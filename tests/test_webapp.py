@@ -521,6 +521,9 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
     main_c = next(d for d in report["exclude"] if d["path"] == "main.c")
     assert main_c["action"] == ACTION_EXCLUDE
     assert "模板" in main_c["reason"]
+    # 报告携带模板 main.c 全文预览：一次确认前用户能看到将要写入母版的 main.c
+    assert report["main_c_preview"] == main_c_template(PLATFORM_STM32)
+    assert report["main_c_preview"]
 
     confirmed = client.post(
         "/api/masters/confirm",

@@ -765,7 +765,8 @@ def test_report_round_trips_through_json(fake_stm32_projects):
     assert rebuilt == report
     # wire format 形状：确认请求按 to_dict 输出原样回传
     data = report.to_dict()
-    assert set(data) == {"platform", "projects", "keep", "merge", "exclude"}
+    assert set(data) == {"platform", "projects", "keep", "merge", "exclude",
+                         "main_c_preview"}
     assert data["keep"][0] == {
         "path": "inc/stm32f10x_conf.h",
         "action": ACTION_KEEP,
@@ -777,6 +778,30 @@ def test_report_round_trips_through_json(fake_stm32_projects):
     assert data["merge"][0]["source"] == "proj-a"
     assert data["merge"][0]["content"] == MERGED_UVPROJX
     assert data["merge"][0]["explanation"]
+
+
+def test_distill_report_carries_template_main_c_preview(fake_stm32_projects):
+    """报告携带模板 main.c 全文预览：用户一次确认前能看到将要写入母版的 main.c。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+
+    assert report.main_c_preview == main_c_template(PLATFORM_STM32)
+    assert report.main_c_preview  # 非空全文
+
+
+def test_report_from_dict_derives_preview_from_platform(fake_stm32_projects):
+    """确认请求回传的预览不可信：from_dict 按平台重推导，保证预览 = 实际落盘内容。
+
+    预览是确定性展示素材（落盘永远写 main_c_template(platform)），客户端改它
+    不会影响落盘内容，重推导保证报告自洽。
+    """
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    data = report.to_dict()
+    data["main_c_preview"] = "/* 伪造的预览 */"
+
+    rebuilt = DistillationReport.from_dict(data)
+
+    assert rebuilt.main_c_preview == main_c_template(PLATFORM_STM32)
+    assert rebuilt.main_c_preview != "/* 伪造的预览 */"
 
 
 def test_report_from_dict_rejects_malformed(fake_stm32_projects):

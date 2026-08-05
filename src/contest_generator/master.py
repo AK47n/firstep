@@ -7,10 +7,11 @@ compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→
 → 基于摘要判定），公共文件按"所有工程内容一致"确定保留，残留（构建产物 /
 备份 / 临时文件）按扩展名 / 模式规则识别、确定性剔除，旧工程 main.c 一律
 不进母版（ADR 0002：母版 main.c 由确定性模板提供）→ 得到完整提炼报告
-（保留 / 整合 / 剔除清单 + 理由，残留与 main.c 条目带规则化原因）→ 用户
-审查、可修改报告 → apply_distillation 按确认后的报告落盘母版候选（落盘后
-写平台模板 main.c）→ import_master 做结构分析后入库（每平台一个母版，可
-更换 / 删除）。
+（保留 / 整合 / 剔除清单 + 理由，残留与 main.c 条目带规则化原因，整合产物
+全文 + 说明，模板 main.c 全文预览）→ 用户一次审查、可修改动作 →
+apply_distillation 按确认后的最终集合重新校验并落盘母版候选（复制 / 写整合
+产物 / 剔除 + 写平台模板 main.c）→ import_master 做结构分析后入库（每平台
+一个母版，可更换 / 删除）。
 
 母版库：磁盘目录即数据库，母版库根下每个平台一个目录（工程文件本体）+ 同名
 <platform>.json 元数据（提炼来源、入库时结构分析的警告）。元数据放目录外的
@@ -169,11 +170,14 @@ class ProjectComparison:
 
 @dataclass(frozen=True)
 class DistillationReport:
-    """提炼报告：保留 / 整合 / 剔除清单（确认后交给 apply_distillation）。
+    """提炼报告：保留 / 整合 / 剔除清单 + 模板 main.c 预览（确认后交给
+    apply_distillation）。
 
     清单条目复用 llm.FileDecision（path / action / content / explanation /
     source / reason 同一套字段，不另造一个同形类型）。来源工程名在 projects
-    里——确认后的报告要落盘、母版入库元数据要用。
+    里——确认后的报告要落盘、母版入库元数据要用。main_c_preview 是确定性模板
+    main.c 全文（ADR 0002：母版 main.c 由模板提供），给用户在确认前预览；
+    落盘仍写 main_c_template(platform)，预览不参与落盘。
     """
 
     platform: str
@@ -181,6 +185,7 @@ class DistillationReport:
     keep: tuple[FileDecision, ...]
     merge: tuple[FileDecision, ...]
     exclude: tuple[FileDecision, ...]
+    main_c_preview: str  # 模板 main.c 全文预览（确定性，由平台推导，必填）
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 兼容 dict（提炼报告的 wire format，确认请求回传同形）。"""
@@ -190,6 +195,7 @@ class DistillationReport:
             "keep": [d.to_dict() for d in self.keep],
             "merge": [d.to_dict() for d in self.merge],
             "exclude": [d.to_dict() for d in self.exclude],
+            "main_c_preview": self.main_c_preview,
         }
 
     @classmethod
@@ -197,7 +203,10 @@ class DistillationReport:
         """从确认请求的 JSON 重建报告（形状校验；语义校验归 apply_distillation）。
 
         条目形状校验与 llm.parse_distillation_report 同一标准；来源工程与
-        路径覆盖等语义问题在落盘前由 _validate_report 拦截。
+        路径覆盖等语义问题在落盘前由 _validate_report 拦截。main_c_preview
+        是确定性素材（落盘永远写 main_c_template(platform)），客户端回传值
+        不可信——按平台重推导，保证报告里的预览 = 实际落盘内容；平台非法在
+        这里就大声失败（模板词表与平台词表不漂移）。
         """
         if not isinstance(data, dict):
             raise MasterError("提炼报告必须是 JSON 对象")
@@ -221,6 +230,7 @@ class DistillationReport:
             keep=decisions("keep"),
             merge=decisions("merge"),
             exclude=decisions("exclude"),
+            main_c_preview=main_c_template(platform),
         )
 
 
@@ -516,6 +526,7 @@ def assemble_report(
         keep=tuple(keep),
         merge=tuple(merge),
         exclude=tuple(exclude),
+        main_c_preview=main_c_template(platform),
     )
 
 
