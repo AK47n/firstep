@@ -58,6 +58,56 @@ class KeilPatcher:
         )
 
 
+def rewrite_project_references(project_dir: Path, kept_paths: Sequence[str]) -> None:
+    """删除 .uvprojx 里引用但不在保留集合的源文件条目，main.c 条目统一重定向。
+
+    母版落盘后调用（apply_distillation）：被剔除的文件不留悬空引用，否则
+    Keil 打开工程编译会因缺文件失败，"打开就能编译烧录"不成立。保留集合 =
+    落盘文件的相对路径（POSIX，大小写不敏感）。main.c 条目特殊处理：母版
+    main.c 由确定性模板写死在母版根，旧工程可能在任意层级（正点原子风格在
+    USER/ 子目录），引用路径统一重写指向模板落位，模板 main.c 才进工程树。
+    空组保留（Keil 可容忍，少动结构）。格式知识归本模块所有：与 patch /
+    extract_config_summary 共用同一套 XML 结构认知。
+    """
+    uvprojx = _find_uvprojx(project_dir)
+    root, original_text = parse_project_file(uvprojx, KeilProjectError)
+    kept = {_normalize_path(p) for p in kept_paths}
+    template_main = _keil_rel_path("main.c")
+    changed = False
+    for target in root.findall("Targets/Target"):
+        for group in target.findall("Groups/Group"):
+            for files_el in group.findall("Files"):
+                for file_el in list(files_el.findall("File")):
+                    file_name = (file_el.findtext("FileName") or "").lower()
+                    file_path = file_el.findtext("FilePath")
+                    if file_name == "main.c":
+                        # 旧工程 main.c 由模板替代（ADR 0002），引用一律指向模板落位
+                        if file_path is not None and file_path != template_main:
+                            file_el.find("FilePath").text = template_main
+                            changed = True
+                    elif file_path is None or _normalize_path(file_path) not in kept:
+                        files_el.remove(file_el)
+                        changed = True
+    if not changed:
+        return  # 无悬空引用也无需重定向——保持整合产物原样，不重写格式
+    write_project_file(
+        uvprojx,
+        root,
+        original_text,
+        indent="  ",
+        declaration='<?xml version="1.0" encoding="UTF-8" ?>',
+        restore=lambda serialized: _restore_xmlns(serialized, root, original_text),
+    )
+
+
+def _normalize_path(path: str) -> str:
+    """Keil 的 .\\ 前缀 + 反斜杠路径 → 小写 POSIX 相对路径（与扫描清单可比）。"""
+    norm = path.replace("\\", "/").lower()
+    while norm.startswith("./"):
+        norm = norm[2:]
+    return norm
+
+
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
     """.uvprojx 的只读配置摘要：设备 / include path（母版提炼的配置对比素材）。
 

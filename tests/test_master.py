@@ -43,11 +43,14 @@ from tests.fakes import (
     make_fake_master_project,
 )
 
-# 假工程对的判定范围（冲突 + 独有）与一份典型 AI 判定
+# 假工程对的判定范围（公共 + 冲突 + 独有，全部文件）与一份典型 AI 判定
+# 公共文件（所有工程内容一致）同样由 AI 判定：基础建设必需 → keep（判例 06）
 # merge 携带整合产物全文（content）+ 整合说明（explanation）；选一份只是特例
 MERGED_UVPROJX = FAKE_DISTILL_UVPROJX_A  # 特例：直接取 A 的全文，说明为何选它
 MERGED_OLED = "/* 通用 OLED 驱动（整合版） */\nvoid oled_init(void);\n"
 DEFAULT_DECISIONS = (
+    FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="官方库配置头，基础必需"),
+    FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="系统初始化，基础必需"),
     FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用传感器驱动，应进母版"),
     FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="上一场比赛的字体表残留"),
     FileDecision(
@@ -338,13 +341,13 @@ def test_distill_report_groups_keep_merge_exclude(fake_stm32_projects):
 
     assert report.platform == PLATFORM_STM32
     assert report.projects == ("proj-a", "proj-b")
-    # 公共文件确定保留，且排在最前；AI 判定跟随其后；main.c 不进 keep
+    # 全部文件（公共 + 冲突 + 独有）都由 AI 判定：公共文件判 keep 进保留
     assert [d.path for d in report.keep] == [
         "inc/stm32f10x_conf.h",
         "src/system_stm32f10x.c",
         "sensors/dht11.c",
     ]
-    assert report.keep[0].reason == "所有导入工程内容一致，属公共骨架"
+    assert report.keep[0].reason == "官方库配置头，基础必需"
     assert [d.path for d in report.merge] == ["project.uvprojx", "src/oled.c"]
     assert report.merge[0].source == "proj-a"
     # exclude = AI 判定（ui/oled_fonts.c）+ 规则识别的残留（确定性、排序）
@@ -370,14 +373,26 @@ def test_distill_passes_platform_names_and_summary_to_llm(fake_stm32_projects):
     assert platform == PLATFORM_STM32
     assert names == ("proj-a", "proj-b")
     assert "src/oled.c" in summary
-    # 判定素材覆盖冲突 + 独有，含全文与持有工程；公共文件不传给 AI
+    # 判定素材覆盖公共 + 冲突 + 独有（全部文件），含全文与持有工程（判例 06：
+    # 公共文件也进 AI 判定，内容一致不等于基础建设必需）
     by_path = {f.path: f for f in judgment_files}
     assert set(by_path) == {
+        "inc/stm32f10x_conf.h",
+        "src/system_stm32f10x.c",
         "project.uvprojx",
         "src/oled.c",
         "sensors/dht11.c",
         "ui/oled_fonts.c",
     }
+    # 公共文件：单版本、持有两工程
+    assert by_path["inc/stm32f10x_conf.h"].versions[0].projects == (
+        "proj-a",
+        "proj-b",
+    )
+    assert by_path["src/system_stm32f10x.c"].versions[0].projects == (
+        "proj-a",
+        "proj-b",
+    )
     oled_versions = by_path["src/oled.c"].versions
     assert len(oled_versions) == 2  # 冲突文件两个版本都传
     assert {v.projects for v in oled_versions} == {("proj-a",), ("proj-b",)}
@@ -468,26 +483,35 @@ def test_judgment_files_group_identical_contents_across_projects(
     assert "B 版本" in by_projects[("proj-b",)]
 
 
-def test_distill_ignores_ai_keep_on_common_path(fake_stm32_projects):
-    """AI 把公共文件也判定 keep 时按冗余忽略，不中断提炼（现实 LLM 常见回显）。"""
-    decisions = DEFAULT_DECISIONS + (
-        FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="公共骨架，应保留"),
+def test_distill_accepts_ai_exclude_on_common_path(fake_stm32_projects):
+    """公共文件 AI 判 exclude 合法：内容一致 ≠ 基础建设必需（判例 06）。
+
+    所有工程共享的业务 .c/.h（如都拷贝了同一份驱动）由 AI 按内容判除，
+    不再"内容一致 → 自动保留"。"""
+    # 把 DEFAULT_DECISIONS 里对公共文件的 keep 判定改成 exclude（同路径只判一次）
+    decisions = tuple(
+        FileDecision("inc/stm32f10x_conf.h", ACTION_EXCLUDE, reason="非基础必需")
+        if d.path == "inc/stm32f10x_conf.h"
+        else d
+        for d in DEFAULT_DECISIONS
     )
 
     report = _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
-    assert [d.path for d in report.keep].count("inc/stm32f10x_conf.h") == 1
+    excluded = {d.path for d in report.exclude}
+    assert "inc/stm32f10x_conf.h" in excluded
+    assert "inc/stm32f10x_conf.h" not in {d.path for d in report.keep}
 
 
 def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
-    """公共文件判定 merge / exclude 是错误——公共文件必须保留。"""
+    """公共文件判定 merge 是错误——内容一致、没有可整合的多份版本。"""
     decisions = DEFAULT_DECISIONS + (
         FileDecision(
             "inc/stm32f10x_conf.h", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"
         ),
     )
 
-    with pytest.raises(MasterError, match="公共文件必须保留"):
+    with pytest.raises(MasterError, match="只用于"):
         _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
 
@@ -774,7 +798,7 @@ def test_report_round_trips_through_json(fake_stm32_projects):
         "content": "",
         "explanation": "",
         "source": "",
-        "reason": "所有导入工程内容一致，属公共骨架",
+        "reason": "官方库配置头，基础必需",
     }
     assert data["merge"][0]["source"] == "proj-a"
     assert data["merge"][0]["content"] == MERGED_UVPROJX
@@ -1001,15 +1025,64 @@ def test_apply_writes_ccs_template_main_c(tmp_path):
     ccs_a = make_fake_ccs_master_project(tmp_path / "ccs_a")
     ccs_b = make_fake_ccs_master_project(tmp_path / "ccs_b")  # 内容一致 → 全公共
     projects = [scan_project(ccs_a), scan_project(ccs_b)]
+    # 全公共工程同样逐个进 AI 判定（判例 06）：基础设施 → keep
+    decisions = tuple(
+        FileDecision(path, ACTION_KEEP, reason="基础设施，基础必需")
+        for path in compare_projects(projects).judgment
+    )
 
-    report = distill_master(FakeLLM(distillation=()), PLATFORM_MSPM0, projects)
+    report = distill_master(FakeLLM(distillation=decisions), PLATFORM_MSPM0, projects)
     output = tmp_path / "preview"
     apply_distillation(report, compare_projects(projects), output)
 
     content = (output / "main.c").read_text(encoding="utf-8")
     assert content == main_c_template(PLATFORM_MSPM0)
-    assert "master's old main" not in content
-    assert analyze_structure(output, PLATFORM_MSPM0).warnings == ()
+
+
+def test_apply_removes_excluded_files_from_uvprojx(fake_stm32_projects, tmp_path):
+    """落盘后 .uvprojx 对被剔除文件的引用自动清除（判例 06：不做人工处理）。
+
+    旧工程 .uvprojx 引用将被剔除的业务文件（ui/oled_fonts.c）——重写后引用
+    删除，否则 Keil 编译因缺文件失败，"打开就能编译烧录"不成立；保留文件的
+    引用不动；main.c 条目指向模板落位（母版根）。"""
+    uvprojx_with_refs = FAKE_DISTILL_UVPROJX_A.replace(
+        "</Target>",
+        "<Groups><Group><GroupName>g</GroupName><Files>"
+        "<File><FileName>main.c</FileName><FileType>1</FileType>"
+        "<FilePath>.\\USER\\main.c</FilePath></File>"
+        "<File><FileName>system_stm32f10x.c</FileName><FileType>1</FileType>"
+        "<FilePath>.\\src\\system_stm32f10x.c</FilePath></File>"
+        "<File><FileName>oled_fonts.c</FileName><FileType>1</FileType>"
+        "<FilePath>.\\ui\\oled_fonts.c</FilePath></File>"
+        "</Files></Group></Groups>"
+        "</Target>",
+        1,
+    )
+    decisions = tuple(
+        FileDecision(
+            "project.uvprojx",
+            ACTION_MERGE,
+            content=uvprojx_with_refs,
+            explanation="取 include path 更全的 A 版本，补充源码引用",
+            source="proj-a",
+        )
+        if d.path == "project.uvprojx"
+        else d
+        for d in DEFAULT_DECISIONS
+    )
+    projects = _projects(fake_stm32_projects)
+    comparison = compare_projects(projects)
+    report = distill_master(FakeLLM(distillation=decisions), PLATFORM_STM32, projects)
+    output = tmp_path / "preview"
+
+    apply_distillation(report, comparison, output)
+
+    rewritten = (output / "project.uvprojx").read_text(encoding="utf-8")
+    assert ".\\ui\\oled_fonts.c" not in rewritten  # 剔除文件的引用被清除
+    assert ".\\src\\system_stm32f10x.c" in rewritten  # 保留文件的引用不动
+    assert ".\\main.c" in rewritten  # main.c 条目重定向到模板落位（母版根）
+    assert ".\\USER\\main.c" not in rewritten
+    assert ".\\sensors\\dht11.c" not in rewritten  # 未在 .uvprojx 里的保留文件不新增
 
 
 # ---------------------------------------------------------------------------

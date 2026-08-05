@@ -3,14 +3,15 @@
 流程（spec US 18/19 + "母版提炼"实现决策）：用户导入多个同平台旧工程 →
 scan_project 逐个生成结构快照（平台检测 + 文件清单 + 配置摘要）→
 compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→ distill_master
-把需要判定的路径（冲突 + 独有）连同文件全文交给 LLM（两阶段：读全文出摘要
-→ 基于摘要判定），公共文件按"所有工程内容一致"确定保留，残留（构建产物 /
+把全部文件（公共 + 冲突 + 独有，公共不等于基础建设必需，同样逐个判）连同
+文件全文交给 LLM（两阶段：读全文出摘要 → 基于摘要判定），残留（构建产物 /
 备份 / 临时文件）按扩展名 / 模式规则识别、确定性剔除，旧工程 main.c 一律
 不进母版（ADR 0002：母版 main.c 由确定性模板提供）→ 得到完整提炼报告
 （保留 / 整合 / 剔除清单 + 理由，残留与 main.c 条目带规则化原因，整合产物
 全文 + 说明，模板 main.c 全文预览）→ 用户一次审查、可修改动作 →
 apply_distillation 按确认后的最终集合重新校验并落盘母版候选（复制 / 写整合
-产物 / 剔除 + 写平台模板 main.c）→ import_master 做结构分析后入库（每平台
+产物 / 剔除 + 写平台模板 main.c + Keil 工程配置引用重写：剔除文件不留悬空
+引用，main.c 条目指向模板落位）→ import_master 做结构分析后入库（每平台
 一个母版，可更换 / 删除）。
 
 母版库：磁盘目录即数据库，母版库根下每个平台一个目录（工程文件本体）+ 同名
@@ -36,7 +37,11 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
-from .keil import KeilProjectError, extract_config_summary as extract_keil_config_summary
+from .keil import (
+    KeilProjectError,
+    extract_config_summary as extract_keil_config_summary,
+    rewrite_project_references,
+)
 from .llm import FileVersion, JudgmentFile, LLM
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .report import (
@@ -163,7 +168,7 @@ class ProjectComparison:
     conflicts: tuple[str, ...]  # 同路径、内容不一致
     unique: tuple[str, ...]  # 只出现在部分工程
     by_path: Mapping[str, tuple[str, ...]]  # path -> 含该文件的工程名（出现顺序）
-    judgment: tuple[str, ...]  # 需要 AI 判定的路径（冲突 + 独有）
+    judgment: tuple[str, ...]  # 需要 AI 判定的路径（公共 + 冲突 + 独有）
     residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
     main_c_files: tuple[str, ...] = ()  # 全部工程的旧 main.c（并集，排序，模板替代）
 
@@ -256,7 +261,8 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
 
     公共 = 所有工程都有且内容完全一致；冲突 = 同路径内容不一致；独有 =
     只出现在部分工程。by_path 记录每个路径出现在哪些工程（出现顺序），
-    供报告确认后的落盘取源。
+    供报告确认后的落盘取源。判定范围 = 公共 + 冲突 + 独有（全部文件，
+    ADR 0001：不看重复次数与出现范围——公共 ≠ 基础建设必需，也进 AI 判定）。
     """
     if not projects:
         raise MasterError("至少导入一个工程")
@@ -298,19 +304,23 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
         conflicts=tuple(conflicts),
         unique=tuple(unique),
         by_path={path: tuple(names) for path, names in by_path.items()},
-        judgment=tuple(sorted(conflicts)) + tuple(sorted(unique)),
+        judgment=(
+            tuple(sorted(common)) + tuple(sorted(conflicts)) + tuple(sorted(unique))
+        ),
         residues=tuple(sorted({r for p in projects for r in p.residues})),
         main_c_files=tuple(sorted({m for p in projects for m in p.main_c_files})),
     )
 
 
 def build_judgment_files(comparison: ProjectComparison) -> tuple[JudgmentFile, ...]:
-    """待判文件（冲突 + 独有）的全文素材：路径 + 每个内容版本及其持有工程。
+    """待判文件（公共 + 冲突 + 独有，全部文件）的全文素材：路径 + 每个内容
+    版本及其持有工程。
 
-    兑现 ADR 0001 的"读内容判断"——AI 判定前先看到文件全文。同一路径在多个
-    工程里内容不同（冲突）时每个内容版本都进素材；内容一致的工程合并为一个
-    版本（按扫描时的内容哈希分组，版本工程名不重不漏）。读取用 UTF-8 容错：
-    旧工程可能是 GBK 等编码，宁可摘要含乱码也不让提炼因单个文件中断。
+    兑现 ADR 0001 的"读内容判断"——AI 判定前先看到文件全文。公共文件（所有
+    工程内容一致）是一个单版本条目；同一路径在多个工程里内容不同（冲突）时
+    每个内容版本都进素材；内容一致的工程合并为一个版本（按扫描时的内容哈希
+    分组，版本工程名不重不漏）。读取用 UTF-8 容错：旧工程可能是 GBK 等编码，
+    宁可摘要含乱码也不让提炼因单个文件中断。
     """
     projects_by_name = {p.name: p for p in comparison.projects}
     files: list[JudgmentFile] = []
@@ -373,8 +383,9 @@ def distill_master(
 ) -> DistillationReport:
     """提炼流程：对比 → LLM 判定（读全文 → 摘要 → 判定）→ 拼装完整报告。
 
-    公共文件确定保留（所有工程内容一致，无需 AI）；冲突与独有文件连同全文
-    交给 AI（llm 内部先逐文件读全文出摘要，再基于摘要判定），覆盖不全或出现
+    全部文件（公共 + 冲突 + 独有）连同全文交给 AI（llm 内部先逐文件读全文
+    出摘要，再基于摘要判定）——公共文件只是"每份内容一样"，不等于基础建设
+    必需，同样逐个判（ADR 0001：不看重复次数与出现范围）。覆盖不全或出现
     未知路径抛 MasterError——宁可不放行也不带病进入确认流程。
     """
     comparison = compare_projects(projects)
@@ -395,20 +406,19 @@ def assemble_report(
     comparison: ProjectComparison,
     decisions: Sequence[FileDecision],
 ) -> DistillationReport:
-    """把确定性公共文件、规则化残留剔除、旧 main.c 模板替代与 AI 判定拼成完整
-    报告，并校验覆盖。
+    """把 AI 判定、规则化残留剔除、旧 main.c 模板替代拼成完整报告，并校验覆盖。
 
-    判据是内容（通用性 / 基础建设必需性），分类不直接决定动作：冲突文件可以
-    merge（整合出通用版本）也可以 exclude，只有 keep 被禁止（keep 没有"取哪份
-    内容"的信息，落盘时会静默取第一个工程）；公共文件确定保留——AI 重复判定
-    keep 是冗余（忽略），判定 merge / exclude 是错误（公共文件必须保留），
-    用户确认时可把公共文件改为剔除。残留（构建产物 / 备份 / 临时文件）与旧
-    main.c（ADR 0002：母版 main.c 由确定性模板提供）机器识别、确定性剔除：
-    不进 AI 判定素材（AI 给出这类路径的判定是越界，拒绝），报告 exclude 清单
-    自动带规则化原因（ADR 0001：不做黑盒消失）。merge 必须带整合产物全文与
-    整合说明（选一份只是特例）。这些在确认前就拦住，兑现"不带病进入确认流程"。
+    判据是内容（基础建设必需性），分类不直接决定动作：公共文件（所有工程
+    内容一致）AI 判 keep 或 exclude 都合法——"每份内容一样"不等于基础建设
+    必需，业务 .c/.h 即使所有工程共享也按内容判除（ADR 0001：不看重复次数
+    与出现范围）；冲突文件可以 merge（整合出通用版本）也可以 exclude，只有
+    keep 被禁止（keep 没有"取哪份内容"的信息，落盘时会静默取第一个工程）；
+    merge 必须带整合产物全文与整合说明（选一份只是特例）。残留（构建产物 /
+    备份 / 临时文件）与旧 main.c（ADR 0002：母版 main.c 由确定性模板提供）
+    机器识别、确定性剔除：不进 AI 判定素材（AI 给出这类路径的判定是越界，
+    拒绝），报告 exclude 清单自动带规则化原因（ADR 0001：不做黑盒消失）。
+    这些在确认前就拦住，兑现"不带病进入确认流程"。
     """
-    common = set(comparison.common)
     residues = set(comparison.residues)
     main_c_files = set(comparison.main_c_files)
     scoped: list[FileDecision] = []
@@ -419,30 +429,14 @@ def assemble_report(
         if decision.path in main_c_files:
             # 旧 main.c 由模板确定性替代（ADR 0002），AI 从未在素材里见过它
             raise MasterError(f"旧工程 main.c 由模板替代，无需 AI 判定：{decision.path}")
-        if decision.path in common:
-            # 公共文件由确定性自动保留覆盖；AI 重复判定 keep 是冗余（忽略），
-            # 判定 merge / exclude 是错误（公共文件必须保留），直接拒绝
-            if decision.action != ACTION_KEEP:
-                raise MasterError(f"公共文件必须保留：{decision.path}")
-            continue
         scoped.append(decision)
     decided = {d.path for d in scoped}
     _validate_judgment_coverage(decided=decided, judgment=set(comparison.judgment))
     _validate_merge_sources(scoped, comparison)
 
-    keep: list[FileDecision] = [
-        FileDecision(path, ACTION_KEEP, reason="所有导入工程内容一致，属公共骨架")
-        for path in comparison.common
-    ]
-    merge: list[FileDecision] = []
-    exclude: list[FileDecision] = []
-    for decision in scoped:
-        if decision.action == ACTION_MERGE:
-            merge.append(decision)
-        elif decision.action == ACTION_EXCLUDE:
-            exclude.append(decision)
-        else:
-            keep.append(decision)
+    keep: list[FileDecision] = [d for d in scoped if d.action == ACTION_KEEP]
+    merge: list[FileDecision] = [d for d in scoped if d.action == ACTION_MERGE]
+    exclude: list[FileDecision] = [d for d in scoped if d.action == ACTION_EXCLUDE]
     for path in comparison.residues:
         reason = residue_reason(path)
         if reason is None:
@@ -506,9 +500,11 @@ def apply_distillation(
 
     keep 从第一个含该文件的工程复制；merge 写入 AI 整合出的通用版本全文
     （content）；exclude 不复制。落盘完成后写平台模板 main.c（ADR 0002：
-    母版 = 空的最小系统板工程，旧工程 main.c 一律不进母版）。报告的路径集合
-    必须与对比的判定范围完全一致（确认环节可能被用户修改动作与内容，但路径
-    集合不变）。落盘中途失败不留半成品。
+    母版 = 空的最小系统板工程，旧工程 main.c 一律不进母版）；Keil 工程的
+    .uvprojx 引用重写——剔除文件的条目删除、main.c 条目指向模板落位，保证
+    "打开就能编译烧录"成立（CCS 按目录编译，天然一致）。报告的路径集合必须
+    与对比的判定范围完全一致（确认环节可能被用户修改动作与内容，但路径集合
+    不变）。落盘中途失败不留半成品。
     """
     _validate_report(report, comparison)
     project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
@@ -527,6 +523,12 @@ def apply_distillation(
         (output_dir / MAIN_C_TEMPLATE_PATH).write_text(
             main_c_template(report.platform), encoding="utf-8"
         )
+        if report.platform == PLATFORM_STM32:
+            rewrite_project_references(
+                output_dir,
+                [d.path for d in (*report.keep, *report.merge)]
+                + [MAIN_C_TEMPLATE_PATH],
+            )
     except Exception:
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
@@ -534,11 +536,12 @@ def apply_distillation(
 
 
 def _validate_report(report: DistillationReport, comparison: ProjectComparison) -> None:
-    """报告必须恰好覆盖判定范围（公共文件默认在 keep 里，不在 AI 判定范围）。
+    """报告必须恰好覆盖判定范围（公共 + 冲突 + 独有，全部文件）。
 
-    公共文件必须保留或剔除（keep / exclude；merge 被禁）——用户确认时可以把
-    公共文件改为剔除；merge 词表约束由 _validate_merge_sources 统一校验；报告
-    的来源工程必须与传入的对比结果一致——传错对比就是拿错误范围校验。
+    公共文件必须保留或剔除（keep / exclude）——AI 判 keep 或 exclude 都合法，
+    用户确认时也可以改；merge 词表约束（merge 只用于冲突文件）由
+    _validate_merge_sources 统一校验；报告的来源工程必须与传入的对比结果
+    一致——传错对比就是拿错误范围校验。
     """
     if set(report.projects) != {p.name for p in comparison.projects}:
         raise MasterError("报告与对比结果不匹配（来源工程不一致）")
@@ -555,15 +558,11 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
         raise MasterError(
             "公共文件必须保留或剔除：" + "、".join(sorted(misplaced_commons))
         )
-    for decision in report.merge:
-        if decision.path in common:
-            raise MasterError(f"公共文件必须保留：{decision.path}")
     # 残留与旧 main.c 在报告里但不在判定范围（规则识别、确定性剔除），从覆盖
     # 校验中扣除；它们必须恰好出现在 exclude 里，由 _validate_residue_disposition
     # / _validate_main_c_disposition 单独校验
     _validate_judgment_coverage(
-        decided=set(paths) - common - set(comparison.residues)
-        - set(comparison.main_c_files),
+        decided=set(paths) - set(comparison.residues) - set(comparison.main_c_files),
         judgment=set(comparison.judgment),
     )
     _validate_residue_disposition(report, comparison)

@@ -77,7 +77,10 @@ class RaisingLLM:
 
 
 # 假工程对的典型 AI 判定（与 tests/test_master.py 同一套素材）
+# 公共文件（所有工程内容一致）同样由 AI 判定：基础建设必需 → keep（判例 06）
 DEFAULT_DECISIONS = (
+    FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="官方库配置头，基础必需"),
+    FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="系统初始化，基础必需"),
     FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用传感器驱动"),
     FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="上场比赛残留"),
     FileDecision(
