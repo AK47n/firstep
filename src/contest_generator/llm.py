@@ -23,8 +23,9 @@ SELECT_SYSTEM_PROMPT = (
 )
 
 SKELETON_SYSTEM_PROMPT = (
-    "你是嵌入式 C 工程师。为赛题生成 main.c 骨架：按模块初始化序列排好调用，"
-    "只调用给定模块摘要中存在的接口，不确定的地方写成注释占位，保证可编译。"
+    "你是嵌入式 C 工程师。为赛题生成 main.c 骨架：按所选模块的头文件接口排好初始化序列，"
+    "带注释说明与预留编写区（TODO）。只调用给定接口中真实存在的函数，绝不凭空造函数；"
+    "不确定的调用写成注释占位，保证骨架可编译。"
 )
 
 SUMMARY_SYSTEM_PROMPT = "你是嵌入式 C 工程师。用中文一句话总结这段代码的功能，作为模块库简介。"
@@ -52,7 +53,7 @@ class LLM(Protocol):
     ) -> ModuleSelection: ...
 
     def generate_main_skeleton(
-        self, problem_text: str, module_summaries: Sequence[str]
+        self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str: ...
 
     def summarize_module(self, code: str) -> str: ...
@@ -133,15 +134,15 @@ class DeepSeekLLM:
         return parse_module_selection(content, known_slugs=_summary_slugs(manifest_summaries))
 
     def generate_main_skeleton(
-        self, problem_text: str, module_summaries: Sequence[str]
+        self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str:
-        user = _build_user_prompt(
-            problem_text, "可选模块：", [f"- {summary}" for summary in module_summaries]
-        )
         return self._chat(
             [
                 {"role": "system", "content": SKELETON_SYSTEM_PROMPT},
-                {"role": "user", "content": user},
+                {
+                    "role": "user",
+                    "content": _skeleton_user_prompt(problem_text, module_interfaces),
+                },
             ]
         )
 
@@ -228,6 +229,19 @@ def _selection_user_prompt(problem_text: str, manifest_summaries: Sequence[str])
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     prompt = _build_user_prompt(problem_text, "模块库可用模块：", manifest_summaries)
     return prompt + '\n只返回 json 格式的 JSON 对象：{"modules": [{"slug": "...", "reason": "..."}]}'
+
+
+def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -> str:
+    """main.c 骨架生成的 user 消息：赛题 + 所选模块头文件接口块（见 skeleton.py）。"""
+    prompt = _build_user_prompt(
+        problem_text,
+        "所选模块的头文件接口（main.c 只调用这里真实存在的函数）：",
+        module_interfaces,
+    )
+    return prompt + (
+        "\n\n输出 main.c 骨架：按模块初始化序列排好调用，带注释与预留编写区（TODO），"
+        "不确定的调用写成注释占位，不凭空造函数，保证可编译。"
+    )
 
 
 def _summary_slugs(manifest_summaries: Sequence[str]) -> list[str]:

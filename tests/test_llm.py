@@ -203,11 +203,14 @@ def test_parse_selection_rejects_malformed_output(bad_json):
 # ---------------------------------------------------------------------------
 
 
-def test_generate_main_skeleton_routes_problem_and_summaries_to_chat():
+def test_generate_main_skeleton_routes_problem_and_header_interfaces_to_chat():
     transport = FakeTransport(body=_api_response("int main(void) { /* TODO */ }"))
     llm = _llm(transport)
+    interfaces = [
+        "### 模块 dht11（inc/dht11.h）\n#pragma once\nfloat dht11_read(void);"
+    ]
 
-    skeleton = llm.generate_main_skeleton("赛题", ["dht11: 温湿度驱动"])
+    skeleton = llm.generate_main_skeleton("赛题", interfaces)
 
     assert skeleton == "int main(void) { /* TODO */ }"
     url, headers, payload, _ = transport.calls[0]
@@ -215,8 +218,13 @@ def test_generate_main_skeleton_routes_problem_and_summaries_to_chat():
     assert headers["Authorization"] == "Bearer sk-test"
     user_message = payload["messages"][1]["content"]
     assert "赛题" in user_message
-    assert "dht11: 温湿度驱动" in user_message
+    assert "float dht11_read(void);" in user_message
     assert "response_format" not in payload
+    # 系统提示约束骨架规则：初始化序列、只调真实接口、不确定写占位、不凭空造函数
+    system_message = payload["messages"][0]["content"]
+    assert "初始化序列" in system_message
+    assert "占位" in system_message
+    assert "绝不凭空造函数" in system_message
 
 
 def test_summarize_module_returns_ai_description():

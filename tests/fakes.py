@@ -26,8 +26,9 @@ DHT11_H = "#pragma once\nfloat dht11_read(void);\n"
 OLED_STM32_C = "/* OLED driver for STM32 */\nvoid oled_init(void);\n"
 OLED_H = "#pragma once\nvoid oled_init(void);\n"
 
-# 假 LLM 生成的 main.c 骨架（工单 05 前由测试直接传入生成器）
-MAIN_SKELETON = "int main(void) { dht11_init(); oled_init(); while(1); }\n"
+# 测试直接传入生成器的 main.c 内容（生成器会静态自检，必须只调所选模块头文件
+# 里真实存在的函数；自检逻辑见 skeleton.py）
+MAIN_SKELETON = "int main(void) { float t = dht11_read(); while (1); }\n"
 
 # 假母版的 .uvprojx：结构真实的 Keil5 工程文件（设备型号、Cpu、IncludePath、
 # 一个含 main.c 的源组）。修改器只该动 IncludePath 与 Groups，其余原样保留。
@@ -127,7 +128,10 @@ def make_fake_module_library(library_dir: Path) -> Path:
                 "mspm0": {"files": ["delay.c", "delay.h"], "verified": True},
             },
         },
-        {"delay.c": "/* delay */\nvoid delay_ms(int ms);\n", "delay.h": "#pragma once\n"},
+        {
+            "delay.c": "/* delay */\nvoid delay_ms(int ms);\n",
+            "delay.h": "#pragma once\nvoid delay_ms(int ms);\n",
+        },
     )
     _add_module(
         library_dir,
@@ -307,7 +311,7 @@ class FakeTransport:
 
 
 class FakeLLM:
-    """假 LLM：固定返回，供后续工单（04/05）注入。"""
+    """假 LLM：固定返回并记录骨架生成输入，供工单 04/05 注入。"""
 
     def __init__(
         self,
@@ -316,6 +320,7 @@ class FakeLLM:
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
+        self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
 
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
@@ -323,8 +328,9 @@ class FakeLLM:
         return self._selection
 
     def generate_main_skeleton(
-        self, problem_text: str, module_summaries: Sequence[str]
+        self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str:
+        self.skeleton_calls.append((problem_text, tuple(module_interfaces)))
         return self._main_skeleton
 
     def summarize_module(self, code: str) -> str:

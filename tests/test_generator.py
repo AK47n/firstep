@@ -13,6 +13,7 @@ from contest_generator.generator import (
     MasterNotFoundError,
     MissingModuleFilesError,
     OutputDirNotEmptyError,
+    UndefinedCallsError,
 )
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASS, _SETTINGS_MODULE_ID
 from contest_generator.manifest import ModuleManifest
@@ -58,7 +59,7 @@ def test_generate_stm32_outputs_complete_project(make_project, tmp_path):
     )
     # main.c 落位，替换母版旧 main
     assert (result / "main.c").read_text(encoding="utf-8") == (
-        "int main(void) { dht11_init(); oled_init(); while(1); }\n"
+        "int main(void) { float t = dht11_read(); while (1); }\n"
     )
     # 模块文件按平台版本复制，内容原样
     assert (
@@ -99,7 +100,7 @@ def test_generate_mspm0_outputs_complete_project(make_ccs_project, tmp_path):
     assert _ccs_source_entry_names(root, "Debug") == [""]  # 根条目覆盖 modules/
     # main.c 落位，替换母版旧 main
     assert (result / "main.c").read_text(encoding="utf-8") == (
-        "int main(void) { dht11_init(); oled_init(); while(1); }\n"
+        "int main(void) { float t = dht11_read(); while (1); }\n"
     )
     # 模块文件按平台版本复制，内容原样
     assert (
@@ -110,7 +111,7 @@ def test_generate_mspm0_outputs_complete_project(make_ccs_project, tmp_path):
         "/* delay */\nvoid delay_ms(int ms);\n"
     )
     assert (result / "modules/delay/delay.h").read_text(encoding="utf-8") == (
-        "#pragma once\n"
+        "#pragma once\nvoid delay_ms(int ms);\n"
     )
 
 
@@ -169,6 +170,20 @@ def test_generate_unknown_platform_fails_before_touching_output(make_project, tm
     with pytest.raises(UnknownPlatformError, match="esp32"):
         make_project(platform="esp32", output_dir=output_dir)
 
+    assert not output_dir.exists()
+
+
+def test_generate_rejects_main_c_calling_undefined_functions(make_project, tmp_path):
+    """生成器落盘前的静态自检兜底：不存在调用明确报错，不产出残缺工程。"""
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(UndefinedCallsError, match="dht11_init") as excinfo:
+        make_project(
+            main_c_content="int main(void) { dht11_init(); while (1); }\n",
+            output_dir=output_dir,
+        )
+
+    assert "头文件" in str(excinfo.value)
     assert not output_dir.exists()
 
 

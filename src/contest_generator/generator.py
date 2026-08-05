@@ -2,7 +2,8 @@
 
 输入（目标平台、已选模块的 manifest 集、模块库目录、母版工程路径、
 输出目录、main.c 内容）→ 输出完整工程目录：母版文件复制、模块文件按
-平台版本复制到 modules/<slug>/、main.c 落位、平台修改器经注册表委托。
+平台版本复制到 modules/<slug>/、main.c 落位（落位前静态自检：引用的
+函数必须在所选模块头文件中）、平台修改器经注册表委托。
 
 所有校验失败都在创建输出目录之前发生，绝不产出残缺工程。
 """
@@ -15,6 +16,11 @@ from typing import Sequence
 
 from .manifest import ModuleManifest
 from .patchers import PatcherRegistry, default_registry
+from .skeleton import (
+    build_skeleton_interfaces,
+    extract_header_functions,
+    find_undefined_calls,
+)
 
 MODULES_SUBDIR = "modules"
 
@@ -33,6 +39,10 @@ class OutputDirNotEmptyError(GeneratorError):
 
 class MissingModuleFilesError(GeneratorError):
     """所选模块缺少目标平台版本的文件（或根本没有该平台的版本条目）。"""
+
+
+class UndefinedCallsError(GeneratorError):
+    """main.c 调用了所选模块头文件中不存在的函数，拒绝产出残缺工程。"""
 
 
 def generate(
@@ -56,6 +66,7 @@ def generate(
         raise OutputDirNotEmptyError(f"输出目录已存在且非空，拒绝覆盖：{output_dir}")
 
     _check_module_files(manifests, platform, module_library_dir)
+    _check_main_calls(main_c_content, manifests, platform, module_library_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -97,6 +108,30 @@ def _check_module_files(
     if missing:
         raise MissingModuleFilesError(
             "所选模块文件不齐全，拒绝生成残缺工程：\n- " + "\n- ".join(missing)
+        )
+
+
+def _check_main_calls(
+    main_c_content: str,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    library_dir: Path,
+) -> None:
+    """静态自检兜底：main.c 引用的每个函数必须存在于所选模块头文件。
+
+    骨架阶段（skeleton.sanitize_skeleton）把 AI 的幻觉调用改成注释占位；
+    走到这里的 main.c 若仍含不存在的调用（用户手改等），明确报错——这是
+    "不存在的调用被拦截"的报错分支，拒绝产出无法编译的工程。
+    """
+    interfaces = build_skeleton_interfaces(manifests, platform, library_dir)
+    undefined = find_undefined_calls(
+        main_c_content, extract_header_functions(interfaces)
+    )
+    if undefined:
+        raise UndefinedCallsError(
+            "main.c 调用了所选模块头文件中不存在的函数："
+            + "、".join(undefined)
+            + " —— 请改用真实接口，或让骨架阶段自检改写为注释占位"
         )
 
 
