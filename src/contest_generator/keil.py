@@ -72,7 +72,10 @@ def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
 
 
 def _find_uvprojx(project_dir: Path) -> Path:
-    candidates = sorted(project_dir.glob("*.uvprojx"))
+    """定位工程文件 .uvprojx：任意层级（正点原子风格在 USER/ 子目录），跳过 .git。"""
+    candidates = sorted(
+        p for p in project_dir.rglob("*.uvprojx") if ".git" not in p.parts
+    )
     if not candidates:
         raise KeilProjectError(f"工程目录里没有 .uvprojx 文件：{project_dir}")
     if len(candidates) > 1:

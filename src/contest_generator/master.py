@@ -89,11 +89,11 @@ class ProjectComparison:
 
 @dataclass(frozen=True)
 class DistillationReport:
-    """提炼报告：保留 / 合并 / 剔除清单（确认后交给 apply_distillation）。
+    """提炼报告：保留 / 整合 / 剔除清单（确认后交给 apply_distillation）。
 
-    清单条目复用 llm.FileDecision（path / action / source / reason 同一套
-    字段，不另造一个同形类型）。来源工程名在 projects 里——确认后的报告要
-    落盘、母版入库元数据要用。
+    清单条目复用 llm.FileDecision（path / action / content / explanation /
+    source / reason 同一套字段，不另造一个同形类型）。来源工程名在 projects
+    里——确认后的报告要落盘、母版入库元数据要用。
     """
 
     platform: str
@@ -186,7 +186,8 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     """扫描单个工程：平台检测 + 文件清单（含内容哈希）+ 平台配置摘要。
 
     平台由工程配置文件判定：有 .uvprojx 为 stm32，有 .cproject 为 mspm0；
-    两者都有或都没有抛 MasterError。.git / Debug / Release 等非母版内容的
+    两者都有或都没有抛 MasterError。工程文件在任意层级可识别（正点原子风格
+    在 USER/ 子目录），.git 目录除外。.git / Debug / Release 等非母版内容的
     顶层目录不进清单。config_summary 提取设备 / include path / 编译宏等
     配置对比素材（XML 解析失败只记一行，扫描不因单个工程带病中断）。
     """
@@ -318,14 +319,26 @@ def assemble_report(
 ) -> DistillationReport:
     """把确定性公共文件与 AI 判定拼成完整报告，并校验判定覆盖完整。
 
-    冲突文件（同路径不同内容）必须走 merge 指定来源工程——keep 没有"取哪份
-    内容"的信息，选了 keep 就会在落盘时静默取第一个工程，报告上用户看不到
-    来源；merge 的来源工程必须是导入工程且真实含该文件。这些在确认前就拦住，
-    兑现"不带病进入确认流程"。
+    判据是内容（通用性 / 基础建设必需性），分类不直接决定动作：冲突文件可以
+    merge（整合出通用版本）也可以 exclude，只有 keep 被禁止（keep 没有"取哪份
+    内容"的信息，落盘时会静默取第一个工程）；公共文件确定保留——AI 重复判定
+    keep 是冗余（忽略），判定 merge / exclude 是错误（公共文件必须保留），
+    用户确认时可把公共文件改为剔除。merge 必须带整合产物全文与整合说明
+    （选一份只是特例）。这些在确认前就拦住，兑现"不带病进入确认流程"。
     """
-    decided = {d.path for d in decisions}
+    common = set(comparison.common)
+    judged: list[FileDecision] = []
+    for decision in decisions:
+        if decision.path in common:
+            # 公共文件由确定性自动保留覆盖；AI 重复判定 keep 是冗余（忽略），
+            # 判定 merge / exclude 是错误（公共文件必须保留），直接拒绝
+            if decision.action != ACTION_KEEP:
+                raise MasterError(f"公共文件必须保留：{decision.path}")
+            continue
+        judged.append(decision)
+    decided = {d.path for d in judged}
     _validate_judgment_coverage(decided=decided, judgment=set(comparison.judgment))
-    _validate_merge_sources(decisions, comparison)
+    _validate_merge_sources(judged, comparison)
 
     keep: list[FileDecision] = [
         FileDecision(path, ACTION_KEEP, reason="所有导入工程内容一致，属公共骨架")
@@ -333,7 +346,7 @@ def assemble_report(
     ]
     merge: list[FileDecision] = []
     exclude: list[FileDecision] = []
-    for decision in decisions:
+    for decision in judged:
         if decision.action == ACTION_MERGE:
             merge.append(decision)
         elif decision.action == ACTION_EXCLUDE:
@@ -352,21 +365,28 @@ def assemble_report(
 def _validate_merge_sources(
     decisions: Sequence[FileDecision], comparison: ProjectComparison
 ) -> None:
-    """冲突路径必须 merge（内容不同，keep 无法表达取哪份）；merge 来源必须真实含该文件。"""
+    """词表约束：冲突文件 merge 或 exclude（keep 被禁）；merge 只用于冲突文件、
+    必须带整合产物全文与整合说明（选一份只是特例，可附来源工程名）；来源工程
+    必须是导入工程。"""
     names = {p.name for p in comparison.projects}
+    conflicts = set(comparison.conflicts)
     for decision in decisions:
-        if decision.path in comparison.conflicts and decision.action != ACTION_MERGE:
+        if decision.path in conflicts and decision.action == ACTION_KEEP:
             raise MasterError(
-                f"冲突文件（同路径不同内容）必须指定来源工程：{decision.path}"
+                f"冲突文件（同路径不同内容）必须 merge 或 exclude：{decision.path}"
             )
         if decision.action != ACTION_MERGE:
             continue
-        if decision.source not in names:
-            raise MasterError(f"合并来源工程未知：{decision.source}")
-        if decision.source not in comparison.by_path.get(decision.path, ()):
+        if decision.path not in conflicts:
             raise MasterError(
-                f"来源工程 {decision.source} 不含文件 {decision.path}"
+                f"merge 只用于同路径多份内容不同的冲突文件：{decision.path}"
             )
+        if not decision.content.strip():
+            raise MasterError(f"merge 必须带整合产物全文：{decision.path}")
+        if not decision.explanation:
+            raise MasterError(f"merge 必须带整合说明：{decision.path}")
+        if decision.source and decision.source not in names:
+            raise MasterError(f"合并来源工程未知：{decision.source}")
 
 
 # ---------------------------------------------------------------------------
@@ -381,9 +401,10 @@ def apply_distillation(
 ) -> Path:
     """按确认后的报告把文件落盘到 output_dir（母版候选目录）。
 
-    keep 从第一个含该文件的工程复制；merge 从报告指定的来源工程复制；
-    exclude 不复制。报告的路径集合必须与对比的判定范围完全一致（确认环节
-    可能被用户修改动作与来源，但路径集合不变）。落盘中途失败不留半成品。
+    keep 从第一个含该文件的工程复制；merge 写入 AI 整合出的通用版本全文
+    （content）；exclude 不复制。报告的路径集合必须与对比的判定范围完全一致
+    （确认环节可能被用户修改动作与内容，但路径集合不变）。落盘中途失败不留
+    半成品。
     """
     _validate_report(report, comparison)
     project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
@@ -391,11 +412,14 @@ def apply_distillation(
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
         for decision in (*report.keep, *report.merge):
-            source_project = _source_project(decision, comparison)
-            src = project_dir_by_name[source_project] / Path(decision.path)
             dst = output_dir / Path(decision.path)
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+            if decision.action == ACTION_MERGE:
+                dst.write_text(decision.content, encoding="utf-8")
+            else:
+                source_project = _source_project(decision, comparison)
+                src = project_dir_by_name[source_project] / Path(decision.path)
+                shutil.copy2(src, dst)
     except Exception:
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
@@ -403,10 +427,11 @@ def apply_distillation(
 
 
 def _validate_report(report: DistillationReport, comparison: ProjectComparison) -> None:
-    """报告必须恰好覆盖判定范围（公共文件已在 keep 里，不在判定范围内）。
+    """报告必须恰好覆盖判定范围（公共文件默认在 keep 里，不在 AI 判定范围）。
 
-    公共文件必须保留且出现在 keep 清单；merge 来源工程必须真实含该文件；
-    报告的来源工程必须与传入的对比结果一致——传错对比就是拿错误范围校验。
+    公共文件必须保留或剔除（keep / exclude；merge 被禁）——用户确认时可以把
+    公共文件改为剔除；merge 词表约束由 _validate_merge_sources 统一校验；报告
+    的来源工程必须与传入的对比结果一致——传错对比就是拿错误范围校验。
     """
     if set(report.projects) != {p.name for p in comparison.projects}:
         raise MasterError("报告与对比结果不匹配（来源工程不一致）")
@@ -415,9 +440,16 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
     if len(set(paths)) != len(paths):
         raise MasterError("报告里同一路径被多次判定")
     common = set(comparison.common)
-    misplaced_commons = common - {d.path for d in report.keep}
+    misplaced_commons = common - {d.path for d in report.keep} - {
+        d.path for d in report.exclude
+    }
     if misplaced_commons:
-        raise MasterError("公共文件必须保留：" + "、".join(sorted(misplaced_commons)))
+        raise MasterError(
+            "公共文件必须保留或剔除：" + "、".join(sorted(misplaced_commons))
+        )
+    for decision in report.merge:
+        if decision.path in common:
+            raise MasterError(f"公共文件必须保留：{decision.path}")
     _validate_judgment_coverage(decided=set(paths) - common, judgment=set(comparison.judgment))
     _validate_merge_sources(dispositions, comparison)
 
@@ -432,9 +464,7 @@ def _validate_judgment_coverage(decided: set[str], judgment: set[str]) -> None:
 
 
 def _source_project(decision: FileDecision, comparison: ProjectComparison) -> str:
-    """keep 取第一个含该文件的工程；merge 取报告指定的来源工程。"""
-    if decision.action == ACTION_MERGE:
-        return decision.source
+    """keep 取第一个含该文件的工程（merge 由整合产物全文落盘，不取源）。"""
     holders = comparison.by_path.get(decision.path, ())
     if not holders:
         raise MasterError(f"没有任何工程含文件 {decision.path}")
@@ -457,7 +487,7 @@ def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
     if not master_dir.is_dir():
         raise MasterError(f"母版目录不存在：{master_dir}")
     for suffix in PLATFORM_CONFIG_FILES[platform]:
-        if not any(master_dir.glob(f"*{suffix}")):
+        if not _find_config_files(master_dir, f"*{suffix}"):
             raise MasterError(
                 f"母版缺少平台 {platform} 的工程配置文件（{suffix}），拒绝入库"
             )
@@ -561,9 +591,20 @@ def delete_master(masters_dir: Path, platform: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _find_config_files(project_dir: Path, pattern: str) -> list[Path]:
+    """递归查找工程配置文件：跳过 .git（任意层级）与 Debug/Release 等顶层
+    非母版目录——与扫描清单同一套忽略规则。"""
+    return [
+        p
+        for p in project_dir.rglob(pattern)
+        if ".git" not in p.parts
+        and p.relative_to(project_dir).parts[0] not in IGNORED_TOP_LEVEL_DIRS
+    ]
+
+
 def _detect_platform(project_dir: Path) -> str:
-    has_uvprojx = any(project_dir.glob("*.uvprojx"))
-    has_cproject = any(project_dir.glob("*.cproject"))
+    has_uvprojx = bool(_find_config_files(project_dir, "*.uvprojx"))
+    has_cproject = bool(_find_config_files(project_dir, "*.cproject"))
     if has_uvprojx and has_cproject:
         raise MasterError("工程同时含 .uvprojx 与 .cproject，无法判定平台")
     if has_uvprojx:

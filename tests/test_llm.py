@@ -319,8 +319,9 @@ def test_parse_validation_rejects_non_bool_consistent():
 DISTILL_DECISIONS_JSON = json.dumps(
     {
         "decisions": [
-            {"path": "src/oled.c", "action": ACTION_MERGE, "source": "proj-a",
-             "reason": "A 的 include path 更全"},
+            {"path": "src/oled.c", "action": ACTION_MERGE,
+             "content": "/* 整合产物 */\n", "explanation": "两版合并去重",
+             "source": "proj-a", "reason": "A 的 include path 更全"},
             {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用驱动"},
             {"path": "ui/oled_fonts.c", "action": ACTION_EXCLUDE, "reason": "赛题残留"},
         ]
@@ -337,7 +338,12 @@ def test_distill_master_posts_json_request_with_comparison():
 
     assert len(decisions) == 3
     assert decisions[0] == FileDecision(
-        "src/oled.c", ACTION_MERGE, "proj-a", "A 的 include path 更全"
+        "src/oled.c",
+        ACTION_MERGE,
+        content="/* 整合产物 */\n",
+        explanation="两版合并去重",
+        source="proj-a",
+        reason="A 的 include path 更全",
     )
     _, _, payload, _ = transport.calls[0]
     assert payload["response_format"] == {"type": "json_object"}
@@ -347,12 +353,15 @@ def test_distill_master_posts_json_request_with_comparison():
     assert "src/oled.c" in user_message
     assert "json" in user_message  # DeepSeek 的 json_object 模式要求提示词含 json
     assert "判定" in payload["messages"][0]["content"]
+    assert "整合" in user_message  # merge 语义：读多份整合出通用版本
 
 
 def test_parse_distillation_accepts_mixed_decisions():
     decisions = parse_distillation_report(DISTILL_DECISIONS_JSON, ("proj-a", "proj-b"))
 
     assert decisions[0].action == ACTION_MERGE
+    assert decisions[0].content == "/* 整合产物 */\n"
+    assert decisions[0].explanation == "两版合并去重"
     assert decisions[0].source == "proj-a"
     assert decisions[1].action == ACTION_KEEP
     assert decisions[2].action == ACTION_EXCLUDE
@@ -366,8 +375,20 @@ def test_parse_distillation_accepts_mixed_decisions():
         json.dumps({"decisions": "not a list"}),
         json.dumps({"decisions": [{"path": "a.c", "action": "archive"}]}),
         json.dumps({"decisions": [{"action": ACTION_KEEP}]}),  # 缺 path
-        json.dumps({"decisions": [{"path": "a.c", "action": ACTION_MERGE}]}),  # merge 缺 source
+        json.dumps(
+            {"decisions": [{"path": "a.c", "action": ACTION_MERGE,
+                            "explanation": "说明"}]}  # merge 缺 content
+        ),
+        json.dumps(
+            {"decisions": [{"path": "a.c", "action": ACTION_MERGE,
+                            "content": "产物"}]}  # merge 缺 explanation
+        ),
+        json.dumps(
+            {"decisions": [{"path": "a.c", "action": ACTION_MERGE,
+                            "content": "   ", "explanation": "说明"}]}  # 空白 content
+        ),
         json.dumps({"decisions": [{"path": "a.c", "action": ACTION_KEEP, "source": "proj-a"}]}),
+        json.dumps({"decisions": [{"path": "a.c", "action": ACTION_KEEP, "content": "产物"}]}),
         json.dumps(
             {
                 "decisions": [
@@ -387,7 +408,17 @@ def test_parse_distillation_rejects_unknown_source_project():
     with pytest.raises(LLMError, match="来源工程"):
         parse_distillation_report(
             json.dumps(
-                {"decisions": [{"path": "a.c", "action": ACTION_MERGE, "source": "proj-c"}]}
+                {
+                    "decisions": [
+                        {
+                            "path": "a.c",
+                            "action": ACTION_MERGE,
+                            "content": "产物",
+                            "explanation": "说明",
+                            "source": "proj-c",
+                        }
+                    ]
+                }
             ),
             ("proj-a", "proj-b"),
         )
@@ -399,7 +430,14 @@ def test_parse_distillation_rejects_unknown_source_project():
 
 
 def test_file_decision_round_trips_through_json():
-    decision = FileDecision("src/oled.c", ACTION_MERGE, "proj-a", "include path 更全")
+    decision = FileDecision(
+        "src/oled.c",
+        ACTION_MERGE,
+        content="/* 整合产物 */\n",
+        explanation="两版合并去重",
+        source="proj-a",
+        reason="include path 更全",
+    )
 
     rebuilt = FileDecision.from_dict(decision.to_dict())
 
@@ -407,6 +445,8 @@ def test_file_decision_round_trips_through_json():
     assert rebuilt.to_dict() == {
         "path": "src/oled.c",
         "action": ACTION_MERGE,
+        "content": "/* 整合产物 */\n",
+        "explanation": "两版合并去重",
         "source": "proj-a",
         "reason": "include path 更全",
     }
@@ -427,8 +467,11 @@ def test_file_decision_from_dict_accepts_keep_without_source():
         {"action": ACTION_KEEP},  # 缺 path
         {"path": "", "action": ACTION_KEEP},
         {"path": "a.c", "action": "archive"},  # action 非法
-        {"path": "a.c", "action": ACTION_MERGE},  # merge 缺 source
+        {"path": "a.c", "action": ACTION_MERGE, "explanation": "说明"},  # merge 缺 content
+        {"path": "a.c", "action": ACTION_MERGE, "content": "产物"},  # merge 缺 explanation
+        {"path": "a.c", "action": ACTION_MERGE, "content": "   ", "explanation": "说明"},  # 空白 content
         {"path": "a.c", "action": ACTION_KEEP, "source": "proj-a"},  # 非 merge 带来源
+        {"path": "a.c", "action": ACTION_KEEP, "content": "产物"},  # 非 merge 带 content
         {"path": "a.c", "action": ACTION_KEEP, "reason": 42},
     ],
 )
