@@ -30,6 +30,11 @@ SKELETON_SYSTEM_PROMPT = (
 
 SUMMARY_SYSTEM_PROMPT = "你是嵌入式 C 工程师。用中文一句话总结这段代码的功能，作为模块库简介。"
 
+VALIDATION_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师。判断给定的模块简介与实际代码是否一致：简介描述的功能、"
+    "接口、行为是否与代码相符。不一致时用中文指出具体差异。只输出 JSON 对象。"
+)
+
 
 class LLMError(Exception):
     """LLM 调用或输出解析失败，message 说明具体问题。"""
@@ -47,6 +52,14 @@ class ModuleSelection:
     reasons: dict[str, str]  # slug -> 推荐理由
 
 
+@dataclass(frozen=True)
+class ValidationResult:
+    """模块简介与实际代码的一致性校验结果。"""
+
+    consistent: bool  # 简介与代码是否一致
+    issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
+
+
 class LLM(Protocol):
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
@@ -57,6 +70,10 @@ class LLM(Protocol):
     ) -> str: ...
 
     def summarize_module(self, code: str) -> str: ...
+
+    def validate_module_description(
+        self, description: str, code: str
+    ) -> ValidationResult: ...
 
 
 def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
@@ -154,6 +171,21 @@ class DeepSeekLLM:
             ]
         )
 
+    def validate_module_description(
+        self, description: str, code: str
+    ) -> ValidationResult:
+        content = self._chat(
+            [
+                {"role": "system", "content": VALIDATION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _validation_user_prompt(description, code),
+                },
+            ],
+            json_mode=True,
+        )
+        return parse_validation_result(content)
+
     def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
         if json_mode:
@@ -218,6 +250,28 @@ def parse_module_selection(
     return ModuleSelection(modules=tuple(modules), reasons=reasons)
 
 
+def parse_validation_result(content: str) -> ValidationResult:
+    """把模型返回的校验 JSON 文本解析校验为 ValidationResult。
+
+    任何结构 / 内容问题（非 JSON、缺 consistent、字段类型错）都抛 LLMError——
+    模型输出不可信，宁可大声失败也不要放行未校验的简介入库。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict):
+        raise LLMError("校验结果必须是 JSON 对象")
+    if "consistent" not in data:
+        raise LLMError("校验结果缺少必填字段 consistent")
+    if not isinstance(data["consistent"], bool):
+        raise LLMError("校验结果的 consistent 必须是布尔值")
+    issues = data.get("issues", "")
+    if not isinstance(issues, str):
+        raise LLMError("校验结果的 issues 必须是字符串")
+    return ValidationResult(consistent=data["consistent"], issues=issues)
+
+
 def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) -> str:
     """赛题 + 清单的 user 消息拼装（模块选择 / main.c 骨架共用）。"""
     lines = ["赛题：", problem_text, "", heading]
@@ -229,6 +283,15 @@ def _selection_user_prompt(problem_text: str, manifest_summaries: Sequence[str])
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     prompt = _build_user_prompt(problem_text, "模块库可用模块：", manifest_summaries)
     return prompt + '\n只返回 json 格式的 JSON 对象：{"modules": [{"slug": "...", "reason": "..."}]}'
+
+
+def _validation_user_prompt(description: str, code: str) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    return (
+        f"模块简介：\n{description}\n\n实际代码：\n```c\n{code}\n```\n\n"
+        '判断简介与实际代码是否一致，只返回 json 格式的 JSON 对象：'
+        '{"consistent": true/false, "issues": "不一致时用中文指出差异，一致时为空字符串"}'
+    )
 
 
 def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -> str:

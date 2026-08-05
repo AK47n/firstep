@@ -1,0 +1,578 @@
+"""模块库管理核心：浏览 / 编辑 / 删除、AI 录入流程（草稿 + 一致性校验）、多平台版本。
+
+用 conftest 的假模块库与假 LLM 驱动，断言磁盘库目录结构与 manifest 内容（外部行为）。
+"""
+
+import dataclasses
+import json
+
+import pytest
+
+from contest_generator.library import (
+    LibraryError,
+    add_module,
+    add_platform_files,
+    delete_module,
+    draft_description,
+    get_module,
+    list_modules,
+    remove_platform_files,
+    save_manifest,
+    update_module_description,
+    validate_description,
+)
+from contest_generator.llm import ValidationResult
+from contest_generator.manifest import MANIFEST_FILENAME, ModuleManifest, PlatformEntry
+from tests.fakes import FakeLLM
+
+DHT11_FILES = {
+    "inc/dht11.h": "#pragma once\nfloat dht11_read(void);\n",
+    "stm32/src/dht11.c": "float dht11_read(void) { return 25.0; }\n",
+}
+
+
+def _add_bmp180(library, files: dict[str, str] | None = None) -> None:
+    """在库中入库一个 bmp180 模块（stm32 版本）。"""
+    add_module(
+        FakeLLM(),
+        library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files=files or {"bmp180.c": "int bmp180_read(void);\n"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# 浏览
+# ---------------------------------------------------------------------------
+
+
+def test_list_modules_returns_all_modules_sorted_by_slug(fake_module_library):
+    manifests = list_modules(fake_module_library)
+
+    assert [m.slug for m in manifests] == ["broken", "delay", "dht11", "oled"]
+
+
+def test_list_modules_loads_manifest_fields(fake_module_library):
+    dht11 = next(m for m in list_modules(fake_module_library) if m.slug == "dht11")
+
+    assert dht11.description == "DHT11 温湿度传感器驱动"
+    assert dht11.dependencies == ("delay",)
+    assert dht11.platforms["stm32"].files == ("stm32/src/dht11.c", "inc/dht11.h")
+    assert dht11.platforms["stm32"].verified is True
+
+
+def test_list_modules_ignores_stray_files_at_library_root(fake_module_library):
+    (fake_module_library / "README.md").write_text("说明", encoding="utf-8")
+
+    assert {m.slug for m in list_modules(fake_module_library)} == {
+        "broken",
+        "delay",
+        "dht11",
+        "oled",
+    }
+
+
+def test_list_modules_rejects_corrupt_manifest(fake_module_library):
+    (fake_module_library / "broken" / MANIFEST_FILENAME).write_text(
+        "{not json", encoding="utf-8"
+    )
+
+    with pytest.raises(LibraryError, match="manifest"):
+        list_modules(fake_module_library)
+
+
+def test_get_module_returns_manifest(fake_module_library):
+    assert get_module(fake_module_library, "dht11").slug == "dht11"
+
+
+def test_get_module_missing_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="不存在"):
+        get_module(fake_module_library, "wifi")
+
+
+def test_get_module_rejects_path_traversal_slug(fake_module_library):
+    with pytest.raises(LibraryError, match="slug"):
+        get_module(fake_module_library, "../evil")
+
+
+# ---------------------------------------------------------------------------
+# 删除
+# ---------------------------------------------------------------------------
+
+
+def test_delete_module_removes_directory(fake_module_library):
+    delete_module(fake_module_library, "oled")
+
+    assert not (fake_module_library / "oled").exists()
+    assert "oled" not in [m.slug for m in list_modules(fake_module_library)]
+
+
+def test_delete_module_missing_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="不存在"):
+        delete_module(fake_module_library, "wifi")
+
+
+def test_delete_module_rejects_path_traversal_slug(tmp_path, fake_module_library):
+    outside = tmp_path / "evil"
+    outside.mkdir()
+
+    with pytest.raises(LibraryError, match="slug"):
+        delete_module(fake_module_library, "../evil")
+
+    assert outside.exists()  # 库外目录未被删除
+
+
+# ---------------------------------------------------------------------------
+# 编辑（save_manifest 写回结构字段；简介编辑走 update_module_description）
+# ---------------------------------------------------------------------------
+
+
+def test_save_manifest_persists_edits(fake_module_library):
+    edited = dataclasses.replace(
+        get_module(fake_module_library, "dht11"), dependencies=("delay", "uart")
+    )
+
+    save_manifest(fake_module_library, edited)
+
+    assert get_module(fake_module_library, "dht11").dependencies == ("delay", "uart")
+    assert '"uart"' in (fake_module_library / "dht11" / MANIFEST_FILENAME).read_text(
+        encoding="utf-8"
+    )
+
+
+def test_save_manifest_missing_module_raises(fake_module_library):
+    ghost = ModuleManifest(slug="ghost", description="x")
+
+    with pytest.raises(LibraryError, match="不存在"):
+        save_manifest(fake_module_library, ghost)
+
+
+def test_save_manifest_rejects_path_traversal_slug(fake_module_library):
+    ghost = ModuleManifest(slug="../evil", description="x")
+
+    with pytest.raises(LibraryError, match="slug"):
+        save_manifest(fake_module_library, ghost)
+
+
+def test_save_manifest_rejects_structural_errors(fake_module_library):
+    bad = ModuleManifest(
+        slug="dht11",
+        description="x",
+        platforms={"stm32": PlatformEntry(files=())},
+    )
+
+    with pytest.raises(LibraryError, match="不能为空"):
+        save_manifest(fake_module_library, bad)
+
+
+def test_update_module_description_persists_when_consistent(fake_module_library):
+    llm = FakeLLM()
+
+    manifest = update_module_description(llm, fake_module_library, "dht11", "新的简介")
+
+    assert manifest.description == "新的简介"
+    assert get_module(fake_module_library, "dht11").description == "新的简介"
+    description, code = llm.validation_calls[0]
+    assert description == "新的简介"
+    # 校验视角 = 模块全部平台版本引用的文件
+    assert "stm32/src/dht11.c" in code
+    assert "mspm0/src/dht11.c" in code
+
+
+def test_update_module_description_revalidates_edited_description(fake_module_library):
+    llm = FakeLLM(
+        validation=ValidationResult(consistent=False, issues="简介与代码不符")
+    )
+
+    with pytest.raises(LibraryError, match="不一致"):
+        update_module_description(llm, fake_module_library, "dht11", "错误的新简介")
+
+    # 校验未通过：磁盘上的简介保持原样
+    assert (
+        get_module(fake_module_library, "dht11").description
+        == "DHT11 温湿度传感器驱动"
+    )
+
+
+def test_update_module_description_missing_module_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="不存在"):
+        update_module_description(FakeLLM(), fake_module_library, "wifi", "x")
+
+
+# ---------------------------------------------------------------------------
+# AI 录入流程：草稿 + 一致性校验
+# ---------------------------------------------------------------------------
+
+
+def test_draft_description_asks_llm_with_assembled_code():
+    llm = FakeLLM(summary="DHT11 温湿度传感器驱动，单总线")
+
+    draft = draft_description(llm, DHT11_FILES)
+
+    assert draft == "DHT11 温湿度传感器驱动，单总线"
+    (code,) = llm.summary_calls[0]
+    assert "inc/dht11.h" in code
+    assert "stm32/src/dht11.c" in code
+    assert "float dht11_read(void);" in code
+
+
+def test_validate_description_returns_llm_verdict():
+    llm = FakeLLM(
+        validation=ValidationResult(consistent=False, issues="简介写 I2C，实际是单总线")
+    )
+
+    result = validate_description(llm, "支持 I2C", DHT11_FILES)
+
+    assert result.consistent is False
+    assert "单总线" in result.issues
+    description, code = llm.validation_calls[0]
+    assert description == "支持 I2C"
+    assert "float dht11_read(void);" in code
+
+
+def test_add_flow_validates_user_edited_description_after_draft(fake_module_library):
+    """完整录入流程：AI 草稿 → 用户修改 → 入库前校验的是修改后的描述。"""
+    llm = FakeLLM(summary="AI 草稿：DHT11 温湿度传感器驱动")
+    draft = draft_description(llm, DHT11_FILES)
+    edited = draft.replace("AI 草稿：", "")  # 用户修改草稿
+
+    add_module(
+        llm,
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description=edited,
+        files=DHT11_FILES,
+    )
+
+    validated_description, _ = llm.validation_calls[0]
+    assert validated_description == "DHT11 温湿度传感器驱动"
+
+
+# ---------------------------------------------------------------------------
+# 添加模块：校验通过才入库
+# ---------------------------------------------------------------------------
+
+
+def test_add_module_stores_module_with_consistent_description(fake_module_library):
+    manifest = add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files=DHT11_FILES,
+        verified=True,
+        notes="PA0",
+    )
+
+    assert manifest.slug == "bmp180"
+    entry = manifest.platforms["stm32"]
+    assert entry.files == ("inc/dht11.h", "stm32/src/dht11.c")
+    assert entry.verified is True
+    assert entry.notes == "PA0"
+    module_dir = fake_module_library / "bmp180"
+    assert (module_dir / "inc" / "dht11.h").read_text(encoding="utf-8").startswith(
+        "#pragma once"
+    )
+    assert (module_dir / "stm32" / "src" / "dht11.c").exists()
+    on_disk = json.loads((module_dir / MANIFEST_FILENAME).read_text(encoding="utf-8"))
+    assert on_disk["description"] == "BMP180 气压计驱动"
+    assert on_disk["dependencies"] == []
+
+
+def test_add_module_records_dependencies(fake_module_library):
+    manifest = add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        dependencies=("delay",),
+        files={"bmp180.c": "int bmp180_read(void);\n"},
+    )
+
+    assert manifest.dependencies == ("delay",)
+    assert get_module(fake_module_library, "bmp180").dependencies == ("delay",)
+
+
+def test_add_module_inconsistent_validation_raises_and_leaves_no_trace(
+    fake_module_library,
+):
+    llm = FakeLLM(
+        validation=ValidationResult(consistent=False, issues="简介说支持 I2C，代码实际是单总线")
+    )
+
+    with pytest.raises(LibraryError, match="不一致"):
+        add_module(
+            llm,
+            fake_module_library,
+            slug="wifi",
+            platform="stm32",
+            description="WIFI 驱动",
+            files={"wifi.c": "int wifi_init(void);\n"},
+        )
+
+    assert not (fake_module_library / "wifi").exists()
+    assert llm.validation_calls  # 校验确实被调用后才拒绝
+
+
+def test_add_module_duplicate_slug_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="已存在"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="dht11",
+            platform="stm32",
+            description="x",
+            files={"a.c": "int a(void);\n"},
+        )
+
+
+@pytest.mark.parametrize("bad_slug", ["", "a b", "a/b", "..", ".", "-abc", "a..b"])
+def test_add_module_rejects_bad_slug(fake_module_library, bad_slug):
+    with pytest.raises(LibraryError, match="slug"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug=bad_slug,
+            platform="stm32",
+            description="x",
+            files={"a.c": "int a(void);\n"},
+        )
+
+
+@pytest.mark.parametrize("bad_file", ["../escape.c", "/abs.c", "a\\b.c", "sub/../up.c"])
+def test_add_module_rejects_unsafe_file_path(fake_module_library, bad_file):
+    with pytest.raises(LibraryError, match="相对"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="new",
+            platform="stm32",
+            description="x",
+            files={bad_file: "int a(void);\n"},
+        )
+
+
+def test_add_module_rejects_non_source_extension(fake_module_library):
+    with pytest.raises(LibraryError, match=".c/.h"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="new",
+            platform="stm32",
+            description="x",
+            files={"notes.txt": "hi"},
+        )
+
+
+def test_add_module_rejects_manifest_filename(fake_module_library):
+    with pytest.raises(LibraryError, match="manifest"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="new",
+            platform="stm32",
+            description="x",
+            files={MANIFEST_FILENAME: "{}"},
+        )
+
+
+def test_add_module_rejects_empty_files(fake_module_library):
+    with pytest.raises(LibraryError, match="至少"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="new",
+            platform="stm32",
+            description="x",
+            files={},
+        )
+
+
+# ---------------------------------------------------------------------------
+# 多平台版本：增删各平台版本文件与 manifest 条目
+# ---------------------------------------------------------------------------
+
+
+def test_add_platform_files_creates_new_platform_entry(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    manifest = add_platform_files(
+        fake_module_library,
+        "bmp180",
+        "mspm0",
+        {"mspm0/bmp180.c": "int bmp180_read(void);\n"},
+    )
+
+    assert set(manifest.platforms) == {"stm32", "mspm0"}
+    assert (fake_module_library / "bmp180" / "mspm0" / "bmp180.c").read_text(
+        encoding="utf-8"
+    ).startswith("int bmp180_read")
+    # 既有平台条目原样保留
+    assert manifest.platforms["stm32"].files == ("bmp180.c",)
+
+
+def test_add_platform_files_appends_to_existing_entry(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    manifest = add_platform_files(
+        fake_module_library, "bmp180", "stm32", {"bmp180.h": "#pragma once\n"}
+    )
+
+    assert manifest.platforms["stm32"].files == ("bmp180.c", "bmp180.h")
+
+
+def test_add_platform_files_reuses_identical_shared_file(fake_module_library):
+    header = "#pragma once\nint bmp180_read(void);\n"
+    add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files={"inc/bmp180.h": header, "stm32/bmp180.c": "int bmp180_read(void) { return 0; }\n"},
+    )
+
+    manifest = add_platform_files(
+        fake_module_library,
+        "bmp180",
+        "mspm0",
+        {"inc/bmp180.h": header, "mspm0/bmp180.c": "int bmp180_read(void) { return 1; }\n"},
+    )
+
+    # 双平台共用同一头文件：只写一份，两个条目都引用
+    assert manifest.platforms["mspm0"].files == ("inc/bmp180.h", "mspm0/bmp180.c")
+    assert (fake_module_library / "bmp180" / "inc" / "bmp180.h").read_text(
+        encoding="utf-8"
+    ) == header
+
+
+def test_add_platform_files_rejects_conflicting_content_at_existing_path(
+    fake_module_library,
+):
+    add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files={"inc/bmp180.h": "#pragma once\nint bmp180_read(void);\n"},
+    )
+
+    with pytest.raises(LibraryError, match="内容不一致"):
+        add_platform_files(
+            fake_module_library,
+            "bmp180",
+            "mspm0",
+            {"inc/bmp180.h": "#pragma once\nfloat bmp180_read(void);\n"},
+        )
+
+
+def test_add_platform_files_conflict_leaves_no_orphan_files(fake_module_library):
+    """写盘前预检：后一个文件冲突时，前一个文件不残留。"""
+    add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files={"inc/bmp180.h": "#pragma once\nint bmp180_read(void);\n"},
+    )
+
+    with pytest.raises(LibraryError, match="内容不一致"):
+        add_platform_files(
+            fake_module_library,
+            "bmp180",
+            "mspm0",
+            {
+                "mspm0/bmp180.c": "int bmp180_read(void);\n",
+                "inc/bmp180.h": "DIFFERENT CONTENT\n",
+            },
+        )
+
+    assert not (fake_module_library / "bmp180" / "mspm0" / "bmp180.c").exists()
+
+
+def test_add_platform_files_missing_module_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="不存在"):
+        add_platform_files(
+            fake_module_library, "ghost", "stm32", {"a.c": "int a(void);\n"}
+        )
+
+
+def test_remove_platform_files_removes_files_then_drops_empty_entry(
+    fake_module_library,
+):
+    add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files={"bmp180.c": "int bmp180_read(void);\n", "bmp180.h": "#pragma once\n"},
+    )
+
+    manifest = remove_platform_files(fake_module_library, "bmp180", "stm32", ["bmp180.c"])
+
+    assert manifest.platforms["stm32"].files == ("bmp180.h",)
+    assert not (fake_module_library / "bmp180" / "bmp180.c").exists()
+    assert (fake_module_library / "bmp180" / "bmp180.h").exists()
+
+    manifest = remove_platform_files(fake_module_library, "bmp180", "stm32", ["bmp180.h"])
+
+    assert "stm32" not in manifest.platforms
+    assert not (fake_module_library / "bmp180" / "bmp180.h").exists()
+
+
+def test_remove_platform_files_keeps_file_shared_by_other_platform(
+    fake_module_library,
+):
+    header = "#pragma once\n"
+    add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files={"inc/bmp180.h": header, "stm32/bmp180.c": "int bmp180_read(void);\n"},
+    )
+    add_platform_files(
+        fake_module_library,
+        "bmp180",
+        "mspm0",
+        {"inc/bmp180.h": header, "mspm0/bmp180.c": "int bmp180_read(void);\n"},
+    )
+
+    manifest = remove_platform_files(
+        fake_module_library, "bmp180", "stm32", ["inc/bmp180.h", "stm32/bmp180.c"]
+    )
+
+    # stm32 条目删空后移除；共享的 inc/bmp180.h 仍被 mspm0 引用，磁盘文件保留
+    assert "stm32" not in manifest.platforms
+    assert (fake_module_library / "bmp180" / "inc" / "bmp180.h").exists()
+    assert not (fake_module_library / "bmp180" / "stm32" / "bmp180.c").exists()
+
+
+def test_remove_platform_files_rejects_unknown_filename(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    with pytest.raises(LibraryError, match="不在"):
+        remove_platform_files(fake_module_library, "bmp180", "stm32", ["nope.c"])
+
+
+def test_remove_platform_files_rejects_missing_platform_entry(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    with pytest.raises(LibraryError, match="没有"):
+        remove_platform_files(fake_module_library, "bmp180", "mspm0", ["bmp180.c"])
+
+
+def test_remove_platform_files_rejects_empty_filenames(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    with pytest.raises(LibraryError, match="至少"):
+        remove_platform_files(fake_module_library, "bmp180", "stm32", [])

@@ -13,6 +13,7 @@ from contest_generator.llm import (
     LLMError,
     build_manifest_summaries,
     parse_module_selection,
+    parse_validation_result,
 )
 from contest_generator.manifest import ModuleManifest
 from tests.fakes import FakeTransport
@@ -236,3 +237,71 @@ def test_summarize_module_returns_ai_description():
     assert summary == "DHT11 温湿度传感器驱动，读取单总线数据"
     _, _, payload, _ = transport.calls[0]
     assert "float dht11_read(void);" in payload["messages"][1]["content"]
+
+
+# ---------------------------------------------------------------------------
+# 模块简介一致性校验：json 结构化输出
+# ---------------------------------------------------------------------------
+
+
+def test_validate_module_description_posts_json_request_with_description_and_code():
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"consistent": True, "issues": ""}))
+    )
+    llm = _llm(transport)
+    description = "DHT11 温湿度传感器驱动，单总线协议"
+    code = "float dht11_read(void);"
+
+    result = llm.validate_module_description(description, code)
+
+    assert result.consistent is True
+    assert result.issues == ""
+    _, _, payload, _ = transport.calls[0]
+    assert payload["response_format"] == {"type": "json_object"}
+    user_message = payload["messages"][1]["content"]
+    assert description in user_message
+    assert code in user_message
+    assert "json" in user_message  # DeepSeek 的 json_object 模式要求提示词含 json
+    # 系统提示约束校验任务：判断简介与实际代码是否一致
+    assert "一致" in payload["messages"][0]["content"]
+
+
+def test_validate_module_description_reports_inconsistency_with_issues():
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "consistent": False,
+                    "issues": "简介声称支持 I2C，实际代码是单总线协议",
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+
+    result = llm.validate_module_description("支持 I2C", "float dht11_read(void);")
+
+    assert result.consistent is False
+    assert "单总线协议" in result.issues
+
+
+@pytest.mark.parametrize(
+    "bad_json",
+    [
+        "{not json",
+        json.dumps({"consistent": True, "issues": 42}),
+    ],
+)
+def test_parse_validation_rejects_malformed_output(bad_json):
+    with pytest.raises(LLMError):
+        parse_validation_result(bad_json)
+
+
+def test_parse_validation_rejects_missing_consistent():
+    with pytest.raises(LLMError, match="缺少"):
+        parse_validation_result(json.dumps({"issues": "缺 consistent"}))
+
+
+def test_parse_validation_rejects_non_bool_consistent():
+    with pytest.raises(LLMError, match="布尔"):
+        parse_validation_result(json.dumps({"consistent": "yes", "issues": ""}))

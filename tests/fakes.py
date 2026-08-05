@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
 
-from contest_generator.llm import ModuleSelection
+from contest_generator.llm import ModuleSelection, ValidationResult
 
 # ---------------------------------------------------------------------------
 # 假模块文件内容（断言输出目录里文件内容用）
@@ -311,16 +311,22 @@ class FakeTransport:
 
 
 class FakeLLM:
-    """假 LLM：固定返回并记录骨架生成输入，供工单 04/05 注入。"""
+    """假 LLM：固定返回并记录各职责的输入，供工单 04/05/07 注入。"""
 
     def __init__(
         self,
         selection: ModuleSelection | None = None,
         main_skeleton: str = "/* skeleton placeholder */\n",
+        summary: str = "AI 生成的模块简介",
+        validation: ValidationResult = ValidationResult(consistent=True),
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
+        self._summary = summary
+        self._validation = validation
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
+        self.summary_calls: list[tuple[str, ...]] = []
+        self.validation_calls: list[tuple[str, str]] = []
 
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
@@ -334,7 +340,14 @@ class FakeLLM:
         return self._main_skeleton
 
     def summarize_module(self, code: str) -> str:
-        return "AI 生成的模块简介"
+        self.summary_calls.append((code,))
+        return self._summary
+
+    def validate_module_description(
+        self, description: str, code: str
+    ) -> ValidationResult:
+        self.validation_calls.append((description, code))
+        return self._validation
 
 
 class RecordingPatcher:
