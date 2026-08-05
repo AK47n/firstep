@@ -10,11 +10,7 @@ import pytest
 
 from contest_generator.config import AppConfig
 from contest_generator.llm import (
-    ACTION_EXCLUDE,
-    ACTION_KEEP,
-    ACTION_MERGE,
     DeepSeekLLM,
-    FileDecision,
     FileVersion,
     JudgmentFile,
     LLMError,
@@ -24,6 +20,13 @@ from contest_generator.llm import (
     parse_module_selection,
     parse_summary_report,
     parse_validation_result,
+)
+from contest_generator.report import (
+    ACTION_EXCLUDE,
+    ACTION_KEEP,
+    ACTION_MERGE,
+    FileDecision,
+    ReportError,
 )
 from contest_generator.manifest import ModuleManifest
 from tests.fakes import FakeTransport
@@ -740,5 +743,5 @@ def test_file_decision_from_dict_accepts_keep_without_source():
     ],
 )
 def test_file_decision_from_dict_rejects_malformed(bad):
-    with pytest.raises(LLMError):
+    with pytest.raises(ReportError):
         FileDecision.from_dict(bad)

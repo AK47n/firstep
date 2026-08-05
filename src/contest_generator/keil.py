@@ -5,6 +5,8 @@ IncludePath；设备型号、烧录配置等其余配置语义全部保留。文
 ElementTree 重序列化，空白格式会规范化——.uvprojx 由 Keil 生成、不含
 注释，格式变化无信息损失。
 重复调用幂等：先移除上次加的 modules 分组，再按同一顺序重新添加。
+XML 解析 / 写回 / 头部回注基础设施与 ccs 共用 projectfile.py 底座，
+这里只留 .uvprojx 的格式结构知识。
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Sequence
+
+from .projectfile import parse_project_file, write_project_file
 
 MODULES_GROUP = "modules"
 
@@ -37,14 +41,21 @@ class KeilPatcher:
         include_dirs: Sequence[Path],
     ) -> None:
         uvprojx = _find_uvprojx(project_dir)
-        root, original_text = _parse(uvprojx)
+        root, original_text = parse_project_file(uvprojx, KeilProjectError)
         targets = root.findall("Targets/Target")
         if not targets:
             raise KeilProjectError(f"{uvprojx} 里没有 <Targets><Target>，无法注册模块")
         for target in targets:
             _register_module_files(target, module_files)
             _append_include_dirs(target, include_dirs)
-        _write(uvprojx, root, original_text)
+        write_project_file(
+            uvprojx,
+            root,
+            original_text,
+            indent="  ",
+            declaration='<?xml version="1.0" encoding="UTF-8" ?>',
+            restore=lambda serialized: _restore_xmlns(serialized, root, original_text),
+        )
 
 
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
@@ -89,13 +100,14 @@ def _find_uvprojx(project_dir: Path) -> Path:
 _XMLNS_DECL_RE = re.compile(r'xmlns(?:[:\w-]+)?="[^"]*"')
 
 
-def _parse(path: Path) -> tuple[ET.Element, str]:
-    try:
-        original_text = path.read_text(encoding="utf-8")
-        root = ET.fromstring(original_text)
-    except ET.ParseError as exc:
-        raise KeilProjectError(f"{path} 不是合法 XML：{exc}") from exc
-    return root, original_text
+def _restore_xmlns(serialized: str, root: ET.Element, original_text: str) -> str:
+    """补回 ET 解析时丢弃的根元素 xmlns 声明（对 Keil 无影响，尽量少动母版）。"""
+    decls = _XMLNS_DECL_RE.findall(original_text)
+    if not decls:
+        return serialized
+    return serialized.replace(
+        f"<{root.tag}>", f"<{root.tag} " + " ".join(decls) + ">", 1
+    )
 
 
 def _register_module_files(target: ET.Element, module_files: Sequence[Path]) -> None:
@@ -142,18 +154,3 @@ def _append_include_dirs(target: ET.Element, include_dirs: Sequence[Path]) -> No
 def _keil_rel_path(path: Path) -> str:
     """相对工程目录的路径，转成 Keil 惯例的 .\\ 前缀 + 反斜杠。"""
     return ".\\" + str(path).replace("/", "\\")
-
-
-def _write(path: Path, root: ET.Element, original_text: str) -> None:
-    ET.indent(root, space="  ")
-    serialized = (
-        '<?xml version="1.0" encoding="UTF-8" ?>\n'
-        + ET.tostring(root, encoding="unicode")
-    )
-    # ET 解析时丢弃根元素的 xmlns 声明（对 Keil 无影响），按原文补回，尽量少动母版
-    decls = _XMLNS_DECL_RE.findall(original_text)
-    if decls:
-        serialized = serialized.replace(
-            f"<{root.tag}>", f"<{root.tag} " + " ".join(decls) + ">", 1
-        )
-    path.write_text(serialized, encoding="utf-8")

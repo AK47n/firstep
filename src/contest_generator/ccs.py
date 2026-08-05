@@ -8,6 +8,8 @@ configuration 都加）；确保 modules/ 目录被某个 sourceEntry 覆盖（�
 等其余配置语义全部保留。文件经 ElementTree 重序列化，空白格式会规范化——
 .cproject 由 CCS 生成、不含注释，格式变化无信息损失。
 重复调用幂等：include 值按去重追加，sourceEntry 按存在性补齐，不重复添加。
+XML 解析 / 写回 / 头部回注基础设施与 keil 共用 projectfile.py 底座，
+这里只留 .cproject 的格式结构知识。
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Sequence
+
+from .projectfile import parse_project_file, write_project_file
 
 INCLUDE_OPTION_SUPERCLASS = "ti.ccs.misc.options.buildIncludePath"
 MODULES_SOURCE_ENTRY_NAME = "modules"
@@ -40,7 +44,7 @@ class CcsPatcher:
         include_dirs: Sequence[Path],
     ) -> None:
         cproject = _find_cproject(project_dir)
-        root, original_text = _parse(cproject)
+        root, original_text = parse_project_file(cproject, CcsProjectError)
         configurations = _build_configurations(root)
         if not configurations:
             raise CcsProjectError(
@@ -49,7 +53,15 @@ class CcsPatcher:
         for configuration in configurations:
             _append_include_dirs(configuration, include_dirs)
             _ensure_modules_source_entry(configuration)
-        _write(cproject, root, original_text)
+        file_version = _FILEVERSION_PI_RE.search(original_text)
+        write_project_file(
+            cproject,
+            root,
+            original_text,
+            indent="\t",
+            declaration=_XML_DECLARATION,
+            head_extra=file_version.group(0) if file_version else "",
+        )
 
 
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
@@ -93,15 +105,6 @@ def _find_cproject(project_dir: Path) -> Path:
             + "、".join(p.name for p in candidates)
         )
     return candidates[0]
-
-
-def _parse(path: Path) -> tuple[ET.Element, str]:
-    try:
-        original_text = path.read_text(encoding="utf-8")
-        root = ET.fromstring(original_text)
-    except ET.ParseError as exc:
-        raise CcsProjectError(f"{path} 不是合法 XML：{exc}") from exc
-    return root, original_text
 
 
 def _build_configurations(root: ET.Element) -> list[ET.Element]:
@@ -187,14 +190,3 @@ def _ensure_modules_source_entry(configuration: ET.Element) -> None:
 def _ccs_include_value(rel_dir: Path) -> str:
     """相对工程目录的路径，转成 CCS 惯例的 ${PROJECT_LOC}/ 前缀 + 正斜杠。"""
     return "${PROJECT_LOC}/" + rel_dir.as_posix()
-
-
-def _write(path: Path, root: ET.Element, original_text: str) -> None:
-    ET.indent(root, space="\t")
-    serialized = _XML_DECLARATION + "\n"
-    # ET 解析时丢弃根元素前的 <?fileVersion ...?> 处理指令（CCS 的固定头），按原文补回
-    file_version = _FILEVERSION_PI_RE.search(original_text)
-    if file_version:
-        serialized += file_version.group(0)
-    serialized += ET.tostring(root, encoding="unicode")
-    path.write_text(serialized, encoding="utf-8")

@@ -9,12 +9,6 @@ from dataclasses import replace
 
 import pytest
 
-from contest_generator.llm import (
-    ACTION_EXCLUDE,
-    ACTION_KEEP,
-    ACTION_MERGE,
-    FileDecision,
-)
 from contest_generator.master import (
     DistillationReport,
     MAIN_C_TEMPLATE_REASON,
@@ -24,6 +18,7 @@ from contest_generator.master import (
     build_comparison_summary,
     build_judgment_files,
     compare_projects,
+    confirm_distillation,
     delete_master,
     distill_master,
     get_master,
@@ -33,6 +28,12 @@ from contest_generator.master import (
     scan_project,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from contest_generator.report import (
+    ACTION_EXCLUDE,
+    ACTION_KEEP,
+    ACTION_MERGE,
+    FileDecision,
+)
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FAKE_DISTILL_UVPROJX_B,
@@ -489,27 +490,24 @@ def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
         _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
 
-def test_distill_ignores_ai_keep_on_common_path(fake_stm32_projects):
-    """AI 把公共文件也判定 keep 时按冗余忽略，不中断提炼（现实 LLM 常见回显）。"""
-    decisions = DEFAULT_DECISIONS + (
-        FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="公共骨架，应保留"),
-    )
+def test_distill_rejects_platform_mismatch_with_projects(fake_stm32_projects):
+    """调用方给的平台必须与工程的平台一致——不一致时报告会带错误平台的
+    模板 main.c 预览与错误落位路径，确认前拦住（平台交叉校验）。"""
+    with pytest.raises(MasterError, match="平台不一致"):
+        distill_master(
+            FakeLLM(distillation=DEFAULT_DECISIONS),
+            PLATFORM_MSPM0,
+            _projects(fake_stm32_projects),
+        )
 
-    report = _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
-    assert [d.path for d in report.keep].count("inc/stm32f10x_conf.h") == 1
+def test_apply_rejects_report_platform_mismatch(fake_stm32_projects, tmp_path):
+    """确认回传的报告平台与工程不一致——与 AI 路径同一道校验，落盘前拦住。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(report, platform=PLATFORM_MSPM0)
 
-
-def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
-    """公共文件判定 merge / exclude 是错误——公共文件必须保留。"""
-    decisions = DEFAULT_DECISIONS + (
-        FileDecision(
-            "inc/stm32f10x_conf.h", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"
-        ),
-    )
-
-    with pytest.raises(MasterError, match="公共文件必须保留"):
-        _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
+    with pytest.raises(MasterError, match="平台不一致"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
 
 
 def test_distill_requires_full_judgment_coverage(fake_stm32_projects):
@@ -901,6 +899,41 @@ def test_apply_rejects_comparison_mismatch(fake_stm32_projects, tmp_path):
 
     with pytest.raises(MasterError, match="不匹配"):
         apply_distillation(report, wrong_comparison, tmp_path / "preview")
+
+
+def test_confirm_distillation_stores_master_in_one_transaction(
+    fake_stm32_projects, fake_masters_dir, tmp_path
+):
+    """确认事务（重扫 → 重比 → 重建报告 → 暂存 → 落盘 → 入库）可不经 HTTP 直测。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    payload = {
+        **report.to_dict(),
+        "project_dirs": [str(p) for p in fake_stm32_projects],
+    }
+
+    meta = confirm_distillation(fake_masters_dir, fake_stm32_projects, payload)
+
+    assert meta.platform == PLATFORM_STM32
+    assert meta.sources == ("proj-a", "proj-b")
+    stored = fake_masters_dir / PLATFORM_STM32
+    assert (stored / "main.c").is_file()
+    assert (stored / "main.c").read_text(encoding="utf-8") == main_c_template(
+        PLATFORM_STM32
+    )
+    assert (stored / "sensors/dht11.c").is_file()
+    assert not (stored / "ui/oled_fonts.c").exists()
+
+
+def test_confirm_distillation_failure_leaves_no_trace(
+    fake_stm32_projects, fake_masters_dir
+):
+    """确认失败（报告形状非法）不留半成品：暂存目录自灭，母版库不被触碰。"""
+    with pytest.raises(MasterError):
+        confirm_distillation(
+            fake_masters_dir, fake_stm32_projects, {"platform": ""}
+        )
+
+    assert list_masters(fake_masters_dir) == []
 
 
 def test_apply_cleans_up_on_mid_copy_failure(fake_stm32_projects, tmp_path):

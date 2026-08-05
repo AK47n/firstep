@@ -1,7 +1,8 @@
 """pytest fixtures：假母版、假模块库、假 LLM、生成器调用助手。
 
-全功能只通过一个接缝测试——生成器核心（contest_generator.generator.generate）。
-构造器与假件本体在 tests/fakes.py。
+生成流程经 contest_generator.generator 驱动：落盘接缝是 generate，完整流程
+（选模块 → 母版 → 生成 → 摘要）的接缝是 generate_project。构造器与假件
+本体在 tests/fakes.py。
 """
 
 from __future__ import annotations

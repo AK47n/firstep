@@ -14,12 +14,8 @@ from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
 
-from contest_generator.llm import (
-    FileDecision,
-    JudgmentFile,
-    ModuleSelection,
-    ValidationResult,
-)
+from contest_generator.llm import JudgmentFile, ModuleSelection, ValidationResult
+from contest_generator.report import FileDecision
 
 # ---------------------------------------------------------------------------
 # 假模块文件内容（断言输出目录里文件内容用）
@@ -409,7 +405,9 @@ class FakeLLM:
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
         self.validation_calls: list[tuple[str, str]] = []
-        self.distill_calls: list[tuple[str, tuple[str, ...], str]] = []
+        self.distill_calls: list[
+            tuple[str, tuple[str, ...], tuple[JudgmentFile, ...], str]
+        ] = []
 
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]

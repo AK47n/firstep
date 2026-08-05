@@ -14,18 +14,72 @@ from contest_generator.generator import (
     MissingModuleFilesError,
     OutputDirNotEmptyError,
     UndefinedCallsError,
+    generate_project,
 )
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASS, _SETTINGS_MODULE_ID
 from contest_generator.manifest import ModuleManifest
+from contest_generator.master import MasterError
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32, PatcherRegistry
 from tests.fakes import (
     DHT11_H,
     DHT11_MSPM0_C,
     DHT11_STM32_C,
+    MAIN_SKELETON,
     OLED_H,
     OLED_STM32_C,
     RecordingPatcher,
+    make_fake_master_project,
 )
+
+
+def test_generate_project_full_flow_returns_summary(fake_module_library, tmp_path):
+    """完整流程接缝：选模块 → 定位母版 → 生成 → 摘要，一步返回只读摘要。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    output_dir = tmp_path / "out"
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11", "oled"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=output_dir,
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+    )
+
+    # 依赖 delay 被自动展开（resolve_selection），落盘与摘要一次给齐
+    assert (output_dir / "main.c").is_file()
+    assert (output_dir / "modules" / "delay" / "delay.c").is_file()
+    assert "modules/dht11/stm32/src" in summary.include_dirs
+    assert any(slug == "delay" for slug, _ in summary.modules)
+
+
+def test_generate_project_master_missing_fails(fake_module_library, tmp_path):
+    """母版库里没有该平台母版——流程入口就报错，不产出残缺工程。"""
+    with pytest.raises(MasterNotFoundError, match="母版"):
+        generate_project(
+            platform=PLATFORM_STM32,
+            slugs=["dht11"],
+            main_c_content=MAIN_SKELETON,
+            output_dir=tmp_path / "out",
+            module_library_dir=fake_module_library,
+            masters_dir=tmp_path / "masters",
+        )
+
+    assert not (tmp_path / "out").exists()
+
+
+def test_generate_project_rejects_platform_path_traversal(fake_module_library, tmp_path):
+    """借平台名逃出母版库在入口处被拦：平台先过母版库的平台名校验。"""
+    with pytest.raises(MasterError, match="非法平台名"):
+        generate_project(
+            platform="../evil",
+            slugs=["dht11"],
+            main_c_content=MAIN_SKELETON,
+            output_dir=tmp_path / "out",
+            module_library_dir=fake_module_library,
+            masters_dir=tmp_path / "masters",
+        )
 
 
 def test_generate_stm32_outputs_complete_project(make_project, tmp_path):

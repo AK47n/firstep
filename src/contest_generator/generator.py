@@ -1,9 +1,10 @@
-"""工程生成器核心 —— 全功能唯一的测试接缝。
+"""工程生成器核心 —— 生成流程的接缝（generate_project）与落盘步骤（generate）。
 
-输入（目标平台、已选模块的 manifest 集、模块库目录、母版工程路径、
-输出目录、main.c 内容）→ 输出完整工程目录：母版文件复制、模块文件按
-平台版本复制到 modules/<slug>/、main.c 落位（落位前静态自检：引用的
-函数必须在所选模块头文件中）、平台修改器经注册表委托。
+generate_project 是完整流程入口：选模块（加载库 + 展开依赖 + 平台警告）→
+定位母版 → generate 落盘 → 只读摘要，webapp 与测试都经它驱动；generate 是
+内部落盘步骤（母版文件复制、模块文件按平台版本复制到 modules/<slug>/、
+main.c 落位（落位前静态自检：引用的函数必须在所选模块头文件中）、平台
+修改器经注册表委托）。
 
 所有校验失败都在创建输出目录之前发生，绝不产出残缺工程。
 """
@@ -16,7 +17,9 @@ from pathlib import Path
 from typing import Sequence
 
 from .manifest import ModuleManifest
+from .master import master_project_dir
 from .patchers import PatcherRegistry, default_registry
+from .selection import resolve_selection
 from .skeleton import verify_main_c
 
 MODULES_SUBDIR = "modules"
@@ -86,6 +89,36 @@ def describe_generation(
         include_dirs=tuple(include_dirs),
         modules=tuple(modules),
     )
+
+
+def generate_project(
+    *,
+    platform: str,
+    slugs: Sequence[str],
+    main_c_content: str,
+    output_dir: Path,
+    module_library_dir: Path,
+    masters_dir: Path,
+    registry: PatcherRegistry | None = None,
+) -> GenerationSummary:
+    """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
+
+    生成前的组合操作（加载库 + 展开依赖 + 平台警告 → 母版目录 → 复制打补丁
+    → 只读摘要）只有一个入口，webapp 与流程级测试都经它驱动；母版库布局
+    （masters_dir/<platform>）归母版模块所有（master_project_dir），这里只
+    调用不另抄。所有校验失败都在创建输出目录之前发生。
+    """
+    resolved = resolve_selection(module_library_dir, platform, slugs)
+    result_dir = generate(
+        platform=platform,
+        manifests=resolved.manifests,
+        module_library_dir=module_library_dir,
+        master_project_dir=master_project_dir(masters_dir, platform),
+        output_dir=output_dir,
+        main_c_content=main_c_content,
+        registry=registry,
+    )
+    return describe_generation(result_dir, resolved.manifests, platform)
 
 
 def generate(

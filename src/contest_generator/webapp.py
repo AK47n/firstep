@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +27,7 @@ from .config import (
     save_config,
 )
 from .extraction import ExtractionError, extract_file
-from .generator import GenerationSummary, GeneratorError, describe_generation, generate
+from .generator import GenerationSummary, GeneratorError, generate_project
 from .library import (
     LibraryError,
     add_module,
@@ -43,8 +42,7 @@ from .llm import LLM, LLMError, DeepSeekLLM, build_manifest_summaries
 from .master import (
     DistillationReport,
     MasterError,
-    apply_distillation,
-    compare_projects,
+    confirm_distillation,
     delete_master,
     distill_master,
     import_master,
@@ -279,30 +277,24 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise _error_response(exc) from exc
 
     @app.post("/api/generate")
-    def generate_project(payload: dict) -> dict:
-        """完整生成：模块文件 + main.c 落位 + 平台修改器（include path 等）。"""
+    def generate(payload: dict) -> dict:
+        """完整生成：选模块 → 母版 → 生成 → 摘要（流程在 generate_project）。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
         output_dir = Path(_require_str(payload, "output_dir"))
         try:
             config = _require_config(context)
-            resolved = resolve_selection(config.module_library_dir, platform, slugs)
-            master_dir = config.masters_dir / platform
-            result_dir = generate(
+            summary = generate_project(
                 platform=platform,
-                manifests=resolved.manifests,
-                module_library_dir=config.module_library_dir,
-                master_project_dir=master_dir,
-                output_dir=output_dir,
+                slugs=slugs,
                 main_c_content=main_c,
+                output_dir=output_dir,
+                module_library_dir=config.module_library_dir,
+                masters_dir=config.masters_dir,
             )
-            return _generation_result(describe_generation(result_dir, resolved.manifests, platform))
-        except (
-            LibraryError,
-            SelectionError,
-            GeneratorError,
-        ) as exc:
+            return _generation_result(summary)
+        except (LibraryError, SelectionError, GeneratorError, MasterError) as exc:
             raise _error_response(exc) from exc
 
     # ------------------------------------------------------------------
@@ -437,31 +429,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     @app.post("/api/masters/confirm")
     def masters_confirm(payload: dict) -> dict:
-        """确认报告：落盘母版候选（apply_distillation）→ 结构分析 → 入库。"""
+        """确认报告：落盘母版候选 → 结构分析 → 入库（事务在 confirm_distillation）。"""
         try:
-            project_dirs = [
-                scan_project(Path(d))
-                for d in _require_str_list(payload, "project_dirs")
-            ]
-            comparison = compare_projects(project_dirs)
-            report = DistillationReport.from_dict(payload)
-            staging = Path(tempfile.mkdtemp(prefix="master-staging-"))
-            try:
-                preview = apply_distillation(report, comparison, staging / "preview")
-                meta = import_master(
-                    _masters_dir(context),
-                    report.platform,
-                    preview,
-                    sources=report.projects,
-                )
-            finally:
-                shutil.rmtree(staging, ignore_errors=True)
+            project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
+            meta = confirm_distillation(_masters_dir(context), project_dirs, payload)
             return {
                 "platform": meta.platform,
                 "sources": list(meta.sources),
                 "warnings": list(meta.warnings),
             }
-        except (MasterError, LLMError) as exc:
+        except MasterError as exc:
             raise _error_response(exc) from exc
 
     @app.get("/api/masters")

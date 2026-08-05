@@ -17,6 +17,7 @@ from typing import Any, Protocol, Sequence
 
 from .config import AppConfig
 from .manifest import ModuleManifest
+from .report import ACTION_MERGE, FileDecision, ReportError
 
 SELECT_SYSTEM_PROMPT = (
     "你是电子设计竞赛（电赛）嵌入式开发助手，熟悉 MSPM0G3507（CCS）与 "
@@ -54,14 +55,6 @@ DISTILL_SYSTEM_PROMPT = (
     "只输出 JSON 对象。"
 )
 
-ACTION_KEEP = "keep"  # 保留：通用且基础建设必需
-ACTION_MERGE = "merge"  # 整合：同路径多份内容不同，AI 读多份产出通用版本
-ACTION_EXCLUDE = "exclude"  # 剔除：不通用 / 残留
-
-# 判定动作词表：llm.py 与 master.py 共用，各自硬编码会静默漂移
-DISTILL_ACTIONS = (ACTION_KEEP, ACTION_MERGE, ACTION_EXCLUDE)
-
-
 class LLMError(Exception):
     """LLM 调用或输出解析失败，message 说明具体问题。"""
 
@@ -84,86 +77,6 @@ class ValidationResult:
 
     consistent: bool  # 简介与代码是否一致
     issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
-
-
-@dataclass(frozen=True)
-class FileDecision:
-    """母版提炼时单个文件的判定：保留 / 整合（AI 产出通用版本）/ 剔除。
-
-    merge 携带整合产物全文（content）与整合说明（explanation），选一份只是
-    特例——可附 source 说明选了哪份，但落盘一律写 content。只覆盖需要判定
-    的路径（同路径不同内容 + 独有文件）；所有工程内容一致的公共文件由
-    master.compare_projects 确定性保留，不交给 AI。
-    """
-
-    path: str  # 相对工程目录的路径（与扫描清单同一套词表）
-    action: str  # ACTION_KEEP / ACTION_MERGE / ACTION_EXCLUDE
-    content: str = ""  # merge 时 AI 整合出的通用版本全文（其余动作必须为空）
-    explanation: str = ""  # merge 时的整合说明（选一份时说明为何选它）
-    source: str = ""  # merge 选一份特例时的来源工程名（其余动作必须为空）
-    reason: str = ""  # AI 的中文理由
-
-    def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 兼容 dict（确认请求按同一形状回传）。"""
-        return {
-            "path": self.path,
-            "action": self.action,
-            "content": self.content,
-            "explanation": self.explanation,
-            "source": self.source,
-            "reason": self.reason,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "FileDecision":
-        """从 JSON 重建单个判定（形状校验与 parse_distillation_report 同源）。
-
-        任何结构 / 内容问题（非对象、缺 path、action 非法、merge 缺整合产物或
-        整合说明、非 merge 带 content/explanation/source）都抛 LLMError——确认
-        报告同样不可信，宁可大声失败也不要带病进入落盘流程。来源工程名是否真实
-        含该文件由 master 层校验。
-        """
-        if not isinstance(data, dict):
-            raise LLMError("判定条目必须是对象")
-        path = data.get("path")
-        if not isinstance(path, str) or not path:
-            raise LLMError("判定条目缺少必填字段：path")
-        action = data.get("action")
-        if action not in DISTILL_ACTIONS:
-            raise LLMError(f"判定条目的 action 非法：{action!r}")
-        reason = data.get("reason", "")
-        if not isinstance(reason, str):
-            raise LLMError("判定条目的 reason 必须是字符串")
-        content = data.get("content", "")
-        explanation = data.get("explanation", "")
-        source = data.get("source", "")
-        if not isinstance(content, str):
-            raise LLMError("判定条目的 content 必须是字符串")
-        if not isinstance(explanation, str):
-            raise LLMError("判定条目的 explanation 必须是字符串")
-        if not isinstance(source, str):
-            raise LLMError("判定条目的 source 必须是字符串")
-        if action == ACTION_MERGE:
-            if not content.strip():
-                raise LLMError(
-                    f"判定条目 {path!r} 的 merge 必须指定 content（整合产物全文）"
-                )
-            if not explanation.strip():
-                raise LLMError(
-                    f"判定条目 {path!r} 的 merge 必须指定 explanation（整合说明）"
-                )
-        elif content or explanation or source:
-            raise LLMError(
-                f"判定条目 {path!r} 只有 merge 才能带 content / explanation / source"
-            )
-        return cls(
-            path=path,
-            action=action,
-            content=content,
-            explanation=explanation,
-            source=source,
-            reason=reason,
-        )
 
 
 @dataclass(frozen=True)
@@ -457,11 +370,12 @@ def parse_distillation_report(
 ) -> tuple[FileDecision, ...]:
     """把模型返回的提炼判定 JSON 文本解析校验为 FileDecision 列表。
 
-    任何结构 / 内容问题（非 JSON、缺 decisions、action 非法、merge 缺整合产物
-    或整合说明、merge 来源工程未知、非 merge 带 content/explanation/source、
-    路径重复）都抛 LLMError——模型输出不可信，宁可大声失败也不要带病进入确认
-    流程。路径与对比范围的完整性由 master.assemble_report 校验（llm 层不知道
-    对比范围）。
+    条目形状校验（action 词表、merge 必须带整合产物全文与说明等）委托
+    report.FileDecision.from_dict——报告模型是唯一所有者；这里只做 AI 契约
+    专属检查：JSON 外层、decisions 数组、来源工程必须在导入列表、路径不重复。
+    任何问题都抛 LLMError——模型输出不可信，宁可大声失败也不要带病进入确认
+    流程。路径与对比范围的完整性由 master.assemble_report 校验（llm 层
+    不知道对比范围）。
     """
     try:
         data = json.loads(content)
@@ -476,54 +390,22 @@ def parse_distillation_report(
     for index, item in enumerate(data["decisions"]):
         if not isinstance(item, dict):
             raise LLMError(f"decisions[{index}] 必须是对象")
-        path = item.get("path")
-        if not isinstance(path, str) or not path:
-            raise LLMError(f"decisions[{index}] 缺 path")
-        action = item.get("action")
-        if action not in DISTILL_ACTIONS:
-            raise LLMError(f"decisions[{index}] 的 action 非法：{action!r}")
-        reason = item.get("reason", "")
-        if not isinstance(reason, str):
-            raise LLMError(f"decisions[{index}] 的 reason 必须是字符串")
-        content = item.get("content", "")
-        explanation = item.get("explanation", "")
-        source = item.get("source", "")
-        if not isinstance(content, str):
-            raise LLMError(f"decisions[{index}] 的 content 必须是字符串")
-        if not isinstance(explanation, str):
-            raise LLMError(f"decisions[{index}] 的 explanation 必须是字符串")
-        if not isinstance(source, str):
-            raise LLMError(f"decisions[{index}] 的 source 必须是字符串")
-        if action == ACTION_MERGE:
-            if not content.strip():
-                raise LLMError(
-                    f"decisions[{index}] 的 merge 必须指定 content（整合产物全文）"
-                )
-            if not explanation.strip():
-                raise LLMError(
-                    f"decisions[{index}] 的 merge 必须指定 explanation（整合说明）"
-                )
-            if source and source not in names:
-                raise LLMError(
-                    f"decisions[{index}] 的来源工程不在导入列表中：{source}"
-                )
-        elif content or explanation or source:
+        try:
+            decision = FileDecision.from_dict(item)
+        except ReportError as exc:
+            raise LLMError(f"decisions[{index}] {exc}") from exc
+        if (
+            decision.action == ACTION_MERGE
+            and decision.source
+            and decision.source not in names
+        ):
             raise LLMError(
-                f"decisions[{index}] 只有 merge 才能带 content / explanation / source"
+                f"decisions[{index}] 的来源工程不在导入列表中：{decision.source}"
             )
-        if path in seen:
-            raise LLMError(f"模型重复判定文件：{path}")
-        seen.add(path)
-        decisions.append(
-            FileDecision(
-                path=path,
-                action=action,
-                content=content,
-                explanation=explanation,
-                source=source,
-                reason=reason,
-            )
-        )
+        if decision.path in seen:
+            raise LLMError(f"模型重复判定文件：{decision.path}")
+        seen.add(decision.path)
+        decisions.append(decision)
     return tuple(decisions)
 
 

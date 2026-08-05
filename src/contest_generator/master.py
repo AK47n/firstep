@@ -30,23 +30,22 @@ import json
 import os
 import re
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
 from .keil import KeilProjectError, extract_config_summary as extract_keil_config_summary
-from .llm import (
+from .llm import FileVersion, JudgmentFile, LLM
+from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
-    FileVersion,
-    JudgmentFile,
-    LLM,
-    LLMError,
+    ReportError,
 )
-from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
 # 扫描时忽略的顶级目录：版本库与构建产物不是母版内容
 BUILD_ARTIFACT_DIRS = frozenset({"Debug", "Release"})
@@ -221,7 +220,7 @@ class DistillationReport:
                 raise MasterError(f"{key} 必须是列表")
             try:
                 return tuple(FileDecision.from_dict(item) for item in raw)
-            except LLMError as exc:
+            except ReportError as exc:
                 raise MasterError(f"报告 {key} 条目非法：{exc}") from exc
 
         return cls(
@@ -444,6 +443,7 @@ def distill_master(
     未知路径抛 MasterError——宁可不放行也不带病进入确认流程。
     """
     comparison = compare_projects(projects)
+    _validate_platform_match(platform, comparison)
     project_names = tuple(p.name for p in projects)
     decisions = llm.distill_master(
         platform,
@@ -607,6 +607,7 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
     """
     if set(report.projects) != {p.name for p in comparison.projects}:
         raise MasterError("报告与对比结果不匹配（来源工程不一致）")
+    _validate_platform_match(report.platform, comparison)
     dispositions = (*report.keep, *report.merge, *report.exclude)
     paths = [d.path for d in dispositions]
     if len(set(paths)) != len(paths):
@@ -674,6 +675,21 @@ def _validate_forced_exclusions(
         raise MasterError(f"{error_prefix}：" + "、".join(problems))
 
 
+def _validate_platform_match(platform: str, comparison: ProjectComparison) -> None:
+    """报告 / 提炼的平台必须与工程的平台一致（平台交叉校验）。
+
+    平台名来自调用方（webapp 从客户端 payload 取），工程平台由扫描判定；
+    compare_projects 只保证工程之间同平台，不保证调用方给的平台与工程一致。
+    不一致时报告会带着错误平台的模板 main.c 预览与错误落位路径，必须在确认
+    前拦住。
+    """
+    projects_platform = comparison.projects[0].platform  # compare 已保证同平台
+    if platform != projects_platform:
+        raise MasterError(
+            f"平台不一致：报告为 {platform!r}，工程为 {projects_platform!r}"
+        )
+
+
 def _validate_judgment_coverage(decided: set[str], judgment: set[str]) -> None:
     missing = judgment - decided
     if missing:
@@ -691,9 +707,45 @@ def _source_project(decision: FileDecision, comparison: ProjectComparison) -> st
     return holders[0]
 
 
+def confirm_distillation(
+    masters_dir: Path,
+    project_dirs: Sequence[Path],
+    payload: dict[str, Any],
+) -> MasterMeta:
+    """确认报告并落库：重扫 → 重比 → 重建报告 → 暂存 → 落盘 → 入库，一次事务。
+
+    确认请求里的 project_dirs 与报告同样不可信：落库前重新扫描对比、按报告
+    模型重建（形状校验在 from_dict），暂存目录在函数内部自生自灭——任何一步
+    失败都不留半成品，既有母版在任意失败点都完好（import_master 自带备份
+    回滚）。webapp 只收请求、调这里、转 JSON。
+    """
+    projects = tuple(scan_project(project_dir) for project_dir in project_dirs)
+    comparison = compare_projects(projects)
+    report = DistillationReport.from_dict(payload)
+    staging = Path(tempfile.mkdtemp(prefix="master-staging-"))
+    try:
+        preview = apply_distillation(report, comparison, staging / "preview")
+        meta = import_master(
+            masters_dir, report.platform, preview, sources=report.projects
+        )
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return meta
+
+
 # ---------------------------------------------------------------------------
 # 母版库：入库（结构分析 + 可更换）、浏览、删除
 # ---------------------------------------------------------------------------
+
+
+def master_project_dir(masters_dir: Path, platform: str) -> Path:
+    """母版在库里的目录位置：<masters_dir>/<platform>（库布局的唯一出处）。
+
+    import_master / get_master / delete_master 与生成流程共用这一条布局规则；
+    平台名先过合法性校验——借平台名拼路径逃出母版库在入口处就被拦住。
+    """
+    _validate_store_key(platform)
+    return masters_dir / platform
 
 
 def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
