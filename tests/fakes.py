@@ -183,7 +183,8 @@ FAKE_DISTILL_UVPROJX_B = FAKE_DISTILL_UVPROJX_A.replace(
 def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
     """两个同平台旧工程（母版提炼素材）：公共文件内容一致、两处冲突
     （project.uvprojx / src/oled.c）、各自独有的残留文件；.git 与构建产物
-    目录（Debug/Release）应在扫描时被忽略。"""
+    目录（Debug/Release）应在扫描时被忽略；源码树内的残留（.o/.bak/.
+    hex/~）应规则识别、确定性剔除但进报告。"""
     common = {
         "main.c": "#include \"stm32f10x_conf.h\"\nint main(void) { while (1); }\n",
         "inc/stm32f10x_conf.h": "#pragma once\n",
@@ -195,6 +196,8 @@ def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
         "project.uvprojx": FAKE_DISTILL_UVPROJX_A,
         "src/oled.c": "/* 通用 OLED 驱动（A 版本） */\nvoid oled_init(void);\n",
         "sensors/dht11.c": "/* 通用 DHT11 驱动 */\nfloat dht11_read(void);\n",
+        "src/oled.o": "ELF junk",  # 构建产物
+        "main.c.bak": "backup",  # 备份文件
         ".git/HEAD": "ref: refs/heads/main\n",
         "Debug/out.axf": "binary junk",
     })
@@ -204,6 +207,8 @@ def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
         "project.uvprojx": FAKE_DISTILL_UVPROJX_B,
         "src/oled.c": "/* 通用 OLED 驱动（B 版本） */\nvoid oled_init(void);\n",
         "ui/oled_fonts.c": "/* 上一场比赛的字体表 */\nconst unsigned char font[1];\n",
+        "src/oled.hex": "hex junk",  # 构建产物
+        "ui/oled_fonts.c~": "backup",  # 备份文件（编辑器临时备份）
         ".git/HEAD": "ref: refs/heads/main\n",
         "Release/oled.o": "binary junk",
     })

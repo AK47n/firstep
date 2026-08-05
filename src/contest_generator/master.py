@@ -4,10 +4,11 @@
 scan_project 逐个生成结构快照（平台检测 + 文件清单 + 配置摘要）→
 compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→ distill_master
 把需要判定的路径（冲突 + 独有）连同文件全文交给 LLM（两阶段：读全文出摘要
-→ 基于摘要判定），公共文件按"所有工程内容一致"确定保留 → 得到完整提炼报告
-（保留 / 合并 / 剔除清单 + 理由）→ 用户审查、可修改报告 → apply_distillation
-按确认后的报告落盘母版候选 → import_master 做结构分析后入库（每平台一个
-母版，可更换 / 删除）。
+→ 基于摘要判定），公共文件按"所有工程内容一致"确定保留，残留（构建产物 /
+备份 / 临时文件）按扩展名 / 模式规则识别、确定性剔除 → 得到完整提炼报告
+（保留 / 整合 / 剔除清单 + 理由，残留条目带规则化原因）→ 用户审查、可修改
+报告 → apply_distillation 按确认后的报告落盘母版候选 → import_master 做结构
+分析后入库（每平台一个母版，可更换 / 删除）。
 
 母版库：磁盘目录即数据库，母版库根下每个平台一个目录（工程文件本体）+ 同名
 <platform>.json 元数据（提炼来源、入库时结构分析的警告）。元数据放目录外的
@@ -48,6 +49,34 @@ from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 BUILD_ARTIFACT_DIRS = frozenset({"Debug", "Release"})
 IGNORED_TOP_LEVEL_DIRS = frozenset({".git"}) | BUILD_ARTIFACT_DIRS
 
+# 残留规则（保守名单，与 template-fit-check.md 的"建议清理"一致）：构建产物 /
+# 备份 / 临时文件按扩展名与模式机器识别。命中即确定性剔除——不进扫描清单、
+# 不进 AI 判定、不读全文，但进报告 exclude 清单并带规则化原因（ADR 0001：
+# 不做黑盒消失）。
+RESIDUE_RULES: tuple[tuple[str, str], ...] = (
+    (".o", "构建产物：.o 文件"),
+    (".axf", "构建产物：.axf 文件"),
+    (".hex", "构建产物：.hex 文件"),
+    (".map", "构建产物：.map 文件"),
+    (".bak", "备份文件：.bak"),
+    (".tmp", "临时文件：.tmp"),
+    (".temp", "临时文件：.temp"),
+    ("~", "备份文件：~ 结尾"),
+)
+
+
+def residue_reason(rel_path: str) -> str | None:
+    """路径命中残留规则时返回规则化原因（如"构建产物：.o 文件"），否则 None。
+
+    按路径后缀判定（大小写不敏感——Windows 下构建产物常大写，如 .HEX）。
+    规则由路径决定：同一路径在任何工程里都是残留，不可能既是残留又是源码。
+    """
+    lowered = rel_path.lower()
+    for suffix, reason in RESIDUE_RULES:
+        if lowered.endswith(suffix):
+            return reason
+    return None
+
 # 各平台 IDE 打开工程必需的配置文件：结构分析时校验存在性
 PLATFORM_CONFIG_FILES = {
     PLATFORM_STM32: (".uvprojx",),
@@ -68,7 +97,8 @@ class MasterError(ValueError):
 
 @dataclass(frozen=True)
 class ProjectStructure:
-    """单个工程的结构快照：平台、文件清单（相对路径 + 内容哈希）、配置摘要。"""
+    """单个工程的结构快照：平台、文件清单（相对路径 + 内容哈希）、配置摘要、
+    残留清单（规则识别、确定性剔除，不进 AI 判定）。"""
 
     project_dir: Path
     name: str  # 工程名（目录名）
@@ -76,6 +106,7 @@ class ProjectStructure:
     files: tuple[str, ...]  # 相对路径（POSIX 分隔），排序
     file_hashes: Mapping[str, str]  # path -> sha256 hex（对比内容是否一致）
     config_summary: tuple[str, ...]  # 平台配置摘要行（配置对比的 AI 素材）
+    residues: tuple[str, ...] = ()  # 残留相对路径（构建产物 / 备份 / 临时文件）
 
 
 @dataclass(frozen=True)
@@ -88,6 +119,7 @@ class ProjectComparison:
     unique: tuple[str, ...]  # 只出现在部分工程
     by_path: Mapping[str, tuple[str, ...]]  # path -> 含该文件的工程名（出现顺序）
     judgment: tuple[str, ...]  # 需要 AI 判定的路径（冲突 + 独有）
+    residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
 
 
 @dataclass(frozen=True)
@@ -191,19 +223,25 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     平台由工程配置文件判定：有 .uvprojx 为 stm32，有 .cproject 为 mspm0；
     两者都有或都没有抛 MasterError。工程文件在任意层级可识别（正点原子风格
     在 USER/ 子目录），.git 目录除外。.git / Debug / Release 等非母版内容的
-    顶层目录不进清单。config_summary 提取设备 / include path / 编译宏等
-    配置对比素材（XML 解析失败只记一行，扫描不因单个工程带病中断）。
+    顶层目录不进清单。残留（构建产物 / 备份 / 临时文件）单独记录在
+    residues、不进扫描清单也不读内容（可能是二进制）；config_summary 提取
+    设备 / include path / 编译宏等配置对比素材（XML 解析失败只记一行，扫描
+    不因单个工程带病中断）。
     """
     if not project_dir.is_dir():
         raise MasterError(f"工程目录不存在：{project_dir}")
     platform = _detect_platform(project_dir)
     files: list[str] = []
+    residues: list[str] = []
     hashes: dict[str, str] = {}
     for path in sorted(project_dir.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(project_dir).as_posix()
         if _is_ignored(rel):
+            continue
+        if residue_reason(rel) is not None:
+            residues.append(rel)
             continue
         files.append(rel)
         hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -214,6 +252,7 @@ def scan_project(project_dir: Path) -> ProjectStructure:
         files=tuple(files),
         file_hashes=hashes,
         config_summary=_config_summary(project_dir, platform),
+        residues=tuple(residues),
     )
 
 
@@ -265,6 +304,7 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
         unique=tuple(unique),
         by_path={path: tuple(names) for path, names in by_path.items()},
         judgment=tuple(sorted(conflicts)) + tuple(sorted(unique)),
+        residues=tuple(sorted({r for p in projects for r in p.residues})),
     )
 
 
@@ -358,18 +398,25 @@ def assemble_report(
     comparison: ProjectComparison,
     decisions: Sequence[FileDecision],
 ) -> DistillationReport:
-    """把确定性公共文件与 AI 判定拼成完整报告，并校验判定覆盖完整。
+    """把确定性公共文件、规则化残留剔除与 AI 判定拼成完整报告，并校验覆盖。
 
     判据是内容（通用性 / 基础建设必需性），分类不直接决定动作：冲突文件可以
     merge（整合出通用版本）也可以 exclude，只有 keep 被禁止（keep 没有"取哪份
     内容"的信息，落盘时会静默取第一个工程）；公共文件确定保留——AI 重复判定
     keep 是冗余（忽略），判定 merge / exclude 是错误（公共文件必须保留），
-    用户确认时可把公共文件改为剔除。merge 必须带整合产物全文与整合说明
-    （选一份只是特例）。这些在确认前就拦住，兑现"不带病进入确认流程"。
+    用户确认时可把公共文件改为剔除。残留（构建产物 / 备份 / 临时文件）机器
+    识别、确定性剔除：不进 AI 判定素材（AI 给出残留路径判定是越界，拒绝），
+    报告 exclude 清单自动带规则化原因（ADR 0001：不做黑盒消失）。merge 必须带
+    整合产物全文与整合说明（选一份只是特例）。这些在确认前就拦住，兑现"不带
+    病进入确认流程"。
     """
     common = set(comparison.common)
+    residues = set(comparison.residues)
     scoped: list[FileDecision] = []
     for decision in decisions:
+        if decision.path in residues:
+            # 残留由规则确定性剔除，AI 从未在素材里见过它——判定即越界
+            raise MasterError(f"残留文件由规则剔除，无需 AI 判定：{decision.path}")
         if decision.path in common:
             # 公共文件由确定性自动保留覆盖；AI 重复判定 keep 是冗余（忽略），
             # 判定 merge / exclude 是错误（公共文件必须保留），直接拒绝
@@ -394,6 +441,13 @@ def assemble_report(
             exclude.append(decision)
         else:
             keep.append(decision)
+    for path in comparison.residues:
+        reason = residue_reason(path)
+        if reason is None:
+            # 对比结果由扫描分类产生，残留路径必命中规则；手动构造的对比
+            # 带病也要在此大声失败，而不是把 None 理由带进报告
+            raise MasterError(f"残留路径未命中规则：{path}")
+        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=reason))
     return DistillationReport(
         platform=platform,
         projects=tuple(project_names),
@@ -491,8 +545,36 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
     for decision in report.merge:
         if decision.path in common:
             raise MasterError(f"公共文件必须保留：{decision.path}")
-    _validate_judgment_coverage(decided=set(paths) - common, judgment=set(comparison.judgment))
+    # 残留在报告里但不在判定范围（规则识别、确定性剔除），从覆盖校验中扣除；
+    # 它们必须恰好出现在 exclude 里，由 _validate_residue_disposition 单独校验
+    _validate_judgment_coverage(
+        decided=set(paths) - common - set(comparison.residues),
+        judgment=set(comparison.judgment),
+    )
+    _validate_residue_disposition(report, comparison)
     _validate_merge_sources(dispositions, comparison)
+
+
+def _validate_residue_disposition(
+    report: DistillationReport, comparison: ProjectComparison
+) -> None:
+    """残留必须恰好剔除一次：规则识别的确定性剔除，用户确认也不能改成
+    保留 / 整合或删掉（删掉 = 黑盒消失，ADR 0001）。两种问题一次报全，
+    各自带原因。"""
+    residues = set(comparison.residues)
+    moved = sorted(
+        residues
+        & {
+            d.path
+            for d in (*report.keep, *report.merge, *report.exclude)
+            if d.action != ACTION_EXCLUDE
+        }
+    )
+    missing = sorted(residues - {d.path for d in report.exclude})
+    if moved or missing:
+        problems = [f"{path}（被改为保留/整合）" for path in moved]
+        problems += [f"{path}（报告中缺失）" for path in missing]
+        raise MasterError("残留文件必须剔除：" + "、".join(problems))
 
 
 def _validate_judgment_coverage(decided: set[str], judgment: set[str]) -> None:

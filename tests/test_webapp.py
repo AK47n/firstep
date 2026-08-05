@@ -507,7 +507,16 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
         "inc/stm32f10x_conf.h", "main.c", "src/system_stm32f10x.c", "sensors/dht11.c",
     ]
     assert [d["path"] for d in report["merge"]] == ["project.uvprojx", "src/oled.c"]
-    assert [d["path"] for d in report["exclude"]] == ["ui/oled_fonts.c"]
+    # exclude = AI 判定 + 规则识别的残留（带规则化原因）
+    assert [d["path"] for d in report["exclude"]] == [
+        "ui/oled_fonts.c",
+        "main.c.bak",
+        "src/oled.hex",
+        "src/oled.o",
+        "ui/oled_fonts.c~",
+    ]
+    residue = next(d for d in report["exclude"] if d["path"] == "src/oled.o")
+    assert residue["reason"] == "构建产物：.o 文件"
 
     confirmed = client.post(
         "/api/masters/confirm",

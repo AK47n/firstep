@@ -104,6 +104,10 @@ def test_scan_detects_platform_and_lists_files(fake_stm32_projects):
     # .git 与构建产物目录不进清单
     assert ".git/HEAD" not in structure_a.files
     assert "Debug/out.axf" not in structure_a.files
+    # 源码树内的残留单独记录、不进扫描清单也不读内容
+    assert structure_a.residues == ("main.c.bak", "src/oled.o")
+    assert "src/oled.o" not in structure_a.files
+    assert "src/oled.o" not in structure_a.file_hashes
 
 
 def test_scan_ignores_build_artifacts_in_other_project(fake_stm32_projects):
@@ -111,6 +115,42 @@ def test_scan_ignores_build_artifacts_in_other_project(fake_stm32_projects):
 
     assert ".git/HEAD" not in structure_b.files
     assert "Release/oled.o" not in structure_b.files
+
+
+def test_scan_classifies_residues_by_rule(tmp_path):
+    """构建产物 / 备份 / 临时文件按扩展名与模式识别；名单外的相近命名不误伤。"""
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "project.uvprojx").write_text(FAKE_DISTILL_UVPROJX_B, encoding="utf-8")
+    for name, content in {
+        "src/driver.o": "ELF",  # 构建产物
+        "build/out.axf": "ELF",
+        "flash/fw.hex": "hex",
+        "build/out.map": "map",
+        "main.c.bak": "backup",  # 备份文件
+        "src/driver.c~": "backup",
+        "list.tmp": "temp",  # 临时文件
+        "scratch.temp": "temp",
+        "src/real.c": "/* real */",  # 源码不受影响
+        "src/real.c.orig": "/* orig */",  # 不在名单内 → 普通文件
+    }.items():
+        path = project / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    structure = scan_project(project)
+
+    assert structure.residues == (
+        "build/out.axf",
+        "build/out.map",
+        "flash/fw.hex",
+        "list.tmp",
+        "main.c.bak",
+        "scratch.temp",
+        "src/driver.c~",
+        "src/driver.o",
+    )
+    assert structure.files == ("project.uvprojx", "src/real.c", "src/real.c.orig")
 
 
 def test_scan_detects_ccs_platform(tmp_path):
@@ -217,6 +257,22 @@ def test_compare_records_which_projects_hold_each_path(fake_stm32_projects):
     assert comparison.by_path["ui/oled_fonts.c"] == ("proj-b",)
 
 
+def test_compare_unions_residues_across_projects(fake_stm32_projects):
+    comparison = _comparison(fake_stm32_projects)
+
+    assert comparison.residues == (
+        "main.c.bak",
+        "src/oled.hex",
+        "src/oled.o",
+        "ui/oled_fonts.c~",
+    )
+    # 残留不进对比分类，也不进 AI 判定范围
+    assert "src/oled.o" not in comparison.judgment
+    assert "src/oled.o" not in comparison.common
+    assert "src/oled.o" not in comparison.conflicts
+    assert "src/oled.o" not in comparison.unique
+
+
 def test_compare_rejects_platform_mismatch(fake_stm32_projects, tmp_path):
     ccs = scan_project(make_fake_ccs_master_project(tmp_path / "ccs_proj"))
 
@@ -268,7 +324,14 @@ def test_distill_report_groups_keep_merge_exclude(fake_stm32_projects):
     assert report.keep[0].reason == "所有导入工程内容一致，属公共骨架"
     assert [d.path for d in report.merge] == ["project.uvprojx", "src/oled.c"]
     assert report.merge[0].source == "proj-a"
-    assert [d.path for d in report.exclude] == ["ui/oled_fonts.c"]
+    # exclude = AI 判定（ui/oled_fonts.c）+ 规则识别的残留（确定性、排序）
+    assert [d.path for d in report.exclude] == [
+        "ui/oled_fonts.c",
+        "main.c.bak",
+        "src/oled.hex",
+        "src/oled.o",
+        "ui/oled_fonts.c~",
+    ]
     assert "残留" in report.exclude[0].reason
 
 
@@ -297,6 +360,39 @@ def test_distill_passes_platform_names_and_summary_to_llm(fake_stm32_projects):
     assert by_path["sensors/dht11.c"].versions[0].projects == ("proj-a",)
     assert "DHT11" in by_path["sensors/dht11.c"].versions[0].content
     assert by_path["ui/oled_fonts.c"].versions[0].projects == ("proj-b",)
+
+
+def test_residues_never_reach_ai_material(fake_stm32_projects):
+    """残留不进 AI 判定范围、不进两阶段摘要——AI 只看到冲突与独有文件。"""
+    llm = FakeLLM(distillation=DEFAULT_DECISIONS)
+
+    _distill(fake_stm32_projects, llm)
+
+    _, _, judgment_files, summary = llm.distill_calls[0]
+    residue_paths = {"main.c.bak", "src/oled.hex", "src/oled.o", "ui/oled_fonts.c~"}
+    assert not {f.path for f in judgment_files} & residue_paths
+    for path in residue_paths:
+        assert path not in summary
+
+
+def test_distill_lists_residues_with_rule_reasons(fake_stm32_projects):
+    """报告 exclude 清单含残留条目，reason 为规则化原因（不做黑盒消失）。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+
+    by_path = {d.path: d for d in report.exclude}
+    assert by_path["src/oled.o"].action == ACTION_EXCLUDE
+    assert by_path["src/oled.o"].reason == "构建产物：.o 文件"
+    assert by_path["src/oled.hex"].reason == "构建产物：.hex 文件"
+    assert by_path["main.c.bak"].reason == "备份文件：.bak"
+    assert by_path["ui/oled_fonts.c~"].reason == "备份文件：~ 结尾"
+
+
+def test_distill_rejects_ai_decision_on_residue(fake_stm32_projects):
+    """残留由规则确定性剔除，AI 判定残留路径是越界——宁可大声失败。"""
+    bad = (*DEFAULT_DECISIONS, FileDecision("src/oled.o", ACTION_EXCLUDE, reason="AI 也判残留"))
+
+    with pytest.raises(MasterError, match="无需 AI 判定"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=bad))
 
 
 def test_judgment_files_group_identical_contents_across_projects(
@@ -397,6 +493,41 @@ def test_apply_copies_keep_and_merge_skips_exclude(fake_stm32_projects, tmp_path
     assert "B 版本" not in (output / "src/oled.c").read_text(encoding="utf-8")
     # exclude：不复制
     assert not (output / "ui/oled_fonts.c").exists()
+
+
+def test_apply_skips_residues(fake_stm32_projects, tmp_path):
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    output = tmp_path / "preview"
+
+    apply_distillation(report, _comparison(fake_stm32_projects), output)
+
+    for residue in ("main.c.bak", "src/oled.hex", "src/oled.o", "ui/oled_fonts.c~"):
+        assert not (output / residue).exists()
+
+
+def test_apply_rejects_residue_missing_from_report(fake_stm32_projects, tmp_path):
+    """确认时删掉残留条目——残留确定性剔除，不能静默消失。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        exclude=tuple(d for d in report.exclude if d.path != "src/oled.o"),
+    )
+
+    with pytest.raises(MasterError, match="残留文件必须剔除"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
+
+
+def test_apply_rejects_residue_moved_to_keep(fake_stm32_projects, tmp_path):
+    """确认时把残留改成保留——规则识别的确定性剔除不因用户编辑而失效。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        exclude=tuple(d for d in report.exclude if d.path != "src/oled.o"),
+        keep=(*report.keep, FileDecision("src/oled.o", ACTION_KEEP, reason="用户改的")),
+    )
+
+    with pytest.raises(MasterError, match="残留文件必须剔除"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
 
 
 def test_apply_user_edited_merge_content_wins(fake_stm32_projects, tmp_path):
