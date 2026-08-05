@@ -4,6 +4,7 @@
 """
 
 import json
+from typing import Any
 
 import pytest
 
@@ -14,10 +15,14 @@ from contest_generator.llm import (
     ACTION_MERGE,
     DeepSeekLLM,
     FileDecision,
+    FileVersion,
+    JudgmentFile,
     LLMError,
+    VersionSummary,
     build_manifest_summaries,
     parse_distillation_report,
     parse_module_selection,
+    parse_summary_report,
     parse_validation_result,
 )
 from contest_generator.manifest import ModuleManifest
@@ -313,7 +318,7 @@ def test_parse_validation_rejects_non_bool_consistent():
 
 
 # ---------------------------------------------------------------------------
-# 母版提炼判定：json 结构化输出
+# 母版提炼判定：两阶段（读全文出摘要 → 基于摘要判定），json 结构化输出
 # ---------------------------------------------------------------------------
 
 DISTILL_DECISIONS_JSON = json.dumps(
@@ -327,26 +332,285 @@ DISTILL_DECISIONS_JSON = json.dumps(
     }
 )
 
+JUDGMENT_FILES = (
+    JudgmentFile(
+        path="src/oled.c",
+        versions=(
+            FileVersion(
+                content="/* 通用 OLED 驱动（A 版本） */\nvoid oled_init(void);\n",
+                projects=("proj-a",),
+            ),
+            FileVersion(
+                content="/* 通用 OLED 驱动（B 版本） */\nvoid oled_init(void);\n",
+                projects=("proj-b",),
+            ),
+        ),
+    ),
+    JudgmentFile(
+        path="sensors/dht11.c",
+        versions=(
+            FileVersion(
+                content="/* 通用 DHT11 驱动 */\nfloat dht11_read(void);\n",
+                projects=("proj-a",),
+            ),
+        ),
+    ),
+)
 
-def test_distill_master_posts_json_request_with_comparison():
-    transport = FakeTransport(body=_api_response(DISTILL_DECISIONS_JSON))
+SUMMARY_REPORT_JSON = json.dumps(
+    {
+        "summaries": [
+            {
+                "path": "src/oled.c",
+                "versions": [
+                    {"projects": ["proj-a"], "summary": "A 版本：通用 OLED 初始化驱动"},
+                    {"projects": ["proj-b"], "summary": "B 版本：OLED 驱动带滚屏功能"},
+                ],
+            },
+            {
+                "path": "sensors/dht11.c",
+                "versions": [
+                    {"projects": ["proj-a"], "summary": "通用 DHT11 单总线驱动"}
+                ],
+            },
+        ]
+    }
+)
+
+
+class SequenceTransport(FakeTransport):
+    """按调用顺序返回固定响应列表的传输假件（两阶段请求形状测试）。"""
+
+    def __init__(self, bodies: list[str]) -> None:
+        super().__init__()
+        self._bodies = list(bodies)
+
+    def post(
+        self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
+    ) -> tuple[int, str]:
+        body = self._bodies.pop(0)
+        self.calls.append((url, headers, payload, timeout))
+        return self.status, body
+
+
+def test_distill_master_two_phase_posts_summaries_then_decisions():
+    transport = SequenceTransport(
+        [_api_response(SUMMARY_REPORT_JSON), _api_response(DISTILL_DECISIONS_JSON)]
+    )
     llm = _llm(transport)
     summary = "冲突文件（同路径、内容不同）：\n- src/oled.c（出现在：proj-a、proj-b）"
 
-    decisions = llm.distill_master("stm32", ("proj-a", "proj-b"), summary)
+    decisions = llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, summary)
+
+    # 两次 json_mode 调用：第一阶段读全文出摘要，第二阶段基于摘要判定
+    assert len(transport.calls) == 2
+    for _, _, payload, _ in transport.calls:
+        assert payload["response_format"] == {"type": "json_object"}
+
+    # 第一阶段：user 消息含平台、工程与每个版本的全文
+    _, _, phase1_payload, _ = transport.calls[0]
+    phase1_message = phase1_payload["messages"][1]["content"]
+    assert "stm32" in phase1_message
+    assert "proj-a" in phase1_message
+    assert "src/oled.c" in phase1_message
+    assert "通用 OLED 驱动（A 版本）" in phase1_message
+    assert "通用 OLED 驱动（B 版本）" in phase1_message
+    assert "json" in phase1_message  # DeepSeek 的 json_object 模式要求提示词含 json
+    assert "摘要" in phase1_payload["messages"][0]["content"]
+
+    # 第二阶段：输入包含第一阶段的摘要产物（读全文的要点）+ 结构与配置对比
+    _, _, phase2_payload, _ = transport.calls[1]
+    phase2_message = phase2_payload["messages"][1]["content"]
+    assert "A 版本：通用 OLED 初始化驱动" in phase2_message
+    assert "B 版本：OLED 驱动带滚屏功能" in phase2_message
+    assert "通用 DHT11 单总线驱动" in phase2_message
+    assert "src/oled.c（proj-a）" in phase2_message
+    assert "冲突文件（同路径、内容不同）" in phase2_message
+    assert "判定" in phase2_payload["messages"][0]["content"]
 
     assert len(decisions) == 3
     assert decisions[0] == FileDecision(
         "src/oled.c", ACTION_MERGE, "proj-a", "A 的 include path 更全"
     )
-    _, _, payload, _ = transport.calls[0]
-    assert payload["response_format"] == {"type": "json_object"}
-    user_message = payload["messages"][1]["content"]
-    assert "stm32" in user_message
-    assert "proj-a" in user_message
-    assert "src/oled.c" in user_message
-    assert "json" in user_message  # DeepSeek 的 json_object 模式要求提示词含 json
-    assert "判定" in payload["messages"][0]["content"]
+
+
+def test_distill_master_fails_loud_on_broken_summary_phase():
+    """第一阶段返回非 JSON 就抛 LLMError，不进第二阶段——宁可大声失败。"""
+    transport = SequenceTransport(
+        [_api_response("{not json"), _api_response(DISTILL_DECISIONS_JSON)]
+    )
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="JSON"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 1  # 第一阶段失败即停
+
+
+def test_distill_master_fails_loud_on_missing_summary():
+    """缺某个文件的摘要 → 第二阶段素材残缺，拒绝进入判定。"""
+    missing = json.dumps(
+        {
+            "summaries": [
+                {
+                    "path": "src/oled.c",
+                    "versions": [
+                        {"projects": ["proj-a"], "summary": "A 版本"},
+                        {"projects": ["proj-b"], "summary": "B 版本"},
+                    ],
+                }
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [_api_response(missing), _api_response(DISTILL_DECISIONS_JSON)]
+    )
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="缺少文件"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 1
+
+
+def test_parse_summary_accepts_all_versions_with_holders():
+    summaries = parse_summary_report(SUMMARY_REPORT_JSON, JUDGMENT_FILES)
+
+    assert [s.path for s in summaries] == ["src/oled.c", "sensors/dht11.c"]
+    assert summaries[0].versions[0] == VersionSummary(
+        ("proj-a",), "A 版本：通用 OLED 初始化驱动"
+    )
+    assert summaries[0].versions[1].projects == ("proj-b",)
+    assert summaries[1].versions[0].summary == "通用 DHT11 单总线驱动"
+
+
+def test_parse_summary_accepts_identical_content_grouped_as_one_version():
+    """内容一致的工程归为一个版本：proj-a / proj-c 共享同一份摘要。"""
+    files = (
+        JudgmentFile(
+            path="src/oled.c",
+            versions=(
+                FileVersion(
+                    content="/* A 版 */\n", projects=("proj-a", "proj-c")
+                ),
+                FileVersion(content="/* B 版 */\n", projects=("proj-b",)),
+            ),
+        ),
+    )
+    report = json.dumps(
+        {
+            "summaries": [
+                {
+                    "path": "src/oled.c",
+                    "versions": [
+                        {"projects": ["proj-c", "proj-a"], "summary": "A 版摘要"},
+                        {"projects": ["proj-b"], "summary": "B 版摘要"},
+                    ],
+                }
+            ]
+        }
+    )
+
+    summaries = parse_summary_report(report, files)
+
+    # 分组按工程名集合匹配，输出顺序无关
+    by_projects = {v.projects: v.summary for v in summaries[0].versions}
+    assert by_projects[("proj-c", "proj-a")] == "A 版摘要"
+    assert by_projects[("proj-b",)] == "B 版摘要"
+
+
+@pytest.mark.parametrize(
+    "bad_json",
+    [
+        "{not json",
+        json.dumps({"nope": []}),
+        json.dumps({"summaries": "not a list"}),
+        json.dumps({"summaries": [{"versions": []}]}),  # 缺 path
+        json.dumps({"summaries": [{"path": "src/extra.c", "versions": []}]}),
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "src/oled.c",
+                        "versions": [
+                            {"projects": ["proj-a"], "summary": "A"},
+                            {"projects": ["proj-b"], "summary": "B"},
+                        ],
+                    },
+                    {"path": "src/oled.c", "versions": []},  # 重复路径
+                ]
+            }
+        ),
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "src/oled.c",
+                        "versions": [
+                            {"projects": ["proj-a"], "summary": "A"},
+                            {"projects": ["proj-b"], "summary": ""},  # 摘要为空
+                        ],
+                    }
+                ]
+            }
+        ),
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "src/oled.c",
+                        "versions": [
+                            {"projects": ["proj-a"], "summary": "A"},
+                            {"projects": ["proj-c"], "summary": "B"},  # 未知工程
+                        ],
+                    }
+                ]
+            }
+        ),
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "src/oled.c",
+                        "versions": [
+                            {"projects": ["proj-a"], "summary": "A"},  # 缺 proj-b 版本
+                        ],
+                    }
+                ]
+            }
+        ),
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "src/oled.c",
+                        "versions": [
+                            {"projects": ["proj-a"], "summary": "A"},
+                            {"projects": ["proj-a"], "summary": "A 重复"},  # 版本重复
+                        ],
+                    }
+                ]
+            }
+        ),
+        # 独有文件（单版本）同一组工程名出两份摘要：同样按重复拒绝
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "sensors/dht11.c",
+                        "versions": [
+                            {"projects": ["proj-a"], "summary": "通用驱动"},
+                            {"projects": ["proj-a"], "summary": "再抄一遍"},
+                        ],
+                    }
+                ]
+            }
+        ),
+    ],
+)
+def test_parse_summary_rejects_malformed_output(bad_json):
+    with pytest.raises(LLMError):
+        parse_summary_report(bad_json, JUDGMENT_FILES)
 
 
 def test_parse_distillation_accepts_mixed_decisions():

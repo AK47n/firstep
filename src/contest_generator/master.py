@@ -3,10 +3,11 @@
 流程（spec US 18/19 + "母版提炼"实现决策）：用户导入多个同平台旧工程 →
 scan_project 逐个生成结构快照（平台检测 + 文件清单 + 配置摘要）→
 compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→ distill_master
-把需要判定的路径（冲突 + 独有）交给 LLM，公共文件按"所有工程内容一致"确定
-保留 → 得到完整提炼报告（保留 / 合并 / 剔除清单 + 理由）→ 用户审查、可修改
-报告 → apply_distillation 按确认后的报告落盘母版候选 → import_master 做结构
-分析后入库（每平台一个母版，可更换 / 删除）。
+把需要判定的路径（冲突 + 独有）连同文件全文交给 LLM（两阶段：读全文出摘要
+→ 基于摘要判定），公共文件按"所有工程内容一致"确定保留 → 得到完整提炼报告
+（保留 / 合并 / 剔除清单 + 理由）→ 用户审查、可修改报告 → apply_distillation
+按确认后的报告落盘母版候选 → import_master 做结构分析后入库（每平台一个
+母版，可更换 / 删除）。
 
 母版库：磁盘目录即数据库，母版库根下每个平台一个目录（工程文件本体）+ 同名
 <platform>.json 元数据（提炼来源、入库时结构分析的警告）。元数据放目录外的
@@ -36,6 +37,8 @@ from .llm import (
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
+    FileVersion,
+    JudgmentFile,
     LLM,
     LLMError,
 )
@@ -186,7 +189,8 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     """扫描单个工程：平台检测 + 文件清单（含内容哈希）+ 平台配置摘要。
 
     平台由工程配置文件判定：有 .uvprojx 为 stm32，有 .cproject 为 mspm0；
-    两者都有或都没有抛 MasterError。.git / Debug / Release 等非母版内容的
+    两者都有或都没有抛 MasterError。工程文件在任意层级可识别（正点原子风格
+    在 USER/ 子目录），.git 目录除外。.git / Debug / Release 等非母版内容的
     顶层目录不进清单。config_summary 提取设备 / include path / 编译宏等
     配置对比素材（XML 解析失败只记一行，扫描不因单个工程带病中断）。
     """
@@ -264,6 +268,41 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
     )
 
 
+def build_judgment_files(comparison: ProjectComparison) -> tuple[JudgmentFile, ...]:
+    """待判文件（冲突 + 独有）的全文素材：路径 + 每个内容版本及其持有工程。
+
+    兑现 ADR 0001 的"读内容判断"——AI 判定前先看到文件全文。同一路径在多个
+    工程里内容不同（冲突）时每个内容版本都进素材；内容一致的工程合并为一个
+    版本（按扫描时的内容哈希分组，版本工程名不重不漏）。读取用 UTF-8 容错：
+    旧工程可能是 GBK 等编码，宁可摘要含乱码也不让提炼因单个文件中断。
+    """
+    projects_by_name = {p.name: p for p in comparison.projects}
+    files: list[JudgmentFile] = []
+    for path in comparison.judgment:
+        holders = comparison.by_path[path]
+        versions: list[FileVersion] = []
+        seen_hashes: set[str] = set()
+        for name in holders:
+            project = projects_by_name[name]
+            content_hash = project.file_hashes[path]
+            if content_hash in seen_hashes:
+                continue
+            seen_hashes.add(content_hash)
+            group = tuple(
+                n for n in holders if projects_by_name[n].file_hashes[path] == content_hash
+            )
+            versions.append(
+                FileVersion(
+                    content=(project.project_dir / path).read_text(
+                        encoding="utf-8", errors="replace"
+                    ),
+                    projects=group,
+                )
+            )
+        files.append(JudgmentFile(path=path, versions=tuple(versions)))
+    return tuple(files)
+
+
 def build_comparison_summary(comparison: ProjectComparison) -> str:
     """把对比结果格式化成喂给 LLM 的结构 + 配置对比文本。"""
     lines: list[str] = []
@@ -296,16 +335,19 @@ def distill_master(
     platform: str,
     projects: Sequence[ProjectStructure],
 ) -> DistillationReport:
-    """提炼流程：对比 → LLM 判定 → 拼装完整报告。
+    """提炼流程：对比 → LLM 判定（读全文 → 摘要 → 判定）→ 拼装完整报告。
 
-    公共文件确定保留（所有工程内容一致，无需 AI）；冲突与独有文件必须被
-    AI 逐条判定，覆盖不全或出现未知路径抛 MasterError——宁可不放行也不带病
-    进入确认流程。
+    公共文件确定保留（所有工程内容一致，无需 AI）；冲突与独有文件连同全文
+    交给 AI（llm 内部先逐文件读全文出摘要，再基于摘要判定），覆盖不全或出现
+    未知路径抛 MasterError——宁可不放行也不带病进入确认流程。
     """
     comparison = compare_projects(projects)
     project_names = tuple(p.name for p in projects)
     decisions = llm.distill_master(
-        platform, project_names, build_comparison_summary(comparison)
+        platform,
+        project_names,
+        build_judgment_files(comparison),
+        build_comparison_summary(comparison),
     )
     return assemble_report(platform, project_names, comparison, decisions)
 
@@ -323,9 +365,19 @@ def assemble_report(
     来源；merge 的来源工程必须是导入工程且真实含该文件。这些在确认前就拦住，
     兑现"不带病进入确认流程"。
     """
-    decided = {d.path for d in decisions}
+    common = set(comparison.common)
+    scoped: list[FileDecision] = []
+    for decision in decisions:
+        if decision.path in common:
+            # 公共文件由确定性自动保留覆盖；AI 重复判定 keep 是冗余（忽略），
+            # 判定 merge / exclude 是错误（公共文件必须保留），直接拒绝
+            if decision.action != ACTION_KEEP:
+                raise MasterError(f"公共文件必须保留：{decision.path}")
+            continue
+        scoped.append(decision)
+    decided = {d.path for d in scoped}
     _validate_judgment_coverage(decided=decided, judgment=set(comparison.judgment))
-    _validate_merge_sources(decisions, comparison)
+    _validate_merge_sources(scoped, comparison)
 
     keep: list[FileDecision] = [
         FileDecision(path, ACTION_KEEP, reason="所有导入工程内容一致，属公共骨架")
@@ -333,7 +385,7 @@ def assemble_report(
     ]
     merge: list[FileDecision] = []
     exclude: list[FileDecision] = []
-    for decision in decisions:
+    for decision in scoped:
         if decision.action == ACTION_MERGE:
             merge.append(decision)
         elif decision.action == ACTION_EXCLUDE:
@@ -457,7 +509,9 @@ def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
     if not master_dir.is_dir():
         raise MasterError(f"母版目录不存在：{master_dir}")
     for suffix in PLATFORM_CONFIG_FILES[platform]:
-        if not any(master_dir.glob(f"*{suffix}")):
+        if not any(
+            p for p in master_dir.rglob(f"*{suffix}") if ".git" not in p.parts
+        ):
             raise MasterError(
                 f"母版缺少平台 {platform} 的工程配置文件（{suffix}），拒绝入库"
             )
@@ -562,8 +616,12 @@ def delete_master(masters_dir: Path, platform: str) -> None:
 
 
 def _detect_platform(project_dir: Path) -> str:
-    has_uvprojx = any(project_dir.glob("*.uvprojx"))
-    has_cproject = any(project_dir.glob("*.cproject"))
+    has_uvprojx = any(
+        p for p in project_dir.rglob("*.uvprojx") if ".git" not in p.parts
+    )
+    has_cproject = any(
+        p for p in project_dir.rglob("*.cproject") if ".git" not in p.parts
+    )
     if has_uvprojx and has_cproject:
         raise MasterError("工程同时含 .uvprojx 与 .cproject，无法判定平台")
     if has_uvprojx:

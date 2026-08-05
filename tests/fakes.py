@@ -14,7 +14,12 @@ from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
 
-from contest_generator.llm import FileDecision, ModuleSelection, ValidationResult
+from contest_generator.llm import (
+    FileDecision,
+    JudgmentFile,
+    ModuleSelection,
+    ValidationResult,
+)
 
 # ---------------------------------------------------------------------------
 # 假模块文件内容（断言输出目录里文件内容用）
@@ -420,9 +425,15 @@ class FakeLLM:
         return self._validation
 
     def distill_master(
-        self, platform: str, project_names: Sequence[str], comparison_summary: str
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
     ) -> tuple[FileDecision, ...]:
-        self.distill_calls.append((platform, tuple(project_names), comparison_summary))
+        self.distill_calls.append(
+            (platform, tuple(project_names), tuple(judgment_files), comparison_summary)
+        )
         return self._distillation
 
 

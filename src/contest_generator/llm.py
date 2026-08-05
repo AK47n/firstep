@@ -3,7 +3,8 @@
 生产实现 DeepSeekLLM 走 DeepSeek Chat Completions API（base_url / api_key /
 模型来自本机配置文件 config.py）；HTTP 传输可注入假件，网络调用不进测试。
 LLM 承担四个职责：赛题→模块选择、main.c 骨架生成、模块简介生成与校验、
-母版提炼判定（冲突/独有文件 → 保留/合并/剔除）。
+母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出摘要，
+再基于摘要判定）。
 """
 
 from __future__ import annotations
@@ -36,11 +37,18 @@ VALIDATION_SYSTEM_PROMPT = (
     "接口、行为是否与代码相符。不一致时用中文指出具体差异。只输出 JSON 对象。"
 )
 
+JUDGMENT_SUMMARY_SYSTEM_PROMPT = (
+    "你是嵌入式开发工程整理助手。导入的多个同平台旧工程里，有些文件需要判定"
+    "去留：同一路径在不同工程里内容不同（冲突），或只出现在部分工程（独有）。"
+    "逐文件读全文后，为每个内容版本用中文写一段简短摘要：说明它实现什么功能、"
+    "是否通用、是否基础建设必需。只输出 JSON 对象。"
+)
+
 DISTILL_SYSTEM_PROMPT = (
-    "你是嵌入式开发工程整理助手。用户导入了多个同平台旧工程，你需要根据结构对比"
-    "与配置对比判定：哪些文件属于公共骨架（保留）、哪些需要合并（同一路径在多个"
-    "工程里内容不同，选定一个来源工程）、哪些是项目残留（剔除，如赛题专用业务代码、"
-    "构建产物）。只输出 JSON 对象。"
+    "你是嵌入式开发工程整理助手。用户导入了多个同平台旧工程，你需要根据文件"
+    "内容摘要与结构配置对比判定：哪些文件属于公共骨架（保留）、哪些需要合并"
+    "（同一路径在多个工程里内容不同，选定一个来源工程）、哪些是项目残留（剔除，"
+    "如赛题专用业务代码、构建产物）。只输出 JSON 对象。"
 )
 
 ACTION_KEEP = "keep"  # 保留：属于公共骨架
@@ -127,6 +135,42 @@ class FileDecision:
         return cls(path=path, action=action, source=source, reason=reason)
 
 
+@dataclass(frozen=True)
+class JudgmentFile:
+    """待判文件素材：路径 + 每个内容版本及其持有工程（AI 判定前先读全文出摘要）。
+
+    覆盖 master 判定范围（冲突 + 独有文件）；公共文件不进素材。同一路径内容
+    不同的每个版本都传（AI 读全部版本后判定）；内容一致的工程合并为一个版本。
+    """
+
+    path: str
+    versions: tuple[FileVersion, ...]
+
+
+@dataclass(frozen=True)
+class FileVersion:
+    """同一路径下的一个内容版本：全文 + 持该版本的工程名。"""
+
+    content: str
+    projects: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VersionSummary:
+    """第一阶段摘要产物：一个内容版本的摘要 + 持该版本的工程名。"""
+
+    projects: tuple[str, ...]
+    summary: str
+
+
+@dataclass(frozen=True)
+class FileSummary:
+    """第一阶段摘要产物：一个待判文件各内容版本的摘要（第二阶段的判定素材）。"""
+
+    path: str
+    versions: tuple[VersionSummary, ...]
+
+
 class LLM(Protocol):
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
@@ -143,7 +187,11 @@ class LLM(Protocol):
     ) -> ValidationResult: ...
 
     def distill_master(
-        self, platform: str, project_names: Sequence[str], comparison_summary: str
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
     ) -> tuple[FileDecision, ...]: ...
 
 
@@ -258,21 +306,56 @@ class DeepSeekLLM:
         return parse_validation_result(content)
 
     def distill_master(
-        self, platform: str, project_names: Sequence[str], comparison_summary: str
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
     ) -> tuple[FileDecision, ...]:
+        """两阶段判定：先逐文件读全文出摘要，再基于摘要判定（两次 json_mode 调用）。
+
+        兑现 ADR 0001 的"读内容判断"——判定素材含文件内容摘要，不再只有路径
+        与配置摘要。第一阶段产物（摘要）只作为第二阶段输入，不进报告；判定
+        条目的 reason 由 AI 带上摘要要点。两阶段产物都走严格解析，畸形 / 缺
+        摘要抛 LLMError，宁可大声失败也不带病进确认流程。
+        """
+        file_summaries = self._summarize_judgment_files(
+            platform, project_names, judgment_files
+        )
         content = self._chat(
             [
                 {"role": "system", "content": DISTILL_SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": _distill_user_prompt(
-                        platform, project_names, comparison_summary
+                        platform, project_names, file_summaries, comparison_summary
                     ),
                 },
             ],
             json_mode=True,
         )
         return parse_distillation_report(content, project_names)
+
+    def _summarize_judgment_files(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+    ) -> tuple[FileSummary, ...]:
+        """第一阶段：逐文件读全文出摘要（json_mode），解析校验为 FileSummary。"""
+        content = self._chat(
+            [
+                {"role": "system", "content": JUDGMENT_SUMMARY_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _summarize_user_prompt(
+                        platform, project_names, judgment_files
+                    ),
+                },
+            ],
+            json_mode=True,
+        )
+        return parse_summary_report(content, judgment_files)
 
     def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
@@ -391,6 +474,79 @@ def parse_distillation_report(
     return tuple(decisions)
 
 
+def parse_summary_report(
+    content: str, judgment_files: Sequence[JudgmentFile]
+) -> tuple[FileSummary, ...]:
+    """把模型返回的第一阶段摘要 JSON 解析校验为 FileSummary 列表。
+
+    任何结构 / 内容问题（非 JSON、缺 summaries、未知或重复路径、缺某个内容
+    版本的摘要、摘要为空、版本工程名对不上）都抛 LLMError——摘要残缺会让
+    第二阶段基于残缺素材判定，宁可大声失败也不要带病进第二阶段。版本按"持
+    该版本的工程名"匹配发送的词表（内容一致的工程归一个版本，工程名是唯一
+    不重不漏的分组键）。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("summaries"), list):
+        raise LLMError("模型输出缺少 summaries 数组")
+
+    expected: dict[str, tuple[frozenset[str], ...]] = {
+        file.path: tuple(frozenset(v.projects) for v in file.versions)
+        for file in judgment_files
+    }
+    seen_paths: set[str] = set()
+    summaries: list[FileSummary] = []
+    for index, item in enumerate(data["summaries"]):
+        if not isinstance(item, dict):
+            raise LLMError(f"summaries[{index}] 必须是对象")
+        path = item.get("path")
+        if not isinstance(path, str) or not path:
+            raise LLMError(f"summaries[{index}] 缺 path")
+        if path not in expected:
+            raise LLMError(f"摘要里出现非待判文件：{path}")
+        if path in seen_paths:
+            raise LLMError(f"模型重复摘要文件：{path}")
+        seen_paths.add(path)
+        raw_versions = item.get("versions")
+        if not isinstance(raw_versions, list):
+            raise LLMError(f"{path} 的 versions 必须是列表")
+        versions: list[VersionSummary] = []
+        for v_index, version in enumerate(raw_versions):
+            if not isinstance(version, dict):
+                raise LLMError(f"{path} versions[{v_index}] 必须是对象")
+            projects = version.get("projects")
+            if not isinstance(projects, list) or not projects or not all(
+                isinstance(p, str) and p for p in projects
+            ):
+                raise LLMError(f"{path} versions[{v_index}] 的 projects 非法")
+            summary = version.get("summary")
+            if not isinstance(summary, str) or not summary:
+                raise LLMError(f"{path} versions[{v_index}] 缺摘要或摘要为空")
+            versions.append(VersionSummary(projects=tuple(projects), summary=summary))
+        summaries.append(FileSummary(path=path, versions=tuple(versions)))
+
+    for path, groups in expected.items():
+        if path not in seen_paths:
+            raise LLMError(f"摘要缺少文件：{path}")
+        entry = next(s for s in summaries if s.path == path)
+        got_groups = [frozenset(v.projects) for v in entry.versions]
+        # 版本必须不重不漏恰好覆盖发送的词表：缺一个版本或多报一个（同一组
+        # 工程名出两份摘要）都是畸形输出，宁可大声失败也不带病进第二阶段
+        for group in groups:
+            if got_groups.count(group) != 1:
+                raise LLMError(
+                    f"{path} 缺少内容版本的摘要：{'、'.join(sorted(group))}"
+                )
+        for got in got_groups:
+            if got not in groups:
+                raise LLMError(
+                    f"{path} 的摘要含未知内容版本：{'、'.join(sorted(got))}"
+                )
+    return tuple(summaries)
+
+
 def parse_validation_result(content: str) -> ValidationResult:
     """把模型返回的校验 JSON 文本解析校验为 ValidationResult。
 
@@ -426,19 +582,68 @@ def _selection_user_prompt(problem_text: str, manifest_summaries: Sequence[str])
     return prompt + '\n只返回 json 格式的 JSON 对象：{"modules": [{"slug": "...", "reason": "..."}]}'
 
 
-def _distill_user_prompt(
-    platform: str, project_names: Sequence[str], comparison_summary: str
+def _summarize_user_prompt(
+    platform: str,
+    project_names: Sequence[str],
+    judgment_files: Sequence[JudgmentFile],
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     names = "、".join(project_names)
-    return (
-        f"平台：{platform}\n导入的工程：{names}\n\n结构与配置对比：\n"
-        f"{comparison_summary}\n\n"
-        "对每个需要判定的文件路径给出动作：keep（保留）/ merge（合并，必须选定"
-        "来源工程）/ exclude（剔除）。只返回 json 格式的 JSON 对象："
-        '{"decisions": [{"path": "...", "action": "keep|merge|exclude", '
-        '"source": "merge 时必填的来源工程名", "reason": "中文理由"}]}'
+    lines = [
+        f"平台：{platform}",
+        f"导入的工程：{names}",
+        "",
+        "需要判定的文件（同一路径出现多个内容版本 = 冲突；只出现在部分工程 = "
+        "独有）。读全文后为每个内容版本写一段中文摘要：",
+    ]
+    for file in judgment_files:
+        for version in file.versions:
+            lines.append(
+                f"- {file.path}（{'、'.join(version.projects)}）：\n"
+                f"```c\n{version.content}\n```"
+            )
+    lines.append(
+        "只返回 json 格式的 JSON 对象："
+        '{"summaries": [{"path": "...", "versions": [{"projects": ["工程名"], '
+        '"summary": "中文摘要"}]}]}'
     )
+    return "\n".join(lines)
+
+
+def _distill_user_prompt(
+    platform: str,
+    project_names: Sequence[str],
+    file_summaries: Sequence[FileSummary],
+    comparison_summary: str,
+) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    names = "、".join(project_names)
+    lines = [
+        f"平台：{platform}",
+        f"导入的工程：{names}",
+        "",
+        "待判文件内容摘要（已读全文的要点）：",
+    ]
+    for summary in file_summaries:
+        for version in summary.versions:
+            lines.append(
+                f"- {summary.path}（{'、'.join(version.projects)}）：{version.summary}"
+            )
+    lines.extend(
+        [
+            "",
+            "结构与配置对比：",
+            comparison_summary,
+            "",
+            "对每个需要判定的文件路径给出动作：keep（保留）/ merge（合并，必须选定"
+            "来源工程）/ exclude（剔除）。公共文件已确定保留，不在判定范围内，不要"
+            "列进 decisions；只判定冲突与独有文件。判定理由带上摘要要点。只返回 "
+            "json 格式的 JSON 对象：",
+            '{"decisions": [{"path": "...", "action": "keep|merge|exclude", '
+            '"source": "merge 时必填的来源工程名", "reason": "中文理由"}]}',
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _validation_user_prompt(description: str, code: str) -> str:

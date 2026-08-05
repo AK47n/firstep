@@ -21,6 +21,7 @@ from contest_generator.master import (
     analyze_structure,
     apply_distillation,
     build_comparison_summary,
+    build_judgment_files,
     compare_projects,
     delete_master,
     distill_master,
@@ -109,6 +110,29 @@ def test_scan_rejects_project_without_config_file(tmp_path):
 
     with pytest.raises(MasterError, match="无法判定平台"):
         scan_project(bare)
+
+
+def test_scan_detects_keil_platform_with_nested_uvprojx(tmp_path):
+    """工程文件在子目录（正点原子风格 USER/）时也能判定平台。"""
+    project = tmp_path / "proj"
+    user = project / "USER"
+    user.mkdir(parents=True)
+    (user / "project.uvprojx").write_text(FAKE_DISTILL_UVPROJX_B, encoding="utf-8")
+
+    structure = scan_project(project)
+
+    assert structure.platform == PLATFORM_STM32
+    assert "USER/project.uvprojx" in structure.files
+    assert structure.config_summary[0] == "project.uvprojx 设备：STM32F103C8"
+
+
+def test_scan_ignores_uvprojx_inside_git(tmp_path):
+    project = tmp_path / "proj"
+    (project / ".git").mkdir(parents=True)
+    (project / ".git" / "project.uvprojx").write_text("<Project/>", encoding="utf-8")
+
+    with pytest.raises(MasterError, match="无法判定平台"):
+        scan_project(project)
 
 
 def test_scan_rejects_project_with_both_config_files(tmp_path):
@@ -235,10 +259,65 @@ def test_distill_passes_platform_names_and_summary_to_llm(fake_stm32_projects):
 
     _distill(fake_stm32_projects, llm)
 
-    platform, names, summary = llm.distill_calls[0]
+    platform, names, judgment_files, summary = llm.distill_calls[0]
     assert platform == PLATFORM_STM32
     assert names == ("proj-a", "proj-b")
     assert "src/oled.c" in summary
+    # 判定素材覆盖冲突 + 独有，含全文与持有工程；公共文件不传给 AI
+    by_path = {f.path: f for f in judgment_files}
+    assert set(by_path) == {
+        "project.uvprojx",
+        "src/oled.c",
+        "sensors/dht11.c",
+        "ui/oled_fonts.c",
+    }
+    oled_versions = by_path["src/oled.c"].versions
+    assert len(oled_versions) == 2  # 冲突文件两个版本都传
+    assert {v.projects for v in oled_versions} == {("proj-a",), ("proj-b",)}
+    assert any("A 版本" in v.content for v in oled_versions)
+    assert any("B 版本" in v.content for v in oled_versions)
+    assert by_path["sensors/dht11.c"].versions[0].projects == ("proj-a",)
+    assert "DHT11" in by_path["sensors/dht11.c"].versions[0].content
+    assert by_path["ui/oled_fonts.c"].versions[0].projects == ("proj-b",)
+
+
+def test_judgment_files_group_identical_contents_across_projects(
+    fake_stm32_projects, tmp_path
+):
+    """内容一致的工程合并为一个版本：oled.c 在 proj-a / proj-c 相同 → 只传一份。"""
+    third = tmp_path / "old_projects2" / "proj-c"
+    third.parent.mkdir(parents=True)
+    shutil.copytree(fake_stm32_projects[0], third)  # proj-c 与 proj-a 内容一致
+    projects = [scan_project(p) for p in (*fake_stm32_projects, third)]
+
+    judgment = build_judgment_files(compare_projects(projects))
+
+    oled = next(f for f in judgment if f.path == "src/oled.c")
+    assert len(oled.versions) == 2  # A 版本一份（proj-a / proj-c 共享），B 版本一份
+    by_projects = {v.projects: v.content for v in oled.versions}
+    assert "A 版本" in by_projects[("proj-a", "proj-c")]
+    assert "B 版本" in by_projects[("proj-b",)]
+
+
+def test_distill_ignores_ai_keep_on_common_path(fake_stm32_projects):
+    """AI 把公共文件也判定 keep 时按冗余忽略，不中断提炼（现实 LLM 常见回显）。"""
+    decisions = DEFAULT_DECISIONS + (
+        FileDecision("main.c", ACTION_KEEP, reason="公共骨架，应保留"),
+    )
+
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
+
+    assert [d.path for d in report.keep].count("main.c") == 1
+
+
+def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
+    """公共文件判定 merge / exclude 是错误——公共文件必须保留。"""
+    decisions = DEFAULT_DECISIONS + (
+        FileDecision("main.c", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"),
+    )
+
+    with pytest.raises(MasterError, match="公共文件必须保留"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
 
 def test_distill_requires_full_judgment_coverage(fake_stm32_projects):
@@ -434,6 +513,17 @@ def test_analyze_requires_platform_config_file(tmp_path):
 
     with pytest.raises(MasterError, match=".uvprojx"):
         analyze_structure(master, PLATFORM_STM32)
+
+
+def test_analyze_accepts_nested_uvprojx(tmp_path):
+    """工程文件在子目录时结构分析同样通过。"""
+    master = tmp_path / "master"
+    (master / "USER").mkdir(parents=True)
+    (master / "USER" / "project.uvprojx").write_text("<Project/>", encoding="utf-8")
+
+    analysis = analyze_structure(master, PLATFORM_STM32)
+
+    assert analysis.warnings == ()
 
 
 def test_analyze_requires_ccs_project_description(tmp_path):

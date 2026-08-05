@@ -20,6 +20,7 @@ from contest_generator.llm import (
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
+    JudgmentFile,
     LLMError,
     ModuleSelection,
     ValidationResult,
@@ -64,7 +65,11 @@ class RaisingLLM:
         raise LLMError("服务不可用")
 
     def distill_master(
-        self, platform: str, project_names: Sequence[str], comparison_summary: str
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
     ) -> tuple[FileDecision, ...]:
         raise LLMError("服务不可用")
 
