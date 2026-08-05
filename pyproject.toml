@@ -1,0 +1,13 @@
+[project]
+name = "contest-generator"
+version = "0.1.0"
+description = "电赛工程生成器 — 本地网页工具核心"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
