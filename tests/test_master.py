@@ -16,6 +16,7 @@ from contest_generator.llm import (
     FileDecision,
 )
 from contest_generator.master import (
+    DistillationReport,
     MasterError,
     analyze_structure,
     apply_distillation,
@@ -343,6 +344,40 @@ def test_distill_rejects_conflict_classified_as_keep(fake_stm32_projects):
 
     with pytest.raises(MasterError, match="必须指定来源工程"):
         _distill(fake_stm32_projects, FakeLLM(distillation=bad))
+
+
+def test_report_round_trips_through_json(fake_stm32_projects):
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+
+    rebuilt = DistillationReport.from_dict(report.to_dict())
+
+    assert rebuilt == report
+    # wire format 形状：确认请求按 to_dict 输出原样回传
+    data = report.to_dict()
+    assert set(data) == {"platform", "projects", "keep", "merge", "exclude"}
+    assert data["keep"][0] == {
+        "path": "inc/stm32f10x_conf.h",
+        "action": ACTION_KEEP,
+        "source": "",
+        "reason": "所有导入工程内容一致，属公共骨架",
+    }
+    assert data["merge"][0]["source"] == "proj-a"
+
+
+def test_report_from_dict_rejects_malformed(fake_stm32_projects):
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    data = report.to_dict()
+
+    bad_cases = [
+        "not a dict",
+        {**data, "platform": ""},  # 缺平台
+        {**data, "projects": []},  # 缺来源工程
+        {**data, "keep": "not a list"},
+        {**data, "merge": [{"path": "a.c", "action": "archive"}]},  # 条目形状非法
+    ]
+    for bad in bad_cases:
+        with pytest.raises(MasterError):
+            DistillationReport.from_dict(bad)
 
 
 def test_apply_rejects_user_edited_bad_merge_source(fake_stm32_projects, tmp_path):

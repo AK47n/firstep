@@ -47,6 +47,30 @@ class KeilPatcher:
         _write(uvprojx, root, original_text)
 
 
+def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
+    """.uvprojx 的只读配置摘要：设备 / include path（母版提炼的配置对比素材）。
+
+    格式知识归本模块所有：patch 的改写与这里的摘要共用同一套 XML 结构认知，
+    母版提炼不再另抄一份走查。解析失败只记一行，由调用方决定是否中断。
+    """
+    uvprojx = _find_uvprojx(project_dir)
+    try:
+        root = ET.parse(uvprojx).getroot()
+    except ET.ParseError as exc:
+        return (f"{uvprojx.name} 无法解析为 XML：{exc}",)
+    lines: list[str] = []
+    for target in root.findall("Targets/Target"):
+        device = target.findtext("TargetOption/TargetCommonOption/Device")
+        include_path = target.findtext("TargetOption/TargetArmAds/Cads/IncludePath")
+        if device:
+            lines.append(f"{uvprojx.name} 设备：{device}")
+        if include_path:
+            lines.append(f"{uvprojx.name} include path：{include_path}")
+    if not lines:
+        lines.append(f"{uvprojx.name}：未找到设备 / include path 配置")
+    return tuple(lines)
+
+
 def _find_uvprojx(project_dir: Path) -> Path:
     candidates = sorted(project_dir.glob("*.uvprojx"))
     if not candidates:

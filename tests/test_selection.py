@@ -15,6 +15,7 @@ from contest_generator.selection import (
     UnknownModuleError,
     check_platform_warnings,
     resolve_dependencies,
+    resolve_selection,
 )
 
 PLATFORM_STM32 = "stm32"
@@ -172,3 +173,27 @@ def test_warnings_follow_input_order():
 def test_warnings_unknown_slug_raises():
     with pytest.raises(UnknownModuleError, match="ghost"):
         check_platform_warnings(["ghost"], PLATFORM_STM32, {})
+
+
+# ---------------------------------------------------------------------------
+# resolve_selection：加载库 + 展开依赖 + 平台警告的组合操作
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_selection_composes_library_resolution_and_warnings(
+    fake_module_library,
+):
+    resolved = resolve_selection(
+        fake_module_library, PLATFORM_MSPM0, ["dht11", "oled"]
+    )
+
+    # 依赖 delay 被带入，排序与 resolve_dependencies 一致（依赖先于使用者）
+    assert [m.slug for m in resolved.manifests] == ["delay", "dht11", "oled"]
+    # oled 缺 mspm0 版本 → missing 警告；dht11 依赖的 delay 双平台都有
+    assert {w.slug for w in resolved.warnings} == {"oled"}
+    assert next(w for w in resolved.warnings).kind == WARNING_MISSING
+
+
+def test_resolve_selection_propagates_unknown_module(fake_module_library):
+    with pytest.raises(UnknownModuleError, match="ghost"):
+        resolve_selection(fake_module_library, PLATFORM_STM32, ["ghost"])

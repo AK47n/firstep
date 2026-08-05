@@ -39,16 +39,7 @@ from .library import (
     remove_platform_files,
     update_module_description,
 )
-from .llm import (
-    ACTION_EXCLUDE,
-    ACTION_KEEP,
-    ACTION_MERGE,
-    FileDecision,
-    LLM,
-    LLMError,
-    DeepSeekLLM,
-    build_manifest_summaries,
-)
+from .llm import LLM, LLMError, DeepSeekLLM, build_manifest_summaries
 from .master import (
     DistillationReport,
     MasterError,
@@ -61,7 +52,7 @@ from .master import (
     scan_project,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
-from .selection import SelectionError, check_platform_warnings, resolve_dependencies
+from .selection import SelectionError, resolve_selection
 from .skeleton import generate_skeleton
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -170,27 +161,6 @@ def _mask_api_key(api_key: str) -> str:
     return api_key[:4] + _API_KEY_MASK_MARKER
 
 
-def _decision_dict(decision: FileDecision) -> dict:
-    """母版判定条目 → JSON（确认请求按同一形态回传）。"""
-    return {
-        "path": decision.path,
-        "action": decision.action,
-        "source": decision.source,
-        "reason": decision.reason,
-    }
-
-
-def _report_dict(report: DistillationReport) -> dict:
-    """提炼报告 → JSON。"""
-    return {
-        "platform": report.platform,
-        "projects": list(report.projects),
-        "keep": [_decision_dict(d) for d in report.keep],
-        "merge": [_decision_dict(d) for d in report.merge],
-        "exclude": [_decision_dict(d) for d in report.exclude],
-    }
-
-
 # ---------------------------------------------------------------------------
 # 应用工厂（测试注入上下文用）
 # ---------------------------------------------------------------------------
@@ -282,16 +252,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         try:
-            by_slug = {m.slug: m for m in list_modules(_library_dir(context))}
-            manifests = resolve_dependencies(slugs, by_slug)
-            warnings = check_platform_warnings(
-                [m.slug for m in manifests], platform, by_slug
-            )
+            resolved = resolve_selection(_library_dir(context), platform, slugs)
             return {
-                "modules": [m.to_dict() for m in manifests],
+                "modules": [m.to_dict() for m in resolved.manifests],
                 "warnings": [
                     {"slug": w.slug, "kind": w.kind, "message": w.message}
-                    for w in warnings
+                    for w in resolved.warnings
                 ],
             }
         except (LibraryError, SelectionError) as exc:
@@ -304,10 +270,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         try:
-            by_slug = {m.slug: m for m in list_modules(_library_dir(context))}
-            manifests = resolve_dependencies(slugs, by_slug)
+            resolved = resolve_selection(_library_dir(context), platform, slugs)
             main_c, intercepted = generate_skeleton(
-                _llm(context), problem_text, manifests, platform, _library_dir(context)
+                _llm(context), problem_text, resolved.manifests, platform, _library_dir(context)
             )
             return {"main_c": main_c, "intercepted": list(intercepted)}
         except (LibraryError, SelectionError, LLMError) as exc:
@@ -322,18 +287,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         output_dir = Path(_require_str(payload, "output_dir"))
         try:
             config = _require_config(context)
-            by_slug = {m.slug: m for m in list_modules(config.module_library_dir)}
-            manifests = resolve_dependencies(slugs, by_slug)
+            resolved = resolve_selection(config.module_library_dir, platform, slugs)
             master_dir = config.masters_dir / platform
             result_dir = generate(
                 platform=platform,
-                manifests=manifests,
+                manifests=resolved.manifests,
                 module_library_dir=config.module_library_dir,
                 master_project_dir=master_dir,
                 output_dir=output_dir,
                 main_c_content=main_c,
             )
-            return _generation_result(describe_generation(result_dir, manifests, platform))
+            return _generation_result(describe_generation(result_dir, resolved.manifests, platform))
         except (
             LibraryError,
             SelectionError,
@@ -467,27 +431,26 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 for d in _require_str_list(payload, "project_dirs")
             ]
             report = distill_master(_llm(context), platform, projects)
-            return _report_dict(report)
+            return report.to_dict()
         except (MasterError, LLMError) as exc:
             raise _error_response(exc) from exc
 
     @app.post("/api/masters/confirm")
     def masters_confirm(payload: dict) -> dict:
         """确认报告：落盘母版候选（apply_distillation）→ 结构分析 → 入库。"""
-        platform = _require_str(payload, "platform")
         try:
             project_dirs = [
                 scan_project(Path(d))
                 for d in _require_str_list(payload, "project_dirs")
             ]
             comparison = compare_projects(project_dirs)
-            report = _report_from_payload(payload, platform)
+            report = DistillationReport.from_dict(payload)
             staging = Path(tempfile.mkdtemp(prefix="master-staging-"))
             try:
                 preview = apply_distillation(report, comparison, staging / "preview")
                 meta = import_master(
                     _masters_dir(context),
-                    platform,
+                    report.platform,
                     preview,
                     sources=report.projects,
                 )
@@ -573,36 +536,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
 
 # ---------------------------------------------------------------------------
-# 辅助：报告重建 / 响应拼装
+# 辅助：响应拼装
 # ---------------------------------------------------------------------------
-
-
-def _report_from_payload(payload: dict, platform: str) -> DistillationReport:
-    """把确认请求里的报告 JSON 重建为 DistillationReport（结构校验由核心做）。"""
-    projects = tuple(_require_str_list(payload, "projects"))
-
-    def decisions(key: str, default_action: str) -> tuple[FileDecision, ...]:
-        raw = payload.get(key, [])
-        if not isinstance(raw, list):
-            raise HTTPException(400, f"{key} 必须是列表")
-        return tuple(
-            FileDecision(
-                path=_require_str(item, "path"),
-                action=str(item.get("action", default_action)),
-                source=str(item.get("source", "")),
-                reason=str(item.get("reason", "")),
-            )
-            for item in raw
-            if isinstance(item, dict)
-        )
-
-    return DistillationReport(
-        platform=platform,
-        projects=projects,
-        keep=decisions("keep", ACTION_KEEP),
-        merge=decisions("merge", ACTION_MERGE),
-        exclude=decisions("exclude", ACTION_EXCLUDE),
-    )
 
 
 def _generation_result(summary: GenerationSummary) -> dict:

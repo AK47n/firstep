@@ -52,6 +52,37 @@ class CcsPatcher:
         _write(cproject, root, original_text)
 
 
+def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
+    """.cproject 的只读配置摘要：include path / 编译宏（母版提炼的配置对比素材）。
+
+    格式知识归本模块所有：patch 的改写与这里的摘要共用同一套 XML 结构认知
+    （_build_configurations 是唯一走查实现），母版提炼不再另抄一份。解析
+    失败只记一行，由调用方决定是否中断。
+    """
+    cproject = _find_cproject(project_dir)
+    try:
+        root = ET.parse(cproject).getroot()
+    except ET.ParseError as exc:
+        return (f"{cproject.name} 无法解析为 XML：{exc}",)
+    lines: list[str] = []
+    for configuration in _build_configurations(root):
+        name = configuration.get("name", "?")
+        include_paths = _option_values(
+            configuration, "ti.ccs.misc.options.buildIncludePath"
+        )
+        defines = _option_values(configuration, "ti.ccs.misc.options.buildDefine")
+        parts: list[str] = []
+        if include_paths:
+            parts.append("include path: " + ", ".join(include_paths))
+        if defines:
+            parts.append("defines: " + ", ".join(defines))
+        if parts:
+            lines.append(f"{cproject.name} 配置 {name}：{'；'.join(parts)}")
+    if not lines:
+        lines.append(f"{cproject.name}：未找到配置摘要")
+    return tuple(lines)
+
+
 def _find_cproject(project_dir: Path) -> Path:
     candidates = sorted(project_dir.glob("*.cproject"))
     if not candidates:
@@ -107,14 +138,29 @@ def _append_include_dirs(
             existing.add(value.lower())
 
 
-def _include_option(configuration: ET.Element) -> ET.Element | None:
+def _include_option(
+    configuration: ET.Element, super_class: str = INCLUDE_OPTION_SUPERCLASS
+) -> ET.Element | None:
+    """toolchain 里指定 superClass 的 option 元素。"""
     tool_chain = configuration.find("folderInfo/toolChain")
     if tool_chain is None:
         return None
     for option in tool_chain.findall("option"):
-        if option.get("superClass") == INCLUDE_OPTION_SUPERCLASS:
+        if option.get("superClass") == super_class:
             return option
     return None
+
+
+def _option_values(configuration: ET.Element, super_class: str) -> list[str]:
+    """toolchain 里指定 superClass 的 option 的 listOptionValue 值列表（配置摘要用）。"""
+    option = _include_option(configuration, super_class)
+    if option is None:
+        return []
+    return [
+        value.get("value", "")
+        for value in option.findall("listOptionValue")
+        if value.get("value")
+    ]
 
 
 def _ensure_modules_source_entry(configuration: ET.Element) -> None:

@@ -94,6 +94,19 @@ def extract_header_functions(interfaces: Sequence[str]) -> set[str]:
     return functions
 
 
+def verify_main_c(
+    main_c: str, manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
+) -> tuple[str, ...]:
+    """静态自检：main.c 调用了、但不在所选模块头文件接口里的函数名（排序）。
+
+    与 generate_skeleton 共用同一份接口块（build_skeleton_interfaces 的
+    输出）——自检只认喂给 LLM 的同一套接口，不存在的调用由调用方决定
+    改写（sanitize_skeleton）或明确报错（生成器兜底）。
+    """
+    interfaces = build_skeleton_interfaces(manifests, platform, library_dir)
+    return find_undefined_calls(main_c, extract_header_functions(interfaces))
+
+
 def find_undefined_calls(
     main_c: str, known_functions: Sequence[str] | set[str]
 ) -> tuple[str, ...]:

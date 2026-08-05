@@ -26,7 +26,7 @@ from .manifest import (
     ManifestError,
     ModuleManifest,
     PlatformEntry,
-    _is_unsafe_path,
+    is_unsafe_path,
 )
 
 ALLOWED_SOURCE_EXTENSIONS = frozenset({".c", ".h"})
@@ -298,7 +298,7 @@ def _validate_source_files(files: Mapping[str, str]) -> None:
 
 def _validate_source_names(names: Sequence[str]) -> None:
     for name in names:
-        if _is_unsafe_path(name):
+        if is_unsafe_path(name):
             raise LibraryError(f"文件路径必须是相对且无 .. 的：{name!r}")
         if Path(name).suffix.lower() not in ALLOWED_SOURCE_EXTENSIONS:
             raise LibraryError(f"只支持 .c/.h 源文件：{name!r}")

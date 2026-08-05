@@ -391,3 +391,47 @@ def test_parse_distillation_rejects_unknown_source_project():
             ),
             ("proj-a", "proj-b"),
         )
+
+
+# ---------------------------------------------------------------------------
+# FileDecision 序列化：确认请求按 to_dict 的同一形状回传
+# ---------------------------------------------------------------------------
+
+
+def test_file_decision_round_trips_through_json():
+    decision = FileDecision("src/oled.c", ACTION_MERGE, "proj-a", "include path 更全")
+
+    rebuilt = FileDecision.from_dict(decision.to_dict())
+
+    assert rebuilt == decision
+    assert rebuilt.to_dict() == {
+        "path": "src/oled.c",
+        "action": ACTION_MERGE,
+        "source": "proj-a",
+        "reason": "include path 更全",
+    }
+
+
+def test_file_decision_from_dict_accepts_keep_without_source():
+    decision = FileDecision.from_dict(
+        {"path": "main.c", "action": ACTION_KEEP, "reason": "公共骨架"}
+    )
+
+    assert decision == FileDecision("main.c", ACTION_KEEP, reason="公共骨架")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "not a dict",
+        {"action": ACTION_KEEP},  # 缺 path
+        {"path": "", "action": ACTION_KEEP},
+        {"path": "a.c", "action": "archive"},  # action 非法
+        {"path": "a.c", "action": ACTION_MERGE},  # merge 缺 source
+        {"path": "a.c", "action": ACTION_KEEP, "source": "proj-a"},  # 非 merge 带来源
+        {"path": "a.c", "action": ACTION_KEEP, "reason": 42},
+    ],
+)
+def test_file_decision_from_dict_rejects_malformed(bad):
+    with pytest.raises(LLMError):
+        FileDecision.from_dict(bad)

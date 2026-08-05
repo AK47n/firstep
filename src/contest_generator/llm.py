@@ -88,6 +88,44 @@ class FileDecision:
     source: str = ""  # merge 时选定的来源工程名（其余动作必须为空）
     reason: str = ""  # AI 的中文理由
 
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为 JSON 兼容 dict（确认请求按同一形状回传）。"""
+        return {
+            "path": self.path,
+            "action": self.action,
+            "source": self.source,
+            "reason": self.reason,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FileDecision":
+        """从 JSON 重建单个判定（形状校验与 parse_distillation_report 同源）。
+
+        任何结构 / 内容问题（非对象、缺 path、action 非法、merge 缺来源或
+        非 merge 带来源）都抛 LLMError——确认报告同样不可信，宁可大声失败
+        也不要带病进入落盘流程。来源工程名是否真实含该文件由 master 层校验。
+        """
+        if not isinstance(data, dict):
+            raise LLMError("判定条目必须是对象")
+        path = data.get("path")
+        if not isinstance(path, str) or not path:
+            raise LLMError("判定条目缺少必填字段：path")
+        action = data.get("action")
+        if action not in DISTILL_ACTIONS:
+            raise LLMError(f"判定条目的 action 非法：{action!r}")
+        reason = data.get("reason", "")
+        if not isinstance(reason, str):
+            raise LLMError("判定条目的 reason 必须是字符串")
+        source = data.get("source", "")
+        if not isinstance(source, str):
+            raise LLMError("判定条目的 source 必须是字符串")
+        if action == ACTION_MERGE:
+            if not source:
+                raise LLMError(f"判定条目 {path!r} 的 merge 必须指定 source")
+        elif source:
+            raise LLMError(f"判定条目 {path!r} 只有 merge 才能指定 source")
+        return cls(path=path, action=action, source=source, reason=reason)
+
 
 class LLM(Protocol):
     def select_modules(

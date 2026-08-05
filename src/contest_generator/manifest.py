@@ -133,7 +133,7 @@ def _parse_file_list(files: list[Any], platform: str) -> tuple[str, ...]:
     for item in files:
         if not isinstance(item, str) or not item:
             raise ManifestError(f"平台 {platform} 的文件路径必须是非空字符串：{item!r}")
-        if _is_unsafe_path(item):
+        if is_unsafe_path(item):
             raise ManifestError(f"平台 {platform} 的文件路径必须是相对且无 .. 的：{item!r}")
         if item in seen:
             raise ManifestError(f"平台 {platform} 的文件列表重复：{item!r}")
@@ -154,7 +154,7 @@ def _parse_dependencies(dependencies: Any) -> list[str]:
     return dependencies
 
 
-def _is_unsafe_path(path: str) -> bool:
+def is_unsafe_path(path: str) -> bool:
     """路径必须是相对路径，不含 .. 、空段、绝对路径（跨目录逃逸风险）。"""
     return (
         path.startswith("/")

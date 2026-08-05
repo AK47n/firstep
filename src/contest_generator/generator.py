@@ -17,11 +17,7 @@ from typing import Sequence
 
 from .manifest import ModuleManifest
 from .patchers import PatcherRegistry, default_registry
-from .skeleton import (
-    build_skeleton_interfaces,
-    extract_header_functions,
-    find_undefined_calls,
-)
+from .skeleton import verify_main_c
 
 MODULES_SUBDIR = "modules"
 
@@ -166,14 +162,12 @@ def _check_main_calls(
 ) -> None:
     """静态自检兜底：main.c 引用的每个函数必须存在于所选模块头文件。
 
-    骨架阶段（skeleton.sanitize_skeleton）把 AI 的幻觉调用改成注释占位；
-    走到这里的 main.c 若仍含不存在的调用（用户手改等），明确报错——这是
-    "不存在的调用被拦截"的报错分支，拒绝产出无法编译的工程。
+    自检实现归 skeleton.verify_main_c（与骨架阶段共用同一份接口块）——
+    "不存在的调用"只有一个实现、两种出口：骨架阶段改写为注释占位，走到
+    这里的 main.c 若仍含不存在的调用（用户手改等），明确报错，拒绝产出
+    无法编译的工程。
     """
-    interfaces = build_skeleton_interfaces(manifests, platform, library_dir)
-    undefined = find_undefined_calls(
-        main_c_content, extract_header_functions(interfaces)
-    )
+    undefined = verify_main_c(main_c_content, manifests, platform, library_dir)
     if undefined:
         raise UndefinedCallsError(
             "main.c 调用了所选模块头文件中不存在的函数："

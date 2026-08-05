@@ -2,7 +2,8 @@
 
 流程：AI 推荐（或用户手选）的 slug 集 → 生成前用户增删 → 按 manifest 递归
 展开依赖 → 检查目标平台可用性 → 交给生成器。展开与检查都是纯函数：用户
-增删选择后重跑一遍 resolve_dependencies 即可，无需维护中间状态。
+增删选择后重跑一遍 resolve_selection（加载库 + 展开 + 警告的组合操作）即可，
+无需维护中间状态。
 
 平台警告分三类——缺版本（missing，生成必失败）、未验证（unverified，可能
 无法编译）、硬件绑定（hardware_bound，换平台需移植）。前两类是风险提示，
@@ -12,8 +13,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Mapping, Sequence
 
+from .library import list_modules
 from .manifest import ModuleManifest
 
 WARNING_MISSING = "missing"  # 无目标平台版本条目，生成必失败
@@ -40,6 +43,28 @@ class PlatformWarning:
     slug: str
     kind: str  # WARNING_MISSING / WARNING_UNVERIFIED / WARNING_HARDWARE_BOUND
     message: str
+
+
+@dataclass(frozen=True)
+class ResolvedSelection:
+    """选择解析结果：依赖展开后的完整模块集 + 平台可用性警告。"""
+
+    manifests: tuple[ModuleManifest, ...]
+    warnings: tuple[PlatformWarning, ...]
+
+
+def resolve_selection(
+    library_dir: Path, platform: str, slugs: Sequence[str]
+) -> ResolvedSelection:
+    """加载模块库 → 展开依赖 → 平台警告，一步到位。
+
+    webapp 的展开 / 骨架 / 生成三个端点共用这一组合操作——"所选模块最终
+    解析成什么"只有一个答案来源，单独跑 expand 与生成前的结果必然一致。
+    """
+    by_slug = {m.slug: m for m in list_modules(library_dir)}
+    manifests = resolve_dependencies(slugs, by_slug)
+    warnings = check_platform_warnings([m.slug for m in manifests], platform, by_slug)
+    return ResolvedSelection(manifests=manifests, warnings=warnings)
 
 
 def resolve_dependencies(

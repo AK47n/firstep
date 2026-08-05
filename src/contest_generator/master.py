@@ -25,17 +25,19 @@ import json
 import os
 import re
 import shutil
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
+from .keil import KeilProjectError, extract_config_summary as extract_keil_config_summary
 from .llm import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
     LLM,
+    LLMError,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
@@ -99,6 +101,47 @@ class DistillationReport:
     keep: tuple[FileDecision, ...]
     merge: tuple[FileDecision, ...]
     exclude: tuple[FileDecision, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为 JSON 兼容 dict（提炼报告的 wire format，确认请求回传同形）。"""
+        return {
+            "platform": self.platform,
+            "projects": list(self.projects),
+            "keep": [d.to_dict() for d in self.keep],
+            "merge": [d.to_dict() for d in self.merge],
+            "exclude": [d.to_dict() for d in self.exclude],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DistillationReport":
+        """从确认请求的 JSON 重建报告（形状校验；语义校验归 apply_distillation）。
+
+        条目形状校验与 llm.parse_distillation_report 同一标准；来源工程与
+        路径覆盖等语义问题在落盘前由 _validate_report 拦截。
+        """
+        if not isinstance(data, dict):
+            raise MasterError("提炼报告必须是 JSON 对象")
+        platform = _require_str(data, "platform")
+        projects = tuple(_require_str_list(data, "projects"))
+        if not projects:
+            raise MasterError("报告缺少来源工程：projects 不能为空")
+
+        def decisions(key: str) -> tuple[FileDecision, ...]:
+            raw = data.get(key)
+            if not isinstance(raw, list):
+                raise MasterError(f"{key} 必须是列表")
+            try:
+                return tuple(FileDecision.from_dict(item) for item in raw)
+            except LLMError as exc:
+                raise MasterError(f"报告 {key} 条目非法：{exc}") from exc
+
+        return cls(
+            platform=platform,
+            projects=projects,
+            keep=decisions("keep"),
+            merge=decisions("merge"),
+            exclude=decisions("exclude"),
+        )
 
 
 @dataclass(frozen=True)
@@ -535,84 +578,18 @@ def _is_ignored(rel: str) -> bool:
 
 
 def _config_summary(project_dir: Path, platform: str) -> tuple[str, ...]:
-    """平台配置摘要行：设备 / include path / 编译宏（配置对比的 AI 素材）。"""
-    if platform == PLATFORM_STM32:
-        uvprojx = sorted(project_dir.glob("*.uvprojx"))[0]
-        return _keil_config_summary(uvprojx)
-    cproject = sorted(project_dir.glob("*.cproject"))[0]
-    return _ccs_config_summary(cproject)
+    """平台配置摘要行：设备 / include path / 编译宏（配置对比的 AI 素材）。
 
-
-def _keil_config_summary(uvprojx: Path) -> tuple[str, ...]:
+    格式知识归修改器适配器所有（keil.py / ccs.py 的 extract_config_summary），
+    这里只做平台分发；适配器内部失败（多配置文件等）转成一行摘要，扫描不因
+    单个工程带病中断。
+    """
     try:
-        root = ET.parse(uvprojx).getroot()
-    except ET.ParseError as exc:
-        return (f"{uvprojx.name} 无法解析为 XML：{exc}",)
-    lines: list[str] = []
-    for target in root.findall("Targets/Target"):
-        device = target.findtext("TargetOption/TargetCommonOption/Device")
-        include_path = target.findtext("TargetOption/TargetArmAds/Cads/IncludePath")
-        if device:
-            lines.append(f"{uvprojx.name} 设备：{device}")
-        if include_path:
-            lines.append(f"{uvprojx.name} include path：{include_path}")
-    if not lines:
-        lines.append(f"{uvprojx.name}：未找到设备 / include path 配置")
-    return tuple(lines)
-
-
-def _ccs_config_summary(cproject: Path) -> tuple[str, ...]:
-    try:
-        root = ET.parse(cproject).getroot()
-    except ET.ParseError as exc:
-        return (f"{cproject.name} 无法解析为 XML：{exc}",)
-    lines: list[str] = []
-    for configuration in _ccs_configurations(root):
-        name = configuration.get("name", "?")
-        include_paths = _ccs_option_values(
-            configuration, "ti.ccs.misc.options.buildIncludePath"
-        )
-        defines = _ccs_option_values(configuration, "ti.ccs.misc.options.buildDefine")
-        parts: list[str] = []
-        if include_paths:
-            parts.append("include path: " + ", ".join(include_paths))
-        if defines:
-            parts.append("defines: " + ", ".join(defines))
-        if parts:
-            lines.append(f"{cproject.name} 配置 {name}：{'；'.join(parts)}")
-    if not lines:
-        lines.append(f"{cproject.name}：未找到配置摘要")
-    return tuple(lines)
-
-
-def _ccs_configurations(root: ET.Element) -> list[ET.Element]:
-    """所有 build configuration 元素（cconfiguration/cdtBuildSystem/configuration）。"""
-    result: list[ET.Element] = []
-    for storage in root.findall("storageModule"):
-        if storage.get("moduleId") != "org.eclipse.cdt.core.settings":
-            continue
-        for cconfig in storage.findall("cconfiguration"):
-            for inner in cconfig.findall("storageModule"):
-                if inner.get("moduleId") != "org.eclipse.cdt.core.settings":
-                    continue
-                build_system = inner.find("cdtBuildSystem")
-                if build_system is not None:
-                    result.extend(build_system.findall("configuration"))
-    return result
-
-
-def _ccs_option_values(configuration: ET.Element, super_class: str) -> list[str]:
-    tool_chain = configuration.find("folderInfo/toolChain")
-    if tool_chain is None:
-        return []
-    for option in tool_chain.findall("option"):
-        if option.get("superClass") == super_class:
-            return [
-                value.get("value", "")
-                for value in option.findall("listOptionValue")
-                if value.get("value")
-            ]
-    return []
+        if platform == PLATFORM_STM32:
+            return extract_keil_config_summary(project_dir)
+        return extract_ccs_config_summary(project_dir)
+    except (KeilProjectError, CcsProjectError) as exc:
+        return (f"{platform} 工程配置读取失败：{exc}",)
 
 
 def _validate_store_key(platform: str) -> None:

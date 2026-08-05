@@ -15,6 +15,7 @@ from contest_generator.skeleton import (
     find_undefined_calls,
     generate_skeleton,
     sanitize_skeleton,
+    verify_main_c,
 )
 from tests.fakes import FakeLLM
 
@@ -292,3 +293,30 @@ def test_generate_skeleton_then_project_keeps_only_real_calls(
     assert "int main(void) {" in content
     assert "dht11_read();" in content
     assert "不存在的函数 dht11_init" in content
+
+
+# ---------------------------------------------------------------------------
+# verify_main_c：生成器落盘前的静态自检（与骨架阶段同一份接口块）
+# ---------------------------------------------------------------------------
+
+
+def test_verify_main_c_flags_calls_outside_module_headers(fake_module_library):
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+    main_c = "int main(void) { float t = dht11_read(); dht11_init(); while (1); }\n"
+
+    undefined = verify_main_c(main_c, manifests, PLATFORM_MSPM0, fake_module_library)
+
+    assert undefined == ("dht11_init",)
+
+
+def test_verify_main_c_passes_clean_main_c(fake_module_library):
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+
+    undefined = verify_main_c(
+        "int main(void) { float t = dht11_read(); delay_ms(100); while (1); }\n",
+        manifests,
+        PLATFORM_MSPM0,
+        fake_module_library,
+    )
+
+    assert undefined == ()
