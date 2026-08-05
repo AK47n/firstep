@@ -110,6 +110,37 @@ def test_patch_with_multiple_uvprojx_raises(keil_project):
         KeilPatcher().patch(keil_project, MODULE_C_FILES, INCLUDE_DIRS)
 
 
+def test_patch_finds_uvprojx_in_subdirectory(tmp_path):
+    """工程文件在子目录（正点原子风格 USER/）时也能定位并改写。"""
+    project = make_fake_master_project(tmp_path / "project")
+    user = project / "USER"
+    user.mkdir()
+    (user / "project.uvprojx").write_text(
+        (project / "project.uvprojx").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (project / "project.uvprojx").unlink()
+
+    KeilPatcher().patch(project, MODULE_C_FILES, INCLUDE_DIRS)
+
+    root = _parse_uvprojx(user)
+    groups = root.findall("./Targets/Target/Groups/Group")
+    assert any(g.findtext("GroupName") == "modules" for g in groups)
+    include_path = root.findtext(
+        "Targets/Target/TargetOption/TargetArmAds/Cads/IncludePath"
+    )
+    assert "modules\\dht11\\stm32\\src" in include_path
+
+
+def test_patch_ignores_uvprojx_inside_git(tmp_path):
+    project = make_fake_master_project(tmp_path / "project")
+    content = (project / "project.uvprojx").read_text(encoding="utf-8")
+    (project / "project.uvprojx").unlink()
+    (project / ".git" / "project.uvprojx").write_text(content, encoding="utf-8")
+
+    with pytest.raises(KeilProjectError, match="没有 .uvprojx"):
+        KeilPatcher().patch(project, MODULE_C_FILES, INCLUDE_DIRS)
+
+
 def test_patch_with_invalid_xml_raises(keil_project):
     (keil_project / "project.uvprojx").write_text(
         "<Project><Targets>", encoding="utf-8"
