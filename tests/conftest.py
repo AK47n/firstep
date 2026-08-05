@@ -19,6 +19,7 @@ from tests.fakes import (
     make_fake_ccs_master_project,
     make_fake_master_project,
     make_fake_module_library,
+    make_fake_stm32_projects,
 )
 
 
@@ -40,6 +41,18 @@ def fake_ccs_master_project(tmp_path) -> Path:
 @pytest.fixture
 def fake_llm() -> FakeLLM:
     return FakeLLM()
+
+
+@pytest.fixture
+def fake_stm32_projects(tmp_path) -> tuple[Path, Path]:
+    """母版提炼素材：proj-a / proj-b 两个同平台旧工程（见 fakes.py 构造）。"""
+    return make_fake_stm32_projects(tmp_path / "old_projects")
+
+
+@pytest.fixture
+def fake_masters_dir(tmp_path) -> Path:
+    """母版库目录（母版提炼结果入库的地方）。"""
+    return tmp_path / "masters"
 
 
 @pytest.fixture

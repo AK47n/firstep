@@ -9,9 +9,14 @@ import pytest
 
 from contest_generator.config import LLMConfig
 from contest_generator.llm import (
+    ACTION_EXCLUDE,
+    ACTION_KEEP,
+    ACTION_MERGE,
     DeepSeekLLM,
+    FileDecision,
     LLMError,
     build_manifest_summaries,
+    parse_distillation_report,
     parse_module_selection,
     parse_validation_result,
 )
@@ -305,3 +310,84 @@ def test_parse_validation_rejects_missing_consistent():
 def test_parse_validation_rejects_non_bool_consistent():
     with pytest.raises(LLMError, match="布尔"):
         parse_validation_result(json.dumps({"consistent": "yes", "issues": ""}))
+
+
+# ---------------------------------------------------------------------------
+# 母版提炼判定：json 结构化输出
+# ---------------------------------------------------------------------------
+
+DISTILL_DECISIONS_JSON = json.dumps(
+    {
+        "decisions": [
+            {"path": "src/oled.c", "action": ACTION_MERGE, "source": "proj-a",
+             "reason": "A 的 include path 更全"},
+            {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用驱动"},
+            {"path": "ui/oled_fonts.c", "action": ACTION_EXCLUDE, "reason": "赛题残留"},
+        ]
+    }
+)
+
+
+def test_distill_master_posts_json_request_with_comparison():
+    transport = FakeTransport(body=_api_response(DISTILL_DECISIONS_JSON))
+    llm = _llm(transport)
+    summary = "冲突文件（同路径、内容不同）：\n- src/oled.c（出现在：proj-a、proj-b）"
+
+    decisions = llm.distill_master("stm32", ("proj-a", "proj-b"), summary)
+
+    assert len(decisions) == 3
+    assert decisions[0] == FileDecision(
+        "src/oled.c", ACTION_MERGE, "proj-a", "A 的 include path 更全"
+    )
+    _, _, payload, _ = transport.calls[0]
+    assert payload["response_format"] == {"type": "json_object"}
+    user_message = payload["messages"][1]["content"]
+    assert "stm32" in user_message
+    assert "proj-a" in user_message
+    assert "src/oled.c" in user_message
+    assert "json" in user_message  # DeepSeek 的 json_object 模式要求提示词含 json
+    assert "判定" in payload["messages"][0]["content"]
+
+
+def test_parse_distillation_accepts_mixed_decisions():
+    decisions = parse_distillation_report(DISTILL_DECISIONS_JSON, ("proj-a", "proj-b"))
+
+    assert decisions[0].action == ACTION_MERGE
+    assert decisions[0].source == "proj-a"
+    assert decisions[1].action == ACTION_KEEP
+    assert decisions[2].action == ACTION_EXCLUDE
+
+
+@pytest.mark.parametrize(
+    "bad_json",
+    [
+        "{not json",
+        json.dumps({"nope": []}),
+        json.dumps({"decisions": "not a list"}),
+        json.dumps({"decisions": [{"path": "a.c", "action": "archive"}]}),
+        json.dumps({"decisions": [{"action": ACTION_KEEP}]}),  # 缺 path
+        json.dumps({"decisions": [{"path": "a.c", "action": ACTION_MERGE}]}),  # merge 缺 source
+        json.dumps({"decisions": [{"path": "a.c", "action": ACTION_KEEP, "source": "proj-a"}]}),
+        json.dumps(
+            {
+                "decisions": [
+                    {"path": "a.c", "action": ACTION_KEEP},
+                    {"path": "a.c", "action": ACTION_EXCLUDE},
+                ]
+            }
+        ),
+    ],
+)
+def test_parse_distillation_rejects_malformed_output(bad_json):
+    with pytest.raises(LLMError):
+        parse_distillation_report(bad_json, ("proj-a", "proj-b"))
+
+
+def test_parse_distillation_rejects_unknown_source_project():
+    with pytest.raises(LLMError, match="来源工程"):
+        parse_distillation_report(
+            json.dumps(
+                {"decisions": [{"path": "a.c", "action": ACTION_MERGE, "source": "proj-c"}]}
+            ),
+            ("proj-a", "proj-b"),
+        )

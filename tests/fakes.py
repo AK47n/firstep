@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
 
-from contest_generator.llm import ModuleSelection, ValidationResult
+from contest_generator.llm import FileDecision, ModuleSelection, ValidationResult
 
 # ---------------------------------------------------------------------------
 # 假模块文件内容（断言输出目录里文件内容用）
@@ -143,6 +143,73 @@ def make_fake_module_library(library_dir: Path) -> Path:
         {},
     )
     return library_dir
+
+
+# ---------------------------------------------------------------------------
+# 母版提炼的假旧工程（工单 08）：proj-a / proj-b 两个同平台工程
+# ---------------------------------------------------------------------------
+
+# 提炼用假工程 .uvprojx：只有设备与 include path 两个对比点（A 多一个 .\src）
+FAKE_DISTILL_UVPROJX_A = r'''<?xml version="1.0" encoding="UTF-8" ?>
+<Project>
+  <Targets>
+    <Target>
+      <TargetName>proj-a</TargetName>
+      <TargetOption>
+        <TargetCommonOption>
+          <Device>STM32F103C8</Device>
+        </TargetCommonOption>
+        <TargetArmAds>
+          <Cads>
+            <IncludePath>.\inc;.\src</IncludePath>
+          </Cads>
+        </TargetArmAds>
+      </TargetOption>
+    </Target>
+  </Targets>
+</Project>
+'''
+
+FAKE_DISTILL_UVPROJX_B = FAKE_DISTILL_UVPROJX_A.replace(
+    "<TargetName>proj-a</TargetName>", "<TargetName>proj-b</TargetName>"
+).replace("<IncludePath>.\\inc;.\\src</IncludePath>", "<IncludePath>.\\inc</IncludePath>")
+
+
+def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
+    """两个同平台旧工程（母版提炼素材）：公共文件内容一致、两处冲突
+    （project.uvprojx / src/oled.c）、各自独有的残留文件；.git 与构建产物
+    目录（Debug/Release）应在扫描时被忽略。"""
+    common = {
+        "main.c": "#include \"stm32f10x_conf.h\"\nint main(void) { while (1); }\n",
+        "inc/stm32f10x_conf.h": "#pragma once\n",
+        "src/system_stm32f10x.c": "/* startup/system */\n",
+    }
+    proj_a = base_dir / "proj-a"
+    _write_files(proj_a, {
+        **common,
+        "project.uvprojx": FAKE_DISTILL_UVPROJX_A,
+        "src/oled.c": "/* 通用 OLED 驱动（A 版本） */\nvoid oled_init(void);\n",
+        "sensors/dht11.c": "/* 通用 DHT11 驱动 */\nfloat dht11_read(void);\n",
+        ".git/HEAD": "ref: refs/heads/main\n",
+        "Debug/out.axf": "binary junk",
+    })
+    proj_b = base_dir / "proj-b"
+    _write_files(proj_b, {
+        **common,
+        "project.uvprojx": FAKE_DISTILL_UVPROJX_B,
+        "src/oled.c": "/* 通用 OLED 驱动（B 版本） */\nvoid oled_init(void);\n",
+        "ui/oled_fonts.c": "/* 上一场比赛的字体表 */\nconst unsigned char font[1];\n",
+        ".git/HEAD": "ref: refs/heads/main\n",
+        "Release/oled.o": "binary junk",
+    })
+    return proj_a, proj_b
+
+
+def _write_files(root: Path, files: dict[str, str]) -> None:
+    for relpath, content in files.items():
+        path = root / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
 
 # 假母版的 .cproject：结构真实的 CCS（Eclipse CDT managed build）工程文件。
@@ -311,7 +378,7 @@ class FakeTransport:
 
 
 class FakeLLM:
-    """假 LLM：固定返回并记录各职责的输入，供工单 04/05/07 注入。"""
+    """假 LLM：固定返回并记录各职责的输入，供工单 04/05/07/08 注入。"""
 
     def __init__(
         self,
@@ -319,14 +386,17 @@ class FakeLLM:
         main_skeleton: str = "/* skeleton placeholder */\n",
         summary: str = "AI 生成的模块简介",
         validation: ValidationResult = ValidationResult(consistent=True),
+        distillation: tuple[FileDecision, ...] = (),
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
         self._summary = summary
         self._validation = validation
+        self._distillation = distillation
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
         self.validation_calls: list[tuple[str, str]] = []
+        self.distill_calls: list[tuple[str, tuple[str, ...], str]] = []
 
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
@@ -348,6 +418,12 @@ class FakeLLM:
     ) -> ValidationResult:
         self.validation_calls.append((description, code))
         return self._validation
+
+    def distill_master(
+        self, platform: str, project_names: Sequence[str], comparison_summary: str
+    ) -> tuple[FileDecision, ...]:
+        self.distill_calls.append((platform, tuple(project_names), comparison_summary))
+        return self._distillation
 
 
 class RecordingPatcher:

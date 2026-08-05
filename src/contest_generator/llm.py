@@ -2,7 +2,8 @@
 
 生产实现 DeepSeekLLM 走 DeepSeek Chat Completions API（base_url / api_key /
 模型来自本机配置文件 config.py）；HTTP 传输可注入假件，网络调用不进测试。
-LLM 承担三个职责：赛题→模块选择、main.c 骨架生成、模块简介生成与校验。
+LLM 承担四个职责：赛题→模块选择、main.c 骨架生成、模块简介生成与校验、
+母版提炼判定（冲突/独有文件 → 保留/合并/剔除）。
 """
 
 from __future__ import annotations
@@ -35,6 +36,20 @@ VALIDATION_SYSTEM_PROMPT = (
     "接口、行为是否与代码相符。不一致时用中文指出具体差异。只输出 JSON 对象。"
 )
 
+DISTILL_SYSTEM_PROMPT = (
+    "你是嵌入式开发工程整理助手。用户导入了多个同平台旧工程，你需要根据结构对比"
+    "与配置对比判定：哪些文件属于公共骨架（保留）、哪些需要合并（同一路径在多个"
+    "工程里内容不同，选定一个来源工程）、哪些是项目残留（剔除，如赛题专用业务代码、"
+    "构建产物）。只输出 JSON 对象。"
+)
+
+ACTION_KEEP = "keep"  # 保留：属于公共骨架
+ACTION_MERGE = "merge"  # 合并：同路径不同内容，选定来源工程
+ACTION_EXCLUDE = "exclude"  # 剔除：项目残留
+
+# 判定动作词表：llm.py 与 master.py 共用，各自硬编码会静默漂移
+DISTILL_ACTIONS = (ACTION_KEEP, ACTION_MERGE, ACTION_EXCLUDE)
+
 
 class LLMError(Exception):
     """LLM 调用或输出解析失败，message 说明具体问题。"""
@@ -60,6 +75,20 @@ class ValidationResult:
     issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
 
 
+@dataclass(frozen=True)
+class FileDecision:
+    """母版提炼时单个文件的 AI 判定：保留 / 合并（取某工程版本）/ 剔除。
+
+    只覆盖需要判定的路径（同路径不同内容 + 独有文件）；所有工程内容一致的
+    公共文件由 master.compare_projects 确定性保留，不交给 AI。
+    """
+
+    path: str  # 相对工程目录的路径（与扫描清单同一套词表）
+    action: str  # ACTION_KEEP / ACTION_MERGE / ACTION_EXCLUDE
+    source: str = ""  # merge 时选定的来源工程名（其余动作必须为空）
+    reason: str = ""  # AI 的中文理由
+
+
 class LLM(Protocol):
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
@@ -74,6 +103,10 @@ class LLM(Protocol):
     def validate_module_description(
         self, description: str, code: str
     ) -> ValidationResult: ...
+
+    def distill_master(
+        self, platform: str, project_names: Sequence[str], comparison_summary: str
+    ) -> tuple[FileDecision, ...]: ...
 
 
 def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
@@ -186,6 +219,23 @@ class DeepSeekLLM:
         )
         return parse_validation_result(content)
 
+    def distill_master(
+        self, platform: str, project_names: Sequence[str], comparison_summary: str
+    ) -> tuple[FileDecision, ...]:
+        content = self._chat(
+            [
+                {"role": "system", "content": DISTILL_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _distill_user_prompt(
+                        platform, project_names, comparison_summary
+                    ),
+                },
+            ],
+            json_mode=True,
+        )
+        return parse_distillation_report(content, project_names)
+
     def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
         if json_mode:
@@ -250,6 +300,59 @@ def parse_module_selection(
     return ModuleSelection(modules=tuple(modules), reasons=reasons)
 
 
+def parse_distillation_report(
+    content: str, project_names: Sequence[str]
+) -> tuple[FileDecision, ...]:
+    """把模型返回的提炼判定 JSON 文本解析校验为 FileDecision 列表。
+
+    任何结构 / 内容问题（非 JSON、缺 decisions、action 非法、merge 缺来源或
+    来源工程未知、非 merge 带来源、路径重复）都抛 LLMError——模型输出不可信，
+    宁可大声失败也不要带病进入确认流程。路径与对比范围的完整性由
+    master.assemble_report 校验（llm 层不知道对比范围）。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("decisions"), list):
+        raise LLMError("模型输出缺少 decisions 数组")
+
+    names = set(project_names)
+    decisions: list[FileDecision] = []
+    seen: set[str] = set()
+    for index, item in enumerate(data["decisions"]):
+        if not isinstance(item, dict):
+            raise LLMError(f"decisions[{index}] 必须是对象")
+        path = item.get("path")
+        if not isinstance(path, str) or not path:
+            raise LLMError(f"decisions[{index}] 缺 path")
+        action = item.get("action")
+        if action not in DISTILL_ACTIONS:
+            raise LLMError(f"decisions[{index}] 的 action 非法：{action!r}")
+        reason = item.get("reason", "")
+        if not isinstance(reason, str):
+            raise LLMError(f"decisions[{index}] 的 reason 必须是字符串")
+        source = item.get("source", "")
+        if not isinstance(source, str):
+            raise LLMError(f"decisions[{index}] 的 source 必须是字符串")
+        if action == ACTION_MERGE:
+            if not source:
+                raise LLMError(f"decisions[{index}] 的 merge 必须指定 source")
+            if source not in names:
+                raise LLMError(
+                    f"decisions[{index}] 的来源工程不在导入列表中：{source}"
+                )
+        elif source:
+            raise LLMError(f"decisions[{index}] 只有 merge 才能指定 source")
+        if path in seen:
+            raise LLMError(f"模型重复判定文件：{path}")
+        seen.add(path)
+        decisions.append(
+            FileDecision(path=path, action=action, source=source, reason=reason)
+        )
+    return tuple(decisions)
+
+
 def parse_validation_result(content: str) -> ValidationResult:
     """把模型返回的校验 JSON 文本解析校验为 ValidationResult。
 
@@ -283,6 +386,21 @@ def _selection_user_prompt(problem_text: str, manifest_summaries: Sequence[str])
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     prompt = _build_user_prompt(problem_text, "模块库可用模块：", manifest_summaries)
     return prompt + '\n只返回 json 格式的 JSON 对象：{"modules": [{"slug": "...", "reason": "..."}]}'
+
+
+def _distill_user_prompt(
+    platform: str, project_names: Sequence[str], comparison_summary: str
+) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    names = "、".join(project_names)
+    return (
+        f"平台：{platform}\n导入的工程：{names}\n\n结构与配置对比：\n"
+        f"{comparison_summary}\n\n"
+        "对每个需要判定的文件路径给出动作：keep（保留）/ merge（合并，必须选定"
+        "来源工程）/ exclude（剔除）。只返回 json 格式的 JSON 对象："
+        '{"decisions": [{"path": "...", "action": "keep|merge|exclude", '
+        '"source": "merge 时必填的来源工程名", "reason": "中文理由"}]}'
+    )
 
 
 def _validation_user_prompt(description: str, code: str) -> str:
