@@ -136,6 +136,94 @@ def make_fake_module_library(library_dir: Path) -> Path:
     return library_dir
 
 
+# 假母版的 .cproject：结构真实的 CCS（Eclipse CDT managed build）工程文件。
+# Debug/Release 双配置，toolchain 里带 buildIncludePath 选项，sourceEntries 有根条目。
+# 与 .uvprojx 的关键差异：CCS 不逐文件枚举源文件，构建系统扫描 sourceEntries 目录。
+FAKE_CPROJECT = r'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?fileVersion 4.0.0?><cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
+  <storageModule moduleId="org.eclipse.cdt.core.settings">
+    <cconfiguration id="ti.ccs.project.toolchain.configuration.debug.12345">
+      <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+      <storageModule moduleId="org.eclipse.cdt.core.settings">
+        <extensions>
+          <extension id="org.eclipse.cdt.core.ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+          <extension id="org.eclipse.cdt.core.MakeErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+        </extensions>
+        <cdtBuildSystem buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildId="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" comment="Build configuration: Debug" id="ti.ccs.project.toolchain.configuration.debug.12345" name="Debug">
+          <configuration artifactExtension="out" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" comment="Build configuration: Debug" id="ti.ccs.project.toolchain.configuration.debug.12345" name="Debug" parent="ti.ccs.project.toolchain.configuration.debug.12345">
+            <folderInfo id="ti.ccs.project.toolchain.configuration.debug.12345." name="/" resourcePath="">
+              <toolChain id="ti.ccs.project.toolchain.debug.23456" name="TI Code Generation Tools" superClass="ti.ccs.project.toolchain.debug">
+                <option id="ti.ccs.misc.options.buildDefine.34567" name="Build Defines" superClass="ti.ccs.misc.options.buildDefine" valueType="define">
+                  <listOptionValue builtIn="false" value="DEBUG"/>
+                  <listOptionValue builtIn="false" value="MSPM0G3507"/>
+                </option>
+                <option id="ti.ccs.misc.options.buildIncludePath.34568" name="Include Options" superClass="ti.ccs.misc.options.buildIncludePath" valueType="includePath">
+                  <listOptionValue builtIn="false" value="${PROJECT_LOC}/inc"/>
+                  <listOptionValue builtIn="false" value="${PROJECT_LOC}/driverlib"/>
+                </option>
+                <option id="ti.ccs.misc.options.buildVar.34569" name="Build Variables" superClass="ti.ccs.misc.options.buildVar" valueType="buildVariables"/>
+                <targetPlatform id="ti.ccs.project.toolchain.debug.23456.0" name="ti.platforms.mspm0" superClass="ti.ccs.platform.mspm0"/>
+                <builder id="ti.ccs.project.toolchain.builder.debug.23457" superClass="ti.ccs.project.toolchain.builder.debug"/>
+                <tool id="ti.ccs.project.toolchain.arm.compiler.debug.23458" name="TI Compiler" superClass="ti.ccs.project.toolchain.arm.compiler.debug">
+                  <option id="ti.ccs.arm.compiler.options.optLevel.45670" superClass="ti.ccs.arm.compiler.options.optLevel" value="ti.ccs.arm.compiler.options.optLevel.off" valueType="enumerated"/>
+                </tool>
+                <tool id="ti.ccs.project.toolchain.arm.assembler.debug.23459" name="TI Assembler" superClass="ti.ccs.project.toolchain.arm.assembler.debug"/>
+                <tool id="ti.ccs.project.toolchain.arm.linker.debug.23460" name="TI Linker" superClass="ti.ccs.project.toolchain.arm.linker.debug">
+                  <option id="ti.ccs.arm.linker.options.commandFile.45671" superClass="ti.ccs.arm.linker.options.commandFile" valueType="string">
+                    <listOptionValue builtIn="false" value="${PROJECT_LOC}/mspm0g3507.cmd"/>
+                  </option>
+                </tool>
+              </toolChain>
+            </folderInfo>
+            <sourceEntries>
+              <entry excluding="Debug" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name=""/>
+            </sourceEntries>
+          </configuration>
+        </cdtBuildSystem>
+      </storageModule>
+      <storageModule moduleId="org.eclipse.cdt.core.language.mapping">
+        <project-mappings>
+          <projectMapping language="c" project="org.eclipse.cdt.core.c_cpp.language.c"/>
+        </project-mappings>
+      </storageModule>
+    </cconfiguration>
+    <cconfiguration id="ti.ccs.project.toolchain.configuration.release.54321">
+      <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+      <storageModule moduleId="org.eclipse.cdt.core.settings">
+        <extensions>
+          <extension id="org.eclipse.cdt.core.ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+        </extensions>
+        <cdtBuildSystem buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildId="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" comment="Build configuration: Release" id="ti.ccs.project.toolchain.configuration.release.54321" name="Release">
+          <configuration artifactExtension="out" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" comment="Build configuration: Release" id="ti.ccs.project.toolchain.configuration.release.54321" name="Release" parent="ti.ccs.project.toolchain.configuration.release.54321">
+            <folderInfo id="ti.ccs.project.toolchain.configuration.release.54321." name="/" resourcePath="">
+              <toolChain id="ti.ccs.project.toolchain.release.65432" name="TI Code Generation Tools" superClass="ti.ccs.project.toolchain.release">
+                <option id="ti.ccs.misc.options.buildIncludePath.65433" name="Include Options" superClass="ti.ccs.misc.options.buildIncludePath" valueType="includePath">
+                  <listOptionValue builtIn="false" value="${PROJECT_LOC}/inc"/>
+                </option>
+                <option id="ti.ccs.misc.options.buildVar.65434" name="Build Variables" superClass="ti.ccs.misc.options.buildVar" valueType="buildVariables"/>
+                <targetPlatform id="ti.ccs.project.toolchain.release.65432.0" name="ti.platforms.mspm0" superClass="ti.ccs.platform.mspm0"/>
+                <builder id="ti.ccs.project.toolchain.builder.release.65433" superClass="ti.ccs.project.toolchain.builder.release"/>
+                <tool id="ti.ccs.project.toolchain.arm.compiler.release.65434" name="TI Compiler" superClass="ti.ccs.project.toolchain.arm.compiler.release"/>
+                <tool id="ti.ccs.project.toolchain.arm.assembler.release.65435" name="TI Assembler" superClass="ti.ccs.project.toolchain.arm.assembler.release"/>
+                <tool id="ti.ccs.project.toolchain.arm.linker.release.65436" name="TI Linker" superClass="ti.ccs.project.toolchain.arm.linker.release"/>
+              </toolChain>
+            </folderInfo>
+            <sourceEntries>
+              <entry excluding="Release" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name=""/>
+            </sourceEntries>
+          </configuration>
+        </cdtBuildSystem>
+      </storageModule>
+    </cconfiguration>
+  </storageModule>
+  <storageModule moduleId="cdtBuildSystem">
+    <project id="mspm0g3507.12345" name="mspm0g3507" type="ti.ccs.project.toolchain.arm"/>
+  </storageModule>
+  <storageModule moduleId="scannerConfiguration"/>
+</cproject>
+'''
+
+
 def make_fake_master_project(master_dir: Path) -> Path:
     """最小化的 Keil 风格母版工程（真实母版由工单 08 提炼，这里只求结构真实）。"""
     (master_dir / "inc").mkdir(parents=True)
@@ -147,6 +235,53 @@ def make_fake_master_project(master_dir: Path) -> Path:
     (master_dir / "src/system_stm32f10x.c").write_text(
         "/* startup/system */", encoding="utf-8"
     )
+    (master_dir / ".git/HEAD").write_text("ref: refs/heads/main", encoding="utf-8")
+    return master_dir
+
+
+# 假母版的 .project：CCS（Eclipse 底座）打开工程必需的工程描述文件，
+# 声明 TI 与 CDT 的 natures——缺了它 CCS 无法打开工程。
+FAKE_CCS_PROJECT = r'''<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+  <name>mspm0g3507</name>
+  <comment></comment>
+  <projects>
+  </projects>
+  <buildSpec>
+    <buildCommand>
+      <name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name>
+      <triggers>clean,full,incremental,</triggers>
+      <arguments>
+      </arguments>
+    </buildCommand>
+    <buildCommand>
+      <name>org.eclipse.cdt.managedbuilder.core.ScannerConfigBuilder</name>
+      <triggers>full,incremental,</triggers>
+      <arguments>
+      </arguments>
+    </buildCommand>
+  </buildSpec>
+  <natures>
+    <nature>com.ti.ccstudio.core.ccsNature</nature>
+    <nature>org.eclipse.cdt.core.cnature</nature>
+    <nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
+    <nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
+  </natures>
+</projectDescription>
+'''
+
+
+def make_fake_ccs_master_project(master_dir: Path) -> Path:
+    """最小化的 CCS 风格母版工程（真实母版由工单 08 提炼，这里只求结构真实）。"""
+    (master_dir / "inc").mkdir(parents=True)
+    (master_dir / ".git").mkdir()
+    (master_dir / ".project").write_text(FAKE_CCS_PROJECT, encoding="utf-8")
+    (master_dir / "project.cproject").write_text(FAKE_CPROJECT, encoding="utf-8")
+    (master_dir / "main.c").write_text("/* master's old main */", encoding="utf-8")
+    (master_dir / "mspm0g3507.cmd").write_text(
+        "--stack_size=512\n--heap_size=512\n", encoding="utf-8"
+    )
+    (master_dir / "inc/mspm0g3507.h").write_text("#pragma once\n", encoding="utf-8")
     (master_dir / ".git/HEAD").write_text("ref: refs/heads/main", encoding="utf-8")
     return master_dir
 

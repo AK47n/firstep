@@ -2,20 +2,21 @@
 
 import pytest
 
+from contest_generator.ccs import CcsPatcher
 from contest_generator.keil import KeilPatcher
 from contest_generator.patchers import (
     PLATFORM_MSPM0,
     PLATFORM_STM32,
-    NullPatcher,
     PatcherRegistry,
     UnknownPlatformError,
     default_registry,
 )
+from tests.fakes import RecordingPatcher
 
 
 def test_register_and_get_returns_same_patcher():
     registry = PatcherRegistry()
-    patcher = NullPatcher()
+    patcher = RecordingPatcher()
 
     registry.register(PLATFORM_STM32, patcher)
 
@@ -24,8 +25,8 @@ def test_register_and_get_returns_same_patcher():
 
 def test_late_registration_overwrites_previous():
     registry = PatcherRegistry()
-    registry.register(PLATFORM_STM32, NullPatcher())
-    replacement = NullPatcher()
+    registry.register(PLATFORM_STM32, RecordingPatcher())
+    replacement = RecordingPatcher()
 
     registry.register(PLATFORM_STM32, replacement)
 
@@ -34,14 +35,14 @@ def test_late_registration_overwrites_previous():
 
 def test_get_unknown_platform_raises_and_lists_known_platforms():
     registry = PatcherRegistry()
-    registry.register(PLATFORM_STM32, NullPatcher())
+    registry.register(PLATFORM_STM32, RecordingPatcher())
 
     with pytest.raises(UnknownPlatformError, match=PLATFORM_STM32):
         registry.get("nonexistent")
 
 
-def test_default_registry_wires_keil_patcher_for_stm32():
+def test_default_registry_wires_real_patchers_for_both_platforms():
     registry = default_registry()
 
     assert isinstance(registry.get(PLATFORM_STM32), KeilPatcher)
-    assert isinstance(registry.get(PLATFORM_MSPM0), NullPatcher)
+    assert isinstance(registry.get(PLATFORM_MSPM0), CcsPatcher)

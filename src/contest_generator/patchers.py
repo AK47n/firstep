@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, Sequence
 
+from .ccs import CcsPatcher
 from .keil import KeilPatcher
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
@@ -39,18 +40,6 @@ class ProjectPatcher(Protocol):
     ) -> None: ...
 
 
-class NullPatcher:
-    """桩实现：mspm0 的真实修改器（工单 03，CCS）落地前的占位，不做任何修改。"""
-
-    def patch(
-        self,
-        project_dir: Path,
-        module_files: Sequence[Path],
-        include_dirs: Sequence[Path],
-    ) -> None:
-        pass
-
-
 class PatcherRegistry:
     """平台名 -> 修改器的映射。"""
 
@@ -72,8 +61,8 @@ class PatcherRegistry:
 
 
 def default_registry() -> PatcherRegistry:
-    """stm32 用真实 Keil 修改器；mspm0 仍是桩（工单 03 落地 CCS）。"""
+    """两个平台都用真实修改器：stm32 → Keil，mspm0 → CCS。"""
     registry = PatcherRegistry()
     registry.register(PLATFORM_STM32, KeilPatcher())
-    registry.register(PLATFORM_MSPM0, NullPatcher())
+    registry.register(PLATFORM_MSPM0, CcsPatcher())
     return registry
