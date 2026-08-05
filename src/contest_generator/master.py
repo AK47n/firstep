@@ -6,7 +6,9 @@ compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→
 把全部文件（公共 + 冲突 + 独有，公共不等于基础建设必需，同样逐个判）连同
 文件全文交给 LLM（两阶段：读全文出摘要 → 基于摘要判定），残留（构建产物 /
 备份 / 临时文件）按扩展名 / 模式规则识别、确定性剔除，旧工程 main.c 一律
-不进母版（ADR 0002：母版 main.c 由确定性模板提供）→ 得到完整提炼报告
+不进母版（ADR 0002：母版 main.c 由确定性模板提供），启动文件 / 链接脚本
+（.s/.ld/.sct/.cmd）按扩展名规则确定性保留（编译链必需件，不交给 AI 判）
+→ 得到完整提炼报告
 （保留 / 整合 / 剔除清单 + 理由，残留与 main.c 条目带规则化原因，整合产物
 全文 + 说明，模板 main.c 全文预览）→ 用户一次审查、可修改动作 →
 apply_distillation 按确认后的最终集合重新校验并落盘母版候选（复制 / 写整合
@@ -111,6 +113,30 @@ def main_c_reason(rel_path: str) -> str | None:
     return None
 
 
+# 基础设施规则：启动文件（.s/.S）与链接脚本（.ld/.sct/.cmd）由规则识别、
+# 确定性保留。电赛工程里这些就是官方标准件（startup_stm32f10x_hd.s 等），
+# 格式固定、没有"项目特定"的可能；进 AI 判定只有判错风险（判 exclude →
+# 空工程编译链断裂、编译失败，且重写 .uvprojx 时悬空引用会被静默删除）。
+# 与残留同模式：不进扫描清单、不进 AI 判定素材、不读全文，但进报告 keep
+# 清单并带规则化原因（ADR 0001：不做黑盒消失——保留方向同理）。
+INFRASTRUCTURE_SUFFIXES = (".s", ".ld", ".sct", ".cmd")
+INFRASTRUCTURE_REASON = "平台基础设施：启动文件 / 链接脚本，确定性保留"
+
+
+def infrastructure_reason(rel_path: str) -> str | None:
+    """基础设施识别：启动文件（.s）与链接脚本（.ld/.sct/.cmd）由规则保留。
+
+    按路径后缀判定、大小写不敏感（Windows 文件系统大小写不敏感，.S 也是
+    汇编启动文件）。命中即确定性保留——不进 AI 判定、不读全文，但进报告
+    keep 清单并带规则化原因。
+    """
+    lowered = rel_path.lower()
+    for suffix in INFRASTRUCTURE_SUFFIXES:
+        if lowered.endswith(suffix):
+            return INFRASTRUCTURE_REASON
+    return None
+
+
 def main_c_template(platform: str) -> str:
     """确定性模板 main.c 全文（非 AI 生成）：按平台取 templates/ 下的模板。
 
@@ -157,6 +183,7 @@ class ProjectStructure:
     config_summary: tuple[str, ...]  # 平台配置摘要行（配置对比的 AI 素材）
     residues: tuple[str, ...] = ()  # 残留相对路径（构建产物 / 备份 / 临时文件）
     main_c_files: tuple[str, ...] = ()  # 旧工程 main.c（模板替代，不进扫描清单）
+    infrastructure: tuple[str, ...] = ()  # 基础设施（启动文件 / 链接脚本），确定性保留、不进 AI 判定
 
 
 @dataclass(frozen=True)
@@ -171,6 +198,7 @@ class ProjectComparison:
     judgment: tuple[str, ...]  # 需要 AI 判定的路径（公共 + 冲突 + 独有）
     residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
     main_c_files: tuple[str, ...] = ()  # 全部工程的旧 main.c（并集，排序，模板替代）
+    infrastructure: tuple[str, ...] = ()  # 全部工程的基础设施（并集，排序，确定性保留）
 
 
 @dataclass(frozen=True)
@@ -220,8 +248,9 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     顶层目录不进清单。残留（构建产物 / 备份 / 临时文件）单独记录在
     residues、不进扫描清单也不读内容（可能是二进制）；旧 main.c（任意层级）
     单独记录在 main_c_files（模板替代，ADR 0002）、不进扫描清单也不读内容；
-    config_summary 提取设备 / include path / 编译宏等配置对比素材（XML 解析
-    失败只记一行，扫描不因单个工程带病中断）。
+    启动文件 / 链接脚本（.s/.ld/.sct/.cmd）单独记录在 infrastructure、确定性
+    保留、不进扫描清单也不读内容；config_summary 提取设备 / include path /
+    编译宏等配置对比素材（XML 解析失败只记一行，扫描不因单个工程带病中断）。
     """
     if not project_dir.is_dir():
         raise MasterError(f"工程目录不存在：{project_dir}")
@@ -229,6 +258,7 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     files: list[str] = []
     residues: list[str] = []
     main_c_files: list[str] = []
+    infrastructure: list[str] = []
     hashes: dict[str, str] = {}
     for path in sorted(project_dir.rglob("*")):
         if not path.is_file():
@@ -242,6 +272,10 @@ def scan_project(project_dir: Path) -> ProjectStructure:
         if main_c_reason(rel) is not None:
             main_c_files.append(rel)
             continue
+        if infrastructure_reason(rel) is not None:
+            # 启动文件 / 链接脚本：确定性保留，不进 AI 判定也不读内容
+            infrastructure.append(rel)
+            continue
         files.append(rel)
         hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return ProjectStructure(
@@ -253,6 +287,7 @@ def scan_project(project_dir: Path) -> ProjectStructure:
         config_summary=_config_summary(project_dir, platform),
         residues=tuple(residues),
         main_c_files=tuple(main_c_files),
+        infrastructure=tuple(infrastructure),
     )
 
 
@@ -309,6 +344,9 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
         ),
         residues=tuple(sorted({r for p in projects for r in p.residues})),
         main_c_files=tuple(sorted({m for p in projects for m in p.main_c_files})),
+        infrastructure=tuple(
+            sorted({i for p in projects for i in p.infrastructure})
+        ),
     )
 
 
@@ -417,10 +455,13 @@ def assemble_report(
     备份 / 临时文件）与旧 main.c（ADR 0002：母版 main.c 由确定性模板提供）
     机器识别、确定性剔除：不进 AI 判定素材（AI 给出这类路径的判定是越界，
     拒绝），报告 exclude 清单自动带规则化原因（ADR 0001：不做黑盒消失）。
-    这些在确认前就拦住，兑现"不带病进入确认流程"。
+    启动文件 / 链接脚本（基础设施）同模式、确定性保留：不进 AI 判定素材，
+    AI 判定即越界，报告 keep 清单自动带规则化原因——这些文件判错（剔除）
+    会直接断掉空工程的编译链。以上在确认前就拦住，兑现"不带病进入确认流程"。
     """
     residues = set(comparison.residues)
     main_c_files = set(comparison.main_c_files)
+    infrastructure = set(comparison.infrastructure)
     scoped: list[FileDecision] = []
     for decision in decisions:
         if decision.path in residues:
@@ -429,12 +470,18 @@ def assemble_report(
         if decision.path in main_c_files:
             # 旧 main.c 由模板确定性替代（ADR 0002），AI 从未在素材里见过它
             raise MasterError(f"旧工程 main.c 由模板替代，无需 AI 判定：{decision.path}")
+        if decision.path in infrastructure:
+            # 启动文件 / 链接脚本由规则确定性保留，AI 从未在素材里见过它
+            raise MasterError(f"基础设施由规则保留，无需 AI 判定：{decision.path}")
         scoped.append(decision)
     decided = {d.path for d in scoped}
     _validate_judgment_coverage(decided=decided, judgment=set(comparison.judgment))
     _validate_merge_sources(scoped, comparison)
 
-    keep: list[FileDecision] = [d for d in scoped if d.action == ACTION_KEEP]
+    keep: list[FileDecision] = [
+        FileDecision(path, ACTION_KEEP, reason=INFRASTRUCTURE_REASON)
+        for path in comparison.infrastructure
+    ] + [d for d in scoped if d.action == ACTION_KEEP]
     merge: list[FileDecision] = [d for d in scoped if d.action == ACTION_MERGE]
     exclude: list[FileDecision] = [d for d in scoped if d.action == ACTION_EXCLUDE]
     for path in comparison.residues:
@@ -560,13 +607,16 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
         )
     # 残留与旧 main.c 在报告里但不在判定范围（规则识别、确定性剔除），从覆盖
     # 校验中扣除；它们必须恰好出现在 exclude 里，由 _validate_residue_disposition
-    # / _validate_main_c_disposition 单独校验
+    # / _validate_main_c_disposition 单独校验；基础设施（启动文件 / 链接脚本）
+    # 同样不在判定范围，必须恰好出现在 keep 里
     _validate_judgment_coverage(
-        decided=set(paths) - set(comparison.residues) - set(comparison.main_c_files),
+        decided=set(paths) - set(comparison.residues) - set(comparison.main_c_files)
+        - set(comparison.infrastructure),
         judgment=set(comparison.judgment),
     )
     _validate_residue_disposition(report, comparison)
     _validate_main_c_disposition(report, comparison)
+    _validate_infrastructure_disposition(report, comparison)
     _validate_merge_sources(dispositions, comparison)
 
 
@@ -609,6 +659,28 @@ def _validate_forced_exclusions(
         raise MasterError(f"{error_prefix}：" + "、".join(problems))
 
 
+def _validate_infrastructure_disposition(
+    report: DistillationReport, comparison: ProjectComparison
+) -> None:
+    """基础设施（启动文件 / 链接脚本）必须恰好保留一次：确定性保留（规则识别，
+    见 assemble_report），用户确认也不能改成整合 / 剔除或删掉——这些文件是
+    空工程编译链的必需件，剔除即编译失败。"""
+    forced = set(comparison.infrastructure)
+    moved = sorted(
+        forced
+        & {
+            d.path
+            for d in (*report.keep, *report.merge, *report.exclude)
+            if d.action != ACTION_KEEP
+        }
+    )
+    missing = sorted(forced - {d.path for d in report.keep})
+    if moved or missing:
+        problems = [f"{path}（被改为整合/剔除）" for path in moved]
+        problems += [f"{path}（报告中缺失）" for path in missing]
+        raise MasterError(f"基础设施必须保留：" + "、".join(problems))
+
+
 def _validate_platform_match(platform: str, comparison: ProjectComparison) -> None:
     """报告 / 提炼的平台必须与工程的平台一致（平台交叉校验）。
 
@@ -634,11 +706,18 @@ def _validate_judgment_coverage(decided: set[str], judgment: set[str]) -> None:
 
 
 def _source_project(decision: FileDecision, comparison: ProjectComparison) -> str:
-    """keep 取第一个含该文件的工程（merge 由整合产物全文落盘，不取源）。"""
+    """keep 取第一个含该文件的工程（merge 由整合产物全文落盘，不取源）。
+
+    基础设施文件（启动文件 / 链接脚本）不在扫描清单（by_path 不含它们），
+    从工程快照的基础设施清单取源。
+    """
     holders = comparison.by_path.get(decision.path, ())
-    if not holders:
-        raise MasterError(f"没有任何工程含文件 {decision.path}")
-    return holders[0]
+    if holders:
+        return holders[0]
+    for project in comparison.projects:
+        if decision.path in project.infrastructure:
+            return project.name
+    raise MasterError(f"没有任何工程含文件 {decision.path}")
 
 
 def confirm_distillation(

@@ -16,4 +16,5 @@
 - [x] master.py：judgment 范围含公共（compare_projects）、assemble_report 去"内容一致自动保留"（公共 keep/exclude 都合法，merge 词表校验兜底）、_validate_report 覆盖校验调整、apply_distillation 落盘后调配置重写（仅 stm32；CCS 按目录编译天然一致）
 - [x] keil.py：rewrite_project_references——删除引用但不在保留集的 File 条目 + main.c 条目重定向到模板落位（母版根）；无实际改动不写回（保持 AI 整合产物原样）
 - [x] llm.py：DISTILL prompt 判据收紧为"基础建设必需"（官方外设库 / 基础设施 / 基础通用封装 keep；项目特定业务代码 exclude；公共文件同样逐个判）
-- [x] 测试：公共进素材、公共 AI exclude 合法、公共 merge 仍禁、配置引用重写、CCS 全公共补判定；全套 356 绿
+- [x] 基础设施（.s/.ld/.sct/.cmd：启动文件 / 链接脚本）确定性保留：规则识别、不进 AI 判定（AI 判定即越界）、报告自动 keep 带规则化原因、确认时不可改动作——编译链必需件判错会断编译
+- [x] 测试：公共进素材、公共 AI exclude 合法、公共 merge 仍禁、配置引用重写、CCS 全公共补判定、基础设施保留/越界/落盘；全套 360 绿

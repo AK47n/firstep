@@ -1086,6 +1086,78 @@ def test_apply_removes_excluded_files_from_uvprojx(fake_stm32_projects, tmp_path
 
 
 # ---------------------------------------------------------------------------
+# 基础设施（启动文件 / 链接脚本）：确定性保留，不交给 AI 判定
+# ---------------------------------------------------------------------------
+
+
+def test_scan_classifies_infrastructure(fake_stm32_projects):
+    """启动文件 / 链接脚本由规则识别：不进扫描清单、不进 AI 判定、不读内容。"""
+    (fake_stm32_projects[0] / "startup_stm32f10x_hd.s").write_text(
+        "; startup", encoding="utf-8"
+    )
+
+    structure = scan_project(fake_stm32_projects[0])
+
+    assert structure.infrastructure == ("startup_stm32f10x_hd.s",)
+    assert "startup_stm32f10x_hd.s" not in structure.files
+    assert "startup_stm32f10x_hd.s" not in structure.file_hashes
+
+
+def test_distill_auto_keeps_infrastructure(fake_stm32_projects):
+    """基础设施自动保留、排最前、带规则化原因，不占 AI 判定范围（判例 06：
+    启动文件判错（剔除）会断掉空工程编译链，不交给 AI）。"""
+    for project in fake_stm32_projects:
+        (project / "startup_stm32f10x_hd.s").write_text("; startup", encoding="utf-8")
+    llm = FakeLLM(distillation=DEFAULT_DECISIONS)
+
+    report = _distill(fake_stm32_projects, llm)
+
+    assert report.keep[0].path == "startup_stm32f10x_hd.s"
+    assert report.keep[0].reason == "平台基础设施：启动文件 / 链接脚本，确定性保留"
+    # 不进 AI 判定素材
+    _, _, judgment_files, _ = llm.distill_calls[0]
+    assert "startup_stm32f10x_hd.s" not in {f.path for f in judgment_files}
+
+
+def test_distill_rejects_ai_on_infrastructure(fake_stm32_projects):
+    """AI 判定基础设施（保留/整合/剔除）是越界——规则保留的文件 AI 从未见过。"""
+    for project in fake_stm32_projects:
+        (project / "startup_stm32f10x_hd.s").write_text("; startup", encoding="utf-8")
+    decisions = DEFAULT_DECISIONS + (
+        FileDecision("startup_stm32f10x_hd.s", ACTION_KEEP, reason="AI 判的"),
+    )
+
+    with pytest.raises(MasterError, match="无需 AI 判定"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
+
+
+def test_apply_copies_infrastructure(fake_stm32_projects, tmp_path):
+    """基础设施从第一个含它的工程复制落盘；用户确认也不能改成剔除/整合。"""
+    for project in fake_stm32_projects:
+        (project / "startup_stm32f10x_hd.s").write_text("; startup", encoding="utf-8")
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    output = tmp_path / "preview"
+
+    apply_distillation(report, _comparison(fake_stm32_projects), output)
+
+    assert (output / "startup_stm32f10x_hd.s").read_text(encoding="utf-8") == (
+        "; startup"
+    )
+
+    # 用户把基础设施改成剔除 → 拒绝（编译链必需件不可改动作）
+    report = replace(
+        report,
+        keep=tuple(d for d in report.keep if d.path != "startup_stm32f10x_hd.s"),
+        exclude=(
+            *report.exclude,
+            FileDecision("startup_stm32f10x_hd.s", ACTION_EXCLUDE, reason="用户改的"),
+        ),
+    )
+    with pytest.raises(MasterError, match="基础设施必须保留"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "bad")
+
+
+# ---------------------------------------------------------------------------
 # 结构分析
 # ---------------------------------------------------------------------------
 
