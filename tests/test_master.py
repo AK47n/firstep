@@ -17,6 +17,7 @@ from contest_generator.llm import (
 )
 from contest_generator.master import (
     DistillationReport,
+    MAIN_C_TEMPLATE_REASON,
     MasterError,
     analyze_structure,
     apply_distillation,
@@ -28,6 +29,7 @@ from contest_generator.master import (
     get_master,
     import_master,
     list_masters,
+    main_c_template,
     scan_project,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -84,23 +86,21 @@ def _distill(fake_stm32_projects, llm):
 
 
 def test_scan_detects_platform_and_lists_files(fake_stm32_projects):
-    proj_a, proj_b = fake_stm32_projects
-
-    structure_a = scan_project(proj_a)
-    structure_b = scan_project(proj_b)
+    structure_a = scan_project(fake_stm32_projects[0])
 
     assert structure_a.name == "proj-a"
     assert structure_a.platform == PLATFORM_STM32
     assert structure_a.files == (
         "inc/stm32f10x_conf.h",
-        "main.c",
         "project.uvprojx",
         "sensors/dht11.c",
         "src/oled.c",
         "src/system_stm32f10x.c",
     )
-    # 公共文件在两个工程里内容哈希一致
-    assert structure_a.file_hashes["main.c"] == structure_b.file_hashes["main.c"]
+    # 旧工程 main.c 单独记录（模板替代，ADR 0002），不进扫描清单也不读内容
+    assert structure_a.main_c_files == ("main.c",)
+    assert "main.c" not in structure_a.files
+    assert "main.c" not in structure_a.file_hashes
     # .git 与构建产物目录不进清单
     assert ".git/HEAD" not in structure_a.files
     assert "Debug/out.axf" not in structure_a.files
@@ -184,6 +184,27 @@ def test_scan_detects_keil_platform_with_nested_uvprojx(tmp_path):
     assert structure.config_summary[0] == "project.uvprojx 设备：STM32F103C8"
 
 
+def test_scan_records_nested_main_c(tmp_path):
+    """任意层级的 main.c（正点原子风格 USER/ 子目录）都由模板替代；大小写不
+    敏感（Windows 下 MAIN.C 也是 main 文件）。"""
+    project = tmp_path / "proj"
+    (project / "USER").mkdir(parents=True)
+    (project / "USER" / "project.uvprojx").write_text(
+        FAKE_DISTILL_UVPROJX_B, encoding="utf-8"
+    )
+    # USER/MAIN.C 与根 main.c 不同目录：Windows 文件系统大小写不敏感，同目录
+    # 写两个会互相覆盖
+    (project / "USER" / "MAIN.C").write_text("int main(void) {}\n", encoding="utf-8")
+    (project / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
+
+    structure = scan_project(project)
+
+    # 顺序按平台路径排序规则而定，只断言集合
+    assert set(structure.main_c_files) == {"USER/MAIN.C", "main.c"}
+    assert "main.c" not in structure.files
+    assert "MAIN.C" not in structure.files
+
+
 def test_scan_ignores_uvprojx_inside_git(tmp_path):
     project = tmp_path / "proj"
     (project / ".git").mkdir(parents=True)
@@ -242,17 +263,18 @@ def test_compare_classifies_common_conflict_unique(fake_stm32_projects):
 
     assert comparison.common == (
         "inc/stm32f10x_conf.h",
-        "main.c",
         "src/system_stm32f10x.c",
     )
     assert comparison.conflicts == ("project.uvprojx", "src/oled.c")
     assert comparison.unique == ("sensors/dht11.c", "ui/oled_fonts.c")
+    # 旧工程 main.c 由模板替代：不进公共 / 冲突 / 独有分类，也就进不了 AI 判定
+    assert comparison.main_c_files == ("main.c",)
 
 
 def test_compare_records_which_projects_hold_each_path(fake_stm32_projects):
     comparison = _comparison(fake_stm32_projects)
 
-    assert comparison.by_path["main.c"] == ("proj-a", "proj-b")
+    assert "main.c" not in comparison.by_path
     assert comparison.by_path["sensors/dht11.c"] == ("proj-a",)
     assert comparison.by_path["ui/oled_fonts.c"] == ("proj-b",)
 
@@ -314,10 +336,9 @@ def test_distill_report_groups_keep_merge_exclude(fake_stm32_projects):
 
     assert report.platform == PLATFORM_STM32
     assert report.projects == ("proj-a", "proj-b")
-    # 公共文件确定保留，且排在最前；AI 判定跟随其后
+    # 公共文件确定保留，且排在最前；AI 判定跟随其后；main.c 不进 keep
     assert [d.path for d in report.keep] == [
         "inc/stm32f10x_conf.h",
-        "main.c",
         "src/system_stm32f10x.c",
         "sensors/dht11.c",
     ]
@@ -325,14 +346,17 @@ def test_distill_report_groups_keep_merge_exclude(fake_stm32_projects):
     assert [d.path for d in report.merge] == ["project.uvprojx", "src/oled.c"]
     assert report.merge[0].source == "proj-a"
     # exclude = AI 判定（ui/oled_fonts.c）+ 规则识别的残留（确定性、排序）
+    # + 旧工程 main.c（模板替代，规则化原因）
     assert [d.path for d in report.exclude] == [
         "ui/oled_fonts.c",
         "main.c.bak",
         "src/oled.hex",
         "src/oled.o",
         "ui/oled_fonts.c~",
+        "main.c",
     ]
     assert "残留" in report.exclude[0].reason
+    assert report.exclude[-1].reason == MAIN_C_TEMPLATE_REASON
 
 
 def test_distill_passes_platform_names_and_summary_to_llm(fake_stm32_projects):
@@ -395,6 +419,35 @@ def test_distill_rejects_ai_decision_on_residue(fake_stm32_projects):
         _distill(fake_stm32_projects, FakeLLM(distillation=bad))
 
 
+def test_distill_excludes_old_main_c_with_rule_reason(fake_stm32_projects):
+    """旧工程 main.c 一律不进母版：报告 exclude 带规则化原因，keep 无 main.c。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+
+    by_path = {d.path: d for d in report.exclude}
+    assert by_path["main.c"].action == ACTION_EXCLUDE
+    assert by_path["main.c"].reason == MAIN_C_TEMPLATE_REASON
+    assert "main.c" not in {d.path for d in report.keep}
+
+
+def test_old_main_c_never_reaches_ai_material(fake_stm32_projects):
+    """旧工程 main.c 由模板确定性替代：不进判定范围、不进两阶段摘要。"""
+    llm = FakeLLM(distillation=DEFAULT_DECISIONS)
+
+    _distill(fake_stm32_projects, llm)
+
+    _, _, judgment_files, summary = llm.distill_calls[0]
+    assert "main.c" not in {f.path for f in judgment_files}
+    assert "main.c" not in summary
+
+
+def test_distill_rejects_ai_decision_on_main_c(fake_stm32_projects):
+    """旧工程 main.c 由模板确定性替代，AI 判定 main.c 是越界——宁可大声失败。"""
+    bad = (*DEFAULT_DECISIONS, FileDecision("main.c", ACTION_KEEP, reason="AI 也判保留"))
+
+    with pytest.raises(MasterError, match="无需 AI 判定"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=bad))
+
+
 def test_judgment_files_group_identical_contents_across_projects(
     fake_stm32_projects, tmp_path
 ):
@@ -416,18 +469,20 @@ def test_judgment_files_group_identical_contents_across_projects(
 def test_distill_ignores_ai_keep_on_common_path(fake_stm32_projects):
     """AI 把公共文件也判定 keep 时按冗余忽略，不中断提炼（现实 LLM 常见回显）。"""
     decisions = DEFAULT_DECISIONS + (
-        FileDecision("main.c", ACTION_KEEP, reason="公共骨架，应保留"),
+        FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="公共骨架，应保留"),
     )
 
     report = _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
-    assert [d.path for d in report.keep].count("main.c") == 1
+    assert [d.path for d in report.keep].count("inc/stm32f10x_conf.h") == 1
 
 
 def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
     """公共文件判定 merge / exclude 是错误——公共文件必须保留。"""
     decisions = DEFAULT_DECISIONS + (
-        FileDecision("main.c", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"),
+        FileDecision(
+            "inc/stm32f10x_conf.h", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"
+        ),
     )
 
     with pytest.raises(MasterError, match="公共文件必须保留"):
@@ -437,18 +492,20 @@ def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
 def test_distill_ignores_ai_keep_on_common_path(fake_stm32_projects):
     """AI 把公共文件也判定 keep 时按冗余忽略，不中断提炼（现实 LLM 常见回显）。"""
     decisions = DEFAULT_DECISIONS + (
-        FileDecision("main.c", ACTION_KEEP, reason="公共骨架，应保留"),
+        FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="公共骨架，应保留"),
     )
 
     report = _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
-    assert [d.path for d in report.keep].count("main.c") == 1
+    assert [d.path for d in report.keep].count("inc/stm32f10x_conf.h") == 1
 
 
 def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
     """公共文件判定 merge / exclude 是错误——公共文件必须保留。"""
     decisions = DEFAULT_DECISIONS + (
-        FileDecision("main.c", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"),
+        FileDecision(
+            "inc/stm32f10x_conf.h", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"
+        ),
     )
 
     with pytest.raises(MasterError, match="公共文件必须保留"):
@@ -485,7 +542,7 @@ def test_apply_copies_keep_and_merge_skips_exclude(fake_stm32_projects, tmp_path
     apply_distillation(report, _comparison(fake_stm32_projects), output)
 
     # 公共文件与 AI 保留的文件就位
-    assert (output / "main.c").read_text(encoding="utf-8").startswith("#include")
+    assert (output / "main.c").is_file()
     assert (output / "sensors/dht11.c").is_file()
     # merge：落盘的是 AI 整合产物全文（不是任何一份源工程的复制）
     assert (output / "project.uvprojx").read_text(encoding="utf-8") == MERGED_UVPROJX
@@ -503,6 +560,44 @@ def test_apply_skips_residues(fake_stm32_projects, tmp_path):
 
     for residue in ("main.c.bak", "src/oled.hex", "src/oled.o", "ui/oled_fonts.c~"):
         assert not (output / residue).exists()
+
+
+def test_apply_writes_template_main_c(fake_stm32_projects, tmp_path):
+    """落盘后母版 main.c = 平台模板全文，旧工程 main.c 内容不在其中。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    output = tmp_path / "preview"
+
+    apply_distillation(report, _comparison(fake_stm32_projects), output)
+
+    content = (output / "main.c").read_text(encoding="utf-8")
+    assert content == main_c_template(PLATFORM_STM32)
+    assert "proj-a 的赛题 main" not in content
+    assert "proj-b 的赛题 main" not in content
+
+
+def test_apply_rejects_main_c_missing_from_report(fake_stm32_projects, tmp_path):
+    """确认时删掉 main.c 剔除条目——模板替代不能黑盒消失（ADR 0001）。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        exclude=tuple(d for d in report.exclude if d.path != "main.c"),
+    )
+
+    with pytest.raises(MasterError, match="旧工程 main.c 必须剔除"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
+
+
+def test_apply_rejects_main_c_moved_to_keep(fake_stm32_projects, tmp_path):
+    """确认时把 main.c 改成保留——确定性替代不因用户编辑而失效。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        exclude=tuple(d for d in report.exclude if d.path != "main.c"),
+        keep=(*report.keep, FileDecision("main.c", ACTION_KEEP, reason="用户改的")),
+    )
+
+    with pytest.raises(MasterError, match="旧工程 main.c 必须剔除"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
 
 
 def test_apply_rejects_residue_missing_from_report(fake_stm32_projects, tmp_path):
@@ -728,17 +823,17 @@ def test_apply_user_moves_common_to_exclude(fake_stm32_projects, tmp_path):
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     report = replace(
         report,
-        keep=tuple(d for d in report.keep if d.path != "main.c"),
+        keep=tuple(d for d in report.keep if d.path != "inc/stm32f10x_conf.h"),
         exclude=(
             *report.exclude,
-            FileDecision("main.c", ACTION_EXCLUDE, reason="用户确认剔除"),
+            FileDecision("inc/stm32f10x_conf.h", ACTION_EXCLUDE, reason="用户确认剔除"),
         ),
     )
 
     output = tmp_path / "preview"
     apply_distillation(report, _comparison(fake_stm32_projects), output)
 
-    assert not (output / "main.c").exists()
+    assert not (output / "inc/stm32f10x_conf.h").exists()
 
 
 def test_apply_rejects_common_left_undecided(fake_stm32_projects, tmp_path):
@@ -746,7 +841,7 @@ def test_apply_rejects_common_left_undecided(fake_stm32_projects, tmp_path):
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     report = replace(
         report,
-        keep=tuple(d for d in report.keep if d.path != "main.c"),
+        keep=tuple(d for d in report.keep if d.path != "inc/stm32f10x_conf.h"),
     )
 
     with pytest.raises(MasterError, match="必须保留或剔除"):
@@ -758,11 +853,11 @@ def test_apply_rejects_user_merge_on_common(fake_stm32_projects, tmp_path):
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     report = replace(
         report,
-        keep=tuple(d for d in report.keep if d.path != "main.c"),
+        keep=tuple(d for d in report.keep if d.path != "inc/stm32f10x_conf.h"),
         merge=(
             *report.merge,
             FileDecision(
-                "main.c",
+                "inc/stm32f10x_conf.h",
                 ACTION_MERGE,
                 content="x",
                 explanation="y",
@@ -793,6 +888,54 @@ def test_apply_cleans_up_on_mid_copy_failure(fake_stm32_projects, tmp_path):
     with pytest.raises(OSError):
         apply_distillation(report, comparison, output)
     assert not output.exists()
+
+
+# ---------------------------------------------------------------------------
+# 模板 main.c（ADR 0002）：母版自带确定性模板，旧工程 main.c 一律不进母版
+# ---------------------------------------------------------------------------
+
+
+def test_main_c_template_matches_platform():
+    """模板 main.c 与平台匹配：stm32 Keil 风格、mspm0 CCS 风格，都是空工程。"""
+    stm32 = main_c_template(PLATFORM_STM32)
+    mspm0 = main_c_template(PLATFORM_MSPM0)
+
+    assert stm32 != mspm0
+    # stm32：Keil 标准外设库风格，时钟初始化 SystemInit
+    assert "stm32f10x_conf.h" in stm32
+    assert "SystemInit" in stm32
+    # mspm0：CCS SysConfig 风格，SYSCFG_DL_init
+    assert "ti_msp_dl_config.h" in mspm0
+    assert "SYSCFG_DL_init" in mspm0
+    # 共同形态：时钟初始化 + while(1) 空循环 + TODO 区，能直接编译烧录
+    for content in (stm32, mspm0):
+        assert "int main(void)" in content
+        assert "while (1)" in content
+        assert "TODO" in content
+    # 确定性：同平台多次读取内容一致（非 AI 生成）
+    assert main_c_template(PLATFORM_STM32) == stm32
+    assert main_c_template(PLATFORM_MSPM0) == mspm0
+
+
+def test_main_c_template_rejects_unknown_platform():
+    with pytest.raises(MasterError, match="未知平台"):
+        main_c_template("esp32")
+
+
+def test_apply_writes_ccs_template_main_c(tmp_path):
+    """mspm0 母版落盘同样写平台模板 main.c，结构分析仍通过（IDE 可打开）。"""
+    ccs_a = make_fake_ccs_master_project(tmp_path / "ccs_a")
+    ccs_b = make_fake_ccs_master_project(tmp_path / "ccs_b")  # 内容一致 → 全公共
+    projects = [scan_project(ccs_a), scan_project(ccs_b)]
+
+    report = distill_master(FakeLLM(distillation=()), PLATFORM_MSPM0, projects)
+    output = tmp_path / "preview"
+    apply_distillation(report, compare_projects(projects), output)
+
+    content = (output / "main.c").read_text(encoding="utf-8")
+    assert content == main_c_template(PLATFORM_MSPM0)
+    assert "master's old main" not in content
+    assert analyze_structure(output, PLATFORM_MSPM0).warnings == ()
 
 
 # ---------------------------------------------------------------------------
@@ -974,7 +1117,12 @@ def test_full_distillation_flow(fake_stm32_projects, fake_masters_dir, tmp_path)
 
     assert meta.platform == PLATFORM_STM32
     stored = fake_masters_dir / "stm32"
+    # 母版 main.c = 确定性模板，旧工程 main.c 不进母版（ADR 0002）
     assert (stored / "main.c").is_file()
+    assert (stored / "main.c").read_text(encoding="utf-8") == main_c_template(
+        PLATFORM_STM32
+    )
+    assert "proj-a 的赛题 main" not in (stored / "main.c").read_text(encoding="utf-8")
     assert (stored / "sensors/dht11.c").is_file()
     assert not (stored / "ui/oled_fonts.c").exists()
     # 母版可被生成器使用：结构分析通过（含 .uvprojx）

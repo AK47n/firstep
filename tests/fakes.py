@@ -186,13 +186,15 @@ def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
     目录（Debug/Release）应在扫描时被忽略；源码树内的残留（.o/.bak/.
     hex/~）应规则识别、确定性剔除但进报告。"""
     common = {
-        "main.c": "#include \"stm32f10x_conf.h\"\nint main(void) { while (1); }\n",
         "inc/stm32f10x_conf.h": "#pragma once\n",
         "src/system_stm32f10x.c": "/* startup/system */\n",
     }
     proj_a = base_dir / "proj-a"
     _write_files(proj_a, {
         **common,
+        # 旧工程 main.c 内容两工程不同（各写各的赛题逻辑）——一律不进母版，
+        # 由确定性模板 main.c 替代（ADR 0002），内容差异无碍
+        "main.c": "/* proj-a 的赛题 main */\nint main(void) { while (1); }\n",
         "project.uvprojx": FAKE_DISTILL_UVPROJX_A,
         "src/oled.c": "/* 通用 OLED 驱动（A 版本） */\nvoid oled_init(void);\n",
         "sensors/dht11.c": "/* 通用 DHT11 驱动 */\nfloat dht11_read(void);\n",
@@ -204,6 +206,7 @@ def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
     proj_b = base_dir / "proj-b"
     _write_files(proj_b, {
         **common,
+        "main.c": "/* proj-b 的赛题 main（业务逻辑不同） */\nint main(void) { while (1); }\n",
         "project.uvprojx": FAKE_DISTILL_UVPROJX_B,
         "src/oled.c": "/* 通用 OLED 驱动（B 版本） */\nvoid oled_init(void);\n",
         "ui/oled_fonts.c": "/* 上一场比赛的字体表 */\nconst unsigned char font[1];\n",

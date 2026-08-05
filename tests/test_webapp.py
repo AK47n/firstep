@@ -25,7 +25,7 @@ from contest_generator.llm import (
     ModuleSelection,
     ValidationResult,
 )
-from contest_generator.master import import_master
+from contest_generator.master import import_master, main_c_template
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import AppContext, create_app
 from tests.fakes import (
@@ -504,19 +504,23 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
     ).json()
     assert report["projects"] == ["proj-a", "proj-b"]
     assert [d["path"] for d in report["keep"]] == [
-        "inc/stm32f10x_conf.h", "main.c", "src/system_stm32f10x.c", "sensors/dht11.c",
+        "inc/stm32f10x_conf.h", "src/system_stm32f10x.c", "sensors/dht11.c",
     ]
     assert [d["path"] for d in report["merge"]] == ["project.uvprojx", "src/oled.c"]
-    # exclude = AI 判定 + 规则识别的残留（带规则化原因）
+    # exclude = AI 判定 + 规则识别的残留（带规则化原因）+ 旧工程 main.c（模板替代）
     assert [d["path"] for d in report["exclude"]] == [
         "ui/oled_fonts.c",
         "main.c.bak",
         "src/oled.hex",
         "src/oled.o",
         "ui/oled_fonts.c~",
+        "main.c",
     ]
     residue = next(d for d in report["exclude"] if d["path"] == "src/oled.o")
     assert residue["reason"] == "构建产物：.o 文件"
+    main_c = next(d for d in report["exclude"] if d["path"] == "main.c")
+    assert main_c["action"] == ACTION_EXCLUDE
+    assert "模板" in main_c["reason"]
 
     confirmed = client.post(
         "/api/masters/confirm",
@@ -525,6 +529,13 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
     assert confirmed.status_code == 200
     assert confirmed.json()["platform"] == PLATFORM_STM32
     assert confirmed.json()["sources"] == ["proj-a", "proj-b"]
+
+    stored = context[0].config.masters_dir / PLATFORM_STM32
+    # 母版 main.c = 确定性模板，旧工程 main.c 不进母版（ADR 0002）
+    assert (stored / "main.c").read_text(encoding="utf-8") == main_c_template(
+        PLATFORM_STM32
+    )
+    assert "proj-a 的赛题 main" not in (stored / "main.c").read_text(encoding="utf-8")
 
     masters = client.get("/api/masters").json()
     assert [m["platform"] for m in masters] == [PLATFORM_STM32]
@@ -561,25 +572,50 @@ def test_master_confirm_rejects_user_edited_merge_on_unique(client, context, tmp
     assert client.get("/api/masters").json() == []  # 确认失败不入库
 
 
-def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
+def test_master_confirm_rejects_restoring_old_main_c(client, context, tmp_path):
+    """旧工程 main.c 由模板确定性替代：用户把 main.c 从剔除改成保留 → 拒绝入库。"""
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = DEFAULT_DECISIONS
     dirs = [str(proj_a), str(proj_b)]
     report = client.post(
         "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
     ).json()
-    # 用户把公共文件 main.c 从保留改成剔除——公共文件可判 exclude
-    report["keep"] = [d for d in report["keep"] if d["path"] != "main.c"]
+    # 用户想把旧 main.c 恢复进母版——确定性替代不因用户编辑而失效
+    report["exclude"] = [d for d in report["exclude"] if d["path"] != "main.c"]
+    report["keep"].append(
+        {"path": "main.c", "action": ACTION_KEEP, "reason": "用户改的"}
+    )
+
+    resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
+
+    assert resp.status_code == 400
+    assert "旧工程 main.c 必须剔除" in resp.json()["detail"]
+    assert client.get("/api/masters").json() == []  # 确认失败不入库
+
+
+def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
+    """公共文件默认保留，但用户确认时可改为剔除（经 HTTP 端到端）。"""
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"]._distillation = DEFAULT_DECISIONS
+    dirs = [str(proj_a), str(proj_b)]
+    report = client.post(
+        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
+    ).json()
+    report["keep"] = [d for d in report["keep"] if d["path"] != "inc/stm32f10x_conf.h"]
     report["exclude"].append(
-        {"path": "main.c", "action": ACTION_EXCLUDE, "reason": "用户确认剔除"}
+        {"path": "inc/stm32f10x_conf.h", "action": ACTION_EXCLUDE, "reason": "用户确认剔除"}
     )
 
     resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
 
     assert resp.status_code == 200
     stored = context[0].config.masters_dir / PLATFORM_STM32
-    assert not (stored / "main.c").exists()
-    assert client.get("/api/masters").json() == [{"platform": PLATFORM_STM32, "sources": ["proj-a", "proj-b"], "warnings": []}]
+    assert not (stored / "inc/stm32f10x_conf.h").exists()
+    assert client.get("/api/masters").json() == [{
+        "platform": PLATFORM_STM32,
+        "sources": ["proj-a", "proj-b"],
+        "warnings": [],
+    }]
 
 
 # ---------------------------------------------------------------------------
