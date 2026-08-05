@@ -6,8 +6,13 @@
 from __future__ import annotations
 
 import json
+import zlib
+import zipfile
 from pathlib import Path
 from typing import Sequence
+from xml.sax.saxutils import escape
+
+from pypdf import PdfWriter
 
 from contest_generator.llm import ModuleSelection
 
@@ -336,3 +341,108 @@ def _add_module(library_dir: Path, manifest: dict, files: dict[str, str]) -> Non
         path = module_dir / relpath
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# 样例赛题文件（文本抽取测试用）：tmp_path 现场构造，不提交二进制 fixture
+# ---------------------------------------------------------------------------
+
+
+def make_sample_docx(path: Path, paragraphs: Sequence[str]) -> Path:
+    """手工构造最小 .docx：zip 内含 [Content_Types].xml 与 word/document.xml。"""
+    body = "\n".join(
+        f'<w:p><w:r><w:t xml:space="preserve">{_xml_escape(p)}</w:t></w:r></w:p>'
+        for p in paragraphs
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n'
+        f"<w:body>{body}</w:body>\n"
+        "</w:document>"
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/word/document.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        "</Types>"
+    )
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("[Content_Types].xml", content_types)
+        archive.writestr("word/document.xml", document)
+    return path
+
+
+def _xml_escape(text: str) -> str:
+    return escape(text, {"'": "&apos;", '"': "&quot;"})
+
+
+def make_sample_pdf(path: Path, text: str) -> Path:
+    """手工构造最小单页 PDF：Helvetica + WinAnsiEncoding + FlateDecode 内容流。
+
+    只支持 ASCII 文本（PDF 字符串字面量），括号与反斜杠会被转义。
+    """
+    content = f"BT /F1 24 Tf 72 720 Td ({_pdf_escape(text)}) Tj ET\n"
+    stream = zlib.compress(content.encode("ascii"))
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"
+        ),
+        (
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+            b"/Encoding /WinAnsiEncoding >>"
+        ),
+        (
+            b"<< /Filter /FlateDecode /Length "
+            + str(len(stream)).encode("ascii")
+            + b" >>\nstream\n"
+            + stream
+            + b"\nendstream"
+        ),
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out.extend(f"{number} 0 obj\n".encode("ascii"))
+        out.extend(body)
+        out.extend(b"\nendobj\n")
+    xref_pos = len(out)
+    out.extend(b"xref\n0 6\n")
+    out.extend(b"0000000000 65535 f \n")
+    for offset in offsets:
+        out.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    out.extend(
+        f"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode(
+            "ascii"
+        )
+    )
+    path.write_bytes(bytes(out))
+    return path
+
+
+def _pdf_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def make_encrypted_pdf(path: Path) -> Path:
+    """pypdf 生成带密码的 PDF，用于测试"已加密"报错路径。"""
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    writer.encrypt("contest-password")
+    with path.open("wb") as file:
+        writer.write(file)
+    return path
+
+
+def make_blank_pdf(path: Path) -> Path:
+    """pypdf 生成无任何文字的 PDF（模拟扫描件），抽取应报错而非给空文。"""
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with path.open("wb") as file:
+        writer.write(file)
+    return path
