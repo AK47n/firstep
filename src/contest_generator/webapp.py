@@ -40,7 +40,6 @@ from .library import (
 )
 from .llm import LLM, LLMError, DeepSeekLLM, build_manifest_summaries
 from .master import (
-    DistillationReport,
     MasterError,
     confirm_distillation,
     delete_master,

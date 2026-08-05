@@ -10,7 +10,6 @@ from dataclasses import replace
 import pytest
 
 from contest_generator.master import (
-    DistillationReport,
     MAIN_C_TEMPLATE_REASON,
     MasterError,
     analyze_structure,
@@ -32,7 +31,9 @@ from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
     ACTION_MERGE,
+    DistillationReport,
     FileDecision,
+    ReportError,
 )
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
@@ -758,7 +759,9 @@ def test_distill_rejects_merge_with_unknown_source(fake_stm32_projects):
 def test_report_round_trips_through_json(fake_stm32_projects):
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
 
-    rebuilt = DistillationReport.from_dict(report.to_dict())
+    rebuilt = DistillationReport.from_dict(
+        report.to_dict(), main_c_preview=report.main_c_preview
+    )
 
     assert rebuilt == report
     # wire format 形状：确认请求按 to_dict 输出原样回传
@@ -786,17 +789,19 @@ def test_distill_report_carries_template_main_c_preview(fake_stm32_projects):
     assert report.main_c_preview  # 非空全文
 
 
-def test_report_from_dict_derives_preview_from_platform(fake_stm32_projects):
-    """确认请求回传的预览不可信：from_dict 按平台重推导，保证预览 = 实际落盘内容。
+def test_report_from_dict_ignores_client_preview(fake_stm32_projects):
+    """确认请求回传的预览不可信：from_dict 忽略回传值，预览由调用方按平台重推导。
 
     预览是确定性展示素材（落盘永远写 main_c_template(platform)），客户端改它
-    不会影响落盘内容，重推导保证报告自洽。
+    不会影响落盘内容；调用方传入权威预览保证报告自洽。
     """
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     data = report.to_dict()
     data["main_c_preview"] = "/* 伪造的预览 */"
 
-    rebuilt = DistillationReport.from_dict(data)
+    rebuilt = DistillationReport.from_dict(
+        data, main_c_preview=main_c_template(PLATFORM_STM32)
+    )
 
     assert rebuilt.main_c_preview == main_c_template(PLATFORM_STM32)
     assert rebuilt.main_c_preview != "/* 伪造的预览 */"
@@ -805,6 +810,7 @@ def test_report_from_dict_derives_preview_from_platform(fake_stm32_projects):
 def test_report_from_dict_rejects_malformed(fake_stm32_projects):
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     data = report.to_dict()
+    preview = main_c_template(PLATFORM_STM32)
 
     bad_cases = [
         "not a dict",
@@ -814,8 +820,18 @@ def test_report_from_dict_rejects_malformed(fake_stm32_projects):
         {**data, "merge": [{"path": "a.c", "action": "archive"}]},  # 条目形状非法
     ]
     for bad in bad_cases:
-        with pytest.raises(MasterError):
-            DistillationReport.from_dict(bad)
+        with pytest.raises(ReportError):
+            DistillationReport.from_dict(bad, main_c_preview=preview)
+
+
+def test_confirm_wraps_report_shape_errors_as_master_error(
+    fake_stm32_projects, tmp_path
+):
+    """容器形状校验（ReportError）在确认入口转成 MasterError：HTTP 层只认这一种。"""
+    project_dirs = list(fake_stm32_projects)
+
+    with pytest.raises(MasterError, match="提炼报告必须是 JSON 对象"):
+        confirm_distillation(tmp_path, project_dirs, "not a dict")
 
 
 def test_apply_rejects_user_edited_merge_on_unique(fake_stm32_projects, tmp_path):

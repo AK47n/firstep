@@ -43,6 +43,7 @@ from .report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
     ACTION_MERGE,
+    DistillationReport,
     FileDecision,
     ReportError,
 )
@@ -165,72 +166,6 @@ class ProjectComparison:
     judgment: tuple[str, ...]  # 需要 AI 判定的路径（冲突 + 独有）
     residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
     main_c_files: tuple[str, ...] = ()  # 全部工程的旧 main.c（并集，排序，模板替代）
-
-
-@dataclass(frozen=True)
-class DistillationReport:
-    """提炼报告：保留 / 整合 / 剔除清单 + 模板 main.c 预览（确认后交给
-    apply_distillation）。
-
-    清单条目复用 llm.FileDecision（path / action / content / explanation /
-    source / reason 同一套字段，不另造一个同形类型）。来源工程名在 projects
-    里——确认后的报告要落盘、母版入库元数据要用。main_c_preview 是确定性模板
-    main.c 全文（ADR 0002：母版 main.c 由模板提供），给用户在确认前预览；
-    落盘仍写 main_c_template(platform)，预览不参与落盘。
-    """
-
-    platform: str
-    projects: tuple[str, ...]  # 提炼来源工程名
-    keep: tuple[FileDecision, ...]
-    merge: tuple[FileDecision, ...]
-    exclude: tuple[FileDecision, ...]
-    main_c_preview: str  # 模板 main.c 全文预览（确定性，由平台推导，必填）
-
-    def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 兼容 dict（提炼报告的 wire format，确认请求回传同形）。"""
-        return {
-            "platform": self.platform,
-            "projects": list(self.projects),
-            "keep": [d.to_dict() for d in self.keep],
-            "merge": [d.to_dict() for d in self.merge],
-            "exclude": [d.to_dict() for d in self.exclude],
-            "main_c_preview": self.main_c_preview,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DistillationReport":
-        """从确认请求的 JSON 重建报告（形状校验；语义校验归 apply_distillation）。
-
-        条目形状校验与 llm.parse_distillation_report 同一标准；来源工程与
-        路径覆盖等语义问题在落盘前由 _validate_report 拦截。main_c_preview
-        是确定性素材（落盘永远写 main_c_template(platform)），客户端回传值
-        不可信——按平台重推导，保证报告里的预览 = 实际落盘内容；平台非法在
-        这里就大声失败（模板词表与平台词表不漂移）。
-        """
-        if not isinstance(data, dict):
-            raise MasterError("提炼报告必须是 JSON 对象")
-        platform = _require_str(data, "platform")
-        projects = tuple(_require_str_list(data, "projects"))
-        if not projects:
-            raise MasterError("报告缺少来源工程：projects 不能为空")
-
-        def decisions(key: str) -> tuple[FileDecision, ...]:
-            raw = data.get(key)
-            if not isinstance(raw, list):
-                raise MasterError(f"{key} 必须是列表")
-            try:
-                return tuple(FileDecision.from_dict(item) for item in raw)
-            except ReportError as exc:
-                raise MasterError(f"报告 {key} 条目非法：{exc}") from exc
-
-        return cls(
-            platform=platform,
-            projects=projects,
-            keep=decisions("keep"),
-            merge=decisions("merge"),
-            exclude=decisions("exclude"),
-            main_c_preview=main_c_template(platform),
-        )
 
 
 @dataclass(frozen=True)
@@ -715,13 +650,25 @@ def confirm_distillation(
     """确认报告并落库：重扫 → 重比 → 重建报告 → 暂存 → 落盘 → 入库，一次事务。
 
     确认请求里的 project_dirs 与报告同样不可信：落库前重新扫描对比、按报告
-    模型重建（形状校验在 from_dict），暂存目录在函数内部自生自灭——任何一步
-    失败都不留半成品，既有母版在任意失败点都完好（import_master 自带备份
-    回滚）。webapp 只收请求、调这里、转 JSON。
+    模型重建（形状校验在 report.DistillationReport.from_dict，容器形状错误
+    在此转成 MasterError——HTTP 层只认这一种），暂存目录在函数内部自生自灭
+    ——任何一步失败都不留半成品，既有母版在任意失败点都完好（import_master
+    自带备份回滚）。webapp 只收请求、调这里、转 JSON。
     """
     projects = tuple(scan_project(project_dir) for project_dir in project_dirs)
     comparison = compare_projects(projects)
-    report = DistillationReport.from_dict(payload)
+    if not isinstance(payload, dict):
+        raise MasterError("提炼报告必须是 JSON 对象")
+    platform = _require_str(payload, "platform")
+    try:
+        report = DistillationReport.from_dict(
+            payload,
+            # 预览是确定性素材（落盘永远写 main_c_template(platform)）：客户端
+            # 回传值不可信，按平台重推导；平台非法由模板加载大声失败
+            main_c_preview=main_c_template(platform),
+        )
+    except ReportError as exc:
+        raise MasterError(str(exc)) from exc
     staging = Path(tempfile.mkdtemp(prefix="master-staging-"))
     try:
         preview = apply_distillation(report, comparison, staging / "preview")

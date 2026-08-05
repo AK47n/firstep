@@ -1,10 +1,11 @@
-"""提炼报告模型：判定条目与动作词表（schema 的唯一所有者）。
+"""提炼报告模型：判定条目与容器（schema 的唯一所有者）。
 
-FileDecision 同时出现在三条路径上——AI 判定输出（llm 解析）、确定性规则
-拼装（master 拼装报告）、确认请求回传（webapp 往返）——因此它的形状、
-序列化与"merge 必须带整合产物全文与整合说明"不变量在这里只定义一次：
-llm 层只负责 AI JSON 契约（提示词 + decisions 数组解析），master 层只负责
-对比语义校验（路径范围 / 来源工程），形状校验都落到 FileDecision.from_dict。
+FileDecision 与 DistillationReport 同时出现在三条路径上——AI 判定输出
+（llm 解析）、确定性规则拼装（master 拼装报告）、确认请求回传（webapp
+往返）——因此条目与容器的形状、序列化与不变量（merge 必须带整合产物全文
+与整合说明、main_c_preview 由平台重推导）在这里只定义一次：llm 层只负责
+AI JSON 契约（提示词 + decisions 数组解析），master 层只负责对比语义校验
+（路径范围 / 来源工程 / 模板 main.c 内容），形状校验都落到 from_dict。
 """
 
 from __future__ import annotations
@@ -102,4 +103,79 @@ class FileDecision:
             explanation=explanation,
             source=source,
             reason=reason,
+        )
+
+
+@dataclass(frozen=True)
+class DistillationReport:
+    """提炼报告容器：保留 / 整合 / 剔除清单 + 模板 main.c 预览。
+
+    清单条目复用 FileDecision（同一套字段，不另造同形类型）；来源工程名在
+    projects 里——确认后的报告要落盘、母版入库元数据要用。main_c_preview 是
+    确定性模板 main.c 全文（ADR 0002：母版 main.c 由模板提供），给用户在
+    确认前预览；落盘仍写 main_c_template(platform)（模板内容归属母版模块），
+    预览不参与落盘。
+    """
+
+    platform: str
+    projects: tuple[str, ...]  # 提炼来源工程名
+    keep: tuple[FileDecision, ...]
+    merge: tuple[FileDecision, ...]
+    exclude: tuple[FileDecision, ...]
+    main_c_preview: str  # 模板 main.c 全文预览（确定性，由平台推导，必填）
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为 JSON 兼容 dict（提炼报告的 wire format，确认请求回传同形）。"""
+        return {
+            "platform": self.platform,
+            "projects": list(self.projects),
+            "keep": [d.to_dict() for d in self.keep],
+            "merge": [d.to_dict() for d in self.merge],
+            "exclude": [d.to_dict() for d in self.exclude],
+            "main_c_preview": self.main_c_preview,
+        }
+
+    @classmethod
+    def from_dict(
+        cls, data: dict[str, Any], *, main_c_preview: str
+    ) -> "DistillationReport":
+        """从确认请求的 JSON 重建报告（形状校验；语义校验归 master 落盘前）。
+
+        条目形状校验与 llm.parse_distillation_report 同一标准（FileDecision.
+        from_dict）；来源工程与路径覆盖等语义问题在落盘前由 master 层拦截。
+        main_c_preview 是确定性素材（落盘永远写 main_c_template(platform)），
+        客户端回传值不可信——由调用方按平台重推导传入，保证报告里的预览 =
+        实际落盘内容；平台非法由调用方（模板加载）大声失败。
+        """
+        if not isinstance(data, dict):
+            raise ReportError("提炼报告必须是 JSON 对象")
+        platform = data.get("platform")
+        if not isinstance(platform, str) or not platform:
+            raise ReportError("缺少必填字段：platform")
+        projects = data.get("projects")
+        if not isinstance(projects, list) or not all(
+            isinstance(item, str) and item for item in projects
+        ):
+            raise ReportError("projects 必须是非空字符串列表")
+        if not projects:
+            raise ReportError("报告缺少来源工程：projects 不能为空")
+        if not isinstance(main_c_preview, str):
+            raise ReportError("main_c_preview 必须是字符串")
+
+        def decisions(key: str) -> tuple[FileDecision, ...]:
+            raw = data.get(key)
+            if not isinstance(raw, list):
+                raise ReportError(f"{key} 必须是列表")
+            try:
+                return tuple(FileDecision.from_dict(item) for item in raw)
+            except ReportError as exc:
+                raise ReportError(f"报告 {key} 条目非法：{exc}") from exc
+
+        return cls(
+            platform=platform,
+            projects=tuple(projects),
+            keep=decisions("keep"),
+            merge=decisions("merge"),
+            exclude=decisions("exclude"),
+            main_c_preview=main_c_preview,
         )
