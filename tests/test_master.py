@@ -32,6 +32,7 @@ from contest_generator.master import (
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from tests.fakes import (
+    FAKE_DISTILL_UVPROJX_A,
     FAKE_DISTILL_UVPROJX_B,
     FakeLLM,
     make_fake_ccs_master_project,
@@ -39,11 +40,28 @@ from tests.fakes import (
 )
 
 # 假工程对的判定范围（冲突 + 独有）与一份典型 AI 判定
+# merge 携带整合产物全文（content）+ 整合说明（explanation）；选一份只是特例
+MERGED_UVPROJX = FAKE_DISTILL_UVPROJX_A  # 特例：直接取 A 的全文，说明为何选它
+MERGED_OLED = "/* 通用 OLED 驱动（整合版） */\nvoid oled_init(void);\n"
 DEFAULT_DECISIONS = (
     FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用传感器驱动，应进母版"),
     FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="上一场比赛的字体表残留"),
-    FileDecision("project.uvprojx", ACTION_MERGE, source="proj-a", reason="include path 更全"),
-    FileDecision("src/oled.c", ACTION_MERGE, source="proj-b", reason="B 版本较新"),
+    FileDecision(
+        "project.uvprojx",
+        ACTION_MERGE,
+        content=MERGED_UVPROJX,
+        explanation="取 include path 更全的 A 版本",
+        source="proj-a",
+        reason="include path 更全",
+    ),
+    FileDecision(
+        "src/oled.c",
+        ACTION_MERGE,
+        content=MERGED_OLED,
+        explanation="两版接口一致，整合去重",
+        source="proj-b",
+        reason="B 版本较新",
+    ),
 )
 
 
@@ -320,6 +338,27 @@ def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
         _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
 
 
+def test_distill_ignores_ai_keep_on_common_path(fake_stm32_projects):
+    """AI 把公共文件也判定 keep 时按冗余忽略，不中断提炼（现实 LLM 常见回显）。"""
+    decisions = DEFAULT_DECISIONS + (
+        FileDecision("main.c", ACTION_KEEP, reason="公共骨架，应保留"),
+    )
+
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
+
+    assert [d.path for d in report.keep].count("main.c") == 1
+
+
+def test_distill_rejects_merge_on_common_path(fake_stm32_projects):
+    """公共文件判定 merge / exclude 是错误——公共文件必须保留。"""
+    decisions = DEFAULT_DECISIONS + (
+        FileDecision("main.c", ACTION_MERGE, source="proj-a", reason="取 proj-a 版本"),
+    )
+
+    with pytest.raises(MasterError, match="公共文件必须保留"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
+
+
 def test_distill_requires_full_judgment_coverage(fake_stm32_projects):
     # AI 漏判了两个冲突文件（只剩 keep 与 exclude）
     partial = tuple(d for d in DEFAULT_DECISIONS if d.action != ACTION_MERGE)
@@ -352,20 +391,23 @@ def test_apply_copies_keep_and_merge_skips_exclude(fake_stm32_projects, tmp_path
     # 公共文件与 AI 保留的文件就位
     assert (output / "main.c").read_text(encoding="utf-8").startswith("#include")
     assert (output / "sensors/dht11.c").is_file()
-    # merge：project.uvprojx 取 proj-a（include path 更全），oled.c 取 proj-b
-    assert ".\\inc;.\\src" in (output / "project.uvprojx").read_text(encoding="utf-8")
-    assert "B 版本" in (output / "src/oled.c").read_text(encoding="utf-8")
+    # merge：落盘的是 AI 整合产物全文（不是任何一份源工程的复制）
+    assert (output / "project.uvprojx").read_text(encoding="utf-8") == MERGED_UVPROJX
+    assert (output / "src/oled.c").read_text(encoding="utf-8") == MERGED_OLED
+    assert "B 版本" not in (output / "src/oled.c").read_text(encoding="utf-8")
     # exclude：不复制
     assert not (output / "ui/oled_fonts.c").exists()
 
 
-def test_apply_user_edited_merge_source_wins(fake_stm32_projects, tmp_path):
+def test_apply_user_edited_merge_content_wins(fake_stm32_projects, tmp_path):
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
-    # 用户确认时把 oled.c 的来源从 proj-b 改成 proj-a
+    # 用户确认时把 oled.c 的整合产物改成选 A 版本全文（改回选某份）
     report = replace(
         report,
         merge=tuple(
-            replace(d, source="proj-a") if d.path == "src/oled.c" else d
+            replace(d, content="/* A 版本全文 */\n", explanation="用户改回选 A 版本")
+            if d.path == "src/oled.c"
+            else d
             for d in report.merge
         ),
     )
@@ -373,7 +415,7 @@ def test_apply_user_edited_merge_source_wins(fake_stm32_projects, tmp_path):
 
     apply_distillation(report, _comparison(fake_stm32_projects), output)
 
-    assert "A 版本" in (output / "src/oled.c").read_text(encoding="utf-8")
+    assert "A 版本全文" in (output / "src/oled.c").read_text(encoding="utf-8")
 
 
 def test_apply_rejects_report_without_full_coverage(fake_stm32_projects, tmp_path):
@@ -399,21 +441,28 @@ def test_apply_rejects_unknown_path_in_report(fake_stm32_projects, tmp_path):
         apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
 
 
-def test_distill_rejects_merge_source_without_the_file(fake_stm32_projects):
-    # proj-b 里没有 sensors/dht11.c，选它作来源在确认前就必须被拦截
+def test_distill_rejects_merge_on_unique_path(fake_stm32_projects):
+    # 独有文件只有一份内容，没有可整合的对象——merge 只用于冲突文件
     bad = tuple(
-        FileDecision(d.path, ACTION_MERGE, "proj-b", d.reason)
+        FileDecision(
+            d.path,
+            ACTION_MERGE,
+            content="/* 整合 */",
+            explanation="无意义",
+            source="proj-a",
+            reason="不应出现",
+        )
         if d.path == "sensors/dht11.c"
         else d
         for d in DEFAULT_DECISIONS
     )
 
-    with pytest.raises(MasterError, match="不含文件"):
+    with pytest.raises(MasterError, match="只用于"):
         _distill(fake_stm32_projects, FakeLLM(distillation=bad))
 
 
 def test_distill_rejects_conflict_classified_as_keep(fake_stm32_projects):
-    # 冲突文件（同路径不同内容）必须 merge 指定来源；keep 没有"取哪份"的信息
+    # 冲突文件（同路径不同内容）只能 merge 或 exclude；keep 没有"取哪份"的信息
     bad = tuple(
         FileDecision(d.path, ACTION_KEEP, reason="两版都可")
         if d.path == "src/oled.c"
@@ -421,7 +470,64 @@ def test_distill_rejects_conflict_classified_as_keep(fake_stm32_projects):
         for d in DEFAULT_DECISIONS
     )
 
-    with pytest.raises(MasterError, match="必须指定来源工程"):
+    with pytest.raises(MasterError, match="必须 merge 或 exclude"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=bad))
+
+
+def test_distill_allows_conflict_exclude(fake_stm32_projects):
+    """冲突文件可以剔除——分类不决定动作（内容判据才是唯一判据）。"""
+    decisions = tuple(
+        FileDecision(d.path, ACTION_EXCLUDE, reason="两版都是赛题残留")
+        if d.path == "src/oled.c"
+        else d
+        for d in DEFAULT_DECISIONS
+    )
+
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=decisions))
+
+    assert "src/oled.c" in [d.path for d in report.exclude]
+    assert "src/oled.c" not in [d.path for d in report.merge]
+
+
+def test_distill_rejects_merge_without_content(fake_stm32_projects):
+    """merge 必须带整合产物全文——空或纯空白 content 在确认前就拦住。"""
+    bad = tuple(
+        FileDecision(d.path, ACTION_MERGE, explanation="忘了写产物")
+        if d.path == "src/oled.c"
+        else d
+        for d in DEFAULT_DECISIONS
+    )
+
+    with pytest.raises(MasterError, match="整合产物全文"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=bad))
+
+    whitespace = tuple(
+        FileDecision(d.path, ACTION_MERGE, content="   ", explanation="空白产物")
+        if d.path == "src/oled.c"
+        else d
+        for d in DEFAULT_DECISIONS
+    )
+    with pytest.raises(MasterError, match="整合产物全文"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=whitespace))
+
+
+def test_distill_rejects_merge_with_unknown_source(fake_stm32_projects):
+    """merge 选一份特例时来源工程必须是导入工程。"""
+    bad = tuple(
+        FileDecision(
+            d.path,
+            ACTION_MERGE,
+            content=d.content,
+            explanation=d.explanation,
+            source="proj-c",
+            reason=d.reason,
+        )
+        if d.path == "src/oled.c"
+        else d
+        for d in DEFAULT_DECISIONS
+    )
+
+    with pytest.raises(MasterError, match="来源工程未知"):
         _distill(fake_stm32_projects, FakeLLM(distillation=bad))
 
 
@@ -437,10 +543,14 @@ def test_report_round_trips_through_json(fake_stm32_projects):
     assert data["keep"][0] == {
         "path": "inc/stm32f10x_conf.h",
         "action": ACTION_KEEP,
+        "content": "",
+        "explanation": "",
         "source": "",
         "reason": "所有导入工程内容一致，属公共骨架",
     }
     assert data["merge"][0]["source"] == "proj-a"
+    assert data["merge"][0]["content"] == MERGED_UVPROJX
+    assert data["merge"][0]["explanation"]
 
 
 def test_report_from_dict_rejects_malformed(fake_stm32_projects):
@@ -459,19 +569,78 @@ def test_report_from_dict_rejects_malformed(fake_stm32_projects):
             DistillationReport.from_dict(bad)
 
 
-def test_apply_rejects_user_edited_bad_merge_source(fake_stm32_projects, tmp_path):
-    # 报告本身没问题，但用户确认时把独有文件改成 merge、来源却是不含它的工程
+def test_apply_rejects_user_edited_merge_on_unique(fake_stm32_projects, tmp_path):
+    # 报告本身没问题，但用户确认时把独有文件改成 merge（没有可整合的多份内容）
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     report = replace(
         report,
         keep=tuple(d for d in report.keep if d.path != "sensors/dht11.c"),
         merge=(
             *report.merge,
-            FileDecision("sensors/dht11.c", ACTION_MERGE, "proj-b", reason="用户改的"),
+            FileDecision(
+                "sensors/dht11.c",
+                ACTION_MERGE,
+                content="/* 整合 */",
+                explanation="用户改的",
+                source="proj-b",
+                reason="用户改的",
+            ),
         ),
     )
 
-    with pytest.raises(MasterError, match="不含文件"):
+    with pytest.raises(MasterError, match="只用于"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
+
+
+def test_apply_user_moves_common_to_exclude(fake_stm32_projects, tmp_path):
+    """确认时用户把公共文件改为剔除——公共文件默认保留，但可改剔除。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        keep=tuple(d for d in report.keep if d.path != "main.c"),
+        exclude=(
+            *report.exclude,
+            FileDecision("main.c", ACTION_EXCLUDE, reason="用户确认剔除"),
+        ),
+    )
+
+    output = tmp_path / "preview"
+    apply_distillation(report, _comparison(fake_stm32_projects), output)
+
+    assert not (output / "main.c").exists()
+
+
+def test_apply_rejects_common_left_undecided(fake_stm32_projects, tmp_path):
+    """公共文件既不在 keep 也不在 exclude——报告不完整，拒绝落盘。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        keep=tuple(d for d in report.keep if d.path != "main.c"),
+    )
+
+    with pytest.raises(MasterError, match="必须保留或剔除"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
+
+
+def test_apply_rejects_user_merge_on_common(fake_stm32_projects, tmp_path):
+    """公共文件内容一致、没有整合对象——确认时改成 merge 被拦截。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        keep=tuple(d for d in report.keep if d.path != "main.c"),
+        merge=(
+            *report.merge,
+            FileDecision(
+                "main.c",
+                ACTION_MERGE,
+                content="x",
+                explanation="y",
+                reason="用户改的",
+            ),
+        ),
+    )
+
+    with pytest.raises(MasterError, match="公共文件必须保留"):
         apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
 
 

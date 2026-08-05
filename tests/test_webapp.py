@@ -78,8 +78,22 @@ class RaisingLLM:
 DEFAULT_DECISIONS = (
     FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用传感器驱动"),
     FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="上场比赛残留"),
-    FileDecision("project.uvprojx", ACTION_MERGE, source="proj-a", reason="include path 更全"),
-    FileDecision("src/oled.c", ACTION_MERGE, source="proj-b", reason="B 版本较新"),
+    FileDecision(
+        "project.uvprojx",
+        ACTION_MERGE,
+        content="<Project/>",
+        explanation="取 include path 更全的 A 版本",
+        source="proj-a",
+        reason="include path 更全",
+    ),
+    FileDecision(
+        "src/oled.c",
+        ACTION_MERGE,
+        content="/* 通用 OLED 驱动（整合版） */\n",
+        explanation="两版接口一致，整合去重",
+        source="proj-b",
+        reason="B 版本较新",
+    ),
 )
 
 
@@ -511,24 +525,52 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
     assert client.get("/api/masters").json() == []
 
 
-def test_master_confirm_rejects_user_edited_bad_merge_source(client, context, tmp_path):
+def test_master_confirm_rejects_user_edited_merge_on_unique(client, context, tmp_path):
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = DEFAULT_DECISIONS
     dirs = [str(proj_a), str(proj_b)]
     report = client.post(
         "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
     ).json()
-    # 用户把 sensors/dht11.c（只有 proj-a 含它）从保留改成合并、来源选 proj-b
+    # 用户把 sensors/dht11.c（只有一份内容，没有整合对象）从保留改成合并
     report["keep"] = [d for d in report["keep"] if d["path"] != "sensors/dht11.c"]
     report["merge"].append(
-        {"path": "sensors/dht11.c", "action": ACTION_MERGE, "source": "proj-b", "reason": "用户改的"}
+        {
+            "path": "sensors/dht11.c",
+            "action": ACTION_MERGE,
+            "content": "/* 整合 */",
+            "explanation": "用户改的",
+            "source": "proj-b",
+            "reason": "用户改的",
+        }
     )
 
     resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
 
     assert resp.status_code == 400
-    assert "不含文件" in resp.json()["detail"]
+    assert "只用于" in resp.json()["detail"]
     assert client.get("/api/masters").json() == []  # 确认失败不入库
+
+
+def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"]._distillation = DEFAULT_DECISIONS
+    dirs = [str(proj_a), str(proj_b)]
+    report = client.post(
+        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
+    ).json()
+    # 用户把公共文件 main.c 从保留改成剔除——公共文件可判 exclude
+    report["keep"] = [d for d in report["keep"] if d["path"] != "main.c"]
+    report["exclude"].append(
+        {"path": "main.c", "action": ACTION_EXCLUDE, "reason": "用户确认剔除"}
+    )
+
+    resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
+
+    assert resp.status_code == 200
+    stored = context[0].config.masters_dir / PLATFORM_STM32
+    assert not (stored / "main.c").exists()
+    assert client.get("/api/masters").json() == [{"platform": PLATFORM_STM32, "sources": ["proj-a", "proj-b"], "warnings": []}]
 
 
 # ---------------------------------------------------------------------------

@@ -132,6 +132,7 @@ def test_patch_finds_uvprojx_in_subdirectory(tmp_path):
 
 
 def test_patch_ignores_uvprojx_inside_git(tmp_path):
+    """.git 里的工程文件不参与定位（旧工程常自带版本库）。"""
     project = make_fake_master_project(tmp_path / "project")
     content = (project / "project.uvprojx").read_text(encoding="utf-8")
     (project / "project.uvprojx").unlink()
