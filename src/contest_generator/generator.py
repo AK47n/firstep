@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -43,6 +44,52 @@ class MissingModuleFilesError(GeneratorError):
 
 class UndefinedCallsError(GeneratorError):
     """main.c 调用了所选模块头文件中不存在的函数，拒绝产出残缺工程。"""
+
+
+@dataclass(frozen=True)
+class GenerationSummary:
+    """生成结果摘要（界面呈现用）：工程结构 / include path / 各模块文件清单。"""
+
+    output_dir: Path
+    structure: tuple[str, ...]  # 相对工程目录的文件路径（POSIX），排序
+    include_dirs: tuple[str, ...]  # 已去重，按首次出现顺序
+    modules: tuple[tuple[str, tuple[str, ...]], ...]  # (slug, 该平台文件列表)
+
+
+def describe_generation(
+    output_dir: Path, manifests: Sequence[ModuleManifest], platform: str
+) -> GenerationSummary:
+    """生成完成后的只读摘要：结构清单直接读输出目录；include 目录按目标平台
+    条目推导，与 _copy_module_files 共享 MODULES_SUBDIR——子目录改名后界面
+    与工程不会漂移。模块根目录下的文件（parent 为空）对应 modules/<slug>/。
+    """
+    structure = tuple(
+        p.relative_to(output_dir).as_posix()
+        for p in sorted(output_dir.rglob("*"))
+        if p.is_file() and ".git" not in p.relative_to(output_dir).parts
+    )
+    include_dirs: list[str] = []
+    modules: list[tuple[str, tuple[str, ...]]] = []
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        files = tuple(entry.files) if entry is not None else ()
+        modules.append((manifest.slug, files))
+        for rel in files:
+            parent = Path(rel).parent
+            parts = (
+                [MODULES_SUBDIR, manifest.slug, *parent.parts]
+                if parent != Path(".")
+                else [MODULES_SUBDIR, manifest.slug]
+            )
+            include_dir = Path(*parts).as_posix()
+            if include_dir not in include_dirs:
+                include_dirs.append(include_dir)
+    return GenerationSummary(
+        output_dir=output_dir,
+        structure=structure,
+        include_dirs=tuple(include_dirs),
+        modules=tuple(modules),
+    )
 
 
 def generate(

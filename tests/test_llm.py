@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from contest_generator.config import LLMConfig
+from contest_generator.config import AppConfig
 from contest_generator.llm import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -44,7 +44,7 @@ def _llm(
     model: str = "deepseek-chat",
 ) -> DeepSeekLLM:
     return DeepSeekLLM(
-        LLMConfig(base_url=base_url, api_key="sk-test", model=model),
+        AppConfig(base_url=base_url, api_key="sk-test", model=model),
         transport=transport,
     )
 

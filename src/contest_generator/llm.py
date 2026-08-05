@@ -14,7 +14,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Protocol, Sequence
 
-from .config import LLMConfig
+from .config import AppConfig
 from .manifest import ModuleManifest
 
 SELECT_SYSTEM_PROMPT = (
@@ -164,7 +164,7 @@ class DeepSeekLLM:
 
     TIMEOUT_SECONDS = 120
 
-    def __init__(self, config: LLMConfig, transport: Transport | None = None) -> None:
+    def __init__(self, config: AppConfig, transport: Transport | None = None) -> None:
         self._config = config
         self._transport = transport or UrllibTransport()
 

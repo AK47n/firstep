@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电赛工程生成器</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #dde1e6; --text: #1c2530;
+    --muted: #6b7684; --accent: #2563eb; --accent-dark: #1d4ed8;
+    --danger: #dc2626; --warn: #d97706; --ok: #059669; --info: #0891b2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.6 "Microsoft YaHei", "PingFang SC", sans-serif; }
+  header { background: var(--panel); border-bottom: 1px solid var(--border);
+           padding: 12px 24px; display: flex; align-items: baseline; gap: 24px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  nav { display: flex; gap: 4px; padding: 0 24px; background: var(--panel);
+        border-bottom: 1px solid var(--border); }
+  nav button { border: none; background: none; padding: 10px 16px; cursor: pointer;
+               font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  main { max-width: 980px; margin: 20px auto; padding: 0 16px; }
+  section.page { display: none; }
+  section.page.active { display: block; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+          padding: 16px 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  .card h3 { font-size: 13px; margin: 14px 0 8px; color: var(--muted); font-weight: 600; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  textarea, input[type=text], input[type=password], select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font: inherit; background: #fff; }
+  textarea { resize: vertical; font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { padding: 7px 14px; border: 1px solid var(--border); border-radius: 6px;
+           background: #fff; cursor: pointer; font: inherit; color: var(--text); }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-dark); color: #fff; }
+  button.danger { color: var(--danger); }
+  button.danger:hover { border-color: var(--danger); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .error { color: var(--danger); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  .ok { color: var(--ok); }
+  .banner { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e;
+            border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .platform-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+                   cursor: pointer; flex: 1; min-width: 220px; }
+  .platform-card.selected { border-color: var(--accent); background: #eff6ff; }
+  .platform-card.disabled { opacity: .5; cursor: not-allowed; background: #f3f4f6; }
+  .platform-card .name { font-weight: 600; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+           margin-left: 6px; vertical-align: 1px; }
+  .badge.missing { background: #fee2e2; color: var(--danger); }
+  .badge.unverified { background: #fef3c7; color: var(--warn); }
+  .badge.hw { background: #e0f2fe; color: var(--info); }
+  .badge.no-master { background: #e5e7eb; color: var(--muted); }
+  .badge.ok { background: #d1fae5; color: var(--ok); }
+  .item { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px;
+          margin-bottom: 8px; background: #fafbfc; }
+  .item .head { display: flex; gap: 8px; align-items: center; }
+  .item .slug { font-weight: 600; font-family: Consolas, monospace; }
+  .item .reason { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .warn-box { border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
+  .warn-box.missing { background: #fee2e2; color: var(--danger); }
+  .warn-box.unverified { background: #fef3c7; color: var(--warn); }
+  .warn-box.hardware_bound { background: #e0f2fe; color: var(--info); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  pre.result { background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 12px;
+               font-size: 12px; overflow: auto; max-height: 320px; }
+  .file-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; margin-bottom: 8px; }
+  .file-row textarea { min-height: 120px; }
+  .report-group { margin-bottom: 10px; }
+  .report-group .title { font-weight: 600; margin-bottom: 6px; }
+  .report-group.keep .title { color: var(--ok); }
+  .report-group.merge .title { color: var(--info); }
+  .report-group.exclude .title { color: var(--danger); }
+  .decision { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+              margin-bottom: 6px; font-size: 13px; background: #fafbfc; }
+  .decision .path { font-family: Consolas, monospace; font-weight: 600; }
+  .decision .reason { color: var(--muted); margin-top: 2px; }
+  .decision select { width: auto; margin-left: 8px; padding: 2px 6px; font-size: 12px; }
+  .hidden { display: none; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+             border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
+             vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>电赛工程生成器</h1>
+  <span class="sub">贴题 → 选平台 → AI 推荐模块 → 一键生成完整工程</span>
+</header>
+<nav>
+  <button data-tab="generate" class="active">生成</button>
+  <button data-tab="library">模块库</button>
+  <button data-tab="master">母版</button>
+  <button data-tab="settings">设置</button>
+</nav>
+
+<main>
+  <!-- ============================ 生成页 ============================ -->
+  <section id="tab-generate" class="page active">
+    <div id="gen-banner" class="banner hidden">尚未配置 AI API：请先到「设置」页填写 API 后再使用 AI 功能。</div>
+
+    <div class="card">
+      <h2>1. 赛题原文</h2>
+      <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md">
+        <button id="btn-upload">上传并抽取文字</button>
+        <span class="muted">支持 .pdf / .docx / .txt / .md，纯本地解析</span>
+      </div>
+      <div id="upload-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. 目标平台</h2>
+      <div id="platforms" class="row"></div>
+      <div id="platform-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. AI 推荐模块</h2>
+      <div class="row">
+        <button id="btn-recommend" class="primary">让 AI 推荐</button>
+        <span class="muted">AI 按赛题从模块库挑选并说明理由；可增删后重新生成。</span>
+      </div>
+      <div id="recommend-msg" class="error"></div>
+      <div id="rec-list" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>4. 模块清单与平台警告</h2>
+      <div class="row">
+        <select id="module-pool" style="flex:1"></select>
+        <button id="btn-add-module">添加模块</button>
+        <button id="btn-expand" class="primary">展开依赖并检查平台</button>
+      </div>
+      <div id="warnings" style="margin-top:10px"></div>
+      <div id="selected-list" style="margin-top:10px"></div>
+      <div id="expand-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>5. main.c 骨架</h2>
+      <div class="row">
+        <button id="btn-skeleton" class="primary">生成骨架</button>
+        <span class="muted">AI 按所选模块接口排初始化序列；不存在的调用自动改写为注释占位，可手动微调。</span>
+      </div>
+      <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
+      <textarea id="main-c" rows="16" style="margin-top:8px" placeholder="点击「生成骨架」后这里会出现 main.c 内容，可手动编辑…"></textarea>
+      <div id="skeleton-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>6. 输出目录并生成</h2>
+      <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
+      <input type="text" id="output-dir" placeholder="例如 D:\contest\demo">
+      <div class="row" style="margin-top:10px">
+        <button id="btn-generate" class="primary">生成工程</button>
+        <span id="gen-status"></span>
+      </div>
+      <div id="generate-msg" class="error"></div>
+      <div id="generate-result" class="hidden" style="margin-top:12px">
+        <h3>生成完成</h3>
+        <div class="item">输出目录：<span id="res-dir" class="slug"></span></div>
+        <div class="item">include path：<span id="res-includes" class="slug"></span></div>
+        <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
+        <h3>工程结构</h3>
+        <pre id="res-structure" class="result"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ 模块库页 ============================ -->
+  <section id="tab-library" class="page">
+    <div class="card">
+      <h2>模块库 <span class="muted">（磁盘目录即数据库，操作即时生效）</span></h2>
+      <table>
+        <thead><tr><th>模块</th><th>简介</th><th>依赖</th><th>平台版本</th><th style="width:150px">操作</th></tr></thead>
+        <tbody id="lib-rows"></tbody>
+      </table>
+      <div id="lib-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>添加模块（AI 校验后入库）</h2>
+      <div class="row">
+        <div style="flex:1"><label>模块 slug（英文标识，即目录名）</label><input type="text" id="new-slug" placeholder="例如 ultrasonic"></div>
+        <div style="flex:1"><label>平台</label><select id="new-platform"></select></div>
+      </div>
+      <div class="row">
+        <div style="flex:1"><label>功能简介（留空则让 AI 先出草稿）</label><input type="text" id="new-desc" placeholder="例如 超声波测距模块，返回厘米距离"></div>
+        <div style="flex:1"><label>依赖模块（逗号分隔）</label><input type="text" id="new-deps" placeholder="例如 delay"></div>
+      </div>
+      <div class="row">
+        <label style="margin-top:10px"><input type="checkbox" id="new-hw"> 硬件绑定（换平台需移植）</label>
+        <label style="margin-top:10px"><input type="checkbox" id="new-verified"> 已在该平台验证过</label>
+        <label style="margin-top:10px">备注 <input type="text" id="new-notes" style="width:260px" placeholder="例如 接 PA1"></label>
+      </div>
+      <h3>源文件（.c / .h）</h3>
+      <div id="new-files"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-add-file-row">+ 文件</button>
+        <button id="btn-draft-desc">AI 出简介草稿</button>
+        <button id="btn-add-module-submit" class="primary">校验并入库</button>
+      </div>
+      <div id="add-msg" class="error"></div>
+    </div>
+  </section>
+
+  <!-- ============================ 母版页 ============================ -->
+  <section id="tab-master" class="page">
+    <div class="card">
+      <h2>母版提炼（导入旧工程 → AI 判定 → 确认入库）</h2>
+      <label for="project-dirs">旧工程目录（每行一个，必须是同一平台；含 .uvprojx 判定为 Keil 工程，含 .cproject 判定为 CCS 工程）</label>
+      <textarea id="project-dirs" rows="4" placeholder="D:\old\proj-2024&#10;D:\old\proj-2025"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="btn-scan">扫描工程</button>
+        <button id="btn-distill" class="primary" disabled>AI 提炼报告</button>
+      </div>
+      <div id="scan-msg" class="error"></div>
+      <div id="scan-result" style="margin-top:10px"></div>
+      <div id="distill-msg" class="error"></div>
+      <div id="report" class="hidden" style="margin-top:10px">
+        <h3>提炼报告（确认后入库；merge 条目可换来源工程）</h3>
+        <div id="report-body"></div>
+        <div class="row" style="margin-top:10px">
+          <button id="btn-confirm" class="primary">确认并入库</button>
+          <span id="confirm-status"></span>
+        </div>
+        <div id="confirm-msg" class="error"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>母版库（每平台一个）</h2>
+      <table>
+        <thead><tr><th>平台</th><th>提炼来源</th><th>入库警告</th><th style="width:90px">操作</th></tr></thead>
+        <tbody id="master-rows"></tbody>
+      </table>
+      <div id="master-msg" class="error"></div>
+    </div>
+  </section>
+
+  <!-- ============================ 设置页 ============================ -->
+  <section id="tab-settings" class="page">
+    <div class="card">
+      <h2>AI API 配置（保存后即时生效，无需重启）</h2>
+      <div id="settings-banner" class="banner hidden">尚未配置：请填写 API key 后保存。</div>
+      <div class="row">
+        <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
+        <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-chat"></div>
+      </div>
+      <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="password" id="set-api-key" placeholder="sk-…"></div>
+      <div class="row">
+        <div style="flex:1"><label>模块库目录</label><input type="text" id="set-lib-dir" placeholder="~/.contest_generator/modules"></div>
+        <div style="flex:1"><label>母版库目录</label><input type="text" id="set-masters-dir" placeholder="~/.contest_generator/masters"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="btn-save-settings" class="primary">保存设置</button>
+        <span class="muted">配置文件：<span id="set-config-path"></span>（含 API key，不入版本库）</span>
+      </div>
+      <div id="settings-msg" class="error"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+// ---------------------------------------------------------------------------
+// API 辅助：统一错误提取（detail 是后端的中文 message）
+// ---------------------------------------------------------------------------
+async function handle(resp) {
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.detail || ("请求失败（HTTP " + resp.status + "）"));
+  return data;
+}
+async function apiGet(url) { return handle(await fetch(url)); }
+async function apiPost(url, body) {
+  return handle(await fetch(url, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }));
+}
+async function apiPut(url, body) {
+  return handle(await fetch(url, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }));
+}
+async function apiDelete(url, body) {
+  return handle(await fetch(url, {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }));
+}
+
+function esc(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+const KIND_TEXT = { missing: "缺平台版本（生成将失败）", unverified: "未验证", hardware_bound: "硬件绑定" };
+const KIND_BADGE = { missing: "badge missing", unverified: "badge unverified", hardware_bound: "badge hw" };
+
+// ---------------------------------------------------------------------------
+// 页签
+// ---------------------------------------------------------------------------
+document.querySelectorAll("nav button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll("section.page").forEach((s) =>
+      s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
+    if (btn.dataset.tab === "library") loadLibrary();
+    if (btn.dataset.tab === "master") loadMasters();
+    if (btn.dataset.tab === "settings") loadSettings();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 全局状态
+// ---------------------------------------------------------------------------
+let state = null;                 // GET /api/state
+let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
+let expanded = [];                // 展开后的模块 manifest（含依赖）
+let warnings = [];                // 平台警告
+let mainC = "";
+
+async function refreshState() {
+  state = await apiGet("/api/state");
+  $("gen-banner").classList.toggle("hidden", !!state.api_configured);
+  // 未配置时模块库读不到：保留旧列表（可能为空），不能让渲染中断
+  try { state.modules = await apiGet("/api/modules"); }
+  catch (e) { state.modules = state.modules || []; }
+  renderPlatforms();
+  renderModulePool();
+}
+
+// ---------------------------------------------------------------------------
+// 生成页：2. 平台选择
+// ---------------------------------------------------------------------------
+let chosenPlatform = null;
+function renderPlatforms() {
+  const box = $("platforms");
+  box.innerHTML = "";
+  for (const p of state.platforms) {
+    const card = document.createElement("div");
+    card.className = "platform-card" + (chosenPlatform === p.id ? " selected" : "") + (p.status !== "ready" ? " disabled" : "");
+    const badge = p.status === "ready"
+      ? '<span class="badge ok">可用</span>'
+      : '<span class="badge no-master">暂不可用：尚未导入母版</span>';
+    card.innerHTML = `<div class="name">${esc(p.name)}</div>${badge}`;
+    if (p.status === "ready") {
+      card.addEventListener("click", () => {
+        chosenPlatform = p.id;
+        renderPlatforms();
+        selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
+      });
+    }
+    box.appendChild(card);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 生成页：1. 上传抽取
+// ---------------------------------------------------------------------------
+$("btn-upload").addEventListener("click", async () => {
+  const file = $("problem-file").files[0];
+  $("upload-msg").textContent = "";
+  if (!file) { $("upload-msg").textContent = "请先选择文件"; return; }
+  const form = new FormData();
+  form.append("upload", file);
+  try {
+    const data = await handle(await fetch("/api/extract", { method: "POST", body: form }));
+    $("problem").value = data.text;
+    $("upload-msg").classList.add("ok");
+    $("upload-msg").textContent = "抽取成功：" + file.name;
+  } catch (e) {
+    $("upload-msg").classList.remove("ok");
+    $("upload-msg").textContent = e.message;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 生成页：3. AI 推荐
+// ---------------------------------------------------------------------------
+function moduleBadges(m) {
+  const badges = [];
+  for (const [platform, entry] of Object.entries(m.platforms || {})) {
+    badges.push(`<span class="badge ${entry.hardware_bound ? "hw" : entry.verified ? "ok" : "unverified"}">${esc(platform)}${entry.hardware_bound ? "·硬件绑定" : entry.verified ? "·已验证" : "·未验证"}</span>`);
+  }
+  return badges.join("");
+}
+
+$("btn-recommend").addEventListener("click", async () => {
+  const problem = $("problem").value.trim();
+  $("recommend-msg").textContent = "";
+  if (!problem) { $("recommend-msg").textContent = "请先填写赛题原文"; return; }
+  $("btn-recommend").disabled = true;
+  $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
+  try {
+    const data = await apiPost("/api/recommend", { problem_text: problem });
+    const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
+    for (const m of fresh) selectedSlugs.push(m.slug);
+    expanded = []; warnings = [];
+    renderSelected(); renderWarnings();
+    const box = $("rec-list");
+    if (!data.modules.length) {
+      box.innerHTML = '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
+    } else {
+      box.innerHTML = data.modules.map((m) => `
+        <div class="item"><div class="head"><span class="slug">${esc(m.slug)}</span>
+          <span class="reason">${esc(m.reason)}</span>
+          <button class="danger" data-remove="${esc(m.slug)}">移除</button></div></div>`).join("");
+    }
+    box.querySelectorAll("[data-remove]").forEach((b) =>
+      b.addEventListener("click", () => {
+        selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
+        expanded = []; warnings = [];
+        renderSelected(); renderWarnings(); renderRecommend();
+      }));
+    $("btn-recommend").innerHTML = "重新推荐";
+  } catch (e) {
+    $("recommend-msg").textContent = e.message;
+    $("btn-recommend").innerHTML = "让 AI 推荐";
+  } finally {
+    $("btn-recommend").disabled = false;
+  }
+});
+
+function renderRecommend() {
+  $("rec-list").innerHTML = '<div class="muted">点击「让 AI 推荐」重新生成推荐清单。</div>';
+}
+
+// ---------------------------------------------------------------------------
+// 生成页：4. 模块清单（增删 + 依赖展开 + 平台警告）
+// ---------------------------------------------------------------------------
+function renderModulePool() {
+  $("module-pool").innerHTML = (state.modules || [])
+    .filter((m) => !selectedSlugs.includes(m.slug))
+    .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(m.description)}</option>`).join("");
+}
+async function refreshModulePool() {
+  state.modules = await apiGet("/api/modules");
+  renderModulePool();
+}
+
+$("btn-add-module").addEventListener("click", () => {
+  const slug = $("module-pool").value;
+  if (!slug) return;
+  selectedSlugs.push(slug);
+  expanded = []; warnings = [];
+  renderSelected(); renderWarnings(); renderModulePool();
+});
+
+$("btn-expand").addEventListener("click", async () => {
+  $("expand-msg").textContent = "";
+  if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 2 选择目标平台"; return; }
+  if (!selectedSlugs.length) { $("expand-msg").textContent = "请先选择至少一个模块"; return; }
+  try {
+    const data = await apiPost("/api/selection/expand", { slugs: selectedSlugs, platform: chosenPlatform });
+    expanded = data.modules;
+    warnings = data.warnings;
+    renderSelected(); renderWarnings();
+  } catch (e) { $("expand-msg").textContent = e.message; }
+});
+
+function renderSelected() {
+  const box = $("selected-list");
+  if (!expanded.length) {
+    box.innerHTML = selectedSlugs.length
+      ? '<div class="muted">已选（未展开依赖）：' + selectedSlugs.map(esc).join("、") + '</div>'
+      : '<div class="muted">尚未选择模块。</div>';
+    return;
+  }
+  box.innerHTML = expanded.map((m) => `
+    <div class="item"><div class="head">
+      <span class="slug">${esc(m.slug)}</span>
+      <span class="muted">${esc(m.description)}</span>
+      ${(m.dependencies || []).length ? `<span class="muted">依赖：${esc(m.dependencies.join("、"))}</span>` : ""}
+      ${moduleBadges(m)}
+      <button class="danger" data-remove="${esc(m.slug)}">移除</button>
+    </div></div>`).join("");
+  box.querySelectorAll("[data-remove]").forEach((b) =>
+    b.addEventListener("click", () => {
+      selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
+      expanded = []; warnings = [];
+      renderSelected(); renderWarnings(); renderModulePool();
+    }));
+}
+
+function renderWarnings() {
+  const box = $("warnings");
+  box.innerHTML = "";
+  if (!warnings.length) {
+    if (expanded.length) box.innerHTML = '<div class="warn-box ok" style="color:var(--ok);background:#d1fae5">所选模块在该平台均可直接用。</div>';
+    return;
+  }
+  for (const w of warnings) {
+    const div = document.createElement("div");
+    div.className = "warn-box " + w.kind;
+    div.textContent = "[" + KIND_TEXT[w.kind] + "] " + w.message;
+    box.appendChild(div);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 生成页：5. main.c 骨架
+// ---------------------------------------------------------------------------
+$("btn-skeleton").addEventListener("click", async () => {
+  $("skeleton-msg").textContent = "";
+  const problem = $("problem").value.trim();
+  if (!problem) { $("skeleton-msg").textContent = "请先填写赛题原文"; return; }
+  if (!chosenPlatform) { $("skeleton-msg").textContent = "请先在步骤 2 选择目标平台"; return; }
+  if (!selectedSlugs.length) { $("skeleton-msg").textContent = "请先选择模块"; return; }
+  $("btn-skeleton").disabled = true;
+  $("btn-skeleton").innerHTML = '<span class="spinner"></span>生成中…';
+  try {
+    const data = await apiPost("/api/skeleton", {
+      problem_text: problem, slugs: selectedSlugs, platform: chosenPlatform,
+    });
+    mainC = data.main_c;
+    $("main-c").value = mainC;
+    const box = $("intercepted");
+    if (data.intercepted.length) {
+      box.classList.remove("hidden");
+      box.textContent = "AI 调用以下函数在所选模块接口中不存在，已改写为注释占位，请在骨架里替换为真实接口："
+        + data.intercepted.join("、");
+    } else { box.classList.add("hidden"); }
+  } catch (e) { $("skeleton-msg").textContent = e.message; }
+  finally {
+    $("btn-skeleton").disabled = false;
+    $("btn-skeleton").innerHTML = "重新生成骨架";
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 生成页：6. 输出目录并生成
+// ---------------------------------------------------------------------------
+$("btn-generate").addEventListener("click", async () => {
+  $("generate-msg").textContent = "";
+  $("generate-result").classList.add("hidden");
+  if (!chosenPlatform) { $("generate-msg").textContent = "请先选择目标平台"; return; }
+  if (!selectedSlugs.length) { $("generate-msg").textContent = "请先选择模块"; return; }
+  const outputDir = $("output-dir").value.trim();
+  if (!outputDir) { $("generate-msg").textContent = "请填写输出目录"; return; }
+  const status = $("gen-status");
+  status.innerHTML = '<span class="spinner"></span>生成中…';
+  $("btn-generate").disabled = true;
+  try {
+    const data = await apiPost("/api/generate", {
+      platform: chosenPlatform, slugs: selectedSlugs,
+      main_c: $("main-c").value, output_dir: outputDir,
+    });
+    $("res-dir").textContent = data.output_dir;
+    $("res-includes").textContent = data.include_dirs.join("；");
+    $("res-modules").textContent = data.modules
+      .map((m) => m.slug + "(" + m.files.join(", ") + ")").join("、");
+    $("res-structure").textContent = data.structure.join("\n");
+    $("generate-result").classList.remove("hidden");
+    status.textContent = "";
+    $("generate-msg").classList.add("ok");
+    $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位，可直接用 IDE 打开编译。";
+  } catch (e) {
+    $("generate-msg").classList.remove("ok");
+    $("generate-msg").textContent = e.message;
+    status.textContent = "";
+  } finally { $("btn-generate").disabled = false; }
+});
+
+// ---------------------------------------------------------------------------
+// 模块库页
+// ---------------------------------------------------------------------------
+async function loadLibrary() {
+  try {
+    const modules = await apiGet("/api/modules");
+    state.modules = modules;
+    renderModulePool();
+    $("lib-rows").innerHTML = modules.map((m) => `
+      <tr>
+        <td class="slug">${esc(m.slug)}</td>
+        <td>${esc(m.description)}</td>
+        <td class="muted">${esc((m.dependencies || []).join("、") || "—")}</td>
+        <td>${moduleBadges(m)}</td>
+        <td>
+          <button data-edit-desc="${esc(m.slug)}">改简介</button>
+          <button data-del="${esc(m.slug)}" class="danger">删除</button>
+        </td>
+      </tr>`).join("");
+    $("lib-rows").querySelectorAll("[data-edit-desc]").forEach((b) =>
+      b.addEventListener("click", () => editDescription(b.dataset.editDesc)));
+    $("lib-rows").querySelectorAll("[data-del]").forEach((b) =>
+      b.addEventListener("click", () => deleteModule(b.dataset.del)));
+    $("lib-msg").textContent = "";
+  } catch (e) { $("lib-msg").textContent = e.message; }
+}
+
+async function editDescription(slug) {
+  const text = prompt("模块 " + slug + " 的新简介（AI 校验与代码一致后才会保存）：");
+  if (text === null || !text.trim()) return;
+  try {
+    await apiPut(`/api/modules/${encodeURIComponent(slug)}/description`, { description: text.trim() });
+    loadLibrary();
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteModule(slug) {
+  if (!confirm("删除模块 " + slug + " 的整个目录？")) return;
+  try {
+    await apiDelete(`/api/modules/${encodeURIComponent(slug)}`);
+    loadLibrary();
+  } catch (e) { alert(e.message); }
+}
+
+// 添加模块：动态文件行
+function addFileRow(name, content) {
+  const row = document.createElement("div");
+  row.className = "file-row";
+  row.innerHTML = `
+    <input type="text" placeholder="文件名（含相对路径）" value="${esc(name || "")}">
+    <div style="position:relative">
+      <textarea placeholder="文件内容（.c / .h）">${esc(content || "")}</textarea>
+      <button style="position:absolute;right:4px;top:4px;font-size:11px;padding:2px 6px" class="danger">✕</button>
+    </div>`;
+  row.querySelector("button").addEventListener("click", () => row.remove());
+  $("new-files").appendChild(row);
+}
+$("btn-add-file-row").addEventListener("click", () => addFileRow());
+addFileRow();
+
+function collectFiles() {
+  const files = {};
+  for (const row of $("new-files").children) {
+    const name = row.querySelector("input").value.trim();
+    const content = row.querySelector("textarea").value;
+    if (!name) continue;
+    if (files[name] !== undefined) { alert("文件名重复：" + name); return null; }
+    files[name] = content;
+  }
+  return files;
+}
+
+function newModulePayload() {
+  const files = collectFiles();
+  if (files === null) return null;
+  if (!Object.keys(files).length) { alert("至少需要一个源文件"); return null; }
+  return {
+    slug: $("new-slug").value.trim(),
+    platform: $("new-platform").value,
+    description: $("new-desc").value.trim(),
+    dependencies: $("new-deps").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+    hardware_bound: $("new-hw").checked,
+    verified: $("new-verified").checked,
+    notes: $("new-notes").value.trim(),
+    files,
+  };
+}
+
+$("btn-draft-desc").addEventListener("click", async () => {
+  $("add-msg").textContent = "";
+  const payload = newModulePayload();
+  if (!payload) return;
+  if (!$("new-slug").value.trim()) { $("add-msg").textContent = "请先填写模块 slug"; return; }
+  try {
+    const data = await apiPost("/api/modules", { ...payload, description: "" });
+    $("new-desc").value = data.draft;
+    $("add-msg").classList.add("ok");
+    $("add-msg").textContent = "AI 简介草稿已填入，可修改后点击「校验并入库」。";
+  } catch (e) {
+    $("add-msg").classList.remove("ok");
+    $("add-msg").textContent = e.message;
+  }
+});
+
+$("btn-add-module-submit").addEventListener("click", async () => {
+  $("add-msg").textContent = "";
+  const payload = newModulePayload();
+  if (!payload) return;
+  if (!$("new-slug").value.trim()) { $("add-msg").textContent = "请先填写模块 slug"; return; }
+  if (!$("new-desc").value.trim()) { $("add-msg").textContent = "请填写功能简介（或先让 AI 出草稿）"; return; }
+  try {
+    const manifest = await apiPost("/api/modules", payload);
+    $("add-msg").classList.add("ok");
+    $("add-msg").textContent = "模块 " + manifest.slug + " 已入库（简介与代码一致性校验通过）。";
+    ["new-slug", "new-desc", "new-deps", "new-notes"].forEach((id) => ($(id).value = ""));
+    $("new-hw").checked = $("new-verified").checked = false;
+    $("new-files").innerHTML = "";
+    addFileRow();
+    loadLibrary();
+  } catch (e) {
+    $("add-msg").classList.remove("ok");
+    $("add-msg").textContent = e.message;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 母版页
+// ---------------------------------------------------------------------------
+let scannedProjects = null;   // 扫描结果（含报告确认所需）
+let currentReport = null;
+
+function projectDirs() {
+  return $("project-dirs").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+
+$("btn-scan").addEventListener("click", async () => {
+  $("scan-msg").textContent = "";
+  $("report").classList.add("hidden");
+  const dirs = projectDirs();
+  if (!dirs.length) { $("scan-msg").textContent = "请先填写至少一个旧工程目录"; return; }
+  try {
+    scannedProjects = await apiPost("/api/masters/scan", { project_dirs: dirs });
+    $("scan-result").innerHTML = scannedProjects.map((p) => `
+      <div class="item"><div class="head">
+        <span class="slug">${esc(p.name)}</span>
+        <span class="muted">平台：${esc(p.platform)}</span>
+        <span class="muted">${p.files.length} 个文件</span>
+      </div>
+      <div class="reason">${esc(p.config_summary.join("；") || "无配置摘要")}</div></div>`).join("");
+    $("btn-distill").disabled = false;
+  } catch (e) { $("scan-msg").textContent = e.message; }
+});
+
+$("btn-distill").addEventListener("click", async () => {
+  $("distill-msg").textContent = "";
+  $("btn-distill").disabled = true;
+  $("btn-distill").innerHTML = '<span class="spinner"></span>AI 判定中…';
+  try {
+    const dirs = projectDirs();
+    const platform = scannedProjects[0].platform;
+    const data = await apiPost("/api/masters/distill", { platform, project_dirs: dirs });
+    currentReport = data;
+    renderReport();
+  } catch (e) {
+    $("distill-msg").textContent = e.message;
+  } finally {
+    $("btn-distill").disabled = false;
+    $("btn-distill").innerHTML = "重新提炼";
+  }
+});
+
+function decisionItem(d, sourceOptions) {
+  const source = d.action === "merge" ? `
+    <select data-path="${esc(d.path)}">
+      ${sourceOptions.map((s) => `<option value="${esc(s)}" ${s === d.source ? "selected" : ""}>${esc(s)}</option>`).join("")}
+    </select>` : "";
+  return `<div class="decision"><span class="path">${esc(d.path)}</span>
+    <span class="muted">（${d.action === "keep" ? "保留" : d.action === "merge" ? "合并" : "剔除"}${source}）</span>
+    <div class="reason">${esc(d.reason)}</div></div>`;
+}
+
+function renderReport() {
+  $("report").classList.remove("hidden");
+  const r = currentReport;
+  const body = $("report-body");
+  const options = r.projects;
+  body.innerHTML = `
+    <div class="report-group keep"><div class="title">保留（${r.keep.length}）</div>
+      ${r.keep.map((d) => decisionItem(d)).join("")}</div>
+    <div class="report-group merge"><div class="title">合并 — 选来源工程（${r.merge.length}）</div>
+      ${r.merge.map((d) => decisionItem(d, options)).join("")}</div>
+    <div class="report-group exclude"><div class="title">剔除（${r.exclude.length}）</div>
+      ${r.exclude.map((d) => decisionItem(d)).join("")}</div>`;
+  body.querySelectorAll("select[data-path]").forEach((sel) =>
+    sel.addEventListener("change", () => {
+      const d = currentReport.merge.find((x) => x.path === sel.dataset.path);
+      if (d) d.source = sel.value;
+    }));
+}
+
+$("btn-confirm").addEventListener("click", async () => {
+  $("confirm-msg").textContent = "";
+  if (!currentReport) return;
+  if (!confirm("确认按此报告提炼母版并入库？（将整体替换该平台的旧母版）")) return;
+  $("btn-confirm").disabled = true;
+  $("confirm-status").innerHTML = '<span class="spinner"></span>落盘与入库中…';
+  try {
+    const data = await apiPost("/api/masters/confirm", {
+      platform: currentReport.platform,
+      project_dirs: projectDirs(),
+      projects: currentReport.projects,
+      keep: currentReport.keep, merge: currentReport.merge, exclude: currentReport.exclude,
+    });
+    $("confirm-status").textContent = "";
+    $("confirm-msg").classList.add("ok");
+    $("confirm-msg").textContent = "母版已入库：平台 " + data.platform + "（来源：" + data.sources.join("、") + "）"
+      + (data.warnings.length ? "，警告：" + data.warnings.join("；") : "");
+    $("report").classList.add("hidden");
+    loadMasters();
+  } catch (e) {
+    $("confirm-msg").classList.remove("ok");
+    $("confirm-msg").textContent = e.message;
+  } finally { $("btn-confirm").disabled = false; }
+});
+
+async function loadMasters() {
+  try {
+    const masters = await apiGet("/api/masters");
+    $("master-rows").innerHTML = masters.map((m) => `
+      <tr>
+        <td class="slug">${esc(m.platform)}</td>
+        <td class="muted">${esc(m.sources.join("、") || "—")}</td>
+        <td class="muted">${esc(m.warnings.join("；") || "—")}</td>
+        <td><button class="danger" data-del="${esc(m.platform)}">删除</button></td>
+      </tr>`).join("");
+    $("master-rows").querySelectorAll("[data-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        if (!confirm("删除平台 " + b.dataset.del + " 的母版？")) return;
+        try { await apiDelete(`/api/masters/${encodeURIComponent(b.dataset.del)}`); loadMasters(); }
+        catch (e) { alert(e.message); }
+      }));
+    $("master-msg").textContent = "";
+  } catch (e) { $("master-msg").textContent = e.message; }
+}
+
+// ---------------------------------------------------------------------------
+// 设置页
+// ---------------------------------------------------------------------------
+async function loadSettings() {
+  try {
+    const s = await apiGet("/api/settings");
+    $("set-base-url").value = s.base_url || "https://api.deepseek.com";
+    $("set-model").value = s.model || "deepseek-chat";
+    $("set-api-key").value = s.api_key;
+    $("set-lib-dir").value = s.module_library_dir;
+    $("set-masters-dir").value = s.masters_dir;
+    $("set-config-path").textContent = s.config_path;
+    $("settings-banner").classList.toggle("hidden", !!s.configured);
+  } catch (e) { $("settings-msg").textContent = e.message; }
+}
+
+$("btn-save-settings").addEventListener("click", async () => {
+  $("settings-msg").textContent = "";
+  try {
+    const data = await apiPut("/api/settings", {
+      base_url: $("set-base-url").value.trim(),
+      api_key: $("set-api-key").value.trim(),
+      model: $("set-model").value.trim(),
+      module_library_dir: $("set-lib-dir").value.trim(),
+      masters_dir: $("set-masters-dir").value.trim(),
+    });
+    $("settings-msg").classList.add("ok");
+    $("settings-msg").textContent = "已保存，立即生效。";
+    await refreshState();
+    loadSettings();
+  } catch (e) {
+    $("settings-msg").classList.remove("ok");
+    $("settings-msg").textContent = e.message;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 启动
+// ---------------------------------------------------------------------------
+(async function init() {
+  try {
+    state = await apiGet("/api/state");
+  } catch (e) {
+    $("gen-banner").textContent = "加载失败：" + e.message;
+    $("gen-banner").classList.remove("hidden");
+    return;
+  }
+  // 未配置 AI API 时模块库读不到（400 提示去设置）——平台卡片必须照常渲染，
+  // 首次使用流程（设置 → 导入母版 → 生成）不能死在启动上
+  try { state.modules = await apiGet("/api/modules"); }
+  catch (e) { state.modules = []; }
+  renderPlatforms();
+  renderModulePool();
+  $("new-platform").innerHTML = state.platforms.map((p) =>
+    `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+})();
+</script>
+</body>
+</html>
