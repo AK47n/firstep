@@ -9,7 +9,7 @@ import json
 import zlib
 import zipfile
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
@@ -289,6 +289,21 @@ def make_fake_ccs_master_project(master_dir: Path) -> Path:
     (master_dir / "inc/mspm0g3507.h").write_text("#pragma once\n", encoding="utf-8")
     (master_dir / ".git/HEAD").write_text("ref: refs/heads/main", encoding="utf-8")
     return master_dir
+
+
+class FakeTransport:
+    """HTTP 传输假件：记录请求并返回固定响应（注入 DeepSeekLLM，网络不进测试）。"""
+
+    def __init__(self, status: int = 200, body: str = "") -> None:
+        self.status = status
+        self.body = body
+        self.calls: list[tuple[str, dict[str, str], dict[str, Any], float]] = []
+
+    def post(
+        self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
+    ) -> tuple[int, str]:
+        self.calls.append((url, headers, payload, timeout))
+        return self.status, self.body
 
 
 class FakeLLM:
