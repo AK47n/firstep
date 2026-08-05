@@ -258,7 +258,7 @@
       <div id="settings-banner" class="banner hidden">尚未配置：请填写 API key 后保存。</div>
       <div class="row">
         <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
-        <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-chat"></div>
+        <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="password" id="set-api-key" placeholder="sk-…"></div>
       <div class="row">
@@ -829,7 +829,7 @@ async function loadSettings() {
   try {
     const s = await apiGet("/api/settings");
     $("set-base-url").value = s.base_url || "https://api.deepseek.com";
-    $("set-model").value = s.model || "deepseek-chat";
+    $("set-model").value = s.model || "deepseek-v4-flash";
     $("set-api-key").value = s.api_key;
     $("set-lib-dir").value = s.module_library_dir;
     $("set-masters-dir").value = s.masters_dir;

@@ -18,7 +18,7 @@ CONFIG_FILENAME = "config.json"
 DEFAULT_CONFIG_PATH = Path.home() / CONFIG_DIRNAME / CONFIG_FILENAME
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-chat"
+DEFAULT_MODEL = "deepseek-v4-flash"
 
 # 工作目录默认值：工具工作目录（配置目录）下的 modules/ 与 masters/
 DEFAULT_MODULE_LIBRARY_DIR = Path.home() / CONFIG_DIRNAME / "modules"
