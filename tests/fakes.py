@@ -24,6 +24,54 @@ OLED_H = "#pragma once\nvoid oled_init(void);\n"
 # 假 LLM 生成的 main.c 骨架（工单 05 前由测试直接传入生成器）
 MAIN_SKELETON = "int main(void) { dht11_init(); oled_init(); while(1); }\n"
 
+# 假母版的 .uvprojx：结构真实的 Keil5 工程文件（设备型号、Cpu、IncludePath、
+# 一个含 main.c 的源组）。修改器只该动 IncludePath 与 Groups，其余原样保留。
+FAKE_UVPROJX = r'''<?xml version="1.0" encoding="UTF-8" ?>
+<Project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <SchemaVersion>2.1</SchemaVersion>
+  <HeaderVersion>1.0</HeaderVersion>
+  <Targets>
+    <Target>
+      <TargetName>STM32F103C8</TargetName>
+      <ToolsetNumber>0x4</ToolsetNumber>
+      <ToolsetName>ARM-ADS</ToolsetName>
+      <TargetOption>
+        <TargetCommonOption>
+          <Device>STM32F103C8</Device>
+          <Vendor>STMicroelectronics</Vendor>
+          <Cpu>IRAM(0x20000000,0x5000) IROM(0x08000000,0x10000)</Cpu>
+        </TargetCommonOption>
+        <TargetArmAds>
+          <ArmAdsMisc>
+            <useUlib>1</useUlib>
+          </ArmAdsMisc>
+          <Cads>
+            <IncludePath>.\inc;.\src</IncludePath>
+          </Cads>
+        </TargetArmAds>
+      </TargetOption>
+      <Groups>
+        <Group>
+          <GroupName>Source Group 1</GroupName>
+          <Files>
+            <File>
+              <FileName>main.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\main.c</FilePath>
+            </File>
+            <File>
+              <FileName>system_stm32f10x.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\system_stm32f10x.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+      </Groups>
+    </Target>
+  </Targets>
+</Project>
+'''
+
 
 def make_fake_module_library(library_dir: Path) -> Path:
     """假模块库：dht11（双平台验证过，依赖 delay）、oled（仅 stm32）、
@@ -93,9 +141,7 @@ def make_fake_master_project(master_dir: Path) -> Path:
     (master_dir / "inc").mkdir(parents=True)
     (master_dir / "src").mkdir()
     (master_dir / ".git").mkdir()
-    (master_dir / "project.uvprojx").write_text(
-        "<!-- fake keil project -->", encoding="utf-8"
-    )
+    (master_dir / "project.uvprojx").write_text(FAKE_UVPROJX, encoding="utf-8")
     (master_dir / "main.c").write_text("/* master's old main */", encoding="utf-8")
     (master_dir / "inc/stm32f10x_conf.h").write_text("#pragma once\n", encoding="utf-8")
     (master_dir / "src/system_stm32f10x.c").write_text(

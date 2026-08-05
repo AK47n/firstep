@@ -4,6 +4,7 @@
 → 输出完整工程目录。断言输出目录的结构与文件内容。
 """
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -30,12 +31,30 @@ def test_generate_stm32_outputs_complete_project(make_project, tmp_path):
 
     assert result == tmp_path / "out"
     # 母版文件就位
-    assert (result / "project.uvprojx").read_text(encoding="utf-8") == (
-        "<!-- fake keil project -->"
-    )
+    assert (result / "project.uvprojx").exists()
     assert (result / "inc/stm32f10x_conf.h").exists()
     assert (result / "src/system_stm32f10x.c").exists()
     assert not (result / ".git").exists()
+    # .uvprojx：模块源文件注册进工程树，include path 已填好，设备型号保留
+    root = ET.parse(result / "project.uvprojx").getroot()
+    assert (
+        root.findtext("Targets/Target/TargetOption/TargetCommonOption/Device")
+        == "STM32F103C8"
+    )
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    assert [f.findtext("FilePath") for f in modules.findall("Files/File")] == [
+        ".\\modules\\dht11\\stm32\\src\\dht11.c",
+        ".\\modules\\oled\\stm32\\src\\oled.c",
+    ]
+    include_path = root.findtext(
+        "Targets/Target/TargetOption/TargetArmAds/Cads/IncludePath"
+    )
+    assert include_path == (
+        ".\\inc;.\\src"
+        ";.\\modules\\dht11\\stm32\\src;.\\modules\\dht11\\inc"
+        ";.\\modules\\oled\\stm32\\src;.\\modules\\oled\\inc"
+    )
     # main.c 落位，替换母版旧 main
     assert (result / "main.c").read_text(encoding="utf-8") == (
         "int main(void) { dht11_init(); oled_init(); while(1); }\n"
@@ -129,6 +148,15 @@ def test_generate_accepts_existing_empty_output_dir(make_project, tmp_path):
     result = make_project(output_dir=output_dir)
 
     assert (result / "main.c").exists()
+
+
+def test_generate_twice_produces_identical_project_config(make_project, tmp_path):
+    first = make_project(output_dir=tmp_path / "out1")
+    second = make_project(output_dir=tmp_path / "out2")
+
+    assert (first / "project.uvprojx").read_bytes() == (
+        second / "project.uvprojx"
+    ).read_bytes()
 
 
 def test_patcher_invoked_via_registry_with_files_and_include_dirs(make_project, tmp_path):

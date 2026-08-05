@@ -2,6 +2,7 @@
 
 import pytest
 
+from contest_generator.keil import KeilPatcher
 from contest_generator.patchers import (
     PLATFORM_MSPM0,
     PLATFORM_STM32,
@@ -39,8 +40,8 @@ def test_get_unknown_platform_raises_and_lists_known_platforms():
         registry.get("nonexistent")
 
 
-def test_default_registry_has_stub_for_both_platforms():
+def test_default_registry_wires_keil_patcher_for_stm32():
     registry = default_registry()
 
-    assert isinstance(registry.get(PLATFORM_STM32), NullPatcher)
+    assert isinstance(registry.get(PLATFORM_STM32), KeilPatcher)
     assert isinstance(registry.get(PLATFORM_MSPM0), NullPatcher)

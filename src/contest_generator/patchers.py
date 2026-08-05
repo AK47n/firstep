@@ -2,7 +2,7 @@
 
 生成器核心把模块文件复制、main.c 落位等公共逻辑做完后，把工程目录交给
 注册表里对应平台的修改器（Keil 改 .uvprojx、CCS 改 .cproject 等）。
-核心只认识平台名，不绑定任何平台格式；真实修改器在工单 02/03 落地。
+核心只认识平台名，不绑定任何平台格式。
 """
 
 from __future__ import annotations
@@ -10,7 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, Sequence
 
-from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32  # noqa: F401
+from .keil import KeilPatcher
+from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
 
 class UnknownPlatformError(ValueError):
@@ -39,7 +40,7 @@ class ProjectPatcher(Protocol):
 
 
 class NullPatcher:
-    """桩实现：真实修改器（工单 02/03）前的占位，不做任何修改。"""
+    """桩实现：mspm0 的真实修改器（工单 03，CCS）落地前的占位，不做任何修改。"""
 
     def patch(
         self,
@@ -71,8 +72,8 @@ class PatcherRegistry:
 
 
 def default_registry() -> PatcherRegistry:
-    """两个内置平台都先用桩修改器，保证管线端到端可跑。"""
+    """stm32 用真实 Keil 修改器；mspm0 仍是桩（工单 03 落地 CCS）。"""
     registry = PatcherRegistry()
-    for platform in KNOWN_PLATFORMS:
-        registry.register(platform, NullPatcher())
+    registry.register(PLATFORM_STM32, KeilPatcher())
+    registry.register(PLATFORM_MSPM0, NullPatcher())
     return registry
