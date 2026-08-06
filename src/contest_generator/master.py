@@ -36,7 +36,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
 from .keil import (
@@ -131,6 +131,11 @@ def _is_binary_file(path: Path) -> bool:
         return b"\x00" in file.read(BINARY_PROBE_BYTES)
 
 
+def _binary_reason(rel_path: str, path: Path) -> str | None:
+    """二进制类别识别（RuleCategory 统一签名）：内容判据命中返回规则化原因。"""
+    return BINARY_FILE_REASON if _is_binary_file(path) else None
+
+
 # 模板 main.c（ADR 0002）：母版 = 空的最小系统板工程，main.c 由确定性平台模板
 # 提供（时钟初始化 + while(1) 空循环 + TODO 区），能直接编译烧录；旧工程 main.c
 # 一律不进母版。模板内容在 templates/ 目录（与 webapp 的 static/ 同一加载模式），
@@ -178,6 +183,72 @@ def infrastructure_reason(rel_path: str) -> str | None:
         if lowered.endswith(suffix):
             return INFRASTRUCTURE_REASON
     return None
+
+
+# ---------------------------------------------------------------------------
+# 文件类别：残留 / 旧 main.c / 基础设施 / 二进制——识别规则 + 生命周期唯一出处
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RuleCategory:
+    """一个文件类别的完整生命周期描述。
+
+    类别 = 识别规则（reason_of，扫描时判定）+ 生命周期各环节的处置：扫描
+    分类 → 对比并集 → 报告汇编（report_reason，此时已无文件内容可读，二进制
+    类给常量原因）→ 越界拦截（AI 判定即报错）→ 校验（确认不能改成别的动作）。
+    """
+
+    key: str  # ProjectStructure / ProjectComparison 的字段名（类别分组）
+    name: str  # 中文名（错误消息用）
+    reason_of: Callable[[str, Path], str | None]  # (rel, path) → 规则化原因；None = 不命中
+    report_reason: Callable[[str], str | None]  # 报告汇编取原因（按路径重算或常量）
+    disposition: Literal["keep", "exclude"]  # 确定性处置：保留 / 剔除
+    out_of_scope_message: str  # AI 判定即越界的报错文案，{path} 占位
+    disposition_message: str  # 处置校验的报错前缀，如"残留文件必须剔除"
+
+
+# 四大类别。顺序即扫描的判定顺序：先便宜的后读文件内容的（二进制探针最后，
+# 且各类别互斥——命中即分类，break 进下一个文件）。新增类别 = 在此加一条 +
+# 给 ProjectStructure / ProjectComparison 补同名字段（声明式，不再复制六处逻辑）。
+RULE_CATEGORIES: tuple[RuleCategory, ...] = (
+    RuleCategory(
+        key="residues",
+        name="残留文件",
+        reason_of=lambda rel, path: residue_reason(rel),
+        report_reason=residue_reason,
+        disposition="exclude",
+        out_of_scope_message="残留文件由规则剔除，无需 AI 判定：{path}",
+        disposition_message="残留文件必须剔除",
+    ),
+    RuleCategory(
+        key="main_c_files",
+        name="旧工程 main.c",
+        reason_of=lambda rel, path: main_c_reason(rel),
+        report_reason=main_c_reason,
+        disposition="exclude",
+        out_of_scope_message="旧工程 main.c 由模板替代，无需 AI 判定：{path}",
+        disposition_message="旧工程 main.c 必须剔除",
+    ),
+    RuleCategory(
+        key="infrastructure",
+        name="基础设施",
+        reason_of=lambda rel, path: infrastructure_reason(rel),
+        report_reason=lambda _: INFRASTRUCTURE_REASON,
+        disposition="keep",
+        out_of_scope_message="基础设施由规则保留，无需 AI 判定：{path}",
+        disposition_message="基础设施必须保留",
+    ),
+    RuleCategory(
+        key="binaries",
+        name="二进制文件",
+        reason_of=_binary_reason,
+        report_reason=lambda _: BINARY_FILE_REASON,
+        disposition="exclude",
+        out_of_scope_message="二进制文件由规则剔除，无需 AI 判定：{path}",
+        disposition_message="二进制文件必须剔除",
+    ),
+)
 
 
 def main_c_template(platform: str) -> str:
@@ -303,33 +374,25 @@ def scan_project(project_dir: Path) -> ProjectStructure:
         raise MasterError(f"工程目录不存在：{project_dir}")
     platform = _detect_platform(project_dir)
     files: list[str] = []
-    residues: list[str] = []
-    main_c_files: list[str] = []
-    infrastructure: list[str] = []
-    binaries: list[str] = []
     hashes: dict[str, str] = {}
+    category_lists: dict[str, list[str]] = {
+        cat.key: [] for cat in RULE_CATEGORIES
+    }
     for path in sorted(project_dir.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(project_dir).as_posix()
         if _is_ignored(rel):
             continue
-        if residue_reason(rel) is not None:
-            residues.append(rel)
-            continue
-        if main_c_reason(rel) is not None:
-            main_c_files.append(rel)
-            continue
-        if infrastructure_reason(rel) is not None:
-            # 启动文件 / 链接脚本：确定性保留，不进 AI 判定也不读内容
-            infrastructure.append(rel)
-            continue
-        if _is_binary_file(path):
-            # 二进制文件（内容判据）：确定性剔除，不进 AI 判定也不读全文
-            binaries.append(rel)
-            continue
-        files.append(rel)
-        hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+        for cat in RULE_CATEGORIES:
+            if cat.reason_of(rel, path) is not None:
+                # 类别互斥、按表序判定（残留 → main.c → 基础设施 → 二进制）：
+                # 命中即分类、不读全文（二进制探针只读文件头）
+                category_lists[cat.key].append(rel)
+                break
+        else:
+            files.append(rel)
+            hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return ProjectStructure(
         project_dir=project_dir,
         name=project_dir.name,
@@ -337,10 +400,10 @@ def scan_project(project_dir: Path) -> ProjectStructure:
         files=tuple(files),
         file_hashes=hashes,
         config_summary=_config_summary(project_dir, platform),
-        residues=tuple(residues),
-        main_c_files=tuple(main_c_files),
-        infrastructure=tuple(infrastructure),
-        binaries=tuple(binaries),
+        residues=tuple(category_lists["residues"]),
+        main_c_files=tuple(category_lists["main_c_files"]),
+        infrastructure=tuple(category_lists["infrastructure"]),
+        binaries=tuple(category_lists["binaries"]),
     )
 
 
@@ -395,12 +458,13 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
         judgment=(
             tuple(sorted(common)) + tuple(sorted(conflicts)) + tuple(sorted(unique))
         ),
-        residues=tuple(sorted({r for p in projects for r in p.residues})),
-        main_c_files=tuple(sorted({m for p in projects for m in p.main_c_files})),
-        infrastructure=tuple(
-            sorted({i for p in projects for i in p.infrastructure})
-        ),
-        binaries=tuple(sorted({b for p in projects for b in p.binaries})),
+        # 类别分组并集（残留 / main.c / 基础设施 / 二进制，遍历类别表）
+        **{
+            cat.key: tuple(
+                sorted({v for p in projects for v in getattr(p, cat.key)})
+            )
+            for cat in RULE_CATEGORIES
+        },
     )
 
 
@@ -514,49 +578,46 @@ def assemble_report(
     AI 判定即越界，报告 keep 清单自动带规则化原因——这些文件判错（剔除）
     会直接断掉空工程的编译链。以上在确认前就拦住，兑现"不带病进入确认流程"。
     """
-    residues = set(comparison.residues)
-    main_c_files = set(comparison.main_c_files)
-    infrastructure = set(comparison.infrastructure)
-    binaries = set(comparison.binaries)
     scoped: list[FileDecision] = []
     for decision in decisions:
-        if decision.path in residues:
-            # 残留由规则确定性剔除，AI 从未在素材里见过它——判定即越界
-            raise MasterError(f"残留文件由规则剔除，无需 AI 判定：{decision.path}")
-        if decision.path in main_c_files:
-            # 旧 main.c 由模板确定性替代（ADR 0002），AI 从未在素材里见过它
-            raise MasterError(f"旧工程 main.c 由模板替代，无需 AI 判定：{decision.path}")
-        if decision.path in infrastructure:
-            # 启动文件 / 链接脚本由规则确定性保留，AI 从未在素材里见过它
-            raise MasterError(f"基础设施由规则保留，无需 AI 判定：{decision.path}")
-        if decision.path in binaries:
-            # 二进制文件由内容规则确定性剔除，AI 从未在素材里见过它
-            raise MasterError(f"二进制文件由规则剔除，无需 AI 判定：{decision.path}")
+        for cat in RULE_CATEGORIES:
+            if decision.path in getattr(comparison, cat.key):
+                # 类别由规则确定性处置（剔除 / 保留 / 模板替代），AI 从未在
+                # 素材里见过它——判定即越界，确认前拦住，兑现"不带病进入确认流程"
+                raise MasterError(
+                    cat.out_of_scope_message.format(path=decision.path)
+                )
         scoped.append(decision)
     decided = {d.path for d in scoped}
     _validate_judgment_coverage(decided=decided, judgment=set(comparison.judgment))
     _validate_merge_sources(scoped, comparison)
 
-    keep: list[FileDecision] = [
-        FileDecision(path, ACTION_KEEP, reason=INFRASTRUCTURE_REASON)
-        for path in comparison.infrastructure
-    ] + [d for d in scoped if d.action == ACTION_KEEP]
+    # 类别文件自动进报告（带规则化原因，ADR 0001：不做黑盒消失）。顺序与旧
+    # 行为一致：keep 的类别文件排前（旧：基础设施先拼），exclude 的排后
+    # （旧：AI 判定先拼）
+    category_keep: list[FileDecision] = []
+    category_exclude: list[FileDecision] = []
+    for cat in RULE_CATEGORIES:
+        for path in getattr(comparison, cat.key):
+            reason = cat.report_reason(path)
+            if reason is None:
+                # 对比结果由扫描分类产生，类别路径必命中规则；手动构造的对比
+                # 带病也要在此大声失败，而不是把 None 理由带进报告
+                raise MasterError(f"{cat.name}未命中规则：{path}")
+            decision = FileDecision(
+                path,
+                ACTION_KEEP if cat.disposition == "keep" else ACTION_EXCLUDE,
+                reason=reason,
+            )
+            (category_keep if cat.disposition == "keep" else category_exclude).append(
+                decision
+            )
+    keep: list[FileDecision] = category_keep + [
+        d for d in scoped if d.action == ACTION_KEEP
+    ]
     merge: list[FileDecision] = [d for d in scoped if d.action == ACTION_MERGE]
     exclude: list[FileDecision] = [d for d in scoped if d.action == ACTION_EXCLUDE]
-    for path in comparison.residues:
-        reason = residue_reason(path)
-        if reason is None:
-            # 对比结果由扫描分类产生，残留路径必命中规则；手动构造的对比
-            # 带病也要在此大声失败，而不是把 None 理由带进报告
-            raise MasterError(f"残留路径未命中规则：{path}")
-        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=reason))
-    for path in comparison.main_c_files:
-        reason = main_c_reason(path)
-        if reason is None:
-            raise MasterError(f"旧工程 main.c 未命中规则：{path}")
-        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=reason))
-    for path in comparison.binaries:
-        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=BINARY_FILE_REASON))
+    exclude += category_exclude
     return DistillationReport(
         platform=platform,
         projects=tuple(project_names),
@@ -666,91 +727,53 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
         raise MasterError(
             "公共文件必须保留或剔除：" + "、".join(sorted(misplaced_commons))
         )
-    # 残留、旧 main.c 与二进制文件在报告里但不在判定范围（规则识别、确定性
-    # 剔除），从覆盖校验中扣除；它们必须恰好出现在 exclude 里，由各自的
-    # _validate_*_disposition 单独校验；基础设施（启动文件 / 链接脚本）同样
-    # 不在判定范围，必须恰好出现在 keep 里
+    # 类别文件（残留 / 旧 main.c / 基础设施 / 二进制）不在判定范围（规则识别、
+    # 确定性处置），从覆盖校验中扣除；它们必须恰好按各自 disposition 处置，
+    # 由 _validate_category_disposition 逐类校验（遍历类别表）
+    category_paths = {
+        path
+        for cat in RULE_CATEGORIES
+        for path in getattr(comparison, cat.key)
+    }
     _validate_judgment_coverage(
-        decided=set(paths) - set(comparison.residues) - set(comparison.main_c_files)
-        - set(comparison.infrastructure) - set(comparison.binaries),
+        decided=set(paths) - category_paths,
         judgment=set(comparison.judgment),
     )
-    _validate_residue_disposition(report, comparison)
-    _validate_main_c_disposition(report, comparison)
-    _validate_binary_disposition(report, comparison)
-    _validate_infrastructure_disposition(report, comparison)
+    for cat in RULE_CATEGORIES:
+        _validate_category_disposition(cat, report, comparison)
     _validate_merge_sources(dispositions, comparison)
 
 
-def _validate_residue_disposition(
-    report: DistillationReport, comparison: ProjectComparison
+def _validate_category_disposition(
+    category: RuleCategory,
+    report: DistillationReport,
+    comparison: ProjectComparison,
 ) -> None:
-    """残留必须恰好剔除一次：规则识别的确定性剔除（见 _validate_forced_exclusions）。"""
-    _validate_forced_exclusions(
-        set(comparison.residues), report, "残留文件必须剔除"
-    )
+    """类别文件必须恰好按 disposition 处置一次（保留 / 剔除）。
 
-
-def _validate_main_c_disposition(
-    report: DistillationReport, comparison: ProjectComparison
-) -> None:
-    """旧工程 main.c 必须恰好剔除一次：模板替代的确定性剔除（ADR 0002，
-    见 _validate_forced_exclusions）。"""
-    _validate_forced_exclusions(
-        set(comparison.main_c_files), report, "旧工程 main.c 必须剔除"
-    )
-
-
-def _validate_binary_disposition(
-    report: DistillationReport, comparison: ProjectComparison
-) -> None:
-    """二进制文件必须恰好剔除一次：内容规则识别的确定性剔除（非源码素材，
-    见 _validate_forced_exclusions）。"""
-    _validate_forced_exclusions(
-        set(comparison.binaries), report, "二进制文件必须剔除"
-    )
-
-
-def _validate_forced_exclusions(
-    forced: set[str], report: DistillationReport, error_prefix: str
-) -> None:
-    """确定性剔除的文件必须恰好剔除一次：用户确认也不能改成保留 / 整合或
-    删掉（删掉 = 黑盒消失，ADR 0001）。两种问题一次报全，各自带原因。"""
+    规则识别的确定性处置：用户确认也不能改成别的动作或删掉（删掉 = 黑盒
+    消失，ADR 0001；基础设施被剔除 = 空工程编译链断裂）。两种问题一次报全，
+    各自带原因。
+    """
+    forced = set(getattr(comparison, category.key))
+    expected = ACTION_KEEP if category.disposition == "keep" else ACTION_EXCLUDE
+    section = report.keep if expected == ACTION_KEEP else report.exclude
     moved = sorted(
         forced
         & {
             d.path
             for d in (*report.keep, *report.merge, *report.exclude)
-            if d.action != ACTION_EXCLUDE
+            if d.action != expected
         }
     )
-    missing = sorted(forced - {d.path for d in report.exclude})
+    missing = sorted(forced - {d.path for d in section})
     if moved or missing:
-        problems = [f"{path}（被改为保留/整合）" for path in moved]
+        moved_verbs = "保留/整合" if expected == ACTION_EXCLUDE else "整合/剔除"
+        problems = [f"{path}（被改为{moved_verbs}）" for path in moved]
         problems += [f"{path}（报告中缺失）" for path in missing]
-        raise MasterError(f"{error_prefix}：" + "、".join(problems))
-
-
-def _validate_infrastructure_disposition(
-    report: DistillationReport, comparison: ProjectComparison
-) -> None:
-    """基础设施（启动文件 / 链接脚本）必须恰好保留一次：确定性保留（规则识别，
-    见 assemble_report），用户确认也不能改成整合 / 剔除或删掉——这些文件是
-    空工程编译链的必需件，剔除即编译失败。"""
-    forced = set(comparison.infrastructure)
-    moved = sorted(
-        forced
-        & {
-            d.path
-            for d in (*report.keep, *report.merge, *report.exclude)
-            if d.action != ACTION_KEEP
-        }
-    )
-    missing = sorted(forced - {d.path for d in report.keep})
-    if moved or missing:
-        problems = [f"{path}（被改为整合/剔除）" for path in moved]
-        problems += [f"{path}（报告中缺失）" for path in missing]
-        raise MasterError(f"基础设施必须保留：" + "、".join(problems))
+        raise MasterError(
+            f"{category.disposition_message}：" + "、".join(problems)
+        )
 
 
 def _validate_platform_match(platform: str, comparison: ProjectComparison) -> None:
@@ -780,14 +803,18 @@ def _validate_judgment_coverage(decided: set[str], judgment: set[str]) -> None:
 def _source_project(decision: FileDecision, comparison: ProjectComparison) -> str:
     """keep 取第一个含该文件的工程（merge 由整合产物全文落盘，不取源）。
 
-    基础设施文件（启动文件 / 链接脚本）不在扫描清单（by_path 不含它们），
-    从工程快照的基础设施清单取源。
+    keep 类别的文件（基础设施：启动文件 / 链接脚本）不在扫描清单（by_path
+    不含它们），从工程快照的对应类别清单取源。
     """
     holders = comparison.by_path.get(decision.path, ())
     if holders:
         return holders[0]
     for project in comparison.projects:
-        if decision.path in project.infrastructure:
+        if any(
+            decision.path in getattr(project, cat.key)
+            for cat in RULE_CATEGORIES
+            if cat.disposition == "keep"
+        ):
             return project.name
     raise MasterError(f"没有任何工程含文件 {decision.path}")
 
