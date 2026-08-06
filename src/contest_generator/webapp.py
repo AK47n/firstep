@@ -11,10 +11,12 @@
 
 from __future__ import annotations
 
+import functools
+import inspect
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -112,12 +114,18 @@ def _masters_dir(ctx: AppContext) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# 错误映射：核心异常 → HTTP 状态与中文 message
+# 错误映射：核心异常 → HTTP 状态与中文 message（全路由唯一出口）
 # ---------------------------------------------------------------------------
 
 
 def _error_response(exc: Exception) -> HTTPException:
-    """业务失败 → 400（message 原样带出）；LLM 服务失败 → 502。"""
+    """error_to_http 表：核心异常 → HTTP 状态与中文 message。
+
+    已知异常：业务失败 → 400（message 原样带出）、LLM 服务失败 → 502、
+    文件系统失败 → 400；**未登记的异常 = 真 bug，兜底转 500**——旧实现
+    兜底 400 会把真 bug 吞成业务失败（测试 raise_server_exceptions=False
+    时静默通过）。新异常类型必须在此登记，否则按真 bug 大声 500。
+    """
     if isinstance(exc, LLMError):
         return HTTPException(502, f"AI 服务调用失败：{exc}")
     if isinstance(exc, (KeilProjectError, CcsProjectError)):
@@ -128,7 +136,55 @@ def _error_response(exc: Exception) -> HTTPException:
         # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
         # 转 400 带说明，不裸 500
         return HTTPException(400, f"文件操作失败：{exc}")
-    return HTTPException(400, str(exc))
+    if isinstance(
+        exc,
+        (
+            ExtractionError,
+            LibraryError,
+            MasterError,
+            SelectionError,
+            GeneratorError,
+            ConfigError,
+        ),
+    ):
+        # 业务失败：message 原样带出（用户可按提示修正重试）
+        return HTTPException(400, str(exc))
+    # 兜底：未登记异常 = 真 bug，500 大声失败（带类型名方便排查）
+    return HTTPException(500, f"服务器内部错误（{type(exc).__name__}）：{exc}")
+
+
+def _map_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """路由包装兜底：路由内任何异常统一经 error_to_http 表映射。
+
+    路由只写业务逻辑、不写 catch 元组——catch 元组漏类型（如漏 OSError）
+    是裸 500 的 bug 根源（568cf51 修过 confirm 端点，scan/distill 同款漏洞）。
+    HTTPException（参数校验等直接抛出的 400）原样穿透；其余异常由
+    _error_response 兜底映射，未登记异常转 500 大声失败。
+    """
+
+    if inspect.iscoroutinefunction(fn):
+
+        @functools.wraps(fn)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return await fn(*args, **kwargs)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise _error_response(exc) from exc
+
+        return async_wrapper
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise _error_response(exc) from exc
+
+    return wrapper
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -184,16 +240,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     # 全局状态：平台可用性 / 配置状态 / 工作目录
     @app.get("/api/state")
+    @_map_errors
     def state() -> dict:
         """首页状态：配置状态 + 平台可用性（母版缺失的平台标记暂不可用）。"""
         config = _current_config(context)
         dirs = config or AppConfig()  # 未配置时展示默认工作目录
-        try:
-            masters = (
-                list_masters(dirs.masters_dir) if dirs.masters_dir.is_dir() else []
-            )
-        except MasterError as exc:
-            raise _error_response(exc) from exc
+        masters = (
+            list_masters(dirs.masters_dir) if dirs.masters_dir.is_dir() else []
+        )
         master_platforms = {meta.platform for meta in masters}
         return {
             "api_configured": config is not None,
@@ -221,112 +275,93 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # ------------------------------------------------------------------
 
     @app.post("/api/extract")
+    @_map_errors
     async def extract(upload: UploadFile = File(...)) -> dict:
         """上传赛题文件（PDF / .docx / .txt / .md）→ 抽取纯文本。"""
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=Path(upload.filename or "").suffix
+        ) as tmp:
+            tmp.write(await upload.read())
+            tmp_path = Path(tmp.name)
         try:
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=Path(upload.filename or "").suffix
-            ) as tmp:
-                tmp.write(await upload.read())
-                tmp_path = Path(tmp.name)
-            try:
-                return {"text": extract_file(tmp_path)}
-            finally:
-                tmp_path.unlink(missing_ok=True)
-        except ExtractionError as exc:
-            raise _error_response(exc) from exc
+            return {"text": extract_file(tmp_path)}
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     @app.post("/api/recommend")
+    @_map_errors
     def recommend(payload: dict) -> dict:
         """AI 按赛题推荐模块并给出理由（未展开依赖、未检查平台可用性）。"""
         problem_text = _require_str(payload, "problem_text")
-        try:
-            library_dir = _library_dir(context)
-            summaries = build_manifest_summaries(list_modules(library_dir))
-            selection = _llm(context).select_modules(problem_text, summaries)
-            return {
-                "modules": [
-                    {"slug": slug, "reason": selection.reasons.get(slug, "")}
-                    for slug in selection.modules
-                ]
-            }
-        except (LibraryError, LLMError) as exc:
-            raise _error_response(exc) from exc
+        library_dir = _library_dir(context)
+        summaries = build_manifest_summaries(list_modules(library_dir))
+        selection = _llm(context).select_modules(problem_text, summaries)
+        return {
+            "modules": [
+                {"slug": slug, "reason": selection.reasons.get(slug, "")}
+                for slug in selection.modules
+            ]
+        }
 
     @app.post("/api/selection/expand")
+    @_map_errors
     def expand_selection(payload: dict) -> dict:
         """展开依赖 + 平台可用性检查：用户增删选择后重跑一次即可。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
-        try:
-            resolved = resolve_selection(_library_dir(context), platform, slugs)
-            return {
-                "modules": [m.to_dict() for m in resolved.manifests],
-                "warnings": [
-                    {"slug": w.slug, "kind": w.kind, "message": w.message}
-                    for w in resolved.warnings
-                ],
-            }
-        except (LibraryError, SelectionError) as exc:
-            raise _error_response(exc) from exc
+        resolved = resolve_selection(_library_dir(context), platform, slugs)
+        return {
+            "modules": [m.to_dict() for m in resolved.manifests],
+            "warnings": [
+                {"slug": w.slug, "kind": w.kind, "message": w.message}
+                for w in resolved.warnings
+            ],
+        }
 
     @app.post("/api/skeleton")
+    @_map_errors
     def skeleton(payload: dict) -> dict:
         """main.c 骨架：LLM 出稿 + 静态自检（不存在的调用改写为注释占位）。"""
         problem_text = _require_str(payload, "problem_text")
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
-        try:
-            resolved = resolve_selection(_library_dir(context), platform, slugs)
-            main_c, intercepted = generate_skeleton(
-                _llm(context), problem_text, resolved.manifests, platform, _library_dir(context)
-            )
-            return {"main_c": main_c, "intercepted": list(intercepted)}
-        except (LibraryError, SelectionError, LLMError) as exc:
-            raise _error_response(exc) from exc
+        resolved = resolve_selection(_library_dir(context), platform, slugs)
+        main_c, intercepted = generate_skeleton(
+            _llm(context), problem_text, resolved.manifests, platform, _library_dir(context)
+        )
+        return {"main_c": main_c, "intercepted": list(intercepted)}
 
     @app.post("/api/generate")
+    @_map_errors
     def generate(payload: dict) -> dict:
         """完整生成：选模块 → 母版 → 生成 → 摘要（流程在 generate_project）。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
         output_dir = Path(_require_str(payload, "output_dir"))
-        try:
-            config = _require_config(context)
-            summary = generate_project(
-                platform=platform,
-                slugs=slugs,
-                main_c_content=main_c,
-                output_dir=output_dir,
-                module_library_dir=config.module_library_dir,
-                masters_dir=config.masters_dir,
-            )
-            return _generation_result(summary)
-        except (
-            LibraryError,
-            SelectionError,
-            GeneratorError,
-            MasterError,
-            KeilProjectError,
-            CcsProjectError,
-            OSError,
-        ) as exc:
-            raise _error_response(exc) from exc
+        config = _require_config(context)
+        summary = generate_project(
+            platform=platform,
+            slugs=slugs,
+            main_c_content=main_c,
+            output_dir=output_dir,
+            module_library_dir=config.module_library_dir,
+            masters_dir=config.masters_dir,
+        )
+        return _generation_result(summary)
 
     # ------------------------------------------------------------------
     # 模块库（工单 07）：浏览 / AI 录入 / 编辑简介 / 多平台版本 / 删除
     # ------------------------------------------------------------------
 
     @app.get("/api/modules")
+    @_map_errors
     def modules() -> list[dict]:
         """浏览模块库（磁盘目录即数据库，实时读盘）。"""
-        try:
-            return [m.to_dict() for m in list_modules(_library_dir(context))]
-        except LibraryError as exc:
-            raise _error_response(exc) from exc
+        return [m.to_dict() for m in list_modules(_library_dir(context))]
 
     @app.post("/api/modules")
+    @_map_errors
     def module_add(payload: dict) -> dict:
         """AI 录入：通读代码出简介草稿 → 用户填简介 → 一致性校验通过才入库。
 
@@ -338,150 +373,130 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         files = payload.get("files")
         if not isinstance(files, dict):
             raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
-        try:
-            llm = _llm(context)
-            if not description:
-                description = draft_description(llm, files)
-                return {"draft": description}
-            manifest = add_module(
-                llm,
-                _library_dir(context),
-                slug=slug,
-                platform=platform,
-                description=description,
-                files=files,
-                dependencies=_require_str_list(payload, "dependencies", default=()),
-                hardware_bound=_require_flag(payload, "hardware_bound"),
-                verified=_require_flag(payload, "verified"),
-                notes=str(payload.get("notes", "")),
-            )
-            return manifest.to_dict()
-        except (LibraryError, LLMError) as exc:
-            raise _error_response(exc) from exc
+        llm = _llm(context)
+        if not description:
+            description = draft_description(llm, files)
+            return {"draft": description}
+        manifest = add_module(
+            llm,
+            _library_dir(context),
+            slug=slug,
+            platform=platform,
+            description=description,
+            files=files,
+            dependencies=_require_str_list(payload, "dependencies", default=()),
+            hardware_bound=_require_flag(payload, "hardware_bound"),
+            verified=_require_flag(payload, "verified"),
+            notes=str(payload.get("notes", "")),
+        )
+        return manifest.to_dict()
 
     @app.put("/api/modules/{slug}/description")
+    @_map_errors
     def module_description(slug: str, payload: dict) -> dict:
         """编辑简介：AI 校验新简介与代码一致后才写回。"""
-        try:
-            manifest = update_module_description(
-                _llm(context), _library_dir(context), slug, _require_str(payload, "description")
-            )
-            return manifest.to_dict()
-        except (LibraryError, LLMError) as exc:
-            raise _error_response(exc) from exc
+        manifest = update_module_description(
+            _llm(context), _library_dir(context), slug, _require_str(payload, "description")
+        )
+        return manifest.to_dict()
 
     @app.post("/api/modules/{slug}/platform-files")
+    @_map_errors
     def module_platform_files(slug: str, payload: dict) -> dict:
         """给模块添加某平台版本文件（内容一致的共享路径复用）。"""
         platform = _require_str(payload, "platform")
         files = payload.get("files")
         if not isinstance(files, dict):
             raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
-        try:
-            manifest = add_platform_files(
-                _library_dir(context), slug, platform, files
-            )
-            return manifest.to_dict()
-        except (LibraryError, LLMError) as exc:
-            raise _error_response(exc) from exc
+        manifest = add_platform_files(
+            _library_dir(context), slug, platform, files
+        )
+        return manifest.to_dict()
 
     @app.delete("/api/modules/{slug}/platform-files")
+    @_map_errors
     def module_platform_files_delete(slug: str, payload: dict) -> dict:
         """删除某平台版本的文件（共享文件只移出条目，磁盘保留）。"""
         platform = _require_str(payload, "platform")
         filenames = _require_str_list(payload, "filenames")
-        try:
-            manifest = remove_platform_files(
-                _library_dir(context), slug, platform, filenames
-            )
-            return manifest.to_dict()
-        except LibraryError as exc:
-            raise _error_response(exc) from exc
+        manifest = remove_platform_files(
+            _library_dir(context), slug, platform, filenames
+        )
+        return manifest.to_dict()
 
     @app.delete("/api/modules/{slug}")
+    @_map_errors
     def module_delete(slug: str) -> dict:
         """删除模块：整个目录移除。"""
-        try:
-            delete_module(_library_dir(context), slug)
-            return {"ok": True}
-        except LibraryError as exc:
-            raise _error_response(exc) from exc
+        delete_module(_library_dir(context), slug)
+        return {"ok": True}
 
     # ------------------------------------------------------------------
     # 母版提炼（工单 08）：导入旧工程 → AI 报告 → 确认入库
     # ------------------------------------------------------------------
 
     @app.post("/api/masters/scan")
+    @_map_errors
     def masters_scan(payload: dict) -> list[dict]:
         """逐个扫描导入的旧工程：平台检测 + 文件清单 + 配置摘要。"""
-        try:
-            return [
-                {
-                    "name": structure.name,
-                    "platform": structure.platform,
-                    "files": list(structure.files),
-                    "config_summary": list(structure.config_summary),
-                }
-                for structure in (
-                    scan_project(Path(d))
-                    for d in _require_str_list(payload, "project_dirs")
-                )
-            ]
-        except MasterError as exc:
-            raise _error_response(exc) from exc
+        return [
+            {
+                "name": structure.name,
+                "platform": structure.platform,
+                "files": list(structure.files),
+                "config_summary": list(structure.config_summary),
+            }
+            for structure in (
+                scan_project(Path(d))
+                for d in _require_str_list(payload, "project_dirs")
+            )
+        ]
 
     @app.post("/api/masters/distill")
+    @_map_errors
     def masters_distill(payload: dict) -> dict:
         """AI 提炼报告（保留 / 合并 / 剔除清单 + 理由）；确认前不落任何东西。"""
         platform = _require_str(payload, "platform")
-        try:
-            projects = [
-                scan_project(Path(d))
-                for d in _require_str_list(payload, "project_dirs")
-            ]
-            report = distill_master(_llm(context), platform, projects)
-            return report.to_dict()
-        except (MasterError, LLMError) as exc:
-            raise _error_response(exc) from exc
+        projects = [
+            scan_project(Path(d))
+            for d in _require_str_list(payload, "project_dirs")
+        ]
+        report = distill_master(_llm(context), platform, projects)
+        return report.to_dict()
 
     @app.post("/api/masters/confirm")
+    @_map_errors
     def masters_confirm(payload: dict) -> dict:
         """确认报告：落盘母版候选 → 结构分析 → 入库（事务在 confirm_distillation）。"""
-        try:
-            project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
-            meta = confirm_distillation(_masters_dir(context), project_dirs, payload)
-            return {
-                "platform": meta.platform,
-                "sources": list(meta.sources),
-                "warnings": list(meta.warnings),
-            }
-        except (MasterError, KeilProjectError, CcsProjectError, OSError) as exc:
-            raise _error_response(exc) from exc
+        project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
+        meta = confirm_distillation(_masters_dir(context), project_dirs, payload)
+        return {
+            "platform": meta.platform,
+            "sources": list(meta.sources),
+            "warnings": list(meta.warnings),
+        }
 
     @app.get("/api/masters")
+    @_map_errors
     def masters() -> list[dict]:
         """浏览母版库（每平台一个母版）。"""
-        try:
-            return [
-                {"platform": m.platform, "sources": list(m.sources), "warnings": list(m.warnings)}
-                for m in list_masters(_masters_dir(context))
-            ]
-        except MasterError as exc:
-            raise _error_response(exc) from exc
+        return [
+            {"platform": m.platform, "sources": list(m.sources), "warnings": list(m.warnings)}
+            for m in list_masters(_masters_dir(context))
+        ]
 
     @app.delete("/api/masters/{platform}")
+    @_map_errors
     def master_delete(platform: str) -> dict:
-        try:
-            delete_master(_masters_dir(context), platform)
-            return {"ok": True}
-        except MasterError as exc:
-            raise _error_response(exc) from exc
+        delete_master(_masters_dir(context), platform)
+        return {"ok": True}
 
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）
     # ------------------------------------------------------------------
 
     @app.get("/api/settings")
+    @_map_errors
     def settings_get() -> dict:
         """读取设置；API key 只回掩码，不回明文。"""
         config = _current_config(context)
@@ -501,6 +516,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         }
 
     @app.put("/api/settings")
+    @_map_errors
     def settings_put(payload: dict) -> dict:
         """保存设置并立即生效；api_key 收到掩码说明用户没改，沿用旧值。"""
         existing = _current_config(context)
@@ -512,19 +528,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             if existing is None:
                 raise HTTPException(400, "首次配置必须填写 API key")
             api_key = existing.api_key
-        try:
-            config = AppConfig(
-                base_url=_require_str(payload, "base_url"),
-                api_key=api_key,
-                model=_require_str(payload, "model"),
-                module_library_dir=Path(_require_str(payload, "module_library_dir")),
-                masters_dir=Path(_require_str(payload, "masters_dir")),
-            )
-            save_config(config, context.config_path)
-            context.config = config  # 即时生效：后续请求直接用新配置
-            return {"ok": True}
-        except ConfigError as exc:
-            raise HTTPException(400, str(exc)) from exc
+        config = AppConfig(
+            base_url=_require_str(payload, "base_url"),
+            api_key=api_key,
+            model=_require_str(payload, "model"),
+            module_library_dir=Path(_require_str(payload, "module_library_dir")),
+            masters_dir=Path(_require_str(payload, "masters_dir")),
+        )
+        save_config(config, context.config_path)
+        context.config = config  # 即时生效：后续请求直接用新配置
+        return {"ok": True}
 
     return app
 

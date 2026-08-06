@@ -708,6 +708,78 @@ def test_master_confirm_uvprojx_excluded_returns_400(context, tmp_path):
     assert client.get("/api/masters").json() == []  # 失败不入库
 
 
+def test_master_scan_oserror_returns_400_not_500(context, monkeypatch):
+    """/api/masters/scan 漏捕 OSError → 裸 500（评审点名的已知 bug 类）→ 400。
+
+    扫描读文件遇权限 / 占用 / 磁盘满时 scan_project 抛 OSError，旧 catch
+    元组只捕 MasterError 让它裸传成 500。统一路由包装后任何 OSError 都经
+    error_to_http 表转 400 带中文 message。
+    """
+
+    def boom(project_dir):
+        raise OSError("权限不足")
+
+    monkeypatch.setattr("contest_generator.webapp.scan_project", boom)
+    client = TestClient(create_app(context[0]), raise_server_exceptions=False)
+
+    resp = client.post("/api/masters/scan", json={"project_dirs": ["proj-a"]})
+
+    assert resp.status_code == 400
+    assert "文件操作失败" in resp.json()["detail"]
+
+
+class _OSErrorLLM(RaisingLLM):
+    """扫描之后 AI 阶段抛 OSError（模拟读素材 / 写临时文件时的系统失败）。"""
+
+    def distill_master(
+        self, platform, project_names, judgment_files, comparison_summary
+    ):
+        raise OSError("磁盘已满")
+
+
+class _BoomLLM(RaisingLLM):
+    """抛未登记异常：任何非已知类型 = 真 bug，必须 500 大声失败。"""
+
+    def distill_master(
+        self, platform, project_names, judgment_files, comparison_summary
+    ):
+        raise RuntimeError("内部损坏")
+
+
+def test_master_distill_oserror_returns_400_not_500(context, tmp_path):
+    """/api/masters/distill 的 OSError（旧 catch 元组漏捕的同类漏洞）→ 400。"""
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"] = _OSErrorLLM()
+    client = TestClient(create_app(context[0]), raise_server_exceptions=False)
+
+    resp = client.post(
+        "/api/masters/distill",
+        json={"platform": PLATFORM_STM32, "project_dirs": [str(proj_a), str(proj_b)]},
+    )
+
+    assert resp.status_code == 400
+    assert "文件操作失败" in resp.json()["detail"]
+
+
+def test_unknown_exception_returns_500_not_400(context, tmp_path):
+    """未登记异常 = 真 bug → 500 带类型名，不吞成业务 400。
+
+    旧实现 _error_response 兜底 400：真 bug 以业务失败静默通过（配合测试
+    raise_server_exceptions=False 时无声无息）。统一映射后兜底 500 大声失败。
+    """
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"] = _BoomLLM()
+    client = TestClient(create_app(context[0]), raise_server_exceptions=False)
+
+    resp = client.post(
+        "/api/masters/distill",
+        json={"platform": PLATFORM_STM32, "project_dirs": [str(proj_a), str(proj_b)]},
+    )
+
+    assert resp.status_code == 500
+    assert "服务器内部错误（RuntimeError）" in resp.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # 设置：保存后即时生效（验收项 6）
 # ---------------------------------------------------------------------------
