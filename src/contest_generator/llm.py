@@ -4,7 +4,10 @@
 模型来自本机配置文件 config.py）；HTTP 传输可注入假件，网络调用不进测试。
 LLM 承担四个职责：赛题→模块选择、main.c 骨架生成、模块简介生成与校验、
 母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出摘要，
-再基于摘要判定）。
+再基于摘要判定）。请求体有大小控制：所有嵌内容调用（赛题 / 接口块 / 文件
+全文）超长截断（带标注，AI 知道读到的是截断内容）、摘要阶段多文件按预算
+分批发送、发送前有序列化体积断言兜底——DeepSeek 网关对请求体有硬性大小
+限制，一次性全发会 413。
 """
 
 from __future__ import annotations
@@ -19,16 +22,28 @@ from .config import AppConfig
 from .manifest import ModuleManifest
 from .report import ACTION_MERGE, FileDecision, ReportError
 
+# ---------------------------------------------------------------------------
+# 截断标注契约（唯一出处）
+#
+# 所有嵌内容调用（赛题 / 接口块 / 文件全文）截断时都带标注；标注措辞的
+# 唯一出处在此。系统提示词与用户提示词必须包含它（双端契约测试断言）——
+# 只改一处会让模型在另一侧消息里以为读到的是完整内容（ticket 06 的
+# 双端漂移教训：曾只改系统提示词、漏改用户提示词，提炼当场失败）。
+# ---------------------------------------------------------------------------
+TRUNCATION_NOTICE = "按所见内容判断，不要脑补缺失部分"
+
 SELECT_SYSTEM_PROMPT = (
     "你是电子设计竞赛（电赛）嵌入式开发助手，熟悉 MSPM0G3507（CCS）与 "
     "STM32F103C8T6（Keil5）两条平台线。根据赛题在给定的模块库中选择合适的"
-    "现成模块，为每个推荐给出简短理由（中文）。只输出 JSON 对象。"
+    "现成模块（赛题文本过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE
+    + "），为每个推荐给出简短理由（中文）。只输出 JSON 对象。"
 )
 
 SKELETON_SYSTEM_PROMPT = (
-    "你是嵌入式 C 工程师。为赛题生成 main.c 骨架：按所选模块的头文件接口排好初始化序列，"
-    "带注释说明与预留编写区（TODO）。只调用给定接口中真实存在的函数，绝不凭空造函数；"
-    "不确定的调用写成注释占位，保证骨架可编译。"
+    "你是嵌入式 C 工程师。为赛题生成 main.c 骨架（赛题文本 / 模块接口过长"
+    "可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：按所选模块的头文件"
+    "接口排好初始化序列，带注释说明与预留编写区（TODO）。只调用给定接口中"
+    "真实存在的函数，绝不凭空造函数；不确定的调用写成注释占位，保证骨架可编译。"
 )
 
 SUMMARY_SYSTEM_PROMPT = "你是嵌入式 C 工程师。用中文一句话总结这段代码的功能，作为模块库简介。"
@@ -41,7 +56,8 @@ VALIDATION_SYSTEM_PROMPT = (
 JUDGMENT_SUMMARY_SYSTEM_PROMPT = (
     "你是嵌入式开发工程整理助手。导入的多个同平台旧工程里，有些文件需要判定"
     "去留：同一路径在不同工程里内容不同（冲突），或只出现在部分工程（独有），"
-    "或所有工程内容一致（公共，同样要判）。逐文件读全文后，为每个内容版本用"
+    "或所有工程内容一致（公共，同样要判）。逐文件读全文（超长文件已截断并在"
+    "末尾标注，" + TRUNCATION_NOTICE + "）后，为每个内容版本用"
     "中文写一段简短摘要：说明它实现什么功能、是否通用、是否基础建设必需。"
     "必须为列出的每个文件输出摘要，一个都不能少。只输出 JSON 对象。"
 )
@@ -73,8 +89,9 @@ DISTILL_SYSTEM_PROMPT = (
 # 判定素材内容上限（字符）：第一阶段提示词把每个内容版本全文嵌入，真实旧
 # 工程里的巨型源码（如 stm32f10x.h ~800KB 标准库头）全文嵌入会撑爆上下文
 # （判例 08：三个真实工程修复前判定素材 47.6M 字符，修复后按此上限嵌入
-# 29 万字符）。截断只影响判定素材（文件头足以判断性质），keep 落盘仍复制
-# 工程原文全文，不受截断影响。
+# 29 万字符）。截断只影响发送素材（文件头足以判断性质），keep 落盘仍复制
+# 工程原文全文，不受截断影响。该上限同时是所有嵌内容调用（赛题 / 接口块 /
+# 简介校验代码）的统一截断上限——_truncate_content 走这里。
 JUDGMENT_CONTENT_CAP = 4000
 
 # 两阶段输出的补问上限：模型一次输出大量 JSON 条目时偶发丢条目（判例 08：
@@ -85,13 +102,91 @@ SUMMARY_RETRY_LIMIT = 3
 # 判定分批大小：一次问太多文件，模型会系统性漏掉小配置文件 / 点文件
 # （判例 08：115 个文件一次返回漏 30 个，补问也不收敛——不是偶发，是批量
 # 超载）。按此大小分批问，总输入 token 不变（每个文件只嵌入一次），漏判
-# 从"必现"降为"偶发"，交给补问机制兜底。
+# 从"必现"降为"偶发"，交给补问机制兜底。摘要阶段的分批同时受文件数上限
+# （本常量，模型可靠性）与字符预算（MAX_SUMMARY_BATCH_CHARS，请求体上限）
+# 双重约束，见 _judgment_batches。
 JUDGMENT_BATCH_SIZE = 25
+
+# 请求体预算（413 修复）：DeepSeek 网关对请求体有硬性大小限制（超限返回
+# "413 Request Entity Too Large"），导入带标准外设库 / driverlib 的完整工程
+# 时，摘要阶段把全部文件全文一次塞进一个请求必然超限。批预算远小于网关
+# 限制，提示词开销与 JSON 转义不占预算余量。
+MAX_SUMMARY_BATCH_CHARS = 24000  # 每批摘要请求的内容字符预算
+MAX_REQUEST_BYTES = 128 * 1024  # 发送前断言：序列化请求体超过此字节数即大声失败（兜底）
 
 
 def _chunked(items: Sequence[Any], size: int) -> list[list[Any]]:
     """按 size 切分列表（最后一块可以不满）。"""
     return [list(items[i : i + size]) for i in range(0, len(items), size)]
+
+
+def _truncate_content(content: str) -> str:
+    """单内容截断（带标注）：超长内容只送前 JUDGMENT_CONTENT_CAP 字符。
+
+    标注让 AI 明确知道读到的是截断内容（TRUNCATION_NOTICE，措辞唯一出处），
+    并注明原文总长——模型不会被误导以为文件就这么短，也不脑补缺失部分。
+    截断只影响发送素材（赛题 / 接口块 / 文件全文），不改数据模型；未超长
+    原样返回。
+    """
+    if len(content) <= JUDGMENT_CONTENT_CAP:
+        return content
+    return (
+        content[:JUDGMENT_CONTENT_CAP]
+        + f"\n……（内容过长，已截断：仅展示前 {JUDGMENT_CONTENT_CAP} 字符，"
+        f"原文共 {len(content)} 字符；{TRUNCATION_NOTICE}）……\n"
+    )
+
+
+def _judgment_batches(
+    judgment_files: Sequence[JudgmentFile],
+) -> tuple[tuple[JudgmentFile, ...], ...]:
+    """按请求体预算 + 文件数上限分批：批内各版本全文（截断后）合计不超预算、
+    文件数不超 JUDGMENT_BATCH_SIZE。
+
+    两个约束各自对应一个判例：预算约束防请求体超网关限制（413）；文件数上限
+    防单批超载导致模型系统性漏判小配置文件（判例 08：一次问 115 个文件漏 30
+    个，补问不收敛）。两个不变量同时成立——漏判从"必现"降为"偶发"，交给
+    补问机制兜底。分批只按"截断后内容字符数"近似——提示词开销与 JSON 转义
+    远小于网关限制，预算本身留了余量。顺序保持输入顺序：摘要产物按批拼接后
+    与发送顺序一致。单文件多版本合计超预算时按版本拆批（单版本截断后 ≤
+    JUDGMENT_CONTENT_CAP，总在预算内；同一批内不出现同一路径两次——
+    parse_summary_report 按路径校验批次覆盖，同批重复路径会让模型输出无法
+    自证）。
+    """
+    batches: list[list[JudgmentFile]] = []
+    current: list[JudgmentFile] = []
+    size = 0
+    for file in judgment_files:
+        file_size = sum(
+            len(_truncate_content(version.content)) for version in file.versions
+        )
+        if file_size > MAX_SUMMARY_BATCH_CHARS:
+            # 单文件多版本合计超预算：按版本拆批（同批内不重复路径）
+            for version in file.versions:
+                unit_size = len(_truncate_content(version.content))
+                if current and (
+                    size + unit_size > MAX_SUMMARY_BATCH_CHARS
+                    or len(current) >= JUDGMENT_BATCH_SIZE
+                    or any(f.path == file.path for f in current)
+                ):
+                    batches.append(current)
+                    current = []
+                    size = 0
+                current.append(JudgmentFile(file.path, (version,)))
+                size += unit_size
+            continue
+        if current and (
+            size + file_size > MAX_SUMMARY_BATCH_CHARS
+            or len(current) >= JUDGMENT_BATCH_SIZE
+        ):
+            batches.append(current)
+            current = []
+            size = 0
+        current.append(file)
+        size += file_size
+    if current:
+        batches.append(current)
+    return tuple(tuple(batch) for batch in batches)
 
 
 def _extract_good_summaries(
@@ -390,7 +485,10 @@ class DeepSeekLLM:
         return self._chat(
             [
                 {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-                {"role": "user", "content": f"```c\n{code}\n```"},
+                {
+                    "role": "user",
+                    "content": f"```c\n{_truncate_content(code)}\n```",
+                },
             ]
         )
 
@@ -440,13 +538,14 @@ class DeepSeekLLM:
 
         大批量素材一次问完时，模型输出偶发丢条目 / JSON 截断（判例 08：真实
         工程 115 个文件一次返回漏 1 个；更大批量甚至系统性漏小配置文件，补问
-        不收敛）。按 JUDGMENT_BATCH_SIZE 分批问（总输入 token 不变），批内
-        严格解析失败后挖出已覆盖的合法条目、只对缺失文件补问，最多
-        SUMMARY_RETRY_LIMIT 轮——宁可在补问上多花一次调用，也不带病进第二
-        阶段。
+        不收敛）。按请求体预算（MAX_SUMMARY_BATCH_CHARS，防网关 413）与文件数
+        上限（JUDGMENT_BATCH_SIZE，防模型批量超载）分批问（_judgment_batches，
+        总输入 token 不变），批内严格解析失败后挖出已覆盖的合法条目、只对
+        缺失文件补问，最多 SUMMARY_RETRY_LIMIT 轮——宁可在补问上多花一次调用，
+        也不带病进第二阶段。
         """
         results: list[FileSummary] = []
-        for batch in _chunked(judgment_files, JUDGMENT_BATCH_SIZE):
+        for batch in _judgment_batches(judgment_files):
             results.extend(self._summarize_batch(platform, project_names, batch))
         return tuple(results)
 
@@ -584,6 +683,15 @@ class DeepSeekLLM:
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
+        body_bytes = json.dumps(payload).encode("utf-8")
+        if len(body_bytes) > MAX_REQUEST_BYTES:
+            # 体积断言兜底：所有嵌内容调用都应已截断 / 分批，仍超限说明有未兜底
+            # 的长输入——请求发出前大声失败（可操作信息），而不是等网关 413
+            raise LLMError(
+                f"请求体过大（{len(body_bytes)} 字节 > {MAX_REQUEST_BYTES} 字节）："
+                "嵌内容的调用应已按预算截断 / 分批，仍超限说明有未兜底的长输入"
+                "（如异常巨大的赛题文本）——请减小输入或减少导入工程的文件大小"
+            )
         url = self._config.base_url.rstrip("/") + "/chat/completions"
         status, body = self._transport.post(
             url,
@@ -595,6 +703,14 @@ class DeepSeekLLM:
             self.TIMEOUT_SECONDS,
         )
         if status != 200:
+            if status == 413:
+                # 网关的请求体大小限制；嵌内容调用已截断分批，仍出现说明有未
+                # 兜底的超长输入（如超大赛题文本）——给出可操作提示
+                raise LLMError(
+                    "DeepSeek API 返回 413：请求体过大。嵌内容素材已按预算截断 / "
+                    "分批发送，若仍触发，请检查赛题文本是否异常巨大，或减少导入"
+                    "工程的文件数量与单文件大小"
+                )
             raise LLMError(f"DeepSeek API 返回 {status}：{body[:200]}")
         try:
             data = json.loads(body)
@@ -784,26 +900,14 @@ def parse_validation_result(content: str) -> ValidationResult:
 
 
 def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) -> str:
-    """赛题 + 清单的 user 消息拼装（模块选择 / main.c 骨架共用）。"""
-    lines = ["赛题：", problem_text, "", heading]
-    lines.extend(items)
-    return "\n".join(lines)
+    """赛题 + 清单的 user 消息拼装（模块选择 / main.c 骨架共用）。
 
-
-def _cap_judgment_content(content: str) -> str:
-    """判定素材内容截断：超过 JUDGMENT_CONTENT_CAP 只保留文件头并注明原文长度。
-
-    文件头足以让模型判断文件性质（标准库头 / 工程配置 / 业务代码）；巨型全文
-    只会在两阶段之间来回搬运。截断标记带原文总长，模型不会被误导以为文件就
-    这么短。
+    赛题文本与清单条目都走截断（_truncate_content，带标注）——模块选择与
+    骨架生成的请求体同样受预算约束，未兜底的长赛题 / 大接口块不再 413。
     """
-    if len(content) <= JUDGMENT_CONTENT_CAP:
-        return content
-    return (
-        content[:JUDGMENT_CONTENT_CAP]
-        + f"\n...（内容过长，已截断：仅展示前 {JUDGMENT_CONTENT_CAP} 字符，"
-        f"原文共 {len(content)} 字符）"
-    )
+    lines = ["赛题：", _truncate_content(problem_text), "", heading]
+    lines.extend(_truncate_content(item) for item in items)
+    return "\n".join(lines)
 
 
 def _selection_user_prompt(problem_text: str, manifest_summaries: Sequence[str]) -> str:
@@ -824,7 +928,8 @@ def _summarize_user_prompt(
         f"导入的工程：{names}",
         "",
         "需要判定的文件（同一路径出现多个内容版本 = 冲突；只出现在部分工程 = "
-        "独有）。读全文后为每个内容版本写一段中文摘要。同一路径在多个工程里"
+        "独有）。读全文（超长文件已截断，见文件末尾标注，" + TRUNCATION_NOTICE
+        + "）后为每个内容版本写一段中文摘要。同一路径在多个工程里"
         "内容不同（冲突）时，每个内容版本必须各输出一条 versions 条目，projects "
         "精确列出持有该版本内容的工程——把不同内容的版本合并成一条是错误：",
     ]
@@ -838,7 +943,7 @@ def _summarize_user_prompt(
             )
             lines.append(
                 f"- {file.path} {label}：\n"
-                f"```c\n{_cap_judgment_content(version.content)}\n```"
+                f"```c\n{_truncate_content(version.content)}\n```"
             )
     lines.append(
         "只返回 json 格式的 JSON 对象："
@@ -890,7 +995,8 @@ def _distill_user_prompt(
 def _validation_user_prompt(description: str, code: str) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     return (
-        f"模块简介：\n{description}\n\n实际代码：\n```c\n{code}\n```\n\n"
+        f"模块简介：\n{_truncate_content(description)}\n\n实际代码：\n"
+        f"```c\n{_truncate_content(code)}\n```\n\n"
         '判断简介与实际代码是否一致，只返回 json 格式的 JSON 对象：'
         '{"consistent": true/false, "issues": "不一致时用中文指出差异，一致时为空字符串"}'
     )

@@ -13,13 +13,21 @@ from contest_generator.llm import (
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
     FileVersion,
+    JUDGMENT_CONTENT_CAP,
+    SELECT_SYSTEM_PROMPT,
+    SKELETON_SYSTEM_PROMPT,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     JudgmentFile,
     LLMError,
+    MAX_REQUEST_BYTES,
+    MAX_SUMMARY_BATCH_CHARS,
+    TRUNCATION_NOTICE,
     VersionSummary,
     _distill_user_prompt,
+    _judgment_batches,
     _summarize_user_prompt,
+    _truncate_content,
     build_manifest_summaries,
     parse_distillation_report,
     parse_module_selection,
@@ -522,6 +530,220 @@ def test_summarize_prompt_caps_oversized_content():
     assert "x" * 20_000 not in message  # 全文不搬运
     assert "内容过长，已截断" in message
     assert "20" in message  # 截断标记注明原文长度
+
+
+# ---------------------------------------------------------------------------
+# 请求体大小控制：截断 + 分批 + 体积断言（413 修复）
+# ---------------------------------------------------------------------------
+
+
+def test_truncate_content_caps_oversized_with_marker():
+    """超长内容截断到预算并带标注（AI 知道读到的是截断内容）；未超长原样返回。"""
+    content = "x" * (JUDGMENT_CONTENT_CAP + 1000)
+
+    truncated = _truncate_content(content)
+
+    assert truncated.startswith(content[:JUDGMENT_CONTENT_CAP])
+    assert "截断" in truncated
+    assert "不要脑补" in truncated
+    assert len(truncated) < JUDGMENT_CONTENT_CAP + 200
+    assert _truncate_content("short") == "short"
+
+
+def test_judgment_batches_splits_by_budget():
+    """分批按内容字符预算：批内合计不超预算，顺序保持输入顺序。
+
+    文件都在截断上限之下（3900 < 4000），预算约束单独生效：6 份合计 23400
+    恰在预算内，第 7 份会超——拆成 6+1 两批。
+    """
+    files = tuple(
+        JudgmentFile(f"{index}.c", (FileVersion("x" * 3900, ("p1",)),))
+        for index in range(7)
+    )
+
+    batches = _judgment_batches(files)
+
+    assert batches == ((files[0], files[1], files[2], files[3], files[4], files[5]), (files[6],))
+    assert _judgment_batches(()) == ()
+
+
+def test_judgment_batches_respects_file_count_cap(monkeypatch):
+    """文件数上限（JUDGMENT_BATCH_SIZE）与预算双约束：小文件时按文件数拆批。
+
+    判例 08 的文件数上限是模型可靠性约束（一次问太多文件系统性漏判小配置
+    文件），413 的预算约束是请求体上限——两者同时成立。
+    """
+    import contest_generator.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "JUDGMENT_BATCH_SIZE", 2)
+    files = tuple(
+        JudgmentFile(f"{index}.c", (FileVersion("/* x */", ("p1",)),))
+        for index in range(5)
+    )
+
+    batches = _judgment_batches(files)
+
+    assert all(len(batch) <= 2 for batch in batches)
+    assert tuple(len(batch) for batch in batches) == (2, 2, 1)
+    assert [f.path for batch in batches for f in batch] == [f"{i}.c" for i in range(5)]
+
+
+def test_judgment_batches_splits_multi_version_file():
+    """单文件多版本合计超预算时按版本拆批：批预算不变量仍成立。
+
+    8 个工程同路径内容不同（如各自不同的 main.c）→ 同一路径 8 个内容版本，
+    截断后合计远超预算——必须拆批且批内路径不重复（parse_summary_report 按
+    路径校验批次覆盖），版本不丢、顺序保持输入顺序。
+    """
+    file = JudgmentFile(
+        "main.c",
+        tuple(
+            FileVersion(f"/* v{index} */\n" + "x" * 8000, (f"p{index}",))
+            for index in range(8)
+        ),
+    )
+
+    batches = _judgment_batches((file,))
+
+    assert len(batches) > 1
+    for batch in batches:
+        batch_size = sum(
+            len(_truncate_content(version.content))
+            for batch_file in batch
+            for version in batch_file.versions
+        )
+        assert batch_size <= MAX_SUMMARY_BATCH_CHARS  # 不变量：每批不超预算
+        paths = [batch_file.path for batch_file in batch]
+        assert len(paths) == len(set(paths))  # 批内路径唯一
+    assert sum(len(batch_file.versions) for b in batches for batch_file in b) == 8
+    order = [
+        version.projects[0]
+        for b in batches
+        for batch_file in b
+        for version in batch_file.versions
+    ]
+    assert order == [f"p{index}" for index in range(8)]  # 版本不丢、顺序保持
+
+
+def test_prompts_share_truncation_notice():
+    """契约测试：截断标注措辞双端同源（TRUNCATION_NOTICE 唯一出处）。
+
+    系统提示词与用户提示词都必须让模型知道"读到的是截断内容"——只改一处
+    会让模型在另一侧消息里以为内容完整（ticket 06 的双端漂移教训）。所有
+    嵌内容调用（赛题 / 接口块 / 文件全文）的系统提示词同样声明。
+    """
+    user_prompt = _summarize_user_prompt("stm32", ("proj-a",), JUDGMENT_FILES)
+
+    assert TRUNCATION_NOTICE in JUDGMENT_SUMMARY_SYSTEM_PROMPT
+    assert TRUNCATION_NOTICE in user_prompt
+    assert TRUNCATION_NOTICE in SELECT_SYSTEM_PROMPT
+    assert TRUNCATION_NOTICE in SKELETON_SYSTEM_PROMPT
+
+
+def test_select_modules_truncates_oversized_problem():
+    """超大赛题文本同样截断：模块选择请求体也不会超限（未兜底输入闭环）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules("赛题" * (JUDGMENT_CONTENT_CAP + 100), ["- dht11: 温湿度"])
+
+    _, _, payload, _ = transport.calls[0]
+    message = payload["messages"][1]["content"]
+    assert len(message) < JUDGMENT_CONTENT_CAP + 500
+    assert "截断" in message
+    assert TRUNCATION_NOTICE in message
+
+
+def test_summarize_module_truncates_oversized_code():
+    """单文件超长同样截断：简介草稿 / 校验的请求体也不会超限（413 兜底）。"""
+    transport = FakeTransport(body=_api_response("摘要"))
+    llm = _llm(transport)
+
+    llm.summarize_module("x" * (JUDGMENT_CONTENT_CAP + 1000))
+
+    _, _, payload, _ = transport.calls[0]
+    message = payload["messages"][1]["content"]
+    assert len(message) < JUDGMENT_CONTENT_CAP + 500
+    assert "截断" in message
+
+
+def test_http_413_raises_with_actionable_message():
+    """网关 413（请求体过大）给出可操作提示，而不是裸 HTML。"""
+    transport = FakeTransport(status=413, body="<html>Request Entity Too Large</html>")
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="413.*请求体过大"):
+        llm._chat([{"role": "user", "content": "hi"}])
+
+
+def test_chat_rejects_oversized_payload_before_send():
+    """发送前体积断言兜底：未截断的超长输入在请求发出前大声失败（而不是 413）。"""
+    transport = FakeTransport(body=_api_response("x"))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="请求体过大"):
+        llm._chat([{"role": "user", "content": "x" * (MAX_REQUEST_BYTES + 1024)}])
+
+    assert transport.calls == []  # 断言在传输之前，网络调用未发生
+
+
+def test_distill_master_batches_summary_phase():
+    """大批文件按预算分批摘要：多次第一阶段调用，摘要合并后进第二阶段。"""
+    files = tuple(
+        JudgmentFile(
+            f"{index}.c", (FileVersion(f"/* {index} */\n" + "x" * 50000, ("p1",)),)
+        )
+        for index in range(8)
+    )  # 每文件超长截断到 4K；8 份截断内容超过单批预算 → 拆成多批
+    batches = _judgment_batches(files)
+    assert len(batches) > 1
+
+    def summary_body(paths: tuple[str, ...]) -> str:
+        return _api_response(
+            json.dumps(
+                {
+                    "summaries": [
+                        {
+                            "path": path,
+                            "versions": [
+                                {"projects": ["p1"], "summary": f"{path} 摘要"}
+                            ],
+                        }
+                        for path in paths
+                    ]
+                }
+            )
+        )
+
+    bodies = [summary_body(tuple(f.path for f in batch)) for batch in batches]
+    bodies.append(
+        _api_response(
+            json.dumps(
+                {
+                    "decisions": [
+                        {"path": f"{index}.c", "action": ACTION_KEEP, "reason": "通用"}
+                        for index in range(8)
+                    ]
+                }
+            )
+        )
+    )
+    transport = SequenceTransport(bodies)
+    llm = _llm(transport)
+
+    decisions = llm.distill_master("stm32", ("p1",), files, "对比")
+
+    # 每批一次第一阶段调用 + 一次第二阶段调用；批内内容不超预算且带截断标注
+    assert len(transport.calls) == len(batches) + 1
+    for _, _, payload, _ in transport.calls[: len(batches)]:
+        message = payload["messages"][1]["content"]
+        assert len(message) <= MAX_SUMMARY_BATCH_CHARS + 2000  # 提示词开销留余量
+        assert "截断" in message
+    # 全部批的摘要合并进第二阶段（缺任何一批都会缺摘要）
+    phase2 = transport.calls[len(batches)][2]["messages"][1]["content"]
+    for path in (f"{index}.c" for index in range(8)):
+        assert f"{path} 摘要" in phase2
+    assert len(decisions) == 8
 
 
 # 只含 src/oled.c 摘要的响应（缺 sensors/dht11.c——判例 08 的模型漏条目病）
