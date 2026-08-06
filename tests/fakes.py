@@ -14,7 +14,12 @@ from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
 
-from contest_generator.llm import JudgmentFile, ModuleSelection, ValidationResult
+from contest_generator.llm import (
+    JudgmentFile,
+    ModuleSelection,
+    ProgressEmitter,
+    ValidationResult,
+)
 from contest_generator.report import FileDecision
 
 # ---------------------------------------------------------------------------
@@ -490,7 +495,10 @@ class FakeLLM:
         project_names: Sequence[str],
         judgment_files: Sequence[JudgmentFile],
         comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]:
+        # 假 LLM 与真 LLM 走同一参数（spec「发射 seam」）：webapp 层可经假 LLM
+        # 注入发射器断言事件序列，这里不消费、只保持签名兼容
         self.distill_calls.append(
             (platform, tuple(project_names), tuple(judgment_files), comparison_summary)
         )
