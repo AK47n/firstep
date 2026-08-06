@@ -21,6 +21,7 @@
 | 骨架 | AI 生成的 main.c（初始化序列 + TODO 预留区）+ 静态自检（幻觉调用改注释占位） | skeleton.py |
 | 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座 | keil.py / ccs.py / patchers.py / projectfile.py |
 | 平台警告 | missing / unverified / hardware_bound，生成前暴露 | selection.py |
+| 进度事件 | 提炼期间后端经 SSE 推送的实时进展（阶段 / 批次 / 补问轮；最后一个事件携带完整报告）；模型单次调用期间不产生事件，存活证明 = 客户端每秒跳动的计时器 | llm.py / webapp.py |
 
 ## 架构要点
 
