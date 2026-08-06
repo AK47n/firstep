@@ -12,6 +12,11 @@ from contest_generator.config import AppConfig
 from contest_generator.llm import (
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
+    EVENT_BATCH_DONE,
+    EVENT_BATCH_START,
+    EVENT_PHASE_DONE,
+    EVENT_RETRY,
+    EVENT_START,
     FileVersion,
     JUDGMENT_CONTENT_CAP,
     SELECT_SYSTEM_PROMPT,
@@ -22,6 +27,9 @@ from contest_generator.llm import (
     LLMError,
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
+    PHASE_DECIDE,
+    PHASE_SUMMARY,
+    ProgressEvent,
     TRUNCATION_NOTICE,
     VersionSummary,
     _distill_user_prompt,
@@ -1677,3 +1685,328 @@ def test_file_decision_from_dict_accepts_keep_without_source():
 def test_file_decision_from_dict_rejects_malformed(bad):
     with pytest.raises(ReportError):
         FileDecision.from_dict(bad)
+
+
+# ---------------------------------------------------------------------------
+# 提炼进度事件契约（工单 01）：发射 seam + 事件序列（spec「事件契约」）
+# ---------------------------------------------------------------------------
+
+
+def test_distill_master_emits_progress_events_normal_path():
+    """正常路径事件契约：start → 每批 batch_start/batch_done → 阶段 phase_done。
+
+    事件契约唯一出处（spec「事件契约」+ ADR 0004），契约测试断言字段形状与
+    事件顺序：本路径单批各阶段，事件序列即契约的基准形态。start 由入口发射
+    且总量先算定（阶段 1 批数 = _judgment_batches、阶段 2 批数 = ⌈待判文件数 /
+    批大小⌉）；阶段 1 批文件清单 = 待判文件路径、阶段 2 = 摘要路径。
+    """
+    transport = SequenceTransport(
+        [_api_response(SUMMARY_REPORT_JSON), _api_response(DISTILL_DECISIONS_JSON)]
+    )
+    llm = _llm(transport)
+    events: list[ProgressEvent] = []
+
+    decisions = llm.distill_master(
+        "stm32",
+        ("proj-a", "proj-b"),
+        JUDGMENT_FILES,
+        "对比摘要",
+        progress_emitter=events.append,
+    )
+
+    assert [e.type for e in events] == [
+        EVENT_START,
+        EVENT_BATCH_START,
+        EVENT_BATCH_DONE,
+        EVENT_PHASE_DONE,  # 阶段 1：摘要
+        EVENT_BATCH_START,
+        EVENT_BATCH_DONE,
+        EVENT_PHASE_DONE,  # 阶段 2：判定
+    ]
+    assert events[0] == ProgressEvent(
+        type=EVENT_START,
+        judgment_count=2,
+        summary_batch_count=1,
+        decide_batch_count=1,
+    )
+    assert events[1] == ProgressEvent(
+        type=EVENT_BATCH_START,
+        phase=PHASE_SUMMARY,
+        batch_index=1,
+        batch_count=1,
+        paths=("src/oled.c", "sensors/dht11.c"),
+    )
+    assert events[2] == ProgressEvent(
+        type=EVENT_BATCH_DONE, phase=PHASE_SUMMARY, batch_index=1, processed_count=2
+    )
+    assert events[3] == ProgressEvent(
+        type=EVENT_PHASE_DONE, phase=PHASE_SUMMARY, file_count=2
+    )
+    assert events[4] == ProgressEvent(
+        type=EVENT_BATCH_START,
+        phase=PHASE_DECIDE,
+        batch_index=1,
+        batch_count=1,
+        paths=("src/oled.c", "sensors/dht11.c"),
+    )
+    assert events[5] == ProgressEvent(
+        type=EVENT_BATCH_DONE, phase=PHASE_DECIDE, batch_index=1, processed_count=2
+    )
+    assert events[6] == ProgressEvent(
+        type=EVENT_PHASE_DONE, phase=PHASE_DECIDE, file_count=2
+    )
+    assert len(decisions) == 2  # 发射器是旁路，不改变主流程产物
+
+
+def test_distill_master_zero_batches_emits_no_batch_events():
+    """零批次（无待判文件）契约：start 总量为 0，不发射任何批事件，两阶段直接完成。
+
+    spec Further Notes：批数为 0（全部文件都是规则处理的残留 / 二进制等）时
+    不发射任何批事件，阶段直接完成——done 由 webapp 层（工单 02）接。
+    """
+    transport = FakeTransport()
+    llm = _llm(transport)
+    events: list[ProgressEvent] = []
+
+    decisions = llm.distill_master(
+        "stm32", ("proj-a",), (), "对比", progress_emitter=events.append
+    )
+
+    assert [e.type for e in events] == [EVENT_START, EVENT_PHASE_DONE, EVENT_PHASE_DONE]
+    assert events[0] == ProgressEvent(
+        type=EVENT_START, judgment_count=0, summary_batch_count=0, decide_batch_count=0
+    )
+    assert events[1] == ProgressEvent(
+        type=EVENT_PHASE_DONE, phase=PHASE_SUMMARY, file_count=0
+    )
+    assert events[2] == ProgressEvent(
+        type=EVENT_PHASE_DONE, phase=PHASE_DECIDE, file_count=0
+    )
+    assert decisions == ()
+    assert transport.calls == []  # 无文件 → 无 LLM 调用
+
+
+def test_distill_master_emitter_failure_does_not_break_distillation():
+    """发射器抛异常（旁路）→ 提炼主流程不受影响：判定照常返回。
+
+    spec「发射 seam」决策点：发射是旁路，不因 UI 消费失败中断提炼——进度只是
+    观察通道，主产物是完整报告（10-15 分钟 API 调用），UI 消费失败最多丢进度。
+    """
+    transport = SequenceTransport(
+        [_api_response(SUMMARY_REPORT_JSON), _api_response(DISTILL_DECISIONS_JSON)]
+    )
+    llm = _llm(transport)
+
+    def exploding(_event: ProgressEvent) -> None:
+        raise RuntimeError("UI 消费失败")
+
+    decisions = llm.distill_master(
+        "stm32",
+        ("proj-a", "proj-b"),
+        JUDGMENT_FILES,
+        "对比摘要",
+        progress_emitter=exploding,
+    )
+
+    assert {d.path for d in decisions} == {"src/oled.c", "sensors/dht11.c"}
+    assert len(transport.calls) == 2  # 两阶段各一次调用，未中断
+
+
+def test_distill_master_start_totals_match_emitted_batch_sequence(monkeypatch):
+    """start 总量契约：阶段 1 批数 = _judgment_batches 先算定、阶段 2 批数 =
+    ⌈待判文件数 / 批大小⌉——与实际发射的批序列严格一致（批号 1 起、批总数一致、
+    batch_done 携带本阶段累计已处理文件数，前端可直接显示"已读 X/115"）。"""
+    import contest_generator.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "JUDGMENT_BATCH_SIZE", 2)
+    files = tuple(
+        JudgmentFile(f"{index}.c", (FileVersion("/* x */", ("p1",)),))
+        for index in range(5)
+    )
+
+    def summaries_body(paths: tuple[str, ...]) -> str:
+        return _api_response(
+            json.dumps(
+                {
+                    "summaries": [
+                        {
+                            "path": path,
+                            "versions": [
+                                {"projects": ["p1"], "summary": f"{path} 摘要"}
+                            ],
+                        }
+                        for path in paths
+                    ]
+                }
+            )
+        )
+
+    def decisions_body(paths: tuple[str, ...]) -> str:
+        return _api_response(
+            json.dumps(
+                {
+                    "decisions": [
+                        {"path": path, "action": ACTION_KEEP, "reason": "通用"}
+                        for path in paths
+                    ]
+                }
+            )
+        )
+
+    batches = (("0.c", "1.c"), ("2.c", "3.c"), ("4.c",))
+    transport = SequenceTransport(
+        [summaries_body(b) for b in batches]
+        + [decisions_body(b) for b in batches]
+    )
+    llm = _llm(transport)
+    events: list[ProgressEvent] = []
+
+    llm.distill_master(
+        "stm32", ("p1",), files, "对比", progress_emitter=events.append
+    )
+
+    assert events[0] == ProgressEvent(
+        type=EVENT_START, judgment_count=5, summary_batch_count=3, decide_batch_count=3
+    )
+    summary_starts = [
+        e for e in events if e.type == EVENT_BATCH_START and e.phase == PHASE_SUMMARY
+    ]
+    assert [(e.batch_index, e.batch_count, e.paths) for e in summary_starts] == [
+        (1, 3, ("0.c", "1.c")),
+        (2, 3, ("2.c", "3.c")),
+        (3, 3, ("4.c",)),
+    ]
+    summary_dones = [
+        e for e in events if e.type == EVENT_BATCH_DONE and e.phase == PHASE_SUMMARY
+    ]
+    assert [e.processed_count for e in summary_dones] == [2, 4, 5]  # 累计
+    decide_starts = [
+        e for e in events if e.type == EVENT_BATCH_START and e.phase == PHASE_DECIDE
+    ]
+    assert [(e.batch_index, e.batch_count) for e in decide_starts] == [
+        (1, 3),
+        (2, 3),
+        (3, 3),
+    ]
+    decide_dones = [
+        e for e in events if e.type == EVENT_BATCH_DONE and e.phase == PHASE_DECIDE
+    ]
+    assert [e.processed_count for e in decide_dones] == [2, 4, 5]
+    assert events[-1] == ProgressEvent(
+        type=EVENT_PHASE_DONE, phase=PHASE_DECIDE, file_count=5
+    )
+
+
+def test_distill_master_emits_retry_events_on_missing():
+    """补问路径：两阶段各自漏条目 → 每轮补问开始发 retry（轮次 1 起、缺失数 =
+    该轮要补问的文件数），补全后照常 batch_done / phase_done——事件序列完整。"""
+    only_dht11_summary = json.dumps(
+        {
+            "summaries": [
+                {
+                    "path": "sensors/dht11.c",
+                    "versions": [
+                        {"projects": ["proj-a"], "summary": "通用 DHT11 单总线驱动"}
+                    ],
+                }
+            ]
+        }
+    )
+    decisions_without_dht11 = json.dumps(
+        {
+            "decisions": [
+                {
+                    "path": "src/oled.c",
+                    "action": ACTION_MERGE,
+                    "content": "/* 整合产物 */\n",
+                    "explanation": "两版合并去重",
+                    "source": "proj-a",
+                    "reason": "A 的 include path 更全",
+                },
+                {"path": "ui/oled_fonts.c", "action": ACTION_EXCLUDE, "reason": "赛题残留"},
+            ]
+        }
+    )
+    only_dht11_decisions = json.dumps(
+        {
+            "decisions": [
+                {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用驱动"}
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [
+            _api_response(SUMMARY_WITHOUT_DHT11),
+            _api_response(only_dht11_summary),
+            _api_response(decisions_without_dht11),
+            _api_response(only_dht11_decisions),
+        ]
+    )
+    llm = _llm(transport)
+    events: list[ProgressEvent] = []
+
+    decisions = llm.distill_master(
+        "stm32",
+        ("proj-a", "proj-b"),
+        JUDGMENT_FILES,
+        "对比摘要",
+        progress_emitter=events.append,
+    )
+
+    assert [e for e in events if e.type == EVENT_RETRY] == [
+        ProgressEvent(
+            type=EVENT_RETRY,
+            phase=PHASE_SUMMARY,
+            batch_index=1,
+            retry_round=1,
+            missing_count=1,
+        ),
+        ProgressEvent(
+            type=EVENT_RETRY,
+            phase=PHASE_DECIDE,
+            batch_index=1,
+            retry_round=1,
+            missing_count=1,
+        ),
+    ]
+    # 补问后事件序列照常收尾：batch_done → phase_done
+    assert [e.type for e in events] == [
+        EVENT_START,
+        EVENT_BATCH_START,
+        EVENT_RETRY,
+        EVENT_BATCH_DONE,
+        EVENT_PHASE_DONE,
+        EVENT_BATCH_START,
+        EVENT_RETRY,
+        EVENT_BATCH_DONE,
+        EVENT_PHASE_DONE,
+    ]
+    assert {d.path for d in decisions} == {"src/oled.c", "sensors/dht11.c"}
+
+
+def test_distill_master_failure_path_emits_retries_then_raises():
+    """失败路径：补问轮次全部用尽仍缺 → 每轮补问开始发 retry（轮次 1/2、缺失数），
+    然后大声失败——失败的批不发射 batch_done / phase_done（事件只描述已发生的
+    事实，不虚构完成）。"""
+    transport = SequenceTransport([_api_response(SUMMARY_WITHOUT_DHT11)] * 3)
+    llm = _llm(transport)
+    events: list[ProgressEvent] = []
+
+    with pytest.raises(LLMError, match="多次补问后仍缺失"):
+        llm.distill_master(
+            "stm32",
+            ("proj-a", "proj-b"),
+            JUDGMENT_FILES,
+            "对比摘要",
+            progress_emitter=events.append,
+        )
+
+    assert [e.type for e in events] == [
+        EVENT_START,
+        EVENT_BATCH_START,
+        EVENT_RETRY,
+        EVENT_RETRY,  # 3 次调用 = 首次 + 补问 2 轮
+    ]
+    retries = [e for e in events if e.type == EVENT_RETRY]
+    assert [(e.retry_round, e.missing_count) for e in retries] == [(1, 1), (2, 1)]
+    assert all(e.phase == PHASE_SUMMARY and e.batch_index == 1 for e in retries)

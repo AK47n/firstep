@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Sequence
 
 import pytest
 
@@ -276,17 +277,19 @@ _RENDER_STARTUP = "sys/startup_stm32f10x_md.s"
 _RENDER_INCLUDE_DIRS = ["inc", "ml_libs", "sys"]
 
 
-def _render(**overrides) -> str:
-    kwargs = dict(
-        kept_paths=_RENDER_KEPT,
-        startup_path=_RENDER_STARTUP,
-        include_dirs=_RENDER_INCLUDE_DIRS,
+def _render(
+    kept_paths: Sequence[str] = _RENDER_KEPT,
+    startup_path: str | None = _RENDER_STARTUP,
+    include_dirs: Sequence[str] = _RENDER_INCLUDE_DIRS,
+) -> str:
+    return build_master_uvprojx(
+        kept_paths=kept_paths, startup_path=startup_path, include_dirs=include_dirs
     )
-    kwargs.update(overrides)
-    return build_master_uvprojx(**kwargs)
 
 
-def _render_files(rendered: str) -> list[tuple[str, str, str, str]]:
+def _render_files(
+    rendered: str,
+) -> list[tuple[str | None, str | None, str | None, str | None]]:
     """渲染产物的文件条目：(组名, FileName, FileType, FilePath)。"""
     root = ET.fromstring(rendered)
     files = []
