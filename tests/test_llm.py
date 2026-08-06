@@ -19,6 +19,7 @@ from contest_generator.llm import (
     LLMError,
     VersionSummary,
     _distill_user_prompt,
+    _summarize_user_prompt,
     build_manifest_summaries,
     parse_distillation_report,
     parse_module_selection,
@@ -102,7 +103,7 @@ def test_select_modules_posts_chat_completion_with_expected_request():
     assert headers["Content-Type"] == "application/json"
     assert payload["model"] == "deepseek-chat"
     assert payload["response_format"] == {"type": "json_object"}
-    assert timeout == 120
+    assert timeout == 300  # 判例 08：大批量判定 JSON 生成超 120 秒，超时放宽
     user_message = payload["messages"][1]["content"]
     assert problem in user_message
     assert "- dht11: 温湿度传感器驱动" in user_message
@@ -437,7 +438,9 @@ def test_distill_master_two_phase_posts_summaries_then_decisions():
     assert "判定" in phase2_payload["messages"][0]["content"]
     assert "整合" in phase2_message  # merge 语义：读多份整合出通用版本
 
-    assert len(decisions) == 3
+    # 素材范围外的判定（ui/oled_fonts.c 不在 JUDGMENT_FILES）被过滤丢弃
+    assert len(decisions) == 2
+    assert {d.path for d in decisions} == {"src/oled.c", "sensors/dht11.c"}
     assert decisions[0] == FileDecision(
         "src/oled.c",
         ACTION_MERGE,
@@ -469,21 +472,705 @@ def test_distill_prompts_share_judgment_scope():
     assert "公共" in JUDGMENT_SUMMARY_SYSTEM_PROMPT
 
 
-def test_distill_master_fails_loud_on_broken_summary_phase():
-    """第一阶段返回非 JSON 就抛 LLMError，不进第二阶段——宁可大声失败。"""
+def test_summarize_prompt_caps_oversized_content():
+    """巨型判定素材（判例 08：stm32f10x.h ~800KB 标准库头）第一阶段提示词只嵌入
+    文件头截断、不全文搬运——截断标记注明原文长度，模型不会误判文件规模；截断
+    只影响提示词，keep 落盘仍复制工程原文全文。"""
     transport = SequenceTransport(
-        [_api_response("{not json"), _api_response(DISTILL_DECISIONS_JSON)]
+        [
+            _api_response(
+                json.dumps(
+                    {
+                        "summaries": [
+                            {
+                                "path": "sys/stm32f10x.h",
+                                "versions": [
+                                    {
+                                        "projects": ["proj-a"],
+                                        "summary": "STM32 标准外设库头文件",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                )
+            ),
+            _api_response(
+                json.dumps(
+                    {
+                        "decisions": [
+                            {
+                                "path": "sys/stm32f10x.h",
+                                "action": ACTION_KEEP,
+                                "reason": "STM32 标准外设库头文件，基础必需",
+                            }
+                        ]
+                    }
+                )
+            ),
+        ]
+    )
+    llm = _llm(transport)
+    big_content = "/* stm32f10x.h */\n" + "x" * 20_000
+    files = (JudgmentFile("sys/stm32f10x.h", (FileVersion(big_content, ("proj-a",)),)),)
+
+    llm.distill_master("stm32", ("proj-a",), files, "对比摘要")
+
+    _, _, payload, _ = transport.calls[0]
+    message = payload["messages"][1]["content"]
+    assert "sys/stm32f10x.h" in message
+    assert "x" * 20_000 not in message  # 全文不搬运
+    assert "内容过长，已截断" in message
+    assert "20" in message  # 截断标记注明原文长度
+
+
+# 只含 src/oled.c 摘要的响应（缺 sensors/dht11.c——判例 08 的模型漏条目病）
+SUMMARY_WITHOUT_DHT11 = json.dumps(
+    {
+        "summaries": [
+            {
+                "path": "src/oled.c",
+                "versions": [
+                    {"projects": ["proj-a"], "summary": "A 版本：通用 OLED 初始化驱动"},
+                    {"projects": ["proj-b"], "summary": "B 版本：OLED 驱动带滚屏功能"},
+                ],
+            },
+        ]
+    }
+)
+
+
+def test_summarize_phase_retries_missing_files_only():
+    """第一阶段漏条目（判例 08：真实工程 115 个文件一次返回漏了 1 个）→
+    挖出已覆盖的合法摘要、只对缺失文件补问，不整批重来。"""
+    only_dht11 = json.dumps(
+        {
+            "summaries": [
+                {
+                    "path": "sensors/dht11.c",
+                    "versions": [
+                        {"projects": ["proj-a"], "summary": "通用 DHT11 单总线驱动"}
+                    ],
+                },
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [
+            _api_response(SUMMARY_WITHOUT_DHT11),
+            _api_response(only_dht11),
+            _api_response(DISTILL_DECISIONS_JSON),
+        ]
     )
     llm = _llm(transport)
 
-    with pytest.raises(LLMError, match="JSON"):
+    decisions = llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 3
+    # 补问轮只含缺失的 dht11.c，不再搬运已覆盖的 oled.c
+    _, _, phase1_retry, _ = transport.calls[1]
+    message = phase1_retry["messages"][1]["content"]
+    assert "sensors/dht11.c" in message
+    assert "src/oled.c" not in message
+    # 补问后两阶段产物完整，判定覆盖全部待判文件（素材外的 oled_fonts 被过滤）
+    assert {d.path for d in decisions} == {"src/oled.c", "sensors/dht11.c"}
+
+
+def test_summarize_phase_batches_large_material(monkeypatch):
+    """大批量素材按 JUDGMENT_BATCH_SIZE 分批问（判例 08：一次问 115 个文件，
+    模型系统性漏判小配置文件、补问不收敛——分批把漏判降为偶发，交补问兜底）。"""
+    import contest_generator.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "JUDGMENT_BATCH_SIZE", 2)
+    files = (
+        JudgmentFile(
+            "src/oled.c",
+            (
+                FileVersion("/* A */", ("proj-a",)),
+                FileVersion("/* B */", ("proj-b",)),
+            ),
+        ),
+        JudgmentFile("sensors/dht11.c", (FileVersion("/* D */", ("proj-a",)),)),
+        JudgmentFile("ui/led.c", (FileVersion("/* L */", ("proj-a",)),)),
+    )
+    batch1_summaries = json.dumps(
+        {
+            "summaries": [
+                {
+                    "path": "src/oled.c",
+                    "versions": [
+                        {"projects": ["proj-a"], "summary": "A"},
+                        {"projects": ["proj-b"], "summary": "B"},
+                    ],
+                },
+                {"path": "sensors/dht11.c", "versions": [{"projects": ["proj-a"], "summary": "D"}]},
+            ]
+        }
+    )
+    batch2_summaries = json.dumps(
+        {
+            "summaries": [
+                {"path": "ui/led.c", "versions": [{"projects": ["proj-a"], "summary": "L"}]}
+            ]
+        }
+    )
+    decisions_batch1 = json.dumps(
+        {
+            "decisions": [
+                {"path": "src/oled.c", "action": ACTION_MERGE,
+                 "content": "/* M */\n", "explanation": "合并", "reason": "去重"},
+                {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用"},
+            ]
+        }
+    )
+    decisions_batch2 = json.dumps(
+        {
+            "decisions": [
+                {"path": "ui/led.c", "action": ACTION_EXCLUDE, "reason": "业务"}
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [
+            _api_response(batch1_summaries),
+            _api_response(batch2_summaries),
+            _api_response(decisions_batch1),
+            _api_response(decisions_batch2),
+        ]
+    )
+    llm = _llm(transport)
+
+    result = llm.distill_master("stm32", ("proj-a", "proj-b"), files, "对比摘要")
+
+    assert len(transport.calls) == 4
+    # 每批各自一问：批 1 含 oled/dht11，批 2 只含 led（两阶段同款分批）
+    _, _, phase1_batch1, _ = transport.calls[0]
+    msg1 = phase1_batch1["messages"][1]["content"]
+    assert "src/oled.c" in msg1 and "sensors/dht11.c" in msg1
+    assert "ui/led.c" not in msg1
+    _, _, phase1_batch2, _ = transport.calls[1]
+    msg2 = phase1_batch2["messages"][1]["content"]
+    assert "ui/led.c" in msg2
+    assert "src/oled.c" not in msg2
+    assert {d.path for d in result} == {"src/oled.c", "sensors/dht11.c", "ui/led.c"}
+
+
+def test_decide_phase_retries_missing_decisions():
+    """第二阶段漏条目 → 只补问缺失路径，判定最终完整覆盖。"""
+    decisions_without_dht11 = json.dumps(
+        {
+            "decisions": [
+                {
+                    "path": "src/oled.c",
+                    "action": ACTION_MERGE,
+                    "content": "/* 整合产物 */\n",
+                    "explanation": "两版合并去重",
+                    "source": "proj-a",
+                    "reason": "A 的 include path 更全",
+                },
+                {"path": "ui/oled_fonts.c", "action": ACTION_EXCLUDE, "reason": "赛题残留"},
+            ]
+        }
+    )
+    only_dht11 = json.dumps(
+        {
+            "decisions": [
+                {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用驱动"}
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [
+            _api_response(SUMMARY_REPORT_JSON),
+            _api_response(decisions_without_dht11),
+            _api_response(only_dht11),
+        ]
+    )
+    llm = _llm(transport)
+
+    decisions = llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 3
+    # 补问轮只含缺失的 dht11.c
+    _, _, phase2_retry, _ = transport.calls[2]
+    message = phase2_retry["messages"][1]["content"]
+    assert "sensors/dht11.c" in message
+    assert "src/oled.c" not in message
+    # 素材范围外的判定（ui/oled_fonts.c 不在 JUDGMENT_FILES）被过滤丢弃
+    assert {d.path for d in decisions} == {"src/oled.c", "sensors/dht11.c"}
+
+
+def test_summarize_phase_fails_loud_after_retries():
+    """补问 3 轮仍缺失 → LLMError（宁可大声失败也不带病进第二阶段）。"""
+    transport = SequenceTransport([_api_response(SUMMARY_WITHOUT_DHT11)] * 3)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="多次补问后仍缺失"):
         llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
 
-    assert len(transport.calls) == 1  # 第一阶段失败即停
+
+def test_summarize_phase_bad_entry_retries_only_that_file():
+    """批内一个文件输出不可修复的畸形（版本合并且 projects 与发送词表并集不
+    匹配，拆分兜底拒绝）→ 只补问它自己，同批合法摘要不连坐（判例 08：
+    deploy_config.json 版本合并曾让整批 15 个文件 3 轮全废）。"""
+    deploy = JudgmentFile(
+        path="ml/deploy.json",
+        versions=(
+            FileVersion(content="/* 部署配置 A */\n", projects=("proj-a",)),
+            FileVersion(content="/* 部署配置 B */\n", projects=("proj-b",)),
+        ),
+    )
+    merged_versions = json.dumps(
+        {
+            "summaries": [
+                {
+                    "path": "src/oled.c",
+                    "versions": [
+                        {"projects": ["proj-a"], "summary": "A 版本：通用 OLED 初始化驱动"},
+                        {"projects": ["proj-b"], "summary": "B 版本：OLED 驱动带滚屏功能"},
+                    ],
+                },
+                {
+                    "path": "sensors/dht11.c",
+                    "versions": [
+                        {"projects": ["proj-a"], "summary": "通用 DHT11 单总线驱动"}
+                    ],
+                },
+                {
+                    # 模型合并且多报工程名——projects 与并集不匹配，拆分兜底拒绝
+                    "path": "ml/deploy.json",
+                    "versions": [
+                        {"projects": ["proj-a", "proj-b", "proj-c"], "summary": "合并版"}
+                    ],
+                },
+            ]
+        }
+    )
+    correct_versions = json.dumps(
+        {
+            "summaries": [
+                {
+                    "path": "ml/deploy.json",
+                    "versions": [
+                        {"projects": ["proj-a"], "summary": "A 版部署配置"},
+                        {"projects": ["proj-b"], "summary": "B 版部署配置"},
+                    ],
+                }
+            ]
+        }
+    )
+    decisions = json.dumps(
+        {
+            "decisions": [
+                {"path": "src/oled.c", "action": ACTION_MERGE,
+                 "content": "/* M */\n", "explanation": "合并", "source": "proj-a",
+                 "reason": "去重"},
+                {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用驱动"},
+                {"path": "ml/deploy.json", "action": ACTION_EXCLUDE,
+                 "reason": "特定模型部署配置"},
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [_api_response(merged_versions), _api_response(correct_versions),
+         _api_response(decisions)]
+    )
+    llm = _llm(transport)
+
+    result = llm.distill_master(
+        "stm32", ("proj-a", "proj-b"), JUDGMENT_FILES + (deploy,), "对比摘要"
+    )
+
+    assert len(transport.calls) == 3
+    # 补问轮只问坏文件（deploy.json），已覆盖的 oled.c 不重问；补问轮 prompt
+    # 对多版本文件带"版本 N"标记
+    _, _, retry_payload, _ = transport.calls[1]
+    retry_message = retry_payload["messages"][1]["content"]
+    assert "ml/deploy.json" in retry_message
+    assert "版本 1（proj-a）" in retry_message
+    assert "版本 2（proj-b）" in retry_message
+    assert "src/oled.c" not in retry_message
+    assert {d.path for d in result} == {"src/oled.c", "sensors/dht11.c", "ml/deploy.json"}
+
+
+def test_summarize_phase_merged_versions_split_into_versions():
+    """模型把多内容版本合并成一条且 projects = 各版本工程名并集（判例 08：
+    deploy_config.json 内容过于相似、屡次合并）→ 确定性拆回逐版本条目（摘要
+    复制），一次通过、不进补问轮。"""
+    deploy = JudgmentFile(
+        path="ml/deploy.json",
+        versions=(
+            FileVersion(content="/* A */\n", projects=("proj-a",)),
+            FileVersion(content="/* B */\n", projects=("proj-b",)),
+        ),
+    )
+    merged = _api_response(
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "ml/deploy.json",
+                        "versions": [
+                            {
+                                "projects": ["proj-a", "proj-b"],
+                                "summary": "合并版部署配置",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    decisions = _api_response(
+        json.dumps(
+            {
+                "decisions": [
+                    {"path": "ml/deploy.json", "action": ACTION_EXCLUDE,
+                     "reason": "特定模型部署配置"}
+                ]
+            }
+        )
+    )
+    transport = SequenceTransport([merged, decisions])
+    llm = _llm(transport)
+
+    result = llm.distill_master("stm32", ("proj-a", "proj-b"), (deploy,), "对比摘要")
+
+    # 拆分兜底一轮通过：无需补问（阶段 1 摘要 + 阶段 2 判定各一次）
+    assert len(transport.calls) == 2
+    assert [d.path for d in result] == ["ml/deploy.json"]
+
+
+def test_summarize_phase_merged_versions_not_split_when_projects_mismatch():
+    """合并条目的 projects 不等于发送版本组并集（多报工程名）→ 不拆，补问
+    3 轮仍合并 → 大声失败。"""
+    deploy = JudgmentFile(
+        path="ml/deploy.json",
+        versions=(
+            FileVersion(content="/* A */\n", projects=("proj-a",)),
+            FileVersion(content="/* B */\n", projects=("proj-b",)),
+        ),
+    )
+    mismatched = _api_response(
+        json.dumps(
+            {
+                "summaries": [
+                    {
+                        "path": "ml/deploy.json",
+                        "versions": [
+                            {
+                                "projects": ["proj-a", "proj-b", "proj-c"],
+                                "summary": "合并版",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    transport = SequenceTransport([mismatched] * 3)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="ml/deploy.json"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), (deploy,), "对比摘要")
+
+
+def test_decide_phase_bad_entry_retries_only_that_file():
+    """第二阶段一个条目畸形（merge 缺整合产物全文）→ 好条目不连坐，只补问
+    坏文件。"""
+    bad_entry = json.dumps(
+        {
+            "decisions": [
+                {
+                    "path": "src/oled.c",
+                    "action": ACTION_MERGE,
+                    "content": "/* 整合产物 */\n",
+                    "explanation": "两版合并去重",
+                    "source": "proj-a",
+                    "reason": "A 的 include path 更全",
+                },
+                {
+                    # merge 缺 content——条目形状错，严格解析拒绝
+                    "path": "sensors/dht11.c",
+                    "action": ACTION_MERGE,
+                    "explanation": "合并",
+                    "source": "proj-a",
+                    "reason": "去重",
+                },
+            ]
+        }
+    )
+    only_dht11 = json.dumps(
+        {
+            "decisions": [
+                {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用驱动"}
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [_api_response(SUMMARY_REPORT_JSON), _api_response(bad_entry),
+         _api_response(only_dht11)]
+    )
+    llm = _llm(transport)
+
+    decisions = llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 3
+    # 补问轮只问坏文件 dht11.c，已判定的 oled.c 不重问
+    _, _, phase2_retry, _ = transport.calls[2]
+    retry_message = phase2_retry["messages"][1]["content"]
+    assert "sensors/dht11.c" in retry_message
+    assert "src/oled.c" not in retry_message
+    assert {d.path for d in decisions} == {"src/oled.c", "sensors/dht11.c"}
+
+
+def test_decide_phase_cross_batch_repeats_filtered():
+    """模型在批 N 幻觉复述其他批已判的路径（判例 08：提示词带完整结构对比
+    清单，模型把 ml_adc.c 判了两次）→ 跨批复述被按批过滤丢弃，不产生重复
+    判定。"""
+    import contest_generator.llm as llm_module
+
+    monkeypatch_batch = 2
+    old = llm_module.JUDGMENT_BATCH_SIZE
+    llm_module.JUDGMENT_BATCH_SIZE = monkeypatch_batch
+    try:
+        files = (
+            JudgmentFile(
+                "src/oled.c",
+                (
+                    FileVersion("/* A */", ("proj-a",)),
+                    FileVersion("/* B */", ("proj-b",)),
+                ),
+            ),
+            JudgmentFile("sensors/dht11.c", (FileVersion("/* D */", ("proj-a",)),)),
+            JudgmentFile("ui/led.c", (FileVersion("/* L */", ("proj-a",)),)),
+        )
+        batch1_decisions = json.dumps(
+            {
+                "decisions": [
+                    {"path": "src/oled.c", "action": ACTION_MERGE,
+                     "content": "/* M */\n", "explanation": "合并", "source": "proj-a",
+                     "reason": "去重"},
+                    {"path": "sensors/dht11.c", "action": ACTION_KEEP,
+                     "reason": "通用"},
+                ]
+            }
+        )
+        batch2_decisions = json.dumps(
+            {
+                "decisions": [
+                    # 幻觉复述批 1 已判的 oled.c——应按批过滤丢弃
+                    {"path": "src/oled.c", "action": ACTION_KEEP, "reason": "复述"},
+                    {"path": "ui/led.c", "action": ACTION_EXCLUDE, "reason": "业务"},
+                ]
+            }
+        )
+        transport = SequenceTransport(
+            [
+                _api_response(
+                    json.dumps(
+                        {
+                            "summaries": [
+                                {
+                                    "path": "src/oled.c",
+                                    "versions": [
+                                        {"projects": ["proj-a"], "summary": "A"},
+                                        {"projects": ["proj-b"], "summary": "B"},
+                                    ],
+                                },
+                                {
+                                    "path": "sensors/dht11.c",
+                                    "versions": [
+                                        {"projects": ["proj-a"], "summary": "D"}
+                                    ],
+                                },
+                            ]
+                        }
+                    )
+                ),
+                _api_response(
+                    json.dumps(
+                        {
+                            "summaries": [
+                                {
+                                    "path": "ui/led.c",
+                                    "versions": [
+                                        {"projects": ["proj-a"], "summary": "L"}
+                                    ],
+                                }
+                            ]
+                        }
+                    )
+                ),
+                _api_response(batch1_decisions),
+                _api_response(batch2_decisions),
+            ]
+        )
+        llm = _llm(transport)
+
+        result = llm.distill_master("stm32", ("proj-a", "proj-b"), files, "对比摘要")
+
+        paths = [d.path for d in result]
+        assert len(paths) == len(set(paths))  # 无重复路径
+        assert set(paths) == {"src/oled.c", "sensors/dht11.c", "ui/led.c"}
+        # 复述的 oled.c（ACTION_KEEP）被丢弃，保留的是批 1 的 merge 判定
+        oled = next(d for d in result if d.path == "src/oled.c")
+        assert oled.action == ACTION_MERGE
+    finally:
+        llm_module.JUDGMENT_BATCH_SIZE = old
+
+
+def test_decide_phase_out_of_scope_paths_filtered():
+    """模型编造素材范围外的路径（判例 08：code/pid_debug.h 不在判定范围、
+    属模型幻觉）→ 判定被过滤丢弃，不会触发 master 的"对比范围外路径"校验。"""
+    hallucinated = json.dumps(
+        {
+            "decisions": [
+                {"path": "src/oled.c", "action": ACTION_MERGE,
+                 "content": "/* M */\n", "explanation": "合并", "source": "proj-a",
+                 "reason": "去重"},
+                {"path": "sensors/dht11.c", "action": ACTION_KEEP, "reason": "通用"},
+                {"path": "code/pid_debug.h", "action": ACTION_EXCLUDE,
+                 "reason": "幻觉路径"},
+            ]
+        }
+    )
+    transport = SequenceTransport(
+        [_api_response(SUMMARY_REPORT_JSON), _api_response(hallucinated)]
+    )
+    llm = _llm(transport)
+
+    decisions = llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 2
+    assert {d.path for d in decisions} == {"src/oled.c", "sensors/dht11.c"}
+
+
+def test_decide_phase_early_output_from_later_batch_filtered():
+    """模型在批 N 提前输出批 N+1 的路径判定（判例 08：提示词带完整结构对比
+    清单，模型"预判"未读摘要路径）→ 提前判定不可信、被丢弃，该批正规判定
+    保留。"""
+    import contest_generator.llm as llm_module
+
+    old = llm_module.JUDGMENT_BATCH_SIZE
+    llm_module.JUDGMENT_BATCH_SIZE = 2
+    try:
+        files = (
+            JudgmentFile(
+                "src/oled.c",
+                (
+                    FileVersion("/* A */", ("proj-a",)),
+                    FileVersion("/* B */", ("proj-b",)),
+                ),
+            ),
+            JudgmentFile("sensors/dht11.c", (FileVersion("/* D */", ("proj-a",)),)),
+            JudgmentFile("ui/led.c", (FileVersion("/* L */", ("proj-a",)),)),
+        )
+        batch1_decisions = json.dumps(
+            {
+                "decisions": [
+                    {"path": "src/oled.c", "action": ACTION_MERGE,
+                     "content": "/* M */\n", "explanation": "合并", "source": "proj-a",
+                     "reason": "去重"},
+                    {"path": "sensors/dht11.c", "action": ACTION_KEEP,
+                     "reason": "通用"},
+                    # 提前输出批 2 的 led.c（没读过它的摘要）——应被丢弃
+                    {"path": "ui/led.c", "action": ACTION_KEEP, "reason": "预判"},
+                ]
+            }
+        )
+        batch2_decisions = json.dumps(
+            {
+                "decisions": [
+                    {"path": "ui/led.c", "action": ACTION_EXCLUDE, "reason": "业务"}
+                ]
+            }
+        )
+        transport = SequenceTransport(
+            [
+                _api_response(
+                    json.dumps(
+                        {
+                            "summaries": [
+                                {
+                                    "path": "src/oled.c",
+                                    "versions": [
+                                        {"projects": ["proj-a"], "summary": "A"},
+                                        {"projects": ["proj-b"], "summary": "B"},
+                                    ],
+                                },
+                                {
+                                    "path": "sensors/dht11.c",
+                                    "versions": [
+                                        {"projects": ["proj-a"], "summary": "D"}
+                                    ],
+                                },
+                            ]
+                        }
+                    )
+                ),
+                _api_response(
+                    json.dumps(
+                        {
+                            "summaries": [
+                                {
+                                    "path": "ui/led.c",
+                                    "versions": [
+                                        {"projects": ["proj-a"], "summary": "L"}
+                                    ],
+                                }
+                            ]
+                        }
+                    )
+                ),
+                _api_response(batch1_decisions),
+                _api_response(batch2_decisions),
+            ]
+        )
+        llm = _llm(transport)
+
+        result = llm.distill_master("stm32", ("proj-a", "proj-b"), files, "对比摘要")
+
+        assert len(transport.calls) == 4
+        # led 的判定必须是批 2 的正规判定（exclude），批 1 的预判 keep 被丢弃
+        led = next(d for d in result if d.path == "ui/led.c")
+        assert led.action == ACTION_EXCLUDE
+        assert {d.path for d in result} == {"src/oled.c", "sensors/dht11.c", "ui/led.c"}
+    finally:
+        llm_module.JUDGMENT_BATCH_SIZE = old
+
+
+def test_summarize_prompt_labels_versions_for_conflicts():
+    """第一阶段提示词：多内容版本文件带"版本 N（工程）"标记与禁止合并说明，
+    单版本文件不带版本号。"""
+    prompt = _summarize_user_prompt("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES)
+
+    assert "版本 1（proj-a）" in prompt
+    assert "版本 2（proj-b）" in prompt
+    assert "把不同内容的版本合并成一条是错误" in prompt
+    # 单版本文件只带工程名、不带"版本 N"标记
+    single_line = next(
+        line for line in prompt.splitlines()
+        if line.startswith("- sensors/dht11.c")
+    )
+    assert "版本 1" not in single_line
+    assert "sensors/dht11.c （proj-a）：" in single_line
+
+
+def test_distill_master_fails_loud_on_broken_summary_phase():
+    """第一阶段连续返回非 JSON（补问 3 轮仍不可用）→ LLMError，不进第二阶段——
+    宁可大声失败。"""
+    transport = SequenceTransport([_api_response("{not json")] * 3)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="多次补问后仍缺失"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 3  # 补问 3 轮后才放弃
 
 
 def test_distill_master_fails_loud_on_missing_summary():
-    """缺某个文件的摘要 → 第二阶段素材残缺，拒绝进入判定。"""
+    """缺某个文件的摘要（补问 3 轮仍缺）→ 第二阶段素材残缺，拒绝进入判定。"""
     missing = json.dumps(
         {
             "summaries": [
@@ -497,15 +1184,13 @@ def test_distill_master_fails_loud_on_missing_summary():
             ]
         }
     )
-    transport = SequenceTransport(
-        [_api_response(missing), _api_response(DISTILL_DECISIONS_JSON)]
-    )
+    transport = SequenceTransport([_api_response(missing)] * 3)
     llm = _llm(transport)
 
-    with pytest.raises(LLMError, match="缺少文件"):
+    with pytest.raises(LLMError, match="多次补问后仍缺失"):
         llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
 
-    assert len(transport.calls) == 1
+    assert len(transport.calls) == 3
 
 
 def test_parse_summary_accepts_all_versions_with_holders():

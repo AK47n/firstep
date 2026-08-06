@@ -11,6 +11,7 @@ from dataclasses import replace
 import pytest
 
 from contest_generator.master import (
+    BINARY_FILE_REASON,
     MAIN_C_TEMPLATE_REASON,
     MasterError,
     analyze_structure,
@@ -157,6 +158,50 @@ def test_scan_classifies_residues_by_rule(tmp_path):
         "src/driver.o",
     )
     assert structure.files == ("project.uvprojx", "src/real.c", "src/real.c.orig")
+
+
+def test_scan_classifies_binary_files_by_content(tmp_path):
+    """二进制文件（内容判据：文件头含 NUL）单独记录、不进扫描清单也不读全文；
+    纯文本文件不受影响（判例 08：真实旧工程混着 PDF/模型/图片/压缩包，扩展名
+    名单永远有尾，内容判据全覆盖）。"""
+    project = tmp_path / "proj"
+    (project / "USER").mkdir(parents=True)
+    (project / "USER" / "project.uvprojx").write_text(
+        FAKE_DISTILL_UVPROJX_B, encoding="utf-8"
+    )
+    (project / "assets").mkdir(parents=True, exist_ok=True)
+    (project / "docs").mkdir(parents=True, exist_ok=True)
+    (project / "assets" / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00binary junk")
+    (project / "docs" / "note.txt").write_text("plain text\n", encoding="utf-8")
+
+    structure = scan_project(project)
+
+    assert structure.binaries == ("assets/logo.png",)
+    assert "assets/logo.png" not in structure.files
+    assert "assets/logo.png" not in structure.file_hashes
+    assert "docs/note.txt" in structure.files
+
+
+def test_scan_classifies_bak_variants_as_residues(tmp_path):
+    """备份变体（.bak2 / .bak_consolidate——判例 08 真实旧工程备份习惯）按规则
+    剔除，不因后缀不在精确名单里漏进 AI 判定。"""
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "project.uvprojx").write_text(FAKE_DISTILL_UVPROJX_B, encoding="utf-8")
+    for name in ("code/pid.c.bak2", "code/pid.c.bak3", "code/pid.c.bak_consolidate"):
+        path = project / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("/* backup */", encoding="utf-8")
+    (project / "code" / "pid.c").write_text("/* real pid */", encoding="utf-8")
+
+    structure = scan_project(project)
+
+    assert structure.residues == (
+        "code/pid.c.bak2",
+        "code/pid.c.bak3",
+        "code/pid.c.bak_consolidate",
+    )
+    assert "code/pid.c" in structure.files
 
 
 def test_scan_detects_ccs_platform(tmp_path):
@@ -492,6 +537,40 @@ def test_distill_lists_residues_with_rule_reasons(fake_stm32_projects):
     assert by_path["ui/oled_fonts.c~"].reason == "备份文件：~ 结尾"
 
 
+def test_binary_files_never_reach_ai_material(fake_stm32_projects):
+    """二进制文件（内容判据）不进 AI 判定范围：素材里没有、报告 exclude 带规则化
+    原因（判例 08：真实旧工程混着 PDF/模型/图片，全文嵌入会撑爆 LLM 上下文）。"""
+    (fake_stm32_projects[0] / "assets").mkdir(parents=True, exist_ok=True)
+    (fake_stm32_projects[0] / "assets" / "logo.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00binary junk"
+    )
+
+    llm = FakeLLM(distillation=DEFAULT_DECISIONS)
+    report = _distill(fake_stm32_projects, llm)
+
+    _, _, judgment_files, summary = llm.distill_calls[0]
+    assert "assets/logo.png" not in {f.path for f in judgment_files}
+    assert "assets/logo.png" not in summary
+    by_path = {d.path: d for d in report.exclude}
+    assert by_path["assets/logo.png"].action == ACTION_EXCLUDE
+    assert by_path["assets/logo.png"].reason == BINARY_FILE_REASON
+
+
+def test_distill_rejects_ai_decision_on_binary(fake_stm32_projects):
+    """二进制文件由内容规则确定性剔除，AI 判定二进制路径是越界——宁可大声失败。"""
+    (fake_stm32_projects[0] / "assets").mkdir(parents=True, exist_ok=True)
+    (fake_stm32_projects[0] / "assets" / "logo.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00binary junk"
+    )
+    bad = (
+        *DEFAULT_DECISIONS,
+        FileDecision("assets/logo.png", ACTION_EXCLUDE, reason="AI 也判剔除"),
+    )
+
+    with pytest.raises(MasterError, match="无需 AI 判定"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=bad))
+
+
 def test_distill_rejects_ai_decision_on_residue(fake_stm32_projects):
     """残留由规则确定性剔除，AI 判定残留路径是越界——宁可大声失败。"""
     bad = (*DEFAULT_DECISIONS, FileDecision("src/oled.o", ACTION_EXCLUDE, reason="AI 也判残留"))
@@ -709,6 +788,42 @@ def test_apply_rejects_residue_moved_to_keep(fake_stm32_projects, tmp_path):
     )
 
     with pytest.raises(MasterError, match="残留文件必须剔除"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
+
+
+def test_apply_rejects_binary_missing_from_report(fake_stm32_projects, tmp_path):
+    """确认时删掉二进制条目——二进制确定性剔除，不能静默消失（ADR 0001）。"""
+    (fake_stm32_projects[0] / "assets").mkdir(parents=True, exist_ok=True)
+    (fake_stm32_projects[0] / "assets" / "logo.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00binary junk"
+    )
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        exclude=tuple(d for d in report.exclude if d.path != "assets/logo.png"),
+    )
+
+    with pytest.raises(MasterError, match="二进制文件必须剔除"):
+        apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
+
+
+def test_apply_rejects_binary_moved_to_keep(fake_stm32_projects, tmp_path):
+    """确认时把二进制改成保留——内容规则识别的确定性剔除不因用户编辑而失效。"""
+    (fake_stm32_projects[0] / "assets").mkdir(parents=True, exist_ok=True)
+    (fake_stm32_projects[0] / "assets" / "logo.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00binary junk"
+    )
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        exclude=tuple(d for d in report.exclude if d.path != "assets/logo.png"),
+        keep=(
+            *report.keep,
+            FileDecision("assets/logo.png", ACTION_KEEP, reason="用户改的"),
+        ),
+    )
+
+    with pytest.raises(MasterError, match="二进制文件必须剔除"):
         apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "preview")
 
 

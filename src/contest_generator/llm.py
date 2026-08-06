@@ -43,7 +43,7 @@ JUDGMENT_SUMMARY_SYSTEM_PROMPT = (
     "去留：同一路径在不同工程里内容不同（冲突），或只出现在部分工程（独有），"
     "或所有工程内容一致（公共，同样要判）。逐文件读全文后，为每个内容版本用"
     "中文写一段简短摘要：说明它实现什么功能、是否通用、是否基础建设必需。"
-    "只输出 JSON 对象。"
+    "必须为列出的每个文件输出摘要，一个都不能少。只输出 JSON 对象。"
 )
 
 # 判定范围与判据的唯一表述：系统提示词与用户提示词在同一个 API 调用里都要
@@ -67,8 +67,150 @@ DISTILL_SYSTEM_PROMPT = (
     + JUDGMENT_SCOPE
     + "动作词表：keep（保留）/ merge（整合：同一路径多份内容不同时，读多份后"
     "整合出通用版本，选一份只是特例，必须给出整合产物全文与整合说明）/ "
-    "exclude（剔除）。只输出 JSON 对象。"
+    "exclude（剔除）。必须为每个待判文件给出动作，一个都不能少。只输出 JSON 对象。"
 )
+
+# 判定素材内容上限（字符）：第一阶段提示词把每个内容版本全文嵌入，真实旧
+# 工程里的巨型源码（如 stm32f10x.h ~800KB 标准库头）全文嵌入会撑爆上下文
+# （判例 08：三个真实工程修复前判定素材 47.6M 字符，修复后按此上限嵌入
+# 29 万字符）。截断只影响判定素材（文件头足以判断性质），keep 落盘仍复制
+# 工程原文全文，不受截断影响。
+JUDGMENT_CONTENT_CAP = 4000
+
+# 两阶段输出的补问上限：模型一次输出大量 JSON 条目时偶发丢条目（判例 08：
+# 115 个文件一次返回漏了 1 个），严格解析失败后只对缺失路径补问，最多补问
+# 这么轮；仍缺失就大声失败——宁可失败也不带病进下一阶段。
+SUMMARY_RETRY_LIMIT = 3
+
+# 判定分批大小：一次问太多文件，模型会系统性漏掉小配置文件 / 点文件
+# （判例 08：115 个文件一次返回漏 30 个，补问也不收敛——不是偶发，是批量
+# 超载）。按此大小分批问，总输入 token 不变（每个文件只嵌入一次），漏判
+# 从"必现"降为"偶发"，交给补问机制兜底。
+JUDGMENT_BATCH_SIZE = 25
+
+
+def _chunked(items: Sequence[Any], size: int) -> list[list[Any]]:
+    """按 size 切分列表（最后一块可以不满）。"""
+    return [list(items[i : i + size]) for i in range(0, len(items), size)]
+
+
+def _extract_good_summaries(
+    content: str, batch: Sequence[JudgmentFile]
+) -> list[FileSummary]:
+    """从一次失败的批量摘要输出里挖出能通过严格校验的条目（补问只问缺失的）。
+
+    逐文件粒度校验（判例 08：deploy_config.json 把多内容版本合并成一条，曾让
+    同批 14 个合法摘要连坐、整批重问 3 轮全废）：一个文件输出畸形只让它自己
+    重问，其他文件的合法摘要照常收下；输出里非本轮批次的路径条目忽略（补问
+    轮模型偶发复述已覆盖路径，不该拖累本批校验）。
+    """
+    try:
+        data = json.loads(content)
+        wanted = {f.path for f in batch}
+        entries = [
+            item
+            for item in data.get("summaries", [])
+            if isinstance(item, dict) and item.get("path") in wanted
+        ]
+    except (json.JSONDecodeError, AttributeError):
+        return []
+    good: list[FileSummary] = []
+    for f in batch:
+        f_entries = [e for e in entries if e.get("path") == f.path]
+        if not f_entries:
+            continue
+        try:
+            good.extend(parse_summary_report(json.dumps({"summaries": f_entries}), [f]))
+            continue
+        except LLMError:
+            pass
+        # 模型把多内容版本合并成一条（判例 08：deploy_config.json 两版内容过于
+        # 相似，模型屡次合并、补问不收敛）→ 确定性拆分回逐版本条目再校验
+        reconciled = _split_merged_versions(f, f_entries)
+        if reconciled is not None:
+            try:
+                good.extend(
+                    parse_summary_report(json.dumps({"summaries": reconciled}), [f])
+                )
+            except LLMError:
+                continue
+    return good
+
+
+def _split_merged_versions(
+    file: JudgmentFile, entries: list[dict[str, Any]]
+) -> list[dict[str, Any]] | None:
+    """模型把多内容版本合并成一条摘要（projects 列了多个版本的全部工程名）。
+
+    拆分条件严格：该路径发送词表含多个内容版本组，输出恰好一条条目、且其
+    projects 恰好等于各版本组工程名的并集（不多不少）——此时模型读多份后
+    写了一条"通用"摘要，拆回逐版本条目（摘要复制）。并集不匹配或形状不对
+    则不拆（宁缺毋滥，留给补问轮）。拆出的版本摘要相同会让第二阶段看不出
+    版本差异、倾向 exclude/keep 而非 merge——对内容高度相似的版本是合理近似
+    （模型本来就认为差异可忽略）。
+    """
+    if len(file.versions) < 2 or len(entries) != 1:
+        return None
+    groups = [frozenset(v.projects) for v in file.versions]
+    union = frozenset().union(*groups)
+    entry = entries[0]
+    raw_versions = entry.get("versions")
+    if not isinstance(raw_versions, list) or len(raw_versions) != 1:
+        return None
+    merged = raw_versions[0]
+    if not isinstance(merged, dict):
+        return None
+    projects = merged.get("projects")
+    summary = merged.get("summary")
+    if (
+        not isinstance(projects, list)
+        or frozenset(projects) != union
+        or not isinstance(summary, str)
+        or not summary
+    ):
+        return None
+    # 一条条目、多条 versions（模型契约：同一路径只出现一次，版本在 versions 里）
+    return [
+        {
+            "path": file.path,
+            "versions": [
+                {"projects": sorted(group), "summary": summary} for group in groups
+            ],
+        }
+    ]
+
+
+def _extract_good_decisions(
+    content: str,
+    project_names: Sequence[str],
+    batch: Sequence[FileSummary],
+) -> list[FileDecision]:
+    """从一次失败的批量判定输出里挖出能通过严格校验的条目（补问只问缺失的）。
+
+    与 _extract_good_summaries 同款逐文件粒度：一个条目畸形（如 merge 缺整合
+    产物全文）只让它自己重问，好条目不连坐；输出里非本轮批次的路径条目忽略。
+    """
+    try:
+        data = json.loads(content)
+        entries = [item for item in data.get("decisions", []) if isinstance(item, dict)]
+    except (json.JSONDecodeError, AttributeError):
+        return []
+    good: list[FileDecision] = []
+    for f in batch:
+        entry = next((e for e in entries if e.get("path") == f.path), None)
+        if entry is None:
+            continue
+        try:
+            good.extend(
+                parse_distillation_report(
+                    json.dumps({"decisions": [entry]}), project_names
+                )
+            )
+        except LLMError:
+            continue
+    return good
+
+
 
 class LLMError(Exception):
     """LLM 调用或输出解析失败，message 说明具体问题。"""
@@ -207,7 +349,10 @@ class UrllibTransport:
 class DeepSeekLLM:
     """生产 LLM：调用 DeepSeek Chat Completions，结构化输出解析为 ModuleSelection。"""
 
-    TIMEOUT_SECONDS = 120
+    # 大批量判定 JSON 的生成时间实测可超 120 秒（判例 08：真实工程一批 25 个
+    # 文件读全文出摘要，DeepSeek 生成 JSON 需要 2-5 分钟）——120 秒读超时会让
+    # 提炼流程整段失败。300 秒对单批生成足够，网络瞬断仍是偶发失败（大声报错）。
+    TIMEOUT_SECONDS = 300
 
     def __init__(self, config: AppConfig, transport: Transport | None = None) -> None:
         self._config = config
@@ -281,19 +426,9 @@ class DeepSeekLLM:
         file_summaries = self._summarize_judgment_files(
             platform, project_names, judgment_files
         )
-        content = self._chat(
-            [
-                {"role": "system", "content": DISTILL_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _distill_user_prompt(
-                        platform, project_names, file_summaries, comparison_summary
-                    ),
-                },
-            ],
-            json_mode=True,
+        return self._decide_distillation(
+            platform, project_names, file_summaries, comparison_summary
         )
-        return parse_distillation_report(content, project_names)
 
     def _summarize_judgment_files(
         self,
@@ -301,20 +436,149 @@ class DeepSeekLLM:
         project_names: Sequence[str],
         judgment_files: Sequence[JudgmentFile],
     ) -> tuple[FileSummary, ...]:
-        """第一阶段：逐文件读全文出摘要（json_mode），解析校验为 FileSummary。"""
-        content = self._chat(
-            [
-                {"role": "system", "content": JUDGMENT_SUMMARY_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _summarize_user_prompt(
-                        platform, project_names, judgment_files
-                    ),
-                },
-            ],
-            json_mode=True,
-        )
-        return parse_summary_report(content, judgment_files)
+        """第一阶段：逐文件读全文出摘要（json_mode），解析校验为 FileSummary。
+
+        大批量素材一次问完时，模型输出偶发丢条目 / JSON 截断（判例 08：真实
+        工程 115 个文件一次返回漏 1 个；更大批量甚至系统性漏小配置文件，补问
+        不收敛）。按 JUDGMENT_BATCH_SIZE 分批问（总输入 token 不变），批内
+        严格解析失败后挖出已覆盖的合法条目、只对缺失文件补问，最多
+        SUMMARY_RETRY_LIMIT 轮——宁可在补问上多花一次调用，也不带病进第二
+        阶段。
+        """
+        results: list[FileSummary] = []
+        for batch in _chunked(judgment_files, JUDGMENT_BATCH_SIZE):
+            results.extend(self._summarize_batch(platform, project_names, batch))
+        return tuple(results)
+
+    def _summarize_batch(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        batch: Sequence[JudgmentFile],
+    ) -> list[FileSummary]:
+        """一批文件的摘要 + 补问循环（见 _summarize_judgment_files 的分批说明）。"""
+        remaining = list(batch)
+        results: list[FileSummary] = []
+        for _ in range(SUMMARY_RETRY_LIMIT):
+            if not remaining:
+                break
+            content = self._chat(
+                [
+                    {"role": "system", "content": JUDGMENT_SUMMARY_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": _summarize_user_prompt(
+                            platform, project_names, remaining
+                        ),
+                    },
+                ],
+                json_mode=True,
+            )
+            try:
+                results.extend(parse_summary_report(content, remaining))
+                remaining = []  # 一次全部通过，循环结束校验也放行
+                break
+            except LLMError:
+                pass
+            good = _extract_good_summaries(content, remaining)
+            results.extend(good)
+            missing = [f for f in remaining if f.path not in {s.path for s in good}]
+            if not missing:
+                # 全部路径都有合法条目（严格解析本应已成功；防御性收尾）
+                remaining = []
+                break
+            if len(missing) == len(remaining):
+                # 输出整体不可用——下一轮整批重问
+                continue
+            remaining = missing
+        if remaining:
+            raise LLMError(
+                "第一阶段摘要多次补问后仍缺失 "
+                + "、".join(sorted(f.path for f in remaining))[:300]
+            )
+        return results
+
+    def _decide_distillation(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        file_summaries: Sequence[FileSummary],
+        comparison_summary: str,
+    ) -> tuple[FileDecision, ...]:
+        """第二阶段：基于摘要判定（json_mode），与第一阶段同款分批 + 补问机制。
+
+        判定条数 = 待判文件数，同样可能被模型丢条目 / 截断（批量超载时系统性
+        漏判，见 JUDGMENT_BATCH_SIZE）——按批问、批内漏判只补问缺失路径，
+        保证返回的判定恰好覆盖全部待判文件（路径完整性由 master.assemble_
+        report 再兜底校验）。
+        判定按"已处理批的素材路径"过滤 + 全局去重（判例 08：提示词带完整结构
+        对比清单，模型会幻觉复述其他批已判的路径、编造素材外路径（code/pid_
+        debug.h）、或提前输出未处理批的路径——前两者让 assemble_report 的
+        "多次判定"/"对比范围外路径"校验失败，提前输出则没读过该路径的摘要、
+        判定不可信，还会挤掉该批正规判定）。只有"本批读过摘要"的判定收下；
+        真实路径的漏判仍由批内补问兜底，过滤不会掩盖漏判。
+        """
+        results: list[FileDecision] = []
+        seen: set[str] = set()
+        for batch in _chunked(file_summaries, JUDGMENT_BATCH_SIZE):
+            batch_paths = {s.path for s in batch}
+            for decision in self._decide_batch(
+                platform, project_names, batch, comparison_summary
+            ):
+                if decision.path in batch_paths and decision.path not in seen:
+                    seen.add(decision.path)
+                    results.append(decision)
+        return tuple(results)
+
+    def _decide_batch(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        batch: Sequence[FileSummary],
+        comparison_summary: str,
+    ) -> list[FileDecision]:
+        """一批文件的判定 + 补问循环（见 _decide_distillation 的分批说明）。"""
+        remaining = list(batch)
+        results: list[FileDecision] = []
+        for _ in range(SUMMARY_RETRY_LIMIT):
+            if not remaining:
+                break
+            content = self._chat(
+                [
+                    {"role": "system", "content": DISTILL_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": _distill_user_prompt(
+                            platform, project_names, remaining, comparison_summary
+                        ),
+                    },
+                ],
+                json_mode=True,
+            )
+            try:
+                parsed = parse_distillation_report(content, project_names)
+            except LLMError:
+                # 输出整体不可用（非 JSON / 形状错）——挖出合法条目只补问坏的，
+                # 一个都挖不出才整批重问（坏条目不连坐好条目，同 _extract_good_
+                # summaries）
+                parsed = _extract_good_decisions(content, project_names, remaining)
+                if not parsed:
+                    continue
+            # 严格解析不校验覆盖（master 层职责）；这里知道素材范围，漏判即补问。
+            # 跨轮去重（补问轮的响应可能复述已判路径）：同一路径只保留第一次判定
+            results.extend(d for d in parsed if d.path not in {x.path for x in results})
+            covered = {d.path for d in results}
+            missing = [s for s in remaining if s.path not in covered]
+            if not missing:
+                remaining = []
+                break
+            remaining = missing  # 漏判部分——只补问缺失路径
+        if remaining:
+            raise LLMError(
+                "提炼判定多次补问后仍缺失 "
+                + "、".join(sorted(s.path for s in remaining))[:300]
+            )
+        return results
 
     def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
@@ -526,6 +790,22 @@ def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) ->
     return "\n".join(lines)
 
 
+def _cap_judgment_content(content: str) -> str:
+    """判定素材内容截断：超过 JUDGMENT_CONTENT_CAP 只保留文件头并注明原文长度。
+
+    文件头足以让模型判断文件性质（标准库头 / 工程配置 / 业务代码）；巨型全文
+    只会在两阶段之间来回搬运。截断标记带原文总长，模型不会被误导以为文件就
+    这么短。
+    """
+    if len(content) <= JUDGMENT_CONTENT_CAP:
+        return content
+    return (
+        content[:JUDGMENT_CONTENT_CAP]
+        + f"\n...（内容过长，已截断：仅展示前 {JUDGMENT_CONTENT_CAP} 字符，"
+        f"原文共 {len(content)} 字符）"
+    )
+
+
 def _selection_user_prompt(problem_text: str, manifest_summaries: Sequence[str]) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     prompt = _build_user_prompt(problem_text, "模块库可用模块：", manifest_summaries)
@@ -544,13 +824,21 @@ def _summarize_user_prompt(
         f"导入的工程：{names}",
         "",
         "需要判定的文件（同一路径出现多个内容版本 = 冲突；只出现在部分工程 = "
-        "独有）。读全文后为每个内容版本写一段中文摘要：",
+        "独有）。读全文后为每个内容版本写一段中文摘要。同一路径在多个工程里"
+        "内容不同（冲突）时，每个内容版本必须各输出一条 versions 条目，projects "
+        "精确列出持有该版本内容的工程——把不同内容的版本合并成一条是错误：",
     ]
     for file in judgment_files:
-        for version in file.versions:
+        multi = len(file.versions) > 1
+        for index, version in enumerate(file.versions, start=1):
+            label = (
+                f"版本 {index}（{'、'.join(version.projects)}）"
+                if multi
+                else f"（{'、'.join(version.projects)}）"
+            )
             lines.append(
-                f"- {file.path}（{'、'.join(version.projects)}）：\n"
-                f"```c\n{version.content}\n```"
+                f"- {file.path} {label}：\n"
+                f"```c\n{_cap_judgment_content(version.content)}\n```"
             )
     lines.append(
         "只返回 json 格式的 JSON 对象："

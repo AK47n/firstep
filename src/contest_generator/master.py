@@ -5,10 +5,10 @@ scan_project 逐个生成结构快照（平台检测 + 文件清单 + 配置摘�
 compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→ distill_master
 把全部文件（公共 + 冲突 + 独有，公共不等于基础建设必需，同样逐个判）连同
 文件全文交给 LLM（两阶段：读全文出摘要 → 基于摘要判定），残留（构建产物 /
-备份 / 临时文件）按扩展名 / 模式规则识别、确定性剔除，旧工程 main.c 一律
-不进母版（ADR 0002：母版 main.c 由确定性模板提供），启动文件 / 链接脚本
-（.s/.ld/.sct/.cmd）按扩展名规则确定性保留（编译链必需件，不交给 AI 判）
-→ 得到完整提炼报告
+备份 / 临时文件）按扩展名 / 模式规则识别、二进制文件（非源码素材）按内容
+规则识别，确定性剔除，旧工程 main.c 一律不进母版（ADR 0002：母版 main.c 由
+确定性模板提供），启动文件 / 链接脚本（.s/.ld/.sct/.cmd）按扩展名规则确定性
+保留（编译链必需件，不交给 AI 判）→ 得到完整提炼报告
 （保留 / 整合 / 剔除清单 + 理由，残留与 main.c 条目带规则化原因，整合产物
 全文 + 说明，模板 main.c 全文预览）→ 用户一次审查、可修改动作 →
 apply_distillation 按确认后的最终集合重新校验并落盘母版候选（复制 / 写整合
@@ -97,14 +97,37 @@ RESIDUE_RULES: tuple[tuple[str, str], ...] = (
 def residue_reason(rel_path: str) -> str | None:
     """路径命中残留规则时返回规则化原因（如"构建产物：.o 文件"），否则 None。
 
-    按路径后缀判定（大小写不敏感——Windows 下构建产物常大写，如 .HEX）。
-    规则由路径决定：同一路径在任何工程里都是残留，不可能既是残留又是源码。
+    按路径后缀判定（大小写不敏感——Windows 下构建产物常大写，如 .HEX）；
+    .bak 精确后缀之外，路径含 ".bak" 段的（pid.c.bak2 / pid.c.bak_consolidate
+    ——真实旧工程备份习惯多样，判例 08）同样是备份。规则由路径决定：同一路径
+    在任何工程里都是残留，不可能既是残留又是源码。
     """
     lowered = rel_path.lower()
     for suffix, reason in RESIDUE_RULES:
         if lowered.endswith(suffix):
             return reason
+    if ".bak" in lowered:
+        return "备份文件：.bak 变体（.bak2 / .bak_consolidate 等）"
     return None
+
+
+# 二进制文件（内容判据）：文件头探针内含 NUL 字节即二进制。真实旧工程里混着
+# 素材类文件——PDF / 图片 / 模型（.kmodel）/ 压缩包 / 可执行文件 / STEP 装配体，
+# 它们不可能是编译链源码（母版 = 空的最小系统板工程，编译必需件只有文本），
+# 且以 errors="replace" 读全文会产生几十 MB 乱码撑爆 LLM 上下文（判例 08：三个
+# 真实工程判定素材 47.6M 字符，最大单文件 7.5M）。与残留同模式：规则识别、
+# 确定性剔除、不进 AI 判定也不读全文，但进报告 exclude 清单并带规则化原因
+# （ADR 0001：不做黑盒消失）。判据是内容不是扩展名——扩展名名单永远有尾
+# （.kmodel/.STEP/.exe/.zip/...），NUL 探测覆盖任何二进制格式，且纯文本源码
+# 不含 NUL，不会误伤。
+BINARY_PROBE_BYTES = 8192
+BINARY_FILE_REASON = "二进制文件：非源码素材（文档 / 图片 / 模型等），确定性剔除"
+
+
+def _is_binary_file(path: Path) -> bool:
+    """文件头（前 BINARY_PROBE_BYTES 字节）含 NUL 字节即判定为二进制。"""
+    with path.open("rb") as file:
+        return b"\x00" in file.read(BINARY_PROBE_BYTES)
 
 
 # 模板 main.c（ADR 0002）：母版 = 空的最小系统板工程，main.c 由确定性平台模板
@@ -203,6 +226,7 @@ class ProjectStructure:
     residues: tuple[str, ...] = ()  # 残留相对路径（构建产物 / 备份 / 临时文件）
     main_c_files: tuple[str, ...] = ()  # 旧工程 main.c（模板替代，不进扫描清单）
     infrastructure: tuple[str, ...] = ()  # 基础设施（启动文件 / 链接脚本），确定性保留、不进 AI 判定
+    binaries: tuple[str, ...] = ()  # 二进制文件（内容判据，确定性剔除、不进 AI 判定）
 
 
 @dataclass(frozen=True)
@@ -218,6 +242,7 @@ class ProjectComparison:
     residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
     main_c_files: tuple[str, ...] = ()  # 全部工程的旧 main.c（并集，排序，模板替代）
     infrastructure: tuple[str, ...] = ()  # 全部工程的基础设施（并集，排序，确定性保留）
+    binaries: tuple[str, ...] = ()  # 全部工程的二进制文件（并集，排序，确定性剔除）
 
 
 @dataclass(frozen=True)
@@ -268,8 +293,10 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     residues、不进扫描清单也不读内容（可能是二进制）；旧 main.c（任意层级）
     单独记录在 main_c_files（模板替代，ADR 0002）、不进扫描清单也不读内容；
     启动文件 / 链接脚本（.s/.ld/.sct/.cmd）单独记录在 infrastructure、确定性
-    保留、不进扫描清单也不读内容；config_summary 提取设备 / include path /
-    编译宏等配置对比素材（XML 解析失败只记一行，扫描不因单个工程带病中断）。
+    保留、不进扫描清单也不读内容；二进制文件（内容判据：文件头含 NUL）单独
+    记录在 binaries、确定性剔除、不进扫描清单也不读全文（可能是几十 MB 的
+    模型 / 压缩包）；config_summary 提取设备 / include path / 编译宏等配置对比
+    素材（XML 解析失败只记一行，扫描不因单个工程带病中断）。
     """
     if not project_dir.is_dir():
         raise MasterError(f"工程目录不存在：{project_dir}")
@@ -278,6 +305,7 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     residues: list[str] = []
     main_c_files: list[str] = []
     infrastructure: list[str] = []
+    binaries: list[str] = []
     hashes: dict[str, str] = {}
     for path in sorted(project_dir.rglob("*")):
         if not path.is_file():
@@ -295,6 +323,10 @@ def scan_project(project_dir: Path) -> ProjectStructure:
             # 启动文件 / 链接脚本：确定性保留，不进 AI 判定也不读内容
             infrastructure.append(rel)
             continue
+        if _is_binary_file(path):
+            # 二进制文件（内容判据）：确定性剔除，不进 AI 判定也不读全文
+            binaries.append(rel)
+            continue
         files.append(rel)
         hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return ProjectStructure(
@@ -307,6 +339,7 @@ def scan_project(project_dir: Path) -> ProjectStructure:
         residues=tuple(residues),
         main_c_files=tuple(main_c_files),
         infrastructure=tuple(infrastructure),
+        binaries=tuple(binaries),
     )
 
 
@@ -366,6 +399,7 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
         infrastructure=tuple(
             sorted({i for p in projects for i in p.infrastructure})
         ),
+        binaries=tuple(sorted({b for p in projects for b in p.binaries})),
     )
 
 
@@ -471,9 +505,10 @@ def assemble_report(
     与出现范围）；冲突文件可以 merge（整合出通用版本）也可以 exclude，只有
     keep 被禁止（keep 没有"取哪份内容"的信息，落盘时会静默取第一个工程）；
     merge 必须带整合产物全文与整合说明（选一份只是特例）。残留（构建产物 /
-    备份 / 临时文件）与旧 main.c（ADR 0002：母版 main.c 由确定性模板提供）
-    机器识别、确定性剔除：不进 AI 判定素材（AI 给出这类路径的判定是越界，
-    拒绝），报告 exclude 清单自动带规则化原因（ADR 0001：不做黑盒消失）。
+    备份 / 临时文件）、旧 main.c（ADR 0002：母版 main.c 由确定性模板提供）与
+    二进制文件（内容判据，非源码素材）机器识别、确定性剔除：不进 AI 判定素材
+    （AI 给出这类路径的判定是越界，拒绝），报告 exclude 清单自动带规则化原因
+    （ADR 0001：不做黑盒消失）。
     启动文件 / 链接脚本（基础设施）同模式、确定性保留：不进 AI 判定素材，
     AI 判定即越界，报告 keep 清单自动带规则化原因——这些文件判错（剔除）
     会直接断掉空工程的编译链。以上在确认前就拦住，兑现"不带病进入确认流程"。
@@ -481,6 +516,7 @@ def assemble_report(
     residues = set(comparison.residues)
     main_c_files = set(comparison.main_c_files)
     infrastructure = set(comparison.infrastructure)
+    binaries = set(comparison.binaries)
     scoped: list[FileDecision] = []
     for decision in decisions:
         if decision.path in residues:
@@ -492,6 +528,9 @@ def assemble_report(
         if decision.path in infrastructure:
             # 启动文件 / 链接脚本由规则确定性保留，AI 从未在素材里见过它
             raise MasterError(f"基础设施由规则保留，无需 AI 判定：{decision.path}")
+        if decision.path in binaries:
+            # 二进制文件由内容规则确定性剔除，AI 从未在素材里见过它
+            raise MasterError(f"二进制文件由规则剔除，无需 AI 判定：{decision.path}")
         scoped.append(decision)
     decided = {d.path for d in scoped}
     _validate_judgment_coverage(decided=decided, judgment=set(comparison.judgment))
@@ -515,6 +554,8 @@ def assemble_report(
         if reason is None:
             raise MasterError(f"旧工程 main.c 未命中规则：{path}")
         exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=reason))
+    for path in comparison.binaries:
+        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=BINARY_FILE_REASON))
     return DistillationReport(
         platform=platform,
         projects=tuple(project_names),
@@ -624,17 +665,18 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
         raise MasterError(
             "公共文件必须保留或剔除：" + "、".join(sorted(misplaced_commons))
         )
-    # 残留与旧 main.c 在报告里但不在判定范围（规则识别、确定性剔除），从覆盖
-    # 校验中扣除；它们必须恰好出现在 exclude 里，由 _validate_residue_disposition
-    # / _validate_main_c_disposition 单独校验；基础设施（启动文件 / 链接脚本）
-    # 同样不在判定范围，必须恰好出现在 keep 里
+    # 残留、旧 main.c 与二进制文件在报告里但不在判定范围（规则识别、确定性
+    # 剔除），从覆盖校验中扣除；它们必须恰好出现在 exclude 里，由各自的
+    # _validate_*_disposition 单独校验；基础设施（启动文件 / 链接脚本）同样
+    # 不在判定范围，必须恰好出现在 keep 里
     _validate_judgment_coverage(
         decided=set(paths) - set(comparison.residues) - set(comparison.main_c_files)
-        - set(comparison.infrastructure),
+        - set(comparison.infrastructure) - set(comparison.binaries),
         judgment=set(comparison.judgment),
     )
     _validate_residue_disposition(report, comparison)
     _validate_main_c_disposition(report, comparison)
+    _validate_binary_disposition(report, comparison)
     _validate_infrastructure_disposition(report, comparison)
     _validate_merge_sources(dispositions, comparison)
 
@@ -655,6 +697,16 @@ def _validate_main_c_disposition(
     见 _validate_forced_exclusions）。"""
     _validate_forced_exclusions(
         set(comparison.main_c_files), report, "旧工程 main.c 必须剔除"
+    )
+
+
+def _validate_binary_disposition(
+    report: DistillationReport, comparison: ProjectComparison
+) -> None:
+    """二进制文件必须恰好剔除一次：内容规则识别的确定性剔除（非源码素材，
+    见 _validate_forced_exclusions）。"""
+    _validate_forced_exclusions(
+        set(comparison.binaries), report, "二进制文件必须剔除"
     )
 
 
