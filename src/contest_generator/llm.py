@@ -20,7 +20,7 @@ from typing import Any, Protocol, Sequence
 
 from .config import AppConfig
 from .manifest import ModuleManifest
-from .report import ACTION_MERGE, FileDecision, ReportError
+from .report import ACTION_MERGE, FileDecision, JudgmentFile, ReportError
 
 # ---------------------------------------------------------------------------
 # 截断标注契约（唯一出处）
@@ -246,7 +246,7 @@ def _split_merged_versions(
     """
     if len(file.versions) < 2 or len(entries) != 1:
         return None
-    groups = [frozenset(v.projects) for v in file.versions]
+    groups = file.version_groups
     union = frozenset().union(*groups)
     entry = entries[0]
     raw_versions = entry.get("versions")
@@ -329,26 +329,6 @@ class ValidationResult:
 
     consistent: bool  # 简介与代码是否一致
     issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
-
-
-@dataclass(frozen=True)
-class JudgmentFile:
-    """待判文件素材：路径 + 每个内容版本及其持有工程（AI 判定前先读全文出摘要）。
-
-    覆盖 master 判定范围（公共 + 冲突 + 独有，全部文件）。同一路径内容
-    不同的每个版本都传（AI 读全部版本后判定）；内容一致的工程合并为一个版本。
-    """
-
-    path: str
-    versions: tuple[FileVersion, ...]
-
-
-@dataclass(frozen=True)
-class FileVersion:
-    """同一路径下的一个内容版本：全文 + 持该版本的工程名。"""
-
-    content: str
-    projects: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -823,8 +803,7 @@ def parse_summary_report(
         raise LLMError("模型输出缺少 summaries 数组")
 
     expected: dict[str, tuple[frozenset[str], ...]] = {
-        file.path: tuple(frozenset(v.projects) for v in file.versions)
-        for file in judgment_files
+        file.path: file.version_groups for file in judgment_files
     }
     seen_paths: set[str] = set()
     summaries: list[FileSummary] = []

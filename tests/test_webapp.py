@@ -15,17 +15,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.config import AppConfig
-from contest_generator.llm import (
-    JudgmentFile,
-    LLMError,
-    ModuleSelection,
-    ValidationResult,
-)
+from contest_generator.llm import LLMError, ModuleSelection, ValidationResult
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
+    JudgmentFile,
 )
 from contest_generator.master import import_master, main_c_template
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32

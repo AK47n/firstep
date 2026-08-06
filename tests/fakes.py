@@ -14,8 +14,8 @@ from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
 
-from contest_generator.llm import JudgmentFile, ModuleSelection, ValidationResult
-from contest_generator.report import FileDecision
+from contest_generator.llm import ModuleSelection, ValidationResult
+from contest_generator.report import FileDecision, JudgmentFile
 
 # ---------------------------------------------------------------------------
 # 假模块文件内容（断言输出目录里文件内容用）
