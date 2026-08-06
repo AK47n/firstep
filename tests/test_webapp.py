@@ -79,19 +79,12 @@ class RaisingLLM:
 
 # 假工程对的典型 AI 判定（与 tests/test_master.py 同一套素材）
 # 公共文件（所有工程内容一致）同样由 AI 判定：基础建设必需 → keep（判例 06）
+# 注意：.uvprojx 是工程配置文件（工单 09），由确定性规则处理、不在判定范围
 DEFAULT_DECISIONS = (
     FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="官方库配置头，基础必需"),
     FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="系统初始化，基础必需"),
     FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用传感器驱动"),
     FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="上场比赛残留"),
-    FileDecision(
-        "project.uvprojx",
-        ACTION_MERGE,
-        content=FAKE_DISTILL_UVPROJX_A,  # 结构完整的整合产物（入库有结构校验）
-        explanation="取 include path 更全的 A 版本",
-        source="proj-a",
-        reason="include path 更全",
-    ),
     FileDecision(
         "src/oled.c",
         ACTION_MERGE,
@@ -509,14 +502,20 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
         "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
     ).json()
     assert report["projects"] == ["proj-a", "proj-b"]
+    # keep = 规则条目（.uvprojx 工程配置文件，工单 09）+ AI 判定保留
     assert [d["path"] for d in report["keep"]] == [
-        "inc/stm32f10x_conf.h", "src/system_stm32f10x.c", "sensors/dht11.c",
+        "project.uvprojx", "inc/stm32f10x_conf.h", "src/system_stm32f10x.c",
+        "sensors/dht11.c",
     ]
-    assert [d["path"] for d in report["merge"]] == ["project.uvprojx", "src/oled.c"]
-    # exclude = AI 判定 + 规则识别的残留（带规则化原因）+ 旧工程 main.c（模板替代）
+    config = next(d for d in report["keep"] if d["path"] == "project.uvprojx")
+    assert "确定性模板现写" in config["reason"]
+    assert [d["path"] for d in report["merge"]] == ["src/oled.c"]
+    # exclude = AI 判定 + 规则识别的残留（带规则化原因，含 IDE 用户选项 .uvoptx）
+    # + 旧工程 main.c（模板替代）
     assert [d["path"] for d in report["exclude"]] == [
         "ui/oled_fonts.c",
         "main.c.bak",
+        "project.uvoptx",
         "src/oled.hex",
         "src/oled.o",
         "ui/oled_fonts.c~",
@@ -524,12 +523,17 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
     ]
     residue = next(d for d in report["exclude"] if d["path"] == "src/oled.o")
     assert residue["reason"] == "构建产物：.o 文件"
+    uvoptx = next(d for d in report["exclude"] if d["path"] == "project.uvoptx")
+    assert uvoptx["reason"] == "IDE 用户选项：编译时自动重建"
     main_c = next(d for d in report["exclude"] if d["path"] == "main.c")
     assert main_c["action"] == ACTION_EXCLUDE
     assert "模板" in main_c["reason"]
-    # 报告携带模板 main.c 全文预览：一次确认前用户能看到将要写入母版的 main.c
+    # 报告携带模板 main.c 与 .uvprojx 全文预览：一次确认前用户能看到将要写入
+    # 母版的 main.c 与工程文件
     assert report["main_c_preview"] == main_c_template(PLATFORM_STM32)
     assert report["main_c_preview"]
+    assert report["uvprojx_preview"]
+    assert "STM32F103C8" in report["uvprojx_preview"]
 
     confirmed = client.post(
         "/api/masters/confirm",
@@ -628,26 +632,14 @@ def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
 
 
 def test_master_confirm_invalid_ai_merged_uvprojx_returns_400(context, tmp_path):
-    """AI 整合出的 .uvprojx 是截断 XML → 业务失败 400 带中文 message，不裸 500。
-
-    真实 LLM 整合 .uvprojx 时可能输出截断 / 转义错误的 XML，落盘阶段
-    rewrite_project_references 解析失败——此前 KeilProjectError 未被确认端点
-    捕获，浏览器只看到裸 500 且界面停在"落盘与入库中"。
-    """
+    """.uvprojx 是工程配置文件（工单 09），用户确认时改成剔除 → 业务失败 400
+    带中文 message，不裸 500（条目不可改动作，同基础设施强制）。"""
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = (
         FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="必需"),
         FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="必需"),
         FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用"),
         FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="残留"),
-        FileDecision(
-            "project.uvprojx",
-            ACTION_MERGE,
-            content="<Project>\n  <Targets>\n    <Target>\n      <TargetName>proj",  # 截断
-            explanation="整合",
-            source="proj-a",
-            reason="整合",
-        ),
         FileDecision(
             "src/oled.c",
             ACTION_MERGE,
@@ -662,20 +654,26 @@ def test_master_confirm_invalid_ai_merged_uvprojx_returns_400(context, tmp_path)
     report = client.post(
         "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
     ).json()
+    # 用户确认时把 .uvprojx（工程配置文件）改成剔除——确定性规则处理不可改
+    # 动作（工单 09 决策 7）→ 400 带中文 message，不裸 500
+    report["keep"] = [d for d in report["keep"] if d["path"] != "project.uvprojx"]
+    report["exclude"].append(
+        {"path": "project.uvprojx", "action": ACTION_EXCLUDE, "reason": "用户改的"}
+    )
 
     resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
 
     assert resp.status_code == 400
-    assert "不是合法 XML" in resp.json()["detail"]
+    assert "工程配置文件必须保留" in resp.json()["detail"]
     assert client.get("/api/masters").json() == []  # 失败不入库
 
 
-def test_master_confirm_uvprojx_excluded_returns_400(context, tmp_path):
-    """AI 把 .uvprojx 判为剔除 → 落盘重写找不到工程文件 → 400 而非 500。
+def test_master_distill_rejects_ai_on_uvprojx_returns_400(context, tmp_path):
+    """AI 给工程配置文件（.uvprojx）判定 → 越界 → 提炼阶段 400 而非带病进
+    确认流程。
 
-    .uvprojx 是 Keil 工程的"工程文件"，AI 判 exclude 后母版目录没有
-    .uvprojx，rewrite_project_references 找不到目标——同样是 KeilProjectError
-    裸传 500 的漏网点。
+    .uvprojx 由确定性渲染器现写（工单 09，判例 09 治本）：AI 从未在判定素材
+    里见过它，给出判定即越界——在确认前大声失败。
     """
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = (
@@ -697,14 +695,13 @@ def test_master_confirm_uvprojx_excluded_returns_400(context, tmp_path):
     )
     client = TestClient(create_app(context[0]), raise_server_exceptions=False)
     dirs = [str(proj_a), str(proj_b)]
-    report = client.post(
-        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
-    ).json()
 
-    resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
+    resp = client.post(
+        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
+    )
 
     assert resp.status_code == 400
-    assert "uvprojx" in resp.json()["detail"].lower()
+    assert "无需 AI 判定" in resp.json()["detail"]
     assert client.get("/api/masters").json() == []  # 失败不入库
 
 

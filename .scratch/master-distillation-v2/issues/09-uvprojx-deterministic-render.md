@@ -33,8 +33,17 @@
 
 **Blocked by:** 无（ticket 08 的结构校验保留，作为安全网）
 
-**Status:** open
+**Status:** resolved
 
 ## Answer
 
-（实现后填写）
+- [x] **keil.py 渲染器**：`build_master_uvprojx`（纯字符串确定性拼接）+ `render_master_uvprojx`（固定落位 `user/Project.uvprojx`）。设备块从真实母版 2026C/21F 原样提取（已验证与源文件逐字节一致）：C8T6 硬编码（Device STM32F103C8 / IRAM(0x20000000,0x5000) IROM(0x08000000,0x10000) / ARM-ADS 0x4 / SchemaVersion 2.1）；文件树按顶层目录分组（code/ml_libs/sys/user 风格）、引用全部保留 .c/.s + 模板 main.c 条目（`..\main.c`）；IncludePath = 保留 .h 目录（去重排序、相对 user/）；启动文件密度辅助（`is_startup_candidate` / `is_md_startup`）与密度守卫（非 _md 大声失败"导入工程与目标板 STM32F103C8T6 不符"）在渲染器。`rewrite_project_references` 在母版路径退役（删除函数与测试）。
+- [x] **master.py 扫描分类**：`.uvprojx` → 工程配置文件（不进扫描清单/判定素材，报告 keep 带规则原因"工程配置文件：由确定性模板现写，保留文件全量入树"）；`.uvoptx`/`.uvguix` → IDE 用户选项规则剔除（`.uvguix` 文件名带用户名后缀，按包含匹配——真实工程 2026C/21F 成对出现，决策 5 补全）；`startup_stm32f10x_*.s` → 启动文件候选单独记录。
+- [x] **启动文件跨工程去重**（assemble_report，scan 只分类）：优先 `_md`、无则路径排序取第一份；落选候选 exclude 带原因"启动文件替代：同一器件只需一份启动文件"；保留份/落选份均不可改动作（`_validate_startup_disposition`）。真实案例验证：2026C key/ + 21F sys/ 两份 md 只保留 key/ 一份。
+- [x] **报告语义**：配置文件强制 keep 不可改（`_validate_config_disposition`，与基础设施同款）；`DistillationReport` 加 `uvprojx_preview` 必填字段（stm32 渲染全文 / mspm0 空串），确认回传时按最终决策集重推导（客户端值不可信，tamper 测试覆盖）；`JUDGMENT_SCOPE` 声明"工程配置文件由确定性规则处理，不参与判定"（AI 给配置路径判定 = 越界拒绝）；webapp 往返经 to_dict/from_dict 自动带上（webapp.py 无需改动）。
+- [x] **落盘**：apply_distillation 跳过配置文件复制、stm32 渲染现写（密度守卫落盘前大声失败——蒸馏预览推导时即触发）；mspm0 .cproject/.project 保留首份原样复制；KeilPatcher 生成时模块条目与 include path 改按 .uvprojx 所在目录相对（user/ 落位下 `.\..\modules\...` 回算——根级相对会解析到 user/modules/ 编译缺文件）；结构与校验均对齐真实格式（IncludePath 在 `Cads/VariousControls` 下，2026C/21F 同款；FAKE_UVPROJX/FAKE_DISTILL_UVPROJX 同步更新）。
+- [x] **模板 main.c**：include `"stm32f10x_conf.h"` → `"stm32f10x.h"`（已对照真实头文件验证：stm32f10x.h:479 include system_stm32f10x.h、SystemInit 声明在 :79）。
+- [x] **测试**：渲染器单测 9 个（树覆盖/分组/IncludePath/设备块/确定性/密度守卫/落位/结构校验/候选辅助）+ 生成打补丁相对路径锁定 + 报告语义（强制 keep、不可改、预览往返重推导）+ 启动去重 3 场景 + 真实工程验收 `test_real_projects_2026c_21f_distill_and_import`（2026C+21F 全流程跑通：去重/剔除/渲染/入库结构校验，机器上 PASS 非 skip）。全套 418 绿 + mypy 干净。
+- [x] **ADR 0003**（工程配置文件移出 AI 判定、确定性现写），CONTEXT.md 词表补充。
+- [ ] **验收剩余步骤（需真实环境，人工）**：`~/.contest_generator/masters/stm32` 坏母版替换为新提炼母版（组空、0 IncludePath 的旧母版已被本流程取代）；用户 Keil 实际编译一次为最终证明（含生成流程：新母版 + 选模块生成 → 编译）。
+- [ ] 8000 端口服务需重启加载新代码（若在跑）。

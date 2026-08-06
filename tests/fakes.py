@@ -31,8 +31,9 @@ OLED_H = "#pragma once\nvoid oled_init(void);\n"
 # 里真实存在的函数；自检逻辑见 skeleton.py）
 MAIN_SKELETON = "int main(void) { float t = dht11_read(); while (1); }\n"
 
-# 假母版的 .uvprojx：结构真实的 Keil5 工程文件（设备型号、Cpu、IncludePath、
-# 一个含 main.c 的源组）。修改器只该动 IncludePath 与 Groups，其余原样保留。
+# 假母版的 .uvprojx：结构真实的 Keil5 工程文件（设备型号、Cpu、IncludePath
+# 在 Cads/VariousControls 下——真实 Keil 格式（2026C/21F 同款）、一个含
+# main.c 的源组）。修改器只该动 IncludePath 与 Groups，其余原样保留。
 FAKE_UVPROJX = r'''<?xml version="1.0" encoding="UTF-8" ?>
 <Project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <SchemaVersion>2.1</SchemaVersion>
@@ -53,7 +54,12 @@ FAKE_UVPROJX = r'''<?xml version="1.0" encoding="UTF-8" ?>
             <useUlib>1</useUlib>
           </ArmAdsMisc>
           <Cads>
-            <IncludePath>.\inc;.\src</IncludePath>
+            <VariousControls>
+              <MiscControls></MiscControls>
+              <Define></Define>
+              <Undefine></Undefine>
+              <IncludePath>.\inc;.\src</IncludePath>
+            </VariousControls>
           </Cads>
         </TargetArmAds>
       </TargetOption>
@@ -152,7 +158,8 @@ def make_fake_module_library(library_dir: Path) -> Path:
 
 # 提炼用假工程 .uvprojx：设备 / include path 两个对比点（A 多一个 .\src）+
 # 工程树（Groups/Files，引用 proj-a 自己的 .c 源码——真实 Keil 工程的形态；
-# 母版入库的结构校验要求每个保留源码都在工程树里有引用，无树配置 = 坏母版）
+# 母版入库的结构校验要求每个保留源码都在工程树里有引用，无树配置 = 坏母版）。
+# IncludePath 在 Cads/VariousControls 下（真实 Keil 格式，2026C/21F 同款）。
 FAKE_DISTILL_UVPROJX_A = r'''<?xml version="1.0" encoding="UTF-8" ?>
 <Project>
   <Targets>
@@ -164,7 +171,12 @@ FAKE_DISTILL_UVPROJX_A = r'''<?xml version="1.0" encoding="UTF-8" ?>
         </TargetCommonOption>
         <TargetArmAds>
           <Cads>
-            <IncludePath>.\inc;.\src</IncludePath>
+            <VariousControls>
+              <MiscControls></MiscControls>
+              <Define></Define>
+              <Undefine></Undefine>
+              <IncludePath>.\inc;.\src</IncludePath>
+            </VariousControls>
           </Cads>
         </TargetArmAds>
       </TargetOption>
@@ -202,7 +214,9 @@ FAKE_DISTILL_UVPROJX_A = r'''<?xml version="1.0" encoding="UTF-8" ?>
 
 FAKE_DISTILL_UVPROJX_B = FAKE_DISTILL_UVPROJX_A.replace(
     "<TargetName>proj-a</TargetName>", "<TargetName>proj-b</TargetName>"
-).replace("<IncludePath>.\\inc;.\\src</IncludePath>", "<IncludePath>.\\inc</IncludePath>").replace(
+).replace(
+    "<IncludePath>.\\inc;.\\src</IncludePath>", "<IncludePath>.\\inc</IncludePath>"
+).replace(
     "</File>\n          </Files>",
     "</File>\n"
     "            <File>\n"
@@ -230,6 +244,7 @@ def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
         # 由确定性模板 main.c 替代（ADR 0002），内容差异无碍
         "main.c": "/* proj-a 的赛题 main */\nint main(void) { while (1); }\n",
         "project.uvprojx": FAKE_DISTILL_UVPROJX_A,
+        "project.uvoptx": "<ProjectOpt><Targets/></ProjectOpt>",  # IDE 用户选项
         "src/oled.c": "/* 通用 OLED 驱动（A 版本） */\nvoid oled_init(void);\n",
         "sensors/dht11.c": "/* 通用 DHT11 驱动 */\nfloat dht11_read(void);\n",
         "src/oled.o": "ELF junk",  # 构建产物
@@ -242,6 +257,7 @@ def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:
         **common,
         "main.c": "/* proj-b 的赛题 main（业务逻辑不同） */\nint main(void) { while (1); }\n",
         "project.uvprojx": FAKE_DISTILL_UVPROJX_B,
+        "project.uvoptx": "<ProjectOpt><Targets/></ProjectOpt>",  # IDE 用户选项
         "src/oled.c": "/* 通用 OLED 驱动（B 版本） */\nvoid oled_init(void);\n",
         "ui/oled_fonts.c": "/* 上一场比赛的字体表 */\nconst unsigned char font[1];\n",
         "src/oled.hex": "hex junk",  # 构建产物
