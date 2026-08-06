@@ -55,19 +55,38 @@ from .report import (
     ReportError,
 )
 
-# 扫描时忽略的顶级目录：版本库与构建产物不是母版内容
-BUILD_ARTIFACT_DIRS = frozenset({"Debug", "Release"})
+# 扫描时忽略的目录：版本库与构建产物不是母版内容。Debug/Release（CCS 构建
+# 输出）只在工程顶层出现，顶层匹配即可；Listings/Objects（Keil 默认输出目录）
+# 建在 .uvprojx 所在目录——正点原子风格工程 .uvprojx 在 USER/ 下时，产物在
+# USER/Listings、USER/Objects，必须按任意层级组件匹配（见 _is_ignored）。
+# Keil 的 .d 依赖文件落在这些输出目录里，整目录忽略已覆盖，名单里不需要裸
+# ".d" 规则（见 RESIDUE_RULES 注释）。
+BUILD_ARTIFACT_DIRS = frozenset({"Debug", "Release", "Listings", "Objects"})
 IGNORED_TOP_LEVEL_DIRS = frozenset({".git"}) | BUILD_ARTIFACT_DIRS
+
+# 任意层级组件忽略的目录（其余忽略只在顶层生效，见 _is_ignored）
+NESTED_IGNORE_DIRS = frozenset({"Listings", "Objects"})
 
 # 残留规则（保守名单，与 template-fit-check.md 的"建议清理"一致）：构建产物 /
 # 备份 / 临时文件按扩展名与模式机器识别。命中即确定性剔除——不进扫描清单、
 # 不进 AI 判定、不读全文，但进报告 exclude 清单并带规则化原因（ADR 0001：
-# 不做黑盒消失）。
+# 不做黑盒消失）。注意：刻意不含裸 ".d"（Keil/CCS 依赖文件）——.d 依赖文件
+# 默认落在构建输出目录（Keil 的 Objects/Listings、CCS 的 Debug/Release），
+# 目录级忽略（BUILD_ARTIFACT_DIRS，任意层级）已覆盖，名单不需要这条扩展名
+# 规则。也不存在"截胡链接脚本"的问题：后缀匹配是整段 endswith，"startup.ld"
+# / "link.cmd" 不以 ".d" 结尾。
 RESIDUE_RULES: tuple[tuple[str, str], ...] = (
     (".o", "构建产物：.o 文件"),
     (".axf", "构建产物：.axf 文件"),
     (".hex", "构建产物：.hex 文件"),
     (".map", "构建产物：.map 文件"),
+    (".lst", "构建产物：.lst 文件（Keil 列表文件）"),
+    (".htm", "构建产物：.htm 文件（构建 / 链接日志）"),
+    (".crf", "构建产物：.crf 文件（Keil 交叉引用文件）"),
+    (".dep", "构建产物：.dep 文件（依赖文件）"),
+    (".lnp", "构建产物：.lnp 文件（Keil 链接控制文件）"),
+    (".out", "构建产物：.out 文件（CCS 链接产物）"),
+    (".elf", "构建产物：.elf 文件（链接产物）"),
     (".bak", "备份文件：.bak"),
     (".tmp", "临时文件：.tmp"),
     (".temp", "临时文件：.temp"),
@@ -889,13 +908,13 @@ def delete_master(masters_dir: Path, platform: str) -> None:
 
 
 def _find_config_files(project_dir: Path, pattern: str) -> list[Path]:
-    """递归查找工程配置文件：跳过 .git（任意层级）与 Debug/Release 等顶层
-    非母版目录——与扫描清单同一套忽略规则。"""
+    """递归查找工程配置文件：跳过 .git（任意层级）与构建产物目录——与扫描
+    清单同一套忽略规则（_is_ignored：顶层 + Keil 输出目录任意层级）。"""
     return [
         p
         for p in project_dir.rglob(pattern)
         if ".git" not in p.parts
-        and p.relative_to(project_dir).parts[0] not in IGNORED_TOP_LEVEL_DIRS
+        and not _is_ignored(p.relative_to(project_dir).as_posix())
     ]
 
 
@@ -912,7 +931,14 @@ def _detect_platform(project_dir: Path) -> str:
 
 
 def _is_ignored(rel: str) -> bool:
-    return rel.split("/", 1)[0] in IGNORED_TOP_LEVEL_DIRS
+    """路径是否命中忽略目录：顶层忽略（.git / Debug / Release / Listings /
+    Objects）+ Keil 输出目录任意层级匹配（NESTED_IGNORE_DIRS）——Keil 把
+    Listings/Objects 建在 .uvprojx 所在目录，USER/ 工程时产物在 USER/ 下，
+    顶层匹配会漏。"""
+    parts = rel.split("/")
+    if parts[0] in IGNORED_TOP_LEVEL_DIRS:
+        return True
+    return any(part in NESTED_IGNORE_DIRS for part in parts)
 
 
 def _config_summary(project_dir: Path, platform: str) -> tuple[str, ...]:

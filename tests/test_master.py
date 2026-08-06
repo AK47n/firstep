@@ -5,6 +5,7 @@
 """
 
 import shutil
+import xml.etree.ElementTree as ET
 from dataclasses import replace
 
 import pytest
@@ -258,6 +259,69 @@ def test_scan_tolerates_broken_config_xml(fake_stm32_projects):
     assert "无法解析为 XML" in structure.config_summary[0]
 
 
+def test_scan_classifies_keil_build_logs_as_residues(fake_stm32_projects):
+    """Keil 构建产物盲区（判例 06 扩展）：.lst/.htm/.crf/.dep/.lnp 与 .o/.axf
+    同模式识别为残留；.ld 链接脚本 / .cmd 命令文件是基础设施不受误伤。名单刻意
+    不含裸 .d——依赖文件由输出目录级忽略覆盖（见 RESIDUE_RULES 注释）。"""
+    proj = fake_stm32_projects[0]
+    for rel, content in {
+        "Listings/proj.lst": "listing junk",  # 目录级忽略（.d 等无规则后缀的产物）
+        "Listings/proj.d": "dep junk",
+        "Objects/proj.crf": "crf junk",
+        "Objects/proj.dep": "dep junk",
+        "Objects/proj.htm": "<html>link log</html>",
+        "proj.lst": "stray listing",  # 目录外的散件按后缀规则识别
+        "proj.out": "ccs link junk",
+        "proj.elf": "elf junk",
+        "startup.ld": "MEMORY { FLASH (rx) : ORIGIN = 0x0 }",  # 链接脚本：基础设施
+        "link.cmd": "--stack_size=512",  # TI 链接命令文件：基础设施
+    }.items():
+        path = proj / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    structure = scan_project(proj)
+
+    residues = set(structure.residues)
+    # 目录外的散件按后缀规则识别为残留（.lst/.out/.elf，带规则化原因）
+    assert {"proj.elf", "proj.lst", "proj.out"} <= residues
+    # Listings/Objects 是构建产物目录，整目录忽略（与 Debug/Release 同模式）：
+    # .d/.crf/.dep/.htm 等不再出现在任何清单，也不读内容、不进 AI 判定
+    assert not {"Objects/proj.crf", "Objects/proj.dep", "Objects/proj.htm"} <= residues
+    assert "Listings/proj.d" not in residues
+    assert "Listings/proj.lst" not in residues
+    # .ld/.cmd 是基础设施，确定保留、不进判定（后缀匹配是整段 endswith，不会被 .d 误伤）
+    assert structure.infrastructure == ("link.cmd", "startup.ld")
+
+
+def test_scan_ignores_keil_output_dirs_below_uvprojx_dir(fake_stm32_projects):
+    """Keil 把 Listings/Objects 建在 .uvprojx 所在目录：工程在 USER/ 下时产物
+    在 USER/Listings、USER/Objects（判例 07 交叉缺口——顶层忽略挡不住）。裸 .d
+    依赖文件没有后缀规则，全靠目录级忽略兜底，任意层级匹配漏了就会进 AI 判定
+    素材。"""
+    proj = fake_stm32_projects[0]
+    for rel, content in {
+        "USER/Listings/proj.d": "dep junk",
+        "USER/Listings/proj.htm": "<html>link log</html>",
+        "USER/Objects/proj.crf": "crf junk",
+        "USER/Objects/proj.o": "obj junk",
+    }.items():
+        path = proj / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    structure = scan_project(proj)
+
+    ignored = {
+        "USER/Listings/proj.d",
+        "USER/Listings/proj.htm",
+        "USER/Objects/proj.crf",
+        "USER/Objects/proj.o",
+    }
+    assert not set(structure.files) & ignored
+    assert not set(structure.residues) & ignored
+
+
 # ---------------------------------------------------------------------------
 # 对比
 # ---------------------------------------------------------------------------
@@ -404,7 +468,7 @@ def test_distill_passes_platform_names_and_summary_to_llm(fake_stm32_projects):
 
 
 def test_residues_never_reach_ai_material(fake_stm32_projects):
-    """残留不进 AI 判定范围、不进两阶段摘要——AI 只看到冲突与独有文件。"""
+    """残留不进 AI 判定范围、不进两阶段摘要——AI 只看到公共 + 冲突 + 独有文件。"""
     llm = FakeLLM(distillation=DEFAULT_DECISIONS)
 
     _distill(fake_stm32_projects, llm)
@@ -1155,6 +1219,74 @@ def test_apply_copies_infrastructure(fake_stm32_projects, tmp_path):
     )
     with pytest.raises(MasterError, match="基础设施必须保留"):
         apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "bad")
+
+
+def test_apply_rewrites_nested_uvprojx_references(tmp_path):
+    """用户真实结构（.uvprojx 在 user/ 子目录，Keil FilePath 用 ..\ 相对）：
+    落盘后引用重写保留 sys/ 官方库等保留文件（..\ 解析回工程根）、删除被剔除
+    文件的悬空引用、main.c 指向模板落位（.\..\main.c）。"""
+    project = tmp_path / "proj2025"
+    files = {
+        "user/project.uvprojx": (
+            '<Project><Targets><Target><Groups>'
+            "<Group><GroupName>main</GroupName><Files>"
+            "<File><FileName>main.c</FileName><FileType>1</FileType><FilePath>"
+            r".\main.c</FilePath></File>"
+            "</Files></Group>"
+            "<Group><GroupName>sys</GroupName><Files>"
+            "<File><FileName>delay.c</FileName><FileType>1</FileType><FilePath>"
+            r".\..\sys\delay.c</FilePath></File>"
+            "<File><FileName>startup_stm32f10x_hd.s</FileName><FileType>2</FileType>"
+            "<FilePath>"
+            r".\..\sys\startup_stm32f10x_hd.s</FilePath></File>"
+            "</Files></Group>"
+            "<Group><GroupName>code</GroupName><Files>"
+            "<File><FileName>app.c</FileName><FileType>1</FileType><FilePath>"
+            r".\..\code\app.c</FilePath></File>"
+            "</Files></Group>"
+            "</Groups></Target></Targets></Project>"
+        ),
+        "user/main.c": "/* 赛题 main */\n",
+        "sys/delay.c": "/* 通用延时 */\n",
+        "sys/delay.h": "#pragma once\n",
+        "sys/startup_stm32f10x_hd.s": "; startup\n",
+        "code/app.c": "/* 赛题业务 */\n",
+    }
+    for rel, content in files.items():
+        path = project / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    comparison = compare_projects([scan_project(project)])
+    ai_keep = {
+        p
+        for p in comparison.judgment
+        if p.startswith("sys/") or p.endswith(".uvprojx")
+    }
+    ai_exclude = {p for p in comparison.judgment if p not in ai_keep}
+    decisions = tuple(
+        FileDecision(p, ACTION_KEEP, reason="基础必需") for p in sorted(ai_keep)
+    ) + tuple(
+        FileDecision(p, ACTION_EXCLUDE, reason="赛题业务") for p in sorted(ai_exclude)
+    )
+    report = distill_master(
+        FakeLLM(distillation=decisions), "stm32", (scan_project(project),)
+    )
+
+    output = tmp_path / "preview"
+    apply_distillation(report, comparison, output)
+
+    root = ET.parse(output / "user" / "project.uvprojx").getroot()
+    files = [
+        (f.findtext("FileName"), f.findtext("FilePath")) for f in root.iter("File")
+    ]
+    assert files == [
+        ("main.c", r".\..\main.c"),
+        ("delay.c", r".\..\sys\delay.c"),
+        ("startup_stm32f10x_hd.s", r".\..\sys\startup_stm32f10x_hd.s"),
+    ]
+    assert (output / "sys" / "delay.c").is_file()
+    assert (output / "main.c").is_file()  # 模板 main.c 在工程根
 
 
 # ---------------------------------------------------------------------------

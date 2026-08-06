@@ -66,13 +66,20 @@ def rewrite_project_references(project_dir: Path, kept_paths: Sequence[str]) -> 
     落盘文件的相对路径（POSIX，大小写不敏感）。main.c 条目特殊处理：母版
     main.c 由确定性模板写死在母版根，旧工程可能在任意层级（正点原子风格在
     USER/ 子目录），引用路径统一重写指向模板落位，模板 main.c 才进工程树。
-    空组保留（Keil 可容忍，少动结构）。格式知识归本模块所有：与 patch /
+    空组保留（Keil 可容忍，少动结构）。
+
+    .uvprojx 本身也可能在子目录——Keil 的 FilePath 相对 .uvprojx 所在目录
+    （如 USER/proj.uvprojx 里的 `.\..\sys\delay.c` = 工程根的 sys/delay.c），
+    匹配保留集合前先按该基准解析回工程根相对路径（_resolve_root_path）；
+    main.c 重定向目标（工程根）同样从 .uvprojx 所在目录回算
+    （_keil_rel_path_from）。格式知识归本模块所有：与 patch /
     extract_config_summary 共用同一套 XML 结构认知。
     """
     uvprojx = _find_uvprojx(project_dir)
     root, original_text = parse_project_file(uvprojx, KeilProjectError)
+    uvprojx_parts = uvprojx.parent.relative_to(project_dir).parts
     kept = {_normalize_path(p) for p in kept_paths}
-    template_main = _keil_rel_path("main.c")
+    template_main = _keil_rel_path_from(uvprojx_parts, "main.c")
     changed = False
     for target in root.findall("Targets/Target"):
         for group in target.findall("Groups/Group"):
@@ -85,7 +92,10 @@ def rewrite_project_references(project_dir: Path, kept_paths: Sequence[str]) -> 
                         if file_path is not None and file_path != template_main:
                             file_el.find("FilePath").text = template_main
                             changed = True
-                    elif file_path is None or _normalize_path(file_path) not in kept:
+                    elif (
+                        file_path is None
+                        or _resolve_root_path(uvprojx_parts, file_path) not in kept
+                    ):
                         files_el.remove(file_el)
                         changed = True
     if not changed:
@@ -101,11 +111,45 @@ def rewrite_project_references(project_dir: Path, kept_paths: Sequence[str]) -> 
 
 
 def _normalize_path(path: str) -> str:
-    """Keil 的 .\\ 前缀 + 反斜杠路径 → 小写 POSIX 相对路径（与扫描清单可比）。"""
+    """Keil 的 .\\ 前缀 + 反斜杠路径 → 小写 POSIX 相对路径（与扫描清单可比）。
+
+    用于保留集合的归一化（kept 是工程根相对路径）；.uvprojx 里的文件引用
+    还要先按 .uvprojx 所在目录解析（_resolve_root_path），不能直接比。
+    """
     norm = path.replace("\\", "/").lower()
     while norm.startswith("./"):
         norm = norm[2:]
     return norm
+
+
+def _resolve_root_path(
+    uvprojx_dir_parts: tuple[str, ...], file_path: str
+) -> str | None:
+    """把 .uvprojx 里的文件引用解析为工程根相对路径（小写 POSIX）。
+
+    Keil 的 FilePath 相对 .uvprojx 所在目录（如 USER/proj.uvprojx 里的
+    `.\..\sys\delay.c` = 工程根的 sys/delay.c）。`..` 弹出工程根之外（引用
+    工程外文件）返回 None——保守视为悬空引用，不匹配保留集合、按原逻辑删除。
+    """
+    parts = [p for p in file_path.replace("\\", "/").split("/") if p not in ("", ".")]
+    stack = list(uvprojx_dir_parts)
+    for part in parts:
+        if part == "..":
+            if not stack:
+                return None
+            stack.pop()
+        else:
+            stack.append(part)
+    return "/".join(stack).lower()
+
+
+def _keil_rel_path_from(uvprojx_dir_parts: tuple[str, ...], target: str) -> str:
+    """从 .uvprojx 所在目录到工程根相对目标文件的 Keil 路径（.\\ 前缀 + 反斜杠）。
+
+    .uvprojx 在工程根时 = `.\main.c`；在 USER/ 下时 = `.\..\main.c`。
+    """
+    parts = [".."] * len(uvprojx_dir_parts) + target.split("/")
+    return ".\\" + "\\".join(parts)
 
 
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
@@ -180,7 +224,7 @@ def _register_module_files(target: ET.Element, module_files: Sequence[Path]) -> 
         entry = ET.SubElement(files, "File")
         ET.SubElement(entry, "FileName").text = file.name
         ET.SubElement(entry, "FileType").text = _SOURCE_FILETYPES[file.suffix]
-        ET.SubElement(entry, "FilePath").text = _keil_rel_path(file)
+        ET.SubElement(entry, "FilePath").text = _keil_rel_path_from_root(file)
 
 
 def _append_include_dirs(target: ET.Element, include_dirs: Sequence[Path]) -> None:
@@ -192,15 +236,19 @@ def _append_include_dirs(target: ET.Element, include_dirs: Sequence[Path]) -> No
     existing = [s for s in (include_el.text or "").split(";") if s]
     existing_lower = {s.lower() for s in existing}
     additions = [
-        _keil_rel_path(d)
+        _keil_rel_path_from_root(d)
         for d in include_dirs
-        if _keil_rel_path(d).lower() not in existing_lower
+        if _keil_rel_path_from_root(d).lower() not in existing_lower
     ]
     if additions:
         prefix = include_el.text + ";" if include_el.text else ""
         include_el.text = prefix + ";".join(additions)
 
 
-def _keil_rel_path(path: Path) -> str:
-    """相对工程目录的路径，转成 Keil 惯例的 .\\ 前缀 + 反斜杠。"""
+def _keil_rel_path_from_root(path: Path) -> str:
+    """从工程根出发的相对路径，转成 Keil 惯例的 .\\ 前缀 + 反斜杠。
+
+    注意与 _keil_rel_path_from 区分：那个从 .uvprojx 所在目录出发（.uvprojx
+    在子目录时加 ..\\ 回算到工程根），这个直接按工程根相对路径。
+    """
     return ".\\" + str(path).replace("/", "\\")

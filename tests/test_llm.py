@@ -10,11 +10,15 @@ import pytest
 
 from contest_generator.config import AppConfig
 from contest_generator.llm import (
+    DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
     FileVersion,
+    JUDGMENT_SCOPE,
+    JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     JudgmentFile,
     LLMError,
     VersionSummary,
+    _distill_user_prompt,
     build_manifest_summaries,
     parse_distillation_report,
     parse_module_selection,
@@ -442,6 +446,27 @@ def test_distill_master_two_phase_posts_summaries_then_decisions():
         source="proj-a",
         reason="A 的 include path 更全",
     )
+
+
+def test_distill_prompts_share_judgment_scope():
+    """契约测试：系统提示词与用户提示词对判定范围说同一件事。
+
+    ticket 06 曾只改系统提示词、漏改用户提示词——模型按用户消息跳过公共文件，
+    多工程提炼当场失败（"提炼报告缺少判定"）。判定范围表述必须来自同一常量
+    （JUDGMENT_SCOPE），且旧判据 / 旧判定范围的表述不得重新出现：出现即说明
+    有人改了单点、漏了另一处。
+    """
+    user_prompt = _distill_user_prompt(
+        "stm32", ("proj-a",), (), "结构与配置对比"
+    )
+
+    assert JUDGMENT_SCOPE in DISTILL_SYSTEM_PROMPT
+    assert JUDGMENT_SCOPE in user_prompt
+    for stale in ("公共文件已确定保留", "只判定冲突与独有文件", "是否通用（不依赖具体赛题）"):
+        assert stale not in DISTILL_SYSTEM_PROMPT
+        assert stale not in user_prompt
+    # 第一阶段摘要的素材范围描述同样覆盖公共文件（判定范围 = 公共 + 冲突 + 独有）
+    assert "公共" in JUDGMENT_SUMMARY_SYSTEM_PROMPT
 
 
 def test_distill_master_fails_loud_on_broken_summary_phase():
