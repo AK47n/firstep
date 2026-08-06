@@ -59,7 +59,7 @@ class KeilPatcher:
 
 
 def rewrite_project_references(project_dir: Path, kept_paths: Sequence[str]) -> None:
-    """删除 .uvprojx 里引用但不在保留集合的源文件条目，main.c 条目统一重定向。
+    r"""删除 .uvprojx 里引用但不在保留集合的源文件条目，main.c 条目统一重定向。
 
     母版落盘后调用（apply_distillation）：被剔除的文件不留悬空引用，否则
     Keil 打开工程编译会因缺文件失败，"打开就能编译烧录"不成立。保留集合 =
@@ -112,6 +112,57 @@ def rewrite_project_references(project_dir: Path, kept_paths: Sequence[str]) -> 
     )
 
 
+def validate_project_structure(
+    project_dir: Path, expected_sources: Sequence[str]
+) -> None:
+    """校验 .uvprojx 的编译链完整性（母版入库前调用）：配置节点齐全 + 树引用
+    覆盖全部保留源码，失败抛 KeilProjectError。
+
+    XML 合法不等于能编译——AI 整合出的 .uvprojx 曾把组清空（丢了启动文件 /
+    system_stm32f10x.c 的引用）、Cads/IncludePath 节点整个消失，母版照常
+    入库、生成时 KeilPatcher 才拒绝（判例 09）。三层校验：
+    1. XML 语法合法（parse_project_file 既有职责，坏了直接抛）；
+    2. 配置节点齐全：至少一个 Targets/Target、每个 Target 的
+       TargetOption/TargetArmAds/Cads/IncludePath 存在——没有它模块 include
+       path 无处可加，头文件无法解析；
+    3. 编译链完整：expected_sources（调用方按扫描同一套忽略规则计算的工程内
+       全部 .c/.s）必须每个都在工程树里有引用（跨全部 Target 并集）——Keil
+       只编译树里的文件，未引用的源码等于没有，"打开就能编译"不成立。
+    解析基准与 rewrite_project_references 相同（FilePath 相对 .uvprojx 所在
+    目录），引用解析复用 _resolve_root_path。
+    """
+    uvprojx = _find_uvprojx(project_dir)
+    root, _ = parse_project_file(uvprojx, KeilProjectError)
+    uvprojx_parts = uvprojx.parent.relative_to(project_dir).parts
+    targets = root.findall("Targets/Target")
+    if not targets:
+        raise KeilProjectError(f"{uvprojx.name} 里没有 <Targets><Target>，无法编译")
+    for target in targets:
+        if target.find("TargetOption/TargetArmAds/Cads/IncludePath") is None:
+            raise KeilProjectError(
+                f"{uvprojx.name} 的 Target 缺少 Cads/IncludePath 节点，头文件无法解析"
+            )
+    referenced: set[str] = set()
+    for target in targets:
+        for group in target.findall("Groups/Group"):
+            for files_el in group.findall("Files"):
+                for file_el in files_el.findall("File"):
+                    file_path = file_el.findtext("FilePath")
+                    if file_path is None:
+                        continue
+                    resolved = _resolve_root_path(uvprojx_parts, file_path)
+                    if resolved is not None:
+                        referenced.add(resolved)
+    missing = sorted(set(expected_sources) - referenced)
+    if missing:
+        shown = "、".join(missing[:10])
+        if len(missing) > 10:
+            shown += f"…（共 {len(missing)} 个）"
+        raise KeilProjectError(
+            f"{uvprojx.name} 工程树缺少 {len(missing)} 个保留源码的引用：{shown}"
+        )
+
+
 def _normalize_path(path: str) -> str:
     """Keil 的 .\\ 前缀 + 反斜杠路径 → 小写 POSIX 相对路径（与扫描清单可比）。
 
@@ -127,7 +178,7 @@ def _normalize_path(path: str) -> str:
 def _resolve_root_path(
     uvprojx_dir_parts: tuple[str, ...], file_path: str
 ) -> str | None:
-    """把 .uvprojx 里的文件引用解析为工程根相对路径（小写 POSIX）。
+    r"""把 .uvprojx 里的文件引用解析为工程根相对路径（小写 POSIX）。
 
     Keil 的 FilePath 相对 .uvprojx 所在目录（如 USER/proj.uvprojx 里的
     `.\..\sys\delay.c` = 工程根的 sys/delay.c）。`..` 弹出工程根之外（引用
@@ -146,7 +197,7 @@ def _resolve_root_path(
 
 
 def _keil_rel_path_from(uvprojx_dir_parts: tuple[str, ...], target: str) -> str:
-    """从 .uvprojx 所在目录到工程根相对目标文件的 Keil 路径（.\\ 前缀 + 反斜杠）。
+    r"""从 .uvprojx 所在目录到工程根相对目标文件的 Keil 路径（.\\ 前缀 + 反斜杠）。
 
     .uvprojx 在工程根时 = `.\main.c`；在 USER/ 下时 = `.\..\main.c`。
     """

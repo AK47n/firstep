@@ -1143,6 +1143,52 @@ def test_confirm_distillation_stores_master_in_one_transaction(
     assert not (stored / "ui/oled_fonts.c").exists()
 
 
+def test_confirm_rejects_broken_merged_uvprojx(fake_stm32_projects, fake_masters_dir):
+    """AI 整合出结构残缺的 .uvprojx（组清空 / Cads 节点丢失）→ 确认入库必须拒绝。
+
+    用户实测（判例 09）：AI 把两工程各自的 .uvprojx 判了 merge，整合产物
+    XML 合法但组被清空（丢了启动文件、system_stm32f10x.c 的引用）、连
+    Cads/IncludePath 节点都没了——旧校验只查配置文件存在，坏母版照样入库，
+    到生成时 KeilPatcher 才拒绝。校验失败必须在入库前（confirm_distillation）
+    大声拒绝，兑现"绝不产出残缺工程"。
+    """
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    broken_uvprojx = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<Project>\n  <Targets>\n    <Target>\n"
+        "      <TargetName>merged</TargetName>\n"
+        "      <TargetOption>\n        <TargetCommonOption>\n"
+        "          <Device>STM32F103C8</Device>\n"
+        "        </TargetCommonOption>\n"
+        "      </TargetOption>\n"
+        "    </Target>\n  </Targets>\n</Project>\n"
+    )
+    report = replace(
+        report,
+        merge=tuple(
+            FileDecision(
+                "project.uvprojx",
+                ACTION_MERGE,
+                content=broken_uvprojx,
+                explanation="AI 合并两工程配置",
+                reason="合并",
+            )
+            if d.path == "project.uvprojx"
+            else d
+            for d in report.merge
+        ),
+    )
+    payload = {
+        **report.to_dict(),
+        "project_dirs": [str(p) for p in fake_stm32_projects],
+    }
+
+    with pytest.raises(MasterError, match="结构"):
+        confirm_distillation(fake_masters_dir, fake_stm32_projects, payload)
+
+    assert list_masters(fake_masters_dir) == []  # 失败不留任何入库痕迹
+
+
 def test_confirm_distillation_failure_leaves_no_trace(
     fake_stm32_projects, fake_masters_dir
 ):
@@ -1224,8 +1270,12 @@ def test_apply_removes_excluded_files_from_uvprojx(fake_stm32_projects, tmp_path
     旧工程 .uvprojx 引用将被剔除的业务文件（ui/oled_fonts.c）——重写后引用
     删除，否则 Keil 编译因缺文件失败，"打开就能编译烧录"不成立；保留文件的
     引用不动；main.c 条目指向模板落位（母版根）。"""
-    uvprojx_with_refs = FAKE_DISTILL_UVPROJX_A.replace(
-        "</Target>",
+    uvprojx_with_refs = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<Project>\n<Targets>\n<Target>\n<TargetName>proj-a</TargetName>\n"
+        "<TargetOption><TargetCommonOption><Device>STM32F103C8</Device></TargetCommonOption>"
+        "<TargetArmAds><Cads><IncludePath>.\\inc;.\\src</IncludePath></Cads></TargetArmAds>"
+        "</TargetOption>\n"
         "<Groups><Group><GroupName>g</GroupName><Files>"
         "<File><FileName>main.c</FileName><FileType>1</FileType>"
         "<FilePath>.\\USER\\main.c</FilePath></File>"
@@ -1233,9 +1283,8 @@ def test_apply_removes_excluded_files_from_uvprojx(fake_stm32_projects, tmp_path
         "<FilePath>.\\src\\system_stm32f10x.c</FilePath></File>"
         "<File><FileName>oled_fonts.c</FileName><FileType>1</FileType>"
         "<FilePath>.\\ui\\oled_fonts.c</FilePath></File>"
-        "</Files></Group></Groups>"
-        "</Target>",
-        1,
+        "</Files></Group></Groups>\n"
+        "</Target>\n</Targets>\n</Project>\n"
     )
     decisions = tuple(
         FileDecision(
@@ -1337,7 +1386,7 @@ def test_apply_copies_infrastructure(fake_stm32_projects, tmp_path):
 
 
 def test_apply_rewrites_nested_uvprojx_references(tmp_path):
-    """用户真实结构（.uvprojx 在 user/ 子目录，Keil FilePath 用 ..\ 相对）：
+    r"""用户真实结构（.uvprojx 在 user/ 子目录，Keil FilePath 用 ..\ 相对）：
     落盘后引用重写保留 sys/ 官方库等保留文件（..\ 解析回工程根）、删除被剔除
     文件的悬空引用、main.c 指向模板落位（.\..\main.c）。"""
     project = tmp_path / "proj2025"
@@ -1425,10 +1474,12 @@ def test_analyze_requires_platform_config_file(tmp_path):
 
 
 def test_analyze_accepts_nested_uvprojx(tmp_path):
-    """工程文件在子目录时结构分析同样通过。"""
+    """工程文件在子目录时结构分析同样通过（正点原子风格 USER/ 子目录）。"""
     master = tmp_path / "master"
     (master / "USER").mkdir(parents=True)
-    (master / "USER" / "project.uvprojx").write_text("<Project/>", encoding="utf-8")
+    (master / "USER" / "project.uvprojx").write_text(
+        FAKE_DISTILL_UVPROJX_A, encoding="utf-8"
+    )
 
     analysis = analyze_structure(master, PLATFORM_STM32)
 

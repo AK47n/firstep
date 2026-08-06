@@ -15,6 +15,7 @@ from contest_generator.keil import (
     KeilPatcher,
     KeilProjectError,
     rewrite_project_references,
+    validate_project_structure,
 )
 from tests.fakes import make_fake_master_project
 
@@ -323,3 +324,41 @@ def test_rewrite_skips_write_when_nothing_changed(tmp_path):
     rewrite_project_references(project, _KEPT)
 
     assert uvprojx.read_text(encoding="utf-8") == minimal
+
+
+# ---------------------------------------------------------------------------
+# 母版入库前的结构校验（判例 09：AI 整合出的 .uvprojx 结构残缺仍入库）
+# ---------------------------------------------------------------------------
+
+
+def test_validate_structure_accepts_complete_project(keil_project):
+    """结构完整的母版工程（假母版 FAKE_UVPROJX：Cads/IncludePath + 工程树引用
+    覆盖全部 .c）通过校验。"""
+    validate_project_structure(keil_project, ["main.c", "src/system_stm32f10x.c"])
+
+
+def test_validate_structure_rejects_missing_include_path(keil_project):
+    """Cads/IncludePath 节点整个消失（判例 09：AI 合并产物没有该节点）→ 拒绝。"""
+    root = ET.parse(keil_project / "project.uvprojx").getroot()
+    ads = root.find("Targets/Target/TargetOption/TargetArmAds")
+    ads.remove(ads.find("Cads"))
+    ET.ElementTree(root).write(keil_project / "project.uvprojx", encoding="utf-8")
+
+    with pytest.raises(KeilProjectError, match="Cads/IncludePath"):
+        validate_project_structure(keil_project, ["main.c"])
+
+
+def test_validate_structure_rejects_unreferenced_sources(keil_project):
+    """工程树缺了保留源码的引用（判例 09：组被清空）→ 拒绝，中文指出缺谁。"""
+    with pytest.raises(KeilProjectError, match="工程树缺少.*dht11.c"):
+        validate_project_structure(keil_project, ["main.c", "src/system_stm32f10x.c", "sensors/dht11.c"])
+
+
+def test_validate_structure_rejects_project_without_target(keil_project):
+    """连 Targets/Target 都没有（更残缺的整合产物）→ 拒绝。"""
+    (keil_project / "project.uvprojx").write_text(
+        "<Project><SchemaVersion>2.1</SchemaVersion></Project>", encoding="utf-8"
+    )
+
+    with pytest.raises(KeilProjectError, match="Targets"):
+        validate_project_structure(keil_project, [])

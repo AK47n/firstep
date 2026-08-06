@@ -43,6 +43,7 @@ from .keil import (
     KeilProjectError,
     extract_config_summary as extract_keil_config_summary,
     rewrite_project_references,
+    validate_project_structure,
 )
 from .llm import FileVersion, JudgmentFile, LLM
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
@@ -845,9 +846,12 @@ def master_project_dir(masters_dir: Path, platform: str) -> Path:
 
 
 def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
-    """入库前的结构分析：平台配置文件缺失硬失败，其余问题进警告。
+    """入库前的结构分析：平台配置文件缺失 / 编译链结构残缺硬失败，其余进警告。
 
-    平台配置文件缺失说明母版无法被 IDE 打开，拒绝入库；构建产物目录等
+    平台配置文件缺失说明母版无法被 IDE 打开，拒绝入库；Keil 母版还校验
+    .uvprojx 的编译链完整性（配置节点齐全 + 工程树引用覆盖全部保留源码，
+    见 _validate_keil_structure）——AI 整合出的 .uvprojx"XML 合法但结构残缺"
+    曾照样入库，生成时才被 KeilPatcher 拒绝（判例 09）。构建产物目录等
     非母版内容只给警告（生成器复制时会忽略 .git，构建目录会原样带进新工程，
     建议清理）。
     """
@@ -859,11 +863,38 @@ def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
             raise MasterError(
                 f"母版缺少平台 {platform} 的工程配置文件（{suffix}），拒绝入库"
             )
+    if platform == PLATFORM_STM32:
+        _validate_keil_structure(master_dir)
     warnings: list[str] = []
     for name in sorted(BUILD_ARTIFACT_DIRS):
         if (master_dir / name).is_dir():
             warnings.append(f"母版含 {name}/ 构建产物目录，建议清理")
     return StructureAnalysis(platform=platform, warnings=tuple(warnings))
+
+
+def _validate_keil_structure(master_dir: Path) -> None:
+    """Keil 母版入库前的编译链结构校验（格式知识归 keil.py）。
+
+    判例 09（用户实测）：AI 把两工程各自的 .uvprojx 判了 merge，整合产物
+    XML 合法但组被清空（丢了启动文件 / system_stm32f10x.c 的引用）、连
+    Cads/IncludePath 节点都没了——旧校验只查配置文件存在，坏母版照样入库、
+    到生成时 KeilPatcher 才拒绝。校验失败在入库前大声拒绝（中文说明缺什么），
+    兑现"绝不产出残缺工程"不变量。工程内保留源码清单按扫描同一套忽略规则
+    计算（.git / 构建输出目录不进清单）。
+    """
+    expected: list[str] = []
+    for path in sorted(master_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(master_dir).as_posix()
+        if _is_ignored(rel):
+            continue
+        if path.suffix.lower() in (".c", ".s"):
+            expected.append(rel)
+    try:
+        validate_project_structure(master_dir, expected)
+    except KeilProjectError as exc:
+        raise MasterError(f"母版 .uvprojx 结构不完整，拒绝入库：{exc}") from exc
 
 
 def import_master(

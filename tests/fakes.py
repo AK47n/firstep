@@ -150,7 +150,9 @@ def make_fake_module_library(library_dir: Path) -> Path:
 # 母版提炼的假旧工程（工单 08）：proj-a / proj-b 两个同平台工程
 # ---------------------------------------------------------------------------
 
-# 提炼用假工程 .uvprojx：只有设备与 include path 两个对比点（A 多一个 .\src）
+# 提炼用假工程 .uvprojx：设备 / include path 两个对比点（A 多一个 .\src）+
+# 工程树（Groups/Files，引用 proj-a 自己的 .c 源码——真实 Keil 工程的形态；
+# 母版入库的结构校验要求每个保留源码都在工程树里有引用，无树配置 = 坏母版）
 FAKE_DISTILL_UVPROJX_A = r'''<?xml version="1.0" encoding="UTF-8" ?>
 <Project>
   <Targets>
@@ -166,6 +168,33 @@ FAKE_DISTILL_UVPROJX_A = r'''<?xml version="1.0" encoding="UTF-8" ?>
           </Cads>
         </TargetArmAds>
       </TargetOption>
+      <Groups>
+        <Group>
+          <GroupName>Source Group 1</GroupName>
+          <Files>
+            <File>
+              <FileName>main.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\main.c</FilePath>
+            </File>
+            <File>
+              <FileName>oled.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\oled.c</FilePath>
+            </File>
+            <File>
+              <FileName>system_stm32f10x.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\system_stm32f10x.c</FilePath>
+            </File>
+            <File>
+              <FileName>dht11.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\sensors\dht11.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+      </Groups>
     </Target>
   </Targets>
 </Project>
@@ -173,7 +202,16 @@ FAKE_DISTILL_UVPROJX_A = r'''<?xml version="1.0" encoding="UTF-8" ?>
 
 FAKE_DISTILL_UVPROJX_B = FAKE_DISTILL_UVPROJX_A.replace(
     "<TargetName>proj-a</TargetName>", "<TargetName>proj-b</TargetName>"
-).replace("<IncludePath>.\\inc;.\\src</IncludePath>", "<IncludePath>.\\inc</IncludePath>")
+).replace("<IncludePath>.\\inc;.\\src</IncludePath>", "<IncludePath>.\\inc</IncludePath>").replace(
+    "</File>\n          </Files>",
+    "</File>\n"
+    "            <File>\n"
+    "              <FileName>oled_fonts.c</FileName>\n"
+    "              <FileType>1</FileType>\n"
+    "              <FilePath>.\\ui\\oled_fonts.c</FilePath>\n"
+    "            </File>\n"
+    "          </Files>",
+)
 
 
 def make_fake_stm32_projects(base_dir: Path) -> tuple[Path, Path]:

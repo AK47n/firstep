@@ -31,6 +31,7 @@ from contest_generator.master import import_master, main_c_template
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import AppContext, create_app
 from tests.fakes import (
+    FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
     make_fake_ccs_master_project,
     make_fake_master_project,
@@ -86,7 +87,7 @@ DEFAULT_DECISIONS = (
     FileDecision(
         "project.uvprojx",
         ACTION_MERGE,
-        content="<Project/>",
+        content=FAKE_DISTILL_UVPROJX_A,  # 结构完整的整合产物（入库有结构校验）
         explanation="取 include path 更全的 A 版本",
         source="proj-a",
         reason="include path 更全",
