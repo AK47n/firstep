@@ -4,7 +4,7 @@
 """
 
 import json
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 
@@ -24,8 +24,10 @@ from contest_generator.llm import (
     MAX_SUMMARY_BATCH_CHARS,
     TRUNCATION_NOTICE,
     VersionSummary,
+    _batches,
     _distill_user_prompt,
-    _judgment_batches,
+    _file_chars,
+    _split_versions,
     _summarize_user_prompt,
     _truncate_content,
     build_manifest_summaries,
@@ -67,6 +69,18 @@ def _llm(
     return DeepSeekLLM(
         AppConfig(base_url=base_url, api_key="sk-test", model=model),
         transport=transport,
+    )
+
+
+def _judgment_batches(
+    files: Sequence[JudgmentFile],
+) -> tuple[tuple[JudgmentFile, ...], ...]:
+    """摘要阶段分批（镜像生产 _summarize_judgment_files 的调用参数）。"""
+    return _batches(
+        files,
+        max_chars=MAX_SUMMARY_BATCH_CHARS,
+        size_of=_file_chars,
+        split_oversized=_split_versions,
     )
 
 
