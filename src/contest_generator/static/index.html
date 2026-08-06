@@ -799,6 +799,7 @@ $("btn-confirm").addEventListener("click", async () => {
   } catch (e) {
     $("confirm-msg").classList.remove("ok");
     $("confirm-msg").textContent = e.message;
+    $("confirm-status").textContent = "";  // 失败也要清掉"落盘与入库中"，不留进行中假象
   } finally { $("btn-confirm").disabled = false; }
 });
 

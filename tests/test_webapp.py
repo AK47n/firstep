@@ -626,6 +626,87 @@ def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
     }]
 
 
+def test_master_confirm_invalid_ai_merged_uvprojx_returns_400(context, tmp_path):
+    """AI 整合出的 .uvprojx 是截断 XML → 业务失败 400 带中文 message，不裸 500。
+
+    真实 LLM 整合 .uvprojx 时可能输出截断 / 转义错误的 XML，落盘阶段
+    rewrite_project_references 解析失败——此前 KeilProjectError 未被确认端点
+    捕获，浏览器只看到裸 500 且界面停在"落盘与入库中"。
+    """
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"]._distillation = (
+        FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="必需"),
+        FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="必需"),
+        FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用"),
+        FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="残留"),
+        FileDecision(
+            "project.uvprojx",
+            ACTION_MERGE,
+            content="<Project>\n  <Targets>\n    <Target>\n      <TargetName>proj",  # 截断
+            explanation="整合",
+            source="proj-a",
+            reason="整合",
+        ),
+        FileDecision(
+            "src/oled.c",
+            ACTION_MERGE,
+            content="/* 整合 */\n",
+            explanation="整合",
+            source="proj-b",
+            reason="整合",
+        ),
+    )
+    client = TestClient(create_app(context[0]), raise_server_exceptions=False)
+    dirs = [str(proj_a), str(proj_b)]
+    report = client.post(
+        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
+    ).json()
+
+    resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
+
+    assert resp.status_code == 400
+    assert "不是合法 XML" in resp.json()["detail"]
+    assert client.get("/api/masters").json() == []  # 失败不入库
+
+
+def test_master_confirm_uvprojx_excluded_returns_400(context, tmp_path):
+    """AI 把 .uvprojx 判为剔除 → 落盘重写找不到工程文件 → 400 而非 500。
+
+    .uvprojx 是 Keil 工程的"工程文件"，AI 判 exclude 后母版目录没有
+    .uvprojx，rewrite_project_references 找不到目标——同样是 KeilProjectError
+    裸传 500 的漏网点。
+    """
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"]._distillation = (
+        FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="必需"),
+        FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="必需"),
+        FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用"),
+        FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="残留"),
+        FileDecision(
+            "project.uvprojx", ACTION_EXCLUDE, reason="AI 认为不需要工程文件"
+        ),
+        FileDecision(
+            "src/oled.c",
+            ACTION_MERGE,
+            content="/* 整合 */\n",
+            explanation="整合",
+            source="proj-b",
+            reason="整合",
+        ),
+    )
+    client = TestClient(create_app(context[0]), raise_server_exceptions=False)
+    dirs = [str(proj_a), str(proj_b)]
+    report = client.post(
+        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
+    ).json()
+
+    resp = client.post("/api/masters/confirm", json={**report, "project_dirs": dirs})
+
+    assert resp.status_code == 400
+    assert "uvprojx" in resp.json()["detail"].lower()
+    assert client.get("/api/masters").json() == []  # 失败不入库
+
+
 # ---------------------------------------------------------------------------
 # 设置：保存后即时生效（验收项 6）
 # ---------------------------------------------------------------------------

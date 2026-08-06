@@ -184,7 +184,7 @@ def _extract_good_decisions(
     content: str,
     project_names: Sequence[str],
     batch: Sequence[FileSummary],
-) -> list[FileDecision]:
+) -> tuple[FileDecision, ...]:
     """从一次失败的批量判定输出里挖出能通过严格校验的条目（补问只问缺失的）。
 
     与 _extract_good_summaries 同款逐文件粒度：一个条目畸形（如 merge 缺整合
@@ -194,7 +194,7 @@ def _extract_good_decisions(
         data = json.loads(content)
         entries = [item for item in data.get("decisions", []) if isinstance(item, dict)]
     except (json.JSONDecodeError, AttributeError):
-        return []
+        return ()
     good: list[FileDecision] = []
     for f in batch:
         entry = next((e for e in entries if e.get("path") == f.path), None)
@@ -208,7 +208,7 @@ def _extract_good_decisions(
             )
         except LLMError:
             continue
-    return good
+    return tuple(good)
 
 
 

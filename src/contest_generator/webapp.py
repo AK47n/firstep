@@ -19,6 +19,7 @@ from typing import Callable, Sequence
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from .ccs import CcsProjectError
 from .config import (
     DEFAULT_CONFIG_PATH,
     AppConfig,
@@ -28,6 +29,7 @@ from .config import (
 )
 from .extraction import ExtractionError, extract_file
 from .generator import GenerationSummary, GeneratorError, generate_project
+from .keil import KeilProjectError
 from .library import (
     LibraryError,
     add_module,
@@ -118,6 +120,14 @@ def _error_response(exc: Exception) -> HTTPException:
     """业务失败 → 400（message 原样带出）；LLM 服务失败 → 502。"""
     if isinstance(exc, LLMError):
         return HTTPException(502, f"AI 服务调用失败：{exc}")
+    if isinstance(exc, (KeilProjectError, CcsProjectError)):
+        # 工程文件（.uvprojx / .cproject）缺失、重复或不是合法 XML：业务失败
+        # （旧工程 / AI 整合产物有问题），转 400 带中文 message，不裸 500
+        return HTTPException(400, str(exc))
+    if isinstance(exc, OSError):
+        # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
+        # 转 400 带说明，不裸 500
+        return HTTPException(400, f"文件操作失败：{exc}")
     return HTTPException(400, str(exc))
 
 
@@ -293,7 +303,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 masters_dir=config.masters_dir,
             )
             return _generation_result(summary)
-        except (LibraryError, SelectionError, GeneratorError, MasterError) as exc:
+        except (
+            LibraryError,
+            SelectionError,
+            GeneratorError,
+            MasterError,
+            KeilProjectError,
+            CcsProjectError,
+            OSError,
+        ) as exc:
             raise _error_response(exc) from exc
 
     # ------------------------------------------------------------------
@@ -437,7 +455,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 "sources": list(meta.sources),
                 "warnings": list(meta.warnings),
             }
-        except MasterError as exc:
+        except (MasterError, KeilProjectError, CcsProjectError, OSError) as exc:
             raise _error_response(exc) from exc
 
     @app.get("/api/masters")

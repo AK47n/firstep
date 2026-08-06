@@ -90,7 +90,9 @@ def rewrite_project_references(project_dir: Path, kept_paths: Sequence[str]) -> 
                     if file_name == "main.c":
                         # 旧工程 main.c 由模板替代（ADR 0002），引用一律指向模板落位
                         if file_path is not None and file_path != template_main:
-                            file_el.find("FilePath").text = template_main
+                            fp_el = file_el.find("FilePath")
+                            if fp_el is not None:  # findtext 已取到值，元素必在
+                                fp_el.text = template_main
                             changed = True
                     elif (
                         file_path is None
