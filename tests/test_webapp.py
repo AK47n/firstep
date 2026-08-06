@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from typing import Sequence
 
 import pytest
@@ -16,9 +18,18 @@ from fastapi.testclient import TestClient
 
 from contest_generator.config import AppConfig
 from contest_generator.llm import (
+    EVENT_BATCH_DONE,
+    EVENT_BATCH_START,
+    EVENT_PHASE_DONE,
+    EVENT_RETRY,
+    EVENT_START,
     JudgmentFile,
     LLMError,
     ModuleSelection,
+    PHASE_DECIDE,
+    PHASE_SUMMARY,
+    ProgressEmitter,
+    ProgressEvent,
     ValidationResult,
 )
 from contest_generator.report import (
@@ -27,9 +38,9 @@ from contest_generator.report import (
     ACTION_MERGE,
     FileDecision,
 )
-from contest_generator.master import import_master, main_c_template
+from contest_generator.master import distill_master, import_master, main_c_template, scan_project
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
-from contest_generator.webapp import AppContext, create_app
+from contest_generator.webapp import EVENT_DONE, EVENT_ERROR, AppContext, create_app
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
@@ -73,8 +84,66 @@ class RaisingLLM:
         project_names: Sequence[str],
         judgment_files: Sequence[JudgmentFile],
         comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]:
         raise LLMError("服务不可用")
+
+
+class ScriptedDistillLLM:
+    """假 LLM：distill_master 经 progress_emitter 发射脚本化事件后返回固定判定。
+
+    事件序列与发射间隔由调用方给定（模拟真 LLM 的批次循环发射——工单 01 的
+    发射 seam：假 LLM 与真 LLM 走同一参数）；completion 事件在返回判定后
+    置位（断线测试观察"后端正常结束提炼"）。其余职责不会被提炼端点调用，
+    按 RaisingLLM 同款直接抛错。
+    """
+
+    def __init__(
+        self,
+        decisions: tuple[FileDecision, ...],
+        events: Sequence[ProgressEvent] = (),
+        completion: threading.Event | None = None,
+        delay: float = 0.0,
+    ) -> None:
+        self._decisions = decisions
+        self._events = tuple(events)
+        self._completion = completion
+        self._delay = delay
+
+    def select_modules(
+        self, problem_text: str, manifest_summaries: Sequence[str]
+    ) -> ModuleSelection:
+        raise LLMError("ScriptedDistillLLM 只服务提炼端点")
+
+    def generate_main_skeleton(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        raise LLMError("ScriptedDistillLLM 只服务提炼端点")
+
+    def summarize_module(self, code: str) -> str:
+        raise LLMError("ScriptedDistillLLM 只服务提炼端点")
+
+    def validate_module_description(
+        self, description: str, code: str
+    ) -> ValidationResult:
+        raise LLMError("ScriptedDistillLLM 只服务提炼端点")
+
+    def distill_master(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
+    ) -> tuple[FileDecision, ...]:
+        for event in self._events:
+            if self._delay:
+                time.sleep(self._delay)
+            if progress_emitter is not None:
+                progress_emitter(event)
+        if self._completion is not None:
+            self._completion.set()
+        return self._decisions
 
 
 # 假工程对的典型 AI 判定（与 tests/test_master.py 同一套素材）
@@ -127,6 +196,47 @@ def client(context):
 def _import_stm32_master(masters_dir, tmp_path) -> None:
     """给 stm32 平台导入一个母版（平台"落地"的判定条件）。"""
     import_master(masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "master_src"))
+
+
+# ---------------------------------------------------------------------------
+# SSE 提炼流（工单 02）测试助手：解析 + done 载荷提取
+# ---------------------------------------------------------------------------
+
+
+def _parse_sse(text: str) -> list[tuple[str, dict]]:
+    """SSE 流解析：[(event 类型, data), ...]，空行分隔（线格式共享契约）。"""
+    events = []
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        event_type = ""
+        data = {}
+        for line in block.split("\n"):
+            if line.startswith("event: "):
+                event_type = line[len("event: "):]
+            elif line.startswith("data: "):
+                data = json.loads(line[len("data: "):])
+        events.append((event_type, data))
+    return events
+
+
+def _distill_stream(client, dirs) -> list[tuple[str, dict]]:
+    """POST 提炼端点并解析 SSE 事件序列（断言 HTTP 200 起流 + text/event-stream）。"""
+    resp = client.post(
+        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
+    )
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    return _parse_sse(resp.text)
+
+
+def _distill_report(client, dirs) -> dict:
+    """提炼端点 → done 载荷（完整报告）；流以 error 收尾则断言失败。"""
+    events = _distill_stream(client, dirs)
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, f"流未以 done 结束：{events}"
+    return done[0]
 
 
 # ---------------------------------------------------------------------------
@@ -498,9 +608,7 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
     assert [p["name"] for p in scanned] == ["proj-a", "proj-b"]
     assert all(p["platform"] == PLATFORM_STM32 for p in scanned)
 
-    report = client.post(
-        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
-    ).json()
+    report = _distill_report(client, dirs)
     assert report["projects"] == ["proj-a", "proj-b"]
     # keep = 规则条目（.uvprojx 工程配置文件，工单 09）+ AI 判定保留
     assert [d["path"] for d in report["keep"]] == [
@@ -562,9 +670,7 @@ def test_master_confirm_rejects_user_edited_merge_on_unique(client, context, tmp
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = DEFAULT_DECISIONS
     dirs = [str(proj_a), str(proj_b)]
-    report = client.post(
-        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
-    ).json()
+    report = _distill_report(client, dirs)
     # 用户把 sensors/dht11.c（只有一份内容，没有整合对象）从保留改成合并
     report["keep"] = [d for d in report["keep"] if d["path"] != "sensors/dht11.c"]
     report["merge"].append(
@@ -590,9 +696,7 @@ def test_master_confirm_rejects_restoring_old_main_c(client, context, tmp_path):
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = DEFAULT_DECISIONS
     dirs = [str(proj_a), str(proj_b)]
-    report = client.post(
-        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
-    ).json()
+    report = _distill_report(client, dirs)
     # 用户想把旧 main.c 恢复进母版——确定性替代不因用户编辑而失效
     report["exclude"] = [d for d in report["exclude"] if d["path"] != "main.c"]
     report["keep"].append(
@@ -611,9 +715,7 @@ def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = DEFAULT_DECISIONS
     dirs = [str(proj_a), str(proj_b)]
-    report = client.post(
-        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
-    ).json()
+    report = _distill_report(client, dirs)
     report["keep"] = [d for d in report["keep"] if d["path"] != "inc/stm32f10x_conf.h"]
     report["exclude"].append(
         {"path": "inc/stm32f10x_conf.h", "action": ACTION_EXCLUDE, "reason": "用户确认剔除"}
@@ -651,9 +753,7 @@ def test_master_confirm_invalid_ai_merged_uvprojx_returns_400(context, tmp_path)
     )
     client = TestClient(create_app(context[0]), raise_server_exceptions=False)
     dirs = [str(proj_a), str(proj_b)]
-    report = client.post(
-        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
-    ).json()
+    report = _distill_report(client, dirs)
     # 用户确认时把 .uvprojx（工程配置文件）改成剔除——确定性规则处理不可改
     # 动作（工单 09 决策 7）→ 400 带中文 message，不裸 500
     report["keep"] = [d for d in report["keep"] if d["path"] != "project.uvprojx"]
@@ -668,12 +768,13 @@ def test_master_confirm_invalid_ai_merged_uvprojx_returns_400(context, tmp_path)
     assert client.get("/api/masters").json() == []  # 失败不入库
 
 
-def test_master_distill_rejects_ai_on_uvprojx_returns_400(context, tmp_path):
-    """AI 给工程配置文件（.uvprojx）判定 → 越界 → 提炼阶段 400 而非带病进
-    确认流程。
+def test_master_distill_rejects_ai_on_uvprojx_returns_400(client, context, tmp_path):
+    """AI 给工程配置文件（.uvprojx）判定 → 越界 → 提炼阶段流内 error 事件
+    （中文 message）而非带病进确认流程。
 
     .uvprojx 由确定性渲染器现写（工单 09，判例 09 治本）：AI 从未在判定素材
-    里见过它，给出判定即越界——在确认前大声失败。
+    里见过它，给出判定即越界——在确认前大声失败。HTTP 保持 200 起流，失败
+    以 error 事件收尾（客户端只认事件，不依赖状态码）。
     """
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = (
@@ -693,16 +794,189 @@ def test_master_distill_rejects_ai_on_uvprojx_returns_400(context, tmp_path):
             reason="整合",
         ),
     )
-    client = TestClient(create_app(context[0]), raise_server_exceptions=False)
     dirs = [str(proj_a), str(proj_b)]
 
+    events = _distill_stream(client, dirs)
+
+    assert [kind for kind, _ in events] == [EVENT_ERROR]
+    assert "无需 AI 判定" in events[0][1]["message"]
+    assert client.get("/api/masters").json() == []  # 失败不入库
+
+
+# ---------------------------------------------------------------------------
+# 母版提炼 SSE 流（工单 02）：事件顺序 / done 载荷 / error 收尾 / 零批次 / 断线
+# ---------------------------------------------------------------------------
+
+
+# 脚本化发射序列：模拟真 LLM 批次循环的完整事件流（阶段 1 带补问轮）
+SCRIPTED_EVENTS = (
+    ProgressEvent(
+        type=EVENT_START, judgment_count=5, summary_batch_count=1, decide_batch_count=1
+    ),
+    ProgressEvent(
+        type=EVENT_BATCH_START,
+        phase=PHASE_SUMMARY,
+        batch_index=1,
+        batch_count=1,
+        paths=(
+            "inc/stm32f10x_conf.h", "src/system_stm32f10x.c", "sensors/dht11.c",
+            "ui/oled_fonts.c", "src/oled.c",
+        ),
+    ),
+    ProgressEvent(
+        type=EVENT_RETRY, phase=PHASE_SUMMARY, batch_index=1, retry_round=1, missing_count=1
+    ),
+    ProgressEvent(
+        type=EVENT_BATCH_DONE, phase=PHASE_SUMMARY, batch_index=1, processed_count=5
+    ),
+    ProgressEvent(type=EVENT_PHASE_DONE, phase=PHASE_SUMMARY, file_count=5),
+    ProgressEvent(
+        type=EVENT_BATCH_START,
+        phase=PHASE_DECIDE,
+        batch_index=1,
+        batch_count=1,
+        paths=(
+            "inc/stm32f10x_conf.h", "src/system_stm32f10x.c", "sensors/dht11.c",
+            "ui/oled_fonts.c", "src/oled.c",
+        ),
+    ),
+    ProgressEvent(
+        type=EVENT_BATCH_DONE, phase=PHASE_DECIDE, batch_index=1, processed_count=5
+    ),
+    ProgressEvent(type=EVENT_PHASE_DONE, phase=PHASE_DECIDE, file_count=5),
+)
+
+
+def test_distill_streams_progress_events_then_done_with_report(client, context, tmp_path):
+    """事件顺序 = 发射序列原样透传（start → 批事件 → 补问 → 阶段完成），
+    done 载荷 = 完整报告（与同步路径同构，前端报告渲染原样复用）。"""
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"] = ScriptedDistillLLM(DEFAULT_DECISIONS, events=SCRIPTED_EVENTS)
+    dirs = [str(proj_a), str(proj_b)]
+
+    events = _distill_stream(client, dirs)
+
+    assert [kind for kind, _ in events] == [
+        EVENT_START, EVENT_BATCH_START, EVENT_RETRY, EVENT_BATCH_DONE, EVENT_PHASE_DONE,
+        EVENT_BATCH_START, EVENT_BATCH_DONE, EVENT_PHASE_DONE, EVENT_DONE,
+    ]
+    # 进度事件字段原样透传（键名 = 工单 01 契约 ProgressEvent）
+    start = events[0][1]
+    assert start["judgment_count"] == 5
+    assert start["summary_batch_count"] == 1
+    assert start["decide_batch_count"] == 1
+    batch_start = events[1][1]
+    assert batch_start["phase"] == PHASE_SUMMARY
+    assert batch_start["batch_index"] == 1
+    assert batch_start["batch_count"] == 1
+    assert batch_start["paths"] == [
+        "inc/stm32f10x_conf.h", "src/system_stm32f10x.c", "sensors/dht11.c",
+        "ui/oled_fonts.c", "src/oled.c",
+    ]
+    assert events[2][1]["retry_round"] == 1
+    assert events[2][1]["missing_count"] == 1
+    assert events[3][1]["processed_count"] == 5
+    assert events[4][1]["file_count"] == 5
+    assert events[5][1]["phase"] == PHASE_DECIDE
+    # done 载荷 = 完整提炼报告：同素材同步提炼（不经 HTTP）的 report.to_dict()
+    expected = distill_master(
+        ScriptedDistillLLM(DEFAULT_DECISIONS),
+        PLATFORM_STM32,
+        [scan_project(proj_a), scan_project(proj_b)],
+    ).to_dict()
+    assert events[-1][0] == EVENT_DONE
+    assert events[-1][1] == expected
+
+
+def test_distill_no_judgment_files_streams_done_directly(client, context, tmp_path):
+    """无待判文件（全部文件都是规则处理的残留 / main.c / 配置文件）→ 不发射
+    任何批事件、阶段直接完成 → done（spec「批数为 0」），报告只有规则条目。"""
+    project = tmp_path / "empty-judgment"
+    (project / "src").mkdir(parents=True)
+    (project / "main.c").write_text("int main(void) { while (1); }\n", encoding="utf-8")
+    (project / "project.uvprojx").write_text(FAKE_DISTILL_UVPROJX_A, encoding="utf-8")
+    (project / "project.uvoptx").write_text("<ProjectOpt/>", encoding="utf-8")
+    (project / "main.c.bak").write_text("backup", encoding="utf-8")
+    (project / "src/oled.hex").write_text("hex junk", encoding="utf-8")
+    context[1]["llm"] = ScriptedDistillLLM(
+        (),
+        events=(
+            ProgressEvent(
+                type=EVENT_START, judgment_count=0, summary_batch_count=0,
+                decide_batch_count=0,
+            ),
+            ProgressEvent(type=EVENT_PHASE_DONE, phase=PHASE_SUMMARY, file_count=0),
+            ProgressEvent(type=EVENT_PHASE_DONE, phase=PHASE_DECIDE, file_count=0),
+        ),
+    )
+
+    events = _distill_stream(client, [str(project)])
+
+    assert [kind for kind, _ in events] == [
+        EVENT_START, EVENT_PHASE_DONE, EVENT_PHASE_DONE, EVENT_DONE,
+    ]
+    report = events[-1][1]
+    assert report["projects"] == ["empty-judgment"]
+    # 规则条目照常进报告：工程配置文件 keep，残留 / 旧 main.c exclude（无 AI 判定）
+    assert [d["path"] for d in report["keep"]] == ["project.uvprojx"]
+    assert [d["path"] for d in report["exclude"]] == [
+        "main.c.bak", "project.uvoptx", "src/oled.hex", "main.c",
+    ]
+
+
+def test_distill_llm_error_ends_stream_with_error_event(client, context, tmp_path):
+    """AI 服务失败（LLMError）→ 流内 error 事件（中文 message），HTTP 保持
+    200 起流 → 流结束，不再有其他事件。"""
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    context[1]["llm"] = RaisingLLM()
+
+    events = _distill_stream(client, [str(proj_a), str(proj_b)])
+
+    assert events == [(EVENT_ERROR, {"message": "AI 服务调用失败：服务不可用"})]
+
+
+def test_distill_scan_error_ends_stream_with_error_event(client, context, tmp_path):
+    """业务失败（工程目录不存在）→ 流内 error 事件（中文 message）→ 流结束。"""
+    events = _distill_stream(client, [str(tmp_path / "nope")])
+
+    assert [kind for kind, _ in events] == [EVENT_ERROR]
+    assert "工程目录不存在" in events[0][1]["message"]
+
+
+def test_distill_disconnect_lets_backend_finish(client, context, tmp_path):
+    """客户端提前断开（读到第一个事件后关闭）：后端照常结束本次提炼——发射
+    器不抛异常、不堵提炼线程（spec「断线」：确认前不落任何东西，无副作用）。"""
+    proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
+    completion = threading.Event()
+    context[1]["llm"] = ScriptedDistillLLM(
+        DEFAULT_DECISIONS, events=SCRIPTED_EVENTS, completion=completion, delay=0.02
+    )
+    dirs = [str(proj_a), str(proj_b)]
+
+    with client.stream(
+        "POST",
+        "/api/masters/distill",
+        json={"platform": PLATFORM_STM32, "project_dirs": dirs},
+    ) as resp:
+        assert resp.status_code == 200
+        first = next(resp.iter_lines())
+        assert first.startswith(f"event: {EVENT_START}")
+        # 读到第一个事件后立即断开（退出 with 即关闭响应，流无人消费）
+
+    assert completion.wait(timeout=5), "断线后后端应照常完成本次提炼"
+
+
+def test_distill_rejects_unconfigured_api_before_streaming(tmp_path):
+    """未配置 AI API：起流前 400（不产生 SSE 流，与其他 AI 端点同款提示）。"""
+    ctx = AppContext(config_path=tmp_path / "cfg" / "config.json", config=None)
+    client = TestClient(create_app(ctx))
+
     resp = client.post(
-        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": dirs}
+        "/api/masters/distill", json={"platform": PLATFORM_STM32, "project_dirs": []}
     )
 
     assert resp.status_code == 400
-    assert "无需 AI 判定" in resp.json()["detail"]
-    assert client.get("/api/masters").json() == []  # 失败不入库
+    assert "未配置 AI API" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

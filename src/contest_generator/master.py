@@ -52,7 +52,7 @@ from .keil import (
     render_master_uvprojx,
     validate_project_structure,
 )
-from .llm import FileVersion, JudgmentFile, LLM
+from .llm import FileVersion, JudgmentFile, LLM, ProgressEmitter
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .report import (
     ACTION_EXCLUDE,
@@ -568,6 +568,7 @@ def distill_master(
     llm: LLM,
     platform: str,
     projects: Sequence[ProjectStructure],
+    progress_emitter: ProgressEmitter | None = None,
 ) -> DistillationReport:
     """提炼流程：对比 → LLM 判定（读全文 → 摘要 → 判定）→ 拼装完整报告。
 
@@ -575,6 +576,8 @@ def distill_master(
     出摘要，再基于摘要判定）——公共文件只是"每份内容一样"，不等于基础建设
     必需，同样逐个判（ADR 0001：不看重复次数与出现范围）。覆盖不全或出现
     未知路径抛 MasterError——宁可不放行也不带病进入确认流程。
+    progress_emitter 透传给 llm.distill_master（工单 01 的发射 seam）：
+    webapp 层把它接到 SSE 流上；默认 None 不发射，行为与现状一致。
     """
     comparison = compare_projects(projects)
     _validate_platform_match(platform, comparison)
@@ -584,6 +587,7 @@ def distill_master(
         project_names,
         build_judgment_files(comparison),
         build_comparison_summary(comparison),
+        progress_emitter,
     )
     return assemble_report(platform, project_names, comparison, decisions)
 
