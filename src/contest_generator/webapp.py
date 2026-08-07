@@ -42,6 +42,7 @@ from .library import (
     list_modules,
     remove_platform_files,
     update_module_description,
+    update_platform_identity,
 )
 from .llm import LLM, LLMError, DeepSeekLLM, ProgressEvent, build_manifest_summaries
 from .master import (
@@ -468,6 +469,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         try:
             manifest = remove_platform_files(
                 _library_dir(context), slug, platform, filenames
+            )
+            return manifest.to_dict()
+        except LibraryError as exc:
+            raise _error_response(exc) from exc
+
+    @app.put("/api/modules/{slug}/platform-identity")
+    def module_platform_identity(slug: str, payload: dict) -> dict:
+        """编辑平台条目的硬件身份（kit / source_url，工单 02）。
+
+        存量条目的补填 / 修改入口：只做格式校验（提供值须合法——kit 非空、
+        source_url URL 格式），不走 AI 一致性校验——身份是事实信息、由人
+        确认，AI 判不了真假；只改身份字段，该条目的文件列表 / 验证状态 /
+        硬件绑定原样保留。空值视为未提供、保留原值（补填是逐步的）。
+        """
+        try:
+            manifest = update_platform_identity(
+                _library_dir(context),
+                slug,
+                _require_str(payload, "platform"),
+                kit=_optional_str(payload, "kit"),
+                source_url=_optional_str(payload, "source_url"),
             )
             return manifest.to_dict()
         except LibraryError as exc:

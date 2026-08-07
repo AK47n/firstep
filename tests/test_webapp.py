@@ -671,6 +671,113 @@ def test_module_add_platform_files_rejects_missing_identity(client, context):
 
 
 # ---------------------------------------------------------------------------
+# 存量身份补填编辑路径（工单 02）：PUT /api/modules/{slug}/platform-identity
+# ---------------------------------------------------------------------------
+
+
+def test_platform_identity_edit_backfills_legacy_entry(client, context):
+    """存量无身份字段的平台条目（dht11 stm32）经编辑路径补填：保存成功、
+    列表 API 立即可见，且不触发 AI 一致性校验（FakeLLM 无调用记录）。"""
+    llm = context[1]["llm"]
+
+    resp = client.put(
+        "/api/modules/dht11/platform-identity",
+        json={
+            "platform": PLATFORM_STM32,
+            "kit": "STM32F103C8T6 最小系统板",
+            "source_url": "https://item.jd.com/1000123456.html",
+        },
+    )
+
+    assert resp.status_code == 200
+    entry = resp.json()["platforms"][PLATFORM_STM32]
+    assert entry["kit"] == "STM32F103C8T6 最小系统板"
+    assert entry["source_url"] == "https://item.jd.com/1000123456.html"
+    # 保存立即生效：列表 API 可见新字段
+    listed = next(m for m in client.get("/api/modules").json() if m["slug"] == "dht11")
+    assert listed["platforms"][PLATFORM_STM32]["kit"] == "STM32F103C8T6 最小系统板"
+    assert (
+        listed["platforms"][PLATFORM_STM32]["source_url"]
+        == "https://item.jd.com/1000123456.html"
+    )
+    # 身份是事实信息：编辑不走 AI 一致性校验
+    assert llm.validation_calls == []
+    assert llm.summary_calls == []
+
+
+def test_platform_identity_edit_preserves_other_entry_fields(client, context):
+    """只改身份字段：文件列表、验证状态、硬件绑定、备注原样保留。"""
+    resp = client.put(
+        "/api/modules/dht11/platform-identity",
+        json={
+            "platform": PLATFORM_STM32,
+            "kit": "STM32F103C8T6 最小系统板",
+            "source_url": "https://item.jd.com/1000123456.html",
+        },
+    )
+
+    assert resp.status_code == 200
+    entry = resp.json()["platforms"][PLATFORM_STM32]
+    assert entry["verified"] is True
+    assert entry["hardware_bound"] is False
+    assert entry["notes"] == "PA0"
+    assert entry["files"] == ["stm32/src/dht11.c", "inc/dht11.h"]
+
+
+def test_platform_identity_edit_rejects_invalid_source_url(client, context):
+    resp = client.put(
+        "/api/modules/dht11/platform-identity",
+        json={
+            "platform": PLATFORM_STM32,
+            "kit": "STM32F103C8T6 最小系统板",
+            "source_url": "item.jd.com/1000.html",  # 无协议
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "格式非法" in resp.json()["detail"]
+    # 拒绝不落盘：列表 API 里身份字段仍为空
+    listed = next(m for m in client.get("/api/modules").json() if m["slug"] == "dht11")
+    assert listed["platforms"][PLATFORM_STM32]["kit"] == ""
+    assert listed["platforms"][PLATFORM_STM32]["source_url"] == ""
+
+
+def test_platform_identity_edit_rejects_empty_identity(client, context):
+    resp = client.put(
+        "/api/modules/dht11/platform-identity",
+        json={"platform": PLATFORM_STM32, "kit": "", "source_url": ""},
+    )
+
+    assert resp.status_code == 400
+    assert "至少填写一个硬件身份字段" in resp.json()["detail"]
+
+
+def test_platform_identity_edit_rejects_missing_platform(client, context):
+    resp = client.put(
+        "/api/modules/dht11/platform-identity",
+        json={"kit": "STM32F103C8T6 最小系统板"},
+    )
+
+    assert resp.status_code == 400
+    assert "缺少必填字段" in resp.json()["detail"]
+
+
+def test_platform_identity_edit_unknown_platform_entry(client, context):
+    """目标平台条目不存在：明确报错而非静默改别的条目。"""
+    resp = client.put(
+        "/api/modules/oled/platform-identity",
+        json={
+            "platform": PLATFORM_MSPM0,
+            "kit": "地猛星 MSPM0G3507 开发板",
+            "source_url": "https://item.jd.com/6543210001.html",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "没有平台" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
 # 母版（工单 08 装配）：扫描 → 提炼 → 确认入库 → 浏览 → 删除
 # ---------------------------------------------------------------------------
 

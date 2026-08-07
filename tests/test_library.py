@@ -19,6 +19,7 @@ from contest_generator.library import (
     remove_platform_files,
     save_manifest,
     update_module_description,
+    update_platform_identity,
     validate_description,
 )
 from contest_generator.llm import ValidationResult
@@ -902,3 +903,156 @@ def test_save_manifest_allows_identity_still_empty(fake_module_library):
 
     assert get_module(fake_module_library, "dht11").platforms["stm32"].kit == ""
     assert get_module(fake_module_library, "dht11").platforms["stm32"].source_url == ""
+
+
+# ---------------------------------------------------------------------------
+# 存量身份补填编辑路径（工单 02）：update_platform_identity
+# ---------------------------------------------------------------------------
+
+
+def test_update_platform_identity_backfills_legacy_entry(fake_module_library):
+    """给存量（无身份字段）平台条目补填 kit / source_url：保存成功并落盘。"""
+    manifest = update_platform_identity(
+        fake_module_library,
+        "dht11",
+        "stm32",
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
+    )
+
+    entry = manifest.platforms["stm32"]
+    assert entry.kit == KIT_STM32
+    assert entry.source_url == SOURCE_URL_STM32
+    stored = get_module(fake_module_library, "dht11").platforms["stm32"]
+    assert stored.kit == KIT_STM32
+    assert stored.source_url == SOURCE_URL_STM32
+    assert stored.files == ("stm32/src/dht11.c", "inc/dht11.h")  # 文件列表不变
+
+
+def test_update_platform_identity_preserves_other_entry_fields(fake_module_library):
+    """只改身份字段：文件列表、验证状态、硬件绑定、备注全部原样保留。"""
+    before = get_module(fake_module_library, "dht11").platforms["stm32"]
+    assert before.verified is True
+    assert before.hardware_bound is False
+    assert before.notes == "PA0"
+
+    manifest = update_platform_identity(
+        fake_module_library,
+        "dht11",
+        "stm32",
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
+    )
+
+    entry = manifest.platforms["stm32"]
+    assert entry.verified is True
+    assert entry.hardware_bound is False
+    assert entry.notes == "PA0"
+    assert entry.files == before.files
+
+
+def test_update_platform_identity_backfills_each_field_independently(
+    fake_module_library,
+):
+    """补填是逐步的：只填 kit、不填 source_url 也能保存（反之亦然），
+    未提供的字段保留原值。"""
+    manifest = update_platform_identity(
+        fake_module_library, "dht11", "stm32", kit=KIT_STM32
+    )
+
+    assert manifest.platforms["stm32"].kit == KIT_STM32
+    assert manifest.platforms["stm32"].source_url == ""
+
+    manifest = update_platform_identity(
+        fake_module_library, "dht11", "stm32", source_url=SOURCE_URL_STM32
+    )
+
+    assert manifest.platforms["stm32"].kit == KIT_STM32  # 原值保留
+    assert manifest.platforms["stm32"].source_url == SOURCE_URL_STM32
+
+
+def test_update_platform_identity_modifies_existing_fields(fake_module_library):
+    """已填过身份字段的条目可修改为新值（补填 / 修改同一条路径）。"""
+    update_platform_identity(
+        fake_module_library,
+        "dht11",
+        "stm32",
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
+    )
+
+    manifest = update_platform_identity(
+        fake_module_library,
+        "dht11",
+        "stm32",
+        kit="地猛星 MSPM0G3507 开发板",
+        source_url=SOURCE_URL_MSPM0,
+    )
+
+    entry = manifest.platforms["stm32"]
+    assert entry.kit == "地猛星 MSPM0G3507 开发板"
+    assert entry.source_url == SOURCE_URL_MSPM0
+
+
+def test_update_platform_identity_strips_whitespace(fake_module_library):
+    manifest = update_platform_identity(
+        fake_module_library,
+        "dht11",
+        "stm32",
+        kit=f"  {KIT_STM32}  ",
+        source_url=f"  {SOURCE_URL_STM32}  ",
+    )
+
+    assert manifest.platforms["stm32"].kit == KIT_STM32
+    assert manifest.platforms["stm32"].source_url == SOURCE_URL_STM32
+
+
+def test_update_platform_identity_rejects_invalid_source_url(fake_module_library):
+    with pytest.raises(LibraryError, match="格式非法"):
+        update_platform_identity(
+            fake_module_library,
+            "dht11",
+            "stm32",
+            kit=KIT_STM32,
+            source_url="not-a-url",
+        )
+
+    # 校验失败在落盘前：磁盘上身份字段仍是原样（空）
+    stored = get_module(fake_module_library, "dht11").platforms["stm32"]
+    assert stored.kit == ""
+    assert stored.source_url == ""
+
+
+def test_update_platform_identity_rejects_empty_payload(fake_module_library):
+    """编辑至少填一个身份字段：全空（含只给空白）拒绝，避免无意义保存。"""
+    with pytest.raises(LibraryError, match="至少填写一个硬件身份字段"):
+        update_platform_identity(fake_module_library, "dht11", "stm32")
+    with pytest.raises(LibraryError, match="至少填写一个硬件身份字段"):
+        update_platform_identity(fake_module_library, "dht11", "stm32", kit="   ")
+
+
+def test_update_platform_identity_blank_kit_means_not_provided(
+    fake_module_library,
+):
+    """kit 只给空白 = 未提供：不报错、保留原值——补填是逐步的，只填
+    source_url（表单带空 kit）也必须能保存。"""
+    manifest = update_platform_identity(
+        fake_module_library,
+        "dht11",
+        "stm32",
+        kit="   ",
+        source_url=SOURCE_URL_STM32,
+    )
+
+    assert manifest.platforms["stm32"].kit == ""
+    assert manifest.platforms["stm32"].source_url == SOURCE_URL_STM32
+
+
+def test_update_platform_identity_missing_platform_entry_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="没有平台"):
+        update_platform_identity(fake_module_library, "oled", "mspm0", kit=KIT_STM32)
+
+
+def test_update_platform_identity_missing_module_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="不存在"):
+        update_platform_identity(fake_module_library, "wifi", "stm32", kit=KIT_STM32)

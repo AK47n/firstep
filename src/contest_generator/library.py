@@ -103,6 +103,39 @@ def save_manifest(library_root: Path, manifest: ModuleManifest) -> None:
     _write_manifest(module_dir, manifest)
 
 
+def update_platform_identity(
+    library_root: Path,
+    slug: str,
+    platform: str,
+    *,
+    kit: str = "",
+    source_url: str = "",
+) -> ModuleManifest:
+    """存量平台条目的硬件身份补填 / 修改（工单 02）：只改身份字段，不走 AI 校验。
+
+    用户补填身份字段的编辑入口：提供值须合法——kit 非空、source_url 须为
+    合法 URL；空值视为未提供、保留原值（补填是逐步的，只填一个字段也能
+    保存）。至少填一个字段，拒绝无意义的空保存。只做格式校验，不走 AI
+    一致性校验——身份是事实信息、由人确认，AI 判不了真假（spec US 12）。
+    只改该条目的 kit / source_url，文件列表、验证状态、硬件绑定等其余
+    字段原样保留。任何校验失败都在落盘前。
+    """
+    manifest = get_module(library_root, slug)
+    entry = manifest.platforms.get(platform)
+    if entry is None:
+        raise LibraryError(f"模块 {slug!r} 没有平台 {platform} 的版本")
+    if not kit.strip() and not source_url.strip():
+        raise LibraryError("至少填写一个硬件身份字段（kit 或 source_url）")
+    if source_url.strip():
+        _validate_source_url_format(source_url, platform)
+    new_entry = _replace_identity_fields(entry, kit, source_url)
+    new_manifest = replace(
+        manifest, platforms={**manifest.platforms, platform: new_entry}
+    )
+    save_manifest(library_root, new_manifest)
+    return new_manifest
+
+
 # ---------------------------------------------------------------------------
 # AI 录入流程：草稿 → 用户修改 → 一致性校验 → 入库
 # ---------------------------------------------------------------------------
