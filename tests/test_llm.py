@@ -17,13 +17,11 @@ from contest_generator.llm import (
     EVENT_PHASE_DONE,
     EVENT_RETRY,
     EVENT_START,
-    FileVersion,
     JUDGMENT_CONTENT_CAP,
     SELECT_SYSTEM_PROMPT,
     SKELETON_SYSTEM_PROMPT,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
-    JudgmentFile,
     LLMError,
     MAX_REQUEST_BYTES,
     ModuleSelection,
@@ -52,6 +50,8 @@ from contest_generator.report import (
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
+    FileVersion,
+    JudgmentFile,
     ReportError,
 )
 from contest_generator.manifest import ModuleManifest, PlatformEntry

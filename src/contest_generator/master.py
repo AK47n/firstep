@@ -52,7 +52,7 @@ from .keil import (
     render_master_uvprojx,
     validate_project_structure,
 )
-from .llm import FileVersion, JudgmentFile, LLM, ProgressEmitter
+from .llm import LLM, ProgressEmitter  # AI 接缝协议 + 进度发射器（仅类型引用，实现与解析在 llm 层）
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .report import (
     ACTION_EXCLUDE,
@@ -60,6 +60,8 @@ from .report import (
     ACTION_MERGE,
     DistillationReport,
     FileDecision,
+    FileVersion,
+    JudgmentFile,
     ReportError,
 )
 

@@ -1,11 +1,15 @@
-"""提炼报告模型：判定条目与容器（schema 的唯一所有者）。
+"""判定模型：提炼报告的判定条目与容器 + AI 判定素材（schema 的唯一所有者）。
 
-FileDecision 与 DistillationReport 同时出现在三条路径上——AI 判定输出
-（llm 解析）、确定性规则拼装（master 拼装报告）、确认请求回传（webapp
-往返）——因此条目与容器的形状、序列化与不变量（merge 必须带整合产物全文
-与整合说明、main_c_preview 由平台重推导）在这里只定义一次：llm 层只负责
-AI JSON 契约（提示词 + decisions 数组解析），master 层只负责对比语义校验
-（路径范围 / 来源工程 / 模板 main.c 内容），形状校验都落到 from_dict。
+FileDecision 与 DistillationReport（判定输出）同时出现在三条路径上——AI
+判定输出（llm 解析）、确定性规则拼装（master 拼装报告）、确认请求回传
+（webapp 往返）——因此条目与容器的形状、序列化与不变量（merge 必须带整合
+产物全文与整合说明、main_c_preview 由平台重推导）在这里只定义一次：llm 层
+只负责 AI JSON 契约（提示词 + decisions 数组解析），master 层只负责对比语义
+校验（路径范围 / 来源工程 / 模板 main.c 内容），形状校验都落到 from_dict。
+
+JudgmentFile 与 FileVersion（判定输入素材，master 构造、llm 消费）同归此
+处——依赖倒置：llm 层依赖模型层取素材类型，master 不再从 llm 导入模型。
+版本分组不变量（版本工程名组不重不漏）在这里唯一声明与校验。
 """
 
 from __future__ import annotations
@@ -186,3 +190,59 @@ class DistillationReport:
             main_c_preview=main_c_preview,
             uvprojx_preview=uvprojx_preview,
         )
+
+
+# ---------------------------------------------------------------------------
+# 判定素材（AI 判定流程的输入）：master 构造、llm 消费
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class JudgmentFile:
+    """待判文件素材：路径 + 每个内容版本及其持有工程（AI 判定前先读全文出摘要）。
+
+    覆盖 master 判定范围（公共 + 冲突 + 独有，全部文件）。同一路径内容不同
+    的每个版本都传（AI 读全部版本后判定）；内容一致的工程合并为一个版本。
+    """
+
+    path: str
+    versions: tuple[FileVersion, ...]
+
+    @property
+    def version_groups(self) -> tuple[frozenset[str], ...]:
+        """版本分组（唯一出处）：每个内容版本一组持有工程名。
+
+        分组是判定素材模型的不变量——组与组互不重叠（一个工程在同一路径只有
+        一个内容版本），组并集 = 该路径全部持有工程。解析词表 / 合并拆分各处
+        复用本属性，不再手抄 frozenset 推导。
+        """
+        return tuple(frozenset(version.projects) for version in self.versions)
+
+    def __post_init__(self) -> None:
+        """版本分组不变量校验：版本非空、各组非空、组间不重叠。
+
+        不变量由 build_judgment_files（按内容哈希分组）保证；手工构造的素材
+        带病在此大声失败，不让畸形分组流到解析词表 / 合并拆分逻辑。
+        """
+        if not self.versions:
+            raise ReportError(f"判定素材 {self.path!r} 缺少内容版本")
+        seen: set[str] = set()
+        for version in self.versions:
+            group = frozenset(version.projects)
+            if not group:
+                raise ReportError(f"判定素材 {self.path!r} 有内容版本无持有工程")
+            overlap = group & seen
+            if overlap:
+                raise ReportError(
+                    f"判定素材 {self.path!r} 的内容版本工程名重叠："
+                    + "、".join(sorted(overlap))
+                )
+            seen |= group
+
+
+@dataclass(frozen=True)
+class FileVersion:
+    """同一路径下的一个内容版本：全文 + 持该版本的工程名。"""
+
+    content: str
+    projects: tuple[str, ...]
