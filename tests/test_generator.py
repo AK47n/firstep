@@ -104,7 +104,7 @@ def test_generate_stm32_outputs_complete_project(make_project, tmp_path):
         ".\\modules\\oled\\stm32\\src\\oled.c",
     ]
     include_path = root.findtext(
-        "Targets/Target/TargetOption/TargetArmAds/Cads/IncludePath"
+        "Targets/Target/TargetOption/TargetArmAds/Cads/VariousControls/IncludePath"
     )
     assert include_path == (
         ".\\inc;.\\src"

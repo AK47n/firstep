@@ -91,6 +91,43 @@
              border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
              vertical-align: -2px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* ---- 提炼进度区（工单 03：stepper + 批进度 + 双计时器 + 补问徽标 + 可折叠日志） ---- */
+  .distill-progress { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px;
+                      padding: 10px 14px; background: #fafbfc; }
+  .stepper { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+  .stepper .step { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+                   color: var(--muted); white-space: nowrap; }
+  .stepper .step .dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border);
+                        background: #fff; display: inline-flex; align-items: center; justify-content: center;
+                        font-size: 10px; flex: none; }
+  .stepper .step.done { color: var(--ok); }
+  .stepper .step.done .dot { border-color: var(--ok); background: var(--ok); color: #fff; }
+  .stepper .step.active { color: var(--accent); font-weight: 600; }
+  .stepper .step.active .dot { border-color: var(--accent); }
+  .stepper .connector { flex: 1; height: 2px; background: var(--border); min-width: 10px; }
+  .stepper .connector.done { background: var(--ok); }
+  .prog-batch { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+  .prog-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
+              margin: 6px 0 8px; }
+  .prog-bar > div { height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  .prog-timers { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 6px;
+                 font-variant-numeric: tabular-nums; }
+  .prog-badge { display: inline-block; background: #fef3c7; color: var(--warn);
+                border: 1px solid #f59e0b; border-radius: 10px; font-size: 11px; padding: 0 8px; }
+  .prog-log-head { display: flex; gap: 6px; align-items: center; margin-top: 6px; cursor: pointer;
+                   user-select: none; font-size: 12px; color: var(--muted); }
+  .prog-log-head:hover { color: var(--accent); }
+  .prog-log { margin-top: 6px; max-height: 220px; overflow-y: auto; font-size: 12px;
+              font-family: Consolas, "Courier New", monospace; border-top: 1px dashed var(--border);
+              padding-top: 6px; }
+  .prog-log .line { padding: 2px 0; color: var(--text); word-break: break-all; }
+  .prog-log .line .t { color: var(--muted); margin-right: 6px; }
+  .prog-log .line.batch { cursor: pointer; }
+  .prog-log .line.batch:hover { color: var(--accent); }
+  .prog-log .line.error { color: var(--danger); font-weight: 600; }
+  .prog-log .file-list { margin: 0 0 4px 22px; color: var(--muted); white-space: pre-wrap;
+                         word-break: break-all; }
+  .prog-done { font-size: 13px; color: var(--ok); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -226,6 +263,33 @@
       <div class="row" style="margin-top:10px">
         <button id="btn-scan">扫描工程</button>
         <button id="btn-distill" class="primary" disabled>AI 提炼报告</button>
+      </div>
+      <div id="distill-progress" class="distill-progress hidden" style="margin-top:10px">
+        <div id="prog-body">
+          <div class="stepper" id="prog-stepper">
+            <span class="step" data-i="0"><span class="dot">1</span>开始</span>
+            <span class="connector"></span>
+            <span class="step" data-i="1"><span class="dot">2</span>摘要</span>
+            <span class="connector"></span>
+            <span class="step" data-i="2"><span class="dot">3</span>判定</span>
+            <span class="connector"></span>
+            <span class="step" data-i="3"><span class="dot">4</span>完成</span>
+          </div>
+          <div class="prog-batch">
+            <span id="prog-batch-text"></span>
+            <span id="prog-badge" class="prog-badge hidden"></span>
+          </div>
+          <div class="prog-bar hidden" id="prog-bar"><div id="prog-bar-fill"></div></div>
+          <div class="prog-timers">
+            <span id="prog-timer-total">总用时 00:00</span>
+            <span id="prog-timer-call">当前调用已等待 00:00</span>
+          </div>
+          <div class="prog-log-head" id="prog-log-head" title="点击展开 / 收起">
+            <span id="prog-log-caret">▾</span> 事件日志<span id="prog-log-count" class="muted"></span>
+          </div>
+          <div id="prog-log" class="prog-log"></div>
+        </div>
+        <div id="prog-done" class="prog-done hidden"></div>
       </div>
       <div id="scan-msg" class="error"></div>
       <div id="scan-result" style="margin-top:10px"></div>
@@ -715,6 +779,7 @@ function projectDirs() {
 $("btn-scan").addEventListener("click", async () => {
   $("scan-msg").textContent = "";
   $("report").classList.add("hidden");
+  $("distill-progress").classList.add("hidden");   // 重新扫描 = 新的提炼上下文，收起旧进度
   const dirs = projectDirs();
   if (!dirs.length) { $("scan-msg").textContent = "请先填写至少一个旧工程目录"; return; }
   try {
@@ -730,21 +795,262 @@ $("btn-scan").addEventListener("click", async () => {
   } catch (e) { $("scan-msg").textContent = e.message; }
 });
 
+// 提炼进度状态（工单 03）：一次点击到 done / error / 断线为一个生命周期。
+// 计时器每秒跳动是"没卡死"的唯一证明——模型单次调用期间后端不发任何事件。
+let prog = null;
+const PHASE_LABEL = { summary: "摘要", decide: "判定" };
+const MAX_LOG_LINES = 300;   // 日志上限：超出丢最旧，不撑爆页面
+
+// ===== SSE 解析器开始（工单 03；纯函数：输入 Response → 逐事件回调，不碰 DOM）=====
+// 工单 02 契约：HTTP 200、text/event-stream；每个事件 = "event: <type>\n" +
+// "data: <JSON>\n" + "\n"（空行分隔）；断线 = 放弃本次（无自动重连）。
+// 本地手测：浏览器 devtools 用 new Response(new ReadableStream(...)) 构造假流喂它。
+async function parseSSE(resp, onEvent) {
+  if (!resp.body) throw new Error("服务响应无流");
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let type = "";
+  let data = "";
+  const feed = (block) => {
+    for (const line of block.split("\n")) {
+      if (!line) continue;
+      if (line.startsWith("event:")) type = line.slice(6).trim();
+      else if (line.startsWith("data:")) data += line.slice(5).replace(/^ /, "") + "\n";
+      // 其他行（id / 注释等）本次契约不用，忽略
+    }
+  };
+  const flush = () => {
+    if (type || data) {
+      onEvent(type || "message", data.replace(/\n$/, ""));
+      type = "";
+      data = "";
+    }
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    let idx;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      feed(buffer.slice(0, idx));
+      buffer = buffer.slice(idx + 2);
+      flush();
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer) { feed(buffer); flush(); }   // 流末尾缺最后一个空行也认
+}
+// ===== SSE 解析器结束 =====
+
+function fmtClock(sec) {   // 计时器显示：mm:ss（分可超 59）
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+}
+function fmtDuration(sec) {   // 完成行："12 分 34 秒" / "45 秒" / "1 小时 2 分 3 秒"
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  const parts = [];
+  if (h) parts.push(h + " 小时");
+  if (m || h) parts.push(m + " 分");
+  parts.push(s + " 秒");
+  return parts.join(" ");
+}
+
+function setStep(n, state) {   // n = 步号（0 开始…3 完成）；state = "active" | "done"
+  const steps = document.querySelectorAll("#prog-stepper .step");
+  const conns = document.querySelectorAll("#prog-stepper .connector");
+  steps.forEach((el, i) => {
+    el.classList.remove("done", "active");
+    el.querySelector(".dot").textContent = i < n ? "✓" : String(i + 1);
+    if (i < n) el.classList.add("done");
+    else if (i === n) el.classList.add(state);
+  });
+  conns.forEach((el, i) => el.classList.toggle("done", i < n));
+}
+
+function updateBatch() {
+  if (prog.phase && prog.batchIndex) {
+    $("prog-batch-text").textContent =
+      (PHASE_LABEL[prog.phase] || prog.phase) + " 第 " + prog.batchIndex + "/" + prog.batchCount
+      + " 批 · 已读 " + prog.processed + "/" + (prog.phaseTotal[prog.phase] || prog.processed);
+    $("prog-bar").classList.remove("hidden");
+    const total = prog.phaseTotal[prog.phase];
+    $("prog-bar-fill").style.width = (total ? Math.min(100, prog.processed * 100 / total) : 100) + "%";
+  } else {
+    $("prog-batch-text").textContent = "";
+    $("prog-bar").classList.add("hidden");
+  }
+}
+
+function addLogLine(cls, text) {
+  const div = document.createElement("div");
+  div.className = "line" + (cls ? " " + cls : "");
+  const t = new Date();
+  div.innerHTML = '<span class="t">' + String(t.getHours()).padStart(2, "0") + ":"
+    + String(t.getMinutes()).padStart(2, "0") + ":" + String(t.getSeconds()).padStart(2, "0")
+    + "</span>" + esc(text);
+  const log = $("prog-log");
+  log.appendChild(div);
+  while (log.childElementCount > MAX_LOG_LINES) log.firstElementChild.remove();
+  prog.logCount++;
+  $("prog-log-count").textContent = "（" + prog.logCount + " 条）";
+  log.scrollTop = log.scrollHeight;
+}
+
+function addBatchLine(ev) {
+  const div = document.createElement("div");
+  div.className = "line batch";
+  const t = new Date();
+  const label = (PHASE_LABEL[ev.phase] || ev.phase) + " 第 " + ev.batch_index + "/" + ev.batch_count
+    + " 批开始";
+  div.innerHTML = '<span class="t">' + String(t.getHours()).padStart(2, "0") + ":"
+    + String(t.getMinutes()).padStart(2, "0") + ":" + String(t.getSeconds()).padStart(2, "0")
+    + "</span>" + esc(label) + '<span class="muted">（' + ev.paths.length + ' 个文件）</span>'
+    + '<span class="muted" data-toggle>[展开]</span>';
+  const list = document.createElement("div");
+  list.className = "file-list hidden";
+  list.textContent = ev.paths.join("\n");
+  div.addEventListener("click", () => {
+    const open = list.classList.toggle("hidden");
+    div.querySelector("[data-toggle]").textContent = open ? "[展开]" : "[收起]";
+  });
+  const log = $("prog-log");
+  log.appendChild(div);
+  log.appendChild(list);
+  prog.logCount++;
+  $("prog-log-count").textContent = "（" + prog.logCount + " 条）";
+  log.scrollTop = log.scrollHeight;
+}
+
+$("prog-log-head").addEventListener("click", () => {
+  const log = $("prog-log");
+  $("prog-log-caret").textContent = log.classList.toggle("hidden") ? "▾" : "▸";
+});
+
+function tick() {
+  const now = Date.now();
+  $("prog-timer-total").textContent = "总用时 " + fmtClock((now - prog.startedAt) / 1000);
+  $("prog-timer-call").textContent = "当前调用已等待 " + fmtClock((now - prog.lastEventAt) / 1000);
+}
+
+function startProgress() {
+  if (prog && prog.timerId) clearInterval(prog.timerId);
+  prog = {
+    startedAt: Date.now(), lastEventAt: Date.now(),
+    judgmentCount: 0,
+    phaseTotal: { summary: 0, decide: 0 },   // 两阶段文件总数 = 待判文件数
+    phase: "", batchIndex: 0, batchCount: 0, processed: 0,
+    logCount: 0, finished: false, timerId: null,
+  };
+  $("distill-progress").classList.remove("hidden");
+  $("prog-done").classList.add("hidden");
+  $("prog-body").classList.remove("hidden");
+  $("prog-log").innerHTML = "";
+  $("prog-log").classList.remove("hidden");
+  $("prog-log-caret").textContent = "▾";
+  $("prog-log-count").textContent = "";
+  $("prog-badge").classList.add("hidden");
+  setStep(0, "active");
+  updateBatch();
+  prog.timerId = setInterval(tick, 1000);
+  tick();
+}
+
+function finishProgress(report) {
+  clearInterval(prog.timerId);
+  prog.finished = true;
+  setStep(3, "done");
+  $("prog-body").classList.add("hidden");   // 完成态折叠为一行
+  $("prog-done").classList.remove("hidden");
+  $("prog-done").textContent = "提炼完成，用时 " + fmtDuration((Date.now() - prog.startedAt) / 1000);
+  currentReport = report;
+  renderReport();
+}
+
+function failProgress(message) {
+  clearInterval(prog.timerId);
+  prog.finished = true;
+  addLogLine("error", message);
+  $("prog-log").classList.remove("hidden");   // 失败态：日志保留且展开，红行可见
+  $("prog-log-caret").textContent = "▾";
+  tick();   // 计时器停在最后读数
+}
+
+function handleProgressEvent(type, raw) {
+  let data = {};
+  try { data = JSON.parse(raw || "null") || {}; } catch (e) { data = {}; }
+  prog.lastEventAt = Date.now();
+  switch (type) {
+    case "start":
+      prog.judgmentCount = data.judgment_count || 0;
+      prog.phaseTotal.summary = prog.phaseTotal.decide = prog.judgmentCount;
+      setStep(0, "done");
+      addLogLine("", "开始：待判文件 " + prog.judgmentCount + " 份（摘要 "
+        + (data.summary_batch_count || 0) + " 批 / 判定 " + (data.decide_batch_count || 0) + " 批）");
+      break;
+    case "batch_start":
+      if (prog.phase && prog.phase !== data.phase) prog.processed = 0;   // 阶段切换：阶段内计数归零
+      prog.phase = data.phase;
+      prog.batchIndex = data.batch_index;
+      prog.batchCount = data.batch_count;
+      setStep(data.phase === "decide" ? 2 : 1, "active");
+      $("prog-badge").classList.add("hidden");
+      addBatchLine(data);
+      updateBatch();
+      break;
+    case "batch_done":
+      prog.processed = data.processed_count || 0;
+      $("prog-badge").classList.add("hidden");
+      addLogLine("", (PHASE_LABEL[data.phase] || data.phase) + " 第 " + data.batch_index + "/"
+        + (prog.batchCount || data.batch_index) + " 批完成（累计已读 " + prog.processed + " 份）");
+      updateBatch();
+      break;
+    case "retry":
+      $("prog-badge").classList.remove("hidden");
+      $("prog-badge").textContent = "批 " + data.batch_index + " 补问中";
+      addLogLine("", "批 " + data.batch_index + " 补问：第 " + (data.retry_round || 1) + " 轮，缺失 "
+        + (data.missing_count || 0) + " 份");
+      break;
+    case "phase_done":
+      setStep(data.phase === "decide" ? 2 : 1, "done");
+      addLogLine("", (PHASE_LABEL[data.phase] || data.phase) + " 阶段完成，共 "
+        + (data.file_count || 0) + " 份");
+      break;
+    case "done":
+      finishProgress(data);   // data = 完整提炼报告（与现状响应同构，原样渲染）
+      break;
+    case "error":
+      failProgress(data.message || "提炼失败");
+      break;
+    // 预留事件类型（token 级流式等）——本次忽略
+  }
+}
+
 $("btn-distill").addEventListener("click", async () => {
   $("distill-msg").textContent = "";
-  $("btn-distill").disabled = true;
-  $("btn-distill").innerHTML = '<span class="spinner"></span>AI 判定中…';
+  $("btn-distill").disabled = true;   // 进度区替代按钮静态转圈
+  startProgress();
   try {
     const dirs = projectDirs();
     const platform = scannedProjects[0].platform;
-    const data = await apiPost("/api/masters/distill", { platform, project_dirs: dirs });
-    currentReport = data;
-    renderReport();
+    const resp = await fetch("/api/masters/distill", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform, project_dirs: dirs }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+    }
+    await parseSSE(resp, handleProgressEvent);
+    if (!prog.finished) {   // 流结束但没等到 done / error = 断线：放弃本次，刷新安全重试
+      failProgress("连接中断：本次提炼未完成（确认前不落任何东西），刷新页面后可安全重试");
+    }
   } catch (e) {
-    $("distill-msg").textContent = e.message;
+    if (!prog.finished) failProgress(e.message);
   } finally {
     $("btn-distill").disabled = false;
-    $("btn-distill").innerHTML = "重新提炼";
+    $("btn-distill").textContent = "重新提炼";
   }
 });
 
