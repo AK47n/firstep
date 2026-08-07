@@ -21,7 +21,13 @@ from typing import Any, Callable, Protocol, Sequence, TypeVar
 
 from .config import AppConfig
 from .manifest import ModuleManifest
-from .report import ACTION_MERGE, FileDecision, JudgmentFile, ReportError
+from .report import (
+    ACTION_MERGE,
+    FileDecision,
+    JudgmentFile,
+    ReferenceCandidate,
+    ReportError,
+)
 
 # ---------------------------------------------------------------------------
 # 截断标注契约（唯一出处）
@@ -101,6 +107,26 @@ DISTILL_SYSTEM_PROMPT = (
     + "动作词表：keep（保留）/ merge（整合：同一路径多份内容不同时，读多份后"
     "整合出通用版本，选一份只是特例，必须给出整合产物全文与整合说明）/ "
     "exclude（剔除）。必须为每个待判文件给出动作，一个都不能少。只输出 JSON 对象。"
+)
+
+# 参考文件简介生成（工单 02）：配套资料（例程工程 / 说明书等）→ 中文简介草稿。
+# 素材超长截断带标注（与所有嵌内容调用同款，TRUNCATION_NOTICE 唯一出处见上）。
+REFERENCE_SUMMARY_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发资料整理助手。根据提供的配套资料内容"
+    "（素材过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）写一段中文"
+    "简介：它是什么、用途、适用场景。只输出简介文本，不要额外格式。"
+)
+
+# 归档判定（工单 02）：提炼时被剔除的业务代码是否值得归档为该赛题的参考文件。
+# 判据 = 可复用的业务代码 / 学习参考（传感器驱动、外设封装、赛题逻辑实现、
+# 算法），一次性杂物 / 配置噪声 / 无关文件不值得归档。与提炼判据同款双端
+# 契约（系统提示词与用户提示词都带判据，见 _archive_judgment_user_prompt）。
+ARCHIVE_JUDGMENT_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发工程整理助手。提炼旧工程时被剔除的"
+    "文件，需要判断是否值得归档为该赛题的参考文件（素材过长可能被截断，见"
+    "末尾标注，" + TRUNCATION_NOTICE + "）：归档价值 = 可复用的业务代码或学习"
+    "参考（传感器驱动、外设封装、赛题逻辑实现、算法）；一次性杂物 / 配置噪声"
+    " / 无关文件不值得归档。只输出 JSON 对象。"
 )
 
 # 判定素材内容上限（字符）：第一阶段提示词把每个内容版本全文嵌入，真实旧
@@ -482,6 +508,12 @@ class LLM(Protocol):
         progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]: ...
 
+    def reference_summarize(self, material: str) -> str: ...
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]: ...
+
 
 def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
     """模块库 manifest 摘要行（喂给 LLM 的可用模块清单）。
@@ -611,6 +643,36 @@ class DeepSeekLLM:
             json_mode=True,
         )
         return parse_validation_result(content)
+
+    def reference_summarize(self, material: str) -> str:
+        """配套资料（例程工程 / 说明书等）→ 中文简介草稿（文本模式，工单 02）。
+
+        素材超长截断带标注（_truncate_content，与所有嵌内容调用同款预算）。
+        """
+        return self._chat(
+            [
+                {"role": "system", "content": REFERENCE_SUMMARY_SYSTEM_PROMPT},
+                {"role": "user", "content": _truncate_content(material)},
+            ]
+        )
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        """归档判定：被剔除的业务代码是否值得归档为该赛题的参考文件（json_mode）。
+
+        返回值得归档的路径子集（可为空 = 没有文件值得归档）。输出经
+        parse_archive_judgment 严格解析（词表外 / 重复路径拒绝，畸形抛
+        LLMError——模型输出不可信，宁可大声失败也不带病进入归档流程）。
+        """
+        content = self._chat(
+            [
+                {"role": "system", "content": ARCHIVE_JUDGMENT_SYSTEM_PROMPT},
+                {"role": "user", "content": _archive_judgment_user_prompt(candidates)},
+            ],
+            json_mode=True,
+        )
+        return parse_archive_judgment(content, [c.path for c in candidates])
 
     def distill_master(
         self,
@@ -1225,6 +1287,50 @@ def _distill_user_prompt(
             '"explanation": "merge 时必填的整合说明（选一份时说明为何选它）", '
             '"source": "merge 选一份时可选填的来源工程名", "reason": "中文理由"}]}',
         ]
+    )
+    return "\n".join(lines)
+
+
+def parse_archive_judgment(content: str, paths: Sequence[str]) -> tuple[str, ...]:
+    """把模型返回的归档判定 JSON 解析校验为值得归档的路径列表。
+
+    路径词表约束（未知路径 / 重复路径拒绝）与 parse_module_selection 同款——
+    模型输出不可信，宁可大声失败也不要带病进入归档流程。空列表合法（没有
+    文件值得归档），由调用方决定如何呈现。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("archive"), list):
+        raise LLMError("模型输出缺少 archive 数组")
+
+    known = set(paths)
+    result: list[str] = []
+    for index, item in enumerate(data["archive"]):
+        if not isinstance(item, str) or not item:
+            raise LLMError(f"archive[{index}] 必须是字符串")
+        if item not in known:
+            raise LLMError(f"模型判定归档了素材外的路径：{item}")
+        if item in result:
+            raise LLMError(f"模型重复判定归档：{item}")
+        result.append(item)
+    return tuple(result)
+
+
+def _archive_judgment_user_prompt(
+    candidates: Sequence[ReferenceCandidate],
+) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    lines = ["待判断是否值得归档的文件（已被判定剔除出母版，附剔除理由）："]
+    for candidate in candidates:
+        lines.append(
+            f"- {candidate.path}（理由：{candidate.reason}）：\n"
+            f"```\n{_truncate_content(candidate.content)}\n```"
+        )
+    lines.append(
+        "只返回 json 格式的 JSON 对象："
+        '{"archive": ["值得归档的路径", ...]}'
     )
     return "\n".join(lines)
 
