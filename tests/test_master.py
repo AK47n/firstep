@@ -5,16 +5,21 @@
 """
 
 import dataclasses
+import os
 import shutil
+import sys
 import xml.etree.ElementTree as ET
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+from contest_generator.keil import KeilProjectError
 from contest_generator.master import (
     BINARY_FILE_REASON,
     MAIN_C_TEMPLATE_REASON,
     RULE_CATEGORIES,
+    STARTUP_REPLACEMENT_REASON,
     MasterError,
     ProjectComparison,
     ProjectStructure,
@@ -30,6 +35,7 @@ from contest_generator.master import (
     import_master,
     list_masters,
     main_c_template,
+    residue_reason,
     scan_project,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -42,6 +48,7 @@ from contest_generator.report import (
     ReportError,
 )
 from tests.fakes import (
+    FAKE_CCS_PROJECT,
     FAKE_DISTILL_UVPROJX_A,
     FAKE_DISTILL_UVPROJX_B,
     FakeLLM,
@@ -52,21 +59,13 @@ from tests.fakes import (
 # 假工程对的判定范围（公共 + 冲突 + 独有，全部文件）与一份典型 AI 判定
 # 公共文件（所有工程内容一致）同样由 AI 判定：基础建设必需 → keep（判例 06）
 # merge 携带整合产物全文（content）+ 整合说明（explanation）；选一份只是特例
-MERGED_UVPROJX = FAKE_DISTILL_UVPROJX_A  # 特例：直接取 A 的全文，说明为何选它
+# 注意：.uvprojx 是工程配置文件（工单 09），由确定性规则处理、不在判定范围
 MERGED_OLED = "/* 通用 OLED 驱动（整合版） */\nvoid oled_init(void);\n"
 DEFAULT_DECISIONS = (
     FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="官方库配置头，基础必需"),
     FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="系统初始化，基础必需"),
     FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用传感器驱动，应进母版"),
     FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="上一场比赛的字体表残留"),
-    FileDecision(
-        "project.uvprojx",
-        ACTION_MERGE,
-        content=MERGED_UVPROJX,
-        explanation="取 include path 更全的 A 版本",
-        source="proj-a",
-        reason="include path 更全",
-    ),
     FileDecision(
         "src/oled.c",
         ACTION_MERGE,
@@ -81,6 +80,13 @@ DEFAULT_DECISIONS = (
 def _projects(fake_stm32_projects):
     """扫好的工程结构快照列表。"""
     return [scan_project(p) for p in fake_stm32_projects]
+
+
+def _write_startup(project: Path, directory: str, name: str, content: str) -> None:
+    """在工程子目录写一份启动文件候选（目录不存在时先创建）。"""
+    path = project / directory / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
 
 
 def _comparison(fake_stm32_projects):
@@ -118,11 +124,15 @@ def test_scan_detects_platform_and_lists_files(fake_stm32_projects):
     assert structure_a.platform == PLATFORM_STM32
     assert structure_a.files == (
         "inc/stm32f10x_conf.h",
-        "project.uvprojx",
         "sensors/dht11.c",
         "src/oled.c",
         "src/system_stm32f10x.c",
     )
+    # 工程配置文件（.uvprojx，工单 09）单独记录：确定性规则处理（渲染现写）、
+    # 不进扫描清单也不读内容
+    assert structure_a.config_files == ("project.uvprojx",)
+    assert "project.uvprojx" not in structure_a.files
+    assert "project.uvprojx" not in structure_a.file_hashes
     # 旧工程 main.c 单独记录（模板替代，ADR 0002），不进扫描清单也不读内容
     assert structure_a.main_c_files == ("main.c",)
     assert "main.c" not in structure_a.files
@@ -130,8 +140,8 @@ def test_scan_detects_platform_and_lists_files(fake_stm32_projects):
     # .git 与构建产物目录不进清单
     assert ".git/HEAD" not in structure_a.files
     assert "Debug/out.axf" not in structure_a.files
-    # 源码树内的残留单独记录、不进扫描清单也不读内容
-    assert structure_a.residues == ("main.c.bak", "src/oled.o")
+    # 源码树内的残留单独记录（含 IDE 用户选项 .uvoptx，工单 09）、不进扫描清单也不读内容
+    assert structure_a.residues == ("main.c.bak", "project.uvoptx", "src/oled.o")
     assert "src/oled.o" not in structure_a.files
     assert "src/oled.o" not in structure_a.file_hashes
 
@@ -176,7 +186,9 @@ def test_scan_classifies_residues_by_rule(tmp_path):
         "src/driver.c~",
         "src/driver.o",
     )
-    assert structure.files == ("project.uvprojx", "src/real.c", "src/real.c.orig")
+    # .uvprojx 是工程配置文件（工单 09），不进扫描清单
+    assert structure.config_files == ("project.uvprojx",)
+    assert structure.files == ("src/real.c", "src/real.c.orig")
 
 
 def test_scan_classifies_binary_files_by_content(tmp_path):
@@ -227,8 +239,11 @@ def test_scan_detects_ccs_platform(tmp_path):
     structure = scan_project(make_fake_ccs_master_project(tmp_path / "ccs_proj"))
 
     assert structure.platform == PLATFORM_MSPM0
-    assert "project.cproject" in structure.files
-    assert ".project" in structure.files
+    # .cproject/.project 是工程配置文件（工单 09 决策 6）：确定性保留首份、
+    # 不进扫描清单
+    assert structure.config_files == (".project", "project.cproject")
+    assert "project.cproject" not in structure.files
+    assert ".project" not in structure.files
 
 
 def test_scan_rejects_project_without_config_file(tmp_path):
@@ -250,7 +265,8 @@ def test_scan_detects_keil_platform_with_nested_uvprojx(tmp_path):
     structure = scan_project(project)
 
     assert structure.platform == PLATFORM_STM32
-    assert "USER/project.uvprojx" in structure.files
+    assert structure.config_files == ("USER/project.uvprojx",)
+    assert "USER/project.uvprojx" not in structure.files
     assert structure.config_summary[0] == "project.uvprojx 设备：STM32F103C8"
 
 
@@ -398,10 +414,13 @@ def test_compare_classifies_common_conflict_unique(fake_stm32_projects):
         "inc/stm32f10x_conf.h",
         "src/system_stm32f10x.c",
     )
-    assert comparison.conflicts == ("project.uvprojx", "src/oled.c")
+    assert comparison.conflicts == ("src/oled.c",)
     assert comparison.unique == ("sensors/dht11.c", "ui/oled_fonts.c")
     # 旧工程 main.c 由模板替代：不进公共 / 冲突 / 独有分类，也就进不了 AI 判定
     assert comparison.main_c_files == ("main.c",)
+    # 工程配置文件（.uvprojx）与启动文件候选同样不在判定范围（工单 09）
+    assert comparison.config_files == ("project.uvprojx",)
+    assert "project.uvprojx" not in comparison.judgment
 
 
 def test_compare_records_which_projects_hold_each_path(fake_stm32_projects):
@@ -417,6 +436,7 @@ def test_compare_unions_residues_across_projects(fake_stm32_projects):
 
     assert comparison.residues == (
         "main.c.bak",
+        "project.uvoptx",  # IDE 用户选项（工单 09）：两工程都有，并集去重
         "src/oled.hex",
         "src/oled.o",
         "ui/oled_fonts.c~",
@@ -453,7 +473,7 @@ def test_compare_rejects_empty_projects():
 def test_comparison_summary_lists_every_path_and_config(fake_stm32_projects):
     summary = build_comparison_summary(_comparison(fake_stm32_projects))
 
-    for path in ("project.uvprojx", "src/oled.c", "sensors/dht11.c", "ui/oled_fonts.c"):
+    for path in ("src/oled.c", "sensors/dht11.c", "ui/oled_fonts.c"):
         assert path in summary
     assert "工程 proj-a" in summary
     assert "include path" in summary
@@ -469,26 +489,34 @@ def test_distill_report_groups_keep_merge_exclude(fake_stm32_projects):
 
     assert report.platform == PLATFORM_STM32
     assert report.projects == ("proj-a", "proj-b")
-    # 全部文件（公共 + 冲突 + 独有）都由 AI 判定：公共文件判 keep 进保留
+    # 全部文件（公共 + 冲突 + 独有）都由 AI 判定：公共文件判 keep 进保留；
+    # .uvprojx 是工程配置文件（工单 09），确定性现写、自动进 keep 带规则原因
+    # （规则条目排最前，AI 判定在后）
     assert [d.path for d in report.keep] == [
+        "project.uvprojx",
         "inc/stm32f10x_conf.h",
         "src/system_stm32f10x.c",
         "sensors/dht11.c",
     ]
-    assert report.keep[0].reason == "官方库配置头，基础必需"
-    assert [d.path for d in report.merge] == ["project.uvprojx", "src/oled.c"]
-    assert report.merge[0].source == "proj-a"
-    # exclude = AI 判定（ui/oled_fonts.c）+ 规则识别的残留（确定性、排序）
-    # + 旧工程 main.c（模板替代，规则化原因）
+    assert report.keep[1].reason == "官方库配置头，基础必需"
+    config_entry = next(d for d in report.keep if d.path == "project.uvprojx")
+    assert config_entry.reason == "工程配置文件：由确定性模板现写，保留文件全量入树"
+    assert [d.path for d in report.merge] == ["src/oled.c"]
+    assert report.merge[0].source == "proj-b"
+    # exclude = AI 判定（ui/oled_fonts.c）+ 规则识别的残留（确定性、排序，
+    # 含 IDE 用户选项 .uvoptx）+ 旧工程 main.c（模板替代，规则化原因）
     assert [d.path for d in report.exclude] == [
         "ui/oled_fonts.c",
         "main.c.bak",
+        "project.uvoptx",
         "src/oled.hex",
         "src/oled.o",
         "ui/oled_fonts.c~",
         "main.c",
     ]
     assert "残留" in report.exclude[0].reason
+    uvoptx_entry = next(d for d in report.exclude if d.path == "project.uvoptx")
+    assert uvoptx_entry.reason == "IDE 用户选项：编译时自动重建"
     assert report.exclude[-1].reason == MAIN_C_TEMPLATE_REASON
 
 
@@ -502,16 +530,19 @@ def test_distill_passes_platform_names_and_summary_to_llm(fake_stm32_projects):
     assert names == ("proj-a", "proj-b")
     assert "src/oled.c" in summary
     # 判定素材覆盖公共 + 冲突 + 独有（全部文件），含全文与持有工程（判例 06：
-    # 公共文件也进 AI 判定，内容一致不等于基础建设必需）
+    # 公共文件也进 AI 判定，内容一致不等于基础建设必需）；.uvprojx 是工程配置
+    # 文件（工单 09），确定性规则处理、不进判定素材
     by_path = {f.path: f for f in judgment_files}
     assert set(by_path) == {
         "inc/stm32f10x_conf.h",
         "src/system_stm32f10x.c",
-        "project.uvprojx",
         "src/oled.c",
         "sensors/dht11.c",
         "ui/oled_fonts.c",
     }
+    assert "project.uvprojx" not in by_path
+    # 摘要里的配置行仍含 "project.uvprojx 设备：..."（配置对比素材），但不作为
+    # 待判路径出现——上面 by_path 已断言不进判定素材
     # 公共文件：单版本、持有两工程
     assert by_path["inc/stm32f10x_conf.h"].versions[0].projects == (
         "proj-a",
@@ -698,11 +729,11 @@ def test_apply_rejects_report_platform_mismatch(fake_stm32_projects, tmp_path):
 
 
 def test_distill_requires_full_judgment_coverage(fake_stm32_projects):
-    # AI 漏判了两个冲突文件（只剩 keep 与 exclude）
+    # AI 漏判了冲突文件 src/oled.c（只剩 keep 与 exclude）
     partial = tuple(d for d in DEFAULT_DECISIONS if d.action != ACTION_MERGE)
     llm = FakeLLM(distillation=partial)
 
-    with pytest.raises(MasterError, match="缺少判定.*project.uvprojx"):
+    with pytest.raises(MasterError, match="缺少判定.*src/oled.c"):
         _distill(fake_stm32_projects, llm)
 
 
@@ -730,9 +761,14 @@ def test_apply_copies_keep_and_merge_skips_exclude(fake_stm32_projects, tmp_path
     assert (output / "main.c").is_file()
     assert (output / "sensors/dht11.c").is_file()
     # merge：落盘的是 AI 整合产物全文（不是任何一份源工程的复制）
-    assert (output / "project.uvprojx").read_text(encoding="utf-8") == MERGED_UVPROJX
     assert (output / "src/oled.c").read_text(encoding="utf-8") == MERGED_OLED
     assert "B 版本" not in (output / "src/oled.c").read_text(encoding="utf-8")
+    # .uvprojx：不再复制源工程（也不写 AI 整合产物）——确定性渲染现写到
+    # user/Project.uvprojx（工单 09，判例 09 治本），内容 = 报告预览
+    rendered = output / "user" / "Project.uvprojx"
+    assert rendered.is_file()
+    assert rendered.read_text(encoding="utf-8") == report.uvprojx_preview
+    assert "STM32F103C8" in rendered.read_text(encoding="utf-8")
     # exclude：不复制
     assert not (output / "ui/oled_fonts.c").exists()
 
@@ -982,15 +1018,24 @@ def test_report_round_trips_through_json(fake_stm32_projects):
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
 
     rebuilt = DistillationReport.from_dict(
-        report.to_dict(), main_c_preview=report.main_c_preview
+        report.to_dict(),
+        main_c_preview=report.main_c_preview,
+        uvprojx_preview=report.uvprojx_preview,
     )
 
     assert rebuilt == report
     # wire format 形状：确认请求按 to_dict 输出原样回传
     data = report.to_dict()
-    assert set(data) == {"platform", "projects", "keep", "merge", "exclude",
-                         "main_c_preview"}
-    assert data["keep"][0] == {
+    assert set(data) == {
+        "platform",
+        "projects",
+        "keep",
+        "merge",
+        "exclude",
+        "main_c_preview",
+        "uvprojx_preview",
+    }
+    assert next(d for d in data["keep"] if d["path"] == "inc/stm32f10x_conf.h") == {
         "path": "inc/stm32f10x_conf.h",
         "action": ACTION_KEEP,
         "content": "",
@@ -998,8 +1043,8 @@ def test_report_round_trips_through_json(fake_stm32_projects):
         "source": "",
         "reason": "官方库配置头，基础必需",
     }
-    assert data["merge"][0]["source"] == "proj-a"
-    assert data["merge"][0]["content"] == MERGED_UVPROJX
+    assert data["merge"][0]["source"] == "proj-b"
+    assert data["merge"][0]["content"] == MERGED_OLED
     assert data["merge"][0]["explanation"]
 
 
@@ -1011,22 +1056,39 @@ def test_distill_report_carries_template_main_c_preview(fake_stm32_projects):
     assert report.main_c_preview  # 非空全文
 
 
+def test_distill_report_carries_uvprojx_preview(fake_stm32_projects):
+    """报告携带 .uvprojx 全文预览（工单 09 决策 7，与 main_c_preview 同款）：
+    确定性渲染产物，非 AI 生成；用户一次确认前能看到将要写入母版的工程文件。
+    （预览 = 落盘渲染产物由 test_apply_copies_keep_and_merge_skips_exclude 断言。）"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+
+    assert report.uvprojx_preview
+    assert "STM32F103C8" in report.uvprojx_preview
+    assert "Project" in report.uvprojx_preview
+    assert "<Targets>" in report.uvprojx_preview
+
+
 def test_report_from_dict_ignores_client_preview(fake_stm32_projects):
     """确认请求回传的预览不可信：from_dict 忽略回传值，预览由调用方按平台重推导。
 
-    预览是确定性展示素材（落盘永远写 main_c_template(platform)），客户端改它
-    不会影响落盘内容；调用方传入权威预览保证报告自洽。
+    预览是确定性展示素材（落盘永远写 main_c_template(platform) 与确定性渲染
+    产物），客户端改它不会影响落盘内容；调用方传入权威预览保证报告自洽。
     """
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     data = report.to_dict()
     data["main_c_preview"] = "/* 伪造的预览 */"
+    data["uvprojx_preview"] = "<Project/>"
 
     rebuilt = DistillationReport.from_dict(
-        data, main_c_preview=main_c_template(PLATFORM_STM32)
+        data,
+        main_c_preview=main_c_template(PLATFORM_STM32),
+        uvprojx_preview=report.uvprojx_preview,
     )
 
     assert rebuilt.main_c_preview == main_c_template(PLATFORM_STM32)
     assert rebuilt.main_c_preview != "/* 伪造的预览 */"
+    assert rebuilt.uvprojx_preview == report.uvprojx_preview
+    assert rebuilt.uvprojx_preview != "<Project/>"
 
 
 def test_report_from_dict_rejects_malformed(fake_stm32_projects):
@@ -1160,41 +1222,28 @@ def test_confirm_distillation_stores_master_in_one_transaction(
     )
     assert (stored / "sensors/dht11.c").is_file()
     assert not (stored / "ui/oled_fonts.c").exists()
+    # 母版里的 .uvprojx = 确定性渲染产物（user/Project.uvprojx，工单 09），
+    # 不是任何一份源工程的复制
+    rendered = stored / "user" / "Project.uvprojx"
+    assert rendered.is_file()
+    assert rendered.read_text(encoding="utf-8") == report.uvprojx_preview
 
 
-def test_confirm_rejects_broken_merged_uvprojx(fake_stm32_projects, fake_masters_dir):
-    """AI 整合出结构残缺的 .uvprojx（组清空 / Cads 节点丢失）→ 确认入库必须拒绝。
+def test_confirm_rejects_config_file_disposition_change(fake_stm32_projects, fake_masters_dir):
+    """用户确认时把 .uvprojx（工程配置文件）改成剔除 → 确认入库必须拒绝。
 
-    用户实测（判例 09）：AI 把两工程各自的 .uvprojx 判了 merge，整合产物
-    XML 合法但组被清空（丢了启动文件、system_stm32f10x.c 的引用）、连
-    Cads/IncludePath 节点都没了——旧校验只查配置文件存在，坏母版照样入库，
-    到生成时 KeilPatcher 才拒绝。校验失败必须在入库前（confirm_distillation）
-    大声拒绝，兑现"绝不产出残缺工程"。
+    判例 09 治本（工单 09 决策 7）：工程配置文件由确定性规则处理（渲染现写）、
+    条目不可改动作——与基础设施同款强制；AI 手写整合 XML 结构残缺的场景从
+    源头消失（渲染产物结构一致性由构造保证）。ticket 08 的结构校验保留为
+    手工导入母版的安全网（见 analyze/validate 测试）。
     """
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
-    broken_uvprojx = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        "<Project>\n  <Targets>\n    <Target>\n"
-        "      <TargetName>merged</TargetName>\n"
-        "      <TargetOption>\n        <TargetCommonOption>\n"
-        "          <Device>STM32F103C8</Device>\n"
-        "        </TargetCommonOption>\n"
-        "      </TargetOption>\n"
-        "    </Target>\n  </Targets>\n</Project>\n"
-    )
     report = replace(
         report,
-        merge=tuple(
-            FileDecision(
-                "project.uvprojx",
-                ACTION_MERGE,
-                content=broken_uvprojx,
-                explanation="AI 合并两工程配置",
-                reason="合并",
-            )
-            if d.path == "project.uvprojx"
-            else d
-            for d in report.merge
+        keep=tuple(d for d in report.keep if d.path != "project.uvprojx"),
+        exclude=(
+            *report.exclude,
+            FileDecision("project.uvprojx", ACTION_EXCLUDE, reason="用户改的"),
         ),
     )
     payload = {
@@ -1202,7 +1251,7 @@ def test_confirm_rejects_broken_merged_uvprojx(fake_stm32_projects, fake_masters
         "project_dirs": [str(p) for p in fake_stm32_projects],
     }
 
-    with pytest.raises(MasterError, match="结构"):
+    with pytest.raises(MasterError, match="工程配置文件必须保留"):
         confirm_distillation(fake_masters_dir, fake_stm32_projects, payload)
 
     assert list_masters(fake_masters_dir) == []  # 失败不留任何入库痕迹
@@ -1243,8 +1292,10 @@ def test_main_c_template_matches_platform():
     mspm0 = main_c_template(PLATFORM_MSPM0)
 
     assert stm32 != mspm0
-    # stm32：Keil 标准外设库风格，时钟初始化 SystemInit
-    assert "stm32f10x_conf.h" in stm32
+    # stm32：寄存器操作风格（工单 09 决策 8），只依赖 stm32f10x.h（其 479 行
+    # 已 include system_stm32f10x.h，SystemInit 声明在 79 行），时钟初始化
+    assert "stm32f10x.h" in stm32
+    assert "stm32f10x_conf.h" not in stm32  # USE_STDPERIPH_DRIVER/conf.h 机制不需要
     assert "SystemInit" in stm32
     # mspm0：CCS SysConfig 风格，SYSCFG_DL_init
     assert "ti_msp_dl_config.h" in mspm0
@@ -1283,53 +1334,30 @@ def test_apply_writes_ccs_template_main_c(tmp_path):
     assert content == main_c_template(PLATFORM_MSPM0)
 
 
-def test_apply_removes_excluded_files_from_uvprojx(fake_stm32_projects, tmp_path):
-    """落盘后 .uvprojx 对被剔除文件的引用自动清除（判例 06：不做人工处理）。
-
-    旧工程 .uvprojx 引用将被剔除的业务文件（ui/oled_fonts.c）——重写后引用
-    删除，否则 Keil 编译因缺文件失败，"打开就能编译烧录"不成立；保留文件的
-    引用不动；main.c 条目指向模板落位（母版根）。"""
-    uvprojx_with_refs = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        "<Project>\n<Targets>\n<Target>\n<TargetName>proj-a</TargetName>\n"
-        "<TargetOption><TargetCommonOption><Device>STM32F103C8</Device></TargetCommonOption>"
-        "<TargetArmAds><Cads><IncludePath>.\\inc;.\\src</IncludePath></Cads></TargetArmAds>"
-        "</TargetOption>\n"
-        "<Groups><Group><GroupName>g</GroupName><Files>"
-        "<File><FileName>main.c</FileName><FileType>1</FileType>"
-        "<FilePath>.\\USER\\main.c</FilePath></File>"
-        "<File><FileName>system_stm32f10x.c</FileName><FileType>1</FileType>"
-        "<FilePath>.\\src\\system_stm32f10x.c</FilePath></File>"
-        "<File><FileName>oled_fonts.c</FileName><FileType>1</FileType>"
-        "<FilePath>.\\ui\\oled_fonts.c</FilePath></File>"
-        "</Files></Group></Groups>\n"
-        "</Target>\n</Targets>\n</Project>\n"
-    )
-    decisions = tuple(
-        FileDecision(
-            "project.uvprojx",
-            ACTION_MERGE,
-            content=uvprojx_with_refs,
-            explanation="取 include path 更全的 A 版本，补充源码引用",
-            source="proj-a",
-        )
-        if d.path == "project.uvprojx"
-        else d
-        for d in DEFAULT_DECISIONS
-    )
+def test_apply_renders_uvprojx_covering_kept_sources(fake_stm32_projects, tmp_path):
+    """落盘后 .uvprojx 由确定性渲染器现写（工单 09，判例 09 治本）：文件树
+    引用全部保留 .c/.s（剔除文件不可能有引用——按保留集合构造）、main.c
+    条目指向模板落位、IncludePath 覆盖保留 .h 所在目录；入库前结构校验通过。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     projects = _projects(fake_stm32_projects)
     comparison = compare_projects(projects)
-    report = distill_master(FakeLLM(distillation=decisions), PLATFORM_STM32, projects)
     output = tmp_path / "preview"
 
     apply_distillation(report, comparison, output)
 
-    rewritten = (output / "project.uvprojx").read_text(encoding="utf-8")
-    assert ".\\ui\\oled_fonts.c" not in rewritten  # 剔除文件的引用被清除
-    assert ".\\src\\system_stm32f10x.c" in rewritten  # 保留文件的引用不动
-    assert ".\\main.c" in rewritten  # main.c 条目重定向到模板落位（母版根）
-    assert ".\\USER\\main.c" not in rewritten
-    assert ".\\sensors\\dht11.c" not in rewritten  # 未在 .uvprojx 里的保留文件不新增
+    rendered = (output / "user" / "Project.uvprojx").read_text(encoding="utf-8")
+    # 保留源码全量入树（含 merge 的整合产物 src/oled.c）
+    assert r"..\src\system_stm32f10x.c" in rendered
+    assert r"..\sensors\dht11.c" in rendered
+    assert r"..\src\oled.c" in rendered
+    # 被剔除的文件没有引用（构造即一致——渲染器只看保留集合）
+    assert "oled_fonts" not in rendered
+    # main.c 条目指向模板落位（工程根，相对 user/）
+    assert r"..\main.c" in rendered
+    # IncludePath 覆盖保留 .h 所在目录（inc/stm32f10x_conf.h → ..\inc）
+    assert r"..\inc" in rendered
+    # 渲染产物过入库结构校验（ticket 08 安全网）
+    analyze_structure(output, PLATFORM_STM32)
 
 
 # ---------------------------------------------------------------------------
@@ -1338,40 +1366,55 @@ def test_apply_removes_excluded_files_from_uvprojx(fake_stm32_projects, tmp_path
 
 
 def test_scan_classifies_infrastructure(fake_stm32_projects):
-    """启动文件 / 链接脚本由规则识别：不进扫描清单、不进 AI 判定、不读内容。"""
-    (fake_stm32_projects[0] / "startup_stm32f10x_hd.s").write_text(
+    """启动文件候选（startup_stm32f10x_*.s）单独记录（跨工程去重，决策 2），
+    非启动 .s 与链接脚本进 infrastructure：都不进扫描清单、不进 AI 判定。"""
+    (fake_stm32_projects[0] / "startup_stm32f10x_md.s").write_text(
         "; startup", encoding="utf-8"
+    )
+    (fake_stm32_projects[0] / "src" / "custom.s").write_text(
+        "; custom asm", encoding="utf-8"
     )
 
     structure = scan_project(fake_stm32_projects[0])
 
-    assert structure.infrastructure == ("startup_stm32f10x_hd.s",)
-    assert "startup_stm32f10x_hd.s" not in structure.files
-    assert "startup_stm32f10x_hd.s" not in structure.file_hashes
+    assert structure.startup_files == ("startup_stm32f10x_md.s",)
+    assert structure.infrastructure == ("src/custom.s",)
+    assert "startup_stm32f10x_md.s" not in structure.files
+    assert "startup_stm32f10x_md.s" not in structure.file_hashes
+    assert "src/custom.s" not in structure.files
 
 
 def test_distill_auto_keeps_infrastructure(fake_stm32_projects):
     """基础设施自动保留、排最前、带规则化原因，不占 AI 判定范围（判例 06：
-    启动文件判错（剔除）会断掉空工程编译链，不交给 AI）。"""
+    启动文件判错（剔除）会断掉空工程编译链，不交给 AI）。启动文件候选去重后
+    保留份同样自动进 keep（决策 2）。"""
     for project in fake_stm32_projects:
+        (project / "startup_stm32f10x_md.s").write_text("; startup", encoding="utf-8")
         (project / "startup_stm32f10x_hd.s").write_text("; startup", encoding="utf-8")
     llm = FakeLLM(distillation=DEFAULT_DECISIONS)
 
     report = _distill(fake_stm32_projects, llm)
 
-    assert report.keep[0].path == "startup_stm32f10x_hd.s"
-    assert report.keep[0].reason == "平台基础设施：启动文件 / 链接脚本，确定性保留"
+    # 去重：优先 _md（与目标板 C8T6 中密度匹配），落选候选规则剔除
+    startup_entry = next(d for d in report.keep if d.path == "startup_stm32f10x_md.s")
+    assert startup_entry.reason == "平台基础设施：启动文件 / 链接脚本，确定性保留"
+    excluded = {d.path: d for d in report.exclude}
+    assert excluded["startup_stm32f10x_hd.s"].action == ACTION_EXCLUDE
+    assert excluded["startup_stm32f10x_hd.s"].reason == (
+        "启动文件替代：同一器件只需一份启动文件"
+    )
     # 不进 AI 判定素材
     _, _, judgment_files, _ = llm.distill_calls[0]
+    assert "startup_stm32f10x_md.s" not in {f.path for f in judgment_files}
     assert "startup_stm32f10x_hd.s" not in {f.path for f in judgment_files}
 
 
 def test_distill_rejects_ai_on_infrastructure(fake_stm32_projects):
     """AI 判定基础设施（保留/整合/剔除）是越界——规则保留的文件 AI 从未见过。"""
     for project in fake_stm32_projects:
-        (project / "startup_stm32f10x_hd.s").write_text("; startup", encoding="utf-8")
+        (project / "startup_stm32f10x_md.s").write_text("; startup", encoding="utf-8")
     decisions = DEFAULT_DECISIONS + (
-        FileDecision("startup_stm32f10x_hd.s", ACTION_KEEP, reason="AI 判的"),
+        FileDecision("startup_stm32f10x_md.s", ACTION_KEEP, reason="AI 判的"),
     )
 
     with pytest.raises(MasterError, match="无需 AI 判定"):
@@ -1379,35 +1422,36 @@ def test_distill_rejects_ai_on_infrastructure(fake_stm32_projects):
 
 
 def test_apply_copies_infrastructure(fake_stm32_projects, tmp_path):
-    """基础设施从第一个含它的工程复制落盘；用户确认也不能改成剔除/整合。"""
+    """基础设施与保留启动文件从第一个含它的工程复制落盘；用户确认也不能
+    改成剔除/整合。"""
     for project in fake_stm32_projects:
-        (project / "startup_stm32f10x_hd.s").write_text("; startup", encoding="utf-8")
+        (project / "startup_stm32f10x_md.s").write_text("; startup", encoding="utf-8")
     report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
     output = tmp_path / "preview"
 
     apply_distillation(report, _comparison(fake_stm32_projects), output)
 
-    assert (output / "startup_stm32f10x_hd.s").read_text(encoding="utf-8") == (
+    assert (output / "startup_stm32f10x_md.s").read_text(encoding="utf-8") == (
         "; startup"
     )
 
-    # 用户把基础设施改成剔除 → 拒绝（编译链必需件不可改动作）
+    # 用户把保留启动文件改成剔除 → 拒绝（编译链必需件不可改动作）
     report = replace(
         report,
-        keep=tuple(d for d in report.keep if d.path != "startup_stm32f10x_hd.s"),
+        keep=tuple(d for d in report.keep if d.path != "startup_stm32f10x_md.s"),
         exclude=(
             *report.exclude,
-            FileDecision("startup_stm32f10x_hd.s", ACTION_EXCLUDE, reason="用户改的"),
+            FileDecision("startup_stm32f10x_md.s", ACTION_EXCLUDE, reason="用户改的"),
         ),
     )
-    with pytest.raises(MasterError, match="基础设施必须保留"):
+    with pytest.raises(MasterError, match="启动文件必须保留"):
         apply_distillation(report, _comparison(fake_stm32_projects), tmp_path / "bad")
 
 
-def test_apply_rewrites_nested_uvprojx_references(tmp_path):
-    r"""用户真实结构（.uvprojx 在 user/ 子目录，Keil FilePath 用 ..\ 相对）：
-    落盘后引用重写保留 sys/ 官方库等保留文件（..\ 解析回工程根）、删除被剔除
-    文件的悬空引用、main.c 指向模板落位（.\..\main.c）。"""
+def test_apply_renders_fixed_location_regardless_of_source(tmp_path):
+    """源工程 .uvprojx 在 user/（真实结构，2026C/21F 同款）：落盘后渲染产物
+    固定落位 user/Project.uvprojx（正点原子风格，与现母版一致），源 .uvprojx
+    不复制；文件树按顶层目录分组、引用按保留集合构造。"""
     project = tmp_path / "proj2025"
     files = {
         "user/project.uvprojx": (
@@ -1419,9 +1463,9 @@ def test_apply_rewrites_nested_uvprojx_references(tmp_path):
             "<Group><GroupName>sys</GroupName><Files>"
             "<File><FileName>delay.c</FileName><FileType>1</FileType><FilePath>"
             r".\..\sys\delay.c</FilePath></File>"
-            "<File><FileName>startup_stm32f10x_hd.s</FileName><FileType>2</FileType>"
+            "<File><FileName>startup_stm32f10x_md.s</FileName><FileType>2</FileType>"
             "<FilePath>"
-            r".\..\sys\startup_stm32f10x_hd.s</FilePath></File>"
+            r".\..\sys\startup_stm32f10x_md.s</FilePath></File>"
             "</Files></Group>"
             "<Group><GroupName>code</GroupName><Files>"
             "<File><FileName>app.c</FileName><FileType>1</FileType><FilePath>"
@@ -1432,7 +1476,7 @@ def test_apply_rewrites_nested_uvprojx_references(tmp_path):
         "user/main.c": "/* 赛题 main */\n",
         "sys/delay.c": "/* 通用延时 */\n",
         "sys/delay.h": "#pragma once\n",
-        "sys/startup_stm32f10x_hd.s": "; startup\n",
+        "sys/startup_stm32f10x_md.s": "; startup\n",
         "code/app.c": "/* 赛题业务 */\n",
     }
     for rel, content in files.items():
@@ -1441,11 +1485,7 @@ def test_apply_rewrites_nested_uvprojx_references(tmp_path):
         path.write_text(content, encoding="utf-8")
 
     comparison = compare_projects([scan_project(project)])
-    ai_keep = {
-        p
-        for p in comparison.judgment
-        if p.startswith("sys/") or p.endswith(".uvprojx")
-    }
+    ai_keep = {p for p in comparison.judgment if p.startswith("sys/")}
     ai_exclude = {p for p in comparison.judgment if p not in ai_keep}
     decisions = tuple(
         FileDecision(p, ACTION_KEEP, reason="基础必需") for p in sorted(ai_keep)
@@ -1459,17 +1499,212 @@ def test_apply_rewrites_nested_uvprojx_references(tmp_path):
     output = tmp_path / "preview"
     apply_distillation(report, comparison, output)
 
-    root = ET.parse(output / "user" / "project.uvprojx").getroot()
+    root = ET.parse(output / "user" / "Project.uvprojx").getroot()
     files = [
         (f.findtext("FileName"), f.findtext("FilePath")) for f in root.iter("File")
     ]
-    assert files == [
-        ("main.c", r".\..\main.c"),
-        ("delay.c", r".\..\sys\delay.c"),
-        ("startup_stm32f10x_hd.s", r".\..\sys\startup_stm32f10x_hd.s"),
-    ]
+    assert ("main.c", r"..\main.c") in files  # 模板 main.c 落位工程根
+    assert ("delay.c", r"..\sys\delay.c") in files
+    assert ("startup_stm32f10x_md.s", r"..\sys\startup_stm32f10x_md.s") in files
+    assert ("app.c", r"..\code\app.c") not in files  # 剔除文件无引用
     assert (output / "sys" / "delay.c").is_file()
     assert (output / "main.c").is_file()  # 模板 main.c 在工程根
+    # 源 .uvprojx 不复制：渲染产物是唯一工程文件
+    assert list(output.rglob("*.uvprojx")) == [output / "user" / "Project.uvprojx"]
+
+
+# ---------------------------------------------------------------------------
+# 工程配置文件与启动文件去重（工单 09）：确定性规则处理
+# ---------------------------------------------------------------------------
+
+
+def test_scan_classifies_uvguix_as_ide_option(tmp_path):
+    """.uvguix（Keil 界面布局，2026C/21F 真实工程成对出现）与 .uvoptx 同族
+    （工单 09 决策 5 的补全）：规则剔除、带 IDE 用户选项原因、不进扫描清单。"""
+    project = tmp_path / "proj"
+    (project / "user").mkdir(parents=True)
+    (project / "user" / "Project.uvprojx").write_text(
+        FAKE_DISTILL_UVPROJX_A, encoding="utf-8"
+    )
+    (project / "user" / "Project.uvoptx").write_text(
+        "<ProjectOpt/>", encoding="utf-8"
+    )
+    (project / "user" / "Project.uvguix.luoji").write_text("<GUI/>", encoding="utf-8")
+
+    structure = scan_project(project)
+
+    assert structure.residues == ("user/Project.uvguix.luoji", "user/Project.uvoptx")
+    assert residue_reason("user/Project.uvoptx") == "IDE 用户选项：编译时自动重建"
+    assert "user/Project.uvoptx" not in structure.files
+    assert "user/Project.uvguix.luoji" not in structure.files
+
+
+def test_startup_dedup_prefers_md_across_projects(fake_stm32_projects):
+    """真实案例（2026C+21F 同款）：两个工程各带一份 md 启动（不同目录）——
+    跨工程去重只保留一份（优先 _md，同 _md 时路径排序取第一份），落选份
+    规则剔除（同一器件只需一份启动文件，否则 Reset_Handler 重复定义）。"""
+    _write_startup(fake_stm32_projects[0], "key", "startup_stm32f10x_md.s", "; A")
+    _write_startup(fake_stm32_projects[1], "sys", "startup_stm32f10x_md.s", "; B")
+
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+
+    kept = {d.path for d in report.keep}
+    excluded = {d.path: d for d in report.exclude}
+    assert "key/startup_stm32f10x_md.s" in kept  # 排序取第一份
+    assert excluded["sys/startup_stm32f10x_md.s"].action == ACTION_EXCLUDE
+    assert excluded["sys/startup_stm32f10x_md.s"].reason == STARTUP_REPLACEMENT_REASON
+
+
+def test_startup_dedup_without_md_guard_fires_at_distill(fake_stm32_projects):
+    """无 _md 候选（如 hd/vd）：按路径排序取第一份；密度守卫在报告预览推导
+    时（入库前，决策 4）大声失败——目标板是中密度 C8T6，不能静默产出无法
+    编译的母版。"""
+    (fake_stm32_projects[0] / "startup_stm32f10x_hd.s").write_text(
+        "; A", encoding="utf-8"
+    )
+    (fake_stm32_projects[1] / "startup_stm32f10x_vd.s").write_text(
+        "; B", encoding="utf-8"
+    )
+
+    with pytest.raises(KeilProjectError, match="STM32F103C8T6"):
+        _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+
+
+def test_apply_rejects_eliminated_startup_restored(fake_stm32_projects, tmp_path):
+    """落选启动文件不可改动作（决策 2）：用户确认时把它改回保留 → 拒绝——
+    两份启动并存 = Reset_Handler 重复定义，宁可大声失败。"""
+    _write_startup(fake_stm32_projects[0], "key", "startup_stm32f10x_md.s", "; A")
+    _write_startup(fake_stm32_projects[1], "sys", "startup_stm32f10x_md.s", "; B")
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    report = replace(
+        report,
+        exclude=tuple(
+            d for d in report.exclude if d.path != "sys/startup_stm32f10x_md.s"
+        ),
+        keep=(
+            *report.keep,
+            FileDecision("sys/startup_stm32f10x_md.s", ACTION_KEEP, reason="用户改的"),
+        ),
+    )
+
+    with pytest.raises(MasterError, match="落选启动文件必须剔除"):
+        apply_distillation(
+            report, _comparison(fake_stm32_projects), tmp_path / "preview"
+        )
+
+
+def test_confirm_rederives_uvprojx_preview(fake_stm32_projects, fake_masters_dir):
+    """确认请求回传的 .uvprojx 预览不可信（与 main_c_preview 同款，决策 7）：
+    确认时按最终决策集重推导，客户端改预览不影响落盘内容。"""
+    report = _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
+    payload = {
+        **report.to_dict(),
+        "uvprojx_preview": "<Project/>",
+        "project_dirs": [str(p) for p in fake_stm32_projects],
+    }
+
+    confirm_distillation(fake_masters_dir, fake_stm32_projects, payload)
+
+    rendered = (
+        fake_masters_dir / PLATFORM_STM32 / "user" / "Project.uvprojx"
+    ).read_text(encoding="utf-8")
+    assert rendered != "<Project/>"
+    assert "STM32F103C8" in rendered
+    assert rendered == report.uvprojx_preview  # 权威预览 = 实际落盘
+
+
+def test_apply_keeps_ccs_config_files_first_copy(tmp_path):
+    """mspm0 的 .cproject/.project 确定性保留首份（决策 6）：不现写不重写，
+    从第一个含它的工程复制；报告 keep 带规则原因、无 .uvprojx 预览（无现写）。"""
+    ccs_a = make_fake_ccs_master_project(tmp_path / "ccs_a")
+    ccs_b = make_fake_ccs_master_project(tmp_path / "ccs_b")  # 内容一致 → 全公共
+    projects = [scan_project(ccs_a), scan_project(ccs_b)]
+    decisions = tuple(
+        FileDecision(path, ACTION_KEEP, reason="基础设施，基础必需")
+        for path in compare_projects(projects).judgment
+    )
+    report = distill_master(FakeLLM(distillation=decisions), PLATFORM_MSPM0, projects)
+
+    config_entries = [
+        d for d in report.keep if d.path in (".project", "project.cproject")
+    ]
+    assert {d.path for d in config_entries} == {".project", "project.cproject"}
+    assert all("确定性" in d.reason for d in config_entries)
+    assert report.uvprojx_preview == ""  # mspm0 无现写
+
+    output = tmp_path / "preview"
+    apply_distillation(report, compare_projects(projects), output)
+
+    assert (output / ".project").read_text(encoding="utf-8") == FAKE_CCS_PROJECT
+    assert (output / "project.cproject").is_file()
+    # 入库结构分析通过（IDE 可打开）
+    analyze_structure(output, PLATFORM_MSPM0)
+
+
+# 真实工程验收（工单 09 决策 9 的自动化部分）：判例 09 原案
+# 2026C + 2021F/21F（元数据 sources 同名）；目录缺失（非验收机器）时跳过
+REAL_STM32_PROJECTS = (
+    Path.home() / "Desktop" / "2026C",
+    Path.home() / "Desktop" / "2021F" / "21F",
+)
+requires_real_projects = pytest.mark.skipif(
+    not all(p.is_dir() for p in REAL_STM32_PROJECTS),
+    reason="真实工程目录不存在（判例 09 验收环境）",
+)
+
+
+@requires_real_projects
+def test_real_projects_2026c_21f_distill_and_import(fake_masters_dir):
+    """2026C + 21F 重提炼 → 确认入库 → 结构校验通过（工单 09 决策 9）。
+
+    保留全部判定路径（假 LLM 替身，真实运行走 LLM；冲突文件判 exclude——
+    保留动作对冲突文件非法）：启动文件去重（两份 md 只保留一份）、
+    .uvoptx/.uvguix 规则剔除、.uvprojx 确定性渲染产物过入库结构校验——
+    判例 09 的坏母版场景（AI 手写残缺 XML）从源头消失。
+    """
+    projects = [scan_project(p) for p in REAL_STM32_PROJECTS]
+    comparison = compare_projects(projects)
+    decisions = tuple(
+        FileDecision(path, ACTION_KEEP, reason="基础必需")
+        for path in comparison.judgment
+        if path not in comparison.conflicts
+    ) + tuple(
+        FileDecision(path, ACTION_EXCLUDE, reason="冲突文件")
+        for path in comparison.conflicts
+    )
+    report = distill_master(FakeLLM(distillation=decisions), PLATFORM_STM32, projects)
+
+    # 启动文件去重：key/ 与 sys/ 两份 md 只保留一份（路径排序取第一份）
+    kept_startups = [d.path for d in report.keep if d.path.endswith(".s")]
+    assert kept_startups == ["key/startup_stm32f10x_md.s"]
+    assert any(
+        d.path == "sys/startup_stm32f10x_md.s"
+        and d.action == ACTION_EXCLUDE
+        and d.reason == STARTUP_REPLACEMENT_REASON
+        for d in report.exclude
+    )
+    # IDE 用户选项规则剔除（两工程各带 .uvoptx + .uvguix.<用户名>，包含匹配）
+    assert any(d.path.endswith(".uvoptx") for d in report.exclude)
+    assert any(".uvguix" in d.path for d in report.exclude)
+    # 渲染预览：C8T6 设备块 + 启动文件在树内
+    assert "STM32F103C8" in report.uvprojx_preview
+    assert "startup_stm32f10x_md.s" in report.uvprojx_preview
+
+    # 完整确认事务：重扫 → 重比 → 落盘 → 渲染 → 结构校验 → 入库
+    meta = confirm_distillation(
+        fake_masters_dir,
+        REAL_STM32_PROJECTS,
+        {
+            **report.to_dict(),
+            "project_dirs": [str(p) for p in REAL_STM32_PROJECTS],
+        },
+    )
+
+    assert meta.sources == ("2026C", "21F")
+    stored = fake_masters_dir / PLATFORM_STM32
+    assert (stored / "user" / "Project.uvprojx").is_file()
+    # 母版里恰好一份启动文件（Reset_Handler 不重复定义）
+    assert [p.name for p in stored.rglob("*.s")] == ["startup_stm32f10x_md.s"]
 
 
 # ---------------------------------------------------------------------------
@@ -1547,8 +1782,10 @@ def test_import_stores_master_with_meta_and_sources(
     assert meta.platform == PLATFORM_STM32
     assert meta.sources == ("proj-a", "proj-b")
     assert meta.warnings == ()
-    # 工程文件就位，元数据在母版目录外的平级文件（不污染生成的工程）
+    # 工程文件就位（.uvprojx = 渲染产物在 user/ 下，工单 09），元数据在母版
+    # 目录外的平级文件（不污染生成的工程）
     assert (fake_masters_dir / "stm32" / "main.c").is_file()
+    assert (fake_masters_dir / "stm32" / "user" / "Project.uvprojx").is_file()
     assert not (fake_masters_dir / "stm32" / "master.json").exists()
     assert (fake_masters_dir / "stm32.json").is_file()
 
@@ -1565,6 +1802,70 @@ def test_import_replaces_existing_master_of_same_platform(fake_stm32_projects, f
     assert not stale_file.exists()  # 旧母版被整体更换
     assert (fake_masters_dir / "stm32" / "project.uvprojx").is_file()
     assert get_master(fake_masters_dir, PLATFORM_STM32).sources == ("proj-b",)
+
+
+def test_import_swap_failure_keeps_old_master_and_explains_occupation(
+    monkeypatch, fake_masters_dir, tmp_path
+):
+    """旧母版被占用（如 Keil 开着）时替换失败：旧母版原封不动，错误中文说明。
+
+    判例（真实事故）：替换失败的回滚里 rmtree 旧母版，把只被锁住部分的旧
+    母版删成空壳——本测试是那次事故的回归测试。
+    """
+    import_master(fake_masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "old"))
+    real_replace = os.replace
+
+    def locked_replace(src, dst):
+        if Path(dst).name.startswith(".stm32"):  # 模拟旧母版挪不动（WinError 5）
+            raise PermissionError(13, "拒绝访问。")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", locked_replace)
+
+    with pytest.raises(MasterError, match="占用"):
+        import_master(
+            fake_masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "new")
+        )
+
+    # 旧母版一个文件不少；新母版未入库；无残留备份目录
+    assert (fake_masters_dir / "stm32" / "main.c").is_file()
+    assert (fake_masters_dir / "stm32" / "project.uvprojx").is_file()
+    assert not (fake_masters_dir / ".stm32.backup").exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 独占：真实目录句柄锁")
+def test_import_locked_subdirectory_keeps_old_master_intact(
+    fake_masters_dir, tmp_path
+):
+    """端到端：无 share-delete 的目录句柄（Keil/资源管理器的真实锁法）锁住
+    旧母版子目录时，替换失败且旧母版原封不动（WinError 5 的真实成因）。"""
+    import ctypes
+
+    import_master(fake_masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "old"))
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateFileW.argtypes = [
+        ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
+        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p,
+    ]
+    kernel32.CreateFileW.restype = ctypes.c_void_p
+    handle = kernel32.CreateFileW(
+        str(fake_masters_dir / "stm32" / "inc"),
+        0x80000000, 0x3, None, 3, 0x02000000, None,  # 只共享读写、不共享删除
+    )
+    assert handle not in (None, ctypes.c_void_p(-1).value)
+    try:
+        with pytest.raises((MasterError, OSError), match="占用|拒绝访问|WinError"):
+            import_master(
+                fake_masters_dir, PLATFORM_STM32,
+                make_fake_master_project(tmp_path / "new"),
+            )
+    finally:
+        kernel32.CloseHandle(handle)
+
+    # 旧母版一个文件不少（判例事故的回归：不删残）；新母版未入库
+    assert (fake_masters_dir / "stm32" / "main.c").is_file()
+    assert (fake_masters_dir / "stm32" / "project.uvprojx").is_file()
+    assert not (fake_masters_dir / ".stm32.backup").exists()
 
 
 def test_import_rejects_missing_config_without_touching_store(fake_masters_dir, tmp_path):
@@ -1661,5 +1962,6 @@ def test_full_distillation_flow(fake_stm32_projects, fake_masters_dir, tmp_path)
     assert "proj-a 的赛题 main" not in (stored / "main.c").read_text(encoding="utf-8")
     assert (stored / "sensors/dht11.c").is_file()
     assert not (stored / "ui/oled_fonts.c").exists()
-    # 母版可被生成器使用：结构分析通过（含 .uvprojx）
-    assert any(stored.glob("*.uvprojx"))
+    # 母版可被生成器使用：结构分析通过（.uvprojx = 确定性渲染产物在 user/ 下）
+    assert (stored / "user" / "Project.uvprojx").is_file()
+    assert any(stored.rglob("*.uvprojx"))
