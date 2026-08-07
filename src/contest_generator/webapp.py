@@ -13,13 +13,16 @@ from __future__ import annotations
 
 import functools
 import inspect
+import json
 import tempfile
-from dataclasses import dataclass
+import threading
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from queue import Full, Queue
+from typing import Any, Callable, Iterator, Sequence
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from .ccs import CcsProjectError
 from .config import (
@@ -41,8 +44,9 @@ from .library import (
     list_modules,
     remove_platform_files,
     update_module_description,
+    update_platform_identity,
 )
-from .llm import LLM, LLMError, DeepSeekLLM, build_manifest_summaries
+from .llm import LLM, LLMError, DeepSeekLLM, ProgressEvent, build_manifest_summaries
 from .master import (
     MasterError,
     confirm_distillation,
@@ -118,6 +122,25 @@ def _masters_dir(ctx: AppContext) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _error_message(exc: Exception) -> str:
+    """异常 → 中文 message（与 _error_response 同一映射：AI 失败 / 业务失败）。
+
+    提炼的 SSE 流内 error 事件用它（HTTP 保持 200 起流）；普通端点仍走
+    _error_response 转状态码。映射改动只在此一处，两端共用不漂移。
+    """
+    if isinstance(exc, LLMError):
+        return f"AI 服务调用失败：{exc}"
+    if isinstance(exc, (KeilProjectError, CcsProjectError)):
+        # 工程文件（.uvprojx / .cproject）缺失、重复或不是合法 XML：业务失败
+        # （旧工程 / AI 整合产物有问题），带中文 message，不裸 500
+        return str(exc)
+    if isinstance(exc, OSError):
+        # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
+        # 带说明，不裸 500
+        return f"文件操作失败：{exc}"
+    return str(exc)
+
+
 def _error_response(exc: Exception) -> HTTPException:
     """error_to_http 表：核心异常 → HTTP 状态与中文 message。
 
@@ -187,6 +210,49 @@ def _map_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+# ---------------------------------------------------------------------------
+# SSE 线格式共享契约（工单 02，与工单 03 并行开发，精确一致不得单方面改动）
+#
+# HTTP 200，Content-Type: text/event-stream，无自动重连（断线 = 放弃本次）。
+# 每个事件 = "event: <type>\n" + "data: <JSON>\n" + "\n"（空行分隔）；
+# type ∈ start / batch_start / batch_done / retry / phase_done / done / error
+# （前五者由工单 01 的发射器产生，done / error 由本层发射收尾）；进度事件
+# data = ProgressEvent 字段 JSON，done 的 data = 完整报告（report.to_dict()），
+# error 的 data = {"message": 中文错误信息}；done 或 error 后流结束。
+# ---------------------------------------------------------------------------
+
+EVENT_DONE = "done"
+EVENT_ERROR = "error"
+
+# 事件缓冲上限与终端事件等待超时：进度事件只在批次边界产生（分钟级），
+# 100 个缓冲对在线消费方绰绰有余；客户端断开后队列无人消费——进度事件满即丢
+# （put_nowait，旁路），终端事件等超时后也丢——提炼线程（daemon）不因断线卡死。
+_SSE_QUEUE_MAXSIZE = 100
+_SSE_TERMINAL_TIMEOUT = 10  # 秒
+
+
+def _sse_frame(event_type: str, data: dict[str, Any]) -> str:
+    """SSE 帧：event 行 + data 行 + 空行（线格式共享契约的唯一实现点）。
+
+    json.dumps 默认转义字符串内换行——data 恒为单行，SSE 解析不歧义。
+    """
+    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+# 事件队列条目：进度事件原样入队；终端条目 = (kind, data)，kind ∈ done/error
+# （done 的 data = 报告 dict，error 的 data = 中文 message）
+_QueueItem = ProgressEvent | tuple[str, Any]
+
+
+def _put_terminal(events: Queue[_QueueItem], kind: str, data: Any) -> None:
+    """终端事件（done / error）入队：客户端已断开（队列满、无人消费）时等
+    超时后丢弃——提炼线程不因断线卡死（spec「断线」）。"""
+    try:
+        events.put((kind, data), timeout=_SSE_TERMINAL_TIMEOUT)
+    except Full:
+        pass
+
+
 def _require_str(payload: dict, key: str) -> str:
     """必填非空字符串；缺失 / 空白抛 400。"""
     value = payload.get(key)
@@ -215,6 +281,16 @@ def _require_flag(payload: dict, key: str, *, default: bool = False) -> bool:
     if not isinstance(value, bool):
         raise HTTPException(400, f"{key} 必须是布尔值")
     return value
+
+
+def _optional_str(payload: dict, key: str) -> str:
+    """可选字符串：缺省 / null → 空串；类型非法抛 400（勿让 null 变成 'None'）。"""
+    value = payload.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise HTTPException(400, f"{key} 必须是字符串")
+    return value.strip()
 
 
 def _mask_api_key(api_key: str) -> str:
@@ -388,6 +464,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             hardware_bound=_require_flag(payload, "hardware_bound"),
             verified=_require_flag(payload, "verified"),
             notes=str(payload.get("notes", "")),
+            # 硬件身份字段透传（必填 / URL 格式校验在核心层，缺省走 LibraryError）
+            kit=_optional_str(payload, "kit"),
+            source_url=_optional_str(payload, "source_url"),
         )
         return manifest.to_dict()
 
@@ -409,7 +488,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if not isinstance(files, dict):
             raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
         manifest = add_platform_files(
-            _library_dir(context), slug, platform, files
+            _library_dir(context),
+            slug,
+            platform,
+            files,
+            hardware_bound=_require_flag(payload, "hardware_bound"),
+            kit=_optional_str(payload, "kit"),
+            source_url=_optional_str(payload, "source_url"),
         )
         return manifest.to_dict()
 
@@ -423,6 +508,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             _library_dir(context), slug, platform, filenames
         )
         return manifest.to_dict()
+
+    @app.put("/api/modules/{slug}/platform-identity")
+    def module_platform_identity(slug: str, payload: dict) -> dict:
+        """编辑平台条目的硬件身份（kit / source_url，工单 02）。
+
+        存量条目的补填 / 修改入口：只做格式校验（提供值须合法——kit 非空、
+        source_url URL 格式），不走 AI 一致性校验——身份是事实信息、由人
+        确认，AI 判不了真假；只改身份字段，该条目的文件列表 / 验证状态 /
+        硬件绑定原样保留。空值视为未提供、保留原值（补填是逐步的）。
+        """
+        try:
+            manifest = update_platform_identity(
+                _library_dir(context),
+                slug,
+                _require_str(payload, "platform"),
+                kit=_optional_str(payload, "kit"),
+                source_url=_optional_str(payload, "source_url"),
+            )
+            return manifest.to_dict()
+        except LibraryError as exc:
+            raise _error_response(exc) from exc
 
     @app.delete("/api/modules/{slug}")
     @_map_errors
@@ -453,16 +559,55 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         ]
 
     @app.post("/api/masters/distill")
-    @_map_errors
-    def masters_distill(payload: dict) -> dict:
-        """AI 提炼报告（保留 / 合并 / 剔除清单 + 理由）；确认前不落任何东西。"""
+    def masters_distill(payload: dict) -> StreamingResponse:
+        """AI 提炼报告（SSE 流，工单 02）：start → 进度事件 → done（完整报告）
+        或 error（中文信息）→ 流结束。HTTP 200 起流，失败以流内 error 事件收尾
+        （客户端只认事件，不依赖状态码）；确认前不落任何东西、服务端无状态，
+        报告必须随流返回（没有二次查询的可能）。
+
+        提炼是阻塞调用（单批 2-5 分钟）：放独立线程跑，事件经队列送流生成器
+        ——不占事件循环。断线（客户端关闭）后队列无人消费：进度事件旁路丢弃
+        （满即丢，不堵提炼线程），后端照常结束本次提炼（无副作用）。
+        扫描 / 对比 / 拼装是瞬间步骤，不发事件，直接以 start（带总量）开头、
+        done 收尾——start 由 llm 层发射器产生（工单 01：总量先算定）。
+        """
         platform = _require_str(payload, "platform")
-        projects = [
-            scan_project(Path(d))
-            for d in _require_str_list(payload, "project_dirs")
-        ]
-        report = distill_master(_llm(context), platform, projects)
-        return report.to_dict()
+        project_dirs = _require_str_list(payload, "project_dirs")
+        llm = _llm(context)
+        events: Queue[_QueueItem] = Queue(maxsize=_SSE_QUEUE_MAXSIZE)
+
+        def emit(event: ProgressEvent) -> None:
+            # 旁路（工单 01 决策）：客户端断开后队列满 → 丢进度事件，不堵提炼线程
+            try:
+                events.put_nowait(event)
+            except Full:
+                pass
+
+        def run() -> None:
+            try:
+                projects = [scan_project(Path(d)) for d in project_dirs]
+                report = distill_master(llm, platform, projects, emit)
+                _put_terminal(events, EVENT_DONE, report.to_dict())
+            except Exception as exc:
+                _put_terminal(events, EVENT_ERROR, _error_message(exc))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+        def stream() -> Iterator[str]:
+            while True:
+                item = events.get()
+                if isinstance(item, ProgressEvent):
+                    yield _sse_frame(item.type, asdict(item))
+                    continue
+                kind, data = item
+                if kind == EVENT_DONE:
+                    yield _sse_frame(EVENT_DONE, data)
+                else:
+                    yield _sse_frame(EVENT_ERROR, {"message": data})
+                return
+
+        return StreamingResponse(stream(), headers={"Content-Type": "text/event-stream"})
 
     @app.post("/api/masters/confirm")
     @_map_errors
