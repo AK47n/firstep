@@ -13,6 +13,7 @@ LLM 承担四个职责：赛题→模块选择、main.c 骨架生成、模块简
 from __future__ import annotations
 
 import json
+import math
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from typing import Any, Callable, Protocol, Sequence, TypeVar
 
 from .config import AppConfig
 from .manifest import ModuleManifest
-from .report import ACTION_MERGE, FileDecision, ReportError
+from .report import ACTION_MERGE, FileDecision, JudgmentFile, ReportError
 
 # ---------------------------------------------------------------------------
 # 截断标注契约（唯一出处）
@@ -48,9 +49,23 @@ SKELETON_SYSTEM_PROMPT = (
 
 SUMMARY_SYSTEM_PROMPT = "你是嵌入式 C 工程师。用中文一句话总结这段代码的功能，作为模块库简介。"
 
+# 专用性检查要求的唯一表述：系统提示词与用户提示词在同一个 API 调用里都要说
+# 这件事（ticket 06 双端漂移教训：判定范围曾只改系统提示词、漏改用户提示词，
+# 模型按用户消息跳过公共文件当场失败）。此常量是唯一出处：改专用性检查只动
+# 这里（契约测试 test_llm 双端断言）。
+VALIDATION_SPECIFICITY_RULE = (
+    "同时检查专用性声明：简介声称\"XX 题专用\"时，代码必须有对应的赛题专用逻辑"
+    "（题目参数、判定流程、赛题数据结构等）。简介称专用但代码是通用驱动（无任何"
+    "赛题相关逻辑）→ 判为不一致，issues 指出具体差异；代码明显是赛题专用逻辑"
+    "（绑定具体赛题）而简介未标注\"XX 题专用\" → 同样判为不一致，issues 提示"
+    "在简介中补充专用性标注。"
+)
+
 VALIDATION_SYSTEM_PROMPT = (
     "你是嵌入式 C 工程师。判断给定的模块简介与实际代码是否一致：简介描述的功能、"
-    "接口、行为是否与代码相符。不一致时用中文指出具体差异。只输出 JSON 对象。"
+    "接口、行为是否与代码相符。"
+    + VALIDATION_SPECIFICITY_RULE
+    + "不一致时用中文指出具体差异。只输出 JSON 对象。"
 )
 
 JUDGMENT_SUMMARY_SYSTEM_PROMPT = (
@@ -73,7 +88,9 @@ JUDGMENT_SCOPE = (
     "脚本 / 工程配置）、通用基础封装（如 delay 延时，写任何工程都要用）→ "
     "keep；具体项目 / 具体硬件相关的业务代码（传感器驱动、外设封装、赛题逻辑）"
     "→ exclude。不看重复次数与出现范围——公共文件（所有工程内容一致）同样"
-    "逐个判定，可保留可剔除，内容一样不等于基础建设必需。"
+    "逐个判定，可保留可剔除，内容一样不等于基础建设必需。工程配置文件"
+    "（.uvprojx / .uvoptx / .cproject / .project 等）由确定性规则处理、不参与"
+    "判定（ADR 0003）——AI 给出这类路径的判定是越界，会被系统拒绝。"
 )
 
 DISTILL_SYSTEM_PROMPT = (
@@ -189,7 +206,7 @@ def _split_merged_versions(
     """
     if len(file.versions) < 2 or len(entries) != 1:
         return None
-    groups = [frozenset(v.projects) for v in file.versions]
+    groups = file.version_groups
     union = frozenset().union(*groups)
     entry = entries[0]
     raw_versions = entry.get("versions")
@@ -272,26 +289,6 @@ class ValidationResult:
 
     consistent: bool  # 简介与代码是否一致
     issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
-
-
-@dataclass(frozen=True)
-class JudgmentFile:
-    """待判文件素材：路径 + 每个内容版本及其持有工程（AI 判定前先读全文出摘要）。
-
-    覆盖 master 判定范围（公共 + 冲突 + 独有，全部文件）。同一路径内容
-    不同的每个版本都传（AI 读全部版本后判定）；内容一致的工程合并为一个版本。
-    """
-
-    path: str
-    versions: tuple[FileVersion, ...]
-
-
-@dataclass(frozen=True)
-class FileVersion:
-    """同一路径下的一个内容版本：全文 + 持该版本的工程名。"""
-
-    content: str
-    projects: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -396,6 +393,71 @@ def _batches(
     return tuple(tuple(batch) for batch in batches)
 
 
+# ---------------------------------------------------------------------------
+# 提炼进度事件契约（唯一出处，契约测试断言；spec「事件契约」+ ADR 0004）
+#
+# 发射 seam：distill_master 的可选 progress_emitter 参数（默认 None，不接不
+# 影响行为；测试假 LLM 与真 LLM 走同一参数）。发射点在批次循环层。done /
+# error 由 webapp 层（工单 02）发射——本契约只管到 phase_done 为止。事件类型
+# 集合预留 token 级流式扩展位（本次不做，spec Out of Scope）。
+# ---------------------------------------------------------------------------
+
+# 阶段名与事件类型（webapp 层 / 前端按这些键消费，改动须同步测试契约）
+PHASE_SUMMARY = "summary"  # 阶段 1：逐文件读全文出摘要
+PHASE_DECIDE = "decide"  # 阶段 2：基于摘要判定
+
+EVENT_START = "start"
+EVENT_BATCH_START = "batch_start"
+EVENT_BATCH_DONE = "batch_done"
+EVENT_RETRY = "retry"
+EVENT_PHASE_DONE = "phase_done"
+
+
+@dataclass(frozen=True)
+class ProgressEvent:
+    """提炼进度事件（事件契约的代码形态，唯一出处）。
+
+    每个事件类型只用字段子集：start 用 judgment_count / summary_batch_count /
+    decide_batch_count（均由入口先算定）；batch_start 用 phase / batch_index
+    （批号，1 起）/ batch_count / paths（阶段 1 = 待判文件路径、阶段 2 = 摘要
+    路径）；batch_done 用 phase / batch_index / processed_count（本阶段累计已
+    处理文件数——前端直接显示"已读 X/115"，无需累加状态）；retry 用 phase /
+    batch_index / retry_round（补问轮次，1 起——首次补问 = 1）/ missing_count
+    （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）。
+    """
+
+    type: str
+    judgment_count: int = 0
+    summary_batch_count: int = 0
+    decide_batch_count: int = 0
+    phase: str = ""
+    batch_index: int = 0
+    batch_count: int = 0
+    paths: tuple[str, ...] = ()
+    processed_count: int = 0
+    retry_round: int = 0
+    missing_count: int = 0
+    file_count: int = 0
+
+
+ProgressEmitter = Callable[[ProgressEvent], None]
+
+
+def _emit(emitter: ProgressEmitter | None, event: ProgressEvent) -> None:
+    """旁路发射进度事件：发射器调用失败不影响提炼主流程（spec「发射 seam」）。
+
+    选旁路而非透传的理由：提炼的主产物是完整报告（10-15 分钟 API 调用），进度
+    只是观察通道——UI 消费失败（如前端断开）最多丢进度，不该让整个提炼陪葬。
+    吞掉的异常不外抛也不记录（本地单用户工具，进度通道无诊断需求）。
+    """
+    if emitter is None:
+        return
+    try:
+        emitter(event)
+    except Exception:
+        pass
+
+
 class LLM(Protocol):
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
@@ -417,18 +479,32 @@ class LLM(Protocol):
         project_names: Sequence[str],
         judgment_files: Sequence[JudgmentFile],
         comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]: ...
 
 
 def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
     """模块库 manifest 摘要行（喂给 LLM 的可用模块清单）。
 
-    行格式与 _summary_slugs 的反向解析耦合：改动格式须同步两处。
+    行格式：`- slug: description（套件: kit; 依赖: ...）`——套件段聚合各平台
+    条目的 kit（去重保序，有 kit 才显示，AI 靠它分辨"哪个套件的 UWB"）；依赖
+    段有依赖才显示。行格式与 _summary_slugs 的反向解析耦合：改动格式须同步两处。
     """
     lines = []
     for manifest in manifests:
         line = f"- {manifest.slug}: {manifest.description}"
-        if manifest.dependencies:
+        kits: list[str] = []
+        seen: set[str] = set()
+        for entry in manifest.platforms.values():
+            if entry.kit and entry.kit not in seen:
+                seen.add(entry.kit)
+                kits.append(entry.kit)
+        if kits:
+            line += f"（套件: {'、'.join(kits)}"
+            if manifest.dependencies:
+                line += f"; 依赖: {', '.join(manifest.dependencies)}"
+            line += "）"
+        elif manifest.dependencies:
             line += f"（依赖: {', '.join(manifest.dependencies)}）"
         lines.append(line)
     return lines
@@ -542,6 +618,7 @@ class DeepSeekLLM:
         project_names: Sequence[str],
         judgment_files: Sequence[JudgmentFile],
         comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]:
         """两阶段判定：先逐文件读全文出摘要，再基于摘要判定（两次 json_mode 调用）。
 
@@ -549,12 +626,34 @@ class DeepSeekLLM:
         与配置摘要。第一阶段产物（摘要）只作为第二阶段输入，不进报告；判定
         条目的 reason 由 AI 带上摘要要点。两阶段产物都走严格解析，畸形 / 缺
         摘要抛 LLMError，宁可大声失败也不带病进确认流程。
+
+        progress_emitter：可选进度发射器（默认 None 不发射，行为与现状一致）。
+        start 由入口发射且总量先算定——阶段 1 批数 = _batches 算定的批数、
+        阶段 2 批数 = ⌈待判文件数 / 批大小⌉；算定后同一批序列传给阶段循环，
+        start 的批次总量与实际发射的批序列严格一致（契约测试断言）。
+        发射失败是旁路（_emit），不影响提炼主流程。
         """
+        summary_batches = _batches(
+            judgment_files,
+            max_chars=MAX_SUMMARY_BATCH_CHARS,
+            size_of=_file_chars,
+            split_oversized=_split_versions,
+        )
+        decide_batch_count = math.ceil(len(judgment_files) / JUDGMENT_BATCH_SIZE)
+        _emit(
+            progress_emitter,
+            ProgressEvent(
+                type=EVENT_START,
+                judgment_count=len(judgment_files),
+                summary_batch_count=len(summary_batches),
+                decide_batch_count=decide_batch_count,
+            ),
+        )
         file_summaries = self._summarize_judgment_files(
-            platform, project_names, judgment_files
+            platform, project_names, judgment_files, summary_batches, progress_emitter
         )
         return self._decide_distillation(
-            platform, project_names, file_summaries, comparison_summary
+            platform, project_names, file_summaries, comparison_summary, progress_emitter
         )
 
     def _summarize_judgment_files(
@@ -562,25 +661,55 @@ class DeepSeekLLM:
         platform: str,
         project_names: Sequence[str],
         judgment_files: Sequence[JudgmentFile],
+        summary_batches: Sequence[Sequence[JudgmentFile]],
+        progress_emitter: ProgressEmitter | None,
     ) -> tuple[FileSummary, ...]:
         """第一阶段：逐文件读全文出摘要（json_mode），解析校验为 FileSummary。
 
         大批量素材一次问完时，模型输出偶发丢条目 / JSON 截断（判例 08：真实
         工程 115 个文件一次返回漏 1 个；更大批量甚至系统性漏小配置文件，补问
         不收敛）。按请求体预算（MAX_SUMMARY_BATCH_CHARS，防网关 413）与文件数
-        上限（JUDGMENT_BATCH_SIZE，防模型批量超载）分批问（_judgment_batches，
+        上限（JUDGMENT_BATCH_SIZE，防模型批量超载）分批问（_batches 原语，
         总输入 token 不变），批内严格解析失败后挖出已覆盖的合法条目、只对
         缺失文件补问，最多 SUMMARY_RETRY_LIMIT 轮——宁可在补问上多花一次调用，
         也不带病进第二阶段。
+
+        批次循环层发射进度事件（契约唯一出处见 ProgressEvent）：每批开始发
+        batch_start（带该批文件路径清单）、批完成发 batch_done（累计已处理文件
+        数）、阶段结束发 phase_done；批数为 0 时不发射任何批事件，阶段直接完成。
         """
         results: list[FileSummary] = []
-        for batch in _batches(
-            judgment_files,
-            max_chars=MAX_SUMMARY_BATCH_CHARS,
-            size_of=_file_chars,
-            split_oversized=_split_versions,
-        ):
-            results.extend(self._summarize_batch(platform, project_names, batch))
+        for batch_index, batch in enumerate(summary_batches, start=1):
+            _emit(
+                progress_emitter,
+                ProgressEvent(
+                    type=EVENT_BATCH_START,
+                    phase=PHASE_SUMMARY,
+                    batch_index=batch_index,
+                    batch_count=len(summary_batches),
+                    paths=tuple(f.path for f in batch),
+                ),
+            )
+            results.extend(
+                self._summarize_batch(
+                    platform, project_names, batch, progress_emitter, batch_index
+                )
+            )
+            _emit(
+                progress_emitter,
+                ProgressEvent(
+                    type=EVENT_BATCH_DONE,
+                    phase=PHASE_SUMMARY,
+                    batch_index=batch_index,
+                    processed_count=len(results),
+                ),
+            )
+        _emit(
+            progress_emitter,
+            ProgressEvent(
+                type=EVENT_PHASE_DONE, phase=PHASE_SUMMARY, file_count=len(results)
+            ),
+        )
         return tuple(results)
 
     def _retry_batch(
@@ -592,6 +721,9 @@ class DeepSeekLLM:
         salvage: Callable[[str, Sequence[I]], Sequence[R]],
         phase_label: str,
         items: Sequence[I],
+        progress_emitter: ProgressEmitter | None,
+        batch_index: int,
+        phase: str,
     ) -> list[R]:
         """一批条目的重试 + 补问循环（摘要 / 判定两阶段共用的唯一原语）。
 
@@ -602,13 +734,27 @@ class DeepSeekLLM:
         最多 SUMMARY_RETRY_LIMIT 轮；仍缺失就大声失败（宁可失败也不带病进
         下一阶段）。严格解析不校验覆盖（master 层职责）；这里知道素材范围，
         漏判即补问。跨轮去重：补问轮的响应可能复述已覆盖路径，同一路径只
-        保留第一次结果。
+        保留第一次结果。每次开始补问轮（重新发请求前）发射 retry 事件（契约
+        唯一出处见 ProgressEvent）：轮次 1 起、缺失数 = 该轮要补问的文件数。
         """
         remaining = list(items)
         results: list[R] = []
+        retry_round = 0
         for _ in range(SUMMARY_RETRY_LIMIT):
             if not remaining:
                 break
+            if retry_round:
+                _emit(
+                    progress_emitter,
+                    ProgressEvent(
+                        type=EVENT_RETRY,
+                        phase=phase,
+                        batch_index=batch_index,
+                        retry_round=retry_round,
+                        missing_count=len(remaining),
+                    ),
+                )
+            retry_round += 1
             content = self._chat(
                 [
                     {"role": "system", "content": system_prompt},
@@ -645,8 +791,13 @@ class DeepSeekLLM:
         platform: str,
         project_names: Sequence[str],
         batch: Sequence[JudgmentFile],
+        progress_emitter: ProgressEmitter | None,
+        batch_index: int,
     ) -> list[FileSummary]:
-        """一批文件的摘要 + 补问循环（见 _summarize_judgment_files 的分批说明）。"""
+        """一批文件的摘要 + 补问循环（见 _summarize_judgment_files 的分批说明）。
+
+        参数化 _retry_batch（retry 事件发射在原语内，phase=summary）。
+        """
         return self._retry_batch(
             system_prompt=JUDGMENT_SUMMARY_SYSTEM_PROMPT,
             user_prompt=lambda remaining: _summarize_user_prompt(
@@ -656,6 +807,9 @@ class DeepSeekLLM:
             salvage=_extract_good_summaries,
             phase_label="第一阶段摘要",
             items=batch,
+            progress_emitter=progress_emitter,
+            batch_index=batch_index,
+            phase=PHASE_SUMMARY,
         )
 
     def _decide_distillation(
@@ -664,6 +818,7 @@ class DeepSeekLLM:
         project_names: Sequence[str],
         file_summaries: Sequence[FileSummary],
         comparison_summary: str,
+        progress_emitter: ProgressEmitter | None,
     ) -> tuple[FileDecision, ...]:
         """第二阶段：基于摘要判定（json_mode），与第一阶段同款分批 + 补问机制。
 
@@ -677,17 +832,56 @@ class DeepSeekLLM:
         "多次判定"/"对比范围外路径"校验失败，提前输出则没读过该路径的摘要、
         判定不可信，还会挤掉该批正规判定）。只有"本批读过摘要"的判定收下；
         真实路径的漏判仍由批内补问兜底，过滤不会掩盖漏判。
+
+        与第一阶段同款发射进度事件：批开始 batch_start（批文件清单 = 摘要路径）、
+        批完成 batch_done（累计已处理文件数 = 已入批循环的文件累计数——判定
+        会被素材范围过滤，不能按结果条数算）、阶段结束 phase_done。
         """
         results: list[FileDecision] = []
         seen: set[str] = set()
-        for batch in _batches(file_summaries, max_chars=None):
+        batches = _batches(file_summaries, max_chars=None)
+        processed = 0
+        for batch_index, batch in enumerate(batches, start=1):
+            _emit(
+                progress_emitter,
+                ProgressEvent(
+                    type=EVENT_BATCH_START,
+                    phase=PHASE_DECIDE,
+                    batch_index=batch_index,
+                    batch_count=len(batches),
+                    paths=tuple(s.path for s in batch),
+                ),
+            )
             batch_paths = {s.path for s in batch}
             for decision in self._decide_batch(
-                platform, project_names, batch, comparison_summary
+                platform,
+                project_names,
+                batch,
+                comparison_summary,
+                progress_emitter,
+                batch_index,
             ):
                 if decision.path in batch_paths and decision.path not in seen:
                     seen.add(decision.path)
                     results.append(decision)
+            processed += len(batch)
+            _emit(
+                progress_emitter,
+                ProgressEvent(
+                    type=EVENT_BATCH_DONE,
+                    phase=PHASE_DECIDE,
+                    batch_index=batch_index,
+                    processed_count=processed,
+                ),
+            )
+        _emit(
+            progress_emitter,
+            ProgressEvent(
+                type=EVENT_PHASE_DONE,
+                phase=PHASE_DECIDE,
+                file_count=len(file_summaries),
+            ),
+        )
         return tuple(results)
 
     def _decide_batch(
@@ -696,11 +890,14 @@ class DeepSeekLLM:
         project_names: Sequence[str],
         batch: Sequence[FileSummary],
         comparison_summary: str,
+        progress_emitter: ProgressEmitter | None,
+        batch_index: int,
     ) -> list[FileDecision]:
         """一批文件的判定 + 补问循环（见 _decide_distillation 的分批说明）。
 
         参数化 _retry_batch：判定阶段的严格解析不校验覆盖（master 层职责），
-        补问只问缺失路径；素材范围外的判定由 _decide_distillation 按批过滤。
+        补问只问缺失路径；素材范围外的判定由 _decide_distillation 按批过滤
+        （retry 事件发射在原语内，phase=decide）。
         """
         return self._retry_batch(
             system_prompt=DISTILL_SYSTEM_PROMPT,
@@ -715,6 +912,9 @@ class DeepSeekLLM:
             ),
             phase_label="提炼判定",
             items=batch,
+            progress_emitter=progress_emitter,
+            batch_index=batch_index,
+            phase=PHASE_DECIDE,
         )
 
     def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
@@ -861,8 +1061,7 @@ def parse_summary_report(
         raise LLMError("模型输出缺少 summaries 数组")
 
     expected: dict[str, tuple[frozenset[str], ...]] = {
-        file.path: tuple(frozenset(v.projects) for v in file.versions)
-        for file in judgment_files
+        file.path: file.version_groups for file in judgment_files
     }
     seen_paths: set[str] = set()
     summaries: list[FileSummary] = []
@@ -1035,7 +1234,8 @@ def _validation_user_prompt(description: str, code: str) -> str:
     return (
         f"模块简介：\n{_truncate_content(description)}\n\n实际代码：\n"
         f"```c\n{_truncate_content(code)}\n```\n\n"
-        '判断简介与实际代码是否一致，只返回 json 格式的 JSON 对象：'
+        + VALIDATION_SPECIFICITY_RULE
+        + "\n判断简介与实际代码是否一致，只返回 json 格式的 JSON 对象："
         '{"consistent": true/false, "issues": "不一致时用中文指出差异，一致时为空字符串"}'
     )
 
@@ -1054,7 +1254,11 @@ def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -
 
 
 def _summary_slugs(manifest_summaries: Sequence[str]) -> list[str]:
-    """从摘要行提取 slug（行首 "- " 后的第一个冒号前）。"""
+    """从摘要行提取 slug（行首 "- " 后的第一个冒号前）。
+
+    与 build_manifest_summaries 的行格式耦合：套件 / 依赖段都在冒号之后、不
+    影响本解析；改动格式须同步两处（选模块结果的 known_slugs 靠它反解析）。
+    """
     slugs = []
     for line in manifest_summaries:
         if not line.startswith("- "):

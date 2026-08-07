@@ -17,5 +17,24 @@
 - [x] uvprojx 结构校验：红测试先行（坏整合产物今天成功入库 → 修复后 confirm_distillation 大声拒绝），keil 层 4 个单测 + master/webapp 层适配
 - [x] 假工程 fixture 补真实工程树（Groups/Files 引用各自源码，B 含独有文件）；顺手修 keil.py / test_master.py 文档串无效转义 SyntaxWarning（Python 3.14 报警）
 - [x] 全套测试绿（403），mypy 干净
-- [ ] 8000 端口服务需重启加载新代码
+- [x] 8000 端口服务重启加载新代码（杀掉旧 PID 3980，重新拉起，/ 返回 200）
 - [ ] 待定：uvprojx merge 策略是否改"选一份"（结构校验是安全网，不治本——AI 手写 XML 配置仍有失败率；真实超长冲突工程的 merge 截断盲区未验证，ADR 0001 已记录已知风险）
+
+## 复验记录（2026-08-06，真实 HTTP 层，判例 09）
+
+用真实应用（main:8000，新代码）+ 真实工程（2026C 63 文件 + 21F 64 文件，
+stm32/STM32F103C8，与 ticket 08 主路径同源）复验判例 09：
+
+- 扫描 `/api/masters/scan` 正常返回（63+64 文件，平台识别正确）
+- 构造判例 09 同构 payload：`user/Project.uvprojx` 判 merge，整合产物 XML 合法但
+  组清空、Target 缺 Cads/IncludePath 节点（判例 09 原样）；公共/冲突/残留/二进制/
+  main.c/基础设施全部按规则填齐（82 判定文件恰好覆盖），POST 真实
+  `/api/masters/confirm`
+- **结果：400 带中文拒绝**——"母版 .uvprojx 结构不完整，拒绝入库：Project.uvprojx
+  的 Target 缺少 Cads/IncludePath 节点，头文件无法解析"
+- **不留痕迹**：拒绝后 `/api/masters` 仍只有原 stm32 母版（sources 2026C/21F），
+  磁盘无 `.importing`/`.backup`/staging 残留
+- **发现：库里现存 stm32 母版（ticket 08 入库的那个）本身是坏母版**——用新校验
+  判它不合格（缺 Cads/IncludePath、工程树只有 main.c 一个引用）。它是在修复
+  （166ef6f）之前入库的，符合判例 09 描述。需要重新提炼一轮替换掉它才能兑现
+  "生成即能编译"。

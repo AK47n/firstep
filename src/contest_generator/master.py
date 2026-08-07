@@ -5,16 +5,20 @@ scan_project 逐个生成结构快照（平台检测 + 文件清单 + 配置摘�
 compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→ distill_master
 把全部文件（公共 + 冲突 + 独有，公共不等于基础建设必需，同样逐个判）连同
 文件全文交给 LLM（两阶段：读全文出摘要 → 基于摘要判定），残留（构建产物 /
-备份 / 临时文件）按扩展名 / 模式规则识别、二进制文件（非源码素材）按内容
-规则识别，确定性剔除，旧工程 main.c 一律不进母版（ADR 0002：母版 main.c 由
-确定性模板提供），启动文件 / 链接脚本（.s/.ld/.sct/.cmd）按扩展名规则确定性
-保留（编译链必需件，不交给 AI 判）→ 得到完整提炼报告
-（保留 / 整合 / 剔除清单 + 理由，残留与 main.c 条目带规则化原因，整合产物
-全文 + 说明，模板 main.c 全文预览）→ 用户一次审查、可修改动作 →
-apply_distillation 按确认后的最终集合重新校验并落盘母版候选（复制 / 写整合
-产物 / 剔除 + 写平台模板 main.c + Keil 工程配置引用重写：剔除文件不留悬空
-引用，main.c 条目指向模板落位）→ import_master 做结构分析后入库（每平台
-一个母版，可更换 / 删除）。
+备份 / 临时文件 / IDE 用户选项）按扩展名 / 模式规则识别、二进制文件（非源码
+素材）按内容规则识别，确定性剔除，旧工程 main.c 一律不进母版（ADR 0002：
+母版 main.c 由确定性模板提供），启动文件（.s）与链接脚本（.ld/.sct/.cmd）
+按扩展名规则确定性保留、启动文件跨工程去重（至多一份，优先 _md，决策 2），
+工程配置文件（.uvprojx / .cproject / .project）移出 AI 判定（工单 09：
+判例 09 治本——AI 手写整合 XML 结构残缺照样入库，stm32 的 .uvprojx 由
+确定性渲染器现写，结构一致性由构造保证；mspm0 保留首份原样）→ 得到完整
+提炼报告（保留 / 整合 / 剔除清单 + 理由，残留与 main.c 条目带规则化原因，
+整合产物全文 + 说明，模板 main.c 全文预览，.uvprojx 全文预览）→ 用户一次
+审查、可修改动作 → apply_distillation 按确认后的最终集合重新校验并落盘母版
+候选（复制 / 写整合产物 / 剔除 + 写平台模板 main.c + stm32 的 .uvprojx 由
+渲染器现写到 user/Project.uvprojx：设备块 C8T6 硬编码、文件树引用全部保留
+.c/.s、IncludePath = 保留 .h 所在目录，密度守卫——保留启动文件非 _md 大声
+失败）→ import_master 做结构分析后入库（每平台一个母版，可更换 / 删除）。
 
 母版库：磁盘目录即数据库，母版库根下每个平台一个目录（工程文件本体）+ 同名
 <platform>.json 元数据（提炼来源、入库时结构分析的警告）。元数据放目录外的
@@ -34,18 +38,21 @@ import os
 import re
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
 from .keil import (
     KeilProjectError,
+    build_master_uvprojx,
     extract_config_summary as extract_keil_config_summary,
-    rewrite_project_references,
+    is_md_startup,
+    is_startup_candidate,
+    render_master_uvprojx,
     validate_project_structure,
 )
-from .llm import FileVersion, JudgmentFile, LLM
+from .llm import LLM, ProgressEmitter  # AI 接缝协议 + 进度发射器（仅类型引用，实现与解析在 llm 层）
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .report import (
     ACTION_EXCLUDE,
@@ -53,6 +60,8 @@ from .report import (
     ACTION_MERGE,
     DistillationReport,
     FileDecision,
+    FileVersion,
+    JudgmentFile,
     ReportError,
 )
 
@@ -69,10 +78,12 @@ IGNORED_TOP_LEVEL_DIRS = frozenset({".git"}) | BUILD_ARTIFACT_DIRS
 NESTED_IGNORE_DIRS = frozenset({"Listings", "Objects"})
 
 # 残留规则（保守名单，与 template-fit-check.md 的"建议清理"一致）：构建产物 /
-# 备份 / 临时文件按扩展名与模式机器识别。命中即确定性剔除——不进扫描清单、
-# 不进 AI 判定、不读全文，但进报告 exclude 清单并带规则化原因（ADR 0001：
-# 不做黑盒消失）。注意：刻意不含裸 ".d"（Keil/CCS 依赖文件）——.d 依赖文件
-# 默认落在构建输出目录（Keil 的 Objects/Listings、CCS 的 Debug/Release），
+# 备份 / 临时文件 / IDE 用户选项按扩展名与模式机器识别。命中即确定性剔除——
+# 不进扫描清单、不进 AI 判定、不读全文，但进报告 exclude 清单并带规则化原因
+# （ADR 0001：不做黑盒消失）。IDE 用户选项（.uvoptx 断点 / 调试配置、.uvguix
+# 窗口布局——2026C/21F 真实工程里成对出现）：非编译关键，Keil 编译时自动重建
+# （工单 09 决策 5）。注意：刻意不含裸 ".d"（Keil/CCS 依赖文件）——.d 依赖
+# 文件默认落在构建输出目录（Keil 的 Objects/Listings、CCS 的 Debug/Release），
 # 目录级忽略（BUILD_ARTIFACT_DIRS，任意层级）已覆盖，名单不需要这条扩展名
 # 规则。也不存在"截胡链接脚本"的问题：后缀匹配是整段 endswith，"startup.ld"
 # / "link.cmd" 不以 ".d" 结尾。
@@ -88,6 +99,7 @@ RESIDUE_RULES: tuple[tuple[str, str], ...] = (
     (".lnp", "构建产物：.lnp 文件（Keil 链接控制文件）"),
     (".out", "构建产物：.out 文件（CCS 链接产物）"),
     (".elf", "构建产物：.elf 文件（链接产物）"),
+    (".uvoptx", "IDE 用户选项：编译时自动重建"),
     (".bak", "备份文件：.bak"),
     (".tmp", "临时文件：.tmp"),
     (".temp", "临时文件：.temp"),
@@ -109,6 +121,10 @@ def residue_reason(rel_path: str) -> str | None:
             return reason
     if ".bak" in lowered:
         return "备份文件：.bak 变体（.bak2 / .bak_consolidate 等）"
+    if ".uvguix" in lowered:
+        # Keil 界面布局文件带用户名后缀（Project.uvguix.luoji，2026C/21F 真实
+        # 工程成对出现）：按包含匹配，与 .uvoptx 同族规则剔除
+        return "IDE 用户选项：Keil 界面布局，编译时自动重建"
     return None
 
 
@@ -129,6 +145,11 @@ def _is_binary_file(path: Path) -> bool:
     """文件头（前 BINARY_PROBE_BYTES 字节）含 NUL 字节即判定为二进制。"""
     with path.open("rb") as file:
         return b"\x00" in file.read(BINARY_PROBE_BYTES)
+
+
+def _binary_reason(rel_path: str, path: Path) -> str | None:
+    """二进制类别识别（RuleCategory 统一签名）：内容判据命中返回规则化原因。"""
+    return BINARY_FILE_REASON if _is_binary_file(path) else None
 
 
 # 模板 main.c（ADR 0002）：母版 = 空的最小系统板工程，main.c 由确定性平台模板
@@ -171,7 +192,9 @@ def infrastructure_reason(rel_path: str) -> str | None:
 
     按路径后缀判定、大小写不敏感（Windows 文件系统大小写不敏感，.S 也是
     汇编启动文件）。命中即确定性保留——不进 AI 判定、不读全文，但进报告
-    keep 清单并带规则化原因。
+    keep 清单并带规则化原因。注意：匹配 startup_stm32f10x_*.s 的启动文件
+    候选单独记录（startup_files），由 assemble_report 跨工程去重后决定
+    保留份与落选份。
     """
     lowered = rel_path.lower()
     for suffix in INFRASTRUCTURE_SUFFIXES:
@@ -180,6 +203,136 @@ def infrastructure_reason(rel_path: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# 文件类别：残留 / 旧 main.c / 基础设施 / 二进制 / 工程配置文件——识别规则 +
+# 生命周期唯一出处（启动文件候选是表内钩子，决策 2：跨工程去重）
+# ---------------------------------------------------------------------------
+
+
+# 工程配置文件（工单 09，判例 09 治本）：.uvprojx（stm32）由确定性渲染器
+# 现写（keil.render_master_uvprojx，结构一致性由构造保证），.cproject/.project
+# （mspm0，CCS 按目录编译、无文件引用问题，母版库尚无 mspm0 良好格式种子）
+# 确定性保留首份原样、不现写不重写（决策 6）。与基础设施同模式：不进扫描
+# 清单、不进 AI 判定素材、不读全文，但进报告 keep 清单并带规则化原因
+# （ADR 0001：不做黑盒消失）；条目不可改动作（决策 7）。
+UVPROJX_CONFIG_REASON = "工程配置文件：由确定性模板现写，保留文件全量入树"
+CCS_CONFIG_REASON = "工程配置文件：由确定性规则保留首份原样（CCS 按目录编译）"
+CONFIG_FILE_SUFFIXES = (
+    ".uvprojx",  # stm32 / Keil
+    ".cproject",  # mspm0 / CCS
+    ".project",  # mspm0 / CCS（Eclipse 底座描述）
+)
+
+
+def config_file_reason(rel_path: str) -> str | None:
+    """工程配置文件识别：按后缀判定、大小写不敏感，返回规则化原因。
+
+    .uvprojx → 渲染现写；.cproject/.project → 保留首份原样。命中即确定性
+    处理——不进 AI 判定（AI 给出这类路径的判定是越界，拒绝）、不读全文。
+    """
+    lowered = rel_path.lower()
+    if lowered.endswith(".uvprojx"):
+        return UVPROJX_CONFIG_REASON
+    if lowered.endswith(".cproject") or lowered.endswith(".project"):
+        return CCS_CONFIG_REASON
+    return None
+
+
+# 启动文件跨工程去重（决策 2）：同一器件只需一份启动文件——真实案例 2026C+21F
+# 各带一份 md 启动（key/ 与 sys/），旧母版两份都保留（Reset_Handler 重复定义
+# 风险）。文件名匹配 startup_stm32f10x_*.s 的 .s 是"启动文件候选"，至多保留
+# 一份（优先 _md——与目标板 C8T6 中密度匹配，没有则按路径排序取第一份），
+# 落选候选规则剔除、进报告 exclude 带本原因。
+STARTUP_REPLACEMENT_REASON = "启动文件替代：同一器件只需一份启动文件"
+
+
+def _pick_startup(comparison: "ProjectComparison") -> str | None:
+    """跨工程启动文件去重（决策 2）：返回保留的那份，落选候选进 exclude。
+
+    优先 startup_stm32f10x_md.s（与目标板 C8T6 中密度匹配）；没有 _md 则按
+    路径排序取第一份（密度守卫在渲染器：保留份非 _md 时入库前大声失败）。
+    确定性：同一输入必然同一结果。
+    """
+    candidates = comparison.startup_files
+    if not candidates:
+        return None
+    md = sorted(c for c in candidates if is_md_startup(c))
+    if md:
+        return md[0]
+    return sorted(candidates)[0]
+
+
+@dataclass(frozen=True)
+class RuleCategory:
+    """一个文件类别的完整生命周期描述。
+
+    类别 = 识别规则（reason_of，扫描时判定）+ 生命周期各环节的处置：扫描
+    分类 → 对比并集 → 报告汇编（report_reason，此时已无文件内容可读，二进制
+    类给常量原因）→ 越界拦截（AI 判定即报错）→ 校验（确认不能改成别的动作）。
+    """
+
+    key: str  # ProjectStructure / ProjectComparison 的字段名（类别分组）
+    name: str  # 中文名（错误消息用）
+    reason_of: Callable[[str, Path], str | None]  # (rel, path) → 规则化原因；None = 不命中
+    report_reason: Callable[[str], str | None]  # 报告汇编取原因（按路径重算或常量）
+    disposition: Literal["keep", "exclude"]  # 确定性处置：保留 / 剔除
+    out_of_scope_message: str  # AI 判定即越界的报错文案，{path} 占位
+    disposition_message: str  # 处置校验的报错前缀，如"残留文件必须剔除"
+
+
+# 类别表。顺序即扫描的判定顺序：先便宜的后读文件内容的（二进制探针最后；
+# 工程配置文件是纯后缀判定，放表尾——与残留 / 基础设施等类别互斥，顺序
+# 不影响分类结果）。新增类别 = 在此加一条 + 给 ProjectStructure /
+# ProjectComparison 补同名字段（声明式，不再复制六处逻辑）。启动文件候选
+# 不进表（处置不是单一动作：跨工程至多保留一份，见 _pick_startup），由
+# 扫描钩子单独记录、各流水线表外处理。
+RULE_CATEGORIES: tuple[RuleCategory, ...] = (
+    RuleCategory(
+        key="residues",
+        name="残留文件",
+        reason_of=lambda rel, path: residue_reason(rel),
+        report_reason=residue_reason,
+        disposition="exclude",
+        out_of_scope_message="残留文件由规则剔除，无需 AI 判定：{path}",
+        disposition_message="残留文件必须剔除",
+    ),
+    RuleCategory(
+        key="main_c_files",
+        name="旧工程 main.c",
+        reason_of=lambda rel, path: main_c_reason(rel),
+        report_reason=main_c_reason,
+        disposition="exclude",
+        out_of_scope_message="旧工程 main.c 由模板替代，无需 AI 判定：{path}",
+        disposition_message="旧工程 main.c 必须剔除",
+    ),
+    RuleCategory(
+        key="infrastructure",
+        name="基础设施",
+        reason_of=lambda rel, path: infrastructure_reason(rel),
+        report_reason=lambda _: INFRASTRUCTURE_REASON,
+        disposition="keep",
+        out_of_scope_message="基础设施由规则保留，无需 AI 判定：{path}",
+        disposition_message="基础设施必须保留",
+    ),
+    RuleCategory(
+        key="binaries",
+        name="二进制文件",
+        reason_of=_binary_reason,
+        report_reason=lambda _: BINARY_FILE_REASON,
+        disposition="exclude",
+        out_of_scope_message="二进制文件由规则剔除，无需 AI 判定：{path}",
+        disposition_message="二进制文件必须剔除",
+    ),
+    RuleCategory(
+        key="config_files",
+        name="工程配置文件",
+        reason_of=lambda rel, path: config_file_reason(rel),
+        report_reason=config_file_reason,
+        disposition="keep",
+        out_of_scope_message="工程配置文件由规则处理，无需 AI 判定：{path}",
+        disposition_message="工程配置文件必须保留",
+    ),
+)
 def main_c_template(platform: str) -> str:
     """确定性模板 main.c 全文（非 AI 生成）：按平台取 templates/ 下的模板。
 
@@ -216,7 +369,8 @@ class MasterError(ValueError):
 class ProjectStructure:
     """单个工程的结构快照：平台、文件清单（相对路径 + 内容哈希）、配置摘要、
     残留清单（规则识别、确定性剔除，不进 AI 判定）、旧 main.c 清单（模板
-    替代，不进扫描清单）。"""
+    替代，不进扫描清单）、工程配置文件（确定性规则处理，不进扫描清单）、
+    启动文件候选（跨工程去重，不进 AI 判定）。"""
 
     project_dir: Path
     name: str  # 工程名（目录名）
@@ -224,9 +378,11 @@ class ProjectStructure:
     files: tuple[str, ...]  # 相对路径（POSIX 分隔），排序
     file_hashes: Mapping[str, str]  # path -> sha256 hex（对比内容是否一致）
     config_summary: tuple[str, ...]  # 平台配置摘要行（配置对比的 AI 素材）
-    residues: tuple[str, ...] = ()  # 残留相对路径（构建产物 / 备份 / 临时文件）
+    residues: tuple[str, ...] = ()  # 残留相对路径（构建产物 / 备份 / 临时文件 / IDE 用户选项）
     main_c_files: tuple[str, ...] = ()  # 旧工程 main.c（模板替代，不进扫描清单）
-    infrastructure: tuple[str, ...] = ()  # 基础设施（启动文件 / 链接脚本），确定性保留、不进 AI 判定
+    infrastructure: tuple[str, ...] = ()  # 基础设施（链接脚本 / 非启动 .s），确定性保留、不进 AI 判定
+    startup_files: tuple[str, ...] = ()  # 启动文件候选（startup_stm32f10x_*.s），跨工程去重、不进 AI 判定
+    config_files: tuple[str, ...] = ()  # 工程配置文件（.uvprojx/.cproject/.project），确定性规则处理、不进 AI 判定
     binaries: tuple[str, ...] = ()  # 二进制文件（内容判据，确定性剔除、不进 AI 判定）
 
 
@@ -243,6 +399,8 @@ class ProjectComparison:
     residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
     main_c_files: tuple[str, ...] = ()  # 全部工程的旧 main.c（并集，排序，模板替代）
     infrastructure: tuple[str, ...] = ()  # 全部工程的基础设施（并集，排序，确定性保留）
+    startup_files: tuple[str, ...] = ()  # 全部工程的启动文件候选（并集，排序，去重后保留）
+    config_files: tuple[str, ...] = ()  # 全部工程的工程配置文件（并集，排序，确定性规则处理）
     binaries: tuple[str, ...] = ()  # 全部工程的二进制文件（并集，排序，确定性剔除）
 
 
@@ -290,46 +448,47 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     平台由工程配置文件判定：有 .uvprojx 为 stm32，有 .cproject 为 mspm0；
     两者都有或都没有抛 MasterError。工程文件在任意层级可识别（正点原子风格
     在 USER/ 子目录），.git 目录除外。.git / Debug / Release 等非母版内容的
-    顶层目录不进清单。残留（构建产物 / 备份 / 临时文件）单独记录在
-    residues、不进扫描清单也不读内容（可能是二进制）；旧 main.c（任意层级）
-    单独记录在 main_c_files（模板替代，ADR 0002）、不进扫描清单也不读内容；
-    启动文件 / 链接脚本（.s/.ld/.sct/.cmd）单独记录在 infrastructure、确定性
-    保留、不进扫描清单也不读内容；二进制文件（内容判据：文件头含 NUL）单独
-    记录在 binaries、确定性剔除、不进扫描清单也不读全文（可能是几十 MB 的
-    模型 / 压缩包）；config_summary 提取设备 / include path / 编译宏等配置对比
-    素材（XML 解析失败只记一行，扫描不因单个工程带病中断）。
+    顶层目录不进清单。残留（构建产物 / 备份 / 临时文件 / IDE 用户选项）单独
+    记录在 residues、不进扫描清单也不读内容（可能是二进制）；旧 main.c（任意
+    层级）单独记录在 main_c_files（模板替代，ADR 0002）、不进扫描清单也不读
+    内容；启动文件候选（startup_stm32f10x_*.s，跨工程去重）单独记录在
+    startup_files、其余链接脚本 / 非启动 .s 记录在 infrastructure——确定性
+    保留、不进扫描清单也不读内容；工程配置文件（.uvprojx/.cproject/.project，
+    工单 09）单独记录在 config_files、确定性规则处理、不进扫描清单也不读
+    内容；二进制文件（内容判据：文件头含 NUL）单独记录在 binaries、确定性
+    剔除、不进扫描清单也不读全文（可能是几十 MB 的模型 / 压缩包）；
+    config_summary 提取设备 / include path / 编译宏等配置对比素材（XML 解析
+    失败只记一行，扫描不因单个工程带病中断）。
     """
     if not project_dir.is_dir():
         raise MasterError(f"工程目录不存在：{project_dir}")
     platform = _detect_platform(project_dir)
     files: list[str] = []
-    residues: list[str] = []
-    main_c_files: list[str] = []
-    infrastructure: list[str] = []
-    binaries: list[str] = []
+    startup_files: list[str] = []  # 启动文件候选（决策 2：表内钩子，单独记录）
     hashes: dict[str, str] = {}
+    category_lists: dict[str, list[str]] = {
+        cat.key: [] for cat in RULE_CATEGORIES
+    }
     for path in sorted(project_dir.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(project_dir).as_posix()
         if _is_ignored(rel):
             continue
-        if residue_reason(rel) is not None:
-            residues.append(rel)
-            continue
-        if main_c_reason(rel) is not None:
-            main_c_files.append(rel)
-            continue
-        if infrastructure_reason(rel) is not None:
-            # 启动文件 / 链接脚本：确定性保留，不进 AI 判定也不读内容
-            infrastructure.append(rel)
-            continue
-        if _is_binary_file(path):
-            # 二进制文件（内容判据）：确定性剔除，不进 AI 判定也不读全文
-            binaries.append(rel)
-            continue
-        files.append(rel)
-        hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+        for cat in RULE_CATEGORIES:
+            if cat.reason_of(rel, path) is not None:
+                # 类别互斥、按表序判定（残留 → main.c → 基础设施 → 二进制 →
+                # 工程配置文件）：命中即分类、不读全文（二进制探针只读文件头）。
+                # 表内钩子：基础设施命中且是启动文件候选（startup_*.s）时
+                # 单列到 startup_files——跨工程去重（决策 2），不进基础设施组
+                if cat.key == "infrastructure" and is_startup_candidate(rel):
+                    startup_files.append(rel)
+                else:
+                    category_lists[cat.key].append(rel)
+                break
+        else:
+            files.append(rel)
+            hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return ProjectStructure(
         project_dir=project_dir,
         name=project_dir.name,
@@ -337,10 +496,12 @@ def scan_project(project_dir: Path) -> ProjectStructure:
         files=tuple(files),
         file_hashes=hashes,
         config_summary=_config_summary(project_dir, platform),
-        residues=tuple(residues),
-        main_c_files=tuple(main_c_files),
-        infrastructure=tuple(infrastructure),
-        binaries=tuple(binaries),
+        startup_files=tuple(startup_files),
+        residues=tuple(category_lists["residues"]),
+        main_c_files=tuple(category_lists["main_c_files"]),
+        infrastructure=tuple(category_lists["infrastructure"]),
+        binaries=tuple(category_lists["binaries"]),
+        config_files=tuple(category_lists["config_files"]),
     )
 
 
@@ -395,12 +556,17 @@ def compare_projects(projects: Sequence[ProjectStructure]) -> ProjectComparison:
         judgment=(
             tuple(sorted(common)) + tuple(sorted(conflicts)) + tuple(sorted(unique))
         ),
-        residues=tuple(sorted({r for p in projects for r in p.residues})),
-        main_c_files=tuple(sorted({m for p in projects for m in p.main_c_files})),
-        infrastructure=tuple(
-            sorted({i for p in projects for i in p.infrastructure})
+        # 类别分组并集（残留 / main.c / 基础设施 / 二进制 / 工程配置文件，
+        # 遍历类别表）+ 启动文件候选（表内钩子，决策 2）
+        **{
+            cat.key: tuple(
+                sorted({v for p in projects for v in getattr(p, cat.key)})
+            )
+            for cat in RULE_CATEGORIES
+        },
+        startup_files=tuple(
+            sorted({s for p in projects for s in p.startup_files})
         ),
-        binaries=tuple(sorted({b for p in projects for b in p.binaries})),
     )
 
 
@@ -472,6 +638,7 @@ def distill_master(
     llm: LLM,
     platform: str,
     projects: Sequence[ProjectStructure],
+    progress_emitter: ProgressEmitter | None = None,
 ) -> DistillationReport:
     """提炼流程：对比 → LLM 判定（读全文 → 摘要 → 判定）→ 拼装完整报告。
 
@@ -479,6 +646,8 @@ def distill_master(
     出摘要，再基于摘要判定）——公共文件只是"每份内容一样"，不等于基础建设
     必需，同样逐个判（ADR 0001：不看重复次数与出现范围）。覆盖不全或出现
     未知路径抛 MasterError——宁可不放行也不带病进入确认流程。
+    progress_emitter 透传给 llm.distill_master（工单 01 的发射 seam）：
+    webapp 层把它接到 SSE 流上；默认 None 不发射，行为与现状一致。
     """
     comparison = compare_projects(projects)
     _validate_platform_match(platform, comparison)
@@ -488,6 +657,7 @@ def distill_master(
         project_names,
         build_judgment_files(comparison),
         build_comparison_summary(comparison),
+        progress_emitter,
     )
     return assemble_report(platform, project_names, comparison, decisions)
 
@@ -498,7 +668,8 @@ def assemble_report(
     comparison: ProjectComparison,
     decisions: Sequence[FileDecision],
 ) -> DistillationReport:
-    """把 AI 判定、规则化残留剔除、旧 main.c 模板替代拼成完整报告，并校验覆盖。
+    """把 AI 判定、规则化残留剔除、旧 main.c 模板替代、配置文件与启动去重
+    拼成完整报告，并校验覆盖。
 
     判据是内容（基础建设必需性），分类不直接决定动作：公共文件（所有工程
     内容一致）AI 判 keep 或 exclude 都合法——"每份内容一样"不等于基础建设
@@ -506,57 +677,72 @@ def assemble_report(
     与出现范围）；冲突文件可以 merge（整合出通用版本）也可以 exclude，只有
     keep 被禁止（keep 没有"取哪份内容"的信息，落盘时会静默取第一个工程）；
     merge 必须带整合产物全文与整合说明（选一份只是特例）。残留（构建产物 /
-    备份 / 临时文件）、旧 main.c（ADR 0002：母版 main.c 由确定性模板提供）与
-    二进制文件（内容判据，非源码素材）机器识别、确定性剔除：不进 AI 判定素材
-    （AI 给出这类路径的判定是越界，拒绝），报告 exclude 清单自动带规则化原因
-    （ADR 0001：不做黑盒消失）。
+    备份 / 临时文件 / IDE 用户选项）、旧 main.c（ADR 0002：母版 main.c 由
+    确定性模板提供）与二进制文件（内容判据，非源码素材）机器识别、确定性
+    剔除：不进 AI 判定素材（AI 给出这类路径的判定是越界，拒绝），报告
+    exclude 清单自动带规则化原因（ADR 0001：不做黑盒消失）。
     启动文件 / 链接脚本（基础设施）同模式、确定性保留：不进 AI 判定素材，
     AI 判定即越界，报告 keep 清单自动带规则化原因——这些文件判错（剔除）
-    会直接断掉空工程的编译链。以上在确认前就拦住，兑现"不带病进入确认流程"。
+    会直接断掉空工程的编译链。启动文件候选跨工程去重（决策 2）：保留份进
+    keep、落选份进 exclude（"启动文件替代"原因），各不可改动作。工程配置
+    文件（.uvprojx/.cproject/.project，工单 09 判例 09 治本）同模式进 keep
+    带规则化原因——stm32 的 .uvprojx 由确定性渲染器现写，报告同时携带
+    .uvprojx 全文预览（与 main_c_preview 同款：确认回传时按平台重推导，
+    客户端回传值不可信；mspm0 无现写，预览为空串）。以上在确认前就拦住，
+    兑现"不带病进入确认流程"。
     """
-    residues = set(comparison.residues)
-    main_c_files = set(comparison.main_c_files)
-    infrastructure = set(comparison.infrastructure)
-    binaries = set(comparison.binaries)
     scoped: list[FileDecision] = []
+    startup_files = set(comparison.startup_files)
     for decision in decisions:
-        if decision.path in residues:
-            # 残留由规则确定性剔除，AI 从未在素材里见过它——判定即越界
-            raise MasterError(f"残留文件由规则剔除，无需 AI 判定：{decision.path}")
-        if decision.path in main_c_files:
-            # 旧 main.c 由模板确定性替代（ADR 0002），AI 从未在素材里见过它
-            raise MasterError(f"旧工程 main.c 由模板替代，无需 AI 判定：{decision.path}")
-        if decision.path in infrastructure:
-            # 启动文件 / 链接脚本由规则确定性保留，AI 从未在素材里见过它
-            raise MasterError(f"基础设施由规则保留，无需 AI 判定：{decision.path}")
-        if decision.path in binaries:
-            # 二进制文件由内容规则确定性剔除，AI 从未在素材里见过它
-            raise MasterError(f"二进制文件由规则剔除，无需 AI 判定：{decision.path}")
+        for cat in RULE_CATEGORIES:
+            if decision.path in getattr(comparison, cat.key):
+                # 类别由规则确定性处置（剔除 / 保留 / 模板替代），AI 从未在
+                # 素材里见过它——判定即越界，确认前拦住，兑现"不带病进入确认流程"
+                raise MasterError(
+                    cat.out_of_scope_message.format(path=decision.path)
+                )
+        if decision.path in startup_files:
+            # 启动文件候选跨工程去重（决策 2）：表内钩子，AI 从未在素材里见过它
+            raise MasterError(f"启动文件由规则处理，无需 AI 判定：{decision.path}")
         scoped.append(decision)
     decided = {d.path for d in scoped}
     _validate_judgment_coverage(decided=decided, judgment=set(comparison.judgment))
     _validate_merge_sources(scoped, comparison)
 
-    keep: list[FileDecision] = [
-        FileDecision(path, ACTION_KEEP, reason=INFRASTRUCTURE_REASON)
-        for path in comparison.infrastructure
-    ] + [d for d in scoped if d.action == ACTION_KEEP]
+    # 类别文件自动进报告（带规则化原因，ADR 0001：不做黑盒消失）。顺序与旧
+    # 行为一致：keep 的类别文件排前（旧：基础设施、配置文件先拼），exclude
+    # 的排后（旧：AI 判定先拼）
+    category_keep: list[FileDecision] = []
+    category_exclude: list[FileDecision] = []
+    for cat in RULE_CATEGORIES:
+        for path in getattr(comparison, cat.key):
+            reason = cat.report_reason(path)
+            if reason is None:
+                # 对比结果由扫描分类产生，类别路径必命中规则；手动构造的对比
+                # 带病也要在此大声失败，而不是把 None 理由带进报告
+                raise MasterError(f"{cat.name}未命中规则：{path}")
+            decision = FileDecision(
+                path,
+                ACTION_KEEP if cat.disposition == "keep" else ACTION_EXCLUDE,
+                reason=reason,
+            )
+            (category_keep if cat.disposition == "keep" else category_exclude).append(
+                decision
+            )
+    keep: list[FileDecision] = category_keep
+    startup = _pick_startup(comparison)
+    if startup is not None:
+        # 启动文件去重保留份（决策 2）：基础设施同款确定性保留
+        keep.append(FileDecision(startup, ACTION_KEEP, reason=INFRASTRUCTURE_REASON))
+    keep += [d for d in scoped if d.action == ACTION_KEEP]
     merge: list[FileDecision] = [d for d in scoped if d.action == ACTION_MERGE]
     exclude: list[FileDecision] = [d for d in scoped if d.action == ACTION_EXCLUDE]
-    for path in comparison.residues:
-        reason = residue_reason(path)
-        if reason is None:
-            # 对比结果由扫描分类产生，残留路径必命中规则；手动构造的对比
-            # 带病也要在此大声失败，而不是把 None 理由带进报告
-            raise MasterError(f"残留路径未命中规则：{path}")
-        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=reason))
-    for path in comparison.main_c_files:
-        reason = main_c_reason(path)
-        if reason is None:
-            raise MasterError(f"旧工程 main.c 未命中规则：{path}")
-        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=reason))
-    for path in comparison.binaries:
-        exclude.append(FileDecision(path, ACTION_EXCLUDE, reason=BINARY_FILE_REASON))
+    exclude += category_exclude
+    if startup is not None:
+        for path in sorted(set(comparison.startup_files) - {startup}):
+            exclude.append(
+                FileDecision(path, ACTION_EXCLUDE, reason=STARTUP_REPLACEMENT_REASON)
+            )
     return DistillationReport(
         platform=platform,
         projects=tuple(project_names),
@@ -564,7 +750,45 @@ def assemble_report(
         merge=tuple(merge),
         exclude=tuple(exclude),
         main_c_preview=main_c_template(platform),
+        # 预览与落盘同源：直接用拼好的 keep + merge（含规则添加的启动文件 /
+        # 基础设施 / 配置文件条目），与 apply_distillation 的 _render_inputs
+        # 输入一致——报告预览 = 实际落盘渲染产物
+        uvprojx_preview=_config_preview(platform, (*keep, *merge), comparison),
     )
+
+
+def _render_inputs(
+    decisions: Sequence[FileDecision], comparison: ProjectComparison
+) -> tuple[list[str], str | None, list[str]]:
+    """渲染器输入推导：保留源码（.c/.s）+ 启动文件（去重后）+ 保留 .h 所在目录。
+
+    预览（_config_preview）与落盘（apply_distillation）共用——同一份最终
+    决策集必然渲染出同一份 .uvprojx，报告预览 = 实际落盘内容。
+    """
+    sources = [
+        d.path
+        for d in decisions
+        if Path(d.path).suffix.lower() in (".c", ".s")
+    ]
+    include_dirs = sorted(
+        {
+            str(Path(d.path).parent)
+            for d in decisions
+            if Path(d.path).suffix.lower() == ".h"
+        }
+    )
+    return sources, _pick_startup(comparison), include_dirs
+
+
+def _config_preview(
+    platform: str, decisions: Sequence[FileDecision], comparison: ProjectComparison
+) -> str:
+    """.uvprojx 全文预览（决策 7）：stm32 由确定性渲染器推导（与 main_c_preview
+    同款——确认回传时按平台重推导，客户端回传值不可信）；mspm0 无现写
+    （保留首份原样），返回空串。"""
+    if platform != PLATFORM_STM32:
+        return ""
+    return build_master_uvprojx(*_render_inputs(decisions, comparison))
 
 
 def _validate_merge_sources(
@@ -608,18 +832,24 @@ def apply_distillation(
 
     keep 从第一个含该文件的工程复制；merge 写入 AI 整合出的通用版本全文
     （content）；exclude 不复制。落盘完成后写平台模板 main.c（ADR 0002：
-    母版 = 空的最小系统板工程，旧工程 main.c 一律不进母版）；Keil 工程的
-    .uvprojx 引用重写——剔除文件的条目删除、main.c 条目指向模板落位，保证
-    "打开就能编译烧录"成立（CCS 按目录编译，天然一致）。报告的路径集合必须
-    与对比的判定范围完全一致（确认环节可能被用户修改动作与内容，但路径集合
-    不变）。落盘中途失败不留半成品。
+    母版 = 空的最小系统板工程，旧工程 main.c 一律不进母版）；stm32 的
+    .uvprojx 由确定性渲染器现写（工单 09，判例 09 治本：不再从源工程复制
+    也无需引用重写——渲染产物按保留集合构造，结构一致性由构造保证，落位
+    user/Project.uvprojx；密度守卫在渲染器：保留启动文件非 _md 大声失败，
+    目标板 STM32F103C8T6 中密度）；mspm0 的 .cproject/.project 保留首份
+    原样（CCS 按目录编译，无文件引用问题）。报告的路径集合必须与对比的
+    判定范围完全一致（确认环节可能被用户修改动作与内容，但路径集合不变）。
+    落盘中途失败不留半成品。
     """
     _validate_report(report, comparison)
     project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
+    config_paths = set(comparison.config_files)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
         for decision in (*report.keep, *report.merge):
+            if decision.path in config_paths:
+                continue  # 工程配置文件不走复制：stm32 现写 / mspm0 保留首份，见下
             dst = output_dir / Path(decision.path)
             dst.parent.mkdir(parents=True, exist_ok=True)
             if decision.action == ACTION_MERGE:
@@ -632,11 +862,19 @@ def apply_distillation(
             main_c_template(report.platform), encoding="utf-8"
         )
         if report.platform == PLATFORM_STM32:
-            rewrite_project_references(
+            render_master_uvprojx(
                 output_dir,
-                [d.path for d in (*report.keep, *report.merge)]
-                + [MAIN_C_TEMPLATE_PATH],
+                *_render_inputs((*report.keep, *report.merge), comparison),
             )
+        else:
+            for decision in report.keep:
+                if decision.path not in config_paths:
+                    continue
+                dst = output_dir / Path(decision.path)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                source_project = _source_project(decision, comparison)
+                src = project_dir_by_name[source_project] / Path(decision.path)
+                shutil.copy2(src, dst)
     except Exception:
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
@@ -666,56 +904,67 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
         raise MasterError(
             "公共文件必须保留或剔除：" + "、".join(sorted(misplaced_commons))
         )
-    # 残留、旧 main.c 与二进制文件在报告里但不在判定范围（规则识别、确定性
-    # 剔除），从覆盖校验中扣除；它们必须恰好出现在 exclude 里，由各自的
-    # _validate_*_disposition 单独校验；基础设施（启动文件 / 链接脚本）同样
-    # 不在判定范围，必须恰好出现在 keep 里
+    # 类别文件（残留 / 旧 main.c / 基础设施 / 二进制 / 工程配置文件）不在
+    # 判定范围（规则识别、确定性处置），从覆盖校验中扣除；它们必须恰好按
+    # 各自 disposition 处置，由 _validate_category_disposition 逐类校验（遍历
+    # 类别表）。启动文件候选（决策 2 表内钩子）同样不在判定范围：保留份必须
+    # keep、落选份必须 exclude，由 _validate_startup_disposition 单独校验。
+    category_paths = {
+        path
+        for cat in RULE_CATEGORIES
+        for path in getattr(comparison, cat.key)
+    }
     _validate_judgment_coverage(
-        decided=set(paths) - set(comparison.residues) - set(comparison.main_c_files)
-        - set(comparison.infrastructure) - set(comparison.binaries),
+        decided=set(paths) - category_paths - set(comparison.startup_files),
         judgment=set(comparison.judgment),
     )
-    _validate_residue_disposition(report, comparison)
-    _validate_main_c_disposition(report, comparison)
-    _validate_binary_disposition(report, comparison)
-    _validate_infrastructure_disposition(report, comparison)
+    for cat in RULE_CATEGORIES:
+        _validate_category_disposition(cat, report, comparison)
+    _validate_startup_disposition(report, comparison)
     _validate_merge_sources(dispositions, comparison)
 
 
-def _validate_residue_disposition(
-    report: DistillationReport, comparison: ProjectComparison
+def _validate_category_disposition(
+    category: RuleCategory,
+    report: DistillationReport,
+    comparison: ProjectComparison,
 ) -> None:
-    """残留必须恰好剔除一次：规则识别的确定性剔除（见 _validate_forced_exclusions）。"""
-    _validate_forced_exclusions(
-        set(comparison.residues), report, "残留文件必须剔除"
+    """类别文件必须恰好按 disposition 处置一次（保留 / 剔除）。
+
+    规则识别的确定性处置：用户确认也不能改成别的动作或删掉（删掉 = 黑盒
+    消失，ADR 0001；基础设施被剔除 = 空工程编译链断裂）。两种问题一次报全，
+    各自带原因。
+    """
+    forced = set(getattr(comparison, category.key))
+    expected = ACTION_KEEP if category.disposition == "keep" else ACTION_EXCLUDE
+    section = report.keep if expected == ACTION_KEEP else report.exclude
+    moved = sorted(
+        forced
+        & {
+            d.path
+            for d in (*report.keep, *report.merge, *report.exclude)
+            if d.action != expected
+        }
     )
-
-
-def _validate_main_c_disposition(
-    report: DistillationReport, comparison: ProjectComparison
-) -> None:
-    """旧工程 main.c 必须恰好剔除一次：模板替代的确定性剔除（ADR 0002，
-    见 _validate_forced_exclusions）。"""
-    _validate_forced_exclusions(
-        set(comparison.main_c_files), report, "旧工程 main.c 必须剔除"
-    )
-
-
-def _validate_binary_disposition(
-    report: DistillationReport, comparison: ProjectComparison
-) -> None:
-    """二进制文件必须恰好剔除一次：内容规则识别的确定性剔除（非源码素材，
-    见 _validate_forced_exclusions）。"""
-    _validate_forced_exclusions(
-        set(comparison.binaries), report, "二进制文件必须剔除"
-    )
+    missing = sorted(forced - {d.path for d in section})
+    if moved or missing:
+        moved_verbs = "保留/整合" if expected == ACTION_EXCLUDE else "整合/剔除"
+        problems = [f"{path}（被改为{moved_verbs}）" for path in moved]
+        problems += [f"{path}（报告中缺失）" for path in missing]
+        raise MasterError(
+            f"{category.disposition_message}：" + "、".join(problems)
+        )
 
 
 def _validate_forced_exclusions(
     forced: set[str], report: DistillationReport, error_prefix: str
 ) -> None:
     """确定性剔除的文件必须恰好剔除一次：用户确认也不能改成保留 / 整合或
-    删掉（删掉 = 黑盒消失，ADR 0001）。两种问题一次报全，各自带原因。"""
+    删掉（删掉 = 黑盒消失，ADR 0001）。两种问题一次报全，各自带原因。
+
+    类别表的确定性剔除由 _validate_category_disposition 泛化覆盖；本函数
+    仅剩启动文件落选候选（决策 2：同一器件只需一份启动文件）在用。
+    """
     moved = sorted(
         forced
         & {
@@ -731,26 +980,21 @@ def _validate_forced_exclusions(
         raise MasterError(f"{error_prefix}：" + "、".join(problems))
 
 
-def _validate_infrastructure_disposition(
+def _validate_startup_disposition(
     report: DistillationReport, comparison: ProjectComparison
 ) -> None:
-    """基础设施（启动文件 / 链接脚本）必须恰好保留一次：确定性保留（规则识别，
-    见 assemble_report），用户确认也不能改成整合 / 剔除或删掉——这些文件是
-    空工程编译链的必需件，剔除即编译失败。"""
-    forced = set(comparison.infrastructure)
-    moved = sorted(
-        forced
-        & {
-            d.path
-            for d in (*report.keep, *report.merge, *report.exclude)
-            if d.action != ACTION_KEEP
-        }
+    """启动文件去重结果不可改动作（决策 2）：保留份必须恰好保留一次，落选
+    候选必须恰好剔除一次——同一器件只需一份启动文件（两份并存 = Reset_Handler
+    重复定义），用户确认也不能改回或删掉。"""
+    picked = _pick_startup(comparison)
+    if picked is None:
+        return
+    if picked not in {d.path for d in report.keep}:
+        raise MasterError(f"启动文件必须保留：{picked}")
+    eliminated = sorted(set(comparison.startup_files) - {picked})
+    _validate_forced_exclusions(
+        set(eliminated), report, "落选启动文件必须剔除"
     )
-    missing = sorted(forced - {d.path for d in report.keep})
-    if moved or missing:
-        problems = [f"{path}（被改为整合/剔除）" for path in moved]
-        problems += [f"{path}（报告中缺失）" for path in missing]
-        raise MasterError(f"基础设施必须保留：" + "、".join(problems))
 
 
 def _validate_platform_match(platform: str, comparison: ProjectComparison) -> None:
@@ -780,14 +1024,20 @@ def _validate_judgment_coverage(decided: set[str], judgment: set[str]) -> None:
 def _source_project(decision: FileDecision, comparison: ProjectComparison) -> str:
     """keep 取第一个含该文件的工程（merge 由整合产物全文落盘，不取源）。
 
-    基础设施文件（启动文件 / 链接脚本）不在扫描清单（by_path 不含它们），
-    从工程快照的基础设施清单取源。
+    keep 类别的文件（基础设施 / 工程配置文件）与启动文件去重保留份（决策 2）
+    不在扫描清单（by_path 不含它们），从工程快照的对应类别清单取源。
     """
     holders = comparison.by_path.get(decision.path, ())
     if holders:
         return holders[0]
     for project in comparison.projects:
-        if decision.path in project.infrastructure:
+        if any(
+            decision.path in getattr(project, cat.key)
+            for cat in RULE_CATEGORIES
+            if cat.disposition == "keep"
+        ):
+            return project.name
+        if decision.path in project.startup_files:
             return project.name
     raise MasterError(f"没有任何工程含文件 {decision.path}")
 
@@ -813,12 +1063,21 @@ def confirm_distillation(
     try:
         report = DistillationReport.from_dict(
             payload,
-            # 预览是确定性素材（落盘永远写 main_c_template(platform)）：客户端
-            # 回传值不可信，按平台重推导；平台非法由模板加载大声失败
+            # 预览是确定性素材（落盘永远写 main_c_template(platform) 与
+            # _config_preview(...)）：客户端回传值不可信，按平台重推导；平台
+            # 非法由模板加载大声失败
             main_c_preview=main_c_template(platform),
+            uvprojx_preview="",
         )
     except ReportError as exc:
         raise MasterError(str(exc)) from exc
+    # .uvprojx 预览按确认后的最终决策集重推导（stm32 渲染全文 / mspm0 空串）
+    report = replace(
+        report,
+        uvprojx_preview=_config_preview(
+            report.platform, (*report.keep, *report.merge), comparison
+        ),
+    )
     staging = Path(tempfile.mkdtemp(prefix="master-staging-"))
     try:
         preview = apply_distillation(report, comparison, staging / "preview")
@@ -907,7 +1166,9 @@ def import_master(
 
     每平台一个母版：目标已存在时整体更换。先分析后动盘，分析失败不落任何
     文件；旧母版先挪到备份目录再换入新母版，中途失败把备份换回来——既有
-    母版在任意失败点都完好。
+    母版在任意失败点都完好。旧母版被占用（Keil µVision / 文件资源管理器
+    开着）时改名失败：绝不碰旧母版（rmtree 会把只锁住部分的旧母版删残，
+    真实事故），抛中文占用说明。
     """
     _validate_store_key(platform)
     analysis = analyze_structure(source_dir, platform)
@@ -918,17 +1179,37 @@ def import_master(
     shutil.rmtree(temp_dir, ignore_errors=True)  # 清掉上次失败残留
     shutil.copytree(source_dir, temp_dir)
     target_dir = masters_dir / platform
+    if target_dir.exists():
+        shutil.rmtree(backup_dir, ignore_errors=True)
+        if backup_dir.exists():
+            # 备份目录清理不掉（被占用）：改名只会撞上非空目录，Windows 报
+            # WinError 5，这里用中文讲清原因而不是裸抛拒绝访问
+            raise MasterError(
+                f"旧备份 {backup_dir.name} 目录清理失败（可能被占用），"
+                "请先关闭占用程序后重试导入"
+            )
+    moved_to_backup = False
     try:
         if target_dir.exists():
-            shutil.rmtree(backup_dir, ignore_errors=True)
             os.replace(target_dir, backup_dir)  # 旧母版先挪开
+            moved_to_backup = True
         os.replace(temp_dir, target_dir)  # 新母版原子换入
     except Exception:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        if target_dir.exists():
+        if moved_to_backup:
+            # 旧母版已在备份目录：清掉半换入的新母版，把旧母版换回来
             shutil.rmtree(target_dir, ignore_errors=True)
-        if backup_dir.exists():
-            os.replace(backup_dir, target_dir)  # 回滚旧母版
+            if backup_dir.exists():
+                os.replace(backup_dir, target_dir)  # 回滚旧母版
+            raise
+        if target_dir.exists():
+            # 旧母版从未挪动（改名失败）：绝不能碰它——rmtree 会把只锁住
+            # 部分文件的旧母版删残（判例：真实事故，母版只剩空壳）
+            raise MasterError(
+                f"母版替换失败：旧母版目录 {target_dir.name} 被占用，无法挪动。"
+                "通常是 Keil µVision 或文件资源管理器还打开着该目录，"
+                "请先关闭再重试导入（杀毒软件扫描期间偶发，稍后重试亦可）"
+            ) from None
         raise
     shutil.rmtree(backup_dir, ignore_errors=True)
 
