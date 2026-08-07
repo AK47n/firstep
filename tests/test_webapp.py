@@ -1206,7 +1206,12 @@ class _OSErrorLLM(RaisingLLM):
     """扫描之后 AI 阶段抛 OSError（模拟读素材 / 写临时文件时的系统失败）。"""
 
     def distill_master(
-        self, platform, project_names, judgment_files, comparison_summary
+        self,
+        platform,
+        project_names,
+        judgment_files,
+        comparison_summary,
+        progress_emitter=None,
     ):
         raise OSError("磁盘已满")
 
@@ -1215,43 +1220,49 @@ class _BoomLLM(RaisingLLM):
     """抛未登记异常：任何非已知类型 = 真 bug，必须 500 大声失败。"""
 
     def distill_master(
-        self, platform, project_names, judgment_files, comparison_summary
+        self,
+        platform,
+        project_names,
+        judgment_files,
+        comparison_summary,
+        progress_emitter=None,
     ):
         raise RuntimeError("内部损坏")
 
 
-def test_master_distill_oserror_returns_400_not_500(context, tmp_path):
-    """/api/masters/distill 的 OSError（旧 catch 元组漏捕的同类漏洞）→ 400。"""
+def test_master_distill_oserror_ends_stream_with_error(context, tmp_path):
+    """/api/masters/distill 的 OSError（旧 catch 元组漏捕的同类漏洞）→ 流内 error 事件。
+
+    提炼端点 SSE 化后错误以流内 error 事件收尾（HTTP 200 起流，工单 02）：
+    OSError 经 _error_message 转"文件操作失败"中文 message，不再有裸 500。
+    """
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"] = _OSErrorLLM()
     client = TestClient(create_app(context[0]), raise_server_exceptions=False)
 
-    resp = client.post(
-        "/api/masters/distill",
-        json={"platform": PLATFORM_STM32, "project_dirs": [str(proj_a), str(proj_b)]},
-    )
+    events = _distill_stream(client, [str(proj_a), str(proj_b)])
 
-    assert resp.status_code == 400
-    assert "文件操作失败" in resp.json()["detail"]
+    # start / batch_start 先由 llm 层发射器产生，异常后以 error 收尾（流终止）
+    assert events[-1][0] == EVENT_ERROR
+    assert "文件操作失败" in events[-1][1]["message"]
 
 
-def test_unknown_exception_returns_500_not_400(context, tmp_path):
-    """未登记异常 = 真 bug → 500 带类型名，不吞成业务 400。
+def test_unknown_exception_ends_stream_with_error(context, tmp_path):
+    """未登记异常（SSE 端点）→ 流内 error 事件，不吞成假成功。
 
-    旧实现 _error_response 兜底 400：真 bug 以业务失败静默通过（配合测试
-    raise_server_exceptions=False 时无声无息）。统一映射后兜底 500 大声失败。
+    同步端点经 error_to_http 表兜底 500 大声失败（见 _error_response）；SSE
+    端点无状态码，后台线程异常统一转流内 error 事件（message 原样带出），
+    同样不静默吞掉——测试 raise_server_exceptions=False 时若流假成功会露馅。
     """
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"] = _BoomLLM()
     client = TestClient(create_app(context[0]), raise_server_exceptions=False)
 
-    resp = client.post(
-        "/api/masters/distill",
-        json={"platform": PLATFORM_STM32, "project_dirs": [str(proj_a), str(proj_b)]},
-    )
+    events = _distill_stream(client, [str(proj_a), str(proj_b)])
 
-    assert resp.status_code == 500
-    assert "服务器内部错误（RuntimeError）" in resp.json()["detail"]
+    # start / batch_start 先由 llm 层发射器产生，异常后以 error 收尾（流终止）
+    assert events[-1][0] == EVENT_ERROR
+    assert events[-1][1]["message"] == "内部损坏"
 
 
 # ---------------------------------------------------------------------------
