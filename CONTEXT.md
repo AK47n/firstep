@@ -23,6 +23,7 @@
 | 启动文件 | startup_stm32f10x_*.s 候选跨工程去重：至多保留一份（优先 _md，无则路径排序取第一份），落选规则剔除（Reset_Handler 重复定义风险）；密度守卫：保留份非 _md 大声失败（目标板 C8T6 中密度） | keil.py / master.py |
 | 残留 | 构建产物（.o/.axf/.hex/.map/.lst/.crf/.dep/.lnp/.out/.elf/.htm）、备份（.bak 精确后缀，以及路径含 .bak 段的变体如 .bak2 / .bak_consolidate）、临时文件、IDE 用户选项（.uvoptx / .uvguix，编译时自动重建）：机器识别、确定性剔除，但进报告 exclude 清单并带规则化原因；构建输出目录（Debug/Release/Listings/Objects，后者任意层级）整目录忽略 | master.py |
 | 二进制 | 非源码素材（文档 / 图片 / 模型 / 压缩包 / .exe 等）：文件头含 NUL 字节即判定，读全文会污染 LLM 判定素材，确定性剔除，但进报告 exclude 清单并带规则化原因 | master.py |
+| 文件类别 | 残留 / 旧 main.c / 基础设施 / 二进制四类的统一生命周期：识别（reason_of）→ 扫描分类 → 对比并集 → 报告汇编 → 越界拦截（AI 判定即报错）→ 处置校验；新增类别 = RULE_CATEGORIES 加一条 + 结构/对比字段声明 | master.py（RuleCategory / RULE_CATEGORIES） |
 | 骨架 | AI 生成的 main.c（初始化序列 + TODO 预留区）+ 静态自检（幻觉调用改注释占位） | skeleton.py |
 | 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座 | keil.py / ccs.py / patchers.py / projectfile.py |
 | 平台警告 | missing / unverified / hardware_bound，生成前暴露 | selection.py |
@@ -32,6 +33,7 @@
 ## 架构要点
 
 - 薄壳（webapp 路由 / LLM 网络调用 / 文本抽取）包裹纯逻辑核心。
+- 文件类别生命周期单源化：四大类别（残留 / 旧 main.c / 基础设施 / 二进制）+ 工程配置文件（工单 09）各是一条 `RuleCategory` 描述（识别规则 + 确定性处置 + 报错文案），流水线遍历 `RULE_CATEGORIES`，不再每处复制平行分支；启动文件候选是表内钩子（决策 2，跨工程去重）。
 - 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；新异常类型必须登记，否则按真 bug 500 暴露。
 - 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版模块（`master_project_dir`）。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。

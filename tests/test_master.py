@@ -4,6 +4,7 @@
 结构与确认流程落盘的磁盘结果（外部行为）。
 """
 
+import dataclasses
 import os
 import shutil
 import sys
@@ -17,8 +18,11 @@ from contest_generator.keil import KeilProjectError
 from contest_generator.master import (
     BINARY_FILE_REASON,
     MAIN_C_TEMPLATE_REASON,
+    RULE_CATEGORIES,
     STARTUP_REPLACEMENT_REASON,
     MasterError,
+    ProjectComparison,
+    ProjectStructure,
     analyze_structure,
     apply_distillation,
     build_comparison_summary,
@@ -96,6 +100,21 @@ def _distill(fake_stm32_projects, llm):
 # ---------------------------------------------------------------------------
 # 扫描
 # ---------------------------------------------------------------------------
+
+
+def test_rule_categories_keys_match_structure_fields():
+    """类别表与结构 / 对比字段一一对应：新增类别必须补字段，防漂移。
+
+    四大类别（残留 / 旧 main.c / 基础设施 / 二进制）的生命周期由
+    RULE_CATEGORIES 表驱动，扫描分类按表序进行；类别 key 必须是
+    ProjectStructure / ProjectComparison 的既有字段，否则生命周期里
+    getattr 静默拿不到分组，带病入库。
+    """
+    structure_fields = {f.name for f in dataclasses.fields(ProjectStructure)}
+    comparison_fields = {f.name for f in dataclasses.fields(ProjectComparison)}
+    for category in RULE_CATEGORIES:
+        assert category.key in structure_fields
+        assert category.key in comparison_fields
 
 
 def test_scan_detects_platform_and_lists_files(fake_stm32_projects):
