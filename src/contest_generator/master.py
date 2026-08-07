@@ -54,6 +54,11 @@ from .keil import (
 )
 from .llm import LLM, ProgressEmitter  # AI 接缝协议 + 进度发射器（仅类型引用，实现与解析在 llm 层）
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .reference_library import (
+    ReferenceError,
+    archive_reference,
+    validate_topic_anchor,
+)
 from .report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -62,6 +67,7 @@ from .report import (
     FileDecision,
     FileVersion,
     JudgmentFile,
+    ReferenceCandidate,
     ReportError,
 )
 
@@ -892,14 +898,17 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
     if set(report.projects) != {p.name for p in comparison.projects}:
         raise MasterError("报告与对比结果不匹配（来源工程不一致）")
     _validate_platform_match(report.platform, comparison)
+    # 归档条目（工单 02）与判定条目一起计入覆盖：路径集合 = keep + merge +
+    # exclude + archive，恰好覆盖判定范围且不重复——归档 = 该文件不进母版但
+    # 复制入库参考文件库，同样是一次"判定"
     dispositions = (*report.keep, *report.merge, *report.exclude)
-    paths = [d.path for d in dispositions]
+    paths = [d.path for d in dispositions] + [d.path for d in report.archive]
     if len(set(paths)) != len(paths):
         raise MasterError("报告里同一路径被多次判定")
     common = set(comparison.common)
     misplaced_commons = common - {d.path for d in report.keep} - {
         d.path for d in report.exclude
-    }
+    } - {d.path for d in report.archive}
     if misplaced_commons:
         raise MasterError(
             "公共文件必须保留或剔除：" + "、".join(sorted(misplaced_commons))
@@ -907,8 +916,9 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
     # 类别文件（残留 / 旧 main.c / 基础设施 / 二进制 / 工程配置文件）不在
     # 判定范围（规则识别、确定性处置），从覆盖校验中扣除；它们必须恰好按
     # 各自 disposition 处置，由 _validate_category_disposition 逐类校验（遍历
-    # 类别表）。启动文件候选（决策 2 表内钩子）同样不在判定范围：保留份必须
-    # keep、落选份必须 exclude，由 _validate_startup_disposition 单独校验。
+    # 类别表）——归档条目也逃不过：残留 / 二进制等类别文件必须剔除，不配归档。
+    # 启动文件候选（决策 2 表内钩子）同样不在判定范围：保留份必须 keep、
+    # 落选份必须 exclude，由 _validate_startup_disposition 单独校验。
     category_paths = {
         path
         for cat in RULE_CATEGORIES
@@ -1046,6 +1056,9 @@ def confirm_distillation(
     masters_dir: Path,
     project_dirs: Sequence[Path],
     payload: dict[str, Any],
+    *,
+    llm_factory: Callable[[], LLM] | None = None,
+    reference_library_dir: Path | None = None,
 ) -> MasterMeta:
     """确认报告并落库：重扫 → 重比 → 重建报告 → 暂存 → 落盘 → 入库，一次事务。
 
@@ -1054,6 +1067,14 @@ def confirm_distillation(
     在此转成 MasterError——HTTP 层只认这一种），暂存目录在函数内部自生自灭
     ——任何一步失败都不留半成品，既有母版在任意失败点都完好（import_master
     自带备份回滚）。webapp 只收请求、调这里、转 JSON。
+
+    归档动作（工单 02，报告 archive 段）：随确认事务一起提交——报告校验与
+    暂存（apply_distillation，类别文件不配归档在此被拦）→ LLM 判定归档价值
+    并生成条目简介（全部在任何真写盘前，失败即整体中止、母版库与参考库都不
+    被触碰）→ 母版先入库（既有事务语义不变）→ 归档条目复制入库（每条目
+    原子，批量失败回滚本批已建条目并大声报错：母版已入库、可重试——import
+    幂等，归档重跑是全新条目）。llm_factory / reference_library_dir 只在报告
+    含归档动作时按需取用（无归档的确认不要求 AI 配置，与现状一致）。
     """
     projects = tuple(scan_project(project_dir) for project_dir in project_dirs)
     comparison = compare_projects(projects)
@@ -1081,12 +1102,111 @@ def confirm_distillation(
     staging = Path(tempfile.mkdtemp(prefix="master-staging-"))
     try:
         preview = apply_distillation(report, comparison, staging / "preview")
+        if report.archive:
+            # LLM 调用在暂存之后、任何真写盘之前：失败只清暂存，什么都不碰
+            summaries = _prepare_archive(
+                report, comparison, llm_factory, reference_library_dir
+            )
+        else:
+            summaries = {}
         meta = import_master(
             masters_dir, report.platform, preview, sources=report.projects
         )
+        if report.archive:
+            # _prepare_archive 已拒绝 None（归档需要参考库目录）；此处为类型
+            # 窄化断言，运行期恒真
+            assert reference_library_dir is not None
+            _write_archive_entries(
+                report, comparison, reference_library_dir, summaries
+            )
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return meta
+
+
+def _prepare_archive(
+    report: DistillationReport,
+    comparison: ProjectComparison,
+    llm_factory: Callable[[], LLM] | None,
+    reference_library_dir: Path | None,
+) -> dict[str, str]:
+    """归档前置：校验配置与锚定、LLM 判定归档价值并生成条目简介（不写盘）。
+
+    全部失败都在写盘前大声报错（MasterError，中文说明）：归档需要 AI 服务与
+    参考文件库目录配置；锚定赛题编号格式非法（查库确认待赛题库工单 01 落地后
+    接入）；AI 判定不配归档的文件被拒绝（一次性杂物 / 配置噪声不配归档）。
+    条目简介 = LLM 对文件全文的摘要（与参考文件库录入草稿同一协议方法
+    reference_summarize）。归档路径的合法性（判定范围内、类别文件不配归档）
+    由 apply_distillation 的处置校验先拦住——本函数只做归档自身的校验。
+    """
+    if llm_factory is None or reference_library_dir is None:
+        raise MasterError(
+            "归档动作需要 AI 服务与参考文件库目录（未提供），无法提交"
+        )
+    project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
+    candidates: list[ReferenceCandidate] = []
+    for decision in report.archive:
+        try:
+            validate_topic_anchor(decision.topic)
+        except ReferenceError as exc:
+            raise MasterError(str(exc)) from exc
+        holders = comparison.by_path.get(decision.path)
+        if not holders:
+            # 覆盖校验应先拦住（判定范围外路径）；兜底大声失败，不猜测不编造
+            raise MasterError(f"没有任何工程含文件 {decision.path}")
+        source = holders[0]
+        content = (project_dir_by_name[source] / Path(decision.path)).read_text(
+            encoding="utf-8", errors="replace"
+        )
+        candidates.append(
+            ReferenceCandidate(
+                path=decision.path, content=content, reason=decision.reason
+            )
+        )
+    llm = llm_factory()
+    archivable = set(llm.reference_judge_archivable(candidates))
+    rejected = [c.path for c in candidates if c.path not in archivable]
+    if rejected:
+        raise MasterError(
+            "以下文件未被 AI 判定为值得归档（可去掉归档动作后重新确认）："
+            + "、".join(rejected)
+        )
+    return {c.path: llm.reference_summarize(c.content) for c in candidates}
+
+
+def _write_archive_entries(
+    report: DistillationReport,
+    comparison: ProjectComparison,
+    reference_library_dir: Path,
+    summaries: Mapping[str, str],
+) -> None:
+    """归档条目落盘（在母版入库之后）：源工程文件字节复制入库、锚定该题。
+
+    批回滚：任一条目写入失败，删除本批已建条目目录并大声报错（中文说明）——
+    不留半成品（母版已入库且归档条目相互独立，重试确认即可：import 幂等、
+    归档重跑是全新条目）。归档 = 复制入库（内容自持）：源工程删除不丢。
+    """
+    project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
+    created: list[Path] = []
+    try:
+        for decision in report.archive:
+            holders = comparison.by_path[decision.path]
+            source = holders[0]
+            entry = archive_reference(
+                reference_library_dir,
+                source=project_dir_by_name[source] / Path(decision.path),
+                rel_path=decision.path,
+                title=f"{decision.path}（{source}）",
+                description=summaries[decision.path],
+                anchor_topic=decision.topic,
+            )
+            created.append(reference_library_dir / entry.id)
+    except Exception as exc:
+        for entry_dir in created:
+            shutil.rmtree(entry_dir, ignore_errors=True)
+        raise MasterError(
+            f"母版已入库，但归档写入失败（已回滚本次归档条目，可重试确认）：{exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

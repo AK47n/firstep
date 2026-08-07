@@ -57,6 +57,14 @@ from .master import (
     scan_project,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .reference_library import (
+    ReferenceError,
+    add_reference,
+    delete_reference,
+    draft_description as reference_draft_description,
+    module_kit_vocabulary,
+    search_references,
+)
 from .selection import SelectionError, resolve_selection
 from .skeleton import generate_skeleton
 
@@ -117,6 +125,15 @@ def _masters_dir(ctx: AppContext) -> Path:
     return _require_config(ctx).masters_dir
 
 
+def _reference_dir(ctx: AppContext) -> Path:
+    """参考文件库目录：模块库平级兄弟 references/（素材库 colocate，工单 02）。
+
+    本批不新增配置项（config.py 冻结），按模块库目录的平级兄弟推导——默认
+    布局下 = ~/.contest_generator/references；用户配置模块库位置时参考库跟随。
+    """
+    return _require_config(ctx).module_library_dir.parent / "references"
+
+
 # ---------------------------------------------------------------------------
 # 错误映射：核心异常 → HTTP 状态与中文 message（全路由唯一出口）
 # ---------------------------------------------------------------------------
@@ -168,6 +185,7 @@ def _error_response(exc: Exception) -> HTTPException:
             SelectionError,
             GeneratorError,
             ConfigError,
+            ReferenceError,
         ),
     ):
         # 业务失败：message 原样带出（用户可按提示修正重试）
@@ -612,9 +630,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/masters/confirm")
     @_map_errors
     def masters_confirm(payload: dict) -> dict:
-        """确认报告：落盘母版候选 → 结构分析 → 入库（事务在 confirm_distillation）。"""
+        """确认报告：落盘母版候选 → 结构分析 → 入库（事务在 confirm_distillation）。
+
+        报告含归档动作（工单 02）时，归档条目随确认事务一起提交（LLM 判定 +
+        复制入库、锚定该题）；AI 服务与参考文件库目录按需取用——无归档动作的
+        确认不要求 AI 配置（与现状一致）。
+        """
         project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
-        meta = confirm_distillation(_masters_dir(context), project_dirs, payload)
+        meta = confirm_distillation(
+            _masters_dir(context),
+            project_dirs,
+            payload,
+            llm_factory=lambda: _llm(context),
+            reference_library_dir=_reference_dir(context),
+        )
         return {
             "platform": meta.platform,
             "sources": list(meta.sources),
@@ -682,6 +711,60 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
+        return {"ok": True}
+
+    # ------------------------------------------------------------------
+    # 参考文件库（工单 02）：浏览 / 搜索 / AI 简介草稿 / 入库 / 删除
+    # ------------------------------------------------------------------
+
+    @app.get("/api/references")
+    @_map_errors
+    def references(title: str = "", type: str = "", anchor: str = "") -> list[dict]:
+        """浏览参考文件库：按标题 / 类型 / 锚定值子串过滤（可组合，空 = 全量）。"""
+        return [
+            entry.to_dict()
+            for entry in search_references(
+                _reference_dir(context), title=title, type=type, anchor=anchor
+            )
+        ]
+
+    @app.post("/api/references/draft")
+    @_map_errors
+    def reference_draft(payload: dict) -> dict:
+        """AI 通读素材生成简介草稿（草稿不校验、由用户确认后入库）。"""
+        files = payload.get("files")
+        if not isinstance(files, dict):
+            raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
+        return {"draft": reference_draft_description(_llm(context), files)}
+
+    @app.post("/api/references")
+    @_map_errors
+    def reference_add(payload: dict) -> dict:
+        """参考文件入库：结构校验（锚定词表 / 格式 / 文件路径）通过才落盘。
+
+        锚定套件型号必须取自模块库已有 kit 词表（不新打字）；赛题编号做格式
+        校验（查库确认待赛题库落地后接入）。
+        """
+        files = payload.get("files")
+        if not isinstance(files, dict):
+            raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
+        entry = add_reference(
+            _reference_dir(context),
+            title=_require_str(payload, "title"),
+            type=_require_str(payload, "type"),
+            description=_require_str(payload, "description"),
+            anchor_kind=_require_str(payload, "anchor_kind"),
+            anchor_value=_require_str(payload, "anchor_value"),
+            files=files,
+            kit_vocabulary=module_kit_vocabulary(_library_dir(context)),
+        )
+        return entry.to_dict()
+
+    @app.delete("/api/references/{entry_id}")
+    @_map_errors
+    def reference_delete(entry_id: str) -> dict:
+        """删除参考文件条目：整个目录移除。"""
+        delete_reference(_reference_dir(context), entry_id)
         return {"ok": True}
 
     return app
