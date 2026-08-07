@@ -45,5 +45,17 @@
 - [x] **模板 main.c**：include `"stm32f10x_conf.h"` → `"stm32f10x.h"`（已对照真实头文件验证：stm32f10x.h:479 include system_stm32f10x.h、SystemInit 声明在 :79）。
 - [x] **测试**：渲染器单测 9 个（树覆盖/分组/IncludePath/设备块/确定性/密度守卫/落位/结构校验/候选辅助）+ 生成打补丁相对路径锁定 + 报告语义（强制 keep、不可改、预览往返重推导）+ 启动去重 3 场景 + 真实工程验收 `test_real_projects_2026c_21f_distill_and_import`（2026C+21F 全流程跑通：去重/剔除/渲染/入库结构校验，机器上 PASS 非 skip）。全套 418 绿 + mypy 干净。
 - [x] **ADR 0003**（工程配置文件移出 AI 判定、确定性现写），CONTEXT.md 词表补充。
-- [ ] **验收剩余步骤（需真实环境，人工）**：`~/.contest_generator/masters/stm32` 坏母版替换为新提炼母版（组空、0 IncludePath 的旧母版已被本流程取代）；用户 Keil 实际编译一次为最终证明（含生成流程：新母版 + 选模块生成 → 编译）。
-- [ ] 8000 端口服务需重启加载新代码（若在跑）。
+- [x] **验收剩余步骤（真实环境，2026-08-06 执行）**：`~/.contest_generator/masters/stm32` 坏母版已替换——新提炼母版（2026C+21F 重提炼）入库成功，结构校验 PASS（12 个 .c/.s 全入树、IncludePath=`..\ml_libs;..\sys`、启动文件去重唯一 md）；剩余：用户 Keil 实际编译一次为最终证明（含生成流程：新母版 + 选模块生成 → 编译）。
+- [x] 8000 端口服务已重启加载新代码（工单 09 合入 main 后重启，418 测试绿）。
+
+## 真实验收记录（2026-08-06）
+
+- 工单 09 分支（b59cf75）fast-forward 合入 main（main 无独有提交，零冲突）
+- 重启 8000 服务加载新代码，全套 418 测试绿
+- 真实提炼（2026C + 2021F/21F，DeepSeek，约 17 分钟）：uvprojx 已移出 AI 判定——
+  报告 keep 带规则原因"工程配置文件：由确定性模板现写，保留文件全量入树"、
+  uvprojx_preview 16419 字符（含 Cads/IncludePath + 启动文件）；.uvoptx/.uvguix
+  规则剔除；启动文件去重（key/ md 保留，sys/ hd+md 落选）
+- 确认入库 200：`~/.contest_generator/masters/stm32` 坏母版（组空、0 IncludePath）
+  被新母版整体替换；结构校验 PASS
+- 遗留（人工）：用户 Keil 实际编译一次为最终证明
