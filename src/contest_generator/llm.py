@@ -17,7 +17,7 @@ import math
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, Sequence
+from typing import Any, Callable, Protocol, Sequence, TypeVar
 
 from .config import AppConfig
 from .manifest import ModuleManifest
@@ -132,11 +132,6 @@ MAX_SUMMARY_BATCH_CHARS = 24000  # 每批摘要请求的内容字符预算
 MAX_REQUEST_BYTES = 128 * 1024  # 发送前断言：序列化请求体超过此字节数即大声失败（兜底）
 
 
-def _chunked(items: Sequence[Any], size: int) -> list[list[Any]]:
-    """按 size 切分列表（最后一块可以不满）。"""
-    return [list(items[i : i + size]) for i in range(0, len(items), size)]
-
-
 def _truncate_content(content: str) -> str:
     """单内容截断（带标注）：超长内容只送前 JUDGMENT_CONTENT_CAP 字符。
 
@@ -152,58 +147,6 @@ def _truncate_content(content: str) -> str:
         + f"\n……（内容过长，已截断：仅展示前 {JUDGMENT_CONTENT_CAP} 字符，"
         f"原文共 {len(content)} 字符；{TRUNCATION_NOTICE}）……\n"
     )
-
-
-def _judgment_batches(
-    judgment_files: Sequence[JudgmentFile],
-) -> tuple[tuple[JudgmentFile, ...], ...]:
-    """按请求体预算 + 文件数上限分批：批内各版本全文（截断后）合计不超预算、
-    文件数不超 JUDGMENT_BATCH_SIZE。
-
-    两个约束各自对应一个判例：预算约束防请求体超网关限制（413）；文件数上限
-    防单批超载导致模型系统性漏判小配置文件（判例 08：一次问 115 个文件漏 30
-    个，补问不收敛）。两个不变量同时成立——漏判从"必现"降为"偶发"，交给
-    补问机制兜底。分批只按"截断后内容字符数"近似——提示词开销与 JSON 转义
-    远小于网关限制，预算本身留了余量。顺序保持输入顺序：摘要产物按批拼接后
-    与发送顺序一致。单文件多版本合计超预算时按版本拆批（单版本截断后 ≤
-    JUDGMENT_CONTENT_CAP，总在预算内；同一批内不出现同一路径两次——
-    parse_summary_report 按路径校验批次覆盖，同批重复路径会让模型输出无法
-    自证）。
-    """
-    batches: list[list[JudgmentFile]] = []
-    current: list[JudgmentFile] = []
-    size = 0
-    for file in judgment_files:
-        file_size = sum(
-            len(_truncate_content(version.content)) for version in file.versions
-        )
-        if file_size > MAX_SUMMARY_BATCH_CHARS:
-            # 单文件多版本合计超预算：按版本拆批（同批内不重复路径）
-            for version in file.versions:
-                unit_size = len(_truncate_content(version.content))
-                if current and (
-                    size + unit_size > MAX_SUMMARY_BATCH_CHARS
-                    or len(current) >= JUDGMENT_BATCH_SIZE
-                    or any(f.path == file.path for f in current)
-                ):
-                    batches.append(current)
-                    current = []
-                    size = 0
-                current.append(JudgmentFile(file.path, (version,)))
-                size += unit_size
-            continue
-        if current and (
-            size + file_size > MAX_SUMMARY_BATCH_CHARS
-            or len(current) >= JUDGMENT_BATCH_SIZE
-        ):
-            batches.append(current)
-            current = []
-            size = 0
-        current.append(file)
-        size += file_size
-    if current:
-        batches.append(current)
-    return tuple(tuple(batch) for batch in batches)
 
 
 def _extract_good_summaries(
@@ -362,6 +305,92 @@ class FileSummary:
 
     path: str
     versions: tuple[VersionSummary, ...]
+
+
+# 分批 / 重试循环的条目类型限定：两阶段各自只有一对输入 / 输出类型（摘要
+# 阶段：待判文件 → 摘要；判定阶段：摘要 → 判定）。用限定 TypeVar 表达而非
+# Protocol——mypy 2.3.0 在 from __future__ import annotations 下对 Protocol
+# 属性约束的结构匹配实测不生效。
+I = TypeVar("I", JudgmentFile, FileSummary)  # 批内输入条目
+R = TypeVar("R", FileSummary, FileDecision)  # 批处理输出条目
+T = TypeVar("T", JudgmentFile, FileSummary)
+
+
+def _file_chars(file: JudgmentFile) -> int:
+    """一个待判文件的发送字符数：各内容版本截断后合计（分批预算按此近似）。"""
+    return sum(len(_truncate_content(version.content)) for version in file.versions)
+
+
+def _split_versions(file: JudgmentFile) -> list[JudgmentFile]:
+    """单文件多版本合计超预算时按版本拆成单版本条目（批内路径不重复）。"""
+    return [JudgmentFile(file.path, (version,)) for version in file.versions]
+
+
+def _batches(
+    items: Sequence[T],
+    *,
+    max_chars: int | None,
+    size_of: Callable[[T], int] | None = None,
+    split_oversized: Callable[[T], Sequence[T]] | None = None,
+) -> tuple[tuple[T, ...], ...]:
+    """按文件数上限（JUDGMENT_BATCH_SIZE）分批；max_chars 给定时同时受字符预算约束。
+
+    两个约束各自对应一个判例：预算约束防请求体超网关限制（413）；文件数上限
+    防单批超载导致模型系统性漏判小配置文件（判例 08：一次问 115 个文件漏 30
+    个，补问不收敛）。两个不变量同时成立——漏判从"必现"降为"偶发"，交给
+    补问机制兜底。分批只按"截断后内容字符数"近似——提示词开销与 JSON 转义
+    远小于网关限制，预算本身留了余量。顺序保持输入顺序：摘要产物按批拼接后
+    与发送顺序一致。
+
+    摘要阶段（max_chars=MAX_SUMMARY_BATCH_CHARS）：批内各版本全文（截断后）
+    合计不超预算、文件数不超上限，单文件多版本合计超预算时按版本拆批
+    （split_oversized，同批内不出现同一路径两次——parse_summary_report 按
+    路径校验批次覆盖，同批重复路径会让模型输出无法自证）。
+    判定阶段（max_chars=None）：摘要产物已小，无请求体预算约束（见
+    _decide_distillation 的分批说明）——只按文件数上限分批。
+    """
+    batches: list[list[T]] = []
+    current: list[T] = []
+    size = 0
+    for item in items:
+        if max_chars is not None:
+            if size_of is None or split_oversized is None:
+                raise ValueError(
+                    "max_chars 给定时必须同时提供 size_of 与 split_oversized"
+                )
+            item_size = size_of(item)
+            if item_size > max_chars:
+                # 单文件多版本合计超预算：按版本拆批（同批内不重复路径）
+                for unit in split_oversized(item):
+                    unit_size = size_of(unit)
+                    if current and (
+                        size + unit_size > max_chars
+                        or len(current) >= JUDGMENT_BATCH_SIZE
+                        or any(f.path == item.path for f in current)
+                    ):
+                        batches.append(current)
+                        current = []
+                        size = 0
+                    current.append(unit)
+                    size += unit_size
+                continue
+            if current and (
+                size + item_size > max_chars
+                or len(current) >= JUDGMENT_BATCH_SIZE
+            ):
+                batches.append(current)
+                current = []
+                size = 0
+            current.append(item)
+            size += item_size
+        else:
+            if current and len(current) >= JUDGMENT_BATCH_SIZE:
+                batches.append(current)
+                current = []
+            current.append(item)
+    if current:
+        batches.append(current)
+    return tuple(tuple(batch) for batch in batches)
 
 
 # ---------------------------------------------------------------------------
@@ -599,12 +628,17 @@ class DeepSeekLLM:
         摘要抛 LLMError，宁可大声失败也不带病进确认流程。
 
         progress_emitter：可选进度发射器（默认 None 不发射，行为与现状一致）。
-        start 由入口发射且总量先算定——阶段 1 批数 = _judgment_batches 算定的
-        批数、阶段 2 批数 = ⌈待判文件数 / 批大小⌉；算定后同一批序列传给阶段
-        循环，start 的批次总量与实际发射的批序列严格一致（契约测试断言）。
+        start 由入口发射且总量先算定——阶段 1 批数 = _batches 算定的批数、
+        阶段 2 批数 = ⌈待判文件数 / 批大小⌉；算定后同一批序列传给阶段循环，
+        start 的批次总量与实际发射的批序列严格一致（契约测试断言）。
         发射失败是旁路（_emit），不影响提炼主流程。
         """
-        summary_batches = _judgment_batches(judgment_files)
+        summary_batches = _batches(
+            judgment_files,
+            max_chars=MAX_SUMMARY_BATCH_CHARS,
+            size_of=_file_chars,
+            split_oversized=_split_versions,
+        )
         decide_batch_count = math.ceil(len(judgment_files) / JUDGMENT_BATCH_SIZE)
         _emit(
             progress_emitter,
@@ -635,7 +669,7 @@ class DeepSeekLLM:
         大批量素材一次问完时，模型输出偶发丢条目 / JSON 截断（判例 08：真实
         工程 115 个文件一次返回漏 1 个；更大批量甚至系统性漏小配置文件，补问
         不收敛）。按请求体预算（MAX_SUMMARY_BATCH_CHARS，防网关 413）与文件数
-        上限（JUDGMENT_BATCH_SIZE，防模型批量超载）分批问（_judgment_batches，
+        上限（JUDGMENT_BATCH_SIZE，防模型批量超载）分批问（_batches 原语，
         总输入 token 不变），批内严格解析失败后挖出已覆盖的合法条目、只对
         缺失文件补问，最多 SUMMARY_RETRY_LIMIT 轮——宁可在补问上多花一次调用，
         也不带病进第二阶段。
@@ -678,6 +712,80 @@ class DeepSeekLLM:
         )
         return tuple(results)
 
+    def _retry_batch(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: Callable[[Sequence[I]], str],
+        parse: Callable[[str, Sequence[I]], Sequence[R]],
+        salvage: Callable[[str, Sequence[I]], Sequence[R]],
+        phase_label: str,
+        items: Sequence[I],
+        progress_emitter: ProgressEmitter | None,
+        batch_index: int,
+        phase: str,
+    ) -> list[R]:
+        """一批条目的重试 + 补问循环（摘要 / 判定两阶段共用的唯一原语）。
+
+        模型一次输出大量 JSON 条目时偶发丢条目（判例 08：115 个文件一次返回
+        漏了 1 个），严格解析失败后不整批重来：挖出已通过逐文件校验的合法
+        条目（salvage——一个文件输出畸形只让它自己重问，好条目不连坐，见
+        _extract_good_summaries / _extract_good_decisions），只对缺失路径补问，
+        最多 SUMMARY_RETRY_LIMIT 轮；仍缺失就大声失败（宁可失败也不带病进
+        下一阶段）。严格解析不校验覆盖（master 层职责）；这里知道素材范围，
+        漏判即补问。跨轮去重：补问轮的响应可能复述已覆盖路径，同一路径只
+        保留第一次结果。每次开始补问轮（重新发请求前）发射 retry 事件（契约
+        唯一出处见 ProgressEvent）：轮次 1 起、缺失数 = 该轮要补问的文件数。
+        """
+        remaining = list(items)
+        results: list[R] = []
+        retry_round = 0
+        for _ in range(SUMMARY_RETRY_LIMIT):
+            if not remaining:
+                break
+            if retry_round:
+                _emit(
+                    progress_emitter,
+                    ProgressEvent(
+                        type=EVENT_RETRY,
+                        phase=phase,
+                        batch_index=batch_index,
+                        retry_round=retry_round,
+                        missing_count=len(remaining),
+                    ),
+                )
+            retry_round += 1
+            content = self._chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt(remaining)},
+                ],
+                json_mode=True,
+            )
+            try:
+                parsed = parse(content, remaining)
+            except LLMError:
+                # 输出整体不可用（非 JSON / 形状错）——挖出合法条目只补问坏的，
+                # 一个都挖不出才整批重问
+                parsed = salvage(content, remaining)
+                if not parsed:
+                    continue
+            results.extend(
+                x for x in parsed if x.path not in {r.path for r in results}
+            )
+            covered = {r.path for r in results}
+            missing = [x for x in remaining if x.path not in covered]
+            if not missing:
+                remaining = []
+                break
+            remaining = missing  # 漏判部分——只补问缺失路径
+        if remaining:
+            raise LLMError(
+                f"{phase_label}多次补问后仍缺失 "
+                + "、".join(sorted(x.path for x in remaining))[:300]
+            )
+        return results
+
     def _summarize_batch(
         self,
         platform: str,
@@ -688,63 +796,21 @@ class DeepSeekLLM:
     ) -> list[FileSummary]:
         """一批文件的摘要 + 补问循环（见 _summarize_judgment_files 的分批说明）。
 
-        每次开始补问轮（重新发请求前）发射 retry 事件：轮次 1 起、缺失数 =
-        该轮要补问的文件数——补问轮的起点即事件发射点（契约唯一出处见
-        ProgressEvent）。
+        参数化 _retry_batch（retry 事件发射在原语内，phase=summary）。
         """
-        remaining = list(batch)
-        results: list[FileSummary] = []
-        retry_round = 0
-        for _ in range(SUMMARY_RETRY_LIMIT):
-            if not remaining:
-                break
-            if retry_round:
-                _emit(
-                    progress_emitter,
-                    ProgressEvent(
-                        type=EVENT_RETRY,
-                        phase=PHASE_SUMMARY,
-                        batch_index=batch_index,
-                        retry_round=retry_round,
-                        missing_count=len(remaining),
-                    ),
-                )
-            retry_round += 1
-            content = self._chat(
-                [
-                    {"role": "system", "content": JUDGMENT_SUMMARY_SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": _summarize_user_prompt(
-                            platform, project_names, remaining
-                        ),
-                    },
-                ],
-                json_mode=True,
-            )
-            try:
-                results.extend(parse_summary_report(content, remaining))
-                remaining = []  # 一次全部通过，循环结束校验也放行
-                break
-            except LLMError:
-                pass
-            good = _extract_good_summaries(content, remaining)
-            results.extend(good)
-            missing = [f for f in remaining if f.path not in {s.path for s in good}]
-            if not missing:
-                # 全部路径都有合法条目（严格解析本应已成功；防御性收尾）
-                remaining = []
-                break
-            if len(missing) == len(remaining):
-                # 输出整体不可用——下一轮整批重问
-                continue
-            remaining = missing
-        if remaining:
-            raise LLMError(
-                "第一阶段摘要多次补问后仍缺失 "
-                + "、".join(sorted(f.path for f in remaining))[:300]
-            )
-        return results
+        return self._retry_batch(
+            system_prompt=JUDGMENT_SUMMARY_SYSTEM_PROMPT,
+            user_prompt=lambda remaining: _summarize_user_prompt(
+                platform, project_names, remaining
+            ),
+            parse=parse_summary_report,
+            salvage=_extract_good_summaries,
+            phase_label="第一阶段摘要",
+            items=batch,
+            progress_emitter=progress_emitter,
+            batch_index=batch_index,
+            phase=PHASE_SUMMARY,
+        )
 
     def _decide_distillation(
         self,
@@ -773,7 +839,7 @@ class DeepSeekLLM:
         """
         results: list[FileDecision] = []
         seen: set[str] = set()
-        batches = _chunked(file_summaries, JUDGMENT_BATCH_SIZE)
+        batches = _batches(file_summaries, max_chars=None)
         processed = 0
         for batch_index, batch in enumerate(batches, start=1):
             _emit(
@@ -829,63 +895,27 @@ class DeepSeekLLM:
     ) -> list[FileDecision]:
         """一批文件的判定 + 补问循环（见 _decide_distillation 的分批说明）。
 
-        每次开始补问轮（重新发请求前）发射 retry 事件，与 _summarize_batch
-        同款（轮次 1 起、缺失数 = 该轮要补问的文件数）。
+        参数化 _retry_batch：判定阶段的严格解析不校验覆盖（master 层职责），
+        补问只问缺失路径；素材范围外的判定由 _decide_distillation 按批过滤
+        （retry 事件发射在原语内，phase=decide）。
         """
-        remaining = list(batch)
-        results: list[FileDecision] = []
-        retry_round = 0
-        for _ in range(SUMMARY_RETRY_LIMIT):
-            if not remaining:
-                break
-            if retry_round:
-                _emit(
-                    progress_emitter,
-                    ProgressEvent(
-                        type=EVENT_RETRY,
-                        phase=PHASE_DECIDE,
-                        batch_index=batch_index,
-                        retry_round=retry_round,
-                        missing_count=len(remaining),
-                    ),
-                )
-            retry_round += 1
-            content = self._chat(
-                [
-                    {"role": "system", "content": DISTILL_SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": _distill_user_prompt(
-                            platform, project_names, remaining, comparison_summary
-                        ),
-                    },
-                ],
-                json_mode=True,
-            )
-            try:
-                parsed = parse_distillation_report(content, project_names)
-            except LLMError:
-                # 输出整体不可用（非 JSON / 形状错）——挖出合法条目只补问坏的，
-                # 一个都挖不出才整批重问（坏条目不连坐好条目，同 _extract_good_
-                # summaries）
-                parsed = _extract_good_decisions(content, project_names, remaining)
-                if not parsed:
-                    continue
-            # 严格解析不校验覆盖（master 层职责）；这里知道素材范围，漏判即补问。
-            # 跨轮去重（补问轮的响应可能复述已判路径）：同一路径只保留第一次判定
-            results.extend(d for d in parsed if d.path not in {x.path for x in results})
-            covered = {d.path for d in results}
-            missing = [s for s in remaining if s.path not in covered]
-            if not missing:
-                remaining = []
-                break
-            remaining = missing  # 漏判部分——只补问缺失路径
-        if remaining:
-            raise LLMError(
-                "提炼判定多次补问后仍缺失 "
-                + "、".join(sorted(s.path for s in remaining))[:300]
-            )
-        return results
+        return self._retry_batch(
+            system_prompt=DISTILL_SYSTEM_PROMPT,
+            user_prompt=lambda remaining: _distill_user_prompt(
+                platform, project_names, remaining, comparison_summary
+            ),
+            parse=lambda content, remaining: parse_distillation_report(
+                content, project_names
+            ),
+            salvage=lambda content, remaining: _extract_good_decisions(
+                content, project_names, remaining
+            ),
+            phase_label="提炼判定",
+            items=batch,
+            progress_emitter=progress_emitter,
+            batch_index=batch_index,
+            phase=PHASE_DECIDE,
+        )
 
     def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
