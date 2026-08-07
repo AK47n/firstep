@@ -2,9 +2,9 @@
 
 生产实现 DeepSeekLLM 走 DeepSeek Chat Completions API（base_url / api_key /
 模型来自本机配置文件 config.py）；HTTP 传输可注入假件，网络调用不进测试。
-LLM 承担四个职责：赛题→模块选择、main.c 骨架生成、模块简介生成与校验、
+LLM 承担五个职责：赛题→模块选择、main.c 骨架生成、模块简介生成与校验、
 母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出摘要，
-再基于摘要判定）。请求体有大小控制：所有嵌内容调用（赛题 / 接口块 / 文件
+再基于摘要判定）与赛题库拆条 / 编号提取。请求体有大小控制：所有嵌内容调用（赛题 / 接口块 / 文件
 全文）超长截断（带标注，AI 知道读到的是截断内容）、摘要阶段多文件按预算
 分批发送、发送前有序列化体积断言兜底——DeepSeek 网关对请求体有硬性大小
 限制，一次性全发会 413。
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -21,7 +22,13 @@ from typing import Any, Callable, Protocol, Sequence, TypeVar
 
 from .config import AppConfig
 from .manifest import ModuleManifest
-from .report import ACTION_MERGE, FileDecision, JudgmentFile, ReportError
+from .report import (
+    ACTION_MERGE,
+    FileDecision,
+    JudgmentFile,
+    ReferenceCandidate,
+    ReportError,
+)
 
 # ---------------------------------------------------------------------------
 # 截断标注契约（唯一出处）
@@ -101,6 +108,26 @@ DISTILL_SYSTEM_PROMPT = (
     + "动作词表：keep（保留）/ merge（整合：同一路径多份内容不同时，读多份后"
     "整合出通用版本，选一份只是特例，必须给出整合产物全文与整合说明）/ "
     "exclude（剔除）。必须为每个待判文件给出动作，一个都不能少。只输出 JSON 对象。"
+)
+
+# 参考文件简介生成（工单 02）：配套资料（例程工程 / 说明书等）→ 中文简介草稿。
+# 素材超长截断带标注（与所有嵌内容调用同款，TRUNCATION_NOTICE 唯一出处见上）。
+REFERENCE_SUMMARY_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发资料整理助手。根据提供的配套资料内容"
+    "（素材过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）写一段中文"
+    "简介：它是什么、用途、适用场景。只输出简介文本，不要额外格式。"
+)
+
+# 归档判定（工单 02）：提炼时被剔除的业务代码是否值得归档为该赛题的参考文件。
+# 判据 = 可复用的业务代码 / 学习参考（传感器驱动、外设封装、赛题逻辑实现、
+# 算法），一次性杂物 / 配置噪声 / 无关文件不值得归档。与提炼判据同款双端
+# 契约（系统提示词与用户提示词都带判据，见 _archive_judgment_user_prompt）。
+ARCHIVE_JUDGMENT_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发工程整理助手。提炼旧工程时被剔除的"
+    "文件，需要判断是否值得归档为该赛题的参考文件（素材过长可能被截断，见"
+    "末尾标注，" + TRUNCATION_NOTICE + "）：归档价值 = 可复用的业务代码或学习"
+    "参考（传感器驱动、外设封装、赛题逻辑实现、算法）；一次性杂物 / 配置噪声"
+    " / 无关文件不值得归档。只输出 JSON 对象。"
 )
 
 # 判定素材内容上限（字符）：第一阶段提示词把每个内容版本全文嵌入，真实旧
@@ -482,6 +509,16 @@ class LLM(Protocol):
         progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]: ...
 
+    def reference_summarize(self, material: str) -> str: ...
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]: ...
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
+
+    def topic_extract_number(self, text: str) -> str | None: ...
+
 
 def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
     """模块库 manifest 摘要行（喂给 LLM 的可用模块清单）。
@@ -611,6 +648,36 @@ class DeepSeekLLM:
             json_mode=True,
         )
         return parse_validation_result(content)
+
+    def reference_summarize(self, material: str) -> str:
+        """配套资料（例程工程 / 说明书等）→ 中文简介草稿（文本模式，工单 02）。
+
+        素材超长截断带标注（_truncate_content，与所有嵌内容调用同款预算）。
+        """
+        return self._chat(
+            [
+                {"role": "system", "content": REFERENCE_SUMMARY_SYSTEM_PROMPT},
+                {"role": "user", "content": _truncate_content(material)},
+            ]
+        )
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        """归档判定：被剔除的业务代码是否值得归档为该赛题的参考文件（json_mode）。
+
+        返回值得归档的路径子集（可为空 = 没有文件值得归档）。输出经
+        parse_archive_judgment 严格解析（词表外 / 重复路径拒绝，畸形抛
+        LLMError——模型输出不可信，宁可大声失败也不带病进入归档流程）。
+        """
+        content = self._chat(
+            [
+                {"role": "system", "content": ARCHIVE_JUDGMENT_SYSTEM_PROMPT},
+                {"role": "user", "content": _archive_judgment_user_prompt(candidates)},
+            ],
+            json_mode=True,
+        )
+        return parse_archive_judgment(content, [c.path for c in candidates])
 
     def distill_master(
         self,
@@ -916,6 +983,37 @@ class DeepSeekLLM:
             batch_index=batch_index,
             phase=PHASE_DECIDE,
         )
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
+        """历年赛题 PDF 全文 → 拆条（年份 / 编号 / 题面全文），json_mode + 严格解析。
+
+        拆条输出是草稿：用户逐条校对（改年份 / 题号 / 题面）后经
+        topic_library.confirm_topics 确认入库。PDF 全文超长截断（带标注），
+        模型只拆所见部分、不脑补缺失（TRUNCATION_NOTICE）。
+        """
+        content = self._chat(
+            [
+                {"role": "system", "content": TOPIC_SPLIT_SYSTEM_PROMPT},
+                {"role": "user", "content": _topic_split_user_prompt(pdf_text)},
+            ],
+            json_mode=True,
+        )
+        return parse_topic_split(content)
+
+    def topic_extract_number(self, text: str) -> str | None:
+        """从文本提取赛题编号（如 "2026C"）；不是赛题文本返回 None。
+
+        与编号解析服务配套（topic_library.resolve_number 做确定性查库）：
+        粘贴题面自动识别编号时走这里，AI 提取出的编号仍以查库结果为准。
+        """
+        content = self._chat(
+            [
+                {"role": "system", "content": TOPIC_NUMBER_SYSTEM_PROMPT},
+                {"role": "user", "content": _topic_number_user_prompt(text)},
+            ],
+            json_mode=True,
+        )
+        return parse_topic_number(content)
 
     def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
@@ -1229,6 +1327,50 @@ def _distill_user_prompt(
     return "\n".join(lines)
 
 
+def parse_archive_judgment(content: str, paths: Sequence[str]) -> tuple[str, ...]:
+    """把模型返回的归档判定 JSON 解析校验为值得归档的路径列表。
+
+    路径词表约束（未知路径 / 重复路径拒绝）与 parse_module_selection 同款——
+    模型输出不可信，宁可大声失败也不要带病进入归档流程。空列表合法（没有
+    文件值得归档），由调用方决定如何呈现。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("archive"), list):
+        raise LLMError("模型输出缺少 archive 数组")
+
+    known = set(paths)
+    result: list[str] = []
+    for index, item in enumerate(data["archive"]):
+        if not isinstance(item, str) or not item:
+            raise LLMError(f"archive[{index}] 必须是字符串")
+        if item not in known:
+            raise LLMError(f"模型判定归档了素材外的路径：{item}")
+        if item in result:
+            raise LLMError(f"模型重复判定归档：{item}")
+        result.append(item)
+    return tuple(result)
+
+
+def _archive_judgment_user_prompt(
+    candidates: Sequence[ReferenceCandidate],
+) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    lines = ["待判断是否值得归档的文件（已被判定剔除出母版，附剔除理由）："]
+    for candidate in candidates:
+        lines.append(
+            f"- {candidate.path}（理由：{candidate.reason}）：\n"
+            f"```\n{_truncate_content(candidate.content)}\n```"
+        )
+    lines.append(
+        "只返回 json 格式的 JSON 对象："
+        '{"archive": ["值得归档的路径", ...]}'
+    )
+    return "\n".join(lines)
+
+
 def _validation_user_prompt(description: str, code: str) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     return (
@@ -1267,3 +1409,157 @@ def _summary_slugs(manifest_summaries: Sequence[str]) -> list[str]:
         if slug:
             slugs.append(slug)
     return slugs
+
+
+# ---------------------------------------------------------------------------
+# 赛题库协议（工单 01）：长 PDF 拆条（年份 / 编号 / 题面全文）+ 编号提取
+#
+# 编号 = 年份（4 位数字）+ 题号（字母），合称 key（如 "2026C"）。拆条与编号
+# 提取都是 json_mode 调用，输出走严格解析（parse_topic_split /
+# parse_topic_number）——畸形输出抛 LLMError，宁可不放行也不带病进校对 /
+# 入库流程（与模块简介校验同款：宁可大声失败也不带病入库）。
+# ---------------------------------------------------------------------------
+
+# 赛题编号格式（key 的唯一出处）：4 位年份 + 单个大写字母题号（电赛官方
+# 题号形态，如 2026C）；入库目录名与编号解析的查找键都按它校验（非法编号 =
+# 路径穿越风险，入口拦截）。大小写收紧为单一大写字母：小写 / 多字母编号在
+# 大小写不敏感的文件系统（Windows）上会与既有条目撞目录，跨平台行为不一致
+# ——宁可拆条大声失败，也不让用户在校对页见到无法入库的编号。
+TOPIC_KEY_PATTERN = re.compile(r"^(\d{4})([A-Z])$")
+
+
+def validate_topic_key(key: str) -> str | None:
+    """赛题编号格式校验（TOPIC_KEY_PATTERN 的配套文案，唯一出处）。
+
+    合法返回 None，非法返回中文错误说明。拆条解析 / 编号提取 / 入库校验
+    共用——文案只在此一处，改格式只动这里（与 TRUNCATION_NOTICE 同款
+    单源约定，避免各层文案漂移）。
+    """
+    if not TOPIC_KEY_PATTERN.fullmatch(key):
+        return (
+            f"赛题编号格式非法：{key!r}"
+            "（须为 4 位年份 + 单个大写字母题号，如 2026C）"
+        )
+    return None
+
+
+TOPIC_SPLIT_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）赛题整理助手。用户会给你一份历年赛题 PDF 的全文"
+    "（过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）。把其中每一道"
+    "赛题拆成一条：year = 年份（4 位数字，如 2026）、number = 题号（单个"
+    "大写字母，如 C）、problem_text = 题面全文（原样保留，不做摘要、不改写）。"
+    "只输出 JSON 对象。"
+)
+
+TOPIC_NUMBER_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）赛题整理助手。判断给定文本是否来自某道具体赛题"
+    "（题面原文）：是则提取它的编号（年份 + 单个大写字母题号，如 2026C），"
+    "否则 key 给空串。只输出 JSON 对象：{\"key\": \"2026C\"} 或 {\"key\": \"\"}。"
+)
+
+
+@dataclass(frozen=True)
+class TopicDraft:
+    """AI 拆条产物：一道赛题的年份 / 题号 / 题面全文（用户确认前的草稿）。
+
+    key = 年份 + 题号（如 "2026C"），编号解析的查找键与入库目录名。
+    """
+
+    year: str
+    number: str
+    problem_text: str
+
+    @property
+    def key(self) -> str:
+        return f"{self.year}{self.number}"
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "key": self.key,
+            "year": self.year,
+            "number": self.number,
+            "problem_text": self.problem_text,
+        }
+
+
+def parse_topic_split(content: str) -> tuple[TopicDraft, ...]:
+    """把模型返回的拆条 JSON 解析校验为 TopicDraft 列表。
+
+    任何结构 / 内容问题（非 JSON、缺 topics 数组、条目缺字段、年份 / 题号
+    格式非法、题面为空、编号重复）都抛 LLMError——模型输出不可信，宁可大声
+    失败也不带病进入用户校对 / 入库流程。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("topics"), list):
+        raise LLMError("模型输出缺少 topics 数组")
+    if not data["topics"]:
+        # 一份真实真题 PDF 不可能零赛题：空结果 = 模型读错 / 素材不是真题，
+        # 大声失败比让用户面对空校对页更可操作（与"宁可大声失败"同哲学）
+        raise LLMError("模型没有拆出任何赛题（PDF 可能不含赛题，或文本抽取失败）")
+    drafts: list[TopicDraft] = []
+    seen: set[str] = set()
+    for index, item in enumerate(data["topics"]):
+        if not isinstance(item, dict):
+            raise LLMError(f"topics[{index}] 必须是对象")
+        year = item.get("year")
+        number = item.get("number")
+        problem_text = item.get("problem_text")
+        if not isinstance(year, str) or not year:
+            raise LLMError(f"topics[{index}] 缺 year")
+        if not isinstance(number, str) or not number:
+            raise LLMError(f"topics[{index}] 缺 number")
+        if not isinstance(problem_text, str) or not problem_text.strip():
+            raise LLMError(f"topics[{index}] 缺题面或题面为空")
+        draft = TopicDraft(year=year, number=number, problem_text=problem_text)
+        message = validate_topic_key(draft.key)
+        if message:
+            raise LLMError(f"topics[{index}] {message}")
+        if draft.key in seen:
+            raise LLMError(f"模型重复拆出同一编号：{draft.key}")
+        seen.add(draft.key)
+        drafts.append(draft)
+    return tuple(drafts)
+
+
+def parse_topic_number(content: str) -> str | None:
+    """把模型返回的编号提取 JSON 解析校验为 key（无编号返回 None）。
+
+    任何结构 / 内容问题（非 JSON、缺 key、key 格式非法）都抛 LLMError。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict):
+        raise LLMError("编号提取结果必须是 JSON 对象")
+    key = data.get("key", "")
+    if not isinstance(key, str):
+        raise LLMError("编号提取结果的 key 必须是字符串")
+    if not key:
+        return None
+    message = validate_topic_key(key)
+    if message:
+        raise LLMError(message)
+    return key
+
+
+def _topic_split_user_prompt(pdf_text: str) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    return (
+        "历年赛题 PDF 全文：\n"
+        + _truncate_content(pdf_text)
+        + "\n\n只返回 json 格式的 JSON 对象："
+        '{"topics": [{"year": "2026", "number": "C", "problem_text": "题面全文"}]}'
+    )
+
+
+def _topic_number_user_prompt(text: str) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    return (
+        "文本：\n"
+        + _truncate_content(text)
+        + "\n\n只返回 json 格式的 JSON 对象：{\"key\": \"2026C\"} 或 {\"key\": \"\"}"
+    )
