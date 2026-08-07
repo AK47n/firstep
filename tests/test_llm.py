@@ -4,7 +4,7 @@
 """
 
 import json
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 
@@ -26,6 +26,7 @@ from contest_generator.llm import (
     JudgmentFile,
     LLMError,
     MAX_REQUEST_BYTES,
+    ModuleSelection,
     MAX_SUMMARY_BATCH_CHARS,
     PHASE_DECIDE,
     PHASE_SUMMARY,
@@ -37,6 +38,7 @@ from contest_generator.llm import (
     _distill_user_prompt,
     _judgment_batches,
     _summarize_user_prompt,
+    _summary_slugs,
     _truncate_content,
     _validation_user_prompt,
     build_manifest_summaries,
@@ -52,7 +54,7 @@ from contest_generator.report import (
     FileDecision,
     ReportError,
 )
-from contest_generator.manifest import ModuleManifest
+from contest_generator.manifest import ModuleManifest, PlatformEntry
 from tests.fakes import FakeTransport
 
 SELECTION_JSON = json.dumps(
@@ -65,8 +67,21 @@ def _api_response(content: str) -> str:
     return json.dumps({"choices": [{"message": {"content": content}}]})
 
 
-def _manifest(slug: str, description: str, deps: tuple[str, ...] = ()) -> ModuleManifest:
-    return ModuleManifest(slug=slug, description=description, dependencies=deps)
+def _manifest(
+    slug: str,
+    description: str,
+    deps: tuple[str, ...] = (),
+    kits: tuple[str, ...] = (),
+) -> ModuleManifest:
+    """构造 manifest：kits 每个元素一个平台条目（平台名 p0/p1/…，条目的 kit 字段）。
+    kit 为空串 = 存量平台条目无套件身份（摘要行不显示套件段）。"""
+    platforms = {
+        f"p{index}": PlatformEntry(files=("a.c",), kit=kit)
+        for index, kit in enumerate(kits)
+    }
+    return ModuleManifest(
+        slug=slug, description=description, dependencies=deps, platforms=platforms
+    )
 
 
 def _llm(
@@ -100,8 +115,123 @@ def test_manifest_summaries_list_each_module_with_description_and_deps():
     ]
 
 
+def test_manifest_summaries_include_kit_segment_when_present():
+    manifests = [
+        _manifest("uwb", "UWB 测距模块驱动", deps=("delay",), kits=("地猛星 UWB 套件",)),
+        _manifest("oled", "OLED 屏显驱动", kits=("OLED 套件",)),
+    ]
+
+    summaries = build_manifest_summaries(manifests)
+
+    assert summaries == [
+        "- uwb: UWB 测距模块驱动（套件: 地猛星 UWB 套件; 依赖: delay）",
+        "- oled: OLED 屏显驱动（套件: OLED 套件）",
+    ]
+
+
+def test_manifest_summaries_no_kit_segment_when_kit_missing():
+    """存量平台条目无套件身份（kit 为空串）→ 套件段不显示，依赖段照旧。"""
+    manifests = [
+        _manifest("uwb", "UWB 测距模块驱动", deps=("delay",), kits=("",)),
+        _manifest("motor", "电机驱动"),
+    ]
+
+    summaries = build_manifest_summaries(manifests)
+
+    assert summaries == [
+        "- uwb: UWB 测距模块驱动（依赖: delay）",
+        "- motor: 电机驱动",
+    ]
+
+
+def test_manifest_summaries_aggregate_distinct_kits_across_platforms():
+    """多平台条目的 kit 聚合去重（保序）：AI 读到模块的全部套件身份，不重复。"""
+    manifest = _manifest(
+        "dht11",
+        "DHT11 温湿度传感器驱动",
+        deps=("delay",),
+        kits=("STM32F103C8T6 最小系统板", "地猛星 MSPM0G3507 开发板", "STM32F103C8T6 最小系统板"),
+    )
+
+    summaries = build_manifest_summaries([manifest])
+
+    assert summaries == [
+        "- dht11: DHT11 温湿度传感器驱动（套件: STM32F103C8T6 最小系统板、地猛星 MSPM0G3507 开发板; 依赖: delay）",
+    ]
+
+
 def test_manifest_summaries_empty_library_gives_empty_list():
     assert build_manifest_summaries([]) == []
+
+
+def test_summary_slugs_round_trip_with_kit_and_deps_formats():
+    """反向解析与正向格式一致：套件段 / 依赖段都在行首冒号之后，_summary_slugs
+    解析 slug 不丢、不串（工单 03 格式耦合的两处必须同步）。"""
+    manifests = [
+        _manifest("uwb", "UWB 测距模块驱动", deps=("delay",), kits=("地猛星 UWB 套件",)),
+        _manifest("oled", "OLED 屏显驱动", kits=("OLED 套件",)),
+        _manifest("delay", "软件延时", deps=("cmsis",)),
+        _manifest("motor", "电机驱动"),
+    ]
+
+    summaries = build_manifest_summaries(manifests)
+
+    assert _summary_slugs(summaries) == ["uwb", "oled", "delay", "motor"]
+
+
+def test_select_modules_receives_kit_in_summary_lines():
+    """选模块请求的清单文本带套件信息；模型按新格式回 slug 能被正常解析
+    （known_slugs 来自 _summary_slugs，反向解析与正向格式一致）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    summaries = build_manifest_summaries(
+        [
+            _manifest(
+                "dht11",
+                "DHT11 温湿度传感器驱动",
+                deps=("delay",),
+                kits=("地猛星 MSPM0G3507 开发板",),
+            )
+        ]
+    )
+
+    result = llm.select_modules("设计一个环境监测仪，测量温湿度", summaries)
+
+    _, _, payload, _ = transport.calls[0]
+    user_message = payload["messages"][1]["content"]
+    assert (
+        "- dht11: DHT11 温湿度传感器驱动"
+        "（套件: 地猛星 MSPM0G3507 开发板; 依赖: delay）" in user_message
+    )
+    assert result.modules == ("dht11",)
+
+
+def test_fake_llm_receives_manifest_summaries_with_kit():
+    """FakeLLM 断言：喂给选模块 AI 的清单文本包含套件信息——记录型假 LLM
+    （LLM 协议边界的系统边界假件）收到的清单行带套件段，AI 能据此分辨
+    "哪个套件的 UWB"、看懂简介里的赛题专用性。"""
+    class RecordingLLM:
+        def __init__(self) -> None:
+            self.received: list[tuple[str, ...]] = []
+
+        def select_modules(
+            self, problem_text: str, manifest_summaries: Sequence[str]
+        ) -> ModuleSelection:
+            self.received.append(tuple(manifest_summaries))
+            return ModuleSelection(modules=(), reasons={})
+
+    fake = RecordingLLM()
+    summaries = build_manifest_summaries(
+        [
+            _manifest("uwb", "UWB 测距模块驱动", kits=("地猛星 UWB 套件",)),
+            _manifest("oled", "OLED 屏显驱动"),
+        ]
+    )
+
+    fake.select_modules("赛题", summaries)
+
+    assert "套件: 地猛星 UWB 套件" in fake.received[0][0]
+    assert "套件" not in fake.received[0][1]  # 无 kit 的模块不显示套件段
 
 
 # ---------------------------------------------------------------------------

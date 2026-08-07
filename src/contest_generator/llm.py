@@ -477,12 +477,25 @@ class LLM(Protocol):
 def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
     """模块库 manifest 摘要行（喂给 LLM 的可用模块清单）。
 
-    行格式与 _summary_slugs 的反向解析耦合：改动格式须同步两处。
+    行格式：`- slug: description（套件: kit; 依赖: ...）`——套件段聚合各平台
+    条目的 kit（去重保序，有 kit 才显示，AI 靠它分辨"哪个套件的 UWB"）；依赖
+    段有依赖才显示。行格式与 _summary_slugs 的反向解析耦合：改动格式须同步两处。
     """
     lines = []
     for manifest in manifests:
         line = f"- {manifest.slug}: {manifest.description}"
-        if manifest.dependencies:
+        kits: list[str] = []
+        seen: set[str] = set()
+        for entry in manifest.platforms.values():
+            if entry.kit and entry.kit not in seen:
+                seen.add(entry.kit)
+                kits.append(entry.kit)
+        if kits:
+            line += f"（套件: {'、'.join(kits)}"
+            if manifest.dependencies:
+                line += f"; 依赖: {', '.join(manifest.dependencies)}"
+            line += "）"
+        elif manifest.dependencies:
             line += f"（依赖: {', '.join(manifest.dependencies)}）"
         lines.append(line)
     return lines
@@ -1232,7 +1245,11 @@ def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -
 
 
 def _summary_slugs(manifest_summaries: Sequence[str]) -> list[str]:
-    """从摘要行提取 slug（行首 "- " 后的第一个冒号前）。"""
+    """从摘要行提取 slug（行首 "- " 后的第一个冒号前）。
+
+    与 build_manifest_summaries 的行格式耦合：套件 / 依赖段都在冒号之后、不
+    影响本解析；改动格式须同步两处（选模块结果的 known_slugs 靠它反解析）。
+    """
     slugs = []
     for line in manifest_summaries:
         if not line.startswith("- "):
