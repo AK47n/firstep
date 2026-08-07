@@ -49,9 +49,23 @@ SKELETON_SYSTEM_PROMPT = (
 
 SUMMARY_SYSTEM_PROMPT = "你是嵌入式 C 工程师。用中文一句话总结这段代码的功能，作为模块库简介。"
 
+# 专用性检查要求的唯一表述：系统提示词与用户提示词在同一个 API 调用里都要说
+# 这件事（ticket 06 双端漂移教训：判定范围曾只改系统提示词、漏改用户提示词，
+# 模型按用户消息跳过公共文件当场失败）。此常量是唯一出处：改专用性检查只动
+# 这里（契约测试 test_llm 双端断言）。
+VALIDATION_SPECIFICITY_RULE = (
+    "同时检查专用性声明：简介声称\"XX 题专用\"时，代码必须有对应的赛题专用逻辑"
+    "（题目参数、判定流程、赛题数据结构等）。简介称专用但代码是通用驱动（无任何"
+    "赛题相关逻辑）→ 判为不一致，issues 指出具体差异；代码明显是赛题专用逻辑"
+    "（绑定具体赛题）而简介未标注\"XX 题专用\" → 同样判为不一致，issues 提示"
+    "在简介中补充专用性标注。"
+)
+
 VALIDATION_SYSTEM_PROMPT = (
     "你是嵌入式 C 工程师。判断给定的模块简介与实际代码是否一致：简介描述的功能、"
-    "接口、行为是否与代码相符。不一致时用中文指出具体差异。只输出 JSON 对象。"
+    "接口、行为是否与代码相符。"
+    + VALIDATION_SPECIFICITY_RULE
+    + "不一致时用中文指出具体差异。只输出 JSON 对象。"
 )
 
 JUDGMENT_SUMMARY_SYSTEM_PROMPT = (
@@ -1198,7 +1212,8 @@ def _validation_user_prompt(description: str, code: str) -> str:
     return (
         f"模块简介：\n{_truncate_content(description)}\n\n实际代码：\n"
         f"```c\n{_truncate_content(code)}\n```\n\n"
-        '判断简介与实际代码是否一致，只返回 json 格式的 JSON 对象：'
+        + VALIDATION_SPECIFICITY_RULE
+        + "\n判断简介与实际代码是否一致，只返回 json 格式的 JSON 对象："
         '{"consistent": true/false, "issues": "不一致时用中文指出差异，一致时为空字符串"}'
     )
 

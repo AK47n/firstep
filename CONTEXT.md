@@ -8,10 +8,13 @@
 |---|---|---|
 | 赛题 | 粘贴或上传（PDF / .docx / .txt / .md）的竞赛题目原文 | extraction.py → str，贯穿所有 LLM prompt |
 | 平台 | `stm32`（STM32F103C8T6 / Keil5）、`mspm0`（地猛星 MSPM0G3507 / CCS） | 词表在 platforms.py；行为在 patchers.py / master.py / webapp.py |
-| 模块 | 可复用 .c/.h 单元 + 机器可读 manifest；库目录即数据库 | manifest.py（模型）/ library.py（库操作） |
-| manifest | 模块目录下 manifest.json：slug、简介、依赖、平台条目（文件 / 验证状态 / 硬件绑定 / 备注） | manifest.py |
-| 依赖 | manifest 声明的模块依赖，生成前递归展开（依赖先于使用者） | selection.py |
-| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录）；元数据在母版目录外的平级 json | master.py |
+| 模块 | 可复用 .c/.h 单元 + 机器可读 manifest；库目录即数据库；与功能库相对——模块承载外设/赛题功能，功能库是母版自带底层库 | manifest.py（模型）/ library.py（库操作） |
+| manifest | 模块目录下 manifest.json：slug、简介、依赖、平台条目（文件 / 验证状态 / 硬件绑定 / 备注 / 硬件身份字段 kit + source_url） | manifest.py |
+| 简介 | manifest.description，判据三要素：① 与代码一致（AI 校验）；② 硬件身份可确认——套件型号（kit）与购买链接（source_url），平台条目字段、新录入必填、URL 格式校验、由人补填；③ 专用性——逻辑绑定具体赛题的模块必须标注"XX 题专用"（如 lock_control / zone = 2026C 数字钥匙题专用，pid = 巡线题专用） | library.py / llm.py |
+| 依赖 | manifest 声明的模块依赖，生成前递归展开（依赖先于使用者）；上层依赖下层；不得声明对功能库的依赖（母版必有，声明反而使解析器找不到而报错） | selection.py |
+| 可选配套 | 模块的可裁剪组件：如 filter 之于 uwb_uart——代码层现状为必需依赖（uwb_uart.c 写死 include 与滤波调用），可选化（条件编译 + 生成器按选中定义宏）已立项未实现；普适 filter / 普适巡线逻辑为将来方向 | （未实现） |
+| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库）；元数据在母版目录外的平级 json | master.py |
+| 功能库 | 母版自带的底层库（stm32 母版 = 逐飞 ml_*：I2C/UART/PWM/GPIO/OLED 等，headfile.h 聚合），先于一切模块存在、生成时随母版进工程；不属于模块库 | masters/stm32/ml_libs |
 | 提炼 | 导入多旧工程 → 对比 → AI 判定 → 报告（保留 / 整合 / 剔除 + 残留清单）→ 确认 → 入库；判定范围 = 公共 + 冲突 + 独有全部逐个判定，唯一判据：读内容判断是否通用、是否基础建设必需，不看重复次数 / 出现范围；确认是一条事务（confirm_distillation） | master.py + llm.py |
 | 报告模型 | 提炼报告的判定条目与容器：形状 / 序列化 / 不变量（merge 必须带整合产物全文与说明；main_c_preview 与 uvprojx_preview 由平台重推导）唯一所有者；报告平台必须与工程平台一致（平台交叉校验） | report.py |
 | 模板 main.c | 母版自带的最小系统板空 main（时钟初始化 + while(1) 空循环 + TODO 区），确定性模板、非 AI 生成；生成时被按赛题的"骨架"覆盖 | master.py |
