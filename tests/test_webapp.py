@@ -492,6 +492,9 @@ def test_modules_list_returns_all(client):
     dht11 = next(m for m in resp.json() if m["slug"] == "dht11")
     assert dht11["dependencies"] == ["delay"]
     assert set(dht11["platforms"]) == {PLATFORM_STM32, PLATFORM_MSPM0}
+    # 列表 API 返回新字段：存量无身份字段的条目以空值呈现（迁移不打断）
+    assert dht11["platforms"][PLATFORM_STM32]["kit"] == ""
+    assert dht11["platforms"][PLATFORM_STM32]["source_url"] == ""
 
 
 def test_add_module_validates_then_stores(client):
@@ -507,6 +510,8 @@ def test_add_module_validates_then_stores(client):
             },
             "dependencies": ["delay"],
             "notes": "接 PA0",
+            "kit": "STM32F103C8T6 最小系统板",
+            "source_url": "https://item.jd.com/1000123456.html",
         },
     )
 
@@ -516,6 +521,12 @@ def test_add_module_validates_then_stores(client):
     stored = next(m for m in listed if m["slug"] == "ultrasonic")
     assert stored["dependencies"] == ["delay"]
     assert stored["platforms"][PLATFORM_STM32]["notes"] == "接 PA0"
+    # 身份字段透传入库，列表 API 返回新字段
+    assert stored["platforms"][PLATFORM_STM32]["kit"] == "STM32F103C8T6 最小系统板"
+    assert (
+        stored["platforms"][PLATFORM_STM32]["source_url"]
+        == "https://item.jd.com/1000123456.html"
+    )
 
 
 def test_add_module_drafts_description_when_empty(client):
@@ -545,6 +556,8 @@ def test_add_module_rejects_inconsistent_description(client, context):
             "platform": PLATFORM_STM32,
             "description": "与代码不符的简介",
             "files": {"ultrasonic.c": "float distance(void);\n"},
+            "kit": "STM32F103C8T6 最小系统板",
+            "source_url": "https://item.jd.com/1000123456.html",
         },
     )
 
@@ -587,11 +600,74 @@ def test_module_description_update_and_delete(client):
 def test_module_add_platform_files(client):
     resp = client.post(
         "/api/modules/oled/platform-files",
-        json={"platform": PLATFORM_MSPM0, "files": {"mspm0/src/oled.c": "void oled_init(void);\n"}},
+        json={
+            "platform": PLATFORM_MSPM0,
+            "files": {"mspm0/src/oled.c": "void oled_init(void);\n"},
+            "kit": "地猛星 MSPM0G3507 开发板",
+            "source_url": "https://item.jd.com/6543210001.html",
+        },
     )
 
     assert resp.status_code == 200
     assert PLATFORM_MSPM0 in resp.json()["platforms"]
+    # 新增平台版本透传身份字段
+    assert resp.json()["platforms"][PLATFORM_MSPM0]["kit"] == "地猛星 MSPM0G3507 开发板"
+    assert (
+        resp.json()["platforms"][PLATFORM_MSPM0]["source_url"]
+        == "https://item.jd.com/6543210001.html"
+    )
+
+
+def test_add_module_rejects_missing_identity_fields(client):
+    resp = client.post(
+        "/api/modules",
+        json={
+            "slug": "ultrasonic",
+            "platform": PLATFORM_STM32,
+            "description": "超声波测距模块",
+            "files": {"ultrasonic.c": "float distance(void);\n"},
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "kit" in resp.json()["detail"]
+    assert "ultrasonic" not in [m["slug"] for m in client.get("/api/modules").json()]
+
+
+def test_add_module_rejects_invalid_source_url(client):
+    resp = client.post(
+        "/api/modules",
+        json={
+            "slug": "ultrasonic",
+            "platform": PLATFORM_STM32,
+            "description": "超声波测距模块",
+            "files": {"ultrasonic.c": "float distance(void);\n"},
+            "kit": "STM32F103C8T6 最小系统板",
+            "source_url": "item.jd.com/1000.html",  # 无协议
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "格式非法" in resp.json()["detail"]
+    assert "ultrasonic" not in [m["slug"] for m in client.get("/api/modules").json()]
+
+
+def test_module_add_platform_files_rejects_missing_identity(client, context):
+    resp = client.post(
+        "/api/modules/oled/platform-files",
+        json={
+            "platform": PLATFORM_MSPM0,
+            "files": {"mspm0/src/oled.c": "void oled_init(void);\n"},
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "kit" in resp.json()["detail"]
+    # 拒绝后无残留：新平台版本的文件与 manifest 条目都不落盘
+    library_dir = context[0].config.module_library_dir
+    assert not (library_dir / "oled" / "mspm0" / "src" / "oled.c").exists()
+    listed = next(m for m in client.get("/api/modules").json() if m["slug"] == "oled")
+    assert PLATFORM_MSPM0 not in listed["platforms"]
 
 
 # ---------------------------------------------------------------------------

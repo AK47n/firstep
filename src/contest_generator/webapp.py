@@ -218,6 +218,16 @@ def _require_flag(payload: dict, key: str, *, default: bool = False) -> bool:
     return value
 
 
+def _optional_str(payload: dict, key: str) -> str:
+    """可选字符串：缺省 / null → 空串；类型非法抛 400（勿让 null 变成 'None'）。"""
+    value = payload.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise HTTPException(400, f"{key} 必须是字符串")
+    return value.strip()
+
+
 def _mask_api_key(api_key: str) -> str:
     """API key 掩码：只露前 4 位（PUT 收到掩码形态视为用户没改 key）。"""
     if not api_key:
@@ -411,6 +421,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 hardware_bound=_require_flag(payload, "hardware_bound"),
                 verified=_require_flag(payload, "verified"),
                 notes=str(payload.get("notes", "")),
+                # 硬件身份字段透传（必填 / URL 格式校验在核心层，缺省走 LibraryError）
+                kit=_optional_str(payload, "kit"),
+                source_url=_optional_str(payload, "source_url"),
             )
             return manifest.to_dict()
         except (LibraryError, LLMError) as exc:
@@ -436,7 +449,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
         try:
             manifest = add_platform_files(
-                _library_dir(context), slug, platform, files
+                _library_dir(context),
+                slug,
+                platform,
+                files,
+                kit=_optional_str(payload, "kit"),
+                source_url=_optional_str(payload, "source_url"),
             )
             return manifest.to_dict()
         except (LibraryError, LLMError) as exc:

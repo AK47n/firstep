@@ -30,9 +30,14 @@ DHT11_FILES = {
     "stm32/src/dht11.c": "float dht11_read(void) { return 25.0; }\n",
 }
 
+# 硬件身份字段（工单 01）：新录入的平台条目必填
+KIT_STM32 = "STM32F103C8T6 最小系统板"
+SOURCE_URL_STM32 = "https://item.jd.com/1000123456.html"
+SOURCE_URL_MSPM0 = "https://item.jd.com/6543210001.html"
+
 
 def _add_bmp180(library, files: dict[str, str] | None = None) -> None:
-    """在库中入库一个 bmp180 模块（stm32 版本）。"""
+    """在库中入库一个 bmp180 模块（stm32 版本，带硬件身份字段）。"""
     add_module(
         FakeLLM(),
         library,
@@ -40,6 +45,8 @@ def _add_bmp180(library, files: dict[str, str] | None = None) -> None:
         platform="stm32",
         description="BMP180 气压计驱动",
         files=files or {"bmp180.c": "int bmp180_read(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
 
@@ -245,6 +252,8 @@ def test_add_flow_validates_user_edited_description_after_draft(fake_module_libr
         platform="stm32",
         description=edited,
         files=DHT11_FILES,
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
     validated_description, _ = llm.validation_calls[0]
@@ -266,6 +275,8 @@ def test_add_module_stores_module_with_consistent_description(fake_module_librar
         files=DHT11_FILES,
         verified=True,
         notes="PA0",
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
     assert manifest.slug == "bmp180"
@@ -273,6 +284,8 @@ def test_add_module_stores_module_with_consistent_description(fake_module_librar
     assert entry.files == ("inc/dht11.h", "stm32/src/dht11.c")
     assert entry.verified is True
     assert entry.notes == "PA0"
+    assert entry.kit == KIT_STM32
+    assert entry.source_url == SOURCE_URL_STM32
     module_dir = fake_module_library / "bmp180"
     assert (module_dir / "inc" / "dht11.h").read_text(encoding="utf-8").startswith(
         "#pragma once"
@@ -281,6 +294,9 @@ def test_add_module_stores_module_with_consistent_description(fake_module_librar
     on_disk = json.loads((module_dir / MANIFEST_FILENAME).read_text(encoding="utf-8"))
     assert on_disk["description"] == "BMP180 气压计驱动"
     assert on_disk["dependencies"] == []
+    # 身份字段落盘包含新字段
+    assert on_disk["platforms"]["stm32"]["kit"] == KIT_STM32
+    assert on_disk["platforms"]["stm32"]["source_url"] == SOURCE_URL_STM32
 
 
 def test_add_module_records_dependencies(fake_module_library):
@@ -292,6 +308,8 @@ def test_add_module_records_dependencies(fake_module_library):
         description="BMP180 气压计驱动",
         dependencies=("delay",),
         files={"bmp180.c": "int bmp180_read(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
     assert manifest.dependencies == ("delay",)
@@ -313,10 +331,71 @@ def test_add_module_inconsistent_validation_raises_and_leaves_no_trace(
             platform="stm32",
             description="WIFI 驱动",
             files={"wifi.c": "int wifi_init(void);\n"},
+            kit=KIT_STM32,
+            source_url=SOURCE_URL_STM32,
         )
 
     assert not (fake_module_library / "wifi").exists()
     assert llm.validation_calls  # 校验确实被调用后才拒绝
+
+
+def test_add_module_rejects_specificity_claim_unsupported_by_code(
+    fake_module_library,
+):
+    """专用性路径 1：简介声称"XX 题专用"但代码是通用驱动 → 校验拒绝，差异说明
+    透传给出（AI 指出的具体差异进 LibraryError，用户据此修正）。"""
+    llm = FakeLLM(
+        validation=ValidationResult(
+            consistent=False,
+            issues="简介声称 2026C 题专用，但代码是通用 GPIO 驱动，无任何赛题逻辑",
+        )
+    )
+
+    with pytest.raises(LibraryError, match="2026C 题专用.*通用 GPIO 驱动"):
+        add_module(
+            llm,
+            fake_module_library,
+            slug="lock",
+            platform="stm32",
+            description="2026C 数字钥匙题专用锁逻辑",
+            files={"lock.c": "void lock_init(void);\n"},
+            kit=KIT_STM32,
+            source_url=SOURCE_URL_STM32,
+        )
+
+    assert not (fake_module_library / "lock").exists()
+    description, code = llm.validation_calls[0]
+    assert "2026C 数字钥匙题专用锁逻辑" in description  # 校验读的是用户提交的简介
+    assert "void lock_init(void);" in code  # 与校验用同一份代码拼装
+
+
+def test_add_module_rejects_specific_code_missing_annotation(fake_module_library):
+    """专用性路径 2：代码明显是赛题专用逻辑但简介未标注 → 校验拒绝，issues 提示
+    补充专用性标注（简介不完整同样是"与代码不一致"，拒绝入库直到补上标注）。"""
+    llm = FakeLLM(
+        validation=ValidationResult(
+            consistent=False,
+            issues="代码是 2026C 数字钥匙题的锁逻辑，简介未标注专用性，"
+            "请在简介中补充'2026C 题专用'标注",
+        )
+    )
+
+    with pytest.raises(LibraryError, match="补充.*2026C 题专用.*标注"):
+        add_module(
+            llm,
+            fake_module_library,
+            slug="lock",
+            platform="stm32",
+            description="通用锁逻辑",
+            files={"lock.c": "/* 2026C 数字钥匙题判定 */\nvoid lock_init(void);\n"},
+            kit=KIT_STM32,
+            source_url=SOURCE_URL_STM32,
+        )
+
+    assert not (fake_module_library / "lock").exists()
+    description, code = llm.validation_calls[0]
+    assert description == "通用锁逻辑"
+    assert "2026C 数字钥匙题判定" in code
 
 
 def test_add_module_duplicate_slug_raises(fake_module_library):
@@ -406,12 +485,17 @@ def test_add_platform_files_creates_new_platform_entry(fake_module_library):
         "bmp180",
         "mspm0",
         {"mspm0/bmp180.c": "int bmp180_read(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_MSPM0,
     )
 
     assert set(manifest.platforms) == {"stm32", "mspm0"}
     assert (fake_module_library / "bmp180" / "mspm0" / "bmp180.c").read_text(
         encoding="utf-8"
     ).startswith("int bmp180_read")
+    # 新增平台条目带身份字段落盘
+    assert manifest.platforms["mspm0"].kit == KIT_STM32
+    assert manifest.platforms["mspm0"].source_url == SOURCE_URL_MSPM0
     # 既有平台条目原样保留
     assert manifest.platforms["stm32"].files == ("bmp180.c",)
 
@@ -435,6 +519,8 @@ def test_add_platform_files_reuses_identical_shared_file(fake_module_library):
         platform="stm32",
         description="BMP180 气压计驱动",
         files={"inc/bmp180.h": header, "stm32/bmp180.c": "int bmp180_read(void) { return 0; }\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
     manifest = add_platform_files(
@@ -442,6 +528,8 @@ def test_add_platform_files_reuses_identical_shared_file(fake_module_library):
         "bmp180",
         "mspm0",
         {"inc/bmp180.h": header, "mspm0/bmp180.c": "int bmp180_read(void) { return 1; }\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_MSPM0,
     )
 
     # 双平台共用同一头文件：只写一份，两个条目都引用
@@ -461,6 +549,8 @@ def test_add_platform_files_rejects_conflicting_content_at_existing_path(
         platform="stm32",
         description="BMP180 气压计驱动",
         files={"inc/bmp180.h": "#pragma once\nint bmp180_read(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
     with pytest.raises(LibraryError, match="内容不一致"):
@@ -469,6 +559,8 @@ def test_add_platform_files_rejects_conflicting_content_at_existing_path(
             "bmp180",
             "mspm0",
             {"inc/bmp180.h": "#pragma once\nfloat bmp180_read(void);\n"},
+            kit=KIT_STM32,
+            source_url=SOURCE_URL_MSPM0,
         )
 
 
@@ -481,6 +573,8 @@ def test_add_platform_files_conflict_leaves_no_orphan_files(fake_module_library)
         platform="stm32",
         description="BMP180 气压计驱动",
         files={"inc/bmp180.h": "#pragma once\nint bmp180_read(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
     with pytest.raises(LibraryError, match="内容不一致"):
@@ -492,6 +586,8 @@ def test_add_platform_files_conflict_leaves_no_orphan_files(fake_module_library)
                 "mspm0/bmp180.c": "int bmp180_read(void);\n",
                 "inc/bmp180.h": "DIFFERENT CONTENT\n",
             },
+            kit=KIT_STM32,
+            source_url=SOURCE_URL_MSPM0,
         )
 
     assert not (fake_module_library / "bmp180" / "mspm0" / "bmp180.c").exists()
@@ -514,6 +610,8 @@ def test_remove_platform_files_removes_files_then_drops_empty_entry(
         platform="stm32",
         description="BMP180 气压计驱动",
         files={"bmp180.c": "int bmp180_read(void);\n", "bmp180.h": "#pragma once\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
 
     manifest = remove_platform_files(fake_module_library, "bmp180", "stm32", ["bmp180.c"])
@@ -539,12 +637,16 @@ def test_remove_platform_files_keeps_file_shared_by_other_platform(
         platform="stm32",
         description="BMP180 气压计驱动",
         files={"inc/bmp180.h": header, "stm32/bmp180.c": "int bmp180_read(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
     )
     add_platform_files(
         fake_module_library,
         "bmp180",
         "mspm0",
         {"inc/bmp180.h": header, "mspm0/bmp180.c": "int bmp180_read(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_MSPM0,
     )
 
     manifest = remove_platform_files(
@@ -576,3 +678,227 @@ def test_remove_platform_files_rejects_empty_filenames(fake_module_library):
 
     with pytest.raises(LibraryError, match="至少"):
         remove_platform_files(fake_module_library, "bmp180", "stm32", [])
+
+
+# ---------------------------------------------------------------------------
+# 硬件身份字段（工单 01）：新录入强制，校验失败在落盘前
+# ---------------------------------------------------------------------------
+
+
+def test_add_module_requires_kit(fake_module_library):
+    with pytest.raises(LibraryError, match="kit"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="bmp180",
+            platform="stm32",
+            description="BMP180 气压计驱动",
+            files={"bmp180.c": "int bmp180_read(void);\n"},
+            kit="",
+            source_url=SOURCE_URL_STM32,
+        )
+
+    assert not (fake_module_library / "bmp180").exists()  # 拒绝不落盘
+
+
+def test_add_module_requires_source_url(fake_module_library):
+    with pytest.raises(LibraryError, match="source_url"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="bmp180",
+            platform="stm32",
+            description="BMP180 气压计驱动",
+            files={"bmp180.c": "int bmp180_read(void);\n"},
+            kit=KIT_STM32,
+            source_url="",
+        )
+
+    assert not (fake_module_library / "bmp180").exists()  # 拒绝不落盘
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "item.jd.com/1000.html",  # 无协议
+        "https://",  # 无主机
+        "ftp://",  # 无主机
+        "不是链接",  # 无协议无主机
+        "https://a b.com",  # 主机含空白
+    ],
+)
+def test_add_module_rejects_invalid_source_url(fake_module_library, bad_url):
+    with pytest.raises(LibraryError, match="格式非法"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="bmp180",
+            platform="stm32",
+            description="BMP180 气压计驱动",
+            files={"bmp180.c": "int bmp180_read(void);\n"},
+            kit=KIT_STM32,
+            source_url=bad_url,
+        )
+
+    assert not (fake_module_library / "bmp180").exists()  # 拒绝不落盘
+
+
+def test_add_module_strips_identity_whitespace(fake_module_library):
+    manifest = add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="bmp180",
+        platform="stm32",
+        description="BMP180 气压计驱动",
+        files={"bmp180.c": "int bmp180_read(void);\n"},
+        kit=f"  {KIT_STM32}  ",
+        source_url=f"  {SOURCE_URL_STM32}  ",
+    )
+
+    assert manifest.platforms["stm32"].kit == KIT_STM32
+    assert manifest.platforms["stm32"].source_url == SOURCE_URL_STM32
+
+
+def test_add_platform_files_requires_identity_for_new_platform(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    # 缺 kit：拒绝并说明
+    with pytest.raises(LibraryError, match="kit"):
+        add_platform_files(
+            fake_module_library,
+            "bmp180",
+            "mspm0",
+            {"mspm0/bmp180.c": "int bmp180_read(void);\n"},
+            source_url=SOURCE_URL_MSPM0,
+        )
+    # 缺 source_url：拒绝并说明
+    with pytest.raises(LibraryError, match="source_url"):
+        add_platform_files(
+            fake_module_library,
+            "bmp180",
+            "mspm0",
+            {"mspm0/bmp180.c": "int bmp180_read(void);\n"},
+            kit=KIT_STM32,
+        )
+
+    # 拒绝后无残留：文件不落盘、manifest 条目不新增
+    assert not (fake_module_library / "bmp180" / "mspm0" / "bmp180.c").exists()
+    assert set(get_module(fake_module_library, "bmp180").platforms) == {"stm32"}
+
+
+def test_add_platform_files_appending_keeps_existing_identity(fake_module_library):
+    """给已有平台版本追加文件不是新增条目：身份字段不强制、原值保留。"""
+    _add_bmp180(fake_module_library)
+
+    manifest = add_platform_files(
+        fake_module_library,
+        "bmp180",
+        "stm32",
+        {"bmp180.h": "#pragma once\n"},
+    )
+
+    assert manifest.platforms["stm32"].files == ("bmp180.c", "bmp180.h")
+    assert manifest.platforms["stm32"].kit == KIT_STM32
+    assert manifest.platforms["stm32"].source_url == SOURCE_URL_STM32
+
+
+def test_add_platform_files_backfills_identity_on_existing_entry(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    manifest = add_platform_files(
+        fake_module_library,
+        "bmp180",
+        "stm32",
+        {"bmp180.h": "#pragma once\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
+    )
+
+    assert manifest.platforms["stm32"].kit == KIT_STM32
+    assert manifest.platforms["stm32"].source_url == SOURCE_URL_STM32
+
+
+def test_add_platform_files_rejects_invalid_backfill_identity(fake_module_library):
+    _add_bmp180(fake_module_library)
+
+    with pytest.raises(LibraryError, match="格式非法"):
+        add_platform_files(
+            fake_module_library,
+            "bmp180",
+            "stm32",
+            {"bmp180.h": "#pragma once\n"},
+            source_url="not-a-url",
+        )
+
+    # 校验失败在落盘前：文件没写、既有身份字段保持原样
+    assert not (fake_module_library / "bmp180" / "bmp180.h").exists()
+    assert (
+        get_module(fake_module_library, "bmp180").platforms["stm32"].source_url
+        == SOURCE_URL_STM32
+    )
+
+
+# ---------------------------------------------------------------------------
+# 存量迁移（工单 01）：无身份字段的 manifest 照常加载 / 浏览 / 编辑
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_manifest_without_identity_loads_with_empty_fields(
+    fake_module_library,
+):
+    """假库的存量 manifest 全部没有身份字段：浏览正常，字段为空值。"""
+    dht11 = get_module(fake_module_library, "dht11")
+
+    assert dht11.platforms["stm32"].kit == ""
+    assert dht11.platforms["stm32"].source_url == ""
+    assert dht11.platforms["mspm0"].kit == ""
+    assert dht11.platforms["mspm0"].source_url == ""
+
+
+def test_save_manifest_backfills_identity_fields(fake_module_library):
+    """存量条目经结构编辑路径补填身份字段：成功写回。"""
+    dht11 = get_module(fake_module_library, "dht11")
+    entry = dht11.platforms["stm32"]
+    backfilled = dataclasses.replace(
+        dht11,
+        platforms={
+            **dht11.platforms,
+            "stm32": dataclasses.replace(
+                entry, kit=KIT_STM32, source_url=SOURCE_URL_STM32
+            ),
+        },
+    )
+
+    save_manifest(fake_module_library, backfilled)
+
+    stored = get_module(fake_module_library, "dht11")
+    assert stored.platforms["stm32"].kit == KIT_STM32
+    assert stored.platforms["stm32"].source_url == SOURCE_URL_STM32
+
+
+def test_save_manifest_rejects_invalid_backfilled_source_url(fake_module_library):
+    dht11 = get_module(fake_module_library, "dht11")
+    entry = dht11.platforms["stm32"]
+    bad = dataclasses.replace(
+        dht11,
+        platforms={
+            **dht11.platforms,
+            "stm32": dataclasses.replace(entry, source_url="not-a-url"),
+        },
+    )
+
+    with pytest.raises(LibraryError, match="格式非法"):
+        save_manifest(fake_module_library, bad)
+
+    # 落盘前拒绝：磁盘上仍是原样
+    assert get_module(fake_module_library, "dht11").platforms["stm32"].source_url == ""
+
+
+def test_save_manifest_allows_identity_still_empty(fake_module_library):
+    """存量条目补填是逐步的：身份字段仍为空也能保存（只做格式校验、不强制）。"""
+    dht11 = get_module(fake_module_library, "dht11")
+
+    save_manifest(fake_module_library, dataclasses.replace(dht11, dependencies=("delay",)))
+
+    assert get_module(fake_module_library, "dht11").platforms["stm32"].kit == ""
+    assert get_module(fake_module_library, "dht11").platforms["stm32"].source_url == ""

@@ -23,6 +23,8 @@ def test_serialize_parse_roundtrip_preserves_all_fields():
                 verified=True,
                 hardware_bound=False,
                 notes="F103C8T6 PA0",
+                kit="STM32F103C8T6 最小系统板",
+                source_url="https://item.jd.com/1000123456.html",
             ),
             "mspm0": PlatformEntry(
                 files=("mspm0/src/dht11.c", "inc/dht11.h"),
@@ -34,6 +36,8 @@ def test_serialize_parse_roundtrip_preserves_all_fields():
     parsed = ModuleManifest.from_dict(manifest.to_dict())
 
     assert parsed == manifest
+    assert parsed.platforms["stm32"].kit == "STM32F103C8T6 最小系统板"
+    assert parsed.platforms["stm32"].source_url == "https://item.jd.com/1000123456.html"
 
 
 def test_load_from_module_directory(tmp_path):
@@ -191,6 +195,42 @@ def test_platform_entry_notes_must_be_string():
     }
 
     with pytest.raises(ManifestError, match="notes"):
+        ModuleManifest.from_dict(data)
+
+
+def test_legacy_entry_without_identity_fields_loads_with_defaults():
+    """存量 manifest 无 kit / source_url 字段仍能加载（迁移不打断现有库）。"""
+    data = {
+        "slug": "dht11",
+        "description": "DHT11 温湿度传感器驱动",
+        "platforms": {
+            "stm32": {"files": ["src/dht11.c"], "verified": True},
+        },
+    }
+
+    manifest = ModuleManifest.from_dict(data)
+
+    entry = manifest.platforms["stm32"]
+    assert entry.kit == ""
+    assert entry.source_url == ""
+    # 序列化后新字段也回写（空值），列表 API 形态统一
+    assert manifest.to_dict()["platforms"]["stm32"]["kit"] == ""
+    assert manifest.to_dict()["platforms"]["stm32"]["source_url"] == ""
+
+
+@pytest.mark.parametrize(
+    "key", ["kit", "source_url"],
+)
+def test_identity_fields_must_be_strings(key):
+    data = {
+        "slug": "dht11",
+        "description": "DHT11 温湿度传感器驱动",
+        "platforms": {
+            "stm32": {"files": ["src/dht11.c"], key: 123},
+        },
+    }
+
+    with pytest.raises(ManifestError, match=key):
         ModuleManifest.from_dict(data)
 
 

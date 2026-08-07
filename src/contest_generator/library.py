@@ -19,6 +19,7 @@ import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import Mapping, Sequence
+from urllib.parse import urlparse
 
 from .llm import LLM, ValidationResult
 from .manifest import (
@@ -94,6 +95,11 @@ def save_manifest(library_root: Path, manifest: ModuleManifest) -> None:
         ModuleManifest.from_dict(manifest.to_dict())
     except ManifestError as exc:
         raise LibraryError(f"manifest 不合法：{exc}") from exc
+    # 存量条目补填走结构编辑路径：身份字段只做格式校验、不强制必填
+    # （身份是事实信息，AI 判不了真假——不设 AI 一致性校验）
+    for platform, entry in manifest.platforms.items():
+        if entry.source_url:
+            _validate_source_url_format(entry.source_url, platform)
     _write_manifest(module_dir, manifest)
 
 
@@ -126,16 +132,21 @@ def add_module(
     hardware_bound: bool = False,
     verified: bool = False,
     notes: str = "",
+    kit: str = "",
+    source_url: str = "",
 ) -> ModuleManifest:
     """完整录入流程：一致性校验通过才入库；不一致抛 LibraryError 且不落盘。
 
-    校验失败时模块目录根本不会创建，绝无半成品入库。
+    校验失败时模块目录根本不会创建，绝无半成品入库。新录入的硬件身份字段
+    （套件型号 kit / 购买链接 source_url）必填且链接格式合法——由人补填、
+    AI 不猜（spec 工单 01）。
     """
     _validate_slug(slug)
     _validate_platform(platform)
     if (library_root / slug).is_dir():
         raise LibraryError(f"模块 {slug!r} 已存在")
     _validate_source_files(files)
+    _validate_identity_fields(kit, source_url)
     result = validate_description(llm, description, files)
     if not result.consistent:
         raise LibraryError(
@@ -156,6 +167,8 @@ def add_module(
                     verified=verified,
                     hardware_bound=hardware_bound,
                     notes=notes,
+                    kit=kit.strip(),
+                    source_url=source_url.strip(),
                 )
             },
         )
@@ -205,26 +218,48 @@ def add_platform_files(
     slug: str,
     platform: str,
     files: Mapping[str, str],
+    *,
+    kit: str = "",
+    source_url: str = "",
 ) -> ModuleManifest:
     """给已有模块添加某平台版本文件并更新 manifest 条目。
 
     路径已存在于模块中的文件视为共享：内容一致则复用（双平台共用同一文件），
     内容不同抛错——不允许同一路径维护两套内容。
+
+    新增平台条目强制硬件身份字段（kit / source_url 必填且链接格式合法，
+    同录入流程）；存量条目不受强制，补填只做格式校验、不设 AI 一致性校验
+    （身份是事实，AI 判不了真假）。任何校验失败都在落盘前。
     """
     manifest = get_module(library_root, slug)
     _validate_platform(platform)
     _validate_source_files(files)
+
+    entry = manifest.platforms.get(platform)
+    identity_provided = bool(kit.strip() or source_url.strip())
+    if entry is None:
+        _validate_identity_fields(kit, source_url)
+    elif identity_provided:
+        # 存量条目补填：只做格式校验、不强制必填（补填是逐步的）
+        if source_url.strip():
+            _validate_source_url_format(source_url)
+
     module_dir = library_root / slug
     _check_source_files(module_dir, files)  # 写盘前预检：任一路径冲突都不留半成品
     _write_source_files(module_dir, files)
 
-    entry = manifest.platforms.get(platform)
     if entry is None:
-        entry = PlatformEntry(files=tuple(files))
+        entry = PlatformEntry(
+            files=tuple(files),
+            kit=kit.strip(),
+            source_url=source_url.strip(),
+        )
     else:
         entry = _replace_entry_files(
             entry, tuple(dict.fromkeys(entry.files + tuple(files)))
         )
+        if identity_provided:
+            entry = _replace_identity_fields(entry, kit, source_url)
     new_manifest = replace(manifest, platforms={**manifest.platforms, platform: entry})
     _write_manifest(module_dir, new_manifest)
     return new_manifest
@@ -307,12 +342,51 @@ def _validate_source_names(names: Sequence[str]) -> None:
 
 
 def _replace_entry_files(entry: PlatformEntry, files: tuple[str, ...]) -> PlatformEntry:
-    """重建平台条目：仅替换文件列表，保留验证状态、硬件绑定标记与备注。"""
-    return PlatformEntry(
-        files=files,
-        verified=entry.verified,
-        hardware_bound=entry.hardware_bound,
-        notes=entry.notes,
+    """重建平台条目：仅替换文件列表，其余字段（验证状态、身份字段等）全保留。"""
+    return replace(entry, files=files)
+
+
+def _replace_identity_fields(
+    entry: PlatformEntry, kit: str, source_url: str
+) -> PlatformEntry:
+    """存量条目身份补填：提供了才写回，没提供保留原值。"""
+    new_kit = kit.strip() or entry.kit
+    new_source_url = source_url.strip() or entry.source_url
+    return replace(entry, kit=new_kit, source_url=new_source_url)
+
+
+def _validate_identity_fields(kit: str, source_url: str) -> None:
+    """新增平台条目的硬件身份强制：套件型号必填、购买链接必填且格式合法。"""
+    if not kit.strip():
+        raise LibraryError("套件型号（kit）必填：新录入的平台版本必须填写套件型号")
+    if not source_url.strip():
+        raise LibraryError(
+            "购买链接（source_url）必填：新录入的平台版本必须填写购买链接"
+        )
+    _validate_source_url_format(source_url)
+
+
+def _validate_source_url_format(
+    source_url: str, platform: str | None = None
+) -> None:
+    """购买链接格式校验：不合法抛 LibraryError，带中文说明与肇事值。"""
+    if not _is_valid_source_url(source_url):
+        where = f"平台 {platform} 的" if platform else ""
+        raise LibraryError(
+            f"{where}购买链接（source_url）格式非法：{source_url.strip()!r}"
+            "（必须是带协议和主机的完整链接，如 https://item.jd.com/1000123456.html）"
+        )
+
+
+def _is_valid_source_url(source_url: str) -> bool:
+    """购买链接的简单格式校验：必须带协议（scheme）与主机（netloc），
+    且主机不含空白（urlparse 对空白主机很宽松，会放过 'a b.com'）。"""
+    try:
+        parsed = urlparse(source_url.strip())
+    except ValueError:
+        return False
+    return bool(parsed.scheme and parsed.netloc) and not any(
+        ch.isspace() for ch in parsed.netloc
     )
 
 
