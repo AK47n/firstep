@@ -26,6 +26,11 @@ ACTION_KEEP = "keep"  # 保留：通用且基础建设必需
 ACTION_MERGE = "merge"  # 整合：同路径多份内容不同，AI 读多份产出通用版本
 ACTION_EXCLUDE = "exclude"  # 剔除：不通用 / 残留
 
+# 注意：归档（工单 02）不进此词表——FileDecision 是提炼报告逐文件判定的
+# 条目（keep/merge/exclude），"归档为该题参考文件"是动作表上的独立一档，
+# 走 ArchiveDecision 模型（见下）：判定词表与归档动作互不混淆（既有契约
+# 测试把 "archive" 钉死为 FileDecision 非法动作，不得放回此表）。
+
 # 判定动作词表：llm 提示词与 master 拼装共用，各自硬编码会静默漂移
 DISTILL_ACTIONS = (ACTION_KEEP, ACTION_MERGE, ACTION_EXCLUDE)
 
@@ -111,15 +116,54 @@ class FileDecision:
 
 
 @dataclass(frozen=True)
-class DistillationReport:
-    """提炼报告容器：保留 / 整合 / 剔除清单 + 模板 main.c 预览 + .uvprojx 预览。
+class ArchiveDecision:
+    """归档动作：被剔除的业务代码一键复制入库、锚定该题（内容自持，工单 02）。
 
-    清单条目复用 FileDecision（同一套字段，不另造同形类型）；来源工程名在
-    projects 里——确认后的报告要落盘、母版入库元数据要用。main_c_preview 是
-    确定性模板 main.c 全文（ADR 0002：母版 main.c 由模板提供）；uvprojx_preview
-    是确定性渲染的 .uvprojx 全文（工单 09：stm32 由渲染器现写，mspm0 无现写
-    为空串）。两个预览给用户在确认前看；落盘仍写 main_c_template(platform)
-    与确定性渲染产物（内容归属母版模块），预览不参与落盘。
+    提炼报告动作表上独立于 keep/merge/exclude 的一档（"归档为该题参考文件"）：
+    归档文件不落母版，以源工程文件副本入库参考文件库（复制入库——源工程删除
+    不丢）。条目只对判定范围内（公共 + 冲突 + 独有）的文件合法——残留 / 旧
+    main.c / 基础设施 / 二进制 / 工程配置文件由规则确定性处置、不配归档
+    （master 层处置校验拒绝）。topic = 锚定赛题编号（如 2026C）：格式与
+    查库校验在参考文件库模块（本模型只保证形状，语义归确认流程）。
+    """
+
+    path: str  # 相对工程目录的路径（与扫描清单同一套词表）
+    topic: str  # 锚定赛题编号（归档为该题参考文件）
+    reason: str = ""  # 原剔除理由（AI 判定理由）
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为 JSON 兼容 dict（确认请求按同一形状回传）。"""
+        return {"path": self.path, "topic": self.topic, "reason": self.reason}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ArchiveDecision":
+        """从 JSON 重建归档动作（形状校验唯一实现，AI 解析与确认报告共用）。"""
+        if not isinstance(data, dict):
+            raise ReportError("归档条目必须是对象")
+        path = data.get("path")
+        if not isinstance(path, str) or not path:
+            raise ReportError("归档条目缺少必填字段：path")
+        topic = data.get("topic")
+        if not isinstance(topic, str) or not topic.strip():
+            raise ReportError("归档条目缺少必填字段：topic（锚定赛题编号）")
+        reason = data.get("reason", "")
+        if not isinstance(reason, str):
+            raise ReportError("归档条目的 reason 必须是字符串")
+        return cls(path=path, topic=topic, reason=reason)
+
+
+@dataclass(frozen=True)
+class DistillationReport:
+    """提炼报告容器：保留 / 整合 / 剔除清单 + 归档清单 + 模板 main.c 预览 + .uvprojx 预览。
+
+    清单条目复用 FileDecision（同一套字段，不另造同形类型）；归档清单用
+    ArchiveDecision（动作表独立一档，工单 02——由用户在确认时指定，AI 判定
+    词表不含归档）；来源工程名在 projects 里——确认后的报告要落盘、母版入库
+    元数据要用。main_c_preview 是确定性模板 main.c 全文（ADR 0002：母版
+    main.c 由模板提供）；uvprojx_preview 是确定性渲染的 .uvprojx 全文（工单
+    09：stm32 由渲染器现写，mspm0 无现写为空串）。两个预览给用户在确认前看；
+    落盘仍写 main_c_template(platform) 与确定性渲染产物（内容归属母版模块），
+    预览不参与落盘。
     """
 
     platform: str
@@ -129,10 +173,16 @@ class DistillationReport:
     exclude: tuple[FileDecision, ...]
     main_c_preview: str  # 模板 main.c 全文预览（确定性，由平台推导，必填）
     uvprojx_preview: str  # .uvprojx 全文预览（stm32 确定性渲染；mspm0 无现写为空串，必填）
+    archive: tuple[ArchiveDecision, ...] = ()  # 归档动作（确认时由用户指定，缺省空）
 
     def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 兼容 dict（提炼报告的 wire format，确认请求回传同形）。"""
-        return {
+        """序列化为 JSON 兼容 dict（提炼报告的 wire format，确认请求回传同形）。
+
+        archive 键只在非空时带出：AI 出稿的报告（archive 恒空，动作由用户在
+        确认时指定）保持既有 wire 形状不变（契约测试钉死七键）；含归档动作
+        的确认回传才出现 archive 段。from_dict 两种形状都接受（缺省空）。
+        """
+        data: dict[str, Any] = {
             "platform": self.platform,
             "projects": list(self.projects),
             "keep": [d.to_dict() for d in self.keep],
@@ -141,6 +191,9 @@ class DistillationReport:
             "main_c_preview": self.main_c_preview,
             "uvprojx_preview": self.uvprojx_preview,
         }
+        if self.archive:
+            data["archive"] = [d.to_dict() for d in self.archive]
+        return data
 
     @classmethod
     def from_dict(
@@ -181,6 +234,15 @@ class DistillationReport:
             except ReportError as exc:
                 raise ReportError(f"报告 {key} 条目非法：{exc}") from exc
 
+        def archive_entries(key: str) -> tuple[ArchiveDecision, ...]:
+            raw = data.get(key, [])
+            if not isinstance(raw, list):
+                raise ReportError(f"{key} 必须是列表")
+            try:
+                return tuple(ArchiveDecision.from_dict(item) for item in raw)
+            except ReportError as exc:
+                raise ReportError(f"报告 {key} 条目非法：{exc}") from exc
+
         return cls(
             platform=platform,
             projects=tuple(projects),
@@ -189,12 +251,27 @@ class DistillationReport:
             exclude=decisions("exclude"),
             main_c_preview=main_c_preview,
             uvprojx_preview=uvprojx_preview,
+            archive=archive_entries("archive"),
         )
 
 
 # ---------------------------------------------------------------------------
 # 判定素材（AI 判定流程的输入）：master 构造、llm 消费
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReferenceCandidate:
+    """归档判定素材：一个被剔除文件的路径 + 全文 + 剔除理由（工单 02）。
+
+    与 JudgmentFile / FileVersion 同归判定素材模型层（master 构造、llm 消费）：
+    llm 层只消费类型、不拥有——归档判定协议（reference_judge_archivable）的
+    参数类型在此定义（依赖倒置，CONTEXT「判定素材模型归模型层」）。
+    """
+
+    path: str
+    content: str
+    reason: str = ""
 
 
 @dataclass(frozen=True)
