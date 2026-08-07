@@ -170,16 +170,17 @@ def add_module(
 ) -> ModuleManifest:
     """完整录入流程：一致性校验通过才入库；不一致抛 LibraryError 且不落盘。
 
-    校验失败时模块目录根本不会创建，绝无半成品入库。新录入的硬件身份字段
-    （套件型号 kit / 购买链接 source_url）必填且链接格式合法——由人补填、
-    AI 不猜（spec 工单 01）。
+    校验失败时模块目录根本不会创建，绝无半成品入库。硬件身份字段
+    （套件型号 kit / 购买链接 source_url）由人补填、AI 不猜（spec 工单 01）；
+    硬件绑定条目必填且链接格式合法，纯逻辑条目（hardware_bound=False）
+    不强制但提供值必须合法（工单 06 修订）。
     """
     _validate_slug(slug)
     _validate_platform(platform)
     if (library_root / slug).is_dir():
         raise LibraryError(f"模块 {slug!r} 已存在")
     _validate_source_files(files)
-    _validate_identity_fields(kit, source_url)
+    _validate_identity_fields(kit, source_url, required=hardware_bound)
     result = validate_description(llm, description, files)
     if not result.consistent:
         raise LibraryError(
@@ -252,6 +253,7 @@ def add_platform_files(
     platform: str,
     files: Mapping[str, str],
     *,
+    hardware_bound: bool = False,
     kit: str = "",
     source_url: str = "",
 ) -> ModuleManifest:
@@ -260,8 +262,9 @@ def add_platform_files(
     路径已存在于模块中的文件视为共享：内容一致则复用（双平台共用同一文件），
     内容不同抛错——不允许同一路径维护两套内容。
 
-    新增平台条目强制硬件身份字段（kit / source_url 必填且链接格式合法，
-    同录入流程）；存量条目不受强制，补填只做格式校验、不设 AI 一致性校验
+    新增平台条目按硬件绑定强制身份字段（hardware_bound=True 时 kit /
+    source_url 必填且链接格式合法；纯逻辑条目不强制但提供值必须合法，
+    工单 06 修订）；存量条目不受强制，补填只做格式校验、不设 AI 一致性校验
     （身份是事实，AI 判不了真假）。任何校验失败都在落盘前。
     """
     manifest = get_module(library_root, slug)
@@ -271,7 +274,7 @@ def add_platform_files(
     entry = manifest.platforms.get(platform)
     identity_provided = bool(kit.strip() or source_url.strip())
     if entry is None:
-        _validate_identity_fields(kit, source_url)
+        _validate_identity_fields(kit, source_url, required=hardware_bound)
     elif identity_provided:
         # 存量条目补填：只做格式校验、不强制必填（补填是逐步的）
         if source_url.strip():
@@ -284,6 +287,7 @@ def add_platform_files(
     if entry is None:
         entry = PlatformEntry(
             files=tuple(files),
+            hardware_bound=hardware_bound,
             kit=kit.strip(),
             source_url=source_url.strip(),
         )
@@ -388,15 +392,18 @@ def _replace_identity_fields(
     return replace(entry, kit=new_kit, source_url=new_source_url)
 
 
-def _validate_identity_fields(kit: str, source_url: str) -> None:
-    """新增平台条目的硬件身份强制：套件型号必填、购买链接必填且格式合法。"""
-    if not kit.strip():
-        raise LibraryError("套件型号（kit）必填：新录入的平台版本必须填写套件型号")
-    if not source_url.strip():
-        raise LibraryError(
-            "购买链接（source_url）必填：新录入的平台版本必须填写购买链接"
-        )
-    _validate_source_url_format(source_url)
+def _validate_identity_fields(kit: str, source_url: str, *, required: bool) -> None:
+    """硬件身份校验（工单 06 修订）：required 时 kit / source_url 必填且格式合法；
+    否则（纯逻辑条目）不强制，但提供值必须合法——给了就要给对。"""
+    if required:
+        if not kit.strip():
+            raise LibraryError("套件型号（kit）必填：硬件绑定条目必须填写套件型号")
+        if not source_url.strip():
+            raise LibraryError(
+                "购买链接（source_url）必填：硬件绑定条目必须填写购买链接"
+            )
+    if source_url.strip():
+        _validate_source_url_format(source_url)
 
 
 def _validate_source_url_format(

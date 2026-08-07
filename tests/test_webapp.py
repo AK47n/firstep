@@ -626,12 +626,31 @@ def test_add_module_rejects_missing_identity_fields(client):
             "platform": PLATFORM_STM32,
             "description": "超声波测距模块",
             "files": {"ultrasonic.c": "float distance(void);\n"},
+            "hardware_bound": True,
         },
     )
 
     assert resp.status_code == 400
     assert "kit" in resp.json()["detail"]
     assert "ultrasonic" not in [m["slug"] for m in client.get("/api/modules").json()]
+
+
+def test_add_module_pure_logic_without_identity_ok(client):
+    resp = client.post(
+        "/api/modules",
+        json={
+            "slug": "zone",
+            "platform": PLATFORM_STM32,
+            "description": "区域判定逻辑（纯软件）",
+            "files": {"zone.c": "int zone_determine(void);\n"},
+        },
+    )
+
+    assert resp.status_code == 200
+    entry = resp.json()["platforms"][PLATFORM_STM32]
+    assert entry["kit"] == ""
+    assert entry["source_url"] == ""
+    assert resp.json()["slug"] in [m["slug"] for m in client.get("/api/modules").json()]
 
 
 def test_add_module_rejects_invalid_source_url(client):
@@ -658,6 +677,7 @@ def test_module_add_platform_files_rejects_missing_identity(client, context):
         json={
             "platform": PLATFORM_MSPM0,
             "files": {"mspm0/src/oled.c": "void oled_init(void);\n"},
+            "hardware_bound": True,
         },
     )
 

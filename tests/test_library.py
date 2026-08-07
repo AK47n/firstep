@@ -695,6 +695,7 @@ def test_add_module_requires_kit(fake_module_library):
             platform="stm32",
             description="BMP180 气压计驱动",
             files={"bmp180.c": "int bmp180_read(void);\n"},
+            hardware_bound=True,
             kit="",
             source_url=SOURCE_URL_STM32,
         )
@@ -711,8 +712,61 @@ def test_add_module_requires_source_url(fake_module_library):
             platform="stm32",
             description="BMP180 气压计驱动",
             files={"bmp180.c": "int bmp180_read(void);\n"},
+            hardware_bound=True,
             kit=KIT_STM32,
             source_url="",
+        )
+
+    assert not (fake_module_library / "bmp180").exists()  # 拒绝不落盘
+
+
+def test_add_module_pure_logic_without_identity_ok(fake_module_library):
+    """纯逻辑模块（hardware_bound=False）可不带身份字段入库（工单 06 修订）。"""
+    manifest = add_module(
+        FakeLLM(),
+        fake_module_library,
+        slug="zone",
+        platform="stm32",
+        description="区域判定逻辑（纯软件）",
+        files={"zone.c": "int zone_determine(void);\n"},
+    )
+
+    entry = manifest.platforms["stm32"]
+    assert entry.hardware_bound is False
+    assert entry.kit == ""
+    assert entry.source_url == ""
+
+
+def test_add_module_hardware_bound_requires_identity(fake_module_library):
+    """硬件绑定条目仍强制身份字段——修订只放行纯逻辑条目。"""
+    with pytest.raises(LibraryError, match="kit"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="bmp180",
+            platform="stm32",
+            description="BMP180 气压计驱动",
+            files={"bmp180.c": "int bmp180_read(void);\n"},
+            hardware_bound=True,
+            kit="",
+            source_url=SOURCE_URL_STM32,
+        )
+
+    assert not (fake_module_library / "bmp180").exists()  # 拒绝不落盘
+
+
+def test_add_module_pure_logic_rejects_provided_bad_url(fake_module_library):
+    """纯逻辑条目给了身份就校验格式——给了就要给对。"""
+    with pytest.raises(LibraryError, match="格式非法"):
+        add_module(
+            FakeLLM(),
+            fake_module_library,
+            slug="bmp180",
+            platform="stm32",
+            description="BMP180 气压计驱动",
+            files={"bmp180.c": "int bmp180_read(void);\n"},
+            kit=KIT_STM32,
+            source_url="item.jd.com/1000.html",  # 无协议
         )
 
     assert not (fake_module_library / "bmp180").exists()  # 拒绝不落盘
@@ -763,28 +817,48 @@ def test_add_module_strips_identity_whitespace(fake_module_library):
 def test_add_platform_files_requires_identity_for_new_platform(fake_module_library):
     _add_bmp180(fake_module_library)
 
-    # 缺 kit：拒绝并说明
+    # 硬件绑定新平台条目：缺 kit 拒绝并说明
     with pytest.raises(LibraryError, match="kit"):
         add_platform_files(
             fake_module_library,
             "bmp180",
             "mspm0",
             {"mspm0/bmp180.c": "int bmp180_read(void);\n"},
+            hardware_bound=True,
             source_url=SOURCE_URL_MSPM0,
         )
-    # 缺 source_url：拒绝并说明
+    # 硬件绑定新平台条目：缺 source_url 拒绝并说明
     with pytest.raises(LibraryError, match="source_url"):
         add_platform_files(
             fake_module_library,
             "bmp180",
             "mspm0",
             {"mspm0/bmp180.c": "int bmp180_read(void);\n"},
+            hardware_bound=True,
             kit=KIT_STM32,
         )
 
     # 拒绝后无残留：文件不落盘、manifest 条目不新增
     assert not (fake_module_library / "bmp180" / "mspm0" / "bmp180.c").exists()
     assert set(get_module(fake_module_library, "bmp180").platforms) == {"stm32"}
+
+
+def test_add_platform_files_pure_logic_new_platform_without_identity(fake_module_library):
+    """纯逻辑新平台条目可不带身份字段（工单 06 修订）。"""
+    _add_bmp180(fake_module_library)
+
+    manifest = add_platform_files(
+        fake_module_library,
+        "bmp180",
+        "mspm0",
+        {"mspm0/bmp180.c": "int bmp180_read(void);\n"},
+    )
+
+    entry = manifest.platforms["mspm0"]
+    assert entry.hardware_bound is False
+    assert entry.kit == ""
+    assert entry.source_url == ""
+    assert (fake_module_library / "bmp180" / "mspm0" / "bmp180.c").exists()
 
 
 def test_add_platform_files_appending_keeps_existing_identity(fake_module_library):

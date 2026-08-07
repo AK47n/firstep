@@ -454,6 +454,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 slug,
                 platform,
                 files,
+                hardware_bound=_require_flag(payload, "hardware_bound"),
                 kit=_optional_str(payload, "kit"),
                 source_url=_optional_str(payload, "source_url"),
             )
