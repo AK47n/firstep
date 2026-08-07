@@ -26,10 +26,12 @@
 | 骨架 | AI 生成的 main.c（初始化序列 + TODO 预留区）+ 静态自检（幻觉调用改注释占位） | skeleton.py |
 | 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座 | keil.py / ccs.py / patchers.py / projectfile.py |
 | 平台警告 | missing / unverified / hardware_bound，生成前暴露 | selection.py |
+| 错误映射 | 路由异常的唯一出口：error_to_http 表把核心异常转 HTTP 状态与中文 message（业务 400 / LLM 502 / 文件系统 400）；**未登记异常 = 真 bug → 500 大声失败**，不吞成业务 400 | webapp.py（_error_response / _map_errors） |
 | 进度事件 | 提炼期间后端经 SSE 推送的实时进展（阶段 / 批次 / 补问轮；最后一个事件携带完整报告）；模型单次调用期间不产生事件，存活证明 = 客户端每秒跳动的计时器 | llm.py / webapp.py |
 
 ## 架构要点
 
 - 薄壳（webapp 路由 / LLM 网络调用 / 文本抽取）包裹纯逻辑核心。
+- 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；新异常类型必须登记，否则按真 bug 500 暴露。
 - 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版模块（`master_project_dir`）。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。
