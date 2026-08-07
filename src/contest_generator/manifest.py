@@ -27,6 +27,8 @@ class PlatformEntry:
     verified: bool = False  # 该平台版本是否验证过
     hardware_bound: bool = False  # 是否绑定硬件（换平台需移植）
     notes: str = ""  # 备注
+    kit: str = ""  # 套件型号（硬件身份字段，由人补填、AI 不猜）
+    source_url: str = ""  # 购买链接（硬件身份字段，由人补填、AI 不猜）
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,8 @@ class ModuleManifest:
                     "verified": entry.verified,
                     "hardware_bound": entry.hardware_bound,
                     "notes": entry.notes,
+                    "kit": entry.kit,
+                    "source_url": entry.source_url,
                 }
                 for platform, entry in self.platforms.items()
             },
@@ -75,6 +79,10 @@ class ModuleManifest:
                 verified=_require_flag(raw_entry, "verified", platform),
                 hardware_bound=_require_flag(raw_entry, "hardware_bound", platform),
                 notes=_require_notes(raw_entry, platform),
+                # 硬件身份字段容忍缺省：存量 manifest 无此字段仍能加载（迁移
+                # 不打断现有库）；类型非法（非字符串）直接报错。
+                kit=_require_optional_str(raw_entry, "kit", platform),
+                source_url=_require_optional_str(raw_entry, "source_url", platform),
             )
 
         return cls(
@@ -120,11 +128,16 @@ def _require_flag(entry: dict[str, Any], key: str, platform: str) -> bool:
     return value
 
 
-def _require_notes(entry: dict[str, Any], platform: str) -> str:
-    value = entry.get("notes", "")
+def _require_optional_str(entry: dict[str, Any], key: str, platform: str) -> str:
+    """可选字符串字段：缺省视为空串（存量兼容），类型非法抛 ManifestError。"""
+    value = entry.get(key, "")
     if not isinstance(value, str):
-        raise ManifestError(f"平台 {platform} 的 notes 必须是字符串")
+        raise ManifestError(f"平台 {platform} 的 {key} 必须是字符串")
     return value
+
+
+def _require_notes(entry: dict[str, Any], platform: str) -> str:
+    return _require_optional_str(entry, "notes", platform)
 
 
 def _parse_file_list(files: list[Any], platform: str) -> tuple[str, ...]:

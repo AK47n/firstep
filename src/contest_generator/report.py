@@ -112,13 +112,14 @@ class FileDecision:
 
 @dataclass(frozen=True)
 class DistillationReport:
-    """提炼报告容器：保留 / 整合 / 剔除清单 + 模板 main.c 预览。
+    """提炼报告容器：保留 / 整合 / 剔除清单 + 模板 main.c 预览 + .uvprojx 预览。
 
     清单条目复用 FileDecision（同一套字段，不另造同形类型）；来源工程名在
     projects 里——确认后的报告要落盘、母版入库元数据要用。main_c_preview 是
-    确定性模板 main.c 全文（ADR 0002：母版 main.c 由模板提供），给用户在
-    确认前预览；落盘仍写 main_c_template(platform)（模板内容归属母版模块），
-    预览不参与落盘。
+    确定性模板 main.c 全文（ADR 0002：母版 main.c 由模板提供）；uvprojx_preview
+    是确定性渲染的 .uvprojx 全文（工单 09：stm32 由渲染器现写，mspm0 无现写
+    为空串）。两个预览给用户在确认前看；落盘仍写 main_c_template(platform)
+    与确定性渲染产物（内容归属母版模块），预览不参与落盘。
     """
 
     platform: str
@@ -127,6 +128,7 @@ class DistillationReport:
     merge: tuple[FileDecision, ...]
     exclude: tuple[FileDecision, ...]
     main_c_preview: str  # 模板 main.c 全文预览（确定性，由平台推导，必填）
+    uvprojx_preview: str  # .uvprojx 全文预览（stm32 确定性渲染；mspm0 无现写为空串，必填）
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 兼容 dict（提炼报告的 wire format，确认请求回传同形）。"""
@@ -137,19 +139,21 @@ class DistillationReport:
             "merge": [d.to_dict() for d in self.merge],
             "exclude": [d.to_dict() for d in self.exclude],
             "main_c_preview": self.main_c_preview,
+            "uvprojx_preview": self.uvprojx_preview,
         }
 
     @classmethod
     def from_dict(
-        cls, data: dict[str, Any], *, main_c_preview: str
+        cls, data: dict[str, Any], *, main_c_preview: str, uvprojx_preview: str = ""
     ) -> "DistillationReport":
         """从确认请求的 JSON 重建报告（形状校验；语义校验归 master 落盘前）。
 
         条目形状校验与 llm.parse_distillation_report 同一标准（FileDecision.
         from_dict）；来源工程与路径覆盖等语义问题在落盘前由 master 层拦截。
-        main_c_preview 是确定性素材（落盘永远写 main_c_template(platform)），
-        客户端回传值不可信——由调用方按平台重推导传入，保证报告里的预览 =
-        实际落盘内容；平台非法由调用方（模板加载）大声失败。
+        main_c_preview / uvprojx_preview 是确定性素材（落盘永远写
+        main_c_template(platform) 与确定性渲染产物），客户端回传值不可信——
+        由调用方按平台重推导传入，保证报告里的预览 = 实际落盘内容；平台非法
+        由调用方（模板加载）大声失败。
         """
         if not isinstance(data, dict):
             raise ReportError("提炼报告必须是 JSON 对象")
@@ -165,6 +169,8 @@ class DistillationReport:
             raise ReportError("报告缺少来源工程：projects 不能为空")
         if not isinstance(main_c_preview, str):
             raise ReportError("main_c_preview 必须是字符串")
+        if not isinstance(uvprojx_preview, str):
+            raise ReportError("uvprojx_preview 必须是字符串")
 
         def decisions(key: str) -> tuple[FileDecision, ...]:
             raw = data.get(key)
@@ -182,6 +188,7 @@ class DistillationReport:
             merge=decisions("merge"),
             exclude=decisions("exclude"),
             main_c_preview=main_c_preview,
+            uvprojx_preview=uvprojx_preview,
         )
 
 
