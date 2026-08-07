@@ -4,7 +4,9 @@
 结构与确认流程落盘的磁盘结果（外部行为）。
 """
 
+import os
 import shutil
+import sys
 import xml.etree.ElementTree as ET
 from dataclasses import replace
 from pathlib import Path
@@ -1781,6 +1783,70 @@ def test_import_replaces_existing_master_of_same_platform(fake_stm32_projects, f
     assert not stale_file.exists()  # 旧母版被整体更换
     assert (fake_masters_dir / "stm32" / "project.uvprojx").is_file()
     assert get_master(fake_masters_dir, PLATFORM_STM32).sources == ("proj-b",)
+
+
+def test_import_swap_failure_keeps_old_master_and_explains_occupation(
+    monkeypatch, fake_masters_dir, tmp_path
+):
+    """旧母版被占用（如 Keil 开着）时替换失败：旧母版原封不动，错误中文说明。
+
+    判例（真实事故）：替换失败的回滚里 rmtree 旧母版，把只被锁住部分的旧
+    母版删成空壳——本测试是那次事故的回归测试。
+    """
+    import_master(fake_masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "old"))
+    real_replace = os.replace
+
+    def locked_replace(src, dst):
+        if Path(dst).name.startswith(".stm32"):  # 模拟旧母版挪不动（WinError 5）
+            raise PermissionError(13, "拒绝访问。")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", locked_replace)
+
+    with pytest.raises(MasterError, match="占用"):
+        import_master(
+            fake_masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "new")
+        )
+
+    # 旧母版一个文件不少；新母版未入库；无残留备份目录
+    assert (fake_masters_dir / "stm32" / "main.c").is_file()
+    assert (fake_masters_dir / "stm32" / "project.uvprojx").is_file()
+    assert not (fake_masters_dir / ".stm32.backup").exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 独占：真实目录句柄锁")
+def test_import_locked_subdirectory_keeps_old_master_intact(
+    fake_masters_dir, tmp_path
+):
+    """端到端：无 share-delete 的目录句柄（Keil/资源管理器的真实锁法）锁住
+    旧母版子目录时，替换失败且旧母版原封不动（WinError 5 的真实成因）。"""
+    import ctypes
+
+    import_master(fake_masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "old"))
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateFileW.argtypes = [
+        ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
+        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p,
+    ]
+    kernel32.CreateFileW.restype = ctypes.c_void_p
+    handle = kernel32.CreateFileW(
+        str(fake_masters_dir / "stm32" / "inc"),
+        0x80000000, 0x3, None, 3, 0x02000000, None,  # 只共享读写、不共享删除
+    )
+    assert handle not in (None, ctypes.c_void_p(-1).value)
+    try:
+        with pytest.raises((MasterError, OSError), match="占用|拒绝访问|WinError"):
+            import_master(
+                fake_masters_dir, PLATFORM_STM32,
+                make_fake_master_project(tmp_path / "new"),
+            )
+    finally:
+        kernel32.CloseHandle(handle)
+
+    # 旧母版一个文件不少（判例事故的回归：不删残）；新母版未入库
+    assert (fake_masters_dir / "stm32" / "main.c").is_file()
+    assert (fake_masters_dir / "stm32" / "project.uvprojx").is_file()
+    assert not (fake_masters_dir / ".stm32.backup").exists()
 
 
 def test_import_rejects_missing_config_without_touching_store(fake_masters_dir, tmp_path):

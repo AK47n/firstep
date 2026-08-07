@@ -1144,7 +1144,9 @@ def import_master(
 
     每平台一个母版：目标已存在时整体更换。先分析后动盘，分析失败不落任何
     文件；旧母版先挪到备份目录再换入新母版，中途失败把备份换回来——既有
-    母版在任意失败点都完好。
+    母版在任意失败点都完好。旧母版被占用（Keil µVision / 文件资源管理器
+    开着）时改名失败：绝不碰旧母版（rmtree 会把只锁住部分的旧母版删残，
+    真实事故），抛中文占用说明。
     """
     _validate_store_key(platform)
     analysis = analyze_structure(source_dir, platform)
@@ -1155,17 +1157,37 @@ def import_master(
     shutil.rmtree(temp_dir, ignore_errors=True)  # 清掉上次失败残留
     shutil.copytree(source_dir, temp_dir)
     target_dir = masters_dir / platform
+    if target_dir.exists():
+        shutil.rmtree(backup_dir, ignore_errors=True)
+        if backup_dir.exists():
+            # 备份目录清理不掉（被占用）：改名只会撞上非空目录，Windows 报
+            # WinError 5，这里用中文讲清原因而不是裸抛拒绝访问
+            raise MasterError(
+                f"旧备份 {backup_dir.name} 目录清理失败（可能被占用），"
+                "请先关闭占用程序后重试导入"
+            )
+    moved_to_backup = False
     try:
         if target_dir.exists():
-            shutil.rmtree(backup_dir, ignore_errors=True)
             os.replace(target_dir, backup_dir)  # 旧母版先挪开
+            moved_to_backup = True
         os.replace(temp_dir, target_dir)  # 新母版原子换入
     except Exception:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        if target_dir.exists():
+        if moved_to_backup:
+            # 旧母版已在备份目录：清掉半换入的新母版，把旧母版换回来
             shutil.rmtree(target_dir, ignore_errors=True)
-        if backup_dir.exists():
-            os.replace(backup_dir, target_dir)  # 回滚旧母版
+            if backup_dir.exists():
+                os.replace(backup_dir, target_dir)  # 回滚旧母版
+            raise
+        if target_dir.exists():
+            # 旧母版从未挪动（改名失败）：绝不能碰它——rmtree 会把只锁住
+            # 部分文件的旧母版删残（判例：真实事故，母版只剩空壳）
+            raise MasterError(
+                f"母版替换失败：旧母版目录 {target_dir.name} 被占用，无法挪动。"
+                "通常是 Keil µVision 或文件资源管理器还打开着该目录，"
+                "请先关闭再重试导入（杀毒软件扫描期间偶发，稍后重试亦可）"
+            ) from None
         raise
     shutil.rmtree(backup_dir, ignore_errors=True)
 
