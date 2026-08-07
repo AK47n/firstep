@@ -21,7 +21,7 @@ from pathlib import Path
 from queue import Full, Queue
 from typing import Any, Callable, Iterator, Sequence
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from .ccs import CcsProjectError
@@ -59,6 +59,13 @@ from .master import (
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .selection import SelectionError, resolve_selection
 from .skeleton import generate_skeleton
+from .topic_library import (
+    TopicError,
+    confirm_topics,
+    discover_related_modules,
+    parse_confirm_entries,
+    resolve_number,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -117,6 +124,16 @@ def _masters_dir(ctx: AppContext) -> Path:
     return _require_config(ctx).masters_dir
 
 
+def _topic_library_dir(ctx: AppContext) -> Path:
+    """赛题库目录：模块库同级目录下的 topics/（工单 01 约定）。
+
+    配置没有独立字段（config.py 不在本工单边界内），取模块库同级目录——
+    与默认布局（~/.contest_generator/{modules,masters}）同一工作目录；将来
+    加配置项时只改这一处。
+    """
+    return _require_config(ctx).module_library_dir.parent / "topics"
+
+
 # ---------------------------------------------------------------------------
 # 错误映射：核心异常 → HTTP 状态与中文 message（全路由唯一出口）
 # ---------------------------------------------------------------------------
@@ -168,6 +185,7 @@ def _error_response(exc: Exception) -> HTTPException:
             SelectionError,
             GeneratorError,
             ConfigError,
+            TopicError,
         ),
     ):
         # 业务失败：message 原样带出（用户可按提示修正重试）
@@ -298,6 +316,19 @@ def _mask_api_key(api_key: str) -> str:
     if not api_key:
         return ""
     return api_key[:4] + _API_KEY_MASK_MARKER
+
+
+async def _save_upload(upload: UploadFile) -> Path:
+    """上传文件 → 临时文件（保留原后缀，抽取 / 录入按后缀选解析器）。
+
+    返回临时文件路径，调用方负责 finally unlink（与 /api/extract 同款
+    临时文件生命周期；本助手供新增上传路由复用）。
+    """
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=Path(upload.filename or "").suffix
+    ) as tmp:
+        tmp.write(await upload.read())
+    return Path(tmp.name)
 
 
 # ---------------------------------------------------------------------------
@@ -683,6 +714,85 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
         return {"ok": True}
+
+    # ------------------------------------------------------------------
+    # 赛题库（工单 01）：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）+ 编号解析
+    # ------------------------------------------------------------------
+
+    @app.post("/api/topics/split")
+    @_map_errors
+    async def topics_split(upload: UploadFile = File(...)) -> dict:
+        """上传历年真题长 PDF → 抽取文本 → AI 拆条（年份 / 编号 / 题面全文）。
+
+        拆条是草稿：用户逐条校对（改年份 / 题号 / 题面）后回传
+        /api/topics/confirm 确认入库。
+        """
+        tmp_path = await _save_upload(upload)
+        try:
+            drafts = _llm(context).topic_split_topics(extract_file(tmp_path))
+        finally:
+            tmp_path.unlink(missing_ok=True)
+        return {"topics": [draft.to_dict() for draft in drafts]}
+
+    @app.post("/api/topics/confirm")
+    @_map_errors
+    async def topics_confirm(
+        pdf: UploadFile = File(...), payload: str = Form(...)
+    ) -> dict:
+        """确认入库（事务）：一条目一目录，题面 .md + manifest + 原 PDF 副本。
+
+        multipart：pdf = 原 PDF 文件（复制进每个条目目录，AI 拆错可查原文）；
+        payload = Form 里的 JSON：{entries: [{year, number, problem_text}],
+        program_dirs: [附带程序目录，引用方式存绝对路径]}。任何校验失败都
+        不落半成品（事务在 confirm_topics）。
+        """
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(400, f"payload 不是合法 JSON：{exc}") from exc
+        if not isinstance(data, dict):
+            raise HTTPException(400, "payload 必须是 JSON 对象")
+        entries = parse_confirm_entries(data)
+        program_dirs = _require_str_list(data, "program_dirs", default=())
+        tmp_path = await _save_upload(pdf)
+        try:
+            stored = confirm_topics(
+                _topic_library_dir(context),
+                tmp_path,
+                entries,
+                program_dirs=program_dirs,
+                pdf_filename=pdf.filename or "",
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)
+        return {"topics": [entry.to_dict() for entry in stored]}
+
+    @app.post("/api/topics/extract-number")
+    @_map_errors
+    def topics_extract_number(payload: dict) -> dict:
+        """AI 从文本提取赛题编号（如 "2026C"）；不是赛题文本返回 key=null。
+
+        与编号解析配套：粘贴题面自动识别编号后走 GET /api/topics/{key} 取题面。
+        """
+        key = _llm(context).topic_extract_number(_require_str(payload, "text"))
+        return {"key": key}
+
+    @app.get("/api/topics/{key}")
+    @_map_errors
+    def topic_get(key: str) -> dict:
+        """编号解析："2026C" → 题面全文 + 附带程序 + 关联模块（生成入口素材）。
+
+        关联模块复用模块简介"XX 题专用"标注自动发现（读时计算，不新造链接
+        字段）；查无此条明确报错（不猜测编造）。
+        """
+        config = _require_config(context)
+        entry = resolve_number(_topic_library_dir(context), key)
+        return {
+            **entry.to_dict(),
+            "related_modules": list(
+                discover_related_modules(config.module_library_dir, key)
+            ),
+        }
 
     return app
 
