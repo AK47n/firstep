@@ -31,11 +31,14 @@ from contest_generator.llm import (
     PHASE_SUMMARY,
     ProgressEvent,
     TRUNCATION_NOTICE,
+    VALIDATION_SYSTEM_PROMPT,
+    VALIDATION_SPECIFICITY_RULE,
     VersionSummary,
     _distill_user_prompt,
     _judgment_batches,
     _summarize_user_prompt,
     _truncate_content,
+    _validation_user_prompt,
     build_manifest_summaries,
     parse_distillation_report,
     parse_module_selection,
@@ -317,6 +320,35 @@ def test_validate_module_description_reports_inconsistency_with_issues():
 
     assert result.consistent is False
     assert "单总线协议" in result.issues
+
+
+def test_validation_prompts_share_specificity_rule():
+    """契约测试：专用性检查要求双端同源（VALIDATION_SPECIFICITY_RULE 唯一出处）。
+
+    ticket 06 的双端漂移教训：判定范围曾只改系统提示词、漏改用户提示词——校验
+    提示词的专用性检查同理：只改一侧会让模型在另一侧消息里漏掉这项检查，简介
+    的"XX 题专用"声明失去可信度。改要求只动常量（契约测试双端断言）。
+    """
+    user_prompt = _validation_user_prompt("2026C 题专用锁逻辑", "int lock(void);")
+
+    assert VALIDATION_SPECIFICITY_RULE in VALIDATION_SYSTEM_PROMPT
+    assert VALIDATION_SPECIFICITY_RULE in user_prompt
+
+
+def test_validate_module_description_posts_specificity_rule():
+    """实际发出的校验请求（系统 + 用户消息）都带专用性检查要求。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"consistent": True, "issues": ""}))
+    )
+    llm = _llm(transport)
+
+    llm.validate_module_description("2026C 题专用锁逻辑", "int lock(void);")
+
+    _, _, payload, _ = transport.calls[0]
+    user_message = payload["messages"][1]["content"]
+    assert VALIDATION_SPECIFICITY_RULE in user_message
+    system_message = payload["messages"][0]["content"]
+    assert VALIDATION_SPECIFICITY_RULE in system_message
 
 
 @pytest.mark.parametrize(
