@@ -81,6 +81,9 @@
   .report-group.keep .title { color: var(--ok); }
   .report-group.merge .title { color: var(--info); }
   .report-group.exclude .title { color: var(--danger); }
+  .report-group.archive .title { color: var(--warn); }
+  .decision button { margin-left: 8px; padding: 1px 8px; font-size: 12px; }
+  .decision input[data-topic] { width: 160px; margin-left: 8px; padding: 2px 6px; font-size: 12px; }
   .decision { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
               margin-bottom: 6px; font-size: 13px; background: #fafbfc; }
   .decision .path { font-family: Consolas, monospace; font-weight: 600; }
@@ -138,6 +141,7 @@
 <nav>
   <button data-tab="generate" class="active">生成</button>
   <button data-tab="library">模块库</button>
+  <button data-tab="reference">参考文件库</button>
   <button data-tab="master">母版</button>
   <button data-tab="settings">设置</button>
 </nav>
@@ -256,6 +260,57 @@
         <button id="btn-add-module-submit" class="primary">校验并入库</button>
       </div>
       <div id="add-msg" class="error"></div>
+    </div>
+  </section>
+
+  <!-- ============================ 参考文件库页 ============================ -->
+  <section id="tab-reference" class="page">
+    <div class="card">
+      <h2>参考文件库 <span class="muted">（不编译进生成工程的配套资料，生成时按锚定作学习素材注入；磁盘目录即数据库）</span></h2>
+      <div class="row">
+        <div style="flex:1"><label>标题</label><input type="text" id="ref-filter-title" placeholder="标题子串"></div>
+        <div style="flex:1"><label>类型</label><input type="text" id="ref-filter-type" placeholder="类型子串"></div>
+        <div style="flex:1"><label>锚定</label><input type="text" id="ref-filter-anchor" placeholder="赛题编号 / 套件型号"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-ref-search" class="primary">搜索</button>
+        <button id="btn-ref-search-clear">清空并显示全部</button>
+      </div>
+      <table style="margin-top:10px">
+        <thead><tr><th>标题</th><th>类型</th><th>锚定</th><th>简介</th><th>文件</th><th style="width:70px">操作</th></tr></thead>
+        <tbody id="ref-rows"></tbody>
+      </table>
+      <div id="ref-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>录入参考文件（素材 → AI 简介草稿 → 补锚定 → 入库）</h2>
+      <div class="row">
+        <div style="flex:1"><label>标题</label><input type="text" id="ref-title" placeholder="例如 ALX 套件 STM32F1 串口例程"></div>
+        <div style="flex:1"><label>类型</label><input type="text" id="ref-type" placeholder="例如 例程代码 / 说明书"></div>
+      </div>
+      <div class="row">
+        <div style="flex:1.2">
+          <label>锚定（套件型号只能从模块库已有 kit 词表选，不能自由输入）</label>
+          <div class="row">
+            <select id="ref-anchor-kind" style="width:130px">
+              <option value="topic">赛题编号</option>
+              <option value="kit">套件型号</option>
+            </select>
+            <input type="text" id="ref-anchor-topic" placeholder="如 2026C" style="flex:1;max-width:200px">
+            <select id="ref-anchor-kit" class="hidden" style="flex:1;max-width:280px"></select>
+          </div>
+        </div>
+        <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label><textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…"></textarea></div>
+      </div>
+      <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库）</h3>
+      <div id="ref-files"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-ref-add-file-row">+ 文件</button>
+        <button id="btn-ref-draft-desc">AI 生成简介草稿</button>
+        <button id="btn-ref-add" class="primary">入库</button>
+      </div>
+      <div id="ref-add-msg" class="error"></div>
     </div>
   </section>
 
@@ -390,6 +445,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
     document.querySelectorAll("section.page").forEach((s) =>
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
     if (btn.dataset.tab === "library") loadLibrary();
+    if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); }
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "settings") loadSettings();
   });
@@ -721,25 +777,27 @@ async function deleteModule(slug) {
   } catch (e) { alert(e.message); }
 }
 
-// 添加模块：动态文件行
-function addFileRow(name, content) {
+// 动态文件行（模块库 / 参考文件库共用；container 缺省为模块库的 #new-files）
+function addFileRow(container, name, content) {
+  if (!container) container = $("new-files");
   const row = document.createElement("div");
   row.className = "file-row";
   row.innerHTML = `
     <input type="text" placeholder="文件名（含相对路径）" value="${esc(name || "")}">
     <div style="position:relative">
-      <textarea placeholder="文件内容（.c / .h）">${esc(content || "")}</textarea>
+      <textarea placeholder="文件内容（.c / .h / .txt / .md）">${esc(content || "")}</textarea>
       <button style="position:absolute;right:4px;top:4px;font-size:11px;padding:2px 6px" class="danger">✕</button>
     </div>`;
   row.querySelector("button").addEventListener("click", () => row.remove());
-  $("new-files").appendChild(row);
+  container.appendChild(row);
 }
 $("btn-add-file-row").addEventListener("click", () => addFileRow());
 addFileRow();
 
-function collectFiles() {
+function collectFiles(container) {
+  if (!container) container = $("new-files");
   const files = {};
-  for (const row of $("new-files").children) {
+  for (const row of container.children) {
     const name = row.querySelector("input").value.trim();
     const content = row.querySelector("textarea").value;
     if (!name) continue;
@@ -799,6 +857,132 @@ $("btn-add-module-submit").addEventListener("click", async () => {
   } catch (e) {
     $("add-msg").classList.remove("ok");
     $("add-msg").textContent = e.message;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 参考文件库页：浏览 / 搜索 / AI 简介草稿 / 入库 / 删除
+// ---------------------------------------------------------------------------
+// 套件锚定的合法取值 = 模块库已有 kit 词表（从 /api/modules 各平台条目 kit
+// 字段去重收集，不新打字——词表外值后端校验拒绝）
+let kitVocabulary = [];
+
+async function loadKitVocabulary() {
+  try {
+    const modules = await apiGet("/api/modules");
+    kitVocabulary = [...new Set(modules.flatMap((m) =>
+      Object.values(m.platforms || {}).map((p) => p.kit).filter(Boolean)))].sort();
+  } catch (e) { kitVocabulary = []; }   // 未配置 / 模块库读不到：保留空词表，入库时后端给错误
+  $("ref-anchor-kit").innerHTML = kitVocabulary.length
+    ? kitVocabulary.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("")
+    : '<option value="">（模块库暂无 kit 词表）</option>';
+}
+
+$("ref-anchor-kind").addEventListener("change", () => {
+  const kit = $("ref-anchor-kind").value === "kit";
+  $("ref-anchor-kit").classList.toggle("hidden", !kit);
+  $("ref-anchor-topic").classList.toggle("hidden", kit);
+});
+
+async function loadReferences() {
+  try {
+    const params = new URLSearchParams();
+    const filters = [["title", "ref-filter-title"], ["type", "ref-filter-type"], ["anchor", "ref-filter-anchor"]];
+    for (const [key, id] of filters) {
+      const v = $(id).value.trim();
+      if (v) params.set(key, v);
+    }
+    const qs = params.toString();
+    const entries = await apiGet("/api/references" + (qs ? "?" + qs : ""));
+    $("ref-rows").innerHTML = entries.length ? entries.map((e) => `
+      <tr>
+        <td class="slug">${esc(e.title)}</td>
+        <td>${esc(e.type)}</td>
+        <td class="muted">${esc(e.anchor_kind === "kit" ? "套件：" + e.anchor_value : "赛题：" + e.anchor_value)}</td>
+        <td class="muted">${esc(e.description)}</td>
+        <td class="muted">${esc(e.files.join("、"))}</td>
+        <td><button class="danger" data-ref-del="${esc(e.id)}">删除</button></td>
+      </tr>`).join("")
+      : '<tr><td colspan="6" class="muted">库中暂无条目。</td></tr>';
+    $("ref-rows").querySelectorAll("[data-ref-del]").forEach((b) =>
+      b.addEventListener("click", () => deleteReference(b.dataset.refDel)));
+    $("ref-msg").textContent = "";
+  } catch (e) { $("ref-msg").textContent = e.message; }
+}
+
+$("btn-ref-search").addEventListener("click", loadReferences);
+$("btn-ref-search-clear").addEventListener("click", () => {
+  ["ref-filter-title", "ref-filter-type", "ref-filter-anchor"].forEach((id) => ($(id).value = ""));
+  loadReferences();
+});
+
+async function deleteReference(entryId) {
+  if (!confirm("删除参考文件条目 " + entryId + " 的整个目录？")) return;
+  try {
+    await apiDelete(`/api/references/${encodeURIComponent(entryId)}`);
+    loadReferences();
+  } catch (e) { alert(e.message); }
+}
+
+$("btn-ref-add-file-row").addEventListener("click", () => addFileRow($("ref-files")));
+addFileRow($("ref-files"));
+
+function refCollectFiles() { return collectFiles($("ref-files")); }
+
+$("btn-ref-draft-desc").addEventListener("click", async () => {
+  $("ref-add-msg").textContent = "";
+  const files = refCollectFiles();
+  if (files === null) return;
+  if (!Object.keys(files).length) { $("ref-add-msg").textContent = "至少需要一个素材文件"; return; }
+  $("btn-ref-draft-desc").disabled = true;
+  $("btn-ref-draft-desc").innerHTML = '<span class="spinner"></span>生成中…';
+  try {
+    const data = await apiPost("/api/references/draft", { files });
+    $("ref-desc").value = data.draft;
+    $("ref-add-msg").classList.add("ok");
+    $("ref-add-msg").textContent = "AI 简介草稿已填入，可修改后点击「入库」。（请求体有大小预算，素材过大后端会报 413）";
+  } catch (e) {
+    $("ref-add-msg").classList.remove("ok");
+    $("ref-add-msg").textContent = e.message;
+  } finally {
+    $("btn-ref-draft-desc").disabled = false;
+    $("btn-ref-draft-desc").innerHTML = "AI 生成简介草稿";
+  }
+});
+
+$("btn-ref-add").addEventListener("click", async () => {
+  $("ref-add-msg").textContent = "";
+  const files = refCollectFiles();
+  if (files === null) return;
+  if (!Object.keys(files).length) { $("ref-add-msg").textContent = "至少需要一个素材文件"; return; }
+  const title = $("ref-title").value.trim();
+  const type = $("ref-type").value.trim();
+  const description = $("ref-desc").value.trim();
+  if (!title) { $("ref-add-msg").textContent = "请填写标题"; return; }
+  if (!type) { $("ref-add-msg").textContent = "请填写类型"; return; }
+  if (!description) { $("ref-add-msg").textContent = "请填写简介（或先让 AI 生成草稿）"; return; }
+  const anchorKind = $("ref-anchor-kind").value;
+  const anchorValue = anchorKind === "kit"
+    ? $("ref-anchor-kit").value
+    : $("ref-anchor-topic").value.trim();
+  $("btn-ref-add").disabled = true;
+  $("btn-ref-add").innerHTML = '<span class="spinner"></span>入库中…';
+  try {
+    const entry = await apiPost("/api/references", {
+      title, type, description, anchor_kind: anchorKind, anchor_value: anchorValue, files,
+    });
+    $("ref-add-msg").classList.add("ok");
+    $("ref-add-msg").textContent = "已入库：" + entry.title;
+    ["ref-title", "ref-type", "ref-desc", "ref-anchor-topic"].forEach((id) => ($(id).value = ""));
+    $("ref-files").innerHTML = "";
+    addFileRow($("ref-files"));
+    loadReferences();
+  } catch (e) {
+    $("ref-add-msg").classList.remove("ok");
+    $("ref-add-msg").textContent = e.message;
+  } finally {
+    $("btn-ref-add").disabled = false;
+    $("btn-ref-add").innerHTML = "入库";
   }
 });
 
@@ -1001,6 +1185,7 @@ function finishProgress(report) {
   $("prog-done").classList.remove("hidden");
   $("prog-done").textContent = "提炼完成，用时 " + fmtDuration((Date.now() - prog.startedAt) / 1000);
   currentReport = report;
+  currentReport.archive = report.archive || [];   // AI 出稿报告无 archive 键（动作由用户在确认时指定）
   renderReport();
 }
 
@@ -1097,7 +1282,16 @@ function decisionItem(d, sourceOptions) {
     </select>` : "";
   return `<div class="decision"><span class="path">${esc(d.path)}</span>
     <span class="muted">（${d.action === "keep" ? "保留" : d.action === "merge" ? "合并" : "剔除"}${source}）</span>
+    <button data-archive="${esc(d.path)}" title="该文件不进母版，复制入库参考文件库并锚定赛题编号">归档为该题参考文件</button>
     <div class="reason">${esc(d.reason)}</div></div>`;
+}
+
+function archiveItem(a) {
+  return `<div class="decision"><span class="path">${esc(a.path)}</span>
+    <span class="muted">（归档为该题参考文件，确认时复制入库）</span>
+    <input type="text" data-topic="${esc(a.path)}" placeholder="锚定赛题编号，如 2026C" value="${esc(a.topic)}">
+    <button data-unarchive="${esc(a.path)}">移除</button>
+    <div class="reason">${esc(a.reason || "（无理由）")}</div></div>`;
 }
 
 function renderReport() {
@@ -1105,24 +1299,58 @@ function renderReport() {
   const r = currentReport;
   const body = $("report-body");
   const options = r.projects;
+  const archive = r.archive || [];
   body.innerHTML = `
     <div class="report-group keep"><div class="title">保留（${r.keep.length}）</div>
       ${r.keep.map((d) => decisionItem(d)).join("")}</div>
     <div class="report-group merge"><div class="title">合并 — 选来源工程（${r.merge.length}）</div>
       ${r.merge.map((d) => decisionItem(d, options)).join("")}</div>
     <div class="report-group exclude"><div class="title">剔除（${r.exclude.length}）</div>
-      ${r.exclude.map((d) => decisionItem(d)).join("")}</div>`;
+      ${r.exclude.map((d) => decisionItem(d)).join("")}</div>
+    <div class="report-group archive"><div class="title">归档为该题参考文件（${archive.length}）<span class="muted">确认时复制入库参考文件库、锚定赛题编号，该文件不进母版</span></div>
+      ${archive.length ? archive.map((a) => archiveItem(a)).join("") : ""}</div>`;
   body.querySelectorAll("select[data-path]").forEach((sel) =>
     sel.addEventListener("change", () => {
       const d = currentReport.merge.find((x) => x.path === sel.dataset.path);
       if (d) d.source = sel.value;
+    }));
+  // 归档动作（工单 02）：点「归档」把该判定移入 archive 段（不进母版、确认时复制入库）；
+  // 移除归档回原判定组；锚定赛题编号由用户填（格式 / 词表校验在确认时后端做）
+  body.querySelectorAll("[data-archive]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const path = b.dataset.archive;
+      const group = [r.keep, r.merge, r.exclude].find((g) => g.some((d) => d.path === path));
+      const d = group && group.find((x) => x.path === path);
+      if (!group || !d) return;
+      group.splice(group.indexOf(d), 1);
+      r.archive.push({ path: d.path, topic: "", reason: d.reason, _decision: d, _origin: group });
+      renderReport();
+    }));
+  body.querySelectorAll("input[data-topic]").forEach((inp) =>
+    inp.addEventListener("input", () => {
+      const a = r.archive.find((x) => x.path === inp.dataset.topic);
+      if (a) a.topic = inp.value.trim();
+    }));
+  body.querySelectorAll("[data-unarchive]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const a = r.archive.find((x) => x.path === b.dataset.unarchive);
+      if (!a) return;
+      r.archive = r.archive.filter((x) => x !== a);
+      (a._origin || r.exclude).push(a._decision || {
+        path: a.path, action: "exclude", reason: a.reason,
+      });
+      renderReport();
     }));
 }
 
 $("btn-confirm").addEventListener("click", async () => {
   $("confirm-msg").textContent = "";
   if (!currentReport) return;
-  if (!confirm("确认按此报告提炼母版并入库？（将整体替换该平台的旧母版）")) return;
+  const archiveCount = (currentReport.archive || []).length;
+  const suffix = archiveCount
+    ? "\n另有 " + archiveCount + " 条归档动作：复制入库参考文件库并锚定赛题编号（需 AI 服务，失败可去掉归档后重试）。"
+    : "";
+  if (!confirm("确认按此报告提炼母版并入库？（将整体替换该平台的旧母版）" + suffix)) return;
   $("btn-confirm").disabled = true;
   $("confirm-status").innerHTML = '<span class="spinner"></span>落盘与入库中…';
   try {
@@ -1131,6 +1359,8 @@ $("btn-confirm").addEventListener("click", async () => {
       project_dirs: projectDirs(),
       projects: currentReport.projects,
       keep: currentReport.keep, merge: currentReport.merge, exclude: currentReport.exclude,
+      // 归档动作（工单 02）：只透传 path / topic / reason 契约字段，内部标记不进载荷
+      archive: (currentReport.archive || []).map((a) => ({ path: a.path, topic: a.topic, reason: a.reason })),
     });
     $("confirm-status").textContent = "";
     $("confirm-msg").classList.add("ok");
