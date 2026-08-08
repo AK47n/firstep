@@ -17,8 +17,15 @@
 
 **Blocked by:** 01 — 赛题库录入（确认/解析流程复用）
 
-**Status:** open
+**Status:** done
 
 ## Comments
 
-（待实施后补）
+- 2026-08-08: 工单 04 完成（拆条分块治 flash 静默漏题；拆条 UI 属工单 05，不在本工单范围）。
+- **取舍（工单允许"分批调 LLM（或纯确定性切分）"，选纯确定性）**：`/api/topics/split` 按全文长度分流——≤ `TOPIC_SPLIT_LLM_CHAR_CAP`（20K 字符）单次调 LLM 拆条（既有路径，任意格式，单题短 PDF）；超长走确定性分块。不选"分批调 LLM"的理由：flash 输出预算截断是根因（实测 max_tokens=8192 仍断），大年份 8 题 ≈ 20K 字符输出仍超预算——块变小只是缩小不消除漏题；确定性切分无输出预算问题，且 2026-08-08 真机已验证 69/69 全对（`.scratch/real-run/topic_split_by_year.py`），题面 = 原文段落零 AI 改写正是工单要求的形态。代价：非标准格式长 PDF 无法自动拆 → 大声失败给可操作提示（宁可不拆，不静默漏题）。
+- 新增 `topic_library.split_topics_document`（分块逻辑进核心层，webapp 只路由）：YEAR_RE 年份章节按数字归组、取"到下一年距离最大"的出现为章节起点（封面/页眉几百字符距离天然小）；TITLE_RE 只认括号式（X 题）与行首 X 题：，正文误匹配（"停止条件"类）全排除；题面 = 标题行起点到下一题标题行的原文段落（含评分标准表）；同字母去重取首次；每年最后一题含该年尾部杂项（评分汇总/页脚，校对阶段可修剪）；全文无年份章节或零赛题大声失败。草稿形态 = TopicDraft（year/number/problem_text），`confirm_topics` 契约未变。
+- `llm.py`：`TOPIC_SPLIT_LLM_CHAR_CAP = 20000`；`topic_split_topics` 改全量直传不截断（旧路径截断到 4000 字符 = 静默漏题根因之一），超长输入请求发出前大声失败（与 MAX_REQUEST_BYTES 兜底同哲学）；拆条系统提示去掉"可能被截断"标注。
+- 测试：假文本 fixture 覆盖多年变体年份标记 / 括号式与行首式（全半角）标记 / 正文误匹配 / 同字母去重 / 缺题年份 / 尾部杂项 / 空结果大声失败 / 20K 路由边界；`pytest tests/ -q` 650 全绿，`mypy src` 干净。
+- 真机验证：真题 PDF（2017-2025 汇总，163,750 字符）重跑 `split_topics_document`，与已验证 69 条草稿逐条对比 year/number/problem_text 全一致（`verify_split_topics.py`，.scratch/real-run 未跟踪，与 topic_split_by_year.py 同形态）。
+- 两轴 code review 修复：标准轴——路由阈值魔数改引常量、两处错误文案抽 `_SPLIT_FORMAT_HINT`（文案单源）、章节元组改 `_Chapter` dataclass（去重复年份字段与位置索引）、年份提取改 YEAR_RE 捕获组（删 `_year_of` 二次匹配）；规格轴——补"为何不分批调 LLM"的取舍说明到路由 docstring。
+- 残留风险（如实说明）：① 同字母去重是"连续去重"（与已验证脚本一致）——一年内非连续同字母标记会拆出同编号草稿，`confirm_topics` 编号重复校验会拦截（不落盘），需校对阶段处理（工单 05 UI 范围）；② 缺题年份（有章节无题目标记）静默跳过不报错——与已验证脚本行为一致（PDF 本身没有的题不报错；2017 缺 D/G、2020 缺 H 即此形态）；③ 短路径单题超大题面（≈20K 字符）输出仍可能超 flash 输出预算——实际单题题面约 2-4K 字符，罕见；④ 非标准格式长 PDF 无法自动拆，仅报错提示。
