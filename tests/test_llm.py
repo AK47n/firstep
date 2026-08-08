@@ -2598,7 +2598,10 @@ def test_parse_selection_requirements_reject_unknown_module_slug():
         json.dumps({"requirements": [{"requirement": "需求"}]}),  # 缺 sentence
         json.dumps({"requirements": [{"requirement": "需求", "sentence": 0}]}),
         json.dumps({"requirements": [{"requirement": "需求", "sentence": -2}]}),
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": "1"}]}),  # 字符串编号
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": "0"}]}),  # 数字字符串但非正数
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": "abc"}]}),  # 非数字字符串
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": "1.5"}]}),  # 非整数数字字符串
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1.0}]}),  # 浮点
         json.dumps({"requirements": [{"requirement": "需求", "sentence": True}]}),
         json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": "x"}]}),
         json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"reason": "缺 slug"}]}]}),
@@ -2609,6 +2612,27 @@ def test_parse_selection_requirements_reject_unknown_module_slug():
 def test_parse_selection_rejects_malformed_requirements(bad_json):
     with pytest.raises(LLMError):
         parse_module_selection(bad_json, known_slugs=("dht11",), hardware_words=WORDS)
+
+
+def test_parse_selection_coerces_digit_string_sentence():
+    """数字字符串 sentence 按语义无损强转 int（sentence 语义 = 正整数，不是形状）。
+
+    真机实测：DeepSeek json_object 模式把数字标量序列化为字符串（24/24 条需求
+    全是 "1" 这种形状），严格类型校验让整轮收敛当场失败——"1" 语义上就是正整数，
+    强转不引入任何脑补风险；非数字字符串照旧大声失败（见 reject 参数化）。
+    """
+    raw = json.dumps(
+        {
+            "requirements": [
+                {"requirement": "识别数字", "sentence": "1", "modules": []},
+                {"requirement": "定位", "sentence": " 3 ", "modules": []},
+            ]
+        }
+    )
+
+    result = parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+    assert [r.sentence_index for r in result.requirements] == [1, 3]
 
 
 def test_parse_selection_suggestion_name_hits_wordlist_model_or_category():
