@@ -398,10 +398,11 @@ def test_add_reference_transaction_leaves_nothing_on_write_failure(
 ):
     root = _reference_root(tmp_path)
 
-    def boom(entry_dir: Path, entry: Any) -> None:
+    def boom(entry_dir: Path, data: Any, filename: str) -> None:
         raise OSError("磁盘写失败")
 
-    monkeypatch.setattr("contest_generator.reference_library._write_meta", boom)
+    # 事务中途失败点挂在共享原语 write_json 上（模块级替换只影响本模块引用）
+    monkeypatch.setattr("contest_generator.reference_library.write_json", boom)
     with pytest.raises(OSError, match="磁盘写失败"):
         add_reference(
             root,
@@ -903,17 +904,18 @@ def test_confirm_archive_rolls_back_entries_on_write_failure(
     llm = ReferenceLLM(archivable=archived_paths)
     # 只打参考库的元数据写入（shutil 是全局单例，打 copy2 会误伤 apply /
     # import 的复制）：第二个归档条目元数据写失败 → 条目 2 自清、条目 1 回滚
-    real_write_meta = reference_library._write_meta
+    # （失败点挂在共享原语 write_json 上，模块级替换只影响本模块引用）
+    real_write_json = reference_library.write_json
     calls = {"n": 0}
 
-    def flaky_write_meta(entry_dir: Path, entry: Any) -> None:
+    def flaky_write_json(entry_dir: Path, filename: str, data: Any) -> None:
         calls["n"] += 1
         if calls["n"] == 2:
             raise OSError("磁盘写失败")
-        return real_write_meta(entry_dir, entry)
+        return real_write_json(entry_dir, filename, data)
 
     monkeypatch.setattr(
-        "contest_generator.reference_library._write_meta", flaky_write_meta
+        "contest_generator.reference_library.write_json", flaky_write_json
     )
     with pytest.raises(MasterError, match="归档写入失败"):
         confirm_distillation(

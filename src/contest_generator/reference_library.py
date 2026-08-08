@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .entry_store import entry_transaction, iter_entry_dirs, write_json
 from .library import list_modules
 from .llm import LLM
 from .manifest import is_unsafe_path
@@ -140,13 +141,13 @@ def module_kit_vocabulary(module_library_dir: Path) -> tuple[str, ...]:
 
 
 def list_references(reference_root: Path) -> list[ReferenceEntry]:
-    """返回库中全部条目（按 id 排序）；元数据损坏的条目目录抛 ReferenceError。"""
-    if not reference_root.is_dir():
-        return []
+    """返回库中全部条目（按 id 排序）；元数据损坏的条目目录抛 ReferenceError。
+
+    库根不存在 = 空库、散文件与点开头目录不影响浏览（目录迭代走 entry_store
+    原语，与模块库 / 赛题库浏览同哲学）。
+    """
     entries: list[ReferenceEntry] = []
-    for entry in sorted(reference_root.iterdir(), key=lambda p: p.name):
-        if not entry.is_dir() or entry.name.startswith("."):
-            continue  # 库根下的散文件与临时目录不影响浏览
+    for entry in iter_entry_dirs(reference_root):
         entries.append(get_reference(reference_root, entry.name))
     return entries
 
@@ -256,8 +257,6 @@ def add_reference(
 
     reference_root.mkdir(parents=True, exist_ok=True)
     entry_id = _next_entry_id(reference_root, title)
-    entry_dir = reference_root / entry_id
-    entry_dir.mkdir()
     entry = ReferenceEntry(
         id=entry_id,
         title=title,
@@ -267,12 +266,9 @@ def add_reference(
         anchor_value=anchor_value,
         files=tuple(files),
     )
-    try:
+    with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         _write_files(entry_dir, files)
-        _write_meta(entry_dir, entry)
-    except Exception:
-        shutil.rmtree(entry_dir, ignore_errors=True)  # 入库中途失败不留半成品
-        raise
+        write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
     return entry
 
 
@@ -312,8 +308,6 @@ def archive_reference(
 
     reference_root.mkdir(parents=True, exist_ok=True)
     entry_id = _next_entry_id(reference_root, title)
-    entry_dir = reference_root / entry_id
-    entry_dir.mkdir()
     entry = ReferenceEntry(
         id=entry_id,
         title=title,
@@ -323,14 +317,11 @@ def archive_reference(
         anchor_value=anchor_topic,
         files=(rel_path,),
     )
-    try:
+    with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         dst = entry_dir / rel_path
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, dst)
-        _write_meta(entry_dir, entry)
-    except Exception:
-        shutil.rmtree(entry_dir, ignore_errors=True)  # 归档中途失败不留半成品
-        raise
+        write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
     return entry
 
 
@@ -397,13 +388,6 @@ def _write_files(entry_dir: Path, files: Mapping[str, str]) -> None:
         path = entry_dir / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-
-
-def _write_meta(entry_dir: Path, entry: ReferenceEntry) -> None:
-    (entry_dir / REFERENCE_META_FILENAME).write_text(
-        json.dumps(entry.to_dict(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
 
 
 def _assemble_material(files: Mapping[str, str]) -> str:
