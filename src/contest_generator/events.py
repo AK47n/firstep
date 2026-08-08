@@ -1,7 +1,8 @@
-"""进度事件契约（唯一出处，契约测试断言；spec「事件契约」+ ADR 0004）。
+"""事件契约（唯一出处，契约测试断言；spec「事件契约」+ ADR 0004）。
 
-提炼期间后端经 SSE 推送的实时进展事件：类型 / 阶段名 / 字段子集与发射
-seam 的唯一出处。llm 层（批次循环层）发射，webapp 层组装 SSE 线格式，
+SSE 推送事件的类型词表（进度事件 + 终态事件）与字段子集、发射 seam 的
+唯一出处。进度事件由 llm 层（批次循环层）发射，终态事件（done / error /
+question）由 sse 运行器发射收尾；线格式在 sse.py，webapp 层只装配调用。
 前端按这些键消费——改动须同步测试契约。本模块不依赖任何其他模块，
 事件契约不属于 LLM 客户端。
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-# 阶段名与事件类型（webapp 层 / 前端按这些键消费，改动须同步测试契约）
+# 阶段名与事件类型（sse 运行器 / 前端按这些键消费，改动须同步测试契约）
 PHASE_SUMMARY = "summary"  # 阶段 1：逐文件读全文出摘要
 PHASE_DECIDE = "decide"  # 阶段 2：基于摘要判定
 
@@ -23,9 +24,17 @@ EVENT_PHASE_DONE = "phase_done"
 
 # 模块推荐收敛循环（工单 10）的事件类型：round = 一轮收敛自检开始（round =
 # 轮次、round_total = 上限）；converged = 功能需求层两轮一致（round = 收敛
-# 轮次）。补问（questions）是终端事件，由 webapp 层发射（与 done / error 同款）。
+# 轮次）。补问（questions）是终端事件，由 sse 运行器发射（与 done / error 同款）。
 EVENT_ROUND = "round"
 EVENT_CONVERGED = "converged"
+
+# 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
+# done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
+# question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；
+# error 的 data = {"message": 中文错误信息}。词表唯一出处 = 本模块。
+EVENT_DONE = "done"
+EVENT_ERROR = "error"
+EVENT_QUESTION = "question"
 
 
 @dataclass(frozen=True)

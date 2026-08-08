@@ -15,11 +15,9 @@ import functools
 import inspect
 import json
 import tempfile
-import threading
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from queue import Full, Queue
-from typing import Any, Callable, Iterator, Sequence
+from typing import Any, Callable, Sequence
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -32,7 +30,13 @@ from .config import (
     save_config,
 )
 from .errors import error_entry
-from .events import ProgressEvent
+from .events import (
+    # 终态事件词表 re-export：唯一出处 = events.py（工单 C2），此处维持既有
+    # 导入契约（端点契约测试从 webapp 导入）；瘦身后的端点经 sse 运行器发射
+    EVENT_DONE,
+    EVENT_ERROR,
+    EVENT_QUESTION,
+)
 from .extraction import extract_file
 from .generator import (
     GenerationSummary,
@@ -75,6 +79,7 @@ from .reference_library import (
 )
 from .selection import resolve_selection, select_modules_convergent
 from .skeleton import generate_skeleton
+from .sse import SseEmitter, run_sse
 from .topic_library import (
     confirm_topics,
     delete_topic,
@@ -250,51 +255,10 @@ def _map_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 # ---------------------------------------------------------------------------
-# SSE 线格式共享契约（工单 02，与工单 03 并行开发，精确一致不得单方面改动）
-#
-# HTTP 200，Content-Type: text/event-stream，无自动重连（断线 = 放弃本次）。
-# 每个事件 = "event: <type>\n" + "data: <JSON>\n" + "\n"（空行分隔）。
-# 提炼端点 type ∈ start / batch_start / batch_done / retry / phase_done /
-# done / error（前五者由工单 01 的发射器产生，done / error 由本层发射收尾）；
-# 推荐端点（工单 10）type ∈ round / converged / question / done / error
-# （round / converged 由收敛循环发射器产生，question / done / error 由本层
-# 发射收尾）。进度事件 data = ProgressEvent 字段 JSON；done 的 data = 完整
-# 报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；question 的 data =
-# {"questions": [...]}（模型拿不准向用户补问）；error 的 data =
-# {"message": 中文错误信息}；done / question / error 后流结束。
+# SSE 线格式与流化运行器：唯一实现在 sse.py（工单 C2 深模块）——线格式
+# 契约、事件队列 + 旁路闭包、daemon 线程、stream 生成器；端点只保留入参
+# 校验与核心调用，SSE 机制一律经 run_sse。
 # ---------------------------------------------------------------------------
-
-EVENT_DONE = "done"
-EVENT_ERROR = "error"
-EVENT_QUESTION = "question"  # 推荐端点终端事件：模型拿不准，向用户补问
-
-# 事件缓冲上限与终端事件等待超时：进度事件只在批次边界产生（分钟级），
-# 100 个缓冲对在线消费方绰绰有余；客户端断开后队列无人消费——进度事件满即丢
-# （put_nowait，旁路），终端事件等超时后也丢——提炼线程（daemon）不因断线卡死。
-_SSE_QUEUE_MAXSIZE = 100
-_SSE_TERMINAL_TIMEOUT = 10  # 秒
-
-
-def _sse_frame(event_type: str, data: dict[str, Any]) -> str:
-    """SSE 帧：event 行 + data 行 + 空行（线格式共享契约的唯一实现点）。
-
-    json.dumps 默认转义字符串内换行——data 恒为单行，SSE 解析不歧义。
-    """
-    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-# 事件队列条目：进度事件原样入队；终端条目 = (kind, data)，kind ∈ done/error
-# （done 的 data = 报告 dict，error 的 data = 中文 message）
-_QueueItem = ProgressEvent | tuple[str, Any]
-
-
-def _put_terminal(events: Queue[_QueueItem], kind: str, data: Any) -> None:
-    """终端事件（done / error）入队：客户端已断开（队列满、无人消费）时等
-    超时后丢弃——提炼线程不因断线卡死（spec「断线」）。"""
-    try:
-        events.put((kind, data), timeout=_SSE_TERMINAL_TIMEOUT)
-    except Full:
-        pass
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -463,16 +427,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             )
             suggestions = ()
             reader = None
-        events: Queue[_QueueItem] = Queue(maxsize=_SSE_QUEUE_MAXSIZE)
-
-        def emit(event: ProgressEvent) -> None:
-            # 旁路：客户端断开后队列满 → 丢进度事件，不堵推荐线程
-            try:
-                events.put_nowait(event)
-            except Full:
-                pass
-
-        def run() -> None:
+        def run(emit: SseEmitter) -> None:
             try:
                 selection = select_modules_convergent(
                     _llm(context),
@@ -480,12 +435,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     summaries,
                     references=suggestions,
                     reader=reader,
-                    progress_emitter=emit,
+                    progress_emitter=emit.progress,
                 )
                 if selection.questions:
-                    _put_terminal(
-                        events, EVENT_QUESTION, {"questions": list(selection.questions)}
-                    )
+                    emit.question({"questions": list(selection.questions)})
                     return
                 result: dict[str, Any] = {
                     "modules": [
@@ -500,27 +453,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 if topic is not None:
                     result["topic_id"] = topic.key
                     result["related_modules"] = list(topic.related_modules)
-                _put_terminal(events, EVENT_DONE, result)
+                emit.done(result)
             except Exception as exc:
-                _put_terminal(events, EVENT_ERROR, _error_message(exc))
+                emit.error(_error_message(exc))
 
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-
-        def stream() -> Iterator[str]:
-            while True:
-                item = events.get()
-                if isinstance(item, ProgressEvent):
-                    yield _sse_frame(item.type, asdict(item))
-                    continue
-                kind, data = item
-                if kind in (EVENT_DONE, EVENT_QUESTION):
-                    yield _sse_frame(kind, data)
-                else:
-                    yield _sse_frame(EVENT_ERROR, {"message": data})
-                return
-
-        return StreamingResponse(stream(), headers={"Content-Type": "text/event-stream"})
+        return StreamingResponse(
+            run_sse(run), headers={"Content-Type": "text/event-stream"}
+        )
 
     @app.post("/api/selection/expand")
     @_map_errors
@@ -731,40 +670,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         project_dirs = _require_str_list(payload, "project_dirs")
         llm = _llm(context)
-        events: Queue[_QueueItem] = Queue(maxsize=_SSE_QUEUE_MAXSIZE)
 
-        def emit(event: ProgressEvent) -> None:
-            # 旁路（工单 01 决策）：客户端断开后队列满 → 丢进度事件，不堵提炼线程
-            try:
-                events.put_nowait(event)
-            except Full:
-                pass
-
-        def run() -> None:
+        def run(emit: SseEmitter) -> None:
             try:
                 projects = [scan_project(Path(d)) for d in project_dirs]
-                report = distill_master(llm, platform, projects, emit)
-                _put_terminal(events, EVENT_DONE, report.to_dict())
+                report = distill_master(llm, platform, projects, emit.progress)
+                emit.done(report.to_dict())
             except Exception as exc:
-                _put_terminal(events, EVENT_ERROR, _error_message(exc))
+                emit.error(_error_message(exc))
 
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-
-        def stream() -> Iterator[str]:
-            while True:
-                item = events.get()
-                if isinstance(item, ProgressEvent):
-                    yield _sse_frame(item.type, asdict(item))
-                    continue
-                kind, data = item
-                if kind == EVENT_DONE:
-                    yield _sse_frame(EVENT_DONE, data)
-                else:
-                    yield _sse_frame(EVENT_ERROR, {"message": data})
-                return
-
-        return StreamingResponse(stream(), headers={"Content-Type": "text/event-stream"})
+        return StreamingResponse(
+            run_sse(run), headers={"Content-Type": "text/event-stream"}
+        )
 
     @app.post("/api/masters/confirm")
     @_map_errors
