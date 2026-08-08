@@ -4,7 +4,7 @@
 """
 
 import json
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import pytest
 
@@ -33,6 +33,7 @@ from contest_generator.llm import (
     VALIDATION_SYSTEM_PROMPT,
     VALIDATION_SPECIFICITY_RULE,
     VersionSummary,
+    ReferenceSuggestion,
     _batches,
     _distill_user_prompt,
     _file_chars,
@@ -46,6 +47,7 @@ from contest_generator.llm import (
     parse_module_selection,
     parse_summary_report,
     parse_validation_result,
+    select_modules_two_level,
 )
 from contest_generator.report import (
     ACTION_EXCLUDE,
@@ -57,7 +59,7 @@ from contest_generator.report import (
     ReportError,
 )
 from contest_generator.manifest import ModuleManifest, PlatformEntry
-from tests.fakes import FakeTransport
+from tests.fakes import FakeLLM, FakeTransport
 
 SELECTION_JSON = json.dumps(
     {"modules": [{"slug": "dht11", "reason": "赛题要求采集温湿度"}]}
@@ -2186,3 +2188,245 @@ def test_distill_master_failure_path_emits_retries_then_raises():
     retries = [e for e in events if e.type == EVENT_RETRY]
     assert [(e.retry_round, e.missing_count) for e in retries] == [(1, 1), (2, 1)]
     assert all(e.phase == PHASE_SUMMARY and e.batch_index == 1 for e in retries)
+
+
+# ---------------------------------------------------------------------------
+# 工单 03：选模块 prompt 扩展——参考文件两级注入协议
+# ---------------------------------------------------------------------------
+
+
+def _suggestion(
+    entry_id: str, title: str = "参考标题", description: str = "一句话简介"
+) -> ReferenceSuggestion:
+    return ReferenceSuggestion(id=entry_id, title=title, description=description)
+
+
+def test_select_prompt_includes_reference_list_when_given():
+    """两级注入第一级：参考文件清单（标题 + 一句话简介）进选模块用户提示词。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "2026C 数字钥匙题",
+        ["- dht11: 温湿度传感器驱动"],
+        references=[_suggestion("key-example", "2026C 数字钥匙参考例程", "2026C 钥匙题配套例程")],
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "关联参考文件" in user_message
+    assert "- key-example: 2026C 数字钥匙参考例程 —— 2026C 钥匙题配套例程" in user_message
+    assert '"references"' in user_message  # 输出契约带 references 数组
+
+
+def test_select_prompt_embeds_requested_fulltexts():
+    """两级注入第二级：模型要求阅读全文的参考文件以全文形态嵌入（带截断标注）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    long_text = "长全文" * (JUDGMENT_CONTENT_CAP + 100)
+
+    llm.select_modules(
+        "赛题",
+        ["- dht11: 温湿度"],
+        references=[_suggestion("key-example")],
+        reference_fulltexts={"key-example": long_text},
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "以下是你要求阅读全文的参考文件" in user_message
+    assert "长全文" in user_message
+    assert TRUNCATION_NOTICE in user_message  # 全文同样走统一截断（带标注）
+
+
+def test_select_prompt_embeds_empty_fulltext_without_dropping():
+    """空文件全文也嵌入（带标注的空白块）——静默丢弃会让模型以为点名的文件没给。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "赛题",
+        ["- dht11: 温湿度"],
+        references=[_suggestion("key-example")],
+        reference_fulltexts={"key-example": ""},
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "key-example: 参考标题：" in user_message
+
+
+def test_select_prompt_without_references_keeps_old_shape():
+    """不传参考文件时提示词与既有形态一致（无参考段、输出契约不含 references）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules("赛题", ["- dht11: 温湿度"])
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "参考文件" not in user_message
+    assert '"references"' not in user_message
+
+
+def test_parse_selection_accepts_reference_ids():
+    result = parse_module_selection(
+        json.dumps(
+            {
+                "modules": [{"slug": "dht11", "reason": "测温湿度"}],
+                "references": ["key-example"],
+            }
+        ),
+        known_slugs=("dht11",),
+        known_reference_ids=("key-example",),
+    )
+
+    assert result.reference_ids == ("key-example",)
+
+
+def test_parse_selection_without_references_field_is_empty():
+    result = parse_module_selection(
+        json.dumps({"modules": []}), known_slugs=()
+    )
+    assert result.reference_ids == ()
+
+
+def test_parse_selection_rejects_reference_outside_suggestion_list():
+    with pytest.raises(LLMError, match="清单外"):
+        parse_module_selection(
+            json.dumps({"modules": [], "references": ["ghost"]}),
+            known_slugs=(),
+            known_reference_ids=("key-example",),
+        )
+
+
+def test_parse_selection_rejects_references_without_suggestion_list():
+    """没给参考文件清单时模型报 references = 幻觉：大声失败。"""
+    with pytest.raises(LLMError, match="未提供"):
+        parse_module_selection(
+            json.dumps({"modules": [], "references": ["ghost"]}),
+            known_slugs=(),
+        )
+
+
+def test_parse_selection_rejects_duplicate_reference_ids():
+    with pytest.raises(LLMError, match="重复"):
+        parse_module_selection(
+            json.dumps({"modules": [], "references": ["a", "a"]}),
+            known_slugs=(),
+            known_reference_ids=("a",),
+        )
+
+
+def test_select_modules_with_references_parses_reference_ids():
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"modules": [], "references": ["key-example"]}))
+    )
+    llm = _llm(transport)
+
+    result = llm.select_modules(
+        "赛题",
+        ["- dht11: 温湿度"],
+        references=[_suggestion("key-example")],
+    )
+
+    assert result.reference_ids == ("key-example",)
+
+
+# ---------------------------------------------------------------------------
+# 工单 03：两级注入协议驱动（先清单 → 判断需要时取全文 → 定稿）
+# ---------------------------------------------------------------------------
+
+
+class _RecordingSelectLLM(FakeLLM):
+    """记录型假 LLM：扩展 select_modules 签名并记录每次调用的形状。
+
+    fakes.py 只读（工单 01/02 约定），协议扩展的假件用子类补在测试文件里。
+    """
+
+    def __init__(self, selections: Sequence[ModuleSelection] = ()) -> None:
+        super().__init__()
+        self._queue = list(selections)
+        self.calls: list[
+            tuple[str, tuple[str, ...], tuple[str, ...], dict[str, str]]
+        ] = []
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+    ) -> ModuleSelection:
+        self.calls.append(
+            (
+                problem_text,
+                tuple(manifest_summaries),
+                tuple(r.id for r in references),
+                dict(reference_fulltexts or {}),
+            )
+        )
+        return self._queue.pop(0)
+
+
+def test_two_level_driver_fetches_fulltexts_and_recalls():
+    """第一级要读全文 → 逐条回读 → 第二级带全文重选，以第二级结果为终稿。"""
+    refs = [_suggestion("a", "A", "a"), _suggestion("b", "B", "b")]
+    fake = _RecordingSelectLLM(
+        [
+            ModuleSelection(modules=("dht11",), reasons={}, reference_ids=("a", "b")),
+            ModuleSelection(modules=("dht11",), reasons={}),
+        ]
+    )
+    read: list[str] = []
+
+    def reader(entry_id: str) -> str:
+        read.append(entry_id)
+        return f"全文{entry_id}"
+
+    result = select_modules_two_level(fake, "赛题", ["- dht11"], refs, reader=reader)
+
+    assert read == ["a", "b"]  # 只读第一级点名的文件
+    assert fake.calls[0][3] == {}  # 第一级：只有清单，无全文
+    assert fake.calls[1][3] == {"a": "全文a", "b": "全文b"}  # 第二级：带全文
+    assert result.modules == ("dht11",)
+    assert len(fake.calls) == 2
+
+
+def test_two_level_driver_single_call_when_no_references_wanted():
+    """清单级就足够：模型没点任何全文 → 一次调用即终稿，reader 不被调用。"""
+    fake = _RecordingSelectLLM([ModuleSelection(modules=("dht11",), reasons={})])
+
+    result = select_modules_two_level(
+        fake, "赛题", ["- dht11"], [_suggestion("a")], reader=lambda rid: "x"
+    )
+
+    assert len(fake.calls) == 1
+    assert result.modules == ("dht11",)
+
+
+def test_two_level_driver_without_references_uses_old_signature():
+    """无参考文件清单时退化为普通 select_modules（旧签名）——既有假 LLM
+    （fakes.py 只读）无需改动即可继续服务 webapp 推荐端点。"""
+    fake = _RecordingSelectLLM([ModuleSelection(modules=("dht11",), reasons={})])
+
+    select_modules_two_level(fake, "赛题", ["- dht11"])
+
+    assert fake.calls == [("赛题", ("- dht11",), (), {})]
+
+
+def test_two_level_driver_without_reader_keeps_first_stage_result():
+    """没有全文回读通道时以清单级结果为终稿（references 信息保留）。"""
+    fake = _RecordingSelectLLM(
+        [ModuleSelection(modules=("dht11",), reasons={}, reference_ids=("a",))]
+    )
+
+    result = select_modules_two_level(fake, "赛题", ["- dht11"], [_suggestion("a")])
+
+    assert result.reference_ids == ("a",)
+    assert len(fake.calls) == 1
+
+
+def test_two_level_driver_plain_fake_backward_compatible():
+    """既有 FakeLLM（旧签名）无参考清单时照常服务（webapp 无历史赛题的基线）。"""
+    fake = FakeLLM(selection=ModuleSelection(modules=("dht11",), reasons={}))
+
+    result = select_modules_two_level(fake, "赛题", ["- dht11"])
+
+    assert result.modules == ("dht11",)

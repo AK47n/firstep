@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,6 +29,7 @@ from contest_generator.llm import (
     PHASE_SUMMARY,
     ProgressEmitter,
     ProgressEvent,
+    ReferenceSuggestion,
     ValidationResult,
 )
 from contest_generator.report import (
@@ -49,6 +50,16 @@ from tests.fakes import (
     make_fake_module_library,
     make_fake_stm32_projects,
     make_sample_docx,
+)
+from tests.generate_wiring_fakes import (
+    KIT_REFERENCE_ID,
+    TOPIC_PROBLEM_TEXT,
+    TOPIC_REFERENCE_ID,
+    UWB_REFERENCE_ID,
+    make_fake_reference_library,
+    make_fake_topic_library,
+    make_kit_candidate_module,
+    make_topic_specific_module,
 )
 
 SELECTION = ModuleSelection(
@@ -1343,3 +1354,194 @@ def test_settings_requires_api_key_on_first_configuration(tmp_path):
 
     assert resp.status_code == 400
     assert "API key" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 工单 03：生成流程的历史赛题入口（topic_id / 粘贴题面自动识别）+ 两级注入
+# ---------------------------------------------------------------------------
+
+
+class TopicAwareLLM(FakeLLM):
+    """历史赛题入口的记录型假 LLM：记录选模块收到的题面 / 参考文件清单 /
+    全文，编号提取固定返回（FakeLLM 只读，扩展走子类）。"""
+
+    def __init__(
+        self, selection: ModuleSelection = SELECTION, extracted_key: str | None = "2026C"
+    ) -> None:
+        super().__init__(selection=selection)
+        self._extracted_key = extracted_key
+        self.extract_calls = 0
+        self.problem_texts: list[str] = []
+        self.reference_ids: list[tuple[str, ...]] = []
+        self.fulltexts: list[dict[str, str]] = []
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+    ) -> ModuleSelection:
+        self.problem_texts.append(problem_text)
+        self.reference_ids.append(tuple(r.id for r in references))
+        self.fulltexts.append(dict(reference_fulltexts or {}))
+        return self._selection
+
+    def topic_extract_number(self, text: str) -> str | None:
+        self.extract_calls += 1
+        return self._extracted_key
+
+
+def _wire_material_libraries(context) -> None:
+    """在既有假上下文上补齐素材区：赛题库 / 参考文件库 / 该题专用模块与普通
+    候选模块。素材区与 webapp 推导一致（模块库平级：topics/ 与 references/）。"""
+    ctx = context[0]
+    make_topic_specific_module(ctx.config.module_library_dir)
+    make_kit_candidate_module(ctx.config.module_library_dir)
+    make_fake_topic_library(ctx.config.module_library_dir.parent / "topics")
+    make_fake_reference_library(ctx.config.module_library_dir.parent / "references")
+
+
+def test_recommend_with_topic_id_uses_full_text_and_carries_materials(client, context):
+    """显式 topic_id：长 PDF 题面全文只在选了该赛题时进上下文；候选清单带
+    该题 / 套件关联的参考文件（标题 + 简介清单段）；响应带识别结果与该题
+    专用模块（供 UI 呈现与后续阶段透传）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    resp = client.post(
+        "/api/recommend",
+        json={"problem_text": "用户粘贴的片段", "topic_id": "2026C"},
+    )
+
+    assert resp.status_code == 200
+    llm = holder["llm"]
+    assert llm.extract_calls == 0  # 显式编号不需要 AI 提取
+    assert llm.problem_texts == [TOPIC_PROBLEM_TEXT]
+    assert llm.reference_ids == [
+        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID, UWB_REFERENCE_ID)
+    ]
+    data = resp.json()
+    assert data["topic_id"] == "2026C"
+    assert data["related_modules"] == ["lock_control"]
+    assert data["modules"] == [
+        {"slug": "dht11", "reason": "赛题要求采集温湿度"},
+        {"slug": "oled", "reason": "需要显示测量结果"},
+    ]
+
+
+def test_recommend_auto_recognizes_number_in_pasted_text(client, context):
+    """粘贴题面中出现编号同样可认：AI 提取编号 → 查库得题面全文 + 素材。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION)  # 默认提取到 2026C
+
+    resp = client.post("/api/recommend", json={"problem_text": "……2026C 数字钥匙……"})
+
+    assert resp.status_code == 200
+    llm = holder["llm"]
+    assert llm.extract_calls == 1
+    assert llm.problem_texts == [TOPIC_PROBLEM_TEXT]
+    assert resp.json()["topic_id"] == "2026C"
+
+
+def test_recommend_auto_recognition_falls_back_when_topic_missing(client, context):
+    """自动识别查无此条：尽力而为静默降级——按纯粘贴题面流程走，不报错。"""
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION)  # 提取到 2026C 但库里没有
+
+    resp = client.post("/api/recommend", json={"problem_text": "粘贴片段"})
+
+    assert resp.status_code == 200
+    llm = holder["llm"]
+    assert llm.problem_texts == ["粘贴片段"]
+    assert "topic_id" not in resp.json()
+
+
+def test_recommend_two_level_injection_reads_fulltexts_when_requested(
+    client, context
+):
+    """两级注入协议端到端：模型第一级点名的参考文件取全文进第二级上下文。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    selection = ModuleSelection(
+        modules=("dht11",),
+        reasons={"dht11": "赛题要求采集温湿度"},
+        reference_ids=(TOPIC_REFERENCE_ID,),
+    )
+    holder["llm"] = TopicAwareLLM(selection=selection, extracted_key=None)
+
+    resp = client.post(
+        "/api/recommend",
+        json={"problem_text": "粘贴", "topic_id": "2026C"},
+    )
+
+    assert resp.status_code == 200
+    llm = holder["llm"]
+    assert llm.fulltexts[0] == {}  # 第一级：只有清单
+    assert "/* 数字钥匙例程 */" in llm.fulltexts[1][TOPIC_REFERENCE_ID]  # 第二级：全文
+    assert len(llm.problem_texts) == 2
+
+
+def test_skeleton_with_topic_id_uses_full_text_and_related_modules(client, context):
+    """骨架阶段：题面全文进上下文（长 PDF 题面全文只在选了该赛题时进上下文），
+    该题专用模块并入接口块（main.c 可初始化它）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "topic_id": "2026C",
+        },
+    )
+
+    assert resp.status_code == 200
+    llm = holder["llm"]
+    assert llm.skeleton_calls[0][0] == TOPIC_PROBLEM_TEXT
+    assert any("lock_control.h" in text for text in llm.skeleton_calls[0][1])
+
+
+def test_generate_with_topic_id_auto_includes_related_modules(client, context, tmp_path):
+    """生成请求带 topic_id：该题专用模块自动并入最终工程（生成物与手选等价）。"""
+    _wire_material_libraries(context)
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    output_dir = tmp_path / "out" / "demo"
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+            "topic_id": "2026C",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert (output_dir / "modules" / "lock_control" / "lock_control.c").is_file()
+
+
+def test_generate_with_unknown_topic_id_returns_400(client, context, tmp_path):
+    """生成请求带库中不存在的编号：明确报错（不猜测编造），不产出残缺工程。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(tmp_path / "out"),
+            "topic_id": "2021F",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "2021F" in resp.json()["detail"]

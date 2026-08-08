@@ -18,7 +18,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, Sequence, TypeVar
+from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
 
 from .config import AppConfig
 from .manifest import ModuleManifest
@@ -304,10 +304,26 @@ class ModuleSelection:
 
     依赖展开与生成前的增删由 selection.resolve_dependencies 在用户确认后
     统一处理——AI 输出后用户还可能增删，先展开的集合无法代表最终选择。
+    reference_ids 是两级注入第一级的产物：模型想读全文的参考文件 id（没给
+    参考文件清单时恒为空）。
     """
 
     modules: tuple[str, ...]  # 模块 slug（AI 推荐顺序）
     reasons: dict[str, str]  # slug -> 推荐理由
+    reference_ids: tuple[str, ...] = ()  # 两级注入第一级：想读全文的参考文件 id
+
+
+@dataclass(frozen=True)
+class ReferenceSuggestion:
+    """两级注入的清单段：一个参考文件（标题 + 一句话简介），供选模块 AI 判断是否取全文。
+
+    清单段由 selection 层装配（associated_references → reference_suggestions）；
+    id 与参考文件库条目的 id 一致——AI 点名要读的 id 就是全文回读的键。
+    """
+
+    id: str
+    title: str
+    description: str
 
 
 @dataclass(frozen=True)
@@ -487,7 +503,11 @@ def _emit(emitter: ProgressEmitter | None, event: ProgressEvent) -> None:
 
 class LLM(Protocol):
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[str]
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection: ...
 
     def generate_main_skeleton(
@@ -596,19 +616,36 @@ class DeepSeekLLM:
         self._transport = transport or UrllibTransport()
 
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[str]
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
+        """赛题 → 模块选择（工单 03 起带参考文件两级注入的清单 / 全文两个形态）。
+
+        references = 该赛题 / 套件关联的参考文件清单（标题 + 一句话简介，
+        两级注入第一级）；reference_fulltexts = 模型点名要读全文的参考文件
+        （id → 全文，第二级）。两者都缺时行为与既有实现完全一致（提示词无
+        参考段、输出契约无 references 字段）。
+        """
         content = self._chat(
             [
                 {"role": "system", "content": SELECT_SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": _selection_user_prompt(problem_text, manifest_summaries),
+                    "content": _selection_user_prompt(
+                        problem_text, manifest_summaries, references, reference_fulltexts
+                    ),
                 },
             ],
             json_mode=True,
         )
-        return parse_module_selection(content, known_slugs=_summary_slugs(manifest_summaries))
+        return parse_module_selection(
+            content,
+            known_slugs=_summary_slugs(manifest_summaries),
+            known_reference_ids=[r.id for r in references],
+        )
 
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
@@ -1061,12 +1098,17 @@ class DeepSeekLLM:
 
 
 def parse_module_selection(
-    content: str, known_slugs: Sequence[str]
+    content: str,
+    known_slugs: Sequence[str],
+    known_reference_ids: Sequence[str] = (),
 ) -> ModuleSelection:
     """把模型返回的 JSON 文本解析校验为 ModuleSelection。
 
     任何结构 / 内容问题（非 JSON、缺模块数组、未知 slug、重复、字段类型错）
     都抛 LLMError——模型输出不可信，宁可大声失败也不要带病进入生成流程。
+    references 数组（两级注入第一级，可选）同样严格：没给参考文件清单时模型
+    报 references = 幻觉（大声失败）；给了则必须全部在清单内、不重复——要求
+    阅读清单外的参考文件也是幻觉，读它 = 把没校验过的内容带进上下文。
     """
     try:
         data = json.loads(content)
@@ -1093,7 +1135,25 @@ def parse_module_selection(
             raise LLMError(f"模块 {slug} 的 reason 必须是字符串")
         modules.append(slug)
         reasons[slug] = reason
-    return ModuleSelection(modules=tuple(modules), reasons=reasons)
+
+    raw_reference_ids = data.get("references", [])
+    if not isinstance(raw_reference_ids, list):
+        raise LLMError("references 必须是数组")
+    if not known_reference_ids and raw_reference_ids:
+        raise LLMError("模型输出了未提供的参考文件 id（没给清单却要点名读全文）")
+    reference_ids: list[str] = []
+    known_refs = set(known_reference_ids)
+    for index, item in enumerate(raw_reference_ids):
+        if not isinstance(item, str) or not item:
+            raise LLMError(f"references[{index}] 必须是字符串")
+        if item not in known_refs:
+            raise LLMError(f"模型要求阅读清单外的参考文件：{item}")
+        if item in reference_ids:
+            raise LLMError(f"模型重复要求阅读参考文件：{item}")
+        reference_ids.append(item)
+    return ModuleSelection(
+        modules=tuple(modules), reasons=reasons, reference_ids=tuple(reference_ids)
+    )
 
 
 def parse_distillation_report(
@@ -1245,10 +1305,67 @@ def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) ->
     return "\n".join(lines)
 
 
-def _selection_user_prompt(problem_text: str, manifest_summaries: Sequence[str]) -> str:
+def _selection_user_prompt(
+    problem_text: str,
+    manifest_summaries: Sequence[str],
+    references: Sequence[ReferenceSuggestion] = (),
+    reference_fulltexts: Mapping[str, str] | None = None,
+) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     prompt = _build_user_prompt(problem_text, "模块库可用模块：", manifest_summaries)
+    if references:
+        lines = [
+            "",
+            "关联参考文件（标题 + 一句话简介；如需阅读全文，在输出的 references "
+            "数组里列出想读的 id，系统随后给出全文）：",
+        ]
+        lines.extend(
+            f"- {ref.id}: {ref.title} —— {ref.description}" for ref in references
+        )
+        prompt += "\n".join(lines)
+    if reference_fulltexts:
+        lines = ["", "以下是你要求阅读全文的参考文件："]
+        for ref in references:
+            fulltext = reference_fulltexts.get(ref.id)
+            if fulltext is not None:
+                # 空文件也嵌入（带文件名标注的空白块）——静默丢弃会让模型以为
+                # 它点名的文件没给，与"读到什么就是什么"的截断契约一致
+                lines.append(
+                    f"- {ref.id}: {ref.title}：\n```\n{_truncate_content(fulltext)}\n```"
+                )
+        prompt += "\n".join(lines)
+    if references:
+        return (
+            prompt
+            + '\n只返回 json 格式的 JSON 对象：{"modules": [{"slug": "...", "reason": '
+            '"..."}], "references": ["想读全文的参考文件 id，不需要可省略"]}'
+        )
     return prompt + '\n只返回 json 格式的 JSON 对象：{"modules": [{"slug": "...", "reason": "..."}]}'
+
+
+def select_modules_two_level(
+    llm: LLM,
+    problem_text: str,
+    manifest_summaries: Sequence[str],
+    references: Sequence[ReferenceSuggestion] = (),
+    reader: Callable[[str], str] | None = None,
+) -> ModuleSelection:
+    """两级注入协议驱动：先清单（标题 + 一句话简介），LLM 判断需要时取全文再选模块。
+
+    第一级：模块候选 + 参考文件清单 → LLM 返回推荐与想读全文的参考文件 id
+    （reference_ids）。有想读的且给了 reader → 逐条取全文（第二级）后带全文
+    重选，以第二级结果为终稿——全文已在上下文，模型据此定稿；没有想读的 →
+    第一级结果即终稿。恰好两级：第二级仍要求更多全文时不再注入（想要的已全
+    给），以第二级结果为准。没有参考文件清单时退化为普通 select_modules——
+    调用形状不变（旧签名），既有假 LLM（fakes.py 只读）无需改动即可继续服务。
+    """
+    if not references:
+        return llm.select_modules(problem_text, manifest_summaries)
+    first = llm.select_modules(problem_text, manifest_summaries, references)
+    if not first.reference_ids or reader is None:
+        return first  # 没有想读的，或没有全文回读通道：清单级结果即终稿
+    fulltexts = {entry_id: reader(entry_id) for entry_id in first.reference_ids}
+    return llm.select_modules(problem_text, manifest_summaries, references, fulltexts)
 
 
 def _summarize_user_prompt(
