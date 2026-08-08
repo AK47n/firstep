@@ -3,19 +3,21 @@
 generate_project 是完整流程入口：选模块（加载库 + 展开依赖 + 平台警告）→
 定位母版 → generate 落盘 → 只读摘要，webapp 与测试都经它驱动；generate 是
 内部落盘步骤（母版文件复制、模块文件按平台版本复制到 modules/<slug>/、
-main.c 落位（落位前静态自检：引用的函数必须在所选模块头文件中）、平台
-修改器经注册表委托）。
+main.c 落位（落位前静态自检：引用的函数必须在所选模块头文件中、main.c 与
+模块源码的每个引号 include 必须在最终工程里能解析）、平台修改器经注册表委托）。
 
 所有校验失败都在创建输出目录之前发生，绝不产出残缺工程。
 """
 
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
+from .keil import include_search_dirs
 from .library import list_modules
 from .llm import LLM, LLMError, build_manifest_summaries
 from .manifest import ModuleManifest
@@ -29,7 +31,7 @@ from .selection import (
     reference_suggestions,
     resolve_selection,
 )
-from .skeleton import verify_main_c
+from .skeleton import _strip_comments_keep_preprocessor, verify_main_c
 from .topic_library import (
     TopicEntry,
     TopicError,
@@ -58,6 +60,34 @@ class MissingModuleFilesError(GeneratorError):
 
 class UndefinedCallsError(GeneratorError):
     """main.c 调用了所选模块头文件中不存在的函数，拒绝产出残缺工程。"""
+
+
+class FencedMainCError(GeneratorError):
+    """main.c 含 Markdown 代码围栏（LLM 围栏输出未剥离），拒绝产出残缺工程。"""
+
+
+class UnresolvedIncludeError(GeneratorError):
+    """main.c 或模块源码引用了最终工程里不存在的头文件，拒绝产出残缺工程。"""
+
+
+# Markdown 代码围栏行（与 skeleton.strip_code_fences 同一形态）：main.c 手改
+# 或旧流程产物若带围栏，Keil 报 unrecognized token（判例见 strip_code_fences）
+_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
+
+# 引号 include 提取（注释/字符串剔除后匹配，见 _check_unresolved_includes）
+_INCLUDE_QUOTED_RE = re.compile(r'#\s*include\s*"([^"]+)"')
+
+# Keil 在工程外也能解析的头：ARMCC 标准库（引号形式同样走库搜索）与器件包
+# （stm32f10x_conf.h 由 STM32F1xx DFP 提供，工程树里没有）。缺了会误报。
+_EXTERNAL_HEADERS = frozenset(
+    {
+        "math.h", "stdio.h", "stdlib.h", "string.h", "stdint.h", "stdbool.h",
+        "stddef.h", "limits.h", "float.h", "assert.h", "errno.h", "ctype.h",
+        "time.h", "inttypes.h", "stdarg.h", "setjmp.h", "signal.h", "locale.h",
+        "wchar.h", "wctype.h", "complex.h", "fenv.h", "tgmath.h", "iso646.h",
+        "stdatomic.h", "threads.h", "uchar.h", "stm32f10x_conf.h",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -274,6 +304,9 @@ def generate(
 
     _check_module_files(manifests, platform, module_library_dir)
     _check_main_calls(main_c_content, manifests, platform, module_library_dir)
+    _check_unresolved_includes(
+        main_c_content, manifests, platform, module_library_dir, master_project_dir
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -329,14 +362,82 @@ def _check_main_calls(
     自检实现归 skeleton.verify_main_c（与骨架阶段共用同一份接口块）——
     "不存在的调用"只有一个实现、两种出口：骨架阶段改写为注释占位，走到
     这里的 main.c 若仍含不存在的调用（用户手改等），明确报错，拒绝产出
-    无法编译的工程。
+    无法编译的工程。main.c 含 Markdown 代码围栏同样明确报错（骨架阶段已
+    剥离，走到这里说明输入绕过骨架阶段或手改带入）。
     """
+    for i, line in enumerate(main_c_content.splitlines(), 1):
+        if _FENCE_LINE_RE.match(line):
+            raise FencedMainCError(
+                f"main.c 第 {i} 行是 Markdown 代码围栏（{line.strip()}），不是 C 代码"
+                " —— 骨架阶段会剥离 LLM 围栏输出，请直接用纯 C 代码"
+            )
     undefined = verify_main_c(main_c_content, manifests, platform, library_dir)
     if undefined:
         raise UndefinedCallsError(
             "main.c 调用了所选模块头文件中不存在的函数："
             + "、".join(undefined)
             + " —— 请改用真实接口，或让骨架阶段自检改写为注释占位"
+        )
+
+
+def _check_unresolved_includes(
+    main_c_content: str,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path,
+) -> None:
+    """生成前静态校验：main.c 与模块源码的每个引号 include 都必须在最终工程里可解析。
+
+    Keil 语义：#include "x.h" 先找当前文件所在目录，再按 IncludePath 顺序找
+    （模块代码目录自动追加 + 母版自带）；工程内找不到且不是标准库 / 器件包
+    头 → 拒绝生成（判例：库模块 pid.c 引用了从未入库的 digit_uart.h，Keil
+    报 cannot open source input file，真机编译失败）。检查在创建输出目录
+    之前发生，不产出残缺工程。
+    """
+    # 搜索目录 = 母版 IncludePath + 各模块代码目录（_copy_module_files 会把
+    # 这些目录追加进 uvprojx IncludePath，与 Keil 实际搜索范围一致）
+    search_dirs: list[Path] = list(include_search_dirs(master_project_dir))
+    seen: set[str] = {str(d).lower() for d in search_dirs}
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for rel in entry.files:
+            parent = (library_dir / manifest.slug / Path(rel)).parent.resolve()
+            key = str(parent).lower()
+            if key not in seen:
+                seen.add(key)
+                search_dirs.append(parent)
+
+    checks: list[tuple[str, Path, str]] = [(f"main.c", master_project_dir, main_c_content)]
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for rel in entry.files:
+            if not rel.lower().endswith((".c", ".h")):
+                continue
+            path = library_dir / manifest.slug / rel
+            if not path.is_file():  # 文件缺失由 _check_module_files 兜底
+                continue
+            label = f"模块 {manifest.slug} 的 {rel}"
+            checks.append((label, path.parent, path.read_text(encoding="utf-8", errors="replace")))
+
+    problems: list[str] = []
+    for label, own_dir, code in checks:
+        stripped = _strip_comments_keep_preprocessor(code)
+        for m in _INCLUDE_QUOTED_RE.finditer(stripped):
+            header = m.group(1)
+            if any((d / header).is_file() for d in (own_dir, *search_dirs)):
+                continue
+            if header.lower() in _EXTERNAL_HEADERS:
+                continue
+            problems.append(f"{label} 引用了最终工程中不存在的头文件 {header}")
+    if problems:
+        raise UnresolvedIncludeError(
+            "生成工程无法编译（include 解析失败）：\n- " + "\n- ".join(problems)
+            + "\n —— 请将该头文件所属模块一并选中，或补录模块库条目"
         )
 
 
