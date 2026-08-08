@@ -24,14 +24,25 @@ LLM，协议在 llm 层；超长全文走确定性分块 split_topics_document�
 
 from __future__ import annotations
 
-import json
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .entry_store import entry_transaction, iter_entry_dirs, write_json
+from .entry_store import (
+    StoreError,
+    StoreParseError,
+    StoreReadError,
+    StoreShapeError,
+    delete_entry,
+    entry_transaction,
+    iter_entry_dirs,
+    read_json,
+    require_str,
+    validate_store_key,
+    write_json,
+)
 from .library import list_modules
 from .manifest import MANIFEST_FILENAME, ModuleManifest
 
@@ -60,9 +71,12 @@ def validate_topic_key(key: str) -> str | None:
 
     合法返回 None，非法返回中文错误说明。拆条解析 / 编号提取 / 入库校验
     共用——文案只在此一处，改格式只动这里（与 TRUNCATION_NOTICE 同款
-    单源约定，避免各层文案漂移）。
+    单源约定，避免各层文案漂移）。执行走 entry_store 原语（validate_store_key），
+    正则与文案仍归本模块。
     """
-    if not TOPIC_KEY_PATTERN.fullmatch(key):
+    try:
+        validate_store_key(key, TOPIC_KEY_PATTERN, "赛题编号")
+    except StoreError:
         return (
             f"赛题编号格式非法：{key!r}"
             "（须为 4 位年份 + 单个大写字母题号，如 2026C）"
@@ -201,12 +215,13 @@ def delete_topic(topic_library_root: Path, key: str) -> None:
     """删除赛题条目：整个目录移除（含题面与原 PDF 副本）。
 
     编号先过格式校验（_entry_dir 拦截路径穿越）；查无此条明确报错（与
-    resolve_number 同文案，不猜测编造）。
+    resolve_number 同文案，不猜测编造，目录存在校验走 entry_store 原语）。
     """
-    entry_dir = _entry_dir(topic_library_root, key)
-    if not entry_dir.is_dir():
-        raise TopicError(f"题库中没有该编号的赛题：{key}")
-    shutil.rmtree(entry_dir)
+    _entry_dir(topic_library_root, key)  # 编号先过格式校验（_entry_dir 拦截路径穿越）
+    try:
+        delete_entry(topic_library_root, key)
+    except StoreError:
+        raise TopicError(f"题库中没有该编号的赛题：{key}") from None
 
 
 def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
@@ -433,21 +448,23 @@ def _entry_dir(topic_library_root: Path, key: str) -> Path:
 
 
 def _load_entry(entry_dir: Path) -> TopicEntry:
-    """从条目目录加载：manifest.json + 题面 .md；缺失 / 损坏抛 TopicError。"""
+    """从条目目录加载：manifest.json + 题面 .md；缺失 / 损坏抛 TopicError。
+
+    读盘 / 解析 / 形状校验走 entry_store 原语（read_json），错误类型与文案
+    仍归本模块。
+    """
     try:
-        text = (entry_dir / MANIFEST_FILENAME).read_text(encoding="utf-8")
-    except OSError as exc:
+        data = read_json(entry_dir, MANIFEST_FILENAME)
+    except StoreReadError as exc:
         raise TopicError(
-            f"赛题条目 {entry_dir.name} 的 manifest 无法读取：{exc}"
+            f"赛题条目 {entry_dir.name} 的 manifest 无法读取：{exc.error}"
         ) from exc
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
+    except StoreParseError as exc:
         raise TopicError(
-            f"赛题条目 {entry_dir.name} 的 manifest 不是合法 JSON：{exc}"
+            f"赛题条目 {entry_dir.name} 的 manifest 不是合法 JSON：{exc.error}"
         ) from exc
-    if not isinstance(data, dict):
-        raise TopicError(f"赛题条目 {entry_dir.name} 的 manifest 必须是 JSON 对象")
+    except StoreShapeError:
+        raise TopicError(f"赛题条目 {entry_dir.name} 的 manifest 必须是 JSON 对象") from None
     year = _require_str(data, "year", entry_dir)
     number = _require_str(data, "number", entry_dir)
     problem_md = _require_str(data, "problem_md", entry_dir)
@@ -476,7 +493,9 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
 
 
 def _require_str(data: Mapping[str, Any], key: str, entry_dir: Path) -> str:
-    value = data.get(key)
-    if not isinstance(value, str) or not value:
-        raise TopicError(f"赛题条目 {entry_dir.name} 的 manifest 缺少必填字段：{key}")
-    return value
+    try:
+        return require_str(data, key)
+    except StoreError:
+        raise TopicError(
+            f"赛题条目 {entry_dir.name} 的 manifest 缺少必填字段：{key}"
+        ) from None

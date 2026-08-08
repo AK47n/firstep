@@ -34,7 +34,7 @@ from .events import (
     ProgressEvent,
     _emit,
 )
-from .manifest import ModuleManifest
+from .manifest import ModuleManifest, collect_kits
 from .report import (
     ACTION_MERGE,
     FileDecision,
@@ -488,18 +488,14 @@ def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
     """模块库 manifest 摘要行（喂给 LLM 的可用模块清单）。
 
     行格式：`- slug: description（套件: kit; 依赖: ...）`——套件段聚合各平台
-    条目的 kit（去重保序，有 kit 才显示，AI 靠它分辨"哪个套件的 UWB"）；依赖
-    段有依赖才显示。行格式与 _summary_slugs 的反向解析耦合：改动格式须同步两处。
+    条目的 kit（去重保序走 manifest.collect_kits 单源，有 kit 才显示，AI 靠它
+    分辨"哪个套件的 UWB"）；依赖段有依赖才显示。行格式与 _summary_slugs 的
+    反向解析耦合：改动格式须同步两处。
     """
     lines = []
     for manifest in manifests:
         line = f"- {manifest.slug}: {manifest.description}"
-        kits: list[str] = []
-        seen: set[str] = set()
-        for entry in manifest.platforms.values():
-            if entry.kit and entry.kit not in seen:
-                seen.add(entry.kit)
-                kits.append(entry.kit)
+        kits = collect_kits([manifest])
         if kits:
             line += f"（套件: {'、'.join(kits)}"
             if manifest.dependencies:

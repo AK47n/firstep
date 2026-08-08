@@ -15,6 +15,12 @@ import inspect
 import pkgutil
 
 import contest_generator
+from contest_generator.entry_store import (
+    StoreError,
+    StoreParseError,
+    StoreReadError,
+    StoreShapeError,
+)
 from contest_generator.errors import _ERROR_TABLE, error_entry
 from contest_generator.llm import LLMError
 from contest_generator.manifest import ManifestError
@@ -26,6 +32,13 @@ from contest_generator.wordlist import WordlistError
 # 刻意按 500 暴露的类（不登记）：这些类从不直达 web 层，泄漏必是真 bug，
 # 500 大声失败正是政策本意——结构测试不强制它们入表，逐条注释理由：
 _UNREGISTERED_WHITELIST: tuple[type[Exception], ...] = (
+    # 条目库原语失败（entry_store.py：读盘 / 解析 / 形状 / 键非法 / 查无
+    # 此条 / 字段缺失）：四库全部捕获重包装为各自域错误（已登记）；能漏到
+    # 路由层 = 调用方漏包装 → 500 正确
+    StoreError,
+    StoreReadError,
+    StoreParseError,
+    StoreShapeError,
     # 模块清单内部校验（manifest.py）：所有出厂路径都被 library.py 捕获
     # 重包装为 LibraryError（已登记）；能漏到路由层 = 调用方 bug → 500 正确
     ManifestError,

@@ -7,10 +7,18 @@ files 里，相对模块目录）。
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
+
+from .entry_store import (
+    StoreError,
+    StoreParseError,
+    StoreReadError,
+    StoreShapeError,
+    is_unsafe_path,
+    read_json,
+)
 
 MANIFEST_FILENAME = "manifest.json"
 
@@ -94,14 +102,14 @@ class ModuleManifest:
 
     @classmethod
     def load(cls, module_dir: Path) -> "ModuleManifest":
-        """读取模块目录下的 manifest.json。"""
+        """读取模块目录下的 manifest.json（读盘 / 解析 / 形状走 entry_store 原语）。"""
         manifest_path = module_dir / MANIFEST_FILENAME
         try:
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ManifestError(f"无法读取 {manifest_path}: {exc}") from exc
-        if not isinstance(data, dict):
-            raise ManifestError(f"{manifest_path} 必须是 JSON 对象")
+            data = read_json(module_dir, MANIFEST_FILENAME)
+        except (StoreReadError, StoreParseError) as exc:
+            raise ManifestError(f"无法读取 {manifest_path}: {exc.error}") from exc
+        except StoreShapeError:
+            raise ManifestError(f"{manifest_path} 必须是 JSON 对象") from None
         manifest = cls.from_dict(data)
         if manifest.slug != module_dir.name:
             raise ManifestError(
@@ -167,11 +175,19 @@ def _parse_dependencies(dependencies: Any) -> list[str]:
     return dependencies
 
 
-def is_unsafe_path(path: str) -> bool:
-    """路径必须是相对路径，不含 .. 、空段、绝对路径（跨目录逃逸风险）。"""
-    return (
-        path.startswith("/")
-        or ":" in path
-        or "\\" in path
-        or any(part in ("", "..") for part in path.split("/"))
-    )
+def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
+    """平台条目 kit 词表（保序去重、空值跳过）：硬件身份词表的唯一实现。
+
+    调用方（reference_library.module_kit_vocabulary / selection 的关联参考
+    收集 / llm 的 manifest 摘要行）都从这里取——顺序 = manifests 顺序 ×
+    平台条目插入顺序 × 首次出现。字段所有者是 PlatformEntry.kit，词表语义
+    只在此一处（改语义同步改调用方测试）。
+    """
+    kits: list[str] = []
+    seen: set[str] = set()
+    for manifest in manifests:
+        for entry in manifest.platforms.values():
+            if entry.kit and entry.kit not in seen:
+                seen.add(entry.kit)
+                kits.append(entry.kit)
+    return kits
