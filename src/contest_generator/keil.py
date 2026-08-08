@@ -203,6 +203,37 @@ def _keil_rel_flat(uvprojx_dir_parts: tuple[str, ...], target: str) -> str:
     return "..\\" + posix
 
 
+def include_search_dirs(project_dir: Path) -> list[Path]:
+    """工程 .uvprojx IncludePath 的目录（Keil 对引号头文件的搜索范围）。
+
+    IncludePath 条目相对 .uvprojx 所在目录（Keil 惯例），解析为绝对目录、
+    按出现顺序去重。找不到 .uvprojx 返回空列表——生成路径母版必有 uvprojx
+    （KeilPatcher 兜底报错），此函数只为解析 include 搜索目录。
+    """
+    try:
+        uvprojx = _find_uvprojx(project_dir)
+    except KeilProjectError:
+        return []
+    root, _ = parse_project_file(uvprojx, KeilProjectError)
+    dirs: list[Path] = []
+    seen: set[str] = set()
+    for target in root.findall("Targets/Target"):
+        include_el = _find_include_path(target)
+        if include_el is None or not include_el.text:
+            continue
+        for entry in include_el.text.split(";"):
+            entry = entry.strip().replace("\\", "/")
+            if not entry:
+                continue
+            p = Path(entry)
+            resolved = p if p.is_absolute() else (uvprojx.parent / p)
+            key = str(resolved).lower()
+            if key not in seen:
+                seen.add(key)
+                dirs.append(resolved.resolve())
+    return dirs
+
+
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
     """.uvprojx 的只读配置摘要：设备 / include path（母版提炼的配置对比素材）。
 
