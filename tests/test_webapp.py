@@ -533,6 +533,29 @@ def test_generate_rejects_main_c_with_undefined_calls(client, context, tmp_path)
     assert "不存在的函数" in resp.json()["detail"]
 
 
+def test_generate_unknown_platform_returns_400_chinese(client, context, tmp_path):
+    """实证 bug 修复（工单 C6）：platform 非法（用户可控输入）→ 400 中文。
+
+    UnknownPlatformError 原漏登记（error_to_http 表外）→ 500 "服务器内部
+    错误"，用户可控输入打在"真 bug"路径上；登记后 {"platform": "foo"} 得
+    可修复的 400，message 带已注册平台清单。
+    """
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": "foo",
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(tmp_path / "out"),
+        },
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "未知平台" in detail
+    assert "stm32" in detail  # 带已注册平台清单，用户可直接修正重试
+
+
 def test_recommend_llm_failure_ends_stream_with_error_event(client, context):
     """推荐端点（SSE 流）：LLM 失败以流内 error 事件收尾（HTTP 保持 200 起流，
     与提炼端点同款——客户端只认事件，不依赖状态码）。"""
