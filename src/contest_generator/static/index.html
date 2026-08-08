@@ -65,6 +65,19 @@
   .item .head { display: flex; gap: 8px; align-items: center; }
   .item .slug { font-weight: 600; font-family: Consolas, monospace; }
   .item .reason { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  /* 推荐卡片（工单 10）：库内命中 chips 可勾选/移除；库外建议灰色 + 需自备 */
+  .rec-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+          border-radius: 12px; font-size: 13px; font-family: Consolas, monospace;
+          border: 1px solid var(--border); }
+  .chip .reason { font-family: inherit; margin: 0; }
+  .chip.rec { background: #d1fae5; color: var(--ok); cursor: pointer; }
+  .chip.rec .reason { color: var(--muted); }
+  .chip.rec .chip-x { font-size: 11px; opacity: .6; }
+  .chip.rec:hover { border-color: var(--danger); }
+  .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
+  .chip.out { background: #e5e7eb; color: #6b7280; cursor: default; }
+  .chip.out .reason { color: #9ca3af; }
   .warn-box { border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
   .warn-box.missing { background: #fee2e2; color: var(--danger); }
   .warn-box.unverified { background: #fef3c7; color: var(--warn); }
@@ -182,7 +195,7 @@
       <h2>3. AI 推荐模块</h2>
       <div class="row">
         <button id="btn-recommend" class="primary">让 AI 推荐</button>
-        <span class="muted">AI 按赛题从模块库挑选并说明理由；可增删后重新生成。</span>
+        <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
       </div>
       <div id="recommend-msg" class="error"></div>
       <div id="rec-list" style="margin-top:10px"></div>
@@ -597,43 +610,111 @@ function moduleBadges(m) {
   return badges.join("");
 }
 
-$("btn-recommend").addEventListener("click", async () => {
-  const problem = $("problem").value.trim();
+// 工单 10：推荐 = SSE 流（round → converged → done / question / error）。
+// 收敛循环：功能需求层两轮一致即停、上限 4 轮；库内命中 chips 可勾选/移除，
+// 库外建议灰色 + 「需自备」标注（仅展示，不进 selectedSlugs / expand / generate）。
+let lastRecommend = null;  // 最近一次推荐结果（移除勾选 chip 后重渲染用）
+
+function recommendChip(slug, reason) {
+  return '<span class="chip rec" data-remove="' + esc(slug) + '">' + esc(slug)
+    + (reason ? '<span class="reason">' + esc(reason) + '</span>' : "")
+    + '<span class="chip-x">✕</span></span>';
+}
+
+function suggestionChip(s) {
+  const note = s.degraded ? "（型号不在词表，按类别展示）" : "";
+  return '<span class="chip out" title="' + esc(note) + '">' + esc(s.name)
+    + '<span class="reason">需自备' + note
+    + (s.examples.length ? "：" + esc(s.examples.join(" / ")) : "") + '</span></span>';
+}
+
+function renderRecommendResult(data) {
+  if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
+  const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
+  for (const m of fresh) selectedSlugs.push(m.slug);
+  expanded = []; warnings = [];
+  renderSelected(); renderWarnings();
+  lastRecommend = data;
+  const box = $("rec-list");
+  const requirements = data.requirements || [];
+  if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length)) {
+    box.innerHTML = '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
+    return;
+  }
+  box.innerHTML = requirements.map((r) => `
+    <div class="item">
+      <div class="head"><span class="slug">句子${r.sentence} · ${esc(r.requirement)}</span></div>
+      <div class="rec-chips">
+        ${r.modules.map((slug) => recommendChip(slug, (data.modules.find((m) => m.slug === slug) || {}).reason)).join("") || '<span class="muted">库内无命中</span>'}
+        ${(r.suggestions || []).map(suggestionChip).join("")}
+      </div>
+    </div>`).join("");
+  box.querySelectorAll("[data-remove]").forEach((b) =>
+    b.addEventListener("click", () => {
+      selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
+      expanded = []; warnings = [];
+      renderSelected(); renderWarnings(); renderRecommendResult(lastRecommend);
+    }));
+}
+
+function showRecommendError(message) {
+  $("recommend-msg").textContent = message;
+  $("btn-recommend").innerHTML = "让 AI 推荐";
+  $("btn-recommend").disabled = false;
+}
+
+function showRecommendQuestions(problem, questions) {
+  const box = $("rec-list");
+  box.innerHTML = '<div class="warn-box" style="border:1px solid var(--border)">'
+    + '<div class="muted">AI 拿不准，需要你确认（回答会追加进题面重新分析）：</div>'
+    + questions.map((q) => '<div class="item" style="margin-top:6px">' + esc(q) + '</div>').join("")
+    + '<div class="row" style="margin-top:8px"><input id="recommend-answer" style="flex:1" placeholder="补充说明（可选）">'
+    + '<button id="btn-recommend-answer" class="primary">补充回答并继续</button></div></div>';
+  $("btn-recommend-answer").addEventListener("click", () => {
+    const answer = $("recommend-answer").value.trim();
+    startRecommend(problem + (answer ? "\n\n（用户补充： " + answer + " ）" : ""));
+  });
+}
+
+async function startRecommend(problem) {
   $("recommend-msg").textContent = "";
-  if (!problem) { $("recommend-msg").textContent = "请先填写赛题原文"; return; }
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
+  const box = $("rec-list");
+  box.innerHTML = '<div class="muted">AI 收敛自检中…</div>';
+  let resp;
   try {
-    const data = await apiPost("/api/recommend", {
-      problem_text: problem, topic_id: currentTopicId || undefined,
+    resp = await fetch("/api/recommend", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined }),
     });
-    if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
-    const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
-    for (const m of fresh) selectedSlugs.push(m.slug);
-    expanded = []; warnings = [];
-    renderSelected(); renderWarnings();
-    const box = $("rec-list");
-    if (!data.modules.length) {
-      box.innerHTML = '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
-    } else {
-      box.innerHTML = data.modules.map((m) => `
-        <div class="item"><div class="head"><span class="slug">${esc(m.slug)}</span>
-          <span class="reason">${esc(m.reason)}</span>
-          <button class="danger" data-remove="${esc(m.slug)}">移除</button></div></div>`).join("");
+  } catch (e) { showRecommendError(e.message); return; }
+  if (!resp.body) { showRecommendError("服务响应无流"); return; }
+  parseSSE(resp, (type, payload) => {
+    let ev;
+    try { ev = JSON.parse(payload); } catch { return; }
+    if (type === "round") {
+      box.innerHTML = '<div class="muted">AI 收敛自检：第 ' + ev.round + "/" + ev.round_total + " 轮…</div>";
+    } else if (type === "converged") {
+      box.innerHTML = '<div class="muted">功能需求层已收敛（第 ' + ev.round + " 轮）…</div>";
+    } else if (type === "done") {
+      renderRecommendResult(ev);
+      $("btn-recommend").innerHTML = "重新推荐";
+      $("btn-recommend").disabled = false;
+    } else if (type === "question") {
+      $("btn-recommend").innerHTML = "让 AI 推荐";
+      $("btn-recommend").disabled = false;
+      showRecommendQuestions(problem, ev.questions || []);
+    } else if (type === "error") {
+      showRecommendError(ev.message || "推荐失败");
     }
-    box.querySelectorAll("[data-remove]").forEach((b) =>
-      b.addEventListener("click", () => {
-        selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
-        expanded = []; warnings = [];
-        renderSelected(); renderWarnings(); renderRecommend();
-      }));
-    $("btn-recommend").innerHTML = "重新推荐";
-  } catch (e) {
-    $("recommend-msg").textContent = e.message;
-    $("btn-recommend").innerHTML = "让 AI 推荐";
-  } finally {
-    $("btn-recommend").disabled = false;
-  }
+  });
+}
+
+$("btn-recommend").addEventListener("click", () => {
+  const problem = $("problem").value.trim();
+  if (!problem) { $("recommend-msg").textContent = "请先填写赛题原文"; return; }
+  startRecommend(problem);
 });
 
 function renderRecommend() {

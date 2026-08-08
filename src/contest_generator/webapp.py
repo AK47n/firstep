@@ -60,7 +60,7 @@ from .llm import (
     ProgressEvent,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_manifest_summaries,
-    select_modules_two_level,
+    select_modules_convergent,
 )
 from .master import (
     MasterError,
@@ -308,15 +308,20 @@ def _map_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
 # SSE 线格式共享契约（工单 02，与工单 03 并行开发，精确一致不得单方面改动）
 #
 # HTTP 200，Content-Type: text/event-stream，无自动重连（断线 = 放弃本次）。
-# 每个事件 = "event: <type>\n" + "data: <JSON>\n" + "\n"（空行分隔）；
-# type ∈ start / batch_start / batch_done / retry / phase_done / done / error
-# （前五者由工单 01 的发射器产生，done / error 由本层发射收尾）；进度事件
-# data = ProgressEvent 字段 JSON，done 的 data = 完整报告（report.to_dict()），
-# error 的 data = {"message": 中文错误信息}；done 或 error 后流结束。
+# 每个事件 = "event: <type>\n" + "data: <JSON>\n" + "\n"（空行分隔）。
+# 提炼端点 type ∈ start / batch_start / batch_done / retry / phase_done /
+# done / error（前五者由工单 01 的发射器产生，done / error 由本层发射收尾）；
+# 推荐端点（工单 10）type ∈ round / converged / question / done / error
+# （round / converged 由收敛循环发射器产生，question / done / error 由本层
+# 发射收尾）。进度事件 data = ProgressEvent 字段 JSON；done 的 data = 完整
+# 报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；question 的 data =
+# {"questions": [...]}（模型拿不准向用户补问）；error 的 data =
+# {"message": 中文错误信息}；done / question / error 后流结束。
 # ---------------------------------------------------------------------------
 
 EVENT_DONE = "done"
 EVENT_ERROR = "error"
+EVENT_QUESTION = "question"  # 推荐端点终端事件：模型拿不准，向用户补问
 
 # 事件缓冲上限与终端事件等待超时：进度事件只在批次边界产生（分钟级），
 # 100 个缓冲对在线消费方绰绰有余；客户端断开后队列无人消费——进度事件满即丢
@@ -473,15 +478,28 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     @app.post("/api/recommend")
     @_map_errors
-    def recommend(payload: dict) -> dict:
-        """AI 按赛题推荐模块并给出理由（未展开依赖、未检查平台可用性）。
+    def recommend(payload: dict) -> StreamingResponse:
+        """AI 按赛题推荐模块（SSE 流，工单 10）：round → … → converged →
+        done（推荐结果）或 question（向用户补问）或 error（中文信息）→ 流结束。
+
+        收敛循环驱动（select_modules_convergent）：功能需求层两轮一致即停、
+        上限 4 轮（成本 2-4 轮 × 2-4K token），轮次经 SSE 进度事件推送；模型
+        拿不准（题面证据不足以判定）时以 question 事件收尾（questions 数组，
+        前端把用户回答追加进题面后重新请求）。done 的 data = 推荐结果：顶层
+        modules[] 格式与旧契约一致（下游 selectedSlugs / expand / generate
+        零改动），新增 requirements（功能需求层：需求 / 对照句 / 库内命中 /
+        库外建议——库外建议仅展示、不进工程）。
 
         历史赛题入口：topic_id（显式）或粘贴题面中的编号（AI 自动识别）选中
         某题时，题面用库内全文（长 PDF 题面全文只在选了该赛题时进上下文），
         候选清单带该题 / 套件关联的参考文件（标题 + 一句话简介，两级注入第一
-        级）——模型点名要读全文的经 select_modules_two_level 回读后带全文定稿
-        （第二级）。响应带识别结果（topic_id）与该题专用模块（related_modules，
-        后续阶段按同一 topic_id 自动并入，UI 也可透传）。"""
+        级）——模型点名要读全文的经收敛循环第 1 轮回读后带全文定稿（第二级）。
+        响应带识别结果（topic_id）与该题专用模块（related_modules，后续阶段
+        按同一 topic_id 自动并入，UI 也可透传）。
+
+        阻塞调用（每轮 2-4K token）放独立线程跑，事件经队列送流生成器——不占
+        事件循环；断线后队列无人消费：进度事件旁路丢弃（满即丢），后端照常
+        结束本次推荐（与提炼端点同款，spec「断线」）。"""
         problem_text = _require_str(payload, "problem_text")
         topic_id = _optional_str(payload, "topic_id")
         config = _require_config(context)
@@ -491,25 +509,66 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         summaries = build_manifest_summaries(list_modules(config.module_library_dir))
         reference_root = _reference_dir(context)
         references = topic.references if topic is not None else ()
-        selection = select_modules_two_level(
-            _llm(context),
-            problem_text,
-            summaries,
-            references=reference_suggestions(references),
-            reader=lambda entry_id: read_reference_fulltext(
-                reference_root, _reference_by_id(references, entry_id)
-            ),
-        )
-        result: dict[str, Any] = {
-            "modules": [
-                {"slug": slug, "reason": selection.reasons.get(slug, "")}
-                for slug in selection.modules
-            ]
-        }
-        if topic is not None:
-            result["topic_id"] = topic.key
-            result["related_modules"] = list(topic.related_modules)
-        return result
+        events: Queue[_QueueItem] = Queue(maxsize=_SSE_QUEUE_MAXSIZE)
+
+        def emit(event: ProgressEvent) -> None:
+            # 旁路：客户端断开后队列满 → 丢进度事件，不堵推荐线程
+            try:
+                events.put_nowait(event)
+            except Full:
+                pass
+
+        def run() -> None:
+            try:
+                selection = select_modules_convergent(
+                    _llm(context),
+                    problem_text,
+                    summaries,
+                    references=reference_suggestions(references),
+                    reader=lambda entry_id: read_reference_fulltext(
+                        reference_root, _reference_by_id(references, entry_id)
+                    ),
+                    progress_emitter=emit,
+                )
+                if selection.questions:
+                    _put_terminal(
+                        events, EVENT_QUESTION, {"questions": list(selection.questions)}
+                    )
+                    return
+                result: dict[str, Any] = {
+                    "modules": [
+                        {"slug": slug, "reason": selection.reasons.get(slug, "")}
+                        for slug in selection.modules
+                    ],
+                    "requirements": [
+                        requirement.to_dict()
+                        for requirement in selection.requirements
+                    ],
+                }
+                if topic is not None:
+                    result["topic_id"] = topic.key
+                    result["related_modules"] = list(topic.related_modules)
+                _put_terminal(events, EVENT_DONE, result)
+            except Exception as exc:
+                _put_terminal(events, EVENT_ERROR, _error_message(exc))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+        def stream() -> Iterator[str]:
+            while True:
+                item = events.get()
+                if isinstance(item, ProgressEvent):
+                    yield _sse_frame(item.type, asdict(item))
+                    continue
+                kind, data = item
+                if kind in (EVENT_DONE, EVENT_QUESTION):
+                    yield _sse_frame(kind, data)
+                else:
+                    yield _sse_frame(EVENT_ERROR, {"message": data})
+                return
+
+        return StreamingResponse(stream(), headers={"Content-Type": "text/event-stream"})
 
     @app.post("/api/selection/expand")
     @_map_errors
