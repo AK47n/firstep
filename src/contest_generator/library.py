@@ -18,10 +18,10 @@ import re
 import shutil
 from dataclasses import replace
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
 from urllib.parse import urlparse
 
-from .llm import LLM, ValidationResult
+from .entry_store import entry_transaction, iter_entry_dirs, write_json
 from .manifest import (
     MANIFEST_FILENAME,
     ManifestError,
@@ -29,6 +29,9 @@ from .manifest import (
     PlatformEntry,
     is_unsafe_path,
 )
+
+if TYPE_CHECKING:
+    from .llm import LLM, ValidationResult  # 仅类型注解用（模块库不运行时依赖 LLM 客户端）
 
 ALLOWED_SOURCE_EXTENSIONS = frozenset({".c", ".h"})
 _SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
@@ -44,11 +47,13 @@ class LibraryError(ValueError):
 
 
 def list_modules(library_root: Path) -> list[ModuleManifest]:
-    """返回库中全部模块（按 slug 排序）；manifest 损坏的模块目录抛 LibraryError。"""
+    """返回库中全部模块（按 slug 排序）；manifest 损坏的模块目录抛 LibraryError。
+
+    库根不存在 = 空库、点开头目录不影响浏览（与赛题库 / 参考库浏览同哲学，
+    目录迭代走 entry_store 原语）。
+    """
     manifests = []
-    for entry in sorted(library_root.iterdir(), key=lambda p: p.name):
-        if not entry.is_dir():
-            continue  # 库根下的散文件（如 README）不影响浏览
+    for entry in iter_entry_dirs(library_root):
         try:
             manifests.append(ModuleManifest.load(entry))
         except ManifestError as exc:
@@ -187,9 +192,7 @@ def add_module(
             f"模块简介与实际代码不一致，请修正后再入库：{result.issues}"
         )
 
-    module_dir = library_root / slug
-    module_dir.mkdir()
-    try:
+    with entry_transaction(library_root, [slug]) as (module_dir,):
         _write_source_files(module_dir, files)
         manifest = ModuleManifest(
             slug=slug,
@@ -206,10 +209,7 @@ def add_module(
                 )
             },
         )
-        _write_manifest(module_dir, manifest)
-    except Exception:
-        shutil.rmtree(module_dir, ignore_errors=True)  # 入库中途失败不留半成品
-        raise
+        write_json(module_dir, MANIFEST_FILENAME, manifest.to_dict())
     return manifest
 
 
@@ -460,10 +460,8 @@ def _write_source_files(module_dir: Path, files: Mapping[str, str]) -> None:
 
 
 def _write_manifest(module_dir: Path, manifest: ModuleManifest) -> None:
-    (module_dir / MANIFEST_FILENAME).write_text(
-        json.dumps(manifest.to_dict(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    """写 manifest（JSON 序列化走 entry_store 原语，与赛题库 / 参考库同款）。"""
+    write_json(module_dir, MANIFEST_FILENAME, manifest.to_dict())
 
 
 def _assemble_code(files: Mapping[str, str]) -> str:

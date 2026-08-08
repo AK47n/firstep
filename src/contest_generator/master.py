@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence
 
 from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
+from .entry_store import discard_entry_dirs
 from .keil import (
     KeilProjectError,
     build_master_uvprojx,
@@ -52,7 +53,8 @@ from .keil import (
     render_master_uvprojx,
     validate_project_structure,
 )
-from .llm import LLM, ProgressEmitter  # AI 接缝协议 + 进度发射器（仅类型引用，实现与解析在 llm 层）
+from .events import ProgressEmitter  # 进度发射器类型（契约在 events，仅类型引用）
+from .llm import LLM  # AI 接缝协议（仅类型引用，实现与解析在 llm 层）
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
     ReferenceError,
@@ -1133,8 +1135,9 @@ def _prepare_archive(
     """归档前置：校验配置与锚定、LLM 判定归档价值并生成条目简介（不写盘）。
 
     全部失败都在写盘前大声报错（MasterError，中文说明）：归档需要 AI 服务与
-    参考文件库目录配置；锚定赛题编号格式非法（查库确认待赛题库工单 01 落地后
-    接入）；AI 判定不配归档的文件被拒绝（一次性杂物 / 配置噪声不配归档）。
+    参考文件库目录配置；锚定赛题编号格式非法（格式与赛题库 key 同源校验，
+    查库确认 / 查无此条拒绝未接线——留待素材区接线工单）；AI 判定不配归档的
+    文件被拒绝（一次性杂物 / 配置噪声不配归档）。
     条目简介 = LLM 对文件全文的摘要（与参考文件库录入草稿同一协议方法
     reference_summarize）。归档路径的合法性（判定范围内、类别文件不配归档）
     由 apply_distillation 的处置校验先拦住——本函数只做归档自身的校验。
@@ -1202,8 +1205,7 @@ def _write_archive_entries(
             )
             created.append(reference_library_dir / entry.id)
     except Exception as exc:
-        for entry_dir in created:
-            shutil.rmtree(entry_dir, ignore_errors=True)
+        discard_entry_dirs(created)
         raise MasterError(
             f"母版已入库，但归档写入失败（已回滚本次归档条目，可重试确认）：{exc}"
         ) from exc

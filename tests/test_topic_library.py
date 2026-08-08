@@ -19,18 +19,19 @@ from contest_generator.library import LibraryError, add_module
 from contest_generator.llm import (
     LLMError,
     TOPIC_SPLIT_LLM_CHAR_CAP,
-    TopicDraft,
     parse_topic_number,
     parse_topic_split,
 )
 from contest_generator.manifest import MANIFEST_FILENAME
 from contest_generator.topic_library import (
     TOPIC_MD_FILENAME,
+    TopicDraft,
     TopicError,
     confirm_topics,
     delete_topic,
     discover_related_modules,
     list_topics,
+    parse_confirm_entries,
     resolve_number,
     split_topics_document,
 )
@@ -769,6 +770,39 @@ def test_topics_confirm_endpoint_rejects_existing_entry(topic_context, tmp_path)
 
     assert response.status_code == 400
     assert KEY_2026C in response.json()["detail"]
+
+
+def test_parse_confirm_entries_rejects_invalid_key_format_inline():
+    """用户提交的畸形编号在解析层就地拦截（不再等 confirm_topics 第二跳）。"""
+    with pytest.raises(TopicError, match="格式非法"):
+        parse_confirm_entries(
+            {
+                "entries": [
+                    {"year": "2026", "number": "c", "problem_text": "题面"}
+                ]
+            }
+        )
+    with pytest.raises(TopicError, match="格式非法"):
+        parse_confirm_entries(
+            {
+                "entries": [
+                    {"year": "2026", "number": "AB", "problem_text": "题面"}
+                ]
+            }
+        )
+
+
+def test_parse_confirm_entries_rejects_duplicate_keys_inline():
+    """同批重复编号在解析层就地拦截（与拆条解析同标准）。"""
+    with pytest.raises(TopicError, match="重复"):
+        parse_confirm_entries(
+            {
+                "entries": [
+                    {"year": "2026", "number": "C", "problem_text": "题面一"},
+                    {"year": "2026", "number": "C", "problem_text": "题面二"},
+                ]
+            }
+        )
 
 
 def test_topics_confirm_endpoint_rejects_bad_payload(topic_context, tmp_path):

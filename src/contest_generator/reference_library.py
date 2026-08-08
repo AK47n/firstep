@@ -4,8 +4,8 @@
 类型 / 简介 / 锚定）+ 素材文件本体（内容自持——归档 = 复制入库，源工程删除
 不丢）。条目字段 = 标题 / 类型 / 简介 / 锚定（赛题编号 或 套件型号；套件必须
 从模块库已有 kit 词表选——录入时从 list_modules 收集（module_kit_vocabulary）、
-校验拒绝词表外值；赛题编号本批只做格式校验，查库确认（查无此条拒绝）待赛题库
-工单 01 落地后接入）。
+校验拒绝词表外值；赛题编号锚定与赛题库 key 同源校验（validate_topic_key，
+放行集合一致），查库确认（查无此条拒绝）留待素材区接线）。
 
 录入流程（复用模块库草稿→校验→入库模式）：AI 通读素材生成简介草稿
 （llm.reference_summarize，/api/references/draft）→ 用户修改 / 补锚定 →
@@ -30,9 +30,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .entry_store import entry_transaction, iter_entry_dirs, write_json
 from .library import list_modules
 from .llm import LLM
 from .manifest import is_unsafe_path
+from .topic_library import validate_topic_key
 
 REFERENCE_META_FILENAME = "reference.json"
 
@@ -40,9 +42,6 @@ REFERENCE_META_FILENAME = "reference.json"
 ANCHOR_KIND_TOPIC = "topic"
 ANCHOR_KIND_KIT = "kit"
 ANCHOR_KINDS = (ANCHOR_KIND_TOPIC, ANCHOR_KIND_KIT)
-
-# 赛题编号格式：年份（4 位）+ 编号（1-2 个字母），如 2026C / 2021F
-_TOPIC_ANCHOR_PATTERN = re.compile(r"^\d{4}[A-Za-z]{1,2}$")
 
 # 归档条目固定类型：被剔除的业务代码复制入库即为"例程代码"参考
 ARCHIVE_ENTRY_TYPE = "例程代码"
@@ -114,12 +113,14 @@ class ReferenceEntry:
 def validate_topic_anchor(anchor: str) -> None:
     """赛题编号锚定格式校验：年份 + 编号（如 2026C）。
 
-    本批只做格式校验；查库确认（查无此条拒绝）待赛题库（工单 01）落地后接入。
+    格式与赛题库 key 同源（validate_topic_key，唯一出处）——放行集合与赛题库
+    合法编号完全一致（旧实现独立的 ^\d{4}[A-Za-z]{1,2}$ 会放行 2026c / 2026AB
+    这类赛题库永远存不了的编号，导致锚定永远解析不中）。查库确认（查无此条
+    拒绝）留待素材区接线。
     """
-    if not _TOPIC_ANCHOR_PATTERN.fullmatch(anchor):
-        raise ReferenceError(
-            f"赛题编号 {anchor!r} 格式非法（应为年份 + 编号，如 2026C）"
-        )
+    message = validate_topic_key(anchor)
+    if message:
+        raise ReferenceError(message)
 
 
 def module_kit_vocabulary(module_library_dir: Path) -> tuple[str, ...]:
@@ -140,13 +141,13 @@ def module_kit_vocabulary(module_library_dir: Path) -> tuple[str, ...]:
 
 
 def list_references(reference_root: Path) -> list[ReferenceEntry]:
-    """返回库中全部条目（按 id 排序）；元数据损坏的条目目录抛 ReferenceError。"""
-    if not reference_root.is_dir():
-        return []
+    """返回库中全部条目（按 id 排序）；元数据损坏的条目目录抛 ReferenceError。
+
+    库根不存在 = 空库、散文件与点开头目录不影响浏览（目录迭代走 entry_store
+    原语，与模块库 / 赛题库浏览同哲学）。
+    """
     entries: list[ReferenceEntry] = []
-    for entry in sorted(reference_root.iterdir(), key=lambda p: p.name):
-        if not entry.is_dir() or entry.name.startswith("."):
-            continue  # 库根下的散文件与临时目录不影响浏览
+    for entry in iter_entry_dirs(reference_root):
         entries.append(get_reference(reference_root, entry.name))
     return entries
 
@@ -256,8 +257,6 @@ def add_reference(
 
     reference_root.mkdir(parents=True, exist_ok=True)
     entry_id = _next_entry_id(reference_root, title)
-    entry_dir = reference_root / entry_id
-    entry_dir.mkdir()
     entry = ReferenceEntry(
         id=entry_id,
         title=title,
@@ -267,12 +266,9 @@ def add_reference(
         anchor_value=anchor_value,
         files=tuple(files),
     )
-    try:
+    with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         _write_files(entry_dir, files)
-        _write_meta(entry_dir, entry)
-    except Exception:
-        shutil.rmtree(entry_dir, ignore_errors=True)  # 入库中途失败不留半成品
-        raise
+        write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
     return entry
 
 
@@ -312,8 +308,6 @@ def archive_reference(
 
     reference_root.mkdir(parents=True, exist_ok=True)
     entry_id = _next_entry_id(reference_root, title)
-    entry_dir = reference_root / entry_id
-    entry_dir.mkdir()
     entry = ReferenceEntry(
         id=entry_id,
         title=title,
@@ -323,14 +317,11 @@ def archive_reference(
         anchor_value=anchor_topic,
         files=(rel_path,),
     )
-    try:
+    with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         dst = entry_dir / rel_path
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, dst)
-        _write_meta(entry_dir, entry)
-    except Exception:
-        shutil.rmtree(entry_dir, ignore_errors=True)  # 归档中途失败不留半成品
-        raise
+        write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
     return entry
 
 
@@ -397,13 +388,6 @@ def _write_files(entry_dir: Path, files: Mapping[str, str]) -> None:
         path = entry_dir / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-
-
-def _write_meta(entry_dir: Path, entry: ReferenceEntry) -> None:
-    (entry_dir / REFERENCE_META_FILENAME).write_text(
-        json.dumps(entry.to_dict(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
 
 
 def _assemble_material(files: Mapping[str, str]) -> str:
