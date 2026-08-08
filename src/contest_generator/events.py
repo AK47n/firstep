@@ -21,6 +21,12 @@ EVENT_BATCH_DONE = "batch_done"
 EVENT_RETRY = "retry"
 EVENT_PHASE_DONE = "phase_done"
 
+# 模块推荐收敛循环（工单 10）的事件类型：round = 一轮收敛自检开始（round =
+# 轮次、round_total = 上限）；converged = 功能需求层两轮一致（round = 收敛
+# 轮次）。补问（questions）是终端事件，由 webapp 层发射（与 done / error 同款）。
+EVENT_ROUND = "round"
+EVENT_CONVERGED = "converged"
+
 
 @dataclass(frozen=True)
 class ProgressEvent:
@@ -32,7 +38,8 @@ class ProgressEvent:
     路径）；batch_done 用 phase / batch_index / processed_count（本阶段累计已
     处理文件数——前端直接显示"已读 X/115"，无需累加状态）；retry 用 phase /
     batch_index / retry_round（补问轮次，1 起——首次补问 = 1）/ missing_count
-    （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）。
+    （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）；
+    推荐收敛循环（工单 10）的 round 用 round / round_total、converged 用 round。
     """
 
     type: str
@@ -47,6 +54,8 @@ class ProgressEvent:
     retry_round: int = 0
     missing_count: int = 0
     file_count: int = 0
+    round: int = 0  # 模块推荐收敛轮次（round / converged 事件用，1 起）
+    round_total: int = 0  # 收敛轮次上限（round 事件携带，前端显示"N/上限"）
 
 
 ProgressEmitter = Callable[[ProgressEvent], None]

@@ -1,0 +1,10 @@
+[
+  { "category": "视觉模块", "models": ["K230", "OpenMV", "摄像头"] },
+  { "category": "声光提示器件", "models": ["LED", "蜂鸣器"] },
+  { "category": "感知传感器", "models": ["编码器", "MPU6050", "九轴传感器", "红外传感器", "超声波传感器"] },
+  { "category": "执行机构", "models": ["电机", "舵机"] },
+  { "category": "无线通信模块", "models": ["ESP8266", "蓝牙模块", "NRF24L01"] },
+  { "category": "显示模块", "models": ["OLED", "数码管"] },
+  { "category": "定位模块", "models": ["GPS", "北斗模块"] },
+  { "category": "电源模块", "models": ["稳压模块", "充电管理模块"] }
+]
