@@ -9,13 +9,15 @@ import json
 import zlib
 import zipfile
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 from xml.sax.saxutils import escape
 
 from pypdf import PdfWriter
 
-from contest_generator.llm import ModuleSelection, ProgressEmitter, ValidationResult
-from contest_generator.report import FileDecision, JudgmentFile
+from contest_generator.events import ProgressEmitter
+from contest_generator.llm import ModuleSelection, ReferenceSuggestion, ValidationResult
+from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
+from contest_generator.topic_library import TopicDraft
 
 # ---------------------------------------------------------------------------
 # 假模块文件内容（断言输出目录里文件内容用）
@@ -441,7 +443,11 @@ class FakeTransport:
 
 
 class FakeLLM:
-    """假 LLM：固定返回并记录各职责的输入，供工单 04/05/07/08 注入。"""
+    """假 LLM：固定返回并记录各职责的输入，供工单 04/05/07/08 注入。
+
+    实现 LLM 协议的全部 9 个方法（与协议契约对齐——生产代码不再需要
+    getattr 兜底）；默认行为只覆盖最常用的职责，其余返回空 / None。
+    """
 
     def __init__(
         self,
@@ -462,9 +468,17 @@ class FakeLLM:
         self.distill_calls: list[
             tuple[str, tuple[str, ...], tuple[JudgmentFile, ...], str]
         ] = []
+        self.reference_summarize_calls: list[tuple[str, ...]] = []
+        self.reference_judge_calls: list[tuple[ReferenceCandidate, ...]] = []
+        self.topic_split_calls: list[tuple[str, ...]] = []
+        self.topic_extract_calls: list[tuple[str, ...]] = []
 
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[str]
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         return self._selection
 
@@ -498,6 +512,24 @@ class FakeLLM:
             (platform, tuple(project_names), tuple(judgment_files), comparison_summary)
         )
         return self._distillation
+
+    def reference_summarize(self, material: str) -> str:
+        self.reference_summarize_calls.append((material,))
+        return ""
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        self.reference_judge_calls.append(tuple(candidates))
+        return ()
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
+        self.topic_split_calls.append((pdf_text,))
+        return ()
+
+    def topic_extract_number(self, text: str) -> str | None:
+        self.topic_extract_calls.append((text,))
+        return None
 
 
 class RecordingPatcher:

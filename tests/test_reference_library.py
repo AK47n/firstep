@@ -69,14 +69,19 @@ KIT_ALX = "ALX-AOA-FIT"
 KIT_MSPM0 = "地猛星-MSPM0"
 
 
-class ReferenceLLM:
-    """工单 02 假 LLM：固定返回参考文件简介 / 归档判定，并记录调用输入。"""
+class ReferenceLLM(FakeLLM):
+    """工单 02 假 LLM：固定返回参考文件简介 / 归档判定，并记录调用输入。
+
+    继承 FakeLLM 以保持协议全量实现（其余职责用默认空行为，参考流程只用
+    下面两个）。
+    """
 
     def __init__(
         self,
         summary: str = "AI 生成的参考文件简介",
         archivable: Sequence[str] = (),
     ) -> None:
+        super().__init__()
         self._summary = summary
         self._archivable = tuple(archivable)
         self.summary_calls: list[tuple[str, ...]] = []

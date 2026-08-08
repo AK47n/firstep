@@ -53,11 +53,11 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
+from .events import ProgressEvent
 from .llm import (
     LLM,
     LLMError,
     DeepSeekLLM,
-    ProgressEvent,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_manifest_summaries,
     select_modules_two_level,

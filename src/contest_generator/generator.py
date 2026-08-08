@@ -82,19 +82,15 @@ def resolve_topic_context(
     粘贴的 problem_text 里 AI 提取编号（llm.topic_extract_number，自动识别
     尽力而为——提取失败 / 库中没有该题就按纯粘贴题面流程走，不阻断生成入口，
     与显式编号的查无此条大声报错相对——刻意取舍，工单 Comments 留痕）。
-    LLM 实现没有编号提取职责（既有假件）时跳过自动识别。返回 None = 没有
-    可识别的历史赛题。
+    返回 None = 没有可识别的历史赛题。
     """
     if topic_key:
         entry, related = _resolve_topic_entry(
             module_library_dir, topic_library_dir, topic_key
         )
     elif llm is not None:
-        extractor = getattr(llm, "topic_extract_number", None)
-        if not callable(extractor):
-            return None  # LLM 实现没有编号提取职责（既有假件）：跳过自动识别
         try:
-            extracted = extractor(problem_text)
+            extracted = llm.topic_extract_number(problem_text)
         except LLMError:
             return None  # 自动识别尽力而为：AI 提取失败不阻断粘贴题面流程
         if not extracted:

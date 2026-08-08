@@ -17,18 +17,20 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.config import AppConfig
-from contest_generator.llm import (
+from contest_generator.events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
     EVENT_PHASE_DONE,
     EVENT_RETRY,
     EVENT_START,
-    LLMError,
-    ModuleSelection,
     PHASE_DECIDE,
     PHASE_SUMMARY,
     ProgressEmitter,
     ProgressEvent,
+)
+from contest_generator.llm import (
+    LLMError,
+    ModuleSelection,
     ReferenceSuggestion,
     ValidationResult,
 )
@@ -38,7 +40,9 @@ from contest_generator.report import (
     ACTION_MERGE,
     FileDecision,
     JudgmentFile,
+    ReferenceCandidate,
 )
+from contest_generator.topic_library import TopicDraft
 from contest_generator.master import distill_master, import_master, main_c_template, scan_project
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import EVENT_DONE, EVENT_ERROR, AppContext, create_app
@@ -69,10 +73,18 @@ SELECTION = ModuleSelection(
 
 
 class RaisingLLM:
-    """AI 服务失败用的假 LLM：任何职责都抛 LLMError（对应 502）。"""
+    """AI 服务失败用的假 LLM：任何职责都抛 LLMError（对应 502）。
+
+    实现协议全部方法（编号提取的 LLMError 会被生成器按"自动识别尽力而为"
+    接住降级，与协议契约一致——不再依赖调用方 getattr 探测）。
+    """
 
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[str]
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         raise LLMError("服务不可用")
 
@@ -97,6 +109,20 @@ class RaisingLLM:
         comparison_summary: str,
         progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]:
+        raise LLMError("服务不可用")
+
+    def reference_summarize(self, material: str) -> str:
+        raise LLMError("服务不可用")
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        raise LLMError("服务不可用")
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
+        raise LLMError("服务不可用")
+
+    def topic_extract_number(self, text: str) -> str | None:
         raise LLMError("服务不可用")
 
 

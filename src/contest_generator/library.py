@@ -18,10 +18,9 @@ import re
 import shutil
 from dataclasses import replace
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
 from urllib.parse import urlparse
 
-from .llm import LLM, ValidationResult
 from .manifest import (
     MANIFEST_FILENAME,
     ManifestError,
@@ -29,6 +28,9 @@ from .manifest import (
     PlatformEntry,
     is_unsafe_path,
 )
+
+if TYPE_CHECKING:
+    from .llm import LLM, ValidationResult  # 仅类型注解用（模块库不运行时依赖 LLM 客户端）
 
 ALLOWED_SOURCE_EXTENSIONS = frozenset({".c", ".h"})
 _SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
