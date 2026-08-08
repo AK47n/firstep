@@ -197,6 +197,14 @@
         <button id="btn-recommend" class="primary">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
       </div>
+      <div id="rec-progress" class="distill-progress hidden" style="margin-top:10px">
+        <div id="rec-prog-text" style="margin-bottom:6px"></div>
+        <div class="prog-bar hidden" id="rec-bar"><div id="rec-bar-fill"></div></div>
+        <div class="prog-timers">
+          <span id="rec-timer-total">总用时 00:00</span>
+          <span id="rec-timer-round">当前轮已等待 00:00</span>
+        </div>
+      </div>
       <div id="recommend-msg" class="error"></div>
       <div id="rec-list" style="margin-top:10px"></div>
     </div>
@@ -676,39 +684,86 @@ function showRecommendQuestions(problem, questions) {
   });
 }
 
+// 推荐进度状态（工单 01）：一次点击到 done / question / error / 断线为一个生命周期。
+// 计时器每秒跳动是"没卡死"的唯一证明——每轮 = 单次 LLM 调用，轮内后端不发任何事件。
+let recProg = null;
+
+function startRecProgress() {
+  recProg = { startedAt: Date.now(), lastEventAt: Date.now(), timerId: null, finished: false };
+  $("rec-progress").classList.remove("hidden");
+  $("rec-bar").classList.add("hidden");   // 首条 round 事件带 round_total 后再显示条
+  $("rec-bar-fill").style.width = "0";    // 补问回答重启 = 新生命周期，条从第 1 轮重新开始
+  recProg.timerId = setInterval(tickRec, 1000);
+}
+
+function stopRecProgress() {
+  clearInterval(recProg.timerId);
+  $("rec-progress").classList.add("hidden");
+}
+
+function tickRec() {
+  const now = Date.now();
+  $("rec-timer-total").textContent = "总用时 " + fmtClock((now - recProg.startedAt) / 1000);
+  $("rec-timer-round").textContent = "当前轮已等待 " + fmtClock((now - recProg.lastEventAt) / 1000);
+}
+
 async function startRecommend(problem) {
   $("recommend-msg").textContent = "";
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
-  const box = $("rec-list");
-  box.innerHTML = '<div class="muted">AI 收敛自检中…</div>';
+  $("rec-list").innerHTML = "";   // 旧结果清空，状态文本进进度面板
+  startRecProgress();
   let resp;
   try {
     resp = await fetch("/api/recommend", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined }),
     });
-  } catch (e) { showRecommendError(e.message); return; }
-  if (!resp.body) { showRecommendError("服务响应无流"); return; }
-  parseSSE(resp, (type, payload) => {
-    let ev;
-    try { ev = JSON.parse(payload); } catch { return; }
-    if (type === "round") {
-      box.innerHTML = '<div class="muted">AI 收敛自检：第 ' + ev.round + "/" + ev.round_total + " 轮…</div>";
-    } else if (type === "converged") {
-      box.innerHTML = '<div class="muted">功能需求层已收敛（第 ' + ev.round + " 轮）…</div>";
-    } else if (type === "done") {
-      renderRecommendResult(ev);
-      $("btn-recommend").innerHTML = "重新推荐";
-      $("btn-recommend").disabled = false;
-    } else if (type === "question") {
-      $("btn-recommend").innerHTML = "让 AI 推荐";
-      $("btn-recommend").disabled = false;
-      showRecommendQuestions(problem, ev.questions || []);
-    } else if (type === "error") {
-      showRecommendError(ev.message || "推荐失败");
-    }
-  });
+  } catch (e) { stopRecProgress(); showRecommendError(e.message); return; }
+  if (!resp.body) { stopRecProgress(); showRecommendError("服务响应无流"); return; }
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    stopRecProgress();
+    showRecommendError(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+    return;
+  }
+  try {
+    await parseSSE(resp, (type, payload) => {
+      let ev;
+      try { ev = JSON.parse(payload); } catch { return; }
+      if (type === "round") {
+        recProg.lastEventAt = Date.now();
+        $("rec-prog-text").textContent = "AI 收敛自检：第 " + ev.round + "/" + ev.round_total + " 轮…";
+        $("rec-bar").classList.remove("hidden");
+        $("rec-bar-fill").style.width = (ev.round_total ? Math.min(100, ev.round * 100 / ev.round_total) : 100) + "%";
+      } else if (type === "converged") {
+        recProg.lastEventAt = Date.now();
+        $("rec-prog-text").textContent = "功能需求层已收敛（第 " + ev.round + " 轮）…";
+        $("rec-bar").classList.remove("hidden");
+        $("rec-bar-fill").style.width = "100%";   // round_total 是上限非保证：提前收敛就跳满
+      } else if (type === "done") {
+        recProg.finished = true;
+        stopRecProgress();
+        renderRecommendResult(ev);
+        $("btn-recommend").innerHTML = "重新推荐";
+        $("btn-recommend").disabled = false;
+      } else if (type === "question") {
+        recProg.finished = true;
+        stopRecProgress();
+        $("btn-recommend").innerHTML = "让 AI 推荐";
+        $("btn-recommend").disabled = false;
+        showRecommendQuestions(problem, ev.questions || []);
+      } else if (type === "error") {
+        recProg.finished = true;
+        stopRecProgress();
+        showRecommendError(ev.message || "推荐失败");
+      }
+    });
+  } catch (e) { if (recProg.finished) return; }   // 终态已到后的读流出错忽略，防重复提示
+  if (!recProg.finished) {   // 流结束 / 读流出错但没等到终态 = 断线：推荐不落任何东西，可安全重试
+    stopRecProgress();
+    showRecommendError("连接中断：本次推荐未完成，可安全重试");
+  }
 }
 
 $("btn-recommend").addEventListener("click", () => {
