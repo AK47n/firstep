@@ -14,6 +14,7 @@ from contest_generator.generator import (
     GeneratorError,
     MasterNotFoundError,
     MissingModuleFilesError,
+    ModuleSelfIncludeError,
     OutputDirNotEmptyError,
     UndefinedCallsError,
     UnresolvedIncludeError,
@@ -180,7 +181,7 @@ def test_generate_mspm0_outputs_complete_project(make_ccs_project, tmp_path):
     ).read_text(encoding="utf-8") == DHT11_MSPM0_C
     assert (result / "modules/dht11/inc/dht11.h").read_text(encoding="utf-8") == DHT11_H
     assert (result / "modules/delay/delay.c").read_text(encoding="utf-8") == (
-        "/* delay */\nvoid delay_ms(int ms);\n"
+        "#include \"delay.h\"\n/* delay */\nvoid delay_ms(int ms);\n"
     )
     assert (result / "modules/delay/delay.h").read_text(encoding="utf-8") == (
         "#pragma once\nvoid delay_ms(int ms);\n"
@@ -620,6 +621,48 @@ def test_generate_rejects_module_with_unresolved_include(
         )
 
     assert "bad.c" in str(excinfo.value)
+    assert not output_dir.exists()  # 校验在创建输出目录之前
+
+
+def test_generate_rejects_module_without_self_include(
+    fake_module_library, make_project, tmp_path
+):
+    """模块 .c 不 include 自己的头（符号声明依赖原始工程聚合头，真机编译
+    pid_t/yaw_gyro/D1..D8 全未声明判例）→ 拒绝生成并点名模块与头文件。"""
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "noself",
+            "description": "不自含的坏模块",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/noself.c", "code/noself.h"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        {
+            # 只 include 母版聚合头，不 include 自己的头 —— 复刻真实判例
+            "code/noself.c": '#include "headfile.h"\nvoid noself_fn(void) { pid_t p; }\n',
+            "code/noself.h": "typedef int pid_t;\nvoid noself_fn(void);\n",
+        },
+    )
+    mod = ModuleManifest.load(fake_module_library / "noself")
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(ModuleSelfIncludeError, match="noself.h") as excinfo:
+        make_project(
+            manifests=[mod],
+            main_c_content="int main(void) { while (1); }\n",
+            output_dir=output_dir,
+        )
+
+    assert "noself.c" in str(excinfo.value)
     assert not output_dir.exists()  # 校验在创建输出目录之前
 
 

@@ -5,7 +5,9 @@
 输出目录：.scratch/real-run/out_<topic>（不碰桌面原工程）。
 """
 import json
+import os
 import re
+import subprocess
 import sys
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -86,6 +88,29 @@ def _uvprojx_include_dirs(out_dir: Path) -> list[Path]:
             except OSError:
                 continue
     return dirs
+
+
+def uv4_build(out_dir: Path) -> tuple[bool | None, str]:
+    """真机编译：UV4 命令行构建最终 .uvprojx（工单 01 补洞——include 解析
+    与自包含只是静态近似，符号级完整性只有真编译能证；pid.c 曾静态全绿但
+    Keil 35 错）。返回 (是否通过, 摘要)；UV4 不可用返回 (None, 原因)。
+    """
+    uv4 = os.environ.get("KEIL_UV4") or r"C:\Keil5\Core\UV4\UV4.exe"
+    if not Path(uv4).is_file():
+        return None, f"未找到 UV4（{uv4}），跳过真机编译"
+    uvprojx = next(out_dir.rglob("*.uvprojx"), None)
+    if uvprojx is None:
+        return False, "工程里没有 .uvprojx"
+    log = out_dir.parent / "keil_build.log"
+    proc = subprocess.run(
+        [uv4, "-j0", "-b", str(uvprojx), "-o", str(log)],
+        capture_output=True, text=True,
+    )
+    text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+    m = re.search(r"(\d+) Error\(s\)", text)
+    n_err = int(m.group(1)) if m else -1
+    tail = text.strip().splitlines()[-1] if text.strip() else f"exit={proc.returncode} 无日志"
+    return (n_err == 0, f"UV4 exit={proc.returncode} {tail}（{n_err} 错误）")
 
 
 def post(url: str, payload: dict) -> dict:
@@ -206,6 +231,16 @@ def check_topic(key: str) -> bool:
         ok = False
     else:
         print("  [产物] 无围栏残留、全部 include 可解析")
+
+    # 真机编译：UV4 命令行构建（符号级完整性的唯一证明）
+    passed, summary = uv4_build(out_dir)
+    if passed is None:
+        print(f"  [真机] {summary}")
+    elif passed:
+        print(f"  [真机] ✓ {summary}")
+    else:
+        print(f"  [真机] ✗ {summary}")
+        ok = False
     return ok
 
 
