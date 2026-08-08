@@ -76,6 +76,10 @@
                font-size: 12px; overflow: auto; max-height: 320px; }
   .file-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; margin-bottom: 8px; }
   .file-row textarea { min-height: 120px; }
+  /* ---- 赛题库拆条校对表（工单 05）：年份 / 题号 / 题面三字段 + 删条目 ---- */
+  .proofread-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
+  .proofread-row input { width: 90px; flex: none; }
+  .proofread-row textarea { flex: 1; min-height: 110px; }
   .report-group { margin-bottom: 10px; }
   .report-group .title { font-weight: 600; margin-bottom: 6px; }
   .report-group.keep .title { color: var(--ok); }
@@ -142,6 +146,7 @@
   <button data-tab="generate" class="active">生成</button>
   <button data-tab="library">模块库</button>
   <button data-tab="reference">参考文件库</button>
+  <button data-tab="topic">赛题库</button>
   <button data-tab="master">母版</button>
   <button data-tab="settings">设置</button>
 </nav>
@@ -314,6 +319,45 @@
     </div>
   </section>
 
+  <!-- ============================ 赛题库页 ============================ -->
+  <section id="tab-topic" class="page">
+    <div class="card">
+      <h2>赛题库 <span class="muted">（历年真题拆条入库，编号可解析为题面作生成入口；磁盘目录即数据库）</span></h2>
+      <div class="row">
+        <div style="flex:1"><label>年份</label><input type="text" id="topic-filter-year" placeholder="如 2026"></div>
+        <div style="flex:1"><label>编号</label><input type="text" id="topic-filter-number" placeholder="如 C"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-topic-search" class="primary">搜索</button>
+        <button id="btn-topic-search-clear">清空并显示全部</button>
+      </div>
+      <table style="margin-top:10px">
+        <thead><tr><th>编号</th><th>年份</th><th>题面预览</th><th>关联模块</th><th style="width:70px">操作</th></tr></thead>
+        <tbody id="topic-rows"></tbody>
+      </table>
+      <div id="topic-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>拆条录入（上传真题长 PDF → 拆条 → 逐条校对 → 确认入库）</h2>
+      <div class="row">
+        <input type="file" id="topic-pdf" accept=".pdf">
+        <button id="btn-topic-split" class="primary">上传并拆条</button>
+        <span class="muted">长 PDF 自动走确定性分块（年份章节 + 题目标记），无需手动处理</span>
+      </div>
+      <div id="topic-split-msg" class="error"></div>
+      <div id="topic-proofread" class="hidden" style="margin-top:10px">
+        <h3>校对（年份 / 题号 / 题面可改，条目可删；确认前不落盘）</h3>
+        <div id="topic-proofread-rows"></div>
+        <div class="row" style="margin-top:8px">
+          <button id="btn-topic-confirm" class="primary">确认入库</button>
+          <span class="muted">确认失败（编号重复 / 已存在 / 格式非法）会原样显示原因，不会留下半成品</span>
+        </div>
+        <div id="topic-confirm-msg" class="error"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============================ 母版页 ============================ -->
   <section id="tab-master" class="page">
     <div class="card">
@@ -446,6 +490,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
     if (btn.dataset.tab === "library") loadLibrary();
     if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); }
+    if (btn.dataset.tab === "topic") loadTopics();
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "settings") loadSettings();
   });
@@ -983,6 +1028,145 @@ $("btn-ref-add").addEventListener("click", async () => {
   } finally {
     $("btn-ref-add").disabled = false;
     $("btn-ref-add").innerHTML = "入库";
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 赛题库页：浏览 / 过滤 / 拆条录入（逐条校对）/ 删除
+// ---------------------------------------------------------------------------
+// 拆条录入（工单 05）：上传长 PDF → /api/topics/split 出草稿 → 逐条校对表
+// （年份 / 题号 / 题面文本框可改、条目可删，确认前不落盘）→ /api/topics/
+// confirm 确认入库（multipart：pdf + payload JSON，载荷与工单 01 契约一致）。
+// program_dirs 不在本工单范围（校对表只含三字段，payload 里固定空数组）。
+let topicRows = [];      // 校对表草稿：[{year, number, problem_text}]
+let topicPdfFile = null; // 待确认的原 PDF（确认时随 multipart 重新上传，AI 拆错可查原文）
+
+function truncate(text, n) {
+  text = String(text);
+  return text.length <= n ? text : text.slice(0, n) + "…";
+}
+
+async function loadTopics() {
+  try {
+    // 过滤在前端做（与参考库服务端搜索不同）：题库条目少、列表一次取回
+    // （related_modules 后端已一次性算好），年份/编号子串过滤本地完成
+    const topics = await apiGet("/api/topics");
+    const year = $("topic-filter-year").value.trim().toLowerCase();
+    const number = $("topic-filter-number").value.trim().toLowerCase();
+    const rows = topics
+      .filter((t) => (!year || t.year.toLowerCase().includes(year))
+        && (!number || t.number.toLowerCase().includes(number)))
+      .map((t) => `
+        <tr>
+          <td class="slug">${esc(t.key)}</td>
+          <td>${esc(t.year)}</td>
+          <td class="muted" title="${esc(truncate(t.problem_text, 200))}">${esc(truncate(t.problem_text, 80))}</td>
+          <td class="muted">${t.related_modules && t.related_modules.length ? esc(t.related_modules.join("、")) : "—"}</td>
+          <td><button class="danger" data-topic-del="${esc(t.key)}">删除</button></td>
+        </tr>`).join("");
+    $("topic-rows").innerHTML = rows
+      || '<tr><td colspan="5" class="muted">库中暂无条目。</td></tr>';
+    $("topic-rows").querySelectorAll("[data-topic-del]").forEach((b) =>
+      b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
+    $("topic-msg").textContent = "";
+  } catch (e) { $("topic-msg").textContent = e.message; }
+}
+
+$("btn-topic-search").addEventListener("click", loadTopics);
+$("btn-topic-search-clear").addEventListener("click", () => {
+  $("topic-filter-year").value = "";
+  $("topic-filter-number").value = "";
+  loadTopics();
+});
+
+async function deleteTopic(key) {
+  if (!confirm("删除赛题 " + key + " 的整个条目目录（含题面与原 PDF）？")) return;
+  try {
+    await apiDelete(`/api/topics/${encodeURIComponent(key)}`);
+    loadTopics();
+  } catch (e) { alert(e.message); }
+}
+
+function renderProofreadRows() {
+  const box = $("topic-proofread-rows");
+  box.innerHTML = "";
+  if (!topicRows.length) {
+    box.innerHTML = '<div class="muted">校对表为空（条目已全部删除），请重新上传拆条。</div>';
+    return;
+  }
+  topicRows.forEach((t, i) => {
+    const div = document.createElement("div");
+    div.className = "proofread-row";
+    div.innerHTML = `
+      <input type="text" placeholder="年份" title="年份（4 位）" value="${esc(t.year)}">
+      <input type="text" placeholder="题号" title="题号（如 C）" value="${esc(t.number)}">
+      <textarea placeholder="题面全文（可修剪尾部杂项 / 评分汇总）">${esc(t.problem_text)}</textarea>
+      <button class="danger" title="删除该条草稿">✕</button>`;
+    const inputs = div.querySelectorAll("input, textarea");
+    inputs[0].addEventListener("input", (e) => (topicRows[i].year = e.target.value.trim()));
+    inputs[1].addEventListener("input", (e) => (topicRows[i].number = e.target.value.trim()));
+    inputs[2].addEventListener("input", (e) => (topicRows[i].problem_text = e.target.value));
+    div.querySelector("button").addEventListener("click", () => {
+      topicRows.splice(i, 1);
+      renderProofreadRows();
+    });
+    box.appendChild(div);
+  });
+}
+
+$("btn-topic-split").addEventListener("click", async () => {
+  $("topic-split-msg").classList.remove("ok");  // 早退路径（无文件）也按错误红显
+  $("topic-split-msg").textContent = "";
+  $("topic-proofread").classList.add("hidden");
+  const file = $("topic-pdf").files[0];
+  if (!file) { $("topic-split-msg").textContent = "请先选择 PDF 文件"; return; }
+  $("btn-topic-split").disabled = true;
+  $("btn-topic-split").innerHTML = '<span class="spinner"></span>拆条中…';
+  try {
+    const form = new FormData();
+    form.append("upload", file);
+    const data = await handle(await fetch("/api/topics/split", { method: "POST", body: form }));
+    topicPdfFile = file;
+    topicRows = data.topics.map((t) => ({ year: t.year, number: t.number, problem_text: t.problem_text }));
+    renderProofreadRows();
+    $("topic-proofread").classList.remove("hidden");
+    $("topic-split-msg").classList.add("ok");
+    $("topic-split-msg").textContent = "拆出 " + topicRows.length + " 条赛题草稿，请逐条校对后确认入库。";
+  } catch (e) {
+    $("topic-split-msg").classList.remove("ok");
+    $("topic-split-msg").textContent = e.message;
+  } finally {
+    $("btn-topic-split").disabled = false;
+    $("btn-topic-split").innerHTML = "重新拆条";
+  }
+});
+
+$("btn-topic-confirm").addEventListener("click", async () => {
+  $("topic-confirm-msg").classList.remove("ok");  // 早退路径（空校对表）也按错误红显
+  $("topic-confirm-msg").textContent = "";
+  if (!topicRows.length) { $("topic-confirm-msg").textContent = "校对表为空，无可入库条目"; return; }
+  if (!topicPdfFile) { $("topic-confirm-msg").textContent = "原 PDF 已丢失，请重新上传拆条"; return; }
+  $("btn-topic-confirm").disabled = true;
+  $("btn-topic-confirm").innerHTML = '<span class="spinner"></span>入库中…';
+  try {
+    const form = new FormData();
+    form.append("pdf", topicPdfFile);
+    form.append("payload", JSON.stringify({ entries: topicRows, program_dirs: [] }));
+    const data = await handle(await fetch("/api/topics/confirm", { method: "POST", body: form }));
+    $("topic-confirm-msg").classList.add("ok");
+    $("topic-confirm-msg").textContent = "已入库 " + data.topics.length + " 条："
+      + data.topics.map((t) => t.key).join("、");
+    topicRows = [];
+    topicPdfFile = null;
+    $("topic-proofread").classList.add("hidden");
+    $("topic-pdf").value = "";
+    loadTopics();
+  } catch (e) {
+    $("topic-confirm-msg").classList.remove("ok");
+    $("topic-confirm-msg").textContent = e.message;
+  } finally {
+    $("btn-topic-confirm").disabled = false;
+    $("btn-topic-confirm").innerHTML = "确认入库";
   }
 });
 
