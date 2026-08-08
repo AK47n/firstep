@@ -5,14 +5,87 @@
 输出目录：.scratch/real-run/out_<topic>（不碰桌面原工程）。
 """
 import json
+import re
 import sys
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 BASE = "http://127.0.0.1:8000"
 PLATFORM = "stm32"
 TOPICS = Path.home() / ".contest_generator" / "topics"
 HERE = Path(__file__).parent
+
+# 编译产物级校验（Keil 语义）：真机编译失败的对应断言。
+# 1) 代码围栏：LLM 输出带 ```c 围栏直接落盘 → Keil 报 unrecognized token。
+# 2) include 解析：#include "x.h" 先找当前文件目录，再找 uvprojx IncludePath；
+#    工程树里找不到且不是标准库/器件包头 → Keil 报 cannot open source input file。
+FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
+# Keil 在工程外也能解析的头：ARMCC 标准库（引号形式）与器件包（stm32f10x_conf.h）
+EXTERNAL_HEADERS = frozenset(
+    {
+        "math.h", "stdio.h", "stdlib.h", "string.h", "stdint.h", "stdbool.h",
+        "stddef.h", "limits.h", "float.h", "assert.h", "errno.h", "ctype.h",
+        "time.h", "inttypes.h", "stdarg.h", "setjmp.h", "signal.h", "locale.h",
+        "wchar.h", "wctype.h", "complex.h", "fenv.h", "tgmath.h", "iso646.h",
+        "stdatomic.h", "threads.h", "uchar.h", "stm32f10x_conf.h",
+    }
+)
+_INCLUDE_RE = re.compile(r'#\s*include\s*"([^"]+)"')
+
+
+def check_artifacts(out_dir: Path) -> list[str]:
+    """产物检查：返回问题列表（空 = 干净）。围栏 + include 解析两断言。"""
+    problems: list[str] = []
+    sources = [p for p in out_dir.rglob("*") if p.suffix.lower() in (".c", ".h")]
+    include_dirs = _uvprojx_include_dirs(out_dir)
+    for src in sources:
+        rel = src.relative_to(out_dir).as_posix()
+        text = src.read_text(encoding="utf-8", errors="replace")
+        for i, line in enumerate(text.splitlines(), 1):
+            if FENCE_RE.match(line):
+                problems.append(f"{rel}:{i} 代码围栏残留: {line.strip()!r}")
+        for m in _INCLUDE_RE.finditer(text):
+            header = m.group(1)
+            if _resolves(header, src.parent, include_dirs):
+                continue
+            if header.lower() in EXTERNAL_HEADERS:
+                continue
+            line_no = text.count("\n", 0, m.start()) + 1
+            problems.append(f"{rel}:{line_no} 引用不存在的头文件: {header}")
+    return problems
+
+
+def _resolves(header: str, own_dir: Path, include_dirs: list[Path]) -> bool:
+    return any((d / header).is_file() for d in [own_dir, *include_dirs])
+
+
+def _uvprojx_include_dirs(out_dir: Path) -> list[Path]:
+    """解析最终 .uvprojx 的 IncludePath（相对 .uvprojx 所在目录）→ 工程根相对目录。"""
+    uvprojx = next(out_dir.rglob("*.uvprojx"), None)
+    if uvprojx is None:
+        return []
+    dirs: list[Path] = []
+    try:
+        root = ET.parse(uvprojx).getroot()
+    except ET.ParseError:
+        return []
+    for el in root.findall("Targets/Target"):
+        path_el = el.find(
+            "TargetOption/TargetArmAds/Cads/VariousControls/IncludePath"
+        )
+        if path_el is None or not path_el.text:
+            continue
+        for entry in path_el.text.split(";"):
+            p = Path(entry.strip().replace("\\", "/"))
+            if not entry.strip():
+                continue
+            resolved = p if p.is_absolute() else (uvprojx.parent / p)
+            try:
+                dirs.append(resolved.resolve())
+            except OSError:
+                continue
+    return dirs
 
 
 def post(url: str, payload: dict) -> dict:
@@ -22,8 +95,12 @@ def post(url: str, payload: dict) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=600) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {e.code} {url}: {body[:400]}") from e
 
 
 def recommend_stream(payload: dict) -> dict:
@@ -120,6 +197,15 @@ def check_topic(key: str) -> bool:
     if missing:
         print(f"  ✗ 缺关键文件: {missing}")
         ok = False
+
+    # 产物级断言：围栏 + include 解析（真机编译失败的对应检查）
+    problems = check_artifacts(out_dir)
+    if problems:
+        for p in problems:
+            print(f"  ✗ 产物: {p}")
+        ok = False
+    else:
+        print("  [产物] 无围栏残留、全部 include 可解析")
     return ok
 
 

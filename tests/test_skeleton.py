@@ -15,6 +15,7 @@ from contest_generator.skeleton import (
     find_undefined_calls,
     generate_skeleton,
     sanitize_skeleton,
+    strip_code_fences,
     verify_main_c,
 )
 from tests.fakes import FakeLLM
@@ -320,3 +321,74 @@ def test_verify_main_c_passes_clean_main_c(fake_module_library):
     )
 
     assert undefined == ()
+
+
+# ---------------------------------------------------------------------------
+# strip_code_fences：LLM 围栏输出剥离（判例：围栏落盘 → Keil unrecognized token）
+# ---------------------------------------------------------------------------
+
+
+def test_strip_code_fences_removes_leading_and_trailing_fence():
+    raw = "```c\nint main(void) { return 0; }\n```\n"
+
+    assert strip_code_fences(raw) == "int main(void) { return 0; }\n"
+
+
+def test_strip_code_fences_handles_tilde_fence_and_no_lang():
+    raw = "~~~\nint main(void) {}\n~~~"
+
+    assert strip_code_fences(raw) == "int main(void) {}\n"
+
+
+def test_strip_code_fences_passthrough_without_fences():
+    code = "int main(void) { return 0; }\n"
+
+    assert strip_code_fences(code) == code
+
+
+def test_strip_code_fences_does_not_touch_middle_fence_lines():
+    # 围栏在中间 = 不是包裹形态（可能是注释里的示例代码），不剥
+    code = "// ```c\nint main(void) {}\n"
+
+    assert strip_code_fences(code) == code
+
+
+def test_generate_skeleton_strips_fenced_llm_output(fake_module_library):
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+    llm = FakeLLM(
+        main_skeleton=(
+            "```c\n"
+            "int main(void) {\n"
+            "    float t = dht11_read();\n"
+            "    delay_ms(100);\n"
+            "    while (1);\n"
+            "}\n"
+            "```\n"
+        )
+    )
+
+    main_c, blocked = generate_skeleton(
+        llm, "环境监测仪", manifests, PLATFORM_MSPM0, fake_module_library
+    )
+
+    assert blocked == ()
+    assert "```" not in main_c
+    assert main_c.startswith("int main(void) {")
+
+
+def test_strip_comments_keep_preprocessor_preserves_include_filename_on_later_lines():
+    """判例：pid.c 第 2 行的 #include 文件名曾因行首判断失误被当字符串剥掉。"""
+    from contest_generator.skeleton import _strip_comments_keep_preprocessor
+
+    code = (
+        '#include "headfile.h"\n'
+        '#include "digit_uart.h"\n'
+        '// #include "commented.h"\n'
+        'void f(void) {}\n'
+    )
+
+    stripped = _strip_comments_keep_preprocessor(code)
+
+    assert '"digit_uart.h"' in stripped
+    assert '"headfile.h"' in stripped
+    assert "commented.h" not in stripped  # 注释里的 include 不算数

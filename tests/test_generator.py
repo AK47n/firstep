@@ -10,11 +10,13 @@ from pathlib import Path
 import pytest
 
 from contest_generator.generator import (
+    FencedMainCError,
     GeneratorError,
     MasterNotFoundError,
     MissingModuleFilesError,
     OutputDirNotEmptyError,
     UndefinedCallsError,
+    UnresolvedIncludeError,
     generate_project,
     resolve_topic_context,
 )
@@ -32,6 +34,7 @@ from tests.fakes import (
     OLED_H,
     OLED_STM32_C,
     RecordingPatcher,
+    _add_module,
     make_fake_master_project,
     make_fake_module_library,
 )
@@ -574,3 +577,149 @@ def test_generate_project_unknown_topic_key_raises(fake_module_library, tmp_path
         )
 
     assert not (tmp_path / "out").exists()
+
+
+# ---------------------------------------------------------------------------
+# include 解析门禁（判例：库模块引用了从未入库的头，Keil cannot open）
+# ---------------------------------------------------------------------------
+
+
+def test_generate_rejects_module_with_unresolved_include(
+    fake_module_library, make_project, tmp_path
+):
+    """模块源码引用了最终工程里不存在的头 → 拒绝生成并点名头文件。"""
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "badmod",
+            "description": "引用不存在头的坏模块",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/bad.c"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        # 悬空 include 放第 2 行——复刻真实判例（pid.c 第 1 行 headfile.h 第 2 行
+        # digit_uart.h）：第 1 行的 # 行判断能过、第 2 行起不能，曾漏检
+        {"code/bad.c": '#include "headfile.h"\n#include "digit_uart.h"\nvoid bad_fn(void) {}\n'},
+    )
+    badmod = ModuleManifest.load(fake_module_library / "badmod")
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(UnresolvedIncludeError, match="digit_uart.h") as excinfo:
+        make_project(
+            manifests=[badmod],
+            main_c_content="int main(void) { while (1); }\n",
+            output_dir=output_dir,
+        )
+
+    assert "bad.c" in str(excinfo.value)
+    assert not output_dir.exists()  # 校验在创建输出目录之前
+
+
+def test_generate_rejects_main_c_with_code_fences(make_project, tmp_path):
+    """main.c 带 Markdown 围栏（LLM 围栏输出未剥离）→ 拒绝生成。"""
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(FencedMainCError, match="第 1 行") as excinfo:
+        make_project(
+            main_c_content="```c\nint main(void) { while (1); }\n```\n",
+            output_dir=output_dir,
+        )
+
+    assert "围栏" in str(excinfo.value)
+    assert not output_dir.exists()
+
+
+def test_generate_accepts_module_include_resolving_via_other_module_dir(
+    fake_module_library, make_project, tmp_path
+):
+    """模块间 include（A 引 B 的头，B 目录进 IncludePath）→ 正常生成。"""
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "mod_b",
+            "description": "提供 b.h",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/b.h"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        {"code/b.h": "#pragma once\nint b_val;\n"},
+    )
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "mod_a",
+            "description": "引用 mod_b 的头",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/a.c"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        {"code/a.c": '#include "b.h"\nvoid a_fn(void) { (void)b_val; }\n'},
+    )
+    mod_a = ModuleManifest.load(fake_module_library / "mod_a")
+    mod_b = ModuleManifest.load(fake_module_library / "mod_b")
+
+    out = make_project(
+        manifests=[mod_a, mod_b],
+        main_c_content="int main(void) { while (1); }\n",
+        output_dir=tmp_path / "out",
+    )
+
+    assert (out / "modules/mod_a/code/a.c").is_file()
+
+
+def test_generate_accepts_stdlib_header_in_quotes(
+    fake_module_library, make_project, tmp_path
+):
+    """引号形式的标准库头（math.h）Keil 在工程外能解析 → 不误报。"""
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "mathmod",
+            "description": "用引号引用标准库头",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/m.c"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        {"code/m.c": '#include "math.h"\ndouble m_fn(double x) { return x; }\n'},
+    )
+    mathmod = ModuleManifest.load(fake_module_library / "mathmod")
+
+    out = make_project(
+        manifests=[mathmod],
+        main_c_content="int main(void) { while (1); }\n",
+        output_dir=tmp_path / "out",
+    )
+
+    assert (out / "modules/mathmod/code/m.c").is_file()
