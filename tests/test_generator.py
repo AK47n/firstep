@@ -12,6 +12,7 @@ import pytest
 from contest_generator.generator import (
     FencedMainCError,
     GeneratorError,
+    MacroRedefinitionError,
     MasterNotFoundError,
     MissingModuleFilesError,
     ModuleSelfIncludeError,
@@ -766,3 +767,162 @@ def test_generate_accepts_stdlib_header_in_quotes(
     )
 
     assert (out / "modules/mathmod/code/m.c").is_file()
+
+
+# ---------------------------------------------------------------------------
+# 宏重定义门禁（判例：config.h 的 LED_GPIO 撞母版 ml_led.h，Keil #47-D）
+# ---------------------------------------------------------------------------
+
+
+def test_generate_rejects_module_redefining_master_macro(
+    fake_master_project, fake_module_library, make_project, tmp_path
+):
+    """模块头重定义母版接口宏（同名不同值）→ 拒绝生成并点名三方。"""
+    (fake_master_project / "inc/ml_led.h").write_text(
+        "#define LED_GPIO GPIO_A\n", encoding="utf-8"
+    )
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "clash",
+            "description": "重定义库宏的坏模块",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/clash.h"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        {"code/clash.h": "#define LED_GPIO GPIO_C\n"},
+    )
+    clash = ModuleManifest.load(fake_module_library / "clash")
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(MacroRedefinitionError) as excinfo:
+        make_project(
+            manifests=[clash],
+            main_c_content="int main(void) { while (1); }\n",
+            output_dir=output_dir,
+        )
+
+    message = str(excinfo.value)
+    assert "LED_GPIO" in message
+    assert "clash.h" in message
+    assert "ml_led.h" in message
+    assert not output_dir.exists()  # 校验在创建输出目录之前
+
+
+def test_generate_allows_same_value_macro(
+    fake_master_project, fake_module_library, make_project, tmp_path
+):
+    """同名同值宏 = Keil benign redefinition → 放行。"""
+    (fake_master_project / "inc/ml_led.h").write_text(
+        "#define LED_GPIO GPIO_A\n", encoding="utf-8"
+    )
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "sameval",
+            "description": "同值重定义模块",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/sameval.h"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        {"code/sameval.h": "#define LED_GPIO GPIO_A\n"},
+    )
+    sameval = ModuleManifest.load(fake_module_library / "sameval")
+
+    out = make_project(
+        manifests=[sameval],
+        main_c_content="int main(void) { while (1); }\n",
+        output_dir=tmp_path / "out",
+    )
+
+    assert (out / "modules/sameval/code/sameval.h").is_file()
+
+
+def test_generate_ignores_include_guard_and_undef(
+    fake_master_project, fake_module_library, make_project, tmp_path
+):
+    """include guard 定义（#ifndef 块内）与 #undef 后重定义 → 均不误报。"""
+    (fake_master_project / "inc/ml_led.h").write_text(
+        "#ifndef _ml_led_h_\n#define _ml_led_h_\n#define LED_GPIO GPIO_A\n#endif\n",
+        encoding="utf-8",
+    )
+    _add_module(
+        fake_module_library,
+        {
+            "slug": "guarded",
+            "description": "guard 与 undef 模式模块",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/guarded.h"],
+                    "verified": False,
+                    "hardware_bound": False,
+                    "notes": "",
+                    "kit": "",
+                    "source_url": "",
+                }
+            },
+        },
+        {
+            # 模块头带 guard（同名 guard 宏不冲突）+ #undef 后合法重定义
+            "code/guarded.h": (
+                "#ifndef _guarded_h_\n#define _guarded_h_\n"
+                "#undef LED_GPIO\n#define LED_GPIO GPIO_C\n"
+                "#define LED_RED_Pin Pin_13\n#endif\n"
+            )
+        },
+    )
+    guarded = ModuleManifest.load(fake_module_library / "guarded")
+
+    out = make_project(
+        manifests=[guarded],
+        main_c_content="int main(void) { while (1); }\n",
+        output_dir=tmp_path / "out",
+    )
+
+    assert (out / "modules/guarded/code/guarded.h").is_file()
+
+
+def test_generate_rejects_main_c_redefining_master_macro(
+    fake_master_project, make_project, tmp_path
+):
+    """main.c 重定义母版接口宏同样拒绝。"""
+    (fake_master_project / "inc/ml_led.h").write_text(
+        "#define LED_GPIO GPIO_A\n", encoding="utf-8"
+    )
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(MacroRedefinitionError, match="LED_GPIO"):
+        make_project(
+            main_c_content="#define LED_GPIO GPIO_C\nint main(void) { while (1); }\n",
+            output_dir=output_dir,
+        )
+
+    assert not output_dir.exists()
+
+
+def test_generate_writes_main_c_with_trailing_newline(make_project, tmp_path):
+    """main.c 落盘幂等补尾部换行（Keil #1-D last line without newline 判例）。"""
+    out = make_project(
+        main_c_content="int main(void) { while (1); }",  # 无尾部换行
+        output_dir=tmp_path / "out",
+    )
+
+    content = (out / "main.c").read_text(encoding="utf-8")
+    assert content.endswith("\n")
