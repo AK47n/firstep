@@ -15,8 +15,9 @@ from xml.sax.saxutils import escape
 from pypdf import PdfWriter
 
 from contest_generator.events import ProgressEmitter
-from contest_generator.llm import ModuleSelection, ReferenceSuggestion, ValidationResult
+from contest_generator.llm import ValidationResult
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
+from contest_generator.selection import ModuleSelection, ReferenceSuggestion
 from contest_generator.topic_library import TopicDraft
 
 # ---------------------------------------------------------------------------
