@@ -61,29 +61,49 @@ def build_skeleton_interfaces(
     顺序与 manifests 一致（调用方应先按依赖展开）；每个模块的平台条目里
     的 .h 文件内容逐块给出。头文件缺失跳过（文件齐全由生成器硬校验兜底）；
     模块无平台版本或纯 .c 实现时给出占位块，LLM 仍知道它被选中。
+    读盘 + 格式化拆成两层：这里做读盘与形态判断，块格式化归
+    format_interface_blocks（生成门禁用语料文本走同一格式化）。
     """
     blocks: list[str] = []
+    headers: list[tuple[str, str, str]] = []
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         if entry is None:
             blocks.append(f"### 模块 {manifest.slug}（无平台 {platform} 版本，无接口）")
             continue
-        parts: list[str] = []
-        for rel in entry.files:
-            if not _is_header_path(rel):
-                continue
+        declared_headers = [rel for rel in entry.files if _is_header_path(rel)]
+        if not declared_headers:
+            blocks.append(f"### 模块 {manifest.slug}（无头文件接口）")
+            continue
+        for rel in declared_headers:
             path = library_dir / manifest.slug / rel
             if not path.is_file():
                 continue
-            parts.append(f"### 模块 {manifest.slug}（{rel}）")
-            parts.append(path.read_text(encoding="utf-8"))
-        if not parts:
-            blocks.append(
-                f"### 模块 {manifest.slug}"
-                + ("（头文件缺失，无接口）" if any(_is_header_path(rel) for rel in entry.files) else "（无头文件接口）")
-            )
-        else:
-            blocks.append("\n".join(parts))
+            headers.append((manifest.slug, rel, path.read_text(encoding="utf-8")))
+        if not any(h[0] == manifest.slug for h in headers):
+            blocks.append(f"### 模块 {manifest.slug}（头文件缺失，无接口）")
+    blocks.extend(format_interface_blocks(headers))
+    return blocks
+
+
+def format_interface_blocks(
+    headers: Sequence[tuple[str, str, str]],
+) -> list[str]:
+    """接口块格式化唯一实现：(slug, rel, 头文件文本) → 每模块一个接口块。
+
+    骨架流程（build_skeleton_interfaces 读盘后）与生成门禁（语料文本）共用
+    同一份格式化——接口块长什么样只有这里知道。占位块（无平台版本 / 无头
+    文件接口 / 头文件缺失）由调用方按形态判断，这里只管"有内容的头文件"。
+    每个模块一块：同模块多 rel 的块内容以换行相连（与读盘版行为一致）。
+    """
+    blocks: list[str] = []
+    for slug in dict.fromkeys(h[0] for h in headers):  # 保序去重
+        parts: list[str] = []
+        for s, rel, text in headers:
+            if s == slug:
+                parts.append(f"### 模块 {slug}（{rel}）")
+                parts.append(text)
+        blocks.append("\n".join(parts))
     return blocks
 
 
@@ -102,9 +122,18 @@ def verify_main_c(
 
     与 generate_skeleton 共用同一份接口块（build_skeleton_interfaces 的
     输出）——自检只认喂给 LLM 的同一套接口，不存在的调用由调用方决定
-    改写（sanitize_skeleton）或明确报错（生成器兜底）。
+    改写（sanitize_skeleton）或明确报错（生成器兜底）。生成门禁有语料
+    文本时走 verify_main_c_interfaces（不重读盘，接口块同一格式化）。
     """
     interfaces = build_skeleton_interfaces(manifests, platform, library_dir)
+    return verify_main_c_interfaces(main_c, interfaces)
+
+
+def verify_main_c_interfaces(
+    main_c: str, interfaces: Sequence[str]
+) -> tuple[str, ...]:
+    """静态自检：main.c vs 已格式化接口块（生成门禁用——接口块来自语料，
+    不再重读盘）。与 verify_main_c 共用同一份提取与自检逻辑。"""
     return find_undefined_calls(main_c, extract_header_functions(interfaces))
 
 
