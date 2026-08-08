@@ -17,6 +17,8 @@ from contest_generator.llm import (
     EVENT_PHASE_DONE,
     EVENT_RETRY,
     EVENT_START,
+    EVENT_CONVERGED,
+    EVENT_ROUND,
     JUDGMENT_CONTENT_CAP,
     SELECT_SYSTEM_PROMPT,
     SKELETON_SYSTEM_PROMPT,
@@ -25,6 +27,8 @@ from contest_generator.llm import (
     LLMError,
     MAX_REQUEST_BYTES,
     ModuleSelection,
+    FunctionRequirement,
+    OutOfLibrarySuggestion,
     MAX_SUMMARY_BATCH_CHARS,
     PHASE_DECIDE,
     PHASE_SUMMARY,
@@ -39,6 +43,8 @@ from contest_generator.llm import (
     _batches,
     _distill_user_prompt,
     _file_chars,
+    _number_topic_sentences,
+    _revision_prompt,
     _split_versions,
     _summarize_user_prompt,
     _summary_slugs,
@@ -49,8 +55,10 @@ from contest_generator.llm import (
     parse_module_selection,
     parse_summary_report,
     parse_validation_result,
+    select_modules_convergent,
     select_modules_two_level,
 )
+from contest_generator.wordlist import HardwareWordGroup
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -829,7 +837,11 @@ def test_prompts_share_truncation_notice():
 
 
 def test_select_modules_truncates_oversized_problem():
-    """超大赛题文本同样截断：模块选择请求体也不会超限（未兜底输入闭环）。"""
+    """超大赛题文本同样截断：模块选择请求体也不会超限（未兜底输入闭环）。
+
+    提示词开销 = 固定常数段（词表科普段 / 输出契约，工单 10 起新增），余量
+    放宽到 +1000：断言的重点是"赛题内容被截断到预算内"，开销段不随内容增长。
+    """
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
 
@@ -837,7 +849,7 @@ def test_select_modules_truncates_oversized_problem():
 
     _, _, payload, _ = transport.calls[0]
     message = payload["messages"][1]["content"]
-    assert len(message) < JUDGMENT_CONTENT_CAP + 500
+    assert len(message) < JUDGMENT_CONTENT_CAP + 1000
     assert "截断" in message
     assert TRUNCATION_NOTICE in message
 
@@ -2474,3 +2486,559 @@ def test_topic_split_topics_rejects_overlong_fulltext():
         llm.topic_split_topics("x" * (TOPIC_SPLIT_LLM_CHAR_CAP + 1))
 
     assert transport.calls == []  # 请求未发出
+
+
+# ---------------------------------------------------------------------------
+# 工单 10：功能需求层契约解析（requirements / suggestions / questions）
+# ---------------------------------------------------------------------------
+
+# 测试专用小词表（与包内默认词表解耦，契约测试自足）
+WORDS = (
+    HardwareWordGroup(category="视觉模块", models=("K230", "OpenMV")),
+    HardwareWordGroup(category="声光提示器件", models=("LED", "蜂鸣器")),
+)
+
+REQUIREMENTS_JSON = json.dumps(
+    {
+        "requirements": [
+            {
+                "requirement": "识别数字",
+                "sentence": 3,
+                "modules": [
+                    {"slug": "dht11", "reason": "测温湿度"},
+                    {"slug": "oled", "reason": "显示结果"},
+                ],
+                "suggestions": [{"name": "视觉模块", "examples": ["K230", "OpenMV"]}],
+            },
+            {
+                "requirement": "声光提示",
+                "sentence": 5,
+                "modules": [],
+                "suggestions": [{"name": "蜂鸣器", "examples": []}],
+            },
+        ]
+    }
+)
+
+
+def test_parse_selection_requirements_derive_top_modules():
+    """新契约：顶层 modules 由功能需求层机械派生（库内命中并集，保序、首见理由）
+    ——模块必有需求支撑，顶层与需求层永不漂移。"""
+    result = parse_module_selection(
+        REQUIREMENTS_JSON, known_slugs=("dht11", "oled"), hardware_words=WORDS
+    )
+
+    assert result.modules == ("dht11", "oled")
+    assert result.reasons == {"dht11": "测温湿度", "oled": "显示结果"}
+    assert result.requirements[0] == FunctionRequirement(
+        requirement="识别数字",
+        sentence_index=3,
+        modules=("dht11", "oled"),
+        suggestions=(
+            OutOfLibrarySuggestion(name="视觉模块", examples=("K230", "OpenMV")),
+        ),
+    )
+    assert result.requirements[1].suggestions == (
+        OutOfLibrarySuggestion(name="蜂鸣器", examples=()),
+    )
+
+
+def test_parse_selection_requirements_dedup_shared_module_across_requirements():
+    """同一模块出现在两条需求里：顶层去重（首见理由保留），需求各自保留命中。"""
+    raw = json.dumps(
+        {
+            "requirements": [
+                {
+                    "requirement": "采集温湿度",
+                    "sentence": 1,
+                    "modules": [{"slug": "dht11", "reason": "测温"}],
+                },
+                {
+                    "requirement": "显示",
+                    "sentence": 2,
+                    "modules": [{"slug": "dht11", "reason": "数据来源"}],
+                },
+            ]
+        }
+    )
+
+    result = parse_module_selection(raw, known_slugs=("dht11",), hardware_words=WORDS)
+
+    assert result.modules == ("dht11",)
+    assert result.reasons == {"dht11": "测温"}  # 首见理由
+    assert [r.modules for r in result.requirements] == [("dht11",), ("dht11",)]
+
+
+def test_parse_selection_requirements_reject_unknown_module_slug():
+    """需求层里的库外 slug 同样大声失败（与顶层 modules 校验同款严格）。"""
+    with pytest.raises(LLMError, match="不存在"):
+        parse_module_selection(
+            json.dumps(
+                {
+                    "requirements": [
+                        {
+                            "requirement": "识别数字",
+                            "sentence": 1,
+                            "modules": [{"slug": "k230_cam", "reason": "视觉"}],
+                        }
+                    ]
+                }
+            ),
+            known_slugs=("dht11",),
+            hardware_words=WORDS,
+        )
+
+
+@pytest.mark.parametrize(
+    "bad_json",
+    [
+        json.dumps({"requirements": "not a list"}),
+        json.dumps({"requirements": [{"sentence": 1}]}),  # 缺 requirement
+        json.dumps({"requirements": [{"requirement": "  ", "sentence": 1}]}),
+        json.dumps({"requirements": [{"requirement": "需求"}]}),  # 缺 sentence
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": 0}]}),
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": -2}]}),
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": "1"}]}),  # 字符串编号
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": True}]}),
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": "x"}]}),
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"reason": "缺 slug"}]}]}),
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"slug": "dht11", "reason": 42}]}]}),
+        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"slug": "dht11"}, {"slug": "dht11"}]}]}),  # 需求内重复
+    ],
+)
+def test_parse_selection_rejects_malformed_requirements(bad_json):
+    with pytest.raises(LLMError):
+        parse_module_selection(bad_json, known_slugs=("dht11",), hardware_words=WORDS)
+
+
+def test_parse_selection_suggestion_name_hits_wordlist_model_or_category():
+    """词表内型号与类别名都直接显示（命中 → 显示）。"""
+    raw = json.dumps(
+        {
+            "requirements": [
+                {
+                    "requirement": "识别数字",
+                    "sentence": 1,
+                    "modules": [],
+                    "suggestions": [
+                        {"name": "K230", "examples": ["K230 模组"]},  # 型号条目
+                        {"name": "视觉模块", "examples": ["OpenMV"]},  # 类别条目
+                    ],
+                }
+            ]
+        }
+    )
+
+    result = parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+    suggestions = result.requirements[0].suggestions
+    assert suggestions[0].name == "K230" and suggestions[0].degraded is False
+    assert suggestions[1].name == "视觉模块" and suggestions[1].degraded is False
+
+
+def test_parse_selection_suggestion_off_wordlist_degrades_to_category():
+    """词表外型号（模型给出词表内类别名）→ 降级为类别名显示（degraded）。"""
+    raw = json.dumps(
+        {
+            "requirements": [
+                {
+                    "requirement": "识别数字",
+                    "sentence": 1,
+                    "modules": [],
+                    "suggestions": [
+                        {"name": "K210", "category": "视觉模块", "examples": ["OpenMV"]}
+                    ],
+                }
+            ]
+        }
+    )
+
+    result = parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+    suggestion = result.requirements[0].suggestions[0]
+    assert suggestion.name == "视觉模块"  # 降级后的类别名
+    assert suggestion.degraded is True
+    assert suggestion.examples == ("OpenMV",)
+
+
+@pytest.mark.parametrize(
+    "suggestion",
+    [
+        {"name": "K210"},  # 词表外且无 category
+        {"name": "K210", "category": "随便什么"},  # category 不在词表
+        {"name": "K210", "category": 42},
+    ],
+)
+def test_parse_selection_suggestion_off_wordlist_rejected(suggestion):
+    """词表外型号无法降级（缺合法类别）→ 拒收（大声失败，与库内 slug 校验同源）。"""
+    raw = json.dumps(
+        {
+            "requirements": [
+                {
+                    "requirement": "识别数字",
+                    "sentence": 1,
+                    "modules": [],
+                    "suggestions": [suggestion],
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(LLMError, match="硬件词表"):
+        parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+
+def test_parse_selection_suggestions_without_wordlist_rejected():
+    """没给硬件词表时模型报库外建议 = 无法校验的编造：大声失败。"""
+    raw = json.dumps(
+        {
+            "requirements": [
+                {
+                    "requirement": "识别数字",
+                    "sentence": 1,
+                    "modules": [],
+                    "suggestions": [{"name": "视觉模块"}],
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(LLMError, match="词表"):
+        parse_module_selection(raw, known_slugs=())
+
+
+def test_parse_selection_questions_accepted():
+    """拿不准向用户补问：questions 数组解析；纯补问输出（无需求层无模块）合法。"""
+    raw = json.dumps({"questions": ["题面没有说明识别方式，用摄像头还是传感器？"]})
+
+    result = parse_module_selection(raw, known_slugs=())
+
+    assert result.questions == ("题面没有说明识别方式，用摄像头还是传感器？",)
+    assert result.modules == ()
+
+
+@pytest.mark.parametrize(
+    "bad_questions",
+    [
+        json.dumps({"questions": "不是数组"}),
+        json.dumps({"questions": [42]}),
+        json.dumps({"questions": [""]}),
+    ],
+)
+def test_parse_selection_rejects_malformed_questions(bad_questions):
+    with pytest.raises(LLMError, match="questions"):
+        parse_module_selection(bad_questions, known_slugs=())
+
+
+def test_parse_selection_requirements_present_ignores_plain_modules():
+    """模型同时输出 requirements 与顶层 modules（冗余）→ 以需求层派生的为准。"""
+    raw = json.dumps(
+        {
+            "modules": [{"slug": "oled", "reason": "冗余"}],  # 与需求层不一致，应被忽略
+            "requirements": [
+                {
+                    "requirement": "采集温湿度",
+                    "sentence": 1,
+                    "modules": [{"slug": "dht11", "reason": "测温"}],
+                }
+            ],
+        }
+    )
+
+    result = parse_module_selection(
+        raw, known_slugs=("dht11", "oled"), hardware_words=WORDS
+    )
+
+    assert result.modules == ("dht11",)  # 派生为准
+
+
+def test_select_modules_prompt_includes_wordlist_and_new_contract():
+    """提示词契约：硬件词表科普段 + 新输出契约（requirements / suggestions /
+    questions）都进用户消息——模型按新契约输出，解析器才有得校验。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules("设计一个识别数字的送药小车", ["- dht11: 温湿度"])
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "硬件词表" in user_message
+    assert "- 视觉模块：K230、OpenMV" in user_message  # 词表科普段
+    assert '"requirements"' in user_message
+    assert '"suggestions"' in user_message
+    assert '"questions"' in user_message
+    assert '"references"' not in user_message  # 无参考文件清单时旧形态保持
+
+
+def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
+    """生产 LLM 端到端：新契约 JSON → 功能需求层 + 库外建议（默认词表校验）。"""
+    transport = FakeTransport(body=_api_response(REQUIREMENTS_JSON))
+    llm = _llm(transport)
+
+    result = llm.select_modules("设计一个送药小车", ["- dht11: 温湿度", "- oled: 显示"])
+
+    assert result.modules == ("dht11", "oled")
+    assert result.requirements[0].requirement == "识别数字"
+    assert result.requirements[0].suggestions[0].name == "视觉模块"
+
+
+# ---------------------------------------------------------------------------
+# 工单 10：题面逐句编号 + 收敛轮提示词
+# ---------------------------------------------------------------------------
+
+
+def test_number_topic_sentences_splits_on_sentence_breaks():
+    text = "设计并制作送药小车。它需要识别数字；并声光提示。能避障？\n请按要求完成。"
+
+    numbered = _number_topic_sentences(text)
+
+    assert numbered == (
+        "1. 设计并制作送药小车。\n"
+        "2. 它需要识别数字；\n"
+        "3. 并声光提示。\n"
+        "4. 能避障？\n"
+        "5. 请按要求完成。"
+    )
+
+
+def test_number_topic_sentences_single_sentence_and_empty():
+    assert _number_topic_sentences("只有一句") == "1. 只有一句"
+    assert _number_topic_sentences("   ") == "   "  # 无可分句子原样返回
+
+
+def test_revision_prompt_carries_previous_layer_and_self_check_instruction():
+    numbered = "1. 设计送药小车。"
+    previous = (
+        FunctionRequirement(
+            requirement="识别数字",
+            sentence_index=2,
+            modules=("ml_mpu6050",),
+            suggestions=(OutOfLibrarySuggestion(name="视觉模块", examples=("K230",)),),
+        ),
+    )
+
+    prompt = _revision_prompt(numbered, previous)
+
+    assert prompt.startswith(numbered)
+    assert "上一轮功能需求层" in prompt
+    assert "句子2「识别数字」" in prompt
+    assert "库内命中：ml_mpu6050" in prompt
+    assert "库外建议：视觉模块" in prompt
+    assert "自检修订" in prompt  # 自检指令在场
+
+
+# ---------------------------------------------------------------------------
+# 工单 10：收敛循环驱动（多轮调用 / 轮数上限 / 补问 / 两级注入）
+# ---------------------------------------------------------------------------
+
+
+class _RecordingConvergenceLLM(FakeLLM):
+    """记录型假 LLM：按脚本返回选择序列，记录每次调用（问题文本 / 清单 / 全文）。"""
+
+    def __init__(self, selections: Sequence[ModuleSelection]) -> None:
+        super().__init__()
+        self._queue = list(selections)
+        self.calls: list[tuple[str, tuple[str, ...], tuple[str, ...], dict[str, str]]] = []
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+    ) -> ModuleSelection:
+        self.calls.append(
+            (
+                problem_text,
+                tuple(manifest_summaries),
+                tuple(reference.id for reference in references),
+                dict(reference_fulltexts or {}),
+            )
+        )
+        return self._queue.pop(0)
+
+
+def _requirement(text: str, sentence: int = 1) -> FunctionRequirement:
+    return FunctionRequirement(requirement=text, sentence_index=sentence)
+
+
+def _selection_with(
+    requirement: str,
+    *,
+    sentence: int = 1,
+    modules: tuple[str, ...] = (),
+    suggestions: tuple[str, ...] = (),
+    questions: tuple[str, ...] = (),
+) -> ModuleSelection:
+    return ModuleSelection(
+        modules=modules,
+        reasons={slug: "" for slug in modules},
+        requirements=(
+            FunctionRequirement(
+                requirement=requirement,
+                sentence_index=sentence,
+                modules=modules,
+                suggestions=tuple(
+                    OutOfLibrarySuggestion(name=name) for name in suggestions
+                ),
+            ),
+        ),
+        questions=questions,
+    )
+
+
+def test_convergent_stops_after_two_identical_rounds():
+    """收敛命中：两轮功能需求层一致 → 第 2 轮即收敛，结果 = 第 2 轮产物。"""
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字", suggestions=("视觉模块",))] * 2
+    )
+    events: list[ProgressEvent] = []
+
+    result = select_modules_convergent(
+        fake, "送药小车题", ["- dht11: 温湿度"], progress_emitter=events.append
+    )
+
+    assert len(fake.calls) == 2
+    assert result.requirements == (
+        FunctionRequirement(
+            requirement="识别数字",
+            sentence_index=1,
+            suggestions=(OutOfLibrarySuggestion(name="视觉模块"),),
+        ),
+    ) and result.questions == ()
+    assert [e.type for e in events] == [EVENT_ROUND, EVENT_ROUND, EVENT_CONVERGED]
+    assert events[2].round == 2
+    assert [e.round for e in events] == [1, 2, 2]
+    assert all(e.round_total == 4 for e in events[:2])
+
+
+def test_convergent_reaches_round_limit_without_convergence():
+    """轮数上限：每轮功能需求层都变 → 4 轮后以最后一轮为准（不再多问）。"""
+    fake = _RecordingConvergenceLLM(
+        [
+            _selection_with("需求一"),
+            _selection_with("需求二"),
+            _selection_with("需求三"),
+            _selection_with("需求四"),
+        ]
+    )
+    events: list[ProgressEvent] = []
+
+    result = select_modules_convergent(
+        fake, "题面", ["- dht11: 温湿度"], progress_emitter=events.append
+    )
+
+    assert len(fake.calls) == 4
+    assert result.requirements == (_requirement("需求四"),)
+    assert [e.type for e in events] == [EVENT_ROUND] * 4  # 未收敛，无 converged 事件
+
+
+def test_convergent_second_round_carries_previous_layer_with_stable_numbering():
+    """第 2 轮带上一轮功能需求层（自检修订依据）且题面编号跨轮稳定（收敛判定的
+    对照句编号依赖它——编号漂移会让两轮"同一句"对不上号）。"""
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字", sentence=2), _selection_with("识别数字", sentence=2)]
+    )
+
+    select_modules_convergent(fake, "送药小车。识别数字。", ["- dht11: 温湿度"])
+
+    assert fake.calls[0][0] == "1. 送药小车。\n2. 识别数字。"
+    round2_topic = fake.calls[1][0]
+    assert round2_topic.startswith("1. 送药小车。\n2. 识别数字。\n")  # 编号未漂移
+    assert "上一轮功能需求层" in round2_topic
+    assert "句子2「识别数字」" in round2_topic
+
+
+def test_convergent_question_stops_immediately():
+    """补问路径：模型拿不准（questions 非空）→ 本轮即停，不再收敛确认。"""
+    fake = _RecordingConvergenceLLM(
+        [
+            ModuleSelection(
+                modules=(),
+                reasons={},
+                questions=("题面没有说明识别方式，用摄像头还是传感器？",),
+            )
+        ]
+    )
+    events: list[ProgressEvent] = []
+
+    result = select_modules_convergent(
+        fake, "题面", ["- dht11: 温湿度"], progress_emitter=events.append
+    )
+
+    assert len(fake.calls) == 1  # 补问后暂停，没有第 2 轮
+    assert result.questions == ("题面没有说明识别方式，用摄像头还是传感器？",)
+    assert [e.type for e in events] == [EVENT_ROUND]
+
+
+def test_convergent_round_one_two_level_fulltexts_carried_into_round_two():
+    """两级注入在收敛循环内：第 1 轮点名全文 → 回读；第 2 轮收敛确认仍带已读
+    全文（全文上下文不丢；恰好两级，不再注入新全文）。"""
+    refs = [_suggestion("a", "A", "a")]
+    fake = _RecordingConvergenceLLM(
+        [
+            ModuleSelection(
+                modules=("dht11",),
+                reasons={},
+                reference_ids=("a",),
+                requirements=(_requirement("识别数字"),),
+            ),
+            ModuleSelection(
+                modules=("dht11",),
+                reasons={},
+                reference_ids=("a",),
+                requirements=(_requirement("识别数字"),),
+            ),
+            ModuleSelection(
+                modules=("dht11",),
+                reasons={},
+                reference_ids=("a",),
+                requirements=(_requirement("识别数字"),),
+            ),
+        ]
+    )
+    read: list[str] = []
+
+    def reader(entry_id: str) -> str:
+        read.append(entry_id)
+        return f"全文{entry_id}"
+
+    select_modules_convergent(
+        fake,
+        "题面",
+        ["- dht11: 温湿度"],
+        references=refs,
+        reader=reader,
+    )
+
+    assert read == ["a"]  # 只在第一级点名时回读一次
+    assert fake.calls[0][3] == {}  # 第一级：只有清单
+    assert fake.calls[1][3] == {"a": "全文a"}  # 第二级：带全文
+    assert fake.calls[2][3] == {"a": "全文a"}  # 第 2 轮：已读全文照旧带上
+
+
+def test_convergent_without_references_uses_old_signature():
+    """无参考文件清单时退化：全程旧签名（2 参）调用——既有假 LLM（fakes.py
+    只读）无需改动即可服务收敛循环（webapp 无历史赛题的基线）。"""
+    fake = FakeLLM(selection=ModuleSelection(modules=(), reasons={}))
+
+    result = select_modules_convergent(fake, "赛题", ["- dht11: 温湿度"])
+
+    assert result.modules == ()
+    # 收敛照常工作（旧契约无需求层 → 第 2 轮一致即收敛），旧签名假 LLM 未触发异常
+
+
+def test_convergent_round_events_tolerate_failing_emitter():
+    """发射器抛异常（旁路）→ 收敛主流程不受影响（与提炼进度同款 seam）。"""
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字"), _selection_with("识别数字")]
+    )
+
+    def exploding(_event: ProgressEvent) -> None:
+        raise RuntimeError("UI 消费失败")
+
+    result = select_modules_convergent(
+        fake, "题面", ["- dht11: 温湿度"], progress_emitter=exploding
+    )
+
+    assert result.requirements == (_requirement("识别数字"),)
+    assert len(fake.calls) == 2
