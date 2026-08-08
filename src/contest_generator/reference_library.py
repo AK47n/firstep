@@ -28,13 +28,17 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .entry_store import entry_transaction, iter_entry_dirs, write_json
 from .library import list_modules
-from .llm import LLM
 from .manifest import is_unsafe_path
 from .topic_library import validate_topic_key
+
+if TYPE_CHECKING:
+    # 仅类型注解用（draft_description 签名；C1 归位后 llm → selection →
+    # reference_library → llm 会成运行时环，library.py 同款先例）
+    from .llm import LLM
 
 REFERENCE_META_FILENAME = "reference.json"
 

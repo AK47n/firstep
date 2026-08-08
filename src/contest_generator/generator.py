@@ -17,12 +17,13 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from .library import list_modules
-from .llm import LLM, LLMError, ReferenceSuggestion, build_manifest_summaries
+from .llm import LLM, LLMError, build_manifest_summaries
 from .manifest import ModuleManifest
 from .master import master_project_dir
 from .patchers import PatcherRegistry, default_registry
 from .reference_library import ReferenceEntry, ReferenceError
 from .selection import (
+    ReferenceSuggestion,
     associated_references,
     read_reference_fulltext,
     reference_suggestions,
