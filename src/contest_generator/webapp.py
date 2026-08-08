@@ -58,6 +58,7 @@ from .llm import (
     LLMError,
     DeepSeekLLM,
     ProgressEvent,
+    TOPIC_SPLIT_LLM_CHAR_CAP,
     build_manifest_summaries,
     select_modules_two_level,
 )
@@ -93,6 +94,7 @@ from .topic_library import (
     discover_related_modules,
     parse_confirm_entries,
     resolve_number,
+    split_topics_document,
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -900,14 +902,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/topics/split")
     @_map_errors
     async def topics_split(upload: UploadFile = File(...)) -> dict:
-        """上传历年真题长 PDF → 抽取文本 → AI 拆条（年份 / 编号 / 题面全文）。
+        """上传历年真题长 PDF → 拆条（年份 / 编号 / 题面全文）→ 草稿列表。
 
-        拆条是草稿：用户逐条校对（改年份 / 题号 / 题面）后回传
-        /api/topics/confirm 确认入库。
+        路由按全文长度分流（flash 模型输出预算有限，多年长 PDF 一次拆会被
+        截断而静默漏题）：≤ TOPIC_SPLIT_LLM_CHAR_CAP 单次调 LLM 拆条（支持
+        任意格式，单题短 PDF 的既有路径）；超长走确定性分块
+        （split_topics_document：年份章节 + 题目标记切到单题，零 AI 改写，
+        格式不匹配大声失败，不静默漏题）。取舍：超长不选"分批调 LLM"——大
+        年份 8 题 ≈ 20K 字符输出仍超 flash 输出预算，块变小只是缩小不消除
+        漏题；确定性切分无输出预算问题，且已真机验证 69/69 全对。拆条是
+        草稿：用户逐条校对（改年份 / 题号 / 题面）后回传 /api/topics/confirm
+        确认入库。
         """
         tmp_path = await _save_upload(upload)
         try:
-            drafts = _llm(context).topic_split_topics(extract_file(tmp_path))
+            text = extract_file(tmp_path)
+            if len(text) <= TOPIC_SPLIT_LLM_CHAR_CAP:
+                drafts = _llm(context).topic_split_topics(text)
+            else:
+                drafts = split_topics_document(text)
         finally:
             tmp_path.unlink(missing_ok=True)
         return {"topics": [draft.to_dict() for draft in drafts]}
