@@ -13,15 +13,23 @@
 
 **明确不动的（边界）**：webapp.py / keil.py / ccs.py 零改动；skeleton 骨架流程（generate_skeleton / build_skeleton_interfaces 对外签名）；错误类型与文案契约逐字不变。
 
-**Status:** pending
+**Status:** resolved
 
 ## 验收
 
-- [ ] 全量 pytest 绿；五道门对同一 corpus 的既有行为用例原样过（错误文案逐字不变）
-- [ ] `grep -rn "read_text" src/contest_generator/generator.py` 只剩 build_module_corpus 一处读盘点（门禁内无 read_text）
-- [ ] 测试有纯内存构造 ModuleCorpus 直喂门禁的用例（无盘上夹具）
-- [ ] verify_main_c 门禁侧不再重读盘（skeleton 骨架流程读盘路径不变）
+- [x] 全量 pytest 绿（789，783 基线 + 6 个语料用例）；错误文案逐字不变（既有断言原样过）
+- [x] `grep -rn "read_text" src/contest_generator/generator.py` 只剩 build_module_corpus 一处读盘点（门禁内无 read_text）
+- [x] 测试有纯内存构造 ModuleCorpus 直喂门禁的用例（6 个，无盘上夹具；唯一碰盘 = include 解析按 Keil 语义查搜索目录）
+- [x] verify_main_c 门禁侧不再重读盘（verify_main_c_interfaces 吃语料接口块，skeleton 骨架流程读盘路径不变）
+- [x] mypy 干净（26 文件）
 
 ## Comments
 
 （2026-08-08 立项，grilling 共识：候选 2。范围 A——只服务五道门；format_interface_blocks 纯函数共享一份格式化；布局统一与平台盲区明确不做。依赖 01（门禁用 clex 词法原语）。）
+
+（2026-08-08 实施完成，refactor 提交 + merge PR。要点：
+
+- **ModuleCorpus 语料**（generator.py 公开）：platform / modules（slug → ModuleFile 元组）/ missing_platforms / missing_files / master_headers（一次 rglob+读盘）/ master_search_dirs（IncludePath 构建时算好）/ master_project_dir（main.c own_dir）/ main_c。ModuleFile = rel/kind/text/own_dir——文本与目录一次读好，门禁只吃语料。
+- **五道门改吃 corpus**：遍历编排全删（-5 份拷贝）；`_check_main_calls` 走 verify_main_c_interfaces + format_interface_blocks（skeleton 新拆纯函数，与骨架流程共享格式化唯一实现；verify_main_c = 读盘版薄壳 + verify_main_c_interfaces）；`_check_unresolved_includes` main.c own_dir = corpus.master_project_dir（原为母版根）；`_check_macro_conflicts` 母版头改吃 corpus.master_headers。
+- **测试**：新增 6 个内存语料用例直喂门禁（缺失清单顺序 / 围栏 / 自包含 / 宏冲突 / include 搜索目录 / 缺失头拒绝）；_memory_corpus 辅助构造。错误文案逐字不变，既有 783 断言原样过。
+- **过程教训（重复）**：一次编辑又误落主检出（Edit 路径写错），已还原（git checkout -- tests/test_generator.py）并重做——worktree 会话中任何对 tests/ 的编辑必须先确认路径带 .claude/worktrees/ 前缀。）
