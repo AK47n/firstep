@@ -24,7 +24,6 @@ from typing import Any, Callable, Iterator, Sequence
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from .ccs import CcsProjectError
 from .config import (
     DEFAULT_CONFIG_PATH,
     AppConfig,
@@ -32,18 +31,17 @@ from .config import (
     load_config,
     save_config,
 )
-from .extraction import ExtractionError, extract_file
+from .errors import error_entry
+from .events import ProgressEvent
+from .extraction import extract_file
 from .generator import (
     GenerationSummary,
-    GeneratorError,
     TopicContext,
     generate_project,
     prepend_related_modules,
     resolve_topic_context,
 )
-from .keil import KeilProjectError
 from .library import (
-    LibraryError,
     add_module,
     add_platform_files,
     delete_module,
@@ -53,16 +51,13 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
-from .events import ProgressEvent
 from .llm import (
     LLM,
-    LLMError,
     DeepSeekLLM,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_manifest_summaries,
 )
 from .master import (
-    MasterError,
     confirm_distillation,
     delete_master,
     distill_master,
@@ -72,21 +67,15 @@ from .master import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
-    ReferenceError,
     add_reference,
     delete_reference,
     draft_description as reference_draft_description,
     module_kit_vocabulary,
     search_references,
 )
-from .selection import (
-    SelectionError,
-    resolve_selection,
-    select_modules_convergent,
-)
+from .selection import resolve_selection, select_modules_convergent
 from .skeleton import generate_skeleton
 from .topic_library import (
-    TopicError,
     confirm_topics,
     delete_topic,
     discover_related_modules,
@@ -199,47 +188,8 @@ def _resolve_topic_for_generation(
 
 
 # ---------------------------------------------------------------------------
-# 错误映射：核心异常 → HTTP 状态与中文 message（全路由唯一出口）
+# 错误映射：取值与包装（error_to_http 表唯一出处 = errors.py，全路由出口）
 # ---------------------------------------------------------------------------
-
-
-def _error_entry(exc: Exception) -> tuple[int, str]:
-    """error_to_http 表（唯一出处）：核心异常 → (HTTP 状态, 中文 message)。
-
-    已知异常：业务失败 → 400（message 原样带出）、LLM 服务失败 → 502、
-    文件系统失败 → 400；**未登记的异常 = 真 bug，兜底 500 带类型名**——
-    旧实现兜底 400 会把真 bug 吞成业务失败（测试 raise_server_exceptions=False
-    时静默通过）。新异常类型必须在此登记，否则按真 bug 大声失败。
-    同步端点取状态码转 HTTPException、SSE 端点只取 message（HTTP 保持 200
-    起流）——同一张表两端共用，未登记政策一致，改动只在此一处。
-    """
-    if isinstance(exc, LLMError):
-        return 502, f"AI 服务调用失败：{exc}"
-    if isinstance(exc, (KeilProjectError, CcsProjectError)):
-        # 工程文件（.uvprojx / .cproject）缺失、重复或不是合法 XML：业务失败
-        # （旧工程 / AI 整合产物有问题），带中文 message，不裸 500
-        return 400, str(exc)
-    if isinstance(exc, OSError):
-        # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
-        # 带说明，不裸 500
-        return 400, f"文件操作失败：{exc}"
-    if isinstance(
-        exc,
-        (
-            ExtractionError,
-            LibraryError,
-            MasterError,
-            SelectionError,
-            GeneratorError,
-            ConfigError,
-            ReferenceError,
-            TopicError,
-        ),
-    ):
-        # 业务失败：message 原样带出（用户可按提示修正重试）
-        return 400, str(exc)
-    # 兜底：未登记异常 = 真 bug，500 大声失败（带类型名方便排查）
-    return 500, f"服务器内部错误（{type(exc).__name__}）：{exc}"
 
 
 def _error_message(exc: Exception) -> str:
@@ -247,9 +197,9 @@ def _error_message(exc: Exception) -> str:
 
     提炼的 SSE 流内 error 事件用它（HTTP 保持 200 起流）；普通端点仍走
     _error_response 转状态码。未登记异常与同步同政策：带类型名大声失败，
-    不原样透传裸 str。
+    不原样透传裸 str。表与唯一实现在 errors.py。
     """
-    return _error_entry(exc)[1]
+    return error_entry(exc)[1]
 
 
 def _error_response(exc: Exception) -> HTTPException:
@@ -259,8 +209,9 @@ def _error_response(exc: Exception) -> HTTPException:
     文件系统失败 → 400；**未登记的异常 = 真 bug，兜底转 500**——旧实现
     兜底 400 会把真 bug 吞成业务失败（测试 raise_server_exceptions=False
     时静默通过）。新异常类型必须登记，否则按真 bug 大声 500。
+    表与唯一实现在 errors.py。
     """
-    status, message = _error_entry(exc)
+    status, message = error_entry(exc)
     return HTTPException(status, message)
 
 
