@@ -34,7 +34,7 @@ from .events import (
     ProgressEvent,
     _emit,
 )
-from .manifest import ModuleManifest, collect_kits
+from .manifest import ManifestSummary, ModuleManifest
 from .report import (
     ACTION_MERGE,
     FileDecision,
@@ -450,7 +450,7 @@ class LLM(Protocol):
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection: ...
@@ -485,27 +485,16 @@ class LLM(Protocol):
     def topic_extract_number(self, text: str) -> str | None: ...
 
 
-def build_manifest_summaries(manifests: Sequence[ModuleManifest]) -> list[str]:
-    """模块库 manifest 摘要行（喂给 LLM 的可用模块清单）。
+def build_manifest_summaries(
+    manifests: Sequence[ModuleManifest],
+) -> list[ManifestSummary]:
+    """模块库摘要对象（喂给 LLM 的可用模块清单）。
 
-    行格式：`- slug: description（套件: kit; 依赖: ...）`——套件段聚合各平台
-    条目的 kit（去重保序走 manifest.collect_kits 单源，有 kit 才显示，AI 靠它
-    分辨"哪个套件的 UWB"）；依赖段有依赖才显示。行格式与 _summary_slugs 的
-    反向解析耦合：改动格式须同步两处。
+    形状归 manifest.ManifestSummary（slug/description/kits/依赖），行渲染
+    唯一实现 = ManifestSummary.to_line()——本函数只是批量投影，协议层不再
+    传字符串、不再有反向解析（_summary_slugs 已删除）。
     """
-    lines = []
-    for manifest in manifests:
-        line = f"- {manifest.slug}: {manifest.description}"
-        kits = collect_kits([manifest])
-        if kits:
-            line += f"（套件: {'、'.join(kits)}"
-            if manifest.dependencies:
-                line += f"; 依赖: {', '.join(manifest.dependencies)}"
-            line += "）"
-        elif manifest.dependencies:
-            line += f"（依赖: {', '.join(manifest.dependencies)}）"
-        lines.append(line)
-    return lines
+    return [ManifestSummary.from_manifest(m) for m in manifests]
 
 
 class Transport(Protocol):
@@ -569,7 +558,7 @@ class DeepSeekLLM:
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
@@ -602,7 +591,7 @@ class DeepSeekLLM:
         )
         return parse_module_selection(
             content,
-            known_slugs=_summary_slugs(manifest_summaries),
+            known_slugs=[s.slug for s in manifest_summaries],
             known_reference_ids=[r.id for r in references],
             hardware_words=self._hardware_words,
         )
@@ -1491,13 +1480,15 @@ def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) ->
 
 def _selection_user_prompt(
     problem_text: str,
-    manifest_summaries: Sequence[str],
+    manifest_summaries: Sequence[ManifestSummary],
     references: Sequence[ReferenceSuggestion] = (),
     reference_fulltexts: Mapping[str, str] | None = None,
     hardware_words: Sequence[HardwareWordGroup] = (),
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
-    prompt = _build_user_prompt(problem_text, "模块库可用模块：", manifest_summaries)
+    prompt = _build_user_prompt(
+        problem_text, "模块库可用模块：", [s.to_line() for s in manifest_summaries]
+    )
     if references:
         lines = [
             "",
@@ -1677,22 +1668,6 @@ def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -
         "\n\n输出 main.c 骨架：按模块初始化序列排好调用，带注释与预留编写区（TODO），"
         "不确定的调用写成注释占位，不凭空造函数，保证可编译。"
     )
-
-
-def _summary_slugs(manifest_summaries: Sequence[str]) -> list[str]:
-    """从摘要行提取 slug（行首 "- " 后的第一个冒号前）。
-
-    与 build_manifest_summaries 的行格式耦合：套件 / 依赖段都在冒号之后、不
-    影响本解析；改动格式须同步两处（选模块结果的 known_slugs 靠它反解析）。
-    """
-    slugs = []
-    for line in manifest_summaries:
-        if not line.startswith("- "):
-            continue
-        slug = line[2:].split(":", 1)[0].strip()
-        if slug:
-            slugs.append(slug)
-    return slugs
 
 
 # ---------------------------------------------------------------------------

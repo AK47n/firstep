@@ -12,7 +12,7 @@ from typing import Mapping, Sequence
 import pytest
 
 from contest_generator.events import EVENT_CONVERGED, EVENT_ROUND, ProgressEvent
-from contest_generator.manifest import ModuleManifest, PlatformEntry
+from contest_generator.manifest import ManifestSummary, ModuleManifest, PlatformEntry
 from contest_generator.reference_library import ReferenceError, get_reference
 from contest_generator.selection import (
     WARNING_HARDWARE_BOUND,
@@ -419,7 +419,7 @@ class _RecordingConvergenceLLM(FakeLLM):
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:

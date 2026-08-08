@@ -179,9 +179,9 @@ def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
     """平台条目 kit 词表（保序去重、空值跳过）：硬件身份词表的唯一实现。
 
     调用方（reference_library.module_kit_vocabulary / selection 的关联参考
-    收集 / llm 的 manifest 摘要行）都从这里取——顺序 = manifests 顺序 ×
-    平台条目插入顺序 × 首次出现。字段所有者是 PlatformEntry.kit，词表语义
-    只在此一处（改语义同步改调用方测试）。
+    收集 / manifest 摘要对象）都从这里取——顺序 = manifests 顺序 × 平台条目
+    插入顺序 × 首次出现。字段所有者是 PlatformEntry.kit，词表语义只在此
+    一处（改语义同步改调用方测试）。
     """
     kits: list[str] = []
     seen: set[str] = set()
@@ -191,3 +191,44 @@ def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
                 seen.add(entry.kit)
                 kits.append(entry.kit)
     return kits
+
+
+@dataclass(frozen=True)
+class ManifestSummary:
+    """模块库摘要对象（喂给 LLM 的可用模块清单——协议层收对象，字符串只在
+    prompt 边界渲染一次，不再有两端解析耦合）。
+
+    行渲染唯一实现 = to_line()（原 build_manifest_summaries 的行文法逐字
+    搬入）；known_slugs 直接取 slug 字段，不再反向解析行。
+    """
+
+    slug: str
+    description: str
+    kits: tuple[str, ...] = ()  # collect_kits 单源（保序去重，有 kit 才显示）
+    dependencies: tuple[str, ...] = ()
+
+    @classmethod
+    def from_manifest(cls, manifest: ModuleManifest) -> "ManifestSummary":
+        return cls(
+            slug=manifest.slug,
+            description=manifest.description,
+            kits=tuple(collect_kits([manifest])),
+            dependencies=manifest.dependencies,
+        )
+
+    def to_line(self) -> str:
+        """摘要行：`- slug: description（套件: kit; 依赖: ...）`。
+
+        套件段聚合各平台条目的 kit（去重保序走 collect_kits 单源，有 kit 才
+        显示，AI 靠它分辨"哪个套件的 UWB"）；依赖段有依赖才显示。行格式
+        的唯一出处——只进 LLM prompt，不再有反向解析方。
+        """
+        line = f"- {self.slug}: {self.description}"
+        if self.kits:
+            line += f"（套件: {'、'.join(self.kits)}"
+            if self.dependencies:
+                line += f"; 依赖: {', '.join(self.dependencies)}"
+            line += "）"
+        elif self.dependencies:
+            line += f"（依赖: {', '.join(self.dependencies)}）"
+        return line

@@ -32,7 +32,7 @@ from .events import (
 )
 from .entry_store import is_unsafe_path
 from .library import list_modules
-from .manifest import ModuleManifest, collect_kits
+from .manifest import ManifestSummary, ModuleManifest, collect_kits
 from .reference_library import ReferenceEntry, ReferenceError, search_references
 
 if TYPE_CHECKING:
@@ -395,7 +395,7 @@ def _functional_layer_key(
 def select_modules_convergent(
     llm: LLM,
     problem_text: str,
-    manifest_summaries: Sequence[str],
+    manifest_summaries: Sequence[ManifestSummary],
     references: Sequence[ReferenceSuggestion] = (),
     reader: Callable[[str], str] | None = None,
     max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
