@@ -1288,8 +1288,9 @@ def test_unknown_exception_ends_stream_with_error(context, tmp_path):
     """未登记异常（SSE 端点）→ 流内 error 事件，不吞成假成功。
 
     同步端点经 error_to_http 表兜底 500 大声失败（见 _error_response）；SSE
-    端点无状态码，后台线程异常统一转流内 error 事件（message 原样带出），
-    同样不静默吞掉——测试 raise_server_exceptions=False 时若流假成功会露馅。
+    端点无状态码，后台线程异常统一转流内 error 事件，与同步同一张表、同一
+    未登记政策——带类型名大声失败（不原样透传裸 str），同样不静默吞掉——
+    测试 raise_server_exceptions=False 时若流假成功会露馅。
     """
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"] = _BoomLLM()
@@ -1299,7 +1300,8 @@ def test_unknown_exception_ends_stream_with_error(context, tmp_path):
 
     # start / batch_start 先由 llm 层发射器产生，异常后以 error 收尾（流终止）
     assert events[-1][0] == EVENT_ERROR
-    assert events[-1][1]["message"] == "内部损坏"
+    assert "服务器内部错误（RuntimeError）" in events[-1][1]["message"]
+    assert "内部损坏" in events[-1][1]["message"]
 
 
 # ---------------------------------------------------------------------------
