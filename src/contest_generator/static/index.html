@@ -155,6 +155,11 @@
         <button id="btn-upload">上传并抽取文字</button>
         <span class="muted">支持 .pdf / .docx / .txt / .md，纯本地解析</span>
       </div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="topic-id" placeholder="历史赛题编号，如 2026C" style="flex:1;max-width:220px">
+        <button id="btn-topic-load">取题面</button>
+        <span id="topic-msg" class="muted"></span>
+      </div>
       <div id="upload-msg" class="error"></div>
     </div>
 
@@ -435,8 +440,12 @@ function renderPlatforms() {
 }
 
 // ---------------------------------------------------------------------------
-// 生成页：1. 上传抽取
+// 生成页：1. 上传抽取 + 历史赛题取题面
 // ---------------------------------------------------------------------------
+// 当前生效的赛题编号（历史赛题入口）：透传给推荐 / 骨架 / 生成三个请求；
+// 换题（上传 / 手动改题面）时清除，避免旧题专用模块串进新工程。
+let currentTopicId = "";
+
 $("btn-upload").addEventListener("click", async () => {
   const file = $("problem-file").files[0];
   $("upload-msg").textContent = "";
@@ -446,12 +455,34 @@ $("btn-upload").addEventListener("click", async () => {
   try {
     const data = await handle(await fetch("/api/extract", { method: "POST", body: form }));
     $("problem").value = data.text;
+    currentTopicId = "";
     $("upload-msg").classList.add("ok");
     $("upload-msg").textContent = "抽取成功：" + file.name;
   } catch (e) {
     $("upload-msg").classList.remove("ok");
     $("upload-msg").textContent = e.message;
   }
+});
+
+$("btn-topic-load").addEventListener("click", async () => {
+  const key = $("topic-id").value.trim().toUpperCase();
+  $("topic-msg").textContent = "";
+  if (!key) { $("topic-msg").textContent = "请先填写赛题编号"; return; }
+  try {
+    const data = await handle(await fetch("/api/topics/" + encodeURIComponent(key)));
+    $("problem").value = data.problem_text;
+    currentTopicId = data.key;
+    const rel = data.related_modules || [];
+    $("topic-msg").textContent = "已取题面：" + data.key
+      + (rel.length ? "；该题专用模块：" + rel.join("、") : "");
+  } catch (e) {
+    $("topic-msg").textContent = e.message;
+    currentTopicId = "";
+  }
+});
+
+$("problem").addEventListener("input", () => {
+  if (currentTopicId) { currentTopicId = ""; $("topic-msg").textContent = ""; }
 });
 
 // ---------------------------------------------------------------------------
@@ -472,7 +503,10 @@ $("btn-recommend").addEventListener("click", async () => {
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
   try {
-    const data = await apiPost("/api/recommend", { problem_text: problem });
+    const data = await apiPost("/api/recommend", {
+      problem_text: problem, topic_id: currentTopicId || undefined,
+    });
+    if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
     const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
     for (const m of fresh) selectedSlugs.push(m.slug);
     expanded = []; warnings = [];
@@ -591,6 +625,7 @@ $("btn-skeleton").addEventListener("click", async () => {
   try {
     const data = await apiPost("/api/skeleton", {
       problem_text: problem, slugs: selectedSlugs, platform: chosenPlatform,
+      topic_id: currentTopicId || undefined,
     });
     mainC = data.main_c;
     $("main-c").value = mainC;
@@ -624,6 +659,7 @@ $("btn-generate").addEventListener("click", async () => {
     const data = await apiPost("/api/generate", {
       platform: chosenPlatform, slugs: selectedSlugs,
       main_c: $("main-c").value, output_dir: outputDir,
+      topic_id: currentTopicId || undefined,
     });
     $("res-dir").textContent = data.output_dir;
     $("res-includes").textContent = data.include_dirs.join("；");
