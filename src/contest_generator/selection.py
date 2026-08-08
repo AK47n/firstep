@@ -30,8 +30,9 @@ from .events import (
     ProgressEvent,
     _emit,
 )
+from .entry_store import is_unsafe_path
 from .library import list_modules
-from .manifest import ModuleManifest, is_unsafe_path
+from .manifest import ModuleManifest, collect_kits
 from .reference_library import ReferenceEntry, ReferenceError, search_references
 
 if TYPE_CHECKING:
@@ -176,20 +177,15 @@ def associated_references(
 ) -> tuple[ReferenceEntry, ...]:
     """该赛题 / 套件关联的参考文件（候选清单的参考段，两级注入第一级的素材）。
 
-    关联判据 = 锚定值匹配赛题编号（topic_key）或套件型号（manifests 各平台
-    条目的 kit 词表收集——候选模块的套件身份与模块简介同源，参考文件 ↔ 套件
-    链接可靠）。按 id 去重排序：search_references 的锚定过滤是子串匹配，同
-    一条目可能被多个锚定值命中（如 kit 名含编号）。参考库目录不存在返回空。
+    关联判据 = 锚定值匹配赛题编号（topic_key）或套件型号（kit 词表收集走
+    manifest.collect_kits 单源——候选模块的套件身份与模块简介同源，参考文件
+    ↔ 套件链接可靠）。按 id 去重排序：search_references 的锚定过滤是子串
+    匹配，同一条目可能被多个锚定值命中（如 kit 名含编号）。参考库目录不存在
+    返回空。
     """
     if not reference_root.is_dir():
         return ()
-    kits: list[str] = []
-    seen_kits: set[str] = set()
-    for manifest in manifests:
-        for platform_entry in manifest.platforms.values():
-            if platform_entry.kit and platform_entry.kit not in seen_kits:
-                seen_kits.add(platform_entry.kit)
-                kits.append(platform_entry.kit)
+    kits = collect_kits(manifests)
     entries: dict[str, ReferenceEntry] = {}
     for anchor in (topic_key, *kits):
         if anchor:

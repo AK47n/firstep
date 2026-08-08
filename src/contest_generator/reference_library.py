@@ -23,16 +23,28 @@ add_reference 结构校验（标题 / 类型 / 简介非空、锚定合法、文
 
 from __future__ import annotations
 
-import json
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from .entry_store import entry_transaction, iter_entry_dirs, write_json
+from .entry_store import (
+    StoreError,
+    StoreParseError,
+    StoreReadError,
+    StoreShapeError,
+    delete_entry,
+    entry_transaction,
+    is_unsafe_path,
+    iter_entry_dirs,
+    read_json,
+    require_str,
+    validate_store_key,
+    write_json,
+)
 from .library import list_modules
-from .manifest import is_unsafe_path
+from .manifest import collect_kits
 from .topic_library import validate_topic_key
 
 if TYPE_CHECKING:
@@ -130,13 +142,10 @@ def validate_topic_anchor(anchor: str) -> None:
 def module_kit_vocabulary(module_library_dir: Path) -> tuple[str, ...]:
     """模块库现有 kit 词表（参考文件套件锚定的合法取值，唯一出处）。
 
-    从模块库各平台条目的 kit 字段收集（去重排序）；manifest 损坏的模块由
-    list_modules 抛 LibraryError，透传给调用方（webapp 错误映射已登记）。
+    收集走 manifest.collect_kits（保序去重的唯一实现）；manifest 损坏的模块
+    由 list_modules 抛 LibraryError，透传给调用方（webapp 错误映射已登记）。
     """
-    kits: set[str] = set()
-    for manifest in list_modules(module_library_dir):
-        kits.update(entry.kit for entry in manifest.platforms.values() if entry.kit)
-    return tuple(sorted(kits))
+    return tuple(collect_kits(list_modules(module_library_dir)))
 
 
 # ---------------------------------------------------------------------------
@@ -157,24 +166,29 @@ def list_references(reference_root: Path) -> list[ReferenceEntry]:
 
 
 def get_reference(reference_root: Path, entry_id: str) -> ReferenceEntry:
-    """读取单个条目；不存在或元数据损坏抛 ReferenceError。"""
+    """读取单个条目；不存在或元数据损坏抛 ReferenceError。
+
+    读盘 / 解析 / 形状校验走 entry_store 原语（read_json），错误类型与文案
+    仍归本模块。
+    """
     _validate_entry_id(entry_id)
     entry_dir = reference_root / entry_id
     if not entry_dir.is_dir():
         raise ReferenceError(f"参考文件条目 {entry_id!r} 不存在")
-    meta_path = entry_dir / REFERENCE_META_FILENAME
     try:
-        text = meta_path.read_text(encoding="utf-8")
-    except OSError as exc:
+        data = read_json(entry_dir, REFERENCE_META_FILENAME)
+    except StoreReadError as exc:
         raise ReferenceError(
-            f"参考文件条目 {entry_id!r} 的元数据无法读取：{exc}"
+            f"参考文件条目 {entry_id!r} 的元数据无法读取：{exc.error}"
         ) from exc
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
+    except StoreParseError as exc:
         raise ReferenceError(
-            f"参考文件条目 {entry_id!r} 的元数据不是合法 JSON：{exc}"
+            f"参考文件条目 {entry_id!r} 的元数据不是合法 JSON：{exc.error}"
         ) from exc
+    except StoreShapeError:
+        raise ReferenceError(
+            f"参考文件条目 {entry_id!r} 的元数据不合法：参考文件条目必须是对象"
+        ) from None
     try:
         return ReferenceEntry.from_dict(data)
     except ReferenceError as exc:
@@ -208,12 +222,12 @@ def search_references(
 
 
 def delete_reference(reference_root: Path, entry_id: str) -> None:
-    """删除条目：整个目录移除。"""
+    """删除条目：整个目录移除（目录存在校验走 entry_store 原语）。"""
     _validate_entry_id(entry_id)
-    entry_dir = reference_root / entry_id
-    if not entry_dir.is_dir():
-        raise ReferenceError(f"参考文件条目 {entry_id!r} 不存在")
-    shutil.rmtree(entry_dir)
+    try:
+        delete_entry(reference_root, entry_id)
+    except StoreError:
+        raise ReferenceError(f"参考文件条目 {entry_id!r} 不存在") from None
 
 
 # ---------------------------------------------------------------------------
@@ -364,8 +378,10 @@ def _validate_files(files: Mapping[str, str]) -> None:
 
 def _validate_entry_id(entry_id: str) -> None:
     """条目 id 合法性：杜绝借 id 拼路径逃出库目录的路径穿越。"""
-    if not _ENTRY_ID_PATTERN.fullmatch(entry_id):
-        raise ReferenceError(f"非法条目 id：{entry_id!r}")
+    try:
+        validate_store_key(entry_id, _ENTRY_ID_PATTERN, "条目 id")
+    except StoreError:
+        raise ReferenceError(f"非法条目 id：{entry_id!r}") from None
 
 
 def _next_entry_id(reference_root: Path, title: str) -> str:
@@ -402,7 +418,7 @@ def _assemble_material(files: Mapping[str, str]) -> str:
 
 
 def _require_str(data: dict[str, Any], key: str) -> str:
-    value = data.get(key)
-    if not isinstance(value, str) or not value:
-        raise ReferenceError(f"缺少必填字段：{key}")
-    return value
+    try:
+        return require_str(data, key)
+    except StoreError:
+        raise ReferenceError(f"缺少必填字段：{key}") from None

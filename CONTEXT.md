@@ -16,8 +16,9 @@
 | 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库）；元数据在母版目录外的平级 json | master.py |
 | 功能库 | 母版自带的底层库（stm32 母版 = 逐飞 ml_*：I2C/UART/PWM/GPIO/OLED 等，headfile.h 聚合），先于一切模块存在、生成时随母版进工程；不属于模块库 | masters/stm32/ml_libs |
 | 提炼 | 导入多旧工程 → 对比 → AI 判定 → 报告（保留 / 整合 / 剔除 + 残留清单）→ 确认 → 入库；判定范围 = 公共 + 冲突 + 独有全部逐个判定，唯一判据：读内容判断是否通用、是否基础建设必需，不看重复次数 / 出现范围；确认是一条事务（confirm_distillation） | master.py + llm.py |
-| 参考文件库 | 与赛题库分开的独立素材区（存储与浏览入口都分开）：参考文件 = 不编译进生成工程的整包配套资料（套件例程 + 参考说明书）与提炼残渣，锚定赛题或套件；生成时 LLM 两级注入读取（先关联清单、需要时取全文）作学习素材——与模块相对（模块进工程，参考文件只被读）；区别于"可选配套"（那是模块的可裁剪组件，这是独立条目） | reference_library.py / webapp.py；两级注入装配在 generator.py（TopicContext）+ selection.py（清单段与全文回读） |
-| 归档 | 提炼确认时的"归档为该题参考文件"动作：字节复制入库、锚定该题、内容自持（源工程删除不丢）；AI 判定不配归档的文件拒绝；归档批次与母版入库同事务 | master.py / reference_library.py / report.py（ArchiveDecision）/ llm.py |
+| 条目库原语 | 模块库 / 赛题库 / 参考文件库共用的"目录即数据库"骨架：事务落盘、目录迭代、JSON 元数据读写与校验（read_json）、删除（delete_entry）、目录名 = 键的校验（validate_store_key）、必填字符串字段（require_str）、路径安全（is_unsafe_path）；不持业务形状，错误类型与文案归各库（StoreError 家族从不直达 web 层） | entry_store.py |
+| 参考文件库 | 与赛题库分开的独立素材区（存储与浏览入口都分开）：参考文件 = 不编译进生成工程的整包配套资料（套件例程 + 参考说明书）与提炼残渣，锚定赛题或套件；生成时 LLM 两级注入读取（先关联清单、需要时取全文）作学习素材——与模块相对（模块进工程，参考文件只被读）；区别于"可选配套"（那是模块的可裁剪组件，这是独立条目）；套件锚定的 kit 词表单源 = manifest.collect_kits（保序去重） | reference_library.py / webapp.py；两级注入装配在 generator.py（TopicContext）+ selection.py（清单段与全文回读） |
+| 归档 | 提炼确认时的"归档为该题参考文件"动作：字节复制入库、锚定该题、内容自持（源工程删除不丢）；AI 判定不配归档的文件拒绝；归档批次与母版入库同事务；归档步骤在 archive.py（master 不 import 参考库族，防 import 链，函数级延迟导入） | archive.py / master.py / reference_library.py / report.py（ArchiveDecision）/ llm.py |
 | 赛题库 | 与参考文件库分开的独立素材区：历年真题长 PDF 导入拆成的条目（年份 + 编号 + 题面），支持"几几年几题"编号解析为题面、作生成入口之一（贴题面或选历史题）；赛题条目锚定该题附带的完整程序（如 2026C 钥匙/锁两套）；关联模块可复用简介的专用性标注（"XX 题专用"）自动发现 | topic_library.py（拆条 LLM 协议与解析在 llm.py，确定性分块在 topic_library）/ webapp.py |
 | 判定模型 | 提炼报告的判定条目与容器（FileDecision / DistillationReport）+ AI 判定素材（JudgmentFile / FileVersion）：形状 / 序列化 / 不变量（merge 必须带整合产物全文与说明；main_c_preview 与 uvprojx_preview 由平台重推导；版本分组不重不漏）唯一所有者；报告平台必须与工程平台一致（平台交叉校验） | report.py |
 | 模板 main.c | 母版自带的最小系统板空 main（时钟初始化 + while(1) 空循环 + TODO 区），确定性模板、非 AI 生成；生成时被按赛题的"骨架"覆盖 | master.py |
