@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from .library import list_modules
-from .manifest import ModuleManifest
+from .llm import ReferenceSuggestion
+from .manifest import ModuleManifest, is_unsafe_path
+from .reference_library import ReferenceEntry, ReferenceError, search_references
 
 WARNING_MISSING = "missing"  # 无目标平台版本条目，生成必失败
 WARNING_UNVERIFIED = "unverified"  # 有版本但未验证过，可能无法编译
@@ -143,3 +145,75 @@ def _get_manifest(by_slug: Mapping[str, ModuleManifest], slug: str) -> ModuleMan
     if manifest is None:
         raise UnknownModuleError(f"库中不存在模块：{slug}")
     return manifest
+
+
+# ---------------------------------------------------------------------------
+# 工单 03：候选清单带参考文件（两级注入第一级）+ 全文回读（第二级）
+# ---------------------------------------------------------------------------
+
+
+def associated_references(
+    reference_root: Path,
+    *,
+    topic_key: str = "",
+    manifests: Sequence[ModuleManifest] = (),
+) -> tuple[ReferenceEntry, ...]:
+    """该赛题 / 套件关联的参考文件（候选清单的参考段，两级注入第一级的素材）。
+
+    关联判据 = 锚定值匹配赛题编号（topic_key）或套件型号（manifests 各平台
+    条目的 kit 词表收集——候选模块的套件身份与模块简介同源，参考文件 ↔ 套件
+    链接可靠）。按 id 去重排序：search_references 的锚定过滤是子串匹配，同
+    一条目可能被多个锚定值命中（如 kit 名含编号）。参考库目录不存在返回空。
+    """
+    if not reference_root.is_dir():
+        return ()
+    kits: list[str] = []
+    seen_kits: set[str] = set()
+    for manifest in manifests:
+        for platform_entry in manifest.platforms.values():
+            if platform_entry.kit and platform_entry.kit not in seen_kits:
+                seen_kits.add(platform_entry.kit)
+                kits.append(platform_entry.kit)
+    entries: dict[str, ReferenceEntry] = {}
+    for anchor in (topic_key, *kits):
+        if anchor:
+            for reference in search_references(reference_root, anchor=anchor):
+                entries.setdefault(reference.id, reference)
+    return tuple(entries.values())
+
+
+def reference_suggestions(
+    entries: Sequence[ReferenceEntry],
+) -> tuple[ReferenceSuggestion, ...]:
+    """候选清单的参考段形状：参考文件（标题 + 一句话简介），喂给选模块 AI。"""
+    return tuple(
+        ReferenceSuggestion(id=entry.id, title=entry.title, description=entry.description)
+        for entry in entries
+    )
+
+
+def read_reference_fulltext(reference_root: Path, entry: ReferenceEntry) -> str:
+    """参考文件条目全文（两级注入第二级的素材）：素材文件拼成带文件名标注的文本。
+
+    二进制素材（说明书 PDF 等）读不了文本——跳过并标注（不让生成流程因个别
+    不可读素材整体失败）；条目文件缺失 / 相对路径非法 = 库损坏，大声失败
+    （ReferenceError，宁可大声失败也不把坏数据带进上下文）。
+    """
+    chunks: list[str] = []
+    for rel in entry.files:
+        if is_unsafe_path(rel):
+            raise ReferenceError(
+                f"参考文件条目 {entry.id!r} 的文件路径非法：{rel!r}"
+            )
+        path = reference_root / entry.id / rel
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ReferenceError(
+                f"参考文件条目 {entry.id!r} 的素材文件无法读取：{rel}: {exc}"
+            ) from exc
+        except UnicodeDecodeError:
+            chunks.append(f"// ---- {rel} ----（二进制素材，未嵌入全文）\n")
+            continue
+        chunks.append(f"// ---- {rel} ----\n{content}")
+    return "\n".join(chunks)
