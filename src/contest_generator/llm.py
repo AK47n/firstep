@@ -2,33 +2,49 @@
 
 生产实现 DeepSeekLLM 走 DeepSeek Chat Completions API（base_url / api_key /
 模型来自本机配置文件 config.py）；HTTP 传输可注入假件，网络调用不进测试。
-LLM 承担五个职责：赛题→模块选择、main.c 骨架生成、模块简介生成与校验、
-母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出摘要，
-再基于摘要判定）与赛题库拆条 / 编号提取。请求体有大小控制：所有嵌内容调用（赛题 / 接口块 / 文件
-全文）超长截断（带标注，AI 知道读到的是截断内容）、摘要阶段多文件按预算
-分批发送、发送前有序列化体积断言兜底——DeepSeek 网关对请求体有硬性大小
-限制，一次性全发会 413。
+LLM 承担六类协议职责：赛题→模块选择、main.c 骨架生成、模块简介生成与
+校验、母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出
+摘要，再基于摘要判定）、参考文件提炼归档判定、赛题库拆条 / 编号提取。
+领域模型不在此处——赛题库模型在 topic_library，判定素材模型在 report，
+进度事件契约在 events（本模块只消费）。请求体有大小控制：所有嵌内容调用
+（赛题 / 接口块 / 文件全文）超长截断（带标注，AI 知道读到的是截断内容）、
+摘要阶段多文件按预算分批发送、发送前有序列化体积断言兜底——DeepSeek
+网关对请求体有硬性大小限制，一次性全发会 413。
 """
 
 from __future__ import annotations
 
 import json
 import math
-import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
 
 from .config import AppConfig
+from .events import (
+    EVENT_BATCH_DONE,
+    EVENT_BATCH_START,
+    EVENT_PHASE_DONE,
+    EVENT_RETRY,
+    EVENT_START,
+    PHASE_DECIDE,
+    PHASE_SUMMARY,
+    ProgressEmitter,
+    ProgressEvent,
+    _emit,
+)
 from .manifest import ModuleManifest
 from .report import (
     ACTION_MERGE,
     FileDecision,
+    FileSummary,
     JudgmentFile,
     ReferenceCandidate,
     ReportError,
+    VersionSummary,
 )
+from .topic_library import TopicDraft, validate_topic_key
 
 # ---------------------------------------------------------------------------
 # 截断标注契约（唯一出处）
@@ -340,22 +356,6 @@ class ValidationResult:
     issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
 
 
-@dataclass(frozen=True)
-class VersionSummary:
-    """第一阶段摘要产物：一个内容版本的摘要 + 持该版本的工程名。"""
-
-    projects: tuple[str, ...]
-    summary: str
-
-
-@dataclass(frozen=True)
-class FileSummary:
-    """第一阶段摘要产物：一个待判文件各内容版本的摘要（第二阶段的判定素材）。"""
-
-    path: str
-    versions: tuple[VersionSummary, ...]
-
-
 # 分批 / 重试循环的条目类型限定：两阶段各自只有一对输入 / 输出类型（摘要
 # 阶段：待判文件 → 摘要；判定阶段：摘要 → 判定）。用限定 TypeVar 表达而非
 # Protocol——mypy 2.3.0 在 from __future__ import annotations 下对 Protocol
@@ -440,71 +440,6 @@ def _batches(
     if current:
         batches.append(current)
     return tuple(tuple(batch) for batch in batches)
-
-
-# ---------------------------------------------------------------------------
-# 提炼进度事件契约（唯一出处，契约测试断言；spec「事件契约」+ ADR 0004）
-#
-# 发射 seam：distill_master 的可选 progress_emitter 参数（默认 None，不接不
-# 影响行为；测试假 LLM 与真 LLM 走同一参数）。发射点在批次循环层。done /
-# error 由 webapp 层（工单 02）发射——本契约只管到 phase_done 为止。事件类型
-# 集合预留 token 级流式扩展位（本次不做，spec Out of Scope）。
-# ---------------------------------------------------------------------------
-
-# 阶段名与事件类型（webapp 层 / 前端按这些键消费，改动须同步测试契约）
-PHASE_SUMMARY = "summary"  # 阶段 1：逐文件读全文出摘要
-PHASE_DECIDE = "decide"  # 阶段 2：基于摘要判定
-
-EVENT_START = "start"
-EVENT_BATCH_START = "batch_start"
-EVENT_BATCH_DONE = "batch_done"
-EVENT_RETRY = "retry"
-EVENT_PHASE_DONE = "phase_done"
-
-
-@dataclass(frozen=True)
-class ProgressEvent:
-    """提炼进度事件（事件契约的代码形态，唯一出处）。
-
-    每个事件类型只用字段子集：start 用 judgment_count / summary_batch_count /
-    decide_batch_count（均由入口先算定）；batch_start 用 phase / batch_index
-    （批号，1 起）/ batch_count / paths（阶段 1 = 待判文件路径、阶段 2 = 摘要
-    路径）；batch_done 用 phase / batch_index / processed_count（本阶段累计已
-    处理文件数——前端直接显示"已读 X/115"，无需累加状态）；retry 用 phase /
-    batch_index / retry_round（补问轮次，1 起——首次补问 = 1）/ missing_count
-    （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）。
-    """
-
-    type: str
-    judgment_count: int = 0
-    summary_batch_count: int = 0
-    decide_batch_count: int = 0
-    phase: str = ""
-    batch_index: int = 0
-    batch_count: int = 0
-    paths: tuple[str, ...] = ()
-    processed_count: int = 0
-    retry_round: int = 0
-    missing_count: int = 0
-    file_count: int = 0
-
-
-ProgressEmitter = Callable[[ProgressEvent], None]
-
-
-def _emit(emitter: ProgressEmitter | None, event: ProgressEvent) -> None:
-    """旁路发射进度事件：发射器调用失败不影响提炼主流程（spec「发射 seam」）。
-
-    选旁路而非透传的理由：提炼的主产物是完整报告（10-15 分钟 API 调用），进度
-    只是观察通道——UI 消费失败（如前端断开）最多丢进度，不该让整个提炼陪葬。
-    吞掉的异常不外抛也不记录（本地单用户工具，进度通道无诊断需求）。
-    """
-    if emitter is None:
-        return
-    try:
-        emitter(event)
-    except Exception:
-        pass
 
 
 class LLM(Protocol):
@@ -1550,28 +1485,8 @@ def _summary_slugs(manifest_summaries: Sequence[str]) -> list[str]:
 # 入库流程（与模块简介校验同款：宁可大声失败也不带病入库）。
 # ---------------------------------------------------------------------------
 
-# 赛题编号格式（key 的唯一出处）：4 位年份 + 单个大写字母题号（电赛官方
-# 题号形态，如 2026C）；入库目录名与编号解析的查找键都按它校验（非法编号 =
-# 路径穿越风险，入口拦截）。大小写收紧为单一大写字母：小写 / 多字母编号在
-# 大小写不敏感的文件系统（Windows）上会与既有条目撞目录，跨平台行为不一致
-# ——宁可拆条大声失败，也不让用户在校对页见到无法入库的编号。
-TOPIC_KEY_PATTERN = re.compile(r"^(\d{4})([A-Z])$")
-
-
-def validate_topic_key(key: str) -> str | None:
-    """赛题编号格式校验（TOPIC_KEY_PATTERN 的配套文案，唯一出处）。
-
-    合法返回 None，非法返回中文错误说明。拆条解析 / 编号提取 / 入库校验
-    共用——文案只在此一处，改格式只动这里（与 TRUNCATION_NOTICE 同款
-    单源约定，避免各层文案漂移）。
-    """
-    if not TOPIC_KEY_PATTERN.fullmatch(key):
-        return (
-            f"赛题编号格式非法：{key!r}"
-            "（须为 4 位年份 + 单个大写字母题号，如 2026C）"
-        )
-    return None
-
+# 赛题编号格式与校验的唯一出处已回 topic_library（validate_topic_key），
+# 拆条 / 编号提取的提示词与解析在这里消费，不重新定义。
 
 TOPIC_SPLIT_SYSTEM_PROMPT = (
     "你是电子设计竞赛（电赛）赛题整理助手。用户会给你一份历年赛题 PDF 的全文。"
@@ -1585,30 +1500,6 @@ TOPIC_NUMBER_SYSTEM_PROMPT = (
     "（题面原文）：是则提取它的编号（年份 + 单个大写字母题号，如 2026C），"
     "否则 key 给空串。只输出 JSON 对象：{\"key\": \"2026C\"} 或 {\"key\": \"\"}。"
 )
-
-
-@dataclass(frozen=True)
-class TopicDraft:
-    """AI 拆条产物：一道赛题的年份 / 题号 / 题面全文（用户确认前的草稿）。
-
-    key = 年份 + 题号（如 "2026C"），编号解析的查找键与入库目录名。
-    """
-
-    year: str
-    number: str
-    problem_text: str
-
-    @property
-    def key(self) -> str:
-        return f"{self.year}{self.number}"
-
-    def to_dict(self) -> dict[str, str]:
-        return {
-            "key": self.key,
-            "year": self.year,
-            "number": self.number,
-            "problem_text": self.problem_text,
-        }
 
 
 def parse_topic_split(content: str) -> tuple[TopicDraft, ...]:

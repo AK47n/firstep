@@ -9,14 +9,19 @@ from typing import Any, Mapping, Sequence
 import pytest
 
 from contest_generator.config import AppConfig
-from contest_generator.llm import (
-    DISTILL_SYSTEM_PROMPT,
-    DeepSeekLLM,
+from contest_generator.events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
     EVENT_PHASE_DONE,
     EVENT_RETRY,
     EVENT_START,
+    PHASE_DECIDE,
+    PHASE_SUMMARY,
+    ProgressEvent,
+)
+from contest_generator.llm import (
+    DISTILL_SYSTEM_PROMPT,
+    DeepSeekLLM,
     JUDGMENT_CONTENT_CAP,
     SELECT_SYSTEM_PROMPT,
     SKELETON_SYSTEM_PROMPT,
@@ -26,15 +31,10 @@ from contest_generator.llm import (
     MAX_REQUEST_BYTES,
     ModuleSelection,
     MAX_SUMMARY_BATCH_CHARS,
-    PHASE_DECIDE,
-    PHASE_SUMMARY,
-    ProgressEvent,
     TRUNCATION_NOTICE,
     VALIDATION_SYSTEM_PROMPT,
     VALIDATION_SPECIFICITY_RULE,
-    VersionSummary,
     ReferenceSuggestion,
-    TopicDraft,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     _batches,
     _distill_user_prompt,
@@ -56,10 +56,13 @@ from contest_generator.report import (
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
+    FileSummary,
     FileVersion,
     JudgmentFile,
     ReportError,
+    VersionSummary,
 )
+from contest_generator.topic_library import TopicDraft
 from contest_generator.manifest import ModuleManifest, PlatformEntry
 from tests.fakes import FakeLLM, FakeTransport
 

@@ -52,7 +52,8 @@ from .keil import (
     render_master_uvprojx,
     validate_project_structure,
 )
-from .llm import LLM, ProgressEmitter  # AI 接缝协议 + 进度发射器（仅类型引用，实现与解析在 llm 层）
+from .events import ProgressEmitter  # 进度发射器类型（契约在 events，仅类型引用）
+from .llm import LLM  # AI 接缝协议（仅类型引用，实现与解析在 llm 层）
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
     ReferenceError,

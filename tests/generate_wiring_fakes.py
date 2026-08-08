@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from contest_generator.llm import TopicDraft
+from contest_generator.topic_library import TopicDraft
 from contest_generator.reference_library import add_reference
 from contest_generator.topic_library import confirm_topics
 from tests.fakes import make_sample_pdf

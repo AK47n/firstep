@@ -10,6 +10,10 @@ FileDecision 与 DistillationReport（判定输出）同时出现在三条路径
 JudgmentFile 与 FileVersion（判定输入素材，master 构造、llm 消费）同归此
 处——依赖倒置：llm 层依赖模型层取素材类型，master 不再从 llm 导入模型。
 版本分组不变量（版本工程名组不重不漏）在这里唯一声明与校验。
+
+提炼第一阶段产物（FileSummary / VersionSummary：待判文件各内容版本的摘要，
+第二阶段判定的输入素材）同为判定素材模型，同归此处——两阶段的素材形状在
+模型层只定义一次，llm 层只负责 AI JSON 解析。
 """
 
 from __future__ import annotations
@@ -323,3 +327,19 @@ class FileVersion:
 
     content: str
     projects: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VersionSummary:
+    """第一阶段摘要产物：一个内容版本的摘要 + 持该版本的工程名。"""
+
+    projects: tuple[str, ...]
+    summary: str
+
+
+@dataclass(frozen=True)
+class FileSummary:
+    """第一阶段摘要产物：一个待判文件各内容版本的摘要（第二阶段的判定素材）。"""
+
+    path: str
+    versions: tuple[VersionSummary, ...]

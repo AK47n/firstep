@@ -31,7 +31,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .llm import LLM, TopicDraft, validate_topic_key
 from .library import list_modules
 from .manifest import MANIFEST_FILENAME
 
@@ -40,6 +39,58 @@ TOPIC_MD_FILENAME = "topic.md"  # 题面全文落盘文件名（条目目录内�
 
 class TopicError(ValueError):
     """赛题库操作失败（条目不存在、编号冲突、题面 / 原 PDF 缺失等）。"""
+
+
+# ---------------------------------------------------------------------------
+# 赛题编号（key 的唯一出处）与拆条草稿模型：赛题库领域的模型层，llm 协议层
+# 从这里取类型（拆条解析 / 编号提取消费），不反向定义。
+# ---------------------------------------------------------------------------
+
+# 赛题编号格式（key 的唯一出处）：4 位年份 + 单个大写字母题号（电赛官方
+# 题号形态，如 2026C）；入库目录名与编号解析的查找键都按它校验（非法编号 =
+# 路径穿越风险，入口拦截）。大小写收紧为单一大写字母：小写 / 多字母编号在
+# 大小写不敏感的文件系统（Windows）上会与既有条目撞目录，跨平台行为不一致
+# ——宁可拆条大声失败，也不让用户在校对页见到无法入库的编号。
+TOPIC_KEY_PATTERN = re.compile(r"^(\d{4})([A-Z])$")
+
+
+def validate_topic_key(key: str) -> str | None:
+    """赛题编号格式校验（TOPIC_KEY_PATTERN 的配套文案，唯一出处）。
+
+    合法返回 None，非法返回中文错误说明。拆条解析 / 编号提取 / 入库校验
+    共用——文案只在此一处，改格式只动这里（与 TRUNCATION_NOTICE 同款
+    单源约定，避免各层文案漂移）。
+    """
+    if not TOPIC_KEY_PATTERN.fullmatch(key):
+        return (
+            f"赛题编号格式非法：{key!r}"
+            "（须为 4 位年份 + 单个大写字母题号，如 2026C）"
+        )
+    return None
+
+
+@dataclass(frozen=True)
+class TopicDraft:
+    """AI 拆条产物：一道赛题的年份 / 题号 / 题面全文（用户确认前的草稿）。
+
+    key = 年份 + 题号（如 "2026C"），编号解析的查找键与入库目录名。
+    """
+
+    year: str
+    number: str
+    problem_text: str
+
+    @property
+    def key(self) -> str:
+        return f"{self.year}{self.number}"
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "key": self.key,
+            "year": self.year,
+            "number": self.number,
+            "problem_text": self.problem_text,
+        }
 
 
 @dataclass(frozen=True)
@@ -334,8 +385,9 @@ def _title_marks(seg: str) -> list[tuple[str, int]]:
 def _validate_entries(entries: Sequence[TopicDraft]) -> None:
     """确认前校验（全部在落盘前）：至少一道题 / 编号格式与不重复 / 题面非空。
 
-    编号格式校验用 llm 层的 validate_topic_key（文案唯一出处）；这里是
-    用户校对后的提交值，格式问题同样在落盘前拦截（与拆条解析同标准）。
+    编号格式校验用本模块的 validate_topic_key（文案唯一出处，模型回 owner
+    后不再借道 llm 层）；这里是用户校对后的提交值，格式问题同样在落盘前
+    拦截（与拆条解析同标准）。
     """
     if not entries:
         raise TopicError("至少拆出一道赛题才能入库")

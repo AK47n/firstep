@@ -19,13 +19,13 @@ from contest_generator.library import LibraryError, add_module
 from contest_generator.llm import (
     LLMError,
     TOPIC_SPLIT_LLM_CHAR_CAP,
-    TopicDraft,
     parse_topic_number,
     parse_topic_split,
 )
 from contest_generator.manifest import MANIFEST_FILENAME
 from contest_generator.topic_library import (
     TOPIC_MD_FILENAME,
+    TopicDraft,
     TopicError,
     confirm_topics,
     delete_topic,
