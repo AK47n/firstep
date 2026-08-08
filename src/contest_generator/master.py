@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence
 
 from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
+from .entry_store import discard_entry_dirs
 from .keil import (
     KeilProjectError,
     build_master_uvprojx,
@@ -1203,8 +1204,7 @@ def _write_archive_entries(
             )
             created.append(reference_library_dir / entry.id)
     except Exception as exc:
-        for entry_dir in created:
-            shutil.rmtree(entry_dir, ignore_errors=True)
+        discard_entry_dirs(created)
         raise MasterError(
             f"母版已入库，但归档写入失败（已回滚本次归档条目，可重试确认）：{exc}"
         ) from exc

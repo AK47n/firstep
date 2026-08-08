@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .entry_store import entry_transaction, iter_entry_dirs, write_json
 from .library import list_modules
 from .manifest import MANIFEST_FILENAME
 
@@ -151,19 +152,15 @@ def confirm_topics(
         if (topic_library_root / draft.key).exists():
             raise TopicError(f"题库中已存在该编号的赛题：{draft.key}")
 
-    created: list[Path] = []
-    topic_library_root.mkdir(parents=True, exist_ok=True)
-    try:
-        for draft in entries:
-            entry_dir = topic_library_root / draft.key
-            entry_dir.mkdir()
-            created.append(entry_dir)
+    with entry_transaction(topic_library_root, [draft.key for draft in entries]) as dirs:
+        for draft, entry_dir in zip(entries, dirs):
             shutil.copy2(pdf_path, entry_dir / pdf_name)
             (entry_dir / TOPIC_MD_FILENAME).write_text(
                 draft.problem_text, encoding="utf-8"
             )
-            _write_manifest(
+            write_json(
                 entry_dir,
+                MANIFEST_FILENAME,
                 {
                     "year": draft.year,
                     "number": draft.number,
@@ -172,10 +169,6 @@ def confirm_topics(
                     "programs": list(normalized_programs),
                 },
             )
-    except Exception:
-        for entry_dir in created:
-            shutil.rmtree(entry_dir, ignore_errors=True)  # 入库中途失败不留半成品
-        raise
     return tuple(resolve_number(topic_library_root, draft.key) for draft in entries)
 
 
@@ -196,14 +189,10 @@ def list_topics(topic_library_root: Path) -> list[TopicEntry]:
 
     损坏的 manifest 大声失败（与模块库 / 参考库浏览同哲学，不静默跳过——
     浏览者不该面对缺条目的列表）；库根下的散文件与临时目录（点开头）不影响
-    浏览。
+    浏览（目录迭代走 entry_store 原语）。
     """
-    if not topic_library_root.is_dir():
-        return []
     entries: list[TopicEntry] = []
-    for entry_dir in topic_library_root.iterdir():
-        if not entry_dir.is_dir() or entry_dir.name.startswith("."):
-            continue  # 库根下的散文件与临时目录不影响浏览
+    for entry_dir in iter_entry_dirs(topic_library_root):
         entries.append(_load_entry(entry_dir))
     return sorted(entries, key=lambda entry: entry.key)
 
@@ -473,12 +462,6 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
         problem_md=problem_md,
         original_pdf=original_pdf,
         programs=tuple(raw_programs),
-    )
-
-
-def _write_manifest(entry_dir: Path, data: dict[str, Any]) -> None:
-    (entry_dir / MANIFEST_FILENAME).write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
 
