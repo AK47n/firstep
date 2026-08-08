@@ -19,7 +19,7 @@ from typing import Callable, Sequence
 from .keil import include_search_dirs
 from .library import list_modules
 from .llm import LLM, LLMError, build_manifest_summaries
-from .manifest import ModuleManifest
+from .manifest import ManifestSummary, ModuleManifest
 from .master import master_project_dir
 from .patchers import PatcherRegistry, default_registry
 from .reference_library import ReferenceEntry, ReferenceError
@@ -116,7 +116,7 @@ class TopicContext:
     problem_text: str
     references: tuple[ReferenceEntry, ...]  # 关联参考文件（完整条目）
     related_modules: tuple[str, ...]  # 该题专用模块 slug（自动并入最终模块集）
-    manifest_summaries: tuple[str, ...]  # 模块库摘要行（与 references 同一次扫库产出）
+    manifest_summaries: tuple[ManifestSummary, ...]  # 模块库摘要对象（与 references 同一次扫库产出）
     suggestions: tuple[ReferenceSuggestion, ...]  # 两级注入第一级（清单段）
     read_fulltext: Callable[[str], str]  # 两级注入第二级（按清单段条目 id 回读全文）
 
