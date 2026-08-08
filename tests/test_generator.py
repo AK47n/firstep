@@ -15,10 +15,18 @@ from contest_generator.generator import (
     MacroRedefinitionError,
     MasterNotFoundError,
     MissingModuleFilesError,
+    ModuleCorpus,
+    ModuleFile,
     ModuleSelfIncludeError,
     OutputDirNotEmptyError,
     UndefinedCallsError,
     UnresolvedIncludeError,
+    _check_main_calls,
+    _check_macro_conflicts,
+    _check_module_files,
+    _check_module_self_include,
+    _check_unresolved_includes,
+    build_module_corpus,
     generate_project,
     resolve_topic_context,
 )
@@ -273,6 +281,134 @@ def test_generate_missing_module_file_fails_with_clear_message(
     assert "stm32/src/broken.c" in str(excinfo.value)
     # 不产出残缺工程：输出目录不被创建
     assert not output_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# 语料门禁（工单 02）：纯内存构造 ModuleCorpus 直喂五道门，无盘上夹具。
+# 门禁不再读盘——文件文本全部来自语料，唯一例外是 include 解析要查盘上
+# 搜索目录（模拟 Keil 搜索，见 test_unresolved_include_checks_master_search_dirs）。
+# ---------------------------------------------------------------------------
+
+
+def _memory_corpus(
+    tmp_path,
+    *,
+    main_c: str = "int main(void) { while (1); }\n",
+    module_texts: list[tuple[str, str, str]] | None = None,
+    missing_files: list[tuple[str, str]] | None = None,
+    missing_platforms: list[str] | None = None,
+) -> ModuleCorpus:
+    """内存语料：module_texts = (slug, rel, text)，master_headers 留空。"""
+    files: list[tuple[str, tuple[ModuleFile, ...]]] = []
+    seen_slugs: set[str] = set()
+    for slug, rel, text in module_texts or []:
+        if slug not in seen_slugs:
+            seen_slugs.add(slug)
+            files.append((slug, ()))
+        kind = "c" if rel.endswith(".c") else "h" if rel.endswith(".h") else "other"
+        file = ModuleFile(rel=rel, kind=kind, text=text, own_dir=tmp_path / slug)
+        for i, (s, _files) in enumerate(files):
+            if s == slug:
+                files[i] = (s, (*_files, file))
+    return ModuleCorpus(
+        platform=PLATFORM_STM32,
+        modules=tuple(files),
+        missing_platforms=tuple(missing_platforms or ()),
+        missing_files=tuple(missing_files or ()),
+        master_headers=(),
+        master_search_dirs=(),
+        master_project_dir=tmp_path,
+        main_c=main_c,
+    )
+
+
+def test_corpus_missing_platform_and_files_reported_in_order(tmp_path):
+    corpus = _memory_corpus(
+        tmp_path,
+        missing_platforms=["noplat"],
+        missing_files=[("mod", "missing.c")],
+    )
+
+    with pytest.raises(MissingModuleFilesError) as excinfo:
+        _check_module_files(corpus)
+
+    assert "模块 noplat 没有平台 stm32 的版本条目" in str(excinfo.value)
+    assert "模块 mod 缺文件：missing.c" in str(excinfo.value)
+
+
+def test_corpus_main_calls_fence_and_undefined_from_memory(tmp_path):
+    corpus = _memory_corpus(
+        tmp_path,
+        main_c="```c\nint main(void) { ghost(); while (1); }\n```\n",
+        module_texts=[("mod", "mod.h", "#pragma once\nfloat real(void);\n")],
+    )
+
+    with pytest.raises(FencedMainCError, match="第 1 行"):
+        _check_main_calls(corpus)
+
+
+def test_corpus_self_include_checks_own_headers_from_memory(tmp_path):
+    corpus = _memory_corpus(
+        tmp_path,
+        module_texts=[
+            ("mod", "mod.h", "#pragma once\nvoid mod_init(void);\n"),
+            ("mod", "mod.c", '#include "other.h"\nvoid mod_init(void) {}\n'),
+        ],
+    )
+
+    with pytest.raises(ModuleSelfIncludeError, match="mod.c.*mod.h") as excinfo:
+        _check_module_self_include(corpus)
+
+    assert "没有 include 本模块自己的头" in str(excinfo.value)
+
+
+def test_corpus_macro_conflict_reported_from_memory(tmp_path):
+    corpus = ModuleCorpus(
+        platform=PLATFORM_STM32,
+        modules=(("mod", (ModuleFile(rel="mod.h", kind="h", text="#define LED_GPIO 1\n", own_dir=tmp_path),)),),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(("ml_led.h", "#define LED_GPIO 2\n"),),
+        master_search_dirs=(),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { while (1); }\n",
+    )
+
+    with pytest.raises(MacroRedefinitionError, match="LED_GPIO.*ml_led.h") as excinfo:
+        _check_macro_conflicts(corpus)
+
+    assert "重定义了母版接口宏" in str(excinfo.value)
+
+
+def test_unresolved_include_checks_master_search_dirs(tmp_path):
+    """唯一碰盘的检查：include 解析按 Keil 语义查搜索目录（模拟母版头在位）。"""
+    master = tmp_path / "master"
+    master.mkdir()
+    (master / "headfile.h").write_text("", encoding="utf-8")
+    corpus = ModuleCorpus(
+        platform=PLATFORM_STM32,
+        modules=(("mod", (ModuleFile(rel="mod.c", kind="c", text='#include "headfile.h"\n', own_dir=tmp_path),)),),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(),
+        master_search_dirs=(master,),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { while (1); }\n",
+    )
+
+    _check_unresolved_includes(corpus)  # 母版搜索目录里有 headfile.h → 通过
+
+
+def test_unresolved_include_missing_header_rejected_from_memory(tmp_path):
+    corpus = _memory_corpus(
+        tmp_path,
+        module_texts=[("mod", "mod.c", '#include "ghost.h"\n')],
+    )
+
+    with pytest.raises(UnresolvedIncludeError, match="ghost.h") as excinfo:
+        _check_unresolved_includes(corpus)
+
+    assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
 
 
 def test_generate_module_without_platform_version_fails(
