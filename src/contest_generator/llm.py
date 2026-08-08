@@ -1317,7 +1317,15 @@ def _parse_requirements(
         if not isinstance(requirement, str) or not requirement.strip():
             raise LLMError(f"requirements[{index}] 缺 requirement 或为空")
         sentence = item.get("sentence")
-        if isinstance(sentence, bool) or not isinstance(sentence, int) or sentence < 1:
+        # DeepSeek json_object 模式实测把数字标量序列化为字符串（"1"）——数字
+        # 字符串按语义无损强转（sentence 语义 = 正整数，不是形状）；非数字字符串 /
+        # 布尔 / 浮点照旧大声失败（脑补与乱编仍拒收）
+        if isinstance(sentence, bool) or not isinstance(sentence, int):
+            if isinstance(sentence, str) and sentence.strip().isdigit():
+                sentence = int(sentence)
+            else:
+                raise LLMError(f"requirements[{index}] 的 sentence 必须是正整数")
+        if sentence < 1:
             raise LLMError(f"requirements[{index}] 的 sentence 必须是正整数")
         raw_modules = item.get("modules", [])
         if not isinstance(raw_modules, list):
@@ -1630,7 +1638,8 @@ def _selection_user_prompt(
         prompt += "\n\n" + format_wordlist_prompt(hardware_words)
     contract = (
         '{"requirements": [{"requirement": "功能需求（能力/外设级）", '
-        '"sentence": 对应题面句子编号, "modules": [{"slug": "库内命中模块", '
+        '"sentence": 1（整数——对应题面句子编号，第 3 句就是 3；必须是整数，'
+        '不是字符串"1"）, "modules": [{"slug": "库内命中模块", '
         '"reason": "为何满足该需求"}], "suggestions": [{"name": "硬件词表内的'
         '类别或型号名", "category": "词表外型号必填的所属类别名", "examples": '
         '["常识举例"]}]}], "questions": ["题面证据不足以判定时的补问，可省略"]'
