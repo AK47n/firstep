@@ -25,3 +25,21 @@
 - `FakeLLM` 增加 summary / validation 构造参数与调用记录（沿用 main_skeleton 的注入模式），既有用例不受影响。
 - 测试：新增 tests/test_library.py（47 例），test_llm.py 补校验用例（共 25 例）；全量 192 通过，mypy 干净。
 - 两轴 code review 已跑：修复了规格轴指出的"编辑简介绕过 AI 校验"（新增 update_module_description）与"slug 路径穿越"，以及标准轴的错误契约、重复代码、fixture 复用问题。
+
+## 真机验证记录（2026-08-07，真实 HTTP 层 + 真实 DeepSeek）
+
+用真实应用（main:8000 新代码）+ 真实工程（Desktop\2026C / 2021F\21F）复验：
+
+- **AI 录入全流程 ✓**：8 个真实模块入库（ml_oled / ml_i2c / ml_mpu6050 / motor /
+  pid / lock_control / uwb_uart / filter），草稿 → 校验 → 入库全走真实 LLM；
+  子目录结构、manifest、API 列表落盘正确。
+- **一致性校验真实生效 ✓**：uwb_uart 第一次草稿被校验拒绝（换草稿通过）；
+  离谱简介（"串口GPS导航模块"）编辑被拒并给出中文差异说明；正常简介通过。
+- **共享文件冲突守卫 ✓**：21F 的 filter 内容与库中 2026C 版不同 → 400
+  "路径已被其他平台版本占用且内容不一致"。
+- **"已存在"守卫 ✓**：motor 重复导入 → 400 "模块已存在"。
+- **发现：真实工程是混编码**（2021F 部分逐飞库 .c 为 GBK，如 ml_i2c.c）——
+  库以 UTF-8 为规范格式，本次命令行导入脚本做了 GBK→UTF-8 转码；前端模块
+  录入是 textarea（无文件读取），赛题上传走 /api/extract 对非 UTF-8 文本有
+  明确报错，均无静默损坏。**遗留**：将来做"拖入 .c/.h"录入时需在浏览器端
+  ArrayBuffer + TextDecoder("gbk") 转码，否则 GBK 文件会读成乱码入库。

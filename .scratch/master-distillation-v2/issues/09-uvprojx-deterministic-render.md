@@ -59,3 +59,13 @@
 - 确认入库 200：`~/.contest_generator/masters/stm32` 坏母版（组空、0 IncludePath）
   被新母版整体替换；结构校验 PASS
 - 遗留（人工）：用户 Keil 实际编译一次为最终证明
+
+## 复验记录（2026-08-07）
+
+- 发现 `~/.contest_generator/masters/stm32` 源文件（12 个 .c/.s）全部丢失、
+  仅剩 user/ 下 3 个 XML（uvprojx 引用不存在的文件）——入库后丢失，成因
+  未明（日志被重启覆盖）。**母版目录不是生成流程的写入目标**（generate 只
+  读），排除代码侧写入；疑为人工清理或未知外部操作。
+- 用户浏览器重新跑提炼 + 入库：母版 33 文件全量恢复（12 个 .c/.s + 头文件
+  + user/Project.uvprojx），结构校验 PASS，sources=[2026C, 21F]，无残留。
+- 遗留不变：用户 Keil 实际编译一次为最终证明。
