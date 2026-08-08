@@ -45,6 +45,7 @@ from contest_generator.llm import (
     _truncate_content,
     _validation_user_prompt,
     build_manifest_summaries,
+    parse_archive_judgment,
     parse_distillation_report,
     parse_module_selection,
     parse_summary_report,
@@ -59,6 +60,7 @@ from contest_generator.report import (
     FileSummary,
     FileVersion,
     JudgmentFile,
+    ReferenceCandidate,
     ReportError,
     VersionSummary,
 )
@@ -2477,3 +2479,108 @@ def test_topic_split_topics_rejects_overlong_fulltext():
         llm.topic_split_topics("x" * (TOPIC_SPLIT_LLM_CHAR_CAP + 1))
 
     assert transport.calls == []  # 请求未发出
+
+
+# ---------------------------------------------------------------------------
+# 归档判定 / 参考文件简介（工单 02，重试兜底工单 C5）
+# ---------------------------------------------------------------------------
+
+
+def _candidate(path: str = "src/motor.c") -> ReferenceCandidate:
+    return ReferenceCandidate(path=path, content="int main(void) { }", reason="剔除")
+
+
+def test_parse_archive_judgment_rejects_non_json():
+    with pytest.raises(LLMError, match="不是 JSON"):
+        parse_archive_judgment("{not json", ["src/motor.c"])
+
+
+def test_parse_archive_judgment_rejects_missing_archive_array():
+    with pytest.raises(LLMError, match="缺少 archive 数组"):
+        parse_archive_judgment("{}", ["src/motor.c"])
+
+
+def test_parse_archive_judgment_rejects_non_string_item():
+    with pytest.raises(LLMError, match="必须是字符串"):
+        parse_archive_judgment('{"archive": [1]}', ["src/motor.c"])
+
+
+def test_parse_archive_judgment_rejects_unknown_path():
+    """词表外路径拒绝：模型判定了素材外的路径 = 输出不可信，大声失败。"""
+    with pytest.raises(LLMError, match="素材外的路径"):
+        parse_archive_judgment('{"archive": ["src/other.c"]}', ["src/motor.c"])
+
+
+def test_parse_archive_judgment_rejects_duplicate_path():
+    with pytest.raises(LLMError, match="重复判定归档"):
+        parse_archive_judgment(
+            '{"archive": ["src/motor.c", "src/motor.c"]}', ["src/motor.c"]
+        )
+
+
+def test_parse_archive_judgment_accepts_empty_and_subset():
+    """空列表合法（没有文件值得归档，由调用方呈现）；子集按序返回。"""
+    assert parse_archive_judgment('{"archive": []}', ["src/motor.c"]) == ()
+    assert parse_archive_judgment(
+        '{"archive": ["src/motor.c"]}', ["src/motor.c", "src/pid.c"]
+    ) == ("src/motor.c",)
+
+
+class _FlakyTransport(FakeTransport):
+    """前 n 次调用返回 502，之后正常（测整次调用级重试，工单 C5）。"""
+
+    def __init__(self, body: str, failures: int) -> None:
+        super().__init__(body=body)
+        self._failures = failures
+
+    def post(
+        self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
+    ) -> tuple[int, str]:
+        self.calls.append((url, headers, payload, timeout))
+        if len(self.calls) <= self._failures:
+            return 502, "transient failure"
+        return self.status, self.body
+
+
+def test_reference_judge_archivable_retries_transient_failure():
+    """单次瞬时失败整次重问（与提炼批处理同哲学：宁可多花一次调用）。"""
+    transport = _FlakyTransport(
+        body=_api_response('{"archive": ["src/motor.c"]}'), failures=1
+    )
+    llm = _llm(transport)
+
+    result = llm.reference_judge_archivable([_candidate()])
+
+    assert result == ("src/motor.c",)
+    assert len(transport.calls) == 2
+
+
+def test_reference_judge_archivable_exhausts_retries_then_loud_failure():
+    """超过重试上限仍失败 = 大声抛错（不静默吞成假结果）。"""
+    transport = _FlakyTransport(body=_api_response('{"archive": []}'), failures=9)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="归档判定连续 3 次调用失败"):
+        llm.reference_judge_archivable([_candidate()])
+
+    assert len(transport.calls) == 3  # SUMMARY_RETRY_LIMIT
+
+
+def test_reference_summarize_retries_transient_failure():
+    """逐文件简介同样有重试兜底（多文件归档不再单次失败即整体放弃）。"""
+    transport = _FlakyTransport(body=_api_response("UWB 例程"), failures=2)
+    llm = _llm(transport)
+
+    assert llm.reference_summarize("材料全文") == "UWB 例程"
+    assert len(transport.calls) == 3
+
+
+def test_reference_judge_archivable_retries_on_malformed_json_output():
+    """输出畸形（非 JSON）也整次重问，直到严格解析通过。"""
+    transport = FakeTransport(body=_api_response("{broken"))
+    llm = _llm(transport)
+
+    # 固定响应始终畸形：三次尝试后大声失败（与输出可用性策略一致）
+    with pytest.raises(LLMError, match="归档判定连续 3 次调用失败"):
+        llm.reference_judge_archivable([_candidate()])
+    assert len(transport.calls) == 3
