@@ -20,8 +20,10 @@ from contest_generator.config import AppConfig
 from contest_generator.events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
+    EVENT_CONVERGED,
     EVENT_PHASE_DONE,
     EVENT_RETRY,
+    EVENT_ROUND,
     EVENT_START,
     PHASE_DECIDE,
     PHASE_SUMMARY,
@@ -29,8 +31,10 @@ from contest_generator.events import (
     ProgressEvent,
 )
 from contest_generator.llm import (
+    FunctionRequirement,
     LLMError,
     ModuleSelection,
+    OutOfLibrarySuggestion,
     ReferenceSuggestion,
     ValidationResult,
 )
@@ -45,7 +49,13 @@ from contest_generator.report import (
 from contest_generator.topic_library import TopicDraft
 from contest_generator.master import distill_master, import_master, main_c_template, scan_project
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
-from contest_generator.webapp import EVENT_DONE, EVENT_ERROR, AppContext, create_app
+from contest_generator.webapp import (
+    EVENT_DONE,
+    EVENT_ERROR,
+    EVENT_QUESTION,
+    AppContext,
+    create_app,
+)
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
@@ -276,6 +286,22 @@ def _distill_report(client, dirs) -> dict:
     return done[0]
 
 
+def _recommend_stream(client, payload) -> list[tuple[str, dict]]:
+    """POST 推荐端点（SSE 流，工单 10）并解析事件序列（HTTP 200 起流）。"""
+    resp = client.post("/api/recommend", json=payload)
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    return _parse_sse(resp.text)
+
+
+def _recommend_done(client, payload) -> dict:
+    """推荐端点 → done 载荷（推荐结果）；流以 error 收尾则断言失败。"""
+    events = _recommend_stream(client, payload)
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, f"流未以 done 结束：{events}"
+    return done[0]
+
+
 # ---------------------------------------------------------------------------
 # 全局状态：平台可用性（验收项 5：未落地平台显示"暂不可用"而非报错）
 # ---------------------------------------------------------------------------
@@ -364,13 +390,15 @@ def test_extract_unsupported_type_returns_clear_error(client):
 
 
 def test_recommend_returns_modules_with_reasons(client):
-    resp = client.post("/api/recommend", json={"problem_text": "温湿度采集并显示"})
+    data = _recommend_done(client, {"problem_text": "温湿度采集并显示"})
 
-    assert resp.status_code == 200
-    assert resp.json()["modules"] == [
+    # 顶层 modules[] 格式与旧契约一致（下游 selectedSlugs / expand / generate
+    # 零改动）；旧假 LLM 无功能需求层 → requirements 为空数组
+    assert data["modules"] == [
         {"slug": "dht11", "reason": "赛题要求采集温湿度"},
         {"slug": "oled", "reason": "需要显示测量结果"},
     ]
+    assert data["requirements"] == []
 
 
 def test_expand_resolves_dependencies_and_warns_on_missing_platform(client):
@@ -506,13 +534,15 @@ def test_generate_rejects_main_c_with_undefined_calls(client, context, tmp_path)
     assert "不存在的函数" in resp.json()["detail"]
 
 
-def test_llm_failure_maps_to_502(client, context):
+def test_recommend_llm_failure_ends_stream_with_error_event(client, context):
+    """推荐端点（SSE 流）：LLM 失败以流内 error 事件收尾（HTTP 保持 200 起流，
+    与提炼端点同款——客户端只认事件，不依赖状态码）。"""
     context[1]["llm"] = RaisingLLM()  # 换掉假 LLM：直接抛 LLMError
 
-    resp = client.post("/api/recommend", json={"problem_text": "题目"})
+    events = _recommend_stream(client, {"problem_text": "题目"})
 
-    assert resp.status_code == 502
-    assert "AI 服务调用失败" in resp.json()["detail"]
+    assert events[-1][0] == EVENT_ERROR
+    assert "AI 服务调用失败" in events[-1][1]["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -1438,19 +1468,19 @@ def test_recommend_with_topic_id_uses_full_text_and_carries_materials(client, co
     holder = context[1]
     holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
 
-    resp = client.post(
-        "/api/recommend",
-        json={"problem_text": "用户粘贴的片段", "topic_id": "2026C"},
+    data = _recommend_done(
+        client, {"problem_text": "用户粘贴的片段", "topic_id": "2026C"}
     )
-
-    assert resp.status_code == 200
     llm = holder["llm"]
     assert llm.extract_calls == 0  # 显式编号不需要 AI 提取
-    assert llm.problem_texts == [TOPIC_PROBLEM_TEXT]
+    # 收敛循环第 1 轮：题面全文逐句编号后进上下文（"1. " 前缀，编号跨轮稳定）；
+    # 第 2 轮收敛确认带上一轮功能需求层（自检修订指令）
+    assert llm.problem_texts[0] == "1. " + TOPIC_PROBLEM_TEXT
+    assert "上一轮功能需求层" in llm.problem_texts[1]
     assert llm.reference_ids == [
-        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID, UWB_REFERENCE_ID)
+        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID, UWB_REFERENCE_ID),
+        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID, UWB_REFERENCE_ID),
     ]
-    data = resp.json()
     assert data["topic_id"] == "2026C"
     assert data["related_modules"] == ["lock_control"]
     assert data["modules"] == [
@@ -1465,13 +1495,12 @@ def test_recommend_auto_recognizes_number_in_pasted_text(client, context):
     holder = context[1]
     holder["llm"] = TopicAwareLLM(selection=SELECTION)  # 默认提取到 2026C
 
-    resp = client.post("/api/recommend", json={"problem_text": "……2026C 数字钥匙……"})
+    data = _recommend_done(client, {"problem_text": "……2026C 数字钥匙……"})
 
-    assert resp.status_code == 200
     llm = holder["llm"]
     assert llm.extract_calls == 1
-    assert llm.problem_texts == [TOPIC_PROBLEM_TEXT]
-    assert resp.json()["topic_id"] == "2026C"
+    assert llm.problem_texts[0] == "1. " + TOPIC_PROBLEM_TEXT
+    assert data["topic_id"] == "2026C"
 
 
 def test_recommend_auto_recognition_falls_back_when_topic_missing(client, context):
@@ -1479,18 +1508,18 @@ def test_recommend_auto_recognition_falls_back_when_topic_missing(client, contex
     holder = context[1]
     holder["llm"] = TopicAwareLLM(selection=SELECTION)  # 提取到 2026C 但库里没有
 
-    resp = client.post("/api/recommend", json={"problem_text": "粘贴片段"})
+    data = _recommend_done(client, {"problem_text": "粘贴片段"})
 
-    assert resp.status_code == 200
     llm = holder["llm"]
-    assert llm.problem_texts == ["粘贴片段"]
-    assert "topic_id" not in resp.json()
+    assert llm.problem_texts[0] == "1. 粘贴片段"
+    assert "topic_id" not in data
 
 
 def test_recommend_two_level_injection_reads_fulltexts_when_requested(
     client, context
 ):
-    """两级注入协议端到端：模型第一级点名的参考文件取全文进第二级上下文。"""
+    """两级注入协议端到端（收敛循环第 1 轮内）：模型第一级点名的参考文件取
+    全文进第二级上下文；第 2 轮收敛确认同样带已读全文（全文上下文不丢）。"""
     _wire_material_libraries(context)
     holder = context[1]
     selection = ModuleSelection(
@@ -1500,16 +1529,91 @@ def test_recommend_two_level_injection_reads_fulltexts_when_requested(
     )
     holder["llm"] = TopicAwareLLM(selection=selection, extracted_key=None)
 
-    resp = client.post(
-        "/api/recommend",
-        json={"problem_text": "粘贴", "topic_id": "2026C"},
-    )
+    _recommend_done(client, {"problem_text": "粘贴", "topic_id": "2026C"})
 
-    assert resp.status_code == 200
     llm = holder["llm"]
     assert llm.fulltexts[0] == {}  # 第一级：只有清单
     assert "/* 数字钥匙例程 */" in llm.fulltexts[1][TOPIC_REFERENCE_ID]  # 第二级：全文
-    assert len(llm.problem_texts) == 2
+    assert llm.fulltexts[2] == llm.fulltexts[1]  # 第 2 轮收敛确认带已读全文
+    assert len(llm.problem_texts) == 3  # 两级 × 第 1 轮 + 第 2 轮确认
+
+
+def test_recommend_streams_rounds_and_converged_events(client):
+    """SSE 契约：round（轮次 / 上限）→ … → converged（收敛轮）→ done（推荐结果）。"""
+    events = _recommend_stream(client, {"problem_text": "温湿度采集并显示"})
+
+    assert [kind for kind, _ in events] == ["round", "round", "converged", "done"]
+    assert events[0][1]["round"] == 1 and events[0][1]["round_total"] == 4
+    assert events[1][1]["round"] == 2
+    assert events[2][1]["round"] == 2  # converged 事件携带收敛轮次
+    assert "modules" in events[3][1]
+
+
+def test_recommend_question_ends_stream_with_question_event(client, context):
+    """模型拿不准（题面证据不足以判定）→ question 事件收尾（questions 数组），
+    流不以 done 结束——前端据此向用户补问。"""
+    holder = context[1]
+    holder["llm"] = FakeLLM(
+        selection=ModuleSelection(
+            modules=(),
+            reasons={},
+            questions=("题面没有说明识别方式，用摄像头还是传感器？",),
+        )
+    )
+
+    events = _recommend_stream(client, {"problem_text": "识别数字的送药小车"})
+
+    assert [kind for kind, _ in events] == ["round", EVENT_QUESTION]
+    assert events[-1][1]["questions"] == [
+        "题面没有说明识别方式，用摄像头还是传感器？"
+    ]
+
+
+def test_recommend_carries_requirements_and_isolates_suggestions(client, context):
+    """done 载荷：功能需求层（需求 / 对照句 / 库内命中 / 库外建议）随流返回；
+    库外建议只展示——不进 modules[]（隔离不变量），当 slug 传给 expand 报错。"""
+    holder = context[1]
+    holder["llm"] = FakeLLM(
+        selection=ModuleSelection(
+            modules=("dht11",),
+            reasons={"dht11": "测温湿度"},
+            requirements=(
+                FunctionRequirement(
+                    requirement="识别数字",
+                    sentence_index=2,
+                    modules=("dht11",),
+                    suggestions=(
+                        OutOfLibrarySuggestion(
+                            name="视觉模块", examples=("K230", "OpenMV")
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+
+    data = _recommend_done(client, {"problem_text": "送药小车"})
+
+    assert data["modules"] == [{"slug": "dht11", "reason": "测温湿度"}]
+    assert data["requirements"] == [
+        {
+            "requirement": "识别数字",
+            "sentence": 2,
+            "modules": ["dht11"],
+            "suggestions": [
+                {"name": "视觉模块", "examples": ["K230", "OpenMV"], "degraded": False}
+            ],
+        }
+    ]
+    # 库外建议名绝不出现在 modules[]（只展示、不进 selectedSlugs / expand / generate）
+    assert "视觉模块" not in [m["slug"] for m in data["modules"]]
+    # 现有严格校验保留：把建议名当 slug 传给 expand → 库中不存在 → 400
+    resp = client.post(
+        "/api/selection/expand",
+        json={"slugs": ["视觉模块"], "platform": PLATFORM_STM32},
+    )
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
 
 
 def test_skeleton_with_topic_id_uses_full_text_and_related_modules(client, context):
