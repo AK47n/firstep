@@ -11,7 +11,6 @@ main.c 落位（落位前静态自检：引用的函数必须在所选模块头�
 
 from __future__ import annotations
 
-import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +30,13 @@ from .selection import (
     reference_suggestions,
     resolve_selection,
 )
-from .skeleton import _strip_comments_keep_preprocessor, verify_main_c
+from .clex import (
+    extract_quoted_includes,
+    fence_line_indices,
+    strip_comments,
+    top_level_defines,
+)
+from .skeleton import format_interface_blocks, verify_main_c_interfaces
 from .topic_library import (
     TopicEntry,
     TopicError,
@@ -79,13 +84,6 @@ class MacroRedefinitionError(GeneratorError):
     编译警告的工程（Keil #47-D incompatible redefinition 判例：config.h
     的 LED_GPIO 撞 ml_led.h）。"""
 
-
-# Markdown 代码围栏行（与 skeleton.strip_code_fences 同一形态）：main.c 手改
-# 或旧流程产物若带围栏，Keil 报 unrecognized token（判例见 strip_code_fences）
-_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
-
-# 引号 include 提取（注释/字符串剔除后匹配，见 _check_unresolved_includes）
-_INCLUDE_QUOTED_RE = re.compile(r'#\s*include\s*"([^"]+)"')
 
 # Keil 在工程外也能解析的头：ARMCC 标准库（引号形式同样走库搜索）与器件包
 # （stm32f10x_conf.h 由 STM32F1xx DFP 提供，工程树里没有）。缺了会误报。
@@ -292,6 +290,109 @@ def generate_project(
     return describe_generation(result_dir, resolved.manifests, platform)
 
 
+@dataclass(frozen=True)
+class ModuleFile:
+    """模块文件条目：rel 路径 / 类别（c/h/other）/ 文本 / 所在目录。
+
+    文本与目录在语料构建时一次读好——门禁只吃语料，不再碰盘。
+    """
+
+    rel: str
+    kind: str  # "c" / "h" / "other"
+    text: str
+    own_dir: Path  # library_dir/<slug>/<rel 的父目录>（include 解析的 own_dir）
+
+
+@dataclass(frozen=True)
+class ModuleCorpus:
+    """生成校验的内存语料：一次读盘，五道门共吃。
+
+    modules 顺序与 manifests 一致（含平台条目缺失的模块，files 为空——
+    缺失清单在 missing 里）；master_headers = 母版树全部 *.h（相对路径,
+    文本，一次 rglob + 读盘）；master_search_dirs = 母版 IncludePath
+    （keil 语义，构建时算好）；main_c 直接进语料。测试可内存构造直喂门禁。
+    """
+
+    platform: str
+    modules: tuple[tuple[str, tuple[ModuleFile, ...]], ...]
+    missing_platforms: tuple[str, ...]  # 无该平台版本条目的 slug
+    missing_files: tuple[tuple[str, str], ...]  # (slug, rel) 声明了但读不到
+    master_headers: tuple[tuple[str, str], ...]
+    master_search_dirs: tuple[Path, ...]
+    master_project_dir: Path  # main.c 的 own_dir（最终工程根 = 母版根）
+    main_c: str
+
+
+def build_module_corpus(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path,
+    main_c_content: str,
+) -> ModuleCorpus:
+    """一次读盘构建校验语料：模块文件（存在性 + 文本）+ 母版头 + 搜索目录。
+
+    文件缺失不 raise——存在性由 _check_module_files 门报告（missing 清单
+    记录，门禁职责不变）；母版 rglob 与 IncludePath 也在这里一次做完，
+    门禁不再扫盘。
+    """
+    modules: list[tuple[str, tuple[ModuleFile, ...]]] = []
+    missing_platforms: list[str] = []
+    missing_files: list[tuple[str, str]] = []
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            missing_platforms.append(manifest.slug)
+            modules.append((manifest.slug, ()))
+            continue
+        files: list[ModuleFile] = []
+        for rel in entry.files:
+            path = library_dir / manifest.slug / rel
+            if not path.is_file():
+                missing_files.append((manifest.slug, rel))
+                continue
+            kind = (
+                "c"
+                if rel.lower().endswith(".c")
+                else "h"
+                if rel.lower().endswith(".h")
+                else "other"
+            )
+            files.append(
+                ModuleFile(
+                    rel=rel,
+                    kind=kind,
+                    text=path.read_text(encoding="utf-8", errors="replace"),
+                    own_dir=path.parent,
+                )
+            )
+        modules.append((manifest.slug, tuple(files)))
+
+    master_headers: list[tuple[str, str]] = []
+    for rel in sorted(
+        p.relative_to(master_project_dir).as_posix()
+        for p in master_project_dir.rglob("*.h")
+    ):
+        path = master_project_dir / rel
+        try:
+            master_headers.append(
+                (rel, path.read_text(encoding="utf-8", errors="replace"))
+            )
+        except OSError:
+            continue
+
+    return ModuleCorpus(
+        platform=platform,
+        modules=tuple(modules),
+        missing_platforms=tuple(missing_platforms),
+        missing_files=tuple(missing_files),
+        master_headers=tuple(master_headers),
+        master_search_dirs=tuple(include_search_dirs(master_project_dir)),
+        master_project_dir=master_project_dir,
+        main_c=main_c_content,
+    )
+
+
 def generate(
     *,
     platform: str,
@@ -312,15 +413,14 @@ def generate(
     if output_dir.exists() and any(output_dir.iterdir()):
         raise OutputDirNotEmptyError(f"输出目录已存在且非空，拒绝覆盖：{output_dir}")
 
-    _check_module_files(manifests, platform, module_library_dir)
-    _check_main_calls(main_c_content, manifests, platform, module_library_dir)
-    _check_module_self_include(manifests, platform, module_library_dir)
-    _check_unresolved_includes(
-        main_c_content, manifests, platform, module_library_dir, master_project_dir
+    corpus = build_module_corpus(
+        manifests, platform, module_library_dir, master_project_dir, main_c_content
     )
-    _check_macro_conflicts(
-        main_c_content, manifests, platform, module_library_dir, master_project_dir
-    )
+    _check_module_files(corpus)
+    _check_main_calls(corpus)
+    _check_module_self_include(corpus)
+    _check_unresolved_includes(corpus)
+    _check_macro_conflicts(corpus)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -349,45 +449,41 @@ def generate(
     return output_dir
 
 
-def _check_module_files(
-    manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
-) -> None:
+def _check_module_files(corpus: ModuleCorpus) -> None:
     missing: list[str] = []
-    for manifest in manifests:
-        entry = manifest.platforms.get(platform)
-        if entry is None:
-            missing.append(f"模块 {manifest.slug} 没有平台 {platform} 的版本条目")
-            continue
-        for rel in entry.files:
-            if not (library_dir / manifest.slug / rel).is_file():
-                missing.append(f"模块 {manifest.slug} 缺文件：{rel}")
+    for slug in corpus.missing_platforms:
+        missing.append(f"模块 {slug} 没有平台 {corpus.platform} 的版本条目")
+    for slug, rel in corpus.missing_files:
+        missing.append(f"模块 {slug} 缺文件：{rel}")
     if missing:
         raise MissingModuleFilesError(
             "所选模块文件不齐全，拒绝生成残缺工程：\n- " + "\n- ".join(missing)
         )
 
 
-def _check_main_calls(
-    main_c_content: str,
-    manifests: Sequence[ModuleManifest],
-    platform: str,
-    library_dir: Path,
-) -> None:
+def _check_main_calls(corpus: ModuleCorpus) -> None:
     """静态自检兜底：main.c 引用的每个函数必须存在于所选模块头文件。
 
-    自检实现归 skeleton.verify_main_c（与骨架阶段共用同一份接口块）——
-    "不存在的调用"只有一个实现、两种出口：骨架阶段改写为注释占位，走到
-    这里的 main.c 若仍含不存在的调用（用户手改等），明确报错，拒绝产出
-    无法编译的工程。main.c 含 Markdown 代码围栏同样明确报错（骨架阶段已
-    剥离，走到这里说明输入绕过骨架阶段或手改带入）。
+    自检实现归 skeleton.verify_main_c_interfaces（与骨架阶段共用同一份
+    接口块格式化与提取逻辑）——"不存在的调用"只有一个实现、两种出口：
+    骨架阶段改写为注释占位，走到这里的 main.c 若仍含不存在的调用（用户
+    手改等），明确报错，拒绝产出无法编译的工程。main.c 含 Markdown 代码
+    围栏同样明确报错（骨架阶段已剥离，走到这里说明输入绕过骨架阶段或
+    手改带入）。
     """
-    for i, line in enumerate(main_c_content.splitlines(), 1):
-        if _FENCE_LINE_RE.match(line):
-            raise FencedMainCError(
-                f"main.c 第 {i} 行是 Markdown 代码围栏（{line.strip()}），不是 C 代码"
-                " —— 骨架阶段会剥离 LLM 围栏输出，请直接用纯 C 代码"
-            )
-    undefined = verify_main_c(main_c_content, manifests, platform, library_dir)
+    for i, line in fence_line_indices(corpus.main_c):
+        raise FencedMainCError(
+            f"main.c 第 {i} 行是 Markdown 代码围栏（{line}），不是 C 代码"
+            " —— 骨架阶段会剥离 LLM 围栏输出，请直接用纯 C 代码"
+        )
+    headers: list[tuple[str, str, str]] = [
+        (slug, f.rel, f.text)
+        for slug, files in corpus.modules
+        for f in files
+        if f.kind == "h"
+    ]
+    interfaces = format_interface_blocks(headers)
+    undefined = verify_main_c_interfaces(corpus.main_c, interfaces)
     if undefined:
         raise UndefinedCallsError(
             "main.c 调用了所选模块头文件中不存在的函数："
@@ -396,55 +492,38 @@ def _check_main_calls(
         )
 
 
-def _check_unresolved_includes(
-    main_c_content: str,
-    manifests: Sequence[ModuleManifest],
-    platform: str,
-    library_dir: Path,
-    master_project_dir: Path,
-) -> None:
+def _check_unresolved_includes(corpus: ModuleCorpus) -> None:
     """生成前静态校验：main.c 与模块源码的每个引号 include 都必须在最终工程里可解析。
 
     Keil 语义：#include "x.h" 先找当前文件所在目录，再按 IncludePath 顺序找
     （模块代码目录自动追加 + 母版自带）；工程内找不到且不是标准库 / 器件包
     头 → 拒绝生成（判例：库模块 pid.c 引用了从未入库的 digit_uart.h，Keil
     报 cannot open source input file，真机编译失败）。检查在创建输出目录
-    之前发生，不产出残缺工程。
+    之前发生，不产出残缺工程。搜索目录在语料构建时算好（母版 IncludePath +
+    各模块代码目录），门禁只吃语料不碰盘。
     """
-    # 搜索目录 = 母版 IncludePath + 各模块代码目录（_copy_module_files 会把
-    # 这些目录追加进 uvprojx IncludePath，与 Keil 实际搜索范围一致）
-    search_dirs: list[Path] = list(include_search_dirs(master_project_dir))
+    search_dirs: list[Path] = list(corpus.master_search_dirs)
     seen: set[str] = {str(d).lower() for d in search_dirs}
-    for manifest in manifests:
-        entry = manifest.platforms.get(platform)
-        if entry is None:
-            continue
-        for rel in entry.files:
-            parent = (library_dir / manifest.slug / Path(rel)).parent.resolve()
-            key = str(parent).lower()
+    for _, files in corpus.modules:
+        for f in files:
+            key = str(f.own_dir).lower()
             if key not in seen:
                 seen.add(key)
-                search_dirs.append(parent)
+                search_dirs.append(f.own_dir)
 
-    checks: list[tuple[str, Path, str]] = [(f"main.c", master_project_dir, main_c_content)]
-    for manifest in manifests:
-        entry = manifest.platforms.get(platform)
-        if entry is None:
-            continue
-        for rel in entry.files:
-            if not rel.lower().endswith((".c", ".h")):
+    checks: list[tuple[str, Path, str]] = [
+        ("main.c", corpus.master_project_dir, corpus.main_c)
+    ]
+    for slug, files in corpus.modules:
+        for f in files:
+            if f.kind not in ("c", "h"):
                 continue
-            path = library_dir / manifest.slug / rel
-            if not path.is_file():  # 文件缺失由 _check_module_files 兜底
-                continue
-            label = f"模块 {manifest.slug} 的 {rel}"
-            checks.append((label, path.parent, path.read_text(encoding="utf-8", errors="replace")))
+            checks.append((f"模块 {slug} 的 {f.rel}", f.own_dir, f.text))
 
     problems: list[str] = []
     for label, own_dir, code in checks:
-        stripped = _strip_comments_keep_preprocessor(code)
-        for m in _INCLUDE_QUOTED_RE.finditer(stripped):
-            header = m.group(1)
+        stripped = strip_comments(code, keep_preprocessor=True)
+        for header in extract_quoted_includes(stripped):
             if any((d / header).is_file() for d in (own_dir, *search_dirs)):
                 continue
             if header.lower() in _EXTERNAL_HEADERS:
@@ -457,9 +536,7 @@ def _check_unresolved_includes(
         )
 
 
-def _check_module_self_include(
-    manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
-) -> None:
+def _check_module_self_include(corpus: ModuleCorpus) -> None:
     """生成前静态校验：模块 .c 必须 include 本模块自己的至少一个头文件。
 
     Keil 语义：模块 .c 不 include 自己的 .h 时，符号声明只存在于原始工程的
@@ -469,25 +546,18 @@ def _check_module_self_include(
     此规则补上：引用解析 + 自包含两条件都过，生成工程才有编译基础。
     """
     problems: list[str] = []
-    for manifest in manifests:
-        entry = manifest.platforms.get(platform)
-        if entry is None:
-            continue
-        own_headers = [Path(rel).name for rel in entry.files if rel.lower().endswith(".h")]
+    for slug, files in corpus.modules:
+        own_headers = [Path(f.rel).name for f in files if f.kind == "h"]
         if not own_headers:
             continue  # 纯 .c 模块（无头文件可自含）跳过
-        for rel in entry.files:
-            if not rel.lower().endswith(".c"):
+        for f in files:
+            if f.kind != "c":
                 continue
-            path = library_dir / manifest.slug / rel
-            if not path.is_file():  # 文件缺失由 _check_module_files 兜底
-                continue
-            code = path.read_text(encoding="utf-8", errors="replace")
-            stripped = _strip_comments_keep_preprocessor(code)
-            included = set(_INCLUDE_QUOTED_RE.findall(stripped))
+            stripped = strip_comments(f.text, keep_preprocessor=True)
+            included = set(extract_quoted_includes(stripped))
             if not (set(own_headers) & included):
                 problems.append(
-                    f"模块 {manifest.slug} 的 {rel} 没有 include 本模块自己的头"
+                    f"模块 {slug} 的 {f.rel} 没有 include 本模块自己的头"
                     f"（{', '.join(sorted(own_headers))}）"
                 )
     if problems:
@@ -498,95 +568,31 @@ def _check_module_self_include(
         )
 
 
-def _top_level_defines(code: str) -> dict[str, tuple[str, int]]:
-    """无条件顶层 #define 清单：{宏名: (规范化值, 行号)}。
-
-    只收不在任何 #if/#ifdef/#ifndef 块内的 #define——include guard 的定义
-    在 #ifndef 块内（深度 1）天然排除；条件块里可能生效也可能不生效的宏
-    跳过（宁可放过、不可误杀，编译器的 warning 兜底）。同一文件 #undef
-    后再定义的不收（合法覆盖模式）。函数宏名字取到左括号前，参数表并入
-    值参与文本比较。反斜杠续行在预处理行内合并。
-    """
-    stripped = _strip_comments_keep_preprocessor(code)
-    lines = stripped.split("\n")
-    defines: dict[str, tuple[str, int]] = {}
-    undefed: set[str] = set()
-    depth = 0
-    i = 0
-    while i < len(lines):
-        text = lines[i].strip()
-        lineno = i + 1
-        if not text.startswith("#"):
-            i += 1
-            continue
-        while text.endswith("\\") and i + 1 < len(lines):  # 续行合并
-            i += 1
-            text = text[:-1] + " " + lines[i].strip()
-        if text.startswith("#if"):
-            depth += 1
-        elif text.startswith("#endif"):
-            depth = max(0, depth - 1)
-        elif text.startswith("#undef"):
-            m = re.match(r"#\s*undef\s+([A-Za-z_]\w*)", text)
-            if m:
-                undefed.add(m.group(1))
-        elif text.startswith("#define") and depth == 0:
-            m = re.match(r"#\s*define\s+([A-Za-z_]\w*)", text)
-            if m:
-                name = m.group(1)
-                if name not in undefed:
-                    value = re.sub(r"\s+", " ", text[m.end():].strip())
-                    defines[name] = (value, lineno)
-        i += 1
-    return defines
-
-
-def _check_macro_conflicts(
-    main_c_content: str,
-    manifests: Sequence[ModuleManifest],
-    platform: str,
-    library_dir: Path,
-    master_project_dir: Path,
-) -> None:
+def _check_macro_conflicts(corpus: ModuleCorpus) -> None:
     """生成前静态校验：模块头 / main.c 不得重定义母版库接口宏（同名不同值）。
 
     Keil 语义：#define 同名不同值 = #47-D incompatible redefinition 警告
     （判例：config.h 的 LED_GPIO=GPIO_C 撞母版 ml_led.h 的 LED_GPIO=GPIO_A，
     真机编译 4 处 warning）。库接口宏是母版命名空间，模块配置想表达不同
     引脚必须换自定义宏名——门禁在创建输出目录之前拒绝生成，不留 warning
-    工程。
+    工程。母版头文本在语料构建时一次 rglob + 读盘，门禁只吃语料。
     """
     master_defines: dict[str, tuple[str, int, str]] = {}
-    for rel in sorted(p.relative_to(master_project_dir).as_posix() for p in master_project_dir.rglob("*.h")):
-        path = master_project_dir / rel
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for name, (value, line) in _top_level_defines(text).items():
+    for rel, text in corpus.master_headers:
+        for name, (value, line) in top_level_defines(text).items():
             if name not in master_defines:
                 master_defines[name] = (value, line, rel)
 
     problems: list[str] = []
-    sources: list[tuple[str, str | None, Path]] = [("main.c", None, master_project_dir / "main.c")]
-    for manifest in manifests:
-        entry = manifest.platforms.get(platform)
-        if entry is None:
-            continue
-        for rel in entry.files:
-            if not rel.lower().endswith(".h"):
+    sources: list[tuple[str, str | None, str]] = [("main.c", None, corpus.main_c)]
+    for slug, files in corpus.modules:
+        for f in files:
+            if f.kind != "h":
                 continue
-            path = library_dir / manifest.slug / rel
-            if not path.is_file():  # 文件缺失由 _check_module_files 兜底
-                continue
-            sources.append((f"模块 {manifest.slug} 的 {rel}", rel, path))
+            sources.append((f"模块 {slug} 的 {f.rel}", f.rel, f.text))
 
-    for label, rel, path in sources:
-        if rel is None:  # main.c：内容来自参数，与母版文件无关
-            text = main_c_content
-        else:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        for name, (value, line) in _top_level_defines(text).items():
+    for label, source_rel, text in sources:
+        for name, (value, line) in top_level_defines(text).items():
             master = master_defines.get(name)
             if master is not None and master[0] != value:
                 problems.append(

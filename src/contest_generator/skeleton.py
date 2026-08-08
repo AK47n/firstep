@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 from typing import Sequence
 
+from .clex import strip_code_fences, strip_comments
 from .llm import LLM
 from .manifest import ModuleManifest
 
@@ -51,27 +52,6 @@ _MACRO_DEF_RE = re.compile(r"#define\s+([A-Za-z_]\w*)\(")
 # 任意 #define 定义的名字（对象宏；定义行上"名 ("可能被调用形态误报）
 _DEFINE_RE = re.compile(r"#define\s+([A-Za-z_]\w*)")
 
-# Markdown 代码围栏行（``` / ~~~，可带语言标注）：LLM 输出最常见的传输层包裹
-_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
-
-
-def strip_code_fences(code: str) -> str:
-    """剥离 LLM 输出的首尾代码围栏行（```lang / ~~~），其余原样。
-
-    提示词要求输出纯 C，但模型偶尔仍用围栏包裹（判例：骨架带 ```c 围栏直接
-    落盘 main.c，Keil 报 unrecognized token，连锁炸掉整个编译）。只剥首尾
-    各一行围栏；无围栏原样返回；中间位置的围栏行不动（不是包裹形态，剥了
-    反而丢信息）。
-    """
-    lines = code.splitlines(keepends=True)
-    if not lines:
-        return code
-    if _FENCE_LINE_RE.match(lines[0]):
-        lines = lines[1:]
-    if lines and _FENCE_LINE_RE.match(lines[-1].rstrip("\r\n")):
-        lines = lines[:-1]
-    return "".join(lines)
-
 
 def build_skeleton_interfaces(
     manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
@@ -81,29 +61,49 @@ def build_skeleton_interfaces(
     顺序与 manifests 一致（调用方应先按依赖展开）；每个模块的平台条目里
     的 .h 文件内容逐块给出。头文件缺失跳过（文件齐全由生成器硬校验兜底）；
     模块无平台版本或纯 .c 实现时给出占位块，LLM 仍知道它被选中。
+    读盘 + 格式化拆成两层：这里做读盘与形态判断，块格式化归
+    format_interface_blocks（生成门禁用语料文本走同一格式化）。
     """
     blocks: list[str] = []
+    headers: list[tuple[str, str, str]] = []
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         if entry is None:
             blocks.append(f"### 模块 {manifest.slug}（无平台 {platform} 版本，无接口）")
             continue
-        parts: list[str] = []
-        for rel in entry.files:
-            if not _is_header_path(rel):
-                continue
+        declared_headers = [rel for rel in entry.files if _is_header_path(rel)]
+        if not declared_headers:
+            blocks.append(f"### 模块 {manifest.slug}（无头文件接口）")
+            continue
+        for rel in declared_headers:
             path = library_dir / manifest.slug / rel
             if not path.is_file():
                 continue
-            parts.append(f"### 模块 {manifest.slug}（{rel}）")
-            parts.append(path.read_text(encoding="utf-8"))
-        if not parts:
-            blocks.append(
-                f"### 模块 {manifest.slug}"
-                + ("（头文件缺失，无接口）" if any(_is_header_path(rel) for rel in entry.files) else "（无头文件接口）")
-            )
-        else:
-            blocks.append("\n".join(parts))
+            headers.append((manifest.slug, rel, path.read_text(encoding="utf-8")))
+        if not any(h[0] == manifest.slug for h in headers):
+            blocks.append(f"### 模块 {manifest.slug}（头文件缺失，无接口）")
+    blocks.extend(format_interface_blocks(headers))
+    return blocks
+
+
+def format_interface_blocks(
+    headers: Sequence[tuple[str, str, str]],
+) -> list[str]:
+    """接口块格式化唯一实现：(slug, rel, 头文件文本) → 每模块一个接口块。
+
+    骨架流程（build_skeleton_interfaces 读盘后）与生成门禁（语料文本）共用
+    同一份格式化——接口块长什么样只有这里知道。占位块（无平台版本 / 无头
+    文件接口 / 头文件缺失）由调用方按形态判断，这里只管"有内容的头文件"。
+    每个模块一块：同模块多 rel 的块内容以换行相连（与读盘版行为一致）。
+    """
+    blocks: list[str] = []
+    for slug in dict.fromkeys(h[0] for h in headers):  # 保序去重
+        parts: list[str] = []
+        for s, rel, text in headers:
+            if s == slug:
+                parts.append(f"### 模块 {slug}（{rel}）")
+                parts.append(text)
+        blocks.append("\n".join(parts))
     return blocks
 
 
@@ -111,7 +111,7 @@ def extract_header_functions(interfaces: Sequence[str]) -> set[str]:
     """从接口块提取函数名与函数式宏名（自检的已知集合）。"""
     functions: set[str] = set()
     for block in interfaces:
-        functions |= _decl_or_macro_names(_strip_comments_and_strings(block))
+        functions |= _decl_or_macro_names(strip_comments(block))
     return functions
 
 
@@ -122,9 +122,18 @@ def verify_main_c(
 
     与 generate_skeleton 共用同一份接口块（build_skeleton_interfaces 的
     输出）——自检只认喂给 LLM 的同一套接口，不存在的调用由调用方决定
-    改写（sanitize_skeleton）或明确报错（生成器兜底）。
+    改写（sanitize_skeleton）或明确报错（生成器兜底）。生成门禁有语料
+    文本时走 verify_main_c_interfaces（不重读盘，接口块同一格式化）。
     """
     interfaces = build_skeleton_interfaces(manifests, platform, library_dir)
+    return verify_main_c_interfaces(main_c, interfaces)
+
+
+def verify_main_c_interfaces(
+    main_c: str, interfaces: Sequence[str]
+) -> tuple[str, ...]:
+    """静态自检：main.c vs 已格式化接口块（生成门禁用——接口块来自语料，
+    不再重读盘）。与 verify_main_c 共用同一份提取与自检逻辑。"""
     return find_undefined_calls(main_c, extract_header_functions(interfaces))
 
 
@@ -136,7 +145,7 @@ def find_undefined_calls(
     注释、字符串里的"调用"不算；main.c 自己定义/声明/宏定义的函数不算；
     控制关键字（if/while/return/…）不算。结果按名字排序，保证确定性。
     """
-    stripped = _strip_comments_and_strings(main_c)
+    stripped = strip_comments(main_c)
     calls = _extract_calls(stripped)
     local = _known_local(stripped)
     unknown = calls - local - set(known_functions)
@@ -434,73 +443,3 @@ def _known_local(code: str) -> set[str]:
 def _decl_or_macro_names(code: str) -> set[str]:
     """名字带声明/定义或函数式宏形态的标识符集合。"""
     return set(_DECL_OR_DEF_RE.findall(code)) | set(_MACRO_DEF_RE.findall(code))
-
-
-def _strip_comments_and_strings(code: str) -> str:
-    """去掉 C 代码里的注释与字符串/字符字面量，只留代码形态。"""
-    out: list[str] = []
-    i = 0
-    length = len(code)
-    while i < length:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < length else ""
-        if char == "/" and nxt == "/":  # 行注释
-            end = code.find("\n", i)
-            i = length if end == -1 else end + 1
-        elif char == "/" and nxt == "*":  # 块注释
-            end = code.find("*/", i + 2)
-            i = length if end == -1 else end + 2
-        elif char in ('"', "'"):  # 字符串 / 字符字面量（含转义）
-            quote = char
-            i += 1
-            while i < length and code[i] != quote:
-                if code[i] == "\\":
-                    i += 1
-                i += 1
-            i += 1
-        else:
-            out.append(char)
-            i += 1
-    return "".join(out)
-
-
-def _strip_comments_keep_preprocessor(code: str) -> str:
-    """去掉注释（行/块），预处理行整行原样保留。
-
-    字符串里的内容照剥，但 # 打头的行（#include 等）不剥——include 的文件名
-    在引号里，普通字符串剥离会把它当字符串吞掉（判例：include 门禁扫描
-    失败）。块注释跨行时先命中注释分支整段跳过，行内注释先行跳过，# 行
-    里的注释与字符串属于预处理内容，原样保留不影响匹配。
-    """
-    out: list[str] = []
-    i = 0
-    length = len(code)
-    while i < length:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < length else ""
-        if char == "/" and nxt == "/":  # 行注释
-            end = code.find("\n", i)
-            i = length if end == -1 else end + 1
-        elif char == "/" and nxt == "*":  # 块注释（跨行一并跳过）
-            end = code.find("*/", i + 2)
-            i = length if end == -1 else end + 2
-        elif char == "#" and (i == 0 or code[i - 1] == "\n"):  # 预处理行透传
-            # 注意：不能用 _at_line_start_after_ws（它回退跳过整段空白，第 2 行
-            # 起的 # 行全部误判为不在行首——判例：pid.c 第 2 行 #include 被当
-            # 字符串剥掉，include 门禁漏检）
-            end = code.find("\n", i)
-            end = length if end == -1 else end + 1
-            out.append(code[i:end])
-            i = end
-        elif char in ('"', "'"):  # 字符串 / 字符字面量（含转义）
-            quote = char
-            i += 1
-            while i < length and code[i] != quote:
-                if code[i] == "\\":
-                    i += 1
-                i += 1
-            i += 1
-        else:
-            out.append(char)
-            i += 1
-    return "".join(out)
