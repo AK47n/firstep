@@ -1,12 +1,14 @@
 """赛题库核心：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）+ 编号解析。
 
-流程（素材库 spec + ADR 0006）：用户导入历年真题长 PDF → AI 拆条（年份 /
-编号 / 题面全文，拆条协议在 llm 层）→ 用户逐条校对（改年份 / 题号 / 题面）
-→ 确认入库。磁盘目录即数据库（与模块库同风格）：一条目一目录（目录名 =
-赛题编号），题面全文落 topic.md，原 PDF 复制保留在条目目录（AI 拆错可查
-原文），manifest.json 记录年份 / 编号 / 题面文件名 / 原 PDF 文件名 / 附带
-程序目录。附带程序用引用方式（字段存绝对路径，不复制）——源工程还要继续
-编辑使用，复制会制造两份（2026C 钥匙/锁两套即此形态）。
+流程（素材库 spec + ADR 0006）：用户导入历年真题长 PDF → 拆条（短全文走
+LLM，协议在 llm 层；超长全文走确定性分块 split_topics_document——flash
+输出预算有限会静默漏题，纯文本规则零 AI 改写）→ 用户逐条校对（改年份 /
+题号 / 题面）→ 确认入库。磁盘目录即数据库（与模块库同风格）：一条目一
+目录（目录名 = 赛题编号），题面全文落 topic.md，原 PDF 复制保留在条目
+目录（AI 拆错可查原文），manifest.json 记录年份 / 编号 / 题面文件名 /
+原 PDF 文件名 / 附带程序目录。附带程序用引用方式（字段存绝对路径，不
+复制）——源工程还要继续编辑使用，复制会制造两份（2026C 钥匙/锁两套即
+此形态）。
 
 编号解析："2026C"（年份 + 题号）→ 题面全文，供生成入口与 AI 理解使用；
 查无此条明确报错（不猜测编造）。关联模块复用模块简介"XX 题专用"标注自动
@@ -23,6 +25,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -186,6 +189,112 @@ def discover_related_modules(module_library_dir: Path, key: str) -> tuple[str, .
         for manifest in list_modules(module_library_dir)
         if key in manifest.description and "专用" in manifest.description
     )
+
+
+# ---------------------------------------------------------------------------
+# 确定性分块（工单 04）：长 PDF 按年份章节 + 题目标记切到单题（零 AI 改写）
+# ---------------------------------------------------------------------------
+
+# 规则经 .scratch/real-run/topic_split_by_year.py 真机验证（2017-2025 汇总
+# PDF 163K 字符 69/69 全对）：年份章节按数字归组、取"到下一年距离最大"的
+# 出现为起点（封面/页眉只有几百字符，章节跨度天然最大）；题目标记只认
+# 括号式（X 题）与行首 X 题：，正文误匹配（"停止条件"类）全排除；题面 =
+# 标题行起点到下一题标题行的原文段落（含评分标准表），零 AI 改写比 AI
+# 抽取更忠实。
+YEAR_RE = re.compile(r"(20(?:1[7-9]|2[0-5]))[ ]*年")  # group(1) = 4 位年份
+TITLE_RE = re.compile(r"[（(]\s*([A-H])\s*题\s*[)）]|^([A-H])\s*题[：:]", re.M)
+
+# 两种"拆不出来"共用同一句可操作提示（文案单源，与 validate_topic_key 同约定）
+_SPLIT_FORMAT_HINT = (
+    "长 PDF 的拆条分块要求标准格式（年份章节 + 题目标记（X 题）/行首 X 题：）；"
+    "可尝试把 PDF 拆成单份赛题后逐份导入"
+)
+
+
+@dataclass(frozen=True)
+class _Chapter:
+    """年份章节（同一年变体归组后的一年）：起点 = 到下一年距离最大的出现。
+
+    start/end 是全文切片边界（end 恒为下一章节起点或全文末尾），章节内容
+    = text[start:end]。
+    """
+
+    year: str
+    start: int
+    end: int
+
+
+def split_topics_document(text: str) -> tuple[TopicDraft, ...]:
+    """多年真题长 PDF 全文 → 单题草稿（确定性分块，零 AI 改写）。
+
+    LLM 一次拆 8 题会被 flash 模型输出预算截断（实测 max_tokens=8192 也断，
+    静默漏题无感知），改为纯文本规则切分：年份章节（YEAR_RE，同一年变体
+    按数字归组、取到下一年距离最大的出现为起点）→ 题目标记（TITLE_RE，
+    括号式/行首式、正文误匹配排除、同字母去重取首次）→ 题面 = 标题行起点
+    到下一题标题行的原文段落；每年最后一题含该年尾部杂项（评分汇总/页脚，
+    校对阶段可修剪）。草稿形态与 LLM 拆条一致（TopicDraft：year/number/
+    problem_text，confirm_topics 契约不变）。全文无年份章节或零赛题 = 格式
+    不匹配，大声失败（宁可报错也不让用户面对空校对页，与"宁可大声失败"
+    同哲学）。
+    """
+    chapters = _split_year_chapters(text)
+    if not chapters:
+        raise TopicError(
+            f"未从 PDF 全文识别出任何年份章节（找不到 20XX 年）：{_SPLIT_FORMAT_HINT}"
+        )
+    drafts: list[TopicDraft] = []
+    for chapter in chapters:
+        seg = text[chapter.start : chapter.end]
+        marks = _title_marks(seg)
+        for index, (letter, pos) in enumerate(marks):
+            nxt = marks[index + 1][1] if index + 1 < len(marks) else len(seg)
+            drafts.append(
+                TopicDraft(
+                    year=chapter.year,
+                    number=letter,
+                    problem_text=seg[pos:nxt].strip(),
+                )
+            )
+    if not drafts:
+        raise TopicError(
+            f"未从 PDF 全文识别出任何赛题（年份章节内找不到题目标记）："
+            f"{_SPLIT_FORMAT_HINT}"
+        )
+    drafts.sort(key=lambda draft: draft.key)
+    return tuple(drafts)
+
+
+def _split_year_chapters(text: str) -> list[_Chapter]:
+    """年份章节边界：同一年变体（'2017年'/'2017 年'）按数字归组，
+    取'到下一年距离最大'的出现作为章节起点（封面/页眉只有几百字符，
+    章节跨度天然最大）。"""
+    occurrences: list[tuple[str, int]] = []
+    for match in YEAR_RE.finditer(text):
+        year = match.group(1)
+        assert year is not None  # YEAR_RE 整式匹配，年份捕获组必命中
+        occurrences.append((year, match.start()))
+    best: dict[str, _Chapter] = {}
+    for index, (year, pos) in enumerate(occurrences):
+        nxt = len(text)
+        for year2, pos2 in occurrences[index + 1 :]:
+            if year2 != year:
+                nxt = pos2
+                break
+        if year not in best or nxt - pos > best[year].end - best[year].start:
+            best[year] = _Chapter(year=year, start=pos, end=nxt)
+    return sorted(best.values(), key=lambda chapter: chapter.start)
+
+
+def _title_marks(seg: str) -> list[tuple[str, int]]:
+    """题目标记（含行首偏移）：同字母去重取首次；行首偏移 = 标题行起点
+    （题面含标题文字）。"""
+    marks: list[tuple[str, int]] = []
+    for match in TITLE_RE.finditer(seg):
+        letter = match.group(1) or match.group(2)
+        line_start = seg.rfind("\n", 0, match.start()) + 1
+        if not marks or marks[-1][0] != letter:
+            marks.append((letter, line_start))
+    return marks
 
 
 # ---------------------------------------------------------------------------

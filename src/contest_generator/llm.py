@@ -158,6 +158,12 @@ JUDGMENT_BATCH_SIZE = 25
 MAX_SUMMARY_BATCH_CHARS = 24000  # 每批摘要请求的内容字符预算
 MAX_REQUEST_BYTES = 128 * 1024  # 发送前断言：序列化请求体超过此字节数即大声失败（兜底）
 
+# 拆条单次 LLM 调用的全文长度上限（工单 04）：超过即走确定性分块
+# （topic_library.split_topics_document，纯文本规则切分）——flash 模型输出
+# 预算有限（实测 max_tokens=8192 也截断），多年长 PDF 一次拆必静默漏题；
+# 20K 字符 = 实测 163K 全量必截断后的安全块上限。
+TOPIC_SPLIT_LLM_CHAR_CAP = 20000
+
 
 def _truncate_content(content: str) -> str:
     """单内容截断（带标注）：超长内容只送前 JUDGMENT_CONTENT_CAP 字符。
@@ -1022,12 +1028,19 @@ class DeepSeekLLM:
         )
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
-        """历年赛题 PDF 全文 → 拆条（年份 / 编号 / 题面全文），json_mode + 严格解析。
-
-        拆条输出是草稿：用户逐条校对（改年份 / 题号 / 题面）后经
-        topic_library.confirm_topics 确认入库。PDF 全文超长截断（带标注），
-        模型只拆所见部分、不脑补缺失（TRUNCATION_NOTICE）。
+        """短全文（≤ TOPIC_SPLIT_LLM_CHAR_CAP）单次调 LLM 拆条，json_mode +
+        严格解析。全文全量直传不截断（截断 = flash 模型静默漏题根因之一）；
+        超长全文应走 topic_library.split_topics_document 确定性分块——这里
+        收到超长输入 = 调用方未按路由契约，请求发出前大声失败（与
+        MAX_REQUEST_BYTES 兜底同哲学）。
         """
+        if len(pdf_text) > TOPIC_SPLIT_LLM_CHAR_CAP:
+            raise LLMError(
+                f"拆条调用收到超长全文（{len(pdf_text)} 字符 > "
+                f"{TOPIC_SPLIT_LLM_CHAR_CAP} 字符）：应走确定性分块"
+                "（topic_library.split_topics_document），把全文塞给模型会因"
+                "输出预算截断而静默漏题"
+            )
         content = self._chat(
             [
                 {"role": "system", "content": TOPIC_SPLIT_SYSTEM_PROMPT},
@@ -1561,11 +1574,10 @@ def validate_topic_key(key: str) -> str | None:
 
 
 TOPIC_SPLIT_SYSTEM_PROMPT = (
-    "你是电子设计竞赛（电赛）赛题整理助手。用户会给你一份历年赛题 PDF 的全文"
-    "（过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）。把其中每一道"
-    "赛题拆成一条：year = 年份（4 位数字，如 2026）、number = 题号（单个"
-    "大写字母，如 C）、problem_text = 题面全文（原样保留，不做摘要、不改写）。"
-    "只输出 JSON 对象。"
+    "你是电子设计竞赛（电赛）赛题整理助手。用户会给你一份历年赛题 PDF 的全文。"
+    "把其中每一道赛题拆成一条：year = 年份（4 位数字，如 2026）、number = 题号"
+    "（单个大写字母，如 C）、problem_text = 题面全文（原样保留，不做摘要、"
+    "不改写）。只输出 JSON 对象。"
 )
 
 TOPIC_NUMBER_SYSTEM_PROMPT = (
@@ -1664,10 +1676,12 @@ def parse_topic_number(content: str) -> str | None:
 
 
 def _topic_split_user_prompt(pdf_text: str) -> str:
-    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求。
+    # 拆条全文全量直传不截断（截断 = 静默漏题）；长度由调用方按
+    # TOPIC_SPLIT_LLM_CHAR_CAP 路由保证
     return (
         "历年赛题 PDF 全文：\n"
-        + _truncate_content(pdf_text)
+        + pdf_text
         + "\n\n只返回 json 格式的 JSON 对象："
         '{"topics": [{"year": "2026", "number": "C", "problem_text": "题面全文"}]}'
     )

@@ -34,6 +34,8 @@ from contest_generator.llm import (
     VALIDATION_SPECIFICITY_RULE,
     VersionSummary,
     ReferenceSuggestion,
+    TopicDraft,
+    TOPIC_SPLIT_LLM_CHAR_CAP,
     _batches,
     _distill_user_prompt,
     _file_chars,
@@ -2430,3 +2432,45 @@ def test_two_level_driver_plain_fake_backward_compatible():
     result = select_modules_two_level(fake, "赛题", ["- dht11"])
 
     assert result.modules == ("dht11",)
+
+
+# ---------------------------------------------------------------------------
+# 拆条（工单 04）：短全文全量直传不截断；超长全文 = 调用方路由错误，大声失败
+# ---------------------------------------------------------------------------
+
+
+def test_topic_split_topics_sends_full_text_without_truncation():
+    """短全文（≤ TOPIC_SPLIT_LLM_CHAR_CAP）全量直传：旧路径截断到 4000 字符
+    （JUDGMENT_CONTENT_CAP）是 flash 模型静默漏题的根因之一，拆条不再截断。"""
+    text = "2026 年赛题正文……" * 500
+    assert len(text) > JUDGMENT_CONTENT_CAP  # 超过旧截断上限，必须全量直传
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "topics": [
+                        {"year": "2026", "number": "C", "problem_text": "题面全文"}
+                    ]
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+
+    drafts = llm.topic_split_topics(text)
+
+    _, _, payload, _ = transport.calls[0]
+    assert text in payload["messages"][1]["content"]
+    assert drafts == (TopicDraft(year="2026", number="C", problem_text="题面全文"),)
+
+
+def test_topic_split_topics_rejects_overlong_fulltext():
+    """超长全文 = 调用方未走确定性分块路由：请求发出前大声失败（与
+    MAX_REQUEST_BYTES 兜底同哲学），不把塞给 flash 模型后静默漏题。"""
+    transport = FakeTransport()
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="拆条"):
+        llm.topic_split_topics("x" * (TOPIC_SPLIT_LLM_CHAR_CAP + 1))
+
+    assert transport.calls == []  # 请求未发出
