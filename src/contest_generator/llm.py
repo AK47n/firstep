@@ -363,6 +363,7 @@ class ValidationResult:
 I = TypeVar("I", JudgmentFile, FileSummary)  # 批内输入条目
 R = TypeVar("R", FileSummary, FileDecision)  # 批处理输出条目
 T = TypeVar("T", JudgmentFile, FileSummary)
+RT = TypeVar("RT")  # 整次调用重试的返回类型（不限定：摘要 str / 归档路径元组）
 
 
 def _file_chars(file: JudgmentFile) -> int:
@@ -627,16 +628,51 @@ class DeepSeekLLM:
         )
         return parse_validation_result(content)
 
+    def _retry_parse(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        parse: Callable[[str], RT],
+        label: str,
+        json_mode: bool = False,
+    ) -> RT:
+        """整次调用级重试（单调用契约共用原语，与批处理 _retry_batch 同哲学）。
+
+        归档判定 / 逐文件简介这类"一次调用一个产物"的契约，LLM 异常或输出
+        畸形时整次重问，最多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错——宁可
+        多花一次调用，也不带病进入归档 / 入库流程（多文件归档此前无任何重试
+        兜底，单次瞬时失败即整体放弃确认）。批内条目级补问（_retry_batch）
+        服务"一批输出多个路径键控条目"的契约，这里是它的单调用孪生。
+        """
+        last_error: Exception | None = None
+        for _ in range(SUMMARY_RETRY_LIMIT):
+            try:
+                content = self._chat(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    json_mode=json_mode,
+                )
+                return parse(content)
+            except LLMError as exc:
+                last_error = exc
+        raise LLMError(
+            f"{label}连续 {SUMMARY_RETRY_LIMIT} 次调用失败：{last_error}"
+        ) from last_error
+
     def reference_summarize(self, material: str) -> str:
         """配套资料（例程工程 / 说明书等）→ 中文简介草稿（文本模式，工单 02）。
 
-        素材超长截断带标注（_truncate_content，与所有嵌内容调用同款预算）。
+        素材超长截断带标注（_truncate_content，与所有嵌内容调用同款预算）；
+        瞬时失败整次重问（_retry_parse，与归档判定同款兜底）。
         """
-        return self._chat(
-            [
-                {"role": "system", "content": REFERENCE_SUMMARY_SYSTEM_PROMPT},
-                {"role": "user", "content": _truncate_content(material)},
-            ]
+        return self._retry_parse(
+            system_prompt=REFERENCE_SUMMARY_SYSTEM_PROMPT,
+            user_prompt=_truncate_content(material),
+            parse=lambda content: content,
+            label="参考文件简介生成",
         )
 
     def reference_judge_archivable(
@@ -646,16 +682,18 @@ class DeepSeekLLM:
 
         返回值得归档的路径子集（可为空 = 没有文件值得归档）。输出经
         parse_archive_judgment 严格解析（词表外 / 重复路径拒绝，畸形抛
-        LLMError——模型输出不可信，宁可大声失败也不带病进入归档流程）。
+        LLMError——模型输出不可信，宁可大声失败也不带病进入归档流程）；
+        畸形输出 / 瞬时失败整次重问（_retry_parse）。
         """
-        content = self._chat(
-            [
-                {"role": "system", "content": ARCHIVE_JUDGMENT_SYSTEM_PROMPT},
-                {"role": "user", "content": _archive_judgment_user_prompt(candidates)},
-            ],
+        return self._retry_parse(
+            system_prompt=ARCHIVE_JUDGMENT_SYSTEM_PROMPT,
+            user_prompt=_archive_judgment_user_prompt(candidates),
+            parse=lambda content: parse_archive_judgment(
+                content, [c.path for c in candidates]
+            ),
+            label="归档判定",
             json_mode=True,
         )
-        return parse_archive_judgment(content, [c.path for c in candidates])
 
     def distill_master(
         self,
