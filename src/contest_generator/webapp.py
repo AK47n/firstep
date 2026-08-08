@@ -73,7 +73,6 @@ from .master import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
-    ReferenceEntry,
     ReferenceError,
     add_reference,
     delete_reference,
@@ -83,8 +82,6 @@ from .reference_library import (
 )
 from .selection import (
     SelectionError,
-    read_reference_fulltext,
-    reference_suggestions,
     resolve_selection,
 )
 from .skeleton import generate_skeleton
@@ -199,14 +196,6 @@ def _resolve_topic_for_generation(
     return resolved, resolved.problem_text
 
 
-def _reference_by_id(
-    entries: Sequence[ReferenceEntry], entry_id: str
-) -> ReferenceEntry:
-    """两级注入第二级的回读键映射：清单段 id → 参考文件条目（读全文用）。"""
-    for entry in entries:
-        if entry.id == entry_id:
-            return entry
-    raise ReferenceError(f"参考文件条目不存在：{entry_id!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -493,18 +482,22 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         topic, problem_text = _resolve_topic_for_generation(
             context, topic_id, problem_text
         )
-        summaries = build_manifest_summaries(list_modules(config.module_library_dir))
-        reference_root = _reference_dir(context)
-        references = topic.references if topic is not None else ()
-        selection = select_modules_two_level(
-            _llm(context),
-            problem_text,
-            summaries,
-            references=reference_suggestions(references),
-            reader=lambda entry_id: read_reference_fulltext(
-                reference_root, _reference_by_id(references, entry_id)
-            ),
-        )
+        if topic is not None:
+            # 完整上下文已在装配点（resolve_topic_context）一次备好：两级注入
+            # 的清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费
+            selection = select_modules_two_level(
+                _llm(context),
+                problem_text,
+                topic.manifest_summaries,
+                references=topic.suggestions,
+                reader=topic.read_fulltext,
+            )
+        else:
+            selection = select_modules_two_level(
+                _llm(context),
+                problem_text,
+                build_manifest_summaries(list_modules(config.module_library_dir)),
+            )
         result: dict[str, Any] = {
             "modules": [
                 {"slug": slug, "reason": selection.reasons.get(slug, "")}

@@ -14,17 +14,27 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from .library import list_modules
-from .llm import LLM, LLMError
+from .llm import LLM, LLMError, ReferenceSuggestion, build_manifest_summaries
 from .manifest import ModuleManifest
 from .master import master_project_dir
 from .patchers import PatcherRegistry, default_registry
-from .reference_library import ReferenceEntry
-from .selection import associated_references, resolve_selection
+from .reference_library import ReferenceEntry, ReferenceError
+from .selection import (
+    associated_references,
+    read_reference_fulltext,
+    reference_suggestions,
+    resolve_selection,
+)
 from .skeleton import verify_main_c
-from .topic_library import TopicEntry, TopicError, discover_related_modules, resolve_number
+from .topic_library import (
+    TopicEntry,
+    TopicError,
+    related_module_slugs,
+    resolve_number,
+)
 
 MODULES_SUBDIR = "modules"
 
@@ -51,20 +61,25 @@ class UndefinedCallsError(GeneratorError):
 
 @dataclass(frozen=True)
 class TopicContext:
-    """历史赛题入口的生成素材：题面全文 + 关联素材（清单段）+ 该题专用模块。
+    """历史赛题入口的完整生成素材（唯一装配点）。
 
-    长 PDF 题面全文只在选了该赛题时进上下文——problem_text 即题面全文，选
-    模块与骨架阶段用它替代 / 补充粘贴文本；关联素材 = 锚定该题或候选模块
-    套件的参考文件（候选 = 模块库全量，套件 = 模块 kit 词表——该题没有专用
-    模块时套件锚定的参考文件仍能进清单；完整条目，两级注入第一级清单段的
-    来源，第二级读全文也用它）；该题专用模块复用简介"XX 题专用"标注自动
-    发现，不新造链接字段。
+    一次解析产出：题面全文 + 关联素材（完整条目）+ 该题专用模块 + 两级注入
+    所需的一切（清单段 suggestions、第二级全文 reader、模块库摘要行）——
+    webapp 只调用不装配协议细节，推荐 / 骨架 / 生成三阶段共享同一解析。
+    长 PDF 题面全文只在选了该赛题时进上下文——problem_text 即题面全文；关联
+    素材 = 锚定该题或候选模块套件的参考文件（候选 = 模块库全量，套件 = 模块
+    kit 词表——该题没有专用模块时套件锚定的参考文件仍能进清单）；该题专用
+    模块复用简介"XX 题专用"标注自动发现，不新造链接字段。模块库扫描在
+    装配点内只发生一次（候选清单同时供关联模块筛、套件词表、摘要行三用）。
     """
 
     key: str
     problem_text: str
     references: tuple[ReferenceEntry, ...]  # 关联参考文件（完整条目）
     related_modules: tuple[str, ...]  # 该题专用模块 slug（自动并入最终模块集）
+    manifest_summaries: tuple[str, ...]  # 模块库摘要行（与 references 同一次扫库产出）
+    suggestions: tuple[ReferenceSuggestion, ...]  # 两级注入第一级（清单段）
+    read_fulltext: Callable[[str], str]  # 两级注入第二级（按清单段条目 id 回读全文）
 
 
 def resolve_topic_context(
@@ -76,7 +91,7 @@ def resolve_topic_context(
     topic_library_dir: Path,
     reference_library_dir: Path,
 ) -> TopicContext | None:
-    """生成入口素材装配：显式编号或粘贴题面中的编号（AI 理解）→ 题面全文 + 关联素材 + 该题专用模块。
+    """生成入口素材装配：显式编号或粘贴题面中的编号（AI 理解）→ 完整赛题上下文。
 
     两条入口：topic_key 显式给出（查无此条大声报错——不猜测编造）；否则从
     粘贴的 problem_text 里 AI 提取编号（llm.topic_extract_number，自动识别
@@ -85,9 +100,7 @@ def resolve_topic_context(
     返回 None = 没有可识别的历史赛题。
     """
     if topic_key:
-        entry, related = _resolve_topic_entry(
-            module_library_dir, topic_library_dir, topic_key
-        )
+        entry = _resolve_topic_entry(topic_library_dir, topic_key)
     elif llm is not None:
         try:
             extracted = llm.topic_extract_number(problem_text)
@@ -96,32 +109,46 @@ def resolve_topic_context(
         if not extracted:
             return None
         try:
-            entry, related = _resolve_topic_entry(
-                module_library_dir, topic_library_dir, extracted
-            )
+            entry = _resolve_topic_entry(topic_library_dir, extracted)
         except TopicError:
             return None  # 库中没有该题：自动识别查无此条静默降级（不猜测编造）
     else:
         return None
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
+    references = associated_references(
+        reference_library_dir, topic_key=entry.key, manifests=candidates
+    )
     return TopicContext(
         key=entry.key,
         problem_text=entry.problem_text,
-        references=associated_references(
-            reference_library_dir, topic_key=entry.key, manifests=candidates
-        ),
-        related_modules=related,
+        references=references,
+        related_modules=related_module_slugs(candidates, entry.key),
+        manifest_summaries=tuple(build_manifest_summaries(candidates)),
+        suggestions=reference_suggestions(references),
+        read_fulltext=_make_fulltext_reader(reference_library_dir, references),
     )
 
 
-def _resolve_topic_entry(
-    module_library_dir: Path, topic_library_dir: Path, topic_key: str
-) -> tuple[TopicEntry, tuple[str, ...]]:
-    """历史赛题条目 + 该题专用模块（唯一解析点：查库 + 关联发现一起做，
-    resolve_topic_context 与 generate_project 共用，不各写一遍）。"""
-    entry = resolve_number(topic_library_dir, topic_key)
-    return entry, discover_related_modules(module_library_dir, entry.key)
+def _resolve_topic_entry(topic_library_dir: Path, topic_key: str) -> TopicEntry:
+    """历史赛题条目（唯一解析点：查库，不猜测编造；关联模块由调用方用
+    候选清单筛——装配上下文与生成流程各扫一次库，不互相复制解析逻辑）。"""
+    return resolve_number(topic_library_dir, topic_key)
+
+
+def _make_fulltext_reader(
+    reference_root: Path, references: Sequence[ReferenceEntry]
+) -> Callable[[str], str]:
+    """两级注入第二级回读器：清单段条目 id → 全文（键映射与读取在同一处，
+    装配进上下文的唯一实现——webapp 不再自建 reader 闭包）。"""
+
+    def reader(entry_id: str) -> str:
+        for entry in references:
+            if entry.id == entry_id:
+                return read_reference_fulltext(reference_root, entry)
+        raise ReferenceError(f"参考文件条目不存在：{entry_id!r}")
+
+    return reader
 
 
 def prepend_related_modules(
@@ -205,7 +232,11 @@ def generate_project(
     if topic_key:
         if topic_library_dir is None:
             raise GeneratorError("生成历史赛题工程必须给出 topic_library_dir")
-        _, related = _resolve_topic_entry(module_library_dir, topic_library_dir, topic_key)
+        entry = _resolve_topic_entry(topic_library_dir, topic_key)
+        related = related_module_slugs(
+            list_modules(module_library_dir) if module_library_dir.is_dir() else [],
+            entry.key,
+        )
         slugs = prepend_related_modules(related, slugs)  # 该题专用模块并入（前置去重保序）
     resolved = resolve_selection(module_library_dir, platform, slugs)
     result_dir = generate(
