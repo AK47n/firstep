@@ -30,13 +30,12 @@ from contest_generator.events import (
     ProgressEmitter,
     ProgressEvent,
 )
-from contest_generator.llm import (
+from contest_generator.llm import LLMError, ValidationResult
+from contest_generator.selection import (
     FunctionRequirement,
-    LLMError,
     ModuleSelection,
     OutOfLibrarySuggestion,
     ReferenceSuggestion,
-    ValidationResult,
 )
 from contest_generator.report import (
     ACTION_EXCLUDE,
