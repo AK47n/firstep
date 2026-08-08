@@ -33,8 +33,11 @@ _SOURCE_FILETYPES = {
     ".S": "2",
 }
 
-# 现写 .uvprojx 的固定落位（正点原子风格，与真实母版 2026C/21F 一致）
+# 现写 .uvprojx 的固定落位（正点原子风格，与真实母版 2026C/21F 一致）。
+# 布局的唯一出处：默认组名 / 文件引用前缀 / IncludePath 都从它推导——
+# 换布局只改这一处（此前三处硬编码 "user"：组名、user\ 前缀、落位常量）。
 UVPROJX_RENDER_LOCATION = "user/Project.uvprojx"
+_UVPROJX_RENDER_DIR = Path(UVPROJX_RENDER_LOCATION).parent  # "user/"
 
 # 启动文件候选命名：官方密度变体（md/hd/vd/xl/cl）统一为 startup_stm32f10x_*.s
 _STARTUP_PATTERN = re.compile(r"^startup_stm32f10x_.*\.s$", re.IGNORECASE)
@@ -174,10 +177,30 @@ def _resolve_root_path(
 def _keil_rel_path_from(uvprojx_dir_parts: tuple[str, ...], target: str) -> str:
     r"""从 .uvprojx 所在目录到工程根相对目标文件的 Keil 路径（.\\ 前缀 + 反斜杠）。
 
-    .uvprojx 在工程根时 = `.\main.c`；在 user/ 下时 = `.\..\main.c`。
+    Keil 原生风格（补丁写引用用）：.uvprojx 在工程根时 = `.\main.c`；
+    在 user/ 下时 = `.\..\main.c`。与渲染器的 _keil_rel_flat（正点原子风格，
+    无 `.\..\` 前缀）同一相对规则、两种输出惯例——补丁不改写现写产物，
+    各自保持各自的字节形态。
     """
     parts = [".."] * len(uvprojx_dir_parts) + target.split("/")
     return ".\\" + "\\".join(parts)
+
+
+def _keil_rel_flat(uvprojx_dir_parts: tuple[str, ...], target: str) -> str:
+    r"""相对 .uvprojx 所在目录的渲染器风格路径（正点原子惯例，唯一实现）。
+
+    同目录文件（target 首段 = 所在目录名）→ `.\名`；其余 → `..\dir\名`
+    （target "." = 所在目录自身 → `..`，IncludePath 的工程根写法）。渲染器
+    产出与真实母版逐字节一致（2026C 实测：.\main.c / ..\code\motor.c /
+    ..\sys\startup_stm32f10x_md.s）。
+    """
+    posix = target.replace("/", "\\")
+    if posix == ".":
+        return "\\".join([".."] * len(uvprojx_dir_parts))
+    prefix = uvprojx_dir_parts[-1] + "\\"
+    if posix.lower().startswith(prefix.lower()):
+        return ".\\" + posix[len(prefix) :]
+    return "..\\" + posix
 
 
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
@@ -681,10 +704,11 @@ def render_master_uvprojx(
 
 def _render_include_path(include_dirs: Sequence[str]) -> str:
     r"""IncludePath 值：保留 .h 所在目录，去重、排序、相对 .uvprojx 所在目录
-    （真实惯例：..\dir;..\dir——2026C 为 ..\user;..\ml_libs;..\code;..\sys）。"""
+    （真实惯例：..\dir;..\dir——2026C 为 ..\user;..\ml_libs;..\code;..\sys；
+    路径语义与文件引用同一实现 _keil_rel_flat，布局只随 UVPROJX_RENDER_LOCATION）。"""
     seen: list[str] = []
     for directory in sorted({d for d in include_dirs if d}):
-        rel = ".." if directory == "." else "..\\" + directory.replace("/", "\\")
+        rel = _keil_rel_flat(_UVPROJX_RENDER_DIR.parts, directory)
         if rel not in seen:
             seen.append(rel)
     return ";".join(seen)
@@ -704,9 +728,9 @@ def _build_groups(kept_paths: Sequence[str]) -> str:
         if suffix not in _SOURCE_FILETYPES:
             continue
         parent = Path(path).parent
-        group = parent.parts[0] if parent.parts else "user"
+        group = parent.parts[0] if parent.parts else _UVPROJX_RENDER_DIR.parts[-1]
         groups.setdefault(group, []).append(path)
-    groups.setdefault("user", []).append("main.c")
+    groups.setdefault(_UVPROJX_RENDER_DIR.parts[-1], []).append("main.c")
 
     blocks: list[str] = []
     for name in sorted(groups):
@@ -736,13 +760,10 @@ def _render_file_entry(path: str) -> str:
 
 
 def _render_file_path(path: str) -> str:
-    r"""文件引用路径（相对 user/）：同目录 .\name，其余 ..\dir\name——真实
-    母版惯例（2026C：.\main.c / ..\code\motor.c / ..\sys\startup_stm32f10x_md.s）。
-    main.c 落位工程根 → ..\main.c。"""
-    posix = path.replace("/", "\\")
-    if posix.lower().startswith("user\\"):
-        return ".\\" + posix[len("user\\") :]
-    return "..\\" + posix
+    r"""文件引用路径（相对 .uvprojx 所在目录，正点原子惯例）：同目录 .\name，
+    其余 ..\dir\name——真实母版惯例（2026C：.\main.c / ..\code\motor.c /
+    ..\sys\startup_stm32f10x_md.s）。main.c 落位工程根 → ..\main.c。"""
+    return _keil_rel_flat(_UVPROJX_RENDER_DIR.parts, path)
 
 
 _XMLNS_DECL_RE = re.compile(r'xmlns(?:[:\w-]+)?="[^"]*"')

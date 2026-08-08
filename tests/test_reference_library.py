@@ -69,14 +69,19 @@ KIT_ALX = "ALX-AOA-FIT"
 KIT_MSPM0 = "地猛星-MSPM0"
 
 
-class ReferenceLLM:
-    """工单 02 假 LLM：固定返回参考文件简介 / 归档判定，并记录调用输入。"""
+class ReferenceLLM(FakeLLM):
+    """工单 02 假 LLM：固定返回参考文件简介 / 归档判定，并记录调用输入。
+
+    继承 FakeLLM 以保持协议全量实现（其余职责用默认空行为，参考流程只用
+    下面两个）。
+    """
 
     def __init__(
         self,
         summary: str = "AI 生成的参考文件简介",
         archivable: Sequence[str] = (),
     ) -> None:
+        super().__init__()
         self._summary = summary
         self._archivable = tuple(archivable)
         self.summary_calls: list[tuple[str, ...]] = []
@@ -213,11 +218,40 @@ def test_validate_topic_anchor_accepts_year_and_code():
 
 
 @pytest.mark.parametrize(
-    "bad", ["", "2026", "C2026", "26C", "2026CDE", "2026-C", "2026c1", "2026 年 C 题"]
+    "bad",
+    [
+        "",
+        "2026",
+        "C2026",
+        "26C",
+        "2026CDE",
+        "2026-C",
+        "2026c1",
+        "2026 年 C 题",
+        # 旧锚定正则（^\d{4}[A-Za-z]{1,2}$）会放行、赛题库永远存不了的编号：
+        # 与赛题库 key 同源后必须一并拒绝（大小写 / 多字母在大小写不敏感的
+        # Windows 上会与既有条目撞目录，跨平台行为不一致）
+        "2026c",
+        "2026a",
+        "2026AB",
+    ],
 )
 def test_validate_topic_anchor_rejects_bad_format(bad: str):
     with pytest.raises(ReferenceError, match="格式非法"):
         validate_topic_anchor(bad)
+
+
+def test_validate_topic_anchor_agrees_with_topic_key_validation():
+    """锚定校验与赛题库 key 校验同源（放行集合一致，契约测试）。"""
+    from contest_generator.topic_library import validate_topic_key
+
+    for sample in ["2026C", "2021F", "2026c", "2026AB", "2026", "2026CDE", "2019H"]:
+        anchor_rejects = False
+        try:
+            validate_topic_anchor(sample)
+        except ReferenceError:
+            anchor_rejects = True
+        assert anchor_rejects == (validate_topic_key(sample) is not None)
 
 
 def test_module_kit_vocabulary_collects_deduplicates_and_sorts(tmp_path):
@@ -364,10 +398,11 @@ def test_add_reference_transaction_leaves_nothing_on_write_failure(
 ):
     root = _reference_root(tmp_path)
 
-    def boom(entry_dir: Path, entry: Any) -> None:
+    def boom(entry_dir: Path, data: Any, filename: str) -> None:
         raise OSError("磁盘写失败")
 
-    monkeypatch.setattr("contest_generator.reference_library._write_meta", boom)
+    # 事务中途失败点挂在共享原语 write_json 上（模块级替换只影响本模块引用）
+    monkeypatch.setattr("contest_generator.reference_library.write_json", boom)
     with pytest.raises(OSError, match="磁盘写失败"):
         add_reference(
             root,
@@ -869,17 +904,18 @@ def test_confirm_archive_rolls_back_entries_on_write_failure(
     llm = ReferenceLLM(archivable=archived_paths)
     # 只打参考库的元数据写入（shutil 是全局单例，打 copy2 会误伤 apply /
     # import 的复制）：第二个归档条目元数据写失败 → 条目 2 自清、条目 1 回滚
-    real_write_meta = reference_library._write_meta
+    # （失败点挂在共享原语 write_json 上，模块级替换只影响本模块引用）
+    real_write_json = reference_library.write_json
     calls = {"n": 0}
 
-    def flaky_write_meta(entry_dir: Path, entry: Any) -> None:
+    def flaky_write_json(entry_dir: Path, filename: str, data: Any) -> None:
         calls["n"] += 1
         if calls["n"] == 2:
             raise OSError("磁盘写失败")
-        return real_write_meta(entry_dir, entry)
+        return real_write_json(entry_dir, filename, data)
 
     monkeypatch.setattr(
-        "contest_generator.reference_library._write_meta", flaky_write_meta
+        "contest_generator.reference_library.write_json", flaky_write_json
     )
     with pytest.raises(MasterError, match="归档写入失败"):
         confirm_distillation(

@@ -53,11 +53,11 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
+from .events import ProgressEvent
 from .llm import (
     LLM,
     LLMError,
     DeepSeekLLM,
-    ProgressEvent,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_manifest_summaries,
     select_modules_two_level,
@@ -73,7 +73,6 @@ from .master import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
-    ReferenceEntry,
     ReferenceError,
     add_reference,
     delete_reference,
@@ -83,8 +82,6 @@ from .reference_library import (
 )
 from .selection import (
     SelectionError,
-    read_reference_fulltext,
-    reference_suggestions,
     resolve_selection,
 )
 from .skeleton import generate_skeleton
@@ -199,14 +196,6 @@ def _resolve_topic_for_generation(
     return resolved, resolved.problem_text
 
 
-def _reference_by_id(
-    entries: Sequence[ReferenceEntry], entry_id: str
-) -> ReferenceEntry:
-    """两级注入第二级的回读键映射：清单段 id → 参考文件条目（读全文用）。"""
-    for entry in entries:
-        if entry.id == entry_id:
-            return entry
-    raise ReferenceError(f"参考文件条目不存在：{entry_id!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -214,43 +203,26 @@ def _reference_by_id(
 # ---------------------------------------------------------------------------
 
 
-def _error_message(exc: Exception) -> str:
-    """异常 → 中文 message（与 _error_response 同一映射：AI 失败 / 业务失败）。
+def _error_entry(exc: Exception) -> tuple[int, str]:
+    """error_to_http 表（唯一出处）：核心异常 → (HTTP 状态, 中文 message)。
 
-    提炼的 SSE 流内 error 事件用它（HTTP 保持 200 起流）；普通端点仍走
-    _error_response 转状态码。映射改动只在此一处，两端共用不漂移。
+    已知异常：业务失败 → 400（message 原样带出）、LLM 服务失败 → 502、
+    文件系统失败 → 400；**未登记的异常 = 真 bug，兜底 500 带类型名**——
+    旧实现兜底 400 会把真 bug 吞成业务失败（测试 raise_server_exceptions=False
+    时静默通过）。新异常类型必须在此登记，否则按真 bug 大声失败。
+    同步端点取状态码转 HTTPException、SSE 端点只取 message（HTTP 保持 200
+    起流）——同一张表两端共用，未登记政策一致，改动只在此一处。
     """
     if isinstance(exc, LLMError):
-        return f"AI 服务调用失败：{exc}"
+        return 502, f"AI 服务调用失败：{exc}"
     if isinstance(exc, (KeilProjectError, CcsProjectError)):
         # 工程文件（.uvprojx / .cproject）缺失、重复或不是合法 XML：业务失败
         # （旧工程 / AI 整合产物有问题），带中文 message，不裸 500
-        return str(exc)
+        return 400, str(exc)
     if isinstance(exc, OSError):
         # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
         # 带说明，不裸 500
-        return f"文件操作失败：{exc}"
-    return str(exc)
-
-
-def _error_response(exc: Exception) -> HTTPException:
-    """error_to_http 表：核心异常 → HTTP 状态与中文 message。
-
-    已知异常：业务失败 → 400（message 原样带出）、LLM 服务失败 → 502、
-    文件系统失败 → 400；**未登记的异常 = 真 bug，兜底转 500**——旧实现
-    兜底 400 会把真 bug 吞成业务失败（测试 raise_server_exceptions=False
-    时静默通过）。新异常类型必须在此登记，否则按真 bug 大声 500。
-    """
-    if isinstance(exc, LLMError):
-        return HTTPException(502, f"AI 服务调用失败：{exc}")
-    if isinstance(exc, (KeilProjectError, CcsProjectError)):
-        # 工程文件（.uvprojx / .cproject）缺失、重复或不是合法 XML：业务失败
-        # （旧工程 / AI 整合产物有问题），转 400 带中文 message，不裸 500
-        return HTTPException(400, str(exc))
-    if isinstance(exc, OSError):
-        # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
-        # 转 400 带说明，不裸 500
-        return HTTPException(400, f"文件操作失败：{exc}")
+        return 400, f"文件操作失败：{exc}"
     if isinstance(
         exc,
         (
@@ -265,9 +237,31 @@ def _error_response(exc: Exception) -> HTTPException:
         ),
     ):
         # 业务失败：message 原样带出（用户可按提示修正重试）
-        return HTTPException(400, str(exc))
+        return 400, str(exc)
     # 兜底：未登记异常 = 真 bug，500 大声失败（带类型名方便排查）
-    return HTTPException(500, f"服务器内部错误（{type(exc).__name__}）：{exc}")
+    return 500, f"服务器内部错误（{type(exc).__name__}）：{exc}"
+
+
+def _error_message(exc: Exception) -> str:
+    """异常 → 中文 message（error_to_http 表的 SSE 侧取值，与同步同一张表）。
+
+    提炼的 SSE 流内 error 事件用它（HTTP 保持 200 起流）；普通端点仍走
+    _error_response 转状态码。未登记异常与同步同政策：带类型名大声失败，
+    不原样透传裸 str。
+    """
+    return _error_entry(exc)[1]
+
+
+def _error_response(exc: Exception) -> HTTPException:
+    """异常 → HTTPException（error_to_http 表的同步侧取值，与 SSE 同一张表）。
+
+    已知异常：业务失败 → 400（message 原样带出）、LLM 服务失败 → 502、
+    文件系统失败 → 400；**未登记的异常 = 真 bug，兜底转 500**——旧实现
+    兜底 400 会把真 bug 吞成业务失败（测试 raise_server_exceptions=False
+    时静默通过）。新异常类型必须登记，否则按真 bug 大声 500。
+    """
+    status, message = _error_entry(exc)
+    return HTTPException(status, message)
 
 
 def _map_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -488,18 +482,22 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         topic, problem_text = _resolve_topic_for_generation(
             context, topic_id, problem_text
         )
-        summaries = build_manifest_summaries(list_modules(config.module_library_dir))
-        reference_root = _reference_dir(context)
-        references = topic.references if topic is not None else ()
-        selection = select_modules_two_level(
-            _llm(context),
-            problem_text,
-            summaries,
-            references=reference_suggestions(references),
-            reader=lambda entry_id: read_reference_fulltext(
-                reference_root, _reference_by_id(references, entry_id)
-            ),
-        )
+        if topic is not None:
+            # 完整上下文已在装配点（resolve_topic_context）一次备好：两级注入
+            # 的清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费
+            selection = select_modules_two_level(
+                _llm(context),
+                problem_text,
+                topic.manifest_summaries,
+                references=topic.suggestions,
+                reader=topic.read_fulltext,
+            )
+        else:
+            selection = select_modules_two_level(
+                _llm(context),
+                problem_text,
+                build_manifest_summaries(list_modules(config.module_library_dir)),
+            )
         result: dict[str, Any] = {
             "modules": [
                 {"slug": slug, "reason": selection.reasons.get(slug, "")}
@@ -658,6 +656,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         return manifest.to_dict()
 
     @app.put("/api/modules/{slug}/platform-identity")
+    @_map_errors
     def module_platform_identity(slug: str, payload: dict) -> dict:
         """编辑平台条目的硬件身份（kit / source_url，工单 02）。
 
@@ -666,17 +665,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         确认，AI 判不了真假；只改身份字段，该条目的文件列表 / 验证状态 /
         硬件绑定原样保留。空值视为未提供、保留原值（补填是逐步的）。
         """
-        try:
-            manifest = update_platform_identity(
-                _library_dir(context),
-                slug,
-                _require_str(payload, "platform"),
-                kit=_optional_str(payload, "kit"),
-                source_url=_optional_str(payload, "source_url"),
-            )
-            return manifest.to_dict()
-        except LibraryError as exc:
-            raise _error_response(exc) from exc
+        manifest = update_platform_identity(
+            _library_dir(context),
+            slug,
+            _require_str(payload, "platform"),
+            kit=_optional_str(payload, "kit"),
+            source_url=_optional_str(payload, "source_url"),
+        )
+        return manifest.to_dict()
 
     @app.delete("/api/modules/{slug}")
     @_map_errors

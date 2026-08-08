@@ -17,18 +17,20 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.config import AppConfig
-from contest_generator.llm import (
+from contest_generator.events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
     EVENT_PHASE_DONE,
     EVENT_RETRY,
     EVENT_START,
-    LLMError,
-    ModuleSelection,
     PHASE_DECIDE,
     PHASE_SUMMARY,
     ProgressEmitter,
     ProgressEvent,
+)
+from contest_generator.llm import (
+    LLMError,
+    ModuleSelection,
     ReferenceSuggestion,
     ValidationResult,
 )
@@ -38,7 +40,9 @@ from contest_generator.report import (
     ACTION_MERGE,
     FileDecision,
     JudgmentFile,
+    ReferenceCandidate,
 )
+from contest_generator.topic_library import TopicDraft
 from contest_generator.master import distill_master, import_master, main_c_template, scan_project
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import EVENT_DONE, EVENT_ERROR, AppContext, create_app
@@ -69,10 +73,18 @@ SELECTION = ModuleSelection(
 
 
 class RaisingLLM:
-    """AI 服务失败用的假 LLM：任何职责都抛 LLMError（对应 502）。"""
+    """AI 服务失败用的假 LLM：任何职责都抛 LLMError（对应 502）。
+
+    实现协议全部方法（编号提取的 LLMError 会被生成器按"自动识别尽力而为"
+    接住降级，与协议契约一致——不再依赖调用方 getattr 探测）。
+    """
 
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[str]
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         raise LLMError("服务不可用")
 
@@ -97,6 +109,20 @@ class RaisingLLM:
         comparison_summary: str,
         progress_emitter: ProgressEmitter | None = None,
     ) -> tuple[FileDecision, ...]:
+        raise LLMError("服务不可用")
+
+    def reference_summarize(self, material: str) -> str:
+        raise LLMError("服务不可用")
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        raise LLMError("服务不可用")
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
+        raise LLMError("服务不可用")
+
+    def topic_extract_number(self, text: str) -> str | None:
         raise LLMError("服务不可用")
 
 
@@ -1262,8 +1288,9 @@ def test_unknown_exception_ends_stream_with_error(context, tmp_path):
     """未登记异常（SSE 端点）→ 流内 error 事件，不吞成假成功。
 
     同步端点经 error_to_http 表兜底 500 大声失败（见 _error_response）；SSE
-    端点无状态码，后台线程异常统一转流内 error 事件（message 原样带出），
-    同样不静默吞掉——测试 raise_server_exceptions=False 时若流假成功会露馅。
+    端点无状态码，后台线程异常统一转流内 error 事件，与同步同一张表、同一
+    未登记政策——带类型名大声失败（不原样透传裸 str），同样不静默吞掉——
+    测试 raise_server_exceptions=False 时若流假成功会露馅。
     """
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"] = _BoomLLM()
@@ -1273,7 +1300,8 @@ def test_unknown_exception_ends_stream_with_error(context, tmp_path):
 
     # start / batch_start 先由 llm 层发射器产生，异常后以 error 收尾（流终止）
     assert events[-1][0] == EVENT_ERROR
-    assert events[-1][1]["message"] == "内部损坏"
+    assert "服务器内部错误（RuntimeError）" in events[-1][1]["message"]
+    assert "内部损坏" in events[-1][1]["message"]
 
 
 # ---------------------------------------------------------------------------

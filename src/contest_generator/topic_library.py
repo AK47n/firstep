@@ -31,15 +31,67 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .llm import LLM, TopicDraft, validate_topic_key
+from .entry_store import entry_transaction, iter_entry_dirs, write_json
 from .library import list_modules
-from .manifest import MANIFEST_FILENAME
+from .manifest import MANIFEST_FILENAME, ModuleManifest
 
 TOPIC_MD_FILENAME = "topic.md"  # 题面全文落盘文件名（条目目录内，唯一出处）
 
 
 class TopicError(ValueError):
     """赛题库操作失败（条目不存在、编号冲突、题面 / 原 PDF 缺失等）。"""
+
+
+# ---------------------------------------------------------------------------
+# 赛题编号（key 的唯一出处）与拆条草稿模型：赛题库领域的模型层，llm 协议层
+# 从这里取类型（拆条解析 / 编号提取消费），不反向定义。
+# ---------------------------------------------------------------------------
+
+# 赛题编号格式（key 的唯一出处）：4 位年份 + 单个大写字母题号（电赛官方
+# 题号形态，如 2026C）；入库目录名与编号解析的查找键都按它校验（非法编号 =
+# 路径穿越风险，入口拦截）。大小写收紧为单一大写字母：小写 / 多字母编号在
+# 大小写不敏感的文件系统（Windows）上会与既有条目撞目录，跨平台行为不一致
+# ——宁可拆条大声失败，也不让用户在校对页见到无法入库的编号。
+TOPIC_KEY_PATTERN = re.compile(r"^(\d{4})([A-Z])$")
+
+
+def validate_topic_key(key: str) -> str | None:
+    """赛题编号格式校验（TOPIC_KEY_PATTERN 的配套文案，唯一出处）。
+
+    合法返回 None，非法返回中文错误说明。拆条解析 / 编号提取 / 入库校验
+    共用——文案只在此一处，改格式只动这里（与 TRUNCATION_NOTICE 同款
+    单源约定，避免各层文案漂移）。
+    """
+    if not TOPIC_KEY_PATTERN.fullmatch(key):
+        return (
+            f"赛题编号格式非法：{key!r}"
+            "（须为 4 位年份 + 单个大写字母题号，如 2026C）"
+        )
+    return None
+
+
+@dataclass(frozen=True)
+class TopicDraft:
+    """AI 拆条产物：一道赛题的年份 / 题号 / 题面全文（用户确认前的草稿）。
+
+    key = 年份 + 题号（如 "2026C"），编号解析的查找键与入库目录名。
+    """
+
+    year: str
+    number: str
+    problem_text: str
+
+    @property
+    def key(self) -> str:
+        return f"{self.year}{self.number}"
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "key": self.key,
+            "year": self.year,
+            "number": self.number,
+            "problem_text": self.problem_text,
+        }
 
 
 @dataclass(frozen=True)
@@ -100,19 +152,15 @@ def confirm_topics(
         if (topic_library_root / draft.key).exists():
             raise TopicError(f"题库中已存在该编号的赛题：{draft.key}")
 
-    created: list[Path] = []
-    topic_library_root.mkdir(parents=True, exist_ok=True)
-    try:
-        for draft in entries:
-            entry_dir = topic_library_root / draft.key
-            entry_dir.mkdir()
-            created.append(entry_dir)
+    with entry_transaction(topic_library_root, [draft.key for draft in entries]) as dirs:
+        for draft, entry_dir in zip(entries, dirs):
             shutil.copy2(pdf_path, entry_dir / pdf_name)
             (entry_dir / TOPIC_MD_FILENAME).write_text(
                 draft.problem_text, encoding="utf-8"
             )
-            _write_manifest(
+            write_json(
                 entry_dir,
+                MANIFEST_FILENAME,
                 {
                     "year": draft.year,
                     "number": draft.number,
@@ -121,10 +169,6 @@ def confirm_topics(
                     "programs": list(normalized_programs),
                 },
             )
-    except Exception:
-        for entry_dir in created:
-            shutil.rmtree(entry_dir, ignore_errors=True)  # 入库中途失败不留半成品
-        raise
     return tuple(resolve_number(topic_library_root, draft.key) for draft in entries)
 
 
@@ -145,14 +189,10 @@ def list_topics(topic_library_root: Path) -> list[TopicEntry]:
 
     损坏的 manifest 大声失败（与模块库 / 参考库浏览同哲学，不静默跳过——
     浏览者不该面对缺条目的列表）；库根下的散文件与临时目录（点开头）不影响
-    浏览。
+    浏览（目录迭代走 entry_store 原语）。
     """
-    if not topic_library_root.is_dir():
-        return []
     entries: list[TopicEntry] = []
-    for entry_dir in topic_library_root.iterdir():
-        if not entry_dir.is_dir() or entry_dir.name.startswith("."):
-            continue  # 库根下的散文件与临时目录不影响浏览
+    for entry_dir in iter_entry_dirs(topic_library_root):
         entries.append(_load_entry(entry_dir))
     return sorted(entries, key=lambda entry: entry.key)
 
@@ -170,12 +210,13 @@ def delete_topic(topic_library_root: Path, key: str) -> None:
 
 
 def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
-    """把确认请求里的 entries 解析为 TopicDraft 列表（形状校验）。
+    """把确认请求里的 entries 解析为 TopicDraft 列表（形状 + 全量校验）。
 
-    用户校对后的提交值：形状问题（非列表 / 条目缺字段） = 业务 400
-    （TopicError）；编号格式与重复等进一步校验在 confirm_topics（核心
-    唯一来源）。llm 层拆条解析（parse_topic_split）各管各的错误类型——
-    那边畸形输出抛 LLMError（502），这边用户提交问题抛 TopicError（400）。
+    用户校对后的提交值：形状问题（非列表 / 条目缺字段）与编号格式 / 重复 /
+    题面为空（_validate_entries 全量校验）都在这里拦截——用户提交的畸形
+    编号不必越过两层函数边界才报错。错误一律 TopicError（业务 400），与
+    llm 层拆条解析（parse_topic_split，畸形输出抛 LLMError / 502）各管各的
+    错误类型——刻意分工：那边模型输出不可信，这边用户提交。
     """
     raw = data.get("entries")
     if not isinstance(raw, list):
@@ -200,24 +241,35 @@ def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
                 problem_text=problem_text,
             )
         )
+    _validate_entries(drafts)
     return tuple(drafts)
+
+
+def related_module_slugs(
+    manifests: Sequence[ModuleManifest], key: str
+) -> tuple[str, ...]:
+    """从 manifest 清单筛出该题专用模块（简介含该题编号且含"专用"）。
+
+    匹配规则与 discover_related_modules 同一处实现——生成上下文已扫过库时
+    直接复用候选清单，不二次扫盘（复用"XX 题专用"标注，不新造链接字段）。
+    """
+    return tuple(
+        manifest.slug
+        for manifest in manifests
+        if key in manifest.description and "专用" in manifest.description
+    )
 
 
 def discover_related_modules(module_library_dir: Path, key: str) -> tuple[str, ...]:
     """自动发现关联模块：复用模块简介的"XX 题专用"标注，不新造链接字段。
 
-    匹配规则：简介含该题编号（如 2026C）且含"专用"（如"2026C 数字钥匙题
-    专用"）。模块清单走 library.list_modules（唯一浏览入口）——损坏的
-    manifest 大声失败（与模块库浏览同哲学），不静默跳过。发现是读时计算，
-    模块库更新后关联随之更新；模块库不存在返回空。
+    模块清单走 library.list_modules（唯一浏览入口）——损坏的 manifest 大声
+    失败（与模块库浏览同哲学），不静默跳过。发现是读时计算，模块库更新后
+    关联随之更新；模块库不存在返回空。
     """
     if not module_library_dir.is_dir():
         return ()
-    return tuple(
-        manifest.slug
-        for manifest in list_modules(module_library_dir)
-        if key in manifest.description and "专用" in manifest.description
-    )
+    return related_module_slugs(list_modules(module_library_dir), key)
 
 
 # ---------------------------------------------------------------------------
@@ -334,8 +386,9 @@ def _title_marks(seg: str) -> list[tuple[str, int]]:
 def _validate_entries(entries: Sequence[TopicDraft]) -> None:
     """确认前校验（全部在落盘前）：至少一道题 / 编号格式与不重复 / 题面非空。
 
-    编号格式校验用 llm 层的 validate_topic_key（文案唯一出处）；这里是
-    用户校对后的提交值，格式问题同样在落盘前拦截（与拆条解析同标准）。
+    编号格式校验用本模块的 validate_topic_key（文案唯一出处，模型回 owner
+    后不再借道 llm 层）；这里是用户校对后的提交值，格式问题同样在落盘前
+    拦截（与拆条解析同标准）。
     """
     if not entries:
         raise TopicError("至少拆出一道赛题才能入库")
@@ -419,12 +472,6 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
         problem_md=problem_md,
         original_pdf=original_pdf,
         programs=tuple(raw_programs),
-    )
-
-
-def _write_manifest(entry_dir: Path, data: dict[str, Any]) -> None:
-    (entry_dir / MANIFEST_FILENAME).write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
 
