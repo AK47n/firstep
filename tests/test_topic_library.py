@@ -28,7 +28,9 @@ from contest_generator.topic_library import (
     TOPIC_MD_FILENAME,
     TopicError,
     confirm_topics,
+    delete_topic,
     discover_related_modules,
+    list_topics,
     resolve_number,
     split_topics_document,
 )
@@ -464,6 +466,68 @@ def test_resolve_number_missing_problem_md_raises(topic_root, pdf):
 
 
 # ---------------------------------------------------------------------------
+# 浏览列表 / 删除（工单 05）：list_topics 按编号排序、损坏 manifest 大声失败；
+# delete_topic 条目目录移除、删除后编号解析报错
+# ---------------------------------------------------------------------------
+
+
+def test_list_topics_sorts_by_key(topic_root, pdf):
+    confirm_topics(topic_root, pdf, (DRAFTS[0],))  # 2026C
+    older = TopicDraft(year="2018", number="A", problem_text="2018A 题面")
+    confirm_topics(topic_root, pdf, (older,))  # 乱序入库，列表按编号排
+
+    entries = list_topics(topic_root)
+
+    assert [e.key for e in entries] == ["2018A", KEY_2026C]
+    assert entries[0].problem_text == older.problem_text
+
+
+def test_list_topics_missing_root_returns_empty(topic_root):
+    assert list_topics(topic_root) == []
+
+
+def test_list_topics_ignores_stray_files(topic_root, pdf):
+    confirm_topics(topic_root, pdf, (DRAFTS[0],))
+    (topic_root / "notes.txt").write_text("随手笔记", encoding="utf-8")
+
+    assert [e.key for e in list_topics(topic_root)] == [KEY_2026C]
+
+
+def test_list_topics_corrupt_manifest_raises(topic_root, pdf):
+    confirm_topics(topic_root, pdf, (DRAFTS[0],))
+    (topic_root / KEY_2026C / MANIFEST_FILENAME).write_text(
+        "{not json", encoding="utf-8"
+    )
+
+    # 损坏 manifest 大声失败，与模块库 / 参考库浏览同哲学，不静默跳过
+    with pytest.raises(TopicError, match="manifest"):
+        list_topics(topic_root)
+
+
+def test_delete_topic_removes_entry_and_resolve_raises(topic_root, pdf):
+    confirm_topics(topic_root, pdf, (DRAFTS[0],))
+
+    delete_topic(topic_root, KEY_2026C)
+
+    assert not (topic_root / KEY_2026C).exists()
+    with pytest.raises(TopicError, match=KEY_2026C):
+        resolve_number(topic_root, KEY_2026C)
+
+
+def test_delete_topic_missing_raises(topic_root):
+    with pytest.raises(TopicError, match=KEY_2026C):
+        delete_topic(topic_root, KEY_2026C)
+
+
+@pytest.mark.parametrize(
+    "bad_key", ["../evil", "2026", "2026C1", "2026CC", "2026c", ""]
+)
+def test_delete_topic_rejects_bad_key(topic_root, bad_key):
+    with pytest.raises(TopicError, match="编号"):
+        delete_topic(topic_root, bad_key)
+
+
+# ---------------------------------------------------------------------------
 # 关联模块：复用模块简介"XX 题专用"标注自动发现，不新造链接字段
 # ---------------------------------------------------------------------------
 
@@ -751,3 +815,89 @@ def test_topics_extract_number_endpoint(topic_context):
 
     assert response.status_code == 200
     assert response.json()["key"] == "2026C"
+
+
+# ---------------------------------------------------------------------------
+# 浏览列表 / 删除路由（工单 05）：GET /api/topics（每条带关联模块，一次性
+# 算好不 N 次前端调用）、DELETE /api/topics/{key}（查无此条明确报错）
+# ---------------------------------------------------------------------------
+
+
+def _confirm_draft(ctx, topics_dir, tmp_path, draft) -> None:
+    pdf_path = tmp_path / "真题.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    confirm_topics(topics_dir, pdf_path, (draft,))
+
+
+def test_topics_list_endpoint_sorted_with_related_modules(topic_context, tmp_path):
+    ctx, _, topics_dir = topic_context
+    older = TopicDraft(year="2018", number="A", problem_text="2018A 题面")
+    _confirm_draft(ctx, topics_dir, tmp_path, older)
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])  # 2026C
+    add_module(
+        FakeLLM(),
+        ctx.config.module_library_dir,
+        slug="lock_control",
+        platform="stm32",
+        description="2026C 数字钥匙题专用锁控制逻辑",
+        files={"lock_control.c": "int lock_open(void);\n"},
+    )
+
+    with _client(ctx) as client:
+        response = client.get("/api/topics")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [t["key"] for t in body] == ["2018A", KEY_2026C]
+    by_key = {t["key"]: t for t in body}
+    assert by_key[KEY_2026C]["related_modules"] == ["lock_control"]
+    assert by_key["2018A"]["related_modules"] == []
+    assert by_key[KEY_2026C]["problem_text"] == DRAFTS[0].problem_text
+
+
+def test_topics_list_endpoint_corrupt_manifest_returns_400(topic_context, tmp_path):
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+    (topics_dir / KEY_2026C / MANIFEST_FILENAME).write_text(
+        "{bad", encoding="utf-8"
+    )
+
+    with _client(ctx) as client:
+        response = client.get("/api/topics")
+
+    assert response.status_code == 400
+    assert "manifest" in response.json()["detail"]
+
+
+def test_topics_delete_endpoint_removes_entry(topic_context, tmp_path):
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+
+    with _client(ctx) as client:
+        response = client.delete(f"/api/topics/{KEY_2026C}")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert not (topics_dir / KEY_2026C).exists()  # 条目目录整体移除
+    with _client(ctx) as client:
+        missing = client.get(f"/api/topics/{KEY_2026C}")
+    assert missing.status_code == 400  # 删除后编号解析明确报错
+    assert KEY_2026C in missing.json()["detail"]
+
+
+def test_topics_delete_missing_returns_400(topic_context):
+    ctx, _, _ = topic_context
+    with _client(ctx) as client:
+        response = client.delete(f"/api/topics/{KEY_2026C}")
+
+    assert response.status_code == 400
+    assert KEY_2026C in response.json()["detail"]
+
+
+def test_topics_delete_bad_key_returns_400(topic_context):
+    ctx, _, _ = topic_context
+    with _client(ctx) as client:
+        response = client.delete("/api/topics/2026")  # 缺题号
+
+    assert response.status_code == 400
+    assert "编号" in response.json()["detail"]

@@ -140,6 +140,35 @@ def resolve_number(topic_library_root: Path, key: str) -> TopicEntry:
     return _load_entry(entry_dir)
 
 
+def list_topics(topic_library_root: Path) -> list[TopicEntry]:
+    """浏览赛题库：全部条目按编号排序（磁盘目录即数据库，操作即时生效）。
+
+    损坏的 manifest 大声失败（与模块库 / 参考库浏览同哲学，不静默跳过——
+    浏览者不该面对缺条目的列表）；库根下的散文件与临时目录（点开头）不影响
+    浏览。
+    """
+    if not topic_library_root.is_dir():
+        return []
+    entries: list[TopicEntry] = []
+    for entry_dir in topic_library_root.iterdir():
+        if not entry_dir.is_dir() or entry_dir.name.startswith("."):
+            continue  # 库根下的散文件与临时目录不影响浏览
+        entries.append(_load_entry(entry_dir))
+    return sorted(entries, key=lambda entry: entry.key)
+
+
+def delete_topic(topic_library_root: Path, key: str) -> None:
+    """删除赛题条目：整个目录移除（含题面与原 PDF 副本）。
+
+    编号先过格式校验（_entry_dir 拦截路径穿越）；查无此条明确报错（与
+    resolve_number 同文案，不猜测编造）。
+    """
+    entry_dir = _entry_dir(topic_library_root, key)
+    if not entry_dir.is_dir():
+        raise TopicError(f"题库中没有该编号的赛题：{key}")
+    shutil.rmtree(entry_dir)
+
+
 def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
     """把确认请求里的 entries 解析为 TopicDraft 列表（形状校验）。
 
