@@ -11,7 +11,6 @@ main.c 落位（落位前静态自检：引用的函数必须在所选模块头�
 
 from __future__ import annotations
 
-import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +30,13 @@ from .selection import (
     reference_suggestions,
     resolve_selection,
 )
-from .skeleton import _strip_comments_keep_preprocessor, verify_main_c
+from .clex import (
+    extract_quoted_includes,
+    fence_line_indices,
+    strip_comments,
+    top_level_defines,
+)
+from .skeleton import verify_main_c
 from .topic_library import (
     TopicEntry,
     TopicError,
@@ -79,13 +84,6 @@ class MacroRedefinitionError(GeneratorError):
     编译警告的工程（Keil #47-D incompatible redefinition 判例：config.h
     的 LED_GPIO 撞 ml_led.h）。"""
 
-
-# Markdown 代码围栏行（与 skeleton.strip_code_fences 同一形态）：main.c 手改
-# 或旧流程产物若带围栏，Keil 报 unrecognized token（判例见 strip_code_fences）
-_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
-
-# 引号 include 提取（注释/字符串剔除后匹配，见 _check_unresolved_includes）
-_INCLUDE_QUOTED_RE = re.compile(r'#\s*include\s*"([^"]+)"')
 
 # Keil 在工程外也能解析的头：ARMCC 标准库（引号形式同样走库搜索）与器件包
 # （stm32f10x_conf.h 由 STM32F1xx DFP 提供，工程树里没有）。缺了会误报。
@@ -381,12 +379,11 @@ def _check_main_calls(
     无法编译的工程。main.c 含 Markdown 代码围栏同样明确报错（骨架阶段已
     剥离，走到这里说明输入绕过骨架阶段或手改带入）。
     """
-    for i, line in enumerate(main_c_content.splitlines(), 1):
-        if _FENCE_LINE_RE.match(line):
-            raise FencedMainCError(
-                f"main.c 第 {i} 行是 Markdown 代码围栏（{line.strip()}），不是 C 代码"
-                " —— 骨架阶段会剥离 LLM 围栏输出，请直接用纯 C 代码"
-            )
+    for i, line in fence_line_indices(main_c_content):
+        raise FencedMainCError(
+            f"main.c 第 {i} 行是 Markdown 代码围栏（{line}），不是 C 代码"
+            " —— 骨架阶段会剥离 LLM 围栏输出，请直接用纯 C 代码"
+        )
     undefined = verify_main_c(main_c_content, manifests, platform, library_dir)
     if undefined:
         raise UndefinedCallsError(
@@ -442,9 +439,8 @@ def _check_unresolved_includes(
 
     problems: list[str] = []
     for label, own_dir, code in checks:
-        stripped = _strip_comments_keep_preprocessor(code)
-        for m in _INCLUDE_QUOTED_RE.finditer(stripped):
-            header = m.group(1)
+        stripped = strip_comments(code, keep_preprocessor=True)
+        for header in extract_quoted_includes(stripped):
             if any((d / header).is_file() for d in (own_dir, *search_dirs)):
                 continue
             if header.lower() in _EXTERNAL_HEADERS:
@@ -483,8 +479,8 @@ def _check_module_self_include(
             if not path.is_file():  # 文件缺失由 _check_module_files 兜底
                 continue
             code = path.read_text(encoding="utf-8", errors="replace")
-            stripped = _strip_comments_keep_preprocessor(code)
-            included = set(_INCLUDE_QUOTED_RE.findall(stripped))
+            stripped = strip_comments(code, keep_preprocessor=True)
+            included = set(extract_quoted_includes(stripped))
             if not (set(own_headers) & included):
                 problems.append(
                     f"模块 {manifest.slug} 的 {rel} 没有 include 本模块自己的头"
@@ -496,49 +492,6 @@ def _check_module_self_include(
             + "\n —— 请在该 .c 顶部补上本模块头文件的 include"
             "（生成工程用母版 headfile.h，原始工程的聚合头不会跟进来）"
         )
-
-
-def _top_level_defines(code: str) -> dict[str, tuple[str, int]]:
-    """无条件顶层 #define 清单：{宏名: (规范化值, 行号)}。
-
-    只收不在任何 #if/#ifdef/#ifndef 块内的 #define——include guard 的定义
-    在 #ifndef 块内（深度 1）天然排除；条件块里可能生效也可能不生效的宏
-    跳过（宁可放过、不可误杀，编译器的 warning 兜底）。同一文件 #undef
-    后再定义的不收（合法覆盖模式）。函数宏名字取到左括号前，参数表并入
-    值参与文本比较。反斜杠续行在预处理行内合并。
-    """
-    stripped = _strip_comments_keep_preprocessor(code)
-    lines = stripped.split("\n")
-    defines: dict[str, tuple[str, int]] = {}
-    undefed: set[str] = set()
-    depth = 0
-    i = 0
-    while i < len(lines):
-        text = lines[i].strip()
-        lineno = i + 1
-        if not text.startswith("#"):
-            i += 1
-            continue
-        while text.endswith("\\") and i + 1 < len(lines):  # 续行合并
-            i += 1
-            text = text[:-1] + " " + lines[i].strip()
-        if text.startswith("#if"):
-            depth += 1
-        elif text.startswith("#endif"):
-            depth = max(0, depth - 1)
-        elif text.startswith("#undef"):
-            m = re.match(r"#\s*undef\s+([A-Za-z_]\w*)", text)
-            if m:
-                undefed.add(m.group(1))
-        elif text.startswith("#define") and depth == 0:
-            m = re.match(r"#\s*define\s+([A-Za-z_]\w*)", text)
-            if m:
-                name = m.group(1)
-                if name not in undefed:
-                    value = re.sub(r"\s+", " ", text[m.end():].strip())
-                    defines[name] = (value, lineno)
-        i += 1
-    return defines
 
 
 def _check_macro_conflicts(
@@ -563,7 +516,7 @@ def _check_macro_conflicts(
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for name, (value, line) in _top_level_defines(text).items():
+        for name, (value, line) in top_level_defines(text).items():
             if name not in master_defines:
                 master_defines[name] = (value, line, rel)
 
@@ -581,12 +534,12 @@ def _check_macro_conflicts(
                 continue
             sources.append((f"模块 {manifest.slug} 的 {rel}", rel, path))
 
-    for label, rel, path in sources:
-        if rel is None:  # main.c：内容来自参数，与母版文件无关
+    for label, source_rel, path in sources:
+        if source_rel is None:  # main.c：内容来自参数，与母版文件无关
             text = main_c_content
         else:
             text = path.read_text(encoding="utf-8", errors="replace")
-        for name, (value, line) in _top_level_defines(text).items():
+        for name, (value, line) in top_level_defines(text).items():
             master = master_defines.get(name)
             if master is not None and master[0] != value:
                 problems.append(

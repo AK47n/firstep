@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 from typing import Sequence
 
+from .clex import strip_code_fences, strip_comments
 from .llm import LLM
 from .manifest import ModuleManifest
 
@@ -50,27 +51,6 @@ _MACRO_DEF_RE = re.compile(r"#define\s+([A-Za-z_]\w*)\(")
 
 # 任意 #define 定义的名字（对象宏；定义行上"名 ("可能被调用形态误报）
 _DEFINE_RE = re.compile(r"#define\s+([A-Za-z_]\w*)")
-
-# Markdown 代码围栏行（``` / ~~~，可带语言标注）：LLM 输出最常见的传输层包裹
-_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
-
-
-def strip_code_fences(code: str) -> str:
-    """剥离 LLM 输出的首尾代码围栏行（```lang / ~~~），其余原样。
-
-    提示词要求输出纯 C，但模型偶尔仍用围栏包裹（判例：骨架带 ```c 围栏直接
-    落盘 main.c，Keil 报 unrecognized token，连锁炸掉整个编译）。只剥首尾
-    各一行围栏；无围栏原样返回；中间位置的围栏行不动（不是包裹形态，剥了
-    反而丢信息）。
-    """
-    lines = code.splitlines(keepends=True)
-    if not lines:
-        return code
-    if _FENCE_LINE_RE.match(lines[0]):
-        lines = lines[1:]
-    if lines and _FENCE_LINE_RE.match(lines[-1].rstrip("\r\n")):
-        lines = lines[:-1]
-    return "".join(lines)
 
 
 def build_skeleton_interfaces(
@@ -111,7 +91,7 @@ def extract_header_functions(interfaces: Sequence[str]) -> set[str]:
     """从接口块提取函数名与函数式宏名（自检的已知集合）。"""
     functions: set[str] = set()
     for block in interfaces:
-        functions |= _decl_or_macro_names(_strip_comments_and_strings(block))
+        functions |= _decl_or_macro_names(strip_comments(block))
     return functions
 
 
@@ -136,7 +116,7 @@ def find_undefined_calls(
     注释、字符串里的"调用"不算；main.c 自己定义/声明/宏定义的函数不算；
     控制关键字（if/while/return/…）不算。结果按名字排序，保证确定性。
     """
-    stripped = _strip_comments_and_strings(main_c)
+    stripped = strip_comments(main_c)
     calls = _extract_calls(stripped)
     local = _known_local(stripped)
     unknown = calls - local - set(known_functions)
@@ -434,73 +414,3 @@ def _known_local(code: str) -> set[str]:
 def _decl_or_macro_names(code: str) -> set[str]:
     """名字带声明/定义或函数式宏形态的标识符集合。"""
     return set(_DECL_OR_DEF_RE.findall(code)) | set(_MACRO_DEF_RE.findall(code))
-
-
-def _strip_comments_and_strings(code: str) -> str:
-    """去掉 C 代码里的注释与字符串/字符字面量，只留代码形态。"""
-    out: list[str] = []
-    i = 0
-    length = len(code)
-    while i < length:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < length else ""
-        if char == "/" and nxt == "/":  # 行注释
-            end = code.find("\n", i)
-            i = length if end == -1 else end + 1
-        elif char == "/" and nxt == "*":  # 块注释
-            end = code.find("*/", i + 2)
-            i = length if end == -1 else end + 2
-        elif char in ('"', "'"):  # 字符串 / 字符字面量（含转义）
-            quote = char
-            i += 1
-            while i < length and code[i] != quote:
-                if code[i] == "\\":
-                    i += 1
-                i += 1
-            i += 1
-        else:
-            out.append(char)
-            i += 1
-    return "".join(out)
-
-
-def _strip_comments_keep_preprocessor(code: str) -> str:
-    """去掉注释（行/块），预处理行整行原样保留。
-
-    字符串里的内容照剥，但 # 打头的行（#include 等）不剥——include 的文件名
-    在引号里，普通字符串剥离会把它当字符串吞掉（判例：include 门禁扫描
-    失败）。块注释跨行时先命中注释分支整段跳过，行内注释先行跳过，# 行
-    里的注释与字符串属于预处理内容，原样保留不影响匹配。
-    """
-    out: list[str] = []
-    i = 0
-    length = len(code)
-    while i < length:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < length else ""
-        if char == "/" and nxt == "/":  # 行注释
-            end = code.find("\n", i)
-            i = length if end == -1 else end + 1
-        elif char == "/" and nxt == "*":  # 块注释（跨行一并跳过）
-            end = code.find("*/", i + 2)
-            i = length if end == -1 else end + 2
-        elif char == "#" and (i == 0 or code[i - 1] == "\n"):  # 预处理行透传
-            # 注意：不能用 _at_line_start_after_ws（它回退跳过整段空白，第 2 行
-            # 起的 # 行全部误判为不在行首——判例：pid.c 第 2 行 #include 被当
-            # 字符串剥掉，include 门禁漏检）
-            end = code.find("\n", i)
-            end = length if end == -1 else end + 1
-            out.append(code[i:end])
-            i = end
-        elif char in ('"', "'"):  # 字符串 / 字符字面量（含转义）
-            quote = char
-            i += 1
-            while i < length and code[i] != quote:
-                if code[i] == "\\":
-                    i += 1
-                i += 1
-            i += 1
-        else:
-            out.append(char)
-            i += 1
-    return "".join(out)
