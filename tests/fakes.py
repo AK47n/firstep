@@ -16,6 +16,7 @@ from pypdf import PdfWriter
 
 from contest_generator.events import ProgressEmitter
 from contest_generator.llm import ValidationResult
+from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
 from contest_generator.topic_library import TopicDraft
@@ -479,7 +480,7 @@ class FakeLLM:
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
