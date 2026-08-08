@@ -60,7 +60,6 @@ from .llm import (
     DeepSeekLLM,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_manifest_summaries,
-    select_modules_convergent,
 )
 from .master import (
     MasterError,
@@ -83,6 +82,7 @@ from .reference_library import (
 from .selection import (
     SelectionError,
     resolve_selection,
+    select_modules_convergent,
 )
 from .skeleton import generate_skeleton
 from .topic_library import (

@@ -6,7 +6,7 @@ LLM 承担六类协议职责：赛题→模块选择、main.c 骨架生成、模
 校验、母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出
 摘要，再基于摘要判定）、参考文件提炼归档判定、赛题库拆条 / 编号提取。
 领域模型不在此处——赛题库模型在 topic_library，判定素材模型在 report，
-进度事件契约在 events（本模块只消费）。请求体有大小控制：所有嵌内容调用
+模块推荐模型与收敛工作流在 selection，进度事件契约在 events（本模块只消费）。请求体有大小控制：所有嵌内容调用
 （赛题 / 接口块 / 文件全文）超长截断（带标注，AI 知道读到的是截断内容）、
 摘要阶段多文件按预算分批发送、发送前有序列化体积断言兜底——DeepSeek
 网关对请求体有硬性大小限制，一次性全发会 413。
@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -26,10 +25,8 @@ from .config import AppConfig
 from .events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
-    EVENT_CONVERGED,
     EVENT_PHASE_DONE,
     EVENT_RETRY,
-    EVENT_ROUND,
     EVENT_START,
     PHASE_DECIDE,
     PHASE_SUMMARY,
@@ -46,6 +43,12 @@ from .report import (
     ReferenceCandidate,
     ReportError,
     VersionSummary,
+)
+from .selection import (
+    FunctionRequirement,
+    ModuleSelection,
+    OutOfLibrarySuggestion,
+    ReferenceSuggestion,
 )
 from .topic_library import TopicDraft, validate_topic_key
 from .wordlist import (
@@ -207,10 +210,6 @@ MAX_REQUEST_BYTES = 128 * 1024  # 发送前断言：序列化请求体超过此�
 # 20K 字符 = 实测 163K 全量必截断后的安全块上限。
 TOPIC_SPLIT_LLM_CHAR_CAP = 20000
 
-# 模块推荐收敛循环（工单 10）：连续两轮功能需求层一致即收敛，上限这么轮防
-# 死循环（ADR 0007：质量优先，成本为 2-4 轮 × 2-4K token，DeepSeek 可承受）。
-SELECT_CONVERGENCE_MAX_ROUNDS = 4
-
 
 def _truncate_content(content: str) -> str:
     """单内容截断（带标注）：超长内容只送前 JUDGMENT_CONTENT_CAP 字符。
@@ -349,84 +348,6 @@ def _extract_good_decisions(
 
 class LLMError(Exception):
     """LLM 调用或输出解析失败，message 说明具体问题。"""
-
-
-@dataclass(frozen=True)
-class OutOfLibrarySuggestion:
-    """库外建议：无库内实现的功能的外设推荐（仅展示、不进工程、不参与生成）。
-
-    name = 展示名：词表内条目（型号或类别）原样显示；词表外型号经解析器
-    降级为其类别名（degraded=True）。examples 常识举例（用户自行核实）。
-    """
-
-    name: str
-    examples: tuple[str, ...] = ()
-    degraded: bool = False  # 词表外型号 → 降级为类别名显示
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "examples": list(self.examples),
-            "degraded": self.degraded,
-        }
-
-
-@dataclass(frozen=True)
-class FunctionRequirement:
-    """功能需求层条目（工单 10）：题面证据驱动的能力/外设级需求。
-
-    requirement = 能力/外设描述（声光提示 → LED/蜂鸣器），粒度贴题面关键词；
-    sentence_index = 逐句对照的题面句子编号（1 起）——找不出对应句的需求即
-    脑补；modules = 库内命中 slug（实现覆盖检查的命中分支，可勾选进工程）；
-    suggestions = 库外建议（无命中分支，仅展示）。
-    """
-
-    requirement: str
-    sentence_index: int
-    modules: tuple[str, ...] = ()
-    suggestions: tuple[OutOfLibrarySuggestion, ...] = ()
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "requirement": self.requirement,
-            "sentence": self.sentence_index,
-            "modules": list(self.modules),
-            "suggestions": [suggestion.to_dict() for suggestion in self.suggestions],
-        }
-
-
-@dataclass(frozen=True)
-class ModuleSelection:
-    """赛题 → 模块选择结果（AI 的原始推荐，未展开依赖）。
-
-    依赖展开与生成前的增删由 selection.resolve_dependencies 在用户确认后
-    统一处理——AI 输出后用户还可能增删，先展开的集合无法代表最终选择。
-    reference_ids 是两级注入第一级的产物：模型想读全文的参考文件 id（没给
-    参考文件清单时恒为空）。
-    requirements = 功能需求层（工单 10）：顶层 modules 由它机械派生（库内
-    命中的并集，保序）——模块必有需求支撑，没挂需求句的模块是脑补；
-    questions = 题面证据不足以判定时向用户补问的问题（非空 → 收敛循环暂停，
-    以补问收尾，不产出推荐）。
-    """
-
-    modules: tuple[str, ...]  # 模块 slug（AI 推荐顺序）
-    reasons: dict[str, str]  # slug -> 推荐理由
-    reference_ids: tuple[str, ...] = ()  # 两级注入第一级：想读全文的参考文件 id
-    requirements: tuple[FunctionRequirement, ...] = ()  # 功能需求层
-    questions: tuple[str, ...] = ()  # 向用户补问（非空 → 暂停分析）
-
-
-@dataclass(frozen=True)
-class ReferenceSuggestion:
-    """两级注入的清单段：一个参考文件（标题 + 一句话简介），供选模块 AI 判断是否取全文。
-
-    清单段由 selection 层装配（associated_references → reference_suggestions）；
-    id 与参考文件库条目的 id 一致——AI 点名要读的 id 就是全文回读的键。
-    """
-
-    id: str
-    title: str
-    description: str
 
 
 @dataclass(frozen=True)
@@ -1615,175 +1536,6 @@ def _selection_user_prompt(
         contract += ', "references": ["想读全文的参考文件 id，不需要可省略"]'
     return prompt + "\n只返回 json 格式的 JSON 对象：" + contract + "}"
 
-
-def select_modules_two_level(
-    llm: LLM,
-    problem_text: str,
-    manifest_summaries: Sequence[str],
-    references: Sequence[ReferenceSuggestion] = (),
-    reader: Callable[[str], str] | None = None,
-) -> ModuleSelection:
-    """两级注入协议驱动：先清单（标题 + 一句话简介），LLM 判断需要时取全文再选模块。
-
-    第一级：模块候选 + 参考文件清单 → LLM 返回推荐与想读全文的参考文件 id
-    （reference_ids）。有想读的且给了 reader → 逐条取全文（第二级）后带全文
-    重选，以第二级结果为终稿——全文已在上下文，模型据此定稿；没有想读的 →
-    第一级结果即终稿。恰好两级：第二级仍要求更多全文时不再注入（想要的已全
-    给），以第二级结果为准。没有参考文件清单时退化为普通 select_modules——
-    调用形状不变（旧签名），既有假 LLM（fakes.py 只读）无需改动即可继续服务。
-    """
-    if not references:
-        return llm.select_modules(problem_text, manifest_summaries)
-    first = llm.select_modules(problem_text, manifest_summaries, references)
-    if not first.reference_ids or reader is None:
-        return first  # 没有想读的，或没有全文回读通道：清单级结果即终稿
-    fulltexts = {entry_id: reader(entry_id) for entry_id in first.reference_ids}
-    return llm.select_modules(problem_text, manifest_summaries, references, fulltexts)
-
-
-# ---------------------------------------------------------------------------
-# 模块推荐收敛循环（工单 10）：题面证据驱动 + 功能需求层两轮一致即收敛
-# ---------------------------------------------------------------------------
-
-# 题面句子切分（逐句对照的机械防漏）：中文句读（。！？；;）或换行后的
-# 空白即句界。切分确定性——同一题面任何轮次编号一致（收敛判定的对照句编号
-# 依赖它：编号漂移会让两轮"同一句"对不上号）。
-_SENTENCE_BOUNDARY = re.compile(r"(?<=[。！？；;\n])\s*")
-
-
-def _number_topic_sentences(problem_text: str) -> str:
-    """题面逐句编号：每句一行 "N. …"，功能需求的 sentence 字段引用这里的编号。
-
-    逐句对照是防脑补的机械兜底（收敛的自检盲区 = 两轮一起漏，逐句表兜底）：
-    题面按句编号，每句对应功能需求或"无功能"，找不出对应句的需求即脑补。
-    """
-    parts = [
-        part.strip() for part in _SENTENCE_BOUNDARY.split(problem_text) if part.strip()
-    ]
-    if not parts:
-        return problem_text
-    return "\n".join(f"{index}. {part}" for index, part in enumerate(parts, 1))
-
-
-def _revision_prompt(
-    numbered_topic: str, previous: Sequence[FunctionRequirement]
-) -> str:
-    """收敛轮（第 2 轮起）的赛题文本：上一轮功能需求层 + 自检修订指令。
-
-    以题面为裁判反复自检修订（删脑补 / 补遗漏 / 重查覆盖），输出完整的新一
-    轮功能需求层（不是增量）——模型在完整重写里自己暴露并修正上一轮的缺陷；
-    连续两轮一致时可保持不动（收敛判定在驱动层完成，这里只是给模型依据）。
-    """
-    lines = [
-        numbered_topic,
-        "",
-        "上一轮功能需求层（以题面原文为裁判自检修订，输出完整的新一轮功能"
-        "需求层，不是增量；连续两轮一致时可保持不动）：",
-    ]
-    for index, requirement in enumerate(previous, 1):
-        detail = f"句子{requirement.sentence_index}「{requirement.requirement}」"
-        if requirement.modules:
-            detail += "，库内命中：" + "、".join(requirement.modules)
-        if requirement.suggestions:
-            detail += "，库外建议：" + "、".join(
-                suggestion.name for suggestion in requirement.suggestions
-            )
-        lines.append(f"{index}. {detail}")
-    return "\n".join(lines)
-
-
-def _functional_layer_key(
-    selection: ModuleSelection,
-) -> tuple[tuple[str, int, tuple[str, ...], tuple[str, ...]], ...]:
-    """收敛判定的一致性键：需求文本 / 对照句 / 库内命中 slug / 库外建议名。
-
-    examples（常识举例）自由发挥、用户自行核实，不参与收敛判定——模型重述
-    examples 不算功能需求层变化（否则"K230/OpenMV" vs "K230"会拖到轮数上限）。
-    """
-    return tuple(
-        (
-            requirement.requirement,
-            requirement.sentence_index,
-            requirement.modules,
-            tuple(suggestion.name for suggestion in requirement.suggestions),
-        )
-        for requirement in selection.requirements
-    )
-
-
-def select_modules_convergent(
-    llm: LLM,
-    problem_text: str,
-    manifest_summaries: Sequence[str],
-    references: Sequence[ReferenceSuggestion] = (),
-    reader: Callable[[str], str] | None = None,
-    max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
-    progress_emitter: ProgressEmitter | None = None,
-) -> ModuleSelection:
-    """题面驱动的收敛循环：功能需求层两轮一致即停，上限 max_rounds 轮。
-
-    每一轮都是独立调用：第 1 轮 = 两级注入协议（参考文件先清单、点名全文后
-    回读重选，见 select_modules_two_level）；第 2 轮起带上一轮功能需求层
-    （_revision_prompt 自检修订指令）与已读全文，功能需求层与上一轮一致即
-    收敛（_functional_layer_key，examples 不参与）。恰好两级：第 2 轮起不再
-    注入新的参考全文（想要的已全给）。题面逐句编号在驱动层完成
-    （_number_topic_sentences），编号跨轮稳定——收敛判定的对照句编号依赖它。
-
-    模型拿不准（题面证据不足以判定）时输出 questions → 本轮即停、返回
-    selection.questions 非空（向用户补问，由 webapp 层转补问终端事件收尾流）。
-
-    轮次经 progress_emitter 旁路发射（EVENT_ROUND / EVENT_CONVERGED）——
-    发射失败不影响主流程（与提炼进度同款 seam，_emit）。
-    """
-    if max_rounds < 1:
-        raise ValueError(f"max_rounds 必须 ≥ 1：{max_rounds}")
-    numbered = _number_topic_sentences(problem_text)
-    fulltexts: dict[str, str] = {}
-    previous: tuple[FunctionRequirement, ...] = ()
-    previous_key: tuple[tuple[str, int, tuple[str, ...], tuple[str, ...]], ...] | None = None
-    selection: ModuleSelection | None = None
-    for round_no in range(1, max_rounds + 1):
-        _emit(
-            progress_emitter,
-            ProgressEvent(type=EVENT_ROUND, round=round_no, round_total=max_rounds),
-        )
-        round_topic = (
-            _revision_prompt(numbered, previous) if round_no > 1 else numbered
-        )
-        if references:
-            if round_no == 1 and reader is not None:
-                # 两级注入第一级：先清单；点名全文 → 回读（第二级），全文进上下文
-                first = llm.select_modules(round_topic, manifest_summaries, references)
-                if first.reference_ids:
-                    fulltexts = {
-                        entry_id: reader(entry_id) for entry_id in first.reference_ids
-                    }
-                    selection = llm.select_modules(
-                        round_topic, manifest_summaries, references, fulltexts
-                    )
-                else:
-                    selection = first
-            else:
-                # 第 2 轮起：已读全文照旧带上（恰好两级，不再注入新全文）；
-                # 没有想读的全文时保持清单级形状（空全文不进提示词）
-                selection = llm.select_modules(
-                    round_topic, manifest_summaries, references, fulltexts or None
-                )
-        else:
-            selection = llm.select_modules(round_topic, manifest_summaries)
-        if selection.questions:
-            return selection  # 补问：暂停收敛，向用户补问（不以推荐收尾）
-        key = _functional_layer_key(selection)
-        if previous_key is not None and key == previous_key:
-            _emit(
-                progress_emitter,
-                ProgressEvent(type=EVENT_CONVERGED, round=round_no),
-            )
-            return selection
-        previous = selection.requirements
-        previous_key = key
-    assert selection is not None  # max_rounds ≥ 1，循环体必赋值
-    return selection  # 上限轮次到：以最后一轮为准（不再多问）
 
 
 def _summarize_user_prompt(
