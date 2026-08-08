@@ -4,8 +4,8 @@
 类型 / 简介 / 锚定）+ 素材文件本体（内容自持——归档 = 复制入库，源工程删除
 不丢）。条目字段 = 标题 / 类型 / 简介 / 锚定（赛题编号 或 套件型号；套件必须
 从模块库已有 kit 词表选——录入时从 list_modules 收集（module_kit_vocabulary）、
-校验拒绝词表外值；赛题编号本批只做格式校验，查库确认（查无此条拒绝）待赛题库
-工单 01 落地后接入）。
+校验拒绝词表外值；赛题编号锚定与赛题库 key 同源校验（validate_topic_key，
+放行集合一致），查库确认（查无此条拒绝）留待素材区接线）。
 
 录入流程（复用模块库草稿→校验→入库模式）：AI 通读素材生成简介草稿
 （llm.reference_summarize，/api/references/draft）→ 用户修改 / 补锚定 →
@@ -33,6 +33,7 @@ from typing import Any, Mapping, Sequence
 from .library import list_modules
 from .llm import LLM
 from .manifest import is_unsafe_path
+from .topic_library import validate_topic_key
 
 REFERENCE_META_FILENAME = "reference.json"
 
@@ -40,9 +41,6 @@ REFERENCE_META_FILENAME = "reference.json"
 ANCHOR_KIND_TOPIC = "topic"
 ANCHOR_KIND_KIT = "kit"
 ANCHOR_KINDS = (ANCHOR_KIND_TOPIC, ANCHOR_KIND_KIT)
-
-# 赛题编号格式：年份（4 位）+ 编号（1-2 个字母），如 2026C / 2021F
-_TOPIC_ANCHOR_PATTERN = re.compile(r"^\d{4}[A-Za-z]{1,2}$")
 
 # 归档条目固定类型：被剔除的业务代码复制入库即为"例程代码"参考
 ARCHIVE_ENTRY_TYPE = "例程代码"
@@ -114,12 +112,14 @@ class ReferenceEntry:
 def validate_topic_anchor(anchor: str) -> None:
     """赛题编号锚定格式校验：年份 + 编号（如 2026C）。
 
-    本批只做格式校验；查库确认（查无此条拒绝）待赛题库（工单 01）落地后接入。
+    格式与赛题库 key 同源（validate_topic_key，唯一出处）——放行集合与赛题库
+    合法编号完全一致（旧实现独立的 ^\d{4}[A-Za-z]{1,2}$ 会放行 2026c / 2026AB
+    这类赛题库永远存不了的编号，导致锚定永远解析不中）。查库确认（查无此条
+    拒绝）留待素材区接线。
     """
-    if not _TOPIC_ANCHOR_PATTERN.fullmatch(anchor):
-        raise ReferenceError(
-            f"赛题编号 {anchor!r} 格式非法（应为年份 + 编号，如 2026C）"
-        )
+    message = validate_topic_key(anchor)
+    if message:
+        raise ReferenceError(message)
 
 
 def module_kit_vocabulary(module_library_dir: Path) -> tuple[str, ...]:

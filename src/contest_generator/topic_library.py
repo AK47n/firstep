@@ -221,12 +221,13 @@ def delete_topic(topic_library_root: Path, key: str) -> None:
 
 
 def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
-    """把确认请求里的 entries 解析为 TopicDraft 列表（形状校验）。
+    """把确认请求里的 entries 解析为 TopicDraft 列表（形状 + 全量校验）。
 
-    用户校对后的提交值：形状问题（非列表 / 条目缺字段） = 业务 400
-    （TopicError）；编号格式与重复等进一步校验在 confirm_topics（核心
-    唯一来源）。llm 层拆条解析（parse_topic_split）各管各的错误类型——
-    那边畸形输出抛 LLMError（502），这边用户提交问题抛 TopicError（400）。
+    用户校对后的提交值：形状问题（非列表 / 条目缺字段）与编号格式 / 重复 /
+    题面为空（_validate_entries 全量校验）都在这里拦截——用户提交的畸形
+    编号不必越过两层函数边界才报错。错误一律 TopicError（业务 400），与
+    llm 层拆条解析（parse_topic_split，畸形输出抛 LLMError / 502）各管各的
+    错误类型——刻意分工：那边模型输出不可信，这边用户提交。
     """
     raw = data.get("entries")
     if not isinstance(raw, list):
@@ -251,6 +252,7 @@ def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
                 problem_text=problem_text,
             )
         )
+    _validate_entries(drafts)
     return tuple(drafts)
 
 
