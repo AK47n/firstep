@@ -91,7 +91,9 @@ from .skeleton import generate_skeleton
 from .topic_library import (
     TopicError,
     confirm_topics,
+    delete_topic,
     discover_related_modules,
+    list_topics,
     parse_confirm_entries,
     resolve_number,
     split_topics_document,
@@ -896,8 +898,29 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         return {"ok": True}
 
     # ------------------------------------------------------------------
-    # 赛题库（工单 01）：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）+ 编号解析
+    # 赛题库（工单 01/05）：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）
+    # + 编号解析 + 浏览 / 删除
     # ------------------------------------------------------------------
+
+    @app.get("/api/topics")
+    @_map_errors
+    def topics() -> list[dict]:
+        """浏览赛题库：全部条目按编号排序，每条带关联模块（浏览列表用）。
+
+        关联模块复用模块简介"XX 题专用"标注自动发现（读时计算）；列表一次性
+        算好返回，前端不再按条回查——单条 GET /api/topics/{key} 是生成入口
+        素材，与浏览列表各司其职。
+        """
+        config = _require_config(context)
+        return [
+            {
+                **entry.to_dict(),
+                "related_modules": list(
+                    discover_related_modules(config.module_library_dir, entry.key)
+                ),
+            }
+            for entry in list_topics(_topic_library_dir(context))
+        ]
 
     @app.post("/api/topics/split")
     @_map_errors
@@ -984,6 +1007,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 discover_related_modules(config.module_library_dir, key)
             ),
         }
+
+    @app.delete("/api/topics/{key}")
+    @_map_errors
+    def topic_delete(key: str) -> dict:
+        """删除赛题条目：整个目录移除（含题面与原 PDF 副本）。
+
+        查无此条明确报错（不猜测编造）；编号格式非法先拒绝（入口拦截路径
+        穿越）。
+        """
+        delete_topic(_topic_library_dir(context), key)
+        return {"ok": True}
 
     return app
 
