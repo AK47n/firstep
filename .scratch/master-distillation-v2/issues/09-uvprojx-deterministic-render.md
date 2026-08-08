@@ -69,3 +69,16 @@
 - 用户浏览器重新跑提炼 + 入库：母版 33 文件全量恢复（12 个 .c/.s + 头文件
   + user/Project.uvprojx），结构校验 PASS，sources=[2026C, 21F]，无残留。
 - 遗留不变：用户 Keil 实际编译一次为最终证明。
+
+## 真机编译复验（2026-08-08）
+
+- 用户 Keil（ARMCC V5.06 build 960）首次真机编译生成工程（`~/.contest_generator/masters/stm32` 母版
+  生成的 out_2026C/out_2021F），报 2 错：`ml_uart.c(21/30): #20: identifier "FILE" is undefined`
+  （`FILE __stdout;` 与 `int fputc(int ch, FILE *f)`）。其余 10 个 .c/.s 全过、0 警告。
+- 根因：ml_uart.c 的 ARMCC 重定向块（`struct __FILE` + `FILE __stdout;` + `__use_no_semihosting`
+  + `_sys_exit`，与 `useUlib=0` 标准库模式匹配）依赖 stdio.h 的 `FILE` typedef，但全工程
+  （ml_uart.c + headfile.h）从未 include `<stdio.h>`。补一行即愈，与重定向模式无冲突：
+  stdio.h 只给 typedef，`struct __FILE` 由重定向块自供（ARM 官方 retarget 同款）。
+- 修复：母版 `masters/stm32/ml_libs/ml_uart.c` 第 2 行补 `#include <stdio.h>`（二进制插入，
+  GBK 注释字节未动）；同步补进 real-run 两个生成产物 out_2021F/out_2026C，用户可即刻复编。
+- 遗留：用户重新编译一次确认 0 错 0 警为最终证明。

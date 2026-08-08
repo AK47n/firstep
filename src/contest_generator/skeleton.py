@@ -150,13 +150,15 @@ def sanitize_skeleton(
 
     语句位置的整段调用替换为"注释 + 空语句"；表达式（赋值 / 条件 / 实参）
     里的调用替换为 0 占位。原调用文本留在 TODO 注释里，用户能看到 AI 的
-    意图。返回（改写后的 main.c, 实际被拦截的调用名）；没有不存在的调用
-    时原样返回、拦截列表为空。
+    意图。随后 while(1) 死循环后不可达的 return 语句同样注释占位（Keil
+    #111-D 判例）。返回（改写后的 main.c, 实际被拦截的调用名）；没有
+    不存在调用且无不可达 return 时原样返回、拦截列表为空。
     """
     undefined = set(find_undefined_calls(main_c, known_functions))
-    if not undefined:
-        return main_c, ()
-    return _replace_undefined_calls(main_c, undefined)
+    fixed, blocked = (
+        _replace_undefined_calls(main_c, undefined) if undefined else (main_c, ())
+    )
+    return _strip_unreachable_return(fixed), blocked
 
 
 def _replace_undefined_calls(
@@ -225,11 +227,22 @@ def _replace_undefined_calls(
 
 
 def _is_statement_start(code: str, name_pos: int) -> bool:
-    """名字前的非空白字符是 { ; } 或行首 → 该调用是独立语句。"""
+    """名字前的非空白字符是 { ; } 或注释结尾 */ 或行首 → 该调用是独立语句。
+
+    上一行是注释时（如"/* OLED 显示缓冲初始化 */\nstrcpy(...)"），回退跳过
+    空白停在 */ 的 / 上——若只认 {;} 会误判为表达式位置、走 0 占位分支，
+    独立语句替换成 `0;` 报 #174-D expression has no effect（判例：2021F
+    骨架第一处 strcpy 占位）。/ * 相连只可能是块注释边界（无空格的
+    a/*p 即注释，除法接解引用必有空格或括号），判断安全。
+    """
     j = name_pos - 1
     while j >= 0 and code[j].isspace():
         j -= 1
-    return j < 0 or code[j] in "{;}"
+    return (
+        j < 0
+        or code[j] in "{;}"
+        or (j >= 1 and code[j] == "/" and code[j - 1] == "*")
+    )
 
 
 def _next_nonspace(code: str, pos: int) -> str:
@@ -287,6 +300,99 @@ def _match_paren(code: str, open_pos: int) -> int:
         else:
             i += 1
     return -1
+
+
+_WHILE_ONE_BLOCK_RE = re.compile(r"while\s*\(\s*1\s*\)\s*\{")
+
+
+def _skip_ws_and_comments(code: str, pos: int) -> int:
+    """从 pos 跳过空白与注释（行/块），返回第一个有效字符位置。"""
+    n = len(code)
+    while pos < n:
+        char = code[pos]
+        if char.isspace():
+            pos += 1
+        elif char == "/" and pos + 1 < n and code[pos + 1] == "/":
+            end = code.find("\n", pos)
+            pos = n if end == -1 else end + 1
+        elif char == "/" and pos + 1 < n and code[pos + 1] == "*":
+            end = code.find("*/", pos + 2)
+            pos = n if end == -1 else end + 2
+        else:
+            break
+    return pos
+
+
+def _match_brace(code: str, open_pos: int) -> int:
+    """从 open_pos 的 { 开始找配平的 } 下标；不配平返回 -1（字符串/注释不计数）。
+
+    与 _match_paren 同款词法，只换括号字符（_match_paren 只配 ()）。
+    """
+    depth = 0
+    i = open_pos
+    n = len(code)
+    while i < n:
+        char = code[i]
+        nxt = code[i + 1] if i + 1 < n else ""
+        if char == "/" and nxt == "/":
+            end = code.find("\n", i)
+            i = n if end == -1 else end + 1
+        elif char == "/" and nxt == "*":
+            end = code.find("*/", i + 2)
+            if end == -1:
+                return -1
+            i = end + 2
+        elif char in ('"', "'"):
+            i = _skip_string(code, i)
+        elif char == "{":
+            depth += 1
+            i += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+            i += 1
+        else:
+            i += 1
+    return -1
+
+
+def _strip_unreachable_return(code: str) -> str:
+    """while(1) 死循环块之后紧跟的独立 return 语句注释占位（Keil #111-D 判例）。
+
+    LLM 常在 while(1){...} 之后补 return 0; —— 死循环后不可达。只处理
+    while(1){...} 块闭合后紧跟（跳过空白与注释）的独立 return 语句；
+    循环体内的 return、非死循环后的 return 不动。一个文件多处死循环时
+    全部处理（替换后从循环块末尾继续扫描）。
+    """
+    pos = 0
+    out: list[str] = []
+    while True:
+        m = _WHILE_ONE_BLOCK_RE.search(code, pos)
+        if m is None:
+            out.append(code[pos:])
+            return "".join(out)
+        close = _match_brace(code, m.end() - 1)
+        if close == -1:  # 循环体不配平（代码残缺）：整段透传
+            out.append(code[pos:])
+            return "".join(out)
+        nxt = _skip_ws_and_comments(code, close + 1)
+        rm = re.match(r"return\b", code[nxt:])
+        if rm is None:
+            out.append(code[pos : close + 1])
+            pos = close + 1
+            continue
+        semi = code.find(";", nxt)
+        if semi == -1:  # return 语句残缺：整段透传
+            out.append(code[pos:])
+            return "".join(out)
+        stmt = code[nxt : semi + 1].strip()
+        out.append(
+            code[pos : close + 1]
+            + "\n"
+            + f"/* TODO: {stmt} —— while(1) 死循环后不可达，已注释占位 */"
+        )
+        pos = semi + 1
 
 
 def _is_ident_start(char: str) -> bool:

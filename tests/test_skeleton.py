@@ -392,3 +392,72 @@ def test_strip_comments_keep_preprocessor_preserves_include_filename_on_later_li
     assert '"digit_uart.h"' in stripped
     assert '"headfile.h"' in stripped
     assert "commented.h" not in stripped  # 注释里的 include 不算数
+
+
+# ---------------------------------------------------------------------------
+# 占位形态：注释后的独立语句、死循环后不可达 return（Keil #174-D/#111-D）
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_statement_after_comment_line_uses_comment_placeholder():
+    """上一行是注释的独立调用必须走注释占位，不能变 0;（#174-D 判例：
+    2021F 骨架第一处 strcpy 占位——名字前是非空白字符 */，被误判表达式）。"""
+    main_c = (
+        "    /* OLED 显示缓冲初始化（实际刷新函数未提供，由外部处理） */\n"
+        '    strcpy(oled_line1, "Medicine Car");\n'
+        "    oled_dirty = 1;\n"
+    )
+
+    fixed, blocked = sanitize_skeleton(main_c, set())
+
+    assert blocked == ("strcpy",)
+    assert "不存在的函数 strcpy" in fixed
+    assert "已注释占位" in fixed
+    assert "*/ 0" not in fixed  # 不能落成 0; 占位
+    assert "oled_dirty = 1;" in fixed
+
+
+def test_sanitize_comments_out_unreachable_return_after_while_loop():
+    """while(1) 死循环块后的 return 0; 不可达 → 注释占位（#111-D 判例）。"""
+    main_c = (
+        "int main(void) {\n"
+        "    while (1) {\n"
+        "        oled_init();\n"
+        "    }\n"
+        "    return 0;\n"
+        "}\n"
+    )
+
+    fixed, blocked = sanitize_skeleton(main_c, {"oled_init"})
+
+    assert blocked == ()
+    assert "\n    return 0;\n" not in fixed  # 语句位置的 return 已移除（注释里保留原文）
+    assert "while(1) 死循环后不可达" in fixed
+    assert "while (1) {" in fixed
+    assert "oled_init();" in fixed
+
+
+def test_sanitize_keeps_return_inside_while_loop():
+    """循环体内的 return（可达路径）不动。"""
+    main_c = (
+        "int main(void) {\n"
+        "    while (1) {\n"
+        "        if (x) return 0;\n"
+        "    }\n"
+        "}\n"
+    )
+
+    fixed, blocked = sanitize_skeleton(main_c, set())
+
+    assert blocked == ()
+    assert "if (x) return 0;" in fixed
+
+
+def test_sanitize_keeps_return_without_infinite_loop():
+    """非死循环后的 return 是合法路径，不动。"""
+    main_c = "int main(void) { oled_init(); return 0; }\n"
+
+    fixed, blocked = sanitize_skeleton(main_c, {"oled_init"})
+
+    assert blocked == ()
+    assert fixed == main_c

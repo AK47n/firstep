@@ -74,6 +74,12 @@ class ModuleSelfIncludeError(GeneratorError):
     """模块 .c 未 include 本模块自己的头文件，拒绝产出残缺工程。"""
 
 
+class MacroRedefinitionError(GeneratorError):
+    """模块配置 / main.c 重定义了母版库接口宏（同名不同值），拒绝产出带
+    编译警告的工程（Keil #47-D incompatible redefinition 判例：config.h
+    的 LED_GPIO 撞 ml_led.h）。"""
+
+
 # Markdown 代码围栏行（与 skeleton.strip_code_fences 同一形态）：main.c 手改
 # 或旧流程产物若带围栏，Keil 报 unrecognized token（判例见 strip_code_fences）
 _FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
@@ -312,6 +318,9 @@ def generate(
     _check_unresolved_includes(
         main_c_content, manifests, platform, module_library_dir, master_project_dir
     )
+    _check_macro_conflicts(
+        main_c_content, manifests, platform, module_library_dir, master_project_dir
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -327,6 +336,8 @@ def generate(
             manifests, platform, module_library_dir, output_dir
         )
 
+        if not main_c_content.endswith("\n"):
+            main_c_content += "\n"  # 尾部换行幂等兜底（LLM 输出常漏，Keil 报 #1-D）
         (output_dir / "main.c").write_text(main_c_content, encoding="utf-8")
 
         patcher.patch(output_dir, copied_files, include_dirs)
@@ -484,6 +495,109 @@ def _check_module_self_include(
             "生成工程无法编译（模块未自包含）：\n- " + "\n- ".join(problems)
             + "\n —— 请在该 .c 顶部补上本模块头文件的 include"
             "（生成工程用母版 headfile.h，原始工程的聚合头不会跟进来）"
+        )
+
+
+def _top_level_defines(code: str) -> dict[str, tuple[str, int]]:
+    """无条件顶层 #define 清单：{宏名: (规范化值, 行号)}。
+
+    只收不在任何 #if/#ifdef/#ifndef 块内的 #define——include guard 的定义
+    在 #ifndef 块内（深度 1）天然排除；条件块里可能生效也可能不生效的宏
+    跳过（宁可放过、不可误杀，编译器的 warning 兜底）。同一文件 #undef
+    后再定义的不收（合法覆盖模式）。函数宏名字取到左括号前，参数表并入
+    值参与文本比较。反斜杠续行在预处理行内合并。
+    """
+    stripped = _strip_comments_keep_preprocessor(code)
+    lines = stripped.split("\n")
+    defines: dict[str, tuple[str, int]] = {}
+    undefed: set[str] = set()
+    depth = 0
+    i = 0
+    while i < len(lines):
+        text = lines[i].strip()
+        lineno = i + 1
+        if not text.startswith("#"):
+            i += 1
+            continue
+        while text.endswith("\\") and i + 1 < len(lines):  # 续行合并
+            i += 1
+            text = text[:-1] + " " + lines[i].strip()
+        if text.startswith("#if"):
+            depth += 1
+        elif text.startswith("#endif"):
+            depth = max(0, depth - 1)
+        elif text.startswith("#undef"):
+            m = re.match(r"#\s*undef\s+([A-Za-z_]\w*)", text)
+            if m:
+                undefed.add(m.group(1))
+        elif text.startswith("#define") and depth == 0:
+            m = re.match(r"#\s*define\s+([A-Za-z_]\w*)", text)
+            if m:
+                name = m.group(1)
+                if name not in undefed:
+                    value = re.sub(r"\s+", " ", text[m.end():].strip())
+                    defines[name] = (value, lineno)
+        i += 1
+    return defines
+
+
+def _check_macro_conflicts(
+    main_c_content: str,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path,
+) -> None:
+    """生成前静态校验：模块头 / main.c 不得重定义母版库接口宏（同名不同值）。
+
+    Keil 语义：#define 同名不同值 = #47-D incompatible redefinition 警告
+    （判例：config.h 的 LED_GPIO=GPIO_C 撞母版 ml_led.h 的 LED_GPIO=GPIO_A，
+    真机编译 4 处 warning）。库接口宏是母版命名空间，模块配置想表达不同
+    引脚必须换自定义宏名——门禁在创建输出目录之前拒绝生成，不留 warning
+    工程。
+    """
+    master_defines: dict[str, tuple[str, int, str]] = {}
+    for rel in sorted(p.relative_to(master_project_dir).as_posix() for p in master_project_dir.rglob("*.h")):
+        path = master_project_dir / rel
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for name, (value, line) in _top_level_defines(text).items():
+            if name not in master_defines:
+                master_defines[name] = (value, line, rel)
+
+    problems: list[str] = []
+    sources: list[tuple[str, str | None, Path]] = [("main.c", None, master_project_dir / "main.c")]
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for rel in entry.files:
+            if not rel.lower().endswith(".h"):
+                continue
+            path = library_dir / manifest.slug / rel
+            if not path.is_file():  # 文件缺失由 _check_module_files 兜底
+                continue
+            sources.append((f"模块 {manifest.slug} 的 {rel}", rel, path))
+
+    for label, rel, path in sources:
+        if rel is None:  # main.c：内容来自参数，与母版文件无关
+            text = main_c_content
+        else:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        for name, (value, line) in _top_level_defines(text).items():
+            master = master_defines.get(name)
+            if master is not None and master[0] != value:
+                problems.append(
+                    f"{label} 第 {line} 行重定义了母版接口宏 {name}"
+                    f"（母版 {master[2]}:{master[1]} 定义为 {master[0]}，"
+                    f"此处定义为 {value}）"
+                    " —— 库接口宏不可覆盖，请改用自定义宏名（如 LED_PORT）"
+                )
+    if problems:
+        raise MacroRedefinitionError(
+            "生成工程会带编译警告（宏重定义，Keil #47-D）：\n- " + "\n- ".join(problems)
         )
 
 

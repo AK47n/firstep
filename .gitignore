@@ -4,3 +4,9 @@ __pycache__/
 .venv/
 .mypy_cache/
 *.egg-info/
+
+# Claude Code 并行 worktree（内嵌 git 仓库，绝不提交）
+.claude/worktrees/
+
+# 真机验收产物（Keil 编译日志 / 生成工程 / 会话日志）
+.scratch/real-run/
