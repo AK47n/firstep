@@ -10,16 +10,20 @@ from pathlib import Path
 import pytest
 
 from contest_generator.generator import (
+    GeneratorError,
     MasterNotFoundError,
     MissingModuleFilesError,
     OutputDirNotEmptyError,
     UndefinedCallsError,
     generate_project,
+    resolve_topic_context,
 )
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASS, _SETTINGS_MODULE_ID
+from contest_generator.llm import LLMError
 from contest_generator.manifest import ModuleManifest
 from contest_generator.master import MasterError
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32, PatcherRegistry
+from contest_generator.topic_library import TopicError
 from tests.fakes import (
     DHT11_H,
     DHT11_MSPM0_C,
@@ -29,6 +33,17 @@ from tests.fakes import (
     OLED_STM32_C,
     RecordingPatcher,
     make_fake_master_project,
+    make_fake_module_library,
+)
+from tests.generate_wiring_fakes import (
+    KIT_REFERENCE_ID,
+    TOPIC_PROBLEM_TEXT,
+    TOPIC_REFERENCE_ID,
+    UWB_REFERENCE_ID,
+    make_fake_reference_library,
+    make_fake_topic_library,
+    make_kit_candidate_module,
+    make_topic_specific_module,
 )
 
 
@@ -340,3 +355,222 @@ def test_patcher_invoked_via_registry_with_files_and_include_dirs(make_project, 
         Path("modules/oled/stm32/src"),
         Path("modules/oled/inc"),
     )
+
+
+# ---------------------------------------------------------------------------
+# 工单 03：生成入口支持历史赛题编号（题面全文 + 关联素材 + 该题专用模块）
+# ---------------------------------------------------------------------------
+
+
+def _wired_dirs(tmp_path):
+    """生成接线的素材区：赛题库 + 参考文件库 + 该题专用模块与普通候选模块
+    （各自独立临时目录，互不污染）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    make_topic_specific_module(library)
+    make_kit_candidate_module(library)
+    topics = make_fake_topic_library(tmp_path / "topics")
+    references = make_fake_reference_library(tmp_path / "references")
+    return library, topics, references
+
+
+def test_resolve_topic_context_explicit_key_materializes_entry(tmp_path):
+    """显式编号：题面全文（长 PDF 题面全文只在选了该赛题时进上下文）+ 关联素材
+    （锚定该题或候选模块套件的参考文件）+ 该题专用模块（XX 题专用标注自动发现）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="用户粘贴的题面片段",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    assert ctx is not None
+    assert ctx.key == "2026C"
+    assert ctx.problem_text == TOPIC_PROBLEM_TEXT
+    assert ctx.related_modules == ("lock_control",)
+    assert [e.id for e in ctx.references] == [
+        TOPIC_REFERENCE_ID,
+        KIT_REFERENCE_ID,
+        UWB_REFERENCE_ID,
+    ]
+
+
+def test_resolve_topic_context_without_specific_modules_still_carries_kit_refs(
+    tmp_path,
+):
+    """该题没有专用模块（库中无"XX 题专用"标注）时，套件锚定的参考文件仍经
+    候选模块的 kit 进清单（评审 c2：关联面不得依赖专用模块是否入库）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    make_kit_candidate_module(library)
+    topics = make_fake_topic_library(tmp_path / "topics")
+    references = make_fake_reference_library(tmp_path / "references")
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="粘贴",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    assert ctx is not None
+    assert ctx.related_modules == ()
+    assert UWB_REFERENCE_ID in [e.id for e in ctx.references]
+
+
+def test_resolve_topic_context_recognizes_number_in_pasted_text(tmp_path):
+    """粘贴题面中出现编号同样可认：AI 提取编号 → 查库得题面全文 + 关联素材。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    class ExtractingLLM:
+        def topic_extract_number(self, text: str) -> str:
+            return "2026C"
+
+    ctx = resolve_topic_context(
+        llm=ExtractingLLM(),
+        topic_key="",
+        problem_text="……2026C 数字钥匙题……",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    assert ctx is not None
+    assert ctx.key == "2026C"
+    assert ctx.problem_text == TOPIC_PROBLEM_TEXT
+
+
+def test_resolve_topic_context_auto_recognition_is_best_effort(tmp_path):
+    """自动识别尽力而为：提取失败（LLMError）/ 查无此条 / 没提取到 → None，
+    不阻断纯粘贴题面流程（与显式编号的查无此条大声报错相对）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    class NoNumberLLM:
+        def topic_extract_number(self, text: str) -> None:
+            return None
+
+    assert (
+        resolve_topic_context(
+            llm=NoNumberLLM(),
+            topic_key="",
+            problem_text="普通粘贴题面",
+            module_library_dir=library,
+            topic_library_dir=topics,
+            reference_library_dir=references,
+        )
+        is None
+    )
+
+    class RaisingExtractLLM:
+        def topic_extract_number(self, text: str) -> str:
+            raise LLMError("服务不可用")
+
+    assert (
+        resolve_topic_context(
+            llm=RaisingExtractLLM(),
+            topic_key="",
+            problem_text="粘贴题面",
+            module_library_dir=library,
+            topic_library_dir=topics,
+            reference_library_dir=references,
+        )
+        is None
+    )
+
+    class UnknownKeyLLM:
+        def topic_extract_number(self, text: str) -> str:
+            return "2021F"  # 库中没有的编号
+
+    assert (
+        resolve_topic_context(
+            llm=UnknownKeyLLM(),
+            topic_key="",
+            problem_text="粘贴题面",
+            module_library_dir=library,
+            topic_library_dir=topics,
+            reference_library_dir=references,
+        )
+        is None
+    )
+
+
+def test_resolve_topic_context_explicit_unknown_key_raises(tmp_path):
+    """显式编号查无此条：明确报错（不猜测编造），不是静默降级。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    with pytest.raises(TopicError, match="没有"):
+        resolve_topic_context(
+            llm=None,
+            topic_key="2021F",
+            problem_text="粘贴",
+            module_library_dir=library,
+            topic_library_dir=topics,
+            reference_library_dir=references,
+        )
+
+
+def test_generate_project_with_topic_key_auto_includes_related_modules(
+    fake_module_library, tmp_path
+):
+    """生成入口带历史赛题编号：该题专用模块自动并入最终模块集（生成物与
+    用户手选等价），题面 / 关联素材在推荐与骨架阶段已进上下文。"""
+    make_topic_specific_module(fake_module_library)
+    topics = make_fake_topic_library(tmp_path / "topics")
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+        topic_key="2026C",
+        topic_library_dir=topics,
+    )
+
+    assert (tmp_path / "out" / "modules" / "lock_control" / "lock_control.c").is_file()
+    assert any(slug == "lock_control" for slug, _ in summary.modules)
+
+
+def test_generate_project_topic_without_library_dir_fails(fake_module_library, tmp_path):
+    """入口要求显式编号必须有赛题库目录：缺目录明确报错。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    with pytest.raises(GeneratorError, match="topic_library_dir"):
+        generate_project(
+            platform=PLATFORM_STM32,
+            slugs=["dht11"],
+            main_c_content=MAIN_SKELETON,
+            output_dir=tmp_path / "out",
+            module_library_dir=fake_module_library,
+            masters_dir=masters_dir,
+            topic_key="2026C",
+        )
+
+
+def test_generate_project_unknown_topic_key_raises(fake_module_library, tmp_path):
+    """生成入口查无此条：大声报错，不产出残缺工程。"""
+    topics = make_fake_topic_library(tmp_path / "topics")
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    with pytest.raises(TopicError, match="没有"):
+        generate_project(
+            platform=PLATFORM_STM32,
+            slugs=["dht11"],
+            main_c_content=MAIN_SKELETON,
+            output_dir=tmp_path / "out",
+            module_library_dir=fake_module_library,
+            masters_dir=masters_dir,
+            topic_key="2021F",
+            topic_library_dir=topics,
+        )
+
+    assert not (tmp_path / "out").exists()

@@ -33,7 +33,14 @@ from .config import (
     save_config,
 )
 from .extraction import ExtractionError, extract_file
-from .generator import GenerationSummary, GeneratorError, generate_project
+from .generator import (
+    GenerationSummary,
+    GeneratorError,
+    TopicContext,
+    generate_project,
+    prepend_related_modules,
+    resolve_topic_context,
+)
 from .keil import KeilProjectError
 from .library import (
     LibraryError,
@@ -46,7 +53,14 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
-from .llm import LLM, LLMError, DeepSeekLLM, ProgressEvent, build_manifest_summaries
+from .llm import (
+    LLM,
+    LLMError,
+    DeepSeekLLM,
+    ProgressEvent,
+    build_manifest_summaries,
+    select_modules_two_level,
+)
 from .master import (
     MasterError,
     confirm_distillation,
@@ -58,6 +72,7 @@ from .master import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
+    ReferenceEntry,
     ReferenceError,
     add_reference,
     delete_reference,
@@ -65,7 +80,12 @@ from .reference_library import (
     module_kit_vocabulary,
     search_references,
 )
-from .selection import SelectionError, resolve_selection
+from .selection import (
+    SelectionError,
+    read_reference_fulltext,
+    reference_suggestions,
+    resolve_selection,
+)
 from .skeleton import generate_skeleton
 from .topic_library import (
     TopicError,
@@ -149,6 +169,40 @@ def _topic_library_dir(ctx: AppContext) -> Path:
     加配置项时只改这一处。
     """
     return _require_config(ctx).module_library_dir.parent / "topics"
+
+
+def _resolve_topic_for_generation(
+    context: AppContext, topic_id: str, problem_text: str
+) -> tuple[TopicContext | None, str]:
+    """生成流程的历史赛题入口素材：显式 topic_id 或粘贴题面自动识别。
+
+    返回（历史赛题上下文, 题面全文）——识别到历史赛题时题面用库内全文（长
+    PDF 题面全文只在选了该赛题时进上下文），没识别到原样返回粘贴文本。显式
+    编号查无此条大声报错；自动识别尽力而为（提取失败 / 查无此条静默降级，
+    不阻断纯粘贴题面流程）。
+    """
+    config = _require_config(context)
+    resolved = resolve_topic_context(
+        llm=_llm(context),
+        topic_key=topic_id,
+        problem_text=problem_text,
+        module_library_dir=config.module_library_dir,
+        topic_library_dir=_topic_library_dir(context),
+        reference_library_dir=_reference_dir(context),
+    )
+    if resolved is None:
+        return None, problem_text
+    return resolved, resolved.problem_text
+
+
+def _reference_by_id(
+    entries: Sequence[ReferenceEntry], entry_id: str
+) -> ReferenceEntry:
+    """两级注入第二级的回读键映射：清单段 id → 参考文件条目（读全文用）。"""
+    for entry in entries:
+        if entry.id == entry_id:
+            return entry
+    raise ReferenceError(f"参考文件条目不存在：{entry_id!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -416,17 +470,42 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/recommend")
     @_map_errors
     def recommend(payload: dict) -> dict:
-        """AI 按赛题推荐模块并给出理由（未展开依赖、未检查平台可用性）。"""
+        """AI 按赛题推荐模块并给出理由（未展开依赖、未检查平台可用性）。
+
+        历史赛题入口：topic_id（显式）或粘贴题面中的编号（AI 自动识别）选中
+        某题时，题面用库内全文（长 PDF 题面全文只在选了该赛题时进上下文），
+        候选清单带该题 / 套件关联的参考文件（标题 + 一句话简介，两级注入第一
+        级）——模型点名要读全文的经 select_modules_two_level 回读后带全文定稿
+        （第二级）。响应带识别结果（topic_id）与该题专用模块（related_modules，
+        后续阶段按同一 topic_id 自动并入，UI 也可透传）。"""
         problem_text = _require_str(payload, "problem_text")
-        library_dir = _library_dir(context)
-        summaries = build_manifest_summaries(list_modules(library_dir))
-        selection = _llm(context).select_modules(problem_text, summaries)
-        return {
+        topic_id = _optional_str(payload, "topic_id")
+        config = _require_config(context)
+        topic, problem_text = _resolve_topic_for_generation(
+            context, topic_id, problem_text
+        )
+        summaries = build_manifest_summaries(list_modules(config.module_library_dir))
+        reference_root = _reference_dir(context)
+        references = topic.references if topic is not None else ()
+        selection = select_modules_two_level(
+            _llm(context),
+            problem_text,
+            summaries,
+            references=reference_suggestions(references),
+            reader=lambda entry_id: read_reference_fulltext(
+                reference_root, _reference_by_id(references, entry_id)
+            ),
+        )
+        result: dict[str, Any] = {
             "modules": [
                 {"slug": slug, "reason": selection.reasons.get(slug, "")}
                 for slug in selection.modules
             ]
         }
+        if topic is not None:
+            result["topic_id"] = topic.key
+            result["related_modules"] = list(topic.related_modules)
+        return result
 
     @app.post("/api/selection/expand")
     @_map_errors
@@ -446,10 +525,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/skeleton")
     @_map_errors
     def skeleton(payload: dict) -> dict:
-        """main.c 骨架：LLM 出稿 + 静态自检（不存在的调用改写为注释占位）。"""
+        """main.c 骨架：LLM 出稿 + 静态自检（不存在的调用改写为注释占位）。
+
+        历史赛题入口：选中某题时题面用库内全文（长 PDF 题面全文只在选了该赛
+        题时进上下文），该题专用模块并入接口块（骨架可初始化它们；骨架阶段
+        不注入参考文件——spec Out of Scope，等真实用例再评估）。"""
         problem_text = _require_str(payload, "problem_text")
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
+        topic_id = _optional_str(payload, "topic_id")
+        topic, problem_text = _resolve_topic_for_generation(
+            context, topic_id, problem_text
+        )
+        if topic is not None:
+            slugs = list(prepend_related_modules(topic.related_modules, slugs))
         resolved = resolve_selection(_library_dir(context), platform, slugs)
         main_c, intercepted = generate_skeleton(
             _llm(context), problem_text, resolved.manifests, platform, _library_dir(context)
@@ -459,11 +548,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/generate")
     @_map_errors
     def generate(payload: dict) -> dict:
-        """完整生成：选模块 → 母版 → 生成 → 摘要（流程在 generate_project）。"""
+        """完整生成：选模块 → 母版 → 生成 → 摘要（流程在 generate_project）。
+
+        历史赛题入口：topic_id 给定时该题专用模块自动并入最终工程（生成物与
+        用户手选等价）；查无此条明确报错（不猜测编造）。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
         output_dir = Path(_require_str(payload, "output_dir"))
+        topic_id = _optional_str(payload, "topic_id")
         config = _require_config(context)
         summary = generate_project(
             platform=platform,
@@ -472,6 +565,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             output_dir=output_dir,
             module_library_dir=config.module_library_dir,
             masters_dir=config.masters_dir,
+            topic_key=topic_id,
+            topic_library_dir=_topic_library_dir(context) if topic_id else None,
         )
         return _generation_result(summary)
 
