@@ -133,7 +133,8 @@ def _add_module(module_library_dir: Path, slug: str, description: str, kit: str)
         encoding="utf-8",
     )
     (module_dir / f"{slug}.c").write_text(
-        f"/* {slug} */\nvoid {slug}_init(void);\n", encoding="utf-8"
+        f"#include \"{slug}.h\"\n/* {slug} */\nvoid {slug}_init(void);\n",
+        encoding="utf-8",
     )
     (module_dir / f"{slug}.h").write_text(
         f"#pragma once\nvoid {slug}_init(void);\n", encoding="utf-8"

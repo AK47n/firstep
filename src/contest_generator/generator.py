@@ -70,6 +70,10 @@ class UnresolvedIncludeError(GeneratorError):
     """main.c 或模块源码引用了最终工程里不存在的头文件，拒绝产出残缺工程。"""
 
 
+class ModuleSelfIncludeError(GeneratorError):
+    """模块 .c 未 include 本模块自己的头文件，拒绝产出残缺工程。"""
+
+
 # Markdown 代码围栏行（与 skeleton.strip_code_fences 同一形态）：main.c 手改
 # 或旧流程产物若带围栏，Keil 报 unrecognized token（判例见 strip_code_fences）
 _FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
@@ -304,6 +308,7 @@ def generate(
 
     _check_module_files(manifests, platform, module_library_dir)
     _check_main_calls(main_c_content, manifests, platform, module_library_dir)
+    _check_module_self_include(manifests, platform, module_library_dir)
     _check_unresolved_includes(
         main_c_content, manifests, platform, module_library_dir, master_project_dir
     )
@@ -438,6 +443,47 @@ def _check_unresolved_includes(
         raise UnresolvedIncludeError(
             "生成工程无法编译（include 解析失败）：\n- " + "\n- ".join(problems)
             + "\n —— 请将该头文件所属模块一并选中，或补录模块库条目"
+        )
+
+
+def _check_module_self_include(
+    manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
+) -> None:
+    """生成前静态校验：模块 .c 必须 include 本模块自己的至少一个头文件。
+
+    Keil 语义：模块 .c 不 include 自己的 .h 时，符号声明只存在于原始工程的
+    自定义 headfile.h 聚合里——生成工程用母版 headfile.h 替换后，类型 / 变量 /
+    函数全部未声明（pid_t / yaw_gyro / D1..D8 / g_systick 判例，真机编译
+    35 错）。include 解析校验只查"引用的头存在"，不查"该引用的头在不在"，
+    此规则补上：引用解析 + 自包含两条件都过，生成工程才有编译基础。
+    """
+    problems: list[str] = []
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        own_headers = [Path(rel).name for rel in entry.files if rel.lower().endswith(".h")]
+        if not own_headers:
+            continue  # 纯 .c 模块（无头文件可自含）跳过
+        for rel in entry.files:
+            if not rel.lower().endswith(".c"):
+                continue
+            path = library_dir / manifest.slug / rel
+            if not path.is_file():  # 文件缺失由 _check_module_files 兜底
+                continue
+            code = path.read_text(encoding="utf-8", errors="replace")
+            stripped = _strip_comments_keep_preprocessor(code)
+            included = set(_INCLUDE_QUOTED_RE.findall(stripped))
+            if not (set(own_headers) & included):
+                problems.append(
+                    f"模块 {manifest.slug} 的 {rel} 没有 include 本模块自己的头"
+                    f"（{', '.join(sorted(own_headers))}）"
+                )
+    if problems:
+        raise ModuleSelfIncludeError(
+            "生成工程无法编译（模块未自包含）：\n- " + "\n- ".join(problems)
+            + "\n —— 请在该 .c 顶部补上本模块头文件的 include"
+            "（生成工程用母版 headfile.h，原始工程的聚合头不会跟进来）"
         )
 
 

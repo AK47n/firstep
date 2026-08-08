@@ -24,10 +24,12 @@ from contest_generator.topic_library import TopicDraft
 # 假模块文件内容（断言输出目录里文件内容用）
 # ---------------------------------------------------------------------------
 
-DHT11_STM32_C = "/* DHT11 driver for STM32 */\nfloat dht11_read(void);\n"
-DHT11_MSPM0_C = "/* DHT11 driver for MSPM0 */\nfloat dht11_read(void);\n"
+# 自包含约定：模块 .c 必须 include 自己的 .h（生成门禁 _check_module_self_include
+# 强制，假模块与真实模块同规则）
+DHT11_STM32_C = "#include \"dht11.h\"\n/* DHT11 driver for STM32 */\nfloat dht11_read(void);\n"
+DHT11_MSPM0_C = "#include \"dht11.h\"\n/* DHT11 driver for MSPM0 */\nfloat dht11_read(void);\n"
 DHT11_H = "#pragma once\nfloat dht11_read(void);\n"
-OLED_STM32_C = "/* OLED driver for STM32 */\nvoid oled_init(void);\n"
+OLED_STM32_C = "#include \"oled.h\"\n/* OLED driver for STM32 */\nvoid oled_init(void);\n"
 OLED_H = "#pragma once\nvoid oled_init(void);\n"
 
 # 测试直接传入生成器的 main.c 内容（生成器会静态自检，必须只调所选模块头文件
@@ -139,7 +141,7 @@ def make_fake_module_library(library_dir: Path) -> Path:
             },
         },
         {
-            "delay.c": "/* delay */\nvoid delay_ms(int ms);\n",
+            "delay.c": "#include \"delay.h\"\n/* delay */\nvoid delay_ms(int ms);\n",
             "delay.h": "#pragma once\nvoid delay_ms(int ms);\n",
         },
     )
