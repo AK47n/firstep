@@ -18,6 +18,7 @@ from contest_generator.config import AppConfig
 from contest_generator.library import LibraryError, add_module
 from contest_generator.llm import (
     LLMError,
+    TOPIC_SPLIT_LLM_CHAR_CAP,
     TopicDraft,
     parse_topic_number,
     parse_topic_split,
@@ -29,6 +30,7 @@ from contest_generator.topic_library import (
     confirm_topics,
     discover_related_modules,
     resolve_number,
+    split_topics_document,
 )
 from contest_generator.webapp import AppContext, create_app
 from tests.fakes import FakeLLM, make_fake_module_library, make_sample_pdf
@@ -183,6 +185,71 @@ def test_parse_topic_number_rejects_malformed_key():
 def test_parse_topic_number_rejects_non_json():
     with pytest.raises(LLMError, match="不是 JSON"):
         parse_topic_number("not json")
+
+
+# ---------------------------------------------------------------------------
+# 确定性分块（工单 04）：多年长 PDF 按年份章节 + 题目标记切到单题，零 AI 改写
+# ---------------------------------------------------------------------------
+
+SPLIT_LINES = [
+    "2017年 2018年 2025年全国大学生电子设计竞赛真题汇总",  # 封面：各年份紧邻距离小
+    "2017 年全国大学生电子设计竞赛",  # 2017 章节（"2017 年"变体）
+    "（A 题）2017A 题面：……正文内容……",
+    "B 题难度较高，此处是正文不是标记",  # 行首 B 题后非冒号 → 不匹配
+    "停止条件见评分标准",  # 正文"条件"类词 → 不匹配
+    "(B 题) 2017B 题面：……正文内容……",  # 半角括号式
+    "2018年全国大学生电子设计竞赛",
+    "（A 题）2018A 题面：……正文……",
+    "（A题）重复标记去重",  # 无空格括号式 + 同字母去重
+    "C题：行首半角冒号式 2018C 题面",
+    "2019年全国大学生电子设计竞赛",  # 缺题年份：有章节无题目
+    "本页无赛题",
+    "2020年全国大学生电子设计竞赛",
+    "D题：行首全角冒号式 2020D 题面",
+    "评分汇总表……2020 年得分统计与页脚说明",  # 尾部杂项 → 进最后一题
+]
+SPLIT_DOC = "\n".join(SPLIT_LINES)
+
+
+def test_split_topics_document_cuts_single_topics_verbatim():
+    drafts = split_topics_document(SPLIT_DOC)
+
+    assert [d.key for d in drafts] == ["2017A", "2017B", "2018A", "2018C", "2020D"]
+    assert drafts[0].problem_text == "\n".join(SPLIT_LINES[2:5])
+    assert drafts[1].problem_text == SPLIT_LINES[5]
+    assert drafts[2].problem_text == "\n".join(SPLIT_LINES[7:9])
+    assert drafts[3].problem_text == SPLIT_LINES[9]
+    assert drafts[4].problem_text == "\n".join(SPLIT_LINES[13:15])
+
+
+def test_split_topics_document_groups_year_variants_by_number():
+    """'2017年'（封面）与'2017 年'（章节）按数字归组，取'到下一年距离最大'
+    的出现为章节起点——封面行（紧邻后续年份，距离小）不进任何题面。"""
+    doc = "\n".join(
+        [
+            "2017年 2018年 2025年全国大学生电子设计竞赛真题汇总",
+            "2017 年全国大学生电子设计竞赛",
+            "（A 题）2017A 题面",
+            "2018年全国大学生电子设计竞赛",
+            "（A 题）2018A 题面",
+        ]
+    )
+
+    drafts = split_topics_document(doc)
+
+    assert [d.key for d in drafts] == ["2017A", "2018A"]
+    assert drafts[0].problem_text == "（A 题）2017A 题面"  # 封面行不在题面内
+    assert drafts[1].problem_text == "（A 题）2018A 题面"
+
+
+def test_split_topics_document_no_year_chapter_raises():
+    with pytest.raises(TopicError, match="年份"):
+        split_topics_document("没有年份章节的文本（A 题）……")
+
+
+def test_split_topics_document_years_without_topics_raises():
+    with pytest.raises(TopicError, match="赛题"):
+        split_topics_document("2025年全国大学生电子设计竞赛\n本页无赛题")
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +597,65 @@ def test_topics_split_endpoint_llm_failure_returns_502(topic_context, tmp_path):
             )
 
     assert response.status_code == 502
+
+
+def _long_topics_text() -> str:
+    """超长假真题全文（> 20K 路由阈值）：单年份两题，题面填充长正文。"""
+    return (
+        "2025年全国大学生电子设计竞赛\n"
+        "（A 题）2025A 题面\n"
+        + "……正文填充……" * 3000
+        + "\nB题：2025B 题面\n"
+        + "……正文填充……" * 3000
+        + "\n"
+    )
+
+
+def test_topics_split_endpoint_long_text_uses_deterministic_split(
+    topic_context, tmp_path
+):
+    ctx, holder, _ = topic_context
+    text = _long_topics_text()
+    assert len(text) > TOPIC_SPLIT_LLM_CHAR_CAP  # 超长判定阈值：超过即走确定性分块
+    pdf_path = tmp_path / "真题.txt"
+    pdf_path.write_text(text, encoding="utf-8")
+    with _client(ctx) as client:
+        with pdf_path.open("rb") as file:
+            response = client.post(
+                "/api/topics/split",
+                files={"upload": ("真题.txt", file, "text/plain")},
+            )
+
+    assert response.status_code == 200
+    topics = response.json()["topics"]
+    assert [t["key"] for t in topics] == ["2025A", "2025B"]
+    assert topics[0]["problem_text"].startswith("（A 题）")
+    assert not holder["llm"].split_calls  # 超长走确定性分块，不调 LLM
+
+
+@pytest.mark.parametrize(
+    "n_chars", [TOPIC_SPLIT_LLM_CHAR_CAP, TOPIC_SPLIT_LLM_CHAR_CAP + 1]
+)
+def test_topics_split_endpoint_routes_at_char_cap(topic_context, tmp_path, n_chars):
+    """路由阈值（TOPIC_SPLIT_LLM_CHAR_CAP）：≤ 阈值单次调 LLM（全量直传），
+    超过走确定性分块（格式不匹配大声失败）。"""
+    ctx, holder, _ = topic_context
+    text = "x" * n_chars
+    pdf_path = tmp_path / "真题.txt"
+    pdf_path.write_text(text, encoding="utf-8")
+    with _client(ctx) as client:
+        with pdf_path.open("rb") as file:
+            response = client.post(
+                "/api/topics/split",
+                files={"upload": ("真题.txt", file, "text/plain")},
+            )
+
+    if n_chars == TOPIC_SPLIT_LLM_CHAR_CAP:
+        assert response.status_code == 200
+        assert holder["llm"].split_calls == [text]
+    else:
+        assert response.status_code == 400  # 无年份章节 → 确定性分块大声失败
+        assert not holder["llm"].split_calls
 
 
 def test_topics_confirm_endpoint_creates_entries_and_resolves(topic_context, tmp_path):
