@@ -254,10 +254,12 @@ def test_validate_topic_anchor_agrees_with_topic_key_validation():
         assert anchor_rejects == (validate_topic_key(sample) is not None)
 
 
-def test_module_kit_vocabulary_collects_deduplicates_and_sorts(tmp_path):
+def test_module_kit_vocabulary_collects_deduplicates_and_preserves_order(tmp_path):
+    """词表语义以 manifest.collect_kits 为准（保序去重）：顺序 = 模块按 slug
+    排序 × 平台条目插入顺序 × 首次出现（工单 C3 起不再排序）。"""
     library = _kit_library(tmp_path)
 
-    assert module_kit_vocabulary(library) == (KIT_ALX, KIT_MSPM0)
+    assert module_kit_vocabulary(library) == (KIT_MSPM0, KIT_ALX)
 
 
 # ---------------------------------------------------------------------------

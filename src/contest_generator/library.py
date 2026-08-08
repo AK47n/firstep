@@ -15,19 +15,25 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Sequence
 from urllib.parse import urlparse
 
-from .entry_store import entry_transaction, iter_entry_dirs, write_json
+from .entry_store import (
+    StoreError,
+    delete_entry,
+    entry_transaction,
+    is_unsafe_path,
+    iter_entry_dirs,
+    validate_store_key,
+    write_json,
+)
 from .manifest import (
     MANIFEST_FILENAME,
     ManifestError,
     ModuleManifest,
     PlatformEntry,
-    is_unsafe_path,
 )
 
 if TYPE_CHECKING:
@@ -78,12 +84,12 @@ def get_module(library_root: Path, slug: str) -> ModuleManifest:
 
 
 def delete_module(library_root: Path, slug: str) -> None:
-    """删除模块：整个目录移除。"""
+    """删除模块：整个目录移除（目录存在校验走 entry_store 原语）。"""
     _validate_slug(slug)
-    module_dir = library_root / slug
-    if not module_dir.is_dir():
-        raise LibraryError(f"模块 {slug!r} 不存在")
-    shutil.rmtree(module_dir)
+    try:
+        delete_entry(library_root, slug)
+    except StoreError:
+        raise LibraryError(f"模块 {slug!r} 不存在") from None
 
 
 def save_manifest(library_root: Path, manifest: ModuleManifest) -> None:
@@ -351,10 +357,12 @@ def remove_platform_files(
 
 
 def _validate_slug(slug: str) -> None:
-    if not _SLUG_PATTERN.fullmatch(slug):
+    try:
+        validate_store_key(slug, _SLUG_PATTERN, "slug")
+    except StoreError:
         raise LibraryError(
             f"非法 slug：{slug!r}（只能含字母数字下划线连字符，且以字母或数字开头）"
-        )
+        ) from None
 
 
 def _validate_platform(platform: str) -> None:

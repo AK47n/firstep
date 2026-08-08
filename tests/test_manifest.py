@@ -9,6 +9,7 @@ from contest_generator.manifest import (
     ManifestError,
     ModuleManifest,
     PlatformEntry,
+    collect_kits,
 )
 
 
@@ -247,3 +248,28 @@ def test_same_file_shared_across_platforms_is_allowed():
     manifest = ModuleManifest.from_dict(data)
 
     assert manifest.platforms["mspm0"].files == ("inc/dht11.h",)
+
+
+def _manifest_with_kits(slug: str, kits: list[str]) -> ModuleManifest:
+    """带 kit 的平台条目构造（词表顺序测试用）。"""
+    return ModuleManifest(
+        slug=slug,
+        description=f"{slug} 驱动",
+        platforms={
+            f"platform-{index}": PlatformEntry(files=("src.c",), kit=kit)
+            for index, kit in enumerate(kits)
+            if kit
+        },
+    )
+
+
+def test_collect_kits_order_dedup_skips_empty():
+    """kit 词表单源（工单 C3）：保序去重、空值跳过——顺序 = manifests 顺序
+    × 平台条目插入顺序 × 首次出现（三处调用方共享同一语义）。"""
+    manifests = [
+        _manifest_with_kits("a", ["K1", "", "K2", "K1"]),
+        _manifest_with_kits("b", ["K2", "K3"]),
+        _manifest_with_kits("c", []),
+    ]
+
+    assert collect_kits(manifests) == ["K1", "K2", "K3"]

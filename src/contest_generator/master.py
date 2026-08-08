@@ -40,10 +40,19 @@ import shutil
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Sequence
 
 from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
-from .entry_store import discard_entry_dirs
+from .entry_store import (
+    StoreError,
+    StoreParseError,
+    StoreReadError,
+    StoreShapeError,
+    delete_entry,
+    read_json,
+    require_str,
+    validate_store_key,
+)
 from .keil import (
     KeilProjectError,
     build_master_uvprojx,
@@ -54,13 +63,12 @@ from .keil import (
     validate_project_structure,
 )
 from .events import ProgressEmitter  # 进度发射器类型（契约在 events，仅类型引用）
-from .llm import LLM  # AI 接缝协议（仅类型引用，实现与解析在 llm 层）
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
-from .reference_library import (
-    ReferenceError,
-    archive_reference,
-    validate_topic_anchor,
-)
+
+if TYPE_CHECKING:
+    # 仅类型注解用（llm 运行时依赖 selection → reference_library，运行时导入
+    # 会把参考库族拖进 master 的 import 闭包，工单 C3 链收敛；library.py 先例）
+    from .llm import LLM
 from .report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -69,7 +77,6 @@ from .report import (
     FileDecision,
     FileVersion,
     JudgmentFile,
-    ReferenceCandidate,
     ReportError,
 )
 
@@ -1075,9 +1082,14 @@ def confirm_distillation(
     并生成条目简介（全部在任何真写盘前，失败即整体中止、母版库与参考库都不
     被触碰）→ 母版先入库（既有事务语义不变）→ 归档条目复制入库（每条目
     原子，批量失败回滚本批已建条目并大声报错：母版已入库、可重试——import
-    幂等，归档重跑是全新条目）。llm_factory / reference_library_dir 只在报告
-    含归档动作时按需取用（无归档的确认不要求 AI 配置，与现状一致）。
+    幂等，归档重跑是全新条目）。归档步骤在 archive.py（工单 C3：master 不
+    import 参考库族，防 import 链）。llm_factory / reference_library_dir 只在
+    报告含归档动作时按需取用（无归档的确认不要求 AI 配置，与现状一致）。
     """
+    # 函数级延迟导入：归档辅助要 import 参考库族与赛题库文法（master 不 import
+    # 它们），模块级导入会造成 master ↔ archive 环——只在归档确认时加载
+    from .archive import prepare_archive, write_archive_entries
+
     projects = tuple(scan_project(project_dir) for project_dir in project_dirs)
     comparison = compare_projects(projects)
     if not isinstance(payload, dict):
@@ -1106,7 +1118,7 @@ def confirm_distillation(
         preview = apply_distillation(report, comparison, staging / "preview")
         if report.archive:
             # LLM 调用在暂存之后、任何真写盘之前：失败只清暂存，什么都不碰
-            summaries = _prepare_archive(
+            summaries = prepare_archive(
                 report, comparison, llm_factory, reference_library_dir
             )
         else:
@@ -1115,100 +1127,15 @@ def confirm_distillation(
             masters_dir, report.platform, preview, sources=report.projects
         )
         if report.archive:
-            # _prepare_archive 已拒绝 None（归档需要参考库目录）；此处为类型
+            # prepare_archive 已拒绝 None（归档需要参考库目录）；此处为类型
             # 窄化断言，运行期恒真
             assert reference_library_dir is not None
-            _write_archive_entries(
+            write_archive_entries(
                 report, comparison, reference_library_dir, summaries
             )
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return meta
-
-
-def _prepare_archive(
-    report: DistillationReport,
-    comparison: ProjectComparison,
-    llm_factory: Callable[[], LLM] | None,
-    reference_library_dir: Path | None,
-) -> dict[str, str]:
-    """归档前置：校验配置与锚定、LLM 判定归档价值并生成条目简介（不写盘）。
-
-    全部失败都在写盘前大声报错（MasterError，中文说明）：归档需要 AI 服务与
-    参考文件库目录配置；锚定赛题编号格式非法（格式与赛题库 key 同源校验，
-    查库确认 / 查无此条拒绝未接线——留待素材区接线工单）；AI 判定不配归档的
-    文件被拒绝（一次性杂物 / 配置噪声不配归档）。
-    条目简介 = LLM 对文件全文的摘要（与参考文件库录入草稿同一协议方法
-    reference_summarize）。归档路径的合法性（判定范围内、类别文件不配归档）
-    由 apply_distillation 的处置校验先拦住——本函数只做归档自身的校验。
-    """
-    if llm_factory is None or reference_library_dir is None:
-        raise MasterError(
-            "归档动作需要 AI 服务与参考文件库目录（未提供），无法提交"
-        )
-    project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
-    candidates: list[ReferenceCandidate] = []
-    for decision in report.archive:
-        try:
-            validate_topic_anchor(decision.topic)
-        except ReferenceError as exc:
-            raise MasterError(str(exc)) from exc
-        holders = comparison.by_path.get(decision.path)
-        if not holders:
-            # 覆盖校验应先拦住（判定范围外路径）；兜底大声失败，不猜测不编造
-            raise MasterError(f"没有任何工程含文件 {decision.path}")
-        source = holders[0]
-        content = (project_dir_by_name[source] / Path(decision.path)).read_text(
-            encoding="utf-8", errors="replace"
-        )
-        candidates.append(
-            ReferenceCandidate(
-                path=decision.path, content=content, reason=decision.reason
-            )
-        )
-    llm = llm_factory()
-    archivable = set(llm.reference_judge_archivable(candidates))
-    rejected = [c.path for c in candidates if c.path not in archivable]
-    if rejected:
-        raise MasterError(
-            "以下文件未被 AI 判定为值得归档（可去掉归档动作后重新确认）："
-            + "、".join(rejected)
-        )
-    return {c.path: llm.reference_summarize(c.content) for c in candidates}
-
-
-def _write_archive_entries(
-    report: DistillationReport,
-    comparison: ProjectComparison,
-    reference_library_dir: Path,
-    summaries: Mapping[str, str],
-) -> None:
-    """归档条目落盘（在母版入库之后）：源工程文件字节复制入库、锚定该题。
-
-    批回滚：任一条目写入失败，删除本批已建条目目录并大声报错（中文说明）——
-    不留半成品（母版已入库且归档条目相互独立，重试确认即可：import 幂等、
-    归档重跑是全新条目）。归档 = 复制入库（内容自持）：源工程删除不丢。
-    """
-    project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
-    created: list[Path] = []
-    try:
-        for decision in report.archive:
-            holders = comparison.by_path[decision.path]
-            source = holders[0]
-            entry = archive_reference(
-                reference_library_dir,
-                source=project_dir_by_name[source] / Path(decision.path),
-                rel_path=decision.path,
-                title=f"{decision.path}（{source}）",
-                description=summaries[decision.path],
-                anchor_topic=decision.topic,
-            )
-            created.append(reference_library_dir / entry.id)
-    except Exception as exc:
-        discard_entry_dirs(created)
-        raise MasterError(
-            f"母版已入库，但归档写入失败（已回滚本次归档条目，可重试确认）：{exc}"
-        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -1357,21 +1284,23 @@ def list_masters(masters_dir: Path) -> list[MasterMeta]:
 
 
 def get_master(masters_dir: Path, platform: str) -> MasterMeta:
-    """读取单个母版元数据；不存在或损坏抛 MasterError。"""
+    """读取单个母版元数据；不存在或损坏抛 MasterError。
+
+    读盘 / 解析 / 形状校验走 entry_store 原语（read_json），错误类型与文案
+    仍归本模块。
+    """
     _validate_store_key(platform)
     meta_path = masters_dir / f"{platform}.json"
     try:
-        text = meta_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise MasterError(f"母版 {platform!r} 不存在") from None
-    except OSError as exc:
-        raise MasterError(f"母版 {platform!r} 的元数据无法读取：{exc}") from exc
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise MasterError(f"母版 {platform!r} 的元数据不是合法 JSON：{exc}") from exc
-    if not isinstance(data, dict):
-        raise MasterError(f"{meta_path} 必须是 JSON 对象")
+        data = read_json(masters_dir, f"{platform}.json")
+    except StoreReadError as exc:
+        if isinstance(exc.error, FileNotFoundError):
+            raise MasterError(f"母版 {platform!r} 不存在") from None
+        raise MasterError(f"母版 {platform!r} 的元数据无法读取：{exc.error}") from exc
+    except StoreParseError as exc:
+        raise MasterError(f"母版 {platform!r} 的元数据不是合法 JSON：{exc.error}") from exc
+    except StoreShapeError:
+        raise MasterError(f"{meta_path} 必须是 JSON 对象") from None
     try:
         return MasterMeta.from_dict(data)
     except MasterError as exc:
@@ -1379,12 +1308,12 @@ def get_master(masters_dir: Path, platform: str) -> MasterMeta:
 
 
 def delete_master(masters_dir: Path, platform: str) -> None:
-    """删除母版：工程目录与元数据文件一并移除。"""
+    """删除母版：工程目录与元数据文件一并移除（目录存在校验走 entry_store 原语）。"""
     _validate_store_key(platform)
-    target_dir = masters_dir / platform
-    if not target_dir.is_dir():
-        raise MasterError(f"母版 {platform!r} 不存在")
-    shutil.rmtree(target_dir)
+    try:
+        delete_entry(masters_dir, platform)
+    except StoreError:
+        raise MasterError(f"母版 {platform!r} 不存在") from None
     (masters_dir / f"{platform}.json").unlink(missing_ok=True)
 
 
@@ -1443,10 +1372,12 @@ def _config_summary(project_dir: Path, platform: str) -> tuple[str, ...]:
 
 
 def _validate_store_key(platform: str) -> None:
-    if not _SLUG_PATTERN.fullmatch(platform):
+    try:
+        validate_store_key(platform, _SLUG_PATTERN, "平台名")
+    except StoreError:
         raise MasterError(
             f"非法平台名：{platform!r}（只能含字母数字下划线连字符，且以字母或数字开头）"
-        )
+        ) from None
 
 
 def _validate_known_platform(platform: str) -> None:
@@ -1466,10 +1397,10 @@ def _write_meta(masters_dir: Path, meta: MasterMeta) -> None:
 
 
 def _require_str(data: dict[str, Any], key: str) -> str:
-    value = data.get(key)
-    if not isinstance(value, str) or not value:
-        raise MasterError(f"缺少必填字段：{key}")
-    return value
+    try:
+        return require_str(data, key)
+    except StoreError:
+        raise MasterError(f"缺少必填字段：{key}") from None
 
 
 def _require_str_list(data: dict[str, Any], key: str) -> list[str]:
