@@ -41,7 +41,6 @@ from contest_generator.llm import (
     _file_chars,
     _split_versions,
     _summarize_user_prompt,
-    _summary_slugs,
     _truncate_content,
     _validation_user_prompt,
     build_manifest_summaries,
@@ -58,6 +57,7 @@ from contest_generator.selection import (
     ReferenceSuggestion,
 )
 from contest_generator.wordlist import HardwareWordGroup
+from contest_generator.manifest import ManifestSummary
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -138,10 +138,11 @@ def test_manifest_summaries_list_each_module_with_description_and_deps():
 
     summaries = build_manifest_summaries(manifests)
 
-    assert summaries == [
+    assert [s.to_line() for s in summaries] == [
         "- dht11: DHT11 温湿度传感器驱动（依赖: delay）",
         "- oled: OLED 屏显驱动",
     ]
+    assert [s.slug for s in summaries] == ["dht11", "oled"]  # known_slugs 同源
 
 
 def test_manifest_summaries_include_kit_segment_when_present():
@@ -152,7 +153,7 @@ def test_manifest_summaries_include_kit_segment_when_present():
 
     summaries = build_manifest_summaries(manifests)
 
-    assert summaries == [
+    assert [s.to_line() for s in summaries] == [
         "- uwb: UWB 测距模块驱动（套件: 地猛星 UWB 套件; 依赖: delay）",
         "- oled: OLED 屏显驱动（套件: OLED 套件）",
     ]
@@ -167,7 +168,7 @@ def test_manifest_summaries_no_kit_segment_when_kit_missing():
 
     summaries = build_manifest_summaries(manifests)
 
-    assert summaries == [
+    assert [s.to_line() for s in summaries] == [
         "- uwb: UWB 测距模块驱动（依赖: delay）",
         "- motor: 电机驱动",
     ]
@@ -184,33 +185,20 @@ def test_manifest_summaries_aggregate_distinct_kits_across_platforms():
 
     summaries = build_manifest_summaries([manifest])
 
-    assert summaries == [
+    assert [s.to_line() for s in summaries] == [
         "- dht11: DHT11 温湿度传感器驱动（套件: STM32F103C8T6 最小系统板、地猛星 MSPM0G3507 开发板; 依赖: delay）",
     ]
+    assert summaries[0].kits == ("STM32F103C8T6 最小系统板", "地猛星 MSPM0G3507 开发板")
 
 
 def test_manifest_summaries_empty_library_gives_empty_list():
     assert build_manifest_summaries([]) == []
-
-
-def test_summary_slugs_round_trip_with_kit_and_deps_formats():
-    """反向解析与正向格式一致：套件段 / 依赖段都在行首冒号之后，_summary_slugs
-    解析 slug 不丢、不串（工单 03 格式耦合的两处必须同步）。"""
-    manifests = [
-        _manifest("uwb", "UWB 测距模块驱动", deps=("delay",), kits=("地猛星 UWB 套件",)),
-        _manifest("oled", "OLED 屏显驱动", kits=("OLED 套件",)),
-        _manifest("delay", "软件延时", deps=("cmsis",)),
-        _manifest("motor", "电机驱动"),
-    ]
-
-    summaries = build_manifest_summaries(manifests)
-
-    assert _summary_slugs(summaries) == ["uwb", "oled", "delay", "motor"]
+    assert [s.slug for s in build_manifest_summaries([])] == []
 
 
 def test_select_modules_receives_kit_in_summary_lines():
     """选模块请求的清单文本带套件信息；模型按新格式回 slug 能被正常解析
-    （known_slugs 来自 _summary_slugs，反向解析与正向格式一致）。"""
+    （known_slugs 取 ManifestSummary.slug，与行渲染同源）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
     summaries = build_manifest_summaries(
@@ -244,9 +232,11 @@ def test_fake_llm_receives_manifest_summaries_with_kit():
             self.received: list[tuple[str, ...]] = []
 
         def select_modules(
-            self, problem_text: str, manifest_summaries: Sequence[str]
+            self,
+            problem_text: str,
+            manifest_summaries: Sequence[ManifestSummary],
         ) -> ModuleSelection:
-            self.received.append(tuple(manifest_summaries))
+            self.received.append(tuple(s.to_line() for s in manifest_summaries))
             return ModuleSelection(modules=(), reasons={})
 
     fake = RecordingLLM()
@@ -273,7 +263,7 @@ def test_select_modules_posts_chat_completion_with_expected_request():
     llm = _llm(transport)
     problem = "设计一个环境监测仪，测量温湿度并显示"
 
-    result = llm.select_modules(problem, ["- dht11: 温湿度传感器驱动"])
+    result = llm.select_modules(problem, [ManifestSummary("dht11", "温湿度传感器驱动")])
 
     url, headers, payload, timeout = transport.calls[0]
     assert url == "https://api.deepseek.com/chat/completions"
@@ -295,7 +285,7 @@ def test_select_modules_uses_configured_base_url_and_model():
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport, base_url="https://example.com/v1/", model="deepseek-reasoner")
 
-    llm.select_modules("赛题", ["- dht11: 温湿度"])
+    llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
     url, _, payload, _ = transport.calls[0]
     assert url == "https://example.com/v1/chat/completions"
@@ -306,7 +296,7 @@ def test_select_modules_empty_selection_is_valid():
     transport = FakeTransport(body=_api_response(json.dumps({"modules": []})))
     llm = _llm(transport)
 
-    result = llm.select_modules("赛题", ["- dht11: 温湿度"])
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
     assert result.modules == ()
     assert result.reasons == {}
@@ -317,7 +307,7 @@ def test_select_modules_http_error_raises_with_status():
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="401"):
-        llm.select_modules("赛题", ["- dht11: 温湿度"])
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
 
 def test_select_modules_invalid_json_response_raises():
@@ -325,7 +315,7 @@ def test_select_modules_invalid_json_response_raises():
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="JSON"):
-        llm.select_modules("赛题", ["- dht11: 温湿度"])
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
 
 def test_select_modules_missing_content_field_raises():
@@ -333,7 +323,7 @@ def test_select_modules_missing_content_field_raises():
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="content"):
-        llm.select_modules("赛题", ["- dht11: 温湿度"])
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
 
 # ---------------------------------------------------------------------------
@@ -848,7 +838,7 @@ def test_select_modules_truncates_oversized_problem():
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
 
-    llm.select_modules("赛题" * (JUDGMENT_CONTENT_CAP + 100), ["- dht11: 温湿度"])
+    llm.select_modules("赛题" * (JUDGMENT_CONTENT_CAP + 100), [ManifestSummary("dht11", "温湿度")])
 
     _, _, payload, _ = transport.calls[0]
     message = payload["messages"][1]["content"]
@@ -2225,7 +2215,7 @@ def test_select_prompt_includes_reference_list_when_given():
 
     llm.select_modules(
         "2026C 数字钥匙题",
-        ["- dht11: 温湿度传感器驱动"],
+        [ManifestSummary("dht11", "温湿度传感器驱动")],
         references=[_suggestion("key-example", "2026C 数字钥匙参考例程", "2026C 钥匙题配套例程")],
     )
 
@@ -2243,7 +2233,7 @@ def test_select_prompt_embeds_requested_fulltexts():
 
     llm.select_modules(
         "赛题",
-        ["- dht11: 温湿度"],
+        [ManifestSummary("dht11", "温湿度")],
         references=[_suggestion("key-example")],
         reference_fulltexts={"key-example": long_text},
     )
@@ -2261,7 +2251,7 @@ def test_select_prompt_embeds_empty_fulltext_without_dropping():
 
     llm.select_modules(
         "赛题",
-        ["- dht11: 温湿度"],
+        [ManifestSummary("dht11", "温湿度")],
         references=[_suggestion("key-example")],
         reference_fulltexts={"key-example": ""},
     )
@@ -2275,7 +2265,7 @@ def test_select_prompt_without_references_keeps_old_shape():
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
 
-    llm.select_modules("赛题", ["- dht11: 温湿度"])
+    llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "参考文件" not in user_message
@@ -2339,7 +2329,7 @@ def test_select_modules_with_references_parses_reference_ids():
 
     result = llm.select_modules(
         "赛题",
-        ["- dht11: 温湿度"],
+        [ManifestSummary("dht11", "温湿度")],
         references=[_suggestion("key-example")],
     )
 
@@ -2786,7 +2776,7 @@ def test_select_modules_prompt_includes_wordlist_and_new_contract():
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
 
-    llm.select_modules("设计一个识别数字的送药小车", ["- dht11: 温湿度"])
+    llm.select_modules("设计一个识别数字的送药小车", [ManifestSummary("dht11", "温湿度")])
 
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "硬件词表" in user_message
@@ -2802,7 +2792,7 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
     transport = FakeTransport(body=_api_response(REQUIREMENTS_JSON))
     llm = _llm(transport)
 
-    result = llm.select_modules("设计一个送药小车", ["- dht11: 温湿度", "- oled: 显示"])
+    result = llm.select_modules("设计一个送药小车", [ManifestSummary("dht11", "温湿度"), ManifestSummary("oled", "显示")])
 
     assert result.modules == ("dht11", "oled")
     assert result.requirements[0].requirement == "识别数字"
