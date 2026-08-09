@@ -7,7 +7,7 @@
 | 术语 | 含义 | 主要实现 |
 |---|---|---|
 | 赛题 | 粘贴或上传（PDF / .docx / .txt / .md）的竞赛题目原文 | extraction.py → str，贯穿所有 LLM prompt；生成入口装配唯一出处 = generator.resolve_topic_context（TopicContext） |
-| 平台 | `stm32`（STM32F103C8T6 / Keil5）、`mspm0`（地猛星 MSPM0G3507 / CCS） | 词表在 platforms.py；识别知识（工程配置文件后缀表）= platforms.PLATFORM_CONFIG_FILE_SUFFIXES 单源；蒸馏侧平台行为经 distill_adapters 适配器（master 只消费）；生成侧行为在 patchers.py / webapp.py |
+| 平台 | `stm32`（STM32F103C8T6 / Keil5）、`mspm0`（地猛星 MSPM0G3507 / CCS） | 词表在 platforms.py；识别知识（工程配置文件后缀表）= platforms.PLATFORM_CONFIG_FILE_SUFFIXES 单源；蒸馏侧平台行为经 distill_adapters 适配器（master 只消费）；生成侧行为在 patchers.py / webapp.py；工具链外部头豁免（stm32 = DFP 提供、mspm0 = SysConfig 生成）经 patchers.external_headers 分派，C 标准库头归门禁（generator._LIBC_HEADERS，平台无关） |
 | 模块 | 可复用 .c/.h 单元 + 机器可读 manifest；库目录即数据库；与功能库相对——模块承载外设/赛题功能，功能库是母版自带底层库；模块推荐（AI 选模块）的模型类与收敛工作流归 selection.py——llm 层运行时依赖 selection 而非反向（report.py 先例） | manifest.py（模型）/ library.py（库操作）；模块推荐域在 selection.py；推荐域判决（build_module_selection：模型输出 → ModuleSelection 解释链——需求派生 / 词表约束 / DeepSeek 怪癖）在 selection.py，llm 只做机械提取 |
 | manifest | 模块目录下 manifest.json：slug、简介、依赖、平台条目（文件 / 验证状态 / 硬件绑定 / 备注 / 硬件身份字段 kit + source_url） | manifest.py |
 | 简介 | manifest.description，判据三要素：① 与代码一致（AI 校验）；② 硬件身份可确认——套件型号（kit）与购买链接（source_url），平台条目字段、新录入必填、URL 格式校验、由人补填；③ 专用性——逻辑绑定具体赛题的模块必须标注"XX 题专用"（如 lock_control / zone = 2026C 数字钥匙题专用，pid = 巡线题专用） | library.py / llm.py |
@@ -56,5 +56,5 @@
 - 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；表住 errors.py，结构测试反射枚举包内全部异常类断言已登记（白名单只放从不直达 web 层的类）——漏登从此是测试红，不是线上 500。
 - 库素材拼装标签格式单源 = library.file_label：模块源码 / 参考素材 / 参考全文共用（prompt 可见契约，改格式只改这一处——曾三处各抄一份，漏一处模型就逐功能看到不同格式）。
 - 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版库模块（`master_store.master_project_dir`）。赛题入口装配 = `generator.resolve_topic_context` 唯一出处（永远返回 TopicContext，key 空串 = 未识别到历史赛题），路由只消费不装配。
-- 生成侧读缝成真——include 搜索目录按平台分派（写侧 patcher registry 对偶），generator 不再 import 平台模块。
+- 生成侧读缝成真——include 搜索目录按平台分派（写侧 patcher registry 对偶），generator 不再 import 平台模块。外部头豁免同缝：工具链头在 keil/ccs 声明、经 patchers.external_headers 分派（跨平台工具链头拒绝放行），C 标准库头（_LIBC_HEADERS）留门禁，generator 不持有平台工具链知识。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。

@@ -20,7 +20,12 @@ from .library import list_modules
 from .llm import LLMError
 from .manifest import ManifestSummary, ModuleManifest, build_manifest_summaries
 from .master_store import master_project_dir
-from .patchers import PatcherRegistry, default_registry, include_search_dirs
+from .patchers import (
+    PatcherRegistry,
+    default_registry,
+    external_headers,
+    include_search_dirs,
+)
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
     ReferenceSuggestion,
@@ -88,18 +93,18 @@ class MacroRedefinitionError(GeneratorError):
     的 LED_GPIO 撞 ml_led.h）。"""
 
 
-# 工程树外由工具链/IDE 提供的头：ARMCC 标准库（引号形式同样走库搜索）与
-# 器件包/平台配置头——stm32f10x_conf.h 由 STM32F1xx DFP 提供；ti_msp_dl_config.h
-# 由 CCS 的 SysConfig 在构建时生成（工程树里没有，构建时经 ${SYSCONFIG_
-# TOOL_INCLUDE_PATH} 解析）。缺了会误报。
-_EXTERNAL_HEADERS = frozenset(
+# 工程树外由 C 标准库提供的头（引号形式同样由编译器按库路径解析；两平台
+# 同名同集，平台无关，归门禁）。工具链外部头（STM32F1xx DFP 提供、CCS
+# SysConfig 构建时生成）是平台事实，在 keil.py / ccs.py 各自声明、经
+# patchers.external_headers 分派——本模块不持有平台工具链知识（工单 03）。
+# 门禁豁免 = 本集合 | 平台外部头。
+_LIBC_HEADERS = frozenset(
     {
         "math.h", "stdio.h", "stdlib.h", "string.h", "stdint.h", "stdbool.h",
         "stddef.h", "limits.h", "float.h", "assert.h", "errno.h", "ctype.h",
         "time.h", "inttypes.h", "stdarg.h", "setjmp.h", "signal.h", "locale.h",
         "wchar.h", "wctype.h", "complex.h", "fenv.h", "tgmath.h", "iso646.h",
-        "stdatomic.h", "threads.h", "uchar.h", "stm32f10x_conf.h",
-        "ti_msp_dl_config.h",
+        "stdatomic.h", "threads.h", "uchar.h",
     }
 )
 
@@ -515,12 +520,12 @@ def _check_main_calls(corpus: ModuleCorpus) -> None:
 def _check_unresolved_includes(corpus: ModuleCorpus) -> None:
     """生成前静态校验：main.c 与模块源码的每个引号 include 都必须在最终工程里可解析。
 
-    Keil 语义：#include "x.h" 先找当前文件所在目录，再按 IncludePath 顺序找
-    （模块代码目录自动追加 + 母版自带）；工程内找不到且不是标准库 / 器件包
-    头 → 拒绝生成（判例：库模块 pid.c 引用了从未入库的 digit_uart.h，Keil
-    报 cannot open source input file，真机编译失败）。检查在创建输出目录
-    之前发生，不产出残缺工程。搜索目录在语料构建时算好（母版 IncludePath +
-    各模块代码目录），门禁只吃语料不碰盘。
+    C 预处理器语义：#include "x.h" 先找当前文件所在目录，再按 IncludePath 顺序找
+    （模块代码目录自动追加 + 母版自带）；工程内找不到且不在豁免集合（C 标准
+    库头 + 平台工具链头）→ 拒绝生成（判例：库模块 pid.c 引用了从未入库的
+    digit_uart.h，Keil 报 cannot open source input file，真机编译失败）。检查
+    在创建输出目录之前发生，不产出残缺工程。搜索目录在语料构建时算好（母版
+    IncludePath + 各模块代码目录），门禁只吃语料不碰盘。
     """
     search_dirs: list[Path] = list(corpus.master_search_dirs)
     seen: set[str] = {str(d).lower() for d in search_dirs}
@@ -530,6 +535,10 @@ def _check_unresolved_includes(corpus: ModuleCorpus) -> None:
             if key not in seen:
                 seen.add(key)
                 search_dirs.append(f.own_dir)
+
+    # 豁免 = C 标准库头（平台无关）+ 平台工具链头（keil/ccs 声明，patchers
+    # 分派），循环前算一次
+    exemptions = _LIBC_HEADERS | external_headers(corpus.platform)
 
     checks: list[tuple[str, Path, str]] = [
         ("main.c", corpus.master_project_dir, corpus.main_c)
@@ -546,7 +555,7 @@ def _check_unresolved_includes(corpus: ModuleCorpus) -> None:
         for header in extract_quoted_includes(stripped):
             if any((d / header).is_file() for d in (own_dir, *search_dirs)):
                 continue
-            if header.lower() in _EXTERNAL_HEADERS:
+            if header.lower() in exemptions:
                 continue
             problems.append(f"{label} 引用了最终工程中不存在的头文件 {header}")
     if problems:
@@ -559,7 +568,7 @@ def _check_unresolved_includes(corpus: ModuleCorpus) -> None:
 def _check_module_self_include(corpus: ModuleCorpus) -> None:
     """生成前静态校验：模块 .c 必须 include 本模块自己的至少一个头文件。
 
-    Keil 语义：模块 .c 不 include 自己的 .h 时，符号声明只存在于原始工程的
+    C 预处理器语义：模块 .c 不 include 自己的 .h 时，符号声明只存在于原始工程的
     自定义 headfile.h 聚合里——生成工程用母版 headfile.h 替换后，类型 / 变量 /
     函数全部未声明（pid_t / yaw_gyro / D1..D8 / g_systick 判例，真机编译
     35 错）。include 解析校验只查"引用的头存在"，不查"该引用的头在不在"，
@@ -591,7 +600,7 @@ def _check_module_self_include(corpus: ModuleCorpus) -> None:
 def _check_macro_conflicts(corpus: ModuleCorpus) -> None:
     """生成前静态校验：模块头 / main.c 不得重定义母版库接口宏（同名不同值）。
 
-    Keil 语义：#define 同名不同值 = #47-D incompatible redefinition 警告
+    C 预处理器语义：#define 同名不同值 = #47-D incompatible redefinition 警告
     （判例：config.h 的 LED_GPIO=GPIO_C 撞母版 ml_led.h 的 LED_GPIO=GPIO_A，
     真机编译 4 处 warning）。库接口宏是母版命名空间，模块配置想表达不同
     引脚必须换自定义宏名——门禁在创建输出目录之前拒绝生成，不留 warning

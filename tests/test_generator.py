@@ -21,6 +21,7 @@ from contest_generator.generator import (
     OutputDirNotEmptyError,
     UndefinedCallsError,
     UnresolvedIncludeError,
+    _LIBC_HEADERS,
     _check_main_calls,
     _check_macro_conflicts,
     _check_module_files,
@@ -39,6 +40,8 @@ from contest_generator.patchers import (
     PLATFORM_MSPM0,
     PLATFORM_STM32,
     PatcherRegistry,
+    UnknownPlatformError,
+    external_headers,
     include_search_dirs,
 )
 from contest_generator.reference_library import ReferenceError
@@ -526,6 +529,119 @@ def test_unresolved_include_rejects_mspm0_missing_sdk_header(tmp_path):
     )
 
     with pytest.raises(UnresolvedIncludeError, match="ghost_sdk.h") as excinfo:
+        _check_unresolved_includes(corpus)
+
+    assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# 外部头豁免（工单 03）：C 标准库头归门禁（_LIBC_HEADERS，平台无关），工具链
+# 头各平台各自声明（keil/ccs EXTERNAL_HEADERS）、patchers.external_headers
+# 分派——跨平台工具链头不互相泄漏，静默放行改拒绝（修门禁洞）
+# ---------------------------------------------------------------------------
+
+
+def test_external_header_exemptions_are_platform_specific():
+    """豁免并集 = C 标准库头（两平台共用）+ 本平台工具链头，互不泄漏。"""
+    stm32_union = _LIBC_HEADERS | external_headers(PLATFORM_STM32)
+    mspm0_union = _LIBC_HEADERS | external_headers(PLATFORM_MSPM0)
+
+    assert external_headers(PLATFORM_STM32) == frozenset({"stm32f10x_conf.h"})
+    assert external_headers(PLATFORM_MSPM0) == frozenset({"ti_msp_dl_config.h"})
+    assert _LIBC_HEADERS.isdisjoint(external_headers(PLATFORM_STM32))
+    assert _LIBC_HEADERS.isdisjoint(external_headers(PLATFORM_MSPM0))
+    assert _LIBC_HEADERS <= stm32_union and _LIBC_HEADERS <= mspm0_union
+    assert "stm32f10x_conf.h" in stm32_union
+    assert "ti_msp_dl_config.h" in mspm0_union
+    assert "ti_msp_dl_config.h" not in stm32_union  # 跨平台工具链头不混入
+    assert "stm32f10x_conf.h" not in mspm0_union
+
+
+def test_external_headers_unknown_platform_raises():
+    with pytest.raises(UnknownPlatformError, match="未知平台.*esp32"):
+        external_headers("esp32")
+
+
+def test_unresolved_include_accepts_own_platform_toolchain_header_on_stm32(tmp_path):
+    """stm32 + conf.h（STM32F1xx DFP 提供）→ 豁免通过。"""
+    corpus = _memory_corpus(
+        tmp_path,
+        module_texts=[("mod", "mod.c", '#include "stm32f10x_conf.h"\n')],
+    )
+
+    _check_unresolved_includes(corpus)
+
+
+def test_unresolved_include_accepts_own_platform_toolchain_header_on_mspm0(tmp_path):
+    """mspm0 + SysConfig 头（构建时生成，工程树里没有）→ 豁免通过。"""
+    corpus = ModuleCorpus(
+        platform=PLATFORM_MSPM0,
+        modules=(
+            (
+                "mod",
+                (
+                    ModuleFile(
+                        rel="mod.c",
+                        kind="c",
+                        text='#include "ti_msp_dl_config.h"\n',
+                        own_dir=tmp_path,
+                    ),
+                ),
+            ),
+        ),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(),
+        master_search_dirs=(),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { while (1); }\n",
+    )
+
+    _check_unresolved_includes(corpus)
+
+
+def test_unresolved_include_rejects_cross_platform_toolchain_header_on_stm32(tmp_path):
+    """跨平台工具链头不泄漏（刻意，修门禁洞）：stm32 工程 include SysConfig 头 → 拒绝。
+
+    今天它静默过门禁、Keil 编译必失败——门禁存在的意义就是抓这个。
+    """
+    corpus = _memory_corpus(
+        tmp_path,
+        module_texts=[("mod", "mod.c", '#include "ti_msp_dl_config.h"\n')],
+    )
+
+    with pytest.raises(UnresolvedIncludeError, match="ti_msp_dl_config.h") as excinfo:
+        _check_unresolved_includes(corpus)
+
+    assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
+
+
+def test_unresolved_include_rejects_cross_platform_toolchain_header_on_mspm0(tmp_path):
+    """跨平台工具链头不泄漏（刻意）：mspm0 工程 include DFP 配置头 → 拒绝。"""
+    corpus = ModuleCorpus(
+        platform=PLATFORM_MSPM0,
+        modules=(
+            (
+                "mod",
+                (
+                    ModuleFile(
+                        rel="mod.c",
+                        kind="c",
+                        text='#include "stm32f10x_conf.h"\n',
+                        own_dir=tmp_path,
+                    ),
+                ),
+            ),
+        ),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(),
+        master_search_dirs=(),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { while (1); }\n",
+    )
+
+    with pytest.raises(UnresolvedIncludeError, match="stm32f10x_conf.h") as excinfo:
         _check_unresolved_includes(corpus)
 
     assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
@@ -1252,3 +1368,29 @@ def test_include_search_dirs_definition_origins():
         if line.startswith("def include_search_dirs")
     ]
     assert hits == ["ccs.py", "keil.py", "patchers.py"]
+
+
+def test_generator_source_has_no_toolchain_header_literals():
+    """结构自证：工具链头字面量只许在平台模块声明，生成核心源码零字面量。"""
+    import contest_generator.generator as generator
+    from pathlib import Path
+
+    text = (Path(generator.__file__).parent / "generator.py").read_text(
+        encoding="utf-8"
+    )
+    assert "stm32f10x_conf" not in text
+    assert "ti_msp_dl_config" not in text
+
+
+def test_external_header_declaration_origins():
+    """结构自证：工具链外部头恰在 keil.py / ccs.py 声明（分派在 patchers.py）。"""
+    import contest_generator.generator as generator
+    from pathlib import Path
+
+    src_root = Path(generator.__file__).parent
+    keil_text = (src_root / "keil.py").read_text(encoding="utf-8")
+    ccs_text = (src_root / "ccs.py").read_text(encoding="utf-8")
+    patchers_text = (src_root / "patchers.py").read_text(encoding="utf-8")
+    assert "EXTERNAL_HEADERS" in keil_text
+    assert "EXTERNAL_HEADERS" in ccs_text
+    assert "def external_headers" in patchers_text
