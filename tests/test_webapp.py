@@ -1312,6 +1312,7 @@ def test_master_stage_rejects_bad_relative_paths(client):
     for bad in ("../evil.c", "/abs/evil.c", "C:/evil.c"):
         resp = client.post("/api/masters/stage", files=[("files", (bad, b"x"))])
         assert resp.status_code == 400, bad
+        assert "非法文件路径" in resp.json()["detail"]
     resp = client.post("/api/masters/stage", files=[("files", ("", b"x"))])
     assert resp.status_code in (400, 422)
 
