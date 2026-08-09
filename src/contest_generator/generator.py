@@ -150,6 +150,7 @@ def resolve_topic_context(
     topic_library_dir: Path,
     reference_library_dir: Path,
     reference_ids: Sequence[str] = (),
+    platform: str = "",
 ) -> TopicContext:
     """生成入口素材装配：显式编号或粘贴题面中的编号（AI 理解）→ 完整赛题上下文。
 
@@ -166,6 +167,10 @@ def resolve_topic_context(
     一次读好，manual_fulltexts），清单段带来源标注（suggestions 混排，锚定
     与手动重合的条目只出现一次、标注手动）。幻觉 id / 重复 id 大声失败
     （manual_reference_admission）。
+
+    platform（工单 01 平台属性）：锚定命中按生成平台过滤（any 全进）；手动
+    选不过平台过滤（用户显式意图，UI 标注平台让用户自判）。recommend 传请求
+    体 platform；skeleton / generate 不注入参考文件，传缺省（空串 = 不过滤）。
     """
     manual_entries = (
         manual_reference_admission(reference_library_dir, reference_ids)
@@ -219,7 +224,10 @@ def resolve_topic_context(
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
     references = associated_references(
-        reference_library_dir, topic_key=entry.key, manifests=candidates
+        reference_library_dir,
+        topic_key=entry.key,
+        manifests=candidates,
+        platform=platform,
     )
     # 并集去重：锚定命中照旧自动进；手动条目若同时被锚定命中，清单只出现
     # 一次（标注 manual——全文已直读，模型无需点名），全文仍直读（manual_fulltexts 全量）

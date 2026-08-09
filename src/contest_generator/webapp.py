@@ -70,6 +70,7 @@ from .master_store import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
+    PLATFORM_ANY,
     add_reference,
     delete_reference,
     draft_description as reference_draft_description,
@@ -211,6 +212,7 @@ def _assemble_topic_context(
     problem_text: str,
     llm: LLM | None,
     reference_ids: Sequence[str] = (),
+    platform: str = "",
 ) -> TopicContext:
     """生成流程的历史赛题入口素材装配（单一 helper，三路由共用）。
 
@@ -221,7 +223,8 @@ def _assemble_topic_context(
     查无此条大声报错；自动识别尽力而为（提取失败 / 查无此条静默降级）。
     推荐 / 骨架传 _llm(context)（自动识别），生成传 None（显式编号路径）。
     reference_ids = 手动选参考资料（工单 01，仅推荐路由传——骨架 / 生成不
-    注入参考文件是既有定案）。
+    注入参考文件是既有定案）。platform（工单 01 平台属性）= 锚定命中过滤
+    依据：仅推荐路由传请求体 platform（骨架 / 生成不注入参考文件，传缺省）。
     """
     config = _require_config(context)
     return resolve_topic_context(
@@ -232,6 +235,7 @@ def _assemble_topic_context(
         topic_library_dir=topic_library_dir(config.module_library_dir),
         reference_library_dir=reference_library_dir(config.module_library_dir),
         reference_ids=reference_ids,
+        platform=platform,
     )
 
 
@@ -482,12 +486,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         problem_text = _require_str(payload, "problem_text")
         topic_id = _optional_str(payload, "topic_id")
         reference_ids = _require_str_list(payload, "reference_ids")
+        platform = _optional_str(payload, "platform")
         # 完整上下文已在装配点（resolve_topic_context）一次备好：两级注入的
         # 清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费（key 空 =
         # 未识别到历史赛题，no-topic 形同样携带全模块摘要）；手动选参考资料
-        # 的准入 / 全文直读同样在装配点完成
+        # 的准入 / 全文直读同样在装配点完成。platform（工单 01）= 锚定命中
+        # 按生成平台过滤（手动选不过滤），缺省 / 空 = 现状不过滤
         topic = _assemble_topic_context(
-            context, topic_id, problem_text, _llm(context), reference_ids
+            context, topic_id, problem_text, _llm(context), reference_ids, platform
         )
         summaries = topic.manifest_summaries
         suggestions = topic.suggestions
@@ -519,14 +525,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 result["topic_id"] = topic.key
                 result["related_modules"] = list(topic.related_modules)
             # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；
-            # 同一条目既锚定又手动只出现一次（手动优先标注——用户显式选择）
+            # 同一条目既锚定又手动只出现一次（手动优先标注——用户显式选择）；
+            # platform（工单 01）随条目带出，前端按它显示平台标注
             manual_ids = {ref.id for ref in topic.manual_references}
             result["references"] = [
-                {"id": ref.id, "title": ref.title, "source": "auto"}
+                {"id": ref.id, "title": ref.title, "source": "auto", "platform": ref.platform}
                 for ref in topic.references
                 if ref.id not in manual_ids
             ] + [
-                {"id": ref.id, "title": ref.title, "source": "manual"}
+                {"id": ref.id, "title": ref.title, "source": "manual", "platform": ref.platform}
                 for ref in topic.manual_references
             ]
             emit.done(result)
@@ -922,6 +929,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             anchor_value=_require_str(payload, "anchor_value"),
             files=files,
             kit_vocabulary=module_kit_vocabulary(config.module_library_dir),
+            # 平台属性（工单 01）：缺省 / 空 = any（平台无关，向后兼容）；
+            # 词表外值由 add_reference 大声失败（400）
+            platform=_optional_str(payload, "platform") or PLATFORM_ANY,
         )
         return entry.to_dict()
 

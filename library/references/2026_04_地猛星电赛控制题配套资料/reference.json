@@ -1,0 +1,15 @@
+{
+  "id": "2026_04_地猛星电赛控制题配套资料",
+  "title": "2026_04_地猛星电赛控制题配套资料",
+  "type": "配套资料",
+  "description": "2026 年电赛控制题（H 题：车载平衡滚球运动控制系统）配套资料：立创·地猛星 MSPM0G3507 开发板引脚图 / 原理图；小车（DC 电机 PID 闭环、灰度巡线、MPU6050 陀螺仪、OLED、串口校准）与云台（步进电机、SPI 屏幕、激光笔）逐步开发例程；CCS 20.5 安装包与 2017-2025 真题汇总。二进制素材（zip/pdf/exe 约 1.9G）不入库，完整保真见 sources/materials 备份。",
+  "anchor_kind": "topic",
+  "anchor_value": "2026H",
+  "files": [
+    "素材清单.txt",
+    "01_.vscode/.vscode/c_cpp_properties.json",
+    "05_OLED驱动代码/oled.c",
+    "05_OLED驱动代码/oled.h"
+  ],
+  "platform": "mspm0"
+}
