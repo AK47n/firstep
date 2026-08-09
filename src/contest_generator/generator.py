@@ -20,7 +20,7 @@ from .keil import include_search_dirs
 from .library import list_modules
 from .llm import LLMError, build_manifest_summaries
 from .manifest import ManifestSummary, ModuleManifest
-from .master import master_project_dir
+from .master_store import master_project_dir
 from .patchers import PatcherRegistry, default_registry
 from .reference_library import ReferenceEntry, ReferenceError
 from .selection import (

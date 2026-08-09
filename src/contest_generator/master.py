@@ -20,54 +20,51 @@ compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→
 .c/.s、IncludePath = 保留 .h 所在目录，密度守卫——保留启动文件非 _md 大声
 失败）→ import_master 做结构分析后入库（每平台一个母版，可更换 / 删除）。
 
-母版库：磁盘目录即数据库，母版库根下每个平台一个目录（工程文件本体）+ 同名
-<platform>.json 元数据（提炼来源、入库时结构分析的警告）。元数据放目录外的
-平级文件：母版目录会被生成器整体复制，内部带 json（如 master.json）会污染
-生成的工程。
-
-任何从平台名拼路径的操作（浏览 / 删除 / 入库）都先校验平台名合法性，杜绝
-借平台名逃出母版库的路径穿越。母版库的物理位置由调用方传入（后续工单接入
-本机配置），测试用 tmp_path。
+职责划分（架构深化 v5 三轴拆块，工单 01）：文件类别的识别规则与生命周期
+（RULE_CATEGORIES / classify / 启动文件去重）唯一出处 = categories.py，
+本模块只消费不定义；母版库 CRUD、元数据与 MasterError 唯一出处 =
+master_store.py。母版库：磁盘目录即数据库，库根下每平台一个目录（工程文件
+本体）+ 同名 <platform>.json 元数据（提炼来源、入库时结构分析的警告）。
+元数据放目录外的平级文件：母版目录会被生成器整体复制，内部带 json（如
+master.json）会污染生成的工程。任何从平台名拼路径的操作都先校验平台名
+合法性，杜绝借平台名逃出母版库的路径穿越。
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
-import os
-import re
 import shutil
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
-from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
-from .entry_store import (
-    StoreError,
-    StoreParseError,
-    StoreReadError,
-    StoreShapeError,
-    delete_entry,
-    read_json,
-    require_str,
-    validate_store_key,
+from .categories import (
+    INFRASTRUCTURE_REASON,
+    RULE_CATEGORIES,
+    STARTUP_REPLACEMENT_REASON,
+    RuleCategory,
+    _pick_startup,
+    _validate_startup_disposition,
+    classify,
 )
+from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
 from .keil import (
     KeilProjectError,
     build_master_uvprojx,
     extract_config_summary as extract_keil_config_summary,
-    is_md_startup,
-    is_startup_candidate,
     render_master_uvprojx,
-    validate_project_structure,
 )
-from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
-from .treewalk import (
-    BUILD_ARTIFACT_DIRS,
-    iter_project_files,
-    skip_project_noise,
+from .master_store import (
+    MasterError,
+    MasterMeta,
+    _find_config_files,
+    _require_str,
+    _validate_known_platform,
+    import_master,
 )
+from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from .treewalk import iter_project_files
 
 if TYPE_CHECKING:
     # 仅类型注解用（llm 运行时依赖 selection → reference_library，运行时导入
@@ -85,269 +82,15 @@ from .report import (
     ReportError,
 )
 
-# 扫描时忽略的目录：版本库与构建产物不是母版内容。Debug/Release（CCS 构建
-# 输出）只在工程顶层出现，顶层匹配即可；Listings/Objects（Keil 默认输出目录）
-# 建在 .uvprojx 所在目录——正点原子风格工程 .uvprojx 在 USER/ 下时，产物在
-# USER/Listings、USER/Objects，必须按任意层级组件匹配（见 treewalk 模块）。
-# Keil 的 .d 依赖文件落在这些输出目录里，整目录忽略已覆盖，名单里不需要裸
-# ".d" 规则（见 RESIDUE_RULES 注释）。常量与跳过规则的唯一出处 = treewalk.py。
-
-# 残留规则（保守名单，与 template-fit-check.md 的"建议清理"一致）：构建产物 /
-# 备份 / 临时文件 / IDE 用户选项按扩展名与模式机器识别。命中即确定性剔除——
-# 不进扫描清单、不进 AI 判定、不读全文，但进报告 exclude 清单并带规则化原因
-# （ADR 0001：不做黑盒消失）。IDE 用户选项（.uvoptx 断点 / 调试配置、.uvguix
-# 窗口布局——2026C/21F 真实工程里成对出现）：非编译关键，Keil 编译时自动重建
-# （工单 09 决策 5）。注意：刻意不含裸 ".d"（Keil/CCS 依赖文件）——.d 依赖
-# 文件默认落在构建输出目录（Keil 的 Objects/Listings、CCS 的 Debug/Release），
-# 目录级忽略（BUILD_ARTIFACT_DIRS，任意层级）已覆盖，名单不需要这条扩展名
-# 规则。也不存在"截胡链接脚本"的问题：后缀匹配是整段 endswith，"startup.ld"
-# / "link.cmd" 不以 ".d" 结尾。
-RESIDUE_RULES: tuple[tuple[str, str], ...] = (
-    (".o", "构建产物：.o 文件"),
-    (".axf", "构建产物：.axf 文件"),
-    (".hex", "构建产物：.hex 文件"),
-    (".map", "构建产物：.map 文件"),
-    (".lst", "构建产物：.lst 文件（Keil 列表文件）"),
-    (".htm", "构建产物：.htm 文件（构建 / 链接日志）"),
-    (".crf", "构建产物：.crf 文件（Keil 交叉引用文件）"),
-    (".dep", "构建产物：.dep 文件（依赖文件）"),
-    (".lnp", "构建产物：.lnp 文件（Keil 链接控制文件）"),
-    (".out", "构建产物：.out 文件（CCS 链接产物）"),
-    (".elf", "构建产物：.elf 文件（链接产物）"),
-    (".uvoptx", "IDE 用户选项：编译时自动重建"),
-    (".bak", "备份文件：.bak"),
-    (".tmp", "临时文件：.tmp"),
-    (".temp", "临时文件：.temp"),
-    ("~", "备份文件：~ 结尾"),
-)
-
-
-def residue_reason(rel_path: str) -> str | None:
-    """路径命中残留规则时返回规则化原因（如"构建产物：.o 文件"），否则 None。
-
-    按路径后缀判定（大小写不敏感——Windows 下构建产物常大写，如 .HEX）；
-    .bak 精确后缀之外，路径含 ".bak" 段的（pid.c.bak2 / pid.c.bak_consolidate
-    ——真实旧工程备份习惯多样，判例 08）同样是备份。规则由路径决定：同一路径
-    在任何工程里都是残留，不可能既是残留又是源码。
-    """
-    lowered = rel_path.lower()
-    for suffix, reason in RESIDUE_RULES:
-        if lowered.endswith(suffix):
-            return reason
-    if ".bak" in lowered:
-        return "备份文件：.bak 变体（.bak2 / .bak_consolidate 等）"
-    if ".uvguix" in lowered:
-        # Keil 界面布局文件带用户名后缀（Project.uvguix.luoji，2026C/21F 真实
-        # 工程成对出现）：按包含匹配，与 .uvoptx 同族规则剔除
-        return "IDE 用户选项：Keil 界面布局，编译时自动重建"
-    return None
-
-
-# 二进制文件（内容判据）：文件头探针内含 NUL 字节即二进制。真实旧工程里混着
-# 素材类文件——PDF / 图片 / 模型（.kmodel）/ 压缩包 / 可执行文件 / STEP 装配体，
-# 它们不可能是编译链源码（母版 = 空的最小系统板工程，编译必需件只有文本），
-# 且以 errors="replace" 读全文会产生几十 MB 乱码撑爆 LLM 上下文（判例 08：三个
-# 真实工程判定素材 47.6M 字符，最大单文件 7.5M）。与残留同模式：规则识别、
-# 确定性剔除、不进 AI 判定也不读全文，但进报告 exclude 清单并带规则化原因
-# （ADR 0001：不做黑盒消失）。判据是内容不是扩展名——扩展名名单永远有尾
-# （.kmodel/.STEP/.exe/.zip/...），NUL 探测覆盖任何二进制格式，且纯文本源码
-# 不含 NUL，不会误伤。
-BINARY_PROBE_BYTES = 8192
-BINARY_FILE_REASON = "二进制文件：非源码素材（文档 / 图片 / 模型等），确定性剔除"
-
-
-def _is_binary_file(path: Path) -> bool:
-    """文件头（前 BINARY_PROBE_BYTES 字节）含 NUL 字节即判定为二进制。"""
-    with path.open("rb") as file:
-        return b"\x00" in file.read(BINARY_PROBE_BYTES)
-
-
-def _binary_reason(rel_path: str, path: Path) -> str | None:
-    """二进制类别识别（RuleCategory 统一签名）：内容判据命中返回规则化原因。"""
-    return BINARY_FILE_REASON if _is_binary_file(path) else None
-
-
 # 模板 main.c（ADR 0002）：母版 = 空的最小系统板工程，main.c 由确定性平台模板
 # 提供（时钟初始化 + while(1) 空循环 + TODO 区），能直接编译烧录；旧工程 main.c
 # 一律不进母版。模板内容在 templates/ 目录（与 webapp 的 static/ 同一加载模式），
-# 按平台词表命名。与残留同模式：旧 main.c 不进扫描清单的公共 / 冲突 / 独有分类、
-# 不进 AI 判定素材，但进报告 exclude 清单并带规则化原因（ADR 0001：不做黑盒消失）。
+# 按平台词表命名。旧 main.c 的识别与剔除原因唯一出处 = categories.py
+# （main_c_reason / MAIN_C_TEMPLATE_REASON）。
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 MAIN_C_TEMPLATE_PATH = "main.c"  # 模板 main.c 在母版里的落位路径（母版根）
-MAIN_C_TEMPLATE_REASON = (
-    "旧工程 main.c 一律剔除：母版 main.c 由确定性模板提供（ADR 0002）"
-)
 
 
-def main_c_reason(rel_path: str) -> str | None:
-    """旧工程 main.c 识别：任意层级的 main.c 都由模板替代，返回规则化原因。
-
-    按文件名判定、大小写不敏感（与残留规则同理：Windows 文件系统大小写不
-    敏感，MAIN.C 也是 main 文件；同一路径在任何工程里都是 main，不可能既是
-    main 又是普通源码）。命中即确定性剔除——不进 AI 判定、不读全文，但进
-    报告 exclude 清单并带规则化原因。
-    """
-    if Path(rel_path).name.lower() == "main.c":
-        return MAIN_C_TEMPLATE_REASON
-    return None
-
-
-# 基础设施规则：启动文件（.s/.S）与链接脚本（.ld/.sct/.cmd）由规则识别、
-# 确定性保留。电赛工程里这些就是官方标准件（startup_stm32f10x_hd.s 等），
-# 格式固定、没有"项目特定"的可能；进 AI 判定只有判错风险（判 exclude →
-# 空工程编译链断裂、编译失败，且重写 .uvprojx 时悬空引用会被静默删除）。
-# 与残留同模式：不进扫描清单、不进 AI 判定素材、不读全文，但进报告 keep
-# 清单并带规则化原因（ADR 0001：不做黑盒消失——保留方向同理）。
-INFRASTRUCTURE_SUFFIXES = (".s", ".ld", ".sct", ".cmd")
-INFRASTRUCTURE_REASON = "平台基础设施：启动文件 / 链接脚本，确定性保留"
-
-
-def infrastructure_reason(rel_path: str) -> str | None:
-    """基础设施识别：启动文件（.s）与链接脚本（.ld/.sct/.cmd）由规则保留。
-
-    按路径后缀判定、大小写不敏感（Windows 文件系统大小写不敏感，.S 也是
-    汇编启动文件）。命中即确定性保留——不进 AI 判定、不读全文，但进报告
-    keep 清单并带规则化原因。注意：匹配 startup_stm32f10x_*.s 的启动文件
-    候选单独记录（startup_files），由 assemble_report 跨工程去重后决定
-    保留份与落选份。
-    """
-    lowered = rel_path.lower()
-    for suffix in INFRASTRUCTURE_SUFFIXES:
-        if lowered.endswith(suffix):
-            return INFRASTRUCTURE_REASON
-    return None
-
-
-# ---------------------------------------------------------------------------
-# 文件类别：残留 / 旧 main.c / 基础设施 / 二进制 / 工程配置文件——识别规则 +
-# 生命周期唯一出处（启动文件候选是表内钩子，决策 2：跨工程去重）
-# ---------------------------------------------------------------------------
-
-
-# 工程配置文件（工单 09，判例 09 治本）：.uvprojx（stm32）由确定性渲染器
-# 现写（keil.render_master_uvprojx，结构一致性由构造保证），.cproject/.project
-# （mspm0，CCS 按目录编译、无文件引用问题，母版库尚无 mspm0 良好格式种子）
-# 确定性保留首份原样、不现写不重写（决策 6）。与基础设施同模式：不进扫描
-# 清单、不进 AI 判定素材、不读全文，但进报告 keep 清单并带规则化原因
-# （ADR 0001：不做黑盒消失）；条目不可改动作（决策 7）。
-UVPROJX_CONFIG_REASON = "工程配置文件：由确定性模板现写，保留文件全量入树"
-CCS_CONFIG_REASON = "工程配置文件：由确定性规则保留首份原样（CCS 按目录编译）"
-CONFIG_FILE_SUFFIXES = (
-    ".uvprojx",  # stm32 / Keil
-    ".cproject",  # mspm0 / CCS
-    ".project",  # mspm0 / CCS（Eclipse 底座描述）
-)
-
-
-def config_file_reason(rel_path: str) -> str | None:
-    """工程配置文件识别：按后缀判定、大小写不敏感，返回规则化原因。
-
-    .uvprojx → 渲染现写；.cproject/.project → 保留首份原样。命中即确定性
-    处理——不进 AI 判定（AI 给出这类路径的判定是越界，拒绝）、不读全文。
-    """
-    lowered = rel_path.lower()
-    if lowered.endswith(".uvprojx"):
-        return UVPROJX_CONFIG_REASON
-    if lowered.endswith(".cproject") or lowered.endswith(".project"):
-        return CCS_CONFIG_REASON
-    return None
-
-
-# 启动文件跨工程去重（决策 2）：同一器件只需一份启动文件——真实案例 2026C+21F
-# 各带一份 md 启动（key/ 与 sys/），旧母版两份都保留（Reset_Handler 重复定义
-# 风险）。文件名匹配 startup_stm32f10x_*.s 的 .s 是"启动文件候选"，至多保留
-# 一份（优先 _md——与目标板 C8T6 中密度匹配，没有则按路径排序取第一份），
-# 落选候选规则剔除、进报告 exclude 带本原因。
-STARTUP_REPLACEMENT_REASON = "启动文件替代：同一器件只需一份启动文件"
-
-
-def _pick_startup(comparison: "ProjectComparison") -> str | None:
-    """跨工程启动文件去重（决策 2）：返回保留的那份，落选候选进 exclude。
-
-    优先 startup_stm32f10x_md.s（与目标板 C8T6 中密度匹配）；没有 _md 则按
-    路径排序取第一份（密度守卫在渲染器：保留份非 _md 时入库前大声失败）。
-    确定性：同一输入必然同一结果。
-    """
-    candidates = comparison.startup_files
-    if not candidates:
-        return None
-    md = sorted(c for c in candidates if is_md_startup(c))
-    if md:
-        return md[0]
-    return sorted(candidates)[0]
-
-
-@dataclass(frozen=True)
-class RuleCategory:
-    """一个文件类别的完整生命周期描述。
-
-    类别 = 识别规则（reason_of，扫描时判定）+ 生命周期各环节的处置：扫描
-    分类 → 对比并集 → 报告汇编（report_reason，此时已无文件内容可读，二进制
-    类给常量原因）→ 越界拦截（AI 判定即报错）→ 校验（确认不能改成别的动作）。
-    """
-
-    key: str  # ProjectStructure / ProjectComparison 的字段名（类别分组）
-    name: str  # 中文名（错误消息用）
-    reason_of: Callable[[str, Path], str | None]  # (rel, path) → 规则化原因；None = 不命中
-    report_reason: Callable[[str], str | None]  # 报告汇编取原因（按路径重算或常量）
-    disposition: Literal["keep", "exclude"]  # 确定性处置：保留 / 剔除
-    out_of_scope_message: str  # AI 判定即越界的报错文案，{path} 占位
-    disposition_message: str  # 处置校验的报错前缀，如"残留文件必须剔除"
-
-
-# 类别表。顺序即扫描的判定顺序：先便宜的后读文件内容的（二进制探针最后；
-# 工程配置文件是纯后缀判定，放表尾——与残留 / 基础设施等类别互斥，顺序
-# 不影响分类结果）。新增类别 = 在此加一条 + 给 ProjectStructure /
-# ProjectComparison 补同名字段（声明式，不再复制六处逻辑）。启动文件候选
-# 不进表（处置不是单一动作：跨工程至多保留一份，见 _pick_startup），由
-# 扫描钩子单独记录、各流水线表外处理。
-RULE_CATEGORIES: tuple[RuleCategory, ...] = (
-    RuleCategory(
-        key="residues",
-        name="残留文件",
-        reason_of=lambda rel, path: residue_reason(rel),
-        report_reason=residue_reason,
-        disposition="exclude",
-        out_of_scope_message="残留文件由规则剔除，无需 AI 判定：{path}",
-        disposition_message="残留文件必须剔除",
-    ),
-    RuleCategory(
-        key="main_c_files",
-        name="旧工程 main.c",
-        reason_of=lambda rel, path: main_c_reason(rel),
-        report_reason=main_c_reason,
-        disposition="exclude",
-        out_of_scope_message="旧工程 main.c 由模板替代，无需 AI 判定：{path}",
-        disposition_message="旧工程 main.c 必须剔除",
-    ),
-    RuleCategory(
-        key="infrastructure",
-        name="基础设施",
-        reason_of=lambda rel, path: infrastructure_reason(rel),
-        report_reason=lambda _: INFRASTRUCTURE_REASON,
-        disposition="keep",
-        out_of_scope_message="基础设施由规则保留，无需 AI 判定：{path}",
-        disposition_message="基础设施必须保留",
-    ),
-    RuleCategory(
-        key="binaries",
-        name="二进制文件",
-        reason_of=_binary_reason,
-        report_reason=lambda _: BINARY_FILE_REASON,
-        disposition="exclude",
-        out_of_scope_message="二进制文件由规则剔除，无需 AI 判定：{path}",
-        disposition_message="二进制文件必须剔除",
-    ),
-    RuleCategory(
-        key="config_files",
-        name="工程配置文件",
-        reason_of=lambda rel, path: config_file_reason(rel),
-        report_reason=config_file_reason,
-        disposition="keep",
-        out_of_scope_message="工程配置文件由规则处理，无需 AI 判定：{path}",
-        disposition_message="工程配置文件必须保留",
-    ),
-)
 def main_c_template(platform: str) -> str:
     """确定性模板 main.c 全文（非 AI 生成）：按平台取 templates/ 下的模板。
 
@@ -361,18 +104,6 @@ def main_c_template(platform: str) -> str:
         return template.read_text(encoding="utf-8")
     except OSError as exc:
         raise MasterError(f"平台 {platform} 的模板 main.c 缺失：{template}") from exc
-
-# 各平台 IDE 打开工程必需的配置文件：结构分析时校验存在性
-PLATFORM_CONFIG_FILES = {
-    PLATFORM_STM32: (".uvprojx",),
-    PLATFORM_MSPM0: (".cproject", ".project"),
-}
-
-_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
-
-
-class MasterError(ValueError):
-    """母版提炼 / 管理失败，message 说明具体问题。"""
 
 
 # ---------------------------------------------------------------------------
@@ -419,39 +150,6 @@ class ProjectComparison:
     binaries: tuple[str, ...] = ()  # 全部工程的二进制文件（并集，排序，确定性剔除）
 
 
-@dataclass(frozen=True)
-class StructureAnalysis:
-    """入库时的结构分析结果。"""
-
-    platform: str
-    warnings: tuple[str, ...]  # 非致命问题（构建产物残留等）
-
-
-@dataclass(frozen=True)
-class MasterMeta:
-    """母版元数据（母版库根下的 <platform>.json）。"""
-
-    platform: str
-    sources: tuple[str, ...]  # 提炼来源工程名
-    warnings: tuple[str, ...]  # 入库时结构分析的警告
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "platform": self.platform,
-            "sources": list(self.sources),
-            "warnings": list(self.warnings),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "MasterMeta":
-        platform = _require_str(data, "platform")
-        sources = _require_str_list(data, "sources")
-        warnings = _require_str_list(data, "warnings")
-        return cls(
-            platform=platform, sources=tuple(sources), warnings=tuple(warnings)
-        )
-
-
 # ---------------------------------------------------------------------------
 # 工程扫描与对比
 # ---------------------------------------------------------------------------
@@ -473,7 +171,8 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     内容；二进制文件（内容判据：文件头含 NUL）单独记录在 binaries、确定性
     剔除、不进扫描清单也不读全文（可能是几十 MB 的模型 / 压缩包）；
     config_summary 提取设备 / include path / 编译宏等配置对比素材（XML 解析
-    失败只记一行，扫描不因单个工程带病中断）。
+    失败只记一行，扫描不因单个工程带病中断）。类别判定按表序由
+    categories.classify 完成（表遍历知识唯一出处）。
     """
     if not project_dir.is_dir():
         raise MasterError(f"工程目录不存在：{project_dir}")
@@ -486,17 +185,16 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     }
     for path in iter_project_files(project_dir):
         rel = path.relative_to(project_dir).as_posix()
-        for cat in RULE_CATEGORIES:
-            if cat.reason_of(rel, path) is not None:
-                # 类别互斥、按表序判定（残留 → main.c → 基础设施 → 二进制 →
-                # 工程配置文件）：命中即分类、不读全文（二进制探针只读文件头）。
-                # 表内钩子：基础设施命中且是启动文件候选（startup_*.s）时
-                # 单列到 startup_files——跨工程去重（决策 2），不进基础设施组
-                if cat.key == "infrastructure" and is_startup_candidate(rel):
-                    startup_files.append(rel)
-                else:
-                    category_lists[cat.key].append(rel)
-                break
+        key, is_startup = classify(rel, path)
+        if key is not None:
+            # 类别互斥、按表序判定（残留 → main.c → 基础设施 → 二进制 →
+            # 工程配置文件）：命中即分类、不读全文（二进制探针只读文件头）。
+            # 表内钩子：基础设施命中且是启动文件候选（startup_*.s）时
+            # 单列到 startup_files——跨工程去重（决策 2），不进基础设施组
+            if is_startup:
+                startup_files.append(rel)
+            else:
+                category_lists[key].append(rel)
         else:
             files.append(rel)
             hashes[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -741,7 +439,7 @@ def assemble_report(
                 decision
             )
     keep: list[FileDecision] = category_keep
-    startup = _pick_startup(comparison)
+    startup = _pick_startup(comparison.startup_files)
     if startup is not None:
         # 启动文件去重保留份（决策 2）：基础设施同款确定性保留
         keep.append(FileDecision(startup, ACTION_KEEP, reason=INFRASTRUCTURE_REASON))
@@ -788,7 +486,7 @@ def _render_inputs(
             if Path(d.path).suffix.lower() == ".h"
         }
     )
-    return sources, _pick_startup(comparison), include_dirs
+    return sources, _pick_startup(comparison.startup_files), include_dirs
 
 
 def _config_preview(
@@ -923,7 +621,8 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
     # 各自 disposition 处置，由 _validate_category_disposition 逐类校验（遍历
     # 类别表）——归档条目也逃不过：残留 / 二进制等类别文件必须剔除，不配归档。
     # 启动文件候选（决策 2 表内钩子）同样不在判定范围：保留份必须 keep、
-    # 落选份必须 exclude，由 _validate_startup_disposition 单独校验。
+    # 落选份必须 exclude，由 _validate_startup_disposition（categories.py）
+    # 单独校验。
     category_paths = {
         path
         for cat in RULE_CATEGORIES
@@ -935,7 +634,7 @@ def _validate_report(report: DistillationReport, comparison: ProjectComparison) 
     )
     for cat in RULE_CATEGORIES:
         _validate_category_disposition(cat, report, comparison)
-    _validate_startup_disposition(report, comparison)
+    _validate_startup_disposition(report, comparison.startup_files)
     _validate_merge_sources(dispositions, comparison)
 
 
@@ -969,47 +668,6 @@ def _validate_category_disposition(
         raise MasterError(
             f"{category.disposition_message}：" + "、".join(problems)
         )
-
-
-def _validate_forced_exclusions(
-    forced: set[str], report: DistillationReport, error_prefix: str
-) -> None:
-    """确定性剔除的文件必须恰好剔除一次：用户确认也不能改成保留 / 整合或
-    删掉（删掉 = 黑盒消失，ADR 0001）。两种问题一次报全，各自带原因。
-
-    类别表的确定性剔除由 _validate_category_disposition 泛化覆盖；本函数
-    仅剩启动文件落选候选（决策 2：同一器件只需一份启动文件）在用。
-    """
-    moved = sorted(
-        forced
-        & {
-            d.path
-            for d in (*report.keep, *report.merge, *report.exclude)
-            if d.action != ACTION_EXCLUDE
-        }
-    )
-    missing = sorted(forced - {d.path for d in report.exclude})
-    if moved or missing:
-        problems = [f"{path}（被改为保留/整合）" for path in moved]
-        problems += [f"{path}（报告中缺失）" for path in missing]
-        raise MasterError(f"{error_prefix}：" + "、".join(problems))
-
-
-def _validate_startup_disposition(
-    report: DistillationReport, comparison: ProjectComparison
-) -> None:
-    """启动文件去重结果不可改动作（决策 2）：保留份必须恰好保留一次，落选
-    候选必须恰好剔除一次——同一器件只需一份启动文件（两份并存 = Reset_Handler
-    重复定义），用户确认也不能改回或删掉。"""
-    picked = _pick_startup(comparison)
-    if picked is None:
-        return
-    if picked not in {d.path for d in report.keep}:
-        raise MasterError(f"启动文件必须保留：{picked}")
-    eliminated = sorted(set(comparison.startup_files) - {picked})
-    _validate_forced_exclusions(
-        set(eliminated), report, "落选启动文件必须剔除"
-    )
 
 
 def _validate_platform_match(platform: str, comparison: ProjectComparison) -> None:
@@ -1135,187 +793,8 @@ def confirm_distillation(
 
 
 # ---------------------------------------------------------------------------
-# 母版库：入库（结构分析 + 可更换）、浏览、删除
-# ---------------------------------------------------------------------------
-
-
-def master_project_dir(masters_dir: Path, platform: str) -> Path:
-    """母版在库里的目录位置：<masters_dir>/<platform>（库布局的唯一出处）。
-
-    import_master / get_master / delete_master 与生成流程共用这一条布局规则；
-    平台名先过合法性校验——借平台名拼路径逃出母版库在入口处就被拦住。
-    """
-    _validate_store_key(platform)
-    return masters_dir / platform
-
-
-def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
-    """入库前的结构分析：平台配置文件缺失 / 编译链结构残缺硬失败，其余进警告。
-
-    平台配置文件缺失说明母版无法被 IDE 打开，拒绝入库；Keil 母版还校验
-    .uvprojx 的编译链完整性（配置节点齐全 + 工程树引用覆盖全部保留源码，
-    见 _validate_keil_structure）——AI 整合出的 .uvprojx"XML 合法但结构残缺"
-    曾照样入库，生成时才被 KeilPatcher 拒绝（判例 09）。构建产物目录等
-    非母版内容只给警告（生成器复制时会忽略 .git，构建目录会原样带进新工程，
-    建议清理）。
-    """
-    _validate_known_platform(platform)
-    if not master_dir.is_dir():
-        raise MasterError(f"母版目录不存在：{master_dir}")
-    for suffix in PLATFORM_CONFIG_FILES[platform]:
-        if not _find_config_files(master_dir, f"*{suffix}"):
-            raise MasterError(
-                f"母版缺少平台 {platform} 的工程配置文件（{suffix}），拒绝入库"
-            )
-    if platform == PLATFORM_STM32:
-        _validate_keil_structure(master_dir)
-    warnings: list[str] = []
-    for name in sorted(BUILD_ARTIFACT_DIRS):
-        if (master_dir / name).is_dir():
-            warnings.append(f"母版含 {name}/ 构建产物目录，建议清理")
-    return StructureAnalysis(platform=platform, warnings=tuple(warnings))
-
-
-def _validate_keil_structure(master_dir: Path) -> None:
-    """Keil 母版入库前的编译链结构校验（格式知识归 keil.py）。
-
-    判例 09（用户实测）：AI 把两工程各自的 .uvprojx 判了 merge，整合产物
-    XML 合法但组被清空（丢了启动文件 / system_stm32f10x.c 的引用）、连
-    Cads/IncludePath 节点都没了——旧校验只查配置文件存在，坏母版照样入库、
-    到生成时 KeilPatcher 才拒绝。校验失败在入库前大声拒绝（中文说明缺什么），
-    兑现"绝不产出残缺工程"不变量。工程内保留源码清单按扫描同一套忽略规则
-    计算（.git / 构建输出目录不进清单）。
-    """
-    expected: list[str] = []
-    for path in iter_project_files(master_dir):
-        if path.suffix.lower() in (".c", ".s"):
-            expected.append(path.relative_to(master_dir).as_posix())
-    try:
-        validate_project_structure(master_dir, expected)
-    except KeilProjectError as exc:
-        raise MasterError(f"母版 .uvprojx 结构不完整，拒绝入库：{exc}") from exc
-
-
-def import_master(
-    masters_dir: Path,
-    platform: str,
-    source_dir: Path,
-    sources: Sequence[str] = (),
-) -> MasterMeta:
-    """母版入库：结构分析 → 复制到临时目录 → 整体替换同平台旧母版。
-
-    每平台一个母版：目标已存在时整体更换。先分析后动盘，分析失败不落任何
-    文件；旧母版先挪到备份目录再换入新母版，中途失败把备份换回来——既有
-    母版在任意失败点都完好。旧母版被占用（Keil µVision / 文件资源管理器
-    开着）时改名失败：绝不碰旧母版（rmtree 会把只锁住部分的旧母版删残，
-    真实事故），抛中文占用说明。
-    """
-    _validate_store_key(platform)
-    analysis = analyze_structure(source_dir, platform)
-    masters_dir.mkdir(parents=True, exist_ok=True)
-
-    temp_dir = masters_dir / f".{platform}.importing"
-    backup_dir = masters_dir / f".{platform}.backup"
-    shutil.rmtree(temp_dir, ignore_errors=True)  # 清掉上次失败残留
-    shutil.copytree(source_dir, temp_dir)
-    target_dir = masters_dir / platform
-    if target_dir.exists():
-        shutil.rmtree(backup_dir, ignore_errors=True)
-        if backup_dir.exists():
-            # 备份目录清理不掉（被占用）：改名只会撞上非空目录，Windows 报
-            # WinError 5，这里用中文讲清原因而不是裸抛拒绝访问
-            raise MasterError(
-                f"旧备份 {backup_dir.name} 目录清理失败（可能被占用），"
-                "请先关闭占用程序后重试导入"
-            )
-    moved_to_backup = False
-    try:
-        if target_dir.exists():
-            os.replace(target_dir, backup_dir)  # 旧母版先挪开
-            moved_to_backup = True
-        os.replace(temp_dir, target_dir)  # 新母版原子换入
-    except Exception:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        if moved_to_backup:
-            # 旧母版已在备份目录：清掉半换入的新母版，把旧母版换回来
-            shutil.rmtree(target_dir, ignore_errors=True)
-            if backup_dir.exists():
-                os.replace(backup_dir, target_dir)  # 回滚旧母版
-            raise
-        if target_dir.exists():
-            # 旧母版从未挪动（改名失败）：绝不能碰它——rmtree 会把只锁住
-            # 部分文件的旧母版删残（判例：真实事故，母版只剩空壳）
-            raise MasterError(
-                f"母版替换失败：旧母版目录 {target_dir.name} 被占用，无法挪动。"
-                "通常是 Keil µVision 或文件资源管理器还打开着该目录，"
-                "请先关闭再重试导入（杀毒软件扫描期间偶发，稍后重试亦可）"
-            ) from None
-        raise
-    shutil.rmtree(backup_dir, ignore_errors=True)
-
-    meta = MasterMeta(
-        platform=platform,
-        sources=tuple(sources),
-        warnings=analysis.warnings,
-    )
-    _write_meta(masters_dir, meta)
-    return meta
-
-
-def list_masters(masters_dir: Path) -> list[MasterMeta]:
-    """返回母版库中全部母版（按平台排序）；元数据缺失或损坏抛 MasterError。"""
-    if not masters_dir.is_dir():
-        return []
-    metas: list[MasterMeta] = []
-    for entry in sorted(masters_dir.iterdir()):
-        if not entry.is_dir() or entry.name.startswith("."):
-            continue  # 散文件与导入中的临时目录不影响浏览
-        metas.append(get_master(masters_dir, entry.name))
-    return metas
-
-
-def get_master(masters_dir: Path, platform: str) -> MasterMeta:
-    """读取单个母版元数据；不存在或损坏抛 MasterError。
-
-    读盘 / 解析 / 形状校验走 entry_store 原语（read_json），错误类型与文案
-    仍归本模块。
-    """
-    _validate_store_key(platform)
-    meta_path = masters_dir / f"{platform}.json"
-    try:
-        data = read_json(masters_dir, f"{platform}.json")
-    except StoreReadError as exc:
-        if isinstance(exc.error, FileNotFoundError):
-            raise MasterError(f"母版 {platform!r} 不存在") from None
-        raise MasterError(f"母版 {platform!r} 的元数据无法读取：{exc.error}") from exc
-    except StoreParseError as exc:
-        raise MasterError(f"母版 {platform!r} 的元数据不是合法 JSON：{exc.error}") from exc
-    except StoreShapeError:
-        raise MasterError(f"{meta_path} 必须是 JSON 对象") from None
-    try:
-        return MasterMeta.from_dict(data)
-    except MasterError as exc:
-        raise MasterError(f"母版 {platform!r} 的元数据不合法：{exc}") from exc
-
-
-def delete_master(masters_dir: Path, platform: str) -> None:
-    """删除母版：工程目录与元数据文件一并移除（目录存在校验走 entry_store 原语）。"""
-    _validate_store_key(platform)
-    try:
-        delete_entry(masters_dir, platform)
-    except StoreError:
-        raise MasterError(f"母版 {platform!r} 不存在") from None
-    (masters_dir / f"{platform}.json").unlink(missing_ok=True)
-
-
-# ---------------------------------------------------------------------------
 # 校验与辅助
 # ---------------------------------------------------------------------------
-
-
-def _find_config_files(project_dir: Path, pattern: str) -> list[Path]:
-    """递归查找工程配置文件：统一噪音跳过规则（treewalk.iter_project_files）。"""
-    return list(iter_project_files(project_dir, pattern=pattern))
 
 
 def _detect_platform(project_dir: Path) -> str:
@@ -1343,44 +822,3 @@ def _config_summary(project_dir: Path, platform: str) -> tuple[str, ...]:
         return extract_ccs_config_summary(project_dir)
     except (KeilProjectError, CcsProjectError) as exc:
         return (f"{platform} 工程配置读取失败：{exc}",)
-
-
-def _validate_store_key(platform: str) -> None:
-    try:
-        validate_store_key(platform, _SLUG_PATTERN, "平台名")
-    except StoreError:
-        raise MasterError(
-            f"非法平台名：{platform!r}（只能含字母数字下划线连字符，且以字母或数字开头）"
-        ) from None
-
-
-def _validate_known_platform(platform: str) -> None:
-    if platform not in KNOWN_PLATFORMS:
-        raise MasterError(f"未知平台 {platform!r}（已知：{'、'.join(KNOWN_PLATFORMS)}）")
-
-
-def _write_meta(masters_dir: Path, meta: MasterMeta) -> None:
-    """写元数据：先写临时文件再原子换入，写失败不会留下损坏的 json。"""
-    target = masters_dir / f"{meta.platform}.json"
-    temp = masters_dir / f".{meta.platform}.json.tmp"
-    temp.write_text(
-        json.dumps(meta.to_dict(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    os.replace(temp, target)
-
-
-def _require_str(data: dict[str, Any], key: str) -> str:
-    try:
-        return require_str(data, key)
-    except StoreError:
-        raise MasterError(f"缺少必填字段：{key}") from None
-
-
-def _require_str_list(data: dict[str, Any], key: str) -> list[str]:
-    value = data.get(key, [])
-    if not isinstance(value, list) or not all(
-        isinstance(item, str) and item for item in value
-    ):
-        raise MasterError(f"{key} 必须是非空字符串列表")
-    return value

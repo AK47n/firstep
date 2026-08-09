@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
 from .entry_store import discard_entry_dirs
-from .master import MasterError, ProjectComparison
+from .master import ProjectComparison
+from .master_store import MasterError
 from .reference_library import archive_reference
 from .report import DistillationReport, ReferenceCandidate
 from .topic_library import validate_topic_key
