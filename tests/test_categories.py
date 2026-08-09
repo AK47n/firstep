@@ -13,9 +13,13 @@ import pytest
 
 from contest_generator.categories import (
     BINARY_FILE_REASON,
+    CCS_CONFIG_REASON,
     MAIN_C_TEMPLATE_REASON,
     RULE_CATEGORIES,
     STARTUP_REPLACEMENT_REASON,
+    UVPROJX_CONFIG_REASON,
+    _CONFIG_FILE_SUFFIX_REASONS,
+    config_file_reason,
     residue_reason,
 )
 from contest_generator.master import (
@@ -27,7 +31,7 @@ from contest_generator.master import (
     scan_project,
 )
 from contest_generator.master_store import MasterError
-from contest_generator.platforms import PLATFORM_STM32
+from contest_generator.platforms import PLATFORM_CONFIG_FILE_SUFFIXES, PLATFORM_STM32
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -125,6 +129,39 @@ def test_rule_categories_keys_match_structure_fields():
     for category in RULE_CATEGORIES:
         assert category.key in structure_fields
         assert category.key in comparison_fields
+
+
+def test_config_file_reason_suffix_reasons_derived_from_platform_table():
+    """表消费：后缀 → 原因映射由 PLATFORM_CONFIG_FILE_SUFFIXES 推导，无硬编码拷贝。
+
+    工单 03：.uvprojx/.cproject/.project 字面量不再散落 categories 规则，
+    新增平台 = 表加行 + 平台→原因一行（_CONFIG_FILE_SUFFIX_REASONS）。
+    """
+    assert set(_CONFIG_FILE_SUFFIX_REASONS) == {
+        suffix
+        for suffixes in PLATFORM_CONFIG_FILE_SUFFIXES.values()
+        for suffix in suffixes
+    }
+    assert _CONFIG_FILE_SUFFIX_REASONS[".uvprojx"] == UVPROJX_CONFIG_REASON
+    assert _CONFIG_FILE_SUFFIX_REASONS[".cproject"] == CCS_CONFIG_REASON
+    assert _CONFIG_FILE_SUFFIX_REASONS[".project"] == CCS_CONFIG_REASON
+
+
+@pytest.mark.parametrize(
+    ("rel_path", "reason"),
+    [
+        ("project.uvprojx", UVPROJX_CONFIG_REASON),
+        ("USER/Project.UVPROJX", UVPROJX_CONFIG_REASON),  # 大小写不敏感保持
+        ("project.cproject", CCS_CONFIG_REASON),
+        ("proj/.project", CCS_CONFIG_REASON),
+        ("main.c", None),
+        ("x.uvprojx.tmp", None),  # 整段 endswith，非中间包含
+        ("", None),
+    ],
+)
+def test_config_file_reason_verbatim(rel_path, reason):
+    """行为逐字（工单 03 表消费后）：按后缀判定、大小写不敏感、返回规则化原因。"""
+    assert config_file_reason(rel_path) == reason
 
 
 # ---------------------------------------------------------------------------

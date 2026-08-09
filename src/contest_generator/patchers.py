@@ -10,8 +10,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, Sequence
 
-from .ccs import CcsPatcher, include_search_dirs as _ccs_include_search_dirs
-from .keil import KeilPatcher, include_search_dirs as _keil_include_search_dirs
+from .ccs import (
+    CcsPatcher,
+    EXTERNAL_HEADERS as _ccs_external_headers,
+    include_search_dirs as _ccs_include_search_dirs,
+)
+from .keil import (
+    KeilPatcher,
+    EXTERNAL_HEADERS as _keil_external_headers,
+    include_search_dirs as _keil_include_search_dirs,
+)
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
 
@@ -78,5 +86,19 @@ def include_search_dirs(platform: str, project_dir: Path) -> list[Path]:
         return _keil_include_search_dirs(project_dir)
     if platform == PLATFORM_MSPM0:
         return _ccs_include_search_dirs(project_dir)
+    known = ", ".join(sorted((PLATFORM_STM32, PLATFORM_MSPM0)))
+    raise UnknownPlatformError(f"未知平台 {platform!r}，已注册的平台：{known}")
+
+
+def external_headers(platform: str) -> frozenset[str]:
+    """平台工具链外部头（工程树外提供，门禁豁免 include 解析）。
+
+    与 include_search_dirs 同缝：生成核心只认识平台名，stm32 走 keil 版
+    （STM32F1xx DFP 提供）、mspm0 走 ccs 版（SysConfig 构建时生成）。
+    """
+    if platform == PLATFORM_STM32:
+        return _keil_external_headers
+    if platform == PLATFORM_MSPM0:
+        return _ccs_external_headers
     known = ", ".join(sorted((PLATFORM_STM32, PLATFORM_MSPM0)))
     raise UnknownPlatformError(f"未知平台 {platform!r}，已注册的平台：{known}")
