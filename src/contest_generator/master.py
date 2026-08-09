@@ -62,12 +62,12 @@ from .keil import (
     render_master_uvprojx,
     validate_project_structure,
 )
-from .events import ProgressEmitter  # 进度发射器类型（契约在 events，仅类型引用）
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
 if TYPE_CHECKING:
     # 仅类型注解用（llm 运行时依赖 selection → reference_library，运行时导入
     # 会把参考库族拖进 master 的 import 闭包，工单 C3 链收敛；library.py 先例）
+    from .events import ProgressEmitter
     from .llm import LLM
 from .report import (
     ACTION_EXCLUDE,

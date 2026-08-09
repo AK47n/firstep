@@ -15,11 +15,15 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from .clex import strip_code_fences, strip_comments
-from .llm import LLM
 from .manifest import ModuleManifest
+
+if TYPE_CHECKING:
+    # 仅类型注解用（skeleton 是纯文本模块，运行时导入 llm 会把整条 LLM 栈
+    # 拉进生成流程的 import 图——master.py 同规先例，工单 C3 链收敛）
+    from .llm import LLM
 
 # 控制关键字与 main：这些"名字("不是模块函数调用
 _CONTROL_KEYWORDS = frozenset(
