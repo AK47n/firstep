@@ -1278,6 +1278,45 @@ def test_distill_rejects_unconfigured_api_before_streaming(tmp_path):
     assert "未配置 AI API" in resp.json()["detail"]
 
 
+def test_master_stage_folder_upload_then_scan(client, tmp_path):
+    """「选择文件夹」上传（/api/masters/stage）→ 暂存目录 → 可喂扫描 / 提炼。
+
+    浏览器不暴露绝对路径，整夹上传由 multipart 承载：每个文件的文件名 =
+    文件夹内相对路径（webkitRelativePath）；返回的暂存目录路径直接进
+    project_dirs，目录名保留原文件夹名（扫描 / 报告 / 入库显示原名）。
+    """
+    proj_a, _ = make_fake_stm32_projects(tmp_path / "old")
+    # 浏览器 webkitRelativePath = "原文件夹名/相对路径"（首段是选中的文件夹名）
+    files = [
+        ("files", (str(p.relative_to(proj_a.parent)).replace("\\", "/"), p.read_bytes()))
+        for p in proj_a.rglob("*")
+        if p.is_file()
+    ]
+    resp = client.post("/api/masters/stage", files=files)
+    assert resp.status_code == 200, resp.text
+    staged = resp.json()["staged"]
+    assert [s["name"] for s in staged] == ["proj-a"]
+    staged_dir = Path(staged[0]["path"])
+    assert staged_dir.is_dir()
+    assert (staged_dir / "src" / "oled.c").read_text(encoding="utf-8").startswith("/* 通用 OLED")
+    assert not (staged_dir / ".git").exists()   # 版本库跳过，与前端过滤一致
+    # 暂存目录可直接进扫描：平台检测 / 文件清单与原目录一致
+    scanned = client.post("/api/masters/scan", json={"project_dirs": [str(staged_dir)]}).json()
+    assert scanned[0]["name"] == "proj-a"
+    assert scanned[0]["platform"] == PLATFORM_STM32
+    assert "src/oled.c" in scanned[0]["files"]
+
+
+def test_master_stage_rejects_bad_relative_paths(client):
+    """上传带 .. / 绝对路径 / 盘符的文件名 → 400；空文件名框架级拦截（不落盘）。"""
+    for bad in ("../evil.c", "/abs/evil.c", "C:/evil.c"):
+        resp = client.post("/api/masters/stage", files=[("files", (bad, b"x"))])
+        assert resp.status_code == 400, bad
+        assert "非法文件路径" in resp.json()["detail"]
+    resp = client.post("/api/masters/stage", files=[("files", ("", b"x"))])
+    assert resp.status_code in (400, 422)
+
+
 def test_master_scan_oserror_returns_400_not_500(context, monkeypatch):
     """/api/masters/scan 漏捕 OSError → 裸 500（评审点名的已知 bug 类）→ 400。
 
@@ -1740,3 +1779,58 @@ def test_layout_dir_derivation_lives_in_config():
     assert (
         config.reference_library_dir(library_dir) == library_dir.parent / "references"
     )
+
+
+# ---------------------------------------------------------------------------
+# 标签会话（启动器模式：关浏览器 = 停服务）
+# ---------------------------------------------------------------------------
+
+
+def test_tabs_register_and_bye_manage_sessions(client, context):
+    """登记 / 注销标签会话：注册表增减正确，空 = 没有打开的前端页面。"""
+    ctx, _ = context
+    assert client.post("/api/tabs/register", json={"tab_id": "t1"}).status_code == 200
+    assert len(ctx.tab_registry) == 1
+    assert client.post("/api/tabs/bye", json={"tab_id": "t1"}).status_code == 200
+    assert len(ctx.tab_registry) == 0
+
+
+def test_tabs_require_tab_id(client):
+    """tab_id 必填非空（与其余端点同款 400 契约）。"""
+    assert client.post("/api/tabs/register", json={}).status_code == 400
+    assert client.post("/api/tabs/bye", json={}).status_code == 400
+
+
+def test_tabs_bye_schedules_exit_only_when_last_tab_and_launcher_managed(
+    client, context, monkeypatch
+):
+    """最后一个标签离开 + 启动器模式 → 宽限后退出；还有标签在开 → 不退出。"""
+    import contest_generator.webapp as webapp
+
+    ctx, _ = context
+    exits = []
+    monkeypatch.setattr(webapp, "_EXIT", lambda code: exits.append(code))
+    monkeypatch.setattr(webapp, "_launcher_managed", lambda: True)
+    monkeypatch.setattr(webapp, "_EXIT_GRACE", 0.01)
+    client.post("/api/tabs/register", json={"tab_id": "t1"})
+    client.post("/api/tabs/register", json={"tab_id": "t2"})
+    client.post("/api/tabs/bye", json={"tab_id": "t1"})
+    time.sleep(0.05)
+    assert exits == []  # 还有 t2 在开，不退出
+    client.post("/api/tabs/bye", json={"tab_id": "t2"})
+    time.sleep(0.05)
+    assert exits == [0]  # 最后一个离开 → 宽限后退出
+
+
+def test_tabs_bye_never_exits_outside_launcher_mode(client, context, monkeypatch):
+    """非启动器模式（测试 / 手动运行默认）：永不自杀。"""
+    import contest_generator.webapp as webapp
+
+    ctx, _ = context
+    exits = []
+    monkeypatch.setattr(webapp, "_EXIT", lambda code: exits.append(code))
+    monkeypatch.setattr(webapp, "_EXIT_GRACE", 0.01)
+    client.post("/api/tabs/register", json={"tab_id": "t1"})
+    client.post("/api/tabs/bye", json={"tab_id": "t1"})
+    time.sleep(0.05)
+    assert exits == []

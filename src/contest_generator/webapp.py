@@ -14,8 +14,11 @@ from __future__ import annotations
 import functools
 import inspect
 import json
+import os
 import tempfile
-from dataclasses import dataclass
+import threading
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -76,6 +79,7 @@ from .reference_library import (
 from .selection import resolve_selection, select_modules_convergent
 from .skeleton import generate_skeleton
 from .sse import SseEmitter, run_sse
+from .stage import stage_project_files
 from .topic_library import (
     confirm_topics,
     delete_topic,
@@ -98,6 +102,63 @@ PLATFORM_DISPLAY_NAMES = {
 _API_KEY_MASK_MARKER = "…"
 
 
+# ---------------------------------------------------------------------------
+# 浏览器标签会话（firstep 启动器）：最后一个标签页关闭 → 服务自动停止
+# ---------------------------------------------------------------------------
+
+_LAUNCHER_ENV = "FIRSTEP_LAUNCHER"  # 启动器置 1：启用"关浏览器 = 停服务"
+_EXIT_GRACE = 1.5  # 秒：注销后宽限窗口，覆盖 F5 重载的 unload→reload 竞态
+_EXIT: Callable[[int], Any] = os._exit  # 可注入（测试断言调度，不真自杀）
+
+
+class TabRegistry:
+    """标签会话注册表：register / unregister，空 = 没有打开的前端页面。
+
+    只记 tab_id 集合、不持业务形状；线程安全（多标签并发注册）。unregister
+    返回是否变空，路由据此调度延迟退出（空 → 关浏览器 = 停服务）。
+    """
+
+    def __init__(self) -> None:
+        self._tabs: set[str] = set()
+        self._lock = threading.Lock()
+
+    def register(self, tab_id: str) -> None:
+        with self._lock:
+            self._tabs.add(tab_id)
+
+    def unregister(self, tab_id: str) -> bool:
+        """注销一个标签；返回注销后注册表是否为空（空 = 可退出）。"""
+        with self._lock:
+            self._tabs.discard(tab_id)
+            return not self._tabs
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._tabs)
+
+
+def _launcher_managed() -> bool:
+    """仅启动器模式启用自动退出（FIRSTEP_LAUNCHER=1）；测试 / 手动运行永不自杀。"""
+    return os.environ.get(_LAUNCHER_ENV) == "1"
+
+
+def _schedule_exit_if_idle(registry: TabRegistry) -> None:
+    """最后一个标签关闭后：宽限窗口内无新标签注册 → 退出进程。
+
+    非启动器模式直接返回（正常开发 / 测试运行不受影响）；daemon 线程不
+    阻塞请求。本地无状态工具，退出即 os._exit（端口随之释放，双击重启）。
+    """
+    if not _launcher_managed():
+        return
+
+    def delayed() -> None:
+        time.sleep(_EXIT_GRACE)
+        if len(registry) == 0:
+            _EXIT(0)
+
+    threading.Thread(target=delayed, daemon=True).start()
+
+
 @dataclass
 class AppContext:
     """服务上下文：配置路径 + 当前配置（写入后即时生效）+ LLM 工厂（测试注入）。"""
@@ -105,6 +166,7 @@ class AppContext:
     config_path: Path = DEFAULT_CONFIG_PATH
     config: AppConfig | None = None  # None → 按需从配置文件加载
     llm_factory: Callable[[AppConfig], LLM] = DeepSeekLLM
+    tab_registry: TabRegistry = field(default_factory=TabRegistry)
 
 
 # ---------------------------------------------------------------------------
@@ -342,6 +404,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 for platform in KNOWN_PLATFORMS
             ],
         }
+
+    # 标签会话（启动器模式）：前端打开登记、关闭注销；最后一个离开 →
+    # 宽限后自动停服务（"关浏览器 = 停止"）。非启动器模式零影响。
+    @app.post("/api/tabs/register")
+    @_map_errors
+    def tabs_register(payload: dict) -> dict:
+        """标签页打开时登记（tab_id 由前端 sessionStorage 生成，跨刷新稳定）。"""
+        tab_id = _require_str(payload, "tab_id")
+        context.tab_registry.register(tab_id)
+        return {"ok": True}
+
+    @app.post("/api/tabs/bye")
+    @_map_errors
+    def tabs_bye(payload: dict) -> dict:
+        """标签页关闭时注销（pagehide + sendBeacon）；最后一个离开 → 停服务。"""
+        tab_id = _require_str(payload, "tab_id")
+        if context.tab_registry.unregister(tab_id):
+            _schedule_exit_if_idle(context.tab_registry)
+        return {"ok": True}
 
     # ------------------------------------------------------------------
     # 生成流程：贴题或传文件 → 选平台 → AI 推荐可增删 → 骨架 → 生成
@@ -610,6 +691,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # ------------------------------------------------------------------
     # 母版提炼（工单 08）：导入旧工程 → AI 报告 → 确认入库
     # ------------------------------------------------------------------
+
+    @app.post("/api/masters/stage")
+    @_map_errors
+    async def masters_stage(files: list[UploadFile] = File(...)) -> dict:
+        """「选择文件夹」上传（浏览器 webkitdirectory）→ 暂存目录 → 可喂扫描。
+
+        浏览器出于安全不暴露绝对路径，选中的旧工程文件夹只能整夹上传：每个
+        文件的文件名 = 文件夹内相对路径（webkitRelativePath，'/' 分隔），
+        服务端按相对路径原样落到 masters 目录同级 staged/<原文件夹名> 下——
+        目录名保留原名（重名覆盖写），扫描 / 报告 / 入库全程显示原名，前端
+        无需二次映射。暂存语义（穿越拒绝 / 目录名清洗 / 噪音跳过 = .git
+        任意深度 + 构建产物 Debug/Release/Listings/Objects、单次上限 512MB）
+        归 stage.py 单源：穿越吃 entry_store.is_unsafe_path、噪音吃
+        treewalk.skip_project_noise，路由只收参数转调。暂存目录是普通目录，
+        扫描后即用，不自动清理。
+        """
+        staged = stage_project_files(
+            _masters_dir(context),
+            [(f.filename or "", await f.read()) for f in files],
+        )
+        return {"staged": [{"path": str(staged), "name": staged.name}]}
 
     @app.post("/api/masters/scan")
     @_map_errors

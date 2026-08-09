@@ -1,0 +1,11 @@
+# 大文件（>50MB：安装包/固件/镜像，工作区全量保真、不进 git）
+# 注：Windows git 按 ANSI 编码读 .gitignore，中文路径模式会失效，故全部用 ASCII 特征
+/materials/**/*.exe
+*.img.gz
+*.img.xz
+*.z01
+*CCS_20.5*
+*tsp-xbhdcc*
+*ubuntu-20.04*
+*dataset.zip
+*05_SPI*.zip

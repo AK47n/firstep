@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STM32F103C8T6 IO引脚配置 — H题 车载平衡滚球</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --yellow: #d2991d; --purple: #a371f7;
+    --cyan: #39d2c0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px;
+  }
+  .container { max-width: 820px; margin: 0 auto; }
+  h1 { text-align: center; font-size: 1.4rem; color: #f0f6fc; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 20px; font-size: 0.82rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; background: var(--card); border-radius: 6px; overflow: hidden; }
+  th { background: #1c2333; padding: 8px 12px; text-align: left; font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); }
+  td { padding: 6px 10px; border-bottom: 1px solid #1a1f2b; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: #1a1f2b; }
+  .td-pin { font-family: 'Consolas', monospace; font-weight: 600; color: #f0f6fc; white-space: nowrap; min-width: 58px; }
+  .td-func { color: #f0f6fc; }
+  .td-mode { font-family: monospace; font-size: 0.72rem; color: var(--accent); white-space: nowrap; }
+  .td-src { font-family: monospace; font-size: 0.7rem; color: var(--muted); }
+
+  .tag {
+    display: inline-block; font-size: 0.68rem; padding: 1px 7px; border-radius: 3px; white-space: nowrap;
+  }
+  .tag-motor   { background: #1a3a2a; color: var(--green); }
+  .tag-sensor  { background: #1a2a3a; color: var(--accent); }
+  .tag-comm    { background: #2a1a3a; color: var(--purple); }
+  .tag-imu     { background: #1a3a3a; color: var(--cyan); }
+  .tag-oled    { background: #2a2a1a; color: var(--yellow); }
+  .tag-encoder { background: #3a1a2a; color: #e0558a; }
+  .tag-led     { background: #3a1a1a; color: #f85149; }
+  .tag-key     { background: #3a3a1a; color: var(--yellow); }
+  .tag-servo   { background: #1a2a1a; color: #3fb950; }
+
+  .used-row  { }
+  .free-row  { opacity: 0.35; }
+  .warn-row  { background: #2a2a10; }
+  .good-row  { background: #102a10; }
+
+  .legend {
+    display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 16px; font-size: 0.73rem; color: var(--muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .stats {
+    display: flex; gap: 20px; justify-content: center; margin-bottom: 16px; font-size: 0.8rem; color: var(--muted);
+  }
+  .stats b { color: #f0f6fc; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>STM32F103C8T6 &nbsp;IO 引脚分配</h1>
+<p class="subtitle">H题：车载平衡滚球运动控制系统 | LQFP-48 | 35个IO | 已用28 · 剩余7</p>
+
+<div class="stats">
+  <span>已用 <b style="color:var(--green)">25</b></span>
+  <span>空闲 <b>7</b></span>
+  <span>待初始化 <b style="color:var(--yellow)">1</b>&nbsp;(PB5)</span>
+  <span>舵机候选 <b style="color:var(--green)">1</b>&nbsp;(PB6)</span>
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:var(--green)"></span> 电机</span>
+  <span><span class="dot" style="background:var(--accent)"></span> 灰度</span>
+  <span><span class="dot" style="background:var(--purple)"></span> UART</span>
+  <span><span class="dot" style="background:var(--cyan)"></span> IMU</span>
+  <span><span class="dot" style="background:var(--yellow)"></span> OLED</span>
+  <span><span class="dot" style="background:#e0558a"></span> 编码器</span>
+  <span><span class="dot" style="background:#f85149"></span> LED</span>
+</div>
+
+<table>
+<thead>
+<tr><th>引脚</th><th>功能</th><th>类别</th><th>方向</th><th>初始化/外设</th></tr>
+</thead>
+<tbody>
+
+<!-- ===== GPIOA ===== -->
+<tr><td colspan="5" style="background:#1c2333;color:var(--accent);font-weight:600;font-size:0.78rem">GPIOA</td></tr>
+
+<tr class="used-row">
+  <td class="td-pin">PA0</td>
+  <td class="td-func">左电机 PWM</td>
+  <td><span class="tag tag-motor">电机</span></td>
+  <td class="td-mode">AF_PP</td>
+  <td class="td-src">TIM2_CH1 · 1kHz</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA1</td>
+  <td class="td-func">右电机 PWM</td>
+  <td><span class="tag tag-motor">电机</span></td>
+  <td class="td-mode">AF_PP</td>
+  <td class="td-src">TIM2_CH2 · 1kHz</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA2</td>
+  <td class="td-func">编码器 A 脉冲</td>
+  <td><span class="tag tag-encoder">编码器</span></td>
+  <td class="td-mode">EXTI2↓</td>
+  <td class="td-src">encoder_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA3</td>
+  <td class="td-func">编码器 A 方向</td>
+  <td><span class="tag tag-encoder">编码器</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">encoder_init() · HIGH=正转</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA4</td>
+  <td class="td-func">编码器 B 脉冲</td>
+  <td><span class="tag tag-encoder">编码器</span></td>
+  <td class="td-mode">EXTI4↓</td>
+  <td class="td-src">encoder_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA5</td>
+  <td class="td-func">编码器 B 方向</td>
+  <td><span class="tag tag-encoder">编码器</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">encoder_init() · HIGH=正转</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA6</td>
+  <td class="td-func">左电机 方向0</td>
+  <td><span class="tag tag-motor">电机</span></td>
+  <td class="td-mode">OUT_PP</td>
+  <td class="td-src">motorA_duty() · motorA_dir</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA7</td>
+  <td class="td-func">左电机 方向1</td>
+  <td><span class="tag tag-motor">电机</span></td>
+  <td class="td-mode">OUT_PP</td>
+  <td class="td-src">motorA_duty() · !motorA_dir</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA8</td>
+  <td class="td-func">灰度 D5</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA9</td>
+  <td class="td-func">UART1 TX → K230</td>
+  <td><span class="tag tag-comm">UART</span></td>
+  <td class="td-mode">AF_PP</td>
+  <td class="td-src">USART1 · 115200</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA10</td>
+  <td class="td-func">UART1 RX ← K230 钢珠</td>
+  <td><span class="tag tag-comm">UART</span></td>
+  <td class="td-mode">ID</td>
+  <td class="td-src">USART1 · 115200</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA11</td>
+  <td class="td-func">🔴 红灯 LED</td>
+  <td><span class="tag tag-led">LED</span></td>
+  <td class="td-mode">OUT_PP</td>
+  <td class="td-src">main() · gpio_init</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA12</td>
+  <td class="td-func">🟢 绿灯 LED</td>
+  <td><span class="tag tag-led">LED</span></td>
+  <td class="td-mode">OUT_PP</td>
+  <td class="td-src">main() · gpio_init</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA13</td>
+  <td class="td-func">SWDIO（调试）</td>
+  <td><span class="tag tag-sensor">系统</span></td>
+  <td class="td-mode">—</td>
+  <td class="td-src">保留</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PA14</td>
+  <td class="td-func">SWCLK（调试）</td>
+  <td><span class="tag tag-sensor">系统</span></td>
+  <td class="td-mode">—</td>
+  <td class="td-src">保留</td>
+</tr>
+<tr class="free-row">
+  <td class="td-pin">PA15</td>
+  <td class="td-func">— 空闲 —</td>
+  <td></td>
+  <td class="td-mode">—</td>
+  <td class="td-src">JTDI · 可用作 GPIO</td>
+</tr>
+
+<!-- ===== GPIOB ===== -->
+<tr><td colspan="5" style="background:#1c2333;color:var(--accent);font-weight:600;font-size:0.78rem">GPIOB</td></tr>
+
+<tr class="used-row">
+  <td class="td-pin">PB0</td>
+  <td class="td-func">右电机 方向0</td>
+  <td><span class="tag tag-motor">电机</span></td>
+  <td class="td-mode">OUT_PP</td>
+  <td class="td-src">motorB_duty() · motorB_dir</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB1</td>
+  <td class="td-func">右电机 方向1</td>
+  <td><span class="tag tag-motor">电机</span></td>
+  <td class="td-mode">OUT_PP</td>
+  <td class="td-src">motorB_duty() · !motorB_dir</td>
+</tr>
+<tr class="free-row">
+  <td class="td-pin">PB2</td>
+  <td class="td-func">— 空闲 —</td>
+  <td></td>
+  <td class="td-mode">—</td>
+  <td class="td-src">BOOT1</td>
+</tr>
+<tr class="free-row">
+  <td class="td-pin">PB3</td>
+  <td class="td-func">— 空闲 —</td>
+  <td></td>
+  <td class="td-mode">—</td>
+  <td class="td-src">JTDO · 可用作 GPIO</td>
+</tr>
+<tr class="free-row">
+  <td class="td-pin">PB4</td>
+  <td class="td-func">— 空闲 —</td>
+  <td></td>
+  <td class="td-mode">—</td>
+  <td class="td-src">JNTRST · 可用作 GPIO</td>
+</tr>
+<tr class="warn-row">
+  <td class="td-pin">PB5</td>
+  <td class="td-func" style="color:var(--yellow)">⚡ 启动按键 — 未初始化！</td>
+  <td><span class="tag tag-key">按键</span></td>
+  <td class="td-mode" style="color:var(--yellow)">(缺 IU)</td>
+  <td class="td-src" style="color:var(--yellow)">⚠ 硬件已接，代码缺失</td>
+</tr>
+<tr class="good-row">
+  <td class="td-pin">PB6</td>
+  <td class="td-func" style="color:var(--green)">🌟 舵机 PWM 候选</td>
+  <td><span class="tag tag-servo">舵机</span></td>
+  <td class="td-mode" style="color:var(--green)">AF_PP</td>
+  <td class="td-src" style="color:var(--green)">TIM4_CH1 · 50Hz</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB7</td>
+  <td class="td-func">MPU6050 INT</td>
+  <td><span class="tag tag-imu">IMU</span></td>
+  <td class="td-mode">EXTI7↑</td>
+  <td class="td-src">exti_init() · 200Hz</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB8</td>
+  <td class="td-func">OLED SCL</td>
+  <td><span class="tag tag-oled">OLED</span></td>
+  <td class="td-mode">OUT_OD</td>
+  <td class="td-src">OLED_I2C_Init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB9</td>
+  <td class="td-func">OLED SDA</td>
+  <td><span class="tag tag-oled">OLED</span></td>
+  <td class="td-mode">OUT_OD</td>
+  <td class="td-src">OLED_I2C_Init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB10</td>
+  <td class="td-func">IMU I2C SCL</td>
+  <td><span class="tag tag-imu">IMU</span></td>
+  <td class="td-mode">OUT_OD</td>
+  <td class="td-src">I2C_Init() · MPU+HMC</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB11</td>
+  <td class="td-func">IMU I2C SDA</td>
+  <td><span class="tag tag-imu">IMU</span></td>
+  <td class="td-mode">OUT_OD</td>
+  <td class="td-src">I2C_Init() · MPU+HMC</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB12</td>
+  <td class="td-func">灰度 D1</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB13</td>
+  <td class="td-func">灰度 D2</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB14</td>
+  <td class="td-func">灰度 D3</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PB15</td>
+  <td class="td-func">灰度 D4</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+
+<!-- ===== GPIOC ===== -->
+<tr><td colspan="5" style="background:#1c2333;color:var(--accent);font-weight:600;font-size:0.78rem">GPIOC</td></tr>
+
+<tr class="used-row">
+  <td class="td-pin">PC13</td>
+  <td class="td-func">灰度 D6</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PC14</td>
+  <td class="td-func">灰度 D7</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+<tr class="used-row">
+  <td class="td-pin">PC15</td>
+  <td class="td-func">灰度 D8</td>
+  <td><span class="tag tag-sensor">灰度</span></td>
+  <td class="td-mode">IU</td>
+  <td class="td-src">gray_init()</td>
+</tr>
+
+</tbody>
+</table>
+
+<p style="text-align:center; color:var(--muted); margin-top:16px; font-size:0.72rem">
+  pin_config.html · 2026-07-29
+</p>
+
+</div>
+</body>
+</html>

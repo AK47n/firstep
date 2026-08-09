@@ -1,0 +1,30 @@
+# 我的镜像默认密码是xbhdcc
+
+# 查看是否识别到了adb设备
+.\adb.exe devices
+
+# 连接adb设备，可以开始输入指令
+.\adb.exe shell
+
+# 常用的指令
+ls # 列举当前文件夹下面的文件
+ll # 列举当前文件夹下面文件的详细信息
+cd # 进入某个目录
+cd .. #返回上一级
+mkdir #创建一个文件夹
+ 
+# 连接wifi，用手机热点就可以了
+bash connect_wifi.sh wifi名称 wifi密码
+
+# 禁用linux桌面，这样可以省下内存，但是如果你接了hdmi屏幕，不要用这个
+systemctl set-default multi-user.target
+systemctl isolate multi-user.target
+
+# 生成用来远程登录的密钥
+ssh-keygen -t rsa -b 4096
+
+# 把密钥上传，粘贴到/root/.ssh/authorized_keys
+service ssh restart
+#这样vscode就可以免密登录了
+
+
