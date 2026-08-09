@@ -103,6 +103,25 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
         pass
 
 
+def topic_library_dir(module_library_dir: Path) -> Path:
+    """赛题库目录：模块库同级目录下的 topics/（工单 01 约定）。
+
+    配置没有独立字段（config.py 不在工单边界内），取模块库同级目录——与
+    默认布局（~/.contest_generator/{modules,masters}）同一工作目录；将来
+    加配置项时只改这一处。
+    """
+    return module_library_dir.parent / "topics"
+
+
+def reference_library_dir(module_library_dir: Path) -> Path:
+    """参考文件库目录：模块库平级兄弟 references/（素材库 colocate，工单 02）。
+
+    本批不新增配置项（config.py 冻结），按模块库目录的平级兄弟推导——默认
+    布局下 = ~/.contest_generator/references；用户配置模块库位置时参考库跟随。
+    """
+    return module_library_dir.parent / "references"
+
+
 def _require_nonempty_str(data: dict, key: str, default: str, path: Path) -> str:
     value = data.get(key, default)
     if not isinstance(value, str) or not value:
