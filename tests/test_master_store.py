@@ -35,6 +35,7 @@ from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
     make_fake_ccs_master_project,
+    make_fake_ccs_theia_master_project,
     make_fake_master_project,
 )
 
@@ -153,6 +154,29 @@ def test_import_stores_master_with_meta_and_sources(
     assert (fake_masters_dir / "stm32" / "user" / "Project.uvprojx").is_file()
     assert not (fake_masters_dir / "stm32" / "master.json").exists()
     assert (fake_masters_dir / "stm32.json").is_file()
+
+
+def test_import_mspm0_theia_master_analyzes_clean(fake_masters_dir, tmp_path):
+    """Theia 20.5 母版入库：结构分析无警告（整理后无构建产物目录），
+    sources 元数据 = TI 示例工程名，工程文件就位（首个真机 mspm0 母版）。"""
+    source = make_fake_ccs_theia_master_project(tmp_path / "theia_src")
+
+    meta = import_master(
+        fake_masters_dir,
+        PLATFORM_MSPM0,
+        source,
+        sources=("empty_LP_MSPM0G3507_nortos_ticlang",),
+    )
+
+    assert meta.platform == PLATFORM_MSPM0
+    assert meta.warnings == ()
+    assert meta.sources == ("empty_LP_MSPM0G3507_nortos_ticlang",)
+    imported = fake_masters_dir / "mspm0"
+    assert (imported / "project.cproject").is_file()
+    assert (imported / ".project").is_file()
+    assert (imported / "main.c").is_file()
+    assert (imported / "mspm0.syscfg").is_file()
+    assert (fake_masters_dir / "mspm0.json").is_file()
 
 
 def test_import_replaces_existing_master_of_same_platform(fake_stm32_projects, fake_masters_dir):

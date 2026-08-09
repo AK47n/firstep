@@ -30,7 +30,7 @@ from contest_generator.generator import (
     generate_project,
     resolve_topic_context,
 )
-from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASS, _SETTINGS_MODULE_ID
+from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASSES, _SETTINGS_MODULE_ID
 from contest_generator.library import list_modules
 from contest_generator.llm import LLMError
 from contest_generator.manifest import ModuleManifest
@@ -52,6 +52,7 @@ from tests.fakes import (
     OLED_STM32_C,
     RecordingPatcher,
     _add_module,
+    make_fake_ccs_theia_master_project,
     make_fake_master_project,
     make_fake_module_library,
 )
@@ -205,29 +206,41 @@ def test_generate_mspm0_outputs_complete_project(make_ccs_project, tmp_path):
 
 
 def _ccs_build_configuration(root: ET.Element, name: str) -> ET.Element:
+    """与生产同款的双格式走查（classic settings 内 cdtBuildSystem 元素 / Theia
+    独立 cdtBuildSystem storageModule），按配置名取 configuration。"""
+    from contest_generator.ccs import _BUILD_SYSTEM_MODULE_ID
+
     for storage in root.findall("storageModule"):
         if storage.get("moduleId") != _SETTINGS_MODULE_ID:
             continue
         for cconfig in storage.findall("cconfiguration"):
             for inner in cconfig.findall("storageModule"):
-                if inner.get("moduleId") != _SETTINGS_MODULE_ID:
-                    continue
                 build_system = inner.find("cdtBuildSystem")
                 if build_system is None:
-                    continue
+                    if inner.get("moduleId") != _BUILD_SYSTEM_MODULE_ID:
+                        continue
+                    build_system = inner
                 for configuration in build_system.findall("configuration"):
                     if configuration.get("name") == name:
                         return configuration
     raise AssertionError(f"没有名为 {name} 的 build configuration")
 
 
+def _ccs_include_option(configuration: ET.Element) -> ET.Element:
+    """与生产同款双位置：classic 直接子元素 / Theia 在 <tool> 元素内。"""
+    for option in configuration.findall("folderInfo/toolChain/option"):
+        if option.get("superClass") in INCLUDE_OPTION_SUPERCLASSES:
+            return option
+    for tool in configuration.findall("folderInfo/toolChain/tool"):
+        for option in tool.findall("option"):
+            if option.get("superClass") in INCLUDE_OPTION_SUPERCLASSES:
+                return option
+    raise AssertionError("没有 include 选项")
+
+
 def _ccs_include_values(root: ET.Element, config_name: str) -> list[str]:
     configuration = _ccs_build_configuration(root, config_name)
-    option = next(
-        option
-        for option in configuration.findall("folderInfo/toolChain/option")
-        if option.get("superClass") == INCLUDE_OPTION_SUPERCLASS
-    )
+    option = _ccs_include_option(configuration)
     values = [v.get("value") for v in option.findall("listOptionValue")]
     return [v for v in values if v is not None]
 
@@ -578,6 +591,67 @@ def test_generate_mspm0_twice_produces_identical_project_config(
     assert (first / "project.cproject").read_bytes() == (
         second / "project.cproject"
     ).read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# Theia 20.5 母版端到端（工单 08）：合成整理后形态 → 生成最小工程
+# ---------------------------------------------------------------------------
+
+
+def _theia_masters_dir(tmp_path) -> Path:
+    masters_dir = tmp_path / "masters"
+    make_fake_ccs_theia_master_project(masters_dir / "mspm0")
+    return masters_dir
+
+
+def test_generate_mspm0_theia_minimal_project_succeeds(fake_module_library, tmp_path):
+    """端到端（slugs=() 最小工程）：Theia 母版全程走通，无 CcsProjectError；
+    输出树 = main.c 骨架 + 母版文件，无 empty.c / .clangd / Debug / README。"""
+    main_c = "int main(void) { while (1); }\n"
+    summary = generate_project(
+        platform=PLATFORM_MSPM0,
+        slugs=(),
+        main_c_content=main_c,
+        output_dir=tmp_path / "out",
+        module_library_dir=fake_module_library,
+        masters_dir=_theia_masters_dir(tmp_path),
+    )
+
+    out = summary.output_dir
+    assert (out / "main.c").read_text(encoding="utf-8") == main_c
+    assert (out / "project.cproject").exists()
+    assert (out / ".project").exists()
+    assert (out / "mspm0.syscfg").exists()
+    assert not (out / "empty.c").exists()  # 母版已整理（empty.c → main.c）
+    assert not (out / ".clangd").exists()
+    assert not (out / "Debug").exists()
+    assert not (out / "README.html").exists()
+    assert not (out / "README.md").exists()
+
+
+def test_generate_mspm0_theia_appends_module_includes_and_root_source_entry(
+    fake_module_library, tmp_path
+):
+    """端到端带模块：.cproject 追加 ${PROJECT_LOC}/modules include + 补根
+    sourceEntry（Theia 母版无 sourceEntries，main.c 与模块都进编译）。"""
+    summary = generate_project(
+        platform=PLATFORM_MSPM0,
+        slugs=["dht11", "delay"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=fake_module_library,
+        masters_dir=_theia_masters_dir(tmp_path),
+    )
+
+    root = ET.parse(summary.output_dir / "project.cproject").getroot()
+    values = _ccs_include_values(root, "Debug")
+    assert values[-3:] == [
+        "${PROJECT_LOC}/modules/delay",  # 依赖展开后 delay 在前（resolve_selection 顺序）
+        "${PROJECT_LOC}/modules/dht11/mspm0/src",
+        "${PROJECT_LOC}/modules/dht11/inc",
+    ]
+    entry_names = _ccs_source_entry_names(root, "Debug")
+    assert entry_names == [""]  # 根条目覆盖 modules/（main.c 一并编译）
 
 
 def test_patcher_invoked_via_registry_with_files_and_include_dirs(make_project, tmp_path):

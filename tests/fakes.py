@@ -431,6 +431,131 @@ def make_fake_ccs_master_project(master_dir: Path) -> Path:
     return master_dir
 
 
+# ---------------------------------------------------------------------------
+# 假 Theia 20.5 母版（工单 08）：以真实 TI empty 示例 .cproject 为底
+# ---------------------------------------------------------------------------
+
+# Theia 与 classic 的三处差异（ccs.py 双格式认知的 fixture 对偶）：
+# ① cdtBuildSystem 是 cconfiguration 内独立的 storageModule（configuration 是
+#    其直接子元素），classic 是 settings storageModule 里的元素；
+# ② include/define 选项 superClass 走 TMS470_TICLANG_4.0 命名空间；
+# ③ 无 sourceEntries 元素（CDT 缺省 = 全树为源，patch 补根条目）。
+FAKE_CPROJECT_THEIA = r'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?fileVersion 4.0.0?><cproject storage_type_id="org.eclipse.cdt.core.XmlProjectDescriptionStorage">
+    <storageModule moduleId="org.eclipse.cdt.core.settings">
+        <cconfiguration id="com.ti.ccstudio.buildDefinitions.TMS470.Debug.56822270">
+            <storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="com.ti.ccstudio.buildDefinitions.TMS470.Debug.56822270" moduleId="org.eclipse.cdt.core.settings" name="Debug">
+                <externalSettings/>
+                <extensions>
+                    <extension id="com.ti.ccs.errorparser.SysConfigErrorParser" point="com.ti.ccs.project.ErrorParser"/>
+                    <extension id="com.ti.ccs.errorparser.CompilerErrorParser_TI" point="com.ti.ccs.project.ErrorParser"/>
+                </extensions>
+            </storageModule>
+            <storageModule moduleId="cdtBuildSystem" version="4.0.0">
+                <configuration artifactExtension="out" artifactName="${ProjName}" buildProperties="" cleanCommand="${CG_CLEAN_CMD}" description="" id="com.ti.ccstudio.buildDefinitions.TMS470.Debug.56822270" name="Debug" parent="com.ti.ccstudio.buildDefinitions.TMS470.Debug">
+                    <folderInfo id="com.ti.ccstudio.buildDefinitions.TMS470.Debug.56822270." name="/" resourcePath="">
+                        <toolChain id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.DebugToolchain.1526877788" name="TI Build Tools" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.DebugToolchain" targetTool="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.linkerDebug.611227998">
+                            <option id="com.ti.ccstudio.buildDefinitions.core.OPT_TAGS.321175198" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_TAGS" valueType="stringList">
+                                <listOptionValue value="DEVICE_CONFIGURATION_ID=Cortex M.MSPM0G3507"/>
+                                <listOptionValue value="PRODUCTS=MSPM0-SDK:2.11.0.07;sysconfig:1.26.2;"/>
+                            </option>
+                            <targetPlatform id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.targetPlatformDebug.1573660973" name="Platform" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.targetPlatformDebug"/>
+                            <builder buildPath="${BuildDirectory}" id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.builderDebug.2060080375" name="GNU Make.Debug" parallelBuildOn="true" parallelizationNumber="optimal" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.builderDebug"/>
+                            <tool id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.compilerDebug.1701041390" name="Arm Compiler" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.compilerDebug">
+                                <option id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.compilerID.INCLUDE_PATH.1878044542" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.compilerID.INCLUDE_PATH" valueType="includePath">
+                                    <listOptionValue value="${COM_TI_MSPM0_SDK_INCLUDE_PATH}"/>
+                                    <listOptionValue value="${SYSCONFIG_TOOL_INCLUDE_PATH}"/>
+                                    <listOptionValue value="${PROJECT_ROOT}"/>
+                                    <listOptionValue value="${PROJECT_ROOT}/${ConfigName}"/>
+                                    <listOptionValue value="${COM_TI_MSPM0_SDK_INSTALL_DIR}/source/third_party/CMSIS/Core/Include"/>
+                                    <listOptionValue value="${COM_TI_MSPM0_SDK_INSTALL_DIR}/source"/>
+                                </option>
+                                <option id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.compilerID.DEFINE.1080537059" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.compilerID.DEFINE" valueType="definedSymbols">
+                                    <listOptionValue value="${COM_TI_MSPM0_SDK_SYMBOLS}"/>
+                                    <listOptionValue value="${SYSCONFIG_TOOL_SYMBOLS}"/>
+                                </option>
+                            </tool>
+                            <tool id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.linkerDebug.611227998" name="Arm Linker" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.exe.linkerDebug">
+                                <option id="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.linkerID.SEARCH_PATH.1371414595" superClass="com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.linkerID.SEARCH_PATH" valueType="libPaths">
+                                    <listOptionValue value="${COM_TI_MSPM0_SDK_LIBRARY_PATH}"/>
+                                    <listOptionValue value="${PROJECT_ROOT}"/>
+                                </option>
+                            </tool>
+                        </toolChain>
+                    </folderInfo>
+                </configuration>
+            </storageModule>
+            <storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+        </cconfiguration>
+    </storageModule>
+    <storageModule moduleId="cdtBuildSystem" version="4.0.0">
+        <project id="empty.com.ti.ccstudio.buildDefinitions.TMS470.ProjectType.599460471" name="TMS470" projectType="com.ti.ccstudio.buildDefinitions.TMS470.ProjectType"/>
+    </storageModule>
+</cproject>
+'''
+
+# Theia 母版 .project（整理后 name = mspm0_project，生成工程在 CCS 工作区显示名）
+FAKE_THEIA_CCS_PROJECT = r'''<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>mspm0_project</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>com.ti.ccstudio.core.ccsNature</nature>
+		<nature>org.eclipse.cdt.core.cnature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
+		<nature>org.eclipse.cdt.core.ccnature</nature>
+	</natures>
+</projectDescription>
+'''
+
+# Theia 母版 main.c：TI empty 示例原样（SYSCFG_DL_init + while(1)，正合 ADR 0002
+# 模板 main.c 形态；生成时被骨架覆盖）
+THEIA_MASTER_MAIN_C = (
+    '#include "ti_msp_dl_config.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    SYSCFG_DL_init();\n"
+    "\n"
+    "    while (1) {\n"
+    "    }\n"
+    "}\n"
+)
+
+# Theia 母版 .syscfg：TI empty 示例原样（官方板 LP_MSPM0G3507，模板预期用户生成后自改）
+FAKE_MSPM0_SYSCFG = (
+    '//@cliArgs --device "MSPM0G350X" --package "LQFP-64(PM)" --part "Default"\n'
+    '//@v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)"\n'
+    "// @cliArgs --board /ti/boards/LP_MSPM0G3507 --rtos nortos\n"
+    "\n"
+    'const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");\n'
+    "\n"
+    'const Board = scripting.addModule("/ti/driverlib/Board", {}, false);\n'
+    "\n"
+    "SYSCTL.forceDefaultClkConfig = true;\n"
+)
+
+
+def make_fake_ccs_theia_master_project(master_dir: Path) -> Path:
+    """Theia 20.5 母版工程（TI 官方 empty 示例整理后形态：main.c + mspm0.syscfg
+    + .cproject + .project，无 .clangd / Debug / README 机器噪音）。"""
+    master_dir.mkdir(parents=True)
+    (master_dir / ".project").write_text(FAKE_THEIA_CCS_PROJECT, encoding="utf-8")
+    (master_dir / "project.cproject").write_text(FAKE_CPROJECT_THEIA, encoding="utf-8")
+    (master_dir / "main.c").write_text(THEIA_MASTER_MAIN_C, encoding="utf-8")
+    (master_dir / "mspm0.syscfg").write_text(FAKE_MSPM0_SYSCFG, encoding="utf-8")
+    return master_dir
+
+
 class FakeTransport:
     """HTTP 传输假件：记录请求并返回固定响应（注入 DeepSeekLLM，网络不进测试）。"""
 
