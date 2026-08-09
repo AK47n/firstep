@@ -496,14 +496,28 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def generate(payload: dict) -> dict:
         """完整生成：选模块 → 母版 → 生成 → 摘要（流程在 generate_project）。
 
-        历史赛题入口：topic_id 给定时该题专用模块自动并入最终工程（生成物与
-        用户手选等价）；查无此条明确报错（不猜测编造）。"""
+        历史赛题入口：topic_id 给定时装配点（resolve_topic_context）一次备好
+        上下文，该题专用模块自动并入最终工程（生成物与用户手选等价）——
+        generate_project 只消费装配结果，不重扫库、不重解析条目；查无此条
+        明确报错（不猜测编造）。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
         output_dir = Path(_require_str(payload, "output_dir"))
         topic_id = _optional_str(payload, "topic_id")
         config = _require_config(context)
+        related_modules: Sequence[str] = ()
+        if topic_id:
+            topic = resolve_topic_context(
+                llm=None,  # 显式编号路径不需要 AI 提取；题面 / 关联素材已装配
+                topic_key=topic_id,
+                problem_text="",
+                module_library_dir=config.module_library_dir,
+                topic_library_dir=_topic_library_dir(context),
+                reference_library_dir=_reference_dir(context),
+            )
+            if topic is not None:
+                related_modules = topic.related_modules
         summary = generate_project(
             platform=platform,
             slugs=slugs,
@@ -511,8 +525,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             output_dir=output_dir,
             module_library_dir=config.module_library_dir,
             masters_dir=config.masters_dir,
-            topic_key=topic_id,
-            topic_library_dir=_topic_library_dir(context) if topic_id else None,
+            related_modules=related_modules,
         )
         return _generation_result(summary)
 
