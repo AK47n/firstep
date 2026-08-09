@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+from .autocommit import commit_after_write
 from .entry_store import (
     StoreError,
     StoreParseError,
@@ -212,6 +213,7 @@ def import_master(
         warnings=analysis.warnings,
     )
     _write_meta(masters_dir, meta)
+    commit_after_write(masters_dir, f"lib: import master {platform}")
     return meta
 
 

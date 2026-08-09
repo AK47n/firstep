@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Sequence
 from urllib.parse import urlparse
 
+from .autocommit import commit_after_write
 from .entry_store import (
     StoreError,
     delete_entry,
@@ -98,6 +99,7 @@ def delete_module(library_root: Path, slug: str) -> None:
         delete_entry(library_root, slug)
     except StoreError:
         raise LibraryError(f"模块 {slug!r} 不存在") from None
+    commit_after_write(library_root, f"lib: delete module {slug}")
 
 
 def save_manifest(library_root: Path, manifest: ModuleManifest) -> None:
@@ -224,6 +226,7 @@ def add_module(
             },
         )
         write_json(module_dir, MANIFEST_FILENAME, manifest.to_dict())
+    commit_after_write(library_root, f"lib: add module {slug}")
     return manifest
 
 
@@ -253,6 +256,7 @@ def update_module_description(
         )
     new_manifest = replace(manifest, description=description)
     save_manifest(library_root, new_manifest)
+    commit_after_write(library_root, f"lib: update module description {slug}")
     return new_manifest
 
 
@@ -313,6 +317,7 @@ def add_platform_files(
             entry = _replace_identity_fields(entry, kit, source_url)
     new_manifest = replace(manifest, platforms={**manifest.platforms, platform: entry})
     _write_manifest(module_dir, new_manifest)
+    commit_after_write(library_root, f"lib: add platform files {slug} {platform}")
     return new_manifest
 
 
@@ -356,6 +361,7 @@ def remove_platform_files(
     for name in filenames:
         if name not in referenced_elsewhere:
             (module_dir / name).unlink(missing_ok=True)
+    commit_after_write(library_root, f"lib: remove platform files {slug} {platform}")
     return new_manifest
 
 

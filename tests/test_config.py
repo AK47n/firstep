@@ -89,4 +89,22 @@ def test_saved_file_is_plain_json(tmp_path):
         "model": DEFAULT_MODEL,
         "module_library_dir": str(DEFAULT_MODULE_LIBRARY_DIR),
         "masters_dir": str(DEFAULT_MASTERS_DIR),
+        "autocommit_enabled": True,
     }
+
+
+def test_autocommit_enabled_defaults_on_and_roundtrips(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
+
+    assert load_config(path).autocommit_enabled is True  # 缺省开（工单 01）
+
+    save_config(AppConfig(api_key="sk-test", autocommit_enabled=False), path)
+    assert load_config(path).autocommit_enabled is False
+
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "autocommit_enabled": "yes"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="autocommit_enabled"):
+        load_config(path)  # 非布尔值大声失败（与其余字段同严格度）
