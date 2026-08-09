@@ -18,7 +18,6 @@ from contest_generator.categories import (
     STARTUP_REPLACEMENT_REASON,
     residue_reason,
 )
-from contest_generator.keil import KeilProjectError
 from contest_generator.master import (
     ProjectComparison,
     ProjectStructure,
@@ -101,6 +100,16 @@ def test_master_consumes_categories_without_redefining():
         "config_file_reason",
     ):
         assert not hasattr(master, name)
+
+
+def test_categories_startup_predicates_go_through_adapter():
+    """启动谓词不再直连 keil（工单 04）：categories 模块级无谓词属性、无
+    平台识别死常量（CONFIG_FILE_SUFFIXES 已删，后缀表单源 platforms.py）；
+    谓词调用发生在蒸馏适配器实例上（模块无属性 = 结构防回退）。"""
+    import contest_generator.categories as categories
+
+    for name in ("is_startup_candidate", "is_md_startup", "CONFIG_FILE_SUFFIXES"):
+        assert not hasattr(categories, name)
 
 
 def test_rule_categories_keys_match_structure_fields():
@@ -495,7 +504,8 @@ def test_startup_dedup_prefers_md_across_projects(fake_stm32_projects):
 def test_startup_dedup_without_md_guard_fires_at_distill(fake_stm32_projects):
     """无 _md 候选（如 hd/vd）：按路径排序取第一份；密度守卫在报告预览推导
     时（入库前，决策 4）大声失败——目标板是中密度 C8T6，不能静默产出无法
-    编译的母版。"""
+    编译的母版。守卫错误在蒸馏适配器缝内翻译归 MasterError（工单 04，
+    message 原样，HTTP 层 MasterError 同映射 400）。"""
     (fake_stm32_projects[0] / "startup_stm32f10x_hd.s").write_text(
         "; A", encoding="utf-8"
     )
@@ -503,7 +513,7 @@ def test_startup_dedup_without_md_guard_fires_at_distill(fake_stm32_projects):
         "; B", encoding="utf-8"
     )
 
-    with pytest.raises(KeilProjectError, match="STM32F103C8T6"):
+    with pytest.raises(MasterError, match="STM32F103C8T6"):
         _distill(fake_stm32_projects, FakeLLM(distillation=DEFAULT_DECISIONS))
 
 

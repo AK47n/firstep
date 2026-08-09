@@ -7,7 +7,7 @@
 | 术语 | 含义 | 主要实现 |
 |---|---|---|
 | 赛题 | 粘贴或上传（PDF / .docx / .txt / .md）的竞赛题目原文 | extraction.py → str，贯穿所有 LLM prompt；生成入口装配唯一出处 = generator.resolve_topic_context（TopicContext） |
-| 平台 | `stm32`（STM32F103C8T6 / Keil5）、`mspm0`（地猛星 MSPM0G3507 / CCS） | 词表在 platforms.py；行为在 patchers.py / master.py / webapp.py |
+| 平台 | `stm32`（STM32F103C8T6 / Keil5）、`mspm0`（地猛星 MSPM0G3507 / CCS） | 词表在 platforms.py；识别知识（工程配置文件后缀表）= platforms.PLATFORM_CONFIG_FILE_SUFFIXES 单源；蒸馏侧平台行为经 distill_adapters 适配器（master 只消费）；生成侧行为在 patchers.py / webapp.py |
 | 模块 | 可复用 .c/.h 单元 + 机器可读 manifest；库目录即数据库；与功能库相对——模块承载外设/赛题功能，功能库是母版自带底层库；模块推荐（AI 选模块）的模型类与收敛工作流归 selection.py——llm 层运行时依赖 selection 而非反向（report.py 先例） | manifest.py（模型）/ library.py（库操作）；模块推荐域在 selection.py |
 | manifest | 模块目录下 manifest.json：slug、简介、依赖、平台条目（文件 / 验证状态 / 硬件绑定 / 备注 / 硬件身份字段 kit + source_url） | manifest.py |
 | 简介 | manifest.description，判据三要素：① 与代码一致（AI 校验）；② 硬件身份可确认——套件型号（kit）与购买链接（source_url），平台条目字段、新录入必填、URL 格式校验、由人补填；③ 专用性——逻辑绑定具体赛题的模块必须标注"XX 题专用"（如 lock_control / zone = 2026C 数字钥匙题专用，pid = 巡线题专用） | library.py / llm.py |
@@ -23,8 +23,8 @@
 | 判定模型 | 提炼报告的判定条目与容器（FileDecision / DistillationReport）+ AI 判定素材（JudgmentFile / FileVersion）：形状 / 序列化 / 不变量（merge 必须带整合产物全文与说明；main_c_preview 与 uvprojx_preview 由平台重推导；版本分组不重不漏）唯一所有者；报告平台必须与工程平台一致（平台交叉校验） | report.py |
 | 模板 main.c | 母版自带的最小系统板空 main（时钟初始化 + while(1) 空循环 + TODO 区），确定性模板、非 AI 生成；生成时被按赛题的"骨架"覆盖 | master.py |
 | 整合 | 同路径多份内容不同时的动作：读多份 → 分析 → 产出通用版本（选一份是特例）；产物全文 + 说明进报告，用户审查后可改回选某份或剔除 | llm.py / master.py |
-| 工程配置文件 | .uvprojx（stm32）：确定性渲染器现写（固定落位 user/Project.uvprojx，C8T6 设备块，文件树引用全部保留 .c/.s，IncludePath = 保留 .h 目录），移出 AI 判定（判例 09 治本）；.cproject/.project（mspm0）：确定性保留首份原样；条目不可改动作、进报告 keep 带规则原因；报告带 .uvprojx 全文预览 | keil.py / master.py |
-| 启动文件 | startup_stm32f10x_*.s 候选跨工程去重：至多保留一份（优先 _md，无则路径排序取第一份），落选规则剔除（Reset_Handler 重复定义风险）；密度守卫：保留份非 _md 大声失败（目标板 C8T6 中密度） | keil.py（格式）/ categories.py（去重生命周期） |
+| 工程配置文件 | .uvprojx（stm32）：确定性渲染器现写（固定落位 user/Project.uvprojx，C8T6 设备块，文件树引用全部保留 .c/.s，IncludePath = 保留 .h 目录），移出 AI 判定（判例 09 治本）；.cproject/.project（mspm0）：确定性保留首份原样；条目不可改动作、进报告 keep 带规则原因；报告带 .uvprojx 全文预览 | keil.py（格式）/ master.py（编排）；渲染与预览经蒸馏适配器（守卫翻译归 MasterError） |
+| 启动文件 | startup_stm32f10x_*.s 候选跨工程去重：至多保留一份（优先 _md，无则路径排序取第一份），落选规则剔除（Reset_Handler 重复定义风险）；密度守卫：保留份非 _md 大声失败（目标板 C8T6 中密度） | keil.py（格式）/ categories.py（去重生命周期）；谓词（is_startup_candidate / is_md_startup）经蒸馏适配器按平台取，mspm0 显式 False |
 | 残留 | 构建产物（.o/.axf/.hex/.map/.lst/.crf/.dep/.lnp/.out/.elf/.htm）、备份（.bak 精确后缀，以及路径含 .bak 段的变体如 .bak2 / .bak_consolidate）、临时文件、IDE 用户选项（.uvoptx / .uvguix，编译时自动重建）：机器识别、确定性剔除，但进报告 exclude 清单并带规则化原因；构建输出目录（Debug/Release/Listings/Objects，后者任意层级）整目录忽略 | categories.py（规则）/ treewalk.py（目录忽略） |
 | 项目树遍历 | "绕开噪音遍历工程目录"的唯一出处：iter_project_files（rglob + 统一跳过规则，绝对路径、排序确定性）+ skip_project_noise（顶层 .git / Debug / Release / Listings / Objects + Keil 输出目录任意层级）——母版扫描 / 旧工程扫描 / 生成摘要 / 语料构建六处消费，不再各走各的树（旧矛盾：Listings/ 下的 .uvprojx keil 找得到、master 忽略）；不持业务形状，类别判定归 categories.RuleCategory | treewalk.py |
 | 二进制 | 非源码素材（文档 / 图片 / 模型 / 压缩包 / .exe 等）：文件头含 NUL 字节即判定，读全文会污染 LLM 判定素材，确定性剔除，但进报告 exclude 清单并带规则化原因 | categories.py |
@@ -49,6 +49,7 @@
 - 薄壳（webapp 路由 / LLM 网络调用 / 文本抽取）包裹纯逻辑核心。
 - 判定素材模型归模型层（依赖倒置）：JudgmentFile / FileVersion 在 report.py（master 构造、llm 消费），llm 层依赖模型层而非反向；master 不再从 llm 导入模型类型（仅 LLM 协议参数类型）。版本分组不变量（版本工程名组不重不漏）在素材模型上唯一声明与校验。
 - 文件类别生命周期单源化：四大类别（残留 / 旧 main.c / 基础设施 / 二进制）+ 工程配置文件（工单 09）各是一条 `RuleCategory` 描述（识别规则 + 确定性处置 + 报错文案），流水线遍历 `RULE_CATEGORIES`，不再每处复制平行分支；启动文件候选是表内钩子（决策 2，跨工程去重）。类别表与 `classify` 收进 categories.py，master 只消费（结构测试防回退：恒等引用 + 模块内无规则函数）。
+- 蒸馏侧平台适配接缝 = distill_adapters（摘要读 / 渲染（含密度守卫翻译）/ 启动候选谓词 per platform；mspm0 显式无操作；母版库入库结构校验留在 master_store，存储域边界）。识别知识（工程配置文件后缀表）单源 = platforms.PLATFORM_CONFIG_FILE_SUFFIXES。
 - 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；表住 errors.py，结构测试反射枚举包内全部异常类断言已登记（白名单只放从不直达 web 层的类）——漏登从此是测试红，不是线上 500。
 - 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版库模块（`master_store.master_project_dir`）。赛题入口装配 = `generator.resolve_topic_context` 唯一出处（永远返回 TopicContext，key 空串 = 未识别到历史赛题），路由只消费不装配。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。

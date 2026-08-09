@@ -6,7 +6,8 @@
 只消费不定义（结构测试防回退）。识别规则即确定性处置：命中类别的文件不进
 扫描清单、不进 AI 判定素材，但进报告并带规则化原因（ADR 0001：不做黑盒
 消失）；启动文件候选是表内钩子（决策 2：跨工程去重），由扫描钩子单独记录、
-各流水线表外处理。
+各流水线表外处理。启动谓词（is_startup_candidate / is_md_startup）经蒸馏
+适配器按平台取（工单 04：mspm0 显式 False），本模块不直连 keil。
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal, Sequence
 
-from .keil import is_md_startup, is_startup_candidate
+from .distill_adapters import get_distill_adapter
 from .master_store import MasterError
 from .report import ACTION_EXCLUDE, DistillationReport
 
@@ -157,18 +158,13 @@ def infrastructure_reason(rel_path: str) -> str | None:
 
 
 # 工程配置文件（工单 09，判例 09 治本）：.uvprojx（stm32）由确定性渲染器
-# 现写（keil.render_master_uvprojx，结构一致性由构造保证），.cproject/.project
+# 现写（格式知识在 keil.py，结构一致性由构造保证），.cproject/.project
 # （mspm0，CCS 按目录编译、无文件引用问题，母版库尚无 mspm0 良好格式种子）
 # 确定性保留首份原样、不现写不重写（决策 6）。与基础设施同模式：不进扫描
 # 清单、不进 AI 判定素材、不读全文，但进报告 keep 清单并带规则化原因
 # （ADR 0001：不做黑盒消失）；条目不可改动作（决策 7）。
 UVPROJX_CONFIG_REASON = "工程配置文件：由确定性模板现写，保留文件全量入树"
 CCS_CONFIG_REASON = "工程配置文件：由确定性规则保留首份原样（CCS 按目录编译）"
-CONFIG_FILE_SUFFIXES = (
-    ".uvprojx",  # stm32 / Keil
-    ".cproject",  # mspm0 / CCS
-    ".project",  # mspm0 / CCS（Eclipse 底座描述）
-)
 
 
 def config_file_reason(rel_path: str) -> str | None:
@@ -266,31 +262,39 @@ RULE_CATEGORIES: tuple[RuleCategory, ...] = (
 )
 
 
-def classify(rel: str, path: Path) -> tuple[str | None, bool]:
+def classify(rel: str, path: Path, platform: str) -> tuple[str | None, bool]:
     """文件类别判定：表内第一命中返回 (类别 key, 是否启动候选)，None = 不命中。
 
     表内钩子（决策 2）：基础设施命中且是启动文件候选（startup_stm32f10x_*.s）
     时返回 is_startup=True——扫描单列到 startup_files（跨工程去重），不进
-    基础设施组。表遍历知识收在本模块，扫描不再自写类别循环（Q7 裁决）。
+    基础设施组。启动候选谓词按平台取（工单 04，蒸馏适配器）：mspm0 显式
+    False（TI/CCS 启动为 .c，不在基础设施词表）。表遍历知识收在本模块，
+    扫描不再自写类别循环（Q7 裁决）。
     """
     for cat in RULE_CATEGORIES:
         if cat.reason_of(rel, path) is not None:
-            if cat.key == "infrastructure" and is_startup_candidate(rel):
+            if (
+                cat.key == "infrastructure"
+                and get_distill_adapter(platform).is_startup_candidate(rel)
+            ):
                 return cat.key, True
             return cat.key, False
     return None, False
 
 
-def _pick_startup(startup_files: Sequence[str]) -> str | None:
+def _pick_startup(startup_files: Sequence[str], platform: str) -> str | None:
     """跨工程启动文件去重（决策 2）：返回保留的那份，落选候选进 exclude。
 
     优先 startup_stm32f10x_md.s（与目标板 C8T6 中密度匹配）；没有 _md 则按
     路径排序取第一份（密度守卫在渲染器：保留份非 _md 时入库前大声失败）。
-    确定性：同一输入必然同一结果。
+    _md 谓词按平台取适配器（工单 04）：mspm0 显式 False——启动去重对 mspm0
+    不生效（无 .s 启动文件）。确定性：同一输入必然同一结果。
     """
     if not startup_files:
         return None
-    md = sorted(c for c in startup_files if is_md_startup(c))
+    md = sorted(
+        c for c in startup_files if get_distill_adapter(platform).is_md_startup(c)
+    )
     if md:
         return md[0]
     return sorted(startup_files)[0]
@@ -305,7 +309,7 @@ def _validate_startup_disposition(
     问题一次报全，各自带原因。类别表的确定性剔除由 master 的
     _validate_category_disposition 泛化覆盖；本函数只处理启动文件落选候选。
     """
-    picked = _pick_startup(startup_files)
+    picked = _pick_startup(startup_files, report.platform)
     if picked is None:
         return
     if picked not in {d.path for d in report.keep}:

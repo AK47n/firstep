@@ -301,3 +301,16 @@ def test_delete_master_removes_dir_and_meta(fake_masters_dir, tmp_path):
 def test_delete_master_missing_raises(fake_masters_dir):
     with pytest.raises(MasterError, match="不存在"):
         delete_master(fake_masters_dir, "stm32")
+
+
+# ---------------------------------------------------------------------------
+# 结构测试（防回退，先例 errors.py 防漏登）：配置文件后缀表单源 platforms.py
+# ---------------------------------------------------------------------------
+
+
+def test_master_store_no_config_file_suffix_table():
+    """工程配置文件后缀表单源 platforms.PLATFORM_CONFIG_FILE_SUFFIXES
+    （工单 04）：master_store 不再自持 PLATFORM_CONFIG_FILES。"""
+    import contest_generator.master_store as master_store
+
+    assert not hasattr(master_store, "PLATFORM_CONFIG_FILES")
