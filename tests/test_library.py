@@ -22,7 +22,7 @@ from contest_generator.library import (
     update_platform_identity,
     validate_description,
 )
-from contest_generator.llm import ValidationResult
+from contest_generator.library import ValidationResult
 from contest_generator.manifest import MANIFEST_FILENAME, ModuleManifest, PlatformEntry
 from tests.fakes import FakeLLM
 

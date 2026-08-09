@@ -8,7 +8,7 @@
 |---|---|---|
 | 赛题 | 粘贴或上传（PDF / .docx / .txt / .md）的竞赛题目原文 | extraction.py → str，贯穿所有 LLM prompt；生成入口装配唯一出处 = generator.resolve_topic_context（TopicContext） |
 | 平台 | `stm32`（STM32F103C8T6 / Keil5）、`mspm0`（地猛星 MSPM0G3507 / CCS） | 词表在 platforms.py；识别知识（工程配置文件后缀表）= platforms.PLATFORM_CONFIG_FILE_SUFFIXES 单源；蒸馏侧平台行为经 distill_adapters 适配器（master 只消费）；生成侧行为在 patchers.py / webapp.py |
-| 模块 | 可复用 .c/.h 单元 + 机器可读 manifest；库目录即数据库；与功能库相对——模块承载外设/赛题功能，功能库是母版自带底层库；模块推荐（AI 选模块）的模型类与收敛工作流归 selection.py——llm 层运行时依赖 selection 而非反向（report.py 先例） | manifest.py（模型）/ library.py（库操作）；模块推荐域在 selection.py |
+| 模块 | 可复用 .c/.h 单元 + 机器可读 manifest；库目录即数据库；与功能库相对——模块承载外设/赛题功能，功能库是母版自带底层库；模块推荐（AI 选模块）的模型类与收敛工作流归 selection.py——llm 层运行时依赖 selection 而非反向（report.py 先例） | manifest.py（模型）/ library.py（库操作）；模块推荐域在 selection.py；推荐域判决（build_module_selection：模型输出 → ModuleSelection 解释链——需求派生 / 词表约束 / DeepSeek 怪癖）在 selection.py，llm 只做机械提取 |
 | manifest | 模块目录下 manifest.json：slug、简介、依赖、平台条目（文件 / 验证状态 / 硬件绑定 / 备注 / 硬件身份字段 kit + source_url） | manifest.py |
 | 简介 | manifest.description，判据三要素：① 与代码一致（AI 校验）；② 硬件身份可确认——套件型号（kit）与购买链接（source_url），平台条目字段、新录入必填、URL 格式校验、由人补填；③ 专用性——逻辑绑定具体赛题的模块必须标注"XX 题专用"（如 lock_control / zone = 2026C 数字钥匙题专用，pid = 巡线题专用） | library.py / llm.py |
 | 依赖 | manifest 声明的模块依赖，生成前递归展开（依赖先于使用者）；上层依赖下层；不得声明对功能库的依赖（母版必有，声明反而使解析器找不到而报错） | selection.py |
@@ -48,6 +48,7 @@
 
 - 薄壳（webapp 路由 / LLM 网络调用 / 文本抽取）包裹纯逻辑核心。
 - 判定素材模型归模型层（依赖倒置）：JudgmentFile / FileVersion 在 report.py（master 构造、llm 消费），llm 层依赖模型层而非反向；master 不再从 llm 导入模型类型（仅 LLM 协议参数类型）。版本分组不变量（版本工程名组不重不漏）在素材模型上唯一声明与校验。
+- llm.py 拆层——域判决随域走（照 report.py / selection.py 先例）："模型输出 → ModuleSelection"整条解释链归 selection.build_module_selection（需求派生 / 词表约束 / DeepSeek 怪癖，错误类型 SelectionError 由传输侧翻译回 LLMError），ValidationResult 归 library.py，llm 缩为 协议 + 提示词 + 机械解析 + 预算 薄传输层。
 - 文件类别生命周期单源化：四大类别（残留 / 旧 main.c / 基础设施 / 二进制）+ 工程配置文件（工单 09）各是一条 `RuleCategory` 描述（识别规则 + 确定性处置 + 报错文案），流水线遍历 `RULE_CATEGORIES`，不再每处复制平行分支；启动文件候选是表内钩子（决策 2，跨工程去重）。类别表与 `classify` 收进 categories.py，master 只消费（结构测试防回退：恒等引用 + 模块内无规则函数）。
 - 蒸馏侧平台适配接缝 = distill_adapters（摘要读 / 渲染（含密度守卫翻译）/ 启动候选谓词 per platform；mspm0 显式无操作；母版库入库结构校验留在 master_store，存储域边界）。识别知识（工程配置文件后缀表）单源 = platforms.PLATFORM_CONFIG_FILE_SUFFIXES。
 - 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；表住 errors.py，结构测试反射枚举包内全部异常类断言已登记（白名单只放从不直达 web 层的类）——漏登从此是测试红，不是线上 500。

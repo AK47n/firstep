@@ -43,19 +43,16 @@ from contest_generator.llm import (
     _summarize_user_prompt,
     _truncate_content,
     _validation_user_prompt,
+    extract_module_selection_data,
     parse_archive_judgment,
     parse_distillation_report,
-    parse_module_selection,
     parse_summary_report,
     parse_validation_result,
 )
 from contest_generator.selection import (
-    FunctionRequirement,
     ModuleSelection,
-    OutOfLibrarySuggestion,
     ReferenceSuggestion,
 )
-from contest_generator.wordlist import HardwareWordGroup
 from contest_generator.manifest import ManifestSummary, build_manifest_summaries
 from contest_generator.report import (
     ACTION_EXCLUDE,
@@ -330,58 +327,19 @@ def test_select_modules_missing_content_field_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_parse_selection_accepts_multiple_modules_with_reasons():
-    result = parse_module_selection(
-        json.dumps(
-            {
-                "modules": [
-                    {"slug": "dht11", "reason": "测温湿度"},
-                    {"slug": "oled", "reason": "显示数据"},
-                ]
-            }
-        ),
-        known_slugs=("dht11", "oled"),
-    )
-
-    assert result.modules == ("dht11", "oled")
-    assert result.reasons == {"dht11": "测温湿度", "oled": "显示数据"}
-
-
-def test_parse_selection_rejects_unknown_slug():
-    with pytest.raises(LLMError, match="不存在"):
-        parse_module_selection(
-            json.dumps({"modules": [{"slug": "wifi", "reason": "通信"}]}),
-            known_slugs=("dht11",),
-        )
-
-
-def test_parse_selection_rejects_duplicate_slug():
-    with pytest.raises(LLMError, match="重复"):
-        parse_module_selection(
-            json.dumps(
-                {
-                    "modules": [
-                        {"slug": "dht11", "reason": "a"},
-                        {"slug": "dht11", "reason": "b"},
-                    ]
-                }
-            ),
-            known_slugs=("dht11",),
-        )
-
-
 @pytest.mark.parametrize(
-    "bad_json",
+    "bad_content",
     [
         "{not json",
-        json.dumps({"modules": "dht11"}),
-        json.dumps({"modules": [{"reason": "缺 slug"}]}),
-        json.dumps({"modules": [{"slug": "dht11", "reason": 42}]}),
+        json.dumps([1, 2]),
+        json.dumps("字符串"),
     ],
 )
-def test_parse_selection_rejects_malformed_output(bad_json):
+def test_extract_module_selection_data_rejects_non_json_or_non_object(bad_content):
+    """机械形状提取（工单 06）：非 JSON / 顶层非对象 → LLMError（只这两处；
+    语义校验——缺模块数组 / 缺 slug / 字段类型——在 selection 侧）。"""
     with pytest.raises(LLMError):
-        parse_module_selection(bad_json, known_slugs=("dht11",))
+        extract_module_selection_data(bad_content)
 
 
 # ---------------------------------------------------------------------------
@@ -2349,55 +2307,6 @@ def test_select_prompt_without_references_keeps_old_shape():
     assert '"references"' not in user_message
 
 
-def test_parse_selection_accepts_reference_ids():
-    result = parse_module_selection(
-        json.dumps(
-            {
-                "modules": [{"slug": "dht11", "reason": "测温湿度"}],
-                "references": ["key-example"],
-            }
-        ),
-        known_slugs=("dht11",),
-        known_reference_ids=("key-example",),
-    )
-
-    assert result.reference_ids == ("key-example",)
-
-
-def test_parse_selection_without_references_field_is_empty():
-    result = parse_module_selection(
-        json.dumps({"modules": []}), known_slugs=()
-    )
-    assert result.reference_ids == ()
-
-
-def test_parse_selection_rejects_reference_outside_suggestion_list():
-    with pytest.raises(LLMError, match="清单外"):
-        parse_module_selection(
-            json.dumps({"modules": [], "references": ["ghost"]}),
-            known_slugs=(),
-            known_reference_ids=("key-example",),
-        )
-
-
-def test_parse_selection_rejects_references_without_suggestion_list():
-    """没给参考文件清单时模型报 references = 幻觉：大声失败。"""
-    with pytest.raises(LLMError, match="未提供"):
-        parse_module_selection(
-            json.dumps({"modules": [], "references": ["ghost"]}),
-            known_slugs=(),
-        )
-
-
-def test_parse_selection_rejects_duplicate_reference_ids():
-    with pytest.raises(LLMError, match="重复"):
-        parse_module_selection(
-            json.dumps({"modules": [], "references": ["a", "a"]}),
-            known_slugs=(),
-            known_reference_ids=("a",),
-        )
-
-
 def test_select_modules_with_references_parses_reference_ids():
     transport = FakeTransport(
         body=_api_response(json.dumps({"modules": [], "references": ["key-example"]}))
@@ -2560,14 +2469,8 @@ def test_reference_judge_archivable_retries_on_malformed_json_output():
     assert len(transport.calls) == 3
 
 
-# 工单 10：功能需求层契约解析（requirements / suggestions / questions）
-# ---------------------------------------------------------------------------
-
-# 测试专用小词表（与包内默认词表解耦，契约测试自足）
-WORDS = (
-    HardwareWordGroup(category="视觉模块", models=("K230", "OpenMV")),
-    HardwareWordGroup(category="声光提示器件", models=("LED", "蜂鸣器")),
-)
+# 工单 10：功能需求层端到端（提示词契约 + 默认词表校验；域判决用例随
+# build_module_selection 迁 test_selection.py，工单 06）
 
 REQUIREMENTS_JSON = json.dumps(
     {
@@ -2590,261 +2493,6 @@ REQUIREMENTS_JSON = json.dumps(
         ]
     }
 )
-
-
-def test_parse_selection_requirements_derive_top_modules():
-    """新契约：顶层 modules 由功能需求层机械派生（库内命中并集，保序、首见理由）
-    ——模块必有需求支撑，顶层与需求层永不漂移。"""
-    result = parse_module_selection(
-        REQUIREMENTS_JSON, known_slugs=("dht11", "oled"), hardware_words=WORDS
-    )
-
-    assert result.modules == ("dht11", "oled")
-    assert result.reasons == {"dht11": "测温湿度", "oled": "显示结果"}
-    assert result.requirements[0] == FunctionRequirement(
-        requirement="识别数字",
-        sentence_index=3,
-        modules=("dht11", "oled"),
-        suggestions=(
-            OutOfLibrarySuggestion(name="视觉模块", examples=("K230", "OpenMV")),
-        ),
-    )
-    assert result.requirements[1].suggestions == (
-        OutOfLibrarySuggestion(name="蜂鸣器", examples=()),
-    )
-
-
-def test_parse_selection_requirements_dedup_shared_module_across_requirements():
-    """同一模块出现在两条需求里：顶层去重（首见理由保留），需求各自保留命中。"""
-    raw = json.dumps(
-        {
-            "requirements": [
-                {
-                    "requirement": "采集温湿度",
-                    "sentence": 1,
-                    "modules": [{"slug": "dht11", "reason": "测温"}],
-                },
-                {
-                    "requirement": "显示",
-                    "sentence": 2,
-                    "modules": [{"slug": "dht11", "reason": "数据来源"}],
-                },
-            ]
-        }
-    )
-
-    result = parse_module_selection(raw, known_slugs=("dht11",), hardware_words=WORDS)
-
-    assert result.modules == ("dht11",)
-    assert result.reasons == {"dht11": "测温"}  # 首见理由
-    assert [r.modules for r in result.requirements] == [("dht11",), ("dht11",)]
-
-
-def test_parse_selection_requirements_reject_unknown_module_slug():
-    """需求层里的库外 slug 同样大声失败（与顶层 modules 校验同款严格）。"""
-    with pytest.raises(LLMError, match="不存在"):
-        parse_module_selection(
-            json.dumps(
-                {
-                    "requirements": [
-                        {
-                            "requirement": "识别数字",
-                            "sentence": 1,
-                            "modules": [{"slug": "k230_cam", "reason": "视觉"}],
-                        }
-                    ]
-                }
-            ),
-            known_slugs=("dht11",),
-            hardware_words=WORDS,
-        )
-
-
-@pytest.mark.parametrize(
-    "bad_json",
-    [
-        json.dumps({"requirements": "not a list"}),
-        json.dumps({"requirements": [{"sentence": 1}]}),  # 缺 requirement
-        json.dumps({"requirements": [{"requirement": "  ", "sentence": 1}]}),
-        json.dumps({"requirements": [{"requirement": "需求"}]}),  # 缺 sentence
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": 0}]}),
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": -2}]}),
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": "0"}]}),  # 数字字符串但非正数
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": "abc"}]}),  # 非数字字符串
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": "1.5"}]}),  # 非整数数字字符串
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1.0}]}),  # 浮点
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": True}]}),
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": "x"}]}),
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"reason": "缺 slug"}]}]}),
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"slug": "dht11", "reason": 42}]}]}),
-        json.dumps({"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"slug": "dht11"}, {"slug": "dht11"}]}]}),  # 需求内重复
-    ],
-)
-def test_parse_selection_rejects_malformed_requirements(bad_json):
-    with pytest.raises(LLMError):
-        parse_module_selection(bad_json, known_slugs=("dht11",), hardware_words=WORDS)
-
-
-def test_parse_selection_coerces_digit_string_sentence():
-    """数字字符串 sentence 按语义无损强转 int（sentence 语义 = 正整数，不是形状）。
-
-    真机实测：DeepSeek json_object 模式把数字标量序列化为字符串（24/24 条需求
-    全是 "1" 这种形状），严格类型校验让整轮收敛当场失败——"1" 语义上就是正整数，
-    强转不引入任何脑补风险；非数字字符串照旧大声失败（见 reject 参数化）。
-    """
-    raw = json.dumps(
-        {
-            "requirements": [
-                {"requirement": "识别数字", "sentence": "1", "modules": []},
-                {"requirement": "定位", "sentence": " 3 ", "modules": []},
-            ]
-        }
-    )
-
-    result = parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
-
-    assert [r.sentence_index for r in result.requirements] == [1, 3]
-
-
-def test_parse_selection_suggestion_name_hits_wordlist_model_or_category():
-    """词表内型号与类别名都直接显示（命中 → 显示）。"""
-    raw = json.dumps(
-        {
-            "requirements": [
-                {
-                    "requirement": "识别数字",
-                    "sentence": 1,
-                    "modules": [],
-                    "suggestions": [
-                        {"name": "K230", "examples": ["K230 模组"]},  # 型号条目
-                        {"name": "视觉模块", "examples": ["OpenMV"]},  # 类别条目
-                    ],
-                }
-            ]
-        }
-    )
-
-    result = parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
-
-    suggestions = result.requirements[0].suggestions
-    assert suggestions[0].name == "K230" and suggestions[0].degraded is False
-    assert suggestions[1].name == "视觉模块" and suggestions[1].degraded is False
-
-
-def test_parse_selection_suggestion_off_wordlist_degrades_to_category():
-    """词表外型号（模型给出词表内类别名）→ 降级为类别名显示（degraded）。"""
-    raw = json.dumps(
-        {
-            "requirements": [
-                {
-                    "requirement": "识别数字",
-                    "sentence": 1,
-                    "modules": [],
-                    "suggestions": [
-                        {"name": "K210", "category": "视觉模块", "examples": ["OpenMV"]}
-                    ],
-                }
-            ]
-        }
-    )
-
-    result = parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
-
-    suggestion = result.requirements[0].suggestions[0]
-    assert suggestion.name == "视觉模块"  # 降级后的类别名
-    assert suggestion.degraded is True
-    assert suggestion.examples == ("OpenMV",)
-
-
-@pytest.mark.parametrize(
-    "suggestion",
-    [
-        {"name": "K210"},  # 词表外且无 category
-        {"name": "K210", "category": "随便什么"},  # category 不在词表
-        {"name": "K210", "category": 42},
-    ],
-)
-def test_parse_selection_suggestion_off_wordlist_rejected(suggestion):
-    """词表外型号无法降级（缺合法类别）→ 拒收（大声失败，与库内 slug 校验同源）。"""
-    raw = json.dumps(
-        {
-            "requirements": [
-                {
-                    "requirement": "识别数字",
-                    "sentence": 1,
-                    "modules": [],
-                    "suggestions": [suggestion],
-                }
-            ]
-        }
-    )
-
-    with pytest.raises(LLMError, match="硬件词表"):
-        parse_module_selection(raw, known_slugs=(), hardware_words=WORDS)
-
-
-def test_parse_selection_suggestions_without_wordlist_rejected():
-    """没给硬件词表时模型报库外建议 = 无法校验的编造：大声失败。"""
-    raw = json.dumps(
-        {
-            "requirements": [
-                {
-                    "requirement": "识别数字",
-                    "sentence": 1,
-                    "modules": [],
-                    "suggestions": [{"name": "视觉模块"}],
-                }
-            ]
-        }
-    )
-
-    with pytest.raises(LLMError, match="词表"):
-        parse_module_selection(raw, known_slugs=())
-
-
-def test_parse_selection_questions_accepted():
-    """拿不准向用户补问：questions 数组解析；纯补问输出（无需求层无模块）合法。"""
-    raw = json.dumps({"questions": ["题面没有说明识别方式，用摄像头还是传感器？"]})
-
-    result = parse_module_selection(raw, known_slugs=())
-
-    assert result.questions == ("题面没有说明识别方式，用摄像头还是传感器？",)
-    assert result.modules == ()
-
-
-@pytest.mark.parametrize(
-    "bad_questions",
-    [
-        json.dumps({"questions": "不是数组"}),
-        json.dumps({"questions": [42]}),
-        json.dumps({"questions": [""]}),
-    ],
-)
-def test_parse_selection_rejects_malformed_questions(bad_questions):
-    with pytest.raises(LLMError, match="questions"):
-        parse_module_selection(bad_questions, known_slugs=())
-
-
-def test_parse_selection_requirements_present_ignores_plain_modules():
-    """模型同时输出 requirements 与顶层 modules（冗余）→ 以需求层派生的为准。"""
-    raw = json.dumps(
-        {
-            "modules": [{"slug": "oled", "reason": "冗余"}],  # 与需求层不一致，应被忽略
-            "requirements": [
-                {
-                    "requirement": "采集温湿度",
-                    "sentence": 1,
-                    "modules": [{"slug": "dht11", "reason": "测温"}],
-                }
-            ],
-        }
-    )
-
-    result = parse_module_selection(
-        raw, known_slugs=("dht11", "oled"), hardware_words=WORDS
-    )
-
-    assert result.modules == ("dht11",)  # 派生为准
 
 
 def test_select_modules_prompt_includes_wordlist_and_new_contract():

@@ -38,7 +38,8 @@ from contest_generator.events import (
     ProgressEmitter,
     ProgressEvent,
 )
-from contest_generator.llm import LLMError, ValidationResult
+from contest_generator.llm import LLMError
+from contest_generator.library import ValidationResult
 from contest_generator.selection import (
     FunctionRequirement,
     ModuleSelection,
