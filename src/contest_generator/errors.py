@@ -23,7 +23,7 @@ from .generator import GeneratorError
 from .keil import KeilProjectError
 from .library import LibraryError
 from .llm import LLMError
-from .master import MasterError
+from .master_store import MasterError
 from .patchers import UnknownPlatformError
 from .reference_library import ReferenceError
 from .selection import SelectionError

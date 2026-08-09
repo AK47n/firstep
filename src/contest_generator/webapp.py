@@ -56,11 +56,13 @@ from .llm import (
 )
 from .master import (
     confirm_distillation,
-    delete_master,
     distill_master,
+    scan_project,
+)
+from .master_store import (
+    delete_master,
     import_master,
     list_masters,
-    scan_project,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
