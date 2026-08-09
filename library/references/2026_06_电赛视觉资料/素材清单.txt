@@ -1,0 +1,33 @@
+素材目录（sources/materials）文件清单：
+
+01_DriverAssitant_v5.11.zip  9813168 bytes
+01_RKDevTool_Release_v2.92.zip  2745366 bytes
+01_tsp-xbhdcc-v1.z01  1073741824 bytes
+01_tsp-xbhdcc-v1.zip  410357778 bytes
+01_VSCodeUserSetup-x64-1.122.1.exe  177168272 bytes
+01_WinSCP-6.5.3-Setup.exe  12236344 bytes
+01_用到的指令.txt  818 bytes
+02_xbhdcc_tools.py  14534 bytes
+02_捕获摄像头画面并推流到浏览器.zip  12184 bytes
+04_设置摄像头参数与基本图形绘制.zip  6390 bytes
+05_canmv-ide-4.0.7.exe  202841370 bytes
+05_检测矩形.zip  7362 bytes
+06_色块与激光点识别.zip  15702 bytes
+07_代码封装，同时检测矩形和色块.zip  18249 bytes
+08_VSCodeUserSetup-x64-1.85.2.exe  94814968 bytes
+09_GPIO驱动彩色灯和激光笔.zip  1022 bytes
+09_立创·泰山派开发板原理图.pdf  11760429 bytes
+10_使用按键切换任务状态.zip  19660 bytes
+11_泰山派使用UART7与电脑串口通信.zip  598 bytes
+12_new_boot.img  24052224 bytes
+12_xbhdcc_spi_lcd.py  5874 bytes
+12_泰山派开机自启与屏幕使用.zip  20216 bytes
+13_DCC-101v1闭环步进电机资料.zip  179027 bytes
+13_闭环步进电机云台使用.zip  2139 bytes
+1_1_imager_2.0.10.exe  22471920 bytes
+1_1_ubuntu-20.04.5-preinstalled-server-arm64+raspi.img.xz  791775304 bytes
+Tspi_Linux_config.cfg  6129 bytes
+代码资料与视频同步更新(1).txt  0 bytes
+代码资料与视频同步更新.txt  0 bytes
+换源后缀(1).txt  127 bytes
+换源后缀.txt  127 bytes

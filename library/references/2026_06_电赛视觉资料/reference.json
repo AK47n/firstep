@@ -1,0 +1,18 @@
+{
+  "id": "2026_06_电赛视觉资料",
+  "title": "2026_06_电赛视觉资料",
+  "type": "视觉资料",
+  "description": "2026 年电赛视觉题配套资料：立创·泰山派开发板摄像头取流、参数设置、色块与激光点识别、GPIO 驱动激光笔、按键任务切换等脚本；刷机 / 推流 / 调试工具（RKDevTool、VSCode、WinSCP、Ubuntu 镜像等）。文本脚本已入库；二进制工具 / 镜像 / 压缩包（约 2.7G）不入库，完整保真见 sources/materials 备份。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "files": [
+    "素材清单.txt",
+    "01_用到的指令.txt",
+    "02_xbhdcc_tools.py",
+    "12_xbhdcc_spi_lcd.py",
+    "代码资料与视频同步更新(1).txt",
+    "代码资料与视频同步更新.txt",
+    "换源后缀(1).txt",
+    "换源后缀.txt"
+  ]
+}
