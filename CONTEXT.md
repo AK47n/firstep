@@ -13,7 +13,7 @@
 | 简介 | manifest.description，判据三要素：① 与代码一致（AI 校验）；② 硬件身份可确认——套件型号（kit）与购买链接（source_url），平台条目字段、新录入必填、URL 格式校验、由人补填；③ 专用性——逻辑绑定具体赛题的模块必须标注"XX 题专用"（如 lock_control / zone = 2026C 数字钥匙题专用，pid = 巡线题专用） | library.py / llm.py |
 | 依赖 | manifest 声明的模块依赖，生成前递归展开（依赖先于使用者）；上层依赖下层；不得声明对功能库的依赖（母版必有，声明反而使解析器找不到而报错） | selection.py |
 | 可选配套 | 模块的可裁剪组件：如 filter 之于 uwb_uart——代码层现状为必需依赖（uwb_uart.c 写死 include 与滤波调用），可选化（条件编译 + 生成器按选中定义宏）已立项未实现；普适 filter / 普适巡线逻辑为将来方向 | （未实现） |
-| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库）；元数据在母版目录外的平级 json | master.py（蒸馏编排）/ master_store.py（母版库 CRUD 与元数据） |
+| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库；**mspm0 母版 = TI 官方 empty 示例（CCS Theia 20.5 导出，TMS470_TICLANG 4.0）整理入库**：main.c 模板 = SYSCFG_DL_init() + while(1)（ADR 0002 形态），mspm0.syscfg 按 TI 官方板 LP_MSPM0G3507、由赛题工程按需自改，.cproject/.project 原样保留语义）；元数据在母版目录外的平级 json | master.py（蒸馏编排）/ master_store.py（母版库 CRUD 与元数据） |
 | 功能库 | 母版自带的底层库（stm32 母版 = 逐飞 ml_*：I2C/UART/PWM/GPIO/OLED 等，headfile.h 聚合），先于一切模块存在、生成时随母版进工程；不属于模块库 | masters/stm32/ml_libs |
 | 提炼 | 导入多旧工程 → 对比 → AI 判定 → 报告（保留 / 整合 / 剔除 + 残留清单）→ 确认 → 入库；判定范围 = 公共 + 冲突 + 独有全部逐个判定，唯一判据：读内容判断是否通用、是否基础建设必需，不看重复次数 / 出现范围；确认是一条事务（confirm_distillation） | master.py + llm.py |
 | 条目库原语 | 模块库 / 赛题库 / 参考文件库共用的"目录即数据库"骨架：事务落盘、目录迭代、JSON 元数据读写与校验（read_json）、删除（delete_entry）、目录名 = 键的校验（validate_store_key）、必填字符串字段（require_str）、路径安全（is_unsafe_path）；不持业务形状，错误类型与文案归各库（StoreError 家族从不直达 web 层） | entry_store.py |
@@ -33,7 +33,7 @@
 | C 词法层 | C 源码文本的机械切分唯一出处：围栏剥离 / 行号检测、注释剥离（keep_preprocessor 轴：# 行透传与否）、引号 include 提取、顶层 #define 扫描、语句级切分原语（iter_c_regions 区域迭代 / match_bracket 括号配对 / next_significant 空白注释跳读，骨架替换走查与死循环检测的消费基座）；接口 = 字符串进 / 字符串出，不碰盘上文件；不做调用形态识别（那是骨架自检的语义判断） | clex.py |
 | 校验语料 | 生成前五道门禁共吃的内存语料：模块文件（文本 / 类别 / 所在目录）+ 母版头 + 母版搜索目录 + main.c，一次读盘；门禁退化为吃语料的纯谓词（可内存直构测试），不各自读盘 | generator.py（ModuleCorpus / ModuleFile / build_module_corpus） |
 | 模块摘要 | 模块库摘要对象（喂 LLM 的可用模块清单）：slug / description / kits（collect_kits 单源）/ 依赖；行渲染唯一实现 = to_line()（字符串只在 prompt 边界渲染一次，无反向解析方）；known_slugs 取 slug 字段 | manifest.py（ManifestSummary / build_manifest_summaries 批量投影） |
-| 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座。include 读侧接缝：patchers.include_search_dirs 按平台分派——stm32 走 keil 版 .uvprojx IncludePath、mspm0 走 ccs 版 .cproject buildIncludePath（${PROJECT_LOC} 展开） | keil.py / ccs.py / patchers.py / projectfile.py |
+| 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座。ccs.py 双格式认知：同时认 CCS classic 与 Theia 20.5（TMS470_TICLANG 4.0）——差异在 cdtBuildSystem 的 storageModule 位置（classic 在 settings 内、Theia 独立）、include/define 选项 superClass 命名空间（ti.ccs.misc.* / com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.compilerID.*）与位置（classic 直接子元素、Theia 在编译器 tool 内），单实现路径通吃；include 值展开 ${PROJECT_LOC} / ${PROJECT_ROOT}，SDK 环境宏（${COM_TI_MSPM0_SDK_*}）跳过不猜。include 读侧接缝：patchers.include_search_dirs 按平台分派——stm32 走 keil 版 .uvprojx IncludePath、mspm0 走 ccs 版 .cproject buildIncludePath | keil.py / ccs.py / patchers.py / projectfile.py |
 | 平台警告 | missing / unverified / hardware_bound，生成前暴露 | selection.py |
 | 功能需求层 | 推荐输出的第一层：题面驱动的能力/外设级需求清单（声光提示 → LED/蜂鸣器、识别数字 → 视觉），粒度贴题面关键词；每条必须挂题面对应句（逐句对照），禁止题外联想——"送药小车所以需要视觉"是脑补，题面要求识别数字才需要视觉 | selection.py |
 | 逐句对照 | 收敛循环的机械防漏机制：题面按句编号，每句对应功能需求或"无功能"；找不到对应句的功能 = 脑补，删 | selection.py |
