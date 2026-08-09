@@ -88,8 +88,10 @@ class MacroRedefinitionError(GeneratorError):
     的 LED_GPIO 撞 ml_led.h）。"""
 
 
-# Keil 在工程外也能解析的头：ARMCC 标准库（引号形式同样走库搜索）与器件包
-# （stm32f10x_conf.h 由 STM32F1xx DFP 提供，工程树里没有）。缺了会误报。
+# 工程树外由工具链/IDE 提供的头：ARMCC 标准库（引号形式同样走库搜索）与
+# 器件包/平台配置头——stm32f10x_conf.h 由 STM32F1xx DFP 提供；ti_msp_dl_config.h
+# 由 CCS 的 SysConfig 在构建时生成（工程树里没有，构建时经 ${SYSCONFIG_
+# TOOL_INCLUDE_PATH} 解析）。缺了会误报。
 _EXTERNAL_HEADERS = frozenset(
     {
         "math.h", "stdio.h", "stdlib.h", "string.h", "stdint.h", "stdbool.h",
@@ -97,6 +99,7 @@ _EXTERNAL_HEADERS = frozenset(
         "time.h", "inttypes.h", "stdarg.h", "setjmp.h", "signal.h", "locale.h",
         "wchar.h", "wctype.h", "complex.h", "fenv.h", "tgmath.h", "iso646.h",
         "stdatomic.h", "threads.h", "uchar.h", "stm32f10x_conf.h",
+        "ti_msp_dl_config.h",
     }
 )
 
