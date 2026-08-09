@@ -14,12 +14,16 @@ JudgmentFile 与 FileVersion（判定输入素材，master 构造、llm 消费�
 提炼第一阶段产物（FileSummary / VersionSummary：待判文件各内容版本的摘要，
 第二阶段判定的输入素材）同为判定素材模型，同归此处——两阶段的素材形状在
 模型层只定义一次，llm 层只负责 AI JSON 解析。
+
+扫描对比模型（ProjectStructure / ProjectComparison，master 扫描构造、archive
+归档消费）同归此处——master↔archive 不再有模型级反向依赖。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Mapping
 
 
 class ReportError(ValueError):
@@ -343,3 +347,47 @@ class FileSummary:
 
     path: str
     versions: tuple[VersionSummary, ...]
+
+
+# ---------------------------------------------------------------------------
+# 扫描对比模型（蒸馏流程的输入产物）：master 扫描构造、archive 归档消费
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ProjectStructure:
+    """单个工程的结构快照：平台、文件清单（相对路径 + 内容哈希）、配置摘要、
+    残留清单（规则识别、确定性剔除，不进 AI 判定）、旧 main.c 清单（模板
+    替代，不进扫描清单）、工程配置文件（确定性规则处理，不进扫描清单）、
+    启动文件候选（跨工程去重，不进 AI 判定）。"""
+
+    project_dir: Path
+    name: str  # 工程名（目录名）
+    platform: str  # 检测到的平台
+    files: tuple[str, ...]  # 相对路径（POSIX 分隔），排序
+    file_hashes: Mapping[str, str]  # path -> sha256 hex（对比内容是否一致）
+    config_summary: tuple[str, ...]  # 平台配置摘要行（配置对比的 AI 素材）
+    residues: tuple[str, ...] = ()  # 残留相对路径（构建产物 / 备份 / 临时文件 / IDE 用户选项）
+    main_c_files: tuple[str, ...] = ()  # 旧工程 main.c（模板替代，不进扫描清单）
+    infrastructure: tuple[str, ...] = ()  # 基础设施（链接脚本 / 非启动 .s），确定性保留、不进 AI 判定
+    startup_files: tuple[str, ...] = ()  # 启动文件候选（startup_stm32f10x_*.s），跨工程去重、不进 AI 判定
+    config_files: tuple[str, ...] = ()  # 工程配置文件（.uvprojx/.cproject/.project），确定性规则处理、不进 AI 判定
+    binaries: tuple[str, ...] = ()  # 二进制文件（内容判据，确定性剔除、不进 AI 判定）
+
+
+@dataclass(frozen=True)
+class ProjectComparison:
+    """多工程的结构 + 配置对比结果。"""
+
+    projects: tuple[ProjectStructure, ...]
+    common: tuple[str, ...]  # 所有工程都有且内容完全一致
+    conflicts: tuple[str, ...]  # 同路径、内容不一致
+    unique: tuple[str, ...]  # 只出现在部分工程
+    by_path: Mapping[str, tuple[str, ...]]  # path -> 含该文件的工程名（出现顺序）
+    judgment: tuple[str, ...]  # 需要 AI 判定的路径（公共 + 冲突 + 独有）
+    residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
+    main_c_files: tuple[str, ...] = ()  # 全部工程的旧 main.c（并集，排序，模板替代）
+    infrastructure: tuple[str, ...] = ()  # 全部工程的基础设施（并集，排序，确定性保留）
+    startup_files: tuple[str, ...] = ()  # 全部工程的启动文件候选（并集，排序，去重后保留）
+    config_files: tuple[str, ...] = ()  # 全部工程的工程配置文件（并集，排序，确定性规则处理）
+    binaries: tuple[str, ...] = ()  # 全部工程的二进制文件（并集，排序，确定性剔除）

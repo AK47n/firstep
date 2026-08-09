@@ -29,10 +29,14 @@ from contest_generator.library import (
     update_module_description,
     update_platform_identity,
 )
-from contest_generator.master import ProjectComparison, ProjectStructure
 from contest_generator.master_store import delete_master
 from contest_generator.reference_library import add_reference, delete_reference
-from contest_generator.report import ArchiveDecision, DistillationReport
+from contest_generator.report import (
+    ArchiveDecision,
+    DistillationReport,
+    ProjectComparison,
+    ProjectStructure,
+)
 from contest_generator.topic_library import delete_topic
 from tests.fakes import FakeLLM
 
