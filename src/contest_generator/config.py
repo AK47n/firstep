@@ -2,8 +2,8 @@
 
 配置文件默认位于用户主目录下的 ~/.contest_generator/config.json——在版本
 库之外，API key 等敏感信息不入版本库。配置项：AI API（base_url / key /
-模型）与工作目录（模块库目录、母版目录——spec：默认在工具工作目录下，
-可配置）。
+模型）、工作目录（模块库目录、母版目录——spec：默认在工具工作目录下，
+可配置）与写库自动提交开关（autocommit_enabled，工单 01）。
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ class AppConfig:
     model: str = DEFAULT_MODEL
     module_library_dir: Path = DEFAULT_MODULE_LIBRARY_DIR
     masters_dir: Path = DEFAULT_MASTERS_DIR
+    autocommit_enabled: bool = True  # 写库动作自动 git 提交开关（工单 01，默认开）
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -70,6 +71,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     masters_dir = Path(
         _require_nonempty_str(data, "masters_dir", str(DEFAULT_MASTERS_DIR), path)
     )
+    autocommit_enabled = data.get("autocommit_enabled", True)
+    if not isinstance(autocommit_enabled, bool):
+        raise ConfigError(f"autocommit_enabled 必须是布尔值：{path}")
 
     return AppConfig(
         base_url=base_url,
@@ -77,6 +81,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         model=model,
         module_library_dir=module_library_dir,
         masters_dir=masters_dir,
+        autocommit_enabled=autocommit_enabled,
     )
 
 
@@ -91,6 +96,7 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
                 "model": config.model,
                 "module_library_dir": str(config.module_library_dir),
                 "masters_dir": str(config.masters_dir),
+                "autocommit_enabled": config.autocommit_enabled,
             },
             ensure_ascii=False,
             indent=2,

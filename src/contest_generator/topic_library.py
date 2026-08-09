@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .autocommit import commit_after_write
 from .entry_store import (
     StoreError,
     StoreParseError,
@@ -183,6 +184,7 @@ def confirm_topics(
                     "programs": list(normalized_programs),
                 },
             )
+    commit_after_write(topic_library_root, "lib: confirm topics")
     return tuple(resolve_number(topic_library_root, draft.key) for draft in entries)
 
 
