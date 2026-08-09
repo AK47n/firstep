@@ -43,7 +43,6 @@ from contest_generator.llm import (
     _summarize_user_prompt,
     _truncate_content,
     _validation_user_prompt,
-    build_manifest_summaries,
     parse_archive_judgment,
     parse_distillation_report,
     parse_module_selection,
@@ -57,7 +56,7 @@ from contest_generator.selection import (
     ReferenceSuggestion,
 )
 from contest_generator.wordlist import HardwareWordGroup
-from contest_generator.manifest import ManifestSummary
+from contest_generator.manifest import ManifestSummary, build_manifest_summaries
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
