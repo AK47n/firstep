@@ -49,6 +49,7 @@ from .selection import (
     FunctionRequirement,
     ModuleSelection,
     OutOfLibrarySuggestion,
+    REFERENCE_SOURCE_MANUAL,
     ReferenceSuggestion,
     SelectionError,
     build_module_selection,
@@ -446,6 +447,7 @@ class LLM(Protocol):
         manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection: ...
 
     def generate_main_skeleton(
@@ -542,13 +544,16 @@ class DeepSeekLLM:
         manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         """赛题 → 模块选择（工单 03 起带参考文件两级注入的清单 / 全文两个形态）。
 
         references = 该赛题 / 套件关联的参考文件清单（标题 + 一句话简介，
         两级注入第一级）；reference_fulltexts = 模型点名要读全文的参考文件
-        （id → 全文，第二级）。两者都缺时行为与既有实现完全一致（提示词无
-        参考段、输出契约无 references 字段）。
+        （id → 全文，第二级）；manual_fulltexts = 用户手动指定的参考文件
+        （id → 全文，工单 01 手动选参考资料——全文直读强制，无需模型点名）。
+        三者都缺时行为与既有实现完全一致（提示词无参考段、输出契约无
+        references 字段）。
 
         工单 10 起输出功能需求层（requirements / suggestions / questions），
         顶层 modules 由需求层机械得出（build_module_selection，域判决在
@@ -564,6 +569,7 @@ class DeepSeekLLM:
                         manifest_summaries,
                         references,
                         reference_fulltexts,
+                        manual_fulltexts,
                         self._hardware_words,
                     ),
                 },
@@ -1256,6 +1262,7 @@ def _selection_user_prompt(
     manifest_summaries: Sequence[ManifestSummary],
     references: Sequence[ReferenceSuggestion] = (),
     reference_fulltexts: Mapping[str, str] | None = None,
+    manual_fulltexts: Mapping[str, str] | None = None,
     hardware_words: Sequence[HardwareWordGroup] = (),
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
@@ -1268,9 +1275,13 @@ def _selection_user_prompt(
             "关联参考文件（标题 + 一句话简介；如需阅读全文，在输出的 references "
             "数组里列出想读的 id，系统随后给出全文）：",
         ]
-        lines.extend(
-            f"- {ref.id}: {ref.title} —— {ref.description}" for ref in references
-        )
+        for ref in references:
+            note = (
+                "（用户手动指定，全文已直接给出，无需点名）"
+                if ref.source == REFERENCE_SOURCE_MANUAL
+                else ""
+            )
+            lines.append(f"- {ref.id}: {ref.title} —— {ref.description}{note}")
         prompt += "\n".join(lines)
     if reference_fulltexts:
         lines = ["", "以下是你要求阅读全文的参考文件："]
@@ -1279,6 +1290,17 @@ def _selection_user_prompt(
             if fulltext is not None:
                 # 空文件也嵌入（带文件名标注的空白块）——静默丢弃会让模型以为
                 # 它点名的文件没给，与"读到什么就是什么"的截断契约一致
+                lines.append(
+                    f"- {ref.id}: {ref.title}：\n```\n{_truncate_content(fulltext)}\n```"
+                )
+        prompt += "\n".join(lines)
+    if manual_fulltexts:
+        # 手动选参考资料（工单 01）：全文直读强制（复用统一截断——read_fulltext
+        # 已带 file_label 文件名标注，超长再经 _truncate_content 截断标注）
+        lines = ["", "以下为你手动指定的参考文件全文（用户显式选择，直接作学习素材）："]
+        for ref in references:
+            fulltext = manual_fulltexts.get(ref.id)
+            if fulltext is not None:
                 lines.append(
                     f"- {ref.id}: {ref.title}：\n```\n{_truncate_content(fulltext)}\n```"
                 )

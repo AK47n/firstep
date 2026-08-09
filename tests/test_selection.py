@@ -18,9 +18,12 @@ from contest_generator.selection import (
     WARNING_UNVERIFIED,
     DependencyCycleError,
     FunctionRequirement,
+    ManualReferenceError,
     ModuleSelection,
     OutOfLibrarySuggestion,
     PlatformWarning,
+    REFERENCE_SOURCE_AUTO,
+    REFERENCE_SOURCE_MANUAL,
     ReferenceSuggestion,
     SelectionError,
     UnknownModuleError,
@@ -29,6 +32,7 @@ from contest_generator.selection import (
     associated_references,
     build_module_selection,
     check_platform_warnings,
+    manual_reference_admission,
     reference_suggestions,
     resolve_dependencies,
     resolve_selection,
@@ -357,7 +361,15 @@ class _RecordingConvergenceLLM(FakeLLM):
     def __init__(self, selections: Sequence[ModuleSelection]) -> None:
         super().__init__()
         self._queue = list(selections)
-        self.calls: list[tuple[str, tuple[str, ...], tuple[str, ...], dict[str, str]]] = []
+        self.calls: list[
+            tuple[
+                str,
+                tuple[str, ...],
+                tuple[str, ...],
+                dict[str, str],
+                dict[str, str],
+            ]
+        ] = []
 
     def select_modules(
         self,
@@ -365,6 +377,7 @@ class _RecordingConvergenceLLM(FakeLLM):
         manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         self.calls.append(
             (
@@ -372,6 +385,7 @@ class _RecordingConvergenceLLM(FakeLLM):
                 tuple(manifest_summaries),
                 tuple(reference.id for reference in references),
                 dict(reference_fulltexts or {}),
+                dict(manual_fulltexts or {}),
             )
         )
         return self._queue.pop(0)
@@ -975,3 +989,131 @@ def test_domain_judgment_text_single_origin():
     assert hits == ["selection.py"]
 
 
+
+
+# ---------------------------------------------------------------------------
+# 工单 01：手动选参考资料（追加准入 + 全文直读 + 来源标注）
+# ---------------------------------------------------------------------------
+
+
+def test_manual_reference_admission_resolves_real_ids_preserving_order(tmp_path):
+    """手动准入：请求的 id → 完整条目，保序返回（幻觉 id / 重复 id 大声失败）。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+
+    entries = manual_reference_admission(
+        reference_root, [UWB_REFERENCE_ID, TOPIC_REFERENCE_ID]
+    )
+
+    assert [e.id for e in entries] == [UWB_REFERENCE_ID, TOPIC_REFERENCE_ID]
+    assert entries[0].title == "UWB 套件例程"
+
+
+def test_manual_reference_admission_rejects_unknown_id(tmp_path):
+    """幻觉 id（库中不存在）大声失败：不猜测、不静默忽略（对齐严格校验精神）。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+
+    with pytest.raises(ManualReferenceError, match="不存在"):
+        manual_reference_admission(reference_root, ["幻觉 id"])
+
+
+def test_manual_reference_admission_rejects_duplicate_id(tmp_path):
+    """同一次请求重复 id 大声失败（与 _parse_reference_ids 拒绝重复同款）。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+
+    with pytest.raises(ManualReferenceError, match="重复"):
+        manual_reference_admission(
+            reference_root, [TOPIC_REFERENCE_ID, TOPIC_REFERENCE_ID]
+        )
+
+
+def test_manual_reference_admission_empty_is_empty(tmp_path):
+    assert manual_reference_admission(tmp_path / "references", ()) == ()
+
+
+def test_reference_suggestions_carry_source_marker(tmp_path):
+    """来源标注：手动准入的条目转建议带 manual 标记（prompt 清单行按它标注）；
+    缺省 = auto（既有形状不变）。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+    entries = manual_reference_admission(reference_root, [TOPIC_REFERENCE_ID])
+
+    suggestions = reference_suggestions(entries, source=REFERENCE_SOURCE_MANUAL)
+
+    assert suggestions[0].source == REFERENCE_SOURCE_MANUAL
+    assert suggestions[0].id == TOPIC_REFERENCE_ID
+    assert reference_suggestions(entries)[0].source == REFERENCE_SOURCE_AUTO
+
+
+def test_convergent_manual_fulltexts_carried_into_every_round():
+    """手动全文直读（工单 01）：第 1 轮第一级就带（全文直读强制，无需模型点名）；
+    第 2 轮确认轮照旧带上（全文上下文不丢）。"""
+    refs = [_suggestion("a", "A", "a")]
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字", modules=("dht11",))] * 2
+    )
+    manual = {"m": "手动条目全文"}
+
+    select_modules_convergent(
+        fake,
+        "题面",
+        ["- dht11: 温湿度"],
+        references=refs,
+        reader=lambda entry_id: f"全文{entry_id}",
+        manual_fulltexts=manual,
+    )
+
+    assert [call[4] for call in fake.calls] == [manual, manual]  # 每轮都带手动全文
+    assert fake.calls[0][3] == {}  # 第一级：手动全文已带，锚定全文未点名（selection 无 reference_ids）
+
+
+def test_convergent_manual_and_anchored_fulltexts_coexist():
+    """手动全文与锚定两级并存：第一级带手动全文，点名锚定条目回读进第二级（两级
+    协议照旧），手动全文在各次调用都带上。"""
+    refs = [_suggestion("a", "A", "a")]
+    fake = _RecordingConvergenceLLM(
+        [
+            ModuleSelection(
+                modules=("dht11",),
+                reasons={},
+                reference_ids=("a",),
+                requirements=(_requirement("识别数字"),),
+            ),
+            _selection_with("识别数字", modules=("dht11",)),
+            _selection_with("识别数字", modules=("dht11",)),  # 第 2 轮收敛确认
+        ]
+    )
+    manual = {"m": "手动全文"}
+    read: list[str] = []
+
+    def reader(entry_id: str) -> str:
+        read.append(entry_id)
+        return f"全文{entry_id}"
+
+    select_modules_convergent(
+        fake,
+        "题面",
+        ["- dht11: 温湿度"],
+        references=refs,
+        reader=reader,
+        manual_fulltexts=manual,
+    )
+
+    assert read == ["a"]  # 只有锚定条目被点名回读（手动条目已全文）
+    assert fake.calls[0][4] == manual  # 第一级（先清单）带手动全文
+    assert fake.calls[1][3] == {"a": "全文a"}  # 第二级：点名回读全文
+    assert fake.calls[1][4] == manual  # 第二级手动全文照旧
+    assert fake.calls[2][4] == manual  # 第 2 轮确认轮照旧
+
+
+def test_convergent_manual_only_without_references_uses_extended_signature():
+    """no-topic + 手动：references 恒空时手动全文仍进上下文（扩展签名调用）；
+    不传 manual_fulltexts = 旧 2 参签名（既有假 LLM 兼容）。"""
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字"), _selection_with("识别数字")]
+    )
+    manual = {"m": "手动全文"}
+
+    select_modules_convergent(fake, "题面", ["- dht11: 温湿度"], manual_fulltexts=manual)
+
+    assert len(fake.calls) == 2
+    assert all(call[2] == () for call in fake.calls)  # 清单恒空（无锚定）
+    assert all(call[4] == manual for call in fake.calls)
