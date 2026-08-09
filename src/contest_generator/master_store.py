@@ -11,8 +11,9 @@
 
 架构深化 v5 三轴拆块（工单 01）：母版库 CRUD 从 master.py 拆出，master 只留
 蒸馏编排；本模块不 import categories（防环：categories 的启动验证要用本模块
-的 MasterError，依赖方向 master_store → categories 不存在）。PLATFORM_CONFIG_FILES
-随唯一消费者 analyze_structure 进本模块（Q4② 环修正）。
+的 MasterError，依赖方向 master_store → categories 不存在）。工程配置文件
+后缀表（PLATFORM_CONFIG_FILE_SUFFIXES）单源在 platforms.py（工单 04 收敛，
+词表层谁都能 import 无循环），本模块只消费。
 """
 
 from __future__ import annotations
@@ -35,15 +36,16 @@ from .entry_store import (
     require_str,
     validate_store_key,
 )
+# 入库结构校验是母版库域操作（存储域），不走蒸馏编排接缝（工单 04）：其唯一
+# 生产消费方就是入库；蒸馏适配器不设 validate 能力，避免死方法
 from .keil import KeilProjectError, validate_project_structure
-from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .platforms import (
+    KNOWN_PLATFORMS,
+    PLATFORM_CONFIG_FILE_SUFFIXES,
+    PLATFORM_MSPM0,
+    PLATFORM_STM32,
+)
 from .treewalk import BUILD_ARTIFACT_DIRS, iter_project_files
-
-# 各平台 IDE 打开工程必需的配置文件：结构分析时校验存在性
-PLATFORM_CONFIG_FILES = {
-    PLATFORM_STM32: (".uvprojx",),
-    PLATFORM_MSPM0: (".cproject", ".project"),
-}
 
 _SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 
@@ -113,7 +115,7 @@ def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
     _validate_known_platform(platform)
     if not master_dir.is_dir():
         raise MasterError(f"母版目录不存在：{master_dir}")
-    for suffix in PLATFORM_CONFIG_FILES[platform]:
+    for suffix in PLATFORM_CONFIG_FILE_SUFFIXES[platform]:
         if not _find_config_files(master_dir, f"*{suffix}"):
             raise MasterError(
                 f"母版缺少平台 {platform} 的工程配置文件（{suffix}），拒绝入库"
