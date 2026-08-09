@@ -79,6 +79,7 @@ from .reference_library import (
 from .selection import resolve_selection, select_modules_convergent
 from .skeleton import generate_skeleton
 from .sse import SseEmitter, run_sse
+from .stage import stage_project_files
 from .topic_library import (
     confirm_topics,
     delete_topic,
@@ -690,6 +691,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # ------------------------------------------------------------------
     # 母版提炼（工单 08）：导入旧工程 → AI 报告 → 确认入库
     # ------------------------------------------------------------------
+
+    @app.post("/api/masters/stage")
+    @_map_errors
+    async def masters_stage(files: list[UploadFile] = File(...)) -> dict:
+        """「选择文件夹」上传（浏览器 webkitdirectory）→ 暂存目录 → 可喂扫描。
+
+        浏览器出于安全不暴露绝对路径，选中的旧工程文件夹只能整夹上传：每个
+        文件的文件名 = 文件夹内相对路径（webkitRelativePath，'/' 分隔），
+        服务端按相对路径原样落到 masters 目录同级 staged/<原文件夹名> 下——
+        目录名保留原名（重名覆盖写），扫描 / 报告 / 入库全程显示原名，前端
+        无需二次映射。暂存语义（穿越拒绝 / 目录名清洗 / 噪音跳过 = .git
+        任意深度 + 构建产物 Debug/Release/Listings/Objects、单次上限 512MB）
+        归 stage.py 单源：穿越吃 entry_store.is_unsafe_path、噪音吃
+        treewalk.skip_project_noise，路由只收参数转调。暂存目录是普通目录，
+        扫描后即用，不自动清理。
+        """
+        staged = stage_project_files(
+            _masters_dir(context),
+            [(f.filename or "", await f.read()) for f in files],
+        )
+        return {"staged": [{"path": str(staged), "name": staged.name}]}
 
     @app.post("/api/masters/scan")
     @_map_errors
