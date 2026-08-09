@@ -719,8 +719,9 @@ class DeepSeekLLM:
 
         progress_emitter：可选进度发射器（默认 None 不发射，行为与现状一致）。
         start 由入口发射且总量先算定——阶段 1 批数 = _batches 算定的批数、
-        阶段 2 批数 = ⌈待判文件数 / 批大小⌉；算定后同一批序列传给阶段循环，
-        start 的批次总量与实际发射的批序列严格一致（契约测试断言）。
+        阶段 2 批数 = ⌈摘要批内条目总和 / 批大小⌉（与 _decide_distillation
+        实发批序同一 _batches 原语推导，见下方注释）；算定后同一批序列传给
+        阶段循环，start 的批次总量与实际发射的批序列严格一致（契约测试断言）。
         发射失败是旁路（_emit），不影响提炼主流程。
         """
         summary_batches = _batches(
@@ -729,7 +730,14 @@ class DeepSeekLLM:
             size_of=_file_chars,
             split_oversized=_split_versions,
         )
-        decide_batch_count = math.ceil(len(judgment_files) / JUDGMENT_BATCH_SIZE)
+        # 判定批数单源化：判定阶段 = 摘要产物按批大小分块（_decide_distillation
+        # 内同一 _batches 原语、max_chars=None），摘要产物数 = 摘要批内条目总和
+        # （批覆盖完整、一条目一摘要，与 _summarize_judgment_files 产物一一对应）
+        # ——从同一批序列推导，杜绝独立公式与实发批序分叉（超预算按版本拆批时
+        # 旧公式按 judgment_files 数算会少报，契约：start 总量 = 实际批序列）。
+        decide_batch_count = math.ceil(
+            sum(len(batch) for batch in summary_batches) / JUDGMENT_BATCH_SIZE
+        )
         _emit(
             progress_emitter,
             ProgressEvent(

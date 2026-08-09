@@ -26,10 +26,11 @@
 | 工程配置文件 | .uvprojx（stm32）：确定性渲染器现写（固定落位 user/Project.uvprojx，C8T6 设备块，文件树引用全部保留 .c/.s，IncludePath = 保留 .h 目录），移出 AI 判定（判例 09 治本）；.cproject/.project（mspm0）：确定性保留首份原样；条目不可改动作、进报告 keep 带规则原因；报告带 .uvprojx 全文预览 | keil.py / master.py |
 | 启动文件 | startup_stm32f10x_*.s 候选跨工程去重：至多保留一份（优先 _md，无则路径排序取第一份），落选规则剔除（Reset_Handler 重复定义风险）；密度守卫：保留份非 _md 大声失败（目标板 C8T6 中密度） | keil.py / master.py |
 | 残留 | 构建产物（.o/.axf/.hex/.map/.lst/.crf/.dep/.lnp/.out/.elf/.htm）、备份（.bak 精确后缀，以及路径含 .bak 段的变体如 .bak2 / .bak_consolidate）、临时文件、IDE 用户选项（.uvoptx / .uvguix，编译时自动重建）：机器识别、确定性剔除，但进报告 exclude 清单并带规则化原因；构建输出目录（Debug/Release/Listings/Objects，后者任意层级）整目录忽略 | master.py |
+| 项目树遍历 | "绕开噪音遍历工程目录"的唯一出处：iter_project_files（rglob + 统一跳过规则，绝对路径、排序确定性）+ skip_project_noise（顶层 .git / Debug / Release / Listings / Objects + Keil 输出目录任意层级）——母版扫描 / 旧工程扫描 / 生成摘要 / 语料构建六处消费，不再各走各的树（旧矛盾：Listings/ 下的 .uvprojx keil 找得到、master 忽略）；不持业务形状，类别判定归 master.RuleCategory | treewalk.py |
 | 二进制 | 非源码素材（文档 / 图片 / 模型 / 压缩包 / .exe 等）：文件头含 NUL 字节即判定，读全文会污染 LLM 判定素材，确定性剔除，但进报告 exclude 清单并带规则化原因 | master.py |
 | 文件类别 | 残留 / 旧 main.c / 基础设施 / 二进制四类的统一生命周期：识别（reason_of）→ 扫描分类 → 对比并集 → 报告汇编 → 越界拦截（AI 判定即报错）→ 处置校验；新增类别 = RULE_CATEGORIES 加一条 + 结构/对比字段声明 | master.py（RuleCategory / RULE_CATEGORIES） |
 | 骨架 | AI 生成的 main.c（初始化序列 + TODO 预留区）+ 静态自检（幻觉调用改注释占位） | skeleton.py |
-| C 词法层 | C 源码文本的机械切分唯一出处：围栏剥离 / 行号检测、注释剥离（keep_preprocessor 轴：# 行透传与否）、引号 include 提取、顶层 #define 扫描；接口 = 字符串进 / 字符串出，不碰盘上文件；不做调用形态识别（那是骨架自检的语义判断） | clex.py |
+| C 词法层 | C 源码文本的机械切分唯一出处：围栏剥离 / 行号检测、注释剥离（keep_preprocessor 轴：# 行透传与否）、引号 include 提取、顶层 #define 扫描、语句级切分原语（iter_c_regions 区域迭代 / match_bracket 括号配对 / next_significant 空白注释跳读，骨架替换走查与死循环检测的消费基座）；接口 = 字符串进 / 字符串出，不碰盘上文件；不做调用形态识别（那是骨架自检的语义判断） | clex.py |
 | 校验语料 | 生成前五道门禁共吃的内存语料：模块文件（文本 / 类别 / 所在目录）+ 母版头 + 母版搜索目录 + main.c，一次读盘；门禁退化为吃语料的纯谓词（可内存直构测试），不各自读盘 | generator.py（ModuleCorpus / ModuleFile / build_module_corpus） |
 | 模块摘要 | 模块库摘要对象（喂 LLM 的可用模块清单）：slug / description / kits（collect_kits 单源）/ 依赖；行渲染唯一实现 = to_line()（字符串只在 prompt 边界渲染一次，无反向解析方）；known_slugs 取 slug 字段 | manifest.py（ManifestSummary） |
 | 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座 | keil.py / ccs.py / patchers.py / projectfile.py |

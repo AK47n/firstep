@@ -654,13 +654,12 @@ def test_resolve_topic_context_explicit_unknown_key_raises(tmp_path):
         )
 
 
-def test_generate_project_with_topic_key_auto_includes_related_modules(
+def test_generate_project_with_related_modules_auto_includes_them(
     fake_module_library, tmp_path
 ):
-    """生成入口带历史赛题编号：该题专用模块自动并入最终模块集（生成物与
-    用户手选等价），题面 / 关联素材在推荐与骨架阶段已进上下文。"""
+    """生成入口带该题专用模块（webapp 装配点 resolve_topic_context 的结果透传）：
+    自动并入最终模块集（生成物与用户手选等价）——接缝只消费不重扫库。"""
     make_topic_specific_module(fake_module_library)
-    topics = make_fake_topic_library(tmp_path / "topics")
     masters_dir = tmp_path / "masters"
     make_fake_master_project(masters_dir / PLATFORM_STM32)
 
@@ -671,50 +670,11 @@ def test_generate_project_with_topic_key_auto_includes_related_modules(
         output_dir=tmp_path / "out",
         module_library_dir=fake_module_library,
         masters_dir=masters_dir,
-        topic_key="2026C",
-        topic_library_dir=topics,
+        related_modules=("lock_control",),
     )
 
     assert (tmp_path / "out" / "modules" / "lock_control" / "lock_control.c").is_file()
     assert any(slug == "lock_control" for slug, _ in summary.modules)
-
-
-def test_generate_project_topic_without_library_dir_fails(fake_module_library, tmp_path):
-    """入口要求显式编号必须有赛题库目录：缺目录明确报错。"""
-    masters_dir = tmp_path / "masters"
-    make_fake_master_project(masters_dir / PLATFORM_STM32)
-
-    with pytest.raises(GeneratorError, match="topic_library_dir"):
-        generate_project(
-            platform=PLATFORM_STM32,
-            slugs=["dht11"],
-            main_c_content=MAIN_SKELETON,
-            output_dir=tmp_path / "out",
-            module_library_dir=fake_module_library,
-            masters_dir=masters_dir,
-            topic_key="2026C",
-        )
-
-
-def test_generate_project_unknown_topic_key_raises(fake_module_library, tmp_path):
-    """生成入口查无此条：大声报错，不产出残缺工程。"""
-    topics = make_fake_topic_library(tmp_path / "topics")
-    masters_dir = tmp_path / "masters"
-    make_fake_master_project(masters_dir / PLATFORM_STM32)
-
-    with pytest.raises(TopicError, match="没有"):
-        generate_project(
-            platform=PLATFORM_STM32,
-            slugs=["dht11"],
-            main_c_content=MAIN_SKELETON,
-            output_dir=tmp_path / "out",
-            module_library_dir=fake_module_library,
-            masters_dir=masters_dir,
-            topic_key="2021F",
-            topic_library_dir=topics,
-        )
-
-    assert not (tmp_path / "out").exists()
 
 
 # ---------------------------------------------------------------------------

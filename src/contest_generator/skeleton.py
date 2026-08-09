@@ -15,11 +15,21 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
-from .clex import strip_code_fences, strip_comments
-from .llm import LLM
+from .clex import (
+    iter_c_regions,
+    match_bracket,
+    next_significant,
+    strip_code_fences,
+    strip_comments,
+)
 from .manifest import ModuleManifest
+
+if TYPE_CHECKING:
+    # 仅类型注解用（skeleton 是纯文本模块，运行时导入 llm 会把整条 LLM 栈
+    # 拉进生成流程的 import 图——master.py 同规先例，工单 C3 链收敛）
+    from .llm import LLM
 
 # 控制关键字与 main：这些"名字("不是模块函数调用
 _CONTROL_KEYWORDS = frozenset(
@@ -173,43 +183,34 @@ def sanitize_skeleton(
 def _replace_undefined_calls(
     code: str, undefined: set[str]
 ) -> tuple[str, tuple[str, ...]]:
-    """逐个替换 code 中 undefined 里的调用；注释、字符串与 # 行透传。"""
+    """逐个替换 code 中 undefined 里的调用；注释、字符串与 # 行透传。
+
+    遍历 clex.iter_c_regions（词法唯一出处）：非 code 区域（注释 / 字符串 /
+    预处理行）原样透传，code 区域内做标识符 + 调用形态识别——语义判断（名字
+    后跟 ( 是不是调用、语句位置）仍在本模块。
+    """
     out: list[str] = []
     hits: set[str] = set()
-    i = 0
-    n = len(code)
-    while i < n:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < n else ""
-        if char == "/" and nxt == "/":  # 行注释透传
-            end = code.find("\n", i)
-            end = n if end == -1 else end + 1
-            out.append(code[i:end])
-            i = end
-        elif char == "/" and nxt == "*":  # 块注释透传
-            end = code.find("*/", i + 2)
-            end = n if end == -1 else end + 2
-            out.append(code[i:end])
-            i = end
-        elif char in ('"', "'"):  # 字符串透传
-            end = _skip_string(code, i)
-            out.append(code[i:end])
-            i = end
-        elif char == "#" and _at_line_start_after_ws(code, i):  # 预处理行透传
-            end = code.find("\n", i)
-            end = n if end == -1 else end + 1
-            out.append(code[i:end])
-            i = end
-        elif _is_ident_start(char):
+    for kind, start, end in iter_c_regions(code, preprocessor_indented=True):
+        if kind != "code":
+            out.append(code[start:end])
+            continue
+        i = start
+        while i < end:
+            char = code[i]
+            if not _is_ident_start(char):
+                out.append(char)
+                i += 1
+                continue
             j = i + 1
-            while j < n and (code[j].isalnum() or code[j] == "_"):
+            while j < end and (code[j].isalnum() or code[j] == "_"):
                 j += 1
             name = code[i:j]
             k = j
-            while k < n and code[k].isspace():
+            while k < end and code[k].isspace():
                 k += 1
-            if name in undefined and k < n and code[k] == "(":
-                close = _match_paren(code, k)
+            if name in undefined and k < end and code[k] == "(":
+                close = match_bracket(code, k, "(", ")")
                 if close == -1:  # 括号不配平（多半被注释截断）：整段透传
                     out.append(code[i:])
                     break
@@ -229,9 +230,6 @@ def _replace_undefined_calls(
             else:
                 out.append(code[i:j])
                 i = j
-        else:
-            out.append(char)
-            i += 1
     return "".join(out), tuple(sorted(hits))
 
 
@@ -261,109 +259,7 @@ def _next_nonspace(code: str, pos: int) -> str:
     return code[j] if j < len(code) else ""
 
 
-def _at_line_start_after_ws(code: str, pos: int) -> bool:
-    j = pos
-    while j > 0 and code[j - 1].isspace():
-        j -= 1
-    return j == 0 or code[j - 1] == "\n"
-
-
-def _skip_string(code: str, start: int) -> int:
-    """从字符串/字符字面量起点跳到闭合引号之后（跳过转义）。"""
-    quote = code[start]
-    i = start + 1
-    n = len(code)
-    while i < n and code[i] != quote:
-        if code[i] == "\\":
-            i += 1
-        i += 1
-    return min(i + 1, n)
-
-
-def _match_paren(code: str, open_pos: int) -> int:
-    """从 open_pos 的 ( 开始找配平的 ) 下标；不配平返回 -1（字符串/注释不计数）。"""
-    depth = 0
-    i = open_pos
-    n = len(code)
-    while i < n:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < n else ""
-        if char == "/" and nxt == "/":
-            end = code.find("\n", i)
-            i = n if end == -1 else end + 1
-        elif char == "/" and nxt == "*":
-            end = code.find("*/", i + 2)
-            if end == -1:
-                return -1
-            i = end + 2
-        elif char in ('"', "'"):
-            i = _skip_string(code, i)
-        elif char == "(":
-            depth += 1
-            i += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return i
-            i += 1
-        else:
-            i += 1
-    return -1
-
-
 _WHILE_ONE_BLOCK_RE = re.compile(r"while\s*\(\s*1\s*\)\s*\{")
-
-
-def _skip_ws_and_comments(code: str, pos: int) -> int:
-    """从 pos 跳过空白与注释（行/块），返回第一个有效字符位置。"""
-    n = len(code)
-    while pos < n:
-        char = code[pos]
-        if char.isspace():
-            pos += 1
-        elif char == "/" and pos + 1 < n and code[pos + 1] == "/":
-            end = code.find("\n", pos)
-            pos = n if end == -1 else end + 1
-        elif char == "/" and pos + 1 < n and code[pos + 1] == "*":
-            end = code.find("*/", pos + 2)
-            pos = n if end == -1 else end + 2
-        else:
-            break
-    return pos
-
-
-def _match_brace(code: str, open_pos: int) -> int:
-    """从 open_pos 的 { 开始找配平的 } 下标；不配平返回 -1（字符串/注释不计数）。
-
-    与 _match_paren 同款词法，只换括号字符（_match_paren 只配 ()）。
-    """
-    depth = 0
-    i = open_pos
-    n = len(code)
-    while i < n:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < n else ""
-        if char == "/" and nxt == "/":
-            end = code.find("\n", i)
-            i = n if end == -1 else end + 1
-        elif char == "/" and nxt == "*":
-            end = code.find("*/", i + 2)
-            if end == -1:
-                return -1
-            i = end + 2
-        elif char in ('"', "'"):
-            i = _skip_string(code, i)
-        elif char == "{":
-            depth += 1
-            i += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return i
-            i += 1
-        else:
-            i += 1
-    return -1
 
 
 def _strip_unreachable_return(code: str) -> str:
@@ -381,11 +277,11 @@ def _strip_unreachable_return(code: str) -> str:
         if m is None:
             out.append(code[pos:])
             return "".join(out)
-        close = _match_brace(code, m.end() - 1)
+        close = match_bracket(code, m.end() - 1, "{", "}")
         if close == -1:  # 循环体不配平（代码残缺）：整段透传
             out.append(code[pos:])
             return "".join(out)
-        nxt = _skip_ws_and_comments(code, close + 1)
+        nxt = next_significant(code, close + 1)
         rm = re.match(r"return\b", code[nxt:])
         if rm is None:
             out.append(code[pos : close + 1])

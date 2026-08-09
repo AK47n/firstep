@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .projectfile import parse_project_file, write_project_file
+from .treewalk import iter_project_files
 
 INCLUDE_OPTION_SUPERCLASS = "ti.ccs.misc.options.buildIncludePath"
 MODULES_SOURCE_ENTRY_NAME = "modules"
@@ -96,7 +97,9 @@ def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
 
 
 def _find_cproject(project_dir: Path) -> Path:
-    candidates = sorted(project_dir.glob("*.cproject"))
+    """定位工程文件 .cproject：任意层级 + 统一噪音跳过规则（treewalk，与
+    master 扫描同一规则；旧实现只查顶层，嵌套工程会漏判）。"""
+    candidates = sorted(iter_project_files(project_dir, pattern="*.cproject"))
     if not candidates:
         raise CcsProjectError(f"工程目录里没有 .cproject 文件：{project_dir}")
     if len(candidates) > 1:
