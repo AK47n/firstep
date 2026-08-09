@@ -5,9 +5,9 @@
 独立成模块的原因：归档需要参考文件库（archive_reference）与赛题编号文法
 （validate_topic_key），而 master 不 import 参考库族——防 import 链
 （master → reference_library → topic_library → library 4 跳收敛，工单 C3）。
-本模块模块级 import master（错误类型与对比模型），master 在
-confirm_distillation 内函数级延迟导入本模块——避开 master ↔ archive
-模块级环（本模块只在归档确认时加载）。
+本模块已不 import master（对比模型从 report 取）；master 在
+confirm_distillation 内函数级延迟导入本模块——链约束（master 不 import
+参考库族），非避环（环已拆）。
 """
 
 from __future__ import annotations
@@ -17,10 +17,9 @@ from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
 from .autocommit import commit_after_write
 from .entry_store import discard_entry_dirs
-from .master import ProjectComparison
 from .master_store import MasterError
 from .reference_library import archive_reference
-from .report import DistillationReport, ReferenceCandidate
+from .report import DistillationReport, ProjectComparison, ReferenceCandidate
 from .topic_library import validate_topic_key
 
 if TYPE_CHECKING:
