@@ -1,0 +1,18 @@
+{
+  "slug": "digit_uart",
+  "description": "该代码实现了一个基于UART中断接收的环形缓冲区驱动，用于解析K230发送的CSV格式数字识别结果（标签、置信度、坐标），并提取帧中数字数量最多的数据供主控使用。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/digit_uart.c",
+        "code/digit_uart.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

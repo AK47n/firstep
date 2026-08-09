@@ -1,0 +1,18 @@
+{
+  "slug": "uart",
+  "description": "MSPM0 通用串口发送：以 UART_Regs* 为参数的单字符/字符串/缓冲发送，可复用于任意已配置的 UART 实例。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/uart.c",
+        "code/uart.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "无固定外设命名要求，调用时传入目标 UART 实例（如 IMU601_INST）。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

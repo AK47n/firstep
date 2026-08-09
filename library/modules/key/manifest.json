@@ -1,0 +1,18 @@
+{
+  "slug": "key",
+  "description": "按键读取 + 电机编码器中断计数（MSPM0）：get_key_state 读取按键（上拉低电平按下）；GROUP1_IRQHandler 内编码器 A 相计数（counter_1_A/counter_2_A 供 motor 测速）。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/key.c",
+        "code/key.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "SysConfig 需配置 GPIO 组 KEY（按键输入上拉）；编码器中断依赖 GPIOA/GPIOB 组中断命名 DC_MOTOR_AA_IIDX/DC_MOTOR_BA_IIDX（对应 DIO16/DIO?，见 .syscfg 组配置）。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

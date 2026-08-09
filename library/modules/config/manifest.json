@@ -1,0 +1,17 @@
+{
+  "slug": "config",
+  "description": "2026C 数字钥匙题专用：集中配置头文件——智能门锁系统（UWB定位+数字钥匙+OLED显示+LED/蜂鸣器指示）的全部硬件引脚映射、区域判定阈值、时间参数及滤波算法参数，供同题各模块调用。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/config.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}
