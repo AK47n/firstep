@@ -15,7 +15,7 @@ from contest_generator.skeleton import (
     find_undefined_calls,
     generate_skeleton,
     sanitize_skeleton,
-    verify_main_c,
+    verify_main_c_interfaces,
 )
 from tests.fakes import FakeLLM
 
@@ -63,6 +63,21 @@ def test_build_skeleton_interfaces_preserves_manifest_order(fake_module_library)
         "### 模块 oled（inc/oled.h）",
         "### 模块 dht11（inc/dht11.h）",
     ]
+
+
+def test_build_skeleton_interfaces_survives_non_utf8_header(fake_module_library):
+    """非 UTF-8 头文件不崩：errors="replace" 编码策略单源（与生成门禁同读法）。"""
+    (fake_module_library / "dht11" / "inc" / "dht11.h").write_bytes(
+        b"float dht11_read(void);\n\xff\xfe\n"
+    )
+
+    blocks = build_skeleton_interfaces(
+        _manifests(fake_module_library, "dht11"), PLATFORM_MSPM0, fake_module_library
+    )
+
+    assert len(blocks) == 1
+    assert chr(0xFFFD) in blocks[0]  # 非法字节以替换字符进接口块，不再崩
+    assert "float dht11_read(void);" in blocks[0]
 
 
 # ---------------------------------------------------------------------------
@@ -296,28 +311,28 @@ def test_generate_skeleton_then_project_keeps_only_real_calls(
 
 
 # ---------------------------------------------------------------------------
-# verify_main_c：生成器落盘前的静态自检（与骨架阶段同一份接口块）
+# verify_main_c_interfaces：生成器落盘前的静态自检（与骨架阶段同一份接口块）
 # ---------------------------------------------------------------------------
 
 
-def test_verify_main_c_flags_calls_outside_module_headers(fake_module_library):
+def test_verify_main_c_interfaces_flags_calls_outside_module_headers(
+    fake_module_library,
+):
     manifests = _manifests(fake_module_library, "dht11", "delay")
     main_c = "int main(void) { float t = dht11_read(); dht11_init(); while (1); }\n"
 
-    undefined = verify_main_c(main_c, manifests, PLATFORM_MSPM0, fake_module_library)
+    interfaces = build_skeleton_interfaces(manifests, PLATFORM_MSPM0, fake_module_library)
+    undefined = verify_main_c_interfaces(main_c, interfaces)
 
     assert undefined == ("dht11_init",)
 
 
-def test_verify_main_c_passes_clean_main_c(fake_module_library):
+def test_verify_main_c_interfaces_passes_clean_main_c(fake_module_library):
     manifests = _manifests(fake_module_library, "dht11", "delay")
+    main_c = "int main(void) { float t = dht11_read(); delay_ms(100); while (1); }\n"
 
-    undefined = verify_main_c(
-        "int main(void) { float t = dht11_read(); delay_ms(100); while (1); }\n",
-        manifests,
-        PLATFORM_MSPM0,
-        fake_module_library,
-    )
+    interfaces = build_skeleton_interfaces(manifests, PLATFORM_MSPM0, fake_module_library)
+    undefined = verify_main_c_interfaces(main_c, interfaces)
 
     assert undefined == ()
 
