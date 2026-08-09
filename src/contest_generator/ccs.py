@@ -28,6 +28,11 @@ from typing import Sequence
 from .projectfile import parse_project_file, write_project_file
 from .treewalk import iter_project_files
 
+# 工具链外部头（工程树外提供，门禁豁免 include 解析）：ti_msp_dl_config.h 由
+# CCS SysConfig 在构建时生成（工程树里没有，构建时经 ${SYSCONFIG_TOOL_INCLUDE_PATH}
+# 解析）。平台事实单源声明处——patchers.external_headers 读侧分派消费（工单 03）。
+EXTERNAL_HEADERS = frozenset({"ti_msp_dl_config.h"})
+
 # include / define 选项的 superClass 双命名空间：classic（ti.ccs.misc.*）与
 # CCS Theia 20.5（com.ti.ccstudio.buildDefinitions.TMS470_TICLANG_4.0.compilerID.*）
 # ——匹配一律按多值集合，两格式同一实现路径

@@ -26,6 +26,11 @@ from xml.sax.saxutils import escape
 from .projectfile import parse_project_file, write_project_file
 from .treewalk import iter_project_files
 
+# 工具链外部头（工程树外提供，门禁豁免 include 解析）：stm32f10x_conf.h 由
+# STM32F1xx DFP 器件包提供（标准外设库配置头，Keil 按 DFP 路径解析）。
+# 平台事实单源声明处——patchers.external_headers 读侧分派消费（工单 03）。
+EXTERNAL_HEADERS = frozenset({"stm32f10x_conf.h"})
+
 MODULES_GROUP = "modules"
 
 _SOURCE_FILETYPES = {
