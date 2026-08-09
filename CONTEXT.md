@@ -33,7 +33,7 @@
 | C 词法层 | C 源码文本的机械切分唯一出处：围栏剥离 / 行号检测、注释剥离（keep_preprocessor 轴：# 行透传与否）、引号 include 提取、顶层 #define 扫描、语句级切分原语（iter_c_regions 区域迭代 / match_bracket 括号配对 / next_significant 空白注释跳读，骨架替换走查与死循环检测的消费基座）；接口 = 字符串进 / 字符串出，不碰盘上文件；不做调用形态识别（那是骨架自检的语义判断） | clex.py |
 | 校验语料 | 生成前五道门禁共吃的内存语料：模块文件（文本 / 类别 / 所在目录）+ 母版头 + 母版搜索目录 + main.c，一次读盘；门禁退化为吃语料的纯谓词（可内存直构测试），不各自读盘 | generator.py（ModuleCorpus / ModuleFile / build_module_corpus） |
 | 模块摘要 | 模块库摘要对象（喂 LLM 的可用模块清单）：slug / description / kits（collect_kits 单源）/ 依赖；行渲染唯一实现 = to_line()（字符串只在 prompt 边界渲染一次，无反向解析方）；known_slugs 取 slug 字段 | manifest.py（ManifestSummary / build_manifest_summaries 批量投影） |
-| 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座 | keil.py / ccs.py / patchers.py / projectfile.py |
+| 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座。include 读侧接缝：patchers.include_search_dirs 按平台分派——stm32 走 keil 版 .uvprojx IncludePath、mspm0 走 ccs 版 .cproject buildIncludePath（${PROJECT_LOC} 展开） | keil.py / ccs.py / patchers.py / projectfile.py |
 | 平台警告 | missing / unverified / hardware_bound，生成前暴露 | selection.py |
 | 功能需求层 | 推荐输出的第一层：题面驱动的能力/外设级需求清单（声光提示 → LED/蜂鸣器、识别数字 → 视觉），粒度贴题面关键词；每条必须挂题面对应句（逐句对照），禁止题外联想——"送药小车所以需要视觉"是脑补，题面要求识别数字才需要视觉 | selection.py |
 | 逐句对照 | 收敛循环的机械防漏机制：题面按句编号，每句对应功能需求或"无功能"；找不到对应句的功能 = 脑补，删 | selection.py |
@@ -54,4 +54,5 @@
 - 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；表住 errors.py，结构测试反射枚举包内全部异常类断言已登记（白名单只放从不直达 web 层的类）——漏登从此是测试红，不是线上 500。
 - 库素材拼装标签格式单源 = library.file_label：模块源码 / 参考素材 / 参考全文共用（prompt 可见契约，改格式只改这一处——曾三处各抄一份，漏一处模型就逐功能看到不同格式）。
 - 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版库模块（`master_store.master_project_dir`）。赛题入口装配 = `generator.resolve_topic_context` 唯一出处（永远返回 TopicContext，key 空串 = 未识别到历史赛题），路由只消费不装配。
+- 生成侧读缝成真——include 搜索目录按平台分派（写侧 patcher registry 对偶），generator 不再 import 平台模块。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。
