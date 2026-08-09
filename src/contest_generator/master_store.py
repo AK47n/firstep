@@ -28,6 +28,7 @@ from typing import Any, Sequence
 
 from .autocommit import commit_after_write
 from .entry_store import (
+    SLUG_PATTERN,
     StoreError,
     StoreParseError,
     StoreReadError,
@@ -47,8 +48,6 @@ from .platforms import (
     PLATFORM_STM32,
 )
 from .treewalk import BUILD_ARTIFACT_DIRS, iter_project_files
-
-_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 
 
 class MasterError(ValueError):
@@ -276,7 +275,7 @@ def _find_config_files(project_dir: Path, pattern: str) -> list[Path]:
 
 def _validate_store_key(platform: str) -> None:
     try:
-        validate_store_key(platform, _SLUG_PATTERN, "平台名")
+        validate_store_key(platform, SLUG_PATTERN, "平台名")
     except StoreError:
         raise MasterError(
             f"非法平台名：{platform!r}（只能含字母数字下划线连字符，且以字母或数字开头）"
