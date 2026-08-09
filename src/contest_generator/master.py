@@ -63,6 +63,11 @@ from .keil import (
     validate_project_structure,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .treewalk import (
+    BUILD_ARTIFACT_DIRS,
+    iter_project_files,
+    skip_project_noise,
+)
 
 if TYPE_CHECKING:
     # 仅类型注解用（llm 运行时依赖 selection → reference_library，运行时导入
@@ -83,14 +88,9 @@ from .report import (
 # 扫描时忽略的目录：版本库与构建产物不是母版内容。Debug/Release（CCS 构建
 # 输出）只在工程顶层出现，顶层匹配即可；Listings/Objects（Keil 默认输出目录）
 # 建在 .uvprojx 所在目录——正点原子风格工程 .uvprojx 在 USER/ 下时，产物在
-# USER/Listings、USER/Objects，必须按任意层级组件匹配（见 _is_ignored）。
+# USER/Listings、USER/Objects，必须按任意层级组件匹配（见 treewalk 模块）。
 # Keil 的 .d 依赖文件落在这些输出目录里，整目录忽略已覆盖，名单里不需要裸
-# ".d" 规则（见 RESIDUE_RULES 注释）。
-BUILD_ARTIFACT_DIRS = frozenset({"Debug", "Release", "Listings", "Objects"})
-IGNORED_TOP_LEVEL_DIRS = frozenset({".git"}) | BUILD_ARTIFACT_DIRS
-
-# 任意层级组件忽略的目录（其余忽略只在顶层生效，见 _is_ignored）
-NESTED_IGNORE_DIRS = frozenset({"Listings", "Objects"})
+# ".d" 规则（见 RESIDUE_RULES 注释）。常量与跳过规则的唯一出处 = treewalk.py。
 
 # 残留规则（保守名单，与 template-fit-check.md 的"建议清理"一致）：构建产物 /
 # 备份 / 临时文件 / IDE 用户选项按扩展名与模式机器识别。命中即确定性剔除——
@@ -484,12 +484,8 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     category_lists: dict[str, list[str]] = {
         cat.key: [] for cat in RULE_CATEGORIES
     }
-    for path in sorted(project_dir.rglob("*")):
-        if not path.is_file():
-            continue
+    for path in iter_project_files(project_dir):
         rel = path.relative_to(project_dir).as_posix()
-        if _is_ignored(rel):
-            continue
         for cat in RULE_CATEGORIES:
             if cat.reason_of(rel, path) is not None:
                 # 类别互斥、按表序判定（残留 → main.c → 基础设施 → 二进制 →
@@ -1191,14 +1187,9 @@ def _validate_keil_structure(master_dir: Path) -> None:
     计算（.git / 构建输出目录不进清单）。
     """
     expected: list[str] = []
-    for path in sorted(master_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(master_dir).as_posix()
-        if _is_ignored(rel):
-            continue
+    for path in iter_project_files(master_dir):
         if path.suffix.lower() in (".c", ".s"):
-            expected.append(rel)
+            expected.append(path.relative_to(master_dir).as_posix())
     try:
         validate_project_structure(master_dir, expected)
     except KeilProjectError as exc:
@@ -1323,14 +1314,8 @@ def delete_master(masters_dir: Path, platform: str) -> None:
 
 
 def _find_config_files(project_dir: Path, pattern: str) -> list[Path]:
-    """递归查找工程配置文件：跳过 .git（任意层级）与构建产物目录——与扫描
-    清单同一套忽略规则（_is_ignored：顶层 + Keil 输出目录任意层级）。"""
-    return [
-        p
-        for p in project_dir.rglob(pattern)
-        if ".git" not in p.parts
-        and not _is_ignored(p.relative_to(project_dir).as_posix())
-    ]
+    """递归查找工程配置文件：统一噪音跳过规则（treewalk.iter_project_files）。"""
+    return list(iter_project_files(project_dir, pattern=pattern))
 
 
 def _detect_platform(project_dir: Path) -> str:
@@ -1343,17 +1328,6 @@ def _detect_platform(project_dir: Path) -> str:
     if has_cproject:
         return PLATFORM_MSPM0
     raise MasterError("工程里没有 .uvprojx 或 .cproject，无法判定平台")
-
-
-def _is_ignored(rel: str) -> bool:
-    """路径是否命中忽略目录：顶层忽略（.git / Debug / Release / Listings /
-    Objects）+ Keil 输出目录任意层级匹配（NESTED_IGNORE_DIRS）——Keil 把
-    Listings/Objects 建在 .uvprojx 所在目录，USER/ 工程时产物在 USER/ 下，
-    顶层匹配会漏。"""
-    parts = rel.split("/")
-    if parts[0] in IGNORED_TOP_LEVEL_DIRS:
-        return True
-    return any(part in NESTED_IGNORE_DIRS for part in parts)
 
 
 def _config_summary(project_dir: Path, platform: str) -> tuple[str, ...]:

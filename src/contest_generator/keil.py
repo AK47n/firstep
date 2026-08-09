@@ -24,6 +24,7 @@ from typing import Sequence
 from xml.sax.saxutils import escape
 
 from .projectfile import parse_project_file, write_project_file
+from .treewalk import iter_project_files
 
 MODULES_GROUP = "modules"
 
@@ -259,10 +260,10 @@ def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
 
 
 def _find_uvprojx(project_dir: Path) -> Path:
-    """定位工程文件 .uvprojx：任意层级（正点原子风格在 USER/ 子目录），跳过 .git。"""
-    candidates = sorted(
-        p for p in project_dir.rglob("*.uvprojx") if ".git" not in p.parts
-    )
+    """定位工程文件 .uvprojx：任意层级（正点原子风格在 USER/ 子目录），统一
+    噪音跳过规则（treewalk：.git 任意层级 + 构建输出目录——Listings/ 下的
+    拷贝不算数，与 master 扫描同一规则）。"""
+    candidates = sorted(iter_project_files(project_dir, pattern="*.uvprojx"))
     if not candidates:
         raise KeilProjectError(f"工程目录里没有 .uvprojx 文件：{project_dir}")
     if len(candidates) > 1:
