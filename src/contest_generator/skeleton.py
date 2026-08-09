@@ -63,6 +63,48 @@ _MACRO_DEF_RE = re.compile(r"#define\s+([A-Za-z_]\w*)\(")
 _DEFINE_RE = re.compile(r"#define\s+([A-Za-z_]\w*)")
 
 
+def is_header_path(rel: str) -> bool:
+    """头文件路径判定单源：`.h` endswith（大小写不敏感）。
+
+    骨架接口块筛选与生成语料 kind 分类共吃同一判定——两处曾各抄一份
+    `.h` 分支，改一处忘另一处即分叉。
+    """
+    return rel.lower().endswith(".h")
+
+
+def read_module_sources(
+    manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
+) -> tuple[list[tuple[str, str, str, Path]], list[tuple[str, str]]]:
+    """有平台条目的模块文件读盘单原语：骨架与生成语料共吃。
+
+    present = (slug, rel, 文本, 完整路径)（路径给调用方做 own_dir =
+    path.parent）；missing = (slug, rel)（声明了但读不到，存在性由生成
+    门禁报告，这里不 raise）。编码 errors="replace" 与门禁同策略——
+    模块文件非 UTF-8 时替换字符继续，不再崩（骨架从崩变不崩是刻意对齐）。
+    返回顺序 = manifests 序 / entry.files 序不变。
+    """
+    present: list[tuple[str, str, str, Path]] = []
+    missing: list[tuple[str, str]] = []
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for rel in entry.files:
+            path = library_dir / manifest.slug / rel
+            if not path.is_file():
+                missing.append((manifest.slug, rel))
+                continue
+            present.append(
+                (
+                    manifest.slug,
+                    rel,
+                    path.read_text(encoding="utf-8", errors="replace"),
+                    path,
+                )
+            )
+    return present, missing
+
+
 def build_skeleton_interfaces(
     manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
 ) -> list[str]:
@@ -71,25 +113,26 @@ def build_skeleton_interfaces(
     顺序与 manifests 一致（调用方应先按依赖展开）；每个模块的平台条目里
     的 .h 文件内容逐块给出。头文件缺失跳过（文件齐全由生成器硬校验兜底）；
     模块无平台版本或纯 .c 实现时给出占位块，LLM 仍知道它被选中。
-    读盘 + 格式化拆成两层：这里做读盘与形态判断，块格式化归
-    format_interface_blocks（生成门禁用语料文本走同一格式化）。
+    读盘归 read_module_sources（编码 errors="replace" 单源，与门禁同读法）、
+    形态判断归 is_header_path、块格式化归 format_interface_blocks（生成
+    门禁用语料文本走同一格式化）。
     """
     blocks: list[str] = []
-    headers: list[tuple[str, str, str]] = []
+    present, _missing = read_module_sources(manifests, platform, library_dir)
+    headers = [
+        (slug, rel, text)
+        for slug, rel, text, _path in present
+        if is_header_path(rel)
+    ]
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         if entry is None:
             blocks.append(f"### 模块 {manifest.slug}（无平台 {platform} 版本，无接口）")
             continue
-        declared_headers = [rel for rel in entry.files if _is_header_path(rel)]
+        declared_headers = [rel for rel in entry.files if is_header_path(rel)]
         if not declared_headers:
             blocks.append(f"### 模块 {manifest.slug}（无头文件接口）")
             continue
-        for rel in declared_headers:
-            path = library_dir / manifest.slug / rel
-            if not path.is_file():
-                continue
-            headers.append((manifest.slug, rel, path.read_text(encoding="utf-8")))
         if not any(h[0] == manifest.slug for h in headers):
             blocks.append(f"### 模块 {manifest.slug}（头文件缺失，无接口）")
     blocks.extend(format_interface_blocks(headers))
@@ -125,25 +168,13 @@ def extract_header_functions(interfaces: Sequence[str]) -> set[str]:
     return functions
 
 
-def verify_main_c(
-    main_c: str, manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
-) -> tuple[str, ...]:
-    """静态自检：main.c 调用了、但不在所选模块头文件接口里的函数名（排序）。
-
-    与 generate_skeleton 共用同一份接口块（build_skeleton_interfaces 的
-    输出）——自检只认喂给 LLM 的同一套接口，不存在的调用由调用方决定
-    改写（sanitize_skeleton）或明确报错（生成器兜底）。生成门禁有语料
-    文本时走 verify_main_c_interfaces（不重读盘，接口块同一格式化）。
-    """
-    interfaces = build_skeleton_interfaces(manifests, platform, library_dir)
-    return verify_main_c_interfaces(main_c, interfaces)
-
-
 def verify_main_c_interfaces(
     main_c: str, interfaces: Sequence[str]
 ) -> tuple[str, ...]:
-    """静态自检：main.c vs 已格式化接口块（生成门禁用——接口块来自语料，
-    不再重读盘）。与 verify_main_c 共用同一份提取与自检逻辑。"""
+    """静态自检：main.c vs 已格式化接口块（骨架流程与生成门禁共用）。
+
+    接口块来自 build_skeleton_interfaces（骨架阶段）或生成语料文本（门禁，
+    不重读盘）——自检只认喂给 LLM 的同一套接口。"""
     return find_undefined_calls(main_c, extract_header_functions(interfaces))
 
 
@@ -321,10 +352,6 @@ def generate_skeleton(
     raw = llm.generate_main_skeleton(problem_text, interfaces)
     raw = strip_code_fences(raw)  # LLM 偶发用围栏包裹 → 剥离后再自检（判例见函数文档）
     return sanitize_skeleton(raw, extract_header_functions(interfaces))
-
-
-def _is_header_path(rel: str) -> bool:
-    return rel.lower().endswith(".h")
 
 
 def _extract_calls(code: str) -> set[str]:
