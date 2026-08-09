@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build (CCS Make)",
+            "type": "shell",
+            "command": "C:/ti/ccs2050/ccs/utils/bin/gmake.exe",
+            "args": [
+                "-j",
+                "all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/Debug"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "使用 CCS 自带 gmake 编译 MSPM0 项目"
+        },
+        {
+            "label": "Clean (CCS Make)",
+            "type": "shell",
+            "command": "C:/ti/ccs2050/ccs/utils/bin/gmake.exe",
+            "args": [
+                "clean"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/Debug"
+            },
+            "problemMatcher": [],
+            "detail": "清理编译产物"
+        }
+    ]
+}
