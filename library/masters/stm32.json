@@ -1,0 +1,8 @@
+{
+  "platform": "stm32",
+  "sources": [
+    "2026C",
+    "21F"
+  ],
+  "warnings": []
+}

@@ -1,0 +1,20 @@
+{
+  "slug": "debug_uart",
+  "description": "2026C 门锁端调试串口（UART2 调试输出 + 单字符调试命令）",
+  "dependencies": [
+    "lock_control"
+  ],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/debug_uart.c",
+        "code/debug_uart.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

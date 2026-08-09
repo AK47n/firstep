@@ -1,0 +1,18 @@
+{
+  "slug": "huidu",
+  "description": "8 路灰度传感器读取（MSPM0）：huidu_value[8] 输出黑线检测（1=黑线），接线 PA26/PA25/PA24/PA23/PA22/PA21/PB9/PB8。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/huidu.c",
+        "code/huidu.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "SysConfig 需配置 GPIO 组 HUIDU_L3/L2/L1/R1/R2/L4/R3/R4（PA26 PA25 PA24 PA23 PA22 PA21 PB9 PB8，输入上拉）。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

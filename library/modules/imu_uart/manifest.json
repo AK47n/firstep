@@ -1,0 +1,20 @@
+{
+  "slug": "imu_uart",
+  "description": "UART 串口陀螺仪（新 IMU 器件）MSPM0 驱动：115200 9 字节帧 + CRC16(Modbus) 校验 + 帧间隙噪声过滤，中断解析出 yaw 角度与角速度（raw×0.1），供车头朝向闭环使用。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/imu.c",
+        "code/imu.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "SysConfig 需配置 UART0（命名 IMU601，115200 8N1，BUSCLK 40MHz）；接线 TX→PA31(UART0 RX，内部上拉)、RX→PA28(UART0 TX)。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

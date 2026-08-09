@@ -1,0 +1,21 @@
+{
+  "slug": "oled",
+  "description": "0.96 寸 OLED（SSD1306）I2C 显示驱动：硬件 I2C 显存式绘图（画点/字符/字符串/汉字，支持反色与 180° 旋转），带 16×8 ASCII 字库。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/oled.c",
+        "code/oled.h",
+        "code/oledfont.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "SysConfig 需配置 I2C1（命名 OLED，7 位地址 0x3C，TX 方向 2 字节传输）；依赖 delay。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

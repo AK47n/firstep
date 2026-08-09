@@ -1,0 +1,20 @@
+{
+  "slug": "zigbee_uart_key",
+  "description": "2026C 钥匙端 Zigbee DL-20 发送（组 4 字节帧上报 DIP-4 ID）",
+  "dependencies": [
+    "config"
+  ],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/zigbee_uart.c",
+        "code/zigbee_uart.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "钥匙端过渡方案（原 STM32，芯片不足换 MSPM0；最终方案代码未定）",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}
