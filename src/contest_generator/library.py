@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 from .autocommit import commit_after_write
 from .entry_store import (
+    SLUG_PATTERN,
     StoreError,
     delete_entry,
     entry_transaction,
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
     from .llm import LLM  # 仅类型注解用（模块库不运行时依赖 LLM 客户端）
 
 ALLOWED_SOURCE_EXTENSIONS = frozenset({".c", ".h"})
-_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 
 
 class LibraryError(ValueError):
@@ -373,7 +373,7 @@ def remove_platform_files(
 
 def _validate_slug(slug: str) -> None:
     try:
-        validate_store_key(slug, _SLUG_PATTERN, "slug")
+        validate_store_key(slug, SLUG_PATTERN, "slug")
     except StoreError:
         raise LibraryError(
             f"非法 slug：{slug!r}（只能含字母数字下划线连字符，且以字母或数字开头）"
