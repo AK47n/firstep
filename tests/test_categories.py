@@ -23,8 +23,6 @@ from contest_generator.categories import (
     residue_reason,
 )
 from contest_generator.master import (
-    ProjectComparison,
-    ProjectStructure,
     apply_distillation,
     compare_projects,
     distill_master,
@@ -37,6 +35,8 @@ from contest_generator.report import (
     ACTION_KEEP,
     ACTION_MERGE,
     FileDecision,
+    ProjectComparison,
+    ProjectStructure,
 )
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
