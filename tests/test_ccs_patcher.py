@@ -329,6 +329,18 @@ def test_include_search_dirs_resolves_relative_paths(tmp_path):
     assert dirs == [project / "sdk" / "headers", project / "inc"]
 
 
+def test_include_search_dirs_normalizes_backslashes(tmp_path):
+    """反斜杠归一（共享解析核心）：Windows 上 Path 行为等价，显式归一更稳，
+    与正斜杠写法去重为同一目录。"""
+    project = _write_include_search_fixture(
+        tmp_path / "proj", ["sdk\\headers", "sdk/headers"]
+    )
+
+    dirs = include_search_dirs(project)
+
+    assert dirs == [project / "sdk" / "headers"]
+
+
 def test_include_search_dirs_without_cproject_returns_empty(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()

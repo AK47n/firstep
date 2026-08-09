@@ -25,8 +25,12 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Sequence
 
-from .projectfile import parse_project_file, write_project_file
-from .treewalk import iter_project_files
+from .projectfile import (
+    find_project_file,
+    parse_project_file,
+    resolve_include_entries,
+    write_project_file,
+)
 
 # 工具链外部头（工程树外提供，门禁豁免 include 解析）：ti_msp_dl_config.h 由
 # CCS SysConfig 在构建时生成（工程树里没有，构建时经 ${SYSCONFIG_TOOL_INCLUDE_PATH}
@@ -68,7 +72,7 @@ class CcsPatcher:
         module_files: Sequence[Path],
         include_dirs: Sequence[Path],
     ) -> None:
-        cproject = _find_cproject(project_dir)
+        cproject = find_project_file(project_dir, "*.cproject", CcsProjectError)
         root, original_text = parse_project_file(cproject, CcsProjectError)
         configurations = _build_configurations(root)
         if not configurations:
@@ -98,40 +102,35 @@ def include_search_dirs(project_dir: Path) -> list[Path]:
     路径以 .cproject 所在目录为基准；以 `${` 开头且不可展开的条目跳过
     （SDK / 工具链环境宏如 ${COM_TI_MSPM0_SDK_*} 由 CCS 构建时解析，Python
     侧不做变量引擎——母版头不在这些目录，解析不了也不参与门禁）；按出现
-    顺序去重。找不到 .cproject 返回空列表——生成路径母版必有 cproject
-    （CcsPatcher 兜底报错），此函数只为解析 include 搜索目录。
+    顺序去重。宏策略（展开 / 跳过）是 CCS 格式知识，留本模块；展开后的
+    条目交给共享解析核心 resolve_include_entries（同构部分，keil 同款）。
+    找不到 .cproject 返回空列表——生成路径母版必有 cproject（CcsPatcher
+    兜底报错），此函数只为解析 include 搜索目录。
     """
     try:
-        cproject = _find_cproject(project_dir)
+        cproject = find_project_file(project_dir, "*.cproject", CcsProjectError)
     except CcsProjectError:
         return []
     root = ET.parse(cproject).getroot()
-    dirs: list[Path] = []
-    seen: set[str] = set()
+    entries: list[str] = []
     for configuration in _build_configurations(root):
         for value in _option_values(configuration, INCLUDE_OPTION_SUPERCLASSES):
-            if value.startswith(
-                ("${PROJECT_LOC}/", "${PROJECT_ROOT}/")
-            ):
-                resolved = cproject.parent / value[value.index("/") + 1 :]
+            if value.startswith(("${PROJECT_LOC}/", "${PROJECT_ROOT}/")):
+                entry = value[value.index("/") + 1 :]
             elif value in _PROJECT_ROOT_MACROS:
-                resolved = cproject.parent
+                entry = str(cproject.parent)
             elif value.startswith("${"):
                 # SDK / 工具链环境宏（${COM_TI_MSPM0_SDK_*} 等）由 CCS 构建时
                 # 解析，Python 侧不做变量引擎：跳过（母版头不在这些目录）
                 continue
             else:
-                p = Path(value)
-                resolved = p if p.is_absolute() else (cproject.parent / p)
-            if "${" in str(resolved):
+                entry = value
+            if "${" in entry:
                 # 展开后仍含宏（如 ${PROJECT_ROOT}/${ConfigName}）：真实目录
                 # 由构建时解析，无法确定，同样跳过
                 continue
-            key = str(resolved).lower()
-            if key not in seen:
-                seen.add(key)
-                dirs.append(resolved.resolve())
-    return dirs
+            entries.append(entry)
+    return resolve_include_entries(entries, cproject.parent)
 
 
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
@@ -141,7 +140,7 @@ def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
     （_build_configurations 是唯一走查实现），母版提炼不再另抄一份。解析
     失败只记一行，由调用方决定是否中断。
     """
-    cproject = _find_cproject(project_dir)
+    cproject = find_project_file(project_dir, "*.cproject", CcsProjectError)
     try:
         root = ET.parse(cproject).getroot()
     except ET.ParseError as exc:
@@ -161,20 +160,6 @@ def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
     if not lines:
         lines.append(f"{cproject.name}：未找到配置摘要")
     return tuple(lines)
-
-
-def _find_cproject(project_dir: Path) -> Path:
-    """定位工程文件 .cproject：任意层级 + 统一噪音跳过规则（treewalk，与
-    master 扫描同一规则；旧实现只查顶层，嵌套工程会漏判）。"""
-    candidates = sorted(iter_project_files(project_dir, pattern="*.cproject"))
-    if not candidates:
-        raise CcsProjectError(f"工程目录里没有 .cproject 文件：{project_dir}")
-    if len(candidates) > 1:
-        raise CcsProjectError(
-            "工程目录里有多个 .cproject，无法确定改哪个："
-            + "、".join(p.name for p in candidates)
-        )
-    return candidates[0]
 
 
 def _build_configurations(root: ET.Element) -> list[ET.Element]:
