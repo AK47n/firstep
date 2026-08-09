@@ -1,0 +1,18 @@
+{
+  "slug": "delay",
+  "description": "MSPM0 毫秒延时：delay_ms 基于 CPUCLK_FREQ 换算调用 delay_cycles，任何时钟频率自动适配。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/delay.c",
+        "code/delay.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "无外设依赖（CPUCLK_FREQ 由 SysConfig SYSCTL 生成）。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

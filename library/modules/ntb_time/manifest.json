@@ -1,0 +1,18 @@
+{
+  "slug": "ntb_time",
+  "description": "MSPM0 毫秒时间戳：读取 NTB 定时器计数换算为毫秒（1s 周期 /500），供任务状态机计时。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/ntb_time.c",
+        "code/ntb_time.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "SysConfig 需配置 TIMG12（命名 NTB，计数时钟 40MHz、1s 周期即 LOAD_VALUE=40M-1）；分频 500 硬编码与周期强绑定。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

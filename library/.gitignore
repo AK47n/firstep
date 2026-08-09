@@ -1,0 +1,13 @@
+# 构建产物（机器可再生，入库时剔除；母版若被重新编译产生的输出不进 git）
+Objects/
+Listings/
+Debug/
+Release/
+*.o
+*.axf
+*.out
+*.hex
+*.map
+*.lst
+*.uvoptx
+*.uvguix

@@ -1136,7 +1136,7 @@ def test_file_label_marker_single_origin():
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         if "// ---- " in line
     ]
-    assert hits == [("library.py", 489)]  # file_label 的 return 行（唯一出处）
+    assert hits == [("library.py", 495)]  # file_label 的 return 行（唯一出处）
 
 
 def test_reference_library_consumes_file_label():

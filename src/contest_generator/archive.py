@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
+from .autocommit import commit_after_write
 from .entry_store import discard_entry_dirs
 from .master import ProjectComparison
 from .master_store import MasterError
@@ -108,3 +109,7 @@ def write_archive_entries(
         raise MasterError(
             f"母版已入库，但归档写入失败（已回滚本次归档条目，可重试确认）：{exc}"
         ) from exc
+    commit_after_write(
+        reference_library_dir,
+        "lib: archive reference " + "、".join(d.path for d in report.archive),
+    )

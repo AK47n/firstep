@@ -1,0 +1,24 @@
+{
+  "slug": "pid",
+  "description": "2021F 巡线题专用：智能小车基于 PID 巡线、路径记忆与十字路口动作决策的往返导航控制，含电机闭环与送药路径状态机。",
+  "dependencies": [
+    "digit_uart",
+    "motor",
+    "ml_mpu6050"
+  ],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/pid.c",
+        "code/pid.h",
+        "code/gray_track.c",
+        "code/gray_track.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}

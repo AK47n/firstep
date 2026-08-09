@@ -1,0 +1,20 @@
+{
+  "slug": "uwb_uart",
+  "description": "UWB 定位模块串口驱动：帧同步接收、XOR 校验、大小端解析，对距离和方位角做滑动平均滤波与野值钳位，输出原始与滤波后的定位数据。",
+  "dependencies": [
+    "config"
+  ],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/uwb_uart.c",
+        "code/uwb_uart.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "",
+      "kit": "最新ALX-AOA-FIT跟随套件开发资料",
+      "source_url": "https://e.tb.cn/h.86Mb3gU2D8LNQAM?tk=v8x7gBwPHC9"
+    }
+  }
+}
