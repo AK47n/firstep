@@ -134,14 +134,16 @@ def resolve_topic_context(
     module_library_dir: Path,
     topic_library_dir: Path,
     reference_library_dir: Path,
-) -> TopicContext | None:
+) -> TopicContext:
     """生成入口素材装配：显式编号或粘贴题面中的编号（AI 理解）→ 完整赛题上下文。
 
-    两条入口：topic_key 显式给出（查无此条大声报错——不猜测编造）；否则从
-    粘贴的 problem_text 里 AI 提取编号（llm.topic_extract_number，自动识别
-    尽力而为——提取失败 / 库中没有该题就按纯粘贴题面流程走，不阻断生成入口，
-    与显式编号的查无此条大声报错相对——刻意取舍，工单 Comments 留痕）。
-    返回 None = 没有可识别的历史赛题。
+    永远返回完整 TopicContext，key 非空 = 识别到历史赛题。两条入口：
+    topic_key 显式给出（查无此条大声报错——不猜测编造）；否则从粘贴的
+    problem_text 里 AI 提取编号（llm.topic_extract_number，自动识别尽力而
+    为——提取失败 / 库中没有该题按 no-topic 形走，不阻断生成入口，与显式
+    编号的查无此条大声报错相对——刻意取舍，工单 Comments 留痕）。
+    no-topic 形 = key="" 哨兵 + 题面原样 + 空关联 / 建议 + 全模块摘要 +
+    空集回读器（见 _no_topic_context）。
     """
     if topic_key:
         entry = _resolve_topic_entry(topic_library_dir, topic_key)
@@ -149,15 +151,23 @@ def resolve_topic_context(
         try:
             extracted = llm.topic_extract_number(problem_text)
         except LLMError:
-            return None  # 自动识别尽力而为：AI 提取失败不阻断粘贴题面流程
+            return _no_topic_context(
+                problem_text, module_library_dir, reference_library_dir
+            )  # 自动识别尽力而为：AI 提取失败不阻断粘贴题面流程
         if not extracted:
-            return None
+            return _no_topic_context(
+                problem_text, module_library_dir, reference_library_dir
+            )
         try:
             entry = _resolve_topic_entry(topic_library_dir, extracted)
         except TopicError:
-            return None  # 库中没有该题：自动识别查无此条静默降级（不猜测编造）
+            return _no_topic_context(
+                problem_text, module_library_dir, reference_library_dir
+            )  # 库中没有该题：自动识别查无此条静默降级（不猜测编造）
     else:
-        return None
+        return _no_topic_context(
+            problem_text, module_library_dir, reference_library_dir
+        )
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
     references = associated_references(
@@ -171,6 +181,27 @@ def resolve_topic_context(
         manifest_summaries=tuple(build_manifest_summaries(candidates)),
         suggestions=reference_suggestions(references),
         read_fulltext=_make_fulltext_reader(reference_library_dir, references),
+    )
+
+
+def _no_topic_context(
+    problem_text: str, module_library_dir: Path, reference_library_dir: Path
+) -> TopicContext:
+    """no-topic 形上下文（key="" 哨兵 = 未识别到历史赛题，路由零 fallback）。
+
+    题面原样 + 空关联 / 建议 + 全模块摘要（无该题时候选清单就是全模块库，
+    与显式路径同一次扫库）+ 空集回读器（任何 id 抛 ReferenceError——
+    suggestions 恒空所以永不被调，诚实 no-op）。
+    """
+    candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
+    return TopicContext(
+        key="",
+        problem_text=problem_text,
+        references=(),
+        related_modules=(),
+        manifest_summaries=tuple(build_manifest_summaries(candidates)),
+        suggestions=(),
+        read_fulltext=_make_fulltext_reader(reference_library_dir, ()),
     )
 
 

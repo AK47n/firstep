@@ -11,12 +11,17 @@ from __future__ import annotations
 import json
 import threading
 import time
+from pathlib import Path
 from typing import Mapping, Sequence
 
 import pytest
 from fastapi.testclient import TestClient
 
-from contest_generator.config import AppConfig
+from contest_generator.config import (
+    AppConfig,
+    reference_library_dir,
+    topic_library_dir,
+)
 from contest_generator.events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
@@ -1475,12 +1480,13 @@ class TopicAwareLLM(FakeLLM):
 
 def _wire_material_libraries(context) -> None:
     """在既有假上下文上补齐素材区：赛题库 / 参考文件库 / 该题专用模块与普通
-    候选模块。素材区与 webapp 推导一致（模块库平级：topics/ 与 references/）。"""
+    候选模块。目录推导与生产同源（config.topic_library_dir / reference_library_dir
+    ——构造一致性，手抄消失）。"""
     ctx = context[0]
     make_topic_specific_module(ctx.config.module_library_dir)
     make_kit_candidate_module(ctx.config.module_library_dir)
-    make_fake_topic_library(ctx.config.module_library_dir.parent / "topics")
-    make_fake_reference_library(ctx.config.module_library_dir.parent / "references")
+    make_fake_topic_library(topic_library_dir(ctx.config.module_library_dir))
+    make_fake_reference_library(reference_library_dir(ctx.config.module_library_dir))
 
 
 def test_recommend_with_topic_id_uses_full_text_and_carries_materials(client, context):
@@ -1700,3 +1706,36 @@ def test_generate_with_unknown_topic_id_returns_400(client, context, tmp_path):
 
     assert resp.status_code == 400
     assert "2021F" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 结构测试（防回退，先例 errors.py 防漏登 / test_categories）：装配不在路由、
+# 布局推导唯一出处 = config.py
+# ---------------------------------------------------------------------------
+
+
+def test_webapp_consumes_topic_context_without_reassembling():
+    """路由不再自持装配：webapp 模块无 build_manifest_summaries 属性（装配
+    函数一个不剩）——候选清单 / 摘要行 / 两级注入只由 generator.resolve_topic_context
+    产出，路由只消费（工单 02：赛题入口单一接缝）。list_modules 是 /api/modules
+    浏览的唯一合法消费（浏览非装配，工单 Comments 留痕）。"""
+    import contest_generator.webapp as webapp
+
+    assert not hasattr(webapp, "build_manifest_summaries")
+    assert hasattr(webapp, "list_modules")
+
+
+def test_layout_dir_derivation_lives_in_config():
+    """布局推导唯一出处 = config.py：webapp 不再自持 topics/ / references/
+    路径推导私有委托（工单 02 收进 config.topic_library_dir / reference_library_dir），
+    测试与生产消费同源。"""
+    import contest_generator.config as config
+    import contest_generator.webapp as webapp
+
+    assert not hasattr(webapp, "_topic_library_dir")
+    assert not hasattr(webapp, "_reference_dir")
+    library_dir = Path("work/module_library")
+    assert config.topic_library_dir(library_dir) == library_dir.parent / "topics"
+    assert (
+        config.reference_library_dir(library_dir) == library_dir.parent / "references"
+    )

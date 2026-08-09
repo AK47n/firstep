@@ -27,7 +27,9 @@ from .config import (
     AppConfig,
     ConfigError,
     load_config,
+    reference_library_dir,
     save_config,
+    topic_library_dir,
 )
 from .errors import error_entry
 from .extraction import extract_file
@@ -52,7 +54,6 @@ from .llm import (
     LLM,
     DeepSeekLLM,
     TOPIC_SPLIT_LLM_CHAR_CAP,
-    build_manifest_summaries,
 )
 from .master import (
     confirm_distillation,
@@ -142,47 +143,27 @@ def _masters_dir(ctx: AppContext) -> Path:
     return _require_config(ctx).masters_dir
 
 
-def _reference_dir(ctx: AppContext) -> Path:
-    """参考文件库目录：模块库平级兄弟 references/（素材库 colocate，工单 02）。
+def _assemble_topic_context(
+    context: AppContext, topic_id: str, problem_text: str, llm: LLM | None
+) -> TopicContext:
+    """生成流程的历史赛题入口素材装配（单一 helper，三路由共用）。
 
-    本批不新增配置项（config.py 冻结），按模块库目录的平级兄弟推导——默认
-    布局下 = ~/.contest_generator/references；用户配置模块库位置时参考库跟随。
-    """
-    return _require_config(ctx).module_library_dir.parent / "references"
-
-
-def _topic_library_dir(ctx: AppContext) -> Path:
-    """赛题库目录：模块库同级目录下的 topics/（工单 01 约定）。
-
-    配置没有独立字段（config.py 不在本工单边界内），取模块库同级目录——
-    与默认布局（~/.contest_generator/{modules,masters}）同一工作目录；将来
-    加配置项时只改这一处。
-    """
-    return _require_config(ctx).module_library_dir.parent / "topics"
-
-
-def _resolve_topic_for_generation(
-    context: AppContext, topic_id: str, problem_text: str
-) -> tuple[TopicContext | None, str]:
-    """生成流程的历史赛题入口素材：显式 topic_id 或粘贴题面自动识别。
-
-    返回（历史赛题上下文, 题面全文）——识别到历史赛题时题面用库内全文（长
-    PDF 题面全文只在选了该赛题时进上下文），没识别到原样返回粘贴文本。显式
-    编号查无此条大声报错；自动识别尽力而为（提取失败 / 查无此条静默降级，
-    不阻断纯粘贴题面流程）。
+    显式 topic_id 或粘贴题面自动识别 → 完整 TopicContext（永远非 None；
+    key 为空串 = 未识别到历史赛题，按纯粘贴题面流程走；识别到时题面用库内
+    全文——长 PDF 题面全文只在选了该赛题时进上下文）。装配唯一出处 =
+    generator.resolve_topic_context，这里只取配置、推导目录、传参；显式编号
+    查无此条大声报错；自动识别尽力而为（提取失败 / 查无此条静默降级）。
+    推荐 / 骨架传 _llm(context)（自动识别），生成传 None（显式编号路径）。
     """
     config = _require_config(context)
-    resolved = resolve_topic_context(
-        llm=_llm(context),
+    return resolve_topic_context(
+        llm=llm,
         topic_key=topic_id,
         problem_text=problem_text,
         module_library_dir=config.module_library_dir,
-        topic_library_dir=_topic_library_dir(context),
-        reference_library_dir=_reference_dir(context),
+        topic_library_dir=topic_library_dir(config.module_library_dir),
+        reference_library_dir=reference_library_dir(config.module_library_dir),
     )
-    if resolved is None:
-        return None, problem_text
-    return resolved, resolved.problem_text
 
 
 
@@ -406,26 +387,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         结束本次推荐（与提炼端点同款，spec「断线」）。"""
         problem_text = _require_str(payload, "problem_text")
         topic_id = _optional_str(payload, "topic_id")
-        config = _require_config(context)
-        topic, problem_text = _resolve_topic_for_generation(
-            context, topic_id, problem_text
+        # 完整上下文已在装配点（resolve_topic_context）一次备好：两级注入的
+        # 清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费（key 空 =
+        # 未识别到历史赛题，no-topic 形同样携带全模块摘要）
+        topic = _assemble_topic_context(
+            context, topic_id, problem_text, _llm(context)
         )
-        if topic is not None:
-            # 完整上下文已在装配点（resolve_topic_context）一次备好：两级注入
-            # 的清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费
-            summaries = topic.manifest_summaries
-            suggestions = topic.suggestions
-            reader = topic.read_fulltext
-        else:
-            summaries = tuple(
-                build_manifest_summaries(list_modules(config.module_library_dir))
-            )
-            suggestions = ()
-            reader = None
+        summaries = topic.manifest_summaries
+        suggestions = topic.suggestions
+        reader = topic.read_fulltext
         def run(emit: SseEmitter) -> None:
             selection = select_modules_convergent(
                 _llm(context),
-                problem_text,
+                topic.problem_text,  # 识别到时题面用库内全文；no-topic 形 = 粘贴原样
                 summaries,
                 references=suggestions,
                 reader=reader,
@@ -444,7 +418,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     for requirement in selection.requirements
                 ],
             }
-            if topic is not None:
+            if topic.key:
                 result["topic_id"] = topic.key
                 result["related_modules"] = list(topic.related_modules)
             emit.done(result)
@@ -482,14 +456,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         topic_id = _optional_str(payload, "topic_id")
-        topic, problem_text = _resolve_topic_for_generation(
-            context, topic_id, problem_text
+        topic = _assemble_topic_context(
+            context, topic_id, problem_text, _llm(context)
         )
-        if topic is not None:
+        if topic.key:
             slugs = list(prepend_related_modules(topic.related_modules, slugs))
         resolved = resolve_selection(_library_dir(context), platform, slugs)
         main_c, intercepted = generate_skeleton(
-            _llm(context), problem_text, resolved.manifests, platform, _library_dir(context)
+            _llm(context), topic.problem_text, resolved.manifests, platform, _library_dir(context)
         )
         return {"main_c": main_c, "intercepted": list(intercepted)}
 
@@ -510,16 +484,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _require_config(context)
         related_modules: Sequence[str] = ()
         if topic_id:
-            topic = resolve_topic_context(
-                llm=None,  # 显式编号路径不需要 AI 提取；题面 / 关联素材已装配
-                topic_key=topic_id,
-                problem_text="",
-                module_library_dir=config.module_library_dir,
-                topic_library_dir=_topic_library_dir(context),
-                reference_library_dir=_reference_dir(context),
-            )
-            if topic is not None:
-                related_modules = topic.related_modules
+            # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
+            topic = _assemble_topic_context(context, topic_id, "", None)
+            related_modules = topic.related_modules
         summary = generate_project(
             platform=platform,
             slugs=slugs,
@@ -700,12 +667,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         确认不要求 AI 配置（与现状一致）。
         """
         project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
+        config = _require_config(context)
         meta = confirm_distillation(
             _masters_dir(context),
             project_dirs,
             payload,
             llm_factory=lambda: _llm(context),
-            reference_library_dir=_reference_dir(context),
+            reference_library_dir=reference_library_dir(config.module_library_dir),
         )
         return {
             "platform": meta.platform,
@@ -784,10 +752,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def references(title: str = "", type: str = "", anchor: str = "") -> list[dict]:
         """浏览参考文件库：按标题 / 类型 / 锚定值子串过滤（可组合，空 = 全量）。"""
+        config = _require_config(context)
         return [
             entry.to_dict()
             for entry in search_references(
-                _reference_dir(context), title=title, type=type, anchor=anchor
+                reference_library_dir(config.module_library_dir),
+                title=title,
+                type=type,
+                anchor=anchor,
             )
         ]
 
@@ -811,15 +783,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         files = payload.get("files")
         if not isinstance(files, dict):
             raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
+        config = _require_config(context)
         entry = add_reference(
-            _reference_dir(context),
+            reference_library_dir(config.module_library_dir),
             title=_require_str(payload, "title"),
             type=_require_str(payload, "type"),
             description=_require_str(payload, "description"),
             anchor_kind=_require_str(payload, "anchor_kind"),
             anchor_value=_require_str(payload, "anchor_value"),
             files=files,
-            kit_vocabulary=module_kit_vocabulary(_library_dir(context)),
+            kit_vocabulary=module_kit_vocabulary(config.module_library_dir),
         )
         return entry.to_dict()
 
@@ -827,7 +800,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def reference_delete(entry_id: str) -> dict:
         """删除参考文件条目：整个目录移除。"""
-        delete_reference(_reference_dir(context), entry_id)
+        delete_reference(
+            reference_library_dir(_require_config(context).module_library_dir),
+            entry_id,
+        )
         return {"ok": True}
 
     # ------------------------------------------------------------------
@@ -852,7 +828,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     discover_related_modules(config.module_library_dir, entry.key)
                 ),
             }
-            for entry in list_topics(_topic_library_dir(context))
+            for entry in list_topics(topic_library_dir(config.module_library_dir))
         ]
 
     @app.post("/api/topics/split")
@@ -904,7 +880,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         tmp_path = await _save_upload(pdf)
         try:
             stored = confirm_topics(
-                _topic_library_dir(context),
+                topic_library_dir(_require_config(context).module_library_dir),
                 tmp_path,
                 entries,
                 program_dirs=program_dirs,
@@ -933,7 +909,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         字段）；查无此条明确报错（不猜测编造）。
         """
         config = _require_config(context)
-        entry = resolve_number(_topic_library_dir(context), key)
+        entry = resolve_number(topic_library_dir(config.module_library_dir), key)
         return {
             **entry.to_dict(),
             "related_modules": list(
@@ -949,7 +925,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         查无此条明确报错（不猜测编造）；编号格式非法先拒绝（入口拦截路径
         穿越）。
         """
-        delete_topic(_topic_library_dir(context), key)
+        delete_topic(topic_library_dir(_require_config(context).module_library_dir), key)
         return {"ok": True}
 
     return app

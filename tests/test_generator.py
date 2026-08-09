@@ -31,10 +31,12 @@ from contest_generator.generator import (
     resolve_topic_context,
 )
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASS, _SETTINGS_MODULE_ID
+from contest_generator.library import list_modules
 from contest_generator.llm import LLMError
 from contest_generator.manifest import ModuleManifest
 from contest_generator.master_store import MasterError
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32, PatcherRegistry
+from contest_generator.reference_library import ReferenceError
 from contest_generator.topic_library import TopicError
 from tests.fakes import (
     DHT11_H,
@@ -586,15 +588,16 @@ def test_resolve_topic_context_recognizes_number_in_pasted_text(tmp_path):
 
 
 def test_resolve_topic_context_auto_recognition_is_best_effort(tmp_path):
-    """自动识别尽力而为：提取失败（LLMError）/ 查无此条 / 没提取到 → None，
-    不阻断纯粘贴题面流程（与显式编号的查无此条大声报错相对）。"""
+    """自动识别尽力而为：提取失败（LLMError）/ 查无此条 / 没提取到 → no-topic
+    上下文（key="" 哨兵），不阻断纯粘贴题面流程（与显式编号的查无此条大声
+    报错相对）。"""
     library, topics, references = _wired_dirs(tmp_path)
 
     class NoNumberLLM:
         def topic_extract_number(self, text: str) -> None:
             return None
 
-    assert (
+    _assert_no_topic_context(
         resolve_topic_context(
             llm=NoNumberLLM(),
             topic_key="",
@@ -602,15 +605,16 @@ def test_resolve_topic_context_auto_recognition_is_best_effort(tmp_path):
             module_library_dir=library,
             topic_library_dir=topics,
             reference_library_dir=references,
-        )
-        is None
+        ),
+        library,
+        "普通粘贴题面",
     )
 
     class RaisingExtractLLM:
         def topic_extract_number(self, text: str) -> str:
             raise LLMError("服务不可用")
 
-    assert (
+    _assert_no_topic_context(
         resolve_topic_context(
             llm=RaisingExtractLLM(),
             topic_key="",
@@ -618,15 +622,16 @@ def test_resolve_topic_context_auto_recognition_is_best_effort(tmp_path):
             module_library_dir=library,
             topic_library_dir=topics,
             reference_library_dir=references,
-        )
-        is None
+        ),
+        library,
+        "粘贴题面",
     )
 
     class UnknownKeyLLM:
         def topic_extract_number(self, text: str) -> str:
             return "2021F"  # 库中没有的编号
 
-    assert (
+    _assert_no_topic_context(
         resolve_topic_context(
             llm=UnknownKeyLLM(),
             topic_key="",
@@ -634,9 +639,26 @@ def test_resolve_topic_context_auto_recognition_is_best_effort(tmp_path):
             module_library_dir=library,
             topic_library_dir=topics,
             reference_library_dir=references,
-        )
-        is None
+        ),
+        library,
+        "粘贴题面",
     )
+
+
+def _assert_no_topic_context(ctx, library, problem_text):
+    """no-topic 形上下文：key="" 哨兵（key 非空 = 识别到历史赛题）+ 题面原样
+    + 空关联 / 建议 + 全模块摘要 + 空集回读器（任何 id 抛 ReferenceError——
+    suggestions 恒空所以永不被调，诚实 no-op）。"""
+    assert ctx.key == ""
+    assert ctx.problem_text == problem_text
+    assert ctx.references == ()
+    assert ctx.related_modules == ()
+    assert ctx.suggestions == ()
+    assert {s.slug for s in ctx.manifest_summaries} == {
+        m.slug for m in list_modules(library)
+    }
+    with pytest.raises(ReferenceError, match="不存在"):
+        ctx.read_fulltext(TOPIC_REFERENCE_ID)
 
 
 def test_resolve_topic_context_explicit_unknown_key_raises(tmp_path):
