@@ -14,7 +14,7 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Sequence
+from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
 from .library import list_modules
 from .llm import LLMError
@@ -28,8 +28,10 @@ from .patchers import (
 )
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
+    REFERENCE_SOURCE_MANUAL,
     ReferenceSuggestion,
     associated_references,
+    manual_reference_admission,
     reference_suggestions,
     resolve_selection,
 )
@@ -135,6 +137,8 @@ class TopicContext:
     manifest_summaries: tuple[ManifestSummary, ...]  # 模块库摘要对象（与 references 同一次扫库产出）
     suggestions: tuple[ReferenceSuggestion, ...]  # 两级注入第一级（清单段）
     read_fulltext: Callable[[str], str]  # 两级注入第二级（按清单段条目 id 回读全文）
+    manual_references: tuple[ReferenceEntry, ...] = ()  # 手动选参考资料（完整条目，追加准入）
+    manual_fulltexts: Mapping[str, str] | None = None  # 手动选参考资料全文（id → 全文，直读）
 
 
 def resolve_topic_context(
@@ -145,6 +149,7 @@ def resolve_topic_context(
     module_library_dir: Path,
     topic_library_dir: Path,
     reference_library_dir: Path,
+    reference_ids: Sequence[str] = (),
 ) -> TopicContext:
     """生成入口素材装配：显式编号或粘贴题面中的编号（AI 理解）→ 完整赛题上下文。
 
@@ -155,7 +160,23 @@ def resolve_topic_context(
     编号的查无此条大声报错相对——刻意取舍，工单 Comments 留痕）。
     no-topic 形 = key="" 哨兵 + 题面原样 + 空关联 / 建议 + 全模块摘要 +
     空集回读器（见 _no_topic_context）。
+
+    手动选参考资料（工单 01）：reference_ids = 用户显式指定的条目 id，准入 =
+    锚定命中 ∪ 手动选（追加语义，锚定两级照旧）。手动条目全文直读（装配点
+    一次读好，manual_fulltexts），清单段带来源标注（suggestions 混排，锚定
+    与手动重合的条目只出现一次、标注手动）。幻觉 id / 重复 id 大声失败
+    （manual_reference_admission）。
     """
+    manual_entries = (
+        manual_reference_admission(reference_library_dir, reference_ids)
+        if reference_ids
+        else ()
+    )
+    manual_fulltexts = (
+        {entry.id: read_fulltext(reference_library_dir, entry) for entry in manual_entries}
+        if manual_entries
+        else None
+    )
     if topic_key:
         entry = _resolve_topic_entry(topic_library_dir, topic_key)
     elif llm is not None:
@@ -163,46 +184,84 @@ def resolve_topic_context(
             extracted = llm.topic_extract_number(problem_text)
         except LLMError:
             return _no_topic_context(
-                problem_text, module_library_dir, reference_library_dir
+                problem_text,
+                module_library_dir,
+                reference_library_dir,
+                manual_entries,
+                manual_fulltexts,
             )  # 自动识别尽力而为：AI 提取失败不阻断粘贴题面流程
         if not extracted:
             return _no_topic_context(
-                problem_text, module_library_dir, reference_library_dir
+                problem_text,
+                module_library_dir,
+                reference_library_dir,
+                manual_entries,
+                manual_fulltexts,
             )
         try:
             entry = _resolve_topic_entry(topic_library_dir, extracted)
         except TopicError:
             return _no_topic_context(
-                problem_text, module_library_dir, reference_library_dir
+                problem_text,
+                module_library_dir,
+                reference_library_dir,
+                manual_entries,
+                manual_fulltexts,
             )  # 库中没有该题：自动识别查无此条静默降级（不猜测编造）
     else:
         return _no_topic_context(
-            problem_text, module_library_dir, reference_library_dir
+            problem_text,
+            module_library_dir,
+            reference_library_dir,
+            manual_entries,
+            manual_fulltexts,
         )
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
     references = associated_references(
         reference_library_dir, topic_key=entry.key, manifests=candidates
     )
+    # 并集去重：锚定命中照旧自动进；手动条目若同时被锚定命中，清单只出现
+    # 一次（标注 manual——全文已直读，模型无需点名），全文仍直读（manual_fulltexts 全量）
+    anchored_ids = {ref.id for ref in references}
+    manual_ids = {ref.id for ref in manual_entries}
+    anchored_only = [ref for ref in references if ref.id not in manual_ids]
+    manual_flagged = [ref for ref in references if ref.id in manual_ids]
+    manual_extra = [ref for ref in manual_entries if ref.id not in anchored_ids]
+    suggestions = [
+        *reference_suggestions(anchored_only),
+        *reference_suggestions(
+            [*manual_flagged, *manual_extra], source=REFERENCE_SOURCE_MANUAL
+        ),
+    ]
     return TopicContext(
         key=entry.key,
         problem_text=entry.problem_text,
         references=references,
         related_modules=related_module_slugs(candidates, entry.key),
         manifest_summaries=tuple(build_manifest_summaries(candidates)),
-        suggestions=reference_suggestions(references),
+        suggestions=tuple(suggestions),
         read_fulltext=_make_fulltext_reader(reference_library_dir, references),
+        manual_references=manual_entries,
+        manual_fulltexts=manual_fulltexts,
     )
 
 
 def _no_topic_context(
-    problem_text: str, module_library_dir: Path, reference_library_dir: Path
+    problem_text: str,
+    module_library_dir: Path,
+    reference_library_dir: Path,
+    manual_entries: Sequence[ReferenceEntry] = (),
+    manual_fulltexts: Mapping[str, str] | None = None,
 ) -> TopicContext:
     """no-topic 形上下文（key="" 哨兵 = 未识别到历史赛题，路由零 fallback）。
 
     题面原样 + 空关联 / 建议 + 全模块摘要（无该题时候选清单就是全模块库，
     与显式路径同一次扫库）+ 空集回读器（任何 id 抛 ReferenceError——
-    suggestions 恒空所以永不被调，诚实 no-op）。
+    suggestions 恒空所以永不被调，诚实 no-op）。手动选参考资料是 no-topic
+    唯一准入：suggestions = 手动条目（来源标注 manual），全文直读
+    （manual_fulltexts）；未选 = 现行为（零参考）。回读器对手动条目 id 可
+    回读（模型若点名已全文的条目也不崩，读回同一全文无害），其它 id 仍抛。
     """
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
     return TopicContext(
@@ -211,8 +270,10 @@ def _no_topic_context(
         references=(),
         related_modules=(),
         manifest_summaries=tuple(build_manifest_summaries(candidates)),
-        suggestions=(),
-        read_fulltext=_make_fulltext_reader(reference_library_dir, ()),
+        suggestions=reference_suggestions(manual_entries, source=REFERENCE_SOURCE_MANUAL),
+        read_fulltext=_make_fulltext_reader(reference_library_dir, (), manual_entries),
+        manual_references=tuple(manual_entries),
+        manual_fulltexts=manual_fulltexts,
     )
 
 
@@ -223,13 +284,19 @@ def _resolve_topic_entry(topic_library_dir: Path, topic_key: str) -> TopicEntry:
 
 
 def _make_fulltext_reader(
-    reference_root: Path, references: Sequence[ReferenceEntry]
+    reference_root: Path,
+    references: Sequence[ReferenceEntry],
+    manual_entries: Sequence[ReferenceEntry] = (),
 ) -> Callable[[str], str]:
     """两级注入第二级回读器：清单段条目 id → 全文（键映射与读取在同一处，
-    装配进上下文的唯一实现——webapp 不再自建 reader 闭包）。"""
+    装配进上下文的唯一实现——webapp 不再自建 reader 闭包）。
+
+    键覆盖锚定清单 ∪ 手动条目——手动条目已全文直读、模型无需点名，但万一
+    点名也不崩（读回同一全文无害）；清单外 id 仍大声失败（幻觉 / 库损坏）。
+    """
 
     def reader(entry_id: str) -> str:
-        for entry in references:
+        for entry in (*references, *manual_entries):
             if entry.id == entry_id:
                 return read_fulltext(reference_root, entry)
         raise ReferenceError(f"参考文件条目不存在：{entry_id!r}")
