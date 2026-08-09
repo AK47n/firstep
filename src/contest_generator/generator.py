@@ -14,11 +14,11 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING, Callable, Sequence
 
 from .keil import include_search_dirs
 from .library import list_modules
-from .llm import LLM, LLMError, build_manifest_summaries
+from .llm import LLMError, build_manifest_summaries
 from .manifest import ManifestSummary, ModuleManifest
 from .master import master_project_dir
 from .patchers import PatcherRegistry, default_registry
@@ -43,6 +43,10 @@ from .topic_library import (
     related_module_slugs,
     resolve_number,
 )
+
+if TYPE_CHECKING:
+    # 仅类型注解用（skeleton.py 同规：生成流程不该在运行时拉进 LLM 栈）
+    from .llm import LLM
 
 MODULES_SUBDIR = "modules"
 
