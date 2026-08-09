@@ -11,6 +11,9 @@ import json
 import threading
 import time
 from dataclasses import asdict
+from queue import Queue
+
+import pytest
 
 from contest_generator.events import (
     EVENT_BATCH_START,
@@ -78,9 +81,9 @@ def test_question_frame_carries_questions_and_stops() -> None:
 
 
 def test_error_frame_wraps_message_and_stops() -> None:
-    """error：data 包成 {"message": 中文信息}（错误映射语义不变），帧后流结束。"""
+    """error：data = {"message": 中文信息}（错误映射语义不变），帧后流结束。"""
     def run(emit: SseEmitter) -> None:
-        emit.error("AI 服务超时")
+        emit.error({"message": "AI 服务超时"})
 
     frames = list(run_sse(run))
     assert frames == [_frame(EVENT_ERROR, {"message": "AI 服务超时"})]
@@ -163,3 +166,63 @@ def test_terminal_dropped_on_timeout_when_disconnected() -> None:
     # 注意：不迭代 stream——客户端断开后无人消费队列
     assert done.wait(2.0), "终端事件超时旁路未生效：业务线程卡在 put"
     assert time.monotonic() - start < 1.0, "超时旁路耗时远超 0.1s，疑似阻塞"
+
+
+# ---------------------------------------------------------------------------
+# 终态保证归运行器（工单 B）：run 抛错 / 线程死亡 → 运行器补发 error 终态，
+# "每条流都以 done / question / error 结束"不依赖闭包写 try/except
+# ---------------------------------------------------------------------------
+
+
+def test_runner_emits_error_when_run_raises() -> None:
+    """run 抛错（如忘记 catch 的 LLMError）→ 运行器补发 error 终态，流结束。"""
+    def run(emit: SseEmitter) -> None:
+        emit.progress(
+            ProgressEvent(type=EVENT_BATCH_START, phase=PHASE_SUMMARY, batch_index=1)
+        )
+        raise ValueError("boom")
+
+    frames = list(run_sse(run, error_message=lambda exc: f"映射：{exc}"))
+    assert frames == [
+        _frame(
+            EVENT_BATCH_START,
+            asdict(
+                ProgressEvent(
+                    type=EVENT_BATCH_START, phase=PHASE_SUMMARY, batch_index=1
+                )
+            ),
+        ),
+        _frame(EVENT_ERROR, {"message": "映射：boom"}),
+    ]
+
+
+def test_runner_uses_injected_mapper_and_defaults_loud() -> None:
+    """错误文案：注入的映射器生效；不注入时默认带类型名大声失败（与错误
+    映射表"未登记异常大声失败"政策同款，sse 是叶子不依赖该表）。"""
+    def run(emit: SseEmitter) -> None:
+        raise ValueError("boom")
+
+    assert list(run_sse(run, error_message=lambda exc: "中文信息")) == [
+        _frame(EVENT_ERROR, {"message": "中文信息"})
+    ]
+    assert list(run_sse(run)) == [
+        _frame(EVENT_ERROR, {"message": "服务器内部错误（ValueError）：boom"})
+    ]
+
+
+def test_runner_emits_error_on_non_exception_death() -> None:
+    """run 以 Exception 之外的 BaseException 死亡（如 KeyboardInterrupt）——
+    旧实现线程静默死亡、流永久悬挂；运行器兜底补发 error 终态，流结束。"""
+    def run(emit: SseEmitter) -> None:
+        raise KeyboardInterrupt
+
+    frames = list(run_sse(run))
+    assert frames == [_frame(EVENT_ERROR, {"message": "服务器内部错误（KeyboardInterrupt）："})]
+
+
+def test_unknown_terminal_kind_fails_loud_at_queue_boundary() -> None:
+    """未知终端 kind：队列边界大声失败（ValueError），不静默进流当 error 帧——
+    stream 的 dispatch 分支由此不可达，防御性 RuntimeError 只是双保险。"""
+    emitter = SseEmitter(Queue(), 0.1)
+    with pytest.raises(ValueError):
+        emitter._put_terminal("bogus", {})  # 本文件是 sse.py 专属测试，私有面可测

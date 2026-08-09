@@ -30,13 +30,6 @@ from .config import (
     save_config,
 )
 from .errors import error_entry
-from .events import (
-    # 终态事件词表 re-export：唯一出处 = events.py（工单 C2），此处维持既有
-    # 导入契约（端点契约测试从 webapp 导入）；瘦身后的端点经 sse 运行器发射
-    EVENT_DONE,
-    EVENT_ERROR,
-    EVENT_QUESTION,
-)
 from .extraction import extract_file
 from .generator import (
     GenerationSummary,
@@ -428,37 +421,36 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             suggestions = ()
             reader = None
         def run(emit: SseEmitter) -> None:
-            try:
-                selection = select_modules_convergent(
-                    _llm(context),
-                    problem_text,
-                    summaries,
-                    references=suggestions,
-                    reader=reader,
-                    progress_emitter=emit.progress,
-                )
-                if selection.questions:
-                    emit.question({"questions": list(selection.questions)})
-                    return
-                result: dict[str, Any] = {
-                    "modules": [
-                        {"slug": slug, "reason": selection.reasons.get(slug, "")}
-                        for slug in selection.modules
-                    ],
-                    "requirements": [
-                        requirement.to_dict()
-                        for requirement in selection.requirements
-                    ],
-                }
-                if topic is not None:
-                    result["topic_id"] = topic.key
-                    result["related_modules"] = list(topic.related_modules)
-                emit.done(result)
-            except Exception as exc:
-                emit.error(_error_message(exc))
+            selection = select_modules_convergent(
+                _llm(context),
+                problem_text,
+                summaries,
+                references=suggestions,
+                reader=reader,
+                progress_emitter=emit.progress,
+            )
+            if selection.questions:
+                emit.question({"questions": list(selection.questions)})
+                return
+            result: dict[str, Any] = {
+                "modules": [
+                    {"slug": slug, "reason": selection.reasons.get(slug, "")}
+                    for slug in selection.modules
+                ],
+                "requirements": [
+                    requirement.to_dict()
+                    for requirement in selection.requirements
+                ],
+            }
+            if topic is not None:
+                result["topic_id"] = topic.key
+                result["related_modules"] = list(topic.related_modules)
+            emit.done(result)
 
+        # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
-            run_sse(run), headers={"Content-Type": "text/event-stream"}
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
         )
 
     @app.post("/api/selection/expand")
@@ -655,6 +647,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         ]
 
     @app.post("/api/masters/distill")
+    @_map_errors
     def masters_distill(payload: dict) -> StreamingResponse:
         """AI 提炼报告（SSE 流，工单 02）：start → 进度事件 → done（完整报告）
         或 error（中文信息）→ 流结束。HTTP 200 起流，失败以流内 error 事件收尾
@@ -672,15 +665,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         llm = _llm(context)
 
         def run(emit: SseEmitter) -> None:
-            try:
-                projects = [scan_project(Path(d)) for d in project_dirs]
-                report = distill_master(llm, platform, projects, emit.progress)
-                emit.done(report.to_dict())
-            except Exception as exc:
-                emit.error(_error_message(exc))
+            projects = [scan_project(Path(d)) for d in project_dirs]
+            report = distill_master(llm, platform, projects, emit.progress)
+            emit.done(report.to_dict())
 
+        # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
-            run_sse(run), headers={"Content-Type": "text/event-stream"}
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
         )
 
     @app.post("/api/masters/confirm")
