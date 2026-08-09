@@ -958,7 +958,7 @@ def test_validation_result_single_origin():
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         if "class ValidationResult" in line
     ]
-    assert hits == [("library.py", 52)]  # ValidationResult 的 class 行（唯一出处）
+    assert [name for name, _ in hits] == ["library.py"]  # ValidationResult 的定义文件（唯一出处）
 
 
 def test_domain_judgment_text_single_origin():
