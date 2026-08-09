@@ -43,7 +43,7 @@ from .entry_store import (
     validate_store_key,
     write_json,
 )
-from .library import list_modules
+from .library import file_label, list_modules
 from .manifest import collect_kits
 from .topic_library import validate_topic_key
 
@@ -231,6 +231,38 @@ def delete_reference(reference_root: Path, entry_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 全文回读（两级注入第二级）：store 自持读取——路径安全 + 二进制跳过 + 标签单源
+# ---------------------------------------------------------------------------
+
+
+def read_fulltext(reference_root: Path, entry: ReferenceEntry) -> str:
+    """参考文件条目全文（两级注入第二级的素材）：素材文件拼成带文件名标注的文本。
+
+    二进制素材（说明书 PDF 等）读不了文本——跳过并标注（不让生成流程因个别
+    不可读素材整体失败）；条目文件缺失 / 相对路径非法 = 库损坏，大声失败
+    （ReferenceError，宁可大声失败也不把坏数据带进上下文）。
+    """
+    chunks: list[str] = []
+    for rel in entry.files:
+        if is_unsafe_path(rel):
+            raise ReferenceError(
+                f"参考文件条目 {entry.id!r} 的文件路径非法：{rel!r}"
+            )
+        path = reference_root / entry.id / rel
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ReferenceError(
+                f"参考文件条目 {entry.id!r} 的素材文件无法读取：{rel}: {exc}"
+            ) from exc
+        except UnicodeDecodeError:
+            chunks.append(file_label(rel, "（二进制素材，未嵌入全文）"))
+            continue
+        chunks.append(file_label(rel) + content)
+    return "\n".join(chunks)
+
+
+# ---------------------------------------------------------------------------
 # AI 录入流程：草稿 → 用户修改 / 补锚定 → 结构校验 → 入库
 # ---------------------------------------------------------------------------
 
@@ -413,7 +445,7 @@ def _write_files(entry_dir: Path, files: Mapping[str, str]) -> None:
 def _assemble_material(files: Mapping[str, str]) -> str:
     """把素材文件拼成一份带文件名标注的文本（简介草稿的 AI 视角）。"""
     return "\n".join(
-        f"// ---- {name} ----\n{content}" for name, content in files.items()
+        file_label(name) + content for name, content in files.items()
     )
 
 
