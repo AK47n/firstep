@@ -261,6 +261,7 @@ def delete_master(masters_dir: Path, platform: str) -> None:
     except StoreError:
         raise MasterError(f"母版 {platform!r} 不存在") from None
     (masters_dir / f"{platform}.json").unlink(missing_ok=True)
+    commit_after_write(masters_dir, f"lib: delete master {platform}")
 
 
 # ---------------------------------------------------------------------------

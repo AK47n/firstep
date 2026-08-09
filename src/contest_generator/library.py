@@ -154,6 +154,7 @@ def update_platform_identity(
         manifest, platforms={**manifest.platforms, platform: new_entry}
     )
     save_manifest(library_root, new_manifest)
+    commit_after_write(library_root, f"lib: update platform identity {slug} {platform}")
     return new_manifest
 
 

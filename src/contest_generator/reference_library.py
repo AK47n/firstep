@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+from .autocommit import commit_after_write
 from .entry_store import (
     StoreError,
     StoreParseError,
@@ -238,6 +239,7 @@ def delete_reference(reference_root: Path, entry_id: str) -> None:
         delete_entry(reference_root, entry_id)
     except StoreError:
         raise ReferenceError(f"参考文件条目 {entry_id!r} 不存在") from None
+    commit_after_write(reference_root, f"lib: delete reference {entry_id}")
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +331,7 @@ def add_reference(
     with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         _write_files(entry_dir, files)
         write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
+    commit_after_write(reference_root, f"lib: add reference {entry_id}")
     return entry
 
 
