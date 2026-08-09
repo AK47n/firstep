@@ -1343,7 +1343,7 @@ def test_generate_writes_main_c_with_trailing_newline(make_project, tmp_path):
 
 # ---------------------------------------------------------------------------
 # 结构测试（防回退，先例 03 工单 hasattr / 06 工单 grep）：generator 对平台模块
-# import 面清零 + include 读侧对偶定义单址（工单 07）
+# import 面清零 + include 读侧对偶定义单址（工单 07）+ 模块源读路径单源（工单 01）
 # ---------------------------------------------------------------------------
 
 
@@ -1394,3 +1394,47 @@ def test_external_header_declaration_origins():
     assert "EXTERNAL_HEADERS" in keil_text
     assert "EXTERNAL_HEADERS" in ccs_text
     assert "def external_headers" in patchers_text
+
+
+def test_source_read_primitives_single_origin():
+    """is_header_path / read_module_sources 定义单址 = skeleton.py。"""
+    import contest_generator.skeleton as skeleton
+    from pathlib import Path
+
+    src_root = Path(skeleton.__file__).parent
+    for primitive in ("is_header_path", "read_module_sources"):
+        hits = [
+            path.name
+            for path in sorted(src_root.glob("*.py"))
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.startswith(f"def {primitive}")
+        ]
+        assert hits == ["skeleton.py"], f"{primitive} 应单址 skeleton.py"
+
+
+def test_skeleton_source_has_no_raw_read_text():
+    """结构自证：skeleton.py 的 read_text 恰一处——在原语 read_module_sources
+    体内（模块源读盘唯一读点，新增裸读盘即红）。"""
+    import contest_generator.skeleton as skeleton
+    from pathlib import Path
+
+    text = (Path(skeleton.__file__).parent / "skeleton.py").read_text(
+        encoding="utf-8"
+    )
+    assert text.count("read_text") == 1
+
+
+def test_generator_module_file_segment_has_no_raw_read_text():
+    """结构自证：build_module_corpus 模块文件段（manifests 循环到母版头之间）
+    无裸 read_text——读盘全走 read_module_sources 原语（母版头段允许，原语范围外）。"""
+    import contest_generator.generator as generator
+    from pathlib import Path
+
+    text = (Path(generator.__file__).parent / "generator.py").read_text(
+        encoding="utf-8"
+    )
+    def_start = text.index("def build_module_corpus(")
+    loop_start = text.index("    for manifest in manifests:", def_start)
+    master_start = text.index("    master_headers:", loop_start)
+    segment = text[loop_start:master_start]
+    assert "read_text" not in segment
