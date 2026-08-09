@@ -224,6 +224,7 @@ def delete_topic(topic_library_root: Path, key: str) -> None:
         delete_entry(topic_library_root, key)
     except StoreError:
         raise TopicError(f"题库中没有该编号的赛题：{key}") from None
+    commit_after_write(topic_library_root, f"lib: delete topic {key}")
 
 
 def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
