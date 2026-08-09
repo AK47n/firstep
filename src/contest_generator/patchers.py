@@ -10,8 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, Sequence
 
-from .ccs import CcsPatcher
-from .keil import KeilPatcher
+from .ccs import CcsPatcher, include_search_dirs as _ccs_include_search_dirs
+from .keil import KeilPatcher, include_search_dirs as _keil_include_search_dirs
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
 
@@ -66,3 +66,17 @@ def default_registry() -> PatcherRegistry:
     registry.register(PLATFORM_STM32, KeilPatcher())
     registry.register(PLATFORM_MSPM0, CcsPatcher())
     return registry
+
+
+def include_search_dirs(platform: str, project_dir: Path) -> list[Path]:
+    """平台工程 include 搜索目录（引号头文件解析范围，读侧与写侧同规则）。
+
+    生成核心只认识平台名，不绑定任何平台格式：stm32 走 keil 版（.uvprojx
+    IncludePath）、mspm0 走 ccs 版（.cproject buildIncludePath）。
+    """
+    if platform == PLATFORM_STM32:
+        return _keil_include_search_dirs(project_dir)
+    if platform == PLATFORM_MSPM0:
+        return _ccs_include_search_dirs(project_dir)
+    known = ", ".join(sorted((PLATFORM_STM32, PLATFORM_MSPM0)))
+    raise UnknownPlatformError(f"未知平台 {platform!r}，已注册的平台：{known}")

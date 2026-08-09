@@ -35,7 +35,12 @@ from contest_generator.library import list_modules
 from contest_generator.llm import LLMError
 from contest_generator.manifest import ModuleManifest
 from contest_generator.master_store import MasterError
-from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32, PatcherRegistry
+from contest_generator.patchers import (
+    PLATFORM_MSPM0,
+    PLATFORM_STM32,
+    PatcherRegistry,
+    include_search_dirs,
+)
 from contest_generator.reference_library import ReferenceError
 from contest_generator.topic_library import TopicError
 from tests.fakes import (
@@ -408,6 +413,106 @@ def test_unresolved_include_missing_header_rejected_from_memory(tmp_path):
     )
 
     with pytest.raises(UnresolvedIncludeError, match="ghost.h") as excinfo:
+        _check_unresolved_includes(corpus)
+
+    assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
+
+
+def _mspm0_master_with_sdk_include(master_dir: Path, sdk_dir: Path) -> Path:
+    """合成 mspm0 母版：.cproject buildIncludePath 指向含 SDK 头的目录（门禁全链 fixture）。"""
+    master_dir.mkdir()
+    (master_dir / "project.cproject").write_text(
+        '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+        '<cproject>\n'
+        '  <storageModule moduleId="org.eclipse.cdt.core.settings">\n'
+        '    <cconfiguration id="c1">\n'
+        '      <storageModule moduleId="org.eclipse.cdt.core.settings">\n'
+        '        <cdtBuildSystem>\n'
+        '          <configuration name="Debug">\n'
+        '            <folderInfo name="/">\n'
+        '              <toolChain name="TI Code Generation Tools">\n'
+        f'                <option name="Include Options" '
+        f'superClass="ti.ccs.misc.options.buildIncludePath" valueType="includePath">\n'
+        f'                  <listOptionValue builtIn="false" value="{sdk_dir}"/>\n'
+        '                </option>\n'
+        '              </toolChain>\n'
+        '            </folderInfo>\n'
+        '          </configuration>\n'
+        '        </cdtBuildSystem>\n'
+        '      </storageModule>\n'
+        '    </cconfiguration>\n'
+        '  </storageModule>\n'
+        '</cproject>\n',
+        encoding="utf-8",
+    )
+    return master_dir
+
+
+def test_unresolved_include_checks_mspm0_sdk_headers_from_cproject(tmp_path):
+    """mspm0 门禁全链：母版 .cproject buildIncludePath 指到 SDK 头目录 → include 可解析。
+
+    master_search_dirs 走 patchers 分派（ccs 语义），与 Keil 版同款只查搜索目录。
+    """
+    sdk = tmp_path / "sdk_headers"
+    sdk.mkdir()
+    (sdk / "ti_mspm0_config.h").write_text("#pragma once\n", encoding="utf-8")
+    master = _mspm0_master_with_sdk_include(tmp_path / "mspm0_master", sdk)
+    corpus = ModuleCorpus(
+        platform=PLATFORM_MSPM0,
+        modules=(
+            (
+                "mod",
+                (
+                    ModuleFile(
+                        rel="mod.c",
+                        kind="c",
+                        text='#include "ti_mspm0_config.h"\n',
+                        own_dir=tmp_path,
+                    ),
+                ),
+            ),
+        ),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(),
+        master_search_dirs=tuple(include_search_dirs(PLATFORM_MSPM0, master)),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { while (1); }\n",
+    )
+
+    _check_unresolved_includes(corpus)  # 母版 buildIncludePath 里有 SDK 头 → 通过
+
+
+def test_unresolved_include_rejects_mspm0_missing_sdk_header(tmp_path):
+    """mspm0 门禁：SDK 目录里没有的头 → 拒绝（UnresolvedIncludeError，文案同 Keil 版）。"""
+    sdk = tmp_path / "sdk_headers"
+    sdk.mkdir()
+    (sdk / "ti_mspm0_config.h").write_text("#pragma once\n", encoding="utf-8")
+    master = _mspm0_master_with_sdk_include(tmp_path / "mspm0_master", sdk)
+    corpus = ModuleCorpus(
+        platform=PLATFORM_MSPM0,
+        modules=(
+            (
+                "mod",
+                (
+                    ModuleFile(
+                        rel="mod.c",
+                        kind="c",
+                        text='#include "ghost_sdk.h"\n',
+                        own_dir=tmp_path,
+                    ),
+                ),
+            ),
+        ),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(),
+        master_search_dirs=tuple(include_search_dirs(PLATFORM_MSPM0, master)),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { while (1); }\n",
+    )
+
+    with pytest.raises(UnresolvedIncludeError, match="ghost_sdk.h") as excinfo:
         _check_unresolved_includes(corpus)
 
     assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
@@ -1044,3 +1149,32 @@ def test_generate_writes_main_c_with_trailing_newline(make_project, tmp_path):
 
     content = (out / "main.c").read_text(encoding="utf-8")
     assert content.endswith("\n")
+
+
+# ---------------------------------------------------------------------------
+# 结构测试（防回退，先例 03 工单 hasattr / 06 工单 grep）：generator 对平台模块
+# import 面清零 + include 读侧对偶定义单址（工单 07）
+# ---------------------------------------------------------------------------
+
+
+def test_generator_has_no_platform_module_imports():
+    """generator 对平台模块（keil/ccs）运行时 import 面清零：搜索目录经 patchers 分派。"""
+    import contest_generator.generator as generator
+
+    assert "keil" not in generator.__dict__
+    assert "ccs" not in generator.__dict__
+
+
+def test_include_search_dirs_definition_origins():
+    """读侧对偶单址：include_search_dirs 格式定义恰在 keil.py + ccs.py（分派在 patchers.py）。"""
+    import contest_generator.generator as generator
+    from pathlib import Path
+
+    src_root = Path(generator.__file__).parent
+    hits = [
+        path.name
+        for path in sorted(src_root.glob("*.py"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("def include_search_dirs")
+    ]
+    assert hits == ["ccs.py", "keil.py", "patchers.py"]
