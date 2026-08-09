@@ -308,6 +308,40 @@ def test_add_reference_topic_anchor_roundtrip(tmp_path):
     assert meta["files"] == ["example.c"]
     assert get_reference(root, entry.id) == entry
     assert [e.id for e in list_references(root)] == [entry.id]
+    # 体量 = 磁盘实况（元数据不含，读盘补全）：目录仅 example.c + reference.json
+    # 两个文件，size 恰为两者磁盘字节和（write_text 的换行翻译以实读字节为准）
+    assert entry.file_count == 2
+    assert entry.size_bytes == (
+        (root / entry.id / "example.c").stat().st_size
+        + (root / entry.id / "reference.json").stat().st_size
+    )
+    data = entry.to_dict()
+    assert data["file_count"] == 2
+    assert data["size_bytes"] == entry.size_bytes
+
+
+def test_entry_stats_counts_whole_dir_including_unlisted_strays(tmp_path):
+    """体量 = 磁盘实况（磁盘目录即数据库）：清单外的散文件也如实计入。
+
+    删除 = 整目录移除，统计口径与删除影响面一致（比 files 字段诚实）。
+    """
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="2026C 数字钥匙例程",
+        type="例程工程",
+        description="开门控制逻辑示例",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    stray = root / entry.id / "散文件.bin"
+    stray.write_bytes(b"xyz")
+
+    got = get_reference(root, entry.id)
+    assert got.file_count == entry.file_count + 1
+    assert got.size_bytes == entry.size_bytes + 3
 
 
 def test_add_reference_kit_anchor_must_come_from_vocabulary(tmp_path):
@@ -653,6 +687,14 @@ def test_archive_reference_copies_file_and_anchors_topic(tmp_path):
     # 内容自持：源文件删除不影响条目
     source.unlink()
     assert stored.is_file()
+    # 体量同源补全（与录入 / 读盘同一统计）：源文件 + reference.json（落盘
+    # 元数据是补全前的零值，读盘时被磁盘实况覆盖，序列化出去恒为实况）
+    assert entry.file_count == 2
+    assert entry.size_bytes == (
+        (root / entry.id / "ui" / "oled_fonts.c").stat().st_size
+        + (root / entry.id / "reference.json").stat().st_size
+    )
+    assert get_reference(root, entry.id) == entry
 
 
 @pytest.mark.parametrize(

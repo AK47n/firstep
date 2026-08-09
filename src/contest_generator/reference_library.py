@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -74,7 +74,12 @@ class ReferenceError(ValueError):
 
 @dataclass(frozen=True)
 class ReferenceEntry:
-    """一个参考文件条目：标题 / 类型 / 简介 / 锚定 + 素材文件清单。"""
+    """一个参考文件条目：标题 / 类型 / 简介 / 锚定 + 素材文件清单。
+
+    体量字段（file_count / size_bytes）是磁盘实况（磁盘目录即数据库），元数据
+    解析（from_dict）不含——读盘返回前由 get_reference / add_reference 用
+    entry_stats 补全，序列化出去的值恒为实况。
+    """
 
     id: str  # 条目 id = 目录名（由标题生成，含中英文 / 数字 / 连字符）
     title: str  # 标题
@@ -83,6 +88,8 @@ class ReferenceEntry:
     anchor_kind: str  # ANCHOR_KIND_TOPIC / ANCHOR_KIND_KIT
     anchor_value: str  # 锚定值（赛题编号 或 模块库已有 kit 型号）
     files: tuple[str, ...]  # 素材文件路径（相对条目目录）
+    file_count: int = 0  # 条目目录文件数（含 reference.json）
+    size_bytes: int = 0  # 条目目录总体积（字节）
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 兼容 dict。"""
@@ -94,6 +101,8 @@ class ReferenceEntry:
             "anchor_kind": self.anchor_kind,
             "anchor_value": self.anchor_value,
             "files": list(self.files),
+            "file_count": self.file_count,
+            "size_bytes": self.size_bytes,
         }
 
     @classmethod
@@ -175,11 +184,26 @@ def list_references(reference_root: Path) -> list[ReferenceEntry]:
     return entries
 
 
+def entry_stats(entry_dir: Path) -> tuple[int, int]:
+    """条目目录磁盘实况：(文件数, 总体积字节)。
+
+    磁盘目录即数据库——统计整目录（含 reference.json），即删除动作的真实
+    影响面；素材清单（files 字段）之外的散文件也如实计入。
+    """
+    count = 0
+    total = 0
+    for path in entry_dir.rglob("*"):
+        if path.is_file():
+            count += 1
+            total += path.stat().st_size
+    return count, total
+
+
 def get_reference(reference_root: Path, entry_id: str) -> ReferenceEntry:
     """读取单个条目；不存在或元数据损坏抛 ReferenceError。
 
     读盘 / 解析 / 形状校验走 entry_store 原语（read_json），错误类型与文案
-    仍归本模块。
+    仍归本模块。返回时补全体量字段（磁盘实况，元数据不含）。
     """
     _validate_entry_id(entry_id)
     entry_dir = reference_root / entry_id
@@ -200,9 +224,11 @@ def get_reference(reference_root: Path, entry_id: str) -> ReferenceEntry:
             f"参考文件条目 {entry_id!r} 的元数据不合法：参考文件条目必须是对象"
         ) from None
     try:
-        return ReferenceEntry.from_dict(data)
+        entry = ReferenceEntry.from_dict(data)
     except ReferenceError as exc:
         raise ReferenceError(f"参考文件条目 {entry_id!r} 的元数据不合法：{exc}") from exc
+    file_count, size_bytes = entry_stats(entry_dir)
+    return replace(entry, file_count=file_count, size_bytes=size_bytes)
 
 
 def search_references(
@@ -329,7 +355,8 @@ def add_reference(
     with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         _write_files(entry_dir, files)
         write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
-    return entry
+    file_count, size_bytes = entry_stats(reference_root / entry_id)
+    return replace(entry, file_count=file_count, size_bytes=size_bytes)
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +409,8 @@ def archive_reference(
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, dst)
         write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
-    return entry
+    file_count, size_bytes = entry_stats(reference_root / entry_id)
+    return replace(entry, file_count=file_count, size_bytes=size_bytes)
 
 
 # ---------------------------------------------------------------------------
