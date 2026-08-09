@@ -4,7 +4,7 @@
 
 **Blocked by:** 无
 
-**Status:** open
+**Status:** resolved
 
 ## 需求
 
@@ -29,13 +29,14 @@
 
 ## 验收
 
-- [ ] 新会话执行（本工单 = 实施提示词，含边界与验收）
-- [ ] 全量测试绿 + mypy 干净
-- [ ] tmp 伪 git 库实测：`add_module` 一次 → `git log -1` 消息正确、`git show --stat` 只含库根路径
-- [ ] 库指向无 git 目录实测不炸、无噪音
-- [ ] CONTEXT.md 库根词条补"写库自动提交"一句
-- [ ] 提交按项目惯例独立 commit，工作区其他未提交修改不混入
+- [x] 新会话执行（本工单 = 实施提示词，含边界与验收）
+- [x] 全量测试绿 + mypy 干净（856 绿 + mypy 0 问题；基线 843 + 本批 13 新测试）
+- [x] tmp 伪 git 库实测：`add_module` 一次 → `git log -1` 消息正确、`git show --stat` 只含库根路径（tests/test_autocommit.py 常驻测试）
+- [x] 库指向无 git 目录实测不炸、无噪音（同文件 test_outside_git_worktree_silently_skips，连日志零输出）
+- [x] CONTEXT.md 库根词条补"写库自动提交"一句
+- [x] 提交按项目惯例独立 commit，工作区其他未提交修改不混入（独立 worktree + refactor/docs 分两次提交）
 
 ## Comments
 
 - 2026-08-09 立项：用户确认"按工单流程走"；范围澄清 = 写库动作包括参考文件归档（references/）；发布形态与赛题素材版权边界仍待定（ADR 0008 已记）
+- 2026-08-09 实施：autocommit.py 纯函数 + config 开关 + 8 调用点（消息模板全部按提示词）+ 结构测试防漏挂（8 函数源码含调用与消息片段双断言）；实现注意点落地 = 库根取调用参数的父目录（四库平级共居），git add 目标与 toplevel 探测按库根算；两处行号钉死测试（file_label / ValidationResult 单源）随 library.py 增行同步更新
