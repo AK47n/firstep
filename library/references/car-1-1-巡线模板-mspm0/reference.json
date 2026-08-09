@@ -1,0 +1,22 @@
+{
+  "id": "car-1-1-巡线模板-mspm0",
+  "title": "car 1.1 巡线模板（mspm0）",
+  "type": "参考例程",
+  "description": "MSPM0G3507 小车巡线参考例程（car 1.1 工程）：xunji_template 巡线主模板（灰度传感器循迹）+ control 电机 PID 闭环控制 + Delay 延时 + USART_JY61P 串口 JY61P 姿态模块驱动，2024H 巡线小车题（mspm0 平台专用）配套学习素材。",
+  "anchor_kind": "topic",
+  "anchor_value": "2024H",
+  "platform": "mspm0",
+  "files": [
+    "xunji_template.c",
+    "xunji_template.h",
+    "xunji_logic_spec.md",
+    "control.c",
+    "control.h",
+    "Delay.c",
+    "Delay.h",
+    "USART_JY61P/JY61P.c",
+    "USART_JY61P/JY61P.h"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
