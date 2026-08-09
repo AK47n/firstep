@@ -38,6 +38,7 @@ from contest_generator.selection import (
     resolve_selection,
     select_modules_convergent,
 )
+from contest_generator.reference_library import add_reference
 from contest_generator.wordlist import HardwareWordGroup
 from tests.fakes import FakeLLM
 from tests.generate_wiring_fakes import (
@@ -273,6 +274,109 @@ def test_associated_references_includes_candidate_kits(tmp_path):
         KIT_REFERENCE_ID,
         UWB_REFERENCE_ID,
     ]
+
+
+def _platform_anchored_references(reference_root) -> Path:
+    """三条同锚定（topic=2024H）不同平台的条目：mspm0 / stm32 / any。"""
+    for platform in ("mspm0", "stm32", "any"):
+        add_reference(
+            reference_root,
+            title=f"巡线模板（{platform}）",
+            type="参考例程",
+            description=f"{platform} 平台配套例程",
+            anchor_kind="topic",
+            anchor_value="2024H",
+            platform=platform,
+            files={"xunji.c": f"/* {platform} */\n"},
+            kit_vocabulary=(),
+        )
+    return reference_root
+
+
+def test_associated_references_filters_topic_hits_by_platform(tmp_path):
+    """topic 命中按平台统一过滤（工单 01）：不匹配跳过、any 全进、空串不过滤。"""
+    reference_root = _platform_anchored_references(tmp_path / "references")
+
+    mspm0 = associated_references(
+        reference_root, topic_key="2024H", platform="mspm0"
+    )
+    assert [e.id for e in mspm0] == ["巡线模板-any", "巡线模板-mspm0"]
+
+    stm32 = associated_references(
+        reference_root, topic_key="2024H", platform="stm32"
+    )
+    assert [e.id for e in stm32] == ["巡线模板-any", "巡线模板-stm32"]
+
+    unfiltered = associated_references(reference_root, topic_key="2024H")
+    assert [e.id for e in unfiltered] == [
+        "巡线模板-any",
+        "巡线模板-mspm0",
+        "巡线模板-stm32",
+    ]
+
+
+def test_associated_references_filters_kit_hits_by_platform(tmp_path):
+    """kit 命中同样按平台过滤（双保险：topic 与 kit 锚定统一判据）。"""
+    reference_root = tmp_path / "references"
+    reference_root.mkdir()
+    add_reference(
+        reference_root,
+        title="ALX 串口例程",
+        type="例程工程",
+        description="STM32F1 串口例程",
+        anchor_kind="kit",
+        anchor_value=KIT_REFERENCE_ID,
+        platform="stm32",
+        files={"uart.c": "/* 串口 */\n"},
+        kit_vocabulary=(KIT_REFERENCE_ID,),
+    )
+    add_reference(
+        reference_root,
+        title="地猛星例程",
+        type="例程工程",
+        description="mspm0 例程",
+        anchor_kind="kit",
+        anchor_value=KIT_REFERENCE_ID,
+        platform="mspm0",
+        files={"m0.c": "/* m0 */\n"},
+        kit_vocabulary=(KIT_REFERENCE_ID,),
+    )
+
+    # manifests 提供套件 → kit 命中；platform 过滤对 kit 命中同样生效
+    manifest = ModuleManifest(
+        slug="alx_uart",
+        description="ALX 套件串口模块",
+        platforms={
+            "stm32": PlatformEntry(files=("uart.c",), kit=KIT_REFERENCE_ID)
+        },
+    )
+    stm32 = associated_references(
+        reference_root, manifests=[manifest], platform="stm32"
+    )
+    assert [e.id for e in stm32] == ["ALX-串口例程"]
+
+    mspm0 = associated_references(
+        reference_root, manifests=[manifest], platform="mspm0"
+    )
+    assert [e.id for e in mspm0] == ["地猛星例程"]
+
+    # 空串 = 不过滤（向后兼容，skeleton / generate 传缺省）
+    all_entries = associated_references(reference_root, manifests=[manifest])
+    assert [e.id for e in all_entries] == ["ALX-串口例程", "地猛星例程"]
+
+
+def test_associated_references_old_entries_without_platform_always_pass(tmp_path):
+    """旧条目（无 platform 字段，缺省 any）：任何平台过滤都进清单（兼容）。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+
+    for platform in ("mspm0", "stm32"):
+        entries = associated_references(
+            reference_root, topic_key="2026C", platform=platform
+        )
+        assert [e.id for e in entries] == [
+            TOPIC_REFERENCE_ID,
+            KIT_REFERENCE_ID,
+        ]
 
 
 def test_associated_references_empty_without_matches(tmp_path):
