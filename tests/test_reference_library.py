@@ -44,6 +44,7 @@ from contest_generator.reference_library import (
     get_reference,
     list_references,
     module_kit_vocabulary,
+    read_fulltext,
     search_references,
     validate_topic_anchor,
 )
@@ -59,6 +60,11 @@ from contest_generator.report import (
 )
 from contest_generator.webapp import AppContext, create_app
 from tests.fakes import FakeLLM, make_fake_stm32_projects
+from tests.generate_wiring_fakes import (
+    KIT_REFERENCE_ID,
+    TOPIC_REFERENCE_ID,
+    make_fake_reference_library,
+)
 
 # ---------------------------------------------------------------------------
 # 假件与构造助手
@@ -1044,3 +1050,98 @@ def test_confirm_route_passes_archive_wiring(tmp_path, fake_masters_dir):
     assert entries[0].description == "归档简介"
 
 
+
+
+# ---------------------------------------------------------------------------
+# 全文回读（两级注入第二级）：read_fulltext 归 store（selection 用例随迁，
+# 断言原样——拼装字节逐字不变）
+# ---------------------------------------------------------------------------
+
+
+def test_read_fulltext_assembles_files_with_headers(tmp_path):
+    """两级注入第二级的素材形状：带文件名标注的拼接文本。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+    entry = get_reference(reference_root, TOPIC_REFERENCE_ID)
+
+    text = read_fulltext(reference_root, entry)
+
+    assert "// ---- key_example.c ----" in text
+    assert "/* 数字钥匙例程 */" in text
+
+
+def test_read_fulltext_skips_binary_files_with_note(tmp_path):
+    """二进制素材（说明书 PDF 等）读不了文本：跳过并标注，不让生成流程整体失败。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+    entry_dir = reference_root / KIT_REFERENCE_ID
+    meta = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    meta["files"] = ["manual.txt", "manual.pdf"]
+    (entry_dir / "manual.pdf").write_bytes(b"%PDF\x00\x01\x02binary")
+    (entry_dir / "reference.json").write_text(
+        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
+    )
+
+    text = read_fulltext(
+        reference_root, get_reference(reference_root, KIT_REFERENCE_ID)
+    )
+
+    assert "套件接线与使用说明全文" in text
+    assert "manual.pdf" in text  # 二进制素材带标注而非静默消失
+
+
+def test_read_fulltext_missing_file_raises(tmp_path):
+    """条目素材文件缺失 = 库损坏：大声失败（宁可大声失败也不带病进上下文）。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+    (reference_root / TOPIC_REFERENCE_ID / "key_example.c").unlink()
+
+    with pytest.raises(ReferenceError, match="无法读取"):
+        read_fulltext(
+            reference_root, get_reference(reference_root, TOPIC_REFERENCE_ID)
+        )
+
+
+def test_read_fulltext_rejects_unsafe_path(tmp_path):
+    """坏条目（files 含 .. 越界路径）借条目 id 逃出库目录：入口拦截大声失败。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+    entry_dir = reference_root / TOPIC_REFERENCE_ID
+    meta = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    meta["files"] = ["../evil.c"]
+    (entry_dir / "reference.json").write_text(
+        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
+    )
+
+    with pytest.raises(ReferenceError, match="路径非法"):
+        read_fulltext(
+            reference_root, get_reference(reference_root, TOPIC_REFERENCE_ID)
+        )
+
+
+# ---------------------------------------------------------------------------
+# 结构测试（防回退，先例 errors.py / 04 工单）：全文读取归 store 的边界 pin
+# ---------------------------------------------------------------------------
+
+
+def test_selection_no_read_reference_fulltext():
+    """全文回读归 reference_library 后，selection 不再自持读取（防回退）。"""
+    import contest_generator.selection as selection
+
+    assert not hasattr(selection, "read_reference_fulltext")
+
+
+def test_file_label_marker_single_origin():
+    """标签格式单源：src 内 "// ---- " 字面量唯一出处 = library.py（file_label 定义处）。"""
+    src_root = Path(reference_library.__file__).parent
+    hits = [
+        (path.name, line_no)
+        for path in sorted(src_root.glob("*.py"))
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if "// ---- " in line
+    ]
+    assert hits == [("library.py", 481)]  # file_label 的 return 行（唯一出处）
+
+
+def test_reference_library_consumes_file_label():
+    """消费 pin：reference_library 从 library 引入 file_label（标签单源消费方）。"""
+    import contest_generator.library as library
+
+    assert hasattr(library, "file_label")
+    assert reference_library.file_label is library.file_label

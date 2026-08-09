@@ -24,7 +24,7 @@ from contest_generator.events import (
 from contest_generator.llm import (
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
-    JUDGMENT_CONTENT_CAP,
+    EMBEDDED_CONTENT_CAP,
     SELECT_SYSTEM_PROMPT,
     SKELETON_SYSTEM_PROMPT,
     JUDGMENT_SCOPE,
@@ -727,14 +727,14 @@ def test_summarize_prompt_caps_oversized_content():
 
 def test_truncate_content_caps_oversized_with_marker():
     """超长内容截断到预算并带标注（AI 知道读到的是截断内容）；未超长原样返回。"""
-    content = "x" * (JUDGMENT_CONTENT_CAP + 1000)
+    content = "x" * (EMBEDDED_CONTENT_CAP + 1000)
 
     truncated = _truncate_content(content)
 
-    assert truncated.startswith(content[:JUDGMENT_CONTENT_CAP])
+    assert truncated.startswith(content[:EMBEDDED_CONTENT_CAP])
     assert "截断" in truncated
     assert "不要脑补" in truncated
-    assert len(truncated) < JUDGMENT_CONTENT_CAP + 200
+    assert len(truncated) < EMBEDDED_CONTENT_CAP + 200
     assert _truncate_content("short") == "short"
 
 
@@ -837,11 +837,11 @@ def test_select_modules_truncates_oversized_problem():
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
 
-    llm.select_modules("赛题" * (JUDGMENT_CONTENT_CAP + 100), [ManifestSummary("dht11", "温湿度")])
+    llm.select_modules("赛题" * (EMBEDDED_CONTENT_CAP + 100), [ManifestSummary("dht11", "温湿度")])
 
     _, _, payload, _ = transport.calls[0]
     message = payload["messages"][1]["content"]
-    assert len(message) < JUDGMENT_CONTENT_CAP + 1000
+    assert len(message) < EMBEDDED_CONTENT_CAP + 1000
     assert "截断" in message
     assert TRUNCATION_NOTICE in message
 
@@ -851,11 +851,11 @@ def test_summarize_module_truncates_oversized_code():
     transport = FakeTransport(body=_api_response("摘要"))
     llm = _llm(transport)
 
-    llm.summarize_module("x" * (JUDGMENT_CONTENT_CAP + 1000))
+    llm.summarize_module("x" * (EMBEDDED_CONTENT_CAP + 1000))
 
     _, _, payload, _ = transport.calls[0]
     message = payload["messages"][1]["content"]
-    assert len(message) < JUDGMENT_CONTENT_CAP + 500
+    assert len(message) < EMBEDDED_CONTENT_CAP + 500
     assert "截断" in message
 
 
@@ -2306,7 +2306,7 @@ def test_select_prompt_embeds_requested_fulltexts():
     """两级注入第二级：模型要求阅读全文的参考文件以全文形态嵌入（带截断标注）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    long_text = "长全文" * (JUDGMENT_CONTENT_CAP + 100)
+    long_text = "长全文" * (EMBEDDED_CONTENT_CAP + 100)
 
     llm.select_modules(
         "赛题",
@@ -2420,9 +2420,9 @@ def test_select_modules_with_references_parses_reference_ids():
 
 def test_topic_split_topics_sends_full_text_without_truncation():
     """短全文（≤ TOPIC_SPLIT_LLM_CHAR_CAP）全量直传：旧路径截断到 4000 字符
-    （JUDGMENT_CONTENT_CAP）是 flash 模型静默漏题的根因之一，拆条不再截断。"""
+    （EMBEDDED_CONTENT_CAP）是 flash 模型静默漏题的根因之一，拆条不再截断。"""
     text = "2026 年赛题正文……" * 500
-    assert len(text) > JUDGMENT_CONTENT_CAP  # 超过旧截断上限，必须全量直传
+    assert len(text) > EMBEDDED_CONTENT_CAP  # 超过旧截断上限，必须全量直传
     transport = FakeTransport(
         body=_api_response(
             json.dumps(

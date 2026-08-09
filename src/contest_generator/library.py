@@ -472,8 +472,15 @@ def _write_manifest(module_dir: Path, manifest: ModuleManifest) -> None:
     write_json(module_dir, MANIFEST_FILENAME, manifest.to_dict())
 
 
+def file_label(name: str, note: str = "") -> str:
+    """库族素材拼装的共享文件名标注——模块源码 / 参考素材 / 参考全文共用。
+
+    prompt 可见契约单源：改格式只改这一处（曾三处各抄一份，漏一处模型就
+    逐功能看到不同格式）。note 追加在标注行末尾（二进制跳过等说明）。
+    """
+    return f"// ---- {name} ----{note}\n"
+
+
 def _assemble_code(files: Mapping[str, str]) -> str:
     """把模块各源文件拼成一份带文件名标注的代码（草稿与校验共用同一视角）。"""
-    return "\n".join(
-        f"// ---- {name} ----\n{content}" for name, content in files.items()
-    )
+    return "\n".join(file_label(name) + content for name, content in files.items())
