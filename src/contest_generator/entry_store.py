@@ -120,6 +120,11 @@ def delete_entry(root: Path, name: str) -> None:
     shutil.rmtree(entry_dir)
 
 
+# 键文法（目录名 = 键）：字母数字开头，字母数字下划线连字符——模块 slug 与
+# 母版平台名共用（原两库各抄一份，收进原语：文法单源，两库消费同一事实）
+SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
+
+
 def validate_store_key(name: str, pattern: Pattern[str], what: str) -> None:
     """目录名 = 键的校验原语：非法键大声失败（统一措辞）。各库传自己的
     文法正则与域名（如 "slug" / "平台名"）——正则内容与错误类型仍归各库，

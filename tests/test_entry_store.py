@@ -4,10 +4,12 @@
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 
 from contest_generator.entry_store import (
+    SLUG_PATTERN,
     StoreError,
     StoreParseError,
     StoreReadError,
@@ -108,3 +110,33 @@ def test_require_str_rejects_missing_empty_and_non_string(data):
 )
 def test_is_unsafe_path(path, unsafe):
     assert is_unsafe_path(path) is unsafe
+
+
+# ---------------------------------------------------------------------------
+# 结构自证（grep 式先例，见 test_include_contract.py）：键文法 SLUG_PATTERN
+# 定义单址 entry_store，library / master_store 不再各自抄 _SLUG_PATTERN
+# ---------------------------------------------------------------------------
+
+
+def test_slug_pattern_defined_single_origin():
+    """SLUG_PATTERN = 定义行仅 entry_store.py 一处（模块 slug 与母版平台名共用）。"""
+    import contest_generator.entry_store as entry_store
+
+    src_root = Path(entry_store.__file__).parent
+    hits = [
+        path.name
+        for path in sorted(src_root.glob("*.py"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("SLUG_PATTERN = ")
+    ]
+    assert hits == ["entry_store.py"], f"SLUG_PATTERN 应单址 entry_store.py"
+
+
+def test_no_private_slug_pattern_in_library_and_master_store():
+    """library / master_store 源码无 _SLUG_PATTERN 残留（已收进原语）。"""
+    import contest_generator.library as library
+    import contest_generator.master_store as master_store
+
+    for module in (library, master_store):
+        text = Path(module.__file__).read_text(encoding="utf-8")
+        assert "_SLUG_PATTERN" not in text
