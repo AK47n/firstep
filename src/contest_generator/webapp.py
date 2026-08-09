@@ -691,6 +691,45 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # 母版提炼（工单 08）：导入旧工程 → AI 报告 → 确认入库
     # ------------------------------------------------------------------
 
+    @app.post("/api/masters/stage")
+    @_map_errors
+    async def masters_stage(files: list[UploadFile] = File(...)) -> dict:
+        """「选择文件夹」上传（浏览器 webkitdirectory）→ 暂存目录 → 可喂扫描。
+
+        浏览器出于安全不暴露绝对路径，选中的旧工程文件夹只能整夹上传：每个
+        文件的文件名 = 文件夹内相对路径（webkitRelativePath，'/' 分隔），
+        服务端按相对路径原样落到 masters 目录同级 staged/<原文件夹名> 下——
+        目录名保留原名（重名覆盖写），扫描 / 报告 / 入库全程显示原名，前端
+        无需二次映射。路径穿越（.. / 绝对路径 / 盘符）与 .git 拒绝或跳过；
+        单次上限 512MB（防误选大目录）。暂存目录是普通目录，扫描后即用，
+        不自动清理。
+        """
+        staged_root = _masters_dir(context).parent / "staged"
+        name = ""
+        total = 0
+        for f in files:
+            rel = (f.filename or "").replace("\\", "/")
+            parts = rel.split("/")
+            if not rel or rel.startswith("/") or ".." in parts or ":" in rel:
+                raise HTTPException(400, f"非法文件路径：{rel!r}（浏览器应传文件夹内相对路径）")
+            if not name:
+                name = "".join(
+                    c if c.isalnum() or c in "-_. " else "_" for c in parts[0]
+                ).strip() or "upload"
+            if ".git" in parts:
+                continue  # 版本库不进母版素材（扫描侧同样忽略）
+            content = await f.read()
+            total += len(content)
+            if total > 512 * 1024 * 1024:
+                raise HTTPException(400, "文件夹过大（超过 512MB），请只选择工程源码目录")
+            dest = staged_root.joinpath(*parts)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with dest.open("wb") as out:
+                out.write(content)
+        if not name:
+            raise HTTPException(400, "没有收到任何文件（选择文件夹后浏览器会逐文件上传）")
+        return {"staged": [{"path": str(staged_root / name), "name": name}]}
+
     @app.post("/api/masters/scan")
     @_map_errors
     def masters_scan(payload: dict) -> list[dict]:
