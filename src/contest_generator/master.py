@@ -800,11 +800,24 @@ def confirm_distillation(
 # ---------------------------------------------------------------------------
 
 
+def _config_suffixes_text() -> str:
+    """全平台工程配置文件后缀，顿号 + "与" 连接（报错文案从识别表推导，工单 03）。"""
+    suffixes = [
+        suffix
+        for platform in KNOWN_PLATFORMS
+        for suffix in PLATFORM_CONFIG_FILE_SUFFIXES[platform]
+    ]
+    if len(suffixes) == 1:
+        return suffixes[0]
+    return "、".join(suffixes[:-1]) + " 与 " + suffixes[-1]
+
+
 def _detect_platform(project_dir: Path) -> str:
     """平台由工程配置文件判定：遍历 KNOWN_PLATFORMS ×
     PLATFORM_CONFIG_FILE_SUFFIXES（识别知识单源 = platforms.py，工单 04）。
     有 .uvprojx 为 stm32，有 .cproject/.project 为 mspm0；两者都有或都没有
-    抛 MasterError。工程文件在任意层级可识别（正点原子风格在 USER/ 子目录）。"""
+    抛 MasterError（文案全后缀列出，由表推导）。工程文件在任意层级可识别
+    （正点原子风格在 USER/ 子目录）。"""
     found = [
         platform
         for platform in KNOWN_PLATFORMS
@@ -814,10 +827,10 @@ def _detect_platform(project_dir: Path) -> str:
         )
     ]
     if len(found) > 1:
-        raise MasterError("工程同时含 .uvprojx 与 .cproject，无法判定平台")
+        raise MasterError(f"工程同时含 {_config_suffixes_text()}，无法判定平台")
     if found:
         return found[0]
-    raise MasterError("工程里没有 .uvprojx 或 .cproject，无法判定平台")
+    raise MasterError(f"工程里没有 {_config_suffixes_text()}，无法判定平台")
 
 
 def _config_summary(project_dir: Path, platform: str) -> tuple[str, ...]:

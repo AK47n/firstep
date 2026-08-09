@@ -137,8 +137,11 @@ def test_scan_rejects_project_without_config_file(tmp_path):
     bare.mkdir()
     (bare / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
 
-    with pytest.raises(MasterError, match="无法判定平台"):
+    with pytest.raises(MasterError) as excinfo:
         scan_project(bare)
+
+    # 报错文案由后缀表全量推导（工单 03，pinned 同步）
+    assert str(excinfo.value) == "工程里没有 .uvprojx、.cproject 与 .project，无法判定平台"
 
 
 def test_scan_detects_keil_platform_with_nested_uvprojx(tmp_path):
@@ -161,8 +164,11 @@ def test_scan_ignores_uvprojx_inside_git(tmp_path):
     (project / ".git").mkdir(parents=True)
     (project / ".git" / "project.uvprojx").write_text("<Project/>", encoding="utf-8")
 
-    with pytest.raises(MasterError, match="无法判定平台"):
+    with pytest.raises(MasterError) as excinfo:
         scan_project(project)
+
+    # 报错文案由后缀表全量推导（工单 03，pinned 同步）
+    assert str(excinfo.value) == "工程里没有 .uvprojx、.cproject 与 .project，无法判定平台"
 
 
 def test_scan_rejects_project_with_both_config_files(tmp_path):
@@ -171,8 +177,11 @@ def test_scan_rejects_project_with_both_config_files(tmp_path):
     (both / "project.uvprojx").write_text(FAKE_DISTILL_UVPROJX_B, encoding="utf-8")
     (both / "project.cproject").write_text("<cproject/>", encoding="utf-8")
 
-    with pytest.raises(MasterError, match="无法判定平台"):
+    with pytest.raises(MasterError) as excinfo:
         scan_project(both)
+
+    # 报错文案由后缀表全量推导（工单 03，pinned 同步）
+    assert str(excinfo.value) == "工程同时含 .uvprojx、.cproject 与 .project，无法判定平台"
 
 
 def test_scan_rejects_missing_dir(tmp_path):

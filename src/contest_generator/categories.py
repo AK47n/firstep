@@ -18,6 +18,7 @@ from typing import Callable, Literal, Sequence
 
 from .distill_adapters import get_distill_adapter
 from .master_store import MasterError
+from .platforms import PLATFORM_CONFIG_FILE_SUFFIXES, PLATFORM_MSPM0, PLATFORM_STM32
 from .report import ACTION_EXCLUDE, DistillationReport
 
 # 扫描时忽略的目录：版本库与构建产物不是母版内容。Debug/Release（CCS 构建
@@ -166,18 +167,30 @@ def infrastructure_reason(rel_path: str) -> str | None:
 UVPROJX_CONFIG_REASON = "工程配置文件：由确定性模板现写，保留文件全量入树"
 CCS_CONFIG_REASON = "工程配置文件：由确定性规则保留首份原样（CCS 按目录编译）"
 
+# 工程配置文件后缀 → 规则化原因（工单 03：识别表消费——平台后缀单源
+# platforms.PLATFORM_CONFIG_FILE_SUFFIXES，原因声明在本模块；别处不再硬编码
+# .uvprojx/.cproject/.project 字面量。新增平台 = 表加行 + 这里加一行平台→原因）
+_CONFIG_FILE_SUFFIX_REASONS: dict[str, str] = {
+    suffix: reason
+    for platform, reason in (
+        (PLATFORM_STM32, UVPROJX_CONFIG_REASON),
+        (PLATFORM_MSPM0, CCS_CONFIG_REASON),
+    )
+    for suffix in PLATFORM_CONFIG_FILE_SUFFIXES[platform]
+}
+
 
 def config_file_reason(rel_path: str) -> str | None:
     """工程配置文件识别：按后缀判定、大小写不敏感，返回规则化原因。
 
+    后缀 → 原因映射由 PLATFORM_CONFIG_FILE_SUFFIXES 推导（平台后缀单源）；
     .uvprojx → 渲染现写；.cproject/.project → 保留首份原样。命中即确定性
     处理——不进 AI 判定（AI 给出这类路径的判定是越界，拒绝）、不读全文。
     """
     lowered = rel_path.lower()
-    if lowered.endswith(".uvprojx"):
-        return UVPROJX_CONFIG_REASON
-    if lowered.endswith(".cproject") or lowered.endswith(".project"):
-        return CCS_CONFIG_REASON
+    for suffix, reason in _CONFIG_FILE_SUFFIX_REASONS.items():
+        if lowered.endswith(suffix):
+            return reason
     return None
 
 
