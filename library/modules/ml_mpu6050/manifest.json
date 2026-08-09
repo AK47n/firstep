@@ -1,0 +1,18 @@
+{
+  "slug": "ml_mpu6050",
+  "description": "MPU6050 六轴传感器的 I2C 通用驱动：提供初始化、寄存器读写以及加速度计和陀螺仪原始数据读取功能，供外部算法进一步解算姿态角。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "ml_libs/ml_mpu6050.c",
+        "ml_libs/ml_mpu6050.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "",
+      "kit": "MPU6050",
+      "source_url": "https://e.tb.cn/h.8g1H453ww0r0xH7?tk=Ue5KgBwTvkV"
+    }
+  }
+}

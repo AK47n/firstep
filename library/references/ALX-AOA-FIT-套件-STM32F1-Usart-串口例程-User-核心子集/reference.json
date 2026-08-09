@@ -1,0 +1,26 @@
+{
+  "id": "ALX-AOA-FIT-套件-STM32F1-Usart-串口例程-User-核心子集",
+  "title": "ALX-AOA-FIT 套件 STM32F1-Usart 串口例程（User 核心子集）",
+  "type": "例程代码",
+  "description": "该资料是基于STM32F103的USART1串口通信处理程序，用于接收并解析外部设备（如UWB定位模块）发送的数据帧。程序通过主循环持续检测串口接收状态，当收到完整的请求命令后，根据命令字（如0x2001）提取对应的距离、方位角和俯仰角信息，并存储到全局结构体TagTrans中供主程序使用。典型应用场景包括智能小车跟随、无人机起降引导、室内定位导航等需要实时获取目标方位参数的嵌入式系统。",
+  "anchor_kind": "kit",
+  "anchor_value": "最新ALX-AOA-FIT跟随套件开发资料",
+  "files": [
+    "APP/main.c",
+    "APP/main.h",
+    "APP/usart1process.c",
+    "APP/usart1process.h",
+    "Common/dataoperation.c",
+    "Common/dataoperation.h",
+    "Common/delay.c",
+    "Common/delay.h",
+    "Config/port.c",
+    "Config/port.h",
+    "Config/stm32f10x_conf.h",
+    "Drivers/uart.h",
+    "Drivers/uart1.c",
+    "Drivers/uart1.h",
+    "Interrupt/stm32f10x_it.c",
+    "Interrupt/stm32f10x_it.h"
+  ]
+}
