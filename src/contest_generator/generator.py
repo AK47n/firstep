@@ -39,7 +39,12 @@ from .clex import (
     strip_comments,
     top_level_defines,
 )
-from .skeleton import format_interface_blocks, verify_main_c_interfaces
+from .skeleton import (
+    format_interface_blocks,
+    is_header_path,
+    read_module_sources,
+    verify_main_c_interfaces,
+)
 from .topic_library import (
     TopicEntry,
     TopicError,
@@ -355,41 +360,33 @@ def build_module_corpus(
 ) -> ModuleCorpus:
     """一次读盘构建校验语料：模块文件（存在性 + 文本）+ 母版头 + 搜索目录。
 
-    文件缺失不 raise——存在性由 _check_module_files 门报告（missing 清单
-    记录，门禁职责不变）；母版 rglob 与 IncludePath 也在这里一次做完，
-    门禁不再扫盘。
+    模块文件读盘走 read_module_sources（骨架与门禁同读法，errors="replace"
+    编码策略单源）；缺失不 raise——存在性由 _check_module_files 门报告
+    （missing 清单记录，门禁职责不变）；母版 rglob 与 IncludePath 也在这里
+    一次做完，门禁不再扫盘。
     """
+    present, missing = read_module_sources(manifests, platform, library_dir)
+    files_by_slug: dict[str, list[ModuleFile]] = {}
+    for slug, rel, text, path in present:
+        kind = (
+            "h"
+            if is_header_path(rel)
+            else "c"
+            if rel.lower().endswith(".c")
+            else "other"
+        )
+        files_by_slug.setdefault(slug, []).append(
+            ModuleFile(rel=rel, kind=kind, text=text, own_dir=path.parent)
+        )
     modules: list[tuple[str, tuple[ModuleFile, ...]]] = []
     missing_platforms: list[str] = []
-    missing_files: list[tuple[str, str]] = []
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         if entry is None:
             missing_platforms.append(manifest.slug)
             modules.append((manifest.slug, ()))
             continue
-        files: list[ModuleFile] = []
-        for rel in entry.files:
-            path = library_dir / manifest.slug / rel
-            if not path.is_file():
-                missing_files.append((manifest.slug, rel))
-                continue
-            kind = (
-                "c"
-                if rel.lower().endswith(".c")
-                else "h"
-                if rel.lower().endswith(".h")
-                else "other"
-            )
-            files.append(
-                ModuleFile(
-                    rel=rel,
-                    kind=kind,
-                    text=path.read_text(encoding="utf-8", errors="replace"),
-                    own_dir=path.parent,
-                )
-            )
-        modules.append((manifest.slug, tuple(files)))
+        modules.append((manifest.slug, tuple(files_by_slug.get(manifest.slug, ()))))
 
     master_headers: list[tuple[str, str]] = []
     for path in iter_project_files(master_project_dir, pattern="*.h"):
@@ -407,7 +404,7 @@ def build_module_corpus(
         platform=platform,
         modules=tuple(modules),
         missing_platforms=tuple(missing_platforms),
-        missing_files=tuple(missing_files),
+        missing_files=tuple(missing),
         master_headers=tuple(master_headers),
         master_search_dirs=tuple(include_search_dirs(platform, master_project_dir)),
         master_project_dir=master_project_dir,
