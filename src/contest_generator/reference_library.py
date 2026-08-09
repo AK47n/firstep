@@ -2,10 +2,11 @@
 
 与模块库同风格：一个条目一个目录——reference.json（机器可读元数据：标题 /
 类型 / 简介 / 锚定）+ 素材文件本体（内容自持——归档 = 复制入库，源工程删除
-不丢）。条目字段 = 标题 / 类型 / 简介 / 锚定（赛题编号 或 套件型号；套件必须
+不丢）。条目字段 = 标题 / 类型 / 简介 / 锚定（赛题编号、套件型号或未锚定；套件必须
 从模块库已有 kit 词表选——录入时从 list_modules 收集（module_kit_vocabulary）、
 校验拒绝词表外值；赛题编号锚定与赛题库 key 同源校验（validate_topic_key，
-放行集合一致），查库确认（查无此条拒绝）留待素材区接线）。
+放行集合一致），查库确认（查无此条拒绝）留待素材区接线；未锚定留给不属于
+任何已登记赛题 / 套件的配套资料，锚定值恒为空）。
 
 录入流程（复用模块库草稿→校验→入库模式）：AI 通读素材生成简介草稿
 （llm.reference_summarize，/api/references/draft）→ 用户修改 / 补锚定 →
@@ -54,10 +55,12 @@ if TYPE_CHECKING:
 
 REFERENCE_META_FILENAME = "reference.json"
 
-# 锚定类型：赛题编号（如 2026C）或 套件型号（必须取自模块库已有 kit 词表）
+# 锚定类型：赛题编号（如 2026C）、套件型号（必须取自模块库已有 kit 词表）
+# 或 未锚定（配套资料不属于任何已登记赛题 / 套件，如通用开发板资料）
 ANCHOR_KIND_TOPIC = "topic"
 ANCHOR_KIND_KIT = "kit"
-ANCHOR_KINDS = (ANCHOR_KIND_TOPIC, ANCHOR_KIND_KIT)
+ANCHOR_KIND_NONE = "none"
+ANCHOR_KINDS = (ANCHOR_KIND_TOPIC, ANCHOR_KIND_KIT, ANCHOR_KIND_NONE)
 
 # 归档条目固定类型：被剔除的业务代码复制入库即为"例程代码"参考
 ARCHIVE_ENTRY_TYPE = "例程代码"
@@ -103,13 +106,20 @@ class ReferenceEntry:
         type_ = _require_str(data, "type")
         description = _require_str(data, "description")
         anchor_kind = _require_str(data, "anchor_kind")
-        anchor_value = _require_str(data, "anchor_value")
         if anchor_kind not in ANCHOR_KINDS:
             # 词表外锚定类型 = 元数据损坏（与 FileDecision.from_dict 拒绝词表外
             # action 同款）：浏览时大声失败，不把坏数据带进列表
             raise ReferenceError(
-                f"非法锚定类型：{anchor_kind!r}（应为 topic 或 kit）"
+                f"非法锚定类型：{anchor_kind!r}（应为 topic、kit 或 none）"
             )
+        if anchor_kind == ANCHOR_KIND_NONE:
+            # 未锚定：锚定值恒为空（非空 = 元数据损坏，拒绝）
+            raw_value = data.get("anchor_value")
+            if raw_value is not None and raw_value != "":
+                raise ReferenceError("未锚定条目的锚定值必须为空")
+            anchor_value = ""
+        else:
+            anchor_value = _require_str(data, "anchor_value")
         files = data.get("files")
         if not isinstance(files, list) or not all(
             isinstance(item, str) and item for item in files
@@ -383,7 +393,8 @@ def archive_reference(
 def _validate_anchor(
     anchor_kind: str, anchor_value: str, kit_vocabulary: Sequence[str]
 ) -> None:
-    """锚定校验：套件型号必须取自模块库已有 kit 词表，赛题编号过格式校验。"""
+    """锚定校验：套件型号必须取自模块库已有 kit 词表，赛题编号过格式校验，
+    未锚定要求锚定值为空。"""
     if anchor_kind == ANCHOR_KIND_TOPIC:
         validate_topic_anchor(anchor_value)
     elif anchor_kind == ANCHOR_KIND_KIT:
@@ -392,9 +403,12 @@ def _validate_anchor(
                 f"套件型号 {anchor_value!r} 不在模块库已有 kit 词表中"
                 f"（现有：{'、'.join(kit_vocabulary) or '无'}）"
             )
+    elif anchor_kind == ANCHOR_KIND_NONE:
+        if anchor_value:
+            raise ReferenceError("未锚定条目的锚定值必须为空")
     else:
         raise ReferenceError(
-            f"非法锚定类型：{anchor_kind!r}（应为 topic 或 kit）"
+            f"非法锚定类型：{anchor_kind!r}（应为 topic、kit 或 none）"
         )
 
 
