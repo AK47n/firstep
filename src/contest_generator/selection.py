@@ -30,9 +30,10 @@ from .events import (
     ProgressEvent,
     _emit,
 )
+from .entry_store import StoreError
 from .library import list_modules
 from .manifest import ManifestSummary, ModuleManifest, collect_kits
-from .reference_library import ReferenceEntry, search_references
+from .reference_library import ReferenceEntry, ReferenceError, get_reference, search_references
 from .wordlist import (
     HardwareWordGroup,
     category_names,
@@ -53,6 +54,10 @@ class SelectionError(ValueError):
 
 class UnknownModuleError(SelectionError):
     """选择了库中不存在的模块（或依赖引用了未知 slug）。"""
+
+
+class ManualReferenceError(SelectionError):
+    """手动选参考资料校验失败（不存在 / 重复——生成时用户显式点名的严格校验）。"""
 
 
 class DependencyCycleError(SelectionError):
@@ -172,6 +177,11 @@ def _get_manifest(by_slug: Mapping[str, ModuleManifest], slug: str) -> ModuleMan
 # 工单 03：候选清单带参考文件（两级注入第一级）+ 全文回读（第二级）
 # ---------------------------------------------------------------------------
 
+# 清单段条目的来源标注（工单 01 手动选参考资料）：auto = 锚定命中自动进清单
+# （两级：清单 → 点名 → 回读）；manual = 用户手动指定（全文直读，无需点名）。
+REFERENCE_SOURCE_AUTO = "auto"
+REFERENCE_SOURCE_MANUAL = "manual"
+
 
 def associated_references(
     reference_root: Path,
@@ -200,12 +210,46 @@ def associated_references(
 
 def reference_suggestions(
     entries: Sequence[ReferenceEntry],
+    *,
+    source: str = REFERENCE_SOURCE_AUTO,
 ) -> tuple[ReferenceSuggestion, ...]:
-    """候选清单的参考段形状：参考文件（标题 + 一句话简介），喂给选模块 AI。"""
+    """候选清单的参考段形状：参考文件（标题 + 一句话简介），喂给选模块 AI。
+
+    source = 来源标注（自动锚定 / 手动指定，prompt 清单行按它区分——手动条目
+    已全文直读，标注后模型无需点名）。
+    """
     return tuple(
-        ReferenceSuggestion(id=entry.id, title=entry.title, description=entry.description)
+        ReferenceSuggestion(id=entry.id, title=entry.title, description=entry.description, source=source)
         for entry in entries
     )
+
+
+def manual_reference_admission(
+    reference_root: Path, reference_ids: Sequence[str]
+) -> tuple[ReferenceEntry, ...]:
+    """手动选参考资料准入（追加语义，工单 01）：请求的 id → 完整条目，保序。
+
+    手动选条目必须真实存在于参考库——幻觉 id / 格式非法大声失败
+    （ManualReferenceError，对齐 _parse_reference_ids 的严格精神：宁可大声
+    失败也不带坏数据进上下文）；同一次请求重复 id 同样拒绝。准入 = 锚定
+    命中 ∪ 手动选（并集去重由装配点做，这里只校验单请求自身）。
+    """
+    entries: list[ReferenceEntry] = []
+    seen: set[str] = set()
+    for entry_id in reference_ids:
+        if entry_id in seen:
+            raise ManualReferenceError(f"重复选择参考文件：{entry_id}")
+        try:
+            entry = get_reference(reference_root, entry_id)
+        except (ReferenceError, StoreError) as exc:
+            # 查无此条（ReferenceError）与键非法（StoreError——条目 id 即目录名，
+            # 文法非法同不存在）统一收口成手动选校验失败，不裸漏 500
+            raise ManualReferenceError(
+                f"手动选择的参考文件不存在：{entry_id}"
+            ) from exc
+        seen.add(entry_id)
+        entries.append(entry)
+    return tuple(entries)
 
 
 # ---------------------------------------------------------------------------
@@ -292,11 +336,13 @@ class ReferenceSuggestion:
 
     清单段由 selection 层装配（associated_references → reference_suggestions）；
     id 与参考文件库条目的 id 一致——AI 点名要读的 id 就是全文回读的键。
+    source = 来源标注（auto 锚定 / manual 手动指定），prompt 清单行按它标注。
     """
 
     id: str
     title: str
     description: str
+    source: str = REFERENCE_SOURCE_AUTO
 
 
 # ---------------------------------------------------------------------------
@@ -622,6 +668,7 @@ def select_modules_convergent(
     reader: Callable[[str], str] | None = None,
     max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
     progress_emitter: ProgressEmitter | None = None,
+    manual_fulltexts: Mapping[str, str] | None = None,
 ) -> ModuleSelection:
     """题面驱动的收敛循环：功能需求层两轮一致即停，上限 max_rounds 轮。
 
@@ -631,6 +678,11 @@ def select_modules_convergent(
     收敛（_functional_layer_key，examples 不参与）。恰好两级：第 2 轮起不再
     注入新的参考全文（想要的已全给）。题面逐句编号在驱动层完成
     （_number_topic_sentences），编号跨轮稳定——收敛判定的对照句编号依赖它。
+
+    手动选参考资料（工单 01）经 manual_fulltexts（id → 全文，装配点已读好）
+    每轮直读进上下文：第 1 轮第一级就带（手动 = 全文直读强制，无需模型点名），
+    点名回读的第二级与第 2 轮起的确认轮照旧带上（全文上下文不丢）。references
+    与 manual_fulltexts 都缺时走旧签名（既有假 LLM 零改动）。
 
     模型拿不准（题面证据不足以判定）时输出 questions → 本轮即停、返回
     selection.questions 非空（向用户补问，由 webapp 层转补问终端事件收尾流）。
@@ -645,6 +697,8 @@ def select_modules_convergent(
     previous: tuple[FunctionRequirement, ...] = ()
     previous_key: tuple[tuple[str, int, tuple[str, ...], tuple[str, ...]], ...] | None = None
     selection: ModuleSelection | None = None
+    # 手动全文存在才传对应关键字——不传时保持旧签名（既有假 LLM 零改动）
+    manual_kwargs = {"manual_fulltexts": manual_fulltexts} if manual_fulltexts else {}
     for round_no in range(1, max_rounds + 1):
         _emit(
             progress_emitter,
@@ -653,16 +707,23 @@ def select_modules_convergent(
         round_topic = (
             _revision_prompt(numbered, previous) if round_no > 1 else numbered
         )
-        if references:
-            if round_no == 1 and reader is not None:
-                # 两级注入第一级：先清单；点名全文 → 回读（第二级），全文进上下文
-                first = llm.select_modules(round_topic, manifest_summaries, references)
+        if references or manual_fulltexts:
+            if round_no == 1 and reader is not None and references:
+                # 两级注入第一级：先清单；点名全文 → 回读（第二级），全文进上下文；
+                # 手动全文第一级就带（全文直读强制，不依赖模型点名）
+                first = llm.select_modules(
+                    round_topic, manifest_summaries, references, **manual_kwargs
+                )
                 if first.reference_ids:
                     fulltexts = {
                         entry_id: reader(entry_id) for entry_id in first.reference_ids
                     }
                     selection = llm.select_modules(
-                        round_topic, manifest_summaries, references, fulltexts
+                        round_topic,
+                        manifest_summaries,
+                        references,
+                        fulltexts,
+                        **manual_kwargs,
                     )
                 else:
                     selection = first
@@ -670,7 +731,11 @@ def select_modules_convergent(
                 # 第 2 轮起：已读全文照旧带上（恰好两级，不再注入新全文）；
                 # 没有想读的全文时保持清单级形状（空全文不进提示词）
                 selection = llm.select_modules(
-                    round_topic, manifest_summaries, references, fulltexts or None
+                    round_topic,
+                    manifest_summaries,
+                    references,
+                    fulltexts or None,
+                    **manual_kwargs,
                 )
         else:
             selection = llm.select_modules(round_topic, manifest_summaries)

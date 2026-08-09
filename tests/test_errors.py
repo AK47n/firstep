@@ -26,7 +26,7 @@ from contest_generator.llm import LLMError
 from contest_generator.manifest import ManifestError
 from contest_generator.patchers import UnknownPlatformError
 from contest_generator.report import ReportError
-from contest_generator.selection import SelectionError
+from contest_generator.selection import ManualReferenceError, SelectionError
 from contest_generator.wordlist import WordlistError
 
 # 刻意按 500 暴露的类（不登记）：这些类从不直达 web 层，泄漏必是真 bug，
@@ -116,6 +116,15 @@ def test_unknown_platform_error_is_registered_as_400() -> None:
     assert status == 400
     assert "未知平台" in message
     assert "stm32" in message  # 带已注册平台清单，用户可直接修正重试
+
+
+def test_manual_reference_error_registered_as_400() -> None:
+    """手动选参考资料校验失败（工单 01）：显式登记 error_to_http 表 → 400 中文。"""
+    status, message = error_entry(
+        ManualReferenceError("手动选择的参考文件不存在：幻觉 id")
+    )
+    assert status == 400
+    assert "不存在" in message
 
 
 def test_error_entry_contract_unchanged() -> None:
