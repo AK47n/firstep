@@ -16,12 +16,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
 
-from .keil import include_search_dirs
 from .library import list_modules
 from .llm import LLMError
 from .manifest import ManifestSummary, ModuleManifest, build_manifest_summaries
 from .master_store import master_project_dir
-from .patchers import PatcherRegistry, default_registry
+from .patchers import PatcherRegistry, default_registry, include_search_dirs
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
     ReferenceSuggestion,
@@ -402,7 +401,7 @@ def build_module_corpus(
         missing_platforms=tuple(missing_platforms),
         missing_files=tuple(missing_files),
         master_headers=tuple(master_headers),
-        master_search_dirs=tuple(include_search_dirs(master_project_dir)),
+        master_search_dirs=tuple(include_search_dirs(platform, master_project_dir)),
         master_project_dir=master_project_dir,
         main_c=main_c_content,
     )

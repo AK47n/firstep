@@ -65,6 +65,40 @@ class CcsPatcher:
         )
 
 
+def include_search_dirs(project_dir: Path) -> list[Path]:
+    """工程 .cproject buildIncludePath 的目录（CCS 对引号头文件的搜索范围）。
+
+    引号头搜索范围与 Keil 对偶：先当前文件所在目录，再按 buildIncludePath
+    顺序。条目相对 .cproject 所在目录（CCS 惯例，${PROJECT_LOC} = 工程根，
+    展开为该目录），绝对路径原样保留，其余相对路径以 .cproject 所在目录为
+    基准；按出现顺序去重。找不到 .cproject 返回空列表——生成路径母版必有
+    cproject（CcsPatcher 兜底报错），此函数只为解析 include 搜索目录。
+    """
+    try:
+        cproject = _find_cproject(project_dir)
+    except CcsProjectError:
+        return []
+    root = ET.parse(cproject).getroot()
+    dirs: list[Path] = []
+    seen: set[str] = set()
+    for configuration in _build_configurations(root):
+        for value in _option_values(
+            configuration, "ti.ccs.misc.options.buildIncludePath"
+        ):
+            if value.startswith("${PROJECT_LOC}/"):
+                resolved = cproject.parent / value[len("${PROJECT_LOC}/") :]
+            elif value == "${PROJECT_LOC}":
+                resolved = cproject.parent
+            else:
+                p = Path(value)
+                resolved = p if p.is_absolute() else (cproject.parent / p)
+            key = str(resolved).lower()
+            if key not in seen:
+                seen.add(key)
+                dirs.append(resolved.resolve())
+    return dirs
+
+
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
     """.cproject 的只读配置摘要：include path / 编译宏（母版提炼的配置对比素材）。
 
