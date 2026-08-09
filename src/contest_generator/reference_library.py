@@ -47,6 +47,7 @@ from .entry_store import (
 )
 from .library import file_label, list_modules
 from .manifest import collect_kits
+from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .topic_library import validate_topic_key
 
 if TYPE_CHECKING:
@@ -62,6 +63,12 @@ ANCHOR_KIND_TOPIC = "topic"
 ANCHOR_KIND_KIT = "kit"
 ANCHOR_KIND_NONE = "none"
 ANCHOR_KINDS = (ANCHOR_KIND_TOPIC, ANCHOR_KIND_KIT, ANCHOR_KIND_NONE)
+
+# 条目平台属性（工单 01）：stm32 / mspm0 / any。词表复用 platforms.py 的两
+# 个已知平台 + any（平台无关，缺省——旧条目缺字段 = any，向后兼容：任何生成
+# 平台都注入；带平台 = 只注入对应平台工程，装配点统一过滤）。
+PLATFORM_ANY = "any"
+REFERENCE_PLATFORMS = (PLATFORM_STM32, PLATFORM_MSPM0, PLATFORM_ANY)
 
 # 归档条目固定类型：被剔除的业务代码复制入库即为"例程代码"参考
 ARCHIVE_ENTRY_TYPE = "例程代码"
@@ -89,6 +96,7 @@ class ReferenceEntry:
     anchor_kind: str  # ANCHOR_KIND_TOPIC / ANCHOR_KIND_KIT
     anchor_value: str  # 锚定值（赛题编号 或 模块库已有 kit 型号）
     files: tuple[str, ...]  # 素材文件路径（相对条目目录）
+    platform: str = PLATFORM_ANY  # 平台属性：stm32 / mspm0 / any（缺省 any 向后兼容）
     file_count: int = 0  # 条目目录文件数（含 reference.json）
     size_bytes: int = 0  # 条目目录总体积（字节）
 
@@ -101,6 +109,7 @@ class ReferenceEntry:
             "description": self.description,
             "anchor_kind": self.anchor_kind,
             "anchor_value": self.anchor_value,
+            "platform": self.platform,
             "files": list(self.files),
             "file_count": self.file_count,
             "size_bytes": self.size_bytes,
@@ -135,6 +144,13 @@ class ReferenceEntry:
             isinstance(item, str) and item for item in files
         ):
             raise ReferenceError("files 必须是非空字符串列表")
+        platform = data.get("platform", PLATFORM_ANY)
+        if platform not in REFERENCE_PLATFORMS:
+            # 词表外平台属性 = 元数据损坏（与锚定类型同款）：浏览时大声失败，
+            # 不把坏数据带进列表
+            raise ReferenceError(
+                f"非法平台属性：{platform!r}（应为 stm32、mspm0 或 any）"
+            )
         return cls(
             id=entry_id,
             title=title,
@@ -143,6 +159,7 @@ class ReferenceEntry:
             anchor_kind=anchor_kind,
             anchor_value=anchor_value,
             files=tuple(files),
+            platform=platform,
         )
 
 
@@ -320,13 +337,15 @@ def add_reference(
     anchor_value: str,
     files: Mapping[str, str],
     kit_vocabulary: Sequence[str],
+    platform: str = PLATFORM_ANY,
 ) -> ReferenceEntry:
     """完整录入流程：结构校验通过才入库；失败不留半成品（与模块录入同款）。
 
     校验全部在落盘前：标题 / 类型 / 简介非空；锚定合法——套件型号必须在
     模块库已有 kit 词表内（词表外值拒绝，spec「不新打字」）、赛题编号通过
-    格式校验（查库确认待赛题库工单 01 落地后接入）；素材文件至少一个、路径
-    安全。简介由用户先经 /api/references/draft 生成草稿并确认，本函数不做
+    格式校验（查库确认待赛题库工单 01 落地后接入）；平台属性必须取自词表
+    （stm32 / mspm0 / any，词表外值大声失败）；素材文件至少一个、路径安全。
+    简介由用户先经 /api/references/draft 生成草稿并确认，本函数不做
     AI 一致性校验（配套资料可能是说明书等非代码素材，简介正确性由人确认）。
     条目目录名由标题生成（重复标题自动加 -2 / -3 后缀）。
     """
@@ -334,6 +353,7 @@ def add_reference(
     type_ = type.strip()
     description = description.strip()
     anchor_value = anchor_value.strip()
+    platform = platform.strip()
     if not title:
         raise ReferenceError("条目标题不能为空")
     if not type_:
@@ -341,6 +361,10 @@ def add_reference(
     if not description:
         raise ReferenceError("条目简介不能为空")
     _validate_anchor(anchor_kind, anchor_value, kit_vocabulary)
+    if platform not in REFERENCE_PLATFORMS:
+        raise ReferenceError(
+            f"非法平台属性：{platform!r}（应为 stm32、mspm0 或 any）"
+        )
     _validate_files(files)
 
     reference_root.mkdir(parents=True, exist_ok=True)
@@ -353,6 +377,7 @@ def add_reference(
         anchor_kind=anchor_kind,
         anchor_value=anchor_value,
         files=tuple(files),
+        platform=platform,
     )
     with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         _write_files(entry_dir, files)

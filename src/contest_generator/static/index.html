@@ -342,6 +342,16 @@
         </div>
         <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label><textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…"></textarea></div>
       </div>
+      <div class="row">
+        <div style="flex:1">
+          <label>平台属性（any = 平台无关，任何生成平台都注入；stm32 / mspm0 = 只注入对应平台工程，生成时按平台过滤）</label>
+          <div class="row">
+            <label style="cursor:pointer"><input type="radio" name="ref-platform" value="any" checked> any（不限平台）</label>
+            <label style="cursor:pointer"><input type="radio" name="ref-platform" value="stm32"> stm32</label>
+            <label style="cursor:pointer"><input type="radio" name="ref-platform" value="mspm0"> mspm0</label>
+          </div>
+        </div>
+      </div>
       <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库；可点「选择文件 / 选择文件夹」直接载入，二进制自动跳过）</h3>
       <div id="ref-files"></div>
       <div class="row" style="margin-top:8px">
@@ -820,13 +830,20 @@ function referenceAnchorLabel(e) {
   return "未关联";
 }
 
+// 平台标注 chip（工单 01 平台属性）：any = 平台无关，不标注；stm32 / mspm0
+// 显示"xx 平台"——手动选不过平台过滤，靠标注让用户自判
+function referencePlatformChip(e) {
+  return e.platform && e.platform !== "any"
+    ? ` <span class="chip out">${esc(e.platform)} 平台</span>` : "";
+}
+
 async function loadReferencePicker() {
   try {
     const entries = await apiGet("/api/references");
     $("ref-picker").innerHTML = entries.length ? entries.map((e) => `
       <label style="display:flex;align-items:baseline;gap:8px;margin-top:4px;cursor:pointer">
         <input type="checkbox" data-ref-pick="${esc(e.id)}" ${selectedReferenceIds.includes(e.id) ? "checked" : ""}>
-        <span class="slug">${esc(e.title)}</span>
+        <span class="slug">${esc(e.title)}</span>${referencePlatformChip(e)}
         <span class="muted">${referenceAnchorLabel(e)} · ${esc(e.description)}</span>
       </label>`).join("")
       : '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>';
@@ -845,7 +862,7 @@ function renderReferenceResult(data) {
   $("ref-result").innerHTML = refs.length
     ? '<div class="item"><div class="head"><span class="slug">本次注入的参考资料</span>'
       + '<span class="muted">（来源：' + refs.map((r) => r.source === "manual" ? "手动" : "自动").join(" / ") + '）</span></div>'
-      + refs.map((r) => `<div class="muted" style="padding:1px 0">${esc(r.title)} <span class="chip${r.source === "manual" ? " out" : ""}">${r.source === "manual" ? "手动" : "自动"}</span></div>`).join("")
+      + refs.map((r) => `<div class="muted" style="padding:1px 0">${esc(r.title)} <span class="chip${r.source === "manual" ? " out" : ""}">${r.source === "manual" ? "手动" : "自动"}</span>${referencePlatformChip(r)}</div>`).join("")
       + '</div>'
     : "";
 }
@@ -1207,7 +1224,7 @@ async function loadReferences() {
       <tr>
         <td class="slug">${esc(e.title)}</td>
         <td>${esc(e.type)}</td>
-        <td class="muted">${e.anchor_kind === "kit" ? "套件：" + esc(e.anchor_value) : e.anchor_kind === "none" ? "未锚定" : "赛题：" + esc(e.anchor_value)}</td>
+        <td class="muted">${e.anchor_kind === "kit" ? "套件：" + esc(e.anchor_value) : e.anchor_kind === "none" ? "未锚定" : "赛题：" + esc(e.anchor_value)}${referencePlatformChip(e)}</td>
         <td class="muted">${esc(e.description)}</td>
         <td class="muted" title="${esc(`${e.files.length} 个素材文件，路径清单见磁盘目录`)}">${e.file_count} 个文件 · ${formatSize(e.size_bytes)}</td>
         <td><button class="danger" data-ref-del="${esc(e.id)}">删除</button></td>
@@ -1276,11 +1293,12 @@ $("btn-ref-add").addEventListener("click", async () => {
   const anchorValue = anchorKind === "kit"
     ? $("ref-anchor-kit").value
     : anchorKind === "none" ? "" : $("ref-anchor-topic").value.trim();
+  const platform = document.querySelector('input[name="ref-platform"]:checked').value;
   $("btn-ref-add").disabled = true;
   $("btn-ref-add").innerHTML = '<span class="spinner"></span>入库中…';
   try {
     const entry = await apiPost("/api/references", {
-      title, type, description, anchor_kind: anchorKind, anchor_value: anchorValue, files,
+      title, type, description, anchor_kind: anchorKind, anchor_value: anchorValue, platform, files,
     });
     $("ref-add-msg").classList.add("ok");
     $("ref-add-msg").textContent = "已入库：" + entry.title;

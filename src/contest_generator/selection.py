@@ -33,7 +33,13 @@ from .events import (
 from .entry_store import StoreError
 from .library import list_modules
 from .manifest import ManifestSummary, ModuleManifest, collect_kits
-from .reference_library import ReferenceEntry, ReferenceError, get_reference, search_references
+from .reference_library import (
+    PLATFORM_ANY,
+    ReferenceEntry,
+    ReferenceError,
+    get_reference,
+    search_references,
+)
 from .wordlist import (
     HardwareWordGroup,
     category_names,
@@ -188,6 +194,7 @@ def associated_references(
     *,
     topic_key: str = "",
     manifests: Sequence[ModuleManifest] = (),
+    platform: str = "",
 ) -> tuple[ReferenceEntry, ...]:
     """该赛题 / 套件关联的参考文件（候选清单的参考段，两级注入第一级的素材）。
 
@@ -196,6 +203,10 @@ def associated_references(
     ↔ 套件链接可靠）。按 id 去重排序：search_references 的锚定过滤是子串
     匹配，同一条目可能被多个锚定值命中（如 kit 名含编号）。参考库目录不存在
     返回空。
+
+    platform 过滤（工单 01）：topic 命中与 kit 命中统一按条目平台属性过滤——
+    不匹配跳过；any 条目全进（平台无关）；platform 空串 = 不过滤（向后兼容，
+    skeleton / generate 等不注入参考文件的调用方传缺省即可）。
     """
     if not reference_root.is_dir():
         return ()
@@ -204,8 +215,19 @@ def associated_references(
     for anchor in (topic_key, *kits):
         if anchor:
             for reference in search_references(reference_root, anchor=anchor):
-                entries.setdefault(reference.id, reference)
+                if _platform_matches(reference, platform):
+                    entries.setdefault(reference.id, reference)
     return tuple(entries.values())
+
+
+def _platform_matches(reference: ReferenceEntry, platform: str) -> bool:
+    """条目平台属性匹配：any 全进；platform 空串 = 不过滤（向后兼容）；否则
+    条目平台必须与生成平台一致。"""
+    return (
+        not platform
+        or reference.platform == PLATFORM_ANY
+        or reference.platform == platform
+    )
 
 
 def reference_suggestions(
