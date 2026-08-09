@@ -16,6 +16,7 @@ from contest_generator.ccs import (
     INCLUDE_OPTION_SUPERCLASS,
     CcsPatcher,
     CcsProjectError,
+    include_search_dirs,
     _SETTINGS_MODULE_ID,
 )
 from tests.fakes import make_fake_ccs_master_project
@@ -248,3 +249,83 @@ def test_patch_twice_is_idempotent(ccs_project):
     after_second = (ccs_project / "project.cproject").read_text(encoding="utf-8")
 
     assert after_second == after_first
+
+
+# ---------------------------------------------------------------------------
+# 读侧 include_search_dirs（keil.py:207 的 CCS 对偶，工单 07）：四态合成 fixture
+# ---------------------------------------------------------------------------
+
+
+def _write_include_search_fixture(project_dir: Path, values: list[str]) -> Path:
+    """合成最小 .cproject：单个 Debug 配置 + 给定 buildIncludePath 值（读侧 fixture）。"""
+    project_dir.mkdir()
+    (project_dir / "project.cproject").write_text(
+        '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+        '<cproject>\n'
+        '  <storageModule moduleId="org.eclipse.cdt.core.settings">\n'
+        '    <cconfiguration id="c1">\n'
+        '      <storageModule moduleId="org.eclipse.cdt.core.settings">\n'
+        '        <cdtBuildSystem>\n'
+        '          <configuration name="Debug">\n'
+        '            <folderInfo name="/">\n'
+        '              <toolChain name="TI Code Generation Tools">\n'
+        '                <option name="Include Options" '
+        'superClass="ti.ccs.misc.options.buildIncludePath" valueType="includePath">\n'
+        + "".join(
+            f'                  <listOptionValue builtIn="false" value="{v}"/>\n'
+            for v in values
+        )
+        + '                </option>\n'
+        '              </toolChain>\n'
+        '            </folderInfo>\n'
+        '          </configuration>\n'
+        '        </cdtBuildSystem>\n'
+        '      </storageModule>\n'
+        '    </cconfiguration>\n'
+        '  </storageModule>\n'
+        '</cproject>\n',
+        encoding="utf-8",
+    )
+    return project_dir
+
+
+def test_include_search_dirs_expands_project_loc(tmp_path):
+    project = _write_include_search_fixture(
+        tmp_path / "proj", ["${PROJECT_LOC}/inc", "${PROJECT_LOC}"]
+    )
+
+    dirs = include_search_dirs(project)
+
+    assert dirs == [project / "inc", project]
+
+
+def test_include_search_dirs_keeps_absolute_paths(tmp_path):
+    abs_inc = tmp_path / "sdk" / "include"
+    project = _write_include_search_fixture(tmp_path / "proj", [str(abs_inc)])
+
+    dirs = include_search_dirs(project)
+
+    assert dirs == [abs_inc]
+
+
+def test_include_search_dirs_resolves_relative_paths(tmp_path):
+    project = _write_include_search_fixture(tmp_path / "proj", ["sdk/headers", "./inc"])
+
+    dirs = include_search_dirs(project)
+
+    assert dirs == [project / "sdk" / "headers", project / "inc"]
+
+
+def test_include_search_dirs_without_cproject_returns_empty(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+
+    assert include_search_dirs(empty) == []
+
+
+def test_include_search_dirs_dedupes_in_first_appearance_order(tmp_path):
+    project = make_fake_ccs_master_project(tmp_path / "proj")  # Debug: inc+driverlib，Release: inc
+
+    dirs = include_search_dirs(project)
+
+    assert dirs == [project / "inc", project / "driverlib"]
