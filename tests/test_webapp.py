@@ -46,6 +46,7 @@ from contest_generator.selection import (
     OutOfLibrarySuggestion,
     ReferenceSuggestion,
 )
+from contest_generator.reference_library import add_reference
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -1926,6 +1927,109 @@ def test_recommend_without_reference_ids_keeps_old_behavior(client, context):
         UWB_REFERENCE_ID,
     }
     assert {ref["source"] for ref in data["references"]} == {"auto"}
+
+
+def test_recommend_platform_filters_anchored_references(client, context):
+    """platform 透传（工单 01）：请求体 platform 随装配点过滤锚定命中——2024H
+    巡线模板（platform=mspm0）在 stm32 工程不进清单、mspm0 工程进。"""
+    _wire_material_libraries(context)
+    add_reference(
+        reference_library_dir(context[0].config.module_library_dir),
+        title="巡线模板（mspm0）",
+        type="参考例程",
+        description="mspm0 平台巡线配套例程",
+        anchor_kind="topic",
+        anchor_value="2026C",
+        platform="mspm0",
+        files={"xunji.c": "/* 巡线 */\n"},
+        kit_vocabulary=(),
+    )
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    stm32_data = _recommend_done(
+        client, {"problem_text": "粘贴", "topic_id": "2026C", "platform": "stm32"}
+    )
+    # 清单 = 旧条目（缺省 any）+ 其它锚定；mspm0 条目被过滤
+    assert "巡线模板-mspm0" not in [
+        ref["id"] for ref in stm32_data["references"]
+    ]
+    assert TOPIC_REFERENCE_ID in [ref["id"] for ref in stm32_data["references"]]
+    # 喂给选模块 LLM 的清单段同样不含 mspm0 条目（透传到装配点）
+    assert holder["llm"].reference_ids[0] == (
+        TOPIC_REFERENCE_ID,
+        KIT_REFERENCE_ID,
+        UWB_REFERENCE_ID,
+    )
+
+    mspm0_data = _recommend_done(
+        client, {"problem_text": "粘贴", "topic_id": "2026C", "platform": "mspm0"}
+    )
+    assert "巡线模板-mspm0" in [ref["id"] for ref in mspm0_data["references"]]
+    assert set(holder["llm"].reference_ids[2]) == {
+        TOPIC_REFERENCE_ID,
+        KIT_REFERENCE_ID,
+        UWB_REFERENCE_ID,
+        "巡线模板-mspm0",
+    }
+
+
+def test_recommend_platform_absent_keeps_old_behavior(client, context):
+    """缺省 platform（不传 / 空）：不过滤（向后兼容），与现状逐字节等价。"""
+    _wire_material_libraries(context)
+    add_reference(
+        reference_library_dir(context[0].config.module_library_dir),
+        title="巡线模板（mspm0）",
+        type="参考例程",
+        description="mspm0 平台巡线配套例程",
+        anchor_kind="topic",
+        anchor_value="2026C",
+        platform="mspm0",
+        files={"xunji.c": "/* 巡线 */\n"},
+        kit_vocabulary=(),
+    )
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    data = _recommend_done(client, {"problem_text": "粘贴", "topic_id": "2026C"})
+
+    assert "巡线模板-mspm0" in [ref["id"] for ref in data["references"]]
+
+
+def test_recommend_manual_reference_bypasses_platform_filter(client, context):
+    """手动选不过平台过滤（工单 01）：stm32 工程手动勾选 mspm0 条目仍注入
+    （用户显式意图），done 参考清单带 platform 标注供 UI 展示。"""
+    _wire_material_libraries(context)
+    mspm0_id = "巡线模板-mspm0"
+    add_reference(
+        reference_library_dir(context[0].config.module_library_dir),
+        title="巡线模板（mspm0）",
+        type="参考例程",
+        description="mspm0 平台巡线配套例程",
+        anchor_kind="topic",
+        anchor_value="2026C",
+        platform="mspm0",
+        files={"xunji.c": "/* 巡线 */\n"},
+        kit_vocabulary=(),
+    )
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    data = _recommend_done(
+        client,
+        {
+            "problem_text": "粘贴",
+            "topic_id": "2026C",
+            "platform": "stm32",
+            "reference_ids": [mspm0_id],
+        },
+    )
+
+    llm = holder["llm"]
+    assert mspm0_id in llm.manual_fulltexts[0]  # 手动全文直读照旧
+    refs = {ref["id"]: ref for ref in data["references"]}
+    assert refs[mspm0_id]["source"] == "manual"
+    assert refs[mspm0_id]["platform"] == "mspm0"  # done 带平台标注
 
 
 def test_recommend_manual_overlapping_anchor_deduped(client, context):

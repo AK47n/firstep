@@ -320,6 +320,114 @@ def test_add_reference_topic_anchor_roundtrip(tmp_path):
     assert data["size_bytes"] == entry.size_bytes
 
 
+def test_add_reference_platform_roundtrip(tmp_path):
+    """平台属性（工单 01）：入库带 platform → 元数据落盘、读盘回读、序列化带出。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="巡线模板",
+        type="参考例程",
+        description="2024H 巡线小车配套例程",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2024H",
+        platform="mspm0",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+
+    assert entry.platform == "mspm0"
+    meta = json.loads((root / entry.id / "reference.json").read_text(encoding="utf-8"))
+    assert meta["platform"] == "mspm0"
+    assert get_reference(root, entry.id).platform == "mspm0"
+    assert entry.to_dict()["platform"] == "mspm0"
+
+
+def test_add_reference_platform_defaults_to_any(tmp_path):
+    """缺省 = any（平台无关）：既有录入流程不带 platform 字段行为不变。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="通用开发板资料",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+
+    assert entry.platform == "any"
+    assert get_reference(root, entry.id).platform == "any"
+
+
+def test_add_reference_rejects_invalid_platform(tmp_path):
+    """词表外平台属性大声失败（与锚定词表同款严格）：esp32 不在 stm32 / mspm0 /
+    any 词表内。"""
+    root = _reference_root(tmp_path)
+    with pytest.raises(ReferenceError, match="非法平台属性"):
+        add_reference(
+            root,
+            title="ESP32 资料",
+            type="说明书",
+            description="x",
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            platform="esp32",
+            files=_sample_files(),
+            kit_vocabulary=(),
+        )
+    assert list_references(root) == []  # 失败不留半成品
+
+
+def test_reference_entry_platform_defaults_to_any_for_old_meta(tmp_path):
+    """旧条目（reference.json 无 platform 字段）：读盘缺省 any，向后兼容。"""
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="旧条目",
+        type="例程工程",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    entry = get_reference(root, list_references(root)[0].id)
+    entry_dir = root / entry.id
+    data = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    data.pop("platform")
+    (entry_dir / "reference.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+
+    assert get_reference(root, entry.id).platform == "any"
+
+
+def test_reference_entry_from_dict_rejects_invalid_platform(tmp_path):
+    """词表外平台属性 = 元数据损坏：浏览时大声失败，不把坏数据带进列表。"""
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="正常条目",
+        type="例程工程",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    entry = get_reference(root, list_references(root)[0].id)
+    entry_dir = root / entry.id
+    data = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    data["platform"] = "esp32"
+    (entry_dir / "reference.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+
+    with pytest.raises(ReferenceError, match="元数据不合法"):
+        list_references(root)
+
+
 def test_entry_stats_counts_whole_dir_including_unlisted_strays(tmp_path):
     """体量 = 磁盘实况（磁盘目录即数据库）：清单外的散文件也如实计入。
 
@@ -1081,6 +1189,64 @@ def test_references_bad_payloads_are_400(tmp_path):
     # 路径穿越在路由层就被拒绝（Starlette 路径归一化）；合法格式的不存在 id → 400
     assert client.delete("/api/references/../escape").status_code == 404
     assert client.delete("/api/references/missing").status_code == 400
+
+
+def test_references_add_platform_contract(tmp_path):
+    """录入表单契约（工单 01 平台属性）：POST 带 platform 入库、GET 响应带
+    platform；缺省 = any；词表外值 400 大声失败。"""
+    client = _app(tmp_path, ReferenceLLM())
+    added = client.post(
+        "/api/references",
+        json={
+            "title": "巡线模板",
+            "type": "参考例程",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2024H",
+            "platform": "mspm0",
+            "files": {"xunji.c": "/* 巡线 */\n"},
+        },
+    )
+    assert added.status_code == 200
+    assert added.json()["platform"] == "mspm0"
+
+    listed = client.get("/api/references").json()
+    assert [e["platform"] for e in listed] == ["mspm0"]
+
+    # 缺省 / 空 → any（向后兼容，旧录入流程不带 platform 字段）
+    legacy = client.post(
+        "/api/references",
+        json={
+            "title": "旧式录入",
+            "type": "说明书",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2024H",
+            "files": {"a.txt": "x"},
+        },
+    )
+    assert legacy.status_code == 200
+    assert legacy.json()["platform"] == "any"
+
+    # 词表外平台值 → 400（大声失败，不留半成品）
+    bad = client.post(
+        "/api/references",
+        json={
+            "title": "非法平台",
+            "type": "说明书",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2024H",
+            "platform": "esp32",
+            "files": {"a.txt": "x"},
+        },
+    )
+    assert bad.status_code == 400
+    assert "非法平台属性" in bad.json()["detail"]
+    assert [e["title"] for e in client.get("/api/references").json()] == [
+        "巡线模板",
+        "旧式录入",
+    ]
 
 
 def test_confirm_route_passes_archive_wiring(tmp_path, fake_masters_dir):
