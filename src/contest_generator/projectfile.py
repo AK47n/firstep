@@ -1,19 +1,67 @@
-"""平台工程文件 XML 读写底座：解析（带错误）与重序列化（缩进 + 头部回注）。
+"""平台工程文件底座：工程文件定位 / include 条目解析核心 / XML 读写。
 
 keil.py / ccs.py 共用同一套 ElementTree 读写基础设施——ET 重序列化会丢掉
 各平台工程文件特有的头部信息（keil 根元素的 xmlns 声明、ccs 根元素前的
 <?fileVersion?> 处理指令），写回前必须按原文补回；声明行与缩进也随平台
-不同。格式结构知识（include 语法、源文件注册）留在各修改器模块，这里只做
-读写的公共部分。
+不同。格式结构知识（include 语法、宏策略、源文件注册）留在各修改器模块，
+这里只做公共部分：孪生查找器 find_project_file（*.uvprojx / *.cproject
+只差 pattern 与错误类）与 include 条目解析核心 resolve_include_entries
+（绝对保留 / 相对基准 / 去重保序 / resolve）。
 """
 
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
+
+from .treewalk import iter_project_files
 
 DEFAULT_XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>'
+
+
+def find_project_file(
+    project_dir: Path, pattern: str, error_cls: type[Exception]
+) -> Path:
+    """定位平台工程文件（*.uvprojx / *.cproject）：任意层级 + 统一噪音跳过。
+
+    孪生查找器 _find_uvprojx / _find_cproject 的共享实现——两平台只差 pattern
+    与错误类型，错误文案从 pattern 派生逐字（"*.uvprojx" → ".uvprojx"）。
+    0 个 / 多个都抛 error_cls；treewalk 跳过规则（.git 任意层级 + 构建产物
+    目录）保证 .git 里的工程文件与 Listings/ 下的拷贝都不算数。
+    """
+    candidates = sorted(iter_project_files(project_dir, pattern=pattern))
+    if not candidates:
+        raise error_cls(f"工程目录里没有 {pattern[1:]} 文件：{project_dir}")
+    if len(candidates) > 1:
+        raise error_cls(
+            f"工程目录里有多个 {pattern[1:]}，无法确定改哪个："
+            + "、".join(p.name for p in candidates)
+        )
+    return candidates[0]
+
+
+def resolve_include_entries(entries: Iterable[str], base: Path) -> list[Path]:
+    """include 搜索目录条目的共享解析核心（keil/ccs 同构部分）。
+
+    strip + 反斜杠归一 → 空条目跳过；绝对路径原样保留，相对路径以 base 为
+    基准（keil 惯例 .uvprojx 所在目录 / ccs 惯例 .cproject 所在目录）；
+    按出现顺序去重（大小写不敏感）；resolve 为绝对目录。宏展开等平台格式
+    知识由调用方处理完再喂进来（keil 无宏，ccs 预处理后同缝）。
+    """
+    dirs: list[Path] = []
+    seen: set[str] = set()
+    for entry in entries:
+        entry = entry.strip().replace("\\", "/")
+        if not entry:
+            continue
+        p = Path(entry)
+        resolved = p if p.is_absolute() else (base / p)
+        key = str(resolved).lower()
+        if key not in seen:
+            seen.add(key)
+            dirs.append(resolved.resolve())
+    return dirs
 
 
 def parse_project_file(
