@@ -29,7 +29,7 @@
 | 二进制 | 非源码素材（文档 / 图片 / 模型 / 压缩包 / .exe 等）：文件头含 NUL 字节即判定，读全文会污染 LLM 判定素材，确定性剔除，但进报告 exclude 清单并带规则化原因 | master.py |
 | 文件类别 | 残留 / 旧 main.c / 基础设施 / 二进制四类的统一生命周期：识别（reason_of）→ 扫描分类 → 对比并集 → 报告汇编 → 越界拦截（AI 判定即报错）→ 处置校验；新增类别 = RULE_CATEGORIES 加一条 + 结构/对比字段声明 | master.py（RuleCategory / RULE_CATEGORIES） |
 | 骨架 | AI 生成的 main.c（初始化序列 + TODO 预留区）+ 静态自检（幻觉调用改注释占位） | skeleton.py |
-| C 词法层 | C 源码文本的机械切分唯一出处：围栏剥离 / 行号检测、注释剥离（keep_preprocessor 轴：# 行透传与否）、引号 include 提取、顶层 #define 扫描；接口 = 字符串进 / 字符串出，不碰盘上文件；不做调用形态识别（那是骨架自检的语义判断） | clex.py |
+| C 词法层 | C 源码文本的机械切分唯一出处：围栏剥离 / 行号检测、注释剥离（keep_preprocessor 轴：# 行透传与否）、引号 include 提取、顶层 #define 扫描、语句级切分原语（iter_c_regions 区域迭代 / match_bracket 括号配对 / next_significant 空白注释跳读，骨架替换走查与死循环检测的消费基座）；接口 = 字符串进 / 字符串出，不碰盘上文件；不做调用形态识别（那是骨架自检的语义判断） | clex.py |
 | 校验语料 | 生成前五道门禁共吃的内存语料：模块文件（文本 / 类别 / 所在目录）+ 母版头 + 母版搜索目录 + main.c，一次读盘；门禁退化为吃语料的纯谓词（可内存直构测试），不各自读盘 | generator.py（ModuleCorpus / ModuleFile / build_module_corpus） |
 | 模块摘要 | 模块库摘要对象（喂 LLM 的可用模块清单）：slug / description / kits（collect_kits 单源）/ 依赖；行渲染唯一实现 = to_line()（字符串只在 prompt 边界渲染一次，无反向解析方）；known_slugs 取 slug 字段 | manifest.py（ManifestSummary） |
 | 修改器 | 平台工程文件适配器：Keil 改 .uvprojx、CCS 改 .cproject；各自是格式读 + 写的唯一所有者；XML 解析 / 写回 / 头部回注共用 projectfile.py 底座 | keil.py / ccs.py / patchers.py / projectfile.py |
