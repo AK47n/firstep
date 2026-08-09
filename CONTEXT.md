@@ -57,4 +57,5 @@
 - 库素材拼装标签格式单源 = library.file_label：模块源码 / 参考素材 / 参考全文共用（prompt 可见契约，改格式只改这一处——曾三处各抄一份，漏一处模型就逐功能看到不同格式）。
 - 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版库模块（`master_store.master_project_dir`）。赛题入口装配 = `generator.resolve_topic_context` 唯一出处（永远返回 TopicContext，key 空串 = 未识别到历史赛题），路由只消费不装配。
 - 生成侧读缝成真——include 搜索目录按平台分派（写侧 patcher registry 对偶），generator 不再 import 平台模块。外部头豁免同缝：工具链头在 keil/ccs 声明、经 patchers.external_headers 分派（跨平台工具链头拒绝放行），C 标准库头（_LIBC_HEADERS）留门禁，generator 不持有平台工具链知识。
+- 模块源读路径单源：模块文件的读盘与头部判定归 skeleton.py 原语（read_module_sources + is_header_path），errors="replace" 编码策略单源——骨架（build_skeleton_interfaces）与生成语料（build_module_corpus）同读法，非 UTF-8 头文件骨架阶段不再崩（曾各抄一份读盘、两种容错）。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。
