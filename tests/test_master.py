@@ -1305,3 +1305,27 @@ def test_full_distillation_flow(fake_stm32_projects, fake_masters_dir, tmp_path)
     # 母版可被生成器使用：结构分析通过（.uvprojx = 确定性渲染产物在 user/ 下）
     assert (stored / "user" / "Project.uvprojx").is_file()
     assert any(stored.rglob("*.uvprojx"))
+
+
+# ---------------------------------------------------------------------------
+# 结构测试（防回退，先例 errors.py 防漏登 / test_categories）：蒸馏侧不再
+# 直连 keil / ccs，也不再用平台常量分派（工单 04，蒸馏适配接缝）
+# ---------------------------------------------------------------------------
+
+
+def test_master_no_direct_keil_ccs_names():
+    """master 的蒸馏侧平台行为全部经 distill_adapters 适配器（工单 04）：
+    直连 keil（守卫错误 / 渲染现写 / 摘要）与 ccs（摘要）一个不剩，平台
+    常量（PLATFORM_STM32 / PLATFORM_MSPM0）也不再用作分派。"""
+    import contest_generator.master as master
+
+    for name in (
+        "KeilProjectError",
+        "CcsProjectError",
+        "build_master_uvprojx",
+        "render_master_uvprojx",
+        "extract_config_summary",
+        "PLATFORM_STM32",
+        "PLATFORM_MSPM0",
+    ):
+        assert not hasattr(master, name)
