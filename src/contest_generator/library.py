@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Sequence
 from urllib.parse import urlparse
@@ -37,7 +37,7 @@ from .manifest import (
 )
 
 if TYPE_CHECKING:
-    from .llm import LLM, ValidationResult  # 仅类型注解用（模块库不运行时依赖 LLM 客户端）
+    from .llm import LLM  # 仅类型注解用（模块库不运行时依赖 LLM 客户端）
 
 ALLOWED_SOURCE_EXTENSIONS = frozenset({".c", ".h"})
 _SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
@@ -45,6 +45,14 @@ _SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 
 class LibraryError(ValueError):
     """模块库操作失败（模块不存在、slug 冲突、文件非法、校验未通过等）。"""
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    """模块简介与实际代码的一致性校验结果。"""
+
+    consistent: bool  # 简介与代码是否一致
+    issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
 
 
 # ---------------------------------------------------------------------------
