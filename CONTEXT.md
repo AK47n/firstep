@@ -13,7 +13,7 @@
 | 简介 | manifest.description，判据三要素：① 与代码一致（AI 校验）；② 硬件身份可确认——套件型号（kit）与购买链接（source_url），平台条目字段、新录入必填、URL 格式校验、由人补填；③ 专用性——逻辑绑定具体赛题的模块必须标注"XX 题专用"（如 lock_control / zone = 2026C 数字钥匙题专用，pid = 巡线题专用） | library.py / llm.py |
 | 依赖 | manifest 声明的模块依赖，生成前递归展开（依赖先于使用者）；上层依赖下层；不得声明对功能库的依赖（母版必有，声明反而使解析器找不到而报错） | selection.py |
 | 可选配套 | 模块的可裁剪组件：如 filter 之于 uwb_uart——代码层现状为必需依赖（uwb_uart.c 写死 include 与滤波调用），可选化（条件编译 + 生成器按选中定义宏）已立项未实现；普适 filter / 普适巡线逻辑为将来方向 | （未实现） |
-| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库）；元数据在母版目录外的平级 json | master.py |
+| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库）；元数据在母版目录外的平级 json | master.py（蒸馏编排）/ master_store.py（母版库 CRUD 与元数据） |
 | 功能库 | 母版自带的底层库（stm32 母版 = 逐飞 ml_*：I2C/UART/PWM/GPIO/OLED 等，headfile.h 聚合），先于一切模块存在、生成时随母版进工程；不属于模块库 | masters/stm32/ml_libs |
 | 提炼 | 导入多旧工程 → 对比 → AI 判定 → 报告（保留 / 整合 / 剔除 + 残留清单）→ 确认 → 入库；判定范围 = 公共 + 冲突 + 独有全部逐个判定，唯一判据：读内容判断是否通用、是否基础建设必需，不看重复次数 / 出现范围；确认是一条事务（confirm_distillation） | master.py + llm.py |
 | 条目库原语 | 模块库 / 赛题库 / 参考文件库共用的"目录即数据库"骨架：事务落盘、目录迭代、JSON 元数据读写与校验（read_json）、删除（delete_entry）、目录名 = 键的校验（validate_store_key）、必填字符串字段（require_str）、路径安全（is_unsafe_path）；不持业务形状，错误类型与文案归各库（StoreError 家族从不直达 web 层） | entry_store.py |
@@ -24,11 +24,11 @@
 | 模板 main.c | 母版自带的最小系统板空 main（时钟初始化 + while(1) 空循环 + TODO 区），确定性模板、非 AI 生成；生成时被按赛题的"骨架"覆盖 | master.py |
 | 整合 | 同路径多份内容不同时的动作：读多份 → 分析 → 产出通用版本（选一份是特例）；产物全文 + 说明进报告，用户审查后可改回选某份或剔除 | llm.py / master.py |
 | 工程配置文件 | .uvprojx（stm32）：确定性渲染器现写（固定落位 user/Project.uvprojx，C8T6 设备块，文件树引用全部保留 .c/.s，IncludePath = 保留 .h 目录），移出 AI 判定（判例 09 治本）；.cproject/.project（mspm0）：确定性保留首份原样；条目不可改动作、进报告 keep 带规则原因；报告带 .uvprojx 全文预览 | keil.py / master.py |
-| 启动文件 | startup_stm32f10x_*.s 候选跨工程去重：至多保留一份（优先 _md，无则路径排序取第一份），落选规则剔除（Reset_Handler 重复定义风险）；密度守卫：保留份非 _md 大声失败（目标板 C8T6 中密度） | keil.py / master.py |
-| 残留 | 构建产物（.o/.axf/.hex/.map/.lst/.crf/.dep/.lnp/.out/.elf/.htm）、备份（.bak 精确后缀，以及路径含 .bak 段的变体如 .bak2 / .bak_consolidate）、临时文件、IDE 用户选项（.uvoptx / .uvguix，编译时自动重建）：机器识别、确定性剔除，但进报告 exclude 清单并带规则化原因；构建输出目录（Debug/Release/Listings/Objects，后者任意层级）整目录忽略 | master.py |
-| 项目树遍历 | "绕开噪音遍历工程目录"的唯一出处：iter_project_files（rglob + 统一跳过规则，绝对路径、排序确定性）+ skip_project_noise（顶层 .git / Debug / Release / Listings / Objects + Keil 输出目录任意层级）——母版扫描 / 旧工程扫描 / 生成摘要 / 语料构建六处消费，不再各走各的树（旧矛盾：Listings/ 下的 .uvprojx keil 找得到、master 忽略）；不持业务形状，类别判定归 master.RuleCategory | treewalk.py |
-| 二进制 | 非源码素材（文档 / 图片 / 模型 / 压缩包 / .exe 等）：文件头含 NUL 字节即判定，读全文会污染 LLM 判定素材，确定性剔除，但进报告 exclude 清单并带规则化原因 | master.py |
-| 文件类别 | 残留 / 旧 main.c / 基础设施 / 二进制四类的统一生命周期：识别（reason_of）→ 扫描分类 → 对比并集 → 报告汇编 → 越界拦截（AI 判定即报错）→ 处置校验；新增类别 = RULE_CATEGORIES 加一条 + 结构/对比字段声明 | master.py（RuleCategory / RULE_CATEGORIES） |
+| 启动文件 | startup_stm32f10x_*.s 候选跨工程去重：至多保留一份（优先 _md，无则路径排序取第一份），落选规则剔除（Reset_Handler 重复定义风险）；密度守卫：保留份非 _md 大声失败（目标板 C8T6 中密度） | keil.py（格式）/ categories.py（去重生命周期） |
+| 残留 | 构建产物（.o/.axf/.hex/.map/.lst/.crf/.dep/.lnp/.out/.elf/.htm）、备份（.bak 精确后缀，以及路径含 .bak 段的变体如 .bak2 / .bak_consolidate）、临时文件、IDE 用户选项（.uvoptx / .uvguix，编译时自动重建）：机器识别、确定性剔除，但进报告 exclude 清单并带规则化原因；构建输出目录（Debug/Release/Listings/Objects，后者任意层级）整目录忽略 | categories.py（规则）/ treewalk.py（目录忽略） |
+| 项目树遍历 | "绕开噪音遍历工程目录"的唯一出处：iter_project_files（rglob + 统一跳过规则，绝对路径、排序确定性）+ skip_project_noise（顶层 .git / Debug / Release / Listings / Objects + Keil 输出目录任意层级）——母版扫描 / 旧工程扫描 / 生成摘要 / 语料构建六处消费，不再各走各的树（旧矛盾：Listings/ 下的 .uvprojx keil 找得到、master 忽略）；不持业务形状，类别判定归 categories.RuleCategory | treewalk.py |
+| 二进制 | 非源码素材（文档 / 图片 / 模型 / 压缩包 / .exe 等）：文件头含 NUL 字节即判定，读全文会污染 LLM 判定素材，确定性剔除，但进报告 exclude 清单并带规则化原因 | categories.py |
+| 文件类别 | 残留 / 旧 main.c / 基础设施 / 二进制四类的统一生命周期：识别（reason_of）→ 扫描分类 → 对比并集 → 报告汇编 → 越界拦截（AI 判定即报错）→ 处置校验；新增类别 = RULE_CATEGORIES 加一条 + 结构/对比字段声明 | categories.py（RuleCategory / RULE_CATEGORIES / classify，唯一出处） |
 | 骨架 | AI 生成的 main.c（初始化序列 + TODO 预留区）+ 静态自检（幻觉调用改注释占位） | skeleton.py |
 | C 词法层 | C 源码文本的机械切分唯一出处：围栏剥离 / 行号检测、注释剥离（keep_preprocessor 轴：# 行透传与否）、引号 include 提取、顶层 #define 扫描、语句级切分原语（iter_c_regions 区域迭代 / match_bracket 括号配对 / next_significant 空白注释跳读，骨架替换走查与死循环检测的消费基座）；接口 = 字符串进 / 字符串出，不碰盘上文件；不做调用形态识别（那是骨架自检的语义判断） | clex.py |
 | 校验语料 | 生成前五道门禁共吃的内存语料：模块文件（文本 / 类别 / 所在目录）+ 母版头 + 母版搜索目录 + main.c，一次读盘；门禁退化为吃语料的纯谓词（可内存直构测试），不各自读盘 | generator.py（ModuleCorpus / ModuleFile / build_module_corpus） |
@@ -48,7 +48,7 @@
 
 - 薄壳（webapp 路由 / LLM 网络调用 / 文本抽取）包裹纯逻辑核心。
 - 判定素材模型归模型层（依赖倒置）：JudgmentFile / FileVersion 在 report.py（master 构造、llm 消费），llm 层依赖模型层而非反向；master 不再从 llm 导入模型类型（仅 LLM 协议参数类型）。版本分组不变量（版本工程名组不重不漏）在素材模型上唯一声明与校验。
-- 文件类别生命周期单源化：四大类别（残留 / 旧 main.c / 基础设施 / 二进制）+ 工程配置文件（工单 09）各是一条 `RuleCategory` 描述（识别规则 + 确定性处置 + 报错文案），流水线遍历 `RULE_CATEGORIES`，不再每处复制平行分支；启动文件候选是表内钩子（决策 2，跨工程去重）。
+- 文件类别生命周期单源化：四大类别（残留 / 旧 main.c / 基础设施 / 二进制）+ 工程配置文件（工单 09）各是一条 `RuleCategory` 描述（识别规则 + 确定性处置 + 报错文案），流水线遍历 `RULE_CATEGORIES`，不再每处复制平行分支；启动文件候选是表内钩子（决策 2，跨工程去重）。类别表与 `classify` 收进 categories.py，master 只消费（结构测试防回退：恒等引用 + 模块内无规则函数）。
 - 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；表住 errors.py，结构测试反射枚举包内全部异常类断言已登记（白名单只放从不直达 web 层的类）——漏登从此是测试红，不是线上 500。
-- 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版模块（`master_project_dir`）。
+- 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版库模块（`master_store.master_project_dir`）。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。

@@ -49,7 +49,8 @@ from contest_generator.report import (
     ReferenceCandidate,
 )
 from contest_generator.topic_library import TopicDraft
-from contest_generator.master import distill_master, import_master, main_c_template, scan_project
+from contest_generator.master import distill_master, main_c_template, scan_project
+from contest_generator.master_store import import_master
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import (
     AppContext,

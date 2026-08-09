@@ -25,12 +25,11 @@ from fastapi.testclient import TestClient
 
 from contest_generator.config import AppConfig
 from contest_generator.master import (
-    MasterError,
     confirm_distillation,
     distill_master,
-    list_masters,
     scan_project,
 )
+from contest_generator.master_store import MasterError, list_masters
 from contest_generator.platforms import PLATFORM_STM32
 from contest_generator import reference_library
 from contest_generator.reference_library import (

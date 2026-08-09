@@ -33,7 +33,7 @@ from contest_generator.generator import (
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASS, _SETTINGS_MODULE_ID
 from contest_generator.llm import LLMError
 from contest_generator.manifest import ModuleManifest
-from contest_generator.master import MasterError
+from contest_generator.master_store import MasterError
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32, PatcherRegistry
 from contest_generator.topic_library import TopicError
 from tests.fakes import (
