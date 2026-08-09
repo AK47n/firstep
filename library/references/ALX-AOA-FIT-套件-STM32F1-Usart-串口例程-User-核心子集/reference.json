@@ -22,5 +22,6 @@
     "Drivers/uart1.h",
     "Interrupt/stm32f10x_it.c",
     "Interrupt/stm32f10x_it.h"
-  ]
+  ],
+  "platform": "stm32"
 }
