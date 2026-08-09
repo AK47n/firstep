@@ -1740,3 +1740,58 @@ def test_layout_dir_derivation_lives_in_config():
     assert (
         config.reference_library_dir(library_dir) == library_dir.parent / "references"
     )
+
+
+# ---------------------------------------------------------------------------
+# 标签会话（启动器模式：关浏览器 = 停服务）
+# ---------------------------------------------------------------------------
+
+
+def test_tabs_register_and_bye_manage_sessions(client, context):
+    """登记 / 注销标签会话：注册表增减正确，空 = 没有打开的前端页面。"""
+    ctx, _ = context
+    assert client.post("/api/tabs/register", json={"tab_id": "t1"}).status_code == 200
+    assert len(ctx.tab_registry) == 1
+    assert client.post("/api/tabs/bye", json={"tab_id": "t1"}).status_code == 200
+    assert len(ctx.tab_registry) == 0
+
+
+def test_tabs_require_tab_id(client):
+    """tab_id 必填非空（与其余端点同款 400 契约）。"""
+    assert client.post("/api/tabs/register", json={}).status_code == 400
+    assert client.post("/api/tabs/bye", json={}).status_code == 400
+
+
+def test_tabs_bye_schedules_exit_only_when_last_tab_and_launcher_managed(
+    client, context, monkeypatch
+):
+    """最后一个标签离开 + 启动器模式 → 宽限后退出；还有标签在开 → 不退出。"""
+    import contest_generator.webapp as webapp
+
+    ctx, _ = context
+    exits = []
+    monkeypatch.setattr(webapp, "_EXIT", lambda code: exits.append(code))
+    monkeypatch.setattr(webapp, "_launcher_managed", lambda: True)
+    monkeypatch.setattr(webapp, "_EXIT_GRACE", 0.01)
+    client.post("/api/tabs/register", json={"tab_id": "t1"})
+    client.post("/api/tabs/register", json={"tab_id": "t2"})
+    client.post("/api/tabs/bye", json={"tab_id": "t1"})
+    time.sleep(0.05)
+    assert exits == []  # 还有 t2 在开，不退出
+    client.post("/api/tabs/bye", json={"tab_id": "t2"})
+    time.sleep(0.05)
+    assert exits == [0]  # 最后一个离开 → 宽限后退出
+
+
+def test_tabs_bye_never_exits_outside_launcher_mode(client, context, monkeypatch):
+    """非启动器模式（测试 / 手动运行默认）：永不自杀。"""
+    import contest_generator.webapp as webapp
+
+    ctx, _ = context
+    exits = []
+    monkeypatch.setattr(webapp, "_EXIT", lambda code: exits.append(code))
+    monkeypatch.setattr(webapp, "_EXIT_GRACE", 0.01)
+    client.post("/api/tabs/register", json={"tab_id": "t1"})
+    client.post("/api/tabs/bye", json={"tab_id": "t1"})
+    time.sleep(0.05)
+    assert exits == []

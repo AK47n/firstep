@@ -34,6 +34,7 @@ from contest_generator.platforms import PLATFORM_STM32
 from contest_generator import reference_library
 from contest_generator.reference_library import (
     ANCHOR_KIND_KIT,
+    ANCHOR_KIND_NONE,
     ANCHOR_KIND_TOPIC,
     ARCHIVE_ENTRY_TYPE,
     ReferenceError,
@@ -337,12 +338,38 @@ def test_add_reference_kit_anchor_must_come_from_vocabulary(tmp_path):
         )
 
 
+def test_add_reference_none_anchor_roundtrip(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="MSPM0 电机参考例程",
+        type="参考例程",
+        description="TI 官方 MSPM0 电机控制例程（不属任何已登记赛题 / 套件）",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files=_sample_files(),
+        kit_vocabulary=(KIT_ALX,),
+    )
+
+    assert entry.anchor_kind == ANCHOR_KIND_NONE
+    assert entry.anchor_value == ""
+    meta = json.loads((root / entry.id / "reference.json").read_text(encoding="utf-8"))
+    assert meta["anchor_kind"] == ANCHOR_KIND_NONE
+    assert meta["anchor_value"] == ""
+    assert get_reference(root, entry.id) == entry
+    # 未锚定条目不参与按锚定过滤的搜索（锚定值空，子串必然不匹配）
+    assert search_references(root, anchor="2026C") == []
+    assert [e.id for e in search_references(root)] == [entry.id]
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
         {"anchor_kind": ANCHOR_KIND_TOPIC, "anchor_value": "26C"},
         {"anchor_kind": "series", "anchor_value": "2026C"},
         {"anchor_kind": ANCHOR_KIND_KIT, "anchor_value": ""},
+        # 未锚定但塞了锚定值 = 元数据损坏，拒绝
+        {"anchor_kind": ANCHOR_KIND_NONE, "anchor_value": "2026C"},
     ],
 )
 def test_add_reference_rejects_invalid_anchor(tmp_path, kwargs):
