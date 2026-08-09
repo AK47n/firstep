@@ -322,6 +322,7 @@
             <select id="ref-anchor-kind" style="width:130px">
               <option value="topic">赛题编号</option>
               <option value="kit">套件型号</option>
+              <option value="none">未锚定</option>
             </select>
             <input type="text" id="ref-anchor-topic" placeholder="如 2026C" style="flex:1;max-width:200px">
             <select id="ref-anchor-kit" class="hidden" style="flex:1;max-width:280px"></select>
@@ -499,6 +500,19 @@ function esc(text) {
   })[c]);
 }
 const KIND_TEXT = { missing: "缺平台版本（生成将失败）", unverified: "未验证", hardware_bound: "硬件绑定" };
+
+// ---------------------------------------------------------------------------
+// 标签会话（启动器模式）：打开登记、关闭注销——最后一个标签关掉 = 停服务
+// ---------------------------------------------------------------------------
+const TAB_ID_KEY = "firstep_tab_id";
+let tabId = sessionStorage.getItem(TAB_ID_KEY);
+if (!tabId) { tabId = crypto.randomUUID(); sessionStorage.setItem(TAB_ID_KEY, tabId); }
+fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ tab_id: tabId }) }).catch(() => {});
+window.addEventListener("pagehide", () => {
+  navigator.sendBeacon("/api/tabs/bye", new Blob([JSON.stringify({ tab_id: tabId })],
+    { type: "application/json" }));
+});
 
 // ---------------------------------------------------------------------------
 // 页签
@@ -816,7 +830,13 @@ function renderSelected() {
       ${(m.dependencies || []).length ? `<span class="muted">依赖：${esc(m.dependencies.join("、"))}</span>` : ""}
       ${moduleBadges(m)}
       <button class="danger" data-remove="${esc(m.slug)}">移除</button>
-    </div></div>`).join("");
+    </div>
+    ${Object.entries(m.platforms || {}).map(([platform, entry]) =>
+      entry.notes
+        ? `<div class="notes" style="margin-top:4px;color:var(--info)">【${esc(platform)} 配置】${esc(entry.notes)}</div>`
+        : ""
+    ).join("")}
+    </div>`).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
@@ -1051,9 +1071,9 @@ async function loadKitVocabulary() {
 }
 
 $("ref-anchor-kind").addEventListener("change", () => {
-  const kit = $("ref-anchor-kind").value === "kit";
-  $("ref-anchor-kit").classList.toggle("hidden", !kit);
-  $("ref-anchor-topic").classList.toggle("hidden", kit);
+  const kind = $("ref-anchor-kind").value;
+  $("ref-anchor-kit").classList.toggle("hidden", kind !== "kit");
+  $("ref-anchor-topic").classList.toggle("hidden", kind !== "topic");
 });
 
 async function loadReferences() {
@@ -1070,7 +1090,7 @@ async function loadReferences() {
       <tr>
         <td class="slug">${esc(e.title)}</td>
         <td>${esc(e.type)}</td>
-        <td class="muted">${esc(e.anchor_kind === "kit" ? "套件：" + e.anchor_value : "赛题：" + e.anchor_value)}</td>
+        <td class="muted">${e.anchor_kind === "kit" ? "套件：" + esc(e.anchor_value) : e.anchor_kind === "none" ? "未锚定" : "赛题：" + esc(e.anchor_value)}</td>
         <td class="muted">${esc(e.description)}</td>
         <td class="muted">${esc(e.files.join("、"))}</td>
         <td><button class="danger" data-ref-del="${esc(e.id)}">删除</button></td>
@@ -1136,7 +1156,7 @@ $("btn-ref-add").addEventListener("click", async () => {
   const anchorKind = $("ref-anchor-kind").value;
   const anchorValue = anchorKind === "kit"
     ? $("ref-anchor-kit").value
-    : $("ref-anchor-topic").value.trim();
+    : anchorKind === "none" ? "" : $("ref-anchor-topic").value.trim();
   $("btn-ref-add").disabled = true;
   $("btn-ref-add").innerHTML = '<span class="spinner"></span>入库中…';
   try {

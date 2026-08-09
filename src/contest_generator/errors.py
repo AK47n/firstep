@@ -27,6 +27,7 @@ from .master_store import MasterError
 from .patchers import UnknownPlatformError
 from .reference_library import ReferenceError
 from .selection import SelectionError
+from .stage import StageError
 from .topic_library import TopicError
 
 
@@ -58,6 +59,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ConfigError,
             ReferenceError,
             TopicError,
+            StageError,
         ),
         400,
         str,

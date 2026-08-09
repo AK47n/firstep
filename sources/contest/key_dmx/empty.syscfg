@@ -1,0 +1,105 @@
+/**
+ * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
+ * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * @cliArgs --device "MSPM0G350X" --part "Default" --package "LQFP-64(PM)" --product "mspm0_sdk@2.10.00.04"
+ * @v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)" --product "mspm0_sdk@2.10.00.04"
+ * @versions {"tool":"1.26.2+4477"}
+ */
+
+/**
+ * Import the modules used in this configuration.
+ */
+const GPIO   = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1  = GPIO.addInstance();
+const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");
+const UART   = scripting.addModule("/ti/driverlib/UART", {}, false);
+const UART1  = UART.addInstance();
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+const divider9       = system.clockTree["UDIV"];
+divider9.divideValue = 2;
+
+const gate7  = system.clockTree["MFCLKGATE"];
+gate7.enable = true;
+
+const multiplier2         = system.clockTree["PLL_QDIV"];
+multiplier2.multiplyValue = 5;
+
+const mux4       = system.clockTree["EXHFMUX"];
+mux4.inputSelect = "EXHFMUX_XTAL";
+
+const mux8       = system.clockTree["HSCLKMUX"];
+mux8.inputSelect = "HSCLKMUX_SYSPLL0";
+
+const pinFunction4     = system.clockTree["HFXT"];
+pinFunction4.inputFreq = 40;
+pinFunction4.enable    = true;
+
+SYSCTL.forceDefaultClkConfig = true;
+SYSCTL.clockTreeEn           = true;
+
+// ============================================================
+// GPIO: DIP 拨码开关 (PA12~PA15)
+// ============================================================
+GPIO1.$name = "KEY_FOB";
+GPIO1.associatedPins.create(4);
+
+// DIP bit0 (最左) — PA12, 上拉输入, ON=GND→读到0→该位为1
+GPIO1.associatedPins[0].$name            = "DIP0";
+GPIO1.associatedPins[0].direction        = "INPUT";
+GPIO1.associatedPins[0].internalResistor = "PULL_UP";
+GPIO1.associatedPins[0].pin.$assign      = "PA12";
+
+// DIP bit1 — PA13, 上拉输入
+GPIO1.associatedPins[1].$name            = "DIP1";
+GPIO1.associatedPins[1].direction        = "INPUT";
+GPIO1.associatedPins[1].internalResistor = "PULL_UP";
+GPIO1.associatedPins[1].pin.$assign      = "PA13";
+
+// DIP bit2 — PA14, 上拉输入
+GPIO1.associatedPins[2].$name            = "DIP2";
+GPIO1.associatedPins[2].direction        = "INPUT";
+GPIO1.associatedPins[2].internalResistor = "PULL_UP";
+GPIO1.associatedPins[2].pin.$assign      = "PA14";
+
+// DIP bit3 (最右) — PA15, 上拉输入
+GPIO1.associatedPins[3].$name            = "DIP3";
+GPIO1.associatedPins[3].direction        = "INPUT";
+GPIO1.associatedPins[3].internalResistor = "PULL_UP";
+GPIO1.associatedPins[3].pin.$assign      = "PA15";
+
+// ============================================================
+// UART1: PB6(TX) + PB7(RX) → DL-20 ZigBee 透传模块
+// 115200, 8N1, 无流控
+// ============================================================
+UART1.$name                            = "DL20";
+UART1.targetBaudRate                   = 115200;
+UART1.peripheral.$assign               = "UART1";
+UART1.peripheral.rxPin.$assign         = "PB7";
+UART1.peripheral.txPin.$assign         = "PB6";
+UART1.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
+UART1.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric0";
+UART1.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+UART1.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+UART1.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+UART1.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric1";
+
+/**
+ * Board peripherals (debugger + crystal)
+ */
+const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
+
+/**
+ * Pinmux solution for unlocked pins/peripherals.
+ */
+pinFunction4.peripheral.$suggestSolution           = "SYSCTL";
+pinFunction4.peripheral.hfxInPin.$suggestSolution  = "PA5";
+pinFunction4.peripheral.hfxOutPin.$suggestSolution = "PA6";
+Board.peripheral.$suggestSolution                  = "DEBUGSS";
+Board.peripheral.swclkPin.$suggestSolution         = "PA20";
+Board.peripheral.swdioPin.$suggestSolution         = "PA19";
