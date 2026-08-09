@@ -1446,7 +1446,7 @@ def test_settings_save_takes_effect_immediately(tmp_path):
 def test_settings_get_masks_api_key_and_put_keeps_masked_value(client, context):
     current = client.get("/api/settings").json()
     assert current["configured"] is True
-    assert "…" in current["api_key"]
+    assert current["api_key"] == "sk-t••t"  # 前 4 位 + 圆点(长度-5) + 末位
     assert "sk-test" not in current["api_key"]
 
     # 提交掩码 = 用户没改 key：沿用旧值，只有 base_url 生效
