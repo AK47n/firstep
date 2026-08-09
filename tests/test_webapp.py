@@ -1278,6 +1278,44 @@ def test_distill_rejects_unconfigured_api_before_streaming(tmp_path):
     assert "未配置 AI API" in resp.json()["detail"]
 
 
+def test_master_stage_folder_upload_then_scan(client, tmp_path):
+    """「选择文件夹」上传（/api/masters/stage）→ 暂存目录 → 可喂扫描 / 提炼。
+
+    浏览器不暴露绝对路径，整夹上传由 multipart 承载：每个文件的文件名 =
+    文件夹内相对路径（webkitRelativePath）；返回的暂存目录路径直接进
+    project_dirs，目录名保留原文件夹名（扫描 / 报告 / 入库显示原名）。
+    """
+    proj_a, _ = make_fake_stm32_projects(tmp_path / "old")
+    # 浏览器 webkitRelativePath = "原文件夹名/相对路径"（首段是选中的文件夹名）
+    files = [
+        ("files", (str(p.relative_to(proj_a.parent)).replace("\\", "/"), p.read_bytes()))
+        for p in proj_a.rglob("*")
+        if p.is_file()
+    ]
+    resp = client.post("/api/masters/stage", files=files)
+    assert resp.status_code == 200, resp.text
+    staged = resp.json()["staged"]
+    assert [s["name"] for s in staged] == ["proj-a"]
+    staged_dir = Path(staged[0]["path"])
+    assert staged_dir.is_dir()
+    assert (staged_dir / "src" / "oled.c").read_text(encoding="utf-8").startswith("/* 通用 OLED")
+    assert not (staged_dir / ".git").exists()   # 版本库跳过，与前端过滤一致
+    # 暂存目录可直接进扫描：平台检测 / 文件清单与原目录一致
+    scanned = client.post("/api/masters/scan", json={"project_dirs": [str(staged_dir)]}).json()
+    assert scanned[0]["name"] == "proj-a"
+    assert scanned[0]["platform"] == PLATFORM_STM32
+    assert "src/oled.c" in scanned[0]["files"]
+
+
+def test_master_stage_rejects_bad_relative_paths(client):
+    """上传带 .. / 绝对路径 / 盘符的文件名 → 400；空文件名框架级拦截（不落盘）。"""
+    for bad in ("../evil.c", "/abs/evil.c", "C:/evil.c"):
+        resp = client.post("/api/masters/stage", files=[("files", (bad, b"x"))])
+        assert resp.status_code == 400, bad
+    resp = client.post("/api/masters/stage", files=[("files", ("", b"x"))])
+    assert resp.status_code in (400, 422)
+
+
 def test_master_scan_oserror_returns_400_not_500(context, monkeypatch):
     """/api/masters/scan 漏捕 OSError → 裸 500（评审点名的已知 bug 类）→ 400。
 
