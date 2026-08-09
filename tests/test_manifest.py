@@ -273,3 +273,14 @@ def test_collect_kits_order_dedup_skips_empty():
     ]
 
     assert collect_kits(manifests) == ["K1", "K2", "K3"]
+
+
+def test_build_manifest_summaries_projection_lives_in_manifest():
+    """投影唯一出处 = manifest.py：llm 模块不再定义 build_manifest_summaries
+    （工单 03：生成核心运行时不再拉 LLM 栈——批量投影归 manifest 紧邻
+    from_manifest，llm 只剩协议与解析）。"""
+    import contest_generator.llm as llm
+    import contest_generator.manifest as manifest
+
+    assert hasattr(manifest, "build_manifest_summaries")
+    assert not hasattr(llm, "build_manifest_summaries")
