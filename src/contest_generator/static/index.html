@@ -282,6 +282,10 @@
       <div id="new-files"></div>
       <div class="row" style="margin-top:8px">
         <button id="btn-add-file-row">+ 文件</button>
+        <button id="btn-pick-mod-files">选择文件…</button>
+        <button id="btn-pick-mod-dir">选择文件夹…</button>
+        <input type="file" id="pick-mod-files" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">
+        <input type="file" id="pick-mod-dir" webkitdirectory multiple style="display:none">
         <button id="btn-draft-desc">AI 出简介草稿</button>
         <button id="btn-add-module-submit" class="primary">校验并入库</button>
       </div>
@@ -303,7 +307,7 @@
         <button id="btn-ref-search-clear">清空并显示全部</button>
       </div>
       <table style="margin-top:10px">
-        <thead><tr><th>标题</th><th>类型</th><th>锚定</th><th>简介</th><th>文件</th><th style="width:70px">操作</th></tr></thead>
+        <thead><tr><th>标题</th><th>类型</th><th>锚定</th><th>简介</th><th>体量</th><th style="width:70px">操作</th></tr></thead>
         <tbody id="ref-rows"></tbody>
       </table>
       <div id="ref-msg" class="error"></div>
@@ -330,10 +334,14 @@
         </div>
         <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label><textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…"></textarea></div>
       </div>
-      <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库）</h3>
+      <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库；可点「选择文件 / 选择文件夹」直接载入，二进制自动跳过）</h3>
       <div id="ref-files"></div>
       <div class="row" style="margin-top:8px">
         <button id="btn-ref-add-file-row">+ 文件</button>
+        <button id="btn-ref-pick-files">选择文件…</button>
+        <button id="btn-ref-pick-dir">选择文件夹…</button>
+        <input type="file" id="ref-pick-files" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">
+        <input type="file" id="ref-pick-dir" webkitdirectory multiple style="display:none">
         <button id="btn-ref-draft-desc">AI 生成简介草稿</button>
         <button id="btn-ref-add" class="primary">入库</button>
       </div>
@@ -384,8 +392,14 @@
   <section id="tab-master" class="page">
     <div class="card">
       <h2>母版提炼（导入旧工程 → AI 判定 → 确认入库）</h2>
-      <label for="project-dirs">旧工程目录（每行一个，必须是同一平台；含 .uvprojx 判定为 Keil 工程，含 .cproject 判定为 CCS 工程）</label>
+      <label for="project-dirs">旧工程目录（可直接输入每行一个，或点下方「选择文件夹」整夹导入；必须同一平台，含 .uvprojx 判定为 Keil 工程，含 .cproject 判定为 CCS 工程）</label>
       <textarea id="project-dirs" rows="4" placeholder="D:\old\proj-2024&#10;D:\old\proj-2025"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-pick-dirs">选择文件夹…</button>
+        <input type="file" id="pick-dirs" webkitdirectory multiple style="display:none">
+        <span class="muted">点开后直接选旧工程文件夹（自动整夹上传，无需手打路径）；选中的文件夹追加进上方列表</span>
+      </div>
+      <div id="staged-dirs" style="margin-top:8px"></div>
       <div class="row" style="margin-top:10px">
         <button id="btn-scan">扫描工程</button>
         <button id="btn-distill" class="primary" disabled>AI 提炼报告</button>
@@ -999,6 +1013,47 @@ function collectFiles(container) {
   return files;
 }
 
+// ===== 选择文件 / 文件夹 → 读为文本填入文件行（模块库 / 参考库共用）=====
+// 文件名 = 相对路径（选文件夹时保留子目录，匹配"文件名（含相对路径）"语义）；
+// 二进制（文件头含 NUL，与后端扫描同判据）与超大文件跳过不载入；老工程常见的
+// GBK 源文件按 gbk 兜底解码。
+const MAX_PICK_BYTES = 20 * 1024 * 1024;
+async function readPickedText(file) {
+  const buf = await file.arrayBuffer();
+  if (new Uint8Array(buf).subarray(0, 8192).includes(0)) return null;   // 二进制
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+  if (!text.includes("�")) return text;
+  try { return new TextDecoder("gbk").decode(buf); } catch { return null; }
+}
+async function pickFilesInto(input, container, msgEl) {
+  const files = Array.from(input.files);
+  input.value = "";
+  if (!files.length) return;
+  let loaded = 0, skipped = 0;
+  for (const f of files) {
+    if (f.webkitRelativePath && f.webkitRelativePath.split("/").includes(".git")) continue;
+    if (f.size > MAX_PICK_BYTES) { skipped++; continue; }
+    const text = await readPickedText(f);
+    if (text === null) { skipped++; continue; }
+    addFileRow(container, f.webkitRelativePath || f.name, text);
+    loaded++;
+  }
+  msgEl.classList.remove("ok");
+  msgEl.textContent = loaded
+    ? "已载入 " + loaded + " 个文件" + (skipped ? "，跳过 " + skipped + " 个二进制 / 超大文件" : "")
+    : "没有可载入的文本文件" + (skipped ? "（跳过 " + skipped + " 个二进制 / 超大文件）" : "");
+  if (loaded) msgEl.classList.add("ok");
+}
+function bindFilePicker(btnId, inputId, containerId, msgId) {
+  const input = $(inputId);
+  $(btnId).addEventListener("click", () => input.click());
+  input.addEventListener("change", () => pickFilesInto(input, $(containerId), $(msgId)));
+}
+bindFilePicker("btn-pick-mod-files", "pick-mod-files", "new-files", "add-msg");
+bindFilePicker("btn-pick-mod-dir", "pick-mod-dir", "new-files", "add-msg");
+bindFilePicker("btn-ref-pick-files", "ref-pick-files", "ref-files", "ref-add-msg");
+bindFilePicker("btn-ref-pick-dir", "ref-pick-dir", "ref-files", "ref-add-msg");
+
 function newModulePayload() {
   const files = collectFiles();
   if (files === null) return null;
@@ -1076,6 +1131,17 @@ $("ref-anchor-kind").addEventListener("change", () => {
   $("ref-anchor-topic").classList.toggle("hidden", kind !== "topic");
 });
 
+function formatSize(bytes) {
+  if (!Number.isFinite(bytes)) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? String(Math.round(v)) : v.toFixed(1)) + " " + units[i];
+}
+
+// 最近一次浏览的条目缓存：删除确认框显示体量（避免删 1630 个文件还不知道多大）
+let refEntryCache = [];
+
 async function loadReferences() {
   try {
     const params = new URLSearchParams();
@@ -1086,13 +1152,14 @@ async function loadReferences() {
     }
     const qs = params.toString();
     const entries = await apiGet("/api/references" + (qs ? "?" + qs : ""));
+    refEntryCache = entries;
     $("ref-rows").innerHTML = entries.length ? entries.map((e) => `
       <tr>
         <td class="slug">${esc(e.title)}</td>
         <td>${esc(e.type)}</td>
         <td class="muted">${e.anchor_kind === "kit" ? "套件：" + esc(e.anchor_value) : e.anchor_kind === "none" ? "未锚定" : "赛题：" + esc(e.anchor_value)}</td>
         <td class="muted">${esc(e.description)}</td>
-        <td class="muted">${esc(e.files.join("、"))}</td>
+        <td class="muted" title="${esc(`${e.files.length} 个素材文件，路径清单见磁盘目录`)}">${e.file_count} 个文件 · ${formatSize(e.size_bytes)}</td>
         <td><button class="danger" data-ref-del="${esc(e.id)}">删除</button></td>
       </tr>`).join("")
       : '<tr><td colspan="6" class="muted">库中暂无条目。</td></tr>';
@@ -1109,7 +1176,9 @@ $("btn-ref-search-clear").addEventListener("click", () => {
 });
 
 async function deleteReference(entryId) {
-  if (!confirm("删除参考文件条目 " + entryId + " 的整个目录？")) return;
+  const entry = refEntryCache.find((e) => e.id === entryId);
+  const bulk = entry ? `（${entry.file_count} 个文件，${formatSize(entry.size_bytes)}）` : "";
+  if (!confirm(`删除参考文件条目 ${entryId}${bulk} 的整个目录？`)) return;
   try {
     await apiDelete(`/api/references/${encodeURIComponent(entryId)}`);
     loadReferences();
@@ -1322,17 +1391,62 @@ $("btn-topic-confirm").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 let scannedProjects = null;   // 扫描结果（含报告确认所需）
 let currentReport = null;
+let stagedDirs = [];   // 「选择文件夹」整夹上传的暂存工程：{path, name}（浏览器不暴露绝对路径，只能整夹上传）
 
 function projectDirs() {
-  return $("project-dirs").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  const typed = $("project-dirs").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  return [...typed, ...stagedDirs.map((d) => d.path)];
 }
 
+function renderStagedDirs() {
+  $("staged-dirs").innerHTML = stagedDirs.map((d) => `
+    <div class="item"><span class="slug">${esc(d.name)}</span>
+      <span class="muted">${esc(d.path)}</span>
+      <button data-remove="${esc(d.path)}" class="danger" style="padding:2px 8px">移除</button></div>`).join("");
+  $("staged-dirs").querySelectorAll("[data-remove]").forEach((b) =>
+    b.addEventListener("click", () => {
+      stagedDirs = stagedDirs.filter((d) => d.path !== b.dataset.remove);
+      renderStagedDirs();
+      $("scan-result").innerHTML = "";   // 工程列表变了，旧扫描结果作废
+      $("btn-distill").disabled = true;
+    }));
+}
+
+$("btn-pick-dirs").addEventListener("click", () => $("pick-dirs").click());
+$("pick-dirs").addEventListener("change", async () => {
+  const input = $("pick-dirs");
+  const files = Array.from(input.files).filter((f) => {
+    const parts = f.webkitRelativePath.split("/");
+    return parts.length > 1 && !parts.includes(".git");
+  });
+  input.value = "";
+  if (!files.length) return;
+  $("scan-msg").classList.remove("ok");
+  $("scan-msg").textContent = "";
+  $("scan-result").innerHTML = "";
+  const form = new FormData();
+  for (const f of files) form.append("files", f, f.webkitRelativePath);
+  $("btn-pick-dirs").disabled = true;
+  try {
+    const data = await handle(await fetch("/api/masters/stage", { method: "POST", body: form }));
+    for (const s of data.staged) if (!stagedDirs.some((d) => d.path === s.path)) stagedDirs.push(s);
+    renderStagedDirs();
+    $("scan-msg").classList.add("ok");
+    $("scan-msg").textContent = "已导入 " + data.staged.length + " 个文件夹（" + files.length
+      + " 个文件），点「扫描工程」继续";
+  } catch (e) {
+    $("scan-msg").classList.remove("ok");
+    $("scan-msg").textContent = e.message;
+  } finally { $("btn-pick-dirs").disabled = false; }
+});
+
 $("btn-scan").addEventListener("click", async () => {
+  $("scan-msg").classList.remove("ok");
   $("scan-msg").textContent = "";
   $("report").classList.add("hidden");
   $("distill-progress").classList.add("hidden");   // 重新扫描 = 新的提炼上下文，收起旧进度
   const dirs = projectDirs();
-  if (!dirs.length) { $("scan-msg").textContent = "请先填写至少一个旧工程目录"; return; }
+  if (!dirs.length) { $("scan-msg").textContent = "请先选择或填写至少一个旧工程目录"; return; }
   try {
     scannedProjects = await apiPost("/api/masters/scan", { project_dirs: dirs });
     $("scan-result").innerHTML = scannedProjects.map((p) => `
