@@ -73,6 +73,7 @@ from tests.fakes import (
 )
 from tests.generate_wiring_fakes import (
     KIT_REFERENCE_ID,
+    OTHER_REFERENCE_ID,
     TOPIC_PROBLEM_TEXT,
     TOPIC_REFERENCE_ID,
     UWB_REFERENCE_ID,
@@ -1500,6 +1501,7 @@ class TopicAwareLLM(FakeLLM):
         self.problem_texts: list[str] = []
         self.reference_ids: list[tuple[str, ...]] = []
         self.fulltexts: list[dict[str, str]] = []
+        self.manual_fulltexts: list[dict[str, str]] = []
 
     def select_modules(
         self,
@@ -1507,10 +1509,12 @@ class TopicAwareLLM(FakeLLM):
         manifest_summaries: Sequence[str],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         self.problem_texts.append(problem_text)
         self.reference_ids.append(tuple(r.id for r in references))
         self.fulltexts.append(dict(reference_fulltexts or {}))
+        self.manual_fulltexts.append(dict(manual_fulltexts or {}))
         return self._selection
 
     def topic_extract_number(self, text: str) -> str | None:
@@ -1834,3 +1838,112 @@ def test_tabs_bye_never_exits_outside_launcher_mode(client, context, monkeypatch
     client.post("/api/tabs/bye", json={"tab_id": "t1"})
     time.sleep(0.05)
     assert exits == []
+
+
+# ---------------------------------------------------------------------------
+# 工单 01：手动选参考资料（reference_ids 契约 / 追加准入 / 全文直读 / 幻觉 400 /
+# 缺省兼容 / 最终参考清单透明闭环）
+# ---------------------------------------------------------------------------
+
+
+def test_recommend_manual_reference_ids_fulltext_into_first_round(client, context):
+    """手动选参考资料：reference_ids 随请求 → 手动全文直读进第一轮（第一级就带，
+    无需模型点名）；done 带最终参考清单（锚定 auto + 手动 manual）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    data = _recommend_done(
+        client,
+        {
+            "problem_text": "粘贴",
+            "topic_id": "2026C",
+            "reference_ids": [OTHER_REFERENCE_ID],
+        },
+    )
+
+    llm = holder["llm"]
+    # 手动全文第一级就带（全文直读强制）
+    assert OTHER_REFERENCE_ID in llm.manual_fulltexts[0]
+    assert "别的套件" in llm.manual_fulltexts[0][OTHER_REFERENCE_ID]
+    assert llm.manual_fulltexts[1] == llm.manual_fulltexts[0]  # 收敛确认轮照旧带上
+    # 最终参考清单：锚定 auto + 手动 manual（并集）
+    sources = {ref["id"]: ref["source"] for ref in data["references"]}
+    assert sources[TOPIC_REFERENCE_ID] == "auto"
+    assert sources[OTHER_REFERENCE_ID] == "manual"
+
+
+def test_recommend_manual_reference_unknown_id_fails_loudly(client, context):
+    """手动幻觉 id：400 大声失败（装配点同步校验在起流前——错误映射表已登记
+    ManualReferenceError → HTTP 400 中文，前端走非 200 分支提示）。"""
+    _wire_material_libraries(context)
+
+    resp = client.post(
+        "/api/recommend", json={"problem_text": "粘贴", "reference_ids": ["幻觉 id"]}
+    )
+
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
+
+
+def test_recommend_no_topic_manual_reference_is_only_admission(client, context):
+    """no-topic + 手动勾选（锚定 none 批次的唯一可用场景）：清单非空、全文直读；
+    done 最终清单只含 manual 条目。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    data = _recommend_done(
+        client,
+        {
+            "problem_text": "粘贴题面",  # 无 topic_id、提取失败 → no-topic 形
+            "reference_ids": [OTHER_REFERENCE_ID],
+        },
+    )
+
+    llm = holder["llm"]
+    assert llm.reference_ids[0] == (OTHER_REFERENCE_ID,)  # 清单 = 手动条目
+    assert OTHER_REFERENCE_ID in llm.manual_fulltexts[0]  # 全文直读
+    assert "topic_id" not in data
+    assert [ref["id"] for ref in data["references"]] == [OTHER_REFERENCE_ID]
+    assert data["references"][0]["source"] == "manual"
+
+
+def test_recommend_without_reference_ids_keeps_old_behavior(client, context):
+    """缺省兼容（回归）：不传 reference_ids → 链路与现状一致（无手动全文、最终
+    清单只含锚定 auto）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    data = _recommend_done(client, {"problem_text": "粘贴", "topic_id": "2026C"})
+
+    llm = holder["llm"]
+    assert all(not fulltexts for fulltexts in llm.manual_fulltexts)  # 无手动全文
+    assert {ref["id"] for ref in data["references"]} == {
+        TOPIC_REFERENCE_ID,
+        KIT_REFERENCE_ID,
+        UWB_REFERENCE_ID,
+    }
+    assert {ref["source"] for ref in data["references"]} == {"auto"}
+
+
+def test_recommend_manual_overlapping_anchor_deduped(client, context):
+    """并集去重：同一条目既锚定命中又被手动选 → 最终清单只出现一次（手动标注）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    data = _recommend_done(
+        client,
+        {
+            "problem_text": "粘贴",
+            "topic_id": "2026C",
+            "reference_ids": [TOPIC_REFERENCE_ID],
+        },
+    )
+
+    ids = [ref["id"] for ref in data["references"]]
+    assert ids.count(TOPIC_REFERENCE_ID) == 1
+    topic = next(ref for ref in data["references"] if ref["id"] == TOPIC_REFERENCE_ID)
+    assert topic["source"] == "manual"

@@ -192,7 +192,15 @@
     </div>
 
     <div class="card">
-      <h2>3. AI 推荐模块</h2>
+      <h2>3. 参考资料（可选）</h2>
+      <div class="muted">勾选 = 手动指定作学习素材注入（全文直读）；赛题 / 套件自动关联的批次无需勾选也会注入。</div>
+      <div id="ref-picker" style="margin-top:8px"></div>
+      <div id="ref-picker-msg" class="error"></div>
+      <div id="ref-result" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>4. AI 推荐模块</h2>
       <div class="row">
         <button id="btn-recommend" class="primary">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
@@ -210,7 +218,7 @@
     </div>
 
     <div class="card">
-      <h2>4. 模块清单与平台警告</h2>
+      <h2>5. 模块清单与平台警告</h2>
       <div class="row">
         <select id="module-pool" style="flex:1"></select>
         <button id="btn-add-module">添加模块</button>
@@ -222,7 +230,7 @@
     </div>
 
     <div class="card">
-      <h2>5. main.c 骨架</h2>
+      <h2>6. main.c 骨架</h2>
       <div class="row">
         <button id="btn-skeleton" class="primary">生成骨架</button>
         <span class="muted">AI 按所选模块接口排初始化序列；不存在的调用自动改写为注释占位，可手动微调。</span>
@@ -233,7 +241,7 @@
     </div>
 
     <div class="card">
-      <h2>6. 输出目录并生成</h2>
+      <h2>7. 输出目录并生成</h2>
       <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
       <input type="text" id="output-dir" placeholder="例如 D:\contest\demo">
       <div class="row" style="margin-top:10px">
@@ -664,6 +672,7 @@ function suggestionChip(s) {
 
 function renderRecommendResult(data) {
   if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
+  renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
   const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
   for (const m of fresh) selectedSlugs.push(m.slug);
   expanded = []; warnings = [];
@@ -775,7 +784,7 @@ async function startRecommend(problem) {
   try {
     resp = await fetch("/api/recommend", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined }),
+      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined, reference_ids: selectedReferenceIds }),
     });
   } catch (e) { stopRecProgress(); showRecommendError(e.message); return; }
   if (!resp.body) { stopRecProgress(); showRecommendError("服务响应无流"); return; }
@@ -801,7 +810,48 @@ $("btn-recommend").addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：4. 模块清单（增删 + 依赖展开 + 平台警告）
+// 生成页：3. 参考资料（可选）——手动勾选 = 追加准入 + 全文直读（工单 01）
+// ---------------------------------------------------------------------------
+let selectedReferenceIds = [];
+
+function referenceAnchorLabel(e) {
+  if (e.anchor_kind === "topic") return "赛题 " + esc(e.anchor_value) + " 关联";
+  if (e.anchor_kind === "kit") return "套件 " + esc(e.anchor_value) + " 关联";
+  return "未关联";
+}
+
+async function loadReferencePicker() {
+  try {
+    const entries = await apiGet("/api/references");
+    $("ref-picker").innerHTML = entries.length ? entries.map((e) => `
+      <label style="display:flex;align-items:baseline;gap:8px;margin-top:4px;cursor:pointer">
+        <input type="checkbox" data-ref-pick="${esc(e.id)}" ${selectedReferenceIds.includes(e.id) ? "checked" : ""}>
+        <span class="slug">${esc(e.title)}</span>
+        <span class="muted">${referenceAnchorLabel(e)} · ${esc(e.description)}</span>
+      </label>`).join("")
+      : '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>';
+    $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) =>
+      cb.addEventListener("change", () => {
+        const id = cb.dataset.refPick;
+        selectedReferenceIds = selectedReferenceIds.filter((x) => x !== id);
+        if (cb.checked) selectedReferenceIds.push(id);
+      }));
+    $("ref-picker-msg").textContent = "";
+  } catch (e) { $("ref-picker-msg").textContent = e.message; }
+}
+
+function renderReferenceResult(data) {
+  const refs = data.references || [];
+  $("ref-result").innerHTML = refs.length
+    ? '<div class="item"><div class="head"><span class="slug">本次注入的参考资料</span>'
+      + '<span class="muted">（来源：' + refs.map((r) => r.source === "manual" ? "手动" : "自动").join(" / ") + '）</span></div>'
+      + refs.map((r) => `<div class="muted" style="padding:1px 0">${esc(r.title)} <span class="chip${r.source === "manual" ? " out" : ""}">${r.source === "manual" ? "手动" : "自动"}</span></div>`).join("")
+      + '</div>'
+    : "";
+}
+
+// ---------------------------------------------------------------------------
+// 生成页：5. 模块清单（增删 + 依赖展开 + 平台警告）
 // ---------------------------------------------------------------------------
 function renderModulePool() {
   $("module-pool").innerHTML = (state.modules || [])
@@ -1922,6 +1972,7 @@ $("btn-save-settings").addEventListener("click", async () => {
   renderModulePool();
   $("new-platform").innerHTML = state.platforms.map((p) =>
     `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  loadReferencePicker();
 })();
 </script>
 </body>

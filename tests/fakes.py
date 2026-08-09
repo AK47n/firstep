@@ -608,6 +608,7 @@ class FakeLLM:
         manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         return self._selection
 

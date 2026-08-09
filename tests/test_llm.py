@@ -50,6 +50,7 @@ from contest_generator.llm import (
     parse_validation_result,
 )
 from contest_generator.selection import (
+    REFERENCE_SOURCE_MANUAL,
     ModuleSelection,
     ReferenceSuggestion,
 )
@@ -2238,9 +2239,14 @@ def test_distill_master_failure_path_emits_retries_then_raises():
 
 
 def _suggestion(
-    entry_id: str, title: str = "参考标题", description: str = "一句话简介"
+    entry_id: str,
+    title: str = "参考标题",
+    description: str = "一句话简介",
+    source: str = "auto",
 ) -> ReferenceSuggestion:
-    return ReferenceSuggestion(id=entry_id, title=title, description=description)
+    return ReferenceSuggestion(
+        id=entry_id, title=title, description=description, source=source
+    )
 
 
 def test_select_prompt_includes_reference_list_when_given():
@@ -2523,3 +2529,47 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
     assert result.requirements[0].requirement == "识别数字"
     assert result.requirements[0].suggestions[0].name == "视觉模块"
 
+
+
+def test_select_prompt_embeds_manual_fulltexts_with_label():
+    """手动选参考资料（工单 01）：全文直读段（统一截断，read_fulltext 的 file_label
+    文件名标注原样保留）；清单段手动条目带来源标注（无需点名）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * (
+        EMBEDDED_CONTENT_CAP + 100
+    )
+
+    llm.select_modules(
+        "赛题",
+        [ManifestSummary("dht11", "温湿度")],
+        references=[
+            _suggestion("visual-ref", "视觉参考", "视觉资料", source=REFERENCE_SOURCE_MANUAL)
+        ],
+        manual_fulltexts={"visual-ref": manual_text},
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "以下为你手动指定的参考文件全文" in user_message
+    assert "视觉资料正文" in user_message
+    assert "// ---- visual.txt ----" in user_message  # read_fulltext 的 file_label 标注保留
+    assert TRUNCATION_NOTICE in user_message  # 手动全文同样走统一截断（带标注）
+    assert "（用户手动指定，全文已直接给出，无需点名）" in user_message  # 清单行来源标注
+
+
+def test_select_prompt_without_manual_keeps_old_shape():
+    """不传 manual_fulltexts：提示词与既有形态一致（无手动段、清单行无来源标注）——
+    缺省 = 现状逐字节等价（回归钉死）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "赛题",
+        [ManifestSummary("dht11", "温湿度")],
+        references=[_suggestion("key-example", "2026C 参考", "配套例程")],
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "手动" not in user_message
+    assert "无需点名" not in user_message
+    assert "- key-example: 2026C 参考 —— 配套例程" in user_message  # 清单行形状不变

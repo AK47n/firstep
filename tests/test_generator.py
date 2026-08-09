@@ -45,6 +45,10 @@ from contest_generator.patchers import (
     include_search_dirs,
 )
 from contest_generator.reference_library import ReferenceError
+from contest_generator.selection import (
+    ManualReferenceError,
+    REFERENCE_SOURCE_MANUAL,
+)
 from contest_generator.topic_library import TopicError
 from tests.fakes import (
     DHT11_H,
@@ -61,6 +65,7 @@ from tests.fakes import (
 )
 from tests.generate_wiring_fakes import (
     KIT_REFERENCE_ID,
+    OTHER_REFERENCE_ID,
     TOPIC_PROBLEM_TEXT,
     TOPIC_REFERENCE_ID,
     UWB_REFERENCE_ID,
@@ -1438,3 +1443,103 @@ def test_generator_module_file_segment_has_no_raw_read_text():
     master_start = text.index("    master_headers:", loop_start)
     segment = text[loop_start:master_start]
     assert "read_text" not in segment
+
+
+# ---------------------------------------------------------------------------
+# 工单 01：手动选参考资料（追加准入 = 锚定 ∪ 手动，全文直读；no-topic 唯一准入）
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_topic_context_manual_ids_added_as_admission(tmp_path):
+    """手动准入（追加语义）：reference_ids → 手动条目进清单（来源标注 manual）+
+    全文直读（manual_fulltexts）；锚定命中照旧自动进（并集，锚定两级不动）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="粘贴",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        reference_ids=[OTHER_REFERENCE_ID],
+    )
+
+    # 锚定照旧自动进（追加语义）
+    assert TOPIC_REFERENCE_ID in [s.id for s in ctx.suggestions]
+    # 手动条目进清单（来源标注 manual）+ 全文直读
+    manual = [s for s in ctx.suggestions if s.source == REFERENCE_SOURCE_MANUAL]
+    assert [s.id for s in manual] == [OTHER_REFERENCE_ID]
+    assert [e.id for e in ctx.manual_references] == [OTHER_REFERENCE_ID]
+    assert "别的套件" in ctx.manual_fulltexts[OTHER_REFERENCE_ID]
+
+
+def test_resolve_topic_context_manual_overlapping_anchor_deduped(tmp_path):
+    """并集去重：同一条目既锚定命中又被手动选，清单只出现一次（保留锚定位置、
+    标注手动）；全文仍直读（手动 = 全文直读强制）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="粘贴",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        reference_ids=[TOPIC_REFERENCE_ID],
+    )
+
+    ids = [s.id for s in ctx.suggestions]
+    assert ids.count(TOPIC_REFERENCE_ID) == 1
+    topic = next(s for s in ctx.suggestions if s.id == TOPIC_REFERENCE_ID)
+    assert topic.source == REFERENCE_SOURCE_MANUAL  # 手动优先标注（用户显式选择）
+    assert TOPIC_REFERENCE_ID in ctx.manual_fulltexts  # 全文仍直读
+
+
+def test_resolve_topic_context_no_topic_manual_is_only_admission(tmp_path):
+    """no-topic + 手动选：手动条目是唯一准入（清单非空 + 全文直读 + 回读器可读
+    手动条目）；未选 = 现行为（零参考）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="",
+        problem_text="粘贴题面",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        reference_ids=[OTHER_REFERENCE_ID],
+    )
+
+    assert ctx.key == ""
+    assert ctx.references == ()  # 锚定零命中
+    assert [s.id for s in ctx.suggestions] == [OTHER_REFERENCE_ID]
+    assert ctx.suggestions[0].source == REFERENCE_SOURCE_MANUAL
+    assert "别的套件" in ctx.manual_fulltexts[OTHER_REFERENCE_ID]
+    assert "别的套件" in ctx.read_fulltext(OTHER_REFERENCE_ID)  # 回读器可读手动条目
+
+    bare = resolve_topic_context(
+        llm=None,
+        topic_key="",
+        problem_text="粘贴题面",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+    assert bare.suggestions == () and bare.manual_fulltexts is None  # 未选 = 现行为
+
+
+def test_resolve_topic_context_manual_unknown_id_raises(tmp_path):
+    """手动幻觉 id：大声失败（不猜测、不静默忽略）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    with pytest.raises(ManualReferenceError, match="不存在"):
+        resolve_topic_context(
+            llm=None,
+            topic_key="2026C",
+            problem_text="粘贴",
+            module_library_dir=library,
+            topic_library_dir=topics,
+            reference_library_dir=references,
+            reference_ids=["幻觉 id"],
+        )

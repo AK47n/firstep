@@ -26,7 +26,7 @@ from .llm import LLMError
 from .master_store import MasterError
 from .patchers import UnknownPlatformError
 from .reference_library import ReferenceError
-from .selection import SelectionError
+from .selection import ManualReferenceError, SelectionError
 from .stage import StageError
 from .topic_library import TopicError
 
@@ -55,6 +55,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             LibraryError,
             MasterError,
             SelectionError,
+            ManualReferenceError,  # 手动选参考资料不存在 / 重复（工单 01）
             GeneratorError,
             ConfigError,
             ReferenceError,

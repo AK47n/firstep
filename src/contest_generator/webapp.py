@@ -206,7 +206,11 @@ def _masters_dir(ctx: AppContext) -> Path:
 
 
 def _assemble_topic_context(
-    context: AppContext, topic_id: str, problem_text: str, llm: LLM | None
+    context: AppContext,
+    topic_id: str,
+    problem_text: str,
+    llm: LLM | None,
+    reference_ids: Sequence[str] = (),
 ) -> TopicContext:
     """生成流程的历史赛题入口素材装配（单一 helper，三路由共用）。
 
@@ -216,6 +220,8 @@ def _assemble_topic_context(
     generator.resolve_topic_context，这里只取配置、推导目录、传参；显式编号
     查无此条大声报错；自动识别尽力而为（提取失败 / 查无此条静默降级）。
     推荐 / 骨架传 _llm(context)（自动识别），生成传 None（显式编号路径）。
+    reference_ids = 手动选参考资料（工单 01，仅推荐路由传——骨架 / 生成不
+    注入参考文件是既有定案）。
     """
     config = _require_config(context)
     return resolve_topic_context(
@@ -225,6 +231,7 @@ def _assemble_topic_context(
         module_library_dir=config.module_library_dir,
         topic_library_dir=topic_library_dir(config.module_library_dir),
         reference_library_dir=reference_library_dir(config.module_library_dir),
+        reference_ids=reference_ids,
     )
 
 
@@ -463,16 +470,24 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         响应带识别结果（topic_id）与该题专用模块（related_modules，后续阶段
         按同一 topic_id 自动并入，UI 也可透传）。
 
+        手动选参考资料（工单 01）：请求体可选 reference_ids（list[str]，缺省 /
+        空 = 现状完全兼容）——准入 = 锚定命中 ∪ 手动选（并集去重，同一条目
+        只出现一次），手动条目全文直读强制进第一轮 prompt（清单段标注来源）。
+        幻觉 id / 重复 id 大声失败（400）。done 结果带最终参考清单
+        （references：id + 标题 + 来源标注 auto / manual，前端展示透明闭环）。
+
         阻塞调用（每轮 2-4K token）放独立线程跑，事件经队列送流生成器——不占
         事件循环；断线后队列无人消费：进度事件旁路丢弃（满即丢），后端照常
         结束本次推荐（与提炼端点同款，spec「断线」）。"""
         problem_text = _require_str(payload, "problem_text")
         topic_id = _optional_str(payload, "topic_id")
+        reference_ids = _require_str_list(payload, "reference_ids")
         # 完整上下文已在装配点（resolve_topic_context）一次备好：两级注入的
         # 清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费（key 空 =
-        # 未识别到历史赛题，no-topic 形同样携带全模块摘要）
+        # 未识别到历史赛题，no-topic 形同样携带全模块摘要）；手动选参考资料
+        # 的准入 / 全文直读同样在装配点完成
         topic = _assemble_topic_context(
-            context, topic_id, problem_text, _llm(context)
+            context, topic_id, problem_text, _llm(context), reference_ids
         )
         summaries = topic.manifest_summaries
         suggestions = topic.suggestions
@@ -485,6 +500,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 references=suggestions,
                 reader=reader,
                 progress_emitter=emit.progress,
+                manual_fulltexts=topic.manual_fulltexts,
             )
             if selection.questions:
                 emit.question({"questions": list(selection.questions)})
@@ -502,6 +518,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             if topic.key:
                 result["topic_id"] = topic.key
                 result["related_modules"] = list(topic.related_modules)
+            # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；
+            # 同一条目既锚定又手动只出现一次（手动优先标注——用户显式选择）
+            manual_ids = {ref.id for ref in topic.manual_references}
+            result["references"] = [
+                {"id": ref.id, "title": ref.title, "source": "auto"}
+                for ref in topic.references
+                if ref.id not in manual_ids
+            ] + [
+                {"id": ref.id, "title": ref.title, "source": "manual"}
+                for ref in topic.manual_references
+            ]
             emit.done(result)
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
