@@ -43,6 +43,7 @@ from .topic_library import (
     related_module_slugs,
     resolve_number,
 )
+from .treewalk import iter_project_files
 
 if TYPE_CHECKING:
     # 仅类型注解用（skeleton.py 同规：生成流程不该在运行时拉进 LLM 栈）
@@ -225,8 +226,7 @@ def describe_generation(
     """
     structure = tuple(
         p.relative_to(output_dir).as_posix()
-        for p in sorted(output_dir.rglob("*"))
-        if p.is_file() and ".git" not in p.relative_to(output_dir).parts
+        for p in iter_project_files(output_dir)
     )
     modules: list[tuple[str, tuple[str, ...]]] = []
     for manifest in manifests:
@@ -355,14 +355,13 @@ def build_module_corpus(
         modules.append((manifest.slug, tuple(files)))
 
     master_headers: list[tuple[str, str]] = []
-    for rel in sorted(
-        p.relative_to(master_project_dir).as_posix()
-        for p in master_project_dir.rglob("*.h")
-    ):
-        path = master_project_dir / rel
+    for path in iter_project_files(master_project_dir, pattern="*.h"):
         try:
             master_headers.append(
-                (rel, path.read_text(encoding="utf-8", errors="replace"))
+                (
+                    path.relative_to(master_project_dir).as_posix(),
+                    path.read_text(encoding="utf-8", errors="replace"),
+                )
             )
         except OSError:
             continue
