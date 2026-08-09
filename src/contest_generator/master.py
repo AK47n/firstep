@@ -23,11 +23,13 @@ compare_projects 做结构对比与配置对比（公共 / 冲突 / 独有）→
 职责划分（架构深化 v5 三轴拆块，工单 01）：文件类别的识别规则与生命周期
 （RULE_CATEGORIES / classify / 启动文件去重）唯一出处 = categories.py，
 本模块只消费不定义；母版库 CRUD、元数据与 MasterError 唯一出处 =
-master_store.py。母版库：磁盘目录即数据库，库根下每平台一个目录（工程文件
-本体）+ 同名 <platform>.json 元数据（提炼来源、入库时结构分析的警告）。
-元数据放目录外的平级文件：母版目录会被生成器整体复制，内部带 json（如
-master.json）会污染生成的工程。任何从平台名拼路径的操作都先校验平台名
-合法性，杜绝借平台名逃出母版库的路径穿越。
+master_store.py；蒸馏侧平台行为（摘要读 / 渲染 / 启动候选谓词）经
+distill_adapters 适配器按平台取（工单 04，守卫翻译在缝内归 MasterError），
+本模块不直连 keil / ccs。母版库：磁盘目录即数据库，库根下每平台一个目录
+（工程文件本体）+ 同名 <platform>.json 元数据（提炼来源、入库时结构分析
+的警告）。元数据放目录外的平级文件：母版目录会被生成器整体复制，内部带
+json（如 master.json）会污染生成的工程。任何从平台名拼路径的操作都先校验
+平台名合法性，杜绝借平台名逃出母版库的路径穿越。
 """
 
 from __future__ import annotations
@@ -48,13 +50,7 @@ from .categories import (
     _validate_startup_disposition,
     classify,
 )
-from .ccs import CcsProjectError, extract_config_summary as extract_ccs_config_summary
-from .keil import (
-    KeilProjectError,
-    build_master_uvprojx,
-    extract_config_summary as extract_keil_config_summary,
-    render_master_uvprojx,
-)
+from .distill_adapters import get_distill_adapter
 from .master_store import (
     MasterError,
     MasterMeta,
@@ -63,7 +59,7 @@ from .master_store import (
     _validate_known_platform,
     import_master,
 )
-from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from .platforms import KNOWN_PLATFORMS, PLATFORM_CONFIG_FILE_SUFFIXES
 from .treewalk import iter_project_files
 
 if TYPE_CHECKING:
@@ -185,7 +181,7 @@ def scan_project(project_dir: Path) -> ProjectStructure:
     }
     for path in iter_project_files(project_dir):
         rel = path.relative_to(project_dir).as_posix()
-        key, is_startup = classify(rel, path)
+        key, is_startup = classify(rel, path, platform)
         if key is not None:
             # 类别互斥、按表序判定（残留 → main.c → 基础设施 → 二进制 →
             # 工程配置文件）：命中即分类、不读全文（二进制探针只读文件头）。
@@ -439,7 +435,7 @@ def assemble_report(
                 decision
             )
     keep: list[FileDecision] = category_keep
-    startup = _pick_startup(comparison.startup_files)
+    startup = _pick_startup(comparison.startup_files, platform)
     if startup is not None:
         # 启动文件去重保留份（决策 2）：基础设施同款确定性保留
         keep.append(FileDecision(startup, ACTION_KEEP, reason=INFRASTRUCTURE_REASON))
@@ -467,12 +463,15 @@ def assemble_report(
 
 
 def _render_inputs(
-    decisions: Sequence[FileDecision], comparison: ProjectComparison
+    platform: str,
+    decisions: Sequence[FileDecision],
+    comparison: ProjectComparison,
 ) -> tuple[list[str], str | None, list[str]]:
     """渲染器输入推导：保留源码（.c/.s）+ 启动文件（去重后）+ 保留 .h 所在目录。
 
     预览（_config_preview）与落盘（apply_distillation）共用——同一份最终
-    决策集必然渲染出同一份 .uvprojx，报告预览 = 实际落盘内容。
+    决策集必然渲染出同一份 .uvprojx，报告预览 = 实际落盘内容。platform
+    透传给 _pick_startup（启动谓词按平台取，工单 04）。
     """
     sources = [
         d.path
@@ -486,18 +485,18 @@ def _render_inputs(
             if Path(d.path).suffix.lower() == ".h"
         }
     )
-    return sources, _pick_startup(comparison.startup_files), include_dirs
+    return sources, _pick_startup(comparison.startup_files, platform), include_dirs
 
 
 def _config_preview(
     platform: str, decisions: Sequence[FileDecision], comparison: ProjectComparison
 ) -> str:
-    """.uvprojx 全文预览（决策 7）：stm32 由确定性渲染器推导（与 main_c_preview
-    同款——确认回传时按平台重推导，客户端回传值不可信）；mspm0 无现写
-    （保留首份原样），返回空串。"""
-    if platform != PLATFORM_STM32:
-        return ""
-    return build_master_uvprojx(*_render_inputs(decisions, comparison))
+    """.uvprojx 全文预览（决策 7）：经蒸馏适配器按平台渲染（stm32 由确定性
+    渲染器推导，与 main_c_preview 同款——确认回传时按平台重推导，客户端
+    回传值不可信）；mspm0 显式无操作（无现写，保留首份原样），返回空串。"""
+    return get_distill_adapter(platform).render_config(
+        *_render_inputs(platform, decisions, comparison)
+    )
 
 
 def _validate_merge_sources(
@@ -541,14 +540,15 @@ def apply_distillation(
 
     keep 从第一个含该文件的工程复制；merge 写入 AI 整合出的通用版本全文
     （content）；exclude 不复制。落盘完成后写平台模板 main.c（ADR 0002：
-    母版 = 空的最小系统板工程，旧工程 main.c 一律不进母版）；stm32 的
-    .uvprojx 由确定性渲染器现写（工单 09，判例 09 治本：不再从源工程复制
-    也无需引用重写——渲染产物按保留集合构造，结构一致性由构造保证，落位
-    user/Project.uvprojx；密度守卫在渲染器：保留启动文件非 _md 大声失败，
-    目标板 STM32F103C8T6 中密度）；mspm0 的 .cproject/.project 保留首份
-    原样（CCS 按目录编译，无文件引用问题）。报告的路径集合必须与对比的
-    判定范围完全一致（确认环节可能被用户修改动作与内容，但路径集合不变）。
-    落盘中途失败不留半成品。
+    母版 = 空的最小系统板工程，旧工程 main.c 一律不进母版）；工程配置文件
+    经蒸馏适配器按平台处置（工单 04）：stm32 的 .uvprojx 由确定性渲染器
+    现写（工单 09，判例 09 治本：不再从源工程复制也无需引用重写——渲染
+    产物按保留集合构造，结构一致性由构造保证，落位 user/Project.uvprojx；
+    密度守卫在渲染器，翻译在适配器缝内归 MasterError：保留启动文件非 _md
+    大声失败，目标板 STM32F103C8T6 中密度）；非渲染平台（mspm0）保留首份
+    原样（判例 09）——复制是编排层通用操作，非平台能力。报告的路径集合
+    必须与对比的判定范围完全一致（确认环节可能被用户修改动作与内容，但
+    路径集合不变）。落盘中途失败不留半成品。
     """
     _validate_report(report, comparison)
     project_dir_by_name = {p.name: p.project_dir for p in comparison.projects}
@@ -570,10 +570,13 @@ def apply_distillation(
         (output_dir / MAIN_C_TEMPLATE_PATH).write_text(
             main_c_template(report.platform), encoding="utf-8"
         )
-        if report.platform == PLATFORM_STM32:
-            render_master_uvprojx(
+        adapter = get_distill_adapter(report.platform)
+        if adapter.renders_config:
+            adapter.write_config(
                 output_dir,
-                *_render_inputs((*report.keep, *report.merge), comparison),
+                *_render_inputs(
+                    report.platform, (*report.keep, *report.merge), comparison
+                ),
             )
         else:
             for decision in report.keep:
@@ -798,27 +801,29 @@ def confirm_distillation(
 
 
 def _detect_platform(project_dir: Path) -> str:
-    has_uvprojx = bool(_find_config_files(project_dir, "*.uvprojx"))
-    has_cproject = bool(_find_config_files(project_dir, "*.cproject"))
-    if has_uvprojx and has_cproject:
+    """平台由工程配置文件判定：遍历 KNOWN_PLATFORMS ×
+    PLATFORM_CONFIG_FILE_SUFFIXES（识别知识单源 = platforms.py，工单 04）。
+    有 .uvprojx 为 stm32，有 .cproject/.project 为 mspm0；两者都有或都没有
+    抛 MasterError。工程文件在任意层级可识别（正点原子风格在 USER/ 子目录）。"""
+    found = [
+        platform
+        for platform in KNOWN_PLATFORMS
+        if any(
+            _find_config_files(project_dir, f"*{suffix}")
+            for suffix in PLATFORM_CONFIG_FILE_SUFFIXES[platform]
+        )
+    ]
+    if len(found) > 1:
         raise MasterError("工程同时含 .uvprojx 与 .cproject，无法判定平台")
-    if has_uvprojx:
-        return PLATFORM_STM32
-    if has_cproject:
-        return PLATFORM_MSPM0
+    if found:
+        return found[0]
     raise MasterError("工程里没有 .uvprojx 或 .cproject，无法判定平台")
 
 
 def _config_summary(project_dir: Path, platform: str) -> tuple[str, ...]:
     """平台配置摘要行：设备 / include path / 编译宏（配置对比的 AI 素材）。
 
-    格式知识归修改器适配器所有（keil.py / ccs.py 的 extract_config_summary），
-    这里只做平台分发；适配器内部失败（多配置文件等）转成一行摘要，扫描不因
-    单个工程带病中断。
+    经蒸馏适配器按平台取（格式知识归 keil.py / ccs.py，工单 04）；软失败
+    语义（多配置文件等转成一行摘要）在适配器内，扫描不因单个工程带病中断。
     """
-    try:
-        if platform == PLATFORM_STM32:
-            return extract_keil_config_summary(project_dir)
-        return extract_ccs_config_summary(project_dir)
-    except (KeilProjectError, CcsProjectError) as exc:
-        return (f"{platform} 工程配置读取失败：{exc}",)
+    return get_distill_adapter(platform).config_summary(project_dir)
