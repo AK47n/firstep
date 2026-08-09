@@ -34,7 +34,7 @@ from .events import (
     ProgressEvent,
     _emit,
 )
-from .manifest import ManifestSummary, ModuleManifest
+from .manifest import ManifestSummary
 from .report import (
     ACTION_MERGE,
     FileDecision,
@@ -483,18 +483,6 @@ class LLM(Protocol):
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
     def topic_extract_number(self, text: str) -> str | None: ...
-
-
-def build_manifest_summaries(
-    manifests: Sequence[ModuleManifest],
-) -> list[ManifestSummary]:
-    """模块库摘要对象（喂给 LLM 的可用模块清单）。
-
-    形状归 manifest.ManifestSummary（slug/description/kits/依赖），行渲染
-    唯一实现 = ManifestSummary.to_line()——本函数只是批量投影，协议层不再
-    传字符串、不再有反向解析（_summary_slugs 已删除）。
-    """
-    return [ManifestSummary.from_manifest(m) for m in manifests]
 
 
 class Transport(Protocol):
