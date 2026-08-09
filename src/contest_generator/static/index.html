@@ -482,7 +482,7 @@
         <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
-      <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="password" id="set-api-key" placeholder="sk-…"></div>
+      <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
       <div class="row">
         <div style="flex:1"><label>模块库目录</label><input type="text" id="set-lib-dir" placeholder="~/.contest_generator/modules"></div>
         <div style="flex:1"><label>母版库目录</label><input type="text" id="set-masters-dir" placeholder="~/.contest_generator/masters"></div>
@@ -1943,6 +1943,7 @@ async function loadSettings() {
     const s = await apiGet("/api/settings");
     $("set-base-url").value = s.base_url || "https://api.deepseek.com";
     $("set-model").value = s.model || "deepseek-v4-flash";
+    // key 只回掩码（前 4 位 + 与真实长度一致的圆点），直接填入文本框
     $("set-api-key").value = s.api_key;
     $("set-lib-dir").value = s.module_library_dir;
     $("set-masters-dir").value = s.masters_dir;
