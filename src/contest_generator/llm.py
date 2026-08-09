@@ -177,13 +177,13 @@ ARCHIVE_JUDGMENT_SYSTEM_PROMPT = (
     " / 无关文件不值得归档。只输出 JSON 对象。"
 )
 
-# 判定素材内容上限（字符）：第一阶段提示词把每个内容版本全文嵌入，真实旧
-# 工程里的巨型源码（如 stm32f10x.h ~800KB 标准库头）全文嵌入会撑爆上下文
-# （判例 08：三个真实工程修复前判定素材 47.6M 字符，修复后按此上限嵌入
-# 29 万字符）。截断只影响发送素材（文件头足以判断性质），keep 落盘仍复制
-# 工程原文全文，不受截断影响。该上限同时是所有嵌内容调用（赛题 / 接口块 /
-# 简介校验代码）的统一截断上限——_truncate_content 走这里。
-JUDGMENT_CONTENT_CAP = 4000
+# 嵌内容上限（字符）：第一阶段提示词把每个内容版本全文嵌入，真实旧工程里的
+# 巨型源码（如 stm32f10x.h ~800KB 标准库头）全文嵌入会撑爆上下文（判例 08：
+# 三个真实工程修复前判定素材 47.6M 字符，修复后按此上限嵌入 29 万字符）。
+# 截断只影响发送素材（文件头足以判断性质），keep 落盘仍复制工程原文全文，
+# 不受截断影响。该上限是所有嵌内容调用（赛题 / 接口块 / 文件全文 / 参考
+# 素材 / 参考全文）的统一截断上限——_truncate_content 走这里。
+EMBEDDED_CONTENT_CAP = 4000
 
 # 两阶段输出的补问上限：模型一次输出大量 JSON 条目时偶发丢条目（判例 08：
 # 115 个文件一次返回漏了 1 个），严格解析失败后只对缺失路径补问，最多补问
@@ -213,18 +213,18 @@ TOPIC_SPLIT_LLM_CHAR_CAP = 20000
 
 
 def _truncate_content(content: str) -> str:
-    """单内容截断（带标注）：超长内容只送前 JUDGMENT_CONTENT_CAP 字符。
+    """单内容截断（带标注）：超长内容只送前 EMBEDDED_CONTENT_CAP 字符。
 
     标注让 AI 明确知道读到的是截断内容（TRUNCATION_NOTICE，措辞唯一出处），
     并注明原文总长——模型不会被误导以为文件就这么短，也不脑补缺失部分。
     截断只影响发送素材（赛题 / 接口块 / 文件全文），不改数据模型；未超长
     原样返回。
     """
-    if len(content) <= JUDGMENT_CONTENT_CAP:
+    if len(content) <= EMBEDDED_CONTENT_CAP:
         return content
     return (
-        content[:JUDGMENT_CONTENT_CAP]
-        + f"\n……（内容过长，已截断：仅展示前 {JUDGMENT_CONTENT_CAP} 字符，"
+        content[:EMBEDDED_CONTENT_CAP]
+        + f"\n……（内容过长，已截断：仅展示前 {EMBEDDED_CONTENT_CAP} 字符，"
         f"原文共 {len(content)} 字符；{TRUNCATION_NOTICE}）……\n"
     )
 

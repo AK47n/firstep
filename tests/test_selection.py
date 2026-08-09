@@ -6,14 +6,12 @@
 FakeLLM 记录调用形状断言（不碰网络）。
 """
 
-import json
 from typing import Mapping, Sequence
 
 import pytest
 
 from contest_generator.events import EVENT_CONVERGED, EVENT_ROUND, ProgressEvent
 from contest_generator.manifest import ManifestSummary, ModuleManifest, PlatformEntry
-from contest_generator.reference_library import ReferenceError, get_reference
 from contest_generator.selection import (
     WARNING_HARDWARE_BOUND,
     WARNING_MISSING,
@@ -29,7 +27,6 @@ from contest_generator.selection import (
     _revision_prompt,
     associated_references,
     check_platform_warnings,
-    read_reference_fulltext,
     reference_suggestions,
     resolve_dependencies,
     resolve_selection,
@@ -293,63 +290,6 @@ def test_reference_suggestions_carry_title_and_one_line_description(tmp_path):
     assert suggestions[0].id == TOPIC_REFERENCE_ID
     assert suggestions[0].title == "2026C 数字钥匙参考例程"
     assert suggestions[0].description == "2026C 钥匙题配套例程"
-
-
-def test_read_reference_fulltext_assembles_files_with_headers(tmp_path):
-    """两级注入第二级的素材形状：带文件名标注的拼接文本。"""
-    reference_root = make_fake_reference_library(tmp_path / "references")
-    entry = get_reference(reference_root, TOPIC_REFERENCE_ID)
-
-    text = read_reference_fulltext(reference_root, entry)
-
-    assert "// ---- key_example.c ----" in text
-    assert "/* 数字钥匙例程 */" in text
-
-
-def test_read_reference_fulltext_skips_binary_files_with_note(tmp_path):
-    """二进制素材（说明书 PDF 等）读不了文本：跳过并标注，不让生成流程整体失败。"""
-    reference_root = make_fake_reference_library(tmp_path / "references")
-    entry_dir = reference_root / KIT_REFERENCE_ID
-    meta = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
-    meta["files"] = ["manual.txt", "manual.pdf"]
-    (entry_dir / "manual.pdf").write_bytes(b"%PDF\x00\x01\x02binary")
-    (entry_dir / "reference.json").write_text(
-        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
-    )
-
-    text = read_reference_fulltext(
-        reference_root, get_reference(reference_root, KIT_REFERENCE_ID)
-    )
-
-    assert "套件接线与使用说明全文" in text
-    assert "manual.pdf" in text  # 二进制素材带标注而非静默消失
-
-
-def test_read_reference_fulltext_missing_file_raises(tmp_path):
-    """条目素材文件缺失 = 库损坏：大声失败（宁可大声失败也不带病进上下文）。"""
-    reference_root = make_fake_reference_library(tmp_path / "references")
-    (reference_root / TOPIC_REFERENCE_ID / "key_example.c").unlink()
-
-    with pytest.raises(ReferenceError, match="无法读取"):
-        read_reference_fulltext(
-            reference_root, get_reference(reference_root, TOPIC_REFERENCE_ID)
-        )
-
-
-def test_read_reference_fulltext_rejects_unsafe_path(tmp_path):
-    """坏条目（files 含 .. 越界路径）借条目 id 逃出库目录：入口拦截大声失败。"""
-    reference_root = make_fake_reference_library(tmp_path / "references")
-    entry_dir = reference_root / TOPIC_REFERENCE_ID
-    meta = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
-    meta["files"] = ["../evil.c"]
-    (entry_dir / "reference.json").write_text(
-        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
-    )
-
-    with pytest.raises(ReferenceError, match="路径非法"):
-        read_reference_fulltext(
-            reference_root, get_reference(reference_root, TOPIC_REFERENCE_ID)
-        )
 
 
 def _suggestion(

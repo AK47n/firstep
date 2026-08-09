@@ -17,7 +17,7 @@
 | 功能库 | 母版自带的底层库（stm32 母版 = 逐飞 ml_*：I2C/UART/PWM/GPIO/OLED 等，headfile.h 聚合），先于一切模块存在、生成时随母版进工程；不属于模块库 | masters/stm32/ml_libs |
 | 提炼 | 导入多旧工程 → 对比 → AI 判定 → 报告（保留 / 整合 / 剔除 + 残留清单）→ 确认 → 入库；判定范围 = 公共 + 冲突 + 独有全部逐个判定，唯一判据：读内容判断是否通用、是否基础建设必需，不看重复次数 / 出现范围；确认是一条事务（confirm_distillation） | master.py + llm.py |
 | 条目库原语 | 模块库 / 赛题库 / 参考文件库共用的"目录即数据库"骨架：事务落盘、目录迭代、JSON 元数据读写与校验（read_json）、删除（delete_entry）、目录名 = 键的校验（validate_store_key）、必填字符串字段（require_str）、路径安全（is_unsafe_path）；不持业务形状，错误类型与文案归各库（StoreError 家族从不直达 web 层） | entry_store.py |
-| 参考文件库 | 与赛题库分开的独立素材区（存储与浏览入口都分开）：参考文件 = 不编译进生成工程的整包配套资料（套件例程 + 参考说明书）与提炼残渣，锚定赛题或套件；生成时 LLM 两级注入读取（先关联清单、需要时取全文）作学习素材——与模块相对（模块进工程，参考文件只被读）；区别于"可选配套"（那是模块的可裁剪组件，这是独立条目）；套件锚定的 kit 词表单源 = manifest.collect_kits（保序去重） | reference_library.py / webapp.py；两级注入装配在 generator.py（TopicContext）+ selection.py（清单段与全文回读） |
+| 参考文件库 | 与赛题库分开的独立素材区（存储与浏览入口都分开）：参考文件 = 不编译进生成工程的整包配套资料（套件例程 + 参考说明书）与提炼残渣，锚定赛题或套件；生成时 LLM 两级注入读取（先关联清单、需要时取全文）作学习素材——与模块相对（模块进工程，参考文件只被读）；区别于"可选配套"（那是模块的可裁剪组件，这是独立条目）；套件锚定的 kit 词表单源 = manifest.collect_kits（保序去重） | reference_library.py / webapp.py；两级注入装配在 generator.py（TopicContext）+ selection.py（清单段）+ reference_library.py（全文回读 read_fulltext，store 自持：路径安全 + 二进制跳过 + 标签单源） |
 | 归档 | 提炼确认时的"归档为该题参考文件"动作：字节复制入库、锚定该题、内容自持（源工程删除不丢）；AI 判定不配归档的文件拒绝；归档批次与母版入库同事务；归档步骤在 archive.py（master 不 import 参考库族，防 import 链，函数级延迟导入） | archive.py / master.py / reference_library.py / report.py（ArchiveDecision）/ llm.py |
 | 赛题库 | 与参考文件库分开的独立素材区：历年真题长 PDF 导入拆成的条目（年份 + 编号 + 题面），支持"几几年几题"编号解析为题面、作生成入口之一（贴题面或选历史题）；赛题条目锚定该题附带的完整程序（如 2026C 钥匙/锁两套）；关联模块可复用简介的专用性标注（"XX 题专用"）自动发现 | topic_library.py（拆条 LLM 协议与解析在 llm.py，确定性分块在 topic_library）/ webapp.py |
 | 判定模型 | 提炼报告的判定条目与容器（FileDecision / DistillationReport）+ AI 判定素材（JudgmentFile / FileVersion）：形状 / 序列化 / 不变量（merge 必须带整合产物全文与说明；main_c_preview 与 uvprojx_preview 由平台重推导；版本分组不重不漏）唯一所有者；报告平台必须与工程平台一致（平台交叉校验） | report.py |
@@ -51,5 +51,6 @@
 - 文件类别生命周期单源化：四大类别（残留 / 旧 main.c / 基础设施 / 二进制）+ 工程配置文件（工单 09）各是一条 `RuleCategory` 描述（识别规则 + 确定性处置 + 报错文案），流水线遍历 `RULE_CATEGORIES`，不再每处复制平行分支；启动文件候选是表内钩子（决策 2，跨工程去重）。类别表与 `classify` 收进 categories.py，master 只消费（结构测试防回退：恒等引用 + 模块内无规则函数）。
 - 蒸馏侧平台适配接缝 = distill_adapters（摘要读 / 渲染（含密度守卫翻译）/ 启动候选谓词 per platform；mspm0 显式无操作；母版库入库结构校验留在 master_store，存储域边界）。识别知识（工程配置文件后缀表）单源 = platforms.PLATFORM_CONFIG_FILE_SUFFIXES。
 - 错误映射单源化：路由不写 catch 元组（漏类型是裸 500 的 bug 根源），`_map_errors` 包装兜底统一走 error_to_http 表；表住 errors.py，结构测试反射枚举包内全部异常类断言已登记（白名单只放从不直达 web 层的类）——漏登从此是测试红，不是线上 500。
+- 库素材拼装标签格式单源 = library.file_label：模块源码 / 参考素材 / 参考全文共用（prompt 可见契约，改格式只改这一处——曾三处各抄一份，漏一处模型就逐功能看到不同格式）。
 - 生成流程的接缝是 `generator.generate_project`（选模块 → 定位母版 → 生成 → 摘要；内部落盘步骤 `generate`）；母版库布局（masters_dir/<platform>）归母版库模块（`master_store.master_project_dir`）。赛题入口装配 = `generator.resolve_topic_context` 唯一出处（永远返回 TopicContext，key 空串 = 未识别到历史赛题），路由只消费不装配。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。
