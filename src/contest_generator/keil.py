@@ -23,8 +23,12 @@ from pathlib import Path
 from typing import Sequence
 from xml.sax.saxutils import escape
 
-from .projectfile import parse_project_file, write_project_file
-from .treewalk import iter_project_files
+from .projectfile import (
+    find_project_file,
+    parse_project_file,
+    resolve_include_entries,
+    write_project_file,
+)
 
 # 工具链外部头（工程树外提供，门禁豁免 include 解析）：stm32f10x_conf.h 由
 # STM32F1xx DFP 器件包提供（标准外设库配置头，Keil 按 DFP 路径解析）。
@@ -87,7 +91,7 @@ class KeilPatcher:
         module_files: Sequence[Path],
         include_dirs: Sequence[Path],
     ) -> None:
-        uvprojx = _find_uvprojx(project_dir)
+        uvprojx = find_project_file(project_dir, "*.uvprojx", KeilProjectError)
         root, original_text = parse_project_file(uvprojx, KeilProjectError)
         uvprojx_parts = uvprojx.parent.relative_to(project_dir).parts
         targets = root.findall("Targets/Target")
@@ -126,7 +130,7 @@ def validate_project_structure(
     解析基准与 KeilPatcher 相同（FilePath 相对 .uvprojx 所在目录），引用解析
     复用 _resolve_root_path。
     """
-    uvprojx = _find_uvprojx(project_dir)
+    uvprojx = find_project_file(project_dir, "*.uvprojx", KeilProjectError)
     root, _ = parse_project_file(uvprojx, KeilProjectError)
     uvprojx_parts = uvprojx.parent.relative_to(project_dir).parts
     targets = root.findall("Targets/Target")
@@ -214,30 +218,21 @@ def include_search_dirs(project_dir: Path) -> list[Path]:
 
     IncludePath 条目相对 .uvprojx 所在目录（Keil 惯例），解析为绝对目录、
     按出现顺序去重。找不到 .uvprojx 返回空列表——生成路径母版必有 uvprojx
-    （KeilPatcher 兜底报错），此函数只为解析 include 搜索目录。
+    （KeilPatcher 兜底报错），此函数只为解析 include 搜索目录。查找器与
+    条目解析核心共享 projectfile 底座（keil 无宏，无平台预处理）。
     """
     try:
-        uvprojx = _find_uvprojx(project_dir)
+        uvprojx = find_project_file(project_dir, "*.uvprojx", KeilProjectError)
     except KeilProjectError:
         return []
     root, _ = parse_project_file(uvprojx, KeilProjectError)
-    dirs: list[Path] = []
-    seen: set[str] = set()
+    entries: list[str] = []
     for target in root.findall("Targets/Target"):
         include_el = _find_include_path(target)
         if include_el is None or not include_el.text:
             continue
-        for entry in include_el.text.split(";"):
-            entry = entry.strip().replace("\\", "/")
-            if not entry:
-                continue
-            p = Path(entry)
-            resolved = p if p.is_absolute() else (uvprojx.parent / p)
-            key = str(resolved).lower()
-            if key not in seen:
-                seen.add(key)
-                dirs.append(resolved.resolve())
-    return dirs
+        entries.extend(include_el.text.split(";"))
+    return resolve_include_entries(entries, uvprojx.parent)
 
 
 def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
@@ -246,7 +241,7 @@ def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
     格式知识归本模块所有：patch 的改写与这里的摘要共用同一套 XML 结构认知，
     母版提炼不再另抄一份走查。解析失败只记一行，由调用方决定是否中断。
     """
-    uvprojx = _find_uvprojx(project_dir)
+    uvprojx = find_project_file(project_dir, "*.uvprojx", KeilProjectError)
     try:
         root = ET.parse(uvprojx).getroot()
     except ET.ParseError as exc:
@@ -262,21 +257,6 @@ def extract_config_summary(project_dir: Path) -> tuple[str, ...]:
     if not lines:
         lines.append(f"{uvprojx.name}：未找到设备 / include path 配置")
     return tuple(lines)
-
-
-def _find_uvprojx(project_dir: Path) -> Path:
-    """定位工程文件 .uvprojx：任意层级（正点原子风格在 USER/ 子目录），统一
-    噪音跳过规则（treewalk：.git 任意层级 + 构建输出目录——Listings/ 下的
-    拷贝不算数，与 master 扫描同一规则）。"""
-    candidates = sorted(iter_project_files(project_dir, pattern="*.uvprojx"))
-    if not candidates:
-        raise KeilProjectError(f"工程目录里没有 .uvprojx 文件：{project_dir}")
-    if len(candidates) > 1:
-        raise KeilProjectError(
-            "工程目录里有多个 .uvprojx，无法确定改哪个："
-            + "、".join(p.name for p in candidates)
-        )
-    return candidates[0]
 
 
 # ---------------------------------------------------------------------------

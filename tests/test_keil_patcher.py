@@ -18,6 +18,7 @@ from contest_generator.keil import (
     KeilPatcher,
     KeilProjectError,
     build_master_uvprojx,
+    include_search_dirs,
     is_md_startup,
     is_startup_candidate,
     render_master_uvprojx,
@@ -458,3 +459,12 @@ def test_validate_structure_rejects_project_without_target(keil_project):
 
     with pytest.raises(KeilProjectError, match="Targets"):
         validate_project_structure(keil_project, [])
+
+
+def test_include_search_dirs_resolves_master_include_path(keil_project):
+    """读侧 include 搜索目录：假母版 IncludePath `.\inc;.\src` 相对 .uvprojx
+    所在目录解析为绝对目录（工单 01 共享解析核心，行为逐字）。"""
+    assert include_search_dirs(keil_project) == [
+        keil_project / "inc",
+        keil_project / "src",
+    ]
