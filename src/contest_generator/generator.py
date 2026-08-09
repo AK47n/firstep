@@ -22,11 +22,10 @@ from .llm import LLMError
 from .manifest import ManifestSummary, ModuleManifest, build_manifest_summaries
 from .master_store import master_project_dir
 from .patchers import PatcherRegistry, default_registry
-from .reference_library import ReferenceEntry, ReferenceError
+from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
     ReferenceSuggestion,
     associated_references,
-    read_reference_fulltext,
     reference_suggestions,
     resolve_selection,
 )
@@ -220,7 +219,7 @@ def _make_fulltext_reader(
     def reader(entry_id: str) -> str:
         for entry in references:
             if entry.id == entry_id:
-                return read_reference_fulltext(reference_root, entry)
+                return read_fulltext(reference_root, entry)
         raise ReferenceError(f"参考文件条目不存在：{entry_id!r}")
 
     return reader

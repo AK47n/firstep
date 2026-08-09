@@ -30,10 +30,9 @@ from .events import (
     ProgressEvent,
     _emit,
 )
-from .entry_store import is_unsafe_path
 from .library import list_modules
 from .manifest import ManifestSummary, ModuleManifest, collect_kits
-from .reference_library import ReferenceEntry, ReferenceError, search_references
+from .reference_library import ReferenceEntry, search_references
 
 if TYPE_CHECKING:
     from .llm import LLM  # 仅类型注解用（selection 不运行时依赖 LLM 客户端，library.py 先例）
@@ -202,33 +201,6 @@ def reference_suggestions(
         ReferenceSuggestion(id=entry.id, title=entry.title, description=entry.description)
         for entry in entries
     )
-
-
-def read_reference_fulltext(reference_root: Path, entry: ReferenceEntry) -> str:
-    """参考文件条目全文（两级注入第二级的素材）：素材文件拼成带文件名标注的文本。
-
-    二进制素材（说明书 PDF 等）读不了文本——跳过并标注（不让生成流程因个别
-    不可读素材整体失败）；条目文件缺失 / 相对路径非法 = 库损坏，大声失败
-    （ReferenceError，宁可大声失败也不把坏数据带进上下文）。
-    """
-    chunks: list[str] = []
-    for rel in entry.files:
-        if is_unsafe_path(rel):
-            raise ReferenceError(
-                f"参考文件条目 {entry.id!r} 的文件路径非法：{rel!r}"
-            )
-        path = reference_root / entry.id / rel
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError as exc:
-            raise ReferenceError(
-                f"参考文件条目 {entry.id!r} 的素材文件无法读取：{rel}: {exc}"
-            ) from exc
-        except UnicodeDecodeError:
-            chunks.append(f"// ---- {rel} ----（二进制素材，未嵌入全文）\n")
-            continue
-        chunks.append(f"// ---- {rel} ----\n{content}")
-    return "\n".join(chunks)
 
 
 # ---------------------------------------------------------------------------
