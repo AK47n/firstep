@@ -37,9 +37,9 @@ from __future__ import annotations
 import hashlib
 import shutil
 import tempfile
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 from .categories import (
     INFRASTRUCTURE_REASON,
@@ -75,6 +75,8 @@ from .report import (
     FileDecision,
     FileVersion,
     JudgmentFile,
+    ProjectComparison,
+    ProjectStructure,
     ReportError,
 )
 
@@ -100,50 +102,6 @@ def main_c_template(platform: str) -> str:
         return template.read_text(encoding="utf-8")
     except OSError as exc:
         raise MasterError(f"平台 {platform} 的模板 main.c 缺失：{template}") from exc
-
-
-# ---------------------------------------------------------------------------
-# 数据模型
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class ProjectStructure:
-    """单个工程的结构快照：平台、文件清单（相对路径 + 内容哈希）、配置摘要、
-    残留清单（规则识别、确定性剔除，不进 AI 判定）、旧 main.c 清单（模板
-    替代，不进扫描清单）、工程配置文件（确定性规则处理，不进扫描清单）、
-    启动文件候选（跨工程去重，不进 AI 判定）。"""
-
-    project_dir: Path
-    name: str  # 工程名（目录名）
-    platform: str  # 检测到的平台
-    files: tuple[str, ...]  # 相对路径（POSIX 分隔），排序
-    file_hashes: Mapping[str, str]  # path -> sha256 hex（对比内容是否一致）
-    config_summary: tuple[str, ...]  # 平台配置摘要行（配置对比的 AI 素材）
-    residues: tuple[str, ...] = ()  # 残留相对路径（构建产物 / 备份 / 临时文件 / IDE 用户选项）
-    main_c_files: tuple[str, ...] = ()  # 旧工程 main.c（模板替代，不进扫描清单）
-    infrastructure: tuple[str, ...] = ()  # 基础设施（链接脚本 / 非启动 .s），确定性保留、不进 AI 判定
-    startup_files: tuple[str, ...] = ()  # 启动文件候选（startup_stm32f10x_*.s），跨工程去重、不进 AI 判定
-    config_files: tuple[str, ...] = ()  # 工程配置文件（.uvprojx/.cproject/.project），确定性规则处理、不进 AI 判定
-    binaries: tuple[str, ...] = ()  # 二进制文件（内容判据，确定性剔除、不进 AI 判定）
-
-
-@dataclass(frozen=True)
-class ProjectComparison:
-    """多工程的结构 + 配置对比结果。"""
-
-    projects: tuple[ProjectStructure, ...]
-    common: tuple[str, ...]  # 所有工程都有且内容完全一致
-    conflicts: tuple[str, ...]  # 同路径、内容不一致
-    unique: tuple[str, ...]  # 只出现在部分工程
-    by_path: Mapping[str, tuple[str, ...]]  # path -> 含该文件的工程名（出现顺序）
-    judgment: tuple[str, ...]  # 需要 AI 判定的路径（公共 + 冲突 + 独有）
-    residues: tuple[str, ...] = ()  # 全部工程的残留路径（并集，排序）
-    main_c_files: tuple[str, ...] = ()  # 全部工程的旧 main.c（并集，排序，模板替代）
-    infrastructure: tuple[str, ...] = ()  # 全部工程的基础设施（并集，排序，确定性保留）
-    startup_files: tuple[str, ...] = ()  # 全部工程的启动文件候选（并集，排序，去重后保留）
-    config_files: tuple[str, ...] = ()  # 全部工程的工程配置文件（并集，排序，确定性规则处理）
-    binaries: tuple[str, ...] = ()  # 全部工程的二进制文件（并集，排序，确定性剔除）
 
 
 # ---------------------------------------------------------------------------
@@ -744,7 +702,9 @@ def confirm_distillation(
     报告含归档动作时按需取用（无归档的确认不要求 AI 配置，与现状一致）。
     """
     # 函数级延迟导入：归档辅助要 import 参考库族与赛题库文法（master 不 import
-    # 它们），模块级导入会造成 master ↔ archive 环——只在归档确认时加载
+    # 它们），模块级导入会经 archive 拉入参考库族、破坏 import 链收敛（工单 C3；
+    # 环已拆——对比模型已迁 report，不存在 master ↔ archive 模块级环）——只在
+    # 归档确认时加载
     from .archive import prepare_archive, write_archive_entries
 
     projects = tuple(scan_project(project_dir) for project_dir in project_dirs)
