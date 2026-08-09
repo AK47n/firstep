@@ -351,10 +351,23 @@ def _optional_str(payload: dict, key: str) -> str:
 
 
 def _mask_api_key(api_key: str) -> str:
-    """API key 掩码：只露前 4 位（PUT 收到掩码形态视为用户没改 key）。"""
+    """API key 掩码（判定用）：只露前 4 位 + 省略号（PUT 收到掩码形态视为用户没改 key）。"""
     if not api_key:
         return ""
     return api_key[:4] + _API_KEY_MASK_MARKER
+
+
+def _mask_api_key_display(api_key: str) -> str:
+    """API key 掩码（显示用）：前 4 位 + 圆点 + 末位，圆点个数 = 真实长度 - 5。
+
+    前端填入普通文本框：前缀 + 末位可见以确认 key 无误，圆点数能看出真实长度。
+    长度 ≤5 时只露前缀（短 key 再露末位等于全泄露）。
+    """
+    if not api_key:
+        return ""
+    if len(api_key) <= 5:
+        return api_key[:4] + "•" * (len(api_key) - 4)
+    return api_key[:4] + "•" * (len(api_key) - 5) + api_key[-1]
 
 
 async def _save_upload(upload: UploadFile) -> Path:
@@ -839,14 +852,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/settings")
     @_map_errors
     def settings_get() -> dict:
-        """读取设置；API key 只回掩码，不回明文。"""
+        """读取设置；API key 只回掩码（前 4 位 + 与真实长度一致的圆点），不回明文。"""
         config = _current_config(context)
         api_key = config.api_key if config is not None else ""
         return {
             "configured": config is not None,
             "base_url": (config.base_url if config is not None else ""),
             "model": (config.model if config is not None else ""),
-            "api_key": _mask_api_key(api_key),
+            "api_key": _mask_api_key_display(api_key),
             "module_library_dir": str(
                 config.module_library_dir if config is not None else AppConfig().module_library_dir
             ),
@@ -862,9 +875,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """保存设置并立即生效；api_key 收到掩码说明用户没改，沿用旧值。"""
         existing = _current_config(context)
         api_key = str(payload.get("api_key", "")).strip()
-        # 空或等于当前 key 的掩码形态 → 用户没改 key，沿用旧值
+        # 空或等于当前 key 的任一掩码形态（省略号版 / 圆点版）→ 用户没改 key，沿用旧值
         if not api_key or (
-            existing is not None and api_key == _mask_api_key(existing.api_key)
+            existing is not None
+            and api_key
+            in (_mask_api_key(existing.api_key), _mask_api_key_display(existing.api_key))
         ):
             if existing is None:
                 raise HTTPException(400, "首次配置必须填写 API key")
