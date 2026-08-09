@@ -22,16 +22,19 @@ from contest_generator.selection import (
     OutOfLibrarySuggestion,
     PlatformWarning,
     ReferenceSuggestion,
+    SelectionError,
     UnknownModuleError,
     _number_topic_sentences,
     _revision_prompt,
     associated_references,
+    build_module_selection,
     check_platform_warnings,
     reference_suggestions,
     resolve_dependencies,
     resolve_selection,
     select_modules_convergent,
 )
+from contest_generator.wordlist import HardwareWordGroup
 from tests.fakes import FakeLLM
 from tests.generate_wiring_fakes import (
     KIT_REFERENCE_ID,
@@ -559,5 +562,416 @@ def test_convergent_round_events_tolerate_failing_emitter():
 
     assert result.requirements == (_requirement("识别数字"),)
     assert len(fake.calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# 工单 06：模型输出 → ModuleSelection 解释链（域判决单址，随 build_module_selection
+# 从 llm.py 迁入；断言与 match 文案随迁前逐字一致，错误类型 LLMError → SelectionError）
+# ---------------------------------------------------------------------------
+
+# 测试专用小词表（与包内默认词表解耦，契约测试自足）
+WORDS = (
+    HardwareWordGroup(category="视觉模块", models=("K230", "OpenMV")),
+    HardwareWordGroup(category="声光提示器件", models=("LED", "蜂鸣器")),
+)
+
+REQUIREMENTS_RAW = {
+    "requirements": [
+        {
+            "requirement": "识别数字",
+            "sentence": 3,
+            "modules": [
+                {"slug": "dht11", "reason": "测温湿度"},
+                {"slug": "oled", "reason": "显示结果"},
+            ],
+            "suggestions": [{"name": "视觉模块", "examples": ["K230", "OpenMV"]}],
+        },
+        {
+            "requirement": "声光提示",
+            "sentence": 5,
+            "modules": [],
+            "suggestions": [{"name": "蜂鸣器", "examples": []}],
+        },
+    ]
+}
+
+
+def test_build_selection_accepts_multiple_modules_with_reasons():
+    result = build_module_selection(
+        {
+            "modules": [
+                {"slug": "dht11", "reason": "测温湿度"},
+                {"slug": "oled", "reason": "显示数据"},
+            ]
+        },
+        known_slugs=("dht11", "oled"),
+    )
+
+    assert result.modules == ("dht11", "oled")
+    assert result.reasons == {"dht11": "测温湿度", "oled": "显示数据"}
+
+
+def test_build_selection_rejects_unknown_slug():
+    with pytest.raises(SelectionError, match="不存在"):
+        build_module_selection(
+            {"modules": [{"slug": "wifi", "reason": "通信"}]},
+            known_slugs=("dht11",),
+        )
+
+
+def test_build_selection_rejects_duplicate_slug():
+    with pytest.raises(SelectionError, match="重复"):
+        build_module_selection(
+            {
+                "modules": [
+                    {"slug": "dht11", "reason": "a"},
+                    {"slug": "dht11", "reason": "b"},
+                ]
+            },
+            known_slugs=("dht11",),
+        )
+
+
+@pytest.mark.parametrize(
+    "bad_raw",
+    [
+        {"modules": "dht11"},
+        {"modules": [{"reason": "缺 slug"}]},
+        {"modules": [{"slug": "dht11", "reason": 42}]},
+    ],
+)
+def test_build_selection_rejects_malformed_module_entries(bad_raw):
+    with pytest.raises(SelectionError):
+        build_module_selection(bad_raw, known_slugs=("dht11",))
+
+
+def test_build_selection_accepts_reference_ids():
+    result = build_module_selection(
+        {
+            "modules": [{"slug": "dht11", "reason": "测温湿度"}],
+            "references": ["key-example"],
+        },
+        known_slugs=("dht11",),
+        known_reference_ids=("key-example",),
+    )
+
+    assert result.reference_ids == ("key-example",)
+
+
+def test_build_selection_without_references_field_is_empty():
+    result = build_module_selection({"modules": []}, known_slugs=())
+    assert result.reference_ids == ()
+
+
+def test_build_selection_rejects_reference_outside_suggestion_list():
+    with pytest.raises(SelectionError, match="清单外"):
+        build_module_selection(
+            {"modules": [], "references": ["ghost"]},
+            known_slugs=(),
+            known_reference_ids=("key-example",),
+        )
+
+
+def test_build_selection_rejects_references_without_suggestion_list():
+    """没给参考文件清单时模型报 references = 幻觉：大声失败。"""
+    with pytest.raises(SelectionError, match="未提供"):
+        build_module_selection(
+            {"modules": [], "references": ["ghost"]},
+            known_slugs=(),
+        )
+
+
+def test_build_selection_rejects_duplicate_reference_ids():
+    with pytest.raises(SelectionError, match="重复"):
+        build_module_selection(
+            {"modules": [], "references": ["a", "a"]},
+            known_slugs=(),
+            known_reference_ids=("a",),
+        )
+
+
+def test_build_selection_requirements_derive_top_modules():
+    """新契约：顶层 modules 由功能需求层机械派生（库内命中并集，保序、首见理由）
+    ——模块必有需求支撑，顶层与需求层永不漂移。"""
+    result = build_module_selection(
+        REQUIREMENTS_RAW, known_slugs=("dht11", "oled"), hardware_words=WORDS
+    )
+
+    assert result.modules == ("dht11", "oled")
+    assert result.reasons == {"dht11": "测温湿度", "oled": "显示结果"}
+    assert result.requirements[0] == FunctionRequirement(
+        requirement="识别数字",
+        sentence_index=3,
+        modules=("dht11", "oled"),
+        suggestions=(
+            OutOfLibrarySuggestion(name="视觉模块", examples=("K230", "OpenMV")),
+        ),
+    )
+    assert result.requirements[1].suggestions == (
+        OutOfLibrarySuggestion(name="蜂鸣器", examples=()),
+    )
+
+
+def test_build_selection_requirements_dedup_shared_module_across_requirements():
+    """同一模块出现在两条需求里：顶层去重（首见理由保留），需求各自保留命中。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "采集温湿度",
+                "sentence": 1,
+                "modules": [{"slug": "dht11", "reason": "测温"}],
+            },
+            {
+                "requirement": "显示",
+                "sentence": 2,
+                "modules": [{"slug": "dht11", "reason": "数据来源"}],
+            },
+        ]
+    }
+
+    result = build_module_selection(raw, known_slugs=("dht11",), hardware_words=WORDS)
+
+    assert result.modules == ("dht11",)
+    assert result.reasons == {"dht11": "测温"}  # 首见理由
+    assert [r.modules for r in result.requirements] == [("dht11",), ("dht11",)]
+
+
+def test_build_selection_requirements_reject_unknown_module_slug():
+    """需求层里的库外 slug 同样大声失败（与顶层 modules 校验同款严格）。"""
+    with pytest.raises(SelectionError, match="不存在"):
+        build_module_selection(
+            {
+                "requirements": [
+                    {
+                        "requirement": "识别数字",
+                        "sentence": 1,
+                        "modules": [{"slug": "k230_cam", "reason": "视觉"}],
+                    }
+                ]
+            },
+            known_slugs=("dht11",),
+            hardware_words=WORDS,
+        )
+
+
+@pytest.mark.parametrize(
+    "bad_raw",
+    [
+        {"requirements": "not a list"},
+        {"requirements": [{"sentence": 1}]},  # 缺 requirement
+        {"requirements": [{"requirement": "  ", "sentence": 1}]},
+        {"requirements": [{"requirement": "需求"}]},  # 缺 sentence
+        {"requirements": [{"requirement": "需求", "sentence": 0}]},
+        {"requirements": [{"requirement": "需求", "sentence": -2}]},
+        {"requirements": [{"requirement": "需求", "sentence": "0"}]},  # 数字字符串但非正数
+        {"requirements": [{"requirement": "需求", "sentence": "abc"}]},  # 非数字字符串
+        {"requirements": [{"requirement": "需求", "sentence": "1.5"}]},  # 非整数数字字符串
+        {"requirements": [{"requirement": "需求", "sentence": 1.0}]},  # 浮点
+        {"requirements": [{"requirement": "需求", "sentence": True}]},
+        {"requirements": [{"requirement": "需求", "sentence": 1, "modules": "x"}]},
+        {"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"reason": "缺 slug"}]}]},
+        {"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"slug": "dht11", "reason": 42}]}]},
+        {"requirements": [{"requirement": "需求", "sentence": 1, "modules": [{"slug": "dht11"}, {"slug": "dht11"}]}]},  # 需求内重复
+    ],
+)
+def test_build_selection_rejects_malformed_requirements(bad_raw):
+    with pytest.raises(SelectionError):
+        build_module_selection(bad_raw, known_slugs=("dht11",), hardware_words=WORDS)
+
+
+def test_build_selection_coerces_digit_string_sentence():
+    """数字字符串 sentence 按语义无损强转 int（sentence 语义 = 正整数，不是形状）。
+
+    真机实测：DeepSeek json_object 模式把数字标量序列化为字符串（24/24 条需求
+    全是 "1" 这种形状），严格类型校验让整轮收敛当场失败——"1" 语义上就是正整数，
+    强转不引入任何脑补风险；非数字字符串照旧大声失败（见 reject 参数化）。
+    """
+    raw = {
+        "requirements": [
+            {"requirement": "识别数字", "sentence": "1", "modules": []},
+            {"requirement": "定位", "sentence": " 3 ", "modules": []},
+        ]
+    }
+
+    result = build_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+    assert [r.sentence_index for r in result.requirements] == [1, 3]
+
+
+def test_build_selection_suggestion_name_hits_wordlist_model_or_category():
+    """词表内型号与类别名都直接显示（命中 → 显示）。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别数字",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [
+                    {"name": "K230", "examples": ["K230 模组"]},  # 型号条目
+                    {"name": "视觉模块", "examples": ["OpenMV"]},  # 类别条目
+                ],
+            }
+        ]
+    }
+
+    result = build_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+    suggestions = result.requirements[0].suggestions
+    assert suggestions[0].name == "K230" and suggestions[0].degraded is False
+    assert suggestions[1].name == "视觉模块" and suggestions[1].degraded is False
+
+
+def test_build_selection_suggestion_off_wordlist_degrades_to_category():
+    """词表外型号（模型给出词表内类别名）→ 降级为类别名显示（degraded）。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别数字",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [
+                    {"name": "K210", "category": "视觉模块", "examples": ["OpenMV"]}
+                ],
+            }
+        ]
+    }
+
+    result = build_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+    suggestion = result.requirements[0].suggestions[0]
+    assert suggestion.name == "视觉模块"  # 降级后的类别名
+    assert suggestion.degraded is True
+    assert suggestion.examples == ("OpenMV",)
+
+
+@pytest.mark.parametrize(
+    "suggestion",
+    [
+        {"name": "K210"},  # 词表外且无 category
+        {"name": "K210", "category": "随便什么"},  # category 不在词表
+        {"name": "K210", "category": 42},
+    ],
+)
+def test_build_selection_suggestion_off_wordlist_rejected(suggestion):
+    """词表外型号无法降级（缺合法类别）→ 拒收（大声失败，与库内 slug 校验同源）。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别数字",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [suggestion],
+            }
+        ]
+    }
+
+    with pytest.raises(SelectionError, match="硬件词表"):
+        build_module_selection(raw, known_slugs=(), hardware_words=WORDS)
+
+
+def test_build_selection_suggestions_without_wordlist_rejected():
+    """没给硬件词表时模型报库外建议 = 无法校验的编造：大声失败。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别数字",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [{"name": "视觉模块"}],
+            }
+        ]
+    }
+
+    with pytest.raises(SelectionError, match="词表"):
+        build_module_selection(raw, known_slugs=())
+
+
+def test_build_selection_questions_accepted():
+    """拿不准向用户补问：questions 数组解析；纯补问输出（无需求层无模块）合法。"""
+    raw = {"questions": ["题面没有说明识别方式，用摄像头还是传感器？"]}
+
+    result = build_module_selection(raw, known_slugs=())
+
+    assert result.questions == ("题面没有说明识别方式，用摄像头还是传感器？",)
+    assert result.modules == ()
+
+
+@pytest.mark.parametrize(
+    "bad_questions",
+    [
+        {"questions": "不是数组"},
+        {"questions": [42]},
+        {"questions": [""]},
+    ],
+)
+def test_build_selection_rejects_malformed_questions(bad_questions):
+    with pytest.raises(SelectionError, match="questions"):
+        build_module_selection(bad_questions, known_slugs=())
+
+
+def test_build_selection_requirements_present_ignores_plain_modules():
+    """模型同时输出 requirements 与顶层 modules（冗余）→ 以需求层派生的为准。"""
+    raw = {
+        "modules": [{"slug": "oled", "reason": "冗余"}],  # 与需求层不一致，应被忽略
+        "requirements": [
+            {
+                "requirement": "采集温湿度",
+                "sentence": 1,
+                "modules": [{"slug": "dht11", "reason": "测温"}],
+            }
+        ],
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=("dht11", "oled"), hardware_words=WORDS
+    )
+
+    assert result.modules == ("dht11",)  # 派生为准
+
+
+# ---------------------------------------------------------------------------
+# 结构测试（防回退，先例 errors.py / 04 / 05 工单）：域判决归 selection 的边界 pin
+# ---------------------------------------------------------------------------
+
+
+def test_build_module_selection_consumed_by_llm():
+    """消费 pin：域判决单址 = selection.build_module_selection；llm 侧只有机械
+    提取 extract_module_selection_data（等号引用侧）。"""
+    import contest_generator.llm as llm
+    import contest_generator.selection as selection
+
+    assert hasattr(selection, "build_module_selection")
+    assert hasattr(llm, "extract_module_selection_data")
+
+
+def test_validation_result_single_origin():
+    """ValidationResult 定义单址 = library.py（llm 运行时同对象，import 源已切）。"""
+    import contest_generator.library as library
+    import contest_generator.llm as llm
+    from pathlib import Path
+
+    assert llm.ValidationResult is library.ValidationResult
+    src_root = Path(llm.__file__).parent
+    hits = [
+        (path.name, line_no)
+        for path in sorted(src_root.glob("*.py"))
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if "class ValidationResult" in line
+    ]
+    assert hits == [("library.py", 51)]  # ValidationResult 的 class 行（唯一出处）
+
+
+def test_domain_judgment_text_single_origin():
+    """域判决文案单址：'不在硬件词表中' 唯一出处 = selection.py（llm 只做机械提取）。"""
+    import contest_generator.llm as llm
+    from pathlib import Path
+
+    src_root = Path(llm.__file__).parent
+    hits = [
+        path.name
+        for path in sorted(src_root.glob("*.py"))
+        if "不在硬件词表中" in path.read_text(encoding="utf-8")
+    ]
+    assert hits == ["selection.py"]
 
 

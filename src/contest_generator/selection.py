@@ -33,6 +33,11 @@ from .events import (
 from .library import list_modules
 from .manifest import ManifestSummary, ModuleManifest, collect_kits
 from .reference_library import ReferenceEntry, search_references
+from .wordlist import (
+    HardwareWordGroup,
+    category_names,
+    model_names,
+)
 
 if TYPE_CHECKING:
     from .llm import LLM  # 仅类型注解用（selection 不运行时依赖 LLM 客户端，library.py 先例）
@@ -292,6 +297,251 @@ class ReferenceSuggestion:
     id: str
     title: str
     description: str
+
+
+# ---------------------------------------------------------------------------
+# 模型输出 → ModuleSelection 解释链（工单 06 拆层）：域判决单址
+#
+# 模型输出的 JSON 由 llm 做机械形状提取（extract_module_selection_data，
+# 只 JSON 解析 + 顶层对象校验）后传到这里；需求→模块机械派生、词表硬约束
+# （库外建议 name 校验 / 降级 / 拒收）、DeepSeek json 怪癖（sentence 数字
+# 字符串强转）等域判决整体在本层——llm 只做传输。任何结构 / 内容问题都抛
+# SelectionError（错误文案与拆层前逐字一致）。
+# ---------------------------------------------------------------------------
+
+
+def build_module_selection(
+    raw: dict[str, Any],
+    *,
+    known_slugs: Sequence[str],
+    known_reference_ids: Sequence[str] = (),
+    hardware_words: Sequence[HardwareWordGroup] = (),
+) -> ModuleSelection:
+    """把模型输出的原始 JSON 数据（llm 已解析为 dict）解析校验为 ModuleSelection。
+
+    任何结构 / 内容问题（缺模块数组、未知 slug、重复、字段类型错）都抛
+    SelectionError——模型输出不可信，宁可大声失败也不要带病进入生成流程。
+    references 数组（两级注入第一级，可选）同样严格：没给参考文件清单时模型
+    报 references = 幻觉（大声失败）；给了则必须全部在清单内、不重复——要求
+    阅读清单外的参考文件也是幻觉，读它 = 把没校验过的内容带进上下文。
+    非 JSON / 顶层非对象这两处机械检查在 llm 侧（extract_module_selection_data）。
+
+    新契约（工单 10）：模型输出 requirements（功能需求层）时，顶层 modules
+    由库内命中的并集机械派生（保序、首见理由）——模块必有需求支撑，顶层与
+    需求层永不漂移；模型同批输出的 modules 数组被忽略（派生为准）。requirements
+    缺省时退化为旧契约（modules 数组原样解析）。库外建议 suggestions 的 name
+    受硬件词表约束：词表内条目（类别或型号）→ 显示；词表外型号 → 模型给出
+    词表内类别名（category 字段）时降级为类别显示，否则拒收（大声失败）。
+    questions（向用户补问）非空时暂停分析，不以推荐收尾。
+    """
+    known = set(known_slugs)
+    questions = _parse_questions(raw.get("questions"))
+    raw_requirements = raw.get("requirements")
+    if raw_requirements is not None:
+        requirements, modules, reasons = _parse_requirements(
+            raw_requirements, known, hardware_words
+        )
+    elif isinstance(raw.get("modules"), list):
+        modules, reasons = _parse_plain_modules(raw["modules"], known)
+        requirements = ()
+    elif questions:
+        # 纯补问输出（{"questions": [...]}）：没有需求层也没有模块，合法
+        modules, reasons = [], {}
+        requirements = ()
+    else:
+        raise SelectionError("模型输出缺少 modules 数组")
+
+    reference_ids = _parse_reference_ids(raw.get("references", []), known_reference_ids)
+    return ModuleSelection(
+        modules=tuple(modules),
+        reasons=reasons,
+        reference_ids=reference_ids,
+        requirements=requirements,
+        questions=questions,
+    )
+
+
+def _parse_plain_modules(
+    raw_modules: Sequence[Any], known: set[str]
+) -> tuple[list[str], dict[str, str]]:
+    """旧契约的 modules 数组解析（无功能需求层时的顶层模块）。"""
+    modules: list[str] = []
+    reasons: dict[str, str] = {}
+    for index, item in enumerate(raw_modules):
+        if not isinstance(item, dict):
+            raise SelectionError(f"modules[{index}] 必须是对象")
+        slug = item.get("slug")
+        if not isinstance(slug, str) or not slug:
+            raise SelectionError(f"modules[{index}] 缺 slug")
+        if slug not in known:
+            raise SelectionError(f"模型推荐了库中不存在的模块：{slug}")
+        if slug in modules:
+            raise SelectionError(f"模型重复推荐模块：{slug}")
+        reason = item.get("reason", "")
+        if not isinstance(reason, str):
+            raise SelectionError(f"模块 {slug} 的 reason 必须是字符串")
+        modules.append(slug)
+        reasons[slug] = reason
+    return modules, reasons
+
+
+def _parse_requirements(
+    raw: Sequence[Any], known: set[str], hardware_words: Sequence[HardwareWordGroup]
+) -> tuple[tuple[FunctionRequirement, ...], list[str], dict[str, str]]:
+    """功能需求层解析 + 顶层 modules 派生（库内命中并集，保序、首见理由）。
+
+    需求形状：requirement（非空文本）、sentence（正整数——逐句对照的题面
+    句子编号，找不出对应句的需求即脑补）、modules（库内命中，slug 必须
+    在库内且需求内不重复）、suggestions（库外建议，name 词表校验）。
+    """
+    if not isinstance(raw, list):
+        raise SelectionError("requirements 必须是数组")
+    requirements: list[FunctionRequirement] = []
+    modules: list[str] = []
+    reasons: dict[str, str] = {}
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise SelectionError(f"requirements[{index}] 必须是对象")
+        requirement = item.get("requirement")
+        if not isinstance(requirement, str) or not requirement.strip():
+            raise SelectionError(f"requirements[{index}] 缺 requirement 或为空")
+        sentence = item.get("sentence")
+        # DeepSeek json_object 模式实测把数字标量序列化为字符串（"1"）——数字
+        # 字符串按语义无损强转（sentence 语义 = 正整数，不是形状）；非数字字符串 /
+        # 布尔 / 浮点照旧大声失败（脑补与乱编仍拒收）
+        if isinstance(sentence, bool) or not isinstance(sentence, int):
+            if isinstance(sentence, str) and sentence.strip().isdigit():
+                sentence = int(sentence)
+            else:
+                raise SelectionError(f"requirements[{index}] 的 sentence 必须是正整数")
+        if sentence < 1:
+            raise SelectionError(f"requirements[{index}] 的 sentence 必须是正整数")
+        raw_modules = item.get("modules", [])
+        if not isinstance(raw_modules, list):
+            raise SelectionError(f"requirements[{index}] 的 modules 必须是数组")
+        slugs: list[str] = []
+        for m_index, module in enumerate(raw_modules):
+            if not isinstance(module, dict):
+                raise SelectionError(
+                    f"requirements[{index}] modules[{m_index}] 必须是对象"
+                )
+            slug = module.get("slug")
+            if not isinstance(slug, str) or not slug:
+                raise SelectionError(
+                    f"requirements[{index}] modules[{m_index}] 缺 slug"
+                )
+            if slug not in known:
+                raise SelectionError(f"模型推荐了库中不存在的模块：{slug}")
+            if slug in slugs:
+                raise SelectionError(
+                    f"requirements[{index}] 重复推荐模块：{slug}"
+                )
+            reason = module.get("reason", "")
+            if not isinstance(reason, str):
+                raise SelectionError(f"模块 {slug} 的 reason 必须是字符串")
+            slugs.append(slug)
+            if slug not in reasons:
+                reasons[slug] = reason
+        suggestions = _parse_suggestions(item.get("suggestions", []), index, hardware_words)
+        requirements.append(
+            FunctionRequirement(
+                requirement=requirement,
+                sentence_index=sentence,
+                modules=tuple(slugs),
+                suggestions=suggestions,
+            )
+        )
+        for slug in slugs:
+            if slug not in modules:
+                modules.append(slug)
+    return tuple(requirements), modules, reasons
+
+
+def _parse_suggestions(
+    raw: Sequence[Any], req_index: int, hardware_words: Sequence[HardwareWordGroup]
+) -> tuple[OutOfLibrarySuggestion, ...]:
+    """库外建议解析（name 词表硬约束：不懂不编、编造降级）。
+
+    命中词表条目（类别名或型号名）→ 原样显示；词表外型号 → 模型给出词表内
+    类别名（category 字段）时降级为该类别显示；否则拒收（SelectionError）。
+    没给词表时模型报建议 = 无法校验，同样大声失败。examples 自由（用户自行核实）。
+    """
+    if not isinstance(raw, list):
+        raise SelectionError(f"requirements[{req_index}] 的 suggestions 必须是数组")
+    if raw and not hardware_words:
+        raise SelectionError("模型输出了库外建议但未提供硬件词表")
+    categories = category_names(hardware_words)
+    models = model_names(hardware_words)
+    suggestions: list[OutOfLibrarySuggestion] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise SelectionError(
+                f"requirements[{req_index}] suggestions[{index}] 必须是对象"
+            )
+        name = item.get("name")
+        if not isinstance(name, str) or not name:
+            raise SelectionError(
+                f"requirements[{req_index}] suggestions[{index}] 缺 name"
+            )
+        examples = item.get("examples", [])
+        if not isinstance(examples, list) or not all(
+            isinstance(example, str) for example in examples
+        ):
+            raise SelectionError(
+                f"requirements[{req_index}] suggestions[{index}] 的 examples "
+                "必须是字符串数组"
+            )
+        if name in categories or name in models:
+            suggestions.append(
+                OutOfLibrarySuggestion(name=name, examples=tuple(examples))
+            )
+            continue
+        # 词表外：降级为类别（模型给出词表内类别名时）或拒收
+        category = item.get("category")
+        if isinstance(category, str) and category in categories:
+            suggestions.append(
+                OutOfLibrarySuggestion(
+                    name=category, examples=tuple(examples), degraded=True
+                )
+            )
+            continue
+        raise SelectionError(
+            f"库外建议的硬件名不在硬件词表中：{name}（词表外型号请降级为"
+            "词表内的类别名）"
+        )
+    return tuple(suggestions)
+
+
+def _parse_reference_ids(
+    raw: Sequence[Any], known_reference_ids: Sequence[str]
+) -> tuple[str, ...]:
+    """references 数组解析（两级注入第一级，可选；严格校验与旧契约一致）。"""
+    if not isinstance(raw, list):
+        raise SelectionError("references 必须是数组")
+    if not known_reference_ids and raw:
+        raise SelectionError("模型输出了未提供的参考文件 id（没给清单却要点名读全文）")
+    reference_ids: list[str] = []
+    known_refs = set(known_reference_ids)
+    for index, item in enumerate(raw):
+        if not isinstance(item, str) or not item:
+            raise SelectionError(f"references[{index}] 必须是字符串")
+        if item not in known_refs:
+            raise SelectionError(f"模型要求阅读清单外的参考文件：{item}")
+        if item in reference_ids:
+            raise SelectionError(f"模型重复要求阅读参考文件：{item}")
+        reference_ids.append(item)
+    return tuple(reference_ids)
+
+
+def _parse_questions(raw: Any) -> tuple[str, ...]:
+    """questions 数组解析：缺省 / 空 → ()；非空时必须是字符串数组（补问文本）。"""
+    if raw in (None, [], ()):
+        return ()
+    if not isinstance(raw, list) or not all(
+        isinstance(question, str) and question for question in raw
+    ):
+        raise SelectionError("questions 必须是字符串数组")
+    return tuple(raw)
 
 
 # ---------------------------------------------------------------------------

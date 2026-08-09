@@ -6,7 +6,8 @@ LLM 承担六类协议职责：赛题→模块选择、main.c 骨架生成、模
 校验、母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出
 摘要，再基于摘要判定）、参考文件提炼归档判定、赛题库拆条 / 编号提取。
 领域模型不在此处——赛题库模型在 topic_library，判定素材模型在 report，
-模块推荐模型与收敛工作流在 selection，进度事件契约在 events（本模块只消费）。请求体有大小控制：所有嵌内容调用
+模块推荐模型与收敛工作流在 selection，一致性校验结果模型在 library，进度
+事件契约在 events（本模块只消费）。请求体有大小控制：所有嵌内容调用
 （赛题 / 接口块 / 文件全文）超长截断（带标注，AI 知道读到的是截断内容）、
 摘要阶段多文件按预算分批发送、发送前有序列化体积断言兜底——DeepSeek
 网关对请求体有硬性大小限制，一次性全发会 413。
@@ -18,7 +19,6 @@ import json
 import math
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
 
 from .config import AppConfig
@@ -34,6 +34,7 @@ from .events import (
     ProgressEvent,
     _emit,
 )
+from .library import ValidationResult
 from .manifest import ManifestSummary
 from .report import (
     ACTION_MERGE,
@@ -49,14 +50,14 @@ from .selection import (
     ModuleSelection,
     OutOfLibrarySuggestion,
     ReferenceSuggestion,
+    SelectionError,
+    build_module_selection,
 )
 from .topic_library import TopicDraft, validate_topic_key
 from .wordlist import (
     DEFAULT_WORDLIST,
     HardwareWordGroup,
-    category_names,
     format_wordlist_prompt,
-    model_names,
 )
 
 # ---------------------------------------------------------------------------
@@ -351,14 +352,6 @@ class LLMError(Exception):
     """LLM 调用或输出解析失败，message 说明具体问题。"""
 
 
-@dataclass(frozen=True)
-class ValidationResult:
-    """模块简介与实际代码的一致性校验结果。"""
-
-    consistent: bool  # 简介与代码是否一致
-    issues: str = ""  # 不一致时 AI 指出的具体差异（一致时为空）
-
-
 # 分批 / 重试循环的条目类型限定：两阶段各自只有一对输入 / 输出类型（摘要
 # 阶段：待判文件 → 摘要；判定阶段：摘要 → 判定）。用限定 TypeVar 表达而非
 # Protocol——mypy 2.3.0 在 from __future__ import annotations 下对 Protocol
@@ -558,8 +551,8 @@ class DeepSeekLLM:
         参考段、输出契约无 references 字段）。
 
         工单 10 起输出功能需求层（requirements / suggestions / questions），
-        顶层 modules 由需求层机械派生（parse_module_selection）；硬件词表进
-        提示词作科普素材、作库外建议 name 的校验源。
+        顶层 modules 由需求层机械得出（build_module_selection，域判决在
+        selection.py）；硬件词表进提示词作科普素材、作库外建议 name 的校验源。
         """
         content = self._chat(
             [
@@ -577,12 +570,18 @@ class DeepSeekLLM:
             ],
             json_mode=True,
         )
-        return parse_module_selection(
-            content,
-            known_slugs=[s.slug for s in manifest_summaries],
-            known_reference_ids=[r.id for r in references],
-            hardware_words=self._hardware_words,
-        )
+        data = extract_module_selection_data(content)
+        try:
+            return build_module_selection(
+                data,
+                known_slugs=[s.slug for s in manifest_summaries],
+                known_reference_ids=[r.id for r in references],
+                hardware_words=self._hardware_words,
+            )
+        except SelectionError as exc:
+            # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；
+            # selection 不 import LLMError——否则与 llm → selection 既有边成环）
+            raise LLMError(str(exc)) from exc
 
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
@@ -1086,27 +1085,13 @@ class DeepSeekLLM:
             ) from exc
 
 
-def parse_module_selection(
-    content: str,
-    known_slugs: Sequence[str],
-    known_reference_ids: Sequence[str] = (),
-    hardware_words: Sequence[HardwareWordGroup] = (),
-) -> ModuleSelection:
-    """把模型返回的 JSON 文本解析校验为 ModuleSelection。
+def extract_module_selection_data(content: str) -> dict[str, Any]:
+    """把模型返回的 JSON 文本做机械形状提取，返回校验前的原始 dict。
 
-    任何结构 / 内容问题（非 JSON、缺模块数组、未知 slug、重复、字段类型错）
-    都抛 LLMError——模型输出不可信，宁可大声失败也不要带病进入生成流程。
-    references 数组（两级注入第一级，可选）同样严格：没给参考文件清单时模型
-    报 references = 幻觉（大声失败）；给了则必须全部在清单内、不重复——要求
-    阅读清单外的参考文件也是幻觉，读它 = 把没校验过的内容带进上下文。
-
-    新契约（工单 10）：模型输出 requirements（功能需求层）时，顶层 modules
-    由库内命中的并集机械派生（保序、首见理由）——模块必有需求支撑，顶层与
-    需求层永不漂移；模型同批输出的 modules 数组被忽略（派生为准）。requirements
-    缺省时退化为旧契约（modules 数组原样解析）。库外建议 suggestions 的 name
-    受硬件词表约束：词表内条目（类别或型号）→ 显示；词表外型号 → 模型给出
-    词表内类别名（category 字段）时降级为类别显示，否则拒收（大声失败）。
-    questions（向用户补问）非空时暂停分析，不以推荐收尾。
+    只做两处机械检查：JSON 解析（非 JSON 抛 LLMError）与顶层必须是对象
+    （文案逐字）——语义校验（字段必填 / 类型 / known / 重复 / 需求→顶层
+    模块 / 词表 / 怪癖）全部在 selection.build_module_selection（域判决单址），
+    llm 只做传输。
     """
     try:
         data = json.loads(content)
@@ -1114,215 +1099,7 @@ def parse_module_selection(
         raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
     if not isinstance(data, dict):
         raise LLMError("模型输出必须是 JSON 对象")
-
-    known = set(known_slugs)
-    questions = _parse_questions(data.get("questions"))
-    raw_requirements = data.get("requirements")
-    if raw_requirements is not None:
-        requirements, modules, reasons = _parse_requirements(
-            raw_requirements, known, hardware_words
-        )
-    elif isinstance(data.get("modules"), list):
-        modules, reasons = _parse_plain_modules(data["modules"], known)
-        requirements = ()
-    elif questions:
-        # 纯补问输出（{"questions": [...]}）：没有需求层也没有模块，合法
-        modules, reasons = [], {}
-        requirements = ()
-    else:
-        raise LLMError("模型输出缺少 modules 数组")
-
-    reference_ids = _parse_reference_ids(data.get("references", []), known_reference_ids)
-    return ModuleSelection(
-        modules=tuple(modules),
-        reasons=reasons,
-        reference_ids=reference_ids,
-        requirements=requirements,
-        questions=questions,
-    )
-
-
-def _parse_plain_modules(
-    raw_modules: Sequence[Any], known: set[str]
-) -> tuple[list[str], dict[str, str]]:
-    """旧契约的 modules 数组解析（无功能需求层时的顶层模块）。"""
-    modules: list[str] = []
-    reasons: dict[str, str] = {}
-    for index, item in enumerate(raw_modules):
-        if not isinstance(item, dict):
-            raise LLMError(f"modules[{index}] 必须是对象")
-        slug = item.get("slug")
-        if not isinstance(slug, str) or not slug:
-            raise LLMError(f"modules[{index}] 缺 slug")
-        if slug not in known:
-            raise LLMError(f"模型推荐了库中不存在的模块：{slug}")
-        if slug in modules:
-            raise LLMError(f"模型重复推荐模块：{slug}")
-        reason = item.get("reason", "")
-        if not isinstance(reason, str):
-            raise LLMError(f"模块 {slug} 的 reason 必须是字符串")
-        modules.append(slug)
-        reasons[slug] = reason
-    return modules, reasons
-
-
-def _parse_requirements(
-    raw: Sequence[Any], known: set[str], hardware_words: Sequence[HardwareWordGroup]
-) -> tuple[tuple[FunctionRequirement, ...], list[str], dict[str, str]]:
-    """功能需求层解析 + 顶层 modules 派生（库内命中并集，保序、首见理由）。
-
-    需求形状：requirement（非空文本）、sentence（正整数——逐句对照的题面
-    句子编号，找不出对应句的需求即脑补）、modules（库内命中，slug 必须
-    在库内且需求内不重复）、suggestions（库外建议，name 词表校验）。
-    """
-    if not isinstance(raw, list):
-        raise LLMError("requirements 必须是数组")
-    requirements: list[FunctionRequirement] = []
-    modules: list[str] = []
-    reasons: dict[str, str] = {}
-    for index, item in enumerate(raw):
-        if not isinstance(item, dict):
-            raise LLMError(f"requirements[{index}] 必须是对象")
-        requirement = item.get("requirement")
-        if not isinstance(requirement, str) or not requirement.strip():
-            raise LLMError(f"requirements[{index}] 缺 requirement 或为空")
-        sentence = item.get("sentence")
-        # DeepSeek json_object 模式实测把数字标量序列化为字符串（"1"）——数字
-        # 字符串按语义无损强转（sentence 语义 = 正整数，不是形状）；非数字字符串 /
-        # 布尔 / 浮点照旧大声失败（脑补与乱编仍拒收）
-        if isinstance(sentence, bool) or not isinstance(sentence, int):
-            if isinstance(sentence, str) and sentence.strip().isdigit():
-                sentence = int(sentence)
-            else:
-                raise LLMError(f"requirements[{index}] 的 sentence 必须是正整数")
-        if sentence < 1:
-            raise LLMError(f"requirements[{index}] 的 sentence 必须是正整数")
-        raw_modules = item.get("modules", [])
-        if not isinstance(raw_modules, list):
-            raise LLMError(f"requirements[{index}] 的 modules 必须是数组")
-        slugs: list[str] = []
-        for m_index, module in enumerate(raw_modules):
-            if not isinstance(module, dict):
-                raise LLMError(
-                    f"requirements[{index}] modules[{m_index}] 必须是对象"
-                )
-            slug = module.get("slug")
-            if not isinstance(slug, str) or not slug:
-                raise LLMError(
-                    f"requirements[{index}] modules[{m_index}] 缺 slug"
-                )
-            if slug not in known:
-                raise LLMError(f"模型推荐了库中不存在的模块：{slug}")
-            if slug in slugs:
-                raise LLMError(
-                    f"requirements[{index}] 重复推荐模块：{slug}"
-                )
-            reason = module.get("reason", "")
-            if not isinstance(reason, str):
-                raise LLMError(f"模块 {slug} 的 reason 必须是字符串")
-            slugs.append(slug)
-            if slug not in reasons:
-                reasons[slug] = reason
-        suggestions = _parse_suggestions(item.get("suggestions", []), index, hardware_words)
-        requirements.append(
-            FunctionRequirement(
-                requirement=requirement,
-                sentence_index=sentence,
-                modules=tuple(slugs),
-                suggestions=suggestions,
-            )
-        )
-        for slug in slugs:
-            if slug not in modules:
-                modules.append(slug)
-    return tuple(requirements), modules, reasons
-
-
-def _parse_suggestions(
-    raw: Sequence[Any], req_index: int, hardware_words: Sequence[HardwareWordGroup]
-) -> tuple[OutOfLibrarySuggestion, ...]:
-    """库外建议解析（name 词表硬约束：不懂不编、编造降级）。
-
-    命中词表条目（类别名或型号名）→ 原样显示；词表外型号 → 模型给出词表内
-    类别名（category 字段）时降级为该类别显示；否则拒收（LLMError）。没给
-    词表时模型报建议 = 无法校验，同样大声失败。examples 自由（用户自行核实）。
-    """
-    if not isinstance(raw, list):
-        raise LLMError(f"requirements[{req_index}] 的 suggestions 必须是数组")
-    if raw and not hardware_words:
-        raise LLMError("模型输出了库外建议但未提供硬件词表")
-    categories = category_names(hardware_words)
-    models = model_names(hardware_words)
-    suggestions: list[OutOfLibrarySuggestion] = []
-    for index, item in enumerate(raw):
-        if not isinstance(item, dict):
-            raise LLMError(
-                f"requirements[{req_index}] suggestions[{index}] 必须是对象"
-            )
-        name = item.get("name")
-        if not isinstance(name, str) or not name:
-            raise LLMError(
-                f"requirements[{req_index}] suggestions[{index}] 缺 name"
-            )
-        examples = item.get("examples", [])
-        if not isinstance(examples, list) or not all(
-            isinstance(example, str) for example in examples
-        ):
-            raise LLMError(
-                f"requirements[{req_index}] suggestions[{index}] 的 examples "
-                "必须是字符串数组"
-            )
-        if name in categories or name in models:
-            suggestions.append(
-                OutOfLibrarySuggestion(name=name, examples=tuple(examples))
-            )
-            continue
-        # 词表外：降级为类别（模型给出词表内类别名时）或拒收
-        category = item.get("category")
-        if isinstance(category, str) and category in categories:
-            suggestions.append(
-                OutOfLibrarySuggestion(
-                    name=category, examples=tuple(examples), degraded=True
-                )
-            )
-            continue
-        raise LLMError(
-            f"库外建议的硬件名不在硬件词表中：{name}（词表外型号请降级为"
-            "词表内的类别名）"
-        )
-    return tuple(suggestions)
-
-
-def _parse_reference_ids(
-    raw: Sequence[Any], known_reference_ids: Sequence[str]
-) -> tuple[str, ...]:
-    """references 数组解析（两级注入第一级，可选；严格校验与旧契约一致）。"""
-    if not isinstance(raw, list):
-        raise LLMError("references 必须是数组")
-    if not known_reference_ids and raw:
-        raise LLMError("模型输出了未提供的参考文件 id（没给清单却要点名读全文）")
-    reference_ids: list[str] = []
-    known_refs = set(known_reference_ids)
-    for index, item in enumerate(raw):
-        if not isinstance(item, str) or not item:
-            raise LLMError(f"references[{index}] 必须是字符串")
-        if item not in known_refs:
-            raise LLMError(f"模型要求阅读清单外的参考文件：{item}")
-        if item in reference_ids:
-            raise LLMError(f"模型重复要求阅读参考文件：{item}")
-        reference_ids.append(item)
-    return tuple(reference_ids)
-
-
-def _parse_questions(raw: Any) -> tuple[str, ...]:
-    """questions 数组解析：缺省 / 空 → ()；非空时必须是字符串数组（补问文本）。"""
-    if raw in (None, [], ()):
-        return ()
-    if not isinstance(raw, list) or not all(
-        isinstance(question, str) and question for question in raw
-    ):
-        raise LLMError("questions 必须是字符串数组")
-    return tuple(raw)
+    return data
 
 
 def parse_distillation_report(
@@ -1601,7 +1378,7 @@ def _distill_user_prompt(
 def parse_archive_judgment(content: str, paths: Sequence[str]) -> tuple[str, ...]:
     """把模型返回的归档判定 JSON 解析校验为值得归档的路径列表。
 
-    路径词表约束（未知路径 / 重复路径拒绝）与 parse_module_selection 同款——
+    路径词表约束（未知路径 / 重复路径拒绝）与 build_module_selection 同款——
     模型输出不可信，宁可大声失败也不要带病进入归档流程。空列表合法（没有
     文件值得归档），由调用方决定如何呈现。
     """
