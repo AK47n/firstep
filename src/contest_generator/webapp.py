@@ -30,13 +30,6 @@ from .config import (
     save_config,
 )
 from .errors import error_entry
-from .events import (
-    # 终态事件词表 re-export：唯一出处 = events.py（工单 C2），此处维持既有
-    # 导入契约（端点契约测试从 webapp 导入）；瘦身后的端点经 sse 运行器发射
-    EVENT_DONE,
-    EVENT_ERROR,
-    EVENT_QUESTION,
-)
 from .extraction import extract_file
 from .generator import (
     GenerationSummary,
@@ -428,37 +421,36 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             suggestions = ()
             reader = None
         def run(emit: SseEmitter) -> None:
-            try:
-                selection = select_modules_convergent(
-                    _llm(context),
-                    problem_text,
-                    summaries,
-                    references=suggestions,
-                    reader=reader,
-                    progress_emitter=emit.progress,
-                )
-                if selection.questions:
-                    emit.question({"questions": list(selection.questions)})
-                    return
-                result: dict[str, Any] = {
-                    "modules": [
-                        {"slug": slug, "reason": selection.reasons.get(slug, "")}
-                        for slug in selection.modules
-                    ],
-                    "requirements": [
-                        requirement.to_dict()
-                        for requirement in selection.requirements
-                    ],
-                }
-                if topic is not None:
-                    result["topic_id"] = topic.key
-                    result["related_modules"] = list(topic.related_modules)
-                emit.done(result)
-            except Exception as exc:
-                emit.error(_error_message(exc))
+            selection = select_modules_convergent(
+                _llm(context),
+                problem_text,
+                summaries,
+                references=suggestions,
+                reader=reader,
+                progress_emitter=emit.progress,
+            )
+            if selection.questions:
+                emit.question({"questions": list(selection.questions)})
+                return
+            result: dict[str, Any] = {
+                "modules": [
+                    {"slug": slug, "reason": selection.reasons.get(slug, "")}
+                    for slug in selection.modules
+                ],
+                "requirements": [
+                    requirement.to_dict()
+                    for requirement in selection.requirements
+                ],
+            }
+            if topic is not None:
+                result["topic_id"] = topic.key
+                result["related_modules"] = list(topic.related_modules)
+            emit.done(result)
 
+        # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
-            run_sse(run), headers={"Content-Type": "text/event-stream"}
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
         )
 
     @app.post("/api/selection/expand")
@@ -504,14 +496,28 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def generate(payload: dict) -> dict:
         """完整生成：选模块 → 母版 → 生成 → 摘要（流程在 generate_project）。
 
-        历史赛题入口：topic_id 给定时该题专用模块自动并入最终工程（生成物与
-        用户手选等价）；查无此条明确报错（不猜测编造）。"""
+        历史赛题入口：topic_id 给定时装配点（resolve_topic_context）一次备好
+        上下文，该题专用模块自动并入最终工程（生成物与用户手选等价）——
+        generate_project 只消费装配结果，不重扫库、不重解析条目；查无此条
+        明确报错（不猜测编造）。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
         output_dir = Path(_require_str(payload, "output_dir"))
         topic_id = _optional_str(payload, "topic_id")
         config = _require_config(context)
+        related_modules: Sequence[str] = ()
+        if topic_id:
+            topic = resolve_topic_context(
+                llm=None,  # 显式编号路径不需要 AI 提取；题面 / 关联素材已装配
+                topic_key=topic_id,
+                problem_text="",
+                module_library_dir=config.module_library_dir,
+                topic_library_dir=_topic_library_dir(context),
+                reference_library_dir=_reference_dir(context),
+            )
+            if topic is not None:
+                related_modules = topic.related_modules
         summary = generate_project(
             platform=platform,
             slugs=slugs,
@@ -519,8 +525,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             output_dir=output_dir,
             module_library_dir=config.module_library_dir,
             masters_dir=config.masters_dir,
-            topic_key=topic_id,
-            topic_library_dir=_topic_library_dir(context) if topic_id else None,
+            related_modules=related_modules,
         )
         return _generation_result(summary)
 
@@ -655,6 +660,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         ]
 
     @app.post("/api/masters/distill")
+    @_map_errors
     def masters_distill(payload: dict) -> StreamingResponse:
         """AI 提炼报告（SSE 流，工单 02）：start → 进度事件 → done（完整报告）
         或 error（中文信息）→ 流结束。HTTP 200 起流，失败以流内 error 事件收尾
@@ -672,15 +678,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         llm = _llm(context)
 
         def run(emit: SseEmitter) -> None:
-            try:
-                projects = [scan_project(Path(d)) for d in project_dirs]
-                report = distill_master(llm, platform, projects, emit.progress)
-                emit.done(report.to_dict())
-            except Exception as exc:
-                emit.error(_error_message(exc))
+            projects = [scan_project(Path(d)) for d in project_dirs]
+            report = distill_master(llm, platform, projects, emit.progress)
+            emit.done(report.to_dict())
 
+        # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
-            run_sse(run), headers={"Content-Type": "text/event-stream"}
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
         )
 
     @app.post("/api/masters/confirm")

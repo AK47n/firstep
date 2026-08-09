@@ -14,11 +14,11 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING, Callable, Sequence
 
 from .keil import include_search_dirs
 from .library import list_modules
-from .llm import LLM, LLMError, build_manifest_summaries
+from .llm import LLMError, build_manifest_summaries
 from .manifest import ManifestSummary, ModuleManifest
 from .master import master_project_dir
 from .patchers import PatcherRegistry, default_registry
@@ -43,6 +43,11 @@ from .topic_library import (
     related_module_slugs,
     resolve_number,
 )
+from .treewalk import iter_project_files
+
+if TYPE_CHECKING:
+    # 仅类型注解用（skeleton.py 同规：生成流程不该在运行时拉进 LLM 栈）
+    from .llm import LLM
 
 MODULES_SUBDIR = "modules"
 
@@ -171,7 +176,7 @@ def resolve_topic_context(
 
 def _resolve_topic_entry(topic_library_dir: Path, topic_key: str) -> TopicEntry:
     """历史赛题条目（唯一解析点：查库，不猜测编造；关联模块由调用方用
-    候选清单筛——装配上下文与生成流程各扫一次库，不互相复制解析逻辑）。"""
+    候选清单筛——装配点只此一处，生成接缝消费装配结果不再扫库）。"""
     return resolve_number(topic_library_dir, topic_key)
 
 
@@ -209,33 +214,25 @@ class GenerationSummary:
 
 
 def describe_generation(
-    output_dir: Path, manifests: Sequence[ModuleManifest], platform: str
+    output_dir: Path,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    include_dirs: Sequence[str],
 ) -> GenerationSummary:
-    """生成完成后的只读摘要：结构清单直接读输出目录；include 目录按目标平台
-    条目推导，与 _copy_module_files 共享 MODULES_SUBDIR——子目录改名后界面
-    与工程不会漂移。模块根目录下的文件（parent 为空）对应 modules/<slug>/。
+    """生成完成后的只读摘要：结构清单直接读输出目录；include 目录消费
+    _copy_module_files 的实际复制结果（同一来源，不再从 manifest 二次推导
+    ——同一流程两套推导改一处忘另一处即漂移）。模块根目录下的文件（parent
+    为空）对应 modules/<slug>/。
     """
     structure = tuple(
         p.relative_to(output_dir).as_posix()
-        for p in sorted(output_dir.rglob("*"))
-        if p.is_file() and ".git" not in p.relative_to(output_dir).parts
+        for p in iter_project_files(output_dir)
     )
-    include_dirs: list[str] = []
     modules: list[tuple[str, tuple[str, ...]]] = []
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         files = tuple(entry.files) if entry is not None else ()
         modules.append((manifest.slug, files))
-        for rel in files:
-            parent = Path(rel).parent
-            parts = (
-                [MODULES_SUBDIR, manifest.slug, *parent.parts]
-                if parent != Path(".")
-                else [MODULES_SUBDIR, manifest.slug]
-            )
-            include_dir = Path(*parts).as_posix()
-            if include_dir not in include_dirs:
-                include_dirs.append(include_dir)
     return GenerationSummary(
         output_dir=output_dir,
         structure=structure,
@@ -253,8 +250,7 @@ def generate_project(
     module_library_dir: Path,
     masters_dir: Path,
     registry: PatcherRegistry | None = None,
-    topic_key: str = "",
-    topic_library_dir: Path | None = None,
+    related_modules: Sequence[str] = (),
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -263,22 +259,12 @@ def generate_project(
     （masters_dir/<platform>）归母版模块所有（master_project_dir），这里只
     调用不另抄。所有校验失败都在创建输出目录之前发生。
 
-    历史赛题入口：topic_key 给定时解析该题（题面全文与关联素材在推荐 / 骨架
-    阶段经 resolve_topic_context 进上下文），该题专用模块自动并入最终模块集
-    （复用"XX 题专用"标注自动发现，生成物与用户手选等价）；查无此条由
-    topic_library.resolve_number 大声报错（不猜测编造）。
-    """
-    if topic_key:
-        if topic_library_dir is None:
-            raise GeneratorError("生成历史赛题工程必须给出 topic_library_dir")
-        entry = _resolve_topic_entry(topic_library_dir, topic_key)
-        related = related_module_slugs(
-            list_modules(module_library_dir) if module_library_dir.is_dir() else [],
-            entry.key,
-        )
-        slugs = prepend_related_modules(related, slugs)  # 该题专用模块并入（前置去重保序）
+    历史赛题入口：related_modules = 该题专用模块 slug（推荐 / 骨架阶段已由
+    resolve_topic_context 装配进上下文，webapp 把装配结果透传过来——本接缝
+    只消费不重扫库、不重解析条目；生成物与用户手选等价）。"""
+    slugs = prepend_related_modules(related_modules, slugs)  # 该题专用模块并入（前置去重保序）
     resolved = resolve_selection(module_library_dir, platform, slugs)
-    result_dir = generate(
+    result_dir, include_dirs = generate(
         platform=platform,
         manifests=resolved.manifests,
         module_library_dir=module_library_dir,
@@ -287,7 +273,7 @@ def generate_project(
         main_c_content=main_c_content,
         registry=registry,
     )
-    return describe_generation(result_dir, resolved.manifests, platform)
+    return describe_generation(result_dir, resolved.manifests, platform, include_dirs)
 
 
 @dataclass(frozen=True)
@@ -369,14 +355,13 @@ def build_module_corpus(
         modules.append((manifest.slug, tuple(files)))
 
     master_headers: list[tuple[str, str]] = []
-    for rel in sorted(
-        p.relative_to(master_project_dir).as_posix()
-        for p in master_project_dir.rglob("*.h")
-    ):
-        path = master_project_dir / rel
+    for path in iter_project_files(master_project_dir, pattern="*.h"):
         try:
             master_headers.append(
-                (rel, path.read_text(encoding="utf-8", errors="replace"))
+                (
+                    path.relative_to(master_project_dir).as_posix(),
+                    path.read_text(encoding="utf-8", errors="replace"),
+                )
             )
         except OSError:
             continue
@@ -402,8 +387,11 @@ def generate(
     output_dir: Path,
     main_c_content: str,
     registry: PatcherRegistry | None = None,
-) -> Path:
-    """生成完整工程目录，返回输出目录路径。"""
+) -> tuple[Path, tuple[str, ...]]:
+    """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径）。
+
+    include 目录 = _copy_module_files 实际复制出的目录（摘要消费同一来源，
+    不再二次推导——见 describe_generation）。"""
     patcher_registry = registry or default_registry()
     patcher = patcher_registry.get(platform)  # 未知平台在这里失败
 
@@ -446,7 +434,7 @@ def generate(
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
 
-    return output_dir
+    return output_dir, tuple(p.as_posix() for p in include_dirs)
 
 
 def _check_module_files(corpus: ModuleCorpus) -> None:

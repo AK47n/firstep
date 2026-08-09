@@ -21,7 +21,10 @@ from contest_generator.events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
     EVENT_CONVERGED,
+    EVENT_DONE,
+    EVENT_ERROR,
     EVENT_PHASE_DONE,
+    EVENT_QUESTION,
     EVENT_RETRY,
     EVENT_ROUND,
     EVENT_START,
@@ -49,9 +52,6 @@ from contest_generator.topic_library import TopicDraft
 from contest_generator.master import distill_master, import_master, main_c_template, scan_project
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import (
-    EVENT_DONE,
-    EVENT_ERROR,
-    EVENT_QUESTION,
     AppContext,
     create_app,
 )

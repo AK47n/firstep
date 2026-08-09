@@ -2082,6 +2082,84 @@ def test_distill_master_start_totals_match_emitted_batch_sequence(monkeypatch):
     )
 
 
+def test_distill_start_decide_count_single_sourced_across_version_split(monkeypatch):
+    """start 的判定批数单源化（工单 B）：单文件多版本合计超预算拆批后，摘要
+    条目数 > 待判文件数——start 的 decide_batch_count 必须从实际摘要条目数推导
+    （旧公式按 judgment_files 数算会少报，start 总量 ≠ 实发批序）。"""
+    import contest_generator.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "JUDGMENT_BATCH_SIZE", 2)
+    monkeypatch.setattr(llm_module, "MAX_SUMMARY_BATCH_CHARS", 3)
+    files = (
+        JudgmentFile(
+            "A.c",
+            (FileVersion("AAAA", ("p1",)), FileVersion("BBBB", ("p2",))),
+        ),
+        JudgmentFile("B.c", (FileVersion("CC", ("p1",)),)),
+    )
+
+    def summaries_body(entries: tuple[tuple[str, str], ...]) -> str:
+        """每批的摘要响应：版本工程名必须与发送词表一致（parse 校验版本组
+        不重不漏恰好覆盖）。"""
+        return _api_response(
+            json.dumps(
+                {
+                    "summaries": [
+                        {
+                            "path": path,
+                            "versions": [
+                                {
+                                    "projects": [project],
+                                    "summary": f"{path} {project} 摘要",
+                                }
+                            ],
+                        }
+                        for path, project in entries
+                    ]
+                }
+            )
+        )
+
+    def decisions_body(paths: tuple[str, ...]) -> str:
+        return _api_response(
+            json.dumps(
+                {
+                    "decisions": [
+                        {"path": path, "action": ACTION_KEEP, "reason": "通用"}
+                        for path in paths
+                    ]
+                }
+            )
+        )
+
+    # A 拆成两条目（p1/p2 各一版）→ 摘要批 3（每条目一批）、摘要条目 3 →
+    # 判定批 ⌈3/2⌉=2；旧公式按 judgment_files 数算 ⌈2/2⌉=1，与实际批序分叉。
+    transport = SequenceTransport(
+        [
+            summaries_body((("A.c", "p1"),)),
+            summaries_body((("A.c", "p2"),)),
+            summaries_body((("B.c", "p1"),)),
+            decisions_body(("A.c",)),
+            decisions_body(("B.c",)),
+        ]
+    )
+    llm = _llm(transport)
+    events: list[ProgressEvent] = []
+
+    decisions = llm.distill_master(
+        "stm32", ("p1",), files, "对比", progress_emitter=events.append
+    )
+
+    assert events[0] == ProgressEvent(
+        type=EVENT_START, judgment_count=2, summary_batch_count=3, decide_batch_count=2
+    )
+    decide_starts = [
+        e for e in events if e.type == EVENT_BATCH_START and e.phase == PHASE_DECIDE
+    ]
+    assert [(e.batch_index, e.batch_count) for e in decide_starts] == [(1, 2), (2, 2)]
+    assert {d.path for d in decisions} == {"A.c", "B.c"}
+
+
 def test_distill_master_emits_retry_events_on_missing():
     """补问路径：两阶段各自漏条目 → 每轮补问开始发 retry（轮次 1 起、缺失数 =
     该轮要补问的文件数），补全后照常 batch_done / phase_done——事件序列完整。"""

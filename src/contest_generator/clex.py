@@ -1,9 +1,11 @@
 """C 源码词法层 —— 机械切分文本，不判语义。
 
-围栏剥离 / 注释与字符串切分 / 引号 include 提取 / 顶层 #define 扫描的唯一
-出处。接口全部是"字符串进、字符串出（或元组列表出）"，不碰盘上文件——
+围栏剥离 / 注释与字符串切分（iter_c_regions）/ 括号配对（match_bracket）/
+空白注释跳读（next_significant）/ 引号 include 提取 / 顶层 #define 扫描的
+唯一出处。接口全部是"字符串进、字符串出（或元组列表出）"，不碰盘上文件——
 骨架自检与生成门禁共用同一份实现，杜绝逐字重复（判例：围栏正则曾两处定义、
-注释剥离器两义并存，改一处忘另一处即分叉）。
+注释剥离器两义并存，改一处忘另一处即分叉；skeleton 曾手写第二套注释/字符串
+切分与括号配对，工单 C 深化吸收）。
 
 不做的事：调用形态识别（"名字后跟 ( 是不是函数调用"）是骨架自检的语义
 判断，归 skeleton.py（_DECL_OR_DEF_RE 等）；这里只做任何 C 源文本都需要
@@ -13,6 +15,7 @@
 from __future__ import annotations
 
 import re
+from typing import Iterator, Literal
 
 # Markdown 代码围栏行（``` / ~~~，可带语言标注）：LLM 输出最常见的传输层包裹
 _FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
@@ -52,6 +55,105 @@ def fence_line_indices(code: str) -> list[tuple[int, str]]:
     return hits
 
 
+# 词法区域类型：line_comment / block_comment / string / char /
+# preprocessor（行首 # 整行）/ code（其余普通字符的连续段）
+_RegionKind = Literal[
+    "line_comment", "block_comment", "string", "char", "preprocessor", "code"
+]
+
+
+def _at_preprocessor_line_start(code: str, pos: int, indented: bool) -> bool:
+    """'#' 位置是否行首。indented=True 允许前导空格/制表（骨架替换走查的
+    透传语义——缩进 # 行里的宏体不能被当普通文本扫调用）；注意前导空白只能
+    是空格/制表，不能跨换行——'\n'.isspace() 为 True，用 isspace 回退会把
+    上一行行尾当空白吞掉（旧 skeleton 的 _at_line_start_after_ws 即因此
+    只在文件首行生效）。False 严格"i==0 或前一字符是换行"（strip_comments
+    的 pid.c 判例语义，见其 docstring）。
+    """
+    if indented:
+        j = pos
+        while j > 0 and code[j - 1] in (" ", "\t"):
+            j -= 1
+        return j == 0 or code[j - 1] == "\n"
+    return pos == 0 or code[pos - 1] == "\n"
+
+
+def _skip_literal(code: str, start: int) -> int:
+    """从字符串/字符字面量起点跳到闭合引号之后（跳过转义；不闭合吃到结尾）。"""
+    quote = code[start]
+    i = start + 1
+    n = len(code)
+    while i < n and code[i] != quote:
+        if code[i] == "\\":
+            i += 1
+        i += 1
+    return min(i + 1, n)
+
+
+def iter_c_regions(
+    code: str,
+    *,
+    start: int = 0,
+    preprocessor: bool = True,
+    preprocessor_indented: bool = False,
+) -> Iterator[tuple[_RegionKind, int, int]]:
+    """注释/字符串/预处理行感知的机械切分：逐个产出 (kind, start, end)。
+
+    六类区域：line_comment（// 到行尾含换行，不闭合吃到结尾）/ block_comment
+    （/* */，不闭合吃到结尾）/ string / char（含转义，不闭合吃到结尾）/
+    preprocessor（行首 # 打头的整行含换行）/ code（其余普通字符的连续段）。
+    所有下游（注释剥离 / 括号配对 / 跳读 / 替换走查）共用这一份切分——
+    skeleton 曾手写第二套（_match_paren / _match_brace / _skip_ws_and_comments
+    等约 160 行），工单 C 深化后全部消费本原语。
+
+    preprocessor=False 时不识别预处理行（# 行按普通文本，其字符串照剥——
+    strip_comments 默认轴的语义）。行首宽容度见 _at_preprocessor_line_start。
+    """
+    i = start
+    n = len(code)
+    while i < n:
+        char = code[i]
+        nxt = code[i + 1] if i + 1 < n else ""
+        if char == "/" and nxt == "/":  # 行注释
+            end = code.find("\n", i)
+            end = n if end == -1 else end + 1
+            yield ("line_comment", i, end)
+            i = end
+        elif char == "/" and nxt == "*":  # 块注释（跨行一并跳过）
+            end = code.find("*/", i + 2)
+            end = n if end == -1 else end + 2
+            yield ("block_comment", i, end)
+            i = end
+        elif preprocessor and char == "#" and _at_preprocessor_line_start(
+            code, i, preprocessor_indented
+        ):
+            # 预处理行透传：整行原样保留（含引号里的头文件名 / 宏体）
+            end = code.find("\n", i)
+            end = n if end == -1 else end + 1
+            yield ("preprocessor", i, end)
+            i = end
+        elif char in ('"', "'"):  # 字符串 / 字符字面量（含转义）
+            end = _skip_literal(code, i)
+            yield ("string" if char == '"' else "char", i, end)
+            i = end
+        else:  # 普通字符段：拼到下一个区域边界
+            j = i + 1
+            while j < n:
+                c = code[j]
+                c2 = code[j + 1] if j + 1 < n else ""
+                if c == "/" and (c2 == "/" or c2 == "*"):
+                    break
+                if preprocessor and c == "#" and _at_preprocessor_line_start(
+                    code, j, preprocessor_indented
+                ):
+                    break
+                if c in ('"', "'"):
+                    break
+                j += 1
+            yield ("code", i, j)
+            i = j
+
+
 def strip_comments(code: str, *, keep_preprocessor: bool = False) -> str:
     """去掉 C 注释（行/块）与字符串/字符字面量，只留代码形态。
 
@@ -62,37 +164,56 @@ def strip_comments(code: str, *, keep_preprocessor: bool = False) -> str:
     pid.c 第 2 行 #include 被当字符串剥掉，include 门禁漏检）。默认
     keep_preprocessor=False 时 # 行按普通文本处理（调用形态提取用，注释 /
     字符串照剥）。
+
+    实现 = iter_c_regions 单源切分：非 code 区域整段跳过 / 保留（预处理行）。
     """
     out: list[str] = []
-    i = 0
-    length = len(code)
-    while i < length:
-        char = code[i]
-        nxt = code[i + 1] if i + 1 < length else ""
-        if char == "/" and nxt == "/":  # 行注释
-            end = code.find("\n", i)
-            i = length if end == -1 else end + 1
-        elif char == "/" and nxt == "*":  # 块注释（跨行一并跳过）
-            end = code.find("*/", i + 2)
-            i = length if end == -1 else end + 2
-        elif keep_preprocessor and char == "#" and (i == 0 or code[i - 1] == "\n"):
-            # 预处理行透传：整行原样保留（含引号里的头文件名 / 宏体）
-            end = code.find("\n", i)
-            end = length if end == -1 else end + 1
-            out.append(code[i:end])
-            i = end
-        elif char in ('"', "'"):  # 字符串 / 字符字面量（含转义）
-            quote = char
-            i += 1
-            while i < length and code[i] != quote:
-                if code[i] == "\\":
-                    i += 1
-                i += 1
-            i += 1
-        else:
-            out.append(char)
-            i += 1
+    for kind, start, end in iter_c_regions(code, preprocessor=keep_preprocessor):
+        if kind == "code":
+            out.append(code[start:end])
+        elif keep_preprocessor and kind == "preprocessor":
+            out.append(code[start:end])
     return "".join(out)
+
+
+def match_bracket(code: str, open_pos: int, open_ch: str, close_ch: str) -> int:
+    """从 open_pos 的 open_ch 起找配平的 close_ch 下标；不配平返回 -1。
+
+    括号内注释 / 字符串 / 预处理行不计数（iter_c_regions 同源切分）——
+    main.c 骨架的 while(1){...} 块闭合与调用实参截断共用（skeleton 的
+    _match_paren / _match_brace 第二套词法唯一替代）。
+    """
+    depth = 0
+    for kind, start, end in iter_c_regions(code, start=open_pos):
+        if kind != "code":
+            continue
+        for j in range(start, end):
+            if code[j] == open_ch:
+                depth += 1
+            elif code[j] == close_ch:
+                depth -= 1
+                if depth == 0:
+                    return j
+    return -1
+
+
+def next_significant(code: str, pos: int) -> int:
+    """从 pos 跳到下一个有效字符位置（跳过空白与行/块注释）。
+
+    用于"块后紧跟 return"这类形态判断（skeleton 的 _skip_ws_and_comments
+    唯一替代）；字符串/字符字面量是有效内容，不跳（区域起点原样返回）。
+    """
+    for kind, start, end in iter_c_regions(code, start=pos):
+        if kind in ("string", "char"):
+            return start
+        if kind != "code":
+            continue
+        j = start
+        while j < end and code[j].isspace():
+            j += 1
+        if j < end:
+            return j
+    return len(code)
 
 
 def extract_quoted_includes(stripped: str) -> list[str]:

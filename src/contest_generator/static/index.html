@@ -499,7 +499,6 @@ function esc(text) {
   })[c]);
 }
 const KIND_TEXT = { missing: "缺平台版本（生成将失败）", unverified: "未验证", hardware_bound: "硬件绑定" };
-const KIND_BADGE = { missing: "badge missing", unverified: "badge unverified", hardware_bound: "badge hw" };
 
 // ---------------------------------------------------------------------------
 // 页签
@@ -524,7 +523,6 @@ let state = null;                 // GET /api/state
 let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
 let expanded = [];                // 展开后的模块 manifest（含依赖）
 let warnings = [];                // 平台警告
-let mainC = "";
 
 async function refreshState() {
   state = await apiGet("/api/state");
@@ -684,30 +682,62 @@ function showRecommendQuestions(problem, questions) {
   });
 }
 
-// 推荐进度状态（工单 01）：一次点击到 done / question / error / 断线为一个生命周期。
-// 计时器每秒跳动是"没卡死"的唯一证明——每轮 = 单次 LLM 调用，轮内后端不发任何事件。
-let recProg = null;
+// 推荐进度面板实例（共享模块 makeProgressPanel，定义见"进度面板模块"段）。
+// 生命周期 = 一次点击到 done / question / error / 断线；词表镜像 events.py：
+// round / converged / done / question / error（JS 侧单点声明，改词表须同步）。
+let recProblem = "";   // 当前推荐题面：补问回答后重启流程拼追加回答用
+const recPanel = makeProgressPanel({
+  timerTotalId: "rec-timer-total",
+  timerCallId: "rec-timer-round",
+  totalLabel: "总用时 ",
+  callLabel: "当前轮已等待 ",
+  events: {
+    round: (ev) => {
+      $("rec-prog-text").textContent = "AI 收敛自检：第 " + ev.round + "/" + ev.round_total + " 轮…";
+      $("rec-bar").classList.remove("hidden");
+      $("rec-bar-fill").style.width = (ev.round_total ? Math.min(100, ev.round * 100 / ev.round_total) : 100) + "%";
+    },
+    converged: (ev) => {
+      $("rec-prog-text").textContent = "功能需求层已收敛（第 " + ev.round + " 轮）…";
+      $("rec-bar").classList.remove("hidden");
+      $("rec-bar-fill").style.width = "100%";   // round_total 是上限非保证：提前收敛就跳满
+    },
+    done: (ev) => {
+      recPanel.finish();
+      $("rec-progress").classList.add("hidden");
+      renderRecommendResult(ev);
+      $("btn-recommend").innerHTML = "重新推荐";
+      $("btn-recommend").disabled = false;
+    },
+    question: (ev) => {
+      recPanel.finish();
+      $("rec-progress").classList.add("hidden");
+      $("btn-recommend").innerHTML = "让 AI 推荐";
+      $("btn-recommend").disabled = false;
+      showRecommendQuestions(recProblem, ev.questions || []);
+    },
+    error: (ev) => {
+      recPanel.finish();
+      $("rec-progress").classList.add("hidden");
+      showRecommendError(ev.message || "推荐失败");
+    },
+  },
+});
 
 function startRecProgress() {
-  recProg = { startedAt: Date.now(), lastEventAt: Date.now(), timerId: null, finished: false };
+  recPanel.start();
   $("rec-progress").classList.remove("hidden");
   $("rec-bar").classList.add("hidden");   // 首条 round 事件带 round_total 后再显示条
   $("rec-bar-fill").style.width = "0";    // 补问回答重启 = 新生命周期，条从第 1 轮重新开始
-  recProg.timerId = setInterval(tickRec, 1000);
 }
 
-function stopRecProgress() {
-  clearInterval(recProg.timerId);
+function stopRecProgress() {   // 流未起 / 断线路径：停表 + 收起面板（终态路径由事件表 finish）
+  recPanel.finish();
   $("rec-progress").classList.add("hidden");
 }
 
-function tickRec() {
-  const now = Date.now();
-  $("rec-timer-total").textContent = "总用时 " + fmtClock((now - recProg.startedAt) / 1000);
-  $("rec-timer-round").textContent = "当前轮已等待 " + fmtClock((now - recProg.lastEventAt) / 1000);
-}
-
 async function startRecommend(problem) {
+  recProblem = problem;   // 补问回答重启时仍走同一实例（同一生命周期语义）
   $("recommend-msg").textContent = "";
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
@@ -728,39 +758,9 @@ async function startRecommend(problem) {
     return;
   }
   try {
-    await parseSSE(resp, (type, payload) => {
-      let ev;
-      try { ev = JSON.parse(payload); } catch { return; }
-      if (type === "round") {
-        recProg.lastEventAt = Date.now();
-        $("rec-prog-text").textContent = "AI 收敛自检：第 " + ev.round + "/" + ev.round_total + " 轮…";
-        $("rec-bar").classList.remove("hidden");
-        $("rec-bar-fill").style.width = (ev.round_total ? Math.min(100, ev.round * 100 / ev.round_total) : 100) + "%";
-      } else if (type === "converged") {
-        recProg.lastEventAt = Date.now();
-        $("rec-prog-text").textContent = "功能需求层已收敛（第 " + ev.round + " 轮）…";
-        $("rec-bar").classList.remove("hidden");
-        $("rec-bar-fill").style.width = "100%";   // round_total 是上限非保证：提前收敛就跳满
-      } else if (type === "done") {
-        recProg.finished = true;
-        stopRecProgress();
-        renderRecommendResult(ev);
-        $("btn-recommend").innerHTML = "重新推荐";
-        $("btn-recommend").disabled = false;
-      } else if (type === "question") {
-        recProg.finished = true;
-        stopRecProgress();
-        $("btn-recommend").innerHTML = "让 AI 推荐";
-        $("btn-recommend").disabled = false;
-        showRecommendQuestions(problem, ev.questions || []);
-      } else if (type === "error") {
-        recProg.finished = true;
-        stopRecProgress();
-        showRecommendError(ev.message || "推荐失败");
-      }
-    });
-  } catch (e) { if (recProg.finished) return; }   // 终态已到后的读流出错忽略，防重复提示
-  if (!recProg.finished) {   // 流结束 / 读流出错但没等到终态 = 断线：推荐不落任何东西，可安全重试
+    await parseSSE(resp, recPanel.handleEvent);
+  } catch (e) { if (recPanel.p.finished) return; }   // 终态已到后的读流出错忽略，防重复提示
+  if (!recPanel.p.finished) {   // 流结束 / 读流出错但没等到终态 = 断线：推荐不落任何东西，可安全重试
     stopRecProgress();
     showRecommendError("连接中断：本次推荐未完成，可安全重试");
   }
@@ -772,10 +772,6 @@ $("btn-recommend").addEventListener("click", () => {
   startRecommend(problem);
 });
 
-function renderRecommend() {
-  $("rec-list").innerHTML = '<div class="muted">点击「让 AI 推荐」重新生成推荐清单。</div>';
-}
-
 // ---------------------------------------------------------------------------
 // 生成页：4. 模块清单（增删 + 依赖展开 + 平台警告）
 // ---------------------------------------------------------------------------
@@ -783,10 +779,6 @@ function renderModulePool() {
   $("module-pool").innerHTML = (state.modules || [])
     .filter((m) => !selectedSlugs.includes(m.slug))
     .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(m.description)}</option>`).join("");
-}
-async function refreshModulePool() {
-  state.modules = await apiGet("/api/modules");
-  renderModulePool();
 }
 
 $("btn-add-module").addEventListener("click", () => {
@@ -864,8 +856,7 @@ $("btn-skeleton").addEventListener("click", async () => {
       problem_text: problem, slugs: selectedSlugs, platform: chosenPlatform,
       topic_id: currentTopicId || undefined,
     });
-    mainC = data.main_c;
-    $("main-c").value = mainC;
+    $("main-c").value = data.main_c;
     const box = $("intercepted");
     if (data.intercepted.length) {
       box.classList.remove("hidden");
@@ -1335,11 +1326,60 @@ $("btn-scan").addEventListener("click", async () => {
   } catch (e) { $("scan-msg").textContent = e.message; }
 });
 
-// 提炼进度状态（工单 03）：一次点击到 done / error / 断线为一个生命周期。
-// 计时器每秒跳动是"没卡死"的唯一证明——模型单次调用期间后端不发任何事件。
-let prog = null;
+// 提炼进度面板实例（共享模块 makeProgressPanel，定义见"进度面板模块"段）。
+// 生命周期 = 一次点击到 done / error / 断线；词表镜像 events.py：
+// start / batch_start / batch_done / retry / phase_done / done / error。
+// 流程自己的展示状态（phase / 批号 / 累计 / 日志计数）挂在 distPanel.p 上，
+// 模块只管计时 / 心跳 / 分发。
 const PHASE_LABEL = { summary: "摘要", decide: "判定" };
 const MAX_LOG_LINES = 300;   // 日志上限：超出丢最旧，不撑爆页面
+const distPanel = makeProgressPanel({
+  timerTotalId: "prog-timer-total",
+  timerCallId: "prog-timer-call",
+  totalLabel: "总用时 ",
+  callLabel: "当前调用已等待 ",
+  events: {
+    start: (data) => {
+      const p = distPanel.p;
+      p.judgmentCount = data.judgment_count || 0;
+      p.phaseTotal.summary = p.phaseTotal.decide = p.judgmentCount;
+      setStep(0, "done");
+      addLogLine("", "开始：待判文件 " + p.judgmentCount + " 份（摘要 "
+        + (data.summary_batch_count || 0) + " 批 / 判定 " + (data.decide_batch_count || 0) + " 批）");
+    },
+    batch_start: (data) => {
+      const p = distPanel.p;
+      if (p.phase && p.phase !== data.phase) p.processed = 0;   // 阶段切换：阶段内计数归零
+      p.phase = data.phase;
+      p.batchIndex = data.batch_index;
+      p.batchCount = data.batch_count;
+      setStep(data.phase === "decide" ? 2 : 1, "active");
+      $("prog-badge").classList.add("hidden");
+      addBatchLine(data);
+      updateBatch();
+    },
+    batch_done: (data) => {
+      distPanel.p.processed = data.processed_count || 0;
+      $("prog-badge").classList.add("hidden");
+      addLogLine("", (PHASE_LABEL[data.phase] || data.phase) + " 第 " + data.batch_index + "/"
+        + (distPanel.p.batchCount || data.batch_index) + " 批完成（累计已读 " + distPanel.p.processed + " 份）");
+      updateBatch();
+    },
+    retry: (data) => {
+      $("prog-badge").classList.remove("hidden");
+      $("prog-badge").textContent = "批 " + data.batch_index + " 补问中";
+      addLogLine("", "批 " + data.batch_index + " 补问：第 " + (data.retry_round || 1) + " 轮，缺失 "
+        + (data.missing_count || 0) + " 份");
+    },
+    phase_done: (data) => {
+      setStep(data.phase === "decide" ? 2 : 1, "done");
+      addLogLine("", (PHASE_LABEL[data.phase] || data.phase) + " 阶段完成，共 "
+        + (data.file_count || 0) + " 份");
+    },
+    done: (data) => finishProgress(data),   // data = 完整提炼报告（与现状响应同构，原样渲染）
+    error: (data) => failProgress(data.message || "提炼失败"),
+  },
+});
 
 // ===== SSE 解析器开始（工单 03；纯函数：输入 Response → 逐事件回调，不碰 DOM）=====
 // 工单 02 契约：HTTP 200、text/event-stream；每个事件 = "event: <type>\n" +
@@ -1383,6 +1423,45 @@ async function parseSSE(resp, onEvent) {
 }
 // ===== SSE 解析器结束 =====
 
+// ===== 进度面板模块（工单 A 深化）：推荐 / 提炼两个 SSE 工作流共用的
+// 进度状态机 + 双计时器 + 事件分发 =====
+// 状态 = {startedAt, lastEventAt, timerId, finished}；计时器每秒跳动是"没卡死"
+// 的唯一证明（模型单次调用期间后端不发任何事件，见 ADR 0004）；finished 置位
+// 后流中断不再报"连接中断"（终态已到后的读流出错 / 流结束都放行）。事件词表
+// 在 events.py（后端唯一出处）——本模块的 events 表是 JS 侧单点声明，改词表
+// 须同步这里与后端契约测试。
+function makeProgressPanel(spec) {
+  const p = { startedAt: 0, lastEventAt: 0, timerId: null, finished: false };
+  const totalEl = $(spec.timerTotalId);
+  const callEl = $(spec.timerCallId);
+  const events = spec.events || {};
+  function tick() {   // 双计时器：总用时 + 当前轮/调用等待（lastEventAt = 上次事件心跳）
+    const now = Date.now();
+    totalEl.textContent = spec.totalLabel + fmtClock((now - p.startedAt) / 1000);
+    callEl.textContent = spec.callLabel + fmtClock((now - p.lastEventAt) / 1000);
+  }
+  function start() {   // 新生命周期：计时归零，秒表跳起（自动清旧定时器，防双击）
+    p.startedAt = Date.now();
+    p.lastEventAt = Date.now();
+    p.finished = false;
+    if (p.timerId) clearInterval(p.timerId);
+    p.timerId = setInterval(tick, 1000);
+    tick();
+  }
+  function finish() {   // 终态：停表 + 置位（流中断守卫据此放行）
+    p.finished = true;
+    if (p.timerId) { clearInterval(p.timerId); p.timerId = null; }
+  }
+  function handleEvent(type, raw) {   // parseSSE 事件回调：JSON 解析 + 心跳 + 词表分发
+    let data = {};
+    try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
+    p.lastEventAt = Date.now();
+    const handler = events[type];
+    if (handler) handler(data);   // 预留事件类型（token 级流式等）——忽略
+  }
+  return { p, start, finish, handleEvent, tick };
+}
+
 function fmtClock(sec) {   // 计时器显示：mm:ss（分可超 59）
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
@@ -1410,13 +1489,14 @@ function setStep(n, state) {   // n = 步号（0 开始…3 完成）；state = 
 }
 
 function updateBatch() {
-  if (prog.phase && prog.batchIndex) {
+  const p = distPanel.p;
+  if (p.phase && p.batchIndex) {
     $("prog-batch-text").textContent =
-      (PHASE_LABEL[prog.phase] || prog.phase) + " 第 " + prog.batchIndex + "/" + prog.batchCount
-      + " 批 · 已读 " + prog.processed + "/" + (prog.phaseTotal[prog.phase] || prog.processed);
+      (PHASE_LABEL[p.phase] || p.phase) + " 第 " + p.batchIndex + "/" + p.batchCount
+      + " 批 · 已读 " + p.processed + "/" + (p.phaseTotal[p.phase] || p.processed);
     $("prog-bar").classList.remove("hidden");
-    const total = prog.phaseTotal[prog.phase];
-    $("prog-bar-fill").style.width = (total ? Math.min(100, prog.processed * 100 / total) : 100) + "%";
+    const total = p.phaseTotal[p.phase];
+    $("prog-bar-fill").style.width = (total ? Math.min(100, p.processed * 100 / total) : 100) + "%";
   } else {
     $("prog-batch-text").textContent = "";
     $("prog-bar").classList.add("hidden");
@@ -1433,8 +1513,8 @@ function addLogLine(cls, text) {
   const log = $("prog-log");
   log.appendChild(div);
   while (log.childElementCount > MAX_LOG_LINES) log.firstElementChild.remove();
-  prog.logCount++;
-  $("prog-log-count").textContent = "（" + prog.logCount + " 条）";
+  distPanel.p.logCount++;
+  $("prog-log-count").textContent = "（" + distPanel.p.logCount + " 条）";
   log.scrollTop = log.scrollHeight;
 }
 
@@ -1458,8 +1538,8 @@ function addBatchLine(ev) {
   const log = $("prog-log");
   log.appendChild(div);
   log.appendChild(list);
-  prog.logCount++;
-  $("prog-log-count").textContent = "（" + prog.logCount + " 条）";
+  distPanel.p.logCount++;
+  $("prog-log-count").textContent = "（" + distPanel.p.logCount + " 条）";
   log.scrollTop = log.scrollHeight;
 }
 
@@ -1468,21 +1548,13 @@ $("prog-log-head").addEventListener("click", () => {
   $("prog-log-caret").textContent = log.classList.toggle("hidden") ? "▾" : "▸";
 });
 
-function tick() {
-  const now = Date.now();
-  $("prog-timer-total").textContent = "总用时 " + fmtClock((now - prog.startedAt) / 1000);
-  $("prog-timer-call").textContent = "当前调用已等待 " + fmtClock((now - prog.lastEventAt) / 1000);
-}
-
 function startProgress() {
-  if (prog && prog.timerId) clearInterval(prog.timerId);
-  prog = {
-    startedAt: Date.now(), lastEventAt: Date.now(),
-    judgmentCount: 0,
-    phaseTotal: { summary: 0, decide: 0 },   // 两阶段文件总数 = 待判文件数
-    phase: "", batchIndex: 0, batchCount: 0, processed: 0,
-    logCount: 0, finished: false, timerId: null,
-  };
+  distPanel.start();   // 计时归零 + 秒表跳起（自动清旧定时器，防双击）
+  const p = distPanel.p;
+  p.judgmentCount = 0;
+  p.phaseTotal = { summary: 0, decide: 0 };   // 两阶段文件总数 = 待判文件数
+  p.phase = ""; p.batchIndex = 0; p.batchCount = 0; p.processed = 0;
+  p.logCount = 0;
   $("distill-progress").classList.remove("hidden");
   $("prog-done").classList.add("hidden");
   $("prog-body").classList.remove("hidden");
@@ -1493,79 +1565,25 @@ function startProgress() {
   $("prog-badge").classList.add("hidden");
   setStep(0, "active");
   updateBatch();
-  prog.timerId = setInterval(tick, 1000);
-  tick();
 }
 
 function finishProgress(report) {
-  clearInterval(prog.timerId);
-  prog.finished = true;
+  distPanel.finish();
   setStep(3, "done");
   $("prog-body").classList.add("hidden");   // 完成态折叠为一行
   $("prog-done").classList.remove("hidden");
-  $("prog-done").textContent = "提炼完成，用时 " + fmtDuration((Date.now() - prog.startedAt) / 1000);
+  $("prog-done").textContent = "提炼完成，用时 " + fmtDuration((Date.now() - distPanel.p.startedAt) / 1000);
   currentReport = report;
   currentReport.archive = report.archive || [];   // AI 出稿报告无 archive 键（动作由用户在确认时指定）
   renderReport();
 }
 
 function failProgress(message) {
-  clearInterval(prog.timerId);
-  prog.finished = true;
+  distPanel.finish();
   addLogLine("error", message);
   $("prog-log").classList.remove("hidden");   // 失败态：日志保留且展开，红行可见
   $("prog-log-caret").textContent = "▾";
-  tick();   // 计时器停在最后读数
-}
-
-function handleProgressEvent(type, raw) {
-  let data = {};
-  try { data = JSON.parse(raw || "null") || {}; } catch (e) { data = {}; }
-  prog.lastEventAt = Date.now();
-  switch (type) {
-    case "start":
-      prog.judgmentCount = data.judgment_count || 0;
-      prog.phaseTotal.summary = prog.phaseTotal.decide = prog.judgmentCount;
-      setStep(0, "done");
-      addLogLine("", "开始：待判文件 " + prog.judgmentCount + " 份（摘要 "
-        + (data.summary_batch_count || 0) + " 批 / 判定 " + (data.decide_batch_count || 0) + " 批）");
-      break;
-    case "batch_start":
-      if (prog.phase && prog.phase !== data.phase) prog.processed = 0;   // 阶段切换：阶段内计数归零
-      prog.phase = data.phase;
-      prog.batchIndex = data.batch_index;
-      prog.batchCount = data.batch_count;
-      setStep(data.phase === "decide" ? 2 : 1, "active");
-      $("prog-badge").classList.add("hidden");
-      addBatchLine(data);
-      updateBatch();
-      break;
-    case "batch_done":
-      prog.processed = data.processed_count || 0;
-      $("prog-badge").classList.add("hidden");
-      addLogLine("", (PHASE_LABEL[data.phase] || data.phase) + " 第 " + data.batch_index + "/"
-        + (prog.batchCount || data.batch_index) + " 批完成（累计已读 " + prog.processed + " 份）");
-      updateBatch();
-      break;
-    case "retry":
-      $("prog-badge").classList.remove("hidden");
-      $("prog-badge").textContent = "批 " + data.batch_index + " 补问中";
-      addLogLine("", "批 " + data.batch_index + " 补问：第 " + (data.retry_round || 1) + " 轮，缺失 "
-        + (data.missing_count || 0) + " 份");
-      break;
-    case "phase_done":
-      setStep(data.phase === "decide" ? 2 : 1, "done");
-      addLogLine("", (PHASE_LABEL[data.phase] || data.phase) + " 阶段完成，共 "
-        + (data.file_count || 0) + " 份");
-      break;
-    case "done":
-      finishProgress(data);   // data = 完整提炼报告（与现状响应同构，原样渲染）
-      break;
-    case "error":
-      failProgress(data.message || "提炼失败");
-      break;
-    // 预留事件类型（token 级流式等）——本次忽略
-  }
+  distPanel.tick();   // 计时器停在最后读数
 }
 
 $("btn-distill").addEventListener("click", async () => {
@@ -1583,12 +1601,12 @@ $("btn-distill").addEventListener("click", async () => {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
     }
-    await parseSSE(resp, handleProgressEvent);
-    if (!prog.finished) {   // 流结束但没等到 done / error = 断线：放弃本次，刷新安全重试
+    await parseSSE(resp, distPanel.handleEvent);
+    if (!distPanel.p.finished) {   // 流结束但没等到 done / error = 断线：放弃本次，刷新安全重试
       failProgress("连接中断：本次提炼未完成（确认前不落任何东西），刷新页面后可安全重试");
     }
   } catch (e) {
-    if (!prog.finished) failProgress(e.message);
+    if (!distPanel.p.finished) failProgress(e.message);
   } finally {
     $("btn-distill").disabled = false;
     $("btn-distill").textContent = "重新提炼";
