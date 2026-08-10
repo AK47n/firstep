@@ -204,7 +204,7 @@
       <h2>2. 赛题简介（AI 预读）</h2>
       <div class="row">
         <button id="btn-topic-summary" class="primary">生成赛题简介</button>
-        <span class="muted">AI 先读一遍题面，给你一句话总览 + 功能要点——心里有数再往下选平台。</span>
+        <span class="muted">AI 先读一遍题面，把散落在各处的全部要求整理成一条条要点——心里有数再往下选平台。</span>
       </div>
       <div id="topic-summary-box" class="topic-summary hidden" style="margin-top:8px"></div>
       <div id="topic-summary-msg" class="error"></div>
@@ -680,6 +680,36 @@ $("btn-topic-load").addEventListener("click", async () => {
 $("problem").addEventListener("input", () => {
   if (currentTopicId) { currentTopicId = ""; $("topic-msg").textContent = ""; }
   clearTopicSummary();  // 题面变了 = 旧简介对不上，立即清掉（wait-what 要的是当前题面）
+});
+
+// ---------------------------------------------------------------------------
+// 生成页：2. 赛题简介（AI 预读，wait-what 效果）——总览 + 整理后的功能要点
+// ---------------------------------------------------------------------------
+// 只展示给用户确认认知（把散落在题面各处的全部要求整理成条目），不进任何
+// 下游流程；题面一变（手改 / 上传 / 取题面）立即清掉旧简介，避免对不上
+// 题面的过时认知误导后续步骤。
+function clearTopicSummary() {
+  $("topic-summary-box").classList.add("hidden");
+  $("topic-summary-box").textContent = "";
+  $("topic-summary-msg").textContent = "";
+}
+
+$("btn-topic-summary").addEventListener("click", async () => {
+  $("topic-summary-msg").textContent = "";
+  const problem = $("problem").value.trim();
+  if (!problem) { $("topic-summary-msg").textContent = "请先填写赛题原文"; return; }
+  $("btn-topic-summary").disabled = true;
+  $("btn-topic-summary").innerHTML = '<span class="spinner"></span>AI 读题中…';
+  try {
+    const data = await apiPost("/api/topic/summarize", { problem_text: problem });
+    $("topic-summary-box").textContent = data.summary;
+    $("topic-summary-box").classList.remove("hidden");
+    $("btn-topic-summary").innerHTML = "重新生成";
+  } catch (e) {
+    $("topic-summary-msg").textContent = e.message;
+  } finally {
+    $("btn-topic-summary").disabled = false;
+  }
 });
 
 // ---------------------------------------------------------------------------
