@@ -90,6 +90,9 @@
   .ref-pick-title { color: var(--text); font-weight: 600; font-family: Consolas, monospace; font-size: 13px;
                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ref-pick-desc { color: var(--muted); font-size: 12px; }
+  /* 赛题简介（AI 预读，wait-what 效果）：一句话总览 + 功能要点，浅蓝信息框 */
+  .topic-summary { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
+                   padding: 10px 14px; font-size: 13px; white-space: pre-line; }
   .warn-box { border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
   .warn-box.missing { background: #fee2e2; color: var(--danger); }
   .warn-box.unverified { background: #fef3c7; color: var(--warn); }
@@ -165,7 +168,7 @@
 <body>
 <header>
   <h1>电赛工程生成器</h1>
-  <span class="sub">贴题 → 选平台 → AI 推荐模块 → 一键生成完整工程</span>
+  <span class="sub">贴题 → 赛题简介 → 选平台 → AI 推荐模块 → 一键生成完整工程</span>
 </header>
 <nav>
   <button data-tab="generate" class="active">生成</button>
@@ -198,13 +201,23 @@
     </div>
 
     <div class="card">
-      <h2>2. 目标平台</h2>
+      <h2>2. 赛题简介（AI 预读）</h2>
+      <div class="row">
+        <button id="btn-topic-summary" class="primary">生成赛题简介</button>
+        <span class="muted">AI 先读一遍题面，给你一句话总览 + 功能要点——心里有数再往下选平台。</span>
+      </div>
+      <div id="topic-summary-box" class="topic-summary hidden" style="margin-top:8px"></div>
+      <div id="topic-summary-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. 目标平台</h2>
       <div id="platforms" class="row"></div>
       <div id="platform-msg" class="error"></div>
     </div>
 
     <div class="card">
-      <h2>3. 参考资料（可选）</h2>
+      <h2>4. 参考资料（可选）</h2>
       <div class="muted">勾选 = 手动指定作学习素材注入（全文直读）；赛题 / 套件自动关联的批次无需勾选也会注入。</div>
       <div id="ref-picker" style="margin-top:8px"></div>
       <div id="ref-picker-msg" class="error"></div>
@@ -212,7 +225,7 @@
     </div>
 
     <div class="card">
-      <h2>4. AI 推荐模块</h2>
+      <h2>5. AI 推荐模块</h2>
       <div class="row">
         <button id="btn-recommend" class="primary">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
@@ -230,7 +243,7 @@
     </div>
 
     <div class="card">
-      <h2>5. 模块清单与平台警告</h2>
+      <h2>6. 模块清单与平台警告</h2>
       <div class="row">
         <select id="module-pool" style="flex:1"></select>
         <button id="btn-add-module">添加模块</button>
@@ -242,7 +255,7 @@
     </div>
 
     <div class="card">
-      <h2>6. main.c 骨架</h2>
+      <h2>7. main.c 骨架</h2>
       <div class="row">
         <button id="btn-skeleton" class="primary">生成骨架</button>
         <span class="muted">AI 按所选模块接口排初始化序列；不存在的调用自动改写为注释占位，可手动微调。</span>
@@ -253,7 +266,7 @@
     </div>
 
     <div class="card">
-      <h2>7. 输出目录并生成</h2>
+      <h2>8. 输出目录并生成</h2>
       <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
       <div class="row">
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
@@ -637,6 +650,7 @@ $("btn-upload").addEventListener("click", async () => {
     const data = await handle(await fetch("/api/extract", { method: "POST", body: form }));
     $("problem").value = data.text;
     currentTopicId = "";
+    clearTopicSummary();
     $("upload-msg").classList.add("ok");
     $("upload-msg").textContent = "抽取成功：" + file.name;
   } catch (e) {
@@ -653,6 +667,7 @@ $("btn-topic-load").addEventListener("click", async () => {
     const data = await handle(await fetch("/api/topics/" + encodeURIComponent(key)));
     $("problem").value = data.problem_text;
     currentTopicId = data.key;
+    clearTopicSummary();
     const rel = data.related_modules || [];
     $("topic-msg").textContent = "已取题面：" + data.key
       + (rel.length ? "；该题专用模块：" + rel.join("、") : "");
@@ -664,6 +679,7 @@ $("btn-topic-load").addEventListener("click", async () => {
 
 $("problem").addEventListener("input", () => {
   if (currentTopicId) { currentTopicId = ""; $("topic-msg").textContent = ""; }
+  clearTopicSummary();  // 题面变了 = 旧简介对不上，立即清掉（wait-what 要的是当前题面）
 });
 
 // ---------------------------------------------------------------------------
@@ -910,7 +926,7 @@ $("btn-add-module").addEventListener("click", () => {
 
 $("btn-expand").addEventListener("click", async () => {
   $("expand-msg").textContent = "";
-  if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 2 选择目标平台"; return; }
+  if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
   if (!selectedSlugs.length) { $("expand-msg").textContent = "请先选择至少一个模块"; return; }
   try {
     const data = await apiPost("/api/selection/expand", { slugs: selectedSlugs, platform: chosenPlatform });
@@ -972,7 +988,7 @@ $("btn-skeleton").addEventListener("click", async () => {
   $("skeleton-msg").textContent = "";
   const problem = $("problem").value.trim();
   if (!problem) { $("skeleton-msg").textContent = "请先填写赛题原文"; return; }
-  if (!chosenPlatform) { $("skeleton-msg").textContent = "请先在步骤 2 选择目标平台"; return; }
+  if (!chosenPlatform) { $("skeleton-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
   if (!selectedSlugs.length) { $("skeleton-msg").textContent = "请先选择模块"; return; }
   $("btn-skeleton").disabled = true;
   $("btn-skeleton").innerHTML = '<span class="spinner"></span>生成中…';

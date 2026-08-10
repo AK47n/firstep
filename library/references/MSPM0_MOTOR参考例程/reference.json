@@ -5,6 +5,7 @@
   "description": "TI MSPM0G3507 电机控制官方参考例程（MSP_Motor_Ctrl、m0imu 等），CCS / IAR / Keil 三套工程，600+ C 源文件与驱动库。纯代码资料，全量入库。",
   "anchor_kind": "none",
   "anchor_value": "",
+  "platform": "mspm0",
   "files": [
     "素材清单.txt",
     "empty.syscfg",
