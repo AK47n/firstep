@@ -95,6 +95,16 @@ SELECT_SYSTEM_PROMPT = (
     "只输出 JSON 对象。"
 )
 
+# 澄清阶段系统提示词（工单 01 推荐先澄清后收敛）：只看题面 + 已有问答历史，
+# 输出仍存的疑问（空 = 澄清完成）。不带模块库——疑问只来自题面证据不足，
+# 与库内实现无关（库内有没有实现是收敛阶段的事）。
+CLARIFY_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发助手。逐句核对赛题原文（赛题文本可能"
+    "被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：题面证据不足以判定某项"
+    "要求（如识别方式、交互细节、性能指标）时向用户补问；用户已回答过的问题"
+    "不要重复问；没有疑问时输出空 questions 数组。只输出 JSON 对象。"
+)
+
 SKELETON_SYSTEM_PROMPT = (
     "你是嵌入式 C 工程师。为赛题生成 main.c 骨架（赛题文本 / 模块接口过长"
     "可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：按所选模块的头文件"
@@ -450,6 +460,10 @@ class LLM(Protocol):
         manual_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection: ...
 
+    def clarify(
+        self, problem_text: str, clarifications: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]: ...
+
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str: ...
@@ -588,6 +602,29 @@ class DeepSeekLLM:
             # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；
             # selection 不 import LLMError——否则与 llm → selection 既有边成环）
             raise LLMError(str(exc)) from exc
+
+    def clarify(
+        self, problem_text: str, clarifications: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]:
+        """澄清阶段（工单 01 推荐先澄清后收敛）：只看题面 + 已有问答历史，
+        输出仍存的疑问（空元组 = 澄清完成，可进收敛循环）。
+
+        不带模块库——疑问只来自题面证据不足，与库内实现无关（库内有没有实现
+        是收敛阶段的事，省一轮完整分析的成本）。历史逐条 "Q: … A: …" 送模型，
+        避免重复问已回答过的问题；json_mode 解析 {"questions": [...]}，空数组
+        = 无疑问（parse_clarify_questions，严格解析畸形输出）。
+        """
+        content = self._chat(
+            [
+                {"role": "system", "content": CLARIFY_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _clarify_user_prompt(problem_text, clarifications),
+                },
+            ],
+            json_mode=True,
+        )
+        return parse_clarify_questions(content)
 
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
@@ -1246,6 +1283,30 @@ def parse_validation_result(content: str) -> ValidationResult:
     return ValidationResult(consistent=data["consistent"], issues=issues)
 
 
+def parse_clarify_questions(content: str) -> tuple[str, ...]:
+    """把模型返回的澄清 JSON 解析校验为仍存疑问列表（空 = 澄清完成）。
+
+    与 selection._parse_questions 同款宽松度：缺省 / 空 questions → 空元组
+    （模型认为已无疑问，直接进收敛循环）；非空时必须是字符串数组——畸形
+    输出抛 LLMError（模型输出不可信，宁可大声失败也不带病进收敛，与其它
+    AI 契约同哲学）。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict):
+        raise LLMError("澄清结果必须是 JSON 对象")
+    questions = data.get("questions")
+    if questions in (None, [], ()):
+        return ()
+    if not isinstance(questions, list) or not all(
+        isinstance(question, str) and question for question in questions
+    ):
+        raise LLMError("澄清结果的 questions 必须是字符串数组")
+    return tuple(questions)
+
+
 def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) -> str:
     """赛题 + 清单的 user 消息拼装（模块选择 / main.c 骨架共用）。
 
@@ -1254,6 +1315,20 @@ def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) ->
     """
     lines = ["赛题：", _truncate_content(problem_text), "", heading]
     lines.extend(_truncate_content(item) for item in items)
+    return "\n".join(lines)
+
+
+def _clarify_user_prompt(
+    problem_text: str, clarifications: Sequence[tuple[str, str]]
+) -> str:
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    lines = ["赛题：", _truncate_content(problem_text)]
+    for question, answer in clarifications:
+        lines.extend((f"Q: {question}", f"A: {answer}"))
+    lines.append(
+        "只返回 json 格式的 JSON 对象："
+        '{"questions": ["仍存的疑问，没有疑问时为空数组"]}'
+    )
     return "\n".join(lines)
 
 
