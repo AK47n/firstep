@@ -103,7 +103,9 @@ def delete_module(library_root: Path, slug: str) -> None:
 
 
 def save_manifest(library_root: Path, manifest: ModuleManifest) -> None:
-    """把编辑后的 manifest 写回库；结构不合法（如空文件列表）拒绝入库。
+    """把编辑后的 manifest 写回库；结构不合法（缺字段 / 路径非法等）拒绝入库。
+
+    空 files 平台条目合法（实现内嵌母版，见 manifest.PlatformEntry）。
 
     只改结构字段（平台条目、依赖、备注等）；简介字段的编辑应走
     update_module_description——简介与实际代码的一致性必须经 AI 校验。

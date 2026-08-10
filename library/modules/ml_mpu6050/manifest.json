@@ -8,9 +8,9 @@
         "ml_libs/ml_mpu6050.c",
         "ml_libs/ml_mpu6050.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "",
+      "notes": "文件来自 21F 且真机编译过（ml_mpu6050.o）。",
       "kit": "MPU6050",
       "source_url": "https://e.tb.cn/h.8g1H453ww0r0xH7?tk=Ue5KgBwTvkV"
     }

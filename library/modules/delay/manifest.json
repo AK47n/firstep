@@ -13,6 +13,14 @@
       "notes": "无外设依赖（CPUCLK_FREQ 由 SysConfig SYSCTL 生成）。",
       "kit": "",
       "source_url": ""
+    },
+    "stm32": {
+      "files": [],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "实现内嵌母版 ml_libs/ml_delay.c/h（逐飞 ML 库，2026C/21F 真机编译过）。",
+      "kit": "",
+      "source_url": ""
     }
   }
 }
