@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define></Define>
               <Undefine></Undefine>
-              <IncludePath>..\ml_libs;..\sys</IncludePath>
+              <IncludePath>..\ml_libs;..\sys;..</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>

@@ -17,7 +17,7 @@ from contest_generator.skeleton import (
     sanitize_skeleton,
     verify_main_c_interfaces,
 )
-from tests.fakes import FakeLLM
+from tests.fakes import FakeLLM, make_fake_stm32_ml_master
 
 
 def _manifests(library_dir: Path, *slugs: str) -> list[ModuleManifest]:
@@ -78,6 +78,69 @@ def test_build_skeleton_interfaces_survives_non_utf8_header(fake_module_library)
     assert len(blocks) == 1
     assert chr(0xFFFD) in blocks[0]  # 非法字节以替换字符进接口块，不再崩
     assert "float dht11_read(void);" in blocks[0]
+
+
+def test_build_skeleton_interfaces_includes_master_headers_after_modules(
+    fake_module_library, tmp_path
+):
+    """母版目录给定时接口集并入母版头（headfile.h + ml_*.h），模块块在前。"""
+    master = make_fake_stm32_ml_master(tmp_path / "master")
+
+    blocks = build_skeleton_interfaces(
+        _manifests(fake_module_library, "dht11"),
+        PLATFORM_STM32,
+        fake_module_library,
+        master,
+    )
+
+    assert blocks[0].startswith("### 模块 dht11（inc/dht11.h）")
+    master_blocks = [b for b in blocks if b.startswith("### 母版（ml_libs/")]
+    assert [b.splitlines()[0] for b in master_blocks] == [
+        "### 母版（ml_libs/headfile.h）",
+        "### 母版（ml_libs/ml_exti.h）",
+        "### 母版（ml_libs/ml_gpio.h）",
+        "### 母版（ml_libs/ml_pwm.h）",
+    ]
+    assert "void pwm_init(TIMn_enum timn, TIMn_CHn_enum timn_chn, int fre);" in (
+        "".join(master_blocks)
+    )
+
+
+def test_build_skeleton_interfaces_master_without_ml_libs_contributes_nothing(
+    fake_module_library, fake_ccs_master_project
+):
+    """mspm0 母版无 ml_libs（构建时 SysConfig 生成头）：并入为空、无副作用。"""
+    blocks = build_skeleton_interfaces(
+        _manifests(fake_module_library, "dht11"),
+        PLATFORM_MSPM0,
+        fake_module_library,
+        fake_ccs_master_project,
+    )
+
+    assert len(blocks) == 1
+    assert blocks[0].startswith("### 模块 dht11（inc/dht11.h）")
+
+
+def test_generate_skeleton_master_ml_api_not_blocked(fake_module_library, tmp_path):
+    """骨架自检认母版头：main.c 调母版内嵌实现的 ml_* API 不被打回。"""
+    master = make_fake_stm32_ml_master(tmp_path / "master")
+    manifests = _manifests(fake_module_library, "dht11")
+    llm = FakeLLM(
+        main_skeleton=(
+            "int main(void) {\n"
+            "    float t = dht11_read();\n"
+            "    pwm_init(TIM_2, TIM2_CH1, 1000);\n"  # 母版 ml_pwm.h 的真实 API
+            "    while (1);\n"
+            "}\n"
+        )
+    )
+
+    main_c, blocked = generate_skeleton(
+        llm, "环境监测仪", manifests, PLATFORM_STM32, fake_module_library, master
+    )
+
+    assert blocked == ()
+    assert "pwm_init(TIM_2, TIM2_CH1, 1000);" in main_c
 
 
 # ---------------------------------------------------------------------------

@@ -1,15 +1,7 @@
 {
   "slug": "motor",
   "description": "TB6612 双路直流电机驱动（MSPM0）：PWM 调速 + 方向控制 + 编码器计数测速 + PID 速度闭环 + 自检，附带加权质心巡线控制（adjust_motor/adjust_motor_pwm）。",
-  "dependencies": [
-    "huidu",
-    "imu_uart",
-    "led_beep",
-    "ntb_time",
-    "key",
-    "delay",
-    "oled"
-  ],
+  "dependencies": [],
   "platforms": {
     "mspm0": {
       "files": [
@@ -18,7 +10,18 @@
       ],
       "verified": false,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置：定时器 PWMAB（双通道 C0/C1 输出 PA12/PA13）、定时器 MOTOR_PID（周期中断 10ms）、GPIO 组 DC_MOTOR（AIN1=PA0 AIN2=PA1 BIN1=PB18 BIN2=PA7、编码器 AA=PA16 AB=PA17、BA=PB19 BB=PB20 输入中断）。编码器计数在 key 模块的 GROUP1_IRQHandler。",
+      "notes": "SysConfig 需配置：定时器 PWMAB（双通道 C0/C1 输出 PA12/PA13）、定时器 MOTOR_PID（周期中断 10ms）、GPIO 组 DC_MOTOR（AIN1=PA0 AIN2=PA1 BIN1=PB18 BIN2=PA7、编码器 AA=PA16 AB=PA17、BA=PB19 BB=PB20 输入中断）。编码器计数在 key 模块的 GROUP1_IRQHandler。依赖声明已清空（工单 02：stm32 侧只用母版 ml_* 功能库；mspm0 侧选 motor 需手动同选 huidu/imu_uart/led_beep/ntb_time/key/delay/oled 小车栈）。",
+      "kit": "",
+      "source_url": ""
+    },
+    "stm32": {
+      "files": [
+        "code/motor_stm32.c",
+        "code/motor_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "2021F 提取（真机编译过）：TB6612 驱动 + motor_init/encoder_init + 编码器计数中断 EXTI2/EXTI4 随模块（先例 = mspm0 key 的 GROUP1_IRQHandler）。引脚全走母版 pin_config.h 宏（21F 原值：PWM TIM2 CH1/CH2、方向 PA6/PA7/PB0/PB1、编码器 PA2/PA4 + 方向 PA3/PA5），无硬编码字面量。依赖方向 pid → motor；EXTI2/4 用母版 ml_gpio/ml_exti/ml_pwm/ml_tim（功能库必有，不声明依赖）。",
       "kit": "",
       "source_url": ""
     }

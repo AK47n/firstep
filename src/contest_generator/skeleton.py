@@ -106,13 +106,20 @@ def read_module_sources(
 
 
 def build_skeleton_interfaces(
-    manifests: Sequence[ModuleManifest], platform: str, library_dir: Path
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path | None = None,
 ) -> list[str]:
     """按目标平台收集所选模块头文件内容，格式化为 LLM 骨架生成输入块。
 
     顺序与 manifests 一致（调用方应先按依赖展开）；每个模块的平台条目里
     的 .h 文件内容逐块给出。头文件缺失跳过（文件齐全由生成器硬校验兜底）；
     模块无平台版本或纯 .c 实现时给出占位块，LLM 仍知道它被选中。
+    母版目录给定时并入母版库接口块（headfile.h + ml_*.h，见
+    build_master_interface_blocks）——LLM 生成 main.c 需要知道母版内嵌
+    实现的真实 API（ml_oled_show_string 等），否则骨架自检会把它们的调用
+    改写为注释占位（工单 02）。不传母版目录 = 现行为（只有模块头）。
     读盘归 read_module_sources（编码 errors="replace" 单源，与门禁同读法）、
     形态判断归 is_header_path、块格式化归 format_interface_blocks（生成
     门禁用语料文本走同一格式化）。
@@ -136,6 +143,28 @@ def build_skeleton_interfaces(
         if not any(h[0] == manifest.slug for h in headers):
             blocks.append(f"### 模块 {manifest.slug}（头文件缺失，无接口）")
     blocks.extend(format_interface_blocks(headers))
+    if master_project_dir is not None:
+        blocks.extend(build_master_interface_blocks(master_project_dir))
+    return blocks
+
+
+def build_master_interface_blocks(master_project_dir: Path) -> list[str]:
+    """母版库接口块：ml_libs/ 下全部 .h（headfile.h + ml_*.h）逐块给出。
+
+    与模块接口块同形态（### 标题 + 头文件全文），extract_header_functions
+    由此提取母版内嵌实现的函数名——骨架自检与生成门禁认同一套 API。
+    只收 ml_libs/：sys/ 设备头（stm32f10x.h 等上万行）是工具链知识不是
+    库接口，喂给 LLM 纯浪费上下文；mspm0 母版无 ml_libs（构建时 SysConfig
+    生成头），贡献为空、无副作用。读盘编码 errors="replace"（与
+    read_module_sources 同策略）。"""
+    ml_dir = master_project_dir / "ml_libs"
+    if not ml_dir.is_dir():
+        return []
+    blocks: list[str] = []
+    for path in sorted(ml_dir.glob("*.h")):
+        rel = path.relative_to(master_project_dir).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        blocks.append(f"### 母版（{rel}）\n{text}")
     return blocks
 
 
@@ -341,14 +370,18 @@ def generate_skeleton(
     manifests: Sequence[ModuleManifest],
     platform: str,
     library_dir: Path,
+    master_project_dir: Path | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """LLM 出稿 → 静态自检：返回（可写入工程的 main.c, 被拦截的调用名）。
 
     自检只认喂给 LLM 的同一份接口块，不存在的调用被改写为注释占位，
     main.c 骨架保证可编译。调用方如想"明确报错"而非占位，对拦截列表
-    非空时自行抛错即可。
+    非空时自行抛错即可。母版目录给定时接口集并入母版头（母版内嵌实现
+    的 ml_* API 不再被占位改写）。
     """
-    interfaces = build_skeleton_interfaces(manifests, platform, library_dir)
+    interfaces = build_skeleton_interfaces(
+        manifests, platform, library_dir, master_project_dir
+    )
     raw = llm.generate_main_skeleton(problem_text, interfaces)
     raw = strip_code_fences(raw)  # LLM 偶发用围栏包裹 → 剥离后再自检（判例见函数文档）
     return sanitize_skeleton(raw, extract_header_functions(interfaces))

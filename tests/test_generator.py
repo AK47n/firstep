@@ -28,6 +28,7 @@ from contest_generator.generator import (
     _check_module_self_include,
     _check_unresolved_includes,
     build_module_corpus,
+    generate,
     generate_project,
     resolve_topic_context,
 )
@@ -62,6 +63,8 @@ from tests.fakes import (
     make_fake_ccs_theia_master_project,
     make_fake_master_project,
     make_fake_module_library,
+    make_fake_motor_pid_library,
+    make_fake_stm32_ml_master,
 )
 from tests.generate_wiring_fakes import (
     KIT_REFERENCE_ID,
@@ -1418,15 +1421,16 @@ def test_source_read_primitives_single_origin():
 
 
 def test_skeleton_source_has_no_raw_read_text():
-    """结构自证：skeleton.py 的 read_text 恰一处——在原语 read_module_sources
-    体内（模块源读盘唯一读点，新增裸读盘即红）。"""
+    """结构自证：skeleton.py 的 read_text 恰两处——模块源读盘唯一读点在原语
+    read_module_sources 体内，母版头读盘在 build_master_interface_blocks（工单
+    02，母版头段允许裸读，与 generator 的语料母版头段同规；新增模块源裸读即红）。"""
     import contest_generator.skeleton as skeleton
     from pathlib import Path
 
     text = (Path(skeleton.__file__).parent / "skeleton.py").read_text(
         encoding="utf-8"
     )
-    assert text.count("read_text") == 1
+    assert text.count("read_text") == 2
 
 
 def test_generator_module_file_segment_has_no_raw_read_text():
@@ -1543,3 +1547,119 @@ def test_resolve_topic_context_manual_unknown_id_raises(tmp_path):
             reference_library_dir=references,
             reference_ids=["幻觉 id"],
         )
+
+
+# ---------------------------------------------------------------------------
+# 工单 02：stm32 电机链路（motor/pid 补录 + pin_config.h + 母版头并入门禁）
+# ---------------------------------------------------------------------------
+
+
+def test_generate_stm32_motor_registers_module_and_pin_config(tmp_path):
+    """选 motor 不选 pid stm32 生成：uvprojx 注册 motor_stm32.c、pin_config.h
+    随母版进工程、EXTI2/4 计数中断随模块。"""
+    library = make_fake_motor_pid_library(tmp_path / "modules")
+    master = make_fake_stm32_ml_master(tmp_path / "master")
+    manifests = [ModuleManifest.load(library / "motor")]
+    out = generate(
+        platform=PLATFORM_STM32,
+        manifests=manifests,
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out",
+        main_c_content="int main(void) { motor_init(); encoder_init(); while (1); }\n",
+    )[0]
+
+    # pin_config.h 随母版进工程根（IncludePath 补工程根后模块 include 可解析）
+    assert (out / "pin_config.h").is_file()
+    module_c = (out / "modules" / "motor" / "code" / "motor_stm32.c").read_text(
+        encoding="utf-8"
+    )
+    assert "EXTI2_IRQHandler" in module_c
+    assert "EXTI4_IRQHandler" in module_c
+    assert "MOTOR_A_PWM_CH" in module_c  # 只引用宏，无硬编码引脚
+
+    uvprojx = (out / "user" / "Project.uvprojx").read_text(encoding="utf-8")
+    assert "modules\motor\code\motor_stm32.c" in uvprojx
+
+
+def test_generate_stm32_motor_plus_pid_registers_isr_and_closes_loop(tmp_path):
+    """选 motor+pid stm32 生成：uvprojx 注册 pid_isr.c、TIM3→pid_control 闭环在。"""
+    library = make_fake_motor_pid_library(tmp_path / "modules")
+    master = make_fake_stm32_ml_master(tmp_path / "master")
+    manifests = [
+        ModuleManifest.load(library / slug) for slug in ("motor", "pid")
+    ]
+    out = generate(
+        platform=PLATFORM_STM32,
+        manifests=manifests,
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out",
+        main_c_content=(
+            "int main(void) { motor_init(); encoder_init(); "
+            "pid_init(&motorA, 0, 1, 0, 0); pid_init(&motorB, 0, 1, 0, 0); "
+            "while (1); }\n"
+        ),
+    )[0]
+
+    isr = (out / "modules" / "pid" / "code" / "pid_isr.c").read_text(encoding="utf-8")
+    assert "TIM3_IRQHandler" in isr
+    assert "Encoder_count1" in isr and "Encoder_count2" in isr
+    assert "motorA.now" in isr and "motorB.now" in isr
+    assert "pid_control();" in isr
+
+    uvprojx = (out / "user" / "Project.uvprojx").read_text(encoding="utf-8")
+    assert "modules\pid\code\pid_isr.c" in uvprojx
+
+
+def test_generate_stm32_empty_selection_accepts_master_header_calls(tmp_path):
+    """母版空生成（不选任何模块）：main.c 调母版 ml_* API 过门禁、能落盘。"""
+    master = make_fake_stm32_ml_master(tmp_path / "master")
+
+    out = generate(
+        platform=PLATFORM_STM32,
+        manifests=[],
+        module_library_dir=make_fake_motor_pid_library(tmp_path / "modules"),
+        master_project_dir=master,
+        output_dir=tmp_path / "out",
+        main_c_content=(
+            "int main(void) { pwm_init(TIM_2, TIM2_CH1, 1000); while (1); }\n"
+        ),
+    )[0]
+
+    assert (out / "main.c").is_file()
+    assert (out / "pin_config.h").is_file()
+
+
+def test_check_main_calls_accepts_master_header_functions(tmp_path):
+    """门禁接口集并入母版头：main.c 调母版头声明的函数不报未定义（mspm0
+    母版无 .h 时并入为空，见 test_corpus_main_calls_fence_and_undefined_from_memory）。"""
+    corpus = ModuleCorpus(
+        platform=PLATFORM_STM32,
+        modules=(),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(("ml_pwm.h", "void pwm_init(void);\n"),),
+        master_search_dirs=(),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { pwm_init(); while (1); }\n",
+    )
+
+    _check_main_calls(corpus)  # 不抛 UndefinedCallsError
+
+
+def test_check_main_calls_still_rejects_unknown_calls_with_master_headers(tmp_path):
+    """并入母版头不放松门禁：模块头与母版头都没有的函数仍明确报错。"""
+    corpus = ModuleCorpus(
+        platform=PLATFORM_STM32,
+        modules=(),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(("ml_pwm.h", "void pwm_init(void);\n"),),
+        master_search_dirs=(),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { ghost(); while (1); }\n",
+    )
+
+    with pytest.raises(UndefinedCallsError, match="ghost"):
+        _check_main_calls(corpus)

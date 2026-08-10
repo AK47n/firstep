@@ -12,11 +12,12 @@
         "code/pid.c",
         "code/pid.h",
         "code/gray_track.c",
-        "code/gray_track.h"
+        "code/gray_track.h",
+        "code/pid_isr.c"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "",
+      "notes": "pid_isr.c = 21F user/isr.c 的 TIM3_IRQHandler 原样提取（10ms：关中断读 Encoder_count1/2 → motorA/B.now → pid_control()），选 pid 即带 10ms 调度，闭环开箱即用；TIM3 初始化在 main.c 用 ml_tim 的 tim_interrupt_ms_init(TIM_3, 10, 优先级)。",
       "kit": "",
       "source_url": ""
     }

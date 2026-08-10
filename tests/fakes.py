@@ -801,3 +801,244 @@ def make_blank_pdf(path: Path) -> Path:
     with path.open("wb") as file:
         writer.write(file)
     return path
+
+
+# ---------------------------------------------------------------------------
+# 工单 02 假件：stm32 电机链路（母版 ml_libs + pin_config.h、motor/pid 模块）
+# ---------------------------------------------------------------------------
+
+# 假母版 ml_libs（headfile.h + 驱动层头）与工程根 pin_config.h：内容与真实
+# 母版同构（引脚宏集中、模块只引用宏），结构够生成门禁解析即可。
+FAKE_ML_HEADFILE_H = (
+    "#ifndef __HEADFILE_H\n#define __HEADFILE_H\n"
+    '#include "ml_pwm.h"\n#include "ml_gpio.h"\n#include "ml_exti.h"\n'
+    "#endif\n"
+)
+FAKE_ML_PWM_H = (
+    "#ifndef _pwm_h_\n#define _pwm_h_\n#include \"headfile.h\"\n"
+    "typedef enum { TIM2_CH1 = 0, TIM2_CH2 = 1 } TIMn_CHn_enum;\n"
+    "typedef enum { TIM_2 = 0, TIM_3 = 1 } TIMn_enum;\n"
+    "void pwm_init(TIMn_enum timn, TIMn_CHn_enum timn_chn, int fre);\n"
+    "void pwm_update(TIMn_enum timn, TIMn_CHn_enum timn_chn, int duty);\n"
+    "#endif\n"
+)
+FAKE_ML_GPIO_H = (
+    "#ifndef _ml_gpio_h_\n#define _ml_gpio_h_\n#include \"headfile.h\"\n"
+    "typedef enum { GPIO_A = 0, GPIO_B = 1 } GPIOn_enum;\n"
+    "typedef enum { Pin_0 = 0, Pin_3 = 3, Pin_5 = 5, Pin_6 = 6, Pin_7 = 7 } Pinx_enum;\n"
+    "typedef enum { OUT_PP = 0, IU = 1 } GPIO_MODE_enum;\n"
+    "void gpio_init(GPIOn_enum GPIOn, Pinx_enum Pinx, GPIO_MODE_enum mode);\n"
+    "void gpio_set(GPIOn_enum GPIOn, Pinx_enum Pinx, uint8_t mode);\n"
+    "uint8_t gpio_get(GPIOn_enum GPIOn, Pinx_enum Pinx);\n"
+    "#endif\n"
+)
+FAKE_ML_EXTI_H = (
+    "#ifndef _ml_exti_h_\n#define _ml_exti_h_\n#include \"headfile.h\"\n"
+    "typedef enum { EXTI_PA2 = 6, EXTI_PA4 = 12 } EXTI_Pnx_enum;\n"
+    "typedef enum { RISING, FALLING } EXTI_Trigger_enum;\n"
+    "void exti_init(EXTI_Pnx_enum pin, EXTI_Trigger_enum trigger, uint8_t priority);\n"
+    "#endif\n"
+)
+FAKE_PIN_CONFIG_H = (
+    "#ifndef __PIN_CONFIG_H\n#define __PIN_CONFIG_H\n"
+    "#define MOTOR_A_PWM_TIM TIM_2\n#define MOTOR_A_PWM_CH TIM2_CH1\n"
+    "#define MOTOR_B_PWM_TIM TIM_2\n#define MOTOR_B_PWM_CH TIM2_CH2\n"
+    "#define MOTOR_PWM_FREQ 1000\n"
+    "#define MOTOR_A_DIR_PORT GPIO_A\n#define MOTOR_A_DIR_PIN Pin_6\n"
+    "#define MOTOR_A_DIR2_PORT GPIO_A\n#define MOTOR_A_DIR2_PIN Pin_7\n"
+    "#define MOTOR_B_DIR_PORT GPIO_B\n#define MOTOR_B_DIR_PIN Pin_0\n"
+    "#define MOTOR_B_DIR2_PORT GPIO_B\n#define MOTOR_B_DIR2_PIN Pin_1\n"
+    "#define MOTOR_A_ENC_EXTI EXTI_PA2\n#define MOTOR_A_ENC_LINE 2\n"
+    "#define MOTOR_A_ENC_DIR_PORT GPIO_A\n#define MOTOR_A_ENC_DIR_PIN Pin_3\n"
+    "#define MOTOR_B_ENC_EXTI EXTI_PA4\n#define MOTOR_B_ENC_LINE 4\n"
+    "#define MOTOR_B_ENC_DIR_PORT GPIO_A\n#define MOTOR_B_ENC_DIR_PIN Pin_5\n"
+    "#endif\n"
+)
+
+# 假 stm32 母版 .uvprojx（真实母版同构：uvprojx 在 user/、IncludePath 含工程根
+# `..`——pin_config.h 在工程根、ml_libs 由 ..\ml_libs 进搜索范围）。
+FAKE_STM32_ML_UVPROJX = r'''<?xml version="1.0" encoding="UTF-8" ?>
+<Project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <SchemaVersion>2.1</SchemaVersion>
+  <Targets>
+    <Target>
+      <TargetName>STM32F103C8</TargetName>
+      <ToolsetNumber>0x4</ToolsetNumber>
+      <ToolsetName>ARM-ADS</ToolsetName>
+      <TargetOption>
+        <TargetCommonOption>
+          <Device>STM32F103C8</Device>
+          <Vendor>STMicroelectronics</Vendor>
+        </TargetCommonOption>
+        <TargetArmAds>
+          <Cads>
+            <VariousControls>
+              <MiscControls></MiscControls>
+              <Define></Define>
+              <Undefine></Undefine>
+              <IncludePath>..\ml_libs;..</IncludePath>
+            </VariousControls>
+          </Cads>
+        </TargetArmAds>
+      </TargetOption>
+      <Groups>
+        <Group>
+          <GroupName>user</GroupName>
+          <Files>
+            <File>
+              <FileName>main.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\main.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+      </Groups>
+    </Target>
+  </Targets>
+</Project>
+'''
+
+
+def make_fake_stm32_ml_master(master_dir: Path) -> Path:
+    """假 stm32 母版：ml_libs（headfile.h + ml_pwm/ml_gpio/ml_exti）+ 工程根
+    pin_config.h + user/Project.uvprojx（IncludePath 含工程根，真实母版同构）。"""
+    (master_dir / "ml_libs").mkdir(parents=True)
+    (master_dir / "user").mkdir()
+    (master_dir / "pin_config.h").write_text(FAKE_PIN_CONFIG_H, encoding="utf-8")
+    (master_dir / "main.c").write_text("/* master's old main */", encoding="utf-8")
+    (master_dir / "ml_libs" / "headfile.h").write_text(FAKE_ML_HEADFILE_H, encoding="utf-8")
+    (master_dir / "ml_libs" / "ml_pwm.h").write_text(FAKE_ML_PWM_H, encoding="utf-8")
+    (master_dir / "ml_libs" / "ml_gpio.h").write_text(FAKE_ML_GPIO_H, encoding="utf-8")
+    (master_dir / "ml_libs" / "ml_exti.h").write_text(FAKE_ML_EXTI_H, encoding="utf-8")
+    (master_dir / "user" / "Project.uvprojx").write_text(
+        FAKE_STM32_ML_UVPROJX, encoding="utf-8"
+    )
+    return master_dir
+
+
+# 假 motor/pid 模块（21F 提取形态）：motor_stm32.c 引脚全走 pin_config.h 宏 +
+# EXTI2/4 编码器计数中断随模块；pid_isr.c 为 21F isr.c 的 TIM3_IRQHandler
+# 原样提取（关中断读计数 → motorA/B.now → pid_control）。
+MOTOR_STM32_H = (
+    "#ifndef _MOTOR_STM32_H\n#define _MOTOR_STM32_H\n"
+    '#include "headfile.h"\n'
+    "void motor_init(void);\n"
+    "void motorA_duty(int duty);\n"
+    "void motorB_duty(int duty);\n"
+    "void encoder_init(void);\n"
+    "extern int Encoder_count1, Encoder_count2;\n"
+    "extern uint8_t motorA_dir, motorB_dir;\n"
+    "#endif\n"
+)
+MOTOR_STM32_C = (
+    '#include "motor_stm32.h"\n'
+    '#include "pin_config.h"\n'
+    "uint8_t motorA_dir = 0;\n"
+    "uint8_t motorB_dir = 0;\n"
+    "int Encoder_count1 = 0;\n"
+    "int Encoder_count2 = 0;\n"
+    "void motor_init(void) {\n"
+    "    pwm_init(MOTOR_A_PWM_TIM, MOTOR_A_PWM_CH, MOTOR_PWM_FREQ);\n"
+    "    gpio_init(MOTOR_A_DIR_PORT, MOTOR_A_DIR_PIN, OUT_PP);\n"
+    "    pwm_init(MOTOR_B_PWM_TIM, MOTOR_B_PWM_CH, MOTOR_PWM_FREQ);\n"
+    "    gpio_init(MOTOR_B_DIR_PORT, MOTOR_B_DIR_PIN, OUT_PP);\n"
+    "}\n"
+    "void encoder_init(void) {\n"
+    "    exti_init(MOTOR_A_ENC_EXTI, FALLING, 0);\n"
+    "    gpio_init(MOTOR_A_ENC_DIR_PORT, MOTOR_A_ENC_DIR_PIN, IU);\n"
+    "    exti_init(MOTOR_B_ENC_EXTI, FALLING, 0);\n"
+    "    gpio_init(MOTOR_B_ENC_DIR_PORT, MOTOR_B_ENC_DIR_PIN, IU);\n"
+    "}\n"
+    "void EXTI2_IRQHandler(void) {\n"
+    "    if (EXTI->PR & (1 << MOTOR_A_ENC_LINE)) {\n"
+    "        Encoder_count1++;\n"
+    "        EXTI->PR = 1 << MOTOR_A_ENC_LINE;\n"
+    "    }\n"
+    "}\n"
+    "void EXTI4_IRQHandler(void) {\n"
+    "    if (EXTI->PR & (1 << MOTOR_B_ENC_LINE)) {\n"
+    "        Encoder_count2++;\n"
+    "        EXTI->PR = 1 << MOTOR_B_ENC_LINE;\n"
+    "    }\n"
+    "}\n"
+)
+PID_H = (
+    "#ifndef __PID_H\n#define __PID_H\n#include \"headfile.h\"\n"
+    "typedef struct { float target; float now; } pid_t;\n"
+    "void pid_control(void);\n"
+    "void pid_init(pid_t *pid, int mode, float p, float i, float d);\n"
+    "extern pid_t motorA;\n"
+    "extern pid_t motorB;\n"
+    "#endif\n"
+)
+PID_C = (
+    '#include "pid.h"\n'
+    '#include "motor_stm32.h"\n'
+    "pid_t motorA = {0};\n"
+    "pid_t motorB = {0};\n"
+    "void pid_control(void) { motorA_duty(0); motorB_duty(0); }\n"
+)
+PID_ISR_C = (
+    '#include "pid.h"\n'
+    '#include "motor_stm32.h"\n'
+    "void TIM3_IRQHandler(void) {\n"
+    "    if (TIM3->SR & 1) {\n"
+    "        __disable_irq();\n"
+    "        int enc1 = Encoder_count1;\n"
+    "        int enc2 = Encoder_count2;\n"
+    "        Encoder_count1 = 0;\n"
+    "        Encoder_count2 = 0;\n"
+    "        __enable_irq();\n"
+    "        motorA.now = (float)enc1;\n"
+    "        motorB.now = (float)enc2;\n"
+    "        pid_control();\n"
+    "        TIM3->SR &= ~1;\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def make_fake_motor_pid_library(library_dir: Path) -> Path:
+    """假模块库：motor + pid（stm32，21F 提取形态）——工单 02 生成用例专用。"""
+    _add_module(
+        library_dir,
+        {
+            "slug": "motor",
+            "description": "TB6612 双路直流电机驱动",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/motor_stm32.c", "code/motor_stm32.h"],
+                    "verified": True,
+                    "hardware_bound": False,
+                    "notes": "21F 提取；引脚宏走母版 pin_config.h",
+                }
+            },
+        },
+        {
+            "code/motor_stm32.c": MOTOR_STM32_C,
+            "code/motor_stm32.h": MOTOR_STM32_H,
+        },
+    )
+    _add_module(
+        library_dir,
+        {
+            "slug": "pid",
+            "description": "2021F 巡线题专用 PID 控制",
+            "dependencies": ["motor"],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/pid.c", "code/pid.h", "code/pid_isr.c"],
+                    "verified": True,
+                    "hardware_bound": False,
+                    "notes": "",
+                }
+            },
+        },
+        {
+            "code/pid.c": PID_C,
+            "code/pid.h": PID_H,
+            "code/pid_isr.c": PID_ISR_C,
+        },
+    )
+    return library_dir
