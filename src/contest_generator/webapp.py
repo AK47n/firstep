@@ -160,6 +160,29 @@ def _schedule_exit_if_idle(registry: TabRegistry) -> None:
     threading.Thread(target=delayed, daemon=True).start()
 
 
+def _tkinter_pick_directory() -> str | None:
+    """弹原生文件夹选择对话框，返回绝对路径；取消返回 None。
+
+    浏览器出于安全不暴露用户所选文件夹的绝对路径（webkitdirectory 只能
+    整夹上传，见 /api/masters/stage），输出目录必须知道落盘位置——由本地
+    服务端弹系统对话框（tkinter 随 Python 自带，无网络依赖），选中路径回填
+    前端输入框。tkinter 在无桌面会话的环境（CI / 服务化部署）会抛异常，
+    调用方按未登记异常走 500 大声失败；测试注入 fake 不真弹窗。
+    """
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()  # 隐藏主窗口，只留对话框
+    # 对话框置顶：本地工具场景下浏览器窗口通常在前台，askdirectory 默认可能
+    # 沉到后面（用户曾反馈找不到窗口）；topmost 由父窗口继承，必须传 parent
+    root.attributes("-topmost", True)
+    try:
+        return filedialog.askdirectory(parent=root, title="选择输出目录") or None
+    finally:
+        root.destroy()
+
+
 @dataclass
 class AppContext:
     """服务上下文：配置路径 + 当前配置（写入后即时生效）+ LLM 工厂（测试注入）。"""
@@ -168,6 +191,7 @@ class AppContext:
     config: AppConfig | None = None  # None → 按需从配置文件加载
     llm_factory: Callable[[AppConfig], LLM] = DeepSeekLLM
     tab_registry: TabRegistry = field(default_factory=TabRegistry)
+    pick_directory: Callable[[], str | None] = _tkinter_pick_directory
 
 
 # ---------------------------------------------------------------------------
@@ -594,6 +618,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             _llm(context), topic.problem_text, resolved.manifests, platform, _library_dir(context)
         )
         return {"main_c": main_c, "intercepted": list(intercepted)}
+
+    @app.post("/api/pick-directory")
+    @_map_errors
+    def pick_directory() -> dict:
+        """弹原生文件夹选择对话框（本地工具专用），返回 {"path": 绝对路径}。
+
+        浏览器拿不到所选文件夹的绝对路径（见 _tkinter_pick_directory），
+        由服务端弹系统对话框；用户取消时 path 为 null，前端不覆盖输入框。
+        """
+        return {"path": context.pick_directory()}
 
     @app.post("/api/generate")
     @_map_errors

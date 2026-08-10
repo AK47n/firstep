@@ -341,6 +341,24 @@ def test_state_reports_unconfigured_api(tmp_path):
     assert state["masters_dir"]
 
 
+def test_pick_directory_returns_absolute_path(context):
+    context[0].pick_directory = lambda: r"D:\contest\demo"
+
+    resp = TestClient(create_app(context[0])).post("/api/pick-directory")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"path": r"D:\contest\demo"}
+
+
+def test_pick_directory_cancel_returns_null(context):
+    context[0].pick_directory = lambda: None  # 用户取消：null，前端不覆盖手输
+
+    resp = TestClient(create_app(context[0])).post("/api/pick-directory")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"path": None}
+
+
 def test_state_maps_corrupt_master_meta_to_400(client, context, tmp_path):
     # 母版目录在但元数据损坏：state 给 400 提示而非 500
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
