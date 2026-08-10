@@ -106,6 +106,11 @@ class RaisingLLM:
     ) -> ModuleSelection:
         raise LLMError("服务不可用")
 
+    def clarify(
+        self, problem_text: str, clarifications: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]:
+        raise LLMError("服务不可用")
+
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str:
@@ -168,6 +173,11 @@ class ScriptedDistillLLM:
     def select_modules(
         self, problem_text: str, manifest_summaries: Sequence[str]
     ) -> ModuleSelection:
+        raise LLMError("ScriptedDistillLLM 只服务提炼端点")
+
+    def clarify(
+        self, problem_text: str, clarifications: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
 
     def generate_main_skeleton(
@@ -1641,6 +1651,80 @@ def test_recommend_question_ends_stream_with_question_event(client, context):
     assert events[-1][1]["questions"] == [
         "题面没有说明识别方式，用摄像头还是传感器？"
     ]
+
+
+def test_recommend_clarify_questions_end_stream_with_question_event(client, context):
+    """澄清阶段先行：clarify 仍有疑问 → question 事件收尾（不发 round——澄清
+    阶段不属于收敛轮次，补问不再作废已跑轮次）；问答历史随请求体透传。"""
+    holder = context[1]
+    llm = FakeLLM(clarify_questions=("具体要识别什么数字？",))
+    holder["llm"] = llm
+
+    events = _recommend_stream(
+        client,
+        {
+            "problem_text": "识别数字的送药小车",
+            "clarifications": [{"question": "识别方式？", "answer": "摄像头"}],
+        },
+    )
+
+    assert [kind for kind, _ in events] == [EVENT_QUESTION]
+    assert events[-1][1]["questions"] == ["具体要识别什么数字？"]
+    assert llm.clarify_calls == [
+        ("识别数字的送药小车", (("识别方式？", "摄像头"),))
+    ]
+
+
+def test_recommend_clarify_empty_with_history_goes_straight_to_convergence(
+    client, context
+):
+    """带 clarifications 重发且澄清空 → 立即进收敛（不重跑澄清轮次语义）；
+    收敛收到的题面保持原文（逐句编号），回答不进题面。"""
+    holder = context[1]
+    llm = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+    holder["llm"] = llm
+
+    events = _recommend_stream(
+        client,
+        {
+            "problem_text": "温湿度采集并显示",
+            "clarifications": [{"question": "识别方式？", "answer": "摄像头"}],
+        },
+    )
+
+    assert [kind for kind, _ in events] == [
+        "round",
+        "round",
+        "converged",
+        "done",
+    ]
+    assert llm.clarify_calls == [
+        ("温湿度采集并显示", (("识别方式？", "摄像头"),))
+    ]
+    # 题面保持原文：收敛循环收到的是逐句编号的原始题面，回答不拼进题面
+    assert llm.problem_texts[0] == "1. 温湿度采集并显示"
+    assert "摄像头" not in llm.problem_texts[0]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "字符串",
+        [{"question": "q"}],  # 缺 answer
+        [{"question": "", "answer": "a"}],  # question 为空
+        [{"question": "q", "answer": 123}],  # answer 非字符串
+        [{"question": "q", "answer": "a"}, "不是对象"],  # 条目非对象
+    ],
+)
+def test_recommend_clarifications_malformed_rejected(client, bad):
+    """clarifications 校验：非数组 / 缺 question / 空 question / 非字符串
+    answer / 条目非对象 → 400（字符串对契约，缺省空 = 向后兼容）。"""
+    resp = client.post(
+        "/api/recommend", json={"problem_text": "题目", "clarifications": bad}
+    )
+
+    assert resp.status_code == 400
+    assert "clarifications" in resp.json()["detail"]
 
 
 def test_recommend_carries_requirements_and_isolates_suggestions(client, context):

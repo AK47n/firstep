@@ -22,6 +22,7 @@ from contest_generator.events import (
     ProgressEvent,
 )
 from contest_generator.llm import (
+    CLARIFY_SYSTEM_PROMPT,
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
     EMBEDDED_CONTENT_CAP,
@@ -45,6 +46,7 @@ from contest_generator.llm import (
     _validation_user_prompt,
     extract_module_selection_data,
     parse_archive_judgment,
+    parse_clarify_questions,
     parse_distillation_report,
     parse_summary_report,
     parse_validation_result,
@@ -321,6 +323,96 @@ def test_select_modules_missing_content_field_raises():
 
     with pytest.raises(LLMError, match="content"):
         llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+
+# ---------------------------------------------------------------------------
+# 澄清阶段（工单 01 推荐先澄清后收敛）：只看题面 + 问答历史，输出仍存疑问
+# ---------------------------------------------------------------------------
+
+
+def test_clarify_posts_chat_completion_with_history():
+    """请求形状：CLARIFY_SYSTEM_PROMPT + 题面与逐条 Q/A 历史的用户消息
+    （json_mode）；返回解析后的疑问列表。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"questions": ["识别方式？"]}))
+    )
+    llm = _llm(transport)
+    problem = "设计一个识别数字的送药小车"
+
+    result = llm.clarify(problem, [("识别方式？", "摄像头")])
+
+    url, headers, payload, timeout = transport.calls[0]
+    assert url == "https://api.deepseek.com/chat/completions"
+    assert headers["Authorization"] == "Bearer sk-test"
+    assert payload["model"] == "deepseek-chat"
+    assert payload["response_format"] == {"type": "json_object"}
+    assert timeout == 300
+    assert payload["messages"][0]["content"] == CLARIFY_SYSTEM_PROMPT
+    user_message = payload["messages"][1]["content"]
+    assert problem in user_message
+    assert "Q: 识别方式？" in user_message
+    assert "A: 摄像头" in user_message
+    assert "JSON" in user_message  # DeepSeek 的 json_object 模式要求提示词含 json
+
+    assert result == ("识别方式？",)
+
+
+def test_clarify_empty_questions_means_done():
+    """空 questions 数组 / 缺省 questions → 空元组（澄清完成，进收敛）。"""
+    for body in (json.dumps({"questions": []}), json.dumps({})):
+        transport = FakeTransport(body=_api_response(body))
+        assert _llm(transport).clarify("赛题", []) == ()
+
+
+@pytest.mark.parametrize(
+    "bad_content",
+    [
+        json.dumps({"questions": "识别方式？"}),
+        json.dumps({"questions": [123]}),
+        json.dumps({"questions": [""]}),
+        "{not json",
+        json.dumps([1, 2]),
+    ],
+)
+def test_clarify_rejects_malformed_output(bad_content):
+    """畸形输出（非 JSON / 顶层非对象 / questions 非字符串数组）→ LLMError——
+    宁可大声失败也不带病进收敛循环（与其它 AI 契约同哲学）。"""
+    transport = FakeTransport(body=_api_response(bad_content))
+    with pytest.raises(LLMError):
+        _llm(transport).clarify("赛题", [])
+
+
+def test_clarify_prompt_contract():
+    """澄清系统提示词契约：逐句核对题面、证据不足才补问、不重复已答问题、
+    无疑问输出空 questions 数组（机械提取层把行为要点写死在提示词）。"""
+    assert "逐句核对" in CLARIFY_SYSTEM_PROMPT
+    assert "证据不足" in CLARIFY_SYSTEM_PROMPT
+    assert "不要重复问" in CLARIFY_SYSTEM_PROMPT
+    assert "空 questions 数组" in CLARIFY_SYSTEM_PROMPT
+    assert TRUNCATION_NOTICE in CLARIFY_SYSTEM_PROMPT
+
+
+def test_clarify_truncates_oversized_problem():
+    """超大赛题文本同样截断（带标注）：澄清调用也不会让请求体超限。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"questions": []}))
+    )
+    llm = _llm(transport)
+
+    llm.clarify("赛题" * (EMBEDDED_CONTENT_CAP + 100), [])
+
+    _, _, payload, _ = transport.calls[0]
+    message = payload["messages"][1]["content"]
+    assert len(message) < EMBEDDED_CONTENT_CAP + 1000
+    assert "截断" in message
+    assert TRUNCATION_NOTICE in message
+
+
+def test_parse_clarify_questions_pure_parse():
+    """解析函数直测：空数组 → 空元组；缺省 → 空元组；字符串数组原样返回。"""
+    assert parse_clarify_questions('{"questions": []}') == ()
+    assert parse_clarify_questions("{}") == ()
+    assert parse_clarify_questions('{"questions": ["a", "b"]}') == ("a", "b")
 
 
 # ---------------------------------------------------------------------------
@@ -785,6 +877,7 @@ def test_prompts_share_truncation_notice():
     assert TRUNCATION_NOTICE in user_prompt
     assert TRUNCATION_NOTICE in SELECT_SYSTEM_PROMPT
     assert TRUNCATION_NOTICE in SKELETON_SYSTEM_PROMPT
+    assert TRUNCATION_NOTICE in CLARIFY_SYSTEM_PROMPT
 
 
 def test_select_modules_truncates_oversized_problem():

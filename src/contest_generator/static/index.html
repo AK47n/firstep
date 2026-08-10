@@ -719,20 +719,25 @@ function showRecommendError(message) {
 function showRecommendQuestions(problem, questions) {
   const box = $("rec-list");
   box.innerHTML = '<div class="warn-box" style="border:1px solid var(--border)">'
-    + '<div class="muted">AI 拿不准，需要你确认（回答会追加进题面重新分析）：</div>'
-    + questions.map((q) => '<div class="item" style="margin-top:6px">' + esc(q) + '</div>').join("")
-    + '<div class="row" style="margin-top:8px"><input id="recommend-answer" style="flex:1" placeholder="补充说明（可选）">'
-    + '<button id="btn-recommend-answer" class="primary">补充回答并继续</button></div></div>';
+    + '<div class="muted">AI 拿不准，需要你确认（回答只用于澄清，不改写题面）：</div>'
+    + questions.map((q, i) => '<div class="item" style="margin-top:6px">' + esc(q)
+      + '<input id="recommend-answer-' + i + '" style="margin-top:4px;width:100%" placeholder="补充说明（可选）"></div>').join("")
+    + '<div class="row" style="margin-top:8px"><button id="btn-recommend-answer" class="primary">补充回答并继续</button></div></div>';
   $("btn-recommend-answer").addEventListener("click", () => {
-    const answer = $("recommend-answer").value.trim();
-    startRecommend(problem + (answer ? "\n\n（用户补充： " + answer + " ）" : ""));
+    // 回答进澄清历史（随请求体发送），题面保持原文——收敛判定依赖题面句子
+    // 编号稳定，拼进题面会污染"两轮一致"对照（工单 01）
+    questions.forEach((q, i) => {
+      recommendClarifications.push({ question: q, answer: ($("recommend-answer-" + i).value || "").trim() });
+    });
+    startRecommend(problem);
   });
 }
 
 // 推荐进度面板实例（共享模块 makeProgressPanel，定义见"进度面板模块"段）。
 // 生命周期 = 一次点击到 done / question / error / 断线；词表镜像 events.py：
 // round / converged / done / question / error（JS 侧单点声明，改词表须同步）。
-let recProblem = "";   // 当前推荐题面：补问回答后重启流程拼追加回答用
+let recProblem = "";   // 当前推荐题面：澄清回答后重启流程仍用原文（回答走请求体，不污染题面）
+let recommendClarifications = [];   // 澄清历史 [{question, answer}]，随请求体发送；手动重推清空（新生命周期）
 const recPanel = makeProgressPanel({
   timerTotalId: "rec-timer-total",
   timerCallId: "rec-timer-round",
@@ -794,7 +799,7 @@ async function startRecommend(problem) {
   try {
     resp = await fetch("/api/recommend", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined, reference_ids: selectedReferenceIds }),
+      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined, reference_ids: selectedReferenceIds, clarifications: recommendClarifications }),
     });
   } catch (e) { stopRecProgress(); showRecommendError(e.message); return; }
   if (!resp.body) { stopRecProgress(); showRecommendError("服务响应无流"); return; }
@@ -816,6 +821,7 @@ async function startRecommend(problem) {
 $("btn-recommend").addEventListener("click", () => {
   const problem = $("problem").value.trim();
   if (!problem) { $("recommend-msg").textContent = "请先填写赛题原文"; return; }
+  recommendClarifications = [];   // 手动重推 = 新生命周期，清空澄清历史
   startRecommend(problem);
 });
 
