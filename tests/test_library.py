@@ -168,11 +168,29 @@ def test_save_manifest_rejects_structural_errors(fake_module_library):
     bad = ModuleManifest(
         slug="dht11",
         description="x",
-        platforms={"stm32": PlatformEntry(files=())},
+        platforms={"stm32": PlatformEntry(files=("../evil.c",))},
     )
 
-    with pytest.raises(LibraryError, match="不能为空"):
+    with pytest.raises(LibraryError, match="无 .."):
         save_manifest(fake_module_library, bad)
+
+
+def test_save_manifest_accepts_embedded_in_master_entry(fake_module_library):
+    """空 files 平台条目（实现内嵌母版）可经结构编辑保存，与生成语义一致。"""
+    module = get_module(fake_module_library, "dht11")
+    edited = dataclasses.replace(
+        module,
+        platforms={
+            "stm32": PlatformEntry(files=(), verified=True),
+            "mspm0": module.platforms["mspm0"],
+        },
+    )
+
+    save_manifest(fake_module_library, edited)
+
+    saved = get_module(fake_module_library, "dht11")
+    assert saved.platforms["stm32"].files == ()
+    assert saved.platforms["stm32"].verified is True
 
 
 def test_update_module_description_persists_when_consistent(fake_module_library):
