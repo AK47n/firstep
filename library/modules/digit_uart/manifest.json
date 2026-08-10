@@ -8,9 +8,9 @@
         "code/digit_uart.c",
         "code/digit_uart.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "",
+      "notes": "文件来自 21F 且真机编译过（digit_uart.o）。",
       "kit": "",
       "source_url": ""
     }

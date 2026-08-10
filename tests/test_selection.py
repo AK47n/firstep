@@ -150,6 +150,16 @@ def test_verified_module_gives_no_warning():
     assert check_platform_warnings(["dht11"], PLATFORM_STM32, _by_slug(dht11)) == ()
 
 
+def test_embedded_in_master_entry_gives_no_missing_warning():
+    """空 files 平台条目（实现内嵌母版）= 该平台有版本：不再误报 missing。"""
+    oled = _manifest(
+        "oled",
+        platforms={PLATFORM_STM32: PlatformEntry(files=(), verified=True)},
+    )
+
+    assert check_platform_warnings(["oled"], PLATFORM_STM32, _by_slug(oled)) == ()
+
+
 def test_module_missing_target_platform_version_warns():
     oled = _manifest("oled", platforms={PLATFORM_STM32: _entry()})
 

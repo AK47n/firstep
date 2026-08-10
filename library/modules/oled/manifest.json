@@ -16,6 +16,14 @@
       "notes": "SysConfig 需配置 I2C1（命名 OLED，7 位地址 0x3C，TX 方向 2 字节传输）；依赖 delay。",
       "kit": "",
       "source_url": ""
+    },
+    "stm32": {
+      "files": [],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "实现内嵌母版 ml_libs/ml_oled.c/h + ml_oled_font.h（逐飞 ML 库，2026C/21F 真机编译过）。",
+      "kit": "",
+      "source_url": ""
     }
   }
 }

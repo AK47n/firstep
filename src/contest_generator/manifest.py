@@ -29,9 +29,13 @@ class ManifestError(ValueError):
 
 @dataclass(frozen=True)
 class PlatformEntry:
-    """单个平台下的模块版本条目。"""
+    """单个平台下的模块版本条目。
 
-    files: tuple[str, ...]  # 相对模块目录的文件路径列表
+    files 空 = 该平台实现已内嵌母版（随母版进工程，不复制不注册）——
+    平台条目本身仍必填：缺条目 = 该平台无版本，生成必失败（missing 警告）。
+    """
+
+    files: tuple[str, ...]  # 相对模块目录的文件路径列表（空 = 实现内嵌母版）
     verified: bool = False  # 该平台版本是否验证过
     hardware_bound: bool = False  # 是否绑定硬件（换平台需移植）
     notes: str = ""  # 备注
@@ -149,6 +153,9 @@ def _require_notes(entry: dict[str, Any], platform: str) -> str:
 
 
 def _parse_file_list(files: list[Any], platform: str) -> tuple[str, ...]:
+    """解析平台条目文件列表：空数组合法 = 该平台实现已内嵌母版（无模块文件
+    需复制/注册/校验）；非空时逐项校验路径安全与去重。files 数组本身仍必填
+    （缺字段 = 平台条目不完整，报错保留）。"""
     result: list[str] = []
     seen: set[str] = set()
     for item in files:
@@ -160,8 +167,6 @@ def _parse_file_list(files: list[Any], platform: str) -> tuple[str, ...]:
             raise ManifestError(f"平台 {platform} 的文件列表重复：{item!r}")
         seen.add(item)
         result.append(item)
-    if not result:
-        raise ManifestError(f"平台 {platform} 的 files 不能为空")
     return tuple(result)
 
 

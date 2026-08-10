@@ -13,6 +13,14 @@
       "notes": "SysConfig 需配置 GPIO 组 LED_BEEP（LED_BEEP_PORT/LED_BEEP_LED_PIN = PA14 输出）；蜂鸣器函数为空实现，需要时自行补 GPIO。",
       "kit": "",
       "source_url": ""
+    },
+    "stm32": {
+      "files": [],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "实现内嵌母版 ml_libs/ml_led.c/h（逐飞 ML 库，2026C/21F 真机编译过）；蜂鸣器与 mspm0 版同为占位空实现。",
+      "kit": "",
+      "source_url": ""
     }
   }
 }
