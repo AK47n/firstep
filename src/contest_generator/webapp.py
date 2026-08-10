@@ -67,6 +67,7 @@ from .master_store import (
     delete_master,
     import_master,
     list_masters,
+    master_project_dir,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
@@ -658,7 +659,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             slugs = list(prepend_related_modules(topic.related_modules, slugs))
         resolved = resolve_selection(_library_dir(context), platform, slugs)
         main_c, intercepted = generate_skeleton(
-            _llm(context), topic.problem_text, resolved.manifests, platform, _library_dir(context)
+            _llm(context),
+            topic.problem_text,
+            resolved.manifests,
+            platform,
+            _library_dir(context),
+            master_project_dir(_require_config(context).masters_dir, platform),
         )
         return {"main_c": main_c, "intercepted": list(intercepted)}
 

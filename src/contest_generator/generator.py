@@ -567,6 +567,10 @@ def _check_main_calls(corpus: ModuleCorpus) -> None:
     手改等），明确报错，拒绝产出无法编译的工程。main.c 含 Markdown 代码
     围栏同样明确报错（骨架阶段已剥离，走到这里说明输入绕过骨架阶段或
     手改带入）。
+
+    接口集 = 模块头 + 母版头（corpus.master_headers 已收集，直接并入）——
+    main.c 调母版内嵌实现的 ml_* API 不再误报未定义（工单 02，骨架阶段
+    已把母版头喂给 LLM，门禁必须认同一套；mspm0 母版无 .h，并入为空）。
     """
     for i, line in fence_line_indices(corpus.main_c):
         raise FencedMainCError(
@@ -579,6 +583,7 @@ def _check_main_calls(corpus: ModuleCorpus) -> None:
         for f in files
         if f.kind == "h"
     ]
+    headers.extend(("母版", rel, text) for rel, text in corpus.master_headers)
     interfaces = format_interface_blocks(headers)
     undefined = verify_main_c_interfaces(corpus.main_c, interfaces)
     if undefined:

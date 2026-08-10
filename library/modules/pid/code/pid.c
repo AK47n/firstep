@@ -1,6 +1,6 @@
 #include "headfile.h"
 #include "pid.h"
-#include "motor.h"
+#include "motor_stm32.h" // motor 模块的 code/motor.h 是 mspm0 版（含 ti_msp_dl_config.h），stm32 侧用独立头
 #include "gray_track.h"
 #include "ml_mpu6050.h"
 #include "digit_uart.h"
