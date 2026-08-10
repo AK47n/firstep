@@ -111,6 +111,9 @@ class RaisingLLM:
     ) -> tuple[str, ...]:
         raise LLMError("服务不可用")
 
+    def summarize_topic(self, problem_text: str) -> str:
+        raise LLMError("服务不可用")
+
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str:
@@ -389,6 +392,11 @@ def test_ai_endpoints_reject_with_hint_when_unconfigured(tmp_path):
     assert resp.status_code == 400
     assert "未配置 AI API" in resp.json()["detail"]
 
+    resp = client.post("/api/topic/summarize", json={"problem_text": "题目"})
+
+    assert resp.status_code == 400
+    assert "未配置 AI API" in resp.json()["detail"]
+
 
 # ---------------------------------------------------------------------------
 # 生成流程（验收项 1）：抽取 → 推荐 → 展开 → 骨架 → 生成
@@ -423,6 +431,33 @@ def test_extract_unsupported_type_returns_clear_error(client):
 
     assert resp.status_code == 400
     assert "不支持的文件类型" in resp.json()["detail"]
+
+
+def test_topic_summarize_returns_summary(client, context):
+    """赛题简介：单次 LLM 调用返回一句话总览 + 功能要点（只展示，不进下游）。"""
+    resp = client.post(
+        "/api/topic/summarize", json={"problem_text": "温湿度采集并显示"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"summary": "AI 生成的赛题简介"}
+    assert context[1]["llm"].topic_summarize_calls == [("温湿度采集并显示",)]
+
+
+def test_topic_summarize_requires_problem_text(client):
+    resp = client.post("/api/topic/summarize", json={})
+
+    assert resp.status_code == 400
+    assert "problem_text" in resp.json()["detail"]
+
+
+def test_topic_summarize_llm_failure_maps_to_502(client, context):
+    context[1]["llm"] = RaisingLLM()
+
+    resp = client.post("/api/topic/summarize", json={"problem_text": "题"})
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == "AI 服务调用失败：服务不可用"
 
 
 def test_recommend_returns_modules_with_reasons(client):

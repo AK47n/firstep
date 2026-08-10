@@ -2557,6 +2557,52 @@ def test_reference_summarize_retries_transient_failure():
     assert len(transport.calls) == 3
 
 
+# ---------------------------------------------------------------------------
+# 赛题简介生成（wait-what 步骤）：文本模式单调用契约
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_topic_posts_plain_text_prompt():
+    """赛题简介：文本模式（非 json_mode），一句话总览 + 功能要点的提示词。"""
+    transport = FakeTransport(
+        body=_api_response("做一个温湿度采集系统\n- 采集温湿度\n- 显示结果")
+    )
+    llm = _llm(transport)
+
+    summary = llm.summarize_topic("温湿度采集并显示")
+
+    assert summary == "做一个温湿度采集系统\n- 采集温湿度\n- 显示结果"
+    _, _, payload, _ = transport.calls[0]
+    messages = payload["messages"]
+    assert "一句话总览" in messages[0]["content"]
+    assert TRUNCATION_NOTICE in messages[0]["content"]
+    assert "温湿度采集并显示" in messages[1]["content"]
+    assert "response_format" not in payload  # 文本模式
+
+
+def test_summarize_topic_truncates_oversized_problem():
+    """超长赛题截断带标注（与所有嵌内容调用同款预算）。"""
+    transport = FakeTransport(body=_api_response("概述"))
+    llm = _llm(transport)
+    long_problem = "题" * (EMBEDDED_CONTENT_CAP + 100)
+
+    llm.summarize_topic(long_problem)
+
+    _, _, payload, _ = transport.calls[0]
+    user = payload["messages"][1]["content"]
+    assert len(user) < len(long_problem)
+    assert TRUNCATION_NOTICE in user
+
+
+def test_summarize_topic_retries_transient_failure():
+    """瞬时失败整次重问（与参考文件简介同款兜底）。"""
+    transport = _FlakyTransport(body=_api_response("概述"), failures=2)
+    llm = _llm(transport)
+
+    assert llm.summarize_topic("题面") == "概述"
+    assert len(transport.calls) == 3
+
+
 def test_reference_judge_archivable_retries_on_malformed_json_output():
     """输出畸形（非 JSON）也整次重问，直到严格解析通过。"""
     transport = FakeTransport(body=_api_response("{broken"))
