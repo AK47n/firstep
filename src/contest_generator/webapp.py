@@ -364,6 +364,33 @@ def _require_flag(payload: dict, key: str, *, default: bool = False) -> bool:
     return value
 
 
+def _require_clarifications(
+    payload: dict, key: str = "clarifications"
+) -> list[tuple[str, str]]:
+    """可选问答历史：[{question, answer}] 字符串对（缺省空 = 向后兼容）。
+
+    question 必填非空；answer 可为空串（回答输入框允许留空——空回答 = 用户
+    明确不给补充，同样进历史，防止澄清无限循环）。
+    """
+    value = payload.get(key)
+    if value in (None, (), []):
+        return []
+    if not isinstance(value, list):
+        raise HTTPException(400, f"{key} 必须是 [question, answer] 数组")
+    result: list[tuple[str, str]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise HTTPException(400, f"{key}[{index}] 必须是对象")
+        question = item.get("question")
+        if not isinstance(question, str) or not question.strip():
+            raise HTTPException(400, f"{key}[{index}] 缺 question")
+        answer = item.get("answer")
+        if not isinstance(answer, str):
+            raise HTTPException(400, f"{key}[{index}] 的 answer 必须是字符串")
+        result.append((question.strip(), answer))
+    return result
+
+
 def _optional_str(payload: dict, key: str) -> str:
     """可选字符串：缺省 / null → 空串；类型非法抛 400（勿让 null 变成 'None'）。"""
     value = payload.get(key)
@@ -496,13 +523,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """AI 按赛题推荐模块（SSE 流，工单 10）：round → … → converged →
         done（推荐结果）或 question（向用户补问）或 error（中文信息）→ 流结束。
 
-        收敛循环驱动（select_modules_convergent）：功能需求层两轮一致即停、
-        上限 4 轮（成本 2-4 轮 × 2-4K token），轮次经 SSE 进度事件推送；模型
-        拿不准（题面证据不足以判定）时以 question 事件收尾（questions 数组，
-        前端把用户回答追加进题面后重新请求）。done 的 data = 推荐结果：顶层
-        modules[] 格式与旧契约一致（下游 selectedSlugs / expand / generate
-        零改动），新增 requirements（功能需求层：需求 / 对照句 / 库内命中 /
-        库外建议——库外建议仅展示、不进工程）。
+        两阶段（工单 01 推荐先澄清后收敛）：**澄清阶段先行**——先调
+        llm.clarify（只看题面 + 请求体 clarifications 问答历史），仍有疑问 →
+        question 事件收尾（不发 round，前端把回答 push 进历史随请求体重发，
+        已跑轮次不再作废）；澄清空 = 澄清完成，才进收敛循环。
+        **收敛循环**（select_modules_convergent）：功能需求层两轮一致即停、
+        上限 4 轮（成本 2-4 轮 × 2-4K token），轮次经 SSE 进度事件推送；循环
+        内模型拿不准（罕见兜底）以 question 事件收尾（questions 数组，回答
+        并入历史重发——此时澄清通常已空，立即进收敛）。done 的 data = 推荐
+        结果：顶层 modules[] 格式与旧契约一致（下游 selectedSlugs / expand /
+        generate 零改动），新增 requirements（功能需求层：需求 / 对照句 /
+        库内命中 / 库外建议——库外建议仅展示、不进工程）。
 
         历史赛题入口：topic_id（显式）或粘贴题面中的编号（AI 自动识别）选中
         某题时，题面用库内全文（长 PDF 题面全文只在选了该赛题时进上下文），
@@ -524,6 +555,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         topic_id = _optional_str(payload, "topic_id")
         reference_ids = _require_str_list(payload, "reference_ids")
         platform = _optional_str(payload, "platform")
+        # 澄清历史（工单 01 推荐先澄清后收敛）：[{question, answer}] 字符串对，
+        # 缺省空 = 向后兼容；回答随请求体走、不拼进题面（题面保持原文——收敛
+        # 判定的"两轮一致"对照依赖逐句编号，题面被污染会让判定失真）
+        clarifications = _require_clarifications(payload)
         # 完整上下文已在装配点（resolve_topic_context）一次备好：两级注入的
         # 清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费（key 空 =
         # 未识别到历史赛题，no-topic 形同样携带全模块摘要）；手动选参考资料
@@ -536,8 +571,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         suggestions = topic.suggestions
         reader = topic.read_fulltext
         def run(emit: SseEmitter) -> None:
+            llm = _llm(context)  # 澄清与收敛用同一实例（工厂每次请求构造）
+            # 澄清阶段先行（工单 01）：只看题面 + 已有问答历史，仍有疑问 →
+            # question 事件收尾（不发 round——澄清阶段不属于收敛轮次，补问不再
+            # 作废已跑轮次）；空 = 澄清完成，才进收敛循环
+            pending = llm.clarify(topic.problem_text, clarifications)
+            if pending:
+                emit.question({"questions": list(pending)})
+                return
             selection = select_modules_convergent(
-                _llm(context),
+                llm,
                 topic.problem_text,  # 识别到时题面用库内全文；no-topic 形 = 粘贴原样
                 summaries,
                 references=suggestions,
