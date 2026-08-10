@@ -112,15 +112,19 @@ def test_platform_entry_without_files_rejected():
         ModuleManifest.from_dict(data)
 
 
-def test_platform_entry_with_empty_file_list_rejected():
+def test_platform_entry_with_empty_file_list_is_embedded_in_master():
+    """空 files 平台条目 = 实现内嵌母版（随母版进工程，不复制不注册）；
+    无 files 数组的平台条目仍报错（平台条目本身必填）。"""
     data = {
-        "slug": "dht11",
-        "description": "DHT11 温湿度传感器驱动",
-        "platforms": {"stm32": {"files": []}},
+        "slug": "oled",
+        "description": "OLED 屏显驱动",
+        "platforms": {"stm32": {"files": [], "verified": True}},
     }
 
-    with pytest.raises(ManifestError, match="files"):
-        ModuleManifest.from_dict(data)
+    manifest = ModuleManifest.from_dict(data)
+
+    assert manifest.platforms["stm32"].files == ()
+    assert manifest.platforms["stm32"].verified is True
 
 
 def test_duplicate_file_within_one_platform_entry_rejected():

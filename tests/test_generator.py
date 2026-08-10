@@ -34,7 +34,7 @@ from contest_generator.generator import (
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASSES, _SETTINGS_MODULE_ID
 from contest_generator.library import list_modules
 from contest_generator.llm import LLMError
-from contest_generator.manifest import ModuleManifest
+from contest_generator.manifest import ModuleManifest, PlatformEntry
 from contest_generator.master_store import MasterError
 from contest_generator.patchers import (
     PLATFORM_MSPM0,
@@ -272,6 +272,33 @@ def test_generate_copies_platform_specific_version(
     assert not (result / "modules/dht11/stm32").exists()
 
 
+def test_generate_embedded_in_master_entry_copies_nothing(
+    make_project, tmp_path
+):
+    """空 files 平台条目（实现内嵌母版）：不复制模块文件、不加 include 目录、
+    输出无 modules/ 子树（实现随母版进工程）。"""
+    embedded = ModuleManifest(
+        slug="oled",
+        description="OLED（stm32 实现内嵌母版）",
+        platforms={PLATFORM_STM32: PlatformEntry(files=(), verified=True)},
+    )
+    registry = PatcherRegistry()
+    spy = RecordingPatcher()
+    registry.register(PLATFORM_STM32, spy)
+
+    result = make_project(
+        manifests=[embedded],
+        output_dir=tmp_path / "out",
+        main_c_content="int main(void) { while (1); }\n",
+        registry=registry,
+    )
+
+    assert not (result / "modules").exists()
+    project_dir, module_files, include_dirs = spy.calls[0]
+    assert module_files == ()  # 无模块文件复制
+    assert include_dirs == ()  # 不加 include 目录
+
+
 def test_generate_unknown_platform_fails_before_touching_output(make_project, tmp_path):
     from contest_generator.patchers import UnknownPlatformError
 
@@ -325,8 +352,9 @@ def _memory_corpus(
     module_texts: list[tuple[str, str, str]] | None = None,
     missing_files: list[tuple[str, str]] | None = None,
     missing_platforms: list[str] | None = None,
+    master_headers: list[tuple[str, str]] | None = None,
 ) -> ModuleCorpus:
-    """内存语料：module_texts = (slug, rel, text)，master_headers 留空。"""
+    """内存语料：module_texts = (slug, rel, text)，master_headers 可传（默认空）。"""
     files: list[tuple[str, tuple[ModuleFile, ...]]] = []
     seen_slugs: set[str] = set()
     for slug, rel, text in module_texts or []:
@@ -343,7 +371,7 @@ def _memory_corpus(
         modules=tuple(files),
         missing_platforms=tuple(missing_platforms or ()),
         missing_files=tuple(missing_files or ()),
-        master_headers=(),
+        master_headers=tuple(master_headers or ()),
         master_search_dirs=(),
         master_project_dir=tmp_path,
         main_c=main_c,
@@ -373,6 +401,20 @@ def test_corpus_main_calls_fence_and_undefined_from_memory(tmp_path):
 
     with pytest.raises(FencedMainCError, match="第 1 行"):
         _check_main_calls(corpus)
+
+
+def test_corpus_main_calls_accept_master_header_functions(tmp_path):
+    """母版内嵌实现（空 files 平台条目）的函数声明在母版头——接口集并入
+    母版头后，main.c 调母版 API（OLED_* 等）不再误报未定义。"""
+    corpus = _memory_corpus(
+        tmp_path,
+        main_c='int main(void) { OLED_ShowString(1, 2, "hi"); while (1); }\n',
+        master_headers=[
+            ("ml_oled.h", "#pragma once\nvoid OLED_ShowString(uint8_t line, uint8_t col, char *s);\n"),
+        ],
+    )
+
+    _check_main_calls(corpus)  # 母版头里的函数 → 通过
 
 
 def test_corpus_self_include_checks_own_headers_from_memory(tmp_path):

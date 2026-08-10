@@ -580,6 +580,14 @@ def _check_main_calls(corpus: ModuleCorpus) -> None:
         if f.kind == "h"
     ]
     interfaces = format_interface_blocks(headers)
+    # 母版内嵌实现（空 files 平台条目）的函数在母版头里声明——接口集并入
+    # 母版头，main.c 调 ml_* / OLED_* 等母版 API 不再误报未定义（mspm0
+    # 母版无 .h，并入为空，无副作用）
+    interfaces.extend(
+        format_interface_blocks(
+            [("母版", rel, text) for rel, text in corpus.master_headers]
+        )
+    )
     undefined = verify_main_c_interfaces(corpus.main_c, interfaces)
     if undefined:
         raise UndefinedCallsError(
@@ -714,7 +722,11 @@ def _copy_module_files(
     library_dir: Path,
     output_dir: Path,
 ) -> tuple[list[Path], list[Path]]:
-    """复制模块文件到 modules/<slug>/ 下，返回（相对工程目录的文件列表、include 目录列表）。"""
+    """复制模块文件到 modules/<slug>/ 下，返回（相对工程目录的文件列表、include 目录列表）。
+
+    空 files 平台条目（实现内嵌母版）不复制、不加 include 目录——files 为
+    空时内层循环天然跳过，生成物只含母版自带的实现，无需注册。
+    """
     copied_files: list[Path] = []
     include_dirs: list[Path] = []
     seen_dirs: set[Path] = set()
