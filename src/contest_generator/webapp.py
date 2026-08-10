@@ -625,6 +625,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             headers={"Content-Type": "text/event-stream"},
         )
 
+    @app.post("/api/topic/summarize")
+    @_map_errors
+    def topic_summarize(payload: dict) -> dict:
+        """赛题简介（赛题简介步骤，wait-what 效果）：AI 预读题面给一句话
+        总览 + 功能要点。
+
+        让用户在选平台 / 推荐模块之前对"这个赛题要实现什么"有简短认知；
+        只做展示、不进任何下游流程（推荐 / 骨架有自己的题面处理，这里不
+        注入）。文本模式单次 LLM 调用，失败走错误映射表（LLM 服务失败 →
+        502）。"""
+        problem_text = _require_str(payload, "problem_text")
+        return {"summary": _llm(context).summarize_topic(problem_text)}
+
     @app.post("/api/selection/expand")
     @_map_errors
     def expand_selection(payload: dict) -> dict:

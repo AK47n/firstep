@@ -2,9 +2,10 @@
 
 生产实现 DeepSeekLLM 走 DeepSeek Chat Completions API（base_url / api_key /
 模型来自本机配置文件 config.py）；HTTP 传输可注入假件，网络调用不进测试。
-LLM 承担六类协议职责：赛题→模块选择、main.c 骨架生成、模块简介生成与
-校验、母版提炼判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出
-摘要，再基于摘要判定）、参考文件提炼归档判定、赛题库拆条 / 编号提取。
+LLM 承担七类协议职责：赛题→模块选择、赛题简介生成（AI 预读题面给用户
+一句话总览 + 功能要点）、main.c 骨架生成、模块简介生成与校验、母版提炼
+判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出摘要，再基于
+摘要判定）、参考文件提炼归档判定、赛题库拆条 / 编号提取。
 领域模型不在此处——赛题库模型在 topic_library，判定素材模型在 report，
 模块推荐模型与收敛工作流在 selection，一致性校验结果模型在 library，进度
 事件契约在 events（本模块只消费）。请求体有大小控制：所有嵌内容调用
@@ -175,6 +176,20 @@ REFERENCE_SUMMARY_SYSTEM_PROMPT = (
     "你是电子设计竞赛（电赛）嵌入式开发资料整理助手。根据提供的配套资料内容"
     "（素材过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）写一段中文"
     "简介：它是什么、用途、适用场景。只输出简介文本，不要额外格式。"
+)
+
+# 赛题简介生成（赛题简介步骤，wait-what 效果）：AI 预读题面给"这个赛题要
+# 实现什么"的简短认知——第一行一句话总览 + 每行一个功能要点。只展示给用户
+# 确认理解，不进任何下游流程；纯文本契约，与参考文件简介同款（文本模式，
+# 无结构化输出）。要求贴题面关键词、禁止脑补，与模块推荐的证据约束同源。
+TOPIC_SUMMARY_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发助手，熟悉 MSPM0G3507（CCS）与 "
+    "STM32F103C8T6（Keil5）两条平台线。为下面的赛题写一段简短简介"
+    "（赛题文本可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）："
+    "第一行用一句话总览这个赛题要做一个什么样的装置 / 系统，随后每行一个"
+    "功能要点（以「- 」开头），3-6 条，粒度贴题面关键词（如声光提示、测距、"
+    "显示等），严格以题面原文为证据，不要脑补题外功能。只输出简介文本，"
+    "不要额外格式。"
 )
 
 # 归档判定（工单 02）：提炼时被剔除的业务代码是否值得归档为该赛题的参考文件。
@@ -464,6 +479,8 @@ class LLM(Protocol):
         self, problem_text: str, clarifications: Sequence[tuple[str, str]]
     ) -> tuple[str, ...]: ...
 
+    def summarize_topic(self, problem_text: str) -> str: ...
+
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str: ...
@@ -625,6 +642,21 @@ class DeepSeekLLM:
             json_mode=True,
         )
         return parse_clarify_questions(content)
+
+    def summarize_topic(self, problem_text: str) -> str:
+        """赛题 → 简短简介（一句话总览 + 功能要点，文本模式，赛题简介步骤）。
+
+        预读题面给用户"这个赛题要实现什么"的简短认知（wait-what 效果）：只
+        展示、不进任何下游流程；赛题超长截断带标注（_truncate_content，与
+        所有嵌内容调用同款预算）；瞬时失败整次重问（_retry_parse，与参考
+        文件简介同款兜底）。
+        """
+        return self._retry_parse(
+            system_prompt=TOPIC_SUMMARY_SYSTEM_PROMPT,
+            user_prompt=_truncate_content(problem_text),
+            parse=lambda content: content,
+            label="赛题简介生成",
+        )
 
     def generate_main_skeleton(
         self, problem_text: str, module_interfaces: Sequence[str]
