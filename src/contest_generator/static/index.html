@@ -78,6 +78,18 @@
   .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
   .chip.out { background: #e5e7eb; color: #6b7280; cursor: default; }
   .chip.out .reason { color: #9ca3af; }
+  /* 参考资料选择列表（工单：表格状对齐）：勾选 | 资料 | 平台 | 说明 四列 */
+  .ref-pick-head, .ref-pick-row {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr) 110px minmax(0, 2fr);
+    gap: 10px; align-items: center; }
+  .ref-pick-head { font-size: 12px; color: var(--muted); padding: 2px 4px;
+                   border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+  .ref-pick-row { padding: 4px; cursor: pointer; border-radius: 4px; }
+  .ref-pick-row:hover { background: #f3f4f6; }
+  .ref-pick-row input { margin: 0; }
+  .ref-pick-title { color: var(--text); font-weight: 600; font-family: Consolas, monospace; font-size: 13px;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ref-pick-desc { color: var(--muted); font-size: 12px; }
   .warn-box { border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
   .warn-box.missing { background: #fee2e2; color: var(--danger); }
   .warn-box.unverified { background: #fef3c7; color: var(--warn); }
@@ -243,7 +255,10 @@
     <div class="card">
       <h2>7. 输出目录并生成</h2>
       <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
-      <input type="text" id="output-dir" placeholder="例如 D:\contest\demo">
+      <div class="row">
+        <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
+        <button id="btn-pick-output-dir">选择文件夹…</button>
+      </div>
       <div class="row" style="margin-top:10px">
         <button id="btn-generate" class="primary">生成工程</button>
         <span id="gen-status"></span>
@@ -840,11 +855,14 @@ function referencePlatformChip(e) {
 async function loadReferencePicker() {
   try {
     const entries = await apiGet("/api/references");
-    $("ref-picker").innerHTML = entries.length ? entries.map((e) => `
-      <label style="display:flex;align-items:baseline;gap:8px;margin-top:4px;cursor:pointer">
+    $("ref-picker").innerHTML = entries.length
+      ? '<div class="ref-pick-head"><span></span><span>资料</span><span>平台</span><span>说明</span></div>'
+        + entries.map((e) => `
+      <label class="ref-pick-row">
         <input type="checkbox" data-ref-pick="${esc(e.id)}" ${selectedReferenceIds.includes(e.id) ? "checked" : ""}>
-        <span class="slug">${esc(e.title)}</span>${referencePlatformChip(e)}
-        <span class="muted">${referenceAnchorLabel(e)} · ${esc(e.description)}</span>
+        <span class="ref-pick-title" title="${esc(e.title)}">${esc(e.title)}</span>
+        <span>${referencePlatformChip(e)}</span>
+        <span class="ref-pick-desc">${referenceAnchorLabel(e)}${e.description ? " · " + esc(e.description) : ""}</span>
       </label>`).join("")
       : '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>';
     $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) =>
@@ -974,6 +992,13 @@ $("btn-skeleton").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 // 生成页：6. 输出目录并生成
 // ---------------------------------------------------------------------------
+$("btn-pick-output-dir").addEventListener("click", async () => {
+  try {
+    const data = await apiPost("/api/pick-directory", {});
+    if (data.path) $("output-dir").value = data.path;  // 取消 = null，不覆盖手输
+  } catch (e) { $("generate-msg").textContent = e.message; }
+});
+
 $("btn-generate").addEventListener("click", async () => {
   $("generate-msg").textContent = "";
   $("generate-result").classList.add("hidden");
