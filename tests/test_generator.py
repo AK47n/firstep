@@ -30,6 +30,7 @@ from contest_generator.generator import (
     _check_module_self_include,
     _check_unresolved_includes,
     build_module_corpus,
+    build_output_tree_corpus,
     generate,
     generate_project,
     resolve_topic_context,
@@ -485,6 +486,133 @@ def test_unresolved_include_missing_header_rejected_from_memory(tmp_path):
         _check_unresolved_includes(corpus)
 
     assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# 产物树语料重建（工单 generate-check-parity/01）：build_output_tree_corpus
+# 从生成产物树重建语料——真机验收脚本（generate_check）不再抄门禁逻辑，
+# 镜像删除后验收测的就是 run_generation_gates 本身（门禁一改脚本不再静默
+# 漂移）。tmp_path 直构产物树可测。
+# ---------------------------------------------------------------------------
+
+
+def _write_output_tree(
+    root: Path,
+    *,
+    main_c: str = "int main(void) { while (1); }\n",
+    modules: dict[str, dict[str, str]] | None = None,
+    master_headers: dict[str, str] | None = None,
+) -> None:
+    """tmp_path 直构产物树：modules = {slug: {rel: text}}，母版头相对根。"""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "main.c").write_text(main_c, encoding="utf-8")
+    for slug, files in (modules or {}).items():
+        for rel, text in files.items():
+            p = root / "modules" / slug / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
+    for rel, text in (master_headers or {}).items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+
+def test_build_output_tree_corpus_rebuilds_modules_and_master(tmp_path):
+    root = tmp_path / "out"
+    _write_output_tree(
+        root,
+        main_c='#include "headfile.h"\nint main(void) { while (1); }\n',
+        modules={
+            "pid": {
+                "code/pid.c": '#include "pid.h"\n',
+                "code/pid.h": "#pragma once\n",
+            },
+            "led": {"led.c": '#include "led.h"\n', "led.h": "#pragma once\n"},
+        },
+        master_headers={
+            "headfile.h": "#pragma once\n",
+            "ml_led.h": "#define LED_GPIO 1\n",
+        },
+    )
+
+    corpus = build_output_tree_corpus(root, PLATFORM_STM32, [root / "user"])
+
+    assert corpus.platform == PLATFORM_STM32
+    assert corpus.master_project_dir == root
+    assert corpus.missing_platforms == () and corpus.missing_files == ()
+    assert corpus.main_c.startswith('#include "headfile.h"')
+    # modules 按 slug 排序；文件 rel 相对模块目录，kind 判定与 build_module_corpus 同规
+    assert [slug for slug, _ in corpus.modules] == ["led", "pid"]
+    pid_files = {f.rel: f for f in dict(corpus.modules)["pid"]}
+    assert set(pid_files) == {"code/pid.c", "code/pid.h"}
+    assert pid_files["code/pid.c"].kind == "c"
+    assert pid_files["code/pid.h"].kind == "h"
+    assert pid_files["code/pid.c"].own_dir == root / "modules" / "pid" / "code"
+    assert pid_files["code/pid.c"].text == '#include "pid.h"\n'
+    # master_headers 收母版树 *.h，排除 modules/ 子树（模块头在 modules 语料里）
+    assert {rel for rel, _ in corpus.master_headers} == {"headfile.h", "ml_led.h"}
+    # master_search_dirs = 调用方传入（generate_check 读补丁后工程文件的 IncludePath）
+    assert corpus.master_search_dirs == (root / "user",)
+
+
+def test_build_output_tree_corpus_no_modules_dir_is_empty(tmp_path):
+    root = tmp_path / "out"
+    _write_output_tree(root, master_headers={"headfile.h": "#pragma once\n"})
+
+    corpus = build_output_tree_corpus(root, PLATFORM_STM32, [])
+
+    assert corpus.modules == ()
+    assert corpus.master_headers == (("headfile.h", "#pragma once\n"),)
+    assert corpus.main_c == "int main(void) { while (1); }\n"
+
+
+def test_output_tree_unresolved_include_hits_real_gate(tmp_path):
+    """门禁对偶：产物树含未解析 include → 重建语料跑真门禁抛
+    UnresolvedIncludeError（镜像删净后验收测的就是生产谓词本身）。"""
+    root = tmp_path / "out"
+    _write_output_tree(
+        root,
+        modules={"mod": {"code/mod.c": '#include "ghost.h"\n'}},
+        master_headers={"headfile.h": "#pragma once\n"},
+    )
+
+    corpus = build_output_tree_corpus(root, PLATFORM_STM32, [])
+    with pytest.raises(UnresolvedIncludeError, match="ghost.h"):
+        run_generation_gates(corpus, [], PLATFORM_STM32)
+
+
+def test_output_tree_macro_conflict_hits_real_gate(tmp_path):
+    """门禁对偶：产物树模块头重定义母版接口宏 → 真门禁抛
+    MacroRedefinitionError（宏冲突判例：config.h LED_GPIO 撞 ml_led.h）。"""
+    root = tmp_path / "out"
+    _write_output_tree(
+        root,
+        modules={"mod": {"config.h": "#define LED_GPIO 1\n"}},
+        master_headers={"ml_led.h": "#define LED_GPIO 2\n"},
+    )
+
+    corpus = build_output_tree_corpus(root, PLATFORM_STM32, [])
+    with pytest.raises(MacroRedefinitionError, match="LED_GPIO.*ml_led.h"):
+        run_generation_gates(corpus, [], PLATFORM_STM32)
+
+
+def test_output_tree_clean_tree_passes_all_gates(tmp_path):
+    """门禁对偶：产物树干净（include 可解析 + 模块自包含 + 无宏冲突）→ 六道全过。"""
+    root = tmp_path / "out"
+    _write_output_tree(
+        root,
+        main_c='#include "headfile.h"\nint main(void) { mod_init(); while (1); }\n',
+        modules={
+            "mod": {
+                "code/mod.c": '#include "mod.h"\nvoid mod_init(void) {}\n',
+                "code/mod.h": "#pragma once\nvoid mod_init(void);\n",
+            },
+        },
+        master_headers={"headfile.h": "#pragma once\n"},
+    )
+
+    corpus = build_output_tree_corpus(root, PLATFORM_STM32, [])
+    run_generation_gates(corpus, [], PLATFORM_STM32)  # 不抛 = 六道全过
 
 
 def _mspm0_master_with_sdk_include(master_dir: Path, sdk_dir: Path) -> Path:
