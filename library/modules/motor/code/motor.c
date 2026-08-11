@@ -6,6 +6,7 @@
 /* 前置声明（定义在文件末尾，先声明让前面的函数能调用） */
 void calculate_speed(uint8_t motor_id);
 void DC_MOTOR_PID(uint8_t motor_id);
+void adjust_motor_pwm(void);
 
 float kp = 2.5; // 比例系数
 float ki = 0.2; // 积分系数

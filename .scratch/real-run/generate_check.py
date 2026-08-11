@@ -58,9 +58,27 @@ def check_artifacts(out_dir: Path, platform: str = PLATFORM) -> list[str]:
     for src in sources:
         rel = src.relative_to(out_dir).as_posix()
         text = src.read_text(encoding="utf-8", errors="replace")
+        in_block = False
         for i, line in enumerate(text.splitlines(), 1):
             if FENCE_RE.match(line):
                 problems.append(f"{rel}:{i} 代码围栏残留: {line.strip()!r}")
+            # 块注释内嵌套 /* → 提前闭合块注释，后续注释内容变裸代码
+            # （2026H mspm0 真机实测：骨架 LLM 在注释里又写 /* */，10 错）
+            if in_block and "/*" in line:
+                problems.append(f"{rel}:{i} 块注释内嵌套 /*: {line.strip()!r}")
+            j = 0
+            while j < len(line):
+                ch = line[j]
+                if in_block:
+                    if ch == "*" and j + 1 < len(line) and line[j + 1] == "/":
+                        in_block = False
+                        j += 2
+                        continue
+                elif ch == "/" and j + 1 < len(line) and line[j + 1] == "*":
+                    in_block = True
+                    j += 2
+                    continue
+                j += 1
         for m in _INCLUDE_RE.finditer(text):
             header = m.group(1)
             if _resolves(header, src.parent, include_dirs):
