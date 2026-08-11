@@ -712,6 +712,7 @@ def select_modules_convergent(
     max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
     progress_emitter: ProgressEmitter | None = None,
     manual_fulltexts: Mapping[str, str] | None = None,
+    clarifications: Sequence[tuple[str, str]] = (),
 ) -> ModuleSelection:
     """题面驱动的收敛循环：功能需求层两轮一致即停，上限 max_rounds 轮。
 
@@ -727,6 +728,12 @@ def select_modules_convergent(
     点名回读的第二级与第 2 轮起的确认轮照旧带上（全文上下文不丢）。references
     与 manual_fulltexts 都缺时走旧签名（既有假 LLM 零改动）。
 
+    clarifications = 澄清问答历史（工单 clarify-history-in-convergence）每轮
+    透传给 select_modules：题面后的独立段（Q/A 逐条、不带编号），收敛阶段
+    对同一证据不足点补问（selection.questions → 用户回答重推）后不再换措辞
+    反复问——问答闭环贯穿两阶段。空历史不传对应关键字（既有假 LLM 零改动，
+    与 manual_fulltexts 同规）。
+
     模型拿不准（题面证据不足以判定）时输出 questions → 本轮即停、返回
     selection.questions 非空（向用户补问，由 webapp 层转补问终端事件收尾流）。
 
@@ -740,8 +747,14 @@ def select_modules_convergent(
     previous: tuple[FunctionRequirement, ...] = ()
     previous_key: tuple[tuple[str, int, tuple[str, ...], tuple[str, ...]], ...] | None = None
     selection: ModuleSelection | None = None
-    # 手动全文存在才传对应关键字——不传时保持旧签名（既有假 LLM 零改动）
-    manual_kwargs = {"manual_fulltexts": manual_fulltexts} if manual_fulltexts else {}
+    # 手动全文 / 澄清历史存在才传对应关键字——不传时保持旧签名（既有假 LLM
+    # 零改动；缺省空 = 旧行为）。合并成单次 ** 展开：mypy 对多个异构 **dict
+    # 的展开按位置错配参数（manual_fulltexts 单展开先例只容一个，加第二个
+    # clarifications 即误报）。
+    optional_kwargs: dict[str, Any] = {
+        **({"manual_fulltexts": manual_fulltexts} if manual_fulltexts else {}),
+        **({"clarifications": clarifications} if clarifications else {}),
+    }
     for round_no in range(1, max_rounds + 1):
         _emit(
             progress_emitter,
@@ -755,7 +768,10 @@ def select_modules_convergent(
                 # 两级注入第一级：先清单；点名全文 → 回读（第二级），全文进上下文；
                 # 手动全文第一级就带（全文直读强制，不依赖模型点名）
                 first = llm.select_modules(
-                    round_topic, manifest_summaries, references, **manual_kwargs
+                    round_topic,
+                    manifest_summaries,
+                    references,
+                    **optional_kwargs,
                 )
                 if first.reference_ids:
                     fulltexts = {
@@ -766,7 +782,7 @@ def select_modules_convergent(
                         manifest_summaries,
                         references,
                         fulltexts,
-                        **manual_kwargs,
+                        **optional_kwargs,
                     )
                 else:
                     selection = first
@@ -778,10 +794,12 @@ def select_modules_convergent(
                     manifest_summaries,
                     references,
                     fulltexts or None,
-                    **manual_kwargs,
+                    **optional_kwargs,
                 )
         else:
-            selection = llm.select_modules(round_topic, manifest_summaries)
+            selection = llm.select_modules(
+                round_topic, manifest_summaries, **optional_kwargs
+            )
         if selection.questions:
             return selection  # 补问：暂停收敛，向用户补问（不以推荐收尾）
         key = _functional_layer_key(selection)
@@ -847,6 +865,7 @@ def run_recommendation(
         reader=topic.read_fulltext,
         progress_emitter=emit.progress,
         manual_fulltexts=topic.manual_fulltexts,
+        clarifications=clarifications,  # 澄清历史贯穿收敛循环（题面后独立段）
     )
     if selection.questions:
         emit.question({"questions": list(selection.questions)})

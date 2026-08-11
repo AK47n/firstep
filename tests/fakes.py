@@ -615,6 +615,7 @@ class FakeLLM:
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
     ) -> ModuleSelection:
         return self._selection
 
