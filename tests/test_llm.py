@@ -2712,3 +2712,60 @@ def test_select_prompt_without_manual_keeps_old_shape():
     assert "手动" not in user_message
     assert "无需点名" not in user_message
     assert "- key-example: 2026C 参考 —— 配套例程" in user_message  # 清单行形状不变
+
+
+def test_select_prompt_embeds_clarifications_as_independent_section():
+    """选择阶段 prompt 契约（工单 clarify-history-in-convergence）：题面 / 参考段
+    之后的"用户已澄清的问题"独立段——Q/A 逐条、按历史顺序；不带编号、不并入
+    题面（题面逐句编号跨轮稳定，收敛判定的对照句编号依赖它）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "送药小车。识别数字。",
+        [ManifestSummary("dht11", "温湿度")],
+        clarifications=(
+            ("识别方式？", "摄像头"),
+            ("屏幕尺寸？", "1.3 寸"),
+        ),
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    history_section = user_message.split("用户已澄清的问题")[1]
+    assert "Q: 识别方式？\nA: 摄像头" in history_section  # 逐条 Q/A、保序
+    assert "Q: 屏幕尺寸？\nA: 1.3 寸" in history_section
+    assert history_section.index("识别方式") < history_section.index("屏幕尺寸")
+    # 与题面分离：题面原样在前（不并入题面，题面编号稳定性不受影响），
+    # 历史段独立成段、不带编号、无题面内容混入
+    topic_section = user_message.split("用户已澄清的问题")[0]
+    assert "送药小车。识别数字。" in topic_section
+    assert (
+        user_message.index("送药小车。识别数字。")
+        < user_message.index("用户已澄清的问题")
+    )
+    assert "Q: " not in topic_section  # 无问答混入题面段
+    assert "1. Q" not in history_section  # 历史段未被编号（独立段不带编号）
+
+
+def test_select_prompt_without_clarifications_keeps_old_shape():
+    """缺省空 clarifications：提示词与既有形态一致（无历史段）——回归钉死
+    （向后兼容：缺省空 = 旧行为）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "赛题",
+        [ManifestSummary("dht11", "温湿度")],
+        references=[_suggestion("key-example", "2026C 参考", "配套例程")],
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "用户已澄清的问题" not in user_message
+    assert "- key-example: 2026C 参考 —— 配套例程" in user_message  # 参考段形状不变
+
+
+def test_select_system_prompt_carries_no_reask_rule():
+    """系统提示词补"已答不重问"：SELECT_SYSTEM_PROMPT 与 CLARIFY_SYSTEM_PROMPT
+    同款措辞（两阶段语义一致——收敛阶段同样不换措辞反复补问）。"""
+    assert "用户已回答过的问题不要重复问" in SELECT_SYSTEM_PROMPT
+    assert "用户已回答过的问题不要重复问" in CLARIFY_SYSTEM_PROMPT  # 同款措辞在场

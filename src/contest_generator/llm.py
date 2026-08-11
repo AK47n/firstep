@@ -93,7 +93,8 @@ SELECT_SYSTEM_PROMPT = (
     "在 category 字段注明，宁可给类别也不编造型号。以题面为裁判反复自检"
     "修订（删脑补 / 补遗漏 / 重查覆盖），连续两轮功能需求层一致即可保持"
     "不动。题面证据不足以判定时，在 questions 数组向用户补问，不要瞎猜。"
-    "只输出 JSON 对象。"
+    "用户已回答过的问题不要重复问，仅补充新疑问（与澄清阶段同规，问答历史"
+    "在题面后的独立段）。只输出 JSON 对象。"
 )
 
 # 澄清阶段系统提示词（工单 01 推荐先澄清后收敛）：只看题面 + 已有问答历史，
@@ -477,6 +478,7 @@ class LLM(Protocol):
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
     ) -> ModuleSelection: ...
 
     def clarify(
@@ -580,6 +582,7 @@ class DeepSeekLLM:
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
     ) -> ModuleSelection:
         """赛题 → 模块选择（工单 03 起带参考文件两级注入的清单 / 全文两个形态）。
 
@@ -589,6 +592,11 @@ class DeepSeekLLM:
         （id → 全文，工单 01 手动选参考资料——全文直读强制，无需模型点名）。
         三者都缺时行为与既有实现完全一致（提示词无参考段、输出契约无
         references 字段）。
+
+        clarifications = 用户已澄清的问答历史（题面证据不足处的 Q/A，工单
+        clarify-history-in-convergence：收敛循环每轮透传）——题面后的独立段
+        （Q/A 逐条、不带编号、不并入题面），题面逐句编号跨轮稳定不受影响；
+        缺省空 = 旧行为（无历史段）。
 
         工单 10 起输出功能需求层（requirements / suggestions / questions），
         顶层 modules 由需求层机械得出（build_module_selection，域判决在
@@ -606,6 +614,7 @@ class DeepSeekLLM:
                         reference_fulltexts,
                         manual_fulltexts,
                         self._hardware_words,
+                        clarifications,
                     ),
                 },
             ],
@@ -1375,6 +1384,7 @@ def _selection_user_prompt(
     reference_fulltexts: Mapping[str, str] | None = None,
     manual_fulltexts: Mapping[str, str] | None = None,
     hardware_words: Sequence[HardwareWordGroup] = (),
+    clarifications: Sequence[tuple[str, str]] = (),
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     prompt = _build_user_prompt(
@@ -1415,6 +1425,14 @@ def _selection_user_prompt(
                 lines.append(
                     f"- {ref.id}: {ref.title}：\n```\n{_truncate_content(fulltext)}\n```"
                 )
+        prompt += "\n".join(lines)
+    if clarifications:
+        # 澄清问答历史（工单 clarify-history-in-convergence）：题面 / 参考段之后
+        # 的独立段——Q/A 逐条、不带编号、不并入题面（题面逐句编号跨轮稳定，
+        # 收敛判定的对照句编号依赖它）。空历史不出段（缺省 = 旧行为逐字节）。
+        lines = ["", "用户已澄清的问题（题面证据不足处用户已补充的回答，不要重复问）："]
+        for question, answer in clarifications:
+            lines.extend((f"Q: {question}", f"A: {answer}"))
         prompt += "\n".join(lines)
     if hardware_words:
         prompt += "\n\n" + format_wordlist_prompt(hardware_words)

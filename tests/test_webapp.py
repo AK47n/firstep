@@ -1569,6 +1569,7 @@ class TopicAwareLLM(FakeLLM):
         self.reference_ids: list[tuple[str, ...]] = []
         self.fulltexts: list[dict[str, str]] = []
         self.manual_fulltexts: list[dict[str, str]] = []
+        self.clarifications: list[tuple[tuple[str, str], ...]] = []
 
     def select_modules(
         self,
@@ -1577,17 +1578,56 @@ class TopicAwareLLM(FakeLLM):
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
     ) -> ModuleSelection:
         self.problem_texts.append(problem_text)
         self.manifest_slugs.append(tuple(s.slug for s in manifest_summaries))
         self.reference_ids.append(tuple(r.id for r in references))
         self.fulltexts.append(dict(reference_fulltexts or {}))
         self.manual_fulltexts.append(dict(manual_fulltexts or {}))
+        self.clarifications.append(tuple(clarifications))
         return self._selection
 
     def topic_extract_number(self, text: str) -> str | None:
         self.extract_calls += 1
         return self._extracted_key
+
+
+class ClarifyHistoryTopicLLM(TopicAwareLLM):
+    """收敛补问闭环的记录型假 LLM（工单 clarify-history-in-convergence）：
+    第一次收敛（无历史）返回补问；带历史后收敛成功——模拟"收敛阶段补问 →
+    用户回答重推"的完整路径。select_modules 收到的 clarifications 经
+    TopicAwareLLM 记录。"""
+
+    def __init__(self) -> None:
+        super().__init__(selection=SELECTION, extracted_key=None)
+        self._asked = False
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[str],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
+    ) -> ModuleSelection:
+        super().select_modules(
+            problem_text,
+            manifest_summaries,
+            references,
+            reference_fulltexts,
+            manual_fulltexts,
+            clarifications,
+        )
+        if not self._asked and not clarifications:
+            self._asked = True
+            return ModuleSelection(
+                modules=(),
+                reasons={},
+                questions=("题面没有说明识别方式，用摄像头还是传感器？",),
+            )
+        return self._selection
 
 
 def _wire_material_libraries(context) -> None:
@@ -1761,6 +1801,38 @@ def test_recommend_clarify_empty_with_history_goes_straight_to_convergence(
     # 题面保持原文：收敛循环收到的是逐句编号的原始题面，回答不拼进题面
     assert llm.problem_texts[0] == "1. 温湿度采集并显示"
     assert "摄像头" not in llm.problem_texts[0]
+
+
+def test_recommend_convergence_ask_answers_carried_into_retry(client, context):
+    """闭环断言（工单 clarify-history-in-convergence）：收敛阶段补问 → 用户回答
+    重推 → 第二次收敛的 select_modules 每轮都收到首次答案——收敛 prompt 不再
+    对同一证据不足点换措辞反复问（问答历史贯穿收敛循环，修复闭环断裂）。"""
+    holder = context[1]
+    llm = ClarifyHistoryTopicLLM()
+    holder["llm"] = llm
+
+    first = _recommend_stream(client, {"problem_text": "温湿度采集并显示"})
+    assert [kind for kind, _ in first] == ["round", EVENT_QUESTION]
+    question = first[-1][1]["questions"][0]
+
+    second = _recommend_stream(
+        client,
+        {
+            "problem_text": "温湿度采集并显示",
+            "clarifications": [{"question": question, "answer": "用摄像头"}],
+        },
+    )
+    assert [kind for kind, _ in second] == [
+        "round",
+        "round",
+        "converged",
+        "done",
+    ]
+    # 第二次收敛：每轮 select_modules 都带首次答案（历史保序、贯穿到收敛）
+    history = ((question, "用摄像头"),)
+    assert llm.clarifications[-2:] == [history, history]
+    # 澄清阶段与收敛阶段看到同一历史（双阶段一致，不会此消彼长）
+    assert llm.clarify_calls[-1] == ("温湿度采集并显示", history)
 
 
 @pytest.mark.parametrize(
