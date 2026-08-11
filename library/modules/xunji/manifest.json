@@ -1,0 +1,15 @@
+{
+  "slug": "xunji",
+  "description": "2024H 巡线题专用（mspm0）：白区计数路口检测 + AB/ABCDA/ACBDA/ACBDAx4 模式状态机 + 加权质心巡线 + 声光（LED）提示——car xunji 真机工程移植，2024H 自动行驶小车题推荐命中。",
+  "dependencies": ["motor"],
+  "platforms": {
+    "mspm0": {
+      "files": ["code/xunji.c", "code/xunji.h"],
+      "verified": false,
+      "hardware_bound": true,
+      "notes": "移植源 sources/car/car xunji/control.c（原生 mspm0 真机，Debug/PWM.out 编译产物在，2026-08-11 领域建模判据：原生平台真机代码优先）。白区计数路口（8 路全白 100ms 消抖）→ 段计数 m/掉头段 n 状态机；四个模式对 2024H 题 1~4 问：AB 陀螺仪直行见黑停车（第 1 问）/ ABCDA 一圈（第 2 问）/ ACBDA 反向一圈（第 3 问）/ ACBDAx4 四圈 m==18 停车（第 4 问）；声光 = 真机仅 LED（无蜂鸣器），LED 时序随 50ms tick。灰度 8 路 GPIO_Gray_* → 母版 HUIDU 组（P1..P8 = L3/L2/L1/R1/R2/L4/R3/R4，huidu 模块索引序，编译级默认；实际接线改 xunji.c 头部 P1..P8 宏；极性非零=白，26H gray_track_mspm0 同款直读）。电机：方向 AIN*/BIN* → motor_set_direction(id,dir) 0停1正转2反转；PWM 真机 TIMG0 2500 计数百分比制 → motor_set_duty 原始值 0~1300（MAX_DUTY=1300 对偶 pid_mspm0，13=1300/100）。编码器：真机四倍频正交解码 GROUP1_IRQHandler → key 模块 counter_1_A/counter_2_A（单沿计数无方向，符号级 extern，需手动同选 key；xunji_tick_50ms 采样清零）。陀螺仪：真机 JY61P（UART2 0x55 帧）与库内 imu_uart（IMU601 UART0 CRC16 帧）不同件——本模块消费 current_attitude.yaw（imu_uart，类型经 motor.h→imu.h 链），掉头角常量（103/error=180）与 Yaw 零偏/极性需上板校准（hardware_bound）。调度：真机 50ms/10ms 定时中断拆为 xunji_tick_50ms/xunji_tick_10ms，main 周期调用（MOTOR_PID_INST_IRQHandler 已被 motor 占用，参考 pid_mspm0 先例自建定时器中断或主循环分频）。母版 STBY 硬件直连 3.3V（motor.h），ACBDAx4 关使能动作省略。编译验证未上板（默认外设布局 gmake 0 错）；对偶 stm32 侧无——2024H 题规定 TI MSPM0 MCU。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}
