@@ -3,9 +3,10 @@
 generate_project 是完整流程入口：选模块（加载库 + 展开依赖 + 平台警告）→
 定位母版 → generate 落盘 → 只读摘要，webapp 与测试都经它驱动；generate 是
 内部落盘步骤（母版文件复制、模块文件按平台版本复制到 modules/<slug>/、
-main.c 落位（落位前静态自检：引用的函数必须在所选模块头文件中、main.c 与
-模块源码的每个引号 include 必须在最终工程里能解析、所选模块文件路径不得
-跨模块重复）、平台修改器经注册表委托）。
+main.c 落位（落位前静态自检：六道门禁全貌在 GENERATION_GATES 表——文件
+齐全 / 路径不跨模块重复 / 调用可解析 / 模块自包含 / include 可解析 / 宏
+不冲突，装配唯一出处 = 表 + run_generation_gates）、平台修改器经注册表
+委托）。
 
 所有校验失败都在创建输出目录之前发生，绝不产出残缺工程。
 """
@@ -247,7 +248,8 @@ def resolve_topic_context(
     # 推荐层平台过滤（工单 ref-platform-filter 模块侧对偶）：模块候选只含本
     # 平台有实现的模块——摘要行（模型可见，可勾选）与关联模块（自动并入）
     # 同源同滤；本平台没有的模块需求走库外建议（suggestions）。空串 = 不过滤
-    # （骨架 / 生成传缺省，现状保持；生成门禁 _check_platform 是兜底不动）。
+    # （骨架 / 生成传缺省，现状保持；未知平台在 generate 入口经
+    # patcher_registry.get 失败）。
     candidates = list(filter_manifests_by_platform(candidates, platform))
     # 并集去重：锚定命中照旧自动进；手动条目若同时被锚定命中，清单只出现
     # 一次（标注 manual——全文已直读，模型无需点名），全文仍直读（manual_fulltexts 全量）
@@ -433,7 +435,7 @@ class ModuleFile:
 @dataclass(frozen=True)
 class ModuleCorpus:
     """生成校验的内存语料：一次读盘，语料门禁共吃（文件路径查重门直接吃
-    manifest 声明，不读盘——见 _check_file_path_conflicts）。
+    manifest 声明，不读盘——输入依赖在 GENERATION_GATES 表内声明）。
 
     modules 顺序与 manifests 一致（含平台条目缺失的模块，files 为空——
     缺失清单在 missing 里）；master_headers = 母版树全部 *.h（相对路径,
@@ -538,12 +540,7 @@ def generate(
     corpus = build_module_corpus(
         manifests, platform, module_library_dir, master_project_dir, main_c_content
     )
-    _check_module_files(corpus)
-    _check_file_path_conflicts(manifests, platform)
-    _check_main_calls(corpus)
-    _check_module_self_include(corpus)
-    _check_unresolved_includes(corpus)
-    _check_macro_conflicts(corpus)
+    run_generation_gates(corpus, manifests, platform)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -784,6 +781,62 @@ def _check_file_path_conflicts(
             "multiply defined）：\n- " + "\n- ".join(problems)
             + " —— 请检查模块选择，或补录库条目唯一化文件路径"
         )
+
+
+@dataclass(frozen=True)
+class GenerationGate:
+    """一道生成门禁的装配描述：key（表内唯一，测试钉死顺序）+ check（小型
+    闭包选择该门的自然输入——谓词函数签名与实现零改动，表只做输入选择）。"""
+
+    key: str
+    check: Callable[[ModuleCorpus, Sequence[ModuleManifest], str], None]
+
+
+# 门禁表。顺序即 generate 的校验顺序（现状调用顺序，结构测试钉死）；顺序有
+# 语义：file_path_conflicts 跳过无该平台版本条目（由 module_files 先报），
+# 必须先跑 module_files。新增门禁 = 表加一条 + 谓词（照 categories.
+# RULE_CATEGORIES 先例）——顺序 / 输入依赖 / 门禁全貌只此一处可见。5 道吃
+# corpus（纯谓词，内存直构可测）；file_path_conflicts 吃 manifests +
+# platform（manifest 声明，不读盘）。
+GENERATION_GATES: tuple[GenerationGate, ...] = (
+    GenerationGate(
+        "module_files",
+        lambda corpus, manifests, platform: _check_module_files(corpus),
+    ),
+    GenerationGate(
+        "file_path_conflicts",
+        lambda corpus, manifests, platform: _check_file_path_conflicts(
+            manifests, platform
+        ),
+    ),
+    GenerationGate(
+        "main_calls",
+        lambda corpus, manifests, platform: _check_main_calls(corpus),
+    ),
+    GenerationGate(
+        "module_self_include",
+        lambda corpus, manifests, platform: _check_module_self_include(corpus),
+    ),
+    GenerationGate(
+        "unresolved_includes",
+        lambda corpus, manifests, platform: _check_unresolved_includes(corpus),
+    ),
+    GenerationGate(
+        "macro_conflicts",
+        lambda corpus, manifests, platform: _check_macro_conflicts(corpus),
+    ),
+)
+
+
+def run_generation_gates(
+    corpus: ModuleCorpus, manifests: Sequence[ModuleManifest], platform: str
+) -> None:
+    """按表序跑全部生成门禁（装配唯一出处）：首个失败即抛，不产出残缺工程。
+
+    generate 不再自写门禁循环；新增 / 重排门禁只改表。
+    """
+    for gate in GENERATION_GATES:
+        gate.check(corpus, manifests, platform)
 
 
 def _copy_module_files(
