@@ -165,21 +165,50 @@ def recommend_stream(payload: dict) -> dict:
     return result
 
 
-def check_topic(key: str) -> bool:
+def check_topic(
+    key: str,
+    clarify_map: dict[str, str] | None = None,
+    drop: tuple[str, ...] = (),
+) -> bool:
     ok = True
     print(f"\n===== {key} =====")
     topic_md = TOPICS / key / "topic.md"
     problem_text = topic_md.read_text(encoding="utf-8")
     print(f"[题面] {key}/topic.md {len(problem_text)} 字符")
 
-    # 1) 推荐
-    rec = recommend_stream({"problem_text": problem_text, "topic_id": key})
-    print(f"[推荐] {rec['rounds']} 轮 → 终态 {rec['event']}")
+    # 1) 推荐（补问循环：question 终态 → 从 clarify_map 取答案 → 带澄清历史
+    # 重发，最多 5 轮；答案不进题面，收敛判定的句子编号不受污染。
+    # clarify_map 全量预置进历史：模型能看到已答问题，避免换措辞反复补问）
+    clarify_hist: list[dict[str, str]] = [
+        {"question": q, "answer": a} for q, a in (clarify_map or {}).items()
+    ]
+    rec: dict = {}
+    for _round in range(5):
+        payload: dict = {"problem_text": problem_text, "topic_id": key}
+        if clarify_hist:
+            payload["clarifications"] = clarify_hist
+        rec = recommend_stream(payload)
+        print(f"[推荐] {rec['rounds']} 轮 → 终态 {rec['event']}")
+        if rec["event"] != "question":
+            break
+        questions = list((rec.get("data") or {}).get("questions", []))
+        missing = [q for q in questions if (clarify_map or {}).get(q) is None]
+        if missing:
+            print(f"  ✗ 补问无答案可答: {missing}")
+            print(f"    （已答 {len(clarify_hist)} 条，补充 clarify 映射后重跑）")
+            return False
+        for q in questions:
+            clarify_hist.append({"question": q, "answer": clarify_map[q]})
+            print(f"  ↻ 补问第{len(clarify_hist)}条已回答: {q[:64]}…")
     if rec["event"] != "done":
-        print(f"  ✗ 未收敛: {json.dumps(rec['data'], ensure_ascii=False)[:300]}")
+        print(f"  ✗ 未收敛: {json.dumps(rec.get('data'), ensure_ascii=False)[:300]}")
         return False
     data = rec["data"]
     slugs = [m["slug"] for m in data.get("modules", [])]
+    dropped = [s for s in slugs if s in drop]
+    if dropped:
+        slugs = [s for s in slugs if s not in drop]
+        print(f"  → 按 --drop 去掉 {dropped}（无 {PLATFORM} 平台条目，前端同款手动增删语义）")
     print(f"  模块({len(slugs)}): {', '.join(slugs)}")
     for m in data.get("modules", []):
         print(f"    - {m['slug']}: {m['reason'][:80]}")
@@ -249,8 +278,23 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
-    topics = sys.argv[1:] or ["2026C", "2021F"]
-    results = {t: check_topic(t) for t in topics}
+    args = sys.argv[1:]
+    clarify_map: dict[str, str] = {}
+    if "--clarify" in args:
+        idx = args.index("--clarify")
+        raw = json.loads(Path(args[idx + 1]).read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            clarify_map = {str(k): str(v) for k, v in raw.items()}
+        elif isinstance(raw, list):
+            clarify_map = {str(d["question"]): str(d["answer"]) for d in raw}
+        del args[idx:idx + 2]
+    drop: tuple[str, ...] = ()
+    if "--drop" in args:
+        idx = args.index("--drop")
+        drop = tuple(s.strip() for s in args[idx + 1].split(",") if s.strip())
+        del args[idx:idx + 2]
+    topics = args or ["2026C", "2021F"]
+    results = {t: check_topic(t, clarify_map, drop) for t in topics}
     print("\n===== 汇总 =====")
     for t, ok in results.items():
         print(f"{t}: {'✓ 通过' if ok else '✗ 失败'}")
