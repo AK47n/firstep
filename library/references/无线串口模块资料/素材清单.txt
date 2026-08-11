@@ -1,0 +1,23 @@
+素材目录（Desktop/无线串口说明书）文件清单：
+
+CP2102驱动/CP2102模块驱动.zip  3847349 bytes
+DL-20/DL-20使用说明书.pdf  4873113 bytes
+DL-20/DL-20尺寸图.png  6121 bytes
+DL-20/原理图 DL-20.pdf  155010 bytes
+DL-22/DL-22使用说明书.pdf  3821397 bytes
+DL-22/DL-22原理图.pdf  1812570 bytes
+DL-22/DL-22尺寸图.png  2159 bytes
+DL-30/DL-30 原理图.pdf  156187 bytes
+DL-30/dl-30尺寸图.jpg  55466 bytes
+DL-30/DL-30按键配置使用说明书.pdf  4454586 bytes
+DL-30/DL-30无线串口模块参数.pdf  220240 bytes
+DL-30/DL-30软件配置使用说明书.pdf  359512 bytes
+DL-43P/DL-43P原理图.pdf  1630022 bytes
+DL-43P/DL-43P尺寸图.pdf  9618 bytes
+DL-43P/DL-43P按键配置使用说明书.jpg  460014 bytes
+DL-43P/DL-43P软件配置使用说明书.pdf  299187 bytes
+DL-43P/DL-43尺寸图 -详细.pdf  1652197 bytes
+串口调试助手/UartAssist.exe  1034752 bytes
+参数介绍.jpg  299554 bytes
+工作状态说明.jpg  181844 bytes
+无线串口模块亮灯信道对照表.docx  107118 bytes
