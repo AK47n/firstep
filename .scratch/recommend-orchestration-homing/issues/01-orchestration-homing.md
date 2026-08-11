@@ -2,7 +2,7 @@
 
 **What to build:** 把 /api/recommend 路由闭包里的两阶段编排（澄清先行 → question 终态不发 round → 空进收敛 → done 载荷组装与条件附加）收成 selection.py 的单一域函数，路由只剩取参 + 转调 + sse 包装；补结构测试防回退。
 
-**Status:** drafted（2026-08-11，主会话已核实现状，待用户开新终端执行）
+**Status:** resolved（2026-08-11 实施提交，1044 绿 + mypy 干净，验收全勾，待合 main）
 
 ## 现状（已核实）
 

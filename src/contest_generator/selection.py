@@ -40,6 +40,7 @@ from .reference_library import (
     get_reference,
     search_references,
 )
+from .sse import SseEmitter  # 终端事件发射面（sse 是叶子模块，运行时导入无环）
 from .wordlist import (
     HardwareWordGroup,
     category_names,
@@ -47,6 +48,7 @@ from .wordlist import (
 )
 
 if TYPE_CHECKING:
+    from .generator import TopicContext  # 装配点素材（generator 运行时依赖本层，仅类型注解）
     from .llm import LLM  # 仅类型注解用（selection 不运行时依赖 LLM 客户端，library.py 先例）
 
 WARNING_MISSING = "missing"  # 无目标平台版本条目，生成必失败
@@ -793,3 +795,85 @@ def select_modules_convergent(
         previous_key = key
     assert selection is not None  # max_rounds ≥ 1，循环体必赋值
     return selection  # 上限轮次到：以最后一轮为准（不再多问）
+
+
+# ---------------------------------------------------------------------------
+# 推荐两阶段编排（工单 recommend-orchestration-homing/01）：澄清先行 → 收敛 →
+# done 载荷组装。单域函数收口 /api/recommend 路由闭包的全部编排——路由只剩
+# 取参 + 转调 + sse 包装；终态（question / done）一律由本函数发出，路由不分支。
+# TopicContext 仅 TYPE_CHECKING（generator 运行时依赖本层，反向导入成环）。
+# ---------------------------------------------------------------------------
+
+
+def run_recommendation(
+    topic: TopicContext,
+    llm: LLM,
+    clarifications: Sequence[tuple[str, str]] = (),
+    *,
+    emit: SseEmitter,
+) -> None:
+    """/api/recommend 的两阶段编排（工单 01 推荐先澄清后收敛）。
+
+    澄清阶段先行：先调 llm.clarify（只看题面 + clarifications 问答历史），仍
+    有疑问 → question 事件收尾（不发 round——澄清阶段不属于收敛轮次，补问不
+    再作废已跑轮次）；澄清空 = 澄清完成，才进收敛循环。
+
+    收敛循环（select_modules_convergent）：功能需求层两轮一致即停、上限 4 轮
+    （成本 2-4 轮 × 2-4K token），轮次经 emit.progress 推送；循环内模型拿不准
+    （罕见兜底）以 question 事件收尾（questions 数组，回答并入历史重发）。
+    循环收敛成功 → done 载荷：顶层 modules[] 格式与旧契约一致（下游
+    selectedSlugs / expand / generate 零改动）+ requirements（功能需求层：
+    需求 / 对照句 / 库内命中 / 库外建议——库外建议仅展示、不进工程）；
+    topic.key 非空（识别到历史赛题）才附加 topic_id + related_modules；最终
+    参考清单 = 锚定命中（auto）∪ 手动选（manual）并集去重，同一条目只出现
+    一次且手动优先标注（用户显式选择），platform 随条目带出。
+
+    装配素材（题面全文 / 清单段 / 全文回读 / 手动参考）全在 topic（装配点
+    resolve_topic_context 一次备好），本函数只消费。返回 None——终态一律
+    发出，路由不再分支（run 抛错由 sse 运行器补发 error 终态）。
+    """
+    # 澄清阶段先行（工单 01）：只看题面 + 已有问答历史，仍有疑问 → question
+    # 事件收尾（不发 round——澄清阶段不属于收敛轮次，补问不再作废已跑轮次）；
+    # 空 = 澄清完成，才进收敛循环
+    pending = llm.clarify(topic.problem_text, clarifications)
+    if pending:
+        emit.question({"questions": list(pending)})
+        return
+    selection = select_modules_convergent(
+        llm,
+        topic.problem_text,  # 识别到时题面用库内全文；no-topic 形 = 粘贴原样
+        topic.manifest_summaries,
+        references=topic.suggestions,
+        reader=topic.read_fulltext,
+        progress_emitter=emit.progress,
+        manual_fulltexts=topic.manual_fulltexts,
+    )
+    if selection.questions:
+        emit.question({"questions": list(selection.questions)})
+        return
+    result: dict[str, Any] = {
+        "modules": [
+            {"slug": slug, "reason": selection.reasons.get(slug, "")}
+            for slug in selection.modules
+        ],
+        "requirements": [
+            requirement.to_dict()
+            for requirement in selection.requirements
+        ],
+    }
+    if topic.key:
+        result["topic_id"] = topic.key
+        result["related_modules"] = list(topic.related_modules)
+    # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；
+    # 同一条目既锚定又手动只出现一次（手动优先标注——用户显式选择）；
+    # platform（工单 01）随条目带出，前端按它显示平台标注
+    manual_ids = {ref.id for ref in topic.manual_references}
+    result["references"] = [
+        {"id": ref.id, "title": ref.title, "source": "auto", "platform": ref.platform}
+        for ref in topic.references
+        if ref.id not in manual_ids
+    ] + [
+        {"id": ref.id, "title": ref.title, "source": "manual", "platform": ref.platform}
+        for ref in topic.manual_references
+    ]
+    emit.done(result)
