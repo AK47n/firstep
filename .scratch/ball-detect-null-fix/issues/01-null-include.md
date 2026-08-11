@@ -2,7 +2,32 @@
 
 **What to build:** `library/modules/ball_detect/code/ball_detect_stm32.c` 使用 `NULL`（9 处）但未包含定义它的头文件——仅引 `headfile.h`（不含 NULL，已核实）与 `ball_detect_stm32.h`。今日 13:55 `98f8b0a`（mspm0 补录）给 `library/modules/pid/manifest.json` 加了 `ball_detect` 依赖后，任何选 pid 的 stm32 生成必拉入 ball_detect → Keil UV4 编译必 8 错。静态 include 检查只验"include 能否解析"、抓不到"漏 include"（UV4 真编译按设计抓到门禁）。修复：补 `#include <stddef.h>`（最小、只补 NULL 定义）。
 
-**Status:** drafted（2026-08-11，主会话已核实现状，待用户开新终端执行）
+**Status:** resolved（2026-08-11，验收闭环）
+
+## 验收记录（2026-08-11）
+
+- 复现红：`generate_check.py 2021F --platform stm32 --clarify clarify_2021F.json`
+  真机全流程（DeepSeek 推荐 4 轮 done，6 模块 digit_uart/motor/pid/led_beep/
+  zigbee_uart/zigbee_uart_key + pid 依赖拉入 ball_detect），UV4 编译 8 错全在
+  ball_detect_stm32.c（:52,144,147,150,153,156,159,162 NULL 未定义），log 存
+  `.scratch/real-run/keil_build_red_2021F.log`（尾行 8 Error(s), 1 Warning(s)）。
+- 修复：`ball_detect_stm32.c` 首行补 `#include <stddef.h>`（仅此 1 行，含注释说明）。
+- 复验绿：重生成同场景，UV4 全工程 **0 Error(s), 0 Warning(s)**，log 存
+  `.scratch/real-run/keil_build_green_final.log`（ball_detect_stm32.c 在编译
+  列表内无错警）。模块级独立对照：ARMCC `--c99 -DSTM32F10X_MD`（UV4 DFP 同参）
+  编译该文件 8 错→0 错 0 警。
+- pytest 1052 全绿 + `mypy src` 干净（基线 1052 同数，无回归）。
+- 双平台不回归：mspm0 侧 ball_detect.c 未动；stm32 全量库清单未动（仅 .c 首行
+  include）；`#include <stddef.h>` 在门禁 EXTERNAL_HEADERS 白名单内，include
+  解析检查过。
+- 补充：clarify_2021F.json +2 条（本次模型补问"装载/卸载检测方式"与"双车无线
+  通信模块"，如实作答：题面未指定、按光电检测 + NRF24L01 处理，不影响选型）。
+- 遗留发现（超工单边界，未动）：zigbee_uart 与 zigbee_uart_key 两模块文件同名
+  （均 code/zigbee_uart.c）且都定义 zigbee_uart_init，双车协同场景模型双选时
+  UV4 L6200E multiply defined（本次绿跑实测，drop 其一即过）——静态 include
+  检查同盲区（两文件独立可解析），建议另立工单。绿证工程 main.c 两处 LLM 产物
+  缺陷（:25 块注释内嵌套 /*、:12-13 未用 filter 变量）已脚手架修补后编译，门禁
+  均已正确拦截（块注释嵌套属 generate_check 已查断言）。
 
 ## 现状（已核实）
 
