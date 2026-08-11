@@ -19,7 +19,7 @@ from typing import Callable
 from .ccs import CcsProjectError
 from .config import ConfigError
 from .extraction import ExtractionError
-from .generator import GeneratorError
+from .generator import DuplicateFilePathError, GeneratorError
 from .keil import KeilProjectError
 from .library import LibraryError
 from .llm import LLMError
@@ -57,6 +57,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             SelectionError,
             ManualReferenceError,  # 手动选参考资料不存在 / 重复（工单 01）
             GeneratorError,
+            DuplicateFilePathError,  # 跨模块同名文件（生成侧查重兜底，工单 gen-file-collision-gate/01）
             ConfigError,
             ReferenceError,
             TopicError,

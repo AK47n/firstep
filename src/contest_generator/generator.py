@@ -4,7 +4,8 @@ generate_project 是完整流程入口：选模块（加载库 + 展开依赖 + 
 定位母版 → generate 落盘 → 只读摘要，webapp 与测试都经它驱动；generate 是
 内部落盘步骤（母版文件复制、模块文件按平台版本复制到 modules/<slug>/、
 main.c 落位（落位前静态自检：引用的函数必须在所选模块头文件中、main.c 与
-模块源码的每个引号 include 必须在最终工程里能解析）、平台修改器经注册表委托）。
+模块源码的每个引号 include 必须在最终工程里能解析、所选模块文件路径不得
+跨模块重复）、平台修改器经注册表委托）。
 
 所有校验失败都在创建输出目录之前发生，绝不产出残缺工程。
 """
@@ -99,6 +100,11 @@ class MacroRedefinitionError(GeneratorError):
     """模块配置 / main.c 重定义了母版库接口宏（同名不同值），拒绝产出带
     编译警告的工程（Keil #47-D incompatible redefinition 判例：config.h
     的 LED_GPIO 撞 ml_led.h）。"""
+
+
+class DuplicateFilePathError(GeneratorError):
+    """所选模块集内跨模块同名平台文件路径（或同一模块重复声明），拒绝产出
+    链接期冲突工程（UV4 L6200E multiply defined 判例）。"""
 
 
 # 工程树外由 C 标准库提供的头（引号形式同样由编译器按库路径解析；两平台
@@ -426,7 +432,8 @@ class ModuleFile:
 
 @dataclass(frozen=True)
 class ModuleCorpus:
-    """生成校验的内存语料：一次读盘，五道门共吃。
+    """生成校验的内存语料：一次读盘，语料门禁共吃（文件路径查重门直接吃
+    manifest 声明，不读盘——见 _check_file_path_conflicts）。
 
     modules 顺序与 manifests 一致（含平台条目缺失的模块，files 为空——
     缺失清单在 missing 里）；master_headers = 母版树全部 *.h（相对路径,
@@ -532,6 +539,7 @@ def generate(
         manifests, platform, module_library_dir, master_project_dir, main_c_content
     )
     _check_module_files(corpus)
+    _check_file_path_conflicts(manifests, platform)
     _check_main_calls(corpus)
     _check_module_self_include(corpus)
     _check_unresolved_includes(corpus)
@@ -736,6 +744,45 @@ def _check_macro_conflicts(corpus: ModuleCorpus) -> None:
     if problems:
         raise MacroRedefinitionError(
             "生成工程会带编译警告（宏重定义，Keil #47-D）：\n- " + "\n- ".join(problems)
+        )
+
+
+def _check_file_path_conflicts(
+    manifests: Sequence[ModuleManifest], platform: str
+) -> None:
+    """生成前静态校验：所选模块（含依赖展开后）的平台文件相对路径不得跨模块重复。
+
+    生成器把模块文件复制到 modules/<slug>/ 命名空间目录，文件本身不互相覆盖，
+    但跨模块同名文件 = 同源代码重复进工程，符号定义必然重复——UV4 链接期
+    L6200E multiply defined 判例：zigbee_uart 与 zigbee_uart_key 曾同声明
+    code/zigbee_uart.c/.h，五道静态门静默通过、真机编译才炸。库内不变量
+    （tests/test_module_collision.py 全库跨模块重复路径即红）只管数据层，本门
+    管生成时组合——新补录模块撞既有路径、用户组合出冲突时，生成前大声失败
+    （400 中文），同类冲突不再等真机编译暴露。files 空（实现内嵌母版）跳过；
+    只查选中平台条目；同一模块内 manifest 重复声明同查（parse 侧已防，防御
+    内存构造路径）。
+    """
+    by_path: dict[str, str] = {}
+    problems: list[str] = []
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue  # 无该平台版本条目由 _check_module_files 报，这里跳过
+        for rel in entry.files:
+            owner = by_path.get(rel)
+            if owner is None:
+                by_path[rel] = manifest.slug
+            elif owner == manifest.slug:
+                problems.append(f"模块 {manifest.slug} 重复声明文件 {rel}")
+            else:
+                problems.append(
+                    f"模块 {manifest.slug} 与模块 {owner} 都声明文件 {rel}"
+                )
+    if problems:
+        raise DuplicateFilePathError(
+            "所选模块存在同名文件冲突（生成工程链接期会报 UV4 L6200E "
+            "multiply defined）：\n- " + "\n- ".join(problems)
+            + " —— 请检查模块选择，或补录库条目唯一化文件路径"
         )
 
 
