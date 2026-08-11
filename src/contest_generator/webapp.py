@@ -30,6 +30,7 @@ from .config import (
     AppConfig,
     ConfigError,
     load_config,
+    materials_dir,
     reference_library_dir,
     save_config,
     topic_library_dir,
@@ -232,23 +233,6 @@ def _library_dir(ctx: AppContext) -> Path:
 
 def _masters_dir(ctx: AppContext) -> Path:
     return _require_config(ctx).masters_dir
-
-
-def _materials_dir(module_library_dir: Path) -> Path:
-    """素材备份根：参考条目二进制素材（PDF / zip 等）的镜像目录。
-
-    与 reference_library_dir 同源推导（config.py 冻结，不新增配置项）——素材
-    工具脚本以工作区根为根写 sources/materials，工作区根可能直接装模块库
-    （默认布局 ~/.contest_generator/modules → 同级 sources/），也可能模块库
-    在 library/ 子目录下（仓库布局 firstep/library/modules → 备份在仓库根
-    firstep/sources/）。两级候选都取目录实况判定，避免把 404 钉死在推导上；
-    两处都没有 = 返回优先候选，文件服务端照常 404 不炸。
-    """
-    sibling = module_library_dir.parent / "sources" / "materials"
-    if sibling.is_dir():
-        return sibling
-    repo_root = module_library_dir.parent.parent / "sources" / "materials"
-    return repo_root if repo_root.is_dir() else sibling
 
 
 def _assemble_topic_context(
@@ -1102,19 +1086,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def reference_file(entry_id: str, rel_path: str) -> FileResponse:
         """条目文件服务：条目目录命中 = 文本内联；materials 镜像命中 = PDF 预览 /
-        扩展名下载；都找不到 404。路径安全校验在库内（is_unsafe_path → 400）。"""
+        扩展名下载；两处都找不到抛 ReferenceError（映射 400，与条目不存在同通道，
+        不再有内联 404）。路径安全校验在库内（is_unsafe_path → 400）。"""
         config = _require_config(context)
-        resolved = resolve_entry_file(
+        path, media_type = resolve_entry_file(
             reference_library_dir(config.module_library_dir),
-            _materials_dir(config.module_library_dir),
+            materials_dir(config.module_library_dir),
             entry_id,
             rel_path,
         )
-        if resolved is None:
-            raise HTTPException(
-                404, f"参考文件条目 {entry_id!r} 中不存在文件：{rel_path}"
-            )
-        path, media_type = resolved
         return FileResponse(path, media_type=media_type)
 
     # ------------------------------------------------------------------

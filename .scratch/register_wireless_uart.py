@@ -19,16 +19,19 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from contest_generator import config  # noqa: E402
 from contest_generator.reference_library import (  # noqa: E402
     ANCHOR_KIND_NONE,
     PLATFORM_ANY,
     add_reference,
+    build_material_manifest,
     get_reference,
     list_references,
 )
 
 SRC_ROOT = Path(r"C:\Users\luoji\Desktop\无线串口说明书")
-REFERENCE_ROOT = REPO_ROOT / "library" / "references"
+# 参考库目录：与 webapp 同源推导（config 唯一出处，脚本不再硬编码）
+REFERENCE_ROOT = config.reference_library_dir(REPO_ROOT / "library" / "modules")
 
 TITLE = "无线串口模块资料"
 TYPE = "无线串口资料"
@@ -46,26 +49,12 @@ def extract_docx_text() -> str:
     return text.strip()
 
 
-def build_manifest() -> str:
-    """源目录全部文件的《素材清单》文本（文件名 + 大小，二进制留痕）。"""
-    lines = ["素材目录（Desktop/无线串口说明书）文件清单：", ""]
-    for path in sorted(SRC_ROOT.rglob("*")):
-        if not path.is_file():
-            continue
-        try:
-            size = path.stat().st_size
-        except OSError:
-            size = -1
-        lines.append(f"{path.relative_to(SRC_ROOT).as_posix()}  {size} bytes")
-    return "\n".join(lines)
-
-
 def main() -> None:
     if TITLE in {e.title for e in list_references(REFERENCE_ROOT)}:
         print(f"[跳过] 条目已存在：{TITLE}")
         return
     files: dict[str, str] = {
-        "素材清单.txt": build_manifest(),
+        "素材清单.txt": build_material_manifest(SRC_ROOT),
         DOCX_TEXT_REL: extract_docx_text(),
     }
     entry = add_reference(

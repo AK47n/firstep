@@ -18,7 +18,10 @@ import shutil
 import sys
 from pathlib import Path
 
-REPO = Path(r"C:\Users\luoji\Desktop\firstep")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from contest_generator import config  # noqa: E402
 
 # 源目录 → (备份目标目录名, 额外保留的 zip/docx 白名单)
 BATCHES = [
@@ -51,8 +54,9 @@ KEEP_SUFFIXES = {".pdf", ".zip", ".docx"}
 
 def main() -> None:
     copied = 0
+    materials_root = config.materials_dir(REPO_ROOT / "library" / "modules")
     for src_root, dest_name, whitelist in BATCHES:
-        dest_root = REPO / "sources" / "materials" / dest_name
+        dest_root = materials_root / dest_name
         dest_root.mkdir(parents=True, exist_ok=True)
         for path in sorted(src_root.rglob("*")):
             if not path.is_file():

@@ -17,16 +17,19 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from contest_generator import config  # noqa: E402
 from contest_generator.reference_library import (  # noqa: E402
     ANCHOR_KIND_NONE,
     PLATFORM_ANY,
     add_reference,
+    build_material_manifest,
     get_reference,
     list_references,
 )
 
 SRC_ROOT = Path(r"C:\Users\luoji\Desktop\tuchuan\canmv_k230")
-REFERENCE_ROOT = REPO_ROOT / "library" / "references"
+# 参考库目录：与 webapp 同源推导（config 唯一出处，脚本不再硬编码）
+REFERENCE_ROOT = config.reference_library_dir(REPO_ROOT / "library" / "modules")
 
 TITLE = "canmv_k230官方源码"
 TYPE = "官方源码"
@@ -52,28 +55,11 @@ def iter_text_files() -> dict[str, str]:
     return files
 
 
-def build_manifest() -> str:
-    """源树全部文件《素材清单》文本（含 C 源码 / 二进制留痕，.git 排除）。"""
-    lines = ["素材目录（Desktop/tuchuan/canmv_k230 官方 git clone）文件清单：", ""]
-    for path in sorted(SRC_ROOT.rglob("*")):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(SRC_ROOT).as_posix()
-        if rel.startswith(".git/"):
-            continue
-        try:
-            size = path.stat().st_size
-        except OSError:
-            size = -1
-        lines.append(f"{rel}  {size} bytes")
-    return "\n".join(lines)
-
-
 def main() -> None:
     if TITLE in {e.title for e in list_references(REFERENCE_ROOT)}:
         print(f"[跳过] 条目已存在：{TITLE}")
         return
-    files: dict[str, str] = {"素材清单.txt": build_manifest()}
+    files: dict[str, str] = {"素材清单.txt": build_material_manifest(SRC_ROOT)}
     files.update(iter_text_files())
     print(f"文本文件 {len(files) - 1} 个（含素材清单共 {len(files)}）")
     entry = add_reference(

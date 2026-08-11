@@ -4,17 +4,26 @@
 """
 import os
 import shutil
+import sys
+from pathlib import Path
 
-REPO = r"C:\Users\luoji\Desktop\firstep"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from contest_generator import config  # noqa: E402
+
+# 素材备份根与 webapp 同源推导（config 唯一出处，脚本不再硬编码）；
+# contest 赛题工作目录仍是脚本自有布局（无对应推导），按仓库根相对路径拼
+MATERIALS_DIR = config.materials_dir(REPO_ROOT / "library" / "modules")
 SRCS = [
-    (r"C:\Users\luoji\Desktop\2026H", r"sources\contest\2026H"),
-    (r"C:\Users\luoji\Desktop\key", r"sources\contest\key"),
-    (r"C:\Users\luoji\Desktop\key_dmx", r"sources\contest\key_dmx"),
-    (r"C:\Users\luoji\Desktop\2026_04_地猛星电赛控制题配套资料", r"sources\materials\2026_04_地猛星电赛控制题配套资料"),
-    (r"C:\Users\luoji\Desktop\2026_06_电赛视觉资料", r"sources\materials\2026_06_电赛视觉资料"),
-    (r"C:\Users\luoji\Desktop\2026_07_电赛带练真题资料", r"sources\materials\2026_07_电赛带练真题资料"),
-    (r"C:\Users\luoji\Desktop\k230资料", r"sources\materials\k230资料"),
-    (r"C:\Users\luoji\Desktop\MSPM0_MOTOR(参考例程)", r"sources\materials\MSPM0_MOTOR参考例程"),
+    (r"C:\Users\luoji\Desktop\2026H", REPO_ROOT / "sources" / "contest" / "2026H"),
+    (r"C:\Users\luoji\Desktop\key", REPO_ROOT / "sources" / "contest" / "key"),
+    (r"C:\Users\luoji\Desktop\key_dmx", REPO_ROOT / "sources" / "contest" / "key_dmx"),
+    (r"C:\Users\luoji\Desktop\2026_04_地猛星电赛控制题配套资料", MATERIALS_DIR / "2026_04_地猛星电赛控制题配套资料"),
+    (r"C:\Users\luoji\Desktop\2026_06_电赛视觉资料", MATERIALS_DIR / "2026_06_电赛视觉资料"),
+    (r"C:\Users\luoji\Desktop\2026_07_电赛带练真题资料", MATERIALS_DIR / "2026_07_电赛带练真题资料"),
+    (r"C:\Users\luoji\Desktop\k230资料", MATERIALS_DIR / "k230资料"),
+    (r"C:\Users\luoji\Desktop\MSPM0_MOTOR(参考例程)", MATERIALS_DIR / "MSPM0_MOTOR参考例程"),
 ]
 BIG_MB = 50
 
@@ -29,7 +38,7 @@ for src, dest in SRCS:
         continue
     for root, dirs, files in os.walk(src):
         rel = os.path.relpath(root, src)
-        target_root = os.path.join(REPO, dest, rel) if rel != "." else os.path.join(REPO, dest)
+        target_root = os.path.join(dest, rel) if rel != "." else str(dest)
         os.makedirs(target_root, exist_ok=True)
         for f in files:
             sp = os.path.join(root, f)
@@ -48,7 +57,7 @@ for src, dest in SRCS:
 
 print(f"\n复制 {total_copied} 文件, {round(total_bytes/1024/1024)}MB, 跳过已存在 {skipped_existing}")
 
-gitignore_path = os.path.join(REPO, "sources", ".gitignore")
+gitignore_path = REPO_ROOT / "sources" / ".gitignore"
 existing = ""
 if os.path.exists(gitignore_path):
     existing = open(gitignore_path, encoding="utf-8").read()

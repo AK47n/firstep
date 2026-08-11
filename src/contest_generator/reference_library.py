@@ -60,7 +60,11 @@ REFERENCE_META_FILENAME = "reference.json"
 # 素材清单.txt（素材工具脚本写入条目目录）：首行表头 + 空行，之后每行
 # "相对路径  大小 bytes"（路径可含空格，锚尾解析）——PDF / zip 等只留痕
 # 不入库的二进制素材由它索引，是文件名搜索与文件清单的素材来源。
+# 写入侧契约 = build_material_manifest（唯一生成器），读端 = _MANIFEST_LINE
+# （写读对偶同模块）；表头统一为 sources/materials 源目录说明（读端锚尾
+# 正则天然跳过，仅人类可读）。
 MANIFEST_FILENAME = "素材清单.txt"
+_MANIFEST_HEADER = "素材目录（sources/materials）文件清单："
 _MANIFEST_LINE = re.compile(r"^(.*?)\s+(\d+)\s+bytes$")
 
 # 锚定类型：赛题编号（如 2026C）、套件型号（必须取自模块库已有 kit 词表）
@@ -265,10 +269,12 @@ def search_references(
 ) -> list[ReferenceEntry]:
     """浏览 / 搜索：按标题 / 类型 / 锚定值 / 文件名子串过滤（大小写不敏感，可组合）。
 
-    文件名过滤（文件名搜索工单）：子串匹配该条目素材清单.txt 内容行 + files
-    各路径——PDF 等只留痕不入库的二进制素材以素材清单行命中（磁盘实况），
-    文本文件同时可经 files 路径命中；素材清单缺失 = 该项为空（旧条目兼容）。
-    全部过滤参数为空时返回全量（与 list_references 同形状）。
+    文件名过滤（文件名搜索工单）：逐路径子串匹配该条目可服务文件全集
+    （_entry_file_records：素材清单记录 + 条目目录实际文件，唯一出处）——
+    PDF 等只留痕不入库的二进制素材以清单路径命中（磁盘实况），文本文件
+    同时可经实际路径命中；素材清单缺失 = 该项为空（旧条目兼容）。逐路径
+    判据不跨路径拼接（含 \n 的 needle 不再伪命中）。全部过滤参数为空时
+    返回全量（与 list_references 同形状）。
     """
     entries = list_references(reference_root)
     needle_title = title.strip().lower()
@@ -285,7 +291,10 @@ def search_references(
         and (not needle_anchor or needle_anchor in entry.anchor_value.lower())
         and (
             not needle_filename
-            or needle_filename in _entry_filename_haystack(reference_root, entry)
+            or any(
+                needle_filename in rel.lower()
+                for rel in _entry_file_records(reference_root, entry.id)
+            )
         )
     ]
 
@@ -303,54 +312,60 @@ def delete_reference(reference_root: Path, entry_id: str) -> None:
 # ---------------------------------------------------------------------------
 # 文件名搜索 / 文件清单与定位（文件名搜索 + 文件打开工单）：素材清单.txt 是
 # 二进制素材（PDF / zip 等本体在 sources/materials 镜像）的索引，清单记录
-# + 条目目录实际文件 = 可服务文件全集
+# + 条目目录实际文件 = 可服务文件全集；写读对偶同模块（build_material_manifest
+# 生成 ↔ _read_manifest_records 解析），三形状（清单 / 搜索 / 匹配）共用
+# _entry_file_records 一个出处
 # ---------------------------------------------------------------------------
+
+
+def build_material_manifest(src_dir: Path) -> str:
+    """《素材清单》文本生成器（素材工具脚本写入侧契约）：源目录全部文件留痕。
+
+    首行表头 + 空行，之后每行 "相对路径  大小 bytes"（路径可含空格，锚尾
+    解析）——与读取侧 _read_manifest_records 的 _MANIFEST_LINE 对偶：表头 /
+    空行天然跳过；stat 失败的文件记 size=-1（读端锚尾正则只吃数字，-1 行
+    仅留痕不索引）。行格式是写入侧契约，勿改（磁盘存量清单按旧格式，读端不变）。
+    """
+    lines = [_MANIFEST_HEADER, ""]
+    for path in sorted(src_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = -1
+        lines.append(f"{path.relative_to(src_dir).as_posix()}  {size} bytes")
+    return "\n".join(lines)
 
 
 def list_entry_files(reference_root: Path, entry_id: str) -> list[dict[str, str | int]]:
     """条目可服务文件清单 [{path, size_bytes}]（按路径排序）。
 
-    素材清单.txt 记录（二进制素材索引，size 取记录值）+ 条目目录实际文件
-    （rglob 排除 reference.json，size 取真实 stat）；同路径条目目录文件优先
-    （可服务副本，以真实大小为准）。素材清单缺失 / 不可读 = 只剩实际文件
-    （旧条目兼容）。条目不存在抛 ReferenceError（既有映射）。
+    数据源 = _entry_file_records（素材清单记录 + 条目目录实际文件，同路径
+    磁盘实况优先——唯一出处）；条目不存在抛 ReferenceError（既有映射）。
     """
-    entry = get_reference(reference_root, entry_id)
-    entry_dir = reference_root / entry.id
-    files: dict[str, int] = {}
-    for rel, size in _read_manifest_records(entry_dir):
-        files[rel] = size
-    for path in entry_dir.rglob("*"):
-        if path.is_file() and path.name != REFERENCE_META_FILENAME:
-            files[path.relative_to(entry_dir).as_posix()] = path.stat().st_size
     return [
-        {"path": rel, "size_bytes": size} for rel, size in sorted(files.items())
+        {"path": rel, "size_bytes": size}
+        for rel, size in sorted(_entry_file_records(reference_root, entry_id).items())
     ]
 
 
 def match_entry_files(
     reference_root: Path, entry_id: str, needle: str
 ) -> list[str]:
-    """条目内文件名子串匹配（大小写不敏感）：素材清单路径行 + files 各路径。
+    """条目内文件名子串匹配（大小写不敏感）：逐路径判据（不跨路径拼接）。
 
-    命中路径按（清单顺序优先，未在清单的 files 路径殿后）去重返回——用于
-    文件名搜索时直接带出命中文件，省去"查看 → 清单 → 翻找"两跳。needle
-    空串返回空列表（调用方仅在文件名过滤时启用）。
+    命中路径按 _entry_file_records 插入序（清单顺序优先，磁盘新增殿后）返回
+    ——用于文件名搜索时直接带出命中文件，省去"查看 → 清单 → 翻找"两跳。
+    needle 空串返回空列表（调用方仅在文件名过滤时启用）。
     """
     needle = needle.strip().lower()
     if not needle:
         return []
-    entry = get_reference(reference_root, entry_id)
-    manifest_paths = [rel for rel, _ in _read_manifest_records(reference_root / entry.id)]
-    seen: set[str] = set()
-    matched: list[str] = []
-    for rel in [*manifest_paths, *entry.files]:
-        if rel in seen:
-            continue
-        seen.add(rel)
-        if needle in rel.lower():
-            matched.append(rel)
-    return matched
+    return [
+        rel for rel in _entry_file_records(reference_root, entry_id)
+        if needle in rel.lower()
+    ]
 
 
 def resolve_entry_file(
@@ -358,14 +373,14 @@ def resolve_entry_file(
     materials_root: Path,
     entry_id: str,
     rel_path: str,
-) -> tuple[Path, str | None] | None:
-    """条目文件物理定位：(文件路径, 响应 media_type 覆写或 None)；找不到 = None。
+) -> tuple[Path, str | None]:
+    """条目文件物理定位：(文件路径, 响应 media_type 覆写或 None)。
 
     路径安全（is_unsafe_path）不通过抛 ReferenceError（映射 400）；先试条目
     目录（文本副本，命中即服务、media_type 留空按扩展名自动猜）；不存在再试
     sources/materials 镜像（PDF 带 application/pdf 供浏览器预览，其余按扩展
-    名自动转下载）；materials 根缺失 / 两处都找不到 = None（调用方转 404）。
-    条目不存在抛 ReferenceError（既有映射）。
+    名自动转下载）；materials 根缺失 / 两处都找不到抛 ReferenceError（映射
+    400，与条目不存在同通道）。条目不存在抛 ReferenceError（既有映射）。
     """
     entry = get_reference(reference_root, entry_id)
     if is_unsafe_path(rel_path):
@@ -379,14 +394,27 @@ def resolve_entry_file(
             "application/pdf" if materials_file.suffix.lower() == ".pdf" else None
         )
         return materials_file, media_type
-    return None
+    raise ReferenceError(f"参考文件条目 {entry_id!r} 中不存在文件：{rel_path}")
 
 
-def _entry_filename_haystack(reference_root: Path, entry: ReferenceEntry) -> str:
-    """条目可搜文件名文本（小写）：素材清单路径行 + files 各路径。"""
-    parts = [path.lower() for path in entry.files]
-    parts.extend(rel.lower() for rel, _ in _read_manifest_records(reference_root / entry.id))
-    return "\n".join(parts)
+def _entry_file_records(reference_root: Path, entry_id: str) -> dict[str, int]:
+    """条目可服务文件全集 {相对路径: 大小字节}（清单 / 搜索 / 匹配的唯一出处）。
+
+    素材清单.txt 记录（二进制素材索引，size 取记录值）+ 条目目录实际文件
+    （rglob 排除 reference.json，size 取真实 stat）；同路径磁盘实况优先。
+    插入序 = 清单记录序 + 磁盘新增殿后（match_entry_files 保序依赖）。素材
+    清单缺失 / 不可读 = 只剩实际文件（旧条目兼容）。条目不存在抛
+    ReferenceError（既有映射）。
+    """
+    entry = get_reference(reference_root, entry_id)
+    entry_dir = reference_root / entry.id
+    records: dict[str, int] = {}
+    for rel, size in _read_manifest_records(entry_dir):
+        records[rel] = size
+    for path in entry_dir.rglob("*"):
+        if path.is_file() and path.name != REFERENCE_META_FILENAME:
+            records[path.relative_to(entry_dir).as_posix()] = path.stat().st_size
+    return records
 
 
 def _read_manifest_records(entry_dir: Path) -> list[tuple[str, int]]:
