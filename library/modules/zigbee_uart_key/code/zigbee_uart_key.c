@@ -1,11 +1,11 @@
 #include "headfile.h"
-#include "zigbee_uart.h"
+#include "zigbee_uart_key.h"
 #include "config.h"
 
 // ============================================================
 //  Zigbee DL-20 初始化 (UART1, 115200bps)
 // ============================================================
-void zigbee_uart_init(void)
+void zigbee_uart_key_init(void)
 {
     uart_init(ZIGBEE_UART, ZIGBEE_BAUD, 0x00);  // 只发不收，不开接收中断
 }
@@ -15,7 +15,7 @@ void zigbee_uart_init(void)
 //    [0xAA] [0x55] [ID] [SUM]
 //    SUM = (0xAA + 0x55 + ID) & 0xFF
 // ============================================================
-void zigbee_send_id(uint8_t key_id)
+void zigbee_uart_key_send_id(uint8_t key_id)
 {
     uint8_t id = key_id & 0x0F;  // 只取低4位
     uint8_t sum = (uint8_t)(0xAA + 0x55 + id);
