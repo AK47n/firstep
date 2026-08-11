@@ -100,6 +100,32 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
+  /* 操作列（各库表最后一列）按钮不折行——窄列下"查看/删除"不换行成竖排 */
+  table td:last-child { white-space: nowrap; }
+  /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
+     操作列加宽让查看/删除横排；长文本列按宽换行、体量列完整显示 */
+  /* 赛题库表：固定列宽布局（同参考库模式）——长题面不再挤压编号/年份短列，
+     操作列加宽保底 100px */
+  #tab-topic table { table-layout: fixed; min-width: 760px; }
+  #tab-topic .card { overflow-x: auto; }
+  #tab-topic th:nth-child(1), #tab-topic td:nth-child(1) { width: 100px; }
+  #tab-topic th:nth-child(2), #tab-topic td:nth-child(2) { width: 70px; }
+  #tab-topic th:nth-child(3), #tab-topic td:nth-child(3) { width: auto; }
+  #tab-topic th:nth-child(4), #tab-topic td:nth-child(4) { width: 150px; }
+  #tab-topic th:nth-child(5), #tab-topic td:nth-child(5) { width: 100px; }
+  #tab-topic td { overflow-wrap: break-word; }
+  /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
+     操作列加宽让查看/删除横排；长文本列按宽换行、体量列完整显示 */
+  #tab-reference table { table-layout: fixed; min-width: 900px; }
+  #tab-reference .card { overflow-x: auto; }
+  #tab-reference th:nth-child(1), #tab-reference td:nth-child(1) { width: 210px; }
+  #tab-reference th:nth-child(2), #tab-reference td:nth-child(2) { width: 100px; }
+  #tab-reference th:nth-child(3), #tab-reference td:nth-child(3) { width: 120px; }
+  #tab-reference th:nth-child(4), #tab-reference td:nth-child(4) { width: auto; }
+  #tab-reference th:nth-child(5), #tab-reference td:nth-child(5) { width: 140px; }
+  #tab-reference th:nth-child(6), #tab-reference td:nth-child(6) { width: 140px; }
+  #tab-reference td { overflow-wrap: break-word; }
+  #tab-reference td:nth-child(6) { white-space: nowrap; }
   pre.result { background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 12px;
                font-size: 12px; overflow: auto; max-height: 320px; }
   .file-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; margin-bottom: 8px; }
@@ -370,7 +396,7 @@
         <button id="btn-ref-search-clear">清空并显示全部</button>
       </div>
       <table style="margin-top:10px">
-        <thead><tr><th>标题</th><th>类型</th><th>锚定</th><th>简介</th><th>体量</th><th style="width:70px">操作</th></tr></thead>
+        <thead><tr><th>标题</th><th>类型</th><th>锚定</th><th>简介</th><th>体量</th><th>操作</th></tr></thead>
         <tbody id="ref-rows"></tbody>
       </table>
       <div id="ref-msg" class="error"></div>
@@ -435,7 +461,7 @@
         <button id="btn-topic-search-clear">清空并显示全部</button>
       </div>
       <table style="margin-top:10px">
-        <thead><tr><th>编号</th><th>年份</th><th>题面预览</th><th>关联模块</th><th style="width:70px">操作</th></tr></thead>
+        <thead><tr><th>编号</th><th>年份</th><th>题面预览</th><th>关联模块</th><th>操作</th></tr></thead>
         <tbody id="topic-rows"></tbody>
       </table>
       <div id="topic-msg" class="error"></div>
