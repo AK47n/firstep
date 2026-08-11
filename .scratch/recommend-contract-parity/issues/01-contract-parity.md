@@ -2,7 +2,29 @@
 
 **What to build:** /api/recommend 请求契约的浏览器前端与 CLI 验收脚本当前已漂移——reference_ids 前端发、CLI 不发（35ed61e platform 漂移的同款机制，那次是真机流程从未触发平台过滤的根因）。给 CLI 补 reference_ids 支持、payload 组装提成纯函数，加对偶测试强制字段集与事件词表一致，真机验收覆盖参考注入路径。
 
-**Status:** drafted（2026-08-11，主会话已核实现状，待用户开新终端执行）
+**Status:** implemented（2026-08-11，分支 recommend-contract-parity b09f6ba（rebase 到 d365348 后，原 28ac23f），验收全勾，待合 main）
+
+## 验收记录（2026-08-11）
+
+- pytest 1040 全绿（main 1032 + 新增 8）+ mypy src 干净（generate_check.py 在
+  .scratch/ 属 mypy 范围外，与工单预期一致）。
+- 对偶测试可证伪两层实证：删 check_topic 的 reference_ids 透传 → 全字段测试红；
+  删 main 的 --reference-ids 解析 → CLI 解析测试红（均已还原）。
+- 真机 8001/8000：服务跑在 8000（CLI BASE，webapp 本工单未动故未重启）。五跑收敛：
+  首跑无 clarify 补问 5 条失败 → 建 clarify_2021F.json（7 条，含图1 尺寸假设）；
+  一次 DeepSeek 空响应偶发重跑后，`--topic-file 2021F/topic.md --reference-ids
+  2026_07_电赛带练真题资料` 推荐 done ✓，done references 3 条透明闭环：
+  k230资料 [auto/any] + ALX-AOA-FIT 串口例程 [auto/stm32]（锚定命中）+ 
+  2026_07_电赛带练真题资料 [manual/any]（--reference-ids 手动注入，去重后各一条）；
+  骨架 / 生成 / 产物检查全绿（无围栏、include 全解析）。
+- 遗留发现（超工单边界，未动）：UV4 编译 8 错 = library/modules/ball_detect/
+  code/ball_detect_stm32.c 用 NULL 未包含定义头（headfile.h 不提供）——98f8b0a
+  （今日 13:55 mspm0 补录）给 pid manifest 加 ball_detect 依赖后每次选 pid 必拉入；
+  静态 include 检查抓不到（只验 include 解析、不验漏 include），UV4 真编译抓到
+  （门禁按设计工作）。与参考注入无关（无 refs 隔离跑同样 8 错）。建议另立工单：
+  修 ball_detect_stm32.c 补 #include <stddef.h>（或 headfile.h 收口）。
+- 真机验收耗 5 跑 ≈ 1 小时：DeepSeek 补问 4 轮 7 条映射 + 一次空响应偶发 + 一次
+  输出目录拒绝覆盖（隔离跑残留 out_2021F_stm32，门禁按设计拒绝）。
 
 ## 现状（已核实）
 
