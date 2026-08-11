@@ -2,7 +2,7 @@
 
 **What to build:** 2026-08-11 MSPM0 线真机验收（2026H 题）发现 mspm0 线模块库只有 9 个，H 题实际需要的 pid（摆杆/滚球控制）、digit_uart（视觉坐标串口）、filter（滑动滤波）、gray_track（巡线路口检测）、ball_detect（球检）全在库外——推荐只能给库外建议，生成工程里这些功能全是 TODO。**2026H 部分已于并行会话实施完毕（98f8b0a，2026-08-11 从桌面 worktree 合入 main）**；**剩余缺口 = 2024H 巡线题专用层**：mspm0 巡线三层中灰度读取（huidu）与循迹核心（motor 内嵌 adjust_motor_pwm）已在库，题专用决策层（白区计数路口 / AB-ABCDA-ACBDA 模式状态机 / 声光）缺失——源 = car xunji 原生真机工程（2026-08-11 领域建模定判据：补录移植源原生优先，见 CONTEXT.md「入库路径」）。
 
-**Status:** open（剩余 2024H 巡线题专用层）
+**Status:** resolved（2026-08-12 剩余 2024H 巡线题专用层实施完毕，验收两项勾选，见下）
 
 ## 已完成：2026H 5 模块（98f8b0a，2026-08-11 合入 main）
 
@@ -30,14 +30,35 @@
 - **仓库备份素材**：`sources/materials/MSPM0_MOTOR参考例程/`（7343e80 入库）——MSP_Motor_Ctrl（Modbus 电机控制 + 编码器解析 + CRC16）、m0imu（UART 陀螺仪）、empty.syscfg + ti_msp_dl_config.h/c 真机生成物、移植.md（DL_* API 用法手册）
 - **遗留风险（如实记录）**：仍是"编译验证未上板"级——真机素材替代不了实际接线/上板行为验证；入库标准 = gmake 编译 0 错
 
-## 验收（2026H 部分已勾选 = 98f8b0a）
+## 验收（2026H 部分已勾选 = 98f8b0a；2024H 部分已勾选 = 本次提交）
 
 - [x] 5 模块 manifest：platforms.mspm0 + files + dependencies 按实际 include 声明，`_check_module_self_include` 门禁过
 - [x] 每个模块编译验证：默认外设布局生成工程 gmake 0 错（无编译验证不入库）
 - [x] 全量 pytest 绿 + mypy src 干净
 - [x] 工单如实记录"编译验证未上板"状态
-- [ ] **2024H 巡线套装模块**：manifest platforms.mspm0 + files + dependencies，标注"2024H 巡线题专用"，编译验证 gmake 0 错
-- [ ] 2024H mspm0 全管线生成验证（推荐 2024H 题 → 巡线套装模块可被选中 → 产物编译 0 错）
+- [x] **2024H 巡线套装模块**：manifest platforms.mspm0 + files + dependencies，标注"2024H 巡线题专用"，编译验证 gmake 0 错
+- [x] 2024H mspm0 全管线生成验证（推荐 2024H 题 → 巡线套装模块可被选中 → 产物编译 0 错）
+
+## 实施记录（2024H 巡线题专用层补录，2026-08-12）
+
+- **模块**：`library/modules/xunji/`（manifest.json + code/xunji.c/h，slug `xunji`）——description 含"2024H 巡线题专用"（topic_library `related_module_slugs` 自动发现命中，全管线实测 `related=['xunji']`）
+- **移植源**：`sources/car/car xunji/control.c`（原生 mspm0 真机，Debug/PWM.out 编译产物在；归档副本 `library/references/car-1-1-巡线模板-mspm0/` 逐字节一致，2026-08-11 领域建模判据：原生平台真机代码优先）——白区计数路口（8 路全白 100ms 消抖）+ AB/ABCDA/ACBDA/ACBDAx4 状态机（对 2024H 题 1~4 问）+ 声光（真机仅 LED 无蜂鸣器）+ xunji_centroid 加权质心核心逐字保留
+- **硬件适配**（母版默认外设布局宏，对照工单第 19 行）：
+  - 灰度 8 路 `GPIO_Gray_1..8` → `HUIDU_L3/L2/L1/R1/R2/L4/R3/R4`（huidu 模块索引序，编译级默认，实际接线改 xunji.c 头部 P1..P8 宏；极性非零=白与 26H gray_track_mspm0 同款直读）
+  - 电机：`GPIO_IN_PIN_AIN*/BIN*` → `motor_set_direction(id,dir)` 0停1正转2反转；PWM 真机百分比制（TIMG0 2500 计数）→ `motor_set_duty` 原始值 0~1300（MAX_DUTY=1300 对偶 pid_mspm0）
+  - 编码器：真机四倍频正交解码 GROUP1_IRQHandler → key 模块 `counter_1_A/counter_2_A`（单沿计数无方向，extern 符号级，需同选 key；xunji_tick_50ms 采样清零）
+  - 陀螺仪：真机 JY61P（UART2 0x55 帧）≠ 库内 imu_uart IMU601（UART0 CRC16 帧）——本模块消费 `current_attitude.yaw`（imu_uart，类型经 motor.h→imu.h 链），掉头角常量（103/error=180）与 Yaw 零偏/极性需上板校准（manifest `hardware_bound: true` 如实标注）
+  - 声光：`GPIO_LED`(PA26) → `LED_BEEP_LED`(PA3)；STBY（真机 PA7）母版硬件直连 3.3V（motor.h），ACBDAx4 关使能动作省略
+- **调度**：真机 50ms/10ms 定时中断拆为 `xunji_tick_50ms()`/`xunji_tick_10ms()`，main 周期调用（`MOTOR_PID_INST_IRQHandler` 已被 motor 模块占用，按 pid_mspm0 先例自建定时器中断或主循环分频）
+- **依赖**：dependencies `["motor"]`（实际 include motor.h；imu_uart 经 motor.h→imu.h 链带入；key 计数符号级 extern——需手动同选小车栈，motor manifest 同款约定）；`_check_module_self_include` 门禁过（xunji.c 自含 xunji.h）
+- **验证**：
+  - 模块级：默认外设布局工程（out_2026H_mspm0 + xunji）`build_makefiles.py` + `gmake all` **0 错 0 警**，mspm0_project.out 链接成功
+  - 全管线：`generate_check.py --platform mspm0 --clarify clarify_2024H.json --add delay,ntb_time,oled,key 2024H` → 推荐 4 轮收敛**选中 xunji**（related=['xunji'] 自动发现 + AI 理由"2024H 巡线工程的状态机与巡线控制"）→ 生成 out_2024H_mspm0（含 xunji 文件）产物门禁全过 → gmake **0 错**（3 警告均非本模块：母版 syscfg UART ovsRate ×2 + AI 骨架 main.c 未用变量）→ mspm0_project.out 链接成功
+  - 补问一轮预置：模型问场地布局（A/B/C/D 与半圆弧布置、直线段有无引导线），clarify_2024H.json 按题目文本作答（"场地除两个半圆弧外不得添加任何标记"→ 直线段无引导线，弧线段灰度循迹、直线段陀螺仪航向保持）
+  - **编译验证未上板**（真机素材替代不了实际接线/上板行为验证，如实记录）
+  - 全量 pytest **1087 绿** + mypy src 干净
+- **build_makefiles.py**：MODULES 表补 `("xunji", ["xunji.c"])`；新增按工程实际模块集过滤（工程按推荐集生成，模块子集因题而异——2024H 无 digit_uart/filter/ball_detect/pid，表内其他条目不写进 makefile）
+- **遗留（如实记录）**：灰度物理排列/极性、Yaw 零偏与掉头角常量需上板校准；key 单沿计数无方向（真机四倍频正交解码）；tick 挂载由 main 完成（自建定时器或主循环分频）；ml_mpu6050 在推荐集（mspm0 空 files 条目，不参与编译）
 
 ## 实施提示词（复制到新会话）
 

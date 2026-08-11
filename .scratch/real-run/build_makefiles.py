@@ -29,6 +29,12 @@ MODULES = [
     ("digit_uart", ["digit_uart_mspm0.c"]),
     ("filter", ["filter.c"]),
     ("ball_detect", ["ball_detect.c"]),
+    ("xunji", ["xunji.c"]),
+]
+# 只编译工程内实际存在的模块（工程按推荐集生成，模块子集因题而异——
+# 如 2024H 无 digit_uart/filter/ball_detect，表内其他条目不写进 makefile）
+MODULES = [
+    (slug, cfiles) for slug, cfiles in MODULES if (PROJ / f"modules/{slug}/code").is_dir()
 ]
 MOD_DIRS = [f"modules/{slug}/code" for slug, _ in MODULES]
 INC = " ".join(
