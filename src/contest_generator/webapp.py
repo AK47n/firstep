@@ -76,6 +76,7 @@ from .reference_library import (
     delete_reference,
     draft_description as reference_draft_description,
     list_entry_files,
+    match_entry_files,
     module_kit_vocabulary,
     resolve_entry_file,
     search_references,
@@ -1019,18 +1020,28 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def references(
         title: str = "", type: str = "", anchor: str = "", filename: str = ""
     ) -> list[dict]:
-        """浏览参考文件库：按标题 / 类型 / 锚定值 / 文件名子串过滤（可组合，空 = 全量）。"""
+        """浏览参考文件库：按标题 / 类型 / 锚定值 / 文件名子串过滤（可组合，空 = 全量）。
+
+        文件名过滤时每条目附 matched_files（命中文件路径列表）——搜索直出
+        文件，免"查看 → 清单 → 翻找"两跳；未过滤时不含该字段（向后兼容）。
+        """
         config = _require_config(context)
-        return [
-            entry.to_dict()
-            for entry in search_references(
-                reference_library_dir(config.module_library_dir),
-                title=title,
-                type=type,
-                anchor=anchor,
-                filename=filename,
-            )
-        ]
+        reference_root = reference_library_dir(config.module_library_dir)
+        entries = []
+        for entry in search_references(
+            reference_root,
+            title=title,
+            type=type,
+            anchor=anchor,
+            filename=filename,
+        ):
+            data = entry.to_dict()
+            if filename.strip():
+                data["matched_files"] = match_entry_files(
+                    reference_root, entry.id, filename
+                )
+            entries.append(data)
+        return entries
 
     @app.post("/api/references/draft")
     @_map_errors

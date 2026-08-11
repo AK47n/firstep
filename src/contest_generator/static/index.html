@@ -183,6 +183,12 @@
   .ref-files-viewer pre { margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto;
                           font-size: 12px; font-family: Consolas, monospace;
                           white-space: pre-wrap; word-break: break-all; }
+  .ref-matched { margin-top: 4px; font-size: 12px; font-family: Consolas, monospace;
+                 line-height: 1.7; }
+  .ref-matched a { color: var(--accent); text-decoration: none; cursor: pointer;
+                   display: block; word-break: break-all; }
+  .ref-files-filter { margin: 8px 14px 0; padding: 5px 8px; border: 1px solid var(--border);
+                      border-radius: 4px; font-size: 13px; width: calc(100% - 28px); }
 </style>
 </head>
 <body>
@@ -1320,7 +1326,10 @@ async function loadReferences() {
     refEntryCache = entries;
     $("ref-rows").innerHTML = entries.length ? entries.map((e) => `
       <tr>
-        <td class="slug">${esc(e.title)}</td>
+        <td class="slug">${esc(e.title)}
+          ${(e.matched_files || []).length ? '<div class="ref-matched">' + e.matched_files.map((p) =>
+            `<a href="#" data-mf="${esc(e.id)}" data-path="${esc(p)}">▸ ${esc(p)}</a>`).join("") + '</div>' : ''}
+        </td>
         <td>${esc(e.type)}</td>
         <td class="muted">${e.anchor_kind === "kit" ? "套件：" + esc(e.anchor_value) : e.anchor_kind === "none" ? "未锚定" : "赛题：" + esc(e.anchor_value)}${referencePlatformChip(e)}</td>
         <td class="muted">${esc(e.description)}</td>
@@ -1330,6 +1339,11 @@ async function loadReferences() {
       : '<tr><td colspan="6" class="muted">库中暂无条目。</td></tr>';
     $("ref-rows").querySelectorAll("[data-ref-view]").forEach((b) =>
       b.addEventListener("click", () => viewReferenceFiles(b.dataset.refView)));
+    $("ref-rows").querySelectorAll("[data-mf]").forEach((a) =>
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        openReferenceFile(a.dataset.mf, a.dataset.path);
+      }));
     $("ref-rows").querySelectorAll("[data-ref-del]").forEach((b) =>
       b.addEventListener("click", () => deleteReference(b.dataset.refDel)));
     $("ref-msg").textContent = "";
@@ -1362,6 +1376,24 @@ function referenceFileUrl(entryId, path) {
   return `/api/references/${encodeURIComponent(entryId)}/files/${segments}`;
 }
 
+// 打开参考文件（行内直开 / 弹层共用）：PDF 新窗口预览 / 文本 fetch 内联 /
+// 其余新窗口下载。viewer 缺省 = 行内直开（文本也新窗口，服务端给 Content-Type）。
+async function openReferenceFile(entryId, path, viewer, viewerPre) {
+  const url = referenceFileUrl(entryId, path);
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".pdf")) { window.open(url, "_blank"); return; } // PDF 浏览器预览
+  if (viewer && REF_TEXT_EXTENSIONS.some((ext) => lower.endsWith("." + ext))) {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(await resp.text().catch(() => "HTTP " + resp.status));
+      viewerPre.textContent = `${path}\n\n${await resp.text()}`;
+      viewer.classList.remove("hidden");
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  window.open(url, "_blank"); // 其余类型：服务端按扩展名给 Content-Type，浏览器转下载
+}
+
 async function viewReferenceFiles(entryId) {
   try {
     const files = await apiGet(`/api/references/${encodeURIComponent(entryId)}/files`);
@@ -1378,9 +1410,10 @@ function showReferenceFiles(entryId, files) {
         <strong>${esc(entryId)} · ${files.length} 个文件</strong>
         <button class="ref-files-close" title="关闭">×</button>
       </div>
+      <input class="ref-files-filter" placeholder="过滤文件名…">
       <ul class="ref-files-list">
         ${files.length ? files.map((f) => `
-          <li><a href="#" data-path="${esc(f.path)}">${esc(f.path)}</a>
+          <li data-path="${esc(f.path)}"><a href="#" data-path="${esc(f.path)}">${esc(f.path)}</a>
               <span class="muted">${formatSize(f.size_bytes)}</span></li>`).join("")
           : '<li class="muted">无文件（素材清单缺失）。</li>'}
       </ul>
@@ -1391,23 +1424,19 @@ function showReferenceFiles(entryId, files) {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   const viewer = overlay.querySelector(".ref-files-viewer");
   const viewerPre = viewer.querySelector("pre");
+  const filterInput = overlay.querySelector(".ref-files-filter");
+  const list = overlay.querySelector(".ref-files-list");
+  const applyFilter = () => {
+    const needle = filterInput.value.trim().toLowerCase();
+    list.querySelectorAll("li[data-path]").forEach((li) => {
+      li.style.display = !needle || li.dataset.path.toLowerCase().includes(needle) ? "" : "none";
+    });
+  };
+  filterInput.addEventListener("input", applyFilter);
   overlay.querySelectorAll(".ref-files-list a").forEach((a) =>
     a.addEventListener("click", async (e) => {
       e.preventDefault();
-      const path = a.dataset.path;
-      const url = referenceFileUrl(entryId, path);
-      const lower = path.toLowerCase();
-      if (lower.endsWith(".pdf")) { window.open(url, "_blank"); return; } // PDF 浏览器预览
-      if (REF_TEXT_EXTENSIONS.some((ext) => lower.endsWith("." + ext))) {
-        try {
-          const resp = await fetch(url);
-          if (!resp.ok) throw new Error(await resp.text().catch(() => "HTTP " + resp.status));
-          viewerPre.textContent = `${path}\n\n${await resp.text()}`;
-          viewer.classList.remove("hidden");
-        } catch (err) { alert(err.message); }
-        return;
-      }
-      window.open(url, "_blank"); // 其余类型：服务端按扩展名给 Content-Type，浏览器转下载
+      await openReferenceFile(entryId, a.dataset.path, viewer, viewerPre);
     }));
   const onKey = (e) => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
