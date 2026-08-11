@@ -516,7 +516,8 @@ def test_revision_prompt_carries_previous_layer_and_self_check_instruction():
 
 
 class _RecordingConvergenceLLM(FakeLLM):
-    """记录型假 LLM：按脚本返回选择序列，记录每次调用（问题文本 / 清单 / 全文）。"""
+    """记录型假 LLM：按脚本返回选择序列，记录每次调用（问题文本 / 清单 / 全文 /
+    clarifications）。"""
 
     def __init__(self, selections: Sequence[ModuleSelection]) -> None:
         super().__init__()
@@ -530,6 +531,7 @@ class _RecordingConvergenceLLM(FakeLLM):
                 dict[str, str],
             ]
         ] = []
+        self.clarifications: list[tuple[tuple[str, str], ...]] = []
 
     def select_modules(
         self,
@@ -538,6 +540,7 @@ class _RecordingConvergenceLLM(FakeLLM):
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
     ) -> ModuleSelection:
         self.calls.append(
             (
@@ -548,6 +551,7 @@ class _RecordingConvergenceLLM(FakeLLM):
                 dict(manual_fulltexts or {}),
             )
         )
+        self.clarifications.append(tuple(clarifications))
         return self._queue.pop(0)
 
 
@@ -719,6 +723,38 @@ def test_convergent_without_references_uses_old_signature():
 
     assert result.modules == ()
     # 收敛照常工作（旧契约无需求层 → 第 2 轮一致即收敛），旧签名假 LLM 未触发异常
+
+
+def test_convergent_passes_clarifications_every_round():
+    """收敛透传（工单 clarify-history-in-convergence）：澄清问答历史每轮
+    select_modules 都收到同一份——收敛阶段补问的答案在用户回答重推后进入收敛
+    prompt（题面后的独立段），不再换措辞反复问同一问题。"""
+    history = (("识别方式？", "摄像头"), ("序号2缺失？", "已补全"))
+    fake = _RecordingConvergenceLLM(
+        [
+            _selection_with("识别数字"),
+            _selection_with("识别数字"),  # 第 2 轮一致 → 收敛
+        ]
+    )
+
+    select_modules_convergent(
+        fake, "送药小车。识别数字。", ["- dht11: 温湿度"], clarifications=history
+    )
+
+    assert len(fake.calls) == 2
+    assert fake.clarifications == [history, history]  # 每轮同一份、保序
+
+
+def test_convergent_without_clarifications_keeps_old_signature():
+    """向后兼容：clarifications 缺省空 → 不传该关键字（旧签名调用，既有假
+    LLM 零改动）；记录到的历史为空元组 = 旧行为。"""
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字"), _selection_with("识别数字")]
+    )
+
+    select_modules_convergent(fake, "赛题", ["- dht11: 温湿度"])
+
+    assert fake.clarifications == [(), ()]
 
 
 def test_convergent_round_events_tolerate_failing_emitter():
