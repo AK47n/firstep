@@ -40,6 +40,7 @@ from contest_generator.reference_library import (
     ReferenceError,
     add_reference,
     archive_reference,
+    build_material_manifest,
     delete_reference,
     draft_description,
     get_reference,
@@ -786,6 +787,24 @@ def test_search_references_filename_missing_manifest_means_empty(tmp_path):
     assert [e.title for e in search_references(root, filename="notes")] == ["旧条目"]
 
 
+def test_search_references_filename_newline_needle_no_pseudo_hit(tmp_path):
+    """含 \n 的 needle 不跨路径拼接命中（旧 join 串伪阳性回归）。"""
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="条目",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"a.txt": "x", "b.txt": "y"},
+        kit_vocabulary=(),
+    )
+    # 逐路径判据：a.txt / b.txt 各自不包含 "a\nb"（跨路径拼接不再命中）
+    assert search_references(root, filename="a\nb") == []
+    assert [e.title for e in search_references(root, filename="a.txt")] == ["条目"]
+
+
 def test_list_entry_files_parses_manifest_and_disk(tmp_path):
     root = _reference_root(tmp_path)
     entry = add_reference(
@@ -858,6 +877,68 @@ def test_list_entry_files_missing_entry_raises(tmp_path):
         list_entry_files(root, "nope")
 
 
+def test_build_material_manifest_lists_files_with_sizes(tmp_path):
+    """行格式契约：表头 + 空行 + 每文件一行 "相对路径  大小 bytes"（目录跳过）。"""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.txt").write_text("x" * 10, encoding="utf-8")
+    (src / "子目录").mkdir()
+    (src / "子目录" / "b.pdf").write_bytes(b"pdf")
+    (src / "空目录").mkdir()
+    lines = build_material_manifest(src).splitlines()
+    assert lines[0] == "素材目录（sources/materials）文件清单："
+    assert lines[1] == ""
+    assert "a.txt  10 bytes" in lines
+    assert "子目录/b.pdf  3 bytes" in lines
+    # 目录（含空目录）不产生行
+    assert len(lines) == 4
+
+
+def test_build_material_manifest_stat_failure_marks_minus_one(tmp_path, monkeypatch):
+    """stat 失败的文件记 size=-1（读端锚尾正则只吃数字，-1 行仅留痕不索引）。
+
+    is_file 走 os.path.isfile（不经过 Path.stat），stat 只用于取大小——fake 对
+    目标路径一律抛 OSError 即可，不影响 is_file 判定。
+    """
+    src = tmp_path / "src"
+    src.mkdir()
+    broken = src / "broken.bin"
+    broken.write_bytes(b"data")
+    real_stat = Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        if self == broken:
+            raise OSError("模拟 stat 失败")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", fake_stat)
+    assert "broken.bin  -1 bytes" in build_material_manifest(src).splitlines()
+
+
+def test_build_material_manifest_roundtrips_with_read_side(tmp_path):
+    """写→读对偶：build 输出写入条目目录后，_read_manifest_records 解析一致。"""
+    root = _reference_root(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.txt").write_text("x" * 10, encoding="utf-8")
+    (src / "子").mkdir()
+    (src / "子" / "b.pdf").write_bytes(b"pdf")
+    entry = add_reference(
+        root,
+        title="条目",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"素材清单.txt": build_material_manifest(src)},
+        kit_vocabulary=(),
+    )
+    assert reference_library._read_manifest_records(root / entry.id) == [
+        ("a.txt", 10),
+        ("子/b.pdf", 3),
+    ]
+
+
 def test_resolve_entry_file_serves_entry_then_materials(tmp_path):
     root = _reference_root(tmp_path)
     entry = add_reference(
@@ -891,9 +972,12 @@ def test_resolve_entry_file_serves_entry_then_materials(tmp_path):
     )
     assert path == pdf
     assert media_type == "application/pdf"
-    # materials 根不存在 / 都找不到 = None（调用方转 404，不炸）
-    assert resolve_entry_file(root, tmp_path / "no-such-materials", entry.id, "x.pdf") is None
-    assert resolve_entry_file(root, materials, entry.id, "nope.pdf") is None
+    # materials 根不存在 / 都找不到 → ReferenceError（映射 400，与条目不存在
+    # 同通道——resolve 不再返回 None，调用方无内联 404 分支）
+    with pytest.raises(ReferenceError, match="中不存在文件"):
+        resolve_entry_file(root, tmp_path / "no-such-materials", entry.id, "x.pdf")
+    with pytest.raises(ReferenceError, match="中不存在文件"):
+        resolve_entry_file(root, materials, entry.id, "nope.pdf")
 
 
 @pytest.mark.parametrize("bad", ["../x", "..\\x", "/abs", "a//b", "c:/win", "a/../b"])

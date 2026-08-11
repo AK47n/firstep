@@ -128,6 +128,24 @@ def reference_library_dir(module_library_dir: Path) -> Path:
     return module_library_dir.parent / "references"
 
 
+def materials_dir(module_library_dir: Path) -> Path:
+    """素材备份根：参考条目二进制素材（PDF / zip 等）的镜像目录。
+
+    与 reference_library_dir 同源推导（config.py 冻结，不新增配置项）——素材
+    工具脚本以工作区根为根写 sources/materials，工作区根可能直接装模块库
+    （默认布局 ~/.contest_generator/modules → 同级 sources/），也可能模块库
+    在 library/ 子目录下（仓库布局 firstep/library/modules → 备份在仓库根
+    firstep/sources/）。两级候选都取目录实况判定，避免把推导钉死在 404 上；
+    两处都没有 = 返回优先候选（resolve_entry_file 对缺失文件抛 ReferenceError
+    → 400，不因推导空根而炸）。
+    """
+    sibling = module_library_dir.parent / "sources" / "materials"
+    if sibling.is_dir():
+        return sibling
+    repo_root = module_library_dir.parent.parent / "sources" / "materials"
+    return repo_root if repo_root.is_dir() else sibling
+
+
 def _require_nonempty_str(data: dict, key: str, default: str, path: Path) -> str:
     value = data.get(key, default)
     if not isinstance(value, str) or not value:

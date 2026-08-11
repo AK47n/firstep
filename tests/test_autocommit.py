@@ -425,6 +425,10 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "list_entry_files": ("read", ""),
         "resolve_entry_file": ("read", ""),
         "match_entry_files": ("read", ""),  # 命中文件直出：只读素材清单，不落盘
+        # 工单 01（清单域单源化）新增的读函数：素材清单文本生成器——不落
+        # reference.json、不触发提交；调用方在 add_reference 前调用、随条目
+        # 事务入库（脚本写入口，注册表只管 src 模块内落盘面）
+        "build_material_manifest": ("read", ""),
     },
     "topic_library": {
         "validate_topic_key": ("read", ""),

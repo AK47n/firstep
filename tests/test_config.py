@@ -16,6 +16,7 @@ from contest_generator.config import (
     AppConfig,
     ConfigError,
     load_config,
+    materials_dir,
     save_config,
 )
 
@@ -108,3 +109,25 @@ def test_autocommit_enabled_defaults_on_and_roundtrips(tmp_path):
     )
     with pytest.raises(ConfigError, match="autocommit_enabled"):
         load_config(path)  # 非布尔值大声失败（与其余字段同严格度）
+
+
+def test_materials_dir_prefers_sibling_when_exists(tmp_path):
+    """默认布局：模块库 ~/.contest_generator/modules → 同级 sources/materials 优先。"""
+    module_library_dir = tmp_path / "modules"
+    sibling = tmp_path / "sources" / "materials"
+    sibling.mkdir(parents=True)
+    assert materials_dir(module_library_dir) == sibling
+
+
+def test_materials_dir_falls_back_to_repo_root(tmp_path):
+    """仓库布局：模块库在 library/ 子目录下 → 备份在仓库根 sources/materials。"""
+    module_library_dir = tmp_path / "repo" / "library" / "modules"
+    repo_root = tmp_path / "repo" / "sources" / "materials"
+    repo_root.mkdir(parents=True)
+    assert materials_dir(module_library_dir) == repo_root
+
+
+def test_materials_dir_missing_everywhere_returns_sibling(tmp_path):
+    """两处都没有 = 返回优先候选（文件服务端对缺失文件抛 ReferenceError → 400）。"""
+    module_library_dir = tmp_path / "modules"
+    assert materials_dir(module_library_dir) == tmp_path / "sources" / "materials"
