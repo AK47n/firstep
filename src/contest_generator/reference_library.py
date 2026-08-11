@@ -57,6 +57,12 @@ if TYPE_CHECKING:
 
 REFERENCE_META_FILENAME = "reference.json"
 
+# 素材清单.txt（素材工具脚本写入条目目录）：首行表头 + 空行，之后每行
+# "相对路径  大小 bytes"（路径可含空格，锚尾解析）——PDF / zip 等只留痕
+# 不入库的二进制素材由它索引，是文件名搜索与文件清单的素材来源。
+MANIFEST_FILENAME = "素材清单.txt"
+_MANIFEST_LINE = re.compile(r"^(.*?)\s+(\d+)\s+bytes$")
+
 # 锚定类型：赛题编号（如 2026C）、套件型号（必须取自模块库已有 kit 词表）
 # 或 未锚定（配套资料不属于任何已登记赛题 / 套件，如通用开发板资料）
 ANCHOR_KIND_TOPIC = "topic"
@@ -255,16 +261,21 @@ def search_references(
     title: str = "",
     type: str = "",
     anchor: str = "",
+    filename: str = "",
 ) -> list[ReferenceEntry]:
-    """浏览 / 搜索：按标题 / 类型 / 锚定值子串过滤（大小写不敏感，可组合）。
+    """浏览 / 搜索：按标题 / 类型 / 锚定值 / 文件名子串过滤（大小写不敏感，可组合）。
 
+    文件名过滤（文件名搜索工单）：子串匹配该条目素材清单.txt 内容行 + files
+    各路径——PDF 等只留痕不入库的二进制素材以素材清单行命中（磁盘实况），
+    文本文件同时可经 files 路径命中；素材清单缺失 = 该项为空（旧条目兼容）。
     全部过滤参数为空时返回全量（与 list_references 同形状）。
     """
     entries = list_references(reference_root)
     needle_title = title.strip().lower()
     needle_type = type.strip().lower()
     needle_anchor = anchor.strip().lower()
-    if not (needle_title or needle_type or needle_anchor):
+    needle_filename = filename.strip().lower()
+    if not (needle_title or needle_type or needle_anchor or needle_filename):
         return entries
     return [
         entry
@@ -272,6 +283,10 @@ def search_references(
         if (not needle_title or needle_title in entry.title.lower())
         and (not needle_type or needle_type in entry.type.lower())
         and (not needle_anchor or needle_anchor in entry.anchor_value.lower())
+        and (
+            not needle_filename
+            or needle_filename in _entry_filename_haystack(reference_root, entry)
+        )
     ]
 
 
@@ -283,6 +298,88 @@ def delete_reference(reference_root: Path, entry_id: str) -> None:
     except StoreError:
         raise ReferenceError(f"参考文件条目 {entry_id!r} 不存在") from None
     commit_after_write(reference_root, f"lib: delete reference {entry_id}")
+
+
+# ---------------------------------------------------------------------------
+# 文件名搜索 / 文件清单与定位（文件名搜索 + 文件打开工单）：素材清单.txt 是
+# 二进制素材（PDF / zip 等本体在 sources/materials 镜像）的索引，清单记录
+# + 条目目录实际文件 = 可服务文件全集
+# ---------------------------------------------------------------------------
+
+
+def list_entry_files(reference_root: Path, entry_id: str) -> list[dict[str, str | int]]:
+    """条目可服务文件清单 [{path, size_bytes}]（按路径排序）。
+
+    素材清单.txt 记录（二进制素材索引，size 取记录值）+ 条目目录实际文件
+    （rglob 排除 reference.json，size 取真实 stat）；同路径条目目录文件优先
+    （可服务副本，以真实大小为准）。素材清单缺失 / 不可读 = 只剩实际文件
+    （旧条目兼容）。条目不存在抛 ReferenceError（既有映射）。
+    """
+    entry = get_reference(reference_root, entry_id)
+    entry_dir = reference_root / entry.id
+    files: dict[str, int] = {}
+    for rel, size in _read_manifest_records(entry_dir):
+        files[rel] = size
+    for path in entry_dir.rglob("*"):
+        if path.is_file() and path.name != REFERENCE_META_FILENAME:
+            files[path.relative_to(entry_dir).as_posix()] = path.stat().st_size
+    return [
+        {"path": rel, "size_bytes": size} for rel, size in sorted(files.items())
+    ]
+
+
+def resolve_entry_file(
+    reference_root: Path,
+    materials_root: Path,
+    entry_id: str,
+    rel_path: str,
+) -> tuple[Path, str | None] | None:
+    """条目文件物理定位：(文件路径, 响应 media_type 覆写或 None)；找不到 = None。
+
+    路径安全（is_unsafe_path）不通过抛 ReferenceError（映射 400）；先试条目
+    目录（文本副本，命中即服务、media_type 留空按扩展名自动猜）；不存在再试
+    sources/materials 镜像（PDF 带 application/pdf 供浏览器预览，其余按扩展
+    名自动转下载）；materials 根缺失 / 两处都找不到 = None（调用方转 404）。
+    条目不存在抛 ReferenceError（既有映射）。
+    """
+    entry = get_reference(reference_root, entry_id)
+    if is_unsafe_path(rel_path):
+        raise ReferenceError(f"非法文件路径：{rel_path!r}")
+    entry_file = reference_root / entry.id / rel_path
+    if entry_file.is_file():
+        return entry_file, None
+    materials_file = materials_root / entry.title / rel_path
+    if materials_file.is_file():
+        media_type = (
+            "application/pdf" if materials_file.suffix.lower() == ".pdf" else None
+        )
+        return materials_file, media_type
+    return None
+
+
+def _entry_filename_haystack(reference_root: Path, entry: ReferenceEntry) -> str:
+    """条目可搜文件名文本（小写）：素材清单路径行 + files 各路径。"""
+    parts = [path.lower() for path in entry.files]
+    parts.extend(rel.lower() for rel, _ in _read_manifest_records(reference_root / entry.id))
+    return "\n".join(parts)
+
+
+def _read_manifest_records(entry_dir: Path) -> list[tuple[str, int]]:
+    """素材清单.txt 记录 [(相对路径, 大小字节)]；缺失 / 不可读 = 空（旧条目兼容）。
+
+    行格式每行 "相对路径  大小 bytes"（路径可含空格，锚尾解析）；表头行 /
+    空行被正则锚尾天然跳过。
+    """
+    manifest = entry_dir / MANIFEST_FILENAME
+    try:
+        lines = manifest.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    return [
+        (match.group(1), int(match.group(2)))
+        for line in lines
+        if (match := _MANIFEST_LINE.match(line))
+    ]
 
 
 # ---------------------------------------------------------------------------
