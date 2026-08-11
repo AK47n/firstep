@@ -11,7 +11,9 @@ import pytest
 
 from contest_generator.generator import (
     FencedMainCError,
+    GENERATION_GATES,
     GeneratorError,
+    GenerationGate,
     MacroRedefinitionError,
     MasterNotFoundError,
     MissingModuleFilesError,
@@ -31,6 +33,7 @@ from contest_generator.generator import (
     generate,
     generate_project,
     resolve_topic_context,
+    run_generation_gates,
 )
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASSES, _SETTINGS_MODULE_ID
 from contest_generator.library import list_modules
@@ -695,6 +698,53 @@ def test_unresolved_include_rejects_cross_platform_toolchain_header_on_mspm0(tmp
         _check_unresolved_includes(corpus)
 
     assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
+
+
+def test_generation_gate_table_complete_and_ordered():
+    """门禁装配表钉死：6 键有序完整（顺序有语义——file_path_conflicts 依赖
+    module_files 先报缺平台条目），增删 / 换序即红。"""
+    assert [g.key for g in GENERATION_GATES] == [
+        "module_files",
+        "file_path_conflicts",
+        "main_calls",
+        "module_self_include",
+        "unresolved_includes",
+        "macro_conflicts",
+    ]
+
+
+def test_run_generation_gates_invokes_all_in_order_and_stops_on_failure(
+    monkeypatch,
+):
+    """runner 按表序全调、同一 (corpus, manifests, platform) 透传、首个失败即抛。
+
+    表 = 装配唯一出处：generate 不再自写门禁循环，runner 是唯一执行方。
+    """
+    calls: list[tuple[str, object]] = []
+
+    def record(label: str):
+        def check(corpus, manifests, platform):
+            calls.append((label, (corpus, manifests, platform)))
+
+        return check
+
+    def boom(corpus, manifests, platform):
+        calls.append(("boom", None))
+        raise GeneratorError("装配表门禁炸了")
+
+    corpus, manifests, platform = object(), object(), "stm32"
+    fake_gates = (
+        GenerationGate("first", record("first")),
+        GenerationGate("boom", boom),
+        GenerationGate("never", record("never")),  # 首个失败即停，不应被调
+    )
+    monkeypatch.setattr("contest_generator.generator.GENERATION_GATES", fake_gates)
+
+    with pytest.raises(GeneratorError, match="装配表门禁炸了"):
+        run_generation_gates(corpus, manifests, platform)
+
+    assert [label for label, _ in calls] == ["first", "boom"]
+    assert calls[0][1] == (corpus, manifests, platform)  # 参数原样透传
 
 
 def test_generate_module_without_platform_version_fails(
