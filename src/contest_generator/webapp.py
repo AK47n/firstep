@@ -82,7 +82,7 @@ from .reference_library import (
     resolve_entry_file,
     search_references,
 )
-from .selection import resolve_selection, select_modules_convergent
+from .selection import resolve_selection, run_recommendation
 from .skeleton import generate_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -528,30 +528,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """AI 按赛题推荐模块（SSE 流，工单 10）：round → … → converged →
         done（推荐结果）或 question（向用户补问）或 error（中文信息）→ 流结束。
 
-        两阶段（工单 01 推荐先澄清后收敛）：**澄清阶段先行**——先调
-        llm.clarify（只看题面 + 请求体 clarifications 问答历史），仍有疑问 →
-        question 事件收尾（不发 round，前端把回答 push 进历史随请求体重发，
-        已跑轮次不再作废）；澄清空 = 澄清完成，才进收敛循环。
-        **收敛循环**（select_modules_convergent）：功能需求层两轮一致即停、
-        上限 4 轮（成本 2-4 轮 × 2-4K token），轮次经 SSE 进度事件推送；循环
-        内模型拿不准（罕见兜底）以 question 事件收尾（questions 数组，回答
-        并入历史重发——此时澄清通常已空，立即进收敛）。done 的 data = 推荐
-        结果：顶层 modules[] 格式与旧契约一致（下游 selectedSlugs / expand /
-        generate 零改动），新增 requirements（功能需求层：需求 / 对照句 /
-        库内命中 / 库外建议——库外建议仅展示、不进工程）。
-
-        历史赛题入口：topic_id（显式）或粘贴题面中的编号（AI 自动识别）选中
-        某题时，题面用库内全文（长 PDF 题面全文只在选了该赛题时进上下文），
-        候选清单带该题 / 套件关联的参考文件（标题 + 一句话简介，两级注入第一
-        级）——模型点名要读全文的经收敛循环第 1 轮回读后带全文定稿（第二级）。
-        响应带识别结果（topic_id）与该题专用模块（related_modules，后续阶段
-        按同一 topic_id 自动并入，UI 也可透传）。
-
-        手动选参考资料（工单 01）：请求体可选 reference_ids（list[str]，缺省 /
-        空 = 现状完全兼容）——准入 = 锚定命中 ∪ 手动选（并集去重，同一条目
-        只出现一次），手动条目全文直读强制进第一轮 prompt（清单段标注来源）。
-        幻觉 id / 重复 id 大声失败（400）。done 结果带最终参考清单
-        （references：id + 标题 + 来源标注 auto / manual，前端展示透明闭环）。
+        请求体契约：problem_text（必填）；topic_id（可选，历史赛题显式入口）；
+        reference_ids（可选 list[str]，手动选参考资料——幻觉 / 重复 id 大声
+        失败 400）；platform（可选，锚定命中按生成平台过滤）；clarifications
+        （可选 [{question, answer}] 字符串对，缺省空 = 向后兼容，回答随请求体
+        走、不拼进题面）。事件形状：done 的 data = 推荐结果 dict（顶层
+        modules[] + requirements + 识别到历史赛题时带 topic_id / related_modules
+        + references 最终参考清单 auto / manual 标注），question 的 data =
+        {"questions": [...]}，error 的 data = {"message": 中文信息}——逐字
+        契约与两阶段编排（澄清先行 → 收敛 → done 载荷组装）见
+        selection.run_recommendation，本路由只取参 + 转调 + sse 包装。
+        错误语义：参数校验失败 400，LLM 服务失败 502，流内错误经 error 终态
+        补发（文案走错误映射表）。
 
         阻塞调用（每轮 2-4K token）放独立线程跑，事件经队列送流生成器——不占
         事件循环；断线后队列无人消费：进度事件旁路丢弃（满即丢），后端照常
@@ -572,58 +560,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         topic = _assemble_topic_context(
             context, topic_id, problem_text, _llm(context), reference_ids, platform
         )
-        summaries = topic.manifest_summaries
-        suggestions = topic.suggestions
-        reader = topic.read_fulltext
-        def run(emit: SseEmitter) -> None:
-            llm = _llm(context)  # 澄清与收敛用同一实例（工厂每次请求构造）
-            # 澄清阶段先行（工单 01）：只看题面 + 已有问答历史，仍有疑问 →
-            # question 事件收尾（不发 round——澄清阶段不属于收敛轮次，补问不再
-            # 作废已跑轮次）；空 = 澄清完成，才进收敛循环
-            pending = llm.clarify(topic.problem_text, clarifications)
-            if pending:
-                emit.question({"questions": list(pending)})
-                return
-            selection = select_modules_convergent(
-                llm,
-                topic.problem_text,  # 识别到时题面用库内全文；no-topic 形 = 粘贴原样
-                summaries,
-                references=suggestions,
-                reader=reader,
-                progress_emitter=emit.progress,
-                manual_fulltexts=topic.manual_fulltexts,
-            )
-            if selection.questions:
-                emit.question({"questions": list(selection.questions)})
-                return
-            result: dict[str, Any] = {
-                "modules": [
-                    {"slug": slug, "reason": selection.reasons.get(slug, "")}
-                    for slug in selection.modules
-                ],
-                "requirements": [
-                    requirement.to_dict()
-                    for requirement in selection.requirements
-                ],
-            }
-            if topic.key:
-                result["topic_id"] = topic.key
-                result["related_modules"] = list(topic.related_modules)
-            # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；
-            # 同一条目既锚定又手动只出现一次（手动优先标注——用户显式选择）；
-            # platform（工单 01）随条目带出，前端按它显示平台标注
-            manual_ids = {ref.id for ref in topic.manual_references}
-            result["references"] = [
-                {"id": ref.id, "title": ref.title, "source": "auto", "platform": ref.platform}
-                for ref in topic.references
-                if ref.id not in manual_ids
-            ] + [
-                {"id": ref.id, "title": ref.title, "source": "manual", "platform": ref.platform}
-                for ref in topic.manual_references
-            ]
-            emit.done(result)
 
-        # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
+        def run(emit: SseEmitter) -> None:
+            # 两阶段编排归 selection.run_recommendation（澄清先行 → 收敛 →
+            # done 载荷组装），路由只转调——终态一律由域函数发出，路由不分支；
+            # run 抛错由运行器补发 error 终态（终态保证归运行器）
+            run_recommendation(topic, _llm(context), clarifications, emit=emit)
+
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
             headers={"Content-Type": "text/event-stream"},

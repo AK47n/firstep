@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import threading
 import time
@@ -2412,3 +2413,56 @@ def test_reference_file_rejects_unsafe_paths(client, context, tmp_path, bad):
     # 按段编码保证到达 handler（\ 在 URL 中字面传，handler 内校验兜底）
     url = f"/api/references/{entry['id']}/files/{quote(bad, safe='')}"
     assert client.get(url).status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# 结构防回退（工单 recommend-orchestration-homing/01）：/api/recommend 路由只
+# 取参 + 转调 + sse 包装，两阶段编排整体归 selection.run_recommendation——
+# 编排回路由即红（AST 断言，参照 test_autocommit.py 的源码切片断言风格）。
+# ---------------------------------------------------------------------------
+
+
+def _recommend_route_node() -> ast.FunctionDef:
+    """webapp.py 源码中的 recommend 路由函数节点（AST，嵌套在 create_app 内）。"""
+    module_path = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "contest_generator" / "webapp.py"
+    )
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    routes = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "recommend"
+    ]
+    assert len(routes) == 1, "webapp.py 应恰好一个 recommend 路由函数"
+    return routes[0]
+
+
+def _is_orchestration_call(node: ast.Call) -> bool:
+    """编排回路由即红的判据：路由函数体内的编排调用（llm.clarify /
+    select_modules_convergent / emit.done / emit.question——全部应只出现在
+    selection.run_recommendation 里）。"""
+    func = node.func
+    if isinstance(func, ast.Name) and func.id == "select_modules_convergent":
+        return True
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        if func.value.id == "llm" and func.attr == "clarify":
+            return True
+        if func.value.id == "emit" and func.attr in ("done", "question"):
+            return True
+    return False
+
+
+def test_recommend_route_body_free_of_orchestration_calls():
+    """结构防回退：/api/recommend 路由函数体不含两阶段编排调用——编排归位
+    selection.run_recommendation，路由只剩取参 + 转调 + sse 包装。"""
+    route = _recommend_route_node()
+    forbidden = [
+        node
+        for node in ast.walk(route)
+        if isinstance(node, ast.Call) and _is_orchestration_call(node)
+    ]
+    assert not forbidden, (
+        "/api/recommend 路由含编排调用，编排必须归 selection.run_recommendation："
+        + "；".join(ast.unparse(node) for node in forbidden)
+    )
