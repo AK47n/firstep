@@ -2,7 +2,7 @@
 
 **What to build:** 生成器五道静态门不查**跨模块**同名文件与重复符号——zigbee_uart / zigbee_uart_key 冲突即全部门禁静默通过、UV4 链接期才炸（L6200E）。目标：`resolve_selection` 之后对所选模块的 files 路径集合查重，重复 → 生成前大声失败（400 中文），同类冲突不再等真机编译暴露。
 
-**Status:** implemented（2026-08-11，测试侧验收全过，待用户真机 UV4 复编后转 resolved）
+**Status:** resolved（2026-08-11，真机 UV4 复编 0 错 0 警闭环）
 
 ## 实施记录（2026-08-11）
 
@@ -14,7 +14,7 @@
   - 真实库数据：zigbee 双选 + config 过新门不报（全链生成照常由 test_module_collision.py 双选用例覆盖，同一 generate 接缝）。
 - **pytest 1066 全绿**（基线 1056 + 新增 10，无回归）；`mypy src` 干净（32 文件）。
 - 不动：selection.py / resolve_selection；库数据（zigbee 已唯一化，不回退）；manifest 形状；符号级查重（不做 C 词法）。
-- 遗留：待用户真机 UV4 双选/单选复编（0 错 0 警）后转 resolved。
+- 遗留：无（真机已闭环）。
 
 ## 现状（已核实）
 
@@ -36,6 +36,12 @@
 - pytest 全绿 + mypy src 干净。
 - 构造冲突工程 → 生成 400 中文报错（不再等 UV4 链接期）；正常双选/单选照旧。
 - 结构测试：新错误已登记（未登记即红的既有机制）。
+
+## 真机验收记录（2026-08-11，已闭环）
+
+- 生成：2026C 数字钥匙题双选（`--add zigbee_uart,zigbee_uart_key`，前端同款手动增删语义），产物 `.scratch/real-run/out_2026C_stm32/` 含 `modules/zigbee_uart/` 与 `modules/zigbee_uart_key/` 双模块目录；generate_check 真机内置 UV4 校验 exit=0。
+- 编译（UV4 命令行 `-j0 -r` 强制全量重建）：日志 `.scratch/real-run/keil_build_gate.log`——`compiling zigbee_uart.c...`、`compiling zigbee_uart_key.c...` 两行俱在（双选真在工程里），链接 `".\Objects\Project.axf" - 0 Error(s), 0 Warning(s)`，Program Size Code=8292。
+- 前置说明：推荐流对"要求表第2项缺失"（题面自注"原题未列出"）先按 clarify 映射答 5 轮未采纳，后经分值自洽推导（评分标准第1项12分+第2项8分=要求表第1项20分）补全题库题面（备份 `.scratch/real-run/topic_2026C_orig.md`）后收敛——属题库数据缺陷修复，与门禁无关。
 
 ## 文件边界
 
