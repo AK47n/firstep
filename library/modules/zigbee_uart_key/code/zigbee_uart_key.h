@@ -1,5 +1,5 @@
-#ifndef _key_fob_zigbee_uart_h_
-#define _key_fob_zigbee_uart_h_
+#ifndef _zigbee_uart_key_h_
+#define _zigbee_uart_key_h_
 
 #include "headfile.h"
 
@@ -14,7 +14,7 @@
 //    Byte 3: SUM   (0xAA + 0x55 + ID) & 0xFF
 // ============================================================
 
-void zigbee_uart_init(void);
-void zigbee_send_id(uint8_t key_id);
+void zigbee_uart_key_init(void);
+void zigbee_uart_key_send_id(uint8_t key_id);
 
 #endif
