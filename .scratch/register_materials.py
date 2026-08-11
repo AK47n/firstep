@@ -19,17 +19,21 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from contest_generator.platforms import PLATFORM_ANY, PLATFORM_MSPM0  # noqa: E402
+from contest_generator import config  # noqa: E402
+from contest_generator.platforms import PLATFORM_MSPM0  # noqa: E402
 from contest_generator.reference_library import (  # noqa: E402
     ANCHOR_KIND_NONE,
     ANCHOR_KIND_TOPIC,
+    PLATFORM_ANY,
     add_reference,
+    build_material_manifest,
     get_reference,
     list_references,
 )
 
-MATERIALS_ROOT = REPO_ROOT / "sources" / "materials"
-REFERENCE_ROOT = REPO_ROOT / "library" / "references"
+# 素材备份根 / 参考库目录：与 webapp 同源推导（config 唯一出处，脚本不再硬编码）
+MATERIALS_ROOT = config.materials_dir(REPO_ROOT / "library" / "modules")
+REFERENCE_ROOT = config.reference_library_dir(REPO_ROOT / "library" / "modules")
 
 # 单个文件入库上限：超过视为大二进制（文本文件实际都在 MB 级以下）
 MAX_TEXT_BYTES = 20 * 1024 * 1024
@@ -119,20 +123,6 @@ def iter_text_files(src_dir: Path) -> dict[str, str]:
     return files
 
 
-def build_manifest(src_dir: Path) -> str:
-    """源目录全部文件的《素材清单》文本（文件名 + 大小，二进制留痕）。"""
-    lines = ["素材目录（sources/materials）文件清单：", ""]
-    for path in sorted(src_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        try:
-            size = path.stat().st_size
-        except OSError:
-            size = -1
-        lines.append(f"{path.relative_to(src_dir).as_posix()}  {size} bytes")
-    return "\n".join(lines)
-
-
 def main() -> None:
     existing = {e.id for e in list_references(REFERENCE_ROOT)}
     for spec in ENTRIES:
@@ -143,7 +133,7 @@ def main() -> None:
         if spec["dir"] in existing:
             print(f"[跳过] 条目已存在：{spec['dir']}")
             continue
-        files: dict[str, str] = {"素材清单.txt": build_manifest(src_dir)}
+        files: dict[str, str] = {"素材清单.txt": build_material_manifest(src_dir)}
         files.update(iter_text_files(src_dir))
         entry = add_reference(
             REFERENCE_ROOT,

@@ -2293,7 +2293,7 @@ def test_references_filename_search_query_param(client, context, tmp_path):
         "/api/references/塔克小车底盘资料/files/"
         + "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG%20Datasheet.pdf"
     )
-    assert resp.status_code == 404  # 条目目录无此文件、无 materials 镜像 → 404 由调用方提示
+    assert resp.status_code == 400  # 条目目录无此文件、无 materials 镜像 → 缺失通道 400（错误映射统一）
 
 
 def test_reference_files_lists_manifest_and_disk(client, context, tmp_path):
@@ -2361,7 +2361,7 @@ def test_reference_file_serves_materials_in_repo_layout(client, context, tmp_pat
     """仓库布局兜底：模块库在 library/ 子目录下时，materials 镜像在仓库根。
 
     素材工具脚本以工作区根为根写备份（firstep/library/modules →
-    firstep/sources/materials），_materials_dir 同级没有时上两级兜底取实况。
+    firstep/sources/materials），config.materials_dir 同级没有时上两级兜底取实况。
     """
     repo = tmp_path / "repo"
     library_dir = make_fake_module_library(repo / "library" / "modules")
@@ -2397,10 +2397,11 @@ def test_reference_file_serves_materials_in_repo_layout(client, context, tmp_pat
     assert resp.headers["content-type"] == "application/pdf"
 
 
-def test_reference_file_missing_404(client, context, tmp_path):
+def test_reference_file_missing_400(client, context, tmp_path):
     entry = _add_reference_entry(client, "塔克小车底盘资料", {"main.c": "/* 例程 */\n"})
-    # 条目存在但文件两处都没有（materials 根也不存在）= 404 不炸
-    assert client.get(f"/api/references/{entry['id']}/files/nope.pdf").status_code == 404
+    # 条目存在但文件两处都没有（materials 根也不存在）= 缺失通道统一 400
+    # （错误映射 ReferenceError → 400，与条目不存在同通道，不再有内联 404）
+    assert client.get(f"/api/references/{entry['id']}/files/nope.pdf").status_code == 400
     # 条目不存在 → 既有 ReferenceError 映射（400）
     assert client.get("/api/references/missing/files/nope.pdf").status_code == 400
 
