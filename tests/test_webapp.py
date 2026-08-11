@@ -13,6 +13,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Mapping, Sequence
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -2230,3 +2231,170 @@ def test_recommend_manual_overlapping_anchor_deduped(client, context):
     assert ids.count(TOPIC_REFERENCE_ID) == 1
     topic = next(ref for ref in data["references"] if ref["id"] == TOPIC_REFERENCE_ID)
     assert topic["source"] == "manual"
+
+
+# ---------------------------------------------------------------------------
+# 参考文件库：文件名搜索 + 文件清单 + 文件服务（文件名搜索 / 文件打开工单）
+# ---------------------------------------------------------------------------
+
+
+def _add_reference_entry(client, title, files, type_="说明书", anchor="2026C"):
+    """经 API 录入参考条目（赛题锚定，无需 kit 词表），返回条目 dict。"""
+    resp = client.post(
+        "/api/references",
+        json={
+            "title": title,
+            "type": type_,
+            "description": "x",
+            "anchor_kind": "topic",
+            "anchor_value": anchor,
+            "files": files,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_references_filename_search_query_param(client, context, tmp_path):
+    _add_reference_entry(
+        client,
+        "塔克小车底盘资料",
+        {
+            "素材清单.txt": (
+                "素材目录（Desktop/塔克）文件清单：\n"
+                "\n"
+                "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf  632107 bytes\n"
+            )
+        },
+    )
+    _add_reference_entry(client, "无线串口模块资料", {"readme.md": "# 无线串口\n"})
+
+    assert [e["title"] for e in client.get("/api/references?filename=TB6612").json()] == [
+        "塔克小车底盘资料"
+    ]
+    assert [e["title"] for e in client.get("/api/references?filename=readme").json()] == [
+        "无线串口模块资料"
+    ]
+    assert client.get("/api/references?filename=不存在").json() == []
+    # 与其他过滤可组合；空串 = 不过滤（向后兼容）
+    assert client.get("/api/references?filename=TB6612&title=塔克").json() != []
+    assert len(client.get("/api/references").json()) == len(
+        client.get("/api/references?filename=").json()
+    ) == 2
+
+
+def test_reference_files_lists_manifest_and_disk(client, context, tmp_path):
+    entry = _add_reference_entry(
+        client,
+        "塔克小车底盘资料",
+        {
+            "main.c": "/* 例程 */\n",
+            "素材清单.txt": (
+                "素材目录（Desktop/塔克）文件清单：\n"
+                "\n"
+                "7 AT8236电机驱动资料/AT8236.pdf  100 bytes\n"
+            ),
+        },
+    )
+    entry_id = entry["id"]
+    # 条目目录补一个实际文件（含子目录）
+    disk = tmp_path / "references" / entry_id / "extra"
+    disk.mkdir()
+    (disk / "notes.c").write_text("/* 备注 */\n", encoding="utf-8")
+
+    files = client.get(f"/api/references/{entry_id}/files").json()
+    by_path = {f["path"]: f["size_bytes"] for f in files}
+    assert "7 AT8236电机驱动资料/AT8236.pdf" in by_path
+    assert by_path["7 AT8236电机驱动资料/AT8236.pdf"] == 100
+    # size = 真实 stat（Windows 文本模式写盘 \n → \r\n，不能按原串 len 算）
+    assert by_path["main.c"] == (tmp_path / "references" / entry_id / "main.c").stat().st_size
+    assert by_path["extra/notes.c"] == (tmp_path / "references" / entry_id / "extra" / "notes.c").stat().st_size
+    assert "reference.json" not in by_path
+
+
+def test_reference_file_serves_entry_text(client, context, tmp_path):
+    entry = _add_reference_entry(client, "塔克小车底盘资料", {"main.c": "/* 例程 */\n"})
+    resp = client.get(f"/api/references/{entry['id']}/files/main.c")
+    assert resp.status_code == 200
+    # 服务的是磁盘字节（Windows 文本模式写盘是 \r\n），按内容断言
+    assert resp.text.replace("\r\n", "\n") == "/* 例程 */\n"
+
+
+def test_reference_file_serves_materials_pdf(client, context, tmp_path):
+    entry = _add_reference_entry(client, "塔克小车底盘资料", {"main.c": "/* 例程 */\n"})
+    pdf = (
+        tmp_path
+        / "sources"
+        / "materials"
+        / entry["title"]
+        / "6 TB6612电机驱动资料"
+        / "3.芯片手册"
+        / "TB6612FNG Datasheet.pdf"
+    )
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF-1.4\nfake pdf")
+
+    url = (
+        f"/api/references/{entry['id']}/files/"
+        + quote("6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf", safe="/")
+    )
+    resp = client.get(url)
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-1.4\nfake pdf"
+    assert resp.headers["content-type"] == "application/pdf"
+
+
+def test_reference_file_serves_materials_in_repo_layout(client, context, tmp_path):
+    """仓库布局兜底：模块库在 library/ 子目录下时，materials 镜像在仓库根。
+
+    素材工具脚本以工作区根为根写备份（firstep/library/modules →
+    firstep/sources/materials），_materials_dir 同级没有时上两级兜底取实况。
+    """
+    repo = tmp_path / "repo"
+    library_dir = make_fake_module_library(repo / "library" / "modules")
+    ctx = AppContext(
+        config_path=tmp_path / "cfg2" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=library_dir,
+            masters_dir=repo / "library" / "masters",
+        ),
+        llm_factory=lambda config: FakeLLM(selection=SELECTION),
+    )
+    app = TestClient(create_app(ctx))
+    added = _add_reference_entry(app, "塔克小车底盘资料", {"main.c": "/* 例程 */\n"})
+    pdf = (
+        repo
+        / "sources"
+        / "materials"
+        / added["title"]
+        / "6 TB6612电机驱动资料"
+        / "TB6612FNG Datasheet.pdf"
+    )
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF-1.4 fake")
+
+    url = (
+        f"/api/references/{added['id']}/files/"
+        + quote("6 TB6612电机驱动资料/TB6612FNG Datasheet.pdf", safe="/")
+    )
+    resp = app.get(url)
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-1.4 fake"
+    assert resp.headers["content-type"] == "application/pdf"
+
+
+def test_reference_file_missing_404(client, context, tmp_path):
+    entry = _add_reference_entry(client, "塔克小车底盘资料", {"main.c": "/* 例程 */\n"})
+    # 条目存在但文件两处都没有（materials 根也不存在）= 404 不炸
+    assert client.get(f"/api/references/{entry['id']}/files/nope.pdf").status_code == 404
+    # 条目不存在 → 既有 ReferenceError 映射（400）
+    assert client.get("/api/references/missing/files/nope.pdf").status_code == 400
+
+
+@pytest.mark.parametrize("bad", ["../secret", "..\\secret", "/etc/passwd", "a//b", "c:/win"])
+def test_reference_file_rejects_unsafe_paths(client, context, tmp_path, bad):
+    entry = _add_reference_entry(client, "塔克小车底盘资料", {"main.c": "/* 例程 */\n"})
+    # 按段编码保证到达 handler（\ 在 URL 中字面传，handler 内校验兜底）
+    url = f"/api/references/{entry['id']}/files/{quote(bad, safe='')}"
+    assert client.get(url).status_code == 400
