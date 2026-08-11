@@ -3,6 +3,14 @@
   "description": "MPU6050 六轴传感器的 I2C 通用驱动：提供初始化、寄存器读写以及加速度计和陀螺仪原始数据读取功能，供外部算法进一步解算姿态角。",
   "dependencies": [],
   "platforms": {
+    "mspm0": {
+      "files": [],
+      "verified": false,
+      "hardware_bound": true,
+      "notes": "mspm0 线无 MPU6050 实现（姿态由 imu_uart 模块承担）——空 files 条目仅为依赖展开兼容：pid 顶层 dependencies 跨平台共享（stm32 侧 pid.c 真 include ml_mpu6050.h），mspm0 选 pid 时本条目展开无文件复制、不参与编译，推荐层看到 mspm0 姿态需求应选 imu_uart。",
+      "kit": "MPU6050",
+      "source_url": "https://e.tb.cn/h.8g1H453ww0r0xH7?tk=Ue5KgBwTvkV"
+    },
     "stm32": {
       "files": [
         "ml_libs/ml_mpu6050.c",

@@ -1,12 +1,26 @@
 {
   "slug": "pid",
-  "description": "2021F 巡线题专用：智能小车基于 PID 巡线、路径记忆与十字路口动作决策的往返导航控制，含电机闭环与送药路径状态机。",
+  "description": "PID 巡线控制（双平台）：stm32 = 2021F 巡线送药版（路径记忆 + 十字路口决策）；mspm0 = 2026H H 题滚球版（一圈巡线 + 启停线停车 + K230 球坐标解析）。含 pid_cal/pid_control 通用 PID 与 gray_track 灰度检测。",
   "dependencies": [
+    "ball_detect",
     "digit_uart",
     "motor",
     "ml_mpu6050"
   ],
   "platforms": {
+    "mspm0": {
+      "files": [
+        "code/pid_mspm0.c",
+        "code/pid_mspm0.h",
+        "code/gray_track_mspm0.c",
+        "code/gray_track_mspm0.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "2026H H 题滚球版（26H 源码移植）：一圈巡线 + 启停线停车状态机（LAP_IDLE→LEAVING_START→RUNNING→STOPPING→STOPPED）+ ball_detect_parse 消费 K230 球坐标。依赖映射：motorA_duty/motorB_duty→motor_set_duty(id,duty)；motorA_dir/motorB_dir→motor_set_direction(id,dir)（0停1正转2反转）；Encoder_count1/2→key 模块 counter_1_A/counter_2_A；gz→imu 模块 gyro_dps_raw；MAX_DUTY=1300（mspm0 PWM 上限，26H 原 50000）。10ms 调度：MOTOR_PID_INST_IRQHandler（main.c 调用 pid_control，先读编码器清零再调）。灰度 8 路用母版 HUIDU 宏（D1→L1…D8→R4，含 start_line_detect 启停线检测）。编译验证未上板。",
+      "kit": "",
+      "source_url": ""
+    },
     "stm32": {
       "files": [
         "code/pid.c",

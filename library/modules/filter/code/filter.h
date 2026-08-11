@@ -1,7 +1,7 @@
 #ifndef _filter_h_
 #define _filter_h_
 
-#include "headfile.h"
+#include <stdint.h>
 
 // ============================================================
 //  滑动平均滤波器
