@@ -514,6 +514,82 @@ def build_module_corpus(
     )
 
 
+def build_output_tree_corpus(
+    output_dir: Path, platform: str, search_dirs: Sequence[Path]
+) -> ModuleCorpus:
+    """从生成产物树重建校验语料（真机验收与门禁同源，工单 generate-check-parity/01）。
+
+    真机验收脚本曾逐字重实现门禁（FENCE_RE / include 解析 / 豁免集），门禁
+    一改脚本静默漂移，验收给假信心——重建语料后跑同一个 run_generation_gates，
+    验收测的就是生产逻辑本身。产物树即生成成功态（generate 落盘后）：
+    modules = output_dir/modules/<slug>/ 下文件（kind 判定与 build_module_corpus
+    同规），modules 目录不存在 = 空；master_headers = 产物树 *.h 排除 modules/
+    子树（模块头在 modules 里，语义同母版头段）；main_c 从产物树读盘；
+    missing 两组取空（生成成功 = 文件俱在）；master_search_dirs = 调用方传入
+    的产物 .uvprojx/.cproject IncludePath（补丁后的最终值——patch 没把模块
+    目录写进 IncludePath，include 解析门在此失败）。纯函数，tmp_path 直构
+    产物树可测。
+    """
+    modules: list[tuple[str, tuple[ModuleFile, ...]]] = []
+    modules_dir = output_dir / MODULES_SUBDIR
+    if modules_dir.is_dir():
+        by_slug: dict[str, list[ModuleFile]] = {}
+        for path in iter_project_files(modules_dir):
+            rel = path.relative_to(modules_dir).as_posix()
+            slug, _, file_rel = rel.partition("/")
+            kind = (
+                "h"
+                if is_header_path(file_rel)
+                else "c"
+                if file_rel.lower().endswith(".c")
+                else "other"
+            )
+            by_slug.setdefault(slug, []).append(
+                ModuleFile(
+                    rel=file_rel,
+                    kind=kind,
+                    text=path.read_text(encoding="utf-8", errors="replace"),
+                    own_dir=path.parent,
+                )
+            )
+        modules = [
+            (slug, tuple(files)) for slug, files in sorted(by_slug.items())
+        ]
+
+    master_headers: list[tuple[str, str]] = []
+    for path in iter_project_files(output_dir, pattern="*.h"):
+        rel = path.relative_to(output_dir).as_posix()
+        if rel.startswith(MODULES_SUBDIR + "/"):
+            continue  # 模块头在 modules 语料里，母版头段只收母版树
+        try:
+            master_headers.append(
+                (
+                    rel,
+                    path.read_text(encoding="utf-8", errors="replace"),
+                )
+            )
+        except OSError:
+            continue
+
+    try:
+        main_c = (output_dir / "main.c").read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        main_c = ""
+
+    return ModuleCorpus(
+        platform=platform,
+        modules=tuple(modules),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=tuple(master_headers),
+        master_search_dirs=tuple(search_dirs),
+        master_project_dir=output_dir,
+        main_c=main_c,
+    )
+
+
 def generate(
     *,
     platform: str,
