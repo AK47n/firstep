@@ -1,0 +1,29 @@
+素材目录（Desktop/C7-3-4L）文件清单：
+
+Arduino IDE软件安装包/arduino-ide_2.2.1_Windows_64bit.rar  139409240 bytes
+arduino例程/ESP32CAM/app_httpd.cpp  44290 bytes
+arduino例程/ESP32CAM/camera_index.h  150713 bytes
+arduino例程/ESP32CAM/camera_pins.h  8129 bytes
+arduino例程/ESP32CAM/ESP32CAM.ino  4937 bytes
+arduino例程/ESP32CAM/partitions.csv  230 bytes
+arduino例程/OV2640或OV5640.png  14414 bytes
+arduino例程/开发板选择.png  3508 bytes
+arduino例程/改成自己的wifi名称及密码.png  6850 bytes
+ESP32 CAM使用教程.mp4  53489351 bytes
+ESP32-CAM固件烧录问题/ESP32_GENERIC-20230426-v1.20.0.bin  1566528 bytes
+ESP32-CAM固件烧录问题/flash_download_tool_3.9.5_0官方烧录固件软件.rar  24412723 bytes
+ESP32-CAM固件烧录问题/micropython_camera_feeeb5ea3_esp32_idf4_4.bin  1430176 bytes
+ESP32-CAM固件烧录问题/乐鑫官网烧录工具下载示意.png  177279 bytes
+ESP32-CAM固件烧录问题/优先烧录带camera的这个固件.txt  36 bytes
+ESP32-CAM烧录内存不足.png  79896 bytes
+esp32cam固件烧录教程.zip  16311481 bytes
+USB转TTL下载接线图.png  87984 bytes
+使用教程.txt  87 bytes
+安装摄像头.gif  3177097 bytes
+开发资料/esp32-cam产品规格书.pdf  721534 bytes
+开发资料/ESP32_CAMERA_QR-master.zip  775523 bytes
+开发资料/esp32_datasheet_cn.pdf  1145108 bytes
+开发资料/esp32_technical_reference_manual_cn.pdf  8779264 bytes
+开发资料/出厂默认固件ai-thinker_esp32-cam_dio_v1.0_20180825.zip  524022 bytes
+开发资料/摄像头ov2640_ds_1.8_.pdf  3587282 bytes
+注意事项.txt  878 bytes
