@@ -1,0 +1,22 @@
+{
+  "id": "C7-3-4L-ESP32-CAM开发板资料",
+  "title": "C7-3-4L ESP32-CAM开发板资料",
+  "type": "开发板资料",
+  "description": "ESP32-CAM 开发板资料：Arduino IDE 环境、官方 WiFi 摄像头网页推流例程（app_httpd.cpp 等 5 文件）、ESP32 数据手册与参考手册、OV2640 传感器手册、出厂固件与烧录工具、MicroPython 固件、烧录接线 / 注意事项 / 使用教程等。文本例程已入库；视频 / 固件 / 手册 / 安装包（约 245M）不入库，完整保真见 Desktop/C7-3-4L；素材清单留痕。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "files": [
+    "素材清单.txt",
+    "arduino例程/ESP32CAM/app_httpd.cpp",
+    "arduino例程/ESP32CAM/camera_index.h",
+    "arduino例程/ESP32CAM/camera_pins.h",
+    "arduino例程/ESP32CAM/ESP32CAM.ino",
+    "arduino例程/ESP32CAM/partitions.csv",
+    "ESP32-CAM固件烧录问题/优先烧录带camera的这个固件.txt",
+    "使用教程.txt",
+    "注意事项.txt"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
