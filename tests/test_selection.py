@@ -32,6 +32,7 @@ from contest_generator.selection import (
     associated_references,
     build_module_selection,
     check_platform_warnings,
+    filter_manifests_by_platform,
     manual_reference_admission,
     reference_suggestions,
     resolve_dependencies,
@@ -400,6 +401,40 @@ def test_associated_references_empty_without_matches(tmp_path):
 
 def test_associated_references_missing_root_is_empty(tmp_path):
     assert associated_references(tmp_path / "nonexistent", topic_key="2026C") == ()
+
+
+def test_filter_manifests_by_platform_keeps_only_available_platforms():
+    """模块候选按平台过滤（工单 ref-platform-filter 模块侧对偶）：mspm0 请求
+    只留 platforms 含 mspm0 的条目（stm32-only 模块不再作为可勾选候选）。"""
+    dual = _manifest("dual", platforms={"stm32": _entry(), "mspm0": _entry()})
+    stm32_only = _manifest("stm32_only", platforms={"stm32": _entry()})
+    mspm0_only = _manifest("mspm0_only", platforms={"mspm0": _entry()})
+
+    mspm0 = filter_manifests_by_platform([dual, stm32_only, mspm0_only], "mspm0")
+    assert [m.slug for m in mspm0] == ["dual", "mspm0_only"]
+
+    stm32 = filter_manifests_by_platform([dual, stm32_only, mspm0_only], "stm32")
+    assert [m.slug for m in stm32] == ["dual", "stm32_only"]
+
+
+def test_filter_manifests_by_platform_empty_string_is_no_filter():
+    """platform 空串 = 不过滤（向后兼容，骨架 / 生成传缺省）——与参考库
+    associated_references 的 platform 判据同款语义。"""
+    manifests = [_manifest("dual", platforms={"stm32": _entry(), "mspm0": _entry()})]
+    assert filter_manifests_by_platform(manifests, "") == tuple(manifests)
+
+
+def test_filter_manifests_by_platform_no_platform_version_excluded():
+    """无任何平台版本（空 platforms）的条目：平台过滤下不列为候选（生成必
+    失败，推荐出来是浪费模型视线）；空串不过滤时保持现状（不引入新行为）。"""
+    bare = _manifest("bare")  # platforms 缺省空
+    dual = _manifest("dual", platforms={"stm32": _entry(), "mspm0": _entry()})
+
+    assert filter_manifests_by_platform([bare, dual], "stm32") == (dual,)
+    assert [m.slug for m in filter_manifests_by_platform([bare, dual], "")] == [
+        "bare",
+        "dual",
+    ]
 
 
 def test_reference_suggestions_carry_title_and_one_line_description(tmp_path):

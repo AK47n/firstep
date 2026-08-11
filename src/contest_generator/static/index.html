@@ -860,7 +860,7 @@ async function startRecommend(problem) {
   try {
     resp = await fetch("/api/recommend", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined, reference_ids: selectedReferenceIds, clarifications: recommendClarifications }),
+      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined, reference_ids: selectedReferenceIds, clarifications: recommendClarifications, platform: chosenPlatform || undefined }),
     });
   } catch (e) { stopRecProgress(); showRecommendError(e.message); return; }
   if (!resp.body) { stopRecProgress(); showRecommendError("服务响应无流"); return; }

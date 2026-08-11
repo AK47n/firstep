@@ -230,6 +230,25 @@ def _platform_matches(reference: ReferenceEntry, platform: str) -> bool:
     )
 
 
+def filter_manifests_by_platform(
+    manifests: Sequence[ModuleManifest], platform: str
+) -> tuple[ModuleManifest, ...]:
+    """模块候选按平台过滤（工单 ref-platform-filter 模块侧对偶）。
+
+    与 _platform_matches（参考库条目平台属性）同判据：platform 空串 = 不过滤
+    （向后兼容——骨架 / 生成不注入推荐候选，传缺省）；否则只留 platforms 含
+    该平台的条目（无任何平台版本的模块在任意平台生成必失败，不列为候选，
+    与参考库"any 全进、带平台只进对应平台"对齐）。过滤在装配点执行（生成
+    接缝 resolve_topic_context，摘要行与关联模块同源同滤）；生成门禁
+    _check_platform 是兜底不动。
+    """
+    if not platform:
+        return tuple(manifests)
+    return tuple(
+        manifest for manifest in manifests if platform in manifest.platforms
+    )
+
+
 def reference_suggestions(
     entries: Sequence[ReferenceEntry],
     *,

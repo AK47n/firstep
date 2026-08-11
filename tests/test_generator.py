@@ -910,6 +910,69 @@ def test_resolve_topic_context_without_specific_modules_still_carries_kit_refs(
     assert UWB_REFERENCE_ID in [e.id for e in ctx.references]
 
 
+def test_resolve_topic_context_filters_candidates_by_platform(tmp_path):
+    """推荐层平台过滤（工单 ref-platform-filter 模块侧对偶）：platform 给定
+    时模块候选只含本平台有实现的条目——摘要行（模型可见）与关联模块（自动
+    并入）同源同滤（stm32-only 的 lock_control 不再进 related_modules）；
+    stm32 全量库不受影响（stm32 有全部模块）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    mspm0 = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        platform="mspm0",
+    )
+    assert mspm0 is not None
+    assert mspm0.related_modules == ()  # lock_control（stm32-only）被滤除
+    assert {s.slug for s in mspm0.manifest_summaries} == {"dht11", "delay"}
+
+    stm32 = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        platform="stm32",
+    )
+    assert stm32 is not None
+    assert stm32.related_modules == ("lock_control",)
+    assert {s.slug for s in stm32.manifest_summaries} == {
+        "dht11",
+        "delay",
+        "oled",
+        "broken",
+        "lock_control",
+        "uwb",
+    }
+
+
+def test_no_topic_context_filters_candidates_by_platform(tmp_path):
+    """no-topic 形（粘贴题面未识别到历史赛题）同样按平台过滤候选（2026H 真机
+    场景：粘贴题面 + mspm0，模型不该看到 stm32-only 模块）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+
+    class NoNumberLLM:
+        def topic_extract_number(self, text: str) -> None:
+            return None
+
+    ctx = resolve_topic_context(
+        llm=NoNumberLLM(),
+        topic_key="",
+        problem_text="普通粘贴题面",
+        module_library_dir=library,
+        topic_library_dir=make_fake_topic_library(tmp_path / "topics"),
+        reference_library_dir=tmp_path / "references",
+        platform="mspm0",
+    )
+    assert ctx.key == ""
+    assert {s.slug for s in ctx.manifest_summaries} == {"dht11", "delay"}
+
+
 def test_resolve_topic_context_recognizes_number_in_pasted_text(tmp_path):
     """粘贴题面中出现编号同样可认：AI 提取编号 → 查库得题面全文 + 关联素材。"""
     library, topics, references = _wired_dirs(tmp_path)

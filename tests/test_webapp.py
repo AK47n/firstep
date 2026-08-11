@@ -1563,6 +1563,7 @@ class TopicAwareLLM(FakeLLM):
         self._extracted_key = extracted_key
         self.extract_calls = 0
         self.problem_texts: list[str] = []
+        self.manifest_slugs: list[tuple[str, ...]] = []
         self.reference_ids: list[tuple[str, ...]] = []
         self.fulltexts: list[dict[str, str]] = []
         self.manual_fulltexts: list[dict[str, str]] = []
@@ -1576,6 +1577,7 @@ class TopicAwareLLM(FakeLLM):
         manual_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
         self.problem_texts.append(problem_text)
+        self.manifest_slugs.append(tuple(s.slug for s in manifest_summaries))
         self.reference_ids.append(tuple(r.id for r in references))
         self.fulltexts.append(dict(reference_fulltexts or {}))
         self.manual_fulltexts.append(dict(manual_fulltexts or {}))
@@ -2109,6 +2111,46 @@ def test_recommend_platform_filters_anchored_references(client, context):
         UWB_REFERENCE_ID,
         "巡线模板-mspm0",
     }
+
+
+def test_recommend_platform_filters_module_candidates(client, context):
+    """platform 透传（工单 ref-platform-filter 模块侧对偶）：mspm0 请求的
+    模块候选只含本平台有实现的条目——喂给选模块 LLM 的摘要行（可勾选面）与
+    响应 related_modules（自动并入面）同源同滤（stm32-only 的 lock_control /
+    oled 不再出现）；stm32 全量库不受影响。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    mspm0_selection = ModuleSelection(
+        modules=("dht11",),
+        reasons={"dht11": "赛题要求采集温湿度"},
+    )
+    holder["llm"] = TopicAwareLLM(selection=mspm0_selection, extracted_key=None)
+
+    mspm0_data = _recommend_done(
+        client, {"problem_text": "粘贴", "topic_id": "2026C", "platform": "mspm0"}
+    )
+    llm = holder["llm"]
+    # 收敛两轮喂的是同一份过滤后候选（stm32-only 模块模型不可见）
+    assert all(set(slugs) == {"dht11", "delay"} for slugs in llm.manifest_slugs)
+    assert mspm0_data["modules"] == [
+        {"slug": "dht11", "reason": "赛题要求采集温湿度"}
+    ]
+    assert mspm0_data["related_modules"] == []  # lock_control（stm32-only）被滤除
+
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+    stm32_data = _recommend_done(
+        client, {"problem_text": "粘贴", "topic_id": "2026C", "platform": "stm32"}
+    )
+    llm = holder["llm"]
+    assert set(llm.manifest_slugs[0]) == {
+        "dht11",
+        "delay",
+        "oled",
+        "broken",
+        "lock_control",
+        "uwb",
+    }
+    assert stm32_data["related_modules"] == ["lock_control"]
 
 
 def test_recommend_platform_absent_keeps_old_behavior(client, context):
