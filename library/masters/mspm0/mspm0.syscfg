@@ -1,6 +1,11 @@
 /**
- * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
- * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * firstep mspm0 母版默认外设布局（模块库默认引脚方案，编译闭环用）。
+ * 实例名/宏名与模块库代码一一对应（PWMAB/DC_MOTOR/IMU601/OLED/NTB/MOTOR_PID/
+ * HUIDU/KEY/LED_BEEP）；实际接线不同时改引脚名即可，实例名与宏名勿动。
+ * 引脚方案：motor notes（PWMAB C0/C1→PA12/PA13、DC_MOTOR AIN1=PA0 AIN2=PA1
+ * BIN1=PB18 BIN2=PA7、编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20）+ 其余外设
+ * 选空闲引脚（PA22-27/PB4/PB5 = HUIDU，PA2 = KEY，PA3 = LED_BEEP，
+ * UART0 = PA11/PA10，I2C1 = PB3/PB2）。SWD 调试口 PA19/PA20 保留。
  */
 //@cliArgs --device "MSPM0G350X" --package "LQFP-64(PM)" --part "Default"
 //@v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)"
@@ -9,12 +14,156 @@
 /**
  * Import the modules used in this configuration.
  */
-const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL");
+const PWM     = scripting.addModule("/ti/driverlib/PWM", {}, false);
+const PWMAB   = PWM.addInstance();
+const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
+const MOTOR_PID = TIMER.addInstance();
+const NTB     = TIMER.addInstance();
+const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const DC_MOTOR = GPIO.addInstance();
+const HUIDU   = GPIO.addInstance();
+const KEY     = GPIO.addInstance();
+const LED_BEEP = GPIO.addInstance();
+const UART    = scripting.addModule("/ti/driverlib/UART", {}, false);
+const IMU601  = UART.addInstance();
+const I2C     = scripting.addModule("/ti/driverlib/I2C", {}, false);
+const OLED    = I2C.addInstance();
+const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
 
 /**
  * Write custom configuration values to the imported modules.
  */
 
+// 电机 PWM：双通道 C0/C1（TB6612 左/右 PWM 输入）
+PWMAB.$name                      = "PWMAB";
+PWMAB.clockPrescale              = 256;
+PWMAB.timerCount                 = 2000;
+PWMAB.peripheral.$assign         = "TIMG0";
+PWMAB.peripheral.ccp0Pin.$assign = "PA12";
+PWMAB.peripheral.ccp1Pin.$assign = "PA13";
+PWMAB.PWM_CHANNEL_0.$name        = "ti_driverlib_pwm_PWMTimerCC0";
+PWMAB.PWM_CHANNEL_0.dutyCycle    = 0;
+PWMAB.PWM_CHANNEL_1.$name        = "ti_driverlib_pwm_PWMTimerCC1";
+PWMAB.PWM_CHANNEL_1.dutyCycle    = 0;
+
+// 电机 PID 调度定时器（10ms 周期中断，pid 模块用；编译闭环只需宏存在）
+MOTOR_PID.$name              = "MOTOR_PID";
+MOTOR_PID.profile            = "Basic_Periodic";
+MOTOR_PID.peripheral.$assign = "TIMG6";
+
+// 计程定时器（ntb_time 模块读计数）
+NTB.$name              = "NTB";
+NTB.profile            = "Basic_Periodic";
+NTB.peripheral.$assign = "TIMG7";
+
+// 电机方向/使能 + 编码器中断（key 模块 GROUP1_IRQHandler 消费 IIDX）
+DC_MOTOR.$name = "DC_MOTOR";
+DC_MOTOR.associatedPins.create(8);
+DC_MOTOR.associatedPins[0].$name        = "AIN1";
+DC_MOTOR.associatedPins[0].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[0].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[0].pin.$assign  = "PA0";
+DC_MOTOR.associatedPins[1].$name        = "AIN2";
+DC_MOTOR.associatedPins[1].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[1].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[1].pin.$assign  = "PA1";
+DC_MOTOR.associatedPins[2].$name        = "BIN1";
+DC_MOTOR.associatedPins[2].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[2].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[2].pin.$assign  = "PB18";
+DC_MOTOR.associatedPins[3].$name        = "BIN2";
+DC_MOTOR.associatedPins[3].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[3].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[3].pin.$assign  = "PA7";
+DC_MOTOR.associatedPins[4].$name        = "AA";
+DC_MOTOR.associatedPins[4].direction    = "INPUT";
+DC_MOTOR.associatedPins[4].interruptEn  = true;
+DC_MOTOR.associatedPins[4].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[4].pin.$assign  = "PA16";
+DC_MOTOR.associatedPins[5].$name        = "AB";
+DC_MOTOR.associatedPins[5].direction    = "INPUT";
+DC_MOTOR.associatedPins[5].interruptEn  = true;
+DC_MOTOR.associatedPins[5].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[5].pin.$assign  = "PA17";
+DC_MOTOR.associatedPins[6].$name        = "BA";
+DC_MOTOR.associatedPins[6].direction    = "INPUT";
+DC_MOTOR.associatedPins[6].interruptEn  = true;
+DC_MOTOR.associatedPins[6].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[6].pin.$assign  = "PB19";
+DC_MOTOR.associatedPins[7].$name        = "BB";
+DC_MOTOR.associatedPins[7].direction    = "INPUT";
+DC_MOTOR.associatedPins[7].interruptEn  = true;
+DC_MOTOR.associatedPins[7].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[7].pin.$assign  = "PB20";
+
+// 8 路灰度循线输入（引脚空闲位，按实际接线改）
+HUIDU.$name = "HUIDU";
+HUIDU.associatedPins.create(8);
+HUIDU.associatedPins[0].$name       = "L1";
+HUIDU.associatedPins[0].direction   = "INPUT";
+HUIDU.associatedPins[0].pin.$assign = "PA22";
+HUIDU.associatedPins[1].$name       = "L2";
+HUIDU.associatedPins[1].direction   = "INPUT";
+HUIDU.associatedPins[1].pin.$assign = "PA23";
+HUIDU.associatedPins[2].$name       = "L3";
+HUIDU.associatedPins[2].direction   = "INPUT";
+HUIDU.associatedPins[2].pin.$assign = "PA24";
+HUIDU.associatedPins[3].$name       = "L4";
+HUIDU.associatedPins[3].direction   = "INPUT";
+HUIDU.associatedPins[3].pin.$assign = "PA25";
+HUIDU.associatedPins[4].$name       = "R1";
+HUIDU.associatedPins[4].direction   = "INPUT";
+HUIDU.associatedPins[4].pin.$assign = "PA26";
+HUIDU.associatedPins[5].$name       = "R2";
+HUIDU.associatedPins[5].direction   = "INPUT";
+HUIDU.associatedPins[5].pin.$assign = "PA27";
+HUIDU.associatedPins[6].$name       = "R3";
+HUIDU.associatedPins[6].direction   = "INPUT";
+HUIDU.associatedPins[6].pin.$assign = "PB4";
+HUIDU.associatedPins[7].$name       = "R4";
+HUIDU.associatedPins[7].direction   = "INPUT";
+HUIDU.associatedPins[7].pin.$assign = "PB5";
+
+// 启动按键输入（实例名 KEY → KEY_PORT 宏；引脚名 START → KEY_START_PIN）
+KEY.$name = "KEY";
+KEY.associatedPins.create(1);
+KEY.associatedPins[0].$name       = "START";
+KEY.associatedPins[0].direction   = "INPUT";
+KEY.associatedPins[0].pin.$assign = "PA2";
+
+// LED/蜂鸣器输出
+LED_BEEP.$name = "LED_BEEP";
+LED_BEEP.associatedPins.create(1);
+LED_BEEP.associatedPins[0].$name        = "LED";
+LED_BEEP.associatedPins[0].direction    = "OUTPUT";
+LED_BEEP.associatedPins[0].initialValue = "CLEARED";
+LED_BEEP.associatedPins[0].pin.$assign  = "PA3";
+
+// IMU 串口（RX 中断）
+IMU601.$name             = "IMU601";
+IMU601.profile           = "CONFIG_PROFILE_1";
+IMU601.peripheral.$assign = "UART0";
+IMU601.uartClkSrc        = "BUSCLK";
+IMU601.ovsRate           = "3";
+IMU601.targetBaudRate    = 115200;
+IMU601.enableInternalLoopback = false;
+IMU601.enabledInterrupts = ["RX"];
+IMU601.enableFIFO        = false;
+IMU601.peripheral.rxPin.$assign = "PA11";
+IMU601.peripheral.txPin.$assign = "PA10";
+
+// OLED（I2C 控制器）
+OLED.$name                         = "OLED";
+OLED.basicEnableController         = true;
+OLED.basicControllerBusSpeed       = 400000;
+OLED.intController                 = ["NACK", "TX_DONE"];
+OLED.advAnalogGlitchFilter         = "DISABLED";
+OLED.peripheral.$assign            = "I2C1";
+OLED.peripheral.sdaPin.$assign     = "PB3";
+OLED.peripheral.sclPin.$assign     = "PB2";
+
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
+Board.configureUnused = true;
 
 SYSCTL.forceDefaultClkConfig = true;
+SYSCTL.clockTreeEn  = true;
