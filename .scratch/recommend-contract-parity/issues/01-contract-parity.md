@@ -2,7 +2,7 @@
 
 **What to build:** /api/recommend 请求契约的浏览器前端与 CLI 验收脚本当前已漂移——reference_ids 前端发、CLI 不发（35ed61e platform 漂移的同款机制，那次是真机流程从未触发平台过滤的根因）。给 CLI 补 reference_ids 支持、payload 组装提成纯函数，加对偶测试强制字段集与事件词表一致，真机验收覆盖参考注入路径。
 
-**Status:** implemented（2026-08-11，分支 recommend-contract-parity b09f6ba（rebase 到 d365348 后，原 28ac23f），验收全勾，待合 main）
+**Status:** resolved（2026-08-11，PR #45 已合 main 0d3ad9a，验收闭环）
 
 ## 验收记录（2026-08-11）
 
