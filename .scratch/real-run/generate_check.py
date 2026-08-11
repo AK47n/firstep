@@ -255,7 +255,10 @@ def check_topic(
     ]
     rec: dict = {}
     for _round in range(5):
-        payload: dict = {"problem_text": problem_text}
+        # platform 随请求体透传（工单 ref-platform-filter）：推荐层按生成平台
+        # 过滤模块候选——之前不带 platform，模型看全量库会推荐 stm32-only 模块
+        # （如 2026H 的 filter/pid），生成门禁兜底 400 再手动 --drop
+        payload: dict = {"problem_text": problem_text, "platform": platform}
         if topic_id:
             payload["topic_id"] = topic_id
         if clarify_hist:

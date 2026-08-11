@@ -31,6 +31,7 @@ from .selection import (
     REFERENCE_SOURCE_MANUAL,
     ReferenceSuggestion,
     associated_references,
+    filter_manifests_by_platform,
     manual_reference_admission,
     reference_suggestions,
     resolve_selection,
@@ -169,8 +170,10 @@ def resolve_topic_context(
     （manual_reference_admission）。
 
     platform（工单 01 平台属性）：锚定命中按生成平台过滤（any 全进）；手动
-    选不过平台过滤（用户显式意图，UI 标注平台让用户自判）。recommend 传请求
-    体 platform；skeleton / generate 不注入参考文件，传缺省（空串 = 不过滤）。
+    选不过平台过滤（用户显式意图，UI 标注平台让用户自判）；模块候选同样按
+    平台过滤（工单 ref-platform-filter 模块侧对偶——本平台没有的模块不进
+    候选，摘要行与关联模块同源同滤，需求走库外建议）。recommend 传请求体
+    platform；skeleton / generate 不注入参考文件，传缺省（空串 = 不过滤）。
     """
     manual_entries = (
         manual_reference_admission(reference_library_dir, reference_ids)
@@ -194,6 +197,7 @@ def resolve_topic_context(
                 reference_library_dir,
                 manual_entries,
                 manual_fulltexts,
+                platform,
             )  # 自动识别尽力而为：AI 提取失败不阻断粘贴题面流程
         if not extracted:
             return _no_topic_context(
@@ -202,6 +206,7 @@ def resolve_topic_context(
                 reference_library_dir,
                 manual_entries,
                 manual_fulltexts,
+                platform,
             )
         try:
             entry = _resolve_topic_entry(topic_library_dir, extracted)
@@ -212,6 +217,7 @@ def resolve_topic_context(
                 reference_library_dir,
                 manual_entries,
                 manual_fulltexts,
+                platform,
             )  # 库中没有该题：自动识别查无此条静默降级（不猜测编造）
     else:
         return _no_topic_context(
@@ -220,15 +226,23 @@ def resolve_topic_context(
             reference_library_dir,
             manual_entries,
             manual_fulltexts,
+            platform,
         )
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
+    # 参考锚定用全量候选收集套件词表（kit 锚定是参考文件机制，不随模块平台
+    # 过滤——条目自身有平台属性，any 条目按现有语义注入）
     references = associated_references(
         reference_library_dir,
         topic_key=entry.key,
         manifests=candidates,
         platform=platform,
     )
+    # 推荐层平台过滤（工单 ref-platform-filter 模块侧对偶）：模块候选只含本
+    # 平台有实现的模块——摘要行（模型可见，可勾选）与关联模块（自动并入）
+    # 同源同滤；本平台没有的模块需求走库外建议（suggestions）。空串 = 不过滤
+    # （骨架 / 生成传缺省，现状保持；生成门禁 _check_platform 是兜底不动）。
+    candidates = list(filter_manifests_by_platform(candidates, platform))
     # 并集去重：锚定命中照旧自动进；手动条目若同时被锚定命中，清单只出现
     # 一次（标注 manual——全文已直读，模型无需点名），全文仍直读（manual_fulltexts 全量）
     anchored_ids = {ref.id for ref in references}
@@ -261,6 +275,7 @@ def _no_topic_context(
     reference_library_dir: Path,
     manual_entries: Sequence[ReferenceEntry] = (),
     manual_fulltexts: Mapping[str, str] | None = None,
+    platform: str = "",
 ) -> TopicContext:
     """no-topic 形上下文（key="" 哨兵 = 未识别到历史赛题，路由零 fallback）。
 
@@ -270,8 +285,11 @@ def _no_topic_context(
     唯一准入：suggestions = 手动条目（来源标注 manual），全文直读
     （manual_fulltexts）；未选 = 现行为（零参考）。回读器对手动条目 id 可
     回读（模型若点名已全文的条目也不崩，读回同一全文无害），其它 id 仍抛。
+    platform（工单 ref-platform-filter 模块侧对偶）与显式路径同款：候选模块
+    按平台过滤，空串 = 不过滤（缺省，现状保持）。
     """
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
+    candidates = list(filter_manifests_by_platform(candidates, platform))
     return TopicContext(
         key="",
         problem_text=problem_text,

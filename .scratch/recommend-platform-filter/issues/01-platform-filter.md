@@ -4,7 +4,7 @@
 
 **Blocked by:** 无
 
-**Status:** open
+**Status:** resolved（2026-08-11 双回归验收，1009 绿 + mypy 干净）
 
 ## 需求
 
@@ -22,10 +22,17 @@
 
 ## 验收
 
-- [ ] 2026H mspm0 推荐：modules 全为 mspm0 可用（pid/digit_uart/filter/ml_mpu6050 不再出现；若模型仍提 pid 需求 → 在 suggestions 里）
-- [ ] 2021F stm32 回归：推荐结果与现行为一致（stm32 全量库不受影响）
-- [ ] 全量 pytest 绿 + mypy src 干净
-- [ ] 端到端：generate_check mspm0 2026H 可**去掉 --drop** 直接跑通（drop 保留为手动减模块语义）
+- [x] 2026H mspm0 推荐：modules 全为 mspm0 可用（pid/digit_uart/filter/ml_mpu6050 不再出现；若模型仍提 pid 需求 → 在 suggestions 里）
+- [x] 2021F stm32 回归：推荐结果与现行为一致（stm32 全量库不受影响）
+- [x] 全量 pytest 绿 + mypy src 干净
+- [x] 端到端：generate_check mspm0 2026H 可**去掉 --drop** 直接跑通（drop 保留为手动减模块语义）
+
+## 验收记录（2026-08-11）
+
+- 2026H mspm0（2026H_filt，无 --drop）：推荐 4 轮收敛 → huidu, motor, key, ntb_time, oled 全 mspm0 可用（pid/digit_uart/filter/ml_mpu6050 不再出现）；生成 26 文件，产物检查 0 问题。`--add imu_uart,led_beep` 为 include 门禁依赖补选（motor.h include imu.h/led_beep.h，两模块均 mspm0 可用——模型漏选依赖由门禁兜底，非平台过滤缺口）。
+- 2021F stm32（2021F）：推荐 4 轮收敛 → digit_uart, pid, led_beep，related 含 pid（stm32-only 模块不受影响）；生成 51 文件，UV4 真机编译 0 错误。
+- 全量 pytest 1009 绿 + mypy src 干净。
+- 实现：`filter_manifests_by_platform`（selection.py，platform 空串不过滤、platforms 含该平台才留，与参考库 `_platform_matches` 同判据）；`resolve_topic_context` topic/no-topic 两路径装配点过滤（摘要行与关联模块同源同滤，参考锚定 kit 词表用全量候选不动）；`_no_topic_context` 加 platform 参数（缺省空串 = 现状）；`/api/recommend` 请求体补 platform（index.html + generate_check.py payload——之前真机流程从未触发过滤是 2026H "模型推荐 stm32-only 模块 → 门禁 400 → 手动 drop" 的传输层根因）。
 
 ## 实施提示词（复制到新会话）
 
