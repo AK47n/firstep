@@ -1,7 +1,9 @@
 """真机验证：赛题 推荐 → 骨架 → 生成 全流程一次跑完（stm32/Keil 与 mspm0/CCS 两线）。
 
-用法：python generate_check.py [--platform stm32|mspm0] [--topic-file <题面.md>] [topic...]
-      topic 从题库读（默认 2026C 2021F）；--topic-file 从外部 md 读题面（如 2026H）。
+用法：python generate_check.py [--platform stm32|mspm0] [--topic-file <题面.md>]
+      [--reference-ids <id1,id2,...>] [topic...]
+      topic 从题库读（默认 2026C 2021F）；--topic-file 从外部 md 读题面（如 2026H）；
+      --reference-ids 参考注入真机验证（前端同款语义：锚定命中 ∪ 手动选）。
 依赖：服务在 127.0.0.1:8000 运行（python -m contest_generator.webapp）。
 输出目录：.scratch/real-run/out_<topic>_<platform>（不碰桌面原工程）。
 """
@@ -218,6 +220,11 @@ def recommend_stream(payload: dict) -> dict:
                         event = line[6:].strip()
                     elif line.startswith("data:"):
                         data = line[5:].strip()
+                # 事件词表单源 = contest_generator/events.py（EVENT_ROUND /
+                # EVENT_CONVERGED / EVENT_DONE / EVENT_QUESTION / EVENT_ERROR，
+                # 终端事件 = done / question / error），改词表须同步——前端
+                # index.html 词表镜像同款注释；tests/test_generate_check_contract.py
+                # 强制本分支词表与 events.py 一致（改词表忘改 CLI 即红）
                 if event == "round":
                     rounds += 1
                 elif event == "converged":
@@ -230,6 +237,30 @@ def recommend_stream(payload: dict) -> dict:
     return result
 
 
+# /api/recommend 请求契约（服务端校验唯一出处 = webapp.py:575-582，本函数是其
+# CLI 侧对偶；前端 index.html:916 恒发全部五字段）。字段规则：problem_text 必填
+# + platform 恒发（空 = 不过滤）+ topic_id 仅 topic 模式（topic_file = 无题号
+# 手动准入）/ clarifications 非空才发 / reference_ids 非空才发（锚定命中 ∪
+# 手动选，幻觉 / 重复 id 服务端 400 大声失败）。改契约字段须同步三处：webapp
+# 校验 + 前端 + 本函数，tests/test_generate_check_contract.py 强制字段集一致。
+def build_recommend_payload(
+    problem_text: str,
+    *,
+    platform: str = PLATFORM,
+    topic_id: str | None = None,
+    clarify_hist: list[dict[str, str]] | tuple[dict[str, str], ...] = (),
+    reference_ids: tuple[str, ...] = (),
+) -> dict:
+    payload: dict = {"problem_text": problem_text, "platform": platform}
+    if topic_id:
+        payload["topic_id"] = topic_id
+    if clarify_hist:
+        payload["clarifications"] = list(clarify_hist)
+    if reference_ids:
+        payload["reference_ids"] = list(reference_ids)
+    return payload
+
+
 def check_topic(
     key: str,
     clarify_map: dict[str, str] | None = None,
@@ -237,6 +268,7 @@ def check_topic(
     platform: str = PLATFORM,
     topic_file: Path | None = None,
     add: tuple[str, ...] = (),
+    reference_ids: tuple[str, ...] = (),
 ) -> bool:
     ok = True
     print(f"\n===== {key} ({platform}) =====")
@@ -257,12 +289,17 @@ def check_topic(
     for _round in range(5):
         # platform 随请求体透传（工单 ref-platform-filter）：推荐层按生成平台
         # 过滤模块候选——之前不带 platform，模型看全量库会推荐 stm32-only 模块
-        # （如 2026H 的 filter/pid），生成门禁兜底 400 再手动 --drop
-        payload: dict = {"problem_text": problem_text, "platform": platform}
-        if topic_id:
-            payload["topic_id"] = topic_id
-        if clarify_hist:
-            payload["clarifications"] = clarify_hist
+        # （如 2026H 的 filter/pid），生成门禁兜底 400 再手动 --drop。
+        # reference_ids 随请求体透传（工单 03 契约对偶）：前端 selectedReferenceIds
+        # 恒发、CLI 此前不发 → 真机验收永不覆盖参考注入路径；字段规则收敛在
+        # build_recommend_payload（含 topic_id / clarifications 的既有条件语义）
+        payload = build_recommend_payload(
+            problem_text,
+            platform=platform,
+            topic_id=topic_id,
+            clarify_hist=clarify_hist,
+            reference_ids=reference_ids,
+        )
         rec = recommend_stream(payload)
         print(f"[推荐] {rec['rounds']} 轮 → 终态 {rec['event']}")
         if rec["event"] != "question":
@@ -295,6 +332,14 @@ def check_topic(
         print(f"  识别 topic_id={data['topic_id']} related={data.get('related_modules')}")
     if data.get("requirements"):
         print(f"  功能需求层 {len(data['requirements'])} 条")
+    refs = data.get("references")
+    if refs:
+        print(f"  参考资料 {len(refs)} 条（done 透明闭环）")
+        for ref in refs:
+            print(
+                f"    - {ref['id']}: {ref['title'][:60]} "
+                f"[{ref.get('source', '?')}/{ref.get('platform', '?')}]"
+            )
     if not slugs:
         print("  ✗ done 但模块为空")
         return False
@@ -398,9 +443,16 @@ def main() -> None:
         idx = args.index("--add")
         add = tuple(s.strip() for s in args[idx + 1].split(",") if s.strip())
         del args[idx:idx + 2]
+    reference_ids: tuple[str, ...] = ()
+    if "--reference-ids" in args:
+        idx = args.index("--reference-ids")
+        reference_ids = tuple(
+            s.strip() for s in args[idx + 1].split(",") if s.strip()
+        )
+        del args[idx:idx + 2]
     topics = args or ["2026C", "2021F"]
     results = {
-        t: check_topic(t, clarify_map, drop, platform, topic_file, add)
+        t: check_topic(t, clarify_map, drop, platform, topic_file, add, reference_ids)
         for t in topics
     }
     print("\n===== 汇总 =====")
