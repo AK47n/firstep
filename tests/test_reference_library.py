@@ -43,9 +43,11 @@ from contest_generator.reference_library import (
     delete_reference,
     draft_description,
     get_reference,
+    list_entry_files,
     list_references,
     module_kit_vocabulary,
     read_fulltext,
+    resolve_entry_file,
     search_references,
     validate_topic_anchor,
 )
@@ -691,6 +693,207 @@ def test_search_references_filters_by_title_type_anchor(tmp_path):
     assert [e.title for e in search_references(root, anchor=KIT_ALX)] == [
         "ALX 通信说明书"
     ]
+
+
+def test_search_references_filters_by_filename(tmp_path):
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="塔克小车底盘资料",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files={
+            "main.c": "/* 例程 */\n",
+            "素材清单.txt": (
+                "素材目录（Desktop/塔克）文件清单：\n"
+                "\n"
+                "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf  632107 bytes\n"
+                "7 AT8236电机驱动资料/3.芯片手册/AT8236.pdf  1595164 bytes\n"
+            ),
+        },
+        kit_vocabulary=(),
+    )
+    add_reference(
+        root,
+        title="无线串口模块资料",
+        type="说明书",
+        description="y",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"readme.md": "# 无线串口\n"},
+        kit_vocabulary=(),
+    )
+
+    # 素材清单行命中（PDF 只留痕不入库，靠清单可搜）
+    assert [e.title for e in search_references(root, filename="TB6612")] == [
+        "塔克小车底盘资料"
+    ]
+    # 大小写不敏感（型号大小写混用也能命中）
+    assert [e.title for e in search_references(root, filename="at8236")] == [
+        "塔克小车底盘资料"
+    ]
+    # files 路径命中（文本文件双通道可搜）
+    assert [e.title for e in search_references(root, filename="main.c")] == [
+        "塔克小车底盘资料"
+    ]
+    assert [e.title for e in search_references(root, filename="readme")] == [
+        "无线串口模块资料"
+    ]
+    # 不命中 / 与其他过滤可组合（AND：标题命中 + 文件名命中都要满足）
+    assert search_references(root, filename="CAN") == []
+    assert search_references(root, title="无线", filename="AT8236") == []
+    assert search_references(root, title="塔克", filename="TB6612") != []
+    # 空串 = 不过滤（向后兼容，行为与不带该参数一致）
+    assert search_references(root) == search_references(root, filename="")
+    assert search_references(root, title="无线") == search_references(
+        root, title="无线", filename=""
+    )
+
+
+def test_search_references_filename_missing_manifest_means_empty(tmp_path):
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="旧条目",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"notes.txt": "TB6612 参考\n"},  # 旧条目没有素材清单.txt
+        kit_vocabulary=(),
+    )
+    # 无清单 = 按空处理：files 路径仍可搜，浏览不炸
+    assert search_references(root, filename="TB6612") == []
+    assert [e.title for e in search_references(root, filename="notes")] == ["旧条目"]
+
+
+def test_list_entry_files_parses_manifest_and_disk(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="塔克小车底盘资料",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files={
+            "main.c": "/* 例程 */\n",
+            "素材清单.txt": (
+                "素材目录（Desktop/塔克）文件清单：\n"
+                "\n"
+                "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf  632107 bytes\n"
+                "7 AT8236电机驱动资料/AT8236.pdf  100 bytes\n"
+            ),
+        },
+        kit_vocabulary=(),
+    )
+    # 条目目录补一个实际文件：与清单同路径的"3.芯片手册"副本（同路径以磁盘
+    # 实况为准）+ 清单之外的子目录散文件
+    disk_dir = root / entry.id / "6 TB6612电机驱动资料" / "3.芯片手册"
+    disk_dir.mkdir(parents=True)
+    (disk_dir / "TB6612FNG Datasheet.pdf").write_bytes(b"pdf-bytes")
+    extra = root / entry.id / "extra"
+    extra.mkdir()
+    (extra / "notes.c").write_text("/* 备注 */\n", encoding="utf-8")
+
+    listing = list_entry_files(root, entry.id)
+    by_path = {item["path"]: item["size_bytes"] for item in listing}
+
+    # 素材清单记录（二进制只留痕，条目目录没有本体）+ 表头行跳过
+    assert "7 AT8236电机驱动资料/AT8236.pdf" in by_path
+    assert by_path["7 AT8236电机驱动资料/AT8236.pdf"] == 100
+    # 同路径条目目录文件优先（真实 stat 覆盖清单记录值）
+    assert "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf" in by_path
+    assert (
+        by_path["6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"]
+        == len(b"pdf-bytes")
+    )
+    # 条目目录实际文件（含子目录散文件，reference.json 排除；size = 真实 stat，
+    # 与写盘内容字节数一致——Windows 文本模式会把 \n 转 \r\n，不能按原串 len 算）
+    assert by_path["main.c"] == (root / entry.id / "main.c").stat().st_size
+    assert by_path["extra/notes.c"] == (root / entry.id / "extra" / "notes.c").stat().st_size
+    assert "reference.json" not in by_path
+    assert listing == sorted(listing, key=lambda item: item["path"])
+
+
+def test_list_entry_files_missing_manifest_falls_back_to_disk(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="旧条目",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"notes.txt": "/* 例程 */\n"},
+        kit_vocabulary=(),
+    )
+    assert list_entry_files(root, entry.id) == [
+        {"path": "notes.txt", "size_bytes": (root / entry.id / "notes.txt").stat().st_size}
+    ]
+
+
+def test_list_entry_files_missing_entry_raises(tmp_path):
+    root = _reference_root(tmp_path)
+    with pytest.raises(ReferenceError, match="不存在"):
+        list_entry_files(root, "nope")
+
+
+def test_resolve_entry_file_serves_entry_then_materials(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="塔克小车底盘资料",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files={"main.c": "/* 例程 */\n"},
+        kit_vocabulary=(),
+    )
+    materials = tmp_path / "materials"
+    pdf = (
+        materials
+        / entry.title
+        / "6 TB6612电机驱动资料"
+        / "3.芯片手册"
+        / "TB6612FNG Datasheet.pdf"
+    )
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF-1.4 fake")
+
+    # 条目目录命中：文本内联（media_type 留空按扩展名自动）
+    path, media_type = resolve_entry_file(root, materials, entry.id, "main.c")
+    assert path.read_text(encoding="utf-8") == "/* 例程 */\n"
+    assert media_type is None
+    # materials 镜像命中：PDF 带 application/pdf（浏览器预览）
+    path, media_type = resolve_entry_file(
+        root, materials, entry.id, "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"
+    )
+    assert path == pdf
+    assert media_type == "application/pdf"
+    # materials 根不存在 / 都找不到 = None（调用方转 404，不炸）
+    assert resolve_entry_file(root, tmp_path / "no-such-materials", entry.id, "x.pdf") is None
+    assert resolve_entry_file(root, materials, entry.id, "nope.pdf") is None
+
+
+@pytest.mark.parametrize("bad", ["../x", "..\\x", "/abs", "a//b", "c:/win", "a/../b"])
+def test_resolve_entry_file_rejects_unsafe_paths(tmp_path, bad):
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="条目",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"a.txt": "x"},
+        kit_vocabulary=(),
+    )
+    with pytest.raises(ReferenceError, match="非法文件路径"):
+        resolve_entry_file(root, tmp_path / "materials", entry.id, bad)
 
 
 def test_delete_reference_removes_entry_and_rejects_missing(tmp_path):
