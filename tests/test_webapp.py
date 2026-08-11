@@ -2281,6 +2281,19 @@ def test_references_filename_search_query_param(client, context, tmp_path):
     assert len(client.get("/api/references").json()) == len(
         client.get("/api/references?filename=").json()
     ) == 2
+    # 命中文件直出：filename 过滤时带 matched_files，不过滤时无该字段
+    hits = client.get("/api/references?filename=TB6612").json()
+    assert hits[0]["matched_files"] == [
+        "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"
+    ]
+    assert "matched_files" not in client.get("/api/references").json()[0]
+    assert "matched_files" not in client.get("/api/references?filename=").json()[0]
+    # 命中文件可直接经服务端点打开（行内直开路径）
+    resp = client.get(
+        "/api/references/塔克小车底盘资料/files/"
+        + "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG%20Datasheet.pdf"
+    )
+    assert resp.status_code == 404  # 条目目录无此文件、无 materials 镜像 → 404 由调用方提示
 
 
 def test_reference_files_lists_manifest_and_disk(client, context, tmp_path):

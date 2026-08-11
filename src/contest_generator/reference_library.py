@@ -328,6 +328,31 @@ def list_entry_files(reference_root: Path, entry_id: str) -> list[dict[str, str 
     ]
 
 
+def match_entry_files(
+    reference_root: Path, entry_id: str, needle: str
+) -> list[str]:
+    """条目内文件名子串匹配（大小写不敏感）：素材清单路径行 + files 各路径。
+
+    命中路径按（清单顺序优先，未在清单的 files 路径殿后）去重返回——用于
+    文件名搜索时直接带出命中文件，省去"查看 → 清单 → 翻找"两跳。needle
+    空串返回空列表（调用方仅在文件名过滤时启用）。
+    """
+    needle = needle.strip().lower()
+    if not needle:
+        return []
+    entry = get_reference(reference_root, entry_id)
+    manifest_paths = [rel for rel, _ in _read_manifest_records(reference_root / entry.id)]
+    seen: set[str] = set()
+    matched: list[str] = []
+    for rel in [*manifest_paths, *entry.files]:
+        if rel in seen:
+            continue
+        seen.add(rel)
+        if needle in rel.lower():
+            matched.append(rel)
+    return matched
+
+
 def resolve_entry_file(
     reference_root: Path,
     materials_root: Path,

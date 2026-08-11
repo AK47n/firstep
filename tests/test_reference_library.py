@@ -45,6 +45,7 @@ from contest_generator.reference_library import (
     get_reference,
     list_entry_files,
     list_references,
+    match_entry_files,
     module_kit_vocabulary,
     read_fulltext,
     resolve_entry_file,
@@ -750,6 +751,22 @@ def test_search_references_filters_by_filename(tmp_path):
     assert search_references(root, title="无线") == search_references(
         root, title="无线", filename=""
     )
+    # 命中文件直出：清单行优先、files 路径殿后，去重、大小写不敏感
+    assert match_entry_files(root, "塔克小车底盘资料", "TB6612") == [
+        "6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"
+    ]
+    assert match_entry_files(root, "塔克小车底盘资料", "at8236") == [
+        "7 AT8236电机驱动资料/3.芯片手册/AT8236.pdf"
+    ]
+    assert match_entry_files(root, "塔克小车底盘资料", "main.c") == ["main.c"]
+    # 空串 = 空；不命中 = 空；条目不存在抛 ReferenceError
+    assert match_entry_files(root, "塔克小车底盘资料", "") == []
+    assert match_entry_files(root, "塔克小车底盘资料", "CAN") == []
+    try:
+        match_entry_files(root, "不存在的条目", "x")
+        raise AssertionError("应抛 ReferenceError")
+    except Exception as exc:  # noqa: BLE001
+        assert type(exc).__name__ == "ReferenceError"
 
 
 def test_search_references_filename_missing_manifest_means_empty(tmp_path):

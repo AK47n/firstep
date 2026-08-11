@@ -424,6 +424,7 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 文件名搜索 / 文件打开工单新增的读函数：素材清单解析 + 文件定位，不落盘
         "list_entry_files": ("read", ""),
         "resolve_entry_file": ("read", ""),
+        "match_entry_files": ("read", ""),  # 命中文件直出：只读素材清单，不落盘
     },
     "topic_library": {
         "validate_topic_key": ("read", ""),
