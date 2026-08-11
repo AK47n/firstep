@@ -21,79 +21,37 @@ PLATFORM = "stm32"
 TOPICS = Path.home() / ".contest_generator" / "topics"
 HERE = Path(__file__).parent
 
-# mspm0 豁免的头：ti_msp_dl_* 由 SysConfig 构建时生成进工程根（SDK 头同
-# 前缀），产物树里本来就没有——与 Keil 语义的器件包头同地位。
-# 标准库头 stm32 语义见 EXTERNAL_HEADERS，此处按前缀统一豁免 mspm0 器件层。
-def is_external_header(header: str, platform: str) -> bool:
-    if platform == "mspm0":
-        return header.lower() in EXTERNAL_HEADERS or header.lower().startswith(
-            "ti_msp_dl_"
-        )
-    return header.lower() in EXTERNAL_HEADERS
-
-# 编译产物级校验（Keil 语义）：真机编译失败的对应断言。
-# 1) 代码围栏：LLM 输出带 ```c 围栏直接落盘 → Keil 报 unrecognized token。
-# 2) include 解析：#include "x.h" 先找当前文件目录，再找 uvprojx IncludePath；
-#    工程树里找不到且不是标准库/器件包头 → Keil 报 cannot open source input file。
-FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
-# Keil 在工程外也能解析的头：ARMCC 标准库（引号形式）与器件包（stm32f10x_conf.h）
-EXTERNAL_HEADERS = frozenset(
-    {
-        "math.h", "stdio.h", "stdlib.h", "string.h", "stdint.h", "stdbool.h",
-        "stddef.h", "limits.h", "float.h", "assert.h", "errno.h", "ctype.h",
-        "time.h", "inttypes.h", "stdarg.h", "setjmp.h", "signal.h", "locale.h",
-        "wchar.h", "wctype.h", "complex.h", "fenv.h", "tgmath.h", "iso646.h",
-        "stdatomic.h", "threads.h", "uchar.h", "stm32f10x_conf.h",
-    }
+# 产物检查与生成门禁同源（工单 generate-check-parity/01）：门禁镜像段
+# （FENCE_RE / include 解析 / EXTERNAL_HEADERS 豁免集，曾逐字重实现门禁——
+# 门禁一改脚本静默漂移，验收给假信心）已删，改为对产物树重建语料跑生产
+# 同一个 run_generation_gates；豁免集（C 标准库 + 平台工具链头，含 mspm0
+# ti_msp_dl_* 前缀）门禁内部持有，删镜像即天然同源。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from contest_generator.generator import (
+    GeneratorError,
+    build_output_tree_corpus,
+    run_generation_gates,
 )
-_INCLUDE_RE = re.compile(r'#\s*include\s*"([^"]+)"')
 
 
 def check_artifacts(out_dir: Path, platform: str = PLATFORM) -> list[str]:
-    """产物检查：返回问题列表（空 = 干净）。围栏 + include 解析两断言。"""
-    problems: list[str] = []
-    sources = [p for p in out_dir.rglob("*") if p.suffix.lower() in (".c", ".h")]
+    """产物检查：返回问题列表（空 = 干净）。对产物树重建语料跑真门禁。
+
+    manifests 传空：file_path_conflicts 查 manifest 声明（产物树无声明可查，
+    跨模块同名由库内不变量 + 生成前门禁管），空表直过；其余五道吃语料的
+    门照常跑。搜索目录 = 补丁后 .uvprojx/.cproject 的 IncludePath（补丁器
+    验证段，patch 没把模块目录写进 IncludePath → include 解析门在此失败）。
+    """
     if platform == "stm32":
-        include_dirs = _uvprojx_include_dirs(out_dir)
+        search_dirs = _uvprojx_include_dirs(out_dir)
     else:
-        include_dirs = _cproject_include_dirs(out_dir)
-    for src in sources:
-        rel = src.relative_to(out_dir).as_posix()
-        text = src.read_text(encoding="utf-8", errors="replace")
-        in_block = False
-        for i, line in enumerate(text.splitlines(), 1):
-            if FENCE_RE.match(line):
-                problems.append(f"{rel}:{i} 代码围栏残留: {line.strip()!r}")
-            # 块注释内嵌套 /* → 提前闭合块注释，后续注释内容变裸代码
-            # （2026H mspm0 真机实测：骨架 LLM 在注释里又写 /* */，10 错）
-            if in_block and "/*" in line:
-                problems.append(f"{rel}:{i} 块注释内嵌套 /*: {line.strip()!r}")
-            j = 0
-            while j < len(line):
-                ch = line[j]
-                if in_block:
-                    if ch == "*" and j + 1 < len(line) and line[j + 1] == "/":
-                        in_block = False
-                        j += 2
-                        continue
-                elif ch == "/" and j + 1 < len(line) and line[j + 1] == "*":
-                    in_block = True
-                    j += 2
-                    continue
-                j += 1
-        for m in _INCLUDE_RE.finditer(text):
-            header = m.group(1)
-            if _resolves(header, src.parent, include_dirs):
-                continue
-            if is_external_header(header, platform):
-                continue
-            line_no = text.count("\n", 0, m.start()) + 1
-            problems.append(f"{rel}:{line_no} 引用不存在的头文件: {header}")
-    return problems
-
-
-def _resolves(header: str, own_dir: Path, include_dirs: list[Path]) -> bool:
-    return any((d / header).is_file() for d in [own_dir, *include_dirs])
+        search_dirs = _cproject_include_dirs(out_dir)
+    corpus = build_output_tree_corpus(out_dir, platform, search_dirs)
+    try:
+        run_generation_gates(corpus, [], platform)
+    except GeneratorError as e:
+        return [str(e)]
+    return []
 
 
 def _cproject_include_dirs(out_dir: Path) -> list[Path]:
@@ -381,14 +339,16 @@ def check_topic(
         print(f"  ✗ 缺关键文件: {missing}")
         ok = False
 
-    # 产物级断言：围栏 + include 解析（真机编译失败的对应检查）
+    # 产物级断言：对产物树重建语料跑生产同源门禁（真机编译失败的对应检查；
+    # 门禁镜像曾静默漂移，工单 generate-check-parity/01 换闸，验收测的就是
+    # run_generation_gates 本身）
     problems = check_artifacts(out_dir, platform)
     if problems:
         for p in problems:
             print(f"  ✗ 产物: {p}")
         ok = False
     else:
-        print("  [产物] 无围栏残留、全部 include 可解析")
+        print("  [产物] 门禁全过（产物树语料重建，与生成同源）")
 
     # 真机编译：UV4 命令行构建（符号级完整性的唯一证明，仅 stm32/Keil 线；
     # mspm0/CCS 线 Theia 无命令行构建，最终证明走用户 GUI 编译）

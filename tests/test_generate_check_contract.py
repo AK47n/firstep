@@ -213,3 +213,54 @@ def test_cli_event_wordtable_matches_events_py() -> None:
         events.EVENT_ERROR,
     }
     assert _cli_handled_event_names() == expected
+
+
+# ---------- 门禁同源结构钉（工单 generate-check-parity/01） ----------
+#
+# check_artifacts 曾逐字重实现门禁（FENCE_RE / _INCLUDE_RE / EXTERNAL_HEADERS
+# / _resolves / is_external_header），门禁一改脚本静默漂移、真机验收给假信心；
+# 已换闸为 build_output_tree_corpus → run_generation_gates（生产同一个 runner）。
+# 镜像复活即红——验收脚本与生产不再有第二套门禁实现。
+
+MIRROR_SYMBOLS = frozenset(
+    {"FENCE_RE", "_INCLUDE_RE", "EXTERNAL_HEADERS", "_resolves", "is_external_header"}
+)
+
+
+def test_generate_check_has_no_gate_mirror_definitions() -> None:
+    """结构钉：generate_check.py 不再定义门禁镜像符号（赋值 / 函数定义级，
+    AST 断言——注释里的历史提及不算；镜像复活 = 验收与门禁漂移即红）。"""
+    tree = ast.parse(GEN_CHECK.read_text(encoding="utf-8"))
+    defined: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defined.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    defined.add(target.id)
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            if isinstance(node.target, ast.Name):
+                defined.add(node.target.id)
+    assert not (defined & MIRROR_SYMBOLS), (
+        f"门禁镜像复活: {sorted(defined & MIRROR_SYMBOLS)}"
+    )
+
+
+def test_generate_check_runs_real_generation_gates() -> None:
+    """结构钉：check_artifacts 从 package 引入真门禁——contest_generator.generator
+    的 build_output_tree_corpus + run_generation_gates（镜像段换闸，删调用即红）。"""
+    tree = ast.parse(GEN_CHECK.read_text(encoding="utf-8"))
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    assert "run_generation_gates" in names
+    assert "build_output_tree_corpus" in names
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "contest_generator.generator"
+        ):
+            imported = {alias.name for alias in node.names}
+            assert {"run_generation_gates", "build_output_tree_corpus"} <= imported
+            break
+    else:
+        raise AssertionError("generate_check.py 未从 contest_generator.generator import")
