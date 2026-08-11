@@ -5,7 +5,8 @@
  * 引脚方案：motor notes（PWMAB C0/C1→PA12/PA13、DC_MOTOR AIN1=PA0 AIN2=PA1
  * BIN1=PB18 BIN2=PA7、编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20）+ 其余外设
  * 选空闲引脚（PA22-27/PB4/PB5 = HUIDU，PA2 = KEY，PA3 = LED_BEEP，
- * UART0 = PA11/PA10，I2C1 = PB3/PB2）。SWD 调试口 PA19/PA20 保留。
+ * UART0 = PA11/PA10（IMU601），UART1 = PA8/PA9（DIGIT_UART，K230 视觉串口），
+ * I2C1 = PB3/PB2）。SWD 调试口 PA19/PA20 保留。
  */
 //@cliArgs --device "MSPM0G350X" --package "LQFP-64(PM)" --part "Default"
 //@v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)"
@@ -151,6 +152,20 @@ IMU601.enabledInterrupts = ["RX"];
 IMU601.enableFIFO        = false;
 IMU601.peripheral.rxPin.$assign = "PA11";
 IMU601.peripheral.txPin.$assign = "PA10";
+
+// K230 视觉串口（digit_uart/ball_detect 模块用，RX 中断；PA8/PA9 = UART1）
+const DIGIT_UART = UART.addInstance();
+DIGIT_UART.$name             = "DIGIT_UART";
+DIGIT_UART.profile           = "CONFIG_PROFILE_1";
+DIGIT_UART.peripheral.$assign = "UART1";
+DIGIT_UART.uartClkSrc        = "BUSCLK";
+DIGIT_UART.ovsRate           = "3";
+DIGIT_UART.targetBaudRate    = 115200;
+DIGIT_UART.enableInternalLoopback = false;
+DIGIT_UART.enabledInterrupts = ["RX"];
+DIGIT_UART.enableFIFO        = false;
+DIGIT_UART.peripheral.rxPin.$assign = "PA9";
+DIGIT_UART.peripheral.txPin.$assign = "PA8";
 
 // OLED（I2C 控制器）
 OLED.$name                         = "OLED";
