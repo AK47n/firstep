@@ -1,17 +1,27 @@
 """模块选择与依赖解析：递归展开、无环、生成前的平台可用性警告；模块推荐域
 （工单 10）：题面逐句编号、收敛轮提示词与收敛循环驱动（两轮一致即停 / 轮数
-上限 / 补问暂停 / 两级注入）。
+上限 / 补问暂停 / 两级注入）；推荐两阶段编排（工单 recommend-orchestration-
+homing/01）：澄清先行 → 收敛 → done 载荷组装（run_recommendation）。
 
 解析与警告都是纯函数（不碰磁盘），直接构造 manifest 驱动；收敛驱动用
 FakeLLM 记录调用形状断言（不碰网络）。
 """
 
+from queue import Queue
 from typing import Mapping, Sequence
 
 import pytest
 
-from contest_generator.events import EVENT_CONVERGED, EVENT_ROUND, ProgressEvent
+from contest_generator.events import (
+    EVENT_CONVERGED,
+    EVENT_DONE,
+    EVENT_QUESTION,
+    EVENT_ROUND,
+    ProgressEvent,
+)
+from contest_generator.generator import TopicContext
 from contest_generator.manifest import ManifestSummary, ModuleManifest, PlatformEntry
+from contest_generator.reference_library import PLATFORM_ANY, ReferenceEntry, add_reference
 from contest_generator.selection import (
     WARNING_HARDWARE_BOUND,
     WARNING_MISSING,
@@ -37,9 +47,10 @@ from contest_generator.selection import (
     reference_suggestions,
     resolve_dependencies,
     resolve_selection,
+    run_recommendation,
     select_modules_convergent,
 )
-from contest_generator.reference_library import add_reference
+from contest_generator.sse import SseEmitter
 from contest_generator.wordlist import HardwareWordGroup
 from tests.fakes import FakeLLM
 from tests.generate_wiring_fakes import (
@@ -1266,3 +1277,187 @@ def test_convergent_manual_only_without_references_uses_extended_signature():
     assert len(fake.calls) == 2
     assert all(call[2] == () for call in fake.calls)  # 清单恒空（无锚定）
     assert all(call[4] == manual for call in fake.calls)
+
+
+# ---------------------------------------------------------------------------
+# 推荐两阶段编排（run_recommendation，工单 recommend-orchestration-homing/01）：
+# 澄清先行 → 收敛 → done 载荷组装。用真实 SseEmitter + Queue 记录事件序列断言
+# 逐字形状（进度事件 = ProgressEvent，终态 = (kind, dict) 与运行器队列一致）。
+# ---------------------------------------------------------------------------
+
+
+def _run_recommendation(
+    topic: TopicContext,
+    llm: FakeLLM,
+    clarifications: Sequence[tuple[str, str]] = (),
+) -> tuple[SseEmitter, Queue]:
+    """直调 run_recommendation，返回 (emitter, 事件队列)（同线程无竞态）。"""
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+    run_recommendation(topic, llm, clarifications, emit=emit)
+    return emit, events
+
+
+def _drain_events(events: Queue) -> list:
+    items = []
+    while not events.empty():
+        items.append(events.get_nowait())
+    return items
+
+
+def _event_kinds(items: list) -> list[str]:
+    """事件序列的类型词表：进度事件取 type，终态取 kind。"""
+    return [
+        item.type if isinstance(item, ProgressEvent) else item[0] for item in items
+    ]
+
+
+def _topic(
+    key: str = "",
+    *,
+    references: Sequence[ReferenceEntry] = (),
+    related_modules: Sequence[str] = (),
+    manual_references: Sequence[ReferenceEntry] = (),
+) -> TopicContext:
+    """最小装配素材：收敛与载荷组装够用的字段，其余取安全缺省。"""
+    return TopicContext(
+        key=key,
+        problem_text="送药小车。识别数字。",
+        references=tuple(references),
+        related_modules=tuple(related_modules),
+        manifest_summaries=(),
+        suggestions=(),
+        read_fulltext=lambda entry_id: "",
+        manual_references=tuple(manual_references),
+    )
+
+
+def _reference(
+    entry_id: str, title: str, *, platform: str = PLATFORM_ANY
+) -> ReferenceEntry:
+    return ReferenceEntry(
+        id=entry_id,
+        title=title,
+        type="例程工程",
+        description="",
+        anchor_kind="topic",
+        anchor_value="2021F",
+        files=(),
+        platform=platform,
+    )
+
+
+def test_run_recommendation_clarify_questions_end_with_question_only():
+    """澄清阶段先行：clarify 仍有疑问 → 只发 question 终态、无 round 事件
+    （澄清阶段不属于收敛轮次，补问不再作废已跑轮次）；问答历史原样透传。"""
+    llm = FakeLLM(clarify_questions=("具体要识别什么数字？",))
+
+    _, events = _run_recommendation(
+        _topic(), llm, (("识别方式？", "摄像头"),)
+    )
+
+    assert llm.clarify_calls == [
+        ("送药小车。识别数字。", (("识别方式？", "摄像头"),))
+    ]
+    assert _drain_events(events) == [
+        ("question", {"questions": ["具体要识别什么数字？"]})
+    ]
+
+
+def test_run_recommendation_convergence_questions_end_with_question_event():
+    """澄清空 + 收敛循环内模型拿不准（questions 非空）→ round 进度照发、
+    question 收尾（不以 done 结束）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(
+            modules=(),
+            reasons={},
+            questions=("题面没有说明识别方式，用摄像头还是传感器？",),
+        )
+    )
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    items = _drain_events(events)
+    assert _event_kinds(items) == [EVENT_ROUND, EVENT_QUESTION]
+    assert items[-1] == (
+        "question",
+        {"questions": ["题面没有说明识别方式，用摄像头还是传感器？"]},
+    )
+
+
+def test_run_recommendation_done_payload_verbatim():
+    """收敛成功 → done 载荷逐字：modules/reasons、requirements（to_dict 形状）、
+    topic.key 非空带 topic_id + related_modules、references = auto ∪ manual
+    并集去重（同一条目只出现一次，手动优先标注）platform 随条目带出。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(
+            modules=("dht11",),
+            reasons={"dht11": "测温湿度"},
+            requirements=(
+                FunctionRequirement(
+                    requirement="温湿度采集",
+                    sentence_index=2,
+                    modules=("dht11",),
+                    suggestions=(
+                        OutOfLibrarySuggestion(
+                            name="视觉模块", examples=("K230", "OpenMV")
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+    auto = _reference("ref-auto", "锚定参考", platform=PLATFORM_STM32)
+    overlap = _reference("ref-both", "双重参考", platform=PLATFORM_MSPM0)
+    manual = _reference("ref-manual", "手动参考", platform=PLATFORM_ANY)
+
+    _, events = _run_recommendation(
+        _topic(
+            key="2021F",
+            references=(auto, overlap),
+            related_modules=("led", "motor"),
+            manual_references=(manual, overlap),  # ref-both 既锚定又手动
+        ),
+        llm,
+    )
+
+    items = _drain_events(events)
+    assert _event_kinds(items) == [EVENT_ROUND, EVENT_ROUND, EVENT_CONVERGED, EVENT_DONE]
+    data = items[-1][1]
+    assert data == {
+        "modules": [{"slug": "dht11", "reason": "测温湿度"}],
+        "requirements": [
+            {
+                "requirement": "温湿度采集",
+                "sentence": 2,
+                "modules": ["dht11"],
+                "suggestions": [
+                    {"name": "视觉模块", "examples": ["K230", "OpenMV"], "degraded": False}
+                ],
+            }
+        ],
+        "topic_id": "2021F",
+        "related_modules": ["led", "motor"],
+        "references": [
+            {"id": "ref-auto", "title": "锚定参考", "source": "auto", "platform": PLATFORM_STM32},
+            {"id": "ref-manual", "title": "手动参考", "source": "manual", "platform": PLATFORM_ANY},
+            {"id": "ref-both", "title": "双重参考", "source": "manual", "platform": PLATFORM_MSPM0},
+        ],
+    }
+
+
+def test_run_recommendation_no_topic_key_omits_topic_fields():
+    """no-topic 形（key 空）：done 载荷无 topic_id / related_modules；references
+    清单恒空时为 []（键常驻，前端透明闭环照常消费）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
+    )
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    data = _drain_events(events)[-1][1]
+    assert data == {
+        "modules": [{"slug": "dht11", "reason": "测温湿度"}],
+        "requirements": [],
+        "references": [],
+    }
