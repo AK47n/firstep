@@ -1,3 +1,4 @@
+#include <stddef.h>  // NULL（C 库头，headfile.h 不含；UV4 必 8 错见工单 ball-detect-null-fix/01）
 #include "headfile.h"
 #include "ball_detect_stm32.h"
 
