@@ -1,0 +1,26 @@
+#ifndef _ball_detect_stm32_h_
+#define _ball_detect_stm32_h_
+#include "headfile.h"
+
+// ==================== 钢珠检测结果 ====================
+
+typedef struct {
+    int cx, cy;               // 钢珠中心坐标（图像空间 1280x720）
+    float confidence;         // 置信度 0~1
+    int x1, y1, x2, y2;      // 边界框
+    uint8_t detected;         // 本帧是否检测到钢珠（1=有, 0=无）
+    uint8_t updated;          // 是否有新数据（消费后清零）
+    uint32_t lost_frames;     // 连续丢失帧数
+} BallResult;
+
+extern BallResult ball_result;
+extern volatile uint32_t ball_rx_byte_count;
+extern volatile uint32_t ball_rx_overflow;
+extern volatile uint32_t ball_rx_error;
+
+void ball_detect_init(void);
+void ball_detect_flush(void);
+void ball_detect_rx_handler(void);
+void ball_detect_parse(void);
+
+#endif

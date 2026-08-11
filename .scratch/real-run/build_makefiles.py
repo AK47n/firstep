@@ -17,14 +17,18 @@ SYSCFG = "C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"
 OUT = "mspm0_project"
 
 MODULES = [
-    ("delay", "delay.c"),
-    ("ntb_time", "ntb_time.c"),
-    ("key", "key.c"),
-    ("oled", "oled.c"),
-    ("huidu", "huidu.c"),
-    ("imu_uart", "imu.c"),
-    ("led_beep", "led_beep.c"),
-    ("motor", "motor.c"),
+    ("delay", ["delay.c"]),
+    ("ntb_time", ["ntb_time.c"]),
+    ("key", ["key.c"]),
+    ("oled", ["oled.c"]),
+    ("huidu", ["huidu.c"]),
+    ("imu_uart", ["imu.c"]),
+    ("led_beep", ["led_beep.c"]),
+    ("motor", ["motor.c"]),
+    ("pid", ["pid_mspm0.c", "gray_track_mspm0.c"]),
+    ("digit_uart", ["digit_uart_mspm0.c"]),
+    ("filter", ["filter.c"]),
+    ("ball_detect", ["ball_detect.c"]),
 ]
 MOD_DIRS = [f"modules/{slug}/code" for slug, _ in MODULES]
 INC = " ".join(
@@ -105,23 +109,24 @@ root_rules += "\t@echo 'Finished building: \"$<\"'\n\t@echo ' '\n"
 (DEBUG / "subdir_rules.mk").write_text(root_rules, encoding="utf-8")
 
 # ---------- per-module subdir_vars.mk / subdir_rules.mk ----------
-for slug, cfile in MODULES:
+for slug, cfiles in MODULES:
     rel = f"modules/{slug}/code"
     d = DEBUG / rel
     d.mkdir(parents=True, exist_ok=True)
-    src = f"../{rel}/{cfile}"
-    deps = f"./{rel}/{cfile.replace('.c', '.d')}"
-    obj = f"./{rel}/{cfile.replace('.c', '.o')}"
     vars = HEADER
-    vars += f"C_SRCS += \\\n{src} \n\n"
-    vars += f"C_DEPS += \\\n{deps} \n\n"
-    vars += f"OBJS += \\\n{obj} \n\n"
-    vars += f"OBJS__QUOTED += \\\n{chr(34)}{rel}/{cfile.replace('.c', '.o')}{chr(34)} \n\n"
-    vars += f"C_DEPS__QUOTED += \\\n{chr(34)}{rel}/{cfile.replace('.c', '.d')}{chr(34)} \n\n"
-    vars += f"C_SRCS__QUOTED += \\\n{chr(34)}{src}{chr(34)} \n\n"
+    rules = HEADER
+    for cfile in cfiles:
+        src = f"../{rel}/{cfile}"
+        deps = f"./{rel}/{cfile.replace('.c', '.d')}"
+        obj = f"./{rel}/{cfile.replace('.c', '.o')}"
+        vars += f"C_SRCS += \\\n{src} \n\n"
+        vars += f"C_DEPS += \\\n{deps} \n\n"
+        vars += f"OBJS += \\\n{obj} \n\n"
+        vars += f"OBJS__QUOTED += \\\n{chr(34)}{rel}/{cfile.replace('.c', '.o')}{chr(34)} \n\n"
+        vars += f"C_DEPS__QUOTED += \\\n{chr(34)}{rel}/{cfile.replace('.c', '.d')}{chr(34)} \n\n"
+        vars += f"C_SRCS__QUOTED += \\\n{chr(34)}{src}{chr(34)} \n\n"
     (d / "subdir_vars.mk").write_text(vars, encoding="utf-8")
 
-    rules = HEADER
     rules += f"{rel}/%.o: ../{rel}/%.c $(GEN_OPTS) | $(GEN_FILES) $(GEN_MISC_FILES)\n"
     rules += '\t@echo \'Arm Compiler - building file: "$<"\'\n'
     rules += f'\t"{COMPILER}/bin/tiarmclang.exe" -c @"./device.opt" {FLAGS} {INC} -MF"{rel}/$(basename $(<F)).d_raw" -MT"$(@)"  $(GEN_OPTS__FLAG) -o"$@" "$<"\n'
@@ -134,15 +139,16 @@ includes = "\n".join(f"-include {f}" for f in [
 ] + [f"{rel}/subdir_vars.mk" for _, rel in [("", "")]] + [f"modules/{s}/code/subdir_vars.mk" for s, _ in MODULES]
   + ["subdir_rules.mk"] + [f"modules/{s}/code/subdir_rules.mk" for s, _ in MODULES] + ["objects.mk"])
 
+module_objs = [f"./modules/{s}/code/{c.replace('.c', '.o')}" for s, cfiles in MODULES for c in cfiles]
 ordered_objs = "\n".join(
     [o + " \\" for o in (
         ["./ti_msp_dl_config.o", "./startup_mspm0g350x_ticlang.o", "./main.o"]
-        + [f"./modules/{s}/code/{c.replace('.c', '.o')}" for s, c in MODULES]
+        + module_objs
     )]
 ) + "\n$(GEN_CMDS__FLAG) \\\n-Wl,-ldevice.cmd.genlibs \\\n-Wl,-llibc.a"
 objs_quoted = "\n".join(
     ['"ti_msp_dl_config.o"', '"startup_mspm0g350x_ticlang.o"', '"main.o"']
-    + [f'"modules\\{s}\\code\\{c.replace(chr(46)+chr(99), chr(46)+chr(111))}"' for s, c in MODULES]
+    + [f'"modules\\{s}\\code\\{c.replace(chr(46)+chr(99), chr(46)+chr(111))}"' for s, cfiles in MODULES for c in cfiles]
 )
 
 makefile = f"""################################################################################
@@ -191,7 +197,7 @@ all: $(OBJS) $(GEN_CMDS)
 clean:
 	-$(RM) $(GEN_MISC_FILES__QUOTED)$(GEN_FILES__QUOTED)$(EXE_OUTPUTS__QUOTED)
 	-$(RM) """ + objs_quoted.replace("\n", " ") + """
-	-$(RM) """ + " ".join(['"ti_msp_dl_config.d"', '"startup_mspm0g350x_ticlang.d"', '"main.d"'] + [f'"modules\\{s}\\code\\{c.replace(".c", ".d")}"' for s, c in MODULES]) + """
+	-$(RM) """ + " ".join(['"ti_msp_dl_config.d"', '"startup_mspm0g350x_ticlang.d"', '"main.d"'] + [f'"modules\\{s}\\code\\{c.replace(".c", ".d")}"' for s, cfiles in MODULES for c in cfiles]) + """
 	-@echo ' '
 
 .PHONY: all clean dependents
