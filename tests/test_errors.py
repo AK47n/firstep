@@ -22,6 +22,7 @@ from contest_generator.entry_store import (
     StoreShapeError,
 )
 from contest_generator.errors import _ERROR_TABLE, error_entry
+from contest_generator.generator import DuplicateFilePathError
 from contest_generator.llm import LLMError
 from contest_generator.manifest import ManifestError
 from contest_generator.patchers import UnknownPlatformError
@@ -125,6 +126,21 @@ def test_manual_reference_error_registered_as_400() -> None:
     )
     assert status == 400
     assert "不存在" in message
+
+
+def test_duplicate_file_path_error_registered_as_400() -> None:
+    """跨模块同名文件冲突（生成侧查重兜底，工单 gen-file-collision-gate/01）：
+    显式登记 error_to_http 表 → 400 中文。"""
+    status, message = error_entry(
+        DuplicateFilePathError(
+            "所选模块存在同名文件冲突（生成工程链接期会报 UV4 L6200E "
+            "multiply defined）：\n- 模块 zigbee_uart 与模块 zigbee_uart_key "
+            "都声明文件 code/zigbee_uart.c"
+        )
+    )
+    assert status == 400
+    assert "同名文件冲突" in message
+    assert "code/zigbee_uart.c" in message
 
 
 def test_error_entry_contract_unchanged() -> None:
