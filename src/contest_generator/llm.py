@@ -601,37 +601,41 @@ class DeepSeekLLM:
         工单 10 起输出功能需求层（requirements / suggestions / questions），
         顶层 modules 由需求层机械得出（build_module_selection，域判决在
         selection.py）；硬件词表进提示词作科普素材、作库外建议 name 的校验源。
+
+        瞬时失败整次重问（_retry_parse，与归档判定同款兜底）：DeepSeek 偶发
+        空内容 / 输出畸形会重问，最多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错。
         """
-        content = self._chat(
-            [
-                {"role": "system", "content": SELECT_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _selection_user_prompt(
-                        problem_text,
-                        manifest_summaries,
-                        references,
-                        reference_fulltexts,
-                        manual_fulltexts,
-                        self._hardware_words,
-                        clarifications,
-                    ),
-                },
-            ],
+
+        def parse(content: str) -> ModuleSelection:
+            data = extract_module_selection_data(content)
+            try:
+                return build_module_selection(
+                    data,
+                    known_slugs=[s.slug for s in manifest_summaries],
+                    known_reference_ids=[r.id for r in references],
+                    hardware_words=self._hardware_words,
+                )
+            except SelectionError as exc:
+                # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；
+                # selection 不 import LLMError——否则与 llm → selection 既有边成环；
+                # 翻译在闭包内，重试循环吃的是翻译后的 LLMError）
+                raise LLMError(str(exc)) from exc
+
+        return self._retry_parse(
+            system_prompt=SELECT_SYSTEM_PROMPT,
+            user_prompt=_selection_user_prompt(
+                problem_text,
+                manifest_summaries,
+                references,
+                reference_fulltexts,
+                manual_fulltexts,
+                self._hardware_words,
+                clarifications,
+            ),
+            parse=parse,
+            label="模块选择",
             json_mode=True,
         )
-        data = extract_module_selection_data(content)
-        try:
-            return build_module_selection(
-                data,
-                known_slugs=[s.slug for s in manifest_summaries],
-                known_reference_ids=[r.id for r in references],
-                hardware_words=self._hardware_words,
-            )
-        except SelectionError as exc:
-            # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；
-            # selection 不 import LLMError——否则与 llm → selection 既有边成环）
-            raise LLMError(str(exc)) from exc
 
     def clarify(
         self, problem_text: str, clarifications: Sequence[tuple[str, str]]
@@ -643,18 +647,17 @@ class DeepSeekLLM:
         是收敛阶段的事，省一轮完整分析的成本）。历史逐条 "Q: … A: …" 送模型，
         避免重复问已回答过的问题；json_mode 解析 {"questions": [...]}，空数组
         = 无疑问（parse_clarify_questions，严格解析畸形输出）。
+
+        瞬时失败整次重问（_retry_parse，与 select_modules 同款兜底）：空内容 /
+        畸形输出重问至多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错。
         """
-        content = self._chat(
-            [
-                {"role": "system", "content": CLARIFY_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _clarify_user_prompt(problem_text, clarifications),
-                },
-            ],
+        return self._retry_parse(
+            system_prompt=CLARIFY_SYSTEM_PROMPT,
+            user_prompt=_clarify_user_prompt(problem_text, clarifications),
+            parse=parse_clarify_questions,
+            label="澄清",
             json_mode=True,
         )
-        return parse_clarify_questions(content)
 
     def summarize_topic(self, problem_text: str) -> str:
         """赛题 → 简短简介（一句话总览 + 功能要点，文本模式，赛题简介步骤）。
