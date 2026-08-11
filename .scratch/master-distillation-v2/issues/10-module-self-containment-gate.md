@@ -24,7 +24,7 @@
 
 **Blocked by:** 无
 
-**Status:** resolved（待用户 Keil GUI 复验）
+**Status:** resolved（2026-08-11 用户 Keil GUI 复验闭环——见文末复验记录）
 
 ## Answer
 
@@ -35,3 +35,9 @@
 - [x] 2026C 完整管线被推荐收敛循环的补问卡住（"题面中要求序号2的内容缺失"）——设计行为，待用户补题面原文或回答后重跑
 - [x] 门禁 `_check_module_self_include` + 回归测试（tests/test_generator.py），全套 764 绿
 - [x] generate_check.py 加 uv4_build 断言（无 Keil 跳过），真机编译进真机验证脚本
+
+## 复验记录（2026-08-11，用户 Keil GUI）
+
+- 工单 02 2021F 真机验收走完整管线（真实 DeepSeek：推荐 4 轮 done + 补问 4 轮 10 条 → 骨架 0 拦截 → 生成 51 文件），生成工程选用 motor+pid（pid 的 gray_track/ml_mpu6050 依赖拖入）——正是本工单修复的模块库路径。
+- 用户 Keil GUI 编译 0 错 0 警；UV4 命令行同 0 错 0 警。母版（headfile 摘字体聚合 + ml_systick + uvprojx 树）与门禁 _check_module_self_include 均为此管线实跑路径，全部验证。
+- 结论：本工单"待用户 Keil GUI 复验"由此闭环（旧注释写于 2026-08-08 仅有 AI 命令行 UV4 验证时，未随工单 02 验收更新）。
