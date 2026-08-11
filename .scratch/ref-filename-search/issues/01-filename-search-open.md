@@ -2,7 +2,14 @@
 
 **What to build:** 在参考文件库页搜文件名（如"TB6612"）能命中条目并直接打开文件（PDF 浏览器预览 / 文本内联 / 其他下载）。
 
-**Status:** drafted（2026-08-11，主会话已核实现状，待用户开新终端执行）
+**Status:** resolved（2026-08-11 已合 main，PR #42 merged 0200183，ee262fd + dec3767——此前工单状态过期，2026-08-12 收尾改正）
+
+## 实施记录（2026-08-11，合入时补录）
+
+- `search_references` 加 `filename` 参数（大小写不敏感子串匹配素材清单.txt 内容行 + files 路径，空串 = 不过滤向后兼容）。
+- GET /api/references/{id}/files 清单端点（清单记录 + 条目目录 rglob 排除 reference.json，同路径磁盘实况优先）；GET /api/references/{id}/files/{path:path} 服务端点（is_unsafe_path → 400；条目目录文本内联 → materials 镜像 PDF application/pdf 浏览器预览、其余按扩展名下载；404/400 映射走既有 ReferenceError）。
+- 前端文件名筛选框 + 条目行查看按钮 → 文件清单弹层（PDF 新窗口 / 文本 fetch 内联 / 其余下载，URL 按段 encodeURIComponent）。
+- 测试 23 个；验收：1032 绿 + mypy 干净 + 真机 8001 实测（TB6612/AT8236 命中塔克条目，PDF 200 + application/pdf + %PDF 魔数可预览，穿越 400 / 缺失 404）。
 
 ## 现状（已核实）
 
