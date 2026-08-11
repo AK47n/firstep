@@ -325,6 +325,61 @@ def test_select_modules_missing_content_field_raises():
         llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
 
+# select_modules 整次重试兜底（工单 recommend-call-retry/01）：DeepSeek 偶发
+# 空内容（真机 2026C 实测）→ 自动重问，不再一枪毙命
+
+
+def test_select_modules_retries_on_empty_content_then_succeeds():
+    """瞬时空内容响应 → 整次重问（最多 SUMMARY_RETRY_LIMIT 轮）→ 成功。"""
+    transport = SequenceTransport(
+        [_api_response(""), _api_response(""), _api_response(SELECTION_JSON)]
+    )
+    llm = _llm(transport)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    assert len(transport.calls) == 3  # 空内容 2 次 + 成功 1 次
+
+
+def test_select_modules_exhausts_retries_on_empty_content():
+    """全部空内容 → 大声失败（错误文案含"连续"，语义保留在末次失败里）。"""
+    transport = SequenceTransport([_api_response("")] * 3)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="模块选择连续 3 次调用失败"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    assert len(transport.calls) == 3  # SUMMARY_RETRY_LIMIT
+
+
+def test_select_modules_retries_on_malformed_json_then_succeeds():
+    """畸形输出（非 JSON）同样整次重问，直到解析通过。"""
+    transport = SequenceTransport([_api_response("{not json"), _api_response(SELECTION_JSON)])
+    llm = _llm(transport)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    assert len(transport.calls) == 2
+
+
+def test_select_modules_retries_when_selection_rejected():
+    """SelectionError 路径在重试覆盖内：域判决拒绝（未知 slug）→ 翻译成
+    LLMError → 整次重问 → 成功。"""
+    transport = SequenceTransport(
+        [
+            _api_response(json.dumps({"modules": [{"slug": "ghost", "reason": "x"}]})),
+            _api_response(SELECTION_JSON),
+        ]
+    )
+    llm = _llm(transport)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    assert len(transport.calls) == 2
+
+
 # ---------------------------------------------------------------------------
 # 澄清阶段（工单 01 推荐先澄清后收敛）：只看题面 + 问答历史，输出仍存疑问
 # ---------------------------------------------------------------------------
@@ -380,6 +435,37 @@ def test_clarify_rejects_malformed_output(bad_content):
     transport = FakeTransport(body=_api_response(bad_content))
     with pytest.raises(LLMError):
         _llm(transport).clarify("赛题", [])
+
+
+# clarify 整次重试兜底（工单 recommend-call-retry/01）：与 select_modules 同款
+# _retry_parse，空内容 / 畸形输出自动重问，不再一枪毙命
+
+
+def test_clarify_retries_on_empty_content_then_succeeds():
+    """瞬时空内容响应 → 整次重问 → 成功解析疑问。"""
+    transport = SequenceTransport(
+        [
+            _api_response(""),
+            _api_response(""),
+            _api_response(json.dumps({"questions": ["识别方式？"]})),
+        ]
+    )
+    llm = _llm(transport)
+
+    result = llm.clarify("赛题", [("识别方式？", "摄像头")])
+
+    assert result == ("识别方式？",)
+    assert len(transport.calls) == 3  # 空内容 2 次 + 成功 1 次
+
+
+def test_clarify_exhausts_retries_on_empty_content():
+    """全部空内容 → 大声失败（错误文案含"连续"）。"""
+    transport = SequenceTransport([_api_response("")] * 3)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="澄清连续 3 次调用失败"):
+        llm.clarify("赛题", [])
+    assert len(transport.calls) == 3  # SUMMARY_RETRY_LIMIT
 
 
 def test_clarify_prompt_contract():
