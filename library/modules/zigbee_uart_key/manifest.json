@@ -7,8 +7,8 @@
   "platforms": {
     "stm32": {
       "files": [
-        "code/zigbee_uart.c",
-        "code/zigbee_uart.h"
+        "code/zigbee_uart_key.c",
+        "code/zigbee_uart_key.h"
       ],
       "verified": false,
       "hardware_bound": false,
