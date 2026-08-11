@@ -1,8 +1,9 @@
-"""真机验证：2026C + 2021F 推荐 → 骨架 → 生成全流程一次跑完。
+"""真机验证：赛题 推荐 → 骨架 → 生成 全流程一次跑完（stm32/Keil 与 mspm0/CCS 两线）。
 
-用法：python generate_check.py [topic...]（默认 2026C 2021F）
+用法：python generate_check.py [--platform stm32|mspm0] [--topic-file <题面.md>] [topic...]
+      topic 从题库读（默认 2026C 2021F）；--topic-file 从外部 md 读题面（如 2026H）。
 依赖：服务在 127.0.0.1:8000 运行（python -m contest_generator.webapp）。
-输出目录：.scratch/real-run/out_<topic>（不碰桌面原工程）。
+输出目录：.scratch/real-run/out_<topic>_<platform>（不碰桌面原工程）。
 """
 import json
 import os
@@ -17,6 +18,16 @@ BASE = "http://127.0.0.1:8000"
 PLATFORM = "stm32"
 TOPICS = Path.home() / ".contest_generator" / "topics"
 HERE = Path(__file__).parent
+
+# mspm0 豁免的头：ti_msp_dl_* 由 SysConfig 构建时生成进工程根（SDK 头同
+# 前缀），产物树里本来就没有——与 Keil 语义的器件包头同地位。
+# 标准库头 stm32 语义见 EXTERNAL_HEADERS，此处按前缀统一豁免 mspm0 器件层。
+def is_external_header(header: str, platform: str) -> bool:
+    if platform == "mspm0":
+        return header.lower() in EXTERNAL_HEADERS or header.lower().startswith(
+            "ti_msp_dl_"
+        )
+    return header.lower() in EXTERNAL_HEADERS
 
 # 编译产物级校验（Keil 语义）：真机编译失败的对应断言。
 # 1) 代码围栏：LLM 输出带 ```c 围栏直接落盘 → Keil 报 unrecognized token。
@@ -36,11 +47,14 @@ EXTERNAL_HEADERS = frozenset(
 _INCLUDE_RE = re.compile(r'#\s*include\s*"([^"]+)"')
 
 
-def check_artifacts(out_dir: Path) -> list[str]:
+def check_artifacts(out_dir: Path, platform: str = PLATFORM) -> list[str]:
     """产物检查：返回问题列表（空 = 干净）。围栏 + include 解析两断言。"""
     problems: list[str] = []
     sources = [p for p in out_dir.rglob("*") if p.suffix.lower() in (".c", ".h")]
-    include_dirs = _uvprojx_include_dirs(out_dir)
+    if platform == "stm32":
+        include_dirs = _uvprojx_include_dirs(out_dir)
+    else:
+        include_dirs = _cproject_include_dirs(out_dir)
     for src in sources:
         rel = src.relative_to(out_dir).as_posix()
         text = src.read_text(encoding="utf-8", errors="replace")
@@ -51,7 +65,7 @@ def check_artifacts(out_dir: Path) -> list[str]:
             header = m.group(1)
             if _resolves(header, src.parent, include_dirs):
                 continue
-            if header.lower() in EXTERNAL_HEADERS:
+            if is_external_header(header, platform):
                 continue
             line_no = text.count("\n", 0, m.start()) + 1
             problems.append(f"{rel}:{line_no} 引用不存在的头文件: {header}")
@@ -60,6 +74,39 @@ def check_artifacts(out_dir: Path) -> list[str]:
 
 def _resolves(header: str, own_dir: Path, include_dirs: list[Path]) -> bool:
     return any((d / header).is_file() for d in [own_dir, *include_dirs])
+
+
+def _cproject_include_dirs(out_dir: Path) -> list[Path]:
+    """解析最终 .cproject 的 IncludePath（CCS 语义，mspm0 线）→ 工程根相对目录。
+
+    includePath option 的 listOptionValue value 含 ${PROJECT_LOC}（工程目录，
+    .cproject 所在处）与 ${PROJECT_ROOT} 等宏；可展开的宏展开，不可展开的
+    （${ConfigName} 等构建期值）跳过——静态检查只看模块路径可达。
+    """
+    cproject = next(out_dir.rglob(".cproject"), None)
+    if cproject is None:
+        return []
+    dirs: list[Path] = []
+    try:
+        root = ET.parse(cproject).getroot()
+    except ET.ParseError:
+        return []
+    for opt in root.iter("option"):
+        if opt.get("valueType") != "includePath":
+            continue
+        for vo in opt.findall("listOptionValue"):
+            val = (vo.get("value") or "").strip()
+            if not val:
+                continue
+            p = Path(val.replace("${PROJECT_LOC}", str(cproject.parent))
+                     .replace("${PROJECT_ROOT}", str(cproject.parent)))
+            if "${" in str(p):
+                continue
+            try:
+                dirs.append(p.resolve())
+            except OSError:
+                continue
+    return dirs
 
 
 def _uvprojx_include_dirs(out_dir: Path) -> list[Path]:
@@ -169,22 +216,30 @@ def check_topic(
     key: str,
     clarify_map: dict[str, str] | None = None,
     drop: tuple[str, ...] = (),
+    platform: str = PLATFORM,
+    topic_file: Path | None = None,
+    add: tuple[str, ...] = (),
 ) -> bool:
     ok = True
-    print(f"\n===== {key} =====")
+    print(f"\n===== {key} ({platform}) =====")
     topic_md = TOPICS / key / "topic.md"
-    problem_text = topic_md.read_text(encoding="utf-8")
-    print(f"[题面] {key}/topic.md {len(problem_text)} 字符")
+    src = topic_file or topic_md
+    problem_text = src.read_text(encoding="utf-8")
+    print(f"[题面] {src} {len(problem_text)} 字符")
 
     # 1) 推荐（补问循环：question 终态 → 从 clarify_map 取答案 → 带澄清历史
     # 重发，最多 5 轮；答案不进题面，收敛判定的句子编号不受污染。
-    # clarify_map 全量预置进历史：模型能看到已答问题，避免换措辞反复补问）
+    # clarify_map 全量预置进历史：模型能看到已答问题，避免换措辞反复补问。
+    # topic_file 模式 = no-topic 手动准入（题库无该编号），不带 topic_id）
+    topic_id = None if topic_file else key
     clarify_hist: list[dict[str, str]] = [
         {"question": q, "answer": a} for q, a in (clarify_map or {}).items()
     ]
     rec: dict = {}
     for _round in range(5):
-        payload: dict = {"problem_text": problem_text, "topic_id": key}
+        payload: dict = {"problem_text": problem_text}
+        if topic_id:
+            payload["topic_id"] = topic_id
         if clarify_hist:
             payload["clarifications"] = clarify_hist
         rec = recommend_stream(payload)
@@ -209,6 +264,9 @@ def check_topic(
     if dropped:
         slugs = [s for s in slugs if s not in drop]
         print(f"  → 按 --drop 去掉 {dropped}（无 {PLATFORM} 平台条目，前端同款手动增删语义）")
+    if add:
+        slugs += [s for s in add if s not in slugs]
+        print(f"  → 按 --add 补选 {add}（include 门禁要求的依赖模块，前端同款手动增删语义）")
     print(f"  模块({len(slugs)}): {', '.join(slugs)}")
     for m in data.get("modules", []):
         print(f"    - {m['slug']}: {m['reason'][:80]}")
@@ -225,10 +283,12 @@ def check_topic(
             ok = False
 
     # 2) 骨架
-    skel = post("/api/skeleton", {
-        "problem_text": problem_text, "platform": PLATFORM,
-        "slugs": slugs, "topic_id": key,
-    })
+    skel_payload: dict = {
+        "problem_text": problem_text, "platform": platform, "slugs": slugs,
+    }
+    if topic_id:
+        skel_payload["topic_id"] = topic_id
+    skel = post("/api/skeleton", skel_payload)
     main_c = skel.get("main_c", "")
     print(f"[骨架] main.c {len(main_c)} 字符, 拦截幻觉调用 {len(skel.get('intercepted', []))} 处")
     if not main_c or "int main" not in main_c:
@@ -236,24 +296,27 @@ def check_topic(
         ok = False
 
     # 3) 生成
-    out_dir = HERE / f"out_{key}"
-    gen = post("/api/generate", {
-        "platform": PLATFORM, "slugs": slugs, "main_c": main_c,
-        "output_dir": str(out_dir), "topic_id": key,
-    })
+    out_dir = HERE / f"out_{key}_{platform}"
+    gen_payload: dict = {
+        "platform": platform, "slugs": slugs, "main_c": main_c,
+        "output_dir": str(out_dir),
+    }
+    if topic_id:
+        gen_payload["topic_id"] = topic_id
+    gen = post("/api/generate", gen_payload)
     print(f"[生成] 输出 {out_dir}")
     files = [f.relative_to(out_dir).as_posix() for f in out_dir.rglob("*") if f.is_file()]
     print(f"  文件数 {len(files)}")
     for f in files:
         print(f"    - {f}")
-    need = {"main.c", "user/Project.uvprojx"}
+    need = {"main.c", "user/Project.uvprojx"} if platform == "stm32" else {"main.c", "mspm0.syscfg"}
     missing = need - set(files)
     if missing:
         print(f"  ✗ 缺关键文件: {missing}")
         ok = False
 
     # 产物级断言：围栏 + include 解析（真机编译失败的对应检查）
-    problems = check_artifacts(out_dir)
+    problems = check_artifacts(out_dir, platform)
     if problems:
         for p in problems:
             print(f"  ✗ 产物: {p}")
@@ -261,15 +324,19 @@ def check_topic(
     else:
         print("  [产物] 无围栏残留、全部 include 可解析")
 
-    # 真机编译：UV4 命令行构建（符号级完整性的唯一证明）
-    passed, summary = uv4_build(out_dir)
-    if passed is None:
-        print(f"  [真机] {summary}")
-    elif passed:
-        print(f"  [真机] ✓ {summary}")
+    # 真机编译：UV4 命令行构建（符号级完整性的唯一证明，仅 stm32/Keil 线；
+    # mspm0/CCS 线 Theia 无命令行构建，最终证明走用户 GUI 编译）
+    if platform == "stm32":
+        passed, summary = uv4_build(out_dir)
+        if passed is None:
+            print(f"  [真机] {summary}")
+        elif passed:
+            print(f"  [真机] ✓ {summary}")
+        else:
+            print(f"  [真机] ✗ {summary}")
+            ok = False
     else:
-        print(f"  [真机] ✗ {summary}")
-        ok = False
+        print("  [真机] mspm0/CCS 线：Theia 无命令行构建，最终证明待用户 GUI 编译")
     return ok
 
 
@@ -279,6 +346,18 @@ def main() -> None:
     except (AttributeError, ValueError):
         pass
     args = sys.argv[1:]
+    global PLATFORM
+    platform = PLATFORM
+    if "--platform" in args:
+        idx = args.index("--platform")
+        platform = args[idx + 1]
+        PLATFORM = platform
+        del args[idx:idx + 2]
+    topic_file: Path | None = None
+    if "--topic-file" in args:
+        idx = args.index("--topic-file")
+        topic_file = Path(args[idx + 1])
+        del args[idx:idx + 2]
     clarify_map: dict[str, str] = {}
     if "--clarify" in args:
         idx = args.index("--clarify")
@@ -293,8 +372,16 @@ def main() -> None:
         idx = args.index("--drop")
         drop = tuple(s.strip() for s in args[idx + 1].split(",") if s.strip())
         del args[idx:idx + 2]
+    add: tuple[str, ...] = ()
+    if "--add" in args:
+        idx = args.index("--add")
+        add = tuple(s.strip() for s in args[idx + 1].split(",") if s.strip())
+        del args[idx:idx + 2]
     topics = args or ["2026C", "2021F"]
-    results = {t: check_topic(t, clarify_map, drop) for t in topics}
+    results = {
+        t: check_topic(t, clarify_map, drop, platform, topic_file, add)
+        for t in topics
+    }
     print("\n===== 汇总 =====")
     for t, ok in results.items():
         print(f"{t}: {'✓ 通过' if ok else '✗ 失败'}")
