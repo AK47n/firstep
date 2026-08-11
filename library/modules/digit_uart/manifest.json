@@ -3,6 +3,17 @@
   "description": "该代码实现了一个基于UART中断接收的环形缓冲区驱动，用于解析K230发送的CSV格式数字识别结果（标签、置信度、坐标），并提取帧中数字数量最多的数据供主控使用。",
   "dependencies": [],
   "platforms": {
+    "mspm0": {
+      "files": [
+        "code/digit_uart_mspm0.c",
+        "code/digit_uart_mspm0.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 digit_uart_init() 开 NVIC；digit_uart_rx_handler() 需挂在 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）里（main.c 或 isr 文件）。解析逻辑与 21F/26H stm32 版一致（环形缓冲 + CSV 帧解析）。编译验证未上板。",
+      "kit": "",
+      "source_url": ""
+    },
     "stm32": {
       "files": [
         "code/digit_uart.c",
