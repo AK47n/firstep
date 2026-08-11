@@ -2,7 +2,7 @@
 
 **What to build:** ① 素材清单.txt 格式契约写入侧收成 reference_library 公开原语（读取侧已单源，写读对偶）；② materials 备份根推导收进 config.py（webapp 启发式删除、脚本硬编码换推导）；③ "条目可匹配文件名"三形状收敛为一个内部原语 + resolve_entry_file 缺失改抛 ReferenceError（路由内联 404 通道删除）。
 
-**Status:** drafted（2026-08-11，主会话已核实现状，待用户开新终端执行）
+**Status:** resolved（2026-08-11，PR #43，验收全勾）
 
 ## 现状（已核实）
 
