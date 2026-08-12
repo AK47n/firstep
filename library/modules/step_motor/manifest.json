@@ -1,0 +1,18 @@
+{
+  "slug": "step_motor",
+  "description": "脉冲式步进电机驱动：GPIO 方向/使能控制 + PWM 脉冲频率控速（1 脉冲 = 0.05625°）+ LOAD 中断计数到位自动停车。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/step_motor.c",
+        "code/step_motor.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "SysConfig 依赖（宏保留原工程命名，接线见 step_motor.h 头注释）：PWM TimerG 实例 DCC_100_PWM2（C0 通道输出 → 电机 PWM 输入，原工程 PA12）+ 4 个 GPIO 输出宏 STEP_MOTOR_RST2_PIN / SLP2_PIN / DIR2_PIN / DCY2_PIN（同 STEP_MOTOR_PORT 端口，原工程 PA13=DIR / PA14=DCY / PA15=SLP / PA16=RST，合计 5 路接线）；母版默认布局无此实例与宏——2026-08-12 已本地实验验证：生成工程 mspm0.syscfg 按本 notes 补 DCC_100_PWM2（TIMG12，32 位定时器 clockPrescale 须为 1）与 STEP_MOTOR 4 输出引脚后 gmake 全量 0 错（2 警 = 既有母版 UART ovsRate 提示），未上板；未配置时 step_motor.c 编译报宏缺失（预期）。stepper_id==2 单路硬编码保留（原工程第二路），多路扩展按 stepper_id 分支。移植源：素材【云台】03_step_motor 已完成_可以控制速度和角度.zip → 15_step_motor_2/step_motor.{c,h}（已审查为纯驱动，尾部注释掉的 step_motor_step_set 死代码已删）。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}
