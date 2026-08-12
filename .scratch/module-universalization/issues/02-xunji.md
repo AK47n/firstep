@@ -1,6 +1,6 @@
 # 02 — xunji 剥离决策层（mspm0 巡线驱动瘦身）
 
-**What to build:** xunji 模块瘦身为纯驱动（ADR 0009）：移出全部题逻辑——Control_AB / Control_ABCDA / Control_ACBDA / Control_ACBDAx4 四个模式状态机 + 白区消抖/声光时序 + xunji_tick_50ms / xunji_tick_10ms 调度 + 内部重复实现（PID_A / PID_B / myabs / PWM_Limit）；保留驱动能力——灰度 8 路读取、xunji_centroid 加权质心（普适循迹核心）、编码器采样读服务函数；删除头注释"2024H 巡线题专用层——car xunji 真机工程移植…"整段真机记忆（改写为能力方向说明）；manifest 描述按判据四要素重写（能力方向 = 灰度循迹驱动）。决策逻辑素材保障：car xunji 原生工程已归档参考文件库（car-1-1），骨架生成时 AI 可读到，模块无需自持。**先决依赖：工单 01 的结构测试已立（红证）。**
+**What to build:** xunji 模块瘦身为纯驱动（ADR 0009）：移出全部题逻辑——Control_AB / Control_ABCDA / Control_ACBDA / Control_ACBDAx4 四个模式状态机 + 白区消抖/声光时序 + xunji_tick_50ms / xunji_tick_10ms 调度 + 内部重复实现（PID_A / PID_B / myabs / PWM_Limit）；保留驱动能力——灰度 8 路读取、xunji_centroid 加权质心（普适循迹核心）、编码器采样读服务函数；删除头注释"2024H 巡线题专用层——car xunji 真机工程移植…"整段真机记忆（改写为能力方向说明）；manifest 描述按判据四要素重写（能力方向 = 灰度循迹驱动）。决策逻辑素材保障：car xunji 原生工程已归档参考文件库（car-1-1），骨架生成时 AI 可读到，模块无需自持。**先决依赖：工单 01 已闭环（结构测试 + EXCEPTION_REGISTRY 例外注册表已立，红证已验）——本工单清理 xunji 后必须删除注册表对应条目（不删 = 存量校验红，工单 01 实施记录定案）。**
 
 **Status:** drafted
 
@@ -10,6 +10,7 @@
 2. xunji.h：接口按保留驱动服务函数收敛。
 3. manifest.json：description 判据四要素；deps 更新（加 pid，如有）。
 4. 编译验证：2024H 选中 xunji 全管线产物 gmake 0 错；骨架样例（2024H 巡线 main）能编译。
+5. 结构测试 EXCEPTION_REGISTRY（tests/test_module_universality.py）删除 xunji 条目——工单 01 定案：清理后不删条目 = 存量校验红，防漏同步。
 
 ## 文件边界
 
@@ -23,4 +24,5 @@
 - [ ] 结构测试绿（xunji 不再命中黑名单；能力词白名单通过）。
 - [ ] manifest 四要素齐（能力方向含"灰度循迹"、无题号/年份/题名）。
 - [ ] xunji.c 无状态机/调度符号（无 Control_*、无 tick_* 定义），重复实现（PID/myabs/PWM_Limit）已清。
+- [ ] EXCEPTION_REGISTRY 已删 xunji 条目，删后全库测试仍绿（无新污染）。
 - [ ] 工单补实施记录 + 验收勾选，Status resolved。
