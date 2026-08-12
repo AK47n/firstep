@@ -1,0 +1,19 @@
+{
+  "id": "26H-滚球巡线决策例程",
+  "title": "26H-滚球巡线决策例程",
+  "type": "例程代码",
+  "description": "2026H 滚球题一圈巡线决策层源码（stm32 Keil 原工程，决策素材；26H 生成线为 mspm0，决策逻辑经移植为 pid_mspm0 驱动）：pid.c 含 LAP 启停线一圈停车状态机（IDLE→LEAVING_START→RUNNING→STOPPING→STOPPED，启停线消抖/离场冷却）+ 运行计时 + K230 钢珠坐标消费；gray_track.c 含启停线检测（≥4 路黑）与停车区黑白块检测。决策逻辑已按 ADR 0009 从 pid 模块剥离归生成骨架，本条目为 LLM 学习素材（只读不编译）。",
+  "anchor_kind": "topic",
+  "anchor_value": "2026H",
+  "platform": "mspm0",
+  "files": [
+    "code/pid.c",
+    "code/pid.h",
+    "code/gray_track.c",
+    "code/gray_track.h",
+    "user/isr.c",
+    "user/main.c"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
