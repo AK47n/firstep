@@ -18,8 +18,12 @@ UI 提供「回滚本次修复」按钮（restore_backup）。
 所在子目录（`..\main.c(158)` 形态，uvprojx 在 user/ 而源文件在工程根）——
 先按工程根解析，解析不出再按工程文件基准目录解析，两种都过 containment。
 
-替换协议（决策记录 4）：old_snippet 与文件现有内容逐字精确匹配（含缩进）后
-替换；匹配失败 / 多处歧义一律跳过并报告「未应用」（不静默、不模糊替换）。
+替换协议（决策记录 4 + 工单 fix-snippet-match/01）：old_snippet 精确匹配
+（含缩进）优先；精确匹配失败时走行首前缀归一化兜底（old_snippet strip 后
+必须是文件某行 strip 后内容的行首前缀——容忍前导缩进差异 / 行尾注释省略 /
+CRLF / 行尾空白，语句本体必须逐字一致），唯一命中才应用（reason 标注
+「按行首前缀归一化匹配应用」）；仍未命中 / 多处歧义一律跳过并报告
+「未应用」（不静默、不模糊替换、不做语义匹配）。
 
 本模块依赖方向：只 import entry_store（原语）与标准库，是叶子模块——llm.py
 反向依赖本模块（FixSuggestion 模型），禁止本模块 import llm（截断标注与
@@ -82,8 +86,9 @@ class FixSuggestion:
 
     file: str  # 相对路径（POSIX）
     line: int  # 报错行号（提示用，替换不依赖它）
-    old_snippet: str  # 必须与文件现有内容逐字一致（含缩进）
-    new_snippet: str  # 替换后内容（空串 = 删除该片段）
+    old_snippet: str  # 语句本体与文件逐字一致（可省前导缩进 / 行尾注释，见
+    # fix-snippet-match/01 前缀归一化兜底）
+    new_snippet: str  # 替换后内容（空串 = 删除该片段 / 整行）
     reason: str  # 修复理由（中文，可空）
 
 
@@ -269,14 +274,80 @@ def _truncate_file(content: str) -> str:
     return content
 
 
+def _snippet_normalized_lines(old_snippet: str) -> tuple[str, ...]:
+    """old_snippet 归一化后的行序列（工单 fix-snippet-match/01）：整体 strip +
+    逐行 strip + 去空行。与 _normalized_hits 的匹配判据共用同一函数，杜绝
+    匹配与替换两端行数不一致。
+    """
+    return tuple(ln.strip() for ln in old_snippet.strip().splitlines() if ln.strip())
+
+
+def _normalized_hits(content: str, old_snippet: str) -> tuple[int, ...]:
+    """行首前缀归一化匹配（工单 fix-snippet-match/01）：返回命中的起始行号
+    （0-based）元组。判据——old_snippet 归一化行序列（strip + 去空行）逐行
+    必须是文件对应行 strip() 后内容的行首前缀，多行片段 = 连续行块逐行前缀。
+    语句本体任何字符差异（含行内空白重组）→ 前缀比较失败，天然被拒；歧义
+    （多处命中）由调用方跳过。空片段 / 无命中 → 空元组。
+    """
+    snippet_lines = _snippet_normalized_lines(old_snippet)
+    if not snippet_lines:
+        return ()
+    file_lines = content.splitlines()
+    hits: list[int] = []
+    for i, line in enumerate(file_lines):
+        if not line.strip().startswith(snippet_lines[0]):
+            continue
+        j = 1
+        k = i + 1
+        while j < len(snippet_lines) and k < len(file_lines):
+            if not file_lines[k].strip().startswith(snippet_lines[j]):
+                break
+            j += 1
+            k += 1
+        if j == len(snippet_lines):
+            hits.append(i)
+    return tuple(hits)
+
+
+def _line_span(content: str, start_line: int, n_lines: int) -> tuple[int, int]:
+    """内容中第 start_line 行起连续 n_lines 行的 [start, end) 字符区间（含行尾
+    换行；末行无换行则到内容末尾）。归一化替换 = 匹配行的原始全文被
+    new_snippet 替换（new_snippet="" 即删整行/整块，注释随行删除）。
+    """
+    lines = content.splitlines(keepends=True)
+    pos = 0
+    offsets: list[int] = []
+    for ln in lines:
+        offsets.append(pos)
+        pos += len(ln)
+    start = offsets[start_line]
+    end = start + sum(len(ln) for ln in lines[start_line : start_line + n_lines])
+    return start, end
+
+
+def _preserve_line_ending(new_snippet: str, span: str) -> str:
+    """归一化替换的换行保护：span 以行尾换行结尾而 new_snippet 没有行尾时，
+    补回原行尾——整行替换语义下 new_snippet 通常是裸语句（无 \\n），不补会把
+    下一行顶上来拼成一行。new_snippet 为空串（删整行）不补（含换行整块删除）。
+    """
+    if not new_snippet or new_snippet.endswith("\n") or not span:
+        return new_snippet
+    ending = re.search(r"\r?\n\Z", span)
+    if ending is None:
+        return new_snippet
+    return new_snippet + ending.group(0)
+
+
 def apply_fixes(
     fixes: Sequence[FixSuggestion],
     output_dir: Path,
     backup_root: Path,
 ) -> ApplyReport:
-    """snippet 替换协议（决策记录 4）：old_snippet 与文件现有内容逐字精确匹配
-    后替换；匹配失败（0 次）/ 多处歧义（≥2 次）跳过并报告「未应用」——不
-    静默、不模糊替换。
+    """snippet 替换协议（决策记录 4 + 工单 fix-snippet-match/01）：old_snippet
+    精确匹配优先；精确匹配失败（0 次）时走行首前缀归一化兜底（容忍缩进 /
+    行尾注释省略 / CRLF / 行尾空白，语句本体须逐字一致），唯一命中才 applied
+    （reason 标注归一化）；仍未命中 / 多处歧义跳过并报告「未应用」——不
+    静默、不模糊替换、不做语义匹配。
 
     路径判决（决策记录 3）：file 扩展名白名单、is_unsafe_path 防穿越、resolve
     后仍在输出目录内、目标文件存在——任一不满足 → FixError（登记 errors.py
@@ -311,15 +382,43 @@ def apply_fixes(
                 )
                 new_contents[file] = content
             elif count == 0:
-                results.append(
-                    FixResult(
-                        file=file,
-                        line=fix.line,
-                        status="skipped",
-                        reason="未应用：文件内未找到 old_snippet（精确匹配失败，"
-                        "可能缩进 / 内容不一致）",
+                # 精确匹配失败 → 行首前缀归一化兜底（fix-snippet-match/01）
+                normalized = _normalized_hits(content, fix.old_snippet)
+                if len(normalized) == 1:
+                    start, end = _line_span(
+                        content, normalized[0], len(_snippet_normalized_lines(fix.old_snippet))
                     )
-                )
+                    snippet = _preserve_line_ending(fix.new_snippet, content[start:end])
+                    content = content[:start] + snippet + content[end:]
+                    results.append(
+                        FixResult(
+                            file=file,
+                            line=fix.line,
+                            status="applied",
+                            reason="按行首前缀归一化匹配应用",
+                        )
+                    )
+                    new_contents[file] = content
+                elif len(normalized) == 0:
+                    results.append(
+                        FixResult(
+                            file=file,
+                            line=fix.line,
+                            status="skipped",
+                            reason="未应用：文件内未找到 old_snippet（精确匹配失败，"
+                            "可能缩进 / 内容不一致）",
+                        )
+                    )
+                else:
+                    results.append(
+                        FixResult(
+                            file=file,
+                            line=fix.line,
+                            status="skipped",
+                            reason=f"未应用：old_snippet 按行首前缀归一化在文件内"
+                            f"多处命中（{len(normalized)} 处，歧义，要求唯一匹配）",
+                        )
+                    )
             else:
                 results.append(
                     FixResult(
