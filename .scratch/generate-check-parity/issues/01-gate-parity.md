@@ -2,7 +2,7 @@
 
 **What to build:** 真机验收脚本 `.scratch/real-run/generate_check.py` 的 `check_artifacts` 把生成侧门禁逻辑重实现了一遍（FENCE_RE 抄 `clex.fence_line_indices`、`_INCLUDE_RE`/`_resolves` 抄 `clex.extract_quoted_includes` + `_check_unresolved_includes`、`EXTERNAL_HEADERS` 手维护 `_LIBC_HEADERS` + keil/ccs 外部头镜像含 mspm0 前缀豁免）——门禁一改脚本静默漂移，真机验收给假信心；契约测试只查 SSE 词表与 payload 字段集，不查对偶。目标：check_artifacts 的"门禁类"检查改为对**产物树重建语料**跑真正的 `run_generation_gates`（工单 generation-gate-registry/01 产物：表 + runner 可 import），镜像删除，验收测的就是生产逻辑本身。
 
-**Status:** implemented（2026-08-11，真机 2021F 全流程 UV4 0 错 0 警闭环）
+**Status:** resolved（2026-08-11，真机 2021F 全流程 UV4 0 错 0 警闭环）
 
 ## 实施记录（2026-08-11）
 

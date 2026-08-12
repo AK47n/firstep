@@ -2,7 +2,7 @@
 
 **What to build:** `generate()` 里的六道门禁是手写线性调用（generator.py:541-546，顺序靠注释约定），加一道门要手抄四件套（异常类 → `_check_*` 谓词 → 调用行 → 测试），全貌只在调用行一处可见，文档已漂移（两处注释引用不存在的 `_check_platform`）。目标：照 `categories.RULE_CATEGORIES` 先例，门禁装配收进 `GENERATION_GATES` 表 + `run_generation_gates` 一个 runner——顺序、输入依赖、门禁全貌一处可见，新增门禁 = 表加一条 + 谓词。
 
-**Status:** implemented（2026-08-11 已实施，验收全勾）
+**Status:** resolved（2026-08-11 已实施，验收全勾）
 
 ## 现状（已核实，2026-08-11 架构评审）
 
