@@ -53,7 +53,6 @@ from .skeleton import (
 from .topic_library import (
     TopicEntry,
     TopicError,
-    related_module_slugs,
     resolve_number,
 )
 from .treewalk import iter_project_files
@@ -128,20 +127,18 @@ _LIBC_HEADERS = frozenset(
 class TopicContext:
     """历史赛题入口的完整生成素材（唯一装配点）。
 
-    一次解析产出：题面全文 + 关联素材（完整条目）+ 该题专用模块 + 两级注入
-    所需的一切（清单段 suggestions、第二级全文 reader、模块库摘要行）——
-    webapp 只调用不装配协议细节，推荐 / 骨架 / 生成三阶段共享同一解析。
-    长 PDF 题面全文只在选了该赛题时进上下文——problem_text 即题面全文；关联
-    素材 = 锚定该题或候选模块套件的参考文件（候选 = 模块库全量，套件 = 模块
-    kit 词表——该题没有专用模块时套件锚定的参考文件仍能进清单）；该题专用
-    模块复用简介"XX 题专用"标注自动发现，不新造链接字段。模块库扫描在
-    装配点内只发生一次（候选清单同时供关联模块筛、套件词表、摘要行三用）。
+    一次解析产出：题面全文 + 关联素材（完整条目）+ 两级注入所需的一切（清单
+    段 suggestions、第二级全文 reader、模块库摘要行）——webapp 只调用不装配
+    协议细节，推荐 / 骨架 / 生成三阶段共享同一解析。长 PDF 题面全文只在选
+    了该赛题时进上下文——problem_text 即题面全文；关联素材 = 锚定该题或候选
+    模块套件的参考文件（候选 = 模块库全量，套件 = 模块 kit 词表——套件锚定
+    的参考文件不依赖任何"题专用模块"存在）。模块库扫描在装配点内只发生
+    一次（候选清单同时供套件词表、摘要行两用）。
     """
 
     key: str
     problem_text: str
     references: tuple[ReferenceEntry, ...]  # 关联参考文件（完整条目）
-    related_modules: tuple[str, ...]  # 该题专用模块 slug（自动并入最终模块集）
     manifest_summaries: tuple[ManifestSummary, ...]  # 模块库摘要对象（与 references 同一次扫库产出）
     suggestions: tuple[ReferenceSuggestion, ...]  # 两级注入第一级（清单段）
     read_fulltext: Callable[[str], str]  # 两级注入第二级（按清单段条目 id 回读全文）
@@ -179,8 +176,8 @@ def resolve_topic_context(
     platform（工单 01 平台属性）：锚定命中按生成平台过滤（any 全进）；手动
     选不过平台过滤（用户显式意图，UI 标注平台让用户自判）；模块候选同样按
     平台过滤（工单 ref-platform-filter 模块侧对偶——本平台没有的模块不进
-    候选，摘要行与关联模块同源同滤，需求走库外建议）。recommend 传请求体
-    platform；skeleton / generate 不注入参考文件，传缺省（空串 = 不过滤）。
+    候选，摘要行同源同滤，需求走库外建议）。recommend 传请求体 platform；
+    skeleton / generate 不注入参考文件，传缺省（空串 = 不过滤）。
     """
     manual_entries = (
         manual_reference_admission(reference_library_dir, reference_ids)
@@ -246,10 +243,9 @@ def resolve_topic_context(
         platform=platform,
     )
     # 推荐层平台过滤（工单 ref-platform-filter 模块侧对偶）：模块候选只含本
-    # 平台有实现的模块——摘要行（模型可见，可勾选）与关联模块（自动并入）
-    # 同源同滤；本平台没有的模块需求走库外建议（suggestions）。空串 = 不过滤
-    # （骨架 / 生成传缺省，现状保持；未知平台在 generate 入口经
-    # patcher_registry.get 失败）。
+    # 平台有实现的模块——摘要行（模型可见，可勾选）同源同滤；本平台没有的
+    # 模块需求走库外建议（suggestions）。空串 = 不过滤（骨架 / 生成传缺省，
+    # 现状保持；未知平台在 generate 入口经 patcher_registry.get 失败）。
     candidates = list(filter_manifests_by_platform(candidates, platform))
     # 并集去重：锚定命中照旧自动进；手动条目若同时被锚定命中，清单只出现
     # 一次（标注 manual——全文已直读，模型无需点名），全文仍直读（manual_fulltexts 全量）
@@ -268,7 +264,6 @@ def resolve_topic_context(
         key=entry.key,
         problem_text=entry.problem_text,
         references=references,
-        related_modules=related_module_slugs(candidates, entry.key),
         manifest_summaries=tuple(build_manifest_summaries(candidates)),
         suggestions=tuple(suggestions),
         read_fulltext=_make_fulltext_reader(reference_library_dir, references),
@@ -302,7 +297,6 @@ def _no_topic_context(
         key="",
         problem_text=problem_text,
         references=(),
-        related_modules=(),
         manifest_summaries=tuple(build_manifest_summaries(candidates)),
         suggestions=reference_suggestions(manual_entries, source=REFERENCE_SOURCE_MANUAL),
         read_fulltext=_make_fulltext_reader(reference_library_dir, (), manual_entries),
@@ -312,8 +306,7 @@ def _no_topic_context(
 
 
 def _resolve_topic_entry(topic_library_dir: Path, topic_key: str) -> TopicEntry:
-    """历史赛题条目（唯一解析点：查库，不猜测编造；关联模块由调用方用
-    候选清单筛——装配点只此一处，生成接缝消费装配结果不再扫库）。"""
+    """历史赛题条目（唯一解析点：查库，不猜测编造）。"""
     return resolve_number(topic_library_dir, topic_key)
 
 
@@ -336,14 +329,6 @@ def _make_fulltext_reader(
         raise ReferenceError(f"参考文件条目不存在：{entry_id!r}")
 
     return reader
-
-
-def prepend_related_modules(
-    related: Sequence[str], slugs: Sequence[str]
-) -> tuple[str, ...]:
-    """该题专用模块并入用户选择：专用模块前置，去重保序（唯一形状，生成与
-    骨架两处调用同款——改一处忘另一处即分叉）。"""
-    return tuple(dict.fromkeys([*related, *slugs]))
 
 
 @dataclass(frozen=True)
@@ -393,7 +378,6 @@ def generate_project(
     module_library_dir: Path,
     masters_dir: Path,
     registry: PatcherRegistry | None = None,
-    related_modules: Sequence[str] = (),
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -402,10 +386,9 @@ def generate_project(
     （masters_dir/<platform>）归母版模块所有（master_project_dir），这里只
     调用不另抄。所有校验失败都在创建输出目录之前发生。
 
-    历史赛题入口：related_modules = 该题专用模块 slug（推荐 / 骨架阶段已由
-    resolve_topic_context 装配进上下文，webapp 把装配结果透传过来——本接缝
-    只消费不重扫库、不重解析条目；生成物与用户手选等价）。"""
-    slugs = prepend_related_modules(related_modules, slugs)  # 该题专用模块并入（前置去重保序）
+    模块集 = 用户选择（含推荐链路结果）原样展开，历史赛题入口不再自动并入
+    任何"题专用模块"（普适化后无题专用模块，推荐链路 AI 按题面能力推荐
+    承担——工单 module-universalization/07，勿恢复）。"""
     resolved = resolve_selection(module_library_dir, platform, slugs)
     result_dir, include_dirs = generate(
         platform=platform,

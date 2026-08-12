@@ -1029,8 +1029,8 @@ def test_patcher_invoked_via_registry_with_files_and_include_dirs(make_project, 
 
 
 def _wired_dirs(tmp_path):
-    """生成接线的素材区：赛题库 + 参考文件库 + 该题专用模块与普通候选模块
-    （各自独立临时目录，互不污染）。"""
+    """生成接线的素材区：赛题库 + 参考文件库 + 带套件 kit 的候选模块（各自
+    独立临时目录，互不污染）。"""
     library = make_fake_module_library(tmp_path / "modules")
     make_topic_specific_module(library)
     make_kit_candidate_module(library)
@@ -1041,7 +1041,7 @@ def _wired_dirs(tmp_path):
 
 def test_resolve_topic_context_explicit_key_materializes_entry(tmp_path):
     """显式编号：题面全文（长 PDF 题面全文只在选了该赛题时进上下文）+ 关联素材
-    （锚定该题或候选模块套件的参考文件）+ 该题专用模块（XX 题专用标注自动发现）。"""
+    （锚定该题或候选模块套件的参考文件）。"""
     library, topics, references = _wired_dirs(tmp_path)
 
     ctx = resolve_topic_context(
@@ -1056,7 +1056,6 @@ def test_resolve_topic_context_explicit_key_materializes_entry(tmp_path):
     assert ctx is not None
     assert ctx.key == "2026C"
     assert ctx.problem_text == TOPIC_PROBLEM_TEXT
-    assert ctx.related_modules == ("lock_control",)
     assert [e.id for e in ctx.references] == [
         TOPIC_REFERENCE_ID,
         KIT_REFERENCE_ID,
@@ -1067,8 +1066,8 @@ def test_resolve_topic_context_explicit_key_materializes_entry(tmp_path):
 def test_resolve_topic_context_without_specific_modules_still_carries_kit_refs(
     tmp_path,
 ):
-    """该题没有专用模块（库中无"XX 题专用"标注）时，套件锚定的参考文件仍经
-    候选模块的 kit 进清单（评审 c2：关联面不得依赖专用模块是否入库）。"""
+    """候选模块的 kit 词表锚定的参考文件仍经套件进清单（评审 c2：关联面
+    不依赖任何"题专用模块"存在）。"""
     library = make_fake_module_library(tmp_path / "modules")
     make_kit_candidate_module(library)
     topics = make_fake_topic_library(tmp_path / "topics")
@@ -1084,15 +1083,14 @@ def test_resolve_topic_context_without_specific_modules_still_carries_kit_refs(
     )
 
     assert ctx is not None
-    assert ctx.related_modules == ()
     assert UWB_REFERENCE_ID in [e.id for e in ctx.references]
 
 
 def test_resolve_topic_context_filters_candidates_by_platform(tmp_path):
     """推荐层平台过滤（工单 ref-platform-filter 模块侧对偶）：platform 给定
-    时模块候选只含本平台有实现的条目——摘要行（模型可见）与关联模块（自动
-    并入）同源同滤（stm32-only 的 lock_control 不再进 related_modules）；
-    stm32 全量库不受影响（stm32 有全部模块）。"""
+    时模块候选只含本平台有实现的条目——摘要行（模型可见）同源同滤
+    （stm32-only 的 lock_control 不进 mspm0 候选）；stm32 全量库不受影响
+    （stm32 有全部模块）。"""
     library, topics, references = _wired_dirs(tmp_path)
 
     mspm0 = resolve_topic_context(
@@ -1105,7 +1103,6 @@ def test_resolve_topic_context_filters_candidates_by_platform(tmp_path):
         platform="mspm0",
     )
     assert mspm0 is not None
-    assert mspm0.related_modules == ()  # lock_control（stm32-only）被滤除
     assert {s.slug for s in mspm0.manifest_summaries} == {"dht11", "delay"}
 
     stm32 = resolve_topic_context(
@@ -1118,7 +1115,6 @@ def test_resolve_topic_context_filters_candidates_by_platform(tmp_path):
         platform="stm32",
     )
     assert stm32 is not None
-    assert stm32.related_modules == ("lock_control",)
     assert {s.slug for s in stm32.manifest_summaries} == {
         "dht11",
         "delay",
@@ -1238,7 +1234,6 @@ def _assert_no_topic_context(ctx, library, problem_text):
     assert ctx.key == ""
     assert ctx.problem_text == problem_text
     assert ctx.references == ()
-    assert ctx.related_modules == ()
     assert ctx.suggestions == ()
     assert {s.slug for s in ctx.manifest_summaries} == {
         m.slug for m in list_modules(library)
@@ -1260,29 +1255,6 @@ def test_resolve_topic_context_explicit_unknown_key_raises(tmp_path):
             topic_library_dir=topics,
             reference_library_dir=references,
         )
-
-
-def test_generate_project_with_related_modules_auto_includes_them(
-    fake_module_library, tmp_path
-):
-    """生成入口带该题专用模块（webapp 装配点 resolve_topic_context 的结果透传）：
-    自动并入最终模块集（生成物与用户手选等价）——接缝只消费不重扫库。"""
-    make_topic_specific_module(fake_module_library)
-    masters_dir = tmp_path / "masters"
-    make_fake_master_project(masters_dir / PLATFORM_STM32)
-
-    summary = generate_project(
-        platform=PLATFORM_STM32,
-        slugs=["dht11"],
-        main_c_content=MAIN_SKELETON,
-        output_dir=tmp_path / "out",
-        module_library_dir=fake_module_library,
-        masters_dir=masters_dir,
-        related_modules=("lock_control",),
-    )
-
-    assert (tmp_path / "out" / "modules" / "lock_control" / "lock_control.c").is_file()
-    assert any(slug == "lock_control" for slug, _ in summary.modules)
 
 
 # ---------------------------------------------------------------------------

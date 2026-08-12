@@ -17,7 +17,7 @@ from tests.fakes import make_sample_pdf
 
 TOPIC_PROBLEM_TEXT = "2026C 数字钥匙题面全文（长 PDF 拆条入库）"
 
-KIT_KEY = "2026C 钥匙套件"  # 该题专用模块的套件（参考文件 kit 锚定的合法取值）
+KIT_KEY = "2026C 钥匙套件"  # 锁控制模块的套件（参考文件 kit 锚定的合法取值）
 UWB_KIT = "地猛星 UWB 套件"  # 普通候选模块的套件（非该题专用）
 
 # 参考文件条目 id 由标题生成（add_reference 的 _next_entry_id 逻辑）
@@ -87,20 +87,20 @@ def make_fake_reference_library(reference_root: Path) -> Path:
 
 
 def make_topic_specific_module(module_library_dir: Path) -> Path:
-    """假模块：简介标"2026C 数字钥匙题专用"（关联模块发现判据）+ stm32 版本带 kit。"""
+    """假模块：stm32-only 候选（平台过滤判据）+ 带 kit。"""
     return _add_module(
         module_library_dir,
         "lock_control",
-        "2026C 数字钥匙题专用：钥匙校验与锁控制逻辑",
+        "钥匙校验与锁控制驱动",
         KIT_KEY,
     )
 
 
 def make_kit_candidate_module(module_library_dir: Path) -> Path:
-    """普通候选模块：简介不含"专用"（不是该题专用模块），stm32 版本带 UWB 套件 kit。
+    """普通候选模块（无题绑定），stm32 版本带 UWB 套件 kit。
 
-    候选清单的套件关联靠它：该题没有专用模块时，套件锚定的参考文件仍能
-    经候选模块的 kit 进清单（评审 c2 修复的回归锚点）。
+    候选清单的套件关联靠它：套件锚定的参考文件仍能经候选模块的 kit 进清单
+    （评审 c2 修复的回归锚点）。
     """
     return _add_module(
         module_library_dir,

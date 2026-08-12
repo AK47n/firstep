@@ -842,9 +842,9 @@ def run_recommendation(
     循环收敛成功 → done 载荷：顶层 modules[] 格式与旧契约一致（下游
     selectedSlugs / expand / generate 零改动）+ requirements（功能需求层：
     需求 / 对照句 / 库内命中 / 库外建议——库外建议仅展示、不进工程）；
-    topic.key 非空（识别到历史赛题）才附加 topic_id + related_modules；最终
-    参考清单 = 锚定命中（auto）∪ 手动选（manual）并集去重，同一条目只出现
-    一次且手动优先标注（用户显式选择），platform 随条目带出。
+    topic.key 非空（识别到历史赛题）才附加 topic_id；最终参考清单 = 锚定
+    命中（auto）∪ 手动选（manual）并集去重，同一条目只出现一次且手动优先
+    标注（用户显式选择），platform 随条目带出。
 
     装配素材（题面全文 / 清单段 / 全文回读 / 手动参考）全在 topic（装配点
     resolve_topic_context 一次备好），本函数只消费。返回 None——终态一律
@@ -882,7 +882,6 @@ def run_recommendation(
     }
     if topic.key:
         result["topic_id"] = topic.key
-        result["related_modules"] = list(topic.related_modules)
     # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；
     # 同一条目既锚定又手动只出现一次（手动优先标注——用户显式选择）；
     # platform（工单 01）随条目带出，前端按它显示平台标注
