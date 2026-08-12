@@ -45,22 +45,17 @@ from .config import (
 )
 from .errors import error_entry
 from .events import (
-    EVENT_APPLY_RESULT,
     EVENT_COMPILE_START,
-    EVENT_FIX_START,
-    EVENT_PARSE_DONE,
     ProgressEvent,
 )
 from .extraction import extract_file
 from .fix_errors import (
     FixError,
-    apply_fixes,
-    collect_candidate_paths,
     fix_backup_root,
     parse_compile_errors,
-    read_file_contexts,
     resolve_source_path,
     restore_backup,
+    run_fix_round,
     summarize_compile_output,
 )
 from .generator import (
@@ -699,7 +694,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     # ------------------------------------------------------------------
     # 编译错误修复（工单 compile-error-fix/01）：贴报错 → LLM 修复 →
-    # 直接写回（备份 + 可回滚）。域判决在 fix_errors.py，路由只做薄壳装配。
+    # 直接写回（备份 + 可回滚）。域判决与单轮编排在 fix_errors.py
+    # （run_fix_round，对照 run_recommendation 先例），路由只做薄壳装配。
     # ------------------------------------------------------------------
 
     @app.post("/api/fix-errors")
@@ -716,7 +712,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         结果目录，必须已存在）；problem_text / platform / slugs / main_c
         （可选上下文，决策记录 6）。路径安全：解析出的文件必须 resolve 后在
         输出目录内（is_unsafe_path + containment），写回白名单 .c/.h/.s——
-        修复建议越界由 apply_fixes 拒绝（FixError → 400 中文，登记 errors.py）。
+        修复建议越界由修复域拒绝（FixError → 400 中文，登记 errors.py）。
+
+        五步编排（解析 → 定位 → 读上下文 → LLM 修复 → 应用 + 事件发射 +
+        done 载荷拼装）在 run_fix_round（对照 run_recommendation 先例），
+        本路由只取参 + 转调 + SSE 包装。
         """
         error_text = _require_str(payload, "error_text")
         output_dir = Path(_require_str(payload, "output_dir"))
@@ -732,51 +732,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         llm = _llm(context)
 
         def run(emit: SseEmitter) -> None:
-            errors = parse_compile_errors(error_text)
-            candidates = collect_candidate_paths(output_dir, errors)
-            contexts, dropped = read_file_contexts(output_dir, candidates)
-            emit.progress(
-                ProgressEvent(
-                    type=EVENT_PARSE_DONE,
-                    error_count=len(errors),
-                    file_count=len(candidates),
-                )
-            )
-            emit.progress(ProgressEvent(type=EVENT_FIX_START))
-            fixes = llm.fix_compile_errors(
-                error_text,
-                dict(contexts),
-                problem_text=problem_text,
-                platform=platform,
-                module_slugs=slugs,
-                main_c=main_c,
-                dropped_files=dropped,
-            )
-            report = apply_fixes(fixes, output_dir, backup_root)
-            for result in report.results:
-                emit.progress(
-                    ProgressEvent(
-                        type=EVENT_APPLY_RESULT,
-                        file=result.file,
-                        line=result.line,
-                        status=result.status,
-                        reason=result.reason,
-                    )
-                )
+            # 五步编排归 run_fix_round（对照 run_recommendation 归位先例）：事件
+            # 发射在域内（_emit 旁路），done 载荷由本路由 emit.done 收尾（终态
+            # 保证仍归运行器，run 抛错补发 error 终态）
             emit.done(
-                {
-                    "output_dir": str(output_dir),
-                    "backup_id": report.backup_id,
-                    "degraded": not candidates,
-                    "parsed": [
-                        {"path": e.path, "line": e.line, "message": e.message}
-                        for e in errors
-                    ],
-                    "fixes": [
-                        {"file": r.file, "line": r.line, "status": r.status, "reason": r.reason}
-                        for r in report.results
-                    ],
-                }
+                run_fix_round(
+                    llm,
+                    error_text=error_text,
+                    output_dir=output_dir,
+                    backup_root=backup_root,
+                    problem_text=problem_text,
+                    platform=platform,
+                    module_slugs=slugs,
+                    main_c=main_c,
+                    emit=emit.progress,
+                )
             )
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）

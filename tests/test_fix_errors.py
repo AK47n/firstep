@@ -8,11 +8,18 @@ errors.py）、替换协议（精确成功 / 行首前缀归一化兜底 applied
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
 
 from contest_generator.errors import error_entry
+from contest_generator.events import (
+    EVENT_APPLY_RESULT,
+    EVENT_FIX_START,
+    EVENT_PARSE_DONE,
+    ProgressEvent,
+)
 from contest_generator.fix_errors import (
     FIX_BACKUPS_DIRNAME,
     CompileError,
@@ -26,8 +33,10 @@ from contest_generator.fix_errors import (
     parse_compile_errors,
     read_file_contexts,
     restore_backup,
+    run_fix_round,
     summarize_compile_output,
 )
+from tests.fakes import FakeLLM
 
 
 # ---------------------------------------------------------------------------
@@ -617,3 +626,181 @@ def test_backup_id_unique_on_collision(tmp_path):
 
 def test_fix_backup_root_derivation():
     assert fix_backup_root(Path("/tmp/work")) == Path("/tmp/work") / FIX_BACKUPS_DIRNAME
+
+
+# ---------------------------------------------------------------------------
+# run_fix_round 单轮编排（工单 fix-session-homing/01）：假 LLM + 临时目录真实
+# 语料，不依赖 HTTP/SSE（直调，对照 test_selection._run_recommendation 先例）——
+# 事件序列 + done 载荷形状的家
+# ---------------------------------------------------------------------------
+
+
+def test_run_fix_round_event_sequence_and_done_payload(tmp_path):
+    """事件序列（parse_done → fix_start → apply_result×n）+ done 载荷形状
+    （keys 全等 + degraded / parsed / fixes 语义）+ 上下文透传——与路由直调
+    （test_webapp _fix_stream）同语义同参。"""
+    out = _make_project(tmp_path)
+    emitted: list[ProgressEvent] = []
+    llm = FakeLLM(
+        fixes=(
+            FixSuggestion(
+                file="main.c", line=1, old_snippet="int x = 1;",
+                new_snippet="int x = 2;", reason="修复初始化",
+            ),
+            FixSuggestion(
+                file="code/mod.c", line=1, old_snippet="return 1;",
+                new_snippet="return 0;", reason="修复返回值",
+            ),
+        )
+    )
+    done = run_fix_round(
+        llm,
+        error_text='main.c(1): error #20: identifier "x" is undefined\n'
+                  "code/mod.c:1: error: return type mismatch",
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+        problem_text="赛题：做个小车",
+        platform="stm32",
+        module_slugs=("dht11", "oled"),
+        main_c="int main(void) { return 0; }",
+        emit=emitted.append,
+    )
+    assert [e.type for e in emitted] == [
+        EVENT_PARSE_DONE,
+        EVENT_FIX_START,
+        EVENT_APPLY_RESULT,
+        EVENT_APPLY_RESULT,
+    ]
+    parse_done = emitted[0]
+    assert parse_done.error_count == 2 and parse_done.file_count == 2
+    # done 载荷形状：keys 全等（与 /api/fix-errors 逐字一致）+ 语义
+    assert set(done) == {"output_dir", "backup_id", "degraded", "parsed", "fixes"}
+    assert done["output_dir"] == str(out)
+    assert done["degraded"] is False
+    assert done["parsed"] == [
+        {"path": "main.c", "line": 1, "message": 'main.c(1): error #20: identifier "x" is undefined'},
+        {"path": "code/mod.c", "line": 1, "message": "code/mod.c:1: error: return type mismatch"},
+    ]
+    assert done["fixes"] == [
+        {"file": "main.c", "line": 1, "status": "applied", "reason": ""},
+        {"file": "code/mod.c", "line": 1, "status": "applied", "reason": ""},
+    ]
+    assert done["backup_id"]
+    # 文件已写回 + 备份（与路由直调同语义）
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 2;\nint main(void) { return x; }\n"
+    backup_dir = _backup_root(tmp_path) / done["backup_id"]
+    assert (backup_dir / "main.c").is_file()
+    # 上下文透传（题面 / 平台 / 模块 / main.c）——与 llm.fix_compile_errors 同参
+    call = llm.fix_errors_calls[0]
+    assert call[0] == 'main.c(1): error #20: identifier "x" is undefined\ncode/mod.c:1: error: return type mismatch'
+    assert call[1] == {
+        "main.c": "int x = 1;\nint main(void) { return x; }\n",
+        "code/mod.c": "int mod(void) { return 1; }\n",
+    }
+    assert call[2] == "赛题：做个小车" and call[3] == "stm32"
+    assert call[4] == ("dht11", "oled") and call[5] == "int main(void) { return 0; }"
+
+
+def test_run_fix_round_degraded_mode_and_emit_none(tmp_path):
+    """报错无文件引用 → 降级模式：degraded=True / fixes=[] / backup_id=""
+    （与路由直调同语义）；emit=None（旁路跳过）照常返回 done 载荷。"""
+    out = _make_project(tmp_path)
+    done = run_fix_round(
+        FakeLLM(),  # 默认空 fixes
+        error_text="L6200E: Symbol foo multiply defined (by main.o and bar.o)",
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+    )
+    assert done["degraded"] is True
+    assert done["fixes"] == [] and done["backup_id"] == ""
+    assert done["parsed"] == []
+
+
+def test_run_fix_round_emitter_failure_bypassed(tmp_path):
+    """发射器抛错 → 旁路吞掉（spec「发射 seam」），主流程照常返回 done 载荷。"""
+    out = _make_project(tmp_path)
+
+    def boom(event: ProgressEvent) -> None:
+        raise RuntimeError("发射器挂了")
+
+    done = run_fix_round(
+        FakeLLM(),
+        error_text="main.c(1): error #20: boom",
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+        emit=boom,
+    )
+    assert done["degraded"] is False
+    assert done["parsed"][0]["path"] == "main.c"
+
+
+# ---------------------------------------------------------------------------
+# 结构钉（工单 fix-session-homing/01，对照 recommend-orchestration-homing 先例）：
+# /api/fix-errors 路由只取参 + 转调 + SSE 包装，五步编排整体归 run_fix_round——
+# 管线内部原语回 webapp 即红（AST 断言，参照 test_webapp.py 同款切片风格）
+# ---------------------------------------------------------------------------
+
+_WEBAPP_PATH = (
+    Path(__file__).resolve().parent.parent / "src" / "contest_generator" / "webapp.py"
+)
+
+
+def _webapp_tree() -> ast.Module:
+    return ast.parse(_WEBAPP_PATH.read_text(encoding="utf-8"))
+
+
+def test_webapp_imports_run_fix_round_not_pipeline_primitives():
+    """结构钉：webapp 的 fix_errors import 面收敛到 run_fix_round + 外壳原语——
+    五步管线内部符号（apply_fixes / collect_candidate_paths / read_file_contexts）
+    再被 webapp 直接 import 即红（编排回路由 = 域函数被架空）。parse_compile_errors
+    仍被 /api/compile 使用（编译结果 parsed_errors，compile-verdict-align/01），
+    不在钉内。"""
+    tree = _webapp_tree()
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        # 相对 import 在 AST 中 module 为 "fix_errors"（level=1），绝对形态为
+        # "contest_generator.fix_errors"——统一按末段匹配
+        if isinstance(node, ast.ImportFrom) and (
+            node.module is not None and node.module.split(".")[-1] == "fix_errors"
+        ):
+            for alias in node.names:
+                imported.add(alias.asname or alias.name)
+    assert "run_fix_round" in imported, "run_fix_round 未入 webapp import（编排未归位）"
+    leaked = imported & {"apply_fixes", "collect_candidate_paths", "read_file_contexts"}
+    assert not leaked, f"管线内部原语回 webapp import：{sorted(leaked)}"
+
+
+def test_fix_errors_route_body_free_of_pipeline_calls():
+    """结构防回退：/api/fix-errors 路由函数体不含五步管线直接调用（parse /
+    collect / read / apply / llm.fix_compile_errors）——编排归位 run_fix_round，
+    路由只剩取参 + 转调 + SSE 包装（emit.done 收尾保留，决策记录 4）。"""
+    tree = _webapp_tree()
+    routes = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "fix_errors"
+    ]
+    assert len(routes) == 1, "webapp.py 应恰好一个 fix_errors 路由函数"
+    route = routes[0]
+    forbidden: list[ast.Call] = []
+    for node in ast.walk(route):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id in {
+            "parse_compile_errors",
+            "collect_candidate_paths",
+            "read_file_contexts",
+            "apply_fixes",
+        }:
+            forbidden.append(node)
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "llm"
+            and node.func.attr == "fix_compile_errors"
+        ):
+            forbidden.append(node)
+    assert not forbidden, (
+        "/api/fix-errors 路由含五步管线调用，编排必须归 run_fix_round："
+        + "；".join(ast.unparse(node) for node in forbidden)
+    )
