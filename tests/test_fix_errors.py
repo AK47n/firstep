@@ -149,6 +149,52 @@ def test_collect_candidate_paths_skips_unsafe_missing_and_non_source(tmp_path):
     assert collect_candidate_paths(tmp_path, errors) == ("main.c",)
 
 
+def test_collect_uv4_dotdot_resolves_via_uvprojx_benchmark(tmp_path):
+    """真机验收补（2026-08-12 红证）：UV4 报错路径相对 .uvprojx 所在子目录
+    （`..\\main.c(158)` 形态），须按工程文件基准解析回工程根；修复前该形态
+    is_unsafe_path 全拒 → 候选为空（主链路降级死局）。
+    """
+    out = tmp_path / "proj"
+    user = out / "user"
+    user.mkdir(parents=True)
+    (user / "Project.uvprojx").write_text("<x/>", encoding="utf-8")
+    (out / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    errors = (
+        CompileError(
+            path="../main.c",
+            line=158,
+            message='..\\main.c(158): error: #20: identifier "x" is undefined',
+        ),
+    )
+    assert collect_candidate_paths(out, errors) == ("main.c",)
+
+
+def test_collect_uv4_dotdot_escape_still_rejected(tmp_path):
+    """真机验收补：`..\\` 形态仍防穿越——按基准解析后越出工程根必须降级。"""
+    out = tmp_path / "proj"
+    user = out / "user"
+    user.mkdir(parents=True)
+    (user / "Project.uvprojx").write_text("<x/>", encoding="utf-8")
+    (out / "main.c").write_text("x", encoding="utf-8")
+    (tmp_path / "outside.c").write_text("x", encoding="utf-8")
+    for path in ("../../outside.c", "../outside.c"):
+        errors = (CompileError(path=path, line=1, message=f"{path}(1): error: x"),)
+        assert collect_candidate_paths(out, errors) == ()
+
+
+def test_collect_ccs_relative_keeps_working(tmp_path):
+    """真机验收补：CCS 相对形态（.cproject 在工程根）不受基准逻辑影响。"""
+    out = tmp_path / "proj"
+    code = out / "code"
+    code.mkdir(parents=True)
+    (out / ".cproject").write_text("<x/>", encoding="utf-8")
+    (code / "mod.c").write_text("int x;\n", encoding="utf-8")
+    errors = (
+        CompileError(path="code/mod.c", line=1, message="code/mod.c:1: error: x"),
+    )
+    assert collect_candidate_paths(out, errors) == ("code/mod.c",)
+
+
 def test_read_file_contexts_returns_contents(tmp_path):
     (tmp_path / "main.c").write_text("int x = 1;\n", encoding="utf-8")
     contexts, dropped = read_file_contexts(tmp_path, ("main.c",))

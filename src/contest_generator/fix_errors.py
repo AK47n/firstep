@@ -9,9 +9,14 @@
 （工作根/fix-backups/<timestamp>/，默认 ~/.contest_generator/fix-backups/），
 UI 提供「回滚本次修复」按钮（restore_backup）。
 
-路径安全（决策记录 3/5）：解析出的路径必须是相对形态（is_unsafe_path 原语
-拒绝 `..` / 绝对路径 / 反斜杠），resolve 后仍在输出目录内，扩展名白名单
+路径安全（决策记录 3/5）：解析出的路径 resolve 后必须仍在输出目录内（containment
+兜底，`..` 穿越 / 绝对路径 / 反斜杠起始形态天然越界被拒），扩展名白名单
 .c/.h/.s（大写 .S 一并接受）——越界即 FixError（登记 errors.py → 400 中文）。
+
+解析基准（2026-08-12 真机验收补，见 _report_benchmarks）：CCS 报错路径相对
+工程根（.cproject 在根），直接按 output_dir 解析；UV4 报错路径相对 .uvprojx
+所在子目录（`..\main.c(158)` 形态，uvprojx 在 user/ 而源文件在工程根）——
+先按工程根解析，解析不出再按工程文件基准目录解析，两种都过 containment。
 
 替换协议（决策记录 4）：old_snippet 与文件现有内容逐字精确匹配（含缩进）后
 替换；匹配失败 / 多处歧义一律跳过并报告「未应用」（不静默、不模糊替换）。
@@ -140,31 +145,77 @@ def parse_compile_errors(error_text: str) -> tuple[CompileError, ...]:
     return tuple(parsed)
 
 
+def _report_benchmarks(output_dir: Path) -> tuple[Path, ...]:
+    """报错路径的解析基准目录（2026-08-12 真机验收补）：UV4 报错路径相对
+    .uvprojx 所在目录（stm32 母版产物 uvprojx 在 user/ 子目录、源文件相对它
+    以 `..\\` 引用），CCS 的 .cproject 一般在工程根。探测 output_dir 下所有
+    工程文件（.uvprojx / .cproject）的父目录，去重保序；找不到 → 空（只走
+    工程根相对解析，兼容无工程文件的纯源文件输出目录）。
+    """
+    root = output_dir.resolve()
+    benchmarks: list[Path] = []
+    for proj in output_dir.rglob("*"):
+        if proj.is_dir():
+            continue
+        name = proj.name.lower()
+        if name == ".cproject" or name.endswith(".uvprojx"):
+            parent = proj.resolve().parent
+            if parent not in benchmarks:
+                benchmarks.append(parent)
+    return tuple(benchmarks)
+
+
 def collect_candidate_paths(
     output_dir: Path, errors: Sequence[CompileError]
 ) -> tuple[str, ...]:
-    """报错命中的可修复文件（决策记录 3/5）：路径安全（is_unsafe_path 拒绝
-    `..` 穿越 / 绝对路径）+ 白名单扩展名 + resolve 后仍在输出目录内 + 文件
-    真实存在。任一不满足 → 该条报错降级（整段错误文本仍在 LLM 上下文，只是
-    没有文件内容）。返回去重保序的相对路径（POSIX）。
+    """报错命中的可修复文件（决策记录 3/5）：白名单扩展名 + resolve 后仍在
+    输出目录内 + 文件真实存在。任一不满足 → 该条报错降级（整段错误文本仍在
+    LLM 上下文，只是没有文件内容）。返回去重保序的相对路径（POSIX，相对
+    output_dir）。
+
+    两种解析基准（2026-08-12 真机验收补）：先按工程根直接解析（CCS 相对
+    形态）；解析不出（UV4 `..\\` 相对形态，相对工程根会越过 root）再按
+    _report_benchmarks 的工程文件基准目录解析。安全由 containment 兜底：
+    两种解析都 resolve 后判定是否在 root 内——`..` 逃逸 / 绝对路径 /
+    反斜杠起始形态天然越界被拒（不再依赖 is_unsafe_path 的字符串判定）。
     """
     root = output_dir.resolve()
+    benchmarks = _report_benchmarks(output_dir)
     seen: set[str] = set()
     candidates: list[str] = []
     for error in errors:
         path = error.path
-        if not path or path in seen:
+        if not path:
             continue
         if Path(path).suffix not in WRITABLE_EXTENSIONS:
             continue  # 非源码文件（.axf / .uvprojx 等）无修复价值
-        if is_unsafe_path(path):
-            continue
-        target = (output_dir / path).resolve()
-        if not target.is_relative_to(root) or not target.is_file():
+        target = _resolve_in_root(output_dir, root, path, benchmarks)
+        if target is None:
             continue  # 越出输出目录 / 读取不到 → 降级
-        seen.add(path)
-        candidates.append(path)
+        rel = target.relative_to(root).as_posix()
+        if rel in seen:
+            continue
+        seen.add(rel)
+        candidates.append(rel)
     return tuple(candidates)
+
+
+def _resolve_in_root(
+    output_dir: Path,
+    root: Path,
+    path: str,
+    benchmarks: Sequence[Path],
+) -> Path | None:
+    """报错路径 → 输出目录内真实文件（两种基准都试）；解析不到返回 None。"""
+    if not is_unsafe_path(path):
+        target = (output_dir / path).resolve()
+        if target.is_relative_to(root) and target.is_file():
+            return target
+    for bench in benchmarks:
+        target = (bench / path).resolve()
+        if target.is_relative_to(root) and target.is_file():
+            return target
+    return None
 
 
 def read_file_contexts(
