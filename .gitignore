@@ -13,3 +13,6 @@ __pycache__/
 
 # 本地服务运行日志（uvicorn stdout 重定向）
 webapp.log
+
+# fix-errors 运行产物：真机修复的备份目录（输出目录外，可回滚；不入库）
+library/fix-backups/

@@ -434,17 +434,26 @@
       <div id="handoff-msg" class="error"></div>
     </div>
 
-    <div class="card">
-      <h2>10. 编译错误修复（贴报错 → AI 修复 → 直接写回）</h2>
+    <div class="card" id="card-fix-center">
+      <h2>10. 修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
       <div class="row">
-        <button id="btn-fix-errors" class="primary">开始修复</button>
+        <button id="btn-fix-center" class="primary">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
-        <span class="muted">把 Keil / CCS 的编译报错全文粘贴回来，AI 逐条修复并直接写回工程文件；写回前自动备份到输出目录外，可一键回滚。</span>
+        <span id="fix-center-toolchain" class="muted"></span>
       </div>
+      <div id="fix-center-round" class="muted" style="margin-top:8px"></div>
       <div id="fix-status" class="muted" style="margin-top:8px"></div>
-      <textarea id="fix-errors-text" rows="8" style="margin-top:8px" placeholder="粘贴编译报错全文（UV4：..\out\code\main.c(123): error #20: …；CCS / armclang：code/sub/mod.c:45: error: …）…"></textarea>
       <div id="fix-errors-msg" class="error"></div>
       <div id="fix-results" style="margin-top:10px"></div>
+      <h3 style="margin-top:12px">编译输出（自动采集）</h3>
+      <textarea id="fix-center-log" rows="10" readonly style="margin-top:8px" placeholder="编译输出原样展示（含 warnings 引用行）…"></textarea>
+      <h3 style="margin-top:12px">手动模式（无工具链回退）</h3>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-fix-errors" class="primary">开始修复（贴文本）</button>
+        <span class="muted">没有工具链时手动粘贴 Keil / CCS 编译报错，AI 逐条修复并直接写回工程文件；写回前自动备份到输出目录外，可一键回滚。</span>
+      </div>
+      <textarea id="fix-errors-text" rows="8" style="margin-top:8px" placeholder="粘贴编译报错全文（UV4：..\out\code\main.c(123): error #20: …；CCS / armclang：code/sub/mod.c:45: error: …）…"></textarea>
+      <div id="fix-errors-msg" class="error"></div>
     </div>
   </section>
 
@@ -697,6 +706,10 @@
         <div style="flex:1"><label>模块库目录</label><input type="text" id="set-lib-dir" placeholder="~/.contest_generator/modules"></div>
         <div style="flex:1"><label>母版库目录</label><input type="text" id="set-masters-dir" placeholder="~/.contest_generator/masters"></div>
       </div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>Keil UV4 路径（留空自动探测）</label><input type="text" id="set-uv4-path" placeholder="C:\Keil5\Core\UV4\UV4.exe"></div>
+        <div style="flex:1"><label>gmake 路径（留空走 PATH）</label><input type="text" id="set-gmake-path" placeholder="gmake / make"></div>
+      </div>
       <div class="row" style="margin-top:12px">
         <button id="btn-save-settings" class="primary">保存设置</button>
         <span class="muted">配置文件：<span id="set-config-path"></span>（含 API key，不入版本库）</span>
@@ -787,6 +800,9 @@ async function refreshState() {
   // 未配置时模块库读不到：保留旧列表（可能为空），不能让渲染中断
   try { state.modules = await apiGet("/api/modules"); }
   catch (e) { state.modules = state.modules || []; }
+  // 工具链可用性（工单 autocompile-loop/01）：一键编译修复按钮的置灰依据
+  toolchains = state.toolchains || { stm32: false, mspm0: false };
+  renderToolchainStatus();
   renderPlatforms();
   renderModulePool();
 }
@@ -809,6 +825,7 @@ function renderPlatforms() {
       card.addEventListener("click", () => {
         chosenPlatform = p.id;
         renderPlatforms();
+        updateFixCenterAvailability();
         selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
       });
     }
@@ -1256,7 +1273,14 @@ $("btn-generate").addEventListener("click", async () => {
     $("generate-result").classList.remove("hidden");
     status.textContent = "";
     $("generate-msg").classList.add("ok");
-    $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位，可直接用 IDE 打开编译。";
+    $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
+    // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
+    // 用户"懒得编译一遍"）；无工具链则静默跳过（第 10 栏按钮已置灰提示）
+    if ((toolchains || {})[chosenPlatform]) {
+      $("generate-msg").textContent += "已自动触发编译修复（见第 10 栏）…";
+      $("card-fix-center").scrollIntoView({ block: "nearest" });
+      setTimeout(() => startFixCenter(), 100);   // 等结果字段渲染完成再起流
+    }
   } catch (e) {
     $("generate-msg").classList.remove("ok");
     $("generate-msg").textContent = e.message;
@@ -1376,17 +1400,47 @@ $("btn-handoff-copy").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：10. 编译错误修复（工单 compile-error-fix/01）——贴报错 → AI 修复 →
-// 直接写回（写回前备份到输出目录外，可一键回滚）。事件词表镜像 events.py：
-// parse_done / fix_start / retry / apply_result / done / error
+// 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
+// 自动采集报错 → 喂 fix-errors 管线修复 → 重编译验证，循环 ≤3 轮；无工具链
+// 回退贴文本模式（工单 compile-error-fix/01 既有路径保留）。事件词表镜像
+// events.py：compile_start / parse_done / fix_start / retry / apply_result /
+// done / error。循环状态机在前端（服务端只做单次编译），轮次可见"第 N/3 轮"。
 // ---------------------------------------------------------------------------
-let lastFix = null;      // {output_dir, backup_id}：回滚按钮的入口（done 终态后置位）
-let fixFinished = false; // 断线守卫：done / error 置位，读流出错后不再重复提示
+const FIX_MAX_ROUNDS = 3;
+let lastFix = null;          // {output_dir, backup_id}：回滚按钮的入口（done 终态后置位）
+let lastFixDone = null;      // 最近一次 fix-errors 的 done 载荷（循环判"有无应用"）
+let toolchains = { stm32: false, mspm0: false };  // /api/state 装载：平台 → 工具链可用
+let fixLoop = { running: false, round: 0 };       // 循环状态机：单实例（防双击并发）
 
-function fixSetBusy(busy) {
+function fixSetBusy(busy) {   // 手动贴文本按钮
   $("btn-fix-errors").disabled = busy;
   $("btn-fix-errors").innerHTML = busy
-    ? '<span class="spinner"></span>AI 修复中…' : "开始修复";
+    ? '<span class="spinner"></span>AI 修复中…' : "开始修复（贴文本）";
+}
+
+function fixCenterBusy(busy) {   // 一键编译修复按钮
+  $("btn-fix-center").disabled = busy || !toolchains[chosenPlatform] || !chosenPlatform;
+  $("btn-fix-center").innerHTML = busy
+    ? '<span class="spinner"></span>编译修复中…' : "一键编译修复";
+}
+
+function renderToolchainStatus() {
+  const t = toolchains || {};
+  $("fix-center-toolchain").textContent =
+    "工具链：Keil UV4 " + (t.stm32 ? "✅" : "❌") + " / gmake " + (t.mspm0 ? "✅" : "❌")
+    + "（缺失时一键按钮置灰，用下方贴文本模式；可在设置页配置路径）";
+}
+
+function updateFixCenterAvailability() {
+  const ok = !!chosenPlatform && !!(toolchains || {})[chosenPlatform];
+  $("btn-fix-center").disabled = !ok || fixLoop.running;
+  $("btn-fix-center").title = !chosenPlatform ? "请先选择目标平台"
+    : ok ? "" : "未检测到该平台工具链（可在设置页配置路径），请用贴文本模式";
+}
+
+function fixErrorCount(text) {   // 编译输出里 "N Error(s)" 的条数；解析不到返回 null
+  const m = String(text || "").match(/(\d+)\s+Error\(s\)/);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 function fixHandleEvent(type, raw, outputDir) {
@@ -1413,7 +1467,7 @@ function fixHandleEvent(type, raw, outputDir) {
       + (data.reason ? ' <span class="muted">— ' + esc(data.reason) + "</span>" : "");
     $("fix-results").appendChild(row);
   } else if (type === "done") {
-    fixFinished = true;
+    lastFixDone = data;
     const fixes = data.fixes || [];
     const applied = fixes.filter((f) => f.status === "applied").length;
     const skipped = fixes.length - applied;
@@ -1422,28 +1476,44 @@ function fixHandleEvent(type, raw, outputDir) {
       + (skipped ? "，跳过 " + skipped + " 处" : "")
       + (lastFix ? "；已自动备份，可点「回滚本次修复」" : "");
     $("btn-fix-rollback").classList.toggle("hidden", !lastFix);
-    fixSetBusy(false);
   } else if (type === "error") {
-    fixFinished = true;
-    fixSetBusy(false);
+    lastFixDone = null;
     $("fix-status").textContent = "";
     $("fix-errors-msg").textContent = data.message || "修复失败";
   }
 }
 
-async function startFixErrors() {
-  $("fix-errors-msg").textContent = "";
-  $("fix-status").textContent = "";
-  const errorText = $("fix-errors-text").value.trim();
-  if (!errorText) { $("fix-errors-msg").textContent = "请先粘贴编译报错全文"; return; }
-  const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
-  if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
-  $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
-  lastFix = null;
-  fixFinished = false;
-  $("btn-fix-rollback").classList.add("hidden");
-  fixSetBusy(true);
-  $("fix-status").textContent = "解析报错中…";
+/** 单次编译（SSE /api/compile）→ done 载荷；error 终态 / 断线 → throw（中文文案）。 */
+async function runCompileOnce(outputDir) {
+  let finished = false;
+  let done = null;
+  let errorMsg = null;
+  let resp;
+  try {
+    resp = await fetch("/api/compile", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: chosenPlatform, output_dir: outputDir }),
+    });
+  } catch (e) { throw new Error(e.message); }
+  if (!resp.body) throw new Error("服务响应无流");
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+  }
+  await parseSSE(resp, (type, raw) => {
+    let data = {};
+    try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
+    if (type === "done") { done = data; finished = true; }
+    else if (type === "error") { errorMsg = data.message || "编译失败"; finished = true; }
+  });
+  if (errorMsg) throw new Error(errorMsg);
+  if (!done) throw new Error(finished ? "编译未返回结果" : "连接中断：本次编译未完成，可安全重试");
+  return done;
+}
+
+/** 单次修复（SSE /api/fix-errors，复用既有管线）→ done 载荷；error / 断线 → throw。 */
+async function runFixOnce(errorText, outputDir) {
+  let finished = false;
   let resp;
   try {
     resp = await fetch("/api/fix-errors", {
@@ -1457,25 +1527,115 @@ async function startFixErrors() {
         main_c: $("main-c").value.trim(),
       }),
     });
-  } catch (e) { fixSetBusy(false); $("fix-errors-msg").textContent = e.message; return; }
-  if (!resp.body) { fixSetBusy(false); $("fix-errors-msg").textContent = "服务响应无流"; return; }
+  } catch (e) { throw new Error(e.message); }
+  if (!resp.body) throw new Error("服务响应无流");
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    fixSetBusy(false);
-    $("fix-errors-msg").textContent = err.detail || ("请求失败（HTTP " + resp.status + "）");
+    throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+  }
+  await parseSSE(resp, (type, raw) => {
+    if (type === "done" || type === "error") finished = true;
+    fixHandleEvent(type, raw, outputDir);
+  });
+  if (!finished) throw new Error("连接中断：本次修复未完成，可安全重试");
+  if (!lastFixDone) throw new Error("修复失败（见上方提示）");
+  return lastFixDone;
+}
+
+/** 修复中心主循环（决策记录 2/3）：编译 → 报错自动喂修复 → 重编译验证 ≤3 轮。 */
+async function startFixCenter() {
+  if (fixLoop.running) return;   // 单实例：循环中忽略重复触发
+  const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
+  if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
+  if (!chosenPlatform) { $("fix-errors-msg").textContent = "请先选择目标平台"; return; }
+  if (!(toolchains || {})[chosenPlatform]) {
+    $("fix-errors-msg").textContent = "未检测到该平台工具链，已回退贴文本模式（见下方手动模式）";
     return;
   }
+  fixLoop.running = true;
+  fixLoop.round = 0;
+  lastFix = null; lastFixDone = null;
+  $("fix-errors-msg").textContent = "";
+  $("fix-status").textContent = "";
+  $("fix-results").innerHTML = "";
+  $("fix-center-round").textContent = "";
+  $("fix-center-log").value = "";
+  $("btn-fix-rollback").classList.add("hidden");
+  fixCenterBusy(true);
+  $("fix-status").textContent = "自动编译中…";
   try {
-    await parseSSE(resp, (type, raw) => fixHandleEvent(type, raw, outputDir));
-  } catch (e) {
-    if (!fixFinished) {   // 终态已到后的读流出错忽略；否则 = 断线
-      fixSetBusy(false);
-      $("fix-errors-msg").textContent = "连接中断：本次修复未完成，可安全重试";
+    // 第 0 步：首次全量编译（生成后自动触发 / 手动"一键编译修复"同一入口）
+    const initial = await runCompileOnce(outputDir);
+    $("fix-center-log").value = initial.error_text || "";
+    if (initial.timed_out) {
+      $("fix-status").textContent = "编译超时（工具链 180s 未返回），已停止循环——"
+        + "可在设置页检查工具链路径后重试";
+      return;
     }
+    if (initial.passed) {
+      $("fix-status").textContent = "编译通过 ✅（warnings 见上方编译输出）";
+      return;
+    }
+    // 报错 → 修复 → 重编译验证，≤3 轮；第 3 轮后如实报告剩余错误（不无限循环）
+    let errorText = initial.error_text;
+    for (fixLoop.round = 1; fixLoop.round <= FIX_MAX_ROUNDS; fixLoop.round++) {
+      const n = fixErrorCount(errorText);
+      $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+        + " 轮：编译有错（" + (n !== null ? n + " 条 Error" : "多条报错") + "）→ AI 修复…";
+      await runFixOnce(errorText, outputDir);   // 应用结果逐条展示（fix-results）
+      $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+        + " 轮：重编译验证中…";
+      const compile = await runCompileOnce(outputDir);
+      $("fix-center-log").value = compile.error_text || "";
+      if (compile.timed_out) {
+        $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译超时，已停止循环——"
+          + "可修改工程后点「一键编译修复」重新来过";
+        return;
+      }
+      if (compile.passed) {
+        $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译通过 ✅"
+          + "（warnings 见上方编译输出）";
+        return;
+      }
+      errorText = compile.error_text;   // 仍错 → 下一轮喂最新报错
+    }
+    // 第 3 轮后仍错：如实报告剩余错误清单（决策记录 2）
+    const n = fixErrorCount(errorText);
+    $("fix-status").textContent = "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余错误见上方编译输出（"
+      + (n !== null ? n + " 条 Error" : "多条报错") + "）——可继续贴文本修复，或改工程后重试";
+  } catch (e) {
+    $("fix-status").textContent = "";
+    $("fix-errors-msg").textContent = e.message;
+  } finally {
+    fixLoop.running = false;
+    fixLoop.round = 0;
+    fixCenterBusy(false);
   }
 }
 
-$("btn-fix-errors").addEventListener("click", startFixErrors);
+$("btn-fix-center").addEventListener("click", startFixCenter);
+
+$("btn-fix-errors").addEventListener("click", async () => {
+  $("fix-errors-msg").textContent = "";
+  $("fix-status").textContent = "";
+  const errorText = $("fix-errors-text").value.trim();
+  if (!errorText) { $("fix-errors-msg").textContent = "请先粘贴编译报错全文"; return; }
+  const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
+  if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
+  $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
+  lastFix = null;
+  lastFixDone = null;
+  $("btn-fix-rollback").classList.add("hidden");
+  fixSetBusy(true);
+  $("fix-status").textContent = "解析报错中…";
+  try {
+    await runFixOnce(errorText, outputDir);
+  } catch (e) {
+    $("fix-errors-msg").textContent = e.message;
+  } finally {
+    fixSetBusy(false);
+  }
+});
 
 $("btn-fix-rollback").addEventListener("click", async () => {
   if (!lastFix) return;
@@ -2581,6 +2741,9 @@ async function loadSettings() {
     $("set-api-key").value = s.api_key;
     $("set-lib-dir").value = s.module_library_dir;
     $("set-masters-dir").value = s.masters_dir;
+    // 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
+    $("set-uv4-path").value = s.uv4_path || "";
+    $("set-gmake-path").value = s.gmake_path || "";
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
@@ -2595,6 +2758,8 @@ $("btn-save-settings").addEventListener("click", async () => {
       model: $("set-model").value.trim(),
       module_library_dir: $("set-lib-dir").value.trim(),
       masters_dir: $("set-masters-dir").value.trim(),
+      uv4_path: $("set-uv4-path").value.trim(),
+      gmake_path: $("set-gmake-path").value.trim(),
     });
     $("settings-msg").classList.add("ok");
     $("settings-msg").textContent = "已保存，立即生效。";
@@ -2621,6 +2786,9 @@ $("btn-save-settings").addEventListener("click", async () => {
   // 首次使用流程（设置 → 导入母版 → 生成）不能死在启动上
   try { state.modules = await apiGet("/api/modules"); }
   catch (e) { state.modules = []; }
+  // 工具链可用性（工单 autocompile-loop/01）：一键编译修复按钮的置灰依据
+  toolchains = state.toolchains || { stm32: false, mspm0: false };
+  renderToolchainStatus();
   renderPlatforms();
   renderModulePool();
   $("new-platform").innerHTML = state.platforms.map((p) =>

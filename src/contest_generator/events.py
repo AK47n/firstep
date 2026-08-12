@@ -37,6 +37,13 @@ EVENT_PARSE_DONE = "parse_done"
 EVENT_FIX_START = "fix_start"
 EVENT_APPLY_RESULT = "apply_result"
 
+# 自动编译（工单 autocompile-loop/01）的事件类型：compile_start = 编译子进程
+# 启动（前端显示"编译中"，分钟级以内）；done 的 data = {platform, output_dir,
+# exit_code, error_text, passed, timed_out, project_file, command}——error_text
+# 原样采集自编译器输出（与 fix-errors 解析契约对齐），passed 由域模块
+# compile_runner.compile_passed 判定（前端循环不自己判退出码）
+EVENT_COMPILE_START = "compile_start"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；

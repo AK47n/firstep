@@ -28,6 +28,7 @@ from contest_generator.events import (
     EVENT_APPLY_RESULT,
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
+    EVENT_COMPILE_START,
     EVENT_CONVERGED,
     EVENT_DONE,
     EVENT_ERROR,
@@ -504,6 +505,139 @@ def test_fix_errors_rollback_missing_backup_raises(client, tmp_path):
     )
     assert resp.status_code == 400
     assert "备份不存在" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 自动编译（工单 autocompile-loop/01）：工具链探测 → 子进程编译 → SSE 事件
+# ---------------------------------------------------------------------------
+
+
+def _fake_uv4_bat(tmp_path: Path, exit_code: int, log_lines: list[str]) -> Path:
+    """假 UV4：解析 `-o <log>` 参数写日志文件，按指定退出码退出（真实 .bat，
+    子进程直接执行；内容与 tests/test_compile_runner.py 同构）。"""
+    bat = tmp_path / "fake_uv4.bat"
+    bat.write_text(
+        "@echo off\r\nset LOG=\r\n:parse\r\nif \"%~1\"==\"\" goto run\r\n"
+        'if "%~1"=="-o" set LOG=%~2\r\nshift\r\ngoto parse\r\n'
+        ":run\r\n"
+        + "".join(
+            (f'echo {line} > "%LOG%"\r\n' if i == 0 else f'echo {line} >> "%LOG%"\r\n')
+            for i, line in enumerate(line.strip() for line in log_lines)
+        )
+        + f"exit /b {exit_code}\r\n",
+        encoding="utf-8",
+    )
+    return bat
+
+
+def _stm32_project(tmp_path: Path) -> Path:
+    out = tmp_path / "project"
+    (out / "user").mkdir(parents=True)
+    (out / "user" / "Project.uvprojx").write_text("<Project/>", encoding="utf-8")
+    return out
+
+
+def _compile_stream(client, payload) -> list[tuple[str, dict]]:
+    """POST 编译端点并解析 SSE 事件序列（HTTP 200 起流）。"""
+    resp = client.post("/api/compile", json=payload)
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    return _parse_sse(resp.text)
+
+
+def test_compile_requires_output_dir_exists(client, tmp_path):
+    resp = client.post(
+        "/api/compile",
+        json={"platform": PLATFORM_STM32, "output_dir": str(tmp_path / "gone")},
+    )
+    assert resp.status_code == 400
+    assert "输出目录不存在" in resp.json()["detail"]
+
+
+def test_compile_no_toolchain_400_chinese(client, context, tmp_path, monkeypatch):
+    """无工具链 → 400 中文（前端据此置灰按钮回退贴文本模式）。"""
+    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: None)
+    resp = client.post(
+        "/api/compile",
+        json={"platform": PLATFORM_STM32, "output_dir": str(_stm32_project(tmp_path))},
+    )
+    assert resp.status_code == 400
+    assert "工具链" in resp.json()["detail"]
+
+
+def test_compile_mspm0_no_make_400_chinese(client, context, tmp_path, monkeypatch):
+    monkeypatch.setattr("contest_generator.webapp.find_make", lambda override: None)
+    out = tmp_path / "project"
+    (out / "Debug").mkdir(parents=True)
+    (out / "Debug" / "makefile").write_text("all:\n", encoding="utf-8")
+    resp = client.post(
+        "/api/compile",
+        json={"platform": PLATFORM_MSPM0, "output_dir": str(out)},
+    )
+    assert resp.status_code == 400
+    assert "gmake" in resp.json()["detail"]
+
+
+def test_compile_stm32_end_to_end_events_and_passed(client, context, tmp_path, monkeypatch):
+    """端到端：compile_start → done（exit_code / error_text / passed），假 UV4
+    写 -o 日志文件 → 原样采集（与 fix-errors 解析契约对齐）。"""
+    out = _stm32_project(tmp_path)
+    fake_uv4 = _fake_uv4_bat(tmp_path, 0, ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."])
+    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    events = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})
+    assert [kind for kind, _ in events] == [EVENT_COMPILE_START, EVENT_DONE]
+    done = events[1][1]
+    assert done["platform"] == PLATFORM_STM32
+    assert done["exit_code"] == 0 and done["passed"] is True and done["timed_out"] is False
+    assert "0 Error(s)" in done["error_text"]
+    assert "user/Project.uvprojx" in done["project_file"].replace("\\", "/")
+    assert "-r" in done["command"]  # 全量重建（决策记录 4）
+    assert done["output_dir"] == str(out)
+
+
+def test_compile_stm32_errors_reported_not_passed(client, context, tmp_path, monkeypatch):
+    """编译有错（exit 2）→ done 携带 error_text 与 passed=False（走修复循环）。"""
+    out = _stm32_project(tmp_path)
+    fake_uv4 = _fake_uv4_bat(
+        tmp_path, 2,
+        ["Build started: Project: fake", r'..\main.c(10): error #20: identifier "x" is undefined', "1 Error(s) 0 Warning(s)."],
+    )
+    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    done = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})[-1][1]
+    assert done["exit_code"] == 2 and done["passed"] is False
+    assert r'..\main.c(10): error #20' in done["error_text"]
+
+
+def test_compile_structure_error_is_stream_error_event(client, context, tmp_path, monkeypatch):
+    """工程结构异常（没有 .uvprojx）→ 流内 error 事件（HTTP 200 起流），文案写具体。"""
+    out = tmp_path / "project"
+    out.mkdir()
+    fake_uv4 = _fake_uv4_bat(tmp_path, 0, ["0 Error(s)"])
+    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    events = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})
+    errors = [data for kind, data in events if kind == EVENT_ERROR]
+    assert errors, f"流未以 error 收尾：{events}"
+    assert ".uvprojx" in errors[0]["message"]
+
+
+def test_compile_mspm0_gmake_end_to_end(client, context, tmp_path, monkeypatch):
+    """mspm0 线：Debug/makefile + gmake → done（stdout 原样采集）。"""
+    out = tmp_path / "project"
+    (out / "Debug").mkdir(parents=True)
+    (out / "Debug" / "makefile").write_text("all:\n", encoding="utf-8")
+    fake_make = tmp_path / "gmake.bat"
+    fake_make.write_text(
+        "@echo off\r\n"
+        "echo gmake: Entering directory Debug\r\n"
+        "echo code/main.c:45: error: use of undeclared identifier 'y'\r\n"
+        "exit /b 2\r\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("contest_generator.webapp.find_make", lambda override: fake_make)
+    done = _compile_stream(client, {"platform": PLATFORM_MSPM0, "output_dir": str(out)})[-1][1]
+    assert done["exit_code"] == 2 and done["passed"] is False
+    assert "undeclared" in done["error_text"]
+    assert "-B" in done["command"]  # 全量重建（决策记录 4）
 
 
 # ---------------------------------------------------------------------------
@@ -1728,6 +1862,41 @@ def test_settings_requires_api_key_on_first_configuration(tmp_path):
 
     assert resp.status_code == 400
     assert "API key" in resp.json()["detail"]
+
+
+def test_settings_toolchain_paths_roundtrip(client, context):
+    """uv4_path / gmake_path（工单 autocompile-loop/01）读写透传，缺省空串。"""
+    current = client.get("/api/settings").json()
+    assert current["uv4_path"] == "" and current["gmake_path"] == ""  # 缺省自动探测
+
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "uv4_path": r"C:\Keil5\Core\UV4\UV4.exe",
+            "gmake_path": "gmake",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.uv4_path == r"C:\Keil5\Core\UV4\UV4.exe"
+    assert context[0].config.gmake_path == "gmake"
+    saved = client.get("/api/settings").json()
+    assert saved["uv4_path"] == r"C:\Keil5\Core\UV4\UV4.exe"
+    assert saved["gmake_path"] == "gmake"
+
+
+def test_state_reports_toolchain_availability(client, context, monkeypatch):
+    """/api/state 携带 toolchains（前端置灰依据）：探测命中 → True，未命中 → False。"""
+    monkeypatch.setattr(
+        "contest_generator.webapp.find_uv4", lambda override: Path("C:/fake/UV4.exe")
+    )
+    monkeypatch.setattr("contest_generator.webapp.find_make", lambda override: None)
+    state = client.get("/api/state").json()
+    assert state["toolchains"] == {PLATFORM_STM32: True, PLATFORM_MSPM0: False}
 
 
 # ---------------------------------------------------------------------------
