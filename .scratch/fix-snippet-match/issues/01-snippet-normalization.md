@@ -8,7 +8,7 @@
 
 **链路**：复制 2026C stm32 产物（out_2026C_stm32，uvprojx 在 user/）→ main.c 注入带行尾注释错误行 `    int zzz_fix_probe = UNDECLARED_SYMBOL_ZZZ;   /* 验收注入：制造编译错误 */`（157 行，历史 158 行同款形态）→ 真实 UV4 -j0 -r -b 编译采错（`..\main.c(157): error #20: identifier "UNDECLARED_SYMBOL_ZZZ" is undefined`，`..\` 形态归一生效，candidates=main.c）→ 真实 DeepSeek 修复第 1 轮 → **applied**（backup_id 20260812-165715）→ 重编译 **0 Error(s) 1 Warning(s)**（1 警历史固有非回归）。
 
-**环境**：Keil UV4 命令行 + ARM Compiler V5.06 update 7 (build 960)（AC5）——报错为 AC5 的 `path(line): error #xx:` 形态（`..\main.c(157): error #20: ...`），与 parse_compile_errors 的 UV4 正则兼容；若换 AC6/armclang 则为 `path:line:col:` 形态（CCS 正则，同样已支持）。
+**环境**：Keil µVision5（IDE；命令行构建工具为随 IDE 安装的 `UV4.exe`，历史命名延续 µVision4，非 µVision4 本体）+ ARM Compiler V5.06 update 7 (build 960)（AC5）——报错为 AC5 的 `path(line): error #xx:` 形态（`..\main.c(157): error #20: ...`），与 parse_compile_errors 的 UV4 正则兼容；若换 AC6/armclang 则为 `path:line:col:` 形态（CCS 正则，同样已支持）。
 
 **第 1 轮收敛对比**：compile-error-fix/01 历史同形态注入，旧 prompt + 纯精确匹配第 1 轮 skipped（白跑 ~60s 真实调用，第 3 轮才 applied）；本次新 prompt 引导（old_snippet 给从行首开始的语句本体）下 LLM 输出可直接命中，第 1 轮即收敛——prompt 降变形率与匹配兜底双端生效。修复语义：LLM 删错误声明保留注释行（`new_snippet` = 注释），合法。
 
