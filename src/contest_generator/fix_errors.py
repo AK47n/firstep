@@ -19,12 +19,15 @@ UI 提供「回滚本次修复」按钮（restore_backup）。
 所在子目录（`..\main.c(158)` 形态，uvprojx 在 user/ 而源文件在工程根）——
 先按工程根解析，解析不出再按工程文件基准目录解析，两种都过 containment。
 
-替换协议（决策记录 4 + 工单 fix-snippet-match/01）：old_snippet 精确匹配
-（含缩进）优先；精确匹配失败时走行首前缀归一化兜底（old_snippet strip 后
-必须是文件某行 strip 后内容的行首前缀——容忍前导缩进差异 / 行尾注释省略 /
-CRLF / 行尾空白，语句本体必须逐字一致），唯一命中才应用（reason 标注
-「按行首前缀归一化匹配应用」）；仍未命中 / 多处歧义一律跳过并报告
-「未应用」（不静默、不模糊替换、不做语义匹配）。
+替换协议（决策记录 4 + 工单 fix-snippet-match/01 + fix-match-seam/01）：
+old_snippet 精确匹配（含缩进）优先；精确匹配失败时走行首前缀归一化兜底
+（old_snippet strip 后必须是文件某行 strip 后内容的行首前缀——容忍前导
+缩进差异 / 行尾注释省略 / CRLF / 行尾空白，语句本体必须逐字一致），唯一
+命中才应用（reason 标注「按行首前缀归一化匹配应用」）；仍未命中 / 多处
+歧义一律跳过并报告「未应用」（不静默、不模糊替换、不做语义匹配）。匹配
+判决单源在 match_snippet（纯函数），理由文案单源在 _reason_for——写回循环
+只消费判决，改匹配规则 / 文案只动一处；改协议须同步 llm.FIX_SYSTEM_PROMPT
+约束 2（对偶测试双端断言）。
 
 本模块依赖方向：只 import entry_store / events（叶子契约）与标准库，是叶子
 模块——llm.py 反向依赖本模块（FixSuggestion 模型），禁止本模块 import llm
@@ -112,6 +115,30 @@ class FixResult:
     line: int
     status: str  # "applied" / "skipped"
     reason: str
+
+
+@dataclass(frozen=True)
+class SnippetMatch:
+    """片段匹配判决（工单 fix-match-seam/01 决策记录 1）：match_snippet 的产物，
+    写回循环只消费它（applied / skipped 二态 + 替换区间）。
+
+    status 四态：exact（精确子串唯一匹配）/ normalized（行首前缀归一化唯一
+    匹配）/ none（未命中）/ ambiguous（多处命中歧义，不模糊替换）。start /
+    end / snippet 仅 applied（exact / normalized）时有效，否则 start=end=-1、
+    snippet=""。count 供文案插值（歧义 / 未命中的计数，_reason_for 用）。
+
+    via_normalized：ambiguous 的来源判别（True = 行首前缀归一化多处命中，
+    False = 精确子串多处出现）——两种歧义的 reason 文案不同（决策 3 三条
+    skipped 文案逐字保持），而 status 只有一种 ambiguous（决策 1 枚举），
+    判别字段为实施补录（见工单实施记录；_reason_for 之外无其他消费方）。
+    """
+
+    status: str  # "exact" / "normalized" / "none" / "ambiguous"
+    start: int  # 替换区间 [start, end)（仅 applied 有效；否则 -1）
+    end: int
+    snippet: str  # 替换文本（仅 applied 有效；否则 ""）
+    count: int  # 歧义 / 未命中的计数（文案插值用）
+    via_normalized: bool = False  # ambiguous 来源：True = 归一化多处命中
 
 
 @dataclass(frozen=True)
@@ -391,16 +418,87 @@ def _preserve_line_ending(new_snippet: str, span: str) -> str:
     return new_snippet + ending.group(0)
 
 
+def match_snippet(content: str, old_snippet: str, new_snippet: str) -> SnippetMatch:
+    """片段匹配判决（工单 fix-match-seam/01 决策记录 1，语义逐字迁自 apply_fixes
+    写回循环）：old_snippet 精确子串唯一匹配 → exact（替换区间 = 子串区间，
+    snippet = new_snippet 原样）；精确 0 次 → 行首前缀归一化兜底（old_snippet
+    归一化行序列逐行必须是文件对应行 strip 后内容的行首前缀——容忍前导缩进 /
+    行尾注释省略 / CRLF / 行尾空白，语句本体须逐字一致），唯一匹配 →
+    normalized（替换区间 = 行区间，行尾换行保护）；仍未命中 → none；多处
+    命中（精确子串多处出现 / 归一化多处命中）→ ambiguous（不模糊替换，调用
+    方跳过并报告未应用——唯一匹配是应用前提）。纯函数：零文件系统，判决
+    契约可单测。协议文本单源对偶于 llm.FIX_SYSTEM_PROMPT 约束 2（改一侧
+    即红，见测试）。
+    """
+    count = content.count(old_snippet)
+    if count == 1:
+        index = content.find(old_snippet)
+        return SnippetMatch(
+            status="exact",
+            start=index,
+            end=index + len(old_snippet),
+            snippet=new_snippet,
+            count=1,
+        )
+    if count > 1:
+        return SnippetMatch(
+            status="ambiguous", start=-1, end=-1, snippet="", count=count
+        )
+    normalized = _normalized_hits(content, old_snippet)
+    if len(normalized) == 1:
+        start, end = _line_span(
+            content, normalized[0], len(_snippet_normalized_lines(old_snippet))
+        )
+        snippet = _preserve_line_ending(new_snippet, content[start:end])
+        return SnippetMatch(
+            status="normalized", start=start, end=end, snippet=snippet, count=1
+        )
+    if len(normalized) == 0:
+        return SnippetMatch(status="none", start=-1, end=-1, snippet="", count=0)
+    return SnippetMatch(
+        status="ambiguous",
+        start=-1,
+        end=-1,
+        snippet="",
+        count=len(normalized),
+        via_normalized=True,
+    )
+
+
+def _reason_for(match: SnippetMatch) -> str:
+    """判决 → reason 文案（工单 fix-match-seam/01 决策记录 3，单源）：exact
+    无文案（""）；normalized 标注「按行首前缀归一化匹配应用」；none / 歧义
+    三条 skipped 文案逐字保持（决策 2，count 插值不变）。改文案只动这里。
+    """
+    if match.status == "exact":
+        return ""
+    if match.status == "normalized":
+        return "按行首前缀归一化匹配应用"
+    if match.status == "none":
+        return (
+            "未应用：文件内未找到 old_snippet（精确匹配失败，"
+            "可能缩进 / 内容不一致）"
+        )
+    if match.via_normalized:
+        return (
+            f"未应用：old_snippet 按行首前缀归一化在文件内"
+            f"多处命中（{match.count} 处，歧义，要求唯一匹配）"
+        )
+    return (
+        f"未应用：old_snippet 在文件内出现 {match.count} 次"
+        "（歧义，要求唯一匹配）"
+    )
+
+
 def apply_fixes(
     fixes: Sequence[FixSuggestion],
     output_dir: Path,
     backup_root: Path,
 ) -> ApplyReport:
-    """snippet 替换协议（决策记录 4 + 工单 fix-snippet-match/01）：old_snippet
-    精确匹配优先；精确匹配失败（0 次）时走行首前缀归一化兜底（容忍缩进 /
-    行尾注释省略 / CRLF / 行尾空白，语句本体须逐字一致），唯一命中才 applied
-    （reason 标注归一化）；仍未命中 / 多处歧义跳过并报告「未应用」——不
-    静默、不模糊替换、不做语义匹配。
+    """snippet 替换协议（决策记录 4 + 工单 fix-snippet-match/01 + fix-match-seam/01）：
+    匹配判决单源在 match_snippet（精确优先 → 行首前缀归一化兜底 → 未命中 /
+    歧义跳过，判决契约见其 docstring），本函数只消费判决并写回——改匹配规则
+    或理由文案（_reason_for）不动本函数。
 
     路径判决（决策记录 3）：file 扩展名白名单、is_unsafe_path 防穿越、resolve
     后仍在输出目录内、目标文件存在——任一不满足 → FixError（登记 errors.py
@@ -424,62 +522,29 @@ def apply_fixes(
         target = (output_dir / file).resolve()
         content = target.read_text(encoding="utf-8", errors="replace")
         for fix in file_fixes:
-            count = content.count(fix.old_snippet)
-            if count == 1:
-                index = content.find(fix.old_snippet)
+            # 匹配判决只经 match_snippet（工单 fix-match-seam/01）：写回循环
+            # 不碰匹配原语，只消费判决 + 理由文案（_reason_for 单源）
+            match = match_snippet(content, fix.old_snippet, fix.new_snippet)
+            if match.status in ("exact", "normalized"):
                 content = (
-                    content[:index] + fix.new_snippet + content[index + len(fix.old_snippet):]
+                    content[: match.start] + match.snippet + content[match.end :]
                 )
                 results.append(
-                    FixResult(file=file, line=fix.line, status="applied", reason="")
+                    FixResult(
+                        file=file,
+                        line=fix.line,
+                        status="applied",
+                        reason=_reason_for(match),
+                    )
                 )
                 new_contents[file] = content
-            elif count == 0:
-                # 精确匹配失败 → 行首前缀归一化兜底（fix-snippet-match/01）
-                normalized = _normalized_hits(content, fix.old_snippet)
-                if len(normalized) == 1:
-                    start, end = _line_span(
-                        content, normalized[0], len(_snippet_normalized_lines(fix.old_snippet))
-                    )
-                    snippet = _preserve_line_ending(fix.new_snippet, content[start:end])
-                    content = content[:start] + snippet + content[end:]
-                    results.append(
-                        FixResult(
-                            file=file,
-                            line=fix.line,
-                            status="applied",
-                            reason="按行首前缀归一化匹配应用",
-                        )
-                    )
-                    new_contents[file] = content
-                elif len(normalized) == 0:
-                    results.append(
-                        FixResult(
-                            file=file,
-                            line=fix.line,
-                            status="skipped",
-                            reason="未应用：文件内未找到 old_snippet（精确匹配失败，"
-                            "可能缩进 / 内容不一致）",
-                        )
-                    )
-                else:
-                    results.append(
-                        FixResult(
-                            file=file,
-                            line=fix.line,
-                            status="skipped",
-                            reason=f"未应用：old_snippet 按行首前缀归一化在文件内"
-                            f"多处命中（{len(normalized)} 处，歧义，要求唯一匹配）",
-                        )
-                    )
             else:
                 results.append(
                     FixResult(
                         file=file,
                         line=fix.line,
                         status="skipped",
-                        reason=f"未应用：old_snippet 在文件内出现 {count} 次"
-                        "（歧义，要求唯一匹配）",
+                        reason=_reason_for(match),
                     )
                 )
 

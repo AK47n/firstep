@@ -3,12 +3,15 @@
 覆盖：报错解析（UV4 / CCS / 混合多文件 / 无文件引用降级 / 垃圾文本不崩）、
 路径安全（`../` 逃逸、绝对路径、非法扩展名 → FixError → 400 中文登记
 errors.py）、替换协议（精确成功 / 行首前缀归一化兜底 applied / 歧义与语句
-本体差异跳过）、备份与回滚（写回前备份存在、回滚后文件内容恢复原样）。
+本体差异跳过）、匹配判决直测（match_snippet 四态纯函数，工单 fix-match-seam/01：
+判决语义 / 理由文案单源 / 协议对偶 / 结构钉）、备份与回滚（写回前备份存在、
+回滚后文件内容恢复原样）。
 """
 
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 import pytest
@@ -26,10 +29,13 @@ from contest_generator.fix_errors import (
     FixError,
     FixResult,
     FixSuggestion,
+    SnippetMatch,
+    _reason_for,
     apply_fixes,
     backup_files,
     collect_candidate_paths,
     fix_backup_root,
+    match_snippet,
     parse_compile_errors,
     read_file_contexts,
     restore_backup,
@@ -521,6 +527,195 @@ def test_apply_fixes_multiple_fixes_same_file_sequential(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 匹配判决直测（工单 fix-match-seam/01）：match_snippet 纯函数——零文件系统，
+# 红证用例全集（fix-snippet-match/01 的判决语义）从 apply_fixes 端到端迁移到
+# 判决层直测；端到端行为用例（写回 + 备份）保留在上方，双保险不回归
+# ---------------------------------------------------------------------------
+
+
+def test_match_snippet_exact_unique():
+    """精确子串唯一匹配 → exact：替换区间 = 子串区间，snippet = new_snippet
+    原样（无换行保护——子串替换语义）。"""
+    match = match_snippet(
+        "int x = 1;\nint main(void) { return x; }\n", "int x = 1;", "int x = 2;"
+    )
+    assert match.status == "exact"
+    assert (match.start, match.end) == (0, 10)  # "int x = 1;" = 10 字符
+    assert match.snippet == "int x = 2;"
+    assert match.count == 1 and match.via_normalized is False
+
+
+def test_match_snippet_indent_diff_normalized():
+    """丢缩进形态（红证迁移）：前导缩进与文件不一致 → 精确 0 次，归一化唯一命中。"""
+    match = match_snippet(
+        "int x = 1;\nint main(void) { return x; }\n",
+        "  int main(void)",
+        "  int win(void)",
+    )
+    assert match.status == "normalized"
+    assert (match.start, match.end) == (11, 40)  # 行区间（含行尾换行）
+    assert match.snippet == "  int win(void)\n"  # 行尾换行保护补回
+    assert match.count == 1
+
+
+def test_match_snippet_trailing_comment_normalized():
+    """丢行尾注释形态（红证迁移）：old_snippet 省略行尾注释 → 归一化命中整行。"""
+    match = match_snippet(
+        "int x = 1;   /* init */\nint main(void) { return x; }\n",
+        "  int x = 1;",
+        "int x = 2;",
+    )
+    assert match.status == "normalized"
+    assert (match.start, match.end) == (0, 24)  # "int x = 1;   /* init */\n" 整行
+    assert match.snippet == "int x = 2;\n"
+
+
+def test_match_snippet_crlf_content_normalized():
+    """CRLF 形态（红证迁移）：\\r 让精确子串 0 次，归一化逐行 strip 命中；替换
+    保留原行尾 \\r\\n（换行保护）。"""
+    match = match_snippet(
+        "int x = 1;\r\nint main(void) { return x; }\r\n",
+        "int x = 1;\n",
+        "int x = 2;",
+    )
+    assert match.status == "normalized"
+    assert (match.start, match.end) == (0, 12)  # "int x = 1;\r\n" = 12 字符
+    assert match.snippet == "int x = 2;\r\n"
+    assert match.count == 1
+
+
+def test_match_snippet_inline_spaces_normalized():
+    """行内多空格形态（红证迁移）：snippet 行尾多空格 → 精确 0 次，strip 后
+    前缀命中（行尾空白容忍）。"""
+    match = match_snippet(
+        "int x = 1;\nint main(void) { return x; }\n",
+        "int x = 1; ",
+        "int x = 2;",
+    )
+    assert match.status == "normalized"
+    assert (match.start, match.end) == (0, 11)
+    assert match.snippet == "int x = 2;\n"
+
+
+def test_match_snippet_ambiguous_exact_multiple():
+    """精确子串多处出现 → ambiguous（不模糊替换），count = 精确出现次数，
+    via_normalized=False（与归一化歧义的 reason 文案区分，见 _reason_for）。"""
+    match = match_snippet("int x = 1;\nint y = 1;\n", "int", "long")
+    assert match.status == "ambiguous"
+    assert (match.start, match.end) == (-1, -1) and match.snippet == ""
+    assert match.count == 2
+    assert match.via_normalized is False
+
+
+def test_match_snippet_ambiguous_normalized_multiple():
+    """归一化多处命中 → ambiguous，count = 命中行数，via_normalized=True
+    （来源判别字段，实施补录见工单实施记录）。"""
+    match = match_snippet(
+        "int a = 1;  /* one */\nint a = 2;  /* two */\n",
+        "  int a =",
+        "long a =",
+    )
+    assert match.status == "ambiguous"
+    assert (match.start, match.end) == (-1, -1) and match.snippet == ""
+    assert match.count == 2
+    assert match.via_normalized is True
+
+
+def test_match_snippet_body_diff_none():
+    """语句本体不一致（行内空白重组）→ none：前缀比较失败，不模糊替换。"""
+    match = match_snippet(
+        "int x = 1;\nint main(void) { return x; }\n",
+        "int x  = 1;",
+        "int x = 2;",
+    )
+    assert match.status == "none"
+    assert (match.start, match.end) == (-1, -1) and match.snippet == ""
+    assert match.count == 0
+
+
+def test_match_snippet_multiline_block_normalized():
+    """多行片段 = 连续行块逐行前缀命中（红证迁移）：替换区间 = 整块行区间。"""
+    match = match_snippet(
+        "int a = 1;  /* one */\nint b = 2;\nint c = 3;\nint main(void) { return a + b + c; }\n",
+        "    int a = 1;\n    int b = 2;",
+        "int a = 1;\nint b = 20;",
+    )
+    assert match.status == "normalized"
+    assert (match.start, match.end) == (0, 33)  # 前两行整块（含行尾换行）
+    assert match.snippet == "int a = 1;\nint b = 20;\n"
+    assert match.count == 1
+
+
+def test_match_snippet_delete_whole_line_normalized():
+    """new_snippet 空串 = 删整行：替换区间 = 整行（含换行），snippet = 空
+    （空替换不补换行，整块删除）。"""
+    match = match_snippet(
+        "int x = 1;\nint main(void) { return x; }  /* entry */\n",
+        "    int main(void)",
+        "",
+    )
+    assert match.status == "normalized"
+    assert (match.start, match.end) == (11, 53)  # 第二行整行（含换行）
+    assert match.snippet == ""
+
+
+def test_reason_for_wordings_verbatim():
+    """四条文案逐字锚定（决策 2/3 单源）：exact 无文案 / normalized 标注 /
+    none 与两种歧义三条 skipped 文案——改文案只动 _reason_for，本测试锁死现状
+    （count 插值不变）。"""
+    assert (
+        _reason_for(
+            SnippetMatch(status="exact", start=0, end=1, snippet="x", count=1)
+        )
+        == ""
+    )
+    assert (
+        _reason_for(
+            SnippetMatch(status="normalized", start=0, end=1, snippet="x", count=1)
+        )
+        == "按行首前缀归一化匹配应用"
+    )
+    assert (
+        _reason_for(SnippetMatch(status="none", start=-1, end=-1, snippet="", count=0))
+        == "未应用：文件内未找到 old_snippet（精确匹配失败，可能缩进 / 内容不一致）"
+    )
+    assert (
+        _reason_for(
+            SnippetMatch(status="ambiguous", start=-1, end=-1, snippet="", count=3)
+        )
+        == "未应用：old_snippet 在文件内出现 3 次（歧义，要求唯一匹配）"
+    )
+    assert (
+        _reason_for(
+            SnippetMatch(
+                status="ambiguous",
+                start=-1,
+                end=-1,
+                snippet="",
+                count=2,
+                via_normalized=True,
+            )
+        )
+        == "未应用：old_snippet 按行首前缀归一化在文件内多处命中（2 处，歧义，要求唯一匹配）"
+    )
+
+
+def test_match_snippet_docstring_dual_with_fix_system_prompt():
+    """协议对偶（决策记录 4，照 test_generate_check_contract 词表对偶先例）：
+    匹配协议关键语义（行首前缀归一化 / 唯一匹配）在 FIX_SYSTEM_PROMPT 约束 2
+    与 match_snippet docstring 同时存在——提示词改协议忘改判决、或判决改语义
+    忘改提示词，任一侧红。"""
+    from contest_generator.llm import FIX_SYSTEM_PROMPT
+
+    assert "行首前缀归一化" in FIX_SYSTEM_PROMPT
+    assert "唯一匹配" in FIX_SYSTEM_PROMPT
+    doc = inspect.getdoc(match_snippet)
+    assert doc is not None
+    assert "行首前缀归一化" in doc
+    assert "唯一匹配" in doc
+
+
+# ---------------------------------------------------------------------------
 # 路径安全：../ 逃逸、绝对路径、非法扩展名 → FixError（400 中文，登记 errors.py）
 # ---------------------------------------------------------------------------
 
@@ -743,6 +938,9 @@ def test_run_fix_round_emitter_failure_bypassed(tmp_path):
 _WEBAPP_PATH = (
     Path(__file__).resolve().parent.parent / "src" / "contest_generator" / "webapp.py"
 )
+_FIX_ERRORS_PATH = (
+    Path(__file__).resolve().parent.parent / "src" / "contest_generator" / "fix_errors.py"
+)
 
 
 def _webapp_tree() -> ast.Module:
@@ -804,3 +1002,43 @@ def test_fix_errors_route_body_free_of_pipeline_calls():
         "/api/fix-errors 路由含五步管线调用，编排必须归 run_fix_round："
         + "；".join(ast.unparse(node) for node in forbidden)
     )
+
+
+def test_apply_fixes_body_free_of_matching_primitives():
+    """结构钉（工单 fix-match-seam/01 决策记录 5）：写回循环只消费 match_snippet
+    判决——apply_fixes 函数体再出现 content.count( 直调 / _normalized_hits(
+    直调即红（匹配判决必须经 match_snippet 单源，改匹配规则不用动写回循环）；
+    正向钉：判决确经 match_snippet（接缝消失即红）。"""
+    tree = ast.parse(_FIX_ERRORS_PATH.read_text(encoding="utf-8"))
+    funcs = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "apply_fixes"
+    ]
+    assert len(funcs) == 1, "fix_errors.py 应恰好一个 apply_fixes 函数"
+    func = funcs[0]
+    forbidden: list[ast.Call] = []
+    for node in ast.walk(func):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id == "_normalized_hits":
+            forbidden.append(node)
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "count"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "content"
+        ):
+            forbidden.append(node)
+    assert not forbidden, (
+        "apply_fixes 直调匹配原语，判决必须经 match_snippet："
+        + "；".join(ast.unparse(node) for node in forbidden)
+    )
+    calls = [
+        node
+        for node in ast.walk(func)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "match_snippet"
+    ]
+    assert calls, "apply_fixes 未调用 match_snippet（判决接缝消失）"
