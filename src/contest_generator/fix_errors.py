@@ -2,8 +2,9 @@
 
 闭环"生成 → 编译 → 报错 → 修复"：把 Keil / CCS 编译报错文本贴回 → 解析文件
 引用 → 从输出目录读真实文件内容（截断）→ LLM 逐条修复建议 → 直接写回工程
-文件。域判决全部在本模块（纯函数、可单测）；llm.py 只做机械提取
-（fix_compile_errors），webapp 只做薄壳装配（路由 + SSE 编排）。
+文件。域判决与单轮编排（run_fix_round，对照 selection.run_recommendation
+先例）全部在本模块（纯函数、可单测）；llm.py 只做机械提取
+（fix_compile_errors），webapp 只做薄壳装配（取参 + 转调 + SSE 包装）。
 
 可逆性（决策记录 2）：写回前把本次要改的文件原内容备份到输出目录外
 （工作根/fix-backups/<timestamp>/，默认 ~/.contest_generator/fix-backups/），
@@ -25,9 +26,9 @@ CRLF / 行尾空白，语句本体必须逐字一致），唯一命中才应用�
 「按行首前缀归一化匹配应用」）；仍未命中 / 多处歧义一律跳过并报告
 「未应用」（不静默、不模糊替换、不做语义匹配）。
 
-本模块依赖方向：只 import entry_store（原语）与标准库，是叶子模块——llm.py
-反向依赖本模块（FixSuggestion 模型），禁止本模块 import llm（截断标注与
-llm.TRUNCATION_NOTICE 刻意同文，改动须同步）。
+本模块依赖方向：只 import entry_store / events（叶子契约）与标准库，是叶子
+模块——llm.py 反向依赖本模块（FixSuggestion 模型），禁止本模块 import llm
+（截断标注与 llm.TRUNCATION_NOTICE 刻意同文，改动须同步）。
 """
 
 from __future__ import annotations
@@ -37,9 +38,20 @@ import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .entry_store import is_unsafe_path
+from .events import (
+    EVENT_APPLY_RESULT,
+    EVENT_FIX_START,
+    EVENT_PARSE_DONE,
+    ProgressEmitter,
+    ProgressEvent,
+    _emit,
+)
+
+if TYPE_CHECKING:
+    from .llm import LLM  # 仅类型注解用（llm 运行时依赖本模块 FixSuggestion，反向导入成环）
 
 # 可写白名单（决策记录 3）：仅源码文件（.c/.h/.s，大写 .S 一并接受）；
 # 工程配置 / 构建产物（.uvprojx / .axf / .o 等）不参与修复（读上下文同样
@@ -558,3 +570,79 @@ def restore_backup(backup_root: Path, backup_id: str, output_dir: Path) -> tuple
         shutil.copy2(source, destination)
         restored.append(rel)
     return tuple(restored)
+
+
+def run_fix_round(
+    llm: LLM,
+    *,
+    error_text: str,
+    output_dir: Path,
+    backup_root: Path,
+    problem_text: str = "",
+    platform: str = "",
+    module_slugs: Sequence[str] = (),
+    main_c: str = "",
+    emit: ProgressEmitter | None = None,
+) -> dict[str, Any]:
+    """一轮修复的完整编排（工单 fix-session-homing/01）：/api/fix-errors 路由
+    闭包内五步管线的域内归位（对照 selection.run_recommendation 先例）。
+
+    五步：parse_compile_errors → collect_candidate_paths → read_file_contexts
+    （dropped 保留）→ llm.fix_compile_errors → apply_fixes。事件序列契约：
+    parse_done（error_count / file_count）→ fix_start（LLM 修复中，分钟级）
+    → apply_result…（逐处应用结果）——emit 走旁路（_emit，发射失败不影响
+    主流程），None = 不发射（单测直调形态）。
+
+    done 载荷作为返回值（形状的家在此，webapp docstring 只指向本函数）：
+    output_dir（str，原样传入）/ backup_id（本次备份编号，无应用 = ""）/
+    degraded（未定位到可修复文件）/ parsed（[{path, line, message}]，解析
+    结果）/ fixes（[{file, line, status, reason}]，逐处应用结果）。终态发射
+    归路由（emit.done 收尾，run_sse 终态保证语义不变；对照
+    run_recommendation 的 emit.done 在域内，差异见工单决策记录 4）。
+    """
+    errors = parse_compile_errors(error_text)
+    candidates = collect_candidate_paths(output_dir, errors)
+    contexts, dropped = read_file_contexts(output_dir, candidates)
+    _emit(
+        emit,
+        ProgressEvent(
+            type=EVENT_PARSE_DONE,
+            error_count=len(errors),
+            file_count=len(candidates),
+        ),
+    )
+    _emit(emit, ProgressEvent(type=EVENT_FIX_START))
+    fixes = llm.fix_compile_errors(
+        error_text,
+        dict(contexts),
+        problem_text=problem_text,
+        platform=platform,
+        module_slugs=module_slugs,
+        main_c=main_c,
+        dropped_files=dropped,
+    )
+    report = apply_fixes(fixes, output_dir, backup_root)
+    for result in report.results:
+        _emit(
+            emit,
+            ProgressEvent(
+                type=EVENT_APPLY_RESULT,
+                file=result.file,
+                line=result.line,
+                status=result.status,
+                reason=result.reason,
+            ),
+        )
+    return {
+        "output_dir": str(output_dir),
+        "backup_id": report.backup_id,
+        "degraded": not candidates,
+        "parsed": [
+            {"path": e.path, "line": e.line, "message": e.message}
+            for e in errors
+        ],
+        "fixes": [
+            {"file": r.file, "line": r.line, "status": r.status, "reason": r.reason}
+            for r in report.results
+        ],
+    }
