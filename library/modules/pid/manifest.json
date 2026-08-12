@@ -1,11 +1,8 @@
 {
   "slug": "pid",
-  "description": "PID 巡线控制（双平台）：stm32 = 2021F 巡线送药版（路径记忆 + 十字路口决策）；mspm0 = 2026H H 题滚球版（一圈巡线 + 启停线停车 + K230 球坐标解析）。含 pid_cal/pid_control 通用 PID 与 gray_track 灰度检测。",
+  "description": "PID 闭环控制 + 灰度循迹驱动（双平台）：通用 PID 控制器（位置式/增量式，pid_init/pid_cal/pidout_limit）+ 左右轮目标速度输出（含轮速校准，motor_target_set）+ 灰度 8 路读取与边缘中点巡线偏差计算（line_error_calc）+ PD 巡线速度输出（line_pid_track）；适用于巡线/循迹/速度闭环类赛题功能，路口/停车等决策逻辑归生成骨架。",
   "dependencies": [
-    "ball_detect",
-    "digit_uart",
-    "motor",
-    "ml_mpu6050"
+    "motor"
   ],
   "platforms": {
     "mspm0": {
@@ -15,9 +12,9 @@
         "code/gray_track_mspm0.c",
         "code/gray_track_mspm0.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "2026H H 题滚球版（26H 源码移植）：一圈巡线 + 启停线停车状态机（LAP_IDLE→LEAVING_START→RUNNING→STOPPING→STOPPED）+ ball_detect_parse 消费 K230 球坐标。依赖映射：motorA_duty/motorB_duty→motor_set_duty(id,duty)；motorA_dir/motorB_dir→motor_set_direction(id,dir)（0停1正转2反转）；Encoder_count1/2→key 模块 counter_1_A/counter_2_A；gz→imu 模块 gyro_dps_raw；MAX_DUTY=1300（mspm0 PWM 上限，26H 原 50000）。10ms 调度：MOTOR_PID_INST_IRQHandler（main.c 调用 pid_control，先读编码器清零再调）。灰度 8 路用母版 HUIDU 宏（D1→L1…D8→R4，含 start_line_detect 启停线检测）。编译验证未上板。",
+      "notes": "移植源 sources/contest/2026H/26H（26H 滚球原工程 code/pid.c + gray_track.c，stm32 Keil 工程；驱动经移植为 mspm0：motorA_duty/motorB_duty→motor_set_duty(id,duty)；motorA_dir/motorB_dir→motor_set_direction(id,dir)（0停1正转2反转）；MAX_DUTY=1300（26H 原 50000））。决策层（LAP 启停线一圈停车状态机 + 运行计时 + K230 球坐标消费）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（26H-滚球巡线决策例程，stm32 源工程）。驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）；灰度 8 路用母版 HUIDU 宏（D1→L1…D8→R4）。10ms 调度由骨架自建（MOTOR_PID_INST_IRQHandler 或自建定时器中断：读编码器清零 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motor_set_duty）；编码器走 key 模块 counter（符号级 extern，需手动同选 key）。陀螺前馈（GYRO_DAMP_GAIN=0）与 imu_uart 引用已随剥离移除，deps 不引 imu_uart/ball_detect。编译验证：gmake 0 错（2026H 滚球线产物）。",
       "kit": "",
       "source_url": ""
     },
@@ -26,12 +23,11 @@
         "code/pid.c",
         "code/pid.h",
         "code/gray_track.c",
-        "code/gray_track.h",
-        "code/pid_isr.c"
+        "code/gray_track.h"
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "pid_isr.c = 21F user/isr.c 的 TIM3_IRQHandler 原样提取（10ms：关中断读 Encoder_count1/2 → motorA/B.now → pid_control()），选 pid 即带 10ms 调度，闭环开箱即用；TIM3 初始化在 main.c 用 ml_tim 的 tim_interrupt_ms_init(TIM_3, 10, 优先级)。",
+      "notes": "移植源 sources/contest/2021F/21F（2021F 巡线送药原工程 code/pid.c + gray_track.c + user/isr.c）。决策层（十字路口检测/T字路口检测/路由表/K230 动态路口/远端导航/药房状态机/路径记忆 + pid_isr 10ms 调度）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（21F-巡线送药决策例程）；驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）。10ms 调度由骨架自建（TIM3 tim_interrupt_ms_init + ISR：读编码器 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motorA_duty/motorB_duty）；编码器 Encoder_count1/2 走 motor 模块。MAX_DUTY=50000（母版 ml_pwm）。陀螺前馈（GYRO_DAMP_GAIN=0）与角度环 yaw_Kalman 引用已随剥离移除，deps 不引 ml_mpu6050/digit_uart。编译验证：UV4 0 错（21F 巡线线产物）。",
       "kit": "",
       "source_url": ""
     }
