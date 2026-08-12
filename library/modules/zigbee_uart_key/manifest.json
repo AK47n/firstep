@@ -1,6 +1,6 @@
 {
   "slug": "zigbee_uart_key",
-  "description": "2026C 钥匙端 Zigbee DL-20 发送（组 4 字节帧上报 DIP-4 ID）",
+  "description": "Zigbee DL-20 无线发射驱动：按固定帧格式（同步头 + ID + 校验和）组帧并上报本地 DIP-4 ID；适用于无线身份识别、无线信标上报等一对多收发赛题功能的发送侧。",
   "dependencies": [
     "config"
   ],
