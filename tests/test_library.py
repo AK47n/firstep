@@ -222,6 +222,43 @@ def test_update_module_description_revalidates_edited_description(fake_module_li
     )
 
 
+def test_update_module_description_rejects_topic_bound_description_mechanically(
+    fake_module_library,
+):
+    """判据④ 机械拦截同样覆盖简介编辑：带题绑定的新简介直接拒绝，磁盘保持原样。"""
+    llm = FakeLLM()
+
+    with pytest.raises(LibraryError, match="无题绑定.*2024H"):
+        update_module_description(
+            llm, fake_module_library, "dht11", "2024H 巡线题专用层"
+        )
+
+    assert not llm.validation_calls
+    assert (
+        get_module(fake_module_library, "dht11").description
+        == "DHT11 温湿度传感器驱动"
+    )
+
+
+def test_add_module_capability_words_pass_mechanical_check(fake_module_library):
+    """能力词白名单防误伤：简介只含能力词（巡线/灰度等）不被机械拦截，照常走 AI。"""
+    llm = FakeLLM()
+
+    manifest = add_module(
+        llm,
+        fake_module_library,
+        slug="track",
+        platform="stm32",
+        description="灰度循迹驱动：8 路灰度读取 + 加权质心",
+        files={"track.c": "int track_centroid(void);\n"},
+        kit=KIT_STM32,
+        source_url=SOURCE_URL_STM32,
+    )
+
+    assert manifest.slug == "track"
+    assert llm.validation_calls  # 机械检查通过后才调 AI 校验
+
+
 def test_update_module_description_missing_module_raises(fake_module_library):
     with pytest.raises(LibraryError, match="不存在"):
         update_module_description(FakeLLM(), fake_module_library, "wifi", "x")
@@ -358,19 +395,14 @@ def test_add_module_inconsistent_validation_raises_and_leaves_no_trace(
     assert llm.validation_calls  # 校验确实被调用后才拒绝
 
 
-def test_add_module_rejects_specificity_claim_unsupported_by_code(
+def test_add_module_rejects_topic_bound_description_mechanically(
     fake_module_library,
 ):
-    """专用性路径 1：简介声称"XX 题专用"但代码是通用驱动 → 校验拒绝，差异说明
-    透传给出（AI 指出的具体差异进 LibraryError，用户据此修正）。"""
-    llm = FakeLLM(
-        validation=ValidationResult(
-            consistent=False,
-            issues="简介声称 2026C 题专用，但代码是通用 GPIO 驱动，无任何赛题逻辑",
-        )
-    )
+    """判据④（无题绑定）机械拦截：简介命中题号/年份/题名黑名单 → 直接拒绝，
+    中文改写指引，不调 AI（机械可判的不用 AI）。"""
+    llm = FakeLLM()
 
-    with pytest.raises(LibraryError, match="2026C 题专用.*通用 GPIO 驱动"):
+    with pytest.raises(LibraryError, match="无题绑定.*2026C.*改写"):
         add_module(
             llm,
             fake_module_library,
@@ -383,29 +415,29 @@ def test_add_module_rejects_specificity_claim_unsupported_by_code(
         )
 
     assert not (fake_module_library / "lock").exists()
-    description, code = llm.validation_calls[0]
-    assert "2026C 数字钥匙题专用锁逻辑" in description  # 校验读的是用户提交的简介
-    assert "void lock_init(void);" in code  # 与校验用同一份代码拼装
+    assert not llm.validation_calls  # 机械拦截在 AI 校验前
 
 
-def test_add_module_rejects_specific_code_missing_annotation(fake_module_library):
-    """专用性路径 2：代码明显是赛题专用逻辑但简介未标注 → 校验拒绝，issues 提示
-    补充专用性标注（简介不完整同样是"与代码不一致"，拒绝入库直到补上标注）。"""
+def test_add_module_rejects_topic_specific_code(fake_module_library):
+    """判据④ 代码侧（AI 校验）：代码明显带赛题专用逻辑 → 拒绝，issues 提示按
+    ADR 0009 剥离决策逻辑（"补专用性标注"已被④取代——专用不再是合法类别）。
+    简介保持干净（带"锁"的词会被机械拦截误伤——锁类驱动改述"访问控制"，或
+    把"门锁"等能力词补进 CAPABILITY_WORDS 白名单）。"""
     llm = FakeLLM(
         validation=ValidationResult(
             consistent=False,
-            issues="代码是 2026C 数字钥匙题的锁逻辑，简介未标注专用性，"
-            "请在简介中补充'2026C 题专用'标注",
+            issues="代码带 2026C 数字钥匙题专用逻辑，请按 ADR 0009 剥离决策"
+            "逻辑（进生成骨架，素材可归档参考文件库）",
         )
     )
 
-    with pytest.raises(LibraryError, match="补充.*2026C 题专用.*标注"):
+    with pytest.raises(LibraryError, match="剥离决策逻辑"):
         add_module(
             llm,
             fake_module_library,
             slug="lock",
             platform="stm32",
-            description="通用锁逻辑",
+            description="访问控制驱动：开关控制 + 事件上报",
             files={"lock.c": "/* 2026C 数字钥匙题判定 */\nvoid lock_init(void);\n"},
             kit=KIT_STM32,
             source_url=SOURCE_URL_STM32,
@@ -413,7 +445,7 @@ def test_add_module_rejects_specific_code_missing_annotation(fake_module_library
 
     assert not (fake_module_library / "lock").exists()
     description, code = llm.validation_calls[0]
-    assert description == "通用锁逻辑"
+    assert description == "访问控制驱动：开关控制 + 事件上报"
     assert "2026C 数字钥匙题判定" in code
 
 

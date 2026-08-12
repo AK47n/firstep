@@ -35,7 +35,7 @@ from contest_generator.llm import (
     MAX_SUMMARY_BATCH_CHARS,
     TRUNCATION_NOTICE,
     VALIDATION_SYSTEM_PROMPT,
-    VALIDATION_SPECIFICITY_RULE,
+    VALIDATION_UNIVERSALITY_RULE,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     _batches,
     _distill_user_prompt,
@@ -607,21 +607,24 @@ def test_validate_module_description_reports_inconsistency_with_issues():
     assert "单总线协议" in result.issues
 
 
-def test_validation_prompts_share_specificity_rule():
-    """契约测试：专用性检查要求双端同源（VALIDATION_SPECIFICITY_RULE 唯一出处）。
+def test_validation_prompts_share_universality_rule():
+    """契约测试：判据③④双端同源（VALIDATION_UNIVERSALITY_RULE 唯一出处）。
 
     ticket 06 的双端漂移教训：判定范围曾只改系统提示词、漏改用户提示词——校验
-    提示词的专用性检查同理：只改一侧会让模型在另一侧消息里漏掉这项检查，简介
-    的"XX 题专用"声明失去可信度。改要求只动常量（契约测试双端断言）。
+    提示词的判据③④（能力方向 / 无题绑定，ADR 0009）同理：只改一侧会让模型在
+    另一侧消息里漏掉这项检查，简介的普适性失去可信度。改判据只动常量（契约
+    测试双端断言）。
     """
     user_prompt = _validation_user_prompt("2026C 题专用锁逻辑", "int lock(void);")
 
-    assert VALIDATION_SPECIFICITY_RULE in VALIDATION_SYSTEM_PROMPT
-    assert VALIDATION_SPECIFICITY_RULE in user_prompt
+    assert VALIDATION_UNIVERSALITY_RULE in VALIDATION_SYSTEM_PROMPT
+    assert VALIDATION_UNIVERSALITY_RULE in user_prompt
+    assert "能力方向" in VALIDATION_UNIVERSALITY_RULE
+    assert "无题绑定" in VALIDATION_UNIVERSALITY_RULE
 
 
-def test_validate_module_description_posts_specificity_rule():
-    """实际发出的校验请求（系统 + 用户消息）都带专用性检查要求。"""
+def test_validate_module_description_posts_universality_rule():
+    """实际发出的校验请求（系统 + 用户消息）都带判据③④要求。"""
     transport = FakeTransport(
         body=_api_response(json.dumps({"consistent": True, "issues": ""}))
     )
@@ -631,9 +634,9 @@ def test_validate_module_description_posts_specificity_rule():
 
     _, _, payload, _ = transport.calls[0]
     user_message = payload["messages"][1]["content"]
-    assert VALIDATION_SPECIFICITY_RULE in user_message
+    assert VALIDATION_UNIVERSALITY_RULE in user_message
     system_message = payload["messages"][0]["content"]
-    assert VALIDATION_SPECIFICITY_RULE in system_message
+    assert VALIDATION_UNIVERSALITY_RULE in system_message
 
 
 @pytest.mark.parametrize(

@@ -36,7 +36,12 @@ from contest_generator.topic_library import (
     split_topics_document,
 )
 from contest_generator.webapp import AppContext, create_app
-from tests.fakes import FakeLLM, make_fake_module_library, make_sample_pdf
+from tests.fakes import (
+    FakeLLM,
+    _add_module,
+    make_fake_module_library,
+    make_sample_pdf,
+)
 
 
 class FakeTopicLLM(FakeLLM):
@@ -530,27 +535,40 @@ def test_delete_topic_rejects_bad_key(topic_root, bad_key):
 
 # ---------------------------------------------------------------------------
 # 关联模块：复用模块简介"XX 题专用"标注自动发现，不新造链接字段
+#
+# 注意（工单 module-universalization/01 起）：补录/编辑简介已被判据④机械拦截
+# （题号/年份/题名禁止入简介），发现机制只对直写 manifest 的存量/手改条目
+# 生效——测试用 _add_module 直写 manifest 构造素材（绕过补录门禁，专测发现
+# 机制本身）。
 # ---------------------------------------------------------------------------
 
 
 def test_discover_related_modules_finds_specific_modules(tmp_path):
     library = make_fake_module_library(tmp_path / "module_library")
-    # 假库已有 dht11 / oled / delay / broken；再入库两道专用模块
-    add_module(
-        FakeLLM(),
+    # 假库已有 dht11 / oled / delay / broken；再直写两道带题号的模块
+    _add_module(
         library,
-        slug="lock_control",
-        platform="stm32",
-        description="2026C 数字钥匙题专用锁控制逻辑",
-        files={"lock_control.c": "int lock_open(void);\n"},
+        {
+            "slug": "lock_control",
+            "description": "2026C 数字钥匙题专用锁控制逻辑",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {"files": ["lock_control.c"], "verified": False}
+            },
+        },
+        {"lock_control.c": "int lock_open(void);\n"},
     )
-    add_module(
-        FakeLLM(),
+    _add_module(
         library,
-        slug="zone",
-        platform="stm32",
-        description="2026C 数字钥匙题专用区域判定",
-        files={"zone.c": "int zone_determine(void);\n"},
+        {
+            "slug": "zone",
+            "description": "2026C 数字钥匙题专用区域判定",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {"files": ["zone.c"], "verified": False}
+            },
+        },
+        {"zone.c": "int zone_determine(void);\n"},
     )
 
     related = discover_related_modules(library, KEY_2026C)
@@ -868,13 +886,18 @@ def test_topics_list_endpoint_sorted_with_related_modules(topic_context, tmp_pat
     older = TopicDraft(year="2018", number="A", problem_text="2018A 题面")
     _confirm_draft(ctx, topics_dir, tmp_path, older)
     _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])  # 2026C
-    add_module(
-        FakeLLM(),
+    # 判据④ 起补录拒题绑定，直写 manifest 构造带题号模块（专测发现机制）
+    _add_module(
         ctx.config.module_library_dir,
-        slug="lock_control",
-        platform="stm32",
-        description="2026C 数字钥匙题专用锁控制逻辑",
-        files={"lock_control.c": "int lock_open(void);\n"},
+        {
+            "slug": "lock_control",
+            "description": "2026C 数字钥匙题专用锁控制逻辑",
+            "dependencies": [],
+            "platforms": {
+                "stm32": {"files": ["lock_control.c"], "verified": False}
+            },
+        },
+        {"lock_control.c": "int lock_open(void);\n"},
     )
 
     with _client(ctx) as client:
