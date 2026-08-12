@@ -461,7 +461,7 @@
         <button id="btn-topic-search-clear">清空并显示全部</button>
       </div>
       <table style="margin-top:10px">
-        <thead><tr><th>编号</th><th>年份</th><th>题面预览</th><th>关联模块</th><th>操作</th></tr></thead>
+        <thead><tr><th>编号</th><th>年份</th><th>题面预览</th><th>操作</th></tr></thead>
         <tbody id="topic-rows"></tbody>
       </table>
       <div id="topic-msg" class="error"></div>
@@ -721,9 +721,7 @@ $("btn-topic-load").addEventListener("click", async () => {
     $("problem").value = data.problem_text;
     currentTopicId = data.key;
     clearTopicSummary();
-    const rel = data.related_modules || [];
-    $("topic-msg").textContent = "已取题面：" + data.key
-      + (rel.length ? "；该题专用模块：" + rel.join("、") : "");
+    $("topic-msg").textContent = "已取题面：" + data.key;
   } catch (e) {
     $("topic-msg").textContent = e.message;
     currentTopicId = "";
@@ -1550,8 +1548,8 @@ function truncate(text, n) {
 
 async function loadTopics() {
   try {
-    // 过滤在前端做（与参考库服务端搜索不同）：题库条目少、列表一次取回
-    // （related_modules 后端已一次性算好），年份/编号子串过滤本地完成
+    // 过滤在前端做（与参考库服务端搜索不同）：题库条目少、列表一次取回，
+    // 年份/编号子串过滤本地完成
     const topics = await apiGet("/api/topics");
     const year = $("topic-filter-year").value.trim().toLowerCase();
     const number = $("topic-filter-number").value.trim().toLowerCase();
@@ -1563,11 +1561,10 @@ async function loadTopics() {
           <td class="slug">${esc(t.key)}</td>
           <td>${esc(t.year)}</td>
           <td class="muted" title="${esc(truncate(t.problem_text, 200))}">${esc(truncate(t.problem_text, 80))}</td>
-          <td class="muted">${t.related_modules && t.related_modules.length ? esc(t.related_modules.join("、")) : "—"}</td>
           <td><button class="danger" data-topic-del="${esc(t.key)}">删除</button></td>
         </tr>`).join("");
     $("topic-rows").innerHTML = rows
-      || '<tr><td colspan="5" class="muted">库中暂无条目。</td></tr>';
+      || '<tr><td colspan="4" class="muted">库中暂无条目。</td></tr>';
     $("topic-rows").querySelectorAll("[data-topic-del]").forEach((b) =>
       b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
     $("topic-msg").textContent = "";

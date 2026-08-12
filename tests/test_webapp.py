@@ -1643,8 +1643,7 @@ def _wire_material_libraries(context) -> None:
 
 def test_recommend_with_topic_id_uses_full_text_and_carries_materials(client, context):
     """显式 topic_id：长 PDF 题面全文只在选了该赛题时进上下文；候选清单带
-    该题 / 套件关联的参考文件（标题 + 简介清单段）；响应带识别结果与该题
-    专用模块（供 UI 呈现与后续阶段透传）。"""
+    该题 / 套件关联的参考文件（标题 + 简介清单段）；响应带识别结果。"""
     _wire_material_libraries(context)
     holder = context[1]
     holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
@@ -1663,7 +1662,6 @@ def test_recommend_with_topic_id_uses_full_text_and_carries_materials(client, co
         (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID, UWB_REFERENCE_ID),
     ]
     assert data["topic_id"] == "2026C"
-    assert data["related_modules"] == ["lock_control"]
     assert data["modules"] == [
         {"slug": "dht11", "reason": "赛题要求采集温湿度"},
         {"slug": "oled", "reason": "需要显示测量结果"},
@@ -1903,9 +1901,9 @@ def test_recommend_carries_requirements_and_isolates_suggestions(client, context
     assert "不存在" in resp.json()["detail"]
 
 
-def test_skeleton_with_topic_id_uses_full_text_and_related_modules(client, context):
-    """骨架阶段：题面全文进上下文（长 PDF 题面全文只在选了该赛题时进上下文），
-    该题专用模块并入接口块（main.c 可初始化它）。"""
+def test_skeleton_with_topic_id_uses_full_text(client, context):
+    """骨架阶段：题面全文进上下文（长 PDF 题面全文只在选了该赛题时进上下文）；
+    模块集 = 用户选择原样（工单 module-universalization/07 起不自动并入）。"""
     _wire_material_libraries(context)
     holder = context[1]
     holder["llm"] = TopicAwareLLM(extracted_key=None)
@@ -1923,11 +1921,12 @@ def test_skeleton_with_topic_id_uses_full_text_and_related_modules(client, conte
     assert resp.status_code == 200
     llm = holder["llm"]
     assert llm.skeleton_calls[0][0] == TOPIC_PROBLEM_TEXT
-    assert any("lock_control.h" in text for text in llm.skeleton_calls[0][1])
+    assert not any("lock_control.h" in text for text in llm.skeleton_calls[0][1])
 
 
-def test_generate_with_topic_id_auto_includes_related_modules(client, context, tmp_path):
-    """生成请求带 topic_id：该题专用模块自动并入最终工程（生成物与手选等价）。"""
+def test_generate_with_topic_id_keeps_selected_modules_only(client, context, tmp_path):
+    """生成请求带 topic_id：编号经装配点校验（查无此条 400）；模块集 = 用户
+    选择原样展开，不再自动并入"题专用模块"（生成物与手选等价）。"""
     _wire_material_libraries(context)
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
     output_dir = tmp_path / "out" / "demo"
@@ -1944,7 +1943,8 @@ def test_generate_with_topic_id_auto_includes_related_modules(client, context, t
     )
 
     assert resp.status_code == 200
-    assert (output_dir / "modules" / "lock_control" / "lock_control.c").is_file()
+    assert (output_dir / "modules" / "dht11" / "stm32" / "src" / "dht11.c").is_file()
+    assert not (output_dir / "modules" / "lock_control" / "lock_control.c").is_file()
 
 
 def test_generate_with_unknown_topic_id_returns_400(client, context, tmp_path):
@@ -2189,9 +2189,9 @@ def test_recommend_platform_filters_anchored_references(client, context):
 
 def test_recommend_platform_filters_module_candidates(client, context):
     """platform 透传（工单 ref-platform-filter 模块侧对偶）：mspm0 请求的
-    模块候选只含本平台有实现的条目——喂给选模块 LLM 的摘要行（可勾选面）与
-    响应 related_modules（自动并入面）同源同滤（stm32-only 的 lock_control /
-    oled 不再出现）；stm32 全量库不受影响。"""
+    模块候选只含本平台有实现的条目——喂给选模块 LLM 的摘要行（可勾选面）
+    同源同滤（stm32-only 的 lock_control / oled 不再出现）；stm32 全量库
+    不受影响。"""
     _wire_material_libraries(context)
     holder = context[1]
     mspm0_selection = ModuleSelection(
@@ -2209,7 +2209,6 @@ def test_recommend_platform_filters_module_candidates(client, context):
     assert mspm0_data["modules"] == [
         {"slug": "dht11", "reason": "赛题要求采集温湿度"}
     ]
-    assert mspm0_data["related_modules"] == []  # lock_control（stm32-only）被滤除
 
     holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
     stm32_data = _recommend_done(
@@ -2224,7 +2223,6 @@ def test_recommend_platform_filters_module_candidates(client, context):
         "lock_control",
         "uwb",
     }
-    assert stm32_data["related_modules"] == ["lock_control"]
 
 
 def test_recommend_platform_absent_keeps_old_behavior(client, context):

@@ -440,8 +440,6 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "list_topics": ("read", ""),
         "delete_topic": ("commit", "lib: delete topic"),
         "parse_confirm_entries": ("read", ""),
-        "related_module_slugs": ("read", ""),
-        "discover_related_modules": ("read", ""),
         "split_topics_document": ("read", ""),
     },
     "master_store": {

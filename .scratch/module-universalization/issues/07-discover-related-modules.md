@@ -2,7 +2,7 @@
 
 **What to build:** 工单 01 遗留提示①——`topic_library` 的关联模块发现机制（赛题库词条：关联模块可复用简介的"XX 题专用"标注自动发现）依赖简介里的题绑定标注。判据④ 起补录/编辑拒题绑定，新条目不再可能有题绑定标注 → 机制只对直写 manifest 的存量/手改条目生效，随 02~06 清理完毕即完全失效。
 
-**Status:** decided（2026-08-12 主会话审视定案 ①，实施待新终端）
+**Status:** resolved（2026-08-12 实施闭环，refactor 48d296d + docs 随提交）
 
 ## 定案记录（2026-08-12 主会话审视，未走 grilling——证据已足）
 
@@ -35,10 +35,23 @@
 - CONTEXT.md
 - **不动**：library/modules/*、推荐链路本体（AI 收敛 + 能力方向匹配照常）、生成机制其余部分
 
+## 实施记录（2026-08-12）
+
+按定案 ① 全量移除（refactor 48d296d + docs 同批）：topic_library 删
+`related_module_slugs` / `discover_related_modules`；generator 删
+`TopicContext.related_modules` 字段与 `prepend_related_modules`（generate_project
+签名收窄）；selection 删 done 载荷 `related_modules`（契约注释同步）；webapp
+删 2 路由字段 + skeleton 编排 + generate 透传（编号校验保留——查无此条仍
+400）；index.html 删表格"关联模块"列 + 取题提示段；tests 删 4 个 discover
+用例 + 契约对偶/响应形状/生成/skeleton 全同步；test_autocommit 注册表删 2
+条目；CONTEXT.md 赛题库词条改注"已移除"。历史题入口不再并入"题专用模块"，
+推荐链路 AI 按题面能力推荐承担（勿恢复）。不动：library/modules/*、
+推荐链路本体（AI 收敛 + 能力方向匹配照常）。
+
 ## 验收
 
 - [x] 决策定案记录在工单（2026-08-12 主会话审视，① 移除 / ②③ 否决）。
-- [ ] 按定案实施，pytest 全绿 + mypy 干净。
-- [ ] 零残留引用（grep `related_module|discover_related|prepend_related` 干净）。
-- [ ] CONTEXT.md 词表同步。
-- [ ] Status resolved。
+- [x] 按定案实施，pytest 全绿（1090）+ mypy 干净。
+- [x] 零残留引用（grep `related_module|discover_related|prepend_related` 干净，src/ + tests/ + CONTEXT.md）。
+- [x] CONTEXT.md 词表同步。
+- [x] Status resolved。

@@ -41,7 +41,6 @@ from .generator import (
     GenerationSummary,
     TopicContext,
     generate_project,
-    prepend_related_modules,
     resolve_topic_context,
 )
 from .library import (
@@ -89,7 +88,6 @@ from .stage import stage_project_files
 from .topic_library import (
     confirm_topics,
     delete_topic,
-    discover_related_modules,
     list_topics,
     parse_confirm_entries,
     resolve_number,
@@ -533,8 +531,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         失败 400）；platform（可选，锚定命中按生成平台过滤）；clarifications
         （可选 [{question, answer}] 字符串对，缺省空 = 向后兼容，回答随请求体
         走、不拼进题面）。事件形状：done 的 data = 推荐结果 dict（顶层
-        modules[] + requirements + 识别到历史赛题时带 topic_id / related_modules
-        + references 最终参考清单 auto / manual 标注），question 的 data =
+        modules[] + requirements + 识别到历史赛题时带 topic_id + references
+        最终参考清单 auto / manual 标注），question 的 data =
         {"questions": [...]}，error 的 data = {"message": 中文信息}——逐字
         契约与两阶段编排（澄清先行 → 收敛 → done 载荷组装）见
         selection.run_recommendation，本路由只取参 + 转调 + sse 包装。
@@ -606,8 +604,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """main.c 骨架：LLM 出稿 + 静态自检（不存在的调用改写为注释占位）。
 
         历史赛题入口：选中某题时题面用库内全文（长 PDF 题面全文只在选了该赛
-        题时进上下文），该题专用模块并入接口块（骨架可初始化它们；骨架阶段
-        不注入参考文件——spec Out of Scope，等真实用例再评估）。"""
+        题时进上下文）；骨架阶段不注入参考文件、不自动并入模块（模块选择由
+        用户 / 推荐链路决定——spec Out of Scope，等真实用例再评估）。"""
         problem_text = _require_str(payload, "problem_text")
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
@@ -615,8 +613,6 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         topic = _assemble_topic_context(
             context, topic_id, problem_text, _llm(context)
         )
-        if topic.key:
-            slugs = list(prepend_related_modules(topic.related_modules, slugs))
         resolved = resolve_selection(_library_dir(context), platform, slugs)
         main_c, intercepted = generate_skeleton(
             _llm(context),
@@ -643,21 +639,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def generate(payload: dict) -> dict:
         """完整生成：选模块 → 母版 → 生成 → 摘要（流程在 generate_project）。
 
-        历史赛题入口：topic_id 给定时装配点（resolve_topic_context）一次备好
-        上下文，该题专用模块自动并入最终工程（生成物与用户手选等价）——
-        generate_project 只消费装配结果，不重扫库、不重解析条目；查无此条
-        明确报错（不猜测编造）。"""
+        历史赛题入口：topic_id 给定时装配点（resolve_topic_context）校验编号
+        查库——查无此条明确报错（不猜测编造）；模块集 = 用户选择原样展开
+        （工单 module-universalization/07 起不再自动并入"题专用模块"）。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
         output_dir = Path(_require_str(payload, "output_dir"))
         topic_id = _optional_str(payload, "topic_id")
         config = _require_config(context)
-        related_modules: Sequence[str] = ()
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
-            topic = _assemble_topic_context(context, topic_id, "", None)
-            related_modules = topic.related_modules
+            _assemble_topic_context(context, topic_id, "", None)
         summary = generate_project(
             platform=platform,
             slugs=slugs,
@@ -665,7 +658,6 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             output_dir=output_dir,
             module_library_dir=config.module_library_dir,
             masters_dir=config.masters_dir,
-            related_modules=related_modules,
         )
         return _generation_result(summary)
 
@@ -1048,20 +1040,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/topics")
     @_map_errors
     def topics() -> list[dict]:
-        """浏览赛题库：全部条目按编号排序，每条带关联模块（浏览列表用）。
+        """浏览赛题库：全部条目按编号排序（浏览列表用）。
 
-        关联模块复用模块简介"XX 题专用"标注自动发现（读时计算）；列表一次性
-        算好返回，前端不再按条回查——单条 GET /api/topics/{key} 是生成入口
-        素材，与浏览列表各司其职。
+        列表一次性算好返回，前端不再按条回查——单条 GET /api/topics/{key}
+        是生成入口素材，与浏览列表各司其职。
         """
         config = _require_config(context)
         return [
-            {
-                **entry.to_dict(),
-                "related_modules": list(
-                    discover_related_modules(config.module_library_dir, entry.key)
-                ),
-            }
+            entry.to_dict()
             for entry in list_topics(topic_library_dir(config.module_library_dir))
         ]
 
@@ -1137,19 +1123,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/topics/{key}")
     @_map_errors
     def topic_get(key: str) -> dict:
-        """编号解析："2026C" → 题面全文 + 附带程序 + 关联模块（生成入口素材）。
+        """编号解析："2026C" → 题面全文 + 附带程序（生成入口素材）。
 
-        关联模块复用模块简介"XX 题专用"标注自动发现（读时计算，不新造链接
-        字段）；查无此条明确报错（不猜测编造）。
+        查无此条明确报错（不猜测编造）。
         """
         config = _require_config(context)
         entry = resolve_number(topic_library_dir(config.module_library_dir), key)
-        return {
-            **entry.to_dict(),
-            "related_modules": list(
-                discover_related_modules(config.module_library_dir, key)
-            ),
-        }
+        return entry.to_dict()
 
     @app.delete("/api/topics/{key}")
     @_map_errors

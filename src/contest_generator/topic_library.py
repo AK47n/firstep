@@ -11,9 +11,7 @@ LLM，协议在 llm 层；超长全文走确定性分块 split_topics_document�
 此形态）。
 
 编号解析："2026C"（年份 + 题号）→ 题面全文，供生成入口与 AI 理解使用；
-查无此条明确报错（不猜测编造）。关联模块复用模块简介"XX 题专用"标注自动
-发现（如"2026C 数字钥匙题专用"），不新造链接字段——发现是读时计算，模块
-库更新后关联随之更新。
+查无此条明确报错（不猜测编造）。
 
 确认入库是事务（与提炼确认同风格）：全部校验（至少一道题 / 编号格式与不
 重复 / 题面非空 / 原 PDF 存在 / 附带程序目录存在 / 编号未被占用）都在落盘
@@ -44,8 +42,7 @@ from .entry_store import (
     validate_store_key,
     write_json,
 )
-from .library import list_modules
-from .manifest import MANIFEST_FILENAME, ModuleManifest
+from .manifest import MANIFEST_FILENAME
 
 TOPIC_MD_FILENAME = "topic.md"  # 题面全文落盘文件名（条目目录内，唯一出处）
 
@@ -261,33 +258,6 @@ def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
         )
     _validate_entries(drafts)
     return tuple(drafts)
-
-
-def related_module_slugs(
-    manifests: Sequence[ModuleManifest], key: str
-) -> tuple[str, ...]:
-    """从 manifest 清单筛出该题专用模块（简介含该题编号且含"专用"）。
-
-    匹配规则与 discover_related_modules 同一处实现——生成上下文已扫过库时
-    直接复用候选清单，不二次扫盘（复用"XX 题专用"标注，不新造链接字段）。
-    """
-    return tuple(
-        manifest.slug
-        for manifest in manifests
-        if key in manifest.description and "专用" in manifest.description
-    )
-
-
-def discover_related_modules(module_library_dir: Path, key: str) -> tuple[str, ...]:
-    """自动发现关联模块：复用模块简介的"XX 题专用"标注，不新造链接字段。
-
-    模块清单走 library.list_modules（唯一浏览入口）——损坏的 manifest 大声
-    失败（与模块库浏览同哲学），不静默跳过。发现是读时计算，模块库更新后
-    关联随之更新；模块库不存在返回空。
-    """
-    if not module_library_dir.is_dir():
-        return ()
-    return related_module_slugs(list_modules(module_library_dir), key)
 
 
 # ---------------------------------------------------------------------------

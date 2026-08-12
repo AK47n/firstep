@@ -15,7 +15,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.config import AppConfig
-from contest_generator.library import LibraryError, add_module
 from contest_generator.llm import (
     LLMError,
     TOPIC_SPLIT_LLM_CHAR_CAP,
@@ -29,7 +28,6 @@ from contest_generator.topic_library import (
     TopicError,
     confirm_topics,
     delete_topic,
-    discover_related_modules,
     list_topics,
     parse_confirm_entries,
     resolve_number,
@@ -38,7 +36,6 @@ from contest_generator.topic_library import (
 from contest_generator.webapp import AppContext, create_app
 from tests.fakes import (
     FakeLLM,
-    _add_module,
     make_fake_module_library,
     make_sample_pdf,
 )
@@ -534,87 +531,14 @@ def test_delete_topic_rejects_bad_key(topic_root, bad_key):
 
 
 # ---------------------------------------------------------------------------
-# 关联模块：复用模块简介"XX 题专用"标注自动发现，不新造链接字段
-#
-# 注意（工单 module-universalization/01 起）：补录/编辑简介已被判据④机械拦截
-# （题号/年份/题名禁止入简介），发现机制只对直写 manifest 的存量/手改条目
-# 生效——测试用 _add_module 直写 manifest 构造素材（绕过补录门禁，专测发现
-# 机制本身）。
-# ---------------------------------------------------------------------------
-
-
-def test_discover_related_modules_finds_specific_modules(tmp_path):
-    library = make_fake_module_library(tmp_path / "module_library")
-    # 假库已有 dht11 / oled / delay / broken；再直写两道带题号的模块
-    _add_module(
-        library,
-        {
-            "slug": "lock_control",
-            "description": "2026C 数字钥匙题专用锁控制逻辑",
-            "dependencies": [],
-            "platforms": {
-                "stm32": {"files": ["lock_control.c"], "verified": False}
-            },
-        },
-        {"lock_control.c": "int lock_open(void);\n"},
-    )
-    _add_module(
-        library,
-        {
-            "slug": "zone",
-            "description": "2026C 数字钥匙题专用区域判定",
-            "dependencies": [],
-            "platforms": {
-                "stm32": {"files": ["zone.c"], "verified": False}
-            },
-        },
-        {"zone.c": "int zone_determine(void);\n"},
-    )
-
-    related = discover_related_modules(library, KEY_2026C)
-
-    assert related == ("lock_control", "zone")
-    assert "dht11" not in related
-
-
-def test_discover_related_modules_excludes_other_topics_and_generic(tmp_path):
-    library = make_fake_module_library(tmp_path / "module_library")
-    add_module(
-        FakeLLM(),
-        library,
-        slug="pid",
-        platform="stm32",
-        description="巡线题专用 PID 控制",
-        files={"pid.c": "int pid_calc(void);\n"},
-    )
-
-    assert discover_related_modules(library, KEY_2026C) == ()
-    assert discover_related_modules(library, "2025A") == ()
-
-
-def test_discover_related_modules_missing_library_returns_empty(tmp_path):
-    assert discover_related_modules(tmp_path / "不存在", KEY_2026C) == ()
-
-
-def test_discover_related_modules_corrupt_manifest_raises(tmp_path):
-    library = make_fake_module_library(tmp_path / "module_library")
-    (library / "broken" / MANIFEST_FILENAME).write_text("{bad", encoding="utf-8")
-
-    # 模块清单走 library.list_modules（唯一浏览入口）：损坏 manifest 大声失败，
-    # 与模块库浏览同哲学，不静默跳过
-    with pytest.raises(LibraryError, match="manifest"):
-        discover_related_modules(library, KEY_2026C)
-
-
-# ---------------------------------------------------------------------------
 # HTTP 层：拆条上传 / 确认入库（multipart）/ 编号解析
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def topic_context(tmp_path):
-    """已配置的假上下文：假模块库（关联模块发现用）+ 赛题库根（模块库同级
-    topics/）+ 假 LLM，配置文件路径在 tmp 下。"""
+    """已配置的假上下文：假模块库 + 赛题库根（模块库同级 topics/）+ 假 LLM，
+    配置文件路径在 tmp 下。"""
     config_path = tmp_path / "cfg" / "config.json"
     library_dir = make_fake_module_library(tmp_path / "module_library")
     holder = {"llm": FakeTopicLLM(split=DRAFTS)}
@@ -764,7 +688,6 @@ def test_topics_confirm_endpoint_creates_entries_and_resolves(topic_context, tmp
     body = entry.json()
     assert body["problem_text"] == DRAFTS[0].problem_text
     assert body["original_pdf"] == "2026真题.pdf"
-    assert body["related_modules"] == []  # 假库无"XX 题专用"模块
     assert (topics_dir / KEY_2026C / "2026真题.pdf").is_file()
 
 
@@ -870,8 +793,8 @@ def test_topics_extract_number_endpoint(topic_context):
 
 
 # ---------------------------------------------------------------------------
-# 浏览列表 / 删除路由（工单 05）：GET /api/topics（每条带关联模块，一次性
-# 算好不 N 次前端调用）、DELETE /api/topics/{key}（查无此条明确报错）
+# 浏览列表 / 删除路由（工单 05）：GET /api/topics（浏览列表，一次性算好不
+# N 次前端调用）、DELETE /api/topics/{key}（查无此条明确报错）
 # ---------------------------------------------------------------------------
 
 
@@ -881,24 +804,11 @@ def _confirm_draft(ctx, topics_dir, tmp_path, draft) -> None:
     confirm_topics(topics_dir, pdf_path, (draft,))
 
 
-def test_topics_list_endpoint_sorted_with_related_modules(topic_context, tmp_path):
+def test_topics_list_endpoint_sorted(topic_context, tmp_path):
     ctx, _, topics_dir = topic_context
     older = TopicDraft(year="2018", number="A", problem_text="2018A 题面")
     _confirm_draft(ctx, topics_dir, tmp_path, older)
     _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])  # 2026C
-    # 判据④ 起补录拒题绑定，直写 manifest 构造带题号模块（专测发现机制）
-    _add_module(
-        ctx.config.module_library_dir,
-        {
-            "slug": "lock_control",
-            "description": "2026C 数字钥匙题专用锁控制逻辑",
-            "dependencies": [],
-            "platforms": {
-                "stm32": {"files": ["lock_control.c"], "verified": False}
-            },
-        },
-        {"lock_control.c": "int lock_open(void);\n"},
-    )
 
     with _client(ctx) as client:
         response = client.get("/api/topics")
@@ -907,8 +817,6 @@ def test_topics_list_endpoint_sorted_with_related_modules(topic_context, tmp_pat
     body = response.json()
     assert [t["key"] for t in body] == ["2018A", KEY_2026C]
     by_key = {t["key"]: t for t in body}
-    assert by_key[KEY_2026C]["related_modules"] == ["lock_control"]
-    assert by_key["2018A"]["related_modules"] == []
     assert by_key[KEY_2026C]["problem_text"] == DRAFTS[0].problem_text
 
 
