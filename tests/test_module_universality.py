@@ -8,7 +8,8 @@ BANNED_TOPIC_WORDS / CAPABILITY_WORDS 注释）。
 
 红证（2026-08-12 实施时）：注册表置空跑全库扫描，11 个模块命中黑名单——
 其中 xunji / pid / ball_detect / lock_control / zone 五个题专用模块为工单
-02~05 清理对象（输出见 .scratch/module-universalization/issues/01 实施记录）。
+02~05 清理对象（输出见 .scratch/module-universalization/issues/01 实施记录；
+02 xunji / 03 pid / 04 ball_detect 已清理并从注册表删除对应条目）。
 EXCEPTION_REGISTRY = 当前仍携带题词的模块清单（逐条理由）：02~05 清理各自
 模块后必须同步删除对应条目（清理后不删条目 = 存量校验红，防漏同步）；新增
 模块带题词不登记 = 红。扫描范围 = 简介（manifest.description）+ 全部 .c/.h；
@@ -29,9 +30,9 @@ LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
 # 条目随 02~05 工单清理删除——清理后不删条目 = test_exception_registry_entries_are_real_contamination 红。
 # 已清理移除：xunji（工单 02，2026-08-12 剥离决策层为纯驱动）；pid（工单 03，
 # 2026-08-12 剥离双平台决策层为纯驱动——十字路口/启停线/LAP 状态机归骨架，
-# 决策素材归档参考文件库）。
+# 决策素材归档参考文件库）；ball_detect（工单 04，2026-08-12 清理 manifest
+# 描述题绑定——代码本为纯驱动，描述改 K230 视觉帧解析能力方向）。
 EXCEPTION_REGISTRY: dict[str, str] = {
-    "ball_detect": "工单 04 清理范围：描述带 2026H H 题（代码已驱动形态）",
     "lock_control": "工单 05 清理范围（可解散）：2026C 数字钥匙状态机",
     "zone": "工单 05 清理范围（可解散）：2026C 区域划分",
     "config": "2026C 数字钥匙集中配置头——05 工单明确不动，无工单覆盖",

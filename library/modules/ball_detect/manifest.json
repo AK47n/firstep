@@ -1,6 +1,6 @@
 {
   "slug": "ball_detect",
-  "description": "K230 钢珠检测串口解析（2026H H 题）：UART 接收环形缓冲 + CSV 坐标帧解析（B,<cx>,<cy>,<confidence>,<x1>,<y1>,<x2>,<y2> / N 无检测），输出 BallResult 结构。",
+  "description": "K230 视觉帧解析驱动：UART 接收环形缓冲 + CSV 坐标帧解析（B,<cx>,<cy>,<confidence>,<x1>,<y1>,<x2>,<y2> / N 无检测），输出 BallResult 球体检测结果（中心坐标/置信度/边界框/丢失帧计数）；适用于视觉检测类赛题功能，检测结果的决策消费归生成骨架。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
