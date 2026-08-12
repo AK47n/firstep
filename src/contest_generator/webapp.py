@@ -36,7 +36,22 @@ from .config import (
     topic_library_dir,
 )
 from .errors import error_entry
+from .events import (
+    EVENT_APPLY_RESULT,
+    EVENT_FIX_START,
+    EVENT_PARSE_DONE,
+    ProgressEvent,
+)
 from .extraction import extract_file
+from .fix_errors import (
+    FixError,
+    apply_fixes,
+    collect_candidate_paths,
+    fix_backup_root,
+    parse_compile_errors,
+    read_file_contexts,
+    restore_backup,
+)
 from .generator import (
     GenerationSummary,
     TopicContext,
@@ -661,6 +676,111 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             masters_dir=config.masters_dir,
         )
         return _generation_result(summary)
+
+    # ------------------------------------------------------------------
+    # 编译错误修复（工单 compile-error-fix/01）：贴报错 → LLM 修复 →
+    # 直接写回（备份 + 可回滚）。域判决在 fix_errors.py，路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/fix-errors")
+    @_map_errors
+    def fix_errors(payload: dict) -> StreamingResponse:
+        """编译错误修复（SSE 流）：贴报错 → 逐条修复 → 直接写回工程文件。
+
+        事件序列：parse_done（解析结果）→ fix_start（LLM 修复中，分钟级）→
+        apply_result…（逐处应用结果）→ done（修复结果 + 备份编号）或 error
+        （中文信息）→ 流结束。HTTP 200 起流，失败以流内 error 事件收尾
+        （sse 运行器终态保证）；参数校验失败 / 输出目录不存在 400。
+
+        请求体契约：error_text（必填，编译报错全文）；output_dir（必填，生成
+        结果目录，必须已存在）；problem_text / platform / slugs / main_c
+        （可选上下文，决策记录 6）。路径安全：解析出的文件必须 resolve 后在
+        输出目录内（is_unsafe_path + containment），写回白名单 .c/.h/.s——
+        修复建议越界由 apply_fixes 拒绝（FixError → 400 中文，登记 errors.py）。
+        """
+        error_text = _require_str(payload, "error_text")
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise FixError(f"输出目录不存在：{output_dir}")
+        problem_text = _optional_str(payload, "problem_text")
+        platform = _optional_str(payload, "platform")
+        slugs = _require_str_list(payload, "slugs")
+        main_c = _optional_str(payload, "main_c")
+        backup_root = fix_backup_root(
+            _require_config(context).masters_dir.parent
+        )
+        llm = _llm(context)
+
+        def run(emit: SseEmitter) -> None:
+            errors = parse_compile_errors(error_text)
+            candidates = collect_candidate_paths(output_dir, errors)
+            contexts, dropped = read_file_contexts(output_dir, candidates)
+            emit.progress(
+                ProgressEvent(
+                    type=EVENT_PARSE_DONE,
+                    error_count=len(errors),
+                    file_count=len(candidates),
+                )
+            )
+            emit.progress(ProgressEvent(type=EVENT_FIX_START))
+            fixes = llm.fix_compile_errors(
+                error_text,
+                dict(contexts),
+                problem_text=problem_text,
+                platform=platform,
+                module_slugs=slugs,
+                main_c=main_c,
+                dropped_files=dropped,
+            )
+            report = apply_fixes(fixes, output_dir, backup_root)
+            for result in report.results:
+                emit.progress(
+                    ProgressEvent(
+                        type=EVENT_APPLY_RESULT,
+                        file=result.file,
+                        line=result.line,
+                        status=result.status,
+                        reason=result.reason,
+                    )
+                )
+            emit.done(
+                {
+                    "output_dir": str(output_dir),
+                    "backup_id": report.backup_id,
+                    "degraded": not candidates,
+                    "parsed": [
+                        {"path": e.path, "line": e.line, "message": e.message}
+                        for e in errors
+                    ],
+                    "fixes": [
+                        {"file": r.file, "line": r.line, "status": r.status, "reason": r.reason}
+                        for r in report.results
+                    ],
+                }
+            )
+
+        # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    @app.post("/api/fix-errors/rollback")
+    @_map_errors
+    def fix_errors_rollback(payload: dict) -> dict:
+        """回滚本次修复（决策记录 2）：把 <backup>/<backup_id>/ 备份的文件
+        复制回输出目录。backup_id 必须是安全目录名（is_unsafe_path 拒绝对
+        `..` / 绝对路径）；备份或输出目录不存在 → FixError（400 中文）。
+        同步端点（文件复制是瞬间操作）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        backup_id = _require_str(payload, "backup_id")
+        restored = restore_backup(
+            fix_backup_root(_require_config(context).masters_dir.parent),
+            backup_id,
+            output_dir,
+        )
+        return {"restored": list(restored)}
 
     # ------------------------------------------------------------------
     # 模块库（工单 07）：浏览 / AI 录入 / 编辑简介 / 多平台版本 / 删除

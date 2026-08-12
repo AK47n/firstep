@@ -433,6 +433,19 @@
       <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
       <div id="handoff-msg" class="error"></div>
     </div>
+
+    <div class="card">
+      <h2>10. 编译错误修复（贴报错 → AI 修复 → 直接写回）</h2>
+      <div class="row">
+        <button id="btn-fix-errors" class="primary">开始修复</button>
+        <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
+        <span class="muted">把 Keil / CCS 的编译报错全文粘贴回来，AI 逐条修复并直接写回工程文件；写回前自动备份到输出目录外，可一键回滚。</span>
+      </div>
+      <div id="fix-status" class="muted" style="margin-top:8px"></div>
+      <textarea id="fix-errors-text" rows="8" style="margin-top:8px" placeholder="粘贴编译报错全文（UV4：..\out\code\main.c(123): error #20: …；CCS / armclang：code/sub/mod.c:45: error: …）…"></textarea>
+      <div id="fix-errors-msg" class="error"></div>
+      <div id="fix-results" style="margin-top:10px"></div>
+    </div>
   </section>
 
   <!-- ============================ 模块库页 ============================ -->
@@ -1360,6 +1373,127 @@ $("btn-handoff-copy").addEventListener("click", async () => {
     document.execCommand("copy");
     $("handoff-text").blur();
   }
+});
+
+// ---------------------------------------------------------------------------
+// 生成页：10. 编译错误修复（工单 compile-error-fix/01）——贴报错 → AI 修复 →
+// 直接写回（写回前备份到输出目录外，可一键回滚）。事件词表镜像 events.py：
+// parse_done / fix_start / retry / apply_result / done / error
+// ---------------------------------------------------------------------------
+let lastFix = null;      // {output_dir, backup_id}：回滚按钮的入口（done 终态后置位）
+let fixFinished = false; // 断线守卫：done / error 置位，读流出错后不再重复提示
+
+function fixSetBusy(busy) {
+  $("btn-fix-errors").disabled = busy;
+  $("btn-fix-errors").innerHTML = busy
+    ? '<span class="spinner"></span>AI 修复中…' : "开始修复";
+}
+
+function fixHandleEvent(type, raw, outputDir) {
+  let data = {};
+  try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
+  if (type === "parse_done") {
+    const degraded = !data.file_count;
+    $("fix-status").textContent = "已解析 " + (data.error_count || 0) + " 条报错"
+      + (degraded ? "，未定位到可读取的源码文件（降级模式，只按报错全文修复）"
+          : "，定位 " + data.file_count + " 个文件") + "，AI 修复中…";
+  } else if (type === "fix_start") {
+    $("fix-status").textContent = "AI 正在逐条修复（分钟级调用，请等待）…";
+  } else if (type === "retry") {
+    $("fix-status").textContent = "AI 返回异常，第 " + (data.retry_round || 1) + " 轮重试中…";
+  } else if (type === "apply_result") {
+    $("fix-status").textContent = "";
+    const applied = data.status === "applied";
+    const row = document.createElement("div");
+    row.className = "item";
+    row.innerHTML = (applied ? "✅" : "⚠️")
+      + ' <span class="slug">' + esc(data.file || "")
+      + (data.line ? ":" + data.line : "") + "</span> "
+      + (applied ? "已应用" : "未应用")
+      + (data.reason ? ' <span class="muted">— ' + esc(data.reason) + "</span>" : "");
+    $("fix-results").appendChild(row);
+  } else if (type === "done") {
+    fixFinished = true;
+    const fixes = data.fixes || [];
+    const applied = fixes.filter((f) => f.status === "applied").length;
+    const skipped = fixes.length - applied;
+    lastFix = data.backup_id ? { output_dir: outputDir, backup_id: data.backup_id } : null;
+    $("fix-status").textContent = "修复完成：应用 " + applied + " 处"
+      + (skipped ? "，跳过 " + skipped + " 处" : "")
+      + (lastFix ? "；已自动备份，可点「回滚本次修复」" : "");
+    $("btn-fix-rollback").classList.toggle("hidden", !lastFix);
+    fixSetBusy(false);
+  } else if (type === "error") {
+    fixFinished = true;
+    fixSetBusy(false);
+    $("fix-status").textContent = "";
+    $("fix-errors-msg").textContent = data.message || "修复失败";
+  }
+}
+
+async function startFixErrors() {
+  $("fix-errors-msg").textContent = "";
+  $("fix-status").textContent = "";
+  const errorText = $("fix-errors-text").value.trim();
+  if (!errorText) { $("fix-errors-msg").textContent = "请先粘贴编译报错全文"; return; }
+  const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
+  if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
+  $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
+  lastFix = null;
+  fixFinished = false;
+  $("btn-fix-rollback").classList.add("hidden");
+  fixSetBusy(true);
+  $("fix-status").textContent = "解析报错中…";
+  let resp;
+  try {
+    resp = await fetch("/api/fix-errors", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        output_dir: outputDir,
+        error_text: errorText,
+        problem_text: $("problem").value.trim(),
+        platform: chosenPlatform || undefined,
+        slugs: selectedSlugs,
+        main_c: $("main-c").value.trim(),
+      }),
+    });
+  } catch (e) { fixSetBusy(false); $("fix-errors-msg").textContent = e.message; return; }
+  if (!resp.body) { fixSetBusy(false); $("fix-errors-msg").textContent = "服务响应无流"; return; }
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    fixSetBusy(false);
+    $("fix-errors-msg").textContent = err.detail || ("请求失败（HTTP " + resp.status + "）");
+    return;
+  }
+  try {
+    await parseSSE(resp, (type, raw) => fixHandleEvent(type, raw, outputDir));
+  } catch (e) {
+    if (!fixFinished) {   // 终态已到后的读流出错忽略；否则 = 断线
+      fixSetBusy(false);
+      $("fix-errors-msg").textContent = "连接中断：本次修复未完成，可安全重试";
+    }
+  }
+}
+
+$("btn-fix-errors").addEventListener("click", startFixErrors);
+
+$("btn-fix-rollback").addEventListener("click", async () => {
+  if (!lastFix) return;
+  if (!confirm("回滚本次修复？将把备份的文件内容恢复到写回前状态。")) return;
+  $("btn-fix-rollback").disabled = true;
+  $("fix-errors-msg").textContent = "";
+  try {
+    const data = await apiPost("/api/fix-errors/rollback", lastFix);
+    $("fix-errors-msg").classList.add("ok");
+    $("fix-errors-msg").textContent = "已回滚 " + data.restored.length + " 个文件："
+      + data.restored.join("、");
+    $("btn-fix-rollback").classList.add("hidden");
+    $("fix-status").textContent = "已回滚（文件内容已恢复，可重新编译验证）";
+    lastFix = null;
+  } catch (e) {
+    $("fix-errors-msg").classList.remove("ok");
+    $("fix-errors-msg").textContent = e.message;
+  } finally { $("btn-fix-rollback").disabled = false; }
 });
 
 // ---------------------------------------------------------------------------

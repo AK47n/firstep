@@ -35,6 +35,7 @@ from .events import (
     ProgressEvent,
     _emit,
 )
+from .fix_errors import FixSuggestion
 from .library import ValidationResult
 from .manifest import ManifestSummary
 from .report import (
@@ -201,6 +202,27 @@ TOPIC_SUMMARY_SYSTEM_PROMPT = (
     "按题面实际要求来，不为省篇幅漏要求，也不要为凑条数拆句。严格以题面"
     "原文为证据，不要脑补题外功能。整体比原题短而清晰：压缩重复与过程性"
     "表述，保留全部实质要求。只输出简介文本，不要额外格式。"
+)
+
+# 编译错误修复（工单 compile-error-fix/01）：贴报错 → 逐条修复建议（snippet
+# 替换协议）。old_snippet 必须与文件现有内容逐字一致（含缩进）——工具精确
+# 匹配后替换，匹配失败 / 多处歧义跳过并报告「未应用」；file 只可从提供的
+# 文件清单里选（越界路径由域模块 fix_errors.apply_fixes 拒绝，400 中文）。
+# 空输出（无 fix）合法 = 模型认为无法确定修复（结果 0 应用，用户可换措辞
+# 重试）。域判决留在 fix_errors.py，本模块只做机械提取（提示词 + 严格解析）。
+FIX_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师，修复生成工程中的编译报错（文件内容可能被截断，"
+    "见末尾标注，" + TRUNCATION_NOTICE + "）。逐条修复报错，只输出 JSON 对象："
+    '{"fixes": [{"file": 文件相对路径, "line": 报错行号, "old_snippet": '
+    '"现有内容片段", "new_snippet": "替换后内容", "reason": "修复理由"}]}。'
+    "约束：1) file 必须来自提供的文件清单，且是相对路径；不要建议修改清单外"
+    "的文件（含工程配置文件 / 构建产物，它们不参与修复）。2) old_snippet 必须"
+    "与文件现有内容逐字一致（含缩进、注释、空格），工具将精确匹配后替换——"
+    "片段要足够长、上下文足够独特，保证文件内唯一匹配；一处片段出现多次 = "
+    "该处不修（工具会跳过并报告未应用）。3) new_snippet 是替换后的内容；需要"
+    "删除整行或整段时 new_snippet 给空字符串。4) 只修报错指出的问题，不要"
+    "无关重构；一条报错给一处修复，多处报错可在 fixes 数组列出多处。5) 依据"
+    "不足、无法确定精确修改时，宁可不输出该条（工具报告未应用）也不要乱改。"
 )
 
 # 归档判定（工单 02）：提炼时被剔除的业务代码是否值得归档为该赛题的参考文件。
@@ -503,6 +525,18 @@ class LLM(Protocol):
         self, description: str, code: str
     ) -> ValidationResult: ...
 
+    def fix_compile_errors(
+        self,
+        error_text: str,
+        file_contexts: Mapping[str, str],
+        *,
+        problem_text: str = "",
+        platform: str = "",
+        module_slugs: Sequence[str] = (),
+        main_c: str = "",
+        dropped_files: Sequence[str] = (),
+    ) -> tuple[FixSuggestion, ...]: ...
+
     def distill_master(
         self,
         platform: str,
@@ -718,6 +752,43 @@ class DeepSeekLLM:
             json_mode=True,
         )
         return parse_validation_result(content)
+
+    def fix_compile_errors(
+        self,
+        error_text: str,
+        file_contexts: Mapping[str, str],
+        *,
+        problem_text: str = "",
+        platform: str = "",
+        module_slugs: Sequence[str] = (),
+        main_c: str = "",
+        dropped_files: Sequence[str] = (),
+    ) -> tuple[FixSuggestion, ...]:
+        """编译报错修复建议（工单 compile-error-fix/01，json_mode）。
+
+        报错全文 + 命中文件内容 + 题面 / 平台 / 模块 / main.c → 逐条 snippet
+        替换建议（FixSuggestion）。严格解析：file 必须在提供的文件清单内、
+        old_snippet 非空——畸形输出 / 瞬时失败整次重问（_retry_parse ≤3 轮，
+        与归档判定同款兜底）；域判决（路径白名单 / 精确匹配 / 备份回滚）在
+        fix_errors.py，本模块只做机械提取。
+        """
+        return self._retry_parse(
+            system_prompt=FIX_SYSTEM_PROMPT,
+            user_prompt=_fix_errors_user_prompt(
+                error_text=error_text,
+                file_contexts=file_contexts,
+                dropped_files=dropped_files,
+                problem_text=problem_text,
+                platform=platform,
+                module_slugs=module_slugs,
+                main_c=main_c,
+            ),
+            parse=lambda content: parse_fix_suggestions(
+                content, tuple(file_contexts)
+            ),
+            label="编译错误修复",
+            json_mode=True,
+        )
 
     def _retry_parse(
         self,
@@ -1359,6 +1430,105 @@ def parse_clarify_questions(content: str) -> tuple[str, ...]:
     ):
         raise LLMError("澄清结果的 questions 必须是字符串数组")
     return tuple(questions)
+
+
+def parse_fix_suggestions(
+    content: str, allowed_files: Sequence[str]
+) -> tuple[FixSuggestion, ...]:
+    """把模型返回的修复 JSON 严格解析为 FixSuggestion 列表（可空 = 无修复）。
+
+    与其它 AI 契约同哲学（模型输出不可信，宁可大声失败也不带病进写回流程）：
+    非 JSON / 非对象 / fixes 非数组 / 条目缺字段或字段类型错 / file 不在允许
+    清单内 / old_snippet 为空 → 抛 LLMError（整次重问，_retry_parse ≤3 轮
+    兜底）。new_snippet 可为空（删除语义），reason 可为空串。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict):
+        raise LLMError("修复结果必须是 JSON 对象")
+    fixes = data.get("fixes")
+    if fixes in (None, [], ()):
+        return ()
+    if not isinstance(fixes, list):
+        raise LLMError("修复结果的 fixes 必须是数组")
+    allowed = frozenset(allowed_files)
+    result: list[FixSuggestion] = []
+    for index, item in enumerate(fixes):
+        if not isinstance(item, dict):
+            raise LLMError(f"修复结果[{index}] 必须是对象")
+        file = item.get("file")
+        line = item.get("line")
+        old_snippet = item.get("old_snippet")
+        new_snippet = item.get("new_snippet")
+        reason = item.get("reason")
+        if not isinstance(file, str) or not file:
+            raise LLMError(f"修复结果[{index}] 缺 file")
+        if file not in allowed:
+            raise LLMError(f"修复结果[{index}] 的 file 不在提供的文件清单内：{file}")
+        if not isinstance(line, int) or line < 0:
+            raise LLMError(f"修复结果[{index}] 的 line 必须是行号")
+        if not isinstance(old_snippet, str) or not old_snippet:
+            raise LLMError(f"修复结果[{index}] 缺 old_snippet")
+        if not isinstance(new_snippet, str):
+            raise LLMError(f"修复结果[{index}] 的 new_snippet 必须是字符串")
+        if not isinstance(reason, str):
+            raise LLMError(f"修复结果[{index}] 的 reason 必须是字符串")
+        result.append(
+            FixSuggestion(
+                file=file,
+                line=line,
+                old_snippet=old_snippet,
+                new_snippet=new_snippet,
+                reason=reason,
+            )
+        )
+    return tuple(result)
+
+
+def _fix_errors_user_prompt(
+    *,
+    error_text: str,
+    file_contexts: Mapping[str, str],
+    dropped_files: Sequence[str] = (),
+    problem_text: str = "",
+    platform: str = "",
+    module_slugs: Sequence[str] = (),
+    main_c: str = "",
+) -> str:
+    """修复请求的用户消息（决策记录 6）：报错全文 + 命中文件内容（截断已在
+    域模块 fix_errors.read_file_contexts 完成，此处原样嵌入）+ 题面 / 平台 /
+    模块 / main.c（走统一截断 _truncate_content）。无文件上下文（降级模式，
+    决策记录 5）时显式告知模型按报错全文判断——仍可修，只是不精准。
+    """
+    parts: list[str] = ["【编译报错全文】", _truncate_content(error_text)]
+    if file_contexts:
+        parts.append("【输出目录内文件内容】")
+        for path, body in file_contexts.items():
+            parts.append(f"=== {path} ===\n{body}")
+        if dropped_files:
+            parts.append(
+                "（以下文件超出上下文预算，未发送："
+                + "、".join(dropped_files)
+                + "——不要建议修改未发送的文件）"
+            )
+    else:
+        parts.append(
+            "（未定位到可读取的源码文件：只能依据报错全文判断——若仍能确定"
+            "修改位置，请给出正确文件名与精确的 old_snippet，工具会按文件实际"
+            "内容精确匹配）"
+        )
+    parts.append("【工程上下文】")
+    if problem_text:
+        parts.append("赛题原文：\n" + _truncate_content(problem_text))
+    if platform:
+        parts.append("目标平台：" + platform)
+    if module_slugs:
+        parts.append("选中模块：" + "、".join(module_slugs))
+    if main_c:
+        parts.append("main.c：\n" + _truncate_content(main_c))
+    return "\n\n".join(parts)
 
 
 def _build_user_prompt(problem_text: str, heading: str, items: Sequence[str]) -> str:

@@ -15,6 +15,7 @@ from xml.sax.saxutils import escape
 from pypdf import PdfWriter
 
 from contest_generator.events import ProgressEmitter
+from contest_generator.fix_errors import FixSuggestion
 from contest_generator.library import ValidationResult
 from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
@@ -587,6 +588,7 @@ class FakeLLM:
         distillation: tuple[FileDecision, ...] = (),
         clarify_questions: tuple[str, ...] = (),
         topic_summary: str = "AI 生成的赛题简介",
+        fixes: tuple[FixSuggestion, ...] = (),
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -595,6 +597,7 @@ class FakeLLM:
         self._distillation = distillation
         self._clarify_questions = clarify_questions
         self._topic_summary = topic_summary
+        self._fixes = fixes
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
         self.validation_calls: list[tuple[str, str]] = []
@@ -607,6 +610,7 @@ class FakeLLM:
         self.topic_extract_calls: list[tuple[str, ...]] = []
         self.clarify_calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
         self.topic_summarize_calls: list[tuple[str, ...]] = []
+        self.fix_errors_calls: list[tuple[str, dict, str, str, tuple, str]] = []
 
     def select_modules(
         self,
@@ -644,6 +648,29 @@ class FakeLLM:
     ) -> ValidationResult:
         self.validation_calls.append((description, code))
         return self._validation
+
+    def fix_compile_errors(
+        self,
+        error_text: str,
+        file_contexts: Mapping[str, str],
+        *,
+        problem_text: str = "",
+        platform: str = "",
+        module_slugs: Sequence[str] = (),
+        main_c: str = "",
+        dropped_files: Sequence[str] = (),
+    ) -> tuple[FixSuggestion, ...]:
+        self.fix_errors_calls.append(
+            (
+                error_text,
+                dict(file_contexts),
+                problem_text,
+                platform,
+                tuple(module_slugs),
+                main_c,
+            )
+        )
+        return self._fixes
 
     def distill_master(
         self,

@@ -28,6 +28,15 @@ EVENT_PHASE_DONE = "phase_done"
 EVENT_ROUND = "round"
 EVENT_CONVERGED = "converged"
 
+# 编译错误修复（工单 compile-error-fix/01）的事件类型：parse_done = 报错解析
+# 完成（error_count = 解析出的报错条数、file_count = 定位到的可修复文件数，
+# file_count 为 0 = 降级模式）；fix_start = LLM 修复开始（分钟级阻塞调用）；
+# apply_result = 单处修复应用结果（file / line / status / reason，status ∈
+# applied / skipped，未应用带中文 reason）。
+EVENT_PARSE_DONE = "parse_done"
+EVENT_FIX_START = "fix_start"
+EVENT_APPLY_RESULT = "apply_result"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；
@@ -48,7 +57,9 @@ class ProgressEvent:
     处理文件数——前端直接显示"已读 X/115"，无需累加状态）；retry 用 phase /
     batch_index / retry_round（补问轮次，1 起——首次补问 = 1）/ missing_count
     （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）；
-    推荐收敛循环（工单 10）的 round 用 round / round_total、converged 用 round。
+    推荐收敛循环（工单 10）的 round 用 round / round_total、converged 用 round；
+    编译错误修复（工单 compile-error-fix/01）的 parse_done 用 error_count /
+    file_count、apply_result 用 file / line / status / reason。
     """
 
     type: str
@@ -65,6 +76,11 @@ class ProgressEvent:
     file_count: int = 0
     round: int = 0  # 模块推荐收敛轮次（round / converged 事件用，1 起）
     round_total: int = 0  # 收敛轮次上限（round 事件携带，前端显示"N/上限"）
+    error_count: int = 0  # 编译错误修复：parse_done 解析出的报错条数
+    file: str = ""  # 编译错误修复：apply_result 修复的文件相对路径
+    line: int = 0  # 编译错误修复：apply_result 报错行号
+    status: str = ""  # 编译错误修复：apply_result "applied" / "skipped"
+    reason: str = ""  # 编译错误修复：apply_result 中文说明（未应用原因）
 
 
 ProgressEmitter = Callable[[ProgressEvent], None]

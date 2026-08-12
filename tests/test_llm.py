@@ -21,11 +21,13 @@ from contest_generator.events import (
     EVENT_ROUND,
     ProgressEvent,
 )
+from contest_generator.fix_errors import FixSuggestion
 from contest_generator.llm import (
     CLARIFY_SYSTEM_PROMPT,
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
     EMBEDDED_CONTENT_CAP,
+    FIX_SYSTEM_PROMPT,
     SELECT_SYSTEM_PROMPT,
     SKELETON_SYSTEM_PROMPT,
     JUDGMENT_SCOPE,
@@ -40,6 +42,7 @@ from contest_generator.llm import (
     _batches,
     _distill_user_prompt,
     _file_chars,
+    _fix_errors_user_prompt,
     _split_versions,
     _summarize_user_prompt,
     _truncate_content,
@@ -48,6 +51,7 @@ from contest_generator.llm import (
     parse_archive_judgment,
     parse_clarify_questions,
     parse_distillation_report,
+    parse_fix_suggestions,
     parse_summary_report,
     parse_validation_result,
 )
@@ -499,6 +503,97 @@ def test_parse_clarify_questions_pure_parse():
     assert parse_clarify_questions('{"questions": []}') == ()
     assert parse_clarify_questions("{}") == ()
     assert parse_clarify_questions('{"questions": ["a", "b"]}') == ("a", "b")
+
+
+# ---------------------------------------------------------------------------
+# 编译错误修复（工单 compile-error-fix/01）：提示词契约 + 严格解析
+# ---------------------------------------------------------------------------
+
+
+def test_fix_system_prompt_contract():
+    """契约测试：修复提示词带截断标注（与所有嵌内容调用同款，双端断言）。"""
+    assert TRUNCATION_NOTICE in FIX_SYSTEM_PROMPT
+    # 替换协议的关键约束（决策记录 4）在系统提示词里有唯一表述：精确匹配、
+    # 唯一匹配、file 限清单内
+    assert "逐字一致" in FIX_SYSTEM_PROMPT
+    assert "唯一匹配" in FIX_SYSTEM_PROMPT
+    assert "文件清单" in FIX_SYSTEM_PROMPT
+
+
+def test_fix_errors_user_prompt_embeds_contexts():
+    prompt = _fix_errors_user_prompt(
+        error_text="main.c(1): error #20: boom",
+        file_contexts={"main.c": "int x = 1;\n"},
+        problem_text="赛题：做个小车",
+        platform="stm32",
+        module_slugs=("dht11", "oled"),
+        main_c="int main(void) { return 0; }",
+    )
+    assert "main.c(1): error #20: boom" in prompt
+    assert "=== main.c ===" in prompt
+    assert "int x = 1;" in prompt
+    assert "赛题：做个小车" in prompt and "stm32" in prompt
+    assert "dht11、oled" in prompt
+    assert "int main(void)" in prompt
+
+
+def test_fix_errors_user_prompt_degraded_mode_notes_no_files():
+    prompt = _fix_errors_user_prompt(error_text="error #20: boom", file_contexts={})
+    assert "未定位到可读取的源码文件" in prompt
+    assert "精确匹配" in prompt  # 降级模式仍要求精确 old_snippet
+
+
+def test_parse_fix_suggestions_pure_parse():
+    content = json.dumps(
+        {
+            "fixes": [
+                {
+                    "file": "main.c",
+                    "line": 1,
+                    "old_snippet": "int x = 1;",
+                    "new_snippet": "int x = 2;",
+                    "reason": "变量初始化改值",
+                },
+                {
+                    "file": "code/mod.c",
+                    "line": 45,
+                    "old_snippet": "bad_line();",
+                    "new_snippet": "",
+                    "reason": "删除整行",
+                },
+            ]
+        }
+    )
+    fixes = parse_fix_suggestions(content, ("main.c", "code/mod.c"))
+    assert fixes == (
+        FixSuggestion(file="main.c", line=1, old_snippet="int x = 1;", new_snippet="int x = 2;", reason="变量初始化改值"),
+        FixSuggestion(file="code/mod.c", line=45, old_snippet="bad_line();", new_snippet="", reason="删除整行"),
+    )
+
+
+def test_parse_fix_suggestions_empty_is_valid():
+    """空 fixes / 缺 fixes = 无修复（合法终态，不重问）。"""
+    assert parse_fix_suggestions('{"fixes": []}', ("main.c",)) == ()
+    assert parse_fix_suggestions("{}", ("main.c",)) == ()
+
+
+@pytest.mark.parametrize(
+    "bad_content",
+    [
+        "{not json",
+        json.dumps([1, 2]),  # 非对象
+        json.dumps({"fixes": "x"}),  # fixes 非数组
+        json.dumps({"fixes": [{"file": "other.c", "line": 1, "old_snippet": "a", "new_snippet": "b", "reason": ""}]}),  # file 不在清单
+        json.dumps({"fixes": [{"file": "../evil.c", "line": 1, "old_snippet": "a", "new_snippet": "b", "reason": ""}]}),  # 越界路径也拒（清单外）
+        json.dumps({"fixes": [{"file": "main.c", "line": "x", "old_snippet": "a", "new_snippet": "b", "reason": ""}]}),  # line 非数字
+        json.dumps({"fixes": [{"file": "main.c", "line": 1, "old_snippet": "", "new_snippet": "b", "reason": ""}]}),  # old_snippet 空
+        json.dumps({"fixes": [{"file": "main.c", "line": 1, "old_snippet": "a", "new_snippet": "b"}]}),  # 缺 reason
+    ],
+)
+def test_parse_fix_suggestions_rejects_malformed(bad_content):
+    """畸形输出抛 LLMError（模型输出不可信，宁可大声失败也不带病进写回流程）。"""
+    with pytest.raises(LLMError):
+        parse_fix_suggestions(bad_content, ("main.c",))
 
 
 # ---------------------------------------------------------------------------
