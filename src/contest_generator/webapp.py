@@ -58,7 +58,9 @@ from .fix_errors import (
     fix_backup_root,
     parse_compile_errors,
     read_file_contexts,
+    resolve_source_path,
     restore_backup,
+    summarize_compile_output,
 )
 from .generator import (
     GenerationSummary,
@@ -822,8 +824,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         error_text（编译输出原样采集，与 fix-errors 解析契约对齐）/
         passed（域模块 compile_passed 判定，前端循环不自己判退出码）/
         timed_out / project_file（定位到的工程文件）/ command（实际命令，
-        可复述）。阻塞调用（编译分钟级以内）放独立线程跑，事件经队列送流
-        生成器（与提炼 / 修复端点同款终态保证，断线旁路）。"""
+        可复述）；展示层追加（工单 compile-experience-ui/01，只增不改旧字段）：
+        duration（秒，float，子进程实际耗时）/ parsed_errors（[{path, line,
+        message}]，parse_compile_errors 解析——与 fix-errors 的 parsed 同源
+        同构）/ summary（{errors, warnings}，summarize_compile_output：UV4
+        汇总行优先、无汇总退行级）。阻塞调用（编译分钟级以内）放独立线程跑，
+        事件经队列送流生成器（与提炼 / 修复端点同款终态保证，断线旁路）。"""
         platform = _require_str(payload, "platform")
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
@@ -849,6 +855,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             build = collect_build_log(
                 platform, output_dir, uv4=uv4, make=make
             )
+            parsed = parse_compile_errors(build.run.output)
             emit.done(
                 {
                     "platform": build.platform,
@@ -859,6 +866,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     "timed_out": build.run.timed_out,
                     "project_file": build.project_file,
                     "command": list(build.command),
+                    # 展示层（工单 compile-experience-ui/01）：耗时 / 结构化
+                    # 错误列表 / 数字汇总——只追加不改既有字段，旧前端忽略即可
+                    "duration": build.run.duration,
+                    "parsed_errors": [
+                        {"path": e.path, "line": e.line, "message": e.message}
+                        for e in parsed
+                    ],
+                    "summary": summarize_compile_output(build.run.output, parsed),
                 }
             )
 
@@ -867,6 +882,40 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             run_sse(run, error_message=_error_message),
             headers={"Content-Type": "text/event-stream"},
         )
+
+    @app.post("/api/compile/source-line")
+    @_map_errors
+    def compile_source_line(payload: dict) -> dict:
+        """错误列表点击展开的源码行（薄接口，工单 compile-experience-ui/01）。
+
+        请求体契约：output_dir（必填，生成结果目录）；path（必填，错误列表里
+        的相对路径，POSIX 或 UV4 反斜杠形态都收）；line（必填，正整数 1 起）。
+        → 200 {path_resolved, line_text}（line_text 为第 line 行内容，不含
+        行尾；读的是修复后的当前文件——展示修复结果，不做快照）。
+
+        路径安全：复用 fix-errors 双基准解析（工程根 + .uvprojx/.cproject
+        父目录，UV4 `..\\` 形态）与 containment 校验——resolve 后必须在
+        输出目录内，`../..` 穿越 / 绝对路径越界拒绝；文件不存在 / 行号越界
+        → 400 中文（FixError 登记 errors.py）。同步端点（单行读取是瞬间操作）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        path = _require_str(payload, "path")
+        line = payload.get("line")
+        if isinstance(line, bool) or not isinstance(line, int) or line < 1:
+            raise HTTPException(400, "line 必须是正整数（1 起）")
+        target = resolve_source_path(output_dir, path)
+        if target is None:
+            raise FixError(f"源码文件不存在或路径越界：{path}")
+        try:
+            lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as exc:
+            raise FixError(f"读取源码失败：{path}（{exc}）") from exc
+        if line > len(lines):
+            raise FixError(f"行号越界：{path} 第 {line} 行（文件共 {len(lines)} 行）")
+        return {
+            "path_resolved": target.relative_to(output_dir.resolve()).as_posix(),
+            "line_text": lines[line - 1],
+        }
 
     # ------------------------------------------------------------------
     # 模块库（工单 07）：浏览 / AI 录入 / 编辑简介 / 多平台版本 / 删除

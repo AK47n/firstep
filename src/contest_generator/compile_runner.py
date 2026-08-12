@@ -28,6 +28,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -63,12 +64,15 @@ class CompileRun:
     """一次子进程编译的结果：exit_code（超时为 None）+ 原始输出 + 超时标记。
 
     非零退出不炸（工具链报错是正常返回，由调用方判读）；超时 = 终端状态，
-    输出为已采集的部分内容（如实报告，不静默）。
+    输出为已采集的部分内容（如实报告，不静默）。duration = 子进程实际耗时
+    （time.monotonic 计时，超时场景同样如实记录——展示层「耗时 Xs」数据源，
+    工单 compile-experience-ui/01）。
     """
 
     exit_code: int | None
     output: str
     timed_out: bool
+    duration: float
 
 
 @dataclass(frozen=True)
@@ -121,7 +125,9 @@ def run_compile(
     stdout + stderr 合并为 output（两种编译器的输出都在其一或两者）。
     超时（TimeoutExpired）→ exit_code=None + timed_out=True；子进程不存在
     （FileNotFoundError）属调用方传错命令，大声抛——工具链路径已判过存在。
+    duration 用 time.monotonic 包整个子进程调用（超时分支同样如实记录）。
     """
+    started = time.monotonic()
     try:
         proc = subprocess.run(
             list(command),
@@ -134,6 +140,7 @@ def run_compile(
             exit_code=proc.returncode,
             output=(proc.stdout or "") + (proc.stderr or ""),
             timed_out=False,
+            duration=time.monotonic() - started,
         )
     except subprocess.TimeoutExpired as exc:
         # text=True 时 stdout/stderr 是 str；类型桩对超时分支不收缩（bytes 可能
@@ -144,7 +151,12 @@ def run_compile(
             return value.decode(errors="replace") if isinstance(value, bytes) else value
 
         partial = _as_text(exc.stdout) + _as_text(exc.stderr)
-        return CompileRun(exit_code=None, output=partial, timed_out=True)
+        return CompileRun(
+            exit_code=None,
+            output=partial,
+            timed_out=True,
+            duration=time.monotonic() - started,
+        )
 
 
 def collect_build_log(
@@ -207,7 +219,12 @@ def collect_build_log(
             platform=platform,
             project_file=str(uvprojx),
             command=command,
-            run=CompileRun(exit_code=run.exit_code, output=output, timed_out=run.timed_out),
+            run=CompileRun(
+                exit_code=run.exit_code,
+                output=output,
+                timed_out=run.timed_out,
+                duration=run.duration,
+            ),
         )
 
     # mspm0：CCS 命令行构建（build_makefiles 产物 Debug/makefile，决策记录 5）

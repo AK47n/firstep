@@ -94,6 +94,36 @@
   .item .head { display: flex; gap: 8px; align-items: center; }
   .item .slug { font-weight: 600; font-family: var(--mono); }
   .item .reason { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  /* 编译结果横幅（工单 compile-experience-ui/01）：四态颜色 + 初始 hidden */
+  #compile-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
+                    font-size: 13px; font-weight: 600; }
+  #compile-banner.running { background: var(--info-dim); border: 1px solid var(--info-border);
+                            color: var(--info); }
+  #compile-banner.success { background: var(--ok-dim); border: 1px solid var(--ok);
+                            color: var(--ok-bright); }
+  #compile-banner.fail { background: var(--danger-dim); border: 1px solid var(--danger);
+                         color: var(--danger); }
+  #compile-banner.notool { background: rgba(139, 148, 158, .12);
+                           border: 1px dashed var(--border-strong); color: var(--muted);
+                           font-weight: 400; }
+  /* 结构化错误列表（工单 compile-experience-ui/01）：可点击条目 + 展开源码行 */
+  .fix-row { border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px;
+             margin-bottom: 6px; background: var(--panel-2); cursor: pointer;
+             display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
+             font-size: 13px; }
+  .fix-row:hover { border-color: var(--accent); }
+  .fix-row .fix-tag { display: inline-block; padding: 0 8px; border-radius: 10px;
+                      font-size: 11px; flex: none; }
+  .fix-tag.pending { background: var(--warn-dim); color: var(--warn); }
+  .fix-tag.fixed { background: var(--ok-dim); color: var(--ok-bright); }
+  .fix-tag.skipped { background: rgba(139, 148, 158, .15); color: var(--muted); }
+  .fix-tag.new { background: var(--info-dim); color: var(--info); }
+  .fix-row .fix-file { font-family: var(--mono); font-weight: 600; }
+  .fix-row .fix-msg { color: var(--muted); flex: 1 1 260px; word-break: break-all; }
+  .fix-row .fix-source { flex-basis: 100%; font-family: var(--mono); font-size: 12px;
+                         border-top: 1px dashed var(--border); margin-top: 6px;
+                         padding-top: 6px; color: var(--text); white-space: pre-wrap; }
+  .fix-row .fix-source-err { color: var(--danger); }
   /* 推荐卡片（工单 10）：库内命中 chips 可勾选/移除；库外建议灰色 + 需自备 */
   .rec-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
@@ -414,6 +444,9 @@
       </div>
       <div id="generate-msg" class="error"></div>
       <div id="generate-result" class="hidden" style="margin-top:12px">
+        <!-- 编译结果横幅（工单 compile-experience-ui/01）：生成完成一眼确认
+             自动编译发生了、结果如何；四态 running/success/fail/notool -->
+        <div id="compile-banner" class="hidden"></div>
         <h3>生成完成</h3>
         <div class="item">输出目录：<span id="res-dir" class="slug"></span></div>
         <div class="item">include path：<span id="res-includes" class="slug"></span></div>
@@ -1275,11 +1308,14 @@ $("btn-generate").addEventListener("click", async () => {
     $("generate-msg").classList.add("ok");
     $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
     // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
-    // 用户"懒得编译一遍"）；无工具链则静默跳过（第 10 栏按钮已置灰提示）
+    // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
+    // compile-experience-ui/01：无工具链也要显眼，不再静默跳过）
     if ((toolchains || {})[chosenPlatform]) {
       $("generate-msg").textContent += "已自动触发编译修复（见第 10 栏）…";
       $("card-fix-center").scrollIntoView({ block: "nearest" });
       setTimeout(() => startFixCenter(), 100);   // 等结果字段渲染完成再起流
+    } else {
+      compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
     }
   } catch (e) {
     $("generate-msg").classList.remove("ok");
@@ -1411,6 +1447,124 @@ let lastFix = null;          // {output_dir, backup_id}：回滚按钮的入口�
 let lastFixDone = null;      // 最近一次 fix-errors 的 done 载荷（循环判"有无应用"）
 let toolchains = { stm32: false, mspm0: false };  // /api/state 装载：平台 → 工具链可用
 let fixLoop = { running: false, round: 0 };       // 循环状态机：单实例（防双击并发）
+let fixSourceCache = {};                          // 源码行缓存（key = 归一化 path:line；列表重建时清空）
+
+/** 编译结果横幅四态（工单 compile-experience-ui/01）：running/success/fail/notool。 */
+function compileBanner(kind, text) {
+  const b = $("compile-banner");
+  b.className = kind;   // 重置状态类（同时移除初始 hidden）
+  b.textContent = text;
+}
+
+function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n.toFixed(1) : "0.0";
+}
+
+function renderCompileBanner(done) {   // compile done 载荷 → 横幅终态文案
+  const dur = fmtSeconds(done.duration);
+  const sum = done.summary || { errors: 0, warnings: 0 };
+  if (done.timed_out) {
+    compileBanner("fail", "编译超时（工具链 180s 未返回）");
+  } else if (done.passed) {
+    compileBanner("success", "编译成功 · " + (sum.errors || 0) + " Error "
+      + (sum.warnings || 0) + " Warning · 耗时 " + dur + "s");
+  } else {
+    compileBanner("fail", "编译失败 · " + (sum.errors || 0) + " 个错误 · 耗时 " + dur + "s");
+  }
+}
+
+// 错误条目 key（工单 compile-experience-ui/01）：path 归一 POSIX；精确匹配
+// 未命中时 basename 兜底（fix-errors 的 file 可能是短名形态）
+function fixKeyOf(path, line) {
+  return ((path || "").replace(/\\/g, "/").replace(/^\.\/+/, "")) + ":" + (line || 0);
+}
+function fixKeyBasename(path, line) {
+  const parts = ((path || "").replace(/\\/g, "/")).split("/");
+  return "~" + (parts[parts.length - 1] || "") + ":" + (line || 0);
+}
+
+/** 点击条目 → 展开/收起对应源码行（薄接口 /api/compile/source-line，缓存防重复请求）。 */
+async function fixToggleSource(row) {
+  const src = row._source;
+  if (!src || !src.path) return;
+  const existing = row.querySelector(".fix-source");
+  if (existing) { existing.remove(); return; }   // 再点收起
+  const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
+  if (!outputDir) return;
+  const key = fixKeyOf(src.path, src.line);
+  try {
+    let text = fixSourceCache[key];
+    if (text === undefined) {   // 未命中缓存才发请求
+      const data = await apiPost("/api/compile/source-line",
+        { output_dir: outputDir, path: src.path, line: src.line });
+      text = data.line_text;
+      fixSourceCache[key] = text;
+    }
+    const line = document.createElement("div");
+    line.className = "fix-source";
+    line.textContent = (src.line || "?") + ": " + text;
+    row.appendChild(line);
+  } catch (e) {
+    const err = document.createElement("div");
+    err.className = "fix-source fix-source-err";
+    err.textContent = "源码行加载失败：" + e.message;
+    row.appendChild(err);
+  }
+}
+
+/** 结构化错误列表渲染（工单 compile-experience-ui/01）：[状态标签] path:line 消息。
+ * parsed = 解析出的错误（[{path,line,message}]）；fixes = 修复结果
+ * （[{file,line,status,reason}]）；round ≤ 1 无对应 fix 标「待修复」、后续轮「新增」；
+ * 无法匹配 parsed 的 fixes 单独列出。列表重建时清空源码行缓存（新一轮取修复后内容）。 */
+function fixRenderResults(parsed, fixes, round) {
+  parsed = parsed || [];
+  fixes = fixes || [];
+  fixSourceCache = {};
+  const list = $("fix-results");
+  list.innerHTML = "";
+  const exact = new Map(), fuzzy = new Map();
+  for (const f of fixes) {
+    exact.set(fixKeyOf(f.file, f.line), f);
+    fuzzy.set(fixKeyBasename(f.file, f.line), f);
+  }
+  const appendRow = (entry, label, cls, extra) => {
+    const row = document.createElement("div");
+    row.className = "fix-row";
+    const tag = document.createElement("span");
+    tag.className = "fix-tag " + cls;
+    tag.textContent = label;
+    row.appendChild(tag);
+    const file = document.createElement("span");
+    file.className = "fix-file";
+    file.textContent = (entry.path || entry.file || "?")
+      + (entry.line ? ":" + entry.line : "");
+    row.appendChild(file);
+    const msg = document.createElement("span");
+    msg.className = "fix-msg";
+    msg.textContent = extra || entry.message || "";
+    row.appendChild(msg);
+    row._source = { path: entry.path || entry.file, line: entry.line };
+    row.addEventListener("click", () => fixToggleSource(row));
+    list.appendChild(row);
+  };
+  for (const p of parsed) {
+    const f = exact.get(fixKeyOf(p.path, p.line)) || fuzzy.get(fixKeyBasename(p.path, p.line));
+    if (f) {
+      appendRow(p, f.status === "applied" ? "已修复" : "跳过",
+        f.status === "applied" ? "fixed" : "skipped", f.reason);
+    } else {
+      appendRow(p, round <= 1 ? "待修复" : "新增", round <= 1 ? "pending" : "new", "");
+    }
+  }
+  const unmatched = fixes.filter((f) => !parsed.some((p) =>
+    fixKeyOf(p.path, p.line) === fixKeyOf(f.file, f.line)
+    || fixKeyBasename(p.path, p.line) === fixKeyBasename(f.file, f.line)));
+  for (const f of unmatched) {
+    appendRow(f, f.status === "applied" ? "已修复" : "跳过",
+      f.status === "applied" ? "fixed" : "skipped", f.reason);
+  }
+}
 
 function fixSetBusy(busy) {   // 手动贴文本按钮
   $("btn-fix-errors").disabled = busy;
@@ -1459,12 +1613,19 @@ function fixHandleEvent(type, raw, outputDir) {
     $("fix-status").textContent = "";
     const applied = data.status === "applied";
     const row = document.createElement("div");
-    row.className = "item";
-    row.innerHTML = (applied ? "✅" : "⚠️")
-      + ' <span class="slug">' + esc(data.file || "")
-      + (data.line ? ":" + data.line : "") + "</span> "
-      + (applied ? "已应用" : "未应用")
-      + (data.reason ? ' <span class="muted">— ' + esc(data.reason) + "</span>" : "");
+    row.className = "fix-row";
+    const tag = document.createElement("span");
+    tag.className = "fix-tag " + (applied ? "fixed" : "skipped");
+    tag.textContent = applied ? "已修复" : "跳过";
+    const file = document.createElement("span");
+    file.className = "fix-file";
+    file.textContent = (data.file || "?") + (data.line ? ":" + data.line : "");
+    const msg = document.createElement("span");
+    msg.className = "fix-msg";
+    msg.textContent = data.reason || "";
+    row.appendChild(tag); row.appendChild(file); row.appendChild(msg);
+    row._source = { path: data.file, line: data.line };
+    row.addEventListener("click", () => fixToggleSource(row));
     $("fix-results").appendChild(row);
   } else if (type === "done") {
     lastFixDone = data;
@@ -1476,6 +1637,9 @@ function fixHandleEvent(type, raw, outputDir) {
       + (skipped ? "，跳过 " + skipped + " 处" : "")
       + (lastFix ? "；已自动备份，可点「回滚本次修复」" : "");
     $("btn-fix-rollback").classList.toggle("hidden", !lastFix);
+    // 展示层（工单 compile-experience-ui/01）：按 parsed + fixes 重建可点击列表
+    // （streaming 期间逐条追加的行在此合并为最终状态）
+    fixRenderResults(data.parsed || [], fixes, fixLoop.round);
   } else if (type === "error") {
     lastFixDone = null;
     $("fix-status").textContent = "";
@@ -1483,22 +1647,28 @@ function fixHandleEvent(type, raw, outputDir) {
   }
 }
 
-/** 单次编译（SSE /api/compile）→ done 载荷；error 终态 / 断线 → throw（中文文案）。 */
+/** 单次编译（SSE /api/compile）→ done 载荷；error 终态 / 断线 → throw（中文文案）。
+ * 展示层（工单 compile-experience-ui/01）：起流前横幅「编译中（第 N/3 轮）」，
+ * done / error 后横幅终态（成功 / 失败 / 超时）——只更新展示，不改循环控制流。 */
 async function runCompileOnce(outputDir) {
   let finished = false;
   let done = null;
   let errorMsg = null;
   let resp;
+  compileBanner("running", "编译中…"
+    + (fixLoop.round > 0 ? "（第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS + " 轮）" : ""));
   try {
     resp = await fetch("/api/compile", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ platform: chosenPlatform, output_dir: outputDir }),
     });
-  } catch (e) { throw new Error(e.message); }
-  if (!resp.body) throw new Error("服务响应无流");
+  } catch (e) { compileBanner("fail", "编译未能启动：" + e.message); throw new Error(e.message); }
+  if (!resp.body) { compileBanner("fail", "服务响应无流"); throw new Error("服务响应无流"); }
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+    const msg = err.detail || ("请求失败（HTTP " + resp.status + "）");
+    compileBanner("fail", "编译失败：" + msg);
+    throw new Error(msg);
   }
   await parseSSE(resp, (type, raw) => {
     let data = {};
@@ -1506,8 +1676,9 @@ async function runCompileOnce(outputDir) {
     if (type === "done") { done = data; finished = true; }
     else if (type === "error") { errorMsg = data.message || "编译失败"; finished = true; }
   });
-  if (errorMsg) throw new Error(errorMsg);
+  if (errorMsg) { compileBanner("fail", "编译失败：" + errorMsg); throw new Error(errorMsg); }
   if (!done) throw new Error(finished ? "编译未返回结果" : "连接中断：本次编译未完成，可安全重试");
+  renderCompileBanner(done);
   return done;
 }
 
@@ -1550,6 +1721,7 @@ async function startFixCenter() {
   if (!chosenPlatform) { $("fix-errors-msg").textContent = "请先选择目标平台"; return; }
   if (!(toolchains || {})[chosenPlatform]) {
     $("fix-errors-msg").textContent = "未检测到该平台工具链，已回退贴文本模式（见下方手动模式）";
+    compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
     return;
   }
   fixLoop.running = true;
@@ -1576,6 +1748,9 @@ async function startFixCenter() {
       $("fix-status").textContent = "编译通过 ✅（warnings 见上方编译输出）";
       return;
     }
+    // 首编失败 → 立即渲染结构化错误列表（全部「待修复」），修复轮结束后按
+    // fixes 重渲染最终状态（展示层工单 compile-experience-ui/01）
+    fixRenderResults(initial.parsed_errors || [], [], 0);
     // 报错 → 修复 → 重编译验证，≤3 轮；第 3 轮后如实报告剩余错误（不无限循环）
     let errorText = initial.error_text;
     for (fixLoop.round = 1; fixLoop.round <= FIX_MAX_ROUNDS; fixLoop.round++) {
@@ -1587,6 +1762,9 @@ async function startFixCenter() {
         + " 轮：重编译验证中…";
       const compile = await runCompileOnce(outputDir);
       $("fix-center-log").value = compile.error_text || "";
+      // 轮次条追加耗时（展示层工单 compile-experience-ui/01；compile 必有 duration）
+      $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+        + " 轮 · 耗时 " + fmtSeconds(compile.duration) + "s";
       if (compile.timed_out) {
         $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译超时，已停止循环——"
           + "可修改工程后点「一键编译修复」重新来过";
