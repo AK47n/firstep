@@ -15,9 +15,9 @@
 
 // 三个独立LED (共阴，高电平点亮)
 #define LED_PORT           GPIO_C
-#define LED_RED_PIN         Pin_13   // 红灯 — 关锁状态
-#define LED_YELLOW_PIN      Pin_14   // 黄灯 — 迎宾区
-#define LED_GREEN_PIN       Pin_15   // 绿灯 — 开锁状态
+#define LED_RED_PIN         Pin_13   // 红灯 — 关闭指示
+#define LED_YELLOW_PIN      Pin_14   // 黄灯 — 远区指示
+#define LED_GREEN_PIN       Pin_15   // 绿灯 — 开启指示
 
 // 蜂鸣器 (有源蜂鸣器，低电平触发)
 #define BUZZER_GPIO         GPIO_B
@@ -32,31 +32,31 @@
 
 // ============================================================
 //  区域判定参数 — 现场用串口发送命令动态调整更方便
-//     比赛时可根据实测微调
+//     参数按实测微调
 // ============================================================
 
-// 开锁区阈值 (cm)
-#define THR_UNLOCK_ENTER    130     // 进入开锁区: distance <= 130cm
-#define THR_UNLOCK_EXIT     140     // 离开开锁区: distance > 140cm (滞回10cm)
+// 近区阈值 (cm)
+#define THR_UNLOCK_ENTER    130     // 进入近区: distance <= 130cm
+#define THR_UNLOCK_EXIT     140     // 离开近区: distance > 140cm (滞回10cm)
 
-// 迎宾区阈值 (cm)
-#define THR_WELCOME_ENTER   230     // 进入迎宾区: distance <= 230cm
-#define THR_WELCOME_EXIT    240     // 离开迎宾区: distance > 240cm (滞回10cm)
+// 远区阈值 (cm)
+#define THR_WELCOME_ENTER   230     // 进入远区: distance <= 230cm
+#define THR_WELCOME_EXIT    240     // 离开远区: distance > 240cm (滞回10cm)
 
-// 最大感应距离 (cm) — 超出此范围视为无钥匙
+// 最大感应距离 (cm) — 超出此范围视为无标签
 #define THR_SENSING_MAX     430
 
 // TagID 掩码 — DIP-4 拨码只有4位，只比较低4位
 #define TAGID_MASK          0x0F
 
-// FOV 半角 (度) — 智能门锁正前方±45°范围
+// FOV 半角 (度) — 基站正前方±45°范围
 #define FOV_HALF_ANGLE      45
 
 // Zigbee DL-20 无线串口：USART3 (PB10=TX → DL-20 RX, PB11=RX ← DL-20 TX)
 #define ZIGBEE_UART         UART_3
 #define ZIGBEE_BAUD         115200
 
-// Zigbee 钥匙ID 超时 (ms) — 10Hz发送，丢5帧≈500ms → 认为钥匙离开
+// Zigbee 标签ID 超时 (ms) — 10Hz发送，丢5帧≈500ms → 认为标签离开
 #define ZIGBEE_TIMEOUT_MS   500
 
 // ============================================================
@@ -64,7 +64,7 @@
 // ============================================================
 
 #define OLED_UPDATE_MS      80      // OLED 刷新间隔 (12.5Hz，体感流畅)
-#define TAG_TIMEOUT_MS      3000    // 超过3秒没收到数据 → 认为钥匙离开
+#define TAG_TIMEOUT_MS      3000    // 超过3秒没收到数据 → 认为标签离开
 #define EVENT_SHOW_MS       800     // 事件提示在OLED上显示的时长
 
 // ============================================================
