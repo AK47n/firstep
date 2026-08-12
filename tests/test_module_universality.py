@@ -27,8 +27,8 @@ LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
 
 # 已登记例外注册表（唯一出处）：当前仍携带题词的模块 → 理由。
 # 条目随 02~05 工单清理删除——清理后不删条目 = test_exception_registry_entries_are_real_contamination 红。
+# 已清理移除：xunji（工单 02，2026-08-12 剥离决策层为纯驱动）。
 EXCEPTION_REGISTRY: dict[str, str] = {
-    "xunji": "工单 02 清理范围：2024H 巡线题专用层（状态机/调度/头注释真机记忆）",
     "pid": "工单 03 清理范围：2021F 巡线送药版 + 2026H 滚球版双题决策层",
     "ball_detect": "工单 04 清理范围：描述带 2026H H 题（代码已驱动形态）",
     "lock_control": "工单 05 清理范围（可解散）：2026C 数字钥匙状态机",
