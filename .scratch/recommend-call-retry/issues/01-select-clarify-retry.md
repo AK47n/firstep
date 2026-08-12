@@ -2,7 +2,7 @@
 
 **What to build:** DeepSeek 偶发返回空内容（真机 2026C：4 次 recommend 2 次"模型返回的不是 JSON："，空 detail = 响应 content 为空）——`select_modules` 与 `clarify` 是手写 `_chat` + parse 单次调用，遇空/畸形输出即抛 LLMError → error 终态，收敛中途整个推荐流程报废重跑。仓库已有整次调用级重试原语 `_retry_parse`（LLM 异常或输出畸形整次重问，最多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错）——归档判定 / 参考简介 / 模块简介都在用，唯独推荐链路两个方法漏了。目标：`select_modules` / `clarify` 改走 `_retry_parse` 原语（或同款循环），空内容这类瞬时异常自动重问，不再一枪毙命。
 
-**Status:** implemented（2026-08-11，pytest 1087 绿 + mypy 干净 + 真机 2026C 全流程闭环）
+**Status:** resolved（2026-08-11，pytest 1087 绿 + mypy 干净 + 真机 2026C 全流程闭环）
 
 ## 实施记录（2026-08-11）
 

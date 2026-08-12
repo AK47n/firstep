@@ -2,7 +2,7 @@
 
 **What to build:** 澄清历史只进澄清阶段（`llm.clarify` 带 clarifications），**收敛循环不携带**——`select_modules_convergent` 每轮调 `llm.select_modules` 时 prompt 里没有问答历史。模型在收敛阶段对同一证据不足点补问（selection.questions → question 事件）→ 用户回答 → 前端重推（clarifications 追加）→ 澄清阶段看到历史答"空"进收敛 → **收敛阶段又看不到答案，换措辞再问同一问题**——问答闭环断裂。真机实测（2026C 双选，工单 generate-check-parity/01 验收记录）：模型对题面"序号2缺失"换措辞反复补问，clarify_2026C.json 加映射只防澄清阶段，防不了收敛阶段。目标：clarifications 透传进收敛循环每轮 `select_modules` 的 prompt（题面后附"已澄清问答"独立段），`SELECT_SYSTEM_PROMPT` 补"已答过的问题不要重复问"。
 
-**Status:** implemented（2026-08-11，pytest 1081 绿 + mypy 干净 + 真机 2026C 双选收敛闭环）
+**Status:** resolved（2026-08-11，pytest 1081 绿 + mypy 干净 + 真机 2026C 双选收敛闭环）
 
 ## 实施记录（2026-08-11）
 
