@@ -342,6 +342,7 @@
   <button data-tab="pdf">PDF 资料库</button>
   <button data-tab="topic">赛题库</button>
   <button data-tab="master">母版</button>
+  <button data-tab="changelog">更新记录</button>
   <button data-tab="settings">设置</button>
 </nav>
 
@@ -725,6 +726,14 @@
     </div>
   </section>
 
+  <!-- ============================ 更新记录页 ============================ -->
+  <section id="tab-changelog" class="page">
+    <div class="card">
+      <h2>更新记录 <span class="muted">（按天回看工具改进，数据源为手工维护的 CHANGELOG.md）</span></h2>
+      <div id="changelog-list" style="margin-top:8px"></div>
+    </div>
+  </section>
+
   <!-- ============================ 设置页 ============================ -->
   <section id="tab-settings" class="page">
     <div class="card">
@@ -815,6 +824,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
     if (btn.dataset.tab === "pdf") loadPdfs();
     if (btn.dataset.tab === "topic") loadTopics();
     if (btn.dataset.tab === "master") loadMasters();
+    if (btn.dataset.tab === "changelog") loadChangelog();
     if (btn.dataset.tab === "settings") loadSettings();
   });
 });
@@ -2905,6 +2915,31 @@ async function loadMasters() {
       }));
     $("master-msg").textContent = "";
   } catch (e) { $("master-msg").textContent = e.message; }
+}
+
+// ---------------------------------------------------------------------------
+// 更新记录页（工单 changelog-tab/01）：按天分组时间轴，数据源 CHANGELOG.md
+// ---------------------------------------------------------------------------
+async function loadChangelog() {
+  const box = $("changelog-list");
+  try {
+    const groups = await apiGet("/api/changelog");
+    if (!groups.length) {
+      box.innerHTML = '<div class="muted">暂无更新记录。</div>';
+      return;
+    }
+    box.innerHTML = groups.map((g) => `
+      <div style="margin-bottom:14px">
+        <h3 style="color:var(--accent);margin:0 0 6px">${esc(g.date)}</h3>
+        <ul style="margin:0;padding-left:22px">
+          ${g.items.map((i) => `<li style="margin-bottom:4px">${
+            i.time ? `<span class="slug" style="margin-right:8px">${esc(i.time)}</span>` : ""
+          }${esc(i.text)}</li>`).join("")}
+        </ul>
+      </div>`).join("");
+  } catch (e) {
+    box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
 }
 
 // ---------------------------------------------------------------------------
