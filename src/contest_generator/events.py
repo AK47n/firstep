@@ -41,7 +41,12 @@ EVENT_APPLY_RESULT = "apply_result"
 # 启动（前端显示"编译中"，分钟级以内）；done 的 data = {platform, output_dir,
 # exit_code, error_text, passed, timed_out, project_file, command}——error_text
 # 原样采集自编译器输出（与 fix-errors 解析契约对齐），passed 由域模块
-# compile_runner.compile_passed 判定（前端循环不自己判退出码）
+# compile_runner.compile_passed 判定（前端循环不自己判退出码）。展示层字段
+# （工单 compile-experience-ui/01，只增不改旧字段）：duration（秒，float，
+# 子进程实际耗时）/ parsed_errors（[{path, line, message}]，parse_compile_errors
+# 解析——与 fix-errors 的 parsed 同源同构）/ summary（{errors, warnings}，
+# summarize_compile_output）。done 契约与 webapp.py /api/compile 路由 docstring
+# 同源（词表唯一出处，改动须两处同步）
 EVENT_COMPILE_START = "compile_start"
 
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：

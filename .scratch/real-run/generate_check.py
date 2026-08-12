@@ -9,8 +9,6 @@
 """
 import json
 import os
-import re
-import subprocess
 import sys
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -27,6 +25,13 @@ HERE = Path(__file__).parent
 # 同一个 run_generation_gates；豁免集（C 标准库 + 平台工具链头，含 mspm0
 # ti_msp_dl_* 前缀）门禁内部持有，删镜像即天然同源。
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from contest_generator.compile_runner import (
+    CompileRunnerError,
+    collect_build_log,
+    compile_passed,
+    find_uv4,
+)
+from contest_generator.fix_errors import parse_compile_errors, summarize_compile_output
 from contest_generator.generator import (
     GeneratorError,
     build_output_tree_corpus,
@@ -116,26 +121,26 @@ def _uvprojx_include_dirs(out_dir: Path) -> list[Path]:
 
 
 def uv4_build(out_dir: Path) -> tuple[bool | None, str]:
-    """真机编译：UV4 命令行构建最终 .uvprojx（工单 01 补洞——include 解析
-    与自包含只是静态近似，符号级完整性只有真编译能证；pid.c 曾静态全绿但
-    Keil 35 错）。返回 (是否通过, 摘要)；UV4 不可用返回 (None, 原因)。
+    """真机编译：UV4 全量重建（工单 compile-verdict-align/01 换闸，与生产
+    collect_build_log 同源——曾自带 `-j0 -b` 增量命令 + `(\\d+) Error\\(s\\)`
+    正则，增量日志无编译行 = 假绿风险（autocompile-loop 决策记录 4），且
+    判读域已单源在 compile_runner / fix_errors，禁止调用方另写正则）。
+    返回 (是否通过, 摘要)；UV4 不可用返回 (None, 原因)。
     """
-    uv4 = os.environ.get("KEIL_UV4") or r"C:\Keil5\Core\UV4\UV4.exe"
-    if not Path(uv4).is_file():
-        return None, f"未找到 UV4（{uv4}），跳过真机编译"
-    uvprojx = next(out_dir.rglob("*.uvprojx"), None)
-    if uvprojx is None:
-        return False, "工程里没有 .uvprojx"
-    log = out_dir.parent / "keil_build.log"
-    proc = subprocess.run(
-        [uv4, "-j0", "-b", str(uvprojx), "-o", str(log)],
-        capture_output=True, text=True,
+    uv4 = find_uv4(os.environ.get("KEIL_UV4") or "")
+    if uv4 is None:
+        return None, "未找到 UV4，跳过真机编译"
+    try:
+        build = collect_build_log("stm32", out_dir, uv4=uv4)
+    except CompileRunnerError as exc:
+        return False, str(exc)
+    summary = summarize_compile_output(
+        build.run.output, parse_compile_errors(build.run.output)
     )
-    text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
-    m = re.search(r"(\d+) Error\(s\)", text)
-    n_err = int(m.group(1)) if m else -1
-    tail = text.strip().splitlines()[-1] if text.strip() else f"exit={proc.returncode} 无日志"
-    return (n_err == 0, f"UV4 exit={proc.returncode} {tail}（{n_err} 错误）")
+    tail = build.run.output.strip().splitlines()[-1] \
+        if build.run.output.strip() else f"exit={build.run.exit_code} 无日志"
+    passed = compile_passed(build.platform, build.run.exit_code)
+    return passed, f"UV4 exit={build.run.exit_code} {tail}（{summary['errors']} 错误）"
 
 
 def post(url: str, payload: dict) -> dict:

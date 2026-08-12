@@ -566,6 +566,24 @@ def test_compile_no_toolchain_400_chinese(client, context, tmp_path, monkeypatch
     assert "工具链" in resp.json()["detail"]
 
 
+def test_compile_without_ai_config_streams_done(tmp_path, monkeypatch):
+    """无 AI 配置（config=None）→ /api/compile 照常起流出 done（工单
+    compile-verdict-align/01：编译不调 LLM，只须工具链路径——无 api_key 的
+    用户应能"编译看结果"；修复按钮仍走 AI 配置校验，循环自然停）。"""
+    ctx = AppContext(config_path=tmp_path / "cfg" / "config.json", config=None)
+    client = TestClient(create_app(ctx))
+    out = _stm32_project(tmp_path)
+    fake_uv4 = _fake_uv4_bat(
+        tmp_path, 0,
+        ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."],
+    )
+    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    events = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})
+    assert [kind for kind, _ in events] == [EVENT_COMPILE_START, EVENT_DONE]
+    assert events[1][1]["passed"] is True
+    assert events[1][1]["summary"] == {"errors": 0, "warnings": 0}
+
+
 def test_compile_mspm0_no_make_400_chinese(client, context, tmp_path, monkeypatch):
     monkeypatch.setattr("contest_generator.webapp.find_make", lambda override: None)
     out = tmp_path / "project"
