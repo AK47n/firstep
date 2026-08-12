@@ -4,10 +4,19 @@
   "dependencies": [],
   "platforms": {
     "mspm0": {
-      "files": [],
+      "files": [
+        "ml_libs/dmpKey.h",
+        "ml_libs/dmpmap.h",
+        "ml_libs/inv_mpu.c",
+        "ml_libs/inv_mpu.h",
+        "ml_libs/inv_mpu_dmp_motion_driver.c",
+        "ml_libs/inv_mpu_dmp_motion_driver.h",
+        "ml_libs/mpu_port.c",
+        "ml_libs/mpu_port.h"
+      ],
       "verified": false,
       "hardware_bound": true,
-      "notes": "mspm0 线无 MPU6050 实现（姿态由 imu_uart 模块承担）——空 files 条目仅为依赖展开兼容：pid 顶层 dependencies 跨平台共享（stm32 侧 pid.c 真 include ml_mpu6050.h），mspm0 选 pid 时本条目展开无文件复制、不参与编译，推荐层看到 mspm0 姿态需求应选 imu_uart。",
+      "notes": "mspm0 侧为官方 DMP 姿态解算（InvenSense DMP 库，mpu_port.h 封装 DMP_Init / DMP_Read_Data(pitch,roll,yaw)，采样率 100Hz）——与 stm32 侧简化寄存器驱动 API 不同（结构测试不查 API 一致性）。SysConfig 依赖：I2C 控制器实例命名 I2C_0 接 MPU6050（SDA/SCL 按实际接线，默认器件地址 0x68 AD0 接 GND；母版默认布局只有 I2C1=OLED）——2026-08-12 已本地实验验证：生成工程 mspm0.syscfg 补 I2C_0 实例后 gmake 全量 0 错（2 警 = 既有母版 UART ovsRate 提示，非本模块；未上板）；未配置时 mpu_port.c 编译报 I2C_0_INST 缺失（预期，inv_mpu.c / inv_mpu_dmp_motion_driver.c 本身编译零错误）。适配：① inv_mpu.c / inv_mpu_dmp_motion_driver.c 的 EMPL_TARGET_MSP430 / EMPL_TARGET_UC3L0 死分支旧平台 include 已删（mspm0 只用 MOTION_DRIVER_TARGET_MSP430，include 解析门不认预处理器分支，留着会拦生成）；② 内置延时改名 mpu_delay_ms（防与 delay 模块同名符号冲突）；sys_tick_ms 由 main.c 的 SysTick_Handler 每秒递增 1000 次（示例见素材 12_MPU6050/main.c，不递增仅影响 mget_ms 时间戳、不影响功能）。文件来源：素材包【小车】04_mpu6050驱动代码.zip（mpu6050/ 目录 8 个源文件 + 目录条目 = zip 内 9 条目）。",
       "kit": "MPU6050",
       "source_url": "https://e.tb.cn/h.8g1H453ww0r0xH7?tk=Ue5KgBwTvkV"
     },

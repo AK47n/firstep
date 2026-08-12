@@ -10,6 +10,7 @@ from pathlib import Path
 
 PROJ = Path(sys.argv[1]).resolve()
 DEBUG = PROJ / "Debug"
+DEBUG.mkdir(parents=True, exist_ok=True)
 
 SDK = "C:/ti/ccs2051/mspm0_sdk_2_10_00_04"
 COMPILER = "C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"
@@ -17,26 +18,31 @@ SYSCFG = "C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"
 OUT = "mspm0_project"
 
 MODULES = [
-    ("delay", ["delay.c"]),
-    ("ntb_time", ["ntb_time.c"]),
-    ("key", ["key.c"]),
-    ("oled", ["oled.c"]),
-    ("huidu", ["huidu.c"]),
-    ("imu_uart", ["imu.c"]),
-    ("led_beep", ["led_beep.c"]),
-    ("motor", ["motor.c"]),
-    ("pid", ["pid_mspm0.c", "gray_track_mspm0.c"]),
-    ("digit_uart", ["digit_uart_mspm0.c"]),
-    ("filter", ["filter.c"]),
-    ("ball_detect", ["ball_detect.c"]),
-    ("xunji", ["xunji.c"]),
+    # (slug, 子目录, 源文件表)——子目录 = 模块 manifest 平台条目的文件所在子目录
+    ("delay", "code", ["delay.c"]),
+    ("ntb_time", "code", ["ntb_time.c"]),
+    ("key", "code", ["key.c"]),
+    ("oled", "code", ["oled.c"]),
+    ("huidu", "code", ["huidu.c"]),
+    ("imu_uart", "code", ["imu.c"]),
+    ("led_beep", "code", ["led_beep.c"]),
+    ("motor", "code", ["motor.c"]),
+    ("pid", "code", ["pid_mspm0.c", "gray_track_mspm0.c"]),
+    ("digit_uart", "code", ["digit_uart_mspm0.c"]),
+    ("filter", "code", ["filter.c"]),
+    ("ball_detect", "code", ["ball_detect.c"]),
+    ("xunji", "code", ["xunji.c"]),
+    ("step_motor", "code", ["step_motor.c"]),
+    ("ml_mpu6050", "ml_libs", ["inv_mpu.c", "inv_mpu_dmp_motion_driver.c", "mpu_port.c"]),
 ]
 # 只编译工程内实际存在的模块（工程按推荐集生成，模块子集因题而异——
 # 如 2024H 无 digit_uart/filter/ball_detect，表内其他条目不写进 makefile）
 MODULES = [
-    (slug, cfiles) for slug, cfiles in MODULES if (PROJ / f"modules/{slug}/code").is_dir()
+    (slug, subdir, cfiles)
+    for slug, subdir, cfiles in MODULES
+    if (PROJ / f"modules/{slug}/{subdir}").is_dir()
 ]
-MOD_DIRS = [f"modules/{slug}/code" for slug, _ in MODULES]
+MOD_DIRS = [f"modules/{slug}/{subdir}" for slug, subdir, _ in MODULES]
 INC = " ".join(
     [f'-I"{PROJ}"', f'-I"{PROJ}/Debug"']
     + [f'-I"{PROJ}/{d}"' for d in MOD_DIRS]
@@ -115,8 +121,8 @@ root_rules += "\t@echo 'Finished building: \"$<\"'\n\t@echo ' '\n"
 (DEBUG / "subdir_rules.mk").write_text(root_rules, encoding="utf-8")
 
 # ---------- per-module subdir_vars.mk / subdir_rules.mk ----------
-for slug, cfiles in MODULES:
-    rel = f"modules/{slug}/code"
+for slug, subdir, cfiles in MODULES:
+    rel = f"modules/{slug}/{subdir}"
     d = DEBUG / rel
     d.mkdir(parents=True, exist_ok=True)
     vars = HEADER
@@ -142,10 +148,10 @@ for slug, cfiles in MODULES:
 # ---------- Debug/makefile ----------
 includes = "\n".join(f"-include {f}" for f in [
     "sources.mk", "subdir_vars.mk",
-] + [f"{rel}/subdir_vars.mk" for _, rel in [("", "")]] + [f"modules/{s}/code/subdir_vars.mk" for s, _ in MODULES]
-  + ["subdir_rules.mk"] + [f"modules/{s}/code/subdir_rules.mk" for s, _ in MODULES] + ["objects.mk"])
+] + [f"{rel}/subdir_vars.mk" for _, rel in [("", "")]] + [f"modules/{s}/{sub}/subdir_vars.mk" for s, sub, _ in MODULES]
+  + ["subdir_rules.mk"] + [f"modules/{s}/{sub}/subdir_rules.mk" for s, sub, _ in MODULES] + ["objects.mk"])
 
-module_objs = [f"./modules/{s}/code/{c.replace('.c', '.o')}" for s, cfiles in MODULES for c in cfiles]
+module_objs = [f"./modules/{s}/{sub}/{c.replace('.c', '.o')}" for s, sub, cfiles in MODULES for c in cfiles]
 ordered_objs = "\n".join(
     [o + " \\" for o in (
         ["./ti_msp_dl_config.o", "./startup_mspm0g350x_ticlang.o", "./main.o"]
@@ -154,7 +160,7 @@ ordered_objs = "\n".join(
 ) + "\n$(GEN_CMDS__FLAG) \\\n-Wl,-ldevice.cmd.genlibs \\\n-Wl,-llibc.a"
 objs_quoted = "\n".join(
     ['"ti_msp_dl_config.o"', '"startup_mspm0g350x_ticlang.o"', '"main.o"']
-    + [f'"modules\\{s}\\code\\{c.replace(chr(46)+chr(99), chr(46)+chr(111))}"' for s, cfiles in MODULES for c in cfiles]
+    + [f'"modules\\{s}\\{sub}\\{c.replace(chr(46)+chr(99), chr(46)+chr(111))}"' for s, sub, cfiles in MODULES for c in cfiles]
 )
 
 makefile = f"""################################################################################
@@ -203,7 +209,7 @@ all: $(OBJS) $(GEN_CMDS)
 clean:
 	-$(RM) $(GEN_MISC_FILES__QUOTED)$(GEN_FILES__QUOTED)$(EXE_OUTPUTS__QUOTED)
 	-$(RM) """ + objs_quoted.replace("\n", " ") + """
-	-$(RM) """ + " ".join(['"ti_msp_dl_config.d"', '"startup_mspm0g350x_ticlang.d"', '"main.d"'] + [f'"modules\\{s}\\code\\{c.replace(".c", ".d")}"' for s, cfiles in MODULES for c in cfiles]) + """
+	-$(RM) """ + " ".join(['"ti_msp_dl_config.d"', '"startup_mspm0g350x_ticlang.d"', '"main.d"'] + [f'"modules\\{s}\\{sub}\\{c.replace(".c", ".d")}"' for s, sub, cfiles in MODULES for c in cfiles]) + """
 	-@echo ' '
 
 .PHONY: all clean dependents
