@@ -1,0 +1,19 @@
+{
+  "id": "21F-巡线送药决策例程",
+  "title": "21F-巡线送药决策例程",
+  "type": "例程代码",
+  "description": "2021F 巡线送药小车决策层源码（stm32 Keil 原工程，决策素材）：pid.c 含十字路口状态机与路由表（路径记忆返程）、K230 动态路口决策（top2 置信度）、远端导航（大T/小T 字路口 + 返程）、药房送达/掉头状态机；gray_track.c 含十字/T字/返程T字路口检测与停车区黑白块检测；isr.c 含 TIM3 10ms 调度（编码器 → 速度闭环）。决策逻辑已按 ADR 0009 从 pid 模块剥离归生成骨架，本条目为 LLM 学习素材（只读不编译）。",
+  "anchor_kind": "topic",
+  "anchor_value": "2021F",
+  "platform": "stm32",
+  "files": [
+    "code/pid.c",
+    "code/pid.h",
+    "code/gray_track.c",
+    "code/gray_track.h",
+    "user/isr.c",
+    "user/main.c"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
