@@ -422,6 +422,17 @@
         <pre id="res-structure" class="result"></pre>
       </div>
     </div>
+
+    <div class="card">
+      <h2>9. 交接提示词（Handoff）</h2>
+      <div class="row">
+        <button id="btn-handoff" class="primary">生成交接提示词</button>
+        <button id="btn-handoff-copy" class="hidden">复制</button>
+        <span class="muted">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</span>
+      </div>
+      <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
+      <div id="handoff-msg" class="error"></div>
+    </div>
   </section>
 
   <!-- ============================ 模块库页 ============================ -->
@@ -556,6 +567,7 @@
   <section id="tab-topic" class="page">
     <div class="card">
       <h2>赛题库 <span class="muted">（历年真题拆条入库，编号可解析为题面作生成入口；磁盘目录即数据库）</span></h2>
+      <div id="topic-archive-link" style="margin:6px 0"></div>
       <div class="row">
         <div style="flex:1"><label>年份</label><input type="text" id="topic-filter-year" placeholder="如 2026"></div>
         <div style="flex:1"><label>编号</label><input type="text" id="topic-filter-number" placeholder="如 C"></div>
@@ -1240,6 +1252,117 @@ $("btn-generate").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// 生成页：9. 交接提示词（Handoff）——把本次生成的全部上下文打包成一段
+// 提示词，用户直接复制粘贴给下一个 AI 做精准打磨（本工具只搭基础，
+// 精打磨在下一个会话完成）。
+// ---------------------------------------------------------------------------
+function handoffPlatformLabel() {
+  const pf = (state.platforms || []).find((p) => p.id === chosenPlatform);
+  return pf ? pf.name : (chosenPlatform || "未选择");
+}
+function handoffPlatformIde() {
+  return chosenPlatform === "stm32" ? "Keil5" : chosenPlatform === "mspm0" ? "CCS" : "";
+}
+function handoffModuleLines() {
+  // 展开过依赖用展开结果（含简介/依赖/平台徽标），否则从模块库详情拼
+  const src = expanded.length
+    ? expanded
+    : selectedSlugs.map((slug) => (state.modules || []).find((m) => m.slug === slug)).filter(Boolean);
+  if (!src.length) return "（未选模块）";
+  return src.map((m) => {
+    const deps = (m.dependencies || []).length ? "，依赖：" + m.dependencies.join("、") : "";
+    return "- " + m.slug + "：" + (m.description || "") + deps;
+  }).join("\n");
+}
+async function handoffReferenceLines() {
+  if (!selectedReferenceIds.length) return "（未手动勾选；赛题 / 套件自动锚定的资料已按平台注入工程）";
+  try {
+    const entries = await apiGet("/api/references");
+    return entries.filter((e) => selectedReferenceIds.includes(e.id))
+      .map((e) => "- " + e.title).join("\n") || "（未手动勾选；自动锚定资料已注入工程）";
+  } catch { return "（参考资料读取失败，可忽略）"; }
+}
+
+$("btn-handoff").addEventListener("click", async () => {
+  const msg = $("handoff-msg");
+  msg.textContent = "";
+  const problem = $("problem").value.trim();
+  if (!problem) { msg.textContent = "请先填写赛题原文"; return; }
+  if (!chosenPlatform) { msg.textContent = "请先选择目标平台"; return; }
+  $("btn-handoff").disabled = true;
+  try {
+    const platform = handoffPlatformLabel();
+    const ide = handoffPlatformIde();
+    const summary = $("topic-summary-box").textContent.trim();
+    const mainC = $("main-c").value.trim();
+    const dir = $("res-dir").textContent.trim();   // 生成成功后才非空
+    const structure = $("res-structure").textContent.trim();
+    const refs = await handoffReferenceLines();
+    const lines = [
+      "# 电赛工程交接提示词（Handoff）",
+      "",
+      "你是嵌入式开发工程师，接手一个由「电赛工程生成器」搭好的基础工程。平台 / 模块 / 骨架已就绪，你的任务是精准打磨，最终交付一份功能完整、编译零错误、可直接参赛提交的工程。",
+      "",
+      "## 一、赛题原文",
+      "",
+      problem,
+      "",
+      "## 二、功能要点（AI 预读整理）",
+      "",
+      summary || "（未生成，可在打磨时自行通读题面整理）",
+      "",
+      "## 三、目标平台",
+      "",
+      platform + (ide ? "（IDE：" + ide + "）" : ""),
+      "",
+      "## 四、模块清单",
+      "",
+      handoffModuleLines(),
+      "",
+      "## 五、main.c 骨架",
+      "",
+      "```c",
+      mainC || "（未生成骨架）",
+      "```",
+      "",
+      "## 六、工程位置",
+      "",
+      dir ? "- 输出目录：" + dir : "（工程尚未生成；可先以 1~5 项上下文开始打磨，或先在本工具生成）",
+      ...(dir && structure ? ["", "工程结构：", "", "```", structure, "```"] : []),
+      "",
+      "## 七、参考资料",
+      "",
+      refs,
+      "",
+      "## 八、打磨要求",
+      "",
+      "1. 通读 main.c，把注释占位 / 未实现的调用全部按模块真实接口补齐；",
+      "2. 逐模块核对与题面要求的符合度，缺的功能先落到骨架与工程内；",
+      "3. 用 " + ide + " 编译至 0 error 0 warning；",
+      "4. 按题面评分点逐条自检，确认每个要求都有对应实现；",
+      "5. 只修改生成工程目录内的文件，不要改动模块库 / 参考库等仓库内容。",
+    ];
+    $("handoff-text").value = lines.join("\n");
+    $("btn-handoff-copy").classList.remove("hidden");
+  } catch (e) {
+    msg.textContent = e.message;
+  } finally { $("btn-handoff").disabled = false; }
+});
+
+$("btn-handoff-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("handoff-text").value);
+    const btn = $("btn-handoff-copy");
+    btn.textContent = "已复制";
+    setTimeout(() => { btn.textContent = "复制"; }, 1500);
+  } catch {
+    $("handoff-text").select();
+    document.execCommand("copy");
+    $("handoff-text").blur();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 模块库页
 // ---------------------------------------------------------------------------
 async function loadLibrary() {
@@ -1688,7 +1811,27 @@ function truncate(text, n) {
   return text.length <= n ? text : text.slice(0, n) + "…";
 }
 
+// 历年真题汇总长 PDF（2017-2025）置顶链接：素材库同名定位（批次目录变动
+// 也能命中），点击新标签浏览器原生预览；素材库缺失 / 未找到 = 不显示
+let topicArchiveLoaded = false;
+async function loadTopicArchiveLink() {
+  if (topicArchiveLoaded) return;
+  topicArchiveLoaded = true;
+  const box = $("topic-archive-link");
+  try {
+    const pdfs = await apiGet("/api/pdfs?name=" + encodeURIComponent("000_2017-2025"));
+    if (!pdfs.length) return;
+    const p = pdfs[0];
+    box.innerHTML = `<a href="#" data-open-archive-pdf title="${esc(p.rel_path)}">📄 历年真题汇总（2017-2025）长 PDF —— 点击打开</a>`;
+    box.querySelector("[data-open-archive-pdf]").addEventListener("click", (e) => {
+      e.preventDefault();
+      window.open(pdfFileUrl(p.rel_path), "_blank"); // 浏览器原生 PDF 预览
+    });
+  } catch (e) { /* 素材库查询失败 = 不显示链接，不打扰浏览 */ }
+}
+
 async function loadTopics() {
+  loadTopicArchiveLink();
   try {
     // 过滤在前端做（与参考库服务端搜索不同）：题库条目少、列表一次取回，
     // 年份/编号子串过滤本地完成
