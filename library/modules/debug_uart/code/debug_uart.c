@@ -1,6 +1,6 @@
 #include "headfile.h"
 #include "debug_uart.h"
-#include "lock_control.h"
+#include "config.h"
 
 // ============================================================
 //  UART2 初始化 (PA2=TX, PA3=RX, 115200bps)
@@ -64,22 +64,30 @@ void debug_cmd_poll(void)
 
     if (c == 'r' || c == 'R')
     {
-        lock_set_led(1, 0, 0);     // 红灯
+        gpio_set(LED_PORT, LED_RED_PIN, 1);      // 红灯
+        gpio_set(LED_PORT, LED_YELLOW_PIN, 0);
+        gpio_set(LED_PORT, LED_GREEN_PIN, 0);
         DEBUG_PRINTF("LED: RED (lock)\r\n");
     }
     else if (c == 'y' || c == 'Y')
     {
-        lock_set_led(0, 1, 0);     // 黄灯
+        gpio_set(LED_PORT, LED_RED_PIN, 0);
+        gpio_set(LED_PORT, LED_YELLOW_PIN, 1);   // 黄灯
+        gpio_set(LED_PORT, LED_GREEN_PIN, 0);
         DEBUG_PRINTF("LED: YELLOW (welcome)\r\n");
     }
     else if (c == 'g' || c == 'G')
     {
-        lock_set_led(0, 0, 1);     // 绿灯
+        gpio_set(LED_PORT, LED_RED_PIN, 0);
+        gpio_set(LED_PORT, LED_YELLOW_PIN, 0);
+        gpio_set(LED_PORT, LED_GREEN_PIN, 1);    // 绿灯
         DEBUG_PRINTF("LED: GREEN (unlock)\r\n");
     }
     else if (c == 'o' || c == 'O')
     {
-        lock_set_led(0, 0, 0);     // 全灭
+        gpio_set(LED_PORT, LED_RED_PIN, 0);
+        gpio_set(LED_PORT, LED_YELLOW_PIN, 0);
+        gpio_set(LED_PORT, LED_GREEN_PIN, 0);    // 全灭
         DEBUG_PRINTF("LED: OFF\r\n");
     }
     else if (c == 'b' || c == 'B')
@@ -90,7 +98,9 @@ void debug_cmd_poll(void)
             ms = ms * 10 + (cmd_buf[i] - '0');
         if (ms > 0 && ms <= 5000)
         {
-            buzzer_beep_ms(ms);
+            gpio_set(BUZZER_GPIO, BUZZER_PIN, 0);  // 低电平=响
+            delay_ms(ms);
+            gpio_set(BUZZER_GPIO, BUZZER_PIN, 1);  // 高电平=关
             DEBUG_PRINTF("BUZZER: %lums\r\n", ms);
         }
     }

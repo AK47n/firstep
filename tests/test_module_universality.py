@@ -9,7 +9,8 @@ BANNED_TOPIC_WORDS / CAPABILITY_WORDS 注释）。
 红证（2026-08-12 实施时）：注册表置空跑全库扫描，11 个模块命中黑名单——
 其中 xunji / pid / ball_detect / lock_control / zone 五个题专用模块为工单
 02~05 清理对象（输出见 .scratch/module-universalization/issues/01 实施记录；
-02 xunji / 03 pid / 04 ball_detect 已清理并从注册表删除对应条目）。
+02 xunji / 03 pid / 04 ball_detect 已清理并从注册表删除对应条目；
+05 lock_control / zone 已解散删除，2026-08-12）。
 EXCEPTION_REGISTRY = 当前仍携带题词的模块清单（逐条理由）：02~05 清理各自
 模块后必须同步删除对应条目（清理后不删条目 = 存量校验红，防漏同步）；新增
 模块带题词不登记 = 红。扫描范围 = 简介（manifest.description）+ 全部 .c/.h；
@@ -31,10 +32,10 @@ LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
 # 已清理移除：xunji（工单 02，2026-08-12 剥离决策层为纯驱动）；pid（工单 03，
 # 2026-08-12 剥离双平台决策层为纯驱动——十字路口/启停线/LAP 状态机归骨架，
 # 决策素材归档参考文件库）；ball_detect（工单 04，2026-08-12 清理 manifest
-# 描述题绑定——代码本为纯驱动，描述改 K230 视觉帧解析能力方向）。
+# 描述题绑定——代码本为纯驱动，描述改 K230 视觉帧解析能力方向）；lock_control /
+# zone（工单 05，2026-08-12 解散——决策层归骨架，驱动残留由骨架经 config.h 宏
+# + 母版 ml_gpio 内联承担，模块目录删除）。
 EXCEPTION_REGISTRY: dict[str, str] = {
-    "lock_control": "工单 05 清理范围（可解散）：2026C 数字钥匙状态机",
-    "zone": "工单 05 清理范围（可解散）：2026C 区域划分",
     "config": "2026C 数字钥匙集中配置头——05 工单明确不动，无工单覆盖",
     "debug_uart": "2026C 门锁端调试串口（描述 + 命令注释）——无工单覆盖",
     "zigbee_uart": "2026C 门锁端 Zigbee DL-20 接收——05 工单明确不动",
