@@ -2,8 +2,8 @@
 
 覆盖：报错解析（UV4 / CCS / 混合多文件 / 无文件引用降级 / 垃圾文本不崩）、
 路径安全（`../` 逃逸、绝对路径、非法扩展名 → FixError → 400 中文登记
-errors.py）、替换协议（精确成功 / 缩进不匹配跳过并报告 / 多处歧义跳过）、
-备份与回滚（写回前备份存在、回滚后文件内容恢复原样）。
+errors.py）、替换协议（精确成功 / 行首前缀归一化兜底 applied / 歧义与语句
+本体差异跳过）、备份与回滚（写回前备份存在、回滚后文件内容恢复原样）。
 """
 
 from __future__ import annotations
@@ -267,7 +267,9 @@ def test_apply_fixes_exact_match_writes_file_and_backs_up(tmp_path):
     assert (backup_dir / "main.c").read_text(encoding="utf-8") == "int x = 1;\nint main(void) { return x; }\n"
 
 
-def test_apply_fixes_indent_mismatch_skipped_and_reported(tmp_path):
+def test_apply_fixes_indent_mismatch_normalized_applied(tmp_path):
+    """丢缩进形态（工单 fix-snippet-match/01 红转绿）：old_snippet 前导缩进与
+    文件不一致——精确匹配失败（红），行首前缀归一化唯一命中 → applied。"""
     out = _make_project(tmp_path)
     report = apply_fixes(
         [FixSuggestion(file="main.c", line=2, old_snippet="  int main(void)", new_snippet="  int win(void)", reason="缩进多了空格")],
@@ -275,10 +277,12 @@ def test_apply_fixes_indent_mismatch_skipped_and_reported(tmp_path):
         _backup_root(tmp_path),
     )
     result = report.results[0]
-    assert result.status == "skipped"
-    assert "未应用" in result.reason and "精确匹配失败" in result.reason
-    assert report.backup_id == ""  # 无应用 → 不备份
-    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 1;\nint main(void) { return x; }\n"
+    assert result.status == "applied"
+    assert "归一化匹配应用" in result.reason  # 报告透明（决策 3）
+    assert report.backup_id  # 有应用 → 已备份
+    # 归一化替换语义 = 匹配行的原始全文被 new_snippet 替换（工单决策 1）
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 1;\n  int win(void)\n"
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 1;\n  int win(void)\n"
 
 
 def test_apply_fixes_ambiguous_snippet_skipped(tmp_path):
@@ -293,6 +297,137 @@ def test_apply_fixes_ambiguous_snippet_skipped(tmp_path):
     assert result.status == "skipped"
     assert "歧义" in result.reason
     assert "int x = 1;\nint y = 1;\n" in (out / "main.c").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# 行首前缀归一化兜底匹配（工单 fix-snippet-match/01）：四形态红转绿 + 边界
+# ---------------------------------------------------------------------------
+
+
+def test_apply_fixes_trailing_comment_normalized_applied(tmp_path):
+    """丢行尾注释形态（红证：原实现 raw 前缀带空格/缺注释 → 0 次匹配 skipped）。"""
+    out = _make_project(tmp_path)
+    (out / "main.c").write_text("int x = 1;   /* init */\nint main(void) { return x; }\n", encoding="utf-8")
+    report = apply_fixes(
+        [FixSuggestion(file="main.c", line=1, old_snippet="  int x = 1;", new_snippet="int x = 2;", reason="缺注释+缩进变形")],
+        out,
+        _backup_root(tmp_path),
+    )
+    result = report.results[0]
+    assert result.status == "applied"
+    assert "归一化匹配应用" in result.reason
+    assert report.backup_id
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 2;\nint main(void) { return x; }\n"
+
+
+def test_apply_fixes_crlf_file_roundtrip_applied(tmp_path):
+    """行尾 CRLF 形态（契约回归）：真 CRLF 文件（newline="" 落盘）在 apply_fixes
+    通读时被 universal newlines 归一为 \\n（决策 1 ③ 的端到端路径），精确匹配
+    照常 applied，写回保持 CRLF 行尾。"""
+    out = _make_project(tmp_path)
+    (out / "main.c").write_text(
+        "int x = 1;\r\nint main(void) { return x; }\r\n", encoding="utf-8", newline=""
+    )
+    report = apply_fixes(
+        [FixSuggestion(file="main.c", line=1, old_snippet="int x = 1;", new_snippet="int x = 2;", reason="CRLF 文件")],
+        out,
+        _backup_root(tmp_path),
+    )
+    result = report.results[0]
+    assert result.status == "applied"
+    on_disk = (out / "main.c").read_text(encoding="utf-8", newline="")
+    assert on_disk == "int x = 2;\r\nint main(void) { return x; }\r\n"
+
+
+def test_normalized_hits_tolerates_crlf_content():
+    """匹配器层面的 CRLF 容忍（红证：新表面，旧实现按子串匹配对含 \\r 内容
+    0 命中）：内容若带 \\r\\n（非文本模式读取等路径进入匹配器），归一化匹配
+    （strip 逐行）仍唯一命中。"""
+    from contest_generator.fix_errors import _normalized_hits
+
+    hits = _normalized_hits(
+        "int x = 1;\r\nint main(void) { return x; }\r\n", "int x = 1;\n"
+    )
+    assert hits == (0,)
+    hits = _normalized_hits("int x = 1;\r\nint x = 1;\r\n", "int x = 1;")
+    assert len(hits) == 2  # 歧义在调用方处理
+
+
+def test_apply_fixes_inline_spaces_normalized_applied(tmp_path):
+    """行内多空格形态（红证：snippet 行尾多空格 → raw 0 次匹配；strip 后前缀命中）。"""
+    out = _make_project(tmp_path)
+    report = apply_fixes(
+        [FixSuggestion(file="main.c", line=1, old_snippet="int x = 1; ", new_snippet="int x = 2;", reason="行尾多空格")],
+        out,
+        _backup_root(tmp_path),
+    )
+    result = report.results[0]
+    assert result.status == "applied"
+    assert "归一化匹配应用" in result.reason
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 2;\nint main(void) { return x; }\n"
+
+
+def test_apply_fixes_normalized_ambiguous_skipped(tmp_path):
+    """归一化兜底多处命中仍跳过（红证：raw 0 次但 strip 前缀命中 2 行）。"""
+    out = _make_project(tmp_path)
+    (out / "main.c").write_text("int a = 1;  /* one */\nint a = 2;  /* two */\n", encoding="utf-8")
+    report = apply_fixes(
+        [FixSuggestion(file="main.c", line=1, old_snippet="  int a =", new_snippet="long a =", reason="歧义")],
+        out,
+        _backup_root(tmp_path),
+    )
+    result = report.results[0]
+    assert result.status == "skipped"
+    assert "歧义" in result.reason
+    assert report.backup_id == ""
+    assert (out / "main.c").read_text(encoding="utf-8") == "int a = 1;  /* one */\nint a = 2;  /* two */\n"
+
+
+def test_apply_fixes_body_whitespace_diff_skipped(tmp_path):
+    """语句本体不一致仍跳过（行内空白重组不可容忍，决策 1）。"""
+    out = _make_project(tmp_path)
+    report = apply_fixes(
+        [FixSuggestion(file="main.c", line=1, old_snippet="int x  = 1;", new_snippet="int x = 2;", reason="本体空格差异")],
+        out,
+        _backup_root(tmp_path),
+    )
+    result = report.results[0]
+    assert result.status == "skipped"
+    assert "未应用" in result.reason
+    assert report.backup_id == ""
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 1;\nint main(void) { return x; }\n"
+
+
+def test_apply_fixes_multiline_block_normalized_applied(tmp_path):
+    """多行片段 = 连续行块逐行前缀命中（红证：raw 多行逐字不匹配）。"""
+    out = _make_project(tmp_path)
+    (out / "main.c").write_text(
+        "int a = 1;  /* one */\nint b = 2;\nint c = 3;\nint main(void) { return a + b + c; }\n",
+        encoding="utf-8",
+    )
+    report = apply_fixes(
+        [FixSuggestion(file="main.c", line=1, old_snippet="    int a = 1;\n    int b = 2;", new_snippet="int a = 1;\nint b = 20;", reason="两行块")],
+        out,
+        _backup_root(tmp_path),
+    )
+    result = report.results[0]
+    assert result.status == "applied"
+    assert "归一化匹配应用" in result.reason
+    assert (out / "main.c").read_text(encoding="utf-8") == "int a = 1;\nint b = 20;\nint c = 3;\nint main(void) { return a + b + c; }\n"
+
+
+def test_apply_fixes_normalized_delete_whole_line(tmp_path):
+    """new_snippet 空串 = 删整行（匹配行的原始全文被替换为空）。"""
+    out = _make_project(tmp_path)
+    (out / "main.c").write_text("int x = 1;\nint main(void) { return x; }  /* entry */\n", encoding="utf-8")
+    report = apply_fixes(
+        [FixSuggestion(file="main.c", line=2, old_snippet="    int main(void)", new_snippet="", reason="删整行")],
+        out,
+        _backup_root(tmp_path),
+    )
+    result = report.results[0]
+    assert result.status == "applied"
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 1;\n"
 
 
 def test_apply_fixes_multiple_fixes_same_file_sequential(tmp_path):
