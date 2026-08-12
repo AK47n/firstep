@@ -75,16 +75,17 @@ def test_motor_manifest_stm32_entry_files_exist():
     assert manifest.dependencies == ()
 
 
-def test_pid_manifest_has_pid_isr_and_verified():
-    """pid stm32 条目补 pid_isr.c 且 verified 翻 true（工单 01 让位、本工单顺手做）。"""
+def test_pid_manifest_stm32_entry_verified_and_scheduling_stripped():
+    """pid stm32 条目 verified 且文件在位；pid_isr.c 已随 10ms 调度剥离
+    （工单 module-universalization/03：调度归骨架，模块不再自持 ISR）。"""
     manifest = ModuleManifest.load(LIBRARY_DIR / "modules" / "pid")
     entry = manifest.platforms["stm32"]
-    assert "code/pid_isr.c" in entry.files
     assert entry.verified
-    isr = _read("modules/pid/code/pid_isr.c")
-    assert "TIM3_IRQHandler" in isr
-    assert "motorA.now" in isr and "motorB.now" in isr
-    assert "pid_control();" in isr  # 10ms 调度 → 速度闭环
+    assert "code/pid_isr.c" not in entry.files
+    assert not (LIBRARY_DIR / "modules" / "pid" / "code" / "pid_isr.c").exists()
+    for rel in entry.files:
+        assert (LIBRARY_DIR / "modules" / "pid" / rel).is_file(), rel
+    assert manifest.dependencies == ("motor",)  # 决策层依赖已移出
 
 
 def test_pid_source_includes_stm32_motor_header():
