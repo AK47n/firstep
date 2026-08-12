@@ -81,7 +81,7 @@ void zigbee_rx_handler(void)
                 uint8_t sum_calc = (uint8_t)(ZIGBEE_SYNC1 + ZIGBEE_SYNC2 + rx_id);
                 if (byte == sum_calc)
                 {
-                    // 校验通过 → 更新钥匙ID
+                    // 校验通过 → 更新标签ID
                     g_key_id           = rx_id;
                     g_key_id_updated   = 1;
                     g_key_id_last_tick = g_systick;

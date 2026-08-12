@@ -13,7 +13,7 @@
 //    [8-9]   RequestCmd   0x2001
 //    [10-11] VersionID    0x0102
 //    [12-15] AnchorID     基站ID (uint32)
-//    [16-19] TagID        标签ID = 钥匙身份 (uint32)
+//    [16-19] TagID        标签ID = 设备身份 (uint32)
 //    [20-23] Distance     径向距离 cm (uint32)
 //    [24-25] Azimuth      方位角 度 (int16)
 //    [26-27] Elevation    仰角 度 (int16)

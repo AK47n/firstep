@@ -1,6 +1,6 @@
 {
   "slug": "debug_uart",
-  "description": "2026C 门锁端调试串口（UART2 调试输出 + 单字符调试命令）",
+  "description": "调试串口驱动：UART2 调试输出 + 单字符调试命令，供联调阶段打印状态与下发指令；适用于需要串口调试输出的各类联调场景。",
   "dependencies": [
     "config"
   ],
