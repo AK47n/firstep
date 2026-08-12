@@ -1,6 +1,6 @@
 {
   "slug": "config",
-  "description": "集中配置头文件：硬件引脚映射、区域判定阈值、时间参数及滤波算法参数统一集中定义，供各模块统一调用；适用于 UWB 定位、OLED 显示、LED/蜂鸣器指示等多外设联调场景。",
+  "description": "集中外设配置头文件：硬件引脚映射（UART/GPIO/LED/蜂鸣器/DIP 拨码）与通用显示、滤波参数统一集中定义，供各模块与主程序统一调用；适用于 UWB 定位、OLED 显示、LED/蜂鸣器指示等多外设联调场景。",
   "dependencies": [],
   "platforms": {
     "stm32": {
