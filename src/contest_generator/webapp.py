@@ -25,6 +25,13 @@ from typing import Any, Callable, Sequence
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from .compile_runner import (
+    CompileRunnerError,
+    collect_build_log,
+    compile_passed,
+    find_make,
+    find_uv4,
+)
 from .config import (
     DEFAULT_CONFIG_PATH,
     AppConfig,
@@ -38,6 +45,7 @@ from .config import (
 from .errors import error_entry
 from .events import (
     EVENT_APPLY_RESULT,
+    EVENT_COMPILE_START,
     EVENT_FIX_START,
     EVENT_PARSE_DONE,
     ProgressEvent,
@@ -478,8 +486,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             list_masters(dirs.masters_dir) if dirs.masters_dir.is_dir() else []
         )
         master_platforms = {meta.platform for meta in masters}
+        # 工具链可用性（工单 autocompile-loop/01）：前端据此决定"一键编译修复"
+        # 按钮置灰 / 生成后自动编译；探测是瞬间操作（is_file / which），未配置
+        # 时按默认值探测
+        uv4 = find_uv4(dirs.uv4_path)
+        make = find_make(dirs.gmake_path)
         return {
             "api_configured": config is not None,
+            "toolchains": {
+                PLATFORM_STM32: uv4 is not None,
+                PLATFORM_MSPM0: make is not None,
+            },
             "llm": (
                 {"base_url": config.base_url, "model": config.model}
                 if config is not None
@@ -783,6 +800,75 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         return {"restored": list(restored)}
 
     # ------------------------------------------------------------------
+    # 自动编译（工单 autocompile-loop/01）：服务端探测工具链 → 子进程全量
+    # 重建 → 原样采集编译输出。域判决在 compile_runner.py，路由只做薄壳
+    # 装配（前端状态机驱动循环，本路由单次编译）。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/compile")
+    @_map_errors
+    def compile_project(payload: dict) -> StreamingResponse:
+        """自动编译（SSE 流，工单 autocompile-loop/01）：compile_start → done
+        （exit_code / error_text / passed / timed_out）或 error → 流结束。
+
+        请求体契约：platform（stm32 / mspm0，必填）；output_dir（必填，生成
+        结果目录，必须已存在）。工具链缺失在起流前判定 → 400 中文（登记
+        errors.py，前端据此置灰按钮回退贴文本模式）；工程结构异常（没有
+        .uvprojx / Debug/makefile）发生在流内 → error 事件如实报告（文案
+        写具体，不沿用泛化文案——工单观察记录 2）。超时 → done 携带
+        timed_out=True（如实报告不静默）。
+
+        done 的 data：platform / output_dir / exit_code（超时为 null）/
+        error_text（编译输出原样采集，与 fix-errors 解析契约对齐）/
+        passed（域模块 compile_passed 判定，前端循环不自己判退出码）/
+        timed_out / project_file（定位到的工程文件）/ command（实际命令，
+        可复述）。阻塞调用（编译分钟级以内）放独立线程跑，事件经队列送流
+        生成器（与提炼 / 修复端点同款终态保证，断线旁路）。"""
+        platform = _require_str(payload, "platform")
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise CompileRunnerError(f"输出目录不存在：{output_dir}")
+        config = _require_config(context)
+        # 工具链探测（config 覆盖 + 自动）：缺失 → 400 中文（前端回退贴文本），
+        # 编译能力只在检测到工具链时启用（决策记录 1）
+        uv4 = find_uv4(config.uv4_path)
+        make = find_make(config.gmake_path)
+        if platform == PLATFORM_STM32 and uv4 is None:
+            raise CompileRunnerError(
+                "未检测到 Keil UV4 工具链（常见路径 C:\\Keil5\\Core\\UV4\\UV4.exe；"
+                "可在设置页填 uv4_path 覆盖）——已回退贴文本模式"
+            )
+        if platform == PLATFORM_MSPM0 and make is None:
+            raise CompileRunnerError(
+                "未检测到 gmake / make 工具链（可在设置页填 gmake_path 覆盖）"
+                "——已回退贴文本模式"
+            )
+
+        def run(emit: SseEmitter) -> None:
+            emit.progress(ProgressEvent(type=EVENT_COMPILE_START))
+            build = collect_build_log(
+                platform, output_dir, uv4=uv4, make=make
+            )
+            emit.done(
+                {
+                    "platform": build.platform,
+                    "output_dir": str(output_dir),
+                    "exit_code": build.run.exit_code,
+                    "error_text": build.run.output,
+                    "passed": compile_passed(build.platform, build.run.exit_code),
+                    "timed_out": build.run.timed_out,
+                    "project_file": build.project_file,
+                    "command": list(build.command),
+                }
+            )
+
+        # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    # ------------------------------------------------------------------
     # 模块库（工单 07）：浏览 / AI 录入 / 编辑简介 / 多平台版本 / 删除
     # ------------------------------------------------------------------
 
@@ -1011,17 +1097,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """读取设置；API key 只回掩码（前 4 位 + 与真实长度一致的圆点），不回明文。"""
         config = _current_config(context)
         api_key = config.api_key if config is not None else ""
+        defaults = AppConfig()
         return {
             "configured": config is not None,
             "base_url": (config.base_url if config is not None else ""),
             "model": (config.model if config is not None else ""),
             "api_key": _mask_api_key_display(api_key),
             "module_library_dir": str(
-                config.module_library_dir if config is not None else AppConfig().module_library_dir
+                config.module_library_dir if config is not None else defaults.module_library_dir
             ),
             "masters_dir": str(
-                config.masters_dir if config is not None else AppConfig().masters_dir
+                config.masters_dir if config is not None else defaults.masters_dir
             ),
+            # 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
+            "uv4_path": config.uv4_path if config is not None else "",
+            "gmake_path": config.gmake_path if config is not None else "",
             "config_path": str(context.config_path),
         }
 
@@ -1046,6 +1136,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             model=_require_str(payload, "model"),
             module_library_dir=Path(_require_str(payload, "module_library_dir")),
             masters_dir=Path(_require_str(payload, "masters_dir")),
+            # 工具链可选覆盖（工单 autocompile-loop/01）：缺省 = 自动探测
+            uv4_path=_optional_str(payload, "uv4_path"),
+            gmake_path=_optional_str(payload, "gmake_path"),
         )
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置

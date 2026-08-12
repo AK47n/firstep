@@ -39,6 +39,8 @@ class AppConfig:
     module_library_dir: Path = DEFAULT_MODULE_LIBRARY_DIR
     masters_dir: Path = DEFAULT_MASTERS_DIR
     autocommit_enabled: bool = True  # 写库动作自动 git 提交开关（工单 01，默认开）
+    uv4_path: str = ""  # Keil UV4 可选覆盖（工单 autocompile-loop/01）：空 = 自动探测
+    gmake_path: str = ""  # gmake 可选覆盖：空 = 走 PATH 探测
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -75,6 +77,15 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     if not isinstance(autocommit_enabled, bool):
         raise ConfigError(f"autocommit_enabled 必须是布尔值：{path}")
 
+    # 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测；类型非法
+    # 大声失败（与其余字段同严格度）
+    uv4_path = data.get("uv4_path", "")
+    if not isinstance(uv4_path, str):
+        raise ConfigError(f"uv4_path 必须是字符串：{path}")
+    gmake_path = data.get("gmake_path", "")
+    if not isinstance(gmake_path, str):
+        raise ConfigError(f"gmake_path 必须是字符串：{path}")
+
     return AppConfig(
         base_url=base_url,
         api_key=api_key,
@@ -82,6 +93,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         module_library_dir=module_library_dir,
         masters_dir=masters_dir,
         autocommit_enabled=autocommit_enabled,
+        uv4_path=uv4_path,
+        gmake_path=gmake_path,
     )
 
 
@@ -97,6 +110,8 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
                 "module_library_dir": str(config.module_library_dir),
                 "masters_dir": str(config.masters_dir),
                 "autocommit_enabled": config.autocommit_enabled,
+                "uv4_path": config.uv4_path,
+                "gmake_path": config.gmake_path,
             },
             ensure_ascii=False,
             indent=2,

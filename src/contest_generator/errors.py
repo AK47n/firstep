@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .ccs import CcsProjectError
+from .compile_runner import CompileRunnerError
 from .config import ConfigError
 from .extraction import ExtractionError
 from .fix_errors import FixError
@@ -54,6 +55,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
         (
             ExtractionError,
             FixError,  # 编译错误修复（工单 compile-error-fix/01）：路径越界 / 白名单外扩展名拒绝
+            CompileRunnerError,  # 自动编译（工单 autocompile-loop/01）：工具链缺失 / 工程结构异常
             LibraryError,
             MasterError,
             SelectionError,

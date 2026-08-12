@@ -91,7 +91,37 @@ def test_saved_file_is_plain_json(tmp_path):
         "module_library_dir": str(DEFAULT_MODULE_LIBRARY_DIR),
         "masters_dir": str(DEFAULT_MASTERS_DIR),
         "autocommit_enabled": True,
+        # 工具链可选覆盖（工单 autocompile-loop/01）：缺省空串 = 自动探测
+        "uv4_path": "",
+        "gmake_path": "",
     }
+
+
+def test_toolchain_paths_default_blank_and_roundtrip(tmp_path):
+    """uv4_path / gmake_path（工单 autocompile-loop/01）：缺省空串；非空回写。"""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
+    assert load_config(path).uv4_path == ""
+    assert load_config(path).gmake_path == ""
+
+    save_config(
+        AppConfig(
+            api_key="sk-test",
+            uv4_path=r"C:\Keil5\Core\UV4\UV4.exe",
+            gmake_path="gmake",
+        ),
+        path,
+    )
+    loaded = load_config(path)
+    assert loaded.uv4_path == r"C:\Keil5\Core\UV4\UV4.exe"
+    assert loaded.gmake_path == "gmake"
+
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "uv4_path": 123}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="uv4_path"):
+        load_config(path)  # 类型非法大声失败（与其余字段同严格度）
 
 
 def test_autocommit_enabled_defaults_on_and_roundtrips(tmp_path):
