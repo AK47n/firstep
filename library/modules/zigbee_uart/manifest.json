@@ -1,6 +1,6 @@
 {
   "slug": "zigbee_uart",
-  "description": "2026C 门锁端 Zigbee DL-20 接收（解析钥匙端 DIP-4 ID 帧）",
+  "description": "Zigbee DL-20 无线接收驱动：解析发射端上报的 DIP-4 ID 身份帧（同步头 + 校验和），输出标签 ID 与有效帧标志；适用于无线身份识别、无线信标上报等一对多收发赛题功能的接收侧。",
   "dependencies": [
     "config"
   ],
