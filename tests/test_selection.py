@@ -1352,7 +1352,6 @@ def _topic(
     key: str = "",
     *,
     references: Sequence[ReferenceEntry] = (),
-    related_modules: Sequence[str] = (),
     manual_references: Sequence[ReferenceEntry] = (),
 ) -> TopicContext:
     """最小装配素材：收敛与载荷组装够用的字段，其余取安全缺省。"""
@@ -1360,7 +1359,6 @@ def _topic(
         key=key,
         problem_text="送药小车。识别数字。",
         references=tuple(references),
-        related_modules=tuple(related_modules),
         manifest_summaries=(),
         suggestions=(),
         read_fulltext=lambda entry_id: "",
@@ -1423,8 +1421,8 @@ def test_run_recommendation_convergence_questions_end_with_question_event():
 
 def test_run_recommendation_done_payload_verbatim():
     """收敛成功 → done 载荷逐字：modules/reasons、requirements（to_dict 形状）、
-    topic.key 非空带 topic_id + related_modules、references = auto ∪ manual
-    并集去重（同一条目只出现一次，手动优先标注）platform 随条目带出。"""
+    topic.key 非空带 topic_id、references = auto ∪ manual 并集去重（同一条目
+    只出现一次，手动优先标注）platform 随条目带出。"""
     llm = FakeLLM(
         selection=ModuleSelection(
             modules=("dht11",),
@@ -1451,7 +1449,6 @@ def test_run_recommendation_done_payload_verbatim():
         _topic(
             key="2021F",
             references=(auto, overlap),
-            related_modules=("led", "motor"),
             manual_references=(manual, overlap),  # ref-both 既锚定又手动
         ),
         llm,
@@ -1473,7 +1470,6 @@ def test_run_recommendation_done_payload_verbatim():
             }
         ],
         "topic_id": "2021F",
-        "related_modules": ["led", "motor"],
         "references": [
             {"id": "ref-auto", "title": "锚定参考", "source": "auto", "platform": PLATFORM_STM32},
             {"id": "ref-manual", "title": "手动参考", "source": "manual", "platform": PLATFORM_ANY},
@@ -1483,8 +1479,8 @@ def test_run_recommendation_done_payload_verbatim():
 
 
 def test_run_recommendation_no_topic_key_omits_topic_fields():
-    """no-topic 形（key 空）：done 载荷无 topic_id / related_modules；references
-    清单恒空时为 []（键常驻，前端透明闭环照常消费）。"""
+    """no-topic 形（key 空）：done 载荷无 topic_id；references 清单恒空时为 []
+    （键常驻，前端透明闭环照常消费）。"""
     llm = FakeLLM(
         selection=ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
     )
