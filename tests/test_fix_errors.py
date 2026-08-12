@@ -26,6 +26,7 @@ from contest_generator.fix_errors import (
     parse_compile_errors,
     read_file_contexts,
     restore_backup,
+    summarize_compile_output,
 )
 
 
@@ -118,6 +119,71 @@ def test_parse_windows_absolute_path_is_degraded():
     assert errors == ()
     errors = parse_compile_errors(r"\proj\main.c(5): error #20: boom")
     assert errors == ()
+
+
+# ---------------------------------------------------------------------------
+# 编译输出数字汇总（工单 compile-experience-ui/01）：UV4 汇总行优先、无汇总
+# 退行级、空安全（红证：实施前本组断言失败）
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_uv4_summary_line_takes_values():
+    """UV4 汇总行（3 Error 5 Warning）→ 直接取汇总值，不数行。"""
+    text = (
+        r'..\main.c(10): error #20: identifier "x" is undefined' + "\n"
+        "3 Error(s), 5 Warning(s).\n"
+    )
+    assert summarize_compile_output(text, parse_compile_errors(text)) == {
+        "errors": 3,
+        "warnings": 5,
+    }
+
+
+def test_summarize_uv4_summary_line_no_comma():
+    """真机形态 "0 Error(s) 0 Warning(s)." 无逗号分隔——同样命中汇总行。"""
+    text = "Build started: Project: fake\n0 Error(s) 0 Warning(s).\n"
+    assert summarize_compile_output(text, parse_compile_errors(text)) == {
+        "errors": 0,
+        "warnings": 0,
+    }
+
+
+def test_summarize_uv4_summary_takes_precedence_over_line_count():
+    """汇总行优先：与行级计数不一致时以汇总值为准（2 条错误行但汇总 1）。"""
+    text = (
+        "..\\main.c(10): error #20: x\n"
+        "..\\main.c(12): error #20: y\n"
+        "1 Error(s), 0 Warning(s).\n"
+    )
+    assert summarize_compile_output(text, parse_compile_errors(text)) == {
+        "errors": 1,
+        "warnings": 0,
+    }
+
+
+def test_summarize_falls_back_to_line_level_without_summary():
+    """无汇总行（CCS / gmake）→ 行级计数：warning 按消息含 "warning" 判定。"""
+    text = (
+        "code/main.c:10: error: use of undeclared identifier 'x'\n"
+        "code/mod.c:12: warning: variable 't' was declared but never referenced\n"
+        "code/pid.c:15: error: too few arguments to function call\n"
+    )
+    parsed = parse_compile_errors(text)
+    assert summarize_compile_output(text, parsed) == {"errors": 2, "warnings": 1}
+
+
+def test_summarize_warning_detection_case_insensitive():
+    parsed = parse_compile_errors("main.c:5: WARNING #177-D: unused variable 'z'")
+    assert summarize_compile_output("", parsed) == {"errors": 0, "warnings": 1}
+
+
+def test_summarize_garbage_text_empty_safe():
+    garbage = "Target not created\nTotal time: 00:01:23\n"
+    assert summarize_compile_output(garbage, parse_compile_errors(garbage)) == {
+        "errors": 0,
+        "warnings": 0,
+    }
+    assert summarize_compile_output("", ()) == {"errors": 0, "warnings": 0}
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 
 import pytest
@@ -618,6 +618,126 @@ def test_compile_structure_error_is_stream_error_event(client, context, tmp_path
     errors = [data for kind, data in events if kind == EVENT_ERROR]
     assert errors, f"流未以 error 收尾：{events}"
     assert ".uvprojx" in errors[0]["message"]
+
+
+def test_compile_done_payload_carries_duration_parsed_summary(
+    client, context, tmp_path, monkeypatch
+):
+    """展示层（工单 compile-experience-ui/01）：done 追加 duration / parsed_errors
+    / summary，不改旧字段——红证：实施前本测试断言失败。"""
+    out = _stm32_project(tmp_path)
+    fake_uv4 = _fake_uv4_bat(
+        tmp_path, 2,
+        [
+            "Build started: Project: fake",
+            r'..\main.c(10): error #20: identifier "x" is undefined',
+            "1 Error(s), 0 Warning(s).",
+        ],
+    )
+    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    done = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})[-1][1]
+    # 既有字段不动
+    assert done["exit_code"] == 2 and done["passed"] is False
+    assert r'..\main.c(10): error #20' in done["error_text"]
+    # 新增字段
+    assert isinstance(done["duration"], float) and done["duration"] > 0
+    assert done["summary"] == {"errors": 1, "warnings": 0}
+    assert done["parsed_errors"] == [
+        {
+            "path": "../main.c",
+            "line": 10,
+            "message": r'..\main.c(10): error #20: identifier "x" is undefined',
+        }
+    ]
+    # 与 fix-errors done 的 parsed 同构（同字段集）
+    assert set(done["parsed_errors"][0]) == {"path", "line", "message"}
+
+
+def test_compile_done_success_summary_zero(client, context, tmp_path, monkeypatch):
+    """成功编译（汇总行 0 Error 0 Warning）→ summary {0,0}、parsed_errors 空。"""
+    out = _stm32_project(tmp_path)
+    fake_uv4 = _fake_uv4_bat(tmp_path, 0, ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."])
+    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    done = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})[-1][1]
+    assert done["summary"] == {"errors": 0, "warnings": 0}
+    assert done["parsed_errors"] == []
+    assert done["duration"] > 0
+
+
+# ---------------------------------------------------------------------------
+# 源码行接口（工单 compile-experience-ui/01）：薄读取 + 双基准路径判决
+# ---------------------------------------------------------------------------
+
+
+def _source_line(client, output_dir, path, line) -> Any:
+    return client.post(
+        "/api/compile/source-line",
+        json={"output_dir": str(output_dir), "path": path, "line": line},
+    )
+
+
+def test_source_line_hit_returns_current_line(client, tmp_path):
+    """命中 → 200 {path_resolved, line_text}（读修复后的当前文件）。"""
+    out = tmp_path / "proj"
+    out.mkdir()
+    (out / "main.c").write_text("int main(void) {\n    return 0;\n}\n", encoding="utf-8")
+    resp = _source_line(client, out, "main.c", 2)
+    assert resp.status_code == 200
+    assert resp.json() == {"path_resolved": "main.c", "line_text": "    return 0;"}
+
+
+def test_source_line_dual_benchmark_dotdot_hit(client, tmp_path):
+    """UV4 `..\\` 形态：uvprojx 在 user/ 子目录，按工程文件基准解析回工程根。"""
+    out = tmp_path / "proj"
+    (out / "user").mkdir(parents=True)
+    (out / "user" / "Project.uvprojx").write_text("<x/>", encoding="utf-8")
+    (out / "main.c").write_text("int main(void) {\n    return 0;\n}\n", encoding="utf-8")
+    resp = _source_line(client, out, "../main.c", 1)
+    assert resp.status_code == 200
+    assert resp.json() == {"path_resolved": "main.c", "line_text": "int main(void) {"}
+
+
+def test_source_line_escape_rejected(client, tmp_path):
+    """containment：`..\\..\\` 穿越 → 400 中文（双基准解析后仍越界拒绝）。"""
+    out = tmp_path / "proj"
+    (out / "user").mkdir(parents=True)
+    (out / "user" / "Project.uvprojx").write_text("<x/>", encoding="utf-8")
+    (tmp_path / "outside.c").write_text("x", encoding="utf-8")
+    for path in ("../../outside.c", "../outside.c"):
+        resp = _source_line(client, out, path, 1)
+        assert resp.status_code == 400
+        assert ("越界" in resp.json()["detail"]) or ("不存在" in resp.json()["detail"])
+
+
+def test_source_line_missing_file_400(client, tmp_path):
+    out = tmp_path / "proj"
+    out.mkdir()
+    resp = _source_line(client, out, "main.c", 1)
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
+
+
+def test_source_line_line_out_of_range_400(client, tmp_path):
+    out = tmp_path / "proj"
+    out.mkdir()
+    (out / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    resp = _source_line(client, out, "main.c", 99)
+    assert resp.status_code == 400
+    assert "越界" in resp.json()["detail"]
+
+
+def test_source_line_requires_valid_line(client, tmp_path):
+    """line 缺失 / 非数字 / 小于 1 → 400（参数校验）。"""
+    out = tmp_path / "proj"
+    out.mkdir()
+    (out / "main.c").write_text("x", encoding="utf-8")
+    for payload in (
+        {"output_dir": str(out), "path": "main.c"},
+        {"output_dir": str(out), "path": "main.c", "line": "abc"},
+        {"output_dir": str(out), "path": "main.c", "line": 0},
+    ):
+        resp = client.post("/api/compile/source-line", json=payload)
+        assert resp.status_code == 400
 
 
 def test_compile_mspm0_gmake_end_to_end(client, context, tmp_path, monkeypatch):

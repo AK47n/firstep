@@ -124,6 +124,13 @@ _CCS_ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UV4 汇总行（工单 compile-experience-ui/01）：标准形态 "1 Error(s), 0
+# Warning(s)." 与真机形态 "0 Error(s) 0 Warning(s)."（无逗号）都命中；
+# Warning 段缺省（如 "5 Error(s)."）时按 0 处理
+_UV4_SUMMARY_RE = re.compile(
+    r"(?P<errors>\d+)\s+Error\(s\)(?:[,\s]+(?P<warnings>\d+)\s+Warning\(s\))?"
+)
+
 
 def parse_compile_errors(error_text: str) -> tuple[CompileError, ...]:
     """逐行解析编译报错 → CompileError 列表（路径归一为 POSIX）。
@@ -148,6 +155,28 @@ def parse_compile_errors(error_text: str) -> tuple[CompileError, ...]:
             CompileError(path=path, line=int(match.group("line")), message=stripped)
         )
     return tuple(parsed)
+
+
+def summarize_compile_output(
+    error_text: str, parsed_errors: Sequence[CompileError]
+) -> dict[str, int]:
+    """编译输出数字汇总（工单 compile-experience-ui/01）：{errors, warnings}。
+
+    UV4 汇总行优先——命中即取汇总值（errors / warnings 都来自汇总行，与行级
+    计数可能不一致，以汇总为准）；未命中（CCS / gmake 无汇总行）退行级：
+    len(parsed_errors) 为底，warning 条数 = 消息含 "warning"（大小写不敏感）
+    计数，errors = 总数 − warnings。垃圾 / 空文本 → {0, 0}，不崩。
+    与 parse_compile_errors 同文件（解析域单源），展示层汇总与修复层解析
+    共用同一份编译输出，禁止调用方另写正则。
+    """
+    match = _UV4_SUMMARY_RE.search(error_text or "")
+    if match is not None:
+        return {
+            "errors": int(match.group("errors")),
+            "warnings": int(match.group("warnings") or 0),
+        }
+    warnings = sum(1 for error in parsed_errors if "warning" in error.message.lower())
+    return {"errors": len(parsed_errors) - warnings, "warnings": warnings}
 
 
 def _report_benchmarks(output_dir: Path) -> tuple[Path, ...]:
@@ -221,6 +250,18 @@ def _resolve_in_root(
         if target.is_relative_to(root) and target.is_file():
             return target
     return None
+
+
+def resolve_source_path(output_dir: Path, path: str) -> Path | None:
+    """展示层源码行接口的路径判决（工单 compile-experience-ui/01）：复用
+    collect_candidate_paths 同款双基准解析（工程根 + 工程文件基准目录）与
+    containment 校验——resolve 后必须在输出目录内，`..` 穿越 / 绝对路径
+    越界拒绝。解析不到（不存在 / 越界）返回 None，调用方转 400 中文。
+    与修复域共用同一套路径判决，杜绝展示 / 修复两套解析漂移。
+    """
+    return _resolve_in_root(
+        output_dir, output_dir.resolve(), path, _report_benchmarks(output_dir)
+    )
 
 
 def read_file_contexts(
