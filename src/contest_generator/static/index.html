@@ -126,6 +126,15 @@
   #tab-reference th:nth-child(6), #tab-reference td:nth-child(6) { width: 140px; }
   #tab-reference td { overflow-wrap: break-word; }
   #tab-reference td:nth-child(6) { white-space: nowrap; }
+  /* PDF 资料库表：文件名自适应、批次固定宽、操作列窄 */
+  #tab-pdf table { table-layout: fixed; min-width: 760px; }
+  #tab-pdf .card { overflow-x: auto; }
+  #tab-pdf th:nth-child(1), #tab-pdf td:nth-child(1) { width: auto; }
+  #tab-pdf th:nth-child(2), #tab-pdf td:nth-child(2) { width: 220px; }
+  #tab-pdf th:nth-child(3), #tab-pdf td:nth-child(3) { width: 110px; }
+  #tab-pdf th:nth-child(4), #tab-pdf td:nth-child(4) { width: 80px; }
+  #tab-pdf td { overflow-wrap: break-word; }
+  #tab-pdf td:nth-child(4) { white-space: nowrap; }
   pre.result { background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 12px;
                font-size: 12px; overflow: auto; max-height: 320px; }
   .file-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; margin-bottom: 8px; }
@@ -226,6 +235,7 @@
   <button data-tab="generate" class="active">生成</button>
   <button data-tab="library">模块库</button>
   <button data-tab="reference">参考文件库</button>
+  <button data-tab="pdf">PDF 资料库</button>
   <button data-tab="topic">赛题库</button>
   <button data-tab="master">母版</button>
   <button data-tab="settings">设置</button>
@@ -448,6 +458,26 @@
     </div>
   </section>
 
+  <!-- ============================ PDF 资料库页 ============================ -->
+  <section id="tab-pdf" class="page">
+    <div class="card">
+      <h2>PDF 资料库 <span class="muted">（素材库全部 PDF 的直通入口——给人看的资料库；点「打开」浏览器原生预览）</span></h2>
+      <div class="row">
+        <div style="flex:1"><label>文件名 / 批次 / 路径</label><input type="text" id="pdf-filter" placeholder="如 TB6612、原理图、数据手册"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-pdf-search" class="primary">搜索</button>
+        <button id="btn-pdf-search-clear">清空并显示全部</button>
+        <span id="pdf-count" class="muted" style="margin-left:10px"></span>
+      </div>
+      <table style="margin-top:10px">
+        <thead><tr><th>文件名</th><th>批次</th><th>大小</th><th>操作</th></tr></thead>
+        <tbody id="pdf-rows"></tbody>
+      </table>
+      <div id="pdf-msg" class="error"></div>
+    </div>
+  </section>
+
   <!-- ============================ 赛题库页 ============================ -->
   <section id="tab-topic" class="page">
     <div class="card">
@@ -637,6 +667,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
     if (btn.dataset.tab === "library") loadLibrary();
     if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); }
+    if (btn.dataset.tab === "pdf") loadPdfs();
     if (btn.dataset.tab === "topic") loadTopics();
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "settings") loadSettings();
@@ -1529,6 +1560,43 @@ $("btn-ref-add").addEventListener("click", async () => {
     $("btn-ref-add").disabled = false;
     $("btn-ref-add").innerHTML = "入库";
   }
+});
+
+// ---------------------------------------------------------------------------
+// PDF 资料库页：素材库全量 PDF 浏览 / 搜索 / 直开预览（给人看的资料库）
+// ---------------------------------------------------------------------------
+function pdfFileUrl(relPath) {
+  const segments = relPath.split("/").map(encodeURIComponent).join("/");
+  return "/api/pdfs/" + segments;
+}
+
+async function loadPdfs() {
+  try {
+    const q = $("pdf-filter").value.trim();
+    const url = "/api/pdfs" + (q ? "?name=" + encodeURIComponent(q) : "");
+    const pdfs = await apiGet(url);
+    $("pdf-count").textContent = q ? `命中 ${pdfs.length} 份` : `共 ${pdfs.length} 份 PDF`;
+    $("pdf-rows").innerHTML = pdfs.length ? pdfs.map((p) => `
+      <tr>
+        <td><a href="#" data-open-pdf="${esc(p.rel_path)}" title="${esc(p.rel_path)}">${esc(p.name)}</a></td>
+        <td class="muted">${esc(p.batch)}</td>
+        <td class="muted">${formatSize(p.size_bytes)}</td>
+        <td><button data-open-pdf="${esc(p.rel_path)}">打开</button></td>
+      </tr>`).join("")
+      : '<tr><td colspan="4" class="muted">素材库中暂无 PDF。</td></tr>';
+    $("pdf-rows").querySelectorAll("[data-open-pdf]").forEach((el) =>
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        window.open(pdfFileUrl(el.dataset.openPdf), "_blank"); // 浏览器原生 PDF 预览
+      }));
+    $("pdf-msg").textContent = "";
+  } catch (e) { $("pdf-msg").textContent = e.message; }
+}
+
+$("btn-pdf-search").addEventListener("click", loadPdfs);
+$("btn-pdf-search-clear").addEventListener("click", () => {
+  $("pdf-filter").value = "";
+  loadPdfs();
 });
 
 // ---------------------------------------------------------------------------

@@ -70,6 +70,7 @@ from .master_store import (
     master_project_dir,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .pdf_library import list_pdfs, resolve_pdf
 from .reference_library import (
     PLATFORM_ANY,
     add_reference,
@@ -1031,6 +1032,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             rel_path,
         )
         return FileResponse(path, media_type=media_type)
+
+    # ------------------------------------------------------------------
+    # PDF 资料库（给人看的资料库）：素材库全量 PDF 浏览 / 搜索 / 直开预览
+    # ------------------------------------------------------------------
+
+    @app.get("/api/pdfs")
+    @_map_errors
+    def pdfs(name: str = "") -> list[dict]:
+        """浏览素材库 PDF：全量清单（批次 / 文件名 / 大小），名字串过滤。"""
+        config = _require_config(context)
+        return list_pdfs(materials_dir(config.module_library_dir), name=name)
+
+    @app.get("/api/pdfs/{rel_path:path}")
+    @_map_errors
+    def pdf_file(rel_path: str) -> FileResponse:
+        """PDF 直开：application/pdf 返回供浏览器原生预览（路径安全在库内）。"""
+        config = _require_config(context)
+        return FileResponse(
+            resolve_pdf(materials_dir(config.module_library_dir), rel_path),
+            media_type="application/pdf",
+        )
 
     # ------------------------------------------------------------------
     # 赛题库（工单 01/05）：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）

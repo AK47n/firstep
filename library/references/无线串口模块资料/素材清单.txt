@@ -16,7 +16,7 @@ DL-43P/DL-43P原理图.pdf  1630022 bytes
 DL-43P/DL-43P尺寸图.pdf  9618 bytes
 DL-43P/DL-43P按键配置使用说明书.jpg  460014 bytes
 DL-43P/DL-43P软件配置使用说明书.pdf  299187 bytes
-DL-43P/DL-43尺寸图 -详细.pdf  1652197 bytes
+DL-43P/DL-43P尺寸图(详细).pdf  1652197 bytes
 串口调试助手/UartAssist.exe  1034752 bytes
 参数介绍.jpg  299554 bytes
 工作状态说明.jpg  181844 bytes

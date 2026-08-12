@@ -2536,3 +2536,65 @@ def test_recommend_route_body_free_of_orchestration_calls():
         "/api/recommend 路由含编排调用，编排必须归 selection.run_recommendation："
         + "；".join(ast.unparse(node) for node in forbidden)
     )
+
+
+# ---------------------------------------------------------------------------
+# PDF 资料库（给人看的资料库）：素材库 PDF 浏览 / 搜索 / 直开预览
+# ---------------------------------------------------------------------------
+
+def _make_materials_pdfs(tmp_path) -> None:
+    """素材镜像（sources/materials，与模块库同级推导）搭两批次 PDF + 干扰文件。"""
+    a = tmp_path / "sources" / "materials" / "2026_04_地猛星配套资料" / "6 TB6612电机驱动资料" / "3.芯片手册"
+    a.mkdir(parents=True)
+    (a / "TB6612FNG Datasheet.pdf").write_bytes(b"%PDF-1.4\nfake a")
+    (tmp_path / "sources" / "materials" / "2026_04_地猛星配套资料" / "readme.txt").write_text(
+        "not a pdf", encoding="utf-8"
+    )
+    b = tmp_path / "sources" / "materials" / "2026_06_电赛视觉资料"
+    b.mkdir(parents=True)
+    (b / "09_泰山派原理图.PDF").write_bytes(b"%PDF-1.4\nfake b")
+
+
+def test_pdfs_lists_all_sorted_with_batch_and_size(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    pdfs = client.get("/api/pdfs").json()
+    assert [p["name"] for p in pdfs] == ["TB6612FNG Datasheet.pdf", "09_泰山派原理图.PDF"]
+    assert [p["batch"] for p in pdfs] == ["2026_04_地猛星配套资料", "2026_06_电赛视觉资料"]
+    assert pdfs[0]["size_bytes"] == len(b"%PDF-1.4\nfake a")
+    assert pdfs[0]["rel_path"].endswith("3.芯片手册/TB6612FNG Datasheet.pdf")
+
+
+def test_pdfs_filters_by_name(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    hit = client.get("/api/pdfs", params={"name": "tb6612"}).json()
+    assert [p["name"] for p in hit] == ["TB6612FNG Datasheet.pdf"]
+    by_batch = client.get("/api/pdfs", params={"name": "视觉资料"}).json()
+    assert [p["name"] for p in by_batch] == ["09_泰山派原理图.PDF"]
+    assert client.get("/api/pdfs", params={"name": "不存在"}).json() == []
+
+
+def test_pdf_file_serves_application_pdf(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    url = "/api/pdfs/" + quote(
+        "2026_04_地猛星配套资料/6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf",
+        safe="/",
+    )
+    resp = client.get(url)
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-1.4\nfake a"
+    assert resp.headers["content-type"] == "application/pdf"
+
+
+@pytest.mark.parametrize("bad", ["../secret.pdf", "..\\secret.pdf", "/etc/passwd.pdf", "a//b.pdf", "c:/win.pdf"])
+def test_pdf_file_rejects_unsafe_paths(client, context, tmp_path, bad):
+    _make_materials_pdfs(tmp_path)
+    resp = client.get("/api/pdfs/" + quote(bad, safe=""))
+    assert resp.status_code == 400
+    assert "非法文件路径" in resp.json()["detail"]
+
+
+def test_pdf_file_missing_returns_400(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    resp = client.get("/api/pdfs/" + quote("不存在/资料.pdf", safe="/"))
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
