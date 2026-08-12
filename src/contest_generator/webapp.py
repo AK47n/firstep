@@ -829,17 +829,23 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         duration（秒，float，子进程实际耗时）/ parsed_errors（[{path, line,
         message}]，parse_compile_errors 解析——与 fix-errors 的 parsed 同源
         同构）/ summary（{errors, warnings}，summarize_compile_output：UV4
-        汇总行优先、无汇总退行级）。阻塞调用（编译分钟级以内）放独立线程跑，
+        汇总行优先、无汇总退行级）。不要求 AI 配置（工单
+        compile-verdict-align/01：编译不调 LLM，只须工具链路径——无 api_key
+        的用户也应能"编译看结果"；修复按钮仍走 AI 配置校验，400 如实报、
+        循环自然停）。阻塞调用（编译分钟级以内）放独立线程跑，
         事件经队列送流生成器（与提炼 / 修复端点同款终态保证，断线旁路）。"""
         platform = _require_str(payload, "platform")
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
             raise CompileRunnerError(f"输出目录不存在：{output_dir}")
-        config = _require_config(context)
+        # 编译不调 LLM，不要求 AI 配置（工单 compile-verdict-align/01）：未配置
+        # 时 uv4_path / gmake_path 覆盖为空，走自动探测（find_uv4/find_make
+        # 空覆盖语义 = 常见路径 + PATH）
+        config = _current_config(context)
         # 工具链探测（config 覆盖 + 自动）：缺失 → 400 中文（前端回退贴文本），
         # 编译能力只在检测到工具链时启用（决策记录 1）
-        uv4 = find_uv4(config.uv4_path)
-        make = find_make(config.gmake_path)
+        uv4 = find_uv4(config.uv4_path if config else "")
+        make = find_make(config.gmake_path if config else "")
         if platform == PLATFORM_STM32 and uv4 is None:
             raise CompileRunnerError(
                 "未检测到 Keil UV4 工具链（常见路径 C:\\Keil5\\Core\\UV4\\UV4.exe；"

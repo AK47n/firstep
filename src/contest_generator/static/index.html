@@ -1449,8 +1449,9 @@ $("btn-handoff-copy").addEventListener("click", async () => {
 // 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
 // 自动采集报错 → 喂 fix-errors 管线修复 → 重编译验证，循环 ≤3 轮；无工具链
 // 回退贴文本模式（工单 compile-error-fix/01 既有路径保留）。事件词表镜像
-// events.py：compile_start / parse_done / fix_start / retry / apply_result /
-// done / error。循环状态机在前端（服务端只做单次编译），轮次可见"第 N/3 轮"。
+// events.py：compile_start / parse_done / fix_start / apply_result / done /
+// error（retry 是蒸馏层事件，修复流不发；实现发事件时再加回）。循环状态机
+// 在前端（服务端只做单次编译），轮次可见"第 N/3 轮"。
 // ---------------------------------------------------------------------------
 const FIX_MAX_ROUNDS = 3;
 let lastFix = null;          // {output_dir, backup_id}：回滚按钮的入口（done 终态后置位）
@@ -1602,11 +1603,6 @@ function updateFixCenterAvailability() {
     : ok ? "" : "未检测到该平台工具链（可在设置页配置路径），请用贴文本模式";
 }
 
-function fixErrorCount(text) {   // 编译输出里 "N Error(s)" 的条数；解析不到返回 null
-  const m = String(text || "").match(/(\d+)\s+Error\(s\)/);
-  return m ? parseInt(m[1], 10) : null;
-}
-
 function fixHandleEvent(type, raw, outputDir) {
   let data = {};
   try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
@@ -1617,8 +1613,6 @@ function fixHandleEvent(type, raw, outputDir) {
           : "，定位 " + data.file_count + " 个文件") + "，AI 修复中…";
   } else if (type === "fix_start") {
     $("fix-status").textContent = "AI 正在逐条修复（分钟级调用，请等待）…";
-  } else if (type === "retry") {
-    $("fix-status").textContent = "AI 返回异常，第 " + (data.retry_round || 1) + " 轮重试中…";
   } else if (type === "apply_result") {
     $("fix-status").textContent = "";
     const applied = data.status === "applied";
@@ -1683,7 +1677,10 @@ async function runCompileOnce(outputDir) {
   await parseSSE(resp, (type, raw) => {
     let data = {};
     try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
-    if (type === "done") { done = data; finished = true; }
+    if (type === "compile_start") {   // 事件有人消费（词表真实化）：文案与 fetch 前写死的一致
+      compileBanner("running", "编译中…"
+        + (fixLoop.round > 0 ? "（第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS + " 轮）" : ""));
+    } else if (type === "done") { done = data; finished = true; }
     else if (type === "error") { errorMsg = data.message || "编译失败"; finished = true; }
   });
   if (errorMsg) { compileBanner("fail", "编译失败：" + errorMsg); throw new Error(errorMsg); }
@@ -1762,9 +1759,13 @@ async function startFixCenter() {
     // fixes 重渲染最终状态（展示层工单 compile-experience-ui/01）
     fixRenderResults(initial.parsed_errors || [], [], 0);
     // 报错 → 修复 → 重编译验证，≤3 轮；第 3 轮后如实报告剩余错误（不无限循环）
+    // 轮次文案错误数：判读单源 summary（工单 compile-verdict-align/01，删
+    // fixErrorCount 正则——fix_errors.py 明令禁止调用方另写正则）；lastSummary
+    // 与 errorText 同步更新，首轮即 initial 的 summary
     let errorText = initial.error_text;
+    let lastSummary = initial.summary || null;
     for (fixLoop.round = 1; fixLoop.round <= FIX_MAX_ROUNDS; fixLoop.round++) {
-      const n = fixErrorCount(errorText);
+      const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
       $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
         + " 轮：编译有错（" + (n !== null ? n + " 条 Error" : "多条报错") + "）→ AI 修复…";
       await runFixOnce(errorText, outputDir);   // 应用结果逐条展示（fix-results）
@@ -1772,6 +1773,7 @@ async function startFixCenter() {
         + " 轮：重编译验证中…";
       const compile = await runCompileOnce(outputDir);
       $("fix-center-log").value = compile.error_text || "";
+      lastSummary = compile.summary || null;
       // 轮次条追加耗时（展示层工单 compile-experience-ui/01；compile 必有 duration）
       $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
         + " 轮 · 耗时 " + fmtSeconds(compile.duration) + "s";
@@ -1788,7 +1790,7 @@ async function startFixCenter() {
       errorText = compile.error_text;   // 仍错 → 下一轮喂最新报错
     }
     // 第 3 轮后仍错：如实报告剩余错误清单（决策记录 2）
-    const n = fixErrorCount(errorText);
+    const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
     $("fix-status").textContent = "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余错误见上方编译输出（"
       + (n !== null ? n + " 条 Error" : "多条报错") + "）——可继续贴文本修复，或改工程后重试";
   } catch (e) {
