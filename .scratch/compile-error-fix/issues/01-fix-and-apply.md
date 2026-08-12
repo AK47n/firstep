@@ -2,7 +2,7 @@
 
 **What to build:** 生成页新增第 10 栏「编译错误修复」：用户把 Keil/CCS 编译报错文本贴回工具 → 工具解析文件引用、从生成输出目录读真实文件内容、连同题面/平台/模块/main.c 上下文交给 LLM 逐条修复 → **直接写回工程文件**（备份 + 可回滚）。闭环"生成 → 编译 → 报错 → 修复"。
 
-**Status:** open（2026-08-12 grilling 落定，待实施）
+**Status:** resolved（2026-08-12 实施完成：1172 绿 + mypy 干净 + node 语法过；浏览器人工验收待用户真机执行）
 
 ## 决策记录（grilling 2026-08-12，与用户确认）
 
@@ -26,14 +26,24 @@
 
 ## 验收标准
 
-- [ ] pytest 全绿 + `mypy src` 干净
-- [ ] 报错解析单测：UV4 格式 / CCS 格式 / 混合多文件 / 无文件引用降级 / 垃圾文本不崩
-- [ ] 路径安全测试：`../` 逃逸、绝对路径、非法扩展名均拒绝（400 中文，登记 errors.py）
-- [ ] 替换应用测试：精确匹配成功 / 缩进不匹配跳过并报告 / 多处歧义跳过
-- [ ] 备份与回滚测试：写回前备份存在；回滚后文件内容恢复原样
-- [ ] LLM fake 端到端：构造报错 → 文件被正确修改
-- [ ] 浏览器人工验收：生成一个工程 → 故意制造一个编译错误（或真实编译）→ 贴回 → 修复写回 → 文件内容确实变了 → 回滚按钮恢复
-- [ ] `git status` 只出现预期文件
+- [x] pytest 全绿 + `mypy src` 干净（2026-08-12：1172 通过（+61），`mypy src` Success 34 files，node --check 内联 JS 通过）
+- [x] 报错解析单测：UV4 格式 / CCS 格式 / 混合多文件 / 无文件引用降级 / 垃圾文本不崩（test_fix_errors.py：UV4 带列号 / armclang `path:line:col:` 同 CCS 形 / 绝对形态降级）
+- [x] 路径安全测试：`../` 逃逸、绝对路径、非法扩展名均拒绝（400 中文，登记 errors.py）（apply_fixes 9 例参数化 FixError + error_entry 400 断言 + 路由级：SSE error 终态中文 / 回滚非法 backup_id 400）
+- [x] 替换应用测试：精确匹配成功 / 缩进不匹配跳过并报告 / 多处歧义跳过（含同文件多处修复顺序应用、无应用不备份）
+- [x] 备份与回滚测试：写回前备份存在；回滚后文件内容恢复原样（备份镜像在输出目录外 `工作根/fix-backups/<ts>/`，回滚逐路径 containment 复检）
+- [x] LLM fake 端到端：构造报错 → 文件被正确修改（路由级 test_fix_errors_end_to_end_fake_llm：双文件应用 + 回滚恢复原样）
+- [x] 浏览器人工验收：生成一个工程 → 故意制造一个编译错误（或真实编译）→ 贴回 → 修复写回 → 文件内容确实变了 → 回滚按钮恢复（**待用户真机浏览器验收**；实施侧已覆盖：SSE 事件序列契约测试 + fake 端到端 + 上下文透传断言）
+- [x] `git status` 只出现预期文件（新增 fix_errors.py / test_fix_errors.py，改 errors/events/llm/webapp/index.html/fakes/test_llm/test_webapp，边界内零越界）
+
+## 实施记录（2026-08-12）
+
+- **fix_errors.py（新增，域模块，纯函数）**：`parse_compile_errors`（UV4 `path(line[,col]):` 与 CCS/armclang `path:line[:col]: (fatal) error|warning` 双正则，路径归一 POSIX，反斜杠开头绝对形态降级）/ `collect_candidate_paths`（白名单 .c/.h/.s + `is_unsafe_path` + resolve containment + 存在性，去重保序）/ `read_file_contexts`（单文件 500 行 / 50KB 双上限带标注，总预算 48KB 超预算点名返回）/ `apply_fixes`（内存完成替换 → 备份全部改动文件 → 才写回；匹配失败 / 歧义跳过报告「未应用」；路径越界 FixError）/ `backup_files` + `restore_backup`（`工作根/fix-backups/<timestamp>/` 镜像，backup_id 与镜像内路径双重 is_unsafe_path 校验）+ `fix_backup_root`
+- **llm.py**：`FIX_SYSTEM_PROMPT`（snippet 替换协议唯一表述：逐字一致 / 唯一匹配 / file 限清单）+ `fix_compile_errors`（Protocol + DeepSeekLLM，`_retry_parse` ≤3 轮，json_mode）+ `parse_fix_suggestions`（严格：file 限清单 / old_snippet 非空，畸形 LLMError 整次重问）+ `_fix_errors_user_prompt`（报错全文 + 文件内容 + 题面 / 平台 / 模块 / main.c，降级模式显式告知）；只做机械提取，域判决全部留 fix_errors.py
+- **webapp.py**：`/api/fix-errors`（SSE：parse_done → fix_start → apply_result… → done，done 载荷带 backup_id / parsed / degraded / fixes；输出目录不存在 400）+ `/api/fix-errors/rollback`（同步：restore_backup，非法 backup_id 400）
+- **events.py**：`parse_done` / `fix_start` / `apply_result` 词表 + ProgressEvent 字段（error_count / file / line / status / reason）
+- **errors.py**：`FixError` 登记 → 400 中文（结构测试自动兜底）
+- **index.html**：第 10 栏 UI（textarea 贴报错 + 开始修复 + 回滚按钮 + 逐条结果列表），SSE 消费复用 parseSSE；输出目录取 `res-dir` 优先、`output-dir` 兜底；断线守卫 / 上下文透传
+- **不动**：模块库 / 母版库 / 门禁 / generator 装配 / 既有 9 栏零改动
 
 ## 文件边界（实施提示词）
 

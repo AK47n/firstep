@@ -19,6 +19,7 @@ from typing import Callable
 from .ccs import CcsProjectError
 from .config import ConfigError
 from .extraction import ExtractionError
+from .fix_errors import FixError
 from .generator import DuplicateFilePathError, GeneratorError
 from .keil import KeilProjectError
 from .library import LibraryError
@@ -52,6 +53,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
     _ErrorEntry(
         (
             ExtractionError,
+            FixError,  # 编译错误修复（工单 compile-error-fix/01）：路径越界 / 白名单外扩展名拒绝
             LibraryError,
             MasterError,
             SelectionError,

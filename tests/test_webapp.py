@@ -25,11 +25,14 @@ from contest_generator.config import (
     topic_library_dir,
 )
 from contest_generator.events import (
+    EVENT_APPLY_RESULT,
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
     EVENT_CONVERGED,
     EVENT_DONE,
     EVENT_ERROR,
+    EVENT_FIX_START,
+    EVENT_PARSE_DONE,
     EVENT_PHASE_DONE,
     EVENT_QUESTION,
     EVENT_RETRY,
@@ -40,6 +43,7 @@ from contest_generator.events import (
     ProgressEmitter,
     ProgressEvent,
 )
+from contest_generator.fix_errors import FixSuggestion
 from contest_generator.llm import LLMError
 from contest_generator.library import ValidationResult
 from contest_generator.selection import (
@@ -323,6 +327,183 @@ def _recommend_done(client, payload) -> dict:
     done = [data for kind, data in events if kind == EVENT_DONE]
     assert done, f"流未以 done 结束：{events}"
     return done[0]
+
+
+# ---------------------------------------------------------------------------
+# 编译错误修复（工单 compile-error-fix/01）：SSE 流端到端 + 回滚
+# ---------------------------------------------------------------------------
+
+
+def _fix_project(tmp_path) -> Path:
+    """生成结果目录样貌：main.c + code/mod.c（修复端到端断言用）。"""
+    out = tmp_path / "project"
+    out.mkdir()
+    (out / "main.c").write_text(
+        "int x = 1;\nint main(void) { return x; }\n", encoding="utf-8"
+    )
+    (out / "code").mkdir()
+    (out / "code" / "mod.c").write_text("int mod(void) { return 1; }\n", encoding="utf-8")
+    return out
+
+
+def _fix_stream(client, payload) -> list[tuple[str, dict]]:
+    """POST 修复端点并解析 SSE 事件序列（HTTP 200 起流）。"""
+    resp = client.post("/api/fix-errors", json=payload)
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    return _parse_sse(resp.text)
+
+
+def _fix_done(client, payload) -> dict:
+    """修复端点 → done 载荷；流以 error 收尾则断言失败。"""
+    events = _fix_stream(client, payload)
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, f"流未以 done 结束：{events}"
+    return done[0]
+
+
+def test_fix_errors_requires_error_text(client):
+    resp = client.post("/api/fix-errors", json={"output_dir": "C:\\x"})
+    assert resp.status_code == 400
+    assert "error_text" in resp.json()["detail"]
+
+
+def test_fix_errors_requires_existing_output_dir(client, tmp_path):
+    resp = client.post(
+        "/api/fix-errors",
+        json={"output_dir": str(tmp_path / "gone"), "error_text": "main.c(1): error #20: boom"},
+    )
+    assert resp.status_code == 400
+    assert "输出目录不存在" in resp.json()["detail"]
+
+
+def test_fix_errors_end_to_end_fake_llm(client, context, tmp_path):
+    """LLM fake 端到端（验收项）：构造报错 → 文件被正确修改 → 回滚恢复。"""
+    out = _fix_project(tmp_path)
+    holder = context[1]
+    holder["llm"] = FakeLLM(
+        fixes=(
+            FixSuggestion(
+                file="main.c", line=1, old_snippet="int x = 1;",
+                new_snippet="int x = 2;", reason="修复初始化",
+            ),
+            FixSuggestion(
+                file="code/mod.c", line=1, old_snippet="return 1;",
+                new_snippet="return 0;", reason="修复返回值",
+            ),
+        )
+    )
+    done = _fix_done(
+        client,
+        {
+            "output_dir": str(out),
+            "error_text": "main.c(1): error #20: identifier \"x\" is undefined\n"
+                          "code/mod.c:1: error: return type mismatch",
+            "problem_text": "赛题：做个小车",
+            "platform": "stm32",
+            "slugs": ["dht11", "oled"],
+            "main_c": "int main(void) { return 0; }",
+        },
+    )
+    assert done["degraded"] is False
+    assert {p["path"] for p in done["parsed"]} == {"main.c", "code/mod.c"}
+    assert done["fixes"] == [
+        {"file": "main.c", "line": 1, "status": "applied", "reason": ""},
+        {"file": "code/mod.c", "line": 1, "status": "applied", "reason": ""},
+    ]
+    assert done["backup_id"]
+    # 文件确实被修改
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 2;\nint main(void) { return x; }\n"
+    assert (out / "code" / "mod.c").read_text(encoding="utf-8") == "int mod(void) { return 0; }\n"
+    # 回滚恢复原样（验收项：回滚按钮恢复）
+    resp = client.post(
+        "/api/fix-errors/rollback",
+        json={"output_dir": str(out), "backup_id": done["backup_id"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["restored"] == ["code/mod.c", "main.c"]
+    assert (out / "main.c").read_text(encoding="utf-8") == "int x = 1;\nint main(void) { return x; }\n"
+    assert (out / "code" / "mod.c").read_text(encoding="utf-8") == "int mod(void) { return 1; }\n"
+
+
+def test_fix_errors_event_sequence_and_context_passed(client, context, tmp_path):
+    """事件序列契约（决策记录 8）：parse_done → fix_start → apply_result… → done。"""
+    out = _fix_project(tmp_path)
+    holder = context[1]
+    holder["llm"] = FakeLLM(
+        fixes=(FixSuggestion(file="main.c", line=1, old_snippet="int x = 1;", new_snippet="int x = 2;", reason=""),)
+    )
+    events = _fix_stream(
+        client,
+        {"output_dir": str(out), "error_text": "main.c(1): error #20: boom"},
+    )
+    assert [kind for kind, _ in events] == [
+        EVENT_PARSE_DONE, EVENT_FIX_START, EVENT_APPLY_RESULT, EVENT_DONE,
+    ]
+    parse_done = events[0][1]
+    assert parse_done["error_count"] == 1 and parse_done["file_count"] == 1
+    apply_result = events[2][1]
+    assert apply_result["file"] == "main.c" and apply_result["status"] == "applied"
+    # 上下文（题面 / 平台 / 模块 / main.c）已透传给假 LLM
+    call = holder["llm"].fix_errors_calls[0]
+    assert call[1] == {"main.c": "int x = 1;\nint main(void) { return x; }\n"}
+    assert call[2] == "" and call[3] == "" and call[4] == () and call[5] == ""
+
+
+def test_fix_errors_unsafe_fix_path_ends_with_error_event(client, context, tmp_path):
+    """修复建议越界（../ 逃逸）→ 流内 error 终态 + 中文信息（HTTP 200 起流）。"""
+    out = _fix_project(tmp_path)
+    holder = context[1]
+    holder["llm"] = FakeLLM(
+        fixes=(FixSuggestion(file="../evil.c", line=1, old_snippet="a", new_snippet="b", reason=""),)
+    )
+    events = _fix_stream(
+        client,
+        {"output_dir": str(out), "error_text": "main.c(1): error #20: boom"},
+    )
+    errors = [data for kind, data in events if kind == EVENT_ERROR]
+    assert errors, f"流未以 error 收尾：{events}"
+    assert "路径不安全" in errors[0]["message"]
+    # 越界不写任何文件
+    assert (out / "main.c").read_text(encoding="utf-8").startswith("int x = 1;")
+
+
+def test_fix_errors_degraded_mode_no_file_context(client, context, tmp_path):
+    """报错无文件引用（链接错误等）→ 降级模式：无文件上下文，仍可 done。"""
+    out = _fix_project(tmp_path)
+    holder = context[1]
+    holder["llm"] = FakeLLM()  # 默认空 fixes
+    done = _fix_done(
+        client,
+        {
+            "output_dir": str(out),
+            "error_text": "L6200E: Symbol foo multiply defined (by main.o and bar.o)",
+        },
+    )
+    assert done["degraded"] is True
+    assert done["fixes"] == [] and done["backup_id"] == ""
+    call = holder["llm"].fix_errors_calls[0]
+    assert call[1] == {}  # 无文件上下文
+
+
+def test_fix_errors_rollback_rejects_unsafe_backup_id(client, tmp_path):
+    out = _fix_project(tmp_path)
+    resp = client.post(
+        "/api/fix-errors/rollback",
+        json={"output_dir": str(out), "backup_id": "../evil"},
+    )
+    assert resp.status_code == 400
+    assert "非法的备份编号" in resp.json()["detail"]
+
+
+def test_fix_errors_rollback_missing_backup_raises(client, tmp_path):
+    out = _fix_project(tmp_path)
+    resp = client.post(
+        "/api/fix-errors/rollback",
+        json={"output_dir": str(out), "backup_id": "20260812-000000"},
+    )
+    assert resp.status_code == 400
+    assert "备份不存在" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
