@@ -57,6 +57,63 @@ class ValidationResult:
 
 
 # ---------------------------------------------------------------------------
+# 简介判据④（无题绑定）机械词表（唯一出处）
+#
+# ADR 0009：模块 = 纯驱动切片，"XX 题专用"不再是合法模块类别。判据④ = 简介
+# 不得绑定具体赛题（禁题号/年份/题名）。机械词表单源在此：结构测试
+# （tests/test_module_universality.py）与补录流程（validate_description）共用，
+# 改词表只改这一处。能力词白名单防误伤："巡线""循迹""PID""灰度"是能力词，
+# 不能禁——黑名单命中区间落在能力词出现区间内 = 不计。
+# ---------------------------------------------------------------------------
+
+BANNED_TOPIC_WORDS = ("2021F", "2024H", "2026C", "2026H", "钥匙", "锁")
+
+CAPABILITY_WORDS = ("巡线", "循迹", "PID", "灰度")
+
+
+def find_topic_word_hits(
+    text: str,
+    banned: Sequence[str] = BANNED_TOPIC_WORDS,
+    capability: Sequence[str] = CAPABILITY_WORDS,
+) -> list[str]:
+    """文本中命中判据④黑名单的词（去重保序；落在能力词白名单内的命中不计）。
+
+    能力词白名单防误伤（"巡线是能力词，不能禁"）：黑名单命中区间若落在某能力
+    词出现区间内则不计数——词表把"锁"加进黑名单时，"锁定"（latch 语境）不
+    误伤；反过来能力词不遮蔽题名引用（黑名单"巡线题"含能力词"巡线"但不在其
+    区间内 → 仍计）。banned / capability 参数供测试注入合成词表（默认值 =
+    单源词表）。
+    """
+    hits: list[str] = []
+    for word in banned:
+        start = 0
+        while True:
+            index = text.find(word, start)
+            if index < 0:
+                break
+            if not _inside_capability_word(text, index, len(word), capability):
+                hits.append(word)
+            start = index + len(word)
+    return list(dict.fromkeys(hits))
+
+
+def _inside_capability_word(
+    text: str, start: int, length: int, capability: Sequence[str]
+) -> bool:
+    """黑名单命中区间是否落在某能力词出现区间内（是 = 不计）。"""
+    for word in capability:
+        j = 0
+        while True:
+            k = text.find(word, j)
+            if k < 0:
+                break
+            if k <= start and start + length <= k + len(word):
+                return True
+            j = k + len(word)
+    return False
+
+
+# ---------------------------------------------------------------------------
 # 浏览 / 编辑 / 删除（磁盘目录即数据库，操作即时生效）
 # ---------------------------------------------------------------------------
 
@@ -173,7 +230,21 @@ def draft_description(llm: LLM, files: Mapping[str, str]) -> str:
 def validate_description(
     llm: LLM, description: str, files: Mapping[str, str]
 ) -> ValidationResult:
-    """AI 校验简介与实际代码是否一致。"""
+    """简介校验（判据四要素）：④ 无题绑定机械预检，① 一致 / ③ 能力方向走 AI。
+
+    判据④ 先机械拦截：简介命中题号/年份/题名黑名单 → 直接 LibraryError（中文
+    改写指引），不调 AI——机械可判的不用 AI（词表单源 BANNED_TOPIC_WORDS，与
+    结构测试共用）。判据①③ 由 AI 校验（llm.py 提示词判据③④）。add_module /
+    update_module_description 都走这里，④ 拒绝在落盘前。
+    """
+    hits = find_topic_word_hits(description)
+    if hits:
+        raise LibraryError(
+            "模块简介不能绑定具体赛题（判据④ 无题绑定）：命中 "
+            + "、".join(hits)
+            + "。请改写为普适的能力描述（声明可用于哪类赛题功能，如"
+            '"灰度循迹驱动""PID 闭环控制"），去掉题号/年份/题名引用'
+        )
     return llm.validate_module_description(description, _assemble_code(files))
 
 
