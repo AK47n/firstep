@@ -28,12 +28,12 @@ codecao/09_2AI识别数字.py  7313 bytes
 openmv-ide-windows-2.9.7.exe  128589608 bytes
 python基础.ipynb  5852 bytes
 rufus-4.4.exe  1432648 bytes
-SCH_立创·庐山派K230-CanMV开发板-主板-原理图-202409271447.pdf  2821536 bytes
+立创·庐山派K230-CanMV开发板原理图.pdf  2821536 bytes
 天猛星资料/天猛星资料.txt  173 bytes
 引脚图.png  1256495 bytes
-材料/09AI识别数字.pdf  102554 bytes
+材料/09_AI数字识别.pdf  102554 bytes
 材料/2023年E题模拟练习.pdf  128452 bytes
 材料/AI_cube/数字分类.zip  23602638 bytes
 材料/dataset.zip  179841474 bytes
-材料/大矩形.pdf  1225 bytes
+材料/大矩形(视觉识别训练样本).pdf  1225 bytes
 材料/简单图形的识别.pdf  8638 bytes

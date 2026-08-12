@@ -22,8 +22,8 @@ USB转TTL下载接线图.png  87984 bytes
 安装摄像头.gif  3177097 bytes
 开发资料/esp32-cam产品规格书.pdf  721534 bytes
 开发资料/ESP32_CAMERA_QR-master.zip  775523 bytes
-开发资料/esp32_datasheet_cn.pdf  1145108 bytes
-开发资料/esp32_technical_reference_manual_cn.pdf  8779264 bytes
+开发资料/ESP32数据手册(中文).pdf  1145108 bytes
+开发资料/ESP32技术参考手册(中文).pdf  8779264 bytes
 开发资料/出厂默认固件ai-thinker_esp32-cam_dio_v1.0_20180825.zip  524022 bytes
-开发资料/摄像头ov2640_ds_1.8_.pdf  3587282 bytes
+开发资料/OV2640摄像头传感器数据手册.pdf  3587282 bytes
 注意事项.txt  878 bytes
