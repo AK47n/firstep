@@ -2,7 +2,23 @@
 
 **What to build:** 生成页新增第 10 栏「编译错误修复」：用户把 Keil/CCS 编译报错文本贴回工具 → 工具解析文件引用、从生成输出目录读真实文件内容、连同题面/平台/模块/main.c 上下文交给 LLM 逐条修复 → **直接写回工程文件**（备份 + 可回滚）。闭环"生成 → 编译 → 报错 → 修复"。
 
-**Status:** resolved（2026-08-12 实施完成：1172 绿 + mypy 干净 + node 语法过；浏览器人工验收待用户真机执行）
+**Status:** resolved（2026-08-12 实施完成：1172 绿 + mypy 干净 + node 语法过；真机验收闭环 2026-08-12：全链路实测通过 + 路径基准 blocker 修复（本工单后续 commit））
+
+## 真机验收记录（2026-08-12，接口层全真实链路，用户授权执行）
+
+**链路**：真实生成（/api/generate 直连 2026C stm32，5 模块 out_fix_accept）→ 注入编译错误 + 发现历史真实错误 → 真实 UV4 编译（/c/Keil5/Core/UV4/UV4.exe -j0 -r -b）→ 真实 DeepSeek 修复（三轮）→ 写回验证 → 回滚验证 → 最终重编译 **0 Error(s) 4 Warning(s)**。
+
+**验收发现 blocker（已修复）**：stm32 母版产物 uvprojx 在 `user/` 子目录，UV4 报错路径是相对它的 `..\main.c(158)` 形态——`collect_candidate_paths` 用 `is_unsafe_path` 拒 `..` 且 containment 以工程根为基准 → **真实布局下候选全空（file_count=0）→ 全降级 → LLM 建议被空 file 清单拒绝 → 3 轮重试 × ~65s 真实调用白跑 → error 终态"AI 服务调用失败"（误导归因）**。单测 UV4 用例用无前缀形态，与真实输出脱节。
+
+**修复（域内方案）**：`fix_errors.py` 新增 `_report_benchmarks`（rglob 探测 `.uvprojx`/`.cproject` 父目录）+ `collect_candidate_paths` 双基准解析（先工程根，再工程文件基准，containment 兜底安全——`..` 逃逸/绝对路径自然越界被拒）+ `_resolve_in_root`。红证：新增 3 用例（UV4 `..\` 形态 → 候选 main.c；`..` 逃逸仍拒；CCS 相对形态不受影响）。**pytest 1175 全绿（基线 1172 + 3）+ mypy 干净**。
+
+**三轮修复实录**（真实 DeepSeek，每轮 4s~57s）：
+- 第 1 轮（2 errors：TAGID_MASK 80 行 + 注入 UNDECLARED_SYMBOL_ZZZ 158 行）：file_count=1（main.c，`..\` 归一生效）；80 行 **applied**（LLM 把 `id & TAGID_MASK` 修成 `id & 0x0F`）、158 行 **skipped 如实报告**（old_snippet 不匹配，协议内行为）；backup_id=20260812-154628；重编译 2 errors→1 error。
+- 回滚验证：`restored: ["main.c"]`，TAGID_MASK 行恢复原样 ✓（回滚后第二轮只修报错对应的 zzz 行，行为链正确）。
+- 第 2 轮（仅 158 行）：**applied** ✓（未应用 → 再贴 → 修完的循环成立）。
+- 第 3 轮（仅 80 行，2 处 applied）→ 最终重编译 **0 Error(s) 4 Warning(s)**（4 警 = LLM 骨架未用变量，历史固有非回归）。
+
+**附带观察**：① 路径基准修复使服务端已具备"接受编译器原文报错"能力，为一条龙（自动编译采集报错）铺路；② LLM 的 old_snippet 与文件逐字匹配存在不稳定（第 1 轮 158 行失败、第 3 轮 2 处成功），未应用路径真实常见且如实报告——用户体验上靠"再贴一轮"或后续自动循环消化；③ 8000 launcher 服务会因关浏览器标签自毁（tabs/bye → os._exit），验收中需自起服务。
 
 ## 决策记录（grilling 2026-08-12，与用户确认）
 
