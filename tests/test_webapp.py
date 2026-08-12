@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -3068,3 +3069,28 @@ def test_pdf_file_missing_returns_400(client, context, tmp_path):
     resp = client.get("/api/pdfs/" + quote("不存在/资料.pdf", safe="/"))
     assert resp.status_code == 400
     assert "不存在" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 更新记录（工单 changelog-tab/01）：GET /api/changelog 按天分组时间轴
+# ---------------------------------------------------------------------------
+
+
+def test_changelog_route_lists_daily_groups(client):
+    """更新记录：200 + [{date, items: [{time, text}]}]——repo 根 CHANGELOG.md 实况。"""
+    resp = client.get("/api/changelog")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data, "repo 根 CHANGELOG.md 应有初始内容"
+    assert all(
+        isinstance(group["date"], str)
+        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", group["date"])
+        and isinstance(group["items"], list)
+        and all(
+            isinstance(item["time"], str) and isinstance(item["text"], str)
+            for item in group["items"]
+        )
+        for group in data
+    )
+    # 08-12 条目应带 HH:MM 时间前缀（工单实施当日真实 commit 时间）
+    assert re.fullmatch(r"\d{1,2}:\d{2}", data[0]["items"][0]["time"])

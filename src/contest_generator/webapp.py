@@ -25,6 +25,7 @@ from typing import Any, Callable, Sequence
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from .changelog import load_changelog
 from .compile_runner import (
     CompileRunnerError,
     collect_build_log,
@@ -1315,6 +1316,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             resolve_pdf(materials_dir(config.module_library_dir), rel_path),
             media_type="application/pdf",
         )
+
+    # ------------------------------------------------------------------
+    # 更新记录（工单 changelog-tab/01）：手工维护 CHANGELOG.md → 按天分组
+    # ------------------------------------------------------------------
+
+    @app.get("/api/changelog")
+    @_map_errors
+    def changelog() -> list[dict]:
+        """更新记录：仓库根 CHANGELOG.md → [{date, items}]（文件顺序）。
+
+        数据源是手工维护的 markdown（格式契约见 changelog.py：`## YYYY-MM-DD`
+        严格日期 + 组内 `- ` 条目）。纯展示数据：文件缺失 / 损坏 → []（前端
+        显示「暂无更新记录」），不因展示数据损坏阻塞工具——不走"大声失败"。
+        """
+        return load_changelog(Path(__file__).resolve().parents[2] / "CHANGELOG.md")
 
     # ------------------------------------------------------------------
     # 赛题库（工单 01/05）：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）
