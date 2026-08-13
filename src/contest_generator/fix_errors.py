@@ -637,6 +637,43 @@ def restore_backup(backup_root: Path, backup_id: str, output_dir: Path) -> tuple
     return tuple(restored)
 
 
+def _validate_previous_fixes(
+    previous_fixes: Sequence[Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    """上一轮应用结果的形状校验（工单 fix-loop-progress/01 决策记录 3）：每项
+    dict + file / status / reason 字符串、line 整数、status ∈ {applied,
+    skipped}——非法 → FixError（登记 errors.py → 400 中文）。回喂载荷来自
+    前端循环透传，形状违约大声失败不静默丢弃（协议错误，用户可修正重试）。
+    返回规整后的元组（逐项只留四字段），缺省空元组 = 行为与现有一致。
+    """
+    if not isinstance(previous_fixes, Sequence) or isinstance(
+        previous_fixes, (str, bytes)
+    ):
+        raise FixError("previous_fixes 必须是数组")
+    validated: list[Mapping[str, Any]] = []
+    for index, item in enumerate(previous_fixes):
+        if not isinstance(item, Mapping):
+            raise FixError(f"previous_fixes[{index}] 必须是对象")
+        file = item.get("file")
+        line = item.get("line")
+        status = item.get("status")
+        reason = item.get("reason")
+        if not isinstance(file, str):
+            raise FixError(f"previous_fixes[{index}] 的 file 必须是字符串")
+        if not isinstance(line, int):
+            raise FixError(f"previous_fixes[{index}] 的 line 必须是整数")
+        if not isinstance(status, str) or status not in ("applied", "skipped"):
+            raise FixError(
+                f"previous_fixes[{index}] 的 status 必须是 applied 或 skipped"
+            )
+        if not isinstance(reason, str):
+            raise FixError(f"previous_fixes[{index}] 的 reason 必须是字符串")
+        validated.append(
+            {"file": file, "line": line, "status": status, "reason": reason}
+        )
+    return tuple(validated)
+
+
 def run_fix_round(
     llm: LLM,
     *,
@@ -647,6 +684,7 @@ def run_fix_round(
     platform: str = "",
     module_slugs: Sequence[str] = (),
     main_c: str = "",
+    previous_fixes: Sequence[Mapping[str, Any]] = (),
     emit: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """一轮修复的完整编排（工单 fix-session-homing/01）：/api/fix-errors 路由
@@ -658,6 +696,11 @@ def run_fix_round(
     → apply_result…（逐处应用结果）——emit 走旁路（_emit，发射失败不影响
     主流程），None = 不发射（单测直调形态）。
 
+    previous_fixes（工单 fix-loop-progress/01）：上一轮 done 载荷的 fixes
+    数组（[{file, line, status, reason}]），形状校验（_validate_previous_fixes，
+    非法 → FixError → 400 中文）后只进 LLM 素材（不发射事件、不改 done
+    载荷形状）——缺省空 = 行为与现有一致（贴文本模式 / 旧调用零改动）。
+
     done 载荷作为返回值（形状的家在此，webapp docstring 只指向本函数）：
     output_dir（str，原样传入）/ backup_id（本次备份编号，无应用 = ""）/
     degraded（未定位到可修复文件）/ parsed（[{path, line, message}]，解析
@@ -665,6 +708,7 @@ def run_fix_round(
     归路由（emit.done 收尾，run_sse 终态保证语义不变；对照
     run_recommendation 的 emit.done 在域内，差异见工单决策记录 4）。
     """
+    validated_previous = _validate_previous_fixes(previous_fixes)
     errors = parse_compile_errors(error_text)
     candidates = collect_candidate_paths(output_dir, errors)
     contexts, dropped = read_file_contexts(output_dir, candidates)
@@ -685,6 +729,7 @@ def run_fix_round(
         module_slugs=module_slugs,
         main_c=main_c,
         dropped_files=dropped,
+        previous_fixes=validated_previous,
     )
     report = apply_fixes(fixes, output_dir, backup_root)
     for result in report.results:
