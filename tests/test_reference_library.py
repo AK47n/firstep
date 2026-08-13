@@ -1684,3 +1684,110 @@ def test_reference_library_consumes_file_label():
 
     assert hasattr(library, "file_label")
     assert reference_library.file_label is library.file_label
+
+
+# ---------------------------------------------------------------------------
+# 真库数据不变量：塔克R3 条目拆分（工单 reference-library-hygiene/01）
+# ---------------------------------------------------------------------------
+
+REFERENCES_ROOT = Path(__file__).resolve().parents[1] / "library" / "references"
+
+TARKBOT_OLD_ID = "塔克R3两驱小车底盘资料"
+
+# 新标题 → (旧子工程目录前缀, 期望子工程文件数)。旧条目 files 并集共 193 文件：
+# 31×3 + 33×2 + 32 子工程文件 + 素材清单.txt + O 资料更新记录.txt（拆分脚本
+# .scratch/split_tarkbot.py 的前置自检与并集自检同源对照，本表为防回退 pin）
+TARKBOT_SPLITS = {
+    "塔克R3 DB20 直流电机调速": ("DB20_1直流电机调速", 31),
+    "塔克R3 DB20 编码器数据采集": ("DB20_2编码器数据采集", 31),
+    "塔克R3 DB20 PID 速度控制": ("DB20_3PID速度控制", 31),
+    "塔克R3 DB20 PID 位置控制": ("DB20_4PID位置控制", 33),
+    "塔克R3 DB20 舵机角度控制": ("DB20_5舵机角度控制", 33),
+    "塔克R3 编码器电机小车控制源码": ("编码器电机小车控制源码V1.0.230626", 32),
+}
+
+# 顶层共享文件（旧条目 files 中不带子工程前缀的整文件）
+TARKBOT_TOP_LEVEL = ("素材清单.txt", "O 资料更新记录.txt")
+
+
+def _tarkbot_split_entries() -> dict[str, reference_library.ReferenceEntry]:
+    """真库 6 条拆分条目的 {标题: 条目}；缺失 = 拆分未执行 / 被回退，直接红。"""
+    by_title = {entry.title: entry for entry in list_references(REFERENCES_ROOT)}
+    missing = [title for title in TARKBOT_SPLITS if title not in by_title]
+    assert not missing, f"塔克R3 拆分条目缺失：{missing}"
+    return {title: by_title[title] for title in TARKBOT_SPLITS}
+
+
+def test_tarkbot_split_entries_present_and_old_absent():
+    """拆分后 6 条新条目存在、旧条目不存在；list_references 全库结构校验不抛。
+
+    真实参考库数据不变量（工单 reference-library-hygiene/01，与
+    tests/test_module_collision.py 同款真库测试）：list_references 全库解析
+    对坏元数据大声失败；6 条新 id 全在、旧大条目 id 不在 = 拆分完成且无残留
+    （旧条目若被重新合并回一条，本测试即红）。
+    """
+    by_title = {entry.title: entry for entry in list_references(REFERENCES_ROOT)}
+    assert TARKBOT_OLD_ID not in by_title
+    for title in TARKBOT_SPLITS:
+        assert title in by_title
+
+
+def test_tarkbot_split_files_partitioned_by_project():
+    """每条新条目 files 只含本子工程文件 + 共享清单；类型 / 平台 / 锚定对齐。"""
+    entries = _tarkbot_split_entries()
+    for title, (_prefix, expect_count) in TARKBOT_SPLITS.items():
+        entry = entries[title]
+        assert entry.type == "小车底盘例程"
+        assert entry.platform == PLATFORM_STM32
+        assert entry.anchor_kind == ANCHOR_KIND_NONE
+        assert "素材清单.txt" in entry.files
+        project_files = [
+            rel for rel in entry.files if rel not in TARKBOT_TOP_LEVEL
+        ]
+        assert len(project_files) == expect_count
+        # 子工程文件已去旧前缀：首层目录只能是本工程的 Doc/User/X-SOFT 或
+        # Doc/Driver/Robot（跨子工程文件误入会带 DB20_x / 编码器… 前缀，此处红）
+        first_dirs = {rel.split("/", 1)[0] for rel in project_files}
+        assert first_dirs <= {"Doc", "User", "X-SOFT", "Driver", "Robot"}
+    # O 资料更新记录.txt 只归入 DB20_1 条目（并集不丢且不重复）
+    update_log_owners = [
+        title
+        for title, entry in entries.items()
+        if "O 资料更新记录.txt" in entry.files
+    ]
+    assert update_log_owners == ["塔克R3 DB20 直流电机调速"]
+
+
+def test_tarkbot_split_files_union_matches_old_entry():
+    """6 条 files 回挂旧前缀取并集 == 旧条目 files 并集（193 文件，不丢不重）。
+
+    旧条目 files 并集 = 31+31+31+33+33+32 子工程文件 + 素材清单.txt +
+    O 资料更新记录.txt = 193；拆分后回挂旧子工程前缀重建并集，总数与逐前缀
+    数量全对齐 = 无文件漏拆 / 错放。素材清单.txt 6 条共享（集合语义计一次）、
+    O 资料更新记录.txt 单条持有。
+    """
+    entries = _tarkbot_split_entries()
+    rebuilt: set[str] = set()
+    for _title, (prefix, _count) in TARKBOT_SPLITS.items():
+        for rel in entries[_title].files:
+            if rel in TARKBOT_TOP_LEVEL:
+                rebuilt.add(rel)  # 顶层共享文件原样计入（集合语义）
+            else:
+                rebuilt.add(f"{prefix}/{rel}")
+    assert len(rebuilt) == 193
+    for prefix, count in TARKBOT_SPLITS.values():
+        assert sum(1 for rel in rebuilt if rel.startswith(prefix + "/")) == count
+    assert "素材清单.txt" in rebuilt
+    assert "O 资料更新记录.txt" in rebuilt
+    # 6 条素材清单.txt 全文一致（均复制旧清单，索引同源 PDF/zip）
+    manifests = [
+        (REFERENCES_ROOT / entry.id / "素材清单.txt").read_text(encoding="utf-8")
+        for entry in entries.values()
+    ]
+    assert len(set(manifests)) == 1
+
+
+def test_tarkbot_split_search_servo_hits_db20_5():
+    """搜索「舵机」命中 DB20_5 新条目（拆分动机：旧条目标题搜不到舵机角度）。"""
+    hits = search_references(REFERENCES_ROOT, title="舵机")
+    assert [entry.id for entry in hits] == ["塔克R3-DB20-舵机角度控制"]
