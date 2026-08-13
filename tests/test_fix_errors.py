@@ -929,6 +929,110 @@ def test_run_fix_round_emitter_failure_bypassed(tmp_path):
     assert done["parsed"][0]["path"] == "main.c"
 
 
+# 上一轮应用结果回喂（工单 fix-loop-progress/01）：形状校验（非法 → FixError
+# → 400 中文，登记 errors.py）/ 合法转传 LLM / 缺省空零回归（done 载荷与
+# 事件序列不动，previous 只进 LLM 素材）
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "main.c",  # 非对象
+        {"file": 1, "line": 1, "status": "applied", "reason": ""},  # file 非字符串
+        {"file": "main.c", "line": "1", "status": "applied", "reason": ""},  # line 非整数
+        {"file": "main.c", "line": 1, "status": "rejected", "reason": ""},  # status 越枚举
+        {"file": "main.c", "line": 1, "status": "applied", "reason": 3},  # reason 非字符串
+        {"line": 1, "status": "applied", "reason": ""},  # 缺 file
+    ],
+)
+def test_run_fix_round_previous_fixes_invalid_shape(tmp_path, invalid):
+    """形状校验：每项 dict + file/status/reason 字符串 + line 整数 + status ∈
+    {applied, skipped}——非法 → FixError 且登记 errors.py → 400 中文
+    （验收：非法项 400，大声失败不静默丢弃）。"""
+    out = _make_project(tmp_path)
+    with pytest.raises(FixError, match="previous_fixes") as exc_info:
+        run_fix_round(
+            FakeLLM(),
+            error_text="main.c(1): error #20: boom",
+            output_dir=out,
+            backup_root=_backup_root(tmp_path),
+            previous_fixes=(invalid,),
+        )
+    status, message = error_entry(exc_info.value)
+    assert status == 400
+    assert message == str(exc_info.value)
+
+
+def test_run_fix_round_previous_fixes_not_array(tmp_path):
+    """previous_fixes 本身不是数组（dict / null 形态）→ FixError（400 中文），
+    不落 500——路由原样透传，形状判决全归域层。"""
+    out = _make_project(tmp_path)
+    with pytest.raises(FixError, match="数组"):
+        run_fix_round(
+            FakeLLM(),
+            error_text="main.c(1): error #20: boom",
+            output_dir=out,
+            backup_root=_backup_root(tmp_path),
+            previous_fixes={"file": "main.c"},
+        )
+
+
+def test_run_fix_round_previous_fixes_passthrough_to_llm(tmp_path):
+    """合法 previous_fixes → 原样转传 llm.fix_compile_errors（逐项只留四字段）；
+    done 载荷形状与事件序列不动（previous 只进 LLM 素材，不发射新事件）。"""
+    out = _make_project(tmp_path)
+    emitted: list[ProgressEvent] = []
+    llm = FakeLLM(
+        fixes=(
+            FixSuggestion(file="main.c", line=1, old_snippet="int x = 1;",
+                          new_snippet="int x = 2;", reason="修复初始化"),
+        )
+    )
+    previous = (
+        {"file": "main.c", "line": 1, "status": "skipped",
+         "reason": "未应用：文件内未找到 old_snippet（精确匹配失败，可能缩进 / 内容不一致）"},
+        {"file": "code/mod.c", "line": 1, "status": "applied", "reason": ""},
+    )
+    done = run_fix_round(
+        llm,
+        error_text="main.c(1): error #20: boom",
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+        previous_fixes=previous,
+        emit=emitted.append,
+    )
+    assert [e.type for e in emitted] == [
+        EVENT_PARSE_DONE,
+        EVENT_FIX_START,
+        EVENT_APPLY_RESULT,
+    ]
+    assert set(done) == {"output_dir", "backup_id", "degraded", "parsed", "fixes"}
+    assert llm.fix_errors_calls[0][6] == previous
+
+
+def test_run_fix_round_no_previous_zero_regression(tmp_path):
+    """缺省空 = 行为与现有一致：透传空元组、done 载荷形状不变（验收：空列表
+    零回归——贴文本模式 / 旧调用零改动）。"""
+    out = _make_project(tmp_path)
+    llm = FakeLLM(
+        fixes=(
+            FixSuggestion(file="main.c", line=1, old_snippet="int x = 1;",
+                          new_snippet="int x = 2;", reason="修复初始化"),
+        )
+    )
+    done = run_fix_round(
+        llm,
+        error_text="main.c(1): error #20: boom",
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+    )
+    assert set(done) == {"output_dir", "backup_id", "degraded", "parsed", "fixes"}
+    assert done["fixes"] == [
+        {"file": "main.c", "line": 1, "status": "applied", "reason": ""}
+    ]
+    assert llm.fix_errors_calls[0][6] == ()
+
+
 # ---------------------------------------------------------------------------
 # 结构钉（工单 fix-session-homing/01，对照 recommend-orchestration-homing 先例）：
 # /api/fix-errors 路由只取参 + 转调 + SSE 包装，五步编排整体归 run_fix_round——
