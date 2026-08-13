@@ -2,7 +2,7 @@
   "id": "塔克R3-编码器电机小车控制源码",
   "title": "塔克R3 编码器电机小车控制源码",
   "type": "小车底盘例程",
-  "description": "塔克创新 R3 系列两驱小车底盘控制源码 V1.0.230626：OpenCTR H60 V3.2 控制器 / STM32F407VET6（168MHz）整车工程。功能：五种底盘（麦轮 / 四轮差速 / 两轮差速 / 阿克曼 / 三轮全向）正逆运动学解析、车轮 PID 速度控制、PS2 手柄与上位机控制（塔克通用 X-Protocol 串口协议，20ms / 50Hz 周期调度）。文件构成：Robot（main + ax_kinematics 运动学 / ax_robot 底盘速度 / ax_speed 车轮 PID）+ Driver 层 ax_* 封装驱动（电机 / 编码器 / PS2 / 舵机 / 串口等）。与 DB20 五例（F103 单功能教学 例程）不同，本工程是 F4 整车底盘控制源码。",
+  "description": "塔克创新 R3 系列两驱小车底盘控制源码 V1.0.230626：OpenCTR H60 V3.2 控制器 / STM32F407VET6（168MHz）整车工程。功能：五种底盘（麦轮 / 四轮差速 / 两轮差速 / 阿克曼 / 三轮全向）正逆运动学解析、车轮 PID 速度控制、PS2 手柄与上位机控制（塔克通用 X-Protocol 串口协议，20ms / 50Hz 周期调度）。文件构成：Robot（main + ax_kinematics 运动学 / ax_robot 底盘速度 / ax_speed 车轮 PID）+ Driver 层 ax_* 封装驱动（电机 / 编码器 / PS2 / 舵机 / 串口等）。与 DB20 五例（F103 单功能教学例程）不同，本工程是 F4 整车底盘控制源码。",
   "anchor_kind": "none",
   "anchor_value": "",
   "platform": "stm32",

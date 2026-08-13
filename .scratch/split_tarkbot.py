@@ -75,7 +75,7 @@ SPLITS: tuple[tuple[str, str, str, int], ...] = (
         "塔克R3 DB20 PID 速度控制",
         "DB20_3PID速度控制",
         "塔克创新 R3 系列两驱小车底盘 DB20 电机 PID 闭环教程第 3 例：PID 速度闭环。"
-        "STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：以编码器周期增量值为 "
+        "STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：以编码器周期增量值为"
         "速度反馈，PID_MotorVelocityPidCtl 对目标速度（±250）做速度环，OLED 显示目标 / "
         "当前速度与 PID 参数，X-PrintfScope 上位机可设定目标速度与 PID 参数并绘制速度"
         "曲线。与第 4 例的区别：本例闭环对象是速度增量，第 4 例是位置绝对值。文件构成："
@@ -86,7 +86,7 @@ SPLITS: tuple[tuple[str, str, str, int], ...] = (
         "塔克R3 DB20 PID 位置控制",
         "DB20_4PID位置控制",
         "塔克创新 R3 系列两驱小车底盘 DB20 电机 PID 闭环教程第 4 例：PID 位置闭环。"
-        "STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：以编码器绝对计数值为 "
+        "STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：以编码器绝对计数值为"
         "位置反馈，PID_MotorPositionPidCtl 对目标位置（±250，上位机可设 ±32767）做 "
         "位置环，OLED 显示目标 / 当前位置与 PID 参数，X-PrintfScope 上位机可设定目标"
         "位置与 PID 参数并绘制位置曲线。与第 3 例的区别：本例闭环对象是位置绝对值，"
