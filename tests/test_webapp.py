@@ -1022,10 +1022,85 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
         "modules/oled/inc",
     ]
     assert "main.c" in data["structure"]
+    assert data["build_hint"] == ""  # stm32 无构建脚本提示（工单 mspm0-build-makefiles/01）
     # 修改器生效：.uvprojx 注册了模块分组与 include path
     uvprojx = next(output_dir.glob("*.uvprojx")).read_text(encoding="utf-8")
     assert "modules" in uvprojx
     assert "modules\\dht11\\inc" in uvprojx
+
+
+def test_generate_mspm0_with_ccs_tools_writes_makefile_set(
+    client, context, tmp_path, monkeypatch
+):
+    """工单 mspm0-build-makefiles/01：mspm0 生成探 CCS 三件套 → 命中则产出
+    Debug/makefile 集（一键编译修复通路打通），build_hint 空。"""
+    from contest_generator.compile_runner import CcsTools
+
+    import_master(
+        context[0].config.masters_dir,
+        PLATFORM_MSPM0,
+        make_fake_ccs_master_project(tmp_path / "ccs_master_src"),
+    )
+    sdk = tmp_path / "sdk"
+    sdk.mkdir()
+    compiler = tmp_path / "compiler"
+    compiler.mkdir()
+    cli = tmp_path / "cli.bat"
+    cli.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "contest_generator.webapp.find_ccs_tools",
+        lambda s, c, x: CcsTools(sdk_dir=sdk, compiler_dir=compiler, sysconfig_cli=cli),
+    )
+    output_dir = tmp_path / "out"
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_MSPM0,
+            "slugs": ["dht11", "delay"],
+            "main_c": "int main(void) { float t = dht11_read(); while (1); }\n",
+            "output_dir": str(output_dir),
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["build_hint"] == ""
+    makefile = (output_dir / "Debug" / "makefile").read_text(encoding="utf-8")
+    assert "-include modules/dht11/mspm0/src/subdir_vars.mk" in makefile
+    assert "-include modules/delay/subdir_vars.mk" in makefile
+
+
+def test_generate_mspm0_without_ccs_tools_succeeds_with_hint(
+    client, context, tmp_path, monkeypatch
+):
+    """探测不到 CCS：生成照常（不阻断，决策记录 3）+ build_hint 非空 + 无
+    Debug/（探测是装配层职责，直接生成调用方不传探针 = 确定性跳过）。"""
+    from contest_generator.compile_runner import CCS_NOT_FOUND_HINT
+
+    import_master(
+        context[0].config.masters_dir,
+        PLATFORM_MSPM0,
+        make_fake_ccs_master_project(tmp_path / "ccs_master_src"),
+    )
+    monkeypatch.setattr(
+        "contest_generator.webapp.find_ccs_tools", lambda s, c, x: None
+    )
+    output_dir = tmp_path / "out"
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_MSPM0,
+            "slugs": ["dht11", "delay"],
+            "main_c": "int main(void) { float t = dht11_read(); while (1); }\n",
+            "output_dir": str(output_dir),
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["build_hint"] == CCS_NOT_FOUND_HINT
+    assert (output_dir / "main.c").is_file()
+    assert not (output_dir / "Debug").exists()
 
 
 def test_generate_rejects_platform_without_master(client, context, tmp_path):
@@ -2026,6 +2101,40 @@ def test_settings_toolchain_paths_roundtrip(client, context):
     saved = client.get("/api/settings").json()
     assert saved["uv4_path"] == r"C:\Keil5\Core\UV4\UV4.exe"
     assert saved["gmake_path"] == "gmake"
+
+
+def test_settings_ccs_toolchain_paths_roundtrip(client, context):
+    """ccs 三件套（工单 mspm0-build-makefiles/01）读写透传，缺省空串 = 自动探测。"""
+    current = client.get("/api/settings").json()
+    assert current["ccs_sdk_dir"] == ""
+    assert current["ccs_compiler_dir"] == ""
+    assert current["ccs_sysconfig_cli"] == ""
+
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "ccs_sdk_dir": "C:/ti/ccs2051/mspm0_sdk_2_10_00_04",
+            "ccs_compiler_dir": (
+                "C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"
+            ),
+            "ccs_sysconfig_cli": "C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.ccs_sdk_dir == "C:/ti/ccs2051/mspm0_sdk_2_10_00_04"
+    saved = client.get("/api/settings").json()
+    assert saved["ccs_sdk_dir"] == "C:/ti/ccs2051/mspm0_sdk_2_10_00_04"
+    assert saved["ccs_compiler_dir"] == (
+        "C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"
+    )
+    assert saved["ccs_sysconfig_cli"] == (
+        "C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"
+    )
 
 
 def test_state_reports_toolchain_availability(client, context, monkeypatch):

@@ -264,3 +264,39 @@ def test_generate_check_runs_real_generation_gates() -> None:
             break
     else:
         raise AssertionError("generate_check.py 未从 contest_generator.generator import")
+
+
+# ---------- mspm0 真机编译对偶（工单 mspm0-build-makefiles/01） ----------
+
+
+def test_generate_check_gmake_build_uses_real_compile_runner() -> None:
+    """结构钉：mspm0 真机编译走生产 collect_build_log + find_make（uv4_build
+    对偶，Debug/makefile 集由生成器自动产出）——删调用 / 改回自带 gmake
+    命令即红。"""
+    tree = ast.parse(GEN_CHECK.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "contest_generator.compile_runner"
+        ):
+            imported = {alias.name for alias in node.names}
+            assert {"collect_build_log", "find_make"} <= imported
+            break
+    else:
+        raise AssertionError(
+            "generate_check.py 未从 contest_generator.compile_runner import"
+        )
+    func = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "gmake_build"
+    )
+    body_names = {n.id for n in ast.walk(func) if isinstance(n, ast.Name)}
+    assert "collect_build_log" in body_names
+
+
+def test_generate_check_has_no_stale_theia_no_cli_message() -> None:
+    """过时文案已删（工单 mspm0-build-makefiles/01）："Theia 无命令行构建"
+    —— gmake 通路真机跑通后不再是事实。"""
+    text = GEN_CHECK.read_text(encoding="utf-8")
+    assert "无命令行构建" not in text

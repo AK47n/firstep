@@ -85,7 +85,7 @@ def test_library_no_cross_module_duplicate_file_paths():
 def test_zigbee_dual_select_generation_files_and_symbols_unique(tmp_path):
     """双选生成（真实库 + 真实母版）：产物文件同名不重叠、定义符号互斥、
     uvprojx 里两个源文件都以各自路径注册。"""
-    out, _ = generate(
+    out, _, _ = generate(
         platform=PLATFORM_STM32,
         manifests=_load_manifests(("config", *ZIGBEE_SLUGS)),
         module_library_dir=LIBRARY_MODULES,
@@ -128,7 +128,7 @@ def test_zigbee_dual_select_generation_files_and_symbols_unique(tmp_path):
 @pytest.mark.parametrize("slug", ZIGBEE_SLUGS)
 def test_zigbee_single_select_regression(tmp_path, slug):
     """单选照旧：各模块单独生成全门禁通过、模块文件按 manifest 落盘。"""
-    out, _ = generate(
+    out, _, _ = generate(
         platform=PLATFORM_STM32,
         manifests=_load_manifests(("config", slug)),
         module_library_dir=LIBRARY_MODULES,

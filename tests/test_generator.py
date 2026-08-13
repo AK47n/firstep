@@ -55,6 +55,7 @@ from contest_generator.selection import (
     REFERENCE_SOURCE_MANUAL,
 )
 from contest_generator.topic_library import TopicError
+from contest_generator.treewalk import iter_project_files
 from tests.fakes import (
     DHT11_H,
     DHT11_MSPM0_C,
@@ -996,6 +997,135 @@ def test_generate_mspm0_theia_appends_module_includes_and_root_source_entry(
     ]
     entry_names = _ccs_source_entry_names(root, "Debug")
     assert entry_names == [""]  # 根条目覆盖 modules/（main.c 一并编译）
+
+
+# ---------------------------------------------------------------------------
+# mspm0 构建脚本（工单 mspm0-build-makefiles/01）：产物完整后写 CCS 标准
+# Debug/makefile 集（模块条目 = 选中集推导，manifest 单源）；未探测到 CCS
+# 工具链 → 跳过 + build_hint 提示，不阻断生成（决策记录 3）；stm32 零改动。
+# ---------------------------------------------------------------------------
+
+
+def test_generate_mspm0_writes_makefile_set_for_selected_modules(tmp_path):
+    """mspm0 + ccs_tools 命中：Debug/makefile 集落盘，模块条目 = 选中集
+    （dht11 + delay，delay 平铺 subdir 空），未选模块（oled）不出现；纯 .h
+    目录（dht11/inc）不产生编译条目。"""
+    from contest_generator.compile_runner import CcsTools
+
+    library = make_fake_module_library(tmp_path / "modules")
+    master = make_fake_ccs_theia_master_project(tmp_path / "master")
+    manifests = [ModuleManifest.load(library / slug) for slug in ("dht11", "delay")]
+    sdk = tmp_path / "sdk"
+    sdk.mkdir()
+    compiler = tmp_path / "compiler"
+    compiler.mkdir()
+    cli = tmp_path / "cli.bat"
+    cli.write_text("", encoding="utf-8")
+
+    out_dir, _, build_hint = generate(
+        platform=PLATFORM_MSPM0,
+        manifests=manifests,
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out",
+        main_c_content=MAIN_SKELETON,
+        ccs_tools=CcsTools(sdk_dir=sdk, compiler_dir=compiler, sysconfig_cli=cli),
+    )
+
+    assert build_hint == ""
+    makefile = (out_dir / "Debug" / "makefile").read_text(encoding="utf-8")
+    assert "-include modules/dht11/mspm0/src/subdir_vars.mk" in makefile
+    assert "-include modules/delay/subdir_vars.mk" in makefile  # 平铺（subdir 空）
+    assert "oled" not in makefile  # 未选模块不出现（决策记录 2）
+    assert "modules/dht11/inc" not in makefile  # 纯 .h 目录无编译条目
+    assert (
+        out_dir / "Debug" / "modules" / "dht11" / "mspm0" / "src" / "subdir_vars.mk"
+    ).is_file()
+    assert (out_dir / "Debug" / "modules" / "delay" / "subdir_vars.mk").is_file()
+    # 结构摘要跳过 Debug/（treewalk 顶层构建产物目录），摘要不含构建脚本
+    structure = tuple(
+        p.relative_to(out_dir).as_posix() for p in iter_project_files(out_dir)
+    )
+    assert not any(rel.startswith("Debug") for rel in structure)
+
+
+def test_generate_mspm0_without_ccs_tools_skips_and_hints(tmp_path):
+    """mspm0 + ccs_tools None（未探测到）：生成照常、无 Debug/、build_hint
+    非空（命令行构建不可用提示，不阻断——决策记录 3）。"""
+    from contest_generator.compile_runner import CCS_NOT_FOUND_HINT
+
+    library = make_fake_module_library(tmp_path / "modules")
+    master = make_fake_ccs_theia_master_project(tmp_path / "master")
+    out_dir, _, build_hint = generate(
+        platform=PLATFORM_MSPM0,
+        manifests=[ModuleManifest.load(library / "dht11")],
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out",
+        main_c_content=MAIN_SKELETON,
+    )
+
+    assert build_hint == CCS_NOT_FOUND_HINT
+    assert (out_dir / "main.c").is_file()
+    assert not (out_dir / "Debug").exists()
+
+
+def test_generate_stm32_never_writes_makefile_set(tmp_path):
+    """stm32 零改动（决策记录 5）：不写 Debug/makefile 集、hint 恒空。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    master = make_fake_master_project(tmp_path / "master")
+    out_dir, _, build_hint = generate(
+        platform=PLATFORM_STM32,
+        manifests=[ModuleManifest.load(library / "dht11")],
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out",
+        main_c_content=MAIN_SKELETON,
+    )
+
+    assert build_hint == ""
+    assert not (out_dir / "Debug").exists()
+
+
+def test_generate_project_mspm0_summary_carries_build_hint(
+    fake_module_library, tmp_path
+):
+    """流程接缝（generate_project）：mspm0 摘要透传 build_hint——未探测到 →
+    提示 + 无 Debug/；命中 → 空串 + makefile 集落盘。"""
+    from contest_generator.compile_runner import CCS_NOT_FOUND_HINT, CcsTools
+
+    masters_dir = tmp_path / "masters"
+    make_fake_ccs_theia_master_project(masters_dir / "mspm0")
+
+    summary = generate_project(
+        platform=PLATFORM_MSPM0,
+        slugs=["dht11", "delay"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out1",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+    )
+    assert summary.build_hint == CCS_NOT_FOUND_HINT
+    assert not (summary.output_dir / "Debug").exists()
+
+    sdk = tmp_path / "sdk"
+    sdk.mkdir()
+    compiler = tmp_path / "compiler"
+    compiler.mkdir()
+    cli = tmp_path / "cli.bat"
+    cli.write_text("", encoding="utf-8")
+    with_tools = generate_project(
+        platform=PLATFORM_MSPM0,
+        slugs=["dht11", "delay"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out2",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+        ccs_tools=CcsTools(sdk_dir=sdk, compiler_dir=compiler, sysconfig_cli=cli),
+    )
+    assert with_tools.build_hint == ""
+    assert (with_tools.output_dir / "Debug" / "makefile").is_file()
+    assert "Debug/makefile" not in with_tools.structure  # 摘要跳过构建产物
 
 
 def test_patcher_invoked_via_registry_with_files_and_include_dirs(make_project, tmp_path):
