@@ -1,10 +1,11 @@
 """工具链探测 / 编译执行 / 日志采集域模块（工单 autocompile-loop/01）。
 
 闭环"生成 → 自动编译 → 采集报错 → 修复 → 重编译验证"的服务端执行层：
-探测工具链（UV4 / gmake，自动 + config 覆盖）→ 起子进程全量重建工程 →
-原样采集编译输出（error_text 与 fix-errors 解析契约 parse_compile_errors
-天然对齐，warnings 引用行一并保留）。域判决全部在本模块（纯函数、可单测），
-webapp 只做薄壳（路由 + SSE 装配），前端状态机驱动循环（≤3 轮）。
+探测工具链（UV4 / gmake / CCS 三件套，自动 + config 覆盖）→ 起子进程全量
+重建工程 → 原样采集编译输出（error_text 与 fix-errors 解析契约
+parse_compile_errors 天然对齐，warnings 引用行一并保留）。域判决全部在本
+模块（纯函数、可单测），webapp 只做薄壳（路由 + SSE 装配），前端状态机
+驱动循环（≤3 轮）。
 
 工具链缺失是两种终态之一（决策记录 7）：/api/compile 路由在起流前判工具链
 缺失 → 400 中文（登记 errors.py），前端据此置灰按钮回退贴文本模式；工程
@@ -29,6 +30,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -45,9 +47,10 @@ _UV4_CANDIDATES = (
     r"C:\Keil_v5\UV4\UV4.exe",
 )
 
-# mspm0 线构建脚本落位（决策记录 5，按既有 build_makefiles 产物确认）：
-# CCS 命令行构建标准 makefile 集生成在 <工程根>/Debug/makefile（IDE 生成
-# 同款，SHELL = cmd.exe），gmake -C Debug -f makefile 即可全量构建
+# mspm0 线构建脚本落位（决策记录 5，工单 mspm0-build-makefiles/01 起由
+# makefiles.py 在生成时自动产出）：CCS 命令行构建标准 makefile 集生成在
+# <工程根>/Debug/makefile（IDE 生成同款，SHELL = cmd.exe），
+# gmake -C Debug -f makefile 即可全量构建
 _MSPM0_MAKEFILE = "Debug/makefile"
 
 
@@ -113,6 +116,113 @@ def find_make(override: str = "") -> Path | None:
         return candidate if candidate.is_file() else None
     found = shutil.which("gmake") or shutil.which("make")
     return Path(found) if found else None
+
+
+@dataclass(frozen=True)
+class CcsTools:
+    """CCS 工具链三件套（mspm0 命令行构建三依赖，工单 mspm0-build-makefiles/01）。
+
+    真机两版本共存（SDK 在 ccs2051、编译器在 ccs2050）——三件逐件独立探测，
+    不存在"同一个 CCS 版本目录"假设（决策记录 4）。
+    """
+
+    sdk_dir: Path  # mspm0_sdk_*（startup / CMSIS / .metadata/product.json）
+    compiler_dir: Path  # ccs/tools/compiler/ti-cgt-armllvm_*（tiarmclang）
+    sysconfig_cli: Path  # sysconfig_*/sysconfig_cli.bat（.syscfg → 生成文件）
+
+
+# CCS 探测根（决策记录 4）：扫描 C:/ti/ccs*/ 目录；测试 monkeypatch 到 fake 树
+_CCS_SCAN_ROOT = "C:/ti"
+
+# 探测失败提示（决策记录 3）：生成照常、build_hint 透传给用户，不阻断
+CCS_NOT_FOUND_HINT = (
+    "未探测到 CCS 工具链路径（SDK / 编译器 / SysConfig CLI），命令行构建"
+    "不可用——可在设置页填写 ccs_sdk_dir / ccs_compiler_dir / ccs_sysconfig_cli"
+    "覆盖后重新生成"
+)
+
+
+def find_ccs_tools(
+    sdk_override: str = "",
+    compiler_override: str = "",
+    sysconfig_override: str = "",
+) -> CcsTools | None:
+    """探测 CCS 工具链三件套：config 覆盖 > C:/ti/ccs*/ 自动扫描。
+
+    逐件独立（决策记录 4）：SDK（<ccs>/mspm0_sdk_*）、编译器
+    （<ccs>/ccs/tools/compiler/ti-cgt-armllvm_*）、SysConfig CLI
+    （<ccs>/sysconfig_*/sysconfig_cli.bat）各找各的；同件多版本取目录名
+    排序最大（版本号后缀大者新）。三件缺任一件 = 整体 None（调用方跳过
+    makefile 生成 + build_hint 提示，不阻断生成）。覆盖值非空但指向不存在
+    路径 = 该件未找到（与 find_uv4 同规，不静默）。
+    """
+    sdk = _piece(sdk_override, _sdk_candidates, kind="dir")
+    compiler = _piece(compiler_override, _compiler_candidates, kind="dir")
+    sysconfig = _piece(
+        sysconfig_override, _sysconfig_candidates, kind="file", by_parent=True
+    )
+    if sdk is None or compiler is None or sysconfig is None:
+        return None
+    return CcsTools(sdk_dir=sdk, compiler_dir=compiler, sysconfig_cli=sysconfig)
+
+
+def _piece(
+    override: str,
+    finder: Callable[[str], list[Path]],
+    *,
+    kind: str,
+    by_parent: bool = False,
+) -> Path | None:
+    """单件探测：覆盖优先（kind=dir → is_dir / kind=file → is_file），非空但
+    不存在 = 未找到；否则自动扫描取目录名排序最大（by_parent = 版本号在父
+    目录名——SysConfig CLI 的候选是 .bat 文件，版本在其目录名）。"""
+    if override.strip():
+        candidate = Path(override.strip())
+        ok = candidate.is_dir() if kind == "dir" else candidate.is_file()
+        return candidate if ok else None
+    return _newest(finder(_CCS_SCAN_ROOT), by_parent=by_parent)
+
+
+def _newest(candidates: Sequence[Path], *, by_parent: bool = False) -> Path | None:
+    """多版本取目录名排序最大（版本号后缀大者新）；同名并列取路径排序靠后
+    （确定性，不随 glob 顺序漂移）。"""
+    if not candidates:
+        return None
+    name = (lambda p: p.parent.name) if by_parent else (lambda p: p.name)
+    return max(candidates, key=lambda p: (name(p), str(p)))
+
+
+def _ccs_install_dirs(root: str) -> list[Path]:
+    """扫描根下的 ccs* 安装目录（不存在 / 非目录静默跳过）。"""
+    base = Path(root)
+    if not base.is_dir():
+        return []
+    return [p for p in sorted(base.glob("ccs*")) if p.is_dir()]
+
+
+def _sdk_candidates(root: str) -> list[Path]:
+    hits: list[Path] = []
+    for ccs in _ccs_install_dirs(root):
+        hits.extend(p for p in ccs.glob("mspm0_sdk_*") if p.is_dir())
+    return hits
+
+
+def _compiler_candidates(root: str) -> list[Path]:
+    hits: list[Path] = []
+    for ccs in _ccs_install_dirs(root):
+        tools = ccs / "ccs" / "tools" / "compiler"
+        hits.extend(p for p in tools.glob("ti-cgt-armllvm_*") if p.is_dir())
+    return hits
+
+
+def _sysconfig_candidates(root: str) -> list[Path]:
+    hits: list[Path] = []
+    for ccs in _ccs_install_dirs(root):
+        for sc in ccs.glob("sysconfig_*"):
+            cli = sc / "sysconfig_cli.bat"
+            if cli.is_file():
+                hits.append(cli)
+    return hits
 
 
 def run_compile(
@@ -227,7 +337,7 @@ def collect_build_log(
             ),
         )
 
-    # mspm0：CCS 命令行构建（build_makefiles 产物 Debug/makefile，决策记录 5）
+    # mspm0：CCS 命令行构建（生成器产物 Debug/makefile，决策记录 5）
     if make is None or not make.is_file():
         raise CompileRunnerError(
             "未检测到 gmake / make 工具链（可在设置页填 gmake_path 覆盖）"

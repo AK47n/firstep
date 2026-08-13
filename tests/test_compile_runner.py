@@ -17,9 +17,11 @@ import pytest
 
 from contest_generator.compile_runner import (
     BuildLog,
+    CcsTools,
     CompileRunnerError,
     compile_passed,
     collect_build_log,
+    find_ccs_tools,
     find_make,
     find_uv4,
     run_compile,
@@ -116,6 +118,124 @@ def test_find_make_override_and_path(monkeypatch, tmp_path):
     assert find_make(str(tmp_path / "gone")) is None
     monkeypatch.setattr("contest_generator.compile_runner.shutil.which", lambda name: str(fake))
     assert find_make("") == fake
+
+
+# ---------------------------------------------------------------------------
+# CCS 三件套探测（工单 mspm0-build-makefiles/01，决策记录 4）：config 覆盖 >
+# C:/ti/ccs*/ 扫描；逐件独立（真机 SDK / 编译器分居两个版本目录）；同件多
+# 版本取目录名排序最大；缺任一件 = 整体 None（调用方跳过 makefile + 提示）
+# ---------------------------------------------------------------------------
+
+
+def _ccs_tree(
+    tmp_path: Path,
+    ccs_dir: str,
+    *,
+    sdk: str = "mspm0_sdk_2_10_00_04",
+    compiler: str = "ti-cgt-armllvm_4.0.4.LTS",
+    sysconfig: str = "sysconfig_1.26.2",
+) -> Path:
+    """fake CCS 安装目录（真机同款布局：SDK / 编译器 / SysConfig CLI 三件，
+    空串 = 该件不装）；_CCS_SCAN_ROOT monkeypatch 到 tmp_path 扫描。"""
+    ccs = tmp_path / ccs_dir
+    ccs.mkdir(parents=True)
+    if sdk:
+        (ccs / sdk).mkdir(parents=True)
+    if compiler:
+        (ccs / "ccs" / "tools" / "compiler" / compiler).mkdir(parents=True)
+    if sysconfig:
+        (ccs / sysconfig).mkdir(parents=True)
+        (ccs / sysconfig / "sysconfig_cli.bat").write_text("", encoding="utf-8")
+    return ccs
+
+
+def _scan_root(monkeypatch, root: Path) -> None:
+    monkeypatch.setattr("contest_generator.compile_runner._CCS_SCAN_ROOT", str(root))
+
+
+def test_find_ccs_tools_scans_single_ccs_dir(monkeypatch, tmp_path):
+    ccs = _ccs_tree(tmp_path, "ccs2050")
+    _scan_root(monkeypatch, tmp_path)
+
+    tools = find_ccs_tools()
+
+    assert tools == CcsTools(
+        sdk_dir=ccs / "mspm0_sdk_2_10_00_04",
+        compiler_dir=ccs / "ccs" / "tools" / "compiler" / "ti-cgt-armllvm_4.0.4.LTS",
+        sysconfig_cli=ccs / "sysconfig_1.26.2" / "sysconfig_cli.bat",
+    )
+
+
+def test_find_ccs_tools_pieces_span_ccs_versions(monkeypatch, tmp_path):
+    """逐件独立（决策记录 4，真机形态）：SDK + SysConfig 在 ccs2051、编译器在
+    ccs2050——三件来自不同安装目录照常命中，不假设同版本目录。"""
+    ccs2050 = _ccs_tree(tmp_path, "ccs2050", sdk="", sysconfig="")
+    ccs2051 = _ccs_tree(tmp_path, "ccs2051", compiler="")
+    _scan_root(monkeypatch, tmp_path)
+
+    tools = find_ccs_tools()
+
+    assert tools is not None
+    assert tools.sdk_dir == ccs2051 / "mspm0_sdk_2_10_00_04"
+    assert (
+        tools.compiler_dir
+        == ccs2050 / "ccs" / "tools" / "compiler" / "ti-cgt-armllvm_4.0.4.LTS"
+    )
+    assert tools.sysconfig_cli == ccs2051 / "sysconfig_1.26.2" / "sysconfig_cli.bat"
+
+
+def test_find_ccs_tools_newest_version_wins(monkeypatch, tmp_path):
+    """同件多版本取目录名排序最大（版本号后缀大者新）。"""
+    _ccs_tree(tmp_path, "ccs2050", sdk="mspm0_sdk_2_10_00_04")
+    ccs2051 = _ccs_tree(tmp_path, "ccs2051", sdk="mspm0_sdk_2_11_00_07")
+    _scan_root(monkeypatch, tmp_path)
+
+    tools = find_ccs_tools()
+
+    assert tools is not None
+    assert tools.sdk_dir == ccs2051 / "mspm0_sdk_2_11_00_07"
+
+
+def test_find_ccs_tools_missing_piece_returns_none(monkeypatch, tmp_path):
+    """三件缺任一件 = 整体 None（不阻断生成，build_hint 提示）。"""
+    _ccs_tree(tmp_path, "ccs2050", compiler="")  # 缺编译器
+    _scan_root(monkeypatch, tmp_path)
+    assert find_ccs_tools() is None
+
+
+def test_find_ccs_tools_overrides_win_over_scan(monkeypatch, tmp_path):
+    """config 覆盖优先（决策记录 4）：三键全给 → 原样返回，不扫描；逐件覆盖
+    （只给 SDK）→ 其余件照常扫描。"""
+    _ccs_tree(tmp_path, "ccs2050")
+    _scan_root(monkeypatch, tmp_path)
+    sdk = tmp_path / "custom_sdk"
+    sdk.mkdir()
+    compiler = tmp_path / "custom_compiler"
+    compiler.mkdir()
+    cli = tmp_path / "custom_cli.bat"
+    cli.write_text("", encoding="utf-8")
+
+    tools = find_ccs_tools(str(sdk), str(compiler), str(cli))
+
+    assert tools == CcsTools(sdk_dir=sdk, compiler_dir=compiler, sysconfig_cli=cli)
+    partial = find_ccs_tools(str(sdk), "", "")
+    assert partial is not None and partial.sdk_dir == sdk
+    assert partial.compiler_dir == (
+        tmp_path / "ccs2050" / "ccs" / "tools" / "compiler" / "ti-cgt-armllvm_4.0.4.LTS"
+    )
+
+
+def test_find_ccs_tools_invalid_override_returns_none(monkeypatch, tmp_path):
+    """覆盖值非空但指向不存在路径 = 该件未找到（与 find_uv4 同规，不静默）。"""
+    _ccs_tree(tmp_path, "ccs2050")
+    _scan_root(monkeypatch, tmp_path)
+    assert find_ccs_tools(str(tmp_path / "gone_sdk"), "", "") is None
+    assert find_ccs_tools("", "", str(tmp_path / "gone_cli.bat")) is None
+
+
+def test_find_ccs_tools_empty_scan_root_returns_none(monkeypatch, tmp_path):
+    _scan_root(monkeypatch, tmp_path)
+    assert find_ccs_tools() is None
 
 
 # ---------------------------------------------------------------------------

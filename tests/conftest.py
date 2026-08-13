@@ -85,7 +85,7 @@ def make_project(fake_master_project, fake_module_library, stm32_selection):
         main_c_content: str = MAIN_SKELETON,
         registry: PatcherRegistry | None = None,
     ) -> Path:
-        output_dir, _ = generate(
+        output_dir, _, _ = generate(
             platform=platform,
             manifests=stm32_selection if manifests is None else manifests,
             module_library_dir=fake_module_library,
@@ -112,7 +112,7 @@ def make_ccs_project(fake_ccs_master_project, fake_module_library, mspm0_selecti
         main_c_content: str = MAIN_SKELETON,
         registry: PatcherRegistry | None = None,
     ) -> Path:
-        output_dir, _ = generate(
+        output_dir, _, _ = generate(
             platform=platform,
             manifests=mspm0_selection if manifests is None else manifests,
             module_library_dir=fake_module_library,
