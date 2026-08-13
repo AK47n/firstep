@@ -9,6 +9,14 @@ index.html:916；CLI 侧由本测试强制，新增契约字段时须同步三�
     platform      恒发，空 = 不过滤
     clarifications 可选，非空才带（[{question, answer}]）
 
+/api/fix-errors（工单 gen-check-fix-loop/01，服务端校验唯一出处 =
+webapp.py:713 fix_errors 路由；前端恒发 = index.html:1712）：
+    error_text    必填（编译报错全文）
+    output_dir    必填（生成结果目录）
+    problem_text / platform / slugs / main_c 可选上下文，check_topic 内
+                  恒有、恒发，缺省不放；previous_fixes 不带（服务端可选
+                  向后兼容，本工单循环不依赖停滞回喂）
+
 对偶性：改词表忘改 CLI → 事件词表断言红（events.py 是唯一出处）；CLI 侧加 /
 删契约字段 → 字段断言红。测试从 .scratch/real-run/generate_check.py 经
 importlib 加载模块（该目录在 gitignore 内但被 force-tracked，tests/ 无其他
@@ -20,6 +28,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import inspect
+import re
 import sys
 from pathlib import Path
 
@@ -34,6 +43,14 @@ CONTRACT_FIELDS = frozenset(
 )
 # 缺省输入 = 现状两键（向后兼容语义不变）
 DEFAULT_FIELDS = frozenset({"problem_text", "platform"})
+
+# /api/fix-errors 契约六字段清单（新增字段时同步 webapp.py:713 路由校验 +
+# index.html:1712 + build_fix_payload 本文件常量三处；此处红 = 三客户端漂移）
+FIX_CONTRACT_FIELDS = frozenset(
+    {"output_dir", "error_text", "problem_text", "platform", "slugs", "main_c"}
+)
+# 缺省输入 = 必填两键（可选上下文缺省不放）
+FIX_DEFAULT_FIELDS = frozenset({"output_dir", "error_text"})
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GEN_CHECK = REPO_ROOT / ".scratch" / "real-run" / "generate_check.py"
@@ -83,6 +100,43 @@ def test_build_recommend_payload_omits_empty_optionals() -> None:
     payload = gen.build_recommend_payload("题面全文", platform="mspm0")
     assert set(payload) == DEFAULT_FIELDS
     assert payload["platform"] == "mspm0"
+
+
+def test_build_fix_payload_full_input_has_exactly_six_fields() -> None:
+    """全输入（problem_text + platform + slugs + main_c 都传）= 恰六字段。
+
+    前端恒发六字段、CLI 条件发——对偶的强制点是键集合一致（新增契约字段时
+    此处红，注释见文件头 / webapp.py:713）。
+    """
+    payload = gen.build_fix_payload(
+        "out_2026C_stm32",
+        "main.c(12): error #20: identifier undefined",
+        problem_text="题面全文",
+        platform="stm32",
+        slugs=["led_beep", "gpio"],
+        main_c="int main(void) { return 0; }",
+    )
+    assert set(payload) == FIX_CONTRACT_FIELDS
+    assert payload["output_dir"] == "out_2026C_stm32"
+    assert payload["error_text"] == "main.c(12): error #20: identifier undefined"
+    assert payload["problem_text"] == "题面全文"
+    assert payload["platform"] == "stm32"
+    assert payload["slugs"] == ["led_beep", "gpio"]
+    assert payload["main_c"] == "int main(void) { return 0; }"
+
+
+def test_build_fix_payload_default_keeps_two_required_fields() -> None:
+    """缺省输入 = 必填两键（output_dir + error_text），可选上下文缺省不放。"""
+    payload = gen.build_fix_payload("out_x", "err")
+    assert set(payload) == FIX_DEFAULT_FIELDS
+
+
+def test_build_fix_payload_omits_empty_optionals() -> None:
+    """可选上下文为空串 / 空列表时都不进 payload（缺省不放语义）。"""
+    payload = gen.build_fix_payload(
+        "out_x", "err", problem_text="", platform="", slugs=(), main_c=""
+    )
+    assert set(payload) == FIX_DEFAULT_FIELDS
 
 
 # ---------- check_topic 透传对偶（删 reference_ids 透传即红） ----------
@@ -177,13 +231,13 @@ def test_cli_reference_ids_flag_absent_passes_empty(monkeypatch) -> None:
 
 # ---------- 事件词表对偶 ----------
 
-def _cli_handled_event_names() -> set[str]:
-    """AST 抽取 recommend_stream 事件分支比较的 event 字符串字面量。
+def _cli_handled_event_names(fn) -> set[str]:
+    """AST 抽取 SSE 消费函数事件分支比较的 event 字符串字面量。
 
     不写死词表（写死 = 测试镜像自身）：从 CLI 源码结构抽取，与 events.py
     常量比对——改词表忘改 CLI、或改 CLI 忘改词表，任一侧都红。
     """
-    tree = ast.parse(inspect.getsource(gen.recommend_stream))
+    tree = ast.parse(inspect.getsource(fn))
     func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef))
     names: set[str] = set()
     for node in ast.walk(func):
@@ -212,7 +266,33 @@ def test_cli_event_wordtable_matches_events_py() -> None:
         events.EVENT_QUESTION,
         events.EVENT_ERROR,
     }
-    assert _cli_handled_event_names() == expected
+    assert _cli_handled_event_names(gen.recommend_stream) == expected
+
+
+def test_cli_fix_event_wordtable_matches_events_py() -> None:
+    """CLI 修复分支处理的 event 名集合 == events.py 修复词表（recommend 同款
+    机制，工单 gen-check-fix-loop/01——改词表忘改 fix_stream 即红）。"""
+    expected = {
+        events.EVENT_PARSE_DONE,
+        events.EVENT_FIX_START,
+        events.EVENT_APPLY_RESULT,
+        events.EVENT_DONE,
+        events.EVENT_ERROR,
+    }
+    assert _cli_handled_event_names(gen.fix_stream) == expected
+
+
+# ---------- 修复循环轮数上限钉（工单 gen-check-fix-loop/01 决策 1） ----------
+
+
+def test_cli_fix_max_rounds_matches_frontend() -> None:
+    """CLI FIX_MAX_ROUNDS == 前端 index.html FIX_MAX_ROUNDS（改动须两处同步）。"""
+    html = (
+        REPO_ROOT / "src" / "contest_generator" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+    m = re.search(r"const FIX_MAX_ROUNDS = (\d+);", html)
+    assert m is not None, "index.html 找不到 const FIX_MAX_ROUNDS"
+    assert gen.FIX_MAX_ROUNDS == int(m.group(1))
 
 
 # ---------- 门禁同源结构钉（工单 generate-check-parity/01） ----------
