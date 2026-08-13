@@ -1,0 +1,16 @@
+{
+  "id": "UART-外部环回-中断",
+  "title": "UART 外部环回（中断）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures the UART at 9600bps to transmit and receive data. The device should be configured in external loopback mode. The device remains in SLEEP mode while waiting for an interrupt.（SDK 例程：uart_external_loopback_interrupt）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_external_loopback_interrupt.c",
+    "uart_external_loopback_interrupt.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "定时器-A-PWM-死区",
+  "title": "定时器 A PWM 死区",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerA in PWM edge align mode and outputs 4 PWM signal. The pair of signals on C0 and C1 are complementary signals with deadband insertion. The pair of signals on C2 and C3 are also complementary signals with dead band insertion.（SDK 例程：tima_timer_mode_pwm_dead_band）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "tima_timer_mode_pwm_dead_band.c",
+    "tima_timer_mode_pwm_dead_band.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

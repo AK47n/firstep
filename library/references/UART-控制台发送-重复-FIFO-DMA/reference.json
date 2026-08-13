@@ -1,0 +1,16 @@
+{
+  "id": "UART-控制台发送-重复-FIFO-DMA",
+  "title": "UART 控制台发送（重复 FIFO+DMA）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example sets up the UART to continuously transmit data to output to the console via the DMA using a Timer to write each second. This example is designed to run from the LaunchPad connected to a PC with a console open, and verify the DMA can be used to output data to the console with minimal use（SDK 例程：uart_tx_console_multibyte_repeated_fifo_dma）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_tx_console_multibyte_repeated_fifo_dma.c",
+    "uart_tx_console_multibyte_repeated_fifo_dma.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

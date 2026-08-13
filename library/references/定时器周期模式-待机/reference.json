@@ -1,0 +1,16 @@
+{
+  "id": "定时器周期模式-待机",
+  "title": "定时器周期模式（待机）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG in periodic mode and toggles the LED. The period starts at 500ms and decreases by 50ms each toggle until the period is 100 ms, and then repeats. The device remains in STANDBY mode while waiting for an interrupt.（SDK 例程：timx_timer_mode_periodic_standby）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_periodic_standby.c",
+    "timx_timer_mode_periodic_standby.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

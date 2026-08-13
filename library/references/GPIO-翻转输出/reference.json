@@ -1,0 +1,16 @@
+{
+  "id": "GPIO-翻转输出",
+  "title": "GPIO 翻转输出",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Toggles three GPIO pins using HW toggle register.（SDK 例程：gpio_toggle_output）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "gpio_toggle_output.c",
+    "gpio_toggle_output.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

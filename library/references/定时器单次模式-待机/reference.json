@@ -1,0 +1,16 @@
+{
+  "id": "定时器单次模式-待机",
+  "title": "定时器单次模式（待机）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG in one shot mode and turns off an LED after 500 ms. The device remains in STANDBY mode while waiting for an interrupt.（SDK 例程：timx_timer_mode_one_shot_standby）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_one_shot_standby.c",
+    "timx_timer_mode_one_shot_standby.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

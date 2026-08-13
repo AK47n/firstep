@@ -1,0 +1,16 @@
+{
+  "id": "RTC-日历闹钟-待机",
+  "title": "RTC 日历闹钟（待机）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures the RTC in Calendar mode and enables Alarm 1. The LED will toggle when the alarm is triggered. The device remains in STANDBY mode while waiting for an interrupt.（SDK 例程：rtc_calendar_alarm_standby）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "rtc_calendar_alarm_standby.c",
+    "rtc_calendar_alarm_standby.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

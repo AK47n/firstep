@@ -1,0 +1,16 @@
+{
+  "id": "ADC12-单次转换",
+  "title": "ADC12 单次转换",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures ADC0 to trigger single conversion and turn on an LED if ADC > 0.5*VDD. Otherwise, LED1 remains off.（SDK 例程：adc12_single_conversion）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "adc12_single_conversion.c",
+    "adc12_single_conversion.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

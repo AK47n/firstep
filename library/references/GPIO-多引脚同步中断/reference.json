@@ -1,0 +1,16 @@
+{
+  "id": "GPIO-多引脚同步中断",
+  "title": "GPIO 多引脚同步中断",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates how to simultaneously service three GPIO interrupts. The corresponding LED will be toggled for each GPIO interrupt.（SDK 例程：gpio_simultaneous_interrupts）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "gpio_simultaneous_interrupts.c",
+    "gpio_simultaneous_interrupts.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "UART-曼彻斯特编码回显",
+  "title": "UART 曼彻斯特编码回显",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates UART TX and RX with Manchester encoding. Manchester encoding is a feature only usable with UART Extend.（SDK 例程：uart_extend_manchester_echo）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_extend_manchester_echo.c",
+    "uart_extend_manchester_echo.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

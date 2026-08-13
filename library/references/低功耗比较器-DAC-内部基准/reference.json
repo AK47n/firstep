@@ -1,0 +1,16 @@
+{
+  "id": "低功耗比较器-DAC-内部基准",
+  "title": "低功耗比较器 DAC（内部基准）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "COMP is configured in low-power mode using the 8-bit DAC with internal reference as positive input, and the external pin as negative input. An interrupt is triggered when the external input crosses the DAC treshold and a LED is toggled accordingly. The device stays in STOP mode, except when an inter（SDK 例程：comp_lp_dac_vref_internal）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "comp_lp_dac_vref_internal.c",
+    "comp_lp_dac_vref_internal.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

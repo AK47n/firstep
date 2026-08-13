@@ -1,0 +1,16 @@
+{
+  "id": "系统关断模式",
+  "title": "系统关断模式",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Configures different power policies based on the configuration of two input pins. This prevents the device from indefinitely staying in SHUTDOWN mode since the serial wire debug (SWD) remains locked while the device is in SHUTDOWN mode.（SDK 例程：sysctl_shutdown）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "sysctl_shutdown.c",
+    "sysctl_shutdown.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

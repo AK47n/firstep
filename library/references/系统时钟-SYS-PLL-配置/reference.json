@@ -1,0 +1,16 @@
+{
+  "id": "系统时钟-SYS-PLL-配置",
+  "title": "系统时钟 SYS PLL 配置",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example configures MCLK frequency to 80 MHz by using the SYSPLL to convert SYSOSC from 32 MHz to 80 MHz. SYSPLLCLK2X is passed to MCLK and configured as its source. Since MCLK isn't mapped to CLK_OUT pin, SYSPLLCLK1 will be routed to CLK_OUT instead and is configured to be half the speed of SYS（SDK 例程：sysctl_mclk_syspll）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "sysctl_mclk_syspll.c",
+    "sysctl_mclk_syspll.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

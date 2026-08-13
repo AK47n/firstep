@@ -1,0 +1,16 @@
+{
+  "id": "SPI-从机回显-中断",
+  "title": "SPI 从机回显（中断）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Note: The use of \"Master\" and \"Slave\", along with \"MOSI/MISO\" terminology is being considered obsolete. These terms will be replaced with \"Controller\" and \"Peripheral\", and \"PICO/POCI\" respectively.（SDK 例程：spi_peripheral_echo_interrupts）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "spi_peripheral_echo_interrupts.c",
+    "spi_peripheral_echo_interrupts.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

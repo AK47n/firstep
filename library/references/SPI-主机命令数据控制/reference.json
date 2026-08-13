@@ -1,0 +1,16 @@
+{
+  "id": "SPI-主机命令数据控制",
+  "title": "SPI 主机命令数据控制",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Note: The use of \"Master\" and \"Slave\", along with \"MOSI/MISO\" terminology is being considered obsolete. These terms will be replaced with \"Controller\" and \"Peripheral\", and \"PICO/POCI\" respectively.（SDK 例程：spi_controller_command_data_control）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "spi_controller_command_data_control.c",
+    "spi_controller_command_data_control.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

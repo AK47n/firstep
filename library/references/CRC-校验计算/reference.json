@@ -1,0 +1,16 @@
+{
+  "id": "CRC-校验计算",
+  "title": "CRC 校验计算",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example calculates the checksum on a block of memory using the following configuration: - CRC32 - Little endian - Not reversed（SDK 例程：crc_calculate_checksum）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "crc_calculate_checksum.c",
+    "crc_calculate_checksum.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

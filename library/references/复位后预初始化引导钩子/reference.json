@@ -1,0 +1,16 @@
+{
+  "id": "复位后预初始化引导钩子",
+  "title": "复位后预初始化引导钩子",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example shows a basic example of an application calling a pre-initialization boot hook function. This allows an application to execute some instructions immediately after reset or to reduce boot time by bypassing cinit. The example jumps to main without using cinit to initialize global variable（SDK 例程：cinit_bypass）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "cinit_bypass.c",
+    "cinit_bypass.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

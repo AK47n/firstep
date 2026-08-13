@@ -1,0 +1,16 @@
+{
+  "id": "Flash-多尺寸写入",
+  "title": "Flash 多尺寸写入",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates program multiple size (8/16/32/64-bit) data to flash with automatic hardware generated ECC.（SDK 例程：flashctl_multiple_size_write）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "flashctl_multiple_size_write.c",
+    "flashctl_multiple_size_write.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "I2C-从机多字节-FIFO-读写-轮询",
+  "title": "I2C 从机多字节 FIFO 读写（轮询）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "I2C Target responds to write and read request from I2C Controller. The example uses FIFO and polling. It can only handle a maximum of 8 bytes due to FIFO size. LED toggles if transmission and reception are successful. The Target device must be enabled and active before running the Controller example（SDK 例程：i2c_target_rw_multibyte_fifo_poll）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "i2c_target_rw_multibyte_fifo_poll.c",
+    "i2c_target_rw_multibyte_fifo_poll.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

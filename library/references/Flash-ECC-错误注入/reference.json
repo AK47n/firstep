@@ -1,0 +1,16 @@
+{
+  "id": "Flash-ECC-错误注入",
+  "title": "Flash ECC 错误注入",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates testing ECC logic by writing invalid data to inject SEC (single bit error correction) and DED (double bit error correction) errors.（SDK 例程：flashctl_ecc_error_injection）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "flashctl_ecc_error_injection.c",
+    "flashctl_ecc_error_injection.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

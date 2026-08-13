@@ -1,0 +1,16 @@
+{
+  "id": "运放断线检测电流源送-ADC",
+  "title": "运放断线检测电流源送 ADC",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "OPA is configured in buffer mode using connecting positive input to ADC. The burnout current source is then enabled to detect a possible short or open condition.（SDK 例程：opa_burnout_current_source_to_adc）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "opa_burnout_current_source_to_adc.c",
+    "opa_burnout_current_source_to_adc.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

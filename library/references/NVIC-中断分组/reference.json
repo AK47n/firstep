@@ -1,0 +1,16 @@
+{
+  "id": "NVIC-中断分组",
+  "title": "NVIC 中断分组",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TIMG0, TIMG1, and WWDT0 to toggle three different LEDs to demonstrate usage of NVIC group functionality.（SDK 例程：nvic_interrupt_grouping）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "nvic_interrupt_grouping.c",
+    "nvic_interrupt_grouping.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
