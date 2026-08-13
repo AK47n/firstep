@@ -41,6 +41,11 @@ class AppConfig:
     autocommit_enabled: bool = True  # 写库动作自动 git 提交开关（工单 01，默认开）
     uv4_path: str = ""  # Keil UV4 可选覆盖（工单 autocompile-loop/01）：空 = 自动探测
     gmake_path: str = ""  # gmake 可选覆盖：空 = 走 PATH 探测
+    # CCS 工具链三件套可选覆盖（工单 mspm0-build-makefiles/01）：空 = 自动探测
+    # （C:/ti/ccs*/ 扫描）；三件逐件独立（真机 SDK / 编译器分居两个版本目录）
+    ccs_sdk_dir: str = ""
+    ccs_compiler_dir: str = ""
+    ccs_sysconfig_cli: str = ""
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -85,6 +90,16 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     gmake_path = data.get("gmake_path", "")
     if not isinstance(gmake_path, str):
         raise ConfigError(f"gmake_path 必须是字符串：{path}")
+    # CCS 三件套覆盖（工单 mspm0-build-makefiles/01）：空串 = 自动探测
+    ccs_sdk_dir = data.get("ccs_sdk_dir", "")
+    if not isinstance(ccs_sdk_dir, str):
+        raise ConfigError(f"ccs_sdk_dir 必须是字符串：{path}")
+    ccs_compiler_dir = data.get("ccs_compiler_dir", "")
+    if not isinstance(ccs_compiler_dir, str):
+        raise ConfigError(f"ccs_compiler_dir 必须是字符串：{path}")
+    ccs_sysconfig_cli = data.get("ccs_sysconfig_cli", "")
+    if not isinstance(ccs_sysconfig_cli, str):
+        raise ConfigError(f"ccs_sysconfig_cli 必须是字符串：{path}")
 
     return AppConfig(
         base_url=base_url,
@@ -95,6 +110,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         autocommit_enabled=autocommit_enabled,
         uv4_path=uv4_path,
         gmake_path=gmake_path,
+        ccs_sdk_dir=ccs_sdk_dir,
+        ccs_compiler_dir=ccs_compiler_dir,
+        ccs_sysconfig_cli=ccs_sysconfig_cli,
     )
 
 
@@ -112,6 +130,9 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
                 "autocommit_enabled": config.autocommit_enabled,
                 "uv4_path": config.uv4_path,
                 "gmake_path": config.gmake_path,
+                "ccs_sdk_dir": config.ccs_sdk_dir,
+                "ccs_compiler_dir": config.ccs_compiler_dir,
+                "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
             },
             ensure_ascii=False,
             indent=2,

@@ -452,6 +452,9 @@
         <div class="item">输出目录：<span id="res-dir" class="slug"></span></div>
         <div class="item">include path：<span id="res-includes" class="slug"></span></div>
         <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
+        <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
+             工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
+        <div class="item hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
         <h3>工程结构</h3>
         <pre id="res-structure" class="result"></pre>
       </div>
@@ -751,6 +754,13 @@
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>Keil UV4 路径（留空自动探测）</label><input type="text" id="set-uv4-path" placeholder="C:\Keil5\Core\UV4\UV4.exe"></div>
         <div style="flex:1"><label>gmake 路径（留空走 PATH）</label><input type="text" id="set-gmake-path" placeholder="gmake / make"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>CCS SDK 目录（留空自动探测 C:/ti/ccs*）</label><input type="text" id="set-ccs-sdk-dir" placeholder="C:/ti/ccs2051/mspm0_sdk_2_10_00_04"></div>
+        <div style="flex:1"><label>CCS 编译器目录（留空自动探测）</label><input type="text" id="set-ccs-compiler-dir" placeholder="C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>SysConfig CLI 路径（留空自动探测）</label><input type="text" id="set-ccs-sysconfig-cli" placeholder="C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"></div>
       </div>
       <div class="row" style="margin-top:12px">
         <button id="btn-save-settings" class="primary">保存设置</button>
@@ -1312,6 +1322,9 @@ $("btn-generate").addEventListener("click", async () => {
     $("res-includes").textContent = data.include_dirs.join("；");
     $("res-modules").textContent = data.modules
       .map((m) => m.slug + "(" + m.files.join(", ") + ")").join("、");
+    // 构建脚本提示（工单 mspm0-build-makefiles/01）：非空时展示，空则隐藏
+    $("res-build-hint").textContent = data.build_hint || "";
+    $("res-build-hint").classList.toggle("hidden", !data.build_hint);
     $("res-structure").textContent = data.structure.join("\n");
     $("generate-result").classList.remove("hidden");
     status.textContent = "";
@@ -2959,6 +2972,10 @@ async function loadSettings() {
     // 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
     $("set-uv4-path").value = s.uv4_path || "";
     $("set-gmake-path").value = s.gmake_path || "";
+    // CCS 三件套可选覆盖（工单 mspm0-build-makefiles/01）：空串 = 自动探测
+    $("set-ccs-sdk-dir").value = s.ccs_sdk_dir || "";
+    $("set-ccs-compiler-dir").value = s.ccs_compiler_dir || "";
+    $("set-ccs-sysconfig-cli").value = s.ccs_sysconfig_cli || "";
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
@@ -2975,6 +2992,9 @@ $("btn-save-settings").addEventListener("click", async () => {
       masters_dir: $("set-masters-dir").value.trim(),
       uv4_path: $("set-uv4-path").value.trim(),
       gmake_path: $("set-gmake-path").value.trim(),
+      ccs_sdk_dir: $("set-ccs-sdk-dir").value.trim(),
+      ccs_compiler_dir: $("set-ccs-compiler-dir").value.trim(),
+      ccs_sysconfig_cli: $("set-ccs-sysconfig-cli").value.trim(),
     });
     $("settings-msg").classList.add("ok");
     $("settings-msg").textContent = "已保存，立即生效。";

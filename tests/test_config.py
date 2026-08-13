@@ -94,6 +94,10 @@ def test_saved_file_is_plain_json(tmp_path):
         # 工具链可选覆盖（工单 autocompile-loop/01）：缺省空串 = 自动探测
         "uv4_path": "",
         "gmake_path": "",
+        # CCS 三件套可选覆盖（工单 mspm0-build-makefiles/01）：缺省空串 = 自动探测
+        "ccs_sdk_dir": "",
+        "ccs_compiler_dir": "",
+        "ccs_sysconfig_cli": "",
     }
 
 
@@ -121,6 +125,42 @@ def test_toolchain_paths_default_blank_and_roundtrip(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ConfigError, match="uv4_path"):
+        load_config(path)  # 类型非法大声失败（与其余字段同严格度）
+
+
+def test_ccs_toolchain_paths_default_blank_and_roundtrip(tmp_path):
+    """ccs 三件套（工单 mspm0-build-makefiles/01）：缺省空串 = 自动探测；
+    非空回写；类型非法大声失败（uv4_path 同款）。"""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
+    loaded = load_config(path)
+    assert loaded.ccs_sdk_dir == ""
+    assert loaded.ccs_compiler_dir == ""
+    assert loaded.ccs_sysconfig_cli == ""
+
+    save_config(
+        AppConfig(
+            api_key="sk-test",
+            ccs_sdk_dir="C:/ti/ccs2051/mspm0_sdk_2_10_00_04",
+            ccs_compiler_dir=(
+                "C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"
+            ),
+            ccs_sysconfig_cli="C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat",
+        ),
+        path,
+    )
+    loaded = load_config(path)
+    assert loaded.ccs_sdk_dir == "C:/ti/ccs2051/mspm0_sdk_2_10_00_04"
+    assert loaded.ccs_compiler_dir == (
+        "C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"
+    )
+    assert loaded.ccs_sysconfig_cli == "C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"
+
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "ccs_sdk_dir": 123}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="ccs_sdk_dir"):
         load_config(path)  # 类型非法大声失败（与其余字段同严格度）
 
 

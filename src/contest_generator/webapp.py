@@ -30,6 +30,7 @@ from .compile_runner import (
     CompileRunnerError,
     collect_build_log,
     compile_passed,
+    find_ccs_tools,
     find_make,
     find_uv4,
 )
@@ -682,6 +683,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
             _assemble_topic_context(context, topic_id, "", None)
+        # CCS 三件套探测（工单 mspm0-build-makefiles/01）：config 覆盖 > 自动
+        # 扫描；mspm0 生成自动产出 Debug/makefile 集（探测不到 = 生成照常 +
+        # build_hint 提示，不阻断）。stm32 不探。
+        ccs_tools = None
+        if platform == PLATFORM_MSPM0:
+            ccs_tools = find_ccs_tools(
+                config.ccs_sdk_dir,
+                config.ccs_compiler_dir,
+                config.ccs_sysconfig_cli,
+            )
         summary = generate_project(
             platform=platform,
             slugs=slugs,
@@ -689,6 +700,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             output_dir=output_dir,
             module_library_dir=config.module_library_dir,
             masters_dir=config.masters_dir,
+            ccs_tools=ccs_tools,
         )
         return _generation_result(summary)
 
@@ -1138,6 +1150,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
             "uv4_path": config.uv4_path if config is not None else "",
             "gmake_path": config.gmake_path if config is not None else "",
+            # CCS 三件套可选覆盖（工单 mspm0-build-makefiles/01）：空串 = 自动探测
+            "ccs_sdk_dir": config.ccs_sdk_dir if config is not None else "",
+            "ccs_compiler_dir": config.ccs_compiler_dir if config is not None else "",
+            "ccs_sysconfig_cli": config.ccs_sysconfig_cli if config is not None else "",
             "config_path": str(context.config_path),
         }
 
@@ -1165,6 +1181,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 工具链可选覆盖（工单 autocompile-loop/01）：缺省 = 自动探测
             uv4_path=_optional_str(payload, "uv4_path"),
             gmake_path=_optional_str(payload, "gmake_path"),
+            # CCS 三件套可选覆盖（工单 mspm0-build-makefiles/01）：缺省 = 自动探测
+            ccs_sdk_dir=_optional_str(payload, "ccs_sdk_dir"),
+            ccs_compiler_dir=_optional_str(payload, "ccs_compiler_dir"),
+            ccs_sysconfig_cli=_optional_str(payload, "ccs_sysconfig_cli"),
         )
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
@@ -1435,6 +1455,9 @@ def _generation_result(summary: GenerationSummary) -> dict:
         "modules": [
             {"slug": slug, "files": list(files)} for slug, files in summary.modules
         ],
+        # 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
+        # 工具链时非空，前端摘要区展示一行提示
+        "build_hint": summary.build_hint,
     }
 
 
