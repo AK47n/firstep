@@ -18,8 +18,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
+from .compile_runner import CCS_NOT_FOUND_HINT, CcsTools
 from .library import list_modules
 from .llm import LLMError
+from .makefiles import write_makefile_set
 from .manifest import ManifestSummary, ModuleManifest, build_manifest_summaries
 from .master_store import master_project_dir
 from .patchers import (
@@ -28,6 +30,7 @@ from .patchers import (
     external_headers,
     include_search_dirs,
 )
+from .platforms import PLATFORM_MSPM0
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
     REFERENCE_SOURCE_MANUAL,
@@ -333,12 +336,18 @@ def _make_fulltext_reader(
 
 @dataclass(frozen=True)
 class GenerationSummary:
-    """生成结果摘要（界面呈现用）：工程结构 / include path / 各模块文件清单。"""
+    """生成结果摘要（界面呈现用）：工程结构 / include path / 各模块文件清单。
+
+    build_hint（工单 mspm0-build-makefiles/01）：mspm0 生成时未探测到 CCS
+    工具链 → 中文提示（命令行构建不可用，可设置页填 ccs_* 覆盖），生成本身
+    照常；stm32 与探测命中时为空串。
+    """
 
     output_dir: Path
     structure: tuple[str, ...]  # 相对工程目录的文件路径（POSIX），排序
     include_dirs: tuple[str, ...]  # 已去重，按首次出现顺序
     modules: tuple[tuple[str, tuple[str, ...]], ...]  # (slug, 该平台文件列表)
+    build_hint: str = ""
 
 
 def describe_generation(
@@ -346,6 +355,7 @@ def describe_generation(
     manifests: Sequence[ModuleManifest],
     platform: str,
     include_dirs: Sequence[str],
+    build_hint: str = "",
 ) -> GenerationSummary:
     """生成完成后的只读摘要：结构清单直接读输出目录；include 目录消费
     _copy_module_files 的实际复制结果（同一来源，不再从 manifest 二次推导
@@ -366,6 +376,7 @@ def describe_generation(
         structure=structure,
         include_dirs=tuple(include_dirs),
         modules=tuple(modules),
+        build_hint=build_hint,
     )
 
 
@@ -378,6 +389,7 @@ def generate_project(
     module_library_dir: Path,
     masters_dir: Path,
     registry: PatcherRegistry | None = None,
+    ccs_tools: CcsTools | None = None,
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -388,9 +400,15 @@ def generate_project(
 
     模块集 = 用户选择（含推荐链路结果）原样展开，历史赛题入口不再自动并入
     任何"题专用模块"（普适化后无题专用模块，推荐链路 AI 按题面能力推荐
-    承担——工单 module-universalization/07，勿恢复）。"""
+    承担——工单 module-universalization/07，勿恢复）。
+
+    ccs_tools（工单 mspm0-build-makefiles/01）：CCS 三件套探测结果由装配层
+    （webapp）探好传入——本流程不自己探（探针需要 config 覆盖值，config 归
+    装配层；直接调用方不传 = 不写 makefile 集，测试确定性）。mspm0 + None
+    = 摘要 build_hint 提示（命令行构建不可用），生成不阻断。
+    """
     resolved = resolve_selection(module_library_dir, platform, slugs)
-    result_dir, include_dirs = generate(
+    result_dir, include_dirs, build_hint = generate(
         platform=platform,
         manifests=resolved.manifests,
         module_library_dir=module_library_dir,
@@ -398,8 +416,11 @@ def generate_project(
         output_dir=output_dir,
         main_c_content=main_c_content,
         registry=registry,
+        ccs_tools=ccs_tools,
     )
-    return describe_generation(result_dir, resolved.manifests, platform, include_dirs)
+    return describe_generation(
+        result_dir, resolved.manifests, platform, include_dirs, build_hint
+    )
 
 
 @dataclass(frozen=True)
@@ -582,11 +603,20 @@ def generate(
     output_dir: Path,
     main_c_content: str,
     registry: PatcherRegistry | None = None,
-) -> tuple[Path, tuple[str, ...]]:
-    """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径）。
+    ccs_tools: CcsTools | None = None,
+) -> tuple[Path, tuple[str, ...], str]:
+    """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径,
+    build_hint）。
 
     include 目录 = _copy_module_files 实际复制出的目录（摘要消费同一来源，
-    不再二次推导——见 describe_generation）。"""
+    不再二次推导——见 describe_generation）。
+
+    mspm0 构建脚本（工单 mspm0-build-makefiles/01）：产物完整后（patcher 之后）
+    从复制产物推导模块源集（过滤 .c，子目录 = rel 父目录——manifest 单源，
+    不维护静态 MODULES 表）写 CCS 标准 Debug/makefile 集（write_makefile_set，
+    路径全部参数化）；ccs_tools 未探测到（None）→ 跳过 + build_hint 提示，
+    不阻断生成。stm32 零改动（无构建脚本、hint 空）。
+    """
     patcher_registry = registry or default_registry()
     patcher = patcher_registry.get(platform)  # 未知平台在这里失败
 
@@ -620,12 +650,51 @@ def generate(
         (output_dir / "main.c").write_text(main_c_content, encoding="utf-8")
 
         patcher.patch(output_dir, copied_files, include_dirs)
+
+        build_hint = ""
+        if platform == PLATFORM_MSPM0:
+            if ccs_tools is None:
+                build_hint = CCS_NOT_FOUND_HINT
+            else:
+                write_makefile_set(
+                    output_dir,
+                    _module_sources(copied_files),
+                    sdk_dir=str(ccs_tools.sdk_dir),
+                    compiler_dir=str(ccs_tools.compiler_dir),
+                    sysconfig_cli=str(ccs_tools.sysconfig_cli),
+                )
     except Exception:
         # 复制中途失败不要留下半成品
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
 
-    return output_dir, tuple(p.as_posix() for p in include_dirs)
+    return output_dir, tuple(p.as_posix() for p in include_dirs), build_hint
+
+
+def _module_sources(
+    copied_files: Sequence[Path],
+) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
+    """复制产物（modules/<slug>/... 相对路径）→ makefiles 的模块源形状
+    （(slug, 子目录, (源文件名, ...))，只收 .c，子目录 = 文件在模块目录下的
+    父目录、空 = 平铺；顺序 = 复制顺序即 manifest 顺序）。空 files 平台条目
+    （实现内嵌母版）不复制 → 天然不进 makefile 集；纯 .h 模块不产生编译
+    条目（无源码可编）。"""
+    order: list[tuple[str, str]] = []
+    by_key: dict[tuple[str, str], list[str]] = {}
+    for rel in copied_files:
+        parts = rel.parts
+        if len(parts) < 3 or parts[0] != MODULES_SUBDIR:
+            continue  # 模块文件恒为 modules/<slug>/<rel> 形态，防御性跳过
+        if not rel.name.lower().endswith(".c"):
+            continue
+        key = (parts[1], "/".join(parts[2:-1]))
+        if key not in by_key:
+            order.append(key)
+            by_key[key] = []
+        by_key[key].append(rel.name)
+    return tuple(
+        (slug, subdir, tuple(by_key[(slug, subdir)])) for slug, subdir in order
+    )
 
 
 def _check_module_files(corpus: ModuleCorpus) -> None:

@@ -29,6 +29,7 @@ from contest_generator.compile_runner import (
     CompileRunnerError,
     collect_build_log,
     compile_passed,
+    find_make,
     find_uv4,
 )
 from contest_generator.fix_errors import parse_compile_errors, summarize_compile_output
@@ -141,6 +142,30 @@ def uv4_build(out_dir: Path) -> tuple[bool | None, str]:
         if build.run.output.strip() else f"exit={build.run.exit_code} 无日志"
     passed = compile_passed(build.platform, build.run.exit_code)
     return passed, f"UV4 exit={build.run.exit_code} {tail}（{summary['errors']} 错误）"
+
+
+def gmake_build(out_dir: Path) -> tuple[bool | None, str]:
+    """真机编译：gmake 全量重建（mspm0/CCS 线，工单 mspm0-build-makefiles/01——
+    Debug/makefile 集由生成器自动产出，CCS 命令行构建不再依赖 scratch 后处理，
+    与 uv4_build 同源走生产 collect_build_log）。返回 (是否通过, 摘要)；gmake
+    不可用返回 (None, 原因)。摘要带首编耗时（真机计时观察，决策记录 7）。"""
+    make = find_make(os.environ.get("GMAKE") or "")
+    if make is None:
+        return None, "未找到 gmake，跳过真机编译"
+    try:
+        build = collect_build_log("mspm0", out_dir, make=make)
+    except CompileRunnerError as exc:
+        return False, str(exc)
+    summary = summarize_compile_output(
+        build.run.output, parse_compile_errors(build.run.output)
+    )
+    tail = build.run.output.strip().splitlines()[-1] \
+        if build.run.output.strip() else f"exit={build.run.exit_code} 无日志"
+    passed = compile_passed(build.platform, build.run.exit_code)
+    return passed, (
+        f"gmake exit={build.run.exit_code} {tail}"
+        f"（{summary['errors']} 错误，{build.run.duration:.1f}s）"
+    )
 
 
 def post(url: str, payload: dict) -> dict:
@@ -334,6 +359,10 @@ def check_topic(
         gen_payload["topic_id"] = topic_id
     gen = post("/api/generate", gen_payload)
     print(f"[生成] 输出 {out_dir}")
+    if gen.get("build_hint"):
+        # mspm0 未探测到 CCS 工具链（工单 mspm0-build-makefiles/01）：生成照常
+        # 但无 Debug/makefile 集，真机编译段必然失败——先如实提示
+        print(f"  [提示] {gen['build_hint']}")
     files = [f.relative_to(out_dir).as_posix() for f in out_dir.rglob("*") if f.is_file()]
     print(f"  文件数 {len(files)}")
     for f in files:
@@ -355,19 +384,18 @@ def check_topic(
     else:
         print("  [产物] 门禁全过（产物树语料重建，与生成同源）")
 
-    # 真机编译：UV4 命令行构建（符号级完整性的唯一证明，仅 stm32/Keil 线；
-    # mspm0/CCS 线 Theia 无命令行构建，最终证明走用户 GUI 编译）
-    if platform == "stm32":
-        passed, summary = uv4_build(out_dir)
-        if passed is None:
-            print(f"  [真机] {summary}")
-        elif passed:
-            print(f"  [真机] ✓ {summary}")
-        else:
-            print(f"  [真机] ✗ {summary}")
-            ok = False
+    # 真机编译（符号级完整性的唯一证明）：stm32/Keil 线 UV4 全量重建；
+    # mspm0/CCS 线 gmake 全量重建（Debug/makefile 集由生成器自动产出，
+    # 工单 mspm0-build-makefiles/01——旧"无命令行"文案随 gmake 通路落地删除）
+    build_fn = uv4_build if platform == "stm32" else gmake_build
+    passed, summary = build_fn(out_dir)
+    if passed is None:
+        print(f"  [真机] {summary}")
+    elif passed:
+        print(f"  [真机] ✓ {summary}")
     else:
-        print("  [真机] mspm0/CCS 线：Theia 无命令行构建，最终证明待用户 GUI 编译")
+        print(f"  [真机] ✗ {summary}")
+        ok = False
     return ok
 
 
