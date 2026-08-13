@@ -7,6 +7,7 @@
 - 10:19 参考文件库录入 TI MSPM0 SDK driverlib 例程 143 条（每例一条、平台 mspm0，adc / uart / spi / timx / gpio / dma / i2c / comp 等全外设；仅 UTF-8 文本，排除工具链胶水与 SDK 副本树；空骨架不入库）
 - 10:37 例程标题改中文直观名（如「ADC12 单次转换」「定时器 QEI 编码器模式」），原 SDK 目录名保留在简介末尾；删 9 条 CCS 空工程模板；库内共 147 条
 - 12:27 参考文件库「塔克R3两驱小车底盘资料」拆分为 6 条独立条目（DB20 电机 PID 五例 + 编码器电机小车控制源码，每例一条中文直观名标题 + 独立简介，搜索「舵机」等子功能可精确命中）；库内共 152 条
+- 12:53 参考文件库「MSPM0_MOTOR参考例程」修复拆分为 3 条：GBK 转码补录 7 个电机核心源码（motor_crc / motor_read_enc / motor_set_speed / user.h / imu.c，原 UTF-8 直读静默漏录）+ 剥 source/ SDK 副本树与 gcc/iar/keil/ticlang 工具链胶水（镜像保真 + 清单留痕）+ 拆「MSPM0 Motor_Ctrl 电机控制例程」「MSPM0 m0imu 姿态例程」「MSPM0 MOTOR 例程移植笔记」，全文回读电机实现代码可见；库内共 154 条
 
 ## 2026-08-12
 - 00:04 DeepSeek 空内容偶发重试兜底（≤3 轮）

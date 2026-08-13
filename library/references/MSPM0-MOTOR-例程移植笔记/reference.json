@@ -1,0 +1,14 @@
+{
+  "id": "MSPM0-MOTOR-例程移植笔记",
+  "title": "MSPM0 MOTOR 例程移植笔记",
+  "type": "移植笔记",
+  "description": "TI MSPM0G3507 IMU 陀螺仪模块（m0imu）移植指南笔记：把参考例程的 IMU 模块移植到地猛星开发板的完整过程。覆盖：模块概览（UART 115200 8N1、类 ModbusRTU 协议、0xAA 配置 / 0x0A 数据从站地址、数据帧与配置命令格式、依赖 motor_crc）→ 移植前检查清单（UART 引脚映射、MFCLK 必须 4MHz 的时钟树推导与 IBRD/FBRD 波特率除数计算表、UART RX 中断配置）→ 移植步骤（复制文件 / SysConfig 配 UART / 关键宏确认）→ 调试诊断（示波器抓波形 / 回环测试等分层定位）→ 快速问题排查表 → 稳定性改进建议（超时恢复、帧头搜索、动态 CRC）→ 关键经验总结（内部 RC 振荡器精度、RX 引脚上拉、上电时序、中断优先级）。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "移植.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

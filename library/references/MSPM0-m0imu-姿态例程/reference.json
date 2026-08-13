@@ -1,0 +1,19 @@
+{
+  "id": "MSPM0-m0imu-姿态例程",
+  "title": "MSPM0 m0imu 姿态例程",
+  "type": "参考例程",
+  "description": "TI MSPM0G3507 姿态参考例程（m0imu）：经 UART（115200 8N1）以类 ModbusRTU 协议读取 IMU 陀螺仪模块的角度与角速度。imu.c 的 Gyro_ParseFrame 接收状态机解析数据帧 0A 03 04 [角度H/L][角速度H/L][CRC_L/CRC_H]（0x0A 帧头 + CRC16 校验，结果存 gyro_angle_raw / gyro_dps_raw / gyro_rx_done），Gyro_ConfigReportRateRx 发送 AA 06 01 01 01 AD 00 配置命令开启数据上报；CRC16 依赖 motor_crc.c/h（在「MSPM0 Motor_Ctrl 电机控制例程」条目）。SDK 依赖：DriverLib + SysConfig 生成 ti_msp_dl_config / empty.syscfg（MFCLK 4MHz 波特率基准）。移植要点（引脚映射 / 波特率计算 / 中断配置 / 调试诊断）见「MSPM0 MOTOR 例程移植笔记」条目。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "imu.c",
+    "imu.h",
+    "ti_msp_dl_config.c",
+    "ti_msp_dl_config.h",
+    "empty.syscfg",
+    "素材清单.txt"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
