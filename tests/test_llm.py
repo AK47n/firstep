@@ -3202,3 +3202,16 @@ def test_select_system_prompt_carries_no_reask_rule():
     同款措辞（两阶段语义一致——收敛阶段同样不换措辞反复补问）。"""
     assert "用户已回答过的问题不要重复问" in SELECT_SYSTEM_PROMPT
     assert "用户已回答过的问题不要重复问" in CLARIFY_SYSTEM_PROMPT  # 同款措辞在场
+
+
+def test_prompts_carry_one_shot_question_rule():
+    """两阶段提示词补"一轮问全"（工单 recommend-speedup/01）：有疑问时一次性
+    把所有疑问全部列出（宁全勿漏、每条具体可答、最多 10 条），用户一轮全部
+    答完，不要分批渐进追问——2021F 补问 4 轮 10 条的历史教训：渐进式追问
+    是问答轮数多的根因。两阶段同款措辞。"""
+    assert "一次性把所有疑问全部列出" in SELECT_SYSTEM_PROMPT
+    assert "一次性把所有疑问全部列出" in CLARIFY_SYSTEM_PROMPT  # 同款措辞在场
+    assert "不要分批渐进追问" in SELECT_SYSTEM_PROMPT
+    assert "不要分批渐进追问" in CLARIFY_SYSTEM_PROMPT
+    assert "最多 10 条" in SELECT_SYSTEM_PROMPT  # 上限防问题轰炸
+    assert "最多 10 条" in CLARIFY_SYSTEM_PROMPT

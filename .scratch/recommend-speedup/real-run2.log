@@ -1,0 +1,73 @@
+
+===== 2026C (stm32) =====
+[题面] C:\Users\luoji\.contest_generator\topics\2026C\topic.md 2626 字符
+[推荐] 2 轮 → 终态 done
+  模块(7): zigbee_uart_key, zigbee_uart, uwb_uart, config, oled, led_beep, filter
+    - zigbee_uart_key: zigbee_uart_key 是 Zigbee DL-20 无线发射驱动，按固定帧格式（同步头 + ID + 校验和）组帧并上报本地 DIP-4 ID，满足数
+    - zigbee_uart: zigbee_uart 是 Zigbee DL-20 无线接收驱动，解析发射端上报的 DIP-4 ID 身份帧，可用于监测正前方±45°范围内的无线信号并判别是
+    - uwb_uart: uwb_uart 提供 UWB 定位模块串口驱动，可接收无线信号并用于判别数字钥匙的存在
+    - config: config 集中配置硬件引脚映射与参数，便于管理 ID 验证相关的配置
+    - oled: oled 提供 SSD1306 I2C 显存式绘图驱动，可显示 ID 信息
+    - led_beep: led_beep 提供 LED 指示与蜂鸣器开关，实现声光提示的打开与关闭
+    - filter: filter 实现滑动平均滤波器，可平滑传感器数据、减少多径干扰引起的抖动
+  识别 topic_id=2026C related=None
+  功能需求层 13 条
+  参考资料 1 条（done 透明闭环）
+    - ALX-AOA-FIT-套件-STM32F1-Usart-串口例程-User-核心子集: ALX-AOA-FIT 套件 STM32F1-Usart 串口例程（User 核心子集） [auto/stm32]
+[骨架] main.c 10975 字符, 拦截幻觉调用 0 处
+[生成] 输出 C:\Users\luoji\Desktop\firstep\.claude\worktrees\recommend-speedup-01\.scratch\real-run\out_2026C_stm32
+  文件数 49
+    - .gitignore
+    - main.c
+    - pin_config.h
+    - code/readme.txt
+    - key/startup_stm32f10x_md.s
+    - ml_libs/headfile.h
+    - ml_libs/ml_adc.c
+    - ml_libs/ml_adc.h
+    - ml_libs/ml_delay.c
+    - ml_libs/ml_delay.h
+    - ml_libs/ml_exti.c
+    - ml_libs/ml_exti.h
+    - ml_libs/ml_gpio.c
+    - ml_libs/ml_gpio.h
+    - ml_libs/ml_i2c.c
+    - ml_libs/ml_i2c.h
+    - ml_libs/ml_led.c
+    - ml_libs/ml_led.h
+    - ml_libs/ml_nvic.c
+    - ml_libs/ml_nvic.h
+    - ml_libs/ml_oled.c
+    - ml_libs/ml_oled.h
+    - ml_libs/ml_oled_font.h
+    - ml_libs/ml_pwm.c
+    - ml_libs/ml_pwm.h
+    - ml_libs/ml_systick.c
+    - ml_libs/ml_systick.h
+    - ml_libs/ml_tim.c
+    - ml_libs/ml_tim.h
+    - ml_libs/ml_uart.c
+    - ml_libs/ml_uart.h
+    - sys/core_cm3.h
+    - sys/core_cmFunc.h
+    - sys/core_cmInstr.h
+    - sys/stm32f10x.h
+    - sys/system_stm32f10x.c
+    - sys/system_stm32f10x.h
+    - user/Project.uvguix.luoji
+    - user/Project.uvprojx
+    - user/DebugConfig/Target_1_STM32F103C8_1.0.0.dbgconf
+    - modules/zigbee_uart_key/code/zigbee_uart_key.c
+    - modules/zigbee_uart_key/code/zigbee_uart_key.h
+    - modules/zigbee_uart/code/zigbee_uart.c
+    - modules/zigbee_uart/code/zigbee_uart.h
+    - modules/uwb_uart/code/uwb_uart.c
+    - modules/uwb_uart/code/uwb_uart.h
+    - modules/filter/code/filter.c
+    - modules/filter/code/filter.h
+    - modules/config/code/config.h
+  [产物] 门禁全过（产物树语料重建，与生成同源）
+  [真机] ✓ UV4 exit=1 Build Time Elapsed:  00:00:01（0 错误）
+
+===== 汇总 =====
+['2026C']: ✓ 通过

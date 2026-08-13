@@ -489,7 +489,7 @@ def test_number_topic_sentences_single_sentence_and_empty():
     assert _number_topic_sentences("   ") == "   "  # 无可分句子原样返回
 
 
-def test_revision_prompt_carries_previous_layer_and_self_check_instruction():
+def test_revision_prompt_carries_previous_layer_and_verification_instruction():
     numbered = "1. 设计送药小车。"
     previous = (
         FunctionRequirement(
@@ -507,7 +507,14 @@ def test_revision_prompt_carries_previous_layer_and_self_check_instruction():
     assert "句子2「识别数字」" in prompt
     assert "库内命中：ml_mpu6050" in prompt
     assert "库外建议：视觉模块" in prompt
-    assert "自检修订" in prompt  # 自检指令在场
+    # 核验式指令在场（工单 recommend-speedup/01）：题面原文是唯一裁判，仅
+    # 确凿证据才改、无证据条目逐字照抄（句子编号照抄不改）——旧"自检修订"
+    # 让模型每轮都改、永不收敛
+    assert "逐条核验" in prompt
+    assert "题面原文是唯一裁判" in prompt
+    assert "逐字照抄上一轮原文输出" in prompt
+    assert "句子编号照抄不改" in prompt
+    assert "无证据支持的改动（改写措辞也算）本身是脑补" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -1382,19 +1389,36 @@ def _reference(
 
 
 def test_run_recommendation_clarify_questions_end_with_question_only():
-    """澄清阶段先行：clarify 仍有疑问 → 只发 question 终态、无 round 事件
-    （澄清阶段不属于收敛轮次，补问不再作废已跑轮次）；问答历史原样透传。"""
+    """首跑无历史澄清阶段先行：clarify 仍有疑问 → 只发 question 终态、无 round
+    事件（澄清阶段不属于收敛轮次，补问不再作废已跑轮次）。"""
     llm = FakeLLM(clarify_questions=("具体要识别什么数字？",))
 
-    _, events = _run_recommendation(
-        _topic(), llm, (("识别方式？", "摄像头"),)
-    )
+    _, events = _run_recommendation(_topic(), llm)
 
-    assert llm.clarify_calls == [
-        ("送药小车。识别数字。", (("识别方式？", "摄像头"),))
-    ]
+    assert llm.clarify_calls == [("送药小车。识别数字。", ())]
     assert _drain_events(events) == [
         ("question", {"questions": ["具体要识别什么数字？"]})
+    ]
+
+
+def test_run_recommendation_with_history_skips_clarify_gate():
+    """有澄清历史（工单 recommend-speedup/01）：跳过 clarify 门——零 clarify
+    调用，直进收敛循环（select 每轮带历史 kwarg）；两轮一致即收敛。"""
+    history = (("识别方式？", "摄像头"),)
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字"), _selection_with("识别数字")]
+    )
+
+    _, events = _run_recommendation(_topic(), fake, history)
+
+    assert fake.clarify_calls == []  # 有历史：clarify 门被跳过（省一次串行调用）
+    assert len(fake.calls) == 2  # 直进收敛循环（两轮一致收敛）
+    assert fake.clarifications == [history, history]  # 每轮 kwarg 原样透传历史
+    assert _event_kinds(_drain_events(events)) == [
+        EVENT_ROUND,
+        EVENT_ROUND,
+        EVENT_CONVERGED,
+        EVENT_DONE,
     ]
 
 
