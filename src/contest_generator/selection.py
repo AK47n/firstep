@@ -660,17 +660,23 @@ def _number_topic_sentences(problem_text: str) -> str:
 def _revision_prompt(
     numbered_topic: str, previous: Sequence[FunctionRequirement]
 ) -> str:
-    """收敛轮（第 2 轮起）的赛题文本：上一轮功能需求层 + 自检修订指令。
+    """收敛轮（第 2 轮起）的赛题文本：上一轮功能需求层 + 核验式修订指令。
 
-    以题面为裁判反复自检修订（删脑补 / 补遗漏 / 重查覆盖），输出完整的新一
-    轮功能需求层（不是增量）——模型在完整重写里自己暴露并修正上一轮的缺陷；
-    连续两轮一致时可保持不动（收敛判定在驱动层完成，这里只是给模型依据）。
+    逐条核验上一轮功能需求层，题面原文是唯一裁判：仅当有确凿题面证据表明
+    错误（脑补 / 遗漏 / 覆盖错）才改对应条目，且只做最小改动；无证据的条目
+    逐字照抄上一轮原文输出、句子编号照抄不改——改写措辞本身是脑补（工单
+    recommend-speedup/01：旧"自检修订"让模型每轮都改、功能需求层永不重复，
+    "两轮一致即停"拖到 4 轮封顶）。输出完整的新一轮功能需求层（不是增量）；
+    连续两轮一致时保持不动（收敛判定在驱动层完成，这里只是给模型依据）。
     """
     lines = [
         numbered_topic,
         "",
-        "上一轮功能需求层（以题面原文为裁判自检修订，输出完整的新一轮功能"
-        "需求层，不是增量；连续两轮一致时可保持不动）：",
+        "上一轮功能需求层（逐条核验，题面原文是唯一裁判：仅当有确凿题面证据"
+        "表明错误——脑补 / 遗漏 / 覆盖错——才改对应条目，且只做最小改动；"
+        "无证据的条目逐字照抄上一轮原文输出，句子编号照抄不改；无证据支持的"
+        "改动（改写措辞也算）本身是脑补；输出完整的新一轮功能需求层；连续两轮"
+        "一致时保持不动）：",
     ]
     for index, requirement in enumerate(previous, 1):
         detail = f"句子{requirement.sentence_index}「{requirement.requirement}」"
@@ -718,7 +724,7 @@ def select_modules_convergent(
 
     每一轮都是独立调用：第 1 轮 = 两级注入协议（参考文件先清单、点名全文后
     回读重选，协议已内联在下方循环体）；第 2 轮起带上一轮功能需求层
-    （_revision_prompt 自检修订指令）与已读全文，功能需求层与上一轮一致即
+    （_revision_prompt 核验式修订指令）与已读全文，功能需求层与上一轮一致即
     收敛（_functional_layer_key，examples 不参与）。恰好两级：第 2 轮起不再
     注入新的参考全文（想要的已全给）。题面逐句编号在驱动层完成
     （_number_topic_sentences），编号跨轮稳定——收敛判定的对照句编号依赖它。
@@ -832,9 +838,13 @@ def run_recommendation(
 ) -> None:
     """/api/recommend 的两阶段编排（工单 01 推荐先澄清后收敛）。
 
-    澄清阶段先行：先调 llm.clarify（只看题面 + clarifications 问答历史），仍
-    有疑问 → question 事件收尾（不发 round——澄清阶段不属于收敛轮次，补问不
-    再作废已跑轮次）；澄清空 = 澄清完成，才进收敛循环。
+    首跑（无澄清历史）澄清阶段先行：先调 llm.clarify（只看题面），仍有疑问
+    → question 事件收尾（不发 round——澄清阶段不属于收敛轮次，补问不再作废
+    已跑轮次）；澄清空 = 澄清完成，才进收敛循环。有澄清历史时跳过澄清门
+    （工单 recommend-speedup/01）：历史段 + 已答不重问已由 select_modules
+    承载，clarify 的补问功能被收敛循环覆盖——每轮补问省一次串行 LLM 调用
+    （约 2-4 min）；"一轮问全"（A 棱镜）摊薄"答案没清完疑问"的风险，
+    select_modules 本身仍会补问，不会漏问。
 
     收敛循环（select_modules_convergent）：功能需求层两轮一致即停、上限 4 轮
     （成本 2-4 轮 × 2-4K token），轮次经 emit.progress 推送；循环内模型拿不准
@@ -850,13 +860,17 @@ def run_recommendation(
     resolve_topic_context 一次备好），本函数只消费。返回 None——终态一律
     发出，路由不再分支（run 抛错由 sse 运行器补发 error 终态）。
     """
-    # 澄清阶段先行（工单 01）：只看题面 + 已有问答历史，仍有疑问 → question
+    # 首跑（无澄清历史）才走澄清门（工单 01）：只看题面，仍有疑问 → question
     # 事件收尾（不发 round——澄清阶段不属于收敛轮次，补问不再作废已跑轮次）；
-    # 空 = 澄清完成，才进收敛循环
-    pending = llm.clarify(topic.problem_text, clarifications)
-    if pending:
-        emit.question({"questions": list(pending)})
-        return
+    # 空 = 澄清完成，进收敛循环。有澄清历史时跳过 clarify（工单
+    # recommend-speedup/01）：select_modules 已带历史段 + 已答不重问，补问
+    # 功能被收敛循环覆盖——每轮补问省一次串行 LLM 调用；"一轮问全"（A 棱镜）
+    # 摊薄"答案没清完疑问"的风险，select_modules 本身仍会补问、不会漏问。
+    if not clarifications:
+        pending = llm.clarify(topic.problem_text, clarifications)
+        if pending:
+            emit.question({"questions": list(pending)})
+            return
     selection = select_modules_convergent(
         llm,
         topic.problem_text,  # 识别到时题面用库内全文；no-topic 形 = 粘贴原样
