@@ -1,0 +1,26 @@
+{
+  "id": "MSPM0-Motor_Ctrl-电机控制例程",
+  "title": "MSPM0 Motor_Ctrl 电机控制例程",
+  "type": "参考例程",
+  "description": "TI MSPM0G3507 电机控制参考例程（MSP_Motor_Ctrl）：经 UART 以类 Modbus 协议与电机驱动器通信，实现 4 路电机速度控制与编码器值回读。文件构成：motor_set_speed 组帧下发（写多寄存器命令 0x10 设 4 路速度 / 写单寄存器命令 0x06 设闭环模式），motor_read_enc 接收状态机解析驱动器上报的编码器寄存器帧（0x0A 从站地址 + CRC16 校验 + 高低字节拼接，结果存 modbus_date[8] 累计编码器值），motor_crc 为 CRC16 查表实现，user 为 Keil 微库 stdio 适配；ti_msp_dl_config / empty.syscfg 为 SysConfig 时钟与 UART 初始化（MFCLK 4MHz 波特率基准，115200 8N1）。SDK 依赖：TI MSPM0 SDK DriverLib（DL_UART_Main_transmitData / DL_UART_Main_receiveData 等）；README.md 为工程底板（SDK empty 例程）说明。工具链工程与 SDK 副本树（source/ 1585 文件、gcc / iar / keil / ticlang）不入库，保留在 sources/materials 镜像。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "motor_crc.c",
+    "motor_crc.h",
+    "motor_read_enc.c",
+    "motor_set_speed.c",
+    "motor_set_speed.h",
+    "user.h",
+    "motor_read_enc.h",
+    "user.c",
+    "ti_msp_dl_config.c",
+    "ti_msp_dl_config.h",
+    "empty.syscfg",
+    "README.md",
+    "素材清单.txt"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
