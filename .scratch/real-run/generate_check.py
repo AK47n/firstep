@@ -1,4 +1,6 @@
-"""真机验证：赛题 推荐 → 骨架 → 生成 全流程一次跑完（stm32/Keil 与 mspm0/CCS 两线）。
+"""真机验证：赛题 推荐 → 骨架 → 生成 全流程一次跑完（stm32/Keil 与 mspm0/CCS 两线）；
+编译失败自动进入修复循环（报错 → /api/fix-errors → 重编译验证 ≤3 轮，与 web
+修复中心同语义，工单 gen-check-fix-loop/01）。
 
 用法：python generate_check.py [--platform stm32|mspm0] [--topic-file <题面.md>]
       [--reference-ids <id1,id2,...>] [topic...]
@@ -18,6 +20,12 @@ BASE = "http://127.0.0.1:8000"
 PLATFORM = "stm32"
 TOPICS = Path.home() / ".contest_generator" / "topics"
 HERE = Path(__file__).parent
+
+# 修复循环轮数上限，与前端一致（index.html FIX_MAX_ROUNDS = 3，改动须两处
+# 同步——tests/test_generate_check_contract.py 钉两处文本一致，改前端忘改
+# CLI 即红）。停滞检测（0 applied 即停）属前端循环工单 fix-loop-progress/01，
+# 本脚本循环独立实现最小语义：3 轮内 passed 即出活，0 applied 也走完。
+FIX_MAX_ROUNDS = 3
 
 # 产物检查与生成门禁同源（工单 generate-check-parity/01）：门禁镜像段
 # （FENCE_RE / include 解析 / EXTERNAL_HEADERS 豁免集，曾逐字重实现门禁——
@@ -121,41 +129,45 @@ def _uvprojx_include_dirs(out_dir: Path) -> list[Path]:
     return dirs
 
 
-def uv4_build(out_dir: Path) -> tuple[bool | None, str]:
+def uv4_build(out_dir: Path) -> tuple[bool | None, str, str]:
     """真机编译：UV4 全量重建（工单 compile-verdict-align/01 换闸，与生产
     collect_build_log 同源——曾自带 `-j0 -b` 增量命令 + `(\\d+) Error\\(s\\)`
     正则，增量日志无编译行 = 假绿风险（autocompile-loop 决策记录 4），且
     判读域已单源在 compile_runner / fix_errors，禁止调用方另写正则）。
-    返回 (是否通过, 摘要)；UV4 不可用返回 (None, 原因)。
+    返回 (是否通过, 摘要, 编译输出原文)——原文供修复循环回喂 /api/fix-errors
+    （与 web /api/compile done 的 error_text 同款"原样采集"契约，工单
+    gen-check-fix-loop/01）；UV4 不可用返回 (None, 原因, "")。
     """
     uv4 = find_uv4(os.environ.get("KEIL_UV4") or "")
     if uv4 is None:
-        return None, "未找到 UV4，跳过真机编译"
+        return None, "未找到 UV4，跳过真机编译", ""
     try:
         build = collect_build_log("stm32", out_dir, uv4=uv4)
     except CompileRunnerError as exc:
-        return False, str(exc)
+        return False, str(exc), ""
     summary = summarize_compile_output(
         build.run.output, parse_compile_errors(build.run.output)
     )
     tail = build.run.output.strip().splitlines()[-1] \
         if build.run.output.strip() else f"exit={build.run.exit_code} 无日志"
     passed = compile_passed(build.platform, build.run.exit_code)
-    return passed, f"UV4 exit={build.run.exit_code} {tail}（{summary['errors']} 错误）"
+    return passed, f"UV4 exit={build.run.exit_code} {tail}（{summary['errors']} 错误）", \
+        build.run.output
 
 
-def gmake_build(out_dir: Path) -> tuple[bool | None, str]:
+def gmake_build(out_dir: Path) -> tuple[bool | None, str, str]:
     """真机编译：gmake 全量重建（mspm0/CCS 线，工单 mspm0-build-makefiles/01——
     Debug/makefile 集由生成器自动产出，CCS 命令行构建不再依赖 scratch 后处理，
-    与 uv4_build 同源走生产 collect_build_log）。返回 (是否通过, 摘要)；gmake
-    不可用返回 (None, 原因)。摘要带首编耗时（真机计时观察，决策记录 7）。"""
+    与 uv4_build 同源走生产 collect_build_log）。返回 (是否通过, 摘要, 编译
+    输出原文)——原文供修复循环回喂（与 uv4_build 同款契约）；gmake 不可用返回
+    (None, 原因, "")。摘要带首编耗时（真机计时观察，决策记录 7）。"""
     make = find_make(os.environ.get("GMAKE") or "")
     if make is None:
-        return None, "未找到 gmake，跳过真机编译"
+        return None, "未找到 gmake，跳过真机编译", ""
     try:
         build = collect_build_log("mspm0", out_dir, make=make)
     except CompileRunnerError as exc:
-        return False, str(exc)
+        return False, str(exc), ""
     summary = summarize_compile_output(
         build.run.output, parse_compile_errors(build.run.output)
     )
@@ -165,7 +177,7 @@ def gmake_build(out_dir: Path) -> tuple[bool | None, str]:
     return passed, (
         f"gmake exit={build.run.exit_code} {tail}"
         f"（{summary['errors']} 错误，{build.run.duration:.1f}s）"
-    )
+    ), build.run.output
 
 
 def post(url: str, payload: dict) -> dict:
@@ -247,6 +259,166 @@ def build_recommend_payload(
     if reference_ids:
         payload["reference_ids"] = list(reference_ids)
     return payload
+
+
+def fix_stream(payload: dict) -> dict:
+    """消费 SSE：parse_done → fix_start → apply_result… → done/error，返回
+    终态事件（recommend_stream 同款写法；fix 流分钟级真实 DeepSeek，timeout
+    600s 先例）。HTTP 4xx（如输出目录不存在）如实转 error 终态，不打断真机
+    验收主流程。
+
+    事件词表单源 = contest_generator/events.py（EVENT_PARSE_DONE /
+    EVENT_FIX_START / EVENT_APPLY_RESULT / EVENT_DONE / EVENT_ERROR，终端
+    事件 = done / error），改词表须同步——tests/test_generate_check_contract.py
+    强制本分支词表与 events.py 一致（recommend 词表同款机制）。
+    """
+    req = urllib.request.Request(
+        BASE + "/api/fix-errors",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    result = None
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            buf = ""
+            while True:
+                chunk = r.read(4096)
+                if not chunk:
+                    break
+                buf += chunk.decode("utf-8", errors="replace")
+                while "\n\n" in buf:
+                    frame, buf = buf.split("\n\n", 1)
+                    event = data = None
+                    for line in frame.splitlines():
+                        if line.startswith("event:"):
+                            event = line[6:].strip()
+                        elif line.startswith("data:"):
+                            data = line[5:].strip()
+                    # 事件词表单源 = contest_generator/events.py（修复段，
+                    # 注释同 recommend_stream），改词表须同步 CLI 分支
+                    if event == "parse_done":
+                        pass
+                    elif event == "fix_start":
+                        pass
+                    elif event == "apply_result":
+                        pass  # 逐处结果以 done 载荷 fixes 为准（单源）
+                    elif event in ("done", "error"):
+                        result = {"event": event, "data": json.loads(data) if data else None}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        result = {"event": "error", "data": {"message": f"HTTP {e.code}: {body[:300]}"}}
+    except OSError as e:
+        # 流中途断线（服务重启 / 连接被重置，2026-08-13 真机观察）：如实转
+        # error 终态而非打断验收主流程（recommend_stream 无此兜底，本函数
+        # 循环 3 轮更不该一轮断线就抛栈）
+        result = {"event": "error", "data": {"message": f"流连接中断: {e}"}}
+    if result is None:
+        result = {"event": "error", "data": {"message": "流未以终态事件收尾"}}
+    return result
+
+
+# /api/fix-errors 请求契约（服务端校验唯一出处 = webapp.py:713 fix_errors 路由
+# docstring，本函数是其 CLI 侧对偶；前端 index.html:1712 恒发全部六字段）。
+# 字段规则：error_text（必填，编译报错全文）+ output_dir（必填，生成结果
+# 目录）+ problem_text / platform / slugs / main_c（可选上下文，check_topic
+# 内已有全部变量，恒发；缺省不放）。不带 previous_fixes（fix-loop-progress/01
+# 的请求体字段，服务端可选向后兼容，本工单循环不依赖停滞回喂）。改契约
+# 字段须同步三处：webapp 校验 + 前端 + 本函数，
+# tests/test_generate_check_contract.py 强制字段集一致。
+def build_fix_payload(
+    output_dir: Path | str,
+    error_text: str,
+    *,
+    problem_text: str = "",
+    platform: str = "",
+    slugs: list[str] | tuple[str, ...] = (),
+    main_c: str = "",
+) -> dict:
+    payload: dict = {"output_dir": str(output_dir), "error_text": error_text}
+    if problem_text:
+        payload["problem_text"] = problem_text
+    if platform:
+        payload["platform"] = platform
+    if slugs:
+        payload["slugs"] = list(slugs)
+    if main_c:
+        payload["main_c"] = main_c
+    return payload
+
+
+def run_fix_loop(
+    out_dir: Path,
+    error_text: str,
+    problem_text: str,
+    platform: str,
+    slugs: list[str],
+    main_c: str,
+) -> bool:
+    """修复循环（web 修复中心 CLI 对偶，工单 gen-check-fix-loop/01）：编译
+    报错 → /api/fix-errors → 重编译验证，≤ FIX_MAX_ROUNDS 轮——与 index.html
+    startFixCenter 同语义（首编失败由 check_topic 转入，第 3 轮后如实报告
+    剩余错误数）。停滞检测本工单不做：0 applied 也走完 3 轮（前端循环工单
+    fix-loop-progress/01，如先合可顺手同步 applied==0 即停，一行之差）。
+    返回是否通过。
+    """
+    build_fn = uv4_build if platform == "stm32" else gmake_build
+    for round_no in range(1, FIX_MAX_ROUNDS + 1):
+        # 轮次文案错误数：判读单源 summarize_compile_output（工单
+        # compile-verdict-align/01 约定，不另写正则）
+        summary = summarize_compile_output(
+            error_text, parse_compile_errors(error_text)
+        )
+        print(
+            f"  第 {round_no}/{FIX_MAX_ROUNDS} 轮：{summary['errors']} 条 Error"
+            f" → AI 修复…"
+        )
+        fix = fix_stream(
+            build_fix_payload(
+                out_dir,
+                error_text,
+                problem_text=problem_text,
+                platform=platform,
+                slugs=slugs,
+                main_c=main_c,
+            )
+        )
+        if fix["event"] == "error":
+            msg = (fix.get("data") or {}).get("message", "无错误信息")
+            print(f"  ✗ 修复失败: {msg[:300]}")
+            return False
+        done = fix.get("data") or {}
+        fixes = list(done.get("fixes", []))
+        applied = [f for f in fixes if f.get("status") == "applied"]
+        skipped = [f for f in fixes if f.get("status") != "applied"]
+        print(f"  应用 {len(applied)} 处 / 跳过 {len(skipped)} 处")
+        # 逐条打印（file:line status reason，与 web 结果列表同信息量）
+        for f in fixes:
+            mark = "✓" if f.get("status") == "applied" else "·"
+            print(
+                f"    {mark} {f.get('file')}:{f.get('line')} "
+                f"[{f.get('status')}] {f.get('reason', '')}"
+            )
+        if done.get("degraded"):
+            print("  [提示] 未定位到可修复文件（降级），修复未落盘")
+        if done.get("backup_id"):
+            print(f"  [备份] {done['backup_id']}（回滚: POST /api/fix-errors/rollback）")
+        # 重编译验证：passed 出活；仍错下一轮喂最新报错（原样采集原文）
+        passed, build_summary, next_errors = build_fn(out_dir)
+        if passed:
+            print(f"  第 {round_no} 轮重编译 ✓ {build_summary}")
+            return True
+        print(f"  第 {round_no} 轮重编译 ✗ {build_summary}")
+        if passed is None:
+            return False  # 工具链缺失，如实收工不空转
+        error_text = next_errors
+    # 3 轮后如实报告剩余错误数（summary 单源，不另写正则）
+    summary = summarize_compile_output(error_text, parse_compile_errors(error_text))
+    print(
+        f"  ✗ 已达 {FIX_MAX_ROUNDS} 轮上限，剩余 {summary['errors']} 条 Error"
+        f"（见最后编译输出）"
+    )
+    return False
 
 
 def check_topic(
@@ -386,16 +558,23 @@ def check_topic(
 
     # 真机编译（符号级完整性的唯一证明）：stm32/Keil 线 UV4 全量重建；
     # mspm0/CCS 线 gmake 全量重建（Debug/makefile 集由生成器自动产出，
-    # 工单 mspm0-build-makefiles/01——旧"无命令行"文案随 gmake 通路落地删除）
+    # 工单 mspm0-build-makefiles/01——旧"无命令行"文案随 gmake 通路落地删除）。
+    # 编译失败 → 进入修复循环（工单 gen-check-fix-loop/01，与 web 修复中心
+    # 同语义：编译报错 → /api/fix-errors → 重编译验证 ≤3 轮，第 3 轮后
+    # 如实报告剩余错误）
     build_fn = uv4_build if platform == "stm32" else gmake_build
-    passed, summary = build_fn(out_dir)
+    passed, summary, raw_output = build_fn(out_dir)
     if passed is None:
         print(f"  [真机] {summary}")
     elif passed:
         print(f"  [真机] ✓ {summary}")
     else:
         print(f"  [真机] ✗ {summary}")
-        ok = False
+        print("  [真机] 进入修复循环（≤3 轮：编译报错 → AI 修复 → 重编译）")
+        if not run_fix_loop(
+            out_dir, raw_output, problem_text, platform, slugs, main_c
+        ):
+            ok = False
     return ok
 
 
