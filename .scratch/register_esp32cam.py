@@ -13,6 +13,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Windows 控制台默认 GBK 会打花中文日志：脚本输出统一 UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -35,17 +39,39 @@ TYPE = "开发板资料"
 TEXT_SUFFIXES = {".ino", ".cpp", ".h", ".csv", ".txt"}
 
 
+def _read_transcoded(path: Path) -> str | None:
+    """UTF-8 失败后按 gb18030（GBK 超集）兜底转码，\r\n 归一化；仍失败返回 None。"""
+    try:
+        return path.read_bytes().decode("gb18030").replace("\r\n", "\n")
+    except (UnicodeDecodeError, OSError):
+        return None
+
+
 def iter_text_files() -> dict[str, str]:
-    """源目录内 UTF-8 可读文本文件（相对路径 → 内容）；二进制跳过。"""
+    """源目录内 UTF-8 可读文本文件（相对路径 → 内容）；二进制跳过。
+
+    UTF-8 失败回退 gb18030 转码入库（口径同 register_materials.py，工单
+    register-gbk-guard/01）；仍失败按二进制跳过，收尾计数汇总打印。
+    """
     files: dict[str, str] = {}
+    skipped = 0
     for path in sorted(SRC_ROOT.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
             continue
+        rel = path.relative_to(SRC_ROOT).as_posix()
         try:
             content = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        except UnicodeDecodeError:
+            content = _read_transcoded(path)
+            if content is None:
+                skipped += 1
+                continue
+            print(f"[转码] {rel}（gbk→utf-8）")
+        except OSError:
+            skipped += 1
             continue
-        files[path.relative_to(SRC_ROOT).as_posix()] = content
+        files[rel] = content
+    print(f"[跳过] {skipped} 个非文本文件未入库")
     return files
 
 
