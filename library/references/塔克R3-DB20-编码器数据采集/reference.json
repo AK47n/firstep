@@ -2,7 +2,7 @@
   "id": "塔克R3-DB20-编码器数据采集",
   "title": "塔克R3 DB20 编码器数据采集",
   "type": "小车底盘例程",
-  "description": "塔克创新 R3 系列两驱小车底盘 DB20 电机 PID 闭环教程第 2 例：正交 AB 编码器 数据采集。STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：AX_ENCODER_Init 配置正交计数，每 200ms 读取计数值经调试串口打印并 OLED 显示，手动转动电机即可 观察数值变化——是第 3/4 例速度环与位置环的测量基础。文件构成：Doc 说明 + User 主程序 + X-SOFT 全套 ax_* 封装驱动。",
+  "description": "塔克创新 R3 系列两驱小车底盘 DB20 电机 PID 闭环教程第 2 例：正交 AB 编码器 数据采集。STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：AX_ENCODER_Init 配置正交计数，每 200ms 读取计数值经调试串口打印并 OLED 显示，手动转动电机即可观察数值变化——是第 3/4 例速度环与位置环的测量基础。文件构成：Doc 说明 + User 主程序 + X-SOFT 全套 ax_* 封装驱动。",
   "anchor_kind": "none",
   "anchor_value": "",
   "platform": "stm32",

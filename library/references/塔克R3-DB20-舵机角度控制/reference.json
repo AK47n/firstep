@@ -2,7 +2,7 @@
   "id": "塔克R3-DB20-舵机角度控制",
   "title": "塔克R3 DB20 舵机角度控制",
   "type": "小车底盘例程",
-  "description": "塔克创新 R3 系列两驱小车底盘 DB20 电机 PID 闭环教程第 5 例：8 路舵机角度控制。STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：ax_timer_int 定时器中断 产生多路 PWM，ax_servo 驱动最多 8 路舵机在 30°/90°/150° 间隔循环运动（多路 舵机 / 大扭矩负载时注意供电能力）。文件构成：Doc 说明 + User 主程序（含定时器 中断）+ X-SOFT 全套 ax_* 封装驱动。",
+  "description": "塔克创新 R3 系列两驱小车底盘 DB20 电机 PID 闭环教程第 5 例：8 路舵机角度控制。STM32F103C8T6 + 标准外设库 V3.5.0（X-CTR000 控制器）：ax_timer_int 定时器中断 产生多路 PWM，ax_servo 驱动最多 8 路舵机在 30°/90°/150° 间隔循环运动（多路 舵机 / 大扭矩负载时注意供电能力）。文件构成：Doc 说明 + User 主程序（含定时器中断）+ X-SOFT 全套 ax_* 封装驱动。",
   "anchor_kind": "none",
   "anchor_value": "",
   "platform": "stm32",
