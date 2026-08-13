@@ -645,6 +645,10 @@ def test_fix_system_prompt_contract():
     assert "逐字一致" in FIX_SYSTEM_PROMPT
     assert "唯一匹配" in FIX_SYSTEM_PROMPT
     assert "文件清单" in FIX_SYSTEM_PROMPT
+    # 回喂约束（工单 fix-loop-progress/01 决策记录 2，约束 6）：看到上一轮
+    # 未应用原因时对齐重试或放弃，不重复输出相同建议
+    assert "上一轮修复应用结果" in FIX_SYSTEM_PROMPT
+    assert "不要重复输出与上一轮一模一样的" in FIX_SYSTEM_PROMPT
 
 
 def test_fix_errors_user_prompt_embeds_contexts():
@@ -668,6 +672,64 @@ def test_fix_errors_user_prompt_degraded_mode_notes_no_files():
     prompt = _fix_errors_user_prompt(error_text="error #20: boom", file_contexts={})
     assert "未定位到可读取的源码文件" in prompt
     assert "精确匹配" in prompt  # 降级模式仍要求精确 old_snippet
+
+
+def test_fix_errors_user_prompt_previous_fixes_section():
+    """回喂段（工单 fix-loop-progress/01）：独立段标题固定，逐条 file:line +
+    status + reason 在场；位置在文件上下文之后、工程上下文之前。"""
+    prompt = _fix_errors_user_prompt(
+        error_text="main.c(1): error #20: boom",
+        file_contexts={"main.c": "int x = 1;\n"},
+        previous_fixes=(
+            {
+                "file": "main.c",
+                "line": 1,
+                "status": "skipped",
+                "reason": "未应用：文件内未找到 old_snippet（精确匹配失败，可能缩进 / 内容不一致）",
+            },
+            {
+                "file": "code/mod.c",
+                "line": 45,
+                "status": "applied",
+                "reason": "按行首前缀归一化匹配应用",
+            },
+        ),
+    )
+    assert "【上一轮修复应用结果】" in prompt
+    assert "main.c:1 skipped：未应用：文件内未找到 old_snippet（精确匹配失败，可能缩进 / 内容不一致）" in prompt
+    assert "code/mod.c:45 applied：按行首前缀归一化匹配应用" in prompt
+    # 段位置：文件上下文之后、约束（工程上下文）之前（实施注固定，测试断言）
+    assert prompt.index("=== main.c ===") < prompt.index("【上一轮修复应用结果】")
+    assert prompt.index("【上一轮修复应用结果】") < prompt.index("【工程上下文】")
+
+
+def test_fix_errors_user_prompt_empty_previous_zero_regression():
+    """空列表 = 无回喂段（零回归）：全参提示词与旧行为逐字节一致（验收：空
+    列表提示词零回归）。"""
+    prompt = _fix_errors_user_prompt(
+        error_text="main.c(1): error #20: boom",
+        file_contexts={"main.c": "int x = 1;\n"},
+        problem_text="赛题：做个小车",
+        platform="stm32",
+        module_slugs=("dht11", "oled"),
+        main_c="int main(void) { return 0; }",
+        previous_fixes=(),
+    )
+    assert "【上一轮修复应用结果】" not in prompt
+    expected = "\n\n".join(
+        [
+            "【编译报错全文】",
+            "main.c(1): error #20: boom",
+            "【输出目录内文件内容】",
+            "=== main.c ===\nint x = 1;\n",
+            "【工程上下文】",
+            "赛题原文：\n赛题：做个小车",
+            "目标平台：stm32",
+            "选中模块：dht11、oled",
+            "main.c：\nint main(void) { return 0; }",
+        ]
+    )
+    assert prompt == expected
 
 
 def test_parse_fix_suggestions_pure_parse():
