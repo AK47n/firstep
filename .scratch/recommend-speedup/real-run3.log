@@ -1,0 +1,8 @@
+
+===== 2021F (stm32) =====
+[题面] C:\Users\luoji\.contest_generator\topics\2021F\topic.md 2796 字符
+[推荐] 3 轮 → 终态 error
+  ✗ 未收敛: {"message": "AI 服务调用失败：模块选择连续 3 次调用失败：模型返回的不是 JSON："}
+
+===== 汇总 =====
+['2021F']: ✗ 失败

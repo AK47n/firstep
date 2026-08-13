@@ -1,0 +1,71 @@
+
+===== 2021F (stm32) =====
+[题面] C:\Users\luoji\.contest_generator\topics\2021F\topic.md 2796 字符
+[推荐] 4 轮 → 终态 done
+  模块(4): motor, digit_uart, pid, led_beep
+    - motor: motor 模块提供TB6612双路直流电机驱动、PWM调速与运动控制，满足小车移动能力
+    - digit_uart: digit_uart 模块解析 K230 数字识别结果，直接满足病房号识别
+    - pid: pid 模块提供灰度循迹与PID巡线控制，实现红实线寻径
+    - led_beep: led_beep 模块提供LED开关控制，可点亮红色指示灯
+  识别 topic_id=2021F related=None
+  功能需求层 22 条
+  参考资料 3 条（done 透明闭环）
+    - 21F-巡线送药决策例程: 21F-巡线送药决策例程 [auto/stm32]
+    - k230资料: k230资料 [auto/any]
+    - ALX-AOA-FIT-套件-STM32F1-Usart-串口例程-User-核心子集: ALX-AOA-FIT 套件 STM32F1-Usart 串口例程（User 核心子集） [auto/stm32]
+[骨架] main.c 4792 字符, 拦截幻觉调用 0 处
+[生成] 输出 C:\Users\luoji\Desktop\firstep\.claude\worktrees\recommend-speedup-01\.scratch\real-run\out_2021F_stm32
+  文件数 48
+    - .gitignore
+    - main.c
+    - pin_config.h
+    - code/readme.txt
+    - key/startup_stm32f10x_md.s
+    - ml_libs/headfile.h
+    - ml_libs/ml_adc.c
+    - ml_libs/ml_adc.h
+    - ml_libs/ml_delay.c
+    - ml_libs/ml_delay.h
+    - ml_libs/ml_exti.c
+    - ml_libs/ml_exti.h
+    - ml_libs/ml_gpio.c
+    - ml_libs/ml_gpio.h
+    - ml_libs/ml_i2c.c
+    - ml_libs/ml_i2c.h
+    - ml_libs/ml_led.c
+    - ml_libs/ml_led.h
+    - ml_libs/ml_nvic.c
+    - ml_libs/ml_nvic.h
+    - ml_libs/ml_oled.c
+    - ml_libs/ml_oled.h
+    - ml_libs/ml_oled_font.h
+    - ml_libs/ml_pwm.c
+    - ml_libs/ml_pwm.h
+    - ml_libs/ml_systick.c
+    - ml_libs/ml_systick.h
+    - ml_libs/ml_tim.c
+    - ml_libs/ml_tim.h
+    - ml_libs/ml_uart.c
+    - ml_libs/ml_uart.h
+    - sys/core_cm3.h
+    - sys/core_cmFunc.h
+    - sys/core_cmInstr.h
+    - sys/stm32f10x.h
+    - sys/system_stm32f10x.c
+    - sys/system_stm32f10x.h
+    - user/Project.uvguix.luoji
+    - user/Project.uvprojx
+    - user/DebugConfig/Target_1_STM32F103C8_1.0.0.dbgconf
+    - modules/pid/code/gray_track.c
+    - modules/pid/code/gray_track.h
+    - modules/pid/code/pid.c
+    - modules/pid/code/pid.h
+    - modules/motor/code/motor_stm32.c
+    - modules/motor/code/motor_stm32.h
+    - modules/digit_uart/code/digit_uart.c
+    - modules/digit_uart/code/digit_uart.h
+  [产物] 门禁全过（产物树语料重建，与生成同源）
+  [真机] ✓ UV4 exit=0 Build Time Elapsed:  00:00:01（0 错误）
+
+===== 汇总 =====
+['2021F']: ✓ 通过
