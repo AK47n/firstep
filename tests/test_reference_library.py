@@ -37,6 +37,7 @@ from contest_generator.reference_library import (
     ANCHOR_KIND_NONE,
     ANCHOR_KIND_TOPIC,
     ARCHIVE_ENTRY_TYPE,
+    REFERENCE_FILE_CAP,
     ReferenceError,
     add_reference,
     archive_reference,
@@ -1593,7 +1594,8 @@ def test_confirm_route_passes_archive_wiring(tmp_path, fake_masters_dir):
 
 # ---------------------------------------------------------------------------
 # 全文回读（两级注入第二级）：read_fulltext 归 store（selection 用例随迁，
-# 断言原样——拼装字节逐字不变）
+# 断言原样——拼装字节逐字不变）；工单 03 起逐文件截断（超长文件截头带标注，
+# 短文件仍逐字原样）
 # ---------------------------------------------------------------------------
 
 
@@ -1625,6 +1627,70 @@ def test_read_fulltext_skips_binary_files_with_note(tmp_path):
 
     assert "套件接线与使用说明全文" in text
     assert "manual.pdf" in text  # 二进制素材带标注而非静默消失
+
+
+def test_read_fulltext_truncates_oversized_files_independently(tmp_path):
+    """逐文件截断（工单 03）：每个超长文件独立限长、截头带标注——配额不再被
+    首个大文件（素材清单）吃光，每个文件的开头都进上下文（旧契约整体截 4000
+    字符，尾部文件一个字符都进不了模型）；短文件完整、二进制跳过不受影响。"""
+    reference_root = make_fake_reference_library(tmp_path / "references")
+    entry_dir = reference_root / TOPIC_REFERENCE_ID
+    meta = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    meta["files"] = ["big_a.c", "big_b.h", "big_c.txt", "small.c", "manual.pdf"]
+
+    def big(tag: str) -> str:
+        return (
+            f"/* {tag}_head */\n"
+            + "x" * (REFERENCE_FILE_CAP + 3000)
+            + f"\n/* {tag}_tail */\n"
+        )
+
+    (entry_dir / "big_a.c").write_text(big("A"), encoding="utf-8")
+    (entry_dir / "big_b.h").write_text(big("B"), encoding="utf-8")
+    (entry_dir / "big_c.txt").write_text(big("C"), encoding="utf-8")
+    (entry_dir / "small.c").write_text(
+        "/* 小文件头部 */\nint small_ok;\n/* 小文件尾部 */\n", encoding="utf-8"
+    )
+    (entry_dir / "manual.pdf").write_bytes(b"%PDF\x00\x01binary")
+    (entry_dir / "reference.json").write_text(
+        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
+    )
+
+    text = read_fulltext(
+        reference_root, get_reference(reference_root, TOPIC_REFERENCE_ID)
+    )
+
+    assert text.count("内容过长，已截断") == 3  # 3 个超长文件各带一条截断标注
+    for tag in ("A", "B", "C"):
+        assert f"/* {tag}_head */" in text  # 每个文件的开头都在
+        assert f"/* {tag}_tail */" not in text  # 截头：超出上限的尾部被剪掉
+    assert len(text) > 4000  # 逐文件截断总长放宽：旧 4000 总预算必被突破
+    assert "小文件尾部" in text  # 未超长文件完整保留
+    assert "manual.pdf" in text  # 二进制跳过标注不受影响
+    assert "按所见内容判断" in text  # 截断标注措辞（TRUNCATION_NOTICE 单源）
+
+
+def test_read_fulltext_truncation_marker_matches_shared_origin(tmp_path):
+    """截断文案单源：read_fulltext 的逐文件截断逐字等于 library.truncate_content
+    对同一文件同一上限的输出（reference_library 不能 import llm，措辞共享层）。"""
+    from contest_generator.library import truncate_content
+
+    reference_root = make_fake_reference_library(tmp_path / "references")
+    entry_dir = reference_root / TOPIC_REFERENCE_ID
+    meta = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    content = "/* 头 */\n" + "y" * (REFERENCE_FILE_CAP + 500)
+    meta["files"] = ["big.c"]
+    (entry_dir / "big.c").write_text(content, encoding="utf-8")
+    (entry_dir / "reference.json").write_text(
+        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
+    )
+
+    text = read_fulltext(
+        reference_root, get_reference(reference_root, TOPIC_REFERENCE_ID)
+    )
+
+    expected = "// ---- big.c ----\n" + truncate_content(content, REFERENCE_FILE_CAP)
+    assert text == expected
 
 
 def test_read_fulltext_missing_file_raises(tmp_path):
