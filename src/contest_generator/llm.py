@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
@@ -265,6 +266,15 @@ REFERENCE_FULLTEXT_CAP = 60000
 # 这么轮；仍缺失就大声失败——宁可失败也不带病进下一阶段。
 SUMMARY_RETRY_LIMIT = 3
 
+# 网络类失败的重试上限（工单 deepseek-retry-hardening/01）：网络层瞬断
+# （连接重置 10054 / URLError / 超时 / 网关 5xx）3 连快重试大概率仍断
+# （工单 reference-library-hygiene/03 真机 3/3 次运行撞此形态，重试 3 次
+# 仍断、整轮推荐作废），改指数退避：最多重试 NETWORK_RETRY_LIMIT 次、间隔
+# 按连续网络失败次数 2**n 秒（1/2/4/8）——序列由 tests/test_llm.py 钉死。
+# 解析类仍走 SUMMARY_RETRY_LIMIT 快重试（工单 recommend-call-retry/01 行为
+# 不变）。
+NETWORK_RETRY_LIMIT = 5
+
 # 判定分批大小：一次问太多文件，模型会系统性漏掉小配置文件 / 点文件
 # （判例 08：115 个文件一次返回漏 30 个，补问也不收敛——不是偶发，是批量
 # 超载）。按此大小分批问，总输入 token 不变（每个文件只嵌入一次），漏判
@@ -414,8 +424,25 @@ def _extract_good_decisions(
 
 
 
+# LLMError 类别（工单 deepseek-retry-hardening/01）：network = 网络层瞬断
+# （_retry_parse 走指数退避，见 NETWORK_RETRY_LIMIT），parse = 输出解析 /
+# 业务失败（快重试）。字符串常量单源：转换点（UrllibTransport / _chat 5xx）
+# 与 _retry_parse 分策略都引用，测试同样引用（词表同款单源原则）。
+ERROR_KIND_NETWORK = "network"
+ERROR_KIND_PARSE = "parse"
+
+
 class LLMError(Exception):
-    """LLM 调用或输出解析失败，message 说明具体问题。"""
+    """LLM 调用或输出解析失败，message 说明具体问题。
+
+    kind 区分错误类别（缺省 parse，向后兼容——存量单参构造全部按解析类）：
+    network = 网络层瞬断（连接失败 / 超时 / 网关 5xx，重试有价值）；
+    parse = 输出解析 / 业务失败。非 network 类别一律视为 parse。
+    """
+
+    def __init__(self, message: str, kind: str = ERROR_KIND_PARSE) -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 # 分批 / 重试循环的条目类型限定：两阶段各自只有一对输入 / 输出类型（摘要
@@ -597,7 +624,20 @@ class UrllibTransport:
             # 4xx/5xx 是业务失败，状态码透传给调用方转成 LLMError
             return exc.code, exc.read().decode("utf-8", errors="replace")
         except (urllib.error.URLError, OSError) as exc:
-            raise LLMError(f"无法连接 LLM 服务 {url}: {exc}") from exc
+            # 网络层瞬断（连接重置 10054 / 超时 / DNS 失败）→ 标记 network 类，
+            # _retry_parse 据此走指数退避重试（工单 deepseek-retry-hardening/01）
+            raise LLMError(
+                f"无法连接 LLM 服务 {url}: {exc}", kind=ERROR_KIND_NETWORK
+            ) from exc
+
+
+def _backoff_sleep(seconds: float) -> None:
+    """退避等待（独立函数 = 测试 monkeypatch 接缝，见 _retry_parse）。
+
+    网络重试不可真睡 1+2+4+8s：tests/test_llm.py monkeypatch 本函数记录
+    序列——比直接打 llm 命名空间的 time.sleep 更窄，不污染全局 time 模块。
+    """
+    time.sleep(seconds)
 
 
 class DeepSeekLLM:
@@ -809,13 +849,25 @@ class DeepSeekLLM:
         """整次调用级重试（单调用契约共用原语，与批处理 _retry_batch 同哲学）。
 
         归档判定 / 逐文件简介这类"一次调用一个产物"的契约，LLM 异常或输出
-        畸形时整次重问，最多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错——宁可
-        多花一次调用，也不带病进入归档 / 入库流程（多文件归档此前无任何重试
-        兜底，单次瞬时失败即整体放弃确认）。批内条目级补问（_retry_batch）
-        服务"一批输出多个路径键控条目"的契约，这里是它的单调用孪生。
+        畸形时整次重问，仍失败大声抛错——宁可多花一次调用，也不带病进入归档 /
+        入库流程（多文件归档此前无任何重试兜底，单次瞬时失败即整体放弃确认）。
+        批内条目级补问（_retry_batch）服务"一批输出多个路径键控条目"的契约，
+        这里是它的单调用孪生。
+
+        错误类别分策略（工单 deepseek-retry-hardening/01）：网络类
+        （LLMError.kind=network，连接失败 / 超时 / 网关 5xx）最多
+        NETWORK_RETRY_LIMIT 次、按连续网络失败次数指数退避（1/2/4/8 秒，
+        经 _backoff_sleep——真机教训：3 连快重试仍断、整轮推荐作废）；解析类
+        （缺省 kind，空内容 / 畸形 JSON / 业务失败）保持 SUMMARY_RETRY_LIMIT
+        次快重试（工单 recommend-call-retry/01 行为不变）。混合序列按每次
+        失败各自记账：总尝试上限 = NETWORK_RETRY_LIMIT，解析类在第
+        SUMMARY_RETRY_LIMIT 次尝试后仍失败即止。
         """
         last_error: Exception | None = None
-        for _ in range(SUMMARY_RETRY_LIMIT):
+        attempts = 0
+        network_failures = 0
+        while attempts < NETWORK_RETRY_LIMIT:
+            attempts += 1
             try:
                 content = self._chat(
                     [
@@ -827,8 +879,15 @@ class DeepSeekLLM:
                 return parse(content)
             except LLMError as exc:
                 last_error = exc
+                if exc.kind == ERROR_KIND_NETWORK:
+                    network_failures += 1
+                    if attempts >= NETWORK_RETRY_LIMIT:
+                        break
+                    _backoff_sleep(2 ** (network_failures - 1))
+                elif attempts >= SUMMARY_RETRY_LIMIT:
+                    break
         raise LLMError(
-            f"{label}连续 {SUMMARY_RETRY_LIMIT} 次调用失败：{last_error}"
+            f"{label}连续 {attempts} 次调用失败：{last_error}"
         ) from last_error
 
     def reference_summarize(self, material: str) -> str:
@@ -1246,6 +1305,15 @@ class DeepSeekLLM:
                     "DeepSeek API 返回 413：请求体过大。嵌内容素材已按预算截断 / "
                     "分批发送，若仍触发，请检查赛题文本是否异常巨大，或减少导入"
                     "工程的文件数量与单文件大小"
+                )
+            if status >= 500:
+                # 5xx = 网关 / 服务端瞬时故障（重试有价值，与连接失败同款指数
+                # 退避）；4xx = 请求本身有问题（401 密钥 / 413 体积），保持
+                # 缺省 parse 类快重试（与旧行为一致）——工单 deepseek-retry-
+                # hardening/01 分策略
+                raise LLMError(
+                    f"DeepSeek API 返回 {status}：{body[:200]}",
+                    kind=ERROR_KIND_NETWORK,
                 )
             raise LLMError(f"DeepSeek API 返回 {status}：{body[:200]}")
         try:

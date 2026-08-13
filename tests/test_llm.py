@@ -4,10 +4,13 @@
 """
 
 import json
+import urllib.error
+import urllib.request
 from typing import Any, Mapping, Sequence
 
 import pytest
 
+import contest_generator.llm as llm_module
 from contest_generator.config import AppConfig
 from contest_generator.events import (
     EVENT_BATCH_DONE,
@@ -27,6 +30,7 @@ from contest_generator.llm import (
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
     EMBEDDED_CONTENT_CAP,
+    ERROR_KIND_NETWORK,
     FIX_SYSTEM_PROMPT,
     SELECT_SYSTEM_PROMPT,
     SKELETON_SYSTEM_PROMPT,
@@ -35,8 +39,11 @@ from contest_generator.llm import (
     LLMError,
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
+    NETWORK_RETRY_LIMIT,
     REFERENCE_FULLTEXT_CAP,
+    SUMMARY_RETRY_LIMIT,
     TRUNCATION_NOTICE,
+    UrllibTransport,
     VALIDATION_SYSTEM_PROMPT,
     VALIDATION_UNIVERSALITY_RULE,
     TOPIC_SPLIT_LLM_CHAR_CAP,
@@ -383,6 +390,125 @@ def test_select_modules_retries_when_selection_rejected():
 
     assert result.modules == ("dht11",)
     assert len(transport.calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# 网络类退避重试（工单 deepseek-retry-hardening/01）：LLMError 分网络 /
+# 解析两类——网络瞬断（连接重置 / URLError / 网关 5xx）5 次指数退避
+# （1/2/4/8s），解析类（空内容 / 畸形 JSON）保持 3 次快重试。
+# 红证先行：改前形态（无类别标记）下网络类 3 次即抛、零 sleep。
+# ---------------------------------------------------------------------------
+
+
+def _record_backoff_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """monkeypatch llm._backoff_sleep 记录退避序列（测试不可真睡 1+2+4+8s）。"""
+    sleeps: list[float] = []
+    monkeypatch.setattr(llm_module, "_backoff_sleep", sleeps.append)
+    return sleeps
+
+
+class _NetworkFailureTransport(FakeTransport):
+    """每次调用都抛网络类 LLMError（模拟 UrllibTransport 的转换产物：连接
+    重置 / URLError / OSError → LLMError(kind=network)）。"""
+
+    def post(
+        self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
+    ) -> tuple[int, str]:
+        self.calls.append((url, headers, payload, timeout))
+        raise LLMError("无法连接 LLM 服务：连接重置", kind=ERROR_KIND_NETWORK)
+
+
+class _FlakyNetworkTransport(FakeTransport):
+    """前 n 次调用抛网络类 LLMError，之后正常（测退避后成功）。"""
+
+    def __init__(self, body: str, failures: int) -> None:
+        super().__init__(body=body)
+        self._failures = failures
+
+    def post(
+        self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
+    ) -> tuple[int, str]:
+        self.calls.append((url, headers, payload, timeout))
+        if len(self.calls) <= self._failures:
+            raise LLMError("无法连接 LLM 服务：连接重置", kind=ERROR_KIND_NETWORK)
+        return self.status, self.body
+
+
+def test_llm_error_kind_defaults_to_parse():
+    """kind 缺省 parse（向后兼容：存量单参构造的 LLMError 全部按解析类处理）。"""
+    assert LLMError("boom").kind == "parse"
+    assert LLMError("boom", kind="network").kind == "network"
+
+
+def test_select_modules_network_failure_exhausts_with_backoff(monkeypatch):
+    """网络类失败 → NETWORK_RETRY_LIMIT 次尝试 + 指数退避（1/2/4/8s），
+    失败文案随实际次数变化（连续 5 次）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = _NetworkFailureTransport()
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="模块选择连续 5 次调用失败"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert len(transport.calls) == NETWORK_RETRY_LIMIT  # 5
+    assert sleeps == [1.0, 2.0, 4.0, 8.0]  # 退避序列钉死
+
+
+def test_select_modules_http_5xx_uses_network_backoff(monkeypatch):
+    """网关 5xx 与连接失败同策略：5 次退避重试（4xx 不在此列，见 401 用例）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = _FlakyTransport(body=_api_response(SELECTION_JSON), failures=9)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="模块选择连续 5 次调用失败"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert len(transport.calls) == NETWORK_RETRY_LIMIT
+    assert sleeps == [1.0, 2.0, 4.0, 8.0]
+
+
+def test_select_modules_network_failures_then_success(monkeypatch):
+    """混合：前 2 次网络失败后退避 → 第 3 次成功（退避后正常返回）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = _FlakyNetworkTransport(body=_api_response(SELECTION_JSON), failures=2)
+    llm = _llm(transport)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    assert len(transport.calls) == 3
+    assert sleeps == [1.0, 2.0]
+
+
+def test_select_modules_parse_failures_stay_fast_three_retries(monkeypatch):
+    """解析类（空内容）保持 3 次快重试：零 sleep（策略分派不误伤解析类）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = SequenceTransport([_api_response("")] * 3)
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="模块选择连续 3 次调用失败"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT  # 3
+    assert sleeps == []
+
+
+def test_urllib_transport_marks_network_errors(monkeypatch):
+    """传输层网络异常（URLError / OSError）→ LLMError(kind=network)——
+    转换点是 _retry_parse 分策略的依据（红证：旧实现无类别标记）。"""
+    transport = UrllibTransport()
+    for exc in (
+        urllib.error.URLError("timeout"),
+        ConnectionResetError(10054, "连接被重置"),
+    ):
+        monkeypatch.setattr(
+            urllib.request,
+            "urlopen",
+            lambda *args, **kwargs: (_ for _ in ()).throw(exc),
+        )
+        with pytest.raises(LLMError) as caught:
+            transport.post("https://api.deepseek.com/chat/completions", {}, {"m": []}, 300)
+        assert caught.value.kind == ERROR_KIND_NETWORK
 
 
 # ---------------------------------------------------------------------------
@@ -2739,7 +2865,11 @@ def test_parse_archive_judgment_accepts_empty_and_subset():
 
 
 class _FlakyTransport(FakeTransport):
-    """前 n 次调用返回 502，之后正常（测整次调用级重试，工单 C5）。"""
+    """前 n 次调用返回 502，之后正常（测整次调用级重试，工单 C5）。
+
+    502 是 5xx = 网络类（工单 deepseek-retry-hardening/01）→ 走指数退避；
+    触发重试的用例必须 monkeypatch _backoff_sleep（测试不可真睡）。
+    """
 
     def __init__(self, body: str, failures: int) -> None:
         super().__init__(body=body)
@@ -2754,8 +2884,10 @@ class _FlakyTransport(FakeTransport):
         return self.status, self.body
 
 
-def test_reference_judge_archivable_retries_transient_failure():
-    """单次瞬时失败整次重问（与提炼批处理同哲学：宁可多花一次调用）。"""
+def test_reference_judge_archivable_retries_transient_failure(monkeypatch):
+    """单次瞬时失败（网关 502，网络类）整次重问：退避 1s 后成功
+    （与提炼批处理同哲学：宁可多花一次调用）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
     transport = _FlakyTransport(
         body=_api_response('{"archive": ["src/motor.c"]}'), failures=1
     )
@@ -2765,26 +2897,31 @@ def test_reference_judge_archivable_retries_transient_failure():
 
     assert result == ("src/motor.c",)
     assert len(transport.calls) == 2
+    assert sleeps == [1.0]
 
 
-def test_reference_judge_archivable_exhausts_retries_then_loud_failure():
-    """超过重试上限仍失败 = 大声抛错（不静默吞成假结果）。"""
+def test_reference_judge_archivable_exhausts_retries_then_loud_failure(monkeypatch):
+    """超过重试上限仍失败 = 大声抛错（不静默吞成假结果）——网络类 5 次退避。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
     transport = _FlakyTransport(body=_api_response('{"archive": []}'), failures=9)
     llm = _llm(transport)
 
-    with pytest.raises(LLMError, match="归档判定连续 3 次调用失败"):
+    with pytest.raises(LLMError, match="归档判定连续 5 次调用失败"):
         llm.reference_judge_archivable([_candidate()])
 
-    assert len(transport.calls) == 3  # SUMMARY_RETRY_LIMIT
+    assert len(transport.calls) == NETWORK_RETRY_LIMIT
+    assert sleeps == [1.0, 2.0, 4.0, 8.0]
 
 
-def test_reference_summarize_retries_transient_failure():
+def test_reference_summarize_retries_transient_failure(monkeypatch):
     """逐文件简介同样有重试兜底（多文件归档不再单次失败即整体放弃）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
     transport = _FlakyTransport(body=_api_response("UWB 例程"), failures=2)
     llm = _llm(transport)
 
     assert llm.reference_summarize("材料全文") == "UWB 例程"
     assert len(transport.calls) == 3
+    assert sleeps == [1.0, 2.0]
 
 
 # ---------------------------------------------------------------------------
@@ -2824,13 +2961,16 @@ def test_summarize_topic_truncates_oversized_problem():
     assert TRUNCATION_NOTICE in user
 
 
-def test_summarize_topic_retries_transient_failure():
-    """瞬时失败整次重问（与参考文件简介同款兜底）。"""
+def test_summarize_topic_retries_transient_failure(monkeypatch):
+    """瞬时失败（网关 502，网络类）整次重问：退避 1/2s 后成功
+    （与参考文件简介同款兜底）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
     transport = _FlakyTransport(body=_api_response("概述"), failures=2)
     llm = _llm(transport)
 
     assert llm.summarize_topic("题面") == "概述"
     assert len(transport.calls) == 3
+    assert sleeps == [1.0, 2.0]
 
 
 def test_reference_judge_archivable_retries_on_malformed_json_output():
