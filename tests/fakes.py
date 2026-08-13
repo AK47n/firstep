@@ -610,7 +610,7 @@ class FakeLLM:
         self.topic_extract_calls: list[tuple[str, ...]] = []
         self.clarify_calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
         self.topic_summarize_calls: list[tuple[str, ...]] = []
-        self.fix_errors_calls: list[tuple[str, dict, str, str, tuple, str]] = []
+        self.fix_errors_calls: list[tuple[str, dict, str, str, tuple, str, tuple]] = []
 
     def select_modules(
         self,
@@ -659,6 +659,7 @@ class FakeLLM:
         module_slugs: Sequence[str] = (),
         main_c: str = "",
         dropped_files: Sequence[str] = (),
+        previous_fixes: Sequence[Mapping[str, Any]] = (),
     ) -> tuple[FixSuggestion, ...]:
         self.fix_errors_calls.append(
             (
@@ -668,6 +669,7 @@ class FakeLLM:
                 platform,
                 tuple(module_slugs),
                 main_c,
+                tuple(previous_fixes),
             )
         )
         return self._fixes
