@@ -224,7 +224,11 @@ FIX_SYSTEM_PROMPT = (
     "内容；需要删除整行或整段时 new_snippet 给空字符串。4) 只修报错指出的"
     "问题，不要无关重构；一条报错给一处修复，多处报错可在 fixes 数组列出"
     "多处。5) 依据不足、无法确定精确修改时，宁可不输出该条（工具报告未应用）"
-    "也不要乱改。"
+    "也不要乱改。6) 用户消息若带「上一轮修复应用结果」段（工单 "
+    "fix-loop-progress/01）：其中未应用（skipped）的条目原因已写明——重试时"
+    " old_snippet 必须从文件当前内容里逐字对齐后重写（行号只作提示，以文件"
+    "内容为准），仍无法精确给出时放弃该条；不要重复输出与上一轮一模一样的"
+    "建议。"
 )
 
 # 归档判定（工单 02）：提炼时被剔除的业务代码是否值得归档为该赛题的参考文件。
@@ -569,6 +573,7 @@ class LLM(Protocol):
         module_slugs: Sequence[str] = (),
         main_c: str = "",
         dropped_files: Sequence[str] = (),
+        previous_fixes: Sequence[Mapping[str, Any]] = (),
     ) -> tuple[FixSuggestion, ...]: ...
 
     def distill_master(
@@ -810,14 +815,17 @@ class DeepSeekLLM:
         module_slugs: Sequence[str] = (),
         main_c: str = "",
         dropped_files: Sequence[str] = (),
+        previous_fixes: Sequence[Mapping[str, Any]] = (),
     ) -> tuple[FixSuggestion, ...]:
         """编译报错修复建议（工单 compile-error-fix/01，json_mode）。
 
         报错全文 + 命中文件内容 + 题面 / 平台 / 模块 / main.c → 逐条 snippet
-        替换建议（FixSuggestion）。严格解析：file 必须在提供的文件清单内、
-        old_snippet 非空——畸形输出 / 瞬时失败整次重问（_retry_parse ≤3 轮，
-        与归档判定同款兜底）；域判决（路径白名单 / 精确匹配 / 备份回滚）在
-        fix_errors.py，本模块只做机械提取。
+        替换建议（FixSuggestion）。previous_fixes（工单 fix-loop-progress/01）
+        = 上一轮应用结果，渲染进用户消息独立段（空 = 无该段零回归）。严格
+        解析：file 必须在提供的文件清单内、old_snippet 非空——畸形输出 /
+        瞬时失败整次重问（_retry_parse ≤3 轮，与归档判定同款兜底）；域判决
+        （路径白名单 / 精确匹配 / 备份回滚）在 fix_errors.py，本模块只做机械
+        提取。
         """
         return self._retry_parse(
             system_prompt=FIX_SYSTEM_PROMPT,
@@ -829,6 +837,7 @@ class DeepSeekLLM:
                 platform=platform,
                 module_slugs=module_slugs,
                 main_c=main_c,
+                previous_fixes=previous_fixes,
             ),
             parse=lambda content: parse_fix_suggestions(
                 content, tuple(file_contexts)
@@ -1571,11 +1580,16 @@ def _fix_errors_user_prompt(
     platform: str = "",
     module_slugs: Sequence[str] = (),
     main_c: str = "",
+    previous_fixes: Sequence[Mapping[str, Any]] = (),
 ) -> str:
     """修复请求的用户消息（决策记录 6）：报错全文 + 命中文件内容（截断已在
     域模块 fix_errors.read_file_contexts 完成，此处原样嵌入）+ 题面 / 平台 /
     模块 / main.c（走统一截断 _truncate_content）。无文件上下文（降级模式，
     决策记录 5）时显式告知模型按报错全文判断——仍可修，只是不精准。
+
+    previous_fixes（工单 fix-loop-progress/01）：上一轮应用结果回喂——独立段
+    「上一轮修复应用结果」（标题固定，测试断言用），位置在文件上下文之后、
+    工程上下文之前；空列表 = 无该段（提示词与旧行为逐字节一致，零回归）。
     """
     parts: list[str] = ["【编译报错全文】", _truncate_content(error_text)]
     if file_contexts:
@@ -1594,6 +1608,16 @@ def _fix_errors_user_prompt(
             "修改位置，请给出正确文件名与精确的 old_snippet，工具会按文件实际"
             "内容精确匹配）"
         )
+    if previous_fixes:
+        lines = [
+            "【上一轮修复应用结果】（line 只作提示，以文件当前内容为准）"
+        ]
+        for fix in previous_fixes:
+            entry = f"- {fix['file']}:{fix['line']} {fix['status']}"
+            if fix["reason"]:
+                entry += f"：{fix['reason']}"
+            lines.append(entry)
+        parts.append("\n".join(lines))
     parts.append("【工程上下文】")
     if problem_text:
         parts.append("赛题原文：\n" + _truncate_content(problem_text))

@@ -1702,8 +1702,10 @@ async function runCompileOnce(outputDir) {
   return done;
 }
 
-/** 单次修复（SSE /api/fix-errors，复用既有管线）→ done 载荷；error / 断线 → throw。 */
-async function runFixOnce(errorText, outputDir) {
+/** 单次修复（SSE /api/fix-errors，复用既有管线）→ done 载荷；error / 断线 → throw。
+ * previousDone = 上一轮 done 载荷：其 fixes 数组作为 previous_fixes 回喂下一轮
+ * （工单 fix-loop-progress/01）；贴文本模式不传（undefined → 请求体不带该字段）。 */
+async function runFixOnce(errorText, outputDir, previousDone) {
   let finished = false;
   let resp;
   try {
@@ -1712,6 +1714,7 @@ async function runFixOnce(errorText, outputDir) {
       body: JSON.stringify({
         output_dir: outputDir,
         error_text: errorText,
+        previous_fixes: previousDone && previousDone.fixes ? previousDone.fixes : undefined,
         problem_text: $("problem").value.trim(),
         platform: chosenPlatform || undefined,
         slugs: selectedSlugs,
@@ -1771,7 +1774,9 @@ async function startFixCenter() {
     // 首编失败 → 立即渲染结构化错误列表（全部「待修复」），修复轮结束后按
     // fixes 重渲染最终状态（展示层工单 compile-experience-ui/01）
     fixRenderResults(initial.parsed_errors || [], [], 0);
-    // 报错 → 修复 → 重编译验证，≤3 轮；第 3 轮后如实报告剩余错误（不无限循环）
+    // 报错 → 修复 → 重编译验证，≤3 轮；本轮 0 applied 即停（停滞检测，工单
+    // fix-loop-progress/01 决策 1——文件没变，重编译输出必与上轮相同，不再白跑）；
+    // 第 3 轮后如实报告剩余错误（不无限循环）
     // 轮次文案错误数：判读单源 summary（工单 compile-verdict-align/01，删
     // fixErrorCount 正则——fix_errors.py 明令禁止调用方另写正则）；lastSummary
     // 与 errorText 同步更新，首轮即 initial 的 summary
@@ -1781,7 +1786,15 @@ async function startFixCenter() {
       const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
       $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
         + " 轮：编译有错（" + (n !== null ? n + " 条 Error" : "多条报错") + "）→ AI 修复…";
-      await runFixOnce(errorText, outputDir);   // 应用结果逐条展示（fix-results）
+      const done = await runFixOnce(errorText, outputDir, lastFixDone);   // 上轮载荷回喂（决策 2）
+      const applied = (done.fixes || []).filter((f) => f.status === "applied").length;
+      if (applied === 0) {   // 空修复 / 全 skipped / 降级无上下文：立即停，文案写具体
+        $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+          + " 轮：未应用任何修复，停止循环";
+        $("fix-status").textContent = "本轮未应用任何修复（全部 skipped / 无修复建议），停止循环——"
+          + "可贴文本手动修复或改工程后重试";
+        return;
+      }
       $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
         + " 轮：重编译验证中…";
       const compile = await runCompileOnce(outputDir);

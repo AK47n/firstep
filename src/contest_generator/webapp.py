@@ -722,7 +722,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         请求体契约：error_text（必填，编译报错全文）；output_dir（必填，生成
         结果目录，必须已存在）；problem_text / platform / slugs / main_c
-        （可选上下文，决策记录 6）。路径安全：解析出的文件必须 resolve 后在
+        （可选上下文，决策记录 6）；previous_fixes（可选，上一轮 done 载荷的
+        fixes 数组，工单 fix-loop-progress/01——原样透传 run_fix_round，形状
+        判决归域层，路由不做校验）。路径安全：解析出的文件必须 resolve 后在
         输出目录内（is_unsafe_path + containment），写回白名单 .c/.h/.s——
         修复建议越界由修复域拒绝（FixError → 400 中文，登记 errors.py）。
 
@@ -738,6 +740,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _optional_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _optional_str(payload, "main_c")
+        # 可选数组原样透传（形状判决归 run_fix_round 域校验——_optional_str
+        # 系列不适用，非法形状由域层 FixError → 400 中文）
+        previous_fixes = payload.get("previous_fixes", ())
         backup_root = fix_backup_root(
             _require_config(context).masters_dir.parent
         )
@@ -757,6 +762,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     platform=platform,
                     module_slugs=slugs,
                     main_c=main_c,
+                    previous_fixes=previous_fixes,
                     emit=emit.progress,
                 )
             )
