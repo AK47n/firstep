@@ -30,7 +30,7 @@ from contest_generator.master import (
     scan_project,
 )
 from contest_generator.master_store import MasterError, list_masters
-from contest_generator.platforms import PLATFORM_STM32
+from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator import reference_library
 from contest_generator.reference_library import (
     ANCHOR_KIND_KIT,
@@ -1791,3 +1791,149 @@ def test_tarkbot_split_search_servo_hits_db20_5():
     """搜索「舵机」命中 DB20_5 新条目（拆分动机：旧条目标题搜不到舵机角度）。"""
     hits = search_references(REFERENCES_ROOT, title="舵机")
     assert [entry.id for entry in hits] == ["塔克R3-DB20-舵机角度控制"]
+
+
+# ---------------------------------------------------------------------------
+# 真库数据不变量：MSPM0_MOTOR 条目修复（工单 reference-library-hygiene/02）
+# ---------------------------------------------------------------------------
+
+MOTOR_OLD_ID = "MSPM0_MOTOR参考例程"
+MOTOR_MATERIALS_ROOT = Path(__file__).resolve().parents[1] / "sources" / "materials" / MOTOR_OLD_ID
+
+# 新标题 → (type, 期望文件数)。旧条目 1630 文件修复为 13 + 6 + 1 = 20 文件
+# （修复脚本 .scratch/fix_mspm0_motor.py 的前置自检同源对照，本表为防回退 pin）
+MOTOR_SPLITS = {
+    "MSPM0 Motor_Ctrl 电机控制例程": ("参考例程", 13),
+    "MSPM0 m0imu 姿态例程": ("参考例程", 6),
+    "MSPM0 MOTOR 例程移植笔记": ("移植笔记", 1),
+}
+
+# 条目 → 共享工程底板文件（两条例程都自持，移植笔记纯文本不带）
+MOTOR_SHARED_FILES = ("ti_msp_dl_config.c", "ti_msp_dl_config.h", "empty.syscfg")
+
+# 剥负载前缀 + 顶层垃圾文件（旧条目有、新条目一律不得出现；镜像 + git 历史留痕）
+MOTOR_STRIPPED_PREFIXES = ("source/", "gcc/", "iar/", "keil/", "ticlang/")
+MOTOR_STRIPPED_TOP_LEVEL = ("Event.dot", "README.html")
+
+# 7 个 GBK 转码补录文件：新条目内相对路径 → 转码后必现的中文/标识正文
+# （原 GBK 直读失败即漏录，转码后 UTF-8 全文回读必须可见这些正文）
+MOTOR_TRANSCODED_MARKERS = {
+    "MSPM0 Motor_Ctrl 电机控制例程": {
+        "motor_crc.c": "auchCRCHi",
+        "motor_crc.h": "用于计算 CRC",
+        "motor_read_enc.c": "存储累计编码器值",
+        "motor_set_speed.c": "从站地址",
+        "motor_set_speed.h": "设置电机速度",
+        "user.h": "微库",
+    },
+    "MSPM0 m0imu 姿态例程": {
+        "imu.c": "Gyro_ParseFrame",
+    },
+}
+
+
+def _motor_split_entries() -> dict[str, reference_library.ReferenceEntry]:
+    """真库 3 条修复条目的 {标题: 条目}；缺失 = 修复未执行 / 被回退，直接红。"""
+    by_title = {entry.title: entry for entry in list_references(REFERENCES_ROOT)}
+    missing = [title for title in MOTOR_SPLITS if title not in by_title]
+    assert not missing, f"MSPM0_MOTOR 修复条目缺失：{missing}"
+    return {title: by_title[title] for title in MOTOR_SPLITS}
+
+
+def test_motor_entries_present_and_old_absent():
+    """修复后 3 条新条目存在、旧条目不存在；list_references 全库结构校验不抛。"""
+    by_title = {entry.title: entry for entry in list_references(REFERENCES_ROOT)}
+    assert MOTOR_OLD_ID not in by_title
+    for title in MOTOR_SPLITS:
+        assert title in by_title
+
+
+def test_motor_entries_shape_and_stripped_load():
+    """3 条新条目文件集 / 类型 / 平台 / 锚定对齐，且不含任何剥负载路径。"""
+    entries = _motor_split_entries()
+    for title, (type_, expect_count) in MOTOR_SPLITS.items():
+        entry = entries[title]
+        assert entry.type == type_
+        assert entry.platform == PLATFORM_MSPM0
+        assert entry.anchor_kind == ANCHOR_KIND_NONE
+        assert len(entry.files) == expect_count
+        # 剥负载：source/ SDK 副本树、gcc/iar/keil/ticlang 胶水、构建产物垃圾
+        # 一律不得出现在任何新条目 files 里（镜像 + git 历史留痕，不丢数据）
+        for rel in entry.files:
+            assert not rel.startswith(MOTOR_STRIPPED_PREFIXES)
+            assert rel not in MOTOR_STRIPPED_TOP_LEVEL
+    motor, imu, notes = (entries[t] for t in MOTOR_SPLITS)
+    assert set(motor.files) == {
+        "motor_crc.c",
+        "motor_crc.h",
+        "motor_read_enc.c",
+        "motor_read_enc.h",
+        "motor_set_speed.c",
+        "motor_set_speed.h",
+        "user.c",
+        "user.h",
+        "ti_msp_dl_config.c",
+        "ti_msp_dl_config.h",
+        "empty.syscfg",
+        "README.md",
+        "素材清单.txt",
+    }
+    assert set(imu.files) == {
+        "imu.c",
+        "imu.h",
+        "ti_msp_dl_config.c",
+        "ti_msp_dl_config.h",
+        "empty.syscfg",
+        "素材清单.txt",
+    }
+    assert notes.files == ("移植.md",)  # 移植笔记纯文本自持，不带素材清单
+
+
+def test_motor_transcoded_files_readable_utf8():
+    """7 个 GBK 转码补录文件 UTF-8 全文可读且中文注释正文可见。
+
+    转码动机：motor_crc.{c,h} / motor_read_enc.c / motor_set_speed.{c,h} /
+    user.h / imu.c 原为 GBK 编码，UTF-8 直读静默跳过导致"电机控制参考例程"
+    条目里没有电机控制实现代码。转码后 read_text(utf-8) 必须直接成功且正文
+    标记在（若哪天被换回 GBK 或内容清空，本测试即红）。
+    """
+    entries = _motor_split_entries()
+    for title, markers in MOTOR_TRANSCODED_MARKERS.items():
+        entry = entries[title]
+        for rel, marker in markers.items():
+            assert rel in entry.files
+            content = (REFERENCES_ROOT / entry.id / rel).read_text(encoding="utf-8")
+            assert marker in content, f"{entry.id}/{rel} 全文回读不见 {marker!r}"
+
+
+def test_motor_manifests_match_mirror_subdirs():
+    """素材清单.txt 用 build_material_manifest 对镜像子目录重新生成（写读契约 pin）。
+
+    电机条目清单 = sources/materials 镜像 MSP_Motor_Ctrl 子目录全文件留痕、
+    m0imu 条目清单 = m0imu 子目录留痕（镜像 git 追踪，重生成结果与库内清单
+    逐字节一致 = 剥离负载在镜像留痕、清单不丢数据）。
+    """
+    entries = _motor_split_entries()
+    for title, subdir in (
+        ("MSPM0 Motor_Ctrl 电机控制例程", "MSP_Motor_Ctrl"),
+        ("MSPM0 m0imu 姿态例程", "m0imu"),
+    ):
+        entry = entries[title]
+        manifest = (REFERENCES_ROOT / entry.id / "素材清单.txt").read_text(encoding="utf-8")
+        assert manifest == build_material_manifest(MOTOR_MATERIALS_ROOT / subdir)
+
+
+def test_motor_fulltext_shows_code_bodies():
+    """全文回读电机例程：motor_set_speed.c / motor_read_enc.c 正文可见。
+
+    修复动机之一：旧条目素材清单.txt 129575 字符排 files 首位，全文回读
+    4000 字符截断下模型一个代码字符都看不到。修复后 read_fulltext 必须
+    带着电机控制实现代码（帧下发 + 编码器解析函数正文）。
+    """
+    entries = _motor_split_entries()
+    fulltext = read_fulltext(REFERENCES_ROOT, entries["MSPM0 Motor_Ctrl 电机控制例程"])
+    assert "Motor_Set_ClosedLoop" in fulltext
+    assert "Motor_Set_Speeds" in fulltext
+    assert "Modbus_ParseFrame" in fulltext
+    assert "从站地址" in fulltext
+    assert "存储累计编码器值" in fulltext
