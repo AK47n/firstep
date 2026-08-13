@@ -1,0 +1,16 @@
+{
+  "id": "UART-RS-485-发送数据包",
+  "title": "UART RS-485 发送数据包",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates UART TX with RS485 mode. RS485 is usable with both UART Main and UART Extend.（SDK 例程：uart_rs485_send_packet）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_rs485_send_packet.c",
+    "uart_rs485_send_packet.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

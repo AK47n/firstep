@@ -1,0 +1,16 @@
+{
+  "id": "DMA-块搬运",
+  "title": "DMA 块搬运",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "DMA example with a block transfer of data from FLASH main memory to SRAM memory, triggered by SW.（SDK 例程：dma_block_transfer）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "dma_block_transfer.c",
+    "dma_block_transfer.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "UART-接收硬件流控",
+  "title": "UART 接收硬件流控",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example can be used with the uart_tx_hw_flow_control example running on another device. This example sets up the UART with hardware flow control.（SDK 例程：uart_rx_hw_flow_control）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_rx_hw_flow_control.c",
+    "uart_rx_hw_flow_control.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

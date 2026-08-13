@@ -1,0 +1,16 @@
+{
+  "id": "Flash-空白校验",
+  "title": "Flash 空白校验",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates the blank verify command to verify if a flash word is blank. The example does this by successfully verifying a blank word, and returning a failure when a flash word is not blank. A blank flash word is defined as a flash word which has been successfully erased with the ERASE（SDK 例程：flashctl_blank_verify）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "flashctl_blank_verify.c",
+    "flashctl_blank_verify.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

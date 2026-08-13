@@ -1,0 +1,16 @@
+{
+  "id": "定时器周期模式-睡眠",
+  "title": "定时器周期模式（睡眠）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG in periodic mode and toggles the LED and USER_TEST pin every 500ms. The device remains in SLEEP mode while waiting for an interrupt.（SDK 例程：timx_timer_mode_periodic_sleep）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_periodic_sleep.c",
+    "timx_timer_mode_periodic_sleep.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

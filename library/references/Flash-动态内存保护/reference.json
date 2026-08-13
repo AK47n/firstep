@@ -1,0 +1,16 @@
+{
+  "id": "Flash-动态内存保护",
+  "title": "Flash 动态内存保护",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates dynamic protection against program and erase operations.（SDK 例程：flashctl_dynamic_memory_protection）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "flashctl_dynamic_memory_protection.c",
+    "flashctl_dynamic_memory_protection.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

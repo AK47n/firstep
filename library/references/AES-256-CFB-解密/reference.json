@@ -1,0 +1,16 @@
+{
+  "id": "AES-256-CFB-解密",
+  "title": "AES-256 CFB 解密",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example performs AES 256-bit CFB decryption using the on-board AES engine with a software wrapper.（SDK 例程：aes_cfb_256_decrypt）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "aes_cfb_256_decrypt.c",
+    "aes_cfb_256_decrypt.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

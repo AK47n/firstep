@@ -1,0 +1,16 @@
+{
+  "id": "Flash-非主存区写入",
+  "title": "Flash 非主存区写入",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates how to write to the BCR and BSL configuration structures that are in NONMAIN Memory.（SDK 例程：flashctl_nonmain_memory_write）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "flashctl_nonmain_memory_write.c",
+    "flashctl_nonmain_memory_write.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

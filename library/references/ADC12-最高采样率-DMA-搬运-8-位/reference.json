@@ -1,0 +1,16 @@
+{
+  "id": "ADC12-最高采样率-DMA-搬运-8-位",
+  "title": "ADC12 最高采样率 DMA 搬运（8 位）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrate how to capture 1024 samples of a single ADC channel using 8-bit ADC resolution mode at maximum sampling rate. A DMA transfer is triggered every time a new result is loaded to ADC conversion memory and will continue the transfer until 1024 samples are loaded to gADCSamples ar（SDK 例程：adc12_max_freq_dma_8bit）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "adc12_max_freq_dma_8bit.c",
+    "adc12_max_freq_dma_8bit.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "窗口看门狗间隔定时-外部低频晶振",
+  "title": "窗口看门狗间隔定时（外部低频晶振）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures the WWDT in interval mode with an interval of 2Hz. A LED and USER_TEST pin are toggled at every interval of 2Hz (500ms). LFCLK is sourced from the external low frequency crystal oscillator (LFXT). The device remains in STANDBY mode while waiting for an interrupt.（SDK 例程：wwdt_interval_timer_lfxt_standby）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "wwdt_interval_timer_lfxt_standby.c",
+    "wwdt_interval_timer_lfxt_standby.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

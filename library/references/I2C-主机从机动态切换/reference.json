@@ -1,0 +1,16 @@
+{
+  "id": "I2C-主机从机动态切换",
+  "title": "I2C 主机从机动态切换",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example shows how the I2C module can dynamically switch between operating as Controller and Target.（SDK 例程：i2c_controller_target_dynamic_switching）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "i2c_controller_target_dynamic_switching.c",
+    "i2c_controller_target_dynamic_switching.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

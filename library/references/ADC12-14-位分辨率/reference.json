@@ -1,0 +1,16 @@
+{
+  "id": "ADC12-14-位分辨率",
+  "title": "ADC12 14 位分辨率",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates how to capture 1024 samples of a single ADC channel using 12-bit ADC resolution mode at maximum sampling rate with hardware averaging enabled.（SDK 例程：adc12_14bit_resolution）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "adc12_14bit_resolution.c",
+    "adc12_14bit_resolution.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

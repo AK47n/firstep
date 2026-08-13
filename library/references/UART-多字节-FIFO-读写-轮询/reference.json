@@ -1,0 +1,16 @@
+{
+  "id": "UART-多字节-FIFO-读写-轮询",
+  "title": "UART 多字节 FIFO 读写（轮询）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example transmits a UART packet, and then waits to receive UART data. This example uses FIFOs with polling. It can only handle a maximum of 8 bytes due to FIFO size. LED toggles if transmission and reception are successful. UART is configured at 9600bps.（SDK 例程：uart_rw_multibyte_fifo_poll）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_rw_multibyte_fifo_poll.c",
+    "uart_rw_multibyte_fifo_poll.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

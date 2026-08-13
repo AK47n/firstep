@@ -1,0 +1,16 @@
+{
+  "id": "NVIC-中断屏蔽",
+  "title": "NVIC 中断屏蔽",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures configures TimerG in one shot mode, toggles an LED for 5 seconds, and then turns off the LED. The peripheral interrupt is disabled and then the device is put to SLEEP. This example demonstrates the best approach to disable interrupts.（SDK 例程：nvic_interrupt_disable）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "nvic_interrupt_disable.c",
+    "nvic_interrupt_disable.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

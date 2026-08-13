@@ -1,0 +1,16 @@
+{
+  "id": "SysTick-周期定时-睡眠模式",
+  "title": "SysTick 周期定时（睡眠模式）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures SysTick to periodically toggle LED and USER_TEST pin every 500 ms while the device remains in Sleep operating mode.（SDK 例程：systick_periodic_timer）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "systick_periodic_timer.c",
+    "systick_periodic_timer.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "定时器边沿捕获",
+  "title": "定时器边沿捕获",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG0 to measures the time from the start of the capture operation to the signal edge.（SDK 例程：timx_timer_mode_capture_edge_capture）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_capture_edge_capture.c",
+    "timx_timer_mode_capture_edge_capture.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

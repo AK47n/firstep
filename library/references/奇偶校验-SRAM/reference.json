@@ -1,0 +1,16 @@
+{
+  "id": "奇偶校验-SRAM",
+  "title": "奇偶校验 SRAM",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example uses parity SRAM by default. The linker file is modified to use parity SRAM and memory is initialized before being used. Accessing parity SRAM without initialization can result in a parity fault.（SDK 例程：sram_parity）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "sram_parity.c",
+    "sram_parity.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

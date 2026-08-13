@@ -1,0 +1,16 @@
+{
+  "id": "时钟频率计数测量",
+  "title": "时钟频率计数测量",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Demonstrates Frequency Clock Counter (FCC). The FCC is configured to count the number of SYSOSC periods that have occurred between two LFCLK rising-edge to rising-edge periods.（SDK 例程：sysctl_frequency_clock_counter）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "sysctl_frequency_clock_counter.c",
+    "sysctl_frequency_clock_counter.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -14,6 +14,8 @@ SDK 本体可重新获得（安装器在 C:\\ti），按素材保留规则不备
 自动提交：跑前把 config.json 的 autocommit_enabled 置 false，跑完手动一条
 提交（参考 8318b56「补录三批参考文件条目」先例，149 条不逐条进历史）。
 幂等：标题已存在即跳过；跑完抽样回读校验。
+配套：入库后跑 rename_mspm0_refs.py 把标题改中文直观名并删空工程模板
+（重跑本脚本会按 SDK 目录名重新建条，跳过已存在的同名条目）。
 """
 
 from __future__ import annotations

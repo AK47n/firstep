@@ -1,0 +1,16 @@
+{
+  "id": "GPIO-事件直连输出-无-CPU-介入",
+  "title": "GPIO 事件直连输出（无 CPU 介入）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates how to publish and subscribe events between GPIOA and GPIOB instances without CPU intervention.（SDK 例程：event_input_triggers_output）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "event_input_triggers_output.c",
+    "event_input_triggers_output.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

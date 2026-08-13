@@ -1,0 +1,16 @@
+{
+  "id": "高速比较器-DAC-外部基准",
+  "title": "高速比较器 DAC（外部基准）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "COMP is configured in high-speed mode using the 8-bit DAC with external reference as the positive input, and the external pin as negative input. An interrupt is triggered when the external input crosses the DAC treshold and a LED is toggled accordingly. The COMP hysteresis and filter are used to pre（SDK 例程：comp_hs_dac_vref_external）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "comp_hs_dac_vref_external.c",
+    "comp_hs_dac_vref_external.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "GPIO-软件轮询",
+  "title": "GPIO 软件轮询",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Sets GPIO output based on a digital input read in a polling software loop.（SDK 例程：gpio_software_poll）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "gpio_software_poll.c",
+    "gpio_software_poll.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

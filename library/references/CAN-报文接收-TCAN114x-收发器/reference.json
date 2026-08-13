@@ -1,0 +1,24 @@
+{
+  "id": "CAN-报文接收-TCAN114x-收发器",
+  "title": "CAN 报文接收（TCAN114x 收发器）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates how to receive CAN Classic and CAN-FD messages using standard IDs using BOOSTXL-TCAN1145 boosterpack.（SDK 例程：mcan_message_rx_tcan114x）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "mcan_message_rx_tcan114x.c",
+    "mcan_message_rx_tcan114x.syscfg",
+    "README.md",
+    "ti/boosterpacks/tcan114x/tcan114x.c",
+    "ti/boosterpacks/tcan114x/tcan114x.h",
+    "ti/boosterpacks/tcan114x/tcan114x_data_structs.h",
+    "ti/boosterpacks/tcan114x/tcan114x_reg.h",
+    "ti/boosterpacks/tcan114x/tcan114x_spi.c",
+    "ti/boosterpacks/tcan114x/tcan114x_spi.h",
+    "ti/boosterpacks/tcan114x/tcan114x_wdt.c",
+    "ti/boosterpacks/tcan114x/tcan114x_wdt.h"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "可编程增益放大器缓冲送-ADC",
+  "title": "可编程增益放大器缓冲送 ADC",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "GPAMP is configured in buffer mode with output to ADC. The inputs are configured for easy connection to external circuitry.（SDK 例程：gpamp_buffer_to_adc）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "gpamp_buffer_to_adc.c",
+    "gpamp_buffer_to_adc.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

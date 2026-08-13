@@ -1,0 +1,16 @@
+{
+  "id": "UART-内部环回-待机恢复",
+  "title": "UART 内部环回（待机恢复）",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures the UART instance in internal loopback mode to transmit and receive data. Pressing a LaunchPad button will toggle the device between RUN mode and STANDBY mode. The green LED is used to indicate the current power mode. The device will send UART packets continuously wh（SDK 例程：uart_internal_loopback_standby_restore）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_internal_loopback_standby_restore.c",
+    "uart_internal_loopback_standby_restore.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

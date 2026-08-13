@@ -1,0 +1,16 @@
+{
+  "id": "ADC12-窗口比较器",
+  "title": "ADC12 窗口比较器",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures ADC0 to trigger repeated single conversion and turns on an LED is ADC > 0.5VDDA using window comparator feature in ADC12（SDK 例程：adc12_window_comparator）",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "adc12_window_comparator.c",
+    "adc12_window_comparator.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
