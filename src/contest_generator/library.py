@@ -569,6 +569,36 @@ def file_label(name: str, note: str = "") -> str:
     return f"// ---- {name} ----{note}\n"
 
 
+# ---------------------------------------------------------------------------
+# 截断标注契约（唯一出处）
+#
+# 所有嵌内容调用（赛题 / 接口块 / 文件全文 / 参考全文）截断时都带标注；标注
+# 措辞的唯一出处在此（工单 03 从 llm 迁入——reference_library 的逐文件截断
+# 也要用同一措辞，而 reference_library 不能运行时 import llm，共享层落这里）。
+# 系统提示词与用户提示词必须包含它（双端契约测试断言）——只改一处会让模型
+# 在另一侧消息里以为读到的是完整内容（ticket 06 的双端漂移教训：曾只改系统
+# 提示词、漏改用户提示词，提炼当场失败）。
+# ---------------------------------------------------------------------------
+TRUNCATION_NOTICE = "按所见内容判断，不要脑补缺失部分"
+
+
+def truncate_content(content: str, cap: int) -> str:
+    """单内容截断（带标注）：超长内容只送前 cap 字符。
+
+    标注让 AI 明确知道读到的是截断内容（TRUNCATION_NOTICE，措辞唯一出处），
+    并注明原文总长——模型不会被误导以为文件就这么短，也不脑补缺失部分。
+    截断只影响发送素材（赛题 / 接口块 / 文件全文 / 参考全文），不改数据模型
+    （keep 落盘仍复制工程原文全文）；未超长原样返回。
+    """
+    if len(content) <= cap:
+        return content
+    return (
+        content[:cap]
+        + f"\n……（内容过长，已截断：仅展示前 {cap} 字符，"
+        f"原文共 {len(content)} 字符；{TRUNCATION_NOTICE}）……\n"
+    )
+
+
 def _assemble_code(files: Mapping[str, str]) -> str:
     """把模块各源文件拼成一份带文件名标注的代码（草稿与校验共用同一视角）。"""
     return "\n".join(file_label(name) + content for name, content in files.items())

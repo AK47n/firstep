@@ -406,6 +406,9 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "add_platform_files": ("commit", "lib: add platform files"),
         "remove_platform_files": ("commit", "lib: remove platform files"),
         "file_label": ("read", ""),
+        # 工单 reference-library-hygiene/03 新增的读函数：截断文案单源共享层
+        # （纯字符串变换，不落盘——llm / reference_library 共用）
+        "truncate_content": ("read", ""),
         # 工单 01（模块普适化）新增的读函数：判据④机械词表扫描（纯文本，不落盘），
         # 结构测试与补录流程共用
         "find_topic_word_hits": ("read", ""),
