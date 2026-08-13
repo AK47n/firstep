@@ -1,0 +1,16 @@
+{
+  "id": "adc12_monitor_supply",
+  "title": "adc12_monitor_supply",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures the ADC to trigger single conversion in repeat mode to monitor internal channel to monitor voltage supply and turn on an LED if VCC > 2.5V. Otherwise, the LED remains off.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "adc12_monitor_supply.c",
+    "adc12_monitor_supply.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

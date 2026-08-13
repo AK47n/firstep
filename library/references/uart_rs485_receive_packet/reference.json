@@ -1,0 +1,16 @@
+{
+  "id": "uart_rs485_receive_packet",
+  "title": "uart_rs485_receive_packet",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates UART RX with RS485 mode. RS485 is usable with both UART Main and UART Extend.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_rs485_receive_packet.c",
+    "uart_rs485_receive_packet.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

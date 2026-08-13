@@ -1,0 +1,16 @@
+{
+  "id": "timg_32bit_timer_mode_periodic_sleep",
+  "title": "timg_32bit_timer_mode_periodic_sleep",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures a 32-bit TimerG in periodic mode and toggles the LED every 500ms. The device remains in SLEEP mode while waiting for an interrupt.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timg_32bit_timer_mode_periodic_sleep.c",
+    "timg_32bit_timer_mode_periodic_sleep.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

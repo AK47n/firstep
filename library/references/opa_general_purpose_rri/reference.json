@@ -1,0 +1,16 @@
+{
+  "id": "opa_general_purpose_rri",
+  "title": "opa_general_purpose_rri",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "OPA is configured in general purpose mode with rail-to-rail configuration enabled by default. The inputs and output are configured for easy connection to external circuitry.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "opa_general_purpose_rri.c",
+    "opa_general_purpose_rri.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

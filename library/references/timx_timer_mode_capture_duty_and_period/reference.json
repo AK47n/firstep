@@ -1,0 +1,16 @@
+{
+  "id": "timx_timer_mode_capture_duty_and_period",
+  "title": "timx_timer_mode_capture_duty_and_period",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG0 in combined capture mode (configure to measure a PWM signal's period and duty cycle). TimerG7 is used to generate a the PWM signal. This examples configures timers in down counting mode.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_capture_duty_and_period.c",
+    "timx_timer_mode_capture_duty_and_period.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

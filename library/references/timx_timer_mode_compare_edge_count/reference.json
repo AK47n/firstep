@@ -1,0 +1,16 @@
+{
+  "id": "timx_timer_mode_compare_edge_count",
+  "title": "timx_timer_mode_compare_edge_count",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG6 in edge count mode to detect a predefined number of rising edges.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_compare_edge_count.c",
+    "timx_timer_mode_compare_edge_count.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

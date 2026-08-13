@@ -1,0 +1,16 @@
+{
+  "id": "wwdt_interval_timer_lfosc_standby",
+  "title": "wwdt_interval_timer_lfosc_standby",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures the WWDT in interval mode with an interval of 2Hz. LED and USER_TEST GPIO are toggled at every interval of 2Hz (500ms). LFCLK is sourced from the internal low frequency oscillator (LFOSC). The device remains in STANDBY mode while waiting for an interrupt.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "wwdt_interval_timer_lfosc_standby.c",
+    "wwdt_interval_timer_lfosc_standby.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

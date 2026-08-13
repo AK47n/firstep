@@ -1,0 +1,16 @@
+{
+  "id": "timx_timer_mode_pwm_x_trig_stop_restore",
+  "title": "timx_timer_mode_pwm_x_trig_stop_restore",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Two PWMs are generated for 1 second, then saves the PWM timer configuration before going to STOP mode. The device stays in STOP mode for 1 second and then restores PWM generation.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_pwm_x_trig_stop_restore.c",
+    "timx_timer_mode_pwm_x_trig_stop_restore.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

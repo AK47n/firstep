@@ -1,0 +1,16 @@
+{
+  "id": "i2c_target_rw_multibyte_fifo_poll",
+  "title": "i2c_target_rw_multibyte_fifo_poll",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "I2C Target responds to write and read request from I2C Controller. The example uses FIFO and polling. It can only handle a maximum of 8 bytes due to FIFO size. LED toggles if transmission and reception are successful. The Target device must be enabled and active before running the Controller example",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "i2c_target_rw_multibyte_fifo_poll.c",
+    "i2c_target_rw_multibyte_fifo_poll.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "aes_cbc_256_enc_dec",
+  "title": "aes_cbc_256_enc_dec",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example performs 256-bit AES CBC encryption and decryption using the on-board AES engine with a software wrapper.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "aes_cbc_256_enc_dec.c",
+    "aes_cbc_256_enc_dec.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

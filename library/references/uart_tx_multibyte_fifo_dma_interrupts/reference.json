@@ -1,0 +1,16 @@
+{
+  "id": "uart_tx_multibyte_fifo_dma_interrupts",
+  "title": "uart_tx_multibyte_fifo_dma_interrupts",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example sets up the UART to trigger the DMA to do a transmit data transfer. The example can be used with the uart_rx_multibyte_fifo_dma_interrupts example running on another device. The DMA in configured in single transfer mode, using the static UART TX DMA event as the DMA trigger. When the UA",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_tx_multibyte_fifo_dma_interrupts.c",
+    "uart_tx_multibyte_fifo_dma_interrupts.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "rtc_offset_calibration_lfxt",
+  "title": "rtc_offset_calibration_lfxt",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example can be used to correct the crystal offset error. Button are used to increase or decrease offset while an external tool measures frequency using RTCCLK output.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "rtc_offset_calibration_lfxt.c",
+    "rtc_offset_calibration_lfxt.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

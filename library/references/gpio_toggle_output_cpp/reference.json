@@ -1,0 +1,15 @@
+{
+  "id": "gpio_toggle_output_cpp",
+  "title": "gpio_toggle_output_cpp",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "C++ example toggling four GPIO pins.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "gpio_toggle_output_cpp.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

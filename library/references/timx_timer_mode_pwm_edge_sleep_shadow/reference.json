@@ -1,0 +1,16 @@
+{
+  "id": "timx_timer_mode_pwm_edge_sleep_shadow",
+  "title": "timx_timer_mode_pwm_edge_sleep_shadow",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerA to output a single PWM signal and update the signal’s frequency and duty cycle by using the shadow load and shadow capture compare feature. Shadow load will only update the timer load values on a zero event and the shadow capture compare value (which controls",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_pwm_edge_sleep_shadow.c",
+    "timx_timer_mode_pwm_edge_sleep_shadow.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

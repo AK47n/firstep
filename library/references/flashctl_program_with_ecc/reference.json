@@ -1,0 +1,16 @@
+{
+  "id": "flashctl_program_with_ecc",
+  "title": "flashctl_program_with_ecc",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The Flash Controller executes flash word (64-bit) programming with automatic hardware generated ECC as well as with manually provided ECC.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "flashctl_program_with_ecc.c",
+    "flashctl_program_with_ecc.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

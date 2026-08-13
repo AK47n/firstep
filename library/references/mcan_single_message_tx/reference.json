@@ -1,0 +1,16 @@
+{
+  "id": "mcan_single_message_tx",
+  "title": "mcan_single_message_tx",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrate how to send a CAN-FD message via GPIO input interrupt.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "mcan_single_message_tx.c",
+    "mcan_single_message_tx.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

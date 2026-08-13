@@ -1,0 +1,16 @@
+{
+  "id": "dma_fill_data",
+  "title": "dma_fill_data",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "DMA example with a fill data transfer to SRAM memory, triggered by SW.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "dma_fill_data.c",
+    "dma_fill_data.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

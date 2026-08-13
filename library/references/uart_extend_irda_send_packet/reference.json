@@ -1,0 +1,16 @@
+{
+  "id": "uart_extend_irda_send_packet",
+  "title": "uart_extend_irda_send_packet",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates UART TX and RX with IrDA encoding. IrDA encoding is a feature only usable with UART Extend.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "uart_extend_irda_send_packet.c",
+    "uart_extend_irda_send_packet.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
