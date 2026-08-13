@@ -16,6 +16,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Windows 控制台默认 GBK 会打花中文日志：脚本输出统一 UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -87,39 +91,56 @@ ENTRIES = [
         "anchor_kind": ANCHOR_KIND_NONE,
         "anchor_value": "",
     },
-    {
-        "dir": "MSPM0_MOTOR参考例程",
-        "type": "参考例程",
-        "description": (
-            "TI MSPM0G3507 电机控制官方参考例程（MSP_Motor_Ctrl、m0imu 等），"
-            "CCS / IAR / Keil 三套工程，600+ C 源文件与驱动库。纯代码资料，全量入库。"
-        ),
-        "anchor_kind": ANCHOR_KIND_NONE,
-        "anchor_value": "",
-        "platform": PLATFORM_MSPM0,
-    },
+    # 「MSPM0_MOTOR参考例程」已由工单 reference-library-hygiene/02 拆为三条
+    # （MSPM0-Motor_Ctrl 电机控制例程 / MSPM0-m0imu 姿态例程 / MSPM0-MOTOR 移植笔记，
+    # .scratch/fix_mspm0_motor.py 维护，剥 SDK 副本树后精录）。此处不再登记：旧 id
+    # 已删除，若保留会绕过 skip-on-exist 把整棵原始树（含已剥离的 SDK 副本）
+    # 重新灌回库（工单 register-gbk-guard/01 真机重跑时实际踩中，已清退恢复）。
 ]
 
 
+def _read_transcoded(path: Path) -> str | None:
+    """UTF-8 失败后按 gb18030（GBK 超集）兜底转码，\r\n 归一化；仍失败返回 None。"""
+    try:
+        return path.read_bytes().decode("gb18030").replace("\r\n", "\n")
+    except (UnicodeDecodeError, OSError):
+        return None
+
+
 def iter_text_files(src_dir: Path) -> dict[str, str]:
-    """目录内 UTF-8 可读文本文件（相对路径 → 内容）；二进制 / 超大文件跳过。"""
+    """目录内 UTF-8 可读文本文件（相对路径 → 内容）；二进制 / 超大文件跳过。
+
+    UTF-8 失败回退 gb18030 转码入库（中文注释 GBK 源码曾静默漏录，见工单
+    register-gbk-guard/01）；仍失败按二进制跳过，收尾计数汇总打印（静默变可见）。
+    """
     files: dict[str, str] = {}
+    skipped = 0
     for path in sorted(src_dir.rglob("*")):
         if not path.is_file():
             continue
         try:
             if path.stat().st_size > MAX_TEXT_BYTES:
+                skipped += 1
                 continue
         except OSError:
+            skipped += 1
             continue
         rel = path.relative_to(src_dir).as_posix()
         if rel == "reference.json":
             continue
         try:
             content = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        except UnicodeDecodeError:
+            content = _read_transcoded(path)
+            if content is None:
+                skipped += 1
+                continue
+            print(f"[转码] {rel}（gbk→utf-8）")
+        except OSError:
+            skipped += 1
             continue
         files[rel] = content
+    print(f"[跳过] {skipped} 个非文本文件未入库")
     return files
 
 
