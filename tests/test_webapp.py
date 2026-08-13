@@ -2347,32 +2347,28 @@ def test_recommend_question_ends_stream_with_question_event(client, context):
 
 
 def test_recommend_clarify_questions_end_stream_with_question_event(client, context):
-    """澄清阶段先行：clarify 仍有疑问 → question 事件收尾（不发 round——澄清
-    阶段不属于收敛轮次，补问不再作废已跑轮次）；问答历史随请求体透传。"""
+    """首跑（无澄清历史）澄清阶段先行：clarify 仍有疑问 → question 事件收尾
+    （不发 round——澄清阶段不属于收敛轮次，补问不再作废已跑轮次）。"""
     holder = context[1]
     llm = FakeLLM(clarify_questions=("具体要识别什么数字？",))
     holder["llm"] = llm
 
     events = _recommend_stream(
-        client,
-        {
-            "problem_text": "识别数字的送药小车",
-            "clarifications": [{"question": "识别方式？", "answer": "摄像头"}],
-        },
+        client, {"problem_text": "识别数字的送药小车"}
     )
 
     assert [kind for kind, _ in events] == [EVENT_QUESTION]
     assert events[-1][1]["questions"] == ["具体要识别什么数字？"]
-    assert llm.clarify_calls == [
-        ("识别数字的送药小车", (("识别方式？", "摄像头"),))
-    ]
+    assert llm.clarify_calls == [("识别数字的送药小车", ())]
 
 
 def test_recommend_clarify_empty_with_history_goes_straight_to_convergence(
     client, context
 ):
-    """带 clarifications 重发且澄清空 → 立即进收敛（不重跑澄清轮次语义）；
-    收敛收到的题面保持原文（逐句编号），回答不进题面。"""
+    """带 clarifications 重发 → 跳过澄清门直进收敛（工单 recommend-speedup/01：
+    零 clarify 调用——历史段 + 已答不重问已由 select_modules 承载，补问功能被
+    收敛循环覆盖，每轮补问省一次串行调用）；收敛收到的题面保持原文（逐句
+    编号），回答不进题面。"""
     holder = context[1]
     llm = TopicAwareLLM(selection=SELECTION, extracted_key=None)
     holder["llm"] = llm
@@ -2391,9 +2387,7 @@ def test_recommend_clarify_empty_with_history_goes_straight_to_convergence(
         "converged",
         "done",
     ]
-    assert llm.clarify_calls == [
-        ("温湿度采集并显示", (("识别方式？", "摄像头"),))
-    ]
+    assert llm.clarify_calls == []  # 有历史：clarify 门被跳过
     # 题面保持原文：收敛循环收到的是逐句编号的原始题面，回答不拼进题面
     assert llm.problem_texts[0] == "1. 温湿度采集并显示"
     assert "摄像头" not in llm.problem_texts[0]
@@ -2427,8 +2421,9 @@ def test_recommend_convergence_ask_answers_carried_into_retry(client, context):
     # 第二次收敛：每轮 select_modules 都带首次答案（历史保序、贯穿到收敛）
     history = ((question, "用摄像头"),)
     assert llm.clarifications[-2:] == [history, history]
-    # 澄清阶段与收敛阶段看到同一历史（双阶段一致，不会此消彼长）
-    assert llm.clarify_calls[-1] == ("温湿度采集并显示", history)
+    # 首跑才走澄清门；第二次带历史重推 → 跳过 clarify（工单 recommend-speedup/01，
+    # 补问功能由收敛循环覆盖，不会漏问）
+    assert llm.clarify_calls == [("温湿度采集并显示", ())]
 
 
 @pytest.mark.parametrize(
