@@ -1,0 +1,16 @@
+{
+  "id": "wwdt_window_mode_periodic_reset",
+  "title": "wwdt_window_mode_periodic_reset",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures WWDT0 in watchdog mode with a period of 500ms. Reset window 0 is set to be closed for 25% of the total period (125ms). TimerG is configured to reset the watchdog timer periodically. The Timer period is set to 300ms. It will successfully restart the WWDT counter withi",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "wwdt_window_mode_periodic_reset.c",
+    "wwdt_window_mode_periodic_reset.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

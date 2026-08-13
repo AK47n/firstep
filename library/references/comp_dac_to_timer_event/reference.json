@@ -1,0 +1,16 @@
+{
+  "id": "comp_dac_to_timer_event",
+  "title": "comp_dac_to_timer_event",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "COMP is configured using the 8-bit DAC as positive input, and the external pin as negative input. The DAC is set to 1V using VDDA as reference. The output of the comparator triggers a timer event. The timer is configured in Edge Time Capture mode with a capture window of 1sec. At the end of the wind",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "comp_dac_to_timer_event.c",
+    "comp_dac_to_timer_event.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

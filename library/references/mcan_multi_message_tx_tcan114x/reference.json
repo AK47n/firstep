@@ -1,0 +1,24 @@
+{
+  "id": "mcan_multi_message_tx_tcan114x",
+  "title": "mcan_multi_message_tx_tcan114x",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrate how to send multiple CAN-FD messages with message IDs 0x3 and 0x4 via GPIO input interrupt using BOOSTXL-TCAN1145 boosterpack.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "mcan_multi_message_tx_tcan114x.c",
+    "mcan_multi_message_tx_tcan114x.syscfg",
+    "README.md",
+    "ti/boosterpacks/tcan114x/tcan114x.c",
+    "ti/boosterpacks/tcan114x/tcan114x.h",
+    "ti/boosterpacks/tcan114x/tcan114x_data_structs.h",
+    "ti/boosterpacks/tcan114x/tcan114x_reg.h",
+    "ti/boosterpacks/tcan114x/tcan114x_spi.c",
+    "ti/boosterpacks/tcan114x/tcan114x_spi.h",
+    "ti/boosterpacks/tcan114x/tcan114x_wdt.c",
+    "ti/boosterpacks/tcan114x/tcan114x_wdt.h"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

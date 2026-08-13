@@ -1,0 +1,16 @@
+{
+  "id": "comp_analog_filter",
+  "title": "comp_analog_filter",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "COMP is configured with external inputs and outputs enabling the analog output filter and hysteresis.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "comp_analog_filter.c",
+    "comp_analog_filter.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

@@ -1,0 +1,16 @@
+{
+  "id": "adc12_sequence_conversion",
+  "title": "adc12_sequence_conversion",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures ADC0 to trigger a sequence of conversions on 4 different channels and stores the results in 4 different buffer arrays.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "adc12_sequence_conversion.c",
+    "adc12_sequence_conversion.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

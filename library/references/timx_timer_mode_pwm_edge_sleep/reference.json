@@ -1,0 +1,16 @@
+{
+  "id": "timx_timer_mode_pwm_edge_sleep",
+  "title": "timx_timer_mode_pwm_edge_sleep",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG0 to output a pair of edge aligned PWM signals. The device is configured to wait in SLEEP mode.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_pwm_edge_sleep.c",
+    "timx_timer_mode_pwm_edge_sleep.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

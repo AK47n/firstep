@@ -1,0 +1,16 @@
+{
+  "id": "comp_hs_tima_pwm_fault",
+  "title": "comp_hs_tima_pwm_fault",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "COMP is configured to trigger a PWM fault when positive input exceeds AVCC/2. The 8-bit DAC is used to set the negative threshold of the comparator while the positive input is connected to an external pin. A PWM will be driven when the comparator input is below AVCC/2 and then stop when the input go",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "comp_hs_tima_pwm_fault.c",
+    "comp_hs_tima_pwm_fault.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

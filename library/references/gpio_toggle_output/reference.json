@@ -1,0 +1,16 @@
+{
+  "id": "gpio_toggle_output",
+  "title": "gpio_toggle_output",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Toggles three GPIO pins using HW toggle register.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "gpio_toggle_output.c",
+    "gpio_toggle_output.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

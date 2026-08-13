@@ -1,0 +1,16 @@
+{
+  "id": "dma_table_transfer",
+  "title": "dma_table_transfer",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "DMA example with a table distributed to SRAM memory via DMA, triggered by SW.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "dma_table_transfer.c",
+    "dma_table_transfer.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

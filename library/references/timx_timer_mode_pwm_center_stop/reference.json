@@ -1,0 +1,16 @@
+{
+  "id": "timx_timer_mode_pwm_center_stop",
+  "title": "timx_timer_mode_pwm_center_stop",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG0 to output a pair of center aligned PWM signals. The device is configured to wait in STOP mode.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timx_timer_mode_pwm_center_stop.c",
+    "timx_timer_mode_pwm_center_stop.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

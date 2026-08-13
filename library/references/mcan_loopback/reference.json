@@ -1,0 +1,16 @@
+{
+  "id": "mcan_loopback",
+  "title": "mcan_loopback",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example shows the MCAN Loopback functionality. The module is configured in internal loopback mode. The sent message should be received by the node.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "mcan_loopback.c",
+    "mcan_loopback.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

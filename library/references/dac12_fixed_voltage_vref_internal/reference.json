@@ -1,0 +1,16 @@
+{
+  "id": "dac12_fixed_voltage_vref_internal",
+  "title": "dac12_fixed_voltage_vref_internal",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "DAC12 sets a fixed output voltage using the internal VREF.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "dac12_fixed_voltage_vref_internal.c",
+    "dac12_fixed_voltage_vref_internal.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

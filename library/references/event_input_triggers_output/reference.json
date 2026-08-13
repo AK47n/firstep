@@ -1,0 +1,16 @@
+{
+  "id": "event_input_triggers_output",
+  "title": "event_input_triggers_output",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates how to publish and subscribe events between GPIOA and GPIOB instances without CPU intervention.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "event_input_triggers_output.c",
+    "event_input_triggers_output.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

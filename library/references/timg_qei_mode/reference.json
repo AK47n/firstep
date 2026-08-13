@@ -1,0 +1,16 @@
+{
+  "id": "timg_qei_mode",
+  "title": "timg_qei_mode",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "The following example configures TimerG in QEI mode (2-pin mode). The device remains in SLEEP0 mode after QEI is configured, and will turn an LED on or off depending on motor direction.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "timg_qei_mode.c",
+    "timg_qei_mode.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

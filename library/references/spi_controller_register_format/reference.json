@@ -1,0 +1,16 @@
+{
+  "id": "spi_controller_register_format",
+  "title": "spi_controller_register_format",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "Note: The use of \"Master\" and \"Slave\", along with \"MOSI/MISO\" terminology is being considered obsolete. These terms will be replaced with \"Controller\" and \"Peripheral\", and \"PICO/POCI\" respectively.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "README.md",
+    "spi_controller_register_format.c",
+    "spi_controller_register_format.syscfg"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

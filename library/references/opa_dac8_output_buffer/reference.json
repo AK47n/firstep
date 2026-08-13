@@ -1,0 +1,16 @@
+{
+  "id": "opa_dac8_output_buffer",
+  "title": "opa_dac8_output_buffer",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "OPA is configured in output buffer configuration for the 8-bit DAC.The 8-bit DAC uses VDDA as its reference voltage. The output is configured for easy connection to external circuitry.",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "opa_dac8_output_buffer.c",
+    "opa_dac8_output_buffer.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}

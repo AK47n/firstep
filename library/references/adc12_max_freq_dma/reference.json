@@ -1,0 +1,16 @@
+{
+  "id": "adc12_max_freq_dma",
+  "title": "adc12_max_freq_dma",
+  "type": "TI MSPM0 SDK 例程",
+  "description": "This example demonstrates how to capture 1024 samples of a single ADC channel using 12-bit ADC resolution mode at maximum sampling rate. A DMA transfer is triggered every time a new result is loaded to ADC conversion memory and will continue the transfer until 1024 samples are loaded to gADCSamples",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "mspm0",
+  "files": [
+    "adc12_max_freq_dma.c",
+    "adc12_max_freq_dma.syscfg",
+    "README.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
