@@ -35,6 +35,7 @@ from contest_generator.llm import (
     LLMError,
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
+    REFERENCE_FULLTEXT_CAP,
     TRUNCATION_NOTICE,
     VALIDATION_SYSTEM_PROMPT,
     VALIDATION_UNIVERSALITY_RULE,
@@ -2544,10 +2545,12 @@ def test_select_prompt_includes_reference_list_when_given():
 
 
 def test_select_prompt_embeds_requested_fulltexts():
-    """两级注入第二级：模型要求阅读全文的参考文件以全文形态嵌入（带截断标注）。"""
+    """两级注入第二级：模型要求阅读全文的参考文件以全文形态嵌入——总截断上限
+    放宽为 REFERENCE_FULLTEXT_CAP（工单 03，旧 4000 总截断吞掉尾部文件），
+    上限内全文原样直传（逐文件截断已由 read_fulltext 完成）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    long_text = "长全文" * (EMBEDDED_CONTENT_CAP + 100)
+    long_text = "长全文" * (EMBEDDED_CONTENT_CAP + 100)  # 超旧 4000 上限、在新总上限内
 
     llm.select_modules(
         "赛题",
@@ -2558,8 +2561,51 @@ def test_select_prompt_embeds_requested_fulltexts():
 
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "以下是你要求阅读全文的参考文件" in user_message
-    assert "长全文" in user_message
-    assert TRUNCATION_NOTICE in user_message  # 全文同样走统一截断（带标注）
+    assert long_text in user_message  # 超 4000 字符仍全文在（旧实现必截断）
+    assert TRUNCATION_NOTICE not in user_message  # 总上限内不截断（截断标注归 read_fulltext）
+
+
+def test_select_prompt_embeds_fulltext_with_every_file_head():
+    """工单 03 回归：注入块含每个文件开头——read_fulltext 逐文件截断后的多文件
+    全文在总上限内逐字嵌入（旧 4000 总截断下首个大文件吃光配额、尾部文件不可见）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    fulltext = "\n".join(
+        f"// ---- f{i}.c ----\n/* f{i}_head */\n" + "c" * 15000 for i in range(3)
+    )
+
+    llm.select_modules(
+        "赛题",
+        [ManifestSummary("dht11", "温湿度")],
+        references=[_suggestion("key-example")],
+        reference_fulltexts={"key-example": fulltext},
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    for i in range(3):
+        assert f"// ---- f{i}.c ----" in user_message  # 每个文件的标注都在
+        assert f"/* f{i}_head */" in user_message  # 每个文件的开头都在（含尾部文件）
+    assert TRUNCATION_NOTICE not in user_message  # 总上限内不截断
+
+
+def test_select_prompt_truncates_fulltext_at_relaxed_total_cap():
+    """工单 03 回归：总截断放宽不是去掉——超过 REFERENCE_FULLTEXT_CAP 的全文
+    仍截头带标注（兜底超大条目请求体，防 MAX_REQUEST_BYTES 网关预算爆掉）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    long_text = "x" * (REFERENCE_FULLTEXT_CAP + 5000)
+
+    llm.select_modules(
+        "赛题",
+        [ManifestSummary("dht11", "温湿度")],
+        references=[_suggestion("key-example")],
+        reference_fulltexts={"key-example": long_text},
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "内容过长，已截断" in user_message
+    assert f"仅展示前 {REFERENCE_FULLTEXT_CAP} 字符" in user_message
+    assert TRUNCATION_NOTICE in user_message
 
 
 def test_select_prompt_embeds_empty_fulltext_without_dropping():
@@ -2855,13 +2901,14 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
 
 
 def test_select_prompt_embeds_manual_fulltexts_with_label():
-    """手动选参考资料（工单 01）：全文直读段（统一截断，read_fulltext 的 file_label
-    文件名标注原样保留）；清单段手动条目带来源标注（无需点名）。"""
+    """手动选参考资料（工单 01）：全文直读段（read_fulltext 的 file_label 文件名
+    标注 + 逐文件截断标注原样保留；注入处总截断放宽为 REFERENCE_FULLTEXT_CAP
+    ——总上限内原样直传）；清单段手动条目带来源标注（无需点名）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * (
-        EMBEDDED_CONTENT_CAP + 100
-    )
+    # 1500 份 ≈ 9000 字符：超旧 4000 上限（注入处不再截断）、又低于
+    # MAX_REQUEST_BYTES 网关预算（中文 json.dumps 6 字节/字符）
+    manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * 1500
 
     llm.select_modules(
         "赛题",
@@ -2874,9 +2921,9 @@ def test_select_prompt_embeds_manual_fulltexts_with_label():
 
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "以下为你手动指定的参考文件全文" in user_message
-    assert "视觉资料正文" in user_message
+    assert manual_text in user_message  # 超 4000 字符仍全文在（旧实现必截断）
     assert "// ---- visual.txt ----" in user_message  # read_fulltext 的 file_label 标注保留
-    assert TRUNCATION_NOTICE in user_message  # 手动全文同样走统一截断（带标注）
+    assert TRUNCATION_NOTICE not in user_message  # 总上限内不截断（截断标注归 read_fulltext）
     assert "（用户手动指定，全文已直接给出，无需点名）" in user_message  # 清单行来源标注
 
 

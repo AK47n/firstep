@@ -9,9 +9,11 @@ LLM 承担七类协议职责：赛题→模块选择、赛题简介生成（AI �
 领域模型不在此处——赛题库模型在 topic_library，判定素材模型在 report，
 模块推荐模型与收敛工作流在 selection，一致性校验结果模型在 library，进度
 事件契约在 events（本模块只消费）。请求体有大小控制：所有嵌内容调用
-（赛题 / 接口块 / 文件全文）超长截断（带标注，AI 知道读到的是截断内容）、
-摘要阶段多文件按预算分批发送、发送前有序列化体积断言兜底——DeepSeek
-网关对请求体有硬性大小限制，一次性全发会 413。
+（赛题 / 接口块 / 文件全文）超长截断（带标注，AI 知道读到的是截断内容；
+参考全文例外——截断下沉 read_fulltext 逐文件完成，注入处只留
+REFERENCE_FULLTEXT_CAP 总截断兜底）、摘要阶段多文件按预算分批发送、
+发送前有序列化体积断言兜底——DeepSeek 网关对请求体有硬性大小限制，
+一次性全发会 413。
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from .events import (
     _emit,
 )
 from .fix_errors import FixSuggestion
-from .library import ValidationResult
+from .library import TRUNCATION_NOTICE, ValidationResult, truncate_content
 from .manifest import ManifestSummary
 from .report import (
     ACTION_MERGE,
@@ -63,15 +65,9 @@ from .wordlist import (
     format_wordlist_prompt,
 )
 
-# ---------------------------------------------------------------------------
-# 截断标注契约（唯一出处）
-#
-# 所有嵌内容调用（赛题 / 接口块 / 文件全文）截断时都带标注；标注措辞的
-# 唯一出处在此。系统提示词与用户提示词必须包含它（双端契约测试断言）——
-# 只改一处会让模型在另一侧消息里以为读到的是完整内容（ticket 06 的
-# 双端漂移教训：曾只改系统提示词、漏改用户提示词，提炼当场失败）。
-# ---------------------------------------------------------------------------
-TRUNCATION_NOTICE = "按所见内容判断，不要脑补缺失部分"
+# 截断标注契约（唯一出处）在 library.truncate_content / TRUNCATION_NOTICE
+# （工单 03 迁共享层：reference_library 的逐文件截断同用此措辞，而其不能
+# 运行时 import llm——环约束，TYPE_CHECKING 同款先例）——llm 导入重出。
 
 # 模块推荐系统提示词（工单 10）：题面证据驱动的功能需求层 + 收敛自检。
 # 行为要点与 ADR 0007 同源：逐句对照防脑补（找不出对应句的需求即脑补，删）、
@@ -247,8 +243,22 @@ ARCHIVE_JUDGMENT_SYSTEM_PROMPT = (
 # 三个真实工程修复前判定素材 47.6M 字符，修复后按此上限嵌入 29 万字符）。
 # 截断只影响发送素材（文件头足以判断性质），keep 落盘仍复制工程原文全文，
 # 不受截断影响。该上限是所有嵌内容调用（赛题 / 接口块 / 文件全文 / 参考
-# 素材 / 参考全文）的统一截断上限——_truncate_content 走这里。
+# 素材）的统一截断上限——_truncate_content 走这里；参考全文例外（工单 03：
+# 截断下沉 read_fulltext 逐文件 + 注入处走更宽的 REFERENCE_FULLTEXT_CAP）。
 EMBEDDED_CONTENT_CAP = 4000
+
+# 参考全文注入总截断上限（字符，工单 03）：旧实现与所有嵌内容共用
+# EMBEDDED_CONTENT_CAP=4000，files 首位的大文件（素材清单.txt 可 10 万+
+# 字符）吃光配额，尾部文件一个字符都进不了模型。read_fulltext 已逐文件
+# 截断（每文件 ≤ REFERENCE_FILE_CAP=20000，reference_library 常量），此处
+# 总截断放宽到本上限、只兜底超大条目（数百文件条目）的请求体体积。取值按
+# 真库条目实测倒推（json.dumps 默认 ensure_ascii：中文 6 字节/字符，塔克
+# R3 拆条条目全文头实测 ~1.44 字节/字符）：真实 select_modules 请求体 =
+# 提示词开销（赛题 ≤4000 字符 + 模块摘要 + 契约文本，约 2.4 万字节）+
+# 本上限 × 1.44 ≈ 11.4 万字节，128KB 网关预算下留 1.7 万字节余量
+# （题面 / 澄清历史 / 硬件词表波动）；60000 仍覆盖塔克R3 条目前 18/34 个
+# 文件开头（旧 4000 只够 40 行清单）。超出的截头带标注，不静默丢内容。
+REFERENCE_FULLTEXT_CAP = 60000
 
 # 两阶段输出的补问上限：模型一次输出大量 JSON 条目时偶发丢条目（判例 08：
 # 115 个文件一次返回漏了 1 个），严格解析失败后只对缺失路径补问，最多补问
@@ -280,18 +290,10 @@ TOPIC_SPLIT_LLM_CHAR_CAP = 20000
 def _truncate_content(content: str) -> str:
     """单内容截断（带标注）：超长内容只送前 EMBEDDED_CONTENT_CAP 字符。
 
-    标注让 AI 明确知道读到的是截断内容（TRUNCATION_NOTICE，措辞唯一出处），
-    并注明原文总长——模型不会被误导以为文件就这么短，也不脑补缺失部分。
-    截断只影响发送素材（赛题 / 接口块 / 文件全文），不改数据模型；未超长
-    原样返回。
+    文案 / 标注唯一出处 = library.truncate_content（工单 03 迁共享层），此处
+    只绑定 llm 的嵌内容预算常量；截断只影响发送素材，不改数据模型。
     """
-    if len(content) <= EMBEDDED_CONTENT_CAP:
-        return content
-    return (
-        content[:EMBEDDED_CONTENT_CAP]
-        + f"\n……（内容过长，已截断：仅展示前 {EMBEDDED_CONTENT_CAP} 字符，"
-        f"原文共 {len(content)} 字符；{TRUNCATION_NOTICE}）……\n"
-    )
+    return truncate_content(content, EMBEDDED_CONTENT_CAP)
 
 
 def _extract_good_summaries(
@@ -1594,20 +1596,26 @@ def _selection_user_prompt(
             fulltext = reference_fulltexts.get(ref.id)
             if fulltext is not None:
                 # 空文件也嵌入（带文件名标注的空白块）——静默丢弃会让模型以为
-                # 它点名的文件没给，与"读到什么就是什么"的截断契约一致
+                # 它点名的文件没给，与"读到什么就是什么"的截断契约一致。
+                # 截断两级（工单 03）：read_fulltext 逐文件截断（每文件
+                # REFERENCE_FILE_CAP 带标注），此处只做总截断兜底
+                # （REFERENCE_FULLTEXT_CAP——旧 4000 总截断吞掉尾部文件）
                 lines.append(
-                    f"- {ref.id}: {ref.title}：\n```\n{_truncate_content(fulltext)}\n```"
+                    f"- {ref.id}: {ref.title}：\n```\n"
+                    f"{truncate_content(fulltext, REFERENCE_FULLTEXT_CAP)}\n```"
                 )
         prompt += "\n".join(lines)
     if manual_fulltexts:
-        # 手动选参考资料（工单 01）：全文直读强制（复用统一截断——read_fulltext
-        # 已带 file_label 文件名标注，超长再经 _truncate_content 截断标注）
+        # 手动选参考资料（工单 01）：全文直读强制（read_fulltext 已带 file_label
+        # 文件名标注 + 逐文件截断标注，此处只做 REFERENCE_FULLTEXT_CAP 总截断
+        # 兜底——工单 03 放宽，旧 4000 总截断吞掉尾部文件）
         lines = ["", "以下为你手动指定的参考文件全文（用户显式选择，直接作学习素材）："]
         for ref in references:
             fulltext = manual_fulltexts.get(ref.id)
             if fulltext is not None:
                 lines.append(
-                    f"- {ref.id}: {ref.title}：\n```\n{_truncate_content(fulltext)}\n```"
+                    f"- {ref.id}: {ref.title}：\n```\n"
+                    f"{truncate_content(fulltext, REFERENCE_FULLTEXT_CAP)}\n```"
                 )
         prompt += "\n".join(lines)
     if clarifications:
