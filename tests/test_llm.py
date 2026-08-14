@@ -658,6 +658,16 @@ def test_fix_system_prompt_contract():
     assert "不要重复输出与上一轮一模一样的" in FIX_SYSTEM_PROMPT
 
 
+def test_fix_system_prompt_warning_guidance():
+    """告警修复指引（工单 fix-loop-warnings/01，约束 7）：编译输出中的 Warning
+    条目同样逐条修复——未使用变量 / 函数删声明或补引用、告警指出实质问题的
+    照修；第三方库 / 模块自带警告不瞎改。红证：现行提示词无 warning 指引
+    （0 错 N 警即停，警告永不进修复轮）。"""
+    assert "Warning" in FIX_SYSTEM_PROMPT
+    assert "未使用变量" in FIX_SYSTEM_PROMPT
+    assert "不瞎改" in FIX_SYSTEM_PROMPT
+
+
 def test_fix_errors_user_prompt_embeds_contexts():
     prompt = _fix_errors_user_prompt(
         error_text="main.c(1): error #20: boom",

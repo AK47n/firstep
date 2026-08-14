@@ -1768,31 +1768,46 @@ async function startFixCenter() {
       return;
     }
     if (initial.passed) {
-      $("fix-status").textContent = "编译通过 ✅（warnings 见上方编译输出）";
-      return;
+      const iw = (initial.summary && initial.summary.warnings) || 0;
+      if (iw === 0) {
+        $("fix-status").textContent = "编译通过 ✅ 0 错 0 警";
+        return;
+      }
+      // 0 错 N 警 → 进告警轮（工单 fix-loop-warnings/01：不满足「0 错 0 警」
+      // 验收标准，warning 行随完整编译输出回喂修复）
     }
-    // 首编失败 → 立即渲染结构化错误列表（全部「待修复」），修复轮结束后按
-    // fixes 重渲染最终状态（展示层工单 compile-experience-ui/01）
+    // 首编有错 / 有警 → 立即渲染结构化错误列表（全部「待修复」），修复轮
+    // 结束后按 fixes 重渲染最终状态（展示层工单 compile-experience-ui/01）
     fixRenderResults(initial.parsed_errors || [], [], 0);
-    // 报错 → 修复 → 重编译验证，≤3 轮；本轮 0 applied 即停（停滞检测，工单
+    // 报错 / 告警 → 修复 → 重编译验证，≤3 轮（错误+告警共池，停条件 = 0 错
+    // 0 警，工单 fix-loop-warnings/01）；本轮 0 applied 即停（停滞检测，工单
     // fix-loop-progress/01 决策 1——文件没变，重编译输出必与上轮相同，不再白跑）；
-    // 第 3 轮后如实报告剩余错误（不无限循环）
-    // 轮次文案错误数：判读单源 summary（工单 compile-verdict-align/01，删
-    // fixErrorCount 正则——fix_errors.py 明令禁止调用方另写正则）；lastSummary
+    // 第 3 轮后如实报告剩余错误/警告（不无限循环）
+    // 轮次文案错误/警告数：判读单源 summary（工单 compile-verdict-align/01，
+    // 删 fixErrorCount 正则——fix_errors.py 明令禁止调用方另写正则）；lastSummary
     // 与 errorText 同步更新，首轮即 initial 的 summary
     let errorText = initial.error_text;
     let lastSummary = initial.summary || null;
     for (fixLoop.round = 1; fixLoop.round <= FIX_MAX_ROUNDS; fixLoop.round++) {
       const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
+      const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
+      const headLabel = (n === null || n > 0) ? "编译有错" : "编译有警";
+      const headDetail = (n !== null && n > 0)
+        ? (n + " 条 Error" + (w !== null && w > 0 ? " / " + w + " 条 Warning" : ""))
+        : (w !== null && w > 0 ? w + " 条 Warning" : (headLabel === "编译有错" ? "多条报错" : "多条警告"));
       $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-        + " 轮：编译有错（" + (n !== null ? n + " 条 Error" : "多条报错") + "）→ AI 修复…";
+        + " 轮：" + headLabel + "（" + headDetail + "）→ AI 修复…";
       const done = await runFixOnce(errorText, outputDir, lastFixDone);   // 上轮载荷回喂（决策 2）
       const applied = (done.fixes || []).filter((f) => f.status === "applied").length;
       if (applied === 0) {   // 空修复 / 全 skipped / 降级无上下文：立即停，文案写具体
         $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
           + " 轮：未应用任何修复，停止循环";
-        $("fix-status").textContent = "本轮未应用任何修复（全部 skipped / 无修复建议），停止循环——"
-          + "可贴文本手动修复或改工程后重试";
+        // 告警轮无建议：文案带剩余警数（工单 fix-loop-warnings/01，0-applied
+        // 即停对告警轮同样生效——不再空转 3 轮）
+        const rest = (lastSummary && lastSummary.errors === 0 && lastSummary.warnings > 0)
+          ? "（剩余 " + lastSummary.warnings + " 条 Warning 见上方编译输出）" : "";
+        $("fix-status").textContent = "本轮未应用任何修复（全部 skipped / 无修复建议），停止循环"
+          + rest + "——可贴文本手动修复或改工程后重试";
         return;
       }
       $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
@@ -1809,16 +1824,24 @@ async function startFixCenter() {
         return;
       }
       if (compile.passed) {
-        $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译通过 ✅"
-          + "（warnings 见上方编译输出）";
-        return;
+        if (((compile.summary || {}).warnings || 0) === 0) {
+          $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译通过 ✅ 0 错 0 警";
+          return;
+        }
+        // 仍有警 → 下一轮继续告警轮（工单 fix-loop-warnings/01：停条件 =
+        // 0 错 0 警，仅 passed 即停的旧形态已废）
       }
-      errorText = compile.error_text;   // 仍错 → 下一轮喂最新报错
+      errorText = compile.error_text;   // 仍错或有警 → 下一轮喂最新编译输出
     }
-    // 第 3 轮后仍错：如实报告剩余错误清单（决策记录 2）
+    // 第 3 轮后仍错 / 仍有警：如实报告剩余清单（决策记录 2 + 工单
+    // fix-loop-warnings/01）
     const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
-    $("fix-status").textContent = "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余错误见上方编译输出（"
-      + (n !== null ? n + " 条 Error" : "多条报错") + "）——可继续贴文本修复，或改工程后重试";
+    const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
+    const restParts = [];
+    if (n === null || n > 0) restParts.push(n !== null ? n + " 条 Error" : "多条报错");
+    if (w !== null && w > 0) restParts.push(w + " 条 Warning");
+    $("fix-status").textContent = "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余 "
+      + (restParts.join(" / ") || "问题") + " 见上方编译输出——可继续贴文本修复，或改工程后重试";
   } catch (e) {
     $("fix-status").textContent = "";
     $("fix-errors-msg").textContent = e.message;

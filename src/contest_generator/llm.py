@@ -226,7 +226,8 @@ TOPIC_SUMMARY_SYSTEM_PROMPT = (
 # 从提供的文件清单里选（越界路径由域模块 fix_errors.apply_fixes 拒绝，400
 # 中文）。空输出（无 fix）合法 = 模型认为无法确定修复（结果 0 应用，用户可
 # 换措辞重试）。域判决留在 fix_errors.py，本模块只做机械提取（提示词 +
-# 严格解析）。
+# 严格解析）。约束 7（工单 fix-loop-warnings/01）：Warning 条目同款修复，
+# 模块自带警告不瞎改。
 FIX_SYSTEM_PROMPT = (
     "你是嵌入式 C 工程师，修复生成工程中的编译报错（文件内容可能被截断，"
     "见末尾标注，" + TRUNCATION_NOTICE + "）。逐条修复报错，只输出 JSON 对象："
@@ -246,7 +247,10 @@ FIX_SYSTEM_PROMPT = (
     "fix-loop-progress/01）：其中未应用（skipped）的条目原因已写明——重试时"
     " old_snippet 必须从文件当前内容里逐字对齐后重写（行号只作提示，以文件"
     "内容为准），仍无法精确给出时放弃该条；不要重复输出与上一轮一模一样的"
-    "建议。"
+    "建议。7) 编译输出中的 Warning（警告）条目同样逐条修复（工单 "
+    "fix-loop-warnings/01）：未使用变量 / 函数（删除声明或补引用）、告警"
+    "明确指出实质问题的照修；第三方库或模块自带警告（如宏重定义）不瞎改，"
+    "依据不足时同约束 5 宁可不输出该条。"
 )
 
 # 修复请求回喂段合计截断上限（字符，工单 fix-request-budget/01）：
@@ -257,14 +261,15 @@ FIX_SYSTEM_PROMPT = (
 # （N 条长 reason）仍 ≤ 本上限 × 6 字节 + 标注 ≈ 15.5KB。
 #
 # 修复请求总量预算反推（json.dumps ensure_ascii=True 口径，中文 6 字节/字符，
-# 与 _chat 发送前预检一致——不按 UTF-8 的 3 字节估）：系统提示词 ≈3.3KB（实测）
-# + JSON 壳 ≈0.15KB + 报错全文（4000 字符截断 + 标注）≈24.3KB + 赛题（4000
-# 截断上限，2026C 实测 2626 / 2021F 实测 2796 均在内）≈24KB + main.c（4000 +
-# 标注）≈24.3KB + 回喂段（本上限 + 标注）≈15.5KB + dropped 清单 / 模块清单 /
-# 平台 / 标题分隔 ≈5.3KB ≈ 96.4KB（实测）→ 文件上下文余量 = 128KB − 10KB
-# 目标余量 − 96.4KB ≈ 21.6KB → fix_errors.FIX_CONTEXT_TOTAL_BYTES = 23000
-# （wire 字节，每文件截断标注 ≈0.12KB 含在余量内）→ 最坏形态总量 ≈119.5KB，
-# 余量 ≈11.3KB ≥ 10KB。最坏情况结构测试钉死（tests/test_llm.py::
+# 与 _chat 发送前预检一致——不按 UTF-8 的 3 字节估）：系统提示词 ≈3.8KB（实测，
+# 约束 7 告警修复指引后）+ JSON 壳 ≈0.15KB + 报错全文（4000 字符截断 + 标注）
+# ≈24.3KB + 赛题（4000 截断上限，2026C 实测 2626 / 2021F 实测 2796 均在内）
+# ≈24KB + main.c（4000 + 标注）≈24.3KB + 回喂段（本上限 + 标注）≈15.5KB +
+# dropped 清单 / 模块清单 / 平台 / 标题分隔 ≈5.3KB ≈ 96.9KB（实测）→ 文件
+# 上下文余量 = 128KB − 10KB 目标余量 − 96.9KB ≈ 21.1KB →
+# fix_errors.FIX_CONTEXT_TOTAL_BYTES = 23000（wire 字节，每文件截断标注
+# ≈0.12KB 含在余量内）→ 最坏形态总量 ≈119.5KB，余量 ≈10.7KB ≥ 10KB。
+# 最坏情况结构测试钉死（tests/test_llm.py::
 # test_fix_prompt_worst_case_fits_request_budget），改大任一上限即红。
 FIX_PREVIOUS_FIXES_CAP = 2500
 
