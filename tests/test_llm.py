@@ -44,7 +44,7 @@ from contest_generator.llm import (
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
     NETWORK_RETRY_LIMIT,
-    REFERENCE_FULLTEXT_CAP,
+    REFERENCE_FULLTEXT_BYTES,
     SUMMARY_RETRY_LIMIT,
     TRUNCATION_NOTICE,
     UrllibTransport,
@@ -2846,12 +2846,13 @@ def test_select_prompt_includes_reference_list_when_given():
 
 
 def test_select_prompt_embeds_requested_fulltexts():
-    """两级注入第二级：模型要求阅读全文的参考文件以全文形态嵌入——总截断上限
-    放宽为 REFERENCE_FULLTEXT_CAP（工单 03，旧 4000 总截断吞掉尾部文件），
-    上限内全文原样直传（逐文件截断已由 read_fulltext 完成）。"""
+    """两级注入第二级：模型要求阅读全文的参考文件以全文形态嵌入——总预算
+    放宽为 REFERENCE_FULLTEXT_BYTES wire 字节（工单 03 放宽旧 4000 总截断吞
+    掉尾部文件；budget-wire-unification/01 弃字符 cap 改 wire 记账），预算内
+    全文原样直传（逐文件截断已由 read_fulltext 完成）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    long_text = "长全文" * (EMBEDDED_CONTENT_CAP + 100)  # 超旧 4000 上限、在新总上限内
+    long_text = "长全文" * 2500  # 7500 字符 = 45000 wire 字节：超旧 4000 上限、在 wire 预算内
 
     llm.select_modules(
         "赛题",
@@ -2868,9 +2869,9 @@ def test_select_prompt_embeds_requested_fulltexts():
 
 def test_select_prompt_embeds_fulltext_with_every_file_head():
     """工单 03 回归：注入块含每个文件开头——read_fulltext 逐文件截断后的多文件
-    全文在总上限内逐字嵌入（旧 4000 总截断下首个大文件吃光配额、尾部文件不可见）。
-    全文总量保持在 REFERENCE_FULLTEXT_CAP 内（recommend-speedup/01 D 收紧后
-    35000，3 × 11K 字符 ≈ 33K < 上限）——超上限的截断断言由
+    全文在总预算内逐字嵌入（旧 4000 总截断下首个大文件吃光配额、尾部文件不可见）。
+    全文总量保持在 REFERENCE_FULLTEXT_BYTES wire 字节预算内（budget-wire-
+    unification/01 定 67000，3 × 11K 字节 ≈ 33KB < 预算）——超预算的截断断言由
     test_select_prompt_truncates_fulltext_at_relaxed_total_cap 钉死。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
@@ -2893,11 +2894,12 @@ def test_select_prompt_embeds_fulltext_with_every_file_head():
 
 
 def test_select_prompt_truncates_fulltext_at_relaxed_total_cap():
-    """工单 03 回归：总截断放宽不是去掉——超过 REFERENCE_FULLTEXT_CAP 的全文
-    仍截头带标注（兜底超大条目请求体，防 MAX_REQUEST_BYTES 网关预算爆掉）。"""
+    """工单 03 回归 + budget-wire-unification/01：总预算放宽不是去掉——超过
+    REFERENCE_FULLTEXT_BYTES wire 字节预算的全文仍截头带标注（兜底超大条目
+    请求体，防 MAX_REQUEST_BYTES 网关预算爆掉；wire 记账口径）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    long_text = "x" * (REFERENCE_FULLTEXT_CAP + 5000)
+    long_text = "x" * (REFERENCE_FULLTEXT_BYTES + 5000)
 
     llm.select_modules(
         "赛题",
@@ -2908,7 +2910,7 @@ def test_select_prompt_truncates_fulltext_at_relaxed_total_cap():
 
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "内容过长，已截断" in user_message
-    assert f"仅展示前 {REFERENCE_FULLTEXT_CAP} 字符" in user_message
+    assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in user_message
     assert TRUNCATION_NOTICE in user_message
 
 
@@ -3220,12 +3222,12 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
 
 def test_select_prompt_embeds_manual_fulltexts_with_label():
     """手动选参考资料（工单 01）：全文直读段（read_fulltext 的 file_label 文件名
-    标注 + 逐文件截断标注原样保留；注入处总截断放宽为 REFERENCE_FULLTEXT_CAP
-    ——总上限内原样直传）；清单段手动条目带来源标注（无需点名）。"""
+    标注 + 逐文件截断标注原样保留；注入处总预算放宽为 REFERENCE_FULLTEXT_BYTES
+    wire 字节——预算内原样直传）；清单段手动条目带来源标注（无需点名）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
     # 1500 份 ≈ 9000 字符：超旧 4000 上限（注入处不再截断）、又低于
-    # MAX_REQUEST_BYTES 网关预算（中文 json.dumps 6 字节/字符）
+    # REFERENCE_FULLTEXT_BYTES 预算（中文 json.dumps 6 字节/字符 ≈ 54KB）
     manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * 1500
 
     llm.select_modules(
@@ -3314,11 +3316,14 @@ def test_select_prompt_without_clarifications_keeps_old_shape():
 
 
 def test_selection_prompt_worst_case_fits_request_budget():
-    """结构测试（工单 recommend-speedup/01 D 唯一硬保证）：最坏情况用户提示词
-    ——REFERENCE_FULLTEXT_CAP 上限全文 + 20 条长问答历史（截断后形态）+ 词表 +
-    摘要——UTF-8 序列化 < MAX_REQUEST_BYTES；cap 改大即红（红证：cap 拉回
-    60000 时本用例红）。"""
-    problem = "设" * 2800  # 真机 2021F 题面规模（2796 字符）
+    """结构测试（工单 budget-wire-unification/01 唯一硬保证，红证先行）：最坏
+    情况 select 请求——REFERENCE_FULLTEXT_BYTES 上限全文（全中文，wire 口径
+    6 字节/字符）+ 20 条长问答历史（截断后形态）+ 词表 + 摘要 + 题面 4000
+    （推导最坏形态）——完整 payload 按 json.dumps 序列化（对齐 llm._chat 预检
+    口径，不继承旧 select 测试的 prompt.encode 3 字节假口径：红证实测同一
+    载荷旧实现真实线 256001 字节 > 120832）≤ MAX_REQUEST_BYTES，余量 ≥ 10KB；
+    REFERENCE_FULLTEXT_BYTES 改大即红（实测 +4096 → 124582 > 120832 红）。"""
+    problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（推导最坏形态 4000 中文）
     summaries = [
         ManifestSummary(f"mod{i}", "温湿度传感器采集与显示" * 8)
         for i in range(14)  # stm32 线 14 条摘要
@@ -3331,26 +3336,46 @@ def test_selection_prompt_worst_case_fits_request_budget():
         problem,
         summaries,
         references=[_suggestion("big-ref", "大参考文件", "巨型参考")],
-        reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_CAP},
+        reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_BYTES},
         clarifications=clarifications,
         hardware_words=DEFAULT_WORDLIST,
     )
 
-    assert len(prompt.encode("utf-8")) < MAX_REQUEST_BYTES
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": SELECT_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    total = len(json.dumps(payload).encode("utf-8"))
+    assert total <= MAX_REQUEST_BYTES - 10 * 1024
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
+    assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in prompt  # 全文 wire 预算截断带标注
 
 
 def test_clarify_prompt_worst_case_fits_request_budget():
-    """结构测试（工单 recommend-speedup/01 D）：20 条长问答历史（截断后形态）+
-    上限题面序列化 < MAX_REQUEST_BYTES；合计截断带标注。"""
+    """结构测试（工单 recommend-speedup/01 D + budget-wire-unification/01 换
+    json.dumps 口径）：20 条长问答历史（截断后形态）+ 上限题面完整 payload
+    json.dumps 序列化 ≤ MAX_REQUEST_BYTES；合计截断带标注。"""
     clarifications = tuple(
         (f"问题{i}：" + "疑" * 200, "答" * 5000) for i in range(20)
     )
 
     prompt = _clarify_user_prompt("设" * EMBEDDED_CONTENT_CAP, clarifications)
 
-    assert len(prompt.encode("utf-8")) < MAX_REQUEST_BYTES
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": CLARIFY_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    total = len(json.dumps(payload).encode("utf-8"))
+    assert total <= MAX_REQUEST_BYTES - 10 * 1024
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
 

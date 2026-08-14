@@ -398,17 +398,17 @@ def test_read_file_contexts_budget_keeps_ascii_near_budget(tmp_path):
 
 
 def test_fit_wire_budget_exact_and_maximal():
-    """_fit_wire_budget（工单 fix-request-budget/01）：任何预算下截取结果
-    wire ≤ 预算；预算内原样返回；截断时取最长前缀（多一字即超）；空预算 →
-    空串。"""
-    from contest_generator.fix_errors import _fit_wire_budget, _wire_size
+    """fit_wire_budget（工单 fix-request-budget/01，budget-wire-unification/01
+    迁共享原语 budget 后 import 面跟进）：任何预算下截取结果 wire ≤ 预算；
+    预算内原样返回；截断时取最长前缀（多一字即超）；空预算 → 空串。"""
+    from contest_generator.budget import fit_wire_budget, wire_size
 
     content = "中" * 5000 + "x" * 5000
     for budget in (0, 1, 100, 1000, 23000):
-        assert _wire_size(_fit_wire_budget(content, budget)) <= budget
-    fitted = _fit_wire_budget(content, 23000)
-    assert _wire_size(fitted) <= 23000 < _wire_size(fitted + content[len(fitted)])
-    assert _fit_wire_budget("x" * 10, 0) == ""
+        assert wire_size(fit_wire_budget(content, budget)) <= budget
+    fitted = fit_wire_budget(content, 23000)
+    assert wire_size(fitted) <= 23000 < wire_size(fitted + content[len(fitted)])
+    assert fit_wire_budget("x" * 10, 0) == ""
 
 
 # ---------------------------------------------------------------------------
