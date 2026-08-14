@@ -7,8 +7,9 @@
 生成器在落盘前还会做一次同样的静态校验，任何漏网的调用明确报错。
 
 函数识别是文本级启发式：声明/定义要求类型名前缀（void/int/自定义 _t/…），
-调用提取排除控制关键字、main.c 自建函数与宏。函数指针调用、强制转换等
-生僻形式不在识别范围内（生成的骨架不会用到）。
+调用提取排除控制关键字、预处理指令行（#define 除外）、main.c 自建函数
+与宏。函数指针调用、强制转换等生僻形式不在识别范围内（生成的骨架不会
+用到）。
 """
 
 from __future__ import annotations
@@ -36,6 +37,9 @@ _CONTROL_KEYWORDS = frozenset(
     {
         "if", "for", "while", "switch", "case", "default", "return", "do",
         "else", "goto", "sizeof", "typedef", "main",
+        # C 预处理器操作符（判例：2026C 真机 3 连 400 点名 defined；指令行
+        # 剔除在 _strip_preprocessor_directives，此处兜底任何漏进提取文本的形态）
+        "defined",
     }
 )
 
@@ -61,6 +65,9 @@ _MACRO_DEF_RE = re.compile(r"#define\s+([A-Za-z_]\w*)\(")
 
 # 任意 #define 定义的名字（对象宏；定义行上"名 ("可能被调用形态误报）
 _DEFINE_RE = re.compile(r"#define\s+([A-Za-z_]\w*)")
+
+# 指令行判 #define：# 后紧跟 define 词（\b 挡掉 #defineFOO 这种非指令残行）
+_DEFINE_LINE_RE = re.compile(r"#\s*define\b")
 
 
 def is_header_path(rel: str) -> bool:
@@ -212,12 +219,15 @@ def find_undefined_calls(
 ) -> tuple[str, ...]:
     """静态自检：main.c 调用了、但不在所选模块头文件接口里的函数名。
 
-    注释、字符串里的"调用"不算；main.c 自己定义/声明/宏定义的函数不算；
-    控制关键字（if/while/return/…）不算。结果按名字排序，保证确定性。
+    注释、字符串里的"调用"不算；预处理指令行（#define 除外）不算——与
+    替换侧同 clex 语义（判例：2026C 真机 3 连 400 点名 defined）；main.c
+    自己定义/声明/宏定义的函数不算；控制关键字（if/while/return/…）不算。
+    结果按名字排序，保证确定性。
     """
     stripped = strip_comments(main_c)
-    calls = _extract_calls(stripped)
-    local = _known_local(stripped)
+    code_text = _strip_preprocessor_directives(stripped)
+    calls = _extract_calls(code_text)
+    local = _known_local(code_text)
     unknown = calls - local - set(known_functions)
     return tuple(sorted(unknown))
 
@@ -389,6 +399,38 @@ def generate_skeleton(
 
 def _extract_calls(code: str) -> set[str]:
     return {name for name in _IDENT_CALL_RE.findall(code)} - _CONTROL_KEYWORDS
+
+
+def _strip_preprocessor_directives(code: str) -> str:
+    """剔除预处理指令行（#define 除外）——调用提取与替换侧同一 clex 语义。
+
+    _replace_undefined_calls 走 iter_c_regions 对预处理行整行透传（预处理行
+    不是代码、不替换），检测侧却把 # 行当普通文本扫调用——#if defined(X) 的
+    defined( 被误报为「函数 defined」（判例：2026C 真机 3 连 400），
+    #if fn(...) 条件调用与 #pragma pack(...) 同族。输入已过 strip_comments
+    （# 行按文本存活、内部字符串已剥）。
+
+    非 define 指令整行剔除；跨行条件的 \\ 续行随指令行一并剔除（续行行首无
+    #，单独剥不掉）。#define 行保留——_known_local 依赖它识别 main.c 本地宏，
+    整段剥 # 行会让 #define FOO(x) 定义的宏在 FOO(1) 处误报未定义；宏体内
+    的未定义调用仍需审计（宏一旦展开即链接期必炸，见 find_undefined_calls
+    回归用例）。
+    """
+    out: list[str] = []
+    lines = code.splitlines(keepends=True)
+    i = 0
+    n = len(lines)
+    while i < n:
+        text = lines[i].lstrip(" \t")
+        if text.startswith("#") and not _DEFINE_LINE_RE.match(text):
+            i += 1
+            # 指令行后随 \\ 续行（含末条）整段剔除
+            while i < n and lines[i - 1].rstrip("\r\n").rstrip().endswith("\\"):
+                i += 1
+        else:
+            out.append(lines[i])
+            i += 1
+    return "".join(out)
 
 
 def _known_local(code: str) -> set[str]:

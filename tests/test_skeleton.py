@@ -208,6 +208,57 @@ def test_find_undefined_calls_accepts_function_macros_defined_in_main_c():
     assert find_undefined_calls(main_c, set()) == ()
 
 
+def test_find_undefined_calls_ignores_defined_in_preprocessor_condition():
+    """判例：2026C 真机 3 连 400 点名 defined——#if defined(X) 的 defined( 是
+    预处理器操作符，不是函数调用。"""
+    main_c = "#if defined(USE_EXTRA)\nint main(void) { while (1); }\n#endif\n"
+
+    assert find_undefined_calls(main_c, set()) == ()
+
+
+def test_find_undefined_calls_ignores_calls_in_preprocessor_directives():
+    """同族误判：#if fn(...) 条件调用、#pragma pack(...) 等非 define 指令行
+    整体剔出调用提取（与 _replace_undefined_calls 同 clex 语义：预处理行不是代码）。"""
+    main_c = (
+        "#if has_extra(1) && mode_ok()\n"
+        "#define LED_ON() GPIO_PIN_5\n"
+        "#endif\n"
+        "#pragma pack(push, 1)\n"
+        "int main(void) { LED_ON(); while (1); }\n"
+    )
+
+    assert find_undefined_calls(main_c, set()) == ()
+
+
+def test_find_undefined_calls_strips_multiline_preprocessor_conditions():
+    """跨行 #if 条件的 \\ 续行随指令行一并剔除（续行行首无 #，整段剥不了会漏）。"""
+    main_c = (
+        "#if defined(USE_A) && \\\n"
+        "    defined(USE_B) && \\\n"
+        "    has_extra(1)\n"
+        "#endif\n"
+        "int main(void) { while (1); }\n"
+    )
+
+    assert find_undefined_calls(main_c, set()) == ()
+
+
+def test_find_undefined_calls_accepts_param_macros_defined_in_main_c():
+    """B 陷阱守护：#define 行必须留在提取文本里，参数宏 FOO(x) 的调用
+    FOO(1) 才不会被误报未定义（整段剥 # 行即红）。"""
+    main_c = "#define FOO(x) ((x) * 2)\nint main(void) { return FOO(1); }\n"
+
+    assert find_undefined_calls(main_c, set()) == ()
+
+
+def test_find_undefined_calls_audits_calls_inside_define_bodies():
+    """#define 行保留的刻意后果：宏体内的未定义调用仍被检出（#define TOGGLE()
+    fake_gpio_set(1) 一旦展开即链接期必炸，全剥 # 行会漏掉）。"""
+    main_c = "#define TOGGLE() fake_gpio_set(1)\nint main(void) { TOGGLE(); }\n"
+
+    assert find_undefined_calls(main_c, set()) == ("fake_gpio_set",)
+
+
 # ---------------------------------------------------------------------------
 # 占位处理：不存在的调用注释化
 # ---------------------------------------------------------------------------
