@@ -490,6 +490,10 @@
         <div id="pin-highlight-msg" class="muted" style="margin-top:10px"></div>
         <div class="pin-layout" style="margin-top:8px">
           <div class="pin-board-wrap">
+            <div class="row" style="margin-bottom:6px">
+              <button id="btn-pin-rotate">旋转 90°</button>
+              <span class="muted">板图视角旋转（不影响引脚数据）。</span>
+            </div>
             <div id="pin-board-svg"></div>
             <div id="pin-fixed-list" class="pin-fixed-list"></div>
           </div>
@@ -1371,6 +1375,7 @@ let pinBoardError = "";          // 板定义加载失败信息（占位文案�
 let pinBindings = {};            // {"<slug>.<role_id>": "<PIN>"}（只含用户动过的角色）
 let pinUnbound = new Set();      // 被替换/显式解除的角色 key（红显未绑，不发字段）
 let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
+let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
 
 // 角色类型配色（与 CSS :root 引脚令牌一一对应：全色 / 淡化色）
 const PIN_TYPE_STYLE = {
@@ -1553,7 +1558,13 @@ function renderPinBoard() {
   const W = 460, H = topPad + rows * rowH + (hasBottom ? 40 : 14);
   const pcbBottom = topPad - 10 + rows * rowH + 18;
   const parts = [];
-  parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:440px" role="img" aria-label="${esc(pinBoard.name)}板图">`);
+  // 视角旋转（按钮每次 +90°）：竖排（0/180）原尺寸，横排（90/270）按 W/H 缩放
+  // 塞进 440 宽栏（transform 不动布局盒，旋转后内容居中、盒子高度按缩放后算）
+  const rot = ((pinRotation % 360) + 360) % 360;
+  const upright = rot % 180 === 0;
+  const scale = upright ? 1 : W / H;
+  box.style.height = Math.round(upright ? (440 * H) / W : 440 * (W / H)) + "px";
+  parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:440px;transform:rotate(${rot}deg) scale(${scale});transform-origin:center" role="img" aria-label="${esc(pinBoard.name)}板图">`);
   // PCB 本体 + 芯片丝印（pcb_color = 板 JSON 底色，俯视观感；缺省用默认令牌）
   // 顶部留 30px 给向上伸出的排针、底部额外 +18：最下排焊孔与板缘留出间距
   parts.push(`<rect x="100" y="${topPad - 10}" width="260" height="${rows * rowH + 18}" rx="8" fill="${esc(pinBoard.pcb_color || "var(--pin-pcb)")}" stroke="var(--border)" stroke-width="1.5"/>`);
@@ -1695,6 +1706,11 @@ function renderPinRoles(roles, fam) {
 $("btn-pin-reset").addEventListener("click", () => {
   pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
   renderPinCard();
+});
+
+$("btn-pin-rotate").addEventListener("click", () => {
+  pinRotation += 90;  // 每次 +90°（0→90→180→270→0），纯视图不影响绑定数据
+  renderPinBoard();
 });
 
 function unbindRole(key) {
