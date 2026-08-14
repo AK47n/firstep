@@ -28,8 +28,10 @@ from contest_generator.generator import (
     ModuleCorpus,
     ModuleFile,
     PinLiteralInMainError,
+    TimerConflictError,
     _check_no_pin_literals_in_main,
     _check_pin_bindings,
+    _check_timer_instance_conflicts,
     generate,
 )
 from contest_generator.library import list_modules
@@ -67,7 +69,8 @@ def _resolve(platform: str, bindings: dict[str, str]) -> tuple[ResolvedBinding, 
 
 def _bind(role_key: str, pin: str) -> ResolvedBinding:
     """stm32 渲染器测试用：取角色在 stm32 平台的声明（同 id 在 mspm0 也有
-    声明时取错平台会拿不到 macros）。实例推导与 resolve 同源。"""
+    声明时取错平台会拿不到 macros）。实例推导与 resolve 同源（stm32 pwm
+    类型级 = 绑定引脚实例，其余类型 = 默认引脚实例）。"""
     slug, role_id = role_key.split(".")
     for manifest in ALL_MANIFESTS:
         if manifest.slug != slug:
@@ -77,11 +80,16 @@ def _bind(role_key: str, pin: str) -> ResolvedBinding:
             continue
         for decl in entry.pins:
             if decl.id == role_id:
+                bound_pin = BOARDS["stm32"].pin_index.get(pin)
                 default_pin = BOARDS["stm32"].pin_index.get(decl.default)
                 instances = (
-                    pin_capability_instances(default_pin, decl.type)
-                    if default_pin is not None
-                    else ()
+                    pin_capability_instances(bound_pin, decl.type)
+                    if decl.type == "pwm" and bound_pin is not None
+                    else (
+                        pin_capability_instances(default_pin, decl.type)
+                        if default_pin is not None
+                        else ()
+                    )
                 )
                 return ResolvedBinding(
                     slug=slug,
@@ -149,6 +157,24 @@ def test_resolve_capability_stm32_uart_instance_locked():
     PA9 有 uart_tx:UART_1 → 换脚必拒（ml_libs 第二层锁的机械实现）。"""
     with pytest.raises(PinBindingError, match="UART_1"):
         _resolve("stm32", {"digit_uart.DIGIT_UART_TX": "PB10"})
+
+
+def test_resolve_stm32_pwm_type_level_any_pwm_pin():
+    """stm32 pwm 类型级（ADR 0011）：任意 pwm:* 脚可绑，实例随**绑定引脚**
+    推导喂渲染器（PA6 → TIM3_CH1、PB6 → TIM4_CH1——渲染器写 TIM/CH 宏）。"""
+    a = _resolve("stm32", {"motor.MOTOR_A_PWM": "PA6"})
+    assert a[0].pin == "PA6"
+    assert a[0].instances == ("TIM3_CH1",)
+    b = _resolve("stm32", {"motor.MOTOR_A_PWM": "PB6"})
+    assert b[0].pin == "PB6"
+    assert b[0].instances == ("TIM4_CH1",)
+
+
+def test_resolve_stm32_pwm_rejects_pin_without_pwm_token():
+    """类型级下限：无 pwm token 的脚（PB4 只有 enc/exti）仍拒——报错文案 =
+    类型级（不支持角色类型 pwm），非实例锁文案（角色实例随默认引脚锁定）。"""
+    with pytest.raises(PinBindingError, match="不支持角色类型 pwm"):
+        _resolve("stm32", {"motor.MOTOR_A_PWM": "PB4"})
 
 
 def test_resolve_capability_stm32_enc_same_line_only():
@@ -452,7 +478,7 @@ def test_rewrite_syscfg_same_slot_same_pin_applied_once():
 
 
 # ---------------------------------------------------------------------------
-# 两条新门禁
+# 门禁（骨架引脚字面量 / 绑定校验 / 骨架定时器冲突）
 # ---------------------------------------------------------------------------
 
 
@@ -506,6 +532,92 @@ def test_no_pin_literals_gate_mspm0_pin_names():
             _corpus("int main(void) { int x = PA28; while (1); }\n"),
             (), "mspm0", GateContext(),
         )
+
+
+def test_timer_conflict_gate_rejects_bound_pwm_on_skeleton_timer():
+    """骨架 tim_interrupt_ms_init(TIM_3, ...) × 绑定 MOTOR_A_PWM→PA6
+    （TIM3_CH1）→ TimerConflictError 400 中文（ADR 0011 门禁 2：同一 TIM 被
+    骨架调度占用 = 编译绿运行坏，生成前拦截）。"""
+    main_c = (
+        "int main(void) { tim_interrupt_ms_init(TIM_3, 10, 0); while (1); }\n"
+    )
+    with pytest.raises(TimerConflictError, match="TIM3_CH1") as excinfo:
+        _check_timer_instance_conflicts(
+            _corpus(main_c), ALL_MANIFESTS, "stm32",
+            GateContext(
+                bindings={"motor.MOTOR_A_PWM": "PA6"}, board=BOARDS["stm32"]
+            ),
+        )
+    assert "TIM_3" in str(excinfo.value)
+
+
+def test_timer_conflict_gate_both_timer_spellings():
+    """TIM_2 / TIM2 两写法都拦（枚举名 TIM_2 与 LLM 换写 TIM2 兼容）：
+    MOTOR_B_PWM→PA3 = TIM2_CH4 × 骨架 TIM2 滴答。"""
+    for call in ("tim_interrupt_ms_init(TIM_2, 1, 0)", "tim_interrupt_ms_init(TIM2, 1, 0)"):
+        with pytest.raises(TimerConflictError, match="TIM2_CH4"):
+            _check_timer_instance_conflicts(
+                _corpus(f"int main(void) {{ {call}; while (1); }}\n"),
+                ALL_MANIFESTS, "stm32",
+                GateContext(
+                    bindings={"motor.MOTOR_B_PWM": "PA3"}, board=BOARDS["stm32"]
+                ),
+            )
+
+
+def test_timer_conflict_gate_comment_exempt():
+    """注释里的 tim_interrupt_ms_init 字样不误伤（同 no_pin_literals 先例——
+    clex 注释剥离后判定，spec 关键事实：参考 main.c 注释里出现过该调用）。"""
+    main_c = (
+        "int main(void) {\n"
+        "    /* 预留：tim_interrupt_ms_init(TIM_3, 10, 0); */\n"
+        "    while (1);\n"
+        "}\n"
+    )
+    _check_timer_instance_conflicts(
+        _corpus(main_c), ALL_MANIFESTS, "stm32",
+        GateContext(
+            bindings={"motor.MOTOR_A_PWM": "PA6"}, board=BOARDS["stm32"]
+        ),
+    )
+
+
+def test_timer_conflict_gate_passes_unconflicting_and_default_bindings():
+    """骨架 TIM_3 × 绑定 PB6（TIM4_CH1）不冲突直过；绑定 = 默认值（PA0，
+    no-op）不触发——默认组合冲突是现状性质不拦（spec 留痕）；空载荷直过。"""
+    main_c = (
+        "int main(void) { tim_interrupt_ms_init(TIM_3, 10, 0); while (1); }\n"
+    )
+    _check_timer_instance_conflicts(
+        _corpus(main_c), ALL_MANIFESTS, "stm32",
+        GateContext(
+            bindings={"motor.MOTOR_A_PWM": "PB6"}, board=BOARDS["stm32"]
+        ),
+    )
+    main_c2 = (
+        "int main(void) { tim_interrupt_ms_init(TIM_2, 1, 0); while (1); }\n"
+    )
+    _check_timer_instance_conflicts(
+        _corpus(main_c2), ALL_MANIFESTS, "stm32",
+        GateContext(
+            bindings={"motor.MOTOR_A_PWM": "PA0"}, board=BOARDS["stm32"]
+        ),
+    )
+    _check_timer_instance_conflicts(
+        _corpus(main_c2), ALL_MANIFESTS, "stm32", GateContext()
+    )
+
+
+def test_error_entry_maps_timer_conflict_error_to_400():
+    """TimerConflictError 显式登记 error_to_http 表 → 400 中文（结构测试
+    test_errors.py 反射兜底防漏登）。"""
+    status, message = error_entry(
+        TimerConflictError(
+            "PWM 绑定 TIM3_CH1（motor.MOTOR_A_PWM）与骨架调度定时器 TIM_3 冲突"
+        )
+    )
+    assert status == 400
+    assert "TIM3_CH1" in message
 
 
 def test_pin_bindings_gate_empty_context_passes():
@@ -604,7 +716,7 @@ def test_generate_with_invalid_bindings_creates_no_output_dir(tmp_path):
     """非法绑定在创建输出目录之前失败（门禁先于 mkdir），不留半成品。"""
     motor = next(m for m in ALL_MANIFESTS if m.slug == "motor")
     out_dir = tmp_path / "out"
-    with pytest.raises(PinBindingError, match="TIM2_CH1"):
+    with pytest.raises(PinBindingError, match="pwm"):
         generate(
             platform="stm32",
             manifests=[motor],
@@ -612,6 +724,6 @@ def test_generate_with_invalid_bindings_creates_no_output_dir(tmp_path):
             master_project_dir=STM32_MASTER,
             output_dir=out_dir,
             main_c_content="int main(void) { while (1); }\n",
-            bindings={"motor.MOTOR_A_PWM": "PA6"},  # PA6 = TIM3_CH1 ≠ TIM2_CH1
+            bindings={"motor.MOTOR_A_PWM": "PB4"},  # PB4 无 pwm token（类型级下限）
         )
     assert not out_dir.exists()
