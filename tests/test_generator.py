@@ -29,6 +29,7 @@ from contest_generator.generator import (
     _check_module_files,
     _check_module_self_include,
     _check_unresolved_includes,
+    _search_dir_header_names,
     build_module_corpus,
     build_output_tree_corpus,
     generate,
@@ -347,9 +348,9 @@ def test_generate_missing_module_file_fails_with_clear_message(
 
 
 # ---------------------------------------------------------------------------
-# 语料门禁（工单 02）：纯内存构造 ModuleCorpus 直喂五道门，无盘上夹具。
-# 门禁不再读盘——文件文本全部来自语料，唯一例外是 include 解析要查盘上
-# 搜索目录（模拟 Keil 搜索，见 test_unresolved_include_checks_master_search_dirs）。
+# 语料门禁（工单 02）：纯内存构造 ModuleCorpus 直喂门禁，无盘上夹具。
+# 门禁不再读盘——文件文本与搜索目录头名单全部来自语料（构建时一次扫盘，
+# 工单 gate-corpus-closure/01，见 test_unresolved_include_is_pure_predicate_zero_disk_access）。
 # ---------------------------------------------------------------------------
 
 
@@ -361,8 +362,10 @@ def _memory_corpus(
     missing_files: list[tuple[str, str]] | None = None,
     missing_platforms: list[str] | None = None,
     master_headers: list[tuple[str, str]] | None = None,
+    search_dir_headers: tuple[tuple[Path, frozenset[str]], ...] = (),
 ) -> ModuleCorpus:
-    """内存语料：module_texts = (slug, rel, text)，master_headers 可传（默认空）。"""
+    """内存语料：module_texts = (slug, rel, text)，master_headers / 搜索目录
+    头名单可传（默认空）。"""
     files: list[tuple[str, tuple[ModuleFile, ...]]] = []
     seen_slugs: set[str] = set()
     for slug, rel, text in module_texts or []:
@@ -381,6 +384,7 @@ def _memory_corpus(
         missing_files=tuple(missing_files or ()),
         master_headers=tuple(master_headers or ()),
         master_search_dirs=(),
+        search_dir_headers=search_dir_headers,
         master_project_dir=tmp_path,
         main_c=main_c,
     )
@@ -448,6 +452,7 @@ def test_corpus_macro_conflict_reported_from_memory(tmp_path):
         missing_files=(),
         master_headers=(("ml_led.h", "#define LED_GPIO 2\n"),),
         master_search_dirs=(),
+        search_dir_headers=(),
         master_project_dir=tmp_path,
         main_c="int main(void) { while (1); }\n",
     )
@@ -459,17 +464,23 @@ def test_corpus_macro_conflict_reported_from_memory(tmp_path):
 
 
 def test_unresolved_include_checks_master_search_dirs(tmp_path):
-    """唯一碰盘的检查：include 解析按 Keil 语义查搜索目录（模拟母版头在位）。"""
+    """include 解析按 Keil 语义查搜索目录：搜索目录头名单在语料构建时一次
+    glob 进 search_dir_headers（模拟母版头在搜索目录，门禁纯集合判定）。
+
+    include 写法混合大小写 → 名集合小写化对齐后照常放行（Windows is_file
+    大小写不敏感语义，门禁不再碰盘）。
+    """
     master = tmp_path / "master"
     master.mkdir()
     (master / "headfile.h").write_text("", encoding="utf-8")
     corpus = ModuleCorpus(
         platform=PLATFORM_STM32,
-        modules=(("mod", (ModuleFile(rel="mod.c", kind="c", text='#include "headfile.h"\n', own_dir=tmp_path),)),),
+        modules=(("mod", (ModuleFile(rel="mod.c", kind="c", text='#include "HeadFile.H"\n', own_dir=tmp_path),)),),
         missing_platforms=(),
         missing_files=(),
         master_headers=(),
         master_search_dirs=(master,),
+        search_dir_headers=_search_dir_header_names((master,)),
         master_project_dir=tmp_path,
         main_c="int main(void) { while (1); }\n",
     )
@@ -487,6 +498,85 @@ def test_unresolved_include_missing_header_rejected_from_memory(tmp_path):
         _check_unresolved_includes(corpus)
 
     assert "引用了最终工程中不存在的头文件" in str(excinfo.value)
+
+
+def test_unresolved_include_is_pure_predicate_zero_disk_access(tmp_path, monkeypatch):
+    """第六道门禁零盘访问（契约：门禁只吃语料）——is_file 被调即红。
+
+    include 解析唯一碰盘点（搜索目录 stat）收进语料构建后，门禁退化为纯
+    集合成员判定（工单 gate-corpus-closure/01，旧实现 generator.py 对每个
+    include 候选 stat 活盘，本测试 monkeypatch 证明修复后零盘访问）。
+    """
+    master = tmp_path / "master"
+    master.mkdir()
+    (master / "headfile.h").write_text("", encoding="utf-8")
+    corpus = ModuleCorpus(
+        platform=PLATFORM_STM32,
+        modules=(
+            (
+                "mod",
+                (
+                    ModuleFile(
+                        rel="mod.c",
+                        kind="c",
+                        text='#include "headfile.h"\n',
+                        own_dir=tmp_path,
+                    ),
+                ),
+            ),
+        ),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(),
+        master_search_dirs=(master,),
+        search_dir_headers=((master, frozenset({"headfile.h"})),),
+        master_project_dir=tmp_path,
+        main_c="int main(void) { while (1); }\n",
+    )
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("include 解析门碰盘：Path.is_file 被调用")
+
+    monkeypatch.setattr(Path, "is_file", _boom)
+    try:
+        _check_unresolved_includes(corpus)  # 纯语料放行，is_file 被调即红
+    finally:
+        monkeypatch.undo()  # 先撤 patch 再让 tmp_path 清理（清理代码用 is_file）
+
+
+def test_unresolved_include_resolves_search_dir_from_corpus_only(tmp_path):
+    """内存直构语料：搜索目录在盘上不存在，语料 search_dir_headers 照常放行
+    （纯语料判定——旧实现 stat 活盘必挂，产物体外验收无需真实工具链目录）。"""
+    ghost = tmp_path / "no_such_search_dir"  # 盘上不存在
+    corpus = _memory_corpus(
+        tmp_path,
+        module_texts=[("mod", "mod.c", '#include "headfile.h"\n')],
+        search_dir_headers=((ghost, frozenset({"headfile.h"})),),
+    )
+
+    _check_unresolved_includes(corpus)  # 纯语料判定，不碰盘
+
+
+def test_build_module_corpus_scans_search_dir_headers(tmp_path):
+    """语料构建一次扫盘：每个母版 IncludePath 目录的 *.h 基名集合（小写化）
+    进 search_dir_headers；目录不存在 = 空集（与旧 is_file 判 False 同义）。"""
+    master = make_fake_master_project(tmp_path / "master")  # IncludePath = .\inc;.\src
+    corpus = build_module_corpus(
+        [], PLATFORM_STM32, tmp_path / "lib", master, "int main(void) { while (1); }\n"
+    )
+
+    by_dir = dict(corpus.search_dir_headers)
+    assert by_dir[master / "inc"] == frozenset({"stm32f10x_conf.h"})
+    assert by_dir[master / "src"] == frozenset()  # 无 .h → 空集
+    assert corpus.master_search_dirs == tuple(
+        include_search_dirs(PLATFORM_STM32, master)
+    )
+
+
+def test_search_dir_header_names_missing_dir_is_empty(tmp_path):
+    """搜索目录在盘上不存在 → 空集合（语义与旧 is_file 判 False 一致）。"""
+    ghost = tmp_path / "no_such_dir"
+    assert _search_dir_header_names((ghost,)) == ((ghost, frozenset()),)
 
 
 # ---------------------------------------------------------------------------
@@ -554,6 +644,24 @@ def test_build_output_tree_corpus_rebuilds_modules_and_master(tmp_path):
     assert {rel for rel, _ in corpus.master_headers} == {"headfile.h", "ml_led.h"}
     # master_search_dirs = 调用方传入（generate_check 读补丁后工程文件的 IncludePath）
     assert corpus.master_search_dirs == (root / "user",)
+    # search_dir_headers 与生成侧同构（工单 gate-corpus-closure/01）：字段形状
+    # (Path, frozenset 小写基名)，搜索目录不存在 = 空集
+    assert corpus.search_dir_headers == ((root / "user", frozenset()),)
+
+
+def test_build_output_tree_corpus_scans_search_dir_headers(tmp_path):
+    """产物树侧重建语料与生成侧同规：搜索目录的 *.h 基名集合一次 glob 进
+    search_dir_headers（真机验收与门禁同源，字段形状同构）。"""
+    root = tmp_path / "out"
+    _write_output_tree(root)
+    (root / "user").mkdir()
+    (root / "user" / "headfile.h").write_text("#pragma once\n", encoding="utf-8")
+
+    corpus = build_output_tree_corpus(root, PLATFORM_STM32, [root / "user"])
+
+    assert corpus.search_dir_headers == (
+        (root / "user", frozenset({"headfile.h"})),
+    )
 
 
 def test_build_output_tree_corpus_no_modules_dir_is_empty(tmp_path):
@@ -655,6 +763,7 @@ def test_unresolved_include_checks_mspm0_sdk_headers_from_cproject(tmp_path):
     sdk.mkdir()
     (sdk / "ti_mspm0_config.h").write_text("#pragma once\n", encoding="utf-8")
     master = _mspm0_master_with_sdk_include(tmp_path / "mspm0_master", sdk)
+    search_dirs = tuple(include_search_dirs(PLATFORM_MSPM0, master))
     corpus = ModuleCorpus(
         platform=PLATFORM_MSPM0,
         modules=(
@@ -673,7 +782,8 @@ def test_unresolved_include_checks_mspm0_sdk_headers_from_cproject(tmp_path):
         missing_platforms=(),
         missing_files=(),
         master_headers=(),
-        master_search_dirs=tuple(include_search_dirs(PLATFORM_MSPM0, master)),
+        master_search_dirs=search_dirs,
+        search_dir_headers=_search_dir_header_names(search_dirs),
         master_project_dir=tmp_path,
         main_c="int main(void) { while (1); }\n",
     )
@@ -687,6 +797,7 @@ def test_unresolved_include_rejects_mspm0_missing_sdk_header(tmp_path):
     sdk.mkdir()
     (sdk / "ti_mspm0_config.h").write_text("#pragma once\n", encoding="utf-8")
     master = _mspm0_master_with_sdk_include(tmp_path / "mspm0_master", sdk)
+    search_dirs = tuple(include_search_dirs(PLATFORM_MSPM0, master))
     corpus = ModuleCorpus(
         platform=PLATFORM_MSPM0,
         modules=(
@@ -705,7 +816,8 @@ def test_unresolved_include_rejects_mspm0_missing_sdk_header(tmp_path):
         missing_platforms=(),
         missing_files=(),
         master_headers=(),
-        master_search_dirs=tuple(include_search_dirs(PLATFORM_MSPM0, master)),
+        master_search_dirs=search_dirs,
+        search_dir_headers=_search_dir_header_names(search_dirs),
         master_project_dir=tmp_path,
         main_c="int main(void) { while (1); }\n",
     )
@@ -775,6 +887,7 @@ def test_unresolved_include_accepts_own_platform_toolchain_header_on_mspm0(tmp_p
         missing_files=(),
         master_headers=(),
         master_search_dirs=(),
+        search_dir_headers=(),
         master_project_dir=tmp_path,
         main_c="int main(void) { while (1); }\n",
     )
@@ -819,6 +932,7 @@ def test_unresolved_include_rejects_cross_platform_toolchain_header_on_mspm0(tmp
         missing_files=(),
         master_headers=(),
         master_search_dirs=(),
+        search_dir_headers=(),
         master_project_dir=tmp_path,
         main_c="int main(void) { while (1); }\n",
     )
@@ -2026,6 +2140,7 @@ def test_check_main_calls_accepts_master_header_functions(tmp_path):
         missing_files=(),
         master_headers=(("ml_pwm.h", "void pwm_init(void);\n"),),
         master_search_dirs=(),
+        search_dir_headers=(),
         master_project_dir=tmp_path,
         main_c="int main(void) { pwm_init(); while (1); }\n",
     )
@@ -2042,6 +2157,7 @@ def test_check_main_calls_still_rejects_unknown_calls_with_master_headers(tmp_pa
         missing_files=(),
         master_headers=(("ml_pwm.h", "void pwm_init(void);\n"),),
         master_search_dirs=(),
+        search_dir_headers=(),
         master_project_dir=tmp_path,
         main_c="int main(void) { ghost(); while (1); }\n",
     )

@@ -2,7 +2,7 @@
 
 **What to build:** `_check_unresolved_includes`（`generator.py:756-801`）第 792 行对每个 include 候选 `(d / header).is_file()` stat 活盘——六道门禁里唯一闭包不了语料的一道。ModuleCorpus 契约三处文字（`generator.py:430`「门禁只吃语料，不再碰盘」、:447「测试可内存构造直喂门禁」、门禁 docstring :764「门禁只吃语料不碰盘」）当前是假话：内存直构语料无法忠实覆盖第六道，产物体外验收也得 stat 真实母版/工具链目录。修复后契约文字成真——语料构建时一次扫盘，门禁退化为纯集合成员判定。
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## 现状证据（2026-08-14 读码核实）
 
@@ -41,3 +41,23 @@
 > 验收：红证（is_file monkeypatch 跑红记录）→ 实施绿 + 内存直构测试 + 全量 pytest 绿 + `mypy src` 干净 +（推荐）真机 generate_check 回归；提交格式 `refactor: ...（工单 gate-corpus-closure/01，N 绿 + mypy src 干净——...）` + docs 一笔；`gh pr create --body-file`；不 force push；证据写本文件 Comments，Status → resolved，推送。
 
 ## Comments
+
+### 2026-08-14 实施验收闭环（Status → resolved）
+
+**红证（先行，跑红记录）**：新增 `test_unresolved_include_is_pure_predicate_zero_disk_access`（monkeypatch `Path.is_file` 抛 AssertionError 跑第六道）——旧实现跑红：`AssertionError: include 解析门碰盘：Path.is_file 被调用`，红点在 `tests/test_generator.py:525`，来自 `generator.py:792` 的 `(d / header).is_file()` stat 活盘（六道门禁唯一闭包不了语料的一道，三处契约文字假话的根）。实施后同测试绿（门禁零盘访问）。
+
+**实施**：`ModuleCorpus` 增字段 `search_dir_headers: tuple[tuple[Path, frozenset[str]], ...]`（无默认值，generator 2 处 + tests 9 处构造点全部显式填，防内存语料静默丢搜索名单）；新原语 `_search_dir_header_names` 构建时对每个搜索目录 glob 一次 *.h 基名集合（小写化；目录不存在 = 空集，与旧 is_file 判 False 同义）——`build_module_corpus` 与 `build_output_tree_corpus` 共用同一原语，两处语料字段形状同构；门禁退化为纯集合成员判定：own_dir 兄弟头名（模块文件按 own_dir 分组 + 母版根头按父目录分组取基名）∪ 各模块目录名集合（搜索目录语义：IncludePath 自动追加模块代码目录，跨模块目录解析保住——初版漏掉此层 17 个 generate 级测试红，补上后全绿）∪ search_dir_headers ∪ 豁免集合；报错文案逐字不变（既有门禁测试未改断言即绿）。
+
+**验收**：
+- [x] 红证先行（上记）
+- [x] 内存直构测试：`test_unresolved_include_resolves_search_dir_from_corpus_only`（语料含 search_dir_headers 而搜索目录在盘上不存在 → 照常放行）+ `test_search_dir_header_names_missing_dir_is_empty`
+- [x] Windows 大小写不敏感语义：`test_unresolved_include_checks_master_search_dirs` 改为 include `"HeadFile.H"` 混合大小写 → 名集合小写化对齐后放行
+- [x] 全量 pytest **1374 绿**（基线 1369 + 新增 5：红证 / 内存直构 / 两处构建器扫描 / 目录缺失空集）+ `mypy src` 37 文件干净；既有门禁测试全绿（报错文案逐字不变）
+- [x] 真机回归：`generate_check.py 2026C --reuse-recommend`（`GENERATE_CHECK_CACHE_DIR` 指主检出缓存，服务从 worktree 启动 `PYTHONPATH=src python -m contest_generator.webapp`）——7 模块，`[产物] 门禁全过（产物树语料重建，与生成同源）`，UV4 exit=0 **0 错误 0 警**；生成侧 build_module_corpus 对真实母版 IncludePath（..\ml_libs;..）扫描 + 产物侧 build_output_tree_corpus 重建语料跑同源门禁，两条变更路径均真机覆盖
+- [x] `git status` 只出现 `src/contest_generator/generator.py` + `tests/test_generator.py`（+ 本工单文件）
+
+**语义差异留痕（按设计定案接受）**：
+1. 名集合只收**基名**：相对路径 include（`"sub/x.h"`）旧实现可经 `(d / header).is_file()` 解析，纯谓词后不可解析 → 拒绝（大声失败方向）。全库 + 母版 grep 无任何 `/` 形引号 include，风险面为零。
+2. 搜索目录扫描只收 *.h **直接子文件**（glob 非递归），与 master_headers 的 rglob 递归语义不同——搜索目录实际平铺头文件；目录不存在 = 空集与旧 is_file False 同义（验收标准第 2 条即为此语义）。
+
+**结构钉**：`test_generator_module_file_segment_has_no_raw_read_text`（build_module_corpus 模块文件段无裸 read_text）未破——搜索目录扫描放在 master_headers 段之后；`test_generation_gate_table_complete_and_ordered` 六道表序未动；契约文字（ModuleFile/ModuleCorpus docstring、门禁 docstring「门禁只吃语料不碰盘」）逐字未动，修复让三处文字成真。
