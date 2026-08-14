@@ -74,3 +74,23 @@
    题面只约束门锁侧拨码开关验证 ID）。
 4. **.gitignore 补行实为冗余**：第 12 行 `.scratch/real-run/` 整目录忽略已
    覆盖 cache/（git check-ignore 证实），补行防将来整目录规则收窄漏网。
+
+### 2026-08-14 grilling 裁决（用户授权代决，确认执行）
+
+四处超字面改动经 grilling 落定：
+
+1. **SSE 读超时 1800s**：保留固定常量——安全网非性能旋钮，实测余量健康，
+   提 config 键为投机性设计。
+2. **platform 元数据**：保留；另堵参数指纹盲区——reference_ids / clarify
+   内容此前只进真实请求体、复用路径不感知，同题换参数会静默沿用旧推荐。
+   已补：缓存元数据新增 `reference_ids` + `clarify_sha256`（顺序不敏感
+   指纹），命中不一致打警告不阻断（报错会废掉 flag 换参数迭代的用途；
+   旧格式缓存无此元数据跳过比对）；topic_key 比对并入缓存失效报错。
+   **web 端同病**（每调用读超时 llm.py:659 = 300s，CLI 实测单轮静默窗口
+   超 600s）立 follow-up 工单 `.scratch/web-llm-timeout/issues/
+   01-verify-timeout.md`（先验证后修改，不动 src）。
+3. **clarify_2026C.json 补 2 条**：维持现状——文件未被 git 跟踪（整目录
+   忽略），补条只在本机生效 + 本 Comments 留痕；是否入库属真机数据入库
+   策略的独立决策。
+4. **.gitignore 冗余三行**：已撤（第 12 行整目录规则覆盖，git check-ignore
+   证实；防收窄理由留痕本 Comments 与 commit message）。
