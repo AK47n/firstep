@@ -75,3 +75,10 @@
 ### 未做
 
 真实服务进程 + DeepSeek 全流程 UV4 复编未重跑（可选真机项已以 HTTP 层复刻闭环）；用户验收时可取含 `#if defined` 骨架直发 /api/generate 复核。
+
+### 验收复核（2026-08-14，主会话）
+
+- 复跑 pytest **1356 绿**（25.4s）+ `mypy src` 37 文件干净——与提交声明一致。
+- diff 复核：skeleton.py +54 / test_skeleton.py +51，generator.py / errors.py 零改动 ✓。B 实现三处边界读码无漏：`\` 续行链（`rstrip("\r\n")+rstrip()` 容忍行尾空白）、缩进指令（lstrip 对齐 clex `preprocessor_indented`）、`#define` 续行保留（续行行首无 # 天然走保留分支）。
+- 真机日志复核：`check_2026C_20条_补跑.log` 第 57 行 400 detail 与工单引用逐字一致（控制台 GBK 打花为已知显示问题，内容可辨）。
+- 可选真机项维持未做——HTTP 层复刻已覆盖门禁路径，待下次真实推荐流程自然覆盖。
