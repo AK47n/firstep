@@ -150,15 +150,16 @@ def test_dimx_pb4_pb5_not_on_headers(boards):
 
 
 def test_stm32_header_layout_matches_blue_pill(boards):
-    """蓝药丸双排 20×2 公开标准布局（重建自标准 Blue Pill pinout）。"""
+    """蓝药丸双排 20×2 布局（2026-08-14 按用户手上真板校正：左下角
+    R→3V3→GND→GND；右排从上到下与左排相反——真板丝印为镜像印刷）。"""
     stm32 = boards["stm32-min-system"]
     left = [
         "VBAT", "PC13", "PC14", "PC15", "PA0", "PA1", "PA2", "PA3", "PA4",
-        "PA5", "PA6", "PA7", "PB0", "PB1", "PB10", "PB11", "R", "GND", "3V3", "GND",
+        "PA5", "PA6", "PA7", "PB0", "PB1", "PB10", "PB11", "R", "3V3", "GND", "GND",
     ]
     right = [
-        "PB12", "PB13", "PB14", "PB15", "PA8", "PA9", "PA10", "PA11", "PA12",
-        "PA15", "PB3", "PB4", "PB5", "PB6", "PB7", "PB8", "PB9", "5V", "GND", "3V3",
+        "3V3", "GND", "5V", "PB9", "PB8", "PB7", "PB6", "PB5", "PB4", "PB3",
+        "PA15", "PA12", "PA11", "PA10", "PA9", "PA8", "PB15", "PB14", "PB13", "PB12",
     ]
     for x, expected in ((0, left), (1, right)):
         got = [
