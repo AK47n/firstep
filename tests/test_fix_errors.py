@@ -263,6 +263,60 @@ def test_collect_uv4_dotdot_escape_still_rejected(tmp_path):
         assert collect_candidate_paths(out, errors) == ()
 
 
+def test_collect_gmake_dotdot_resolves_via_build_dir_benchmark(tmp_path):
+    """工单 gmake-fix-path-resolution/01 红证（真机形态）：tiarmclang 报错路径
+    相对构建工作目录（mspm0 产物 Debug/，含 subdir_rules.mk），形如
+    `../main.c:1:10: fatal error`——须按构建工作目录基准解析回工程根；修复前
+    该形态对工程根 / .cproject 两基准全 miss → 候选为空（修复链路降级死局）。
+    """
+    out = tmp_path / "proj"
+    debug = out / "Debug"
+    debug.mkdir(parents=True)
+    (debug / "subdir_rules.mk").write_text("", encoding="utf-8")
+    (out / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    errors = (
+        CompileError(
+            path="../main.c",
+            line=1,
+            message="../main.c:1:10: fatal error: 'nonexistent_probe_fixloop.h' "
+            "file not found",
+        ),
+    )
+    assert collect_candidate_paths(out, errors) == ("main.c",)
+
+
+def test_collect_dotdot_prefix_strip_fallback_without_benchmarks(tmp_path):
+    """工单 gmake-fix-path-resolution/01 红证（未知形态兜底）：无任何工程文件 /
+    构建目录基准时，`../` 前缀逐级剥除后按工程根解析——`../main.c` → main.c、
+    `../code/mod.c` → code/mod.c 命中；剥除后仍不在工程内 / 不存在 → 降级。
+    """
+    out = tmp_path / "proj"
+    out.mkdir(parents=True)
+    (out / "main.c").write_text("x", encoding="utf-8")
+    (out / "code").mkdir()
+    (out / "code" / "mod.c").write_text("x", encoding="utf-8")
+    errors = (
+        CompileError(path="../main.c", line=1, message="x"),
+        CompileError(path="../code/mod.c", line=1, message="x"),
+    )
+    assert collect_candidate_paths(out, errors) == ("main.c", "code/mod.c")
+
+
+def test_collect_gmake_dotdot_escape_still_rejected(tmp_path):
+    """工单 gmake-fix-path-resolution/01 红证：构建目录基准 + 剥前缀兜底仍防
+    穿越——工程内不存在的文件（../outside.c / 深层 ../../outside.c）与绝对
+    路径一律降级，剥前缀不得把工程外文件骗进候选。"""
+    out = tmp_path / "proj"
+    debug = out / "Debug"
+    debug.mkdir(parents=True)
+    (debug / "subdir_rules.mk").write_text("", encoding="utf-8")
+    (out / "main.c").write_text("x", encoding="utf-8")
+    (tmp_path / "outside.c").write_text("x", encoding="utf-8")
+    for path in ("../outside.c", "../../outside.c", "/etc/passwd.c"):
+        errors = (CompileError(path=path, line=1, message=f"{path}(1): error: x"),)
+        assert collect_candidate_paths(out, errors) == ()
+
+
 def test_collect_ccs_relative_keeps_working(tmp_path):
     """真机验收补：CCS 相对形态（.cproject 在工程根）不受基准逻辑影响。"""
     out = tmp_path / "proj"
