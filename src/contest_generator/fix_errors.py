@@ -14,10 +14,13 @@ UI 提供「回滚本次修复」按钮（restore_backup）。
 兜底，`..` 穿越 / 绝对路径 / 反斜杠起始形态天然越界被拒），扩展名白名单
 .c/.h/.s（大写 .S 一并接受）——越界即 FixError（登记 errors.py → 400 中文）。
 
-解析基准（2026-08-12 真机验收补，见 _report_benchmarks）：CCS 报错路径相对
-工程根（.cproject 在根），直接按 output_dir 解析；UV4 报错路径相对 .uvprojx
-所在子目录（`..\main.c(158)` 形态，uvprojx 在 user/ 而源文件在工程根）——
-先按工程根解析，解析不出再按工程文件基准目录解析，两种都过 containment。
+解析基准（2026-08-12 真机验收补 + 工单 gmake-fix-path-resolution/01，见
+_report_benchmarks）：CCS 报错路径相对工程根（.cproject 在根），直接按
+output_dir 解析；UV4 报错路径相对 .uvprojx 所在子目录（`..\main.c(158)`
+形态，uvprojx 在 user/ 而源文件在工程根）；gmake（tiarmclang）报错路径相对
+构建工作目录（Debug/ 含 subdir_rules.mk，`../main.c` 形态）——先按工程根
+解析，解析不出再按工程文件 / 构建工作目录基准解析，两基准全 miss 再走 `..`
+前缀剥除兜底（逐级剥后按工程根解析），全部过 containment。
 
 替换协议（决策记录 4 + 工单 fix-snippet-match/01 + fix-match-seam/01）：
 old_snippet 精确匹配（含缩进）优先；精确匹配失败时走行首前缀归一化兜底
@@ -221,8 +224,12 @@ def summarize_compile_output(
 def _report_benchmarks(output_dir: Path) -> tuple[Path, ...]:
     """报错路径的解析基准目录（2026-08-12 真机验收补）：UV4 报错路径相对
     .uvprojx 所在目录（stm32 母版产物 uvprojx 在 user/ 子目录、源文件相对它
-    以 `..\\` 引用），CCS 的 .cproject 一般在工程根。探测 output_dir 下所有
-    工程文件（.uvprojx / .cproject）的父目录，去重保序；找不到 → 空（只走
+    以 `..\\` 引用），CCS 的 .cproject 一般在工程根；gmake（tiarmclang）报错
+    路径相对构建工作目录（工单 gmake-fix-path-resolution/01：mspm0 产物
+    Debug/ 含 subdir_rules.mk，报错形态 `../main.c` 相对它，该目录加入基准后
+    `(Debug / "../main.c").resolve()` = 工程根/main.c 直接命中）。探测
+    output_dir 下所有工程文件（.uvprojx / .cproject）的父目录与
+    subdir_rules.mk 所在目录（构建工作目录），去重保序；找不到 → 空（只走
     工程根相对解析，兼容无工程文件的纯源文件输出目录）。
     """
     root = output_dir.resolve()
@@ -235,6 +242,13 @@ def _report_benchmarks(output_dir: Path) -> tuple[Path, ...]:
             parent = proj.resolve().parent
             if parent not in benchmarks:
                 benchmarks.append(parent)
+    # 构建工作目录基准（工单 gmake-fix-path-resolution/01 决策记录 2）：
+    # 每个 subdir_rules.mk（Debug/ 根构建规则 + 逐模块目录）的父目录都是
+    # gmake 报错路径的解析基准——工程根在基准内，containment 兜底不变
+    for rules in output_dir.rglob("subdir_rules.mk"):
+        parent = rules.resolve().parent
+        if parent not in benchmarks:
+            benchmarks.append(parent)
     return tuple(benchmarks)
 
 
@@ -246,10 +260,12 @@ def collect_candidate_paths(
     LLM 上下文，只是没有文件内容）。返回去重保序的相对路径（POSIX，相对
     output_dir）。
 
-    两种解析基准（2026-08-12 真机验收补）：先按工程根直接解析（CCS 相对
-    形态）；解析不出（UV4 `..\\` 相对形态，相对工程根会越过 root）再按
-    _report_benchmarks 的工程文件基准目录解析。安全由 containment 兜底：
-    两种解析都 resolve 后判定是否在 root 内——`..` 逃逸 / 绝对路径 /
+    解析基准（2026-08-12 真机验收补 + 工单 gmake-fix-path-resolution/01）：
+    先按工程根直接解析（CCS 相对形态）；解析不出（UV4 `..\\` 相对形态，相对
+    工程根会越过 root）再按 _report_benchmarks 的工程文件 / 构建工作目录基准
+    解析（gmake `../main.c` 形态经 Debug/ 基准命中工程根）；仍不中再走
+    `..` 前缀剥除兜底（逐级剥后按工程根解析）。安全由 containment 兜底：
+    三种解析都 resolve 后判定是否在 root 内——`..` 逃逸 / 绝对路径 /
     反斜杠起始形态天然越界被拒（不再依赖 is_unsafe_path 的字符串判定）。
     """
     root = output_dir.resolve()
@@ -279,13 +295,34 @@ def _resolve_in_root(
     path: str,
     benchmarks: Sequence[Path],
 ) -> Path | None:
-    """报错路径 → 输出目录内真实文件（两种基准都试）；解析不到返回 None。"""
+    """报错路径 → 输出目录内真实文件（工程根 + 工程文件 / 构建目录基准 + `..`
+    前缀剥除兜底都试）；解析不到返回 None。"""
     if not is_unsafe_path(path):
         target = (output_dir / path).resolve()
         if target.is_relative_to(root) and target.is_file():
             return target
     for bench in benchmarks:
         target = (bench / path).resolve()
+        if target.is_relative_to(root) and target.is_file():
+            return target
+    return _resolve_dotdot_stripped(root, path)
+
+
+def _resolve_dotdot_stripped(root: Path, path: str) -> Path | None:
+    """`..` 前缀剥除兜底（工单 gmake-fix-path-resolution/01 决策记录 2 双保险）：
+    两基准都 miss 后，报错路径带 `../`（或 `..\\`，先归一为 POSIX）前缀时逐级
+    剥前缀按工程根解析——每剥一级试 `(root / stripped).resolve()`，
+    containment（is_relative_to(root)）+ is_file 判定与两基准一致；剥到无前缀
+    仍不中 → None。覆盖更深层级 / 未知构建目录形态（基准探测不到时报错路径
+    仍带 `../` 前缀）。UV4 通路不受影响：`..\\main.c(N)` 形态既有基准已命中，
+    本兜底只在两基准全 miss 后才走。
+    """
+    norm = path.replace("\\", "/")
+    while norm.startswith("../"):
+        norm = norm[3:]
+        if not norm:
+            return None
+        target = (root / norm).resolve()
         if target.is_relative_to(root) and target.is_file():
             return target
     return None
