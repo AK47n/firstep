@@ -57,6 +57,4 @@
 
 ## Comments
 
-## Comments
-
 - 2026-08-14 已实施并推送：PR #68（https://github.com/AK47n/firstep/pull/68），分支 budget-wire-unification-01 两笔提交（refactor 20b7ff4 + docs 9d2fe70），未 force push，待合 main。
