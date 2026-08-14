@@ -9,8 +9,8 @@
 #define MOTOR_WHEEL_D 48
 
 // G3507      TB6612
-// PA0 <--> AIN1
-// PA1 <--> AIN2
+// PB9 <--> AIN1
+// PA18 <--> AIN2
 // PA12 <--> PWMA
 // GND <--> GND
 // 3V3 <--> VCC

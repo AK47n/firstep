@@ -1,6 +1,6 @@
 {
   "slug": "led_beep",
-  "description": "LED 指示 + 蜂鸣器开关：LED 低电平点亮（PA14），蜂鸣器为占位空实现（PA15 空闲未接）。",
+  "description": "LED 指示 + 蜂鸣器开关：LED 低电平点亮（PA15），蜂鸣器为占位空实现（未接）。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -10,7 +10,7 @@
       ],
       "verified": false,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置 GPIO 组 LED_BEEP（LED_BEEP_PORT/LED_BEEP_LED_PIN = PA14 输出）；蜂鸣器函数为空实现，需要时自行补 GPIO。",
+      "notes": "SysConfig 需配置 GPIO 组 LED_BEEP（LED_BEEP_PORT/LED_BEEP_LED_PIN = PA15 输出，原 LaunchPad 值 PA3 为晶振脚）；蜂鸣器函数为空实现，需要时自行补 GPIO。",
       "kit": "",
       "source_url": ""
     },
