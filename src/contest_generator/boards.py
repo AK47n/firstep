@@ -45,6 +45,9 @@ PIN_KINDS = ("io", "power", "gnd", "reset", "fixed")
 # 排针侧（板图坐标列）：left / right 对应双排排针
 PIN_SIDES = ("left", "right")
 
+# 板缘地标位置（区分板图上下）：top / bottom / left / right
+PIN_EDGES = ("top", "bottom", "left", "right")
+
 
 class BoardError(ValueError):
     """板定义文件解析或校验失败，message 中说明具体问题。"""
@@ -91,8 +94,25 @@ class FixedResource:
 
 
 @dataclass(frozen=True)
+class Landmark:
+    """板缘物理地标（区分板图上下）：Type-C 插口 / 4P 弯针排针等。
+
+    edge = 所在板缘（PIN_EDGES 之一）；kind = 地标形状（usb_typec /
+    header_4p——前端渲染器只认认识的 kind，未知静默跳过，后端不拦）。
+    """
+
+    edge: str
+    kind: str
+    label: str = ""
+    note: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"edge": self.edge, "kind": self.kind, "label": self.label, "note": self.note}
+
+
+@dataclass(frozen=True)
 class Board:
-    """一块开发板的定义：板图坐标 + 能力集 + 固定资源。
+    """一块开发板的定义：板图坐标 + 能力集 + 固定资源 + 板缘地标。
 
     pins = 排针位全量有序列表（含 power/gnd 重名位——GND 在双排上多处出现）；
     pin_index = 绑定相关引脚（io/fixed/reset）按名索引（这些名字在板上唯一，
@@ -105,6 +125,7 @@ class Board:
     pins: tuple[BoardPin, ...] = ()
     pin_index: dict[str, BoardPin] = field(default_factory=dict)
     fixed: tuple[FixedResource, ...] = ()
+    landmarks: tuple[Landmark, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -113,6 +134,7 @@ class Board:
             "platform": self.platform,
             "pins": [p.to_dict() for p in self.pins],
             "fixed": [f.to_dict() for f in self.fixed],
+            "landmarks": [lm.to_dict() for lm in self.landmarks],
         }
 
 
@@ -221,6 +243,13 @@ def _parse_board(data: dict[str, Any], path: Path) -> Board:
         fixed_names.add(resource.name)
         fixed.append(resource)
 
+    raw_landmarks = data.get("landmarks", [])
+    if not isinstance(raw_landmarks, list):
+        raise BoardError(f"{path} 的 landmarks 必须是数组")
+    landmarks: list[Landmark] = []
+    for item in raw_landmarks:
+        landmarks.append(_parse_landmark(item, path))
+
     return Board(
         board_id=board_id,
         name=name,
@@ -228,6 +257,7 @@ def _parse_board(data: dict[str, Any], path: Path) -> Board:
         pins=tuple(pins),
         pin_index=pin_index,
         fixed=tuple(fixed),
+        landmarks=tuple(landmarks),
     )
 
 
@@ -276,6 +306,22 @@ def _parse_capabilities(item: dict[str, Any], path: Path, name: str) -> tuple[st
             raise BoardError(f"{path} 引脚 {name} 的能力 token {token!r} 实例为空")
         tokens.append(token)
     return tuple(tokens)
+
+
+def _parse_landmark(item: Any, path: Path) -> Landmark:
+    if not isinstance(item, dict):
+        raise BoardError(f"{path} 的 landmarks 条目必须是对象")
+    edge = _require(item, "edge", str, path)
+    if edge not in PIN_EDGES:
+        raise BoardError(f"{path} 板缘地标的 edge {edge!r} 不在 {PIN_EDGES} 内")
+    kind = _require(item, "kind", str, path)
+    if not kind:
+        raise BoardError(f"{path} 板缘地标的 kind 不能为空")
+    label = item.get("label", "")
+    note = item.get("note", "")
+    if not isinstance(label, str) or not isinstance(note, str):
+        raise BoardError(f"{path} 板缘地标的 label/note 必须是字符串")
+    return Landmark(edge=edge, kind=kind, label=label, note=note)
 
 
 def _parse_fixed(item: Any, path: Path) -> FixedResource:

@@ -44,6 +44,10 @@
     {"name": "PB13", "kind": "io", "x": 1, "y": 18, "side": "right", "capabilities": ["gpio_out", "gpio_in"], "notes": ""},
     {"name": "PB12", "kind": "io", "x": 1, "y": 19, "side": "right", "capabilities": ["gpio_out", "gpio_in"], "notes": ""}
   ],
+  "landmarks": [
+    {"edge": "top", "kind": "usb_typec", "label": "Type-C", "note": "USB Type-C 插口（上缘，供电/串口/烧录）"},
+    {"edge": "bottom", "kind": "header_4p", "label": "4P 弯针", "note": "4P 弯针排针（下缘）"}
+  ],
   "fixed": [
     {"name": "板载 LED", "occupies": ["PC13"], "note": "排针可用，板载 LED 共用（低电平点亮）"},
     {"name": "USB", "occupies": ["PA11", "PA12"], "note": "板载 USB 插座（PA11=DM、PA12=DP），排针上已标固定"},
