@@ -793,10 +793,16 @@ def check_topic(
     # -warnings/01，与 web 修复中心同语义：编译报错/告警 → /api/fix-errors →
     # 重编译验证 ≤3 轮，停条件 0 错 0 警，第 3 轮后如实报告剩余错误/警告）
     build_fn = uv4_build if platform == "stm32" else gmake_build
-    # 首编超时沿用旧路径（compile_passed(None)=False → 进修复循环；循环内
-    # 重编译超时即停，工单 cli-fix-loop-parity/01 的停条件只在循环内）
-    passed, summary, raw_output, _timed_out = build_fn(out_dir)
-    if passed is None:
+    passed, summary, raw_output, timed_out = build_fn(out_dir)
+    if timed_out:
+        # 首编超时 = 终端状态（工单 cli-init-compile-timeout/01，对齐前端
+        # startFixCenter 初编译 timed_out 即停）：超时半截输出不是编译报错，
+        # 喂第 1 轮 LLM = 白烧一次分钟级调用 + 误报修复结果——不进修复循环，
+        # 停文案与循环内超时停（cli-fix-loop-parity/01）同款收尾
+        print(f"  [真机] ✗ {summary}")
+        print("  初次编译超时，已停止——可修改工程后重新运行本脚本")
+        ok = False
+    elif passed is None:
         print(f"  [真机] {summary}")
     elif passed:
         print(f"  [真机] ✓ {summary}")
