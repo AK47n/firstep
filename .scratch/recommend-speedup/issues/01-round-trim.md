@@ -6,7 +6,7 @@
 - **C 收敛提前停（修订提示词）**：轮间修订从"自检修订、输出完整新一层"改为核验式，让"两轮一致即停"真正生效，不再拖到 4 轮封顶。
 - **D 请求体预算保证（bug 修复）**：`REFERENCE_FULLTEXT_CAP = 60000` 字符 × UTF-8 ≈180KB 单段就能撑爆 `MAX_REQUEST_BYTES = 128KB`——2026-08-13 真机实测 2021F 推荐 select 调用 192486 字节被预检拦死（模型点名大参考文件时必现，非偶发）。全文截断上限收到预算保证值（≤35000 字符）+ 澄清历史段补截断。
 
-**Status:** A/B/C resolved（PR #62，验收全勾，真机数据入 Comments）；D 请求体预算保证未实施（2026-08-13 T3 会话立单，无代码合入——待实施）
+**Status:** A/B/C resolved（PR #62，验收全勾，真机数据入 Comments）；D 请求体预算保证 resolved（2026-08-14，验收全勾，真机数据入 Comments）
 
 **Blocked by:** 无。与在跑的 gen-check-fix-loop/01 重跑零文件重叠（对方只动 `.scratch/real-run/generate_check.py` + `tests/test_generate_check_contract.py`），可并行独立 worktree。
 
@@ -67,7 +67,7 @@
 - [x] 真机（真实 DeepSeek）：2026C / 2021F 各跑一次，记录对比——问答轮数（历史 4 轮 → 目标 ≤2）、收敛轮数（历史 4 轮 → 目标 ≤3）、UV4 0 错（质量不降硬标准）；数字写进本文件 Comments
 - [x] 首跑无历史：clarify 仍先行（回归不变，fake 测试已钉）
 - [x] `git status` 只出现预期文件（llm.py + selection.py + test_llm.py + test_selection.py + test_webapp.py 契约同步（边界外，实施注已记录）+ 本工单文件）
-- [ ] D 预算保证（cap 35000 + 澄清历史截断 + 结构测试）——未实施，无代码合入
+- [x] D 预算保证（cap 35000 + 澄清历史两级截断 + 结构测试 + 2021F 真机跑通）——2026-08-14 实施，验收数据见 Comments
 
 ## Comments
 
@@ -85,3 +85,20 @@
 - **C 收敛提前停**：初版核验式 2026C 仍 4 轮封顶（模型逐轮改写 24 条需求层）——收紧"无证据条目逐字照抄 + 句子编号照抄不改 + 最小改动"后 2026C **4→2 轮**（"两轮一致即停"真正生效）；2021F 样本波动（22 条需求层逐轮改写、仍到封顶，基线 3 轮）。与 T3 回归观察（旧代码 2026C 2 轮收敛）一致——收敛轮数有模型波动，C 的目标是让 2-3 轮成为常态。质量硬标准全部保持：UV4 0 错 + 产物门禁全过 + 模块集与基线一致（2026C 7 模块 / 2021F 4 模块同集合）。
 - **2021F 瞬态失败样本（real-run3.log）**：第 4 轮连续 3 次"模型返回的不是 JSON"→ error 终态——DeepSeek 偶发畸形输出（工单 recommend-call-retry/01 已知形态，解析类 3 次快重试后大声失败），与本次改动无关；重跑即过。
 - **D 未实施**：预算保证（cap 60000→35000 + 澄清历史截断 + 结构测试）待实施——2021F 真机 192KB 预检拦死是真 bug（2026-08-13 T3 实测），实施时按上节实施 1/3 走。
+
+### 真机验收（D 预算保证，真实 DeepSeek，2026-08-14；服务 real_run_server_d.py 挂体积日志 + 驱动 real_recommend_check_d.py 覆写 BASE=8000，产物/日志落 gitignore 的 .scratch/real-run/）
+
+**实施**：`REFERENCE_FULLTEXT_CAP` 60000 → 35000（注释同步预算推导：35000×3B≈105KB + 基础段 ~25KB ≤ 128KB）；澄清历史段补两级截断——逐条 `_truncate_content` + 段级合计 `CLARIFICATION_HISTORY_CAP=2500`（`_clarification_history_segment` 单源组装，clarify / select 两处 Q/A 循环共用；空历史不出段，旧形态逐字节不变）。
+
+**结构测试（唯一硬保证，tests/test_llm.py +2）**：
+- `test_selection_prompt_worst_case_fits_request_budget`：上限全文 + 20 条长问答（截断后形态）+ 词表 + 14 摘要 → **126470 字节 < 131072（余量 4602）**。
+- `test_clarify_prompt_worst_case_fits_request_budget`：20 条长问答 + 上限题面 → 19746 字节。
+- 红证：cap 拉回 60000 跑红（**201470 字节 > 131072**）→ 恢复 35000 跑绿。
+- 既有测试同步：`test_select_prompt_embeds_fulltext_with_every_file_head` 的 3×15K 字符全文改 3×11K（总量保持新 cap 内，工单 03 回归意图不变——"总上限内不截断"前提随 cap 收紧）。
+- pytest 1348 绿（1346 + 2 新）+ mypy src 37 文件干净。
+
+**真机 2021F（stm32，真实 DeepSeek）**：
+- select 调用字节数：**基线 192486（被 128KB 预检拦死）→ 修复后 42106 / 45562 / 45577 / 45577**（4 轮 → 终态 done，轮 1-2 各 1 次解析重试同尺寸），零"请求体过大"错误。
+- 零 clarify 调用（B 门 + 澄清映射全量预置）；4 轮终态 done（基线 3-4 轮波动内，无瞬时失败）。
+- UV4 exit=0 **0 错误**、产物门禁全过、模块集 zigbee_uart_key / zigbee_uart / pid / motor / digit_uart / config。
+- 端口：8001 被并行会话服务占用（PID 35148，不可杀），本工单服务起 8000——真机服务/驱动均为 gitignore 落盘，git 状态只出现 llm.py + test_llm.py + 本工单文件。
