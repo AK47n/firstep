@@ -257,18 +257,27 @@ ARCHIVE_JUDGMENT_SYSTEM_PROMPT = (
 # 截断下沉 read_fulltext 逐文件 + 注入处走更宽的 REFERENCE_FULLTEXT_CAP）。
 EMBEDDED_CONTENT_CAP = 4000
 
-# 参考全文注入总截断上限（字符，工单 03）：旧实现与所有嵌内容共用
-# EMBEDDED_CONTENT_CAP=4000，files 首位的大文件（素材清单.txt 可 10 万+
-# 字符）吃光配额，尾部文件一个字符都进不了模型。read_fulltext 已逐文件
-# 截断（每文件 ≤ REFERENCE_FILE_CAP=20000，reference_library 常量），此处
-# 总截断放宽到本上限、只兜底超大条目（数百文件条目）的请求体体积。取值按
-# 真库条目实测倒推（json.dumps 默认 ensure_ascii：中文 6 字节/字符，塔克
-# R3 拆条条目全文头实测 ~1.44 字节/字符）：真实 select_modules 请求体 =
-# 提示词开销（赛题 ≤4000 字符 + 模块摘要 + 契约文本，约 2.4 万字节）+
-# 本上限 × 1.44 ≈ 11.4 万字节，128KB 网关预算下留 1.7 万字节余量
-# （题面 / 澄清历史 / 硬件词表波动）；60000 仍覆盖塔克R3 条目前 18/34 个
-# 文件开头（旧 4000 只够 40 行清单）。超出的截头带标注，不静默丢内容。
-REFERENCE_FULLTEXT_CAP = 60000
+# 参考全文注入总截断上限（字符，工单 03 引入 / recommend-speedup/01 D
+# 收紧）：旧实现与所有嵌内容共用 EMBEDDED_CONTENT_CAP=4000，files 首位的大
+# 文件（素材清单.txt 可 10 万+ 字符）吃光配额，尾部文件一个字符都进不了
+# 模型。read_fulltext 已逐文件截断（每文件 ≤ REFERENCE_FILE_CAP=20000，
+# reference_library 常量），此处总截断只兜底超大条目（数百文件条目）的
+# 请求体体积。取值按请求体预算反推——2026-08-13 真机 2021F select 调用
+# 192486 字节 > MAX_REQUEST_BYTES 被预检拦死（3 次重试同尺寸 = 确定性，
+# 根因：旧值 60000 字符 × UTF-8 最坏 3 字节 ≈ 180KB，单段上限已超总量
+# 上限，预算数学自相矛盾）：35000 字符 × 3 字节 ≈ 105KB + 基础段（题面 +
+# 摘要 + 词表 + 澄清历史截断后 + 契约文本，约 25KB）≤ 128KB 恒成立、留
+# 余量。最坏情况结构测试钉死（tests/test_llm.py，唯一硬保证），cap 改大
+# 即红。超出的截头带标注，不静默丢内容。
+REFERENCE_FULLTEXT_CAP = 35000
+
+# 澄清历史段合计截断上限（字符，工单 recommend-speedup/01 D）：历史随补问
+# 轮数无界增长，是请求体预算第二大漏点（2026-08-13 实测 20 条 ~9KB 尚可
+# 控，防未来涨）。逐条 _truncate_content 之后整段再走本上限截头带标注——
+# 历史只作"已答不重问"的判据，最坏形态（20 条长问答）仍 ≤ 本上限 × 3 字节
+# ≈ 7.5KB。取值与 REFERENCE_FULLTEXT_CAP 共同满足总量预算，最坏情况结构
+# 测试钉死（tests/test_llm.py），改大即红。
+CLARIFICATION_HISTORY_CAP = 2500
 
 # 两阶段输出的补问上限：模型一次输出大量 JSON 条目时偶发丢条目（判例 08：
 # 115 个文件一次返回漏了 1 个），严格解析失败后只对缺失路径补问，最多补问
@@ -313,6 +322,30 @@ def _truncate_content(content: str) -> str:
     只绑定 llm 的嵌内容预算常量；截断只影响发送素材，不改数据模型。
     """
     return truncate_content(content, EMBEDDED_CONTENT_CAP)
+
+
+def _clarification_history_segment(
+    clarifications: Sequence[tuple[str, str]],
+) -> str:
+    """澄清问答历史段（Q/A 逐条）：逐条截断 + 段级合计预算兜底（工单
+    recommend-speedup/01 D）。
+
+    两条嵌入路径（clarify / select_modules 的历史段）共用同一组装——历史随
+    补问轮数无界增长，逐条 _truncate_content（带标注）挡单条超长，整段
+    CLARIFICATION_HISTORY_CAP 挡条数增长；截断只影响发送素材，不改数据模型。
+    """
+    lines = [
+        line
+        for question, answer in clarifications
+        for line in (
+            f"Q: {_truncate_content(question)}",
+            f"A: {_truncate_content(answer)}",
+        )
+    ]
+    segment = "\n".join(lines)
+    if len(segment) > CLARIFICATION_HISTORY_CAP:
+        segment = truncate_content(segment, CLARIFICATION_HISTORY_CAP)
+    return segment
 
 
 def _extract_good_summaries(
@@ -1651,8 +1684,8 @@ def _clarify_user_prompt(
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     lines = ["赛题：", _truncate_content(problem_text)]
-    for question, answer in clarifications:
-        lines.extend((f"Q: {question}", f"A: {answer}"))
+    if clarifications:
+        lines.append(_clarification_history_segment(clarifications))
     lines.append(
         "只返回 json 格式的 JSON 对象："
         '{"questions": ["仍存的疑问，没有疑问时为空数组"]}'
@@ -1719,9 +1752,10 @@ def _selection_user_prompt(
         # 澄清问答历史（工单 clarify-history-in-convergence）：题面 / 参考段之后
         # 的独立段——Q/A 逐条、不带编号、不并入题面（题面逐句编号跨轮稳定，
         # 收敛判定的对照句编号依赖它）。空历史不出段（缺省 = 旧行为逐字节）。
+        # 历史段截断（工单 recommend-speedup/01 D）：随补问轮数无界增长，逐条
+        # + 合计两级截断（_clarification_history_segment，带标注）。
         lines = ["", "用户已澄清的问题（题面证据不足处用户已补充的回答，不要重复问）："]
-        for question, answer in clarifications:
-            lines.extend((f"Q: {question}", f"A: {answer}"))
+        lines.append(_clarification_history_segment(clarifications))
         prompt += "\n".join(lines)
     if hardware_words:
         prompt += "\n\n" + format_wordlist_prompt(hardware_words)
