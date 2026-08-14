@@ -102,3 +102,14 @@
 - 零 clarify 调用（B 门 + 澄清映射全量预置）；4 轮终态 done（基线 3-4 轮波动内，无瞬时失败）。
 - UV4 exit=0 **0 错误**、产物门禁全过、模块集 zigbee_uart_key / zigbee_uart / pid / motor / digit_uart / config。
 - 端口：8001 被并行会话服务占用（PID 35148，不可杀），本工单服务起 8000——真机服务/驱动均为 gitignore 落盘，git 状态只出现 llm.py + test_llm.py + 本工单文件。
+
+### 20 条全量澄清映射验证（2026-08-14，2026C stm32 真机——gen-check-fix-loop/01 留档的「待 D 修复后可全量启用」项闭环）
+
+gen-check-fix-loop/01 留档的 20 条合并映射（clarify_default.json = 12 历史 + 8 新增）全量预置跑 2026C（真实 DeepSeek，服务 8000）：
+
+- **请求体**：推荐段 3 轮全程 200，无 413/预检拦死——D 预算保证在 20 条历史下成立。
+- **补问 0 轮**（20 条预置历史全覆盖）、收敛 **3 轮 → done**（历史波动内）。
+- **选中 7 模块** = 8 条映射历史的 5 模块 + oled + led_beep（显示/声光，更贴合门锁题）。
+- **UV4 0 Error(s) exit=0**、产物门禁全过（49 文件）。
+- 备份 `clarify_2026C_8条_backup.json` 留 `.scratch/real-run/`，缓存已重写为 20 条映射新选择；日志 `check_2026C_20条.log`（推荐段真跑）、`check_2026C_20条_补跑3.log`（generate/门禁）、`uv4_2026C_20条.log`。
+- 途中发现 generate 门禁 3 连 400 点名 defined（`#if defined` 预处理行误判）→ 立单 `.scratch/generate-gate/issues/02-defined-misdetect.md`；第 4 骨架无 defined 直跑 /api/generate → 200 → UV4 0 错收尾（旁路脚本 `_capture_skel.py` / `_finish_2026C.py` / `_uv4_only.py` + `evidence_2026C_skel_main.c`，`src/tests/generate_check.py` 零改动）。
