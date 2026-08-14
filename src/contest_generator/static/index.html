@@ -1548,58 +1548,70 @@ function renderPinLegend(roles) {
 }
 
 // ---- 板图 SVG（boards JSON 坐标内联渲染：双排焊盘 + 丝印 + 功能区） ----
-// 180° 时丝印正对用户：SVG 整体 CSS 转 180°，每个文本绕自身位置再反补偿
-// 180°（外转 × 内补偿 = 局部恒等，文字立正、位置随板走）；90°/270° 不处理（用户不要求）
-function pinTextFlip(x, y) {
-  const rot = ((pinRotation % 360) + 360) % 360;
-  return rot === 180 ? ` transform="rotate(180 ${x} ${y})"` : "";
-}
-
+// 旋转 180° = 坐标对换重渲染（丝印天然正对、位置随板走、标签仍在焊孔两侧）；
+// 90°/270° = CSS 旋转缩放（丝印侧置，用户不要求）。板名标题在 SVG 外永远正对。
 function renderPinBoard() {
   const box = $("pin-board-svg");
   const roles = pinRoles();
-  if (!pinBoard) { box.innerHTML = ""; return; }
+  if (!pinBoard) { box.innerHTML = ""; $("pin-board-caption").textContent = ""; return; }
   const idx = pinIndex();
   const rowH = 22, topPad = 46;
   const rows = Math.max(...pinBoard.pins.map((p) => p.y)) + 1;
-  // 下缘地标（Type-C）需要额外底部空间；板缘地标区分板图上下（boards JSON 数据驱动）
+  const rot = ((pinRotation % 360) + 360) % 360;
+  const rotated180 = rot === 180;
+  const hasTop = (pinBoard.landmarks || []).some((l) => l.edge === "top");
   const hasBottom = (pinBoard.landmarks || []).some((l) => l.edge === "bottom");
-  const W = 460, H = topPad + rows * rowH + (hasBottom ? 40 : 14);
+  // 底部额外空间：0° 时下缘地标（Type-C 标签）；180° 时上缘地标转下来（4P 排针伸出板外 34px）
+  const extraBottom = rotated180 ? (hasTop ? 48 : 14) : (hasBottom ? 40 : 14);
+  const W = 460, H = topPad + rows * rowH + extraBottom;
   const pcbBottom = topPad - 10 + rows * rowH + 18;
   const parts = [];
-  // 视角旋转（按钮每次 +90°）：竖排（0/180）原尺寸，横排（90/270）按 W/H 缩放
-  // 塞进 440 宽栏（transform 不动布局盒，旋转后内容居中、盒子高度按缩放后算）
-  const rot = ((pinRotation % 360) + 360) % 360;
-  const upright = rot % 180 === 0;
-  const scale = upright ? 1 : W / H;
-  box.style.height = Math.round(upright ? (440 * H) / W : 440 * (W / H)) + "px";
-  parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:440px;transform:rotate(${rot}deg) scale(${scale});transform-origin:center" role="img" aria-label="${esc(pinBoard.name)}板图">`);
+  // 90/270 走 CSS 旋转缩放塞进 440 宽栏（transform 不动布局盒，盒子高度按缩放后算）；
+  // 0/180 无 transform（180 由坐标对换承担）
+  const cssRotate = rot === 90 || rot === 270;
+  const scale = cssRotate ? W / H : 1;
+  box.style.height = Math.round(cssRotate ? 440 * (W / H) : (440 * H) / W) + "px";
+  parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:440px;${cssRotate ? `transform:rotate(${rot}deg) scale(${scale});transform-origin:center` : ""}" role="img" aria-label="${esc(pinBoard.name)}板图">`);
   // PCB 本体 + 芯片丝印（pcb_color = 板 JSON 底色，俯视观感；缺省用默认令牌）
   // 顶部留 30px 给向上伸出的排针、底部额外 +18：最下排焊孔与板缘留出间距
   parts.push(`<rect x="100" y="${topPad - 10}" width="260" height="${rows * rowH + 18}" rx="8" fill="${esc(pinBoard.pcb_color || "var(--pin-pcb)")}" stroke="var(--border)" stroke-width="1.5"/>`);
   const chip = chosenPlatform === "stm32" ? "STM32F103C8T6" : "MSPM0G3507";
   parts.push(`<rect x="186" y="${H / 2 - 34}" width="88" height="68" rx="4" fill="var(--panel-2)" stroke="var(--border-strong)" stroke-width="1"/>`);
-  parts.push(`<text x="230" y="${H / 2 - 10}"${pinTextFlip(230, H / 2 - 10)} text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
-  parts.push(`<text x="230" y="${H / 2 + 14}"${pinTextFlip(230, H / 2 + 14)} text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
+  parts.push(`<text x="230" y="${H / 2 - 10}" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
+  parts.push(`<text x="230" y="${H / 2 + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
   // 板缘地标（俯视画法，渲染器只认认识的 kind，未知静默跳过）：
-  // header_4p 上缘 = 黑色胶壳贴板上缘 + 4 根金色长排针（30px）向上伸出板外；
-  // usb_typec 下缘 = 银白宽扁壳面向板内延伸，开口朝屏幕下方（壳底缘暗色横带）
+  // header_4p = 黑色胶壳贴板缘 + 4 根金色长排针（30px）向板外伸出；
+  // usb_typec = 银白宽扁壳面贴板面向板内延伸，开口朝屏幕外
   for (const lm of pinBoard.landmarks || []) {
-    if (lm.kind === "header_4p" && lm.edge === "top") {
+    // 180° 坐标对换后：上缘地标画到下缘、下缘地标画到上缘（镜像几何）
+    const edge = rotated180
+      ? (lm.edge === "top" ? "bottom" : lm.edge === "bottom" ? "top" : lm.edge)
+      : lm.edge;
+    if (lm.kind === "header_4p" && edge === "top") {
       parts.push(`<rect x="192" y="${topPad - 14}" width="76" height="6" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
       for (let i = 0; i < 4; i++) {
         parts.push(`<rect x="${198 + i * 16}" y="2" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
       }
-      parts.push(`<text x="230" y="${topPad - 1}"${pinTextFlip(230, topPad - 1)} text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
-    } else if (lm.kind === "usb_typec" && lm.edge === "bottom") {
+      parts.push(`<text x="230" y="${topPad - 1}" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
+    } else if (lm.kind === "header_4p" && edge === "bottom") {
+      parts.push(`<rect x="192" y="${pcbBottom - 4}" width="76" height="6" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
+      for (let i = 0; i < 4; i++) {
+        parts.push(`<rect x="${198 + i * 16}" y="${pcbBottom - 2}" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
+      }
+      parts.push(`<text x="230" y="${pcbBottom - 12}" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
+    } else if (lm.kind === "usb_typec" && edge === "bottom") {
       parts.push(`<rect x="205" y="${pcbBottom - 30}" width="50" height="26" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
       parts.push(`<rect x="213" y="${pcbBottom - 7}" width="34" height="3" rx="1" fill="#0d1117"/>`);
-      parts.push(`<text x="230" y="${pcbBottom + 8}"${pinTextFlip(230, pcbBottom + 8)} text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
+      parts.push(`<text x="230" y="${pcbBottom + 8}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
+    } else if (lm.kind === "usb_typec" && edge === "top") {
+      parts.push(`<rect x="205" y="${topPad - 6}" width="50" height="26" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
+      parts.push(`<rect x="213" y="${topPad - 6}" width="34" height="3" rx="1" fill="#0d1117"/>`);
+      parts.push(`<text x="230" y="${topPad - 18}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
     }
   }
   // 板名标题在 SVG 之外（HTML div）：旋转视角时永远正对用户、永远在最下面
   $("pin-board-caption").textContent = pinBoard.name;
-  for (const pin of pinBoard.pins) parts.push(svgPin(pin, roles, idx));
+  for (const pin of pinBoard.pins) parts.push(svgPin(pin, roles, idx, rotated180));
   parts.push(`</svg>`);
   box.innerHTML = parts.join("");
   box.querySelectorAll("circle[data-pin]").forEach((c) => {
@@ -1607,10 +1619,14 @@ function renderPinBoard() {
   });
 }
 
-function svgPin(pin, roles, idx) {
+function svgPin(pin, roles, idx, rotated180) {
   const rowH = 22, topPad = 46;
-  const cx = pin.x === 0 ? 150 : 310;
-  const cy = topPad + pin.y * rowH + rowH / 2;
+  // 180° 坐标对换：列互换、行倒序（两板均 20 行，y 0..19）——丝印位置随板走、
+  // 标签仍在焊孔外侧（左列→右侧样式、右列→左侧样式），文字天然正对无需补偿
+  const gx = rotated180 ? 1 - pin.x : pin.x;
+  const gy = rotated180 ? 19 - pin.y : pin.y;
+  const cx = gx === 0 ? 150 : 310;
+  const cy = topPad + gy * rowH + rowH / 2;
   const bound = roles.filter((r) => pinBindings[r.key] === pin.name);
   const io = pin.kind === "io";
   let fill = "var(--pin-pad)", stroke = "var(--border-strong)", labelFill = "var(--muted)";
@@ -1642,12 +1658,12 @@ function svgPin(pin, roles, idx) {
   if (bound.length) ttl.push("已绑：" + bound.map((r) => r.decl.label || r.decl.id).join("、"));
   if (pin.notes) ttl.push(pin.notes);
   if (io) ttl.push("能力：" + (pin.capabilities || []).join("、"));
-  const labelX = pin.x === 0 ? cx - 14 : cx + 14;
-  const anchor = pin.x === 0 ? "end" : "start";
+  const labelX = gx === 0 ? cx - 14 : cx + 14;
+  const anchor = gx === 0 ? "end" : "start";
   const clickable = io ? ` data-pin="${esc(pin.name)}" style="cursor:pointer"` : ' style="pointer-events:none"';
   return `<circle cx="${cx}" cy="${cy}" r="7" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${cls}${clickable}>` +
     `<title>${esc(ttl.join(" · "))}</title></circle>${extra}` +
-    `<text x="${labelX}" y="${cy + 4}"${pinTextFlip(labelX, cy + 4)} text-anchor="${anchor}" font-family="var(--mono)" font-size="11" fill="${labelFill}">${esc(pin.name)}</text>`;
+    `<text x="${labelX}" y="${cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="11" fill="${labelFill}">${esc(pin.name)}</text>`;
 }
 
 // ---- 角色清单（标签 / 默认值 / 三态绑定；点条目 → 板图高亮可接引脚） ----
