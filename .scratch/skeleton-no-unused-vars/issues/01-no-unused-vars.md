@@ -2,7 +2,7 @@
 
 **What to build:** main.c 骨架生成提示词补「不声明未使用变量」约束（双端）——真机 2026C stm32 曾出 UV4 4 Warning（骨架 s_lock_state / s_welcome_state / s_zone_state / s_expect_id 第 29~32 行占位声明未用，AI 内联状态区残留），违背用户验收标准 0 错 0 警；现行提示词无此约束，靠后续重跑侥幸消除，无结构保证。
 
-**Status:** 待实施（实施提示词见文末）
+**Status:** resolved（2026-08-14 验收闭环，证据见 Comments）
 
 ## 现状证据（2026-08-14 读码核实）
 
@@ -26,10 +26,10 @@
 
 ## 验收标准
 
-- [ ] 红证：契约测试在现行提示词下跑红（规则词不在双端）
-- [ ] 修复后：契约测试绿 + 既有测试全绿 + `mypy src` 干净
-- [ ] 真机：服务 8000 + `python .scratch/real-run/generate_check.py --reuse-recommend 2026C` → UV4 0 Error(s) 0 Warning(s)（警告数从构建日志确认；旧输出目录 out_2026C_stm32 若存在先删，generate_check 不清理旧 out）
-- [ ] `git status` 只出现预期文件
+- [x] 红证：契约测试在现行提示词下跑红（规则词不在双端）
+- [x] 修复后：契约测试绿 + 既有测试全绿 + `mypy src` 干净
+- [x] 真机：服务 8000 + `python .scratch/real-run/generate_check.py --reuse-recommend 2026C` → UV4 0 Error(s) 0 Warning(s)（警告数从构建日志确认；旧输出目录 out_2026C_stm32 若存在先删，generate_check 不清理旧 out）
+- [x] `git status` 只出现预期文件
 
 ## 实施提示词（新会话粘贴）
 
@@ -40,3 +40,13 @@
 > 真机验收：服务 8000（启动命令见记忆 server-start-playbook）→ `python .scratch/real-run/generate_check.py --reuse-recommend 2026C`（先删旧 out_2026C_stm32）→ UV4 构建日志 0 Error(s) 0 Warning(s) 才算闭环；证据写 Comments，Status 改 resolved，docs 提交推送。
 
 ## Comments
+
+### 2026-08-14 验收闭环（Status resolved）
+
+- **红证先行**：先补契约测试 `test_skeleton_prompt_carries_no_unused_var_rule`（规则词「未使用的变量」「占位声明」双端断言，`_skeleton_user_prompt` 补入 import 面）——现行提示词下跑红：`AssertionError: assert '未使用的变量' in SKELETON_SYSTEM_PROMPT`，规则词双端均不在，红证成立。
+- **实施**（src/contest_generator/llm.py）：`SKELETON_NO_UNUSED_RULE` 常量唯一出处（照 VALIDATION_UNIVERSALITY_RULE 先例，注释带真机 4 警证据 + ticket 06 双端漂移教训）——「不声明未使用的变量：main.c 里每个变量声明都必须被后续代码读取或赋值；预留状态一律写成注释（TODO）说明，不写占位声明（未使用的声明会产生编译警告，验收要求 0 警告）。」；拼入 `SKELETON_SYSTEM_PROMPT`（输出格式句之前）与 `_skeleton_user_prompt` 尾句（「保证可编译。」之后，同一 API 调用双端在场）。测试升级为常量成员双端断言（照 test_validation_prompts_share_universality_rule 先例）+ 常量入 import 面。
+- **绿**：test_llm.py 170 passed；全量 1362 passed（+1）；`mypy src` 37 文件干净。
+- **真机**：服务 8000 起新代码（curl 200）→ 删旧 out_2026C_stm32 → `python .scratch/real-run/generate_check.py --reuse-recommend 2026C` 通过（[产物] 门禁全过；[真机] UV4 exit=0 Build Time 00:00:01（0 错误））。UV4 构建日志原文结语：`".\Objects\Project.axf" - 0 Error(s), 0 Warning(s).`——0 警实锤（独立复跑 uv4_build 采集原文确认，非仅汇总行）。
+- **产物形态**：main.c 160 行，状态变量区（52~54 行 id_valid / lock_state / prev_zone）全部被主循环读取赋值，无占位声明残留；旧 4 警位置（原第 29~32 行 s_lock_state / s_welcome_state / s_zone_state / s_expect_id）不复现。
+- **边界**：git status 只出现 src/contest_generator/llm.py + tests/test_llm.py；generator.py / webapp.py / index.html / fix_errors.py / generate_check.py 零改动。
+- **留档**：真机运行 stdout 只留 tail -40（管线摘要 ✓ 通过 + UV4 0 错误），warning 证据以独立 uv4_build 原文复跑采集（同目录同工程全量重建）。
