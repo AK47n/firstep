@@ -1,6 +1,7 @@
 #include <stddef.h>  // NULL（C 库头，headfile.h 不含；UV4 必 8 错见工单 ball-detect-null-fix/01）
 #include "headfile.h"
 #include "ball_detect_stm32.h"
+#include "pin_config.h"
 
 // ==================== 环形接收缓冲区 ====================
 #define BALL_RX_BUF_SIZE 512
@@ -63,7 +64,7 @@ static char* get_field(const char *line, int n, char *buf, int buf_size)
 
 void ball_detect_init(void)
 {
-    uart_init(UART_1, 115200, 0);
+    uart_init(BALL_DETECT_UART, 115200, 0);  // BALL_DETECT_UART = UART_1（pin_config.h）
 }
 
 // 清空接收缓冲区（状态切换时调用，丢弃旧帧）
@@ -81,14 +82,14 @@ void ball_detect_flush(void)
 
 void ball_detect_rx_handler(void)
 {
-    while (USART1->SR & (0x20 | 0x08))
+    while (BALL_DETECT_UART_INST->SR & (0x20 | 0x08))
     {
-        if (USART1->SR & 0x08)
+        if (BALL_DETECT_UART_INST->SR & 0x08)
             ball_rx_error++;
 
-        if (USART1->SR & 0x20)
+        if (BALL_DETECT_UART_INST->SR & 0x20)
         {
-            uint8_t data = USART1->DR;
+            uint8_t data = BALL_DETECT_UART_INST->DR;
             ball_rx_byte_count++;
 
             uint16_t next = (rx_head + 1) % BALL_RX_BUF_SIZE;
@@ -102,7 +103,7 @@ void ball_detect_rx_handler(void)
         }
         else
         {
-            uint8_t dummy = USART1->DR;
+            uint8_t dummy = BALL_DETECT_UART_INST->DR;
             (void)dummy;
         }
     }

@@ -15,7 +15,21 @@
       "hardware_bound": false,
       "notes": "SysConfig 需配置 I2C1（命名 OLED，7 位地址 0x3C，TX 方向 2 字节传输）；依赖 delay。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "OLED_SCL",
+          "type": "i2c_scl",
+          "default": "PB2",
+          "required": true
+        },
+        {
+          "id": "OLED_SDA",
+          "type": "i2c_sda",
+          "default": "PB3",
+          "required": true
+        }
+      ]
     },
     "stm32": {
       "files": [],

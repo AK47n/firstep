@@ -12,7 +12,39 @@
       "hardware_bound": false,
       "notes": "SysConfig 需配置 GPIO 组 KEY（按键输入上拉）；编码器中断依赖 GPIOA/GPIOB 组中断命名 DC_MOTOR_AA_IIDX/DC_MOTOR_BA_IIDX（对应 DIO16/DIO?，见 .syscfg 组配置）。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "KEY_START",
+          "type": "gpio_in",
+          "default": "PA2",
+          "required": true
+        },
+        {
+          "id": "DC_MOTOR_AA",
+          "type": "enc",
+          "default": "PA16",
+          "required": true
+        },
+        {
+          "id": "DC_MOTOR_AB",
+          "type": "enc",
+          "default": "PA17",
+          "required": true
+        },
+        {
+          "id": "DC_MOTOR_BA",
+          "type": "enc",
+          "default": "PB19",
+          "required": true
+        },
+        {
+          "id": "DC_MOTOR_BB",
+          "type": "enc",
+          "default": "PB20",
+          "required": true
+        }
+      ]
     }
   }
 }

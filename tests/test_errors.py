@@ -24,6 +24,7 @@ from contest_generator.entry_store import (
 from contest_generator.errors import _ERROR_TABLE, error_entry
 from contest_generator.generator import DuplicateFilePathError
 from contest_generator.llm import LLMError
+from contest_generator.boards import BoardError
 from contest_generator.manifest import ManifestError
 from contest_generator.patchers import UnknownPlatformError
 from contest_generator.report import ReportError
@@ -43,6 +44,10 @@ _UNREGISTERED_WHITELIST: tuple[type[Exception], ...] = (
     # 模块清单内部校验（manifest.py）：所有出厂路径都被 library.py 捕获
     # 重包装为 LibraryError（已登记）；能漏到路由层 = 调用方 bug → 500 正确
     ManifestError,
+    # 板定义文件内部校验（boards.py，工单 pin-board-config/01）：板 JSON 是
+    # 包内静态数据（随包分发），损坏 = 安装/发布坏 → 500 大声失败正确；
+    # 与 ManifestError 同政策
+    BoardError,
     # 提炼报告 / 判定条目内部校验（report.py）：llm.py / master.py 捕获
     # 重包装为 LLMError / MasterError（已登记）；同上
     ReportError,

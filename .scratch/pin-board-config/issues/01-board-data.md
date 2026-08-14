@@ -7,7 +7,7 @@
 
 **Blocked by:** mspm0-master-dimx/01（声明默认值取地猛星化后 syscfg 值）
 
-**Status:** 待实施
+**Status:** 已实施待合 main（分支 pin-board-config-01 已推远端）
 
 ## 需求
 
@@ -76,3 +76,4 @@
 ## Comments
 
 - 2026-08-14 立项（板级引脚配置 grilling 定稿；原定 3 工单拆 4 工单——数据层与机制层分家，每张可独立验收）。
+- 2026-08-14 实施完成（分支 pin-board-config-01）：A 板定义双 JSON + boards.py + /api/boards（stm32 能力集逐条照 ml_uart/ml_pwm/ml_exti/ml_adc/ml_i2c/ml_oled 映射表编码，与 .scratch/pin-board-config/stm32f103c8t6-pinmap.tsv 官方 AF 表核对；enc 实例 = EXTI 线号，限同线号引脚；mspm0 能力集照引脚图 PDF 复用标注 pdftotext 逐脚配出，与地猛星化后 syscfg $assign 全部互证——PWMAB TIMG0 PA12/13、DCC TIMG12 PA14、IMU601 UART0 PA28/31、OLED I2C1 PB2/3、I2C_0 PA0/1、DIGIT_UART UART1 PA8/9 均吻合）。B 模型：PIN_ROLE_TYPES 词表单源（boards 与 manifest 共用）+ PinDeclaration（id/type/default/label/required/macros，label==id 归一缺省保证序列化往返稳定）+ 17 个 manifest 补 93 条声明（stm32 带 pin_config.h 宏名映射；板外默认 PB4/PB5 按规则保留声明不拦）。C 迁移：gray_track（D1-D8 两处硬编码）→ GRAY_D* 宏、digit_uart/ball_detect/debug_uart → UART 实例宏 + *_INST 寄存器宏、uwb_uart/zigbee_uart 寄存器引用 → *_UART_INST、config.h 引脚宏并入 pin_config.h（保留波特率等参数 + include）、key.c GPIOA/GPIOB → DC_MOTOR_AA/BA_PORT（syscfg 生成宏）；宏名避让 ml_led.h LED_GPIO 撞名判例。验收：pytest 1413 绿 + mypy src 39 文件干净；真机 UV4 2026C（缓存复用）/2021F（clarify 12 条）双题 0 错 0 警、全迁移面直生成（motor/pid/digit_uart/debug_uart/ball_detect/config/uwb_uart/zigbee_uart/zigbee_uart_key/ml_mpu6050/filter 11 模块）UV4 全量重建 0 错 0 警（日志确认 gray_track.c/digit_uart.c 编译行俱在）；gmake 2026H_filt 10 模块 0 错（2 警 = 既有母版 IMU601/DIGIT_UART ovsRate 提示，clean 重建确认）；模块 code 注释剥离后零引脚字面量（pytest 化验收 grep）；/api/boards curl 双板 + platform 过滤校验。顺手修复：debug_uart.h DEBUG_PRINTF 宏 sprintf 缺 stdio.h 声明（全模块面编译暴露的既有潜伏告警 6 条，加一行 include 清零——本模块从未进过真机选题，迁移验收首编）。遗留：keil.py/webapp 有 SyntaxWarning（`"\."` 非 raw 串，既有）；工具链注意 generate_check 需 GMAKE 环境变量 + 先删旧 out 目录（历史教训复现两次）。

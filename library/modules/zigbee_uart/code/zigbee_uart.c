@@ -39,7 +39,7 @@ void zigbee_uart_init(void)
 // ============================================================
 void zigbee_rx_handler(void)
 {
-    uint8_t byte = (uint8_t)(USART3->DR & 0xFF);
+    uint8_t byte = (uint8_t)(ZIGBEE_UART_INST->DR & 0xFF);  // ZIGBEE_UART_INST = USART3（pin_config.h）
     g_zigbee_byte_count++;  // 每收到1字节+1
 
     switch (rx_state)

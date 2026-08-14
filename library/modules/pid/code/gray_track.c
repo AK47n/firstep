@@ -1,16 +1,17 @@
 #include "headfile.h"
 #include "gray_track.h"
+#include "pin_config.h"
 
 void gray_init()
 {
-	gpio_init(GPIO_B, Pin_12, IU);   // D1
-	gpio_init(GPIO_B, Pin_13, IU);   // D2
-	gpio_init(GPIO_B, Pin_14, IU);   // D3
-	gpio_init(GPIO_B, Pin_15, IU);   // D4
-	gpio_init(GPIO_A, Pin_8, IU);    // D5
-	gpio_init(GPIO_C, Pin_13, IU);   // D6
-	gpio_init(GPIO_C, Pin_14, IU);   // D7
-	gpio_init(GPIO_C, Pin_15, IU);   // D8
+	gpio_init(GRAY_D1_PORT, GRAY_D1_PIN, IU);   // D1
+	gpio_init(GRAY_D2_PORT, GRAY_D2_PIN, IU);   // D2
+	gpio_init(GRAY_D3_PORT, GRAY_D3_PIN, IU);   // D3
+	gpio_init(GRAY_D4_PORT, GRAY_D4_PIN, IU);   // D4
+	gpio_init(GRAY_D5_PORT, GRAY_D5_PIN, IU);   // D5
+	gpio_init(GRAY_D6_PORT, GRAY_D6_PIN, IU);   // D6
+	gpio_init(GRAY_D7_PORT, GRAY_D7_PIN, IU);   // D7
+	gpio_init(GRAY_D8_PORT, GRAY_D8_PIN, IU);   // D8
 }
 
 // ===== 边缘中点法巡线：比全传感器质心更简洁、更快、更抗噪 =====
@@ -77,35 +78,35 @@ unsigned char digtal(unsigned char channel)  // 读取1-8通道灰度传感器�
 	switch(channel)
 	{
 		case 1:
-			if(gpio_get(GPIO_B, Pin_12) == 1) value = 1;
+			if(gpio_get(GRAY_D1_PORT, GRAY_D1_PIN) == 1) value = 1;
 			else value = 0;
 			break;
 		case 2:
-			if(gpio_get(GPIO_B, Pin_13) == 1) value = 1;
+			if(gpio_get(GRAY_D2_PORT, GRAY_D2_PIN) == 1) value = 1;
 			else value = 0;
 			break;
 		case 3:
-			if(gpio_get(GPIO_B, Pin_14) == 1) value = 1;
+			if(gpio_get(GRAY_D3_PORT, GRAY_D3_PIN) == 1) value = 1;
 			else value = 0;
 			break;
 		case 4:
-			if(gpio_get(GPIO_B, Pin_15) == 1) value = 1;
+			if(gpio_get(GRAY_D4_PORT, GRAY_D4_PIN) == 1) value = 1;
 			else value = 0;
 			break;
 		case 5:
-			if(gpio_get(GPIO_A, Pin_8) == 1) value = 1;
+			if(gpio_get(GRAY_D5_PORT, GRAY_D5_PIN) == 1) value = 1;
 			else value = 0;
 			break;
 		case 6:
-			if(gpio_get(GPIO_C, Pin_13) == 1) value = 1;
+			if(gpio_get(GRAY_D6_PORT, GRAY_D6_PIN) == 1) value = 1;
 			else value = 0;
 			break;
 		case 7:
-			if(gpio_get(GPIO_C, Pin_14) == 1) value = 1;
+			if(gpio_get(GRAY_D7_PORT, GRAY_D7_PIN) == 1) value = 1;
 			else value = 0;
 			break;
  		case 8:
- 			if(gpio_get(GPIO_C, Pin_15) == 1) value = 1;
+ 			if(gpio_get(GRAY_D8_PORT, GRAY_D8_PIN) == 1) value = 1;
  			else value = 0;
  			break;
 	}

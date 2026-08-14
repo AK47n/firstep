@@ -2,6 +2,7 @@
 #define _debug_uart_h_
 
 #include "headfile.h"
+#include <stdio.h>  // sprintf（DEBUG_PRINTF 宏用；缺声明 = 隐式声明 6 警，板级引脚配置迁移验收发现）
 
 // ============================================================
 //  调试串口 (UART2: PA2=TX, PA3=RX)
