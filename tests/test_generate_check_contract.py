@@ -14,8 +14,10 @@ webapp.py:713 fix_errors 路由；前端恒发 = index.html:1712）：
     error_text    必填（编译报错全文）
     output_dir    必填（生成结果目录）
     problem_text / platform / slugs / main_c 可选上下文，check_topic 内
-                  恒有、恒发，缺省不放；previous_fixes 不带（服务端可选
-                  向后兼容，本工单循环不依赖停滞回喂）
+                  恒有、恒发，缺省不放；previous_fixes 可选（上一轮 done
+                  的 fixes 数组，非空才发——第 2 轮起回喂，对齐前端
+                  index.html:1724 previousDone.fixes；服务端可选向后
+                  兼容，缺省不带）
 
 对偶性：改词表忘改 CLI → 事件词表断言红（events.py 是唯一出处）；CLI 侧加 /
 删契约字段 → 字段断言红。测试从 .scratch/real-run/generate_check.py 经
@@ -51,6 +53,9 @@ DEFAULT_FIELDS = frozenset({"problem_text", "platform"})
 FIX_CONTRACT_FIELDS = frozenset(
     {"output_dir", "error_text", "problem_text", "platform", "slugs", "main_c"}
 )
+# previous_fixes 可选第七字段（上一轮 done 的 fixes，非空才发，工单
+# cli-fix-loop-parity/01）：带 = 恰七字段，不带 = 六字段语义不变
+FIX_FIELDS_WITH_PREVIOUS = FIX_CONTRACT_FIELDS | {"previous_fixes"}
 # 缺省输入 = 必填两键（可选上下文缺省不放）
 FIX_DEFAULT_FIELDS = frozenset({"output_dir", "error_text"})
 
@@ -134,11 +139,100 @@ def test_build_fix_payload_default_keeps_two_required_fields() -> None:
 
 
 def test_build_fix_payload_omits_empty_optionals() -> None:
-    """可选上下文为空串 / 空列表时都不进 payload（缺省不放语义）。"""
+    """可选上下文为空串 / 空列表时都不进 payload（缺省不放语义；
+    previous_fixes 空同样不带，与前端 previousDone.fixes 真值判定一致）。"""
     payload = gen.build_fix_payload(
-        "out_x", "err", problem_text="", platform="", slugs=(), main_c=""
+        "out_x", "err", problem_text="", platform="", slugs=(), main_c="",
+        previous_fixes=(),
     )
     assert set(payload) == FIX_DEFAULT_FIELDS
+
+
+# ---------- previous_fixes 回喂 + 超时停（工单 cli-fix-loop-parity/01） ----------
+#
+# previous_fixes 是 fix-loop-progress/01 协议一等元素（FIX_SYSTEM_PROMPT 约束 6
+# 靠它抑制「重复输出与上一轮一模一样的建议」）：CLI 第 2 轮起把上一轮 done 的
+# fixes 回喂，对齐前端 previousDone.fixes；重编译超时 = 终端状态（对齐前端
+# index.html 超时停），半截输出不进下一轮 error_text——超时不停进下一轮 =
+# 白烧一次 LLM 调用 + 误报轮上限文案。
+
+
+def test_build_fix_payload_with_previous_fixes_has_exactly_seven_fields() -> None:
+    """带 previous_fixes = 恰七字段（不带 = 六字段语义不变，另测）。"""
+    payload = gen.build_fix_payload(
+        "out_2026C_stm32",
+        "main.c(12): error #20: identifier undefined",
+        problem_text="题面全文",
+        platform="stm32",
+        slugs=["led_beep", "gpio"],
+        main_c="int main(void) { return 0; }",
+        previous_fixes=[
+            {"file": "main.c", "line": 12, "status": "applied", "reason": "修"}
+        ],
+    )
+    assert set(payload) == FIX_FIELDS_WITH_PREVIOUS
+    assert payload["previous_fixes"] == [
+        {"file": "main.c", "line": 12, "status": "applied", "reason": "修"}
+    ]
+
+
+def test_run_fix_loop_round2_payload_includes_previous_fixes(monkeypatch) -> None:
+    """第 2 轮请求体带上一轮 done 的 fixes（对齐前端 previousDone.fixes 回喂）；
+    第 1 轮不带（无上一轮）。"""
+    calls: list[dict] = []
+    fix = {"file": "main.c", "line": 12, "status": "applied", "reason": "修"}
+
+    def fake_fix(payload: dict) -> dict:
+        calls.append(payload)
+        return {"event": "done", "data": {"fixes": [fix]}}
+
+    builds = 0
+
+    def fake_build(out_dir):
+        nonlocal builds
+        builds += 1
+        if builds == 1:
+            return False, "仍有错误", "main.c(13): error #20: undefined", False
+        return True, "0 错 0 警", "", False
+
+    monkeypatch.setattr(gen, "fix_stream", fake_fix)
+    monkeypatch.setattr(gen, "uv4_build", fake_build)
+    assert gen.run_fix_loop(
+        Path("out_x"), "main.c(12): error #20: undefined", "题面", "stm32",
+        ["led_beep"], "int main(void) { return 0; }",
+    ) is True
+    assert len(calls) == 2
+    assert "previous_fixes" not in calls[0]
+    assert calls[1]["previous_fixes"] == [fix]
+
+
+def test_run_fix_loop_rebuild_timeout_stops_without_next_llm_call(
+    monkeypatch, capsys
+) -> None:
+    """重编译超时（合成 timed_out 的 CompileRun）= 终端状态：循环即停 + 文案
+    对齐前端「重编译超时，已停止循环」+ 半截输出不进下一轮 error_text（不白烧
+    第 2 次 LLM 调用——旧形态会把半截输出喂下一轮）。"""
+    calls: list[dict] = []
+
+    def fake_fix(payload: dict) -> dict:
+        calls.append(payload)
+        return {"event": "done", "data": {"fixes": [
+            {"file": "main.c", "line": 12, "status": "applied", "reason": "修"}
+        ]}}
+
+    def fake_build(out_dir):
+        # exit=None + timed_out=True 的合成 CompileRun（半截输出在摘要内）
+        return False, "UV4 exit=None（编译超时）", "半截输出", True
+
+    monkeypatch.setattr(gen, "fix_stream", fake_fix)
+    monkeypatch.setattr(gen, "uv4_build", fake_build)
+    assert gen.run_fix_loop(
+        Path("out_x"), "main.c(12): error #20: undefined", "题面", "stm32",
+        ["led_beep"], "int main(void) { return 0; }",
+    ) is False
+    out = capsys.readouterr().out
+    assert "重编译超时，已停止循环" in out
+    assert len(calls) == 1
 
 
 # ---------- check_topic 透传对偶（删 reference_ids 透传即红） ----------

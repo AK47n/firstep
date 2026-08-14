@@ -5,7 +5,7 @@
 1. **CLI 不发 previous_fixes**（`generate_check.py:451` 注释「本工单循环不依赖停滞回喂」是实施捷径，不是设计定案）：该字段是 fix-loop-progress/01 之后协议的一等元素（服务端已支持：`webapp.py:725/745/765` 可选透传，零改动），FIX_SYSTEM_PROMPT 约束 6 靠它抑制「重复输出与上一轮一模一样的建议」——CLI 循环第 2 轮起与 web 行为分化，验收路径 ≠ 产品路径。
 2. **CLI 无超时停条件**：前端有（`index.html:1793-1796`），CLI 的 `uv4_build`/`gmake_build` 丢弃 `CompileRun.timed_out`（`generate_check.py:142-168, 171-195`），`run_fix_loop`（:534-565）超时后把半截输出当 error_text 喂下一轮——白烧一次 LLM 调用 + 误报轮上限文案。
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## 设计定案（已代决，实施会话不再重开）
 
@@ -35,3 +35,24 @@
 > 验收：红证记录 → 实施绿 + 契约钉全绿 + 全量 pytest 绿 +（推荐）真机 CLI 回归；提交格式 `fix: ...（工单 cli-fix-loop-parity/01，N 绿——...）` + docs 一笔；`gh pr create --body-file`；不 force push；证据写本文件 Comments，Status → resolved，推送。
 
 ## Comments
+
+### 2026-08-14 实施 + 验收闭环（cli-fix-loop-parity-01 分支 d7f0d0c）
+
+**红证先行**（tests/test_generate_check_contract.py 先行落测，实施前跑红）：
+- `test_build_fix_payload_with_previous_fixes_has_exactly_seven_fields` → TypeError: build_fix_payload() got an unexpected keyword argument 'previous_fixes'
+- `test_build_fix_payload_omits_empty_optionals`（加传 previous_fixes=()）→ 同 TypeError
+- `test_run_fix_loop_round2_payload_includes_previous_fixes` → ValueError: too many values to unpack (expected 3, got 4)（重编译解包三元组处）
+- `test_run_fix_loop_rebuild_timeout_stops_without_next_llm_call` → 同 ValueError
+- 红因恰是两缺口本身：现状无 previous_fixes 参数 + 编译函数丢 timed_out
+
+**实施绿**：1372 绿（基线 1369 + 3 新用例 + 1 扩写），契约钉 45/45 绿；src 全目录零改动、webapp.py 零改动（服务端 previous_fixes 可选透传已有）。
+- `build_fix_payload` 增可选 `previous_fixes`（缺省 None 不进 payload；缺省两必填键语义不动——缺省/空省用例绿证；非空才发与前端 previousDone.fixes 真值判定一致）
+- `run_fix_loop`：每轮 done 后记 fixes，第 2 轮起作 previous_fixes 回喂（单元断言：轮 1 请求体无该键、轮 2 请求体 == 轮 1 done.fixes 全等）；重编译 `timed_out` → 「第 N 轮重编译超时，已停止循环——可修改工程后重新运行本脚本」即停（核心文案「重编译超时，已停止循环」对齐前端 index.html:1793-1796），半截输出不进 error_text，fix_stream 恰 1 次调用（旧形态白烧第 2 轮 LLM）
+- `uv4_build`/`gmake_build` 返回四元组 (passed, 摘要, 原文, timed_out)，CompileRun.timed_out 不再丢弃；check_topic 首编解包 `_timed_out` 沿用旧路径（compile_passed(None)=False → 进修复循环——首编超时停不在本工单范围，见遗留）
+
+**真机 CLI 回归**（worktree 起服务 8000，HEAD 基线；GENERATE_CHECK_CACHE_DIR 指主检出 cache 复用 recommend_2026C.json）：
+- `python .scratch/real-run/generate_check.py --reuse-recommend --clarify clarify_2026C.json 2026C` ✓ 通过——缓存复用 7 模块 0 补问；骨架 7139 字符 拦截 0 处；生成 49 文件；[产物] 门禁全过；**[真机] UV4 exit=0 Build Time 00:00:02（0 错误 0 警）**；汇总 2026C: ✓ 通过，exit 0
+- 首跑曾 502（/api/skeleton DeepSeek「Remote end closed connection without response」——服务端瞬态网络失败，发生于骨架段、生成/编译未到，非本工单改动；同命令重跑即过，佐证瞬态）
+- 可选「注错单轮 probe 第 2 轮请求体带 previous_fixes」未做真机（分钟级 LLM 烧卡）：由契约单元测试 test_run_fix_loop_round2_payload_includes_previous_fixes 行为级覆盖（轮 2 payload previous_fixes == 轮 1 done.fixes 全等，与真机 probe 同断言面）
+
+**遗留**：首编（check_topic 初编译）超时仍沿用旧路径进修复循环（半截输出喂第 1 轮 LLM）——本工单超时停条件按设计只落在循环内重编译；如需处理可另立工单。
