@@ -24,7 +24,7 @@ from contest_generator.events import (
     EVENT_ROUND,
     ProgressEvent,
 )
-from contest_generator.fix_errors import FixSuggestion
+from contest_generator.fix_errors import FixSuggestion, read_file_contexts
 from contest_generator.llm import (
     CLARIFICATION_HISTORY_CAP,
     CLARIFY_SYSTEM_PROMPT,
@@ -33,6 +33,7 @@ from contest_generator.llm import (
     DeepSeekLLM,
     EMBEDDED_CONTENT_CAP,
     ERROR_KIND_NETWORK,
+    FIX_PREVIOUS_FIXES_CAP,
     FIX_SYSTEM_PROMPT,
     SELECT_SYSTEM_PROMPT,
     SKELETON_SYSTEM_PROMPT,
@@ -734,6 +735,85 @@ def test_fix_errors_user_prompt_empty_previous_zero_regression():
         ]
     )
     assert prompt == expected
+
+
+def test_fix_errors_user_prompt_previous_fixes_capped():
+    """回喂段级截断（工单 fix-request-budget/01）：海量 previous_fixes → 段级
+    合计截头带标注（truncate_content 单源，与澄清历史同哲学），不再 N×~150
+    字符无界增长；标题与首条保留（首条 = 最近的上一轮结果），尾部条目裁掉。
+    条目数在限内时不截断（零回归由既有逐字节测试钉死）。"""
+    entries = tuple(
+        {
+            "file": f"code/mod_{i}.c",
+            "line": 10 + i,
+            "status": "skipped",
+            "reason": "未" * 200,
+        }
+        for i in range(60)
+    )
+    prompt = _fix_errors_user_prompt(
+        error_text="main.c(1): error #20: boom",
+        file_contexts={"main.c": "int x = 1;\n"},
+        previous_fixes=entries,
+    )
+    assert "【上一轮修复应用结果】" in prompt  # 标题保留（截断只裁段体）
+    assert "code/mod_0.c:10 skipped：未未未" in prompt  # 截头：首条仍在
+    assert "code/mod_59.c" not in prompt  # 尾部条目被裁掉
+    assert "内容过长，已截断" in prompt  # 截断标注（truncate_content 单源措辞）
+    assert f"仅展示前 {FIX_PREVIOUS_FIXES_CAP} 字符" in prompt
+    # 段体长度 ≤ cap + 标注（结构保证链上的确定性上界）
+    segment = prompt.split("【上一轮修复应用结果】")[1].split("【工程上下文】")[0]
+    assert len(segment) <= FIX_PREVIOUS_FIXES_CAP + 80
+
+
+def test_fix_prompt_worst_case_fits_request_budget(tmp_path):
+    """结构测试（工单 fix-request-budget/01 唯一硬保证，红证先行）：最坏形态
+    修复请求——文件上下文（全中文巨型文件，真实走 read_file_contexts 预算
+    截断）+ 报错全文 4000 + 赛题 4000 + main.c 4000 + previous_fixes 海量条
+    + dropped 清单 + 模块清单——完整 payload 按 json.dumps 序列化（对齐
+    llm._chat 预检口径：中文 \\uXXXX 转义 6 字节/字符，不继承 select 测试的
+    prompt.encode 3 字节口径）≤ MAX_REQUEST_BYTES，余量 ≥ 10KB；文件上下文
+    预算改大即红（红证：现行 49152 字符口径最坏 ≈373KB 单段超总量 2×+）。
+    """
+    # 文件上下文最坏形态：全中文文件（每行 50 中文 × 3000 行）——单文件 500
+    # 行截断后仍远超总量预算，必须真实走 read_file_contexts 的预算截断路径
+    (tmp_path / "big.c").write_text(
+        "\n".join("中" * 50 for _ in range(3000)), encoding="utf-8"
+    )
+    contexts, dropped = read_file_contexts(tmp_path, ("big.c",))
+
+    prompt = _fix_errors_user_prompt(
+        error_text="错" * 5000,  # 超 4000 截断（带标注）的最坏形态
+        file_contexts=dict(contexts),
+        # dropped 清单最坏形态（数百条，工单定夺不强加上限）：报错路径派生，
+        # 实测 KB 级，结构测试按数百条覆盖
+        dropped_files=tuple(f"code/mod_{i}_driver.c" for i in range(200)),
+        problem_text="设" * 4000,  # 赛题截断上限（2026C 实测 2626 / 2021F 2796 都在此上限内）
+        platform="stm32",
+        module_slugs=tuple(f"mod_{i}_driver" for i in range(40)),
+        main_c="主" * 5000,  # 超 4000 截断（带标注）的最坏形态
+        previous_fixes=tuple(
+            {
+                "file": f"code/mod_{i}.c",
+                "line": 10 + i,
+                "status": "skipped",
+                "reason": "未" * 200,
+            }
+            for i in range(60)
+        ),
+    )
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": FIX_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    total = len(json.dumps(payload).encode("utf-8"))
+    assert total <= MAX_REQUEST_BYTES - 10 * 1024
+    assert "上下文预算限制" in prompt  # 文件上下文真实走了总量预算截断
+    assert f"仅展示前 {FIX_PREVIOUS_FIXES_CAP} 字符" in prompt  # 回喂段合计截断带标注
 
 
 def test_parse_fix_suggestions_pure_parse():

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import json
 from pathlib import Path
 
 import pytest
@@ -356,14 +357,58 @@ def test_read_file_contexts_truncates_long_lines(tmp_path):
 
 def test_read_file_contexts_total_budget_drops_tail(tmp_path):
     """总预算上限：超预算的剩余文件不发送、点名返回（防静默丢失）。"""
-    from contest_generator.fix_errors import FIX_CONTEXT_TOTAL_CHARS
+    from contest_generator.fix_errors import FIX_CONTEXT_TOTAL_BYTES
 
     chunk = "x" * 1024 + "\n"
     for name in ("a.c", "b.c"):
-        (tmp_path / name).write_text(chunk * (FIX_CONTEXT_TOTAL_CHARS // 1024 + 4), encoding="utf-8")
+        (tmp_path / name).write_text(chunk * (FIX_CONTEXT_TOTAL_BYTES // 1024 + 4), encoding="utf-8")
     contexts, dropped = read_file_contexts(tmp_path, ("a.c", "b.c"))
     assert [p for p, _ in contexts] == ["a.c"]
     assert dropped == ("b.c",)
+
+
+def test_read_file_contexts_budget_accounts_wire_bytes_chinese(tmp_path):
+    """wire 字节记账（工单 fix-request-budget/01，红证：旧字符口径下本断言必
+    红——49152 字符中文单段 ≈295KB 远超预算）：全中文文件截断后嵌入体的
+    json.dumps 序列化字节 ≤ 总预算 + 截断标注，字符口径记账会低估中文 6×。"""
+    from contest_generator.fix_errors import FIX_CONTEXT_TOTAL_BYTES
+
+    (tmp_path / "big.c").write_text(
+        "\n".join("中" * 50 for _ in range(3000)), encoding="utf-8"
+    )
+    contexts, dropped = read_file_contexts(tmp_path, ("big.c",))
+    assert dropped == ()
+    body = dict(contexts)["big.c"]
+    assert "上下文预算限制" in body  # 预算截断标注在场
+    assert len(json.dumps(body, ensure_ascii=True)) - 2 <= FIX_CONTEXT_TOTAL_BYTES + 160
+    # 中文 6 字节/字符：保留字符数约为预算的 1/6（远小于旧 49152 字符口径）
+    assert len(body) < FIX_CONTEXT_TOTAL_BYTES // 6 + 100
+
+
+def test_read_file_contexts_budget_keeps_ascii_near_budget(tmp_path):
+    """字节记账对 ASCII 友好：wire ≈ 字符数，接近预算的 ASCII 文件整段保留
+    不截（钉死字节口径不误伤 ASCII——字符口径若按中文 6× 打折会过度截断）。"""
+    from contest_generator.fix_errors import FIX_CONTEXT_TOTAL_BYTES
+
+    content = "x" * (FIX_CONTEXT_TOTAL_BYTES - 200)
+    (tmp_path / "a.c").write_text(content, encoding="utf-8")
+    contexts, dropped = read_file_contexts(tmp_path, ("a.c",))
+    assert dropped == ()
+    assert dict(contexts)["a.c"] == content  # 未截断（wire ≤ 预算）
+
+
+def test_fit_wire_budget_exact_and_maximal():
+    """_fit_wire_budget（工单 fix-request-budget/01）：任何预算下截取结果
+    wire ≤ 预算；预算内原样返回；截断时取最长前缀（多一字即超）；空预算 →
+    空串。"""
+    from contest_generator.fix_errors import _fit_wire_budget, _wire_size
+
+    content = "中" * 5000 + "x" * 5000
+    for budget in (0, 1, 100, 1000, 23000):
+        assert _wire_size(_fit_wire_budget(content, budget)) <= budget
+    fitted = _fit_wire_budget(content, 23000)
+    assert _wire_size(fitted) <= 23000 < _wire_size(fitted + content[len(fitted)])
+    assert _fit_wire_budget("x" * 10, 0) == ""
 
 
 # ---------------------------------------------------------------------------
