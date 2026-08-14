@@ -26,7 +26,9 @@ from contest_generator.events import (
 )
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.llm import (
+    CLARIFICATION_HISTORY_CAP,
     CLARIFY_SYSTEM_PROMPT,
+    DEFAULT_WORDLIST,
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
     EMBEDDED_CONTENT_CAP,
@@ -48,9 +50,11 @@ from contest_generator.llm import (
     VALIDATION_UNIVERSALITY_RULE,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     _batches,
+    _clarify_user_prompt,
     _distill_user_prompt,
     _file_chars,
     _fix_errors_user_prompt,
+    _selection_user_prompt,
     _split_versions,
     _summarize_user_prompt,
     _truncate_content,
@@ -2755,11 +2759,14 @@ def test_select_prompt_embeds_requested_fulltexts():
 
 def test_select_prompt_embeds_fulltext_with_every_file_head():
     """工单 03 回归：注入块含每个文件开头——read_fulltext 逐文件截断后的多文件
-    全文在总上限内逐字嵌入（旧 4000 总截断下首个大文件吃光配额、尾部文件不可见）。"""
+    全文在总上限内逐字嵌入（旧 4000 总截断下首个大文件吃光配额、尾部文件不可见）。
+    全文总量保持在 REFERENCE_FULLTEXT_CAP 内（recommend-speedup/01 D 收紧后
+    35000，3 × 11K 字符 ≈ 33K < 上限）——超上限的截断断言由
+    test_select_prompt_truncates_fulltext_at_relaxed_total_cap 钉死。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
     fulltext = "\n".join(
-        f"// ---- f{i}.c ----\n/* f{i}_head */\n" + "c" * 15000 for i in range(3)
+        f"// ---- f{i}.c ----\n/* f{i}_head */\n" + "c" * 11000 for i in range(3)
     )
 
     llm.select_modules(
@@ -3195,6 +3202,48 @@ def test_select_prompt_without_clarifications_keeps_old_shape():
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "用户已澄清的问题" not in user_message
     assert "- key-example: 2026C 参考 —— 配套例程" in user_message  # 参考段形状不变
+
+
+def test_selection_prompt_worst_case_fits_request_budget():
+    """结构测试（工单 recommend-speedup/01 D 唯一硬保证）：最坏情况用户提示词
+    ——REFERENCE_FULLTEXT_CAP 上限全文 + 20 条长问答历史（截断后形态）+ 词表 +
+    摘要——UTF-8 序列化 < MAX_REQUEST_BYTES；cap 改大即红（红证：cap 拉回
+    60000 时本用例红）。"""
+    problem = "设" * 2800  # 真机 2021F 题面规模（2796 字符）
+    summaries = [
+        ManifestSummary(f"mod{i}", "温湿度传感器采集与显示" * 8)
+        for i in range(14)  # stm32 线 14 条摘要
+    ]
+    clarifications = tuple(
+        (f"第{i}问：" + "疑" * 200, "答" * 5000) for i in range(20)
+    )
+
+    prompt = _selection_user_prompt(
+        problem,
+        summaries,
+        references=[_suggestion("big-ref", "大参考文件", "巨型参考")],
+        reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_CAP},
+        clarifications=clarifications,
+        hardware_words=DEFAULT_WORDLIST,
+    )
+
+    assert len(prompt.encode("utf-8")) < MAX_REQUEST_BYTES
+    assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
+    assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
+
+
+def test_clarify_prompt_worst_case_fits_request_budget():
+    """结构测试（工单 recommend-speedup/01 D）：20 条长问答历史（截断后形态）+
+    上限题面序列化 < MAX_REQUEST_BYTES；合计截断带标注。"""
+    clarifications = tuple(
+        (f"问题{i}：" + "疑" * 200, "答" * 5000) for i in range(20)
+    )
+
+    prompt = _clarify_user_prompt("设" * EMBEDDED_CONTENT_CAP, clarifications)
+
+    assert len(prompt.encode("utf-8")) < MAX_REQUEST_BYTES
+    assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
+    assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
 
 
 def test_select_system_prompt_carries_no_reask_rule():
