@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved（2026-08-14 收尾：全部 5 张工单均已闭环，本 spec 状态行陈旧改正）
 
 # 素材库（赛题库 + 参考文件库）— ADR 0006 实施
 

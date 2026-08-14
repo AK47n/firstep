@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved（2026-08-14 收尾：全部 10 张工单均已闭环，本 spec 状态行陈旧改正）
 
 # 电赛工程生成器 — 规格
 
