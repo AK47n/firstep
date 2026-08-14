@@ -476,6 +476,9 @@
       <div class="row">
         <button id="btn-fix-center" class="primary">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
+        <!-- 继续修复（工单 fix-loop-continue/01）：仅轮上限终态显示，从续跑态
+             再来一批 ≤3 轮（不重跑初始编译、previous_fixes 回喂不丢） -->
+        <button id="btn-fix-continue" class="hidden">继续修复</button>
         <span id="fix-center-toolchain" class="muted"></span>
       </div>
       <div id="fix-center-round" class="muted" style="margin-top:8px"></div>
@@ -1470,7 +1473,10 @@ const FIX_MAX_ROUNDS = 3;
 let lastFix = null;          // {output_dir, backup_id}：回滚按钮的入口（done 终态后置位）
 let lastFixDone = null;      // 最近一次 fix-errors 的 done 载荷（循环判"有无应用"）
 let toolchains = { stm32: false, mspm0: false };  // /api/state 装载：平台 → 工具链可用
-let fixLoop = { running: false, round: 0 };       // 循环状态机：单实例（防双击并发）
+let fixLoop = { running: false, round: 0, batch: 1, resume: null };
+// 循环状态机：单实例（防双击并发）；batch = 批次号（「继续修复」+1，轮次条标
+// 注「继续批次」）；resume = 轮上限终态保存的续跑态快照 {errorText, lastSummary,
+// lastFixDone}（工单 fix-loop-continue/01：「继续修复」消费它，不重跑编译、回喂不丢）
 let fixSourceCache = {};                          // 源码行缓存（key = 归一化 path:line；列表重建时清空）
 
 /** 编译结果横幅四态（工单 compile-experience-ui/01）：running/success/fail/notool。 */
@@ -1596,10 +1602,11 @@ function fixSetBusy(busy) {   // 手动贴文本按钮
     ? '<span class="spinner"></span>AI 修复中…' : "开始修复（贴文本）";
 }
 
-function fixCenterBusy(busy) {   // 一键编译修复按钮
+function fixCenterBusy(busy) {   // 一键编译修复 + 继续修复按钮
   $("btn-fix-center").disabled = busy || !toolchains[chosenPlatform] || !chosenPlatform;
   $("btn-fix-center").innerHTML = busy
     ? '<span class="spinner"></span>编译修复中…' : "一键编译修复";
+  $("btn-fix-continue").disabled = busy;
 }
 
 function renderToolchainStatus() {
@@ -1736,6 +1743,83 @@ async function runFixOnce(errorText, outputDir, previousDone) {
   return lastFixDone;
 }
 
+/** 修复轮批（工单 fix-loop-continue/01 拆分复用）：报错 / 告警 → 修复 →
+ * 重编译验证 ≤FIX_MAX_ROUNDS 轮。previousDone = 批首轮回喂的上一批 done
+ * 载荷——「一键编译修复」= null（新生命周期）；「继续修复」= 上一批末轮载荷
+ * （回喂上下文不丢）。批内后续轮由 fixHandleEvent 更新模块级 lastFixDone 回喂。
+ * 轮上限终态保存续跑态快照并亮「继续修复」按钮。 */
+async function fixRounds(errorText, lastSummary, previousDone) {
+  const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
+  if (!outputDir) throw new Error("请先生成工程（或填写输出目录）");
+  lastFixDone = previousDone;
+  const batchPrefix = fixLoop.batch > 1 ? "继续批次 " : "";
+  // 报错 / 告警 → 修复 → 重编译验证，≤3 轮（错误+告警共池，停条件 = 0 错
+  // 0 警，工单 fix-loop-warnings/01）；本轮 0 applied 即停（停滞检测，工单
+  // fix-loop-progress/01 决策 1——文件没变，重编译输出必与上轮相同，不再白跑）；
+  // 第 3 轮后如实报告剩余错误/警告（不无限循环）
+  // 轮次文案错误/警告数：判读单源 summary（工单 compile-verdict-align/01，
+  // 删 fixErrorCount 正则——fix_errors.py 明令禁止调用方另写正则）；lastSummary
+  // 与 errorText 同步更新，批首即上一批末轮的 summary
+  for (fixLoop.round = 1; fixLoop.round <= FIX_MAX_ROUNDS; fixLoop.round++) {
+    const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
+    const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
+    const headLabel = (n === null || n > 0) ? "编译有错" : "编译有警";
+    const headDetail = (n !== null && n > 0)
+      ? (n + " 条 Error" + (w !== null && w > 0 ? " / " + w + " 条 Warning" : ""))
+      : (w !== null && w > 0 ? w + " 条 Warning" : (headLabel === "编译有错" ? "多条报错" : "多条警告"));
+    $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+      + " 轮：" + headLabel + "（" + headDetail + "）→ AI 修复…";
+    const done = await runFixOnce(errorText, outputDir, lastFixDone);   // 上轮载荷回喂（决策 2）
+    const applied = (done.fixes || []).filter((f) => f.status === "applied").length;
+    if (applied === 0) {   // 空修复 / 全 skipped / 降级无上下文：立即停，文案写具体
+      $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+        + " 轮：未应用任何修复，停止循环";
+      // 告警轮无建议：文案带剩余警数（工单 fix-loop-warnings/01，0-applied
+      // 即停对告警轮同样生效——不再空转 3 轮）
+      const rest = (lastSummary && lastSummary.errors === 0 && lastSummary.warnings > 0)
+        ? "（剩余 " + lastSummary.warnings + " 条 Warning 见上方编译输出）" : "";
+      $("fix-status").textContent = "本轮未应用任何修复（全部 skipped / 无修复建议），停止循环"
+        + rest + "——可贴文本手动修复或改工程后重试";
+      return;
+    }
+    $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+      + " 轮：重编译验证中…";
+    const compile = await runCompileOnce(outputDir);
+    $("fix-center-log").value = compile.error_text || "";
+    lastSummary = compile.summary || null;
+    // 轮次条追加耗时（展示层工单 compile-experience-ui/01；compile 必有 duration）
+    $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+      + " 轮 · 耗时 " + fmtSeconds(compile.duration) + "s";
+    if (compile.timed_out) {
+      $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译超时，已停止循环——"
+        + "可修改工程后点「一键编译修复」重新来过";
+      return;
+    }
+    if (compile.passed) {
+      if (((compile.summary || {}).warnings || 0) === 0) {
+        $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译通过 ✅ 0 错 0 警";
+        return;
+      }
+      // 仍有警 → 下一轮继续告警轮（工单 fix-loop-warnings/01：停条件 =
+      // 0 错 0 警，仅 passed 即停的旧形态已废）
+    }
+    errorText = compile.error_text;   // 仍错或有警 → 下一轮喂最新编译输出
+  }
+  // 第 3 轮后仍错 / 仍有警：如实报告剩余清单（决策记录 2 + 工单
+  // fix-loop-warnings/01）；轮上限终态保存续跑态并亮「继续修复」（工单
+  // fix-loop-continue/01——按钮消费快照，不重跑初始编译、回喂不丢）
+  const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
+  const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
+  const restParts = [];
+  if (n === null || n > 0) restParts.push(n !== null ? n + " 条 Error" : "多条报错");
+  if (w !== null && w > 0) restParts.push(w + " 条 Warning");
+  fixLoop.resume = { errorText, lastSummary, lastFixDone };
+  $("btn-fix-continue").classList.remove("hidden");
+  $("fix-status").textContent = "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余 "
+    + (restParts.join(" / ") || "问题") + " 见上方编译输出——可点「继续修复」再来 "
+    + FIX_MAX_ROUNDS + " 轮（保留回喂上下文），或贴文本修复，或改工程后重试";
+}
+
 /** 修复中心主循环（决策记录 2/3）：编译 → 报错自动喂修复 → 重编译验证 ≤3 轮。 */
 async function startFixCenter() {
   if (fixLoop.running) return;   // 单实例：循环中忽略重复触发
@@ -1749,6 +1833,8 @@ async function startFixCenter() {
   }
   fixLoop.running = true;
   fixLoop.round = 0;
+  fixLoop.batch = 1;                 // 新生命周期：轮次条不带「继续批次」前缀
+  fixLoop.resume = null;
   lastFix = null; lastFixDone = null;
   $("fix-errors-msg").textContent = "";
   $("fix-status").textContent = "";
@@ -1756,6 +1842,7 @@ async function startFixCenter() {
   $("fix-center-round").textContent = "";
   $("fix-center-log").value = "";
   $("btn-fix-rollback").classList.add("hidden");
+  $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
   fixCenterBusy(true);
   $("fix-status").textContent = "自动编译中…";
   try {
@@ -1779,69 +1866,33 @@ async function startFixCenter() {
     // 首编有错 / 有警 → 立即渲染结构化错误列表（全部「待修复」），修复轮
     // 结束后按 fixes 重渲染最终状态（展示层工单 compile-experience-ui/01）
     fixRenderResults(initial.parsed_errors || [], [], 0);
-    // 报错 / 告警 → 修复 → 重编译验证，≤3 轮（错误+告警共池，停条件 = 0 错
-    // 0 警，工单 fix-loop-warnings/01）；本轮 0 applied 即停（停滞检测，工单
-    // fix-loop-progress/01 决策 1——文件没变，重编译输出必与上轮相同，不再白跑）；
-    // 第 3 轮后如实报告剩余错误/警告（不无限循环）
-    // 轮次文案错误/警告数：判读单源 summary（工单 compile-verdict-align/01，
-    // 删 fixErrorCount 正则——fix_errors.py 明令禁止调用方另写正则）；lastSummary
-    // 与 errorText 同步更新，首轮即 initial 的 summary
-    let errorText = initial.error_text;
-    let lastSummary = initial.summary || null;
-    for (fixLoop.round = 1; fixLoop.round <= FIX_MAX_ROUNDS; fixLoop.round++) {
-      const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
-      const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
-      const headLabel = (n === null || n > 0) ? "编译有错" : "编译有警";
-      const headDetail = (n !== null && n > 0)
-        ? (n + " 条 Error" + (w !== null && w > 0 ? " / " + w + " 条 Warning" : ""))
-        : (w !== null && w > 0 ? w + " 条 Warning" : (headLabel === "编译有错" ? "多条报错" : "多条警告"));
-      $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-        + " 轮：" + headLabel + "（" + headDetail + "）→ AI 修复…";
-      const done = await runFixOnce(errorText, outputDir, lastFixDone);   // 上轮载荷回喂（决策 2）
-      const applied = (done.fixes || []).filter((f) => f.status === "applied").length;
-      if (applied === 0) {   // 空修复 / 全 skipped / 降级无上下文：立即停，文案写具体
-        $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-          + " 轮：未应用任何修复，停止循环";
-        // 告警轮无建议：文案带剩余警数（工单 fix-loop-warnings/01，0-applied
-        // 即停对告警轮同样生效——不再空转 3 轮）
-        const rest = (lastSummary && lastSummary.errors === 0 && lastSummary.warnings > 0)
-          ? "（剩余 " + lastSummary.warnings + " 条 Warning 见上方编译输出）" : "";
-        $("fix-status").textContent = "本轮未应用任何修复（全部 skipped / 无修复建议），停止循环"
-          + rest + "——可贴文本手动修复或改工程后重试";
-        return;
-      }
-      $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-        + " 轮：重编译验证中…";
-      const compile = await runCompileOnce(outputDir);
-      $("fix-center-log").value = compile.error_text || "";
-      lastSummary = compile.summary || null;
-      // 轮次条追加耗时（展示层工单 compile-experience-ui/01；compile 必有 duration）
-      $("fix-center-round").textContent = "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-        + " 轮 · 耗时 " + fmtSeconds(compile.duration) + "s";
-      if (compile.timed_out) {
-        $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译超时，已停止循环——"
-          + "可修改工程后点「一键编译修复」重新来过";
-        return;
-      }
-      if (compile.passed) {
-        if (((compile.summary || {}).warnings || 0) === 0) {
-          $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译通过 ✅ 0 错 0 警";
-          return;
-        }
-        // 仍有警 → 下一轮继续告警轮（工单 fix-loop-warnings/01：停条件 =
-        // 0 错 0 警，仅 passed 即停的旧形态已废）
-      }
-      errorText = compile.error_text;   // 仍错或有警 → 下一轮喂最新编译输出
-    }
-    // 第 3 轮后仍错 / 仍有警：如实报告剩余清单（决策记录 2 + 工单
-    // fix-loop-warnings/01）
-    const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
-    const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
-    const restParts = [];
-    if (n === null || n > 0) restParts.push(n !== null ? n + " 条 Error" : "多条报错");
-    if (w !== null && w > 0) restParts.push(w + " 条 Warning");
-    $("fix-status").textContent = "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余 "
-      + (restParts.join(" / ") || "问题") + " 见上方编译输出——可继续贴文本修复，或改工程后重试";
+    // 一键编译修复 = 初始编译 + 一轮批（工单 fix-loop-continue/01：轮批拆出
+    // 复用，「继续修复」直进 fixRounds 不重跑编译）
+    await fixRounds(initial.error_text, initial.summary || null, null);
+  } catch (e) {
+    $("fix-status").textContent = "";
+    $("fix-errors-msg").textContent = e.message;
+  } finally {
+    fixLoop.running = false;
+    fixLoop.round = 0;
+    fixCenterBusy(false);
+  }
+}
+
+/** 「继续修复」（工单 fix-loop-continue/01）：从轮上限终态保存的续跑态再来
+ * 一批 ≤3 轮——不重跑初始编译，previous_fixes 回喂上下文不丢。 */
+async function continueFixCenter() {
+  if (fixLoop.running) return;   // 批内防重复触发
+  const resume = fixLoop.resume;
+  if (!resume) return;           // 无续跑态（非轮上限终态）不动作
+  fixLoop.resume = null;
+  fixLoop.batch += 1;            // 批次号 +1：轮次条标注「继续批次 第 N/3 轮」
+  $("btn-fix-continue").classList.add("hidden");   // 进入新批即隐藏（终态时按结果重判）
+  fixLoop.running = true;
+  fixCenterBusy(true);
+  $("fix-status").textContent = "";
+  try {
+    await fixRounds(resume.errorText, resume.lastSummary, resume.lastFixDone);
   } catch (e) {
     $("fix-status").textContent = "";
     $("fix-errors-msg").textContent = e.message;
@@ -1853,6 +1904,8 @@ async function startFixCenter() {
 }
 
 $("btn-fix-center").addEventListener("click", startFixCenter);
+$("btn-fix-continue").addEventListener("click", continueFixCenter);
+$("btn-fix-continue").textContent = "继续修复（再来 " + FIX_MAX_ROUNDS + " 轮）";
 
 $("btn-fix-errors").addEventListener("click", async () => {
   $("fix-errors-msg").textContent = "";
@@ -1864,7 +1917,10 @@ $("btn-fix-errors").addEventListener("click", async () => {
   $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
   lastFix = null;
   lastFixDone = null;
+  fixLoop.resume = null;             // 续跑态随之失效（工单 fix-loop-continue/01）
+  fixLoop.batch = 1;
   $("btn-fix-rollback").classList.add("hidden");
+  $("btn-fix-continue").classList.add("hidden");
   fixSetBusy(true);
   $("fix-status").textContent = "解析报错中…";
   try {

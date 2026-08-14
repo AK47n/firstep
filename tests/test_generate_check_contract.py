@@ -318,12 +318,49 @@ def test_cli_fix_event_wordtable_matches_events_py() -> None:
 
 def test_cli_fix_max_rounds_matches_frontend() -> None:
     """CLI FIX_MAX_ROUNDS == 前端 index.html FIX_MAX_ROUNDS（改动须两处同步）。"""
-    html = (
-        REPO_ROOT / "src" / "contest_generator" / "static" / "index.html"
-    ).read_text(encoding="utf-8")
+    html = _index_html()
     m = re.search(r"const FIX_MAX_ROUNDS = (\d+);", html)
     assert m is not None, "index.html 找不到 const FIX_MAX_ROUNDS"
     assert gen.FIX_MAX_ROUNDS == int(m.group(1))
+
+
+# ---------- 修复循环继续按钮钉（工单 fix-loop-continue/01） ----------
+#
+# 轮上限终态保存续跑态（errorText / lastSummary / lastFixDone 快照）并亮
+# 「继续修复」按钮——再来一批 ≤3 轮、不重跑初始编译、previous_fixes 回喂不丢。
+# 结构钉防回退：按钮 id / 终态文案 / resume 快照三者缺一即红。CLI 非交互无对偶。
+
+
+def _index_html() -> str:
+    return (
+        REPO_ROOT / "src" / "contest_generator" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+
+
+def test_index_html_has_fix_continue_button() -> None:
+    """结构钉：index.html 有「继续修复」按钮（hidden 起，仅轮上限终态显示）——
+    删按钮即红（工单 fix-loop-continue/01）。"""
+    assert re.search(
+        r'<button id="btn-fix-continue" class="hidden">', _index_html()
+    ), "index.html 找不到 id=btn-fix-continue 的继续修复按钮"
+
+
+def test_index_html_round_cap_text_mentions_fix_continue() -> None:
+    """结构钉：轮上限终态文案含「继续修复」指引——改回旧文案（只能贴文本 /
+    改工程）即红（工单 fix-loop-continue/01）。"""
+    assert "可点「继续修复」再来" in _index_html(), (
+        "index.html 轮上限终态文案未指引「继续修复」按钮"
+    )
+
+
+def test_index_html_has_fix_continue_resume_snapshot() -> None:
+    """结构钉：轮上限终态把 errorText / lastSummary / lastFixDone 存入
+    fixLoop.resume 续跑态（继续按钮消费，回喂上下文不丢）——删快照即红
+    （工单 fix-loop-continue/01）。"""
+    assert re.search(
+        r"fixLoop\.resume\s*=\s*\{\s*errorText,\s*lastSummary,\s*lastFixDone\s*\}",
+        _index_html(),
+    ), "index.html 找不到 fixLoop.resume 续跑态快照"
 
 
 # ---------- 修复循环告警收敛钉（工单 fix-loop-warnings/01） ----------
