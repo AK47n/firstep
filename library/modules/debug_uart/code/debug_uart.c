@@ -1,14 +1,15 @@
 #include "headfile.h"
 #include "debug_uart.h"
 #include "config.h"
+#include "pin_config.h"
 
 // ============================================================
-//  UART2 初始化 (PA2=TX, PA3=RX, 115200bps)
+//  DEBUG_UART 初始化 (UART_2 = PA2 TX / PA3 RX, 115200bps)
 // ============================================================
 void debug_uart_init(void)
 {
-    // UART2 在 APB1 上
-    uart_init(UART_2, 115200, 0);  // priority=0，不开接收中断
+    // DEBUG_UART = UART_2，在 APB1 上（pin_config.h）
+    uart_init(DEBUG_UART, 115200, 0);  // priority=0，不开接收中断
 }
 
 // ============================================================
@@ -16,7 +17,7 @@ void debug_uart_init(void)
 // ============================================================
 void debug_uart_send(const char *str)
 {
-    uart_sendstr(UART_2, (char*)str);
+    uart_sendstr(DEBUG_UART, (char*)str);
 }
 
 // ============================================================
@@ -33,10 +34,10 @@ void debug_uart_send(const char *str)
 static char  cmd_buf[8];
 static uint8_t cmd_idx = 0;
 
-// USART2 ISR 调用：收一个字节放入命令缓冲
+// DEBUG_UART_INST（= USART2）ISR 调用：收一个字节放入命令缓冲
 void debug_uart_rx_handler(void)
 {
-    char c = (char)(USART2->DR & 0xFF);
+    char c = (char)(DEBUG_UART_INST->DR & 0xFF);
 
     if (c == '\r' || c == '\n')
     {

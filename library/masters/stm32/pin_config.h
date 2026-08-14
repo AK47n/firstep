@@ -2,11 +2,13 @@
 #define __PIN_CONFIG_H
 
 /* ============================================================
- * 电机引脚集中配置（值 = 2021F 真机原值，21F code/motor.c + user/isr.c）
+ * 接线单源：全工程引脚集中配置（ADR 0010，值 = 迁移前硬编码原值）
  *
- * 改引脚只动本文件（对偶 mspm0 侧 SysConfig 生成的 DC_MOTOR_* 宏）：
- * motor 模块的 code/motor_stm32.c / pid 模块的 code/pid_isr.c 只引用
- * 这些宏、不写死引脚字面量。
+ * 改引脚只动本文件（对偶 mspm0 侧 SysConfig 生成的实例宏）：模块代码
+ * （motor_stm32.c / gray_track.c / digit_uart.c / debug_uart.c /
+ * ball_detect_stm32.c / uwb_uart.c / zigbee_uart.c 等）只引用这些宏、
+ * 不写死引脚字面量。config 模块的 config.h 保留非引脚参数并 include
+ * 本文件——原 LED/蜂鸣器/DIP/UWB/Zigbee 引脚宏已并入此处。
  *
  * ⚠️ EXTI 中断名绑定引脚线号：PA2 → EXTI2_IRQHandler、PA4 →
  * EXTI4_IRQHandler 固定，编码器线一换，对应 handler 名也要换（中断
@@ -39,5 +41,61 @@
 #define MOTOR_B_ENC_LINE      4          /* EXTI4_IRQHandler 的线号 */
 #define MOTOR_B_ENC_DIR_PORT  GPIO_A
 #define MOTOR_B_ENC_DIR_PIN   Pin_5      /* 方向输入（上拉） */
+
+/* ---- 灰度传感器（pid 模块 gray_track.c：D1-D8 输入上拉，21F 原值）---- */
+#define GRAY_D1_PORT  GPIO_B
+#define GRAY_D1_PIN   Pin_12
+#define GRAY_D2_PORT  GPIO_B
+#define GRAY_D2_PIN   Pin_13
+#define GRAY_D3_PORT  GPIO_B
+#define GRAY_D3_PIN   Pin_14
+#define GRAY_D4_PORT  GPIO_B
+#define GRAY_D4_PIN   Pin_15
+#define GRAY_D5_PORT  GPIO_A
+#define GRAY_D5_PIN   Pin_8
+#define GRAY_D6_PORT  GPIO_C
+#define GRAY_D6_PIN   Pin_13
+#define GRAY_D7_PORT  GPIO_C
+#define GRAY_D7_PIN   Pin_14
+#define GRAY_D8_PORT  GPIO_C
+#define GRAY_D8_PIN   Pin_15
+
+/* ---- K230 视觉串口（digit_uart / ball_detect 模块，115200）----
+ * UART 实例宏（ml_uart 的 UARTn_enum）+ 寄存器实例宏（UART_1 ↔ USART1，
+ * UART_2 ↔ USART2）——引脚由实例决定（UART_1 = PA9/PA10），换实例换引脚。
+ */
+#define DIGIT_UART             UART_1
+#define DIGIT_UART_INST        USART1
+#define BALL_DETECT_UART       UART_1
+#define BALL_DETECT_UART_INST  USART1
+
+/* ---- 调试串口（debug_uart 模块，115200）---- */
+#define DEBUG_UART             UART_2
+#define DEBUG_UART_INST        USART2
+
+/* ---- 三色 LED（config.h 并入：共阴，高电平点亮，PC13-15）---- */
+#define LED_PORT          GPIO_C
+#define LED_RED_PIN       Pin_13   /* 红灯 */
+#define LED_YELLOW_PIN    Pin_14   /* 黄灯 */
+#define LED_GREEN_PIN     Pin_15   /* 绿灯 */
+
+/* ---- 蜂鸣器（config.h 并入：有源蜂鸣器，低电平触发）---- */
+#define BUZZER_GPIO       GPIO_B
+#define BUZZER_PIN        Pin_0
+
+/* ---- DIP-4 拨码开关（config.h 并入：4 位二进制 ID，上拉输入，拨到 ON=低电平）---- */
+#define DIP_GPIO          GPIO_B
+#define DIP_PIN0          Pin_12
+#define DIP_PIN1          Pin_13
+#define DIP_PIN2          Pin_14
+#define DIP_PIN3          Pin_15
+
+/* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
+#define UWB_UART          UART_1
+#define UWB_UART_INST     USART1
+
+/* ---- Zigbee 无线串口（config.h 并入：UART_3 = PB10 TX / PB11 RX，115200）---- */
+#define ZIGBEE_UART       UART_3
+#define ZIGBEE_UART_INST  USART3
 
 #endif /* __PIN_CONFIG_H */

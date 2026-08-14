@@ -1,5 +1,6 @@
 #include "headfile.h"
 #include "digit_uart.h"
+#include "pin_config.h"
 #include <stddef.h>
 
 // ==================== 环形接收缓冲区 ====================
@@ -62,7 +63,7 @@ static char* get_field(const char *line, int n, char *buf, int buf_size)
 
 void digit_uart_init(void)
 {
-    uart_init(UART_1, 115200, 0);
+    uart_init(DIGIT_UART, 115200, 0);  // DIGIT_UART = UART_1（pin_config.h）
 }
 
 // 清空K230接收缓冲区（识别窗口开启时调用，丢弃旧帧）
@@ -79,14 +80,14 @@ void digit_uart_flush(void)
 
 void digit_uart_rx_handler(void)
 {
-    while (USART1->SR & (0x20 | 0x08))
+    while (DIGIT_UART_INST->SR & (0x20 | 0x08))
     {
-        if (USART1->SR & 0x08)
+        if (DIGIT_UART_INST->SR & 0x08)
             rx_error++;
 
-        if (USART1->SR & 0x20)
+        if (DIGIT_UART_INST->SR & 0x20)
         {
-            uint8_t data = USART1->DR;
+            uint8_t data = DIGIT_UART_INST->DR;
             rx_byte_count++;
 
             uint16_t next = (rx_head + 1) % RX_BUF_SIZE;
@@ -100,7 +101,7 @@ void digit_uart_rx_handler(void)
         }
         else
         {
-            uint8_t dummy = USART1->DR;
+            uint8_t dummy = DIGIT_UART_INST->DR;
             (void)dummy;
         }
     }

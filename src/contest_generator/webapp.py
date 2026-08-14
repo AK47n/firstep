@@ -25,6 +25,7 @@ from typing import Any, Callable, Sequence
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from .boards import BOARDS_DIR, load_boards
 from .changelog import load_changelog
 from .compile_runner import (
     CompileRunnerError,
@@ -514,6 +515,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 for platform in KNOWN_PLATFORMS
             ],
         }
+
+    # 板定义（板图坐标/能力集单源，工单 pin-board-config/01）：前端板图
+    # （工单 03 SVG）与生成门禁（工单 02 绑定校验）同吃这份数据
+    @app.get("/api/boards")
+    @_map_errors
+    def boards(platform: str = ""):
+        """板定义清单；platform 可选过滤（未知平台 = 空列表，不报错）。"""
+        loaded = load_boards(BOARDS_DIR)
+        if platform:
+            loaded = [b for b in loaded if b.platform == platform]
+        return {"boards": [b.to_dict() for b in loaded]}
 
     # 标签会话（启动器模式）：前端打开登记、关闭注销；最后一个离开 →
     # 宽限后自动停服务（"关浏览器 = 停止"）。非启动器模式零影响。

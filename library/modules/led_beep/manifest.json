@@ -12,7 +12,15 @@
       "hardware_bound": false,
       "notes": "SysConfig 需配置 GPIO 组 LED_BEEP（LED_BEEP_PORT/LED_BEEP_LED_PIN = PA15 输出，原 LaunchPad 值 PA3 为晶振脚）；蜂鸣器函数为空实现，需要时自行补 GPIO。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "LED_BEEP_LED",
+          "type": "gpio_out",
+          "default": "PA15",
+          "required": true
+        }
+      ]
     },
     "stm32": {
       "files": [],

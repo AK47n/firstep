@@ -14,7 +14,21 @@
       "hardware_bound": false,
       "notes": "SysConfig 需配置 UART0（命名 IMU601，115200 8N1，BUSCLK 40MHz）；接线 TX→PA31(UART0 RX，内部上拉)、RX→PA28(UART0 TX)。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "IMU601_TX",
+          "type": "uart_tx",
+          "default": "PA28",
+          "required": true
+        },
+        {
+          "id": "IMU601_RX",
+          "type": "uart_rx",
+          "default": "PA31",
+          "required": true
+        }
+      ]
     }
   }
 }

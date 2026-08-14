@@ -12,7 +12,21 @@
       "hardware_bound": false,
       "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 digit_uart_init() 开 NVIC；digit_uart_rx_handler() 需挂在 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）里（main.c 或 isr 文件）。解析逻辑与 21F/26H stm32 版一致（环形缓冲 + CSV 帧解析）。编译验证未上板。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "DIGIT_UART_TX",
+          "type": "uart_tx",
+          "default": "PA8",
+          "required": true
+        },
+        {
+          "id": "DIGIT_UART_RX",
+          "type": "uart_rx",
+          "default": "PA9",
+          "required": true
+        }
+      ]
     },
     "stm32": {
       "files": [
@@ -23,7 +37,25 @@
       "hardware_bound": false,
       "notes": "文件来自 21F 且真机编译过（digit_uart.o）。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "DIGIT_UART_TX",
+          "type": "uart_tx",
+          "default": "PA9",
+          "required": true,
+          "macros": [
+            "DIGIT_UART",
+            "DIGIT_UART_INST"
+          ]
+        },
+        {
+          "id": "DIGIT_UART_RX",
+          "type": "uart_rx",
+          "default": "PA10",
+          "required": true
+        }
+      ]
     }
   }
 }

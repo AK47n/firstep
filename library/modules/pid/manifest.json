@@ -16,7 +16,57 @@
       "hardware_bound": false,
       "notes": "移植源 sources/contest/2026H/26H（26H 滚球原工程 code/pid.c + gray_track.c，stm32 Keil 工程；驱动经移植为 mspm0：motorA_duty/motorB_duty→motor_set_duty(id,duty)；motorA_dir/motorB_dir→motor_set_direction(id,dir)（0停1正转2反转）；MAX_DUTY=1300（26H 原 50000））。决策层（LAP 启停线一圈停车状态机 + 运行计时 + K230 球坐标消费）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（26H-滚球巡线决策例程，stm32 源工程）。驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）；灰度 8 路用母版 HUIDU 宏（D1→L1…D8→R4）。10ms 调度由骨架自建（MOTOR_PID_INST_IRQHandler 或自建定时器中断：读编码器清零 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motor_set_duty）；编码器走 key 模块 counter（符号级 extern，需手动同选 key）。陀螺前馈（GYRO_DAMP_GAIN=0）与 imu_uart 引用已随剥离移除，deps 不引 imu_uart/ball_detect。编译验证：gmake 0 错（2026H 滚球线产物）。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "GRAY_D1",
+          "type": "gpio_in",
+          "default": "PA22",
+          "required": true
+        },
+        {
+          "id": "GRAY_D2",
+          "type": "gpio_in",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "GRAY_D3",
+          "type": "gpio_in",
+          "default": "PA24",
+          "required": true
+        },
+        {
+          "id": "GRAY_D4",
+          "type": "gpio_in",
+          "default": "PA25",
+          "required": true
+        },
+        {
+          "id": "GRAY_D5",
+          "type": "gpio_in",
+          "default": "PA26",
+          "required": true
+        },
+        {
+          "id": "GRAY_D6",
+          "type": "gpio_in",
+          "default": "PA27",
+          "required": true
+        },
+        {
+          "id": "GRAY_D7",
+          "type": "gpio_in",
+          "default": "PB4",
+          "required": true
+        },
+        {
+          "id": "GRAY_D8",
+          "type": "gpio_in",
+          "default": "PB5",
+          "required": true
+        }
+      ]
     },
     "stm32": {
       "files": [
@@ -29,7 +79,89 @@
       "hardware_bound": false,
       "notes": "移植源 sources/contest/2021F/21F（2021F 巡线送药原工程 code/pid.c + gray_track.c + user/isr.c）。决策层（十字路口检测/T字路口检测/路由表/K230 动态路口/远端导航/药房状态机/路径记忆 + pid_isr 10ms 调度）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（21F-巡线送药决策例程）；驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）。10ms 调度由骨架自建（TIM3 tim_interrupt_ms_init + ISR：读编码器 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motorA_duty/motorB_duty）；编码器 Encoder_count1/2 走 motor 模块。MAX_DUTY=50000（母版 ml_pwm）。陀螺前馈（GYRO_DAMP_GAIN=0）与角度环 yaw_Kalman 引用已随剥离移除，deps 不引 ml_mpu6050/digit_uart。编译验证：UV4 0 错（21F 巡线线产物）。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "GRAY_D1",
+          "type": "gpio_in",
+          "default": "PB12",
+          "required": true,
+          "macros": [
+            "GRAY_D1_PORT",
+            "GRAY_D1_PIN"
+          ]
+        },
+        {
+          "id": "GRAY_D2",
+          "type": "gpio_in",
+          "default": "PB13",
+          "required": true,
+          "macros": [
+            "GRAY_D2_PORT",
+            "GRAY_D2_PIN"
+          ]
+        },
+        {
+          "id": "GRAY_D3",
+          "type": "gpio_in",
+          "default": "PB14",
+          "required": true,
+          "macros": [
+            "GRAY_D3_PORT",
+            "GRAY_D3_PIN"
+          ]
+        },
+        {
+          "id": "GRAY_D4",
+          "type": "gpio_in",
+          "default": "PB15",
+          "required": true,
+          "macros": [
+            "GRAY_D4_PORT",
+            "GRAY_D4_PIN"
+          ]
+        },
+        {
+          "id": "GRAY_D5",
+          "type": "gpio_in",
+          "default": "PA8",
+          "required": true,
+          "macros": [
+            "GRAY_D5_PORT",
+            "GRAY_D5_PIN"
+          ]
+        },
+        {
+          "id": "GRAY_D6",
+          "type": "gpio_in",
+          "default": "PC13",
+          "required": true,
+          "macros": [
+            "GRAY_D6_PORT",
+            "GRAY_D6_PIN"
+          ]
+        },
+        {
+          "id": "GRAY_D7",
+          "type": "gpio_in",
+          "default": "PC14",
+          "required": true,
+          "macros": [
+            "GRAY_D7_PORT",
+            "GRAY_D7_PIN"
+          ]
+        },
+        {
+          "id": "GRAY_D8",
+          "type": "gpio_in",
+          "default": "PC15",
+          "required": true,
+          "macros": [
+            "GRAY_D8_PORT",
+            "GRAY_D8_PIN"
+          ]
+        }
+      ]
     }
   }
 }

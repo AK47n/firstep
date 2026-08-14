@@ -2,36 +2,20 @@
 #define _config_h_
 
 #include "stdint.h"
+#include "pin_config.h"
 
 // ============================================================
-//  引脚映射 — 所有硬件引脚集中定义，方便改线
+//  外设参数集中定义（引脚宏已并入母版 pin_config.h——ADR 0010 接线单源：
+//  UWB_UART / ZIGBEE_UART / LED_* / BUZZER_* / DIP_* 均在其中；
+//  本文件保留波特率与显示/滤波参数，既有消费方引用不变）
 // ============================================================
 
-// UWB 基站串口：UART1 (PA9=TX → 基站RX, PA10=RX ← 基站TX)
-#define UWB_UART            UART_1
+// UWB 基站串口波特率（UART 实例 = pin_config.h 的 UWB_UART = UART_1）
 #define UWB_BAUD            115200
 
 // OLED 软件I2C (已在 ml_oled.h 中定义: PB8=SCL, PB9=SDA)
 
-// 三个独立LED (共阴，高电平点亮)
-#define LED_PORT           GPIO_C
-#define LED_RED_PIN         Pin_13   // 红灯
-#define LED_YELLOW_PIN      Pin_14   // 黄灯
-#define LED_GREEN_PIN       Pin_15   // 绿灯
-
-// 蜂鸣器 (有源蜂鸣器，低电平触发)
-#define BUZZER_GPIO         GPIO_B
-#define BUZZER_PIN          Pin_0
-
-// DIP-4 拨码开关 (4位二进制ID，上拉输入，拨到ON=低电平)
-#define DIP_GPIO            GPIO_B
-#define DIP_PIN0            Pin_12
-#define DIP_PIN1            Pin_13
-#define DIP_PIN2            Pin_14
-#define DIP_PIN3            Pin_15
-
-// Zigbee 无线串口：USART3 (PB10=TX → 模块RX, PB11=RX ← 模块TX)
-#define ZIGBEE_UART         UART_3
+// Zigbee 无线串口波特率（UART 实例 = pin_config.h 的 ZIGBEE_UART = UART_3）
 #define ZIGBEE_BAUD         115200
 
 // ============================================================
