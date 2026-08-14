@@ -7,8 +7,9 @@
       topic 从题库读（默认 2026C 2021F）；--topic-file 从外部 md 读题面（如 2026H）；
       --reference-ids 参考注入真机验证（前端同款语义：锚定命中 ∪ 手动选）；
       --reuse-recommend 复用推荐缓存（done 载荷跨运行落盘 .scratch/real-run/
-      cache/，回归跑修复循环/编译链路时推荐段秒过；缓存缺失报错退出，不静默
-      回退真实调用）。
+      cache/，回归跑修复循环/编译链路时推荐段秒过；缓存缺失/失效报错退出，
+      不静默回退真实调用；命中时 reference_ids/clarify 与生成缓存时不一致
+      打警告不阻断）。
 依赖：服务在 127.0.0.1:8000 运行（python -m contest_generator.webapp）。
 输出目录：.scratch/real-run/out_<topic>_<platform>（不碰桌面原工程）。
 """
@@ -251,8 +252,10 @@ def recommend_stream(payload: dict) -> dict:
 #
 # 推荐段是回归大头（单题 ~10-15 min 真实 LLM 调用）；done 载荷跨运行落盘，
 # --reuse-recommend 命中直进骨架。缓存 json = done 载荷逐字 + 元数据
-# （topic_key / platform / problem_sha256）——下游消费变量对齐 recommend_stream
-# 返回的 done，不发明新形状。缺失 / 失效报错退出，不静默回退真实调用
+# （topic_key / platform / problem_sha256 / reference_ids / clarify_sha256
+# ——后两者为参数指纹，命中不一致打警告不阻断）——下游消费变量对齐
+# recommend_stream 返回的 done，不发明新形状。缺失 / 失效报错退出，不静默
+# 回退真实调用
 # （回归确定性优先，防止"以为复用了其实又烧了 15 min"）。骨架不缓存
 # （修复循环需要真实 main_c，1-2 min 保留）。
 
@@ -260,6 +263,28 @@ def recommend_stream(payload: dict) -> dict:
 def problem_fingerprint(problem_text: str) -> str:
     """题面 sha256 指纹（无 topic_id 时兼作缓存键；复用时校验题面未变）。"""
     return hashlib.sha256(problem_text.encode("utf-8")).hexdigest()
+
+
+def clarify_fingerprint(
+    clarify_hist: list[dict[str, str]] | tuple[dict[str, str], ...],
+) -> str:
+    """clarify 历史指纹（缓存元数据参数指纹，复用警告比对用）。
+
+    顺序不敏感（map 预置 + 补问追加的先后不影响内容语义）：逐条序列化后
+    排序再哈希——同内容不同顺序 = 同指纹，避免"补问答案进 map 后重跑"
+    误报警告。
+    """
+    items = sorted(
+        json.dumps(
+            {"question": h["question"], "answer": h["answer"]},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        for h in clarify_hist
+    )
+    return hashlib.sha256(
+        json.dumps(items, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
 
 
 def cache_key(topic_id: str | None, problem_text: str) -> str:
@@ -287,15 +312,21 @@ def cache_recommend(
     topic_key: str,
     problem_text: str,
     platform: str,
+    reference_ids: tuple[str, ...] | list[str] = (),
+    clarify_hist: list[dict[str, str]] | tuple[dict[str, str], ...] = (),
 ) -> None:
     """写缓存：done 载荷逐字 + 元数据。done = recommend_stream 终态 data
     （modules/requirements/references/topic_id），下游 selectedSlugs / expand
     / generate 零改动语义（决策 1）。platform 元数据防跨平台复用（推荐层按
-    平台过滤模块，stm32 推荐结果喂 mspm0 生成会假绿）。"""
+    平台过滤模块，stm32 推荐结果喂 mspm0 生成会假绿）；reference_ids /
+    clarify_sha256 参数指纹（grilling 裁决 ①：这两个轴只进真实请求体，
+    复用路径命中时不比对会静默沿用旧推荐——落指纹供复用警告）。"""
     payload = {
         "topic_key": topic_key,
         "platform": platform,
         "problem_sha256": problem_fingerprint(problem_text),
+        "reference_ids": list(reference_ids),
+        "clarify_sha256": clarify_fingerprint(clarify_hist),
         "done": done,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -556,10 +587,30 @@ def check_topic(
         if (
             cached["problem_sha256"] != problem_fingerprint(problem_text)
             or cached["platform"] != platform
+            or cached["topic_key"] != key
         ):
-            print(f"  ✗ 缓存失效: {cpath}（题面或平台已变，指纹不符）")
+            print(f"  ✗ 缓存失效: {cpath}（题面 / 平台 / 键不符）")
             print("    （先跑一次不带 --reuse-recommend 重建缓存）")
             return False
+        # 参数指纹警告（grilling 裁决 ①）：reference_ids / clarify 内容只进
+        # 真实请求体，复用路径否则不感知其变化——同题换参数静默沿用旧推荐
+        # = 假绿。不一致打警告不阻断（报错会废掉 flag 换参数迭代的用途；
+        # 旧格式缓存无此元数据则跳过比对）
+        warns = []
+        if "reference_ids" in cached and \
+                sorted(cached["reference_ids"]) != sorted(reference_ids):
+            warns.append(
+                f"reference_ids 与生成缓存时不同"
+                f"（缓存 {sorted(cached['reference_ids'])}，本次 {sorted(reference_ids)}）"
+            )
+        if "clarify_sha256" in cached and \
+                cached["clarify_sha256"] != clarify_fingerprint(clarify_hist):
+            warns.append("clarifications 内容与生成缓存时不同")
+        if warns:
+            print("  ⚠️ 缓存命中，但本次输入与生成缓存时不同：")
+            for w in warns:
+                print(f"    - {w}")
+            print("    （结果沿用旧推荐；如需应用新输入，去掉 --reuse-recommend 重跑）")
         data = cached["done"]
         print(f"[缓存] 复用 {cpath}（推荐段跳过）")
     else:
@@ -601,6 +652,7 @@ def check_topic(
             cache_recommend(
                 cpath, data, topic_key=key,
                 problem_text=problem_text, platform=platform,
+                reference_ids=reference_ids, clarify_hist=clarify_hist,
             )
             print(f"[缓存] 已写 {cpath}")
         except OSError as exc:

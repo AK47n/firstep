@@ -11,10 +11,6 @@ __pycache__/
 # 真机验收产物（Keil 编译日志 / 生成工程 / 会话日志）
 .scratch/real-run/
 
-# 推荐缓存（工单 check-recommend-cache/01 决策 3：done 载荷跨运行落盘；
-# 已被上行整目录忽略覆盖，显式一行防将来整目录规则收窄时漏网）
-.scratch/real-run/cache/
-
 # 本地服务运行日志（uvicorn stdout 重定向）
 webapp.log
 

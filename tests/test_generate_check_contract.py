@@ -545,18 +545,24 @@ def test_check_topic_reuse_miss_errors_without_real_call(
 
 
 @pytest.mark.parametrize(
-    "cache_problem_text, cache_platform",
-    [("旧题面", "stm32"), ("题面全文", "mspm0")],
+    "cache_problem_text, cache_platform, cache_topic_key",
+    [
+        ("旧题面", "stm32", "T1"),
+        ("题面全文", "mspm0", "T1"),
+        ("题面全文", "stm32", "T2"),
+    ],
 )
 def test_check_topic_reuse_stale_cache_errors(
-    monkeypatch, tmp_path, capsys, cache_problem_text, cache_platform
+    monkeypatch, tmp_path, capsys, cache_problem_text, cache_platform,
+    cache_topic_key,
 ) -> None:
-    """题面变（指纹不符）或平台不符 → 缓存失效报错退出（决策 6：题面变 →
-    指纹变自然失效；platform 防跨平台复用）。"""
+    """题面变（指纹不符）/ 平台不符 / 键不符 → 缓存失效报错退出（决策 6：
+    题面变 → 指纹变自然失效；platform 防跨平台复用；topic_key 比对 =
+    grilling 裁决，键不符的缓存文件不静默进下游）。"""
     _setup_topic_env(monkeypatch, tmp_path)
     gen.cache_recommend(
         gen.recommend_cache_path("T1"), {"modules": []},
-        topic_key="T1", problem_text=cache_problem_text,
+        topic_key=cache_topic_key, problem_text=cache_problem_text,
         platform=cache_platform,
     )
 
@@ -602,3 +608,85 @@ def test_check_topic_cache_write_failure_does_not_block(
     )
     assert gen.check_topic("T1") is False  # 照常走完推荐段判定（空模块收工）
     assert "写失败" in capsys.readouterr().out
+
+
+def test_cache_recommend_records_param_fingerprints(tmp_path) -> None:
+    """缓存元数据带参数指纹（grilling 裁决 ①）：reference_ids 列表 + clarify
+    内容 sha256；clarify 指纹顺序不敏感（补问答案进 map 后重跑不误报警告）；
+    旧格式缓存（无此两字段）仍可加载（load 形状校验只钉必填三元数据）。"""
+    path = gen.recommend_cache_path("T1", cache_dir=tmp_path)
+    hist = [
+        {"question": "问1?", "answer": "答1"},
+        {"question": "问2?", "answer": "答2"},
+    ]
+    gen.cache_recommend(
+        path, DONE_SAMPLE, topic_key="T1",
+        problem_text="题面全文", platform="stm32",
+        reference_ids=("r1", "r2"), clarify_hist=hist,
+    )
+    cached = gen.load_recommend(path)
+    assert cached["reference_ids"] == ["r1", "r2"]
+    assert cached["clarify_sha256"] == gen.clarify_fingerprint(hist)
+    assert gen.clarify_fingerprint(hist) == gen.clarify_fingerprint(
+        list(reversed(hist))
+    )
+    old = dict(cached)
+    del old["reference_ids"], old["clarify_sha256"]
+    (path.parent / "old.json").write_text(
+        json.dumps(old, ensure_ascii=False), encoding="utf-8"
+    )
+    assert gen.load_recommend(path.parent / "old.json")["done"] == DONE_SAMPLE
+
+
+def test_check_topic_reuse_param_mismatch_warns_but_proceeds(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """同题换 reference_ids / clarify 内容复用缓存 → 打警告不阻断，推荐段仍
+    零调用（grilling 裁决 ①：不静默沿用旧推荐、也不废掉 flag 换参数迭代的
+    用途）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    gen.cache_recommend(
+        gen.recommend_cache_path("T1"), {"modules": []},
+        topic_key="T1", problem_text="题面全文", platform=gen.PLATFORM,
+        reference_ids=("r1",), clarify_hist=[{"question": "问?", "answer": "答"}],
+    )
+    called: list[dict] = []
+
+    def fake_stream(payload: dict) -> dict:
+        called.append(payload)
+        return {"event": "done", "data": {"modules": []}, "rounds": 0}
+
+    monkeypatch.setattr(gen, "recommend_stream", fake_stream)
+    assert gen.check_topic(
+        "T1", reuse_recommend=True,
+        clarify_map={"问?": "答2"}, reference_ids=("r2",),
+    ) is False  # 空模块 done → 骨架前收工；警告已打、流程照走
+    assert called == []
+    out = capsys.readouterr().out
+    assert "本次输入与生成缓存时不同" in out
+    assert "reference_ids" in out
+    assert "clarifications" in out
+
+
+def test_check_topic_reuse_same_params_no_warning(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """同题同参数复用 → 无警告（指纹一致静默通过，警告通道零误报）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    hist = [{"question": "问?", "answer": "答"}]
+    gen.cache_recommend(
+        gen.recommend_cache_path("T1"), {"modules": []},
+        topic_key="T1", problem_text="题面全文", platform=gen.PLATFORM,
+        reference_ids=("r1",), clarify_hist=hist,
+    )
+    monkeypatch.setattr(
+        gen, "recommend_stream",
+        lambda p: {"event": "done", "data": {"modules": []}, "rounds": 0},
+    )
+    assert gen.check_topic(
+        "T1", reuse_recommend=True,
+        clarify_map={"问?": "答"}, reference_ids=("r1",),
+    ) is False
+    out = capsys.readouterr().out
+    assert "复用" in out
+    assert "本次输入与生成缓存时不同" not in out
