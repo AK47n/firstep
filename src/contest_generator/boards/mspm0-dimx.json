@@ -33,7 +33,7 @@
     {"name": "PA21", "kind": "fixed", "x": 1, "y": 7, "side": "right", "capabilities": [], "notes": "VREF- 原理图直连地（R25 NC），不可用"},
     {"name": "PB9", "kind": "io", "x": 1, "y": 8, "side": "right", "capabilities": ["gpio_out", "gpio_in", "enc", "pwm:TIMA0_C0N", "pwm:TIMA0_C1", "spi_sck:SPI1"], "notes": ""},
     {"name": "PB8", "kind": "io", "x": 1, "y": 9, "side": "right", "capabilities": ["gpio_out", "gpio_in", "enc", "pwm:TIMA0_C0", "spi_mosi:SPI1"], "notes": ""},
-    {"name": "PA18", "kind": "io", "x": 1, "y": 10, "side": "right", "capabilities": ["gpio_out", "gpio_in", "enc", "pwm:TIMG7_C1", "pwm:TIMA1_C1", "pwm:TIMA0_C3N", "adc:A1_3", "i2c_sda:I2C1", "spi_sck:SPI0", "spi_mosi:SPI1", "uart_rx:UART1"], "notes": "47k 到 BSL 排针（输出无碍）"},
+    {"name": "PA18", "kind": "io", "x": 1, "y": 10, "side": "right", "capabilities": ["gpio_out", "gpio_in", "enc", "pwm:TIMG7_C1", "pwm:TIMA1_C1", "pwm:TIMA0_C3N", "adc:A1_3", "i2c_sda:I2C1", "spi_sck:SPI0", "spi_mosi:SPI1", "uart_rx:UART1"], "notes": "BSL 烧录脚共用：经 47k 连 BSL 排针——作输出无碍；用 BSL 烧录时勿占用"},
     {"name": "PA17", "kind": "io", "x": 1, "y": 11, "side": "right", "capabilities": ["gpio_out", "gpio_in", "enc", "pwm:TIMG7_C0", "pwm:TIMA1_C0", "pwm:TIMA0_C3", "adc:A1_2", "i2c_scl:I2C1", "spi_sck:SPI0", "spi_sck:SPI1", "uart_tx:UART1"], "notes": ""},
     {"name": "PA16", "kind": "io", "x": 1, "y": 12, "side": "right", "capabilities": ["gpio_out", "gpio_in", "enc", "pwm:TIMA0_C2N", "pwm:TIMA1_C1", "pwm:TIMA1_C1N", "adc:A1_1", "i2c_sda:I2C1", "spi_miso:SPI1"], "notes": ""},
     {"name": "PA15", "kind": "io", "x": 1, "y": 13, "side": "right", "capabilities": ["gpio_out", "gpio_in", "enc", "pwm:TIMA0_C2", "pwm:TIMA1_C0N", "pwm:TIMA1_C0", "adc:A1_0", "i2c_scl:I2C1", "spi_cs:SPI1_2"], "notes": ""},
