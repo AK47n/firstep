@@ -48,10 +48,13 @@
 | 收敛循环 | 推荐分析以题面为依据反复自检修订（删脑补 / 补遗漏 / 重查覆盖），连续两轮功能需求层一致即收敛（上限 4 轮）；拿不准暂停向用户补问（澄清阶段先行：补问在收敛前完成，回答后不重跑已跑轮次）；澄清问答历史贯穿收敛循环（select_modules 每轮带 clarifications 独立段，题面编号不动）；select_modules / clarify 走 _retry_parse 整次重试兜底（瞬时空内容/畸形输出自动重问，最多 3 轮）；收敛解可缓存进赛题条目（v2，库内命中每次现算，库会变） | selection.py / webapp.py / llm.py |
 | 错误映射 | 路由异常的唯一出口：error_to_http 表把核心异常转 HTTP 状态与中文 message（业务 400 / LLM 502 / 文件系统 400）；**未登记异常 = 真 bug → 500 大声失败**，不吞成业务 400 | errors.py（error_entry 单表，webapp 只取值 / 包装；结构测试反射包内全部异常类防漏登） |
 | 进度事件 | 后端经 SSE 推送的实时进展（提炼 = 阶段 / 批次 / 补问轮，推荐 = 收敛轮次 round / converged；最后一个事件携带完整结果）；模型单次调用期间不产生事件，存活证明 = 客户端每秒跳动的计时器 | llm.py / selection.py（进度发射）/ events.py（事件词表唯一出处，含终态）/ sse.py（线格式与流化运行器） |
-| 板定义 | 一块开发板的数据：引脚（丝印名 / 板图坐标 / 类型 / 能力集）+ 固定资源标注；后端 boards/*.json 单源（生成门禁与前端渲染同吃），/api/boards 提供；stm32 = 最小系统板（蓝药丸），mspm0 = 地猛星；能力集口径 stm32 = ml_libs 支持表（v1 受限）、mspm0 = 芯片复用能力（任意）（ADR 0010） | boards.py（未实现，工单 pin-board-config/01） |
-| 引脚角色 | 模块 manifest pins 字段声明的引脚需求条目（id / 类型 / 标签 / 默认引脚 / 必选）；标签 = 模块_用途（如 TB6612_STBY）；配置菜单项 = 已选模块的未绑角色——配置词汇用模块引脚角色而非芯片 AF 复用（ADR 0010） | manifest.py pins（未实现，工单 pin-board-config/01） |
-| 角色类型 | 引脚角色的能力类别词表：gpio_out / gpio_in / uart_tx / uart_rx / pwm / enc / adc / i2c_scl / i2c_sda / spi_* / exti；能力 token 可带实例（如 uart_tx:UART_1、pwm:TIM2_CH1） | boards.py（未实现，工单 pin-board-config/01） |
-| 引脚绑定 | 角色→板引脚 的分配：随生成请求走（v1 不持久化），未绑 = 用声明默认值（默认布线，生成即编译不破）；生成器按绑定覆写 pin_config.h（stm32）/ 只改 .syscfg 的 $assign 行（mspm0，实例名与宏名不动）；同引脚多角色允许（共享，如 xunji/huidu 共传感器，门禁不拦、前端叠加标注）（ADR 0010） | generator 写侧（未实现，工单 pin-board-config/02） |
+| 板定义 | 一块开发板的数据：引脚（丝印名 / 板图坐标 / 类型 / 能力集）+ 固定资源标注；后端 boards/*.json 单源（生成门禁与前端渲染同吃），/api/boards 提供；stm32 = 最小系统板（蓝药丸），mspm0 = 地猛星；能力集口径 stm32 = ml_libs 支持表（v1 受限）、mspm0 = 芯片复用能力（任意）（ADR 0010） | boards.py（已实现，工单 pin-board-config/01） |
+| 引脚角色 | 模块 manifest pins 字段声明的引脚需求条目（id / 类型 / 标签 / 默认引脚 / 必选）；标签 = 模块_用途（如 TB6612_STBY）；配置菜单项 = 已选模块的未绑角色——配置词汇用模块引脚角色而非芯片 AF 复用（ADR 0010） | manifest.py pins（已实现，工单 pin-board-config/01） |
+| 角色类型 | 引脚角色的能力类别词表：gpio_out / gpio_in / uart_tx / uart_rx / pwm / enc / adc / i2c_scl / i2c_sda / spi_* / exti；能力 token 可带实例（如 uart_tx:UART_1、pwm:TIM2_CH1） | boards.py（已实现，工单 pin-board-config/01） |
+| 引脚绑定 | 角色→板引脚 的分配：随生成请求走（v1 不持久化），未绑 = 用声明默认值（默认布线，生成即编译不破）；生成器按绑定覆写 pin_config.h（stm32）/ 只改 .syscfg 的 $assign 行（mspm0，实例名与宏名不动）；同引脚多角色允许（共享，如 xunji/huidu 共传感器，门禁不拦、前端叠加标注）（ADR 0010） | generator 写侧 / pin_bindings.py / pinwriter.py（已实现，工单 pin-board-config/02） |
+| 类型级能力校验 | 角色绑定校验的两种口径之一：只查引脚能力集含该角色**类型**（任意实例 token 即合法）——stm32 pwm 角色的实例由**绑定引脚**推导并喂渲染器写 TIM/CH 宏（代码吃宏，换实例零库改动）；对照 strict-all 实例校验（默认引脚的**全部**实例都必须命中）——mspm0 保持（SysConfig 外设实例固定的真约束），stm32 其余类型亦保持（enc 线号 / uart 实例有 handler 名等真硬编码）。分级 = 平台×类型（ADR 0011） | pin_bindings.py resolve_bindings + index.html pinCanHost（工单 pin-unlock-stm32/01） |
+| 定时器实例冲突 | pwm 绑定实例与骨架调度/滴答定时器同 TIM 外设（26H 骨架 TIM3 10ms 调度、2026C 骨架 TIM2 1ms 滴答）→ 运行期 ARR/PSC 互覆，编译绿运行坏；门禁扫 main_c 的 tim_interrupt_ms_init 实例与绑定 pwm 实例比对，冲突 400（只查用户绑定，默认组合冲突不拦——现状性质；识别不到不拦，漏报优于误报）（ADR 0011） | generator.py 门禁 _check_timer_instance_conflicts（工单 pin-unlock-stm32/01） |
+| 共享端口宏 | 多个角色的 macros 共享同一 _GPIO/_PORT 尾形宏（I2C_GPIO 为 MPU6050 SCL/SDA 共用、LED_PORT 为三灯共用）——改一个角色会改到同族其它角色的共享宏；绑定层面：两条改动绑定写同一共享宏且**值不同** = 坏代码 → 渲染层 400；未改同族角色的隐式漂移仍为提示语义（前端卡片已做）（ADR 0011） | pinwriter.py 渲染层校验（工单 pin-unlock-stm32/02） |
 
 ## 架构要点
 
