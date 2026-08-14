@@ -55,6 +55,7 @@ CubeMX 式引脚配置，但显示**开发板本体**而非芯片封装：stm32 
 ### 引脚绑定（bindings）
 
 - 载荷格式：`/api/generate` 请求体加可选字段 `bindings: {"<slug>.<role_id>": "<PIN>"}`（如 `{"motor.MOTOR_A_PWM": "PA0"}`；缺省 = 全默认，向后兼容）。
+- **板外默认**：角色默认引脚不在板图引脚集内（HUIDU R3/R4=PB4/PB5——地猛星排针未引出，工单 mspm0-master-dimx/01 实证）→ 清单标注"默认板外"、仍可绑定到板内脚；未绑 = 默认照写（syscfg 不动）；绑定到板外脚 = 未知引脚 400。
 - 同引脚多角色**允许**（xunji/huidu 共享灰度传感器先例）：门禁不拦重复，前端对同引脚多角色叠加标注。
 - 门禁校验（工单 02）：能力合法（绑定引脚的能力集含该角色类型实例）/ 未知角色或引脚 / 缺省走默认；另加骨架门禁——clex 注释剥离后 main.c 不得含引脚字面量（守住现状性质）。
 
@@ -85,3 +86,4 @@ CubeMX 式引脚配置，但显示**开发板本体**而非芯片封装：stm32 
 - 地猛星排针清单（引脚图 PDF 提取）：左排 PA0, PA1, PA28, PA31, NRST, PA2, PB24, PB20, PB19, PB18, PA7, PB2, PB3, PA8, PA9, PB6, PB7, +5V, 3V3, GND；右排 GND, PA27, PA26, PA25, PA24, PA23, PA22, PA21, PB9, PB8, PA18, PA17, PA16, PA15, PA14, PA13, PA12, +5V, 3V3, GND。PA19/PA20（SWD）只走独立 DEBUG 排针。
 - 真实 main.c 产物从不内联引脚字面量（16 份历史产物验证）——骨架门禁守住此性质即可，无需"骨架虚拟模块"。
 - 素材 PDF 在 `sources/materials/2026_04_地猛星电赛控制题配套资料/`（引脚图 + 原理图，pdftotext 可提取全文）；蓝药丸板级资料仓库内没有，需按公开标准布局重建。**2026-08-14 补**：芯片级引脚数据已入库 `sources/materials/2026_08_STM32F103手册/`（引脚定义 xlsx + 数据手册 + 参考手册），提取表 `.scratch/pin-board-config/stm32f103c8t6-pinmap.tsv`——能力集可与官方 AF 表逐脚核对；板形丝印仍需公开布局。
+- **地猛星化后板事实（工单 mspm0-master-dimx/01 Comments，2026-08-14，cef70de 已合 main）**：排针 32 IO、无 PB4/PB5（HUIDU R3/R4 默认板外）；PA21/VREF- 直连地不可用；PA0/PA1 板载 LED 与 I2C_0 共享（微闪，PA1 板载 4.7k 上拉、PA0 上拉位未焊）；PA14 LED2+15k（PWM 微亮）；PA18 47k 到 BSL；排针 33 分配全满无空闲脚；原理图 48 脚与 TI LQFP-48(PT) 吻合、syscfg 声明 LQFP-64(PM) 系 LaunchPad 遗留——包型号待核实（工单 mspm0-board-package/01）；TIMG7 16 位回绕问题待核实（工单 ntb-time-wrap/01）。

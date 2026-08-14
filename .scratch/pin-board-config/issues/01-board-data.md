@@ -14,7 +14,7 @@
 ### A 板定义
 
 1. `boards/stm32-min-system.json`：蓝药丸双排 20×2（公开标准布局重建；**芯片级引脚数据已入库**——`sources/materials/2026_08_STM32F103手册/`（引脚定义 xlsx 48 脚全表 + 数据手册 + 参考手册），提取表 `.scratch/pin-board-config/stm32f103c8t6-pinmap.tsv`（含默认 AF 与 remap 列，可逐脚核对）。固定项：PC13 板载 LED、PA11/12 USB、PA13/14 SWD、PD0/PD1 晶振、BOOT0/BOOT1、NRST、VBAT。能力集口径 = **ml_libs 支持表**：ml_uart（UART_1→PA9/10、UART_2→PA2/3、UART_3→PB10/11）、ml_pwm（TIM2_CH1..4→PA0..3、TIM3_CH1..4→PA6/PA7/PB0/PB1、TIM4_CH1..4→PB6..9 等，逐条照 ml_pwm.c 表）、ml_exti（EXTI_PA0~PC7 全表）、ml_adc（Channel→引脚表）、软 I2C（ml_i2c PB10/11、ml_oled PB8/9）→ 编码成能力 token（`uart_tx:UART_1`、`pwm:TIM2_CH1`、`exti:PA2` 等）；GPIO 角色任意 io 脚；**enc 角色 v1 限同 EXTI 线号引脚**（motor 的 EXTI2/EXTI4 handler 名绑定线号，换线号 = 遗留候选）。
-2. `boards/mspm0-dimx.json`：地猛星 2×20 排针 + 独立 SWD（PA19/20）/BSL 排针；固定占用（CH340E PA10/11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、NRST）。能力集 = 引脚图 PDF 每脚复用标注行（UART/I2C/SPI/TIMA/TIMG/ADC/COMP/OPA/CAN/DAC 逐脚录入，pdftotext 提取）+ GPIO 任意。
+2. `boards/mspm0-dimx.json`：地猛星 2×20 排针 + 独立 SWD（PA19/20）/BSL 排针；**排针共 32 个 IO 脚，PB4/PB5 不在排针上**（工单 mspm0-master-dimx/01 自检表实证）；固定占用（CH340E PA10/11、Flash PB14-17、晶振 PA3-6、NRST）；**PA21 固定不可用**（VREF- 原理图直连地，R25 NC）；板载共享注：PA0/PA1 = 板载 LED（I2C_0 共用，微闪副作用；PA1 板载 4.7k 上拉、PA0 上拉位未焊依赖 MPU 板自带）、PA2 = ROSC 偏置 100k 到地、PA14 = LED2 + 15k 到地（PWM 微亮可忽略）、PA18 = 47k 到 BSL 排针（输出无碍）。能力集 = 引脚图 PDF 每脚复用标注行（UART/I2C/SPI/TIMA/TIMG/ADC/COMP/OPA/CAN/DAC 逐脚录入，pdftotext 提取）+ GPIO 任意。
 3. `boards.py`：板定义模型（Board / BoardPin / capability 解析与判定 `pin_supports(pin, role_type, instance)`）+ 加载；`webapp.py` 加 `GET /api/boards`（返回 `{boards: [...]}`）。生成门禁与前端同吃此数据——单源。
 
 ### B manifest pins 声明
@@ -22,7 +22,8 @@
 4. `manifest.py`：Pins 模型 + 校验（id 唯一、type 在词表内、default 必填、label 缺省 = id）。角色类型词表（gpio_out / gpio_in / uart_tx / uart_rx / pwm / enc / adc / i2c_scl / i2c_sda / spi_* / exti）**单源定义**（boards 与 manifest 共用）。
 5. 补声明清单（默认值 = 现值）：
    - **stm32**：motor（MOTOR_A_PWM/A_DIR/A_DIR2/B_PWM/B_DIR/B_DIR2/A_ENC/A_ENC_DIR/B_ENC/B_ENC_DIR，pin_config.h 宏）、pid(gray_track)（D1-D8：PB12-15/PA8/PC13-15）、digit_uart（uart，UART_1）、debug_uart（uart，UART_2）、ball_detect（uart，UART_1）、uwb_uart（uart，UART_1）、zigbee_uart + zigbee_uart_key（uart，UART_3）、config（LED×3 / BUZZER / DIP×4）、ml_mpu6050（i2c，软 I2C PB10/11）。
-   - **mspm0**：motor（AIN1/AIN2/BIN1/BIN2/AA/AB/BA/BB/PWMAB_C0/PWMAB_C1）、huidu（L1-4/R1-4）、pid(gray_track_mspm0)（同 HUIDU 8 脚）、xunji（P1-P8 同 HUIDU——**同引脚共享合法**，不拦）、key（KEY + 编码器组）、digit_uart（DIGIT_UART PA9/PA8）、imu_uart（IMU601）、led_beep（LED）、oled（OLED I2C1 PB3/PB2）、step_motor（5 角色）、ml_mpu6050（I2C_0）。
+   - **mspm0**（默认值 = 地猛星化后 syscfg 现值，工单 mspm0-master-dimx/01 cef70de 已合 main）：motor（PWMAB_C0=PA12/C1=PA13、AIN1=PB9、AIN2=PA18、BIN1=PB18、BIN2=PA7、AA=PA16、AB=PA17、BA=PB19、BB=PB20）、huidu（L1=PA22/L2=PA23/L3=PA24/L4=PA25/R1=PA26/R2=PA27/**R3=PB4/R4=PB5 默认板外**——PB4/PB5 不在排针，见新增规则）、pid(gray_track_mspm0)（同 HUIDU 8 脚）、xunji（P1-P8 同 HUIDU——**同引脚共享合法**，不拦）、key（KEY START=PA2 + 编码器组）、digit_uart（DIGIT_UART TX=PA8/RX=PA9）、imu_uart（IMU601 TX=PA28/RX=PA31）、led_beep（LED=PA15）、oled（OLED I2C1 SCL=PB2/SDA=PB3）、step_motor（RST2=PB24/SLP2=PB6/DIR2=PB7/DCY2=PB8 + DCC_100_PWM2 C0=PA14）、ml_mpu6050（I2C_0 SCL=PA1/SDA=PA0）。
+6. **板外默认规则（新增）**：角色默认引脚不在板图引脚集内（HUIDU R3/R4=PB4/PB5）→ 角色仍出现在清单，状态标注"默认板外"；**不因默认板外而禁止绑定**——用户可绑到板内空闲脚；未绑 = 默认照写（syscfg 不动）。板定义 pins 集只含排针上的脚；绑定到 PB4/PB5 等板外脚 → 未知引脚校验拒绝（工单 02）。
    - filter / delay / uart / ntb_time 无引脚，不声明。
 
 ### C stm32 硬编码迁移
