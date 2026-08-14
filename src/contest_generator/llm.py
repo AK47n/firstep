@@ -236,6 +236,25 @@ FIX_SYSTEM_PROMPT = (
     "建议。"
 )
 
+# 修复请求回喂段合计截断上限（字符，工单 fix-request-budget/01）：
+# previous_fixes 逐条（file:line status + reason）随轮数无界增长，是修复请求
+# 体预算的第二大漏点（第一大是文件上下文旧字符口径，fix_errors.py 已改 wire
+# 字节记账）。与 CLARIFICATION_HISTORY_CAP 同哲学：段级合计截头带标注
+# （truncate_content 单源）——回喂只作「重试时逐字对齐重写」的判据，最坏形态
+# （N 条长 reason）仍 ≤ 本上限 × 6 字节 + 标注 ≈ 15.5KB。
+#
+# 修复请求总量预算反推（json.dumps ensure_ascii=True 口径，中文 6 字节/字符，
+# 与 _chat 发送前预检一致——不按 UTF-8 的 3 字节估）：系统提示词 ≈3.3KB（实测）
+# + JSON 壳 ≈0.15KB + 报错全文（4000 字符截断 + 标注）≈24.3KB + 赛题（4000
+# 截断上限，2026C 实测 2626 / 2021F 实测 2796 均在内）≈24KB + main.c（4000 +
+# 标注）≈24.3KB + 回喂段（本上限 + 标注）≈15.5KB + dropped 清单 / 模块清单 /
+# 平台 / 标题分隔 ≈5.3KB ≈ 96.4KB（实测）→ 文件上下文余量 = 128KB − 10KB
+# 目标余量 − 96.4KB ≈ 21.6KB → fix_errors.FIX_CONTEXT_TOTAL_BYTES = 23000
+# （wire 字节，每文件截断标注 ≈0.12KB 含在余量内）→ 最坏形态总量 ≈119.5KB，
+# 余量 ≈11.3KB ≥ 10KB。最坏情况结构测试钉死（tests/test_llm.py::
+# test_fix_prompt_worst_case_fits_request_budget），改大任一上限即红。
+FIX_PREVIOUS_FIXES_CAP = 2500
+
 # 归档判定（工单 02）：提炼时被剔除的业务代码是否值得归档为该赛题的参考文件。
 # 判据 = 可复用的业务代码 / 学习参考（传感器驱动、外设封装、赛题逻辑实现、
 # 算法），一次性杂物 / 配置噪声 / 无关文件不值得归档。与提炼判据同款双端
@@ -1628,6 +1647,8 @@ def _fix_errors_user_prompt(
     previous_fixes（工单 fix-loop-progress/01）：上一轮应用结果回喂——独立段
     「上一轮修复应用结果」（标题固定，测试断言用），位置在文件上下文之后、
     工程上下文之前；空列表 = 无该段（提示词与旧行为逐字节一致，零回归）。
+    海量条目时段级合计截断（FIX_PREVIOUS_FIXES_CAP，工单 fix-request-budget/01：
+    截头带标注，truncate_content 单源——与澄清历史段同哲学）。
     """
     parts: list[str] = ["【编译报错全文】", _truncate_content(error_text)]
     if file_contexts:
@@ -1655,7 +1676,13 @@ def _fix_errors_user_prompt(
             if fix["reason"]:
                 entry += f"：{fix['reason']}"
             lines.append(entry)
-        parts.append("\n".join(lines))
+        segment = "\n".join(lines)
+        if len(segment) > FIX_PREVIOUS_FIXES_CAP:
+            # 段级合计截断（工单 fix-request-budget/01）：条目数无界增长是
+            # 请求体预算漏点，截头带标注——回喂只作对齐重写判据，尾部条目
+            # 裁掉不丢关键信息（首条 = 最近的上一轮结果）
+            segment = truncate_content(segment, FIX_PREVIOUS_FIXES_CAP)
+        parts.append(segment)
     parts.append("【工程上下文】")
     if problem_text:
         parts.append("赛题原文：\n" + _truncate_content(problem_text))
