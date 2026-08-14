@@ -1561,19 +1561,20 @@ function renderPinBoard() {
   parts.push(`<text x="230" y="${H / 2 - 10}" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
   parts.push(`<text x="230" y="${H / 2 + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
   // 板缘地标（俯视画法，渲染器只认认识的 kind，未知静默跳过）：
-  // header_4p 上缘 = 黑色胶壳贴板缘 + 4 根金色排针向上伸出；
-  // usb_typec 下缘 = 俯视只看得到银白色宽扁壳顶面（开口朝下看不见）
+  // header_4p 上缘 = 黑色胶壳 + 4 根金色长排针（30px，穿壳立在板上）；
+  // usb_typec 下缘 = 银白宽扁壳面贴在板面，开口朝屏幕下方（壳底缘暗色横带）
   for (const lm of pinBoard.landmarks || []) {
     if (lm.kind === "header_4p" && lm.edge === "top") {
       parts.push(`<rect x="192" y="5" width="76" height="5" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
       for (let i = 0; i < 4; i++) {
-        parts.push(`<rect x="${198 + i * 16}" y="0" width="4" height="9" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
+        parts.push(`<rect x="${198 + i * 16}" y="0" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
       }
-      parts.push(`<text x="230" y="19" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
+      parts.push(`<text x="278" y="9" text-anchor="start" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
     } else if (lm.kind === "usb_typec" && lm.edge === "bottom") {
-      const by = 6 + rows * rowH + 14;
-      parts.push(`<rect x="207" y="${by}" width="46" height="10" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
-      parts.push(`<text x="230" y="${by + 22}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
+      const by = 6 + rows * rowH + 6;
+      parts.push(`<rect x="205" y="${by}" width="50" height="12" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
+      parts.push(`<rect x="213" y="${by + 9}" width="34" height="3" rx="1" fill="#0d1117"/>`);
+      parts.push(`<text x="230" y="${by + 24}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
     }
   }
   parts.push(`<text x="230" y="${H - 6}" text-anchor="middle" class="pin-board-caption">${esc(pinBoard.name)}</text>`);
