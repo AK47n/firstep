@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>电赛工程生成器</title>
+<title>firstep</title>
 <style>
   /* 深色科技感单主题（工单 ui-dark-theme/01）：近黑底 #0d1117 + 青色强调 + 克制平面。
      JetBrains Mono 自托管：woff2 base64 内联进 @font-face data URI（后端无静态文件路由，
@@ -37,7 +37,11 @@
   ::selection { background: var(--accent-dim); }
   header { background: var(--panel); border-bottom: 1px solid var(--border);
            padding: 12px 24px; display: flex; align-items: baseline; gap: 24px; }
-  header h1 { font-size: 18px; margin: 0; }
+  header h1 { font-family: var(--mono); font-size: 20px; font-weight: 700; margin: 0; letter-spacing: 1px; }
+  header h1 .accent { color: var(--accent); text-shadow: 0 0 12px rgba(0, 212, 255, .35); }
+  header h1 .cursor { color: var(--accent); font-weight: 400; margin-left: 2px;
+                      animation: cursor-blink 1.1s steps(2, start) infinite; }
+  @keyframes cursor-blink { to { visibility: hidden; } }
   header .sub { color: var(--muted); font-size: 12px; }
   nav { display: flex; gap: 4px; padding: 0 24px; background: var(--panel);
         border-bottom: 1px solid var(--border); }
@@ -50,8 +54,10 @@
   section.page.active { display: block; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
           padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 0 rgba(255, 255, 255, .02); }
-  .card h2 { font-size: 15px; margin: 0 0 12px; }
-  .card h3 { font-size: 13px; margin: 14px 0 8px; color: var(--muted); font-weight: 600; }
+  .card h2 { font-size: 16px; font-weight: 600; margin: 0 0 12px; letter-spacing: .3px; }
+  .card h2 .no { font-family: var(--mono); font-weight: 700; color: var(--accent); margin-right: 2px; }
+  .card h3 { font-size: 13px; margin: 14px 0 8px; color: var(--text); font-weight: 600; }
+  .card h3::before { content: "▸ "; color: var(--accent); }
   label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
   textarea, input[type=text], input[type=password], select {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
@@ -149,6 +155,13 @@
   .ref-pick-title { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: 13px;
                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ref-pick-desc { color: var(--muted); font-size: 12px; }
+  /* 参考资料选择：条目多时收成搜索 + 固定高度滚动，表头吸顶 */
+  .ref-pick-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .ref-pick-toolbar input { flex: 1; max-width: 340px; }
+  .ref-pick-toolbar button { padding: 4px 10px; font-size: 12px; }
+  .ref-pick-count { color: var(--accent); font-weight: 600; font-size: 12px; white-space: nowrap; }
+  .ref-pick-scroll { max-height: 320px; overflow-y: auto; }
+  .ref-pick-scroll .ref-pick-head { position: sticky; top: 0; background: var(--panel); z-index: 1; }
   /* 赛题简介（AI 预读，wait-what 效果）：一句话总览 + 功能要点，深底信息框 */
   .topic-summary { background: var(--info-dim); border: 1px solid var(--info-border); border-radius: 6px;
                    padding: 10px 14px; font-size: 13px; white-space: pre-line; color: var(--text); }
@@ -158,6 +171,16 @@
   .warn-box.hardware_bound { background: var(--info-dim); color: var(--info); }
   /* renderWarnings 直通提示 JS 内联浅绿 #d1fae5——JS 不动，样式表 !important 压成深色 */
   .warn-box.ok { background: var(--ok-dim) !important; color: var(--ok-bright) !important; }
+  /* 模块清单（第 6 步）：条目多行排布 + 列表滚动收口，长清单不出屏 */
+  #selected-list { max-height: 320px; overflow: auto; }
+  /* select 选项带长描述，min-width 放开 flex 挤压，否则整行被撑出卡片右边 */
+  #module-pool { min-width: 0; }
+  .mod-item .head { flex-wrap: wrap; }
+  #selected-list .item .slug { color: var(--accent); }
+  .mod-item .head button { margin-left: auto; }
+  .mod-item .mod-deps { color: var(--muted); font-size: 12px; margin-top: 4px; font-family: var(--mono); }
+  .mod-item .mod-notes { margin-top: 6px; color: var(--info); font-size: 13px; }
+  .mod-item .reason, .mod-item .mod-deps, .mod-item .mod-notes { overflow-wrap: break-word; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
@@ -249,7 +272,7 @@
                 border: 1px solid var(--warn-border); border-radius: 10px; font-size: 11px;
                 padding: 0 8px; }
   .prog-log-head { display: flex; gap: 6px; align-items: center; margin-top: 6px; cursor: pointer;
-                   user-select: none; font-size: 12px; color: var(--muted); }
+                   user-select: none; font-size: 12px; color: var(--muted); font-weight: 600; }
   .prog-log-head:hover { color: var(--accent); }
   .prog-log { margin-top: 6px; max-height: 220px; overflow-y: auto; font-size: 12px;
               font-family: var(--mono); border-top: 1px dashed var(--border);
@@ -397,7 +420,7 @@
 </head>
 <body>
 <header>
-  <h1>电赛工程生成器</h1>
+  <h1>first<span class="accent">ep</span><span class="cursor">_</span></h1>
   <span class="sub">贴题 → 赛题简介 → 选平台 → AI 推荐模块 → 一键生成完整工程</span>
 </header>
 <nav>
@@ -417,7 +440,7 @@
     <div id="gen-banner" class="banner hidden">尚未配置 AI API：请先到「设置」页填写 API 后再使用 AI 功能。</div>
 
     <div class="card">
-      <h2>1. 赛题原文</h2>
+      <h2><span class="no">1.</span> 赛题原文</h2>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
       <div class="row" style="margin-top:8px">
         <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md">
@@ -433,7 +456,7 @@
     </div>
 
     <div class="card">
-      <h2>2. 赛题简介（AI 预读）</h2>
+      <h2><span class="no">2.</span> 赛题简介（AI 预读）</h2>
       <div class="row">
         <button id="btn-topic-summary" class="primary">生成赛题简介</button>
         <span class="muted">AI 先读一遍题面，把散落在各处的全部要求整理成一条条要点——心里有数再往下选平台。</span>
@@ -443,13 +466,13 @@
     </div>
 
     <div class="card">
-      <h2>3. 目标平台</h2>
+      <h2><span class="no">3.</span> 目标平台</h2>
       <div id="platforms" class="row"></div>
       <div id="platform-msg" class="error"></div>
     </div>
 
     <div class="card">
-      <h2>4. 参考资料（可选）</h2>
+      <h2><span class="no">4.</span> 参考资料（可选）</h2>
       <div class="muted">勾选 = 手动指定作学习素材注入（全文直读）；赛题 / 套件自动关联的批次无需勾选也会注入。</div>
       <div id="ref-picker" style="margin-top:8px"></div>
       <div id="ref-picker-msg" class="error"></div>
@@ -457,7 +480,7 @@
     </div>
 
     <div class="card">
-      <h2>5. AI 推荐模块</h2>
+      <h2><span class="no">5.</span> AI 推荐模块</h2>
       <div class="row">
         <button id="btn-recommend" class="primary">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
@@ -475,11 +498,12 @@
     </div>
 
     <div class="card">
-      <h2>6. 模块清单与平台警告</h2>
+      <h2><span class="no">6.</span> 模块清单与平台警告</h2>
       <div class="row">
         <select id="module-pool" style="flex:1"></select>
         <button id="btn-add-module">添加模块</button>
         <button id="btn-expand" class="primary">展开依赖并检查平台</button>
+        <span id="module-count" class="muted" style="margin-left:auto"></span>
       </div>
       <div id="warnings" style="margin-top:10px"></div>
       <div id="selected-list" style="margin-top:10px"></div>
@@ -487,7 +511,7 @@
     </div>
 
     <div class="card" id="card-pin-config">
-      <h2>7. 引脚配置（板图点选）</h2>
+      <h2><span class="no">7.</span> 引脚配置（板图点选）</h2>
       <div class="muted">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
       <div id="pin-config-msg" class="banner hidden" style="margin-top:8px"></div>
       <div id="pin-config-empty" class="muted" style="margin-top:8px"></div>
@@ -517,7 +541,7 @@
     </div>
 
     <div class="card">
-      <h2>8. main.c 骨架</h2>
+      <h2><span class="no">8.</span> main.c 骨架</h2>
       <div class="row">
         <button id="btn-skeleton" class="primary">生成骨架</button>
         <span class="muted">AI 按所选模块接口排初始化序列；不存在的调用自动改写为注释占位，可手动微调。</span>
@@ -528,7 +552,7 @@
     </div>
 
     <div class="card">
-      <h2>9. 输出目录并生成</h2>
+      <h2><span class="no">9.</span> 输出目录并生成</h2>
       <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
       <div class="row">
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
@@ -556,7 +580,7 @@
     </div>
 
     <div class="card">
-      <h2>10. 交接提示词（Handoff）</h2>
+      <h2><span class="no">10.</span> 交接提示词（Handoff）</h2>
       <div class="row">
         <button id="btn-handoff" class="primary">生成交接提示词</button>
         <button id="btn-handoff-copy" class="hidden">复制</button>
@@ -567,7 +591,7 @@
     </div>
 
     <div class="card" id="card-fix-center">
-      <h2>11. 修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
+      <h2><span class="no">11.</span> 修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
       <div class="row">
         <button id="btn-fix-center" class="primary">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
@@ -838,18 +862,24 @@
   <!-- ============================ 设置页 ============================ -->
   <section id="tab-settings" class="page">
     <div class="card">
-      <h2>AI API 配置（保存后即时生效，无需重启）</h2>
+      <h2>AI 模型（保存后即时生效，无需重启）</h2>
       <div id="settings-banner" class="banner hidden">尚未配置：请填写 API key 后保存。</div>
       <div class="row">
         <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
+    </div>
+    <div class="card">
+      <h2>数据目录</h2>
       <div class="row">
         <div style="flex:1"><label>模块库目录</label><input type="text" id="set-lib-dir" placeholder="~/.contest_generator/modules"></div>
         <div style="flex:1"><label>母版库目录</label><input type="text" id="set-masters-dir" placeholder="~/.contest_generator/masters"></div>
       </div>
-      <div class="row" style="margin-top:10px">
+    </div>
+    <div class="card">
+      <h2>编译工具链</h2>
+      <div class="row">
         <div style="flex:1"><label>Keil UV4 路径（留空自动探测）</label><input type="text" id="set-uv4-path" placeholder="C:\Keil5\Core\UV4\UV4.exe"></div>
         <div style="flex:1"><label>gmake 路径（留空走 PATH）</label><input type="text" id="set-gmake-path" placeholder="gmake / make"></div>
       </div>
@@ -1259,22 +1289,60 @@ function referencePlatformChip(e) {
 async function loadReferencePicker() {
   try {
     const entries = await apiGet("/api/references");
-    $("ref-picker").innerHTML = entries.length
-      ? '<div class="ref-pick-head"><span></span><span>资料</span><span>平台</span><span>说明</span></div>'
-        + entries.map((e) => `
-      <label class="ref-pick-row">
+    if (!entries.length) {
+      $("ref-picker").innerHTML = '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>';
+      return;
+    }
+    // 搜索 + 计数工具条；列表收进固定高度滚动区（表头吸顶），条目多时不再撑开整页
+    $("ref-picker").innerHTML =
+      '<div class="ref-pick-toolbar">'
+      + '<input type="text" id="ref-pick-search" placeholder="搜索：名称 / 说明 / 平台 / 关联…">'
+      + '<span class="ref-pick-count" id="ref-pick-count"></span>'
+      + '<button id="ref-pick-clear" class="hidden">清空勾选</button>'
+      + '</div>'
+      + '<div class="ref-pick-scroll">'
+      + '<div class="ref-pick-head"><span></span><span>资料</span><span>平台</span><span>说明</span></div>'
+      + entries.map((e) => {
+          const searchText = esc((e.title + " " + (e.description || "") + " " + referenceAnchorLabel(e) + " " + (e.platform || "")).toLowerCase());
+          return `
+      <label class="ref-pick-row" data-search="${searchText}">
         <input type="checkbox" data-ref-pick="${esc(e.id)}" ${selectedReferenceIds.includes(e.id) ? "checked" : ""}>
         <span class="ref-pick-title" title="${esc(e.title)}">${esc(e.title)}</span>
         <span>${referencePlatformChip(e)}</span>
         <span class="ref-pick-desc">${referenceAnchorLabel(e)}${e.description ? " · " + esc(e.description) : ""}</span>
-      </label>`).join("")
-      : '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>';
+      </label>`;
+        }).join("")
+      + '<div id="ref-pick-nomatch" class="muted hidden" style="padding:8px 4px">无匹配资料</div>'
+      + '</div>';
+    const updateCount = () => {
+      const n = selectedReferenceIds.length;
+      $("ref-pick-count").textContent = n ? `已选 ${n} 条` : "";
+      $("ref-pick-clear").classList.toggle("hidden", !n);
+    };
     $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) =>
       cb.addEventListener("change", () => {
         const id = cb.dataset.refPick;
         selectedReferenceIds = selectedReferenceIds.filter((x) => x !== id);
         if (cb.checked) selectedReferenceIds.push(id);
+        updateCount();
       }));
+    $("ref-pick-search").addEventListener("input", () => {
+      const q = $("ref-pick-search").value.trim().toLowerCase();
+      let visible = 0;
+      $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) => {
+        const row = cb.closest(".ref-pick-row");
+        const hit = !q || row.dataset.search.includes(q);
+        row.style.display = hit ? "" : "none";
+        if (hit) visible++;
+      });
+      $("ref-pick-nomatch").classList.toggle("hidden", !q || visible > 0);
+    });
+    $("ref-pick-clear").addEventListener("click", () => {
+      selectedReferenceIds = [];
+      $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) => { cb.checked = false; });
+      updateCount();
+    });
+    updateCount();
     $("ref-picker-msg").textContent = "";
   } catch (e) { $("ref-picker-msg").textContent = e.message; }
 }
@@ -1321,25 +1389,30 @@ $("btn-expand").addEventListener("click", async () => {
 
 function renderSelected() {
   const box = $("selected-list");
+  const count = $("module-count");
   if (!expanded.length) {
     box.innerHTML = selectedSlugs.length
-      ? '<div class="muted">已选（未展开依赖）：' + selectedSlugs.map(esc).join("、") + '</div>'
+      ? '<div class="muted">已选（未展开依赖）：<span style="font-family:var(--mono);color:var(--text)">'
+        + selectedSlugs.map(esc).join("、") + '</span></div>'
       : '<div class="muted">尚未选择模块。</div>';
+    count.textContent = selectedSlugs.length ? `已选 ${selectedSlugs.length} 个` : "";
     return;
   }
+  count.textContent = `展开后共 ${expanded.length} 个模块`;
   box.innerHTML = expanded.map((m) => `
-    <div class="item"><div class="head">
-      <span class="slug">${esc(m.slug)}</span>
-      <span class="muted">${esc(m.description)}</span>
-      ${(m.dependencies || []).length ? `<span class="muted">依赖：${esc(m.dependencies.join("、"))}</span>` : ""}
-      ${moduleBadges(m)}
-      <button class="danger" data-remove="${esc(m.slug)}">移除</button>
-    </div>
-    ${Object.entries(m.platforms || {}).map(([platform, entry]) =>
-      entry.notes
-        ? `<div class="notes" style="margin-top:4px;color:var(--info)">【${esc(platform)} 配置】${esc(entry.notes)}</div>`
-        : ""
-    ).join("")}
+    <div class="item mod-item">
+      <div class="head">
+        <span class="slug">${esc(m.slug)}</span>
+        ${moduleBadges(m)}
+        <button class="danger" data-remove="${esc(m.slug)}">移除</button>
+      </div>
+      ${m.description ? `<div class="reason">${esc(m.description)}</div>` : ""}
+      ${(m.dependencies || []).length ? `<div class="mod-deps">依赖：${esc(m.dependencies.join("、"))}</div>` : ""}
+      ${Object.entries(m.platforms || {}).map(([platform, entry]) =>
+        entry.notes
+          ? `<div class="mod-notes">【${esc(platform)} 配置】${esc(entry.notes)}</div>`
+          : ""
+      ).join("")}
     </div>`).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
