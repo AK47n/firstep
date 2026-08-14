@@ -328,6 +328,66 @@
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   ::-webkit-scrollbar-corner { background: transparent; }
   * { scrollbar-width: thin; scrollbar-color: var(--border-strong) var(--bg); }
+  /* ---- 引脚配置卡片（板级引脚配置工单 03）：板图 SVG + 角色清单 + 锚定菜单 ---- */
+  /* 角色类型配色：派生自令牌色系（视觉参照 pin_config.html 深色 tag 风格） */
+  :root {
+    --pin-gpio: var(--info); --pin-gpio-dim: var(--info-dim);
+    --pin-pwm: var(--ok); --pin-pwm-dim: var(--ok-dim);
+    --pin-adc: var(--warn); --pin-adc-dim: var(--warn-dim);
+    --pin-uart: #a371f7; --pin-uart-dim: rgba(163, 113, 247, .15);
+    --pin-i2c: #39d2c0; --pin-i2c-dim: rgba(57, 210, 192, .15);
+    --pin-spi: #79c0ff; --pin-spi-dim: rgba(121, 192, 255, .15);
+    --pin-enc: #e0558a; --pin-enc-dim: rgba(224, 85, 138, .15);
+    --pin-exti: #d2a8ff; --pin-exti-dim: rgba(210, 168, 255, .15);
+    --pin-pcb: rgba(63, 185, 80, .05);   /* PCB 本体底色（绿板微染） */
+    --pin-pad: #21262d;                   /* 空闲 IO 焊盘 */
+    --pin-fixed-pad: #171b21;             /* 固定/电源焊盘（灰色不可点） */
+  }
+  .pin-layout { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .pin-board-wrap { flex: none; }
+  .pin-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px;
+                color: var(--muted); margin-bottom: 8px; }
+  .pin-legend .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block;
+                     margin-right: 4px; vertical-align: -1px; }
+  .pin-role-list { flex: 1; min-width: 320px; }
+  .pin-role { border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px;
+              margin-bottom: 6px; background: var(--panel-2); cursor: pointer; }
+  .pin-role:hover { border-color: var(--accent); }
+  .pin-role.bound { border-left: 3px solid var(--accent); }
+  .pin-role.unbound { border-color: var(--danger); background: var(--danger-dim); }
+  .pin-role .role-status { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .pin-role .role-status button { padding: 1px 8px; font-size: 12px; margin-left: 6px; }
+  .role-type { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 3px;
+               font-family: var(--mono); margin-right: 6px; }
+  .pin-fixed-list { margin-top: 10px; max-width: 460px; }
+  .pin-fixed-list .fx { display: inline-block; margin: 2px 8px 2px 0; padding: 1px 8px;
+                        border: 1px dashed var(--border-strong); border-radius: 10px;
+                        font-size: 12px; color: var(--muted); }
+  /* SVG 引脚候选高亮（点清单条目 → 板图可接引脚） */
+  .pin-cand { stroke: var(--accent) !important; stroke-width: 2.5 !important; }
+  .pin-dim { opacity: .22; }
+  .pin-default-cand { stroke: var(--ok); stroke-width: 1.5; stroke-dasharray: 3 2; }
+  .pin-board-caption { fill: var(--muted); font-size: 11px; }
+  /* 引脚锚定浮层菜单（复用 .ref-files-overlay 模式：全屏遮罩 + 弹层 + Esc 关闭） */
+  .pin-menu-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); z-index: 50; }
+  .pin-menu { position: absolute; background: var(--panel); border: 1px solid var(--border);
+              border-radius: 8px; box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+              width: 436px; max-width: calc(100vw - 16px); max-height: 74vh;
+              display: flex; flex-direction: column; }
+  .pin-menu-head { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+                   padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .pin-menu-list { list-style: none; margin: 0; padding: 6px 0; overflow-y: auto;
+                   font-size: 13px; }
+  .pin-menu-list li { padding: 6px 14px; border-bottom: 1px solid var(--border); }
+  .pin-menu-list li:last-child { border-bottom: none; }
+  .pin-menu-list li.can { cursor: pointer; }
+  .pin-menu-list li.can:hover { background: var(--panel-2); }
+  .pin-menu-list li.cant { opacity: .5; }
+  .pin-menu-list li .why, .pin-menu-list li .fam { display: block; font-size: 11px;
+                                                   margin-top: 2px; }
+  .pin-menu-list li .why { color: var(--muted); }
+  .pin-menu-list li .fam { color: var(--warn); }
+  .pin-menu-list .pin-menu-unbind { float: right; padding: 1px 8px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -421,8 +481,32 @@
       <div id="expand-msg" class="error"></div>
     </div>
 
+    <div class="card" id="card-pin-config">
+      <h2>7. 引脚配置（板图点选）</h2>
+      <div class="muted">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
+      <div id="pin-config-msg" class="banner hidden" style="margin-top:8px"></div>
+      <div id="pin-config-empty" class="muted" style="margin-top:8px"></div>
+      <div id="pin-config-body" class="hidden">
+        <div id="pin-highlight-msg" class="muted" style="margin-top:10px"></div>
+        <div class="pin-layout" style="margin-top:8px">
+          <div class="pin-board-wrap">
+            <div id="pin-board-svg"></div>
+            <div id="pin-fixed-list" class="pin-fixed-list"></div>
+          </div>
+          <div class="pin-role-list">
+            <div class="pin-legend" id="pin-legend"></div>
+            <div class="row" style="margin-bottom:10px">
+              <button id="btn-pin-reset" class="danger" style="display:none">全部还原默认</button>
+              <span class="muted">改线后的引脚写入 pin_config.h（stm32）/ 改写 .syscfg（mspm0）。</span>
+            </div>
+            <div id="pin-role-items"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
-      <h2>7. main.c 骨架</h2>
+      <h2>8. main.c 骨架</h2>
       <div class="row">
         <button id="btn-skeleton" class="primary">生成骨架</button>
         <span class="muted">AI 按所选模块接口排初始化序列；不存在的调用自动改写为注释占位，可手动微调。</span>
@@ -433,7 +517,7 @@
     </div>
 
     <div class="card">
-      <h2>8. 输出目录并生成</h2>
+      <h2>9. 输出目录并生成</h2>
       <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
       <div class="row">
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
@@ -461,7 +545,7 @@
     </div>
 
     <div class="card">
-      <h2>9. 交接提示词（Handoff）</h2>
+      <h2>10. 交接提示词（Handoff）</h2>
       <div class="row">
         <button id="btn-handoff" class="primary">生成交接提示词</button>
         <button id="btn-handoff-copy" class="hidden">复制</button>
@@ -472,7 +556,7 @@
     </div>
 
     <div class="card" id="card-fix-center">
-      <h2>10. 修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
+      <h2>11. 修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
       <div class="row">
         <button id="btn-fix-center" class="primary">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
@@ -883,6 +967,9 @@ function renderPlatforms() {
         renderPlatforms();
         updateFixCenterAvailability();
         selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
+        // 引脚配置（工单 03）：切平台清空绑定重取板定义
+        pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
+        loadPinBoard();
       });
     }
     box.appendChild(card);
@@ -1217,6 +1304,7 @@ $("btn-expand").addEventListener("click", async () => {
     expanded = data.modules;
     warnings = data.warnings;
     renderSelected(); renderWarnings();
+    renderPinCard();  // 引脚配置卡（工单 03）：角色清单随展开结果重算
   } catch (e) { $("expand-msg").textContent = e.message; }
 });
 
@@ -1247,6 +1335,7 @@ function renderSelected() {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
       expanded = []; warnings = [];
       renderSelected(); renderWarnings(); renderModulePool();
+      renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
     }));
 }
 
@@ -1266,7 +1355,433 @@ function renderWarnings() {
 }
 
 // ---------------------------------------------------------------------------
-// 生成页：5. main.c 骨架
+// 生成页：7. 引脚配置（板图点选，板级引脚配置工单 03）
+// 板定义 = GET /api/boards（板图坐标/能力集单源，无静态路由——SVG 由 JSON
+// 坐标内联渲染）；角色声明 = 展开结果 expanded[].platforms[platform].pins。
+// 绑定只含用户动过的角色（缺省 = 默认），未配任何引脚不发 bindings 字段。
+// 能力过滤 = strict-all 与后端门禁同语义（工单 02 发现）：角色默认引脚能力
+// token 的**全部实例**都必须命中——motor.PWMAB_C0 默认 PA12 有 pwm:TIMG0_C0
+// + pwm:TIMA0_C3 双实例，any-of 会放行仅 TIMA0_C3 的 PA28（界面兼容但
+// SysConfig 路由必炸）；UI 过滤不兼容角色灰显 + 原因，双实例俱有的 PA23 可绑。
+// mspm0 排针满员 → v1 交互 = 替换两步换位（点已占用引脚 → 原角色红显未绑 →
+// 再绑目标脚）；stm32 LED_PORT / DIP_GPIO 共享宏族绑定给提示（不拦截）。
+// ---------------------------------------------------------------------------
+let pinBoard = null;             // 当前平台板定义（GET /api/boards，切平台重取）
+let pinBoardError = "";          // 板定义加载失败信息（占位文案用）
+let pinBindings = {};            // {"<slug>.<role_id>": "<PIN>"}（只含用户动过的角色）
+let pinUnbound = new Set();      // 被替换/显式解除的角色 key（红显未绑，不发字段）
+let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
+
+// 角色类型配色（与 CSS :root 引脚令牌一一对应：全色 / 淡化色）
+const PIN_TYPE_STYLE = {
+  gpio_out: ["var(--pin-gpio)", "var(--pin-gpio-dim)"],
+  gpio_in: ["var(--pin-gpio)", "var(--pin-gpio-dim)"],
+  pwm: ["var(--pin-pwm)", "var(--pin-pwm-dim)"],
+  enc: ["var(--pin-enc)", "var(--pin-enc-dim)"],
+  uart_tx: ["var(--pin-uart)", "var(--pin-uart-dim)"],
+  uart_rx: ["var(--pin-uart)", "var(--pin-uart-dim)"],
+  i2c_scl: ["var(--pin-i2c)", "var(--pin-i2c-dim)"],
+  i2c_sda: ["var(--pin-i2c)", "var(--pin-i2c-dim)"],
+  spi_mosi: ["var(--pin-spi)", "var(--pin-spi-dim)"],
+  spi_miso: ["var(--pin-spi)", "var(--pin-spi-dim)"],
+  spi_sck: ["var(--pin-spi)", "var(--pin-spi-dim)"],
+  spi_cs: ["var(--pin-spi)", "var(--pin-spi-dim)"],
+  adc: ["var(--pin-adc)", "var(--pin-adc-dim)"],
+  exti: ["var(--pin-exti)", "var(--pin-exti-dim)"],
+};
+const PIN_TYPE_ZH = {
+  gpio_out: "GPIO输出", gpio_in: "GPIO输入", pwm: "PWM", enc: "编码器",
+  uart_tx: "UART发", uart_rx: "UART收", i2c_scl: "I2C时钟", i2c_sda: "I2C数据",
+  spi_mosi: "SPI主出", spi_miso: "SPI主入", spi_sck: "SPI时钟", spi_cs: "SPI片选",
+  adc: "ADC", exti: "EXTI中断",
+};
+
+function pinIndex() {
+  const idx = {};
+  for (const p of (pinBoard && pinBoard.pins) || []) idx[p.name] = p;
+  return idx;
+}
+
+function pinRoles() {
+  const roles = [];
+  for (const m of expanded) {
+    const entry = (m.platforms || {})[chosenPlatform];
+    for (const decl of (entry && entry.pins) || []) {
+      roles.push({ key: m.slug + "." + decl.id, slug: m.slug, decl });
+    }
+  }
+  return roles;
+}
+
+// ---- strict-all 能力判定（镜像后端 pin_bindings.resolve_bindings 口径） ----
+function pinSupports(pin, type, instance) {
+  const token = instance ? type + ":" + instance : type;
+  return (pin.capabilities || []).includes(token);
+}
+
+function roleInstances(decl) {
+  // 角色实例 = 默认引脚能力 token 的实例（与门禁一致：板外默认无实例）
+  const def = pinIndex()[decl.default];
+  if (!def) return [];
+  const prefix = decl.type + ":";
+  return (def.capabilities || []).filter((t) => t.startsWith(prefix)).map((t) => t.slice(prefix.length));
+}
+
+function pinCanHost(pin, decl) {
+  if (!pin || pin.kind !== "io") return false;
+  const insts = roleInstances(decl);
+  if (insts.length) return insts.every((i) => pinSupports(pin, decl.type, i));
+  return pinSupports(pin, decl.type, "");
+}
+
+function pinListsType(pin, type) {
+  // 菜单第一层过滤：引脚能力集里连该类型 token 都没有的角色直接不列
+  // （UART 脚不出现 PWM 角色）；类型有但实例不齐 → 列但灰显
+  return (pin.capabilities || []).some((t) => t === type || t.startsWith(type + ":"));
+}
+
+function pinMissReason(pin, decl) {
+  const insts = roleInstances(decl);
+  if (insts.length) {
+    const miss = insts.filter((i) => !pinSupports(pin, decl.type, i));
+    return "需要 " + decl.type + " 实例 " + insts.join("、") + "，此脚缺 " + miss.join("、");
+  }
+  return "该脚不支持角色类型 " + decl.type;
+}
+
+function pinMacroFamilies(roles) {
+  // 共享宏族（工单 02 发现）：macros 里与其它角色共享的宏——LED_PORT 三灯
+  // 共口 / DIP_GPIO 四拨码共口，绑一个角色会改到同族其它角色的共享宏。
+  // v1 不拦截（接线语义用户把关），只给提示文案列出同族角色。
+  const byMacro = new Map();
+  for (const r of roles) {
+    for (const macro of r.decl.macros || []) {
+      if (!byMacro.has(macro)) byMacro.set(macro, []);
+      byMacro.get(macro).push(r);
+    }
+  }
+  const fam = new Map();
+  for (const [macro, members] of byMacro) {
+    if (members.length < 2) continue;
+    for (const r of members) {
+      fam.set(r.key, {
+        macro,
+        siblings: members.filter((o) => o.key !== r.key).map((o) => o.decl.label || o.decl.id),
+      });
+    }
+  }
+  return fam;
+}
+
+function pinHint(text) {
+  const m = $("pin-config-msg");
+  m.textContent = text;
+  m.classList.toggle("hidden", !text);
+}
+
+// ---- 卡片总渲染（板图 SVG + 图例 + 角色清单 + 固定资源丝印） ----
+function renderPinCard() {
+  const empty = $("pin-config-empty"), body = $("pin-config-body");
+  const roles = pinRoles();
+  const keys = new Set(roles.map((r) => r.key));
+  // 展开结果变化后清理已消失角色的绑定/红显/高亮（新角色默认值预填显示）
+  if (expanded.length) {
+    for (const k of Object.keys(pinBindings)) if (!keys.has(k)) delete pinBindings[k];
+    for (const k of [...pinUnbound]) if (!keys.has(k)) pinUnbound.delete(k);
+    if (pinHighlight && !keys.has(pinHighlight)) pinHighlight = null;
+  }
+  $("btn-pin-reset").style.display = (Object.keys(pinBindings).length || pinUnbound.size) ? "" : "none";
+  if (!chosenPlatform) {
+    body.classList.add("hidden"); empty.classList.remove("hidden");
+    empty.textContent = "请先选择目标平台（步骤 3）。";
+    return;
+  }
+  if (!pinBoard) {
+    body.classList.add("hidden"); empty.classList.remove("hidden");
+    empty.textContent = pinBoardError ? "板定义加载失败：" + pinBoardError : "板定义加载中…";
+    return;
+  }
+  if (!expanded.length) {
+    body.classList.add("hidden"); empty.classList.remove("hidden");
+    empty.textContent = "尚未展开模块清单（步骤 6）——展开后这里出现板图与接线角色清单。";
+    return;
+  }
+  empty.classList.add("hidden"); body.classList.remove("hidden");
+  $("pin-highlight-msg").textContent = pinHighlight
+    ? "已选中角色：板图高亮可接引脚（灰 = 不兼容），点引脚弹菜单绑定。"
+    : "";
+  renderPinLegend(roles);
+  renderPinBoard();
+  renderPinRoles(roles, pinMacroFamilies(roles));
+  $("pin-fixed-list").innerHTML = (pinBoard.fixed || []).map((f) =>
+    `<span class="fx" title="${esc(f.note)}">${esc(f.name)}：${esc(f.occupies.join("、"))}</span>`).join("");
+}
+
+async function loadPinBoard() {
+  pinBoard = null; pinBoardError = "";
+  renderPinCard();
+  if (!chosenPlatform) return;
+  try {
+    const data = await apiGet("/api/boards?platform=" + encodeURIComponent(chosenPlatform));
+    pinBoard = (data.boards || [])[0] || null;
+    if (!pinBoard) pinBoardError = "该平台没有板定义数据。";
+  } catch (e) {
+    pinBoard = null;
+    pinBoardError = e.message;
+  }
+  renderPinCard();
+}
+
+function renderPinLegend(roles) {
+  const seen = [];
+  for (const r of roles) if (!seen.includes(r.decl.type)) seen.push(r.decl.type);
+  let html = seen.map((t) => {
+    const st = PIN_TYPE_STYLE[t] || ["var(--accent)", "var(--accent-dim)"];
+    return `<span><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
+  }).join("");
+  html += `<span><span class="dot" style="background:var(--pin-pad);border:1px solid var(--border-strong)"></span>空闲 IO</span>`;
+  html += `<span><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
+  $("pin-legend").innerHTML = html;
+}
+
+// ---- 板图 SVG（boards JSON 坐标内联渲染：双排焊盘 + 丝印 + 功能区） ----
+function renderPinBoard() {
+  const box = $("pin-board-svg");
+  const roles = pinRoles();
+  if (!pinBoard) { box.innerHTML = ""; return; }
+  const idx = pinIndex();
+  const rowH = 22, topPad = 16;
+  const rows = Math.max(...pinBoard.pins.map((p) => p.y)) + 1;
+  const W = 460, H = topPad + rows * rowH + 14;
+  const parts = [];
+  parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:440px" role="img" aria-label="${esc(pinBoard.name)}板图">`);
+  // PCB 本体 + 芯片丝印
+  parts.push(`<rect x="100" y="6" width="260" height="${rows * rowH + 4}" rx="8" fill="var(--pin-pcb)" stroke="var(--border)" stroke-width="1.5"/>`);
+  const chip = chosenPlatform === "stm32" ? "STM32F103C8T6" : "MSPM0G3507";
+  parts.push(`<rect x="186" y="${H / 2 - 34}" width="88" height="68" rx="4" fill="var(--panel-2)" stroke="var(--border-strong)" stroke-width="1"/>`);
+  parts.push(`<text x="230" y="${H / 2 - 10}" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
+  parts.push(`<text x="230" y="${H / 2 + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
+  parts.push(`<text x="230" y="${H - 6}" text-anchor="middle" class="pin-board-caption">${esc(pinBoard.name)}</text>`);
+  for (const pin of pinBoard.pins) parts.push(svgPin(pin, roles, idx));
+  parts.push(`</svg>`);
+  box.innerHTML = parts.join("");
+  box.querySelectorAll("circle[data-pin]").forEach((c) => {
+    c.addEventListener("click", () => showPinMenu(c, c.dataset.pin));
+  });
+}
+
+function svgPin(pin, roles, idx) {
+  const rowH = 22, topPad = 16;
+  const cx = pin.x === 0 ? 150 : 310;
+  const cy = topPad + pin.y * rowH + rowH / 2;
+  const bound = roles.filter((r) => pinBindings[r.key] === pin.name);
+  const io = pin.kind === "io";
+  let fill = "var(--pin-pad)", stroke = "var(--border-strong)", labelFill = "var(--muted)";
+  if (!io) { fill = "var(--pin-fixed-pad)"; stroke = "var(--border)"; }
+  else if (bound.length) {
+    const st = PIN_TYPE_STYLE[bound[0].decl.type] || ["var(--accent)", "var(--accent-dim)"];
+    fill = st[1]; stroke = st[0]; labelFill = st[0];
+  }
+  let cls = "", extra = "";
+  if (pinHighlight) {
+    const hl = roles.find((r) => r.key === pinHighlight);
+    if (hl) {
+      if (idx[hl.decl.default] === pin) {
+        extra += `<circle cx="${cx}" cy="${cy}" r="11" fill="none" class="pin-default-cand"/>`;
+      }
+      if (pinCanHost(pin, hl.decl)) cls = ' class="pin-cand"';
+      else if (io) cls = ' class="pin-dim"';
+    }
+  }
+  // 同引脚多角色共享 → 叠加标注（xunji/huidu 先例）：焊盘上方小色点
+  if (bound.length > 1) {
+    for (let i = 0; i < Math.min(bound.length, 3); i++) {
+      const st = PIN_TYPE_STYLE[bound[i].decl.type] || ["var(--accent)", "var(--accent-dim)"];
+      extra += `<circle cx="${cx - 6 + i * 6}" cy="${cy - 13}" r="3" fill="${st[0]}"/>`;
+    }
+    if (bound.length > 3) extra += `<text x="${cx + 8}" y="${cy - 9}" font-size="9" fill="var(--muted)">+${bound.length - 3}</text>`;
+  }
+  const ttl = [pin.name, io ? "IO 引脚" : "固定/电源"];
+  if (bound.length) ttl.push("已绑：" + bound.map((r) => r.decl.label || r.decl.id).join("、"));
+  if (pin.notes) ttl.push(pin.notes);
+  if (io) ttl.push("能力：" + (pin.capabilities || []).join("、"));
+  const labelX = pin.x === 0 ? cx - 14 : cx + 14;
+  const anchor = pin.x === 0 ? "end" : "start";
+  const clickable = io ? ` data-pin="${esc(pin.name)}" style="cursor:pointer"` : ' style="pointer-events:none"';
+  return `<circle cx="${cx}" cy="${cy}" r="7" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${cls}${clickable}>` +
+    `<title>${esc(ttl.join(" · "))}</title></circle>${extra}` +
+    `<text x="${labelX}" y="${cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="11" fill="${labelFill}">${esc(pin.name)}</text>`;
+}
+
+// ---- 角色清单（标签 / 默认值 / 三态绑定；点条目 → 板图高亮可接引脚） ----
+function renderPinRoles(roles, fam) {
+  const box = $("pin-role-items");
+  if (!roles.length) {
+    box.innerHTML = '<div class="muted">所选模块在此平台没有可配置的引脚角色——按默认布线生成，无需配置。</div>';
+    return;
+  }
+  const idx = pinIndex();
+  box.innerHTML = roles.map((r) => {
+    const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
+    const bound = pinBindings[r.key];
+    const unbound = pinUnbound.has(r.key);
+    const defOnBoard = !!idx[r.decl.default];
+    const famInfo = fam.get(r.key);
+    let status;
+    if (bound) {
+      status = `<span style="color:${st[0]}">已绑 ${esc(bound)}</span>` +
+        (bound !== r.decl.default ? ` <span class="muted">（默认 ${esc(r.decl.default)}）</span>` : "") +
+        ' <button class="pin-role-unbind">还原默认</button>';
+    } else if (unbound) {
+      status = `<span style="color:var(--danger)">未绑定</span>` +
+        `<span class="muted">（生成仍按默认 ${esc(r.decl.default)} 走）</span>` +
+        ' <button class="pin-role-restore">清除红显</button>';
+    } else if (!defOnBoard) {
+      status = `<span style="color:var(--warn)">默认板外（排针未引出）——仍可绑到板内空闲脚</span>`;
+    } else if (Object.values(pinBindings).includes(r.decl.default)) {
+      const by = Object.entries(pinBindings).find(([k, v]) => v === r.decl.default && k !== r.key);
+      status = `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 已被 ${esc((by && by[0]) || "其它角色")} 占用——未绑定时生成可能资源冲突，建议改线</span>`;
+    } else {
+      status = `<span class="muted">默认 ${esc(r.decl.default)}</span>`;
+    }
+    return `<div class="pin-role ${bound ? "bound" : ""} ${unbound ? "unbound" : ""}" data-role="${esc(r.key)}">
+      <div class="role-head">
+        <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}">${esc(r.decl.type)}</span>
+        <strong>${esc(r.decl.label || r.decl.id)}</strong>
+        <span class="muted">${esc(r.slug)}</span>
+        ${r.decl.required ? '<span class="badge hw">必接</span>' : ""}
+      </div>
+      <div class="role-status">${status}</div>
+      ${famInfo ? `<div class="role-status" style="color:var(--warn)">共享宏族 ${esc(famInfo.macro)}：同族 ${esc(famInfo.siblings.join("、"))}</div>` : ""}
+    </div>`;
+  }).join("");
+  box.querySelectorAll(".pin-role").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      const key = el.dataset.role;
+      pinHighlight = pinHighlight === key ? null : key;
+      renderPinCard();
+    });
+  });
+  box.querySelectorAll(".pin-role-unbind").forEach((b) => {
+    b.addEventListener("click", () => unbindRole(b.closest(".pin-role").dataset.role));
+  });
+  box.querySelectorAll(".pin-role-restore").forEach((b) => {
+    b.addEventListener("click", () => {
+      pinUnbound.delete(b.closest(".pin-role").dataset.role);
+      renderPinCard();
+    });
+  });
+}
+
+$("btn-pin-reset").addEventListener("click", () => {
+  pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
+  renderPinCard();
+});
+
+function unbindRole(key) {
+  delete pinBindings[key];
+  pinUnbound.add(key);  // 显式解除 = 红显未绑（生成仍按默认走）
+  renderPinCard();
+}
+
+function bindRole(key, pinName) {
+  const roles = pinRoles();
+  const r = roles.find((x) => x.key === key);
+  if (!r || pinBindings[key] === pinName) return;
+  // 替换本脚占用者：被替换角色回"未绑定"红显（排针满员两步换位交互）
+  for (const [k, v] of Object.entries(pinBindings)) {
+    if (v === pinName && k !== key) {
+      delete pinBindings[k];
+      pinUnbound.add(k);
+    }
+  }
+  pinBindings[key] = pinName;
+  pinUnbound.delete(key);
+  pinHighlight = null;
+  renderPinCard();
+  // 共享宏族提示（v1 不拦截，接线语义用户把关）
+  const famInfo = pinMacroFamilies(roles).get(key);
+  pinHint(famInfo
+    ? `已绑 ${r.decl.label || r.decl.id} → ${pinName}：与同族角色 ${famInfo.siblings.join("、")} 共享宏 ${famInfo.macro}——改线会同步影响同族其它角色的共享宏，请确认接线。`
+    : "");
+}
+
+// ---- 引脚锚定浮层菜单（复用 .ref-files-overlay 模式） ----
+function showPinMenu(pinEl, pinName) {
+  const roles = pinRoles();
+  const pin = pinIndex()[pinName];
+  if (!pin) return;
+  const fam = pinMacroFamilies(roles);
+  const occupants = roles.filter((r) => pinBindings[r.key] === pinName);
+  const defaulters = roles.filter((r) => !pinBindings[r.key] && r.decl.default === pinName);
+  document.querySelectorAll(".pin-menu-overlay").forEach((o) => o.remove());
+  const overlay = document.createElement("div");
+  overlay.className = "pin-menu-overlay";
+  const menu = document.createElement("div");
+  menu.className = "pin-menu";
+  let rows = "";
+  if (occupants.length) {
+    rows += `<li class="muted" style="font-weight:600">已占用（可直接替换：点下方角色即换绑，原占用角色红显未绑）</li>` +
+      occupants.map((r) => {
+        const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
+        return `<li><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${st[0]};margin-right:6px"></span>` +
+          `<strong>${esc(r.decl.label || r.decl.id)}</strong> <span class="muted">${esc(r.slug)}</span>` +
+          `<button class="pin-menu-unbind" data-key="${esc(r.key)}">解除</button></li>`;
+      }).join("");
+  }
+  if (defaulters.length) {
+    rows += `<li class="muted">另有 ${defaulters.length} 个角色默认使用此脚（未绑定，按默认生成）：${defaulters.map((r) => esc(r.decl.label || r.decl.id)).join("、")}——同脚接线请自行确认。</li>`;
+  }
+  rows += `<li class="muted" style="font-weight:600;border-top:1px dashed var(--border);margin-top:4px;padding-top:8px">绑定角色到此脚（点条目即绑定）：</li>`;
+  rows += roles.filter((r) => pinListsType(pin, r.decl.type)).map((r) => {
+    const can = pinCanHost(pin, r.decl);
+    const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
+    const bound = pinBindings[r.key];
+    const why = can ? "" : pinMissReason(pin, r.decl);
+    const famInfo = fam.get(r.key);
+    return `<li class="${can ? "can" : "cant"}" ${can ? `data-bind="${esc(r.key)}"` : ""} title="${esc(why)}">
+      <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}">${esc(r.decl.type)}</span>
+      <strong>${esc(r.decl.label || r.decl.id)}</strong>
+      <span class="muted">${esc(r.slug)} · 默认 ${esc(r.decl.default)}</span>
+      ${r.decl.required ? '<span class="badge hw">必接</span>' : ""}
+      ${bound ? ` <span style="color:${st[0]}">现绑 ${esc(bound)}</span>` : ""}
+      ${famInfo ? `<span class="fam">共享宏族 ${esc(famInfo.macro)}：绑它会改到同族 ${esc(famInfo.siblings.join("、"))} 的共享宏</span>` : ""}
+      ${why ? `<span class="why">不兼容：${esc(why)}</span>` : ""}
+    </li>`;
+  }).join("");
+  menu.innerHTML = `
+    <div class="pin-menu-head">
+      <strong style="font-family:var(--mono)">${esc(pinName)}</strong>
+      <span class="muted">${esc(pin.notes || "IO 引脚")}</span>
+      <button class="ref-files-close" title="关闭">×</button>
+    </div>
+    <div class="muted" style="padding:6px 14px;font-size:12px;font-family:var(--mono);word-break:break-all">能力：${esc((pin.capabilities || []).join("、") || "无")}</div>
+    <ul class="pin-menu-list">${rows}</ul>`;
+  overlay.appendChild(menu);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  // 锚定弹层：贴引脚右侧/左侧（越界翻面），纵向夹在视口内
+  const rect = pinEl.getBoundingClientRect();
+  let left = rect.right + 10;
+  if (left + 436 > window.innerWidth) left = rect.left - 446;
+  left = Math.max(8, Math.min(left, window.innerWidth - 444));
+  const top = Math.max(8, Math.min(rect.top, window.innerHeight - menu.offsetHeight - 8));
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  menu.querySelectorAll("li[data-bind]").forEach((li) =>
+    li.addEventListener("click", () => { bindRole(li.dataset.bind, pinName); close(); }));
+  menu.querySelectorAll(".pin-menu-unbind").forEach((b) =>
+    b.addEventListener("click", (e) => { e.stopPropagation(); unbindRole(b.dataset.key); close(); }));
+}
+
+// ---------------------------------------------------------------------------
+// 生成页：8. main.c 骨架
 // ---------------------------------------------------------------------------
 $("btn-skeleton").addEventListener("click", async () => {
   $("skeleton-msg").textContent = "";
@@ -1296,7 +1811,7 @@ $("btn-skeleton").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：6. 输出目录并生成
+// 生成页：9. 输出目录并生成
 // ---------------------------------------------------------------------------
 $("btn-pick-output-dir").addEventListener("click", async () => {
   try {
@@ -1316,11 +1831,20 @@ $("btn-generate").addEventListener("click", async () => {
   status.innerHTML = '<span class="spinner"></span>生成中…';
   $("btn-generate").disabled = true;
   try {
-    const data = await apiPost("/api/generate", {
+    // bindings（工单 03）：只带仍在选择集内的用户绑定（模块移除后不残留 400）；
+    // 未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）
+    const slugs = new Set(selectedSlugs);
+    const bindings = {};
+    for (const [key, pin] of Object.entries(pinBindings)) {
+      if (slugs.has(key.split(".")[0])) bindings[key] = pin;
+    }
+    const payload = {
       platform: chosenPlatform, slugs: selectedSlugs,
       main_c: $("main-c").value, output_dir: outputDir,
       topic_id: currentTopicId || undefined,
-    });
+    };
+    if (Object.keys(bindings).length) payload.bindings = bindings;
+    const data = await apiPost("/api/generate", payload);
     $("res-dir").textContent = data.output_dir;
     $("res-includes").textContent = data.include_dirs.join("；");
     $("res-modules").textContent = data.modules
@@ -1351,7 +1875,7 @@ $("btn-generate").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：9. 交接提示词（Handoff）——把本次生成的全部上下文打包成一段
+// 生成页：10. 交接提示词（Handoff）——把本次生成的全部上下文打包成一段
 // 提示词，用户直接复制粘贴给下一个 AI 做精准打磨（本工具只搭基础，
 // 精打磨在下一个会话完成）。
 // ---------------------------------------------------------------------------
@@ -1462,7 +1986,7 @@ $("btn-handoff-copy").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
+// 生成页：11. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
 // 自动采集报错 → 喂 fix-errors 管线修复 → 重编译验证，循环 ≤3 轮；无工具链
 // 回退贴文本模式（工单 compile-error-fix/01 既有路径保留）。事件词表镜像
 // events.py：compile_start / parse_done / fix_start / apply_result / done /
@@ -3118,6 +3642,7 @@ $("btn-save-settings").addEventListener("click", async () => {
   renderToolchainStatus();
   renderPlatforms();
   renderModulePool();
+  renderPinCard();  // 引脚配置卡（工单 03）：初始占位文案
   $("new-platform").innerHTML = state.platforms.map((p) =>
     `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
   loadReferencePicker();
