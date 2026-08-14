@@ -2,7 +2,7 @@
 
 **What to build:** 把 `.scratch/real-run/build_makefiles.py`（scratch 后处理脚本，硬编码 CCS 路径 + 静态 MODULES 表）产品化为生成器的一步：**mspm0 平台生成时自动产出 CCS 标准 Debug/makefile 集**（makefile + sources.mk + objects.mk + 逐源目录 subdir_vars.mk/subdir_rules.mk），模块条目按选中模块集推导。让 web 端 mspm0 线的"一键编译修复"真正可用，CLI 真机验收（generate_check）mspm0 线补 gmake 编译段。
 
-**Status:** implemented
+**Status:** resolved（2026-08-13 已合 main，PR #59 merged fcbf3ab，1309 绿 + mypy src 37 文件干净，验收全勾——2026-08-14 收尾改正状态字段）
 
 **Blocked by:** 无
 
