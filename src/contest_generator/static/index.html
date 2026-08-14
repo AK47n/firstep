@@ -1501,11 +1501,7 @@ function renderPinCard() {
     empty.textContent = pinBoardError ? "板定义加载失败：" + pinBoardError : "板定义加载中…";
     return;
   }
-  if (!expanded.length) {
-    body.classList.add("hidden"); empty.classList.remove("hidden");
-    empty.textContent = "尚未展开模块清单（步骤 6）——展开后这里出现板图与接线角色清单。";
-    return;
-  }
+  // 选了平台就能看板图（不必等推荐/展开）：未展开模块清单时角色区显示占位文案
   empty.classList.add("hidden"); body.classList.remove("hidden");
   $("pin-highlight-msg").textContent = pinHighlight
     ? "已选中角色：板图高亮可接引脚（灰 = 不兼容），点引脚弹菜单绑定。"
@@ -1552,7 +1548,9 @@ function renderPinBoard() {
   const idx = pinIndex();
   const rowH = 22, topPad = 16;
   const rows = Math.max(...pinBoard.pins.map((p) => p.y)) + 1;
-  const W = 460, H = topPad + rows * rowH + 14;
+  // 下缘地标（4P 弯针）需要额外底部空间；板缘地标区分板图上下（boards JSON 数据驱动）
+  const hasBottom = (pinBoard.landmarks || []).some((l) => l.edge === "bottom");
+  const W = 460, H = topPad + rows * rowH + (hasBottom ? 40 : 14);
   const parts = [];
   parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:440px" role="img" aria-label="${esc(pinBoard.name)}板图">`);
   // PCB 本体 + 芯片丝印
@@ -1561,6 +1559,19 @@ function renderPinBoard() {
   parts.push(`<rect x="186" y="${H / 2 - 34}" width="88" height="68" rx="4" fill="var(--panel-2)" stroke="var(--border-strong)" stroke-width="1"/>`);
   parts.push(`<text x="230" y="${H / 2 - 10}" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
   parts.push(`<text x="230" y="${H / 2 + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
+  // 板缘地标：Type-C 上缘 / 4P 弯针下缘（渲染器只认认识的 kind，未知静默跳过）
+  for (const lm of pinBoard.landmarks || []) {
+    if (lm.kind === "usb_typec" && lm.edge === "top") {
+      parts.push(`<rect x="208" y="2" width="44" height="12" rx="3" fill="var(--panel-2)" stroke="var(--border-strong)" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口（上缘）")}</title></rect>`);
+      parts.push(`<rect x="218" y="5" width="24" height="6" rx="1.5" fill="var(--input-bg)"/>`);
+    } else if (lm.kind === "header_4p" && lm.edge === "bottom") {
+      const py = H - 34;
+      for (let i = 0; i < 4; i++) {
+        parts.push(`<circle cx="${206 + i * 16}" cy="${py}" r="3.5" fill="var(--pin-fixed-pad)" stroke="var(--border)" stroke-width="1"/>`);
+      }
+      parts.push(`<text x="230" y="${H - 22}" text-anchor="middle" font-size="8" fill="var(--muted)"><title>${esc(lm.note || "")}</title>${esc(lm.label || "4P 弯针")}</text>`);
+    }
+  }
   parts.push(`<text x="230" y="${H - 6}" text-anchor="middle" class="pin-board-caption">${esc(pinBoard.name)}</text>`);
   for (const pin of pinBoard.pins) parts.push(svgPin(pin, roles, idx));
   parts.push(`</svg>`);
@@ -1617,7 +1628,9 @@ function svgPin(pin, roles, idx) {
 function renderPinRoles(roles, fam) {
   const box = $("pin-role-items");
   if (!roles.length) {
-    box.innerHTML = '<div class="muted">所选模块在此平台没有可配置的引脚角色——按默认布线生成，无需配置。</div>';
+    box.innerHTML = expanded.length
+      ? '<div class="muted">所选模块在此平台没有可配置的引脚角色——按默认布线生成，无需配置。</div>'
+      : '<div class="muted">尚未展开模块清单（步骤 6）——板图先行，展开后这里列出接线角色。</div>';
     return;
   }
   const idx = pinIndex();

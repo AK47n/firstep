@@ -172,6 +172,14 @@ def test_stm32_header_layout_matches_blue_pill(boards):
         assert got == expected
 
 
+def test_stm32_landmarks_mark_orientation(boards):
+    """板缘地标（真板校正 2026-08-14）：Type-C 上缘 + 4P 弯针下缘区分板图上下。"""
+    stm32 = boards["stm32-min-system"]
+    by_edge = {lm.edge: lm for lm in stm32.landmarks}
+    assert by_edge["top"].kind == "usb_typec"
+    assert by_edge["bottom"].kind == "header_4p"
+
+
 def test_stm32_fixed_resources(boards):
     stm32 = boards["stm32-min-system"]
     occupies = {f.name: f.occupies for f in stm32.fixed}
