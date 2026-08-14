@@ -326,6 +326,71 @@ def test_cli_fix_max_rounds_matches_frontend() -> None:
     assert gen.FIX_MAX_ROUNDS == int(m.group(1))
 
 
+# ---------- 修复循环告警收敛钉（工单 fix-loop-warnings/01） ----------
+#
+# 0 错 N 警即停违背「0 错 0 警」验收标准：停条件 passed → passed && warnings
+# == 0（前端两处 + CLI 两处）、摘要行补警数、首编有警进修复循环。以下结构钉
+# 防回退——警告计数判读单源 summarize_compile_output（禁止另写正则）。
+
+
+def _warnings_field_refs(node: ast.AST) -> bool:
+    """AST 判读：节点子树内引用 summary 的 warnings 字段（dict 下标
+    ["warnings"] 形态——summary 是 summarize_compile_output 返回的 dict）。"""
+    for sub in ast.walk(node):
+        if (
+            isinstance(sub, ast.Subscript)
+            and isinstance(sub.slice, ast.Constant)
+            and sub.slice.value == "warnings"
+        ):
+            return True
+    return False
+
+
+def test_run_fix_loop_stop_condition_requires_zero_warnings() -> None:
+    """结构钉：run_fix_loop 停条件 = passed 且 0 警（And 表达式同时引用
+    passed 与 warnings 判读）——只判 passed 即返的旧形态（0 错 N 警即停）
+    不合法，复活即红。"""
+    tree = ast.parse(inspect.getsource(gen.run_fix_loop))
+    func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef))
+    for node in ast.walk(func):
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+            names = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+            if "passed" in names and _warnings_field_refs(node):
+                return
+    raise AssertionError("run_fix_loop 停条件未同时引用 passed 与 warnings")
+
+
+def test_check_topic_passed_branch_enters_fix_loop_on_warnings() -> None:
+    """结构钉：check_topic 首编 passed 分支引用 warnings 判定并调 run_fix_loop
+    （有警 → 进修复轮）——删判定即红（旧形态 0 错 N 警即收工）。"""
+    tree = ast.parse(inspect.getsource(gen.check_topic))
+    func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef))
+    for node in ast.walk(func):
+        if (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "passed"
+        ):
+            names = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+            assert _warnings_field_refs(node), (
+                "check_topic passed 分支未引用 warnings"
+            )
+            assert "run_fix_loop" in names, (
+                "check_topic passed 分支未调用 run_fix_loop"
+            )
+            return
+    raise AssertionError("check_topic 无 passed 分支")
+
+
+def test_build_summary_lines_include_warning_count() -> None:
+    """结构钉：uv4_build / gmake_build 摘要行含警数（工单 fix-loop-warnings/01
+    ——0 错 N 警时 CLI 摘要警数不可见即红）。"""
+    for fn in (gen.uv4_build, gen.gmake_build):
+        assert "warnings" in inspect.getsource(fn), (
+            f"{fn.__name__} 摘要行未引用 warnings（警数不可见）"
+        )
+
+
 # ---------- 门禁同源结构钉（工单 generate-check-parity/01） ----------
 #
 # check_artifacts 曾逐字重实现门禁（FENCE_RE / _INCLUDE_RE / EXTERNAL_HEADERS
