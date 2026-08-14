@@ -26,8 +26,10 @@ importlib 加载模块（该目录在 gitignore 内但被 force-tracked，tests/
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import inspect
+import json
 import re
 import sys
 from pathlib import Path
@@ -152,6 +154,9 @@ def captured_recommend_payload(monkeypatch, tmp_path) -> dict:
     (topics / "T1").mkdir(parents=True)
     (topics / "T1" / "topic.md").write_text("题面全文", encoding="utf-8")
     monkeypatch.setattr(gen, "TOPICS", topics)
+    # 推荐缓存目录 tmp 隔离（check_topic 真实推荐路径会写缓存，不污染真
+    # 实 .scratch/real-run/cache/——工单 check-recommend-cache/01）
+    monkeypatch.setenv("GENERATE_CHECK_CACHE_DIR", str(tmp_path / "cache"))
     captured: dict[str, dict] = {}
 
     def fake_stream(payload: dict) -> dict:
@@ -194,7 +199,8 @@ def test_cli_reference_ids_flag_reaches_check_topic(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     def fake_check_topic(
-        key, clarify_map, drop, platform, topic_file, add, reference_ids
+        key, clarify_map, drop, platform, topic_file, add, reference_ids,
+        reuse_recommend,
     ):
         captured["key"] = key
         captured["reference_ids"] = reference_ids
@@ -217,9 +223,11 @@ def test_cli_reference_ids_flag_absent_passes_empty(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     def fake_check_topic(
-        key, clarify_map, drop, platform, topic_file, add, reference_ids
+        key, clarify_map, drop, platform, topic_file, add, reference_ids,
+        reuse_recommend,
     ):
         captured["reference_ids"] = reference_ids
+        captured["reuse_recommend"] = reuse_recommend
         return True
 
     monkeypatch.setattr(gen, "check_topic", fake_check_topic)
@@ -227,6 +235,29 @@ def test_cli_reference_ids_flag_absent_passes_empty(monkeypatch) -> None:
     with pytest.raises(SystemExit):
         gen.main()
     assert captured["reference_ids"] == ()
+    assert captured["reuse_recommend"] is False
+
+
+def test_cli_reuse_recommend_flag_reaches_check_topic(monkeypatch) -> None:
+    """--reuse-recommend 布尔 flag 解析 → check_topic 透传 True（删解析即红，
+    工单 check-recommend-cache/01）。"""
+    captured: dict[str, object] = {}
+
+    def fake_check_topic(
+        key, clarify_map, drop, platform, topic_file, add, reference_ids,
+        reuse_recommend,
+    ):
+        captured["reuse_recommend"] = reuse_recommend
+        return True
+
+    monkeypatch.setattr(gen, "check_topic", fake_check_topic)
+    monkeypatch.setattr(
+        sys, "argv", ["generate_check.py", "2026C", "--reuse-recommend"]
+    )
+    with pytest.raises(SystemExit) as ei:
+        gen.main()
+    assert ei.value.code == 0
+    assert captured["reuse_recommend"] is True
 
 
 # ---------- 事件词表对偶 ----------
@@ -380,3 +411,282 @@ def test_generate_check_has_no_stale_theia_no_cli_message() -> None:
     —— gmake 通路真机跑通后不再是事实。"""
     text = GEN_CHECK.read_text(encoding="utf-8")
     assert "无命令行构建" not in text
+
+
+# ---------- 推荐缓存（工单 check-recommend-cache/01） ----------
+#
+# 缓存 json = done 载荷逐字 + 元数据（topic_key / platform / problem_sha256，
+# 决策 1）；键 = topic_id 优先、无 topic_id 用题面 sha256（决策 2）。纯函数
+# 经 cache_dir=tmp_path 注入；check_topic 级测试经环境变量
+# GENERATE_CHECK_CACHE_DIR 隔离（真实推荐路径会写缓存，不污染真实 cache/）。
+
+DONE_SAMPLE = {
+    "modules": [
+        {"slug": "led_beep", "reason": "蜂鸣器提示"},
+        {"slug": "gpio", "reason": "按键扫描"},
+    ],
+    "requirements": [{"id": 1, "text": "上电自检"}],
+    "references": [
+        {"id": "r1", "title": "参考条目", "source": "manual", "platform": "stm32"}
+    ],
+    "topic_id": "T1",
+}
+
+
+def _setup_topic_env(monkeypatch, tmp_path, problem_text="题面全文") -> None:
+    """check_topic 缓存级测试的题库 + 缓存目录 tmp 隔离（fixture 同款）。"""
+    topics = tmp_path / "topics"
+    (topics / "T1").mkdir(parents=True)
+    (topics / "T1" / "topic.md").write_text(problem_text, encoding="utf-8")
+    monkeypatch.setattr(gen, "TOPICS", topics)
+    monkeypatch.setenv("GENERATE_CHECK_CACHE_DIR", str(tmp_path / "cache"))
+
+
+def test_recommend_cache_path_override_chain(tmp_path, monkeypatch) -> None:
+    """recommend_cache_path 目录覆盖：显式参数 > 环境变量 > 缺省目录
+    （决策 3，测试经 cache_dir=tmp_path 注入）。"""
+    assert (
+        gen.recommend_cache_path("2026C", cache_dir=tmp_path)
+        == tmp_path / "recommend_2026C.json"
+    )
+    monkeypatch.setenv("GENERATE_CHECK_CACHE_DIR", str(tmp_path / "env"))
+    assert (
+        gen.recommend_cache_path("2026C")
+        == tmp_path / "env" / "recommend_2026C.json"
+    )
+    monkeypatch.delenv("GENERATE_CHECK_CACHE_DIR")
+    assert gen.recommend_cache_path("2026C") == gen.CACHE_DIR / "recommend_2026C.json"
+
+
+def test_cache_key_topic_id_priority_else_sha256() -> None:
+    """缓存键：topic_id 优先；无 topic_id（topic_file 手动准入）用题面
+    sha256（决策 2——题面变 → 键变自然失效）。"""
+    assert gen.cache_key("2026C", "任意题面") == "2026C"
+    assert gen.cache_key(None, "题面") == gen.problem_fingerprint("题面")
+
+
+def test_cache_recommend_then_load_roundtrip(tmp_path) -> None:
+    """写 → 读回形状全等：done 逐字、元数据齐全（决策 1 另存题面指纹与
+    topic key；platform 元数据防跨平台复用）。"""
+    path = gen.recommend_cache_path("T1", cache_dir=tmp_path)
+    gen.cache_recommend(
+        path, DONE_SAMPLE, topic_key="T1",
+        problem_text="题面全文", platform="stm32",
+    )
+    cached = gen.load_recommend(path)
+    assert cached["done"] == DONE_SAMPLE
+    assert cached["topic_key"] == "T1"
+    assert cached["platform"] == "stm32"
+    assert cached["problem_sha256"] == gen.problem_fingerprint("题面全文")
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "不是 json",                                    # 坏 json
+        '["列表顶层"]',                                 # 顶层非对象
+        {"problem_sha256": "x", "platform": "stm32"},   # 缺 done / topic_key
+        {"done": DONE_SAMPLE, "platform": "stm32"},     # 缺 problem_sha256
+        {"topic_key": "T1", "done": {"modules": "非列表"},
+         "platform": "stm32", "problem_sha256": "x"},   # modules 非列表
+    ],
+)
+def test_load_recommend_rejects_bad_shapes(tmp_path, raw) -> None:
+    """坏 json / 缺字段 / 非对象 → ValueError（复用安全网：不带假数据进下游）。"""
+    path = gen.recommend_cache_path("T1", cache_dir=tmp_path)
+    if isinstance(raw, str):
+        path.write_text(raw, encoding="utf-8")
+    else:
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError):
+        gen.load_recommend(path)
+
+
+def test_check_topic_reuse_hit_skips_recommend_stream(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """--reuse-recommend 命中：recommend_stream 零调用，done 从缓存进下游
+    （空模块 done → 骨架前收工，推荐段跳过本身可证）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    gen.cache_recommend(
+        gen.recommend_cache_path("T1"), {"modules": []},
+        topic_key="T1", problem_text="题面全文", platform=gen.PLATFORM,
+    )
+    called: list[dict] = []
+
+    def fake_stream(payload: dict) -> dict:
+        called.append(payload)
+        return {"event": "done", "data": {"modules": []}, "rounds": 0}
+
+    monkeypatch.setattr(gen, "recommend_stream", fake_stream)
+    assert gen.check_topic("T1", reuse_recommend=True) is False
+    assert called == []
+    assert "复用" in capsys.readouterr().out
+
+
+def test_check_topic_reuse_miss_errors_without_real_call(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """--reuse-recommend 缺失：报错退出（False + 可操作文案），不静默回退
+    真实推荐（决策 4）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    called: list[dict] = []
+
+    def fake_stream(payload: dict) -> dict:
+        called.append(payload)
+        return {"event": "done", "data": {"modules": []}, "rounds": 0}
+
+    monkeypatch.setattr(gen, "recommend_stream", fake_stream)
+    assert gen.check_topic("T1", reuse_recommend=True) is False
+    assert called == []
+    out = capsys.readouterr().out
+    assert "缓存不存在" in out
+    assert "--reuse-recommend" in out
+
+
+@pytest.mark.parametrize(
+    "cache_problem_text, cache_platform, cache_topic_key",
+    [
+        ("旧题面", "stm32", "T1"),
+        ("题面全文", "mspm0", "T1"),
+        ("题面全文", "stm32", "T2"),
+    ],
+)
+def test_check_topic_reuse_stale_cache_errors(
+    monkeypatch, tmp_path, capsys, cache_problem_text, cache_platform,
+    cache_topic_key,
+) -> None:
+    """题面变（指纹不符）/ 平台不符 / 键不符 → 缓存失效报错退出（决策 6：
+    题面变 → 指纹变自然失效；platform 防跨平台复用；topic_key 比对 =
+    grilling 裁决，键不符的缓存文件不静默进下游）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    gen.cache_recommend(
+        gen.recommend_cache_path("T1"), {"modules": []},
+        topic_key=cache_topic_key, problem_text=cache_problem_text,
+        platform=cache_platform,
+    )
+
+    def no_real(payload):
+        raise AssertionError("失效缓存不得回退真实推荐")
+
+    monkeypatch.setattr(gen, "recommend_stream", no_real)
+    assert gen.check_topic("T1", reuse_recommend=True) is False
+    assert "缓存失效" in capsys.readouterr().out
+
+
+def test_check_topic_real_recommend_writes_cache(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """不带 flag = 真实推荐 + 写缓存（决策 5 默认行为不变）：done 载荷逐字
+    落盘（空模块 done 在骨架前收工，写缓存已发生）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    done = {"modules": []}
+    monkeypatch.setattr(
+        gen, "recommend_stream",
+        lambda p: {"event": "done", "data": done, "rounds": 0},
+    )
+    assert gen.check_topic("T1") is False
+    cached = gen.load_recommend(gen.recommend_cache_path("T1"))
+    assert cached["done"] == done
+    assert cached["topic_key"] == "T1"
+    assert "已写" in capsys.readouterr().out
+
+
+def test_check_topic_cache_write_failure_does_not_block(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """写缓存失败（OSError）= 打印警告不阻断主流程（决策 5）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+
+    def fail_cache(path, done, **kwargs):
+        raise OSError("磁盘只读")
+
+    monkeypatch.setattr(gen, "cache_recommend", fail_cache)
+    monkeypatch.setattr(
+        gen, "recommend_stream",
+        lambda p: {"event": "done", "data": {"modules": []}, "rounds": 0},
+    )
+    assert gen.check_topic("T1") is False  # 照常走完推荐段判定（空模块收工）
+    assert "写失败" in capsys.readouterr().out
+
+
+def test_cache_recommend_records_param_fingerprints(tmp_path) -> None:
+    """缓存元数据带参数指纹（grilling 裁决 ①）：reference_ids 列表 + clarify
+    内容 sha256；clarify 指纹顺序不敏感（补问答案进 map 后重跑不误报警告）；
+    旧格式缓存（无此两字段）仍可加载（load 形状校验只钉必填三元数据）。"""
+    path = gen.recommend_cache_path("T1", cache_dir=tmp_path)
+    hist = [
+        {"question": "问1?", "answer": "答1"},
+        {"question": "问2?", "answer": "答2"},
+    ]
+    gen.cache_recommend(
+        path, DONE_SAMPLE, topic_key="T1",
+        problem_text="题面全文", platform="stm32",
+        reference_ids=("r1", "r2"), clarify_hist=hist,
+    )
+    cached = gen.load_recommend(path)
+    assert cached["reference_ids"] == ["r1", "r2"]
+    assert cached["clarify_sha256"] == gen.clarify_fingerprint(hist)
+    assert gen.clarify_fingerprint(hist) == gen.clarify_fingerprint(
+        list(reversed(hist))
+    )
+    old = dict(cached)
+    del old["reference_ids"], old["clarify_sha256"]
+    (path.parent / "old.json").write_text(
+        json.dumps(old, ensure_ascii=False), encoding="utf-8"
+    )
+    assert gen.load_recommend(path.parent / "old.json")["done"] == DONE_SAMPLE
+
+
+def test_check_topic_reuse_param_mismatch_warns_but_proceeds(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """同题换 reference_ids / clarify 内容复用缓存 → 打警告不阻断，推荐段仍
+    零调用（grilling 裁决 ①：不静默沿用旧推荐、也不废掉 flag 换参数迭代的
+    用途）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    gen.cache_recommend(
+        gen.recommend_cache_path("T1"), {"modules": []},
+        topic_key="T1", problem_text="题面全文", platform=gen.PLATFORM,
+        reference_ids=("r1",), clarify_hist=[{"question": "问?", "answer": "答"}],
+    )
+    called: list[dict] = []
+
+    def fake_stream(payload: dict) -> dict:
+        called.append(payload)
+        return {"event": "done", "data": {"modules": []}, "rounds": 0}
+
+    monkeypatch.setattr(gen, "recommend_stream", fake_stream)
+    assert gen.check_topic(
+        "T1", reuse_recommend=True,
+        clarify_map={"问?": "答2"}, reference_ids=("r2",),
+    ) is False  # 空模块 done → 骨架前收工；警告已打、流程照走
+    assert called == []
+    out = capsys.readouterr().out
+    assert "本次输入与生成缓存时不同" in out
+    assert "reference_ids" in out
+    assert "clarifications" in out
+
+
+def test_check_topic_reuse_same_params_no_warning(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """同题同参数复用 → 无警告（指纹一致静默通过，警告通道零误报）。"""
+    _setup_topic_env(monkeypatch, tmp_path)
+    hist = [{"question": "问?", "answer": "答"}]
+    gen.cache_recommend(
+        gen.recommend_cache_path("T1"), {"modules": []},
+        topic_key="T1", problem_text="题面全文", platform=gen.PLATFORM,
+        reference_ids=("r1",), clarify_hist=hist,
+    )
+    monkeypatch.setattr(
+        gen, "recommend_stream",
+        lambda p: {"event": "done", "data": {"modules": []}, "rounds": 0},
+    )
+    assert gen.check_topic(
+        "T1", reuse_recommend=True,
+        clarify_map={"问?": "答"}, reference_ids=("r1",),
+    ) is False
+    out = capsys.readouterr().out
+    assert "复用" in out
+    assert "本次输入与生成缓存时不同" not in out
