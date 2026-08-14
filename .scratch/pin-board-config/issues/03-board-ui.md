@@ -4,7 +4,7 @@
 
 **Blocked by:** pin-board-config/01、02（依赖 /api/boards 与 /api/generate bindings）
 
-**Status:** 待实施
+**Status:** 已实施（2026-08-14 分支 pin-board-config-03；待浏览器人工验收 + 合 main）
 
 ## 需求
 
@@ -61,3 +61,9 @@
 ## Comments
 
 - 2026-08-14 立项（板级引脚配置 grilling 定稿）。
+- 2026-08-14 实施完成（分支 pin-board-config-03，独立 worktree，单文件 index.html +535/-10，零后端改动，pytest 1456 零扰动）：
+  **卡片 7「引脚配置（板图点选）」**插在模块清单与骨架之间（h2 序号 7→11 顺延 + JS 分节注释同步）——左板图 SVG（boards JSON 坐标内联渲染，无静态路由：PCB 本体 + 芯片丝印 + 双排焊盘 + 丝印名，固定/电源引脚灰色不可点，IO 按绑定角色类型着色，同脚多角色叠加小色点，title 悬停含能力与板载注记，固定资源功能区虚线 chips）+ 右角色清单（类型 tag / 默认值 / 已绑 / 红显未绑 / 默认板外（PB4/PB5 先例）/ 默认被占用警示 / 共享宏族行）+ 图例（角色类型色 + 空闲 IO + 固定电源）。
+  **交互**：点引脚 → 锚定浮层菜单（.ref-files-overlay 模式：全屏遮罩 + Esc + 越界翻面）——第一层类型过滤（UART 脚不列 PWM 角色）+ strict-all 实例判定（与门禁同语义勿 any-of，不兼容灰显 + 缺实例原因）；点已占用引脚 → 占用者可替换/解除（被替换角色红显未绑——排针满员两步换位交互）；点清单条目 → 板图高亮可接引脚（pin-cand 高亮 / pin-dim 不兼容变暗 / 默认脚虚线环，再点取消）；共享宏族（LED_PORT/DIP_GPIO）绑定时卡片顶部黄色提示列出同族角色（v1 不拦截）。
+  **payload**：/api/generate 带 bindings（只含用户动过且模块仍在选择集内的角色；未配任何引脚不发字段——缺省即默认，旧行为不变）；切平台清空重取板定义；展开/清单变化时角色清单重算 + 残留绑定清理。
+  **验证**：node --check 过（脚本段提取）；jsdom DOM 冒烟 37/37 全绿（卡片序号顺延 / stm32+mspm0 双板渲染 / 固定引脚不可点 / strict-all 反例 PA28 灰显缺 TIMG0_C0、PA23 可绑 / 替换后原角色红显未绑 / 共享宏族提示 / 默认板外 PB4 PB5 / 默认被占用警示 / 高亮与取消 / payload 带 bindings 与不带两态 / 还原默认）；纯函数逻辑用真 boards JSON 复核（stm32 enc 实例锁线号仅 PA2 可绑、UART 脚类型层不列 pwm）；真机 web 路径（worktree 服务 8000 + generate_check --reuse-recommend）：2026C --add motor --bindings `{"motor.MOTOR_B_ENC":"PB4"}` → pin_config.h MOTOR_B_ENC_EXTI=EXTI_PB4（默认 EXTI_PA4，产物恰一处宏行变化）UV4 exit=0 0 错 0 警；不配 bindings 回归 EXTI_PA4 默认值 UV4 0 错 0 警；顺带实证后端门禁：绑未选模块的角色（motor 未在 2026C 推荐集）→ 400 中文。DeepSeek 骨架段瞬态 502 两次（Remote end closed / WinError 10054）重跑即过（known transient，deepseek-retry-hardening/01 口径）。
+  **浏览器人工验收清单（待用户执行）**：① 卡片位置与序号 7→11 顺延；② stm32/mspm0 两板切换渲染正常（蓝药丸 / 地猛星），固定引脚灰色不可点；③ mspm0 点 PA28 菜单 PWMAB_C0 灰显 + 原因"缺 TIMG0_C0"，PA23 可绑（strict-all 反例）；④ UART 脚菜单不出现 PWM 角色；⑤ 点已占用引脚 → 替换后原角色红显未绑（两步换位）；⑥ 点清单条目 → 板图高亮可接引脚；⑦ stm32 绑 LED_RED → 共享宏族提示；⑧ devtools 网络面板核对 /api/generate 请求体带 bindings（还原默认后再生成 → 无该字段）；⑨ 真机 2026C 浏览器全流程配一个改绑定 → UV4 0 错。
