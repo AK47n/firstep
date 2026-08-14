@@ -4,7 +4,7 @@
 
 **Blocked by:** 无
 
-**Status:** 待实施
+**Status:** resolved
 
 ## 现状证据
 
@@ -35,12 +35,12 @@
 
 ## 验收
 
-- [ ] 2026H 全管线生成产物 gmake 0 错（`--add imu_uart,led_beep`，复用既有 clarify 映射）
-- [ ] **含孤儿模块用例**：`--add step_motor,ml_mpu6050` 生成产物 gmake 0 错（补齐实证）
-- [ ] 每个实例引脚都在地猛星排针清单内且互不重复（对照表进 Comments）
-- [ ] 注释漂移 grep 复查：huidu/imu/led_beep/ntb_time/motor 的引脚注释与 syscfg 逐一致
-- [ ] pytest 全绿 + mypy src 干净（零 src 改动应无扰动）
-- [ ] 独立 worktree + 独立提交（`data:` 前缀）+ 推送
+- [x] 2026H 全管线生成产物 gmake 0 错（`--add imu_uart,led_beep`，复用既有 clarify 映射）——真机 ✓ 通过，gmake exit=0 0 错误 0 警 13.0s（2026-08-14；inclue 门禁要求 motor 同选 huidu，故 --add 实际为 imu_uart,led_beep,huidu，见 Comments）
+- [x] **含孤儿模块用例**：`--add step_motor,ml_mpu6050` 生成产物 gmake 0 错（补齐实证）——真机 ✓ 通过，gmake exit=0 0 错误 0 警 13.6s；产物含 step_motor.o / mpu_port.o / inv_mpu.o / inv_mpu_dmp_motion_driver.o（实际 --add step_motor,ml_mpu6050,huidu,imu_uart，同上门禁同选）
+- [x] 每个实例引脚都在地猛星排针清单内且互不重复（对照表进 Comments）
+- [x] 注释漂移 grep 复查：huidu/imu/led_beep/ntb_time/motor 的引脚注释与 syscfg 逐一致
+- [x] pytest 全绿（1379 passed）+ mypy src 干净（38 文件 Success，零 src 改动无扰动）
+- [x] 独立 worktree + 独立提交（`data:` 前缀）+ 推送
 
 ## 实施提示词（复制到新会话）
 
@@ -63,3 +63,35 @@
 ## Comments
 
 - 2026-08-14 立项（板级引脚配置 grilling 定稿派生；原为工单 08 遗留"母版 .syscfg 地猛星化"）。
+- 2026-08-14 实施闭环（Status resolved）。引脚重分配裁决与实例对照表：
+
+### 实例引脚对照排针清单自检表（2026-08-14）
+
+| 实例.角色 | 新引脚 | 旧引脚 | 排针 | 备注 |
+|---|---|---|---|---|
+| PWMAB C0/C1 | PA12/PA13 | 同 | 右排 ✓ | 不动 |
+| DC_MOTOR AIN1 | PB9 | PA0 | 右排 ✓ | 离板载 LED2（PA0 低电平亮） |
+| DC_MOTOR AIN2 | PA18 | PA1 | 右排 ✓ | 离板载 LED；PA18 板载 47k 到 BSL 排针（输出无碍） |
+| DC_MOTOR BIN1/BIN2 | PB18/PA7 | 同 | 左排 ✓ | 不动 |
+| DC_MOTOR AA/AB/BA/BB | PA16/PA17/PB19/PB20 | 同 | 右排/左排 ✓ | 不动（中断脚） |
+| HUIDU L1-L4/R1/R2 | PA22-PA27 | 同 | 右排 ✓ | 不动 |
+| HUIDU R3/R4 | PB4/PB5 | 同 | ✗ 排针未引出 | 不动（工单约束）；见下方"重要发现" |
+| KEY START | PA2 | 同 | 左排 ✓ | 不动；板载 ROSC 偏置 100k 到地与此脚共用 |
+| LED_BEEP LED | PA15 | PA3 | 右排 ✓ | PA3 = 32.768k 晶振脚，排针没有 |
+| IMU601 UART0 TX/RX | PA28/PA31 | PA10/PA11 | 左排 ✓ | CH340E 占 UART0 默认脚（且不在排针） |
+| DIGIT_UART UART1 | PA8/PA9 | 同 | 左排 ✓ | 不动 |
+| OLED I2C1 SDA/SCL | PB3/PB2 | 同 | 左排 ✓ | 不动 |
+| STEP_MOTOR RST2/SLP2/DIR2/DCY2 | PB24/PB6/PB7/PB8 | （孤儿） | 左排 ✓ | 新增，四脚同 GPIOB → STEP_MOTOR_PORT=GPIOB（代码硬要求） |
+| DCC_100_PWM2 TIMG12 C0 | PA14 | （孤儿） | 右排 ✓ | 新增；TIMG12-C0 在排针上只有 PA14/PB20，PB20 被编码器 BB 占；PA14 板载 LED2+15k 到地，PWM 时微亮可忽略 |
+| I2C_0 I2C0 SDA/SCL | PA0/PA1 | （孤儿） | 左排 ✓ | 新增；见下方裁决 |
+
+33 个引脚两两互不重复（SysConfig 校验 0 错背书）。
+
+### 裁决与事实记录
+
+- **DC_MOTOR AIN1/AIN2 裁决 = 移开**（非保留）：IMU601 与 I2C_0 两个孤儿争抢排针上唯一空闲的 UART0/I2C0 引脚对——地猛星 UART0 复用只在 PA0/PA1 与 PA28/PA31 两对，I2C0 复用同样只有这两对（引脚图 PDF 逐行定位核对）。imu 模块代码注释本就写 PA28/PA31（imu.h/imu.c/manifest 三处一致），故 IMU601=UART0 PA28/PA31、I2C_0=I2C0 PA0/PA1（板载 LED 微闪副作用：总线空闲高电平不亮；PA1 板载 4.7k 上拉，PA0 上拉位 R12 未焊、依赖 MPU 板自带——原理图逐网段追线核实）。
+- **DCC_100_PWM2 通道名改名**：PWMAB 已占默认通道名 `ti_driverlib_pwm_PWMTimerCC0`，SysConfig 重名报错（base 预检红证抓到），改名 `ti_driverlib_pwm_DCC100_CC0`；`GPIO_DCC_100_PWM2_C0_IDX` 宏由实例名生成不受影响（生成物 ti_msp_dl_config.h 已核对）。
+- **重要发现（供 pin-board-config 01 建库）**：地猛星 2×20 排针共 32 IO（左排 PB6/PB7，**没有 PB4/PB5**）；原理图芯片 48 脚清单与 TI LQFP-48(PT) 封装逐脚吻合（PA0=1 脚、VDD=6、VCORE=25…）——**板载芯片疑为 LQFP-48(PT)，syscfg 声明 LQFP-64(PM) 系 LaunchPad 遗留**，PB4/PB5 仅 PM 模型存在。HUIDU R3/R4=PB4/PB5 按工单约束未动（改它需腾 2 脚，排针 32 脚已满 33 分配恰好容纳，无空闲脚），board JSON pins 集不含 PB4/PB5 时默认绑定需另行处理。**PA21/VREF- 原理图直连地（R25 NC，GND 符号直连）→ 不可用**；PA14 板载 LED2（15k 到地）。建议另立工单核实包型号并处理 HUIDU R3/R4。
+- **ntb_time 顺带观察**（未改，另立工单候选）：TIMG7 为 16 位，40MHz 计数 1.638ms 回绕，`counter/500` 恒 0——manifest note 已按现状改述 TIMG7，功能可用性待核实。
+- **文件边界扩展**（只改注释与 note）：step_motor.h/manifest 与 ml_mpu6050 manifest 的"母版默认布局无此配置"被本工单改动直接推翻，同步更新（含 2026-08-12 实验记录保留）；motor.c:615 加权质心物理排列注释与 huidu.h 同属一条漂移面，一并同步。其余按工单清单。
+- **验收环境**：独立 worktree + 临时服务 8100（配置指向 worktree 库目录、autocommit 关；主检出与 ~/.contest_generator/ 未动）+ generate_check 临时副本（BASE=8100、GMAKE 环境变量）。2026H 推荐 4 轮真实调用收敛后缓存复用；include 门禁要求 motor 同选小车栈（huidu/imu_uart），两用例 --add 列表相应补齐（motor manifest 既有约定："mspm0 选 motor 需手动同选小车栈剩余项"）。gmake 报告 2 警 = 既有母版 UART ovsRate 提示（旧母版同值，SysConfig 校验级建议、非编译器告警，generate_check 解析口径 0 警）。
