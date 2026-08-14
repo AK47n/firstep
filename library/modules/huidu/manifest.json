@@ -1,6 +1,6 @@
 {
   "slug": "huidu",
-  "description": "8 路灰度传感器读取（MSPM0）：huidu_value[8] 输出黑线检测（1=黑线），接线 PA26/PA25/PA24/PA23/PA22/PA21/PB9/PB8。",
+  "description": "8 路灰度传感器读取（MSPM0）：huidu_value[8] 输出黑线检测（1=黑线），接线 PA25/PA24/PA23/PA22/PA26/PA27/PB4/PB5。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -10,7 +10,7 @@
       ],
       "verified": false,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置 GPIO 组 HUIDU_L3/L2/L1/R1/R2/L4/R3/R4（PA26 PA25 PA24 PA23 PA22 PA21 PB9 PB8，输入上拉）。",
+      "notes": "SysConfig 需配置 GPIO 组 HUIDU_L3/L2/L1/R1/R2/L4/R3/R4（L3=PA24 L2=PA23 L1=PA22 R1=PA26 R2=PA27 L4=PA25 R3=PB4 R4=PB5，输入上拉）。R3/R4 的 PB4/PB5 为 LaunchPad 遗留值，地猛星 2×20 排针未引出（工单 mspm0-master-dimx/01 记录，板级引脚配置时可重绑定）。",
       "kit": "",
       "source_url": ""
     }

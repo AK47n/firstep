@@ -1,12 +1,26 @@
 /**
- * firstep mspm0 母版默认外设布局（模块库默认引脚方案，编译闭环用）。
+ * firstep mspm0 母版默认外设布局（地猛星 LCKFB-DMX 开发板，模块库默认引脚方案，
+ * 编译闭环用；2026-08-14 地猛星化，工单 mspm0-master-dimx/01）。
  * 实例名/宏名与模块库代码一一对应（PWMAB/DC_MOTOR/IMU601/OLED/NTB/MOTOR_PID/
- * HUIDU/KEY/LED_BEEP）；实际接线不同时改引脚名即可，实例名与宏名勿动。
- * 引脚方案：motor notes（PWMAB C0/C1→PA12/PA13、DC_MOTOR AIN1=PA0 AIN2=PA1
- * BIN1=PB18 BIN2=PA7、编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20）+ 其余外设
- * 选空闲引脚（PA22-27/PB4/PB5 = HUIDU，PA2 = KEY，PA3 = LED_BEEP，
- * UART0 = PA11/PA10（IMU601），UART1 = PA8/PA9（DIGIT_UART，K230 视觉串口），
- * I2C1 = PB3/PB2）。SWD 调试口 PA19/PA20 保留。
+ * HUIDU/KEY/LED_BEEP/STEP_MOTOR/DCC_100_PWM2/I2C_0）；实际接线不同时改引脚名
+ * 即可，实例名与宏名勿动。
+ * 引脚方案（除 PB4/PB5 外全部在地猛星 2×20 排针上）：
+ *   motor：PWMAB C0/C1→PA12/PA13、DC_MOTOR AIN1=PB9 AIN2=PA18 BIN1=PB18
+ *   BIN2=PA7、编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20
+ *   HUIDU：PA22-27/PB4/PB5（R3/R4 的 PB4/PB5 为 LaunchPad 遗留，地猛星未引出）
+ *   KEY：PA2（板载 ROSC 偏置 100k 到地，按键与上拉共用此脚）
+ *   LED_BEEP：PA15；IMU601：UART0 = PA28(TX)/PA31(RX)（板载 CH340E 占
+ *   UART0 的 PA10/PA11，勿用）；DIGIT_UART：UART1 = PA8(TX)/PA9(RX)（K230 串口）
+ *   OLED：I2C1 = PB3(SDA)/PB2(SCL)；I2C_0：I2C0 = PA0(SDA)/PA1(SCL)（MPU6050，
+ *   复用板载 LED 脚——总线空闲高电平 LED 不亮，通信期间微闪；PA1 板载 4.7k 上拉，
+ *   PA0 上拉未焊 R12，靠 MPU 板自带）
+ *   STEP_MOTOR：RST2/SLP2/DIR2/DCY2 = PB24/PB6/PB7/PB8（全 GPIOB，
+ *   STEP_MOTOR_PORT 整组 GPIOB）；DCC_100_PWM2：TIMG12 C0 = PA14（板上经
+ *   LED2+15k 到地，PWM 输出时 LED 微亮，可忽略）
+ * 板上固定占用：CH340E PA10/PA11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、
+ * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针）、
+ * NRST。板载芯片为 48 脚（疑 LQFP-48 PT），syscfg 仍声明 LQFP-64(PM)（LaunchPad
+ * 遗留，PB4/PB5 仅 PM 模型存在——留待板级引脚配置工单核实包型号）。
  */
 //@cliArgs --device "MSPM0G350X" --package "LQFP-64(PM)" --part "Default"
 //@v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)"
@@ -17,6 +31,7 @@
  */
 const PWM     = scripting.addModule("/ti/driverlib/PWM", {}, false);
 const PWMAB   = PWM.addInstance();
+const DCC_100_PWM2 = PWM.addInstance();
 const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
 const MOTOR_PID = TIMER.addInstance();
 const NTB     = TIMER.addInstance();
@@ -25,10 +40,12 @@ const DC_MOTOR = GPIO.addInstance();
 const HUIDU   = GPIO.addInstance();
 const KEY     = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
+const STEP_MOTOR = GPIO.addInstance();
 const UART    = scripting.addModule("/ti/driverlib/UART", {}, false);
 const IMU601  = UART.addInstance();
 const I2C     = scripting.addModule("/ti/driverlib/I2C", {}, false);
 const OLED    = I2C.addInstance();
+const I2C_0   = I2C.addInstance();
 const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
 
 /**
@@ -47,6 +64,16 @@ PWMAB.PWM_CHANNEL_0.dutyCycle    = 0;
 PWMAB.PWM_CHANNEL_1.$name        = "ti_driverlib_pwm_PWMTimerCC1";
 PWMAB.PWM_CHANNEL_1.dutyCycle    = 0;
 
+// 步进电机脉冲输出（step_motor 模块：DCC_100_PWM2_INST，TIMG12 32 位定时器，
+// clockPrescale 必须为 1——step_set_speed 按 INST_CLK_FREQ/频率 直算周期；C0 = PA14）
+DCC_100_PWM2.$name              = "DCC_100_PWM2";
+DCC_100_PWM2.clockPrescale      = 1;
+DCC_100_PWM2.timerCount         = 65535;
+DCC_100_PWM2.peripheral.$assign = "TIMG12";
+DCC_100_PWM2.peripheral.ccp0Pin.$assign = "PA14";
+DCC_100_PWM2.PWM_CHANNEL_0.$name        = "ti_driverlib_pwm_DCC100_CC0";
+DCC_100_PWM2.PWM_CHANNEL_0.dutyCycle    = 50;
+
 // 电机 PID 调度定时器（10ms 周期中断，pid 模块用；编译闭环只需宏存在）
 MOTOR_PID.$name              = "MOTOR_PID";
 MOTOR_PID.profile            = "Basic_Periodic";
@@ -63,11 +90,11 @@ DC_MOTOR.associatedPins.create(8);
 DC_MOTOR.associatedPins[0].$name        = "AIN1";
 DC_MOTOR.associatedPins[0].direction    = "OUTPUT";
 DC_MOTOR.associatedPins[0].initialValue = "CLEARED";
-DC_MOTOR.associatedPins[0].pin.$assign  = "PA0";
+DC_MOTOR.associatedPins[0].pin.$assign  = "PB9";
 DC_MOTOR.associatedPins[1].$name        = "AIN2";
 DC_MOTOR.associatedPins[1].direction    = "OUTPUT";
 DC_MOTOR.associatedPins[1].initialValue = "CLEARED";
-DC_MOTOR.associatedPins[1].pin.$assign  = "PA1";
+DC_MOTOR.associatedPins[1].pin.$assign  = "PA18";
 DC_MOTOR.associatedPins[2].$name        = "BIN1";
 DC_MOTOR.associatedPins[2].direction    = "OUTPUT";
 DC_MOTOR.associatedPins[2].initialValue = "CLEARED";
@@ -132,15 +159,37 @@ KEY.associatedPins[0].$name       = "START";
 KEY.associatedPins[0].direction   = "INPUT";
 KEY.associatedPins[0].pin.$assign = "PA2";
 
-// LED/蜂鸣器输出
+// LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
 LED_BEEP.associatedPins.create(1);
 LED_BEEP.associatedPins[0].$name        = "LED";
 LED_BEEP.associatedPins[0].direction    = "OUTPUT";
 LED_BEEP.associatedPins[0].initialValue = "CLEARED";
-LED_BEEP.associatedPins[0].pin.$assign  = "PA3";
+LED_BEEP.associatedPins[0].pin.$assign  = "PA15";
 
-// IMU 串口（RX 中断）
+// 步进电机方向/使能（step_motor 模块：宏 STEP_MOTOR_RST2/SLP2/DIR2/DCY2_PIN，
+// 四脚同 GPIOB → STEP_MOTOR_PORT = GPIOB；RST2/SLP2 空闲高有效，init 置高）
+STEP_MOTOR.$name = "STEP_MOTOR";
+STEP_MOTOR.associatedPins.create(4);
+STEP_MOTOR.associatedPins[0].$name        = "RST2";
+STEP_MOTOR.associatedPins[0].direction    = "OUTPUT";
+STEP_MOTOR.associatedPins[0].initialValue = "SET";
+STEP_MOTOR.associatedPins[0].pin.$assign  = "PB24";
+STEP_MOTOR.associatedPins[1].$name        = "SLP2";
+STEP_MOTOR.associatedPins[1].direction    = "OUTPUT";
+STEP_MOTOR.associatedPins[1].initialValue = "SET";
+STEP_MOTOR.associatedPins[1].pin.$assign  = "PB6";
+STEP_MOTOR.associatedPins[2].$name        = "DIR2";
+STEP_MOTOR.associatedPins[2].direction    = "OUTPUT";
+STEP_MOTOR.associatedPins[2].initialValue = "CLEARED";
+STEP_MOTOR.associatedPins[2].pin.$assign  = "PB7";
+STEP_MOTOR.associatedPins[3].$name        = "DCY2";
+STEP_MOTOR.associatedPins[3].direction    = "OUTPUT";
+STEP_MOTOR.associatedPins[3].initialValue = "CLEARED";
+STEP_MOTOR.associatedPins[3].pin.$assign  = "PB8";
+
+// IMU 串口（RX 中断；UART0 = PA28(TX)/PA31(RX)——板载 CH340E 占用 UART0 默认脚
+// PA10/PA11，勿用；imu_uart 模块接线注释同步此值）
 IMU601.$name             = "IMU601";
 IMU601.profile           = "CONFIG_PROFILE_1";
 IMU601.peripheral.$assign = "UART0";
@@ -150,8 +199,8 @@ IMU601.targetBaudRate    = 115200;
 IMU601.enableInternalLoopback = false;
 IMU601.enabledInterrupts = ["RX"];
 IMU601.enableFIFO        = false;
-IMU601.peripheral.rxPin.$assign = "PA11";
-IMU601.peripheral.txPin.$assign = "PA10";
+IMU601.peripheral.rxPin.$assign = "PA31";
+IMU601.peripheral.txPin.$assign = "PA28";
 
 // K230 视觉串口（digit_uart/ball_detect 模块用，RX 中断；PA8/PA9 = UART1）
 const DIGIT_UART = UART.addInstance();
@@ -176,6 +225,17 @@ OLED.advAnalogGlitchFilter         = "DISABLED";
 OLED.peripheral.$assign            = "I2C1";
 OLED.peripheral.sdaPin.$assign     = "PB3";
 OLED.peripheral.sclPin.$assign     = "PB2";
+
+// MPU6050 姿态传感器（ml_mpu6050 模块：I2C_0_INST，轮询控制器模式；
+// I2C0 = PA0(SDA)/PA1(SCL) 复用板载 LED 脚，通信期间 LED 微闪——地猛星 I2C0 的
+// 另一组 PA28/PA31 已给 IMU601 UART0；PA1 板载 4.7k 上拉，PA0 上拉未焊 R12、
+// 依赖 MPU6050 模块板自带）
+I2C_0.$name                     = "I2C_0";
+I2C_0.basicEnableController     = true;
+I2C_0.basicControllerBusSpeed   = 400000;
+I2C_0.peripheral.$assign        = "I2C0";
+I2C_0.peripheral.sdaPin.$assign = "PA0";
+I2C_0.peripheral.sclPin.$assign = "PA1";
 
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
 Board.configureUnused = true;
