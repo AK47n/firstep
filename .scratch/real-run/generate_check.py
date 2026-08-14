@@ -3,12 +3,17 @@
 修复中心同语义，工单 gen-check-fix-loop/01）。
 
 用法：python generate_check.py [--platform stm32|mspm0] [--topic-file <题面.md>]
-      [--reference-ids <id1,id2,...>] [topic...]
+      [--reference-ids <id1,id2,...>] [--reuse-recommend] [topic...]
       topic 从题库读（默认 2026C 2021F）；--topic-file 从外部 md 读题面（如 2026H）；
-      --reference-ids 参考注入真机验证（前端同款语义：锚定命中 ∪ 手动选）。
+      --reference-ids 参考注入真机验证（前端同款语义：锚定命中 ∪ 手动选）；
+      --reuse-recommend 复用推荐缓存（done 载荷跨运行落盘 .scratch/real-run/
+      cache/，回归跑修复循环/编译链路时推荐段秒过；缓存缺失/失效报错退出，
+      不静默回退真实调用；命中时 reference_ids/clarify 与生成缓存时不一致
+      打警告不阻断）。
 依赖：服务在 127.0.0.1:8000 运行（python -m contest_generator.webapp）。
 输出目录：.scratch/real-run/out_<topic>_<platform>（不碰桌面原工程）。
 """
+import hashlib
 import json
 import os
 import sys
@@ -20,6 +25,9 @@ BASE = "http://127.0.0.1:8000"
 PLATFORM = "stm32"
 TOPICS = Path.home() / ".contest_generator" / "topics"
 HERE = Path(__file__).parent
+# 推荐缓存目录（工单 check-recommend-cache/01 决策 3；环境变量
+# GENERATE_CHECK_CACHE_DIR 可在 recommend_cache_path 处覆盖）
+CACHE_DIR = HERE / "cache"
 
 # 修复循环轮数上限，与前端一致（index.html FIX_MAX_ROUNDS = 3，改动须两处
 # 同步——tests/test_generate_check_contract.py 钉两处文本一致，改前端忘改
@@ -205,7 +213,10 @@ def recommend_stream(payload: dict) -> dict:
     )
     rounds = 0
     result = None
-    with urllib.request.urlopen(req, timeout=600) as r:
+    # 读超时 1800s（曾 600s）：提速棱镜 A"一轮问全"后单轮 LLM 响应分钟级，
+    # 2026-08-14 真机实测首轮静默窗口超 600s → 流被 TimeoutError 误杀（整次
+    # 推荐白跑）。SSE 轮间无事件 = LLM 在算，不是挂起；杀流比等更贵。
+    with urllib.request.urlopen(req, timeout=1800) as r:
         buf = ""
         while True:
             chunk = r.read(4096)
@@ -237,6 +248,111 @@ def recommend_stream(payload: dict) -> dict:
     return result
 
 
+# ---------- 推荐缓存（工单 check-recommend-cache/01） ----------
+#
+# 推荐段是回归大头（单题 ~10-15 min 真实 LLM 调用）；done 载荷跨运行落盘，
+# --reuse-recommend 命中直进骨架。缓存 json = done 载荷逐字 + 元数据
+# （topic_key / platform / problem_sha256 / reference_ids / clarify_sha256
+# ——后两者为参数指纹，命中不一致打警告不阻断）——下游消费变量对齐
+# recommend_stream 返回的 done，不发明新形状。缺失 / 失效报错退出，不静默
+# 回退真实调用
+# （回归确定性优先，防止"以为复用了其实又烧了 15 min"）。骨架不缓存
+# （修复循环需要真实 main_c，1-2 min 保留）。
+
+
+def problem_fingerprint(problem_text: str) -> str:
+    """题面 sha256 指纹（无 topic_id 时兼作缓存键；复用时校验题面未变）。"""
+    return hashlib.sha256(problem_text.encode("utf-8")).hexdigest()
+
+
+def clarify_fingerprint(
+    clarify_hist: list[dict[str, str]] | tuple[dict[str, str], ...],
+) -> str:
+    """clarify 历史指纹（缓存元数据参数指纹，复用警告比对用）。
+
+    顺序不敏感（map 预置 + 补问追加的先后不影响内容语义）：逐条序列化后
+    排序再哈希——同内容不同顺序 = 同指纹，避免"补问答案进 map 后重跑"
+    误报警告。
+    """
+    items = sorted(
+        json.dumps(
+            {"question": h["question"], "answer": h["answer"]},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        for h in clarify_hist
+    )
+    return hashlib.sha256(
+        json.dumps(items, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+
+
+def cache_key(topic_id: str | None, problem_text: str) -> str:
+    """缓存键：topic_id 优先（topic 模式）；无 topic_id（topic_file 手动准入）
+    用题面 sha256（决策 2——题面变 → 键变自然失效）。"""
+    return topic_id or problem_fingerprint(problem_text)
+
+
+def recommend_cache_path(key: str, cache_dir: Path | None = None) -> Path:
+    """缓存键 → 缓存文件路径 recommend_<key>.json（决策 3）。
+
+    目录覆盖顺序：显式参数 > 环境变量 GENERATE_CHECK_CACHE_DIR > 缺省
+    .scratch/real-run/cache/（测试经 cache_dir=tmp_path 注入）。
+    """
+    base = cache_dir or Path(
+        os.environ.get("GENERATE_CHECK_CACHE_DIR") or CACHE_DIR
+    )
+    return base / f"recommend_{key}.json"
+
+
+def cache_recommend(
+    path: Path,
+    done: dict,
+    *,
+    topic_key: str,
+    problem_text: str,
+    platform: str,
+    reference_ids: tuple[str, ...] | list[str] = (),
+    clarify_hist: list[dict[str, str]] | tuple[dict[str, str], ...] = (),
+) -> None:
+    """写缓存：done 载荷逐字 + 元数据。done = recommend_stream 终态 data
+    （modules/requirements/references/topic_id），下游 selectedSlugs / expand
+    / generate 零改动语义（决策 1）。platform 元数据防跨平台复用（推荐层按
+    平台过滤模块，stm32 推荐结果喂 mspm0 生成会假绿）；reference_ids /
+    clarify_sha256 参数指纹（grilling 裁决 ①：这两个轴只进真实请求体，
+    复用路径命中时不比对会静默沿用旧推荐——落指纹供复用警告）。"""
+    payload = {
+        "topic_key": topic_key,
+        "platform": platform,
+        "problem_sha256": problem_fingerprint(problem_text),
+        "reference_ids": list(reference_ids),
+        "clarify_sha256": clarify_fingerprint(clarify_hist),
+        "done": done,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def load_recommend(path: Path) -> dict:
+    """读缓存：json 读回 + 形状校验（自写自读，校验是复用安全网——坏 json /
+    缺字段 → ValueError，调用方报错退出而非带假数据进下游）。"""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"缓存不可读: {path}（{exc}）") from exc
+    if not isinstance(raw, dict):
+        raise ValueError(f"缓存形状错误: {path}（顶层非对象）")
+    for field in ("topic_key", "platform", "problem_sha256"):
+        if not isinstance(raw.get(field), str) or not raw[field]:
+            raise ValueError(f"缓存形状错误: {path}（缺 {field}）")
+    done = raw.get("done")
+    if not isinstance(done, dict) or not isinstance(done.get("modules"), list):
+        raise ValueError(f"缓存形状错误: {path}（done 非对象或缺 modules 列表）")
+    return raw
+
+
 # /api/recommend 请求契约（服务端校验唯一出处 = webapp.py:575-582，本函数是其
 # CLI 侧对偶；前端 index.html:916 恒发全部五字段）。字段规则：problem_text 必填
 # + platform 恒发（空 = 不过滤）+ topic_id 仅 topic 模式（topic_file = 无题号
@@ -263,9 +379,9 @@ def build_recommend_payload(
 
 def fix_stream(payload: dict) -> dict:
     """消费 SSE：parse_done → fix_start → apply_result… → done/error，返回
-    终态事件（recommend_stream 同款写法；fix 流分钟级真实 DeepSeek，timeout
-    600s 先例）。HTTP 4xx（如输出目录不存在）如实转 error 终态，不打断真机
-    验收主流程。
+    终态事件（recommend_stream 同款写法；fix 流分钟级真实 DeepSeek，读超时
+    1800s——2026-08-14 真机教训）。HTTP 4xx（如输出目录不存在）如实转 error
+    终态，不打断真机验收主流程。
 
     事件词表单源 = contest_generator/events.py（EVENT_PARSE_DONE /
     EVENT_FIX_START / EVENT_APPLY_RESULT / EVENT_DONE / EVENT_ERROR，终端
@@ -280,7 +396,10 @@ def fix_stream(payload: dict) -> dict:
     )
     result = None
     try:
-        with urllib.request.urlopen(req, timeout=600) as r:
+        # 读超时 1800s（曾 600s）：与 recommend_stream 同款教训（2026-08-14
+        # 真机实测首轮静默窗口超 600s）——修复调用单次分钟级，静默窗口超
+        # 600s 即误杀循环
+        with urllib.request.urlopen(req, timeout=1800) as r:
             buf = ""
             while True:
                 chunk = r.read(4096)
@@ -429,6 +548,7 @@ def check_topic(
     topic_file: Path | None = None,
     add: tuple[str, ...] = (),
     reference_ids: tuple[str, ...] = (),
+    reuse_recommend: bool = False,
 ) -> bool:
     ok = True
     print(f"\n===== {key} ({platform}) =====")
@@ -437,46 +557,106 @@ def check_topic(
     problem_text = src.read_text(encoding="utf-8")
     print(f"[题面] {src} {len(problem_text)} 字符")
 
-    # 1) 推荐（补问循环：question 终态 → 从 clarify_map 取答案 → 带澄清历史
-    # 重发，最多 5 轮；答案不进题面，收敛判定的句子编号不受污染。
-    # clarify_map 全量预置进历史：模型能看到已答问题，避免换措辞反复补问。
-    # topic_file 模式 = no-topic 手动准入（题库无该编号），不带 topic_id）
+    # 1) 推荐（topic_file 模式 = no-topic 手动准入（题库无该编号），不带
+    # topic_id）。--reuse-recommend（工单 check-recommend-cache/01）命中缓存
+    # 直进下游，缺失 / 失效报错退出；否则真实推荐（补问循环：question 终态
+    # → 从 clarify_map 取答案 → 带澄清历史重发，最多 5 轮；答案不进题面，
+    # 收敛判定的句子编号不受污染。clarify_map 全量预置进历史：模型能看到
+    # 已答问题，避免换措辞反复补问）并写缓存（写失败不阻断主流程）
     topic_id = None if topic_file else key
     clarify_hist: list[dict[str, str]] = [
         {"question": q, "answer": a} for q, a in (clarify_map or {}).items()
     ]
-    rec: dict = {}
-    for _round in range(5):
-        # platform 随请求体透传（工单 ref-platform-filter）：推荐层按生成平台
-        # 过滤模块候选——之前不带 platform，模型看全量库会推荐 stm32-only 模块
-        # （如 2026H 的 filter/pid），生成门禁兜底 400 再手动 --drop。
-        # reference_ids 随请求体透传（工单 03 契约对偶）：前端 selectedReferenceIds
-        # 恒发、CLI 此前不发 → 真机验收永不覆盖参考注入路径；字段规则收敛在
-        # build_recommend_payload（含 topic_id / clarifications 的既有条件语义）
-        payload = build_recommend_payload(
-            problem_text,
-            platform=platform,
-            topic_id=topic_id,
-            clarify_hist=clarify_hist,
-            reference_ids=reference_ids,
-        )
-        rec = recommend_stream(payload)
-        print(f"[推荐] {rec['rounds']} 轮 → 终态 {rec['event']}")
-        if rec["event"] != "question":
-            break
-        questions = list((rec.get("data") or {}).get("questions", []))
-        missing = [q for q in questions if (clarify_map or {}).get(q) is None]
-        if missing:
-            print(f"  ✗ 补问无答案可答: {missing}")
-            print(f"    （已答 {len(clarify_hist)} 条，补充 clarify 映射后重跑）")
+    ckey = cache_key(topic_id, problem_text)
+    cpath = recommend_cache_path(ckey)
+    if reuse_recommend:
+        # 决策 4：缓存缺失 → 报错退出，不静默回退真实调用（回归确定性优先，
+        # 防止"以为复用了其实又烧了 15 min"）；题面指纹 / 平台不符同样报错
+        # （决策 6：题面变 → 指纹变自然失效；platform 防跨平台复用——推荐层
+        # 按平台过滤模块，stm32 推荐结果喂 mspm0 生成会假绿）
+        if not cpath.exists():
+            print(f"  ✗ 缓存不存在: {cpath}")
+            print("    （先跑一次不带 --reuse-recommend 生成缓存）")
             return False
-        for q in questions:
-            clarify_hist.append({"question": q, "answer": clarify_map[q]})
-            print(f"  ↻ 补问第{len(clarify_hist)}条已回答: {q[:64]}…")
-    if rec["event"] != "done":
-        print(f"  ✗ 未收敛: {json.dumps(rec.get('data'), ensure_ascii=False)[:300]}")
-        return False
-    data = rec["data"]
+        try:
+            cached = load_recommend(cpath)
+        except ValueError as exc:
+            print(f"  ✗ {exc}")
+            print("    （删除该缓存文件后重跑真实推荐可重建）")
+            return False
+        if (
+            cached["problem_sha256"] != problem_fingerprint(problem_text)
+            or cached["platform"] != platform
+            or cached["topic_key"] != key
+        ):
+            print(f"  ✗ 缓存失效: {cpath}（题面 / 平台 / 键不符）")
+            print("    （先跑一次不带 --reuse-recommend 重建缓存）")
+            return False
+        # 参数指纹警告（grilling 裁决 ①）：reference_ids / clarify 内容只进
+        # 真实请求体，复用路径否则不感知其变化——同题换参数静默沿用旧推荐
+        # = 假绿。不一致打警告不阻断（报错会废掉 flag 换参数迭代的用途；
+        # 旧格式缓存无此元数据则跳过比对）
+        warns = []
+        if "reference_ids" in cached and \
+                sorted(cached["reference_ids"]) != sorted(reference_ids):
+            warns.append(
+                f"reference_ids 与生成缓存时不同"
+                f"（缓存 {sorted(cached['reference_ids'])}，本次 {sorted(reference_ids)}）"
+            )
+        if "clarify_sha256" in cached and \
+                cached["clarify_sha256"] != clarify_fingerprint(clarify_hist):
+            warns.append("clarifications 内容与生成缓存时不同")
+        if warns:
+            print("  ⚠️ 缓存命中，但本次输入与生成缓存时不同：")
+            for w in warns:
+                print(f"    - {w}")
+            print("    （结果沿用旧推荐；如需应用新输入，去掉 --reuse-recommend 重跑）")
+        data = cached["done"]
+        print(f"[缓存] 复用 {cpath}（推荐段跳过）")
+    else:
+        rec: dict = {}
+        for _round in range(5):
+            # platform 随请求体透传（工单 ref-platform-filter）：推荐层按生成平台
+            # 过滤模块候选——之前不带 platform，模型看全量库会推荐 stm32-only 模块
+            # （如 2026H 的 filter/pid），生成门禁兜底 400 再手动 --drop。
+            # reference_ids 随请求体透传（工单 03 契约对偶）：前端 selectedReferenceIds
+            # 恒发、CLI 此前不发 → 真机验收永不覆盖参考注入路径；字段规则收敛在
+            # build_recommend_payload（含 topic_id / clarifications 的既有条件语义）
+            payload = build_recommend_payload(
+                problem_text,
+                platform=platform,
+                topic_id=topic_id,
+                clarify_hist=clarify_hist,
+                reference_ids=reference_ids,
+            )
+            rec = recommend_stream(payload)
+            print(f"[推荐] {rec['rounds']} 轮 → 终态 {rec['event']}")
+            if rec["event"] != "question":
+                break
+            questions = list((rec.get("data") or {}).get("questions", []))
+            missing = [q for q in questions if (clarify_map or {}).get(q) is None]
+            if missing:
+                print(f"  ✗ 补问无答案可答: {missing}")
+                print(f"    （已答 {len(clarify_hist)} 条，补充 clarify 映射后重跑）")
+                return False
+            for q in questions:
+                clarify_hist.append({"question": q, "answer": clarify_map[q]})
+                print(f"  ↻ 补问第{len(clarify_hist)}条已回答: {q[:64]}…")
+        if rec["event"] != "done":
+            print(f"  ✗ 未收敛: {json.dumps(rec.get('data'), ensure_ascii=False)[:300]}")
+            return False
+        data = rec["data"]
+        # 决策 5：默认行为不变——真实推荐后写缓存（done 载荷逐字），写失败
+        # 打印警告不阻断（缓存是加速手段，不是流程依赖）
+        try:
+            cache_recommend(
+                cpath, data, topic_key=key,
+                problem_text=problem_text, platform=platform,
+                reference_ids=reference_ids, clarify_hist=clarify_hist,
+            )
+            print(f"[缓存] 已写 {cpath}")
+        except OSError as exc:
+            print(f"  [缓存] 写失败（不阻断主流程）: {exc}")
     slugs = [m["slug"] for m in data.get("modules", [])]
     dropped = [s for s in slugs if s in drop]
     if dropped:
@@ -622,9 +802,15 @@ def main() -> None:
             s.strip() for s in args[idx + 1].split(",") if s.strip()
         )
         del args[idx:idx + 2]
+    reuse_recommend = "--reuse-recommend" in args
+    if reuse_recommend:
+        del args[args.index("--reuse-recommend")]
     topics = args or ["2026C", "2021F"]
     results = {
-        t: check_topic(t, clarify_map, drop, platform, topic_file, add, reference_ids)
+        t: check_topic(
+            t, clarify_map, drop, platform, topic_file, add, reference_ids,
+            reuse_recommend=reuse_recommend,
+        )
         for t in topics
     }
     print("\n===== 汇总 =====")

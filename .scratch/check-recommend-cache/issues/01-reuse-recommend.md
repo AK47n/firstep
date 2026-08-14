@@ -2,7 +2,7 @@
 
 **What to build:** `generate_check.py` 每次真实推荐 done 后把 done 载荷全量落缓存 json；加 `--reuse-recommend` 时跳过 `/api/recommend` SSE 段（推荐流单题 ~10-15 min，占回归 90%），直进骨架/生成/编译。回归场景（验证修复循环、编译链路）推荐结果稳定，缓存完全够用；全流程抽查不带该 flag 即可。纯 CLI 侧改动，**不动 src**。
 
-**Status:** claimed
+**Status:** resolved
 
 **Blocked by:** gen-check-fix-loop/01 合 main（同文件 `.scratch/real-run/generate_check.py`，避免共享检出竞态 / 合并冲突——对方重跑收尾后再开工，开工前先拉 main）。
 
@@ -37,9 +37,60 @@
 
 ## 验收标准
 
-- [ ] pytest 全绿（含契约测试新增）+ `mypy src` 干净（CLI 脚本不在 mypy src 范围）
-- [ ] 真机：真实 2026C 全流程跑一次（写缓存）→ `--reuse-recommend` 重跑：推荐段秒过、UV4 0 错、两次用时对比写进 Comments
-- [ ] 真机：缓存缺失时 `--reuse-recommend` 报错退出（非零码 + 可操作文案）
-- [ ] `git status` 只出现预期文件（generate_check.py + 契约测试 + .gitignore + 本工单文件），缓存目录不出现
+- [x] pytest 全绿（含契约测试新增）+ `mypy src` 干净（CLI 脚本不在 mypy src 范围）
+- [x] 真机：真实 2026C 全流程跑一次（写缓存）→ `--reuse-recommend` 重跑：推荐段秒过、UV4 0 错、两次用时对比写进 Comments
+- [x] 真机：缓存缺失时 `--reuse-recommend` 报错退出（非零码 + 可操作文案）
+- [x] `git status` 只出现预期文件（generate_check.py + 契约测试 + .gitignore + 本工单文件），缓存目录不出现
 
 ## Comments
+
+### 2026-08-14 实施闭环
+
+**代码**：`recommend_cache_path` / `cache_recommend` / `load_recommend` /
+`cache_key` / `problem_fingerprint` 纯函数 + `check_topic` 推荐段分流
+（`--reuse-recommend` 命中直进下游，缺失 / 失效报错退出）+ `main()` flag
+解析；契约测试 +11（tmp_path 注入纯函数、坏 json / 缺字段拒绝、命中推荐段
+零调用、缺失 / 失效报错、默认写缓存、写失败不阻断）；`.gitignore` 补显式行。
+1342 绿 + mypy src 干净。
+
+**真机（2026-08-14，8000 服务本会话起）**：
+- 真实 2026C 跑（`--clarify clarify_2026C.json`）：3 轮 → done，5 模块
+  （zigbee_uart_key / zigbee_uart / uwb_uart / filter / config），缓存已写，
+  UV4 0 错，**8m50s**（real）
+- `--reuse-recommend` 重跑：`[缓存] 复用 …（推荐段跳过）`，UV4 exit=0 0 错，
+  **2m41s**（real）——推荐段 6m10s 全省，约 3.3×
+- 缓存缺失：exit=1 + `缓存不存在: <path>（先跑一次不带 --reuse-recommend
+  生成缓存）`
+
+**超出工单字面的四处**（如有异议可 grilling）：
+1. **SSE 读超时 600→1800s**（recommend_stream + fix_stream）：真机首跑被
+   TimeoutError 误杀——提速棱镜 A"一轮问全"后单轮 LLM 静默窗口实测超 600s
+   （4 轮 8m56s 才出 question 终态）。SSE 轮间无事件 = LLM 在算不是挂起，
+   放宽后首跑成功。
+2. **缓存元数据加 platform 字段**：推荐层按平台过滤模块，stm32 推荐结果
+   喂 mspm0 生成会假绿——复用校验指纹 + 平台双不符即"缓存失效"报错。
+3. **clarify_2026C.json 补 2 条**（平台线选择 / 数字钥匙 ID 设置，模型新
+   措辞）——首跑补问所致；答案自洽推导（平台 = CLI 参数；钥匙 ID 固定预设，
+   题面只约束门锁侧拨码开关验证 ID）。
+4. **.gitignore 补行实为冗余**：第 12 行 `.scratch/real-run/` 整目录忽略已
+   覆盖 cache/（git check-ignore 证实），补行防将来整目录规则收窄漏网。
+
+### 2026-08-14 grilling 裁决（用户授权代决，确认执行）
+
+四处超字面改动经 grilling 落定：
+
+1. **SSE 读超时 1800s**：保留固定常量——安全网非性能旋钮，实测余量健康，
+   提 config 键为投机性设计。
+2. **platform 元数据**：保留；另堵参数指纹盲区——reference_ids / clarify
+   内容此前只进真实请求体、复用路径不感知，同题换参数会静默沿用旧推荐。
+   已补：缓存元数据新增 `reference_ids` + `clarify_sha256`（顺序不敏感
+   指纹），命中不一致打警告不阻断（报错会废掉 flag 换参数迭代的用途；
+   旧格式缓存无此元数据跳过比对）；topic_key 比对并入缓存失效报错。
+   **web 端同病**（每调用读超时 llm.py:659 = 300s，CLI 实测单轮静默窗口
+   超 600s）立 follow-up 工单 `.scratch/web-llm-timeout/issues/
+   01-verify-timeout.md`（先验证后修改，不动 src）。
+3. **clarify_2026C.json 补 2 条**：维持现状——文件未被 git 跟踪（整目录
+   忽略），补条只在本机生效 + 本 Comments 留痕；是否入库属真机数据入库
+   策略的独立决策。
+4. **.gitignore 冗余三行**：已撤（第 12 行整目录规则覆盖，git check-ignore
+   证实；防收窄理由留痕本 Comments 与 commit message）。
