@@ -12,7 +12,57 @@
       "hardware_bound": false,
       "notes": "SysConfig 需配置 GPIO 组 HUIDU_L3/L2/L1/R1/R2/L4/R3/R4（L3=PA24 L2=PA23 L1=PA22 R1=PA26 R2=PA27 L4=PA25 R3=PB4 R4=PB5，输入上拉）。R3/R4 的 PB4/PB5 为 LaunchPad 遗留值，地猛星 2×20 排针未引出（工单 mspm0-master-dimx/01 记录，板级引脚配置时可重绑定）。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "L1",
+          "type": "gpio_in",
+          "default": "PA22",
+          "required": true
+        },
+        {
+          "id": "L2",
+          "type": "gpio_in",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "L3",
+          "type": "gpio_in",
+          "default": "PA24",
+          "required": true
+        },
+        {
+          "id": "L4",
+          "type": "gpio_in",
+          "default": "PA25",
+          "required": true
+        },
+        {
+          "id": "R1",
+          "type": "gpio_in",
+          "default": "PA26",
+          "required": true
+        },
+        {
+          "id": "R2",
+          "type": "gpio_in",
+          "default": "PA27",
+          "required": true
+        },
+        {
+          "id": "R3",
+          "type": "gpio_in",
+          "default": "PB4",
+          "required": true
+        },
+        {
+          "id": "R4",
+          "type": "gpio_in",
+          "default": "PB5",
+          "required": true
+        }
+      ]
     }
   }
 }

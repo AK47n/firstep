@@ -11,7 +11,89 @@
       "hardware_bound": false,
       "notes": "",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "LED_RED",
+          "type": "gpio_out",
+          "default": "PC13",
+          "required": false,
+          "macros": [
+            "LED_PORT",
+            "LED_RED_PIN"
+          ]
+        },
+        {
+          "id": "LED_YELLOW",
+          "type": "gpio_out",
+          "default": "PC14",
+          "required": false,
+          "macros": [
+            "LED_PORT",
+            "LED_YELLOW_PIN"
+          ]
+        },
+        {
+          "id": "LED_GREEN",
+          "type": "gpio_out",
+          "default": "PC15",
+          "required": false,
+          "macros": [
+            "LED_PORT",
+            "LED_GREEN_PIN"
+          ]
+        },
+        {
+          "id": "BUZZER",
+          "type": "gpio_out",
+          "default": "PB0",
+          "required": false,
+          "macros": [
+            "BUZZER_GPIO",
+            "BUZZER_PIN"
+          ]
+        },
+        {
+          "id": "DIP0",
+          "type": "gpio_in",
+          "default": "PB12",
+          "required": false,
+          "macros": [
+            "DIP_GPIO",
+            "DIP_PIN0"
+          ]
+        },
+        {
+          "id": "DIP1",
+          "type": "gpio_in",
+          "default": "PB13",
+          "required": false,
+          "macros": [
+            "DIP_GPIO",
+            "DIP_PIN1"
+          ]
+        },
+        {
+          "id": "DIP2",
+          "type": "gpio_in",
+          "default": "PB14",
+          "required": false,
+          "macros": [
+            "DIP_GPIO",
+            "DIP_PIN2"
+          ]
+        },
+        {
+          "id": "DIP3",
+          "type": "gpio_in",
+          "default": "PB15",
+          "required": false,
+          "macros": [
+            "DIP_GPIO",
+            "DIP_PIN3"
+          ]
+        }
+      ]
     }
   }
 }
