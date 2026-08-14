@@ -2,7 +2,7 @@
 
 **What to build:** cli-fix-loop-parity/01 的遗留收尾。该工单给循环内重编译补了超时停条件，但 check_topic 的**首次编译**仍丢弃 `CompileRun.timed_out`（解包 `_timed_out` 沿用旧路径）——`compile_passed(None)=False` → 进修复循环，把超时半截输出当 error_text 喂第 1 轮 LLM：白烧一次分钟级调用 + 误报修复结果。前端对偶已有：`startFixCenter` 初编译 `compile.timed_out` 即停（`index.html:1852-1856`），不进入 fixRounds。
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## 现状证据（cli-fix-loop-parity/01 Comments 遗留）
 
@@ -37,3 +37,12 @@
 > 验收：红证记录 → 实施绿 + 全量 pytest 绿（基线 1377）+（可选）probe；提交格式 `fix: ...（工单 cli-init-compile-timeout/01，N 绿——...）` + docs 一笔；`gh pr create --body-file`；不 force push；证据写本文件 Comments，Status → resolved，推送。
 
 ## Comments
+
+**2026-08-14 实施闭环（分支 cli-init-compile-timeout-01，提交 8bc87c9，PR #70 待合 main）：**
+
+- **红证先行**：两个用例先落库跑红后实施——
+  - 行为钉 `test_check_topic_initial_timeout_stops_without_fix_loop`：合成 `uv4_build` 返回 `(False, "UV4 exit=None（编译超时）", "半截输出", True)`（即生产 `collect_build_log` 四元组契约形态），hermetic 全流程走通到编译段。红 = `loop_calls == []` 断言炸（旧形态进修复循环，`run_fix_loop` 被调 = 白烧第 1 轮 LLM）+ 停文案缺席。
+  - 结构钉 `test_check_topic_initial_timeout_branch_skips_fix_loop`：AST 断言 check_topic 存在 `timed_out` 停分支、分支体含停文案、不含 `run_fix_loop`（只判分支体——elif 链的 else 分支调 run_fix_loop 属编译失败路径正常残留）。红 = "check_topic 无首编 timed_out 停分支"。
+- **实施**（只动 2 个边界内文件）：check_topic 解包 `timed_out`（弃 `_timed_out`）→ `if timed_out:` 停分支：`[真机] ✗ {摘要}` + 「初次编译超时，已停止——可修改工程后重新运行本脚本」——后缀「——可修改工程后重新运行本脚本」与循环内超时停文案逐字同款（`run_fix_loop` 内「第 N 轮重编译超时，已停止循环——可修改工程后重新运行本脚本」，cli-fix-loop-parity/01），`ok = False` 失败态汇总（不报修复轮结果）；工具链缺失旧路径（passed None 非超时）与 run_fix_loop、src/ 全目录零改动。
+- **验收**：2 新用例绿；全量 pytest **1379 绿**（基线 1377 + 2，契约钉全绿）；`git status` 只出现预期两文件。
+- **probe 未做（可选项）**：真机强制超时需 UV4 全量重建 >180s 才自然触发不可控，临时调小常量需动 src 违反边界——按定案以单元测试合成 `CompileRun(timed_out=True)`（即 uv4_build 真实四元组契约形态）为验收主体。

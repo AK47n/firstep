@@ -235,6 +235,117 @@ def test_run_fix_loop_rebuild_timeout_stops_without_next_llm_call(
     assert len(calls) == 1
 
 
+# ---------- 首编超时即停（工单 cli-init-compile-timeout/01） ----------
+#
+# cli-fix-loop-parity/01 的停条件只在循环内：check_topic 首编译丢弃
+# CompileRun.timed_out（解包 _timed_out 沿用旧路径），passed None 含超时形态
+# → 进修复循环，把超时半截输出当 error_text 喂第 1 轮 LLM = 白烧一次分钟级
+# 调用 + 误报修复结果。前端 startFixCenter 对偶已有（index.html:1852 初编译
+# timed_out 即停不进 fixRounds）。首编超时 = 终端状态：不进 run_fix_loop、
+# 停文案与循环内超时停（cli-fix-loop-parity/01）同款收尾、失败态汇总。
+
+
+def _fake_path_home(tmp_path: Path) -> type[Path]:
+    """Path 子类：home() 指到 tmp——模块目录校验（~/.contest_generator/modules）
+    测试级隔离，闭包捕获 tmp_path 不靠全局可变状态。"""
+
+    class _FakeHomePath(Path):
+        @classmethod
+        def home(cls):
+            return tmp_path
+
+    return _FakeHomePath
+
+
+def _setup_full_flow_env(monkeypatch, tmp_path) -> Path:
+    """check_topic 走通到真机编译段的 hermetic 环境：题库 + 缓存 + 模块目录 +
+    骨架/生成/产物门禁全部 fake，只有 uv4_build 留给用例合成。
+
+    返回 out_dir（已预置 need 关键文件），check_topic 在编译段前零失败。
+    """
+    _setup_topic_env(monkeypatch, tmp_path)
+    gen.cache_recommend(
+        gen.recommend_cache_path("T1"), DONE_SAMPLE,
+        topic_key="T1", problem_text="题面全文", platform=gen.PLATFORM,
+    )
+    # 模块目录校验：home() 指 tmp，两个 slug 都在
+    monkeypatch.setattr(gen, "Path", _fake_path_home(tmp_path))
+    for slug in ("led_beep", "gpio"):
+        (tmp_path / ".contest_generator" / "modules" / slug).mkdir(parents=True)
+    # 骨架 / 生成两段 POST fake（build_hint 缺省 = 无提示）
+    monkeypatch.setattr(
+        gen, "post",
+        lambda url, payload: (
+            {"main_c": "int main(void) { return 0; }", "intercepted": []}
+            if url == "/api/skeleton" else {}
+        ),
+    )
+    # HERE 指 tmp：out_dir 不落真实 .scratch/real-run；need 关键文件预置
+    out_dir = tmp_path / "here" / "out_T1_stm32"
+    (out_dir / "user").mkdir(parents=True)
+    (out_dir / "main.c").write_text("int main(void) { return 0; }", encoding="utf-8")
+    (out_dir / "user" / "Project.uvprojx").write_text(
+        "<project/>", encoding="utf-8"
+    )
+    monkeypatch.setattr(gen, "HERE", tmp_path / "here")
+    # 产物门禁 fake：out_dir 是空壳工程，真门禁必报错
+    monkeypatch.setattr(gen, "check_artifacts", lambda out_dir, platform: [])
+    return out_dir
+
+
+def test_check_topic_initial_timeout_stops_without_fix_loop(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """首编超时（合成 timed_out 的 CompileRun）= 终端状态：不进 run_fix_loop
+    （零修复轮调用 = 零 LLM 白烧）+ 停文案与循环内超时停同款收尾 + 失败态
+    返回 False——旧形态进循环把半截输出喂第 1 轮 LLM。"""
+    _setup_full_flow_env(monkeypatch, tmp_path)
+    loop_calls: list[tuple] = []
+    fix_calls: list[dict] = []
+    monkeypatch.setattr(
+        gen, "run_fix_loop",
+        lambda *args, **kwargs: (loop_calls.append(args), False)[1],
+    )
+    monkeypatch.setattr(
+        gen, "fix_stream",
+        lambda payload: (fix_calls.append(payload),
+                         {"event": "done", "data": {"fixes": []}})[1],
+    )
+
+    def fake_build(out_dir):
+        # exit=None + timed_out=True 的合成 CompileRun（半截输出在摘要内）
+        return False, "UV4 exit=None（编译超时）", "半截输出", True
+
+    monkeypatch.setattr(gen, "uv4_build", fake_build)
+    assert gen.check_topic("T1", reuse_recommend=True) is False
+    out = capsys.readouterr().out
+    assert loop_calls == []
+    assert fix_calls == []
+    assert "初次编译超时，已停止" in out
+    assert "——可修改工程后重新运行本脚本" in out
+
+
+def test_check_topic_initial_timeout_branch_skips_fix_loop() -> None:
+    """结构钉：check_topic 首编 timed_out 分支即停——分支内不进 run_fix_loop
+    + 停文案在场（删分支 / 进循环即红）。"""
+    src = inspect.getsource(gen.check_topic)
+    tree = ast.parse(src)
+    func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef))
+    for node in ast.walk(func):
+        if (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "timed_out"
+        ):
+            # 只看分支体（elif 链在 orelse 里，else 分支调 run_fix_loop 属
+            # 编译失败路径的正常残留——全链段判 "无 run_fix_loop" 会误红）
+            body_src = ast.unparse(node.body)
+            assert "初次编译超时" in body_src, "timed_out 分支停文案缺失"
+            assert "run_fix_loop" not in body_src, "timed_out 分支不得进修复循环"
+            return
+    raise AssertionError("check_topic 无首编 timed_out 停分支")
+
+
 # ---------- check_topic 透传对偶（删 reference_ids 透传即红） ----------
 
 @pytest.fixture
