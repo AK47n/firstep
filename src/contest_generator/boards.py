@@ -126,6 +126,7 @@ class Board:
     pin_index: dict[str, BoardPin] = field(default_factory=dict)
     fixed: tuple[FixedResource, ...] = ()
     landmarks: tuple[Landmark, ...] = ()
+    pcb_color: str = ""  # 板图 PCB 底色（俯视图观感）；空 = 前端默认令牌
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -135,6 +136,7 @@ class Board:
             "pins": [p.to_dict() for p in self.pins],
             "fixed": [f.to_dict() for f in self.fixed],
             "landmarks": [lm.to_dict() for lm in self.landmarks],
+            "pcb_color": self.pcb_color,
         }
 
 
@@ -250,6 +252,10 @@ def _parse_board(data: dict[str, Any], path: Path) -> Board:
     for item in raw_landmarks:
         landmarks.append(_parse_landmark(item, path))
 
+    pcb_color = data.get("pcb_color", "")
+    if not isinstance(pcb_color, str):
+        raise BoardError(f"{path} 的 pcb_color 必须是字符串")
+
     return Board(
         board_id=board_id,
         name=name,
@@ -258,6 +264,7 @@ def _parse_board(data: dict[str, Any], path: Path) -> Board:
         pin_index=pin_index,
         fixed=tuple(fixed),
         landmarks=tuple(landmarks),
+        pcb_color=pcb_color,
     )
 
 
