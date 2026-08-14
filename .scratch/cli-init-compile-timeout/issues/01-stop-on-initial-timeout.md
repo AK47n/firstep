@@ -38,7 +38,7 @@
 
 ## Comments
 
-**2026-08-14 实施闭环（分支 cli-init-compile-timeout-01，提交 8bc87c9）：**
+**2026-08-14 实施闭环（分支 cli-init-compile-timeout-01，提交 8bc87c9，PR #70 待合 main）：**
 
 - **红证先行**：两个用例先落库跑红后实施——
   - 行为钉 `test_check_topic_initial_timeout_stops_without_fix_loop`：合成 `uv4_build` 返回 `(False, "UV4 exit=None（编译超时）", "半截输出", True)`（即生产 `collect_build_log` 四元组契约形态），hermetic 全流程走通到编译段。红 = `loop_calls == []` 断言炸（旧形态进修复循环，`run_fix_loop` 被调 = 白烧第 1 轮 LLM）+ 停文案缺席。
