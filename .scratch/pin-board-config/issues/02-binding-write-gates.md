@@ -4,7 +4,7 @@
 
 **Blocked by:** pin-board-config/01（依赖 boards 数据与 manifest pins 声明）
 
-**Status:** 已实施（待合 main，分支 pin-board-config-02）
+**Status:** resolved（2026-08-14 PR #71 squash merged 3215c99，主会话复核 + 1456 绿复跑；评审修正见 Comments 尾注）
 
 ## 需求
 
@@ -57,3 +57,4 @@
 
 - 2026-08-14 立项（板级引脚配置 grilling 定稿；工单 01 的写侧部分拆出成张）。
 - 2026-08-14 实施完成（分支 pin-board-config-02，独立 worktree）：**模型** pin_bindings.py——resolve_bindings 唯一校验出口（键格式/未知角色/未知引脚/能力/槽位），ResolvedBinding 喂写侧，PinBindingError 登记 errors.py 400 中文（结构防漏登测试自动收编）；**stm32 渲染器** pinwriter.render_pin_config——宏行级替换（head/name/sep/eol 原样保留，CRLF 母版逐字节契约）、8 种宏名尾形分派（_EXTI/_LINE/_TIM/_CH/_UART/_INST/_PORT/_GPIO/_PIN）、注释旧引脚字样同步、宏不在 pin_config.h（ml_mpu6050 的 I2C_* 住 ml_i2c.h）大声失败；**syscfg 改写器** rewrite_syscfg——默认引脚值定位槽位（母版 $assign 引脚值唯一，真库不变量测试钉）、只换 $assign 引号值、实例名/宏名/通道名集合结构测试钉（DCC100_CC0 先例防炸）、同槽位多角色绑同脚 dedupe/绑异脚 400；**门禁两条**入 GENERATION_GATES（GateContext 第 4 参，存量谓词忽略）——_check_pin_bindings（校验即 resolve，generate 预解析喂写侧 + 门禁独立再校验同纯函数）+ _check_no_pin_literals_in_main（clex 注释/字符串剥离后扫 PAx/PBx/Pin_N/GPIO_<口>/GPIO_PIN_N——前缀允许 _ 收 EXTI_PA2/GPIO_Pin_13，尾 \b 挡宏名后缀）；**API** /api/generate 可选 bindings（形状判决归域层）+ generate_check.py --bindings（JSON 字符串）。真机：stm32 2026C 默认 UV4 0 错 0 警 + 改绑定 motor.MOTOR_B_ENC→PB4（pin_config.h 与母版 diff 恰 1 行 EXTI_PA4→EXTI_PB4）UV4 0 错 0 警；mspm0 2026H 默认 gmake 0 错（2 既有母版 ovsRate 提示）+ 改绑定 LED_BEEP_LED↔KEY_START 换位（syscfg diff 恰 2 行）gmake 0 错；无 bindings 旧请求回归两平台全过（产物树门禁含两条新门禁）。红证 4 条已验（errors 漏登/渲染器丢行尾/注释误伤/any-of 放宽）。**关键裁决与发现**：① 能力校验 = strict-all（默认引脚全部实例都要支持——mspm0 PWMAB_C0 默认 PA12 双实例，any-of 会放行仅 TIMA0_C3 的 PA28 但 SysConfig 路由必炸，宁严勿假绿；PWMAB 仍可移到双实例俱有的 PA23）；② 工单文案"enc 一绑三宏"与工单 01 产物对齐：DIR 是独立角色（MOTOR_A_ENC_DIR），渲染器按 PinDeclaration.macros 逐宏驱动，等价覆盖；③ 共享宏族陷阱（LED_PORT 三灯共口 / DIP_GPIO 四拨码共口——绑一个角色会改到其它角色的共享宏）v1 不拦，接线语义用户把关，工单 03 前端可加共享宏族提示；④ **mspm0 单角色换脚必撞已占用引脚**（母版 syscfg 排针 32 IO 全占满，实证 LED→PB8 撞 STEP_MOTOR DCY2：SysConfig "Resource conflict" exit=2——机制改写正确、冲突是接线语义）——干净改法 = 双角色换位（本次验收形态）或未来"腾挪已占用角色"交互，工单 03 前端设计必读。
+- 2026-08-14 主会话复核合并（PR #71 squash merged 3215c99，远端分支已删）：读码 pin_bindings.py / pinwriter.py（行级替换 + CRLF 逐字节 + 8 宏名尾形 + 槽位定位）/ generator 门禁装配（GateContext 第 4 参存量谓词零改动）/ errors 登记；主检出复跑 1456 绿 34.1s。评审修正：resolve_bindings 内两处陈旧注释"多实例任一命中"与 strict-all 代码矛盾，改"全部命中"（code 本来就是 strict-all，纯注释对齐）。**合并过程事故**：主检出 index.html 有一处未提交改动，reset --hard origin/main 时被抹掉（未进对象库不可恢复）——若用户手头有该改动副本请重新应用，与本工单代码无关。

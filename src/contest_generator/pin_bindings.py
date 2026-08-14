@@ -70,9 +70,10 @@ def resolve_bindings(
     """bindings 载荷 → 校验后的绑定清单；任何非法即抛 PinBindingError（400 中文）。
 
     校验三查：键格式 `<slug>.<role_id>` 且角色在选中模块的该平台声明里 /
-    引脚在板定义排针（板外脚 = 未知引脚）/ 能力合法（绑定引脚须支持角色
-    类型的默认实例——多实例任一命中，mspm0 复用标注多实例引脚的先例：
-    motor.PWMAB_C0 默认 PA12 有 pwm:TIMG0_C0 + pwm:TIMA0_C3）。mspm0 同默认
+    引脚在板定义排针（板外脚 = 未知引脚）/ 能力合法（strict-all：绑定引脚
+    须支持默认引脚能力 token 的**全部**实例——mspm0 复用标注多实例引脚的
+    先例：motor.PWMAB_C0 默认 PA12 有 pwm:TIMG0_C0 + pwm:TIMA0_C3，仅
+    TIMA0_C3 的脚如 PA28 会让 SysConfig 路由失败，宁严勿假绿）。mspm0 同默认
     引脚两角色绑不同脚 = 槽位冲突互斥（syscfg 单落点）。顺序 = 载荷插入
     顺序（dict 保序，写侧覆盖顺序确定性）。
     """
@@ -122,8 +123,8 @@ def resolve_bindings(
                 f"绑定 {key} 的引脚 {pin} 不存在（不在 {board.name} 排针引脚集内）"
             )
         # 角色实例 = 默认引脚能力 token 的实例（板外默认如 PB4/PB5 无默认
-        # 引脚 → 实例空 → 只查类型）；多实例 = 任一命中（复用标注多实例
-        # 引脚先例，spec 能力集口径）
+        # 引脚 → 实例空 → 只查类型）；多实例 = 全部命中（strict-all，
+        # any-of 会放行 SysConfig 路由必炸的绑定——工单 02 红证已验）
         default_bound = board_pin(board, declaration.default)
         instances = (
             pin_capability_instances(default_bound, declaration.type)
