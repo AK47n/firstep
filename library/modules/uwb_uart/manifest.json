@@ -14,7 +14,25 @@
       "hardware_bound": false,
       "notes": "",
       "kit": "最新ALX-AOA-FIT跟随套件开发资料",
-      "source_url": "https://e.tb.cn/h.86Mb3gU2D8LNQAM?tk=v8x7gBwPHC9"
+      "source_url": "https://e.tb.cn/h.86Mb3gU2D8LNQAM?tk=v8x7gBwPHC9",
+      "pins": [
+        {
+          "id": "UWB_UART_TX",
+          "type": "uart_tx",
+          "default": "PA9",
+          "required": true,
+          "macros": [
+            "UWB_UART",
+            "UWB_UART_INST"
+          ]
+        },
+        {
+          "id": "UWB_UART_RX",
+          "type": "uart_rx",
+          "default": "PA10",
+          "required": true
+        }
+      ]
     }
   }
 }

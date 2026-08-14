@@ -14,7 +14,25 @@
       "hardware_bound": false,
       "notes": "钥匙端过渡方案（原 STM32，芯片不足换 MSPM0；最终方案代码未定）",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "ZIGBEE_UART_TX",
+          "type": "uart_tx",
+          "default": "PB10",
+          "required": true,
+          "macros": [
+            "ZIGBEE_UART",
+            "ZIGBEE_UART_INST"
+          ]
+        },
+        {
+          "id": "ZIGBEE_UART_RX",
+          "type": "uart_rx",
+          "default": "PB11",
+          "required": true
+        }
+      ]
     }
   }
 }

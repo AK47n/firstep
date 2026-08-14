@@ -14,7 +14,25 @@
       "hardware_bound": false,
       "notes": "",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "DEBUG_UART_TX",
+          "type": "uart_tx",
+          "default": "PA2",
+          "required": true,
+          "macros": [
+            "DEBUG_UART",
+            "DEBUG_UART_INST"
+          ]
+        },
+        {
+          "id": "DEBUG_UART_RX",
+          "type": "uart_rx",
+          "default": "PA3",
+          "required": true
+        }
+      ]
     }
   }
 }

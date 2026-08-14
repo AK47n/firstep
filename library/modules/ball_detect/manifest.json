@@ -23,7 +23,25 @@
       "hardware_bound": true,
       "notes": "2026H 源码提取（uart_init(UART_1,115200) + USART1 中断 + 环形缓冲解析），isr.c 里 USART1_IRQHandler 调 ball_detect_rx_handler()。编译验证未上板。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "BALL_DETECT_UART_TX",
+          "type": "uart_tx",
+          "default": "PA9",
+          "required": true,
+          "macros": [
+            "BALL_DETECT_UART",
+            "BALL_DETECT_UART_INST"
+          ]
+        },
+        {
+          "id": "BALL_DETECT_UART_RX",
+          "type": "uart_rx",
+          "default": "PA10",
+          "required": true
+        }
+      ]
     }
   }
 }
