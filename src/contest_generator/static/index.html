@@ -363,6 +363,10 @@
   .pin-fixed-list .fx { display: inline-block; margin: 2px 8px 2px 0; padding: 1px 8px;
                         border: 1px dashed var(--border-strong); border-radius: 10px;
                         font-size: 12px; color: var(--muted); }
+  .pin-warn-list { margin-top: 4px; max-width: 460px; }
+  .pin-warn-list .wx { display: inline-block; margin: 2px 8px 2px 0; padding: 1px 8px;
+                       border: 1px solid var(--warn); border-radius: 10px;
+                       font-size: 12px; color: var(--warn); }
   /* SVG 引脚候选高亮（点清单条目 → 板图可接引脚） */
   .pin-cand { stroke: var(--accent) !important; stroke-width: 2.5 !important; }
   .pin-dim { opacity: .22; }
@@ -498,6 +502,7 @@
             <div id="pin-board-svg"></div>
             <div id="pin-board-caption"></div>
             <div id="pin-fixed-list" class="pin-fixed-list"></div>
+            <div id="pin-warn-list" class="pin-warn-list"></div>
           </div>
           <div class="pin-role-list">
             <div class="pin-legend" id="pin-legend"></div>
@@ -1518,6 +1523,11 @@ function renderPinCard() {
   renderPinRoles(roles, pinMacroFamilies(roles));
   $("pin-fixed-list").innerHTML = (pinBoard.fixed || []).map((f) =>
     `<span class="fx" title="${esc(f.note)}">${esc(f.name)}：${esc(f.occupies.join("、"))}</span>`).join("");
+  // 板载共用警示（可见警告，不只悬停）：io 引脚带 notes = 与板载资源共用（BSL/LED/ROSC 等）
+  $("pin-warn-list").innerHTML = (pinBoard.pins || [])
+    .filter((p) => p.kind === "io" && p.notes)
+    .map((p) => `<span class="wx" title="${esc(p.notes)}">⚠ ${esc(p.name)} · ${esc(p.notes)}</span>`)
+    .join("");
 }
 
 async function loadPinBoard() {
@@ -1543,6 +1553,7 @@ function renderPinLegend(roles) {
     return `<span><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
   }).join("");
   html += `<span><span class="dot" style="background:var(--pin-pad);border:1px solid var(--border-strong)"></span>空闲 IO</span>`;
+  html += `<span><span class="dot" style="background:transparent;border:1px dashed var(--warn)"></span>板载共用（见板图下方警示）</span>`;
   html += `<span><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
   $("pin-legend").innerHTML = html;
 }
@@ -1653,6 +1664,11 @@ function svgPin(pin, roles, idx, rotated180) {
       extra += `<circle cx="${cx - 6 + i * 6}" cy="${cy - 13}" r="3" fill="${st[0]}"/>`;
     }
     if (bound.length > 3) extra += `<text x="${cx + 8}" y="${cy - 9}" font-size="9" fill="var(--muted)">+${bound.length - 3}</text>`;
+  }
+  // 板载共用警告环（io 且带 notes = 与板载资源共用，如 BSL/LED/ROSC——
+  // 可见警示不靠悬停，下方 pin-warn-list 有完整清单）
+  if (io && pin.notes) {
+    extra += `<circle cx="${cx}" cy="${cy}" r="9.5" fill="none" stroke="var(--warn)" stroke-width="1" stroke-dasharray="2.5 2"/>`;
   }
   const ttl = [pin.name, io ? "IO 引脚" : "固定/电源"];
   if (bound.length) ttl.push("已绑：" + bound.map((r) => r.decl.label || r.decl.id).join("、"));

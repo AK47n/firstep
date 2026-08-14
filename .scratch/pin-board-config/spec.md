@@ -32,7 +32,7 @@ CubeMX 式引脚配置，但显示**开发板本体**而非芯片封装：stm32 
 }
 ```
 
-- `kind`: io / power / gnd / reset / swd / osc / boot / fixed（固定资源）。
+- `kind`: io / power / gnd / reset / swd / osc / boot / fixed（固定资源）。**板载共用警示约定（2026-08-14 用户定）**：io 引脚带 `notes` = 与板载资源共用（BSL 烧录脚 / 板载 LED / ROSC 偏置 / USB 插座等）——前端必须渲染**可见警告**（焊盘橙虚环 + 板图下方 ⚠ 警示清单），不只悬停；notes 措辞必须写明共用对象与可用条件（如"作输出无碍；用 BSL 烧录时勿占用"）；新增板载共用脚必须照此写 notes，不得只放悬停。
 - 能力 token 格式 `<角色类型>[:<实例>]`；类型词表单源：`gpio_out / gpio_in / uart_tx / uart_rx / pwm / enc / adc / i2c_scl / i2c_sda / spi_mosi / spi_miso / spi_sck / spi_cs / exti`。
 - 能力集口径：**stm32 = ml_libs 支持表**（ml_uart.c / ml_pwm.c / ml_exti.c / ml_adc.c / ml_i2c.h / ml_oled.h 的"实例→引脚"映射逐条编码）+ GPIO 任意 + enc 限同 EXTI 线号引脚（motor 的 EXTI2/EXTI4 handler 名绑定线号，v1 不换线）；**mspm0 = 地猛星引脚图 PDF 复用标注**（真任意，芯片级过滤）。
 - 两块板：`stm32-min-system`（蓝药丸双排 20×2，公开标准布局重建；固定项 = PC13 板载 LED、PA11/12 USB、PA13/14 SWD、PD0/1 晶振、BOOT0/1、NRST、VBAT）、`mspm0-dimx`（2×20 排针 + 独立 SWD/BSL 排针；固定项 = CH340E PA10/11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、NRST）。
