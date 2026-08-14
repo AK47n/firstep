@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved（2026-08-14 收尾：全部 7 张工单均已闭环，本 spec 状态行陈旧改正）
 
 # 模块简介规范 — 三要素判据落地
 
