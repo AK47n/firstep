@@ -56,3 +56,7 @@
 > 验收：红证记录 + 结构测试绿 + 新常量改大即红 + 全量 pytest 绿 + `mypy src` 干净；提交格式 `refactor: ...（工单 budget-wire-unification/01，N 绿 + mypy src 干净——...）` + docs 一笔；`gh pr create --body-file`（反引号坑）；不 force push；证据写本文件 Comments，Status → resolved，推送。
 
 ## Comments
+
+## Comments
+
+- 2026-08-14 已实施并推送：PR #68（https://github.com/AK47n/firstep/pull/68），分支 budget-wire-unification-01 两笔提交（refactor 20b7ff4 + docs 9d2fe70），未 force push，待合 main。
