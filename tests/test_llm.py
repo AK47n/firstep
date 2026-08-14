@@ -36,6 +36,7 @@ from contest_generator.llm import (
     FIX_PREVIOUS_FIXES_CAP,
     FIX_SYSTEM_PROMPT,
     SELECT_SYSTEM_PROMPT,
+    SKELETON_NO_UNUSED_RULE,
     SKELETON_SYSTEM_PROMPT,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
@@ -56,6 +57,7 @@ from contest_generator.llm import (
     _file_chars,
     _fix_errors_user_prompt,
     _selection_user_prompt,
+    _skeleton_user_prompt,
     _split_versions,
     _summarize_user_prompt,
     _truncate_content,
@@ -916,6 +918,23 @@ def test_generate_main_skeleton_routes_problem_and_header_interfaces_to_chat():
     assert "初始化序列" in system_message
     assert "占位" in system_message
     assert "绝不凭空造函数" in system_message
+
+
+def test_skeleton_prompt_carries_no_unused_var_rule():
+    """契约测试：骨架「不声明未使用变量」约束双端同源（SKELETON_NO_UNUSED_RULE 唯一出处）。
+
+    ticket 06 的双端漂移教训：判定范围曾只改系统提示词、漏改用户提示词——模型按
+    用户消息行事当场失败。骨架同款风险：用户消息尾句「保证可编译」是模型最直接
+    读到的指令，未用变量规则只写系统提示词会被尾句盖过（真机 2026C 曾出 UV4
+    4 警：s_lock_state / s_welcome_state / s_zone_state / s_expect_id 占位声明未用，
+    #177-D / #550-D，违背 0 错 0 警验收）。改规则只动常量（契约测试双端断言）。
+    """
+    user_prompt = _skeleton_user_prompt("赛题", ("x.h",))
+
+    assert SKELETON_NO_UNUSED_RULE in SKELETON_SYSTEM_PROMPT
+    assert SKELETON_NO_UNUSED_RULE in user_prompt
+    assert "未使用的变量" in SKELETON_NO_UNUSED_RULE
+    assert "占位声明" in SKELETON_NO_UNUSED_RULE
 
 
 def test_summarize_module_returns_ai_description():

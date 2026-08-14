@@ -110,12 +110,25 @@ CLARIFY_SYSTEM_PROMPT = (
     "不要重复问；没有疑问时输出空 questions 数组。只输出 JSON 对象。"
 )
 
+# 骨架「不声明未使用变量」规则的唯一表述：系统提示词与用户提示词在同一个 API
+# 调用里都要说这件事（ticket 06 双端漂移教训：只改系统提示词会被用户消息尾句
+# 「保证可编译」盖过——模型按用户消息行事）。此常量是唯一出处：改规则只动这里
+# （契约测试 test_llm 双端断言）。真机 2026C stm32 曾出 UV4 4 警：s_lock_state /
+# s_welcome_state / s_zone_state / s_expect_id 占位声明未用（#177-D declared but
+# never referenced / #550-D set but never used），违背用户 0 错 0 警验收标准。
+SKELETON_NO_UNUSED_RULE = (
+    "不声明未使用的变量：main.c 里每个变量声明都必须被后续代码读取或赋值；"
+    "预留状态一律写成注释（TODO）说明，不写占位声明（未使用的声明会产生"
+    "编译警告，验收要求 0 警告）。"
+)
+
 SKELETON_SYSTEM_PROMPT = (
     "你是嵌入式 C 工程师。为赛题生成 main.c 骨架（赛题文本 / 模块接口过长"
     "可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：按所选模块的头文件"
     "接口排好初始化序列，带注释说明与预留编写区（TODO）。只调用给定接口中"
     "真实存在的函数，绝不凭空造函数；不确定的调用写成注释占位，保证骨架可编译。"
-    "输出纯 C 代码，不要用 ``` 或 ~~~ 代码围栏包裹，不要输出任何 Markdown 标记。"
+    + SKELETON_NO_UNUSED_RULE
+    + "输出纯 C 代码，不要用 ``` 或 ~~~ 代码围栏包裹，不要输出任何 Markdown 标记。"
 )
 
 SUMMARY_SYSTEM_PROMPT = "你是嵌入式 C 工程师。用中文一句话总结这段代码的功能，作为模块库简介。"
@@ -1941,6 +1954,7 @@ def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -
     return prompt + (
         "\n\n输出 main.c 骨架：按模块初始化序列排好调用，带注释与预留编写区（TODO），"
         "不确定的调用写成注释占位，不凭空造函数，保证可编译。"
+        + SKELETON_NO_UNUSED_RULE
     )
 
 
