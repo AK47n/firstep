@@ -1546,35 +1546,35 @@ function renderPinBoard() {
   const roles = pinRoles();
   if (!pinBoard) { box.innerHTML = ""; return; }
   const idx = pinIndex();
-  const rowH = 22, topPad = 16;
+  const rowH = 22, topPad = 46;
   const rows = Math.max(...pinBoard.pins.map((p) => p.y)) + 1;
-  // 下缘地标（4P 弯针）需要额外底部空间；板缘地标区分板图上下（boards JSON 数据驱动）
+  // 下缘地标（Type-C）需要额外底部空间；板缘地标区分板图上下（boards JSON 数据驱动）
   const hasBottom = (pinBoard.landmarks || []).some((l) => l.edge === "bottom");
   const W = 460, H = topPad + rows * rowH + (hasBottom ? 40 : 14);
+  const pcbBottom = topPad - 10 + rows * rowH + 18;
   const parts = [];
   parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:440px" role="img" aria-label="${esc(pinBoard.name)}板图">`);
   // PCB 本体 + 芯片丝印（pcb_color = 板 JSON 底色，俯视观感；缺省用默认令牌）
-  // 底部额外 +14：最下排焊孔与板缘留出间距（Type-C 骑下缘不挤焊孔）
-  parts.push(`<rect x="100" y="6" width="260" height="${rows * rowH + 18}" rx="8" fill="${esc(pinBoard.pcb_color || "var(--pin-pcb)")}" stroke="var(--border)" stroke-width="1.5"/>`);
+  // 顶部留 30px 给向上伸出的排针、底部额外 +18：最下排焊孔与板缘留出间距
+  parts.push(`<rect x="100" y="${topPad - 10}" width="260" height="${rows * rowH + 18}" rx="8" fill="${esc(pinBoard.pcb_color || "var(--pin-pcb)")}" stroke="var(--border)" stroke-width="1.5"/>`);
   const chip = chosenPlatform === "stm32" ? "STM32F103C8T6" : "MSPM0G3507";
   parts.push(`<rect x="186" y="${H / 2 - 34}" width="88" height="68" rx="4" fill="var(--panel-2)" stroke="var(--border-strong)" stroke-width="1"/>`);
   parts.push(`<text x="230" y="${H / 2 - 10}" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
   parts.push(`<text x="230" y="${H / 2 + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
   // 板缘地标（俯视画法，渲染器只认认识的 kind，未知静默跳过）：
-  // header_4p 上缘 = 黑色胶壳 + 4 根金色长排针（30px，穿壳立在板上）；
-  // usb_typec 下缘 = 银白宽扁壳面贴在板面，开口朝屏幕下方（壳底缘暗色横带）
+  // header_4p 上缘 = 黑色胶壳贴板上缘 + 4 根金色长排针（30px）向上伸出板外；
+  // usb_typec 下缘 = 银白宽扁壳面向板内延伸，开口朝屏幕下方（壳底缘暗色横带）
   for (const lm of pinBoard.landmarks || []) {
     if (lm.kind === "header_4p" && lm.edge === "top") {
-      parts.push(`<rect x="192" y="5" width="76" height="5" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
+      parts.push(`<rect x="192" y="${topPad - 14}" width="76" height="6" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
       for (let i = 0; i < 4; i++) {
-        parts.push(`<rect x="${198 + i * 16}" y="0" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
+        parts.push(`<rect x="${198 + i * 16}" y="2" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
       }
-      parts.push(`<text x="278" y="9" text-anchor="start" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
+      parts.push(`<text x="230" y="${topPad - 1}" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
     } else if (lm.kind === "usb_typec" && lm.edge === "bottom") {
-      const by = 6 + rows * rowH + 6;
-      parts.push(`<rect x="205" y="${by}" width="50" height="12" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
-      parts.push(`<rect x="213" y="${by + 9}" width="34" height="3" rx="1" fill="#0d1117"/>`);
-      parts.push(`<text x="230" y="${by + 24}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
+      parts.push(`<rect x="205" y="${pcbBottom - 30}" width="50" height="26" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
+      parts.push(`<rect x="213" y="${pcbBottom - 7}" width="34" height="3" rx="1" fill="#0d1117"/>`);
+      parts.push(`<text x="230" y="${pcbBottom + 8}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
     }
   }
   parts.push(`<text x="230" y="${H - 6}" text-anchor="middle" class="pin-board-caption">${esc(pinBoard.name)}</text>`);
@@ -1587,7 +1587,7 @@ function renderPinBoard() {
 }
 
 function svgPin(pin, roles, idx) {
-  const rowH = 22, topPad = 16;
+  const rowH = 22, topPad = 46;
   const cx = pin.x === 0 ? 150 : 310;
   const cy = topPad + pin.y * rowH + rowH / 2;
   const bound = roles.filter((r) => pinBindings[r.key] === pin.name);
