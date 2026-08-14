@@ -444,7 +444,9 @@ class ModuleCorpus:
     modules 顺序与 manifests 一致（含平台条目缺失的模块，files 为空——
     缺失清单在 missing 里）；master_headers = 母版树全部 *.h（相对路径,
     文本，一次 rglob + 读盘）；master_search_dirs = 母版 IncludePath
-    （keil 语义，构建时算好）；main_c 直接进语料。测试可内存构造直喂门禁。
+    （keil 语义，构建时算好）；search_dir_headers = 每个搜索目录的 *.h
+    基名集合（小写化，构建时一次 glob，目录不存在 = 空集——include 解析
+    门纯集合成员判定）；main_c 直接进语料。测试可内存构造直喂门禁。
     """
 
     platform: str
@@ -453,8 +455,28 @@ class ModuleCorpus:
     missing_files: tuple[tuple[str, str], ...]  # (slug, rel) 声明了但读不到
     master_headers: tuple[tuple[str, str], ...]
     master_search_dirs: tuple[Path, ...]
+    search_dir_headers: tuple[tuple[Path, frozenset[str]], ...]  # 搜索目录 *.h 基名集合（小写化）
     master_project_dir: Path  # main.c 的 own_dir（最终工程根 = 母版根）
     main_c: str
+
+
+def _search_dir_header_names(
+    search_dirs: Sequence[Path],
+) -> tuple[tuple[Path, frozenset[str]], ...]:
+    """每个搜索目录的 *.h 基名集合（小写化，Windows 大小写不敏感对齐）。
+
+    目录不存在（或不是目录）= 空集，与旧 is_file 判 False 同义；语料构建时
+    一次 glob，门禁不再扫盘（工单 gate-corpus-closure/01）。
+    """
+    names: list[tuple[Path, frozenset[str]]] = []
+    for d in search_dirs:
+        if d.is_dir():
+            names.append(
+                (d, frozenset(p.name.lower() for p in d.glob("*.h") if p.is_file()))
+            )
+        else:
+            names.append((d, frozenset()))
+    return tuple(names)
 
 
 def build_module_corpus(
@@ -506,13 +528,15 @@ def build_module_corpus(
         except OSError:
             continue
 
+    search_dirs = tuple(include_search_dirs(platform, master_project_dir))
     return ModuleCorpus(
         platform=platform,
         modules=tuple(modules),
         missing_platforms=tuple(missing_platforms),
         missing_files=tuple(missing),
         master_headers=tuple(master_headers),
-        master_search_dirs=tuple(include_search_dirs(platform, master_project_dir)),
+        master_search_dirs=search_dirs,
+        search_dir_headers=_search_dir_header_names(search_dirs),
         master_project_dir=master_project_dir,
         main_c=main_c_content,
     )
@@ -582,13 +606,15 @@ def build_output_tree_corpus(
     except OSError:
         main_c = ""
 
+    search_dir_list = tuple(search_dirs)
     return ModuleCorpus(
         platform=platform,
         modules=tuple(modules),
         missing_platforms=(),
         missing_files=(),
         master_headers=tuple(master_headers),
-        master_search_dirs=tuple(search_dirs),
+        master_search_dirs=search_dir_list,
+        search_dir_headers=_search_dir_header_names(search_dir_list),
         master_project_dir=output_dir,
         main_c=main_c,
     )
@@ -760,17 +786,25 @@ def _check_unresolved_includes(corpus: ModuleCorpus) -> None:
     （模块代码目录自动追加 + 母版自带）；工程内找不到且不在豁免集合（C 标准
     库头 + 平台工具链头）→ 拒绝生成（判例：库模块 pid.c 引用了从未入库的
     digit_uart.h，Keil 报 cannot open source input file，真机编译失败）。检查
-    在创建输出目录之前发生，不产出残缺工程。搜索目录在语料构建时算好（母版
-    IncludePath + 各模块代码目录），门禁只吃语料不碰盘。
+    在创建输出目录之前发生，不产出残缺工程。解析是纯集合成员判定：own_dir
+    兄弟头名（模块文件按 own_dir 分组 + 母版根头）∪ 搜索目录头名单（语料
+    构建时一次 glob，search_dir_headers）∪ 豁免集合——门禁只吃语料不碰盘。
     """
-    search_dirs: list[Path] = list(corpus.master_search_dirs)
-    seen: set[str] = {str(d).lower() for d in search_dirs}
+    # own_dir 兄弟头名：模块文件按 own_dir 分组取基名（小写化，Windows 大小写
+    # 不敏感语义）；模块目录同时是搜索目录（IncludePath 自动追加模块代码目录）。
+    grouped: dict[str, set[str]] = {}
     for _, files in corpus.modules:
         for f in files:
-            key = str(f.own_dir).lower()
-            if key not in seen:
-                seen.add(key)
-                search_dirs.append(f.own_dir)
+            grouped.setdefault(str(f.own_dir).lower(), set()).add(
+                Path(f.rel).name.lower()
+            )
+    module_dir_names = {key: frozenset(names) for key, names in grouped.items()}
+
+    # 母版根兄弟头名：main.c 的 own_dir = 母版根，兄弟头 = 相对母版根无父目录的头
+    root_names = frozenset(
+        Path(rel).name.lower() for rel, _ in corpus.master_headers if "/" not in rel
+    )
+    master_root_key = str(corpus.master_project_dir).lower()
 
     # 豁免 = C 标准库头（平台无关）+ 平台工具链头（keil/ccs 声明，patchers
     # 分派），循环前算一次
@@ -787,11 +821,19 @@ def _check_unresolved_includes(corpus: ModuleCorpus) -> None:
 
     problems: list[str] = []
     for label, own_dir, code in checks:
+        own_names = module_dir_names.get(str(own_dir).lower(), frozenset())
+        if str(own_dir).lower() == master_root_key:
+            own_names = own_names | root_names
         stripped = strip_comments(code, keep_preprocessor=True)
         for header in extract_quoted_includes(stripped):
-            if any((d / header).is_file() for d in (own_dir, *search_dirs)):
+            lowered = header.lower()
+            if lowered in own_names:
                 continue
-            if header.lower() in exemptions:
+            if any(lowered in names for names in module_dir_names.values()):
+                continue
+            if any(lowered in names for _, names in corpus.search_dir_headers):
+                continue
+            if lowered in exemptions:
                 continue
             problems.append(f"{label} 引用了最终工程中不存在的头文件 {header}")
     if problems:
