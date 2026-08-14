@@ -10,7 +10,7 @@
       ],
       "verified": false,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置：定时器 PWMAB（双通道 C0/C1 输出 PA12/PA13）、定时器 MOTOR_PID（周期中断 10ms）、GPIO 组 DC_MOTOR（AIN1=PA0 AIN2=PA1 BIN1=PB18 BIN2=PA7、编码器 AA=PA16 AB=PA17、BA=PB19 BB=PB20 输入中断）。编码器计数在 key 模块的 GROUP1_IRQHandler。依赖声明 delay/oled/led_beep（stm32 空条目=母版内嵌）；huidu/imu_uart/ntb_time/key 为 mspm0-only 不声明（stm32 侧声明会拖 missing），mspm0 选 motor 需手动同选小车栈剩余项（huidu/imu_uart/ntb_time/key）。",
+      "notes": "SysConfig 需配置：定时器 PWMAB（双通道 C0/C1 输出 PA12/PA13）、定时器 MOTOR_PID（周期中断 10ms）、GPIO 组 DC_MOTOR（AIN1=PB9 AIN2=PA18 BIN1=PB18 BIN2=PA7、编码器 AA=PA16 AB=PA17、BA=PB19 BB=PB20 输入中断）。编码器计数在 key 模块的 GROUP1_IRQHandler。依赖声明 delay/oled/led_beep（stm32 空条目=母版内嵌）；huidu/imu_uart/ntb_time/key 为 mspm0-only 不声明（stm32 侧声明会拖 missing），mspm0 选 motor 需手动同选小车栈剩余项（huidu/imu_uart/ntb_time/key）。",
       "kit": "",
       "source_url": ""
     },
