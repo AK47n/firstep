@@ -15,7 +15,7 @@
 | 依赖 | manifest 声明的模块依赖，生成前递归展开（依赖先于使用者）；上层依赖下层；不得声明对功能库的依赖（母版必有，声明反而使解析器找不到而报错） | selection.py |
 | 可选配套 | 模块的可裁剪组件：如 filter 之于 uwb_uart——代码层现状为必需依赖（uwb_uart.c 写死 include 与滤波调用），可选化（条件编译 + 生成器按选中定义宏）已立项未实现；普适 filter / 普适巡线逻辑为将来方向 | （未实现） |
 | 巡线 | 灰度循迹类能力（21F / 2024H / 2026H 巡线题），模块库内两层：**驱动层**（模块承载、普适）——灰度读取（stm32=pid 内 gray_track / mspm0=huidu）+ 循迹核心（stm32=pid.c / mspm0=motor 内嵌 adjust_motor_pwm 加权质心，原 huidu.c 并入）+ 加权质心（xunji_centroid）；**决策层**（路口检测 / 模式状态机 / 声光时序 = 题逻辑）——进生成骨架，素材来自参考文件库（2024H 原生决策源码已归档 car-1-1），不落模块（ADR 0009）；决策层原实现在各模块内，由工单 module-universalization 02/03 逐模块剥离 | manifest 简介 / library/modules |
-| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库；**mspm0 母版 = TI 官方 empty 示例（CCS Theia 20.5 导出，TMS470_TICLANG 4.0）整理入库**：main.c 模板 = SYSCFG_DL_init() + while(1)（ADR 0002 形态），mspm0.syscfg 按 TI 官方板 LP_MSPM0G3507、由赛题工程按需自改，.cproject/.project 原样保留语义）；元数据在母版目录外的平级 json；**stm32 母版另带工程根 pin_config.h（电机引脚宏集中，值 = 21F 原值；motor/pid 模块只引用宏不写死引脚，未来"配置引脚"只改此文件，对偶 mspm0 SysConfig 生成的 DC_MOTOR_* 宏）** | master.py（蒸馏编排）/ master_store.py（母版库 CRUD 与元数据） |
+| 母版 | 每平台一个的基础工程；现阶段 = 空的最小系统板工程（平台基础设施齐全 + 模板 main.c，能直接编译烧录；stm32 母版自带全套逐飞库 ml_* 功能库；**mspm0 母版 = TI 官方 empty 示例（CCS Theia 20.5 导出，TMS470_TICLANG 4.0）整理入库**：main.c 模板 = SYSCFG_DL_init() + while(1)（ADR 0002 形态），mspm0.syscfg 按 TI 官方板 LP_MSPM0G3507、由赛题工程按需自改，.cproject/.project 原样保留语义）；元数据在母版目录外的平级 json；**stm32 母版另带工程根 pin_config.h（电机引脚宏集中，值 = 21F 原值；motor/pid 模块只引用宏不写死引脚，板级引脚配置只改此文件（ADR 0010），对偶 mspm0 SysConfig 生成的 DC_MOTOR_* 宏）** | master.py（蒸馏编排）/ master_store.py（母版库 CRUD 与元数据） |
 | 功能库 | 母版自带的底层库（stm32 母版 = 逐飞 ml_*：I2C/UART/PWM/GPIO/OLED 等，headfile.h 聚合），先于一切模块存在、生成时随母版进工程；不属于模块库；模块平台条目 files 空 = 实现内嵌母版（随母版进工程，不复制不注册） | masters/stm32/ml_libs |
 | 提炼 | 导入多旧工程 → 对比 → AI 判定 → 报告（保留 / 整合 / 剔除 + 残留清单）→ 确认 → 入库；判定范围 = 公共 + 冲突 + 独有全部逐个判定，唯一判据：读内容判断是否通用、是否基础建设必需，不看重复次数 / 出现范围；确认是一条事务（confirm_distillation） | master.py + llm.py |
 | 上传暂存 | 「选择文件夹」上传（webkitdirectory 整夹上传）的落盘点：路径穿越拒绝（entry_store.is_unsafe_path 单源，空段 a//b 也拒绝）、目录名清洗（白名单 + 空回退 "upload"）、噪音跳过（.git 任意深度 + 构建产物目录，与扫描侧 iter_project_files 同一套）、单次上限 512MB、空清单报错——staged/ 目录在母版库同级、扫描后即用不自动清理；与 master.py 蒸馏预览的 mkdtemp 暂存（函数内自生自灭）区分命名 | stage.py（staged_root 推导 / stage_project_files）/ webapp.py（路由只收参数转调） |
@@ -48,6 +48,10 @@
 | 收敛循环 | 推荐分析以题面为依据反复自检修订（删脑补 / 补遗漏 / 重查覆盖），连续两轮功能需求层一致即收敛（上限 4 轮）；拿不准暂停向用户补问（澄清阶段先行：补问在收敛前完成，回答后不重跑已跑轮次）；澄清问答历史贯穿收敛循环（select_modules 每轮带 clarifications 独立段，题面编号不动）；select_modules / clarify 走 _retry_parse 整次重试兜底（瞬时空内容/畸形输出自动重问，最多 3 轮）；收敛解可缓存进赛题条目（v2，库内命中每次现算，库会变） | selection.py / webapp.py / llm.py |
 | 错误映射 | 路由异常的唯一出口：error_to_http 表把核心异常转 HTTP 状态与中文 message（业务 400 / LLM 502 / 文件系统 400）；**未登记异常 = 真 bug → 500 大声失败**，不吞成业务 400 | errors.py（error_entry 单表，webapp 只取值 / 包装；结构测试反射包内全部异常类防漏登） |
 | 进度事件 | 后端经 SSE 推送的实时进展（提炼 = 阶段 / 批次 / 补问轮，推荐 = 收敛轮次 round / converged；最后一个事件携带完整结果）；模型单次调用期间不产生事件，存活证明 = 客户端每秒跳动的计时器 | llm.py / selection.py（进度发射）/ events.py（事件词表唯一出处，含终态）/ sse.py（线格式与流化运行器） |
+| 板定义 | 一块开发板的数据：引脚（丝印名 / 板图坐标 / 类型 / 能力集）+ 固定资源标注；后端 boards/*.json 单源（生成门禁与前端渲染同吃），/api/boards 提供；stm32 = 最小系统板（蓝药丸），mspm0 = 地猛星；能力集口径 stm32 = ml_libs 支持表（v1 受限）、mspm0 = 芯片复用能力（任意）（ADR 0010） | boards.py（未实现，工单 pin-board-config/01） |
+| 引脚角色 | 模块 manifest pins 字段声明的引脚需求条目（id / 类型 / 标签 / 默认引脚 / 必选）；标签 = 模块_用途（如 TB6612_STBY）；配置菜单项 = 已选模块的未绑角色——配置词汇用模块引脚角色而非芯片 AF 复用（ADR 0010） | manifest.py pins（未实现，工单 pin-board-config/01） |
+| 角色类型 | 引脚角色的能力类别词表：gpio_out / gpio_in / uart_tx / uart_rx / pwm / enc / adc / i2c_scl / i2c_sda / spi_* / exti；能力 token 可带实例（如 uart_tx:UART_1、pwm:TIM2_CH1） | boards.py（未实现，工单 pin-board-config/01） |
+| 引脚绑定 | 角色→板引脚 的分配：随生成请求走（v1 不持久化），未绑 = 用声明默认值（默认布线，生成即编译不破）；生成器按绑定覆写 pin_config.h（stm32）/ 只改 .syscfg 的 $assign 行（mspm0，实例名与宏名不动）；同引脚多角色允许（共享，如 xunji/huidu 共传感器，门禁不拦、前端叠加标注）（ADR 0010） | generator 写侧（未实现，工单 pin-board-config/02） |
 
 ## 架构要点
 
