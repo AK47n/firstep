@@ -144,6 +144,18 @@ def pin_capability_instances(pin: BoardPin, role_type: str) -> tuple[str, ...]:
     )
 
 
+def board_for_platform(platform: str, boards_dir: Path = BOARDS_DIR) -> Board:
+    """平台 → 板定义（生成绑定校验 / 写侧用；每平台一块板）。
+
+    该平台无板定义抛 BoardError（板 JSON 是包内静态数据，缺失 = 安装/发布
+    坏 → 500 大声失败，与 ManifestError 同政策——errors.py 白名单留痕）。
+    """
+    for board in load_boards(boards_dir):
+        if board.platform == platform:
+            return board
+    raise BoardError(f"平台 {platform!r} 没有板定义（boards/ 目录下无该平台 JSON）")
+
+
 def load_boards(boards_dir: Path) -> list[Board]:
     """加载目录下全部 board JSON（按 board_id 排序）；损坏即抛 BoardError。"""
     if not boards_dir.is_dir():
