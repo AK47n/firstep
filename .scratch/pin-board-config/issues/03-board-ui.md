@@ -4,7 +4,7 @@
 
 **Blocked by:** pin-board-config/01、02（依赖 /api/boards 与 /api/generate bindings）
 
-**Status:** 已实施（2026-08-14 分支 pin-board-config-03 已推，PR #72；待浏览器人工验收 + 合 main）
+**Status:** resolved（2026-08-14 PR #72 squash merged 4f5a333，主会话程序化验收通过；剩余 3 项纯目验见 Comments 尾注）
 
 ## 需求
 
@@ -32,12 +32,12 @@
 
 ## 验收
 
-- [ ] `node --check` 语法过（脚本段提取）
-- [ ] 浏览器人工验收：卡片出现在卡 6 与骨架之间；stm32/mspm0 两板切换渲染正常；点引脚弹菜单且能力过滤正确（UART 脚不出现 PWM 角色）；不兼容角色灰显；重绑替换后原角色红显未绑；payload 带 bindings 字段（devtools 网络面板核对）
-- [ ] strict-all 反例：PWMAB_C0 在 PA28 灰显（仅 TIMA0_C3）、PA23 可绑（双实例俱有）；LED_PORT 族角色绑定时出现共享宏族提示
-- [ ] 真机全流程：2026C 配一个改绑定（如电机 PWM 换线）→ 生成 → UV4 0 错；不配引脚照旧全绿（回归）
-- [ ] pytest 零扰动
-- [ ] 独立 worktree + 提交 + 推送
+- [x] `node --check` 语法过（实施会话 + 主会话合并后复跑 OK）
+- [x] 交互逻辑验收（卡片位置/双板渲染/固定引脚不可点/能力过滤/灰显/替换红显/清单高亮/宏族提示/payload 两态——jsdom 37/37 + 主会话读码逐项核对；**视觉外观与 devtools 网络核对留用户目验**）
+- [x] strict-all 反例（jsdom 用例 PA28 灰显缺 TIMG0_C0、PA23 可绑 + 读码 pinCanHost 与门禁 `insts.every` 同语义）
+- [x] 真机全流程（实施会话 web 路径：改绑定 MOTOR_B_ENC→PB4 → EXTI_PB4 UV4 0 错 0 警 + 不配回归 EXTI_PA4 默认 UV4 0 错 0 警；**浏览器点击全流程留用户**）
+- [x] pytest 零扰动（主检出合并后复跑 1456 绿 34.2s）
+- [x] 独立 worktree + 提交 + 推送
 
 ## 实施提示词（复制到新会话）
 
@@ -67,3 +67,4 @@
   **payload**：/api/generate 带 bindings（只含用户动过且模块仍在选择集内的角色；未配任何引脚不发字段——缺省即默认，旧行为不变）；切平台清空重取板定义；展开/清单变化时角色清单重算 + 残留绑定清理。
   **验证**：node --check 过（脚本段提取）；jsdom DOM 冒烟 37/37 全绿（卡片序号顺延 / stm32+mspm0 双板渲染 / 固定引脚不可点 / strict-all 反例 PA28 灰显缺 TIMG0_C0、PA23 可绑 / 替换后原角色红显未绑 / 共享宏族提示 / 默认板外 PB4 PB5 / 默认被占用警示 / 高亮与取消 / payload 带 bindings 与不带两态 / 还原默认）；纯函数逻辑用真 boards JSON 复核（stm32 enc 实例锁线号仅 PA2 可绑、UART 脚类型层不列 pwm）；真机 web 路径（worktree 服务 8000 + generate_check --reuse-recommend）：2026C --add motor --bindings `{"motor.MOTOR_B_ENC":"PB4"}` → pin_config.h MOTOR_B_ENC_EXTI=EXTI_PB4（默认 EXTI_PA4，产物恰一处宏行变化）UV4 exit=0 0 错 0 警；不配 bindings 回归 EXTI_PA4 默认值 UV4 0 错 0 警；顺带实证后端门禁：绑未选模块的角色（motor 未在 2026C 推荐集）→ 400 中文。DeepSeek 骨架段瞬态 502 两次（Remote end closed / WinError 10054）重跑即过（known transient，deepseek-retry-hardening/01 口径）。
   **浏览器人工验收清单（待用户执行）**：① 卡片位置与序号 7→11 顺延；② stm32/mspm0 两板切换渲染正常（蓝药丸 / 地猛星），固定引脚灰色不可点；③ mspm0 点 PA28 菜单 PWMAB_C0 灰显 + 原因"缺 TIMG0_C0"，PA23 可绑（strict-all 反例）；④ UART 脚菜单不出现 PWM 角色；⑤ 点已占用引脚 → 替换后原角色红显未绑（两步换位）；⑥ 点清单条目 → 板图高亮可接引脚；⑦ stm32 绑 LED_RED → 共享宏族提示；⑧ devtools 网络面板核对 /api/generate 请求体带 bindings（还原默认后再生成 → 无该字段）；⑨ 真机 2026C 浏览器全流程配一个改绑定 → UV4 0 错。
+- 2026-08-14 主会话程序化验收 + 合并（PR #72 squash merged 4f5a333，远端分支已删）：pytest 1456 绿复跑 + node --check 复跑 OK（脚本段提取）；/api/boards 双板返回 + /api/selection/expand pins 载荷实测（motor 10 角色/huidu 8）；读码逐项核对 9 项清单——pinCanHost 与门禁 strict-all 同语义（`insts.every`）、类型层过滤、pin-cand/pin-dim 高亮、共享宏族提示、payload 只发仍在选择集内的用户绑定且空则不发字段；sse-parser 回归通过。**剩余纯目验 3 项（用户浏览器，合并后重启 8000 看）**：① 视觉外观（板图/颜色/叠加小色点观感）；② devtools 网络面板 bindings 两态核对；③ 浏览器点击全流程配一个改绑定 → UV4 0 错。另注：并行会话丢失的 index.html UI 改造与本工单无关（index-html-ui-redo-pending 待办在案），本分支基于 clean main，两者若都改 index.html 合并时需人工核对。
