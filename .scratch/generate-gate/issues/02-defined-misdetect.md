@@ -2,7 +2,7 @@
 
 **What to build:** 生成门禁把预处理行上的预处理器操作符 `defined` 误判为函数调用，连续 3 次 400 拒绝生成——检测侧（`find_undefined_calls`）与替换侧（`_replace_undefined_calls`）对「预处理行算不算代码」答案相反，检测侧裸奔。
 
-**Status:** 待实施（实施提示词见文末）
+**Status:** resolved
 
 ## 现象（2026-08-14 真机，2026C 20 条全量映射验证途中）
 
@@ -30,10 +30,10 @@
 
 ## 验收标准
 
-- [ ] 红证：fixture 复刻 `#if defined(X)` → 修复前 `find_undefined_calls` 返回 `("defined",)`，修复后为空
-- [ ] 既有测试全绿 + `mypy src` 干净
-- [ ] 回归不变量：真实模块调用仍被检出；main.c 本地函数式宏（`#define FOO(x) … FOO(1)`）不被误报（B 陷阱守护，A 单独做也要跑）
-- [ ] （可选）真机：/api/generate 用含 `#if defined` 的骨架 → 200 不 400
+- [x] 红证：fixture 复刻 `#if defined(X)` → 修复前 `find_undefined_calls` 返回 `("defined",)`，修复后为空
+- [x] 既有测试全绿 + `mypy src` 干净
+- [x] 回归不变量：真实模块调用仍被检出；main.c 本地函数式宏（`#define FOO(x) … FOO(1)`）不被误报（B 陷阱守护，A 单独做也要跑）
+- [x] （可选）真机：/api/generate 用含 `#if defined` 的骨架 → 200 不 400（HTTP 层复刻闭环，见 Comments；真实服务进程 + DeepSeek 全流程留用户复核）
 
 ## 实施提示词（新会话粘贴）
 
@@ -43,3 +43,35 @@
 > 验收：红证先写（defined fixture 修复前跑红）→ 修复后绿 + 既有全绿 + `mypy src` 干净；B 若做需守护「main.c 本地函数式宏不误报」回归。完成后把证据写入工单 Comments，Status 改 resolved。
 
 ## Comments
+
+**2026-08-14 实施闭环（红证 → 修复 → 绿 + HTTP 层 400→200 复刻）**
+
+### 红证（修复前实跑）
+
+- 单测层（tests/test_skeleton.py 新 5 条先写后跑）：
+  - `#if defined(USE_EXTRA)` fixture → `find_undefined_calls` 返回 `("defined",)`（验收红证逐字命中）；
+  - 同族 `#if has_extra(1) && mode_ok()` + `#pragma pack(push, 1)` → `("has_extra", "mode_ok", "pack")`；
+  - 跨行续行 `#if defined(USE_A) && \` + `    defined(USE_B) && \` + `    has_extra(1)` → `("defined", "has_extra")`。
+- HTTP 层（一次性脚本 tests/_tmp_defined_gate_check.py，跑完已删，未入库）：POST /api/generate 直灌含 `#if defined(USE_EXTRA)` 的 main_c（真机旁路 _finish_2026C.py 同形态，main_c 走载荷不经过 LLM）——修复前 400，detail 与真机逐字一致：「main.c 调用了所选模块头文件中不存在的函数：defined —— 请改用真实接口，或让骨架阶段自检改写为注释占位」（对应 .scratch/real-run/check_2026C_20条_补跑.log / 补跑2.log 第 57 行，两处已复核）；修复后 200。
+
+### 修复（src/contest_generator/skeleton.py；generator.py / errors.py 零改动）
+
+- **A**：`defined` 入 `_CONTROL_KEYWORDS`（1 行 + 注释）——C 预处理器操作符，兜底任何漏进提取文本的形态。
+- **B**：`_strip_preprocessor_directives`——`find_undefined_calls` 在 `strip_comments` 后、调用提取前剔除非 define 预处理指令行，与 `_replace_undefined_calls`（iter_c_regions 对预处理行整行透传）对齐 clex 语义。整行剔除含跨行条件的 `\` 续行（含末条，续行行首无 # 单独剥不掉）；`#define` 判定用新 `_DEFINE_LINE_RE`（`#\s*define\b`，`\b` 挡 `#defineFOO` 这种非指令残行）。
+- **B 选型（保留 #define 行，而非宏识别改吃未剥离文本）**：全剥 # 行的坏修法已实跑复现陷阱——`#define FOO(x) ((x) * 2)` + `FOO(1)` 误报 `['FOO']`。保留 #define 行同时保住两件事：`_known_local` 的本地宏识别（陷阱守护），以及宏体内调用的审计（`#define TOGGLE() fake_gpio_set(1)` 一旦展开即链接期必炸，仍被检出）——检测侧不因对齐 clex 而弱化门禁。
+
+### 测试 +5（1356 全绿 + mypy src 37 文件干净）
+
+- `test_find_undefined_calls_ignores_defined_in_preprocessor_condition`（A 判例）
+- `test_find_undefined_calls_ignores_calls_in_preprocessor_directives`（B 同族：#if fn() / #pragma pack）
+- `test_find_undefined_calls_strips_multiline_preprocessor_conditions`（\ 续行）
+- `test_find_undefined_calls_accepts_param_macros_defined_in_main_c`（B 陷阱守护：FOO(x) + FOO(1) 不误报）
+- `test_find_undefined_calls_audits_calls_inside_define_bodies`（保留 #define 行的刻意后果：宏体未定义调用仍检）
+
+### 回归不变量
+
+真实模块调用仍被检出（既有 test_skeleton 全用例 + test_generator 门禁用例全过）；main.c 本地函数式宏不误报（既有 LED_ON 用例 + 新 FOO(x) 用例）。
+
+### 未做
+
+真实服务进程 + DeepSeek 全流程 UV4 复编未重跑（可选真机项已以 HTTP 层复刻闭环）；用户验收时可取含 `#if defined` 骨架直发 /api/generate 复核。
