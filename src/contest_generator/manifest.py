@@ -22,9 +22,64 @@ from .entry_store import (
 
 MANIFEST_FILENAME = "manifest.json"
 
+# 引脚角色类型词表（单源）：boards 能力 token 与 manifest pins 声明共用——
+# 改词表只改这一处（ADR 0010 板级引脚配置；board 能力 token 格式 =
+# `<角色类型>[:<实例>]`）。gpio_out/gpio_in 任意 io 脚（无实例）；
+# uart_tx/uart_rx 实例 = 串口实例（stm32 = ml_uart 的 UARTn，mspm0 = 外设
+# UARTn）；pwm 实例 = 定时器通道（TIM2_CH1 / TIMG0_C0 等）；enc 实例 =
+# stm32 EXTI 线号（handler 名绑定线号）、mspm0 无实例（GPIO 组中断任意脚）；
+# adc 实例 = 通道（ADC_Channel_0 / A0_0 等）；i2c_scl/i2c_sda 实例 = 软
+# I2C 驱动（ml_i2c / ml_oled）或外设（I2C0/I2C1）；spi_* 实例 = 外设 + 通道；
+# exti 实例 = stm32 引脚名（ml_exti 的 EXTI_PA0 枚举）。
+PIN_ROLE_TYPES = (
+    "gpio_out",
+    "gpio_in",
+    "uart_tx",
+    "uart_rx",
+    "pwm",
+    "enc",
+    "adc",
+    "i2c_scl",
+    "i2c_sda",
+    "spi_mosi",
+    "spi_miso",
+    "spi_sck",
+    "spi_cs",
+    "exti",
+)
+
 
 class ManifestError(ValueError):
     """manifest 解析或校验失败，message 中说明具体问题。"""
+
+
+@dataclass(frozen=True)
+class PinDeclaration:
+    """模块引脚角色声明（ADR 0010：标签 = 模块_用途，如 MOTOR_A_PWM）。
+
+    default = 该角色的默认引脚（板级配置未绑定时照此生成——"打开就能编译"）。
+    角色类型词表 = PIN_ROLE_TYPES 单源。实例不落声明：门禁从默认引脚的能力
+    token 推导（如 default PA2 的 enc:2 → 绑定引脚必须同线号）。macros =
+    stm32 写侧渲染要改的 pin_config.h 宏名（工单 02 渲染器用；mspm0 走
+    syscfg $assign，不填）。
+    """
+
+    id: str  # 角色 id（载荷绑定键 = <slug>.<id>）
+    type: str  # 角色类型（PIN_ROLE_TYPES 之一）
+    default: str  # 默认引脚名
+    label: str = ""  # 菜单标签（缺省 = id）
+    required: bool = False  # 必需接线（未绑定也必须按默认生成）
+    macros: tuple[str, ...] = ()  # 该角色控制的 pin_config.h 宏名（stm32）
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "label": self.label or self.id,
+            "default": self.default,
+            "required": self.required,
+            "macros": list(self.macros),
+        }
 
 
 @dataclass(frozen=True)
@@ -41,6 +96,7 @@ class PlatformEntry:
     notes: str = ""  # 备注
     kit: str = ""  # 套件型号（硬件身份字段，由人补填、AI 不猜）
     source_url: str = ""  # 购买链接（硬件身份字段，由人补填、AI 不猜）
+    pins: tuple[PinDeclaration, ...] = ()  # 引脚角色声明（per-platform）
 
 
 @dataclass(frozen=True)
@@ -66,6 +122,7 @@ class ModuleManifest:
                     "notes": entry.notes,
                     "kit": entry.kit,
                     "source_url": entry.source_url,
+                    "pins": [pin.to_dict() for pin in entry.pins],
                 }
                 for platform, entry in self.platforms.items()
             },
@@ -95,6 +152,7 @@ class ModuleManifest:
                 # 不打断现有库）；类型非法（非字符串）直接报错。
                 kit=_require_optional_str(raw_entry, "kit", platform),
                 source_url=_require_optional_str(raw_entry, "source_url", platform),
+                pins=_parse_pins(raw_entry, platform),
             )
 
         return cls(
@@ -167,6 +225,72 @@ def _parse_file_list(files: list[Any], platform: str) -> tuple[str, ...]:
             raise ManifestError(f"平台 {platform} 的文件列表重复：{item!r}")
         seen.add(item)
         result.append(item)
+    return tuple(result)
+
+
+def _parse_pins(raw_entry: dict[str, Any], platform: str) -> tuple[PinDeclaration, ...]:
+    """解析平台条目的 pins 声明（缺省 = 空元组，存量 manifest 兼容）。
+
+    校验：id 非空且平台内唯一、type 在 PIN_ROLE_TYPES 词表内、default 非空、
+    label/required/macros 类型严格（宽松强转会让错值静默进绑定校验）。
+    """
+    raw_pins = raw_entry.get("pins", [])
+    if raw_pins is None:
+        return ()
+    if not isinstance(raw_pins, list):
+        raise ManifestError(f"平台 {platform} 的 pins 必须是数组")
+    result: list[PinDeclaration] = []
+    seen_ids: set[str] = set()
+    for item in raw_pins:
+        if not isinstance(item, dict):
+            raise ManifestError(f"平台 {platform} 的 pins 条目必须是对象")
+        pin_id = _require(item, "id", str, platform)
+        if not pin_id:
+            raise ManifestError(f"平台 {platform} 的引脚角色 id 不能为空")
+        if pin_id in seen_ids:
+            raise ManifestError(f"平台 {platform} 的引脚角色 id 重复：{pin_id}")
+        seen_ids.add(pin_id)
+        role_type = _require(item, "type", str, platform)
+        if role_type not in PIN_ROLE_TYPES:
+            raise ManifestError(
+                f"平台 {platform} 的角色 {pin_id} 的 type {role_type!r}"
+                f" 不在词表 {PIN_ROLE_TYPES} 内"
+            )
+        default = _require(item, "default", str, platform)
+        if not default:
+            raise ManifestError(f"平台 {platform} 的角色 {pin_id} 的 default 不能为空")
+        label = item.get("label", "")
+        if not isinstance(label, str):
+            raise ManifestError(f"平台 {platform} 的角色 {pin_id} 的 label 必须是字符串")
+        if label == pin_id:
+            label = ""  # label==id 视为缺省（to_dict 落 id，序列化往返稳定）
+        required = item.get("required", False)
+        if not isinstance(required, bool):
+            raise ManifestError(
+                f"平台 {platform} 的角色 {pin_id} 的 required 必须是布尔值"
+            )
+        macros_raw = item.get("macros", [])
+        if not isinstance(macros_raw, list):
+            raise ManifestError(
+                f"平台 {platform} 的角色 {pin_id} 的 macros 必须是数组"
+            )
+        macros: list[str] = []
+        for macro in macros_raw:
+            if not isinstance(macro, str) or not macro:
+                raise ManifestError(
+                    f"平台 {platform} 的角色 {pin_id} 的 macros 必须是非空字符串"
+                )
+            macros.append(macro)
+        result.append(
+            PinDeclaration(
+                id=pin_id,
+                type=role_type,
+                default=default,
+                label=label,
+                required=required,
+                macros=tuple(macros),
+            )
+        )
     return tuple(result)
 
 

@@ -147,7 +147,7 @@ static void parse_frame(void)
 // ============================================================
 void uwb_rx_handler(void)
 {
-    uint8_t byte = (uint8_t)(USART1->DR & 0xFF);
+    uint8_t byte = (uint8_t)(UWB_UART_INST->DR & 0xFF);  // UWB_UART_INST = USART1（pin_config.h）
 
     // 检测帧头：连续 4 个 0xFF
     if (byte == 0xFF)
