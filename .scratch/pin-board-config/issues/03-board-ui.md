@@ -4,7 +4,7 @@
 
 **Blocked by:** pin-board-config/01、02（依赖 /api/boards 与 /api/generate bindings）
 
-**Status:** 已实施（2026-08-14 分支 pin-board-config-03；待浏览器人工验收 + 合 main）
+**Status:** 已实施（2026-08-14 分支 pin-board-config-03 已推，PR #72；待浏览器人工验收 + 合 main）
 
 ## 需求
 
