@@ -1361,9 +1361,11 @@ function renderReferenceResult(data) {
 // 生成页：5. 模块清单（增删 + 依赖展开 + 平台警告）
 // ---------------------------------------------------------------------------
 function renderModulePool() {
+  // 选项文本截断长描述：原生下拉弹层宽度随最长选项走，长描述会把弹层顶出屏幕右边
+  const shortDesc = (s) => (s && s.length > 22 ? s.slice(0, 22) + "…" : s || "");
   $("module-pool").innerHTML = (state.modules || [])
     .filter((m) => !selectedSlugs.includes(m.slug))
-    .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(m.description)}</option>`).join("");
+    .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(shortDesc(m.description))}</option>`).join("");
 }
 
 $("btn-add-module").addEventListener("click", () => {
