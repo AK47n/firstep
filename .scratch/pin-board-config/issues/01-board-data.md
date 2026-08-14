@@ -7,7 +7,7 @@
 
 **Blocked by:** mspm0-master-dimx/01（声明默认值取地猛星化后 syscfg 值）
 
-**Status:** 待实施
+**Status:** 已实施待合 main（分支 pin-board-config-01 已推远端）
 
 ## 需求
 
