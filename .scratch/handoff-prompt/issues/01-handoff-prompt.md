@@ -5,7 +5,7 @@
 1. **生成页第 9 栏「交接提示词（Handoff）」**：把赛题原文 / 平台 / 模块清单（含简介与依赖）/ main.c 骨架 / 输出目录与结构 / 手动勾选参考资料打包成一段完整提示词（HTML 结构 + `btn-handoff`/`btn-handoff-copy` + `handoffModuleLines`/`handoffPlatformLabel`/`handoffPlatformIde`/`handoffReferenceLines` 四个 helper），一键生成 + 复制，供用户粘贴给下一个 AI 会话做精准打磨（本工具只搭基础，精打磨在下一个会话完成）。
 2. **赛题库页顶部「历年真题汇总（2017-2025）」链接**：`loadTopicArchiveLink()` 经 `/api/pdfs?name=000_2017-2025` 素材库定位（批次目录变动也能命中），`window.open` 浏览器原生预览；素材库缺失/查询失败静默不显示。
 
-**Status:** resolved（2026-08-12 补单验证闭环，待提交）
+**Status:** resolved（2026-08-12 补单验证闭环，已合 main 85bfe3a——2026-08-14 收尾改正状态字段）
 
 ## 现状（2026-08-12 核查）
 

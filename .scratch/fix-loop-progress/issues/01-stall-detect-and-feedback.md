@@ -2,7 +2,7 @@
 
 **What to build:** 修复中心循环（编译 → AI 修复 → 重编译 ≤3 轮）的两个质量缺口：① **停滞检测**——本轮 0 applied（LLM 空修复 / 全部 skipped / 降级无上下文）时，文件没有变化，重编译输出必与上轮相同、下一轮 LLM 输入也几乎相同（snippet 协议下模型大概率原样重试）——纯浪费 40s 编译 + 分钟级 LLM，应立即停循环并如实说明；② **回喂**——把上一轮逐处应用结果（applied/skipped + 原因）拼进下一轮修复请求，让模型看到自己哪些 old_snippet 没匹配上（最常见失败 = 与文件逐字不符），修正后重试或放弃，而不是无信息重试。
 
-**Status:** resolved（2026-08-13 实施完成 + 真机验收闭环，PR 待合 main）
+**Status:** resolved（2026-08-13 实施完成 + 真机验收闭环；PR #60 已合 main e9a9a88——2026-08-14 收尾改正状态字段）
 
 **Blocked by:** 无（与 mspm0-build-makefiles/01、gen-check-fix-loop/01 无文件重叠，可并行 worktree）
 

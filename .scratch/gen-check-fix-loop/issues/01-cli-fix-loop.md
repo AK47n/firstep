@@ -2,7 +2,7 @@
 
 **What to build:** CLI 真机验收（`.scratch/real-run/generate_check.py`）与 web 一条龙语义对齐：真机编译失败后不再只报 fail——自动把编译输出喂 `/api/fix-errors`（SSE）→ 重编译验证，≤3 轮，与前端修复中心同语义（编译 → 修复 → 重编译，第 3 轮后如实报告剩余错误）。mspm0 线 gmake 段已由 mspm0-build-makefiles/01 落地（`gmake_build`），本工单在其上补循环。
 
-**Status:** resolved（验收全勾，待合 main）
+**Status:** resolved（验收全勾；PR #61 已合 main 28bbcdb——2026-08-14 收尾改正状态字段）
 
 **Blocked by:** mspm0-build-makefiles/01 合 main（PR #59）——本工单的 mspm0 修复循环建立在 `gmake_build` 之上；stm32 侧可先行开发验证。
 
