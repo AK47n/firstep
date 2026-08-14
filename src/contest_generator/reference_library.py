@@ -444,8 +444,9 @@ def _read_manifest_records(entry_dir: Path) -> list[tuple[str, int]]:
 # 标注，措辞单源 = library.truncate_content）——旧契约"读到什么就是什么"在
 # 注入处整体截 4000 字符，files 首位的大文件（素材清单.txt 可 10 万+ 字符）
 # 吃光配额，真正代码一个字符都进不了模型。20000 字符 = 正常单源文件全量、
-# 18KB 级移植笔记全量，超长文件截头带标注；注入处另有总截断兜底
-# （llm.REFERENCE_FULLTEXT_CAP）。
+# 18KB 级移植笔记全量，超长文件截头带标注；注入处另有 wire 字节预算兜底
+# （llm.REFERENCE_FULLTEXT_BYTES，工单 budget-wire-unification/01 弃字符 cap
+# 改 wire 记账）。
 REFERENCE_FILE_CAP = 20000
 
 
@@ -454,8 +455,8 @@ def read_fulltext(reference_root: Path, entry: ReferenceEntry) -> str:
 
     逐文件截断（工单 03）：每个文件独立限长（REFERENCE_FILE_CAP，超长截头带
     标注，措辞单源 = library.truncate_content）——配额不再被首个大文件吃光，
-    每个文件的开头都进上下文；注入处原样嵌入（总截断兜底见
-    llm.REFERENCE_FULLTEXT_CAP）。二进制素材（说明书 PDF 等）读不了文本——
+    每个文件的开头都进上下文；注入处原样嵌入（wire 字节预算兜底见
+    llm.REFERENCE_FULLTEXT_BYTES）。二进制素材（说明书 PDF 等）读不了文本——
     跳过并标注（不让生成流程因个别不可读素材整体失败）；条目文件缺失 /
     相对路径非法 = 库损坏，大声失败（ReferenceError，宁可大声失败也不把坏
     数据带进上下文）。

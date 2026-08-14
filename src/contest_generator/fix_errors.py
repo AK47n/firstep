@@ -32,14 +32,14 @@ old_snippet 精确匹配（含缩进）优先；精确匹配失败时走行首�
 只消费判决，改匹配规则 / 文案只动一处；改协议须同步 llm.FIX_SYSTEM_PROMPT
 约束 2（对偶测试双端断言）。
 
-本模块依赖方向：只 import entry_store / events（叶子契约）与标准库，是叶子
-模块——llm.py 反向依赖本模块（FixSuggestion 模型），禁止本模块 import llm
-（截断标注与 llm.TRUNCATION_NOTICE 刻意同文，改动须同步）。
+本模块依赖方向：只 import budget / entry_store / events（叶子契约）与标准库，
+是叶子模块——llm.py 反向依赖本模块（FixSuggestion 模型），禁止本模块 import
+llm（截断标注与 llm.TRUNCATION_NOTICE 刻意同文，改动须同步）。wire 记账
+原语与预算常量单源在 budget（工单 budget-wire-unification/01）。
 """
 
 from __future__ import annotations
 
-import json
 import re
 import shutil
 import time
@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+from .budget import FIX_CONTEXT_TOTAL_BYTES, fit_wire_budget, wire_size
 from .entry_store import is_unsafe_path
 from .events import (
     EVENT_APPLY_RESULT,
@@ -69,17 +70,10 @@ WRITABLE_EXTENSIONS = frozenset({".c", ".h", ".s", ".S"})
 FILE_CONTEXT_MAX_LINES = 500
 FILE_CONTEXT_MAX_CHARS = 50 * 1024
 
-# 全部文件上下文的总预算（wire 字节，工单 fix-request-budget/01）：LLM 请求体
-# 有硬性大小限制（llm.py MAX_REQUEST_BYTES 128KB）。记账口径从「字符」改为
-# json.dumps ensure_ascii 序列化字节（与 llm._chat 发送前预检同口径：中文
-# \uXXXX 转义 6 字节/字符、ASCII 1 字节）——旧字符口径下 49152 字符中文最坏
-# ≈295KB，单段超总量上限 2×+，修复循环最后防线断（预检 LLMError 无 kind →
-# 快重试同尺寸必败）。取值由请求总量预算反推（推导见 llm.py
-# FIX_PREVIOUS_FIXES_CAP 注释：基础段合计后余量给文件上下文，目标余量
-# ≥10KB），最坏情况结构测试钉死（tests/test_llm.py::
-# test_fix_prompt_worst_case_fits_request_budget），改大即红。超预算的文件不
-# 发送、在提示词里点名（防静默丢失）。
-FIX_CONTEXT_TOTAL_BYTES = 23000
+# 全部文件上下文的总预算（wire 字节，工单 fix-request-budget/01）：常量与
+# 推导单源迁至 budget.FIX_CONTEXT_TOTAL_BYTES（工单 budget-wire-unification/01，
+# 与推荐侧共享同款 wire 记账原语）；本模块 re-export 保既有 import 面。
+# 语义不变：超预算的文件不发送、在提示词里点名（防静默丢失）。
 
 # 截断标注（决策记录 6）：与 llm.TRUNCATION_NOTICE 同句——本模块是 llm 的
 # 依赖方向下游，不能反向 import，两句刻意同文（改动须同步，契约测试双端断言）
@@ -349,33 +343,6 @@ def resolve_source_path(output_dir: Path, path: str) -> Path | None:
     )
 
 
-def _wire_size(content: str) -> int:
-    """内容序列化进 JSON 字符串后的字节数（json.dumps ensure_ascii=True 口径，
-    与 llm._chat 发送前预检一致）：中文 \\uXXXX 转义 6 字节/字符、ASCII 1
-    字节——预算记账必须同口径，按字符数记账会低估中文 6×（工单
-    fix-request-budget/01 的根因教训）。减 2 = 剥掉 json.dumps 加的首尾引号。
-    """
-    return len(json.dumps(content, ensure_ascii=True)) - 2
-
-
-def _fit_wire_budget(content: str, budget: int) -> str:
-    """按 wire 字节预算截取最长前缀（工单 fix-request-budget/01）：wire 字节数
-    随前缀长度单调不减（每字符至少 1 字节），二分 O(log n) 次序列化取最大保留
-    前缀——中文 6 字节/字符时约保留预算的 1/6 字符，纯 ASCII 几乎全额保留
-    （比统一按字符打折更贴内容）。预算内无需截断时原样返回。
-    """
-    if _wire_size(content) <= budget:
-        return content
-    lo, hi = 0, len(content)
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if _wire_size(content[:mid]) <= budget:
-            lo = mid
-        else:
-            hi = mid - 1
-    return content[:lo]
-
-
 def read_file_contexts(
     output_dir: Path, paths: Sequence[str]
 ) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
@@ -383,7 +350,7 @@ def read_file_contexts(
     500 行 / 50KB 双上限截断（带标注，模型明确知道读到的是截断内容），全部
     文件合计不超 FIX_CONTEXT_TOTAL_BYTES **wire 字节**（json.dumps 序列化
     口径，与 llm._chat 发送前预检一致）——超预算的当前文件按字节预算截取
-    最长前缀（_fit_wire_budget）+ 标注，超预算的剩余文件不读取、单独返回
+    最长前缀（fit_wire_budget）+ 标注，超预算的剩余文件不读取、单独返回
     （llm 提示词点名，不静默丢失）。读取失败（磁盘错误 / 编码不可解）跳过
     （该文件降级）。返回 ((相对路径, 内容), ...) 与（未发送的相对路径列表）。
     """
@@ -399,10 +366,10 @@ def read_file_contexts(
         except OSError:
             continue  # 读取失败 → 该文件降级（决策记录 5）
         content = _truncate_file(content)
-        if _wire_size(content) > budget:
-            content = _fit_wire_budget(content, budget)
+        if wire_size(content) > budget:
+            content = fit_wire_budget(content, budget)
             content += "\n……（上下文预算限制，仅截取前段）……\n"
-        budget -= _wire_size(content)
+        budget -= wire_size(content)
         contents.append((path, content))
     return tuple(contents), tuple(dropped)
 
