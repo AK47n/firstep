@@ -3,10 +3,10 @@
 generate_project 是完整流程入口：选模块（加载库 + 展开依赖 + 平台警告）→
 定位母版 → generate 落盘 → 只读摘要，webapp 与测试都经它驱动；generate 是
 内部落盘步骤（母版文件复制、模块文件按平台版本复制到 modules/<slug>/、
-main.c 落位（落位前静态自检：六道门禁全貌在 GENERATION_GATES 表——文件
-齐全 / 路径不跨模块重复 / 调用可解析 / 模块自包含 / include 可解析 / 宏
-不冲突，装配唯一出处 = 表 + run_generation_gates）、平台修改器经注册表
-委托）。
+main.c 落位（落位前静态自检：门禁全貌在 GENERATION_GATES 表——文件齐全 /
+路径不跨模块重复 / 调用可解析 / 模块自包含 / include 可解析 / 宏不冲突 /
+绑定合法 / 骨架定时器不撞绑定 pwm / 骨架不内联引脚，装配唯一出处 = 表 +
+run_generation_gates）、平台修改器经注册表委托）。
 
 所有校验失败都在创建输出目录之前发生，绝不产出残缺工程。
 """
@@ -118,6 +118,11 @@ class PinLiteralInMainError(GeneratorError):
     """main.c 内联了引脚字面量（注释剥离后判定），拒绝产出换板即错的骨架。"""
 
 
+class TimerConflictError(GeneratorError):
+    """绑定 pwm 角色的 TIM 实例与骨架调度定时器（tim_interrupt_ms_init）冲突，
+    拒绝产出编译绿运行坏的工程（工单 pin-unlock-stm32/01）。"""
+
+
 # 工程树外由 C 标准库提供的头（引号形式同样由编译器按库路径解析；两平台
 # 同名同集，平台无关，归门禁）。工具链外部头（STM32F1xx DFP 提供、CCS
 # SysConfig 构建时生成）是平台事实，在 keil.py / ccs.py 各自声明、经
@@ -142,6 +147,16 @@ _LIBC_HEADERS = frozenset(
 _PIN_LITERAL_RE = re.compile(
     r"(?:^|[^A-Za-z0-9])(?:P[A-H]\d{1,2}|Pin_\d+|GPIO_[A-H]|GPIO_PIN_\d+)\b"
 )
+
+# 骨架调度定时器调用形态（门禁 _check_timer_instance_conflicts 用）：
+# tim_interrupt_ms_init(TIM_3, 10, 0) / (TIM2, 1, 0)——TIM_2/TIM2 两写法
+# （ml_tim 枚举名 TIM_2 与 LLM 换写 TIM2 兼容）；只吃 2/3/4（ml_tim 只注册
+# 这三个，TIM1 不可用——spec 关键事实）。注释剥离后判定。
+_SKELETON_TIMER_RE = re.compile(r"tim_interrupt_ms_init\s*\(\s*TIM_?([234])\b")
+
+# 绑定 pwm 实例前段（TIM3_CH1 → 3，喂定时器冲突门禁；TIMG0_C0 等 mspm0
+# 形态不命中 = 自然不拦）
+_PWM_TIMER_INSTANCE_RE = re.compile(r"TIM([234])_")
 
 
 @dataclass(frozen=True)
@@ -1045,6 +1060,52 @@ def _check_no_pin_literals_in_main(
         )
 
 
+def _check_timer_instance_conflicts(
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: "GateContext",
+) -> None:
+    """骨架定时器 × 绑定 pwm 实例冲突（工单 pin-unlock-stm32/01，ADR 0011）：
+    main_c 经 clex 注释剥离后扫 tim_interrupt_ms_init(TIM_x（x∈2/3/4，TIM_2/
+    TIM2 两写法），与**用户改动过**的绑定 pwm 角色 TIM 实例前段（TIM3_CH1 →
+    3）冲突 → TimerConflictError 400 中文——同一 TIM 被骨架调度占用（2026H
+    TIM_3 调度 / 2026C TIM_2 滴答），编译绿运行坏，生成前拦截。
+
+    只查用户绑定且绑定 ≠ 默认值（no-op 不触发——默认组合冲突是现状性质不拦，
+    spec 留痕）；识别不到（LLM 换写法）不拦——漏报优于误报。mspm0 pwm 实例
+    形态（TIMG0_C0/TIMA0_C3）不命中 TIM[234] 正则，天然不拦。
+    """
+    if not context.bindings or context.board is None:
+        return
+    resolved = resolve_bindings(manifests, platform, context.board, context.bindings)
+    bound_timers: dict[int, tuple[ResolvedBinding, str]] = {}
+    for binding in resolved:
+        if (
+            binding.declaration.type != "pwm"
+            or binding.pin == binding.declaration.default
+        ):
+            continue
+        for instance in binding.instances:
+            match = _PWM_TIMER_INSTANCE_RE.match(instance)
+            if match:
+                timer_no = int(match.group(1))
+                bound_timers.setdefault(timer_no, (binding, instance))
+                break
+    if not bound_timers:
+        return
+    skeleton_timers = {
+        int(number) for number in _SKELETON_TIMER_RE.findall(strip_comments(corpus.main_c))
+    }
+    for timer_no, (binding, instance) in bound_timers.items():
+        if timer_no in skeleton_timers:
+            raise TimerConflictError(
+                f"PWM 绑定 {instance}（{binding.role_key}）与骨架调度定时器"
+                f" TIM_{timer_no} 冲突（tim_interrupt_ms_init 已占用该定时器"
+                f"——请换绑其它 TIM 通道的引脚）"
+            )
+
+
 @dataclass(frozen=True)
 class GenerationGate:
     """一道生成门禁的装配描述：key（表内唯一，测试钉死顺序）+ check（小型
@@ -1071,11 +1132,13 @@ class GateContext:
 
 # 门禁表。顺序即 generate 的校验顺序（现状调用顺序，结构测试钉死）；顺序有
 # 语义：file_path_conflicts 跳过无该平台版本条目（由 module_files 先报），
-# 必须先跑 module_files。新增门禁 = 表加一条 + 谓词（照 categories.
+# 必须先跑 module_files；timer_instance_conflicts 依赖 pin_bindings 先校验
+# 载荷（resolve 才能成功）。新增门禁 = 表加一条 + 谓词（照 categories.
 # RULE_CATEGORIES 先例）——顺序 / 输入依赖 / 门禁全貌只此一处可见。5 道吃
 # corpus（纯谓词，内存直构可测）；file_path_conflicts 吃 manifests +
-# platform（manifest 声明，不读盘）；工单 02 新两条吃 context（bindings +
-# board——绑定校验 / 骨架引脚字面量）。签名统一 4 参，存量谓词忽略第 4 参。
+# platform（manifest 声明，不读盘）；工单 02 新两条 + 工单
+# pin-unlock-stm32/01 一条吃 context（bindings + board——绑定校验 / 骨架
+# 引脚字面量 / 骨架定时器冲突）。签名统一 4 参，存量谓词忽略第 4 参。
 GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "module_files",
@@ -1112,6 +1175,12 @@ GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "pin_bindings",
         lambda corpus, manifests, platform, context: _check_pin_bindings(
+            corpus, manifests, platform, context
+        ),
+    ),
+    GenerationGate(
+        "timer_instance_conflicts",
+        lambda corpus, manifests, platform, context: _check_timer_instance_conflicts(
             corpus, manifests, platform, context
         ),
     ),

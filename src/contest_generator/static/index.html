@@ -1370,10 +1370,12 @@ function renderWarnings() {
 // 板定义 = GET /api/boards（板图坐标/能力集单源，无静态路由——SVG 由 JSON
 // 坐标内联渲染）；角色声明 = 展开结果 expanded[].platforms[platform].pins。
 // 绑定只含用户动过的角色（缺省 = 默认），未配任何引脚不发 bindings 字段。
-// 能力过滤 = strict-all 与后端门禁同语义（工单 02 发现）：角色默认引脚能力
-// token 的**全部实例**都必须命中——motor.PWMAB_C0 默认 PA12 有 pwm:TIMG0_C0
-// + pwm:TIMA0_C3 双实例，any-of 会放行仅 TIMA0_C3 的 PA28（界面兼容但
-// SysConfig 路由必炸）；UI 过滤不兼容角色灰显 + 原因，双实例俱有的 PA23 可绑。
+// 能力过滤与后端门禁同语义（ADR 0011 平台×类型分级）：stm32 pwm = 类型级
+// （任意 pwm:* 脚可绑，实例随绑定引脚）；其余 strict-all（工单 02 口径）——
+// 角色默认引脚能力 token 的**全部实例**都必须命中——motor.PWMAB_C0 默认
+// PA12 有 pwm:TIMG0_C0 + pwm:TIMA0_C3 双实例，any-of 会放行仅 TIMA0_C3 的
+// PA28（界面兼容但 SysConfig 路由必炸）；UI 过滤不兼容角色灰显 + 原因，
+// 双实例俱有的 PA23 可绑。
 // mspm0 排针满员 → v1 交互 = 替换两步换位（点已占用引脚 → 原角色红显未绑 →
 // 再绑目标脚）；stm32 LED_PORT / DIP_GPIO 共享宏族绑定给提示（不拦截）。
 // ---------------------------------------------------------------------------
@@ -1425,7 +1427,8 @@ function pinRoles() {
   return roles;
 }
 
-// ---- strict-all 能力判定（镜像后端 pin_bindings.resolve_bindings 口径） ----
+// ---- 能力判定（镜像后端 pin_bindings.resolve_bindings 口径：stm32 pwm
+// 类型级 + 其余 strict-all） ----
 function pinSupports(pin, type, instance) {
   const token = instance ? type + ":" + instance : type;
   return (pin.capabilities || []).includes(token);
@@ -1441,6 +1444,11 @@ function roleInstances(decl) {
 
 function pinCanHost(pin, decl) {
   if (!pin || pin.kind !== "io") return false;
+  // stm32 pwm = 类型级（ADR 0011，镜像后端）：任意 pwm:* token 即 canHost，
+  // 实例随绑定引脚；其余平台/类型 strict-all 原口径
+  if (chosenPlatform === "stm32" && decl.type === "pwm") {
+    return pinListsType(pin, decl.type);
+  }
   const insts = roleInstances(decl);
   if (insts.length) return insts.every((i) => pinSupports(pin, decl.type, i));
   return pinSupports(pin, decl.type, "");
@@ -1453,6 +1461,10 @@ function pinListsType(pin, type) {
 }
 
 function pinMissReason(pin, decl) {
+  // stm32 pwm 类型级：灰显原因 = 无 pwm token（与后端类型级报错文案同语义）
+  if (chosenPlatform === "stm32" && decl.type === "pwm") {
+    return "该脚不支持角色类型 " + decl.type;
+  }
   const insts = roleInstances(decl);
   if (insts.length) {
     const miss = insts.filter((i) => !pinSupports(pin, decl.type, i));
