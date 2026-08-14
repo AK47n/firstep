@@ -4,7 +4,7 @@
 
 **Blocked by:** 无（基于最新 main）；同缝提示——`.scratch/index-html-ui-redo/issues/01` 也动 index.html，本单先行（功能优先）、redo 其后 rebase。
 
-**Status:** resolved
+**Status:** resolved（2026-08-15 PR #74 squash merged 09364ad，主会话复核 + 1464 绿复跑；02 解除阻塞可开工）
 
 ## 需求
 
@@ -54,4 +54,5 @@
 ## Comments
 
 - 2026-08-15 立项（stm32 引脚解锁 grilling 定稿，189d9df）。
+- 2026-08-15 合并复核（PR #74 squash merged 09364ad，远端分支已删；主会话 diff 复核——分级分支形状/门禁语义/TIM_2+TIM2 两写法/mspm0 实例自然不命中/else 分支逐字节不动，全对 grilling 定稿；合并后 main 复跑 1464 绿 31.9s；本地分支 pin-unlock-01 因实施会话 worktree 占用未删，归其收尾）。
 - 2026-08-15 实施完成（分支 pin-unlock-01，独立 worktree 从 origin/main）：**pin_bindings.py 类型级分支**——stm32+pwm 实例随绑定引脚推导（pin_capability_instances(bound)，无 pwm token 拒"不支持角色类型 pwm"），strict-all 原逻辑入 else 逐字节不动；**generator.py 门禁 _check_timer_instance_conflicts** 入 GENERATION_GATES（pin_bindings 之后）——clex 注释/字符串剥离后扫 `tim_interrupt_ms_init(TIM_?([234])`（TIM_2/TIM2 两写法，ml_tim 只注册 2/3/4）× 用户改动过的绑定（pin ≠ default，no-op 不触发）pwm 实例前段 `TIM([234])_`（mspm0 TIMG0/TIMA0 形态自然不命中）→ TimerConflictError 登记 errors.py 400 中文；**index.html pinCanHost 镜像**——stm32+pwm 任意 pwm:* token 即 canHost（pinListsType 复用），pinMissReason 同步"该脚不支持角色类型 pwm"，卡片/能力判定注释同步，其余零改动。红证先行实录：PA6 旧 strict-all 拒（实例锁文案）+ PB4 旧文案非类型级 + 门禁 ImportError 收集红；绿证 1464 全绿 32.1s + mypy src 41 文件干净 + node --check（脚本段提取）过 + jsdom 冒烟 8/8（PB6/PA6 可绑、PB4 不列、mspm0 PA28 仍灰显 PA23 可绑、stm32 uart 严格保持）。真机（worktree 服务 8000 + 缓存复用）：2026C `--reuse-recommend --add motor --bindings {"motor.MOTOR_A_PWM":"PB6"}` → pin_config.h `MOTOR_A_PWM_TIM TIM_4` / `MOTOR_A_PWM_CH TIM4_CH1 /* PB6 */` UV4 0 错 0 警；不配 bindings 回归 → TIM_2/TIM2_CH1 原值 UV4 0 错 0 警；HTTP 层红证 `tim_interrupt_ms_init(TIM_3, 10, 0)` 骨架 + PA6 绑定 → 400 detail "PWM 绑定 TIM3_CH1（motor.MOTOR_A_PWM）与骨架调度定时器 TIM_3 冲突…" 且零产物目录。
