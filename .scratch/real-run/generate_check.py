@@ -4,13 +4,17 @@
 + fix-loop-warnings/01）。
 
 用法：python generate_check.py [--platform stm32|mspm0] [--topic-file <题面.md>]
-      [--reference-ids <id1,id2,...>] [--reuse-recommend] [topic...]
+      [--reference-ids <id1,id2,...>] [--reuse-recommend]
+      [--bindings '{"模块.角色":"引脚"}'] [topic...]
       topic 从题库读（默认 2026C 2021F）；--topic-file 从外部 md 读题面（如 2026H）；
       --reference-ids 参考注入真机验证（前端同款语义：锚定命中 ∪ 手动选）；
       --reuse-recommend 复用推荐缓存（done 载荷跨运行落盘 .scratch/real-run/
       cache/，回归跑修复循环/编译链路时推荐段秒过；缓存缺失/失效报错退出，
       不静默回退真实调用；命中时 reference_ids/clarify 与生成缓存时不一致
-      打警告不阻断）。
+      打警告不阻断）；
+      --bindings 板级引脚绑定载荷（工单 pin-board-config/02 真机驱动：
+      {"模块.角色": "引脚"} JSON 对象字符串，如
+      --bindings '{"motor.MOTOR_B_ENC":"PB4"}'）。
 依赖：服务在 127.0.0.1:8000 运行（python -m contest_generator.webapp）。
 输出目录：.scratch/real-run/out_<topic>_<platform>（不碰桌面原工程）。
 """
@@ -599,6 +603,7 @@ def check_topic(
     add: tuple[str, ...] = (),
     reference_ids: tuple[str, ...] = (),
     reuse_recommend: bool = False,
+    bindings: dict[str, str] | None = None,
 ) -> bool:
     ok = True
     print(f"\n===== {key} ({platform}) =====")
@@ -751,7 +756,7 @@ def check_topic(
         print("  ✗ main.c 缺失或没有 main 函数")
         ok = False
 
-    # 3) 生成
+    # 3) 生成（bindings 板级引脚绑定载荷，工单 pin-board-config/02 真机驱动）
     out_dir = HERE / f"out_{key}_{platform}"
     gen_payload: dict = {
         "platform": platform, "slugs": slugs, "main_c": main_c,
@@ -759,6 +764,9 @@ def check_topic(
     }
     if topic_id:
         gen_payload["topic_id"] = topic_id
+    if bindings:
+        gen_payload["bindings"] = bindings
+        print(f"  [绑定] {bindings}")
     gen = post("/api/generate", gen_payload)
     print(f"[生成] 输出 {out_dir}")
     if gen.get("build_hint"):
@@ -875,11 +883,23 @@ def main() -> None:
     reuse_recommend = "--reuse-recommend" in args
     if reuse_recommend:
         del args[args.index("--reuse-recommend")]
+    bindings: dict[str, str] | None = None
+    if "--bindings" in args:
+        # JSON 对象字符串（{"模块.角色": "引脚"}，板级引脚配置工单 02 真机驱动）
+        idx = args.index("--bindings")
+        raw = json.loads(args[idx + 1])
+        if not isinstance(raw, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in raw.items()
+        ):
+            print("✗ --bindings 必须是 {\"模块.角色\": \"引脚\"} JSON 对象字符串")
+            sys.exit(1)
+        bindings = raw
+        del args[idx:idx + 2]
     topics = args or ["2026C", "2021F"]
     results = {
         t: check_topic(
             t, clarify_map, drop, platform, topic_file, add, reference_ids,
-            reuse_recommend=reuse_recommend,
+            reuse_recommend=reuse_recommend, bindings=bindings,
         )
         for t in topics
     }

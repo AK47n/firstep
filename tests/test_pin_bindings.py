@@ -1,0 +1,617 @@
+"""板级引脚绑定机制层（工单 pin-board-config/02）：bindings 校验 + 双平台
+写侧渲染/改写 + 两条新门禁 + 生成集成。
+
+契约（spec）：默认绑定输出与母版逐字节一致；绑定改哪几个角色，只变对应
+宏行（stm32 pin_config.h）/ 只换 $assign 引脚值（mspm0 syscfg，实例名/
+宏名/通道名不动）；缺省载荷（bindings 不传）= 旧行为逐字节。红证 =
+resolve_bindings / 门禁的每个拒绝分支；真库不变量 = 写侧机制的立身之本
+（syscfg $assign 引脚值唯一 → 默认值槽位定位成立；stm32 默认单实例 →
+实例宏推导成立）。
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+from contest_generator.boards import (
+    BOARDS_DIR,
+    board_for_platform,
+    load_boards,
+    pin_capability_instances,
+)
+from contest_generator.errors import error_entry
+from contest_generator.generator import (
+    GateContext,
+    ModuleCorpus,
+    ModuleFile,
+    PinLiteralInMainError,
+    _check_no_pin_literals_in_main,
+    _check_pin_bindings,
+    generate,
+)
+from contest_generator.library import list_modules
+from contest_generator.manifest import ModuleManifest, PinDeclaration
+from contest_generator.pin_bindings import (
+    PinBindingError,
+    ResolvedBinding,
+    resolve_bindings,
+)
+from contest_generator.pinwriter import (
+    MSPM0_SYSCFG_FILENAME,
+    PIN_CONFIG_FILENAME,
+    render_pin_config,
+    rewrite_syscfg,
+)
+
+LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
+LIBRARY_MODULES = LIBRARY_ROOT / "modules"
+STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"
+MSPM0_MASTER = LIBRARY_ROOT / "masters" / "mspm0"
+
+BOARDS = {b.platform: b for b in load_boards(BOARDS_DIR)}
+ALL_MANIFESTS = list_modules(LIBRARY_MODULES)
+STM32_MASTER_PIN_CONFIG = (STM32_MASTER / PIN_CONFIG_FILENAME).read_text(
+    encoding="utf-8", newline=""
+)
+MSPM0_MASTER_SYSCFG = (MSPM0_MASTER / MSPM0_SYSCFG_FILENAME).read_text(
+    encoding="utf-8", newline=""
+)
+
+
+def _resolve(platform: str, bindings: dict[str, str]) -> tuple[ResolvedBinding, ...]:
+    return resolve_bindings(ALL_MANIFESTS, platform, BOARDS[platform], bindings)
+
+
+def _bind(role_key: str, pin: str) -> ResolvedBinding:
+    """stm32 渲染器测试用：取角色在 stm32 平台的声明（同 id 在 mspm0 也有
+    声明时取错平台会拿不到 macros）。实例推导与 resolve 同源。"""
+    slug, role_id = role_key.split(".")
+    for manifest in ALL_MANIFESTS:
+        if manifest.slug != slug:
+            continue
+        entry = manifest.platforms.get("stm32")
+        if entry is None:
+            continue
+        for decl in entry.pins:
+            if decl.id == role_id:
+                default_pin = BOARDS["stm32"].pin_index.get(decl.default)
+                instances = (
+                    pin_capability_instances(default_pin, decl.type)
+                    if default_pin is not None
+                    else ()
+                )
+                return ResolvedBinding(
+                    slug=slug,
+                    declaration=decl,
+                    pin=pin,
+                    instances=instances,
+                )
+    raise AssertionError(f"未找到 stm32 角色 {role_key}")
+
+
+# ---------------------------------------------------------------------------
+# bindings 校验（红证）
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_valid_stm32_binding_carries_instances():
+    """stm32 enc 角色：实例 = 默认引脚 enc 线号（PA4 → enc:4）。"""
+    resolved = _resolve("stm32", {"motor.MOTOR_B_ENC": "PB4"})
+    assert len(resolved) == 1
+    binding = resolved[0]
+    assert binding.role_key == "motor.MOTOR_B_ENC"
+    assert binding.pin == "PB4"
+    assert binding.instances == ("4",)
+
+
+def test_resolve_empty_and_none_pass_through():
+    assert _resolve("stm32", {}) == ()
+    assert _resolve("stm32", None) == ()  # type: ignore[arg-type]
+
+
+def test_resolve_rejects_non_mapping():
+    with pytest.raises(PinBindingError, match="bindings 必须是 JSON 对象"):
+        resolve_bindings(ALL_MANIFESTS, "stm32", BOARDS["stm32"], "PA0")  # type: ignore[arg-type]
+
+
+def test_resolve_rejects_bad_key_format():
+    with pytest.raises(PinBindingError, match="绑定键格式非法"):
+        _resolve("stm32", {"no_dot": "PA0"})
+    with pytest.raises(PinBindingError, match="绑定键格式非法"):
+        _resolve("stm32", {"a.b.c": "PA0"})
+    with pytest.raises(PinBindingError, match="绑定键格式非法"):
+        _resolve("stm32", {"": "PA0"})
+
+
+def test_resolve_rejects_unknown_slug_and_unknown_role():
+    with pytest.raises(PinBindingError, match="不存在"):
+        _resolve("stm32", {"no_such_module.MOTOR_A_PWM": "PA0"})
+    with pytest.raises(PinBindingError, match="不存在"):
+        _resolve("stm32", {"motor.NO_SUCH_ROLE": "PA0"})
+    # 角色在别的平台声明但本平台没有（motor 的 mspm0 角色不在 stm32 声明）
+    with pytest.raises(PinBindingError, match="不存在"):
+        _resolve("stm32", {"motor.PWMAB_C0": "PA12"})
+
+
+def test_resolve_rejects_unknown_pin_board_external():
+    """板外脚（mspm0 排针无 PB4/PB5）绑定 = 未知引脚 400（spec 板外默认规则）。"""
+    with pytest.raises(PinBindingError, match="PB4"):
+        _resolve("mspm0", {"huidu.R3": "PB4"})
+    with pytest.raises(PinBindingError, match="PB5"):
+        _resolve("mspm0", {"huidu.R4": "PB5"})
+
+
+def test_resolve_capability_stm32_uart_instance_locked():
+    """uart 角色实例 = 默认引脚实例（DIGIT_UART TX 默认 PA9 → UART_1），只有
+    PA9 有 uart_tx:UART_1 → 换脚必拒（ml_libs 第二层锁的机械实现）。"""
+    with pytest.raises(PinBindingError, match="UART_1"):
+        _resolve("stm32", {"digit_uart.DIGIT_UART_TX": "PB10"})
+
+
+def test_resolve_capability_stm32_enc_same_line_only():
+    """enc 限同 EXTI 线号：MOTOR_B_ENC 默认 PA4（enc:4）→ PB4 可、PA6（enc:6）拒。"""
+    assert _resolve("stm32", {"motor.MOTOR_B_ENC": "PB4"})
+    with pytest.raises(PinBindingError, match="enc"):
+        _resolve("stm32", {"motor.MOTOR_B_ENC": "PA6"})
+
+
+def test_resolve_capability_mspm0_multi_instance_strict_all():
+    """mspm0 复用标注多实例引脚（PWMAB_C0 默认 PA12 有 pwm:TIMG0_C0 +
+    pwm:TIMA0_C3）：strict-all——绑定引脚须支持全部实例（宁严勿假绿：只换
+    $assign 不改外设，绑到仅 TIMA0_C3 的 PA28 会让 SysConfig 路由失败）。
+    PA23 双实例俱有 → 合法；PA28（仅 TIMA0_C3）拒。"""
+    resolved = _resolve("mspm0", {"motor.PWMAB_C0": "PA23"})
+    assert resolved[0].instances == ("TIMG0_C0", "TIMA0_C3")
+    with pytest.raises(PinBindingError, match="TIMG0_C0"):
+        _resolve("mspm0", {"motor.PWMAB_C0": "PA28"})
+
+
+def test_resolve_capability_mspm0_single_instance_movable():
+    """单实例角色（OLED_SCL 默认 PB2 → i2c_scl:I2C1）可换到同实例脚（PA17）。"""
+    resolved = _resolve("mspm0", {"oled.OLED_SCL": "PA17"})
+    assert resolved[0].pin == "PA17"
+    assert resolved[0].instances == ("I2C1",)
+
+
+def test_resolve_mspm0_slot_conflict_and_dedupe():
+    """同默认引脚 = 同 syscfg 槽位：两角色绑异脚互斥、绑同脚合法（同引脚多
+    角色共享 spec 已定）。"""
+    with pytest.raises(PinBindingError, match="共用同一槽位"):
+        _resolve("mspm0", {"motor.AA": "PB2", "key.DC_MOTOR_AA": "PB3"})
+    assert _resolve("mspm0", {"motor.AA": "PB2", "key.DC_MOTOR_AA": "PB2"})
+
+
+def test_resolve_stm32_same_default_different_roles_not_conflicting():
+    """stm32 各角色宏族独立：pid.GRAY_D1 与 config.DIP0 同默认 PB12 但宏不同
+    （GRAY_D1_* vs DIP_*），绑到不同脚互不冲突（槽位互斥只对 mspm0）。"""
+    resolved = _resolve(
+        "stm32", {"pid.GRAY_D1": "PB13", "config.DIP0": "PB14"}
+    )
+    assert {b.role_key for b in resolved} == {"pid.GRAY_D1", "config.DIP0"}
+
+
+def test_resolve_offboard_default_role_can_bind_inside_board():
+    """板外默认（HUIDU R3 = PB4）不因默认板外禁绑：绑板内脚合法。"""
+    resolved = _resolve("mspm0", {"huidu.R3": "PA27"})
+    assert resolved[0].pin == "PA27"
+    assert resolved[0].instances == ()
+
+
+def test_error_entry_maps_pin_binding_error_to_400():
+    status, message = error_entry(PinBindingError("绑定 motor.X 的引脚 Y 不存在"))
+    assert status == 400
+    assert "motor.X" in message
+
+
+# ---------------------------------------------------------------------------
+# 真库不变量（写侧机制立身之本）
+# ---------------------------------------------------------------------------
+
+
+def test_syscfg_pin_assign_values_unique():
+    """母版 syscfg 的 $assign 引脚值唯一 = 默认值槽位定位成立的前提（漂移
+    即红——写侧靠默认值找唯一落点行）。"""
+    values = re.findall(
+        r'^\s*.+\.\$assign\s*=\s*"([A-Za-z0-9]+)"', MSPM0_MASTER_SYSCFG, re.M
+    )
+    assert len(values) == len(set(values))
+
+
+def test_every_mspm0_declared_default_has_exactly_one_syscfg_site():
+    """全库 mspm0 声明默认值在母版 syscfg 里恰一行落点（含板外 PB4/PB5 的
+    LaunchPad 遗留值）——resolve + 改写器逐字节契约的前提。"""
+    sites: dict[str, list[str]] = {}
+    for line in MSPM0_MASTER_SYSCFG.splitlines():
+        m = re.match(r'^\s*.+\.\$assign\s*=\s*"([A-Za-z0-9]+)"', line)
+        if m:
+            sites.setdefault(m.group(1), []).append(line)
+    for manifest in ALL_MANIFESTS:
+        entry = manifest.platforms.get("mspm0")
+        if entry is None:
+            continue
+        for decl in entry.pins:
+            assert len(sites.get(decl.default, [])) == 1, (
+                f"{manifest.slug}.{decl.id} 默认 {decl.default} 的 syscfg 落点"
+                f"不是唯一一行"
+            )
+
+
+def test_stm32_declared_defaults_single_instance():
+    """stm32 渲染器靠单实例推导宏值（_TIM/_CH/_UART/_INST/_LINE）：全库声明
+    默认引脚对角色类型必须单实例（多实例 = 渲染歧义）。"""
+    for manifest in ALL_MANIFESTS:
+        entry = manifest.platforms.get("stm32")
+        if entry is None:
+            continue
+        for decl in entry.pins:
+            default_pin = BOARDS["stm32"].pin_index.get(decl.default)
+            if default_pin is None:
+                continue  # stm32 无板外默认
+            instances = pin_capability_instances(default_pin, decl.type)
+            assert len(instances) <= 1, (
+                f"{manifest.slug}.{decl.id} 默认 {decl.default} 对"
+                f" {decl.type} 多实例 {instances}（渲染歧义）"
+            )
+
+
+# ---------------------------------------------------------------------------
+# stm32 pin_config.h 渲染器（逐字节契约）
+# ---------------------------------------------------------------------------
+
+
+def test_render_pin_config_default_bindings_byte_identical():
+    """契约核心：空/None/绑定值=默认值 → 与母版逐字节一致。"""
+    assert render_pin_config(STM32_MASTER_PIN_CONFIG, ()) == STM32_MASTER_PIN_CONFIG
+    assert (
+        render_pin_config(
+            STM32_MASTER_PIN_CONFIG,
+            _resolve("stm32", {"motor.MOTOR_A_PWM": "PA0", "motor.MOTOR_B_ENC": "PA4"}),
+        )
+        == STM32_MASTER_PIN_CONFIG
+    )
+
+
+def test_render_pin_config_changes_only_bound_macro_lines():
+    """绑定改哪几个角色，只变对应宏行：MOTOR_A_DIR → PB12（PORT/PIN 两行）、
+    MOTOR_B_ENC → PB4（EXTI 一行——LINE 值不变、DIR 未绑，均不动）。CRLF 保留。"""
+    out = render_pin_config(
+        STM32_MASTER_PIN_CONFIG,
+        _resolve("stm32", {"motor.MOTOR_A_DIR": "PB12", "motor.MOTOR_B_ENC": "PB4"}),
+    )
+    before = STM32_MASTER_PIN_CONFIG.splitlines(True)
+    after = out.splitlines(True)
+    assert len(before) == len(after)
+    changed = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
+    changed_lines = [after[i] for i in changed]
+    assert changed_lines == [
+        "#define MOTOR_A_DIR_PORT    GPIO_B\r\n",
+        "#define MOTOR_A_DIR_PIN     Pin_12\r\n",
+        "#define MOTOR_B_ENC_EXTI      EXTI_PB4   /* PB4，下降沿触发 */\r\n",
+    ]
+
+
+def test_render_pin_config_enc_line_macro_untouched_when_same_line():
+    """enc 换线保线号：MOTOR_B_ENC_LINE 值仍是 4（handler 名绑线号，EXTI4
+    不变），该行逐字节不动。"""
+    out = render_pin_config(
+        STM32_MASTER_PIN_CONFIG, _resolve("stm32", {"motor.MOTOR_B_ENC": "PB4"})
+    )
+    assert "MOTOR_B_ENC_LINE      4          /* EXTI4_IRQHandler 的线号 */\r\n" in out
+    assert "EXTI_PA4" not in out
+    assert "EXTI_PB4   /* PB4，下降沿触发 */" in out
+
+
+def test_render_pin_config_gpio_value_shapes():
+    """gpio 宏值形状：_PORT → GPIO_<口>、_PIN → Pin_<号>（PB12 → GPIO_B/
+    Pin_12；PC13 → GPIO_C/Pin_13——DIR 默认 PA6 之外的真实可绑脚）。"""
+    for old_pin, port, pin_no in (("PB12", "GPIO_B", "Pin_12"), ("PC13", "GPIO_C", "Pin_13")):
+        binding = _bind("motor.MOTOR_A_DIR", old_pin)
+        out = render_pin_config(STM32_MASTER_PIN_CONFIG, (binding,))
+        assert f"MOTOR_A_DIR_PORT    {port}\r\n" in out
+        assert f"MOTOR_A_DIR_PIN     {pin_no}\r\n" in out
+
+
+def test_render_pin_config_missing_macro_loud_failure():
+    """宏不在母版 pin_config.h（ml_mpu6050 的 I2C_GPIO 住在 ml_i2c.h）= 数据
+    不在渲染器可控范围 → 大声失败（实践上门禁实例锁已拦，此路防御）。"""
+    binding = _bind("ml_mpu6050.MPU6050_SCL", "PB12")
+    with pytest.raises(PinBindingError, match="I2C_GPIO"):
+        render_pin_config(STM32_MASTER_PIN_CONFIG, (binding,))
+
+
+def test_render_pin_config_ambiguous_instance_loud_failure():
+    """实例歧义（多实例）→ 渲染器大声失败（真库不变量测试保证现状单实例）。"""
+    decl = _bind("motor.MOTOR_A_PWM", "PA0").declaration
+    binding = ResolvedBinding(
+        slug="motor",
+        declaration=decl,
+        pin="PA6",
+        instances=("TIM2_CH1", "TIM3_CH1"),
+    )
+    with pytest.raises(PinBindingError, match="实例歧义"):
+        render_pin_config(STM32_MASTER_PIN_CONFIG, (binding,))
+
+
+def test_render_pin_config_instance_macro_shapes():
+    """实例宏值形状（防御路径——实例锁下真机不可达，渲染器纯函数直测）：
+    _TIM/_CH/_UART/_INST。TIM3_CH1 → TIM_3 / TIM3_CH1；UART_3 → UART_3 /
+    USART3；注释旧引脚字样同步替换。"""
+    pwm_decl = _bind("motor.MOTOR_A_PWM", "PA0").declaration
+    uart_decl = _bind("digit_uart.DIGIT_UART_TX", "PA9").declaration
+    out = render_pin_config(
+        STM32_MASTER_PIN_CONFIG,
+        (
+            ResolvedBinding(
+                slug="motor", declaration=pwm_decl, pin="PA6",
+                instances=("TIM3_CH1",),
+            ),
+            ResolvedBinding(
+                slug="digit_uart", declaration=uart_decl, pin="PB10",
+                instances=("UART_3",),
+            ),
+        ),
+    )
+    assert "#define MOTOR_A_PWM_TIM     TIM_3\r\n" in out
+    assert "#define MOTOR_A_PWM_CH      TIM3_CH1   /* PA6 */\r\n" in out
+    assert "#define DIGIT_UART             UART_3\r\n" in out
+    assert "#define DIGIT_UART_INST        USART3\r\n" in out
+
+
+# ---------------------------------------------------------------------------
+# mspm0 syscfg 改写器（逐字节契约 + 结构钉）
+# ---------------------------------------------------------------------------
+
+
+def test_rewrite_syscfg_default_bindings_byte_identical():
+    assert rewrite_syscfg(MSPM0_MASTER_SYSCFG, ()) == MSPM0_MASTER_SYSCFG
+    assert (
+        rewrite_syscfg(
+            MSPM0_MASTER_SYSCFG,
+            _resolve("mspm0", {"led_beep.LED_BEEP_LED": "PA15"}),
+        )
+        == MSPM0_MASTER_SYSCFG
+    )
+
+
+def test_rewrite_syscfg_changes_only_target_assign_lines():
+    """LED 换脚只动 LED_BEEP 一行；板外默认 HUIDU R3/R4（PB4/PB5）未绑不动
+    （板外默认回归显式用例）。"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG,
+        _resolve("mspm0", {"led_beep.LED_BEEP_LED": "PA12"}),
+    )
+    before = MSPM0_MASTER_SYSCFG.splitlines(True)
+    after = out.splitlines(True)
+    assert len(before) == len(after)
+    changed = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
+    assert len(changed) == 1
+    assert after[changed[0]].rstrip("\r\n").endswith('pin.$assign  = "PA12";')
+    assert '= "PB4";' in out and '= "PB5";' in out  # R3/R4 未绑照旧
+
+
+def test_rewrite_syscfg_swap_bindings_applied_simultaneously():
+    """同槽位组互换（L1 ↔ L2）：全部绑定对照原始文本定位（先换后查会撞重复
+    值——PA23 会同时出现在两行）。"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG,
+        _resolve("mspm0", {"huidu.L1": "PA23", "huidu.L2": "PA22"}),
+    )
+    assert 'HUIDU.associatedPins[0].pin.$assign = "PA23";' in out
+    assert 'HUIDU.associatedPins[1].pin.$assign = "PA22";' in out
+
+
+def test_rewrite_syscfg_xunji_permuted_slot_by_default_value():
+    """xunji P1-P8 与 HUIDU 槽位错序共享：P1 默认 PA24 → HUIDU L3 槽位
+    （默认值槽位定位天然对位，无需映射表）。"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG, _resolve("mspm0", {"xunji.P1": "PA25"})
+    )
+    assert 'HUIDU.associatedPins[2].pin.$assign = "PA25";' in out
+
+
+def test_rewrite_syscfg_offboard_default_rewrites_legacy_value():
+    """板外默认（R3 = PB4）绑定板内脚 → LaunchPad 遗留值行被换掉。"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG, _resolve("mspm0", {"huidu.R3": "PA27"})
+    )
+    assert 'HUIDU.associatedPins[6].pin.$assign = "PA27";' in out
+
+
+def test_rewrite_syscfg_instance_and_channel_names_unchanged():
+    """结构钉：改写后实例名（$name）/ 宏名 / 通道名（ti_driverlib_*）集合与
+    母版一致——改写器只碰 $assign 引号值，DCC100_CC0 通道名先例防炸。"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG,
+        _resolve("mspm0", {
+            "led_beep.LED_BEEP_LED": "PA12",
+            "oled.OLED_SCL": "PA17",
+            "key.KEY_START": "PA8",
+        }),
+    )
+
+    def names(text: str) -> set[str]:
+        return set(re.findall(r'\.\$name\s*=\s*"([^"]+)"', text)) | set(
+            re.findall(r'"\s*(ti_driverlib_\w+)\s*"', text)
+        )
+
+    assert names(out) == names(MSPM0_MASTER_SYSCFG)
+    assert 'ti_driverlib_pwm_DCC100_CC0' in out  # 通道名逐字未动
+
+
+def test_rewrite_syscfg_same_slot_same_pin_applied_once():
+    """motor.AA 与 key.DC_MOTOR_AA 同槽位同引脚 → 该槽位一行改动（dedupe）。
+    （全文件 '= "PB2";' 另有一处 OLED sclPin 的默认值，逐槽位断言。）"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG,
+        _resolve("mspm0", {"motor.AA": "PB2", "key.DC_MOTOR_AA": "PB2"}),
+    )
+    assert out.count('DC_MOTOR.associatedPins[4].pin.$assign  = "PB2";') == 1
+
+
+# ---------------------------------------------------------------------------
+# 两条新门禁
+# ---------------------------------------------------------------------------
+
+
+def _corpus(main_c: str) -> ModuleCorpus:
+    return ModuleCorpus(
+        platform="stm32",
+        modules=(),
+        missing_platforms=(),
+        missing_files=(),
+        master_headers=(),
+        master_search_dirs=(),
+        search_dir_headers=(),
+        master_project_dir=Path("."),
+        main_c=main_c,
+    )
+
+
+def test_no_pin_literals_gate_rejects_code_literals():
+    """main.c 内联引脚字面量 → PinLiteralInMainError（GeneratorError 族，
+    errors 表 400 中文）。"""
+    for bad in (
+        "int main(void) { gpio_init(GPIO_A, Pin_0, OUT); while (1); }\n",
+        "int main(void) { EXTI_Init(EXTI_PA2); while (1); }\n",
+        "#define MY_PIN PA0\nint main(void) { while (1); }\n",
+        "int main(void) { GPIO_Pin_13; while (1); }\n",
+        "int main(void) { volatile int x = PA28; while (1); }\n",
+    ):
+        with pytest.raises(PinLiteralInMainError):
+            _check_no_pin_literals_in_main(
+                _corpus(bad), (), "stm32", GateContext()
+            )
+
+
+def test_no_pin_literals_gate_comment_and_string_exempt():
+    """注释里的 PA11 字样（历史产物判例）/ 字符串字面量不误伤；宏名后缀
+    （PA12_PORT）不算字面量。"""
+    clean = [
+        "int main(void) { /* 历史接线注记：PA11 被 USB 占用 */ while (1); }\n",
+        'int main(void) { printf("当前引脚 PA12\\n"); while (1); }\n',
+        "int main(void) { gpio_init(HUIDU_L1_PORT, HUIDU_L1_PIN, IN); }\n",
+        "int main(void) { while (1); }\n",
+    ]
+    for main_c in clean:
+        _check_no_pin_literals_in_main(_corpus(main_c), (), "stm32", GateContext())
+
+
+def test_no_pin_literals_gate_mspm0_pin_names():
+    """mspm0 引脚名（PA28/PB24）同样被拦。"""
+    with pytest.raises(PinLiteralInMainError):
+        _check_no_pin_literals_in_main(
+            _corpus("int main(void) { int x = PA28; while (1); }\n"),
+            (), "mspm0", GateContext(),
+        )
+
+
+def test_pin_bindings_gate_empty_context_passes():
+    """缺省空载荷直过（generate_check 产物复核 / 存量测试形态）。"""
+    _check_pin_bindings(_corpus(""), (), "stm32", GateContext())
+
+
+def test_pin_bindings_gate_rejects_invalid_payload():
+    with pytest.raises(PinBindingError, match="不存在"):
+        _check_pin_bindings(
+            _corpus(""), ALL_MANIFESTS, "stm32",
+            GateContext(
+                bindings={"motor.NO_SUCH_ROLE": "PA0"}, board=BOARDS["stm32"]
+            ),
+        )
+
+
+def test_pin_bindings_gate_requires_board_when_bindings_present():
+    with pytest.raises(PinBindingError, match="板定义"):
+        _check_pin_bindings(
+            _corpus(""), ALL_MANIFESTS, "stm32",
+            GateContext(bindings={"motor.MOTOR_A_PWM": "PA0"}, board=None),
+        )
+
+
+# ---------------------------------------------------------------------------
+# generate() 集成（真母版）：写侧挂钩 + 缺省路径回归
+# ---------------------------------------------------------------------------
+
+
+def test_generate_stm32_with_bindings_rewrites_pin_config(tmp_path):
+    """带绑定生成：pin_config.h 只变绑定宏行；无绑定：与母版逐字节一致。"""
+    motor = next(m for m in ALL_MANIFESTS if m.slug == "motor")
+    # 带绑定
+    out_dir = tmp_path / "out_bound"
+    generate(
+        platform="stm32",
+        manifests=[motor],
+        module_library_dir=LIBRARY_MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out_dir,
+        main_c_content="int main(void) { while (1); }\n",
+        bindings={"motor.MOTOR_B_ENC": "PB4"},
+    )
+    written = (out_dir / PIN_CONFIG_FILENAME).read_text(encoding="utf-8", newline="")
+    assert "EXTI_PB4" in written
+    assert written != STM32_MASTER_PIN_CONFIG
+    # 无绑定回归：缺省路径 = 旧行为逐字节
+    out_dir2 = tmp_path / "out_default"
+    generate(
+        platform="stm32",
+        manifests=[motor],
+        module_library_dir=LIBRARY_MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out_dir2,
+        main_c_content="int main(void) { while (1); }\n",
+    )
+    assert (
+        out_dir2 / PIN_CONFIG_FILENAME
+    ).read_text(encoding="utf-8", newline="") == STM32_MASTER_PIN_CONFIG
+
+
+def test_generate_mspm0_with_bindings_rewrites_syscfg(tmp_path):
+    """带绑定生成：syscfg $assign 变、实例名集合不变；无绑定逐字节一致。"""
+    led = next(m for m in ALL_MANIFESTS if m.slug == "led_beep")
+    out_dir = tmp_path / "out"
+    generate(
+        platform="mspm0",
+        manifests=[led],
+        module_library_dir=LIBRARY_MODULES,
+        master_project_dir=MSPM0_MASTER,
+        output_dir=out_dir,
+        main_c_content="int main(void) { while (1); }\n",
+        bindings={"led_beep.LED_BEEP_LED": "PA12"},
+    )
+    written = (
+        out_dir / MSPM0_SYSCFG_FILENAME
+    ).read_text(encoding="utf-8", newline="")
+    assert 'pin.$assign  = "PA12";' in written
+    assert written != MSPM0_MASTER_SYSCFG
+    out_dir2 = tmp_path / "out_default"
+    generate(
+        platform="mspm0",
+        manifests=[led],
+        module_library_dir=LIBRARY_MODULES,
+        master_project_dir=MSPM0_MASTER,
+        output_dir=out_dir2,
+        main_c_content="int main(void) { while (1); }\n",
+    )
+    assert (
+        out_dir2 / MSPM0_SYSCFG_FILENAME
+    ).read_text(encoding="utf-8", newline="") == MSPM0_MASTER_SYSCFG
+
+
+def test_generate_with_invalid_bindings_creates_no_output_dir(tmp_path):
+    """非法绑定在创建输出目录之前失败（门禁先于 mkdir），不留半成品。"""
+    motor = next(m for m in ALL_MANIFESTS if m.slug == "motor")
+    out_dir = tmp_path / "out"
+    with pytest.raises(PinBindingError, match="TIM2_CH1"):
+        generate(
+            platform="stm32",
+            manifests=[motor],
+            module_library_dir=LIBRARY_MODULES,
+            master_project_dir=STM32_MASTER,
+            output_dir=out_dir,
+            main_c_content="int main(void) { while (1); }\n",
+            bindings={"motor.MOTOR_A_PWM": "PA6"},  # PA6 = TIM3_CH1 ≠ TIM2_CH1
+        )
+    assert not out_dir.exists()

@@ -27,6 +27,7 @@ from .library import LibraryError
 from .llm import LLMError
 from .master_store import MasterError
 from .patchers import UnknownPlatformError
+from .pin_bindings import PinBindingError
 from .reference_library import ReferenceError
 from .selection import ManualReferenceError, SelectionError
 from .stage import StageError
@@ -62,6 +63,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ManualReferenceError,  # 手动选参考资料不存在 / 重复（工单 01）
             GeneratorError,
             DuplicateFilePathError,  # 跨模块同名文件（生成侧查重兜底，工单 gen-file-collision-gate/01）
+            PinBindingError,  # 引脚绑定载荷非法（工单 pin-board-config/02：键/角色/引脚/能力/槽位）
             ConfigError,
             ReferenceError,
             TopicError,

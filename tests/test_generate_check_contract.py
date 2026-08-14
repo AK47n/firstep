@@ -405,7 +405,7 @@ def test_cli_reference_ids_flag_reaches_check_topic(monkeypatch) -> None:
 
     def fake_check_topic(
         key, clarify_map, drop, platform, topic_file, add, reference_ids,
-        reuse_recommend,
+        reuse_recommend, bindings=None,
     ):
         captured["key"] = key
         captured["reference_ids"] = reference_ids
@@ -429,7 +429,7 @@ def test_cli_reference_ids_flag_absent_passes_empty(monkeypatch) -> None:
 
     def fake_check_topic(
         key, clarify_map, drop, platform, topic_file, add, reference_ids,
-        reuse_recommend,
+        reuse_recommend, bindings=None,
     ):
         captured["reference_ids"] = reference_ids
         captured["reuse_recommend"] = reuse_recommend
@@ -450,7 +450,7 @@ def test_cli_reuse_recommend_flag_reaches_check_topic(monkeypatch) -> None:
 
     def fake_check_topic(
         key, clarify_map, drop, platform, topic_file, add, reference_ids,
-        reuse_recommend,
+        reuse_recommend, bindings=None,
     ):
         captured["reuse_recommend"] = reuse_recommend
         return True
@@ -463,6 +463,59 @@ def test_cli_reuse_recommend_flag_reaches_check_topic(monkeypatch) -> None:
         gen.main()
     assert ei.value.code == 0
     assert captured["reuse_recommend"] is True
+
+
+def test_cli_bindings_flag_reaches_check_topic(monkeypatch) -> None:
+    """--bindings JSON 解析 → check_topic 透传（工单 pin-board-config/02 真机
+    驱动；删解析即红）。"""
+    captured: dict[str, object] = {}
+
+    def fake_check_topic(
+        key, clarify_map, drop, platform, topic_file, add, reference_ids,
+        reuse_recommend, bindings=None,
+    ):
+        captured["bindings"] = bindings
+        return True
+
+    monkeypatch.setattr(gen, "check_topic", fake_check_topic)
+    monkeypatch.setattr(
+        sys, "argv",
+        ["generate_check.py", "2026C", "--bindings",
+         '{"motor.MOTOR_B_ENC": "PB4"}'],
+    )
+    with pytest.raises(SystemExit) as ei:
+        gen.main()
+    assert ei.value.code == 0
+    assert captured["bindings"] == {"motor.MOTOR_B_ENC": "PB4"}
+
+
+def test_cli_bindings_flag_absent_passes_none(monkeypatch) -> None:
+    """不带 --bindings → 透传 None（缺省 = 旧请求行为逐字节）。"""
+    captured: dict[str, object] = {}
+
+    def fake_check_topic(
+        key, clarify_map, drop, platform, topic_file, add, reference_ids,
+        reuse_recommend, bindings=None,
+    ):
+        captured["bindings"] = bindings
+        return True
+
+    monkeypatch.setattr(gen, "check_topic", fake_check_topic)
+    monkeypatch.setattr(sys, "argv", ["generate_check.py", "2026C"])
+    with pytest.raises(SystemExit):
+        gen.main()
+    assert captured["bindings"] is None
+
+
+def test_cli_bindings_flag_rejects_non_string_map(monkeypatch) -> None:
+    """--bindings 形状非法（值非字符串）→ 退出码 1，不进流程。"""
+    monkeypatch.setattr(
+        sys, "argv",
+        ["generate_check.py", "2026C", "--bindings", '{"motor.MOTOR_B_ENC": 4}'],
+    )
+    with pytest.raises(SystemExit) as ei:
+        gen.main()
+    assert ei.value.code == 1
 
 
 # ---------- 事件词表对偶 ----------
