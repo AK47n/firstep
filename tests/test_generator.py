@@ -12,6 +12,7 @@ import pytest
 from contest_generator.generator import (
     FencedMainCError,
     GENERATION_GATES,
+    GateContext,
     GeneratorError,
     GenerationGate,
     MacroRedefinitionError,
@@ -944,8 +945,8 @@ def test_unresolved_include_rejects_cross_platform_toolchain_header_on_mspm0(tmp
 
 
 def test_generation_gate_table_complete_and_ordered():
-    """门禁装配表钉死：6 键有序完整（顺序有语义——file_path_conflicts 依赖
-    module_files 先报缺平台条目），增删 / 换序即红。"""
+    """门禁装配表钉死：8 键有序完整（顺序有语义——file_path_conflicts 依赖
+    module_files 先报缺平台条目；工单 02 新两条收尾），增删 / 换序即红。"""
     assert [g.key for g in GENERATION_GATES] == [
         "module_files",
         "file_path_conflicts",
@@ -953,6 +954,8 @@ def test_generation_gate_table_complete_and_ordered():
         "module_self_include",
         "unresolved_includes",
         "macro_conflicts",
+        "pin_bindings",
+        "no_pin_literals_in_main",
     ]
 
 
@@ -966,12 +969,12 @@ def test_run_generation_gates_invokes_all_in_order_and_stops_on_failure(
     calls: list[tuple[str, object]] = []
 
     def record(label: str):
-        def check(corpus, manifests, platform):
-            calls.append((label, (corpus, manifests, platform)))
+        def check(corpus, manifests, platform, context):
+            calls.append((label, (corpus, manifests, platform, context)))
 
         return check
 
-    def boom(corpus, manifests, platform):
+    def boom(corpus, manifests, platform, context):
         calls.append(("boom", None))
         raise GeneratorError("装配表门禁炸了")
 
@@ -982,12 +985,13 @@ def test_run_generation_gates_invokes_all_in_order_and_stops_on_failure(
         GenerationGate("never", record("never")),  # 首个失败即停，不应被调
     )
     monkeypatch.setattr("contest_generator.generator.GENERATION_GATES", fake_gates)
+    context = GateContext()
 
     with pytest.raises(GeneratorError, match="装配表门禁炸了"):
-        run_generation_gates(corpus, manifests, platform)
+        run_generation_gates(corpus, manifests, platform, context)
 
     assert [label for label, _ in calls] == ["first", "boom"]
-    assert calls[0][1] == (corpus, manifests, platform)  # 参数原样透传
+    assert calls[0][1] == (corpus, manifests, platform, context)  # 参数原样透传
 
 
 def test_generate_module_without_platform_version_fails(

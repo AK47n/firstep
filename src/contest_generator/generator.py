@@ -13,11 +13,13 @@ main.c 落位（落位前静态自检：六道门禁全貌在 GENERATION_GATES �
 
 from __future__ import annotations
 
+import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
+from .boards import Board, board_for_platform
 from .compile_runner import CCS_NOT_FOUND_HINT, CcsTools
 from .library import list_modules
 from .llm import LLMError
@@ -30,6 +32,8 @@ from .patchers import (
     external_headers,
     include_search_dirs,
 )
+from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
+from .pinwriter import apply_pin_bindings
 from .platforms import PLATFORM_MSPM0
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
@@ -110,6 +114,10 @@ class DuplicateFilePathError(GeneratorError):
     链接期冲突工程（UV4 L6200E multiply defined 判例）。"""
 
 
+class PinLiteralInMainError(GeneratorError):
+    """main.c 内联了引脚字面量（注释剥离后判定），拒绝产出换板即错的骨架。"""
+
+
 # 工程树外由 C 标准库提供的头（引号形式同样由编译器按库路径解析；两平台
 # 同名同集，平台无关，归门禁）。工具链外部头（STM32F1xx DFP 提供、CCS
 # SysConfig 构建时生成）是平台事实，在 keil.py / ccs.py 各自声明、经
@@ -123,6 +131,16 @@ _LIBC_HEADERS = frozenset(
         "wchar.h", "wctype.h", "complex.h", "fenv.h", "tgmath.h", "iso646.h",
         "stdatomic.h", "threads.h", "uchar.h",
     }
+)
+
+# 引脚字面量形态（骨架门禁 _check_no_pin_literals_in_main 用）：PAx/PBx/
+# PCx/PDx… + 库级字面量 Pin_N / GPIO_<口> / Keil 旧式 GPIO_PIN_N。前缀允许
+# 字母数字之外的字符（_ 也算）——EXTI_PA2 / GPIO_Pin_13 里的 PA2 / Pin_13
+# 前缀是 _，\b 会漏；尾 \b 挡宏名后缀（PA12_PORT 里的 PA12 后是 _ 不算）。
+# 注释剥离后判定，注释字样不误伤（历史产物注释里出现过 PA11 字样——spec
+# 关键事实）。
+_PIN_LITERAL_RE = re.compile(
+    r"(?:^|[^A-Za-z0-9])(?:P[A-H]\d{1,2}|Pin_\d+|GPIO_[A-H]|GPIO_PIN_\d+)\b"
 )
 
 
@@ -390,6 +408,7 @@ def generate_project(
     masters_dir: Path,
     registry: PatcherRegistry | None = None,
     ccs_tools: CcsTools | None = None,
+    bindings: Mapping[str, str] | None = None,
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -417,6 +436,7 @@ def generate_project(
         main_c_content=main_c_content,
         registry=registry,
         ccs_tools=ccs_tools,
+        bindings=bindings,
     )
     return describe_generation(
         result_dir, resolved.manifests, platform, include_dirs, build_hint
@@ -630,12 +650,21 @@ def generate(
     main_c_content: str,
     registry: PatcherRegistry | None = None,
     ccs_tools: CcsTools | None = None,
+    bindings: Mapping[str, str] | None = None,
 ) -> tuple[Path, tuple[str, ...], str]:
     """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径,
     build_hint）。
 
     include 目录 = _copy_module_files 实际复制出的目录（摘要消费同一来源，
     不再二次推导——见 describe_generation）。
+
+    bindings（工单 pin-board-config/02）：可选板级引脚绑定载荷
+    `{"<slug>.<role_id>": "<PIN>"}`——缺省 / 空 = 全默认（旧行为逐字节）。
+    带绑定时：板定义 + resolve_bindings 预校验（PinBindingError → 400，
+    在创建输出目录之前发生；pin_bindings 门禁以原始载荷再校验一遍，同一
+    纯函数两处调用是刻意的——门禁是唯一校验出口，generate 拿解析结果喂
+    写侧），copytree 后 apply_pin_bindings 覆写 pin_config.h / 改写 syscfg
+    （文本无变化不落盘，缺省路径完全不进写侧）。
 
     mspm0 构建脚本（工单 mspm0-build-makefiles/01）：产物完整后（patcher 之后）
     从复制产物推导模块源集（过滤 .c，子目录 = rel 父目录——manifest 单源，
@@ -652,10 +681,23 @@ def generate(
     if output_dir.exists() and any(output_dir.iterdir()):
         raise OutputDirNotEmptyError(f"输出目录已存在且非空，拒绝覆盖：{output_dir}")
 
+    # 绑定预解析（工单 02）：板定义 + 载荷校验都在创建输出目录之前；解析
+    # 结果喂写侧（门禁对原始载荷独立再校验——见 docstring）。
+    board: Board | None = None
+    resolved_bindings: tuple[ResolvedBinding, ...] = ()
+    if bindings:
+        board = board_for_platform(platform)  # 板数据缺失 = BoardError 500（白名单）
+        resolved_bindings = resolve_bindings(manifests, platform, board, bindings)
+
     corpus = build_module_corpus(
         manifests, platform, module_library_dir, master_project_dir, main_c_content
     )
-    run_generation_gates(corpus, manifests, platform)
+    run_generation_gates(
+        corpus,
+        manifests,
+        platform,
+        GateContext(bindings=bindings or {}, board=board),
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -674,6 +716,10 @@ def generate(
         if not main_c_content.endswith("\n"):
             main_c_content += "\n"  # 尾部换行幂等兜底（LLM 输出常漏，Keil 报 #1-D）
         (output_dir / "main.c").write_text(main_c_content, encoding="utf-8")
+
+        # copytree 后按绑定覆写板级引脚配置（工单 02 写侧；缺省路径不进写侧）
+        if resolved_bindings:
+            apply_pin_bindings(output_dir, platform, resolved_bindings)
 
         patcher.patch(output_dir, copied_files, include_dirs)
 
@@ -953,13 +999,74 @@ def _check_file_path_conflicts(
         )
 
 
+def _check_pin_bindings(
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: "GateContext",
+) -> None:
+    """绑定载荷校验（工单 02）：键格式 / 未知角色 / 未知引脚 / 能力 / mspm0
+    槽位冲突——全部在创建输出目录之前发生，非法即 PinBindingError 400 中文。
+
+    空载荷（bindings 缺省）直过 = 全默认；resolve_bindings 是校验唯一实现
+    （generate 预解析与写侧同吃）。重复绑定不拦（同引脚多角色共享合法）。
+    """
+    if not context.bindings:
+        return
+    if context.board is None:
+        raise PinBindingError(
+            "绑定校验缺少板定义（装配层未传入）——请检查 boards 数据或生成入口"
+        )
+    resolve_bindings(manifests, platform, context.board, context.bindings)
+
+
+def _check_no_pin_literals_in_main(
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: "GateContext",
+) -> None:
+    """骨架不内联引脚（工单 02）：clex 注释剥离后 main.c 不得含引脚字面量
+    （PAx/PBx/PCx/PDx…/GPIO_Pin_N）——守住"骨架只调模块接口，引脚归接线
+    单源（pin_config.h / mspm0.syscfg）"的现状性质，换板才不用重写骨架。
+
+    历史产物注释里出现过 PA11 字样（spec 关键事实），必须注释剥离后判定才
+    不误伤；字符串字面量同样被 clex 剥掉（printf 里提到引脚名无害）。
+    """
+    stripped = strip_comments(corpus.main_c)
+    hits = sorted(set(_PIN_LITERAL_RE.findall(stripped)))
+    if hits:
+        raise PinLiteralInMainError(
+            "main.c 不得内联引脚字面量（引脚归接线单源 pin_config.h / "
+            "mspm0.syscfg，骨架只调模块接口宏）："
+            + "、".join(hits)
+            + " —— 请改用模块接口宏（如 GRAY_D1_PIN / DC_MOTOR_AA_PORT），"
+            "或让骨架阶段自检改写"
+        )
+
+
 @dataclass(frozen=True)
 class GenerationGate:
     """一道生成门禁的装配描述：key（表内唯一，测试钉死顺序）+ check（小型
     闭包选择该门的自然输入——谓词函数签名与实现零改动，表只做输入选择）。"""
 
     key: str
-    check: Callable[[ModuleCorpus, Sequence[ModuleManifest], str], None]
+    check: Callable[
+        [ModuleCorpus, Sequence[ModuleManifest], str, "GateContext"], None
+    ]
+
+
+@dataclass(frozen=True)
+class GateContext:
+    """门禁的请求级输入（工单 02）：板定义 + 绑定载荷——pin_bindings /
+    no_pin_literals_in_main 两条新门禁用，存量门禁忽略。
+
+    缺省空上下文 = 无绑定（generate_check 产物复核与存量测试同此形态，
+    两条新门禁空转直过）。board 只随 bindings 传入（缺省路径不加载板数据）。
+    """
+
+    bindings: Mapping[str, str] = field(default_factory=dict)
+    board: Board | None = None
 
 
 # 门禁表。顺序即 generate 的校验顺序（现状调用顺序，结构测试钉死）；顺序有
@@ -967,46 +1074,70 @@ class GenerationGate:
 # 必须先跑 module_files。新增门禁 = 表加一条 + 谓词（照 categories.
 # RULE_CATEGORIES 先例）——顺序 / 输入依赖 / 门禁全貌只此一处可见。5 道吃
 # corpus（纯谓词，内存直构可测）；file_path_conflicts 吃 manifests +
-# platform（manifest 声明，不读盘）。
+# platform（manifest 声明，不读盘）；工单 02 新两条吃 context（bindings +
+# board——绑定校验 / 骨架引脚字面量）。签名统一 4 参，存量谓词忽略第 4 参。
 GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "module_files",
-        lambda corpus, manifests, platform: _check_module_files(corpus),
+        lambda corpus, manifests, platform, context: _check_module_files(corpus),
     ),
     GenerationGate(
         "file_path_conflicts",
-        lambda corpus, manifests, platform: _check_file_path_conflicts(
+        lambda corpus, manifests, platform, context: _check_file_path_conflicts(
             manifests, platform
         ),
     ),
     GenerationGate(
         "main_calls",
-        lambda corpus, manifests, platform: _check_main_calls(corpus),
+        lambda corpus, manifests, platform, context: _check_main_calls(corpus),
     ),
     GenerationGate(
         "module_self_include",
-        lambda corpus, manifests, platform: _check_module_self_include(corpus),
+        lambda corpus, manifests, platform, context: _check_module_self_include(
+            corpus
+        ),
     ),
     GenerationGate(
         "unresolved_includes",
-        lambda corpus, manifests, platform: _check_unresolved_includes(corpus),
+        lambda corpus, manifests, platform, context: _check_unresolved_includes(
+            corpus
+        ),
     ),
     GenerationGate(
         "macro_conflicts",
-        lambda corpus, manifests, platform: _check_macro_conflicts(corpus),
+        lambda corpus, manifests, platform, context: _check_macro_conflicts(
+            corpus
+        ),
+    ),
+    GenerationGate(
+        "pin_bindings",
+        lambda corpus, manifests, platform, context: _check_pin_bindings(
+            corpus, manifests, platform, context
+        ),
+    ),
+    GenerationGate(
+        "no_pin_literals_in_main",
+        lambda corpus, manifests, platform, context: _check_no_pin_literals_in_main(
+            corpus, manifests, platform, context
+        ),
     ),
 )
 
 
 def run_generation_gates(
-    corpus: ModuleCorpus, manifests: Sequence[ModuleManifest], platform: str
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: GateContext | None = None,
 ) -> None:
-    """按表序跑全部生成门禁（装配唯一出处）：首个失败即抛，不产出残缺工程。
+    """按表序跑全部生成门禁（装配唯一出口）：首个失败即抛，不产出残缺工程。
 
-    generate 不再自写门禁循环；新增 / 重排门禁只改表。
+    generate 不再自写门禁循环；新增 / 重排门禁只改表。context 缺省 = 空
+    （无绑定形态，generate_check 产物复核 / 存量测试同此）。
     """
+    ctx = context or GateContext()
     for gate in GENERATION_GATES:
-        gate.check(corpus, manifests, platform)
+        gate.check(corpus, manifests, platform, ctx)
 
 
 def _copy_module_files(

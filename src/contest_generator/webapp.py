@@ -685,12 +685,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         历史赛题入口：topic_id 给定时装配点（resolve_topic_context）校验编号
         查库——查无此条明确报错（不猜测编造）；模块集 = 用户选择原样展开
-        （工单 module-universalization/07 起不再自动并入"题专用模块"）。"""
+        （工单 module-universalization/07 起不再自动并入"题专用模块"）。
+
+        bindings（工单 pin-board-config/02）：可选板级引脚绑定载荷
+        {"<slug>.<role_id>": "<PIN>"}，缺省 = 全默认（向后兼容，旧请求行为
+        逐字节不变）。形状校验归域层 resolve_bindings（PinBindingError → 400
+        中文），路由只透传。"""
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
         output_dir = Path(_require_str(payload, "output_dir"))
         topic_id = _optional_str(payload, "topic_id")
+        bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
         config = _require_config(context)
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
@@ -713,6 +719,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             module_library_dir=config.module_library_dir,
             masters_dir=config.masters_dir,
             ccs_tools=ccs_tools,
+            bindings=bindings,
         )
         return _generation_result(summary)
 
