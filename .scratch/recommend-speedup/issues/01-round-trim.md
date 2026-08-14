@@ -6,7 +6,7 @@
 - **C 收敛提前停（修订提示词）**：轮间修订从"自检修订、输出完整新一层"改为核验式，让"两轮一致即停"真正生效，不再拖到 4 轮封顶。
 - **D 请求体预算保证（bug 修复）**：`REFERENCE_FULLTEXT_CAP = 60000` 字符 × UTF-8 ≈180KB 单段就能撑爆 `MAX_REQUEST_BYTES = 128KB`——2026-08-13 真机实测 2021F 推荐 select 调用 192486 字节被预检拦死（模型点名大参考文件时必现，非偶发）。全文截断上限收到预算保证值（≤35000 字符）+ 澄清历史段补截断。
 
-**Status:** A/B/C resolved（PR #62，验收全勾，真机数据入 Comments）；D 请求体预算保证 resolved（2026-08-14，验收全勾，真机数据入 Comments）
+**Status:** A/B/C resolved（PR #62，验收全勾，真机数据入 Comments）；D 请求体预算保证 resolved（2026-08-14，PR #66，验收全勾，真机数据入 Comments）
 
 **Blocked by:** 无。与在跑的 gen-check-fix-loop/01 重跑零文件重叠（对方只动 `.scratch/real-run/generate_check.py` + `tests/test_generate_check_contract.py`），可并行独立 worktree。
 
