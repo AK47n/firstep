@@ -144,18 +144,20 @@ def uv4_build(out_dir: Path) -> tuple[bool | None, str, str]:
     collect_build_log 同源——曾自带 `-j0 -b` 增量命令 + `(\\d+) Error\\(s\\)`
     正则，增量日志无编译行 = 假绿风险（autocompile-loop 决策记录 4），且
     判读域已单源在 compile_runner / fix_errors，禁止调用方另写正则）。
-    返回 (是否通过, 摘要, 编译输出原文)——原文供修复循环回喂 /api/fix-errors
-    （与 web /api/compile done 的 error_text 同款"原样采集"契约，工单
-    gen-check-fix-loop/01）；摘要含错误/警告数（工单 fix-loop-warnings/01，
-    0 错 N 警时警数可见）；UV4 不可用返回 (None, 原因, "")。
+    返回 (是否通过, 摘要, 编译输出原文, 是否超时)——原文供修复循环回喂
+    /api/fix-errors（与 web /api/compile done 的 error_text 同款"原样采集"
+    契约，工单 gen-check-fix-loop/01）；摘要含错误/警告数（工单
+    fix-loop-warnings/01，0 错 N 警时警数可见）；超时标记供修复循环停条件
+    （工单 cli-fix-loop-parity/01：超时 = 终端状态，半截输出不进 error_text）；
+    UV4 不可用返回 (None, 原因, "", False)。
     """
     uv4 = find_uv4(os.environ.get("KEIL_UV4") or "")
     if uv4 is None:
-        return None, "未找到 UV4，跳过真机编译", ""
+        return None, "未找到 UV4，跳过真机编译", "", False
     try:
         build = collect_build_log("stm32", out_dir, uv4=uv4)
     except CompileRunnerError as exc:
-        return False, str(exc), ""
+        return False, str(exc), "", False
     summary = summarize_compile_output(
         build.run.output, parse_compile_errors(build.run.output)
     )
@@ -165,23 +167,24 @@ def uv4_build(out_dir: Path) -> tuple[bool | None, str, str]:
     return passed, (
         f"UV4 exit={build.run.exit_code} {tail}"
         f"（{summary['errors']} 错误 {summary['warnings']} 警）"
-    ), build.run.output
+    ), build.run.output, build.run.timed_out
 
 
 def gmake_build(out_dir: Path) -> tuple[bool | None, str, str]:
     """真机编译：gmake 全量重建（mspm0/CCS 线，工单 mspm0-build-makefiles/01——
     Debug/makefile 集由生成器自动产出，CCS 命令行构建不再依赖 scratch 后处理，
     与 uv4_build 同源走生产 collect_build_log）。返回 (是否通过, 摘要, 编译
-    输出原文)——原文供修复循环回喂（与 uv4_build 同款契约）；gmake 不可用返回
-    (None, 原因, "")。摘要带警数与首编耗时（警数工单 fix-loop-warnings/01，
-    真机计时观察决策记录 7）。"""
+    输出原文, 是否超时)——原文供修复循环回喂（与 uv4_build 同款契约）；超时
+    标记供修复循环停条件（工单 cli-fix-loop-parity/01）；gmake 不可用返回
+    (None, 原因, "", False)。摘要带警数与首编耗时（警数工单
+    fix-loop-warnings/01，真机计时观察决策记录 7）。"""
     make = find_make(os.environ.get("GMAKE") or "")
     if make is None:
-        return None, "未找到 gmake，跳过真机编译", ""
+        return None, "未找到 gmake，跳过真机编译", "", False
     try:
         build = collect_build_log("mspm0", out_dir, make=make)
     except CompileRunnerError as exc:
-        return False, str(exc), ""
+        return False, str(exc), "", False
     summary = summarize_compile_output(
         build.run.output, parse_compile_errors(build.run.output)
     )
@@ -192,7 +195,7 @@ def gmake_build(out_dir: Path) -> tuple[bool | None, str, str]:
         f"gmake exit={build.run.exit_code} {tail}"
         f"（{summary['errors']} 错误 {summary['warnings']} 警，"
         f"{build.run.duration:.1f}s）"
-    ), build.run.output
+    ), build.run.output, build.run.timed_out
 
 
 def post(url: str, payload: dict) -> dict:
@@ -448,10 +451,12 @@ def fix_stream(payload: dict) -> dict:
 # docstring，本函数是其 CLI 侧对偶；前端 index.html:1712 恒发全部六字段）。
 # 字段规则：error_text（必填，编译报错全文）+ output_dir（必填，生成结果
 # 目录）+ problem_text / platform / slugs / main_c（可选上下文，check_topic
-# 内已有全部变量，恒发；缺省不放）。不带 previous_fixes（fix-loop-progress/01
-# 的请求体字段，服务端可选向后兼容，本工单循环不依赖停滞回喂）。改契约
-# 字段须同步三处：webapp 校验 + 前端 + 本函数，
-# tests/test_generate_check_contract.py 强制字段集一致。
+# 内已有全部变量，恒发；缺省不放）。previous_fixes（fix-loop-progress/01 的
+# 请求体字段，服务端可选向后兼容）：上一轮 done 的 fixes 数组，非空才发——
+# 第 2 轮起回喂，抑制「重复输出与上一轮一模一样的建议」（FIX_SYSTEM_PROMPT
+# 约束 6），与前端 index.html:1724 previousDone.fixes 同语义；缺省 None 不进
+# payload（缺省两必填键语义不动）。改契约字段须同步三处：webapp 校验 +
+# 前端 + 本函数，tests/test_generate_check_contract.py 强制字段集一致。
 def build_fix_payload(
     output_dir: Path | str,
     error_text: str,
@@ -460,6 +465,7 @@ def build_fix_payload(
     platform: str = "",
     slugs: list[str] | tuple[str, ...] = (),
     main_c: str = "",
+    previous_fixes: list[dict] | tuple[dict, ...] | None = None,
 ) -> dict:
     payload: dict = {"output_dir": str(output_dir), "error_text": error_text}
     if problem_text:
@@ -470,6 +476,8 @@ def build_fix_payload(
         payload["slugs"] = list(slugs)
     if main_c:
         payload["main_c"] = main_c
+    if previous_fixes:
+        payload["previous_fixes"] = list(previous_fixes)
     return payload
 
 
@@ -487,9 +495,13 @@ def run_fix_loop(
     停条件 = 0 错 0 警，工单 fix-loop-warnings/01：仅 passed 即返的旧形态
     0 错 N 警即停已废；第 3 轮后如实报告剩余错误/警告数）。停滞检测与前端
     同步（fix-loop-progress/01 决策 1）：0 applied 即停——告警轮无建议不再
-    空转 3 轮。返回是否通过。
+    空转 3 轮。第 2 轮起回喂上一轮 done 的 fixes 作 previous_fixes（工单
+    cli-fix-loop-parity/01，对齐前端 previousDone.fixes）；重编译超时 = 终端
+    状态即停（同工单，对齐前端超时停：半截输出不进下一轮 error_text）。
+    返回是否通过。
     """
     build_fn = uv4_build if platform == "stm32" else gmake_build
+    previous_fixes: list[dict] | None = None
     for round_no in range(1, FIX_MAX_ROUNDS + 1):
         # 轮次文案错误/警告数：判读单源 summarize_compile_output（工单
         # compile-verdict-align/01 约定，不另写正则）
@@ -509,6 +521,7 @@ def run_fix_loop(
                 platform=platform,
                 slugs=slugs,
                 main_c=main_c,
+                previous_fixes=previous_fixes,
             )
         )
         if fix["event"] == "error":
@@ -517,6 +530,9 @@ def run_fix_loop(
             return False
         done = fix.get("data") or {}
         fixes = list(done.get("fixes", []))
+        # 下一轮回喂上一轮 done 的 fixes（工单 cli-fix-loop-parity/01，对齐
+        # 前端 previousDone.fixes；空列表 → 请求体不带该字段）
+        previous_fixes = list(fixes)
         applied = [f for f in fixes if f.get("status") == "applied"]
         skipped = [f for f in fixes if f.get("status") != "applied"]
         print(f"  应用 {len(applied)} 处 / 跳过 {len(skipped)} 处")
@@ -538,7 +554,16 @@ def run_fix_loop(
             return False
         # 重编译验证：0 错 0 警出活（fix-loop-warnings/01）；仍有警下一轮
         # 告警轮（喂最新编译输出）；仍错下一轮喂最新报错（原样采集原文）
-        passed, build_summary, next_errors = build_fn(out_dir)
+        passed, build_summary, next_errors, timed_out = build_fn(out_dir)
+        if timed_out:
+            # 编译超时 = 终端状态（工单 cli-fix-loop-parity/01，对齐前端
+            # index.html 超时停）：半截输出不作 error_text 喂下一轮——不停进
+            # 下一轮 = 白烧一次 LLM 调用 + 误报轮上限文案
+            print(
+                f"  第 {round_no} 轮重编译超时，已停止循环——"
+                f"可修改工程后重新运行本脚本"
+            )
+            return False
         next_summary = summarize_compile_output(
             next_errors, parse_compile_errors(next_errors)
         )
@@ -768,7 +793,9 @@ def check_topic(
     # -warnings/01，与 web 修复中心同语义：编译报错/告警 → /api/fix-errors →
     # 重编译验证 ≤3 轮，停条件 0 错 0 警，第 3 轮后如实报告剩余错误/警告）
     build_fn = uv4_build if platform == "stm32" else gmake_build
-    passed, summary, raw_output = build_fn(out_dir)
+    # 首编超时沿用旧路径（compile_passed(None)=False → 进修复循环；循环内
+    # 重编译超时即停，工单 cli-fix-loop-parity/01 的停条件只在循环内）
+    passed, summary, raw_output, _timed_out = build_fn(out_dir)
     if passed is None:
         print(f"  [真机] {summary}")
     elif passed:
