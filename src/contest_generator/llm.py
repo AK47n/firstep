@@ -28,6 +28,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
 from .budget import (
     FIX_PREVIOUS_FIXES_CAP,
     REFERENCE_FULLTEXT_BYTES,
+    SKELETON_REFERENCE_TOTAL_BYTES,
     fit_wire_budget,
     wire_size,
 )
@@ -347,19 +348,22 @@ def _truncate_content(content: str) -> str:
     return truncate_content(content, EMBEDDED_CONTENT_CAP)
 
 
-def _fit_fulltext_wire(fulltext: str) -> str:
+def _fit_fulltext_wire(
+    fulltext: str, budget: int = REFERENCE_FULLTEXT_BYTES
+) -> str:
     """全文注入的 wire 字节预算截断（工单 budget-wire-unification/01）：弃用
     字符 cap（REFERENCE_FULLTEXT_CAP「×3 字节」估算假口径——真实线
     json.dumps ensure_ascii=True 中文实发 6 字节/字符，全中文最坏形态必炸
     128KB 网关），改 wire 字节预算取最长前缀（budget.fit_wire_budget）+ 截头
     标注（TRUNCATION_NOTICE 文案沿用）——标注自身的 wire 字节计入预算（对齐
     fix 侧 read_file_contexts 既有做法：标注非免费，推导余量已含）。预算内
-    原样返回（逐文件截断标注归 read_fulltext，此处零增删）。
+    原样返回（逐文件截断标注归 read_fulltext，此处零增删）。budget 参数供
+    骨架参考段等多篇注入按篇数均分（skeleton-smoke-refs/02）。
     """
-    fitted = fit_wire_budget(fulltext, REFERENCE_FULLTEXT_BYTES)
+    fitted = fit_wire_budget(fulltext, budget)
     if fitted != fulltext:
         fitted += (
-            f"\n……（内容过长，已截断：仅展示前 {REFERENCE_FULLTEXT_BYTES} "
+            f"\n……（内容过长，已截断：仅展示前 {budget} "
             f"wire 字节，原文共 {len(fulltext)} 字符；{TRUNCATION_NOTICE}）……\n"
         )
     return fitted
@@ -1997,10 +2001,13 @@ def _skeleton_user_prompt(
         module_interfaces,
     )
     if reference_fulltexts:
+        per_ref_budget = max(
+            0, SKELETON_REFERENCE_TOTAL_BYTES // len(reference_fulltexts)
+        )
         ref_parts = ["参考资料（可作实现草稿，不要整段照抄）："]
         for ref_id, fulltext in reference_fulltexts.items():
             ref_parts.append(
-                f"### 参考资料 {ref_id}\n{_fit_fulltext_wire(fulltext)}"
+                f"### 参考资料 {ref_id}\n{_fit_fulltext_wire(fulltext, per_ref_budget)}"
             )
         prompt += "\n\n" + "\n\n".join(ref_parts)
         prompt += (

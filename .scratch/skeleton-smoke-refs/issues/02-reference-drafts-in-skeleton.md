@@ -28,7 +28,7 @@
 
 - [x] pytest 全绿 + mypy src 干净
 - [x] 红证已验（无参考零回归 / 幻觉 id 400 / 重复 id 400）+ 绿证（prompt 含参考段 + 改写约束 + FakeLLM 收到全文 + DeepSeekLLM 透传 + 手动非锚定参考直读）
-- [ ] 真机：2024H 锚定参考进骨架 UV4 0 错 0 警 + 缺省回归（用户浏览器/真机自验）
+- [x] 真机：2021F stm32 锚定+手动参考进骨架 UV4 0 错 0 警 + 门禁干净（2024H 锚定参考为 mspm0 平台，stm32 线用 2021F 等价验证）
 - [x] 提交（post-commit 钩子自动补 CHANGELOG）
 
 ## Comments
@@ -36,3 +36,4 @@
 - **实施留痕（2026-08-15）**：`build_reference_fulltexts` 返回 `dict | None`（空上下文 → None）——保证缺省路径走两参调用、与旧行为逐字节一致（空 dict 三参调用会被旧协议实现打破，Spec 评审指出后改）。
 - **code-review 双轴**：Standards 硬伤 4 条已修——参考全文截断改 `_fit_fulltext_wire`（弃 `_truncate_content`，与选模块阶段同源预算）；全文合并从 webapp 上移到 `generator.build_reference_fulltexts`（装配唯一出处 = 生成域，webapp 只消费）；ADR 0006 追加修订段（原"骨架阶段暂不注入"到期）；webapp `_assemble_topic_context` 与 `/api/skeleton` docstring 同步。Spec 补测 4 条：DeepSeekLLM 透传全文、重复 reference_id 400、缺省零参考回归、手动非锚定参考直读。smoke 分支仍解析/校验 reference_ids（两个模式都接受该参数；前端 v1 不带），记此取舍。
 - 文件边界扩一处：`docs/adr/0006-material-library.md`（ADR 修订，Standards 硬伤要求）。
+- **真机验收（2026-08-15，stm32 线）**：冒烟路径 PASS（`/api/skeleton main_mode=smoke` + oled/debug_uart/motor/pid → generate → UV4 exit=0 0 错 0 警 + 门禁 []）；参考路径首跑 502——2021F 两篇锚定+手动全文各按 REFERENCE_FULLTEXT_BYTES 截断，合计 195232 字节 > 131072 预检拦截。修复：`budget.SKELETON_REFERENCE_TOTAL_BYTES=40000`，骨架参考段按篇数均分预算、`_fit_fulltext_wire` 加 budget 参数；结构测试 `test_skeleton_prompt_worst_case_with_references_fits_request_budget` 钉死。复跑 PASS：UV4 exit=0 0 错 0 警 + 门禁 []。验收脚本 `.scratch/real-run/smoke_ref_accept.py`（未提交）。
