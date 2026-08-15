@@ -1427,8 +1427,9 @@ function pinRoles() {
   return roles;
 }
 
-// ---- 能力判定（镜像后端 pin_bindings.resolve_bindings 口径：stm32 pwm
-// 类型级 + 其余 strict-all） ----
+// ---- 能力判定（镜像后端 pin_bindings.resolve_bindings 口径：stm32 pwm /
+// enc / uart 类型级 + mspm0 uart / i2c 类型级 + mspm0 pwm 同族内类型级 +
+// 其余 strict-all） ----
 function pinSupports(pin, type, instance) {
   const token = instance ? type + ":" + instance : type;
   return (pin.capabilities || []).includes(token);
@@ -1442,14 +1443,56 @@ function roleInstances(decl) {
   return (def.capabilities || []).filter((t) => t.startsWith(prefix)).map((t) => t.slice(prefix.length));
 }
 
+function pinIsTypeLevel(decl) {
+  if (chosenPlatform === "stm32") {
+    return decl.type === "pwm" || decl.type === "enc" ||
+      decl.type === "uart_tx" || decl.type === "uart_rx";
+  }
+  if (chosenPlatform === "mspm0") {
+    return decl.type === "uart_tx" || decl.type === "uart_rx" ||
+      decl.type === "i2c_scl" || decl.type === "i2c_sda";
+  }
+  return false;
+}
+
+function pwmRoleChannel(decl) {
+  const m = decl.id.match(/_C(\d+)$/);
+  return m ? "C" + m[1] : null;
+}
+
+function pwmFamily(inst) {
+  const m = inst.match(/^[A-Za-z]+/);
+  return m ? m[0] : inst;
+}
+
+function mspm0PwmDefaultFamilies(decl) {
+  // 后端同款：默认引脚上通道匹配的 pwm 实例族集合
+  const def = pinIndex()[decl.default];
+  if (!def) return new Set();
+  const channel = pwmRoleChannel(decl);
+  const insts = (def.capabilities || [])
+    .filter((t) => t.startsWith("pwm:"))
+    .map((t) => t.slice(4));
+  const filtered = channel ? insts.filter((i) => i.endsWith("_" + channel)) : insts;
+  return new Set(filtered.map(pwmFamily));
+}
+
+function mspm0PwmAllowed(pin, decl) {
+  const families = mspm0PwmDefaultFamilies(decl);
+  const channel = pwmRoleChannel(decl);
+  return (pin.capabilities || [])
+    .filter((t) => t.startsWith("pwm:"))
+    .map((t) => t.slice(4))
+    .filter((i) => families.has(pwmFamily(i)) && (!channel || i.endsWith("_" + channel)));
+}
+
 function pinCanHost(pin, decl) {
   if (!pin || pin.kind !== "io") return false;
-  // stm32 pwm / enc / uart = 类型级（ADR 0011 / ADR 0012，镜像后端）：任意
-  // pwm:* / enc:* / uart_tx:* / uart_rx:* token 即 canHost，实例随绑定引脚；
-  // 其余平台/类型 strict-all（uart TX/RX 成对同实例由后端 400 拦）
-  if (chosenPlatform === "stm32" && (decl.type === "pwm" || decl.type === "enc" ||
-      decl.type === "uart_tx" || decl.type === "uart_rx")) {
-    return pinListsType(pin, decl.type);
+  // 类型级（镜像后端）：任意对应类型 token 即 canHost，实例随绑定引脚；
+  // mspm0 pwm = 同族内类型级（跨族灰显，04 才放开）
+  if (pinIsTypeLevel(decl)) return pinListsType(pin, decl.type);
+  if (chosenPlatform === "mspm0" && decl.type === "pwm") {
+    return mspm0PwmAllowed(pin, decl).length > 0;
   }
   const insts = roleInstances(decl);
   if (insts.length) return insts.every((i) => pinSupports(pin, decl.type, i));
@@ -1463,10 +1506,11 @@ function pinListsType(pin, type) {
 }
 
 function pinMissReason(pin, decl) {
-  // stm32 pwm / enc / uart 类型级：灰显原因 = 无对应 token（与后端类型级报错文案同语义）
-  if (chosenPlatform === "stm32" && (decl.type === "pwm" || decl.type === "enc" ||
-      decl.type === "uart_tx" || decl.type === "uart_rx")) {
-    return "该脚不支持角色类型 " + decl.type;
+  // 类型级：灰显原因 = 无对应 token（与后端类型级报错文案同语义）
+  if (pinIsTypeLevel(decl)) return "该脚不支持角色类型 " + decl.type;
+  if (chosenPlatform === "mspm0" && decl.type === "pwm") {
+    const families = [...mspm0PwmDefaultFamilies(decl)].sort();
+    return "需要 pwm 实例族 " + families.join("、") + "，此脚无同族匹配（跨族迁移暂未开放）";
   }
   const insts = roleInstances(decl);
   if (insts.length) {

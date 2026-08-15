@@ -16,14 +16,17 @@ boards.pin_capability_instances 推导实例）。校验通过产出 ResolvedBin
   换实例 = _UART/_INST/引脚宏跟随绑定 + USARTx_IRQ_CALLS 重分组——工单
   pin-full-unlock/02，TX/RX 对同实例约束在本模块、实例冲突由生成门禁
   uart_instance_conflicts 拦）。
-- 其余（mspm0 全部类型 + stm32 其余类型）= strict-all：绑定引脚须支持默认
-  引脚的**全部**实例——mspm0 复用标注多实例引脚（motor.PWMAB_C0 默认 PA12
-  有 pwm:TIMG0_C0 + pwm:TIMA0_C3）只有同双实例的引脚才可绑（现状仅 PA12
-  自身 = 锁死）。宁严勿假绿：syscfg 改写器只换 $assign 不改外设
-  （PWMAB.peripheral = TIMG0 不动），绑到只有 TIMA0_C3 的脚（如 PA28）会让
-  SysConfig 路由失败——strict-all 把这类"界面显示兼容但构建必炸"的绑定挡
-  在生成前。单实例类型（uart/i2c）与无实例类型（gpio/enc-mspm0）不受
-  影响。
+- mspm0 uart / i2c = **类型级**（ADR 0012 工单 03）：绑定引脚须有 ≥1 个
+  uart_tx:* / uart_rx:* / i2c_scl:* / i2c_sda:* token，实例随绑定引脚推导
+  喂写侧（syscfg peripheral 字段改写，实例名不动 → 模块代码零改动）；
+  TX/RX 与 SCL/SDA 成对同实例约束在本模块（机制与工单 02 同款），实例
+  冲突由生成门禁 uart_instance_conflicts 拦（平台通用）。
+- mspm0 pwm = **同族内类型级**（ADR 0012 工单 03）：绑定脚 pwm token 实例族
+  == 默认实例族（按角色通道尾 `_C0`/`_C1` 从默认引脚实例推族）→ 合法；
+  跨族仍 400（工单 04 才放开）。
+- 其余（mspm0 gpio / enc / 其余类型 + stm32 其余类型）= strict-all：绑定引脚
+  须支持默认引脚的**全部**实例。mspm0 gpio 组另有同端口门禁（step_motor
+  四脚单端口宏）。宁严勿假绿：无实例类型（gpio/enc-mspm0）只查类型。
 
 政策：
 - 缺省 = 全默认：bindings 缺省或未覆盖的角色按声明默认值生成；必选角色允许
@@ -38,11 +41,12 @@ boards.pin_capability_instances 推导实例）。校验通过产出 ResolvedBin
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Sequence
 
-from .boards import Board, board_pin, pin_capability_instances, pin_supports
+from .boards import Board, BoardPin, board_pin, pin_capability_instances, pin_supports
 from .manifest import ModuleManifest, PinDeclaration
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
@@ -136,25 +140,38 @@ def resolve_bindings(
             raise PinBindingError(
                 f"绑定 {key} 的引脚 {pin} 不存在（不在 {board.name} 排针引脚集内）"
             )
-        # stm32 pwm / enc / uart：类型级（ADR 0011 / ADR 0012）——实例随
-        # **绑定引脚**推导喂渲染器（pwm 换实例 = 宏值变化，库零改动；enc
-        # 换线 = _LINE/_EXTI 宏跟随，motor 条件 handler 自动跟随线号；uart
-        # 换实例 = _UART/_INST/引脚宏跟随绑定，TX/RX 对约束在循环后统一
-        # 查）；无对应 token 的脚仍拒（类型级下限）。其余平台/类型
-        # strict-all：实例 = 默认引脚能力 token 的实例（板外默认如 PB4/PB5
-        # 无默认引脚 → 实例空 → 只查类型）；多实例 = 全部命中（any-of 会
-        # 放行 SysConfig 路由必炸的绑定——工单 02 红证已验）
+        # 类型级（ADR 0011 / ADR 0012 / ADR 0012 Tier A）：stm32 pwm / enc /
+        # uart 与 mspm0 uart / i2c——实例随**绑定引脚**推导喂写侧（stm32
+        # pwm 换实例 = 宏值变化、enc 换线 = _LINE/_EXTI 宏跟随、uart 换实例
+        # = _UART/_INST/引脚宏跟随；mspm0 uart/i2c 换实例 = syscfg
+        # peripheral 字段改写，实例名不动 → 模块代码零改动）；无对应 token
+        # 的脚仍拒（类型级下限）。mspm0 pwm = 同族内类型级（工单 03）：
+        # 绑定脚 pwm token 实例族 == 默认实例族 → 合法，跨族仍 400（04 才
+        # 放开）。其余 strict-all：实例 = 默认引脚能力 token 的实例（板外
+        # 默认如 PB4/PB5 无默认引脚 → 实例空 → 只查类型）；多实例 = 全部
+        # 命中（any-of 会放行 SysConfig 路由必炸的绑定——工单 02 红证已验）
         if platform == PLATFORM_STM32 and declaration.type in (
             "pwm",
             "enc",
             "uart_tx",
             "uart_rx",
         ):
-            instances = pin_capability_instances(bound, declaration.type)
-            if not instances:
-                raise PinBindingError(
-                    f"绑定 {key} 的引脚 {pin} 不支持角色类型 {declaration.type}"
-                )
+            instances = _type_level_instances(
+                bound, declaration.type, key, pin
+            )
+        elif platform == PLATFORM_MSPM0 and declaration.type in (
+            "uart_tx",
+            "uart_rx",
+            "i2c_scl",
+            "i2c_sda",
+        ):
+            instances = _type_level_instances(
+                bound, declaration.type, key, pin
+            )
+        elif platform == PLATFORM_MSPM0 and declaration.type == "pwm":
+            instances = _mspm0_pwm_instances(
+                board, bound, declaration, key, pin
+            )
         else:
             default_bound = board_pin(board, declaration.default)
             instances = (
@@ -187,62 +204,174 @@ def resolve_bindings(
 
     if platform == PLATFORM_MSPM0:
         _check_slot_conflicts(resolved)
-    if platform == PLATFORM_STM32:
-        _check_uart_tx_rx_pairs(board, roles, raw)
+        _check_mspm0_gpio_port_groups(board, roles, raw)
+    if platform in (PLATFORM_STM32, PLATFORM_MSPM0):
+        _check_paired_role_instances(board, roles, raw)
     return tuple(resolved)
 
 
-def _check_uart_tx_rx_pairs(
+def _type_level_instances(
+    bound: BoardPin, role_type: str, key: str, pin: str
+) -> tuple[str, ...]:
+    """类型级角色：绑定引脚须有 ≥1 个对应类型 token，实例随绑定引脚推导。"""
+    instances = pin_capability_instances(bound, role_type)
+    if not instances:
+        raise PinBindingError(
+            f"绑定 {key} 的引脚 {pin} 不支持角色类型 {role_type}"
+        )
+    return instances
+
+
+def _mspm0_pwm_instances(
+    board: Board,
+    bound: BoardPin,
+    declaration: PinDeclaration,
+    key: str,
+    pin: str,
+) -> tuple[str, ...]:
+    """mspm0 pwm 同族内类型级（ADR 0012 Tier A）：默认实例族 = 默认引脚上
+    与角色通道（id 尾 `_C0`/`_C1`）匹配的 pwm 实例的族；绑定脚须有同族 +
+    同通道的 pwm 实例（跨族仍 400——Tier B 工单 04 才放开）。多实例匹配
+    全部随绑定推导喂写侧（写侧优先选与母版 peripheral 现值相同的实例 =
+    最小改动；否则取首个）。"""
+    default_bound = board_pin(board, declaration.default)
+    if default_bound is None:
+        # 板外默认（真库暂无 mspm0 pwm 板外默认）：退类型级
+        return _type_level_instances(bound, "pwm", key, pin)
+    channel = _pwm_role_channel(declaration.id)
+    default_instances = pin_capability_instances(default_bound, "pwm")
+    if channel:
+        default_instances = tuple(
+            i for i in default_instances if i.endswith("_" + channel)
+        )
+    if not default_instances:
+        raise PinBindingError(
+            f"角色 {key} 的默认引脚 {declaration.default} 没有通道"
+            f" {channel or '?'} 的 pwm 实例（母版 / 板数据漂移）"
+        )
+    families = {_pwm_family(i) for i in default_instances}
+    bound_instances = pin_capability_instances(bound, "pwm")
+    allowed = tuple(
+        i
+        for i in bound_instances
+        if _pwm_family(i) in families and (not channel or i.endswith("_" + channel))
+    )
+    if not allowed:
+        raise PinBindingError(
+            f"绑定 {key} 的引脚 {pin} 不能担任该角色：需要 pwm 实例族"
+            f" {'、'.join(sorted(families))}（通道 {channel or '任意'}），"
+            f"此脚 pwm 实例 {'、'.join(bound_instances) or '无'} 无同族匹配"
+            f"（跨族迁移在工单 04 才放开）"
+        )
+    return allowed
+
+
+def _pwm_role_channel(role_id: str) -> str | None:
+    """pwm 角色 id 的通道尾（PWMAB_C0 → C0、DCC_100_PWM2_C0 → C0）。"""
+    match = re.search(r"_C(\d+)$", role_id)
+    return f"C{match.group(1)}" if match else None
+
+
+def _pwm_family(instance: str) -> str:
+    """pwm 实例族（TIMG0_C0 → TIMG、TIMA0_C3 → TIMA）。"""
+    match = re.match(r"^[A-Za-z]+", instance)
+    assert match is not None, f"pwm 实例 {instance!r} 无族前缀（板数据漂移）"
+    return match.group()
+
+
+def _check_paired_role_instances(
     board: Board,
     roles: dict[tuple[str, str], PinDeclaration],
     raw: Mapping[str, str],
 ) -> None:
-    """stm32 UART TX/RX 对同实例约束（ADR 0012 工单 02）：同一角色对（同
-    slug 下 _TX/_RX 同根角色）两脚的有效实例集——绑定脚实例（已过类型级
-    校验）/ 未绑默认引脚实例——交集必须非空。空 = 400 中文"必须同实例，
-    请成对绑定"：单脚换实例必撞另一脚默认实例（换过去 = TX/RX 分属两
-    UART，编译绿运行坏），宁严勿假绿；成对同实例 = 交集推导喂渲染器
-    _UART/_INST 尾形（两脚实例同源）。只声明单脚 / 无实例（防御路径，
-    真库全成对）不查。
+    """成对角色同实例约束（ADR 0012 工单 02/03，平台通用）：UART TX/RX 与
+    I2C SCL/SDA 同一角色对（同 slug 下同根 id）两脚的有效实例集——绑定脚
+    实例（已过类型级校验）/ 未绑默认引脚实例——交集必须非空。空 = 400
+    中文"必须同实例，请成对绑定"：单脚换实例必撞另一脚默认实例（换过去 =
+    TX/RX 或 SCL/SDA 分属两外设，编译绿运行坏），宁严勿假绿；成对同实例 =
+    交集推导喂写侧（两脚实例同源）。只声明单脚 / 无实例（防御路径，真库
+    全成对）不查。
     """
-    pairs: dict[tuple[str, str], list[PinDeclaration]] = {}
-    for (slug, role_id), decl in roles.items():
-        if decl.type not in ("uart_tx", "uart_rx"):
-            continue
-        stem = role_id[:-3] if role_id.endswith(("_TX", "_RX")) else role_id
-        pairs.setdefault((slug, stem), []).append(decl)
+    for type_a, type_b, suffix_a, suffix_b, label_a, label_b in (
+        ("uart_tx", "uart_rx", "_TX", "_RX", "TX", "RX"),
+        ("i2c_scl", "i2c_sda", "_SCL", "_SDA", "SCL", "SDA"),
+    ):
+        pairs: dict[tuple[str, str], dict[str, PinDeclaration]] = {}
+        for (slug, role_id), decl in roles.items():
+            if decl.type == type_a and role_id.endswith(suffix_a):
+                pairs.setdefault((slug, role_id[: -len(suffix_a)]), {})[
+                    type_a
+                ] = decl
+            elif decl.type == type_b and role_id.endswith(suffix_b):
+                pairs.setdefault((slug, role_id[: -len(suffix_b)]), {})[
+                    type_b
+                ] = decl
+        for (slug, _), feet in pairs.items():
+            first = feet.get(type_a)
+            second = feet.get(type_b)
+            if first is None or second is None:
+                continue  # 只声明单脚的角色对不查（真库全成对，防御路径）
+            first_instances = _pair_foot_instances(board, raw, slug, first)
+            second_instances = _pair_foot_instances(board, raw, slug, second)
+            if not first_instances or not second_instances:
+                continue  # 板外默认等无实例：不查（防御路径）
+            if not (first_instances & second_instances):
+                raise PinBindingError(
+                    f"绑定 {slug}.{first.id} / {slug}.{second.id} 的"
+                    f" {label_a}/{label_b} 必须同实例，请成对绑定"
+                    f"（{label_a} 实例 {'、'.join(sorted(first_instances))} ×"
+                    f" {label_b} 实例 {'、'.join(sorted(second_instances))}"
+                    f" 交集为空）"
+                )
 
-    for (slug, _), feet in pairs.items():
-        tx = next(
-            (d for d in feet if d.id.endswith("_TX")), None
-        )
-        rx = next(
-            (d for d in feet if d.id.endswith("_RX")), None
-        )
-        if tx is None or rx is None:
-            continue  # 只声明单脚的 UART 角色不查（真库全成对，防御路径）
-        tx_instances = _uart_foot_instances(board, raw, slug, tx)
-        rx_instances = _uart_foot_instances(board, raw, slug, rx)
-        if not tx_instances or not rx_instances:
-            continue  # 板外默认等无实例：不查（防御路径）
-        if not (tx_instances & rx_instances):
-            raise PinBindingError(
-                f"绑定 {slug}.{tx.id} / {slug}.{rx.id} 的 TX/RX 必须同实例，"
-                f"请成对绑定（TX 实例 {'、'.join(sorted(tx_instances))} ×"
-                f" RX 实例 {'、'.join(sorted(rx_instances))} 交集为空）"
-            )
 
-
-def _uart_foot_instances(
+def _pair_foot_instances(
     board: Board, raw: Mapping[str, str], slug: str, decl: PinDeclaration
 ) -> set[str]:
-    """UART 角色单脚的有效实例集：绑定脚实例（raw 有值）/ 默认引脚实例。"""
+    """成对角色单脚的有效实例集：绑定脚实例（raw 有值）/ 默认引脚实例。"""
     key = f"{slug}.{decl.id}"
     pin = raw.get(key)
     bound = board_pin(board, pin) if pin is not None else board_pin(board, decl.default)
     if bound is None:
         return set()
     return set(pin_capability_instances(bound, decl.type))
+
+
+def _check_mspm0_gpio_port_groups(
+    board: Board,
+    roles: dict[tuple[str, str], PinDeclaration],
+    raw: Mapping[str, str],
+) -> None:
+    """mspm0 gpio 组同端口门禁（ADR 0012 Tier A 工单 03）：同一模块同类型
+    gpio 角色若默认全在同一端口（数据判据 = step_motor 四脚全 GPIOB），则
+    它们吃单端口宏（如 STEP_MOTOR_PORT）——有效引脚（绑定值或默认值）必须
+    同端口，混端口编译绿运行坏，400 生成前拦。默认就混端口的组（DC_MOTOR /
+    HUIDU / 灰度等）走逐脚端口宏，不查。
+    """
+    groups: dict[tuple[str, str], list[PinDeclaration]] = {}
+    for (slug, _), decl in roles.items():
+        if decl.type in ("gpio_out", "gpio_in"):
+            groups.setdefault((slug, decl.type), []).append(decl)
+
+    for (slug, _), decls in groups.items():
+        if len(decls) < 2:
+            continue
+        default_ports = {_pin_port(d.default) for d in decls}
+        if len(default_ports) != 1:
+            continue  # 默认混端口 = 逐脚端口宏，无单端口约束
+        ports = {_pin_port(raw.get(f"{slug}.{d.id}", d.default)) for d in decls}
+        if len(ports) != 1:
+            raise PinBindingError(
+                f"绑定冲突：{slug} 的 {len(decls)} 个 {decls[0].type} 角色"
+                f"（{'、'.join(d.id for d in decls)}）必须绑到同一端口"
+                f"（当前 {'、'.join(sorted(ports))}）——该组角色走单端口宏"
+                f"（如 STEP_MOTOR_PORT），混端口编译绿运行坏"
+            )
+
+
+def _pin_port(pin: str) -> str:
+    """引脚名 → 端口字母（PA15 → A、PB24 → B）。"""
+    return pin[1]
 
 
 def _check_slot_conflicts(resolved: Sequence[ResolvedBinding]) -> None:
