@@ -46,7 +46,9 @@ ADR 0011 解了 stm32 pwm 类型级与软 I2C，三类"真锁"记遗留：① en
    Resource conflict 自然拦（已实证），不另设门。
 7. **默认 5 组同脚冲突重排**：改 manifest 默认 pins + pin_config.h 母版默认值，目标
    冲突归零（物理不可达则最小化并明示）；放主链最后（机制稳定后重排数据，全量默认
-   回归）。
+   回归）。**工单 05 结果**：4 组归零（BUZZER/MOTOR_A_ENC/LED×GRAY_D6-8/软 I2C 挪位）；
+   DIP×GRAY_D1-4（PB12-15）为唯一残留（全库 42 角色 vs 排针 32 脚，全互异数学上
+   不可达），白名单留痕 tests/test_default_layout.py。
 8. **包型号悬案**：纳入并行前置（既有工单 .scratch/mspm0-board-package/issues/01，
    用户物理看丝印），不阻塞主链。
 9. **验收口径**：编译级 + 产物断言（UV4/gmake 0 错 + pin_config.h 宏值 / isr.c 聚合 /

@@ -46,7 +46,7 @@
         {
           "id": "BUZZER",
           "type": "gpio_out",
-          "default": "PB0",
+          "default": "PA15",
           "required": false,
           "macros": [
             "BUZZER_GPIO",
