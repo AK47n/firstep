@@ -2,8 +2,9 @@
 
 母版 mspm0.syscfg = 全量实例（默认布局理论上限）。生成时按本次选中的模块集
 裁剪：未选模块的实例不落盘，其引脚空出来可绑——bindings 写到这些脚不再撞
-SysConfig Resource conflict。实例 → 消费模块映射是本模块单源表（manifest
-note / 模块代码宏消费面归纳，改库增实例时同步这里）。
+SysConfig Resource conflict。实例 → 消费模块映射单源表在
+syscfg_instances.py（manifest note / 模块代码宏消费面归纳，改库增实例时
+同步那里；本模块保留 INSTANCE_CONSUMERS 旧导入路径兼容）。
 """
 
 from __future__ import annotations
@@ -13,25 +14,9 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from .pinwriter import MSPM0_SYSCFG_FILENAME
+from .syscfg_instances import INSTANCE_CONSUMERS  # noqa: F401  # 旧导入路径兼容
 
-# 实例名 → 消费模块 slug 元组。任一消费模块被选中即保留；全部未选才裁剪。
-# 共享实例：DC_MOTOR 由 motor/key 共用（编码器中断在 key），HUIDU 由
-# huidu/pid(mspm0 GRAY_D1-8)/xunji 共用（灰度槽位）。
-INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
-    "PWMAB": ("motor",),
-    "DCC_100_PWM2": ("step_motor",),
-    "MOTOR_PID": ("motor", "pid"),
-    "NTB": ("ntb_time",),
-    "DC_MOTOR": ("motor", "key"),
-    "HUIDU": ("huidu", "pid", "xunji"),
-    "KEY": ("key",),
-    "LED_BEEP": ("led_beep",),
-    "STEP_MOTOR": ("step_motor",),
-    "IMU601": ("imu_uart",),
-    "DIGIT_UART": ("digit_uart", "ball_detect"),
-    "OLED": ("oled",),
-    "I2C_0": ("ml_mpu6050",),
-}
+__all__ = ["INSTANCE_CONSUMERS", "prune_syscfg"]
 
 _INSTANCE_DECL_RE = re.compile(
     r"^\s*const\s+(?P<instance>[A-Za-z_]\w*)\s*=\s*(?P<module>[A-Za-z_]\w*)\.addInstance\(\);?\s*(?P<eol>\r?\n)?$"

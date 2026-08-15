@@ -46,6 +46,7 @@ from contest_generator.pin_bindings import (
 from contest_generator.pinwriter import (
     MSPM0_SYSCFG_FILENAME,
     PIN_CONFIG_FILENAME,
+    _mspm0_path_matches,
     render_pin_config,
     rewrite_syscfg,
 )
@@ -277,31 +278,43 @@ def test_error_entry_maps_pin_binding_error_to_400():
 # ---------------------------------------------------------------------------
 
 
-def test_syscfg_pin_assign_values_unique():
-    """母版 syscfg 的 $assign 引脚值唯一 = 默认值槽位定位成立的前提（漂移
-    即红——写侧靠默认值找唯一落点行）。"""
+def test_syscfg_pin_assign_values_unique_except_intentional_pb6_pb7():
+    """母版 syscfg 的 $assign 引脚值除刻意重叠 PB6/PB7 外唯一：STEP_MOTOR
+    SLP2/DIR2 与 HUIDU R3/R4 同脚（全库 42 角色 vs 排针 32 脚数学上无法全
+    互异，允许重叠、用户改绑消解）。写侧 2026-08-15 起按实例路径定位，不再
+    依赖全局唯一。"""
     values = re.findall(
         r'^\s*.+\.\$assign\s*=\s*"([A-Za-z0-9]+)"', MSPM0_MASTER_SYSCFG, re.M
     )
-    assert len(values) == len(set(values))
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    assert {v: c for v, c in counts.items() if c != 1} == {"PB6": 2, "PB7": 2}
 
 
-def test_every_mspm0_declared_default_has_exactly_one_syscfg_site():
-    """全库 mspm0 声明默认值在母版 syscfg 里恰一行落点（含板外 PB4/PB5 的
-    LaunchPad 遗留值）——resolve + 改写器逐字节契约的前提。"""
+def test_every_mspm0_declared_default_has_path_unique_syscfg_site():
+    """全库 mspm0 声明默认值在母版 syscfg 里按实例路径恰一行落点：STEP_MOTOR
+    SLP2/DIR2 与 HUIDU R3/R4 默认同值 PB6/PB7 但路径不同（associatedPins 序
+    号/实例名不同），改写器按路径形选唯一候选。"""
     sites: dict[str, list[str]] = {}
     for line in MSPM0_MASTER_SYSCFG.splitlines():
-        m = re.match(r'^\s*.+\.\$assign\s*=\s*"([A-Za-z0-9]+)"', line)
+        m = re.match(r'^\s*(.+?)\.\$assign\s*=\s*"([A-Za-z0-9]+)"', line)
         if m:
-            sites.setdefault(m.group(1), []).append(line)
+            sites.setdefault(m.group(2), []).append(m.group(1))
     for manifest in ALL_MANIFESTS:
         entry = manifest.platforms.get("mspm0")
         if entry is None:
             continue
         for decl in entry.pins:
-            assert len(sites.get(decl.default, [])) == 1, (
+            paths = sites.get(decl.default, [])
+            matches = [
+                p
+                for p in paths
+                if _mspm0_path_matches(decl.type, decl.id, manifest.slug, p)
+            ]
+            assert len(matches) == 1, (
                 f"{manifest.slug}.{decl.id} 默认 {decl.default} 的 syscfg 落点"
-                f"不是唯一一行"
+                f"按路径形过滤后不是唯一一行（找到 {matches}）"
             )
 
 
@@ -444,7 +457,7 @@ def test_rewrite_syscfg_default_bindings_byte_identical():
 
 
 def test_rewrite_syscfg_changes_only_target_assign_lines():
-    """LED 换脚只动 LED_BEEP 一行；HUIDU R3/R4 默认已板内（PA0/PA1）未绑不动。"""
+    """LED 换脚只动 LED_BEEP 一行；HUIDU R3/R4 默认 PB6/PB7 未绑不动。"""
     out = rewrite_syscfg(
         MSPM0_MASTER_SYSCFG,
         _resolve("mspm0", {"led_beep.LED_BEEP_LED": "PA12"}),
@@ -476,6 +489,23 @@ def test_rewrite_syscfg_xunji_permuted_slot_by_default_value():
         MSPM0_MASTER_SYSCFG, _resolve("mspm0", {"xunji.P1": "PA25"})
     )
     assert 'HUIDU.associatedPins[2].pin.$assign = "PA25";' in out
+
+
+def test_rewrite_syscfg_duplicate_default_pb6_selects_by_path():
+    """默认重叠 PB6（HUIDU R3 vs STEP_MOTOR SLP2）：改绑按实例路径定位——
+    绑 STEP_MOTOR 只碰 STEP_MOTOR 行，绑 HUIDU 只碰 HUIDU 行。"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG,
+        _resolve("mspm0", {"step_motor.STEP_MOTOR_SLP2": "PB2"}),
+    )
+    assert 'STEP_MOTOR.associatedPins[1].pin.$assign  = "PB2";' in out
+    assert 'HUIDU.associatedPins[6].pin.$assign = "PB6";' in out
+
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG, _resolve("mspm0", {"huidu.R3": "PA27"})
+    )
+    assert 'HUIDU.associatedPins[6].pin.$assign = "PA27";' in out
+    assert 'STEP_MOTOR.associatedPins[1].pin.$assign  = "PB6";' in out
 
 
 def test_rewrite_syscfg_offboard_default_rewrites_legacy_value():
