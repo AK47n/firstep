@@ -4,7 +4,7 @@
 
 **Blocked by:** 01（test_pin_bindings.py 同缝——01 合 main 后再开）
 
-**Status:** resolved（待合 main，分支 pin-unlock-02 29c114d）
+**Status:** resolved（2026-08-15 PR #77 squash merged 5d0fee2，主会话复核 + 1481 绿复跑——解锁轮四张工单全部闭环）
 
 ## 需求
 
@@ -50,6 +50,7 @@
   ASCII define + 插 include，注释字节原样；板 JSON 行级变换保格式（两脚本后
   diff 恰 32 io 行语义变化）；门禁只查 `_GPIO/_PORT` 尾形宏的改动项，同值放行，
   值推导复用 `_stm32_macro_value`（零新推导逻辑）。
+- **2026-08-15 合并复核**（PR #77 squash merged 5d0fee2，远端分支已删）：主会话 diff 复核——6 宏原值迁移/32 io 行 token 去实例化/门禁值与写侧同源/测试三同步全对工单；合并后 main 复跑 1481 绿 29.3s。
 
 ## 实施提示词（复制到新会话）
 
