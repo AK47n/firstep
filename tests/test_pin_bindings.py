@@ -49,6 +49,7 @@ from contest_generator.pinwriter import (
     render_pin_config,
     rewrite_syscfg,
 )
+from contest_generator.syscfg_prune import prune_syscfg
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
 LIBRARY_MODULES = LIBRARY_ROOT / "modules"
@@ -721,7 +722,8 @@ def test_generate_stm32_with_bindings_rewrites_pin_config(tmp_path):
 
 
 def test_generate_mspm0_with_bindings_rewrites_syscfg(tmp_path):
-    """带绑定生成：syscfg $assign 变、实例名集合不变；无绑定逐字节一致。"""
+    """带绑定生成：syscfg 先按选中模块裁剪（syscfg-prune/01）再写 $assign；
+    无绑定 = 裁剪后基线（不再 == 全量母版，全选理论模块才 == 母版）。"""
     led = next(m for m in ALL_MANIFESTS if m.slug == "led_beep")
     out_dir = tmp_path / "out"
     generate(
@@ -737,6 +739,8 @@ def test_generate_mspm0_with_bindings_rewrites_syscfg(tmp_path):
         out_dir / MSPM0_SYSCFG_FILENAME
     ).read_text(encoding="utf-8", newline="")
     assert 'pin.$assign  = "PA12";' in written
+    assert "LED_BEEP.$name" in written
+    assert "IMU601.$name" not in written  # 未选 imu_uart → 实例被裁
     assert written != MSPM0_MASTER_SYSCFG
     out_dir2 = tmp_path / "out_default"
     generate(
@@ -749,7 +753,9 @@ def test_generate_mspm0_with_bindings_rewrites_syscfg(tmp_path):
     )
     assert (
         out_dir2 / MSPM0_SYSCFG_FILENAME
-    ).read_text(encoding="utf-8", newline="") == MSPM0_MASTER_SYSCFG
+    ).read_text(encoding="utf-8", newline="") == prune_syscfg(
+        MSPM0_MASTER_SYSCFG, ["led_beep"]
+    )
 
 
 def test_generate_with_invalid_bindings_creates_no_output_dir(tmp_path):
