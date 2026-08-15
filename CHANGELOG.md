@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0e02724e37376c6a1d780cd7a7a96f848767966d -->
+<!-- changelog-auto: last-commit=bf919aa703f3343944e8e7e547fbb1f1b2d3ca39 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -7,6 +7,7 @@
 ## 2026-08-16
 - 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）
 - 00:37 骨架生成注入参考实现草稿（锚定+手动全文，reference_ids 透传）
+- 00:55 骨架参考注入按合计预算截断，防多篇全文撑爆 128KB 网关
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
