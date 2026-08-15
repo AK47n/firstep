@@ -1164,11 +1164,13 @@ function suggestionChip(s) {
     + (s.examples.length ? "：" + esc(s.examples.join(" / ")) : "") + '</span></span>';
 }
 
-function renderRecommendResult(data) {
+function renderRecommendResult(data, autoAdd = true) {
   if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
   renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
-  const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
-  for (const m of fresh) selectedSlugs.push(m.slug);
+  if (autoAdd) {
+    const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
+    for (const m of fresh) selectedSlugs.push(m.slug);
+  }
   expanded = []; warnings = [];
   renderSelected(); renderWarnings();
   lastRecommend = data;
@@ -1190,8 +1192,9 @@ function renderRecommendResult(data) {
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
       expanded = []; warnings = [];
-      renderSelected(); renderWarnings(); renderRecommendResult(lastRecommend);
+      renderSelected(); renderWarnings(); renderRecommendResult(lastRecommend, false);
     }));
+  if (autoAdd && data.modules.length) runExpand();
 }
 
 function showRecommendError(message) {
@@ -1478,7 +1481,7 @@ function renderSelected() {
         <span class="slug">${esc(m.slug)}</span>
         ${isDep ? `<span class="badge dep" title="由 ${esc(bringer || "其它模块")} 依赖带入">自动带入${bringer ? "·" + esc(bringer) : ""}</span>` : ""}
         ${moduleBadges(m)}
-        <button class="danger" data-remove="${esc(m.slug)}">移除</button>
+        ${isDep ? "" : `<button class="danger" data-remove="${esc(m.slug)}">移除</button>`}
       </div>
       <div class="desc" title="${esc((m.description || "") + " " + notes(m))}">${esc(m.description || "")}${(m.dependencies || []).length ? ` · 依赖：${esc(m.dependencies.join("、"))}` : ""}</div>
     </div>`;
@@ -1934,9 +1937,14 @@ function renderPinRoles(roles, fam) {
   };
   const requiredRoles = roles.filter((r) => r.decl.required);
   const optionalRoles = roles.filter((r) => !r.decl.required);
+  // 已动过的可选角色不能被折叠藏起来（用户绑了线/红显解除后要可见）
+  const hasTouchedOptional = optionalRoles.some(
+    (r) => pinBindings[r.key] || pinUnbound.has(r.key)
+  );
+  const showOptional = pinShowOptional || hasTouchedOptional;
   let html = requiredRoles.map(roleHtml).join("");
   if (optionalRoles.length) {
-    if (pinShowOptional) {
+    if (showOptional) {
       html += optionalRoles.map(roleHtml).join("");
       html += '<button class="pin-toggle-optional" id="btn-pin-hide-optional">收起可选角色</button>';
     } else {
@@ -1961,10 +1969,10 @@ function renderPinRoles(roles, fam) {
       renderPinCard();
     });
   });
-  const showOptional = $("btn-pin-show-optional");
-  if (showOptional) showOptional.addEventListener("click", () => { pinShowOptional = true; renderPinCard(); });
-  const hideOptional = $("btn-pin-hide-optional");
-  if (hideOptional) hideOptional.addEventListener("click", () => { pinShowOptional = false; renderPinCard(); });
+  const showOptBtn = $("btn-pin-show-optional");
+  if (showOptBtn) showOptBtn.addEventListener("click", () => { pinShowOptional = true; renderPinCard(); });
+  const hideOptBtn = $("btn-pin-hide-optional");
+  if (hideOptBtn) hideOptBtn.addEventListener("click", () => { pinShowOptional = false; renderPinCard(); });
 }
 
 $("btn-pin-reset").addEventListener("click", () => {
