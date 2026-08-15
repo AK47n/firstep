@@ -4,7 +4,7 @@
 
 **Blocked by:** 无
 
-**Status:** 待复核（实施完成，PR 待开）
+**Status:** resolved（2026-08-15 PR #83 squash merged ee6225f，主会话复核 + 1538 绿复跑）
 
 ## 需求
 
@@ -39,3 +39,10 @@
 ## Comments
 
 - 2026-08-14 立项（mspm0-master-dimx/01 Comments"建议另立工单"）。
+- **合并复核**（PR #83 squash merged ee6225f，主会话）：核实结论成立——dimx
+  母版 NTB 已由 SysConfig 生成 125kHz/500ms 周期，旧实现确实未 startCounter
+  且 /500 不是毫秒、未处理 LOAD 向下数；软件回绕累加方案零 syscfg 改动、
+  默认逐字节契约不破；NTB_INST_IRQHandler 与 get_time_stamp_ms 实现正确
+  （ZERO 中断 +500ms；LOAD-remaining 拼周内毫秒；首次调用自启动 + NVIC）。
+  合并后 main 复跑 1538 绿 + mypy 41 文件干净。worktree ntb-time-wrap-01
+  照例保留。
