@@ -9,12 +9,11 @@ PIN_ROLE_TYPES（boards 与 manifest pins 声明共用，改词表只改那一�
 
 能力集口径：
 - stm32 = ml_libs 支持表（实例→引脚写死在功能库内：ml_uart 的 UART_1→
-  PA9/10、ml_pwm 的 TIM2_CH1→PA0、ml_exti 的 EXTI_PA0~PC7、ml_adc 的
-  Channel→引脚），GPIO 任意；软 I2C 已参数化（ADR 0011 工单 02：引脚宏迁
-  pin_config.h，i2c_scl/i2c_sda token 去实例 = 任意 io 脚类型级）；
-  enc 实例 = EXTI 线号（motor 的 EXTI2/EXTI4 handler 名绑定线号，v1 换线 =
-  遗留候选）——门禁按"默认引脚能力 token 的实例"约束绑定引脚（如 MOTOR_A_ENC
-  默认 PA2 → 能力 enc:2 → 只能绑到同线号 PB2）。
+  PA9/10、ml_pwm 的 TIM2_CH1→PA0、ml_exti 的 EXTI_PA0~PC15（ADR 0012 扩
+  48 项）、ml_adc 的 Channel→引脚），GPIO 任意；软 I2C 已参数化（ADR 0011
+  工单 02：引脚宏迁 pin_config.h，i2c_scl/i2c_sda token 去实例 = 任意 io
+  脚类型级）；enc 实例 = EXTI 线号（ADR 0012 起类型级：绑定引脚自带的
+  enc:N token 喂 _LINE 宏，异口同线冲突由生成门禁 exti_line_conflicts 拦）。
 - mspm0 = 地猛星引脚图 PDF 每脚复用标注（sources/materials/2026_04_地猛星
   电赛控制题配套资料/00_立创·地猛星MSPM0G3507开发板引脚图.pdf，pdftotext
   提取）——真任意（芯片级过滤），GPIO/enc 任意 io 脚（编码器走 GPIO 组中断，
@@ -160,8 +159,8 @@ def pin_supports(pin: BoardPin, role_type: str, instance: str = "") -> bool:
 def pin_capability_instances(pin: BoardPin, role_type: str) -> tuple[str, ...]:
     """引脚能力集中某类型的所有实例（去类型前缀，保序）。
 
-    门禁用它从角色默认引脚推导所需实例（如 MOTOR_A_ENC 默认 PA2 的
-    enc:2 → 绑定引脚必须也有 enc:2——v1 限同 EXTI 线号的机械实现）。
+    门禁与渲染器共用：strict-all 从角色默认引脚推导所需实例；stm32 pwm /
+    enc 类型级从绑定引脚取实例喂渲染器（enc:5 → _LINE 5）。
     """
     prefix = f"{role_type}:"
     return tuple(

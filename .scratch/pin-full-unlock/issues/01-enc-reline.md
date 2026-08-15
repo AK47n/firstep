@@ -4,7 +4,7 @@
 
 **Blocked by:** 无（链首；前置 01-04 解锁轮已合 main）
 
-**Status:** 待实施
+**Status:** resolved（2026-08-15）
 
 ## 需求
 
@@ -27,7 +27,29 @@
 
 ## 验收
 
-- [ ] pytest 全绿 + mypy src 干净
-- [ ] 红证已验（类型级缺位 / 同线 400 / 枚举缺项）+ 绿证（宏值 + 默认逐字节 + 条件 handler 展开）
-- [ ] 真机：绑 PA5/PA6 UV4 0 错 0 警 + handler 符号断言 + 不配回归逐字节 + HTTP 400 零产物
-- [ ] 独立 worktree + 提交 + 推送开 PR
+- [x] pytest 全绿 + mypy src 干净
+- [x] 红证已验（类型级缺位 / 同线 400 / 枚举缺项）+ 绿证（宏值 + 默认逐字节 + 条件 handler 展开）
+- [x] 真机：绑 PA5/PA6 UV4 0 错 0 警 + handler 符号断言 + 不配回归逐字节 + HTTP 400 零产物
+- [x] 独立 worktree + 提交 + 推送开 PR
+
+## 实施留痕（2026-08-15）
+
+- 文件边界扩一处：**ml_exti.h 同改**（工单边界只列 ml_exti.c，但 C 枚举本体在
+  头文件——只扩 .c switch 不扩头枚举，EXTI_PA8-15 符号不存在，绑 PA8+ 编译
+  必炸；spec"枚举扩 48 项"语义覆盖两文件）。
+- 母版 pin_config.h 两行 LINE 宏注释改中性（`EXTI2/4_IRQHandler 的线号` →
+  `EXTI 线号（handler 按此条件编译）`）——旧注释描述的就是被拆的那把锁，
+  且换线渲染后注释会误导。
+- 真机 400 样例 PA2+PB2 → **PA5+PB5**：PB2 = BOOT1 不在排针（绑定会以"未知
+  引脚"400，不走线冲突门禁）；PA5+PB5 同线 5 走真门禁。
+- 真机骨架复用 pin-unlock-04 已验证 main.c（同 2026C + 8 模块输入）：跑
+  generate_check 时 DeepSeek 上游在骨架段 502 断连；骨架非本单变更面，复用
+  已验收产物，enc 路径（生成→门禁→UV4）照常全量验证。
+- 测试同步：test_boards.py ml_libs 映射表扩线 8-15 + 线号排针全表钉；
+  test_pin_bindings.py enc 同线锁用例改写为类型级（"无 enc token"下限靠假板
+  直测——真板扩线后全 io 脚都有 enc token）；test_generator.py 门禁表 10 键
+  钉；新增 tests/test_pin_unlock_enc.py（红证 3 类 + 绿证结构钉）。
+- 真机证据（worktree .scratch/real-run/，gitignored）：UV4 exit=0 0 错 0 警；
+  Project.map EXTI9_5_IRQHandler 强定义 motor_stm32.o（100 字节）、EXTI2/4 仅
+  startup 弱兜底（0 字节）；不配回归 pin_config.h 与母版逐字节一致；PA5+PB5
+  同线 400 中文 + 输出目录零产物。

@@ -34,11 +34,11 @@
 
 /* ---- 编码器（EXTI 脉冲计数 + 方向输入，21F 原值）---- */
 #define MOTOR_A_ENC_EXTI      EXTI_PA2   /* PA2，下降沿触发 */
-#define MOTOR_A_ENC_LINE      2          /* EXTI2_IRQHandler 的线号 */
+#define MOTOR_A_ENC_LINE      2          /* EXTI 线号（handler 按此条件编译） */
 #define MOTOR_A_ENC_DIR_PORT  GPIO_A
 #define MOTOR_A_ENC_DIR_PIN   Pin_3      /* 方向输入（上拉） */
 #define MOTOR_B_ENC_EXTI      EXTI_PA4   /* PA4，下降沿触发 */
-#define MOTOR_B_ENC_LINE      4          /* EXTI4_IRQHandler 的线号 */
+#define MOTOR_B_ENC_LINE      4          /* EXTI 线号（handler 按此条件编译） */
 #define MOTOR_B_ENC_DIR_PORT  GPIO_A
 #define MOTOR_B_ENC_DIR_PIN   Pin_5      /* 方向输入（上拉） */
 

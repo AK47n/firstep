@@ -76,9 +76,10 @@ def test_capability_tokens_valid_and_unique(boards):
 
 
 # stm32 能力集口径 = ml_libs 支持表（ml_uart/ml_pwm/ml_exti/ml_adc 的实例→
-# 引脚映射逐条编码）——映射表硬编码于此防回退。软 I2C 已参数化（ADR 0011
-# 工单 02）：i2c_scl/i2c_sda 为全 io 脚类型级 token（无实例），表内 PB8/9/
-# 10/11 行钉旧 ml_i2c/ml_oled 实例位的类型级形态。
+# 引脚映射逐条编码）——映射表硬编码于此防回退。ml_exti 已扩 48 项（ADR 0012
+# 工单 01）：PA8-15/PB8-15/PC13-15 补 exti:PAx/PBx/PCx + enc:<尾号 mod 16>。
+# 软 I2C 已参数化（ADR 0011 工单 02）：i2c_scl/i2c_sda 为全 io 脚类型级
+# token（无实例），表内 PB8/9/10/11 行钉旧 ml_i2c/ml_oled 实例位的类型级形态。
 STM32_ML_LIBS_EXPECTED = {
     "PA0": ["pwm:TIM2_CH1", "adc:ADC_Channel_0", "exti:PA0", "enc:0"],
     "PA1": ["pwm:TIM2_CH2", "adc:ADC_Channel_1", "exti:PA1", "enc:1"],
@@ -88,8 +89,12 @@ STM32_ML_LIBS_EXPECTED = {
     "PA5": ["adc:ADC_Channel_5", "exti:PA5", "enc:5"],
     "PA6": ["pwm:TIM3_CH1", "adc:ADC_Channel_6", "exti:PA6", "enc:6"],
     "PA7": ["pwm:TIM3_CH2", "adc:ADC_Channel_7", "exti:PA7", "enc:7"],
-    "PA9": ["uart_tx:UART_1"],
-    "PA10": ["uart_rx:UART_1"],
+    "PA8": ["exti:PA8", "enc:8"],
+    "PA9": ["uart_tx:UART_1", "exti:PA9", "enc:9"],
+    "PA10": ["uart_rx:UART_1", "exti:PA10", "enc:10"],
+    "PA11": ["exti:PA11", "enc:11"],
+    "PA12": ["exti:PA12", "enc:12"],
+    "PA15": ["exti:PA15", "enc:15"],
     "PB0": ["pwm:TIM3_CH3", "adc:ADC_Channel_8", "exti:PB0", "enc:0"],
     "PB1": ["pwm:TIM3_CH4", "adc:ADC_Channel_9", "exti:PB1", "enc:1"],
     "PB3": ["exti:PB3", "enc:3"],
@@ -97,10 +102,17 @@ STM32_ML_LIBS_EXPECTED = {
     "PB5": ["exti:PB5", "enc:5"],
     "PB6": ["pwm:TIM4_CH1", "exti:PB6", "enc:6"],
     "PB7": ["pwm:TIM4_CH2", "exti:PB7", "enc:7"],
-    "PB8": ["pwm:TIM4_CH3", "i2c_scl"],
-    "PB9": ["pwm:TIM4_CH4", "i2c_sda"],
-    "PB10": ["uart_tx:UART_3", "i2c_scl"],
-    "PB11": ["uart_rx:UART_3", "i2c_sda"],
+    "PB8": ["pwm:TIM4_CH3", "i2c_scl", "exti:PB8", "enc:8"],
+    "PB9": ["pwm:TIM4_CH4", "i2c_sda", "exti:PB9", "enc:9"],
+    "PB10": ["uart_tx:UART_3", "i2c_scl", "exti:PB10", "enc:10"],
+    "PB11": ["uart_rx:UART_3", "i2c_sda", "exti:PB11", "enc:11"],
+    "PB12": ["exti:PB12", "enc:12"],
+    "PB13": ["exti:PB13", "enc:13"],
+    "PB14": ["exti:PB14", "enc:14"],
+    "PB15": ["exti:PB15", "enc:15"],
+    "PC13": ["exti:PC13", "enc:13"],
+    "PC14": ["exti:PC14", "enc:14"],
+    "PC15": ["exti:PC15", "enc:15"],
 }
 
 
@@ -113,13 +125,19 @@ def test_stm32_capabilities_match_ml_libs(boards):
             assert token in pin.capabilities, f"{name} 缺能力 {token}（ml_libs 表）"
 
 
-def test_stm32_enc_limited_to_same_exti_line(boards):
-    """enc 实例 = EXTI 线号：v1 限同线号引脚（handler 名绑定线号）。"""
+def test_stm32_enc_line_coverage_matches_headers(boards):
+    """enc 实例 = EXTI 线号（数据口径，ADR 0012 扩线后）：抽查各线号排针脚
+    全表——物理锁脚（PA13/14 SWD、PB2 BOOT1）不在排针不涉及。"""
     stm32 = boards["stm32-min-system"]
-    line2 = [p.name for p in stm32.pins if pin_supports(p, "enc", "2")]
-    line4 = [p.name for p in stm32.pins if pin_supports(p, "enc", "4")]
-    assert line2 == ["PA2"]  # PB2(BOOT1)/PC2 不在排针
-    assert line4 == ["PA4", "PB4"]
+    for line, expected in {
+        "2": ["PA2"],  # PB2(BOOT1)/PC2 不在排针
+        "4": ["PA4", "PB4"],
+        "8": ["PB8", "PA8"],  # 板序：右排 PB8 在 PA8 前
+        "13": ["PC13", "PB13"],  # 板序：左排 PC13 在前
+        "15": ["PC15", "PA15", "PB15"],
+    }.items():
+        pins = [p.name for p in stm32.pins if pin_supports(p, "enc", line)]
+        assert pins == expected, f"enc:{line} 排针脚 {pins} ≠ {expected}"
 
 
 def test_dimx_header_layout_matches_pin_diagram(boards):

@@ -3,22 +3,24 @@
 bindings 载荷 = `{"<slug>.<role_id>": "<PIN>"}`（spec 板级引脚配置）——本模块
 是绑定的唯一校验出口：角色存在于选中模块声明（manifest pins）、引脚存在于
 板定义排针（boards.board_pin）、能力合法（boards.pin_supports；
-boards.pin_capability_instances 推导——enc 限同 EXTI 线号的机械实现）。校验
-通过产出 ResolvedBinding——写侧渲染器 / 改写器只吃已解析结构，不再自判
-形状（工单 02 文件边界：模型归本模块）。
+boards.pin_capability_instances 推导实例）。校验通过产出 ResolvedBinding——
+写侧渲染器 / 改写器只吃已解析结构，不再自判形状（工单 02 文件边界：模型
+归本模块）。
 
-能力口径（平台 × 类型分级，ADR 0011）：
-- stm32 pwm = **类型级**：绑定引脚须有 ≥1 个 pwm:* token，实例随**绑定引脚**
-  推导喂渲染器（换实例 = 宏值变化，库零改动——motor_stm32.c 吃宏、ml_pwm
-  支持 TIM2/3/4 全通道，假锁放宽）。
+能力口径（平台 × 类型分级，ADR 0011 / ADR 0012）：
+- stm32 pwm / enc = **类型级**：绑定引脚须有 ≥1 个 pwm:* / enc:* token，
+  实例随**绑定引脚**推导喂渲染器（pwm 换实例 = 宏值变化，库零改动——
+  motor_stm32.c 吃宏、ml_pwm 支持 TIM2/3/4 全通道；enc 换线 = _LINE/_EXTI
+  宏跟随绑定，motor 按线号条件编译 handler——工单 pin-full-unlock/01，
+  异口同线冲突由生成门禁 exti_line_conflicts 拦）。
 - 其余（mspm0 全部类型 + stm32 其余类型）= strict-all：绑定引脚须支持默认
   引脚的**全部**实例——mspm0 复用标注多实例引脚（motor.PWMAB_C0 默认 PA12
   有 pwm:TIMG0_C0 + pwm:TIMA0_C3）只有同双实例的引脚才可绑（现状仅 PA12
   自身 = 锁死）。宁严勿假绿：syscfg 改写器只换 $assign 不改外设
   （PWMAB.peripheral = TIMG0 不动），绑到只有 TIMA0_C3 的脚（如 PA28）会让
   SysConfig 路由失败——strict-all 把这类"界面显示兼容但构建必炸"的绑定挡
-  在生成前。单实例类型（uart/i2c/enc）与无实例类型（gpio/enc-mspm0）不
-  受影响。
+  在生成前。单实例类型（uart/i2c）与无实例类型（gpio/enc-mspm0）不受
+  影响。
 
 政策：
 - 缺省 = 全默认：bindings 缺省或未覆盖的角色按声明默认值生成；必选角色允许
@@ -50,10 +52,10 @@ class PinBindingError(ValueError):
 class ResolvedBinding:
     """一条通过校验的绑定：写侧只吃它（渲染器 / 改写器不再自判形状）。
 
-    instances = 角色实例（pin_capability_instances 推导；stm32 pwm 类型级 =
-    绑定引脚实例（ADR 0011），其余 = 默认引脚能力 token 的实例；gpio_out/
-    gpio_in 与 mspm0 enc 等无实例类型为空元组）。stm32 渲染器需要单实例推导
-    宏值（多实例 = 数据歧义，渲染处大声失败）。
+    instances = 角色实例（pin_capability_instances 推导；stm32 pwm / enc
+    类型级 = 绑定引脚实例（ADR 0011 / ADR 0012），其余 = 默认引脚能力
+    token 的实例；gpio_out/gpio_in 与 mspm0 enc 等无实例类型为空元组）。
+    stm32 渲染器需要单实例推导宏值（多实例 = 数据歧义，渲染处大声失败）。
     """
 
     slug: str
@@ -76,13 +78,13 @@ def resolve_bindings(
     """bindings 载荷 → 校验后的绑定清单；任何非法即抛 PinBindingError（400 中文）。
 
     校验三查：键格式 `<slug>.<role_id>` 且角色在选中模块的该平台声明里 /
-    引脚在板定义排针（板外脚 = 未知引脚）/ 能力合法（stm32 pwm = 类型级：
-    绑定引脚须有 ≥1 个 pwm:* token，实例随绑定引脚推导；其余 strict-all：
-    绑定引脚须支持默认引脚能力 token 的**全部**实例——mspm0 复用标注多实例
-    引脚的先例：motor.PWMAB_C0 默认 PA12 有 pwm:TIMG0_C0 + pwm:TIMA0_C3，
-    仅 TIMA0_C3 的脚如 PA28 会让 SysConfig 路由失败，宁严勿假绿）。mspm0 同
-    默认引脚两角色绑不同脚 = 槽位冲突互斥（syscfg 单落点）。顺序 = 载荷
-    插入顺序（dict 保序，写侧覆盖顺序确定性）。
+    引脚在板定义排针（板外脚 = 未知引脚）/ 能力合法（stm32 pwm / enc =
+    类型级：绑定引脚须有 ≥1 个 pwm:* / enc:* token，实例随绑定引脚推导；
+    其余 strict-all：绑定引脚须支持默认引脚能力 token 的**全部**实例——
+    mspm0 复用标注多实例引脚的先例：motor.PWMAB_C0 默认 PA12 有
+    pwm:TIMG0_C0 + pwm:TIMA0_C3，仅 TIMA0_C3 的脚如 PA28 会让 SysConfig
+    路由失败，宁严勿假绿）。mspm0 同默认引脚两角色绑不同脚 = 槽位冲突互斥
+    （syscfg 单落点）。顺序 = 载荷插入顺序（dict 保序，写侧覆盖顺序确定性）。
     """
     if not raw:
         return ()
@@ -129,13 +131,14 @@ def resolve_bindings(
             raise PinBindingError(
                 f"绑定 {key} 的引脚 {pin} 不存在（不在 {board.name} 排针引脚集内）"
             )
-        # stm32 pwm：类型级（ADR 0011）——实例随**绑定引脚**推导喂渲染器
-        # （换实例 = 宏值变化，库零改动）；无 pwm token 的脚仍拒（类型级
-        # 下限）。其余平台/类型 strict-all：实例 = 默认引脚能力 token 的实例
-        # （板外默认如 PB4/PB5 无默认引脚 → 实例空 → 只查类型）；多实例 =
-        # 全部命中（any-of 会放行 SysConfig 路由必炸的绑定——工单 02 红证
-        # 已验）
-        if platform == PLATFORM_STM32 and declaration.type == "pwm":
+        # stm32 pwm / enc：类型级（ADR 0011 / ADR 0012）——实例随**绑定
+        # 引脚**推导喂渲染器（pwm 换实例 = 宏值变化，库零改动；enc 换线 =
+        # _LINE/_EXTI 宏跟随，motor 条件 handler 自动跟随线号）；无对应
+        # token 的脚仍拒（类型级下限）。其余平台/类型 strict-all：实例 =
+        # 默认引脚能力 token 的实例（板外默认如 PB4/PB5 无默认引脚 → 实例
+        # 空 → 只查类型）；多实例 = 全部命中（any-of 会放行 SysConfig 路由
+        # 必炸的绑定——工单 02 红证已验）
+        if platform == PLATFORM_STM32 and declaration.type in ("pwm", "enc"):
             instances = pin_capability_instances(bound, declaration.type)
             if not instances:
                 raise PinBindingError(

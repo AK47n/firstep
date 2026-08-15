@@ -34,7 +34,7 @@ from .patchers import (
 )
 from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
 from .pinwriter import apply_pin_bindings
-from .platforms import PLATFORM_MSPM0
+from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
     REFERENCE_SOURCE_MANUAL,
@@ -123,6 +123,12 @@ class TimerConflictError(GeneratorError):
     拒绝产出编译绿运行坏的工程（工单 pin-unlock-stm32/01）。"""
 
 
+class ExtiLineConflictError(GeneratorError):
+    """绑定 enc/exti 角色异口同线互斥（EXTI 线号 = 脚号 mod 16，PA5/PB5 同
+    线 5）——同线两个 handler 会互相清 PR 位，编译绿运行坏，生成前拦截
+    （工单 pin-full-unlock/01，ADR 0012）。"""
+
+
 # 工程树外由 C 标准库提供的头（引号形式同样由编译器按库路径解析；两平台
 # 同名同集，平台无关，归门禁）。工具链外部头（STM32F1xx DFP 提供、CCS
 # SysConfig 构建时生成）是平台事实，在 keil.py / ccs.py 各自声明、经
@@ -157,6 +163,9 @@ _SKELETON_TIMER_RE = re.compile(r"tim_interrupt_ms_init\s*\(\s*TIM_?([234])\b")
 # 绑定 pwm 实例前段（TIM3_CH1 → 3，喂定时器冲突门禁；TIMG0_C0 等 mspm0
 # 形态不命中 = 自然不拦）
 _PWM_TIMER_INSTANCE_RE = re.compile(r"TIM([234])_")
+
+# 引脚名尾号（喂 EXTI 线冲突门禁：PA5 → 5、PC13 → 13 mod 16）
+_PIN_TRAILING_DIGITS_RE = re.compile(r"(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -1106,6 +1115,44 @@ def _check_timer_instance_conflicts(
             )
 
 
+def _check_exti_line_conflicts(
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: "GateContext",
+) -> None:
+    """绑定 enc/exti 角色异口同线互斥（工单 pin-full-unlock/01，ADR 0012）：
+    EXTI 线号 = 脚号 mod 16（PA5/PB5 同线 5、PC13 线 13）——同线两角色分属
+    两个 handler（motor 条件编译）会互相清 PR 位 = 编译绿运行坏，生成前
+    400。两两只查绑定项；同脚共享不查（提示语义）；mspm0 无 EXTI 线语义
+    不适用（enc 走 GPIO 组中断）。
+    """
+    if platform != PLATFORM_STM32 or not context.bindings or context.board is None:
+        return
+    resolved = resolve_bindings(manifests, platform, context.board, context.bindings)
+    candidates = [b for b in resolved if b.declaration.type in ("enc", "exti")]
+    for i, first in enumerate(candidates):
+        for second in candidates[i + 1 :]:
+            if first.pin == second.pin:
+                continue  # 同脚共享 = 提示语义，不查
+            first_line = _exti_line_of(first.pin)
+            second_line = _exti_line_of(second.pin)
+            if first_line == second_line:
+                raise ExtiLineConflictError(
+                    f"绑定冲突：{first.role_key}（{first.pin}）与"
+                    f" {second.role_key}（{second.pin}）同 EXTI 线"
+                    f" {first_line}，异口同线互斥（共线 handler 互相清 PR 位，"
+                    f"编译绿运行坏）——请换绑不同线号的引脚"
+                )
+
+
+def _exti_line_of(pin: str) -> int:
+    """引脚名尾号 → EXTI 线号（PA5 → 5、PC13 → 13 mod 16）。"""
+    match = _PIN_TRAILING_DIGITS_RE.search(pin)
+    assert match is not None, f"非引脚名 {pin!r} 无尾号（板数据漂移）"
+    return int(match.group(1)) % 16
+
+
 @dataclass(frozen=True)
 class GenerationGate:
     """一道生成门禁的装配描述：key（表内唯一，测试钉死顺序）+ check（小型
@@ -1132,13 +1179,14 @@ class GateContext:
 
 # 门禁表。顺序即 generate 的校验顺序（现状调用顺序，结构测试钉死）；顺序有
 # 语义：file_path_conflicts 跳过无该平台版本条目（由 module_files 先报），
-# 必须先跑 module_files；timer_instance_conflicts 依赖 pin_bindings 先校验
-# 载荷（resolve 才能成功）。新增门禁 = 表加一条 + 谓词（照 categories.
-# RULE_CATEGORIES 先例）——顺序 / 输入依赖 / 门禁全貌只此一处可见。5 道吃
-# corpus（纯谓词，内存直构可测）；file_path_conflicts 吃 manifests +
-# platform（manifest 声明，不读盘）；工单 02 新两条 + 工单
-# pin-unlock-stm32/01 一条吃 context（bindings + board——绑定校验 / 骨架
-# 引脚字面量 / 骨架定时器冲突）。签名统一 4 参，存量谓词忽略第 4 参。
+# 必须先跑 module_files；timer_instance_conflicts / exti_line_conflicts
+# 依赖 pin_bindings 先校验载荷（resolve 才能成功）。新增门禁 = 表加一条 +
+# 谓词（照 categories.RULE_CATEGORIES 先例）——顺序 / 输入依赖 / 门禁全貌
+# 只此一处可见。5 道吃 corpus（纯谓词，内存直构可测）；file_path_conflicts
+# 吃 manifests + platform（manifest 声明，不读盘）；工单 02 新两条 + 工单
+# pin-unlock-stm32/01 一条 + 工单 pin-full-unlock/01 一条吃 context
+# （bindings + board——绑定校验 / 骨架引脚字面量 / 骨架定时器冲突 / EXTI
+# 线冲突）。签名统一 4 参，存量谓词忽略第 4 参。
 GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "module_files",
@@ -1181,6 +1229,12 @@ GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "timer_instance_conflicts",
         lambda corpus, manifests, platform, context: _check_timer_instance_conflicts(
+            corpus, manifests, platform, context
+        ),
+    ),
+    GenerationGate(
+        "exti_line_conflicts",
+        lambda corpus, manifests, platform, context: _check_exti_line_conflicts(
             corpus, manifests, platform, context
         ),
     ),
