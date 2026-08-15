@@ -34,6 +34,7 @@ from .patchers import (
 )
 from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
 from .pinwriter import apply_pin_bindings
+from .syscfg_prune import prune_mspm0_syscfg_file
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
@@ -753,6 +754,12 @@ def generate(
         if not main_c_content.endswith("\n"):
             main_c_content += "\n"  # 尾部换行幂等兜底（LLM 输出常漏，Keil 报 #1-D）
         (output_dir / "main.c").write_text(main_c_content, encoding="utf-8")
+
+        # mspm0 动态裁剪（工单 syscfg-prune/01）：未选模块的实例不落盘，
+        # 其引脚空出来可绑。必须在 apply_pin_bindings 之前——写侧槽位定位
+        # 只认保留实例的默认引脚。
+        if platform == PLATFORM_MSPM0:
+            prune_mspm0_syscfg_file(output_dir, (m.slug for m in manifests))
 
         # copytree 后按绑定覆写板级引脚配置（工单 02 写侧；缺省路径不进写侧）
         if resolved_bindings:
