@@ -576,7 +576,8 @@
       <h2><span class="step-no">8</span>main.c 骨架</h2>
       <div class="row">
         <button id="btn-skeleton" class="primary">生成骨架</button>
-        <span class="muted">AI 按所选模块接口排初始化序列；不存在的调用自动改写为注释占位，可手动微调。</span>
+        <button id="btn-smoke" class="primary">生成自检骨架</button>
+        <span class="muted">骨架 = 初始化序列 + TODO 预留区；自检 = 逐模块初始化/读一次/打印结果（OLED 为主、串口为辅），先验硬件再写逻辑。</span>
       </div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
       <textarea id="main-c" rows="16" style="margin-top:8px" placeholder="点击「生成骨架」后这里会出现 main.c 内容，可手动编辑…"></textarea>
@@ -2090,34 +2091,47 @@ function showPinMenu(pinEl, pinName) {
 }
 
 // ---------------------------------------------------------------------------
-// 生成页：8. main.c 骨架
+// 生成页：8. main.c 骨架 / 自检冒烟（工单 skeleton-smoke-refs/01）
+// 共用校验 / 请求 / intercepted 渲染；差异 = 按钮 id、main_mode、占位文案。
 // ---------------------------------------------------------------------------
-$("btn-skeleton").addEventListener("click", async () => {
+const SKELETON_MODES = {
+  skeleton: { btn: "btn-skeleton", doneLabel: "重新生成骨架", interceptHint: "骨架" },
+  smoke: { btn: "btn-smoke", doneLabel: "重新生成自检骨架", interceptHint: "自检骨架" },
+};
+
+async function generateMain(mode) {
+  const cfg = SKELETON_MODES[mode];
+  const btn = $(cfg.btn);
   $("skeleton-msg").textContent = "";
   const problem = $("problem").value.trim();
   if (!problem) { $("skeleton-msg").textContent = "请先填写赛题原文"; return; }
   if (!chosenPlatform) { $("skeleton-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
   if (!selectedSlugs.length) { $("skeleton-msg").textContent = "请先选择模块"; return; }
-  $("btn-skeleton").disabled = true;
-  $("btn-skeleton").innerHTML = '<span class="spinner"></span>生成中…';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>生成中…';
   try {
-    const data = await apiPost("/api/skeleton", {
+    const payload = {
       problem_text: problem, slugs: selectedSlugs, platform: chosenPlatform,
       topic_id: currentTopicId || undefined,
-    });
+    };
+    if (mode === "smoke") payload.main_mode = "smoke";
+    const data = await apiPost("/api/skeleton", payload);
     $("main-c").value = data.main_c;
     const box = $("intercepted");
     if (data.intercepted.length) {
       box.classList.remove("hidden");
-      box.textContent = "AI 调用以下函数在所选模块接口中不存在，已改写为注释占位，请在骨架里替换为真实接口："
-        + data.intercepted.join("、");
+      box.textContent = "AI 调用以下函数在所选模块接口中不存在，已改写为注释占位，请在" + cfg.interceptHint
+        + "里替换为真实接口：" + data.intercepted.join("、");
     } else { box.classList.add("hidden"); }
   } catch (e) { $("skeleton-msg").textContent = e.message; }
   finally {
-    $("btn-skeleton").disabled = false;
-    $("btn-skeleton").innerHTML = "重新生成骨架";
+    btn.disabled = false;
+    btn.innerHTML = cfg.doneLabel;
   }
-});
+}
+
+$("btn-skeleton").addEventListener("click", () => generateMain("skeleton"));
+$("btn-smoke").addEventListener("click", () => generateMain("smoke"));
 
 // ---------------------------------------------------------------------------
 // 生成页：9. 输出目录并生成

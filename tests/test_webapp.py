@@ -127,6 +127,11 @@ class RaisingLLM:
     ) -> str:
         raise LLMError("服务不可用")
 
+    def generate_smoke_main(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        raise LLMError("服务不可用")
+
     def summarize_module(self, code: str) -> str:
         raise LLMError("服务不可用")
 
@@ -192,6 +197,11 @@ class ScriptedDistillLLM:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
 
     def generate_main_skeleton(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        raise LLMError("ScriptedDistillLLM 只服务提炼端点")
+
+    def generate_smoke_main(
         self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
@@ -2492,6 +2502,66 @@ def test_recommend_carries_requirements_and_isolates_suggestions(client, context
     )
     assert resp.status_code == 400
     assert "不存在" in resp.json()["detail"]
+
+
+def test_skeleton_smoke_mode_generates_smoke_main(client, context):
+    """main_mode="smoke"：走 generate_smoke_main（假 LLM 冒烟出稿 + 同款占位兜底）。"""
+    context[1]["llm"]._smoke_skeleton = (
+        "int main(void) { oled_init(); float t = dht11_read(); dht11_init(); while (1); }\n"
+    )
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "温湿度采集",
+            "slugs": ["dht11", "oled"],
+            "platform": PLATFORM_STM32,
+            "main_mode": "smoke",
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "int main(void)" in data["main_c"]
+    assert "oled_init();" in data["main_c"]
+    assert "dht11_read();" in data["main_c"]
+    assert data["intercepted"] == ["dht11_init"]
+    assert context[1]["llm"].smoke_calls
+    assert not context[1]["llm"].skeleton_calls
+
+
+def test_skeleton_smoke_requires_oled_or_debug_uart(client, context):
+    """自检冒烟必须选 OLED 或 debug_uart 作为输出通道，否则 400 中文。"""
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "温湿度采集",
+            "slugs": ["dht11"],
+            "platform": PLATFORM_STM32,
+            "main_mode": "smoke",
+        },
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "OLED" in detail and "debug_uart" in detail
+
+
+def test_skeleton_rejects_invalid_main_mode(client, context):
+    """main_mode 非法值 400（含空串），不落到生成分支。"""
+    for bad in ("banana", ""):
+        resp = client.post(
+            "/api/skeleton",
+            json={
+                "problem_text": "温湿度采集",
+                "slugs": ["dht11", "oled"],
+                "platform": PLATFORM_STM32,
+                "main_mode": bad,
+            },
+        )
+
+        assert resp.status_code == 400
+        assert "main_mode" in resp.json()["detail"]
 
 
 def test_skeleton_with_topic_id_uses_full_text(client, context):

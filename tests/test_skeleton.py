@@ -14,6 +14,7 @@ from contest_generator.skeleton import (
     extract_header_functions,
     find_undefined_calls,
     generate_skeleton,
+    generate_smoke_main,
     sanitize_skeleton,
     verify_main_c_interfaces,
 )
@@ -449,6 +450,57 @@ def test_verify_main_c_interfaces_passes_clean_main_c(fake_module_library):
     undefined = verify_main_c_interfaces(main_c, interfaces)
 
     assert undefined == ()
+
+
+def test_generate_smoke_main_feeds_interfaces_and_sanitizes(fake_module_library):
+    """自检冒烟入口：接口块同源喂给 LLM，出稿走 sanitize_skeleton 同款兜底。"""
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+    llm = FakeLLM(
+        smoke_skeleton=(
+            "int main(void) {\n"
+            "    float t = dht11_read();\n"
+            "    delay_ms(100);\n"
+            "    dht11_init();\n"  # 假 LLM 出稿里的幻觉调用
+            "    while (1);\n"
+            "}\n"
+        )
+    )
+
+    main_c, blocked = generate_smoke_main(
+        llm, "环境监测仪", manifests, PLATFORM_MSPM0, fake_module_library
+    )
+
+    problem, interfaces = llm.smoke_calls[0]
+    assert problem == "环境监测仪"
+    assert interfaces[0].startswith("### 模块 dht11（inc/dht11.h）")
+    assert "float dht11_read(void);" in interfaces[0]
+    assert blocked == ("dht11_init",)
+    assert "dht11_read();" in main_c
+    assert "不存在的函数 dht11_init" in main_c
+
+
+def test_generate_smoke_main_strips_fenced_llm_output(fake_module_library):
+    """冒烟出稿的代码围栏同样剥掉（与 generate_skeleton 同款容错）。"""
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+    llm = FakeLLM(
+        smoke_skeleton=(
+            "```c\n"
+            "int main(void) {\n"
+            "    float t = dht11_read();\n"
+            "    delay_ms(100);\n"
+            "    while (1);\n"
+            "}\n"
+            "```\n"
+        )
+    )
+
+    main_c, blocked = generate_smoke_main(
+        llm, "环境监测仪", manifests, PLATFORM_MSPM0, fake_module_library
+    )
+
+    assert blocked == ()
+    assert "```" not in main_c
+    assert main_c.startswith("int main(void) {")
 
 
 def test_generate_skeleton_strips_fenced_llm_output(fake_module_library):

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 from .clex import (
     iter_c_regions,
@@ -389,10 +389,59 @@ def generate_skeleton(
     非空时自行抛错即可。母版目录给定时接口集并入母版头（母版内嵌实现
     的 ml_* API 不再被占位改写）。
     """
+    return _generate_main_c(
+        llm,
+        problem_text,
+        manifests,
+        platform,
+        library_dir,
+        master_project_dir,
+        llm.generate_main_skeleton,
+    )
+
+
+def generate_smoke_main(
+    llm: LLM,
+    problem_text: str,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path | None = None,
+) -> tuple[str, tuple[str, ...]]:
+    """LLM 出稿 → 静态自检：返回（可写入工程的自检冒烟 main.c, 被拦截调用）。
+
+    与 generate_skeleton 同构：接口块同源（build_skeleton_interfaces）、
+    自检同源（sanitize_skeleton）——差别只在 LLM 职责（generate_smoke_main
+    的 prompt 要求"初始化每个模块 → 读一次/动一次 → 打印结果"，不写赛题
+    逻辑）。输出通道（OLED 为主 / 串口为辅）由 LLM prompt 约束、webapp 层
+    负责"两个通道模块都没选 → 400"的入口校验，本纯函数不做该判决（保持
+    可内存直测）。
+    """
+    return _generate_main_c(
+        llm,
+        problem_text,
+        manifests,
+        platform,
+        library_dir,
+        master_project_dir,
+        llm.generate_smoke_main,
+    )
+
+
+def _generate_main_c(
+    llm: LLM,
+    problem_text: str,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path | None,
+    generate: Any,
+) -> tuple[str, tuple[str, ...]]:
+    """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。"""
     interfaces = build_skeleton_interfaces(
         manifests, platform, library_dir, master_project_dir
     )
-    raw = llm.generate_main_skeleton(problem_text, interfaces)
+    raw = generate(problem_text, interfaces)
     raw = strip_code_fences(raw)  # LLM 偶发用围栏包裹 → 剥离后再自检（判例见函数文档）
     return sanitize_skeleton(raw, extract_header_functions(interfaces))
 
