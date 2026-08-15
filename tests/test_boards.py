@@ -75,8 +75,10 @@ def test_capability_tokens_valid_and_unique(boards):
                 assert parts[0] in PIN_ROLE_TYPES, f"{pin.name} 非法 token {token}"
 
 
-# stm32 能力集口径 = ml_libs 支持表（ml_uart/ml_pwm/ml_exti/ml_adc/
-# ml_i2c/ml_oled 的实例→引脚映射逐条编码）——映射表硬编码于此防回退。
+# stm32 能力集口径 = ml_libs 支持表（ml_uart/ml_pwm/ml_exti/ml_adc 的实例→
+# 引脚映射逐条编码）——映射表硬编码于此防回退。软 I2C 已参数化（ADR 0011
+# 工单 02）：i2c_scl/i2c_sda 为全 io 脚类型级 token（无实例），表内 PB8/9/
+# 10/11 行钉旧 ml_i2c/ml_oled 实例位的类型级形态。
 STM32_ML_LIBS_EXPECTED = {
     "PA0": ["pwm:TIM2_CH1", "adc:ADC_Channel_0", "exti:PA0", "enc:0"],
     "PA1": ["pwm:TIM2_CH2", "adc:ADC_Channel_1", "exti:PA1", "enc:1"],
@@ -95,10 +97,10 @@ STM32_ML_LIBS_EXPECTED = {
     "PB5": ["exti:PB5", "enc:5"],
     "PB6": ["pwm:TIM4_CH1", "exti:PB6", "enc:6"],
     "PB7": ["pwm:TIM4_CH2", "exti:PB7", "enc:7"],
-    "PB8": ["pwm:TIM4_CH3", "i2c_scl:ml_oled"],
-    "PB9": ["pwm:TIM4_CH4", "i2c_sda:ml_oled"],
-    "PB10": ["uart_tx:UART_3", "i2c_scl:ml_i2c"],
-    "PB11": ["uart_rx:UART_3", "i2c_sda:ml_i2c"],
+    "PB8": ["pwm:TIM4_CH3", "i2c_scl"],
+    "PB9": ["pwm:TIM4_CH4", "i2c_sda"],
+    "PB10": ["uart_tx:UART_3", "i2c_scl"],
+    "PB11": ["uart_rx:UART_3", "i2c_sda"],
 }
 
 

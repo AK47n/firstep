@@ -10,7 +10,8 @@ PIN_ROLE_TYPES（boards 与 manifest pins 声明共用，改词表只改那一�
 能力集口径：
 - stm32 = ml_libs 支持表（实例→引脚写死在功能库内：ml_uart 的 UART_1→
   PA9/10、ml_pwm 的 TIM2_CH1→PA0、ml_exti 的 EXTI_PA0~PC7、ml_adc 的
-  Channel→引脚、软 I2C 的 ml_i2c→PB10/11 与 ml_oled→PB8/9），GPIO 任意；
+  Channel→引脚），GPIO 任意；软 I2C 已参数化（ADR 0011 工单 02：引脚宏迁
+  pin_config.h，i2c_scl/i2c_sda token 去实例 = 任意 io 脚类型级）；
   enc 实例 = EXTI 线号（motor 的 EXTI2/EXTI4 handler 名绑定线号，v1 换线 =
   遗留候选）——门禁按"默认引脚能力 token 的实例"约束绑定引脚（如 MOTOR_A_ENC
   默认 PA2 → 能力 enc:2 → 只能绑到同线号 PB2）。
