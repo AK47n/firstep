@@ -4,7 +4,7 @@
 
 **Blocked by:** 01（pin_bindings.py / tests / index.html 同缝——01 合 main 后再开）
 
-**Status:** 待复核（实施完成，PR 待开）
+**Status:** resolved（2026-08-15 PR #79 squash merged eb41286，主会话复核 + 1514 绿复跑）
 
 ## 实施记录（2026-08-15，worktree pin-full-unlock-02 @ 7962fd6）
 
