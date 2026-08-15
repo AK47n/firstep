@@ -53,3 +53,7 @@
   Project.map EXTI9_5_IRQHandler 强定义 motor_stm32.o（100 字节）、EXTI2/4 仅
   startup 弱兜底（0 字节）；不配回归 pin_config.h 与母版逐字节一致；PA5+PB5
   同线 400 中文 + 输出目录零产物。
+
+## Comments（2026-08-15 合并复核）
+
+- **合并复核**（PR #78 squash merged 7d3ef39，主会话）：diff 逐项对工单——类型级分支（pwm/enc 共用 in-tuple 判据）/ 7 条件 handler 守卫与 PR 位分派 / ml_exti 48 项（头源同改，交错序保 pin/3 == 线号，NVIC 三段公式正确性核过：线 0-4 → pin/3+6、5-9 → EXTI9_5、10-15 → EXTI15_10）/ 板定义扩线逐脚核对（PC13-15、PA8-15、PB8-15 的 exti+enc 尾号全对）/ 门禁表 10 键序 + errors.py 登记 / 前端镜像双函数；偏差 4 条留痕理由成立（ml_exti.h 同改属 spec"枚举扩 48 项"语义覆盖；PB2 换 PA5+PB5 样例正确——PB2 不在排针走未知引脚 400 而非线冲突；骨架复用 pin-unlock-04 已验收产物，enc 路径全量验证不受影响；LINE 宏注释中性化正当）。合并后 main 复跑 1494 绿 36.8s + mypy src 41 文件干净。worktree pin-unlock-full-01 照例保留。
