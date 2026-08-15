@@ -170,11 +170,18 @@ def test_resolve_rejects_unknown_pin_board_external():
         _resolve("mspm0", {"huidu.R4": "PB5"})
 
 
-def test_resolve_capability_stm32_uart_instance_locked():
-    """uart 角色实例 = 默认引脚实例（DIGIT_UART TX 默认 PA9 → UART_1），只有
-    PA9 有 uart_tx:UART_1 → 换脚必拒（ml_libs 第二层锁的机械实现）。"""
-    with pytest.raises(PinBindingError, match="UART_1"):
+def test_resolve_capability_stm32_uart_pair_constraint():
+    """uart 类型级（ADR 0012 工单 02）：TX/RX 必须成对同实例——单脚换实例
+    （DIGIT_UART_TX→PB10 = UART_3，RX 留默认 UART_1）交集空 → 400 成对绑定；
+    成对绑 PB10/PB11 → 两脚实例随绑定引脚推导 ("UART_3",)（旧实例锁：只有
+    PA9 有 uart_tx:UART_1，换脚必拒）。"""
+    with pytest.raises(PinBindingError, match="必须同实例，请成对绑定"):
         _resolve("stm32", {"digit_uart.DIGIT_UART_TX": "PB10"})
+    resolved = _resolve(
+        "stm32",
+        {"digit_uart.DIGIT_UART_TX": "PB10", "digit_uart.DIGIT_UART_RX": "PB11"},
+    )
+    assert [b.instances for b in resolved] == [("UART_3",), ("UART_3",)]
 
 
 def test_resolve_stm32_pwm_type_level_any_pwm_pin():

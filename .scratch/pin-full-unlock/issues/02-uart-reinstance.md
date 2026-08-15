@@ -4,7 +4,41 @@
 
 **Blocked by:** 01（pin_bindings.py / tests / index.html 同缝——01 合 main 后再开）
 
-**Status:** 待实施
+**Status:** 待复核（实施完成，PR 待开）
+
+## 实施记录（2026-08-15，worktree pin-full-unlock-02 @ 7962fd6）
+
+**验收全过**：pytest 1514 绿 + mypy src 干净；真机 2026C 三场景——①不配回归
+UV4 0 错 0 警 + pin_config.h/isr.c == 新母版逐字节；②换位绑定（DEBUG→UART_3、
+ZIGBEE→UART_2、UWB→UART_2 成对绑 TX/RX）最终 UV4 0 错 0 警 + 产物宏断言全
+命中（CALLS 重分组 USART1=digit+ball / USART2=uwb+zigbee / USART3=debug，
+fputc 流随 DEBUG_UART 挪位）；③单角色绑 DEBUG→UART_3 → HTTP 400 中文零产物。
+
+**偏差留痕（边界外必要改动 / 与工单文本的差异）**：
+1. **CALLS/兜底用真实函数名**：模块实际名为 `uwb_rx_handler` / `zigbee_rx_handler`
+   （非需求 5 示例的 uwb_uart_rx_handler / zigbee_uart_rx_handler）——重命名
+   超文件边界（.h 也要动），聚合宏与 isr.c 兜底按真实名对齐，弱兜底覆盖
+   语义才成立。
+2. **uart_pin_init_ex 形参 uint8_t**（需求 3 签名 5 参照旧）：ml_uart.h 里用
+   GPIOn_enum/Pinx_enum 会在 ml_led.c 编译时炸（ml_led.h→ml_gpio.h→headfile.h
+   →ml_uart.h 循环 include，枚举在 ml_gpio.h 的 headfile.h include 之后才定义
+   ——真机 UV4 #20 undefined 4 错判例）；改 uint8_t + 定义体显式转换回枚举，
+   ml_uart.h 加声明（边界外必要小改）。签名无 baud/priority 参 → 内定 115200
+   （全库 UART 角色同波特率）+ NVIC 0x01（debug/digit/ball 旧 0→1，都使能
+   中断，仅抢占优先级差异）。
+3. **新增门禁 no_usart_handlers_in_main**（需求表外加一条，errors.py 已登记）：
+   骨架 LLM 按旧模块头注释"USART1 中断调用"在 main.c 写 USARTx_IRQHandler →
+   与 isr.c 强符号 UV4 L6200E multiply defined（真机判例）。修法双管：三模块
+   头（uwb/zigbee/debug）.h 注释改指 isr.c 聚合（勿在 main.c 定义）+ 门禁兜底
+   （main.c 定义 USART1/2/3_IRQHandler → 400 中文，骨架回归 = 生成前拦而非
+   链接期炸）。mspm0 不适用。
+4. **真机 ② 连带绑 zigbee_uart_key 对**：2026C 推荐集含 key 模块——key 未绑
+   则其默认 UART_3 撞 DEBUG 绑 UART_3 → 400（门禁语义正确体现，换位需多角色
+   同时绑）；键集 8 条（三组 + key 对）。
+5. **真机 ② 首轮 UV4 有骨架缺陷**（两次跑首轮分别为 1 错 / 9 错 5 警，
+   根因 = 骨架 LLM 的 `#if DEVICE_KEY_TX` 预处理块缺 `#endif`，与 uart
+   改动无关）→ 修复循环 1 轮归零；终态 0 错 0 警（验收口径 = 终态编译绿 +
+   产物断言）。
 
 ## 需求
 
@@ -31,7 +65,8 @@
 
 ## 验收
 
-- [ ] pytest 全绿 + mypy src 干净
-- [ ] 红证已验（类型级缺位 / 交集空 / 实例冲突）+ 绿证（换位放行 + 宏值 + CALLS 重分组 + fputc + 默认逐字节）
-- [ ] 真机：不配回归 + 换位绑定 UV4 双 0 错 + 单角色撞车 HTTP 400 零产物
-- [ ] 独立 worktree + 提交 + 推送开 PR
+- [x] pytest 1514 绿 + mypy src 干净
+- [x] 红证已验（类型级缺位 / 交集空 / 实例冲突 / main.c 禁 USARTx_IRQHandler）+ 绿证（换位放行 + 宏值 + CALLS 重分组 + fputc + isr.c 聚合 + 默认逐字节）
+- [x] 真机：不配回归 UV4 0 错 0 警 + 逐字节 ✓；换位绑定 UV4 0 错 0 警 + 产物宏断言 ✓；单角色撞车 HTTP 400 零产物 ✓
+- [x] 独立 worktree（pin-full-unlock-02 @ 7962fd6）
+- [x] 提交 57bc541 + 推送开 PR #79（https://github.com/AK47n/firstep/pull/79）

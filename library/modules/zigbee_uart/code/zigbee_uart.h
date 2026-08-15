@@ -29,6 +29,8 @@ extern volatile uint32_t g_zigbee_byte_count; // 诊断：USART3 收到的总字
 
 // 函数
 void zigbee_uart_init(void);
-void zigbee_rx_handler(void);   // USART3 ISR 调用
+void zigbee_rx_handler(void);   // 由母版 isr.c 的 USART3_IRQHandler 经
+                              // USART3_IRQ_CALLS 聚合宏调用（勿在
+                              // main.c 定义 USARTx_IRQHandler）
 
 #endif

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
-from .boards import Board, board_for_platform
+from .boards import Board, board_for_platform, board_pin, pin_capability_instances
 from .compile_runner import CCS_NOT_FOUND_HINT, CcsTools
 from .library import list_modules
 from .llm import LLMError
@@ -127,6 +127,19 @@ class ExtiLineConflictError(GeneratorError):
     """绑定 enc/exti 角色异口同线互斥（EXTI 线号 = 脚号 mod 16，PA5/PB5 同
     线 5）——同线两个 handler 会互相清 PR 位，编译绿运行坏，生成前拦截
     （工单 pin-full-unlock/01，ADR 0012）。"""
+
+
+class UartInstanceConflictError(GeneratorError):
+    """绑定 UART 角色推导实例 × 未绑定 UART 角色默认实例冲突（换实例必成对
+    换位——单角色换实例会撞同实例默认角色的 _UART 宏与 USARTx_IRQ_CALLS
+    聚合，编译绿运行坏，生成前拦截；工单 pin-full-unlock/02，ADR 0012）。"""
+
+
+class UsartHandlerInMainError(GeneratorError):
+    """main.c 定义了 USART1/2/3_IRQHandler——UART 中断聚合归母版 isr.c
+    （USARTx_IRQ_CALLS 按绑定实例分组），main.c 写死 handler 会与 isr.c 强
+    符号链接冲突（UV4 L6200E multiply defined 判例），生成前拦截
+    （工单 pin-full-unlock/02，ADR 0012）。"""
 
 
 # 工程树外由 C 标准库提供的头（引号形式同样由编译器按库路径解析；两平台
@@ -1153,6 +1166,102 @@ def _exti_line_of(pin: str) -> int:
     return int(match.group(1)) % 16
 
 
+def _check_uart_instance_conflicts(
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: "GateContext",
+) -> None:
+    """UART 实例冲突门禁（工单 pin-full-unlock/02，ADR 0012）：绑定（且改动）
+    UART 角色的推导实例 × 未绑定 UART 角色的默认实例 → 400 中文——单角色换
+    实例必撞同实例默认角色（默认布局 DIGIT/BALL/UWB 共 UART_1、DEBUG UART_2、
+    ZIGBEE UART_3 覆盖全实例），合法换位需多角色成对同时绑。绑定×绑定同实例
+    放行（共享提示语义，换位合法）；默认×默认不查（现状合法，与 TIM 门禁同
+    "只查用户绑定"口径）；绑定值 = 默认值（no-op）不触发。mspm0 无 USART
+    聚合语义不适用。
+    """
+    if platform != PLATFORM_STM32 or not context.bindings or context.board is None:
+        return
+    resolved = resolve_bindings(manifests, platform, context.board, context.bindings)
+    bound: dict[str, tuple[str, str]] = {}
+    for binding in resolved:
+        if (
+            binding.declaration.type not in ("uart_tx", "uart_rx")
+            or binding.pin == binding.declaration.default
+            or len(binding.instances) != 1
+        ):
+            continue
+        instance = binding.instances[0]
+        if instance not in bound:
+            bound[instance] = (binding.role_key, binding.pin)
+    if not bound:
+        return
+
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for decl in entry.pins:
+            role_key = f"{manifest.slug}.{decl.id}"
+            if (
+                decl.type not in ("uart_tx", "uart_rx")
+                or role_key in context.bindings
+            ):
+                continue
+            default_bound = board_pin(context.board, decl.default)
+            instances = (
+                pin_capability_instances(default_bound, decl.type)
+                if default_bound is not None
+                else ()
+            )
+            if len(instances) != 1:
+                continue
+            instance = instances[0]
+            if instance in bound:
+                bound_key, bound_pin = bound[instance]
+                raise UartInstanceConflictError(
+                    f"绑定冲突：{bound_key}（绑 {bound_pin}，推导实例"
+                    f" {instance}）与未绑定的 {role_key} 默认实例 {instance}"
+                    f" 冲突——单角色换实例必撞同实例默认角色，请成对换位绑定"
+                    f"（多角色同时绑到对方实例）"
+                )
+
+
+def _check_no_usart_handlers_in_main(
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: "GateContext",
+) -> None:
+    """main.c 不得定义 USART1/2/3_IRQHandler（工单 pin-full-unlock/02，ADR
+    0012）：UART 中断聚合归母版 isr.c——USARTx_IRQ_CALLS 宏按绑定实例分组
+    rx_handler 调用，main.c 写死 handler（骨架 LLM 按旧模块头注释"USART1
+    中断调用"产出）与 isr.c 强符号链接冲突（真机 UV4 L6200E multiply
+    defined 判例），生成前拦截。模块头已改指 isr.c 聚合，本门禁是兜底
+    （骨架回归 = 400 中文而非链接期炸）。mspm0 无 isr.c 聚合不适用
+    （UART 中断挂载形态在 SysConfig 生成侧）。
+    """
+    if platform != PLATFORM_STM32:
+        return
+    stripped = strip_comments(corpus.main_c)
+    hits = sorted(set(_USART_HANDLER_DEF_RE.findall(stripped)))
+    if hits:
+        raise UsartHandlerInMainError(
+            "main.c 不得定义 USARTx_IRQHandler（"
+            + "、".join(hits)
+            + "）——UART 中断聚合归母版 isr.c（USARTx_IRQ_CALLS 按绑定实例"
+            "分组），main.c 写死 handler 会在链接期与 isr.c 冲突（UV4 L6200E）"
+            "，请删除该 handler 或让骨架阶段改写"
+        )
+
+
+# main.c 的 USARTx_IRQHandler 定义形态（门禁 _check_no_usart_handlers_in_main
+# 用）：void USART1_IRQHandler(void) ——只认 USART1/2/3（isr.c 聚合三实例）
+_USART_HANDLER_DEF_RE = re.compile(
+    r"\bvoid\s+(USART[123]_IRQHandler)\s*\(\s*void\s*\)"
+)
+
+
 @dataclass(frozen=True)
 class GenerationGate:
     """一道生成门禁的装配描述：key（表内唯一，测试钉死顺序）+ check（小型
@@ -1179,14 +1288,16 @@ class GateContext:
 
 # 门禁表。顺序即 generate 的校验顺序（现状调用顺序，结构测试钉死）；顺序有
 # 语义：file_path_conflicts 跳过无该平台版本条目（由 module_files 先报），
-# 必须先跑 module_files；timer_instance_conflicts / exti_line_conflicts
-# 依赖 pin_bindings 先校验载荷（resolve 才能成功）。新增门禁 = 表加一条 +
-# 谓词（照 categories.RULE_CATEGORIES 先例）——顺序 / 输入依赖 / 门禁全貌
-# 只此一处可见。5 道吃 corpus（纯谓词，内存直构可测）；file_path_conflicts
-# 吃 manifests + platform（manifest 声明，不读盘）；工单 02 新两条 + 工单
-# pin-unlock-stm32/01 一条 + 工单 pin-full-unlock/01 一条吃 context
-# （bindings + board——绑定校验 / 骨架引脚字面量 / 骨架定时器冲突 / EXTI
-# 线冲突）。签名统一 4 参，存量谓词忽略第 4 参。
+# 必须先跑 module_files；timer_instance_conflicts / exti_line_conflicts /
+# uart_instance_conflicts 依赖 pin_bindings 先校验载荷（resolve 才能成功）。
+# 新增门禁 = 表加一条 + 谓词（照 categories.RULE_CATEGORIES 先例）——顺序 /
+# 输入依赖 / 门禁全貌只此一处可见。5 道吃 corpus（纯谓词，内存直构可测）；
+# file_path_conflicts 吃 manifests + platform（manifest 声明，不读盘）；
+# 工单 02 新两条 + 工单 pin-unlock-stm32/01 一条 + 工单 pin-full-unlock/01
+# 两条吃 context（bindings + board——绑定校验 / 骨架引脚字面量 / 骨架定时器
+# 冲突 / EXTI 线冲突 / UART 实例冲突）+ 工单 pin-full-unlock/02 两条吃
+# corpus（骨架引脚字面量 / 骨架 USARTx_IRQHandler 禁定义）。签名统一 4 参，
+# 存量谓词忽略第 4 参。
 GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "module_files",
@@ -1239,8 +1350,20 @@ GENERATION_GATES: tuple[GenerationGate, ...] = (
         ),
     ),
     GenerationGate(
+        "uart_instance_conflicts",
+        lambda corpus, manifests, platform, context: _check_uart_instance_conflicts(
+            corpus, manifests, platform, context
+        ),
+    ),
+    GenerationGate(
         "no_pin_literals_in_main",
         lambda corpus, manifests, platform, context: _check_no_pin_literals_in_main(
+            corpus, manifests, platform, context
+        ),
+    ),
+    GenerationGate(
+        "no_usart_handlers_in_main",
+        lambda corpus, manifests, platform, context: _check_no_usart_handlers_in_main(
             corpus, manifests, platform, context
         ),
     ),

@@ -76,7 +76,8 @@ static uint8_t calc_xor(void)
 // ============================================================
 void uwb_uart_init(void)
 {
-    uart_init(UWB_UART, UWB_BAUD, 0x01);
+    uart_pin_init_ex(UWB_UART, UWB_UART_TX_GPIO, UWB_UART_TX_Pin,
+                     UWB_UART_RX_GPIO, UWB_UART_RX_Pin);
     uwb_idx    = 0;
     uwb_synced = 0;
 
@@ -143,11 +144,11 @@ static void parse_frame(void)
 }
 
 // ============================================================
-//  USART1 中断处理 — 字节级状态机
+//  UART 接收中断处理 — 字节级状态机（由母版 isr.c 的 USART1_IRQHandler 经 USART1_IRQ_CALLS 聚合宏调用）
 // ============================================================
 void uwb_rx_handler(void)
 {
-    uint8_t byte = (uint8_t)(UWB_UART_INST->DR & 0xFF);  // UWB_UART_INST = USART1（pin_config.h）
+    uint8_t byte = (uint8_t)(UWB_UART_INST->DR & 0xFF);  // UWB_UART_INST（pin_config.h 宏）
 
     // 检测帧头：连续 4 个 0xFF
     if (byte == 0xFF)
