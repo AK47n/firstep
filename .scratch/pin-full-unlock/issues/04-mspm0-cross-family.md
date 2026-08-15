@@ -4,7 +4,7 @@
 
 **Blocked by:** 03（pinwriter / pin_bindings / index.html 同缝——03 合 main 后再开）
 
-**Status:** 待实施
+**Status:** claimed
 
 ## 需求
 
