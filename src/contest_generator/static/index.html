@@ -100,12 +100,24 @@
   .badge.unverified { background: var(--warn-dim); color: var(--warn); }
   .badge.hw { background: var(--info-dim); color: var(--info); }
   .badge.no-master { background: rgba(139, 148, 158, .15); color: var(--muted); }
+  .badge.dep { background: rgba(139, 148, 158, .12); color: var(--muted); }
   .badge.ok { background: var(--ok-dim); color: var(--ok-bright); }
   .item { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px;
           margin-bottom: 8px; background: var(--panel-2); }
   .item .head { display: flex; gap: 8px; align-items: center; }
   .item .slug { font-weight: 600; font-family: var(--mono); }
   .item .reason { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  /* 步骤 6 紧凑清单（工单 step6-ui）：滚动 + 两行布局 + 搜索 */
+  .selected-scroll { max-height: 240px; overflow-y: auto; overflow-x: hidden;
+                     border: 1px solid var(--border); border-radius: 8px;
+                     padding: 4px 10px; background: var(--panel-2); max-width: 100%; }
+  .selected-scroll .item { border: none; border-bottom: 1px dashed var(--border);
+                           border-radius: 0; margin: 0; padding: 6px 0; background: transparent; }
+  .selected-scroll .item:last-child { border-bottom: none; }
+  .selected-scroll .item .head { flex-wrap: wrap; gap: 6px; min-width: 0; }
+  .selected-scroll .desc { display: block; max-width: 100%; overflow: hidden;
+                           text-overflow: ellipsis; white-space: nowrap;
+                           color: var(--muted); font-size: 12px; margin-top: 2px; }
   /* 编译结果横幅（工单 compile-experience-ui/01）：四态颜色 + 初始 hidden */
   #compile-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
                     font-size: 13px; font-weight: 600; }
@@ -401,7 +413,8 @@
   /* SVG 引脚候选高亮（点清单条目 → 板图可接引脚） */
   .pin-cand { stroke: var(--accent) !important; stroke-width: 2.5 !important; }
   .pin-dim { opacity: .22; }
-  .pin-default-cand { stroke: var(--ok); stroke-width: 1.5; stroke-dasharray: 3 2; }
+  .pin-default-cand { stroke: var(--danger); stroke-width: 3; }
+  .pin-default-dot { fill: var(--danger); filter: drop-shadow(0 0 3px var(--danger)); }
   .pin-board-caption { fill: var(--muted); font-size: 11px; }
   #pin-board-caption { text-align: center; color: var(--muted); font-size: 12px; margin-top: 4px; }
   /* 引脚锚定浮层菜单（复用 .ref-files-overlay 模式：全屏遮罩 + 弹层 + Esc 关闭） */
@@ -516,8 +529,12 @@
         <button id="btn-add-module">添加模块</button>
         <button id="btn-expand" class="primary">展开依赖并检查平台</button>
       </div>
+      <div class="row" style="margin-top:8px">
+        <input type="search" id="module-search" placeholder="搜索已展开模块…" style="flex:1;max-width:300px">
+        <span class="muted" id="module-count"></span>
+      </div>
       <div id="warnings" style="margin-top:10px"></div>
-      <div id="selected-list" style="margin-top:10px"></div>
+      <div id="selected-list" class="selected-scroll" style="margin-top:8px"></div>
       <div id="expand-msg" class="error"></div>
     </div>
 
@@ -1387,21 +1404,18 @@ function renderReferenceResult(data) {
 // ---------------------------------------------------------------------------
 // 生成页：5. 模块清单（增删 + 依赖展开 + 平台警告）
 // ---------------------------------------------------------------------------
+function shortDesc(s, n) {
+  if (!s) return "";
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
 function renderModulePool() {
   $("module-pool").innerHTML = (state.modules || [])
     .filter((m) => !selectedSlugs.includes(m.slug))
-    .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(m.description)}</option>`).join("");
+    .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(shortDesc(m.description, 24))}</option>`).join("");
 }
 
-$("btn-add-module").addEventListener("click", () => {
-  const slug = $("module-pool").value;
-  if (!slug) return;
-  selectedSlugs.push(slug);
-  expanded = []; warnings = [];
-  renderSelected(); renderWarnings(); renderModulePool();
-});
-
-$("btn-expand").addEventListener("click", async () => {
+async function runExpand() {
   $("expand-msg").textContent = "";
   if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
   if (!selectedSlugs.length) { $("expand-msg").textContent = "请先选择至少一个模块"; return; }
@@ -1412,30 +1426,62 @@ $("btn-expand").addEventListener("click", async () => {
     renderSelected(); renderWarnings();
     renderPinCard();  // 引脚配置卡（工单 03）：角色清单随展开结果重算
   } catch (e) { $("expand-msg").textContent = e.message; }
+}
+
+$("btn-add-module").addEventListener("click", () => {
+  const slug = $("module-pool").value;
+  if (!slug) return;
+  selectedSlugs.push(slug);
+  expanded = []; warnings = [];
+  renderSelected(); renderWarnings(); renderModulePool();
+  runExpand();  // 手动添加后直接展开，步骤 7 立即可配置引脚
 });
+
+$("btn-expand").addEventListener("click", runExpand);
+
+$("module-search").addEventListener("input", renderSelected);
 
 function renderSelected() {
   const box = $("selected-list");
+  const q = ($("module-search").value || "").trim().toLowerCase();
   if (!expanded.length) {
+    $("module-count").textContent = "";
     box.innerHTML = selectedSlugs.length
       ? '<div class="muted">已选（未展开依赖）：' + selectedSlugs.map(esc).join("、") + '</div>'
       : '<div class="muted">尚未选择模块。</div>';
     return;
   }
-  box.innerHTML = expanded.map((m) => `
-    <div class="item"><div class="head">
-      <span class="slug">${esc(m.slug)}</span>
-      <span class="muted">${esc(m.description)}</span>
-      ${(m.dependencies || []).length ? `<span class="muted">依赖：${esc(m.dependencies.join("、"))}</span>` : ""}
-      ${moduleBadges(m)}
-      <button class="danger" data-remove="${esc(m.slug)}">移除</button>
-    </div>
-    ${Object.entries(m.platforms || {}).map(([platform, entry]) =>
-      entry.notes
-        ? `<div class="notes" style="margin-top:4px;color:var(--info)">【${esc(platform)} 配置】${esc(entry.notes)}</div>`
-        : ""
-    ).join("")}
-    </div>`).join("");
+  const visible = expanded.filter((m) =>
+    !q || (m.slug + " " + (m.description || "") + " " + (m.dependencies || []).join(" ")).toLowerCase().includes(q));
+  const depCount = expanded.filter((m) => !selectedSlugs.includes(m.slug)).length;
+  $("module-count").textContent = q
+    ? `匹配 ${visible.length} / ${expanded.length} 个模块`
+    : `已展开 ${expanded.length} 个模块（含 ${depCount} 个自动带入）`;
+  if (!visible.length) {
+    box.innerHTML = '<div class="muted">没有匹配的模块。</div>';
+    return;
+  }
+  const notes = (m) => Object.entries(m.platforms || {}).map(([platform, entry]) =>
+    entry.notes ? `【${platform} 配置】${entry.notes}` : "").filter(Boolean).join(" ");
+  const bringers = new Map();
+  for (const m of expanded) {
+    if (!selectedSlugs.includes(m.slug)) continue;
+    for (const dep of (m.dependencies || [])) bringers.set(dep, m.slug);
+  }
+  box.innerHTML = visible.map((m) => {
+    const isDep = !selectedSlugs.includes(m.slug);
+    const bringer = bringers.get(m.slug);
+    return `
+    <div class="item">
+      <div class="head" title="${esc((m.description || "") + " " + notes(m))}">
+        <span class="slug">${esc(m.slug)}</span>
+        ${isDep ? `<span class="badge dep" title="由 ${esc(bringer || "其它模块")} 依赖带入">自动带入${bringer ? "·" + esc(bringer) : ""}</span>` : ""}
+        ${moduleBadges(m)}
+        <button class="danger" data-remove="${esc(m.slug)}">移除</button>
+      </div>
+      <div class="desc" title="${esc((m.description || "") + " " + notes(m))}">${esc(m.description || "")}${(m.dependencies || []).length ? ` · 依赖：${esc(m.dependencies.join("、"))}` : ""}</div>
+    </div>`;
+  }).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
@@ -1795,7 +1841,8 @@ function svgPin(pin, roles, idx, rotated180) {
     const hl = roles.find((r) => r.key === pinHighlight);
     if (hl) {
       if (idx[hl.decl.default] === pin) {
-        extra += `<circle cx="${cx}" cy="${cy}" r="11" fill="none" class="pin-default-cand"/>`;
+        extra += `<circle cx="${cx}" cy="${cy}" r="13" fill="none" class="pin-default-cand"/>`;
+        extra += `<circle cx="${cx}" cy="${cy}" r="4" class="pin-default-dot"/>`;
       }
       if (pinCanHost(pin, hl.decl)) cls = ' class="pin-cand"';
       else if (io) cls = ' class="pin-dim"';
