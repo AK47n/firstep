@@ -198,6 +198,13 @@ STM32_MACRO_VALUES = {
     "UWB_UART_INST": "USART1",
     "ZIGBEE_UART": "UART_3",
     "ZIGBEE_UART_INST": "USART3",
+    # 软 I2C（ml_i2c.h / ml_oled.h 迁入，工单 pin-unlock-stm32/02，原值不变）
+    "I2C_GPIO": "GPIO_B",
+    "I2C_SCL_GPIO_Pin": "Pin_10",
+    "I2C_SDA_GPIO_Pin": "Pin_11",
+    "OLED_GPIO": "GPIO_B",
+    "OLED_SCL_Pin": "Pin_8",
+    "OLED_SDA_Pin": "Pin_9",
 }
 
 
@@ -209,7 +216,8 @@ def test_pin_config_macro_values_preserve_pre_migration_defaults():
 
 def _master_header_defines() -> dict[str, str]:
     """母版全部头（pin_config.h + ml_libs/*.h）的顶层宏——写侧渲染要改的宏
-    必须在母版可见（软 I2C 宏在 ml_i2c.h/ml_oled.h 内，不在 pin_config.h）。"""
+    必须在母版可见（软 I2C 宏已随工单 pin-unlock-stm32/02 迁入 pin_config.h；
+    ml_libs 头以 GBK 编码按 errors="replace" 读入，ASCII 宏名不受影响）。"""
     defines = dict(_pin_config_defines())
     for header in (STM32_MASTER / "ml_libs").glob("*.h"):
         for line in header.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -360,6 +368,12 @@ def test_every_declaration_default_on_board_and_capable():
         if pin.type in ("gpio_out", "gpio_in") or (
             platform == "mspm0" and pin.type == "enc"
         ):
+            assert pin_supports(board_pin_, pin.type), (
+                f"{slug}.{pin.id} 默认 {pin.default} 不支持 {pin.type}"
+            )
+        elif platform == "stm32" and pin.type in ("i2c_scl", "i2c_sda"):
+            # 软 I2C 去实例化（ADR 0011 工单 02）：stm32 i2c token 无实例，
+            # 默认引脚只须类型级支持（总线身份在宏里不在 token 里）
             assert pin_supports(board_pin_, pin.type), (
                 f"{slug}.{pin.id} 默认 {pin.default} 不支持 {pin.type}"
             )

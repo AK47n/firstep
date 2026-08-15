@@ -4,7 +4,7 @@
 
 **Blocked by:** 01（test_pin_bindings.py 同缝——01 合 main 后再开）
 
-**Status:** 待实施
+**Status:** resolved（待合 main，分支 pin-unlock-02 29c114d）
 
 ## 需求
 
@@ -24,10 +24,32 @@
 
 ## 验收
 
-- [ ] pytest 全绿 + mypy src 干净
-- [ ] 红证已验（异口 400 / 同口放行）+ 绿证（三宏值断言 + 默认逐字节契约对新母版成立）
-- [ ] 真机：mpu6050 绑 PA5/PA6 UV4 0 错 0 警；不配回归 UV4 0 错
-- [ ] 独立 worktree + 提交 + 推送（PR）
+- [x] pytest 全绿 + mypy src 干净（1481 passed + mypy 41 文件 Success，2026-08-15 worktree pin-unlock-02 @ 29c114d）
+- [x] 红证已验（异口 400 / 同口放行）+ 绿证（三宏值断言 + 默认逐字节契约对新母版成立）——tests/test_pin_unlock_i2c.py 11 用例，红证先行（缺门禁/数据/宏时 12 红 1 绿，防御用例现路径本就过）
+- [x] 真机：mpu6050 绑 PA5/PA6 UV4 0 错 0 警 + pin_config.h 三宏 GPIO_A/Pin_5/Pin_6 且其余行逐字节（diff 仅 3 行）；不配回归 UV4 0 错 0 警 + pin_config.h == 新母版逐字节（zigbee+mpu6050 同选默认共享脚现状不拦）；HTTP 层异口 400 中文零产物
+- [x] 独立 worktree（.claude/worktrees/pin-unlock-02，01 合 main 后从 b589786 建）+ 提交 + 推送（PR）
+
+## Comments（2026-08-15 实施记录）
+
+- **真机三跑**（2026C stm32，worktree 零写入启动法：AppContext 内存 replace 指向
+  worktree 库目录 + GENERATE_CHECK_CACHE_DIR 复用主检出缓存 + --clarify 20 条零警告；
+  证据日志主检出 .scratch/real-run/check_2026C_i2c_{bind,default,crossport}.log）：
+  ① `--reuse-recommend --add ml_mpu6050 --bindings '{"ml_mpu6050.MPU6050_SCL":"PA5",
+  "ml_mpu6050.MPU6050_SDA":"PA6"}'` → UV4 exit=0 0 错 0 警，产物 pin_config.h 只变
+  I2C_GPIO/I2C_SCL_GPIO_Pin/I2C_SDA_GPIO_Pin 三行（GPIO_A/Pin_5/Pin_6），其余与
+  母版逐字节一致；② 不配 bindings 同 8 模块 → UV4 0 错 0 警，pin_config.h == 新母版
+  逐字节（PB10/11 默认，zigbee+mpu6050 共享脚不拦）；③ SCL→PA5 / SDA→PB6 异口 →
+  HTTP 400 "共享端口宏 I2C_GPIO 被 ml_mpu6050.MPU6050_SCL、ml_mpu6050.MPU6050_SDA
+  绑到不同端口 GPIO_A、GPIO_B"，零产物。
+- **文件边界外必要改动**：tests/test_pins.py——`test_every_declaration_default_on_
+  board_and_capable` 对 stm32 i2c_scl/i2c_sda 加类型级豁免（token 去实例化后
+  旧"默认引脚须有实例"判据必红）+ STM32_MACRO_VALUES 钉死 6 新宏值 +
+  `_master_header_defines` docstring 同步；test_boards.py STM32_ML_LIBS_EXPECTED
+  PB8/9/10/11 行改类型级 token。均为结构测试随数据契约的必要同步，非超范围功能。
+- **实施细节**：ml_i2c.h（GBK）/ ml_oled.h（UTF-8）字节级编辑保编码——只删 3 行
+  ASCII define + 插 include，注释字节原样；板 JSON 行级变换保格式（两脚本后
+  diff 恰 32 io 行语义变化）；门禁只查 `_GPIO/_PORT` 尾形宏的改动项，同值放行，
+  值推导复用 `_stm32_macro_value`（零新推导逻辑）。
 
 ## 实施提示词（复制到新会话）
 

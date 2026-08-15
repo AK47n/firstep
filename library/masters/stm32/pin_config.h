@@ -98,4 +98,15 @@
 #define ZIGBEE_UART       UART_3
 #define ZIGBEE_UART_INST  USART3
 
+/* ---- 软 I2C（ml_i2c / ml_oled 引脚宏，自 ml_libs 头文件迁入，原值不变）----
+ * 参数化后 I2C 角色可绑任意 GPIO（ADR 0011 工单 02）：ml_i2c 默认 PB10 SCL /
+ * PB11 SDA（与 Zigbee UART_3 共用脚）、ml_oled 默认 PB8 SCL / PB9 SDA。
+ */
+#define I2C_GPIO          GPIO_B
+#define I2C_SCL_GPIO_Pin  Pin_10
+#define I2C_SDA_GPIO_Pin  Pin_11
+#define OLED_GPIO         GPIO_B
+#define OLED_SCL_Pin      Pin_8
+#define OLED_SDA_Pin      Pin_9
+
 #endif /* __PIN_CONFIG_H */

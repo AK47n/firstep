@@ -1,6 +1,7 @@
 #ifndef __OLED_H
 #define __OLED_H
 #include "headfile.h"
+#include "pin_config.h"
 
 /* 
    ����ģ��I2CЭ��
@@ -8,9 +9,6 @@
 	 �Զ���OLED��SCL��SDA����
 	 �轫��Ӧ�������óɿ�©���	 
 */
-#define OLED_GPIO     GPIO_B
-#define OLED_SCL_Pin  Pin_8
-#define OLED_SDA_Pin  Pin_9
 
 
 void OLED_Init(void);

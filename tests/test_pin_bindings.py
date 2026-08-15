@@ -340,12 +340,13 @@ def test_render_pin_config_gpio_value_shapes():
         assert f"MOTOR_A_DIR_PIN     {pin_no}\r\n" in out
 
 
-def test_render_pin_config_missing_macro_loud_failure():
-    """宏不在母版 pin_config.h（ml_mpu6050 的 I2C_GPIO 住在 ml_i2c.h）= 数据
-    不在渲染器可控范围 → 大声失败（实践上门禁实例锁已拦，此路防御）。"""
+def test_render_pin_config_i2c_binding_now_legal():
+    """软 I2C 参数化（ADR 0011 工单 02）：mpu6050 绑非默认脚合法——I2C 宏已
+    迁入 pin_config.h（旧预期：宏不在母版 → 大声失败）。PB12 → GPIO_B/Pin_12。"""
     binding = _bind("ml_mpu6050.MPU6050_SCL", "PB12")
-    with pytest.raises(PinBindingError, match="I2C_GPIO"):
-        render_pin_config(STM32_MASTER_PIN_CONFIG, (binding,))
+    out = render_pin_config(STM32_MASTER_PIN_CONFIG, (binding,))
+    assert "#define I2C_GPIO          GPIO_B\r\n" in out
+    assert "#define I2C_SCL_GPIO_Pin  Pin_12\r\n" in out
 
 
 def test_render_pin_config_ambiguous_instance_loud_failure():

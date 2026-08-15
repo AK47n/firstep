@@ -35,9 +35,31 @@
       "files": [],
       "verified": true,
       "hardware_bound": false,
-      "notes": "实现内嵌母版 ml_libs/ml_oled.c/h + ml_oled_font.h（逐飞 ML 库，2026C/21F 真机编译过）。",
+      "notes": "实现内嵌母版 ml_libs/ml_oled.c/h + ml_oled_font.h（逐飞 ML 库，2026C/21F 真机编译过）。软 I2C 参数化（ADR 0011 工单 02）：引脚宏 OLED_GPIO/OLED_SCL_Pin/OLED_SDA_Pin 在 pin_config.h，任意 GPIO 可绑。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "OLED_SCL",
+          "type": "i2c_scl",
+          "default": "PB8",
+          "required": true,
+          "macros": [
+            "OLED_GPIO",
+            "OLED_SCL_Pin"
+          ]
+        },
+        {
+          "id": "OLED_SDA",
+          "type": "i2c_sda",
+          "default": "PB9",
+          "required": true,
+          "macros": [
+            "OLED_GPIO",
+            "OLED_SDA_Pin"
+          ]
+        }
+      ]
     }
   }
 }

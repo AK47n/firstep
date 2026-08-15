@@ -9,6 +9,9 @@
 - mspm0 只碰 `$assign` 引号值：实例名 / 宏名 / 通道名不动（通道名有
   DCC_100_PWM2 先例：ti_driverlib_pwm_DCC100_CC0 为避与 PWMAB 重名改名过，
   改写器碰它必炸 SysConfig）。
+- 共享端口宏异值 400（ADR 0011 工单 02）：同 `_GPIO/_PORT` 尾形宏的两条改动
+  绑定计算值不同 → PinBindingError（SCL/SDA 须同口）；只查改动项，未改同族
+  角色的隐式漂移仍为提示语义（前端卡片已做）。
 
 纯文本函数（字符串进、字符串出），盘上应用由 generator 挂钩（apply_pin_bindings
 统一入口）——keil.py render_master_uvprojx 确定性渲染先例。写侧只吃
@@ -89,15 +92,17 @@ def render_pin_config(
     - `_PIN` / `_Pin` → `Pin_<号>`（引脚 PA6 → Pin_6）
 
     注释里的旧引脚字样同步替换（`/* PA2，下降沿触发 */` → `/* PB2，… */`）。
-    母版 pin_config.h 中没有的宏（如 ml_mpu6050 的 I2C_GPIO 住在 ml_i2c.h）
-    = 数据不在此文件可控 → PinBindingError 大声失败（实践上门禁实例锁已拦，
-    此路为防御）。
+    母版 pin_config.h 中没有的宏 = 数据不在此文件可控 → PinBindingError 大声
+    失败（软 I2C 宏随工单 02 迁入本文件后此路真机不可达，防御路径）。共享
+    端口宏异值冲突（两条改动写同一 `_GPIO/_PORT` 宏且值不同）在写行前拦。
     """
     changes: list[ResolvedBinding] = [
         b for b in resolved if b.pin != b.declaration.default
     ]
     if not changes:
         return master_text
+
+    _check_shared_port_macro_conflicts(changes)
 
     lines = master_text.splitlines(keepends=True)
     index: dict[str, int] = {}
@@ -127,6 +132,33 @@ def render_pin_config(
             if new_line != lines[line_no]:
                 lines[line_no] = new_line
     return "".join(lines)
+
+
+def _check_shared_port_macro_conflicts(
+    changes: Sequence[ResolvedBinding],
+) -> None:
+    """共享端口宏异值门禁（ADR 0011）：两条改动绑定写同一 `_GPIO/_PORT` 尾形
+    宏且计算值不同（如 MPU6050_SCL→PA5、MPU6050_SDA→PB6 都写 I2C_GPIO 但值
+    GPIO_A/GPIO_B 不同——一根 SCL/SDA 总线不可分属两个端口）→ PinBindingError
+    400。只查改动项（未改同族角色的隐式漂移仍为提示语义，前端卡片已做）；
+    同值（同端口）放行。旧"宏不在 pin_config.h 大声失败"防御保留在写行循环。"""
+    by_macro: dict[str, tuple[str, str]] = {}
+    for binding in changes:
+        for macro in binding.declaration.macros:
+            if not macro.endswith(("_GPIO", "_PORT")):
+                continue
+            value = _stm32_macro_value(
+                binding.role_key, macro, binding.pin, binding.instances
+            )
+            previous = by_macro.get(macro)
+            if previous is not None and previous[1] != value:
+                raise PinBindingError(
+                    f"共享端口宏 {macro} 被 {previous[0]}、{binding.role_key} "
+                    f"绑到不同端口 {previous[1]}、{value} —— 同一总线须绑到"
+                    f"同一端口（如 SCL/SDA 同 GPIO 口）"
+                )
+            if previous is None:
+                by_macro[macro] = (binding.role_key, value)
 
 
 def _stm32_macro_value(
