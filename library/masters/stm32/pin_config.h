@@ -32,17 +32,17 @@
 #define MOTOR_B_DIR2_PORT   GPIO_B
 #define MOTOR_B_DIR2_PIN    Pin_1
 
-/* ---- 编码器（EXTI 脉冲计数 + 方向输入，21F 原值）---- */
-#define MOTOR_A_ENC_EXTI      EXTI_PA2   /* PA2，下降沿触发 */
-#define MOTOR_A_ENC_LINE      2          /* EXTI 线号（handler 按此条件编译） */
-#define MOTOR_A_ENC_DIR_PORT  GPIO_A
-#define MOTOR_A_ENC_DIR_PIN   Pin_3      /* 方向输入（上拉） */
+/* ---- 编码器（EXTI 脉冲计数 + 方向输入；A 编码器已离 PA2/PA3 让位 DEBUG_UART）---- */
+#define MOTOR_A_ENC_EXTI      EXTI_PB5   /* PB5，下降沿触发 */
+#define MOTOR_A_ENC_LINE      5          /* EXTI 线号（handler 按此条件编译） */
+#define MOTOR_A_ENC_DIR_PORT  GPIO_B
+#define MOTOR_A_ENC_DIR_PIN   Pin_4      /* 方向输入（上拉） */
 #define MOTOR_B_ENC_EXTI      EXTI_PA4   /* PA4，下降沿触发 */
 #define MOTOR_B_ENC_LINE      4          /* EXTI 线号（handler 按此条件编译） */
 #define MOTOR_B_ENC_DIR_PORT  GPIO_A
 #define MOTOR_B_ENC_DIR_PIN   Pin_5      /* 方向输入（上拉） */
 
-/* ---- 灰度传感器（pid 模块 gray_track.c：D1-D8 输入上拉，21F 原值）---- */
+/* ---- 灰度传感器（pid 模块 gray_track.c：D1-D8 输入上拉；D6-D8 已离 PC13-15 让位 LED）---- */
 #define GRAY_D1_PORT  GPIO_B
 #define GRAY_D1_PIN   Pin_12
 #define GRAY_D2_PORT  GPIO_B
@@ -53,12 +53,12 @@
 #define GRAY_D4_PIN   Pin_15
 #define GRAY_D5_PORT  GPIO_A
 #define GRAY_D5_PIN   Pin_8
-#define GRAY_D6_PORT  GPIO_C
-#define GRAY_D6_PIN   Pin_13
-#define GRAY_D7_PORT  GPIO_C
-#define GRAY_D7_PIN   Pin_14
-#define GRAY_D8_PORT  GPIO_C
-#define GRAY_D8_PIN   Pin_15
+#define GRAY_D6_PORT  GPIO_B
+#define GRAY_D6_PIN   Pin_3
+#define GRAY_D7_PORT  GPIO_B
+#define GRAY_D7_PIN   Pin_6
+#define GRAY_D8_PORT  GPIO_B
+#define GRAY_D8_PIN   Pin_7
 
 /* ---- K230 视觉串口（digit_uart / ball_detect 模块，115200）----
  * UART 实例宏（ml_uart 的 UARTn_enum）+ 寄存器实例宏（UART_1 ↔ USART1，
@@ -92,9 +92,9 @@
 #define LED_YELLOW_PIN    Pin_14   /* 黄灯 */
 #define LED_GREEN_PIN     Pin_15   /* 绿灯 */
 
-/* ---- 蜂鸣器（config.h 并入：有源蜂鸣器，低电平触发）---- */
-#define BUZZER_GPIO       GPIO_B
-#define BUZZER_PIN        Pin_0
+/* ---- 蜂鸣器（config.h 并入：有源蜂鸣器，低电平触发；已离 PB0 让位 MOTOR_B_DIR）---- */
+#define BUZZER_GPIO       GPIO_A
+#define BUZZER_PIN        Pin_15
 
 /* ---- DIP-4 拨码开关（config.h 并入：4 位二进制 ID，上拉输入，拨到 ON=低电平）---- */
 #define DIP_GPIO          GPIO_B
@@ -126,13 +126,14 @@
 #define USART2_IRQ_CALLS debug_uart_rx_handler();
 #define USART3_IRQ_CALLS zigbee_rx_handler();
 
-/* ---- 软 I2C（ml_i2c / ml_oled 引脚宏，自 ml_libs 头文件迁入，原值不变）----
- * 参数化后 I2C 角色可绑任意 GPIO（ADR 0011 工单 02）：ml_i2c 默认 PB10 SCL /
- * PB11 SDA（与 Zigbee UART_3 共用脚）、ml_oled 默认 PB8 SCL / PB9 SDA。
+/* ---- 软 I2C（ml_i2c / ml_oled 引脚宏，自 ml_libs 头文件迁入）----
+ * 参数化后 I2C 角色可绑任意 GPIO（ADR 0011 工单 02）：ml_i2c 默认 PA11 SCL /
+ * PA12 SDA（已离 PB10/11 让位 Zigbee UART_3；PA11/PA12 为 USB DM/DP 共用脚，
+ * 用 USB 时勿占用）、ml_oled 默认 PB8 SCL / PB9 SDA。
  */
-#define I2C_GPIO          GPIO_B
-#define I2C_SCL_GPIO_Pin  Pin_10
-#define I2C_SDA_GPIO_Pin  Pin_11
+#define I2C_GPIO          GPIO_A
+#define I2C_SCL_GPIO_Pin  Pin_11
+#define I2C_SDA_GPIO_Pin  Pin_12
 #define OLED_GPIO         GPIO_B
 #define OLED_SCL_Pin      Pin_8
 #define OLED_SDA_Pin      Pin_9

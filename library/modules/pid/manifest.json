@@ -134,7 +134,7 @@
         {
           "id": "GRAY_D6",
           "type": "gpio_in",
-          "default": "PC13",
+          "default": "PB3",
           "required": true,
           "macros": [
             "GRAY_D6_PORT",
@@ -144,7 +144,7 @@
         {
           "id": "GRAY_D7",
           "type": "gpio_in",
-          "default": "PC14",
+          "default": "PB6",
           "required": true,
           "macros": [
             "GRAY_D7_PORT",
@@ -154,7 +154,7 @@
         {
           "id": "GRAY_D8",
           "type": "gpio_in",
-          "default": "PC15",
+          "default": "PB7",
           "required": true,
           "macros": [
             "GRAY_D8_PORT",
