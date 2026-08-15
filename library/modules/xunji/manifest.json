@@ -56,13 +56,13 @@
         {
           "id": "P7",
           "type": "gpio_in",
-          "default": "PB4",
+          "default": "PB6",
           "required": true
         },
         {
           "id": "P8",
           "type": "gpio_in",
-          "default": "PB5",
+          "default": "PB7",
           "required": true
         }
       ]

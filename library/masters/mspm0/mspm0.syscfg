@@ -147,10 +147,10 @@ HUIDU.associatedPins[5].direction   = "INPUT";
 HUIDU.associatedPins[5].pin.$assign = "PA27";
 HUIDU.associatedPins[6].$name       = "R3";
 HUIDU.associatedPins[6].direction   = "INPUT";
-HUIDU.associatedPins[6].pin.$assign = "PB4";
+HUIDU.associatedPins[6].pin.$assign = "PB6";
 HUIDU.associatedPins[7].$name       = "R4";
 HUIDU.associatedPins[7].direction   = "INPUT";
-HUIDU.associatedPins[7].pin.$assign = "PB5";
+HUIDU.associatedPins[7].pin.$assign = "PB7";
 
 // 启动按键输入（实例名 KEY → KEY_PORT 宏；引脚名 START → KEY_START_PIN）
 KEY.$name = "KEY";
@@ -178,11 +178,11 @@ STEP_MOTOR.associatedPins[0].pin.$assign  = "PB24";
 STEP_MOTOR.associatedPins[1].$name        = "SLP2";
 STEP_MOTOR.associatedPins[1].direction    = "OUTPUT";
 STEP_MOTOR.associatedPins[1].initialValue = "SET";
-STEP_MOTOR.associatedPins[1].pin.$assign  = "PB6";
+STEP_MOTOR.associatedPins[1].pin.$assign  = "PB4";
 STEP_MOTOR.associatedPins[2].$name        = "DIR2";
 STEP_MOTOR.associatedPins[2].direction    = "OUTPUT";
 STEP_MOTOR.associatedPins[2].initialValue = "CLEARED";
-STEP_MOTOR.associatedPins[2].pin.$assign  = "PB7";
+STEP_MOTOR.associatedPins[2].pin.$assign  = "PB5";
 STEP_MOTOR.associatedPins[3].$name        = "DCY2";
 STEP_MOTOR.associatedPins[3].direction    = "OUTPUT";
 STEP_MOTOR.associatedPins[3].initialValue = "CLEARED";

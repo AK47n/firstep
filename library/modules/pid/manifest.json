@@ -57,13 +57,13 @@
         {
           "id": "GRAY_D7",
           "type": "gpio_in",
-          "default": "PB4",
+          "default": "PB6",
           "required": true
         },
         {
           "id": "GRAY_D8",
           "type": "gpio_in",
-          "default": "PB5",
+          "default": "PB7",
           "required": true
         }
       ]
