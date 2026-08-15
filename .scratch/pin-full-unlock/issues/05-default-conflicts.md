@@ -4,7 +4,7 @@
 
 **Blocked by:** 04（tests/test_pins.py 宏值表 / 真机默认产物断言同缝——04 合 main 后再开）
 
-**Status:** 待实施
+**Status:** claimed
 
 ## 需求
 
