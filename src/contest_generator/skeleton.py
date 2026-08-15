@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .clex import (
     iter_c_regions,
@@ -381,13 +381,15 @@ def generate_skeleton(
     platform: str,
     library_dir: Path,
     master_project_dir: Path | None = None,
+    reference_fulltexts: Mapping[str, str] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """LLM 出稿 → 静态自检：返回（可写入工程的 main.c, 被拦截的调用名）。
 
     自检只认喂给 LLM 的同一份接口块，不存在的调用被改写为注释占位，
     main.c 骨架保证可编译。调用方如想"明确报错"而非占位，对拦截列表
     非空时自行抛错即可。母版目录给定时接口集并入母版头（母版内嵌实现
-    的 ml_* API 不再被占位改写）。
+    的 ml_* API 不再被占位改写）。reference_fulltexts 非空时注入骨架
+    prompt（参考实现草稿），None / 空 = 现行为。
     """
     return _generate_main_c(
         llm,
@@ -397,6 +399,7 @@ def generate_skeleton(
         library_dir,
         master_project_dir,
         llm.generate_main_skeleton,
+        reference_fulltexts,
     )
 
 
@@ -436,12 +439,21 @@ def _generate_main_c(
     library_dir: Path,
     master_project_dir: Path | None,
     generate: Any,
+    reference_fulltexts: Mapping[str, str] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
-    """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。"""
+    """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。
+
+    reference_fulltexts 只对骨架路径有意义（冒烟不写题逻辑不传）——非 None
+    时按三参调用 generate（协议方法带 reference_fulltexts），None 时按两参
+    调用（冒烟方法 / 旧骨架零回归）。
+    """
     interfaces = build_skeleton_interfaces(
         manifests, platform, library_dir, master_project_dir
     )
-    raw = generate(problem_text, interfaces)
+    if reference_fulltexts is None:
+        raw = generate(problem_text, interfaces)
+    else:
+        raw = generate(problem_text, interfaces, reference_fulltexts)
     raw = strip_code_fences(raw)  # LLM 偶发用围栏包裹 → 剥离后再自检（判例见函数文档）
     return sanitize_skeleton(raw, extract_header_functions(interfaces))
 

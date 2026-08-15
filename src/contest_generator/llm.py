@@ -633,7 +633,10 @@ class LLM(Protocol):
     def summarize_topic(self, problem_text: str) -> str: ...
 
     def generate_main_skeleton(
-        self, problem_text: str, module_interfaces: Sequence[str]
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> str: ...
 
     def generate_smoke_main(
@@ -850,14 +853,19 @@ class DeepSeekLLM:
         )
 
     def generate_main_skeleton(
-        self, problem_text: str, module_interfaces: Sequence[str]
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> str:
         return self._chat(
             [
                 {"role": "system", "content": SKELETON_SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": _skeleton_user_prompt(problem_text, module_interfaces),
+                    "content": _skeleton_user_prompt(
+                        problem_text, module_interfaces, reference_fulltexts
+                    ),
                 },
             ]
         )
@@ -1972,13 +1980,33 @@ def _validation_user_prompt(description: str, code: str) -> str:
     )
 
 
-def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -> str:
-    """main.c 骨架生成的 user 消息：赛题 + 所选模块头文件接口块（见 skeleton.py）。"""
+def _skeleton_user_prompt(
+    problem_text: str,
+    module_interfaces: Sequence[str],
+    reference_fulltexts: Mapping[str, str] | None = None,
+) -> str:
+    """main.c 骨架生成的 user 消息：赛题 + 接口块 + 可选参考实现段。
+
+    reference_fulltexts 非空时在输出指令前插参考段（每条 id 标注 + 截断全文），
+    并加改写约束：参考资料里有的功能 → 适配当前所选模块接口的草稿实现；
+    没有的 → 保持 TODO。空 / None = 现行为逐字节不变。
+    """
     prompt = _build_user_prompt(
         problem_text,
         SKELETON_INTERFACES_HEADING,
         module_interfaces,
     )
+    if reference_fulltexts:
+        ref_parts = ["参考资料（可作实现草稿，不要整段照抄）："]
+        for ref_id, fulltext in reference_fulltexts.items():
+            ref_parts.append(
+                f"### 参考资料 {ref_id}\n{_fit_fulltext_wire(fulltext)}"
+            )
+        prompt += "\n\n" + "\n\n".join(ref_parts)
+        prompt += (
+            "\n\n参考资料里有的功能，改写为适配当前所选模块接口的草稿实现"
+            "（保证可编译）；参考资料里没有的功能，保持 TODO。"
+        )
     return prompt + (
         "\n\n输出 main.c 骨架：按模块初始化序列排好调用，带注释与预留编写区（TODO），"
         "不确定的调用写成注释占位，不凭空造函数，保证可编译。"

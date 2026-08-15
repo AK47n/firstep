@@ -601,6 +601,7 @@ class FakeLLM:
         self._topic_summary = topic_summary
         self._fixes = fixes
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
+        self.skeleton_ref_calls: list[dict[str, str]] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
         self.validation_calls: list[tuple[str, str]] = []
@@ -637,9 +638,13 @@ class FakeLLM:
         return self._topic_summary
 
     def generate_main_skeleton(
-        self, problem_text: str, module_interfaces: Sequence[str]
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> str:
         self.skeleton_calls.append((problem_text, tuple(module_interfaces)))
+        self.skeleton_ref_calls.append(dict(reference_fulltexts or {}))
         return self._main_skeleton
 
     def generate_smoke_main(

@@ -331,6 +331,24 @@ def resolve_topic_context(
     )
 
 
+def build_reference_fulltexts(topic: TopicContext) -> dict[str, str] | None:
+    """参考全文合并（id → 全文）：手动直读 ∪ 锚定回读；空 → None。
+
+    骨架 / 生成等"整段注入参考"的调用方共用本装配（webapp 只消费）：
+    手动条目装配时已直读（topic.manual_fulltexts），锚定条目经上下文
+    回读器（topic.read_fulltext 覆盖锚定 ∪ 手动，清单外 id 大声失败）。
+    空上下文（no-topic 且零手动）→ None——调用方走零参考现行为（两参
+    调用，逐字节不变）。
+    """
+    fulltexts: dict[str, str] = {}
+    if topic.manual_fulltexts:
+        fulltexts.update(topic.manual_fulltexts)
+    for ref in topic.references:
+        if ref.id not in fulltexts:
+            fulltexts[ref.id] = topic.read_fulltext(ref.id)
+    return fulltexts or None
+
+
 def _no_topic_context(
     problem_text: str,
     module_library_dir: Path,
