@@ -610,19 +610,8 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2><span class="step-no">10</span>交接提示词（Handoff）</h2>
-      <div class="row">
-        <button id="btn-handoff" class="primary">生成交接提示词</button>
-        <button id="btn-handoff-copy" class="hidden">复制</button>
-        <span class="muted">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</span>
-      </div>
-      <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
-      <div id="handoff-msg" class="error"></div>
-    </div>
-
     <div class="card" id="card-fix-center">
-      <h2><span class="step-no">11</span>修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
+      <h2><span class="step-no">10</span>修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
       <div class="row">
         <button id="btn-fix-center" class="primary">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
@@ -644,6 +633,17 @@
       </div>
       <textarea id="fix-errors-text" rows="8" style="margin-top:8px" placeholder="粘贴编译报错全文（UV4：..\out\code\main.c(123): error #20: …；CCS / armclang：code/sub/mod.c:45: error: …）…"></textarea>
       <div id="fix-errors-msg" class="error"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-no">11</span>交接提示词（Handoff）</h2>
+      <div class="row">
+        <button id="btn-handoff" class="primary">生成交接提示词</button>
+        <button id="btn-handoff-copy" class="hidden">复制</button>
+        <span class="muted">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</span>
+      </div>
+      <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
+      <div id="handoff-msg" class="error"></div>
     </div>
   </section>
 
@@ -2173,9 +2173,10 @@ $("btn-generate").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：10. 交接提示词（Handoff）——把本次生成的全部上下文打包成一段
+// 生成页：11. 交接提示词（Handoff）——把本次生成的全部上下文打包成一段
 // 提示词，用户直接复制粘贴给下一个 AI 做精准打磨（本工具只搭基础，
-// 精打磨在下一个会话完成）。
+// 精打磨在下一个会话完成）。交接永远在最后一步：修复中心跑完后，把编译/
+// 修复状态一起装进提示词再交给下一个会话。
 // ---------------------------------------------------------------------------
 function handoffPlatformLabel() {
   const pf = (state.platforms || []).find((p) => p.id === chosenPlatform);
@@ -2218,6 +2219,9 @@ $("btn-handoff").addEventListener("click", async () => {
     const mainC = $("main-c").value.trim();
     const dir = $("res-dir").textContent.trim();   // 生成成功后才非空
     const structure = $("res-structure").textContent.trim();
+    const fixRound = $("fix-center-round").textContent.trim();
+    const fixStatus = $("fix-status").textContent.trim();
+    const fixLog = $("fix-center-log").value.trim();
     const refs = await handoffReferenceLines();
     const lines = [
       "# 电赛工程交接提示词（Handoff）",
@@ -2251,11 +2255,17 @@ $("btn-handoff").addEventListener("click", async () => {
       dir ? "- 输出目录：" + dir : "（工程尚未生成；可先以 1~5 项上下文开始打磨，或先在本工具生成）",
       ...(dir && structure ? ["", "工程结构：", "", "```", structure, "```"] : []),
       "",
-      "## 七、参考资料",
+      "## 七、编译与修复状态",
+      "",
+      ...(fixRound ? [fixRound] : []),
+      fixStatus || "（未运行修复中心）",
+      ...(fixLog ? ["", "编译输出：", "", "```", fixLog, "```"] : []),
+      "",
+      "## 八、参考资料",
       "",
       refs,
       "",
-      "## 八、打磨要求",
+      "## 九、打磨要求",
       "",
       "1. 通读 main.c，把注释占位 / 未实现的调用全部按模块真实接口补齐；",
       "2. 逐模块核对与题面要求的符合度，缺的功能先落到骨架与工程内；",
@@ -2284,7 +2294,7 @@ $("btn-handoff-copy").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：11. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
+// 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
 // 自动采集报错 → 喂 fix-errors 管线修复 → 重编译验证，循环 ≤3 轮；无工具链
 // 回退贴文本模式（工单 compile-error-fix/01 既有路径保留）。事件词表镜像
 // events.py：compile_start / parse_done / fix_start / apply_result / done /
