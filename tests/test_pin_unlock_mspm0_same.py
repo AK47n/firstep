@@ -110,10 +110,11 @@ def test_resolve_mspm0_i2c_type_level_and_pair_constraint():
         _resolve({"oled.OLED_SCL": "PA17", "oled.OLED_SDA": "PA0"})
 
 
-def test_resolve_mspm0_pwm_cross_family_rejected():
-    """pwm 同族内类型级下限：PWMAB_C0 默认族 TIMG，PB18 只有 TIMA0_C2N /
-    TIMA1_C1（跨族）→ 400（04 才放开）。"""
-    with pytest.raises(PinBindingError, match="实例族 TIMG"):
+def test_resolve_mspm0_pwm_channel_still_enforced():
+    """03 的族锁在 04 拆掉后，通道匹配仍是类型级下限：PWMAB_C0 → PB18
+    （TIMA0_C2N / TIMA1_C1 均非 C0）→ 400；跨族合法路径（PA8）由
+    tests/test_pin_unlock_mspm0_cross.py 覆盖。"""
+    with pytest.raises(PinBindingError, match="pwm 通道 C0"):
         _resolve({"motor.PWMAB_C0": "PB18"})
 
 
@@ -204,11 +205,16 @@ def test_rewrite_syscfg_pwm_same_instance_keeps_peripheral():
 
 
 def test_rewrite_syscfg_pwm_family_move_rewrites_peripheral():
-    """PWMAB_C0→PA14（TIMG12_C0）→ 同族换实例：peripheral TIMG0→TIMG12，
-    ccp0Pin 换 PA14；通道名 ti_driverlib_pwm_PWMTimerCC0 不动。"""
-    out = rewrite_syscfg(MSPM0_MASTER_SYSCFG, _resolve({"motor.PWMAB_C0": "PA14"}))
+    """PWMAB 同族换实例（04 起两通道同实例门禁在位，单脚绑 PA14 会被拦）：
+    C0→PA14（TIMG12_C0）+ C1→PA25（TIMG12_C1）成对绑 → peripheral
+    TIMG0→TIMG12 + 两通道引脚联动；通道名 ti_driverlib_pwm_PWMTimerCC0 不动。"""
+    out = rewrite_syscfg(
+        MSPM0_MASTER_SYSCFG,
+        _resolve({"motor.PWMAB_C0": "PA14", "motor.PWMAB_C1": "PA25"}),
+    )
     assert 'PWMAB.peripheral.$assign         = "TIMG12";' in out
     assert 'PWMAB.peripheral.ccp0Pin.$assign = "PA14";' in out
+    assert 'PWMAB.peripheral.ccp1Pin.$assign = "PA25";' in out
     assert 'ti_driverlib_pwm_PWMTimerCC0' in out
 
 

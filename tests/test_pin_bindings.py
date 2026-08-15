@@ -217,14 +217,20 @@ def test_resolve_capability_stm32_enc_type_level():
         resolve_bindings(ALL_MANIFESTS, "stm32", fake, {"motor.MOTOR_B_ENC": "PB1"})
 
 
-def test_resolve_capability_mspm0_pwm_same_family_type_level():
-    """mspm0 pwm 同族内类型级（ADR 0012 工单 03）：PWMAB_C0 默认 PA12 通道
-    C0 → 默认实例族 TIMG（TIMA0_C3 通道不匹配被滤掉）；PA23 有 TIMG8_C0 /
-    TIMG7_C0 / TIMG0_C0 同族同通道 → 全部随绑定推导（写侧优先选 TIMG0 保
-    最小改动）；PB18 只有 TIMA0_C2N / TIMA1_C1（跨族）→ 400（04 才放开）。"""
+def test_resolve_capability_mspm0_pwm_full_type_level():
+    """mspm0 pwm 全类型级（ADR 0012 工单 04）：PWMAB_C0 通道 C0——PA23 同族
+    TIMG 三候选全部随绑定推导（C1 默认 TIMG0 交集非空 → 单脚换位也放行）；
+    PA8/PA9 的 TIMA0_C0/C1 跨族合法（03 的族锁已拆）；PB18 只有
+    TIMA0_C2N / TIMA1_C1（无 C0 通道）→ 400 通道不匹配。"""
     resolved = _resolve("mspm0", {"motor.PWMAB_C0": "PA23"})
     assert resolved[0].instances == ("TIMG8_C0", "TIMG7_C0", "TIMG0_C0")
-    with pytest.raises(PinBindingError, match="实例族 TIMG"):
+    resolved = _resolve(
+        "mspm0", {"motor.PWMAB_C0": "PA8", "motor.PWMAB_C1": "PA9"}
+    )
+    assert next(b for b in resolved if b.role_key == "motor.PWMAB_C0").instances == (
+        "TIMA0_C0",
+    )
+    with pytest.raises(PinBindingError, match="pwm 通道 C0"):
         _resolve("mspm0", {"motor.PWMAB_C0": "PB18"})
 
 

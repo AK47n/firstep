@@ -36,8 +36,9 @@ ADR 0011 解了 stm32 pwm 类型级与软 I2C，三类"真锁"记遗留：① en
    - **同族迁移**（UART0↔UART1、I2C0↔I2C1、TIMGx↔TIMGy、GPIO 组换端口）——改写器
      改 peripheral/port 字段，实例名不动 → SysConfig 生成宏名不动 → 模块代码零改动
      （step_motor 四脚同端口锁借此解）；
-   - **跨族迁移**（TIMG↔TIMA）——API 函数族变，模块 #if 双分支 + 生成器渲染族标志头
-     pin_family.h（pin_config 哲学的 mspm0 版）；
+   - **跨族迁移**（TIMG↔TIMA）——改写器换 peripheral 后 SysConfig 自产族对应初始化；
+     **模块零双分支、无 pin_family.h**（2026-08-15 工单 04 数据裁决实证：全库模块只用
+     SDK 通用 `DL_Timer_*`，`DL_TimerA_*`/`DL_TimerG_*` 在 SDK 里是重定向宏）；
    - step_motor 跨族物理不可能（DCC_100_PWM2 需 32 位，TIMA 16 位）→ 其引脚解锁靠
      同族迁移（TIMG12 可达脚 PA14/PB20）。
 6. **mspm0 pwm 门禁分级**：Tier A 后同族内类型级（推导实例族 == 默认实例族）；Tier B
