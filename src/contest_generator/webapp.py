@@ -1339,7 +1339,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
 
     # ------------------------------------------------------------------
-    # 更新记录（工单 changelog-tab/01）：手工 CHANGELOG.md + git log 自动补记
+    # 更新记录（工单 changelog-tab/01）：CHANGELOG.md → 按天分组
+    # 文件由 post-commit 钩子调用 changelog.update_changelog() 自动补录
     # ------------------------------------------------------------------
 
     @app.get("/api/changelog")
@@ -1349,8 +1350,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         自动补记手工文件没有的日期（`docs:` 内部工单提交过滤）→
         [{date, items}]（日期倒序、组内时间正序）。
 
-        纯展示数据：文件缺失 / 损坏 / git 不可用 → 只回手工文件或 []（前端
-        显示「暂无更新记录」），不因展示数据损坏阻塞工具——不走"大声失败"。
+        数据源是自动维护的 markdown（格式契约见 changelog.py：`## YYYY-MM-DD`
+        严格日期 + 组内 `- ` 条目；git log 自动补录见 update_changelog）。
+        纯展示数据：文件缺失 / 损坏 → []（前端显示「暂无更新记录」），不因
+        展示数据损坏阻塞工具——不走"大声失败"。
         """
         repo_root = Path(__file__).resolve().parents[2]
         return load_changelog_auto(repo_root / "CHANGELOG.md", repo_root)

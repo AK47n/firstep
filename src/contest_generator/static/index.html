@@ -886,7 +886,7 @@
   <!-- ============================ 更新记录页 ============================ -->
   <section id="tab-changelog" class="page">
     <div class="card">
-      <h2>更新记录 <span class="muted">（按天回看工具改进，手工 CHANGELOG.md + git log 自动补记）</span></h2>
+      <h2>更新记录 <span class="muted">（按天回看工具改进，数据源 CHANGELOG.md 由提交后自动补录）</span></h2>
       <div id="changelog-list" style="margin-top:8px"></div>
     </div>
   </section>
@@ -3905,7 +3905,7 @@ async function loadMasters() {
 }
 
 // ---------------------------------------------------------------------------
-// 更新记录页（工单 changelog-tab/01）：按天分组时间轴，数据源 CHANGELOG.md
+// 更新记录页（工单 changelog-tab/01）：按天分组时间轴，数据源 CHANGELOG.md（提交后自动补录）
 // ---------------------------------------------------------------------------
 async function loadChangelog() {
   const box = $("changelog-list");

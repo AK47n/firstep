@@ -15,11 +15,16 @@ from pathlib import Path
 import pytest
 
 from contest_generator.changelog import (
-    git_changelog_groups,
+    _clean_subject,
+    _is_displayable,
+    _marker_sha,
+    _merge_commits,
+    _newest_datetime,
+    _split_header,
+    _upsert_marker,
     load_changelog,
-    load_changelog_auto,
-    merge_changelog,
     parse_changelog,
+    update_changelog,
 )
 
 
@@ -148,44 +153,128 @@ def test_load_unreadable_path_returns_empty(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# git log 自动补记（2026-08-15 用户定案：更新记录自动更新）
+# 自动补录（changelog-auto）：git log → CHANGELOG.md
 # ---------------------------------------------------------------------------
 
 
-def test_merge_changelog_manual_wins_and_auto_fills_missing_dates():
-    """手工日期组优先；git 组只补手工没有的日期；结果按日期倒序。"""
-    manual = [
-        {"date": "2026-08-13", "items": [{"time": "13:45", "text": "手工条目"}]},
-        {"date": "2026-08-12", "items": [{"time": "17:48", "text": "旧条目"}]},
+def test_is_displayable_skips_merge_docs_chore_test_and_routine_lib():
+    """merge / docs: / chore: / test: / 写库 CRUD 机器提交不进更新记录。"""
+    assert _is_displayable("Merge pull request #56 from AK47n/ref-fulltext-truncation") is False
+    assert _is_displayable("merge branch 'main'") is False
+    assert _is_displayable("docs: 工单 01 开工认领") is False
+    assert _is_displayable("chore: 自动更新 CHANGELOG") is False
+    assert _is_displayable("test: 补结构钉") is False
+    assert _is_displayable("lib: update module description filter") is False
+    assert _is_displayable("lib: add reference 塔克R3两驱小车底盘资料") is False
+    assert _is_displayable("feat: 板图加旋转按钮 (#92)") is True
+    assert _is_displayable("fix: 推荐模块移除不再回加 (#91)") is True
+    assert _is_displayable("软 I2C 参数化 + 共享端口宏异值门禁（工单 pin-unlock-stm32/02） (#77)") is True
+    assert _is_displayable("lib: 素材录入脚本 GBK 兜底转码（工单 register-gbk-guard/01）") is True
+
+
+def test_clean_subject_strips_type_prefix_and_pr_ref():
+    """条目文本 = 提交主题去类型前缀与尾部 (#NN)。"""
+    assert _clean_subject("feat: 板图加「旋转 90°」按钮 (#92)") == "板图加「旋转 90°」按钮"
+    assert _clean_subject("fix: 排针 30px 向上伸出板外") == "排针 30px 向上伸出板外"
+    assert _clean_subject("软 I2C 参数化 + 共享端口宏异值门禁（工单 pin-unlock-stm32/02） (#77)") == "软 I2C 参数化 + 共享端口宏异值门禁（工单 pin-unlock-stm32/02）"
+
+
+def test_marker_roundtrip_in_header():
+    """机器标记在头部插入 / 替换 / 读取。"""
+    assert _marker_sha("# 更新记录") is None
+    header = _upsert_marker("# 更新记录", "abc123")
+    assert _marker_sha(header) == "abc123"
+    assert _upsert_marker(header, "def456") == "<!-- changelog-auto: last-commit=def456 -->\n# 更新记录"
+
+
+def test_split_header_separates_before_first_date_group():
+    """头部 = 首个日期组之前的一切（含标题、说明、机器标记）。"""
+    text = "<!-- changelog-auto: last-commit=abc -->\n# 更新记录\n\n（说明）\n\n## 2026-08-15\n- 20:20 条目\n"
+    header, body = _split_header(text)
+    assert "last-commit=abc" in header
+    assert body.startswith("## 2026-08-15")
+
+
+def test_merge_commits_date_desc_items_time_asc_and_dedup():
+    """新提交并入：日期组倒序、组内时间先后、同 (时间, 文本) 去重。"""
+    groups = [
+        {"date": "2026-08-15", "items": [
+            {"time": "9:05", "text": "早条目"},
+            {"time": "", "text": "无时间条目"},
+        ]},
     ]
-    auto = [
-        {"date": "2026-08-15", "items": [{"time": "19:49", "text": "自动条目"}]},
-        {"date": "2026-08-13", "items": [{"time": "00:00", "text": "不应出现"}]},
-        {"date": "2026-08-14", "items": [{"time": "10:00", "text": "补 08-14"}]},
+    commits = [
+        {"sha": "a", "date": "2026-08-15", "time": "10:00", "subject": "feat: 晚条目"},
+        {"sha": "b", "date": "2026-08-15", "time": "10:00", "subject": "feat: 晚条目"},
+        {"sha": "c", "date": "2026-08-16", "time": "08:00", "subject": "fix: 次日条目"},
     ]
-    assert merge_changelog(manual, auto) == [
-        {"date": "2026-08-15", "items": [{"time": "19:49", "text": "自动条目"}]},
-        {"date": "2026-08-14", "items": [{"time": "10:00", "text": "补 08-14"}]},
-        {"date": "2026-08-13", "items": [{"time": "13:45", "text": "手工条目"}]},
-        {"date": "2026-08-12", "items": [{"time": "17:48", "text": "旧条目"}]},
+    merged = _merge_commits(groups, commits)
+    assert [g["date"] for g in merged] == ["2026-08-16", "2026-08-15"]
+    day15 = merged[1]["items"]
+    assert [i["text"] for i in day15] == ["无时间条目", "早条目", "晚条目"]
+
+
+def test_newest_datetime_uses_latest_date_and_max_minutes():
+    """无标记回退：取最新日期组内最晚时间（1 位小时按分钟数比较）。"""
+    groups = [
+        {"date": "2026-08-15", "items": [
+            {"time": "9:05", "text": "a"},
+            {"time": "10:00", "text": "b"},
+        ]},
+        {"date": "2026-08-14", "items": [{"time": "23:59", "text": "c"}]},
     ]
+    assert _newest_datetime(groups) == "2026-08-15 10:00"
+    assert _newest_datetime([]) is None
 
 
-def test_merge_changelog_empty_auto_returns_manual():
-    """git 不可用（自动组为空）→ 手工组原样返回（旧行为）。"""
-    manual = [{"date": "2026-08-13", "items": [{"time": "", "text": "手工"}]}]
-    assert merge_changelog(manual, []) == manual
+def test_update_changelog_appends_entries_and_writes_marker(tmp_path, monkeypatch):
+    """无标记文件 + 新提交 → 追加条目、写机器标记；再次更新无新提交不动文件。"""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "# 更新记录\n\n## 2026-08-15\n- 20:20 模块平台徽标两行显示\n",
+        encoding="utf-8",
+    )
+    repo = tmp_path  # update 只把 repo 传给 git 原语，此处已被 monkeypatch
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_head_sha", lambda repo: "abc123"
+    )
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_log_commits",
+        lambda repo, since_sha=None, since_dt=None: [
+            {"sha": "abc123", "date": "2026-08-15", "time": "21:00", "subject": "feat: 新功能上线 (#94)"},
+        ],
+    )
+
+    assert update_changelog(changelog, repo) is True
+    text = changelog.read_text(encoding="utf-8")
+    assert "last-commit=abc123" in text
+    groups = parse_changelog(text)
+    assert groups[0]["items"][0]["text"] == "模块平台徽标两行显示"
+    assert groups[0]["items"][1] == {"time": "21:00", "text": "新功能上线"}
+
+    # 无新提交：不写入
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_log_commits",
+        lambda repo, since_sha=None, since_dt=None: [],
+    )
+    assert update_changelog(changelog, repo) is False
 
 
-def test_git_changelog_groups_non_repo_returns_empty(tmp_path):
-    """不在 git 工作树（如临时空目录）→ []，不阻塞工具。"""
-    assert git_changelog_groups(tmp_path) == []
-
-
-def test_load_changelog_auto_without_repo_dir_falls_back_to_manual(tmp_path):
-    """repo_dir 为 None → 只回手工文件（旧行为）。"""
-    path = tmp_path / "CHANGELOG.md"
-    path.write_text("## 2026-08-13\n- 手工条目\n", encoding="utf-8")
-    assert load_changelog_auto(path, None) == [
-        {"date": "2026-08-13", "items": [{"time": "", "text": "手工条目"}]}
-    ]
+def test_update_changelog_no_display_commits_returns_false(tmp_path, monkeypatch):
+    """只有 chore/docs 噪声提交 → 不写入（也避免钩子递归提交）。"""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "# 更新记录\n\n## 2026-08-15\n- 20:20 条目\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_head_sha", lambda repo: "def456"
+    )
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_log_commits",
+        lambda repo, since_sha=None, since_dt=None: [
+            {"sha": "def456", "date": "2026-08-15", "time": "21:00", "subject": "chore: 自动更新 CHANGELOG"},
+        ],
+    )
+    assert update_changelog(changelog, tmp_path) is False
+    assert "last-commit" not in changelog.read_text(encoding="utf-8")
