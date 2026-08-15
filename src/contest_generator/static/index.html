@@ -385,6 +385,7 @@
   .pin-role.unbound { border-color: var(--danger); background: var(--danger-dim); }
   .pin-role .role-status { font-size: 12px; color: var(--muted); margin-top: 3px; }
   .pin-role .role-status button { padding: 1px 8px; font-size: 12px; margin-left: 6px; }
+  .pin-toggle-optional { margin-top: 8px; padding: 3px 10px; font-size: 12px; }
   .role-type { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 3px;
                font-family: var(--mono); margin-right: 6px; }
   .pin-fixed-list { margin-top: 10px; max-width: 460px; }
@@ -1524,6 +1525,7 @@ let pinBoard = null;             // 当前平台板定义（GET /api/boards，�
 let pinBoardError = "";          // 板定义加载失败信息（占位文案用）
 let pinBindings = {};            // {"<slug>.<role_id>": "<PIN>"}（只含用户动过的角色）
 let pinUnbound = new Set();      // 被替换/显式解除的角色 key（红显未绑，不发字段）
+let pinShowOptional = false;     // 是否显示可选接线角色（默认只列必接）
 let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
 let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
 
@@ -1893,7 +1895,7 @@ function renderPinRoles(roles, fam) {
       }
     }
   }
-  box.innerHTML = roles.map((r) => {
+  const roleHtml = (r) => {
     const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
     const bound = pinBindings[r.key];
     const unbound = pinUnbound.has(r.key);
@@ -1924,12 +1926,24 @@ function renderPinRoles(roles, fam) {
         <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}">${esc(r.decl.type)}</span>
         <strong>${esc(r.decl.label || r.decl.id)}</strong>
         <span class="muted">${esc(r.slug)}</span>
-        ${r.decl.required ? '<span class="badge hw">必接</span>' : ""}
+        ${r.decl.required ? '<span class="badge hw">必接</span>' : '<span class="badge dep">可选</span>'}
       </div>
       <div class="role-status">${status}</div>
       ${famInfo ? `<div class="role-status" style="color:var(--warn)">共享宏族 ${esc(famInfo.macro)}：同族 ${esc(famInfo.siblings.join("、"))}</div>` : ""}
     </div>`;
-  }).join("");
+  };
+  const requiredRoles = roles.filter((r) => r.decl.required);
+  const optionalRoles = roles.filter((r) => !r.decl.required);
+  let html = requiredRoles.map(roleHtml).join("");
+  if (optionalRoles.length) {
+    if (pinShowOptional) {
+      html += optionalRoles.map(roleHtml).join("");
+      html += '<button class="pin-toggle-optional" id="btn-pin-hide-optional">收起可选角色</button>';
+    } else {
+      html += `<button class="pin-toggle-optional" id="btn-pin-show-optional">显示 ${optionalRoles.length} 个可选角色（不接 = 按默认生成）</button>`;
+    }
+  }
+  box.innerHTML = html;
   box.querySelectorAll(".pin-role").forEach((el) => {
     el.addEventListener("click", (e) => {
       if (e.target.closest("button")) return;
@@ -1947,6 +1961,10 @@ function renderPinRoles(roles, fam) {
       renderPinCard();
     });
   });
+  const showOptional = $("btn-pin-show-optional");
+  if (showOptional) showOptional.addEventListener("click", () => { pinShowOptional = true; renderPinCard(); });
+  const hideOptional = $("btn-pin-hide-optional");
+  if (hideOptional) hideOptional.addEventListener("click", () => { pinShowOptional = false; renderPinCard(); });
 }
 
 $("btn-pin-reset").addEventListener("click", () => {
