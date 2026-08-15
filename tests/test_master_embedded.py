@@ -43,7 +43,8 @@ def test_pin_config_h_keeps_21f_pin_values():
 
 def test_motor_stm32_source_has_no_hardcoded_pins():
     """motor_stm32.c 无硬编码引脚字面量（引脚只出现在 pin_config.h）；
-    编码器计数中断 EXTI2/4 随模块（照 mspm0 key 的 GROUP1_IRQHandler 先例）。"""
+    编码器计数中断随模块（ADR 0012 起按 MOTOR_A/B_ENC_LINE 条件编译 7 个
+    handler，照 mspm0 key 的 GROUP1_IRQHandler 先例）。"""
     text = _read("modules/motor/code/motor_stm32.c")
     for literal in (
         "GPIO_A",

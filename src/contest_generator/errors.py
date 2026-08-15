@@ -21,7 +21,12 @@ from .compile_runner import CompileRunnerError
 from .config import ConfigError
 from .extraction import ExtractionError
 from .fix_errors import FixError
-from .generator import DuplicateFilePathError, GeneratorError, TimerConflictError
+from .generator import (
+    DuplicateFilePathError,
+    ExtiLineConflictError,
+    GeneratorError,
+    TimerConflictError,
+)
 from .keil import KeilProjectError
 from .library import LibraryError
 from .llm import LLMError
@@ -65,6 +70,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             DuplicateFilePathError,  # 跨模块同名文件（生成侧查重兜底，工单 gen-file-collision-gate/01）
             PinBindingError,  # 引脚绑定载荷非法（工单 pin-board-config/02：键/角色/引脚/能力/槽位）
             TimerConflictError,  # 绑定 pwm TIM 实例撞骨架调度定时器（工单 pin-unlock-stm32/01）
+            ExtiLineConflictError,  # 绑定 enc/exti 角色异口同线互斥（工单 pin-full-unlock/01）
             ConfigError,
             ReferenceError,
             TopicError,
