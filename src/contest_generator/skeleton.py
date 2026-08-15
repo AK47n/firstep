@@ -261,7 +261,12 @@ def _replace_undefined_calls(
     """
     out: list[str] = []
     hits: set[str] = set()
+    skip_until = -1  # 已替换调用跨词法区域时，跳过其内部的字符串/注释/代码片段
     for kind, start, end in iter_c_regions(code, preprocessor_indented=True):
+        if start < skip_until:
+            if end <= skip_until:
+                continue  # 整段都在被替换调用内部：跳过，防调用尾巴重复拼出
+            start = skip_until  # 部分重叠：截掉已替换部分，保留其后文本
         if kind != "code":
             out.append(code[start:end])
             continue
@@ -297,6 +302,7 @@ def _replace_undefined_calls(
                         f"已改为 0 占位，请改用真实接口或自行实现 */ 0"
                     )
                 i = close + 1
+                skip_until = close + 1  # 调用可能跨词法区域（实参含字符串/注释）
             else:
                 out.append(code[i:j])
                 i = j

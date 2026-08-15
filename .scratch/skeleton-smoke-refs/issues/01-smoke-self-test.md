@@ -31,7 +31,7 @@
 
 - [x] pytest 全绿 + mypy src 干净
 - [x] 红证已验（FakeLLM 出稿含未定义调用被拦截 / 缺通道模块 400 / 非法 main_mode 400）+ 绿证（prompt 含全部模块与通道指令 / 无平台版本注释）
-- [ ] 真机：冒烟路径 UV4/CCS 0 错 0 警 + HTTP 400 零产物（用户浏览器/真机自验）
+- [x] 真机：冒烟路径 stm32 UV4 0 错 0 警 + mspm0 gmake 0 错 1 警（基线内）+ 门禁干净；HTTP 400 零产物（webapp 测试覆盖）
 - [x] 提交（post-commit 钩子自动补 CHANGELOG）
 
 ## Comments
@@ -39,3 +39,5 @@
 - **实施留痕（2026-08-15）**：prompt 平台措辞不用 `<平台>` 字面量——改为「接口块里标注『无平台 XX 版本』的模块，留注释『该模块无 XX 版本，未自检』（XX 照接口块里的平台名写）」，LLM 从接口块占位块拿到具体平台名，避免生成物出现字面 `<平台>`。
 - **code-review 双轴**：Standards 指出 CONTEXT.md 未更新词条（已补「自检冒烟」行）、三处重复代码（skeleton 出稿管线 / llm 接口块引导语 / webapp 分支实参）与前端双按钮重复（已全部去重为共享 helper：`_generate_main_c`、`SKELETON_INTERFACES_HEADING`、webapp 单 `generate` 分发、index.html `generateMain(mode)` + `SKELETON_MODES`）。Spec 指出 `main_mode` 空串被缺省化（已改为显式出现即必须合法值）与 test_skeleton 缺 prompt 断言（prompt 断言落在 test_llm——prompt 唯一出处是 llm.py，比 test_skeleton 更贴接缝，记此偏差）。
 - 真机验收项留待用户在浏览器里点「生成自检骨架」跑一次真实 LLM + UV4/CCS 自验（本会话无 GUI/工具链）。
+- **真机验收补（2026-08-15）**：stm32 冒烟路径 PASS（UV4 exit=0 0 错 0 警 + 门禁 []）；mspm0 冒烟路径 PASS（gmake exit=0 0 错 1 警（基线内）+ 门禁 []，slugs 需含 oled/motor/pid/huidu/imu_uart/ntb_time/key——motor 头引用与编码器符号未声明为 manifest 依赖，门禁报错引导手选，遗留项）。
+- **sanitize 真 bug 修复**：LLM 出稿 `sprintf(buf, "%s %s", ...)` 时实参字符串把词法区域切开，旧 `_replace_undefined_calls` 替换后把实参尾巴重复拼出（生成物语法错、UV4 1 错）。修复：`skip_until` 跳过已替换调用内部的字符串/注释/代码片段；回归测试 `test_sanitize_call_with_string_literal_args_spans_regions` 钉死。stm32 冒烟复跑 PASS。

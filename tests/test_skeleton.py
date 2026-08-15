@@ -471,6 +471,19 @@ def test_generate_skeleton_with_reference_fulltexts_feeds_them_to_llm(
     assert llm.skeleton_ref_calls == [{"ref-1": "巡线决策参考实现全文"}]
 
 
+def test_sanitize_call_with_string_literal_args_spans_regions():
+    """实参含字符串字面量时调用跨词法区域：替换后不得残留实参尾巴（真机
+    sprintf 判例——旧实现把 \"%s %s\" 起的实参段重复拼出，生成物编译失败）。"""
+    main_c = '    sprintf(buf, "%s %s", module, ok ? "OK" : "FAIL");\n'
+
+    fixed, blocked = sanitize_skeleton(main_c, set())
+
+    assert blocked == ("sprintf",)
+    assert "已注释占位" in fixed
+    assert fixed.rstrip().endswith(";")  # 注释占位后只剩独立分号
+    assert fixed.count('"%s %s"') == 1  # 实参尾巴不重复
+
+
 def test_generate_smoke_main_feeds_interfaces_and_sanitizes(fake_module_library):
     """自检冒烟入口：接口块同源喂给 LLM，出稿走 sanitize_skeleton 同款兜底。"""
     manifests = _manifests(fake_module_library, "dht11", "delay")
