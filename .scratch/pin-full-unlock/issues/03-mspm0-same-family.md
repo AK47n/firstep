@@ -4,7 +4,7 @@
 
 **Blocked by:** 02（pinwriter.py / pin_bindings.py 同缝——02 合 main 后再开）
 
-**Status:** 待复核（实施完成，PR 待开）
+**Status:** resolved（2026-08-15 PR #80 squash merged 77af949，主会话复核 + 1528 绿复跑）
 
 ## 需求
 
@@ -29,7 +29,7 @@
 - [x] pytest 全绿 + mypy src 干净（1528 passed + mypy 41 文件 Success）
 - [x] 红证已验 + 绿证（peripheral/引脚字段断言 + 默认逐字节）——tests/test_pin_unlock_mspm0_same.py 14 用例
 - [x] 真机：不配回归 + UART 挪位 + GPIO 组换端口 gmake 全 0 错 + 400 零产物（直接 generate + gmake，证据 .scratch/real-run/tierA_realrun.log）
-- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-03，02 合 main 后从 6c38df5 建）+ 提交 + 推送开 PR（待开）
+- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-03，02 合 main 后从 6c38df5 建）+ 提交 + 推送开 PR #80
 
 ## 前置验证（2026-08-15，sysconfig_cli 1.27.0 + mspm0_sdk_2_11_00_07）
 
@@ -97,3 +97,19 @@
   `index.html`，仓库实际路径带 static/）；errors.py 零新增（复用
   PinBindingError / UartInstanceConflictError）；boards/mspm0-dimx.json
   零改动（核对结论 = 无需补 token）。
+- **合并复核**（PR #80 squash merged 77af949，主会话）：diff 逐项对工单——
+  pin_bindings 类型级分支（mspm0 uart/i2c 入类型级，实例随绑定脚；pwm 同族
+  通道推族逻辑：id 尾 `_C0`/`_C1` 滤默认实例 → 族集合，绑定脚须同族同通道，
+  PA23 候选 TIMG8/TIMG7/TIMG0_C0 全随绑定推导、PB18 跨族 400 文案正确）；
+  成对角色同实例校验泛化（uart + i2c，平台通用，stm32 回归不受影响）；
+  gpio 同端口门禁数据判据（默认全同端口才查——现库唯一命中 step_motor，
+  DC_MOTOR/HUIDU/灰度默认混端口不误伤）；generator 门禁平台放开
+  （mspm0 默认 IMU601=UART0、DIGIT_UART=UART1，单角色换实例 400 语义与
+  sysconfig_cli Resource conflict 实证一致）；pinwriter peripheral 行按
+  path_index 定位 + 候选优先匹配现值（最小改动契约）；index.html 镜像同族
+  灰显。偏差留痕理由成立：① GPIO 组零 port 改动——前置验证 SysConfig 由
+  组内 $assign 自动推导 STEP_MOTOR_PORT；② 真机场景 ③ 必要连带换位
+  LED_BEEP/DC_MOTOR 三脚——只绑 step_motor 会撞 4 处 Resource conflict
+  （已实证），连带换位是唯一 gmake 绿解；③ 工单写 index.html、仓库实际
+  static/index.html。合并后 main 复跑 1528 绿 33.8s + mypy src 41 文件
+  干净。worktree pin-full-unlock-03 照例保留。
