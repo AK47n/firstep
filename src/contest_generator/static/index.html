@@ -1444,9 +1444,11 @@ function roleInstances(decl) {
 
 function pinCanHost(pin, decl) {
   if (!pin || pin.kind !== "io") return false;
-  // stm32 pwm / enc = 类型级（ADR 0011 / ADR 0012，镜像后端）：任意 pwm:* /
-  // enc:* token 即 canHost，实例（线号）随绑定引脚；其余平台/类型 strict-all
-  if (chosenPlatform === "stm32" && (decl.type === "pwm" || decl.type === "enc")) {
+  // stm32 pwm / enc / uart = 类型级（ADR 0011 / ADR 0012，镜像后端）：任意
+  // pwm:* / enc:* / uart_tx:* / uart_rx:* token 即 canHost，实例随绑定引脚；
+  // 其余平台/类型 strict-all（uart TX/RX 成对同实例由后端 400 拦）
+  if (chosenPlatform === "stm32" && (decl.type === "pwm" || decl.type === "enc" ||
+      decl.type === "uart_tx" || decl.type === "uart_rx")) {
     return pinListsType(pin, decl.type);
   }
   const insts = roleInstances(decl);
@@ -1461,8 +1463,9 @@ function pinListsType(pin, type) {
 }
 
 function pinMissReason(pin, decl) {
-  // stm32 pwm / enc 类型级：灰显原因 = 无对应 token（与后端类型级报错文案同语义）
-  if (chosenPlatform === "stm32" && (decl.type === "pwm" || decl.type === "enc")) {
+  // stm32 pwm / enc / uart 类型级：灰显原因 = 无对应 token（与后端类型级报错文案同语义）
+  if (chosenPlatform === "stm32" && (decl.type === "pwm" || decl.type === "enc" ||
+      decl.type === "uart_tx" || decl.type === "uart_rx")) {
     return "该脚不支持角色类型 " + decl.type;
   }
   const insts = roleInstances(decl);

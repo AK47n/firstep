@@ -945,9 +945,9 @@ def test_unresolved_include_rejects_cross_platform_toolchain_header_on_mspm0(tmp
 
 
 def test_generation_gate_table_complete_and_ordered():
-    """门禁装配表钉死：10 键有序完整（顺序有语义——file_path_conflicts 依赖
+    """门禁装配表钉死：12 键有序完整（顺序有语义——file_path_conflicts 依赖
     module_files 先报缺平台条目；timer_instance_conflicts / exti_line_conflicts
-    依赖 pin_bindings 先校验载荷），增删 / 换序即红。"""
+    / uart_instance_conflicts 依赖 pin_bindings 先校验载荷），增删 / 换序即红。"""
     assert [g.key for g in GENERATION_GATES] == [
         "module_files",
         "file_path_conflicts",
@@ -958,7 +958,9 @@ def test_generation_gate_table_complete_and_ordered():
         "pin_bindings",
         "timer_instance_conflicts",
         "exti_line_conflicts",
+        "uart_instance_conflicts",
         "no_pin_literals_in_main",
+        "no_usart_handlers_in_main",
     ]
 
 

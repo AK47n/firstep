@@ -26,6 +26,8 @@ from .generator import (
     ExtiLineConflictError,
     GeneratorError,
     TimerConflictError,
+    UartInstanceConflictError,
+    UsartHandlerInMainError,
 )
 from .keil import KeilProjectError
 from .library import LibraryError
@@ -71,6 +73,8 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             PinBindingError,  # 引脚绑定载荷非法（工单 pin-board-config/02：键/角色/引脚/能力/槽位）
             TimerConflictError,  # 绑定 pwm TIM 实例撞骨架调度定时器（工单 pin-unlock-stm32/01）
             ExtiLineConflictError,  # 绑定 enc/exti 角色异口同线互斥（工单 pin-full-unlock/01）
+            UartInstanceConflictError,  # 绑定 UART 实例撞未绑角色默认实例（工单 pin-full-unlock/02）
+            UsartHandlerInMainError,  # main.c 定义 USARTx_IRQHandler 撞 isr.c 聚合（工单 pin-full-unlock/02）
             ConfigError,
             ReferenceError,
             TopicError,

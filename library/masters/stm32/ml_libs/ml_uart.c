@@ -1,4 +1,5 @@
 #include "headfile.h"
+#include "pin_config.h"
 #include <stdio.h>
 
 #define PCLK1	36000000  //除了USART1外，其余串口都挂在APB1总线上，使用PCLK1分频 时钟频率为36MHZ
@@ -30,8 +31,8 @@ void _sys_exit(int x)
 //这里使用串口1(USART1)输出printf信息
 int fputc(int ch, FILE *f)
 {
-	while((USART1->SR&0x40)==0);  //等待发送完成
-	USART1->DR = (uint8_t) ch;  
+	while((DEBUG_UART_INST->SR&0x40)==0);  //等待发送完成
+	DEBUG_UART_INST->DR = (uint8_t) ch;  
 	return ch;
 }
 #endif 
@@ -63,6 +64,29 @@ void uart_pin_init(UARTn_enum uartn)
 		  break;
 	}
 
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+// @brief		uart pin parameterized init (ADR 0012): pins passed by caller macros
+// @param		uartn		uart instance (UART_1/2/3)
+// @param		tx_gpio		TX port (GPIO_A/B/C enum)
+// @param		tx_pin		TX pin (Pin_0..15 enum)
+// @param		rx_gpio		RX port (GPIO_A/B/C enum)
+// @param		rx_pin		RX pin (Pin_0..15 enum)
+// @return		void
+// Sample usage:		uart_pin_init_ex(DEBUG_UART, DEBUG_UART_TX_GPIO, DEBUG_UART_TX_Pin, DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin);
+//-------------------------------------------------------------------------------------------------------------------
+void uart_pin_init_ex(UARTn_enum uartn, uint8_t tx_gpio, uint8_t tx_pin, uint8_t rx_gpio, uint8_t rx_pin)
+{
+	if(uartn == UART_1)
+		RCC->APB2ENR |= 1<<14;
+	else
+		RCC->APB1ENR |= 1<<(uartn+16);  //enable clock
+	gpio_init((GPIOn_enum)tx_gpio, (Pinx_enum)tx_pin, AF_PP);  //TX AF push-pull
+	gpio_init((GPIOn_enum)rx_gpio, (Pinx_enum)rx_pin, ID);       //RX pull-down input
+	uart_baud_config(uartn, 115200);    //115200: all UART roles in library
+	uart_index[uartn]->CR1 |= 0x202C;   //enable uart, tx, rx, rx interrupt
+	NVIC_init(0x01,uartn+37);           //interrupt priority init
 }
 
 //-------------------------------------------------------------------------------------------------------------------

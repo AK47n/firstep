@@ -4,12 +4,13 @@
 #include "pin_config.h"
 
 // ============================================================
-//  DEBUG_UART 初始化 (UART_2 = PA2 TX / PA3 RX, 115200bps)
+//  DEBUG_UART 初始化（引脚/实例 = pin_config.h 宏，115200bps）
 // ============================================================
 void debug_uart_init(void)
 {
-    // DEBUG_UART = UART_2，在 APB1 上（pin_config.h）
-    uart_init(DEBUG_UART, 115200, 0);  // priority=0，不开接收中断
+    // 引脚/实例 = pin_config.h 宏（uart_pin_init_ex 参数化，ADR 0012）
+    uart_pin_init_ex(DEBUG_UART, DEBUG_UART_TX_GPIO, DEBUG_UART_TX_Pin,
+                     DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin);
 }
 
 // ============================================================
@@ -34,7 +35,7 @@ void debug_uart_send(const char *str)
 static char  cmd_buf[8];
 static uint8_t cmd_idx = 0;
 
-// DEBUG_UART_INST（= USART2）ISR 调用：收一个字节放入命令缓冲
+// DEBUG_UART_INST ISR 调用（isr.c 聚合）：收一个字节放入命令缓冲
 void debug_uart_rx_handler(void)
 {
     char c = (char)(DEBUG_UART_INST->DR & 0xFF);

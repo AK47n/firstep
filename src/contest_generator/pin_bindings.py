@@ -8,11 +8,14 @@ boards.pin_capability_instances 推导实例）。校验通过产出 ResolvedBin
 归本模块）。
 
 能力口径（平台 × 类型分级，ADR 0011 / ADR 0012）：
-- stm32 pwm / enc = **类型级**：绑定引脚须有 ≥1 个 pwm:* / enc:* token，
-  实例随**绑定引脚**推导喂渲染器（pwm 换实例 = 宏值变化，库零改动——
-  motor_stm32.c 吃宏、ml_pwm 支持 TIM2/3/4 全通道；enc 换线 = _LINE/_EXTI
-  宏跟随绑定，motor 按线号条件编译 handler——工单 pin-full-unlock/01，
-  异口同线冲突由生成门禁 exti_line_conflicts 拦）。
+- stm32 pwm / enc / uart = **类型级**：绑定引脚须有 ≥1 个 pwm:* / enc:* /
+  uart_tx:* / uart_rx:* token，实例随**绑定引脚**推导喂渲染器（pwm 换实例
+  = 宏值变化，库零改动——motor_stm32.c 吃宏、ml_pwm 支持 TIM2/3/4 全通道；
+  enc 换线 = _LINE/_EXTI 宏跟随绑定，motor 按线号条件编译 handler——工单
+  pin-full-unlock/01，异口同线冲突由生成门禁 exti_line_conflicts 拦；uart
+  换实例 = _UART/_INST/引脚宏跟随绑定 + USARTx_IRQ_CALLS 重分组——工单
+  pin-full-unlock/02，TX/RX 对同实例约束在本模块、实例冲突由生成门禁
+  uart_instance_conflicts 拦）。
 - 其余（mspm0 全部类型 + stm32 其余类型）= strict-all：绑定引脚须支持默认
   引脚的**全部**实例——mspm0 复用标注多实例引脚（motor.PWMAB_C0 默认 PA12
   有 pwm:TIMG0_C0 + pwm:TIMA0_C3）只有同双实例的引脚才可绑（现状仅 PA12
@@ -78,10 +81,12 @@ def resolve_bindings(
     """bindings 载荷 → 校验后的绑定清单；任何非法即抛 PinBindingError（400 中文）。
 
     校验三查：键格式 `<slug>.<role_id>` 且角色在选中模块的该平台声明里 /
-    引脚在板定义排针（板外脚 = 未知引脚）/ 能力合法（stm32 pwm / enc =
-    类型级：绑定引脚须有 ≥1 个 pwm:* / enc:* token，实例随绑定引脚推导；
-    其余 strict-all：绑定引脚须支持默认引脚能力 token 的**全部**实例——
-    mspm0 复用标注多实例引脚的先例：motor.PWMAB_C0 默认 PA12 有
+    引脚在板定义排针（板外脚 = 未知引脚）/ 能力合法（stm32 pwm / enc /
+    uart_tx / uart_rx = 类型级：绑定引脚须有 ≥1 个对应类型 token，实例随
+    绑定引脚推导；stm32 uart 另查 TX/RX 对同实例约束——两脚有效实例集
+    （绑定脚 / 未绑默认引脚）交集非空，空 = 400 中文成对绑定；其余
+    strict-all：绑定引脚须支持默认引脚能力 token 的**全部**实例——mspm0
+    复用标注多实例引脚的先例：motor.PWMAB_C0 默认 PA12 有
     pwm:TIMG0_C0 + pwm:TIMA0_C3，仅 TIMA0_C3 的脚如 PA28 会让 SysConfig
     路由失败，宁严勿假绿）。mspm0 同默认引脚两角色绑不同脚 = 槽位冲突互斥
     （syscfg 单落点）。顺序 = 载荷插入顺序（dict 保序，写侧覆盖顺序确定性）。
@@ -131,14 +136,20 @@ def resolve_bindings(
             raise PinBindingError(
                 f"绑定 {key} 的引脚 {pin} 不存在（不在 {board.name} 排针引脚集内）"
             )
-        # stm32 pwm / enc：类型级（ADR 0011 / ADR 0012）——实例随**绑定
-        # 引脚**推导喂渲染器（pwm 换实例 = 宏值变化，库零改动；enc 换线 =
-        # _LINE/_EXTI 宏跟随，motor 条件 handler 自动跟随线号）；无对应
-        # token 的脚仍拒（类型级下限）。其余平台/类型 strict-all：实例 =
-        # 默认引脚能力 token 的实例（板外默认如 PB4/PB5 无默认引脚 → 实例
-        # 空 → 只查类型）；多实例 = 全部命中（any-of 会放行 SysConfig 路由
-        # 必炸的绑定——工单 02 红证已验）
-        if platform == PLATFORM_STM32 and declaration.type in ("pwm", "enc"):
+        # stm32 pwm / enc / uart：类型级（ADR 0011 / ADR 0012）——实例随
+        # **绑定引脚**推导喂渲染器（pwm 换实例 = 宏值变化，库零改动；enc
+        # 换线 = _LINE/_EXTI 宏跟随，motor 条件 handler 自动跟随线号；uart
+        # 换实例 = _UART/_INST/引脚宏跟随绑定，TX/RX 对约束在循环后统一
+        # 查）；无对应 token 的脚仍拒（类型级下限）。其余平台/类型
+        # strict-all：实例 = 默认引脚能力 token 的实例（板外默认如 PB4/PB5
+        # 无默认引脚 → 实例空 → 只查类型）；多实例 = 全部命中（any-of 会
+        # 放行 SysConfig 路由必炸的绑定——工单 02 红证已验）
+        if platform == PLATFORM_STM32 and declaration.type in (
+            "pwm",
+            "enc",
+            "uart_tx",
+            "uart_rx",
+        ):
             instances = pin_capability_instances(bound, declaration.type)
             if not instances:
                 raise PinBindingError(
@@ -176,7 +187,62 @@ def resolve_bindings(
 
     if platform == PLATFORM_MSPM0:
         _check_slot_conflicts(resolved)
+    if platform == PLATFORM_STM32:
+        _check_uart_tx_rx_pairs(board, roles, raw)
     return tuple(resolved)
+
+
+def _check_uart_tx_rx_pairs(
+    board: Board,
+    roles: dict[tuple[str, str], PinDeclaration],
+    raw: Mapping[str, str],
+) -> None:
+    """stm32 UART TX/RX 对同实例约束（ADR 0012 工单 02）：同一角色对（同
+    slug 下 _TX/_RX 同根角色）两脚的有效实例集——绑定脚实例（已过类型级
+    校验）/ 未绑默认引脚实例——交集必须非空。空 = 400 中文"必须同实例，
+    请成对绑定"：单脚换实例必撞另一脚默认实例（换过去 = TX/RX 分属两
+    UART，编译绿运行坏），宁严勿假绿；成对同实例 = 交集推导喂渲染器
+    _UART/_INST 尾形（两脚实例同源）。只声明单脚 / 无实例（防御路径，
+    真库全成对）不查。
+    """
+    pairs: dict[tuple[str, str], list[PinDeclaration]] = {}
+    for (slug, role_id), decl in roles.items():
+        if decl.type not in ("uart_tx", "uart_rx"):
+            continue
+        stem = role_id[:-3] if role_id.endswith(("_TX", "_RX")) else role_id
+        pairs.setdefault((slug, stem), []).append(decl)
+
+    for (slug, _), feet in pairs.items():
+        tx = next(
+            (d for d in feet if d.id.endswith("_TX")), None
+        )
+        rx = next(
+            (d for d in feet if d.id.endswith("_RX")), None
+        )
+        if tx is None or rx is None:
+            continue  # 只声明单脚的 UART 角色不查（真库全成对，防御路径）
+        tx_instances = _uart_foot_instances(board, raw, slug, tx)
+        rx_instances = _uart_foot_instances(board, raw, slug, rx)
+        if not tx_instances or not rx_instances:
+            continue  # 板外默认等无实例：不查（防御路径）
+        if not (tx_instances & rx_instances):
+            raise PinBindingError(
+                f"绑定 {slug}.{tx.id} / {slug}.{rx.id} 的 TX/RX 必须同实例，"
+                f"请成对绑定（TX 实例 {'、'.join(sorted(tx_instances))} ×"
+                f" RX 实例 {'、'.join(sorted(rx_instances))} 交集为空）"
+            )
+
+
+def _uart_foot_instances(
+    board: Board, raw: Mapping[str, str], slug: str, decl: PinDeclaration
+) -> set[str]:
+    """UART 角色单脚的有效实例集：绑定脚实例（raw 有值）/ 默认引脚实例。"""
+    key = f"{slug}.{decl.id}"
+    pin = raw.get(key)
+    bound = board_pin(board, pin) if pin is not None else board_pin(board, decl.default)
+    if bound is None:
+        return set()
+    return set(pin_capability_instances(bound, decl.type))
 
 
 def _check_slot_conflicts(resolved: Sequence[ResolvedBinding]) -> None:

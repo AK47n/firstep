@@ -32,14 +32,20 @@
           "required": true,
           "macros": [
             "BALL_DETECT_UART",
-            "BALL_DETECT_UART_INST"
+            "BALL_DETECT_UART_INST",
+            "BALL_DETECT_UART_TX_GPIO",
+            "BALL_DETECT_UART_TX_Pin"
           ]
         },
         {
           "id": "BALL_DETECT_UART_RX",
           "type": "uart_rx",
           "default": "PA10",
-          "required": true
+          "required": true,
+          "macros": [
+            "BALL_DETECT_UART_RX_GPIO",
+            "BALL_DETECT_UART_RX_Pin"
+          ]
         }
       ]
     }

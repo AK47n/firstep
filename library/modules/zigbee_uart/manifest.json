@@ -23,14 +23,20 @@
           "required": true,
           "macros": [
             "ZIGBEE_UART",
-            "ZIGBEE_UART_INST"
+            "ZIGBEE_UART_INST",
+            "ZIGBEE_UART_TX_GPIO",
+            "ZIGBEE_UART_TX_Pin"
           ]
         },
         {
           "id": "ZIGBEE_UART_RX",
           "type": "uart_rx",
           "default": "PB11",
-          "required": true
+          "required": true,
+          "macros": [
+            "ZIGBEE_UART_RX_GPIO",
+            "ZIGBEE_UART_RX_Pin"
+          ]
         }
       ]
     }

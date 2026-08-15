@@ -31,6 +31,25 @@ from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 PIN_CONFIG_FILENAME = "pin_config.h"
 MSPM0_SYSCFG_FILENAME = "mspm0.syscfg"
 
+# USART 聚合宏（母版 pin_config.h / isr.c 三对同源）：宏名 ↔ 实例（USART1
+# ↔ UART_1）。渲染器按 {STEM}_UART 宏现值重分组（绑定换实例 → 宏值变 →
+# CALLS 跟随），数据源唯一。
+_IRQ_CALLS_MACROS = (
+    "USART1_IRQ_CALLS",
+    "USART2_IRQ_CALLS",
+    "USART3_IRQ_CALLS",
+)
+
+# UART 角色宏根 → rx_handler 函数名（默认分组序 + isr.c __weak 兜底名同源；
+# zigbee_uart_key 与 zigbee_uart 共享 ZIGBEE_* 宏，handler 只列一次）。
+_UART_CALLS_ROLES = (
+    ("DIGIT_UART", "digit_uart_rx_handler"),
+    ("BALL_DETECT_UART", "ball_detect_rx_handler"),
+    ("DEBUG_UART", "debug_uart_rx_handler"),
+    ("UWB_UART", "uwb_rx_handler"),
+    ("ZIGBEE_UART", "zigbee_rx_handler"),
+)
+
 # pin_config.h 宏行：#define NAME<分隔空白><值 + 注释>——只对绑定角色的宏行
 # 整行重构（head/name/sep 原样保留 = 列对齐不动），未触碰行逐字节原样
 _DEFINE_LINE_RE = re.compile(
@@ -88,8 +107,13 @@ def render_pin_config(
     - `_CH` → 通道枚举（= 实例 token 原样，如 TIM2_CH1）
     - `_UART` → UART 实例枚举（= 实例原样，如 UART_1）
     - `_INST` → 寄存器外设宏（USART<N>，实例 UART_1 → USART1）
-    - `_PORT` / `_GPIO` → `GPIO_<口>`（引脚 PA6 → GPIO_A）
-    - `_PIN` / `_Pin` → `Pin_<号>`（引脚 PA6 → Pin_6）
+    - `_PORT` / `_GPIO` → `GPIO_<口>`（引脚 PA6 → GPIO_A；uart 引脚宏
+      `_TX_GPIO`/`_RX_GPIO` 同此尾形）
+    - `_PIN` / `_Pin` → `Pin_<号>`（引脚 PA6 → Pin_6；uart 引脚宏
+      `_TX_Pin`/`_RX_Pin` 同此尾形）
+    - `_IRQ_CALLS` → 不在角色宏清单里：独立重分组通道（见
+      `_regroup_irq_calls`——按各 {STEM}_UART 宏现值把 rx_handler 调用归入
+      USARTx_IRQ_CALLS，绑定换实例即重排）。
 
     注释里的旧引脚字样同步替换（`/* PA2，下降沿触发 */` → `/* PB2，… */`）。
     母版 pin_config.h 中没有的宏 = 数据不在此文件可控 → PinBindingError 大声
@@ -131,7 +155,46 @@ def render_pin_config(
             )
             if new_line != lines[line_no]:
                 lines[line_no] = new_line
+
+    if any(b.declaration.type in ("uart_tx", "uart_rx") for b in changes):
+        _regroup_irq_calls(lines, index)  # CALLS 按 {STEM}_UART 现值重分组
     return "".join(lines)
+
+
+def _regroup_irq_calls(lines: list[str], index: dict[str, int]) -> None:
+    """USARTx_IRQ_CALLS 行重分组（ADR 0012 工单 02）：按各 UART 角色
+    {STEM}_UART 宏的**现值**（绑定换实例后的新值）把 rx_handler 调用归入
+    对应 USARTx_IRQ_CALLS——组跟宏走（共享宏隐式漂移天然跟随），未变角色
+    保留默认分组；重分组后与现值逐字相同的行不写（非 uart 绑定不碰 CALLS
+    行，逐字节契约不破）。宏值不在 UART_1/2/3 = 数据漂移，大声失败。
+    """
+    groups: dict[str, list[str]] = {macro: [] for macro in _IRQ_CALLS_MACROS}
+    for stem, handler in _UART_CALLS_ROLES:
+        line = lines[index[stem]]
+        m = _DEFINE_LINE_RE.match(line)
+        assert m is not None, f"母版 {PIN_CONFIG_FILENAME} 缺宏 {stem}"
+        value = m.group("rest").strip().split(None, 1)[0]
+        if value not in ("UART_1", "UART_2", "UART_3"):
+            raise PinBindingError(
+                f"无法按 {stem} 宏值 {value!r} 分组 IRQ 调用——USARTx_IRQ_CALLS"
+                f" 重分组只认 UART_1/2/3（母版数据漂移）"
+            )
+        groups["USART" + _digits(value) + "_IRQ_CALLS"].append(handler + "()")
+
+    for macro in _IRQ_CALLS_MACROS:
+        line = lines[index[macro]]
+        m = _DEFINE_LINE_RE.match(line)
+        assert m is not None, f"母版 {PIN_CONFIG_FILENAME} 缺宏 {macro}"
+        new_value = "; ".join(groups[macro]) + ";"
+        rest = m.group("rest")
+        if new_value == rest.strip():
+            continue  # 现值一致：不写行（逐字节契约）
+        # 行尾原样接回：`.*$` 会把 CRLF 的 \r 吃进 rest（_replace_define_line
+        # 靠 new_rest 原样保留 \r），本通道自建值不含 \r——按母版行尾还原
+        eol = "\r\n" if rest.endswith("\r") else "\n"
+        lines[index[macro]] = (
+            f"{m.group('head')}{macro}{m.group('sep')}{new_value}{eol}"
+        )
 
 
 def _check_shared_port_macro_conflicts(

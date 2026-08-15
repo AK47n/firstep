@@ -64,7 +64,8 @@ static char* get_field(const char *line, int n, char *buf, int buf_size)
 
 void ball_detect_init(void)
 {
-    uart_init(BALL_DETECT_UART, 115200, 0);  // BALL_DETECT_UART = UART_1（pin_config.h）
+    uart_pin_init_ex(BALL_DETECT_UART, BALL_DETECT_UART_TX_GPIO, BALL_DETECT_UART_TX_Pin,
+                     BALL_DETECT_UART_RX_GPIO, BALL_DETECT_UART_RX_Pin);
 }
 
 // 清空接收缓冲区（状态切换时调用，丢弃旧帧）

@@ -47,7 +47,9 @@ extern volatile uint32_t g_uwb_frame_count; // 累计收到有效帧数
 
 // 函数
 void uwb_uart_init(void);
-void uwb_rx_handler(void);          // USART1 中断调用
+void uwb_rx_handler(void);          // 由母版 isr.c 的 USART1_IRQHandler 经
+                                    // USART1_IRQ_CALLS 聚合宏调用（勿在
+                                    // main.c 定义 USARTx_IRQHandler）
 void uwb_filter_reset(void);        // 重置滤波器 (ID变更时调用)
 uint32_t uwb_get_frame_rate(void);  // 获取帧率 (帧/秒 估算)
 

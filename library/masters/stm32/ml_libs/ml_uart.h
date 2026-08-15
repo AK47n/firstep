@@ -11,6 +11,7 @@ typedef enum
 }UARTn_enum;
 
 void uart_pin_init(UARTn_enum uartn);
+void uart_pin_init_ex(UARTn_enum uartn, uint8_t tx_gpio, uint8_t tx_pin, uint8_t rx_gpio, uint8_t rx_pin);
 void uart_baud_config(UARTn_enum uartn,int baud);
 void uart_init(UARTn_enum uartn,int baud,uint8_t priority);
 void uart_sendbyte(UARTn_enum uartn,uint8_t Byte);

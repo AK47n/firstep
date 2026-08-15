@@ -46,14 +46,20 @@
           "required": true,
           "macros": [
             "DIGIT_UART",
-            "DIGIT_UART_INST"
+            "DIGIT_UART_INST",
+            "DIGIT_UART_TX_GPIO",
+            "DIGIT_UART_TX_Pin"
           ]
         },
         {
           "id": "DIGIT_UART_RX",
           "type": "uart_rx",
           "default": "PA10",
-          "required": true
+          "required": true,
+          "macros": [
+            "DIGIT_UART_RX_GPIO",
+            "DIGIT_UART_RX_Pin"
+          ]
         }
       ]
     }

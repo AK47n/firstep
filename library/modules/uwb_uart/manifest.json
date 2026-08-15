@@ -23,14 +23,20 @@
           "required": true,
           "macros": [
             "UWB_UART",
-            "UWB_UART_INST"
+            "UWB_UART_INST",
+            "UWB_UART_TX_GPIO",
+            "UWB_UART_TX_Pin"
           ]
         },
         {
           "id": "UWB_UART_RX",
           "type": "uart_rx",
           "default": "PA10",
-          "required": true
+          "required": true,
+          "macros": [
+            "UWB_UART_RX_GPIO",
+            "UWB_UART_RX_Pin"
+          ]
         }
       ]
     }

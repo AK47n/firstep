@@ -63,7 +63,8 @@ static char* get_field(const char *line, int n, char *buf, int buf_size)
 
 void digit_uart_init(void)
 {
-    uart_init(DIGIT_UART, 115200, 0);  // DIGIT_UART = UART_1（pin_config.h）
+    uart_pin_init_ex(DIGIT_UART, DIGIT_UART_TX_GPIO, DIGIT_UART_TX_Pin,
+                     DIGIT_UART_RX_GPIO, DIGIT_UART_RX_Pin);
 }
 
 // 清空K230接收缓冲区（识别窗口开启时调用，丢弃旧帧）

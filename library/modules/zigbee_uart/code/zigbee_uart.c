@@ -25,21 +25,22 @@ static volatile uint8_t rx_state = 0;
 static volatile uint8_t rx_id    = 0;
 
 // ============================================================
-//  USART3 初始化 (PB10=TX, PB11=RX, 115200bps)
+//  UART 初始化（引脚/实例 = pin_config.h 宏，115200bps）
 // ============================================================
 void zigbee_uart_init(void)
 {
-    uart_init(ZIGBEE_UART, ZIGBEE_BAUD, 0x01);  // priority=0x01 开启接收中断
+    uart_pin_init_ex(ZIGBEE_UART, ZIGBEE_UART_TX_GPIO, ZIGBEE_UART_TX_Pin,
+                     ZIGBEE_UART_RX_GPIO, ZIGBEE_UART_RX_Pin);
     rx_state = 0;
 }
 
 // ============================================================
-//  USART3 中断处理 — 字节级状态机
-//  由 USART3_IRQHandler 调用
+//  UART 接收中断处理 — 字节级状态机
+//  由母版 isr.c 的 USART3_IRQHandler 经 USART3_IRQ_CALLS 聚合宏调用
 // ============================================================
 void zigbee_rx_handler(void)
 {
-    uint8_t byte = (uint8_t)(ZIGBEE_UART_INST->DR & 0xFF);  // ZIGBEE_UART_INST = USART3（pin_config.h）
+    uint8_t byte = (uint8_t)(ZIGBEE_UART_INST->DR & 0xFF);  // ZIGBEE_UART_INST（pin_config.h 宏）
     g_zigbee_byte_count++;  // 每收到1字节+1
 
     switch (rx_state)
