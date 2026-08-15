@@ -1836,12 +1836,23 @@ function renderPinRoles(roles, fam) {
     return;
   }
   const idx = pinIndex();
+  const typeClashByPin = new Map();
+  for (const r of roles) {
+    if (!idx[r.decl.default]) continue;
+    for (const o of roles) {
+      if (o.key !== r.key && o.decl.default === r.decl.default && o.decl.type !== r.decl.type) {
+        typeClashByPin.set(r.key, o.key);
+        break;
+      }
+    }
+  }
   box.innerHTML = roles.map((r) => {
     const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
     const bound = pinBindings[r.key];
     const unbound = pinUnbound.has(r.key);
     const defOnBoard = !!idx[r.decl.default];
     const famInfo = fam.get(r.key);
+    const typeClash = typeClashByPin.get(r.key);
     let status;
     if (bound) {
       status = `<span style="color:${st[0]}">已绑 ${esc(bound)}</span>` +
@@ -1853,6 +1864,8 @@ function renderPinRoles(roles, fam) {
         ' <button class="pin-role-restore">清除红显</button>';
     } else if (!defOnBoard) {
       status = `<span style="color:var(--warn)">默认板外（排针未引出）——仍可绑到板内空闲脚</span>`;
+    } else if (typeClash) {
+      status = `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 与 ${esc(typeClash)} 冲突（类型不同同脚）——未绑定时生成会资源冲突，建议改线</span>`;
     } else if (Object.values(pinBindings).includes(r.decl.default)) {
       const by = Object.entries(pinBindings).find(([k, v]) => v === r.decl.default && k !== r.key);
       status = `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 已被 ${esc((by && by[0]) || "其它角色")} 占用——未绑定时生成可能资源冲突，建议改线</span>`;

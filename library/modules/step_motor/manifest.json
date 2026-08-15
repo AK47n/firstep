@@ -23,13 +23,13 @@
         {
           "id": "STEP_MOTOR_SLP2",
           "type": "gpio_out",
-          "default": "PB6",
+          "default": "PB4",
           "required": true
         },
         {
           "id": "STEP_MOTOR_DIR2",
           "type": "gpio_out",
-          "default": "PB7",
+          "default": "PB5",
           "required": true
         },
         {
