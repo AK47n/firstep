@@ -4,7 +4,7 @@
 
 **Blocked by:** 03（pinwriter / pin_bindings / index.html 同缝——03 合 main 后再开）
 
-**Status:** 待复核（实施完成，PR 待开）
+**Status:** resolved（2026-08-15 PR #81 squash merged ecad183，主会话复核 + 1535 绿复跑）
 
 ## 需求
 
@@ -33,7 +33,7 @@
 - [x] pytest 全绿 + mypy src 干净（1535 passed + mypy 41 文件 Success）
 - [x] 红证已验 + 绿证（peripheral 字段断言 + 默认逐字节 + 跨族通道过滤）——tests/test_pin_unlock_mspm0_cross.py 7 用例；pin_family.h / motor 双分支按实证取消（偏差留痕）
 - [x] 真机：不配回归 + 跨族绑定 gmake 全 0 错 + 两个 400 零产物（证据 .scratch/real-run/tierB_realrun.log）
-- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-04，03 合 main 后从 9cb9ad5 建）+ 提交 + 推送开 PR（待开）
+- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-04，03 合 main 后从 9cb9ad5 建）+ 提交 + 推送开 PR #81
 
 ## 数据裁决（2026-08-15，第一步）
 
@@ -98,3 +98,14 @@
 - 文件边界实际改动：`src/contest_generator/static/index.html`（工单写
   index.html）；motor.c / generator.py / errors.py / boards JSON 零改动；
   另加 spec.md 与 ADR 0012 两处事实修正（偏差留痕所必需）。
+- **合并复核**（PR #81 squash merged ecad183，主会话）：diff 逐项对工单——
+  pwm 全类型级（通道 endswith 过滤正确排除 `_C0N`/`_C1N` 互补通道，PA8 只收
+  TIMA0_C0、PB18 C2N/C1 无 C0 拒）；两通道同实例门禁按基名交集（C0×C1 各
+  自通道过滤后 base 集交空 → 400 文案点名两通道与实例清单；单脚换位 / 成对
+  换位语义与 UART 对同款）；index.html 镜像通道过滤；旧测试三处同步
+  （同族 TIMG12 换位改 C0/C1 成对绑、PB18 文案改通道、PA8/PA9 跨族合法）。
+  偏差裁决成立：数据裁决实证 motor.c 全库零 `DL_TimerG_*`/`DL_TimerA_*`（SDK
+  两族头均为通用 `DL_Timer_*` 重定向宏），TIMA0 全量工程 clean all 0 错——
+  pin_family.h / motor 双分支取消有据，spec 数据契约与 ADR 0012 决策 5 同步
+  修正。合并后 main 复跑 1535 绿 40.2s + mypy src 41 文件干净。worktree
+  pin-full-unlock-04 照例保留。
