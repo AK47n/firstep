@@ -260,7 +260,7 @@ def test_resolve_stm32_same_default_different_roles_not_conflicting():
 
 
 def test_resolve_offboard_default_role_can_bind_inside_board():
-    """板外默认（HUIDU R3 = PB4）不因默认板外禁绑：绑板内脚合法。"""
+    """HUIDU R3 默认已板内（PB6），仍可绑到板内其它脚（PA27）。"""
     resolved = _resolve("mspm0", {"huidu.R3": "PA27"})
     assert resolved[0].pin == "PA27"
     assert resolved[0].instances == ()
@@ -444,8 +444,7 @@ def test_rewrite_syscfg_default_bindings_byte_identical():
 
 
 def test_rewrite_syscfg_changes_only_target_assign_lines():
-    """LED 换脚只动 LED_BEEP 一行；板外默认 HUIDU R3/R4（PB4/PB5）未绑不动
-    （板外默认回归显式用例）。"""
+    """LED 换脚只动 LED_BEEP 一行；HUIDU R3/R4 默认已板内（PA0/PA1）未绑不动。"""
     out = rewrite_syscfg(
         MSPM0_MASTER_SYSCFG,
         _resolve("mspm0", {"led_beep.LED_BEEP_LED": "PA12"}),
@@ -456,7 +455,7 @@ def test_rewrite_syscfg_changes_only_target_assign_lines():
     changed = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
     assert len(changed) == 1
     assert after[changed[0]].rstrip("\r\n").endswith('pin.$assign  = "PA12";')
-    assert '= "PB4";' in out and '= "PB5";' in out  # R3/R4 未绑照旧
+    assert '= "PB6";' in out and '= "PB7";' in out  # R3/R4 未绑照旧
 
 
 def test_rewrite_syscfg_swap_bindings_applied_simultaneously():
@@ -480,7 +479,7 @@ def test_rewrite_syscfg_xunji_permuted_slot_by_default_value():
 
 
 def test_rewrite_syscfg_offboard_default_rewrites_legacy_value():
-    """板外默认（R3 = PB4）绑定板内脚 → LaunchPad 遗留值行被换掉。"""
+    """HUIDU R3 默认 PB6 绑到 PA27 → 对应 $assign 行被换掉。"""
     out = rewrite_syscfg(
         MSPM0_MASTER_SYSCFG, _resolve("mspm0", {"huidu.R3": "PA27"})
     )

@@ -389,8 +389,8 @@ def test_mspm0_declaration_defaults_match_master_syscfg():
 
 
 def test_every_declaration_default_on_board_and_capable():
-    """默认引脚必须在对应板定义上、能力集含该角色类型；板外默认（PB4/PB5）
-    例外——排针未引出但仍合法（清单保留默认，绑定校验由工单 02 拒绝）。"""
+    """默认引脚必须在对应板定义上、能力集含该角色类型；HUIDU R3/R4 板内化后
+    已无板外默认（mspm0 全默认在排针上，绑定校验照旧拒板外脚）。"""
     for slug, platform, pin in ALL_DECLARATIONS:
         board = BOARDS[platform]
         board_pin_ = board_pin(board, pin.default)
@@ -419,18 +419,16 @@ def test_every_declaration_default_on_board_and_capable():
 
 
 def test_offboard_defaults_are_exactly_pb4_pb5():
+    """工单 huidu-r34-default 后：HUIDU R3/R4 板内化（PB6/PB7），板外默认
+    让位给 STEP_MOTOR SLP2/DIR2（PB4/PB5）。"""
     offboard = {
         (slug, pin.id)
         for slug, platform, pin in ALL_DECLARATIONS
         if platform == "mspm0" and board_pin(BOARDS[platform], pin.default) is None
     }
     assert offboard == {
-        ("huidu", "R3"),
-        ("huidu", "R4"),
-        ("pid", "GRAY_D7"),
-        ("pid", "GRAY_D8"),
-        ("xunji", "P7"),
-        ("xunji", "P8"),
+        ("step_motor", "STEP_MOTOR_SLP2"),
+        ("step_motor", "STEP_MOTOR_DIR2"),
     }
 
 
