@@ -4,7 +4,7 @@
 
 **Blocked by:** 无
 
-**Status:** claimed
+**Status:** 待复核（实施完成，PR 待开）
 
 ## 需求
 
@@ -16,6 +16,25 @@
 
 - `library/modules/ntb_time/`（code + manifest）
 - `library/masters/mspm0/mspm0.syscfg`（若换实例，实例名 NTB 保留或同步改代码——实例名是模块契约，改哪边同步哪边）
+
+## 实施记录（2026-08-15，worktree ntb-time-wrap-01）
+
+- **核实结论**（比工单观察更严重）：母版 NTB = TIMG7 Basic_Periodic，SysConfig
+  默认生成 32MHz/256=125kHz、period=62499+1=62500 ticks=**500ms/周**（不是
+  1.638ms——dimx 母版已带 prescale）。旧 `ntb_time.c` 三个问题叠加：① 从未
+  `startCounter`，计数器不跑，`get_time_stamp_ms` 恒 0；② `counter/500`
+  即使跑起来也不是毫秒（125kHz 下应 /125）；③ 计数器为 LOAD 向下数，
+  已走时间 = LOAD - 当前计数值。
+- **方案**：软件回绕累加（零 syscfg 改动，TIMG7 16 位在 62500 周期下够用，
+  且默认产物逐字节契约不破）。`NTB_INST_IRQHandler` 在 ZERO 中断 +500ms；
+  `get_time_stamp_ms` 首次调用自启动计数器并开 NVIC，返回
+  `g_ntb_ms + (LOAD - remaining) * 500 / (LOAD + 1)`。
+- **文件改动**：`library/modules/ntb_time/code/ntb_time.c`（重写实现）+
+  `manifest.json` note 同步；syscfg 零改动。
+- **验收**：pytest 1538 passed + mypy src 41 文件干净；真机 2024H 十模块
+  默认生成 gmake 0 错 0 警 + ntb_time.o 在产物（证据
+  .scratch/real-run/ntb_realrun.log）。运行级（跨 500ms 周的时间戳连续性）
+  用户上板自验：`get_time_stamp_ms()` 差值应随真实毫秒线性增长。
 
 ## Comments
 

@@ -10,7 +10,7 @@
       ],
       "verified": false,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置定时器命名 NTB（母版 syscfg = TIMG7 Basic_Periodic，计数时钟 40MHz）；分频 500 硬编码与计数时钟强绑定。",
+      "notes": "SysConfig 需配置定时器命名 NTB（母版 syscfg = TIMG7 Basic_Periodic，32MHz/256=125kHz，period 62500 ticks=500ms）。工单 ntb-time-wrap/01 起软件回绕累加：NTB_INST_IRQHandler 每 ZERO 中断 +500ms，get_time_stamp_ms 拼当前周内已走毫秒（LOAD-当前计数值），并首次调用自启动定时器。",
       "kit": "",
       "source_url": ""
     }
