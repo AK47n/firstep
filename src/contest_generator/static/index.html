@@ -367,6 +367,21 @@
   .pin-warn-list .wx { display: inline-block; margin: 2px 8px 2px 0; padding: 1px 8px;
                        border: 1px solid var(--warn); border-radius: 10px;
                        font-size: 12px; color: var(--warn); }
+  /* 卡 7 说明与图例美化（工单 index-html-ui-redo/01）：只动文字/排版/样式层 */
+  .pin-intro { font-size: 13px; color: var(--muted); line-height: 1.7; margin: 2px 0 6px; }
+  .pin-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                 margin-bottom: 8px; }
+  .pin-toolbar .hint { font-size: 12px; color: var(--muted); }
+  .pin-legend { padding: 6px 0 2px; row-gap: 6px; }
+  .pin-legend .lg { display: inline-flex; align-items: center; gap: 4px;
+                    padding: 2px 9px; border: 1px solid var(--border);
+                    border-radius: 999px; background: var(--panel-2);
+                    font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .pin-legend .lg .dot { margin-right: 2px; }
+  .pin-subtitle { margin: 10px 0 4px; font-size: 12px; font-weight: 600;
+                  letter-spacing: .3px; color: var(--fg); }
+  .pin-subtitle.warn { color: var(--warn); }
+  #pin-board-caption { font-weight: 600; }
   /* SVG 引脚候选高亮（点清单条目 → 板图可接引脚） */
   .pin-cand { stroke: var(--accent) !important; stroke-width: 2.5 !important; }
   .pin-dim { opacity: .22; }
@@ -488,20 +503,22 @@
 
     <div class="card" id="card-pin-config">
       <h2>7. 引脚配置（板图点选）</h2>
-      <div class="muted">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
+      <div class="pin-intro">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
       <div id="pin-config-msg" class="banner hidden" style="margin-top:8px"></div>
       <div id="pin-config-empty" class="muted" style="margin-top:8px"></div>
       <div id="pin-config-body" class="hidden">
         <div id="pin-highlight-msg" class="muted" style="margin-top:10px"></div>
         <div class="pin-layout" style="margin-top:8px">
           <div class="pin-board-wrap">
-            <div class="row" style="margin-bottom:6px">
+            <div class="pin-toolbar">
               <button id="btn-pin-rotate">旋转 90°</button>
-              <span class="muted">板图视角旋转（不影响引脚数据）。</span>
+              <span class="hint">板图视角旋转（不影响引脚数据）</span>
             </div>
             <div id="pin-board-svg"></div>
             <div id="pin-board-caption"></div>
+            <div class="pin-subtitle" id="pin-fixed-sub">固定资源</div>
             <div id="pin-fixed-list" class="pin-fixed-list"></div>
+            <div class="pin-subtitle warn" id="pin-warn-sub">⚠ 板载共用警示</div>
             <div id="pin-warn-list" class="pin-warn-list"></div>
           </div>
           <div class="pin-role-list">
@@ -1566,13 +1583,17 @@ function renderPinCard() {
   renderPinLegend(roles);
   renderPinBoard();
   renderPinRoles(roles, pinMacroFamilies(roles));
-  $("pin-fixed-list").innerHTML = (pinBoard.fixed || []).map((f) =>
+  const fixedHtml = (pinBoard.fixed || []).map((f) =>
     `<span class="fx" title="${esc(f.note)}">${esc(f.name)}：${esc(f.occupies.join("、"))}</span>`).join("");
+  $("pin-fixed-list").innerHTML = fixedHtml;
+  $("pin-fixed-sub").classList.toggle("hidden", !fixedHtml);
   // 板载共用警示（可见警告，不只悬停）：io 引脚带 notes = 与板载资源共用（BSL/LED/ROSC 等）
-  $("pin-warn-list").innerHTML = (pinBoard.pins || [])
+  const warnHtml = (pinBoard.pins || [])
     .filter((p) => p.kind === "io" && p.notes)
     .map((p) => `<span class="wx" title="${esc(p.notes)}">⚠ ${esc(p.name)} · ${esc(p.notes)}</span>`)
     .join("");
+  $("pin-warn-list").innerHTML = warnHtml;
+  $("pin-warn-sub").classList.toggle("hidden", !warnHtml);
 }
 
 async function loadPinBoard() {
@@ -1595,11 +1616,11 @@ function renderPinLegend(roles) {
   for (const r of roles) if (!seen.includes(r.decl.type)) seen.push(r.decl.type);
   let html = seen.map((t) => {
     const st = PIN_TYPE_STYLE[t] || ["var(--accent)", "var(--accent-dim)"];
-    return `<span><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
+    return `<span class="lg"><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
   }).join("");
-  html += `<span><span class="dot" style="background:var(--pin-pad);border:1px solid var(--border-strong)"></span>空闲 IO</span>`;
-  html += `<span><span class="dot" style="background:transparent;border:1px dashed var(--warn)"></span>板载共用（见板图下方警示）</span>`;
-  html += `<span><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
+  html += `<span class="lg"><span class="dot" style="background:var(--pin-pad);border:1px solid var(--border-strong)"></span>空闲 IO</span>`;
+  html += `<span class="lg"><span class="dot" style="background:transparent;border:1px dashed var(--warn)"></span>板载共用（见板图下方警示）</span>`;
+  html += `<span class="lg"><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
   $("pin-legend").innerHTML = html;
 }
 
