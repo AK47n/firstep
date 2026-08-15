@@ -27,6 +27,7 @@ from typing import Sequence
 from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError, ResolvedBinding
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from .syscfg_instances import INSTANCES_BY_SLUG
 
 PIN_CONFIG_FILENAME = "pin_config.h"
 MSPM0_SYSCFG_FILENAME = "mspm0.syscfg"
@@ -307,12 +308,15 @@ def rewrite_syscfg(
     不需要 port 字段：SysConfig 由组内引脚 $assign 自动推导
     `STEP_MOTOR_PORT`（前置验证 2026-08-15 实证），写侧仍只碰 $assign。
 
-    槽位定位 = 默认引脚值（母版 syscfg 的 $assign 引脚值唯一，结构测试钉）：
-    角色声明默认值 = 地猛星化后 syscfg 现值（工单 01），逐角色找到唯一落点
-    行即该角色的槽位——xunji P1-P8 与 HUIDU 槽位错序共享也天然对位（P1 默认
-    PA24 → HUIDU L3 槽位）。板外默认（HUIDU R3/R4 = PB4/PB5）仍在 syscfg 有
-    落点（LaunchPad 遗留值），未绑不动、绑定即换。同一槽位两角色（motor.AA
-    / key.DC_MOTOR_AA）同默认 = 同落点，绑同脚合法、绑异脚在 resolve 已拦。
+    槽位定位 = 默认引脚值 + 实例路径尾字段（工单 01 默认值唯一为常态；工单
+    2026-08-15 起 STEP_MOTOR SLP2/DIR2 与 HUIDU R3/R4 默认重叠 PB6/PB7——
+    全库 42 角色 vs 排针 32 脚数学上无法全互异，允许重叠、用户改绑消解）：
+    角色声明默认值 = 地猛星化后 syscfg 现值，同值多行时按角色类型的落点路径
+    形（gpio 组 → associatedPins[n].pin、uart_tx → txPin、i2c_scl → sclPin
+    等）选唯一候选——HUIDU R3 改绑只碰 HUIDU 行、STEP_MOTOR SLP2 改绑只碰
+    STEP_MOTOR 行。xunji P1-P8 与 HUIDU 槽位错序共享也天然对位（P1 默认
+    PA24 → HUIDU L3 槽位）。同一槽位两角色（motor.AA / key.DC_MOTOR_AA）
+    同默认同落点，绑同脚合法、绑异脚在 resolve 已拦。
     """
     changes: list[ResolvedBinding] = [
         b for b in resolved if b.pin != b.declaration.default
@@ -329,29 +333,23 @@ def rewrite_syscfg(
             sites.setdefault(m.group("pin"), []).append(i)
             path_index.setdefault(m.group("path"), i)
 
-    by_default: dict[str, str] = {}
+    by_slot: dict[tuple[str, str], str] = {}
     for binding in changes:
         default = binding.declaration.default
-        previous_pin = by_default.get(default)
+        line_no = _locate_mspm0_site(
+            lines, sites.get(default) or [], default, binding
+        )
+        m = _SYSCFG_ASSIGN_RE.match(lines[line_no])
+        assert m is not None  # _locate_mspm0_site 已匹配过
+        slot = (default, m.group("path"))
+        previous_pin = by_slot.get(slot)
         if previous_pin is not None and previous_pin != binding.pin:
             raise PinBindingError(
-                f"绑定冲突：同一槽位（默认引脚 {default}）的两个角色绑到不同"
-                f"引脚 {previous_pin}、{binding.pin} —— 请绑到同一引脚"
+                f"绑定冲突：同一槽位（默认引脚 {default}，路径"
+                f" {m.group('path')}）的两个角色绑到不同引脚 {previous_pin}、"
+                f"{binding.pin} —— 请绑到同一引脚"
             )
-        by_default[default] = binding.pin
-
-    for binding in changes:
-        default = binding.declaration.default
-        line_nos = sites.get(default) or []
-        if len(line_nos) != 1:
-            raise PinBindingError(
-                f"角色默认引脚 {default} 在母版 {MSPM0_SYSCFG_FILENAME} 中的"
-                f"落点不是唯一一行（找到 {len(line_nos)} 行）——声明"
-                f"默认值与 syscfg 漂移，请核对工单 01 数据"
-            )
-        line_no = line_nos[0]
-        m = _SYSCFG_ASSIGN_RE.match(lines[line_no])
-        assert m is not None  # sites 收录时已匹配过
+        by_slot[slot] = binding.pin
         lines[line_no] = (
             f'{m.group("head")}"{binding.pin}"'
             f'{m.group("tail")}{m.group("eol") or ""}'
@@ -385,6 +383,76 @@ def rewrite_syscfg(
                 f'{pm.group("tail")}{pm.group("eol") or ""}'
             )
     return "".join(lines)
+
+
+def _locate_mspm0_site(
+    lines: list[str],
+    line_nos: Sequence[int],
+    default: str,
+    binding: ResolvedBinding,
+) -> int:
+    """默认引脚值 → 唯一槽位行号。同值多行（默认重叠布局）时按角色类型的
+    落点路径尾形过滤：gpio 组 → associatedPins[n].pin、uart_tx → txPin、
+    i2c_scl → sclPin、pwm → ccp0/ccp1Pin（按角色 id 的 C0/C1 通道）。过滤后
+    仍非唯一 = 母版漂移，大声失败。"""
+    if len(line_nos) == 1:
+        return line_nos[0]
+    if not line_nos:
+        raise PinBindingError(
+            f"角色默认引脚 {default} 在母版 {MSPM0_SYSCFG_FILENAME} 中没有"
+            f"落点——声明默认值与 syscfg 漂移，请核对工单 01 数据"
+        )
+    candidates: list[int] = []
+    for line_no in line_nos:
+        m = _SYSCFG_ASSIGN_RE.match(lines[line_no])
+        assert m is not None  # sites 收录时已匹配过
+        if _mspm0_path_matches(
+            binding.declaration.type,
+            binding.declaration.id,
+            binding.slug,
+            m.group("path"),
+        ):
+            candidates.append(line_no)
+    if len(candidates) == 1:
+        return candidates[0]
+    raise PinBindingError(
+        f"角色默认引脚 {default} 在母版 {MSPM0_SYSCFG_FILENAME} 中的落点不是"
+        f"唯一一行（找到 {len(line_nos)} 行，路径形过滤后剩"
+        f" {len(candidates)} 行）——声明默认值与 syscfg 漂移，请核对工单 01"
+        f"数据"
+    )
+
+
+def _mspm0_path_matches(
+    decl_type: str, role_id: str, slug: str, path: str
+) -> bool:
+    """角色类型 → $assign 路径匹配（mspm0 母版路径形态固定）。
+
+    GPIO 组角色（gpio_out/gpio_in/enc）落在 `<实例>.associatedPins[n].pin`，
+    同值多行时用 slug 反查消费实例名（syscfg_instances 单源表）区分——
+    STEP_MOTOR SLP2 只认 STEP_MOTOR.*，HUIDU R3 只认 HUIDU.*。外设角色
+    落点路径尾字段唯一（txPin/rxPin/sclPin/sdaPin/ccp0Pin/ccp1Pin）。
+    """
+    if decl_type in ("gpio_out", "gpio_in", "enc"):
+        if not (".associatedPins[" in path and path.endswith(".pin")):
+            return False
+        instance = path.split(".associatedPins[", 1)[0]
+        return instance in INSTANCES_BY_SLUG.get(slug, ())
+    if decl_type == "uart_tx":
+        return path.endswith(".txPin")
+    if decl_type == "uart_rx":
+        return path.endswith(".rxPin")
+    if decl_type == "i2c_scl":
+        return path.endswith(".sclPin")
+    if decl_type == "i2c_sda":
+        return path.endswith(".sdaPin")
+    if decl_type == "pwm":
+        if role_id.endswith("_C0"):
+            return path.endswith(".ccp0Pin")
+        if role_id.endswith("_C1"):
+            return path.endswith(".ccp1Pin")
+        return path.endswith((".ccp0Pin", ".ccp1Pin"))
+    return False
 
 
 def _peripheral_path(assign_path: str) -> str | None:

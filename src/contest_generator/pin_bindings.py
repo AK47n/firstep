@@ -34,9 +34,10 @@ boards.pin_capability_instances 推导实例）。校验通过产出 ResolvedBin
   逐字节契约不破）。
 - 重复绑定不拦（同引脚多角色共享合法，spec 已定）；板外脚（如 mspm0 的
   PB4/PB5 不在排针）绑定 = 未知引脚 400。
-- mspm0 槽位互斥：同一默认引脚 = 同一 syscfg 槽位（母版 $assign 引脚值唯一，
-  结构测试钉），两个角色绑到不同引脚 = 冲突 400——stm32 各角色宏族独立
-  （GRAY_D1 与 DIP0 同默认 PB12 但宏不同），不拦。
+- mspm0 槽位互斥：同一默认引脚且同一 syscfg 落点路径（母版 $assign 引脚值
+  唯一为常态；STEP_MOTOR SLP2/DIR2 与 HUIDU R3/R4 默认重叠 PB6/PB7 属刻意
+  重叠，路径不同不互斥）的两个角色绑到不同引脚 = 冲突 400——stm32 各角色
+  宏族独立（GRAY_D1 与 DIP0 同默认 PB12 但宏不同），不拦。
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from typing import Sequence
 
 from .boards import Board, BoardPin, board_pin, pin_capability_instances, pin_supports
 from .manifest import ModuleManifest, PinDeclaration
+from .syscfg_instances import INSTANCES_BY_SLUG
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
 
@@ -422,20 +424,56 @@ def _pin_port(pin: str) -> str:
 
 
 def _check_slot_conflicts(resolved: Sequence[ResolvedBinding]) -> None:
-    """mspm0 槽位互斥：同一默认引脚 = 同一 syscfg 槽位，绑到不同引脚 = 冲突。
+    """mspm0 槽位互斥：同一默认引脚 + 同一 syscfg 落点路径，绑到不同引脚 =
+    冲突。
 
-    判例：motor.AA 与 key.DC_MOTOR_AA 同默认 PA16（syscfg DC_MOTOR 槽位 AA
-    单落点），两模块同时选中并绑到不同脚时物理互斥——400 大声失败比静默
-    后者覆盖前者诚实。同默认同引脚（= 同槽位一致绑定）不拦（重复共享合法）。
+    判例：motor.AA 与 key.DC_MOTOR_AA 同默认 PA16 且同属 DC_MOTOR 实例
+    （syscfg DC_MOTOR 槽位 AA 单落点），两模块同时选中并绑到不同脚时物理
+    互斥——400 大声失败比静默后者覆盖前者诚实。同槽位同引脚不拦（重复共享
+    合法）。STEP_MOTOR SLP2/DIR2 与 HUIDU R3/R4 默认同 PB6/PB7 但实例路径
+    不同（STEP_MOTOR.* vs HUIDU.*），绑不同脚合法——用户改绑消解重叠。
     """
-    by_default: dict[str, ResolvedBinding] = {}
+    by_default: dict[str, list[ResolvedBinding]] = {}
     for binding in resolved:
-        default = binding.declaration.default
-        previous = by_default.get(default)
-        if previous is not None and previous.pin != binding.pin:
-            raise PinBindingError(
-                f"绑定冲突：{previous.role_key} 与 {binding.role_key} 共用同一"
-                f"槽位（默认引脚 {default}）却绑到不同引脚"
-                f" {previous.pin}、{binding.pin} —— 请绑到同一引脚"
-            )
-        by_default[default] = binding
+        by_default.setdefault(binding.declaration.default, []).append(binding)
+    for default, group in by_default.items():
+        for i, left in enumerate(group):
+            for right in group[i + 1 :]:
+                if left.pin != right.pin and _mspm0_same_slot(left, right):
+                    raise PinBindingError(
+                        f"绑定冲突：{left.role_key} 与 {right.role_key} 共用同一"
+                        f"槽位（默认引脚 {default}）却绑到不同引脚"
+                        f" {left.pin}、{right.pin} —— 请绑到同一引脚"
+                    )
+
+
+def _mspm0_same_slot(left: ResolvedBinding, right: ResolvedBinding) -> bool:
+    """两绑定是否落同一 syscfg 槽位（与 pinwriter 的路径匹配口径一致）。
+
+    GPIO 组角色：实例名集合有交集（motor 与 key 共享 DC_MOTOR）即可能同槽
+    位；STEP_MOTOR 与 HUIDU 无交集 = 默认重叠但槽位不同。外设角色：类型
+    尾字段一一对应（pwm 再按角色 id 尾 C0/C1 分通道）。
+    """
+    lt = left.declaration.type
+    rt = right.declaration.type
+    if lt in ("gpio_out", "gpio_in", "enc") and rt in (
+        "gpio_out",
+        "gpio_in",
+        "enc",
+    ):
+        return bool(
+            set(INSTANCES_BY_SLUG.get(left.slug, ()))
+            & set(INSTANCES_BY_SLUG.get(right.slug, ()))
+        )
+    if lt != rt:
+        return False
+    if lt == "pwm":
+        return _pwm_channel(left.declaration.id) == _pwm_channel(
+            right.declaration.id
+        )
+    return True
+
+
+def _pwm_channel(role_id: str) -> str:
+    """角色 id 尾 C0/C1 → 通道；非通道形返回原 id（保持同槽位保守判等）。"""
+    return role_id.rsplit("_", 1)[-1] if "_" in role_id else role_id

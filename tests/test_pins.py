@@ -418,18 +418,15 @@ def test_every_declaration_default_on_board_and_capable():
             )
 
 
-def test_offboard_defaults_are_exactly_pb4_pb5():
-    """工单 huidu-r34-default 后：HUIDU R3/R4 板内化（PB6/PB7），板外默认
-    让位给 STEP_MOTOR SLP2/DIR2（PB4/PB5）。"""
+def test_offboard_defaults_are_exactly_empty():
+    """STEP_MOTOR SLP2/DIR2 板内化（PB6/PB7，与 HUIDU R3/R4 默认重叠）后，
+    mspm0 已无板外默认——全默认在排针上，重叠由用户改绑消解。"""
     offboard = {
         (slug, pin.id)
         for slug, platform, pin in ALL_DECLARATIONS
         if platform == "mspm0" and board_pin(BOARDS[platform], pin.default) is None
     }
-    assert offboard == {
-        ("step_motor", "STEP_MOTOR_SLP2"),
-        ("step_motor", "STEP_MOTOR_DIR2"),
-    }
+    assert offboard == set()
 
 
 def test_shared_pin_roles_allowed():
