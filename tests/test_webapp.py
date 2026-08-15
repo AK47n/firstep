@@ -123,7 +123,10 @@ class RaisingLLM:
         raise LLMError("服务不可用")
 
     def generate_main_skeleton(
-        self, problem_text: str, module_interfaces: Sequence[str]
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> str:
         raise LLMError("服务不可用")
 
@@ -197,7 +200,10 @@ class ScriptedDistillLLM:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
 
     def generate_main_skeleton(
-        self, problem_text: str, module_interfaces: Sequence[str]
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
     ) -> str:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
 
@@ -2562,6 +2568,111 @@ def test_skeleton_rejects_invalid_main_mode(client, context):
 
         assert resp.status_code == 400
         assert "main_mode" in resp.json()["detail"]
+
+
+def test_skeleton_with_reference_ids_injects_fulltexts(client, context):
+    """骨架阶段 reference_ids：锚定 ∪ 手动全文进骨架 prompt（FakeLLM 记录）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "topic_id": "2026C",
+            "reference_ids": [TOPIC_REFERENCE_ID],
+        },
+    )
+
+    assert resp.status_code == 200
+    refs = holder["llm"].skeleton_ref_calls[0]
+    assert TOPIC_REFERENCE_ID in refs
+    assert "数字钥匙例程" in refs[TOPIC_REFERENCE_ID]
+
+
+def test_skeleton_rejects_duplicate_reference_ids(client, context):
+    """骨架阶段重复 reference_id：manual_reference_admission → 400 中文。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "topic_id": "2026C",
+            "reference_ids": [TOPIC_REFERENCE_ID, TOPIC_REFERENCE_ID],
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "重复" in resp.json()["detail"]
+
+
+def test_skeleton_without_reference_ids_records_empty(client, context):
+    """缺省零参考回归：不传 reference_ids → generate_skeleton 收到 None（FakeLLM 记 {}）。"""
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "温湿度采集",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+        },
+    )
+
+    assert resp.status_code == 200
+    assert holder["llm"].skeleton_ref_calls == [{}]
+
+
+def test_skeleton_with_manual_only_reference_injects_fulltext(client, context):
+    """手动选一个非锚定参考（no-topic 唯一准入）：全文直读进骨架 prompt。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "reference_ids": [OTHER_REFERENCE_ID],
+        },
+    )
+
+    assert resp.status_code == 200
+    refs = holder["llm"].skeleton_ref_calls[0]
+    assert refs == {OTHER_REFERENCE_ID: refs[OTHER_REFERENCE_ID]}
+    assert "别的套件" in refs[OTHER_REFERENCE_ID]
+
+
+def test_skeleton_rejects_unknown_reference_id(client, context):
+    """骨架阶段幻觉 reference_id：走 manual_reference_admission → 400 中文。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "topic_id": "2026C",
+            "reference_ids": ["nope"],
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
 
 
 def test_skeleton_with_topic_id_uses_full_text(client, context):

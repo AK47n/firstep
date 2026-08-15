@@ -63,6 +63,7 @@ from .fix_errors import (
 from .generator import (
     GenerationSummary,
     TopicContext,
+    build_reference_fulltexts,
     generate_project,
     resolve_topic_context,
 )
@@ -273,9 +274,10 @@ def _assemble_topic_context(
     generator.resolve_topic_context，这里只取配置、推导目录、传参；显式编号
     查无此条大声报错；自动识别尽力而为（提取失败 / 查无此条静默降级）。
     推荐 / 骨架传 _llm(context)（自动识别），生成传 None（显式编号路径）。
-    reference_ids = 手动选参考资料（工单 01，仅推荐路由传——骨架 / 生成不
-    注入参考文件是既有定案）。platform（工单 01 平台属性）= 锚定命中过滤
-    依据：仅推荐路由传请求体 platform（骨架 / 生成不注入参考文件，传缺省）。
+    reference_ids = 手动选参考资料（工单 01；推荐与骨架路由传——骨架阶段
+    注入参考实现草稿，生成不注入，见 ADR 0006 修订）。platform（工单 01
+    平台属性）= 锚定命中过滤依据：推荐与骨架路由传请求体 platform（生成
+    不注入参考文件，传缺省）。
     """
     config = _require_config(context)
     return resolve_topic_context(
@@ -650,12 +652,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         main_mode：`skeleton`（缺省，现行为）| `smoke`（自检冒烟——只自检不写
         赛题逻辑，OLED 为主 / debug_uart 串口为辅，两者都没选 → 400）。
         历史赛题入口：选中某题时题面用库内全文（长 PDF 题面全文只在选了该赛
-        题时进上下文）；骨架阶段不注入参考文件、不自动并入模块（模块选择由
-        用户 / 推荐链路决定——spec Out of Scope，等真实用例再评估）。"""
+        题时进上下文）；骨架阶段经 reference_ids 注入参考实现草稿（锚定 ∪
+        手动全文，ADR 0006 修订），不自动并入模块（模块选择由用户 / 推荐
+        链路决定）。"""
         problem_text = _require_str(payload, "problem_text")
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         topic_id = _optional_str(payload, "topic_id")
+        reference_ids = _require_str_list(payload, "reference_ids")
         if "main_mode" in payload:
             main_mode = _optional_str(payload, "main_mode")
             if main_mode not in ("skeleton", "smoke"):
@@ -663,7 +667,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         else:
             main_mode = "skeleton"
         topic = _assemble_topic_context(
-            context, topic_id, problem_text, _llm(context)
+            context,
+            topic_id,
+            problem_text,
+            _llm(context),
+            reference_ids=reference_ids,
+            platform=platform,
         )
         resolved = resolve_selection(_library_dir(context), platform, slugs)
         llm = _llm(context)
@@ -672,12 +681,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if main_mode == "smoke":
             if not {"oled", "debug_uart"} & set(slugs):
                 raise HTTPException(400, "自检骨架需要 OLED 或 debug_uart 模块作为输出通道")
-            generate = generate_smoke_main
+            main_c, intercepted = generate_smoke_main(
+                llm, topic.problem_text, resolved.manifests, platform, library_dir, master_dir
+            )
         else:
-            generate = generate_skeleton
-        main_c, intercepted = generate(
-            llm, topic.problem_text, resolved.manifests, platform, library_dir, master_dir
-        )
+            main_c, intercepted = generate_skeleton(
+                llm,
+                topic.problem_text,
+                resolved.manifests,
+                platform,
+                library_dir,
+                master_dir,
+                reference_fulltexts=build_reference_fulltexts(topic),
+            )
         return {"main_c": main_c, "intercepted": list(intercepted)}
 
     @app.post("/api/pick-directory")

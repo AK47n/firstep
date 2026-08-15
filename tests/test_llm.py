@@ -949,6 +949,34 @@ def test_skeleton_prompt_carries_no_unused_var_rule():
     assert "占位声明" in SKELETON_NO_UNUSED_RULE
 
 
+def test_generate_main_skeleton_forwards_reference_fulltexts():
+    """DeepSeekLLM.generate_main_skeleton 把参考全文透传进 user 消息。"""
+    transport = FakeTransport(body=_api_response("int main(void) { /* TODO */ }"))
+    llm = _llm(transport)
+
+    llm.generate_main_skeleton("赛题", ["x.h"], {"r1": "巡线决策源码"})
+
+    _, _, payload, _ = transport.calls[0]
+    user_message = payload["messages"][1]["content"]
+    assert "### 参考资料 r1" in user_message
+    assert "巡线决策源码" in user_message
+
+
+def test_skeleton_prompt_with_references_adds_section_and_rewrite_rule():
+    """参考实现进骨架：非空 reference_fulltexts → 参考段 + 改写约束；空/None = 零回归。"""
+    base = _skeleton_user_prompt("赛题", ("x.h",))
+    with_refs = _skeleton_user_prompt("赛题", ("x.h",), {"ref-1": "巡线决策源码"})
+
+    assert "赛题" in with_refs and "x.h" in with_refs
+    assert with_refs.index("### 参考资料") > with_refs.index("x.h")
+    assert "### 参考资料 ref-1" in with_refs
+    assert "巡线决策源码" in with_refs
+    assert "适配当前所选模块接口" in with_refs
+    assert "保持 TODO" in with_refs
+    assert _skeleton_user_prompt("赛题", ("x.h",), None) == base
+    assert _skeleton_user_prompt("赛题", ("x.h",), {}) == base
+
+
 def test_generate_smoke_main_routes_to_smoke_prompts():
     """自检冒烟职责走独立系统/用户提示词，不经骨架提示词。"""
     transport = FakeTransport(body=_api_response("int main(void) { /* smoke */ }"))

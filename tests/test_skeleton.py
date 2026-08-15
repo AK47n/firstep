@@ -452,6 +452,25 @@ def test_verify_main_c_interfaces_passes_clean_main_c(fake_module_library):
     assert undefined == ()
 
 
+def test_generate_skeleton_with_reference_fulltexts_feeds_them_to_llm(
+    fake_module_library,
+):
+    """参考实现进骨架：reference_fulltexts 非空时喂给 LLM（FakeLLM 记录）。"""
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+    llm = FakeLLM()
+
+    generate_skeleton(
+        llm,
+        "环境监测仪",
+        manifests,
+        PLATFORM_MSPM0,
+        fake_module_library,
+        reference_fulltexts={"ref-1": "巡线决策参考实现全文"},
+    )
+
+    assert llm.skeleton_ref_calls == [{"ref-1": "巡线决策参考实现全文"}]
+
+
 def test_generate_smoke_main_feeds_interfaces_and_sanitizes(fake_module_library):
     """自检冒烟入口：接口块同源喂给 LLM，出稿走 sanitize_skeleton 同款兜底。"""
     manifests = _manifests(fake_module_library, "dht11", "delay")

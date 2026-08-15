@@ -2115,6 +2115,7 @@ async function generateMain(mode) {
       topic_id: currentTopicId || undefined,
     };
     if (mode === "smoke") payload.main_mode = "smoke";
+    else payload.reference_ids = selectedReferenceIds;  // 参考实现进骨架（工单 02）
     const data = await apiPost("/api/skeleton", payload);
     $("main-c").value = data.main_c;
     const box = $("intercepted");
