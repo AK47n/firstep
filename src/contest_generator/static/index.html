@@ -96,6 +96,7 @@
   .platform-card .name { font-weight: 600; }
   .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
            margin-left: 6px; vertical-align: 1px; }
+  .badge.plat { white-space: nowrap; text-align: center; line-height: 1.3; }
   .badge.missing { background: var(--danger-dim); color: var(--danger); }
   .badge.unverified { background: var(--warn-dim); color: var(--warn); }
   .badge.hw { background: var(--info-dim); color: var(--info); }
@@ -1141,7 +1142,9 @@ $("btn-topic-summary").addEventListener("click", async () => {
 function moduleBadges(m) {
   const badges = [];
   for (const [platform, entry] of Object.entries(m.platforms || {})) {
-    badges.push(`<span class="badge ${entry.hardware_bound ? "hw" : entry.verified ? "ok" : "unverified"}">${esc(platform)}${entry.hardware_bound ? "·硬件绑定" : entry.verified ? "·已验证" : "·未验证"}</span>`);
+    const cls = entry.hardware_bound ? "hw" : entry.verified ? "ok" : "unverified";
+    const status = entry.hardware_bound ? "硬件绑定" : entry.verified ? "已验证" : "未验证";
+    badges.push(`<span class="badge plat ${cls}">${esc(platform.toUpperCase())}<br>${esc(status)}</span>`);
   }
   return badges.join("");
 }
