@@ -4,7 +4,7 @@
 
 **Blocked by:** 无（不阻塞 pin-board-config——板外默认规则已兜底）
 
-**Status:** 待实施（research 类，含用户物理操作）
+**Status:** claimed（等用户丝印/引脚数反馈）
 
 ## 需求
 
