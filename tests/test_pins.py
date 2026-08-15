@@ -184,6 +184,19 @@ STM32_MACRO_VALUES = {
     "BALL_DETECT_UART_INST": "USART1",
     "DEBUG_UART": "UART_2",
     "DEBUG_UART_INST": "USART2",
+    # uart 引脚宏（工单 pin-full-unlock/02：值 = ml_uart switch 表原值不变）
+    "DIGIT_UART_TX_GPIO": "GPIO_A",
+    "DIGIT_UART_TX_Pin": "Pin_9",
+    "DIGIT_UART_RX_GPIO": "GPIO_A",
+    "DIGIT_UART_RX_Pin": "Pin_10",
+    "BALL_DETECT_UART_TX_GPIO": "GPIO_A",
+    "BALL_DETECT_UART_TX_Pin": "Pin_9",
+    "BALL_DETECT_UART_RX_GPIO": "GPIO_A",
+    "BALL_DETECT_UART_RX_Pin": "Pin_10",
+    "DEBUG_UART_TX_GPIO": "GPIO_A",
+    "DEBUG_UART_TX_Pin": "Pin_2",
+    "DEBUG_UART_RX_GPIO": "GPIO_A",
+    "DEBUG_UART_RX_Pin": "Pin_3",
     # config.h 并入（LED/BUZZER/DIP/UWB/ZIGBEE 原值）
     "LED_PORT": "GPIO_C",
     "LED_RED_PIN": "Pin_13",
@@ -198,6 +211,20 @@ STM32_MACRO_VALUES = {
     "UWB_UART_INST": "USART1",
     "ZIGBEE_UART": "UART_3",
     "ZIGBEE_UART_INST": "USART3",
+    "UWB_UART_TX_GPIO": "GPIO_A",
+    "UWB_UART_TX_Pin": "Pin_9",
+    "UWB_UART_RX_GPIO": "GPIO_A",
+    "UWB_UART_RX_Pin": "Pin_10",
+    "ZIGBEE_UART_TX_GPIO": "GPIO_B",
+    "ZIGBEE_UART_TX_Pin": "Pin_10",
+    "ZIGBEE_UART_RX_GPIO": "GPIO_B",
+    "ZIGBEE_UART_RX_Pin": "Pin_11",
+    # UART 接收中断聚合（isr.c USARTx_IRQHandler 调用；默认分组）
+    "USART1_IRQ_CALLS": (
+        "digit_uart_rx_handler(); ball_detect_rx_handler(); uwb_rx_handler();"
+    ),
+    "USART2_IRQ_CALLS": "debug_uart_rx_handler();",
+    "USART3_IRQ_CALLS": "zigbee_rx_handler();",
     # 软 I2C（ml_i2c.h / ml_oled.h 迁入，工单 pin-unlock-stm32/02，原值不变）
     "I2C_GPIO": "GPIO_B",
     "I2C_SCL_GPIO_Pin": "Pin_10",

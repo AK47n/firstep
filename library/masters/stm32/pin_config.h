@@ -62,16 +62,29 @@
 
 /* ---- K230 视觉串口（digit_uart / ball_detect 模块，115200）----
  * UART 实例宏（ml_uart 的 UARTn_enum）+ 寄存器实例宏（UART_1 ↔ USART1，
- * UART_2 ↔ USART2）——引脚由实例决定（UART_1 = PA9/PA10），换实例换引脚。
+ * UART_2 ↔ USART2）+ 引脚宏（TX_GPIO/TX_Pin/RX_GPIO/RX_Pin，值 = ml_uart
+ * switch 表原值——换实例换引脚随绑定渲染，模块 init 传宏走 uart_pin_init_ex）。
  */
 #define DIGIT_UART             UART_1
 #define DIGIT_UART_INST        USART1
+#define DIGIT_UART_TX_GPIO GPIO_A
+#define DIGIT_UART_TX_Pin Pin_9
+#define DIGIT_UART_RX_GPIO GPIO_A
+#define DIGIT_UART_RX_Pin Pin_10
 #define BALL_DETECT_UART       UART_1
 #define BALL_DETECT_UART_INST  USART1
+#define BALL_DETECT_UART_TX_GPIO GPIO_A
+#define BALL_DETECT_UART_TX_Pin Pin_9
+#define BALL_DETECT_UART_RX_GPIO GPIO_A
+#define BALL_DETECT_UART_RX_Pin Pin_10
 
 /* ---- 调试串口（debug_uart 模块，115200）---- */
 #define DEBUG_UART             UART_2
 #define DEBUG_UART_INST        USART2
+#define DEBUG_UART_TX_GPIO GPIO_A
+#define DEBUG_UART_TX_Pin Pin_2
+#define DEBUG_UART_RX_GPIO GPIO_A
+#define DEBUG_UART_RX_Pin Pin_3
 
 /* ---- 三色 LED（config.h 并入：共阴，高电平点亮，PC13-15）---- */
 #define LED_PORT          GPIO_C
@@ -93,10 +106,25 @@
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1
+#define UWB_UART_TX_GPIO GPIO_A
+#define UWB_UART_TX_Pin Pin_9
+#define UWB_UART_RX_GPIO GPIO_A
+#define UWB_UART_RX_Pin Pin_10
 
 /* ---- Zigbee 无线串口（config.h 并入：UART_3 = PB10 TX / PB11 RX，115200）---- */
 #define ZIGBEE_UART       UART_3
 #define ZIGBEE_UART_INST  USART3
+#define ZIGBEE_UART_TX_GPIO GPIO_B
+#define ZIGBEE_UART_TX_Pin Pin_10
+#define ZIGBEE_UART_RX_GPIO GPIO_B
+#define ZIGBEE_UART_RX_Pin Pin_11
+
+/* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
+ * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
+ * UART_1 = DIGIT+BALL+UWB 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
+#define USART1_IRQ_CALLS digit_uart_rx_handler(); ball_detect_rx_handler(); uwb_rx_handler();
+#define USART2_IRQ_CALLS debug_uart_rx_handler();
+#define USART3_IRQ_CALLS zigbee_rx_handler();
 
 /* ---- 软 I2C（ml_i2c / ml_oled 引脚宏，自 ml_libs 头文件迁入，原值不变）----
  * 参数化后 I2C 角色可绑任意 GPIO（ADR 0011 工单 02）：ml_i2c 默认 PB10 SCL /

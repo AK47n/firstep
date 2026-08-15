@@ -20,7 +20,9 @@ void debug_uart_init(void);
 void debug_uart_send(const char *str);
 
 // 调试命令 (UART2 RX)
-void debug_uart_rx_handler(void);   // USART2 ISR 调用
+void debug_uart_rx_handler(void);   // 由母版 isr.c 的 USART2_IRQHandler 经
+                                 // USART2_IRQ_CALLS 聚合宏调用（勿在
+                                 // main.c 定义 USARTx_IRQHandler）
 void debug_cmd_poll(void);          // 主循环调用
 
 #if DEBUG_UART_ENABLE

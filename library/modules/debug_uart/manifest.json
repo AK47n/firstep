@@ -23,14 +23,20 @@
           "required": true,
           "macros": [
             "DEBUG_UART",
-            "DEBUG_UART_INST"
+            "DEBUG_UART_INST",
+            "DEBUG_UART_TX_GPIO",
+            "DEBUG_UART_TX_Pin"
           ]
         },
         {
           "id": "DEBUG_UART_RX",
           "type": "uart_rx",
           "default": "PA3",
-          "required": true
+          "required": true,
+          "macros": [
+            "DEBUG_UART_RX_GPIO",
+            "DEBUG_UART_RX_Pin"
+          ]
         }
       ]
     }
