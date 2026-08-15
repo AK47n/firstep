@@ -4,7 +4,7 @@
 
 **Blocked by:** 无（不阻塞 pin-board-config——板外默认规则已兜底）
 
-**Status:** claimed（等用户丝印/引脚数反馈）
+**Status:** resolved（2026-08-15：包型号核实闭环；R3/R4 收口为动态裁剪机制新工单）
 
 ## 需求
 
@@ -18,9 +18,23 @@
 
 ## 验收
 
-- [ ] 包型号核实结论进 Comments（丝印记录或照片）
-- [ ] HUIDU R3/R4 处理裁决记录 + 相应改动（若需）
+- [x] 包型号核实结论进 Comments（用户物理核实：每边 12 脚 = LQFP-48）
+- [x] HUIDU R3/R4 处理裁决记录（动态裁剪机制，新工单 syscfg-prune/01）
 
 ## Comments
 
 - 2026-08-14 立项（mspm0-master-dimx/01 Comments"建议另立工单核实包型号并处理 HUIDU R3/R4"）。
+
+## 核实结论（2026-08-15）
+
+- **包型号 = LQFP-48(PT)**：用户物理核实芯片每边 12 脚（总 48 脚），与
+  原理图 48 脚清单、mspm0-master-dimx/01 的推断一致。
+- **LQFP-48 声明切换评估**：sysconfig_cli 实测把母版 `--package` 改为
+  `LQFP-48(PT)` 后，PB4/PB5 立即非法（报错在 HUIDU R3/R4 的 PB4/PB5 行）——
+  当前母版 33 个 $assign 对 48 封装排针脚数超编，**不能直接切 package**。
+  结论：暂维持 `LQFP-64(PM)` 声明（LaunchPad 遗留，生成/编译已验证可用），
+  待动态裁剪机制落地后再评估切 48。
+- **HUIDU R3/R4 收口**：用户裁决 = **做动态裁剪机制**（默认布局保留理论上限，
+  按本次选中的模块裁剪 syscfg，未选模块的引脚空出来给用户绑）——新工单
+  `.scratch/syscfg-prune/issues/01-prune-unselected-instances.md`。本工单
+  零代码改动，核实验收闭环。
