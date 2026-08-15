@@ -4,7 +4,7 @@
 
 **Blocked by:** 无
 
-**Status:** 待复核（实施完成，PR 待开）
+**Status:** resolved（2026-08-15 PR #85 squash merged 809a2c2，主会话复核 + 1542 绿复跑）
 
 ## 需求
 
@@ -26,7 +26,7 @@
 
 - [x] pytest 全绿 + mypy src 干净（1542 passed + mypy 42 文件 Success）
 - [x] 真机：2024H 十模块裁剪后 gmake 0 错 + 小集绑未选模块引脚（HUIDU R3→PA15）gmake 0 错（证据 .scratch/real-run/syscfg_prune_realrun.log）
-- [x] 独立 worktree（.claude/worktrees/syscfg-prune-01）+ 提交 + 推送开 PR（待开）
+- [x] 独立 worktree（.claude/worktrees/syscfg-prune-01）+ 提交 + 推送开 PR #85
 
 ## Comments
 
@@ -53,3 +53,10 @@
   生成成功 + syscfg 字段断言 + gmake 0 错。
 - **文档**：spec 关键事实 + ADR 0012 决策 7 补"mspm0 默认布局 = 理论上限，
   生成按选中裁剪"。
+- **合并复核**（PR #85 squash merged 809a2c2，主会话）：diff 逐项对工单——
+  INSTANCE_CONSUMERS 13 实例映射与模块代码/共享实例消费面一致；裁剪器
+  行级删除 addInstance / `X.` 配置行 / 全裁模块变量 addModule 行，未登记
+  实例宁多勿裁防御正确；生成挂钩在 apply_pin_bindings 之前、文件缺失防御
+  跳过；stm32 不裁。测试基线更新到位（mspm0 缺省产物 = 裁剪后基线；
+  假母版无 syscfg 的 fakes 不受影响）。合并后 main 复跑 1542 绿 48.3s +
+  mypy src 42 文件干净。worktree syscfg-prune-01 照例保留。
