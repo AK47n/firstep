@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=8870155e2d249c22a31805ca7710a1147e58d6ee -->
+<!-- changelog-auto: last-commit=f60c709352c8f8477ee076ac8b23cd49e66e9e1a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-16
+- 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
