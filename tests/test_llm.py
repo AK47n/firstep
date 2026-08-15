@@ -46,6 +46,7 @@ from contest_generator.llm import (
     MAX_SUMMARY_BATCH_CHARS,
     NETWORK_RETRY_LIMIT,
     REFERENCE_FULLTEXT_BYTES,
+    SKELETON_REFERENCE_TOTAL_BYTES,
     SUMMARY_RETRY_LIMIT,
     TRUNCATION_NOTICE,
     UrllibTransport,
@@ -3418,6 +3419,32 @@ def test_selection_prompt_worst_case_fits_request_budget():
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
     assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in prompt  # 全文 wire 预算截断带标注
+
+
+def test_skeleton_prompt_worst_case_with_references_fits_request_budget():
+    """结构测试（skeleton-smoke-refs/02 真机验收补）：锚定 ∪ 手动多篇全文按
+    SKELETON_REFERENCE_TOTAL_BYTES 均分截断——完整 payload json.dumps 序列化
+    ≤ MAX_REQUEST_BYTES 且余量 ≥ 10KB（真机 2021F 两篇曾 195232 字节 502）。"""
+    problem = "设" * EMBEDDED_CONTENT_CAP
+    interfaces = ["### 模块 m（h）\nvoid init(void);"] * 3
+    refs = {
+        f"ref-{i}": "中" * REFERENCE_FULLTEXT_BYTES for i in range(3)
+    }
+
+    prompt = _skeleton_user_prompt(problem, interfaces, refs)
+
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": SKELETON_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    total = len(json.dumps(payload).encode("utf-8"))
+    assert total <= MAX_REQUEST_BYTES - 10 * 1024
+    per_ref = SKELETON_REFERENCE_TOTAL_BYTES // 3
+    assert f"仅展示前 {per_ref} wire 字节" in prompt
+    assert "内容过长，已截断" in prompt
 
 
 def test_clarify_prompt_worst_case_fits_request_budget():

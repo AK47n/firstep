@@ -87,6 +87,14 @@ FIX_CONTEXT_TOTAL_BYTES = 23000
 # FIX_CONTEXT_TOTAL_BYTES 注释）。
 FIX_PREVIOUS_FIXES_CAP = 2500
 
+# 骨架参考段合计 wire 字节预算（工单 skeleton-smoke-refs/02 真机验收补）：
+# 骨架 prompt 一次注入锚定 ∪ 手动多篇全文——单篇照 REFERENCE_FULLTEXT_BYTES
+# 截断会 N 篇合计撑爆 MAX_REQUEST_BYTES（真机 2021F stm32 两篇 195232 字节
+# > 131072，预检 502）。骨架基础段（题面/接口块/系统提示词/JSON 壳）最坏
+# ≈88KB，给参考段合计 40KB → 最坏 ≈128KB 边缘——取值保守：多篇时每篇按
+# 篇数均分本预算，短篇剩余不回收（实现简单优先，预检仍兜底）。
+SKELETON_REFERENCE_TOTAL_BYTES = 40000
+
 # 推荐侧全文注入 wire 字节预算（工单 budget-wire-unification/01）：旧口径
 # REFERENCE_FULLTEXT_CAP=35000 字符按「×3 字节 ≈105KB ≤128KB 恒成立」估算
 # ——但真实线格式是 json.dumps ensure_ascii=True（llm._chat 预检同口径），
