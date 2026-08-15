@@ -26,7 +26,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from .boards import BOARDS_DIR, load_boards
-from .changelog import load_changelog
+from .changelog import load_changelog_auto
 from .compile_runner import (
     CompileRunnerError,
     collect_build_log,
@@ -1339,19 +1339,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
 
     # ------------------------------------------------------------------
-    # 更新记录（工单 changelog-tab/01）：手工维护 CHANGELOG.md → 按天分组
+    # 更新记录（工单 changelog-tab/01）：手工 CHANGELOG.md + git log 自动补记
     # ------------------------------------------------------------------
 
     @app.get("/api/changelog")
     @_map_errors
     def changelog() -> list[dict]:
-        """更新记录：仓库根 CHANGELOG.md → [{date, items}]（文件顺序）。
+        """更新记录：手工 CHANGELOG.md（格式契约见 changelog.py）+ git log
+        自动补记手工文件没有的日期（`docs:` 内部工单提交过滤）→
+        [{date, items}]（日期倒序、组内时间正序）。
 
-        数据源是手工维护的 markdown（格式契约见 changelog.py：`## YYYY-MM-DD`
-        严格日期 + 组内 `- ` 条目）。纯展示数据：文件缺失 / 损坏 → []（前端
+        纯展示数据：文件缺失 / 损坏 / git 不可用 → 只回手工文件或 []（前端
         显示「暂无更新记录」），不因展示数据损坏阻塞工具——不走"大声失败"。
         """
-        return load_changelog(Path(__file__).resolve().parents[2] / "CHANGELOG.md")
+        repo_root = Path(__file__).resolve().parents[2]
+        return load_changelog_auto(repo_root / "CHANGELOG.md", repo_root)
 
     # ------------------------------------------------------------------
     # 赛题库（工单 01/05）：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）
