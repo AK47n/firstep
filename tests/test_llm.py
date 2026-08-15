@@ -38,6 +38,7 @@ from contest_generator.llm import (
     SELECT_SYSTEM_PROMPT,
     SKELETON_NO_UNUSED_RULE,
     SKELETON_SYSTEM_PROMPT,
+    SMOKE_SYSTEM_PROMPT,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
@@ -58,6 +59,7 @@ from contest_generator.llm import (
     _fix_errors_user_prompt,
     _selection_user_prompt,
     _skeleton_user_prompt,
+    _smoke_user_prompt,
     _split_versions,
     _summarize_user_prompt,
     _truncate_content,
@@ -945,6 +947,40 @@ def test_skeleton_prompt_carries_no_unused_var_rule():
     assert SKELETON_NO_UNUSED_RULE in user_prompt
     assert "未使用的变量" in SKELETON_NO_UNUSED_RULE
     assert "占位声明" in SKELETON_NO_UNUSED_RULE
+
+
+def test_generate_smoke_main_routes_to_smoke_prompts():
+    """自检冒烟职责走独立系统/用户提示词，不经骨架提示词。"""
+    transport = FakeTransport(body=_api_response("int main(void) { /* smoke */ }"))
+    llm = _llm(transport)
+    interfaces = ["### 模块 oled（inc/oled.h）\n#pragma once\nvoid oled_init(void);"]
+
+    smoke = llm.generate_smoke_main("赛题", interfaces)
+
+    assert smoke == "int main(void) { /* smoke */ }"
+    _, _, payload, _ = transport.calls[0]
+    system_message = payload["messages"][0]["content"]
+    user_message = payload["messages"][1]["content"]
+    assert "自检" in system_message
+    assert "初始化" in system_message
+    assert "赛题" in user_message
+    assert "void oled_init(void);" in user_message
+    assert "为赛题生成 main.c 骨架" not in system_message  # 冒烟不写赛题逻辑，与骨架提示词分家
+
+
+def test_smoke_prompt_carries_channel_and_per_module_rules():
+    """契约测试：冒烟用户提示词含 OLED 为主 / 串口为辅 + 逐模块自检 + 无平台版本留注释。"""
+    user_prompt = _smoke_user_prompt("赛题", ("x.h",))
+
+    assert "OLED" in user_prompt
+    assert "debug_uart" in user_prompt
+    assert "逐段显示" in user_prompt or "OLED 上" in user_prompt
+    assert "串口" in user_prompt
+    assert "每个所选模块" in user_prompt
+    assert "无平台 XX 版本" in user_prompt
+    assert "照接口块里的平台名写" in user_prompt
+    assert SKELETON_NO_UNUSED_RULE in SMOKE_SYSTEM_PROMPT
+    assert SKELETON_NO_UNUSED_RULE in user_prompt
 
 
 def test_summarize_module_returns_ai_description():

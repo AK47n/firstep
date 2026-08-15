@@ -128,11 +128,23 @@ SKELETON_NO_UNUSED_RULE = (
     "编译警告，验收要求 0 警告）。"
 )
 
+# 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
+SKELETON_INTERFACES_HEADING = "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："
+
 SKELETON_SYSTEM_PROMPT = (
     "你是嵌入式 C 工程师。为赛题生成 main.c 骨架（赛题文本 / 模块接口过长"
     "可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：按所选模块的头文件"
     "接口排好初始化序列，带注释说明与预留编写区（TODO）。只调用给定接口中"
     "真实存在的函数，绝不凭空造函数；不确定的调用写成注释占位，保证骨架可编译。"
+    + SKELETON_NO_UNUSED_RULE
+    + "输出纯 C 代码，不要用 ``` 或 ~~~ 代码围栏包裹，不要输出任何 Markdown 标记。"
+)
+
+SMOKE_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师。为用户生成硬件自检冒烟 main.c（不是赛题逻辑实现）："
+    "把每个所选模块初始化一遍、读一次/动一次，并把自检结果打印出来。只调用"
+    "给定接口中真实存在的函数，绝不凭空造函数；不确定的调用写成注释占位，"
+    "保证可编译。"
     + SKELETON_NO_UNUSED_RULE
     + "输出纯 C 代码，不要用 ``` 或 ~~~ 代码围栏包裹，不要输出任何 Markdown 标记。"
 )
@@ -624,6 +636,10 @@ class LLM(Protocol):
         self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str: ...
 
+    def generate_smoke_main(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str: ...
+
     def summarize_module(self, code: str) -> str: ...
 
     def validate_module_description(
@@ -842,6 +858,19 @@ class DeepSeekLLM:
                 {
                     "role": "user",
                     "content": _skeleton_user_prompt(problem_text, module_interfaces),
+                },
+            ]
+        )
+
+    def generate_smoke_main(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        return self._chat(
+            [
+                {"role": "system", "content": SMOKE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _smoke_user_prompt(problem_text, module_interfaces),
                 },
             ]
         )
@@ -1947,11 +1976,32 @@ def _skeleton_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -
     """main.c 骨架生成的 user 消息：赛题 + 所选模块头文件接口块（见 skeleton.py）。"""
     prompt = _build_user_prompt(
         problem_text,
-        "所选模块的头文件接口（main.c 只调用这里真实存在的函数）：",
+        SKELETON_INTERFACES_HEADING,
         module_interfaces,
     )
     return prompt + (
         "\n\n输出 main.c 骨架：按模块初始化序列排好调用，带注释与预留编写区（TODO），"
+        "不确定的调用写成注释占位，不凭空造函数，保证可编译。"
+        + SKELETON_NO_UNUSED_RULE
+    )
+
+
+def _smoke_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -> str:
+    """自检冒烟 main.c 的 user 消息：赛题 + 接口块 + 逐模块自检与输出通道规则。"""
+    prompt = _build_user_prompt(
+        problem_text,
+        SKELETON_INTERFACES_HEADING,
+        module_interfaces,
+    )
+    return prompt + (
+        "\n\n输出硬件自检冒烟 main.c（只自检，不实现赛题逻辑）："
+        "对每个所选模块按顺序写一段自检——注释标注模块名 → 初始化该模块 → "
+        "读一次/动一次 → 打印结果。"
+        "输出通道按所选模块决定：如果所选模块里有 oled，初始化 OLED 并在 OLED 上"
+        "逐段显示「模块名 OK/FAIL」；如果同时有 debug_uart，串口 printf 同步回显"
+        "同一行；如果只有 debug_uart 没有 oled，就用串口输出。"
+        "接口块里标注「无平台 XX 版本」的模块，留注释「该模块无 XX 版本，未自检」"
+        "（XX 照接口块里的平台名写，如 stm32 / mspm0）。"
         "不确定的调用写成注释占位，不凭空造函数，保证可编译。"
         + SKELETON_NO_UNUSED_RULE
     )

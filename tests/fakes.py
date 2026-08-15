@@ -583,6 +583,7 @@ class FakeLLM:
         self,
         selection: ModuleSelection | None = None,
         main_skeleton: str = "/* skeleton placeholder */\n",
+        smoke_skeleton: str = "/* smoke placeholder */\n",
         summary: str = "AI 生成的模块简介",
         validation: ValidationResult = ValidationResult(consistent=True),
         distillation: tuple[FileDecision, ...] = (),
@@ -592,6 +593,7 @@ class FakeLLM:
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
+        self._smoke_skeleton = smoke_skeleton
         self._summary = summary
         self._validation = validation
         self._distillation = distillation
@@ -599,6 +601,7 @@ class FakeLLM:
         self._topic_summary = topic_summary
         self._fixes = fixes
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
+        self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
         self.validation_calls: list[tuple[str, str]] = []
         self.distill_calls: list[
@@ -638,6 +641,12 @@ class FakeLLM:
     ) -> str:
         self.skeleton_calls.append((problem_text, tuple(module_interfaces)))
         return self._main_skeleton
+
+    def generate_smoke_main(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        self.smoke_calls.append((problem_text, tuple(module_interfaces)))
+        return self._smoke_skeleton
 
     def summarize_module(self, code: str) -> str:
         self.summary_calls.append((code,))

@@ -106,7 +106,7 @@ from .reference_library import (
     search_references,
 )
 from .selection import resolve_selection, run_recommendation
-from .skeleton import generate_skeleton
+from .skeleton import generate_skeleton, generate_smoke_main
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
 from .topic_library import (
@@ -645,8 +645,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/skeleton")
     @_map_errors
     def skeleton(payload: dict) -> dict:
-        """main.c 骨架：LLM 出稿 + 静态自检（不存在的调用改写为注释占位）。
+        """main.c 骨架 / 自检冒烟：LLM 出稿 + 静态自检（不存在的调用改写为注释占位）。
 
+        main_mode：`skeleton`（缺省，现行为）| `smoke`（自检冒烟——只自检不写
+        赛题逻辑，OLED 为主 / debug_uart 串口为辅，两者都没选 → 400）。
         历史赛题入口：选中某题时题面用库内全文（长 PDF 题面全文只在选了该赛
         题时进上下文）；骨架阶段不注入参考文件、不自动并入模块（模块选择由
         用户 / 推荐链路决定——spec Out of Scope，等真实用例再评估）。"""
@@ -654,17 +656,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         topic_id = _optional_str(payload, "topic_id")
+        if "main_mode" in payload:
+            main_mode = _optional_str(payload, "main_mode")
+            if main_mode not in ("skeleton", "smoke"):
+                raise HTTPException(400, "main_mode 必须是 skeleton 或 smoke")
+        else:
+            main_mode = "skeleton"
         topic = _assemble_topic_context(
             context, topic_id, problem_text, _llm(context)
         )
         resolved = resolve_selection(_library_dir(context), platform, slugs)
-        main_c, intercepted = generate_skeleton(
-            _llm(context),
-            topic.problem_text,
-            resolved.manifests,
-            platform,
-            _library_dir(context),
-            master_project_dir(_require_config(context).masters_dir, platform),
+        llm = _llm(context)
+        library_dir = _library_dir(context)
+        master_dir = master_project_dir(_require_config(context).masters_dir, platform)
+        if main_mode == "smoke":
+            if not {"oled", "debug_uart"} & set(slugs):
+                raise HTTPException(400, "自检骨架需要 OLED 或 debug_uart 模块作为输出通道")
+            generate = generate_smoke_main
+        else:
+            generate = generate_skeleton
+        main_c, intercepted = generate(
+            llm, topic.problem_text, resolved.manifests, platform, library_dir, master_dir
         )
         return {"main_c": main_c, "intercepted": list(intercepted)}
 
