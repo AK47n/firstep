@@ -136,48 +136,48 @@ Reset_Handler    PROC
                  BX      R0
                  ENDP
 
-; Dummy Exception Handlers (infinite loops which can be modified)
+; Dummy Exception Handlers (return immediately; strong handler overrides)
 
 NMI_Handler     PROC
                 EXPORT  NMI_Handler                [WEAK]
-                B       .
+                BX      LR
                 ENDP
 HardFault_Handler\
                 PROC
                 EXPORT  HardFault_Handler          [WEAK]
-                B       .
+                BX      LR
                 ENDP
 MemManage_Handler\
                 PROC
                 EXPORT  MemManage_Handler          [WEAK]
-                B       .
+                BX      LR
                 ENDP
 BusFault_Handler\
                 PROC
                 EXPORT  BusFault_Handler           [WEAK]
-                B       .
+                BX      LR
                 ENDP
 UsageFault_Handler\
                 PROC
                 EXPORT  UsageFault_Handler         [WEAK]
-                B       .
+                BX      LR
                 ENDP
 SVC_Handler     PROC
                 EXPORT  SVC_Handler                [WEAK]
-                B       .
+                BX      LR
                 ENDP
 DebugMon_Handler\
                 PROC
                 EXPORT  DebugMon_Handler           [WEAK]
-                B       .
+                BX      LR
                 ENDP
 PendSV_Handler  PROC
                 EXPORT  PendSV_Handler             [WEAK]
-                B       .
+                BX      LR
                 ENDP
 SysTick_Handler PROC
                 EXPORT  SysTick_Handler            [WEAK]
-                B       .
+                BX      LR
                 ENDP
 
 Default_Handler PROC
@@ -270,7 +270,7 @@ EXTI15_10_IRQHandler
 RTCAlarm_IRQHandler
 USBWakeUp_IRQHandler
 
-                B       .
+                BX      LR
 
                 ENDP
 

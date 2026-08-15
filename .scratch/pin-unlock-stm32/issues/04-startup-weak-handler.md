@@ -4,7 +4,7 @@
 
 **Blocked by:** 无（与 01 并行，文件不重叠）
 
-**Status:** 待实施
+**Status:** resolved（2026-08-15）
 
 ## 需求
 
@@ -20,10 +20,36 @@
 
 ## 验收
 
-- [ ] pytest 全绿 + mypy src 干净
-- [ ] 红证已验（弱 handler `B .` 断言红 → 绿 + BX LR 计数）
-- [ ] 真机：2026C 全默认 UV4 0 错 0 警 + 产物 startup 断言
-- [ ] 独立 worktree + 提交 + 推送（PR）
+- [x] pytest 全绿 + mypy src 干净
+- [x] 红证已验（弱 handler `B .` 断言红 → 绿 + BX LR 计数）
+- [x] 真机：2026C 全默认 UV4 0 错 0 警 + 产物 startup 断言
+- [x] 独立 worktree + 提交 + 推送（PR）
+
+## 验收记录（2026-08-15）
+
+- 修复：`library/masters/stm32/key/startup_stm32f10x_md.s` 10 处弱 handler
+  默认体 `B .` → `BX LR`（9 个异常 handler + Default_Handler 共享体；
+  NMI/HardFault/…/SysTick 各自一块 + 43 外设别名共享一块 = 全弱 handler
+  默认体清零），Dummy 注释同步改「return immediately; strong handler
+  overrides」；向量表 58 DCD / 53 [WEAK] 导出 / Reset_Handler / 其余汇编
+  逐字节不动（diff 仅 10 行指令 + 1 行注释）。
+- 测试 `tests/test_pin_unlock_startup.py` +4：全文零 `B .`；10 个弱 dummy
+  PROC 块各含 BX LR（BX LR 总数 11 = 10 默认体 + stackheap 既有 1 处）；
+  [WEAK] 53 / DCD 58 结构钉；generate() 产物 copytree 逐字节同母版 + 同断言。
+  红证：修复前 3 红（B . 10 处命中），修复后 4 绿；全量 1468 绿 + mypy
+  src 41 文件干净。
+- 真机：2026C `--reuse-recommend --clarify`（20 条指纹匹配零警告）
+  `--add motor`（8 模块 = 缓存 7 + motor）→ 生成 49 文件、产物门禁全过、
+  UV4 `-j0 -r -b` 全量重建 **0 错 0 警** exit 0；产物 startup 逐字节 ==
+  母版、B . = 0、BX LR = 11（断言脚本
+  .scratch/real-run/assert_product_startup_04.py，证据日志
+  check_2026C_pin_unlock_04.log 留档主检出 real-run）。
+- 真机机制注记：webapp 以内存 replace 的 AppConfig 启动（库目录指向本
+  worktree，不写盘不碰用户 config.json，launcher
+  .scratch/real-run/launch_webapp_pin_unlock_04.py 不提交）——分类器拦了
+  两种写 config 的方案后采用此零写入路径，跑完即还原（无持久状态）。
+- 范围外留痕：RX 数据无人消费（ISR 名联动 = 全解候选 ②）不做，弱 handler
+  现在安全返回——死循环雷拆除，中断不触发即无副作用。
 
 ## 实施提示词（复制到新会话）
 
