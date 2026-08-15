@@ -4,7 +4,7 @@
 
 **Blocked by:** 无（与 01 并行，文件不重叠）
 
-**Status:** resolved（2026-08-15 实施 + 真机验收闭环，PR #75 待合 main）
+**Status:** resolved（2026-08-15 PR #75 squash merged 8c42599，主会话复核 + 1467 绿复跑）
 
 ## 需求
 
@@ -46,4 +46,5 @@
 ## Comments
 
 - 2026-08-15 立项（stm32 引脚解锁 grilling 定稿，189d9df）。
+- 2026-08-15 合并复核（PR #75 squash merged 8c42599，远端分支已删；主会话 diff 复核——派生/电平翻转/LED_YELLOW 裁决全对工单；合并后 main 复跑 1467 绿 27.6s）。
 - 2026-08-15 实施完成（分支 pin-unlock-03，独立 worktree 从 origin/main d491891 建）：**ml_led.h 改派生**——`#include "pin_config.h"` + `LED_GPIO LED_PORT` / `LED_RED_Pin LED_RED_PIN` / `LED_YELLOW_Pin LED_YELLOW_PIN` / `LED_GREEN_Pin LED_GREEN_PIN` 四别名；**ON/OFF 低电平点亮翻转**——ON()=set 0 / OFF()=set 1（红绿同），注释同步"板载 LED 灌电流：0=点亮，1=熄灭"；ml_led.c 零改动（经宏消费，OUT_PP 推挽灌电流可行，init 熄灭语义不变）。**LED_YELLOW 宏族裁决**：全库 grep（library 模块+母版 / sources / tests，排除 references 与 scratch）零 `LED_YELLOW_ON/OFF` 消费方——debug_uart.c 直用 pin_config.h 宏（`gpio_set(LED_PORT, LED_YELLOW_PIN, x)`）不经 ml_led 层 → 按工单"有则必补、无则不补"只补 `LED_YELLOW_Pin` 别名，ON/OFF 宏不补（测试 docstring 留痕）。**消费方核对**：`LED_RED_ON/LED_GREEN_ON/LED_GPIO/LED_RED_Pin` 除 ml_led.c 与生成骨架（LLM 产出）外无模块代码消费；references 21F pid.c 的 LED_*_ON 调用属参考例程自有头文件非本母版；sources/contest 历史参考工程不动（文件边界）。**红证先行实录**：新测试 test_pin_unlock_led.py 3 断言对旧 ml_led.h 全红（GPIO_A 硬编码在 / 无 pin_config include 与派生 / ON=set 1）→ 修复后 3/3 绿；母版守卫 test_master_embedded.py 无 ml_led 断言无需同步（其 GPIO_A 钉子都在 pin_config.h / motor_stm32.c）。**真机**（worktree 服务 8000 + 缓存复用 + config masters_dir 临时指 worktree 已复原）：2026C `--reuse-recommend --add motor` → 缓存命中（clarifications 指纹警告非阻断，同 01 先例）+ 8 模块（缓存 7 + motor）→ 骨架 2839 字符 0 拦截 → 生成 49 文件门禁全过 → **UV4 exit=0 0 错 0 警**；产物 out_2026C_stm32/ml_libs/ml_led.h 与母版逐字节一致（diff 空）；骨架 main.c `led_init(); /* 板载 LED 初始化（低电平点亮） */`——LLM 骨架段已读到新头注释（骨架读母版头的实证）。1467 全绿 32.9s + mypy src 41 文件干净。
