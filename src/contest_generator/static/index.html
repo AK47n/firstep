@@ -2196,12 +2196,39 @@ function handoffModuleLines() {
     return "- " + m.slug + "：" + (m.description || "") + deps;
   }).join("\n");
 }
+function handoffWarnings() {
+  if (!warnings.length) return "（所选模块在该平台均可直接使用）";
+  return warnings.map((w) => "- [" + (KIND_TEXT[w.kind] || w.kind) + "] " + w.message).join("\n");
+}
+function handoffPinLines() {
+  const bindings = Object.entries(pinBindings);
+  const unbound = [...pinUnbound];
+  if (!bindings.length && !unbound.length) {
+    return "（未手动改线；全部按默认布局生成。引脚单源：stm32 = pin_config.h / mspm0 = mspm0.syscfg；mspm0 已按选中模块裁剪 syscfg，未选模块引脚空出）";
+  }
+  const lines = [];
+  for (const [key, pin] of bindings) lines.push("- " + key + " → " + pin);
+  for (const key of unbound) lines.push("- " + key + "（显式解除，生成仍按默认）");
+  return lines.join("\n") + "\n\n引脚单源：stm32 = pin_config.h / mspm0 = mspm0.syscfg；mspm0 已按选中模块裁剪 syscfg，未选模块引脚空出。";
+}
 async function handoffReferenceLines() {
-  if (!selectedReferenceIds.length) return "（未手动勾选；赛题 / 套件自动锚定的资料已按平台注入工程）";
+  if (!selectedReferenceIds.length && !autoReferenceIds.length) {
+    return "（未手动勾选；赛题 / 套件自动锚定的资料已按平台注入工程）";
+  }
   try {
     const entries = await apiGet("/api/references");
-    return entries.filter((e) => selectedReferenceIds.includes(e.id))
-      .map((e) => "- " + e.title).join("\n") || "（未手动勾选；自动锚定资料已注入工程）";
+    const byId = new Map(entries.map((e) => [e.id, e]));
+    const lines = [];
+    for (const id of selectedReferenceIds) {
+      const e = byId.get(id);
+      lines.push("- [手动] " + (e ? e.title : id));
+    }
+    for (const id of autoReferenceIds) {
+      if (selectedReferenceIds.includes(id)) continue;
+      const e = byId.get(id);
+      lines.push("- [自动] " + (e ? e.title : id));
+    }
+    return lines.join("\n") || "（参考资料读取为空）";
   } catch { return "（参考资料读取失败，可忽略）"; }
 }
 
@@ -2223,6 +2250,8 @@ $("btn-handoff").addEventListener("click", async () => {
     const fixStatus = $("fix-status").textContent.trim();
     const fixLog = $("fix-center-log").value.trim();
     const refs = await handoffReferenceLines();
+    const warns = handoffWarnings();
+    const pins = handoffPinLines();
     const lines = [
       "# 电赛工程交接提示词（Handoff）",
       "",
@@ -2244,28 +2273,36 @@ $("btn-handoff").addEventListener("click", async () => {
       "",
       handoffModuleLines(),
       "",
-      "## 五、main.c 骨架",
+      "## 五、平台警告",
+      "",
+      warns,
+      "",
+      "## 六、引脚绑定配置",
+      "",
+      pins,
+      "",
+      "## 七、main.c 骨架",
       "",
       "```c",
       mainC || "（未生成骨架）",
       "```",
       "",
-      "## 六、工程位置",
+      "## 八、工程位置",
       "",
       dir ? "- 输出目录：" + dir : "（工程尚未生成；可先以 1~5 项上下文开始打磨，或先在本工具生成）",
       ...(dir && structure ? ["", "工程结构：", "", "```", structure, "```"] : []),
       "",
-      "## 七、编译与修复状态",
+      "## 九、编译与修复状态",
       "",
       ...(fixRound ? [fixRound] : []),
       fixStatus || "（未运行修复中心）",
       ...(fixLog ? ["", "编译输出：", "", "```", fixLog, "```"] : []),
       "",
-      "## 八、参考资料",
+      "## 十、参考资料",
       "",
       refs,
       "",
-      "## 九、打磨要求",
+      "## 十一、打磨要求",
       "",
       "1. 通读 main.c，把注释占位 / 未实现的调用全部按模块真实接口补齐；",
       "2. 逐模块核对与题面要求的符合度，缺的功能先落到骨架与工程内；",
