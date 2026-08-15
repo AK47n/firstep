@@ -4,7 +4,7 @@
 
 **Blocked by:** 04（tests/test_pins.py 宏值表 / 真机默认产物断言同缝——04 合 main 后再开）
 
-**Status:** 待复核（实施完成，PR 待开）
+**Status:** resolved（2026-08-15 PR #82 squash merged c561907，主会话复核 + 1538 绿复跑）
 
 ## 需求
 
@@ -28,7 +28,7 @@
 - [x] pytest 全绿 + mypy src 干净（1538 passed + mypy 41 文件 Success）
 - [x] 真机：2026C / 2021F 不配回归 UV4 双 0 错 0 警 + pin_config.h == 新母版逐字节（证据 .scratch/real-run/tier05_realrun.log）
 - [x] 新旧默认对照表入验收记录
-- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-05，04 合 main 后从 ee9c3fc 建）+ 提交 + 推送开 PR（待开）
+- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-05，04 合 main 后从 ee9c3fc 建）+ 提交 + 推送开 PR #82
 
 ## 新旧默认对照表（2026-08-15，工单 05）
 
@@ -77,3 +77,11 @@ DIP 留 PB12-15、GRAY_D1-4 留 PB12-15、ZIGBEE 留 PB10/11）。
 - 2026-08-15 开工（Status claimed，主检出 ee9c3fc 建 worktree）。
 - 残留 C4 的理由与白名单见上；后续若要彻底归零，只能等排针扩展或删减
   模块角色（不在本轮范围）。
+- **合并复核**（PR #82 squash merged c561907，主会话）：diff 逐项对工单——
+  四组冲突确实归零（BUZZER→PA15、MOTOR_A_ENC/DIR→PB5/PB4、GRAY_D6-8→
+  PB3/PB6/PB7、软 I2C→PA11/PA12；PB0/PA2/PA3/PC13-15/PB10-11 均单角色）；
+  残留 DIP×GRAY_D1-4 理由成立（42 角色 vs 32 脚，全互异数学不可达，白名单
+  精确钉死）；manifest 默认值与 pin_config.h 宏值双向同步无误；旧测试基线
+  五处更新到位（含 2021F main.c 陈旧 DEBUG_UART 行剥离说明）。合并后 main
+  复跑 1538 绿 49.2s + mypy src 41 文件干净。worktree pin-full-unlock-05
+  照例保留。
