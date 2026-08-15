@@ -4,7 +4,7 @@
 
 **Blocked by:** 无
 
-**Status:** claimed
+**Status:** 待复核（实施完成，PR 待开）
 
 ## 需求
 
@@ -24,10 +24,32 @@
 
 ## 验收
 
-- [ ] pytest 全绿 + mypy src 干净
-- [ ] 真机：2024H / 2026C 模块集 gmake 全 0 错 + 未选模块引脚可绑（HTTP 生成成功 + syscfg 字段断言）
-- [ ] 独立 worktree + 提交 + 推送开 PR
+- [x] pytest 全绿 + mypy src 干净（1542 passed + mypy 42 文件 Success）
+- [x] 真机：2024H 十模块裁剪后 gmake 0 错 + 小集绑未选模块引脚（HUIDU R3→PA15）gmake 0 错（证据 .scratch/real-run/syscfg_prune_realrun.log）
+- [x] 独立 worktree（.claude/worktrees/syscfg-prune-01）+ 提交 + 推送开 PR（待开）
 
 ## Comments
 
 - 2026-08-15 立项（mspm0-board-package/01 收口：用户裁决"默认布局 = 理论上限，按选中裁剪让用户规划"）。
+
+## 实施记录（2026-08-15，worktree syscfg-prune-01）
+
+- **新增 `src/contest_generator/syscfg_prune.py`**：`INSTANCE_CONSUMERS`
+  实例→消费模块单源表（13 实例）；`prune_syscfg(master_text, selected)`
+  按交集裁实例——删 `const X = MOD.addInstance();` 行与所有 `X.` 配置行，
+  模块变量全裁时连 `scripting.addModule` 行一起删；未登记实例宁多勿裁
+  （防御）。`prune_mspm0_syscfg_file` 挂生成，文件缺失防御跳过（假母版
+  测试树无 syscfg）。
+- **`generator.generate()` 挂钩**：copytree 后、`apply_pin_bindings` 前
+  对 mspm0 执行裁剪——写侧槽位定位只认保留实例的默认引脚；stm32 不裁。
+- **测试**：新增 `tests/test_syscfg_prune.py` 4 用例（全选==母版 / 空选
+  裁全部 / 选 motor 只留 motor 实例且 UART/I2C 模块变量连根裁 / 共享实例
+  任一消费选中即保留）；`test_pin_bindings.py` 生成集成基线改为"裁剪后
+  基线"（选 led_beep 无绑定 == prune_syscfg(master, [led_beep])，带绑定
+  断言 LED_BEEP 留、IMU601 裁）。全量 1542 passed + mypy 42 文件干净。
+- **真机**（证据 .scratch/real-run/syscfg_prune_realrun.log）：2024H 十模块
+  裁剪后 gmake 0 错（IMU601 保留 / DIGIT_UART、I2C_0 被裁）；小集
+  （huidu+delay+oled）绑 `huidu.R3→PA15`（led_beep 未选，PA15 空出）
+  生成成功 + syscfg 字段断言 + gmake 0 错。
+- **文档**：spec 关键事实 + ADR 0012 决策 7 补"mspm0 默认布局 = 理论上限，
+  生成按选中裁剪"。
