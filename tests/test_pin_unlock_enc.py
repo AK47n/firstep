@@ -163,17 +163,17 @@ def test_error_entry_maps_exti_line_conflict_to_400():
 
 
 def test_render_pin_config_enc_reline_pa5_pa6():
-    """绑 PA5/PA6 → MOTOR_A_ENC_EXTI EXTI_PA5 + MOTOR_A_ENC_LINE 5 +
-    MOTOR_B_ENC_EXTI EXTI_PA6 + MOTOR_B_ENC_LINE 6；注释旧引脚字样同步替换。"""
+    """工单 05 后 A_ENC 默认 PB5（线 5）、B_ENC 默认 PA4（线 4）——绑
+    A→PA6（线 6）/ B→PA5（线 5）两线都变；注释旧引脚字样同步替换。"""
     out = render_pin_config(
         STM32_MASTER_PIN_CONFIG,
-        _resolve({"motor.MOTOR_A_ENC": "PA5", "motor.MOTOR_B_ENC": "PA6"}),
+        _resolve({"motor.MOTOR_A_ENC": "PA6", "motor.MOTOR_B_ENC": "PA5"}),
     )
-    assert "#define MOTOR_A_ENC_EXTI      EXTI_PA5   /* PA5，下降沿触发 */\r\n" in out
-    assert "#define MOTOR_A_ENC_LINE      5          /* EXTI 线号（handler 按此条件编译） */\r\n" in out
-    assert "#define MOTOR_B_ENC_EXTI      EXTI_PA6   /* PA6，下降沿触发 */\r\n" in out
-    assert "#define MOTOR_B_ENC_LINE      6          /* EXTI 线号（handler 按此条件编译） */\r\n" in out
-    assert "EXTI_PA2" not in out
+    assert "#define MOTOR_A_ENC_EXTI      EXTI_PA6   /* PA6，下降沿触发 */\r\n" in out
+    assert "#define MOTOR_A_ENC_LINE      6          /* EXTI 线号（handler 按此条件编译） */\r\n" in out
+    assert "#define MOTOR_B_ENC_EXTI      EXTI_PA5   /* PA5，下降沿触发 */\r\n" in out
+    assert "#define MOTOR_B_ENC_LINE      5          /* EXTI 线号（handler 按此条件编译） */\r\n" in out
+    assert "EXTI_PB5" not in out
     assert "EXTI_PA4" not in out
 
 
@@ -181,17 +181,17 @@ def test_render_enc_reline_changes_only_enc_lines():
     """换线只动 4 行 ENC 宏（EXTI/LINE × A/B），其余行逐字节不动。"""
     out = render_pin_config(
         STM32_MASTER_PIN_CONFIG,
-        _resolve({"motor.MOTOR_A_ENC": "PA5", "motor.MOTOR_B_ENC": "PA6"}),
+        _resolve({"motor.MOTOR_A_ENC": "PA6", "motor.MOTOR_B_ENC": "PA5"}),
     )
     before = STM32_MASTER_PIN_CONFIG.splitlines(True)
     after = out.splitlines(True)
     assert len(before) == len(after)
     changed = [after[i] for i, (a, b) in enumerate(zip(before, after)) if a != b]
     assert changed == [
-        "#define MOTOR_A_ENC_EXTI      EXTI_PA5   /* PA5，下降沿触发 */\r\n",
-        "#define MOTOR_A_ENC_LINE      5          /* EXTI 线号（handler 按此条件编译） */\r\n",
-        "#define MOTOR_B_ENC_EXTI      EXTI_PA6   /* PA6，下降沿触发 */\r\n",
-        "#define MOTOR_B_ENC_LINE      6          /* EXTI 线号（handler 按此条件编译） */\r\n",
+        "#define MOTOR_A_ENC_EXTI      EXTI_PA6   /* PA6，下降沿触发 */\r\n",
+        "#define MOTOR_A_ENC_LINE      6          /* EXTI 线号（handler 按此条件编译） */\r\n",
+        "#define MOTOR_B_ENC_EXTI      EXTI_PA5   /* PA5，下降沿触发 */\r\n",
+        "#define MOTOR_B_ENC_LINE      5          /* EXTI 线号（handler 按此条件编译） */\r\n",
     ]
 
 
@@ -206,12 +206,12 @@ def test_generate_stm32_enc_reline_and_default_byte_identical(tmp_path):
         master_project_dir=STM32_MASTER,
         output_dir=out_dir,
         main_c_content="int main(void) { while (1); }\n",
-        bindings={"motor.MOTOR_A_ENC": "PA5", "motor.MOTOR_B_ENC": "PA6"},
+        bindings={"motor.MOTOR_A_ENC": "PA6", "motor.MOTOR_B_ENC": "PA5"},
     )
     written = (out_dir / PIN_CONFIG_FILENAME).read_text(encoding="utf-8", newline="")
-    assert "#define MOTOR_A_ENC_EXTI      EXTI_PA5" in written
-    assert "#define MOTOR_A_ENC_LINE      5" in written
-    assert "#define MOTOR_B_ENC_LINE      6" in written
+    assert "#define MOTOR_A_ENC_EXTI      EXTI_PA6" in written
+    assert "#define MOTOR_A_ENC_LINE      6" in written
+    assert "#define MOTOR_B_ENC_LINE      5" in written
     assert written != STM32_MASTER_PIN_CONFIG
 
     out_dir2 = tmp_path / "out_default"

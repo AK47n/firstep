@@ -48,7 +48,7 @@
         {
           "id": "MPU6050_SCL",
           "type": "i2c_scl",
-          "default": "PB10",
+          "default": "PA11",
           "required": true,
           "macros": [
             "I2C_GPIO",
@@ -58,7 +58,7 @@
         {
           "id": "MPU6050_SDA",
           "type": "i2c_sda",
-          "default": "PB11",
+          "default": "PA12",
           "required": true,
           "macros": [
             "I2C_GPIO",

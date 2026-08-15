@@ -4,7 +4,7 @@
 
 **Blocked by:** 04（tests/test_pins.py 宏值表 / 真机默认产物断言同缝——04 合 main 后再开）
 
-**Status:** claimed
+**Status:** 待复核（实施完成，PR 待开）
 
 ## 需求
 
@@ -24,8 +24,56 @@
 
 ## 验收
 
-- [ ] 默认布局不变量测试（两两互异 + 白名单共享）全绿
-- [ ] pytest 全绿 + mypy src 干净
-- [ ] 真机：2026C / 2021F 不配回归 UV4 双 0 错 + pin_config.h == 新母版逐字节
-- [ ] 新旧默认对照表入验收记录
-- [ ] 独立 worktree + 提交 + 推送开 PR
+- [x] 默认布局不变量测试（两两互异 + 白名单共享）全绿——tests/test_default_layout.py 3 用例
+- [x] pytest 全绿 + mypy src 干净（1538 passed + mypy 41 文件 Success）
+- [x] 真机：2026C / 2021F 不配回归 UV4 双 0 错 0 警 + pin_config.h == 新母版逐字节（证据 .scratch/real-run/tier05_realrun.log）
+- [x] 新旧默认对照表入验收记录
+- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-05，04 合 main 后从 ee9c3fc 建）+ 提交 + 推送开 PR（待开）
+
+## 新旧默认对照表（2026-08-15，工单 05）
+
+| 角色 | 旧默认 | 新默认 | 宏变化 |
+|---|---|---|---|
+| config.BUZZER | PB0 | PA15 | BUZZER_GPIO GPIO_B→GPIO_A、BUZZER_PIN Pin_0→Pin_15 |
+| motor.MOTOR_A_ENC | PA2 | PB5 | MOTOR_A_ENC_EXTI EXTI_PA2→EXTI_PB5、MOTOR_A_ENC_LINE 2→5 |
+| motor.MOTOR_A_ENC_DIR | PA3 | PB4 | MOTOR_A_ENC_DIR_PORT GPIO_A→GPIO_B、PIN Pin_3→Pin_4 |
+| pid.GRAY_D6 | PC13 | PB3 | GRAY_D6_PORT GPIO_C→GPIO_B、PIN Pin_13→Pin_3 |
+| pid.GRAY_D7 | PC14 | PB6 | GRAY_D7_PORT GPIO_C→GPIO_B、PIN Pin_14→Pin_6 |
+| pid.GRAY_D8 | PC15 | PB7 | GRAY_D8_PORT GPIO_C→GPIO_B、PIN Pin_15→Pin_7 |
+| ml_mpu6050.MPU6050_SCL | PB10 | PA11 | I2C_GPIO GPIO_B→GPIO_A、I2C_SCL_GPIO_Pin Pin_10→Pin_11 |
+| ml_mpu6050.MPU6050_SDA | PB11 | PA12 | I2C_GPIO GPIO_B→GPIO_A、I2C_SDA_GPIO_Pin Pin_11→Pin_12 |
+
+其余角色默认不变（MOTOR_B_DIR 留 PB0、DEBUG 留 PA2/PA3、LED 留 PC13-15、
+DIP 留 PB12-15、GRAY_D1-4 留 PB12-15、ZIGBEE 留 PB10/11）。
+
+## 实施记录（2026-08-15，worktree pin-full-unlock-05）
+
+- **重排结果**：五组冲突归零四组——① BUZZER 离 PB0（MOTOR_B_DIR 独占）；
+  ② MOTOR_A_ENC/DIR 离 PA2/PA3（DEBUG_UART 独占）；③ GRAY_D6-8 离
+  PC13-15（LED 独占）；④ 软 I2C 离 PB10/11（ZIGBEE 独占）。**残留一组**：
+  ⑤ DIP×GRAY_D1-4 仍共享 PB12-15——全库 stm32 42 角色声明 vs 排针 32 脚，
+  既有设计共享（UART1 三模块 6 角色、zigbee_uart/key 4 角色）已占满白名单
+  空间，全互异数学上不可达；保留并白名单入 tests/test_default_layout.py
+  （两组均为输入角色，同选时由用户绑定改脚）。
+- **文件改动**：motor/pid/config/ml_mpu6050 四个 manifest 的 default 值 +
+  pin_config.h 母版宏值同步（其余 manifest 零改动）；spec 关键事实与 ADR
+  0012 决策 7 补工单 05 结果。
+- **测试**：tests/test_pins.py STM32_MACRO_VALUES 更新 8 宏 + 增钉
+  MOTOR_A_ENC 四宏；tests/test_default_layout.py 新 3 用例（白名单精确钉死
+  + 四组冲突已解断言）；test_pin_unlock_i2c.py 默认 no-op 与六宏值基线更新；
+  test_pin_unlock_enc.py 渲染器用例改新基线（A_ENC 默认线 5）；
+  test_master_embedded.py 21F 基线用例更新。全量 1538 passed + mypy src 41
+  文件 Success。
+- **真机**（直接 generate + UV4，证据 .scratch/real-run/tier05_realrun.log，
+  KEIL_UV4=C:\Keil5\Core\UV4\UV4.exe）：2026C 六模块不配回归——pin_config.h
+  == 新母版逐字节 + UV4 0 错 0 警；2021F 四模块不配回归——同左（旧 2021F
+  main.c 自带的 `#define DEBUG_UART UART_1` 陈旧行已剥离，与 pin_config.h
+  UART_2 的 #47-D 重定义警告非本工单数据改动引入）。
+- **文件边界实际改动**：另加 spec.md 与 ADR 0012 两处事实更新（工单结果
+  留痕所必需）；零 src/ 改动。
+
+## Comments
+
+- 2026-08-15 开工（Status claimed，主检出 ee9c3fc 建 worktree）。
+- 残留 C4 的理由与白名单见上；后续若要彻底归零，只能等排针扩展或删减
+  模块角色（不在本轮范围）。

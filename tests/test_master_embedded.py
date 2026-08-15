@@ -19,8 +19,9 @@ def _read(rel: str) -> str:
 
 
 def test_pin_config_h_keeps_21f_pin_values():
-    """引脚宏值 = 21F 原值：PWM TIM2 CH1/CH2（1000Hz）、方向 PA6/PA7/PB0/PB1、
-    编码器 EXTI PA2/PA4 + 方向 PA3/PA5。"""
+    """引脚宏值基线：PWM TIM2 CH1/CH2（1000Hz）、方向 PA6/PA7/PB0/PB1、
+    编码器 B EXTI PA4 + 方向 PA5；A 编码器按工单 pin-full-unlock/05 已改
+    EXTI PB5 + 方向 PB4（让位 DEBUG_UART PA2/PA3）。"""
     text = _read("masters/stm32/pin_config.h")
     for literal in (
         "TIM2_CH1",
@@ -33,9 +34,9 @@ def test_pin_config_h_keeps_21f_pin_values():
         "GPIO_B",
         "Pin_0",
         "Pin_1",
-        "EXTI_PA2",
+        "EXTI_PB5",
         "EXTI_PA4",
-        "Pin_3",
+        "Pin_4",
         "Pin_5",
     ):
         assert literal in text, literal

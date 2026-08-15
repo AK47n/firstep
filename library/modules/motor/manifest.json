@@ -154,7 +154,7 @@
         {
           "id": "MOTOR_A_ENC",
           "type": "enc",
-          "default": "PA2",
+          "default": "PB5",
           "required": true,
           "macros": [
             "MOTOR_A_ENC_EXTI",
@@ -164,7 +164,7 @@
         {
           "id": "MOTOR_A_ENC_DIR",
           "type": "gpio_in",
-          "default": "PA3",
+          "default": "PB4",
           "required": true,
           "macros": [
             "MOTOR_A_ENC_DIR_PORT",

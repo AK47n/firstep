@@ -115,8 +115,9 @@ def test_oled_cross_port_binding_rejected():
 
 
 def test_mpu6050_same_port_binding_renders_three_macros():
-    """SCL/SDA 同绑 PA5/PA6（GPIO_A）→ 放行且只变三行：I2C_GPIO GPIO_A、
-    I2C_SCL_GPIO_Pin Pin_5、I2C_SDA_GPIO_Pin Pin_6（共享宏同值只写一次）。"""
+    """SCL/SDA 同绑 PA5/PA6（GPIO_A）→ 放行且只变两行：I2C_SCL_GPIO_Pin
+    Pin_5、I2C_SDA_GPIO_Pin Pin_6（I2C_GPIO 默认已 GPIO_A = 工单 05 新基线，
+    同值不写）。"""
     out = render_pin_config(
         STM32_MASTER_PIN_CONFIG,
         _resolve(
@@ -129,7 +130,6 @@ def test_mpu6050_same_port_binding_renders_three_macros():
     assert len(before) == len(after)
     changed = [after[i] for i, (a, b) in enumerate(zip(before, after)) if a != b]
     assert changed == [
-        "#define I2C_GPIO          GPIO_A\r\n",
         "#define I2C_SCL_GPIO_Pin  Pin_5\r\n",
         "#define I2C_SDA_GPIO_Pin  Pin_6\r\n",
     ]
@@ -173,15 +173,15 @@ def test_mpu6050_and_oled_same_port_render_together():
 
 
 def test_default_bindings_byte_identical():
-    """绑定值 = 默认值（mpu6050 PB10/11、oled PB8/9）= no-op → 与母版逐字节
-    一致（新母版 = 已含 6 个软 I2C 宏）。"""
+    """绑定值 = 默认值（mpu6050 PA11/12、oled PB8/9）= no-op → 与母版逐字节
+    一致（新母版 = 已含 6 个软 I2C 宏，工单 05 后 mpu6050 默认 PA11/12）。"""
     out = render_pin_config(
         STM32_MASTER_PIN_CONFIG,
         _resolve(
             "stm32",
             {
-                "ml_mpu6050.MPU6050_SCL": "PB10",
-                "ml_mpu6050.MPU6050_SDA": "PB11",
+                "ml_mpu6050.MPU6050_SCL": "PA11",
+                "ml_mpu6050.MPU6050_SDA": "PA12",
                 "oled.OLED_SCL": "PB8",
                 "oled.OLED_SDA": "PB9",
             },
@@ -191,11 +191,12 @@ def test_default_bindings_byte_identical():
 
 
 def test_master_pin_config_has_six_i2c_macros_with_original_values():
-    """六宏逐字节钉死（原值 = ml_i2c.h / ml_oled.h 迁移前硬编码值）。"""
+    """六宏逐字节钉死（工单 05 后 mpu6050 = GPIO_A Pin_11/12、oled = GPIO_B
+    Pin_8/9）。"""
     for line in (
-        "#define I2C_GPIO          GPIO_B\r\n",
-        "#define I2C_SCL_GPIO_Pin  Pin_10\r\n",
-        "#define I2C_SDA_GPIO_Pin  Pin_11\r\n",
+        "#define I2C_GPIO          GPIO_A\r\n",
+        "#define I2C_SCL_GPIO_Pin  Pin_11\r\n",
+        "#define I2C_SDA_GPIO_Pin  Pin_12\r\n",
         "#define OLED_GPIO         GPIO_B\r\n",
         "#define OLED_SCL_Pin      Pin_8\r\n",
         "#define OLED_SDA_Pin      Pin_9\r\n",
