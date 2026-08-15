@@ -217,15 +217,15 @@ def test_resolve_capability_stm32_enc_type_level():
         resolve_bindings(ALL_MANIFESTS, "stm32", fake, {"motor.MOTOR_B_ENC": "PB1"})
 
 
-def test_resolve_capability_mspm0_multi_instance_strict_all():
-    """mspm0 复用标注多实例引脚（PWMAB_C0 默认 PA12 有 pwm:TIMG0_C0 +
-    pwm:TIMA0_C3）：strict-all——绑定引脚须支持全部实例（宁严勿假绿：只换
-    $assign 不改外设，绑到仅 TIMA0_C3 的 PA28 会让 SysConfig 路由失败）。
-    PA23 双实例俱有 → 合法；PA28（仅 TIMA0_C3）拒。"""
+def test_resolve_capability_mspm0_pwm_same_family_type_level():
+    """mspm0 pwm 同族内类型级（ADR 0012 工单 03）：PWMAB_C0 默认 PA12 通道
+    C0 → 默认实例族 TIMG（TIMA0_C3 通道不匹配被滤掉）；PA23 有 TIMG8_C0 /
+    TIMG7_C0 / TIMG0_C0 同族同通道 → 全部随绑定推导（写侧优先选 TIMG0 保
+    最小改动）；PB18 只有 TIMA0_C2N / TIMA1_C1（跨族）→ 400（04 才放开）。"""
     resolved = _resolve("mspm0", {"motor.PWMAB_C0": "PA23"})
-    assert resolved[0].instances == ("TIMG0_C0", "TIMA0_C3")
-    with pytest.raises(PinBindingError, match="TIMG0_C0"):
-        _resolve("mspm0", {"motor.PWMAB_C0": "PA28"})
+    assert resolved[0].instances == ("TIMG8_C0", "TIMG7_C0", "TIMG0_C0")
+    with pytest.raises(PinBindingError, match="实例族 TIMG"):
+        _resolve("mspm0", {"motor.PWMAB_C0": "PB18"})
 
 
 def test_resolve_capability_mspm0_single_instance_movable():
