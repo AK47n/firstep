@@ -4,7 +4,7 @@
 
 **Blocked by:** 无（与 01 并行，文件不重叠）
 
-**Status:** resolved（2026-08-15 实施 + 真机验收闭环，PR 待合 main）
+**Status:** resolved（2026-08-15 实施 + 真机验收闭环，PR #75 待合 main）
 
 ## 需求
 
