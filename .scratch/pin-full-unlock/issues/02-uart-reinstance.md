@@ -69,4 +69,4 @@ fputc 流随 DEBUG_UART 挪位）；③单角色绑 DEBUG→UART_3 → HTTP 400 
 - [x] 红证已验（类型级缺位 / 交集空 / 实例冲突 / main.c 禁 USARTx_IRQHandler）+ 绿证（换位放行 + 宏值 + CALLS 重分组 + fputc + isr.c 聚合 + 默认逐字节）
 - [x] 真机：不配回归 UV4 0 错 0 警 + 逐字节 ✓；换位绑定 UV4 0 错 0 警 + 产物宏断言 ✓；单角色撞车 HTTP 400 零产物 ✓
 - [x] 独立 worktree（pin-full-unlock-02 @ 7962fd6）
-- [ ] 提交 + 推送开 PR（会话内）
+- [x] 提交 57bc541 + 推送开 PR #79（https://github.com/AK47n/firstep/pull/79）
