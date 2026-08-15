@@ -4,7 +4,7 @@
 
 **Blocked by:** 03（pinwriter / pin_bindings / index.html 同缝——03 合 main 后再开）
 
-**Status:** claimed
+**Status:** 待复核（实施完成，PR 待开）
 
 ## 需求
 
@@ -29,8 +29,72 @@
 
 ## 验收
 
-- [ ] 数据裁决记录（TIMA 通道排针全表 + 结论）入 Comments
-- [ ] pytest 全绿 + mypy src 干净
-- [ ] 红证已验 + 绿证（pin_family.h 断言 + peripheral 字段 + 双分支编译 + 默认逐字节）
-- [ ] 真机：不配回归 + 跨族绑定 gmake 全 0 错 + HTTP 400 零产物
-- [ ] 独立 worktree + 提交 + 推送开 PR
+- [x] 数据裁决记录（TIMA 通道排针全表 + 结论 + motor.c 通用 API 实证）入 Comments
+- [x] pytest 全绿 + mypy src 干净（1535 passed + mypy 41 文件 Success）
+- [x] 红证已验 + 绿证（peripheral 字段断言 + 默认逐字节 + 跨族通道过滤）——tests/test_pin_unlock_mspm0_cross.py 7 用例；pin_family.h / motor 双分支按实证取消（偏差留痕）
+- [x] 真机：不配回归 + 跨族绑定 gmake 全 0 错 + 两个 400 零产物（证据 .scratch/real-run/tierB_realrun.log）
+- [x] 独立 worktree（.claude/worktrees/pin-full-unlock-04，03 合 main 后从 9cb9ad5 建）+ 提交 + 推送开 PR（待开）
+
+## 数据裁决（2026-08-15，第一步）
+
+**TIMA 通道排针全表**（boards/mspm0-dimx.json 逐脚列 + 引脚图 PDF 文本交叉核对，
+两者一致）：
+
+| 实例 | C0 | C1 | C0+C1 排针对 |
+|---|---|---|---|
+| TIMA0 | PA0、PA8、PB8 | PA1、PA7、PA9、PA22、PB9、PB20 | **PA0/PA1、PA8/PA9、PB8/PB9** |
+| TIMA1 | PA15、PA17、PA28、PB2 | PA16、PA18、PA24、PA31、PB3、PB18 | **PA15/PA16、PA17/PA18、PA28/PA31、PB2/PB3** |
+
+结论：**存在同实例 C0+C1 排针对 → 跨族物理可达**，实施 2-8 路线成立（非
+"不可达退回灰显"分支）。
+
+**附带实证（决定实施形状的关键发现）**：
+
+1. 最小 syscfg `PWMAB.peripheral = "TIMA0"` + PA8/PA9 跑 sysconfig_cli →
+   0 错，生成 `PWMAB_INST TIMA0` / `GPIO_PWMAB_Cx_IDX DL_TIMER_CC_x_INDEX`
+   ——宏名与通道索引与 TIMG 同形态。
+2. **motor.c 不需要双分支**：全库模块 grep 零 `DL_TimerG_*` / `DL_TimerA_*`；
+   motor.c 只用 SDK 通用 `DL_Timer_*`（dl_timera.h/dl_timerg.h 均为
+   `#define DL_TimerX_* DL_Timer_*` 重定向）。全量工程（默认十模块）手工
+   置换 PWMAB→TIMA0 PA8/PA9 + DIGIT→UART3 PA14/PA13 + DCC→PB20 +
+   DC_MOTOR BB→PA12 后 `gmake clean all` **0 错 0 警**（motor.c 零改动编译）。
+3. 因此需求 2/3（pin_family.h 渲染 + motor.c #if 双分支）**前提不成立，取消**
+   ——偏差已同步修正 spec（数据契约变化 + 关键事实）与 ADR 0012（决策 5）。
+
+## 实施记录（2026-08-15，worktree pin-full-unlock-04）
+
+- **pin_bindings.py**：`_mspm0_pwm_instances` 改全类型级——有 pwm token 的
+  脚可绑（跨族放开），角色通道尾 `_C0`/`_C1` 仍按 endswith 过滤（`_C0N`
+  等互补通道不匹配）；新增 `_check_mspm0_pwm_channel_pairs`——同 slug 下
+  `_C0`/`_C1` 成对 pwm 角色两脚有效实例集按基名（TIMA0/TIMG0）交集必须
+  非空，空 → 400"两通道必须同实例，请成对绑定"（只绑单脚、异实例、成对
+  换位三种语义与 UART 对同款）。模块 docstring 同步 Tier B 口径。
+- **pinwriter.py**：零改动——03 的 `_mspm0_peripheral_of` 已认 TIMG/TIMA，
+  候选优先匹配现值、否则取首个，跨族绑定自然产出 `TIMA0`。
+- **generator.py / errors.py**：零改动（两通道门禁走 PinBindingError，
+  已登记 400）。
+- **index.html**：`mspm0PwmAllowed` 从"同族过滤"改"通道过滤"（全类型级 +
+  互补通道不算同通道），`pinMissReason` 同步（"该脚没有 pwm 通道 Cx"）。
+- **spec / ADR 0012**：数据契约变化与关键事实修正（无 pin_family.h、模块
+  通用 DL_Timer_*、TIMA 全表），ADR 决策 5 跨族条款改写为实证结论。
+- **测试**：红证已验（两通道异实例 400 / 单脚换位 400 / 通道不匹配 400）——
+  tests/test_pin_unlock_mspm0_cross.py 7 用例；test_pin_bindings.py 的 mspm0
+  pwm 用例改全类型级预期（PA8/PA9 跨族合法、PB18 通道不匹配 400）；
+  test_pin_unlock_mspm0_same.py 两处同步（PB18 文案 + TIMG12 同族换实例
+  需成对绑 C0/C1）。全量 1535 passed + mypy src 41 文件 Success。
+- **真机**（直接 generate + gmake，证据 .scratch/real-run/tierB_realrun.log）：
+  ① 2024H 十模块不配回归——syscfg == 母版逐字节 + gmake 0 错 0 警 6.9s；
+  ② +digit_uart/step_motor 跨族置换（PWMAB→TIMA0 PA8/PA9 + DIGIT→UART3
+  PA14/PA13 + DCC→PB20 + DC_MOTOR BB→PA12——全排针 31/31 被默认布局占用，
+  单角色换脚必撞，连带换位是唯一绿解，sysconfig_cli 已实证）——syscfg 八
+  字段断言 + gmake 0 错 0 警 7.7s + ti_msp_dl_config.h `PWMAB_INST TIMA0` /
+  `GPIO_PWMAB_C0_IDX DL_TIMER_CC_0_INDEX` 断言 + motor.o 存在（零改动编译）；
+  ③ C0→PA8 × C1→PA13 两通道异实例 → 400"两通道必须同实例"零产物；④ C1→
+  PA8 通道不匹配 → 400 零产物。运行级（电机真转）用户上板自验。
+
+## Comments
+
+- 2026-08-15 开工（Status claimed，主检出 9cb9ad5 建 worktree）。
+- 文件边界实际改动：`src/contest_generator/static/index.html`（工单写
+  index.html）；motor.c / generator.py / errors.py / boards JSON 零改动；
+  另加 spec.md 与 ADR 0012 两处事实修正（偏差留痕所必需）。

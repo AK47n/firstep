@@ -28,7 +28,7 @@
 - **isr.c**（母版新增，02）：5 个 `__weak void *_rx_handler(void){}` 兜底 + 3 个 `USARTx_IRQHandler`（体 = 调 `USARTx_IRQ_CALLS`）。uvprojx 确定性渲染器文件树全 .c 引用 → 自动纳入（验证）。
 - **ml_uart.c**（02）：fputc 改 `DEBUG_UART_INST->SR/DR`（include pin_config.h）；新增 `uart_pin_init_ex(uart_n, tx_gpio, tx_pin, rx_gpio, rx_pin)`（RCC/NVIC 公式沿用），旧 `uart_pin_init` 保留。
 - **ml_exti.c**（01）：枚举 24→48 项（PA/PB/PC × 线 0-15）；NVIC 通道公式（线 ≤4 → EXTI0-4_IRQn、5-9 → EXTI9_5_IRQn、10-15 → EXTI15_10_IRQn）。
-- **mspm0.syscfg 改写面**（03/04）：pinwriter 支持改 `peripheral` / GPIO 组 `port` 字段（实例名/宏名/通道名不动）；`pin_family.h` 由生成器在 copytree 后渲染（族标志：PWMAB_FAMILY_IS_TIMA 0/1）。
+- **mspm0.syscfg 改写面**（03/04）：pinwriter 支持改 `peripheral` 字段（uart/i2c/pwm，实例名/宏名/通道名不动）；GPIO 组零 `port` 改动——SysConfig 由组内引脚 $assign 自动推导组端口（03 前置验证实证）。**无 pin_family.h**：模块代码全程用 SDK 通用 `DL_Timer_*` API（`DL_TimerA_*`/`DL_TimerG_*` 只是重定向宏），跨族零模块改动（04 真机实证）。
 
 ## 门禁（本轮新增四条）
 
@@ -46,10 +46,10 @@
 - **UART 实例默认布局**：DIGIT=UART_1、BALL=UART_1、UWB=UART_1（三角色共享，现状合法）、DEBUG=UART_2、ZIGBEE=UART_3；板定义 uart token 仅 UART_1（PA9/10）、UART_2（PA2/3）、UART_3（PB10/11）。**用户绑任何单角色换实例必撞某默认角色 → 400；合法换位需多角色同时绑**（真机场景用三组绑定全换位验证）。
 - **stm32 引脚字面量已清零**：模块代码零 Pin_x/GPIO_x 字面量（grep 只命中注释），全走 pin_config.h 宏——换脚机制已就绪，剩 ml_libs 三张 switch 表（uart/exti）+ fputc。
 - **mspm0 syscfg 实例表**（mspm0.syscfg）：PWMAB=TIMG0（C0=PA12/C1=PA13）、DCC_100_PWM2=TIMG12（C0=PA14，clockPrescale 必须 1，32 位直算周期）、MOTOR_PID=TIMG6（无引脚）、NTB=TIMG7（无引脚）、DC_MOTOR=GPIO 8 脚（跨 PA/PB）、HUIDU=GPIO 8 脚（R3/R4=PB4/PB5 排针外，包型号悬案）、KEY=PA2、LED_BEEP=PA15、STEP_MOTOR=GPIOB 4 脚（同端口硬约束）、IMU601=UART0（PA28/31）、DIGIT_UART=UART1（PA8/9）、OLED=I2C1（PB3/PB2）、I2C_0=I2C0（PA0/PA1）。
-- **mspm0 模块族写死表**：motor.c `DL_Timer_setCaptureCompareValue(PWMAB_INST,…)`(:50/56) + startCounter(:58-59) + IRQ `MOTOR_PID_INST_IRQHandler`(:374)；step_motor.c `DCC_100_PWM2_INST`(:9 等) + `DCC_100_PWM2_INST_IRQHandler`(:67)；mpu_port.c `I2C_0_INST`；imu.c `IMU601_INST`(:190 等)；oled.c `OLED_INST`；digit_uart_mspm0.c / ball_detect.c `DIGIT_UART_INST`。**全库零 DL_TimerA_ 调用**——板定义 `pwm:TIMA*` token 零消费方。
-- **改写器硬限制**（pinwriter.py）：只匹配 `$assign` 行（_SYSCFG_ASSIGN_RE :40-43）；rewrite_syscfg 槽位定位 = 默认引脚值唯一（:200-251）；实例名/宏名/通道名/其余行逐字节不动；不能增删实例。Tier A 要动 `peripheral`/`port` 字段 = 新改写面，**SysConfig 对字段变更的接受度未验证——03 实施第一步先手动改一份跑 sysconfig_cli 确认生成宏形态**。
+- **mspm0 模块族写死表（04 实证修正：不存在"写死族"问题）**：motor.c `DL_Timer_setCaptureCompareValue(PWMAB_INST,…)`(:50/56) + startCounter(:58-59) 等全部走 SDK **通用 `DL_Timer_*`**；`DL_TimerA_*`/`DL_TimerG_*` 在 dl_timera.h/dl_timerg.h 只是重定向宏——跨族换 peripheral 零模块改动（04 真机 clean all 0 错）。step_motor.c `DCC_100_PWM2_INST`(:9 等) + IRQ `DCC_100_PWM2_INST_IRQHandler`(:67)；mpu_port.c `I2C_0_INST`；imu.c `IMU601_INST`；oled.c `OLED_INST`；digit_uart_mspm0.c / ball_detect.c `DIGIT_UART_INST`。
+- **改写器硬限制**（pinwriter.py）：只匹配 `$assign` 行（_SYSCFG_ASSIGN_RE）；rewrite_syscfg 槽位定位 = 默认引脚值唯一；实例名/宏名/通道名/其余行逐字节不动；不能增删实例。peripheral 改写面已由 03/04 实施并真机验证。
 - **排针 31/31 可用脚全被默认布局占用**（33 个 $assign，含排针外 PB4/PB5）——mspm0 单角色换脚必撞已占用脚（SysConfig Resource conflict 自然拦，已实证）；换位改法先例（pin-board-config 02/03）。
-- **TIMA 通道排针分布未全表**：已知 PA28 仅 `pwm:TIMA0_C3`、PA12/PA23 双实例（TIMG0_C0+TIMA0_C3）。PWMAB 需 C0+C1 同实例两通道——**若 TIMA 实例在排针无 C0+C1 对，motor 跨族物理不可达**，该风险裁决 = 工单 04 第一任务（数据全表 → 可行则实施 / 不可行则该类脚 pwm 能力退回灰显并记明）。
+- **TIMA 通道排针分布已全表（04 数据裁决）**：TIMA0 C0+C1 对 = PA0/PA1、PA8/PA9、PB8/PB9；TIMA1 C0+C1 对 = PA15/PA16、PA17/PA18、PB2/PB3、PA28/PA31——跨族物理可达（sysconfig_cli + gmake 0 错实证）。
 - **默认 5 组同脚冲突**（pin_config.h 现状）：BUZZER×MOTOR_B_DIR（PB0）、DEBUG_UART×MOTOR_A_ENC/DIR（PA2/3）、LED×GRAY_D6-8（PC13-15）、DIP×GRAY_D1-4（PB12-15）、ZIGBEE×软 I2C（PB10/11）。重排约束：新脚能力兼容（pwm 须 TIM 通道/enc 须 exti 线/uart 须实例对）+ 尽量避开骨架 TIM2/3 + 不新撞同组。
 - **骨架 TIM 占用**：2026H `tim_interrupt_ms_init(TIM_3, 10)`、2026C `TIM_2, 1`（TIM 冲突门禁已拦用户绑定）。
 - **母版双份陷阱**：`~/.contest_generator/masters/stm32/` 是旧部署副本，改母版只改仓库 `library/masters/`。
