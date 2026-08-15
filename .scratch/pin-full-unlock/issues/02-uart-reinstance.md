@@ -70,3 +70,7 @@ fputc 流随 DEBUG_UART 挪位）；③单角色绑 DEBUG→UART_3 → HTTP 400 
 - [x] 真机：不配回归 UV4 0 错 0 警 + 逐字节 ✓；换位绑定 UV4 0 错 0 警 + 产物宏断言 ✓；单角色撞车 HTTP 400 零产物 ✓
 - [x] 独立 worktree（pin-full-unlock-02 @ 7962fd6）
 - [x] 提交 57bc541 + 推送开 PR #79（https://github.com/AK47n/firstep/pull/79）
+
+## Comments（2026-08-15 合并复核）
+
+- **合并复核**（PR #79 squash merged eb41286，主会话）：diff 逐项对工单——uart 类型级入 tuple（pwm/enc/uart 共用）/ TX/RX 对交集校验（绑定脚×未绑默认脚实例集，空 = 400 成对绑定，成对同实例放行）/ uart_instance_conflicts 门禁（绑定改动推导实例 × 未绑角色默认实例 400，绑定×绑定放行、no-op 跳过、默认×默认不查）/ no_usart_handlers_in_main 门禁（clex 注释剥离 + USART1/2/3 定义形态正则，mspm0 跳过）/ _regroup_irq_calls（按 {STEM}_UART 现值重分组，非 uart 绑定不碰 CALLS 行保逐字节契约）/ isr.c 5 weak + 3 handler / fputc 跟随 DEBUG_UART_INST / uart_pin_init_ex uint8_t 形参（循环 include 判例）RCC/NVIC 公式沿用 / 五模块 init 切换 + rx_handler 非 static / 六 manifest 补 macros / uvprojx 静态与渲染双路纳入；偏差五条留痕理由成立（真实 handler 名对齐、uint8_t 判例、新门禁兜底 L6200E 判例、key 连带绑 = 门禁语义正确体现、骨架 #if 缺陷与本单无关）。合并后 main 复跑 1514 绿 30.5s + mypy src 41 文件干净。worktree pin-full-unlock-02 照例保留。
