@@ -1428,7 +1428,7 @@ function pinRoles() {
 }
 
 // ---- 能力判定（镜像后端 pin_bindings.resolve_bindings 口径：stm32 pwm /
-// enc / uart 类型级 + mspm0 uart / i2c 类型级 + mspm0 pwm 同族内类型级 +
+// enc / uart 类型级 + mspm0 uart / i2c / pwm 类型级（pwm 另按角色通道过滤）+
 // 其余 strict-all） ----
 function pinSupports(pin, type, instance) {
   const token = instance ? type + ":" + instance : type;
@@ -1460,36 +1460,20 @@ function pwmRoleChannel(decl) {
   return m ? "C" + m[1] : null;
 }
 
-function pwmFamily(inst) {
-  const m = inst.match(/^[A-Za-z]+/);
-  return m ? m[0] : inst;
-}
-
-function mspm0PwmDefaultFamilies(decl) {
-  // 后端同款：默认引脚上通道匹配的 pwm 实例族集合
-  const def = pinIndex()[decl.default];
-  if (!def) return new Set();
-  const channel = pwmRoleChannel(decl);
-  const insts = (def.capabilities || [])
-    .filter((t) => t.startsWith("pwm:"))
-    .map((t) => t.slice(4));
-  const filtered = channel ? insts.filter((i) => i.endsWith("_" + channel)) : insts;
-  return new Set(filtered.map(pwmFamily));
-}
-
 function mspm0PwmAllowed(pin, decl) {
-  const families = mspm0PwmDefaultFamilies(decl);
+  // 全类型级（04）：有任意 pwm token 且通道匹配角色尾 _C0/_C1 的脚可选
+  // （_C0N 等互补通道不算 _C0，后端同款 endswith 判据）
   const channel = pwmRoleChannel(decl);
   return (pin.capabilities || [])
     .filter((t) => t.startsWith("pwm:"))
     .map((t) => t.slice(4))
-    .filter((i) => families.has(pwmFamily(i)) && (!channel || i.endsWith("_" + channel)));
+    .filter((i) => !channel || i.endsWith("_" + channel));
 }
 
 function pinCanHost(pin, decl) {
   if (!pin || pin.kind !== "io") return false;
   // 类型级（镜像后端）：任意对应类型 token 即 canHost，实例随绑定引脚；
-  // mspm0 pwm = 同族内类型级（跨族灰显，04 才放开）
+  // mspm0 pwm 全类型级（跨族已放开，通道仍按角色尾过滤）
   if (pinIsTypeLevel(decl)) return pinListsType(pin, decl.type);
   if (chosenPlatform === "mspm0" && decl.type === "pwm") {
     return mspm0PwmAllowed(pin, decl).length > 0;
@@ -1509,8 +1493,10 @@ function pinMissReason(pin, decl) {
   // 类型级：灰显原因 = 无对应 token（与后端类型级报错文案同语义）
   if (pinIsTypeLevel(decl)) return "该脚不支持角色类型 " + decl.type;
   if (chosenPlatform === "mspm0" && decl.type === "pwm") {
-    const families = [...mspm0PwmDefaultFamilies(decl)].sort();
-    return "需要 pwm 实例族 " + families.join("、") + "，此脚无同族匹配（跨族迁移暂未开放）";
+    const channel = pwmRoleChannel(decl);
+    return channel
+      ? "该脚没有 pwm 通道 " + channel + "（互补通道不算同通道）"
+      : "该脚不支持角色类型 pwm";
   }
   const insts = roleInstances(decl);
   if (insts.length) {

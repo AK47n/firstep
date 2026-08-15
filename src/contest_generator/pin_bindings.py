@@ -21,9 +21,9 @@ boards.pin_capability_instances 推导实例）。校验通过产出 ResolvedBin
   喂写侧（syscfg peripheral 字段改写，实例名不动 → 模块代码零改动）；
   TX/RX 与 SCL/SDA 成对同实例约束在本模块（机制与工单 02 同款），实例
   冲突由生成门禁 uart_instance_conflicts 拦（平台通用）。
-- mspm0 pwm = **同族内类型级**（ADR 0012 工单 03）：绑定脚 pwm token 实例族
-  == 默认实例族（按角色通道尾 `_C0`/`_C1` 从默认引脚实例推族）→ 合法；
-  跨族仍 400（工单 04 才放开）。
+- mspm0 pwm = **全类型级**（ADR 0012 工单 04，跨族放开）：有 pwm token 且
+  通道（角色 id 尾 `_C0`/`_C1`）匹配的脚可绑；PWMAB 两通道同实例约束在本
+  模块（_check_mspm0_pwm_channel_pairs，C0/C1 实例基名交集必须非空）。
 - 其余（mspm0 gpio / enc / 其余类型 + stm32 其余类型）= strict-all：绑定引脚
   须支持默认引脚的**全部**实例。mspm0 gpio 组另有同端口门禁（step_motor
   四脚单端口宏）。宁严勿假绿：无实例类型（gpio/enc-mspm0）只查类型。
@@ -140,16 +140,16 @@ def resolve_bindings(
             raise PinBindingError(
                 f"绑定 {key} 的引脚 {pin} 不存在（不在 {board.name} 排针引脚集内）"
             )
-        # 类型级（ADR 0011 / ADR 0012 / ADR 0012 Tier A）：stm32 pwm / enc /
-        # uart 与 mspm0 uart / i2c——实例随**绑定引脚**推导喂写侧（stm32
-        # pwm 换实例 = 宏值变化、enc 换线 = _LINE/_EXTI 宏跟随、uart 换实例
-        # = _UART/_INST/引脚宏跟随；mspm0 uart/i2c 换实例 = syscfg
+        # 类型级（ADR 0011 / ADR 0012 Tier A/B）：stm32 pwm / enc / uart 与
+        # mspm0 uart / i2c / pwm——实例随**绑定引脚**推导喂写侧（stm32 pwm
+        # 换实例 = 宏值变化、enc 换线 = _LINE/_EXTI 宏跟随、uart 换实例 =
+        # _UART/_INST/引脚宏跟随；mspm0 uart/i2c/pwm 换实例 = syscfg
         # peripheral 字段改写，实例名不动 → 模块代码零改动）；无对应 token
-        # 的脚仍拒（类型级下限）。mspm0 pwm = 同族内类型级（工单 03）：
-        # 绑定脚 pwm token 实例族 == 默认实例族 → 合法，跨族仍 400（04 才
-        # 放开）。其余 strict-all：实例 = 默认引脚能力 token 的实例（板外
-        # 默认如 PB4/PB5 无默认引脚 → 实例空 → 只查类型）；多实例 = 全部
-        # 命中（any-of 会放行 SysConfig 路由必炸的绑定——工单 02 红证已验）
+        # 的脚仍拒（类型级下限）。mspm0 pwm 通道匹配的脚跨族可绑（工单 04，
+        # 全类型级放开；PWMAB 两通道同实例门禁在循环后查）。其余 strict-all：
+        # 实例 = 默认引脚能力 token 的实例（板外默认如 PB4/PB5 无默认引脚 →
+        # 实例空 → 只查类型）；多实例 = 全部命中（any-of 会放行 SysConfig
+        # 路由必炸的绑定——工单 02 红证已验）
         if platform == PLATFORM_STM32 and declaration.type in (
             "pwm",
             "enc",
@@ -170,7 +170,7 @@ def resolve_bindings(
             )
         elif platform == PLATFORM_MSPM0 and declaration.type == "pwm":
             instances = _mspm0_pwm_instances(
-                board, bound, declaration, key, pin
+                bound, declaration, key, pin
             )
         else:
             default_bound = board_pin(board, declaration.default)
@@ -205,6 +205,7 @@ def resolve_bindings(
     if platform == PLATFORM_MSPM0:
         _check_slot_conflicts(resolved)
         _check_mspm0_gpio_port_groups(board, roles, raw)
+        _check_mspm0_pwm_channel_pairs(board, roles, raw)
     if platform in (PLATFORM_STM32, PLATFORM_MSPM0):
         _check_paired_role_instances(board, roles, raw)
     return tuple(resolved)
@@ -223,45 +224,30 @@ def _type_level_instances(
 
 
 def _mspm0_pwm_instances(
-    board: Board,
     bound: BoardPin,
     declaration: PinDeclaration,
     key: str,
     pin: str,
 ) -> tuple[str, ...]:
-    """mspm0 pwm 同族内类型级（ADR 0012 Tier A）：默认实例族 = 默认引脚上
-    与角色通道（id 尾 `_C0`/`_C1`）匹配的 pwm 实例的族；绑定脚须有同族 +
-    同通道的 pwm 实例（跨族仍 400——Tier B 工单 04 才放开）。多实例匹配
-    全部随绑定推导喂写侧（写侧优先选与母版 peripheral 现值相同的实例 =
-    最小改动；否则取首个）。"""
-    default_bound = board_pin(board, declaration.default)
-    if default_bound is None:
-        # 板外默认（真库暂无 mspm0 pwm 板外默认）：退类型级
-        return _type_level_instances(bound, "pwm", key, pin)
+    """mspm0 pwm 全类型级（ADR 0012 Tier B 工单 04）：有 pwm token 的脚可绑
+    （跨族放开），角色通道（id 尾 `_C0`/`_C1`）仍须匹配——C0 角色只收
+    *_C0 实例（*_C0N 互补通道不匹配，SysConfig ccp0Pin 路由不上）。多实例
+    匹配全部随绑定推导喂写侧（写侧优先选与母版 peripheral 现值相同的实例 =
+    最小改动；否则取首个）。PWMAB 两通道同实例约束在 resolve 循环后由
+    _check_mspm0_pwm_channel_pairs 查。
+    """
     channel = _pwm_role_channel(declaration.id)
-    default_instances = pin_capability_instances(default_bound, "pwm")
-    if channel:
-        default_instances = tuple(
-            i for i in default_instances if i.endswith("_" + channel)
-        )
-    if not default_instances:
-        raise PinBindingError(
-            f"角色 {key} 的默认引脚 {declaration.default} 没有通道"
-            f" {channel or '?'} 的 pwm 实例（母版 / 板数据漂移）"
-        )
-    families = {_pwm_family(i) for i in default_instances}
     bound_instances = pin_capability_instances(bound, "pwm")
     allowed = tuple(
         i
         for i in bound_instances
-        if _pwm_family(i) in families and (not channel or i.endswith("_" + channel))
+        if not channel or i.endswith("_" + channel)
     )
     if not allowed:
         raise PinBindingError(
-            f"绑定 {key} 的引脚 {pin} 不能担任该角色：需要 pwm 实例族"
-            f" {'、'.join(sorted(families))}（通道 {channel or '任意'}），"
-            f"此脚 pwm 实例 {'、'.join(bound_instances) or '无'} 无同族匹配"
-            f"（跨族迁移在工单 04 才放开）"
+            f"绑定 {key} 的引脚 {pin} 不能担任该角色：需要 pwm 通道"
+            f" {channel or '任意'}，此脚 pwm 实例"
+            f" {'、'.join(bound_instances) or '无'} 无匹配通道"
         )
     return allowed
 
@@ -272,11 +258,72 @@ def _pwm_role_channel(role_id: str) -> str | None:
     return f"C{match.group(1)}" if match else None
 
 
-def _pwm_family(instance: str) -> str:
-    """pwm 实例族（TIMG0_C0 → TIMG、TIMA0_C3 → TIMA）。"""
-    match = re.match(r"^[A-Za-z]+", instance)
-    assert match is not None, f"pwm 实例 {instance!r} 无族前缀（板数据漂移）"
-    return match.group()
+def _pwm_instance_base(instance: str) -> str:
+    """pwm 实例基名（TIMA0_C0 → TIMA0、TIMG12_C1 → TIMG12）——两通道同实例
+    门禁按基名判交集。"""
+    return instance.split("_", 1)[0]
+
+
+def _check_mspm0_pwm_channel_pairs(
+    board: Board,
+    roles: dict[tuple[str, str], PinDeclaration],
+    raw: Mapping[str, str],
+) -> None:
+    """mspm0 PWMAB 两通道同实例门禁（ADR 0012 Tier B 工单 04）：同 slug 下
+    `_C0`/`_C1` 成对的 pwm 角色，两脚的有效实例集（绑定脚 / 未绑默认脚，
+    过滤到各自通道）按实例基名（TIMA0 / TIMG0）交集必须非空——C0/C1 分属
+    两外设 = SysConfig 单 peripheral 路由必炸，400 生成前拦。单通道角色
+    （DCC_100_PWM2_C0）无对不查；只声明单脚 / 无匹配实例不查（防御路径）。
+    """
+    pairs: dict[tuple[str, str], dict[str, PinDeclaration]] = {}
+    for (slug, role_id), decl in roles.items():
+        if decl.type != "pwm":
+            continue
+        match = re.search(r"^(?P<stem>.+)_C(?P<channel>[01])$", role_id)
+        if match is None:
+            continue
+        pairs.setdefault((slug, match.group("stem")), {})[
+            match.group("channel")
+        ] = decl
+
+    for (slug, _), feet in pairs.items():
+        c0 = feet.get("0")
+        c1 = feet.get("1")
+        if c0 is None or c1 is None:
+            continue
+        c0_instances = _pwm_pair_foot_instances(board, raw, slug, c0, "C0")
+        c1_instances = _pwm_pair_foot_instances(board, raw, slug, c1, "C1")
+        if not c0_instances or not c1_instances:
+            continue  # 板外默认等无实例：不查（防御路径）
+        c0_bases = {_pwm_instance_base(i) for i in c0_instances}
+        c1_bases = {_pwm_instance_base(i) for i in c1_instances}
+        if not (c0_bases & c1_bases):
+            raise PinBindingError(
+                f"绑定 {slug}.{c0.id} / {slug}.{c1.id} 的两通道必须同实例，"
+                f"请成对绑定（C0 实例 {'、'.join(sorted(c0_instances))} ×"
+                f" C1 实例 {'、'.join(sorted(c1_instances))} 交集为空）——"
+                f"PWM 双通道只能挂同一外设实例"
+            )
+
+
+def _pwm_pair_foot_instances(
+    board: Board,
+    raw: Mapping[str, str],
+    slug: str,
+    decl: PinDeclaration,
+    channel: str,
+) -> set[str]:
+    """pwm 两通道角色单脚的有效实例集（绑定脚 / 默认脚，过滤通道）。"""
+    key = f"{slug}.{decl.id}"
+    pin = raw.get(key)
+    bound = board_pin(board, pin) if pin is not None else board_pin(board, decl.default)
+    if bound is None:
+        return set()
+    return {
+        instance
+        for instance in pin_capability_instances(bound, "pwm")
+        if instance.endswith("_" + channel)
+    }
 
 
 def _check_paired_role_instances(
