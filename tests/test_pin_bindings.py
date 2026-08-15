@@ -18,6 +18,8 @@ import pytest
 
 from contest_generator.boards import (
     BOARDS_DIR,
+    Board,
+    BoardPin,
     board_for_platform,
     load_boards,
     pin_capability_instances,
@@ -69,8 +71,8 @@ def _resolve(platform: str, bindings: dict[str, str]) -> tuple[ResolvedBinding, 
 
 def _bind(role_key: str, pin: str) -> ResolvedBinding:
     """stm32 渲染器测试用：取角色在 stm32 平台的声明（同 id 在 mspm0 也有
-    声明时取错平台会拿不到 macros）。实例推导与 resolve 同源（stm32 pwm
-    类型级 = 绑定引脚实例，其余类型 = 默认引脚实例）。"""
+    声明时取错平台会拿不到 macros）。实例推导与 resolve 同源（stm32 pwm /
+    enc 类型级 = 绑定引脚实例，其余类型 = 默认引脚实例）。"""
     slug, role_id = role_key.split(".")
     for manifest in ALL_MANIFESTS:
         if manifest.slug != slug:
@@ -84,7 +86,7 @@ def _bind(role_key: str, pin: str) -> ResolvedBinding:
                 default_pin = BOARDS["stm32"].pin_index.get(decl.default)
                 instances = (
                     pin_capability_instances(bound_pin, decl.type)
-                    if decl.type == "pwm" and bound_pin is not None
+                    if decl.type in ("pwm", "enc") and bound_pin is not None
                     else (
                         pin_capability_instances(default_pin, decl.type)
                         if default_pin is not None
@@ -100,13 +102,29 @@ def _bind(role_key: str, pin: str) -> ResolvedBinding:
     raise AssertionError(f"未找到 stm32 角色 {role_key}")
 
 
+def _fake_stm32_board(*caps: tuple[str, tuple[str, ...]]) -> Board:
+    """假板（enc 类型级下限红证用）：真板扩线后全 io 脚都有 enc token，
+    "无 enc token 的脚拒绝"分支只能靠假板直测。"""
+    pins = tuple(
+        BoardPin(name=name, kind="io", x=0, y=i, side="left", capabilities=cap)
+        for i, (name, cap) in enumerate(caps)
+    )
+    return Board(
+        board_id="fake-stm32",
+        name="fake",
+        platform="stm32",
+        pins=pins,
+        pin_index={p.name: p for p in pins},
+    )
+
+
 # ---------------------------------------------------------------------------
 # bindings 校验（红证）
 # ---------------------------------------------------------------------------
 
 
 def test_resolve_valid_stm32_binding_carries_instances():
-    """stm32 enc 角色：实例 = 默认引脚 enc 线号（PA4 → enc:4）。"""
+    """stm32 enc 角色：实例 = 绑定引脚 enc 线号（类型级，PB4 → enc:4）。"""
     resolved = _resolve("stm32", {"motor.MOTOR_B_ENC": "PB4"})
     assert len(resolved) == 1
     binding = resolved[0]
@@ -177,11 +195,19 @@ def test_resolve_stm32_pwm_rejects_pin_without_pwm_token():
         _resolve("stm32", {"motor.MOTOR_A_PWM": "PB4"})
 
 
-def test_resolve_capability_stm32_enc_same_line_only():
-    """enc 限同 EXTI 线号：MOTOR_B_ENC 默认 PA4（enc:4）→ PB4 可、PA6（enc:6）拒。"""
-    assert _resolve("stm32", {"motor.MOTOR_B_ENC": "PB4"})
-    with pytest.raises(PinBindingError, match="enc"):
-        _resolve("stm32", {"motor.MOTOR_B_ENC": "PA6"})
+def test_resolve_capability_stm32_enc_type_level():
+    """enc 类型级（ADR 0012 工单 01）：实例（= EXTI 线号）随**绑定引脚**推导
+    ——MOTOR_B_ENC 绑 PA6（enc:6）合法（旧同线锁已拆）；无 enc token 的脚拒
+    = 类型级下限（假板直测——真板扩线后全 io 脚都有 enc token）。"""
+    resolved = _resolve("stm32", {"motor.MOTOR_B_ENC": "PA6"})
+    assert resolved[0].pin == "PA6"
+    assert resolved[0].instances == ("6",)
+    fake = _fake_stm32_board(
+        ("PA0", ("enc:0", "gpio_out")),
+        ("PB1", ("gpio_out",)),
+    )
+    with pytest.raises(PinBindingError, match="不支持角色类型 enc"):
+        resolve_bindings(ALL_MANIFESTS, "stm32", fake, {"motor.MOTOR_B_ENC": "PB1"})
 
 
 def test_resolve_capability_mspm0_multi_instance_strict_all():
@@ -320,12 +346,12 @@ def test_render_pin_config_changes_only_bound_macro_lines():
 
 
 def test_render_pin_config_enc_line_macro_untouched_when_same_line():
-    """enc 换线保线号：MOTOR_B_ENC_LINE 值仍是 4（handler 名绑线号，EXTI4
-    不变），该行逐字节不动。"""
+    """enc 换线保线号：MOTOR_B_ENC→PB4（enc:4）时 MOTOR_B_ENC_LINE 值仍是
+    4（handler 按此宏条件编译），该行逐字节不动；EXTI 行换成 EXTI_PB4。"""
     out = render_pin_config(
         STM32_MASTER_PIN_CONFIG, _resolve("stm32", {"motor.MOTOR_B_ENC": "PB4"})
     )
-    assert "MOTOR_B_ENC_LINE      4          /* EXTI4_IRQHandler 的线号 */\r\n" in out
+    assert "MOTOR_B_ENC_LINE      4          /* EXTI 线号（handler 按此条件编译） */\r\n" in out
     assert "EXTI_PA4" not in out
     assert "EXTI_PB4   /* PB4，下降沿触发 */" in out
 

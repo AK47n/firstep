@@ -34,6 +34,30 @@ void exti_pin_init(EXTI_Pnx_enum pin)
 		case EXTI_PA7:{gpio_init(GPIO_A,Pin_7,IU);break;};
 		case EXTI_PB7:{gpio_init(GPIO_B,Pin_7,IU);break;};
 		case EXTI_PC7:{gpio_init(GPIO_C,Pin_7,IU);break;};
+		case EXTI_PA8:{gpio_init(GPIO_A,Pin_8,IU);break;};
+		case EXTI_PB8:{gpio_init(GPIO_B,Pin_8,IU);break;};
+		case EXTI_PC8:{gpio_init(GPIO_C,Pin_8,IU);break;};
+		case EXTI_PA9:{gpio_init(GPIO_A,Pin_9,IU);break;};
+		case EXTI_PB9:{gpio_init(GPIO_B,Pin_9,IU);break;};
+		case EXTI_PC9:{gpio_init(GPIO_C,Pin_9,IU);break;};
+		case EXTI_PA10:{gpio_init(GPIO_A,Pin_10,IU);break;};
+		case EXTI_PB10:{gpio_init(GPIO_B,Pin_10,IU);break;};
+		case EXTI_PC10:{gpio_init(GPIO_C,Pin_10,IU);break;};
+		case EXTI_PA11:{gpio_init(GPIO_A,Pin_11,IU);break;};
+		case EXTI_PB11:{gpio_init(GPIO_B,Pin_11,IU);break;};
+		case EXTI_PC11:{gpio_init(GPIO_C,Pin_11,IU);break;};
+		case EXTI_PA12:{gpio_init(GPIO_A,Pin_12,IU);break;};
+		case EXTI_PB12:{gpio_init(GPIO_B,Pin_12,IU);break;};
+		case EXTI_PC12:{gpio_init(GPIO_C,Pin_12,IU);break;};
+		case EXTI_PA13:{gpio_init(GPIO_A,Pin_13,IU);break;};
+		case EXTI_PB13:{gpio_init(GPIO_B,Pin_13,IU);break;};
+		case EXTI_PC13:{gpio_init(GPIO_C,Pin_13,IU);break;};
+		case EXTI_PA14:{gpio_init(GPIO_A,Pin_14,IU);break;};
+		case EXTI_PB14:{gpio_init(GPIO_B,Pin_14,IU);break;};
+		case EXTI_PC14:{gpio_init(GPIO_C,Pin_14,IU);break;};
+		case EXTI_PA15:{gpio_init(GPIO_A,Pin_15,IU);break;};
+		case EXTI_PB15:{gpio_init(GPIO_B,Pin_15,IU);break;};
+		case EXTI_PC15:{gpio_init(GPIO_C,Pin_15,IU);break;};
 	}
 }
 
@@ -67,7 +91,9 @@ void exti_init(EXTI_Pnx_enum pin,EXTI_Trigger_enum trigger,uint8_t priority)
 
 	if(pin/3<=4)
 		NVIC_init(priority,pin/3+6);   //ÅäÖÃÖÐ¶Ï
-	else
+	else if(pin/3<=9)
 		NVIC_init(priority,EXTI9_5_IRQn);
+	else
+		NVIC_init(priority,EXTI15_10_IRQn);
 	
 }
