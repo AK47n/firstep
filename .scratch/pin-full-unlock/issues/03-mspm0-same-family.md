@@ -4,7 +4,7 @@
 
 **Blocked by:** 02（pinwriter.py / pin_bindings.py 同缝——02 合 main 后再开）
 
-**Status:** 待实施
+**Status:** claimed
 
 ## 需求
 
