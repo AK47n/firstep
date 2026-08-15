@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=598a13b -->
+<!-- changelog-auto: last-commit=8870155e2d249c22a31805ca7710a1147e58d6ee -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 18:54 推荐模块移除不再回加 + 依赖模块无移除按钮 + 可选角色绑定后自动展开
 - 19:49 mspm0 STEP_MOTOR SLP2/DIR2 板内化 PB6/PB7 + 改写器按实例路径定位重叠默认
 - 20:20 模块平台徽标两行显示
+- 20:46 更新记录改 git log 自动补录（post-commit 钩子）
 
 ## 2026-08-14
 - 08:28 generate_check --reuse-recommend 推荐缓存 + 参数指纹警告（8m50s→2m41s）
