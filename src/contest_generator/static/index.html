@@ -38,7 +38,15 @@
   header { background: var(--panel); border-bottom: 1px solid var(--border);
            padding: 12px 24px; display: flex; align-items: baseline; gap: 24px; }
   header h1 { font-size: 18px; margin: 0; }
+  header h1 .brand-en { font-family: var(--mono); color: var(--accent);
+                        letter-spacing: .5px; margin-right: 8px; }
+  header h1 .brand-cn { color: var(--text); font-size: 14px; font-weight: 600;
+                         margin-left: 4px; }
   header .sub { color: var(--muted); font-size: 12px; }
+  .step-no { display: inline-flex; align-items: center; justify-content: center;
+             min-width: 22px; height: 22px; margin-right: 8px; padding: 0 6px;
+             border-radius: 6px; background: var(--accent); color: #04222b;
+             font-size: 13px; font-weight: 700; vertical-align: -3px; }
   nav { display: flex; gap: 4px; padding: 0 24px; background: var(--panel);
         border-bottom: 1px solid var(--border); }
   nav button { border: none; background: none; padding: 10px 16px; cursor: pointer;
@@ -56,6 +64,10 @@
   textarea, input[type=text], input[type=password], select {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
     font: inherit; background: var(--input-bg); color: var(--text); }
+  input[type=search] {
+    width: 100%; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px;
+    font: inherit; background: var(--input-bg); color: var(--text); }
+  input[type=search]::placeholder { color: var(--muted); }
   ::placeholder { color: var(--muted); }
   textarea { resize: vertical; font-family: var(--mono); font-size: 13px; }
   textarea:focus, input:focus, select:focus, button:focus-visible {
@@ -148,7 +160,11 @@
   .ref-pick-row input { margin: 0; }
   .ref-pick-title { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: 13px;
                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ref-pick-desc { color: var(--muted); font-size: 12px; }
+  .ref-pick-desc { color: var(--muted); font-size: 12px;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 步骤 4 参考资料紧凑化（工单 index-html-ui-redo/01）：滚动 + 搜索 */
+  .ref-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--border);
+                border-radius: 8px; padding: 4px 10px; background: var(--panel-2); }
   /* 赛题简介（AI 预读，wait-what 效果）：一句话总览 + 功能要点，深底信息框 */
   .topic-summary { background: var(--info-dim); border: 1px solid var(--info-border); border-radius: 6px;
                    padding: 10px 14px; font-size: 13px; white-space: pre-line; color: var(--text); }
@@ -367,6 +383,21 @@
   .pin-warn-list .wx { display: inline-block; margin: 2px 8px 2px 0; padding: 1px 8px;
                        border: 1px solid var(--warn); border-radius: 10px;
                        font-size: 12px; color: var(--warn); }
+  /* 卡 7 说明与图例美化（工单 index-html-ui-redo/01）：只动文字/排版/样式层 */
+  .pin-intro { font-size: 13px; color: var(--muted); line-height: 1.7; margin: 2px 0 6px; }
+  .pin-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                 margin-bottom: 8px; }
+  .pin-toolbar .hint { font-size: 12px; color: var(--muted); }
+  .pin-legend { padding: 6px 0 2px; row-gap: 6px; }
+  .pin-legend .lg { display: inline-flex; align-items: center; gap: 4px;
+                    padding: 2px 9px; border: 1px solid var(--border);
+                    border-radius: 999px; background: var(--panel-2);
+                    font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .pin-legend .lg .dot { margin-right: 2px; }
+  .pin-subtitle { margin: 10px 0 4px; font-size: 12px; font-weight: 600;
+                  letter-spacing: .3px; color: var(--fg); }
+  .pin-subtitle.warn { color: var(--warn); }
+  #pin-board-caption { font-weight: 600; }
   /* SVG 引脚候选高亮（点清单条目 → 板图可接引脚） */
   .pin-cand { stroke: var(--accent) !important; stroke-width: 2.5 !important; }
   .pin-dim { opacity: .22; }
@@ -397,7 +428,7 @@
 </head>
 <body>
 <header>
-  <h1>电赛工程生成器</h1>
+  <h1><span class="brand-en">firstep</span><span class="brand-cn">电赛工程生成器</span></h1>
   <span class="sub">贴题 → 赛题简介 → 选平台 → AI 推荐模块 → 一键生成完整工程</span>
 </header>
 <nav>
@@ -417,7 +448,7 @@
     <div id="gen-banner" class="banner hidden">尚未配置 AI API：请先到「设置」页填写 API 后再使用 AI 功能。</div>
 
     <div class="card">
-      <h2>1. 赛题原文</h2>
+      <h2><span class="step-no">1</span>赛题原文</h2>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
       <div class="row" style="margin-top:8px">
         <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md">
@@ -433,7 +464,7 @@
     </div>
 
     <div class="card">
-      <h2>2. 赛题简介（AI 预读）</h2>
+      <h2><span class="step-no">2</span>赛题简介（AI 预读）</h2>
       <div class="row">
         <button id="btn-topic-summary" class="primary">生成赛题简介</button>
         <span class="muted">AI 先读一遍题面，把散落在各处的全部要求整理成一条条要点——心里有数再往下选平台。</span>
@@ -443,21 +474,25 @@
     </div>
 
     <div class="card">
-      <h2>3. 目标平台</h2>
+      <h2><span class="step-no">3</span>目标平台</h2>
       <div id="platforms" class="row"></div>
       <div id="platform-msg" class="error"></div>
     </div>
 
     <div class="card">
-      <h2>4. 参考资料（可选）</h2>
+      <h2><span class="step-no">4</span>参考资料（可选）</h2>
       <div class="muted">勾选 = 手动指定作学习素材注入（全文直读）；赛题 / 套件自动关联的批次无需勾选也会注入。</div>
-      <div id="ref-picker" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:8px">
+        <input type="search" id="ref-search" placeholder="搜索参考资料…" style="flex:1;max-width:300px">
+        <span class="muted" id="ref-count"></span>
+      </div>
+      <div id="ref-selected" style="margin-top:8px"></div>
+      <div id="ref-picker" class="ref-scroll" style="margin-top:8px"></div>
       <div id="ref-picker-msg" class="error"></div>
-      <div id="ref-result" style="margin-top:8px"></div>
     </div>
 
     <div class="card">
-      <h2>5. AI 推荐模块</h2>
+      <h2><span class="step-no">5</span>AI 推荐模块</h2>
       <div class="row">
         <button id="btn-recommend" class="primary">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
@@ -475,7 +510,7 @@
     </div>
 
     <div class="card">
-      <h2>6. 模块清单与平台警告</h2>
+      <h2><span class="step-no">6</span>模块清单与平台警告</h2>
       <div class="row">
         <select id="module-pool" style="flex:1"></select>
         <button id="btn-add-module">添加模块</button>
@@ -487,21 +522,23 @@
     </div>
 
     <div class="card" id="card-pin-config">
-      <h2>7. 引脚配置（板图点选）</h2>
-      <div class="muted">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
+      <h2><span class="step-no">7</span>引脚配置（板图点选）</h2>
+      <div class="pin-intro">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
       <div id="pin-config-msg" class="banner hidden" style="margin-top:8px"></div>
       <div id="pin-config-empty" class="muted" style="margin-top:8px"></div>
       <div id="pin-config-body" class="hidden">
         <div id="pin-highlight-msg" class="muted" style="margin-top:10px"></div>
         <div class="pin-layout" style="margin-top:8px">
           <div class="pin-board-wrap">
-            <div class="row" style="margin-bottom:6px">
+            <div class="pin-toolbar">
               <button id="btn-pin-rotate">旋转 90°</button>
-              <span class="muted">板图视角旋转（不影响引脚数据）。</span>
+              <span class="hint">板图视角旋转（不影响引脚数据）</span>
             </div>
             <div id="pin-board-svg"></div>
             <div id="pin-board-caption"></div>
+            <div class="pin-subtitle" id="pin-fixed-sub">固定资源</div>
             <div id="pin-fixed-list" class="pin-fixed-list"></div>
+            <div class="pin-subtitle warn" id="pin-warn-sub">⚠ 板载共用警示</div>
             <div id="pin-warn-list" class="pin-warn-list"></div>
           </div>
           <div class="pin-role-list">
@@ -517,7 +554,7 @@
     </div>
 
     <div class="card">
-      <h2>8. main.c 骨架</h2>
+      <h2><span class="step-no">8</span>main.c 骨架</h2>
       <div class="row">
         <button id="btn-skeleton" class="primary">生成骨架</button>
         <span class="muted">AI 按所选模块接口排初始化序列；不存在的调用自动改写为注释占位，可手动微调。</span>
@@ -528,7 +565,7 @@
     </div>
 
     <div class="card">
-      <h2>9. 输出目录并生成</h2>
+      <h2><span class="step-no">9</span>输出目录并生成</h2>
       <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
       <div class="row">
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
@@ -556,7 +593,7 @@
     </div>
 
     <div class="card">
-      <h2>10. 交接提示词（Handoff）</h2>
+      <h2><span class="step-no">10</span>交接提示词（Handoff）</h2>
       <div class="row">
         <button id="btn-handoff" class="primary">生成交接提示词</button>
         <button id="btn-handoff-copy" class="hidden">复制</button>
@@ -567,7 +604,7 @@
     </div>
 
     <div class="card" id="card-fix-center">
-      <h2>11. 修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
+      <h2><span class="step-no">11</span>修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
       <div class="row">
         <button id="btn-fix-center" class="primary">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
@@ -838,18 +875,31 @@
   <!-- ============================ 设置页 ============================ -->
   <section id="tab-settings" class="page">
     <div class="card">
-      <h2>AI API 配置（保存后即时生效，无需重启）</h2>
+      <h2>应用设置</h2>
+      <div class="muted" style="margin-bottom:10px">保存后即时生效，无需重启。</div>
       <div id="settings-banner" class="banner hidden">尚未配置：请填写 API key 后保存。</div>
+    </div>
+
+    <div class="card">
+      <h2>AI API</h2>
       <div class="row">
         <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
+    </div>
+
+    <div class="card">
+      <h2>库目录</h2>
       <div class="row">
         <div style="flex:1"><label>模块库目录</label><input type="text" id="set-lib-dir" placeholder="~/.contest_generator/modules"></div>
         <div style="flex:1"><label>母版库目录</label><input type="text" id="set-masters-dir" placeholder="~/.contest_generator/masters"></div>
       </div>
-      <div class="row" style="margin-top:10px">
+    </div>
+
+    <div class="card">
+      <h2>工具链</h2>
+      <div class="row">
         <div style="flex:1"><label>Keil UV4 路径（留空自动探测）</label><input type="text" id="set-uv4-path" placeholder="C:\Keil5\Core\UV4\UV4.exe"></div>
         <div style="flex:1"><label>gmake 路径（留空走 PATH）</label><input type="text" id="set-gmake-path" placeholder="gmake / make"></div>
       </div>
@@ -860,7 +910,10 @@
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>SysConfig CLI 路径（留空自动探测）</label><input type="text" id="set-ccs-sysconfig-cli" placeholder="C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"></div>
       </div>
-      <div class="row" style="margin-top:12px">
+    </div>
+
+    <div class="card">
+      <div class="row">
         <button id="btn-save-settings" class="primary">保存设置</button>
         <span class="muted">配置文件：<span id="set-config-path"></span>（含 API key，不入版本库）</span>
       </div>
@@ -1242,6 +1295,8 @@ $("btn-recommend").addEventListener("click", () => {
 // 生成页：3. 参考资料（可选）——手动勾选 = 追加准入 + 全文直读（工单 01）
 // ---------------------------------------------------------------------------
 let selectedReferenceIds = [];
+let autoReferenceIds = [];
+let referenceEntries = [];
 
 function referenceAnchorLabel(e) {
   if (e.anchor_kind === "topic") return "赛题 " + esc(e.anchor_value) + " 关联";
@@ -1258,35 +1313,75 @@ function referencePlatformChip(e) {
 
 async function loadReferencePicker() {
   try {
-    const entries = await apiGet("/api/references");
-    $("ref-picker").innerHTML = entries.length
-      ? '<div class="ref-pick-head"><span></span><span>资料</span><span>平台</span><span>说明</span></div>'
-        + entries.map((e) => `
-      <label class="ref-pick-row">
-        <input type="checkbox" data-ref-pick="${esc(e.id)}" ${selectedReferenceIds.includes(e.id) ? "checked" : ""}>
-        <span class="ref-pick-title" title="${esc(e.title)}">${esc(e.title)}</span>
-        <span>${referencePlatformChip(e)}</span>
-        <span class="ref-pick-desc">${referenceAnchorLabel(e)}${e.description ? " · " + esc(e.description) : ""}</span>
-      </label>`).join("")
-      : '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>';
-    $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) =>
-      cb.addEventListener("change", () => {
-        const id = cb.dataset.refPick;
-        selectedReferenceIds = selectedReferenceIds.filter((x) => x !== id);
-        if (cb.checked) selectedReferenceIds.push(id);
-      }));
+    referenceEntries = await apiGet("/api/references");
+    renderReferencePicker();
     $("ref-picker-msg").textContent = "";
   } catch (e) { $("ref-picker-msg").textContent = e.message; }
 }
 
+function renderReferencePicker() {
+  const q = ($("ref-search").value || "").trim().toLowerCase();
+  const visible = referenceEntries.filter((e) =>
+    !q || (e.id + " " + (e.title || "") + " " + (e.description || "") + " " + referenceAnchorLabel(e)).toLowerCase().includes(q));
+  $("ref-count").textContent = referenceEntries.length
+    ? (q ? `匹配 ${visible.length} / ${referenceEntries.length} 条` : `共 ${referenceEntries.length} 条`)
+    : "";
+  $("ref-picker").innerHTML = visible.length
+    ? '<div class="ref-pick-head"><span></span><span>资料</span><span>平台</span><span>说明</span></div>'
+      + visible.map((e) => {
+          const isAuto = autoReferenceIds.includes(e.id);
+          const isManual = selectedReferenceIds.includes(e.id);
+          const checked = isAuto || isManual ? "checked" : "";
+          const disabled = isAuto ? "disabled" : "";
+          const autoChip = isAuto ? ' <span class="chip out">自动</span>' : "";
+          return `
+    <label class="ref-pick-row">
+      <input type="checkbox" data-ref-pick="${esc(e.id)}" ${checked} ${disabled}>
+      <span class="ref-pick-title" title="${esc(e.title)}">${esc(e.title)}</span>
+      <span>${referencePlatformChip(e)}${autoChip}</span>
+      <span class="ref-pick-desc" title="${esc(referenceAnchorLabel(e) + (e.description ? " · " + e.description : ""))}">${referenceAnchorLabel(e)}${e.description ? " · " + esc(e.description) : ""}</span>
+    </label>`;
+        }).join("")
+    : (referenceEntries.length
+      ? '<div class="muted">没有匹配的资料。</div>'
+      : '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>');
+  $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) =>
+    cb.addEventListener("change", () => {
+      const id = cb.dataset.refPick;
+      selectedReferenceIds = selectedReferenceIds.filter((x) => x !== id);
+      if (cb.checked) selectedReferenceIds.push(id);
+      renderRefSelected();
+    }));
+  renderRefSelected();
+}
+
+$("ref-search").addEventListener("input", renderReferencePicker);
+
+function renderRefSelected() {
+  const box = $("ref-selected");
+  const byId = new Map(referenceEntries.map((e) => [e.id, e]));
+  const selected = [];
+  for (const id of selectedReferenceIds) {
+    const e = byId.get(id);
+    selected.push({ id, title: e ? e.title : id, source: "手动" });
+  }
+  for (const id of autoReferenceIds) {
+    if (selectedReferenceIds.includes(id)) continue;  // 手动也勾了 = 只显示手动
+    const e = byId.get(id);
+    selected.push({ id, title: e ? e.title : id, source: "自动" });
+  }
+  box.innerHTML = selected.length
+    ? '<div class="muted" style="margin-bottom:4px">已选中（将注入 AI 上下文）：</div>'
+      + selected.map((s) =>
+          `<span class="chip out" title="${esc(s.id)}">✔ ${esc(s.title)} · ${s.source}</span>`).join(" ")
+    : '<div class="muted">尚未选中参考资料（AI 推荐后会自动关联赛题 / 套件资料）。</div>';
+}
+
 function renderReferenceResult(data) {
   const refs = data.references || [];
-  $("ref-result").innerHTML = refs.length
-    ? '<div class="item"><div class="head"><span class="slug">本次注入的参考资料</span>'
-      + '<span class="muted">（来源：' + refs.map((r) => r.source === "manual" ? "手动" : "自动").join(" / ") + '）</span></div>'
-      + refs.map((r) => `<div class="muted" style="padding:1px 0">${esc(r.title)} <span class="chip${r.source === "manual" ? " out" : ""}">${r.source === "manual" ? "手动" : "自动"}</span>${referencePlatformChip(r)}</div>`).join("")
-      + '</div>'
-    : "";
+  autoReferenceIds = refs.filter((r) => r.source !== "manual").map((r) => r.id);
+  renderReferencePicker();
+  renderRefSelected();
 }
 
 // ---------------------------------------------------------------------------
@@ -1566,13 +1661,17 @@ function renderPinCard() {
   renderPinLegend(roles);
   renderPinBoard();
   renderPinRoles(roles, pinMacroFamilies(roles));
-  $("pin-fixed-list").innerHTML = (pinBoard.fixed || []).map((f) =>
+  const fixedHtml = (pinBoard.fixed || []).map((f) =>
     `<span class="fx" title="${esc(f.note)}">${esc(f.name)}：${esc(f.occupies.join("、"))}</span>`).join("");
+  $("pin-fixed-list").innerHTML = fixedHtml;
+  $("pin-fixed-sub").classList.toggle("hidden", !fixedHtml);
   // 板载共用警示（可见警告，不只悬停）：io 引脚带 notes = 与板载资源共用（BSL/LED/ROSC 等）
-  $("pin-warn-list").innerHTML = (pinBoard.pins || [])
+  const warnHtml = (pinBoard.pins || [])
     .filter((p) => p.kind === "io" && p.notes)
     .map((p) => `<span class="wx" title="${esc(p.notes)}">⚠ ${esc(p.name)} · ${esc(p.notes)}</span>`)
     .join("");
+  $("pin-warn-list").innerHTML = warnHtml;
+  $("pin-warn-sub").classList.toggle("hidden", !warnHtml);
 }
 
 async function loadPinBoard() {
@@ -1595,11 +1694,11 @@ function renderPinLegend(roles) {
   for (const r of roles) if (!seen.includes(r.decl.type)) seen.push(r.decl.type);
   let html = seen.map((t) => {
     const st = PIN_TYPE_STYLE[t] || ["var(--accent)", "var(--accent-dim)"];
-    return `<span><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
+    return `<span class="lg"><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
   }).join("");
-  html += `<span><span class="dot" style="background:var(--pin-pad);border:1px solid var(--border-strong)"></span>空闲 IO</span>`;
-  html += `<span><span class="dot" style="background:transparent;border:1px dashed var(--warn)"></span>板载共用（见板图下方警示）</span>`;
-  html += `<span><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
+  html += `<span class="lg"><span class="dot" style="background:var(--pin-pad);border:1px solid var(--border-strong)"></span>空闲 IO</span>`;
+  html += `<span class="lg"><span class="dot" style="background:transparent;border:1px dashed var(--warn)"></span>板载共用（见板图下方警示）</span>`;
+  html += `<span class="lg"><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
   $("pin-legend").innerHTML = html;
 }
 
