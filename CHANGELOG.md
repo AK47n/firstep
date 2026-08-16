@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ecdcac19cab68818fe5e5a4b971721c7fe99e4b0 -->
+<!-- changelog-auto: last-commit=3ac8c24ac3736dddf6e343f003c3e17345683a28 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -34,6 +34,7 @@
 - 18:58 回退 rebase 残留的 #94 运行时补记（webapp/test 改回 load_changelog 本地钩子口径）
 - 19:14 头部品牌升级——firstep 双色(白+青)+终端闪烁光标+副标胶囊，标签页标题/流程副标题/步骤徽章对齐
 - 19:50 mspm0.syscfg 文件模型模块——独占文法+一次解析+槽位身份原语（架构评审 ② 工单 01）
+- 19:55 refactor(syscfg-model): 去掉解析产物死字段 modules（评审：speculative generality）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
