@@ -2,13 +2,13 @@
 # K230 上电自动运行（CanMV 开机自启动 main.py）。
 #
 # 闭环：sensor 采图 → find_blobs 色块追踪 → 组 CSV 帧 → UART 发给主控。
-# 主控侧解析由 ball_detect 模块提供（生成器按依赖自动挂上），两侧帧契约
+# 主控侧解析由 coord_detect 模块提供（生成器按依赖自动挂上），两侧帧契约
 # 同源——下面两个帧常量与串口波特率由生成器渲染占位符注入，不要手改字面量
 # （改了就和主控解析对不齐）。
 #
 # 串口接线（参考库 13_与天猛星串口通信 例程同款）：
-#   K230 11 脚 = UART2 TXD → 主控球检测串口 RX
-#   K230 12 脚 = UART2 RXD → 主控球检测串口 TX（本脚本只发不收，可留空）
+#   K230 11 脚 = UART2 TXD → 主控坐标检测串口 RX
+#   K230 12 脚 = UART2 RXD → 主控坐标检测串口 TX（本脚本只发不收，可留空）
 #
 # 素材：参考库 k230资料/code/05色块追踪与线段识别（find_blobs）+
 # 13_与天猛星串口通信（FPIOA + UART 发送）。
@@ -21,13 +21,13 @@ from machine import UART
 from media.media import MediaManager
 from media.sensor import Sensor
 
-# ---- 帧契约（生成器从契约单源渲染注入；与主控 ball_detect 解析严格一致）----
-FRAME_FORMAT = '{{ball_frame_format}}'   # B,<cx>,<cy>,<confidence>,<x1>,<y1>,<x2>,<y2>
+# ---- 帧契约（生成器从契约单源渲染注入；与主控 coord_detect 解析严格一致）----
+FRAME_FORMAT = '{{coord_frame_format}}'   # B,<cx>,<cy>,<confidence>,<x1>,<y1>,<x2>,<y2>
 NO_DETECT_FRAME = '{{no_detect_frame}}'  # N（本帧未检测到目标）
 
 # ---- 颜色阈值（LAB：Lmin,Lmax,Amin,Amax,Bmin,Bmax；现值为红色系）----
 # 换跟踪颜色就改这里；现场标定可用参考库 14_脱机调整阈值 例程取数。
-BALL_THRESHOLD = (41, 57, 31, 83, 13, 71)
+COLOR_THRESHOLD = (41, 57, 31, 83, 13, 71)
 
 sensor = None
 
@@ -51,7 +51,7 @@ try:
         img = sensor.snapshot()
 
         # 色块追踪（参数照 05 例程：ROI 640x640、步长 5、像素阈值 3000、合并）
-        blobs = img.find_blobs([BALL_THRESHOLD], False, (0, 0, 640, 640),
+        blobs = img.find_blobs([COLOR_THRESHOLD], False, (0, 0, 640, 640),
                                x_stride=5, y_stride=5, pixels_threshold=3000,
                                margin=True)
         if blobs:

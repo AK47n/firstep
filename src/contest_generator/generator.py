@@ -1262,7 +1262,7 @@ def _check_uart_instance_conflicts(
     """UART 实例冲突门禁（工单 pin-full-unlock/02 与 pin-full-unlock/03，
     ADR 0012，平台通用）：绑定（且改动）UART 角色的推导实例 × 未绑定 UART
     角色的默认实例 → 400 中文——单角色换实例必撞同实例默认角色（stm32 默认
-    布局 DIGIT/BALL/UWB 共 UART_1、DEBUG UART_2、ZIGBEE UART_3；mspm0
+    布局 DIGIT/COORD/UWB 共 UART_1、DEBUG UART_2、ZIGBEE UART_3；mspm0
     IMU601=UART0、DIGIT_UART=UART1），合法换位需多角色成对同时绑。绑定×
     绑定同实例放行（共享提示语义，换位合法）；默认×默认不查（现状合法，与
     TIM 门禁同"只查用户绑定"口径）；绑定值 = 默认值（no-op）不触发。

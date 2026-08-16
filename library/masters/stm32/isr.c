@@ -1,7 +1,7 @@
 /* ============================================================
  * UART 接收中断聚合（ADR 0012 工单 02）：每个 USARTx_IRQHandler 调
  * pin_config.h 渲染的 USARTx_IRQ_CALLS 聚合宏——宏按各 UART 角色绑定
- * 实例分组各模块 rx_handler 调用（默认 UART_1 = DIGIT+BALL+UWB 共享、
+ * 实例分组各模块 rx_handler 调用（默认 UART_1 = DIGIT+COORD+UWB 共享、
  * UART_2 = DEBUG、UART_3 = ZIGBEE；绑定换实例后由生成器重分组）。
  *
  * __weak 空兜底：未选模块的 handler 缺失时链接不炸（调用进空函数，
@@ -11,7 +11,7 @@
 #include "pin_config.h"
 
 __weak void digit_uart_rx_handler(void) {}
-__weak void ball_detect_rx_handler(void) {}
+__weak void coord_detect_rx_handler(void) {}
 __weak void debug_uart_rx_handler(void) {}
 __weak void uwb_rx_handler(void) {}
 __weak void zigbee_rx_handler(void) {}
