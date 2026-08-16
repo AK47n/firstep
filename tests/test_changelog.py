@@ -1,9 +1,11 @@
-"""更新记录解析（工单 changelog-tab/01）：纯函数 parse_changelog + load_changelog。
+"""更新记录解析（工单 changelog-tab/01）：纯函数 parse_changelog + load_changelog
++ git log 自动补记（git_changelog_groups / merge_changelog / load_changelog_auto）。
 
-数据源是手工维护的仓库根 CHANGELOG.md。解析规则（格式契约，见
-changelog.py docstring）：`## YYYY-MM-DD` 严格日期开新组（`^...$` 锚定），
-组内 `- ` 行是条目，`# ` 大标题 / 说明段落 / 空行 / 无日期组的 `- ` 行
-全部跳过。纯展示数据：文件缺失 / 读取异常 → []，不阻塞工具。
+数据源 = 手工维护的仓库根 CHANGELOG.md 为主、git log 自动补记手工文件没有的
+日期。解析规则（格式契约，见 changelog.py docstring）：`## YYYY-MM-DD` 严格
+日期开新组（`^...$` 锚定），组内 `- ` 行是条目，`# ` 大标题 / 说明段落 /
+空行 / 无日期组的 `- ` 行全部跳过。纯展示数据：文件缺失 / 读取异常 → []，
+不阻塞工具。
 """
 
 from __future__ import annotations
@@ -12,7 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from contest_generator.changelog import load_changelog, parse_changelog
+from contest_generator.changelog import (
+    git_changelog_groups,
+    load_changelog,
+    load_changelog_auto,
+    merge_changelog,
+    parse_changelog,
+)
 
 
 def test_parse_standard_multiple_groups_and_items():
@@ -137,3 +145,47 @@ def test_load_missing_file_returns_empty(tmp_path):
 def test_load_unreadable_path_returns_empty(tmp_path):
     """读取异常（如路径是目录）→ []。"""
     assert load_changelog(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# git log 自动补记（2026-08-15 用户定案：更新记录自动更新）
+# ---------------------------------------------------------------------------
+
+
+def test_merge_changelog_manual_wins_and_auto_fills_missing_dates():
+    """手工日期组优先；git 组只补手工没有的日期；结果按日期倒序。"""
+    manual = [
+        {"date": "2026-08-13", "items": [{"time": "13:45", "text": "手工条目"}]},
+        {"date": "2026-08-12", "items": [{"time": "17:48", "text": "旧条目"}]},
+    ]
+    auto = [
+        {"date": "2026-08-15", "items": [{"time": "19:49", "text": "自动条目"}]},
+        {"date": "2026-08-13", "items": [{"time": "00:00", "text": "不应出现"}]},
+        {"date": "2026-08-14", "items": [{"time": "10:00", "text": "补 08-14"}]},
+    ]
+    assert merge_changelog(manual, auto) == [
+        {"date": "2026-08-15", "items": [{"time": "19:49", "text": "自动条目"}]},
+        {"date": "2026-08-14", "items": [{"time": "10:00", "text": "补 08-14"}]},
+        {"date": "2026-08-13", "items": [{"time": "13:45", "text": "手工条目"}]},
+        {"date": "2026-08-12", "items": [{"time": "17:48", "text": "旧条目"}]},
+    ]
+
+
+def test_merge_changelog_empty_auto_returns_manual():
+    """git 不可用（自动组为空）→ 手工组原样返回（旧行为）。"""
+    manual = [{"date": "2026-08-13", "items": [{"time": "", "text": "手工"}]}]
+    assert merge_changelog(manual, []) == manual
+
+
+def test_git_changelog_groups_non_repo_returns_empty(tmp_path):
+    """不在 git 工作树（如临时空目录）→ []，不阻塞工具。"""
+    assert git_changelog_groups(tmp_path) == []
+
+
+def test_load_changelog_auto_without_repo_dir_falls_back_to_manual(tmp_path):
+    """repo_dir 为 None → 只回手工文件（旧行为）。"""
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text("## 2026-08-13\n- 手工条目\n", encoding="utf-8")
+    assert load_changelog_auto(path, None) == [
+        {"date": "2026-08-13", "items": [{"time": "", "text": "手工条目"}]}
+    ]
