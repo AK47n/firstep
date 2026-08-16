@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=486b9fae8dc93b3f35808dbcd09d9dadb5106019 -->
+<!-- changelog-auto: last-commit=6ad5620543fbcd1f1f7792f13fcc0061e15bb594 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -27,9 +27,11 @@
 - 16:38 module-multi-instance 06——推荐链路 AI 猜实例数（题面「4 个指示灯」→ led×4）+ 实例解析/收敛键/done 载荷 + 前端回填实例卡
 - 16:56 module-multi-instance 05——双平台编译回归关门验收
 - 17:09 stm32 led_toggle 反转逻辑（高→灭/低→亮真翻转）
+- 17:22 git log 自动补记手工文件缺失的日期
 - 17:45 多实例配置「添加实例」按钮读错属性（data-add vs dataset.slug）导致点了没反应
 - 18:03 第六步搜索框改为搜可用模块→点结果添加（去掉装饰性的已展开过滤，保留下拉两套共存）
 - 18:35 第七步引脚配置新增总览模式——按模块着色已配置引脚（必接+可选已绑），多模块同脚时焊孔填充/描边/高亮环三层均分着色
+- 18:58 回退 rebase 残留的 #94 运行时补记（webapp/test 改回 load_changelog 本地钩子口径）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
