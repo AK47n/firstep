@@ -948,6 +948,7 @@ def test_skeleton_prompt_carries_no_unused_var_rule():
     assert SKELETON_NO_UNUSED_RULE in user_prompt
     assert "未使用的变量" in SKELETON_NO_UNUSED_RULE
     assert "占位声明" in SKELETON_NO_UNUSED_RULE
+    assert "不要带 code/、modules/ 等目录前缀" in user_prompt
 
 
 def test_generate_main_skeleton_forwards_reference_fulltexts():
@@ -1005,9 +1006,12 @@ def test_smoke_prompt_carries_channel_and_per_module_rules():
     assert "debug_uart" in user_prompt
     assert "逐段显示" in user_prompt or "OLED 上" in user_prompt
     assert "串口" in user_prompt
+    assert "不要用 printf/sprintf/snprintf" in user_prompt
+    assert "debug_uart_send" in user_prompt
     assert "每个所选模块" in user_prompt
     assert "无平台 XX 版本" in user_prompt
     assert "照接口块里的平台名写" in user_prompt
+    assert "不要带 code/、modules/ 等目录前缀" in user_prompt
     assert SKELETON_NO_UNUSED_RULE in SMOKE_SYSTEM_PROMPT
     assert SKELETON_NO_UNUSED_RULE in user_prompt
 

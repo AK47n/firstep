@@ -3,7 +3,7 @@
 #include "pin_config.h"
 
 /* 有源蜂鸣器驱动（纯驱动切片）：BUZZER_GPIO/BUZZER_PIN 单源在 pin_config.h。
- * 极性：默认高电平响；若实物为低电平有效，改 beep_on/beep_off 两处即可。 */
+ * 极性：pin_config.h 约定低电平触发（有源蜂鸣器，低电平响）。 */
 
 void beep_init(void)
 {
@@ -13,12 +13,12 @@ void beep_init(void)
 
 void beep_on(void)
 {
-    gpio_set(BUZZER_GPIO, BUZZER_PIN, 1);
+    gpio_set(BUZZER_GPIO, BUZZER_PIN, 0);
 }
 
 void beep_off(void)
 {
-    gpio_set(BUZZER_GPIO, BUZZER_PIN, 0);
+    gpio_set(BUZZER_GPIO, BUZZER_PIN, 1);
 }
 
 void beep_toggle(void)

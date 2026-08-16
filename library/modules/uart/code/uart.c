@@ -1,6 +1,6 @@
 #include "uart.h"
 
-void UART_send_char(UART_Regs *uart, const uint8_t chr)
+void UART_send_char(UART_Regs *uart, uint8_t chr)
 {
     DL_UART_transmitDataBlocking(uart, chr);
 }
@@ -13,9 +13,9 @@ void UART_send_string(UART_Regs *uart, const char *str)
     }
 }
 
-void UART_send_buffer(UART_Regs *uart, const uint8_t *buf, const uint8_t l)
+void UART_send_buffer(UART_Regs *uart, const uint8_t *buf, uint16_t len)
 {
-    for(int i = 0; i < l; i++)
+    for (uint16_t i = 0; i < len; i++)
     {
         UART_send_char(uart, buf[i]);
     }

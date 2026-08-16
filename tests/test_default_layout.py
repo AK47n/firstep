@@ -62,6 +62,9 @@ WHITELIST = {
     "PB13": {"pid.GRAY_D2", "config.DIP1"},
     "PB14": {"pid.GRAY_D3", "config.DIP2"},
     "PB15": {"pid.GRAY_D4", "config.DIP3"},
+    # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
+    # 复位后可用；实际接线经引脚绑定消解——module-functionalize/04）
+    "PB3": {"key.KEY_START", "pid.GRAY_D6"},
 }
 
 
