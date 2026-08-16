@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d03d960bafe8e2a0d2004b019586eb47be9e0f3e -->
+<!-- changelog-auto: last-commit=ff2bf826bac0aab8e959c079d07c9a8fc01930d0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 10:51 key/uart 补 stm32 + 骨架/冒烟 prompt 输出函数约束（防 LLM 出稿碎片）
 - 11:42 module-functionalize 最后一批——协议驱动补 mspm0
 - 12:33 解析类模型重试上限 3 → 5
+- 12:39 骨架/冒烟出稿接入重试原语
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
