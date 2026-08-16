@@ -1512,6 +1512,13 @@ def _generation_result(summary: GenerationSummary) -> dict:
         "modules": [
             {"slug": slug, "files": list(files)} for slug, files in summary.modules
         ],
+        # Python 副产物（工单 k230-vision-copilot/04）：选中模块的 .py
+        # （slug → 输出文件名，工程根）——前端摘要「模块文件」行显示 k230
+        # 这类 files 空模块的 main.py；未选任何带声明模块 = 空数组
+        "python_artifacts": [
+            {"slug": slug, "output": output}
+            for slug, output in summary.python_artifacts
+        ],
         # 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
         # 工具链时非空，前端摘要区展示一行提示
         "build_hint": summary.build_hint,

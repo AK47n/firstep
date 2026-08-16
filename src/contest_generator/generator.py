@@ -428,6 +428,11 @@ class GenerationSummary:
     build_hint（工单 mspm0-build-makefiles/01）：mspm0 生成时未探测到 CCS
     工具链 → 中文提示（命令行构建不可用，可设置页填 ccs_* 覆盖），生成本身
     照常；stm32 与探测命中时为空串。
+
+    python_artifacts（工单 k230-vision-copilot/04）= 选中模块的 .py 副产物
+    (slug, 输出文件名)——模块级声明（与平台无关），产物写在工程根；前端摘要
+    「模块文件」行靠它显示 k230 这类 files 空模块的 main.py，不选任何带
+    声明模块 = 空元组（旧行为）。
     """
 
     output_dir: Path
@@ -435,6 +440,7 @@ class GenerationSummary:
     include_dirs: tuple[str, ...]  # 已去重，按首次出现顺序
     modules: tuple[tuple[str, tuple[str, ...]], ...]  # (slug, 该平台文件列表)
     build_hint: str = ""
+    python_artifacts: tuple[tuple[str, str], ...] = ()
 
 
 def describe_generation(
@@ -458,12 +464,18 @@ def describe_generation(
         entry = manifest.platforms.get(platform)
         files = tuple(entry.files) if entry is not None else ()
         modules.append((manifest.slug, files))
+    python_artifacts = tuple(
+        (manifest.slug, manifest.python_artifact.output)
+        for manifest in manifests
+        if manifest.python_artifact is not None
+    )
     return GenerationSummary(
         output_dir=output_dir,
         structure=structure,
         include_dirs=tuple(include_dirs),
         modules=tuple(modules),
         build_hint=build_hint,
+        python_artifacts=python_artifacts,
     )
 
 
