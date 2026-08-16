@@ -216,6 +216,37 @@ DIGIT_UART.enableFIFO        = false;
 DIGIT_UART.peripheral.rxPin.$assign = "PA9";
 DIGIT_UART.peripheral.txPin.$assign = "PA8";
 
+// UWB 定位串口（uwb_uart 模块用，RX 中断；UART2 = PA23(TX)/PA24(RX)。
+// PA23/PA24 与 HUIDU L2/L3 默认重叠——两模块同选时经引脚绑定消解）
+const UWB_UART = UART.addInstance();
+UWB_UART.$name             = "UWB_UART";
+UWB_UART.profile           = "CONFIG_PROFILE_1";
+UWB_UART.peripheral.$assign = "UART2";
+UWB_UART.uartClkSrc        = "BUSCLK";
+UWB_UART.ovsRate           = "3";
+UWB_UART.targetBaudRate    = 115200;
+UWB_UART.enableInternalLoopback = false;
+UWB_UART.enabledInterrupts = ["RX"];
+UWB_UART.enableFIFO        = false;
+UWB_UART.peripheral.rxPin.$assign = "PA24";
+UWB_UART.peripheral.txPin.$assign = "PA23";
+
+// Zigbee DL-20 串口（zigbee_uart 接收 / zigbee_uart_key 发送共享，
+// RX 中断；UART3 = PA26(TX)/PA25(RX)。PA26/PA25 与 HUIDU R2/R3 默认
+// 重叠——同选时经引脚绑定消解）
+const ZIGBEE_UART = UART.addInstance();
+ZIGBEE_UART.$name             = "ZIGBEE_UART";
+ZIGBEE_UART.profile           = "CONFIG_PROFILE_1";
+ZIGBEE_UART.peripheral.$assign = "UART3";
+ZIGBEE_UART.uartClkSrc        = "BUSCLK";
+ZIGBEE_UART.ovsRate           = "3";
+ZIGBEE_UART.targetBaudRate    = 115200;
+ZIGBEE_UART.enableInternalLoopback = false;
+ZIGBEE_UART.enabledInterrupts = ["RX"];
+ZIGBEE_UART.enableFIFO        = false;
+ZIGBEE_UART.peripheral.rxPin.$assign = "PA25";
+ZIGBEE_UART.peripheral.txPin.$assign = "PA26";
+
 // OLED（I2C 控制器）
 OLED.$name                         = "OLED";
 OLED.basicEnableController         = true;

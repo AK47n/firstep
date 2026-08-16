@@ -116,6 +116,19 @@ def test_project_dir_parameterized():
     text = "\n".join(other.values())
     assert str(PROJ) not in text
     assert str(other_dir) in text  # Windows 下 str(Path) 是反斜杠形态
+def test_header_only_module_include_dirs_enter_compile_flags():
+    """只含 .h 的模块目录（config_mspm0.h 先例）不产生编译条目，但必须进 -I
+    ——否则 gmake 命令行构建找不到跨模块引号 include（IDE 走 .cproject）。"""
+    rendered = _render(extra_include_dirs=(Path("modules/config/code"),))
+    compile_lines = "\n".join(
+        rendered[k] for k in rendered if k.endswith("subdir_rules.mk")
+    )
+    assert f'-I"{PROJ}/modules/config/code"' in compile_lines
+    assert "modules/config/code/subdir_vars.mk" not in rendered
+    # 缺省（无额外目录）= 旧输出逐字节：module_sources 目录仍进 -I
+    default = _render()
+    assert f'-I"{PROJ}/modules/dht11/code"' in default["subdir_rules.mk"]
+    assert f'-I"{PROJ}/modules/config/code"' not in default["subdir_rules.mk"]
 
 
 # ---------------------------------------------------------------------------

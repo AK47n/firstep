@@ -10,9 +10,23 @@
       ],
       "verified": false,
       "hardware_bound": true,
-      "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 ball_detect_init() 开 NVIC；ball_detect_rx_handler() 需挂在 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）里（main.c 或 isr 文件）。stm32 侧同模块名 ball_detect_stm32.c（UART_1/USART1，isr.c 挂 USART1_IRQHandler）。编译验证未上板。",
+      "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 ball_detect_init() 开 NVIC；与 digit_uart 共享该实例，两模块同选时 main.c 定义一个 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）依次调 digit_uart_rx_handler()/ball_detect_rx_handler()。stm32 侧同模块名 ball_detect_stm32.c（UART_1/USART1，isr.c 挂 USART1_IRQHandler）。编译验证未上板。",
       "kit": "",
-      "source_url": ""
+      "source_url": "",
+      "pins": [
+        {
+          "id": "BALL_DETECT_UART_TX",
+          "type": "uart_tx",
+          "default": "PA8",
+          "required": true
+        },
+        {
+          "id": "BALL_DETECT_UART_RX",
+          "type": "uart_rx",
+          "default": "PA9",
+          "required": true
+        }
+      ]
     },
     "stm32": {
       "files": [

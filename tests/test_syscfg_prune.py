@@ -46,7 +46,7 @@ def test_prune_motor_keeps_only_motor_instances():
     for keep in ("PWMAB", "DC_MOTOR"):
         _assert_instance_present(out, keep)
     for drop in ("DCC_100_PWM2", "MOTOR_PID", "NTB", "HUIDU", "KEY", "LED_BEEP",
-                 "STEP_MOTOR", "IMU601", "DIGIT_UART", "OLED", "I2C_0"):
+                 "STEP_MOTOR", "IMU601", "DIGIT_UART", "UWB_UART", "OLED", "I2C_0"):
         _assert_instance_absent(out, drop)
     # 模块变量：GPIO 被 DC_MOTOR 使用，PWM 被 PWMAB 使用；MOTOR_PID 随旧
     # PID 逻辑剥离不再被 motor 消费，TIMER 一并裁掉
@@ -64,3 +64,20 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["pid"]), "MOTOR_PID")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["xunji"]), "HUIDU")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ball_detect"]), "DIGIT_UART")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["zigbee_uart"]), "ZIGBEE_UART")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["zigbee_uart_key"]), "ZIGBEE_UART")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["digit_uart"]), "ZIGBEE_UART")
+
+
+def test_every_master_instance_is_registered_in_consumer_map():
+    """母版新增 UART/外设实例必须登记消费映射——漏登记靠 prune 防御保留会
+    让「未选模块的实例不落盘」失效（本批 UWB/ZIGBEE 曾缺）。"""
+    declared = {
+        m.group(1)
+        for line in MASTER_SYSCFG.splitlines()
+        if (m := re.match(r"^\s*const\s+([A-Za-z_]\w*)\s*=\s*[A-Za-z_\w]+\.addInstance\(\);?\s*$", line))
+    }
+    assert declared
+    assert declared <= set(INSTANCE_CONSUMERS), declared - set(INSTANCE_CONSUMERS)
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["uwb_uart"]), "UWB_UART")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["digit_uart"]), "UWB_UART")

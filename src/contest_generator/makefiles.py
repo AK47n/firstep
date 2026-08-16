@@ -20,6 +20,7 @@ subdir_rules.mk + 逐模块目录 subdir_vars.mk / subdir_rules.mk，模板镜�
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Sequence
 
 # 链接产物名（与母版 .project 的工程名一致，IDE 同款）
 _OUT_NAME = "mspm0_project"
@@ -302,12 +303,42 @@ def _render_makefile(
     )
 
 
+def _compile_includes(
+    proj: str,
+    sdk_dir: str,
+    module_dirs: Sequence[str],
+    extra_include_dirs: Sequence[Path],
+) -> str:
+    """tiarmclang -I 参数串：工程根/Debug + 编译模块目录 + 仅头模块目录 + SDK。
+
+    extra_include_dirs 为相对工程根的 Path（生成侧 include_dirs 单源）——只含
+    .h 的模块（config）不产生模块源条目、mod_dirs 不会收录，但它的头目录必须
+    进 -I，否则 uwb_uart_mspm0.c 的 #include "config_mspm0.h" 在命令行构建
+    找不到（IDE 读 .cproject，gmake 只读本串）。
+    """
+    dirs: list[str] = [proj, f"{proj}/Debug"]
+    seen = set(dirs)
+    for rel in [*module_dirs, *(d.as_posix() for d in extra_include_dirs)]:
+        if rel in seen:
+            continue
+        seen.add(rel)
+        dirs.append(f"{proj}/{rel}")
+    dirs.extend(
+        [
+            f"{sdk_dir}/source/third_party/CMSIS/Core/Include",
+            f"{sdk_dir}/source",
+        ]
+    )
+    return " ".join(f'-I"{d}"' for d in dirs)
+
+
 def render_makefile_set(
     module_sources: ModuleSources,
     proj_dir: Path,
     sdk_dir: str,
     compiler_dir: str,
     sysconfig_cli: str,
+    extra_include_dirs: Sequence[Path] = (),
 ) -> dict[str, str]:
     """参数化渲染完整 makefile 集 → {相对 Debug 目录的路径（POSIX）: 文本}。
 
@@ -317,14 +348,7 @@ def render_makefile_set(
     proj = str(proj_dir)
     startup = f"{sdk_dir}/{_STARTUP_REL}"
     mod_dirs = [_module_dir(slug, subdir) for slug, subdir, _ in module_sources]
-    inc = " ".join(
-        [f'-I"{proj}"', f'-I"{proj}/Debug"']
-        + [f'-I"{proj}/{d}"' for d in mod_dirs]
-        + [
-            f'-I"{sdk_dir}/source/third_party/CMSIS/Core/Include"',
-            f'-I"{sdk_dir}/source"',
-        ]
-    )
+    inc = _compile_includes(proj, sdk_dir, mod_dirs, extra_include_dirs)
     files: dict[str, str] = {
         "sources.mk": _SOURCES_MK,
         "objects.mk": _OBJECTS_MK,
@@ -349,11 +373,17 @@ def write_makefile_set(
     sdk_dir: str,
     compiler_dir: str,
     sysconfig_cli: str,
+    extra_include_dirs: Sequence[Path] = (),
 ) -> tuple[str, ...]:
     """落盘 Debug/ 下完整 makefile 集（工程根相对输出目录），返回写入的
     相对路径（POSIX，排序，结构测试 / 生成摘要可用）。"""
     rendered = render_makefile_set(
-        module_sources, output_dir.resolve(), sdk_dir, compiler_dir, sysconfig_cli
+        module_sources,
+        output_dir.resolve(),
+        sdk_dir,
+        compiler_dir,
+        sysconfig_cli,
+        extra_include_dirs,
     )
     debug = output_dir / "Debug"
     for rel, text in rendered.items():

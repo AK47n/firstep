@@ -796,6 +796,7 @@ def generate(
                     sdk_dir=str(ccs_tools.sdk_dir),
                     compiler_dir=str(ccs_tools.compiler_dir),
                     sysconfig_cli=str(ccs_tools.sysconfig_cli),
+                    extra_include_dirs=include_dirs,
                 )
     except Exception:
         # 复制中途失败不要留下半成品
