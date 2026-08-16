@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5a251d43ba1697d4185a9142d5581820a58195e2 -->
+<!-- changelog-auto: last-commit=a8c114e923740cd3cc37c10eaa86017f6c58a382 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 16:56 module-multi-instance 05——双平台编译回归关门验收
 - 17:09 stm32 led_toggle 反转逻辑（高→灭/低→亮真翻转）
 - 17:45 多实例配置「添加实例」按钮读错属性（data-add vs dataset.slug）导致点了没反应
+- 18:03 第六步搜索框改为搜可用模块→点结果添加（去掉装饰性的已展开过滤，保留下拉两套共存）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
