@@ -951,6 +951,72 @@ def run_recommendation(
 
 
 # ---------------------------------------------------------------------------
+# 请求层 instances 载荷解析（工单 module-multi-instance/04）：纯函数，照
+# build_module_selection 先例——webapp 只取参转调，域判决单址。
+#
+# instances 载荷形状（spec）：{slug: [{name, variant, pin}]}；缺省 / 空 =
+# 空 dict（旧请求零改动 = 单默认实例）。null variant / pin 归一为空串
+# （ModuleInstance 只认空串语义：空串 variant = 非内置色、空串 pin = 自动
+# 分配默认脚）。上限守卫（>max）在 expand_instances，不在这里。
+# ---------------------------------------------------------------------------
+
+
+def parse_instances(
+    raw: Any,
+    *,
+    known_slugs: Sequence[str],
+) -> dict[str, tuple[ModuleInstance, ...]]:
+    """webapp 请求体 instances 字段 → {slug: (ModuleInstance, ...)}。
+
+    严格校验（任何非法抛 SelectionError → 400 中文）：instances 必须是对象；
+    每个键是非空 slug 且在选中集内（未选中 = 幻觉 / 乱编，大声失败）；每个值
+    是对象数组；每个实例 name 非空字符串、variant/pin 为字符串（null 归一
+    空串）。缺省 None / 空对象 = 空 dict（旧行为）。
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise SelectionError("instances 必须是对象")
+    if not raw:
+        return {}
+    known = set(known_slugs)
+    result: dict[str, tuple[ModuleInstance, ...]] = {}
+    for slug, items in raw.items():
+        if not isinstance(slug, str) or not slug:
+            raise SelectionError("instances 的键必须是非空模块 slug")
+        if slug not in known:
+            raise SelectionError(f"实例清单包含未选中的模块：{slug}")
+        if not isinstance(items, list):
+            raise SelectionError(f"实例清单 {slug} 必须是数组")
+        parsed: list[ModuleInstance] = []
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise SelectionError(f"实例 {slug}[{index}] 必须是对象")
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise SelectionError(f"实例 {slug}[{index}] 缺 name 或为空")
+            variant = item.get("variant")
+            if variant is None:
+                variant = ""
+            elif not isinstance(variant, str):
+                raise SelectionError(f"实例 {slug}[{index}] 的 variant 必须是字符串")
+            pin = item.get("pin")
+            if pin is None:
+                pin = ""
+            elif not isinstance(pin, str):
+                raise SelectionError(f"实例 {slug}[{index}] 的 pin 必须是字符串")
+            parsed.append(
+                ModuleInstance(
+                    name=name.strip(),
+                    variant=variant.strip(),
+                    pin=pin.strip(),
+                )
+            )
+        result[slug] = tuple(parsed)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # 实例展开 + 默认脚分配（工单 module-multi-instance/02）：纯函数，确定性
 #
 # resolve_selection 之后对声明了 multi_instance 的模块执行「实例展开」：给定

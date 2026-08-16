@@ -290,6 +290,34 @@ def _import_stm32_master(masters_dir, tmp_path) -> None:
     import_master(masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "master_src"))
 
 
+def _add_fake_led_module(library_dir: Path) -> None:
+    """给假模块库补一个 led 多实例模块（stm32 内嵌母版 = files 空，与真实 led
+    同形态）——webapp 路由透传 instances 的 happy path 素材。"""
+    (library_dir / "led").mkdir(parents=True, exist_ok=True)
+    (library_dir / "led" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "led",
+                "description": "LED 指示灯驱动",
+                "dependencies": [],
+                "multi_instance": {"max": 8, "variant": "color"},
+                "platforms": {
+                    "stm32": {
+                        "files": [],
+                        "verified": True,
+                        "hardware_bound": False,
+                        "notes": "",
+                        "kit": "",
+                        "source_url": "",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
 # ---------------------------------------------------------------------------
 # SSE 提炼流（工单 02）测试助手：解析 + done 载荷提取
 # ---------------------------------------------------------------------------
@@ -1004,6 +1032,81 @@ def test_skeleton_returns_main_c_and_intercepts_undefined_calls(client, context)
     assert "dht11_read();" in main_c
     assert "dht11_init" not in main_c.replace("dht11_init", "", 1) or "TODO" in main_c
     assert resp.json()["intercepted"] == ["dht11_init"]
+
+
+def test_skeleton_rejects_instances_with_unknown_slug(client):
+    """instances 的 slug 不在选中集 → 400 中文（module-multi-instance/04 请求层）。"""
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "温湿度采集",
+            "slugs": ["dht11"],
+            "platform": PLATFORM_STM32,
+            "instances": {"led": [{"name": "红灯"}]},
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "未选中" in resp.json()["detail"]
+
+
+def test_skeleton_rejects_instances_with_empty_name(client):
+    """instances 的 name 空 → 400 中文。"""
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "温湿度采集",
+            "slugs": ["dht11"],
+            "platform": PLATFORM_STM32,
+            "instances": {"dht11": [{"name": ""}]},
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "name" in resp.json()["detail"]
+
+
+def test_skeleton_forwards_instances_to_llm(client, context):
+    """instances 透传到骨架接口块：led×2（两个红灯）→ LLM 收到 LED_RED_2 通道
+    宏（多实例路径，module-multi-instance/04 请求层接线）。"""
+    _add_fake_led_module(context[0].config.module_library_dir)
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "四个指示灯",
+            "slugs": ["led"],
+            "platform": PLATFORM_STM32,
+            "instances": {
+                "led": [
+                    {"name": "红灯", "variant": "red"},
+                    {"name": "红灯2", "variant": "red"},
+                ]
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    interfaces = context[1]["llm"].skeleton_calls[0][1]
+    assert any("#define LED_RED_2" in block for block in interfaces)
+
+
+def test_generate_rejects_instances_with_unknown_slug(client, context, tmp_path):
+    """generate 请求层同样校验 instances（slug 不在选中集 → 400 中文）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    output_dir = tmp_path / "out" / "demo"
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+            "instances": {"led": [{"name": "红灯"}]},
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "未选中" in resp.json()["detail"]
 
 
 def test_generate_assembles_project_with_structure_include_path_and_main(

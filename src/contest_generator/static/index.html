@@ -439,6 +439,19 @@
   .pin-menu-list li .why { color: var(--muted); }
   .pin-menu-list li .fam { color: var(--warn); }
   .pin-menu-list .pin-menu-unbind { float: right; padding: 1px 8px; font-size: 12px; }
+  /* 多实例配置（工单 module-multi-instance/04）：led 实例列表 / 命名 / 颜色 / 引脚 */
+  .instance-mod { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+                  margin-bottom: 10px; background: var(--panel-2); }
+  .instance-head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 4px; }
+  .instance-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+                  padding: 6px 0; }
+  .instance-row + .instance-row { border-top: 1px dashed var(--border); }
+  .instance-row input[type=text] { width: auto; flex: 1 1 140px; padding: 5px 8px; }
+  .instance-row select { width: auto; padding: 5px 8px; }
+  .instance-row .instance-pin { display: inline-flex; gap: 4px; align-items: center; }
+  .instance-row .instance-pin input[type=text] { width: 74px; flex: none; font-family: var(--mono); }
+  .instance-actions { margin-top: 8px; display: flex; gap: 10px; align-items: center; }
+  .instance-picking { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 </style>
 </head>
 <body>
@@ -538,6 +551,13 @@
       <div id="warnings" style="margin-top:10px"></div>
       <div id="selected-list" class="selected-scroll" style="margin-top:8px"></div>
       <div id="expand-msg" class="error"></div>
+    </div>
+
+    <div class="card hidden" id="card-instance-config">
+      <h2>多实例配置<span class="muted" style="font-weight:400;font-size:12px;margin-left:8px">支持多实例的模块（如 led）：一次选多个实例，各带显示名 / 颜色 / 引脚</span></h2>
+      <div class="pin-intro">未配置实例 = 默认单实例（led：stm32 红/黄/绿三通道 PC13/14/15，mspm0 单通道 PA15）。点「添加实例」后按实例清单生成通道宏，每个实例可改显示名、选颜色（红/黄/绿可重复，重复内置色加 _2/_3 后缀；「无颜色」= LED_1/LED_2 通用编号）、绑引脚（空 = 自动分配）。</div>
+      <div id="instance-pin-hint" class="banner hidden" style="margin-top:8px"></div>
+      <div id="instance-config" style="margin-top:8px"></div>
     </div>
 
     <div class="card" id="card-pin-config">
@@ -1017,6 +1037,8 @@ let state = null;                 // GET /api/state
 let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
 let expanded = [];                // 展开后的模块 manifest（含依赖）
 let warnings = [];                // 平台警告
+let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
+let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
 
 async function refreshState() {
   state = await apiGet("/api/state");
@@ -1053,6 +1075,8 @@ function renderPlatforms() {
         selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
         // 引脚配置（工单 03）：切平台清空绑定重取板定义
         pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
+        // 多实例配置（工单 04）：切平台清空实例清单与选脚目标
+        instances = {}; instancePinTarget = null; renderInstanceConfig();
         loadPinBoard();
       });
     }
@@ -1433,6 +1457,7 @@ async function runExpand() {
     warnings = data.warnings;
     renderSelected(); renderWarnings();
     renderPinCard();  // 引脚配置卡（工单 03）：角色清单随展开结果重算
+    renderInstanceConfig();  // 多实例配置卡（工单 04）：随展开结果重算
   } catch (e) { $("expand-msg").textContent = e.message; }
 }
 
@@ -1494,8 +1519,10 @@ function renderSelected() {
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
       expanded = []; warnings = [];
+      instancePinTarget = null;  // 选脚目标随清单变化失效（工单 04）
       renderSelected(); renderWarnings(); renderModulePool();
       renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
+      renderInstanceConfig();  // 多实例配置卡（工单 04）：被移除模块的实例清单随之清掉
     }));
 }
 
@@ -1513,6 +1540,173 @@ function renderWarnings() {
     box.appendChild(div);
   }
 }
+
+// ---------------------------------------------------------------------------
+// 生成页：6.5 多实例配置（工单 module-multi-instance/04）
+// manifest.multi_instance 非空的模块（当前只有 led）显示实例列表：每实例可改
+// 显示名 / 选颜色（red/yellow/green，可重复）/ 绑引脚（复用板图，空 = 自动
+// 分配）；添加 / 删除实例，上限 = multi_instance.max，超限禁用并提示。
+// instances 装配进 /api/skeleton 与 /api/generate 的 instances 字段（缺省 =
+// 不发 = 旧行为单默认实例）。
+// ---------------------------------------------------------------------------
+
+const LED_COLORS = [["red", "红"], ["yellow", "黄"], ["green", "绿"], ["", "无颜色（通用编号）"]];
+
+function multiInstanceModules() {
+  return expanded.filter((m) => m.multi_instance);
+}
+
+function instList(slug) {
+  return instances[slug] || (instances[slug] = []);
+}
+
+function instancePayload() {
+  // 只带仍在选择集内且配了 ≥1 实例的模块；空清单 = 不发 instances（旧行为）
+  const out = {};
+  for (const slug of selectedSlugs) {
+    const list = instances[slug] || [];
+    if (list.length) {
+      out[slug] = list.map((i) => ({ name: i.name, variant: i.variant, pin: i.pin }));
+    }
+  }
+  return out;
+}
+
+function renderInstanceConfig() {
+  const card = $("card-instance-config");
+  // 清掉已不在选择集内模块的实例清单（模块被移除后不残留）
+  for (const slug of Object.keys(instances)) {
+    if (!selectedSlugs.includes(slug)) delete instances[slug];
+  }
+  // 选脚目标失效守卫：slug 已不在选择集 / 实例号越界 → 清掉（防陈旧高亮）
+  if (instancePinTarget) {
+    const targetList = instances[instancePinTarget.slug] || [];
+    if (!selectedSlugs.includes(instancePinTarget.slug) || instancePinTarget.index >= targetList.length) {
+      instancePinTarget = null;
+    }
+  }
+  const mods = multiInstanceModules();
+  if (!mods.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+
+  const hint = $("instance-pin-hint");
+  if (instancePinTarget) {
+    const targetInst = instances[instancePinTarget.slug][instancePinTarget.index];
+    hint.textContent = "正在为「" + (targetInst && targetInst.name ? targetInst.name : "未命名实例") + "」选引脚：点击板图上的 IO 引脚绑定（gpio_out 能力）；再次点「选引脚」或按 Esc 取消。";
+    hint.classList.remove("hidden");
+  } else {
+    hint.classList.add("hidden");
+  }
+
+  const box = $("instance-config");
+  box.innerHTML = mods.map((m) => instanceBlock(m)).join("");
+  box.querySelectorAll("[data-field]").forEach((el) => {
+    el.addEventListener("input", () => {
+      const list = instList(el.dataset.slug);
+      list[+el.dataset.index][el.dataset.field] = el.value;
+    });
+  });
+  box.querySelectorAll("[data-pick]").forEach((b) =>
+    b.addEventListener("click", () => pickInstancePin(b.dataset.slug, +b.dataset.index)));
+  box.querySelectorAll("[data-clear-pin]").forEach((b) =>
+    b.addEventListener("click", () => clearInstancePin(b.dataset.slug, +b.dataset.index)));
+  box.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", () => delInstance(b.dataset.slug, +b.dataset.index)));
+  box.querySelectorAll("[data-add]").forEach((b) =>
+    b.addEventListener("click", () => addInstance(b.dataset.slug)));
+}
+
+function instanceBlock(m) {
+  const slug = m.slug;
+  const max = m.multi_instance.max;
+  const list = instList(slug);
+  const atMax = list.length >= max;
+  const rows = list.map((inst, i) => instanceRow(slug, i, inst)).join("");
+  return `
+    <div class="instance-mod">
+      <div class="instance-head">
+        <strong style="font-family:var(--mono)">${esc(slug)}</strong>
+        <span class="muted">已配 ${list.length} / ${max} 个实例 · 变体 = ${esc(m.multi_instance.variant)}</span>
+      </div>
+      ${rows}
+      <div class="instance-actions">
+        <button data-add="${esc(slug)}" ${atMax ? "disabled" : ""}>添加实例</button>
+        ${atMax ? `<span class="muted" style="color:var(--warn)">已达上限 ${max}</span>` : ""}
+        ${list.length ? "" : `<span class="muted">（未配置实例 = 默认单实例）</span>`}
+      </div>
+    </div>`;
+}
+
+function instanceRow(slug, i, inst) {
+  const picking = instancePinTarget && instancePinTarget.slug === slug && instancePinTarget.index === i;
+  const colors = LED_COLORS.map(([v, zh]) =>
+    `<option value="${v}" ${inst.variant === v ? "selected" : ""}>${zh}</option>`).join("");
+  const pinShow = inst.pin
+    ? `<span style="font-family:var(--mono);color:var(--accent)">${esc(inst.pin)}</span>`
+    : '<span class="muted">自动分配</span>';
+  return `
+    <div class="instance-row${picking ? " instance-picking" : ""}">
+      <span class="muted" style="font-family:var(--mono)">#${i + 1}</span>
+      <input type="text" data-field="name" data-slug="${esc(slug)}" data-index="${i}" value="${esc(inst.name)}" placeholder="显示名（自由中文）">
+      <select data-field="variant" data-slug="${esc(slug)}" data-index="${i}">${colors}</select>
+      <span class="instance-pin">
+        ${pinShow}
+        <button data-pick="1" data-slug="${esc(slug)}" data-index="${i}">${picking ? "取消" : "选引脚"}</button>
+        ${inst.pin ? `<button data-clear-pin="1" data-slug="${esc(slug)}" data-index="${i}">改回自动</button>` : ""}
+      </span>
+      <button class="danger" data-del="1" data-slug="${esc(slug)}" data-index="${i}">删除</button>
+    </div>`;
+}
+
+function addInstance(slug) {
+  const m = expanded.find((x) => x.slug === slug);
+  if (!m || !m.multi_instance) return;
+  const list = instList(slug);
+  if (list.length >= m.multi_instance.max) return;  // 按钮已禁用，双保险
+  list.push({ name: "灯 " + (list.length + 1), variant: "red", pin: "" });
+  renderInstanceConfig();
+}
+
+function delInstance(slug, index) {
+  const list = instList(slug);
+  list.splice(index, 1);
+  if (instancePinTarget && instancePinTarget.slug === slug) instancePinTarget = null;
+  renderInstanceConfig();
+  renderPinBoard();
+}
+
+function pickInstancePin(slug, index) {
+  const same = instancePinTarget && instancePinTarget.slug === slug && instancePinTarget.index === index;
+  instancePinTarget = same ? null : { slug, index };
+  renderInstanceConfig();
+  renderPinBoard();
+}
+
+function clearInstancePin(slug, index) {
+  instList(slug)[index].pin = "";
+  if (instancePinTarget && instancePinTarget.slug === slug && instancePinTarget.index === index) {
+    instancePinTarget = null;
+  }
+  renderInstanceConfig();
+  renderPinBoard();
+}
+
+function assignInstancePin(pinName) {
+  if (!instancePinTarget) return;
+  const t = instances[instancePinTarget.slug][instancePinTarget.index];
+  t.pin = pinName;
+  instancePinTarget = null;
+  renderInstanceConfig();
+  renderPinBoard();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && instancePinTarget) {
+    instancePinTarget = null;
+    renderInstanceConfig();
+    renderPinBoard();
+  }
+});
 
 // ---------------------------------------------------------------------------
 // 生成页：7. 引脚配置（板图点选，板级引脚配置工单 03）
@@ -1825,7 +2019,17 @@ function renderPinBoard() {
   parts.push(`</svg>`);
   box.innerHTML = parts.join("");
   box.querySelectorAll("circle[data-pin]").forEach((c) => {
-    c.addEventListener("click", () => showPinMenu(c, c.dataset.pin));
+    c.addEventListener("click", () => {
+      // 多实例选脚模式（工单 04）：点板图 IO 脚直接绑到目标实例；否则走角色菜单
+      if (instancePinTarget) {
+        const p = pinIndex()[c.dataset.pin];
+        if (p && p.kind === "io" && (p.capabilities || []).includes("gpio_out")) {
+          assignInstancePin(c.dataset.pin);
+        }
+      } else {
+        showPinMenu(c, c.dataset.pin);
+      }
+    });
   });
 }
 
@@ -1855,6 +2059,17 @@ function svgPin(pin, roles, idx, rotated180) {
       }
       if (pinCanHost(pin, hl.decl)) cls = ' class="pin-cand"';
       else if (io) cls = ' class="pin-dim"';
+    }
+  }
+  // 多实例选脚模式（工单 04）：gpio_out 能力脚 = 候选（点即绑），已绑脚红圈
+  if (instancePinTarget && io) {
+    const assigned = (instances[instancePinTarget.slug] || [])[instancePinTarget.index]
+      && instances[instancePinTarget.slug][instancePinTarget.index].pin === pin.name;
+    if ((pin.capabilities || []).includes("gpio_out")) {
+      cls = ' class="pin-cand"';
+      if (assigned) extra += `<circle cx="${cx}" cy="${cy}" r="13" fill="none" class="pin-default-cand"/>`;
+    } else {
+      cls = ' class="pin-dim"';
     }
   }
   // 同引脚多角色共享 → 叠加标注（xunji/huidu 先例）：焊盘上方小色点
@@ -2116,6 +2331,8 @@ async function generateMain(mode) {
     };
     if (mode === "smoke") payload.main_mode = "smoke";
     else payload.reference_ids = selectedReferenceIds;  // 参考实现进骨架（工单 02）
+    const inst = instancePayload();  // 多实例清单（工单 04）：空 = 不发（旧行为）
+    if (Object.keys(inst).length) payload.instances = inst;
     const data = await apiPost("/api/skeleton", payload);
     $("main-c").value = data.main_c;
     const box = $("intercepted");
@@ -2156,11 +2373,14 @@ $("btn-generate").addEventListener("click", async () => {
   $("btn-generate").disabled = true;
   try {
     // bindings（工单 03）：只带仍在选择集内的用户绑定（模块移除后不残留 400）；
-    // 未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）
+    // 未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）。多实例模块（工单
+    // 04）实例脚为权威——已配实例的模块不再发其角色绑定（03 判据⑦「只发其一」）
     const slugs = new Set(selectedSlugs);
+    const inst = instancePayload();  // 多实例清单（工单 04）：空 = 不发（旧行为）
     const bindings = {};
     for (const [key, pin] of Object.entries(pinBindings)) {
-      if (slugs.has(key.split(".")[0])) bindings[key] = pin;
+      const slug = key.split(".")[0];
+      if (slugs.has(slug) && !inst[slug]) bindings[key] = pin;
     }
     const payload = {
       platform: chosenPlatform, slugs: selectedSlugs,
@@ -2168,6 +2388,7 @@ $("btn-generate").addEventListener("click", async () => {
       topic_id: currentTopicId || undefined,
     };
     if (Object.keys(bindings).length) payload.bindings = bindings;
+    if (Object.keys(inst).length) payload.instances = inst;
     const data = await apiPost("/api/generate", payload);
     $("res-dir").textContent = data.output_dir;
     $("res-includes").textContent = data.include_dirs.join("；");
