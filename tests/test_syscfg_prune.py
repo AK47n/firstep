@@ -43,20 +43,24 @@ def test_prune_empty_removes_all_peripheral_instances():
 
 def test_prune_motor_keeps_only_motor_instances():
     out = prune_syscfg(MASTER_SYSCFG, ["motor"])
-    for keep in ("PWMAB", "MOTOR_PID", "DC_MOTOR"):
+    for keep in ("PWMAB", "DC_MOTOR"):
         _assert_instance_present(out, keep)
-    for drop in ("DCC_100_PWM2", "NTB", "HUIDU", "KEY", "LED_BEEP",
+    for drop in ("DCC_100_PWM2", "MOTOR_PID", "NTB", "HUIDU", "KEY", "LED_BEEP",
                  "STEP_MOTOR", "IMU601", "DIGIT_UART", "OLED", "I2C_0"):
         _assert_instance_absent(out, drop)
-    # 模块变量：TIMER 仍被 MOTOR_PID 使用，GPIO 被 DC_MOTOR 使用，PWM 被 PWMAB 使用
-    assert "const TIMER" in out and "const GPIO" in out and "const PWM" in out
+    # 模块变量：GPIO 被 DC_MOTOR 使用，PWM 被 PWMAB 使用；MOTOR_PID 随旧
+    # PID 逻辑剥离不再被 motor 消费，TIMER 一并裁掉
+    assert "const TIMER" not in out and "const GPIO" in out and "const PWM" in out
     # 未使用的 UART / I2C 模块变量连 addModule 一起裁掉
     assert "const UART" not in out
     assert "const I2C" not in out
 
 
 def test_prune_shared_instance_kept_by_any_consumer():
-    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["key"]), "DC_MOTOR")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["motor"]), "DC_MOTOR")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["key"]), "DC_MOTOR")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["key"]), "KEY")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["pid"]), "HUIDU")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["pid"]), "MOTOR_PID")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["xunji"]), "HUIDU")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ball_detect"]), "DIGIT_UART")

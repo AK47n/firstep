@@ -11,7 +11,7 @@
 #define P7			DL_GPIO_readPins(HUIDU_R3_PORT,HUIDU_R3_PIN)
 #define P8			DL_GPIO_readPins(HUIDU_R4_PORT,HUIDU_R4_PIN)
 
-extern uint32_t counter_1_A, counter_2_A;   // key 模块 GPIO 中断累加（符号级 extern，需手动同选 key）
+/* 编码器读数走 motor 模块 motor_encoder_read（GROUP1_IRQHandler 在 motor.c） */
 
 /* 电机输出：百分比制 → motor 原始占空比 0~1300（MAX_DUTY 对偶 pid 模块，
  * 13 = 1300/100）。方向：正→正转，负→反转（0停1正转2反转）。 */
@@ -59,14 +59,11 @@ float xunji_centroid(float gain)
     return -(float)sum / cnt * gain;
 }
 
-/* 编码器采样读（读后清零）：key 模块中断累加计数，骨架按调度周期
- * （如 50ms tick）采样一次并清零，返回左右轮读数。 */
+/* 编码器采样读（读后清零）：motor 模块 GROUP1_IRQHandler 累加计数，
+ * 骨架按调度周期（如 50ms tick）采样一次并清零，返回左右轮读数。 */
 void xunji_encoder_read(int32_t *left, int32_t *right)
 {
-    *left = (int32_t)counter_1_A;                    // 读左轮编码器数据
-    counter_1_A = 0;
-    *right = (int32_t)counter_2_A;                   // 读右轮编码器数据
-    counter_2_A = 0;
+    motor_encoder_read(left, right);
 }
 
 /* 电机速度输出：百分比制速度（正=前进，负=后退；0 时 duty 为 0、方向位
