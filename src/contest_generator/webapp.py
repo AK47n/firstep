@@ -25,7 +25,7 @@ from typing import Any, Callable, Sequence
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from .boards import BOARDS_DIR, load_boards
+from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
 from .compile_runner import (
     CompileRunnerError,
@@ -95,6 +95,7 @@ from .master_store import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .pdf_library import list_pdfs, resolve_pdf
+from .pin_bindings import PinBindingError, resolve_bindings
 from .reference_library import (
     PLATFORM_ANY,
     add_reference,
@@ -712,6 +713,31 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         由服务端弹系统对话框；用户取消时 path 为 null，前端不覆盖输入框。
         """
         return {"path": context.pick_directory()}
+
+    @app.post("/api/bindings/validate")
+    @_map_errors
+    def bindings_validate(payload: dict) -> dict:
+        """引脚绑定校验（工单 pin-verdict-seam/01）：跑 resolve_bindings 返回
+        结构化结果，供前端离开引脚配置步骤、进入生成前调用——跨角色冲突
+        （mspm0 槽位 / GPIO 同端口 / PWM 通道对 / 成对实例）在生成前暴露，
+        不再走到 generate 才撞 400。
+
+        契约：{platform, slugs, bindings} → {ok:true} 或 {ok:false, error}；
+        error 与 generate 400 文案逐字一致（同一 resolve_bindings，不复制
+        文案）。空 bindings / 全默认 = ok:true（旧行为不误拦）。module 集
+        与板定义解析与 generate 同源（resolve_selection + board_for_platform），
+        保证校验与生成吃同一份 manifests / board。
+        """
+        platform = _require_str(payload, "platform")
+        slugs = _require_str_list(payload, "slugs")
+        bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
+        resolved = resolve_selection(_library_dir(context), platform, slugs)
+        board = board_for_platform(platform)
+        try:
+            resolve_bindings(resolved.manifests, platform, board, bindings)
+        except PinBindingError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True}
 
     @app.post("/api/generate")
     @_map_errors

@@ -45,14 +45,17 @@ from contest_generator.events import (
     ProgressEmitter,
     ProgressEvent,
 )
+from contest_generator.boards import board_for_platform
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.llm import LLMError
+from contest_generator.pin_bindings import PinBindingError, resolve_bindings
 from contest_generator.library import ValidationResult
 from contest_generator.selection import (
     FunctionRequirement,
     ModuleSelection,
     OutOfLibrarySuggestion,
     ReferenceSuggestion,
+    resolve_selection,
 )
 from contest_generator.reference_library import add_reference
 from contest_generator.report import (
@@ -1276,6 +1279,98 @@ def test_generate_unknown_platform_returns_400_chinese(client, context, tmp_path
     detail = resp.json()["detail"]
     assert "未知平台" in detail
     assert "stm32" in detail  # 带已注册平台清单，用户可直接修正重试
+
+
+# ---------------------------------------------------------------------------
+# 校验端点（工单 pin-verdict-seam/01）：POST /api/bindings/validate 跑
+# resolve_bindings 返回 {ok} / {ok:false, error}，error 与 generate 400 逐字
+# 一致（同一实现）。module_library_dir 指向真库（引脚角色 / 板定义判定需要
+# 真 manifest pins；本端点不调 LLM，FakeLLM 不触发）。
+# ---------------------------------------------------------------------------
+
+REAL_LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
+
+
+@pytest.fixture
+def bindings_client(tmp_path):
+    """校验端点专用客户端：真模块库（引脚角色判定真值源）+ 空母版库。"""
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=REAL_LIBRARY_MODULES,
+            masters_dir=tmp_path / "masters",
+        ),
+        llm_factory=lambda config: FakeLLM(selection=SELECTION),
+    )
+    return TestClient(create_app(ctx))
+
+
+def _validate(client, platform, slugs, bindings):
+    return client.post(
+        "/api/bindings/validate",
+        json={"platform": platform, "slugs": slugs, "bindings": bindings},
+    )
+
+
+def _resolve_verdict(platform, slugs, bindings):
+    """端点应该跑同一 resolve_bindings：直接算期望判定（逐字一致性断言源）。
+
+    与端点同源：resolve_selection 的 manifests + board_for_platform 的板——
+    保证校验与生成吃同一份输入，逐字比对 error。
+    """
+    manifests = resolve_selection(REAL_LIBRARY_MODULES, platform, slugs).manifests
+    board = board_for_platform(platform)
+    try:
+        resolve_bindings(manifests, platform, board, bindings)
+    except PinBindingError as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True}
+
+
+def test_bindings_validate_valid_stm32_binding_ok(bindings_client):
+    """有效绑定 → {ok:true}（stm32 pwm 类型级：PA6 = TIM3_CH1）。"""
+    resp = _validate(bindings_client, PLATFORM_STM32, ["motor"], {"motor.MOTOR_A_PWM": "PA6"})
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_bindings_validate_empty_and_default_ok(bindings_client):
+    """空 bindings / 全默认 = ok:true（旧行为不误拦）——含不发字段与显式 null。"""
+    assert _validate(bindings_client, PLATFORM_STM32, ["motor"], {}).json() == {"ok": True}
+    assert _validate(bindings_client, PLATFORM_STM32, ["motor"], None).json() == {"ok": True}
+    resp = bindings_client.post(
+        "/api/bindings/validate", json={"platform": PLATFORM_STM32, "slugs": ["motor"]}
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_bindings_validate_invalid_verbatim_matches_resolve_bindings(bindings_client):
+    """各类非法 400 文案逐字一致：端点 error == resolve_bindings 的 PinBindingError
+    文案（同一实现，不复制文案）——逐字比对覆盖类型级下限 / 未知角色 /
+    mspm0 槽位冲突 / stm32 UART 成对绑定四类拒绝分支。"""
+    cases = (
+        (PLATFORM_STM32, ["motor"], {"motor.MOTOR_A_PWM": "PB4"}),  # PB4 无 pwm token
+        (PLATFORM_STM32, ["motor"], {"motor.NO_SUCH_ROLE": "PA0"}),  # 未知角色
+        (PLATFORM_MSPM0, ["huidu", "pid"], {"huidu.L1": "PB2", "pid.GRAY_D1": "PB3"}),  # 槽位冲突
+        (PLATFORM_STM32, ["digit_uart"], {"digit_uart.DIGIT_UART_TX": "PB10"}),  # TX/RX 成对
+    )
+    for platform, slugs, bindings in cases:
+        resp = _validate(bindings_client, platform, slugs, bindings)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is False
+        assert body["error"]  # 非空中文
+        assert body == _resolve_verdict(platform, slugs, bindings)
+
+
+def test_bindings_validate_requires_platform(bindings_client):
+    """platform 缺失 → 400（_require_str 必填；slugs 缺省 = 空清单 → ok:true，
+    与 generate 同款 _require_str_list 语义）。"""
+    resp = bindings_client.post("/api/bindings/validate", json={"slugs": ["motor"]})
+    assert resp.status_code == 400
+    assert "platform" in resp.json()["detail"]
 
 
 def test_recommend_llm_failure_ends_stream_with_error_event(client, context):
