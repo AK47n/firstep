@@ -366,12 +366,12 @@ def test_select_modules_retries_on_empty_content_then_succeeds():
 
 def test_select_modules_exhausts_retries_on_empty_content():
     """全部空内容 → 大声失败（错误文案含"连续"，语义保留在末次失败里）。"""
-    transport = SequenceTransport([_api_response("")] * 3)
+    transport = SequenceTransport([_api_response("")] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
 
-    with pytest.raises(LLMError, match="模块选择连续 3 次调用失败"):
+    with pytest.raises(LLMError, match=f"模块选择连续 {SUMMARY_RETRY_LIMIT} 次调用失败"):
         llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
-    assert len(transport.calls) == 3  # SUMMARY_RETRY_LIMIT
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT
 
 
 def test_select_modules_retries_on_malformed_json_then_succeeds():
@@ -490,16 +490,16 @@ def test_select_modules_network_failures_then_success(monkeypatch):
     assert sleeps == [1.0, 2.0]
 
 
-def test_select_modules_parse_failures_stay_fast_three_retries(monkeypatch):
-    """解析类（空内容）保持 3 次快重试：零 sleep（策略分派不误伤解析类）。"""
+def test_select_modules_parse_failures_stay_fast_retries(monkeypatch):
+    """解析类（空内容）保持 SUMMARY_RETRY_LIMIT 次快重试：零 sleep（策略分派不误伤解析类）。"""
     sleeps = _record_backoff_sleeps(monkeypatch)
-    transport = SequenceTransport([_api_response("")] * 3)
+    transport = SequenceTransport([_api_response("")] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
 
-    with pytest.raises(LLMError, match="模块选择连续 3 次调用失败"):
+    with pytest.raises(LLMError, match=f"模块选择连续 {SUMMARY_RETRY_LIMIT} 次调用失败"):
         llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
-    assert len(transport.calls) == SUMMARY_RETRY_LIMIT  # 3
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT
     assert sleeps == []
 
 
@@ -601,12 +601,12 @@ def test_clarify_retries_on_empty_content_then_succeeds():
 
 def test_clarify_exhausts_retries_on_empty_content():
     """全部空内容 → 大声失败（错误文案含"连续"）。"""
-    transport = SequenceTransport([_api_response("")] * 3)
+    transport = SequenceTransport([_api_response("")] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
 
-    with pytest.raises(LLMError, match="澄清连续 3 次调用失败"):
+    with pytest.raises(LLMError, match=f"澄清连续 {SUMMARY_RETRY_LIMIT} 次调用失败"):
         llm.clarify("赛题", [])
-    assert len(transport.calls) == 3  # SUMMARY_RETRY_LIMIT
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT
 
 
 def test_clarify_prompt_contract():
@@ -1722,8 +1722,8 @@ def test_decide_phase_retries_missing_decisions():
 
 
 def test_summarize_phase_fails_loud_after_retries():
-    """补问 3 轮仍缺失 → LLMError（宁可大声失败也不带病进第二阶段）。"""
-    transport = SequenceTransport([_api_response(SUMMARY_WITHOUT_DHT11)] * 3)
+    """补问 SUMMARY_RETRY_LIMIT 轮仍缺失 → LLMError（宁可大声失败也不带病进第二阶段）。"""
+    transport = SequenceTransport([_api_response(SUMMARY_WITHOUT_DHT11)] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="多次补问后仍缺失"):
@@ -1889,7 +1889,7 @@ def test_summarize_phase_merged_versions_not_split_when_projects_mismatch():
             }
         )
     )
-    transport = SequenceTransport([mismatched] * 3)
+    transport = SequenceTransport([mismatched] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="ml/deploy.json"):
@@ -2179,19 +2179,19 @@ def test_summarize_prompt_labels_versions_for_conflicts():
 
 
 def test_distill_master_fails_loud_on_broken_summary_phase():
-    """第一阶段连续返回非 JSON（补问 3 轮仍不可用）→ LLMError，不进第二阶段——
+    """第一阶段连续返回非 JSON（补问 SUMMARY_RETRY_LIMIT 轮仍不可用）→ LLMError，不进第二阶段——
     宁可大声失败。"""
-    transport = SequenceTransport([_api_response("{not json")] * 3)
+    transport = SequenceTransport([_api_response("{not json")] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="多次补问后仍缺失"):
         llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
 
-    assert len(transport.calls) == 3  # 补问 3 轮后才放弃
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT  # 补问轮用尽后才放弃
 
 
 def test_distill_master_fails_loud_on_missing_summary():
-    """缺某个文件的摘要（补问 3 轮仍缺）→ 第二阶段素材残缺，拒绝进入判定。"""
+    """缺某个文件的摘要（补问 SUMMARY_RETRY_LIMIT 轮仍缺）→ 第二阶段素材残缺，拒绝进入判定。"""
     missing = json.dumps(
         {
             "summaries": [
@@ -2205,13 +2205,13 @@ def test_distill_master_fails_loud_on_missing_summary():
             ]
         }
     )
-    transport = SequenceTransport([_api_response(missing)] * 3)
+    transport = SequenceTransport([_api_response(missing)] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="多次补问后仍缺失"):
         llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
 
-    assert len(transport.calls) == 3
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT
 
 
 def test_parse_summary_accepts_all_versions_with_holders():
@@ -2854,10 +2854,10 @@ def test_distill_master_emits_retry_events_on_missing():
 
 
 def test_distill_master_failure_path_emits_retries_then_raises():
-    """失败路径：补问轮次全部用尽仍缺 → 每轮补问开始发 retry（轮次 1/2、缺失数），
+    """失败路径：补问轮次全部用尽仍缺 → 每轮补问开始发 retry（轮次 1..4、缺失数），
     然后大声失败——失败的批不发射 batch_done / phase_done（事件只描述已发生的
     事实，不虚构完成）。"""
-    transport = SequenceTransport([_api_response(SUMMARY_WITHOUT_DHT11)] * 3)
+    transport = SequenceTransport([_api_response(SUMMARY_WITHOUT_DHT11)] * SUMMARY_RETRY_LIMIT)
     llm = _llm(transport)
     events: list[ProgressEvent] = []
 
@@ -2874,10 +2874,12 @@ def test_distill_master_failure_path_emits_retries_then_raises():
         EVENT_START,
         EVENT_BATCH_START,
         EVENT_RETRY,
-        EVENT_RETRY,  # 3 次调用 = 首次 + 补问 2 轮
+        EVENT_RETRY,
+        EVENT_RETRY,
+        EVENT_RETRY,  # SUMMARY_RETRY_LIMIT 次调用 = 首次 + 补问 4 轮
     ]
     retries = [e for e in events if e.type == EVENT_RETRY]
-    assert [(e.retry_round, e.missing_count) for e in retries] == [(1, 1), (2, 1)]
+    assert [(e.retry_round, e.missing_count) for e in retries] == [(1, 1), (2, 1), (3, 1), (4, 1)]
     assert all(e.phase == PHASE_SUMMARY and e.batch_index == 1 for e in retries)
 
 
@@ -3227,10 +3229,10 @@ def test_reference_judge_archivable_retries_on_malformed_json_output():
     transport = FakeTransport(body=_api_response("{broken"))
     llm = _llm(transport)
 
-    # 固定响应始终畸形：三次尝试后大声失败（与输出可用性策略一致）
-    with pytest.raises(LLMError, match="归档判定连续 3 次调用失败"):
+    # 固定响应始终畸形：SUMMARY_RETRY_LIMIT 次尝试后大声失败（与输出可用性策略一致）
+    with pytest.raises(LLMError, match=f"归档判定连续 {SUMMARY_RETRY_LIMIT} 次调用失败"):
         llm.reference_judge_archivable([_candidate()])
-    assert len(transport.calls) == 3
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT
 
 
 # 工单 10：功能需求层端到端（提示词契约 + 默认词表校验；域判决用例随

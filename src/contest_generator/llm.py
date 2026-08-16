@@ -306,15 +306,15 @@ CLARIFICATION_HISTORY_CAP = 2500
 # 两阶段输出的补问上限：模型一次输出大量 JSON 条目时偶发丢条目（判例 08：
 # 115 个文件一次返回漏了 1 个），严格解析失败后只对缺失路径补问，最多补问
 # 这么轮；仍缺失就大声失败——宁可失败也不带病进下一阶段。
-SUMMARY_RETRY_LIMIT = 3
+SUMMARY_RETRY_LIMIT = 5
 
 # 网络类失败的重试上限（工单 deepseek-retry-hardening/01）：网络层瞬断
 # （连接重置 10054 / URLError / 超时 / 网关 5xx）3 连快重试大概率仍断
 # （工单 reference-library-hygiene/03 真机 3/3 次运行撞此形态，重试 3 次
 # 仍断、整轮推荐作废），改指数退避：最多重试 NETWORK_RETRY_LIMIT 次、间隔
 # 按连续网络失败次数 2**n 秒（1/2/4/8）——序列由 tests/test_llm.py 钉死。
-# 解析类仍走 SUMMARY_RETRY_LIMIT 快重试（工单 recommend-call-retry/01 行为
-# 不变）。
+# 解析类仍走 SUMMARY_RETRY_LIMIT 快重试（工单 recommend-call-retry/01 机制不变；
+# 2026-08-15 用户反馈“两次失败就停” → 与网络类对齐提高到 5 次总尝试）。
 NETWORK_RETRY_LIMIT = 5
 
 # 判定分批大小：一次问太多文件，模型会系统性漏掉小配置文件 / 点文件
@@ -931,7 +931,7 @@ class DeepSeekLLM:
         替换建议（FixSuggestion）。previous_fixes（工单 fix-loop-progress/01）
         = 上一轮应用结果，渲染进用户消息独立段（空 = 无该段零回归）。严格
         解析：file 必须在提供的文件清单内、old_snippet 非空——畸形输出 /
-        瞬时失败整次重问（_retry_parse ≤3 轮，与归档判定同款兜底）；域判决
+        瞬时失败整次重问（_retry_parse ≤SUMMARY_RETRY_LIMIT 轮，与归档判定同款兜底）；域判决
         （路径白名单 / 精确匹配 / 备份回滚）在 fix_errors.py，本模块只做机械
         提取。
         """
@@ -1631,7 +1631,7 @@ def parse_fix_suggestions(
 
     与其它 AI 契约同哲学（模型输出不可信，宁可大声失败也不带病进写回流程）：
     非 JSON / 非对象 / fixes 非数组 / 条目缺字段或字段类型错 / file 不在允许
-    清单内 / old_snippet 为空 → 抛 LLMError（整次重问，_retry_parse ≤3 轮
+    清单内 / old_snippet 为空 → 抛 LLMError（整次重问，_retry_parse ≤SUMMARY_RETRY_LIMIT 轮
     兜底）。new_snippet 可为空（删除语义），reason 可为空串。
     """
     try:
