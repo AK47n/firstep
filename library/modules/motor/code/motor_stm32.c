@@ -34,6 +34,42 @@ void motorB_duty(int duty)
     gpio_set(MOTOR_B_DIR2_PORT, MOTOR_B_DIR2_PIN, !motorB_dir);
 }
 
+// ============================================================
+// 统一 API（与 mspm0 侧 motor.h 同名同义，工单 module-functionalize/02）
+// ============================================================
+
+void motor_set_duty(uint8_t motor_id, uint32_t duty)
+{
+    if (motor_id == 1) {
+        motorA_duty((int)duty);
+    } else if (motor_id == 2) {
+        motorB_duty((int)duty);
+    }
+}
+
+void motor_set_direction(uint8_t motor_id, uint8_t direction)
+{
+    if (direction == 0) {
+        motor_set_duty(motor_id, 0); // 停止 = 占空比 0（方向位保持）
+        return;
+    }
+    // 统一语义 1=正转 / 2=反转 → stm32 旧语义 0=正转 / 1=反转
+    uint8_t dir = (direction == 1) ? 0 : 1;
+    if (motor_id == 1) {
+        motorA_dir = dir;
+    } else if (motor_id == 2) {
+        motorB_dir = dir;
+    }
+}
+
+void motor_encoder_read(int32_t *left, int32_t *right)
+{
+    *left = Encoder_count1;
+    Encoder_count1 = 0;
+    *right = Encoder_count2;
+    Encoder_count2 = 0;
+}
+
 void encoder_init()
 {
     exti_init(MOTOR_A_ENC_EXTI, FALLING, 0);
