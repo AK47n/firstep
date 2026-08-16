@@ -25,7 +25,7 @@ from typing import Mapping, Protocol, Sequence
 from .boards import Board, board_for_platform
 from .manifest import ModuleManifest
 from .patchers import UnknownPlatformError
-from .pinwriter import MSPM0_SYSCFG_FILENAME
+from .syscfg_model import MSPM0_SYSCFG_FILENAME
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .selection import ExpandedInstance, ModuleInstance, expand_instances
 

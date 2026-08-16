@@ -35,7 +35,6 @@ from .patchers import (
 )
 from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
 from .pinwriter import apply_pin_bindings
-from .syscfg_prune import prune_mspm0_syscfg_file
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
@@ -728,8 +727,9 @@ def generate(
     带绑定时：板定义 + resolve_bindings 预校验（PinBindingError → 400，
     在创建输出目录之前发生；pin_bindings 门禁以原始载荷再校验一遍，同一
     纯函数两处调用是刻意的——门禁是唯一校验出口，generate 拿解析结果喂
-    写侧），copytree 后 apply_pin_bindings 覆写 pin_config.h / 改写 syscfg
-    （文本无变化不落盘，缺省路径完全不进写侧）。
+    写侧），copytree 后 apply_pin_bindings 覆写 pin_config.h（stm32）/ 单一
+    pipeline 裁剪+改写 syscfg（mspm0，工单 syscfg-file-model/04——文本无
+    变化不落盘，缺省路径完全不进写侧）。
 
     instances（工单 module-multi-instance/03）= 多实例清单
     {slug: [{name, variant, pin}]}：expand_instance_plans 展开（上限守卫 /
@@ -791,15 +791,17 @@ def generate(
             main_c_content += "\n"  # 尾部换行幂等兜底（LLM 输出常漏，Keil 报 #1-D）
         (output_dir / "main.c").write_text(main_c_content, encoding="utf-8")
 
-        # mspm0 动态裁剪（工单 syscfg-prune/01）：未选模块的实例不落盘，
-        # 其引脚空出来可绑。必须在 apply_pin_bindings 之前——写侧槽位定位
-        # 只认保留实例的默认引脚。
-        if platform == PLATFORM_MSPM0:
-            prune_mspm0_syscfg_file(output_dir, (m.slug for m in manifests))
-
-        # copytree 后按绑定覆写板级引脚配置（工单 02 写侧；缺省路径不进写侧）
-        if resolved_bindings:
-            apply_pin_bindings(output_dir, platform, resolved_bindings)
+        # 写侧（工单 02 写侧 + 工单 syscfg-file-model/04 单 pipeline）：
+        # stm32 按绑定覆写 pin_config.h；mspm0 读 syscfg 一次解析 →
+        # prune(未选模块实例不落盘) → rewrite(绑定改写) 单 pipeline，先后由
+        # 构造保证，不再靠调用顺序/注释。缺省路径（stm32 无绑定）不进写侧。
+        if platform == PLATFORM_MSPM0 or resolved_bindings:
+            apply_pin_bindings(
+                output_dir,
+                platform,
+                resolved_bindings,
+                selected_slugs=(m.slug for m in manifests),
+            )
 
         # 多实例渲染（工单 03）：led_instances.h + mspm0 syscfg 新实例——
         # 空计划（单实例默认）零写侧变化；在 patcher 前（syscfg 改写落在
