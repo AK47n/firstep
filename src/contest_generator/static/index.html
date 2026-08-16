@@ -82,6 +82,7 @@
   button.primary:hover { background: var(--accent-dark); color: #04222b; }
   button.danger { color: var(--danger); }
   button.danger:hover { border-color: var(--danger); }
+  button.pin-overview-on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
   button:disabled { opacity: .45; cursor: not-allowed; }
   .muted { color: var(--muted); font-size: 12px; }
   .error { color: var(--danger); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
@@ -572,6 +573,7 @@
         <div class="pin-layout" style="margin-top:8px">
           <div class="pin-board-wrap">
             <div class="pin-toolbar">
+              <button id="btn-pin-overview">总览</button>
               <button id="btn-pin-rotate">旋转 90°</button>
               <span class="hint">板图视角旋转（不影响引脚数据）</span>
             </div>
@@ -584,6 +586,7 @@
           </div>
           <div class="pin-role-list">
             <div class="pin-legend" id="pin-legend"></div>
+            <div class="pin-legend hidden" id="pin-overview-legend"></div>
             <div class="row" style="margin-bottom:10px">
               <button id="btn-pin-reset" class="danger" style="display:none">全部还原默认</button>
               <span class="muted">改线后的引脚写入 pin_config.h（stm32）/ 改写 .syscfg（mspm0）。</span>
@@ -1766,6 +1769,7 @@ let pinUnbound = new Set();      // 被替换/显式解除的角色 key（红显
 let pinShowOptional = false;     // 是否显示可选接线角色（默认只列必接）
 let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
 let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
+let pinOverview = false;         // 总览模式：按模块着色已配置引脚（必接角色 + 可选已显式绑定）
 
 // 角色类型配色（与 CSS :root 引脚令牌一一对应：全色 / 淡化色）
 const PIN_TYPE_STYLE = {
@@ -1791,6 +1795,12 @@ const PIN_TYPE_ZH = {
   adc: "ADC", exti: "EXTI中断",
 };
 
+// 总览模式模块配色（按角色出现顺序分配，超出循环复用）
+const MODULE_COLORS = [
+  "#60a5fa", "#f87171", "#34d399", "#fbbf24", "#a78bfa", "#f472b6",
+  "#22d3ee", "#a3e635", "#fb923c", "#e879f9", "#38bdf8", "#facc15",
+];
+
 function pinIndex() {
   const idx = {};
   for (const p of (pinBoard && pinBoard.pins) || []) idx[p.name] = p;
@@ -1806,6 +1816,51 @@ function pinRoles() {
     }
   }
   return roles;
+}
+
+// ---- 总览模式：按模块着色"已配置"引脚 ----
+function moduleColorMap(roles) {
+  const map = new Map();
+  let i = 0;
+  for (const r of roles) if (!map.has(r.slug)) map.set(r.slug, MODULE_COLORS[i++ % MODULE_COLORS.length]);
+  return map;
+}
+
+// 某引脚上"已配置"的角色（总览口径）：显式绑定必含；未绑定时必接角色走默认也含，
+// 可选角色走默认不算；显式解除（pinUnbound）不算。
+function overviewRolesAt(pinName, roles) {
+  const res = [];
+  for (const r of roles) {
+    if (pinUnbound.has(r.key)) continue;
+    const b = pinBindings[r.key];
+    if (b) { if (b === pinName) res.push(r); continue; }
+    if (r.decl.required && r.decl.default === pinName) res.push(r);
+  }
+  return res;
+}
+
+// 总览高亮环：单模块整圈同色；多模块按模块数把圆周均分成各色弧段（2=半圆、3=三等分…）
+function overviewRing(cx, cy, r, colors, width) {
+  if (!colors.length) return "";
+  if (colors.length === 1) {
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[0]}" stroke-width="${width}"/>`;
+  }
+  const C = 2 * Math.PI * r;
+  const seg = C / colors.length;
+  return colors.map((color, i) =>
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${width}" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * seg).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`
+  ).join("");
+}
+
+// 总览焊孔分色扇形：多模块共享时把 r 半径圆填充分成 N 等份扇形（厚描边画法，
+// 半径 r/2、描边宽 r 覆盖 [0,r] 整圆，dasharray 切 N 段）。
+function overviewPie(cx, cy, r, colors, opacity) {
+  if (colors.length <= 1) return "";
+  const C = Math.PI * r;               // 半径 r/2 的圆周
+  const seg = C / colors.length;
+  return colors.map((color, i) =>
+    `<circle cx="${cx}" cy="${cy}" r="${r / 2}" fill="none" stroke="${color}" stroke-width="${r}" stroke-opacity="${opacity}" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * seg).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`
+  ).join("");
 }
 
 // ---- 能力判定（镜像后端 pin_bindings.resolve_bindings 口径：stm32 pwm /
@@ -1944,7 +1999,9 @@ function renderPinCard() {
   $("pin-highlight-msg").textContent = pinHighlight
     ? "已选中角色：板图高亮可接引脚（灰 = 不兼容），点引脚弹菜单绑定。"
     : "";
+  $("btn-pin-overview").classList.toggle("pin-overview-on", pinOverview);
   renderPinLegend(roles);
+  renderPinOverviewLegend(roles);
   renderPinBoard();
   renderPinRoles(roles, pinMacroFamilies(roles));
   const fixedHtml = (pinBoard.fixed || []).map((f) =>
@@ -1986,6 +2043,16 @@ function renderPinLegend(roles) {
   html += `<span class="lg"><span class="dot" style="background:transparent;border:1px dashed var(--warn)"></span>板载共用（见板图下方警示）</span>`;
   html += `<span class="lg"><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
   $("pin-legend").innerHTML = html;
+}
+
+function renderPinOverviewLegend(roles) {
+  const box = $("pin-overview-legend");
+  if (!pinOverview) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+  const cmap = moduleColorMap(roles);
+  const items = [...cmap.entries()].map(([slug, color]) =>
+    `<span class="lg"><span class="dot" style="background:${color}"></span>${esc(slug)}</span>`).join("");
+  box.innerHTML = `<span class="muted" style="font-weight:600">总览（按模块着色，仅标已配置引脚）：</span> ${items}`;
+  box.classList.remove("hidden");
 }
 
 // ---- 板图 SVG（boards JSON 坐标内联渲染：双排焊盘 + 丝印 + 功能区） ----
@@ -2079,14 +2146,34 @@ function svgPin(pin, roles, idx, rotated180) {
   const cx = gx === 0 ? 150 : 310;
   const cy = topPad + gy * rowH + rowH / 2;
   const bound = roles.filter((r) => pinBindings[r.key] === pin.name);
+  const overview = pinOverview ? overviewRolesAt(pin.name, roles) : [];
+  const overviewMods = pinOverview && overview.length ? [...new Set(overview.map((r) => r.slug))] : [];
   const io = pin.kind === "io";
   let fill = "var(--pin-pad)", stroke = "var(--border-strong)", labelFill = "var(--muted)";
+  let fillOpacity = "1", strokeWidth = "1.5", overviewColor = null, pieSvg = "";
+  const overviewColors = overviewMods.map((s) => moduleColorMap(roles).get(s));
   if (!io) { fill = "var(--pin-fixed-pad)"; stroke = "var(--border)"; }
+  else if (pinOverview && overview.length) {
+    overviewColor = overviewColors[0] || "var(--accent)";
+    labelFill = overviewColor;
+    if (overviewMods.length > 1) {
+      // 多模块：焊孔填充（pieSvg 扇形）+ 焊孔描边（r=7 弧段）都按模块数分色
+      fill = "transparent"; stroke = "none";
+      pieSvg = overviewPie(cx, cy, 7, overviewColors, "0.75");
+    } else {
+      fill = overviewColor; stroke = overviewColor; fillOpacity = "0.75"; strokeWidth = "2.5";
+    }
+  }
   else if (bound.length) {
     const st = PIN_TYPE_STYLE[bound[0].decl.type] || ["var(--accent)", "var(--accent-dim)"];
     fill = st[1]; stroke = st[0]; labelFill = st[0];
   }
   let cls = "", extra = "";
+  // 总览模式：单模块整圈同色；多模块焊孔描边（r=7）+ 高亮环（r=10.5）都按模块数均分着色
+  if (overviewColor) {
+    if (overviewMods.length > 1) extra += overviewRing(cx, cy, 7, overviewColors, 2.5);
+    extra += overviewRing(cx, cy, 10.5, overviewColors, 2);
+  }
   if (pinHighlight) {
     const hl = roles.find((r) => r.key === pinHighlight);
     if (hl) {
@@ -2109,8 +2196,9 @@ function svgPin(pin, roles, idx, rotated180) {
       cls = ' class="pin-dim"';
     }
   }
-  // 同引脚多角色共享 → 叠加标注（xunji/huidu 先例）：焊盘上方小色点
-  if (bound.length > 1) {
+  // 同引脚多角色共享（非总览）→ 焊盘上方叠小色点（按类型色；xunji/huidu 先例）。
+  // 总览的多模块共存由上方 overviewRing 圆周均分弧段表达，不再画小点。
+  if (!pinOverview && bound.length > 1) {
     for (let i = 0; i < Math.min(bound.length, 3); i++) {
       const st = PIN_TYPE_STYLE[bound[i].decl.type] || ["var(--accent)", "var(--accent-dim)"];
       extra += `<circle cx="${cx - 6 + i * 6}" cy="${cy - 13}" r="3" fill="${st[0]}"/>`;
@@ -2124,14 +2212,16 @@ function svgPin(pin, roles, idx, rotated180) {
   }
   const ttl = [pin.name, io ? "IO 引脚" : "固定/电源"];
   if (bound.length) ttl.push("已绑：" + bound.map((r) => r.decl.label || r.decl.id).join("、"));
+  if (pinOverview && overview.length) ttl.push("总览已配置：" + overview.map((r) => r.slug + "." + (r.decl.label || r.decl.id)).join("、"));
   if (pin.notes) ttl.push(pin.notes);
   if (io) ttl.push("能力：" + (pin.capabilities || []).join("、"));
   const labelX = gx === 0 ? cx - 14 : cx + 14;
   const anchor = gx === 0 ? "end" : "start";
   const clickable = io ? ` data-pin="${esc(pin.name)}" style="cursor:pointer"` : ' style="pointer-events:none"';
-  return `<circle cx="${cx}" cy="${cy}" r="7" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${cls}${clickable}>` +
+  return pieSvg +
+    `<circle cx="${cx}" cy="${cy}" r="7" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${cls}${clickable}>` +
     `<title>${esc(ttl.join(" · "))}</title></circle>${extra}` +
-    `<text x="${labelX}" y="${cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="11" fill="${labelFill}">${esc(pin.name)}</text>`;
+    `<text x="${labelX}" y="${cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="11" fill="${labelFill}"${overviewColor ? ' font-weight="700"' : ""}>${esc(pin.name)}</text>`;
 }
 
 // ---- 角色清单（标签 / 默认值 / 三态绑定；点条目 → 板图高亮可接引脚） ----
@@ -2239,6 +2329,11 @@ $("btn-pin-reset").addEventListener("click", () => {
 $("btn-pin-rotate").addEventListener("click", () => {
   pinRotation += 90;  // 每次 +90°（0→90→180→270→0），纯视图不影响绑定数据
   renderPinBoard();
+});
+
+$("btn-pin-overview").addEventListener("click", () => {
+  pinOverview = !pinOverview;
+  renderPinCard();  // 总览着色 + 模块图例切换
 });
 
 function unbindRole(key) {
