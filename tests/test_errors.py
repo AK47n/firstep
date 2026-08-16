@@ -29,6 +29,7 @@ from contest_generator.manifest import ManifestError
 from contest_generator.patchers import UnknownPlatformError
 from contest_generator.report import ReportError
 from contest_generator.selection import ManualReferenceError, SelectionError
+from contest_generator.syscfg_model import SyscfgModelError
 from contest_generator.wordlist import WordlistError
 
 # 刻意按 500 暴露的类（不登记）：这些类从不直达 web 层，泄漏必是真 bug，
@@ -54,6 +55,10 @@ _UNREGISTERED_WHITELIST: tuple[type[Exception], ...] = (
     # 硬件词表加载（wordlist.py）：只发生在模块导入期（DEFAULT_WORDLIST =
     # load_wordlist() 模块级），词表损坏直接导入失败，不可能到 web 层
     WordlistError,
+    # syscfg 文件模型内部失败（syscfg_model.py，架构评审 ②）：prune / rewrite
+    # 的母版漂移 / 数据漂移防御路径。迁移期（工单 03）由 pinwriter 捕获重包装
+    # 为 PinBindingError（已登记）——能漏到路由层 = 调用方漏包装 → 500 正确
+    SyscfgModelError,
 )
 
 
