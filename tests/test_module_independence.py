@@ -5,6 +5,12 @@
 - 声明的依赖必须有实际 include（死依赖拖拽拦截）；
 - 依赖图无环、依赖目标都存在（架构方向单向朝底层基础模块）。
 
+依赖形态两分（工单 k230-vision-copilot/03）：有 C 文件的模块，依赖必须是
+include 依赖（隐藏耦合拦截 + 死依赖拖拽拦截照旧）；零 C 文件的纯 Python
+副产物模块（如 k230），依赖 = 生成级契约依赖（.py 副产物与主控侧解析模块
+配对，选中即展开），无 include 可查——死依赖检查豁免，豁免只对声明了
+python_artifact 的模块成立。
+
 读盘/注释剥离走 clex（与生成门禁同源）；字符串进字符串出，本测试不碰
 生成器行为、不改模块代码。当前真实库审计结果：0 未声明依赖 / 0 环 /
 0 死依赖（2026-08-15）。
@@ -26,6 +32,15 @@ MANIFESTS = tuple(
 )
 SLUGS = tuple(m.slug for m in MANIFESTS)
 DEPENDENCIES = {m.slug: set(m.dependencies) for m in MANIFESTS}
+MANIFEST_BY_SLUG = {m.slug: m for m in MANIFESTS}
+
+
+def _has_c_sources(slug: str) -> bool:
+    """模块目录内是否存在 .c/.h 源文件（依赖形态两分的判据）。"""
+    return any(
+        path.is_file() and path.suffix.lower() in (".c", ".h")
+        for path in (MODULES / slug).rglob("*")
+    )
 
 
 def _header_owners() -> dict[str, str]:
@@ -81,9 +96,15 @@ def test_cross_module_includes_are_declared_dependencies():
 
 
 def test_declared_dependencies_have_actual_include():
-    """manifest 声明的依赖必须有实际 include：禁止死依赖拖拽无关模块。"""
+    """manifest 声明的依赖必须有实际 include：禁止死依赖拖拽无关模块。
+
+    零 C 文件的纯 Python 副产物模块豁免（依赖 = 生成级契约依赖，无 include
+    可查，见下一条测试钉豁免边界）。
+    """
     problems: list[str] = []
     for slug in SLUGS:
+        if not _has_c_sources(slug):
+            continue  # 纯 Python 副产物模块：依赖 = 生成级契约（见下测试）
         owners_used = {owner for _, owner in _module_includes(slug)}
         for dep in sorted(DEPENDENCIES[slug]):
             if dep not in owners_used:
@@ -91,6 +112,23 @@ def test_declared_dependencies_have_actual_include():
                     f"{slug} 声明依赖 {dep}，但没有任何文件 include {dep} 的头"
                 )
     assert not problems, "死依赖（声明但未使用）：\n" + "\n".join(problems)
+
+
+def test_filesless_python_artifact_modules_may_declare_contract_dependencies():
+    """零 C 文件的模块声明依赖 = 生成级契约依赖（.py 副产物与主控侧解析模块
+    配对，选中即展开），无 include 可查——豁免死依赖检查。豁免只对声明了
+    python_artifact 的模块成立：有 C 文件的模块依赖仍必须是 include 依赖
+    （上一测试）；零 C 文件却无副产物声明的依赖 = 死依赖或漏声明，红。"""
+    problems: list[str] = []
+    for slug in SLUGS:
+        if _has_c_sources(slug):
+            continue
+        if MANIFEST_BY_SLUG[slug].python_artifact is None:
+            problems.append(
+                f"{slug} 无 C 文件却声明依赖且未声明 python_artifact——"
+                "既查不到 include 使用、又没有副产物契约配对"
+            )
+    assert not problems, "无 C 文件的死依赖模块：\n" + "\n".join(problems)
 
 
 def test_dependency_graph_is_acyclic_and_targets_exist():
