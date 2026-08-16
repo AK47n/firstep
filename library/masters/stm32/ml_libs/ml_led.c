@@ -44,8 +44,8 @@ void led_toggle(uint8_t channel)
 {
     ml_led_pin_t led = led_pin(channel);
     if (gpio_get(led.port, led.pin)) {
-        led_on(channel);
+        led_off(channel); // 高 → 灭（真翻转）
     } else {
-        led_off(channel);
+        led_on(channel);  // 低 → 亮
     }
 }
