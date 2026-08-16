@@ -1,11 +1,9 @@
-"""更新记录解析（工单 changelog-tab/01）：纯函数 parse_changelog + load_changelog
-+ git log 自动补记（git_changelog_groups / merge_changelog / load_changelog_auto）。
+"""更新记录解析（工单 changelog-tab/01）：纯函数 parse_changelog + load_changelog。
 
-数据源 = 手工维护的仓库根 CHANGELOG.md 为主、git log 自动补记手工文件没有的
-日期。解析规则（格式契约，见 changelog.py docstring）：`## YYYY-MM-DD` 严格
-日期开新组（`^...$` 锚定），组内 `- ` 行是条目，`# ` 大标题 / 说明段落 /
-空行 / 无日期组的 `- ` 行全部跳过。纯展示数据：文件缺失 / 读取异常 → []，
-不阻塞工具。
+数据源是手工维护的仓库根 CHANGELOG.md。解析规则（格式契约，见
+changelog.py docstring）：`## YYYY-MM-DD` 严格日期开新组（`^...$` 锚定），
+组内 `- ` 行是条目，`# ` 大标题 / 说明段落 / 空行 / 无日期组的 `- ` 行
+全部跳过。纯展示数据：文件缺失 / 读取异常 → []，不阻塞工具。
 """
 
 from __future__ import annotations
