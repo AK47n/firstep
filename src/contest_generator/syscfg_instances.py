@@ -12,7 +12,7 @@ from __future__ import annotations
 # 实例名 → 消费模块 slug 元组。任一消费模块被选中即保留；全部未选才裁剪。
 # 共享实例：DC_MOTOR 只归 motor（编码器计数已从 key 迁入 motor，
 # module-dep-cleanup/02），HUIDU 由 huidu/pid(mspm0 GRAY_D1-8)/xunji
-# 共用（灰度槽位）；DIGIT_UART 由 digit_uart/ball_detect 共用（K230 视觉），
+# 共用（灰度槽位）；DIGIT_UART 由 digit_uart/coord_detect 共用（K230 视觉），
 # ZIGBEE_UART 由 zigbee_uart（收）/zigbee_uart_key（发）共用。
 INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "PWMAB": ("motor",),
@@ -25,7 +25,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "LED_BEEP": ("led",),
     "STEP_MOTOR": ("step_motor",),
     "IMU601": ("imu_uart",),
-    "DIGIT_UART": ("digit_uart", "ball_detect"),
+    "DIGIT_UART": ("digit_uart", "coord_detect"),
     "DEBUG_UART": ("debug_uart",),
     "UWB_UART": ("uwb_uart",),
     "ZIGBEE_UART": ("zigbee_uart", "zigbee_uart_key"),

@@ -45,7 +45,7 @@ _IRQ_CALLS_MACROS = (
 # zigbee_uart_key 与 zigbee_uart 共享 ZIGBEE_* 宏，handler 只列一次）。
 _UART_CALLS_ROLES = (
     ("DIGIT_UART", "digit_uart_rx_handler"),
-    ("BALL_DETECT_UART", "ball_detect_rx_handler"),
+    ("COORD_DETECT_UART", "coord_detect_rx_handler"),
     ("DEBUG_UART", "debug_uart_rx_handler"),
     ("UWB_UART", "uwb_rx_handler"),
     ("ZIGBEE_UART", "zigbee_rx_handler"),

@@ -1,16 +1,19 @@
-#include "ball_detect.h"
+#include <stddef.h>  // NULL（C 库头，headfile.h 不含；UV4 必 8 错见工单 ball-detect-null-fix/01）
+#include "headfile.h"
+#include "coord_detect_stm32.h"
+#include "pin_config.h"
 
 // ==================== 环形接收缓冲区 ====================
-#define BALL_RX_BUF_SIZE 512
+#define COORD_RX_BUF_SIZE 512
 
-static char rx_buf[BALL_RX_BUF_SIZE];
+static char rx_buf[COORD_RX_BUF_SIZE];
 static volatile uint16_t rx_head = 0;
 static volatile uint16_t rx_tail = 0;
-volatile uint32_t ball_rx_byte_count = 0;
-volatile uint32_t ball_rx_overflow = 0;
-volatile uint32_t ball_rx_error = 0;
+volatile uint32_t coord_rx_byte_count = 0;
+volatile uint32_t coord_rx_overflow = 0;
+volatile uint32_t coord_rx_error = 0;
 
-BallResult ball_result = {0};
+CoordResult coord_result = {0};
 
 // ==================== 简易字符串转换 ====================
 
@@ -59,55 +62,51 @@ static char* get_field(const char *line, int n, char *buf, int buf_size)
 
 // ==================== 初始化 ====================
 
-void ball_detect_init(void)
+void coord_detect_init(void)
 {
-    // 母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）已由
-    // SYSCFG_DL_init() 配置好波特率/引脚，这里只需打开 NVIC 中断。
-    NVIC_ClearPendingIRQ(DIGIT_UART_INST_INT_IRQN);
-    NVIC_EnableIRQ(DIGIT_UART_INST_INT_IRQN);
+    uart_pin_init_ex(COORD_DETECT_UART, COORD_DETECT_UART_TX_GPIO, COORD_DETECT_UART_TX_Pin,
+                     COORD_DETECT_UART_RX_GPIO, COORD_DETECT_UART_RX_Pin);
 }
 
 // 清空接收缓冲区（状态切换时调用，丢弃旧帧）
-void ball_detect_flush(void)
+void coord_detect_flush(void)
 {
     rx_head = 0;
     rx_tail = 0;
-    ball_rx_byte_count = 0;
-    ball_result.detected = 0;
-    ball_result.updated  = 0;
-    ball_result.lost_frames = 0;
+    coord_rx_byte_count = 0;
+    coord_result.detected = 0;
+    coord_result.updated  = 0;
+    coord_result.lost_frames = 0;
 }
 
 // ==================== 中断处理 ====================
 
-void ball_detect_rx_handler(void)
+void coord_detect_rx_handler(void)
 {
-    // RX FIFO 单字节中断（母版 enableFIFO=false），每字节一次 IIDX_RX
-    switch (DL_UART_getPendingInterrupt(DIGIT_UART_INST))
+    while (COORD_DETECT_UART_INST->SR & (0x20 | 0x08))
     {
-    case DL_UART_IIDX_RX:
-    {
-        uint8_t data = DL_UART_receiveData(DIGIT_UART_INST);
-        ball_rx_byte_count++;
+        if (COORD_DETECT_UART_INST->SR & 0x08)
+            coord_rx_error++;
 
-        uint16_t next = (rx_head + 1) % BALL_RX_BUF_SIZE;
-        if (next != rx_tail)
+        if (COORD_DETECT_UART_INST->SR & 0x20)
         {
-            rx_buf[rx_head] = data;
-            rx_head = next;
+            uint8_t data = COORD_DETECT_UART_INST->DR;
+            coord_rx_byte_count++;
+
+            uint16_t next = (rx_head + 1) % COORD_RX_BUF_SIZE;
+            if (next != rx_tail)
+            {
+                rx_buf[rx_head] = data;
+                rx_head = next;
+            }
+            else
+                coord_rx_overflow++;
         }
         else
-            ball_rx_overflow++;
-        break;
-    }
-    case DL_UART_IIDX_OVERRUN_ERROR:
-    case DL_UART_IIDX_FRAMING_ERROR:
-    case DL_UART_IIDX_PARITY_ERROR:
-    case DL_UART_IIDX_BREAK_ERROR:
-        ball_rx_error++;
-        break;
-    default:
-        break;
+        {
+            uint8_t dummy = COORD_DETECT_UART_INST->DR;
+            (void)dummy;
+        }
     }
 }
 
@@ -117,7 +116,7 @@ static int rx_read_byte(void)
 {
     if (rx_head == rx_tail) return -1;
     uint8_t data = rx_buf[rx_tail];
-    rx_tail = (rx_tail + 1) % BALL_RX_BUF_SIZE;
+    rx_tail = (rx_tail + 1) % COORD_RX_BUF_SIZE;
     return data;
 }
 
@@ -127,7 +126,7 @@ static int rx_read_byte(void)
 //  字段索引: 0=B, 1=cx, 2=cy, 3=conf, 4=x1, 5=y1, 6=x2, 7=y2
 // 无检测: N
 
-static void parse_ball_line(const char *line)
+static void parse_coord_line(const char *line)
 {
     char buf[16];
 
@@ -135,9 +134,9 @@ static void parse_ball_line(const char *line)
     if (line[0] == 'N' && (line[1] == '\0' || line[1] == '\r' || line[1] == '\n'))
     {
         // 本帧无钢珠
-        ball_result.detected = 0;
-        ball_result.updated  = 1;
-        ball_result.lost_frames++;
+        coord_result.detected = 0;
+        coord_result.updated  = 1;
+        coord_result.lost_frames++;
         return;
     }
 
@@ -146,34 +145,34 @@ static void parse_ball_line(const char *line)
 
     // 解析字段（从第1个逗号后开始，即字段索引1~7）
     if (get_field(line, 1, buf, sizeof(buf)) == NULL) return;
-    ball_result.cx = my_atoi(buf);
+    coord_result.cx = my_atoi(buf);
 
     if (get_field(line, 2, buf, sizeof(buf)) == NULL) return;
-    ball_result.cy = my_atoi(buf);
+    coord_result.cy = my_atoi(buf);
 
     if (get_field(line, 3, buf, sizeof(buf)) == NULL) return;
-    ball_result.confidence = my_atof(buf);
+    coord_result.confidence = my_atof(buf);
 
     if (get_field(line, 4, buf, sizeof(buf)) == NULL) return;
-    ball_result.x1 = my_atoi(buf);
+    coord_result.x1 = my_atoi(buf);
 
     if (get_field(line, 5, buf, sizeof(buf)) == NULL) return;
-    ball_result.y1 = my_atoi(buf);
+    coord_result.y1 = my_atoi(buf);
 
     if (get_field(line, 6, buf, sizeof(buf)) == NULL) return;
-    ball_result.x2 = my_atoi(buf);
+    coord_result.x2 = my_atoi(buf);
 
     if (get_field(line, 7, buf, sizeof(buf)) == NULL) return;
-    ball_result.y2 = my_atoi(buf);
+    coord_result.y2 = my_atoi(buf);
 
-    ball_result.detected = 1;
-    ball_result.updated  = 1;
-    ball_result.lost_frames = 0;
+    coord_result.detected = 1;
+    coord_result.updated  = 1;
+    coord_result.lost_frames = 0;
 }
 
 // ==================== 数据解析（主循环调用） ====================
 
-void ball_detect_parse(void)
+void coord_detect_parse(void)
 {
     static char line_buf[64];
     static int line_idx = 0;
@@ -186,7 +185,7 @@ void ball_detect_parse(void)
             line_buf[line_idx] = '\0';
 
             if (line_buf[0] != '\0' && line_buf[0] != '\r')
-                parse_ball_line(line_buf);
+                parse_coord_line(line_buf);
 
             line_idx = 0;
         }

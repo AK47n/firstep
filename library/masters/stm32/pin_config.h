@@ -6,7 +6,7 @@
  *
  * 改引脚只动本文件（对偶 mspm0 侧 SysConfig 生成的实例宏）：模块代码
  * （motor_stm32.c / gray_track.c / digit_uart.c / debug_uart.c /
- * ball_detect_stm32.c / uwb_uart.c / zigbee_uart.c 等）只引用这些宏、
+ * coord_detect_stm32.c / uwb_uart.c / zigbee_uart.c 等）只引用这些宏、
  * 不写死引脚字面量。config 模块的 config.h 保留非引脚参数并 include
  * 本文件——原 LED/蜂鸣器/DIP/UWB/Zigbee 引脚宏已并入此处。
  *
@@ -60,7 +60,7 @@
 #define GRAY_D8_PORT  GPIO_B
 #define GRAY_D8_PIN   Pin_7
 
-/* ---- K230 视觉串口（digit_uart / ball_detect 模块，115200）----
+/* ---- K230 视觉串口（digit_uart / coord_detect 模块，115200）----
  * UART 实例宏（ml_uart 的 UARTn_enum）+ 寄存器实例宏（UART_1 ↔ USART1，
  * UART_2 ↔ USART2）+ 引脚宏（TX_GPIO/TX_Pin/RX_GPIO/RX_Pin，值 = ml_uart
  * switch 表原值——换实例换引脚随绑定渲染，模块 init 传宏走 uart_pin_init_ex）。
@@ -71,12 +71,12 @@
 #define DIGIT_UART_TX_Pin Pin_9
 #define DIGIT_UART_RX_GPIO GPIO_A
 #define DIGIT_UART_RX_Pin Pin_10
-#define BALL_DETECT_UART       UART_1
-#define BALL_DETECT_UART_INST  USART1
-#define BALL_DETECT_UART_TX_GPIO GPIO_A
-#define BALL_DETECT_UART_TX_Pin Pin_9
-#define BALL_DETECT_UART_RX_GPIO GPIO_A
-#define BALL_DETECT_UART_RX_Pin Pin_10
+#define COORD_DETECT_UART       UART_1
+#define COORD_DETECT_UART_INST  USART1
+#define COORD_DETECT_UART_TX_GPIO GPIO_A
+#define COORD_DETECT_UART_TX_Pin Pin_9
+#define COORD_DETECT_UART_RX_GPIO GPIO_A
+#define COORD_DETECT_UART_RX_Pin Pin_10
 
 /* ---- 调试串口（debug_uart 模块，115200）---- */
 #define DEBUG_UART             UART_2
@@ -125,8 +125,8 @@
 
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
- * UART_1 = DIGIT+BALL+UWB 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
-#define USART1_IRQ_CALLS digit_uart_rx_handler(); ball_detect_rx_handler(); uwb_rx_handler();
+ * UART_1 = DIGIT+COORD+UWB 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
+#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();
 #define USART2_IRQ_CALLS debug_uart_rx_handler();
 #define USART3_IRQ_CALLS zigbee_rx_handler();
 

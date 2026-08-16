@@ -66,7 +66,7 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["pid"]), "HUIDU")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["pid"]), "MOTOR_PID")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["xunji"]), "HUIDU")
-    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ball_detect"]), "DIGIT_UART")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["coord_detect"]), "DIGIT_UART")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["debug_uart"]), "DEBUG_UART")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["uwb_uart"]), "DEBUG_UART")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["zigbee_uart"]), "ZIGBEE_UART")

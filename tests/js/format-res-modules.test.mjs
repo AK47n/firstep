@@ -18,10 +18,10 @@ const formatResModules = new Function("return (" + match[0] + ")")();
 test("k230（files 空 + 副产物）→ slug(副产物 main.py)", () => {
   assert.equal(
     formatResModules(
-      [{ slug: "k230", files: [] }, { slug: "ball_detect", files: ["code/ball_detect.c", "code/ball_detect.h"] }],
+      [{ slug: "k230", files: [] }, { slug: "coord_detect", files: ["code/coord_detect.c", "code/coord_detect.h"] }],
       [{ slug: "k230", output: "main.py" }]
     ),
-    "k230(副产物 main.py)、ball_detect(code/ball_detect.c, code/ball_detect.h)"
+    "k230(副产物 main.py)、coord_detect(code/coord_detect.c, code/coord_detect.h)"
   );
 });
 

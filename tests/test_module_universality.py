@@ -7,9 +7,9 @@ ADR 0009：模块 = 纯驱动切片，"XX 题专用"不再是合法模块类别�
 BANNED_TOPIC_WORDS / CAPABILITY_WORDS 注释）。
 
 红证（2026-08-12 实施时）：注册表置空跑全库扫描，11 个模块命中黑名单——
-其中 xunji / pid / ball_detect / lock_control / zone 五个题专用模块为工单
+其中 xunji / pid / coord_detect / lock_control / zone 五个题专用模块为工单
 02~05 清理对象（输出见 .scratch/module-universalization/issues/01 实施记录；
-02 xunji / 03 pid / 04 ball_detect 已清理并从注册表删除对应条目；
+02 xunji / 03 pid / 04 coord_detect 已清理并从注册表删除对应条目；
 05 lock_control / zone 已解散删除；06 config / debug_uart / zigbee_uart /
 zigbee_uart_key / filter / uwb_uart 六模块题词清理完成，2026-08-12——
 五条简介按四要素重写，六模块代码注释中性化，注册表清空 = 全库无题词）。
@@ -33,7 +33,7 @@ LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
 # 条目随 02~06 工单清理删除——清理后不删条目 = test_exception_registry_entries_are_real_contamination 红。
 # 已清理移除：xunji（工单 02，2026-08-12 剥离决策层为纯驱动）；pid（工单 03，
 # 2026-08-12 剥离双平台决策层为纯驱动——十字路口/启停线/LAP 状态机归骨架，
-# 决策素材归档参考文件库）；ball_detect（工单 04，2026-08-12 清理 manifest
+# 决策素材归档参考文件库）；coord_detect（工单 04，2026-08-12 清理 manifest
 # 描述题绑定——代码本为纯驱动，描述改 K230 视觉帧解析能力方向）；lock_control /
 # zone（工单 05，2026-08-12 解散——决策层归骨架，驱动残留由骨架经 config.h 宏
 # + 母版 ml_gpio 内联承担，模块目录删除）；config / debug_uart / zigbee_uart /
