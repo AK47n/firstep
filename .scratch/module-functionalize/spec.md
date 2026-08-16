@@ -34,14 +34,20 @@
 - 更新 pin 相关测试（led_beep.LED_BEEP_LED → led.LED）。
 - 真机回归：stm32/mspm0 冒烟 + 参考路径，slugs 含 led/beep/led_beep，UV4/gmake 0 错。
 
-## Out of Scope
+## Out of Scope / 剩余批次
 
-- 后续模块功能化清单（不在本批实现）：
-  - motor(stm32) 补 `motor_set_direction / motor_set_duty / motor_encoder_read` 与 mspm0 对偶
-  - key 补 stm32 版本
-  - uart 发送模块补 stm32 版本
-  - ntb_time 补 stm32 版本
-  - ball_detect/digit_uart/uwb/zigbee 补 mspm0 版本
+- 已完成批次（工单 01-04，均 resolved + 真机验收）：
+  - 01 led/beep 拆分 + led_beep 组合化
+  - 02 motor stm32 统一 API
+  - 03 ntb_time stm32
+  - 04 key/uart stm32 + prompt 输出约束
+- 剩余最后一批（协议驱动补 mspm0，建议按序开工）：
+  - digit_uart 已有 mspm0 雏形（核对/验证）
+  - uwb_uart 补 mspm0
+  - zigbee_uart 补 mspm0
+  - zigbee_uart_key 补 mspm0
+  - ball_detect 补 mspm0（已存在未验证，核对/验证）
+  - 每个模块需定：mspm0 UART 实例（DIGIT_UART 已占 UART1，uwb/zigbee/ball 需分配或复用）、默认引脚、manifest pins/notes、真机 gmake 0 错验收
 
 ## Further Notes
 
