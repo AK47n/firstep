@@ -2501,6 +2501,20 @@ $("btn-pick-output-dir").addEventListener("click", async () => {
   } catch (e) { $("generate-msg").textContent = e.message; }
 });
 
+function collectBindings(selectedSlugs, bindings, instanceMap) {
+  // bindings 载荷单源（工单 pin-verdict-seam/01 抽纯函数）：只带仍在选择集内的
+  // 用户绑定（模块移除后不残留 400），已配多实例的模块（instanceMap[slug] 存在）
+  // 不再发其角色绑定（工单 03 判据⑦「只发其一」）。validate 与 generate 必须发
+  // 同一份 bindings——否则校验通过但生成拿到不同绑定会撞 400，故抽成单源。
+  const slugs = new Set(selectedSlugs);
+  const out = {};
+  for (const [key, pin] of Object.entries(bindings)) {
+    const slug = key.split(".")[0];
+    if (slugs.has(slug) && !instanceMap[slug]) out[key] = pin;
+  }
+  return out;
+}
+
 $("btn-generate").addEventListener("click", async () => {
   $("generate-msg").textContent = "";
   $("generate-result").classList.add("hidden");
@@ -2512,16 +2526,24 @@ $("btn-generate").addEventListener("click", async () => {
   status.innerHTML = '<span class="spinner"></span>生成中…';
   $("btn-generate").disabled = true;
   try {
-    // bindings（工单 03）：只带仍在选择集内的用户绑定（模块移除后不残留 400）；
-    // 未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）。多实例模块（工单
-    // 04）实例脚为权威——已配实例的模块不再发其角色绑定（03 判据⑦「只发其一」）
-    const slugs = new Set(selectedSlugs);
+    // bindings（工单 03 + pin-verdict-seam/01）：单源 collectBindings——validate
+    // 与 generate 发同一份；未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）
     const inst = instancePayload();  // 多实例清单（工单 04）：空 = 不发（旧行为）
-    const bindings = {};
-    for (const [key, pin] of Object.entries(pinBindings)) {
-      const slug = key.split(".")[0];
-      if (slugs.has(slug) && !inst[slug]) bindings[key] = pin;
+    const bindings = collectBindings(selectedSlugs, pinBindings, inst);
+
+    // 校验端点（工单 pin-verdict-seam/01）：进入生成前跑 resolve_bindings，跨角色
+    // 冲突（mspm0 槽位 / GPIO 同端口 / PWM 通道对 / 成对实例）在生成前暴露并阻断，
+    // 不发起 generate；空 bindings / 全默认 = ok:true（不误拦）
+    const checkPayload = { platform: chosenPlatform, slugs: selectedSlugs };
+    if (Object.keys(bindings).length) checkPayload.bindings = bindings;
+    const check = await apiPost("/api/bindings/validate", checkPayload);
+    if (check.ok === false) {
+      $("generate-msg").classList.remove("ok");
+      $("generate-msg").textContent = check.error;
+      status.textContent = "";
+      return;
     }
+
     const payload = {
       platform: chosenPlatform, slugs: selectedSlugs,
       main_c: $("main-c").value, output_dir: outputDir,
