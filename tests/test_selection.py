@@ -29,6 +29,7 @@ from contest_generator.selection import (
     DependencyCycleError,
     FunctionRequirement,
     ManualReferenceError,
+    ModuleInstance,
     ModuleSelection,
     OutOfLibrarySuggestion,
     PlatformWarning,
@@ -37,6 +38,7 @@ from contest_generator.selection import (
     ReferenceSuggestion,
     SelectionError,
     UnknownModuleError,
+    _functional_layer_key,
     _number_topic_sentences,
     _revision_prompt,
     associated_references,
@@ -675,6 +677,78 @@ def test_convergent_question_stops_immediately():
     assert [e.type for e in events] == [EVENT_ROUND]
 
 
+def test_convergent_four_leds_with_instances_converges():
+    """多实例收敛（工单 module-multi-instance/06）：「4 个指示灯」→ led×4
+    （红/黄/绿/状态灯）两轮一致即收敛；实例清单随选择结果带出。"""
+    instances = {
+        "led": (
+            ModuleInstance(name="红", variant="red"),
+            ModuleInstance(name="黄", variant="yellow"),
+            ModuleInstance(name="绿", variant="green"),
+            ModuleInstance(name="状态灯", variant=""),
+        )
+    }
+    selection = ModuleSelection(
+        modules=("led",),
+        reasons={"led": "4 个指示灯"},
+        requirements=(
+            FunctionRequirement(
+                requirement="声光提示", sentence_index=4, modules=("led",)
+            ),
+        ),
+        instances=instances,
+    )
+    fake = _RecordingConvergenceLLM([selection, selection])
+    events: list[ProgressEvent] = []
+
+    result = select_modules_convergent(
+        fake, "作品需要 4 个指示灯。", ["- led: 指示灯"], progress_emitter=events.append
+    )
+
+    assert len(fake.calls) == 2  # 两轮一致即收敛
+    assert result.instances == instances
+    assert [e.type for e in events] == [EVENT_ROUND, EVENT_ROUND, EVENT_CONVERGED]
+
+
+def test_functional_layer_key_distinguishes_instance_lists():
+    """收敛判定键纳入实例清单（名称+变体）：实例变化 = 功能需求层变化
+    （否则 led×4 与 led×3 会被判为一致提前收敛，实例猜测被第一轮锁死）。"""
+
+    def make(instances: dict) -> ModuleSelection:
+        return ModuleSelection(
+            modules=("led",),
+            reasons={},
+            requirements=(
+                FunctionRequirement(
+                    requirement="指示灯", sentence_index=1, modules=("led",)
+                ),
+            ),
+            instances=instances,
+        )
+
+    four = make(
+        {
+            "led": (
+                ModuleInstance(name="红", variant="red"),
+                ModuleInstance(name="状态灯", variant=""),
+            )
+        }
+    )
+    three = make({"led": (ModuleInstance(name="红", variant="red"),)})
+    renamed = make(
+        {
+            "led": (
+                ModuleInstance(name="红灯", variant="red"),
+                ModuleInstance(name="状态灯", variant=""),
+            )
+        }
+    )
+
+    assert _functional_layer_key(four) != _functional_layer_key(three)  # 数量不同
+    assert _functional_layer_key(four) != _functional_layer_key(renamed)  # 名称不同
+    assert _functional_layer_key(four) == _functional_layer_key(four)
+
+
 def test_convergent_round_one_two_level_fulltexts_carried_into_round_two():
     """两级注入在收敛循环内：第 1 轮点名全文 → 回读；第 2 轮收敛确认仍带已读
     全文（全文上下文不丢；恰好两级，不再注入新全文）。"""
@@ -1013,6 +1087,297 @@ def test_build_selection_coerces_digit_string_sentence():
     result = build_module_selection(raw, known_slugs=(), hardware_words=WORDS)
 
     assert [r.sentence_index for r in result.requirements] == [1, 3]
+
+
+def test_build_selection_requirements_parse_multi_instances():
+    """多实例推荐（工单 module-multi-instance/06）：需求层模块条目带 instances
+    数组（{name, variant}）→ ModuleSelection.instances（slug → 实例元组）；
+    pin 不参与（AI 不猜，恒空串）。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "声光提示",
+                "sentence": 4,
+                "modules": [
+                    {
+                        "slug": "led",
+                        "reason": "4 个指示灯",
+                        "instances": [
+                            {"name": "红", "variant": "red"},
+                            {"name": "黄", "variant": "yellow"},
+                            {"name": "绿", "variant": "green"},
+                            {"name": "状态灯", "variant": ""},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw,
+        known_slugs=("led",),
+        hardware_words=WORDS,
+        multi_instance_slugs=("led",),
+    )
+
+    assert result.modules == ("led",)
+    assert result.instances == {
+        "led": (
+            ModuleInstance(name="红", variant="red"),
+            ModuleInstance(name="黄", variant="yellow"),
+            ModuleInstance(name="绿", variant="green"),
+            ModuleInstance(name="状态灯", variant=""),
+        )
+    }
+
+
+def test_build_selection_plain_modules_parse_instances():
+    """旧契约（无需求层）：顶层 modules 条目同样可带 instances（形状同需求层）。"""
+    raw = {
+        "modules": [
+            {
+                "slug": "led",
+                "reason": "4 个指示灯",
+                "instances": [{"name": "红", "variant": "red"}, {"name": "状态灯"}],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=("led",), multi_instance_slugs=("led",)
+    )
+
+    assert result.instances == {
+        "led": (
+            ModuleInstance(name="红", variant="red"),
+            ModuleInstance(name="状态灯"),
+        )
+    }
+
+
+def test_build_selection_instances_conflicting_across_requirements_rejected():
+    """同一模块在两条需求里带了不同的实例清单 = 模型自相矛盾 → 大声失败
+    （不一致比首见者赢更诚实——用户拿到的一定是自洽的猜测）。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "状态显示",
+                "sentence": 1,
+                "modules": [
+                    {
+                        "slug": "led",
+                        "reason": "指示灯",
+                        "instances": [{"name": "红", "variant": "red"}],
+                    }
+                ],
+            },
+            {
+                "requirement": "报警",
+                "sentence": 2,
+                "modules": [
+                    {
+                        "slug": "led",
+                        "reason": "报警灯",
+                        "instances": [
+                            {"name": "红", "variant": "red"},
+                            {"name": "黄", "variant": "yellow"},
+                        ],
+                    }
+                ],
+            },
+        ]
+    }
+
+    with pytest.raises(SelectionError, match="不一致"):
+        build_module_selection(
+            raw, known_slugs=("led",), multi_instance_slugs=("led",)
+        )
+
+
+def test_build_selection_instances_identical_across_requirements_ok():
+    """同一模块在两条需求里带相同实例清单：幂等接受（模型常把同一灯挂在
+    多条需求下，不误伤）。"""
+    same = [
+        {"name": "红", "variant": "red"},
+        {"name": "绿", "variant": "green"},
+    ]
+    raw = {
+        "requirements": [
+            {
+                "requirement": "状态显示",
+                "sentence": 1,
+                "modules": [
+                    {"slug": "led", "reason": "指示灯", "instances": list(same)}
+                ],
+            },
+            {
+                "requirement": "报警",
+                "sentence": 2,
+                "modules": [
+                    {"slug": "led", "reason": "报警灯", "instances": list(same)}
+                ],
+            },
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=("led",), multi_instance_slugs=("led",)
+    )
+
+    assert result.instances == {
+        "led": (
+            ModuleInstance(name="红", variant="red"),
+            ModuleInstance(name="绿", variant="green"),
+        )
+    }
+
+
+@pytest.mark.parametrize(
+    "bad_raw, multi_slugs, match",
+    [
+        # 非多实例模块带 instances = 能力校验拒绝（宁严勿假绿）
+        (
+            {
+                "requirements": [
+                    {
+                        "requirement": "需求",
+                        "sentence": 1,
+                        "modules": [
+                            {
+                                "slug": "dht11",
+                                "reason": "x",
+                                "instances": [{"name": "红"}],
+                            }
+                        ],
+                    }
+                ]
+            },
+            ("led",),
+            "不支持多实例",
+        ),
+        # 未提供能力清单（空）= 没有能力证据，同样大声失败
+        (
+            {
+                "requirements": [
+                    {
+                        "requirement": "需求",
+                        "sentence": 1,
+                        "modules": [
+                            {
+                                "slug": "led",
+                                "reason": "x",
+                                "instances": [{"name": "红"}],
+                            }
+                        ],
+                    }
+                ]
+            },
+            (),
+            "不支持多实例",
+        ),
+        # 旧契约顶层模块同样受能力校验
+        (
+            {"modules": [{"slug": "dht11", "reason": "x", "instances": [{"name": "红"}]}]},
+            ("led",),
+            "不支持多实例",
+        ),
+        (
+            {
+                "requirements": [
+                    {
+                        "requirement": "需求",
+                        "sentence": 1,
+                        "modules": [
+                            {"slug": "led", "reason": "x", "instances": "x"}
+                        ],
+                    }
+                ]
+            },
+            ("led",),
+            "instances 必须是数组",
+        ),
+        (
+            {
+                "requirements": [
+                    {
+                        "requirement": "需求",
+                        "sentence": 1,
+                        "modules": [
+                            {"slug": "led", "reason": "x", "instances": ["红"]}
+                        ],
+                    }
+                ]
+            },
+            ("led",),
+            r"instances\[0\] 必须是对象",
+        ),
+        (
+            {
+                "requirements": [
+                    {
+                        "requirement": "需求",
+                        "sentence": 1,
+                        "modules": [
+                            {
+                                "slug": "led",
+                                "reason": "x",
+                                "instances": [{"variant": "red"}],
+                            }
+                        ],
+                    }
+                ]
+            },
+            ("led",),
+            "缺 name 或为空",
+        ),
+        (
+            {
+                "requirements": [
+                    {
+                        "requirement": "需求",
+                        "sentence": 1,
+                        "modules": [
+                            {
+                                "slug": "led",
+                                "reason": "x",
+                                "instances": [{"name": "  ", "variant": "red"}],
+                            }
+                        ],
+                    }
+                ]
+            },
+            ("led",),
+            "缺 name 或为空",
+        ),
+        (
+            {
+                "requirements": [
+                    {
+                        "requirement": "需求",
+                        "sentence": 1,
+                        "modules": [
+                            {
+                                "slug": "led",
+                                "reason": "x",
+                                "instances": [{"name": "红", "variant": 42}],
+                            }
+                        ],
+                    }
+                ]
+            },
+            ("led",),
+            "variant 必须是字符串",
+        ),
+    ],
+)
+def test_build_selection_rejects_invalid_instances(bad_raw, multi_slugs, match):
+    with pytest.raises(SelectionError, match=match):
+        build_module_selection(
+            bad_raw,
+            known_slugs=("led", "dht11"),
+            multi_instance_slugs=multi_slugs,
+        )
 
 
 def test_build_selection_suggestion_name_hits_wordlist_model_or_category():
@@ -1516,4 +1881,32 @@ def test_run_recommendation_no_topic_key_omits_topic_fields():
         "modules": [{"slug": "dht11", "reason": "测温湿度"}],
         "requirements": [],
         "references": [],
+    }
+
+
+def test_run_recommendation_done_payload_includes_instances():
+    """done 载荷带 instances（工单 module-multi-instance/06）：slug → 实例
+    数组（{name, variant, pin}，pin 恒空 = 自动分配）——前端据此回填实例卡；
+    无实例的选择不落 instances 键（旧载荷逐字节不变，见 verbatim 测试）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(
+            modules=("led",),
+            reasons={"led": "4 个指示灯"},
+            instances={
+                "led": (
+                    ModuleInstance(name="红", variant="red"),
+                    ModuleInstance(name="状态灯", variant=""),
+                )
+            },
+        )
+    )
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    data = _drain_events(events)[-1][1]
+    assert data["instances"] == {
+        "led": [
+            {"name": "红", "variant": "red", "pin": ""},
+            {"name": "状态灯", "variant": "", "pin": ""},
+        ]
     }

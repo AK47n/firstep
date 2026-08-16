@@ -444,6 +444,7 @@ def build_module_selection(
     known_slugs: Sequence[str],
     known_reference_ids: Sequence[str] = (),
     hardware_words: Sequence[HardwareWordGroup] = (),
+    multi_instance_slugs: Sequence[str] = (),
 ) -> ModuleSelection:
     """把模型输出的原始 JSON 数据（llm 已解析为 dict）解析校验为 ModuleSelection。
 
@@ -461,21 +462,32 @@ def build_module_selection(
     受硬件词表约束：词表内条目（类别或型号）→ 显示；词表外型号 → 模型给出
     词表内类别名（category 字段）时降级为类别显示，否则拒收（大声失败）。
     questions（向用户补问）非空时暂停分析，不以推荐收尾。
+
+    多实例推荐（工单 module-multi-instance/06）：模块条目可带 instances 数组
+    （{name, variant}，pin 归自动、AI 不猜）→ 聚合进 ModuleSelection.instances。
+    只对多实例模块收 instances——multi_instance_slugs = 多实例能力清单（llm
+    层从 ManifestSummary 同源取），带 instances 的 slug 不在清单内 = 没有能力
+    证据，大声失败（宁严勿假绿，与 references 幻觉同款口径）；未提供清单
+    （空）同样拒绝。数量不设硬上限（上限守卫是 expand_instances 的活）。
     """
     known = set(known_slugs)
+    multi_instance = set(multi_instance_slugs)
     questions = _parse_questions(raw.get("questions"))
     raw_requirements = raw.get("requirements")
     if raw_requirements is not None:
-        requirements, modules, reasons = _parse_requirements(
-            raw_requirements, known, hardware_words
+        requirements, modules, reasons, instances = _parse_requirements(
+            raw_requirements, known, hardware_words, multi_instance
         )
     elif isinstance(raw.get("modules"), list):
-        modules, reasons = _parse_plain_modules(raw["modules"], known)
+        modules, reasons, instances = _parse_plain_modules(
+            raw["modules"], known, multi_instance
+        )
         requirements = ()
     elif questions:
         # 纯补问输出（{"questions": [...]}）：没有需求层也没有模块，合法
         modules, reasons = [], {}
         requirements = ()
+        instances = {}
     else:
         raise SelectionError("模型输出缺少 modules 数组")
 
@@ -486,15 +498,71 @@ def build_module_selection(
         reference_ids=reference_ids,
         requirements=requirements,
         questions=questions,
+        instances=instances,
     )
 
 
+def _parse_model_instances(
+    raw: Any, slug: str, multi_instance: set[str], path: str
+) -> tuple[ModuleInstance, ...]:
+    """模型输出的 instances 数组解析（工单 module-multi-instance/06，AI 推荐侧）。
+
+    形状：[{"name": 显示名, "variant": 变体}]——name 非空字符串、variant 字符串
+    （null 归一空串 = 非内置色）；pin 不解析（AI 不猜，恒自动分配）。只对
+    多实例模块收 instances：slug 不在能力清单内 = 没有能力证据，大声失败
+    （宁严勿假绿，与 references 幻觉同款口径）。字段缺省 / null = 无实例
+    （单默认实例，旧行为；null = 无声明语义，DeepSeek 常对非多实例模块
+    补显式 null，不能当幻觉打——空数组则照打：显式声明了数组形状）。任何
+    形状问题抛 SelectionError。
+    """
+    if raw is None:
+        return ()
+    if slug not in multi_instance:
+        raise SelectionError(f"模块 {slug} 不支持多实例，不能带 instances")
+    if not isinstance(raw, list):
+        raise SelectionError(f"{path} 的 instances 必须是数组")
+    if not raw:
+        return ()
+    parsed: list[ModuleInstance] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise SelectionError(f"{path} instances[{index}] 必须是对象")
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise SelectionError(f"{path} instances[{index}] 缺 name 或为空")
+        variant = item.get("variant")
+        if variant is None:
+            variant = ""
+        elif not isinstance(variant, str):
+            raise SelectionError(f"{path} instances[{index}] 的 variant 必须是字符串")
+        parsed.append(ModuleInstance(name=name.strip(), variant=variant.strip()))
+    return tuple(parsed)
+
+
+def _record_instances(
+    instances: dict[str, tuple[ModuleInstance, ...]],
+    slug: str,
+    parsed: tuple[ModuleInstance, ...],
+) -> None:
+    """实例聚合（跨需求条目）：同 slug 的实例清单必须一致——两条需求带不同
+    清单 = 模型自相矛盾，大声失败；相同（幂等重复挂多条需求）接受；缺省
+    （无 instances）不覆盖已记清单。"""
+    if not parsed:
+        return
+    existing = instances.get(slug)
+    if existing is None:
+        instances[slug] = parsed
+    elif existing != parsed:
+        raise SelectionError(f"模块 {slug} 的实例清单在不同需求条目中不一致")
+
+
 def _parse_plain_modules(
-    raw_modules: Sequence[Any], known: set[str]
-) -> tuple[list[str], dict[str, str]]:
+    raw_modules: Sequence[Any], known: set[str], multi_instance: set[str]
+) -> tuple[list[str], dict[str, str], dict[str, tuple[ModuleInstance, ...]]]:
     """旧契约的 modules 数组解析（无功能需求层时的顶层模块）。"""
     modules: list[str] = []
     reasons: dict[str, str] = {}
+    instances: dict[str, tuple[ModuleInstance, ...]] = {}
     for index, item in enumerate(raw_modules):
         if not isinstance(item, dict):
             raise SelectionError(f"modules[{index}] 必须是对象")
@@ -508,25 +576,40 @@ def _parse_plain_modules(
         reason = item.get("reason", "")
         if not isinstance(reason, str):
             raise SelectionError(f"模块 {slug} 的 reason 必须是字符串")
+        _record_instances(
+            instances,
+            slug,
+            _parse_model_instances(item.get("instances"), slug, multi_instance, f"modules[{index}]"),
+        )
         modules.append(slug)
         reasons[slug] = reason
-    return modules, reasons
+    return modules, reasons, instances
 
 
 def _parse_requirements(
-    raw: Sequence[Any], known: set[str], hardware_words: Sequence[HardwareWordGroup]
-) -> tuple[tuple[FunctionRequirement, ...], list[str], dict[str, str]]:
+    raw: Sequence[Any],
+    known: set[str],
+    hardware_words: Sequence[HardwareWordGroup],
+    multi_instance: set[str],
+) -> tuple[
+    tuple[FunctionRequirement, ...],
+    list[str],
+    dict[str, str],
+    dict[str, tuple[ModuleInstance, ...]],
+]:
     """功能需求层解析 + 顶层 modules 派生（库内命中并集，保序、首见理由）。
 
     需求形状：requirement（非空文本）、sentence（正整数——逐句对照的题面
     句子编号，找不出对应句的需求即脑补）、modules（库内命中，slug 必须
-    在库内且需求内不重复）、suggestions（库外建议，name 词表校验）。
+    在库内且需求内不重复，条目可带 instances 数组——多实例推荐，工单
+    module-multi-instance/06）、suggestions（库外建议，name 词表校验）。
     """
     if not isinstance(raw, list):
         raise SelectionError("requirements 必须是数组")
     requirements: list[FunctionRequirement] = []
     modules: list[str] = []
     reasons: dict[str, str] = {}
+    instances: dict[str, tuple[ModuleInstance, ...]] = {}
     for index, item in enumerate(raw):
         if not isinstance(item, dict):
             raise SelectionError(f"requirements[{index}] 必须是对象")
@@ -567,6 +650,16 @@ def _parse_requirements(
             reason = module.get("reason", "")
             if not isinstance(reason, str):
                 raise SelectionError(f"模块 {slug} 的 reason 必须是字符串")
+            _record_instances(
+                instances,
+                slug,
+                _parse_model_instances(
+                    module.get("instances"),
+                    slug,
+                    multi_instance,
+                    f"requirements[{index}] modules[{m_index}]",
+                ),
+            )
             slugs.append(slug)
             if slug not in reasons:
                 reasons[slug] = reason
@@ -582,7 +675,7 @@ def _parse_requirements(
         for slug in slugs:
             if slug not in modules:
                 modules.append(slug)
-    return tuple(requirements), modules, reasons
+    return tuple(requirements), modules, reasons, instances
 
 
 def _parse_suggestions(
@@ -729,13 +822,31 @@ def _revision_prompt(
     return "\n".join(lines)
 
 
-def _functional_layer_key(
-    selection: ModuleSelection,
-) -> tuple[tuple[str, int, tuple[str, ...], tuple[str, ...]], ...]:
-    """收敛判定的一致性键：需求文本 / 对照句 / 库内命中 slug / 库外建议名。
+# 收敛判定键类型：需求文本 / 对照句 / 库内命中 slug / 库外建议名 /
+# 每命中模块的实例清单（ModuleInstance 冻结结构相等——多实例推荐，工单 06）。
+_FunctionalKey = tuple[
+    tuple[
+        str,
+        int,
+        tuple[str, ...],
+        tuple[str, ...],
+        tuple[tuple[ModuleInstance, ...], ...],
+    ],
+    ...,
+]
+
+
+def _functional_layer_key(selection: ModuleSelection) -> _FunctionalKey:
+    """收敛判定的一致性键：需求文本 / 对照句 / 库内命中 slug / 库外建议名 /
+    每命中模块的实例清单（工单 module-multi-instance/06）。
 
     examples（常识举例）自由发挥、用户自行核实，不参与收敛判定——模型重述
     examples 不算功能需求层变化（否则"K230/OpenMV" vs "K230"会拖到轮数上限）。
+    实例清单同样参与：实例数量 / 名称 / 变体变化 = 功能需求层变化（否则
+    led×4 与 led×3 会被判为一致提前收敛，实例猜测被第一轮锁死）；推荐侧
+    pin 恒为空串（AI 不猜），不引入比较噪音。旧契约（无需求层）路径
+    requirements 恒空 → 键恒空、实例不参与收敛——生产提示词恒走新契约，
+    此退化无实际影响。
     """
     return tuple(
         (
@@ -743,6 +854,9 @@ def _functional_layer_key(
             requirement.sentence_index,
             requirement.modules,
             tuple(suggestion.name for suggestion in requirement.suggestions),
+            tuple(
+                selection.instances.get(slug, ()) for slug in requirement.modules
+            ),
         )
         for requirement in selection.requirements
     )
@@ -790,7 +904,7 @@ def select_modules_convergent(
     numbered = _number_topic_sentences(problem_text)
     fulltexts: dict[str, str] = {}
     previous: tuple[FunctionRequirement, ...] = ()
-    previous_key: tuple[tuple[str, int, tuple[str, ...], tuple[str, ...]], ...] | None = None
+    previous_key: _FunctionalKey | None = None
     selection: ModuleSelection | None = None
     # 手动全文 / 澄清历史存在才传对应关键字——不传时保持旧签名（既有假 LLM
     # 零改动；缺省空 = 旧行为）。合并成单次 ** 展开：mypy 对多个异构 **dict
@@ -933,6 +1047,14 @@ def run_recommendation(
             for requirement in selection.requirements
         ],
     }
+    # 多实例推荐（工单 module-multi-instance/06）：实例清单进 done 载荷
+    # （前端据此回填实例卡，用户确认后仍可增删改）；无实例的选择不落键
+    # （旧载荷逐字节不变 = 单默认实例旧行为）
+    if selection.instances:
+        result["instances"] = {
+            slug: [instance.to_dict() for instance in instances]
+            for slug, instances in selection.instances.items()
+        }
     if topic.key:
         result["topic_id"] = topic.key
     # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；

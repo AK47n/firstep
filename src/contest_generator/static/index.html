@@ -1198,6 +1198,18 @@ function renderRecommendResult(data, autoAdd = true) {
   if (autoAdd) {
     const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
     for (const m of fresh) selectedSlugs.push(m.slug);
+    // 多实例回填（工单 module-multi-instance/06）：AI 猜的实例清单进 6.5 实例卡
+    // （显示名/颜色，引脚恒空 = 自动分配）；用户确认后仍可增删改。载荷里带
+    // 实例的模块 = 新猜测覆盖旧清单；AI 未猜（题面无明确数量）的模块保留用户
+    // 已配清单——上限守卫是 expand_instances 的活（生成时拦），前端不截断
+    if (data.instances) {
+      for (const slug of Object.keys(data.instances)) {
+        instances[slug] = (data.instances[slug] || []).map((i) => ({
+          name: String(i.name || ""), variant: i.variant || "", pin: i.pin || "",
+        }));
+      }
+      instancePinTarget = null;  // 旧选脚目标可能越界，清掉防陈旧高亮
+    }
   }
   expanded = []; warnings = [];
   renderSelected(); renderWarnings();

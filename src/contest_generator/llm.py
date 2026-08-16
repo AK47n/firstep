@@ -58,6 +58,7 @@ from .report import (
     VersionSummary,
 )
 from .selection import (
+    LED_COLOR_MACROS,
     FunctionRequirement,
     ModuleSelection,
     OutOfLibrarySuggestion,
@@ -784,6 +785,11 @@ class DeepSeekLLM:
         顶层 modules 由需求层机械得出（build_module_selection，域判决在
         selection.py）；硬件词表进提示词作科普素材、作库外建议 name 的校验源。
 
+        多实例推荐（工单 module-multi-instance/06）：模块清单行带「多实例」
+        标注（ManifestSummary.to_line），模型按题面猜实例数输出 instances，
+        解析层按同源能力清单校验（multi_instance_slugs——非多实例模块带
+        instances = 幻觉，大声失败）。
+
         瞬时失败整次重问（_retry_parse，与归档判定同款兜底）：DeepSeek 偶发
         空内容 / 输出畸形会重问，最多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错。
         """
@@ -796,6 +802,12 @@ class DeepSeekLLM:
                     known_slugs=[s.slug for s in manifest_summaries],
                     known_reference_ids=[r.id for r in references],
                     hardware_words=self._hardware_words,
+                    # 多实例能力清单（工单 module-multi-instance/06）：
+                    # ManifestSummary.multi_instance 与清单行标注同源——模型
+                    # 只在能力模块上猜实例数，解析层按同清单做能力校验
+                    multi_instance_slugs=[
+                        s.slug for s in manifest_summaries if s.multi_instance
+                    ],
                 )
             except SelectionError as exc:
                 # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；
@@ -1843,14 +1855,41 @@ def _selection_user_prompt(
         prompt += "\n".join(lines)
     if hardware_words:
         prompt += "\n\n" + format_wordlist_prompt(hardware_words)
-    contract = (
-        '{"requirements": [{"requirement": "功能需求（能力/外设级）", '
-        '"sentence": 1（整数——对应题面句子编号，第 3 句就是 3；必须是整数，'
-        '不是字符串"1"）, "modules": [{"slug": "库内命中模块", '
-        '"reason": "为何满足该需求"}], "suggestions": [{"name": "硬件词表内的'
-        '类别或型号名", "category": "词表外型号必填的所属类别名", "examples": '
-        '["常识举例"]}]}], "questions": ["题面证据不足以判定时的补问，可省略"]'
-    )
+    # 多实例猜测规则段（工单 module-multi-instance/06）：库内有多实例模块才出段
+    # （与参考/澄清段同款条件段先例——最坏情形请求预算零成本，旧库提示词逐字节
+    # 不变）；内置变体 token 词表单源 = selection.LED_COLOR_MACROS（提示词可见
+    # 契约与解析校验同源，改词表只改那一处）
+    has_multi = any(summary.multi_instance for summary in manifest_summaries)
+    if has_multi:
+        prompt += (
+            "\n\n多实例模块（清单带「多实例」标注）按题面数量输出 instances "
+            "数组：每条 {\"name\": 显示名, \"variant\": 变体}（led 变体 = 颜色，"
+            f"内置 {'/'.join(LED_COLOR_MACROS)}，其余空串）；数量不超过清单标注"
+            "上限；题面未明确数量时省略；引脚自动分配，不输出 pin；不为非多实例"
+            "模块输出 instances。"
+        )
+    # 输出契约：旧库（无多实例模块）用旧契约逐字节不变（验收②——旧推荐无
+    # instances 现行为不变，模型照旧不输出该字段）；多实例库扩展 instances 形状
+    if has_multi:
+        contract = (
+            '{"requirements": [{"requirement": "功能需求（能力/外设级）", '
+            '"sentence": 1（整数——对应题面句子编号，第 3 句就是 3；必须是整数，'
+            '不是字符串"1"）, "modules": [{"slug": "库内命中模块", '
+            '"reason": "为何满足该需求", "instances": [{"name": "显示名", '
+            f'"variant": "{"/".join(LED_COLOR_MACROS)} 或空串（仅多实例模块，'
+            '按题面数量）"}]}], "suggestions": [{"name": "硬件词表内的'
+            '类别或型号名", "category": "词表外型号必填的所属类别名", "examples": '
+            '["常识举例"]}]}], "questions": ["题面证据不足以判定时的补问，可省略"]'
+        )
+    else:
+        contract = (
+            '{"requirements": [{"requirement": "功能需求（能力/外设级）", '
+            '"sentence": 1（整数——对应题面句子编号，第 3 句就是 3；必须是整数，'
+            '不是字符串"1"）, "modules": [{"slug": "库内命中模块", '
+            '"reason": "为何满足该需求"}], "suggestions": [{"name": "硬件词表内的'
+            '类别或型号名", "category": "词表外型号必填的所属类别名", "examples": '
+            '["常识举例"]}]}], "questions": ["题面证据不足以判定时的补问，可省略"]'
+        )
     if references:
         contract += ', "references": ["想读全文的参考文件 id，不需要可省略"]'
     return prompt + "\n只返回 json 格式的 JSON 对象：" + contract + "}"

@@ -75,10 +75,15 @@ from contest_generator.llm import (
 )
 from contest_generator.selection import (
     REFERENCE_SOURCE_MANUAL,
+    ModuleInstance,
     ModuleSelection,
     ReferenceSuggestion,
 )
-from contest_generator.manifest import ManifestSummary, build_manifest_summaries
+from contest_generator.manifest import (
+    ManifestSummary,
+    MultiInstanceSpec,
+    build_manifest_summaries,
+)
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -110,6 +115,7 @@ def _manifest(
     description: str,
     deps: tuple[str, ...] = (),
     kits: tuple[str, ...] = (),
+    multi_instance: MultiInstanceSpec | None = None,
 ) -> ModuleManifest:
     """构造 manifest：kits 每个元素一个平台条目（平台名 p0/p1/…，条目的 kit 字段）。
     kit 为空串 = 存量平台条目无套件身份（摘要行不显示套件段）。"""
@@ -118,7 +124,11 @@ def _manifest(
         for index, kit in enumerate(kits)
     }
     return ModuleManifest(
-        slug=slug, description=description, dependencies=deps, platforms=platforms
+        slug=slug,
+        description=description,
+        dependencies=deps,
+        platforms=platforms,
+        multi_instance=multi_instance,
     )
 
 
@@ -215,6 +225,28 @@ def test_manifest_summaries_aggregate_distinct_kits_across_platforms():
 def test_manifest_summaries_empty_library_gives_empty_list():
     assert build_manifest_summaries([]) == []
     assert [s.slug for s in build_manifest_summaries([])] == []
+
+
+def test_manifest_summaries_include_multi_instance_marker():
+    """多实例能力进摘要行（工单 module-multi-instance/06）：带 multi_instance
+    的 manifest 摘要行带「多实例」标注（上限 + 变体名）——AI 据此知道哪些
+    模块可多实例、上限多少；不带该块的旧 manifest 行逐字节不变。"""
+    summaries = build_manifest_summaries(
+        [
+            _manifest(
+                "led", "LED 指示灯驱动",
+                multi_instance=MultiInstanceSpec(max=8, variant="color"),
+            ),
+            _manifest("dht11", "温湿度"),
+        ]
+    )
+
+    assert [s.to_line() for s in summaries] == [
+        "- led: LED 指示灯驱动（多实例：上限 8，变体 = color）",
+        "- dht11: 温湿度",
+    ]
+    assert summaries[0].multi_instance == MultiInstanceSpec(max=8, variant="color")
+    assert summaries[1].multi_instance is None
 
 
 def test_select_modules_receives_kit_in_summary_lines():
@@ -3327,6 +3359,100 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
     assert result.modules == ("dht11", "oled")
     assert result.requirements[0].requirement == "识别数字"
     assert result.requirements[0].suggestions[0].name == "视觉模块"
+
+
+REQUIREMENTS_INSTANCES_JSON = json.dumps(
+    {
+        "requirements": [
+            {
+                "requirement": "声光提示",
+                "sentence": 4,
+                "modules": [
+                    {
+                        "slug": "led",
+                        "reason": "4 个指示灯",
+                        "instances": [
+                            {"name": "红", "variant": "red"},
+                            {"name": "黄", "variant": "yellow"},
+                            {"name": "绿", "variant": "green"},
+                            {"name": "状态灯", "variant": ""},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+)
+
+
+def test_select_modules_parses_instances_for_multi_instance_manifest():
+    """生产 LLM 端到端（工单 module-multi-instance/06）：清单里的 led 带
+    multi_instance 能力 → 模型输出的 instances 被解析进
+    ModuleSelection.instances（能力清单从 ManifestSummary 同源取）。"""
+    transport = FakeTransport(body=_api_response(REQUIREMENTS_INSTANCES_JSON))
+    llm = _llm(transport)
+    summary = ManifestSummary(
+        "led", "指示灯", multi_instance=MultiInstanceSpec(max=8, variant="color")
+    )
+
+    result = llm.select_modules("作品需要 4 个指示灯", [summary])
+
+    assert result.instances == {
+        "led": (
+            ModuleInstance(name="红", variant="red"),
+            ModuleInstance(name="黄", variant="yellow"),
+            ModuleInstance(name="绿", variant="green"),
+            ModuleInstance(name="状态灯", variant=""),
+        )
+    }
+
+
+def test_select_modules_rejects_instances_without_multi_instance_capability():
+    """能力校验宁严勿假绿：清单模块未声明 multi_instance 时模型带 instances
+    → LLMError（重试后大声失败），不带病进选择结果。"""
+    transport = FakeTransport(body=_api_response(REQUIREMENTS_INSTANCES_JSON))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="不支持多实例"):
+        llm.select_modules("赛题", [ManifestSummary("led", "指示灯")])
+
+
+def test_select_prompt_marks_multi_instance_and_contract_includes_instances():
+    """提示词契约（工单 module-multi-instance/06）：模块清单行带「多实例」
+    标注（AI 知道谁能多实例 + 上限），输出契约的 modules 条目含 instances
+    形状，用户消息有条件规则段（题面数量为证据 / 不猜引脚 / 非多实例模块
+    不输出——库内有多实例模块才出段）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    led_summary = ManifestSummary(
+        "led", "指示灯", multi_instance=MultiInstanceSpec(max=8, variant="color")
+    )
+
+    llm.select_modules(
+        "作品需要 4 个指示灯", [led_summary, ManifestSummary("dht11", "温湿度")]
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "- led: 指示灯（多实例：上限 8，变体 = color）" in user_message
+    assert "- dht11: 温湿度（多实例" not in user_message  # 无能力块不标注
+    assert '"instances"' in user_message  # 输出契约带 instances 形状
+    assert "不为非多实例模块输出 instances" in user_message
+    assert "不输出 pin" in user_message
+
+
+def test_select_prompt_without_multi_instance_module_keeps_old_shape():
+    """库内没有多实例模块（旧库形状）：提示词与既有形态一致——无多实例规则
+    段、输出契约也不含 instances 形状（验收②：旧推荐无 instances 现行为不变，
+    旧库提示词逐字节等价——契约若无条件宣传 instances，旧库模型输出该字段会
+    被能力校验硬失败）。（最坏情形请求预算零成本。）"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "不为非多实例模块输出 instances" not in user_message
+    assert '"instances"' not in user_message  # 契约保持旧形状（逐字节等价）
 
 
 
