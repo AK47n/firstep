@@ -303,6 +303,8 @@ def test_generate_project_summary_lists_python_artifact(tmp_path):
 
     assert "main.py" in summary.structure
     assert (summary.output_dir / "main.py").is_file()
+    # 摘要带副产物清单（工单 04 前端「模块文件」行消费）：(slug, 输出文件名)
+    assert summary.python_artifacts == (("k230_probe", "main.py"),)
 
 
 def test_generate_without_artifact_module_is_byte_identical(tmp_path):
@@ -590,6 +592,8 @@ def test_generate_project_stm32_k230_expands_dependency_and_writes_py(tmp_path):
     assert (out / "modules" / "ball_detect" / "code" / "ball_detect_stm32.c").is_file()
     assert (out / "modules" / "ball_detect" / "code" / "ball_detect_stm32.h").is_file()
     assert "main.py" in summary.structure
+    # 摘要副产物清单（工单 04）：k230 的 files 空，前端靠它显示 main.py
+    assert summary.python_artifacts == (("k230", "main.py"),)
     _assert_k230_output(out)
 
 
@@ -608,4 +612,5 @@ def test_generate_project_mspm0_k230_expands_dependency_and_writes_py(tmp_path):
     assert (out / "modules" / "ball_detect" / "code" / "ball_detect.c").is_file()
     syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const DIGIT_UART = UART.addInstance();" in syscfg  # ball_detect 共享实例
+    assert summary.python_artifacts == (("k230", "main.py"),)
     _assert_k230_output(out)

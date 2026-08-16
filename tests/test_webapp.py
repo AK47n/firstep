@@ -293,6 +293,112 @@ def _import_stm32_master(masters_dir, tmp_path) -> None:
     import_master(masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "master_src"))
 
 
+def _add_fake_k230_modules(library_dir: Path) -> None:
+    """给假模块库补 k230 + ball_detect（工单 k230-vision-copilot/04 前端闭环
+    素材，与真实库同形态）：k230 = 纯副产物模块（双平台 files 空 + pins 空，
+    依赖 ball_detect——串口解析与引脚由它提供）；ball_detect = 真实
+    uart_tx/uart_rx 角色声明。"""
+    (library_dir / "k230").mkdir(parents=True, exist_ok=True)
+    (library_dir / "k230" / "code").mkdir(parents=True, exist_ok=True)
+    (library_dir / "k230" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "k230",
+                "description": "K230 视觉副控：色块追踪/球检测的 K230 侧发送端",
+                "dependencies": ["ball_detect"],
+                "python_artifact": {"template": "code/main.py", "output": "main.py"},
+                "platforms": {
+                    "stm32": {
+                        "files": [],
+                        "verified": False,
+                        "hardware_bound": True,
+                        "notes": "串口解析与引脚由依赖 ball_detect 提供",
+                    },
+                    "mspm0": {
+                        "files": [],
+                        "verified": False,
+                        "hardware_bound": True,
+                        "notes": "串口解析与引脚由依赖 ball_detect 提供",
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (library_dir / "k230" / "code" / "main.py").write_text(
+        "sensor.reset()\n# k230 假模板（无占位符，渲染原样透传）\n",
+        encoding="utf-8",
+    )
+    (library_dir / "ball_detect").mkdir(parents=True, exist_ok=True)
+    (library_dir / "ball_detect" / "code").mkdir(parents=True, exist_ok=True)
+    (library_dir / "ball_detect" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "ball_detect",
+                "description": "K230 视觉帧解析驱动",
+                "dependencies": [],
+                "platforms": {
+                    "stm32": {
+                        "files": ["code/ball_detect.c", "code/ball_detect.h"],
+                        "verified": True,
+                        "hardware_bound": True,
+                        "notes": "",
+                        "pins": [
+                            {
+                                "id": "BALL_DETECT_UART_TX",
+                                "type": "uart_tx",
+                                "default": "PA9",
+                                "required": True,
+                            },
+                            {
+                                "id": "BALL_DETECT_UART_RX",
+                                "type": "uart_rx",
+                                "default": "PA10",
+                                "required": True,
+                            },
+                        ],
+                    },
+                    "mspm0": {
+                        "files": ["code/ball_detect.c", "code/ball_detect.h"],
+                        "verified": True,
+                        "hardware_bound": True,
+                        "notes": "",
+                        "pins": [
+                            {
+                                "id": "BALL_DETECT_UART_TX",
+                                "type": "uart_tx",
+                                "default": "PA8",
+                                "required": True,
+                            },
+                            {
+                                "id": "BALL_DETECT_UART_RX",
+                                "type": "uart_rx",
+                                "default": "PA9",
+                                "required": True,
+                            },
+                        ],
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (library_dir / "ball_detect" / "code" / "ball_detect.c").write_text(
+        "#include \"ball_detect.h\"\n"
+        "void ball_detect_init(void) {}\n"
+        "void ball_detect_rx_handler(void) {}\n",
+        encoding="utf-8",
+    )
+    (library_dir / "ball_detect" / "code" / "ball_detect.h").write_text(
+        "#pragma once\n"
+        "void ball_detect_init(void);\n"
+        "void ball_detect_rx_handler(void);\n",
+        encoding="utf-8",
+    )
+
+
 def _add_fake_led_module(library_dir: Path) -> None:
     """给假模块库补一个 led 多实例模块（stm32 内嵌母版 = files 空，与真实 led
     同形态）——webapp 路由透传 instances 的 happy path 素材。"""
@@ -1008,6 +1114,65 @@ def test_expand_reports_unverified_and_hardware_bound(client, context):
     assert {"unverified", "hardware_bound"} <= kinds
 
 
+def test_expand_k230_brings_ball_detect_pins_generically(client, context):
+    """工单 k230-vision-copilot/04 验收①：k230（files 空 + pins 空）走现有通用
+    机制——模块池 / 展开 / 引脚配置零新 UI；展开后依赖 ball_detect 自动挂上，
+    其 uart_tx/uart_rx 角色（k230 不重复声明）就是前端引脚卡的配置项来源。"""
+    _add_fake_k230_modules(context[0].config.module_library_dir)
+
+    resp = client.post(
+        "/api/selection/expand", json={"slugs": ["k230"], "platform": PLATFORM_STM32}
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    slugs = [m["slug"] for m in data["modules"]]
+    assert slugs == ["ball_detect", "k230"]  # 依赖先于使用者，自动带入
+    k230 = next(m for m in data["modules"] if m["slug"] == "k230")
+    assert k230["platforms"]["stm32"]["files"] == []
+    assert k230["platforms"]["stm32"]["pins"] == []  # 串口引脚不重复声明
+    ball = next(m for m in data["modules"] if m["slug"] == "ball_detect")
+    assert [p["type"] for p in ball["platforms"]["stm32"]["pins"]] == [
+        "uart_tx",
+        "uart_rx",
+    ]
+    kinds = {w["kind"] for w in data["warnings"]}
+    assert {"unverified", "hardware_bound"} <= kinds  # k230 未上板 + 硬件绑定
+
+
+def test_generate_with_k230_writes_py_and_summary_lists_it(client, context, tmp_path):
+    """工单 k230-vision-copilot/04 验收②：勾选 k230 → 生成产物 = 主控工程
+    （ball_detect 解析随依赖进工程）+ K230 main.py 副产物（工程根）；摘要
+    python_artifacts 让前端「模块文件」行显示 main.py。"""
+    _add_fake_k230_modules(context[0].config.module_library_dir)
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    output_dir = tmp_path / "out" / "k230_demo"
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["k230"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    # 主控工程：依赖 ball_detect 解析代码随生成进工程；k230 自身无 C 子树
+    assert (output_dir / "modules" / "ball_detect" / "code" / "ball_detect.c").is_file()
+    assert not (output_dir / "modules" / "k230").exists()
+    # K230 侧 .py 副产物落在工程根，内容 = 模板渲染结果
+    assert (output_dir / "main.py").read_text(encoding="utf-8") == (
+        "sensor.reset()\n# k230 假模板（无占位符，渲染原样透传）\n"
+    )
+    # 摘要：modules 里 k230 files 空，python_artifacts 单独给出副产物清单
+    assert {"slug": "k230", "files": []} in data["modules"]
+    assert data["python_artifacts"] == [{"slug": "k230", "output": "main.py"}]
+    assert "main.py" in data["structure"]
+
+
 def test_expand_rejects_unknown_module(client):
     resp = client.post(
         "/api/selection/expand", json={"slugs": ["nope"], "platform": PLATFORM_STM32}
@@ -1145,6 +1310,8 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
     ]
     assert "main.c" in data["structure"]
     assert data["build_hint"] == ""  # stm32 无构建脚本提示（工单 mspm0-build-makefiles/01）
+    # 未选任何带 python_artifact 声明的模块 → 副产物清单空（旧行为不变）
+    assert data["python_artifacts"] == []
     # 修改器生效：.uvprojx 注册了模块分组与 include path
     uvprojx = next(output_dir.glob("*.uvprojx")).read_text(encoding="utf-8")
     assert "modules" in uvprojx
