@@ -9,6 +9,7 @@ from contest_generator.manifest import (
     ManifestError,
     ModuleManifest,
     PlatformEntry,
+    PythonArtifactSpec,
     collect_kits,
 )
 
@@ -288,3 +289,118 @@ def test_build_manifest_summaries_projection_lives_in_manifest():
 
     assert hasattr(manifest, "build_manifest_summaries")
     assert not hasattr(llm, "build_manifest_summaries")
+
+
+# ---------------------------------------------------------------------------
+# k230-vision-copilot/01：python_artifact 能力块解析 / 序列化 / 旧 manifest 兼容
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_manifest_without_python_artifact_loads_none():
+    """旧 manifest 缺 python_artifact → None（向后兼容，无副产物照旧）。"""
+    data = {
+        "slug": "dht11",
+        "description": "DHT11 温湿度传感器驱动",
+        "platforms": {"stm32": {"files": ["src/dht11.c"], "verified": True}},
+    }
+
+    manifest = ModuleManifest.from_dict(data)
+
+    assert manifest.python_artifact is None
+
+
+def test_legacy_manifest_serializes_without_python_artifact_field():
+    """旧 manifest 序列化不引入 python_artifact 键（与基线逐字节一致——写回
+    save_manifest 时不会给存量 manifest 平白加一个 null 字段）。"""
+    data = {
+        "slug": "dht11",
+        "description": "DHT11 温湿度传感器驱动",
+        "platforms": {"stm32": {"files": ["src/dht11.c"], "verified": True}},
+    }
+
+    manifest = ModuleManifest.from_dict(data)
+
+    assert "python_artifact" not in manifest.to_dict()
+
+
+def test_python_artifact_roundtrip_preserves_spec():
+    """python_artifact 往返稳定：to_dict → from_dict 无损。"""
+    manifest = ModuleManifest(
+        slug="k230",
+        description="K230 视觉副控",
+        python_artifact=PythonArtifactSpec(
+            template="code/k230_main.py", output="main.py"
+        ),
+    )
+
+    parsed = ModuleManifest.from_dict(manifest.to_dict())
+
+    assert parsed == manifest
+    assert parsed.python_artifact == PythonArtifactSpec(
+        template="code/k230_main.py", output="main.py"
+    )
+    assert manifest.to_dict()["python_artifact"] == {
+        "template": "code/k230_main.py",
+        "output": "main.py",
+    }
+
+
+def test_python_artifact_null_loads_none():
+    """python_artifact 显式 null 与缺省同义（None = 无副产物），且序列化不落键。"""
+    data = {
+        "slug": "k230",
+        "description": "K230 视觉副控",
+        "python_artifact": None,
+        "platforms": {"stm32": {"files": [], "verified": True}},
+    }
+
+    manifest = ModuleManifest.from_dict(data)
+    assert manifest.python_artifact is None
+    assert "python_artifact" not in manifest.to_dict()
+
+
+@pytest.mark.parametrize(
+    ("bad", "match"),
+    [
+        ({"template": "code/k230_main.py"}, "output"),  # 缺 output
+        ({"output": "main.py"}, "template"),  # 缺 template
+        ({"template": "", "output": "main.py"}, "template"),  # 空 template
+        ({"template": "code/k230_main.py", "output": ""}, "output"),  # 空 output
+        ({"template": 123, "output": "main.py"}, "template"),  # 非字符串 template
+        ({"template": "code/k230_main.py", "output": 123}, "output"),  # 非字符串 output
+        ({"template": "/abs/k230_main.py", "output": "main.py"}, "template"),  # 绝对路径
+        ({"template": "../up.py", "output": "main.py"}, "template"),  # .. 逃逸
+        ({"template": "..\\escape.py", "output": "main.py"}, "template"),  # 反斜杠逃逸
+        ({"template": "a//b.py", "output": "main.py"}, "template"),  # 空段
+        ({"template": ".", "output": "main.py"}, "template"),  # 目录自身（非文件）
+        ({"template": "code/k230_main.py", "output": "../main.py"}, "output"),  # output 逃逸
+        ({"template": "code/k230_main.py", "output": "sub/main.py"}, "output"),  # output 含目录
+        ({"template": "code/k230_main.py", "output": "."}, "output"),  # output 目录自身
+    ],
+)
+def test_python_artifact_rejects_invalid_values(bad, match):
+    """python_artifact 存在则严格校验，错值大声失败（照 multi_instance 先例，
+    不静默强转）；match 精确到报错字段（template / output），不满足于任意
+    ManifestError。"""
+    data = {
+        "slug": "k230",
+        "description": "K230 视觉副控",
+        "python_artifact": bad,
+        "platforms": {"stm32": {"files": [], "verified": True}},
+    }
+
+    with pytest.raises(ManifestError, match=match):
+        ModuleManifest.from_dict(data)
+
+
+def test_python_artifact_must_be_object():
+    """python_artifact 非对象（如字符串）大声失败。"""
+    data = {
+        "slug": "k230",
+        "description": "K230 视觉副控",
+        "python_artifact": "main.py",
+        "platforms": {"stm32": {"files": [], "verified": True}},
+    }
+
+    with pytest.raises(ManifestError, match="python_artifact"):
+        ModuleManifest.from_dict(data)
