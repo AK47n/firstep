@@ -99,13 +99,13 @@ class SyscfgAssign:
 class SyscfgModel:
     """mspm0.syscfg 的一次解析产物。
 
-    prune 与 rewrite 是对同一解析的两个操作（各自产出新的 SyscfgModel），
-    to_text 是唯一回写出口——先后关系由调用方 pipeline 构造保证。
+    prune 与 rewrite 是对同一解析的两个操作（产出新的 SyscfgModel；rewrite
+    无生效绑定时返回原模型），to_text 是唯一回写出口——先后关系由调用方
+    pipeline 构造保证。
     """
 
     lines: list[str]
     instances: dict[str, SyscfgInstance]  # 实例名 -> 实例声明
-    modules: dict[str, int]  # 模块变量名 -> addModule 声明行号（首个）
     assigns: list[SyscfgAssign]  # 全部 $assign 落点（行序）
 
     def to_text(self) -> str:
@@ -167,7 +167,8 @@ class SyscfgModel:
         """按绑定改写（对同一解析的 rewrite 操作，与旧 pinwriter.rewrite_syscfg
         逐字节等价）：按角色默认引脚值定位 $assign 落点行、换引号里的引脚值；
         uart/i2c/pwm 角色另按同一实例路径改写 `peripheral` 行值。实例名 / 宏名
-        / 通道名 / 其余行逐字节不动。产出新的 SyscfgModel。"""
+        / 通道名 / 其余行逐字节不动。产出新的 SyscfgModel；无生效绑定（全部
+        = 默认值）返回原模型（与旧 rewrite_syscfg 空改返回原文一致）。"""
         changes: list["ResolvedBinding"] = [
             b for b in resolved if b.pin != b.declaration.default
         ]
@@ -242,7 +243,6 @@ def parse_syscfg(text: str) -> SyscfgModel:
     """
     lines = text.splitlines(keepends=True)
     instances: dict[str, SyscfgInstance] = {}
-    modules: dict[str, int] = {}
     assigns: list[SyscfgAssign] = []
     for i, line in enumerate(lines):
         m = _INSTANCE_DECL_RE.match(line)
@@ -251,18 +251,12 @@ def parse_syscfg(text: str) -> SyscfgModel:
                 name=m.group("instance"), module=m.group("module"), line=i
             )
             continue
-        m = _MODULE_DECL_RE.match(line)
-        if m:
-            modules.setdefault(m.group("module"), i)
-            continue
         m = _SYSCFG_ASSIGN_RE.match(line)
         if m:
             assigns.append(
                 SyscfgAssign(path=m.group("path"), pin=m.group("pin"), line=i)
             )
-    return SyscfgModel(
-        lines=lines, instances=instances, modules=modules, assigns=assigns
-    )
+    return SyscfgModel(lines=lines, instances=instances, assigns=assigns)
 
 
 def syscfg_path_matches(
