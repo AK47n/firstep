@@ -3,18 +3,11 @@
 
 #include <stdint.h>
 
-// 通道编号（地猛星只有一个用户 LED，统一用 LED_RED；多灯时再扩）
-#define LED_RED    0
-#define LED_YELLOW 0
-#define LED_GREEN  0
+#include "led_instances.h" // 通道宏 + 每通道 (port, pin) 表（生成器多实例渲染产物）
 
-// 便捷控制宏（与 stm32 母版 ml_led 对齐，module-polish/05）
-#define LED_RED_ON()     led_on(LED_RED)
-#define LED_RED_OFF()    led_off(LED_RED)
-#define LED_YELLOW_ON()  led_on(LED_YELLOW)
-#define LED_YELLOW_OFF() led_off(LED_YELLOW)
-#define LED_GREEN_ON()   led_on(LED_GREEN)
-#define LED_GREEN_OFF()  led_off(LED_GREEN)
+// LED 驱动（地猛星）。通道表见 led_instances.h：LED_CHANNEL_COUNT +
+// LED_PIN_TABLE（单实例默认 1 通道 PA15，LED_BEEP 组）。极性已封装：
+// LED 一脚接地、另一脚接 MCU 引脚（拉电流接法），led_on = 亮。
 
 void led_init(uint8_t channel);
 void led_on(uint8_t channel);

@@ -11,18 +11,19 @@
       "files": [],
       "verified": true,
       "hardware_bound": false,
-      "notes": "stm32 实现内嵌母版 ml_led（led_init/led_on/led_off/led_toggle + LED_RED/YELLOW/GREEN 通道宏），模块侧空条目 = 母版内嵌（先例 oled/delay）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
+      "notes": "stm32 实现内嵌母版 ml_led（led_init/led_on/led_off/led_toggle），通道宏在母版根 led_instances.h（生成器多实例渲染产物，module-multi-instance/03；默认 = 三通道 PC13/14/15 取 pin_config.h 宏），模块侧空条目 = 母版内嵌（先例 oled/delay）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     },
     "mspm0": {
       "files": [
         "code/led.c",
-        "code/led.h"
+        "code/led.h",
+        "code/led_instances.h"
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "用户 LED PA15（syscfg LED_BEEP 组，拉电流高电平点亮）；板载 PA0/PA1 被 I2C0（MPU6050）占用，不作用户 LED。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
+      "notes": "用户 LED PA15（syscfg LED_BEEP 组，拉电流高电平点亮）；板载 PA0/PA1 被 I2C0（MPU6050）占用，不作用户 LED。\nled_instances.h = 生成器多实例渲染产物（module-multi-instance/03）：本条目默认 = 单实例 1 通道 PA15，多实例时按计划覆写 + syscfg 增 LED_<实例号> GPIO 实例。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

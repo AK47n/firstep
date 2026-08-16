@@ -94,9 +94,10 @@ def test_delay_us_exists_on_mspm0():
     assert "delay_us" in stm32_h
 
 def test_led_convenience_macros_aligned_both_platforms():
-    """三色 ON/OFF 便捷宏双平台一致（module-polish/05）。"""
-    mspm0_h = _read("led", "code/led.h")
-    stm32_h = (STM32_MASTER / "ml_libs" / "ml_led.h").read_text(
+    """三色 ON/OFF 便捷宏双平台一致（module-polish/05）——通道表迁移后宏在
+    led_instances.h（stm32 母版默认 / mspm0 库内默认，module-multi-instance/03）。"""
+    mspm0_h = _read("led", "code/led_instances.h")
+    stm32_h = (STM32_MASTER / "led_instances.h").read_text(
         encoding="utf-8", errors="replace"
     )
     for macro in (

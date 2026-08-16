@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
 from .boards import Board, board_for_platform, board_pin, pin_capability_instances
 from .compile_runner import CCS_NOT_FOUND_HINT, CcsTools
+from .instance_render import expand_instance_plans, render_instances
 from .library import list_modules
 from .llm import LLMError
 from .makefiles import write_makefile_set
@@ -39,6 +40,7 @@ from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
     REFERENCE_SOURCE_MANUAL,
+    ModuleInstance,
     ReferenceSuggestion,
     associated_references,
     filter_manifests_by_platform,
@@ -465,6 +467,7 @@ def generate_project(
     registry: PatcherRegistry | None = None,
     ccs_tools: CcsTools | None = None,
     bindings: Mapping[str, str] | None = None,
+    instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -481,6 +484,10 @@ def generate_project(
     （webapp）探好传入——本流程不自己探（探针需要 config 覆盖值，config 归
     装配层；直接调用方不传 = 不写 makefile 集，测试确定性）。mspm0 + None
     = 摘要 build_hint 提示（命令行构建不可用），生成不阻断。
+
+    instances（工单 module-multi-instance/03）= 多实例清单
+    {slug: [{name, variant, pin}]}，透传 generate 展开 + 渲染；缺省 / 空 =
+    单默认实例（现行为逐字节不变）。
     """
     resolved = resolve_selection(module_library_dir, platform, slugs)
     result_dir, include_dirs, build_hint = generate(
@@ -493,6 +500,7 @@ def generate_project(
         registry=registry,
         ccs_tools=ccs_tools,
         bindings=bindings,
+        instances=instances,
     )
     return describe_generation(
         result_dir, resolved.manifests, platform, include_dirs, build_hint
@@ -707,6 +715,7 @@ def generate(
     registry: PatcherRegistry | None = None,
     ccs_tools: CcsTools | None = None,
     bindings: Mapping[str, str] | None = None,
+    instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
 ) -> tuple[Path, tuple[str, ...], str]:
     """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径,
     build_hint）。
@@ -721,6 +730,12 @@ def generate(
     纯函数两处调用是刻意的——门禁是唯一校验出口，generate 拿解析结果喂
     写侧），copytree 后 apply_pin_bindings 覆写 pin_config.h / 改写 syscfg
     （文本无变化不落盘，缺省路径完全不进写侧）。
+
+    instances（工单 module-multi-instance/03）= 多实例清单
+    {slug: [{name, variant, pin}]}：expand_instance_plans 展开（上限守卫 /
+    默认脚分配在展开层，SelectionError → 400），写侧按注册表渲染
+    （render_instances——led 首例：led_instances.h + mspm0 syscfg 新实例）。
+    缺省 / 空清单 = 单默认实例：渲染零写侧变化（默认文件随复制就位）。
 
     mspm0 构建脚本（工单 mspm0-build-makefiles/01）：产物完整后（patcher 之后）
     从复制产物推导模块源集（过滤 .c，子目录 = rel 父目录——manifest 单源，
@@ -738,12 +753,15 @@ def generate(
         raise OutputDirNotEmptyError(f"输出目录已存在且非空，拒绝覆盖：{output_dir}")
 
     # 绑定预解析（工单 02）：板定义 + 载荷校验都在创建输出目录之前；解析
-    # 结果喂写侧（门禁对原始载荷独立再校验——见 docstring）。
+    # 结果喂写侧（门禁对原始载荷独立再校验——见 docstring）。实例展开的板
+    # 定义由 expand_instance_plans 缺省现加载（多实例清单非空时才需要）。
     board: Board | None = None
     resolved_bindings: tuple[ResolvedBinding, ...] = ()
     if bindings:
         board = board_for_platform(platform)  # 板数据缺失 = BoardError 500（白名单）
         resolved_bindings = resolve_bindings(manifests, platform, board, bindings)
+
+    instance_plans = expand_instance_plans(manifests, instances, platform, board)
 
     corpus = build_module_corpus(
         manifests, platform, module_library_dir, master_project_dir, main_c_content
@@ -782,6 +800,11 @@ def generate(
         # copytree 后按绑定覆写板级引脚配置（工单 02 写侧；缺省路径不进写侧）
         if resolved_bindings:
             apply_pin_bindings(output_dir, platform, resolved_bindings)
+
+        # 多实例渲染（工单 03）：led_instances.h + mspm0 syscfg 新实例——
+        # 空计划（单实例默认）零写侧变化；在 patcher 前（syscfg 改写落在
+        # 生成树，写侧只碰渲染文件与 $assign 行）。
+        render_instances(output_dir, instance_plans, platform)
 
         patcher.patch(output_dir, copied_files, include_dirs)
 
