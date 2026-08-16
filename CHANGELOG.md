@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1aa6da1261924dd3532b3db5378ec214ebab3184 -->
+<!-- changelog-auto: last-commit=5a251d43ba1697d4185a9142d5581820a58195e2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -27,6 +27,7 @@
 - 16:38 module-multi-instance 06——推荐链路 AI 猜实例数（题面「4 个指示灯」→ led×4）+ 实例解析/收敛键/done 载荷 + 前端回填实例卡
 - 16:56 module-multi-instance 05——双平台编译回归关门验收
 - 17:09 stm32 led_toggle 反转逻辑（高→灭/低→亮真翻转）
+- 17:45 多实例配置「添加实例」按钮读错属性（data-add vs dataset.slug）导致点了没反应
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
