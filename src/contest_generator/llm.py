@@ -862,29 +862,33 @@ class DeepSeekLLM:
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
     ) -> str:
-        return self._chat(
-            [
-                {"role": "system", "content": SKELETON_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _skeleton_user_prompt(
-                        problem_text, module_interfaces, reference_fulltexts
-                    ),
-                },
-            ]
+        def parse(content: str) -> str:
+            if not content.strip():
+                raise LLMError("骨架 main.c 生成返回空内容")
+            return content
+
+        return self._retry_parse(
+            system_prompt=SKELETON_SYSTEM_PROMPT,
+            user_prompt=_skeleton_user_prompt(
+                problem_text, module_interfaces, reference_fulltexts
+            ),
+            parse=parse,
+            label="骨架 main.c 生成",
         )
 
     def generate_smoke_main(
         self, problem_text: str, module_interfaces: Sequence[str]
     ) -> str:
-        return self._chat(
-            [
-                {"role": "system", "content": SMOKE_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _smoke_user_prompt(problem_text, module_interfaces),
-                },
-            ]
+        def parse(content: str) -> str:
+            if not content.strip():
+                raise LLMError("冒烟 main.c 生成返回空内容")
+            return content
+
+        return self._retry_parse(
+            system_prompt=SMOKE_SYSTEM_PROMPT,
+            user_prompt=_smoke_user_prompt(problem_text, module_interfaces),
+            parse=parse,
+            label="冒烟 main.c 生成",
         )
 
     def summarize_module(self, code: str) -> str:

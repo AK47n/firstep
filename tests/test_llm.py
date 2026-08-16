@@ -1015,6 +1015,45 @@ def test_smoke_prompt_carries_channel_and_per_module_rules():
     assert SKELETON_NO_UNUSED_RULE in SMOKE_SYSTEM_PROMPT
     assert SKELETON_NO_UNUSED_RULE in user_prompt
 
+def test_generate_main_skeleton_retries_empty_content_then_succeeds():
+    """骨架出稿也走 _retry_parse：空内容自动重问，成功后返回正文。"""
+    transport = SequenceTransport(
+        [_api_response(""), _api_response(""), _api_response("int main(void) {}")]
+    )
+    llm = _llm(transport)
+
+    result = llm.generate_main_skeleton("赛题", ["x.h"])
+
+    assert result == "int main(void) {}"
+    assert len(transport.calls) == 3  # 空内容 2 次 + 成功 1 次
+
+
+def test_generate_main_skeleton_exhausts_retries_on_empty_content():
+    """骨架出稿连续空内容 → 按 SUMMARY_RETRY_LIMIT 大声失败。"""
+    transport = SequenceTransport(
+        [_api_response("")] * SUMMARY_RETRY_LIMIT
+    )
+    llm = _llm(transport)
+
+    with pytest.raises(
+        LLMError, match=f"骨架 main.c 生成连续 {SUMMARY_RETRY_LIMIT} 次调用失败"
+    ):
+        llm.generate_main_skeleton("赛题", ["x.h"])
+    assert len(transport.calls) == SUMMARY_RETRY_LIMIT
+
+
+def test_generate_smoke_main_retries_empty_content_then_succeeds():
+    """冒烟出稿同款兜底：空内容自动重问。"""
+    transport = SequenceTransport(
+        [_api_response(""), _api_response("int main(void) { /* smoke */ }")]
+    )
+    llm = _llm(transport)
+
+    result = llm.generate_smoke_main("赛题", ["x.h"])
+
+    assert result == "int main(void) { /* smoke */ }"
+    assert len(transport.calls) == 2  # 空内容 1 次 + 成功 1 次
+
 
 def test_summarize_module_returns_ai_description():
     transport = FakeTransport(body=_api_response("DHT11 温湿度传感器驱动，读取单总线数据"))
