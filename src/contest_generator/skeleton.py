@@ -40,6 +40,16 @@ if TYPE_CHECKING:
     # 仅类型注解用（实例类型归选择域；instance_render 运行时已消费）
     from .selection import ExpandedInstance, ModuleInstance
 
+
+class SkeletonError(Exception):
+    """骨架 / 自检冒烟的域错误（登记 errors.py → 400 中文）。
+
+    main_mode 非法值 / 冒烟守卫（缺 OLED + debug_uart 输出通道）在此抛出，
+    不再在路由抛 HTTPException——域判决随域走（工单 route-orchestration-homing/01），
+    路由只取参转调。
+    """
+
+
 # 控制关键字与 main：这些"名字("不是模块函数调用
 _CONTROL_KEYWORDS = frozenset(
     {
@@ -460,6 +470,56 @@ def generate_smoke_main(
         llm.generate_smoke_main,
         instances=instances,
     )
+
+
+def run_skeleton(
+    *,
+    llm: LLM,
+    problem_text: str,
+    manifests: Sequence[ModuleManifest],
+    slugs: Sequence[str],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path | None = None,
+    instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
+    reference_fulltexts: Mapping[str, str] | None = None,
+    main_mode: str = "skeleton",
+) -> dict[str, Any]:
+    """/api/skeleton 的域编排（工单 route-orchestration-homing/01）：main_mode
+    分支 + 冒烟守卫 + generate_skeleton / generate_smoke_main 分派。
+
+    冒烟守卫（缺 OLED / debug_uart 输出通道）与 main_mode 非法值抛
+    SkeletonError（登记 errors.py → 400 中文），不再在路由抛 HTTPException。
+    返回结果 dict（形状的家在此：{main_c, intercepted}），webapp docstring
+    只指向本函数。slugs = 用户选择集（冒烟守卫判输出通道用，manifests 是
+    依赖展开后的全集，两者不同源）。
+    """
+    if main_mode not in ("skeleton", "smoke"):
+        raise SkeletonError("main_mode 必须是 skeleton 或 smoke")
+    if main_mode == "smoke":
+        if not {"oled", "debug_uart"} & set(slugs):
+            raise SkeletonError("自检骨架需要 OLED 或 debug_uart 模块作为输出通道")
+        main_c, intercepted = generate_smoke_main(
+            llm,
+            problem_text,
+            manifests,
+            platform,
+            library_dir,
+            master_project_dir,
+            instances=instances,
+        )
+    else:
+        main_c, intercepted = generate_skeleton(
+            llm,
+            problem_text,
+            manifests,
+            platform,
+            library_dir,
+            master_project_dir,
+            reference_fulltexts=reference_fulltexts,
+            instances=instances,
+        )
+    return {"main_c": main_c, "intercepted": list(intercepted)}
 
 
 def _generate_main_c(
