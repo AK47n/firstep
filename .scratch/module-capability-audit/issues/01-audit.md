@@ -11,6 +11,7 @@
 - 数据由 `.scratch/module-capability-audit/audit.py` 生成，可重复运行；只读库。
 - 关键发现：mspm0 条目 22 个仅 1 个 verified；双平台 API 差异集中在 delay/led/oled/motor/ml_mpu6050；单平台缺口 debug_uart(mspm0) 与 huidu/imu_uart/step_motor/xunji(stm32)。
 - 下一步决策见 report.md §7（debug_uart 实例、oled 共同签名、ml_mpu6050 方向、编译矩阵口径）。
+- **2026-08-15 闭环**：P0/P1/P2 已由 module-polish/01-05 全部实施（debug_uart mspm0、oled 共同 API、delay_us、41/41 编译矩阵、led 宏/motor 标注）；剩余仅明确缓议项（ml_mpu6050 高层包装、uwb↔filter 可选化、getter 化）。盘点报告 §6/§7 已同步勾销。
 
 - [x] report.md 含全库模块 × 平台总表
 - [x] 双平台 API 集合差（模块头 + 内嵌母版头）
