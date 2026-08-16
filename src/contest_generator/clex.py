@@ -42,6 +42,22 @@ def strip_code_fences(code: str) -> str:
     return "".join(lines)
 
 
+def strip_all_code_fences(code: str) -> str:
+    """剥离 LLM 输出中**全部**围栏行（``` / ~~~，可带语言标注）。
+
+    与 strip_code_fences 分工：那个只剥首尾包裹形态（中间围栏可能是原文信息，
+    契约由 test_clex 钉死）；本函数剥全部围栏行——生成的 main.c 里任何围栏行
+    都是 LLM 传输层噪声，C 代码本体不可能合法出现（skeleton 出稿兜底，
+    判例：LLM 偶发三重围栏，strip_code_fences 剥首尾后仍残留一行，生成门禁
+    400 阻断生成）。
+    """
+    return "".join(
+        line
+        for line in code.splitlines(keepends=True)
+        if not _FENCE_LINE_RE.match(line.rstrip("\r\n"))
+    )
+
+
 def fence_line_indices(code: str) -> list[tuple[int, str]]:
     """含围栏的行：(1 起行号, 行文本（已 strip）)。
 

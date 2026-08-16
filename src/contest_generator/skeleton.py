@@ -22,6 +22,7 @@ from .clex import (
     iter_c_regions,
     match_bracket,
     next_significant,
+    strip_all_code_fences,
     strip_code_fences,
     strip_comments,
 )
@@ -460,7 +461,8 @@ def _generate_main_c(
         raw = generate(problem_text, interfaces)
     else:
         raw = generate(problem_text, interfaces, reference_fulltexts)
-    raw = strip_code_fences(raw)  # LLM 偶发用围栏包裹 → 剥离后再自检（判例见函数文档）
+    raw = strip_code_fences(raw)  # 首尾包裹形态先剥（契约见 clex）
+    raw = strip_all_code_fences(raw)  # 残留围栏行全剥（LLM 偶发多重围栏，判例见 clex）
     return sanitize_skeleton(raw, extract_header_functions(interfaces))
 
 

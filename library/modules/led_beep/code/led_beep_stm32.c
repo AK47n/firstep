@@ -1,9 +1,8 @@
-#include "led_beep.h"
-#include "led.h"
-#include "beep.h"
-#include "delay.h"
+#include "led_beep_stm32.h"
+#include "beep_stm32.h"
+#include "headfile.h"  // ml_led.h（led_init/led_on/led_off）内嵌母版
 
-/* 组合模块（MSPM0）：转发 led / beep，只做同时控制。 */
+/* 组合模块（stm32）：转发 led / beep，只做同时控制。 */
 
 void led_beep_init(void)
 {

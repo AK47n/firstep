@@ -451,7 +451,7 @@ def test_rewrite_syscfg_default_bindings_byte_identical():
     assert (
         rewrite_syscfg(
             MSPM0_MASTER_SYSCFG,
-            _resolve("mspm0", {"led_beep.LED_BEEP_LED": "PA15"}),
+            _resolve("mspm0", {"led.LED": "PA15"}),
         )
         == MSPM0_MASTER_SYSCFG
     )
@@ -461,7 +461,7 @@ def test_rewrite_syscfg_changes_only_target_assign_lines():
     """LED 换脚只动 LED_BEEP 一行；HUIDU R3/R4 默认 PB6/PB7 未绑不动。"""
     out = rewrite_syscfg(
         MSPM0_MASTER_SYSCFG,
-        _resolve("mspm0", {"led_beep.LED_BEEP_LED": "PA12"}),
+        _resolve("mspm0", {"led.LED": "PA12"}),
     )
     before = MSPM0_MASTER_SYSCFG.splitlines(True)
     after = out.splitlines(True)
@@ -523,7 +523,7 @@ def test_rewrite_syscfg_instance_and_channel_names_unchanged():
     out = rewrite_syscfg(
         MSPM0_MASTER_SYSCFG,
         _resolve("mspm0", {
-            "led_beep.LED_BEEP_LED": "PA12",
+            "led.LED": "PA12",
             "oled.OLED_SCL": "PA17",
             "key.KEY_START": "PA8",
         }),
@@ -754,7 +754,7 @@ def test_generate_stm32_with_bindings_rewrites_pin_config(tmp_path):
 def test_generate_mspm0_with_bindings_rewrites_syscfg(tmp_path):
     """带绑定生成：syscfg 先按选中模块裁剪（syscfg-prune/01）再写 $assign；
     无绑定 = 裁剪后基线（不再 == 全量母版，全选理论模块才 == 母版）。"""
-    led = next(m for m in ALL_MANIFESTS if m.slug == "led_beep")
+    led = next(m for m in ALL_MANIFESTS if m.slug == "led")
     out_dir = tmp_path / "out"
     generate(
         platform="mspm0",
@@ -763,7 +763,7 @@ def test_generate_mspm0_with_bindings_rewrites_syscfg(tmp_path):
         master_project_dir=MSPM0_MASTER,
         output_dir=out_dir,
         main_c_content="int main(void) { while (1); }\n",
-        bindings={"led_beep.LED_BEEP_LED": "PA12"},
+        bindings={"led.LED": "PA12"},
     )
     written = (
         out_dir / MSPM0_SYSCFG_FILENAME
@@ -784,7 +784,7 @@ def test_generate_mspm0_with_bindings_rewrites_syscfg(tmp_path):
     assert (
         out_dir2 / MSPM0_SYSCFG_FILENAME
     ).read_text(encoding="utf-8", newline="") == prune_syscfg(
-        MSPM0_MASTER_SYSCFG, ["led_beep"]
+        MSPM0_MASTER_SYSCFG, ["led"]
     )
 
 

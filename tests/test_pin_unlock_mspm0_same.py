@@ -176,7 +176,7 @@ def test_rewrite_syscfg_default_bindings_byte_identical():
     assert (
         rewrite_syscfg(
             MSPM0_MASTER_SYSCFG,
-            _resolve({"led_beep.LED_BEEP_LED": "PA15"}),
+            _resolve({"led.LED": "PA15"}),
         )
         == MSPM0_MASTER_SYSCFG
     )

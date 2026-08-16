@@ -346,7 +346,7 @@ MSPM0_DEFAULT_MAP = {
     ("digit_uart", "DIGIT_UART_RX"): ("DIGIT_UART", "rxPin"),
     ("imu_uart", "IMU601_TX"): ("IMU601", "txPin"),
     ("imu_uart", "IMU601_RX"): ("IMU601", "rxPin"),
-    ("led_beep", "LED_BEEP_LED"): ("LED_BEEP", "LED"),
+    ("led", "LED"): ("LED_BEEP", "LED"),
     ("oled", "OLED_SCL"): ("OLED", "sclPin"),
     ("oled", "OLED_SDA"): ("OLED", "sdaPin"),
     ("step_motor", "STEP_MOTOR_RST2"): ("STEP_MOTOR", "RST2"),
