@@ -12,6 +12,7 @@ __pycache__/
 .scratch/real-run/
 .scratch/module-functionalize/out_*_mspm0/
 .scratch/module-polish/matrix/
+.scratch/module-multi-instance/matrix/
 
 # 本地服务运行日志（uvicorn stdout 重定向）
 webapp.log
