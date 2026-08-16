@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=18c83600db00475f26d93c8dd91be25b0ecc6ffa -->
+<!-- changelog-auto: last-commit=080096798af0ed1f22187fcea3add264965d704f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 12:33 解析类模型重试上限 3 → 5
 - 12:39 骨架/冒烟出稿接入重试原语
 - 13:19 module-polish 批次——debug_uart mspm0 + OLED 共同 API + delay_us + 编译矩阵
+- 13:23 module-polish P2 收尾——led 便捷宏对齐 + motor 旧 API 标注
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
