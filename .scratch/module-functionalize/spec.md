@@ -36,7 +36,7 @@
 
 ## Out of Scope / 剩余批次
 
-- 已完成批次（工单 01-09，均 resolved + 真机验收）：
+- 已完成批次（工单 01-10，均 resolved + 真机验收）：
   - 01 led/beep 拆分 + led_beep 组合化
   - 02 motor stm32 统一 API
   - 03 ntb_time stm32
@@ -46,6 +46,7 @@
   - 07 zigbee_uart 补 mspm0（ZIGBEE_UART/UART3，PA26(TX)/PA25(RX)，接收侧）
   - 08 zigbee_uart_key 补 mspm0（与 zigbee_uart 共享 ZIGBEE_UART，发送侧只发不收）
   - 09 ball_detect 补 mspm0 声明（DIGIT_UART/UART1 共享，PA8/PA9）
+  - 10 模块独立性结构门禁（tests/test_module_independence.py：跨模块 include = 声明依赖 / 无死依赖 / 无环）
   - UART 实例分配：UART0=IMU601、UART1=DIGIT_UART（digit_uart+ball_detect 共享）、UART2=UWB_UART、UART3=ZIGBEE_UART（zigbee_uart+zigbee_uart_key 共享）；默认重叠（UWB/Zigbee × HUIDU）由模块集裁剪 + 用户改绑消解，已落入 test_pin_bindings / test_syscfg_prune 白名单。
   - 真机 mspm0 gmake 0 错验收：digit+ball 共享 UART1、uwb、zigbee、key、五模块三 UART 同工程全过（日志 `.scratch/module-functionalize/out_*_mspm0/gmake_build.log`）。
 
