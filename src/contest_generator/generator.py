@@ -22,10 +22,16 @@ from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 from .boards import Board, board_for_platform, board_pin, pin_capability_instances
 from .compile_runner import CCS_NOT_FOUND_HINT, CcsTools
 from .instance_render import expand_instance_plans, render_instances
+from .k230_render import render_python_artifact
 from .library import list_modules
 from .llm import LLMError
 from .makefiles import write_makefile_set
-from .manifest import ManifestSummary, ModuleManifest, build_manifest_summaries
+from .manifest import (
+    ManifestSummary,
+    ModuleManifest,
+    PythonArtifactSpec,
+    build_manifest_summaries,
+)
 from .master_store import master_project_dir
 from .patchers import (
     PatcherRegistry,
@@ -142,6 +148,12 @@ class UsartHandlerInMainError(GeneratorError):
     （USARTx_IRQ_CALLS 按绑定实例分组），main.c 写死 handler 会与 isr.c 强
     符号链接冲突（UV4 L6200E multiply defined 判例），生成前拦截
     （工单 pin-full-unlock/02，ADR 0012）。"""
+
+
+class PythonArtifactError(GeneratorError):
+    """Python 副产物写盘失败（工单 k230-vision-copilot/02）：模板缺失 /
+    跨模块 output 同名冲突——大声失败，不静默覆盖、不留残缺产物（generate
+    的 try 块 rmtree 兜底）。"""
 
 
 # 工程树外由 C 标准库提供的头（引号形式同样由编译器按库路径解析；两平台
@@ -737,6 +749,10 @@ def generate(
     （render_instances——led 首例：led_instances.h + mspm0 syscfg 新实例）。
     缺省 / 空清单 = 单默认实例：渲染零写侧变化（默认文件随复制就位）。
 
+    Python 副产物（工单 k230-vision-copilot/02）：模块文件复制后，选中模块
+    的 python_artifact 声明经 k230_render 渲染写 .py 到工程根（同写阶段，
+    中途失败 rmtree 兜底；未选任何带声明模块 = 零写侧变化）。
+
     mspm0 构建脚本（工单 mspm0-build-makefiles/01）：产物完整后（patcher 之后）
     从复制产物推导模块源集（过滤 .c，子目录 = rel 父目录——manifest 单源，
     不维护静态 MODULES 表）写 CCS 标准 Debug/makefile 集（write_makefile_set，
@@ -781,14 +797,22 @@ def generate(
             dirs_exist_ok=True,
             ignore=shutil.ignore_patterns(".git"),
         )
-        (output_dir / "main.c").unlink(missing_ok=True)  # 旧的 main 由新骨架替换
 
         copied_files, include_dirs = _copy_module_files(
             manifests, platform, module_library_dir, output_dir
         )
 
+        # Python 副产物（工单 k230-vision-copilot/02）：选中模块的
+        # python_artifact 声明 → k230_render 渲染模板 → 写 .py 到工程根。
+        # 与模块文件复制同写阶段（try 内），中途失败 rmtree 兜底不留半成品；
+        # 未选任何带声明模块 = 零写侧变化（产物与现在逐字节一致）。写时
+        # 存在性判定撞母版既有文件（含 main.c）即拒绝——unlink 因此排在
+        # 副产物写盘之后（main.c 换新前的旧文件保留语义不变，仅挪位）。
+        _write_python_artifacts(manifests, module_library_dir, output_dir)
+
         if not main_c_content.endswith("\n"):
             main_c_content += "\n"  # 尾部换行幂等兜底（LLM 输出常漏，Keil 报 #1-D）
+        (output_dir / "main.c").unlink(missing_ok=True)  # 旧的 main 由新骨架替换
         (output_dir / "main.c").write_text(main_c_content, encoding="utf-8")
 
         # 写侧（工单 02 写侧 + 工单 syscfg-file-model/04 单 pipeline）：
@@ -1473,3 +1497,56 @@ def _copy_module_files(
                 include_dirs.append(parent)
 
     return copied_files, include_dirs
+
+
+def _write_python_artifacts(
+    manifests: Sequence[ModuleManifest],
+    module_library_dir: Path,
+    output_dir: Path,
+) -> None:
+    """选中模块的 python_artifact 声明 → 渲染并写出 .py 到输出目录（工单
+    k230-vision-copilot/02）。
+
+    模块级声明（与平台无关）：template = .py 模板相对模块目录（读盘，模块
+    库内的模板文件，不随平台文件复制），output = 纯文件名（写工程根——
+    CanMV 的 main.py 落 SD 卡根，开机自启动）。渲染走
+    k230_render.render_python_artifact（契约单源：帧格式 / 波特率占位符 ←
+    契约常量，模板不重抄）。未选任何带声明模块 = 零写侧变化（产物与现在
+    逐字节一致）。跨模块同名 output / 模板缺失 / output 撞工程既有文件
+    （母版文件如 main.c、project.uvprojx；写时存在性判定，顺带挡 Windows
+    大小写不敏感的同名副产物）→ PythonArtifactError 大声失败（generate 的
+    try 块 rmtree 兜底不留半成品，不静默覆盖）。.py 不注册进工程文件
+    （patcher 只吃 copied_files，不进 .uvprojx/.cproject 树）。"""
+    specs: list[tuple[ModuleManifest, PythonArtifactSpec]] = []
+    seen_outputs: dict[str, str] = {}
+    for manifest in manifests:
+        spec = manifest.python_artifact
+        if spec is None:
+            continue
+        owner = seen_outputs.get(spec.output)
+        if owner is not None:
+            raise PythonArtifactError(
+                f"模块 {owner} 与模块 {manifest.slug} 的 python_artifact"
+                f" 输出同名 {spec.output}——请为其中一方改 output 文件名"
+            )
+        seen_outputs[spec.output] = manifest.slug
+        specs.append((manifest, spec))
+    for manifest, spec in specs:
+        # 写时存在性判定：母版树已复制、模块文件已复制，撞任何既有文件
+        # （含先前写出的副产物的大小写变体，Windows 同一文件）即拒绝——
+        # 不静默覆盖工程文件，也不被 main.c 等后续落盘反向覆盖
+        if (output_dir / spec.output).exists():
+            raise PythonArtifactError(
+                f"模块 {manifest.slug} 的 python_artifact 输出 {spec.output}"
+                f" 与工程既有文件同名——请改 output 文件名"
+            )
+        template_path = module_library_dir / manifest.slug / spec.template
+        if not template_path.is_file():
+            raise PythonArtifactError(
+                f"模块 {manifest.slug} 的 python_artifact 模板不存在："
+                f"{spec.template}"
+            )
+        rendered = render_python_artifact(
+            template_path.read_text(encoding="utf-8", errors="replace")
+        )
+        (output_dir / spec.output).write_text(rendered, encoding="utf-8")

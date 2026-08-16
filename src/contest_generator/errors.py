@@ -25,6 +25,7 @@ from .generator import (
     DuplicateFilePathError,
     ExtiLineConflictError,
     GeneratorError,
+    PythonArtifactError,
     TimerConflictError,
     UartInstanceConflictError,
     UsartHandlerInMainError,
@@ -77,6 +78,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ExtiLineConflictError,  # 绑定 enc/exti 角色异口同线互斥（工单 pin-full-unlock/01）
             UartInstanceConflictError,  # 绑定 UART 实例撞未绑角色默认实例（工单 pin-full-unlock/02）
             UsartHandlerInMainError,  # main.c 定义 USARTx_IRQHandler 撞 isr.c 聚合（工单 pin-full-unlock/02）
+            PythonArtifactError,  # Python 副产物写盘失败：模板缺失 / 跨模块 output 同名（工单 k230-vision-copilot/02）
             ConfigError,
             ReferenceError,
             TopicError,
