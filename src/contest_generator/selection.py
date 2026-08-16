@@ -19,7 +19,7 @@ TYPE_CHECKING（library.py 先例，避免 llm ↔ selection 运行时环）。
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
@@ -83,24 +83,41 @@ class PlatformWarning:
 
 @dataclass(frozen=True)
 class ResolvedSelection:
-    """选择解析结果：依赖展开后的完整模块集 + 平台可用性警告。"""
+    """选择解析结果：依赖展开后的完整模块集 + 平台可用性警告 + 实例清单。
+
+    instances = 多实例实例清单（slug → 实例元组），透传自生成请求——缺省
+    空 dict = 单默认实例（旧行为）。
+    """
 
     manifests: tuple[ModuleManifest, ...]
     warnings: tuple[PlatformWarning, ...]
+    instances: dict[str, tuple[ModuleInstance, ...]] = field(default_factory=dict)
 
 
 def resolve_selection(
-    library_dir: Path, platform: str, slugs: Sequence[str]
+    library_dir: Path,
+    platform: str,
+    slugs: Sequence[str],
+    instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
 ) -> ResolvedSelection:
-    """加载模块库 → 展开依赖 → 平台警告，一步到位。
+    """加载模块库 → 展开依赖 → 平台警告 → 透传实例清单，一步到位。
 
     webapp 的展开 / 骨架 / 生成三个端点共用这一组合操作——"所选模块最终
     解析成什么"只有一个答案来源，单独跑 expand 与生成前的结果必然一致。
+    instances 缺省 = 空（单默认实例，旧行为）；传入则保序归一为元组透传，
+    展开 / 默认脚分配（工单 02）在此之后消费。
     """
     by_slug = {m.slug: m for m in list_modules(library_dir)}
     manifests = resolve_dependencies(slugs, by_slug)
     warnings = check_platform_warnings([m.slug for m in manifests], platform, by_slug)
-    return ResolvedSelection(manifests=manifests, warnings=warnings)
+    resolved_instances = {
+        slug: tuple(insts) for slug, insts in (instances or {}).items()
+    }
+    return ResolvedSelection(
+        manifests=manifests,
+        warnings=warnings,
+        instances=resolved_instances,
+    )
 
 
 def resolve_dependencies(
@@ -353,6 +370,23 @@ class FunctionRequirement:
 
 
 @dataclass(frozen=True)
+class ModuleInstance:
+    """多实例选择里的单个实例。
+
+    name = 显示名（自由中文）；variant = 变体（led = 颜色，内置 red/yellow/
+    green，空串 = 非内置色）；pin = 显式引脚覆盖，空串 = 自动分配默认脚
+    （请求解析层把 null 归一为空串，本模型只认空串语义）。
+    """
+
+    name: str
+    variant: str = ""
+    pin: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "variant": self.variant, "pin": self.pin}
+
+
+@dataclass(frozen=True)
 class ModuleSelection:
     """赛题 → 模块选择结果（AI 的原始推荐，未展开依赖）。
 
@@ -364,6 +398,8 @@ class ModuleSelection:
     命中的并集，保序）——模块必有需求支撑，没挂需求句的模块是脑补；
     questions = 题面证据不足以判定时向用户补问的问题（非空 → 收敛循环暂停，
     以补问收尾，不产出推荐）。
+    instances = 多实例实例清单（slug → 实例元组），缺省空 dict = 单默认
+    实例（旧行为）。
     """
 
     modules: tuple[str, ...]  # 模块 slug（AI 推荐顺序）
@@ -371,6 +407,7 @@ class ModuleSelection:
     reference_ids: tuple[str, ...] = ()  # 两级注入第一级：想读全文的参考文件 id
     requirements: tuple[FunctionRequirement, ...] = ()  # 功能需求层
     questions: tuple[str, ...] = ()  # 向用户补问（非空 → 暂停分析）
+    instances: dict[str, tuple[ModuleInstance, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
