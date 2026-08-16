@@ -30,6 +30,7 @@ from contest_generator.selection import (
     ModuleSelection,
     SelectionError,
     expand_instances,
+    parse_instances,
     resolve_selection,
 )
 from contest_generator.instance_render import (
@@ -242,6 +243,77 @@ def test_resolve_selection_without_instances_is_empty(fake_module_library):
     resolved = resolve_selection(fake_module_library, "stm32", ["dht11"])
 
     assert resolved.instances == {}
+
+
+# ---------------------------------------------------------------------------
+# module-multi-instance/04：webapp 请求层 instances 解析（纯函数，照
+# build_module_selection 先例——webapp 只取参转调，域判决单址）。
+#
+# 形状 {slug: [{name, variant, pin}]} → {slug: (ModuleInstance, ...)}；严格
+# 校验：instances 是对象、slug 在选中集内、每实例 name 非空、variant/pin 为
+# 字符串（null 归一空串 = 自动分配 / 非内置色）。缺省 / 空 = 空 dict（旧行为）。
+# ---------------------------------------------------------------------------
+
+
+def test_parse_instances_valid_dict_roundtrip():
+    """合法载荷 → ModuleInstance 元组；null variant / pin 归一为空串。"""
+    result = parse_instances(
+        {
+            "led": [
+                {"name": "红灯", "variant": "red", "pin": "PC13"},
+                {"name": "状态灯", "variant": None, "pin": None},
+                {"name": "绿灯", "variant": "green", "pin": ""},
+            ]
+        },
+        known_slugs=("led",),
+    )
+
+    assert result == {
+        "led": (
+            ModuleInstance(name="红灯", variant="red", pin="PC13"),
+            ModuleInstance(name="状态灯"),
+            ModuleInstance(name="绿灯", variant="green"),
+        )
+    }
+
+
+def test_parse_instances_missing_or_empty_is_empty_dict():
+    """缺省 None / 空对象 = 空 dict（旧请求零改动 = 单默认实例）。"""
+    assert parse_instances(None, known_slugs=("led",)) == {}
+    assert parse_instances({}, known_slugs=("led",)) == {}
+
+
+@pytest.mark.parametrize(
+    ("raw", "match"),
+    [
+        ([], "对象"),  # 顶层非对象
+        ("led", "对象"),
+        ({"led": {}}, "数组"),  # 值非数组
+        ({"led": {"name": "红灯"}}, "数组"),
+        ({"led": [{"variant": "red"}]}, "name"),  # 缺 name
+        ({"led": [{"name": ""}]}, "name"),  # name 空
+        ({"led": [{"name": "  "}]}, "name"),  # name 全空白
+        ({"led": [{"name": "红灯", "variant": 1}]}, "variant"),
+        ({"led": [{"name": "红灯", "pin": 1}]}, "pin"),
+        ({"led": [1]}, "对象"),  # 实例条目非对象
+    ],
+)
+def test_parse_instances_rejects_invalid(raw, match):
+    """非法形状大声失败（SelectionError → webapp 400 中文），match 精确到字段。"""
+    with pytest.raises(SelectionError, match=match):
+        parse_instances(raw, known_slugs=("led",))
+
+
+def test_parse_instances_rejects_slug_not_in_selection():
+    """slug 不在选中集内 = 幻觉 / 乱编（照 build_module_selection 的 unknown slug
+    口径），大声失败。"""
+    with pytest.raises(SelectionError, match="未选中"):
+        parse_instances({"led": [{"name": "红灯"}]}, known_slugs=("dht11",))
+
+
+def test_parse_instances_empty_list_keeps_empty_tuple():
+    """空实例数组 = 该 slug 空计划（下游走单默认实例），与缺省等价。"""
+    assert parse_instances({"led": []}, known_slugs=("led",)) == {"led": ()}
 
 
 # ---------------------------------------------------------------------------

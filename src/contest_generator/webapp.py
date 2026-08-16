@@ -106,7 +106,7 @@ from .reference_library import (
     resolve_entry_file,
     search_references,
 )
-from .selection import resolve_selection, run_recommendation
+from .selection import parse_instances, resolve_selection, run_recommendation
 from .skeleton import generate_skeleton, generate_smoke_main
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -660,6 +660,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         slugs = _require_str_list(payload, "slugs")
         topic_id = _optional_str(payload, "topic_id")
         reference_ids = _require_str_list(payload, "reference_ids")
+        # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
+        # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
+        instances = parse_instances(payload.get("instances"), known_slugs=slugs)
         if "main_mode" in payload:
             main_mode = _optional_str(payload, "main_mode")
             if main_mode not in ("skeleton", "smoke"):
@@ -674,7 +677,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             reference_ids=reference_ids,
             platform=platform,
         )
-        resolved = resolve_selection(_library_dir(context), platform, slugs)
+        resolved = resolve_selection(
+            _library_dir(context), platform, slugs, instances=instances
+        )
         llm = _llm(context)
         library_dir = _library_dir(context)
         master_dir = master_project_dir(_require_config(context).masters_dir, platform)
@@ -682,7 +687,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             if not {"oled", "debug_uart"} & set(slugs):
                 raise HTTPException(400, "自检骨架需要 OLED 或 debug_uart 模块作为输出通道")
             main_c, intercepted = generate_smoke_main(
-                llm, topic.problem_text, resolved.manifests, platform, library_dir, master_dir
+                llm, topic.problem_text, resolved.manifests, platform, library_dir, master_dir,
+                instances=instances,
             )
         else:
             main_c, intercepted = generate_skeleton(
@@ -693,6 +699,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 library_dir,
                 master_dir,
                 reference_fulltexts=build_reference_fulltexts(topic),
+                instances=instances,
             )
         return {"main_c": main_c, "intercepted": list(intercepted)}
 
@@ -725,6 +732,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         output_dir = Path(_require_str(payload, "output_dir"))
         topic_id = _optional_str(payload, "topic_id")
         bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
+        # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
+        # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
+        instances = parse_instances(payload.get("instances"), known_slugs=slugs)
         config = _require_config(context)
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
@@ -748,6 +758,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             masters_dir=config.masters_dir,
             ccs_tools=ccs_tools,
             bindings=bindings,
+            instances=instances,
         )
         return _generation_result(summary)
 
