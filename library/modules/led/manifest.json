@@ -2,6 +2,10 @@
   "slug": "led",
   "description": "LED 指示灯驱动（双平台）：led_init/led_on/led_off/led_toggle + 通道宏 LED_RED/LED_YELLOW/LED_GREEN；拉电流 1=亮 细节已封装在模块内。",
   "dependencies": [],
+  "multi_instance": {
+    "max": 8,
+    "variant": "color"
+  },
   "platforms": {
     "stm32": {
       "files": [],

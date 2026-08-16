@@ -100,6 +100,22 @@ class PlatformEntry:
 
 
 @dataclass(frozen=True)
+class MultiInstanceSpec:
+    """多实例能力声明（模块级）：模块支持一次配置里选多次。
+
+    max = 实例上限（sanity 硬上限守卫，非默认数量——默认数量由推荐链路猜、
+    用户增删）；variant = 区分实例的属性名（led = color；beep/key/motor
+    以后各用其变体名，作为驱动命名与渲染的 key）。
+    """
+
+    max: int
+    variant: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"max": self.max, "variant": self.variant}
+
+
+@dataclass(frozen=True)
 class ModuleManifest:
     """一个模块的机器可读描述。"""
 
@@ -107,26 +123,34 @@ class ModuleManifest:
     description: str  # 功能简介
     dependencies: tuple[str, ...] = ()  # 依赖模块 slug 列表
     platforms: dict[str, PlatformEntry] = field(default_factory=dict)
+    multi_instance: MultiInstanceSpec | None = None  # 多实例能力（缺省 = 单实例）
 
     def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 兼容 dict。"""
-        return {
+        """序列化为 JSON 兼容 dict。
+
+        multi_instance 缺省（None）时不落键——旧 manifest 序列化产物与基线
+        逐字节一致（save_manifest 写回存量 manifest 不会平白加一个 null 字段）。
+        """
+        data: dict[str, Any] = {
             "slug": self.slug,
             "description": self.description,
             "dependencies": list(self.dependencies),
-            "platforms": {
-                platform: {
-                    "files": list(entry.files),
-                    "verified": entry.verified,
-                    "hardware_bound": entry.hardware_bound,
-                    "notes": entry.notes,
-                    "kit": entry.kit,
-                    "source_url": entry.source_url,
-                    "pins": [pin.to_dict() for pin in entry.pins],
-                }
-                for platform, entry in self.platforms.items()
-            },
         }
+        if self.multi_instance is not None:
+            data["multi_instance"] = self.multi_instance.to_dict()
+        data["platforms"] = {
+            platform: {
+                "files": list(entry.files),
+                "verified": entry.verified,
+                "hardware_bound": entry.hardware_bound,
+                "notes": entry.notes,
+                "kit": entry.kit,
+                "source_url": entry.source_url,
+                "pins": [pin.to_dict() for pin in entry.pins],
+            }
+            for platform, entry in self.platforms.items()
+        }
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ModuleManifest":
@@ -160,6 +184,7 @@ class ModuleManifest:
             description=description,
             dependencies=tuple(_parse_dependencies(data.get("dependencies"))),
             platforms=platforms,
+            multi_instance=_parse_multi_instance(data),
         )
 
     @classmethod
@@ -302,6 +327,29 @@ def _parse_dependencies(dependencies: Any) -> list[str]:
     ):
         raise ManifestError("dependencies 必须是字符串列表")
     return dependencies
+
+
+def _parse_multi_instance(data: dict[str, Any]) -> MultiInstanceSpec | None:
+    """解析模块级 multi_instance 能力块（缺省 / null = None，旧 manifest 兼容）。
+
+    存在则严格校验：max 正整数（布尔显式拒绝——bool 是 int 子类，宽松强转
+    会静默放行 True）、variant 非空字符串；错值大声失败（照 _require 系列，
+    不静默强转）。
+    """
+    raw = data.get("multi_instance")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ManifestError("multi_instance 必须是对象")
+    max_value = raw.get("max")
+    if isinstance(max_value, bool) or not isinstance(max_value, int):
+        raise ManifestError("multi_instance 的 max 必须是正整数")
+    if max_value < 1:
+        raise ManifestError("multi_instance 的 max 必须是正整数")
+    variant = raw.get("variant")
+    if not isinstance(variant, str) or not variant:
+        raise ManifestError("multi_instance 的 variant 必须是非空字符串")
+    return MultiInstanceSpec(max=max_value, variant=variant)
 
 
 def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
