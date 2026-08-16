@@ -1,6 +1,6 @@
 {
   "slug": "motor",
-  "description": "TB6612 双路直流电机驱动（MSPM0）：PWM 调速 + 方向控制 + 编码器计数（motor_encoder_read 读后清零）。",
+  "description": "TB6612 双路直流电机驱动（双平台统一 API）：motor_set_duty 调速 + motor_set_direction 方向 + motor_encoder_read 编码器读数（读后清零）。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -83,7 +83,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "2021F 提取（真机编译过）：TB6612 驱动 + motor_init/encoder_init + 编码器计数中断 EXTI2/EXTI4 随模块（先例 = mspm0 key 的 GROUP1_IRQHandler）。引脚全走母版 pin_config.h 宏（21F 原值：PWM TIM2 CH1/CH2、方向 PA6/PA7/PB0/PB1、编码器 PA2/PA4 + 方向 PA3/PA5），无硬编码字面量。依赖方向 pid → motor；EXTI2/4 用母版 ml_gpio/ml_exti/ml_pwm/ml_tim（功能库必有，不声明依赖）。",
+      "notes": "2021F 提取（真机编译过）：TB6612 驱动 + motor_init/encoder_init + 编码器计数中断 EXTI2/EXTI4 随模块（先例 = mspm0 key 的 GROUP1_IRQHandler）。引脚全走母版 pin_config.h 宏（21F 原值：PWM TIM2 CH1/CH2、方向 PA6/PA7/PB0/PB1、编码器 PA2/PA4 + 方向 PA3/PA5），无硬编码字面量。依赖方向 pid → motor；EXTI2/4 用母版 ml_gpio/ml_exti/ml_pwm/ml_tim（功能库必有，不声明依赖）。 统一 API（module-functionalize/02）：motor_set_duty/motor_set_direction/motor_encoder_read 与 mspm0 同名同义；旧 API（motorA_duty/motorB_duty/encoder_init）保留兼容。",
       "kit": "",
       "source_url": "",
       "pins": [
