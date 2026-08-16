@@ -10,14 +10,15 @@
 from __future__ import annotations
 
 # 实例名 → 消费模块 slug 元组。任一消费模块被选中即保留；全部未选才裁剪。
-# 共享实例：DC_MOTOR 由 motor/key 共用（编码器中断在 key），HUIDU 由
-# huidu/pid(mspm0 GRAY_D1-8)/xunji 共用（灰度槽位）。
+# 共享实例：DC_MOTOR 只归 motor（编码器计数已从 key 迁入 motor，
+# module-dep-cleanup/02），HUIDU 由 huidu/pid(mspm0 GRAY_D1-8)/xunji
+# 共用（灰度槽位）。
 INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "PWMAB": ("motor",),
     "DCC_100_PWM2": ("step_motor",),
-    "MOTOR_PID": ("motor", "pid"),
+    "MOTOR_PID": ("pid",),
     "NTB": ("ntb_time",),
-    "DC_MOTOR": ("motor", "key"),
+    "DC_MOTOR": ("motor",),
     "HUIDU": ("huidu", "pid", "xunji"),
     "KEY": ("key",),
     "LED_BEEP": ("led_beep",),

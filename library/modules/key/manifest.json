@@ -1,6 +1,6 @@
 {
   "slug": "key",
-  "description": "按键读取 + 电机编码器中断计数（MSPM0）：get_key_state 读取按键（上拉低电平按下）；GROUP1_IRQHandler 内编码器 A 相计数（counter_1_A/counter_2_A 供 motor 测速）。",
+  "description": "按键读取（MSPM0）：get_key_state 读取按键（上拉低电平按下）。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -10,7 +10,7 @@
       ],
       "verified": false,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置 GPIO 组 KEY（按键输入上拉）；编码器中断依赖 GPIOA/GPIOB 组中断命名 DC_MOTOR_AA_IIDX/DC_MOTOR_BA_IIDX（对应 DIO16/DIO?，见 .syscfg 组配置）。",
+      "notes": "SysConfig 默认布局：GPIO 输入 KEY（KEY_START=PA2，上拉低电平按下）。编码器计数已迁至 motor 模块（GROUP1_IRQHandler + counter_1_A/counter_2_A）。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -18,30 +18,6 @@
           "id": "KEY_START",
           "type": "gpio_in",
           "default": "PA2",
-          "required": true
-        },
-        {
-          "id": "DC_MOTOR_AA",
-          "type": "enc",
-          "default": "PA16",
-          "required": true
-        },
-        {
-          "id": "DC_MOTOR_AB",
-          "type": "enc",
-          "default": "PA17",
-          "required": true
-        },
-        {
-          "id": "DC_MOTOR_BA",
-          "type": "enc",
-          "default": "PB19",
-          "required": true
-        },
-        {
-          "id": "DC_MOTOR_BB",
-          "type": "enc",
-          "default": "PB20",
           "required": true
         }
       ]

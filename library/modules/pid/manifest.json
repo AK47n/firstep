@@ -14,7 +14,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "移植源 sources/contest/2026H/26H（26H 滚球原工程 code/pid.c + gray_track.c，stm32 Keil 工程；驱动经移植为 mspm0：motorA_duty/motorB_duty→motor_set_duty(id,duty)；motorA_dir/motorB_dir→motor_set_direction(id,dir)（0停1正转2反转）；MAX_DUTY=1300（26H 原 50000））。决策层（LAP 启停线一圈停车状态机 + 运行计时 + K230 球坐标消费）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（26H-滚球巡线决策例程，stm32 源工程）。驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）；灰度 8 路用母版 HUIDU 宏（D1→L1…D8→R4）。10ms 调度由骨架自建（MOTOR_PID_INST_IRQHandler 或自建定时器中断：读编码器清零 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motor_set_duty）；编码器走 key 模块 counter（符号级 extern，需手动同选 key）。陀螺前馈（GYRO_DAMP_GAIN=0）与 imu_uart 引用已随剥离移除，deps 不引 imu_uart/ball_detect。编译验证：gmake 0 错（2026H 滚球线产物）。",
+      "notes": "移植源 sources/contest/2026H/26H（26H 滚球原工程 code/pid.c + gray_track.c，stm32 Keil 工程；驱动经移植为 mspm0：motorA_duty/motorB_duty→motor_set_duty(id,duty)；motorA_dir/motorB_dir→motor_set_direction(id,dir)（0停1正转2反转）；MAX_DUTY=1300（26H 原 50000））。决策层（LAP 启停线一圈停车状态机 + 运行计时 + K230 球坐标消费）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（26H-滚球巡线决策例程，stm32 源工程）。驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）；灰度 8 路用母版 HUIDU 宏（D1→L1…D8→R4）。10ms 调度由骨架自建（MOTOR_PID_INST_IRQHandler 或自建定时器中断：读编码器清零 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motor_set_duty）；编码器走 motor 模块 motor_encoder_read（GROUP1_IRQHandler 在 motor.c）。陀螺前馈（GYRO_DAMP_GAIN=0）与 imu_uart 引用已随剥离移除，deps 不引 imu_uart/ball_detect。编译验证：gmake 0 错（2026H 滚球线产物）。",
       "kit": "",
       "source_url": "",
       "pins": [

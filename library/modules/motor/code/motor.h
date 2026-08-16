@@ -1,7 +1,8 @@
 #ifndef MOTOR_H
 #define MOTOR_H
 
-#define PI 3.14
+#include "ti_msp_dl_config.h"
+#include <stdint.h>
 
 // 编码器线数
 #define MOTOR_BIANMAQI 260
@@ -45,45 +46,13 @@
 
 // 所有的GND都需要连接在一起
 
-#include "ti_msp_dl_config.h"
-#include "huidu.h"
-#include "imu.h"
-#include "led_beep.h"
-#include "ntb_time.h"
-
 void motor_init(uint8_t motor_id);
 void motor_set_duty(uint8_t motor_id, uint32_t duty);
 void motor_set_direction(uint8_t motor_id, uint8_t direction);
 int limit_duty(int duty);
 
-/**
- * @brief 电机自检：依次测试电机1/2的正反转
- *
- * @note 测试流程（每步2秒，OLED显示状态）：
- *       1. 电机1正转 → 2. 电机1反转
- *       3. 电机2正转 → 4. 电机2反转
- *       5. 全部停止，测试结束
- *       如果某步电机不转，检查该路接线
- */
-void motor_test(void);
-
-/**
- * @brief 编码器自检：电机1/2正转5秒，OLED实时显示计数值
- *
- * @note 测试前需确保编码器 A/B 相接好：
- *       电机1：PA16(A) PA17(B)
- *       电机2：PB19(A) PB20(B)
- *       两个电机的 count 应持续增长、数值相近
- */
-void encoder_test(void);
-
-/**
- * @brief PID 调参测试：以目标速度运行，OLED 显示实时速度
- *
- * @param target_mm_s 目标速度 (mm/s)，建议 300~800
- *
- * @note 调整 motor.c 中的 kp/ki 变量后烧录观察响应
- */
-void pid_tuning(uint16_t target_mm_s);
+/* 读左右轮编码器脉冲计数并清零（GROUP1_IRQHandler 累加；速度换算由调用方
+ * 按采样周期完成，线数 / 轮径见上方宏） */
+void motor_encoder_read(int32_t *left, int32_t *right);
 
 #endif // MOTOR_H

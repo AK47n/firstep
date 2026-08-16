@@ -245,10 +245,11 @@ def test_resolve_capability_mspm0_single_instance_movable():
 
 def test_resolve_mspm0_slot_conflict_and_dedupe():
     """同默认引脚 = 同 syscfg 槽位：两角色绑异脚互斥、绑同脚合法（同引脚多
-    角色共享 spec 已定）。"""
+    角色共享 spec 已定）。huidu.L1 与 pid.GRAY_D1 同默认 PA22、同 HUIDU
+    实例（module-dep-cleanup 后 DC_MOTOR 只归 motor，key 不再参与）。"""
     with pytest.raises(PinBindingError, match="共用同一槽位"):
-        _resolve("mspm0", {"motor.AA": "PB2", "key.DC_MOTOR_AA": "PB3"})
-    assert _resolve("mspm0", {"motor.AA": "PB2", "key.DC_MOTOR_AA": "PB2"})
+        _resolve("mspm0", {"huidu.L1": "PB2", "pid.GRAY_D1": "PB3"})
+    assert _resolve("mspm0", {"huidu.L1": "PB2", "pid.GRAY_D1": "PB2"})
 
 
 def test_resolve_stm32_same_default_different_roles_not_conflicting():
@@ -538,13 +539,13 @@ def test_rewrite_syscfg_instance_and_channel_names_unchanged():
 
 
 def test_rewrite_syscfg_same_slot_same_pin_applied_once():
-    """motor.AA 与 key.DC_MOTOR_AA 同槽位同引脚 → 该槽位一行改动（dedupe）。
-    （全文件 '= "PB2";' 另有一处 OLED sclPin 的默认值，逐槽位断言。）"""
+    """huidu.L1 与 pid.GRAY_D1 同槽位同引脚 → 该槽位一行改动（dedupe）。
+    （全文件另有 OLED sclPin 默认 PB2，逐槽位断言。）"""
     out = rewrite_syscfg(
         MSPM0_MASTER_SYSCFG,
-        _resolve("mspm0", {"motor.AA": "PB2", "key.DC_MOTOR_AA": "PB2"}),
+        _resolve("mspm0", {"huidu.L1": "PB2", "pid.GRAY_D1": "PB2"}),
     )
-    assert out.count('DC_MOTOR.associatedPins[4].pin.$assign  = "PB2";') == 1
+    assert out.count('HUIDU.associatedPins[0].pin.$assign = "PB2";') == 1
 
 
 # ---------------------------------------------------------------------------

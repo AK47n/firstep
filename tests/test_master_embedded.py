@@ -67,16 +67,15 @@ def test_motor_stm32_source_has_no_hardcoded_pins():
 
 
 def test_motor_manifest_stm32_entry_files_exist():
-    """motor stm32 条目文件在位且 verified；依赖只声明双平台齐全者
-    （delay/oled/led_beep stm32 空条目=母版内嵌，不产生文件，选 motor 无
-    missing 警告的数据前提）；mspm0-only 小车栈项（huidu/imu_uart/
-    ntb_time/key）不得声明——声明会拖 stm32 missing，保持手动同选。"""
+    """motor stm32 条目文件在位且 verified；纯驱动化后 motor 无模块依赖
+    （mspm0-only 小车栈项 huidu/imu_uart/ntb_time/key 不得声明——声明会拖
+    stm32 missing）。"""
     manifest = ModuleManifest.load(LIBRARY_DIR / "modules" / "motor")
     entry = manifest.platforms["stm32"]
     assert entry.verified
     for rel in entry.files:
         assert (LIBRARY_DIR / "modules" / "motor" / rel).is_file(), rel
-    assert set(manifest.dependencies) == {"delay", "oled", "led_beep"}
+    assert manifest.dependencies == ()  # 纯驱动化后不再依赖 delay/oled/led_beep
     for mspm0_only in ("huidu", "imu_uart", "ntb_time", "key"):
         assert mspm0_only not in manifest.dependencies
 
