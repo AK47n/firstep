@@ -1625,7 +1625,7 @@ function renderInstanceConfig() {
   box.querySelectorAll("[data-del]").forEach((b) =>
     b.addEventListener("click", () => delInstance(b.dataset.slug, +b.dataset.index)));
   box.querySelectorAll("[data-add]").forEach((b) =>
-    b.addEventListener("click", () => addInstance(b.dataset.slug)));
+    b.addEventListener("click", () => addInstance(b.dataset.add)));
 }
 
 function instanceBlock(m) {
