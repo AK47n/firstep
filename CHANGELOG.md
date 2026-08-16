@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d73664a8f3b45f49139eafab5d98cf0085a591e8 -->
+<!-- changelog-auto: last-commit=274ae544ea43bd322f55dabe0f482f104e99df95 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -25,6 +25,7 @@
 - 15:30 module-multi-instance 03——led 渲染 hook + led_instances.h 生成 + 骨架通道宏注入（stm32/mspm0 真编译 0 error）
 - 16:00 module-multi-instance 04——webapp 请求层 instances 解析 + 前端实例配置 UI（增删改名/颜色/引脚，上限 8）
 - 16:38 module-multi-instance 06——推荐链路 AI 猜实例数（题面「4 个指示灯」→ led×4）+ 实例解析/收敛键/done 载荷 + 前端回填实例卡
+- 16:56 module-multi-instance 05——双平台编译回归关门验收
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
