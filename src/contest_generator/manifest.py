@@ -383,6 +383,7 @@ class ManifestSummary:
     description: str
     kits: tuple[str, ...] = ()  # collect_kits 单源（保序去重，有 kit 才显示）
     dependencies: tuple[str, ...] = ()
+    multi_instance: MultiInstanceSpec | None = None  # 多实例能力（缺省 = 单实例）
 
     @classmethod
     def from_manifest(cls, manifest: ModuleManifest) -> "ManifestSummary":
@@ -391,14 +392,17 @@ class ManifestSummary:
             description=manifest.description,
             kits=tuple(collect_kits([manifest])),
             dependencies=manifest.dependencies,
+            multi_instance=manifest.multi_instance,
         )
 
     def to_line(self) -> str:
         """摘要行：`- slug: description（套件: kit; 依赖: ...）`。
 
         套件段聚合各平台条目的 kit（去重保序走 collect_kits 单源，有 kit 才
-        显示，AI 靠它分辨"哪个套件的 UWB"）；依赖段有依赖才显示。行格式
-        的唯一出处——只进 LLM prompt，不再有反向解析方。
+        显示，AI 靠它分辨"哪个套件的 UWB"）；依赖段有依赖才显示；多实例段
+        （工单 module-multi-instance/06）有 multi_instance 能力才显示——AI
+        据此知道哪些模块可多实例、上限多少（选模块猜实例数的能力证据）。
+        行格式的唯一出处——只进 LLM prompt，不再有反向解析方。
         """
         line = f"- {self.slug}: {self.description}"
         if self.kits:
@@ -408,6 +412,11 @@ class ManifestSummary:
             line += "）"
         elif self.dependencies:
             line += f"（依赖: {', '.join(self.dependencies)}）"
+        if self.multi_instance is not None:
+            line += (
+                f"（多实例：上限 {self.multi_instance.max}，"
+                f"变体 = {self.multi_instance.variant}）"
+            )
         return line
 
 
