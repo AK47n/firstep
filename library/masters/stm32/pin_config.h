@@ -103,6 +103,10 @@
 #define DIP_PIN2          Pin_14
 #define DIP_PIN3          Pin_15
 
+/* ---- 按键（key 模块 stm32 默认 PB3 = JTDO，SWD 调试用不到；上拉输入，按下=低电平）---- */
+#define KEY_GPIO          GPIO_B
+#define KEY_PIN           Pin_3
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1

@@ -2017,6 +2017,8 @@ def _skeleton_user_prompt(
     return prompt + (
         "\n\n输出 main.c 骨架：按模块初始化序列排好调用，带注释与预留编写区（TODO），"
         "不确定的调用写成注释占位，不凭空造函数，保证可编译。"
+        "所有 #include 只写头文件名（如 #include \"motor_stm32.h\"），"
+        "不要带 code/、modules/ 等目录前缀。"
         + SKELETON_NO_UNUSED_RULE
     )
 
@@ -2033,10 +2035,14 @@ def _smoke_user_prompt(problem_text: str, module_interfaces: Sequence[str]) -> s
         "对每个所选模块按顺序写一段自检——注释标注模块名 → 初始化该模块 → "
         "读一次/动一次 → 打印结果。"
         "输出通道按所选模块决定：如果所选模块里有 oled，初始化 OLED 并在 OLED 上"
-        "逐段显示「模块名 OK/FAIL」；如果同时有 debug_uart，串口 printf 同步回显"
-        "同一行；如果只有 debug_uart 没有 oled，就用串口输出。"
+        "逐段显示「模块名 OK/FAIL」（用 OLED_ShowString / OLED_ShowNum，"
+        "不要用 printf/sprintf/snprintf）；如果同时有 debug_uart，串口用 "
+        "debug_uart_send 同步回显同一行；如果只有 debug_uart 没有 oled，就用"
+        "debug_uart_send 输出。"
         "接口块里标注「无平台 XX 版本」的模块，留注释「该模块无 XX 版本，未自检」"
         "（XX 照接口块里的平台名写，如 stm32 / mspm0）。"
+        "所有 #include 只写头文件名（如 #include \"led.h\"），"
+        "不要带 code/、modules/ 等目录前缀。"
         "不确定的调用写成注释占位，不凭空造函数，保证可编译。"
         + SKELETON_NO_UNUSED_RULE
     )

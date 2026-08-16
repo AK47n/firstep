@@ -1,6 +1,6 @@
 {
   "slug": "key",
-  "description": "按键读取（MSPM0）：get_key_state 读取按键（上拉低电平按下）。",
+  "description": "按键读取（双平台）：get_key_state 读取按键（上拉低电平按下）；stm32 默认 PB3（JTDO 复位后可用），mspm0 默认 PA2。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -19,6 +19,29 @@
           "type": "gpio_in",
           "default": "PA2",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/key_stm32.c",
+        "code/key_stm32.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "蓝药丸无板载按键，默认 PB3（JTDO，SWD 调试用不到，复位后即普通 GPIO）——实际接线自选，经引脚绑定改 KEY_GPIO/KEY_PIN。上拉低电平按下。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "KEY_START",
+          "type": "gpio_in",
+          "default": "PB3",
+          "required": true,
+          "macros": [
+            "KEY_GPIO",
+            "KEY_PIN"
+          ]
         }
       ]
     }

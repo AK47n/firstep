@@ -1,6 +1,6 @@
 {
   "slug": "uart",
-  "description": "MSPM0 通用串口发送：以 UART_Regs* 为参数的单字符/字符串/缓冲发送，可复用于任意已配置的 UART 实例。",
+  "description": "通用串口发送（双平台）：UART_send_string/char/buffer；mspm0 传 UART_Regs*，stm32 传 UARTn_enum（UART_1/2/3）。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -11,6 +11,17 @@
       "verified": false,
       "hardware_bound": false,
       "notes": "无固定外设命名要求，调用时传入目标 UART 实例（如 IMU601_INST）。",
+      "kit": "",
+      "source_url": ""
+    },
+    "stm32": {
+      "files": [
+        "code/uart_stm32.c",
+        "code/uart_stm32.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "转发母版 ml_uart（uart_sendbyte/uart_sendstr）；发送前需 uart_pin_init/uart_init 由骨架或调用方完成。",
       "kit": "",
       "source_url": ""
     }

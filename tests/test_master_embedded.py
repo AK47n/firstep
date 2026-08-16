@@ -101,19 +101,22 @@ def test_pid_source_includes_stm32_motor_header():
     assert '#include "motor.h"' not in pid_c
 
 
-def test_key_manifest_stays_mspm0_only():
-    """key 不补录 stm32（21F 无独立按键素材，PB5 药物检测属工程级逻辑）：
-    平台检查 missing 警告保留（回归）。"""
+def test_key_manifest_has_stm32_entry():
+    """key 已补 stm32（module-functionalize/04：无板载按键，默认 PB3 经引脚
+    绑定可改），文件在位。"""
     manifest = ModuleManifest.load(LIBRARY_DIR / "modules" / "key")
-    assert "stm32" not in manifest.platforms
+    entry = manifest.platforms["stm32"]
+    for rel in entry.files:
+        assert (LIBRARY_DIR / "modules" / "key" / rel).is_file(), rel
+    assert entry.pins[0].id == "KEY_START" and entry.pins[0].default == "PB3"
 
 
-def test_key_selection_on_stm32_reports_missing_warning():
-    """key 在 stm32 上仍报 missing（不补录，警告保留回归，验收项）。"""
+def test_key_selection_on_stm32_has_no_missing_warning():
+    """key 在 stm32 上不再报 missing（补录后回归；unverified 待真机翻 true）。"""
     from contest_generator.selection import WARNING_MISSING, resolve_selection
 
     resolved = resolve_selection(LIBRARY_DIR / "modules", "stm32", ["key"])
-    assert any(w.slug == "key" and w.kind == WARNING_MISSING for w in resolved.warnings)
+    assert not any(w.kind == WARNING_MISSING for w in resolved.warnings)
 
 
 def test_motor_selection_on_stm32_has_no_missing_warning():
