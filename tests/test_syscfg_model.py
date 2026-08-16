@@ -4,7 +4,7 @@
 - 新模块独占 syscfg 文法（实例声明 addInstance / 模块声明 addModule /
   `$assign` 赋值）、一次解析为结构化模型、一个槽位身份原语。
 - 槽位身份原语对 GPIO 组（associatedPins[n].pin）、外设（txPin/sclPin/
-  ccp0Pin 等）两类路径返回与 pinwriter._mspm0_path_matches 相同的判定。
+  ccp0Pin 等）两类路径返回正确判定（唯一实现，工单 03 起 pinwriter 已删旧副本）。
 - 关键断言：新模块 parse+prune+rewrite 输出与旧 prune→rewrite 顺序逐字节一致。
 - MSPM0_SYSCFG_FILENAME 新旧位置都可导入（兼容期）。
 """
@@ -19,7 +19,6 @@ from contest_generator.library import list_modules
 from contest_generator.pin_bindings import resolve_bindings
 from contest_generator.pinwriter import (
     MSPM0_SYSCFG_FILENAME as PINWRITER_MSPM0_SYSCFG_FILENAME,
-    _mspm0_path_matches,
     rewrite_syscfg,
 )
 from contest_generator.syscfg_instances import INSTANCE_CONSUMERS
@@ -102,33 +101,8 @@ def test_serialize_roundtrip_identity():
 
 
 # ---------------------------------------------------------------------------
-# 槽位身份原语：与 pinwriter._mspm0_path_matches 判定一致
+# 槽位身份原语：显式判例（唯一的槽位匹配实现已在文件模型）
 # ---------------------------------------------------------------------------
-
-
-def test_slot_path_matches_agrees_with_legacy_on_all_master_paths():
-    """全库 mspm0 声明角色 × 母版全部 $assign 路径，逐一对照旧判定——真数据
-    穷举等价（GPIO 组 associatedPins / 外设 txPin/sclPin/ccp0Pin + pwm C0/C1
-    通道区分全覆盖）。"""
-    paths = {
-        m.group(1)
-        for line in MSPM0_MASTER_SYSCFG.splitlines()
-        if (m := re.match(r"^\s*(.+?)\.\$assign\s*=", line))
-    }
-    assert paths, "母版应含 $assign 路径（测试前置失效）"
-    roles: list[tuple[str, str, str]] = []
-    for manifest in ALL_MANIFESTS:
-        entry = manifest.platforms.get("mspm0")
-        if entry is None:
-            continue
-        for decl in entry.pins:
-            roles.append((decl.type, decl.id, manifest.slug))
-    assert roles, "库应含 mspm0 角色声明（测试前置失效）"
-    for decl_type, role_id, slug in roles:
-        for path in paths:
-            assert syscfg_path_matches(decl_type, role_id, slug, path) == (
-                _mspm0_path_matches(decl_type, role_id, slug, path)
-            ), f"{slug}.{role_id} ({decl_type}) vs {path}"
 
 
 def test_slot_path_matches_spot_cases():
@@ -152,7 +126,6 @@ def test_slot_path_matches_spot_cases():
         assert syscfg_path_matches(decl_type, role_id, slug, path) is expected, (
             f"{slug}.{role_id} vs {path}"
         )
-        assert _mspm0_path_matches(decl_type, role_id, slug, path) is expected
 
 
 # ---------------------------------------------------------------------------
