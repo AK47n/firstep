@@ -21,16 +21,16 @@ ResolvedBinding（pin_bindings.resolve_bindings 已校验），不再自判形�
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Sequence
 
 from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError, ResolvedBinding
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
-from .syscfg_model import SyscfgModelError, parse_syscfg
+from .syscfg_model import MSPM0_SYSCFG_FILENAME, SyscfgModelError, parse_syscfg
 
 PIN_CONFIG_FILENAME = "pin_config.h"
-MSPM0_SYSCFG_FILENAME = "mspm0.syscfg"
 
 # USART 聚合宏（母版 pin_config.h / isr.c 三对同源）：宏名 ↔ 实例（USART1
 # ↔ UART_1）。渲染器按 {STEM}_UART 宏现值重分组（绑定换实例 → 宏值变 →
@@ -58,11 +58,20 @@ _DEFINE_LINE_RE = re.compile(
 )
 
 def apply_pin_bindings(
-    output_dir: Path, platform: str, resolved: Sequence[ResolvedBinding]
+    output_dir: Path,
+    platform: str,
+    resolved: Sequence[ResolvedBinding],
+    *,
+    selected_slugs: Iterable[str],
 ) -> Path | None:
     """写侧统一入口（generator 在 copytree 后挂钩）：stm32 覆写 pin_config.h、
-    mspm0 改写 mspm0.syscfg。文本无变化（全部绑定 = 默认值 / 未覆盖）不落盘
-    返回 None——缺省路径 = 旧行为逐字节。
+    mspm0 改写 mspm0.syscfg。
+
+    mspm0 走单一 pipeline（工单 syscfg-file-model/04）：读 syscfg 一次解析 →
+    prune(selected_slugs) → rewrite(resolved) → serialize——先后由构造保证，
+    不再靠调用顺序/注释；selected_slugs 只 mspm0 用（未选模块实例不落盘，
+    其引脚空出来可绑；必传，缺省会静默全裁故不设默认）。文本无变化（全默认 /
+    未覆盖 / 全选理论模块）不落盘返回 None——缺省路径 = 旧行为逐字节。
 
     未知平台抛 UnknownPlatformError（与 patchers 同缝；绑定在 stm32/mspm0
     之外无板定义，generate 入口的 board_for_platform 已先拦）。
@@ -73,8 +82,18 @@ def apply_pin_bindings(
         rendered = render_pin_config(original, resolved)
     elif platform == PLATFORM_MSPM0:
         path = output_dir / MSPM0_SYSCFG_FILENAME
+        if not path.is_file():
+            return None  # 假母版/测试树可能无 syscfg；真母版必有，防御跳过
         original = path.read_text(encoding="utf-8", newline="")
-        rendered = rewrite_syscfg(original, resolved)
+        try:
+            rendered = (
+                parse_syscfg(original)
+                .prune(selected_slugs)
+                .rewrite(resolved)
+                .to_text()
+            )
+        except SyscfgModelError as exc:
+            raise PinBindingError(str(exc)) from exc
     else:
         raise UnknownPlatformError(
             f"未知平台 {platform!r}，已注册的平台：{PLATFORM_STM32}, {PLATFORM_MSPM0}"
