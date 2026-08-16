@@ -26,12 +26,19 @@ from .clex import (
     strip_code_fences,
     strip_comments,
 )
+from .instance_render import (
+    expand_instance_plans,
+    instance_interface_blocks,
+    managed_header_rels,
+)
 from .manifest import ModuleManifest
 
 if TYPE_CHECKING:
     # 仅类型注解用（skeleton 是纯文本模块，运行时导入 llm 会把整条 LLM 栈
     # 拉进生成流程的 import 图——master.py 同规先例，工单 C3 链收敛）
     from .llm import LLM
+    # 仅类型注解用（实例类型归选择域；instance_render 运行时已消费）
+    from .selection import ExpandedInstance, ModuleInstance
 
 # 控制关键字与 main：这些"名字("不是模块函数调用
 _CONTROL_KEYWORDS = frozenset(
@@ -118,6 +125,7 @@ def build_skeleton_interfaces(
     platform: str,
     library_dir: Path,
     master_project_dir: Path | None = None,
+    instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
 ) -> list[str]:
     """按目标平台收集所选模块头文件内容，格式化为 LLM 骨架生成输入块。
 
@@ -128,16 +136,23 @@ def build_skeleton_interfaces(
     build_master_interface_blocks）——LLM 生成 main.c 需要知道母版内嵌
     实现的真实 API（ml_oled_show_string 等），否则骨架自检会把它们的调用
     改写为注释占位（工单 02）。不传母版目录 = 现行为（只有模块头）。
+    instance_plans 非空时按注册表注入多实例通道块（工单
+    module-multi-instance/03：LLM 见到的通道宏清单 = 工程里实际生成的文件
+    内容，冒烟能逐个 led_init(<通道宏>)）——空计划 = 单实例默认通道宏。
     读盘归 read_module_sources（编码 errors="replace" 单源，与门禁同读法）、
     形态判断归 is_header_path、块格式化归 format_interface_blocks（生成
     门禁用语料文本走同一格式化）。
     """
     blocks: list[str] = []
     present, _missing = read_module_sources(manifests, platform, library_dir)
+    # 渲染接管文件剔除（module-multi-instance/03）：这些头在生成工程里的内容
+    # 由实例渲染决定（如 led_instances.h 被计划覆写），库内基线文本与注入块
+    # 会互相矛盾——接口块只喂渲染产物。
+    managed = managed_header_rels(instance_plans) if instance_plans else frozenset()
     headers = [
         (slug, rel, text)
         for slug, rel, text, _path in present
-        if is_header_path(rel)
+        if is_header_path(rel) and rel not in managed
     ]
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
@@ -153,6 +168,8 @@ def build_skeleton_interfaces(
     blocks.extend(format_interface_blocks(headers))
     if master_project_dir is not None:
         blocks.extend(build_master_interface_blocks(master_project_dir))
+    if instance_plans:
+        blocks.extend(instance_interface_blocks(instance_plans, platform))
     return blocks
 
 
@@ -389,6 +406,7 @@ def generate_skeleton(
     library_dir: Path,
     master_project_dir: Path | None = None,
     reference_fulltexts: Mapping[str, str] | None = None,
+    instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """LLM 出稿 → 静态自检：返回（可写入工程的 main.c, 被拦截的调用名）。
 
@@ -396,7 +414,10 @@ def generate_skeleton(
     main.c 骨架保证可编译。调用方如想"明确报错"而非占位，对拦截列表
     非空时自行抛错即可。母版目录给定时接口集并入母版头（母版内嵌实现
     的 ml_* API 不再被占位改写）。reference_fulltexts 非空时注入骨架
-    prompt（参考实现草稿），None / 空 = 现行为。
+    prompt（参考实现草稿），None / 空 = 现行为。instances（工单
+    module-multi-instance/03）= 多实例清单 {slug: [{name, variant, pin}]}，
+    展开计划注入接口块（通道宏清单）；缺省 / 空 = 现行为（多实例模块仍注入
+    单实例默认通道宏）。
     """
     return _generate_main_c(
         llm,
@@ -407,6 +428,7 @@ def generate_skeleton(
         master_project_dir,
         llm.generate_main_skeleton,
         reference_fulltexts,
+        instances,
     )
 
 
@@ -417,6 +439,7 @@ def generate_smoke_main(
     platform: str,
     library_dir: Path,
     master_project_dir: Path | None = None,
+    instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """LLM 出稿 → 静态自检：返回（可写入工程的自检冒烟 main.c, 被拦截调用）。
 
@@ -425,7 +448,7 @@ def generate_smoke_main(
     的 prompt 要求"初始化每个模块 → 读一次/动一次 → 打印结果"，不写赛题
     逻辑）。输出通道（OLED 为主 / 串口为辅）由 LLM prompt 约束、webapp 层
     负责"两个通道模块都没选 → 400"的入口校验，本纯函数不做该判决（保持
-    可内存直测）。
+    可内存直测）。instances 同 generate_skeleton（通道宏注入冒烟接口块）。
     """
     return _generate_main_c(
         llm,
@@ -435,6 +458,7 @@ def generate_smoke_main(
         library_dir,
         master_project_dir,
         llm.generate_smoke_main,
+        instances=instances,
     )
 
 
@@ -447,15 +471,19 @@ def _generate_main_c(
     master_project_dir: Path | None,
     generate: Any,
     reference_fulltexts: Mapping[str, str] | None = None,
+    instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。
 
     reference_fulltexts 只对骨架路径有意义（冒烟不写题逻辑不传）——非 None
     时按三参调用 generate（协议方法带 reference_fulltexts），None 时按两参
-    调用（冒烟方法 / 旧骨架零回归）。
+    调用（冒烟方法 / 旧骨架零回归）。instances 经 expand_instance_plans 展开
+    后注入接口块（与生成侧渲染同源——LLM 见到的通道宏 = 工程实际生成的宏；
+    board 缺省时展开层现加载板定义）。
     """
+    plans = expand_instance_plans(manifests, instances, platform)
     interfaces = build_skeleton_interfaces(
-        manifests, platform, library_dir, master_project_dir
+        manifests, platform, library_dir, master_project_dir, instance_plans=plans
     )
     if reference_fulltexts is None:
         raw = generate(problem_text, interfaces)

@@ -21,7 +21,9 @@ def _read(slug: str, rel: str) -> str:
 
 
 def test_led_module_dual_platform_with_uniform_api():
-    """led 模块双平台，API 统一：led_init/led_on/led_off/led_toggle + LED_RED 通道宏。
+    """led 模块双平台，API 统一：led_init/led_on/led_off/led_toggle；通道宏在
+    led_instances.h（生成器多实例渲染产物——stm32 母版默认三通道、mspm0 库内
+    默认单通道，module-multi-instance/03）。
 
     stm32 实现内嵌母版 ml_led（空条目先例 oled/delay），mspm0 实现随模块。"""
     led = _manifest("led")
@@ -36,20 +38,30 @@ def test_led_module_dual_platform_with_uniform_api():
     for h in (stm32_ml_led_h, mspm0_h):
         for fn in ("led_init", "led_on", "led_off", "led_toggle"):
             assert fn in h
-        assert "LED_RED" in h
+        assert "led_instances.h" in h  # 通道宏经 led_instances.h 进入接口
+    stm32_channels = (LIBRARY_ROOT / "masters" / "stm32" / "led_instances.h").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    mspm0_channels = _read("led", "code/led_instances.h")
+    for text in (stm32_channels, mspm0_channels):
+        assert "LED_RED" in text and "LED_CHANNEL_COUNT" in text
 
 
 def test_led_stm32_uses_pin_config_macros_and_source_polarity():
-    """stm32 led（母版 ml_led）用 pin_config.h 宏；1=亮（拉电流）封装在 led_on 内部。"""
+    """stm32 led 默认通道引脚取 pin_config.h 宏（接线单源，单实例下
+    config.LED_* 绑定照旧驱动三内置灯）；1=亮（拉电流）封装在 led_on 内部。"""
     ml_led_h = (LIBRARY_ROOT / "masters" / "stm32" / "ml_libs" / "ml_led.h").read_text(
         encoding="utf-8", errors="replace"
     )
     ml_led_c = (LIBRARY_ROOT / "masters" / "stm32" / "ml_libs" / "ml_led.c").read_text(
         encoding="utf-8", errors="replace"
     )
+    channels = (LIBRARY_ROOT / "masters" / "stm32" / "led_instances.h").read_text(
+        encoding="utf-8", errors="replace"
+    )
     assert "pin_config.h" in ml_led_h  # 引脚宏单源
-    assert "LED_RED_Pin" in ml_led_h and "LED_YELLOW_Pin" in ml_led_h and "LED_GREEN_Pin" in ml_led_h
-    assert "LED_GPIO" in ml_led_h
+    assert "LED_RED_PIN" in channels and "LED_YELLOW_PIN" in channels
+    assert "LED_GREEN_PIN" in channels and "LED_PORT" in channels
     assert "高电平点亮" in ml_led_c  # 拉电流极性封装在实现内
 
 
