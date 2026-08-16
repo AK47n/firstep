@@ -607,6 +607,15 @@ INSTANCES_4 = {
     )
 }
 
+# 关门验收 05 的 4 灯精确组合：内置色 + 重复内置色 + 非内置色（红+红+绿+状态灯）
+# → LED_RED / LED_RED_2 / LED_GREEN / LED_1（覆盖全部三类命名规则）
+MATRIX_4 = (
+    ModuleInstance(name="红灯", variant="red"),
+    ModuleInstance(name="红灯2", variant="red"),
+    ModuleInstance(name="绿灯", variant="green"),
+    ModuleInstance(name="状态灯"),
+)
+
 
 def _fake_stm32_led_master(tmp_path: Path) -> Path:
     """最小 Keil 母版 + led 接线文件（pin_config.h / ml_led.h / led_instances.h
@@ -689,6 +698,53 @@ def test_render_mspm0_multi_plan_channels_and_instance_macros():
     assert "#define LED_CHANNEL_1_PIN  LED_2_LED2_PIN" in text
     assert "#define LED_CHANNEL_3_PORT LED_4_PORT" in text
     assert "#define LED_CHANNEL_3_PIN  LED_4_LED4_PIN" in text
+
+
+# --------------------------- 关门验收 05 矩阵 4 灯精确组合 ---------------------------
+# 红+红+绿+状态灯 同时覆盖内置色 / 重复内置色 / 非内置色三类命名，通道宏与默认脚
+# 逐项对上验收表期望列（区别于 INSTANCES_4 的红/黄/绿/状态灯——那里没有重复内置色）。
+
+
+def test_expand_matrix_4_light_builtin_duplicate_nonbuiltin():
+    """红+红+绿+状态灯 → LED_RED / LED_RED_2 / LED_GREEN / LED_1；默认脚逐项：
+    stm32 PC13/PA0/PC15/PA1（重复内置色与非内置色走 board 顺序，内置色指定脚
+    PC13/PC15 不抢占）、mspm0 PA15/PA0/PA1/PA28（首实例 PA15，其余 board 顺序）。"""
+    plan = _expand(MATRIX_4, "stm32")
+    assert _macros(plan) == ["LED_RED", "LED_RED_2", "LED_GREEN", "LED_1"]
+    assert _pins(plan) == ["PC13", "PA0", "PC15", "PA1"]
+
+    plan = _expand(MATRIX_4, "mspm0")
+    assert _macros(plan) == ["LED_RED", "LED_RED_2", "LED_GREEN", "LED_1"]
+    assert _pins(plan) == ["PA15", "PA0", "PA1", "PA28"]
+
+
+def test_render_matrix_4_light_channel_and_pin_macros():
+    """4 灯渲染产物逐项对上验收表期望列：通道索引 RED=0 / RED_2=1 / GREEN=2 /
+    LED_1=3；stm32 具体 (GPIO_x, Pin_y) 对、mspm0 通道 0 LED_BEEP + 其余
+    LED_<实例号> 实例宏（LED_2_LED2 / LED_3_LED3 / LED_4_LED4）。"""
+    stm32 = render_led_instances_text(_expand(MATRIX_4, "stm32"), "stm32")
+    assert "#define LED_CHANNEL_COUNT 4" in stm32
+    for macro, index in (("LED_RED", 0), ("LED_RED_2", 1), ("LED_GREEN", 2), ("LED_1", 3)):
+        assert re.search(rf"#define\s+{macro}\s+{index}\b", stm32), macro
+    assert "#define LED_CHANNEL_0_PORT GPIO_C" in stm32
+    assert "#define LED_CHANNEL_0_PIN  Pin_13" in stm32
+    assert "#define LED_CHANNEL_1_PORT GPIO_A" in stm32
+    assert "#define LED_CHANNEL_1_PIN  Pin_0" in stm32
+    assert "#define LED_CHANNEL_2_PORT GPIO_C" in stm32
+    assert "#define LED_CHANNEL_2_PIN  Pin_15" in stm32
+    assert "#define LED_CHANNEL_3_PORT GPIO_A" in stm32
+    assert "#define LED_CHANNEL_3_PIN  Pin_1" in stm32
+
+    mspm0 = render_led_instances_text(_expand(MATRIX_4, "mspm0"), "mspm0")
+    assert "#define LED_CHANNEL_COUNT 4" in mspm0
+    assert "#define LED_CHANNEL_0_PORT LED_BEEP_PORT" in mspm0
+    assert "#define LED_CHANNEL_0_PIN  LED_BEEP_LED_PIN" in mspm0
+    assert "#define LED_CHANNEL_1_PORT LED_2_PORT" in mspm0
+    assert "#define LED_CHANNEL_1_PIN  LED_2_LED2_PIN" in mspm0
+    assert "#define LED_CHANNEL_2_PORT LED_3_PORT" in mspm0
+    assert "#define LED_CHANNEL_2_PIN  LED_3_LED3_PIN" in mspm0
+    assert "#define LED_CHANNEL_3_PORT LED_4_PORT" in mspm0
+    assert "#define LED_CHANNEL_3_PIN  LED_4_LED4_PIN" in mspm0
 
 
 # --------------------------- mspm0 syscfg 改写 ---------------------------
@@ -938,3 +994,26 @@ def test_generate_smoke_main_led_init_calls_not_placeholder_rewritten():
     assert intercepted == ()
     assert "led_init(LED_RED);" in main_c
     assert "led_init(LED_1);" in main_c
+
+
+def test_generate_smoke_main_matrix_4_light_all_channels_preserved():
+    """冒烟 main.c 逐个 led_init(<通道宏>)——矩阵 4 灯全通道（LED_RED /
+    LED_RED_2 / LED_GREEN / LED_1）静态自检不误占位（重复内置色 LED_RED_2
+    与非内置色 LED_1 都是合法通道宏实参，led_init 在接口中 → intercepted
+    空、原文保留）。stm32 侧 led 内嵌母版（files 空），led_init 声明在母版
+    ml_led.h —— 走生产同款 master_project_dir 注入母版接口块（webapp 传
+    master_dir），否则会被误判未定义、改写占位。"""
+    llm = FakeLLM(
+        smoke_skeleton=(
+            "int main(void) { led_init(LED_RED); led_init(LED_RED_2);"
+            " led_init(LED_GREEN); led_init(LED_1); while (1); }\n"
+        )
+    )
+    main_c, intercepted = generate_smoke_main(
+        llm, "题面", [LED], "stm32", MODULES, master_project_dir=STM32_MASTER,
+        instances={"led": MATRIX_4},
+    )
+
+    assert intercepted == ()
+    for macro in ("LED_RED", "LED_RED_2", "LED_GREEN", "LED_1"):
+        assert f"led_init({macro});" in main_c
