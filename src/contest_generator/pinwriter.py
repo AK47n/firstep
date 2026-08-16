@@ -27,7 +27,7 @@ from typing import Sequence
 from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError, ResolvedBinding
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
-from .syscfg_instances import INSTANCES_BY_SLUG
+from .syscfg_model import SyscfgModelError, parse_syscfg
 
 PIN_CONFIG_FILENAME = "pin_config.h"
 MSPM0_SYSCFG_FILENAME = "mspm0.syscfg"
@@ -56,21 +56,6 @@ _UART_CALLS_ROLES = (
 _DEFINE_LINE_RE = re.compile(
     r"^(?P<head>\s*#\s*define\s+)(?P<name>[A-Za-z_]\w*)(?P<sep>\s+)(?P<rest>.*)$"
 )
-
-# syscfg $assign 行：<实例路径>.$assign = "<值>"——path 捕获实例路径（引脚落点
-# peripheral/ccp0Pin/rxPin/txPin/sdaPin/sclPin/pin 全形态与 peripheral 外设行
-# 共用此形态），值 = 引脚名或外设名（peripheral 行的 UART0/TIMG0 等）；
-# eol 单独捕获（CRLF 母版，重构时行尾原样接回——逐字节契约不破）
-_SYSCFG_ASSIGN_RE = re.compile(
-    r'^(?P<head>\s*(?P<path>.+?)\.\$assign\s*=\s*)"(?P<pin>[A-Za-z0-9]+)"'
-    r"(?P<tail>.*?)(?P<eol>\r?\n)?$"
-)
-
-# mspm0 需要连带改写 peripheral 行的角色类型（工单 pin-full-unlock/03）：
-# uart/i2c/pwm 的引脚落点路径尾字段 → 实例行路径（去掉尾字段）。
-_MSPM0_PERIPHERAL_TYPES = ("uart_tx", "uart_rx", "i2c_scl", "i2c_sda", "pwm")
-_PERIPHERAL_PIN_FIELDS = ("txPin", "rxPin", "sdaPin", "sclPin", "ccp0Pin", "ccp1Pin")
-
 
 def apply_pin_bindings(
     output_dir: Path, platform: str, resolved: Sequence[ResolvedBinding]
@@ -302,187 +287,12 @@ def _replace_define_line(
 def rewrite_syscfg(
     master_text: str, resolved: Sequence[ResolvedBinding]
 ) -> str:
-    """按绑定改写 mspm0.syscfg：按角色默认引脚值定位 $assign 落点行、换引号里
-    的引脚值；uart/i2c/pwm 角色另按同一实例路径改写 `peripheral` 行值（工单
-    pin-full-unlock/03——实例名 / 宏名 / 通道名 / 其余行逐字节不动）。gpio 组
-    不需要 port 字段：SysConfig 由组内引脚 $assign 自动推导
-    `STEP_MOTOR_PORT`（前置验证 2026-08-15 实证），写侧仍只碰 $assign。
-
-    槽位定位 = 默认引脚值 + 实例路径尾字段（工单 01 默认值唯一为常态；工单
-    2026-08-15 起 STEP_MOTOR SLP2/DIR2 与 HUIDU R3/R4 默认重叠 PB6/PB7——
-    全库 42 角色 vs 排针 32 脚数学上无法全互异，允许重叠、用户改绑消解）：
-    角色声明默认值 = 地猛星化后 syscfg 现值，同值多行时按角色类型的落点路径
-    形（gpio 组 → associatedPins[n].pin、uart_tx → txPin、i2c_scl → sclPin
-    等）选唯一候选——HUIDU R3 改绑只碰 HUIDU 行、STEP_MOTOR SLP2 改绑只碰
-    STEP_MOTOR 行。xunji P1-P8 与 HUIDU 槽位错序共享也天然对位（P1 默认
-    PA24 → HUIDU L3 槽位）。同一槽位两角色（motor.AA / key.DC_MOTOR_AA）
-    同默认同落点，绑同脚合法、绑异脚在 resolve 已拦。
-    """
-    changes: list[ResolvedBinding] = [
-        b for b in resolved if b.pin != b.declaration.default
-    ]
-    if not changes:
-        return master_text
-
-    lines = master_text.splitlines(keepends=True)
-    sites: dict[str, list[int]] = {}
-    path_index: dict[str, int] = {}
-    for i, line in enumerate(lines):
-        m = _SYSCFG_ASSIGN_RE.match(line)
-        if m:
-            sites.setdefault(m.group("pin"), []).append(i)
-            path_index.setdefault(m.group("path"), i)
-
-    by_slot: dict[tuple[str, str], str] = {}
-    for binding in changes:
-        default = binding.declaration.default
-        line_no = _locate_mspm0_site(
-            lines, sites.get(default) or [], default, binding
-        )
-        m = _SYSCFG_ASSIGN_RE.match(lines[line_no])
-        assert m is not None  # _locate_mspm0_site 已匹配过
-        slot = (default, m.group("path"))
-        previous_pin = by_slot.get(slot)
-        if previous_pin is not None and previous_pin != binding.pin:
-            raise PinBindingError(
-                f"绑定冲突：同一槽位（默认引脚 {default}，路径"
-                f" {m.group('path')}）的两个角色绑到不同引脚 {previous_pin}、"
-                f"{binding.pin} —— 请绑到同一引脚"
-            )
-        by_slot[slot] = binding.pin
-        lines[line_no] = (
-            f'{m.group("head")}"{binding.pin}"'
-            f'{m.group("tail")}{m.group("eol") or ""}'
-        )
-        if binding.declaration.type not in _MSPM0_PERIPHERAL_TYPES:
-            continue
-        peripheral_path = _peripheral_path(m.group("path"))
-        if peripheral_path is None:
-            raise PinBindingError(
-                f"角色 {binding.role_key} 的 $assign 路径 {m.group('path')!r}"
-                f" 不是外设引脚字段（txPin/rxPin/sdaPin/sclPin/ccp0Pin/"
-                f"ccp1Pin），无法定位 peripheral 行——母版漂移，请核对"
-            )
-        peripheral_line_no = path_index.get(peripheral_path)
-        if peripheral_line_no is None:
-            raise PinBindingError(
-                f"角色 {binding.role_key} 的外设实例行"
-                f" {peripheral_path}.$assign 不在母版"
-                f" {MSPM0_SYSCFG_FILENAME} 中——母版漂移，请核对"
-            )
-        pm = _SYSCFG_ASSIGN_RE.match(lines[peripheral_line_no])
-        assert pm is not None  # path_index 收录时已匹配过
-        current_peripheral = pm.group("pin")
-        instance = _mspm0_instance_for_binding(
-            binding.role_key, binding.instances, current_peripheral
-        )
-        new_peripheral = _mspm0_peripheral_of(instance)
-        if new_peripheral != current_peripheral:
-            lines[peripheral_line_no] = (
-                f'{pm.group("head")}"{new_peripheral}"'
-                f'{pm.group("tail")}{pm.group("eol") or ""}'
-            )
-    return "".join(lines)
-
-
-def _locate_mspm0_site(
-    lines: list[str],
-    line_nos: Sequence[int],
-    default: str,
-    binding: ResolvedBinding,
-) -> int:
-    """默认引脚值 → 唯一槽位行号。同值多行（默认重叠布局）时按角色类型的
-    落点路径尾形过滤：gpio 组 → associatedPins[n].pin、uart_tx → txPin、
-    i2c_scl → sclPin、pwm → ccp0/ccp1Pin（按角色 id 的 C0/C1 通道）。过滤后
-    仍非唯一 = 母版漂移，大声失败。"""
-    if len(line_nos) == 1:
-        return line_nos[0]
-    if not line_nos:
-        raise PinBindingError(
-            f"角色默认引脚 {default} 在母版 {MSPM0_SYSCFG_FILENAME} 中没有"
-            f"落点——声明默认值与 syscfg 漂移，请核对工单 01 数据"
-        )
-    candidates: list[int] = []
-    for line_no in line_nos:
-        m = _SYSCFG_ASSIGN_RE.match(lines[line_no])
-        assert m is not None  # sites 收录时已匹配过
-        if _mspm0_path_matches(
-            binding.declaration.type,
-            binding.declaration.id,
-            binding.slug,
-            m.group("path"),
-        ):
-            candidates.append(line_no)
-    if len(candidates) == 1:
-        return candidates[0]
-    raise PinBindingError(
-        f"角色默认引脚 {default} 在母版 {MSPM0_SYSCFG_FILENAME} 中的落点不是"
-        f"唯一一行（找到 {len(line_nos)} 行，路径形过滤后剩"
-        f" {len(candidates)} 行）——声明默认值与 syscfg 漂移，请核对工单 01"
-        f"数据"
-    )
-
-
-def _mspm0_path_matches(
-    decl_type: str, role_id: str, slug: str, path: str
-) -> bool:
-    """角色类型 → $assign 路径匹配（mspm0 母版路径形态固定）。
-
-    GPIO 组角色（gpio_out/gpio_in/enc）落在 `<实例>.associatedPins[n].pin`，
-    同值多行时用 slug 反查消费实例名（syscfg_instances 单源表）区分——
-    STEP_MOTOR SLP2 只认 STEP_MOTOR.*，HUIDU R3 只认 HUIDU.*。外设角色
-    落点路径尾字段唯一（txPin/rxPin/sclPin/sdaPin/ccp0Pin/ccp1Pin）。
-    """
-    if decl_type in ("gpio_out", "gpio_in", "enc"):
-        if not (".associatedPins[" in path and path.endswith(".pin")):
-            return False
-        instance = path.split(".associatedPins[", 1)[0]
-        return instance in INSTANCES_BY_SLUG.get(slug, ())
-    if decl_type in ("uart_tx", "uart_rx", "i2c_scl", "i2c_sda"):
-        # 外设角色默认值同脚时（module-polish/01：DEBUG_UART 与 UWB_UART
-        # 同 UART2/PA23），仅尾字段（txPin 等）不再唯一——按 slug 反查
-        # syscfg 实例名区分，与 GPIO 组同款。
-        instance = path.split(".peripheral.", 1)[0]
-        return instance in INSTANCES_BY_SLUG.get(slug, ())
-    if decl_type == "pwm":
-        if role_id.endswith("_C0"):
-            return path.endswith(".ccp0Pin")
-        if role_id.endswith("_C1"):
-            return path.endswith(".ccp1Pin")
-        return path.endswith((".ccp0Pin", ".ccp1Pin"))
-    return False
-
-
-def _peripheral_path(assign_path: str) -> str | None:
-    """$assign 路径 → 同实例 peripheral 路径：IMU601.peripheral.txPin →
-    IMU601.peripheral；GPIO 组 pin 路径（…associatedPins[n].pin）返回 None
-    （调用方不处理 gpio 组）。"""
-    for field in _PERIPHERAL_PIN_FIELDS:
-        if assign_path.endswith("." + field):
-            return assign_path[: -len(field) - 1]
-    return None
-
-
-def _mspm0_instance_for_binding(
-    role_key: str, instances: tuple[str, ...], current_peripheral: str
-) -> str:
-    """多实例候选里选一个写 peripheral：优先与母版现值相同（最小改动、换脚
-    不动外设），否则取首个（绑定脚 token 序，确定性）。"""
-    if not instances:
-        raise PinBindingError(
-            f"绑定 {role_key} 需要改写外设实例，但没有可用的能力实例"
-            f"（数据漂移，请核对板定义 token）"
-        )
-    if current_peripheral:
-        for instance in instances:
-            if _mspm0_peripheral_of(instance) == current_peripheral:
-                return instance
-    return instances[0]
-
-
-def _mspm0_peripheral_of(instance: str) -> str:
-    """实例 token → syscfg peripheral 值：TIMG12_C0 → TIMG12、UART1 → UART1、
-    I2C1 → I2C1。"""
-    if instance.startswith(("TIMG", "TIMA")):
-        return instance.split("_", 1)[0]
-    return instance
+    """按绑定改写 mspm0.syscfg（工单 syscfg-file-model/03）：委托文件模型
+    `parse_syscfg(master_text).rewrite(resolved).to_text()`。文件模型独占
+    $assign 文法、路径匹配与槽位身份（工单 01），写侧只翻译错误契约——
+    SyscfgModelError 是白名单、漏到 web 层会 500，翻译回 PinBindingError
+    保持旧写侧错误契约不变（消息文案与旧实现逐字一致）。"""
+    try:
+        return parse_syscfg(master_text).rewrite(resolved).to_text()
+    except SyscfgModelError as exc:
+        raise PinBindingError(str(exc)) from exc

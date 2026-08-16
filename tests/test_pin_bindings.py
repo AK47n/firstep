@@ -46,10 +46,10 @@ from contest_generator.pin_bindings import (
 from contest_generator.pinwriter import (
     MSPM0_SYSCFG_FILENAME,
     PIN_CONFIG_FILENAME,
-    _mspm0_path_matches,
     render_pin_config,
     rewrite_syscfg,
 )
+from contest_generator.syscfg_model import syscfg_path_matches
 from contest_generator.syscfg_prune import prune_syscfg
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
@@ -321,7 +321,7 @@ def test_every_mspm0_declared_default_has_path_unique_syscfg_site():
             matches = [
                 p
                 for p in paths
-                if _mspm0_path_matches(decl.type, decl.id, manifest.slug, p)
+                if syscfg_path_matches(decl.type, decl.id, manifest.slug, p)
             ]
             assert len(matches) == 1, (
                 f"{manifest.slug}.{decl.id} 默认 {decl.default} 的 syscfg 落点"
