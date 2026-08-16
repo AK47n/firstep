@@ -4,6 +4,9 @@
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
 
+## 2026-08-17
+- 00:02 ball_detect 模块重命名为 coord_detect（坐标检测）——纯机械改名（git mv 保留历史，解析逻辑/协议一字不改）：C 符号 BallResult→CoordResult、ball_detect_*→coord_detect_*、BALL_RX_BUF_SIZE→COORD_RX_BUF_SIZE、引脚宏 BALL_DETECT_UART*→COORD_DETECT_UART*；帧契约单源 BALL_FRAME_*→COORD_FRAME_*（前缀值 "B" 保持——协议字节与模块名解耦）、模板占位符 ball_frame_format→coord_frame_format、BALL_THRESHOLD→COLOR_THRESHOLD；k230 依赖/母版/测试/CONTEXT 同步（工单 coord-detect-rename/01）
+
 ## 2026-08-16
 - 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）
 - 00:37 骨架生成注入参考实现草稿（锚定+手动全文，reference_ids 透传）

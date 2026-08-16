@@ -47,8 +47,8 @@ UART_SWAP_BINDINGS = {
     "imu_uart.IMU601_RX": "PA9",
     "digit_uart.DIGIT_UART_TX": "PA28",
     "digit_uart.DIGIT_UART_RX": "PA31",
-    "ball_detect.BALL_DETECT_UART_TX": "PA28",
-    "ball_detect.BALL_DETECT_UART_RX": "PA31",
+    "coord_detect.COORD_DETECT_UART_TX": "PA28",
+    "coord_detect.COORD_DETECT_UART_RX": "PA31",
 }
 
 
@@ -152,7 +152,7 @@ def test_pipeline_byte_identical_prune_only():
         ["motor"],
         ["led"],
         ["huidu", "pid"],
-        ["imu_uart", "digit_uart", "ball_detect", "uwb_uart", "debug_uart",
+        ["imu_uart", "digit_uart", "coord_detect", "uwb_uart", "debug_uart",
          "zigbee_uart", "zigbee_uart_key"],
     ):
         assert _model_pipeline(selected, ()) == _old_pipeline(selected, ())

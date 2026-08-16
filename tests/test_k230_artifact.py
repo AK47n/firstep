@@ -2,7 +2,7 @@
 
 两层测试（工单 02）：
 1. 契约单源（k230_render 纯函数）：帧格式常量 / 帧渲染 / 模板占位符——
-   与主控侧 ball_detect parse_ball_line 的字段序机械比对锁定（stm32 + mspm0
+   与主控侧 coord_detect parse_coord_line 的字段序机械比对锁定（stm32 + mspm0
    双平台 C 源，防漂移：改 C 不同步契约即红）+ ml_uart.c / mspm0 syscfg
    波特率比对；C 侧照旧零改动；
 2. 生成层：选中带 python_artifact 声明的模块 → 产物工程根含渲染后的 .py；
@@ -11,7 +11,7 @@
 
 工单 03 追加真实 k230 模块（真库 + 真母版）：manifest 形状 / 真实模板契约
 渲染（帧格式与契约常量逐字一致，模板只走占位符不重抄字面量）/ 生成层依赖
-展开（选中 k230 → ball_detect 自动挂上 + main.py 副产物，双平台对端可配）。
+展开（选中 k230 → coord_detect 自动挂上 + main.py 副产物，双平台对端可配）。
 """
 
 from __future__ import annotations
@@ -24,12 +24,12 @@ import pytest
 from contest_generator.errors import error_entry
 from contest_generator.generator import PythonArtifactError, generate, generate_project
 from contest_generator.k230_render import (
-    BALL_FRAME_FIELDS,
-    BALL_FRAME_FORMAT,
-    BALL_FRAME_PREFIX,
+    COORD_FRAME_FIELDS,
+    COORD_FRAME_FORMAT,
+    COORD_FRAME_PREFIX,
     NO_DETECT_FRAME,
     UART_BAUDRATE,
-    render_ball_frame,
+    render_coord_frame,
     render_no_detect_frame,
     render_python_artifact,
 )
@@ -45,31 +45,31 @@ from tests.fakes import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BALL_DETECT_STM32_C = (
-    REPO_ROOT / "library" / "modules" / "ball_detect" / "code" / "ball_detect_stm32.c"
+COORD_DETECT_STM32_C = (
+    REPO_ROOT / "library" / "modules" / "coord_detect" / "code" / "coord_detect_stm32.c"
 )
-BALL_DETECT_MSPM0_C = (
-    REPO_ROOT / "library" / "modules" / "ball_detect" / "code" / "ball_detect.c"
+COORD_DETECT_MSPM0_C = (
+    REPO_ROOT / "library" / "modules" / "coord_detect" / "code" / "coord_detect.c"
 )
 ML_UART_C = REPO_ROOT / "library" / "masters" / "stm32" / "ml_libs" / "ml_uart.c"
 MSPM0_SYSCFG = REPO_ROOT / "library" / "masters" / "mspm0" / "mspm0.syscfg"
 
-# 双平台 parse_ball_line 源（防漂移锁定同吃一份契约，工单 03 扩 mspm0）
-BALL_DETECT_C_SOURCES = (BALL_DETECT_STM32_C, BALL_DETECT_MSPM0_C)
+# 双平台 parse_coord_line 源（防漂移锁定同吃一份契约，工单 03 扩 mspm0）
+COORD_DETECT_C_SOURCES = (COORD_DETECT_STM32_C, COORD_DETECT_MSPM0_C)
 
 # ---------------------------------------------------------------------------
 # 契约单测（k230_render 纯函数）
 # ---------------------------------------------------------------------------
 
 
-def test_ball_frame_format_derived_from_fields():
+def test_coord_frame_format_derived_from_fields():
     """帧格式由字段序派生（单源）：B,<cx>,<cy>,<confidence>,<x1>,<y1>,<x2>,<y2>。"""
-    assert BALL_FRAME_FORMAT == "B,{cx},{cy},{confidence},{x1},{y1},{x2},{y2}"
+    assert COORD_FRAME_FORMAT == "B,{cx},{cy},{confidence},{x1},{y1},{x2},{y2}"
 
 
-def test_render_ball_frame_orders_fields():
+def test_render_coord_frame_orders_fields():
     """帧渲染按契约序落位（x1/y1/x2/y2 与 cx/cy 不混）。"""
-    assert render_ball_frame(12, 34, 0.87, 100, 110, 400, 420) == (
+    assert render_coord_frame(12, 34, 0.87, 100, 110, 400, 420) == (
         "B,12,34,0.87,100,110,400,420"
     )
 
@@ -87,7 +87,7 @@ def test_render_python_artifact_substitutes_contract_vars():
     template = (
         "uart = UART(1, {{uart_baudrate}})\n"
         "uart.write('{{no_detect_frame}}\\n')\n"
-        "fmt = '{{ball_frame_format}}'\n"
+        "fmt = '{{coord_frame_format}}'\n"
     )
     assert render_python_artifact(template) == (
         "uart = UART(1, 115200)\n"
@@ -106,64 +106,64 @@ def test_render_python_artifact_passthrough_without_placeholders():
 # 防漂移：契约与主控侧 C 解析的机械比对（C 侧零改动）
 # ---------------------------------------------------------------------------
 
-# parse_ball_line 的字段提取形态：if (get_field(line, N, buf, sizeof(buf))
-# == NULL) return; 后跟 ball_result.<name> = my_atoi/my_atof(buf);——(N, name)
+# parse_coord_line 的字段提取形态：if (get_field(line, N, buf, sizeof(buf))
+# == NULL) return; 后跟 coord_result.<name> = my_atoi/my_atof(buf);——(N, name)
 # 序即解析序（不看注释，防注释漂移）
 _C_FIELD_ASSIGN_RE = re.compile(
     r"get_field\(line,\s*(\d+),\s*buf,\s*sizeof\(buf\)\)\s*==\s*NULL\)\s*return;\s*"
-    r"ball_result\.([a-z0-9_]+)\s*=\s*(?:my_atoi|my_atof)\(buf\);"
+    r"coord_result\.([a-z0-9_]+)\s*=\s*(?:my_atoi|my_atof)\(buf\);"
 )
 
 
-def _parse_ball_line_body(source: str) -> str:
-    """parse_ball_line 函数体：从函数签名到下一节横幅。"""
-    start = source.index("static void parse_ball_line(const char *line)")
+def _parse_coord_line_body(source: str) -> str:
+    """parse_coord_line 函数体：从函数签名到下一节横幅。"""
+    start = source.index("static void parse_coord_line(const char *line)")
     end = source.index("// ====", start)
     return source[start:end]
 
 
 def _c_field_order(body: str) -> list[tuple[int, str]]:
-    """从 C 源机械提取字段序：(get_field 索引, ball_result 字段名) 列表。"""
+    """从 C 源机械提取字段序：(get_field 索引, coord_result 字段名) 列表。"""
     return [(int(index), name) for index, name in _C_FIELD_ASSIGN_RE.findall(body)]
 
 
 @pytest.mark.parametrize(
-    "source_path", BALL_DETECT_C_SOURCES, ids=["stm32", "mspm0"]
+    "source_path", COORD_DETECT_C_SOURCES, ids=["stm32", "mspm0"]
 )
-def test_c_parse_ball_line_field_order_locked_to_contract(source_path):
-    """防漂移主锁：C 侧 parse_ball_line 的 get_field 序（1..7 逐字段）与
-    BALL_FRAME_FIELDS 严格一致——改 C 字段序 / 改名不同步本契约即红。
-    双平台 C 源同锁（stm32 ball_detect_stm32.c + mspm0 ball_detect.c）。"""
+def test_c_parse_coord_line_field_order_locked_to_contract(source_path):
+    """防漂移主锁：C 侧 parse_coord_line 的 get_field 序（1..7 逐字段）与
+    COORD_FRAME_FIELDS 严格一致——改 C 字段序 / 改名不同步本契约即红。
+    双平台 C 源同锁（stm32 coord_detect_stm32.c + mspm0 coord_detect.c）。"""
     source = source_path.read_text(encoding="utf-8")
-    pairs = _c_field_order(_parse_ball_line_body(source))
+    pairs = _c_field_order(_parse_coord_line_body(source))
 
     assert [index for index, _ in pairs] == list(range(1, 8))  # 逐字段顺序解析
-    assert [name for _, name in pairs] == list(BALL_FRAME_FIELDS)
+    assert [name for _, name in pairs] == list(COORD_FRAME_FIELDS)
 
 
 @pytest.mark.parametrize(
-    "source_path", BALL_DETECT_C_SOURCES, ids=["stm32", "mspm0"]
+    "source_path", COORD_DETECT_C_SOURCES, ids=["stm32", "mspm0"]
 )
 def test_c_frame_prefix_and_delimiter_locked_to_contract(source_path):
     """帧前缀与分隔符两侧一致：C 侧守卫 line[0] != 'B' || line[1] != ','
     由契约常量推导比对（改契约前缀 / 分隔符不同步 C 即红）。"""
     source = source_path.read_text(encoding="utf-8")
-    body = _parse_ball_line_body(source)
-    assert f"line[0] != '{BALL_FRAME_PREFIX}' || line[1] != ','" in body
+    body = _parse_coord_line_body(source)
+    assert f"line[0] != '{COORD_FRAME_PREFIX}' || line[1] != ','" in body
 
 
 @pytest.mark.parametrize(
-    "source_path", BALL_DETECT_C_SOURCES, ids=["stm32", "mspm0"]
+    "source_path", COORD_DETECT_C_SOURCES, ids=["stm32", "mspm0"]
 )
 def test_c_no_detect_frame_locked_to_contract(source_path):
     """无检测帧两侧一致：C 侧首字符判 'N'，契约 NO_DETECT_FRAME == "N"。"""
     source = source_path.read_text(encoding="utf-8")
-    assert "line[0] == 'N'" in _parse_ball_line_body(source)
+    assert "line[0] == 'N'" in _parse_coord_line_body(source)
     assert NO_DETECT_FRAME == "N"
 
 
 def test_mspm0_syscfg_digit_uart_baudrate_locked_to_contract():
-    """波特率两侧一致（mspm0 侧）：母版 syscfg DIGIT_UART 实例（ball_detect
+    """波特率两侧一致（mspm0 侧）：母版 syscfg DIGIT_UART 实例（coord_detect
     共享）的 targetBaudRate == 契约 UART_BAUDRATE——C 侧单独改即红。"""
     text = MSPM0_SYSCFG.read_text(encoding="utf-8", errors="replace")
     match = re.search(r"^DIGIT_UART\.targetBaudRate\s*=\s*(\d+);", text, re.M)
@@ -457,7 +457,7 @@ def test_python_artifact_error_registered_as_400():
 
 # ---------------------------------------------------------------------------
 # 工单 03：真实 k230 模块（真库 + 真母版）——manifest 形状 + 真实模板契约
-# 渲染 + 生成层依赖展开（选中 k230 → ball_detect 自动挂上 + main.py 副产物）
+# 渲染 + 生成层依赖展开（选中 k230 → coord_detect 自动挂上 + main.py 副产物）
 # ---------------------------------------------------------------------------
 
 LIBRARY_MODULES = REPO_ROOT / "library" / "modules"
@@ -468,22 +468,22 @@ K230_TEMPLATE = K230_MODULE / "code" / "main.py"
 
 def test_k230_manifest_shape_and_contract_dependency():
     """k230 = 纯副产物模块：双平台 files 空（主控侧无自有 C 文件）、依赖
-    ball_detect（串口解析 + 引脚由它提供，k230 不重复声明串口 pins）、
+    coord_detect（串口解析 + 引脚由它提供，k230 不重复声明串口 pins）、
     python_artifact 指向真实模板文件。"""
     manifest = ModuleManifest.load(K230_MODULE)
-    assert manifest.dependencies == ("ball_detect",)
+    assert manifest.dependencies == ("coord_detect",)
     assert manifest.python_artifact is not None
     assert manifest.python_artifact.template == "code/main.py"
     assert manifest.python_artifact.output == "main.py"
     for platform in (PLATFORM_STM32, PLATFORM_MSPM0):
         entry = manifest.platforms[platform]
         assert entry.files == ()  # 主控侧无自有 C 文件，不复制不注册
-        assert entry.pins == ()  # 串口引脚由 ball_detect 声明，避免实例撞车
+        assert entry.pins == ()  # 串口引脚由 coord_detect 声明，避免实例撞车
     # 依赖侧的串口解析与引脚真实存在（展开后主控工程才"打开就能编译"）
-    ball = ModuleManifest.load(LIBRARY_MODULES / "ball_detect")
+    coord = ModuleManifest.load(LIBRARY_MODULES / "coord_detect")
     for platform in (PLATFORM_STM32, PLATFORM_MSPM0):
-        assert ball.platforms[platform].files
-        assert {p.type for p in ball.platforms[platform].pins} == {
+        assert coord.platforms[platform].files
+        assert {p.type for p in coord.platforms[platform].pins} == {
             "uart_tx",
             "uart_rx",
         }
@@ -493,17 +493,17 @@ def test_k230_manifest_shape_and_contract_dependency():
 def test_k230_template_renders_real_vision_script():
     """真实模板契约渲染：占位符 ← 契约常量（模板不重抄字面量），渲染产物含
     视觉四要素（sensor / find_blobs / 组帧 / uart），帧格式与契约逐字一致
-    ——与主控侧 parse_ball_line 的对齐经 BALL_FRAME_FORMAT 单源传递（本文件
+    ——与主控侧 parse_coord_line 的对齐经 COORD_FRAME_FORMAT 单源传递（本文件
     前半的 C 侧锁同吃该单源）。"""
     template = K230_TEMPLATE.read_text(encoding="utf-8")
     # 帧格式 / 无检测帧 / 波特率全走占位符（勿各抄一份字面量）
     for placeholder in (
-        "{{ball_frame_format}}",
+        "{{coord_frame_format}}",
         "{{no_detect_frame}}",
         "{{uart_baudrate}}",
     ):
         assert placeholder in template, placeholder
-    assert BALL_FRAME_FORMAT not in template  # 模板正文不重抄帧格式字面量
+    assert COORD_FRAME_FORMAT not in template  # 模板正文不重抄帧格式字面量
     assert "115200" not in template  # 波特率同样只走占位符
 
     rendered = render_python_artifact(template)
@@ -522,48 +522,48 @@ def test_k230_template_renders_real_vision_script():
 
     # 帧契约单源：渲染后的帧格式 / 无检测帧 / 波特率与契约常量逐字一致
     frame_match = re.search(r"FRAME_FORMAT\s*=\s*'([^']*)'", rendered)
-    assert frame_match and frame_match.group(1) == BALL_FRAME_FORMAT
+    assert frame_match and frame_match.group(1) == COORD_FRAME_FORMAT
     no_detect_match = re.search(r"NO_DETECT_FRAME\s*=\s*'([^']*)'", rendered)
     assert no_detect_match and no_detect_match.group(1) == NO_DETECT_FRAME
     assert f"UART(UART.UART2, {UART_BAUDRATE})" in rendered
     # 组帧调用按契约字段落位（kwarg 名 = 契约字段全集）
-    for field in BALL_FRAME_FIELDS:
+    for field in COORD_FRAME_FIELDS:
         assert f"{field}=" in rendered, field
 
 
-# 生成层 main.c：只调 ball_detect 的 API（k230 主控侧无自有文件可调）——
+# 生成层 main.c：只调 coord_detect 的 API（k230 主控侧无自有文件可调）——
 # 与 test_module_protocol_mspm0 同形态（真实库 + 真实母版直驱生成）
 K230_MAIN_C_STM32 = (
     '#include "headfile.h"\n'
-    '#include "ball_detect_stm32.h"\n'
+    '#include "coord_detect_stm32.h"\n'
     "\n"
     "int main(void)\n"
     "{\n"
-    "    ball_detect_init();\n"
+    "    coord_detect_init();\n"
     "    while (1)\n"
     "    {\n"
-    "        ball_detect_parse();\n"
+    "        coord_detect_parse();\n"
     "    }\n"
     "}\n"
 )
 
 K230_MAIN_C_MSPM0 = (
     '#include "ti_msp_dl_config.h"\n'
-    '#include "ball_detect.h"\n'
+    '#include "coord_detect.h"\n'
     "\n"
     "int main(void)\n"
     "{\n"
     "    /* SYSCFG_DL_init(); */\n"
-    "    ball_detect_init();\n"
+    "    coord_detect_init();\n"
     "    while (1)\n"
     "    {\n"
-    "        ball_detect_parse();\n"
+    "        coord_detect_parse();\n"
     "    }\n"
     "}\n"
     "\n"
     "void DIGIT_UART_INST_IRQHandler(void)\n"
     "{\n"
-    "    ball_detect_rx_handler();\n"
+    "    coord_detect_rx_handler();\n"
     "}\n"
 )
 
@@ -578,7 +578,7 @@ def _assert_k230_output(out: Path) -> None:
 
 
 def test_generate_project_stm32_k230_expands_dependency_and_writes_py(tmp_path):
-    """stm32 生成接缝：选中 k230 → 依赖自动展开挂上 ball_detect 解析 +
+    """stm32 生成接缝：选中 k230 → 依赖自动展开挂上 coord_detect 解析 +
     K230 侧 main.py（流程入口 generate_project，与 webapp 同接缝）。"""
     summary = generate_project(
         platform=PLATFORM_STM32,
@@ -589,8 +589,8 @@ def test_generate_project_stm32_k230_expands_dependency_and_writes_py(tmp_path):
         masters_dir=LIBRARY_MASTERS,
     )
     out = summary.output_dir
-    assert (out / "modules" / "ball_detect" / "code" / "ball_detect_stm32.c").is_file()
-    assert (out / "modules" / "ball_detect" / "code" / "ball_detect_stm32.h").is_file()
+    assert (out / "modules" / "coord_detect" / "code" / "coord_detect_stm32.c").is_file()
+    assert (out / "modules" / "coord_detect" / "code" / "coord_detect_stm32.h").is_file()
     assert "main.py" in summary.structure
     # 摘要副产物清单（工单 04）：k230 的 files 空，前端靠它显示 main.py
     assert summary.python_artifacts == (("k230", "main.py"),)
@@ -598,7 +598,7 @@ def test_generate_project_stm32_k230_expands_dependency_and_writes_py(tmp_path):
 
 
 def test_generate_project_mspm0_k230_expands_dependency_and_writes_py(tmp_path):
-    """mspm0 生成接缝（对端可配）：ball_detect 挂上 + DIGIT_UART 共享实例随
+    """mspm0 生成接缝（对端可配）：coord_detect 挂上 + DIGIT_UART 共享实例随
     依赖保留在 syscfg + main.py（副产物与主控平台无关）。"""
     summary = generate_project(
         platform=PLATFORM_MSPM0,
@@ -609,8 +609,8 @@ def test_generate_project_mspm0_k230_expands_dependency_and_writes_py(tmp_path):
         masters_dir=LIBRARY_MASTERS,
     )
     out = summary.output_dir
-    assert (out / "modules" / "ball_detect" / "code" / "ball_detect.c").is_file()
+    assert (out / "modules" / "coord_detect" / "code" / "coord_detect.c").is_file()
     syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
-    assert "const DIGIT_UART = UART.addInstance();" in syscfg  # ball_detect 共享实例
+    assert "const DIGIT_UART = UART.addInstance();" in syscfg  # coord_detect 共享实例
     assert summary.python_artifacts == (("k230", "main.py"),)
     _assert_k230_output(out)

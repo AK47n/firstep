@@ -202,7 +202,7 @@ IMU601.enableFIFO        = false;
 IMU601.peripheral.rxPin.$assign = "PA31";
 IMU601.peripheral.txPin.$assign = "PA28";
 
-// K230 视觉串口（digit_uart/ball_detect 模块用，RX 中断；PA8/PA9 = UART1）
+// K230 视觉串口（digit_uart/coord_detect 模块用，RX 中断；PA8/PA9 = UART1）
 const DIGIT_UART = UART.addInstance();
 DIGIT_UART.$name             = "DIGIT_UART";
 DIGIT_UART.profile           = "CONFIG_PROFILE_1";

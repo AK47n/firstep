@@ -188,8 +188,8 @@ STM32_MACRO_VALUES = {
     # uart 实例宏（迁移前硬编码 UART_1/UART_2 + USART1/2 寄存器）
     "DIGIT_UART": "UART_1",
     "DIGIT_UART_INST": "USART1",
-    "BALL_DETECT_UART": "UART_1",
-    "BALL_DETECT_UART_INST": "USART1",
+    "COORD_DETECT_UART": "UART_1",
+    "COORD_DETECT_UART_INST": "USART1",
     "DEBUG_UART": "UART_2",
     "DEBUG_UART_INST": "USART2",
     # uart 引脚宏（工单 pin-full-unlock/02：值 = ml_uart switch 表原值不变）
@@ -197,10 +197,10 @@ STM32_MACRO_VALUES = {
     "DIGIT_UART_TX_Pin": "Pin_9",
     "DIGIT_UART_RX_GPIO": "GPIO_A",
     "DIGIT_UART_RX_Pin": "Pin_10",
-    "BALL_DETECT_UART_TX_GPIO": "GPIO_A",
-    "BALL_DETECT_UART_TX_Pin": "Pin_9",
-    "BALL_DETECT_UART_RX_GPIO": "GPIO_A",
-    "BALL_DETECT_UART_RX_Pin": "Pin_10",
+    "COORD_DETECT_UART_TX_GPIO": "GPIO_A",
+    "COORD_DETECT_UART_TX_Pin": "Pin_9",
+    "COORD_DETECT_UART_RX_GPIO": "GPIO_A",
+    "COORD_DETECT_UART_RX_Pin": "Pin_10",
     "DEBUG_UART_TX_GPIO": "GPIO_A",
     "DEBUG_UART_TX_Pin": "Pin_2",
     "DEBUG_UART_RX_GPIO": "GPIO_A",
@@ -229,7 +229,7 @@ STM32_MACRO_VALUES = {
     "ZIGBEE_UART_RX_Pin": "Pin_11",
     # UART 接收中断聚合（isr.c USARTx_IRQHandler 调用；默认分组）
     "USART1_IRQ_CALLS": (
-        "digit_uart_rx_handler(); ball_detect_rx_handler(); uwb_rx_handler();"
+        "digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();"
     ),
     "USART2_IRQ_CALLS": "debug_uart_rx_handler();",
     "USART3_IRQ_CALLS": "zigbee_rx_handler();",
@@ -354,8 +354,8 @@ MSPM0_DEFAULT_MAP = {
     ("zigbee_uart", "ZIGBEE_UART_RX"): ("ZIGBEE_UART", "rxPin"),
     ("zigbee_uart_key", "ZIGBEE_UART_TX"): ("ZIGBEE_UART", "txPin"),
     ("zigbee_uart_key", "ZIGBEE_UART_RX"): ("ZIGBEE_UART", "rxPin"),
-    ("ball_detect", "BALL_DETECT_UART_TX"): ("DIGIT_UART", "txPin"),
-    ("ball_detect", "BALL_DETECT_UART_RX"): ("DIGIT_UART", "rxPin"),
+    ("coord_detect", "COORD_DETECT_UART_TX"): ("DIGIT_UART", "txPin"),
+    ("coord_detect", "COORD_DETECT_UART_RX"): ("DIGIT_UART", "rxPin"),
     ("led", "LED"): ("LED_BEEP", "LED"),
     ("oled", "OLED_SCL"): ("OLED", "sclPin"),
     ("oled", "OLED_SDA"): ("OLED", "sdaPin"),

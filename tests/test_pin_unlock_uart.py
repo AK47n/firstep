@@ -79,7 +79,7 @@ def _uart_manifests():
         if m.slug
         in (
             "digit_uart",
-            "ball_detect",
+            "coord_detect",
             "debug_uart",
             "uwb_uart",
             "zigbee_uart",
@@ -219,7 +219,7 @@ def test_uart_instance_conflict_gate_rejects_when_key_module_holds_default():
 
 def test_uart_instance_conflict_gate_passes_swap_and_defaults():
     """换位放行（绑定×绑定同实例 = 共享提示语义）：三组全换位直过；空载荷
-    直过；no-op 绑定（= 默认值）不触发（默认×默认不查——UWB/DIGIT/BALL 共
+    直过；no-op 绑定（= 默认值）不触发（默认×默认不查——UWB/DIGIT/COORD 共
     UART_1 现状合法）。"""
     _uart_conflict_check(SWAP_BINDINGS)  # 五模块选中：换位合法
     _uart_conflict_check({})
@@ -279,18 +279,18 @@ def test_render_pin_config_uart_swap_macro_values():
     assert "#define UWB_UART_TX_Pin Pin_2" in out
     assert "#define UWB_UART_RX_GPIO GPIO_A" in out
     assert "#define UWB_UART_RX_Pin Pin_3" in out
-    # 未绑角色不动（DIGIT/BALL 仍 UART_1）
+    # 未绑角色不动（DIGIT/COORD 仍 UART_1）
     assert "#define DIGIT_UART             UART_1\r\n" in out
-    assert "#define BALL_DETECT_UART       UART_1\r\n" in out
+    assert "#define COORD_DETECT_UART       UART_1\r\n" in out
 
 
 def test_render_pin_config_uart_swap_irq_calls_regrouped():
     """USARTx_IRQ_CALLS 重分组：默认分组按绑定实例重排——USART1 只剩
-    digit+ball（uwb 移出）、USART2 = uwb+zigbee（debug 移出、按默认序
+    digit+coord（uwb 移出）、USART2 = uwb+zigbee（debug 移出、按默认序
     追加）、USART3 = debug。"""
     out = render_pin_config(STM32_MASTER_PIN_CONFIG, _resolve(SWAP_BINDINGS))
     assert (
-        "#define USART1_IRQ_CALLS digit_uart_rx_handler(); ball_detect_rx_handler();\r\n"
+        "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler();\r\n"
         in out
     )
     assert (
@@ -318,7 +318,7 @@ def test_render_pin_config_default_irq_calls_byte_identical():
             ),
         ),
     )
-    assert "#define USART1_IRQ_CALLS digit_uart_rx_handler(); ball_detect_rx_handler(); uwb_rx_handler();\r\n" in out
+    assert "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();\r\n" in out
     assert "#define USART2_IRQ_CALLS debug_uart_rx_handler();\r\n" in out
     assert "#define USART3_IRQ_CALLS zigbee_rx_handler();\r\n" in out
 
@@ -412,7 +412,7 @@ def test_master_isr_c_aggregates_usart_handlers():
     assert '#include "pin_config.h"' in text
     for handler in (
         "digit_uart_rx_handler",
-        "ball_detect_rx_handler",
+        "coord_detect_rx_handler",
         "debug_uart_rx_handler",
         "uwb_rx_handler",
         "zigbee_rx_handler",
@@ -438,8 +438,8 @@ def test_module_uarts_init_via_pin_init_ex_with_macros():
         "digit_uart/code/digit_uart.c": (
             "DIGIT_UART", "DIGIT_UART_TX_GPIO", "DIGIT_UART_RX_Pin"
         ),
-        "ball_detect/code/ball_detect_stm32.c": (
-            "BALL_DETECT_UART", "BALL_DETECT_UART_TX_GPIO", "BALL_DETECT_UART_RX_Pin"
+        "coord_detect/code/coord_detect_stm32.c": (
+            "COORD_DETECT_UART", "COORD_DETECT_UART_TX_GPIO", "COORD_DETECT_UART_RX_Pin"
         ),
     }
     for rel, (instance, tx_gpio, rx_pin) in cases.items():
@@ -450,7 +450,7 @@ def test_module_uarts_init_via_pin_init_ex_with_macros():
     # rx_handler 均非 static（链接覆盖依赖）
     handlers = {
         "digit_uart/code/digit_uart.c": "digit_uart_rx_handler",
-        "ball_detect/code/ball_detect_stm32.c": "ball_detect_rx_handler",
+        "coord_detect/code/coord_detect_stm32.c": "coord_detect_rx_handler",
         "debug_uart/code/debug_uart.c": "debug_uart_rx_handler",
         "uwb_uart/code/uwb_uart.c": "uwb_rx_handler",
         "zigbee_uart/code/zigbee_uart.c": "zigbee_rx_handler",

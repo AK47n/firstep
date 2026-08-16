@@ -38,15 +38,15 @@ MSPM0_MASTER_SYSCFG = (MSPM0_MASTER / MSPM0_SYSCFG_FILENAME).read_text(
 )
 
 # mspm0 UART 换位（真机场景 ② 同款）：IMU601 UART0→UART1（PA8/PA9）、
-# DIGIT_UART UART1→UART0（PA28/PA31）、ball_detect 与 DIGIT_UART 共享实例
+# DIGIT_UART UART1→UART0（PA28/PA31）、coord_detect 与 DIGIT_UART 共享实例
 # 一并成对换到 UART0——绑定×绑定，实例冲突门禁放行。
 UART_SWAP_BINDINGS = {
     "imu_uart.IMU601_TX": "PA8",
     "imu_uart.IMU601_RX": "PA9",
     "digit_uart.DIGIT_UART_TX": "PA28",
     "digit_uart.DIGIT_UART_RX": "PA31",
-    "ball_detect.BALL_DETECT_UART_TX": "PA28",
-    "ball_detect.BALL_DETECT_UART_RX": "PA31",
+    "coord_detect.COORD_DETECT_UART_TX": "PA28",
+    "coord_detect.COORD_DETECT_UART_RX": "PA31",
 }
 
 
@@ -141,7 +141,7 @@ def test_resolve_mspm0_step_motor_same_port_gate():
 
 
 def test_uart_instance_conflict_gate_mspm0_single_role_move_rejected():
-    """IMU601 单方面换 UART1 撞未绑 ball_detect（与 digit_uart 共享
+    """IMU601 单方面换 UART1 撞未绑 coord_detect（与 digit_uart 共享
     DIGIT_UART）默认 UART1 → 400 中文（生成前拦；SysConfig Resource
     conflict 已验证同语义）。"""
     with pytest.raises(UartInstanceConflictError, match="默认实例 UART1") as excinfo:
@@ -149,7 +149,7 @@ def test_uart_instance_conflict_gate_mspm0_single_role_move_rejected():
             {"imu_uart.IMU601_TX": "PA8", "imu_uart.IMU601_RX": "PA9"}
         )
     assert "IMU601_TX" in str(excinfo.value)
-    assert "BALL_DETECT_UART_TX" in str(excinfo.value)
+    assert "COORD_DETECT_UART_TX" in str(excinfo.value)
     assert "默认实例 UART1" in str(excinfo.value)
 
 

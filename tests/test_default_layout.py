@@ -2,7 +2,7 @@
 互异 + 白名单共享。
 
 工单 05 重排结论（证据 .scratch/pin-full-unlock/issues/05）：全库 stm32 42 个
-角色声明 vs 排针 32 脚，物理上不可能全互异——UART1 三模块（digit/ball/uwb）
+角色声明 vs 排针 32 脚，物理上不可能全互异——UART1 三模块（digit/coord/uwb）
 与 zigbee_uart/key 是既有设计共享；DIP×GRAY_D1-4（PB12-15）是唯一无法消解的
 残留（详情见工单 Comments）。本测试把共享白名单钉死，防止重排成果回退。
 """
@@ -42,12 +42,12 @@ def _group_by_pin() -> dict[str, set[str]]:
 WHITELIST = {
     "PA9": {
         "digit_uart.DIGIT_UART_TX",
-        "ball_detect.BALL_DETECT_UART_TX",
+        "coord_detect.COORD_DETECT_UART_TX",
         "uwb_uart.UWB_UART_TX",
     },
     "PA10": {
         "digit_uart.DIGIT_UART_RX",
-        "ball_detect.BALL_DETECT_UART_RX",
+        "coord_detect.COORD_DETECT_UART_RX",
         "uwb_uart.UWB_UART_RX",
     },
     "PB10": {

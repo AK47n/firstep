@@ -1,4 +1,4 @@
-"""module-functionalize/05-09：协议驱动补 mspm0（digit/uwb/zigbee/key/ball）。
+"""module-functionalize/05-09：协议驱动补 mspm0（digit/uwb/zigbee/key/coord）。
 
 真实库不变量：mspm0 文件齐全、双平台 API 同形、manifest pins 与母版
 mspm0.syscfg $assign 一致、syscfg 实例消费映射与裁剪行为、模块自含与
@@ -35,7 +35,7 @@ def _syscfg_text() -> str:
 
 def test_digit_uart_mspm0_driver_shape_and_shared_uart1_note():
     """digit_uart mspm0 雏形：文件/引脚/API 与 stm32 同形；头注释写明 UART1
-    与 ball_detect 共享、由 main.c 单个 IRQHandler 聚合两个 rx_handler。"""
+    与 coord_detect 共享、由 main.c 单个 IRQHandler 聚合两个 rx_handler。"""
     m = _manifest("digit_uart")
     entry = m.platforms["mspm0"]
     assert [Path(f).name for f in entry.files] == [
@@ -56,9 +56,9 @@ def test_digit_uart_mspm0_driver_shape_and_shared_uart1_note():
         assert fn in h
     assert "DIGIT_UART_INST" in c
     assert "NVIC_EnableIRQ(DIGIT_UART_INST_INT_IRQN)" in c
-    # 共享 UART1 的挂载形态在模块头给 LLM 看到（与 ball_detect 同选时聚合）
+    # 共享 UART1 的挂载形态在模块头给 LLM 看到（与 coord_detect 同选时聚合）
     assert "DIGIT_UART_INST_IRQHandler" in h
-    assert "ball_detect_rx_handler" in h
+    assert "coord_detect_rx_handler" in h
 
 def test_config_module_has_mspm0_parameter_header():
     """config 补 mspm0：UWB/Zigbee 依赖 config，否则 mspm0 依赖展开 missing。"""
@@ -204,24 +204,24 @@ def test_zigbee_uart_key_mspm0_driver_shares_instance():
     assert "const ZIGBEE_UART" in prune_syscfg(_syscfg_text(), ["zigbee_uart_key"])
 
 
-def test_ball_detect_mspm0_pins_and_shared_uart1_note():
-    """ball_detect mspm0 已有实现补声明：pins 与 DIGIT_UART 共享映射 + 头注释
+def test_coord_detect_mspm0_pins_and_shared_uart1_note():
+    """coord_detect mspm0 已有实现补声明：pins 与 DIGIT_UART 共享映射 + 头注释
     写明与 digit_uart 同选时由 main.c 单个 UART1 handler 聚合。"""
-    entry = _manifest("ball_detect").platforms["mspm0"]
-    assert entry.files == ("code/ball_detect.c", "code/ball_detect.h")
+    entry = _manifest("coord_detect").platforms["mspm0"]
+    assert entry.files == ("code/coord_detect.c", "code/coord_detect.h")
     assert {(p.id, p.type, p.default, p.required) for p in entry.pins} == {
-        ("BALL_DETECT_UART_TX", "uart_tx", "PA8", True),
-        ("BALL_DETECT_UART_RX", "uart_rx", "PA9", True),
+        ("COORD_DETECT_UART_TX", "uart_tx", "PA8", True),
+        ("COORD_DETECT_UART_RX", "uart_rx", "PA9", True),
     }
     assert entry.hardware_bound is True  # K230 视觉套件绑定
 
-    h = _read("ball_detect", "code/ball_detect.h")
-    c = _read("ball_detect", "code/ball_detect.c")
+    h = _read("coord_detect", "code/coord_detect.h")
+    c = _read("coord_detect", "code/coord_detect.c")
     for fn in (
-        "ball_detect_init",
-        "ball_detect_flush",
-        "ball_detect_rx_handler",
-        "ball_detect_parse",
+        "coord_detect_init",
+        "coord_detect_flush",
+        "coord_detect_rx_handler",
+        "coord_detect_parse",
     ):
         assert fn in h
     assert "DIGIT_UART_INST" in c
@@ -231,8 +231,8 @@ def test_ball_detect_mspm0_pins_and_shared_uart1_note():
     from contest_generator.syscfg_instances import INSTANCES_BY_SLUG
     from contest_generator.syscfg_prune import prune_syscfg
 
-    assert set(INSTANCES_BY_SLUG["ball_detect"]) == {"DIGIT_UART"}
-    assert "const DIGIT_UART" in prune_syscfg(_syscfg_text(), ["ball_detect"])
+    assert set(INSTANCES_BY_SLUG["coord_detect"]) == {"DIGIT_UART"}
+    assert "const DIGIT_UART" in prune_syscfg(_syscfg_text(), ["coord_detect"])
 
 def test_generate_mspm0_all_protocol_modules_default_layout(tmp_path):
     """五个协议模块同选（三 UART 默认布局）生成通过 + syscfg 只留本批实例。"""
@@ -245,7 +245,7 @@ def test_generate_mspm0_all_protocol_modules_default_layout(tmp_path):
 #include "uwb_uart_mspm0.h"
 #include "zigbee_uart_mspm0.h"
 #include "zigbee_uart_key_mspm0.h"
-#include "ball_detect.h"
+#include "coord_detect.h"
 
 int main(void)
 {
@@ -254,25 +254,25 @@ int main(void)
     uwb_uart_init();
     zigbee_uart_init();
     zigbee_uart_key_init();
-    ball_detect_init();
+    coord_detect_init();
     zigbee_uart_key_send_id(1);
     while (1)
     {
         digit_uart_parse();
-        ball_detect_parse();
+        coord_detect_parse();
     }
 }
 
 void DIGIT_UART_INST_IRQHandler(void)
 {
     digit_uart_rx_handler();
-    ball_detect_rx_handler();
+    coord_detect_rx_handler();
 }
 """
     resolved = resolve_selection(
         MODULES,
         PLATFORM_MSPM0,
-        ["digit_uart", "uwb_uart", "zigbee_uart", "zigbee_uart_key", "ball_detect"],
+        ["digit_uart", "uwb_uart", "zigbee_uart", "zigbee_uart_key", "coord_detect"],
     )
     out = tmp_path / "out"
     generate(
@@ -295,7 +295,7 @@ void DIGIT_UART_INST_IRQHandler(void)
         "uwb_uart",
         "zigbee_uart",
         "zigbee_uart_key",
-        "ball_detect",
+        "coord_detect",
         "config",
         "filter",
     ):

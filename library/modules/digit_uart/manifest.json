@@ -10,7 +10,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 digit_uart_init() 开 NVIC；与 ball_detect 共享该实例；两模块同选时 main.c 定义一个 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）依次调 digit_uart_rx_handler()/ball_detect_rx_handler()。解析逻辑与 21F/26H stm32 版一致（环形缓冲 + CSV 帧解析）。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake  0 error；syscfg ovsRate 基线 warning 已记录（非模块代码）；未上板。",
+      "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 digit_uart_init() 开 NVIC；与 coord_detect 共享该实例；两模块同选时 main.c 定义一个 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）依次调 digit_uart_rx_handler()/coord_detect_rx_handler()。解析逻辑与 21F/26H stm32 版一致（环形缓冲 + CSV 帧解析）。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake  0 error；syscfg ovsRate 基线 warning 已记录（非模块代码）；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
