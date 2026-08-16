@@ -7,10 +7,13 @@
 
 from __future__ import annotations
 
+import ast
+import importlib
 import re
 from pathlib import Path
 
-from contest_generator.syscfg_prune import INSTANCE_CONSUMERS, prune_syscfg
+from contest_generator.syscfg_instances import INSTANCE_CONSUMERS
+from contest_generator.syscfg_prune import prune_syscfg
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
 MASTER_SYSCFG = (
@@ -83,3 +86,20 @@ def test_every_master_instance_is_registered_in_consumer_map():
     assert declared <= set(INSTANCE_CONSUMERS), declared - set(INSTANCE_CONSUMERS)
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["uwb_uart"]), "UWB_UART")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["digit_uart"]), "UWB_UART")
+
+
+def test_syscfg_prune_does_not_import_pinwriter():
+    """反向 import 旧环已拆除（工单 syscfg-file-model/04）：syscfg_prune 曾只为
+    拿文件名常量 import pinwriter——文件名常量单源在 syscfg_model，文件级裁剪
+    挂钩并入 pinwriter.apply_pin_bindings，本模块不再 import pinwriter。"""
+    module = importlib.import_module("contest_generator.syscfg_prune")
+    source = Path(module.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    pinwriter_imports = [
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module
+        and node.module.split(".")[-1] == "pinwriter"
+    ]
+    assert pinwriter_imports == []

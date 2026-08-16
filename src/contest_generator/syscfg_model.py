@@ -14,8 +14,9 @@
 
 逐字节契约：parse + prune + rewrite 输出与旧 prune→rewrite 顺序逐字节一致
 （test_syscfg_model 断言）。文本进 / 文本出的纯函数接缝；母版 syscfg 是
-CRLF，读/写走 newline="" 原样保留行尾。expand 阶段旧代码零改动（syscfg_prune
-/ pinwriter / pin_bindings 不变），后续工单逐批切换、删旧文法。
+CRLF，读/写走 newline="" 原样保留行尾。工单 02/03/04 已把 syscfg_prune 裁剪
+/ pinwriter 改写切到本模型、删旧文法——本模块现为 syscfg 文件格式知识与
+写侧唯一实现（pinwriter.apply_pin_bindings 的 mspm0 单一 pipeline 也在此）。
 
 实例 ↔ 消费模块映射单源表仍在 syscfg_instances.py（那是数据，不是文法，本
 模块只消费 INSTANCE_CONSUMERS / INSTANCES_BY_SLUG）。

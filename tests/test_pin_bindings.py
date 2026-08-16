@@ -44,12 +44,11 @@ from contest_generator.pin_bindings import (
     resolve_bindings,
 )
 from contest_generator.pinwriter import (
-    MSPM0_SYSCFG_FILENAME,
     PIN_CONFIG_FILENAME,
     render_pin_config,
     rewrite_syscfg,
 )
-from contest_generator.syscfg_model import syscfg_path_matches
+from contest_generator.syscfg_model import MSPM0_SYSCFG_FILENAME, syscfg_path_matches
 from contest_generator.syscfg_prune import prune_syscfg
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"

@@ -24,10 +24,8 @@ from contest_generator.generator import (
 )
 from contest_generator.library import list_modules
 from contest_generator.pin_bindings import PinBindingError, resolve_bindings
-from contest_generator.pinwriter import (
-    MSPM0_SYSCFG_FILENAME,
-    rewrite_syscfg,
-)
+from contest_generator.pinwriter import rewrite_syscfg
+from contest_generator.syscfg_model import MSPM0_SYSCFG_FILENAME
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
 LIBRARY_MODULES = LIBRARY_ROOT / "modules"

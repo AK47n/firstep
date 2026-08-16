@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=407007914be02c7e9179ab6f0166d8fcb277884c -->
+<!-- changelog-auto: last-commit=5a74f86c9851f89bf5313827c56fe2291145d0b0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -39,6 +39,8 @@
 - 20:14 mspm0 syscfg 裁剪委托文件模型——prune_syscfg 切到 SyscfgModel.prune，删自有 addInstance/addModule 正则（工单 syscfg-file-model/02）
 - 20:15 mspm0 syscfg 裁剪委托文件模型——prune_syscfg 切到 SyscfgModel.prune（工单 syscfg-file-model/02）
 - 20:32 mspm0 syscfg 改写委托文件模型——rewrite_syscfg 切到 SyscfgModel.rewrite，删自有 $assign 文法/路径匹配（工单 syscfg-file-model/03）
+- 20:33 mspm0 syscfg 改写委托文件模型——rewrite_syscfg 切到 SyscfgModel.rewrite，删自有 $assign 文法/路径匹配（工单 syscfg-file-model/03）
+- 20:53 mspm0 syscfg 单一 pipeline 收尾——generator 写侧 prune+rewrite 单 pipeline、MSPM0_SYSCFG_FILENAME 迁入文件模型、删 shim/冗余、CONTEXT 词条（工单 syscfg-file-model/04）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁

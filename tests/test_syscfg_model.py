@@ -6,21 +6,19 @@
 - 槽位身份原语对 GPIO 组（associatedPins[n].pin）、外设（txPin/sclPin/
   ccp0Pin 等）两类路径返回正确判定（唯一实现，工单 03 起 pinwriter 已删旧副本）。
 - 关键断言：新模块 parse+prune+rewrite 输出与旧 prune→rewrite 顺序逐字节一致。
-- MSPM0_SYSCFG_FILENAME 新旧位置都可导入（兼容期）。
+- MSPM0_SYSCFG_FILENAME 单源在新模块（pinwriter 旧定义已迁走，工单 04）。
 """
 
 from __future__ import annotations
 
+import importlib
 import re
 from pathlib import Path
 
 from contest_generator.boards import BOARDS_DIR, load_boards
 from contest_generator.library import list_modules
 from contest_generator.pin_bindings import resolve_bindings
-from contest_generator.pinwriter import (
-    MSPM0_SYSCFG_FILENAME as PINWRITER_MSPM0_SYSCFG_FILENAME,
-    rewrite_syscfg,
-)
+from contest_generator.pinwriter import rewrite_syscfg
 from contest_generator.syscfg_instances import INSTANCE_CONSUMERS
 from contest_generator.syscfg_model import (
     MSPM0_SYSCFG_FILENAME,
@@ -181,10 +179,14 @@ def test_pipeline_byte_identical_with_bindings():
 
 
 # ---------------------------------------------------------------------------
-# 文件名常量：新旧位置都可导入
+# 文件名常量：单源在新模块（兼容期结束）
 # ---------------------------------------------------------------------------
 
 
-def test_mspm0_syscfg_filename_importable_from_both():
+def test_mspm0_syscfg_filename_single_source_in_model():
+    """文件名常量单源：值对 + pinwriter 旧定义已删（工单 04 迁走兼容期副本）。"""
     assert MSPM0_SYSCFG_FILENAME == "mspm0.syscfg"
-    assert PINWRITER_MSPM0_SYSCFG_FILENAME == MSPM0_SYSCFG_FILENAME
+    pinwriter_source = Path(
+        importlib.import_module("contest_generator.pinwriter").__file__
+    ).read_text(encoding="utf-8")
+    assert "MSPM0_SYSCFG_FILENAME =" not in pinwriter_source
