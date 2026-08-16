@@ -438,14 +438,12 @@ def _mspm0_path_matches(
             return False
         instance = path.split(".associatedPins[", 1)[0]
         return instance in INSTANCES_BY_SLUG.get(slug, ())
-    if decl_type == "uart_tx":
-        return path.endswith(".txPin")
-    if decl_type == "uart_rx":
-        return path.endswith(".rxPin")
-    if decl_type == "i2c_scl":
-        return path.endswith(".sclPin")
-    if decl_type == "i2c_sda":
-        return path.endswith(".sdaPin")
+    if decl_type in ("uart_tx", "uart_rx", "i2c_scl", "i2c_sda"):
+        # 外设角色默认值同脚时（module-polish/01：DEBUG_UART 与 UWB_UART
+        # 同 UART2/PA23），仅尾字段（txPin 等）不再唯一——按 slug 反查
+        # syscfg 实例名区分，与 GPIO 组同款。
+        instance = path.split(".peripheral.", 1)[0]
+        return instance in INSTANCES_BY_SLUG.get(slug, ())
     if decl_type == "pwm":
         if role_id.endswith("_C0"):
             return path.endswith(".ccp0Pin")

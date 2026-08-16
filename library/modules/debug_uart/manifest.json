@@ -1,6 +1,6 @@
 {
   "slug": "debug_uart",
-  "description": "调试串口驱动：UART2 调试输出 + 单字符调试命令，供联调阶段打印状态与下发指令；适用于需要串口调试输出的各类联调场景。",
+  "description": "调试串口驱动（双平台）：UART2 调试输出 + 短命令接收回显，供联调阶段打印状态；适用于需要串口调试输出的各类联调场景。",
   "dependencies": [
     "config"
   ],
@@ -10,9 +10,9 @@
         "code/debug_uart.c",
         "code/debug_uart.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "",
+      "notes": "module-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -37,6 +37,31 @@
             "DEBUG_UART_RX_GPIO",
             "DEBUG_UART_RX_Pin"
           ]
+        }
+      ]
+    },
+    "mspm0": {
+      "files": [
+        "code/debug_uart_mspm0.c",
+        "code/debug_uart_mspm0.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg DEBUG_UART 实例（UART2, PA23(TX)/PA22(RX), 115200, RX 中断）——SYSCFG_DL_init() 后调 debug_uart_init() 开 NVIC；DEBUG_UART_INST_IRQHandler（UART2_IRQHandler）在模块内已定义，main.c 无需再定义。与 uwb_uart 默认同 UART2，同选时经引脚绑定换实例消解。debug_cmd_poll 只回显命令（LED/蜂鸣器执行请用 led/beep 模块）。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake  0 error；syscfg ovsRate 基线 warning 已记录（非模块代码）；未上板。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "DEBUG_UART_TX",
+          "type": "uart_tx",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "DEBUG_UART_RX",
+          "type": "uart_rx",
+          "default": "PA22",
+          "required": true
         }
       ]
     }

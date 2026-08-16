@@ -11,9 +11,9 @@
         "code/oled.h",
         "code/oledfont.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置 I2C1（命名 OLED，7 位地址 0x3C，TX 方向 2 字节传输）；依赖 delay。",
+      "notes": "SysConfig 需配置 I2C1（命名 OLED，7 位地址 0x3C，TX 方向 2 字节传输）；依赖 delay。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -35,7 +35,7 @@
       "files": [],
       "verified": true,
       "hardware_bound": false,
-      "notes": "实现内嵌母版 ml_libs/ml_oled.c/h + ml_oled_font.h（逐飞 ML 库，2026C/21F 真机编译过）。软 I2C 参数化（ADR 0011 工单 02）：引脚宏 OLED_GPIO/OLED_SCL_Pin/OLED_SDA_Pin 在 pin_config.h，任意 GPIO 可绑。",
+      "notes": "实现内嵌母版 ml_libs/ml_oled.c/h + ml_oled_font.h（逐飞 ML 库，2026C/21F 真机编译过）。软 I2C 参数化（ADR 0011 工单 02）：引脚宏 OLED_GPIO/OLED_SCL_Pin/OLED_SDA_Pin 在 pin_config.h，任意 GPIO 可绑。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

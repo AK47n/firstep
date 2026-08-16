@@ -336,4 +336,16 @@ void OLED_Init(void);
 void OLED_Test(void);
 
 
+
+
+/* ============================================================
+ * 双平台共同小写 API（module-polish/02；旧 OLED_* 接口保留）：
+ *  line/column 定位（16×8 字符网格，line 0..3、column 0..15）。
+ *  stm32 侧同名包装在母版 ml_oled（逐飞 OLED 写入即显示，
+ *  oled_refresh 为空实现）。
+ * ============================================================ */
+void oled_show_text(uint8_t line, uint8_t column, const char *text);
+void oled_show_number(uint8_t line, uint8_t column, uint32_t number, uint8_t length);
+void oled_refresh(void);
+
 #endif

@@ -8,9 +8,9 @@
         "code/ball_detect.c",
         "code/ball_detect.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": true,
-      "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 ball_detect_init() 开 NVIC；与 digit_uart 共享该实例，两模块同选时 main.c 定义一个 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）依次调 digit_uart_rx_handler()/ball_detect_rx_handler()。stm32 侧同模块名 ball_detect_stm32.c（UART_1/USART1，isr.c 挂 USART1_IRQHandler）。编译验证未上板。",
+      "notes": "母版 syscfg DIGIT_UART 实例（UART1, PA8/PA9, 115200, RX 中断）——SYSCFG_DL_init() 后调 ball_detect_init() 开 NVIC；与 digit_uart 共享该实例，两模块同选时 main.c 定义一个 DIGIT_UART_INST_IRQHandler（UART1_IRQHandler）依次调 digit_uart_rx_handler()/ball_detect_rx_handler()。stm32 侧同模块名 ball_detect_stm32.c（UART_1/USART1，isr.c 挂 USART1_IRQHandler）。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake  0 error；syscfg ovsRate 基线 warning 已记录（非模块代码）；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -33,9 +33,9 @@
         "code/ball_detect_stm32.c",
         "code/ball_detect_stm32.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": true,
-      "notes": "2026H 源码提取（uart_init(UART_1,115200) + USART1 中断 + 环形缓冲解析），isr.c 里 USART1_IRQHandler 调 ball_detect_rx_handler()。编译验证未上板。",
+      "notes": "2026H 源码提取（uart_init(UART_1,115200) + USART1 中断 + 环形缓冲解析），isr.c 里 USART1_IRQHandler 调 ball_detect_rx_handler()。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

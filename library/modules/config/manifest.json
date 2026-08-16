@@ -7,9 +7,9 @@
       "files": [
         "code/config.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "",
+      "notes": "module-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -99,9 +99,9 @@
       "files": [
         "code/config_mspm0.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "mspm0 引脚/UART 实例/波特率归母版 mspm0.syscfg 单源；本头只保留与 stm32 config.h 同值的协议/显示/滤波参数（UWB/Zigbee 等协议驱动跨平台消费）。编译验证未上板。",
+      "notes": "mspm0 引脚/UART 实例/波特率归母版 mspm0.syscfg 单源；本头只保留与 stm32 config.h 同值的协议/显示/滤波参数（UWB/Zigbee 等协议驱动跨平台消费）。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     }

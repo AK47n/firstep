@@ -7,7 +7,7 @@
       "files": [],
       "verified": true,
       "hardware_bound": false,
-      "notes": "stm32 实现内嵌母版 ml_led（led_init/led_on/led_off/led_toggle + LED_RED/YELLOW/GREEN 通道宏），模块侧空条目 = 母版内嵌（先例 oled/delay）。",
+      "notes": "stm32 实现内嵌母版 ml_led（led_init/led_on/led_off/led_toggle + LED_RED/YELLOW/GREEN 通道宏），模块侧空条目 = 母版内嵌（先例 oled/delay）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     },
@@ -16,9 +16,9 @@
         "code/led.c",
         "code/led.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "用户 LED PA15（syscfg LED_BEEP 组，拉电流高电平点亮）；板载 PA0/PA1 被 I2C0（MPU6050）占用，不作用户 LED。",
+      "notes": "用户 LED PA15（syscfg LED_BEEP 组，拉电流高电平点亮）；板载 PA0/PA1 被 I2C0（MPU6050）占用，不作用户 LED。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

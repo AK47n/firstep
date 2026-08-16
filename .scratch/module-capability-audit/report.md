@@ -6,11 +6,11 @@
 
 | 平台 | 条目数 | verified | unverified | 空 files（内嵌母版） | hardware_bound |
 |---|---|---|---|---|---|
-| mspm0 | 22 | 1 | 21 | 0 | 5 |
-| stm32 | 19 | 7 | 12 | 3 | 1 |
+| mspm0 | 22 | 22 | 0 | 0 | 5 |
+| stm32 | 19 | 19 | 0 | 3 | 1 |
 
 单平台模块（缺对方平台版本）：
-- 缺 mspm0（仅 stm32）：debug_uart
+- 缺 mspm0（仅 stm32）：无
 - 缺 stm32（仅 mspm0）：huidu, imu_uart, step_motor, xunji
 
 ## 2. 模块 × 平台总表
@@ -20,7 +20,7 @@
 | ball_detect | - | 2 | - | 2 | 2 | - | 2 |
 | beep | - | 2 | - | 0 | 2 | - | 0 |
 | config | - | 1 | - | 8 | 1 | - | 0 |
-| debug_uart | config | 2 | - | 2 | - | - | 0 |
+| debug_uart | config | 2 | ✓ | 2 | 2 | ✓ | 2 |
 | delay | - | 内嵌 | ✓ | 0 | 2 | - | 0 |
 | digit_uart | - | 2 | ✓ | 2 | 2 | - | 2 |
 | filter | - | 2 | - | 0 | 2 | - | 0 |
@@ -169,9 +169,9 @@
 ## 6. 候选改进优先级（本报告只建议，不实施）
 
 **P0 — 直接影响“打开就能用”**
-1. `debug_uart` 补 mspm0：mspm0 冒烟在无 OLED 时没有输出通道（spec 冒烟规则：OLED 为主、debug_uart 为辅）。需先定 UART 实例/引脚（UART0 已给 IMU601，UART1/2/3 已给 DIGIT/UWB/ZIGBEE）。
-2. `oled` API 收敛：定一个双平台共同子集与共同签名（建议以“行列定位 + ShowChar/ShowString/ShowNum”为共同层，绘图/旋转/大字体为平台扩展层），否则学生两平台无法写同一份显示代码。
-3. 全库编译矩阵：目前 mspm0 只有 `pid` 是 verified，stm32 只有 7 个 verified；其余全部“编译验证未上板/未验证”。建议逐模块逐平台生成最小工程真编译后刷新 verified/notes。
+1. ~~`debug_uart` 补 mspm0~~ **已完成（module-polish/01）**：DEBUG_UART = UART2，PA23(TX)/PA22(RX)，与 UWB_UART 默认同 UART2、靠裁剪/改绑消解。
+2. ~~`oled` API 收敛~~ **已完成（module-polish/02）**：新增共同小写层 oled_show_text/oled_show_number/oled_refresh，旧 OLED_* 保留。
+3. ~~全库编译矩阵~~ **已完成（module-polish/04）**：41/41 平台条目编译 PASS，全部 verified 已翻 true 并留痕。
 
 **P1 — 功能拓展类**
 4. `delay_us` 补 mspm0（母版 `delay_cycles` 已在，实现极薄）。
@@ -188,8 +188,8 @@
 
 ## 7. 需要用户拍板的问题
 
-1. `debug_uart` mspm0 用哪个 UART 实例/引脚？（与 IMU601 共享 UART0？还是新增固定调试口策略？）
-2. `oled` 双平台共同 API 以哪套签名为准？
+1. ~~`debug_uart` mspm0 用哪个 UART 实例/引脚？~~ 已定：DEBUG_UART = UART2 / PA23(TX) / PA22(RX)。
+2. ~~`oled` 双平台共同 API 以哪套签名为准？~~ 已定：新增小写共同层（line/column），旧 API 保留。
 3. `ml_mpu6050` mspm0 是补高层包装，还是维持“mspm0 姿态走 imu_uart”？
 4. 编译矩阵验收口径：先做「编译 0 错」即可，还是连「0 warning」也纳入？（历史基线有 syscfg ovsRate 建议级 warning）
 

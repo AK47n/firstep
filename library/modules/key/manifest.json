@@ -8,9 +8,9 @@
         "code/key.c",
         "code/key.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "SysConfig 默认布局：GPIO 输入 KEY（KEY_START=PA2，上拉低电平按下）。编码器计数已迁至 motor 模块（GROUP1_IRQHandler + counter_1_A/counter_2_A）。",
+      "notes": "SysConfig 默认布局：GPIO 输入 KEY（KEY_START=PA2，上拉低电平按下）。编码器计数已迁至 motor 模块（GROUP1_IRQHandler + counter_1_A/counter_2_A）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -27,9 +27,9 @@
         "code/key_stm32.c",
         "code/key_stm32.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "蓝药丸无板载按键，默认 PB3（JTDO，SWD 调试用不到，复位后即普通 GPIO）——实际接线自选，经引脚绑定改 KEY_GPIO/KEY_PIN。上拉低电平按下。",
+      "notes": "蓝药丸无板载按键，默认 PB3（JTDO，SWD 调试用不到，复位后即普通 GPIO）——实际接线自选，经引脚绑定改 KEY_GPIO/KEY_PIN。上拉低电平按下。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

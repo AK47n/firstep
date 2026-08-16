@@ -294,10 +294,12 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
     assert {v: c for v, c in counts.items() if c != 1} == {
         "PB6": 2,
         "PB7": 2,
-        "PA23": 2,
+        "PA22": 2,
+        "PA23": 3,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX
         "PA24": 2,
         "PA25": 2,
         "PA26": 2,
+        "UART2": 2,  # UWB_UART 与 DEBUG_UART 默认同外设（用户改绑消解）
     }
 
 

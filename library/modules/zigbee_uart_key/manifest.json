@@ -10,9 +10,9 @@
         "code/zigbee_uart_key.c",
         "code/zigbee_uart_key.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "钥匙端过渡方案（原 STM32，芯片不足换 MSPM0；最终方案代码未定）",
+      "notes": "钥匙端过渡方案（原 STM32，芯片不足换 MSPM0；最终方案代码未定）\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -45,9 +45,9 @@
         "code/zigbee_uart_key_mspm0.c",
         "code/zigbee_uart_key_mspm0.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "与 zigbee_uart 共享母版 syscfg ZIGBEE_UART 实例（UART3, PA26(TX)/PA25(RX), 115200）；SYSCFG_DL_init() 后调 zigbee_uart_key_init()（只发不收、不开 NVIC）；发送走 DL_UART_transmitDataBlocking。帧格式/校验与 stm32 版一致。编译验证未上板。",
+      "notes": "与 zigbee_uart 共享母版 syscfg ZIGBEE_UART 实例（UART3, PA26(TX)/PA25(RX), 115200）；SYSCFG_DL_init() 后调 zigbee_uart_key_init()（只发不收、不开 NVIC）；发送走 DL_UART_transmitDataBlocking。帧格式/校验与 stm32 版一致。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake  0 error；syscfg ovsRate 基线 warning 已记录（非模块代码）；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

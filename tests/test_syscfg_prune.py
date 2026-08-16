@@ -46,7 +46,7 @@ def test_prune_motor_keeps_only_motor_instances():
     for keep in ("PWMAB", "DC_MOTOR"):
         _assert_instance_present(out, keep)
     for drop in ("DCC_100_PWM2", "MOTOR_PID", "NTB", "HUIDU", "KEY", "LED_BEEP",
-                 "STEP_MOTOR", "IMU601", "DIGIT_UART", "UWB_UART", "OLED", "I2C_0"):
+                 "STEP_MOTOR", "IMU601", "DIGIT_UART", "DEBUG_UART", "UWB_UART", "OLED", "I2C_0"):
         _assert_instance_absent(out, drop)
     # 模块变量：GPIO 被 DC_MOTOR 使用，PWM 被 PWMAB 使用；MOTOR_PID 随旧
     # PID 逻辑剥离不再被 motor 消费，TIMER 一并裁掉
@@ -64,6 +64,8 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["pid"]), "MOTOR_PID")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["xunji"]), "HUIDU")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ball_detect"]), "DIGIT_UART")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["debug_uart"]), "DEBUG_UART")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["uwb_uart"]), "DEBUG_UART")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["zigbee_uart"]), "ZIGBEE_UART")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["zigbee_uart_key"]), "ZIGBEE_UART")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["digit_uart"]), "ZIGBEE_UART")

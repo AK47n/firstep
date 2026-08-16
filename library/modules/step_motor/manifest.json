@@ -8,9 +8,9 @@
         "code/step_motor.c",
         "code/step_motor.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "SysConfig 依赖（宏保留原工程命名，接线见 step_motor.h 头注释）：PWM TimerG 实例 DCC_100_PWM2（C0 通道输出 → 电机 PWM 输入）+ 4 个 GPIO 输出宏 STEP_MOTOR_RST2_PIN / SLP2_PIN / DIR2_PIN / DCY2_PIN（同 STEP_MOTOR_PORT 端口，合计 5 路接线）。母版默认布局 2026-08-14 起已含此实例（工单 mspm0-master-dimx/01，地猛星引脚）：DCC_100_PWM2 = TIMG12 C0 = PA14（32 位定时器 clockPrescale 须为 1）、STEP_MOTOR = RST2/SLP2/DIR2/DCY2 = PB24/PB6/PB7/PB8（全 GPIOB；原工程 PA12 PWM/PA13 DIR/PA14 DCY/PA15 SLP/PA16 RST 与母版 PWMAB 冲突故重排）。2026-08-12 已本地实验验证：生成工程 mspm0.syscfg 补 DCC_100_PWM2 与 STEP_MOTOR 4 输出引脚后 gmake 全量 0 错（2 警 = 既有母版 UART ovsRate 提示），未上板；未配置时 step_motor.c 编译报宏缺失（预期）。stepper_id==2 单路硬编码保留（原工程第二路），多路扩展按 stepper_id 分支。移植源：素材【云台】03_step_motor 已完成_可以控制速度和角度.zip → 15_step_motor_2/step_motor.{c,h}（已审查为纯驱动，尾部注释掉的 step_motor_step_set 死代码已删）。",
+      "notes": "SysConfig 依赖（宏保留原工程命名，接线见 step_motor.h 头注释）：PWM TimerG 实例 DCC_100_PWM2（C0 通道输出 → 电机 PWM 输入）+ 4 个 GPIO 输出宏 STEP_MOTOR_RST2_PIN / SLP2_PIN / DIR2_PIN / DCY2_PIN（同 STEP_MOTOR_PORT 端口，合计 5 路接线）。母版默认布局 2026-08-14 起已含此实例（工单 mspm0-master-dimx/01，地猛星引脚）：DCC_100_PWM2 = TIMG12 C0 = PA14（32 位定时器 clockPrescale 须为 1）、STEP_MOTOR = RST2/SLP2/DIR2/DCY2 = PB24/PB6/PB7/PB8（全 GPIOB；原工程 PA12 PWM/PA13 DIR/PA14 DCY/PA15 SLP/PA16 RST 与母版 PWMAB 冲突故重排）。2026-08-12 已本地实验验证：生成工程 mspm0.syscfg 补 DCC_100_PWM2 与 STEP_MOTOR 4 输出引脚后 gmake 全量 0 错（2 警 = 既有母版 UART ovsRate 提示），未上板；未配置时 step_motor.c 编译报宏缺失（预期）。stepper_id==2 单路硬编码保留（原工程第二路），多路扩展按 stepper_id 分支。移植源：素材【云台】03_step_motor 已完成_可以控制速度和角度.zip → 15_step_motor_2/step_motor.{c,h}（已审查为纯驱动，尾部注释掉的 step_motor_step_set 死代码已删）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

@@ -216,6 +216,22 @@ DIGIT_UART.enableFIFO        = false;
 DIGIT_UART.peripheral.rxPin.$assign = "PA9";
 DIGIT_UART.peripheral.txPin.$assign = "PA8";
 
+// 调试串口（debug_uart 模块用，RX 中断；UART2 = PA23(TX)/PA22(RX)。
+// 与 UWB_UART 默认同 UART2——两模块同选时经引脚绑定换实例消解；
+// PA23/PA22 与 HUIDU L2/L1 默认重叠，同选时改绑消解）
+const DEBUG_UART = UART.addInstance();
+DEBUG_UART.$name             = "DEBUG_UART";
+DEBUG_UART.profile           = "CONFIG_PROFILE_1";
+DEBUG_UART.peripheral.$assign = "UART2";
+DEBUG_UART.uartClkSrc        = "BUSCLK";
+DEBUG_UART.ovsRate           = "3";
+DEBUG_UART.targetBaudRate    = 115200;
+DEBUG_UART.enableInternalLoopback = false;
+DEBUG_UART.enabledInterrupts = ["RX"];
+DEBUG_UART.enableFIFO        = false;
+DEBUG_UART.peripheral.rxPin.$assign = "PA22";
+DEBUG_UART.peripheral.txPin.$assign = "PA23";
+
 // UWB 定位串口（uwb_uart 模块用，RX 中断；UART2 = PA23(TX)/PA24(RX)。
 // PA23/PA24 与 HUIDU L2/L3 默认重叠——两模块同选时经引脚绑定消解）
 const UWB_UART = UART.addInstance();

@@ -8,9 +8,9 @@
         "code/delay.c",
         "code/delay.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "无外设依赖（CPUCLK_FREQ 由 SysConfig SYSCTL 生成）。",
+      "notes": "无外设依赖（CPUCLK_FREQ 由 SysConfig SYSCTL 生成）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     },
@@ -18,7 +18,7 @@
       "files": [],
       "verified": true,
       "hardware_bound": false,
-      "notes": "实现内嵌母版 ml_libs/ml_delay.c/h（逐飞 ML 库，2026C/21F 真机编译过）。",
+      "notes": "实现内嵌母版 ml_libs/ml_delay.c/h（逐飞 ML 库，2026C/21F 真机编译过）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     }

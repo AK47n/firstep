@@ -8,9 +8,9 @@
         "code/ntb_time.c",
         "code/ntb_time.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置定时器命名 NTB（母版 syscfg = TIMG7 Basic_Periodic，32MHz/256=125kHz，period 62500 ticks=500ms）。工单 ntb-time-wrap/01 起软件回绕累加：NTB_INST_IRQHandler 每 ZERO 中断 +500ms，get_time_stamp_ms 拼当前周内已走毫秒（LOAD-当前计数值），并首次调用自启动定时器。",
+      "notes": "SysConfig 需配置定时器命名 NTB（母版 syscfg = TIMG7 Basic_Periodic，32MHz/256=125kHz，period 62500 ticks=500ms）。工单 ntb-time-wrap/01 起软件回绕累加：NTB_INST_IRQHandler 每 ZERO 中断 +500ms，get_time_stamp_ms 拼当前周内已走毫秒（LOAD-当前计数值），并首次调用自启动定时器。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     },
@@ -19,9 +19,9 @@
         "code/ntb_time_stm32.c",
         "code/ntb_time_stm32.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "stm32 实现：复用母版 SysTick 1ms 节拍（g_systick）；首次调用 systick_init。delay_us/delay_ms 轮询期间时间戳暂停（非严格计时，调度请走 tim_interrupt_ms_init）。",
+      "notes": "stm32 实现：复用母版 SysTick 1ms 节拍（g_systick）；首次调用 systick_init。delay_us/delay_ms 轮询期间时间戳暂停（非严格计时，调度请走 tim_interrupt_ms_init）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     }

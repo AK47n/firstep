@@ -8,9 +8,9 @@
         "code/filter.c",
         "code/filter.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "纯 C 无硬件差异，与 stm32 共用同一份代码（include 改为 <stdint.h>，类型等价）。编译验证未上板。",
+      "notes": "纯 C 无硬件差异，与 stm32 共用同一份代码（include 改为 <stdint.h>，类型等价）。编译验证未上板。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     },
@@ -19,9 +19,9 @@
         "code/filter.c",
         "code/filter.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "",
+      "notes": "module-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     }
