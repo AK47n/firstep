@@ -37,6 +37,7 @@ from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError
 from .reference_library import ReferenceError
 from .selection import ManualReferenceError, SelectionError
+from .skeleton import SkeletonError
 from .stage import StageError
 from .topic_library import TopicError
 
@@ -71,6 +72,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             GeneratorError,
             DuplicateFilePathError,  # 跨模块同名文件（生成侧查重兜底，工单 gen-file-collision-gate/01）
             PinBindingError,  # 引脚绑定载荷非法（工单 pin-board-config/02：键/角色/引脚/能力/槽位）
+            SkeletonError,  # 骨架/自检冒烟（工单 route-orchestration-homing/01：main_mode 非法 / 冒烟守卫）
             TimerConflictError,  # 绑定 pwm TIM 实例撞骨架调度定时器（工单 pin-unlock-stm32/01）
             ExtiLineConflictError,  # 绑定 enc/exti 角色异口同线互斥（工单 pin-full-unlock/01）
             UartInstanceConflictError,  # 绑定 UART 实例撞未绑角色默认实例（工单 pin-full-unlock/02）
