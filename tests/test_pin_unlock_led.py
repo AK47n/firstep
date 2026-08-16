@@ -4,7 +4,7 @@
 Pin_12`——PA11/PA12 是蓝药丸 USB DM/DP，生成骨架调 LED_RED_ON() 点的是
 USB 脚（编译全绿、灯不亮），与 pin_config.h 的 PC13-15 板载 LED 定义并存。
 修复：include "pin_config.h" 派生（LED_GPIO=LED_PORT、旧名=新名宏）+ 板载
-LED 低电平点亮（ON=set 0 / OFF=set 1）。测试直接读仓库内真实
+LED 高电平点亮（ON=set 1 / OFF=set 0，拉电流接法）。测试直接读仓库内真实
 library/masters/stm32/ml_libs/ml_led.h（磁盘目录即数据库，同
 test_master_embedded.py 先例），防定义漂移回 USB 脚。
 """
@@ -46,8 +46,9 @@ def test_ml_led_h_derives_from_pin_config():
         ), f"{old} 应派生自 {new}"
 
 
-def test_ml_led_h_active_low_levels():
-    """低电平点亮翻转：ON() = set 0、OFF() = set 1（板载 LED 灌电流）。"""
+def test_ml_led_h_active_high_levels():
+    """高电平点亮翻转：ON() = set 1、OFF() = set 0（LED 一脚接地、一脚接引脚，
+    拉电流接法——2026-08-15 用户更正，原灌电流 0=亮 的假设作废）。"""
     text = _read()
     for color in ("LED_RED", "LED_GREEN"):
         on = re.search(
@@ -62,5 +63,5 @@ def test_ml_led_h_active_low_levels():
         )
         assert on is not None, f"{color}_ON() 缺失"
         assert off is not None, f"{color}_OFF() 缺失"
-        assert on.group(1) == "0", f"{color}_ON() 应 set 0（低电平点亮）"
-        assert off.group(1) == "1", f"{color}_OFF() 应 set 1（高电平熄灭）"
+        assert on.group(1) == "1", f"{color}_ON() 应 set 1（高电平点亮）"
+        assert off.group(1) == "0", f"{color}_OFF() 应 set 0（低电平熄灭）"
