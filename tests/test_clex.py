@@ -12,6 +12,7 @@ from contest_generator.clex import (
     iter_c_regions,
     match_bracket,
     next_significant,
+    strip_all_code_fences,
     strip_code_fences,
     strip_comments,
     top_level_defines,
@@ -51,6 +52,13 @@ def test_strip_code_fences_does_not_touch_middle_fence_lines():
 # ---------------------------------------------------------------------------
 # fence_line_indices：任意围栏行 + 行号（生成门禁报错用）
 # ---------------------------------------------------------------------------
+
+
+def test_strip_all_code_fences_removes_every_fence_line():
+    """全剥：LLM 三重围栏（首尾剥后仍残留）→ 无围栏行（skeleton 出稿兜底）。"""
+    code = "```c\n```\nint main(void) { return 0; }\n```\n"
+
+    assert strip_all_code_fences(code) == "int main(void) { return 0; }\n"
 
 
 def test_fence_line_indices_reports_all_fence_lines():

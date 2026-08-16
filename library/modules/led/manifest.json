@@ -1,0 +1,34 @@
+{
+  "slug": "led",
+  "description": "LED 指示灯驱动（双平台）：led_init/led_on/led_off/led_toggle + 通道宏 LED_RED/LED_YELLOW/LED_GREEN；灌电流 0=亮 细节已封装在模块内。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "stm32 实现内嵌母版 ml_led（led_init/led_on/led_off/led_toggle + LED_RED/YELLOW/GREEN 通道宏），模块侧空条目 = 母版内嵌（先例 oled/delay）。",
+      "kit": "",
+      "source_url": ""
+    },
+    "mspm0": {
+      "files": [
+        "code/led.c",
+        "code/led.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "用户 LED PA15（syscfg LED_BEEP 组，灌电流低电平点亮）；板载 PA0/PA1 被 I2C0（MPU6050）占用，不作用户 LED。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "LED",
+          "type": "gpio_out",
+          "default": "PA15",
+          "required": true
+        }
+      ]
+    }
+  }
+}

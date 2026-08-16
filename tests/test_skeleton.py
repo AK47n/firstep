@@ -511,6 +511,30 @@ def test_generate_smoke_main_feeds_interfaces_and_sanitizes(fake_module_library)
     assert "不存在的函数 dht11_init" in main_c
 
 
+def test_generate_smoke_main_strips_multiple_fences(fake_module_library):
+    """LLM 三重围栏：首尾剥后残留的围栏行也全剥（真机 502→400 判例）。"""
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+    llm = FakeLLM(
+        smoke_skeleton=(
+            "```c\n```\n"
+            "int main(void) {\n"
+            "    float t = dht11_read();\n"
+            "    delay_ms(100);\n"
+            "    while (1);\n"
+            "}\n"
+            "```\n"
+        )
+    )
+
+    main_c, blocked = generate_smoke_main(
+        llm, "环境监测仪", manifests, PLATFORM_MSPM0, fake_module_library
+    )
+
+    assert blocked == ()
+    assert "```" not in main_c
+    assert main_c.startswith("int main(void) {")
+
+
 def test_generate_smoke_main_strips_fenced_llm_output(fake_module_library):
     """冒烟出稿的代码围栏同样剥掉（与 generate_skeleton 同款容错）。"""
     manifests = _manifests(fake_module_library, "dht11", "delay")

@@ -1,32 +1,31 @@
 {
   "slug": "led_beep",
-  "description": "LED 指示 + 蜂鸣器开关：LED 低电平点亮（PA15），蜂鸣器为占位空实现（未接）。",
-  "dependencies": [],
+  "description": "声光组合模块（双平台）：LED + 蜂鸣器同时开关 + led_beep_alarm 声光报警；只控制一方请选 led 或 beep。",
+  "dependencies": [
+    "led",
+    "beep",
+    "delay"
+  ],
   "platforms": {
+    "stm32": {
+      "files": [
+        "code/led_beep_stm32.c",
+        "code/led_beep_stm32.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "转发 led_stm32 + beep_stm32；报警延时用母版 ml_delay（delay_ms）。",
+      "kit": "",
+      "source_url": ""
+    },
     "mspm0": {
       "files": [
         "code/led_beep.c",
         "code/led_beep.h"
       ],
       "verified": false,
-      "hardware_bound": false,
-      "notes": "SysConfig 需配置 GPIO 组 LED_BEEP（LED_BEEP_PORT/LED_BEEP_LED_PIN = PA15 输出，原 LaunchPad 值 PA3 为晶振脚）；蜂鸣器函数为空实现，需要时自行补 GPIO。",
-      "kit": "",
-      "source_url": "",
-      "pins": [
-        {
-          "id": "LED_BEEP_LED",
-          "type": "gpio_out",
-          "default": "PA15",
-          "required": true
-        }
-      ]
-    },
-    "stm32": {
-      "files": [],
-      "verified": true,
-      "hardware_bound": false,
-      "notes": "实现内嵌母版 ml_libs/ml_led.c/h（逐飞 ML 库，2026C/21F 真机编译过）；蜂鸣器与 mspm0 版同为占位空实现。",
+      "hardware_bound": true,
+      "notes": "转发 led + beep；报警延时用 delay 模块。蜂鸣器未接时声部分为占位（beep 模块）。",
       "kit": "",
       "source_url": ""
     }

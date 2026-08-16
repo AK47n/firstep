@@ -1,0 +1,29 @@
+{
+  "slug": "beep",
+  "description": "蜂鸣器驱动（双平台）：beep_init/beep_on/beep_off/beep_toggle + beep_beep 响 N 声（阻塞式）。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/beep_stm32.c",
+        "code/beep_stm32.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "有源蜂鸣器，引脚宏单源 pin_config.h（BUZZER_GPIO/BUZZER_PIN，默认 PA15，由 config 模块或母版默认提供）；默认高电平响，低电平有效改 beep_on/off 两处。",
+      "kit": "",
+      "source_url": ""
+    },
+    "mspm0": {
+      "files": [
+        "code/beep.c",
+        "code/beep.h"
+      ],
+      "verified": false,
+      "hardware_bound": true,
+      "notes": "占位实现：地猛星排针已分配满，暂无蜂鸣器引脚——保留模块为两平台 API 统一；接线后按 stm32 侧 beep_stm32.c 实现。",
+      "kit": "",
+      "source_url": ""
+    }
+  }
+}
