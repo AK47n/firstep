@@ -30,9 +30,11 @@ from .events import (
     ProgressEvent,
     _emit,
 )
+from .boards import Board, pin_supports
 from .entry_store import StoreError
 from .library import list_modules
 from .manifest import ManifestSummary, ModuleManifest, collect_kits
+from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
     PLATFORM_ANY,
     ReferenceEntry,
@@ -946,3 +948,147 @@ def run_recommendation(
         for ref in topic.manual_references
     ]
     emit.done(result)
+
+
+# ---------------------------------------------------------------------------
+# 实例展开 + 默认脚分配（工单 module-multi-instance/02）：纯函数，确定性
+#
+# resolve_selection 之后对声明了 multi_instance 的模块执行「实例展开」：给定
+# 实例清单，合成每个具体实例的 (slug, 实例号, 宏名, 默认脚) 计划。通用层只
+# 做「合成具体实例 + 分配默认脚」，不产代码（渲染归工单 03 的 led hook）。
+#
+# 命名与默认脚是 led（variant=color）首例的具体语义：内置色 red/yellow/
+# green → LED_RED/LED_YELLOW/LED_GREEN，同一内置色第 2 次起按出现序加 _2/
+# _3 后缀，非内置色按创建顺序 LED_1..n；默认脚 stm32 红/黄/绿优先 PC13/14/
+# 15、mspm0 首个实例优先 PA15，其余按 board 顺序取第一个未被本模块占用且非
+# 指定脚的 io 脚（同模块内去重，不跨模块全局扫描——spec D3）。
+# ---------------------------------------------------------------------------
+
+# 内置色 → 通道宏名 / stm32 默认脚（与母版 ml_led 三通道对齐）
+LED_COLOR_MACROS = {
+    "red": "LED_RED",
+    "yellow": "LED_YELLOW",
+    "green": "LED_GREEN",
+}
+STM32_LED_COLOR_PINS = {
+    "red": "PC13",
+    "yellow": "PC14",
+    "green": "PC15",
+}
+MSPM0_LED_FIRST_PIN = "PA15"
+
+
+@dataclass(frozen=True)
+class ExpandedInstance:
+    """实例展开计划的一行：一个具体实例的通道宏名 + 默认脚。
+
+    slug = 模块 slug（回显，渲染器据此找模块）；index = 实例号（1 起，同模块
+    内唯一，渲染器据此命名每实例 pin 宏）；macro = 通道宏名（LED_RED /
+    LED_RED_2 / LED_1 …）；pin = 默认脚（显式 pin 覆盖优先，否则自动分配）。
+    """
+
+    slug: str
+    index: int
+    macro: str
+    pin: str
+
+
+def expand_instances(
+    manifest: ModuleManifest,
+    instances: Sequence[ModuleInstance],
+    platform: str,
+    board: Board,
+) -> tuple[ExpandedInstance, ...]:
+    """实例清单 → (slug, 实例号, 宏名, 默认脚) 计划（纯函数，同输入同输出）。
+
+    manifest.multi_instance 缺省（不支持多实例）时，非空实例清单 = 调用方错误
+    （SelectionError）；空实例清单 = 单默认实例（旧行为，返回空计划，调用方
+    走单实例路径）。实例数 > max = 上限守卫（SelectionError，中文可读）。
+
+    显式 pin 覆盖优先；自动分配只做同模块内去重（不跨模块全局扫描）——与
+    母版固定占用 / 其他模块默认脚冲突留给用户重绑 + generate-time 门禁当
+    安全网（spec D3，不新增「找不到空闲脚」的硬 400）。
+    """
+    spec = manifest.multi_instance
+    if spec is None:
+        if instances:
+            raise SelectionError(f"模块 {manifest.slug} 不支持多实例")
+        return ()
+    if len(instances) > spec.max:
+        raise SelectionError(
+            f"模块 {manifest.slug} 实例数 {len(instances)} 超过上限 {spec.max}"
+        )
+    designated = _led_designated_pins(platform)
+    plan: list[ExpandedInstance] = []
+    used: set[str] = set()
+    builtin_counts: dict[str, int] = {}
+    non_builtin_seq = 0
+    for index, instance in enumerate(instances, 1):
+        variant = (instance.variant or "").strip()
+        occurrence = 0
+        if variant in LED_COLOR_MACROS:
+            builtin_counts[variant] = builtin_counts.get(variant, 0) + 1
+            occurrence = builtin_counts[variant]
+            macro = LED_COLOR_MACROS[variant]
+            if occurrence > 1:
+                macro = f"{macro}_{occurrence}"
+        else:
+            non_builtin_seq += 1
+            macro = f"LED_{non_builtin_seq}"
+        pin = instance.pin or _led_default_pin(
+            platform, variant, index, occurrence, board, used, designated
+        )
+        used.add(pin)
+        plan.append(
+            ExpandedInstance(slug=manifest.slug, index=index, macro=macro, pin=pin)
+        )
+    return tuple(plan)
+
+
+def _led_default_pin(
+    platform: str,
+    variant: str,
+    index: int,
+    occurrence: int,
+    board: Board,
+    used: set[str],
+    designated: frozenset[str],
+) -> str:
+    """实例默认脚（显式 pin 之外的自动分配）。
+
+    stm32：内置色首次出现 → 其指定脚（PC13/14/15）；mspm0：首个实例 → PA15
+    （位置语义，与 led 模块单 pin 角色默认对齐）；其余 board 顺序首个可用 io
+    脚（跳过指定脚 + 同模块已用）。occurrence 对非内置色无意义（= 0）。
+    """
+    if platform == PLATFORM_STM32:
+        if occurrence == 1 and variant in STM32_LED_COLOR_PINS:
+            return STM32_LED_COLOR_PINS[variant]
+        return _next_led_pin(board, used, designated)
+    if index == 1:
+        return MSPM0_LED_FIRST_PIN
+    return _next_led_pin(board, used, designated)
+
+
+def _led_designated_pins(platform: str) -> frozenset[str]:
+    """led 的指定默认脚：stm32 = 板载三色 PC13/14/15；mspm0 = 用户 LED PA15。
+
+    「board 顺序首个可用 io 脚」跳过这些指定脚——重复内置色 / 非内置色不抢占
+    内置色专属脚（红/黄/绿 → PC13/14/15 的固定映射保持，spec D3）。
+    """
+    if platform == PLATFORM_STM32:
+        return frozenset(STM32_LED_COLOR_PINS.values())
+    return frozenset({MSPM0_LED_FIRST_PIN})
+
+
+def _next_led_pin(board: Board, used: set[str], designated: frozenset[str]) -> str:
+    """board 顺序首个可用 io 脚：gpio_out 能力（pin_supports 复用）、未被本
+    模块占用、非指定脚。耗尽 = 不变量破坏（max 8 远小于排针 io 脚数），大声
+    失败。"""
+    for pin in board.pins:
+        if (
+            pin.name not in used
+            and pin.name not in designated
+            and pin_supports(pin, "gpio_out")
+        ):
+            return pin.name
+    raise SelectionError("没有可用的 io 脚（模块实例数超出排针可用脚）")
