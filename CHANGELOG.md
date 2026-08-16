@@ -48,6 +48,7 @@
 - 22:34 manifest「Python 副产物」声明——python_artifact 能力块：缺省不落键/旧 manifest 逐字节兼容/非法值大声失败（工单 k230-vision-copilot/01）
 - 22:42 manifest「Python 副产物」声明能力（工单 k230-vision-copilot/01）
 - 23:00 生成写盘机制——选中 python_artifact 模块 → k230_render 渲染写 .py 副产物（工单 k230-vision-copilot/02）
+- 23:22 k230 模块落地 + 真实视觉模板——manifest 依赖 ball_detect（files 空不重复声明串口 pins）+ CanMV main.py 模板（FPIOA 串口 → sensor → find_blobs 色块追踪 → CSV 帧 → UART）；双平台生成断言 + 帧契约锁扩 mspm0 + 零 C 文件模块依赖形态豁免（工单 k230-vision-copilot/03）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
