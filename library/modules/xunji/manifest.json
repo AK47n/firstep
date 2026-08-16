@@ -10,9 +10,9 @@
         "code/xunji.c",
         "code/xunji.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": true,
-      "notes": "移植源 sources/car/car xunji/control.c（原生 mspm0 真机，Debug/PWM.out 编译产物在，2026-08-11 领域建模判据：原生平台真机代码优先）——决策层（路口计数/模式状态机/声光时序）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（car-1-1）。灰度 8 路 GPIO_Gray_* → 母版 HUIDU 组（P1..P8 = L3/L2/L1/R1/R2/L4/R3/R4，huidu 模块索引序，编译级默认；实际接线改 xunji.c 头部 P1..P8 宏；极性非零=白）。电机：方向 → motor_set_direction(id,dir) 0停1正转2反转；PWM 真机 TIMG0 2500 计数百分比制 → motor_set_duty 原始值 0~1300（MAX_DUTY=1300 对偶 pid_mspm0，13=1300/100）。编码器：A 相计数在 motor 模块 GROUP1_IRQHandler（counter_1_A/counter_2_A），经 motor_encoder_read 读后清零。速度环 PID 走 pid 模块（deps 已声明）。母版 STBY 硬件直连 3.3V（motor.h）。编译验证未上板（默认外设布局 gmake 0 错）；对偶 stm32 侧无——本模块随巡线套装 mspm0 线。",
+      "notes": "移植源 sources/car/car xunji/control.c（原生 mspm0 真机，Debug/PWM.out 编译产物在，2026-08-11 领域建模判据：原生平台真机代码优先）——决策层（路口计数/模式状态机/声光时序）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（car-1-1）。灰度 8 路 GPIO_Gray_* → 母版 HUIDU 组（P1..P8 = L3/L2/L1/R1/R2/L4/R3/R4，huidu 模块索引序，编译级默认；实际接线改 xunji.c 头部 P1..P8 宏；极性非零=白）。电机：方向 → motor_set_direction(id,dir) 0停1正转2反转；PWM 真机 TIMG0 2500 计数百分比制 → motor_set_duty 原始值 0~1300（MAX_DUTY=1300 对偶 pid_mspm0，13=1300/100）。编码器：A 相计数在 motor 模块 GROUP1_IRQHandler（counter_1_A/counter_2_A），经 motor_encoder_read 读后清零。速度环 PID 走 pid 模块（deps 已声明）。母版 STBY 硬件直连 3.3V（motor.h）。编译验证未上板（默认外设布局 gmake 0 错）；对偶 stm32 侧无——本模块随巡线套装 mspm0 线。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

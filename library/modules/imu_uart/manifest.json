@@ -10,9 +10,9 @@
         "code/imu.c",
         "code/imu.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置 UART0（命名 IMU601，115200 8N1，BUSCLK 40MHz）；接线 TX→PA31(UART0 RX，内部上拉)、RX→PA28(UART0 TX)。",
+      "notes": "SysConfig 需配置 UART0（命名 IMU601，115200 8N1，BUSCLK 40MHz）；接线 TX→PA31(UART0 RX，内部上拉)、RX→PA28(UART0 TX)。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake  0 error；syscfg ovsRate 基线 warning 已记录（非模块代码）；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

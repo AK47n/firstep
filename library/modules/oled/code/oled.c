@@ -354,3 +354,23 @@ void OLED_Init(void)
 		OLED_WR_Byte(0xAF,OLED_CMD);//--turn on oled panel
 		OLED_Refresh();
 }
+
+
+/* ============================================================
+ * 双平台共同小写 API：line/column → 像素坐标（16×8 字符网格，
+ * 字号 16；OLED_ShowString/ShowNum 写完显存后由 oled_refresh 刷新）。
+ * ============================================================ */
+void oled_show_text(uint8_t line, uint8_t column, const char *text)
+{
+    OLED_ShowString((u8)(column * 8), (u8)(line * 16), (u8 *)text, 16);
+}
+
+void oled_show_number(uint8_t line, uint8_t column, uint32_t number, uint8_t length)
+{
+    OLED_ShowNum((u8)(column * 8), (u8)(line * 16), number, length, 16);
+}
+
+void oled_refresh(void)
+{
+    OLED_Refresh();
+}

@@ -77,7 +77,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "移植源 sources/contest/2021F/21F（2021F 巡线送药原工程 code/pid.c + gray_track.c + user/isr.c）。决策层（十字路口检测/T字路口检测/路由表/K230 动态路口/远端导航/药房状态机/路径记忆 + pid_isr 10ms 调度）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（21F-巡线送药决策例程）；驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）。10ms 调度由骨架自建（TIM3 tim_interrupt_ms_init + ISR：读编码器 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motorA_duty/motorB_duty）；编码器 Encoder_count1/2 走 motor 模块。MAX_DUTY=50000（母版 ml_pwm）。陀螺前馈（GYRO_DAMP_GAIN=0）与角度环 yaw_Kalman 引用已随剥离移除，deps 不引 ml_mpu6050/digit_uart。编译验证：UV4 0 错（21F 巡线线产物）。",
+      "notes": "移植源 sources/contest/2021F/21F（2021F 巡线送药原工程 code/pid.c + gray_track.c + user/isr.c）。决策层（十字路口检测/T字路口检测/路由表/K230 动态路口/远端导航/药房状态机/路径记忆 + pid_isr 10ms 调度）已按 ADR 0009 剥离归骨架，素材已归档参考文件库（21F-巡线送药决策例程）；驱动保留：pid_init/pid_cal/pidout_limit/motor_target_set/line_pid_track + 灰度读取（line_error_calc/digtal/all_white_detect）。10ms 调度由骨架自建（TIM3 tim_interrupt_ms_init + ISR：读编码器 → motorA/B.now → line_pid_track → pid_cal(motorA/B) → 限幅 → motorA_duty/motorB_duty）；编码器 Encoder_count1/2 走 motor 模块。MAX_DUTY=50000（母版 ml_pwm）。陀螺前馈（GYRO_DAMP_GAIN=0）与角度环 yaw_Kalman 引用已随剥离移除，deps 不引 ml_mpu6050/digit_uart。编译验证：UV4 0 错（21F 巡线线产物）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

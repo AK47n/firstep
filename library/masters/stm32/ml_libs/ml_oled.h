@@ -27,4 +27,9 @@ void OLED_ShowFloat(uint8_t Line, uint8_t Column, float Number, uint8_t int_Leng
 void OLED_ShowCharBig(uint8_t Line, uint8_t Column, char Char);
 void OLED_ShowStringBig(uint8_t Line, uint8_t Column, char *String);
 
+
+/* module-polish/02: cross-platform OLED common layer (old API kept) */
+void oled_show_text(uint8_t Line, uint8_t Column, const char *String);
+void oled_show_number(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
+void oled_refresh(void);
 #endif

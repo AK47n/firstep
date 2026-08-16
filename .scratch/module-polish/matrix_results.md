@@ -1,0 +1,46 @@
+# module-polish 编译矩阵结果
+
+| slug | platform | exit | errors | 判定 | 备注 |
+|---|---|---|---|---|---|
+| ball_detect | mspm0 | 0 | 0 | PASS | - |
+| beep | mspm0 | 0 | 0 | PASS | - |
+| config | mspm0 | 0 | 0 | PASS | - |
+| debug_uart | mspm0 | 0 | 0 | PASS | - |
+| delay | mspm0 | 0 | 0 | PASS | - |
+| digit_uart | mspm0 | 0 | 0 | PASS | - |
+| filter | mspm0 | 0 | 0 | PASS | - |
+| huidu | mspm0 | 0 | 0 | PASS | - |
+| imu_uart | mspm0 | 0 | 0 | PASS | - |
+| key | mspm0 | 0 | 0 | PASS | - |
+| led | mspm0 | 0 | 0 | PASS | - |
+| led_beep | mspm0 | 0 | 0 | PASS | - |
+| ml_mpu6050 | mspm0 | 0 | 0 | PASS | - |
+| motor | mspm0 | 0 | 0 | PASS | - |
+| ntb_time | mspm0 | 0 | 0 | PASS | - |
+| oled | mspm0 | 0 | 0 | PASS | - |
+| pid | mspm0 | 0 | 0 | PASS | - |
+| step_motor | mspm0 | 0 | 0 | PASS | - |
+| uart | mspm0 | 0 | 0 | PASS | - |
+| uwb_uart | mspm0 | 0 | 0 | PASS | - |
+| xunji | mspm0 | 0 | 0 | PASS | - |
+| zigbee_uart | mspm0 | 0 | 0 | PASS | - |
+| zigbee_uart_key | mspm0 | 0 | 0 | PASS | - |
+| ball_detect | stm32 | 0 | 0 | PASS | - |
+| beep | stm32 | 0 | 0 | PASS | - |
+| config | stm32 | 0 | 0 | PASS | - |
+| debug_uart | stm32 | 0 | 0 | PASS | - |
+| delay | stm32 | 0 | 0 | PASS | - |
+| digit_uart | stm32 | 0 | 0 | PASS | - |
+| filter | stm32 | 0 | 0 | PASS | - |
+| key | stm32 | 0 | 0 | PASS | - |
+| led | stm32 | 0 | 0 | PASS | - |
+| led_beep | stm32 | 0 | 0 | PASS | - |
+| ml_mpu6050 | stm32 | 0 | 0 | PASS | - |
+| motor | stm32 | 0 | 0 | PASS | - |
+| ntb_time | stm32 | 0 | 0 | PASS | - |
+| oled | stm32 | 0 | 0 | PASS | - |
+| pid | stm32 | 0 | 0 | PASS | - |
+| uart | stm32 | 0 | 0 | PASS | - |
+| uwb_uart | stm32 | 0 | 0 | PASS | - |
+| zigbee_uart | stm32 | 0 | 0 | PASS | - |
+| zigbee_uart_key | stm32 | 0 | 0 | PASS | - |

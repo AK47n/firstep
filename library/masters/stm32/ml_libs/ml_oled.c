@@ -436,3 +436,19 @@ void OLED_DrawBMP(unsigned char x0, unsigned char y0,unsigned char x1, unsigned 
 	}
 } 
 
+
+/* module-polish/02: cross-platform OLED common layer (old API kept) */
+void oled_show_text(uint8_t Line, uint8_t Column, const char *String)
+{
+	OLED_ShowString(Line, Column, (char *)String);
+}
+
+void oled_show_number(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length)
+{
+	OLED_ShowNum(Line, Column, Number, Length);
+}
+
+void oled_refresh(void)
+{
+	/* ML OLED writes directly to screen; refresh is a no-op for API parity. */
+}

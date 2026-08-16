@@ -11,6 +11,7 @@ __pycache__/
 # 真机验收产物（Keil 编译日志 / 生成工程 / 会话日志）
 .scratch/real-run/
 .scratch/module-functionalize/out_*_mspm0/
+.scratch/module-polish/matrix/
 
 # 本地服务运行日志（uvicorn stdout 重定向）
 webapp.log

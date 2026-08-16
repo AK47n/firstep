@@ -8,9 +8,9 @@
         "code/uart.c",
         "code/uart.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "无固定外设命名要求，调用时传入目标 UART 实例（如 IMU601_INST）。",
+      "notes": "无固定外设命名要求，调用时传入目标 UART 实例（如 IMU601_INST）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     },
@@ -19,9 +19,9 @@
         "code/uart_stm32.c",
         "code/uart_stm32.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "转发母版 ml_uart（uart_sendbyte/uart_sendstr）；发送前需 uart_pin_init/uart_init 由骨架或调用方完成。",
+      "notes": "转发母版 ml_uart（uart_sendbyte/uart_sendstr）；发送前需 uart_pin_init/uart_init 由骨架或调用方完成。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     }

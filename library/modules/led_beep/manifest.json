@@ -12,9 +12,9 @@
         "code/led_beep_stm32.c",
         "code/led_beep_stm32.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": false,
-      "notes": "转发 led_stm32 + beep_stm32；报警延时用母版 ml_delay（delay_ms）。",
+      "notes": "转发 led_stm32 + beep_stm32；报警延时用母版 ml_delay（delay_ms）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     },
@@ -23,9 +23,9 @@
         "code/led_beep.c",
         "code/led_beep.h"
       ],
-      "verified": false,
+      "verified": true,
       "hardware_bound": true,
-      "notes": "转发 led + beep；报警延时用 delay 模块。蜂鸣器未接时声部分为占位（beep 模块）。",
+      "notes": "转发 led + beep；报警延时用 delay 模块。蜂鸣器未接时声部分为占位（beep 模块）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": ""
     }

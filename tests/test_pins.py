@@ -346,6 +346,8 @@ MSPM0_DEFAULT_MAP = {
     ("digit_uart", "DIGIT_UART_RX"): ("DIGIT_UART", "rxPin"),
     ("imu_uart", "IMU601_TX"): ("IMU601", "txPin"),
     ("imu_uart", "IMU601_RX"): ("IMU601", "rxPin"),
+    ("debug_uart", "DEBUG_UART_TX"): ("DEBUG_UART", "txPin"),
+    ("debug_uart", "DEBUG_UART_RX"): ("DEBUG_UART", "rxPin"),
     ("uwb_uart", "UWB_UART_TX"): ("UWB_UART", "txPin"),
     ("uwb_uart", "UWB_UART_RX"): ("UWB_UART", "rxPin"),
     ("zigbee_uart", "ZIGBEE_UART_TX"): ("ZIGBEE_UART", "txPin"),

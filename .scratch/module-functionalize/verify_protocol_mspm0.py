@@ -67,6 +67,22 @@ int main(void)
 }
 """
 
+DEBUG_MAIN = """#include "ti_msp_dl_config.h"
+#include "debug_uart_mspm0.h"
+
+/* module-polish/01 编译验收：DEBUG_UART（UART2）模块内自带 IRQHandler。 */
+int main(void)
+{
+    /* SYSCFG_DL_init(); */
+    debug_uart_init();
+    debug_uart_send("debug uart ok\\r\\n");
+    while (1)
+    {
+        debug_cmd_poll();
+    }
+}
+"""
+
 ALL_MAIN = """#include "ti_msp_dl_config.h"
 #include "digit_uart_mspm0.h"
 #include "uwb_uart_mspm0.h"
@@ -101,6 +117,7 @@ void DIGIT_UART_INST_IRQHandler(void)
 """
 
 SLICES = {
+    "debug": (["debug_uart"], DEBUG_MAIN),
     "uwb": (["uwb_uart"], UWB_MAIN),
     "zigbee": (["zigbee_uart"], ZIGBEE_MAIN),
     "key": (["zigbee_uart_key"], KEY_MAIN),
