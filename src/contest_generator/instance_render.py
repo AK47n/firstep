@@ -110,7 +110,7 @@ MSPM0_DEFAULT_LED_INSTANCES = """/* led_instances.h —— LED 通道宏 + 每�
 #endif
 """
 
-# syscfg $assign 行形态（pinwriter._SYSCFG_ASSIGN_RE 同款，只服务于 LED_BEEP
+# syscfg $assign 行形态（syscfg_model._SYSCFG_ASSIGN_RE 同款，只服务于 LED_BEEP
 # 通道 0 落点行——path 前置检查后逐组还原，head/tail/eol 原样保留）
 _LED_BEEP_ASSIGN_RE = re.compile(
     r'^(?P<head>\s*(?P<path>LED_BEEP\.associatedPins\[0\]\.pin)\.\$assign\s*=\s*)'
