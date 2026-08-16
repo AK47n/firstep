@@ -545,10 +545,12 @@
         <button id="btn-expand" class="primary">展开依赖并检查平台</button>
       </div>
       <div class="row" style="margin-top:8px">
-        <input type="search" id="module-search" placeholder="搜索已展开模块…" style="flex:1;max-width:300px">
+        <input type="search" id="module-search" placeholder="搜索模块以添加…" style="flex:1;max-width:300px">
         <span class="muted" id="module-count"></span>
       </div>
+      <div id="module-search-results" class="hidden" style="margin-top:6px"></div>
       <div id="warnings" style="margin-top:10px"></div>
+      <div class="muted" id="selected-count" style="margin-top:8px"></div>
       <div id="selected-list" class="selected-scroll" style="margin-top:8px"></div>
       <div id="expand-msg" class="error"></div>
     </div>
@@ -1459,6 +1461,14 @@ function renderModulePool() {
     .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(shortDesc(m.description, 24))}</option>`).join("");
 }
 
+function addModule(slug) {
+  if (!slug || selectedSlugs.includes(slug)) return;
+  selectedSlugs.push(slug);
+  expanded = []; warnings = [];
+  renderSelected(); renderWarnings(); renderModulePool(); renderModuleSearch();
+  runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
+}
+
 async function runExpand() {
   $("expand-msg").textContent = "";
   if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
@@ -1473,39 +1483,54 @@ async function runExpand() {
   } catch (e) { $("expand-msg").textContent = e.message; }
 }
 
-$("btn-add-module").addEventListener("click", () => {
-  const slug = $("module-pool").value;
-  if (!slug) return;
-  selectedSlugs.push(slug);
-  expanded = []; warnings = [];
-  renderSelected(); renderWarnings(); renderModulePool();
-  runExpand();  // 手动添加后直接展开，步骤 7 立即可配置引脚
-});
+$("btn-add-module").addEventListener("click", () => addModule($("module-pool").value));
 
 $("btn-expand").addEventListener("click", runExpand);
 
-$("module-search").addEventListener("input", renderSelected);
+$("module-search").addEventListener("input", renderModuleSearch);
+
+function renderModuleSearch() {
+  const box = $("module-search-results");
+  const q = ($("module-search").value || "").trim().toLowerCase();
+  if (!q) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    $("module-count").textContent = "";
+    return;
+  }
+  const available = (state.modules || []).filter((m) => !selectedSlugs.includes(m.slug));
+  const hits = available.filter((m) =>
+    (m.slug + " " + (m.description || "") + " " + (m.dependencies || []).join(" ")).toLowerCase().includes(q));
+  $("module-count").textContent = `匹配 ${hits.length} 个可用模块`;
+  box.classList.remove("hidden");
+  if (!hits.length) {
+    box.innerHTML = '<div class="muted">没有匹配的可用模块。</div>';
+    return;
+  }
+  box.innerHTML = hits.map((m) => `
+    <div class="item">
+      <div class="head" title="${esc(m.description || "")}">
+        <span class="slug">${esc(m.slug)}</span>
+        ${moduleBadges(m)}
+        <button data-add="${esc(m.slug)}" style="margin-left:auto">添加</button>
+      </div>
+      <div class="desc">${esc(m.description || "")}${(m.dependencies || []).length ? ` · 依赖：${esc(m.dependencies.join("、"))}` : ""}</div>
+    </div>`).join("");
+  box.querySelectorAll("[data-add]").forEach((b) =>
+    b.addEventListener("click", () => addModule(b.dataset.add)));
+}
 
 function renderSelected() {
   const box = $("selected-list");
-  const q = ($("module-search").value || "").trim().toLowerCase();
   if (!expanded.length) {
-    $("module-count").textContent = "";
+    $("selected-count").textContent = "";
     box.innerHTML = selectedSlugs.length
       ? '<div class="muted">已选（未展开依赖）：' + selectedSlugs.map(esc).join("、") + '</div>'
       : '<div class="muted">尚未选择模块。</div>';
     return;
   }
-  const visible = expanded.filter((m) =>
-    !q || (m.slug + " " + (m.description || "") + " " + (m.dependencies || []).join(" ")).toLowerCase().includes(q));
   const depCount = expanded.filter((m) => !selectedSlugs.includes(m.slug)).length;
-  $("module-count").textContent = q
-    ? `匹配 ${visible.length} / ${expanded.length} 个模块`
-    : `已展开 ${expanded.length} 个模块（含 ${depCount} 个自动带入）`;
-  if (!visible.length) {
-    box.innerHTML = '<div class="muted">没有匹配的模块。</div>';
-    return;
-  }
+  $("selected-count").textContent = `已展开 ${expanded.length} 个模块（含 ${depCount} 个自动带入）`;
   const notes = (m) => Object.entries(m.platforms || {}).map(([platform, entry]) =>
     entry.notes ? `【${platform} 配置】${entry.notes}` : "").filter(Boolean).join(" ");
   const bringers = new Map();
@@ -1513,7 +1538,7 @@ function renderSelected() {
     if (!selectedSlugs.includes(m.slug)) continue;
     for (const dep of (m.dependencies || [])) bringers.set(dep, m.slug);
   }
-  box.innerHTML = visible.map((m) => {
+  box.innerHTML = expanded.map((m) => {
     const isDep = !selectedSlugs.includes(m.slug);
     const bringer = bringers.get(m.slug);
     return `
@@ -1532,7 +1557,7 @@ function renderSelected() {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
       expanded = []; warnings = [];
       instancePinTarget = null;  // 选脚目标随清单变化失效（工单 04）
-      renderSelected(); renderWarnings(); renderModulePool();
+      renderSelected(); renderWarnings(); renderModulePool(); renderModuleSearch();
       renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
       renderInstanceConfig();  // 多实例配置卡（工单 04）：被移除模块的实例清单随之清掉
     }));
