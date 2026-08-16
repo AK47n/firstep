@@ -39,8 +39,8 @@ def test_led_module_dual_platform_with_uniform_api():
         assert "LED_RED" in h
 
 
-def test_led_stm32_uses_pin_config_macros_and_sink_polarity():
-    """stm32 led（母版 ml_led）用 pin_config.h 宏；0=亮（灌电流）封装在 led_on 内部。"""
+def test_led_stm32_uses_pin_config_macros_and_source_polarity():
+    """stm32 led（母版 ml_led）用 pin_config.h 宏；1=亮（拉电流）封装在 led_on 内部。"""
     ml_led_h = (LIBRARY_ROOT / "masters" / "stm32" / "ml_libs" / "ml_led.h").read_text(
         encoding="utf-8", errors="replace"
     )
@@ -50,7 +50,7 @@ def test_led_stm32_uses_pin_config_macros_and_sink_polarity():
     assert "pin_config.h" in ml_led_h  # 引脚宏单源
     assert "LED_RED_Pin" in ml_led_h and "LED_YELLOW_Pin" in ml_led_h and "LED_GREEN_Pin" in ml_led_h
     assert "LED_GPIO" in ml_led_h
-    assert "低电平点亮" in ml_led_c  # 灌电流极性封装在实现内
+    assert "高电平点亮" in ml_led_c  # 拉电流极性封装在实现内
 
 
 def test_beep_module_dual_platform_with_uniform_api():
