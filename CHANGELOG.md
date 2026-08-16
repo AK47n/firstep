@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=334bb02ed4fad5ea3980532544b8a4dd1281ad0a -->
+<!-- changelog-auto: last-commit=7aa1ff08110956d500b93e641821ec4b98522b47 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 00:55 骨架参考注入按合计预算截断，防多篇全文撑爆 128KB 网关
 - 01:45 自检骨架 sanitize 跨词法区域调用替换残留实参尾巴
 - 08:44 模块依赖清理——motor 纯驱动化 + 编码器计数迁入 motor + 依赖声明修正
+- 09:29 led/beep 拆分为独立模块，led_beep 组合化，stm32 led 内嵌母版统一 API
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
