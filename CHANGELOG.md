@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=da40562f50231b6eca549119ec0bd47d838657d7 -->
+<!-- changelog-auto: last-commit=3ca520cfc31752c361e42cc70756c7ce7b1a6a05 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -44,6 +44,8 @@
 - 21:12 前端裁决接缝 01——校验端点接 resolve_bindings（工单 pin-verdict-seam/01）
 - 21:13 前端裁决接缝 01——校验端点接 resolve_bindings（工单 pin-verdict-seam/01）
 - 21:43 骨架/编译编排归位——run_skeleton + run_compile 域函数（工单 route-orchestration-homing/01）
+- 21:45 骨架/编译编排归位——run_skeleton + run_compile 域函数（工单 route-orchestration-homing/01）
+- 22:34 manifest「Python 副产物」声明——python_artifact 能力块：缺省不落键/旧 manifest 逐字节兼容/非法值大声失败（工单 k230-vision-copilot/01）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁

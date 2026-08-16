@@ -116,6 +116,22 @@ class MultiInstanceSpec:
 
 
 @dataclass(frozen=True)
+class PythonArtifactSpec:
+    """Python 副产物能力声明（模块级）：模块除主控 C 代码外，生成时额外
+    产出 K230 侧 .py 脚本（如 CanMV main.py）。
+
+    template = .py 模板文件路径（相对模块目录，生成侧据此读模板）；
+    output = 生成的输出文件名（纯文件名，落盘位置由生成侧决定）。
+    """
+
+    template: str
+    output: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"template": self.template, "output": self.output}
+
+
+@dataclass(frozen=True)
 class ModuleManifest:
     """一个模块的机器可读描述。"""
 
@@ -124,12 +140,14 @@ class ModuleManifest:
     dependencies: tuple[str, ...] = ()  # 依赖模块 slug 列表
     platforms: dict[str, PlatformEntry] = field(default_factory=dict)
     multi_instance: MultiInstanceSpec | None = None  # 多实例能力（缺省 = 单实例）
+    python_artifact: PythonArtifactSpec | None = None  # Python 副产物（缺省 = 无）
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 兼容 dict。
 
-        multi_instance 缺省（None）时不落键——旧 manifest 序列化产物与基线
-        逐字节一致（save_manifest 写回存量 manifest 不会平白加一个 null 字段）。
+        multi_instance / python_artifact 缺省（None）时不落键——旧 manifest
+        序列化产物与基线逐字节一致（save_manifest 写回存量 manifest 不会
+        平白加一个 null 字段）。
         """
         data: dict[str, Any] = {
             "slug": self.slug,
@@ -138,6 +156,8 @@ class ModuleManifest:
         }
         if self.multi_instance is not None:
             data["multi_instance"] = self.multi_instance.to_dict()
+        if self.python_artifact is not None:
+            data["python_artifact"] = self.python_artifact.to_dict()
         data["platforms"] = {
             platform: {
                 "files": list(entry.files),
@@ -185,6 +205,7 @@ class ModuleManifest:
             dependencies=tuple(_parse_dependencies(data.get("dependencies"))),
             platforms=platforms,
             multi_instance=_parse_multi_instance(data),
+            python_artifact=_parse_python_artifact(data),
         )
 
     @classmethod
@@ -350,6 +371,33 @@ def _parse_multi_instance(data: dict[str, Any]) -> MultiInstanceSpec | None:
     if not isinstance(variant, str) or not variant:
         raise ManifestError("multi_instance 的 variant 必须是非空字符串")
     return MultiInstanceSpec(max=max_value, variant=variant)
+
+
+def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
+    """解析模块级 python_artifact 能力块（缺省 / null = None，旧 manifest 兼容）。
+
+    存在则严格校验：template 为安全相对路径（模板文件路径相对模块目录，
+    生成侧据此读模板——is_unsafe_path 口径照 _parse_file_list）；output 为
+    纯文件名（生成侧写进输出目录，路径逃逸 / 子目录大声失败）。
+    """
+    raw = data.get("python_artifact")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ManifestError("python_artifact 必须是对象")
+    template = raw.get("template")
+    if not isinstance(template, str) or not template:
+        raise ManifestError("python_artifact 的 template 必须是非空字符串")
+    if is_unsafe_path(template) or template == ".":
+        raise ManifestError(
+            f"python_artifact 的 template 必须是相对且无 .. 的文件路径：{template!r}"
+        )
+    output = raw.get("output")
+    if not isinstance(output, str) or not output:
+        raise ManifestError("python_artifact 的 output 必须是非空字符串")
+    if is_unsafe_path(output) or "/" in output or output == ".":
+        raise ManifestError(f"python_artifact 的 output 必须是纯文件名：{output!r}")
+    return PythonArtifactSpec(template=template, output=output)
 
 
 def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
