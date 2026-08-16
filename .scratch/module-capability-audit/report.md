@@ -178,8 +178,8 @@
 5. `ml_mpu6050` mspm0 补 `MPU6050_Init/Read/Write/GetData` 四个高层包装（若姿态不靠 imu_uart 的题）。
 
 **P2 — 一致性小修**
-6. `led` mspm0 补 `LED_RED_ON/OFF` 等便捷宏。
-7. `motor` manifest notes 明确标注“旧 API = 兼容遗留，新工程请用 motor_* 统一 API”。
+6. ~~`led` mspm0 补便捷宏~~ **已完成（module-polish/05）**：三色 ON/OFF 宏双平台一致。
+7. ~~`motor` 旧 API 标注~~ **已完成（module-polish/05）**。
 
 **暂缓（已评审）**
 - uwb↔filter 可选化：等出现“只要原始 UWB 不要滤波”的真实用例；
