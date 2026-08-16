@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f8dc39d5253326e4f3cad6eafe77070353e0a21a -->
+<!-- changelog-auto: last-commit=34dbf98a175661998be80126a88c0a68fa3ed9d4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 09:34 LED 极性改为拉电流高电平点亮（一脚接地一脚接引脚，用户更正）
 - 09:46 motor stm32 补统一 API（motor_set_duty/direction/encoder_read，与 mspm0 对偶）
 - 10:02 ntb_time 补 stm32（SysTick 1ms 时间戳，get_time_stamp_ms 双平台对偶）
+- 10:51 key/uart 补 stm32 + 骨架/冒烟 prompt 输出函数约束（防 LLM 出稿碎片）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
