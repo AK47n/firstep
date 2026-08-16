@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6d14a197b9e7a822677c6bfdffea608b25f203b0 -->
+<!-- changelog-auto: last-commit=41942d589d7bf83a13e12a995b4dbc7c3dae2650 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 14:12 module-multi-instance 01——manifest 多实例能力声明 + 实例数据形状
 - 14:31 module-multi-instance 02——实例展开 + 默认脚分配纯函数（命名/去重/上限守卫）
 - 15:30 module-multi-instance 03——led 渲染 hook + led_instances.h 生成 + 骨架通道宏注入（stm32/mspm0 真编译 0 error）
+- 16:00 module-multi-instance 04——webapp 请求层 instances 解析 + 前端实例配置 UI（增删改名/颜色/引脚，上限 8）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
