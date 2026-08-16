@@ -29,11 +29,11 @@ from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
 from .compile_runner import (
     CompileRunnerError,
-    collect_build_log,
-    compile_passed,
     find_ccs_tools,
     find_make,
     find_uv4,
+    resolve_compile_toolchain,
+    run_compile,
 )
 from .config import (
     DEFAULT_CONFIG_PATH,
@@ -46,19 +46,13 @@ from .config import (
     topic_library_dir,
 )
 from .errors import error_entry
-from .events import (
-    EVENT_COMPILE_START,
-    ProgressEvent,
-)
 from .extraction import extract_file
 from .fix_errors import (
     FixError,
     fix_backup_root,
-    parse_compile_errors,
     resolve_source_path,
     restore_backup,
     run_fix_round,
-    summarize_compile_output,
 )
 from .generator import (
     GenerationSummary,
@@ -108,7 +102,7 @@ from .reference_library import (
     search_references,
 )
 from .selection import parse_instances, resolve_selection, run_recommendation
-from .skeleton import generate_skeleton, generate_smoke_main
+from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
 from .topic_library import (
@@ -655,7 +649,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         历史赛题入口：选中某题时题面用库内全文（长 PDF 题面全文只在选了该赛
         题时进上下文）；骨架阶段经 reference_ids 注入参考实现草稿（锚定 ∪
         手动全文，ADR 0006 修订），不自动并入模块（模块选择由用户 / 推荐
-        链路决定）。"""
+        链路决定）。main_mode 分支 + 冒烟守卫 + 分派在 skeleton.run_skeleton
+        （对照 run_recommendation / run_fix_round 先例），本路由只取参 +
+        装配输入 + 返回。"""
         problem_text = _require_str(payload, "problem_text")
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
@@ -664,12 +660,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
         # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
         instances = parse_instances(payload.get("instances"), known_slugs=slugs)
-        if "main_mode" in payload:
-            main_mode = _optional_str(payload, "main_mode")
-            if main_mode not in ("skeleton", "smoke"):
-                raise HTTPException(400, "main_mode 必须是 skeleton 或 smoke")
-        else:
-            main_mode = "skeleton"
+        # main_mode 非法值 / 冒烟守卫的 400 归 run_skeleton（SkeletonError → 400
+        # 中文），路由只做缺省回填（未提供 = skeleton）
+        main_mode = (
+            _optional_str(payload, "main_mode") if "main_mode" in payload else "skeleton"
+        )
         topic = _assemble_topic_context(
             context,
             topic_id,
@@ -681,28 +676,22 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         resolved = resolve_selection(
             _library_dir(context), platform, slugs, instances=instances
         )
-        llm = _llm(context)
-        library_dir = _library_dir(context)
-        master_dir = master_project_dir(_require_config(context).masters_dir, platform)
-        if main_mode == "smoke":
-            if not {"oled", "debug_uart"} & set(slugs):
-                raise HTTPException(400, "自检骨架需要 OLED 或 debug_uart 模块作为输出通道")
-            main_c, intercepted = generate_smoke_main(
-                llm, topic.problem_text, resolved.manifests, platform, library_dir, master_dir,
-                instances=instances,
-            )
-        else:
-            main_c, intercepted = generate_skeleton(
-                llm,
-                topic.problem_text,
-                resolved.manifests,
-                platform,
-                library_dir,
-                master_dir,
-                reference_fulltexts=build_reference_fulltexts(topic),
-                instances=instances,
-            )
-        return {"main_c": main_c, "intercepted": list(intercepted)}
+        # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
+        # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
+        return run_skeleton(
+            llm=_llm(context),
+            problem_text=topic.problem_text,
+            manifests=resolved.manifests,
+            slugs=slugs,
+            platform=platform,
+            library_dir=_library_dir(context),
+            master_project_dir=master_project_dir(
+                _require_config(context).masters_dir, platform
+            ),
+            instances=instances,
+            reference_fulltexts=build_reference_fulltexts(topic),
+            main_mode=main_mode,
+        )
 
     @app.post("/api/pick-directory")
     @_map_errors
@@ -905,7 +894,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         compile-verdict-align/01：编译不调 LLM，只须工具链路径——无 api_key
         的用户也应能"编译看结果"；修复按钮仍走 AI 配置校验，400 如实报、
         循环自然停）。阻塞调用（编译分钟级以内）放独立线程跑，
-        事件经队列送流生成器（与提炼 / 修复端点同款终态保证，断线旁路）。"""
+        事件经队列送流生成器（与提炼 / 修复端点同款终态保证，断线旁路）。
+        工具链探测（起流前 400）与流内编排（compile_start → collect → parse
+        → done 11 字段）在 compile_runner（resolve_compile_toolchain /
+        run_compile），本路由只取参 + 转调 + SSE 包装。"""
         platform = _require_str(payload, "platform")
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
@@ -914,47 +906,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 时 uv4_path / gmake_path 覆盖为空，走自动探测（find_uv4/find_make
         # 空覆盖语义 = 常见路径 + PATH）
         config = _current_config(context)
-        # 工具链探测（config 覆盖 + 自动）：缺失 → 400 中文（前端回退贴文本），
-        # 编译能力只在检测到工具链时启用（决策记录 1）
-        uv4 = find_uv4(config.uv4_path if config else "")
-        make = find_make(config.gmake_path if config else "")
-        if platform == PLATFORM_STM32 and uv4 is None:
-            raise CompileRunnerError(
-                "未检测到 Keil UV4 工具链（常见路径 C:\\Keil5\\Core\\UV4\\UV4.exe；"
-                "可在设置页填 uv4_path 覆盖）——已回退贴文本模式"
-            )
-        if platform == PLATFORM_MSPM0 and make is None:
-            raise CompileRunnerError(
-                "未检测到 gmake / make 工具链（可在设置页填 gmake_path 覆盖）"
-                "——已回退贴文本模式"
-            )
+        # 工具链探测（config 覆盖 + 自动）：缺失 → 400 中文（前端回退贴文本）。
+        # 探测归 compile_runner.resolve_compile_toolchain——必须在起流前判（400
+        # 而非流内 error），故不进 run_sse 的 run 回调
+        uv4, make = resolve_compile_toolchain(
+            platform,
+            uv4_override=config.uv4_path if config else "",
+            make_override=config.gmake_path if config else "",
+        )
 
         def run(emit: SseEmitter) -> None:
-            emit.progress(ProgressEvent(type=EVENT_COMPILE_START))
-            build = collect_build_log(
-                platform, output_dir, uv4=uv4, make=make
-            )
-            parsed = parse_compile_errors(build.run.output)
-            emit.done(
-                {
-                    "platform": build.platform,
-                    "output_dir": str(output_dir),
-                    "exit_code": build.run.exit_code,
-                    "error_text": build.run.output,
-                    "passed": compile_passed(build.platform, build.run.exit_code),
-                    "timed_out": build.run.timed_out,
-                    "project_file": build.project_file,
-                    "command": list(build.command),
-                    # 展示层（工单 compile-experience-ui/01）：耗时 / 结构化
-                    # 错误列表 / 数字汇总——只追加不改既有字段，旧前端忽略即可
-                    "duration": build.run.duration,
-                    "parsed_errors": [
-                        {"path": e.path, "line": e.line, "message": e.message}
-                        for e in parsed
-                    ],
-                    "summary": summarize_compile_output(build.run.output, parsed),
-                }
-            )
+            # 流内编排归 compile_runner.run_compile（compile_start → collect →
+            # parse → done 11 字段，对照 run_recommendation / run_fix_round 先例），
+            # 路由只转调
+            run_compile(platform, output_dir, uv4=uv4, make=make, emit=emit)
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(

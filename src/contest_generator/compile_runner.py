@@ -21,7 +21,10 @@ gmake `-B`（等价 clean + all 单次调用）。编译输出原样采集，不
 前者走异常（流内 error / 起流前 400），后者是正常 done（携带 exit_code 与
 error_text 走修复循环）。
 
-依赖方向：只 import platforms（常量）与标准库，是叶子模块。
+依赖方向：import platforms / events / fix_errors（解析契约）与标准库；sse 仅
+类型注解（TYPE_CHECKING）。run_compile（流内编排）与 resolve_compile_toolchain
+（起流前 400）为 /api/compile 的域归位（工单 route-orchestration-homing/01），
+webapp 只取参 + 转调。
 """
 
 from __future__ import annotations
@@ -33,9 +36,16 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
+from .events import EVENT_COMPILE_START, ProgressEvent
+from .fix_errors import parse_compile_errors, summarize_compile_output
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+
+if TYPE_CHECKING:
+    # 仅类型注解用（emit 是 sse 运行器装配的发射面；sse 是叶子模块，运行时
+    # 导入无环——本模块不持 sse 运行时依赖）
+    from .sse import SseEmitter
 
 # 编译子进程超时（决策记录 7）：180s 对全量重建（Keil 大工程 ~40s）宽裕
 COMPILE_TIMEOUT_SECONDS = 180.0
@@ -225,7 +235,7 @@ def _sysconfig_candidates(root: str) -> list[Path]:
     return hits
 
 
-def run_compile(
+def run_compile_command(
     command: Sequence[str],
     cwd: Path,
     timeout: float = COMPILE_TIMEOUT_SECONDS,
@@ -314,7 +324,7 @@ def collect_build_log(
         )
         command = (str(uv4), "-j0", "-r", "-b", str(uvprojx), "-o", str(log_path))
         try:
-            run = run_compile(command, root, timeout=timeout)
+            run = run_compile_command(command, root, timeout=timeout)
             # UV4 把日志写进 -o 文件（stdout/stderr 基本为空）；超时被杀时
             # 文件可能没落盘 → 回退到已采集的部分输出（如实报告）
             text = (
@@ -351,7 +361,7 @@ def collect_build_log(
     command = (
         str(make), "-C", str(makefile.parent), "-f", makefile.name, "-B", "all",
     )
-    run = run_compile(command, root, timeout=timeout)
+    run = run_compile_command(command, root, timeout=timeout)
     return BuildLog(
         platform=platform,
         project_file=str(makefile),
@@ -372,3 +382,72 @@ def compile_passed(platform: str, exit_code: int | None) -> bool:
     if platform == PLATFORM_STM32:
         return exit_code in (0, 1)
     return exit_code == 0
+
+
+def resolve_compile_toolchain(
+    platform: str, uv4_override: str = "", make_override: str = ""
+) -> tuple[Path | None, Path | None]:
+    """工具链探测（起流前 400 判定单源，工单 route-orchestration-homing/01）。
+
+    平台对应工具链缺失 → CompileRunnerError（400 中文，前端据此置灰按钮回退
+    贴文本模式）。探测顺序 = config 覆盖 > 常见路径 / PATH（find_uv4 /
+    find_make 空覆盖语义 = 自动探测）；返回 (uv4, make)——对应平台缺失即抛错，
+    调用方拿到的必是所需件非 None。与 collect_build_log 的流内缺失兜底分开：
+    这里在起流前判（HTTP 400），collect_build_log 在流内兜底（error 事件）。
+    """
+    uv4 = find_uv4(uv4_override)
+    make = find_make(make_override)
+    if platform == PLATFORM_STM32 and uv4 is None:
+        raise CompileRunnerError(
+            "未检测到 Keil UV4 工具链（常见路径 C:\\Keil5\\Core\\UV4\\UV4.exe；"
+            "可在设置页填 uv4_path 覆盖）——已回退贴文本模式"
+        )
+    if platform == PLATFORM_MSPM0 and make is None:
+        raise CompileRunnerError(
+            "未检测到 gmake / make 工具链（可在设置页填 gmake_path 覆盖）"
+            "——已回退贴文本模式"
+        )
+    return uv4, make
+
+
+def run_compile(
+    platform: str,
+    output_dir: Path,
+    *,
+    uv4: Path | None,
+    make: Path | None,
+    emit: SseEmitter,
+) -> None:
+    """/api/compile 的流内编排（工单 route-orchestration-homing/01）：compile_start
+    → collect_build_log → parse_compile_errors → done（11 字段）。
+
+    工具链探测（find_uv4 / find_make + 缺失 400）不在这里——缺失必须在起流前
+    判定（400 中文，前端据此置灰按钮回退贴文本），归 resolve_compile_toolchain
+    （路由在 run_sse 前调用）；本函数收已解析工具链跑编译。工程结构异常（没有
+    .uvprojx / Debug/makefile）由 collect_build_log 抛 CompileRunnerError，run_sse
+    转流内 error 事件（文案写具体）。done 载荷形状的家在此，webapp docstring
+    只指向本函数。
+    """
+    emit.progress(ProgressEvent(type=EVENT_COMPILE_START))
+    build = collect_build_log(platform, output_dir, uv4=uv4, make=make)
+    parsed = parse_compile_errors(build.run.output)
+    emit.done(
+        {
+            "platform": build.platform,
+            "output_dir": str(output_dir),
+            "exit_code": build.run.exit_code,
+            "error_text": build.run.output,
+            "passed": compile_passed(build.platform, build.run.exit_code),
+            "timed_out": build.run.timed_out,
+            "project_file": build.project_file,
+            "command": list(build.command),
+            # 展示层（工单 compile-experience-ui/01）：耗时 / 结构化错误列表 /
+            # 数字汇总——只追加不改既有字段，旧前端忽略即可
+            "duration": build.run.duration,
+            "parsed_errors": [
+                {"path": e.path, "line": e.line, "message": e.message}
+                for e in parsed
+            ],
+            "summary": summarize_compile_output(build.run.output, parsed),
+        }
+    )

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from queue import Queue
 
 import pytest
 
@@ -24,11 +25,19 @@ from contest_generator.compile_runner import (
     find_ccs_tools,
     find_make,
     find_uv4,
+    resolve_compile_toolchain,
     run_compile,
+    run_compile_command,
 )
 from contest_generator.errors import _ERROR_TABLE, error_entry
+from contest_generator.events import (
+    EVENT_COMPILE_START,
+    EVENT_DONE,
+    ProgressEvent,
+)
 from contest_generator.fix_errors import CompileError as FixParseError
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from contest_generator.sse import SseEmitter
 
 _UV4_LOG_HEADER = "Build started: Project: fake\n"
 _UV4_ERROR_LINE = r"..\main.c(10): error #20: identifier \"x\" is undefined"
@@ -244,13 +253,13 @@ def test_find_ccs_tools_empty_scan_root_returns_none(monkeypatch, tmp_path):
 
 
 def test_run_compile_success_captures_stdout(tmp_path):
-    run = run_compile([sys.executable, "-c", "print('ok')"], tmp_path)
+    run = run_compile_command([sys.executable, "-c", "print('ok')"], tmp_path)
     assert run.exit_code == 0 and not run.timed_out
     assert "ok" in run.output
 
 
 def test_run_compile_nonzero_exit_does_not_raise(tmp_path):
-    run = run_compile(
+    run = run_compile_command(
         [sys.executable, "-c", "import sys; print('boom', file=sys.stderr); sys.exit(2)"],
         tmp_path,
     )
@@ -259,7 +268,7 @@ def test_run_compile_nonzero_exit_does_not_raise(tmp_path):
 
 
 def test_run_compile_timeout_reports_partial_output(tmp_path):
-    run = run_compile(
+    run = run_compile_command(
         # flush=True：子进程 stdout 块缓冲时超时被杀前输出可能没落盘
         [sys.executable, "-c", "print('started', flush=True); import time; time.sleep(30)"],
         tmp_path,
@@ -271,7 +280,7 @@ def test_run_compile_timeout_reports_partial_output(tmp_path):
 
 def test_run_compile_missing_command_is_loud(tmp_path):
     with pytest.raises(OSError):
-        run_compile([str(tmp_path / "no-such-tool.exe")], tmp_path)
+        run_compile_command([str(tmp_path / "no-such-tool.exe")], tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -420,3 +429,95 @@ def test_no_class_name_clash_with_fix_errors_compile_error():
     assert registered, "CompileRunnerError 未登记 errors.py"
     # fix_errors.CompileError 是 dataclass 而非异常：不可能是表内类型
     assert not issubclass(type(FixParseError(path="", line=0, message="")), Exception)
+
+
+# ---------------------------------------------------------------------------
+# /api/compile 编排归位（工单 route-orchestration-homing/01）：工具链探测
+# （resolve_compile_toolchain，起流前 400）与流内编排（run_compile，compile_start
+# → collect → parse → done 11 字段）直测，不依赖 HTTP/SSE（对照 test_selection
+# 的 run_recommendation 直测先例）
+# ---------------------------------------------------------------------------
+
+
+def _drain_compile_events(events: Queue) -> list:
+    items = []
+    while not events.empty():
+        items.append(events.get_nowait())
+    return items
+
+
+def _event_kinds(items: list) -> list[str]:
+    """事件序列的类型词表：进度事件取 type，终态取 kind。"""
+    return [
+        item.type if isinstance(item, ProgressEvent) else item[0] for item in items
+    ]
+
+
+def test_resolve_compile_toolchain_missing_400(monkeypatch):
+    """工具链缺失 → CompileRunnerError（登记 errors.py → 400 中文），探测单源
+    归域模块（起流前判定，非流内 error）。"""
+    monkeypatch.setattr(
+        "contest_generator.compile_runner.find_uv4", lambda override: None
+    )
+    with pytest.raises(CompileRunnerError, match="UV4"):
+        resolve_compile_toolchain(PLATFORM_STM32)
+    monkeypatch.setattr(
+        "contest_generator.compile_runner.find_make", lambda override: None
+    )
+    with pytest.raises(CompileRunnerError, match="gmake"):
+        resolve_compile_toolchain(PLATFORM_MSPM0)
+
+
+def test_resolve_compile_toolchain_returns_paths(tmp_path):
+    """探测命中 → 返回 (uv4, make)，config 覆盖优先。"""
+    fake_uv4 = _write_bat(tmp_path / "UV4.exe", "exit /b 0")
+    fake_make = _write_bat(tmp_path / "gmake.bat", "exit /b 0")
+    uv4, make = resolve_compile_toolchain(
+        PLATFORM_STM32, uv4_override=str(fake_uv4), make_override=str(fake_make)
+    )
+    assert uv4 == fake_uv4 and make == fake_make
+
+
+def test_run_compile_event_sequence_and_done_11_fields(tmp_path):
+    """run_compile 直测：compile_start → done（11 字段与 /api/compile 逐字一致）。
+    假 UV4 写 -o 日志 → collect_build_log 采集 → parse_compile_errors 解析 →
+    done 组装（照 test_fix_errors.run_fix_round 直测先例，真实 SseEmitter + Queue）。"""
+    out = _make_project(tmp_path, PLATFORM_STM32)
+    fake_uv4 = _uv4_bat(
+        tmp_path, 2, (_UV4_LOG_HEADER, _UV4_ERROR_LINE, "1 Error(s), 0 Warning(s).")
+    )
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+    run_compile(PLATFORM_STM32, out, uv4=fake_uv4, make=None, emit=emit)
+
+    items = _drain_compile_events(events)
+    assert _event_kinds(items) == [EVENT_COMPILE_START, EVENT_DONE]
+    done = items[-1][1]
+    # done 载荷形状：11 字段全等（与 /api/compile docstring 逐字一致）
+    assert set(done) == {
+        "platform", "output_dir", "exit_code", "error_text", "passed",
+        "timed_out", "project_file", "command", "duration", "parsed_errors", "summary",
+    }
+    assert done["platform"] == PLATFORM_STM32
+    assert done["output_dir"] == str(out)
+    assert done["exit_code"] == 2 and done["passed"] is False
+    assert _UV4_ERROR_LINE in done["error_text"]
+    assert "user/Project.uvprojx" in done["project_file"].replace("\\", "/")
+    assert "-r" in done["command"]  # 全量重建（决策记录 4）
+    assert isinstance(done["duration"], float) and done["duration"] > 0
+    assert done["summary"] == {"errors": 1, "warnings": 0}
+    assert done["parsed_errors"] == [
+        {"path": "../main.c", "line": 10, "message": _UV4_ERROR_LINE}
+    ]
+
+
+def test_run_compile_structure_error_raises_in_stream(tmp_path):
+    """工程结构异常（没有 .uvprojx）→ collect_build_log 抛 CompileRunnerError
+    （run_sse 转流内 error 事件）；run_compile 直测断言其抛错。"""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    fake_uv4 = _uv4_bat(tmp_path, 0, ("0 Error(s)",))
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+    with pytest.raises(CompileRunnerError, match=".uvprojx"):
+        run_compile(PLATFORM_STM32, empty, uv4=fake_uv4, make=None, emit=emit)

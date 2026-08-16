@@ -604,7 +604,7 @@ def test_compile_requires_output_dir_exists(client, tmp_path):
 
 def test_compile_no_toolchain_400_chinese(client, context, tmp_path, monkeypatch):
     """无工具链 → 400 中文（前端据此置灰按钮回退贴文本模式）。"""
-    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: None)
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: None)
     resp = client.post(
         "/api/compile",
         json={"platform": PLATFORM_STM32, "output_dir": str(_stm32_project(tmp_path))},
@@ -624,7 +624,7 @@ def test_compile_without_ai_config_streams_done(tmp_path, monkeypatch):
         tmp_path, 0,
         ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."],
     )
-    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
     events = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})
     assert [kind for kind, _ in events] == [EVENT_COMPILE_START, EVENT_DONE]
     assert events[1][1]["passed"] is True
@@ -632,7 +632,7 @@ def test_compile_without_ai_config_streams_done(tmp_path, monkeypatch):
 
 
 def test_compile_mspm0_no_make_400_chinese(client, context, tmp_path, monkeypatch):
-    monkeypatch.setattr("contest_generator.webapp.find_make", lambda override: None)
+    monkeypatch.setattr("contest_generator.compile_runner.find_make", lambda override: None)
     out = tmp_path / "project"
     (out / "Debug").mkdir(parents=True)
     (out / "Debug" / "makefile").write_text("all:\n", encoding="utf-8")
@@ -649,7 +649,7 @@ def test_compile_stm32_end_to_end_events_and_passed(client, context, tmp_path, m
     写 -o 日志文件 → 原样采集（与 fix-errors 解析契约对齐）。"""
     out = _stm32_project(tmp_path)
     fake_uv4 = _fake_uv4_bat(tmp_path, 0, ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."])
-    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
     events = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})
     assert [kind for kind, _ in events] == [EVENT_COMPILE_START, EVENT_DONE]
     done = events[1][1]
@@ -668,7 +668,7 @@ def test_compile_stm32_errors_reported_not_passed(client, context, tmp_path, mon
         tmp_path, 2,
         ["Build started: Project: fake", r'..\main.c(10): error #20: identifier "x" is undefined', "1 Error(s) 0 Warning(s)."],
     )
-    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
     done = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})[-1][1]
     assert done["exit_code"] == 2 and done["passed"] is False
     assert r'..\main.c(10): error #20' in done["error_text"]
@@ -679,7 +679,7 @@ def test_compile_structure_error_is_stream_error_event(client, context, tmp_path
     out = tmp_path / "project"
     out.mkdir()
     fake_uv4 = _fake_uv4_bat(tmp_path, 0, ["0 Error(s)"])
-    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
     events = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})
     errors = [data for kind, data in events if kind == EVENT_ERROR]
     assert errors, f"流未以 error 收尾：{events}"
@@ -700,7 +700,7 @@ def test_compile_done_payload_carries_duration_parsed_summary(
             "1 Error(s), 0 Warning(s).",
         ],
     )
-    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
     done = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})[-1][1]
     # 既有字段不动
     assert done["exit_code"] == 2 and done["passed"] is False
@@ -723,7 +723,7 @@ def test_compile_done_success_summary_zero(client, context, tmp_path, monkeypatc
     """成功编译（汇总行 0 Error 0 Warning）→ summary {0,0}、parsed_errors 空。"""
     out = _stm32_project(tmp_path)
     fake_uv4 = _fake_uv4_bat(tmp_path, 0, ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."])
-    monkeypatch.setattr("contest_generator.webapp.find_uv4", lambda override: fake_uv4)
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
     done = _compile_stream(client, {"platform": PLATFORM_STM32, "output_dir": str(out)})[-1][1]
     assert done["summary"] == {"errors": 0, "warnings": 0}
     assert done["parsed_errors"] == []
@@ -819,7 +819,7 @@ def test_compile_mspm0_gmake_end_to_end(client, context, tmp_path, monkeypatch):
         "exit /b 2\r\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("contest_generator.webapp.find_make", lambda override: fake_make)
+    monkeypatch.setattr("contest_generator.compile_runner.find_make", lambda override: fake_make)
     done = _compile_stream(client, {"platform": PLATFORM_MSPM0, "output_dir": str(out)})[-1][1]
     assert done["exit_code"] == 2 and done["passed"] is False
     assert "undeclared" in done["error_text"]

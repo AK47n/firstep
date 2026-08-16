@@ -7,14 +7,19 @@
 
 from pathlib import Path
 
+import pytest
+
+from contest_generator.errors import error_entry
 from contest_generator.manifest import ModuleManifest
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.skeleton import (
+    SkeletonError,
     build_skeleton_interfaces,
     extract_header_functions,
     find_undefined_calls,
     generate_skeleton,
     generate_smoke_main,
+    run_skeleton,
     sanitize_skeleton,
     verify_main_c_interfaces,
 )
@@ -649,3 +654,100 @@ def test_sanitize_keeps_return_without_infinite_loop():
 
     assert blocked == ()
     assert fixed == main_c
+
+
+# ---------------------------------------------------------------------------
+# run_skeleton 域编排（工单 route-orchestration-homing/01）：main_mode 分支 +
+# 冒烟守卫（缺 OLED / debug_uart → SkeletonError 400）+ generate_* 分派直测
+# （对照 test_selection 的 run_recommendation 直测先例，不依赖 HTTP）
+# ---------------------------------------------------------------------------
+
+
+def test_run_skeleton_smoke_dispatches_generate_smoke_main(fake_module_library):
+    """main_mode="smoke"：走 generate_smoke_main（假 LLM 冒烟出稿 + 同款占位）。"""
+    manifests = _manifests(fake_module_library, "dht11", "oled")
+    llm = FakeLLM(smoke_skeleton="int main(void) { oled_init(); while (1); }\n")
+
+    result = run_skeleton(
+        llm=llm,
+        problem_text="温湿度采集",
+        manifests=manifests,
+        slugs=["dht11", "oled"],
+        platform=PLATFORM_STM32,
+        library_dir=fake_module_library,
+        main_mode="smoke",
+    )
+
+    assert set(result) == {"main_c", "intercepted"}
+    assert "oled_init();" in result["main_c"]
+    assert llm.smoke_calls  # 冒烟分支
+    assert not llm.skeleton_calls
+
+
+def test_run_skeleton_skeleton_mode_dispatches_generate_skeleton(fake_module_library):
+    """缺省 / main_mode="skeleton"：走 generate_skeleton（参考全文透传）。"""
+    manifests = _manifests(fake_module_library, "dht11", "delay")
+    llm = FakeLLM(main_skeleton="int main(void) { dht11_read(); while (1); }\n")
+
+    result = run_skeleton(
+        llm=llm,
+        problem_text="环境监测仪",
+        manifests=manifests,
+        slugs=["dht11"],
+        platform=PLATFORM_MSPM0,
+        library_dir=fake_module_library,
+        reference_fulltexts={"ref-1": "参考全文"},
+    )
+
+    assert set(result) == {"main_c", "intercepted"}
+    assert "dht11_read();" in result["main_c"]
+    assert llm.skeleton_calls and not llm.smoke_calls
+    assert llm.skeleton_ref_calls == [{"ref-1": "参考全文"}]
+
+
+def test_run_skeleton_smoke_guard_missing_channel_400(fake_module_library):
+    """冒烟守卫：缺 OLED + debug_uart 输出通道 → SkeletonError（400 中文）。"""
+    manifests = _manifests(fake_module_library, "dht11")
+
+    with pytest.raises(SkeletonError, match="OLED") as exc_info:
+        run_skeleton(
+            llm=FakeLLM(),
+            problem_text="温湿度采集",
+            manifests=manifests,
+            slugs=["dht11"],
+            platform=PLATFORM_STM32,
+            library_dir=fake_module_library,
+            main_mode="smoke",
+        )
+
+    status, message = error_entry(exc_info.value)
+    assert status == 400
+    assert "debug_uart" in message
+
+
+def test_run_skeleton_invalid_main_mode_400(fake_module_library):
+    """main_mode 非法值 → SkeletonError（400 中文），不落到生成分支。"""
+    manifests = _manifests(fake_module_library, "dht11", "oled")
+
+    with pytest.raises(SkeletonError, match="main_mode") as exc_info:
+        run_skeleton(
+            llm=FakeLLM(),
+            problem_text="温湿度采集",
+            manifests=manifests,
+            slugs=["dht11", "oled"],
+            platform=PLATFORM_STM32,
+            library_dir=fake_module_library,
+            main_mode="banana",
+        )
+
+    status, _ = error_entry(exc_info.value)
+    assert status == 400
+
+
+def test_skeleton_error_registered_400_chinese():
+    """SkeletonError 已登记 errors.py → 400 + 中文 message（验收：拒绝 400 中文）。"""
+    status, message = error_entry(
+        SkeletonError("自检骨架需要 OLED 或 debug_uart 模块作为输出通道")
+    )
+    assert status == 400
+    assert message == "自检骨架需要 OLED 或 debug_uart 模块作为输出通道"
