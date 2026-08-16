@@ -20,6 +20,8 @@
 // 便捷控制宏（LED 一脚接地、另一脚接 MCU 引脚：拉电流接法，1=点亮，0=熄灭）
 #define LED_RED_ON()     gpio_set(LED_GPIO, LED_RED_Pin, 1)
 #define LED_RED_OFF()    gpio_set(LED_GPIO, LED_RED_Pin, 0)
+#define LED_YELLOW_ON()  gpio_set(LED_GPIO, LED_YELLOW_Pin, 1)
+#define LED_YELLOW_OFF() gpio_set(LED_GPIO, LED_YELLOW_Pin, 0)
 #define LED_GREEN_ON()   gpio_set(LED_GPIO, LED_GREEN_Pin, 1)
 #define LED_GREEN_OFF()  gpio_set(LED_GPIO, LED_GREEN_Pin, 0)
 
