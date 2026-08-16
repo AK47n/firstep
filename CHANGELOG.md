@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1b21609f6517a19ce15813122510c3aa697fa8f0 -->
+<!-- changelog-auto: last-commit=eb96fa4dd7788dbb49ed3f4e6505e86884a35633 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 08:44 模块依赖清理——motor 纯驱动化 + 编码器计数迁入 motor + 依赖声明修正
 - 09:29 led/beep 拆分为独立模块，led_beep 组合化，stm32 led 内嵌母版统一 API
 - 09:34 LED 极性改为拉电流高电平点亮（一脚接地一脚接引脚，用户更正）
+- 09:46 motor stm32 补统一 API（motor_set_duty/direction/encoder_read，与 mspm0 对偶）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
