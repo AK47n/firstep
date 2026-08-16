@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3ca520cfc31752c361e42cc70756c7ce7b1a6a05 -->
+<!-- changelog-auto: last-commit=1e1af12400c26a3aaaef4e76725c333876f3d873 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -46,6 +46,8 @@
 - 21:43 骨架/编译编排归位——run_skeleton + run_compile 域函数（工单 route-orchestration-homing/01）
 - 21:45 骨架/编译编排归位——run_skeleton + run_compile 域函数（工单 route-orchestration-homing/01）
 - 22:34 manifest「Python 副产物」声明——python_artifact 能力块：缺省不落键/旧 manifest 逐字节兼容/非法值大声失败（工单 k230-vision-copilot/01）
+- 22:42 manifest「Python 副产物」声明能力（工单 k230-vision-copilot/01）
+- 23:00 生成写盘机制——选中 python_artifact 模块 → k230_render 渲染写 .py 副产物（工单 k230-vision-copilot/02）
 
 ## 2026-08-15
 - 07:49 stm32 pwm 类型级解锁 + 骨架定时器冲突门禁
