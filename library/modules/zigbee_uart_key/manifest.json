@@ -39,6 +39,31 @@
           ]
         }
       ]
+    },
+    "mspm0": {
+      "files": [
+        "code/zigbee_uart_key_mspm0.c",
+        "code/zigbee_uart_key_mspm0.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "与 zigbee_uart 共享母版 syscfg ZIGBEE_UART 实例（UART3, PA26(TX)/PA25(RX), 115200）；SYSCFG_DL_init() 后调 zigbee_uart_key_init()（只发不收、不开 NVIC）；发送走 DL_UART_transmitDataBlocking。帧格式/校验与 stm32 版一致。编译验证未上板。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "ZIGBEE_UART_TX",
+          "type": "uart_tx",
+          "default": "PA26",
+          "required": true
+        },
+        {
+          "id": "ZIGBEE_UART_RX",
+          "type": "uart_rx",
+          "default": "PA25",
+          "required": true
+        }
+      ]
     }
   }
 }

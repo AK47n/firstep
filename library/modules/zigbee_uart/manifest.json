@@ -39,6 +39,31 @@
           ]
         }
       ]
+    },
+    "mspm0": {
+      "files": [
+        "code/zigbee_uart_mspm0.c",
+        "code/zigbee_uart_mspm0.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "母版 syscfg ZIGBEE_UART 实例（UART3, PA26(TX)/PA25(RX), 115200, RX 中断）——SYSCFG_DL_init() 后调 zigbee_uart_init() 开 NVIC；ZIGBEE_UART_INST_IRQHandler（UART3_IRQHandler）在模块内已定义，main.c 无需再定义。与 zigbee_uart_key 共享同一实例（发送侧不开 NVIC）。帧格式/校验与 stm32 版一致。编译验证未上板。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "ZIGBEE_UART_TX",
+          "type": "uart_tx",
+          "default": "PA26",
+          "required": true
+        },
+        {
+          "id": "ZIGBEE_UART_RX",
+          "type": "uart_rx",
+          "default": "PA25",
+          "required": true
+        }
+      ]
     }
   }
 }

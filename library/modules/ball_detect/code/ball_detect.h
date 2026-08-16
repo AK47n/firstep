@@ -24,4 +24,9 @@ void ball_detect_flush(void);
 void ball_detect_rx_handler(void);
 void ball_detect_parse(void);
 
+/* 中断挂载：DIGIT_UART（UART1）与 digit_uart 共享同一实例。两模块同选时，
+ * main.c 只定义一个 DIGIT_UART_INST_IRQHandler（= UART1_IRQHandler），并在
+ * 其中依次调用 digit_uart_rx_handler() 与 ball_detect_rx_handler()。
+ * 只选本模块时 handler 里只调 ball_detect_rx_handler()。 */
+
 #endif

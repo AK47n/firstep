@@ -40,6 +40,31 @@
           ]
         }
       ]
+    },
+    "mspm0": {
+      "files": [
+        "code/uwb_uart_mspm0.c",
+        "code/uwb_uart_mspm0.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "母版 syscfg UWB_UART 实例（UART2, PA23(TX)/PA24(RX), 115200, RX 中断）——SYSCFG_DL_init() 后调 uwb_uart_init() 开 NVIC；UWB_UART_INST_IRQHandler（UART2_IRQHandler）在模块内已定义，main.c 无需再定义。帧格式/XOR 校验/滤波逻辑与 stm32 版一致。编译验证未上板。",
+      "kit": "最新ALX-AOA-FIT跟随套件开发资料",
+      "source_url": "https://e.tb.cn/h.86Mb3gU2D8LNQAM?tk=v8x7gBwPHC9",
+      "pins": [
+        {
+          "id": "UWB_UART_TX",
+          "type": "uart_tx",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "UWB_UART_RX",
+          "type": "uart_rx",
+          "default": "PA24",
+          "required": true
+        }
+      ]
     }
   }
 }

@@ -279,18 +279,26 @@ def test_error_entry_maps_pin_binding_error_to_400():
 # ---------------------------------------------------------------------------
 
 
-def test_syscfg_pin_assign_values_unique_except_intentional_pb6_pb7():
-    """母版 syscfg 的 $assign 引脚值除刻意重叠 PB6/PB7 外唯一：STEP_MOTOR
-    SLP2/DIR2 与 HUIDU R3/R4 同脚（全库 42 角色 vs 排针 32 脚数学上无法全
-    互异，允许重叠、用户改绑消解）。写侧 2026-08-15 起按实例路径定位，不再
-    依赖全局唯一。"""
+def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
+    """母版 syscfg 的 $assign 引脚值除刻意默认重叠外唯一：STEP_MOTOR
+    SLP2/DIR2 × HUIDU R3/R4（PB6/PB7）与 UWB/Zigbee UART × HUIDU
+    （PA23/PA24/PA25/PA26）——全库角色数 > 排针 32 脚数学上无法全互异，
+    允许重叠、用户改绑或按模块集裁剪消解。写侧 2026-08-15 起按实例路径
+    定位，不再依赖全局唯一。"""
     values = re.findall(
         r'^\s*.+\.\$assign\s*=\s*"([A-Za-z0-9]+)"', MSPM0_MASTER_SYSCFG, re.M
     )
     counts: dict[str, int] = {}
     for value in values:
         counts[value] = counts.get(value, 0) + 1
-    assert {v: c for v, c in counts.items() if c != 1} == {"PB6": 2, "PB7": 2}
+    assert {v: c for v, c in counts.items() if c != 1} == {
+        "PB6": 2,
+        "PB7": 2,
+        "PA23": 2,
+        "PA24": 2,
+        "PA25": 2,
+        "PA26": 2,
+    }
 
 
 def test_every_mspm0_declared_default_has_path_unique_syscfg_site():
