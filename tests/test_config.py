@@ -98,6 +98,9 @@ def test_saved_file_is_plain_json(tmp_path):
         "ccs_sdk_dir": "",
         "ccs_compiler_dir": "",
         "ccs_sysconfig_cli": "",
+        # 本地 LLM 端点（工单 local-llm-routing/01）：缺省空串 = 本地路由关闭
+        "local_llm_base_url": "",
+        "local_llm_model": "",
     }
 
 
@@ -162,6 +165,42 @@ def test_ccs_toolchain_paths_default_blank_and_roundtrip(tmp_path):
     )
     with pytest.raises(ConfigError, match="ccs_sdk_dir"):
         load_config(path)  # 类型非法大声失败（与其余字段同严格度）
+
+
+def test_local_llm_fields_default_blank_and_roundtrip(tmp_path):
+    """local_llm_base_url / local_llm_model（工单 local-llm-routing/01）：缺省空串
+    = 本地路由关闭；非空回写；类型非法大声失败（uv4_path 同款）。"""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
+    loaded = load_config(path)
+    assert loaded.local_llm_base_url == ""
+    assert loaded.local_llm_model == ""
+
+    save_config(
+        AppConfig(
+            api_key="sk-test",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="qwen2.5-coder:7b-instruct",
+        ),
+        path,
+    )
+    loaded = load_config(path)
+    assert loaded.local_llm_base_url == "http://localhost:11434/v1"
+    assert loaded.local_llm_model == "qwen2.5-coder:7b-instruct"
+
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "local_llm_base_url": 123}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="local_llm_base_url"):
+        load_config(path)  # 类型非法大声失败（与其余字段同严格度）
+
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "local_llm_model": 456}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="local_llm_model"):
+        load_config(path)
 
 
 def test_autocommit_enabled_defaults_on_and_roundtrips(tmp_path):
