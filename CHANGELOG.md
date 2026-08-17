@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=088b6ba9f1ccded4206c1ce74f2bde67b18a3b39 -->
+<!-- changelog-auto: last-commit=ad5af45bbe41467990f307d17596269f427847fa -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,8 @@
 - 13:39 README 追加两章：快速上手（编译+烧录）+ 验证顺序清单（工单 project-readme/02）
 - 13:40 README 追加两章：快速上手（编译+烧录）+ 验证顺序清单（工单 project-readme/02）
 - 14:00 README 引脚表：绑定生效引脚 + 多实例每实例一行（工单 project-readme/03）
+- 14:02 README 引脚表：绑定生效引脚 + 多实例每实例一行（工单 project-readme/03）
+- 20:48 配置扩展：AppConfig 增可选本地 LLM 端点字段（工单 local-llm-routing/01）
 
 ## 2026-08-16
 - 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）
