@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fdc0ab3911f7c84c531bd658da7475ec14a6fcbc -->
+<!-- changelog-auto: last-commit=26691e6549f68da503ba99c4d49b4f64fa9345fa -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 14:02 README 引脚表：绑定生效引脚 + 多实例每实例一行（工单 project-readme/03）
 - 20:48 配置扩展：AppConfig 增可选本地 LLM 端点字段（工单 local-llm-routing/01）
 - 21:08 路由层：RoutingLLM 本地文本三调用派发 + build_llm 接线（工单 local-llm-routing/02）
+- 21:20 设置页 UI：本地模型端点可填写/清空 + /api/settings GET/PUT 新字段（工单 local-llm-routing/03）
 
 ## 2026-08-16
 - 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）
