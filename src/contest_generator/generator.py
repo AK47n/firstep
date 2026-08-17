@@ -19,7 +19,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
-from .boards import Board, board_for_platform, board_pin, pin_capability_instances
+from .boards import (
+    Board,
+    BoardError,
+    board_for_platform,
+    board_pin,
+    pin_capability_instances,
+)
 from .compile_runner import CCS_NOT_FOUND_HINT, CcsTools
 from .instance_render import expand_instance_plans, render_instances
 from .k230_render import render_python_artifact
@@ -42,6 +48,7 @@ from .patchers import (
 from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
 from .pinwriter import apply_pin_bindings
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from .readme import README_FILENAME, render_readme
 from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
 from .selection import (
     REFERENCE_SOURCE_MANUAL,
@@ -770,6 +777,10 @@ def generate(
     不维护静态 MODULES 表）写 CCS 标准 Debug/makefile 集（write_makefile_set，
     路径全部参数化）；ccs_tools 未探测到（None）→ 跳过 + build_hint 提示，
     不阻断生成。stm32 零改动（无构建脚本、hint 空）。
+
+    README（工单 project-readme/01）：patcher 之后、返回之前写工程根
+    README.md（render_readme 纯确定性渲染，不吃 LLM）——纯新增文件，不触碰
+    任何既有生成文件（逐字节契约不破）；板名取不到优雅降级为不显示。
     """
     patcher_registry = registry or default_registry()
     patcher = patcher_registry.get(platform)  # 未知平台在这里失败
@@ -788,6 +799,15 @@ def generate(
     if bindings:
         board = board_for_platform(platform)  # 板数据缺失 = BoardError 500（白名单）
         resolved_bindings = resolve_bindings(manifests, platform, board, bindings)
+        readme_board_name: str | None = board.name  # README 板名复用已加载的板
+    else:
+        # 工程概览章板名（工单 project-readme/01）：README 总是生成、不吃板数据
+        # ——板名取不到优雅降级为不显示（与绑定路径的 BoardError 500 相对，不
+        # 阻断生成）。
+        try:
+            readme_board_name = board_for_platform(platform).name
+        except BoardError:
+            readme_board_name = None
 
     instance_plans = expand_instance_plans(manifests, instances, platform, board)
 
@@ -859,6 +879,13 @@ def generate(
                     sysconfig_cli=str(ccs_tools.sysconfig_cli),
                     extra_include_dirs=include_dirs,
                 )
+
+        # README（工单 project-readme/01）：纯确定性渲染落盘，工程根新增
+        # README.md——纯新增文件，不触碰任何既有生成文件（逐字节契约不破）；
+        # 写失败走既有 rmtree 兜底，生成原子性不破。
+        (output_dir / README_FILENAME).write_text(
+            render_readme(platform, readme_board_name, manifests), encoding="utf-8"
+        )
     except Exception:
         # 复制中途失败不要留下半成品
         shutil.rmtree(output_dir, ignore_errors=True)
