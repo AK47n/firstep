@@ -722,6 +722,114 @@ class FakeLLM:
         return None
 
 
+class RecordingLLM:
+    """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
+    返回固定占位值。
+
+    实现 LLM 协议全部方法（与 FakeLLM 同款完整实现，避免协议契约分支）。
+    用于断言 RoutingLLM 的派发——装 remote / local 两个实例，断言每个方法
+    落到的委托。
+    """
+
+    def __init__(self, name: str = "") -> None:
+        self.name = name
+        self.calls: list[str] = []
+
+    def _record(self, method: str) -> None:
+        self.calls.append(method)
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[ManifestSummary],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
+    ) -> ModuleSelection:
+        self._record("select_modules")
+        return ModuleSelection(modules=(), reasons={})
+
+    def clarify(
+        self, problem_text: str, clarifications: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]:
+        self._record("clarify")
+        return ()
+
+    def summarize_topic(self, problem_text: str) -> str:
+        self._record("summarize_topic")
+        return f"{self.name}:topic"
+
+    def generate_main_skeleton(
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
+    ) -> str:
+        self._record("generate_main_skeleton")
+        return f"{self.name}:skeleton"
+
+    def generate_smoke_main(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        self._record("generate_smoke_main")
+        return f"{self.name}:smoke"
+
+    def summarize_module(self, code: str) -> str:
+        self._record("summarize_module")
+        return f"{self.name}:module"
+
+    def validate_module_description(
+        self, description: str, code: str
+    ) -> ValidationResult:
+        self._record("validate_module_description")
+        return ValidationResult(consistent=True)
+
+    def fix_compile_errors(
+        self,
+        error_text: str,
+        file_contexts: Mapping[str, str],
+        *,
+        problem_text: str = "",
+        platform: str = "",
+        module_slugs: Sequence[str] = (),
+        main_c: str = "",
+        dropped_files: Sequence[str] = (),
+        previous_fixes: Sequence[Mapping[str, Any]] = (),
+    ) -> tuple[FixSuggestion, ...]:
+        self._record("fix_compile_errors")
+        return ()
+
+    def distill_master(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
+    ) -> tuple[FileDecision, ...]:
+        self._record("distill_master")
+        return ()
+
+    def reference_summarize(self, material: str) -> str:
+        self._record("reference_summarize")
+        return f"{self.name}:ref"
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        self._record("reference_judge_archivable")
+        return ()
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
+        self._record("topic_split_topics")
+        return ()
+
+    def topic_extract_number(self, text: str) -> str | None:
+        self._record("topic_extract_number")
+        return None
+
+
 class RecordingPatcher:
     """记录调用参数的桩修改器，用于断言核心通过注册表委托。"""
 

@@ -23,6 +23,7 @@ import math
 import time
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
 
 from .budget import (
@@ -1459,6 +1460,197 @@ class DeepSeekLLM:
             raise LLMError(
                 f"DeepSeek API 响应缺少 choices[0].message.content：{body[:200]}"
             ) from exc
+
+
+# ---------------------------------------------------------------------------
+# 本地路由（工单 local-llm-routing/02）：本地方法集 / 失联提示唯一出处 + 组合式
+# RoutingLLM + build_llm 构造接线
+# ---------------------------------------------------------------------------
+
+# 本地方法集：{summarize_topic, summarize_module, reference_summarize}——三个纯
+# 文本摘要调用（spike 实测质量达标，是能力事实，硬编码为常量不做用户可配）。
+# 常量单源：RoutingLLM 派发与测试都引用它。
+LOCAL_LLM_METHODS = frozenset(
+    {"summarize_topic", "summarize_module", "reference_summarize"}
+)
+
+# 本地失联提示文案（唯一出处）：RoutingLLM 包装 local 委托抛出的最终 LLMError
+# 时附上；测试与前端都引用它。用户裁决大声失败，不自动回退 DeepSeek。
+LOCAL_LLM_UNAVAILABLE_MESSAGE = (
+    "本地模型服务不可用：请启动 Ollama，或到设置页清空本地模型配置以改用 DeepSeek"
+)
+
+
+class RoutingLLM:
+    """组合式 LLM：本地方法集走 local 实例、其余方法走 remote 实例。
+
+    本地方法集 = LOCAL_LLM_METHODS（三个纯文本摘要）；方法集外方法绝不落到
+    local。local 委托抛出的最终 LLMError 被包装附可操作提示
+    （LOCAL_LLM_UNAVAILABLE_MESSAGE），错误类别（kind）保持、沿用委托内既有
+    重试机制（网络类指数退避照常），**不**自动回退远程（用户裁决大声失败）。
+    """
+
+    def __init__(self, remote: LLM, local: LLM) -> None:
+        self._remote = remote
+        self._local = local
+
+    def _delegate(self, method: str) -> LLM:
+        """派发决策唯一处：读本地方法集常量——集合内方法 → local，集合外 → remote。
+
+        常量是行为开关而非装饰：改 LOCAL_LLM_METHODS 即改派发（测试以
+        「落 local 的方法集 = 常量」断言分叉即红）。
+        """
+        return self._local if method in LOCAL_LLM_METHODS else self._remote
+
+    def _local_call(self, method: str, call: Callable[[LLM], RT]) -> RT:
+        """按方法集路由调用 + 本地失联包装（三个文本摘要共用原语）。
+
+        _delegate 选委托后执行；仅当委托是 local 时才做失联包装（集合与派发
+        同源——集合缩了自动退化为 remote 直通，不会把远程错误误包装成本地
+        提示）。错误类别（kind）保持。
+        """
+        delegate = self._delegate(method)
+        try:
+            return call(delegate)
+        except LLMError as exc:
+            if delegate is not self._local:
+                raise
+            raise self._wrap_local_error(exc) from exc
+
+    def _wrap_local_error(self, exc: LLMError) -> LLMError:
+        """本地失联大声失败：包装附可操作提示，错误类别（kind）保持。
+
+        已带提示（防御嵌套路由）则原样返回，避免重复包装。
+        """
+        if LOCAL_LLM_UNAVAILABLE_MESSAGE in str(exc):
+            return exc
+        return LLMError(f"{LOCAL_LLM_UNAVAILABLE_MESSAGE}（{exc}）", kind=exc.kind)
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[ManifestSummary],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
+    ) -> ModuleSelection:
+        return self._remote.select_modules(
+            problem_text,
+            manifest_summaries,
+            references,
+            reference_fulltexts,
+            manual_fulltexts,
+            clarifications,
+        )
+
+    def clarify(
+        self, problem_text: str, clarifications: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]:
+        return self._remote.clarify(problem_text, clarifications)
+
+    def summarize_topic(self, problem_text: str) -> str:
+        return self._local_call(
+            "summarize_topic", lambda delegate: delegate.summarize_topic(problem_text)
+        )
+
+    def generate_main_skeleton(
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
+    ) -> str:
+        return self._remote.generate_main_skeleton(
+            problem_text, module_interfaces, reference_fulltexts
+        )
+
+    def generate_smoke_main(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        return self._remote.generate_smoke_main(problem_text, module_interfaces)
+
+    def summarize_module(self, code: str) -> str:
+        return self._local_call(
+            "summarize_module", lambda delegate: delegate.summarize_module(code)
+        )
+
+    def validate_module_description(
+        self, description: str, code: str
+    ) -> ValidationResult:
+        return self._remote.validate_module_description(description, code)
+
+    def fix_compile_errors(
+        self,
+        error_text: str,
+        file_contexts: Mapping[str, str],
+        *,
+        problem_text: str = "",
+        platform: str = "",
+        module_slugs: Sequence[str] = (),
+        main_c: str = "",
+        dropped_files: Sequence[str] = (),
+        previous_fixes: Sequence[Mapping[str, Any]] = (),
+    ) -> tuple[FixSuggestion, ...]:
+        return self._remote.fix_compile_errors(
+            error_text,
+            file_contexts,
+            problem_text=problem_text,
+            platform=platform,
+            module_slugs=module_slugs,
+            main_c=main_c,
+            dropped_files=dropped_files,
+            previous_fixes=previous_fixes,
+        )
+
+    def distill_master(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
+    ) -> tuple[FileDecision, ...]:
+        return self._remote.distill_master(
+            platform,
+            project_names,
+            judgment_files,
+            comparison_summary,
+            progress_emitter,
+        )
+
+    def reference_summarize(self, material: str) -> str:
+        return self._local_call(
+            "reference_summarize",
+            lambda delegate: delegate.reference_summarize(material),
+        )
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        return self._remote.reference_judge_archivable(candidates)
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
+        return self._remote.topic_split_topics(pdf_text)
+
+    def topic_extract_number(self, text: str) -> str | None:
+        return self._remote.topic_extract_number(text)
+
+
+def build_llm(config: AppConfig) -> LLM:
+    """按配置构造 LLM（webapp 的 AppContext.llm_factory 默认值）。
+
+    本地 base_url 为空 → 普通 DeepSeekLLM（≡ 现状，零回归）；非空 → RoutingLLM
+    （remote = 主配置实例，local = 同一 api_key + 本地 base_url / 本地 model
+    的实例——本地 model 空串时沿用主 model，保证请求体 model 非空）。
+    """
+    if not config.local_llm_base_url:
+        return DeepSeekLLM(config)
+    local_config = replace(
+        config,
+        base_url=config.local_llm_base_url,
+        model=config.local_llm_model or config.model,
+    )
+    return RoutingLLM(remote=DeepSeekLLM(config), local=DeepSeekLLM(local_config))
 
 
 def extract_module_selection_data(content: str) -> dict[str, Any]:

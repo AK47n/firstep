@@ -73,8 +73,8 @@ from .library import (
 )
 from .llm import (
     LLM,
-    DeepSeekLLM,
     TOPIC_SPLIT_LLM_CHAR_CAP,
+    build_llm,
 )
 from .master import (
     confirm_distillation,
@@ -212,7 +212,7 @@ class AppContext:
 
     config_path: Path = DEFAULT_CONFIG_PATH
     config: AppConfig | None = None  # None → 按需从配置文件加载
-    llm_factory: Callable[[AppConfig], LLM] = DeepSeekLLM
+    llm_factory: Callable[[AppConfig], LLM] = build_llm
     tab_registry: TabRegistry = field(default_factory=TabRegistry)
     pick_directory: Callable[[], str | None] = _tkinter_pick_directory
 

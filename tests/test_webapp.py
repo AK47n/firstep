@@ -47,7 +47,12 @@ from contest_generator.events import (
 )
 from contest_generator.boards import board_for_platform
 from contest_generator.fix_errors import FixSuggestion
-from contest_generator.llm import LLMError
+from contest_generator.llm import (
+    LOCAL_LLM_UNAVAILABLE_MESSAGE,
+    LLMError,
+    RoutingLLM,
+    build_llm,
+)
 from contest_generator.pin_bindings import PinBindingError, resolve_bindings
 from contest_generator.library import ValidationResult
 from contest_generator.selection import (
@@ -77,6 +82,7 @@ from contest_generator.webapp import (
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
+    RecordingLLM,
     make_fake_ccs_master_project,
     make_fake_master_project,
     make_fake_module_library,
@@ -3645,6 +3651,76 @@ def _recommend_route_node() -> ast.FunctionDef:
     ]
     assert len(routes) == 1, "webapp.py 应恰好一个 recommend 路由函数"
     return routes[0]
+
+
+# ---------------------------------------------------------------------------
+# 本地路由（工单 local-llm-routing/02）：AppContext.llm_factory 默认值 + webapp
+# 级派发两路断言（本地组端点走 local、远程组端点走 remote）
+# ---------------------------------------------------------------------------
+
+
+def test_app_context_llm_factory_default_is_build_llm():
+    """llm_factory 默认值指向 build_llm：不注入 fake 时路由按配置自动生效。"""
+    assert AppContext().llm_factory is build_llm
+
+
+def test_local_routing_webapp_routes_method_groups(tmp_path):
+    """注入 RoutingLLM（remote/local 两个记录型 fake）+ 本地配置：本地组端点
+    （赛题简介）走 local、远程组端点（编号提取）走 remote——路由全链路生效。"""
+    library_dir = make_fake_module_library(tmp_path / "module_library")
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=library_dir,
+            masters_dir=tmp_path / "masters",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="qwen2.5-coder:7b-instruct",
+        ),
+        llm_factory=lambda config: router,
+    )
+    client = TestClient(create_app(ctx))
+
+    # 本地组端点：/api/topic/summarize → summarize_topic → local
+    resp = client.post("/api/topic/summarize", json={"problem_text": "题面"})
+    assert resp.status_code == 200
+    assert local.calls == ["summarize_topic"]
+    assert remote.calls == []
+
+    # 远程组端点：/api/topics/extract-number → topic_extract_number → remote
+    resp = client.post("/api/topics/extract-number", json={"text": "2026C"})
+    assert resp.status_code == 200
+    assert remote.calls == ["topic_extract_number"]
+    assert local.calls == ["summarize_topic"]  # 本地集不被远程调用触碰
+
+
+def test_local_routing_webapp_local_failure_is_loud(tmp_path):
+    """本地失联在 webapp 层大声失败：502 + 可操作提示（错误映射表出口）。"""
+    class _FailingLocal(RecordingLLM):
+        def summarize_topic(self, problem_text: str) -> str:
+            raise LLMError("连接被拒绝", kind="network")
+
+    library_dir = make_fake_module_library(tmp_path / "module_library")
+    router = RoutingLLM(remote=RecordingLLM("remote"), local=_FailingLocal("local"))
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=library_dir,
+            masters_dir=tmp_path / "masters",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="qwen2.5-coder:7b-instruct",
+        ),
+        llm_factory=lambda config: router,
+    )
+    client = TestClient(create_app(ctx))
+
+    resp = client.post("/api/topic/summarize", json={"problem_text": "题面"})
+    assert resp.status_code == 502
+    assert LOCAL_LLM_UNAVAILABLE_MESSAGE in resp.json()["detail"]
 
 
 def _is_orchestration_call(node: ast.Call) -> bool:

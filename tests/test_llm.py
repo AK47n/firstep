@@ -42,14 +42,18 @@ from contest_generator.llm import (
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
+    LOCAL_LLM_METHODS,
+    LOCAL_LLM_UNAVAILABLE_MESSAGE,
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
     NETWORK_RETRY_LIMIT,
     REFERENCE_FULLTEXT_BYTES,
     SKELETON_REFERENCE_TOTAL_BYTES,
+    RoutingLLM,
     SUMMARY_RETRY_LIMIT,
     TRUNCATION_NOTICE,
     UrllibTransport,
+    build_llm,
     VALIDATION_SYSTEM_PROMPT,
     VALIDATION_UNIVERSALITY_RULE,
     TOPIC_SPLIT_LLM_CHAR_CAP,
@@ -98,7 +102,7 @@ from contest_generator.report import (
 )
 from contest_generator.topic_library import TopicDraft
 from contest_generator.manifest import ModuleManifest, PlatformEntry
-from tests.fakes import FakeLLM, FakeTransport
+from tests.fakes import FakeLLM, FakeTransport, RecordingLLM
 
 SELECTION_JSON = json.dumps(
     {"modules": [{"slug": "dht11", "reason": "赛题要求采集温湿度"}]}
@@ -3660,3 +3664,170 @@ def test_prompts_carry_one_shot_question_rule():
     assert "不要分批渐进追问" in CLARIFY_SYSTEM_PROMPT
     assert "最多 10 条" in SELECT_SYSTEM_PROMPT  # 上限防问题轰炸
     assert "最多 10 条" in CLARIFY_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# 本地路由（工单 local-llm-routing/02）：RoutingLLM 派发 / 失联包装 / build_llm
+# ---------------------------------------------------------------------------
+
+
+class _FailingLocal(RecordingLLM):
+    """本地委托失败的记录型假件：summarize_topic 抛 LLMError（本地失联形态）。"""
+
+    def summarize_topic(self, problem_text: str) -> str:
+        raise LLMError("连接被拒绝", kind=ERROR_KIND_NETWORK)
+
+
+class _FailingRemote(RecordingLLM):
+    """远程委托失败的记录型假件：topic_extract_number 抛 LLMError（DeepSeek 形态）。"""
+
+    def topic_extract_number(self, text: str) -> str | None:
+        raise LLMError("DeepSeek API 返回 500")
+
+
+# LLM 协议全部方法名（派发测试的覆盖清单；本地集之外的 = 远程集）
+PROTOCOL_METHOD_NAMES = frozenset(
+    {
+        "select_modules",
+        "clarify",
+        "summarize_topic",
+        "generate_main_skeleton",
+        "generate_smoke_main",
+        "summarize_module",
+        "validate_module_description",
+        "fix_compile_errors",
+        "distill_master",
+        "reference_summarize",
+        "reference_judge_archivable",
+        "topic_split_topics",
+        "topic_extract_number",
+    }
+)
+
+
+def _call_all_protocol_methods(router: RoutingLLM) -> None:
+    """对 router 依次调用 LLM 协议的全部方法（本地路由派发测试的公共扫描）。"""
+    router.summarize_topic("题面")
+    router.summarize_module("代码")
+    router.reference_summarize("素材")
+    router.select_modules("题面", [])
+    router.clarify("题面", [])
+    router.generate_main_skeleton("题面", [])
+    router.generate_smoke_main("题面", [])
+    router.validate_module_description("简介", "代码")
+    router.fix_compile_errors("报错", {})
+    router.distill_master("stm32", ["proj-a"], [], "")
+    router.reference_judge_archivable([])
+    router.topic_split_topics("全文")
+    router.topic_extract_number("2026C")
+
+
+def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
+    """派发：本地方法集三个文本摘要走 local，其余所有方法走 remote（方法集
+    外方法绝不落到 local）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    _call_all_protocol_methods(router)
+
+    assert local.calls == ["summarize_topic", "summarize_module", "reference_summarize"]
+    assert remote.calls == [
+        "select_modules",
+        "clarify",
+        "generate_main_skeleton",
+        "generate_smoke_main",
+        "validate_module_description",
+        "fix_compile_errors",
+        "distill_master",
+        "reference_judge_archivable",
+        "topic_split_topics",
+        "topic_extract_number",
+    ]
+
+
+def test_local_llm_methods_constant_matches_routing_dispatch():
+    """本地方法集常量与派发行为同源：扫完全部协议方法后，落 local 的方法集
+    恰好 = LOCAL_LLM_METHODS——常量是派发开关（_delegate 读它）而非装饰；
+    常量与派发分叉（常量多了 / 少了某方法）即红。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    _call_all_protocol_methods(router)
+
+    assert set(local.calls) == set(LOCAL_LLM_METHODS)
+    assert set(remote.calls) == PROTOCOL_METHOD_NAMES - set(LOCAL_LLM_METHODS)
+
+
+def test_routing_llm_local_failure_wraps_with_actionable_message():
+    """本地失联：捕获 local 委托抛出的最终 LLMError，附可操作提示、kind 保持、
+    不自动回退远程（异常照抛、remote 未被调用）。"""
+    remote = RecordingLLM("remote")
+    router = RoutingLLM(remote=remote, local=_FailingLocal("local"))
+    with pytest.raises(LLMError) as exc_info:
+        router.summarize_topic("题面")
+    assert exc_info.value.kind == ERROR_KIND_NETWORK  # 错误类别保持
+    assert LOCAL_LLM_UNAVAILABLE_MESSAGE in str(exc_info.value)  # 附可操作提示
+    assert "连接被拒绝" in str(exc_info.value)  # 保留原始信息
+    assert remote.calls == []  # 不自动回退远程
+
+
+def test_routing_llm_remote_failure_propagates_unchanged():
+    """远程失败原样传播：不附本地提示（本地路由只管本地方法的包装）。"""
+    router = RoutingLLM(remote=_FailingRemote("remote"), local=RecordingLLM("local"))
+    with pytest.raises(LLMError) as exc_info:
+        router.topic_extract_number("2026C")
+    assert "本地模型服务不可用" not in str(exc_info.value)
+    assert "DeepSeek API 返回 500" in str(exc_info.value)
+
+
+def test_build_llm_without_local_fields_returns_plain_deepseek_llm():
+    """无本地字段 → 普通 DeepSeekLLM（非 RoutingLLM，零回归断言）。"""
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            base_url="https://api.deepseek.com",
+            model="deepseek-chat",
+        )
+    )
+    assert isinstance(llm, DeepSeekLLM)
+    assert not isinstance(llm, RoutingLLM)
+
+
+def test_build_llm_with_local_fields_returns_routing_llm_with_correct_wiring():
+    """有本地字段 → RoutingLLM：remote = 主配置实例，local = 同一 api_key +
+    本地 base_url / 本地 model 的实例（接线断言经构造后的 config 检查）。"""
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            base_url="https://api.deepseek.com",
+            model="deepseek-chat",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="qwen2.5-coder:7b-instruct",
+        )
+    )
+    assert isinstance(llm, RoutingLLM)
+    # remote = 主配置实例（base_url / model / api_key 原样）
+    assert llm._remote._config.base_url == "https://api.deepseek.com"
+    assert llm._remote._config.model == "deepseek-chat"
+    assert llm._remote._config.api_key == "sk-test"
+    # local = 本地 base_url / 本地 model + 复用主 api_key
+    assert llm._local._config.base_url == "http://localhost:11434/v1"
+    assert llm._local._config.model == "qwen2.5-coder:7b-instruct"
+    assert llm._local._config.api_key == "sk-test"
+
+
+def test_build_llm_local_base_url_without_model_falls_back_to_main_model():
+    """本地 base_url 配了但本地 model 空：沿用主 model（请求体 model 非空）。"""
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            base_url="https://api.deepseek.com",
+            model="deepseek-chat",
+            local_llm_base_url="http://localhost:11434/v1",
+        )
+    )
+    assert isinstance(llm, RoutingLLM)
+    assert llm._local._config.base_url == "http://localhost:11434/v1"
+    assert llm._local._config.model == "deepseek-chat"
