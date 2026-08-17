@@ -342,6 +342,10 @@ def test_generate_without_artifact_module_is_byte_identical(tmp_path):
     assert not any(rel.endswith(".py") for rel in base_files)  # 未选 = 无 .py
     assert set(probe_files) == set(base_files) | {"main.py"}
     for rel, content in base_files.items():
+        if rel == "README.md":
+            # README 随 manifest 集渲染（工单 project-readme/01）：probe 多选
+            # 一个模块 → README 模块清单自然不同，非「既有生成文件」契约
+            continue
         assert probe_files[rel] == content  # 共现文件逐字节一致
 
 
