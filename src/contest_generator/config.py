@@ -46,6 +46,9 @@ class AppConfig:
     ccs_sdk_dir: str = ""
     ccs_compiler_dir: str = ""
     ccs_sysconfig_cli: str = ""
+    # 本地 LLM 端点可选配置（工单 local-llm-routing/01）：空串 = 本地路由关闭
+    local_llm_base_url: str = ""
+    local_llm_model: str = ""
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -100,6 +103,14 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     ccs_sysconfig_cli = data.get("ccs_sysconfig_cli", "")
     if not isinstance(ccs_sysconfig_cli, str):
         raise ConfigError(f"ccs_sysconfig_cli 必须是字符串：{path}")
+    # 本地 LLM 端点（工单 local-llm-routing/01）：空串 = 本地路由关闭；类型非法
+    # 大声失败（与其余字段同严格度）
+    local_llm_base_url = data.get("local_llm_base_url", "")
+    if not isinstance(local_llm_base_url, str):
+        raise ConfigError(f"local_llm_base_url 必须是字符串：{path}")
+    local_llm_model = data.get("local_llm_model", "")
+    if not isinstance(local_llm_model, str):
+        raise ConfigError(f"local_llm_model 必须是字符串：{path}")
 
     return AppConfig(
         base_url=base_url,
@@ -113,6 +124,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ccs_sdk_dir=ccs_sdk_dir,
         ccs_compiler_dir=ccs_compiler_dir,
         ccs_sysconfig_cli=ccs_sysconfig_cli,
+        local_llm_base_url=local_llm_base_url,
+        local_llm_model=local_llm_model,
     )
 
 
@@ -133,6 +146,8 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
                 "ccs_sdk_dir": config.ccs_sdk_dir,
                 "ccs_compiler_dir": config.ccs_compiler_dir,
                 "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
+                "local_llm_base_url": config.local_llm_base_url,
+                "local_llm_model": config.local_llm_model,
             },
             ensure_ascii=False,
             indent=2,
