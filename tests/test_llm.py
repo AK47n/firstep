@@ -68,6 +68,7 @@ from contest_generator.llm import (
     _split_versions,
     _summarize_user_prompt,
     _truncate_content,
+    _unwrap_json_fence,
     _validation_user_prompt,
     extract_module_selection_data,
     parse_archive_judgment,
@@ -1200,6 +1201,66 @@ def test_parse_validation_rejects_missing_consistent():
 def test_parse_validation_rejects_non_bool_consistent():
     with pytest.raises(LLMError, match="布尔"):
         parse_validation_result(json.dumps({"consistent": "yes", "issues": ""}))
+
+
+# ---------------------------------------------------------------------------
+# json 围栏剥离（工单 local-llm-json-group/01）：本地模型把 JSON 包进 Markdown
+# 代码围栏时，json_mode 单点剥外层；文本模式输出原样不动
+# ---------------------------------------------------------------------------
+
+
+def test_unwrap_json_fence_strips_fence_with_language():
+    assert _unwrap_json_fence('```json\n{"a": 1}\n```') == '{"a": 1}'
+
+
+def test_unwrap_json_fence_strips_fence_without_language():
+    assert _unwrap_json_fence('```\n{"a": 1}\n```') == '{"a": 1}'
+
+
+def test_unwrap_json_fence_strips_wrapping_newlines():
+    # 真实模型输出常带首尾换行——整块围栏剥完返回内部 JSON
+    assert _unwrap_json_fence('\n```json\n{"a": 1}\n```\n') == '{"a": 1}'
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"a": 1}',                      # 非围栏（合法 JSON 原样）
+        '```json\n{"a": 1}',             # 只有开头没结尾（半截围栏）
+        '```',                           # 只有开头
+        '```json\n{"a": 1}\n```\nextra',  # 闭合后有尾随内容
+        '```json\n```\n{"a": 1}\n```',   # 内部含围栏行（无法可靠判结构，不剥）
+        '',                              # 空内容
+        '   \n  ',                       # 空白内容
+    ],
+)
+def test_unwrap_json_fence_keeps_ambiguous_or_empty(content):
+    assert _unwrap_json_fence(content) == content
+
+
+def test_validate_module_description_unwraps_fenced_json_response():
+    """json_mode 返回被 ```json 围栏包裹 → 剥外层后真实 parse 成功。"""
+    fenced = '```json\n' + json.dumps({"consistent": True, "issues": ""}) + '\n```'
+    transport = FakeTransport(body=_api_response(fenced))
+    llm = _llm(transport)
+
+    result = llm.validate_module_description(
+        "DHT11 温湿度传感器驱动", "float dht11_read(void);"
+    )
+
+    assert result.consistent is True
+    assert result.issues == ""
+
+
+def test_text_mode_keeps_fence_content_untouched():
+    """文本模式（json_mode=False）输出原样不动——骨架 ```c 围栏不被 mangle。"""
+    fenced_code = "```c\nint main(void) { while (1); }\n```"
+    transport = FakeTransport(body=_api_response(fenced_code))
+    llm = _llm(transport)
+
+    result = llm.summarize_module("int main(void);")
+
+    assert result == fenced_code
 
 
 # ---------------------------------------------------------------------------

@@ -737,6 +737,37 @@ def _backoff_sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _unwrap_json_fence(content: str) -> str:
+    """剥掉 Markdown 代码围栏外层（工单 local-llm-json-group/01，唯一出处）。
+
+    仅当**整个输出**就是一个完整的 Markdown 代码围栏块（首行 ``` 或 ```lang
+    开头、末行 ``` 结尾、中间不含围栏行）时剥掉外层返回内部文本；非围栏 /
+    只有开头没结尾 / 内部含围栏行 / 空内容一律原样返回——绝不错伤合法内容。
+    合法 JSON 文档不可能以反引号开头，故"首行 ``` 才剥"天然不会误伤合法
+    JSON；中间出现整行 ```（嵌套/错乱围栏）无法可靠判结构，保守不剥。
+
+    与 clex.strip_code_fences 分工不同（本函数是 JSON 输出的整体围栏判定，
+    不共用其 C 源码围栏谓词——见 CONTEXT「C 词法层」；spec 定本函数为 llm 的
+    唯一出处，不引 clex）：clex 剥 C 源码**首尾围栏行**（中间围栏可能是原文
+    信息），这里要求**整个输出**恰为一个围栏块，多一行围栏/多一行尾随内容都
+    拒绝剥——"绝不错伤"的判据不同，故独立实现。
+    """
+    text = content.strip()
+    if not text:
+        return content
+    lines = text.split("\n")
+    if len(lines) < 3:
+        return content
+    opening = lines[0].rstrip()
+    if not opening.startswith("```") or "```" in opening[3:]:
+        return content
+    if lines[-1].strip() != "```":
+        return content
+    if any(line.strip().startswith("```") for line in lines[1:-1]):
+        return content
+    return "\n".join(lines[1:-1])
+
+
 class DeepSeekLLM:
     """生产 LLM：调用 DeepSeek Chat Completions，结构化输出解析为 ModuleSelection。"""
 
@@ -1455,11 +1486,18 @@ class DeepSeekLLM:
         except json.JSONDecodeError as exc:
             raise LLMError(f"DeepSeek API 响应不是合法 JSON：{body[:200]}") from exc
         try:
-            return data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError(
                 f"DeepSeek API 响应缺少 choices[0].message.content：{body[:200]}"
             ) from exc
+        if json_mode:
+            # 本地 7B 模型偶发把 JSON 包进 Markdown 代码围栏（```json … ```），
+            # 严格解析器不接受——单点剥外层，覆盖全部 json_mode 调用；剥 = no-op
+            # 对 DeepSeek 零影响（从不包围栏），文本模式原样不动（骨架 ```c
+            # 围栏等合法内容不被 mangle）（工单 local-llm-json-group/01）
+            content = _unwrap_json_fence(content)
+        return content
 
 
 # ---------------------------------------------------------------------------
