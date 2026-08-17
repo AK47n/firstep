@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1781eb976cbac8b39163ca77078e073f151107ed -->
+<!-- changelog-auto: last-commit=0efd6a78856ad7a41acc9302f38e33b48228d625 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,8 @@
 - 00:08 模块重命名 ball_detect → coord_detect（工单 coord-detect-rename/01）
 - 00:21 模块重命名 ball_detect → coord_detect（工单 coord-detect-rename/01）
 - 13:24 随工程生成 README（工单 project-readme/01）
+- 13:29 随工程生成「上手即战」README（工单 project-readme/01）
+- 13:39 README 追加两章：快速上手（编译+烧录）+ 验证顺序清单（工单 project-readme/02）
 
 ## 2026-08-16
 - 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）
