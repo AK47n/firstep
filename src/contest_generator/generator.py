@@ -778,9 +778,11 @@ def generate(
     路径全部参数化）；ccs_tools 未探测到（None）→ 跳过 + build_hint 提示，
     不阻断生成。stm32 零改动（无构建脚本、hint 空）。
 
-    README（工单 project-readme/01）：patcher 之后、返回之前写工程根
+    README（工单 project-readme/01 + 03）：patcher 之后、返回之前写工程根
     README.md（render_readme 纯确定性渲染，不吃 LLM）——纯新增文件，不触碰
-    任何既有生成文件（逐字节契约不破）；板名取不到优雅降级为不显示。
+    任何既有生成文件（逐字节契约不破）；板名取不到优雅降级为不显示。透传
+    resolved_bindings + instance_plans（工单 03：引脚表生效引脚 = 绑定覆盖 /
+    多实例每实例一行；两者空 = 缺省路径逐字节不变）。
     """
     patcher_registry = registry or default_registry()
     patcher = patcher_registry.get(platform)  # 未知平台在这里失败
@@ -880,11 +882,20 @@ def generate(
                     extra_include_dirs=include_dirs,
                 )
 
-        # README（工单 project-readme/01）：纯确定性渲染落盘，工程根新增
+        # README（工单 project-readme/01 + 03）：纯确定性渲染落盘，工程根新增
         # README.md——纯新增文件，不触碰任何既有生成文件（逐字节契约不破）；
-        # 写失败走既有 rmtree 兜底，生成原子性不破。
+        # 写失败走既有 rmtree 兜底，生成原子性不破。透传 resolved_bindings +
+        # instance_plans（工单 03：引脚表生效引脚 = 绑定覆盖 / 多实例每实例一
+        # 行）；两者空 = 缺省路径，与工单 01/02 输出逐字节一致。
         (output_dir / README_FILENAME).write_text(
-            render_readme(platform, readme_board_name, manifests), encoding="utf-8"
+            render_readme(
+                platform,
+                readme_board_name,
+                manifests,
+                resolved_bindings=resolved_bindings,
+                instance_plans=instance_plans,
+            ),
+            encoding="utf-8",
         )
     except Exception:
         # 复制中途失败不要留下半成品

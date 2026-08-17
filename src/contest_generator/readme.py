@@ -1,9 +1,10 @@
 """随工程生成「上手即战」README —— 纯确定性模板渲染，不吃 LLM。
 
-工单 project-readme/01 + 02：生成工程时自动附带 README.md。render_readme 是
-纯函数（platform / 板名 / 依赖展开后的 manifest 集 → 完整 README 文本），
-五章：工程概览 / 快速上手：编译 + 烧录 / 引脚接线表 / 模块清单与依赖 / 验证
-顺序清单。utf-8、尾部换行、不含时间戳——同一输入两次调用产出逐字节一致。
+工单 project-readme/01 + 02 + 03：生成工程时自动附带 README.md。render_readme
+是纯函数（platform / 板名 / 依赖展开后的 manifest 集 / 绑定解析结果 / 多实例
+计划 → 完整 README 文本），五章：工程概览 / 快速上手：编译 + 烧录 / 引脚接线表 /
+模块清单与依赖 / 验证顺序清单。utf-8、尾部换行、不含时间戳——同一输入两次调用
+产出逐字节一致。
 
 快速上手章 = 平台静态步骤文本（QUICK_START_STEPS 固定话术预写，不做逐模块
 拼装，生成不依赖 ccs_tools 探测结果）；验证顺序清单章 = 以 manifest 集顺序
@@ -11,16 +12,24 @@
 保持相互间依赖序，其余原序），渲染 checkbox 清单 + 固定引导语。
 
 引脚接线章数据源 = 各模块该平台 manifest pins 声明：模块 / 角色（label 不同
-时附注）/ 生效引脚（本工单 = 声明默认值，绑定覆盖 / 多实例 = 工单 03 范围）/
-说明（类型 + required 必接标记）。未声明 pins 的模块不硬猜，表尾固定尾注
+时附注）/ 生效引脚（工单 03 起 = 绑定载荷覆盖值，否则声明默认值；多实例计划
+每实例追加一行，角色 = 通道宏名、引脚 = 实例 pin）/ 说明（类型 + required
+必接标记）。未声明 pins 的模块不硬猜，表尾固定尾注
 （PIN_TABLE_FOOTNOTE 兜底声明）。
 """
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
 
-from .manifest import ModuleManifest
+# manifest 是轻量模型模块（先例：既有运行时依赖），PinDeclaration 随
+# ModuleManifest 同源引入；pin_bindings / selection 较重，仅注解需用
+# → TYPE_CHECKING（selection.py 先例）。
+from .manifest import ModuleManifest, PinDeclaration
+
+if TYPE_CHECKING:
+    from .pin_bindings import ResolvedBinding
+    from .selection import ExpandedInstance
 
 # README 输出文件名（生成写侧单源，generator 消费）
 README_FILENAME = "README.md"
@@ -84,6 +93,8 @@ def render_readme(
     platform: str,
     board_name: str | None,
     manifests: Sequence[ModuleManifest],
+    resolved_bindings: Sequence[ResolvedBinding] | None = None,
+    instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
 ) -> str:
     """渲染工程 README 完整文本（五章，确定性模板）。
 
@@ -91,8 +102,13 @@ def render_readme(
     后序，依赖先于使用者——模块清单章按此顺序渲染；验证顺序清单章在其上做
     bring-up 前置的稳定分区）。板名取不到传 None = 工程概览章不显示板名行
     （生成方已优雅降级，不阻断生成）。快速上手章 = 平台静态步骤文本，不依赖
-    模块集；引脚接线章取各模块该平台 pins 声明的默认引脚（绑定覆盖 / 多实例
-    = 工单 03 范围）；未声明 pins 的模块不硬猜，表尾固定尾注。
+    模块集。引脚接线章（工单 03 起）：
+    - 生效引脚 = resolved_bindings 覆盖值，否则声明默认值（两平台统一；未绑
+      角色保持 decl.default，绑定只改 pin 值，不新增行、不改行序）；
+    - instance_plans（dict[slug, ExpandedInstance…]）每实例追加一行：角色 =
+      通道宏名（LED_RED / LED_1…）、引脚 = 实例 pin，追加在对应模块声明行之后；
+    - 两者缺省 / 空 = 工单 01/02 现状逐字节不变（回归护栏）。
+    未声明 pins 的模块不硬猜，表尾固定尾注。
     返回文本恒以单个尾部换行收尾（幂等——同输入两次调用逐字节一致）。
     """
     lines: list[str] = []
@@ -113,7 +129,7 @@ def render_readme(
 
     lines.append("## 引脚接线表")
     lines.append("")
-    rows = _pin_rows(platform, manifests)
+    rows = _pin_rows(platform, manifests, resolved_bindings, instance_plans)
     if rows:
         lines.append("| 模块 | 角色 | 引脚 | 说明 |")
         lines.append("|---|---|---|---|")
@@ -150,16 +166,29 @@ def render_readme(
 
 
 def _pin_rows(
-    platform: str, manifests: Sequence[ModuleManifest]
+    platform: str,
+    manifests: Sequence[ModuleManifest],
+    resolved_bindings: Sequence[ResolvedBinding] | None = None,
+    instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
 ) -> list[tuple[str, str, str, str]]:
     """引脚接线表行（模块 slug / 角色 / 生效引脚 / 说明）。
 
     角色列 = 声明 id，label 不同时附注（如 `KEY_START（启动按键）`；parse 侧
-    已把 label==id 归一为空串，非空 label 必为附注形态）；生效引脚 = 声明默认
-    值（绑定覆盖 / 多实例 = 工单 03 范围）；说明 = 类型 + required 必接标记。未声明
-    pins 的模块不产生行（不硬猜），表尾尾注兜底。行顺序 = manifest 顺序 ×
-    平台条目 pins 声明顺序（确定性）。
+    已把 label==id 归一为空串，非空 label 必为附注形态）；生效引脚 = 绑定载荷
+    覆盖值（resolved_bindings 给 (slug, decl.id) → 生效 pin），否则声明默认值
+    ——两平台统一，绑定只改 pin 值，不新增行、不改行序（行顺序 = manifest
+    顺序 × pins 声明顺序，确定性）；说明 = 类型 + required 必接标记。多实例
+    计划（instance_plans[slug]）每实例追加一行：角色 = 通道宏名（LED_RED /
+    LED_1…）、引脚 = 实例 pin、说明 = 模块首个声明的类型（仅类型，不带必接
+    标记——必接是角色声明属性，不随实例通道继承；未声明 pins 的模块 = 空串）
+    ——追加在对应模块声明行之后。未声明 pins 的模块不产生声明行（不硬猜），
+    表尾尾注兜底。
     """
+    bindings: dict[tuple[str, str], str] = {}
+    if resolved_bindings:
+        bindings = {(b.slug, b.declaration.id): b.pin for b in resolved_bindings}
+    plans = instance_plans or {}
+
     rows: list[tuple[str, str, str, str]] = []
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
@@ -167,6 +196,15 @@ def _pin_rows(
             continue  # 无该平台版本条目由生成门禁先报，渲染侧跳过
         for decl in entry.pins:
             role = f"{decl.id}（{decl.label}）" if decl.label else decl.id
-            remark = decl.type + ("（必接）" if decl.required else "")
-            rows.append((manifest.slug, role, decl.default, remark))
+            pin = bindings.get((manifest.slug, decl.id), decl.default)
+            rows.append((manifest.slug, role, pin, _pin_remark(decl)))
+        inst_remark = entry.pins[0].type if entry.pins else ""
+        for inst in plans.get(manifest.slug, ()):
+            rows.append((manifest.slug, inst.macro, inst.pin, inst_remark))
     return rows
+
+
+def _pin_remark(decl: PinDeclaration) -> str:
+    """说明列 = 类型 + required 必接标记（仅声明行；实例行只带类型，见
+    _pin_rows）。"""
+    return decl.type + ("（必接）" if decl.required else "")

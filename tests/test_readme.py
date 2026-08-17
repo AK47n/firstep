@@ -1,15 +1,21 @@
-"""README 渲染器核心 + 生成落盘（工单 project-readme/01 + 02）。
+"""README 渲染器核心 + 生成落盘（工单 project-readme/01 + 02 + 03）。
 
 主 seam = generate_project 流程级：stm32 与 mspm0 各生成一例到 tmp，断言
 README.md 存在、含五章标题、含所选模块 slug/description、引脚表含声明角色的
 默认引脚、验证顺序清单符合规则（bring-up 前置 + 组内依赖序）、不含未选模块
 引脚。渲染器纯函数直测（确定性 / 板名可选 / 引脚行格式 / 依赖显示 / 快速上手
 固定话术 / 排序纯函数边界 / 空集边界 / 尾部换行）。
+
+工单 03：生效引脚 = 绑定载荷覆盖值否则声明默认值（两平台统一）+ 多实例计划
+每实例追加一行（角色 = 通道宏名、引脚 = 实例 pin）。流程级：同一选择无绑定
+vs 带绑定各生成一例断言默认脚 / 绑定脚、带 led 多实例断言每实例一行；渲染器
+级：双平台绑定覆盖 / 多实例行 / 缺省参数与现状逐字节不变（回归护栏）。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Mapping
 
 import pytest
 
@@ -17,6 +23,7 @@ from contest_generator.boards import Board
 from contest_generator.generator import generate_project
 from contest_generator.manifest import ModuleManifest, PinDeclaration, PlatformEntry
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
+from contest_generator.pin_bindings import ResolvedBinding
 from contest_generator.readme import (
     PIN_TABLE_FOOTNOTE,
     README_FILENAME,
@@ -24,6 +31,7 @@ from contest_generator.readme import (
     render_readme,
     sort_verification_order,
 )
+from contest_generator.selection import ExpandedInstance, ModuleInstance
 from tests.fakes import (
     MAIN_SKELETON,
     _add_module,
@@ -157,6 +165,44 @@ def _add_bringup_modules(library: Path) -> None:
             },
         },
         {"code/led_beep.c": "/* led_beep */\n"},
+    )
+
+
+def _add_led_multi_module(library: Path) -> None:
+    """给假模块库补带 multi_instance 的 led 模块（与真实 led manifest 同构：
+    stm32 实现内嵌母版、无 pins 声明（多实例通道级接线落 led_instances.h）；
+    mspm0 声明 LED 角色默认 PA15）。README 只消费实例计划，写侧（led_instances.h
+    / syscfg）行为由 test_module_multi_instance 另行锁定。"""
+    _add_module(
+        library,
+        {
+            "slug": "led",
+            "description": "状态指示灯",
+            "dependencies": [],
+            "multi_instance": {"max": 8, "variant": "color"},
+            "platforms": {
+                PLATFORM_STM32: {
+                    "files": ["code/led.c", "code/led.h"],
+                    "verified": True,
+                },
+                PLATFORM_MSPM0: {
+                    "files": ["code/led.c", "code/led.h"],
+                    "verified": True,
+                    "pins": [
+                        {
+                            "id": "LED",
+                            "type": "gpio_out",
+                            "default": "PA15",
+                            "required": True,
+                        }
+                    ],
+                },
+            },
+        },
+        {
+            "code/led.c": '#include "led.h"\nvoid led_init(unsigned char channel);\n',
+            "code/led.h": "#pragma once\nvoid led_init(unsigned char channel);\n",
+        },
     )
 
 
@@ -320,9 +366,128 @@ def test_generate_project_readme_verification_order(fake_module_library, tmp_pat
     assert slugs == ["delay", "led_beep", "debug_uart", "led", "dht11"]
 
 
+def test_generate_project_readme_binding_overrides_default_pin(
+    fake_module_library, tmp_path
+):
+    """同一选择生成两例（不带绑定 vs 带绑定覆盖 key.KEY_START）：README 引脚表
+    分别显示声明默认脚 PB3 与绑定脚 PA4（工单 03 生效引脚口径进生成 README）。"""
+    _add_pin_modules(fake_module_library)
+    masters_dir = tmp_path / "masters"
+    master = make_fake_master_project(masters_dir / PLATFORM_STM32)
+    # 写侧 apply_pin_bindings 对 stm32 无条件读 pin_config.h；key 无 macros =
+    # 绑定写侧零改动（逐字节不落盘）——本测试只测 README 引脚表，写侧行为由
+    # test_pin_unlock_* 另行锁定。
+    (master / "pin_config.h").write_text(
+        "#ifndef __PIN_CONFIG_H\n#define __PIN_CONFIG_H\n#endif\n", encoding="utf-8"
+    )
+
+    def _readme(out: Path, bindings: Mapping[str, str] | None) -> str:
+        generate_project(
+            platform=PLATFORM_STM32,
+            slugs=["key", "dht11"],
+            main_c_content=MAIN_SKELETON,
+            output_dir=out,
+            module_library_dir=fake_module_library,
+            masters_dir=masters_dir,
+            bindings=bindings,
+        )
+        return (out / README_FILENAME).read_text(encoding="utf-8")
+
+    default_readme = _readme(tmp_path / "out_default", None)
+    bound_readme = _readme(tmp_path / "out_bound", {"key.KEY_START": "PA4"})
+    assert "| key | KEY_START（启动按键） | PB3 | gpio_in（必接） |" in default_readme
+    assert "| key | KEY_START（启动按键） | PA4 | gpio_in（必接） |" in bound_readme
+    assert "| key | KEY_START（启动按键） | PB3 | gpio_in（必接） |" not in bound_readme
+
+
+def test_generate_project_readme_led_multi_instance(fake_module_library, tmp_path):
+    """带 led 多实例选择的生成：引脚表每实例一行，角色 = 通道宏名、引脚 = 实例
+    脚（stm32 内置色指定脚 red→PC13 / yellow→PC14）——追加在模块声明行之后。"""
+    _add_led_multi_module(fake_module_library)
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["led", "dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+        instances={
+            "led": (
+                ModuleInstance(name="红灯", variant="red"),
+                ModuleInstance(name="黄灯", variant="yellow"),
+            )
+        },
+    )
+    readme = (summary.output_dir / README_FILENAME).read_text(encoding="utf-8")
+    # 每实例一行 + 引脚正确；stm32 led 无 pins 声明 = 实例行说明空串（尾注兜底）
+    assert "| led | LED_RED | PC13 |  |" in readme
+    assert "| led | LED_YELLOW | PC14 |  |" in readme
+
+
+def test_generate_project_readme_defaults_byte_identical(fake_module_library, tmp_path):
+    """流程级回归护栏：generate_project 缺省（None）与显式空载荷（bindings={}
+    / instances={}）产出 README 逐字节一致——工单 03 参数透传不扰动 01/02 基线
+    （基线内容由既有流程测试逐行锁定，渲染器级等价另由
+    test_render_readme_defaults_byte_identical 覆盖）。"""
+    _add_pin_modules(fake_module_library)
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    def _readme(
+        out: Path,
+        bindings: Mapping[str, str] | None,
+        instances: Mapping[str, object] | None,
+    ) -> bytes:
+        generate_project(
+            platform=PLATFORM_STM32,
+            slugs=["key", "dht11"],
+            main_c_content=MAIN_SKELETON,
+            output_dir=out,
+            module_library_dir=fake_module_library,
+            masters_dir=masters_dir,
+            bindings=bindings,
+            instances=instances,
+        )
+        return (out / README_FILENAME).read_bytes()
+
+    assert _readme(tmp_path / "out_default", None, None) == _readme(
+        tmp_path / "out_empty", {}, {}
+    )
+
+
 # ---------------------------------------------------------------------------
 # 渲染器纯函数直测：确定性 / 板名可选 / 引脚行格式 / 依赖 / 边界
 # ---------------------------------------------------------------------------
+
+
+def _pin_data_rows(text: str) -> list[str]:
+    """引脚表数据行（剔除表头 `| 模块 |` 与分隔行 `|---|`）。"""
+    return [
+        ln
+        for ln in text.splitlines()
+        if ln.startswith("| ") and not ln.startswith("| 模块") and not ln.startswith("|---")
+    ]
+
+
+def _entry(pins: tuple[tuple[str, str, str, str, bool], ...]) -> PlatformEntry:
+    """(id, type, default, label, required) 序列 → PlatformEntry（files 空，
+    渲染器只读 pins 声明）。双平台直构 manifest 用。"""
+    return PlatformEntry(
+        files=(),
+        pins=tuple(
+            PinDeclaration(
+                id=pid,
+                type=ptype,
+                default=pdefault,
+                label=plabel,
+                required=preq,
+            )
+            for (pid, ptype, pdefault, plabel, preq) in pins
+        ),
+    )
 
 
 def _m(
@@ -338,21 +503,7 @@ def _m(
         slug=slug,
         description=description,
         dependencies=deps,
-        platforms={
-            PLATFORM_STM32: PlatformEntry(
-                files=(),
-                pins=tuple(
-                    PinDeclaration(
-                        id=pid,
-                        type=ptype,
-                        default=pdefault,
-                        label=plabel,
-                        required=preq,
-                    )
-                    for (pid, ptype, pdefault, plabel, preq) in pins
-                ),
-            )
-        },
+        platforms={PLATFORM_STM32: _entry(pins)},
     )
 
 
@@ -407,6 +558,103 @@ def test_render_readme_pin_required_false_no_marker():
     text = render_readme("stm32", None, manifests)
     assert "| beep | BEEP_OUT | PC14 | gpio_out |" in text
     assert "（必接）" not in text
+
+
+def test_render_readme_binding_overrides_default_pin():
+    """生效引脚 = 绑定载荷覆盖值，否则声明默认值（两平台同一渲染路径；绑定
+    只改 pin 值，角色 / 说明列不动）。"""
+    key = ModuleManifest(
+        slug="key",
+        description="独立按键输入",
+        platforms={
+            PLATFORM_STM32: _entry((("KEY_START", "gpio_in", "PB3", "启动按键", True),)),
+            PLATFORM_MSPM0: _entry((("KEY_START", "gpio_in", "PA18", "启动按键", True),)),
+        },
+    )
+
+    decl_s = key.platforms[PLATFORM_STM32].pins[0]
+    bound = render_readme(
+        PLATFORM_STM32,
+        None,
+        [key],
+        (ResolvedBinding(slug="key", declaration=decl_s, pin="PA4"),),
+    )
+    assert "| key | KEY_START（启动按键） | PA4 | gpio_in（必接） |" in bound
+    assert "| key | KEY_START（启动按键） | PB3 | gpio_in（必接） |" not in bound
+
+    decl_m = key.platforms[PLATFORM_MSPM0].pins[0]
+    bound_m = render_readme(
+        PLATFORM_MSPM0,
+        None,
+        [key],
+        (ResolvedBinding(slug="key", declaration=decl_m, pin="PA28"),),
+    )
+    assert "| key | KEY_START（启动按键） | PA28 | gpio_in（必接） |" in bound_m
+    assert "| key | KEY_START（启动按键） | PA18 | gpio_in（必接） |" not in bound_m
+
+
+def test_render_readme_multi_instance_appends_rows():
+    """多实例计划每实例追加一行：角色 = 通道宏名、引脚 = 实例 pin；追加在对应
+    模块声明行之后（无声明行的模块 = 实例行紧贴其 manifest 位置）；说明 = 模块
+    首个声明类型（未声明 pins = 空串）。"""
+    key = ModuleManifest(
+        slug="key",
+        description="独立按键输入",
+        platforms={PLATFORM_STM32: _entry((("KEY_START", "gpio_in", "PB3", "", False),))},
+    )
+    led = ModuleManifest(
+        slug="led",
+        description="状态指示灯",
+        platforms={
+            PLATFORM_STM32: _entry(()),  # stm32 led 无 pins 声明（内嵌母版）
+            PLATFORM_MSPM0: _entry((("LED", "gpio_out", "PA15", "", True),)),
+        },
+    )
+    plans_s = {
+        "led": (
+            ExpandedInstance(slug="led", index=1, macro="LED_RED", pin="PC13"),
+            ExpandedInstance(slug="led", index=2, macro="LED_YELLOW", pin="PC14"),
+        )
+    }
+    text = render_readme(PLATFORM_STM32, None, [key, led], instance_plans=plans_s)
+    lines = _pin_data_rows(text)
+    # 行序：key 声明行 → led 实例行（led 无声明行，实例行紧跟其 manifest 位置）
+    assert lines == [
+        "| key | KEY_START | PB3 | gpio_in |",
+        "| led | LED_RED | PC13 |  |",
+        "| led | LED_YELLOW | PC14 |  |",
+    ]
+
+    # mspm0：实例行说明 = 模块首个声明类型（仅类型，必接标记不随实例通道继承）
+    # ——声明行（LED 默认脚）仍在实例行前
+    plans_m = {
+        "led": (
+            ExpandedInstance(slug="led", index=1, macro="LED_RED", pin="PA15"),
+            ExpandedInstance(slug="led", index=2, macro="LED_YELLOW", pin="PA16"),
+        )
+    }
+    text_m = render_readme(PLATFORM_MSPM0, None, [led], instance_plans=plans_m)
+    lines_m = _pin_data_rows(text_m)
+    assert lines_m == [
+        "| led | LED | PA15 | gpio_out（必接） |",
+        "| led | LED_RED | PA15 | gpio_out |",
+        "| led | LED_YELLOW | PA16 | gpio_out |",
+    ]
+
+
+def test_render_readme_defaults_byte_identical():
+    """缺省参数（绑定 / 实例缺省或空）= 现状逐字节不变：显式 None / 空序列与
+    完全缺省同输出（工单 03 回归护栏）。"""
+    manifests = [
+        _m(
+            "motor",
+            "TB6612 双路直流电机驱动",
+            pins=(("MOTOR_A_PWM", "pwm", "PA0", "A 路 PWM", True),),
+        )
+    ]
+    baseline = render_readme("stm32", "最小系统板", manifests)
+    assert render_readme("stm32", "最小系统板", manifests, None, None) == baseline
+    assert render_readme("stm32", "最小系统板", manifests, (), {}) == baseline
 
 
 def test_render_readme_dependencies_listed_in_order():
