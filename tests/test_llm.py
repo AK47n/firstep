@@ -3784,7 +3784,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
-    """派发：本地方法集三个文本摘要走 local，其余所有方法走 remote（方法集
+    """派发：本地方法集六个方法走 local，其余所有方法走 remote（方法集
     外方法绝不落到 local）。"""
     remote = RecordingLLM("remote")
     local = RecordingLLM("local")
@@ -3792,19 +3792,89 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
 
     _call_all_protocol_methods(router)
 
-    assert local.calls == ["summarize_topic", "summarize_module", "reference_summarize"]
+    assert local.calls == [
+        "summarize_topic",
+        "summarize_module",
+        "reference_summarize",
+        "clarify",
+        "validate_module_description",
+        "reference_judge_archivable",
+    ]
     assert remote.calls == [
         "select_modules",
-        "clarify",
         "generate_main_skeleton",
         "generate_smoke_main",
-        "validate_module_description",
         "fix_compile_errors",
         "distill_master",
-        "reference_judge_archivable",
         "topic_split_topics",
         "topic_extract_number",
     ]
+
+
+def test_clarify_dispatch_to_local():
+    """扩组（local-llm-json-group/02）：澄清走 local（fake 记录 + remote 零调用）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.clarify("题面", [])
+
+    assert local.calls == ["clarify"]
+    assert remote.calls == []
+
+
+def test_validate_module_description_dispatch_to_local():
+    """扩组（local-llm-json-group/02）：简介一致性校验走 local（fake 记录 +
+    remote 零调用）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.validate_module_description("简介", "代码")
+
+    assert local.calls == ["validate_module_description"]
+    assert remote.calls == []
+
+
+def test_reference_judge_archivable_dispatch_to_local():
+    """扩组（local-llm-json-group/02）：归档判定走 local（fake 记录 +
+    remote 零调用）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.reference_judge_archivable([])
+
+    assert local.calls == ["reference_judge_archivable"]
+    assert remote.calls == []
+
+
+def test_unexpanded_methods_stay_remote():
+    """扩组（local-llm-json-group/02）：未扩方法仍走 remote——模块推荐 / 骨架 /
+    smoke / 编译修复 / 提炼 / 拆条 / 编号提取（7B 能力上限或未 spike，保守留
+    DeepSeek）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.select_modules("题面", [])
+    router.generate_main_skeleton("题面", [])
+    router.generate_smoke_main("题面", [])
+    router.fix_compile_errors("报错", {})
+    router.distill_master("stm32", ["proj-a"], [], "")
+    router.topic_split_topics("全文")
+    router.topic_extract_number("2026C")
+
+    assert remote.calls == [
+        "select_modules",
+        "generate_main_skeleton",
+        "generate_smoke_main",
+        "fix_compile_errors",
+        "distill_master",
+        "topic_split_topics",
+        "topic_extract_number",
+    ]
+    assert local.calls == []
 
 
 def test_local_llm_methods_constant_matches_routing_dispatch():

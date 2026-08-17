@@ -1505,11 +1505,20 @@ class DeepSeekLLM:
 # RoutingLLM + build_llm 构造接线
 # ---------------------------------------------------------------------------
 
-# 本地方法集：{summarize_topic, summarize_module, reference_summarize}——三个纯
-# 文本摘要调用（spike 实测质量达标，是能力事实，硬编码为常量不做用户可配）。
-# 常量单源：RoutingLLM 派发与测试都引用它。
+# 本地方法集：{summarize_topic, summarize_module, reference_summarize, clarify,
+# validate_module_description, reference_judge_archivable}——三个纯文本摘要 +
+# 澄清 / 简介一致性校验 / 归档判定（spike 实测内容合理；格式障碍（围栏）已被
+# 工单 local-llm-json-group/01 的 _unwrap_json_fence 移除，JSON 调用可稳定解析）。
+# 能力事实，硬编码为常量不做用户可配。常量单源：RoutingLLM 派发与测试都引用它。
 LOCAL_LLM_METHODS = frozenset(
-    {"summarize_topic", "summarize_module", "reference_summarize"}
+    {
+        "summarize_topic",
+        "summarize_module",
+        "reference_summarize",
+        "clarify",
+        "validate_module_description",
+        "reference_judge_archivable",
+    }
 )
 
 # 本地失联提示文案（唯一出处）：RoutingLLM 包装 local 委托抛出的最终 LLMError
@@ -1522,10 +1531,11 @@ LOCAL_LLM_UNAVAILABLE_MESSAGE = (
 class RoutingLLM:
     """组合式 LLM：本地方法集走 local 实例、其余方法走 remote 实例。
 
-    本地方法集 = LOCAL_LLM_METHODS（三个纯文本摘要）；方法集外方法绝不落到
-    local。local 委托抛出的最终 LLMError 被包装附可操作提示
-    （LOCAL_LLM_UNAVAILABLE_MESSAGE），错误类别（kind）保持、沿用委托内既有
-    重试机制（网络类指数退避照常），**不**自动回退远程（用户裁决大声失败）。
+    本地方法集 = LOCAL_LLM_METHODS（六个方法：三个纯文本摘要 + 澄清 / 简介
+    一致性校验 / 归档判定）；方法集外方法绝不落到 local。local 委托抛出的最终
+    LLMError 被包装附可操作提示（LOCAL_LLM_UNAVAILABLE_MESSAGE），错误类别
+    （kind）保持、沿用委托内既有重试机制（网络类指数退避照常），**不**自动
+    回退远程（用户裁决大声失败）。
     """
 
     def __init__(self, remote: LLM, local: LLM) -> None:
@@ -1541,7 +1551,7 @@ class RoutingLLM:
         return self._local if method in LOCAL_LLM_METHODS else self._remote
 
     def _local_call(self, method: str, call: Callable[[LLM], RT]) -> RT:
-        """按方法集路由调用 + 本地失联包装（三个文本摘要共用原语）。
+        """按方法集路由调用 + 本地失联包装（本地方法集共用原语）。
 
         _delegate 选委托后执行；仅当委托是 local 时才做失联包装（集合与派发
         同源——集合缩了自动退化为 remote 直通，不会把远程错误误包装成本地
@@ -1585,7 +1595,9 @@ class RoutingLLM:
     def clarify(
         self, problem_text: str, clarifications: Sequence[tuple[str, str]]
     ) -> tuple[str, ...]:
-        return self._remote.clarify(problem_text, clarifications)
+        return self._local_call(
+            "clarify", lambda delegate: delegate.clarify(problem_text, clarifications)
+        )
 
     def summarize_topic(self, problem_text: str) -> str:
         return self._local_call(
@@ -1615,7 +1627,10 @@ class RoutingLLM:
     def validate_module_description(
         self, description: str, code: str
     ) -> ValidationResult:
-        return self._remote.validate_module_description(description, code)
+        return self._local_call(
+            "validate_module_description",
+            lambda delegate: delegate.validate_module_description(description, code),
+        )
 
     def fix_compile_errors(
         self,
@@ -1665,7 +1680,10 @@ class RoutingLLM:
     def reference_judge_archivable(
         self, candidates: Sequence[ReferenceCandidate]
     ) -> tuple[str, ...]:
-        return self._remote.reference_judge_archivable(candidates)
+        return self._local_call(
+            "reference_judge_archivable",
+            lambda delegate: delegate.reference_judge_archivable(candidates),
+        )
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
         return self._remote.topic_split_topics(pdf_text)
