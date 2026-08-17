@@ -1074,7 +1074,8 @@ def _theia_masters_dir(tmp_path) -> Path:
 
 def test_generate_mspm0_theia_minimal_project_succeeds(fake_module_library, tmp_path):
     """端到端（slugs=() 最小工程）：Theia 母版全程走通，无 CcsProjectError；
-    输出树 = main.c 骨架 + 母版文件，无 empty.c / .clangd / Debug / README。"""
+    输出树 = main.c 骨架 + 母版文件，无 empty.c / .clangd / Debug / README.html
+    噪音；README.md = 工单 project-readme/01 生成产物（母版不自带）。"""
     main_c = "int main(void) { while (1); }\n"
     summary = generate_project(
         platform=PLATFORM_MSPM0,
@@ -1093,8 +1094,8 @@ def test_generate_mspm0_theia_minimal_project_succeeds(fake_module_library, tmp_
     assert not (out / "empty.c").exists()  # 母版已整理（empty.c → main.c）
     assert not (out / ".clangd").exists()
     assert not (out / "Debug").exists()
-    assert not (out / "README.html").exists()
-    assert not (out / "README.md").exists()
+    assert not (out / "README.html").exists()  # 母版已整理（TI 示例 README 噪音剔除）
+    assert "## 工程概览" in (out / "README.md").read_text(encoding="utf-8")
 
 
 def test_generate_mspm0_theia_appends_module_includes_and_root_source_entry(
