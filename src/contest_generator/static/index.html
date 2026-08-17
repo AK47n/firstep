@@ -966,6 +966,15 @@
     </div>
 
     <div class="card">
+      <h2>本地模型（可选）</h2>
+      <div class="row">
+        <div style="flex:1"><label>本地 LLM base_url（留空 = 本地路由关闭）</label><input type="text" id="set-local-llm-base-url" placeholder="http://localhost:11434/v1"></div>
+        <div style="flex:1"><label>本地模型（留空 = 关闭）</label><input type="text" id="set-local-llm-model" placeholder="qwen2.5-coder:7b-instruct"></div>
+      </div>
+      <div class="muted">填写后，赛题简介 / 模块简介 / 参考素材简介三个纯文本摘要调用走本地模型；其余调用仍走 DeepSeek。</div>
+    </div>
+
+    <div class="card">
       <div class="row">
         <button id="btn-save-settings" class="primary">保存设置</button>
         <span class="muted">配置文件：<span id="set-config-path"></span>（含 API key，不入版本库）</span>
@@ -4358,6 +4367,9 @@ async function loadSettings() {
     $("set-ccs-sdk-dir").value = s.ccs_sdk_dir || "";
     $("set-ccs-compiler-dir").value = s.ccs_compiler_dir || "";
     $("set-ccs-sysconfig-cli").value = s.ccs_sysconfig_cli || "";
+    // 本地 LLM 端点（工单 local-llm-routing/03）：空串 = 本地路由关闭
+    $("set-local-llm-base-url").value = s.local_llm_base_url || "";
+    $("set-local-llm-model").value = s.local_llm_model || "";
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
@@ -4377,6 +4389,8 @@ $("btn-save-settings").addEventListener("click", async () => {
       ccs_sdk_dir: $("set-ccs-sdk-dir").value.trim(),
       ccs_compiler_dir: $("set-ccs-compiler-dir").value.trim(),
       ccs_sysconfig_cli: $("set-ccs-sysconfig-cli").value.trim(),
+      local_llm_base_url: $("set-local-llm-base-url").value.trim(),
+      local_llm_model: $("set-local-llm-model").value.trim(),
     });
     $("settings-msg").classList.add("ok");
     $("settings-msg").textContent = "已保存，立即生效。";

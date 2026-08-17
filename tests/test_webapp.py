@@ -2524,6 +2524,91 @@ def test_settings_ccs_toolchain_paths_roundtrip(client, context):
     )
 
 
+def test_settings_local_llm_fields_roundtrip(client, context):
+    """local_llm_base_url / local_llm_model（工单 local-llm-routing/03）读写透传，
+    缺省空串 = 本地路由关闭（前端显示为空输入框）。"""
+    current = client.get("/api/settings").json()
+    assert current["local_llm_base_url"] == ""
+    assert current["local_llm_model"] == ""
+
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "local_llm_base_url": "http://localhost:11434/v1",
+            "local_llm_model": "qwen2.5-coder:7b-instruct",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == "http://localhost:11434/v1"
+    assert context[0].config.local_llm_model == "qwen2.5-coder:7b-instruct"
+    saved = client.get("/api/settings").json()
+    assert saved["local_llm_base_url"] == "http://localhost:11434/v1"
+    assert saved["local_llm_model"] == "qwen2.5-coder:7b-instruct"
+
+
+def test_settings_local_llm_put_absent_or_blank_closes(client, context):
+    """PUT 缺省 / 空串两字段 = 关闭本地路由（等价于从 config.json 移除）。"""
+    current = client.get("/api/settings").json()
+    base = {
+        "base_url": current["base_url"],
+        "api_key": current["api_key"],
+        "model": current["model"],
+        "module_library_dir": current["module_library_dir"],
+        "masters_dir": current["masters_dir"],
+    }
+    set_local = {
+        "local_llm_base_url": "http://localhost:11434/v1",
+        "local_llm_model": "qwen2.5-coder:7b-instruct",
+    }
+
+    # 先填上本地字段
+    resp = client.put("/api/settings", json={**base, **set_local})
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == "http://localhost:11434/v1"
+
+    # 缺省字段 → 关闭
+    resp = client.put("/api/settings", json=base)
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == ""
+    assert context[0].config.local_llm_model == ""
+
+    # 再填上，然后空串 → 关闭
+    resp = client.put("/api/settings", json={**base, **set_local})
+    assert resp.status_code == 200
+    resp = client.put("/api/settings", json={**base, "local_llm_base_url": "", "local_llm_model": ""})
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == ""
+    assert context[0].config.local_llm_model == ""
+    saved = client.get("/api/settings").json()
+    assert saved["local_llm_base_url"] == ""
+    assert saved["local_llm_model"] == ""
+
+
+def test_settings_local_llm_put_rejects_non_string(client, context):
+    """PUT 两字段非字符串 → 400 中文报错（与既有字段同严格度）。"""
+    current = client.get("/api/settings").json()
+    base = {
+        "base_url": current["base_url"],
+        "api_key": current["api_key"],
+        "model": current["model"],
+        "module_library_dir": current["module_library_dir"],
+        "masters_dir": current["masters_dir"],
+    }
+
+    resp = client.put("/api/settings", json={**base, "local_llm_base_url": 123})
+    assert resp.status_code == 400
+    assert "local_llm_base_url 必须是字符串" in resp.json()["detail"]
+
+    resp = client.put("/api/settings", json={**base, "local_llm_model": 456})
+    assert resp.status_code == 400
+    assert "local_llm_model 必须是字符串" in resp.json()["detail"]
+
+
 def test_state_reports_toolchain_availability(client, context, monkeypatch):
     """/api/state 携带 toolchains（前端置灰依据）：探测命中 → True，未命中 → False。"""
     monkeypatch.setattr(

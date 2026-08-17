@@ -1209,6 +1209,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "ccs_sdk_dir": config.ccs_sdk_dir if config is not None else "",
             "ccs_compiler_dir": config.ccs_compiler_dir if config is not None else "",
             "ccs_sysconfig_cli": config.ccs_sysconfig_cli if config is not None else "",
+            # 本地 LLM 端点（工单 local-llm-routing/01-03）：空串 = 本地路由关闭
+            "local_llm_base_url": config.local_llm_base_url if config is not None else "",
+            "local_llm_model": config.local_llm_model if config is not None else "",
             "config_path": str(context.config_path),
         }
 
@@ -1240,6 +1243,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ccs_sdk_dir=_optional_str(payload, "ccs_sdk_dir"),
             ccs_compiler_dir=_optional_str(payload, "ccs_compiler_dir"),
             ccs_sysconfig_cli=_optional_str(payload, "ccs_sysconfig_cli"),
+            # 本地 LLM 端点（工单 local-llm-routing/03）：缺省 / 空串 = 关闭本地路由
+            local_llm_base_url=_optional_str(payload, "local_llm_base_url"),
+            local_llm_model=_optional_str(payload, "local_llm_model"),
         )
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
