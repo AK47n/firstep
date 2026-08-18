@@ -23,6 +23,7 @@ import logging
 import math
 import time
 import urllib.error
+import uuid
 import urllib.request
 from email.utils import parsedate_to_datetime
 from dataclasses import dataclass, field, replace
@@ -562,6 +563,117 @@ class RetryBudget:
 
 
 @dataclass(frozen=True)
+class LLMCallObservation:
+    """一条已脱敏的 LLM 调用观测；不包含 prompt / response / key / 文件内容。"""
+
+    workflow_id: str
+    sequence: int
+    operation: str
+    provider: str
+    route: str
+    model: str
+    duration_ms: int
+    attempts: int
+    status: str
+    final: bool
+    call_id: int | None
+    budget_attempt: int | None
+    http_status: int | None
+    error_kind: str | None
+    parse_status: str
+    request_bytes: int
+    usage: Mapping[str, Any] | None = None
+
+    def to_log_extra(self) -> dict[str, Any]:
+        usage = dict(self.usage) if self.usage else None
+        return {
+            "workflow_id": self.workflow_id,
+            "sequence": self.sequence,
+            "operation": self.operation,
+            "provider": self.provider,
+            "route": self.route,
+            "model": self.model,
+            "duration_ms": self.duration_ms,
+            "attempts": self.attempts,
+            "status": self.status,
+            "final": self.final,
+            "call_id": self.call_id,
+            "budget_attempt": self.budget_attempt,
+            "http_status": self.http_status,
+            "error_kind": self.error_kind,
+            "parse_status": self.parse_status,
+            "request_bytes": self.request_bytes,
+            "usage": usage,
+        }
+
+
+@dataclass
+class LLMObservationCollector:
+    """工作流级 LLM 调用观测收集器：追加顺序号并只保存脱敏字段。"""
+
+    workflow_id: str
+    _observations: list[LLMCallObservation] = field(default_factory=list, init=False)
+
+    def record(self, observation: LLMCallObservation) -> LLMCallObservation:
+        if observation.workflow_id != self.workflow_id:
+            raise ValueError("观测 workflow_id 与 collector 不一致")
+        if observation.sequence != len(self._observations) + 1:
+            raise ValueError("观测 sequence 必须单调递增")
+        self._observations.append(observation)
+        return observation
+
+    def collect(
+        self,
+        *,
+        operation: str,
+        provider: str,
+        route: str,
+        model: str,
+        duration_ms: int,
+        attempts: int,
+        status: str,
+        final: bool,
+        call_id: int | None,
+        budget_attempt: int | None,
+        http_status: int | None,
+        error_kind: str | None,
+        parse_status: str,
+        request_bytes: int,
+        usage: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        observation = LLMCallObservation(
+            workflow_id=self.workflow_id,
+            sequence=len(self._observations) + 1,
+            operation=operation,
+            provider=provider,
+            route=route,
+            model=model,
+            duration_ms=duration_ms,
+            attempts=attempts,
+            status=status,
+            final=final,
+            call_id=call_id,
+            budget_attempt=budget_attempt,
+            http_status=http_status,
+            error_kind=error_kind,
+            parse_status=parse_status,
+            request_bytes=request_bytes,
+            usage=dict(usage) if usage else None,
+        )
+        self.record(observation)
+        return observation.to_log_extra()
+
+    @property
+    def observations(self) -> tuple[dict[str, Any], ...]:
+        return tuple(item.to_log_extra() for item in self._observations)
+
+
+def create_llm_observation_collector(workflow_name: str) -> LLMObservationCollector:
+    """创建一次逻辑工作流的观测收集器，workflow_id = 类型 + 随机实例 id。"""
+    return LLMObservationCollector(f"{workflow_name}:{uuid.uuid4().hex}")
+
+
+@dataclass(frozen=True)
 class _ChatResult:
     """一次真实请求的响应内容与观测元数据（解析后补记 parse_status）。"""
 
@@ -883,11 +995,13 @@ class DeepSeekLLM:
         hardware_words: Sequence[HardwareWordGroup] | None = None,
         provider: str = "remote",
         retry_budget: RetryBudget | None = None,
+        observation_collector: LLMObservationCollector | None = None,
     ) -> None:
         self._config = config
         self._transport = transport or UrllibTransport()
         self._provider = provider
         self._retry_budget = retry_budget
+        self._observation_collector = observation_collector
         self._call_sequence = 0
         # 硬件词表：库外建议 name 的校验源 + 提示词科普素材；缺省用包内默认
         # 词表（wordlist.json，可手补），测试可注入自定义词表
@@ -1652,6 +1766,8 @@ class DeepSeekLLM:
             "request_bytes": request_bytes,
             "usage": dict(usage) if usage else None,
         }
+        if self._observation_collector is not None:
+            observation = self._observation_collector.collect(**observation)
         logger.info("LLM 调用观测", extra={"llm_observation": observation})
 
     def _observe_chat_result(
@@ -1732,14 +1848,29 @@ class DeepSeekLLM:
         self._call_sequence += 1
         call_id = self._call_sequence
         budget_attempt: int | None = None
-        if self._retry_budget is not None:
-            budget_attempt = self._retry_budget.consume_attempt()
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         body_bytes = json.dumps(payload).encode("utf-8")
         started_at = time.monotonic()
         request_bytes = len(body_bytes)
+        if self._retry_budget is not None:
+            try:
+                budget_attempt = self._retry_budget.consume_attempt()
+            except LLMError as exc:
+                self._observe_call(
+                    operation=operation,
+                    started_at=started_at,
+                    request_bytes=request_bytes,
+                    status="error",
+                    http_status=None,
+                    parse_status="not_sent",
+                    error_kind=exc.kind,
+                    call_id=call_id,
+                    attempts=attempt_number,
+                    budget_attempt=None,
+                )
+                raise
         if len(body_bytes) > MAX_REQUEST_BYTES:
             self._observe_call(
                 operation=operation,
@@ -2077,7 +2208,12 @@ class RoutingLLM:
         return self._remote.topic_extract_number(text)
 
 
-def build_llm(config: AppConfig, retry_budget: RetryBudget | None = None) -> LLM:
+def build_llm(
+    config: AppConfig,
+    retry_budget: RetryBudget | None = None,
+    observation_collector: LLMObservationCollector | None = None,
+    transport: Transport | None = None,
+) -> LLM:
     """按配置构造 LLM（webapp 的 AppContext.llm_factory 默认值）。
 
     本地 base_url 为空 → 普通 DeepSeekLLM（≡ 现状，零回归）；非空 → RoutingLLM
@@ -2086,7 +2222,12 @@ def build_llm(config: AppConfig, retry_budget: RetryBudget | None = None) -> LLM
     model 非空）。
     """
     if not config.local_llm_base_url:
-        return DeepSeekLLM(config, retry_budget=retry_budget)
+        return DeepSeekLLM(
+            config,
+            transport=transport,
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+        )
     local_config = replace(
         config,
         api_key="",
@@ -2094,8 +2235,20 @@ def build_llm(config: AppConfig, retry_budget: RetryBudget | None = None) -> LLM
         model=config.local_llm_model or config.model,
     )
     return RoutingLLM(
-        remote=DeepSeekLLM(config, provider="remote", retry_budget=retry_budget),
-        local=DeepSeekLLM(local_config, provider="local", retry_budget=retry_budget),
+        remote=DeepSeekLLM(
+            config,
+            transport=transport,
+            provider="remote",
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+        ),
+        local=DeepSeekLLM(
+            local_config,
+            transport=transport,
+            provider="local",
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+        ),
     )
 
 

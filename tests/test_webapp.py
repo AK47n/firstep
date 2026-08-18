@@ -48,6 +48,7 @@ from contest_generator.events import (
 from contest_generator.boards import board_for_platform
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.llm import (
+    LLMObservationCollector,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
     LLMError,
     RoutingLLM,
@@ -1243,11 +1244,17 @@ def test_skeleton_rejects_instances_with_empty_name(client):
 
 
 
-def test_llm_factory_receives_shared_retry_budget_for_skeleton(tmp_path):
+def test_llm_factory_receives_shared_retry_budget_and_collector_for_skeleton(tmp_path):
     budgets = []
+    collectors = []
 
-    def factory(config: AppConfig, retry_budget=None):
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
         budgets.append(retry_budget)
+        collectors.append(observation_collector)
         return FakeLLM(main_skeleton="int main(void) { while(1) {} }\n")
 
     modules = make_fake_module_library(tmp_path / "modules")
@@ -1268,13 +1275,22 @@ def test_llm_factory_receives_shared_retry_budget_for_skeleton(tmp_path):
     assert len(budgets) >= 2
     assert budgets[0] is not None
     assert budgets[0] is budgets[1]
+    assert collectors[0] is not None
+    assert collectors[0] is collectors[1]
+    assert collectors[0].workflow_id.startswith("skeleton:")
 
 
-def test_llm_factory_receives_shared_retry_budget_for_recommend(tmp_path):
+def test_llm_factory_receives_shared_retry_budget_and_collector_for_recommend(tmp_path):
     budgets = []
+    collectors = []
 
-    def factory(config: AppConfig, retry_budget=None):
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
         budgets.append(retry_budget)
+        collectors.append(observation_collector)
         return FakeLLM(selection=ModuleSelection(modules=(), reasons={}))
 
     ctx = AppContext(
@@ -1294,6 +1310,9 @@ def test_llm_factory_receives_shared_retry_budget_for_recommend(tmp_path):
     assert len(budgets) >= 2
     assert budgets[0] is not None
     assert budgets[0] is budgets[1]
+    assert collectors[0] is not None
+    assert collectors[0] is collectors[1]
+    assert collectors[0].workflow_id.startswith("recommend:")
 
 
 def test_skeleton_forwards_instances_to_llm(client, context):

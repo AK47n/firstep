@@ -73,9 +73,11 @@ from .library import (
 )
 from .llm import (
     LLM,
+    LLMObservationCollector,
     RetryBudget,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_llm,
+    create_llm_observation_collector,
 )
 from .master import (
     confirm_distillation,
@@ -242,19 +244,25 @@ def _require_config(ctx: AppContext) -> AppConfig:
     return config
 
 
-def _llm(ctx: AppContext, retry_budget: RetryBudget | None = None) -> LLM:
+def _llm(
+    ctx: AppContext,
+    retry_budget: RetryBudget | None = None,
+    observation_collector: LLMObservationCollector | None = None,
+) -> LLM:
     factory = ctx.llm_factory
     config = _require_config(ctx)
-    params = inspect.signature(factory).parameters.values()
+    params = list(inspect.signature(factory).parameters.values())
     positional = {
         inspect.Parameter.POSITIONAL_ONLY,
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
     }
-    accepts_budget = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
-    if not accepts_budget:
-        params = inspect.signature(factory).parameters.values()
-        accepts_budget = sum(1 for p in params if p.kind in positional) >= 2
-    if accepts_budget:
+    if any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params):
+        positional_count = 3
+    else:
+        positional_count = sum(1 for p in params if p.kind in positional)
+    if positional_count >= 3:
+        return factory(config, retry_budget, observation_collector)
+    if positional_count >= 2:
         return factory(config, retry_budget)
     return factory(config)
 
@@ -611,11 +619,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 的准入 / 全文直读同样在装配点完成。platform（工单 01）= 锚定命中
         # 按生成平台过滤（手动选不过滤），缺省 / 空 = 现状不过滤
         budget = RetryBudget()
+        collector = create_llm_observation_collector("recommend")
         topic = _assemble_topic_context(
             context,
             topic_id,
             problem_text,
-            _llm(context, budget),
+            _llm(context, budget, collector),
             reference_ids,
             platform,
         )
@@ -624,7 +633,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 两阶段编排归 selection.run_recommendation（澄清先行 → 收敛 →
             # done 载荷组装），路由只转调——终态一律由域函数发出，路由不分支；
             # run 抛错由运行器补发 error 终态（终态保证归运行器）
-            run_recommendation(topic, _llm(context, budget), clarifications, emit=emit)
+            run_recommendation(
+                topic, _llm(context, budget, collector), clarifications, emit=emit
+            )
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -686,11 +697,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             _optional_str(payload, "main_mode") if "main_mode" in payload else "skeleton"
         )
         budget = RetryBudget()
+        collector = create_llm_observation_collector("skeleton")
         topic = _assemble_topic_context(
             context,
             topic_id,
             problem_text,
-            _llm(context, budget),
+            _llm(context, budget, collector),
             reference_ids=reference_ids,
             platform=platform,
         )
@@ -700,7 +712,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
         # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
         return run_skeleton(
-            llm=_llm(context, budget),
+            llm=_llm(context, budget, collector),
             problem_text=topic.problem_text,
             manifests=resolved.manifests,
             slugs=slugs,
@@ -841,7 +853,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             _require_config(context).masters_dir.parent
         )
         budget = RetryBudget()
-        llm = _llm(context, budget)
+        collector = create_llm_observation_collector("fix-errors")
+        llm = _llm(context, budget, collector)
 
         def run(emit: SseEmitter) -> None:
             # 五步编排归 run_fix_round（对照 run_recommendation 归位先例）：事件
@@ -1151,7 +1164,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         project_dirs = _require_str_list(payload, "project_dirs")
         budget = RetryBudget()
-        llm = _llm(context, budget)
+        collector = create_llm_observation_collector("masters-distill")
+        llm = _llm(context, budget, collector)
 
         def run(emit: SseEmitter) -> None:
             projects = [scan_project(Path(d)) for d in project_dirs]
@@ -1176,9 +1190,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
         config = _require_config(context)
         budget = RetryBudget()
+        collector = create_llm_observation_collector("masters-confirm")
 
         def archive_llm_factory() -> LLM:
-            return _llm(context, budget)
+            return _llm(context, budget, collector)
 
         meta = confirm_distillation(
             _masters_dir(context),

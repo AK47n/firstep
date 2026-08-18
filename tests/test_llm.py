@@ -32,6 +32,7 @@ from contest_generator.llm import (
     DEFAULT_WORDLIST,
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
+    LLMObservationCollector,
     EMBEDDED_CONTENT_CAP,
     ERROR_KIND_NETWORK,
     FIX_PREVIOUS_FIXES_CAP,
@@ -145,11 +146,13 @@ def _llm(
     base_url: str = "https://api.deepseek.com",
     model: str = "deepseek-chat",
     retry_budget: RetryBudget | None = None,
+    observation_collector: LLMObservationCollector | None = None,
 ) -> DeepSeekLLM:
     return DeepSeekLLM(
         AppConfig(base_url=base_url, api_key="sk-test", model=model),
         transport=transport,
         retry_budget=retry_budget,
+        observation_collector=observation_collector,
     )
 
 
@@ -343,13 +346,16 @@ def test_local_llm_route_does_not_forward_remote_authorization(monkeypatch):
 
 def test_llm_call_emits_redacted_structured_observation(caplog):
     transport = FakeTransport(body=_api_response("摘要"))
-    llm = _llm(transport)
+    collector = LLMObservationCollector("workflow-1")
+    llm = _llm(transport, observation_collector=collector)
     caplog.set_level(logging.INFO, logger=llm_module.__name__)
 
-    llm.summarize_module("题面原文与源码 secret-source")
+    llm.summarize_module("题面原文与源码 secret-source compile-output-secret")
 
     record = next(record for record in caplog.records if record.name == llm_module.__name__)
     observation = record.__dict__["llm_observation"]
+    assert observation["workflow_id"] == "workflow-1"
+    assert observation["sequence"] == 1
     assert observation["operation"] == "summarize_module"
     assert observation["provider"] == "deepseek"
     assert observation["route"] == "remote"
@@ -359,8 +365,15 @@ def test_llm_call_emits_redacted_structured_observation(caplog):
     assert observation["http_status"] == 200
     assert observation["parse_status"] == "success"
     assert observation["request_bytes"] > 0
+    assert collector.observations == (observation,)
+    serialized_observation = json.dumps(observation, ensure_ascii=False)
+    assert "题面原文" not in serialized_observation
+    assert "secret-source" not in serialized_observation
+    assert "compile-output-secret" not in serialized_observation
+    assert "sk-test" not in serialized_observation
     assert "题面原文" not in record.getMessage()
     assert "secret-source" not in record.getMessage()
+    assert "compile-output-secret" not in record.getMessage()
     assert "sk-test" not in record.getMessage()
 
 
@@ -448,14 +461,24 @@ def test_rate_limit_uses_retry_after(monkeypatch):
     assert sleeps == [7.0]
 
 
-def test_retry_budget_stops_before_next_attempt():
+def test_retry_budget_stops_before_next_attempt_and_collects_not_sent_observation():
     transport = SequenceTransport([_api_response("")] * 3)
     budget = RetryBudget(max_attempts=2)
-    llm = _llm(transport, retry_budget=budget)
+    collector = LLMObservationCollector("workflow-budget")
+    llm = _llm(transport, retry_budget=budget, observation_collector=collector)
 
     with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
         llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
     assert len(transport.calls) == 2
+    assert [item["parse_status"] for item in collector.observations] == [
+        "parse_error",
+        "parse_error",
+        "not_sent",
+    ]
+    assert collector.observations[-1]["error_kind"] == "budget"
+    assert collector.observations[-1]["http_status"] is None
+    assert collector.observations[-1]["request_bytes"] > 0
+    assert [item["sequence"] for item in collector.observations] == [1, 2, 3]
 
 
 def test_retry_budget_elapsed_time_stops_before_request():
@@ -482,8 +505,15 @@ def test_retry_exhaustion_preserves_last_error_kind():
 
 
 
-def test_build_llm_uses_shared_budget_across_remote_and_local_routes():
-    budget = RetryBudget(max_attempts=1)
+def test_build_llm_uses_shared_budget_and_collector_across_remote_and_local_routes():
+    budget = RetryBudget(max_attempts=2)
+    collector = LLMObservationCollector("workflow-routing")
+    transport = SequenceTransport(
+        [
+            _api_response(json.dumps({"questions": []})),
+            _api_response(SELECTION_JSON),
+        ]
+    )
     llm = build_llm(
         AppConfig(
             api_key="sk-test",
@@ -491,17 +521,21 @@ def test_build_llm_uses_shared_budget_across_remote_and_local_routes():
             local_llm_model="local-model",
         ),
         retry_budget=budget,
+        observation_collector=collector,
+        transport=transport,
     )
 
-    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
-        # clarify 走 local；select_modules 走 remote。两者共享同一个 RetryBudget。
-        try:
-            llm.clarify("赛题", ())
-        except LLMError:
-            pass
-        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    llm.clarify("赛题", ())
+    llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
 
-    assert budget.attempts == 1
+    assert budget.attempts == 2
+    assert [item["workflow_id"] for item in collector.observations] == [
+        "workflow-routing",
+        "workflow-routing",
+    ]
+    assert [item["sequence"] for item in collector.observations] == [1, 2]
+    assert [item["route"] for item in collector.observations] == ["local", "remote"]
+    assert [item["provider"] for item in collector.observations] == ["local", "deepseek"]
 
 
 
