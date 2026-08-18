@@ -1,0 +1,49 @@
+{
+  "slug": "servo",
+  "description": "舵机角度控制（双平台）：servo_init/servo_set_angle 输出 50Hz/20ms 周期、0.5-2.5ms 脉宽映射 0-180°；stm32 走母版 ml_pwm（pwm 类型级开放），mspm0 走母版 syscfg SERVO_PWM 实例（周期按实例时钟运行时计算）；适用于云台转向 / 打靶角度 / 机械臂等舵机类赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/servo.h",
+        "code/servo_stm32.c"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "基于母版 ml_pwm（pwm_pin_init/pwm_init/pwm_update，MAX_DUTY=50000）：50Hz 周期，0.5ms=1250、2.5ms=6250，角度线性插值。引脚宏 SERVO_PWM_TIM/SERVO_PWM_CH 在母版 pin_config.h（b1-adc-servo/02），绑定改宏值（TIM/通道随引脚）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "SERVO_PWM_C0",
+          "type": "pwm",
+          "default": "PB6",
+          "required": true,
+          "macros": [
+            "SERVO_PWM_TIM",
+            "SERVO_PWM_CH"
+          ]
+        }
+      ]
+    },
+    "mspm0": {
+      "files": [
+        "code/servo.h",
+        "code/servo_mspm0.c"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg SERVO_PWM 实例（TIMG8 C0 = PA7，b1-adc-servo/02）；周期与脉宽按 SERVO_PWM_INST_CLK_FREQ 运行时计算（照 step_motor 先例，不依赖 ULPCLK 假设）；绑定换引脚 = 改写 ccp0Pin.$assign + peripheral 行（pwm 类型级现成）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "SERVO_PWM_C0",
+          "type": "pwm",
+          "default": "PA7",
+          "required": true
+        }
+      ]
+    }
+  }
+}

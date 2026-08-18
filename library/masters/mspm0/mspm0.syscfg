@@ -32,6 +32,14 @@
 const PWM     = scripting.addModule("/ti/driverlib/PWM", {}, false);
 const PWMAB   = PWM.addInstance();
 const DCC_100_PWM2 = PWM.addInstance();
+// 舵机（servo 模块：50Hz/20ms 周期，0.5-2.5ms 脉宽映射 0-180°；周期由
+// servo_init 按 SERVO_PWM_INST_CLK_FREQ 运行时配置，此处初值仅保证可编译）
+const SERVO_PWM = PWM.addInstance();
+SERVO_PWM.$name                      = "SERVO_PWM";
+SERVO_PWM.clockPrescale              = 1;
+SERVO_PWM.timerCount                 = 65535;
+SERVO_PWM.peripheral.$assign         = "TIMG8";
+SERVO_PWM.peripheral.ccp0Pin.$assign = "PA7";
 const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
 const MOTOR_PID = TIMER.addInstance();
 const NTB     = TIMER.addInstance();
@@ -284,6 +292,18 @@ I2C_0.peripheral.$assign        = "I2C0";
 I2C_0.peripheral.sdaPin.$assign = "PA0";
 I2C_0.peripheral.sclPin.$assign = "PA1";
 
+// adc 模块：ADC12 单通道（b1-adc-servo/01；MEM0=PA24/A0_3，轮询读取，不配中断；
+// 第二通道的 adcPinN 槽位在 LQFP-64(PM) 设备数据不存在，双通道留后续）
+const ADC12   = scripting.addModule("/ti/driverlib/ADC12", {}, false);
+const ADC12_0 = ADC12.addInstance();
+ADC12_0.$name                      = "ADC12_0";
+ADC12_0.sampClkSrc                 = "DL_ADC12_CLOCK_ULPCLK";
+ADC12_0.sampClkDiv                 = "DL_ADC12_CLOCK_DIVIDE_8";
+ADC12_0.sampleTime0                = "125 us";
+ADC12_0.powerDownMode              = "DL_ADC12_POWER_DOWN_MODE_MANUAL";
+ADC12_0.adcMem0chansel             = "DL_ADC12_INPUT_CHAN_3";
+ADC12_0.peripheral.$assign         = "ADC0";
+ADC12_0.peripheral.adcPin3.$assign = "PA24";
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
 Board.configureUnused = true;
 

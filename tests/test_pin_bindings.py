@@ -295,9 +295,10 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PB7": 2,
         "PA22": 2,
         "PA23": 3,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX
-        "PA24": 2,
-        "PA25": 2,
+        "PA24": 3,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚）
+        "PA25": 2,  # HUIDU L4 + ZIGBEE_UART RX
         "PA26": 2,
+        "PA7": 2,  # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）
         "UART2": 2,  # UWB_UART 与 DEBUG_UART 默认同外设（用户改绑消解）
     }
 
