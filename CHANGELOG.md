@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ac88af6cf13327ebe154191c2d034929dee9394d -->
+<!-- changelog-auto: last-commit=804c7e53c37e18fbf2d71b67a06b54c08f356dcc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 21:08 路由层：RoutingLLM 本地文本三调用派发 + build_llm 接线（工单 local-llm-routing/02）
 - 21:20 设置页 UI：本地模型端点可填写/清空 + /api/settings GET/PUT 新字段（工单 local-llm-routing/03）
 - 22:43 解析层剥围栏：_unwrap_json_fence 单点剥 json_mode 外层 + 文本模式不动（工单 local-llm-json-group/01）
+- 23:14 扩本地组：LOCAL_LLM_METHODS 3→6（澄清/简介校验/归档判定转本地，其余仍留 DeepSeek）（工单 local-llm-json-group/02）
 
 ## 2026-08-16
 - 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）
