@@ -1,21 +1,21 @@
-# 01 — LLM observation collector seam
+# 01 — LLM 观测收集器接缝
 
-**What to build:** a small, safe observation collector interface that lets one logical workflow collect sanitized LLM call records, including local/remote RoutingLLM calls and budget-exhausted not-sent failures, without exposing prompts/responses/secrets and without coupling llm.py to SSE or UI.
+**要做什么：** 一个小而安全的观测收集器接口：一次逻辑工作流可收集脱敏的 LLM 调用记录（含本地/远程 RoutingLLM 调用与预算耗尽未发送的失败），不暴露 prompt / 响应 / 密钥，也不让 llm.py 依赖 SSE 或 UI。
 
-**Blocked by:** None — can start immediately
+**被谁阻塞：** 无——可立即开始
 
-**Status:** resolved
+**状态：** resolved
 
-- [x] A workflow-scoped collector records sanitized call observations with workflow id and monotonic sequence.
-- [x] Existing log observations keep their redaction guarantees and do not include prompt, response, API key, source file content, or compile output.
-- [x] Budget exhaustion before network send produces a not_sent observation with error_kind `budget`.
-- [x] RoutingLLM local + remote calls in one workflow share the same collector/workflow id.
-- [x] Unit tests cover aggregation fields, redaction, budget-exhausted capture, and local/remote correlation.
+- [x] 工作流级收集器按 workflow id + 单调递增 sequence 记录脱敏调用观测。
+- [x] 既有日志观测保持脱敏保证：不含 prompt、响应、API key、源文件内容或编译输出。
+- [x] 网络发送前的预算耗尽产生 not_sent 观测（error_kind=`budget`）。
+- [x] RoutingLLM 同工作流内的本地 + 远程调用共享同一收集器 / workflow id。
+- [x] 单测覆盖聚合字段、脱敏、预算耗尽捕获与本地/远程关联。
 
 ## Notes
 
-- Built `LLMObservationCollector` / `LLMCallObservation` with workflow id + monotonic sequence and retained redacted log emission.
-- Added pre-send budget exhaustion observations (`parse_status=not_sent`, `error_kind=budget`).
-- Threaded one collector through local + remote `RoutingLLM` workflow construction in the web routes.
-- Reviewed with `mattpocock-skills:code-review`; fixed instance workflow ids and structured redaction assertions.
-- Verified with `python -m pytest`, `python -m mypy src`, and `node --test`.
+- 实现 `LLMObservationCollector` / `LLMCallObservation`：workflow id + 单调 sequence，保留脱敏日志发射。
+- 补发送前预算耗尽观测（`parse_status=not_sent`、`error_kind=budget`）。
+- web 路由层把同一个收集器贯穿本地 + 远程 `RoutingLLM` 工作流构造。
+- 经 `mattpocock-skills:code-review` 评审；修正实例级 workflow id 与结构化脱敏断言。
+- 验证：`python -m pytest`、`python -m mypy src`、`node --test`。

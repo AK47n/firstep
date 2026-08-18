@@ -1,21 +1,21 @@
-# 02 — Live LLM telemetry in SSE flows
+# 02 — SSE 流内实时 LLM 遥测
 
-**What to build:** surface collector snapshots through existing SSE flows so long-running recommendation/skeleton/fix/distill work shows LLM attempts, provider split, retry/error status, total duration, request bytes, and token usage when available, while preserving current done/error terminal behavior.
+**要做什么：** 把收集器快照经既有 SSE 流浮出：推荐 / 骨架 / 修复 / 提炼的长任务进行中即展示 LLM 尝试次数、provider 拆分、重试/错误状态、总耗时、请求字节与可用时的 token 用量，同时保持现有 done / error 终态行为不变。
 
-**Blocked by:** 01 — LLM observation collector seam
+**被谁阻塞：** 01 — LLM 观测收集器接缝
 
-**Status:** resolved
+**状态：** resolved
 
-- [x] At least one high-value flow (`/api/fix-errors` or `/api/recommend`) emits live LLM telemetry events from the collector without changing existing terminal events.
-- [x] The progress event contract documents the new telemetry event fields and remains content-safe.
-- [x] Frontend renders a compact LLM status row during the flow: total calls, local/DeepSeek counts, latest operation, retry/error kind, request bytes, duration, and usage if present.
-- [x] Telemetry emission failures stay旁路 and never fail the underlying workflow.
-- [x] Tests cover SSE event shape and frontend formatting for the telemetry row.
+- [x] 至少一条高价值流（`/api/fix-errors` 或 `/api/recommend`）从收集器发射实时 LLM 遥测事件，且不改变既有终态事件。
+- [x] 进度事件契约文档化新遥测事件字段，保持 content-safe。
+- [x] 前端在流程期间渲染紧凑 LLM 状态行：总调用数、local/DeepSeek 计数、最新 operation、重试/错误种类、请求字节、耗时与可用时的 usage。
+- [x] 遥测发射失败保持旁路，绝不使底层工作流失败。
+- [x] 测试覆盖 SSE 事件形状与前端遥测行格式化。
 
 ## Notes
 
-- Added `llm_telemetry` SSE event fields in `events.py` and a `llm_telemetry.py` adapter that converts collector snapshots into content-safe events.
-- Wired `/api/fix-errors` through the adapter without changing existing `done` / `error` terminal behavior.
-- Added compact 第 10 栏 LLM telemetry display, including calls, provider split, latest operation, retry/error counters, bytes, duration, and numeric usage.
-- Updated domain docs for the new LLM telemetry progress event exception and verified redaction in SSE tests.
-- Verified with `python -m pytest`, `python -m mypy src`, and `node --test tests/js/*.mjs`.
+- `events.py` 新增 `llm_telemetry` SSE 事件字段，`llm_telemetry.py` 提供收集器快照 → content-safe 事件的适配器。
+- `/api/fix-errors` 经适配器接线，不改现有 `done` / `error` 终态。
+- 新增紧凑第 10 栏 LLM 遥测展示：调用数、provider 拆分、最新 operation、重试/错误计数、字节、耗时与数值型 usage。
+- 领域文档补记新 LLM 遥测进度事件例外，SSE 测试验证脱敏。
+- 验证：`python -m pytest`、`python -m mypy src`、`node --test tests/js/*.mjs`。

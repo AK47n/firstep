@@ -1,10 +1,10 @@
-# 03 — Recent LLM workflow dashboard
+# 03 — 最近 LLM 工作流仪表盘
 
-**What to build:** add a lightweight settings/dashboard panel backed by an in-memory recent-workflow ring buffer so completed recommendation/skeleton/fix/distill runs can be inspected after the stream ends.
+**要做什么：** 加一个轻量的设置页/仪表盘面板：基于内存「最近工作流」ring buffer，让已完成的推荐 / 骨架 / 修复 / 提炼运行在流结束后仍可查看。
 
-**Blocked by:** 01 — LLM observation collector seam; 02 — Live LLM telemetry in SSE flows
+**被谁阻塞：** 01 — LLM 观测收集器接缝；02 — SSE 流内实时 LLM 遥测
 
-**Status:** resolved
+**状态：** resolved
 
 - [x] Completed workflow summaries are stored in an in-memory bounded ring buffer and are not written to config or disk.
 - [x] A read-only endpoint returns recent workflow summaries and sanitized per-call details.
