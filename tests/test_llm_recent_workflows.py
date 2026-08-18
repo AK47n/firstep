@@ -149,8 +149,8 @@ def test_recent_workflow_store_returns_content_safe_summary_and_call_details():
 
 
 _TABLES = {
-    "deepseek": LLMPriceTable("deepseek", 2.0, 8.0),
-    "local": LLMPriceTable("local", 0.0, 0.0),
+    "deepseek": LLMPriceTable("deepseek", 0.10, 2.0, 8.0),
+    "local": LLMPriceTable("local", 0.0, 0.0, 0.0),
 }
 
 

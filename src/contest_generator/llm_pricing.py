@@ -12,14 +12,17 @@ from typing import Any, Mapping
 
 # 参考单价（元 / 百万 token）。官方定价波动大（2026-08-18 曾大幅调价），此处仅是
 # 开箱即用的默认参考值——设置页可覆盖；0 单价 = 关闭该 provider 的估算。
-# 默认值取 DeepSeek Flash「高峰时段 + 缓存未命中」档（工具高峰使用多、长 prompt
-# 缓存命中率低，估算偏保守不低估；用户可在设置页按实际时段覆盖）。
+# DeepSeek Flash 输入分缓存命中 / 未命中两档（官方差价 ~30 倍，估算必须拆分
+# 计价）；默认值取「高峰时段」档（工具高峰使用多，估算偏保守不低估；用户可
+# 在设置页按实际时段覆盖）。
 DEFAULT_DEEPSEEK_PRICES: dict[str, float] = {
-    "input_per_million": 3.0,
+    "input_cache_hit_per_million": 0.10,
+    "input_cache_miss_per_million": 3.0,
     "output_per_million": 9.0,
 }
 DEFAULT_LOCAL_PRICES: dict[str, float] = {
-    "input_per_million": 0.0,
+    "input_cache_hit_per_million": 0.0,
+    "input_cache_miss_per_million": 0.0,
     "output_per_million": 0.0,
 }
 
@@ -36,18 +39,33 @@ DEEPSEEK_FLASH_PRICE_REFERENCE: dict[str, Any] = {
 
 _SUPPORTED_PROVIDERS = ("deepseek", "local")
 
+# 单价表可配置键（新形态：输入分缓存命中/未命中两档）
+_PRICE_KEYS = (
+    "input_cache_hit_per_million",
+    "input_cache_miss_per_million",
+    "output_per_million",
+)
+
 
 @dataclass(frozen=True)
 class LLMPriceTable:
-    """一个 provider 的单价表（元 / 百万 token）。"""
+    """一个 provider 的单价表（元 / 百万 token）。
+
+    输入分缓存命中 / 未命中两档（DeepSeek Flash 官方计价，差价 ~30 倍——
+    估算必须拆分，见 estimate_llm_cost）；旧配置形态 {input_per_million,
+    output_per_million} 兼容：input 视为未命中档（未命中是常态，保守），
+    命中档用内置默认。
+    """
 
     provider: str
-    input_per_million: float
+    input_cache_hit_per_million: float
+    input_cache_miss_per_million: float
     output_per_million: float
 
     def to_dict(self) -> dict[str, float]:
         return {
-            "input_per_million": self.input_per_million,
+            "input_cache_hit_per_million": self.input_cache_hit_per_million,
+            "input_cache_miss_per_million": self.input_cache_miss_per_million,
             "output_per_million": self.output_per_million,
         }
 
@@ -57,15 +75,45 @@ class LLMPriceTable:
             raise ValueError(f"不支持的 provider：{provider!r}（支持 {_SUPPORTED_PROVIDERS}）")
         if not isinstance(data, Mapping):
             raise ValueError(f"{provider} 单价表必须是 JSON 对象")
-        values: dict[str, float] = {}
-        for key in ("input_per_million", "output_per_million"):
-            value = data.get(key)
+
+        def _read_optional(key: str) -> float | None:
+            if key not in data:
+                return None
+            value = data[key]
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise ValueError(f"{provider} 单价字段 {key} 必须是数字")
             if value < 0:
                 raise ValueError(f"{provider} 单价字段 {key} 不能为负")
-            values[key] = float(value)
-        return cls(provider=provider, **values)
+            return float(value)
+
+        def _read_required(key: str) -> float:
+            value = _read_optional(key)
+            if value is None:
+                raise ValueError(f"{provider} 单价表缺少计费字段 {key}")
+            return value
+
+        hit = _read_optional("input_cache_hit_per_million")
+        miss = _read_optional("input_cache_miss_per_million")
+        if hit is None and miss is None:
+            # 旧形态 {input_per_million, output_per_million}：input = 未命中档
+            # （保守），命中档 = 内置默认（新字段缺省语义）
+            miss = _read_required("input_per_million")
+            hit = (
+                DEFAULT_DEEPSEEK_PRICES["input_cache_hit_per_million"]
+                if provider == "deepseek"
+                else 0.0
+            )
+        else:
+            if hit is None:
+                hit = 0.0
+            if miss is None:
+                miss = 0.0
+        return cls(
+            provider=provider,
+            input_cache_hit_per_million=hit,
+            input_cache_miss_per_million=miss,
+            output_per_million=_read_required("output_per_million"),
+        )
 
 
 def default_price_tables() -> dict[str, LLMPriceTable]:
@@ -109,19 +157,32 @@ def estimate_llm_cost(
     usage: Mapping[str, Any] | None,
     table: LLMPriceTable,
 ) -> float:
-    """usage（prompt_tokens / completion_tokens）→ 估算金额（元）。
+    """usage（prompt_tokens / completion_tokens + 缓存拆分）→ 估算金额（元）。
 
-    缺字段 / 非数值 / 负数一律按 0 计（展示层防御，不抛）；token 计数为模型
-    服务商上报值，估算仅供成本参考，不代表实际账单。
+    DeepSeek Flash 官方输入价分缓存命中 / 未命中两档（差价 ~30 倍），拆分
+    计价：usage 带 prompt_cache_hit_tokens / prompt_cache_miss_tokens 时
+    分别按两档单价算；缺拆分字段（旧 API / 未上报）→ 全部按未命中档
+    （保守，未命中是常态）。输出恒按 output 单价。缺字段 / 非数值 / 负数
+    一律按 0 计（展示层防御，不抛）；token 计数为模型服务商上报值，估算
+    仅供成本参考，不代表实际账单。
     """
     if not usage or not isinstance(usage, Mapping):
         return 0.0
-    prompt = _nonnegative_int(usage.get("prompt_tokens"))
     completion = _nonnegative_int(usage.get("completion_tokens"))
-    if prompt == 0 and completion == 0:
+    prompt_hit = _nonnegative_int(usage.get("prompt_cache_hit_tokens"))
+    prompt_miss = _nonnegative_int(usage.get("prompt_cache_miss_tokens"))
+    if prompt_hit == 0 and prompt_miss == 0:
+        # 无缓存拆分：全部按未命中档（保守；prompt_tokens 整体计价）
+        prompt_hit = 0
+        prompt_miss = _nonnegative_int(usage.get("prompt_tokens"))
+    if prompt_hit == 0 and prompt_miss == 0 and completion == 0:
         return 0.0
     # 不在此处舍入：多次调用聚合时小金额要能累加，展示层再 round
-    return (prompt * table.input_per_million + completion * table.output_per_million) / 1_000_000
+    return (
+        prompt_hit * table.input_cache_hit_per_million
+        + prompt_miss * table.input_cache_miss_per_million
+        + completion * table.output_per_million
+    ) / 1_000_000
 
 
 def _nonnegative_int(value: object) -> int:

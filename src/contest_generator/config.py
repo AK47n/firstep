@@ -54,9 +54,12 @@ class AppConfig:
     vision_base_url: str = ""
     vision_api_key: str = ""
     vision_model: str = ""
-    # LLM 单价覆盖（工单 llm-cost-control/01）：None = 用内置默认参考价；
-    # dict 形态 {"deepseek": {"input_per_million": x, "output_per_million": y},
-    # "local": {...}}——条目级脏数据由消费侧静默跳过（展示层旁路）
+    # LLM 单价覆盖（工单 llm-cost-control/01 + 缓存拆分计价更新）：None = 用内置
+    # 默认参考价；dict 形态 {"deepseek": {"input_cache_hit_per_million": x,
+    # "input_cache_miss_per_million": y, "output_per_million": z}, "local": {...}}
+    # （DeepSeek 输入分缓存命中/未命中两档，官方差价 ~30 倍）；旧形态
+    # {"input_per_million": x} 兼容 = 未命中档——条目级脏数据由消费侧静默跳过
+    # （展示层旁路）
     llm_prices: dict | None = None
     # 推荐缓存开关（工单 llm-cost-control/02）：默认开——同题重跑推荐命中
     # 缓存直出 done 载荷（省最贵的推荐段 LLM 调用）；关闭 = 每次真实推荐

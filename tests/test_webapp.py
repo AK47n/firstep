@@ -2978,12 +2978,14 @@ def test_settings_local_llm_put_rejects_non_string(client, context):
 
 
 def test_settings_llm_prices_roundtrip_and_defaults(client, context):
-    """llm_prices（工单 llm-cost-control/01）：GET 返回生效表（默认 + 覆盖合并）；
-    PUT 覆盖透传；缺省 / 空对象 = 恢复内置默认。"""
+    """llm_prices（工单 llm-cost-control/01 + 缓存拆分计价更新）：GET 返回生效表
+    （默认 + 覆盖合并，输入分缓存命中/未命中两档）；PUT 覆盖透传；缺省 / 空
+    对象 = 恢复内置默认；旧形态 {input_per_million} 兼容 = 未命中档。"""
     saved = client.get("/api/settings").json()
     # 未配置覆盖 → 返回内置默认表（deepseek 参考价 + local 零成本）
-    assert saved["llm_prices"]["deepseek"]["input_per_million"] > 0
-    assert saved["llm_prices"]["local"]["input_per_million"] == 0.0
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] > 0
+    assert saved["llm_prices"]["deepseek"]["input_cache_hit_per_million"] > 0
+    assert saved["llm_prices"]["local"]["input_cache_miss_per_million"] == 0.0
 
     base = {
         "base_url": saved["base_url"],
@@ -2992,25 +2994,44 @@ def test_settings_llm_prices_roundtrip_and_defaults(client, context):
         "module_library_dir": saved["module_library_dir"],
         "masters_dir": saved["masters_dir"],
     }
+    # 新形态覆盖（三字段）
     custom = {
         "llm_prices": {
-            "deepseek": {"input_per_million": 8.0, "output_per_million": 32.0},
+            "deepseek": {
+                "input_cache_hit_per_million": 0.1,
+                "input_cache_miss_per_million": 3.0,
+                "output_per_million": 9.0,
+            },
         }
     }
     resp = client.put("/api/settings", json={**base, **custom})
     assert resp.status_code == 200
     assert context[0].config.llm_prices == custom["llm_prices"]
     saved = client.get("/api/settings").json()
-    assert saved["llm_prices"]["deepseek"] == {"input_per_million": 8.0, "output_per_million": 32.0}
+    assert saved["llm_prices"]["deepseek"] == {
+        "input_cache_hit_per_million": 0.1,
+        "input_cache_miss_per_million": 3.0,
+        "output_per_million": 9.0,
+    }
     # local 未覆盖仍零成本
-    assert saved["llm_prices"]["local"]["input_per_million"] == 0.0
+    assert saved["llm_prices"]["local"]["input_cache_miss_per_million"] == 0.0
+
+    # 旧形态 {input_per_million} 兼容：input = 未命中档，命中档 = 内置默认
+    resp = client.put(
+        "/api/settings",
+        json={**base, "llm_prices": {"deepseek": {"input_per_million": 8.0, "output_per_million": 32.0}}},
+    )
+    assert resp.status_code == 200
+    saved = client.get("/api/settings").json()
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] == 8.0
+    assert saved["llm_prices"]["deepseek"]["output_per_million"] == 32.0
 
     # 空对象 → 恢复默认（config.llm_prices = None）
     resp = client.put("/api/settings", json={**base, "llm_prices": {}})
     assert resp.status_code == 200
     assert context[0].config.llm_prices is None
     saved = client.get("/api/settings").json()
-    assert saved["llm_prices"]["deepseek"]["input_per_million"] > 0
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] > 0
 
 
 def test_settings_llm_prices_put_rejects_non_object(client, context):
