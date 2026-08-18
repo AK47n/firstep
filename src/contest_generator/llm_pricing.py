@@ -116,31 +116,84 @@ class LLMPriceTable:
         )
 
 
-def default_price_tables() -> dict[str, LLMPriceTable]:
-    """内置默认单价表（deepseek 参考价 + local 零成本）。"""
+# 计费时段词表（设置页「计费时段」选择器，单源）：高峰 = peak（白天比赛/集训
+# 时段，官方价高）、空闲 = off_peak（夜间/低峰，官方价低）。period 决定
+# 未覆盖时的基准价（官方该时段价）；用户输入框填值 = 覆盖基准。
+PRICE_PERIODS = ("peak", "off_peak")
+
+# 官方价格参考表 → 指定时段基准表（元/百万 token，单源派生）
+def _deepseek_period_prices(period: str) -> dict[str, float]:
+    if period not in PRICE_PERIODS:
+        raise ValueError(f"未知计费时段：{period!r}（支持 {PRICE_PERIODS}）")
+    ref = DEEPSEEK_FLASH_PRICE_REFERENCE
     return {
-        "deepseek": LLMPriceTable.from_dict("deepseek", DEFAULT_DEEPSEEK_PRICES),
+        "input_cache_hit_per_million": ref["input_cache_hit"][period],
+        "input_cache_miss_per_million": ref["input_cache_miss"][period],
+        "output_per_million": ref["output"][period],
+    }
+
+
+def default_price_tables(period: str = "peak") -> dict[str, LLMPriceTable]:
+    """内置默认单价表（deepseek = 所选时段的官方价 + local 零成本）。
+
+    period（工单 01 扩展）：计费时段（peak / off_peak）决定 deepseek 基准价；
+    缺省 peak（与旧默认值同档）。"""
+    return {
+        "deepseek": LLMPriceTable.from_dict("deepseek", _deepseek_period_prices(period)),
         "local": LLMPriceTable.from_dict("local", DEFAULT_LOCAL_PRICES),
     }
 
 
+def _pick_field(
+    raw_entry: Mapping[str, Any],
+    parsed: LLMPriceTable,
+    base: LLMPriceTable,
+    key: str,
+    legacy: str | None = None,
+) -> float:
+    """部分覆盖合并：覆盖条目声明了该字段（或 legacy 旧字段）→ 用覆盖值；
+    未声明 → 沿用时段基准值（base）。"""
+    if key in raw_entry or (legacy and legacy in raw_entry):
+        return getattr(parsed, key)
+    return getattr(base, key)
+
+
 def price_tables_from_config(
     raw: Mapping[str, Any] | None,
+    period: str = "peak",
 ) -> dict[str, LLMPriceTable]:
-    """config.json 的 llm_prices 覆盖 → 单价表；缺省 / 部分缺省用内置默认。
+    """config.json 的 llm_prices 覆盖 + 计费时段 → 单价表；缺省 / 部分缺省用
+    时段基准价。
 
-    部分覆盖语义：只写 deepseek 就只覆盖 deepseek，local 仍零成本。
+    部分覆盖语义：只覆盖某档（如 input_cache_miss_per_million）时，其余档
+    沿用所选时段的官方基准价（不归零）；只写 deepseek 就只覆盖 deepseek，
+    local 仍零成本。旧形态 {input_per_million} 兼容 = 未命中档覆盖。
     """
-    tables = default_price_tables()
+    tables = default_price_tables(period)
     if not raw or not isinstance(raw, Mapping):
         return tables
-    for provider, entry in raw.items():
-        if not isinstance(entry, Mapping):
+    for provider, raw_entry in raw.items():
+        if not isinstance(raw_entry, Mapping):
             continue  # 脏条目静默跳过（展示层派生，不阻塞配置加载）
         try:
-            tables[provider] = LLMPriceTable.from_dict(provider, entry)
+            parsed = LLMPriceTable.from_dict(provider, raw_entry)
         except ValueError:
             continue
+        base = tables[provider]
+        tables[provider] = LLMPriceTable(
+            provider=provider,
+            input_cache_hit_per_million=_pick_field(
+                raw_entry, parsed, base, "input_cache_hit_per_million"
+            ),
+            input_cache_miss_per_million=_pick_field(
+                raw_entry,
+                parsed,
+                base,
+                "input_cache_miss_per_million",
+                legacy="input_per_million",
+            ),
+            output_per_million=_pick_field(raw_entry, parsed, base, "output_per_million"),
+        )
     return tables
 
 

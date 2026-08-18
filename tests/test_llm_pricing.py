@@ -9,7 +9,9 @@ from contest_generator.llm_pricing import (
     DEFAULT_LOCAL_PRICES,
     DEEPSEEK_FLASH_PRICE_REFERENCE,
     LLMPriceTable,
+    default_price_tables,
     estimate_llm_cost,
+    price_tables_from_config,
 )
 
 
@@ -67,6 +69,34 @@ def test_flash_price_reference_shape():
     assert ref["output"] == {"off_peak": 4.5, "peak": 9.0}
     assert ref["concurrent_connections"] == 2500
     assert ref["as_of"]
+
+
+def test_default_price_tables_follow_period():
+    """计费时段决定未覆盖基准价：peak = 高峰官方价，off_peak = 空闲官方价。"""
+    peak = default_price_tables("peak")["deepseek"]
+    assert peak.input_cache_hit_per_million == pytest.approx(0.10)
+    assert peak.input_cache_miss_per_million == pytest.approx(3.0)
+    assert peak.output_per_million == pytest.approx(9.0)
+
+    off = default_price_tables("off_peak")["deepseek"]
+    assert off.input_cache_hit_per_million == pytest.approx(0.05)
+    assert off.input_cache_miss_per_million == pytest.approx(1.5)
+    assert off.output_per_million == pytest.approx(4.5)
+
+    with pytest.raises(ValueError):
+        default_price_tables("evening")
+
+
+def test_price_tables_from_config_period_base_with_override():
+    """覆盖优先于时段基准：off_peak 基准 + deepseek 覆盖 = 覆盖值生效，
+    local 未覆盖 = 零成本。"""
+    tables = price_tables_from_config(
+        {"deepseek": {"input_cache_miss_per_million": 2.0, "output_per_million": 8.0}},
+        period="off_peak",
+    )
+    assert tables["deepseek"].input_cache_miss_per_million == 2.0
+    assert tables["deepseek"].input_cache_hit_per_million == pytest.approx(0.05)
+    assert tables["local"].input_cache_miss_per_million == 0.0
 
 
 def test_price_table_roundtrip_and_validation():

@@ -955,6 +955,11 @@
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">计费时段</span>
+        <label style="margin:0 12px 0 8px;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="peak" id="period-peak"> 高峰期</label>
+        <label style="margin:0;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="off_peak" id="period-off-peak"> 空闲期</label>
+      </div>
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>DeepSeek 输入单价·缓存命中（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in-hit" placeholder="0.10"></div>
         <div style="flex:1"><label>DeepSeek 输入单价·缓存未命中（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in" placeholder="3.0"></div>
@@ -962,6 +967,7 @@
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>DeepSeek 输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-out" placeholder="9.0"></div>
       </div>
+      <div class="muted" style="margin-top:6px">输入框留空 = 按所选时段的官方价计费（placeholder 即该时段价）；填值 = 自定义覆盖，覆盖优先于时段。</div>
       <details id="price-reference" style="margin-top:8px">
         <summary style="cursor:pointer;font-size:12px;color:var(--muted)">DeepSeek Flash 官方价格参考（点击展开）</summary>
         <div style="margin-top:8px;font-size:12px;line-height:1.7">
@@ -4539,16 +4545,24 @@ async function loadSettings() {
     $("set-vision-base-url").value = s.vision_base_url || "";
     $("set-vision-api-key").value = s.vision_api_key || "";
     $("set-vision-model").value = s.vision_model || "";
-    // LLM 单价（工单 llm-cost-control/01 + 缓存拆分计价更新）：GET 返回生效
-    // 表（DeepSeek 输入分缓存命中/未命中两档），填入输入框；留空语义见保存逻辑
+    // LLM 单价（工单 llm-cost-control/01 + 缓存拆分 + 计费时段）：输入框只显示
+    // 用户显式覆盖（llm_prices_override 原文）；无覆盖 = 留空，placeholder 显示
+    // 所选时段的官方价（留空 = 按时段基准价计费）
     llmPricesDefaults = s.llm_prices || {};
-    $("set-ds-in-hit").value = (llmPricesDefaults.deepseek || {}).input_cache_hit_per_million ?? "";
-    $("set-ds-in").value = (llmPricesDefaults.deepseek || {}).input_cache_miss_per_million ?? "";
-    $("set-ds-out").value = (llmPricesDefaults.deepseek || {}).output_per_million ?? "";
-    // local 无缓存概念：输入框 = 未命中档（命中档同值，默认 0）
-    $("set-local-in").value = (llmPricesDefaults.local || {}).input_cache_miss_per_million ?? "";
-    $("set-local-out").value = (llmPricesDefaults.local || {}).output_per_million ?? "";
+    const priceOverride = s.llm_prices_override || {};
+    const dsOv = priceOverride.deepseek || {};
+    $("set-ds-in-hit").value = dsOv.input_cache_hit_per_million ?? "";
+    $("set-ds-in").value = dsOv.input_cache_miss_per_million ?? (dsOv.input_per_million ?? "");
+    $("set-ds-out").value = dsOv.output_per_million ?? "";
+    const localOv = priceOverride.local || {};
+    $("set-local-in").value = localOv.input_cache_miss_per_million ?? (localOv.input_per_million ?? "");
+    $("set-local-out").value = localOv.output_per_million ?? "";
+    // 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，决定 placeholder 与基准价
+    const period = s.llm_price_period === "off_peak" ? "off_peak" : "peak";
+    $("period-peak").checked = period === "peak";
+    $("period-off-peak").checked = period === "off_peak";
     renderPriceReference(s.price_reference);
+    periodPlaceholders(period);
     // 推荐缓存开关（工单 llm-cost-control/02）：缺省开
     $("set-recommend-cache").checked = s.recommend_cache_enabled !== false;
     // 收敛轮数上限（工单 01）：缺省 4
@@ -4560,10 +4574,13 @@ async function loadSettings() {
 
 /** DeepSeek Flash 官方价格参考表渲染（工单 llm-cost-control 更新）：
  * 数据单源 = 后端 DEEPSEEK_FLASH_PRICE_REFERENCE（/api/settings
- * price_reference），前端只渲染不硬编码；缺数据 = 面板隐藏。 */
+ * price_reference），前端只渲染不硬编码；缺数据 = 面板隐藏。
+ * 同时缓存到 window.__priceRef 供 periodPlaceholders 用（placeholder =
+ * 所选时段的官方价）。 */
 function renderPriceReference(ref) {
   const rows = $("price-ref-rows");
   if (!ref || !rows) return;
+  window.__priceRef = ref;
   const fmt = (v) => (v ?? "-") + " 元";
   const row = (label, entry) => {
     const tr = document.createElement("tr");
@@ -4584,6 +4601,21 @@ function renderPriceReference(ref) {
       : asOf;
   }
 }
+
+/** 输入框 placeholder = 所选时段的官方价（留空 = 按此时段基准价计费）。 */
+function periodPlaceholders(period) {
+  const ref = window.__priceRef || {};
+  const set = (id, entry) => {
+    const v = (entry || {})[period];
+    if (v !== undefined && $(id)) $(id).placeholder = String(v);
+  };
+  set("set-ds-in-hit", ref.input_cache_hit);
+  set("set-ds-in", ref.input_cache_miss);
+  set("set-ds-out", ref.output);
+}
+
+document.querySelectorAll('input[name="price-period"]').forEach((radio) =>
+  radio.addEventListener("change", () => periodPlaceholders(radio.value)));
 
 function collectLlmPrices() {
   // 每个 provider 的框全留空 = 不覆盖（维持当前/默认）；任一填写则按填的值
@@ -4633,6 +4665,7 @@ $("btn-save-settings").addEventListener("click", async () => {
       vision_api_key: $("set-vision-api-key").value.trim(),
       vision_model: $("set-vision-model").value.trim(),
       llm_prices: collectLlmPrices(),
+      llm_price_period: $("period-peak").checked ? "peak" : "off_peak",
       recommend_cache_enabled: $("set-recommend-cache").checked,
       recommend_max_rounds: parseInt($("set-recommend-rounds").value, 10) || 4,
     });

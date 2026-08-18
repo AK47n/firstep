@@ -61,6 +61,9 @@ class AppConfig:
     # {"input_per_million": x} 兼容 = 未命中档——条目级脏数据由消费侧静默跳过
     # （展示层旁路）
     llm_prices: dict | None = None
+    # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，决定未覆盖项的
+    # 基准价（官方该时段价）；覆盖项（llm_prices）优先。缺省 peak
+    llm_price_period: str = "peak"
     # 推荐缓存开关（工单 llm-cost-control/02）：默认开——同题重跑推荐命中
     # 缓存直出 done 载荷（省最贵的推荐段 LLM 调用）；关闭 = 每次真实推荐
     recommend_cache_enabled: bool = True
@@ -156,6 +159,10 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         or not 2 <= recommend_max_rounds <= 4
     ):
         raise ConfigError(f"recommend_max_rounds 必须是 2-4 的整数：{path}")
+    # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，缺省 peak
+    llm_price_period = data.get("llm_price_period", "peak")
+    if llm_price_period not in ("peak", "off_peak"):
+        raise ConfigError(f"llm_price_period 必须是 peak 或 off_peak：{path}")
 
     return AppConfig(
         base_url=base_url,
@@ -177,6 +184,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         llm_prices=llm_prices,
         recommend_cache_enabled=recommend_cache_enabled,
         recommend_max_rounds=recommend_max_rounds,
+        llm_price_period=llm_price_period,
     )
 
 
@@ -205,6 +213,7 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "vision_model": config.vision_model,
         "recommend_cache_enabled": config.recommend_cache_enabled,
         "recommend_max_rounds": config.recommend_max_rounds,
+        "llm_price_period": config.llm_price_period,
     }
     if config.llm_prices is not None:
         data["llm_prices"] = config.llm_prices

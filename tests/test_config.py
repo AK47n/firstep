@@ -109,6 +109,8 @@ def test_saved_file_is_plain_json(tmp_path):
         "recommend_cache_enabled": True,
         # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
         "recommend_max_rounds": 4,
+        # 计费时段（工单 01 扩展）：缺省 peak
+        "llm_price_period": "peak",
     }
 
 
@@ -204,6 +206,23 @@ def test_vision_fields_default_blank_and_roundtrip(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ConfigError, match="vision_api_key"):
+        load_config(path)
+
+
+def test_llm_price_period_default_and_roundtrip(tmp_path):
+    """计费时段（工单 01 扩展）：缺省 peak；off_peak 回写；非法值大声失败。"""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
+    assert load_config(path).llm_price_period == "peak"
+
+    save_config(AppConfig(api_key="sk-test", llm_price_period="off_peak"), path)
+    assert load_config(path).llm_price_period == "off_peak"
+
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "llm_price_period": "evening"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="llm_price_period"):
         load_config(path)
 
 

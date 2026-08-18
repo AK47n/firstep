@@ -3013,6 +3013,9 @@ def test_settings_llm_prices_roundtrip_and_defaults(client, context):
         "input_cache_miss_per_million": 3.0,
         "output_per_million": 9.0,
     }
+    # 计费时段（工单 01 扩展）：缺省 peak；override 原文带出（前端区分留空/覆盖）
+    assert saved["llm_price_period"] == "peak"
+    assert saved["llm_prices_override"] == custom["llm_prices"]
     # local 未覆盖仍零成本
     assert saved["llm_prices"]["local"]["input_cache_miss_per_million"] == 0.0
 
@@ -3032,6 +3035,35 @@ def test_settings_llm_prices_roundtrip_and_defaults(client, context):
     assert context[0].config.llm_prices is None
     saved = client.get("/api/settings").json()
     assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] > 0
+
+
+def test_settings_llm_price_period_roundtrip(client, context):
+    """计费时段（工单 01 扩展）：PUT off_peak → GET 带出 + 生效表按空闲基准；
+    非法值 400；空覆盖时 override = None。"""
+    saved = client.get("/api/settings").json()
+    assert saved["llm_price_period"] == "peak"
+    assert saved["llm_prices_override"] is None
+
+    base = {
+        "base_url": saved["base_url"],
+        "api_key": saved["api_key"],
+        "model": saved["model"],
+        "module_library_dir": saved["module_library_dir"],
+        "masters_dir": saved["masters_dir"],
+    }
+    resp = client.put("/api/settings", json={**base, "llm_price_period": "off_peak"})
+    assert resp.status_code == 200
+    assert context[0].config.llm_price_period == "off_peak"
+    saved = client.get("/api/settings").json()
+    assert saved["llm_price_period"] == "off_peak"
+    # 未覆盖 → 生效表 = 空闲官方价（hit 0.05 / miss 1.5 / out 4.5）
+    assert saved["llm_prices"]["deepseek"]["input_cache_hit_per_million"] == 0.05
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] == 1.5
+    assert saved["llm_prices"]["deepseek"]["output_per_million"] == 4.5
+
+    resp = client.put("/api/settings", json={**base, "llm_price_period": "evening"})
+    assert resp.status_code == 400
+    assert "llm_price_period" in resp.json()["detail"]
 
 
 def test_settings_llm_prices_put_rejects_non_object(client, context):

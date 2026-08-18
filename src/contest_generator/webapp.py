@@ -492,6 +492,18 @@ def _optional_bool(payload: dict, key: str, *, default: bool) -> bool:
     return value
 
 
+def _optional_choice(
+    payload: dict, key: str, *, default: str, choices: tuple[str, ...]
+) -> str:
+    """可选枚举：缺省 / null → default；值不在词表抛 400（工单 01 计费时段）。"""
+    value = payload.get(key)
+    if value is None:
+        return default
+    if value not in choices:
+        raise HTTPException(400, f"{key} 必须是 {'、'.join(choices)} 之一")
+    return value
+
+
 def _optional_int_range(
     payload: dict, key: str, *, default: int, low: int, high: int
 ) -> int:
@@ -1449,7 +1461,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         估算纯展示派生，单价表缺失 / 配置未就绪时用内置默认（旁路不炸）。
         """
         config = _current_config(context)
-        tables = price_tables_from_config(config.llm_prices if config else None)
+        tables = price_tables_from_config(
+            config.llm_prices if config else None,
+            (config.llm_price_period if config else "peak"),
+        )
         return attach_cost_estimates(context.recent_llm_workflows.to_dict(), tables)
 
     @app.get("/api/settings")
@@ -1491,7 +1506,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # LLM 单价（工单 llm-cost-control/01）：返回当前生效表（默认 + 覆盖
             # 合并），前端可直接显示；未配置 / 无覆盖 = 内置默认
             "llm_prices": price_tables_to_config(
-                price_tables_from_config(config.llm_prices if config else None)
+                price_tables_from_config(
+                    config.llm_prices if config else None,
+                    (config.llm_price_period if config else "peak"),
+                )
+            ),
+            # 用户显式覆盖原文（None = 无覆盖）：前端据此区分「留空 = 用时段
+            # 基准价」与「填值 = 自定义覆盖」
+            "llm_prices_override": config.llm_prices if config is not None else None,
+            # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲
+            "llm_price_period": (
+                config.llm_price_period if config is not None else "peak"
             ),
             # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：单源
             # = llm_pricing.DEEPSEEK_FLASH_PRICE_REFERENCE，设置页折叠面板渲染
@@ -1547,6 +1572,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             vision_model=_optional_str(payload, "vision_model"),
             # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 / 空对象 = 恢复内置默认
             llm_prices=_optional_dict(payload, "llm_prices"),
+            # 计费时段（工单 01 扩展）：缺省 peak；非法值 400
+            llm_price_period=_optional_choice(
+                payload, "llm_price_period", default="peak", choices=("peak", "off_peak")
+            ),
             # 推荐缓存开关（工单 llm-cost-control/02）：缺省开；非布尔 400
             recommend_cache_enabled=_optional_bool(
                 payload, "recommend_cache_enabled", default=True
