@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=38560dc2a67ca0c9d1da20ee1851914090282de9 -->
+<!-- changelog-auto: last-commit=cb391635df6317027cca8d68197b46fc8b3eb822 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 09:53 add structured LLM call observations
 - 13:49 add LLM retry budget guardrails
 - 14:45 add LLM observation collector
+- 17:18 surface live LLM telemetry in fix SSE
 
 ## 2026-08-17
 - 00:02 ball_detect 模块重命名为 coord_detect（坐标检测）——纯机械改名（git mv 保留历史，解析逻辑/协议一字不改）：C 符号 BallResult→CoordResult、ball_detect_*→coord_detect_*、BALL_RX_BUF_SIZE→COORD_RX_BUF_SIZE、引脚宏 BALL_DETECT_UART*→COORD_DETECT_UART*；帧契约单源 BALL_FRAME_*→COORD_FRAME_*（前缀值 "B" 保持——协议字节与模块名解耦）、模板占位符 ball_frame_format→coord_frame_format、BALL_THRESHOLD→COLOR_THRESHOLD；k230 依赖/母版/测试/CONTEXT 同步（工单 coord-detect-rename/01）
