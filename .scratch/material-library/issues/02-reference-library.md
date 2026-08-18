@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 — 模块库管理（录入流程复用）；08 — 母版提炼（归档动作挂在提炼报告动作表上）
 
-**Status:** done
+**Status:** resolved
 
 ## Comments
 

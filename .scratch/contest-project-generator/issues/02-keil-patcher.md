@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — 生成器核心骨架 + fixture 测试基座
 
-**Status:** done
+**Status:** resolved
 
 - [x] 解析并改写 .uvprojx：所选模块的源文件注册进工程，include path 加入模块头文件所在目录
 - [x] 不破坏母版原有配置（设备型号、烧录设置等）

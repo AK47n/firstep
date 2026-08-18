@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — 生成器核心骨架 + fixture 测试基座
 
-**Status:** done
+**Status:** resolved
 
 - [x] LLM 客户端抽象为协议：生产实现调用 DeepSeek（base_url / key / 模型可配置，存本机配置文件，不入版本库）；测试注入固定返回的假实现
 - [x] 赛题 + 模块库 manifest 摘要 → 结构化输出：推荐模块列表 + 每条理由

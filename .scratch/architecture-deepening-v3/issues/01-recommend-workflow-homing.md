@@ -20,7 +20,7 @@
 - `_selection_user_prompt` / `_build_user_prompt` / `_truncate_content`（prompt 拼装）留在 llm.py。
 - LLM 协议 / DeepSeekLLM / transport / retry / batch / 提炼 / 赛题库 / 参考库协议全部留在 llm.py。events.py 一字不动。
 
-**Status:** done
+**Status:** resolved
 
 ## 验收
 
