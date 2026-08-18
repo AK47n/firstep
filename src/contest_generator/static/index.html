@@ -1105,6 +1105,7 @@ let state = null;                 // GET /api/state
 let llmPricesDefaults = {};       // 当前生效 LLM 单价表（工单 llm-cost-control/01）
 let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
 let expanded = [];                // 展开后的模块 manifest（含依赖）
+let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
 let warnings = [];                // 平台警告
 let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
 let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
@@ -1613,6 +1614,22 @@ function renderSelected() {
     if (!selectedSlugs.includes(m.slug)) continue;
     for (const dep of (m.dependencies || [])) bringers.set(dep, m.slug);
   }
+  // 副产物模板下拉（工单 k230-multi-template/04）：多模板模块（k230）显示，
+  // 选项 = manifest.python_artifact.templates（name + description 提示）；
+  // 改动 ≠ 默认才记进 pythonTemplates（缺省 = 不发字段 = 旧行为逐字节不变）
+  const templateSelect = (m) => {
+    const pa = m.python_artifact;
+    if (!pa || !pa.templates || pa.templates.length < 2) return "";
+    const current = pythonTemplates[m.slug] || pa.default;
+    const options = pa.templates.map((t) =>
+      `<option value="${esc(t.id)}" ${t.id === current ? "selected" : ""}>${esc(t.name || t.id)}</option>`).join("");
+    const hints = pa.templates.map((t) => `${t.name || t.id}：${t.description || ""}`).join("\n");
+    return `
+      <div class="row" style="margin:6px 0 0;align-items:center;gap:6px">
+        <label style="font-size:12px;color:var(--muted)">副产物模板</label>
+        <select data-template="${esc(m.slug)}" title="${esc(hints)}" style="font-size:12px;max-width:260px">${options}</select>
+      </div>`;
+  };
   box.innerHTML = expanded.map((m) => {
     const isDep = !selectedSlugs.includes(m.slug);
     const bringer = bringers.get(m.slug);
@@ -1625,16 +1642,25 @@ function renderSelected() {
         ${isDep ? "" : `<button class="danger" data-remove="${esc(m.slug)}">移除</button>`}
       </div>
       <div class="desc" title="${esc((m.description || "") + " " + notes(m))}">${esc(m.description || "")}${(m.dependencies || []).length ? ` · 依赖：${esc(m.dependencies.join("、"))}` : ""}</div>
+      ${isDep ? "" : templateSelect(m)}
     </div>`;
   }).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
       expanded = []; warnings = [];
+      delete pythonTemplates[b.dataset.remove];  // 模板选择随模块移除清理（工单 04）
       instancePinTarget = null;  // 选脚目标随清单变化失效（工单 04）
       renderSelected(); renderWarnings(); renderModulePool(); renderModuleSearch();
       renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
       renderInstanceConfig();  // 多实例配置卡（工单 04）：被移除模块的实例清单随之清掉
+    }));
+  box.querySelectorAll("[data-template]").forEach((sel) =>
+    sel.addEventListener("change", () => {
+      const slug = sel.dataset.template;
+      const pa = expanded.find((m) => m.slug === slug)?.python_artifact;
+      if (sel.value === (pa && pa.default)) delete pythonTemplates[slug];
+      else pythonTemplates[slug] = sel.value;
     }));
 }
 
@@ -2584,10 +2610,19 @@ function formatResModules(modules, pythonArtifacts) {
   // 直测）：C 模块文件 + Python 副产物同列——k230 这类纯副产物模块（files
   // 空）也能在摘要里看见 main.py；不带副产物的空 files 模块只显示 slug。
   const pyBySlug = new Map((pythonArtifacts || []).map((a) => [a.slug, a.output]));
+  // 模板名回显（工单 k230-multi-template/04）：多模板模块的摘要行附当前模板名
+  const pyTemplateName = (slug) => {
+    const m = (expanded || []).find((x) => x.slug === slug);
+    const pa = m && m.python_artifact;
+    if (!pa || !pa.templates || pa.templates.length < 2) return "";
+    const id = pythonTemplates[slug] || pa.default;
+    const t = pa.templates.find((x) => x.id === id);
+    return t && (t.name || t.id) ? "（模板：" + t.name + "）" : "";
+  };
   return (modules || []).map((m) => {
     const parts = [...(m.files || [])];
     const py = pyBySlug.get(m.slug);
-    if (py) parts.push("副产物 " + py);
+    if (py) parts.push("副产物 " + py + pyTemplateName(m.slug));
     return m.slug + (parts.length ? "(" + parts.join(", ") + ")" : "");
   }).join("、");
 }
@@ -2628,6 +2663,9 @@ $("btn-generate").addEventListener("click", async () => {
     };
     if (Object.keys(bindings).length) payload.bindings = bindings;
     if (Object.keys(inst).length) payload.instances = inst;
+    // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
+    // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
+    if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;
     const data = await apiPost("/api/generate", payload);
     $("res-dir").textContent = data.output_dir;
     $("res-includes").textContent = data.include_dirs.join("；");

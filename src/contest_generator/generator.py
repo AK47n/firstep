@@ -498,6 +498,7 @@ def generate_project(
     ccs_tools: CcsTools | None = None,
     bindings: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
+    python_templates: Mapping[str, str] | None = None,
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -518,8 +519,17 @@ def generate_project(
     instances（工单 module-multi-instance/03）= 多实例清单
     {slug: [{name, variant, pin}]}，透传 generate 展开 + 渲染；缺省 / 空 =
     单默认实例（现行为逐字节不变）。
+
+    python_templates（工单 k230-multi-template/02）= Python 副产物模板选择
+    {slug: template_id}（manifest python_artifact 多模板时用）；校验在
+    resolve_python_template_choices（非法 slug / 非法 id / 未声明副产物的
+    模块带选择 → PythonArtifactError 400 中文）；缺省 / 空 = 全默认模板
+    （旧行为逐字节不变）。
     """
     resolved = resolve_selection(module_library_dir, platform, slugs)
+    template_choices = resolve_python_template_choices(
+        resolved.manifests, python_templates
+    )
     result_dir, include_dirs, build_hint = generate(
         platform=platform,
         manifests=resolved.manifests,
@@ -531,10 +541,52 @@ def generate_project(
         ccs_tools=ccs_tools,
         bindings=bindings,
         instances=instances,
+        template_choices=template_choices,
     )
     return describe_generation(
         result_dir, resolved.manifests, platform, include_dirs, build_hint
     )
+
+
+def resolve_python_template_choices(
+    manifests: Sequence[ModuleManifest],
+    choices: Mapping[str, str] | None,
+) -> dict[str, str]:
+    """模板选择校验（工单 k230-multi-template/02）：slug 是已选模块且声明了
+    python_artifact，template_id 在声明模板列表内；非法 = PythonArtifactError
+    （400 中文）。缺省 / 空 / None = {}（全默认模板，旧行为逐字节不变）。
+    形状判决（非 Mapping）也在此大声失败——域判决随域走先例。"""
+    if not choices:
+        return {}
+    if not isinstance(choices, Mapping):
+        raise PythonArtifactError(
+            "python_templates 必须是 JSON 对象（形如 {\"模块\": \"模板id\"}）"
+        )
+    by_slug = {m.slug: m for m in manifests}
+    resolved: dict[str, str] = {}
+    for slug, template_id in choices.items():
+        if not isinstance(template_id, str) or not template_id:
+            raise PythonArtifactError(
+                f"模块 {slug} 的模板选择必须是非空字符串"
+            )
+        manifest = by_slug.get(slug)
+        if manifest is None:
+            raise PythonArtifactError(
+                f"模板选择的模块 {slug} 不在所选模块集内"
+            )
+        spec = manifest.python_artifact
+        if spec is None:
+            raise PythonArtifactError(
+                f"模块 {slug} 未声明 python_artifact（无模板可选）"
+            )
+        declared = tuple(t.id for t in spec.templates)
+        if template_id not in declared:
+            raise PythonArtifactError(
+                f"模块 {slug} 的模板 {template_id!r} 不在声明模板列表"
+                f"（{'、'.join(declared)}）"
+            )
+        resolved[slug] = template_id
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -746,6 +798,7 @@ def generate(
     ccs_tools: CcsTools | None = None,
     bindings: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
+    template_choices: Mapping[str, str] | None = None,
 ) -> tuple[Path, tuple[str, ...], str]:
     """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径,
     build_hint）。
@@ -842,7 +895,9 @@ def generate(
         # 未选任何带声明模块 = 零写侧变化（产物与现在逐字节一致）。写时
         # 存在性判定撞母版既有文件（含 main.c）即拒绝——unlink 因此排在
         # 副产物写盘之后（main.c 换新前的旧文件保留语义不变，仅挪位）。
-        _write_python_artifacts(manifests, module_library_dir, output_dir)
+        _write_python_artifacts(
+            manifests, module_library_dir, output_dir, template_choices
+        )
 
         if not main_c_content.endswith("\n"):
             main_c_content += "\n"  # 尾部换行幂等兜底（LLM 输出常漏，Keil 报 #1-D）
@@ -1553,16 +1608,19 @@ def _write_python_artifacts(
     manifests: Sequence[ModuleManifest],
     module_library_dir: Path,
     output_dir: Path,
+    template_choices: Mapping[str, str] | None = None,
 ) -> None:
     """选中模块的 python_artifact 声明 → 渲染并写出 .py 到输出目录（工单
-    k230-vision-copilot/02）。
+    k230-vision-copilot/02 + k230-multi-template/02）。
 
     模块级声明（与平台无关）：template = .py 模板相对模块目录（读盘，模块
     库内的模板文件，不随平台文件复制），output = 纯文件名（写工程根——
     CanMV 的 main.py 落 SD 卡根，开机自启动）。渲染走
     k230_render.render_python_artifact（契约单源：帧格式 / 波特率占位符 ←
-    契约常量，模板不重抄）。未选任何带声明模块 = 零写侧变化（产物与现在
-    逐字节一致）。跨模块同名 output / 模板缺失 / output 撞工程既有文件
+    契约常量，模板不重抄）。template_choices（工单 02）= 按模块 slug 选
+    模板 id（generate_project 已校验），缺省 / 空 = default 模板（旧行为
+    逐字节不变）。未选任何带声明模块 = 零写侧变化（产物与现在逐字节
+    一致）。跨模块同名 output / 模板缺失 / output 撞工程既有文件
     （母版文件如 main.c、project.uvprojx；写时存在性判定，顺带挡 Windows
     大小写不敏感的同名副产物）→ PythonArtifactError 大声失败（generate 的
     try 块 rmtree 兜底不留半成品，不静默覆盖）。.py 不注册进工程文件
@@ -1573,30 +1631,36 @@ def _write_python_artifacts(
         spec = manifest.python_artifact
         if spec is None:
             continue
-        owner = seen_outputs.get(spec.output)
+        template = spec.default_template
+        if template_choices and manifest.slug in template_choices:
+            chosen_id = template_choices[manifest.slug]
+            template = next(
+                t for t in spec.templates if t.id == chosen_id
+            )
+        owner = seen_outputs.get(template.output)
         if owner is not None:
             raise PythonArtifactError(
                 f"模块 {owner} 与模块 {manifest.slug} 的 python_artifact"
-                f" 输出同名 {spec.output}——请为其中一方改 output 文件名"
+                f" 输出同名 {template.output}——请为其中一方改 output 文件名"
             )
-        seen_outputs[spec.output] = manifest.slug
-        specs.append((manifest, spec))
-    for manifest, spec in specs:
+        seen_outputs[template.output] = manifest.slug
+        specs.append((manifest, template))
+    for manifest, template in specs:
         # 写时存在性判定：母版树已复制、模块文件已复制，撞任何既有文件
         # （含先前写出的副产物的大小写变体，Windows 同一文件）即拒绝——
         # 不静默覆盖工程文件，也不被 main.c 等后续落盘反向覆盖
-        if (output_dir / spec.output).exists():
+        if (output_dir / template.output).exists():
             raise PythonArtifactError(
-                f"模块 {manifest.slug} 的 python_artifact 输出 {spec.output}"
+                f"模块 {manifest.slug} 的 python_artifact 输出 {template.output}"
                 f" 与工程既有文件同名——请改 output 文件名"
             )
-        template_path = module_library_dir / manifest.slug / spec.template
+        template_path = module_library_dir / manifest.slug / template.template
         if not template_path.is_file():
             raise PythonArtifactError(
                 f"模块 {manifest.slug} 的 python_artifact 模板不存在："
-                f"{spec.template}"
+                f"{template.template}"
             )
         rendered = render_python_artifact(
             template_path.read_text(encoding="utf-8", errors="replace")
         )
-        (output_dir / spec.output).write_text(rendered, encoding="utf-8")
+        (output_dir / template.output).write_text(rendered, encoding="utf-8")

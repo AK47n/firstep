@@ -935,6 +935,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
         # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
         instances = parse_instances(payload.get("instances"), known_slugs=slugs)
+        # Python 副产物模板选择（工单 k230-multi-template/02）：形状判决归
+        # generator.resolve_python_template_choices（PythonArtifactError →
+        # 400 中文），缺省 = 全默认模板（旧行为逐字节不变）。
+        python_templates = payload.get("python_templates")
         config = _require_config(context)
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
@@ -959,6 +963,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ccs_tools=ccs_tools,
             bindings=bindings,
             instances=instances,
+            python_templates=python_templates,
         )
         return _generation_result(summary)
 
