@@ -1189,6 +1189,43 @@ def test_reference_entry_from_dict_rejects_unknown_anchor_kind(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+class BudgetExhaustedReferenceLLM(ReferenceLLM):
+    def __init__(self) -> None:
+        super().__init__(archivable=["ui/oled_fonts.c"])
+
+    def reference_summarize(self, material: str) -> str:
+        from contest_generator.llm import LLMError
+        raise LLMError("LLM 工作流累计尝试次数预算已耗尽")
+
+
+def test_confirm_archive_budget_exhaustion_before_any_write(tmp_path, fake_masters_dir):
+    """归档判定后逐文件简介耗尽预算：确认事务在母版/参考库写盘前失败。"""
+    report, projects = _distilled_report(tmp_path)
+    report = DistillationReport(
+        platform=report.platform,
+        projects=report.projects,
+        keep=report.keep,
+        merge=report.merge,
+        exclude=tuple(d for d in report.exclude if d.path != "ui/oled_fonts.c"),
+        main_c_preview=report.main_c_preview,
+        uvprojx_preview=report.uvprojx_preview,
+        archive=(ArchiveDecision(path="ui/oled_fonts.c", topic="2026C"),),
+    )
+
+    from contest_generator.llm import LLMError
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        confirm_distillation(
+            fake_masters_dir,
+            projects,
+            _confirm_payload(report, projects),
+            llm_factory=BudgetExhaustedReferenceLLM,
+            reference_library_dir=_reference_root(tmp_path),
+        )
+
+    assert list_masters(fake_masters_dir) == []
+    assert not _reference_root(tmp_path).exists()
+
+
 def test_confirm_archives_excluded_file_with_transaction(
     tmp_path, fake_masters_dir
 ):

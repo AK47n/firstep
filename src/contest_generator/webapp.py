@@ -73,6 +73,7 @@ from .library import (
 )
 from .llm import (
     LLM,
+    RetryBudget,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_llm,
 )
@@ -212,7 +213,7 @@ class AppContext:
 
     config_path: Path = DEFAULT_CONFIG_PATH
     config: AppConfig | None = None  # None → 按需从配置文件加载
-    llm_factory: Callable[[AppConfig], LLM] = build_llm
+    llm_factory: Callable[..., LLM] = build_llm
     tab_registry: TabRegistry = field(default_factory=TabRegistry)
     pick_directory: Callable[[], str | None] = _tkinter_pick_directory
 
@@ -241,8 +242,21 @@ def _require_config(ctx: AppContext) -> AppConfig:
     return config
 
 
-def _llm(ctx: AppContext) -> LLM:
-    return ctx.llm_factory(_require_config(ctx))
+def _llm(ctx: AppContext, retry_budget: RetryBudget | None = None) -> LLM:
+    factory = ctx.llm_factory
+    config = _require_config(ctx)
+    params = inspect.signature(factory).parameters.values()
+    positional = {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }
+    accepts_budget = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+    if not accepts_budget:
+        params = inspect.signature(factory).parameters.values()
+        accepts_budget = sum(1 for p in params if p.kind in positional) >= 2
+    if accepts_budget:
+        return factory(config, retry_budget)
+    return factory(config)
 
 
 def _library_dir(ctx: AppContext) -> Path:
@@ -596,15 +610,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 未识别到历史赛题，no-topic 形同样携带全模块摘要）；手动选参考资料
         # 的准入 / 全文直读同样在装配点完成。platform（工单 01）= 锚定命中
         # 按生成平台过滤（手动选不过滤），缺省 / 空 = 现状不过滤
+        budget = RetryBudget()
         topic = _assemble_topic_context(
-            context, topic_id, problem_text, _llm(context), reference_ids, platform
+            context,
+            topic_id,
+            problem_text,
+            _llm(context, budget),
+            reference_ids,
+            platform,
         )
 
         def run(emit: SseEmitter) -> None:
             # 两阶段编排归 selection.run_recommendation（澄清先行 → 收敛 →
             # done 载荷组装），路由只转调——终态一律由域函数发出，路由不分支；
             # run 抛错由运行器补发 error 终态（终态保证归运行器）
-            run_recommendation(topic, _llm(context), clarifications, emit=emit)
+            run_recommendation(topic, _llm(context, budget), clarifications, emit=emit)
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -665,11 +685,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         main_mode = (
             _optional_str(payload, "main_mode") if "main_mode" in payload else "skeleton"
         )
+        budget = RetryBudget()
         topic = _assemble_topic_context(
             context,
             topic_id,
             problem_text,
-            _llm(context),
+            _llm(context, budget),
             reference_ids=reference_ids,
             platform=platform,
         )
@@ -679,7 +700,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
         # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
         return run_skeleton(
-            llm=_llm(context),
+            llm=_llm(context, budget),
             problem_text=topic.problem_text,
             manifests=resolved.manifests,
             slugs=slugs,
@@ -819,7 +840,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         backup_root = fix_backup_root(
             _require_config(context).masters_dir.parent
         )
-        llm = _llm(context)
+        budget = RetryBudget()
+        llm = _llm(context, budget)
 
         def run(emit: SseEmitter) -> None:
             # 五步编排归 run_fix_round（对照 run_recommendation 归位先例）：事件
@@ -1128,7 +1150,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         platform = _require_str(payload, "platform")
         project_dirs = _require_str_list(payload, "project_dirs")
-        llm = _llm(context)
+        budget = RetryBudget()
+        llm = _llm(context, budget)
 
         def run(emit: SseEmitter) -> None:
             projects = [scan_project(Path(d)) for d in project_dirs]
@@ -1152,11 +1175,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
         config = _require_config(context)
+        budget = RetryBudget()
+
+        def archive_llm_factory() -> LLM:
+            return _llm(context, budget)
+
         meta = confirm_distillation(
             _masters_dir(context),
             project_dirs,
             payload,
-            llm_factory=lambda: _llm(context),
+            llm_factory=archive_llm_factory,
             reference_library_dir=reference_library_dir(config.module_library_dir),
         )
         return {

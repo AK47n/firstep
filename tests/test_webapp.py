@@ -55,6 +55,7 @@ from contest_generator.llm import (
 )
 from contest_generator.pin_bindings import PinBindingError, resolve_bindings
 from contest_generator.library import ValidationResult
+from contest_generator.manifest import ManifestSummary
 from contest_generator.selection import (
     FunctionRequirement,
     ModuleSelection,
@@ -117,7 +118,7 @@ class RaisingLLM:
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
@@ -199,7 +200,7 @@ class ScriptedDistillLLM:
         self._delay = delay
 
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[str]
+        self, problem_text: str, manifest_summaries: Sequence[ManifestSummary]
     ) -> ModuleSelection:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
 
@@ -1238,6 +1239,61 @@ def test_skeleton_rejects_instances_with_empty_name(client):
 
     assert resp.status_code == 400
     assert "name" in resp.json()["detail"]
+
+
+
+
+def test_llm_factory_receives_shared_retry_budget_for_skeleton(tmp_path):
+    budgets = []
+
+    def factory(config: AppConfig, retry_budget=None):
+        budgets.append(retry_budget)
+        return FakeLLM(main_skeleton="int main(void) { while(1) {} }\n")
+
+    modules = make_fake_module_library(tmp_path / "modules")
+    masters = tmp_path / "masters"
+    import_master(masters, PLATFORM_STM32, make_fake_master_project(tmp_path / "master"))
+    ctx = AppContext(
+        config=AppConfig(api_key="sk-test", module_library_dir=modules, masters_dir=masters),
+        llm_factory=factory,
+    )
+    client = TestClient(create_app(ctx))
+
+    response = client.post(
+        "/api/skeleton",
+        json={"problem_text": "赛题", "platform": PLATFORM_STM32, "slugs": []},
+    )
+
+    assert response.status_code == 200
+    assert len(budgets) >= 2
+    assert budgets[0] is not None
+    assert budgets[0] is budgets[1]
+
+
+def test_llm_factory_receives_shared_retry_budget_for_recommend(tmp_path):
+    budgets = []
+
+    def factory(config: AppConfig, retry_budget=None):
+        budgets.append(retry_budget)
+        return FakeLLM(selection=ModuleSelection(modules=(), reasons={}))
+
+    ctx = AppContext(
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=tmp_path / "modules",
+            masters_dir=tmp_path / "masters",
+        ),
+        llm_factory=factory,
+    )
+    (tmp_path / "modules").mkdir()
+    client = TestClient(create_app(ctx))
+
+    frames = list(client.post("/api/recommend", json={"problem_text": "赛题"}).iter_lines())
+
+    assert any("event: done" in line for line in frames)
+    assert len(budgets) >= 2
+    assert budgets[0] is not None
+    assert budgets[0] is budgets[1]
 
 
 def test_skeleton_forwards_instances_to_llm(client, context):
@@ -2644,7 +2700,7 @@ class TopicAwareLLM(FakeLLM):
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
@@ -2676,7 +2732,7 @@ class ClarifyHistoryTopicLLM(TopicAwareLLM):
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,

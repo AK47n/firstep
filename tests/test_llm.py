@@ -48,6 +48,7 @@ from contest_generator.llm import (
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
     NETWORK_RETRY_LIMIT,
+    RetryBudget,
     REFERENCE_FULLTEXT_BYTES,
     SKELETON_REFERENCE_TOTAL_BYTES,
     RoutingLLM,
@@ -143,10 +144,12 @@ def _llm(
     *,
     base_url: str = "https://api.deepseek.com",
     model: str = "deepseek-chat",
+    retry_budget: RetryBudget | None = None,
 ) -> DeepSeekLLM:
     return DeepSeekLLM(
         AppConfig(base_url=base_url, api_key="sk-test", model=model),
         transport=transport,
+        retry_budget=retry_budget,
     )
 
 
@@ -372,7 +375,7 @@ def test_llm_call_emits_failure_observation_without_response_body(caplog):
     observation = caplog.records[-1].__dict__["llm_observation"]
     assert observation["status"] == "error"
     assert observation["http_status"] == 401
-    assert observation["error_kind"] == "http"
+    assert observation["error_kind"] == "client"
     assert observation["parse_status"] == "not_started"
     assert "credential-body-secret" not in caplog.records[-1].getMessage()
     assert "secret-prompt" not in caplog.records[-1].getMessage()
@@ -428,6 +431,94 @@ def test_select_modules_http_error_raises_with_status():
 
     with pytest.raises(LLMError, match="401"):
         llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    assert len(transport.calls) == 1
+
+
+def test_rate_limit_uses_retry_after(monkeypatch):
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = SequenceTransport([
+        (429, "rate limited", {"Retry-After": "7"}),
+        _api_response(SELECTION_JSON),
+    ])
+    llm = _llm(transport)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    assert sleeps == [7.0]
+
+
+def test_retry_budget_stops_before_next_attempt():
+    transport = SequenceTransport([_api_response("")] * 3)
+    budget = RetryBudget(max_attempts=2)
+    llm = _llm(transport, retry_budget=budget)
+
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    assert len(transport.calls) == 2
+
+
+def test_retry_budget_elapsed_time_stops_before_request():
+    now = [0.0]
+    budget = RetryBudget(max_elapsed_seconds=1, _clock=lambda: now[0])
+    now[0] = 1.0
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport, retry_budget=budget)
+
+    with pytest.raises(LLMError, match="累计耗时预算已耗尽"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    assert transport.calls == []
+
+
+
+def test_retry_exhaustion_preserves_last_error_kind():
+    transport = FakeTransport(status=401, body="invalid api key")
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as excinfo:
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert excinfo.value.kind == "client"
+
+
+
+def test_build_llm_uses_shared_budget_across_remote_and_local_routes():
+    budget = RetryBudget(max_attempts=1)
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="local-model",
+        ),
+        retry_budget=budget,
+    )
+
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        # clarify 走 local；select_modules 走 remote。两者共享同一个 RetryBudget。
+        try:
+            llm.clarify("赛题", ())
+        except LLMError:
+            pass
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert budget.attempts == 1
+
+
+
+def test_parse_failure_observation_not_marked_success(caplog):
+    transport = SequenceTransport([_api_response(""), _api_response(SELECTION_JSON)])
+    llm = _llm(transport)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+    assert observations[0]["status"] == "error"
+    assert observations[0]["parse_status"] == "parse_error"
+    assert observations[0]["error_kind"] == "parse"
+    assert observations[1]["status"] == "success"
+    assert observations[1]["parse_status"] == "success"
 
 
 def test_select_modules_invalid_json_response_raises():
@@ -522,7 +613,7 @@ class _NetworkFailureTransport(FakeTransport):
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         self.calls.append((url, headers, payload, timeout))
         raise LLMError("无法连接 LLM 服务：连接重置", kind=ERROR_KIND_NETWORK)
 
@@ -536,11 +627,11 @@ class _FlakyNetworkTransport(FakeTransport):
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         self.calls.append((url, headers, payload, timeout))
         if len(self.calls) <= self._failures:
             raise LLMError("无法连接 LLM 服务：连接重置", kind=ERROR_KIND_NETWORK)
-        return self.status, self.body
+        return self.status, self.body, {}
 
 
 def test_llm_error_kind_defaults_to_parse():
@@ -1390,16 +1481,134 @@ SUMMARY_REPORT_JSON = json.dumps(
 class SequenceTransport(FakeTransport):
     """按调用顺序返回固定响应列表的传输假件（两阶段请求形状测试）。"""
 
-    def __init__(self, bodies: list[str]) -> None:
+    def __init__(self, responses: list[tuple[int, str, Mapping[str, str]] | str]) -> None:
         super().__init__()
-        self._bodies = list(bodies)
+        self._responses = list(responses)
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
-        body = self._bodies.pop(0)
+    ) -> tuple[int, str, Mapping[str, str]]:
+        response = self._responses.pop(0)
         self.calls.append((url, headers, payload, timeout))
-        return self.status, body
+        if isinstance(response, str):
+            return self.status, response, {}
+        return response
+
+
+
+def test_distill_master_shared_retry_budget_across_summary_and_decide():
+    """母版提炼两阶段共享累计预算：摘要批消耗后，判定阶段开始前预算耗尽。
+
+    这是工作流级预算，不是单个 HTTP 调用各自从零算；缺省预算仍不限制。
+    """
+    transport = SequenceTransport(
+        [_api_response(SUMMARY_REPORT_JSON), _api_response(DISTILL_DECISIONS_JSON)]
+    )
+    budget = RetryBudget(max_attempts=1)
+    llm = _llm(transport, retry_budget=budget)
+
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 1
+
+
+
+def test_retry_batch_reuses_retry_after_and_budget(monkeypatch):
+    """_retry_batch 与 _retry_parse 同款分类：429 读 Retry-After，并共用累计预算。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = SequenceTransport(
+        [
+            (429, "rate limited", {"Retry-After": "3"}),
+            _api_response(SUMMARY_REPORT_JSON),
+            _api_response(DISTILL_DECISIONS_JSON),
+        ]
+    )
+    budget = RetryBudget(max_attempts=2)
+    llm = _llm(transport, retry_budget=budget)
+
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert sleeps == [3.0]
+    assert len(transport.calls) == 2
+
+
+
+def test_retry_observations_keep_request_attempts_independent_but_budget_accumulates(caplog):
+    """每次实际请求各有独立观测；预算 attempts 表示逻辑工作流累计请求序号。"""
+    transport = SequenceTransport([_api_response(""), _api_response(SELECTION_JSON)])
+    budget = RetryBudget(max_attempts=5)
+    llm = _llm(transport, retry_budget=budget)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+    assert [o["call_id"] for o in observations] == [1, 2]
+    assert [o["attempts"] for o in observations] == [1, 2]
+    assert budget.attempts == 2
+
+
+
+
+def test_batch_salvage_partial_observation_is_not_double_logged(caplog):
+    transport = SequenceTransport(
+        [
+            _api_response(json.dumps({"summaries": [
+                {"path": "src/oled.c", "versions": [
+                    {"projects": ["proj-a"], "summary": "A"},
+                    {"projects": ["proj-b"], "summary": "B"},
+                ]},
+                {"path": "ghost.c", "versions": [{"projects": ["proj-a"], "summary": "ghost"}]},
+            ]})),
+            _api_response(json.dumps({"summaries": [
+                {"path": "sensors/dht11.c", "versions": [
+                    {"projects": ["proj-a"], "summary": "DHT"},
+                ]}
+            ]})),
+            _api_response(DISTILL_DECISIONS_JSON),
+        ]
+    )
+    llm = _llm(transport)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+    first_call = [o for o in observations if o["call_id"] == 1]
+    assert len(first_call) == 1
+    assert first_call[0]["parse_status"] == "partial"
+
+
+def test_batch_missing_coverage_observation_is_partial(caplog):
+    old = llm_module.JUDGMENT_BATCH_SIZE
+    llm_module.JUDGMENT_BATCH_SIZE = 1
+    try:
+        transport = SequenceTransport(
+            [
+                _api_response(json.dumps({"summaries": [
+                    {"path": "src/oled.c", "versions": [
+                        {"projects": ["proj-a"], "summary": "A"},
+                        {"projects": ["proj-b"], "summary": "B"},
+                    ]}
+                ]})),
+                _api_response(json.dumps({"decisions": []})),
+                _api_response(DISTILL_DECISIONS_JSON),
+            ]
+        )
+        llm = _llm(transport)
+        caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+        llm.distill_master("stm32", ("proj-a", "proj-b"), (JUDGMENT_FILES[0],), "对比摘要")
+
+        observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+        partial = next(o for o in observations if o["parse_status"] == "partial")
+        assert partial["status"] == "error"
+        assert partial["error_kind"] == "parse"
+    finally:
+        llm_module.JUDGMENT_BATCH_SIZE = old
 
 
 def test_distill_master_two_phase_posts_summaries_then_decisions():
@@ -1662,6 +1871,29 @@ def test_summarize_module_truncates_oversized_code():
     message = payload["messages"][1]["content"]
     assert len(message) < EMBEDDED_CONTENT_CAP + 500
     assert "截断" in message
+
+
+
+def test_chat_direct_retry_uses_retry_after(monkeypatch):
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = SequenceTransport([
+        (429, "rate limited", {"Retry-After": "4"}),
+        _api_response("ok"),
+    ])
+    llm = _llm(transport)
+
+    assert llm._chat([{"role": "user", "content": "hi"}]) == "ok"
+    assert sleeps == [4.0]
+    assert len(transport.calls) == 2
+
+
+def test_request_too_large_is_client_kind():
+    llm = _llm(FakeTransport())
+
+    with pytest.raises(LLMError) as excinfo:
+        llm._chat([{"role": "user", "content": "x" * (MAX_REQUEST_BYTES + 1024)}])
+
+    assert excinfo.value.kind == "client"
 
 
 def test_http_413_raises_with_actionable_message():
@@ -3326,11 +3558,11 @@ class _FlakyTransport(FakeTransport):
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         self.calls.append((url, headers, payload, timeout))
         if len(self.calls) <= self._failures:
-            return 502, "transient failure"
-        return self.status, self.body
+            return 502, "transient failure", {}
+        return self.status, self.body, {}
 
 
 def test_reference_judge_archivable_retries_transient_failure(monkeypatch):

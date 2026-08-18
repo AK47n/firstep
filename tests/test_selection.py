@@ -7,6 +7,7 @@ homing/01）：澄清先行 → 收敛 → done 载荷组装（run_recommendatio
 FakeLLM 记录调用形状断言（不碰网络）。
 """
 
+from pathlib import Path
 from queue import Queue
 from typing import Mapping, Sequence
 
@@ -534,7 +535,7 @@ class _RecordingConvergenceLLM(FakeLLM):
         self.calls: list[
             tuple[
                 str,
-                tuple[str, ...],
+                tuple[ManifestSummary, ...],
                 tuple[str, ...],
                 dict[str, str],
                 dict[str, str],
@@ -854,6 +855,85 @@ def test_convergent_round_events_tolerate_failing_emitter():
     assert result.requirements == (_requirement("识别数字"),)
     assert len(fake.calls) == 2
 
+
+
+class _BudgetedRecommendationLLM:
+    """推荐工作流假件：按调用数模拟共享累计预算。"""
+
+    def __init__(self, *, max_attempts: int | None = None) -> None:
+        self.max_attempts = max_attempts
+        self.attempts = 0
+        self.clarify_calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
+        self.select_calls: list[str] = []
+
+    def _consume(self) -> None:
+        if self.max_attempts is not None and self.attempts >= self.max_attempts:
+            from contest_generator.llm import LLMError
+            raise LLMError("LLM 工作流累计尝试次数预算已耗尽")
+        self.attempts += 1
+
+    def clarify(self, problem_text: str, clarifications: Sequence[tuple[str, str]]) -> tuple[str, ...]:
+        self._consume()
+        self.clarify_calls.append((problem_text, tuple(clarifications)))
+        return ()
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[ManifestSummary],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
+    ) -> ModuleSelection:
+        self._consume()
+        self.select_calls.append(problem_text)
+        return _selection_with("识别数字", modules=("dht11",))
+
+
+def test_run_recommendation_budget_accumulates_across_clarify_and_convergence():
+    """推荐入口共享预算：clarify 与后续全部 select 调用累计记账。"""
+    topic = TopicContext(
+        key="",
+        problem_text="送药小车。识别数字。",
+        references=(),
+        manifest_summaries=(ManifestSummary("dht11", "温湿度"),),
+        suggestions=(),
+        read_fulltext=lambda _entry_id: "",
+    )
+    llm = _BudgetedRecommendationLLM(max_attempts=2)
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    from contest_generator.llm import LLMError
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        run_recommendation(topic, llm, emit=emit)
+
+    assert llm.attempts == 2
+    assert len(llm.clarify_calls) == 1
+    assert len(llm.select_calls) == 1
+    assert not [event for event in _drain_events(events) if not isinstance(event, ProgressEvent) and event[0] == "done"]
+
+
+def test_run_recommendation_default_budget_compatibility_still_reaches_done():
+    """缺省无限预算保持既有成功路径：clarify + 两轮收敛后正常 done。"""
+    topic = TopicContext(
+        key="",
+        problem_text="送药小车。识别数字。",
+        references=(),
+        manifest_summaries=(ManifestSummary("dht11", "温湿度"),),
+        suggestions=(),
+        read_fulltext=lambda _entry_id: "",
+    )
+    llm = _BudgetedRecommendationLLM()
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    run_recommendation(topic, llm, emit=emit)
+
+    assert llm.attempts == 3
+    done = [event[1] for event in _drain_events(events) if not isinstance(event, ProgressEvent) and event[0] == "done"]
+    assert done and done[0]["modules"] == [{"slug": "dht11", "reason": ""}]
 
 # ---------------------------------------------------------------------------
 # 工单 06：模型输出 → ModuleSelection 解释链（域判决单址，随 build_module_selection

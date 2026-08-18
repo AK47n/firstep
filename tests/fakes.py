@@ -560,16 +560,17 @@ def make_fake_ccs_theia_master_project(master_dir: Path) -> Path:
 class FakeTransport:
     """HTTP 传输假件：记录请求并返回固定响应（注入 DeepSeekLLM，网络不进测试）。"""
 
-    def __init__(self, status: int = 200, body: str = "") -> None:
+    def __init__(self, status: int = 200, body: str = "", headers: Mapping[str, str] | None = None) -> None:
         self.status = status
         self.body = body
+        self.headers = dict(headers or {})
         self.calls: list[tuple[str, dict[str, str], dict[str, Any], float]] = []
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         self.calls.append((url, headers, payload, timeout))
-        return self.status, self.body
+        return self.status, self.body, self.headers
 
 
 class FakeLLM:
