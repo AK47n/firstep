@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=2cd9fab43b7ec01405229d685aad72d47c68d93b -->
+<!-- changelog-auto: last-commit=f3e9ef0407d63d4b833d2f8b3cb9e895d9b7094f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-19
+- 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
 
 ## 2026-08-18
 - 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
