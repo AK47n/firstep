@@ -27,6 +27,7 @@ import uuid
 import urllib.request
 from email.utils import parsedate_to_datetime
 from dataclasses import dataclass, field, replace
+from numbers import Real
 from typing import Any, Callable, Mapping, NoReturn, Protocol, Sequence, TypeVar
 
 from .budget import (
@@ -77,6 +78,19 @@ from .wordlist import (
     HardwareWordGroup,
     format_wordlist_prompt,
 )
+
+
+def sanitize_llm_usage(usage: Mapping[str, Any] | None) -> dict[str, int | float] | None:
+    """Keep only numeric token-usage fields for logs / collector / SSE telemetry."""
+    if not usage:
+        return None
+    result: dict[str, int | float] = {}
+    for key, value in usage.items():
+        if isinstance(key, str) and isinstance(value, Real) and not isinstance(value, bool):
+            numeric = float(value)
+            result[key] = int(numeric) if numeric.is_integer() else numeric
+    return result or None
+
 
 logger = logging.getLogger(__name__)
 
@@ -585,7 +599,7 @@ class LLMCallObservation:
     usage: Mapping[str, Any] | None = None
 
     def to_log_extra(self) -> dict[str, Any]:
-        usage = dict(self.usage) if self.usage else None
+        usage = sanitize_llm_usage(self.usage)
         return {
             "workflow_id": self.workflow_id,
             "sequence": self.sequence,
@@ -612,6 +626,8 @@ class LLMObservationCollector:
     """工作流级 LLM 调用观测收集器：追加顺序号并只保存脱敏字段。"""
 
     workflow_id: str
+    on_record: Callable[[], None] | None = None
+    _started_at: float = field(default_factory=time.monotonic, init=False)
     _observations: list[LLMCallObservation] = field(default_factory=list, init=False)
 
     def record(self, observation: LLMCallObservation) -> LLMCallObservation:
@@ -620,6 +636,11 @@ class LLMObservationCollector:
         if observation.sequence != len(self._observations) + 1:
             raise ValueError("观测 sequence 必须单调递增")
         self._observations.append(observation)
+        if self.on_record is not None:
+            try:
+                self.on_record()
+            except Exception:
+                pass
         return observation
 
     def collect(
@@ -658,10 +679,14 @@ class LLMObservationCollector:
             error_kind=error_kind,
             parse_status=parse_status,
             request_bytes=request_bytes,
-            usage=dict(usage) if usage else None,
+            usage=sanitize_llm_usage(usage),
         )
         self.record(observation)
         return observation.to_log_extra()
+
+    @property
+    def elapsed_ms(self) -> int:
+        return round((time.monotonic() - self._started_at) * 1000)
 
     @property
     def observations(self) -> tuple[dict[str, Any], ...]:
@@ -1215,6 +1240,7 @@ class DeepSeekLLM:
             ),
             label="编译错误修复",
             json_mode=True,
+            operation="fix_compile_errors",
         )
 
     def _retry_parse(
@@ -1764,7 +1790,7 @@ class DeepSeekLLM:
             "error_kind": error_kind,
             "parse_status": parse_status,
             "request_bytes": request_bytes,
-            "usage": dict(usage) if usage else None,
+            "usage": sanitize_llm_usage(usage),
         }
         if self._observation_collector is not None:
             observation = self._observation_collector.collect(**observation)

@@ -300,6 +300,8 @@
   .prog-log .file-list { margin: 0 0 4px 22px; color: var(--muted); white-space: pre-wrap;
                          word-break: break-all; }
   .prog-done { font-size: 13px; color: var(--ok); font-weight: 600; }
+  .llm-telemetry { margin-top: 8px; font-size: 12px; color: var(--muted);
+                   font-family: var(--mono); line-height: 1.6; }
   /* ---- 参考文件查看弹层（文件名搜索 + 文件打开工单）：清单 + 文本内联 ---- */
   .ref-files-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
                        display: flex; align-items: flex-start; justify-content: center;
@@ -657,6 +659,7 @@
       </div>
       <div id="fix-center-round" class="muted" style="margin-top:8px"></div>
       <div id="fix-status" class="muted" style="margin-top:8px"></div>
+      <div id="fix-llm-telemetry" class="llm-telemetry hidden"></div>
       <div id="fix-errors-msg" class="error"></div>
       <div id="fix-results" style="margin-top:10px"></div>
       <h3 style="margin-top:12px">编译输出（自动采集）</h3>
@@ -2915,6 +2918,48 @@ function renderToolchainStatus() {
     + "（缺失时一键按钮置灰，用下方贴文本模式；可在设置页配置路径）";
 }
 
+function formatLLMTelemetry(data) {
+  const toNumber = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
+  const parts = [
+    "LLM：" + toNumber(data.llm_total_calls) + " calls",
+    "local " + toNumber(data.llm_local_calls) + " / DeepSeek " + toNumber(data.llm_deepseek_calls),
+  ];
+  if (data.llm_latest_operation) parts.push("latest " + data.llm_latest_operation);
+  if (data.llm_error_kind) parts.push("error " + data.llm_error_kind + " / parse " + (data.llm_parse_status || ""));
+  else if (data.llm_parse_status) parts.push("parse " + data.llm_parse_status);
+  if (data.llm_latest_http_status) parts.push("http " + toNumber(data.llm_latest_http_status));
+  const counters = [];
+  if (data.llm_attempts) counters.push("attempts " + toNumber(data.llm_attempts));
+  if (data.llm_retry_calls) counters.push("retries " + toNumber(data.llm_retry_calls));
+  if (data.llm_error_calls) counters.push("errors " + toNumber(data.llm_error_calls));
+  if (data.llm_parse_error_calls) counters.push("parse_errors " + toNumber(data.llm_parse_error_calls));
+  if (data.llm_rate_limit_calls) counters.push("429 " + toNumber(data.llm_rate_limit_calls));
+  if (data.llm_network_error_calls) counters.push("network " + toNumber(data.llm_network_error_calls));
+  if (data.llm_5xx_calls) counters.push("5xx " + toNumber(data.llm_5xx_calls));
+  if (data.llm_budget_blocked_calls) counters.push("budget " + toNumber(data.llm_budget_blocked_calls));
+  if (counters.length) parts.push(counters.join(", "));
+  parts.push("request " + toNumber(data.llm_request_bytes).toLocaleString("en-US") + "B");
+  parts.push("duration " + toNumber(data.llm_duration_ms).toLocaleString("en-US") + "ms");
+  const usage = data.llm_usage || null;
+  if (usage && typeof usage === "object") {
+    const usageText = Object.keys(usage).map((k) => k + "=" + usage[k]).join(", ");
+    if (usageText) parts.push("usage " + usageText);
+  }
+  return parts.join(" · ");
+}
+
+function renderFixLLMTelemetry(data) {
+  const el = $("fix-llm-telemetry");
+  el.textContent = formatLLMTelemetry(data);
+  el.classList.remove("hidden");
+}
+
+function clearFixLLMTelemetry() {
+  const el = $("fix-llm-telemetry");
+  el.classList.add("hidden");
+  el.textContent = "";
+}
+
 function updateFixCenterAvailability() {
   const ok = !!chosenPlatform && !!(toolchains || {})[chosenPlatform];
   $("btn-fix-center").disabled = !ok || fixLoop.running;
@@ -2950,6 +2995,8 @@ function fixHandleEvent(type, raw, outputDir) {
     row._source = { path: data.file, line: data.line };
     row.addEventListener("click", () => fixToggleSource(row));
     $("fix-results").appendChild(row);
+  } else if (type === "llm_telemetry") {
+    renderFixLLMTelemetry(data);
   } else if (type === "done") {
     lastFixDone = data;
     const fixes = data.fixes || [];
@@ -3140,6 +3187,7 @@ async function startFixCenter() {
   $("fix-results").innerHTML = "";
   $("fix-center-round").textContent = "";
   $("fix-center-log").value = "";
+  clearFixLLMTelemetry();
   $("btn-fix-rollback").classList.add("hidden");
   $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
   fixCenterBusy(true);
@@ -3214,6 +3262,7 @@ $("btn-fix-errors").addEventListener("click", async () => {
   const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
   if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
   $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
+  clearFixLLMTelemetry();
   lastFix = null;
   lastFixDone = null;
   fixLoop.resume = null;             // 续跑态随之失效（工单 fix-loop-continue/01）

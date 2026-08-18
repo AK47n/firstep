@@ -79,6 +79,7 @@ from .llm import (
     build_llm,
     create_llm_observation_collector,
 )
+from .llm_telemetry import bind_llm_telemetry
 from .master import (
     confirm_distillation,
     distill_master,
@@ -822,8 +823,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """编译错误修复（SSE 流）：贴报错 → 逐条修复 → 直接写回工程文件。
 
         事件序列：parse_done（解析结果）→ fix_start（LLM 修复中，分钟级）→
-        apply_result…（逐处应用结果）→ done（修复结果 + 备份编号）或 error
-        （中文信息）→ 流结束。HTTP 200 起流，失败以流内 error 事件收尾
+        llm_telemetry（脱敏 LLM 调用快照，可能随每次记录更新）→ apply_result…
+        （逐处应用结果）→ done（修复结果 + 备份编号）或 error（中文信息）→
+        流结束。HTTP 200 起流，失败以流内 error 事件收尾
         （sse 运行器终态保证）；参数校验失败 / 输出目录不存在 400。
 
         请求体契约：error_text（必填，编译报错全文）；output_dir（必填，生成
@@ -860,8 +862,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 五步编排归 run_fix_round（对照 run_recommendation 归位先例）：事件
             # 发射在域内（_emit 旁路），done 载荷由本路由 emit.done 收尾（终态
             # 保证仍归运行器，run 抛错补发 error 终态）
-            emit.done(
-                run_fix_round(
+            with bind_llm_telemetry(collector, emit.progress):
+                result = run_fix_round(
                     llm,
                     error_text=error_text,
                     output_dir=output_dir,
@@ -873,7 +875,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     previous_fixes=previous_fixes,
                     emit=emit.progress,
                 )
-            )
+            emit.done(result)
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(

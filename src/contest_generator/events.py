@@ -10,7 +10,7 @@ question）由 sse 运行器发射收尾；线格式在 sse.py，webapp 层只�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 # 阶段名与事件类型（sse 运行器 / 前端按这些键消费，改动须同步测试契约）
 PHASE_SUMMARY = "summary"  # 阶段 1：逐文件读全文出摘要
@@ -36,6 +36,11 @@ EVENT_CONVERGED = "converged"
 EVENT_PARSE_DONE = "parse_done"
 EVENT_FIX_START = "fix_start"
 EVENT_APPLY_RESULT = "apply_result"
+
+# LLM 观测旁路事件（llm-observability-dashboard/02）：只携带 content-safe
+# 聚合字段，不含 prompt / response / API key / 源码 / 编译输出。字段前缀 llm_
+# 避免与既有 ProgressEvent 字段碰撞；前端显示紧凑状态行，终态行为不变。
+EVENT_LLM_TELEMETRY = "llm_telemetry"
 
 # 自动编译（工单 autocompile-loop/01）的事件类型：compile_start = 编译子进程
 # 启动（前端显示"编译中"，分钟级以内）；done 的 data = {platform, output_dir,
@@ -71,7 +76,8 @@ class ProgressEvent:
     （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）；
     推荐收敛循环（工单 10）的 round 用 round / round_total、converged 用 round；
     编译错误修复（工单 compile-error-fix/01）的 parse_done 用 error_count /
-    file_count、apply_result 用 file / line / status / reason。
+    file_count、apply_result 用 file / line / status / reason；LLM telemetry 用
+    llm_* 聚合字段与 llm_calls 明细（均为脱敏数值 / 枚举 / id，不含内容）。
     """
 
     type: str
@@ -93,6 +99,26 @@ class ProgressEvent:
     line: int = 0  # 编译错误修复：apply_result 报错行号
     status: str = ""  # 编译错误修复：apply_result "applied" / "skipped"
     reason: str = ""  # 编译错误修复：apply_result 中文说明（未应用原因）
+    llm_workflow_id: str = ""  # LLM telemetry：工作流 id（类型 + 随机 id，无内容）
+    llm_total_calls: int = 0
+    llm_local_calls: int = 0
+    llm_deepseek_calls: int = 0
+    llm_latest_operation: str = ""
+    llm_error_kind: str = ""
+    llm_parse_status: str = ""
+    llm_latest_http_status: int = 0
+    llm_attempts: int = 0
+    llm_retry_calls: int = 0
+    llm_error_calls: int = 0
+    llm_parse_error_calls: int = 0
+    llm_rate_limit_calls: int = 0
+    llm_network_error_calls: int = 0
+    llm_5xx_calls: int = 0
+    llm_budget_blocked_calls: int = 0
+    llm_request_bytes: int = 0
+    llm_duration_ms: int = 0
+    llm_usage: dict[str, Any] | None = None
+    llm_calls: tuple[dict[str, Any], ...] = ()
 
 
 ProgressEmitter = Callable[[ProgressEvent], None]

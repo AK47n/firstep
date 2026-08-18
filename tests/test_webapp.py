@@ -34,6 +34,7 @@ from contest_generator.events import (
     EVENT_DONE,
     EVENT_ERROR,
     EVENT_FIX_START,
+    EVENT_LLM_TELEMETRY,
     EVENT_PARSE_DONE,
     EVENT_PHASE_DONE,
     EVENT_QUESTION,
@@ -84,6 +85,7 @@ from contest_generator.webapp import (
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
+    FakeTransport,
     RecordingLLM,
     make_fake_ccs_master_project,
     make_fake_master_project,
@@ -611,6 +613,130 @@ def test_fix_errors_event_sequence_and_context_passed(client, context, tmp_path)
     call = holder["llm"].fix_errors_calls[0]
     assert call[1] == {"main.c": "int x = 1;\nint main(void) { return x; }\n"}
     assert call[2] == "" and call[3] == "" and call[4] == () and call[5] == ""
+
+
+def test_fix_errors_sse_emits_content_safe_llm_telemetry(tmp_path):
+    """真实 DeepSeekLLM 假传输：fix 流额外发 llm_telemetry，done 终态仍保持原形。"""
+    out = _fix_project(tmp_path)
+    body = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "fixes": [
+                                    {
+                                        "file": "main.c",
+                                        "line": 1,
+                                        "old_snippet": "int x = 1;",
+                                        "new_snippet": "int x = 2;",
+                                        "reason": "修复初始化",
+                                    }
+                                ]
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 2,
+                "total_tokens": 12,
+                "unsafe_text": "secret-usage-content",
+            },
+        }
+    )
+    transport = FakeTransport(body=body)
+
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
+        return build_llm(
+            config,
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+            transport=transport,
+        )
+
+    config = AppConfig(
+        api_key="sk-secret",
+        module_library_dir=tmp_path / "modules",
+        masters_dir=tmp_path / "masters",
+    )
+    ctx = AppContext(
+        config=config,
+        llm_factory=factory,
+    )
+    (tmp_path / "modules").mkdir()
+    client = TestClient(create_app(ctx))
+
+    events = _fix_stream(
+        client,
+        {
+            "output_dir": str(out),
+            "error_text": "main.c(1): error #20: secret-compile-output",
+            "problem_text": "secret-problem-text",
+        },
+    )
+
+    assert [kind for kind, _ in events] == [
+        EVENT_PARSE_DONE,
+        EVENT_FIX_START,
+        EVENT_LLM_TELEMETRY,
+        EVENT_APPLY_RESULT,
+        EVENT_DONE,
+    ]
+    telemetry = events[2][1]
+    assert telemetry["llm_workflow_id"].startswith("fix-errors:")
+    assert telemetry["llm_total_calls"] == 1
+    assert telemetry["llm_local_calls"] == 0
+    assert telemetry["llm_deepseek_calls"] == 1
+    assert telemetry["llm_latest_operation"] == "fix_compile_errors"
+    assert telemetry["llm_error_kind"] == ""
+    assert telemetry["llm_parse_status"] == "success"
+    assert telemetry["llm_latest_http_status"] == 200
+    assert telemetry["llm_attempts"] == 1
+    assert telemetry["llm_retry_calls"] == 0
+    assert telemetry["llm_error_calls"] == 0
+    assert telemetry["llm_parse_error_calls"] == 0
+    assert telemetry["llm_rate_limit_calls"] == 0
+    assert telemetry["llm_network_error_calls"] == 0
+    assert telemetry["llm_5xx_calls"] == 0
+    assert telemetry["llm_budget_blocked_calls"] == 0
+    assert telemetry["llm_request_bytes"] > 0
+    assert telemetry["llm_duration_ms"] >= 0
+    assert telemetry["llm_usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+    assert telemetry["llm_calls"] == [
+        {
+            "workflow_id": telemetry["llm_workflow_id"],
+            "sequence": 1,
+            "operation": "fix_compile_errors",
+            "provider": "deepseek",
+            "route": "remote",
+            "model": config.model,
+            "duration_ms": telemetry["llm_calls"][0]["duration_ms"],
+            "attempts": 1,
+            "status": "success",
+            "final": True,
+            "call_id": 1,
+            "budget_attempt": 1,
+            "http_status": 200,
+            "error_kind": None,
+            "parse_status": "success",
+            "request_bytes": telemetry["llm_request_bytes"],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        }
+    ]
+    serialized = json.dumps(telemetry, ensure_ascii=False)
+    assert "secret-problem-text" not in serialized
+    assert "secret-compile-output" not in serialized
+    assert "secret-usage-content" not in serialized
+    assert "sk-secret" not in serialized
+    assert events[-1][0] == EVENT_DONE
+    assert "llm" not in events[-1][1]
 
 
 def test_fix_errors_unsafe_fix_path_ends_with_error_event(client, context, tmp_path):

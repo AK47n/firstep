@@ -345,7 +345,14 @@ def test_local_llm_route_does_not_forward_remote_authorization(monkeypatch):
 
 
 def test_llm_call_emits_redacted_structured_observation(caplog):
-    transport = FakeTransport(body=_api_response("摘要"))
+    transport = FakeTransport(
+        body=json.dumps(
+            {
+                "choices": [{"message": {"content": "摘要"}}],
+                "usage": {"prompt_tokens": 10, "unsafe_text": "secret-usage"},
+            }
+        )
+    )
     collector = LLMObservationCollector("workflow-1")
     llm = _llm(transport, observation_collector=collector)
     caplog.set_level(logging.INFO, logger=llm_module.__name__)
@@ -365,15 +372,18 @@ def test_llm_call_emits_redacted_structured_observation(caplog):
     assert observation["http_status"] == 200
     assert observation["parse_status"] == "success"
     assert observation["request_bytes"] > 0
+    assert observation["usage"] == {"prompt_tokens": 10}
     assert collector.observations == (observation,)
     serialized_observation = json.dumps(observation, ensure_ascii=False)
     assert "题面原文" not in serialized_observation
     assert "secret-source" not in serialized_observation
     assert "compile-output-secret" not in serialized_observation
+    assert "secret-usage" not in serialized_observation
     assert "sk-test" not in serialized_observation
     assert "题面原文" not in record.getMessage()
     assert "secret-source" not in record.getMessage()
     assert "compile-output-secret" not in record.getMessage()
+    assert "secret-usage" not in record.getMessage()
     assert "sk-test" not in record.getMessage()
 
 
