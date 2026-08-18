@@ -656,10 +656,58 @@ def test_convergent_second_round_carries_previous_layer_with_stable_numbering():
     assert "句子2「识别数字」" in round2_topic
 
 
-def test_convergent_question_stops_immediately():
-    """补问路径：模型拿不准（questions 非空）→ 本轮即停，不再收敛确认。"""
+def test_convergent_short_marker_stops_with_previous_result():
+    """核验轮短标记（工单 recommend-speedup-v2/01）：模型自报无修订
+    （converged=True）→ 用上一轮结果提前停——省掉全量输出的核验轮。"""
+    first = _selection_with("识别数字", suggestions=("视觉模块",))
+    fake = _RecordingConvergenceLLM(
+        [first, ModuleSelection(modules=(), reasons={}, converged=True)]
+    )
+    events: list[ProgressEvent] = []
+
+    result = select_modules_convergent(
+        fake, "送药小车题", ["- dht11: 温湿度"], progress_emitter=events.append
+    )
+
+    assert len(fake.calls) == 2  # 核验轮仍是真实调用（短输出），但不再需要第 3 轮
+    assert result is first  # 自报一致 → 上一轮结果原样
+    assert [e.type for e in events] == [EVENT_ROUND, EVENT_ROUND, EVENT_CONVERGED]
+
+
+def test_convergent_short_marker_on_round_one_ignored():
+    """第 1 轮出现 converged 标记（模型违反"仅核验轮可输出"指令）→ 当空结果
+    忽略该字段，继续正常收敛比较（不提前停、不炸）。"""
     fake = _RecordingConvergenceLLM(
         [
+            ModuleSelection(modules=(), reasons={}, converged=True),
+            _selection_with("识别数字"),
+            _selection_with("识别数字"),
+        ]
+    )
+
+    result = select_modules_convergent(fake, "题面", ["- dht11: 温湿度"])
+
+    assert len(fake.calls) == 3  # 轮1 当空结果，轮2/3 两轮一致收敛
+    assert result.requirements == (_requirement("识别数字"),)
+
+
+def test_convergent_respects_max_rounds_parameter():
+    """max_rounds 参数（设置项透传）：未收敛时按上限停（默认 4，可调 2）。"""
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("需求一"), _selection_with("需求二")]
+    )
+
+    result = select_modules_convergent(
+        fake, "题面", ["- dht11: 温湿度"], max_rounds=2
+    )
+
+    assert len(fake.calls) == 2
+    assert result.requirements == (_requirement("需求二"),)
+
+
+def test_convergent_question_stops_immediately():
+    """补问路径：模型拿不准（questions 非空）→ 本轮即停，不再收敛确认。"""
+    fake = _RecordingConvergenceLLM(        [
             ModuleSelection(
                 modules=(),
                 reasons={},

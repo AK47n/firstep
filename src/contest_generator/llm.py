@@ -1072,6 +1072,11 @@ class DeepSeekLLM:
 
         def parse(content: str) -> ModuleSelection:
             data = extract_module_selection_data(content)
+            # 核验轮短标记（工单 01）：{"converged": true} = 模型自报与上一轮
+            # 一致——无需求层可判，跳过域判决直接返回空选择（收敛驱动层据此
+            # 用上一轮结果提前停）；严格 true 才算，false / 缺字段照常走判决
+            if isinstance(data, Mapping) and data.get("converged") is True:
+                return ModuleSelection(modules=(), reasons={}, converged=True)
             try:
                 return build_module_selection(
                     data,

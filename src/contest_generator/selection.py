@@ -410,6 +410,8 @@ class ModuleSelection:
     requirements: tuple[FunctionRequirement, ...] = ()  # 功能需求层
     questions: tuple[str, ...] = ()  # 向用户补问（非空 → 暂停分析）
     instances: dict[str, tuple[ModuleInstance, ...]] = field(default_factory=dict)
+    converged: bool = False  # 核验轮短标记（工单 01）：模型自报与上一轮一致
+    # （无需求层可判——短标记形态跳过域判决；仅核验轮允许，第 1 轮出现当空结果）
 
 
 @dataclass(frozen=True)
@@ -798,8 +800,12 @@ def _revision_prompt(
     错误（脑补 / 遗漏 / 覆盖错）才改对应条目，且只做最小改动；无证据的条目
     逐字照抄上一轮原文输出、句子编号照抄不改——改写措辞本身是脑补（工单
     recommend-speedup/01：旧"自检修订"让模型每轮都改、功能需求层永不重复，
-    "两轮一致即停"拖到 4 轮封顶）。输出完整的新一轮功能需求层（不是增量）；
-    连续两轮一致时保持不动（收敛判定在驱动层完成，这里只是给模型依据）。
+    "两轮一致即停"拖到 4 轮封顶）。
+
+    短标记提前停（工单 01）：**全部条目核验通过（无任何修订）时输出
+    {"converged": true}**——驱动层收到即用上一轮结果提前收敛，省掉全量输出
+    的核验轮（2-4 min → 秒级）；有任何修订才输出完整的新一轮功能需求层
+    （不是增量）。短标记只允许出现在核验轮。
     """
     lines = [
         numbered_topic,
@@ -807,8 +813,9 @@ def _revision_prompt(
         "上一轮功能需求层（逐条核验，题面原文是唯一裁判：仅当有确凿题面证据"
         "表明错误——脑补 / 遗漏 / 覆盖错——才改对应条目，且只做最小改动；"
         "无证据的条目逐字照抄上一轮原文输出，句子编号照抄不改；无证据支持的"
-        "改动（改写措辞也算）本身是脑补；输出完整的新一轮功能需求层；连续两轮"
-        "一致时保持不动）：",
+        "改动（改写措辞也算）本身是脑补）。"
+        "全部条目核验通过、无任何修订时，输出 {\"converged\": true}（不要再输出"
+        "需求层——本轮无需重发）；有任何修订时输出完整的新一轮功能需求层：",
     ]
     for index, requirement in enumerate(previous, 1):
         detail = f"句子{requirement.sentence_index}「{requirement.requirement}」"
@@ -904,6 +911,7 @@ def select_modules_convergent(
     numbered = _number_topic_sentences(problem_text)
     fulltexts: dict[str, str] = {}
     previous: tuple[FunctionRequirement, ...] = ()
+    previous_selection: ModuleSelection | None = None  # 短标记提前停返回用
     previous_key: _FunctionalKey | None = None
     selection: ModuleSelection | None = None
     # 手动全文 / 澄清历史存在才传对应关键字——不传时保持旧签名（既有假 LLM
@@ -961,6 +969,16 @@ def select_modules_convergent(
             )
         if selection.questions:
             return selection  # 补问：暂停收敛，向用户补问（不以推荐收尾）
+        # 核验轮短标记（工单 01）：模型自报与上一轮一致 → 用上一轮结果提前停
+        # （省掉全量输出核验轮的 2-4 min；第 1 轮出现 converged 当空结果忽略——
+        # 模型违反"仅核验轮可输出"指令，requirements 空 → key 空照常比较）
+        if selection.converged and previous_key is not None:
+            _emit(
+                progress_emitter,
+                ProgressEvent(type=EVENT_CONVERGED, round=round_no),
+            )
+            assert previous_selection is not None  # previous_key 非空 ⇒ 已赋值
+            return previous_selection
         key = _functional_layer_key(selection)
         if previous_key is not None and key == previous_key:
             _emit(
@@ -969,6 +987,7 @@ def select_modules_convergent(
             )
             return selection
         previous = selection.requirements
+        previous_selection = selection
         previous_key = key
     assert selection is not None  # max_rounds ≥ 1，循环体必赋值
     return selection  # 上限轮次到：以最后一轮为准（不再多问）
@@ -988,6 +1007,7 @@ def run_recommendation(
     clarifications: Sequence[tuple[str, str]] = (),
     *,
     emit: SseEmitter,
+    max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
 ) -> None:
     """/api/recommend 的两阶段编排（工单 01 推荐先澄清后收敛）。
 
@@ -1033,6 +1053,7 @@ def run_recommendation(
         progress_emitter=emit.progress,
         manual_fulltexts=topic.manual_fulltexts,
         clarifications=clarifications,  # 澄清历史贯穿收敛循环（题面后独立段）
+        max_rounds=max_rounds,  # 轮数上限可配置（工单 01，设置项透传）
     )
     if selection.questions:
         emit.question({"questions": list(selection.questions)})

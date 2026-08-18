@@ -483,6 +483,20 @@ def _optional_bool(payload: dict, key: str, *, default: bool) -> bool:
     return value
 
 
+def _optional_int_range(
+    payload: dict, key: str, *, default: int, low: int, high: int
+) -> int:
+    """可选整数（范围约束）：缺省 / null → default；类型非法 / 越界抛 400。"""
+    value = payload.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise HTTPException(400, f"{key} 必须是整数")
+    if not low <= value <= high:
+        raise HTTPException(400, f"{key} 必须在 {low}-{high} 之间")
+    return value
+
+
 def _mask_api_key(api_key: str) -> str:
     """API key 掩码（判定用）：只露前 4 位 + 省略号（PUT 收到掩码形态视为用户没改 key）。"""
     if not api_key:
@@ -723,6 +737,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         ckey = cache_key(topic_id, problem_text)
         cpath = recommend_cache_path(ckey, cache_dir=context.config_path.parent / "cache")
         clarify_maps = [{"question": q, "answer": a} for q, a in clarifications]
+        # 收敛轮数上限（工单 recommend-speedup-v2/01）：设置项透传，缺省 4
+        max_rounds = config.recommend_max_rounds
 
         def _write_cache(done_data: dict) -> None:
             """真实推荐 done 载荷落缓存（尽力而为：写失败静默旁路）。"""
@@ -765,6 +781,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     _llm(context, budget, collector),
                     clarifications,
                     emit=_CacheWriterEmitter(emit, _write_cache),
+                    max_rounds=max_rounds,
                 )
             finally:
                 context.recent_llm_workflows.add_completed(collector)
@@ -1421,6 +1438,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "recommend_cache_enabled": (
                 config.recommend_cache_enabled if config is not None else True
             ),
+            # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
+            "recommend_max_rounds": (
+                config.recommend_max_rounds if config is not None else 4
+            ),
             "config_path": str(context.config_path),
         }
 
@@ -1460,6 +1481,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 推荐缓存开关（工单 llm-cost-control/02）：缺省开；非布尔 400
             recommend_cache_enabled=_optional_bool(
                 payload, "recommend_cache_enabled", default=True
+            ),
+            # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：2-4，缺省 4
+            recommend_max_rounds=_optional_int_range(
+                payload, "recommend_max_rounds", default=4, low=2, high=4
             ),
         )
         save_config(config, context.config_path)

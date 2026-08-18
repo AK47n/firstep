@@ -3975,6 +3975,81 @@ def test_recommend_corrupt_cache_falls_back_to_real(client, context, tmp_path):
     assert done, "坏缓存应静默走真实推荐"
 
 
+class _EverChangingLLM(TopicAwareLLM):
+    """每轮返回不同功能需求层的假 LLM（永不收敛）：验证轮数上限接线。"""
+
+    def __init__(self) -> None:
+        super().__init__(selection=SELECTION, extracted_key=None)
+        self.select_calls = 0
+
+    def select_modules(
+        self,
+        problem_text,
+        manifest_summaries,
+        references=(),
+        reference_fulltexts=None,
+        manual_fulltexts=None,
+        clarifications=(),
+    ):
+        self.select_calls += 1
+        return ModuleSelection(
+            modules=("dht11",),
+            reasons={"dht11": f"第 {self.select_calls} 轮"},
+            requirements=(
+                FunctionRequirement(
+                    requirement=f"需求 {self.select_calls}",
+                    sentence_index=1,
+                    modules=("dht11",),
+                ),
+            ),
+        )
+
+
+def test_recommend_max_rounds_setting_controls_convergence_rounds(client, context):
+    """收敛轮数上限（工单 01）：默认 4 轮；设置 recommend_max_rounds=2 后同题
+    最多 2 轮（每轮需求层都变 → 永不收敛，轮数 = 上限）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+
+    holder["llm"] = _EverChangingLLM()
+    _recommend_done(client, _recommend_payload(problem_text="题面甲：做个小车。"))
+    assert holder["llm"].select_calls == 4  # 默认上限
+
+    current = client.get("/api/settings").json()
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "recommend_max_rounds": 2,
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.recommend_max_rounds == 2
+
+    holder["llm"] = _EverChangingLLM()
+    _recommend_done(client, _recommend_payload(problem_text="题面乙：做个智能车。"))
+    assert holder["llm"].select_calls == 2  # 上限 2
+
+    # 越界值 400
+    bad = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "recommend_max_rounds": 5,
+        },
+    )
+    assert bad.status_code == 400
+    assert "recommend_max_rounds 必须在 2-4 之间" in bad.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # 参考文件库：文件名搜索 + 文件清单 + 文件服务（文件名搜索 / 文件打开工单）
 # ---------------------------------------------------------------------------

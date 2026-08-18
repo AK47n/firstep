@@ -3764,6 +3764,28 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
     assert result.requirements[0].suggestions[0].name == "视觉模块"
 
 
+def test_select_modules_parses_converged_short_marker():
+    """核验轮短标记（工单 recommend-speedup-v2/01）：模型输出 {"converged": true}
+    → 返回 converged=True 的空选择（跳过域判决——无需求层可判）。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"converged": True})))
+    llm = _llm(transport)
+
+    result = llm.select_modules("设计一个送药小车", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.converged is True
+    assert result.modules == () and result.requirements == ()
+
+
+def test_select_modules_converged_false_is_normal_selection():
+    """{"converged": false} 不是短标记（须严格 true）→ 照常走域判决（缺 modules
+    = 畸形，重试后失败抛错——converged 字段不豁免校验）。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"converged": False})))
+    llm = _llm(transport)
+
+    with pytest.raises(Exception):
+        llm.select_modules("设计一个送药小车", [ManifestSummary("dht11", "温湿度")])
+
+
 REQUIREMENTS_INSTANCES_JSON = json.dumps(
     {
         "requirements": [

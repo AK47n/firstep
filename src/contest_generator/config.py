@@ -56,6 +56,10 @@ class AppConfig:
     # 推荐缓存开关（工单 llm-cost-control/02）：默认开——同题重跑推荐命中
     # 缓存直出 done 载荷（省最贵的推荐段 LLM 调用）；关闭 = 每次真实推荐
     recommend_cache_enabled: bool = True
+    # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：2-4，缺省 4。
+    # 调低 = 更快但更少自检修订（1 轮无收敛意义，配置层拒绝）；核验轮短标记
+    # 提前停生效后实际轮数通常少于上限
+    recommend_max_rounds: int = 4
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -126,6 +130,14 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     recommend_cache_enabled = data.get("recommend_cache_enabled", True)
     if not isinstance(recommend_cache_enabled, bool):
         raise ConfigError(f"recommend_cache_enabled 必须是布尔值：{path}")
+    # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：2-4，缺省 4
+    recommend_max_rounds = data.get("recommend_max_rounds", 4)
+    if (
+        not isinstance(recommend_max_rounds, int)
+        or isinstance(recommend_max_rounds, bool)
+        or not 2 <= recommend_max_rounds <= 4
+    ):
+        raise ConfigError(f"recommend_max_rounds 必须是 2-4 的整数：{path}")
 
     return AppConfig(
         base_url=base_url,
@@ -143,6 +155,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         local_llm_model=local_llm_model,
         llm_prices=llm_prices,
         recommend_cache_enabled=recommend_cache_enabled,
+        recommend_max_rounds=recommend_max_rounds,
     )
 
 
@@ -167,6 +180,7 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "local_llm_base_url": config.local_llm_base_url,
         "local_llm_model": config.local_llm_model,
         "recommend_cache_enabled": config.recommend_cache_enabled,
+        "recommend_max_rounds": config.recommend_max_rounds,
     }
     if config.llm_prices is not None:
         data["llm_prices"] = config.llm_prices

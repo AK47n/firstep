@@ -103,6 +103,8 @@ def test_saved_file_is_plain_json(tmp_path):
         "local_llm_model": "",
         # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
         "recommend_cache_enabled": True,
+        # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
+        "recommend_max_rounds": 4,
     }
 
 

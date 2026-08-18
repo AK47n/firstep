@@ -1004,10 +1004,18 @@
         <label style="margin:0 12px 0 0;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">
           <input type="checkbox" id="set-recommend-cache" style="margin:0"> 推荐缓存
         </label>
+        <label style="margin:0 12px 0 0;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">
+          收敛轮数
+          <select id="set-recommend-rounds" style="font-size:12px">
+            <option value="4">4（默认）</option>
+            <option value="3">3</option>
+            <option value="2">2（最快）</option>
+          </select>
+        </label>
         <button id="btn-refresh-recent-wf" style="margin-left:auto">刷新</button>
       </div>
       <div class="muted" style="margin:10px 0">已完成运行的只读摘要：本地 / DeepSeek 调用数、总耗时、请求字节、状态、每次调用明细与估算费用。仅保存在内存，重启即清空，不写配置。</div>
-      <div class="muted" style="margin:0 0 8px">推荐缓存：同题重跑推荐直出上次结果（省最贵的推荐段 LLM 调用）；题面 / 平台变化自动失效，参考 / 澄清变化会提示差异。</div>
+      <div class="muted" style="margin:0 0 8px">推荐缓存：同题重跑推荐直出上次结果（省最贵的推荐段 LLM 调用）；题面 / 平台变化自动失效，参考 / 澄清变化会提示差异。收敛轮数：核验轮模型自报一致即提前停（通常 2 轮内），上限兜底。</div>
       <div id="recent-workflows" class="recent-wf-list"></div>
       <div class="muted" style="margin-top:8px">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
     </div>
@@ -4472,6 +4480,8 @@ async function loadSettings() {
     $("set-local-out").value = (llmPricesDefaults.local || {}).output_per_million ?? "";
     // 推荐缓存开关（工单 llm-cost-control/02）：缺省开
     $("set-recommend-cache").checked = s.recommend_cache_enabled !== false;
+    // 收敛轮数上限（工单 01）：缺省 4
+    $("set-recommend-rounds").value = String(s.recommend_max_rounds ?? 4);
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
@@ -4513,6 +4523,7 @@ $("btn-save-settings").addEventListener("click", async () => {
       local_llm_model: $("set-local-llm-model").value.trim(),
       llm_prices: collectLlmPrices(),
       recommend_cache_enabled: $("set-recommend-cache").checked,
+      recommend_max_rounds: parseInt($("set-recommend-rounds").value, 10) || 4,
     });
     $("settings-msg").classList.add("ok");
     $("settings-msg").textContent = "已保存，立即生效。";
