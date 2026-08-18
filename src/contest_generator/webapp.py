@@ -86,7 +86,11 @@ from .llm import (
     create_llm_observation_collector,
 )
 from .llm_telemetry import bind_llm_telemetry
-from .llm_pricing import price_tables_from_config, price_tables_to_config
+from .llm_pricing import (
+    DEEPSEEK_FLASH_PRICE_REFERENCE,
+    price_tables_from_config,
+    price_tables_to_config,
+)
 from .llm_recent_workflows import LLMRecentWorkflowStore, attach_cost_estimates
 from .recommend_cache import (
     cache_key,
@@ -1489,6 +1493,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "llm_prices": price_tables_to_config(
                 price_tables_from_config(config.llm_prices if config else None)
             ),
+            # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：单源
+            # = llm_pricing.DEEPSEEK_FLASH_PRICE_REFERENCE，设置页折叠面板渲染
+            "price_reference": DEEPSEEK_FLASH_PRICE_REFERENCE,
             # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
             "recommend_cache_enabled": (
                 config.recommend_cache_enabled if config is not None else True

@@ -7,6 +7,7 @@ import pytest
 from contest_generator.llm_pricing import (
     DEFAULT_DEEPSEEK_PRICES,
     DEFAULT_LOCAL_PRICES,
+    DEEPSEEK_FLASH_PRICE_REFERENCE,
     LLMPriceTable,
     estimate_llm_cost,
 )
@@ -50,6 +51,16 @@ def test_deepseek_default_prices_present():
     """内置 DeepSeek 参考单价存在且非负（注释标明以官方为准，设置页可改）。"""
     assert DEFAULT_DEEPSEEK_PRICES["input_per_million"] >= 0
     assert DEFAULT_DEEPSEEK_PRICES["output_per_million"] >= 0
+
+
+def test_flash_price_reference_shape():
+    """官方价格参考表（设置页折叠面板数据源）：四档价格 + 并发 + 日期，单源。"""
+    ref = DEEPSEEK_FLASH_PRICE_REFERENCE
+    assert ref["input_cache_hit"] == {"off_peak": 0.05, "peak": 0.10}
+    assert ref["input_cache_miss"] == {"off_peak": 1.5, "peak": 3.0}
+    assert ref["output"] == {"off_peak": 4.5, "peak": 9.0}
+    assert ref["concurrent_connections"] == 2500
+    assert ref["as_of"]
 
 
 def test_price_table_roundtrip_and_validation():

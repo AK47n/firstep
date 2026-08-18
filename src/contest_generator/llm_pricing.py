@@ -10,15 +10,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-# 参考单价（元 / 百万 token）。官方定价波动大（2026-08 曾调价），此处仅是
+# 参考单价（元 / 百万 token）。官方定价波动大（2026-08-18 曾大幅调价），此处仅是
 # 开箱即用的默认参考值——设置页可覆盖；0 单价 = 关闭该 provider 的估算。
+# 默认值取 DeepSeek Flash「高峰时段 + 缓存未命中」档（工具高峰使用多、长 prompt
+# 缓存命中率低，估算偏保守不低估；用户可在设置页按实际时段覆盖）。
 DEFAULT_DEEPSEEK_PRICES: dict[str, float] = {
-    "input_per_million": 2.0,
-    "output_per_million": 8.0,
+    "input_per_million": 3.0,
+    "output_per_million": 9.0,
 }
 DEFAULT_LOCAL_PRICES: dict[str, float] = {
     "input_per_million": 0.0,
     "output_per_million": 0.0,
+}
+
+# DeepSeek Flash 官方价格参考表（2026-08 官方定价，单位元/百万 token）——
+# 单源：设置页折叠面板经 /api/settings 的 price_reference 渲染展示，
+# 用户可据此在输入框覆盖默认值；改价只改这一处。
+DEEPSEEK_FLASH_PRICE_REFERENCE: dict[str, Any] = {
+    "input_cache_hit": {"off_peak": 0.05, "peak": 0.10},
+    "input_cache_miss": {"off_peak": 1.5, "peak": 3.0},
+    "output": {"off_peak": 4.5, "peak": 9.0},
+    "concurrent_connections": 2500,
+    "as_of": "2026-08",
 }
 
 _SUPPORTED_PROVIDERS = ("deepseek", "local")

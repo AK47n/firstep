@@ -959,6 +959,19 @@
         <div style="flex:1"><label>DeepSeek 输入单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in" placeholder="参考价，留空=默认"></div>
         <div style="flex:1"><label>DeepSeek 输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-out" placeholder="参考价，留空=默认"></div>
       </div>
+      <details id="price-reference" style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted)">DeepSeek Flash 官方价格参考（点击展开）</summary>
+        <div style="margin-top:8px;font-size:12px;line-height:1.7">
+          <table style="border-collapse:collapse;width:100%;max-width:520px">
+            <thead>
+              <tr style="text-align:left"><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">计费项</th><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">空闲时段（元/百万 token）</th><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">高峰时段（元/百万 token）</th></tr>
+            </thead>
+            <tbody id="price-ref-rows"></tbody>
+          </table>
+          <div style="margin-top:6px" class="muted" id="price-ref-foot"></div>
+          <div class="muted" style="margin-top:6px">上方是官方参考价（用于费用估算展示）；可在输入框按实际时段覆盖默认值。</div>
+        </div>
+      </details>
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>本地模型输入单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-in" placeholder="默认 0（本机免费）"></div>
         <div style="flex:1"><label>本地模型输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-out" placeholder="默认 0（本机免费）"></div>
@@ -4530,6 +4543,7 @@ async function loadSettings() {
     $("set-ds-out").value = (llmPricesDefaults.deepseek || {}).output_per_million ?? "";
     $("set-local-in").value = (llmPricesDefaults.local || {}).input_per_million ?? "";
     $("set-local-out").value = (llmPricesDefaults.local || {}).output_per_million ?? "";
+    renderPriceReference(s.price_reference);
     // 推荐缓存开关（工单 llm-cost-control/02）：缺省开
     $("set-recommend-cache").checked = s.recommend_cache_enabled !== false;
     // 收敛轮数上限（工单 01）：缺省 4
@@ -4537,6 +4551,33 @@ async function loadSettings() {
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
+}
+
+/** DeepSeek Flash 官方价格参考表渲染（工单 llm-cost-control 更新）：
+ * 数据单源 = 后端 DEEPSEEK_FLASH_PRICE_REFERENCE（/api/settings
+ * price_reference），前端只渲染不硬编码；缺数据 = 面板隐藏。 */
+function renderPriceReference(ref) {
+  const rows = $("price-ref-rows");
+  if (!ref || !rows) return;
+  const fmt = (v) => (v ?? "-") + " 元";
+  const row = (label, entry) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + esc(label) + "</td>"
+      + "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + fmt(entry.off_peak) + "</td>"
+      + "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + fmt(entry.peak) + "</td>";
+    rows.appendChild(tr);
+  };
+  row("输入（缓存命中）", ref.input_cache_hit || {});
+  row("输入（缓存未命中）", ref.input_cache_miss || {});
+  row("输出", ref.output || {});
+  const foot = $("price-ref-foot");
+  if (foot) {
+    const concur = ref.concurrent_connections;
+    const asOf = ref.as_of ? "（" + esc(ref.as_of) + " 官方定价）" : "";
+    foot.textContent = concur
+      ? "单服务实例最大并发连接数：" + concur + " " + asOf
+      : asOf;
+  }
 }
 
 function collectLlmPrices() {

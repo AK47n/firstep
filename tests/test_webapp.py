@@ -2836,6 +2836,8 @@ def test_settings_vision_fields_roundtrip_and_mask(client, context):
     assert current["vision_base_url"] == ""
     assert current["vision_api_key"] == ""
     assert current["vision_model"] == ""
+    # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：GET 带出
+    assert current["price_reference"]["concurrent_connections"] == 2500
 
     resp = client.put(
         "/api/settings",
