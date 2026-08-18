@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5878b0a906e2f77dd901f69c7e5f954a094124e9 -->
+<!-- changelog-auto: last-commit=444a2c200e86c19d324f3ac561773d5b889cdff7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 17:18 修复 SSE 流内实时 LLM 遥测（llm_telemetry 事件 + 前端紧凑状态行）（工单 llm-observability-dashboard/02）
 - 18:59 设置页最近 LLM 工作流仪表盘（内存 ring buffer + 只读端点 + 脱敏摘要/明细）（工单 llm-observability-dashboard/03）
 - 19:29 规范：仓库文档与提交信息统一中文——工单与 CHANGELOG 英文记录全量翻译、.githooks/commit-msg 中文门禁（GBK/UTF-8 兼容 + lib 机器提交豁免）、语言规范写入 workflow.md/CLAUDE.md、tests/test_repo_language.py 兜底
+- 20:13 LLM 成本控制闭环——费用估算（可配置单价表 + 仪表盘费用行 + 本地路由节省额）与推荐缓存上 Web（done 载荷复用 + 指纹校验 + 设置开关）
 
 ## 2026-08-17
 - 00:02 ball_detect 模块重命名为 coord_detect（坐标检测）——纯机械改名（git mv 保留历史，解析逻辑/协议一字不改）：C 符号 BallResult→CoordResult、ball_detect_*→coord_detect_*、BALL_RX_BUF_SIZE→COORD_RX_BUF_SIZE、引脚宏 BALL_DETECT_UART*→COORD_DETECT_UART*；帧契约单源 BALL_FRAME_*→COORD_FRAME_*（前缀值 "B" 保持——协议字节与模块名解耦）、模板占位符 ball_frame_format→coord_frame_format、BALL_THRESHOLD→COLOR_THRESHOLD；k230 依赖/母版/测试/CONTEXT 同步（工单 coord-detect-rename/01）
