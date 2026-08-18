@@ -1268,6 +1268,18 @@ def test_extract_unsupported_type_returns_clear_error(client):
     assert "不支持的文件类型" in resp.json()["detail"]
 
 
+def test_extract_image_without_vision_key_returns_actionable_error(client):
+    """图片上传未配视觉 key → 可操作中文提示（引导设置页），不崩（工单 03）。"""
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("题.png", b"\x89PNG\r\n\x1a\nfake", "image/png")},
+    )
+
+    assert resp.status_code == 400
+    assert "视觉" in resp.json()["detail"]
+    assert "设置" in resp.json()["detail"]
+
+
 def test_topic_summarize_returns_summary(client, context):
     """赛题简介：单次 LLM 调用返回一句话总览 + 功能要点（只展示，不进下游）。"""
     resp = client.post(
@@ -2815,6 +2827,67 @@ def test_settings_ccs_toolchain_paths_roundtrip(client, context):
     assert saved["ccs_sysconfig_cli"] == (
         "C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"
     )
+
+
+def test_settings_vision_fields_roundtrip_and_mask(client, context):
+    """视觉通道（工单 vision-eyes/01）：GET 缺省空串 + key 掩码；PUT 透传；
+    掩码形态 = 沿用旧值（与 api_key 同款语义）。"""
+    current = client.get("/api/settings").json()
+    assert current["vision_base_url"] == ""
+    assert current["vision_api_key"] == ""
+    assert current["vision_model"] == ""
+
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "vision_api_key": "sk-vision-123456",
+            "vision_model": "glm-4v-flash",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.vision_api_key == "sk-vision-123456"
+    saved = client.get("/api/settings").json()
+    assert saved["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert saved["vision_api_key"].startswith("sk-v")  # 掩码（前 4 位 + 省略号）
+    assert saved["vision_api_key"] != "sk-vision-123456"
+    assert saved["vision_model"] == "glm-4v-flash"
+
+    # 掩码形态 PUT = 沿用旧值；空串 = 关闭
+    masked = saved["vision_api_key"]
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "vision_api_key": masked,
+            "vision_model": "glm-4v-flash",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.vision_api_key == "sk-vision-123456"
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "vision_api_key": "",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.vision_api_key == ""
 
 
 def test_settings_local_llm_fields_roundtrip(client, context):

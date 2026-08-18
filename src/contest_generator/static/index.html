@@ -502,9 +502,9 @@
       <h2><span class="step-no">1</span>赛题原文</h2>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
       <div class="row" style="margin-top:8px">
-        <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md">
+        <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp">
         <button id="btn-upload">上传并抽取文字</button>
-        <span class="muted">支持 .pdf / .docx / .txt / .md，纯本地解析</span>
+        <span class="muted">支持 .pdf / .docx / .txt / .md / 图片，纯本地解析；图片与 PDF 示意图经免费视觉通道识别（需在设置页配置）</span>
       </div>
       <div class="row" style="margin-top:8px">
         <input type="text" id="topic-id" placeholder="历史赛题编号，如 2026C" style="flex:1;max-width:220px">
@@ -996,6 +996,16 @@
         <div style="flex:1"><label>本地模型（留空 = 关闭）</label><input type="text" id="set-local-llm-model" placeholder="qwen2.5-coder:7b-instruct"></div>
       </div>
       <div class="muted">填写后，赛题简介 / 模块简介 / 参考素材简介三个纯文本摘要调用走本地模型；其余调用仍走 DeepSeek。</div>
+    </div>
+
+    <div class="card">
+      <h2>视觉通道（可选）</h2>
+      <div class="row">
+        <div style="flex:1"><label>视觉 base_url（留空 = 默认智谱）</label><input type="text" id="set-vision-base-url" placeholder="https://open.bigmodel.cn/api/paas/v4"></div>
+        <div style="flex:1"><label>视觉模型（留空 = glm-4v-flash）</label><input type="text" id="set-vision-model" placeholder="glm-4v-flash"></div>
+      </div>
+      <div style="flex:1"><label>视觉 API key（留空 = 视觉关闭；掩码保持不变）</label><input type="text" id="set-vision-api-key" placeholder="智谱开放平台免费 key（GLM-4V-Flash）" autocomplete="off"></div>
+      <div class="muted">免费云端识图（GLM-4V-Flash）：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别——AI 简介 / 推荐 / 骨架都能"看到"图的内容。key 在<a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a>免费获取；不配置 = 视觉功能关闭，其余功能不受影响。</div>
     </div>
 
     <div class="card">
@@ -4509,6 +4519,10 @@ async function loadSettings() {
     // 本地 LLM 端点（工单 local-llm-routing/03）：空串 = 本地路由关闭
     $("set-local-llm-base-url").value = s.local_llm_base_url || "";
     $("set-local-llm-model").value = s.local_llm_model || "";
+    // 视觉通道（工单 vision-eyes/01）：key 只回掩码；空 = 视觉关闭
+    $("set-vision-base-url").value = s.vision_base_url || "";
+    $("set-vision-api-key").value = s.vision_api_key || "";
+    $("set-vision-model").value = s.vision_model || "";
     // LLM 单价（工单 llm-cost-control/01）：GET 返回生效表，填入输入框
     // （默认参考价也填，用户可直接看到当前生效值）；留空语义见保存逻辑
     llmPricesDefaults = s.llm_prices || {};
@@ -4559,6 +4573,9 @@ $("btn-save-settings").addEventListener("click", async () => {
       ccs_sysconfig_cli: $("set-ccs-sysconfig-cli").value.trim(),
       local_llm_base_url: $("set-local-llm-base-url").value.trim(),
       local_llm_model: $("set-local-llm-model").value.trim(),
+      vision_base_url: $("set-vision-base-url").value.trim(),
+      vision_api_key: $("set-vision-api-key").value.trim(),
+      vision_model: $("set-vision-model").value.trim(),
       llm_prices: collectLlmPrices(),
       recommend_cache_enabled: $("set-recommend-cache").checked,
       recommend_max_rounds: parseInt($("set-recommend-rounds").value, 10) || 4,

@@ -47,7 +47,12 @@ from .config import (
 )
 from .errors import error_entry
 from .events import EVENT_CACHE_HIT, ProgressEvent
-from .extraction import extract_file
+from .extraction import (
+    IMAGE_FILE_SUFFIXES,
+    extract_file,
+    extract_image,
+    extract_pdf_with_image_notes,
+)
 from .fix_errors import (
     FixError,
     fix_backup_root,
@@ -517,6 +522,19 @@ def _mask_api_key_display(api_key: str) -> str:
     return api_key[:4] + "•" * (len(api_key) - 5) + api_key[-1]
 
 
+def _masked_optional_key(
+    payload: dict, key: str, existing: str
+) -> str:
+    """可选密钥字段（工单 vision-eyes/01）：缺省 / 空串 = 关闭；收到掩码形态
+    （前 4 位 + 省略号） = 用户没改，沿用旧值；其余 = 新值。"""
+    value = _optional_str(payload, key)
+    if not value:
+        return ""
+    if value in (_mask_api_key(existing), _mask_api_key_display(existing)):
+        return existing
+    return value
+
+
 async def _save_upload(upload: UploadFile) -> Path:
     """上传文件 → 临时文件（保留原后缀，抽取 / 录入按后缀选解析器）。
 
@@ -622,13 +640,37 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/extract")
     @_map_errors
     async def extract(upload: UploadFile = File(...)) -> dict:
-        """上传赛题文件（PDF / .docx / .txt / .md）→ 抽取纯文本。"""
+        """上传赛题文件（PDF / .docx / .txt / .md / 图片）→ 抽取文本。
+
+        PDF 且配了视觉 key（工单 vision-eyes/02）：文本后追加嵌入示意图
+        描述（[示意图N：…]）；未配 key = 纯文本（现状逐字节一致）；视觉
+        失败静默降级。图片（工单 vision-eyes/03）：直接走视觉描述。"""
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=Path(upload.filename or "").suffix
         ) as tmp:
             tmp.write(await upload.read())
             tmp_path = Path(tmp.name)
         try:
+            config = _require_config(context)
+            suffix = tmp_path.suffix.lower()
+            if suffix in IMAGE_FILE_SUFFIXES:
+                return {
+                    "text": extract_image(
+                        tmp_path,
+                        vision_base_url=config.vision_base_url,
+                        vision_api_key=config.vision_api_key,
+                        vision_model=config.vision_model,
+                    )
+                }
+            if suffix == ".pdf":
+                return {
+                    "text": extract_pdf_with_image_notes(
+                        tmp_path,
+                        vision_base_url=config.vision_base_url,
+                        vision_api_key=config.vision_api_key,
+                        vision_model=config.vision_model,
+                    )
+                }
             return {"text": extract_file(tmp_path)}
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -1434,6 +1476,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 本地 LLM 端点（工单 local-llm-routing/01-03）：空串 = 本地路由关闭
             "local_llm_base_url": config.local_llm_base_url if config is not None else "",
             "local_llm_model": config.local_llm_model if config is not None else "",
+            # 视觉通道（工单 vision-eyes/01）：空串 = 视觉关闭（api_key 掩码同主 key）
+            "vision_base_url": config.vision_base_url if config is not None else "",
+            "vision_api_key": (
+                _mask_api_key(config.vision_api_key)
+                if config is not None and config.vision_api_key
+                else ""
+            ),
+            "vision_model": config.vision_model if config is not None else "",
             # LLM 单价（工单 llm-cost-control/01）：返回当前生效表（默认 + 覆盖
             # 合并），前端可直接显示；未配置 / 无覆盖 = 内置默认
             "llm_prices": price_tables_to_config(
@@ -1481,6 +1531,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 本地 LLM 端点（工单 local-llm-routing/03）：缺省 / 空串 = 关闭本地路由
             local_llm_base_url=_optional_str(payload, "local_llm_base_url"),
             local_llm_model=_optional_str(payload, "local_llm_model"),
+            # 视觉通道（工单 vision-eyes/01）：缺省 / 空串 = 视觉关闭；key 掩码
+            # 沿用旧值（与 api_key 同款语义）
+            vision_base_url=_optional_str(payload, "vision_base_url"),
+            vision_api_key=_masked_optional_key(
+                payload, "vision_api_key", existing.vision_api_key if existing else ""
+            ),
+            vision_model=_optional_str(payload, "vision_model"),
             # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 / 空对象 = 恢复内置默认
             llm_prices=_optional_dict(payload, "llm_prices"),
             # 推荐缓存开关（工单 llm-cost-control/02）：缺省开；非布尔 400

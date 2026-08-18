@@ -41,6 +41,7 @@ from .selection import ManualReferenceError, SelectionError
 from .skeleton import SkeletonError
 from .stage import StageError
 from .topic_library import TopicError
+from .vision import VisionError
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ReferenceError,
             TopicError,
             StageError,
+            VisionError,  # 视觉通道失败（工单 vision-eyes/01）：未配置 / 网络 / 上游非法——调用方按降级政策决定阻断与否
         ),
         400,
         str,

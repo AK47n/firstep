@@ -49,6 +49,11 @@ class AppConfig:
     # 本地 LLM 端点可选配置（工单 local-llm-routing/01）：空串 = 本地路由关闭
     local_llm_base_url: str = ""
     local_llm_model: str = ""
+    # 视觉通道（工单 vision-eyes/01）：免费云端 GLM-4V-Flash（OpenAI 兼容）。
+    # api_key 空 = 视觉功能关闭（抽取行为与现状逐字节一致）
+    vision_base_url: str = ""
+    vision_api_key: str = ""
+    vision_model: str = ""
     # LLM 单价覆盖（工单 llm-cost-control/01）：None = 用内置默认参考价；
     # dict 形态 {"deepseek": {"input_per_million": x, "output_per_million": y},
     # "local": {...}}——条目级脏数据由消费侧静默跳过（展示层旁路）
@@ -122,6 +127,16 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     local_llm_model = data.get("local_llm_model", "")
     if not isinstance(local_llm_model, str):
         raise ConfigError(f"local_llm_model 必须是字符串：{path}")
+    # 视觉通道（工单 vision-eyes/01）：api_key 空 = 关闭（缺省兼容旧 config）
+    vision_base_url = data.get("vision_base_url", "")
+    if not isinstance(vision_base_url, str):
+        raise ConfigError(f"vision_base_url 必须是字符串：{path}")
+    vision_api_key = data.get("vision_api_key", "")
+    if not isinstance(vision_api_key, str):
+        raise ConfigError(f"vision_api_key 必须是字符串：{path}")
+    vision_model = data.get("vision_model", "")
+    if not isinstance(vision_model, str):
+        raise ConfigError(f"vision_model 必须是字符串：{path}")
     # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 None = 内置默认价
     llm_prices = data.get("llm_prices")
     if llm_prices is not None and not isinstance(llm_prices, dict):
@@ -153,6 +168,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ccs_sysconfig_cli=ccs_sysconfig_cli,
         local_llm_base_url=local_llm_base_url,
         local_llm_model=local_llm_model,
+        vision_base_url=vision_base_url,
+        vision_api_key=vision_api_key,
+        vision_model=vision_model,
         llm_prices=llm_prices,
         recommend_cache_enabled=recommend_cache_enabled,
         recommend_max_rounds=recommend_max_rounds,
@@ -179,6 +197,9 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
         "local_llm_base_url": config.local_llm_base_url,
         "local_llm_model": config.local_llm_model,
+        "vision_base_url": config.vision_base_url,
+        "vision_api_key": config.vision_api_key,
+        "vision_model": config.vision_model,
         "recommend_cache_enabled": config.recommend_cache_enabled,
         "recommend_max_rounds": config.recommend_max_rounds,
     }
