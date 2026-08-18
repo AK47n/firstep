@@ -739,6 +739,93 @@ def test_fix_errors_sse_emits_content_safe_llm_telemetry(tmp_path):
     assert "llm" not in events[-1][1]
 
 
+def test_recent_llm_workflows_endpoint_returns_sanitized_completed_fix_workflow(tmp_path):
+    """只读 recent endpoint：fix 流结束后返回 content-safe summary + call details。"""
+    out = _fix_project(tmp_path)
+    body = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "fixes": [
+                                    {
+                                        "file": "main.c",
+                                        "line": 1,
+                                        "old_snippet": "int x = 1;",
+                                        "new_snippet": "int x = 2;",
+                                        "reason": "修复初始化",
+                                    }
+                                ]
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 2,
+                "total_tokens": 12,
+                "unsafe_text": "secret-usage-content",
+            },
+        }
+    )
+    transport = FakeTransport(body=body)
+
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
+        return build_llm(
+            config,
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+            transport=transport,
+        )
+
+    config = AppConfig(
+        api_key="sk-secret",
+        module_library_dir=tmp_path / "modules",
+        masters_dir=tmp_path / "masters",
+    )
+    ctx = AppContext(config=config, llm_factory=factory)
+    (tmp_path / "modules").mkdir()
+    client = TestClient(create_app(ctx))
+
+    _fix_stream(
+        client,
+        {
+            "output_dir": str(out),
+            "error_text": "main.c(1): error #20: secret-compile-output",
+            "problem_text": "secret-problem-text",
+        },
+    )
+    resp = client.get("/api/llm-workflows/recent")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["workflows"]) == 1
+    workflow = data["workflows"][0]
+    assert workflow["workflow_id"].startswith("fix-errors:")
+    assert workflow["workflow_name"] == "fix-errors"
+    assert workflow["call_count"] == 1
+    assert workflow["local_calls"] == 0
+    assert workflow["deepseek_calls"] == 1
+    assert workflow["request_bytes"] > 0
+    assert workflow["duration_ms"] >= 0
+    assert workflow["status"] == "success"
+    assert workflow["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+    assert workflow["calls"][0]["operation"] == "fix_compile_errors"
+    assert workflow["calls"][0]["usage"] == workflow["usage"]
+    serialized = json.dumps(data, ensure_ascii=False)
+    assert "secret-problem-text" not in serialized
+    assert "secret-compile-output" not in serialized
+    assert "secret-usage-content" not in serialized
+    assert "sk-secret" not in serialized
+
+
 def test_fix_errors_unsafe_fix_path_ends_with_error_event(client, context, tmp_path):
     """修复建议越界（../ 逃逸）→ 流内 error 终态 + 中文信息（HTTP 200 起流）。"""
     out = _fix_project(tmp_path)

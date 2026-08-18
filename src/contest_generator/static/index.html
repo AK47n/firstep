@@ -302,6 +302,18 @@
   .prog-done { font-size: 13px; color: var(--ok); font-weight: 600; }
   .llm-telemetry { margin-top: 8px; font-size: 12px; color: var(--muted);
                    font-family: var(--mono); line-height: 1.6; }
+  /* ---- 最近 LLM 工作流（llm-observability-dashboard/03）：设置页只读仪表盘 ---- */
+  .recent-wf-list { display: flex; flex-direction: column; gap: 8px; }
+  .recent-wf-summary { border: 1px solid var(--border); border-radius: 8px;
+                       padding: 8px 10px; font-size: 12px; font-family: var(--mono);
+                       line-height: 1.7; background: var(--code-bg); }
+  .recent-wf-summary .wf-name { font-weight: 600; }
+  .recent-wf-summary .wf-status-ok { color: var(--ok); font-weight: 600; }
+  .recent-wf-summary .wf-status-error { color: var(--danger); font-weight: 600; }
+  .recent-wf-calls { margin: 4px 0 0 10px; padding-left: 10px;
+                     border-left: 1px dashed var(--border); color: var(--muted); }
+  .recent-wf-calls .call-row { white-space: nowrap; overflow: hidden;
+                               text-overflow: ellipsis; }
   /* ---- 参考文件查看弹层（文件名搜索 + 文件打开工单）：清单 + 文本内联 ---- */
   .ref-files-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
                        display: flex; align-items: flex-start; justify-content: center;
@@ -978,6 +990,16 @@
     </div>
 
     <div class="card">
+      <div class="row" style="align-items:center">
+        <h2 style="margin:0;flex:1">最近 LLM 工作流</h2>
+        <button id="btn-refresh-recent-wf" style="margin-left:auto">刷新</button>
+      </div>
+      <div class="muted" style="margin:10px 0">已完成运行的只读摘要：本地 / DeepSeek 调用数、总耗时、请求字节、状态与每次调用明细。仅保存在内存，重启即清空，不写配置。</div>
+      <div id="recent-workflows" class="recent-wf-list"></div>
+      <div class="muted" style="margin-top:8px">token 数为模型服务商上报（provider-reported），本工具不估算费用。</div>
+    </div>
+
+    <div class="card">
       <div class="row">
         <button id="btn-save-settings" class="primary">保存设置</button>
         <span class="muted">配置文件：<span id="set-config-path"></span>（含 API key，不入版本库）</span>
@@ -1051,7 +1073,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
     if (btn.dataset.tab === "topic") loadTopics();
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
-    if (btn.dataset.tab === "settings") loadSettings();
+    if (btn.dataset.tab === "settings") { loadSettings(); loadRecentWorkflows(); }
   });
 });
 
@@ -4450,6 +4472,88 @@ $("btn-save-settings").addEventListener("click", async () => {
     $("settings-msg").textContent = e.message;
   }
 });
+
+// ---------------------------------------------------------------------------
+// 最近 LLM 工作流（工单 llm-observability-dashboard/03）：只读内存仪表盘
+// ---------------------------------------------------------------------------
+function wfNum(value) {
+  return Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US") : "0";
+}
+
+function formatWorkflowUsage(usage) {
+  if (!usage || typeof usage !== "object") return "";
+  const text = Object.keys(usage)
+    .map((k) => k + "=" + usage[k])
+    .join(", ");
+  return text ? "usage(服务商上报) " + text : "";
+}
+
+function formatWorkflowSummary(w) {
+  const parts = [
+    (w.workflow_name || "unknown") + (w.status === "error" ? " ✗" : " ✓"),
+    wfNum(w.call_count) + " calls",
+    "local " + wfNum(w.local_calls) + " / DeepSeek " + wfNum(w.deepseek_calls),
+    "request " + wfNum(w.request_bytes) + "B",
+    "duration " + wfNum(w.duration_ms) + "ms",
+  ];
+  const usageText = formatWorkflowUsage(w.usage);
+  if (usageText) parts.push(usageText);
+  return parts.join(" · ");
+}
+
+function formatWorkflowCall(call) {
+  const parts = [
+    "#" + call.sequence,
+    call.operation || "unknown",
+    call.provider || "?",
+    call.status || "?",
+  ];
+  if (call.error_kind) parts.push("error " + call.error_kind);
+  if (call.parse_status && call.parse_status !== "success") parts.push("parse " + call.parse_status);
+  if (call.http_status) parts.push("http " + call.http_status);
+  if (call.attempts > 1) parts.push("attempts " + call.attempts);
+  if (call.budget_attempt) parts.push("budget_attempt " + call.budget_attempt);
+  parts.push("request " + wfNum(call.request_bytes) + "B");
+  parts.push("duration " + wfNum(call.duration_ms) + "ms");
+  const usageText = formatWorkflowUsage(call.usage);
+  if (usageText) parts.push(usageText);
+  return parts.join(" · ");
+}
+
+function renderRecentWorkflows(data) {
+  const el = $("recent-workflows");
+  const workflows = (data && data.workflows) || [];
+  if (!workflows.length) {
+    el.innerHTML = '<div class="muted">暂无已完成的工作流：运行一次推荐 / 骨架 / 修复 / 提炼后，这里会出现记录。</div>';
+    return;
+  }
+  el.innerHTML = workflows.map((w) => {
+    const calls = (w.calls || []).map((c) => {
+      const line = formatWorkflowCall(c);
+      return '<div class="call-row" title="' + esc(line) + '">' + esc(line) + "</div>";
+    }).join("");
+    const statusText = w.status === "error" ? "失败" : "成功";
+    const statusCls = w.status === "error" ? "wf-status-error" : "wf-status-ok";
+    return '<div class="recent-wf-summary">'
+      + '<div><span class="wf-name">' + esc(w.workflow_name || "unknown") + "</span>"
+      + ' <span class="' + statusCls + '">' + statusText + "</span>"
+      + ' <span class="muted">' + esc(w.workflow_id) + "</span></div>"
+      + '<div class="muted">' + esc(formatWorkflowSummary(w)) + "</div>"
+      + (calls ? '<div class="recent-wf-calls">' + calls + "</div>" : "")
+      + "</div>";
+  }).join("");
+}
+
+async function loadRecentWorkflows() {
+  const el = $("recent-workflows");
+  try {
+    renderRecentWorkflows(await apiGet("/api/llm-workflows/recent"));
+  } catch (e) {
+    el.innerHTML = '<div class="muted">读取失败：' + esc(e.message || String(e)) + "</div>";
+  }
+}
+
+$("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
 
 // ---------------------------------------------------------------------------
 // 启动

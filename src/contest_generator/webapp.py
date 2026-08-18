@@ -80,6 +80,7 @@ from .llm import (
     create_llm_observation_collector,
 )
 from .llm_telemetry import bind_llm_telemetry
+from .llm_recent_workflows import LLMRecentWorkflowStore
 from .master import (
     confirm_distillation,
     distill_master,
@@ -219,6 +220,7 @@ class AppContext:
     llm_factory: Callable[..., LLM] = build_llm
     tab_registry: TabRegistry = field(default_factory=TabRegistry)
     pick_directory: Callable[[], str | None] = _tkinter_pick_directory
+    recent_llm_workflows: LLMRecentWorkflowStore = field(default_factory=LLMRecentWorkflowStore)
 
 
 # ---------------------------------------------------------------------------
@@ -634,9 +636,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 两阶段编排归 selection.run_recommendation（澄清先行 → 收敛 →
             # done 载荷组装），路由只转调——终态一律由域函数发出，路由不分支；
             # run 抛错由运行器补发 error 终态（终态保证归运行器）
-            run_recommendation(
-                topic, _llm(context, budget, collector), clarifications, emit=emit
-            )
+            try:
+                run_recommendation(
+                    topic, _llm(context, budget, collector), clarifications, emit=emit
+                )
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -699,33 +704,36 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
         budget = RetryBudget()
         collector = create_llm_observation_collector("skeleton")
-        topic = _assemble_topic_context(
-            context,
-            topic_id,
-            problem_text,
-            _llm(context, budget, collector),
-            reference_ids=reference_ids,
-            platform=platform,
-        )
-        resolved = resolve_selection(
-            _library_dir(context), platform, slugs, instances=instances
-        )
-        # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
-        # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
-        return run_skeleton(
-            llm=_llm(context, budget, collector),
-            problem_text=topic.problem_text,
-            manifests=resolved.manifests,
-            slugs=slugs,
-            platform=platform,
-            library_dir=_library_dir(context),
-            master_project_dir=master_project_dir(
-                _require_config(context).masters_dir, platform
-            ),
-            instances=instances,
-            reference_fulltexts=build_reference_fulltexts(topic),
-            main_mode=main_mode,
-        )
+        try:
+            topic = _assemble_topic_context(
+                context,
+                topic_id,
+                problem_text,
+                _llm(context, budget, collector),
+                reference_ids=reference_ids,
+                platform=platform,
+            )
+            resolved = resolve_selection(
+                _library_dir(context), platform, slugs, instances=instances
+            )
+            # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
+            # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
+            return run_skeleton(
+                llm=_llm(context, budget, collector),
+                problem_text=topic.problem_text,
+                manifests=resolved.manifests,
+                slugs=slugs,
+                platform=platform,
+                library_dir=_library_dir(context),
+                master_project_dir=master_project_dir(
+                    _require_config(context).masters_dir, platform
+                ),
+                instances=instances,
+                reference_fulltexts=build_reference_fulltexts(topic),
+                main_mode=main_mode,
+            )
+        finally:
+            context.recent_llm_workflows.add_completed(collector)
 
     @app.post("/api/pick-directory")
     @_map_errors
@@ -862,20 +870,23 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 五步编排归 run_fix_round（对照 run_recommendation 归位先例）：事件
             # 发射在域内（_emit 旁路），done 载荷由本路由 emit.done 收尾（终态
             # 保证仍归运行器，run 抛错补发 error 终态）
-            with bind_llm_telemetry(collector, emit.progress):
-                result = run_fix_round(
-                    llm,
-                    error_text=error_text,
-                    output_dir=output_dir,
-                    backup_root=backup_root,
-                    problem_text=problem_text,
-                    platform=platform,
-                    module_slugs=slugs,
-                    main_c=main_c,
-                    previous_fixes=previous_fixes,
-                    emit=emit.progress,
-                )
-            emit.done(result)
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_fix_round(
+                        llm,
+                        error_text=error_text,
+                        output_dir=output_dir,
+                        backup_root=backup_root,
+                        problem_text=problem_text,
+                        platform=platform,
+                        module_slugs=slugs,
+                        main_c=main_c,
+                        previous_fixes=previous_fixes,
+                        emit=emit.progress,
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
@@ -1170,9 +1181,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         llm = _llm(context, budget, collector)
 
         def run(emit: SseEmitter) -> None:
-            projects = [scan_project(Path(d)) for d in project_dirs]
-            report = distill_master(llm, platform, projects, emit.progress)
-            emit.done(report.to_dict())
+            try:
+                projects = [scan_project(Path(d)) for d in project_dirs]
+                report = distill_master(llm, platform, projects, emit.progress)
+                emit.done(report.to_dict())
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
@@ -1197,13 +1211,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         def archive_llm_factory() -> LLM:
             return _llm(context, budget, collector)
 
-        meta = confirm_distillation(
-            _masters_dir(context),
-            project_dirs,
-            payload,
-            llm_factory=archive_llm_factory,
-            reference_library_dir=reference_library_dir(config.module_library_dir),
-        )
+        try:
+            meta = confirm_distillation(
+                _masters_dir(context),
+                project_dirs,
+                payload,
+                llm_factory=archive_llm_factory,
+                reference_library_dir=reference_library_dir(config.module_library_dir),
+            )
+        finally:
+            context.recent_llm_workflows.add_completed(collector)
         return {
             "platform": meta.platform,
             "sources": list(meta.sources),
@@ -1228,6 +1245,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）
     # ------------------------------------------------------------------
+
+    @app.get("/api/llm-workflows/recent")
+    @_map_errors
+    def llm_workflows_recent() -> dict:
+        """最近已完成 LLM 工作流：只读、内存态、content-safe，不写 config / 磁盘。"""
+        return context.recent_llm_workflows.to_dict()
 
     @app.get("/api/settings")
     @_map_errors
