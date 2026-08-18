@@ -101,6 +101,8 @@ def test_saved_file_is_plain_json(tmp_path):
         # 本地 LLM 端点（工单 local-llm-routing/01）：缺省空串 = 本地路由关闭
         "local_llm_base_url": "",
         "local_llm_model": "",
+        # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
+        "recommend_cache_enabled": True,
     }
 
 

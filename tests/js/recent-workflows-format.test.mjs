@@ -18,13 +18,13 @@ function extract(name) {
 
 const ns = new Function(
   "return (() => {"
-    + ["wfNum", "formatWorkflowUsage", "formatWorkflowSummary", "formatWorkflowCall"]
+    + ["wfNum", "formatWorkflowUsage", "formatWorkflowCost", "formatWorkflowSummary", "formatWorkflowCall"]
       .map(extract)
       .join("\n")
-    + "\nreturn { formatWorkflowUsage, formatWorkflowSummary, formatWorkflowCall };"
+    + "\nreturn { formatWorkflowUsage, formatWorkflowCost, formatWorkflowSummary, formatWorkflowCall };"
     + "})()"
 )();
-const { formatWorkflowUsage, formatWorkflowSummary, formatWorkflowCall } = ns;
+const { formatWorkflowUsage, formatWorkflowCost, formatWorkflowSummary, formatWorkflowCall } = ns;
 
 test("summary 行：provider 拆分 / call 数 / 耗时 / 请求字节 / 状态 / usage", () => {
   assert.equal(
@@ -102,9 +102,50 @@ test("usage 标注为服务商上报；空 usage 返回空串", () => {
   assert.equal(formatWorkflowUsage("x"), "");
 });
 
-test("仪表盘文案：token 标注服务商上报、不估算费用、仅内存不落盘", () => {
+test("费用段：实际 / 全 DeepSeek 对照 / 节省（工单 llm-cost-control/01）", () => {
+  assert.equal(
+    formatWorkflowCost({ est_cost_actual: 1.8, est_cost_deepseek: 5.4, est_savings: 3.6 }),
+    "cost ¥1.80（全 DeepSeek ¥5.40，省 ¥3.60）"
+  );
+  // 全本地：实际 0、对照 > 0 → 显示省钱
+  assert.equal(
+    formatWorkflowCost({ est_cost_actual: 0, est_cost_deepseek: 2.5, est_savings: 2.5 }),
+    "cost ¥0.00（全 DeepSeek ¥2.50，省 ¥2.50）"
+  );
+  // 都为零 / 缺省 / 非对象 → 不显示
+  assert.equal(formatWorkflowCost({ est_cost_actual: 0, est_cost_deepseek: 0, est_savings: 0 }), "");
+  assert.equal(formatWorkflowCost(undefined), "");
+  assert.equal(formatWorkflowCost(null), "");
+  assert.equal(formatWorkflowCost("x"), "");
+});
+
+test("summary 行带费用段（est 字段注入后）", () => {
+  assert.equal(
+    formatWorkflowSummary({
+      workflow_name: "skeleton",
+      status: "success",
+      call_count: 1,
+      local_calls: 1,
+      deepseek_calls: 0,
+      request_bytes: 90,
+      duration_ms: 12,
+      est: { est_cost_actual: 0, est_cost_deepseek: 1.2, est_savings: 1.2 },
+    }),
+    "skeleton ✓ · 1 calls · local 1 / DeepSeek 0 · request 90B · duration 12ms · cost ¥0.00（全 DeepSeek ¥1.20，省 ¥1.20）"
+  );
+});
+
+test("仪表盘文案：token 标注服务商上报、费用为估算参考值、仅内存不落盘", () => {
   assert.ok(html.includes("服务商上报"), "卡片脚注应标注 provider-reported");
-  assert.ok(html.includes("不估算费用"), "卡片脚注应声明不估算费用");
+  assert.ok(html.includes("估算的参考值"), "卡片脚注应声明费用为估算参考值");
+  assert.ok(html.includes("官方账单为准"), "卡片脚注应声明以官方账单为准");
   assert.ok(html.includes("仅保存在内存"), "卡片脚注应声明仅内存、重启清空");
   assert.ok(html.includes("/api/llm-workflows/recent"), "应调用只读 recent 端点");
+});
+
+test("推荐缓存（工单 llm-cost-control/02）：开关与 cache_hit 处理存在", () => {
+  assert.ok(html.includes("set-recommend-cache"), "设置页应有推荐缓存开关");
+  assert.ok(html.includes("cache_hit"), "推荐事件表应处理 cache_hit 事件");
+  assert.ok(html.includes("复用本地推荐缓存"), "cache_hit 应显示复用缓存文案");
+  assert.ok(html.includes("参考 / 澄清变化会提示差异"), "应说明参数变化提示差异");
 });

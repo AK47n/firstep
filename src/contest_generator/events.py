@@ -54,6 +54,11 @@ EVENT_LLM_TELEMETRY = "llm_telemetry"
 # 同源（词表唯一出处，改动须两处同步）
 EVENT_COMPILE_START = "compile_start"
 
+# 推荐缓存命中（工单 llm-cost-control/02）：进度事件，缓存直出 done 载荷前
+# 发射——warns = 参数指纹警告列表（reference_ids / clarifications 与缓存时
+# 不同，结果沿用旧推荐）；前端显示「复用本地缓存」，带警告时提示差异。
+EVENT_CACHE_HIT = "cache_hit"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；
@@ -119,6 +124,7 @@ class ProgressEvent:
     llm_duration_ms: int = 0
     llm_usage: dict[str, Any] | None = None
     llm_calls: tuple[dict[str, Any], ...] = ()
+    warns: tuple[str, ...] = ()  # 推荐缓存命中（cache_hit）：参数指纹警告列表
 
 
 ProgressEmitter = Callable[[ProgressEvent], None]

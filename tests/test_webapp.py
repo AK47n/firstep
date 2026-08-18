@@ -819,6 +819,11 @@ def test_recent_llm_workflows_endpoint_returns_sanitized_completed_fix_workflow(
     assert workflow["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
     assert workflow["calls"][0]["operation"] == "fix_compile_errors"
     assert workflow["calls"][0]["usage"] == workflow["usage"]
+    # 估算字段（工单 llm-cost-control/01）：展示层派生，默认单价下该用量
+    # (10 prompt × 2 + 2 completion × 8) / 1e6 ≈ 0，字段存在且为数值即可
+    assert set(workflow["est"]) == {"est_cost_actual", "est_cost_deepseek", "est_savings"}
+    assert workflow["est"]["est_cost_actual"] >= 0
+    assert workflow["est"]["est_cost_deepseek"] >= workflow["est"]["est_cost_actual"]
     serialized = json.dumps(data, ensure_ascii=False)
     assert "secret-problem-text" not in serialized
     assert "secret-compile-output" not in serialized
@@ -2897,6 +2902,57 @@ def test_settings_local_llm_put_rejects_non_string(client, context):
     assert "local_llm_model 必须是字符串" in resp.json()["detail"]
 
 
+def test_settings_llm_prices_roundtrip_and_defaults(client, context):
+    """llm_prices（工单 llm-cost-control/01）：GET 返回生效表（默认 + 覆盖合并）；
+    PUT 覆盖透传；缺省 / 空对象 = 恢复内置默认。"""
+    saved = client.get("/api/settings").json()
+    # 未配置覆盖 → 返回内置默认表（deepseek 参考价 + local 零成本）
+    assert saved["llm_prices"]["deepseek"]["input_per_million"] > 0
+    assert saved["llm_prices"]["local"]["input_per_million"] == 0.0
+
+    base = {
+        "base_url": saved["base_url"],
+        "api_key": saved["api_key"],
+        "model": saved["model"],
+        "module_library_dir": saved["module_library_dir"],
+        "masters_dir": saved["masters_dir"],
+    }
+    custom = {
+        "llm_prices": {
+            "deepseek": {"input_per_million": 8.0, "output_per_million": 32.0},
+        }
+    }
+    resp = client.put("/api/settings", json={**base, **custom})
+    assert resp.status_code == 200
+    assert context[0].config.llm_prices == custom["llm_prices"]
+    saved = client.get("/api/settings").json()
+    assert saved["llm_prices"]["deepseek"] == {"input_per_million": 8.0, "output_per_million": 32.0}
+    # local 未覆盖仍零成本
+    assert saved["llm_prices"]["local"]["input_per_million"] == 0.0
+
+    # 空对象 → 恢复默认（config.llm_prices = None）
+    resp = client.put("/api/settings", json={**base, "llm_prices": {}})
+    assert resp.status_code == 200
+    assert context[0].config.llm_prices is None
+    saved = client.get("/api/settings").json()
+    assert saved["llm_prices"]["deepseek"]["input_per_million"] > 0
+
+
+def test_settings_llm_prices_put_rejects_non_object(client, context):
+    """PUT llm_prices 非 JSON 对象 → 400（外层形状严格，条目级旁路）。"""
+    current = client.get("/api/settings").json()
+    base = {
+        "base_url": current["base_url"],
+        "api_key": current["api_key"],
+        "model": current["model"],
+        "module_library_dir": current["module_library_dir"],
+        "masters_dir": current["masters_dir"],
+    }
+    resp = client.put("/api/settings", json={**base, "llm_prices": "high"})
+    assert resp.status_code == 400
+    assert "llm_prices 必须是 JSON 对象" in resp.json()["detail"]
+
+
 def test_state_reports_toolchain_availability(client, context, monkeypatch):
     """/api/state 携带 toolchains（前端置灰依据）：探测命中 → True，未命中 → False。"""
     monkeypatch.setattr(
@@ -3820,6 +3876,103 @@ def test_recommend_manual_overlapping_anchor_deduped(client, context):
     assert ids.count(TOPIC_REFERENCE_ID) == 1
     topic = next(ref for ref in data["references"] if ref["id"] == TOPIC_REFERENCE_ID)
     assert topic["source"] == "manual"
+
+
+# ---------------------------------------------------------------------------
+# 推荐缓存（工单 llm-cost-control/02）：同题重跑命中直出 done，指纹失效走真实
+# ---------------------------------------------------------------------------
+
+
+def _recommend_payload(topic_id="2026C", **overrides):
+    payload = {
+        "problem_text": "赛题：做个智能小车，能巡线、能避障。",
+        "topic_id": topic_id,
+        "platform": "stm32",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_recommend_cache_hit_reuses_done_without_llm(client, context):
+    """同题同平台第二次推荐：cache_hit 事件 + done 载荷与首次逐字一致，不调 LLM。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    first = _recommend_done(client, _recommend_payload())
+    assert first["modules"]
+
+    # 第二次：把 LLM 换成必抛的——命中缓存则不触达 LLM
+    class _BoomLLM:
+        def __getattr__(self, name):
+            raise AssertionError(f"缓存命中不应调用 LLM：{name}")
+
+    holder["llm"] = _BoomLLM()
+    events = _recommend_stream(client, _recommend_payload())
+    cache_hits = [data for kind, data in events if kind == "cache_hit"]
+    assert cache_hits, f"应发射 cache_hit 事件：{events}"
+    assert cache_hits[0]["warns"] == []
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done and done[0] == first
+
+
+def test_recommend_cache_invalidated_when_problem_text_changes(client, context):
+    """题面变化 → 指纹失效 → 走真实推荐（不命中）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    _recommend_done(client, _recommend_payload())
+    events = _recommend_stream(client, _recommend_payload(problem_text="赛题变了：做个小车。"))
+    assert not [k for k, _ in events if k == "cache_hit"]
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, "题面变应走真实推荐并以 done 收尾"
+
+
+def test_recommend_cache_skipped_when_disabled_in_settings(client, context):
+    """设置页关闭缓存开关后：同题重跑走真实推荐（不 cache_hit）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    _recommend_done(client, _recommend_payload())
+
+    current = client.get("/api/settings").json()
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "recommend_cache_enabled": False,
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.recommend_cache_enabled is False
+
+    events = _recommend_stream(client, _recommend_payload())
+    assert not [k for k, _ in events if k == "cache_hit"]
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, "开关关闭应走真实推荐"
+
+
+def test_recommend_corrupt_cache_falls_back_to_real(client, context, tmp_path):
+    """损坏缓存文件 → 静默旁路走真实推荐（Web 交互语义，不报错退出）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    # 预置一个损坏缓存（键 = topic_id）
+    cache_dir = context[0].config_path.parent / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    (cache_dir / "recommend_2026C.json").write_text("{broken", encoding="utf-8")
+
+    events = _recommend_stream(client, _recommend_payload())
+    assert not [k for k, _ in events if k == "cache_hit"]
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, "坏缓存应静默走真实推荐"
 
 
 # ---------------------------------------------------------------------------

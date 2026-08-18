@@ -49,6 +49,13 @@ class AppConfig:
     # 本地 LLM 端点可选配置（工单 local-llm-routing/01）：空串 = 本地路由关闭
     local_llm_base_url: str = ""
     local_llm_model: str = ""
+    # LLM 单价覆盖（工单 llm-cost-control/01）：None = 用内置默认参考价；
+    # dict 形态 {"deepseek": {"input_per_million": x, "output_per_million": y},
+    # "local": {...}}——条目级脏数据由消费侧静默跳过（展示层旁路）
+    llm_prices: dict | None = None
+    # 推荐缓存开关（工单 llm-cost-control/02）：默认开——同题重跑推荐命中
+    # 缓存直出 done 载荷（省最贵的推荐段 LLM 调用）；关闭 = 每次真实推荐
+    recommend_cache_enabled: bool = True
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -111,6 +118,14 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     local_llm_model = data.get("local_llm_model", "")
     if not isinstance(local_llm_model, str):
         raise ConfigError(f"local_llm_model 必须是字符串：{path}")
+    # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 None = 内置默认价
+    llm_prices = data.get("llm_prices")
+    if llm_prices is not None and not isinstance(llm_prices, dict):
+        raise ConfigError(f"llm_prices 必须是 JSON 对象或省略：{path}")
+    # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
+    recommend_cache_enabled = data.get("recommend_cache_enabled", True)
+    if not isinstance(recommend_cache_enabled, bool):
+        raise ConfigError(f"recommend_cache_enabled 必须是布尔值：{path}")
 
     return AppConfig(
         base_url=base_url,
@@ -126,32 +141,38 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ccs_sysconfig_cli=ccs_sysconfig_cli,
         local_llm_base_url=local_llm_base_url,
         local_llm_model=local_llm_model,
+        llm_prices=llm_prices,
+        recommend_cache_enabled=recommend_cache_enabled,
     )
 
 
 def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
-    """写入配置文件；父目录不存在时创建。"""
+    """写入配置文件；父目录不存在时创建。
+
+    llm_prices 为 None（未覆盖）时不写键——缺省语义与 load 一致，配置文件
+    保持最小（既有精确 JSON 断言不受新字段扰动）。
+    """
+    data: dict = {
+        "base_url": config.base_url,
+        "api_key": config.api_key,
+        "model": config.model,
+        "module_library_dir": str(config.module_library_dir),
+        "masters_dir": str(config.masters_dir),
+        "autocommit_enabled": config.autocommit_enabled,
+        "uv4_path": config.uv4_path,
+        "gmake_path": config.gmake_path,
+        "ccs_sdk_dir": config.ccs_sdk_dir,
+        "ccs_compiler_dir": config.ccs_compiler_dir,
+        "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
+        "local_llm_base_url": config.local_llm_base_url,
+        "local_llm_model": config.local_llm_model,
+        "recommend_cache_enabled": config.recommend_cache_enabled,
+    }
+    if config.llm_prices is not None:
+        data["llm_prices"] = config.llm_prices
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(
-            {
-                "base_url": config.base_url,
-                "api_key": config.api_key,
-                "model": config.model,
-                "module_library_dir": str(config.module_library_dir),
-                "masters_dir": str(config.masters_dir),
-                "autocommit_enabled": config.autocommit_enabled,
-                "uv4_path": config.uv4_path,
-                "gmake_path": config.gmake_path,
-                "ccs_sdk_dir": config.ccs_sdk_dir,
-                "ccs_compiler_dir": config.ccs_compiler_dir,
-                "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
-                "local_llm_base_url": config.local_llm_base_url,
-                "local_llm_model": config.local_llm_model,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
+        json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     try:

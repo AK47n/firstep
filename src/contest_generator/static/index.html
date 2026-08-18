@@ -955,6 +955,15 @@
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>DeepSeek 输入单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in" placeholder="参考价，留空=默认"></div>
+        <div style="flex:1"><label>DeepSeek 输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-out" placeholder="参考价，留空=默认"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>本地模型输入单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-in" placeholder="默认 0（本机免费）"></div>
+        <div style="flex:1"><label>本地模型输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-out" placeholder="默认 0（本机免费）"></div>
+      </div>
+      <div class="muted" style="margin-top:6px">仅用于「最近 LLM 工作流」费用估算（官方价格会调整，此处的值是参考；留空 = 维持当前）。</div>
     </div>
 
     <div class="card">
@@ -992,11 +1001,15 @@
     <div class="card">
       <div class="row" style="align-items:center">
         <h2 style="margin:0;flex:1">最近 LLM 工作流</h2>
+        <label style="margin:0 12px 0 0;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">
+          <input type="checkbox" id="set-recommend-cache" style="margin:0"> 推荐缓存
+        </label>
         <button id="btn-refresh-recent-wf" style="margin-left:auto">刷新</button>
       </div>
-      <div class="muted" style="margin:10px 0">已完成运行的只读摘要：本地 / DeepSeek 调用数、总耗时、请求字节、状态与每次调用明细。仅保存在内存，重启即清空，不写配置。</div>
+      <div class="muted" style="margin:10px 0">已完成运行的只读摘要：本地 / DeepSeek 调用数、总耗时、请求字节、状态、每次调用明细与估算费用。仅保存在内存，重启即清空，不写配置。</div>
+      <div class="muted" style="margin:0 0 8px">推荐缓存：同题重跑推荐直出上次结果（省最贵的推荐段 LLM 调用）；题面 / 平台变化自动失效，参考 / 澄清变化会提示差异。</div>
       <div id="recent-workflows" class="recent-wf-list"></div>
-      <div class="muted" style="margin-top:8px">token 数为模型服务商上报（provider-reported），本工具不估算费用。</div>
+      <div class="muted" style="margin-top:8px">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
     </div>
 
     <div class="card">
@@ -1081,6 +1094,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
 // 全局状态
 // ---------------------------------------------------------------------------
 let state = null;                 // GET /api/state
+let llmPricesDefaults = {};       // 当前生效 LLM 单价表（工单 llm-cost-control/01）
 let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
 let expanded = [];                // 展开后的模块 manifest（含依赖）
 let warnings = [];                // 平台警告
@@ -1327,6 +1341,14 @@ const recPanel = makeProgressPanel({
       $("rec-prog-text").textContent = "功能需求层已收敛（第 " + ev.round + " 轮）…";
       $("rec-bar").classList.remove("hidden");
       $("rec-bar-fill").style.width = "100%";   // round_total 是上限非保证：提前收敛就跳满
+    },
+    cache_hit: (ev) => {
+      // 推荐缓存命中（工单 llm-cost-control/02）：直出上次结果，不调 LLM
+      $("rec-prog-text").textContent = (ev.warns && ev.warns.length)
+        ? "⚠ 复用本地推荐缓存，但输入与缓存时不同：" + ev.warns.join("；")
+        : "复用本地推荐缓存（题面 / 平台未变）…";
+      $("rec-bar").classList.remove("hidden");
+      $("rec-bar-fill").style.width = "100%";
     },
     done: (ev) => {
       recPanel.finish();
@@ -4441,9 +4463,36 @@ async function loadSettings() {
     // 本地 LLM 端点（工单 local-llm-routing/03）：空串 = 本地路由关闭
     $("set-local-llm-base-url").value = s.local_llm_base_url || "";
     $("set-local-llm-model").value = s.local_llm_model || "";
+    // LLM 单价（工单 llm-cost-control/01）：GET 返回生效表，填入输入框
+    // （默认参考价也填，用户可直接看到当前生效值）；留空语义见保存逻辑
+    llmPricesDefaults = s.llm_prices || {};
+    $("set-ds-in").value = (llmPricesDefaults.deepseek || {}).input_per_million ?? "";
+    $("set-ds-out").value = (llmPricesDefaults.deepseek || {}).output_per_million ?? "";
+    $("set-local-in").value = (llmPricesDefaults.local || {}).input_per_million ?? "";
+    $("set-local-out").value = (llmPricesDefaults.local || {}).output_per_million ?? "";
+    // 推荐缓存开关（工单 llm-cost-control/02）：缺省开
+    $("set-recommend-cache").checked = s.recommend_cache_enabled !== false;
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
+}
+
+function collectLlmPrices() {
+  // 每个 provider 两个框都留空 = 不覆盖（维持当前/默认）；任一填写则两个都按
+  // 填的值（未填的沿用当前生效值）→ 空对象 = 后端恢复内置默认
+  const llmPrices = {};
+  const collect = (inId, outId, provider) => {
+    const i = $(inId).value.trim(), o = $(outId).value.trim();
+    if (!i && !o) return;
+    const cur = (llmPricesDefaults[provider] || { input_per_million: 0, output_per_million: 0 });
+    llmPrices[provider] = {
+      input_per_million: i ? parseFloat(i) : cur.input_per_million,
+      output_per_million: o ? parseFloat(o) : cur.output_per_million,
+    };
+  };
+  collect("set-ds-in", "set-ds-out", "deepseek");
+  collect("set-local-in", "set-local-out", "local");
+  return llmPrices;
 }
 
 $("btn-save-settings").addEventListener("click", async () => {
@@ -4462,6 +4511,8 @@ $("btn-save-settings").addEventListener("click", async () => {
       ccs_sysconfig_cli: $("set-ccs-sysconfig-cli").value.trim(),
       local_llm_base_url: $("set-local-llm-base-url").value.trim(),
       local_llm_model: $("set-local-llm-model").value.trim(),
+      llm_prices: collectLlmPrices(),
+      recommend_cache_enabled: $("set-recommend-cache").checked,
     });
     $("settings-msg").classList.add("ok");
     $("settings-msg").textContent = "已保存，立即生效。";
@@ -4488,6 +4539,20 @@ function formatWorkflowUsage(usage) {
   return text ? "usage(服务商上报) " + text : "";
 }
 
+function formatWorkflowCost(est) {
+  // 费用段（工单 llm-cost-control/01）：估算参考值；actual / 对照全 DeepSeek
+  // 都为零（无 usage）不显示；节省 > 0.005 元才显示「省」段
+  if (!est || typeof est !== "object") return "";
+  const fmt = (v) => "¥" + Number(v || 0).toFixed(2);
+  const actual = Number(est.est_cost_actual || 0);
+  const counter = Number(est.est_cost_deepseek || 0);
+  if (actual <= 0 && counter <= 0) return "";
+  let text = "cost " + fmt(actual) + "（全 DeepSeek " + fmt(counter) + "）";
+  const savings = Number(est.est_savings || 0);
+  if (savings > 0.005) text = text.slice(0, -1) + "，省 " + fmt(savings) + "）";
+  return text;
+}
+
 function formatWorkflowSummary(w) {
   const parts = [
     (w.workflow_name || "unknown") + (w.status === "error" ? " ✗" : " ✓"),
@@ -4498,6 +4563,8 @@ function formatWorkflowSummary(w) {
   ];
   const usageText = formatWorkflowUsage(w.usage);
   if (usageText) parts.push(usageText);
+  const costText = formatWorkflowCost(w.est);
+  if (costText) parts.push(costText);
   return parts.join(" · ");
 }
 

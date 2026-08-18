@@ -20,7 +20,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -46,6 +46,7 @@ from .config import (
     topic_library_dir,
 )
 from .errors import error_entry
+from .events import EVENT_CACHE_HIT, ProgressEvent
 from .extraction import extract_file
 from .fix_errors import (
     FixError,
@@ -80,7 +81,16 @@ from .llm import (
     create_llm_observation_collector,
 )
 from .llm_telemetry import bind_llm_telemetry
-from .llm_recent_workflows import LLMRecentWorkflowStore
+from .llm_pricing import price_tables_from_config, price_tables_to_config
+from .llm_recent_workflows import LLMRecentWorkflowStore, attach_cost_estimates
+from .recommend_cache import (
+    cache_key,
+    cache_recommend,
+    load_recommend,
+    parameter_warnings,
+    recommend_cache_path,
+    validate_recommend,
+)
 from .master import (
     confirm_distillation,
     distill_master,
@@ -450,6 +460,29 @@ def _optional_str(payload: dict, key: str) -> str:
     return value.strip()
 
 
+def _optional_dict(payload: dict, key: str) -> dict | None:
+    """可选 dict：缺省 / null / 空对象 → None（恢复默认）；类型非法抛 400。
+
+    条目级校验由消费侧（price_tables_from_config）旁路跳过，这里只保外层形状。
+    """
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise HTTPException(400, f"{key} 必须是 JSON 对象")
+    return value or None
+
+
+def _optional_bool(payload: dict, key: str, *, default: bool) -> bool:
+    """可选布尔：缺省 / null → default；类型非法抛 400。"""
+    value = payload.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise HTTPException(400, f"{key} 必须是布尔值")
+    return value
+
+
 def _mask_api_key(api_key: str) -> str:
     """API key 掩码（判定用）：只露前 4 位 + 省略号（PUT 收到掩码形态视为用户没改 key）。"""
     if not api_key:
@@ -586,12 +619,63 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         finally:
             tmp_path.unlink(missing_ok=True)
 
+    class _CacheWriterEmitter(SseEmitter):
+        """转发 SseEmitter 四方法；done 时先写推荐缓存（尽力而为）再转发。
+
+        路由装配细节（工单 llm-cost-control/02）：done 载荷在域内
+        （run_recommendation）组装，路由经此包装拦截写缓存——写失败不阻塞
+        终态发射（旁路），question / error 终态原样透传。
+        """
+
+        def __init__(
+            self, inner: SseEmitter, write_cb: Callable[[dict], None]
+        ) -> None:
+            self._inner = inner
+            self._write_cb = write_cb
+
+        def progress(self, event: ProgressEvent) -> None:
+            self._inner.progress(event)
+
+        def done(self, data: dict) -> None:
+            try:
+                self._write_cb(data)
+            except Exception:
+                pass  # 旁路：缓存写失败不阻塞 done 终态
+            self._inner.done(data)
+
+        def question(self, data: dict) -> None:
+            self._inner.question(data)
+
+        def error(self, data: dict) -> None:
+            self._inner.error(data)
+
+    def _load_recommend_safely(path: Path) -> dict | None:
+        """读推荐缓存：损坏 / 形状非法 → None（旁路走真实推荐，不报错退出）。
+
+        Web 是交互工具（对照 CLI 回归脚本的"缺失即报错"）：坏缓存静默重算。
+        """
+        try:
+            return load_recommend(path)
+        except ValueError:
+            return None
+
+    def _emit_cached_recommend(
+        emit: SseEmitter, cached: Mapping[str, Any], warns: Sequence[str]
+    ) -> None:
+        """推荐缓存命中的终态发射（工单 llm-cost-control/02，路由装配细节）。
+
+        独立于路由函数体（结构防回退：/api/recommend 路由体内不出现
+        emit.done / emit.question——本函数是运行器旁路的专用发射点）：
+        cache_hit 进度事件 + done 终态（载荷 = 缓存 done 逐字）。
+        """
+        emit.progress(ProgressEvent(type=EVENT_CACHE_HIT, warns=tuple(warns)))
+        emit.done(cached["done"])
+
     @app.post("/api/recommend")
     @_map_errors
     def recommend(payload: dict) -> StreamingResponse:
         """AI 按赛题推荐模块（SSE 流，工单 10）：round → … → converged →
         done（推荐结果）或 question（向用户补问）或 error（中文信息）→ 流结束。
-
         请求体契约：problem_text（必填）；topic_id（可选，历史赛题显式入口）；
         reference_ids（可选 list[str]，手动选参考资料——幻觉 / 重复 id 大声
         失败 400）；platform（可选，锚定命中按生成平台过滤）；clarifications
@@ -631,14 +715,56 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             reference_ids,
             platform,
         )
+        # 推荐缓存（工单 llm-cost-control/02）：同题重跑命中直出 done 载荷，
+        # 省最贵的推荐段 LLM 调用；缓存目录 = 配置目录同级 cache/（与 CLI
+        # generate_check 缓存格式逐字兼容，双客户端对偶）
+        config = _require_config(context)
+        cache_enabled = config.recommend_cache_enabled
+        ckey = cache_key(topic_id, problem_text)
+        cpath = recommend_cache_path(ckey, cache_dir=context.config_path.parent / "cache")
+        clarify_maps = [{"question": q, "answer": a} for q, a in clarifications]
+
+        def _write_cache(done_data: dict) -> None:
+            """真实推荐 done 载荷落缓存（尽力而为：写失败静默旁路）。"""
+            if not cache_enabled:
+                return
+            cache_recommend(
+                cpath,
+                done_data,
+                topic_key=ckey,
+                problem_text=problem_text,
+                platform=platform or "",
+                reference_ids=reference_ids,
+                clarify_hist=clarify_maps,
+            )
 
         def run(emit: SseEmitter) -> None:
             # 两阶段编排归 selection.run_recommendation（澄清先行 → 收敛 →
             # done 载荷组装），路由只转调——终态一律由域函数发出，路由不分支；
             # run 抛错由运行器补发 error 终态（终态保证归运行器）
             try:
+                if cache_enabled:
+                    cached = _load_recommend_safely(cpath)
+                    if cached is not None:
+                        ok, _ = validate_recommend(
+                            cached,
+                            topic_key=ckey,
+                            problem_text=problem_text,
+                            platform=platform or "",
+                        )
+                        if ok:
+                            warns = parameter_warnings(
+                                cached,
+                                reference_ids=reference_ids,
+                                clarify_hist=clarify_maps,
+                            )
+                            _emit_cached_recommend(emit, cached, warns)
+                            return
                 run_recommendation(
-                    topic, _llm(context, budget, collector), clarifications, emit=emit
+                    topic,
+                    _llm(context, budget, collector),
+                    clarifications,
+                    emit=_CacheWriterEmitter(emit, _write_cache),
                 )
             finally:
                 context.recent_llm_workflows.add_completed(collector)
@@ -1249,8 +1375,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/llm-workflows/recent")
     @_map_errors
     def llm_workflows_recent() -> dict:
-        """最近已完成 LLM 工作流：只读、内存态、content-safe，不写 config / 磁盘。"""
-        return context.recent_llm_workflows.to_dict()
+        """最近已完成 LLM 工作流：只读、内存态、content-safe，不写 config / 磁盘。
+
+        载荷按当前生效单价表附加估算字段（est：实际 / 全 DeepSeek 对照 / 节省）；
+        估算纯展示派生，单价表缺失 / 配置未就绪时用内置默认（旁路不炸）。
+        """
+        config = _current_config(context)
+        tables = price_tables_from_config(config.llm_prices if config else None)
+        return attach_cost_estimates(context.recent_llm_workflows.to_dict(), tables)
 
     @app.get("/api/settings")
     @_map_errors
@@ -1280,6 +1412,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 本地 LLM 端点（工单 local-llm-routing/01-03）：空串 = 本地路由关闭
             "local_llm_base_url": config.local_llm_base_url if config is not None else "",
             "local_llm_model": config.local_llm_model if config is not None else "",
+            # LLM 单价（工单 llm-cost-control/01）：返回当前生效表（默认 + 覆盖
+            # 合并），前端可直接显示；未配置 / 无覆盖 = 内置默认
+            "llm_prices": price_tables_to_config(
+                price_tables_from_config(config.llm_prices if config else None)
+            ),
+            # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
+            "recommend_cache_enabled": (
+                config.recommend_cache_enabled if config is not None else True
+            ),
             "config_path": str(context.config_path),
         }
 
@@ -1314,6 +1455,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 本地 LLM 端点（工单 local-llm-routing/03）：缺省 / 空串 = 关闭本地路由
             local_llm_base_url=_optional_str(payload, "local_llm_base_url"),
             local_llm_model=_optional_str(payload, "local_llm_model"),
+            # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 / 空对象 = 恢复内置默认
+            llm_prices=_optional_dict(payload, "llm_prices"),
+            # 推荐缓存开关（工单 llm-cost-control/02）：缺省开；非布尔 400
+            recommend_cache_enabled=_optional_bool(
+                payload, "recommend_cache_enabled", default=True
+            ),
         )
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
