@@ -19,6 +19,7 @@ REFERENCE_FULLTEXT_BYTES wire 字节预算兜底）、摘要阶段多文件按�
 from __future__ import annotations
 
 import json
+import logging
 import math
 import time
 import urllib.error
@@ -75,7 +76,9 @@ from .wordlist import (
     format_wordlist_prompt,
 )
 
-# 截断标注契约（唯一出处）在 library.truncate_content / TRUNCATION_NOTICE
+logger = logging.getLogger(__name__)
+
+# 截断标注契约在 library.truncate_content / TRUNCATION_NOTICE
 # （工单 03 迁共享层：reference_library 的逐文件截断同用此措辞，而其不能
 # 运行时 import llm——环约束，TYPE_CHECKING 同款先例）——llm 导入重出。
 
@@ -781,9 +784,12 @@ class DeepSeekLLM:
         config: AppConfig,
         transport: Transport | None = None,
         hardware_words: Sequence[HardwareWordGroup] | None = None,
+        provider: str = "remote",
     ) -> None:
         self._config = config
         self._transport = transport or UrllibTransport()
+        self._provider = provider
+        self._call_sequence = 0
         # 硬件词表：库外建议 name 的校验源 + 提示词科普素材；缺省用包内默认
         # 词表（wordlist.json，可手补），测试可注入自定义词表
         self._hardware_words = (
@@ -860,6 +866,7 @@ class DeepSeekLLM:
             ),
             parse=parse,
             label="模块选择",
+            operation="select_modules",
             json_mode=True,
         )
 
@@ -943,7 +950,8 @@ class DeepSeekLLM:
                     "role": "user",
                     "content": f"```c\n{_truncate_content(code)}\n```",
                 },
-            ]
+            ],
+            operation="summarize_module",
         )
 
     def validate_module_description(
@@ -957,6 +965,7 @@ class DeepSeekLLM:
                     "content": _validation_user_prompt(description, code),
                 },
             ],
+            operation="validate_module_description",
             json_mode=True,
         )
         return parse_validation_result(content)
@@ -1009,6 +1018,7 @@ class DeepSeekLLM:
         user_prompt: str,
         parse: Callable[[str], RT],
         label: str,
+        operation: str | None = None,
         json_mode: bool = False,
     ) -> RT:
         """整次调用级重试（单调用契约共用原语，与批处理 _retry_batch 同哲学）。
@@ -1040,6 +1050,7 @@ class DeepSeekLLM:
                         {"role": "user", "content": user_prompt},
                     ],
                     json_mode=json_mode,
+                    operation=operation or label,
                 )
                 return parse(content)
             except LLMError as exc:
@@ -1245,6 +1256,7 @@ class DeepSeekLLM:
                     {"role": "user", "content": user_prompt(remaining)},
                 ],
                 json_mode=True,
+                operation=phase_label,
             )
             try:
                 parsed = parse(content, remaining)
@@ -1420,6 +1432,7 @@ class DeepSeekLLM:
                 {"role": "system", "content": TOPIC_SPLIT_SYSTEM_PROMPT},
                 {"role": "user", "content": _topic_split_user_prompt(pdf_text)},
             ],
+            operation="topic_split_topics",
             json_mode=True,
         )
         return parse_topic_split(content)
@@ -1435,16 +1448,71 @@ class DeepSeekLLM:
                 {"role": "system", "content": TOPIC_NUMBER_SYSTEM_PROMPT},
                 {"role": "user", "content": _topic_number_user_prompt(text)},
             ],
+            operation="topic_extract_number",
             json_mode=True,
         )
         return parse_topic_number(content)
 
-    def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
+    def _observe_call(
+        self,
+        *,
+        operation: str,
+        started_at: float,
+        request_bytes: int,
+        status: str,
+        http_status: int | None,
+        parse_status: str,
+        error_kind: str | None = None,
+        usage: Mapping[str, Any] | None = None,
+        call_id: int | None = None,
+        attempts: int = 1,
+        final: bool = True,
+    ) -> None:
+        """记录一条无素材的 LLM 调用观测；请求和响应内容绝不进入日志。"""
+        observation: dict[str, Any] = {
+            "operation": operation,
+            "provider": "local" if self._provider == "local" else "deepseek",
+            "route": self._provider,
+            "model": self._config.model,
+            "duration_ms": round((time.monotonic() - started_at) * 1000),
+            "attempts": attempts,
+            "status": status,
+            "final": final,
+            "call_id": call_id,
+            "http_status": http_status,
+            "error_kind": error_kind,
+            "parse_status": parse_status,
+            "request_bytes": request_bytes,
+            "usage": dict(usage) if usage else None,
+        }
+        logger.info("LLM 调用观测", extra={"llm_observation": observation})
+
+    def _chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        json_mode: bool = False,
+        operation: str = "chat",
+    ) -> str:
+        self._call_sequence += 1
+        call_id = self._call_sequence
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         body_bytes = json.dumps(payload).encode("utf-8")
+        started_at = time.monotonic()
+        request_bytes = len(body_bytes)
         if len(body_bytes) > MAX_REQUEST_BYTES:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=None,
+                parse_status="not_sent",
+                error_kind="request_too_large",
+                call_id=call_id,
+            )
             # 体积断言兜底：所有嵌内容调用都应已截断 / 分批，仍超限说明有未兜底
             # 的长输入——请求发出前大声失败（可操作信息），而不是等网关 413
             raise LLMError(
@@ -1453,16 +1521,39 @@ class DeepSeekLLM:
                 "（如异常巨大的赛题文本）——请减小输入或减少导入工程的文件大小"
             )
         url = self._config.base_url.rstrip("/") + "/chat/completions"
-        status, body = self._transport.post(
-            url,
-            {
-                "Authorization": f"Bearer {self._config.api_key}",
-                "Content-Type": "application/json",
-            },
-            payload,
-            self.TIMEOUT_SECONDS,
-        )
+        headers = {"Content-Type": "application/json"}
+        if self._config.api_key:
+            headers["Authorization"] = f"Bearer {self._config.api_key}"
+        try:
+            status, body = self._transport.post(
+                url,
+                headers,
+                payload,
+                self.TIMEOUT_SECONDS,
+            )
+        except LLMError as exc:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=None,
+                parse_status="not_started",
+                error_kind=exc.kind,
+                call_id=call_id,
+            )
+            raise
         if status != 200:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=status,
+                parse_status="not_started",
+                error_kind="http",
+                call_id=call_id,
+            )
             if status == 413:
                 # 网关的请求体大小限制；嵌内容调用已截断分批，仍出现说明有未
                 # 兜底的超长输入（如超大赛题文本）——给出可操作提示
@@ -1484,10 +1575,30 @@ class DeepSeekLLM:
         try:
             data = json.loads(body)
         except json.JSONDecodeError as exc:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=status,
+                parse_status="invalid_response_json",
+                error_kind="response_json",
+                call_id=call_id,
+            )
             raise LLMError(f"DeepSeek API 响应不是合法 JSON：{body[:200]}") from exc
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=status,
+                parse_status="missing_content",
+                error_kind="response_shape",
+                call_id=call_id,
+            )
             raise LLMError(
                 f"DeepSeek API 响应缺少 choices[0].message.content：{body[:200]}"
             ) from exc
@@ -1497,6 +1608,17 @@ class DeepSeekLLM:
             # 对 DeepSeek 零影响（从不包围栏），文本模式原样不动（骨架 ```c
             # 围栏等合法内容不被 mangle）（工单 local-llm-json-group/01）
             content = _unwrap_json_fence(content)
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        self._observe_call(
+            operation=operation,
+            started_at=started_at,
+            request_bytes=request_bytes,
+            status="success",
+            http_status=status,
+            parse_status="success",
+            usage=usage,
+            call_id=call_id,
+        )
         return content
 
 
@@ -1696,17 +1818,22 @@ def build_llm(config: AppConfig) -> LLM:
     """按配置构造 LLM（webapp 的 AppContext.llm_factory 默认值）。
 
     本地 base_url 为空 → 普通 DeepSeekLLM（≡ 现状，零回归）；非空 → RoutingLLM
-    （remote = 主配置实例，local = 同一 api_key + 本地 base_url / 本地 model
-    的实例——本地 model 空串时沿用主 model，保证请求体 model 非空）。
+    （remote = 主配置实例，local = 本地 base_url / 本地 model，且不携带远程
+    api_key——本地请求默认无认证；本地 model 空串时沿用主 model，保证请求体
+    model 非空）。
     """
     if not config.local_llm_base_url:
         return DeepSeekLLM(config)
     local_config = replace(
         config,
+        api_key="",
         base_url=config.local_llm_base_url,
         model=config.local_llm_model or config.model,
     )
-    return RoutingLLM(remote=DeepSeekLLM(config), local=DeepSeekLLM(local_config))
+    return RoutingLLM(
+        remote=DeepSeekLLM(config, provider="remote"),
+        local=DeepSeekLLM(local_config, provider="local"),
+    )
 
 
 def extract_module_selection_data(content: str) -> dict[str, Any]:

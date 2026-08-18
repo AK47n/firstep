@@ -4,6 +4,7 @@
 """
 
 import json
+import logging
 import urllib.error
 import urllib.request
 from typing import Any, Mapping, Sequence
@@ -314,6 +315,67 @@ def test_fake_llm_receives_manifest_summaries_with_kit():
 # ---------------------------------------------------------------------------
 # select_modules：请求形状 + 结构化输出解析
 # ---------------------------------------------------------------------------
+
+
+def test_local_llm_route_does_not_forward_remote_authorization(monkeypatch):
+    transport = FakeTransport(body=_api_response("text"))
+    monkeypatch.setattr(llm_module, "UrllibTransport", lambda: transport)
+    llm = build_llm(
+        AppConfig(
+            base_url="https://api.deepseek.com",
+            api_key="sk-test",
+            model="deepseek-chat",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="local-model",
+        )
+    )
+
+    llm.summarize_topic("题面摘要")
+
+    url, headers, _, _ = transport.calls[0]
+    assert url == "http://localhost:11434/v1/chat/completions"
+    assert "Authorization" not in headers
+    assert headers["Content-Type"] == "application/json"
+
+
+def test_llm_call_emits_redacted_structured_observation(caplog):
+    transport = FakeTransport(body=_api_response("摘要"))
+    llm = _llm(transport)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    llm.summarize_module("题面原文与源码 secret-source")
+
+    record = next(record for record in caplog.records if record.name == llm_module.__name__)
+    observation = record.__dict__["llm_observation"]
+    assert observation["operation"] == "summarize_module"
+    assert observation["provider"] == "deepseek"
+    assert observation["route"] == "remote"
+    assert observation["model"] == "deepseek-chat"
+    assert observation["status"] == "success"
+    assert observation["attempts"] == 1
+    assert observation["http_status"] == 200
+    assert observation["parse_status"] == "success"
+    assert observation["request_bytes"] > 0
+    assert "题面原文" not in record.getMessage()
+    assert "secret-source" not in record.getMessage()
+    assert "sk-test" not in record.getMessage()
+
+
+def test_llm_call_emits_failure_observation_without_response_body(caplog):
+    transport = FakeTransport(status=401, body="credential-body-secret")
+    llm = _llm(transport)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    with pytest.raises(LLMError):
+        llm._chat([{"role": "user", "content": "题面 secret-prompt"}])
+
+    observation = caplog.records[-1].__dict__["llm_observation"]
+    assert observation["status"] == "error"
+    assert observation["http_status"] == 401
+    assert observation["error_kind"] == "http"
+    assert observation["parse_status"] == "not_started"
+    assert "credential-body-secret" not in caplog.records[-1].getMessage()
+    assert "secret-prompt" not in caplog.records[-1].getMessage()
 
 
 def test_select_modules_posts_chat_completion_with_expected_request():
@@ -3927,8 +3989,7 @@ def test_build_llm_without_local_fields_returns_plain_deepseek_llm():
 
 
 def test_build_llm_with_local_fields_returns_routing_llm_with_correct_wiring():
-    """有本地字段 → RoutingLLM：remote = 主配置实例，local = 同一 api_key +
-    本地 base_url / 本地 model 的实例（接线断言经构造后的 config 检查）。"""
+    """有本地字段 → RoutingLLM：remote 保留主凭据，local 默认无认证。"""
     llm = build_llm(
         AppConfig(
             api_key="sk-test",
@@ -3943,10 +4004,10 @@ def test_build_llm_with_local_fields_returns_routing_llm_with_correct_wiring():
     assert llm._remote._config.base_url == "https://api.deepseek.com"
     assert llm._remote._config.model == "deepseek-chat"
     assert llm._remote._config.api_key == "sk-test"
-    # local = 本地 base_url / 本地 model + 复用主 api_key
+    # local = 本地 base_url / 本地 model，默认不复用远程 api_key
     assert llm._local._config.base_url == "http://localhost:11434/v1"
     assert llm._local._config.model == "qwen2.5-coder:7b-instruct"
-    assert llm._local._config.api_key == "sk-test"
+    assert llm._local._config.api_key == ""
 
 
 def test_build_llm_local_base_url_without_model_falls_back_to_main_model():
