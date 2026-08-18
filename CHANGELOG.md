@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d5790c61562596a1ab53b2cfe39b31f41470e87c -->
+<!-- changelog-auto: last-commit=2cd9fab43b7ec01405229d685aad72d47c68d93b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 22:22 新增 adc/servo 模块（b1-adc-servo/01-03）——模拟采样与舵机角度双平台落地
 - 22:24 K230 副产物多模板（k230-multi-template/01-04）——python_artifact 多模板声明 + 矩形识别模板
 - 23:32 给 DeepSeek 装眼睛（vision-eyes/01-04）——免费云端视觉通道 GLM-4V-Flash
+- 23:42 设置页 DeepSeek Flash 官方价格参考表（2026-08 官方定价）
 
 ## 2026-08-17
 - 00:02 ball_detect 模块重命名为 coord_detect（坐标检测）——纯机械改名（git mv 保留历史，解析逻辑/协议一字不改）：C 符号 BallResult→CoordResult、ball_detect_*→coord_detect_*、BALL_RX_BUF_SIZE→COORD_RX_BUF_SIZE、引脚宏 BALL_DETECT_UART*→COORD_DETECT_UART*；帧契约单源 BALL_FRAME_*→COORD_FRAME_*（前缀值 "B" 保持——协议字节与模块名解耦）、模板占位符 ball_frame_format→coord_frame_format、BALL_THRESHOLD→COLOR_THRESHOLD；k230 依赖/母版/测试/CONTEXT 同步（工单 coord-detect-rename/01）
