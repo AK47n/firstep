@@ -125,7 +125,31 @@ def test_find_make_override_and_path(monkeypatch, tmp_path):
     fake = _write_bat(tmp_path / "gmake.exe", "exit /b 0")
     assert find_make(str(fake)) == fake
     assert find_make(str(tmp_path / "gone")) is None
+    monkeypatch.setattr("contest_generator.compile_runner._CCS_SCAN_ROOT", str(tmp_path / "empty"))
     monkeypatch.setattr("contest_generator.compile_runner.shutil.which", lambda name: str(fake))
+    assert find_make("") == fake
+
+
+def test_find_make_scans_ccs_bundled_gmake(monkeypatch, tmp_path):
+    """CCS 自带 gmake（C:/ti/ccs*/ccs/utils/bin/gmake.exe）不在 PATH 也探测到。"""
+    bundled = tmp_path / "ccs2050" / "ccs" / "utils" / "bin" / "gmake.exe"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_bytes(b"MZ")
+    monkeypatch.setattr("contest_generator.compile_runner._CCS_SCAN_ROOT", str(tmp_path))
+    monkeypatch.setattr("contest_generator.compile_runner.shutil.which", lambda name: None)
+
+    assert find_make("") == bundled
+
+
+def test_find_make_accepts_mingw32_make(monkeypatch, tmp_path):
+    """Windows MinGW 的 make 名为 mingw32-make——PATH 兜底（gmake > make 之后）。"""
+    fake = _write_bat(tmp_path / "mingw32-make.exe", "exit /b 0")
+    monkeypatch.setattr("contest_generator.compile_runner._CCS_SCAN_ROOT", str(tmp_path / "empty"))
+    monkeypatch.setattr(
+        "contest_generator.compile_runner.shutil.which",
+        lambda name: str(fake) if name == "mingw32-make" else None,
+    )
+
     assert find_make("") == fake
 
 
