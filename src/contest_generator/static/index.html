@@ -4669,6 +4669,7 @@ async function loadSettings() {
 function renderPriceReference(ref) {
   const rows = $("price-ref-rows");
   if (!ref || !rows) return;
+  rows.innerHTML = "";   // 重绘前清空：loadSettings 每次进设置页都调用，不清空会累积重复
   window.__priceRef = ref;
   const fmt = (v) => (v ?? "-") + " 元";
   const row = (label, entry) => {
