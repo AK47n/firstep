@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4b432565134e3cdcbc1cf3b6ce3c3d444057d70e -->
+<!-- changelog-auto: last-commit=f0ed30ea23d4a253e7153b683336d6dcaa9bca8f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 15:07 修复 PR109 评审发现的规格偏差
 - 16:32 LLM 观测、成本控制与评分点闭环
 - 21:08 生成页支持生成到桌面赛题文件夹——AI 题名命名与重名时间后缀（工单 desktop-topic-output/01）
+- 22:08 enrich topic image notes
 
 ## 2026-08-18
 - 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
