@@ -4,7 +4,7 @@
 
 **被谁阻塞：** k230/02（模板选择请求管线）、k230/03（矩形识别模板落地）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] 模块卡渲染：python_artifact.templates 长度 > 1 时显示模板下拉（含 description 提示），默认 default
 - [ ] 生成请求带 python_templates（仅当用户改过默认）；done 载荷回显所选模板

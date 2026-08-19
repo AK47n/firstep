@@ -4,7 +4,7 @@
 
 **被谁阻塞：** 无——可立即开始（与 b1 01 并行）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] 模块库 library/modules/servo/manifest.json 可解析（slug/描述四要素/pins 校验通过），双平台条目各带 .c/.h
 - [ ] 双平台 API 对偶：servo_init(servo_id, channel) / servo_set_angle(servo_id, angle)（0-180°，越界钳位），角度换算常量（周期 20ms / 脉宽 0.5-2.5ms / 占空比换算）模块头文件单源

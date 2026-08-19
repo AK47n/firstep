@@ -101,10 +101,10 @@ def test_saved_file_is_plain_json(tmp_path):
         # 本地 LLM 端点（工单 local-llm-routing/01）：缺省空串 = 本地路由关闭
         "local_llm_base_url": "",
         "local_llm_model": "",
-        # 视觉通道（工单 vision-eyes/01）：api_key 空 = 视觉关闭
-        "vision_base_url": "",
+        # 视觉通道（工单 vision-eyes/01）：api_key 空 = 视觉关闭，base/model 有默认
+        "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
         "vision_api_key": "",
-        "vision_model": "",
+        "vision_model": "glm-4v-flash",
         # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
         "recommend_cache_enabled": True,
         # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
@@ -177,15 +177,15 @@ def test_ccs_toolchain_paths_default_blank_and_roundtrip(tmp_path):
         load_config(path)  # 类型非法大声失败（与其余字段同严格度）
 
 
-def test_vision_fields_default_blank_and_roundtrip(tmp_path):
-    """视觉通道（工单 vision-eyes/01）：缺省空串 = 视觉关闭；非空回写；
-    类型非法大声失败（local_llm 同款）。"""
+def test_vision_fields_default_and_roundtrip(tmp_path):
+    """视觉通道（工单 vision-eyes/01）：缺省 base/model = 官方免费通道；key
+    空串 = 视觉关闭；非空回写；类型非法大声失败（local_llm 同款）。"""
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
     loaded = load_config(path)
-    assert loaded.vision_base_url == ""
+    assert loaded.vision_base_url == "https://open.bigmodel.cn/api/paas/v4"
     assert loaded.vision_api_key == ""
-    assert loaded.vision_model == ""
+    assert loaded.vision_model == "glm-4v-flash"
 
     save_config(
         AppConfig(

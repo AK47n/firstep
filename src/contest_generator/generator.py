@@ -431,6 +431,17 @@ def _make_fulltext_reader(
 
 
 @dataclass(frozen=True)
+class PythonArtifactSummary:
+    """生成出的 Python 副产物摘要（含本次实际选择的模板，供 done 回显）。"""
+
+    slug: str
+    output: str
+    template_id: str
+    template_name: str
+    template_description: str
+
+
+@dataclass(frozen=True)
 class GenerationSummary:
     """生成结果摘要（界面呈现用）：工程结构 / include path / 各模块文件清单。
 
@@ -438,10 +449,10 @@ class GenerationSummary:
     工具链 → 中文提示（命令行构建不可用，可设置页填 ccs_* 覆盖），生成本身
     照常；stm32 与探测命中时为空串。
 
-    python_artifacts（工单 k230-vision-copilot/04）= 选中模块的 .py 副产物
-    (slug, 输出文件名)——模块级声明（与平台无关），产物写在工程根；前端摘要
-    「模块文件」行靠它显示 k230 这类 files 空模块的 main.py，不选任何带
-    声明模块 = 空元组（旧行为）。
+    python_artifacts（工单 k230-vision-copilot/04 + k230-multi-template/04）=
+    选中模块的 .py 副产物摘要（slug / 输出文件名 / 本次实际模板 id+展示名），
+    产物写在工程根；前端摘要「模块文件」行靠它显示 k230 这类 files 空模块的
+    main.py 与模板回显，不选任何带声明模块 = 空元组（旧行为）。
     """
 
     output_dir: Path
@@ -449,7 +460,7 @@ class GenerationSummary:
     include_dirs: tuple[str, ...]  # 已去重，按首次出现顺序
     modules: tuple[tuple[str, tuple[str, ...]], ...]  # (slug, 该平台文件列表)
     build_hint: str = ""
-    python_artifacts: tuple[tuple[str, str], ...] = ()
+    python_artifacts: tuple[PythonArtifactSummary, ...] = ()
     score_points: tuple[ScorePoint, ...] = ()
 
 
@@ -460,6 +471,7 @@ def describe_generation(
     include_dirs: Sequence[str],
     build_hint: str = "",
     score_points: Sequence[ScorePoint] | None = None,
+    template_choices: Mapping[str, str] | None = None,
 ) -> GenerationSummary:
     """生成完成后的只读摘要：结构清单直接读输出目录；include 目录消费
     _copy_module_files 的实际复制结果（同一来源，不再从 manifest 二次推导
@@ -475,18 +487,29 @@ def describe_generation(
         entry = manifest.platforms.get(platform)
         files = tuple(entry.files) if entry is not None else ()
         modules.append((manifest.slug, files))
-    python_artifacts = tuple(
-        (manifest.slug, manifest.python_artifact.output)
-        for manifest in manifests
-        if manifest.python_artifact is not None
-    )
+    python_artifacts: list[PythonArtifactSummary] = []
+    for manifest in manifests:
+        spec = manifest.python_artifact
+        if spec is None:
+            continue
+        template_id = (template_choices or {}).get(manifest.slug, spec.default_id)
+        template = next(t for t in spec.templates if t.id == template_id)
+        python_artifacts.append(
+            PythonArtifactSummary(
+                slug=manifest.slug,
+                output=template.output,
+                template_id=template.id,
+                template_name=template.name,
+                template_description=template.description,
+            )
+        )
     return GenerationSummary(
         output_dir=output_dir,
         structure=structure,
         include_dirs=tuple(include_dirs),
         modules=tuple(modules),
         build_hint=build_hint,
-        python_artifacts=python_artifacts,
+        python_artifacts=tuple(python_artifacts),
         score_points=tuple(score_points or ()),
     )
 
@@ -551,7 +574,8 @@ def generate_project(
         score_points=score_points,
     )
     return describe_generation(
-        result_dir, resolved.manifests, platform, include_dirs, build_hint, score_points
+        result_dir, resolved.manifests, platform, include_dirs, build_hint,
+        score_points, template_choices
     )
 
 

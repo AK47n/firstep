@@ -1449,7 +1449,15 @@ def test_generate_with_k230_writes_py_and_summary_lists_it(client, context, tmp_
     )
     # 摘要：modules 里 k230 files 空，python_artifacts 单独给出副产物清单
     assert {"slug": "k230", "files": []} in data["modules"]
-    assert data["python_artifacts"] == [{"slug": "k230", "output": "main.py"}]
+    assert data["python_artifacts"] == [
+        {
+            "slug": "k230",
+            "output": "main.py",
+            "template_id": "default",
+            "template_name": "",
+            "template_description": "",
+        }
+    ]
     assert "main.py" in data["structure"]
 
 
@@ -2872,12 +2880,12 @@ def test_settings_ccs_toolchain_paths_roundtrip(client, context):
 
 
 def test_settings_vision_fields_roundtrip_and_mask(client, context):
-    """视觉通道（工单 vision-eyes/01）：GET 缺省空串 + key 掩码；PUT 透传；
-    掩码形态 = 沿用旧值（与 api_key 同款语义）。"""
+    """视觉通道（工单 vision-eyes/01）：GET 缺省 base/model + key 掩码；PUT
+    透传；掩码形态 = 沿用旧值（与 api_key 同款语义）。"""
     current = client.get("/api/settings").json()
-    assert current["vision_base_url"] == ""
+    assert current["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
     assert current["vision_api_key"] == ""
-    assert current["vision_model"] == ""
+    assert current["vision_model"] == "glm-4v-flash"
     # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：GET 带出
     assert current["price_reference"]["concurrent_connections"] == 2500
 

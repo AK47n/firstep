@@ -68,10 +68,11 @@ def test_servo_api_parity_both_platforms():
     shared_h = _read("modules/servo/code/servo.h")
     stm32_c = _read("modules/servo/code/servo_stm32.c")
     mspm0_c = _read("modules/servo/code/servo_mspm0.c")
-    for fn in ("servo_init", "servo_set_angle"):
-        assert fn in shared_h
-        assert fn in stm32_c
-        assert fn in mspm0_c
+    assert "void servo_init(uint8_t servo_id, uint8_t channel);" in shared_h
+    assert "void servo_init(uint8_t servo_id, uint8_t channel)" in stm32_c
+    assert "void servo_init(uint8_t servo_id, uint8_t channel)" in mspm0_c
+    assert "void servo_set_angle(uint8_t servo_id, uint16_t angle);" in shared_h
+    assert "servo_set_angle" in stm32_c and "servo_set_angle" in mspm0_c
     # 角度钳位与换算：0/180 端点
     assert "angle > 180" in stm32_c and "angle > 180" in mspm0_c
 

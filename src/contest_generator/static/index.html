@@ -1283,6 +1283,15 @@ function moduleBadges(m) {
   return badges.join("");
 }
 
+function pythonArtifactSummary(m) {
+  const pa = m.python_artifact;
+  if (!pa || !pa.templates || !pa.templates.length) return "";
+  const templates = pa.templates.map((t) =>
+    `<div><strong>${esc(t.name || t.id)}</strong>${t.description ? "：" + esc(t.description) : ""}</div>`
+  ).join("");
+  return `<div class="muted" style="margin-top:4px">副产物模板：${templates}</div>`;
+}
+
 // 工单 10：推荐 = SSE 流（round → converged → done / question / error）。
 // 收敛循环：功能需求层两轮一致即停、上限 4 轮；库内命中 chips 可勾选/移除，
 // 库外建议灰色 + 「需自备」标注（仅展示，不进 selectedSlugs / expand / generate）。
@@ -2661,9 +2670,13 @@ function formatResModules(modules, pythonArtifacts) {
   // 产物摘要「模块文件」行（工单 k230-vision-copilot/04 抽纯函数，node:test
   // 直测）：C 模块文件 + Python 副产物同列——k230 这类纯副产物模块（files
   // 空）也能在摘要里看见 main.py；不带副产物的空 files 模块只显示 slug。
-  const pyBySlug = new Map((pythonArtifacts || []).map((a) => [a.slug, a.output]));
-  // 模板名回显（工单 k230-multi-template/04）：多模板模块的摘要行附当前模板名
-  const pyTemplateName = (slug) => {
+  const pyBySlug = new Map((pythonArtifacts || []).map((a) => [a.slug, a]));
+  // 模板名回显（工单 k230-multi-template/04）：done 载荷优先，页面状态兜底
+  const pyTemplateName = (slug, artifact) => {
+    if (artifact && (artifact.template_name || artifact.template_id)) {
+      const name = artifact.template_name || (artifact.template_id === "default" ? "" : artifact.template_id);
+      return name ? "（模板：" + name + "）" : "";
+    }
     // node:test 直抽纯函数时没有页面全局状态；缺省按旧摘要格式处理。
     const expandedList = typeof expanded === "undefined" ? [] : (expanded || []);
     const templates = typeof pythonTemplates === "undefined" ? {} : pythonTemplates;
@@ -2672,12 +2685,14 @@ function formatResModules(modules, pythonArtifacts) {
     if (!pa || !pa.templates || pa.templates.length < 2) return "";
     const id = templates[slug] || pa.default;
     const t = pa.templates.find((x) => x.id === id);
-    return t && (t.name || t.id) ? "（模板：" + t.name + "）" : "";
+    return t && (t.name || t.id) ? "（模板：" + (t.name || t.id) + "）" : "";
   };
   return (modules || []).map((m) => {
     const parts = [...(m.files || [])];
-    const py = pyBySlug.get(m.slug);
-    if (py) parts.push("副产物 " + py + pyTemplateName(m.slug));
+    const artifact = pyBySlug.get(m.slug);
+    if (artifact && artifact.output) {
+      parts.push("副产物 " + artifact.output + pyTemplateName(m.slug, artifact));
+    }
     return m.slug + (parts.length ? "(" + parts.join(", ") + ")" : "");
   }).join("、");
 }
@@ -3476,7 +3491,7 @@ async function loadLibrary() {
       <tr>
         <td class="slug">${esc(m.slug)}</td>
         <td>${esc(m.description)}</td>
-        <td class="muted">${esc((m.dependencies || []).join("、") || "—")}</td>
+        <td class="muted">${esc((m.dependencies || []).join("、") || "—")}${pythonArtifactSummary(m)}</td>
         <td>${moduleBadges(m)}</td>
         <td>
           <button data-edit-desc="${esc(m.slug)}">改简介</button>

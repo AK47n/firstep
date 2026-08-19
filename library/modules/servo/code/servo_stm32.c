@@ -10,9 +10,10 @@ static uint16_t servo_duty_for_angle(uint16_t angle)
     return 1250 + (uint16_t)((uint32_t)angle * 5000 / 180);
 }
 
-void servo_init(uint8_t servo_id)
+void servo_init(uint8_t servo_id, uint8_t channel)
 {
     (void)servo_id;
+    (void)channel;
     pwm_init(SERVO_PWM_TIM, SERVO_PWM_CH, 50);
     pwm_update(SERVO_PWM_TIM, SERVO_PWM_CH, servo_duty_for_angle(0));
 }

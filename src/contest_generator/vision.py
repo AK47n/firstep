@@ -70,6 +70,13 @@ class Transport(Protocol):
         """POST JSON，返回（HTTP 状态码, 响应体文本, 响应头）。"""
 
 
+class ObservationCollector(Protocol):
+    """视觉调用观测接缝（避免 vision.py 运行时 import llm.py 造成环）。"""
+
+    def collect(self, **kwargs: Any) -> dict[str, Any]:
+        """记录 content-safe 调用事实，形状与 LLMObservationCollector.collect 对齐。"""
+
+
 class UrllibTransport:
     """基于标准库 urllib 的传输实现（项目零第三方依赖）。"""
 
@@ -124,6 +131,7 @@ def describe_image(
     api_key: str = "",
     model: str = DEFAULT_VISION_MODEL,
     transport: Transport | None = None,
+    observation_collector: ObservationCollector | None = None,
     timeout: float = 60.0,
 ) -> str:
     """图片 → 中文描述（OpenAI 兼容 chat/completions + base64 image_url）。
@@ -137,6 +145,8 @@ def describe_image(
         raise VisionNotConfiguredError(
             "视觉通道未配置：请到设置页填写视觉 API key（免费 GLM-4V-Flash）"
         )
+    base_url = base_url.strip() or DEFAULT_VISION_BASE_URL
+    model = model.strip() or DEFAULT_VISION_MODEL
     payload = {
         "model": model,
         "messages": [
@@ -160,28 +170,73 @@ def describe_image(
     http = transport or UrllibTransport()
 
     last_error: VisionError | None = None
-    for attempt in range(VISION_NETWORK_RETRIES):
+    started_at = time.monotonic()
+    request_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    last_http_status: int | None = None
+    attempts = 0
+
+    def record(status_text: str, parse_status: str, error_kind: str | None) -> None:
+        if observation_collector is None:
+            return
         try:
-            status, body, _headers = http.post(url, headers, payload, timeout)
-        except VisionError as exc:
-            if attempt + 1 < VISION_NETWORK_RETRIES:
-                _backoff_sleep(VISION_BACKOFF_SECONDS[attempt])
-            last_error = exc
-            continue
-        if status == 429:
-            raise VisionError(
-                f"视觉服务限流（HTTP 429，免费层有限速）：{body[:200]}"
+            observation_collector.collect(
+                operation="vision_describe",
+                provider="zhipu",
+                route="vision",
+                model=model,
+                duration_ms=round((time.monotonic() - started_at) * 1000),
+                attempts=attempts,
+                status=status_text,
+                final=True,
+                call_id=None,
+                budget_attempt=None,
+                http_status=last_http_status,
+                error_kind=error_kind,
+                parse_status=parse_status,
+                request_bytes=request_bytes,
+                usage=None,
             )
-        if status >= 500:
-            if attempt + 1 < VISION_NETWORK_RETRIES:
-                _backoff_sleep(VISION_BACKOFF_SECONDS[attempt])
-            last_error = VisionError(f"视觉服务返回 HTTP {status}：{body[:200]}")
-            continue
-        if status != 200:
-            raise VisionError(f"视觉服务返回 HTTP {status}：{body[:200]}")
-        return _parse_description(body)
-    assert last_error is not None  # 循环必赋值（重试次数 ≥ 1）
-    raise last_error
+        except Exception:
+            pass
+
+    try:
+        for attempt in range(VISION_NETWORK_RETRIES):
+            attempts = attempt + 1
+            try:
+                status, body, _headers = http.post(url, headers, payload, timeout)
+            except VisionError as exc:
+                if attempt + 1 < VISION_NETWORK_RETRIES:
+                    _backoff_sleep(VISION_BACKOFF_SECONDS[attempt])
+                last_error = exc
+                continue
+            last_http_status = status
+            if status == 429:
+                raise VisionError(
+                    f"视觉服务限流（HTTP 429，免费层有限速）：{body[:200]}"
+                )
+            if status >= 500:
+                if attempt + 1 < VISION_NETWORK_RETRIES:
+                    _backoff_sleep(VISION_BACKOFF_SECONDS[attempt])
+                last_error = VisionError(f"视觉服务返回 HTTP {status}：{body[:200]}")
+                continue
+            if status != 200:
+                raise VisionError(f"视觉服务返回 HTTP {status}：{body[:200]}")
+            description = _parse_description(body)
+            record("success", "success", None)
+            return description
+        assert last_error is not None  # 循环必赋值（重试次数 ≥ 1）
+        raise last_error
+    except VisionError as exc:
+        if last_http_status == 429:
+            error_kind = "rate_limit"
+        elif last_http_status is not None and last_http_status >= 500:
+            error_kind = "network"
+        elif last_http_status is not None:
+            error_kind = "client"
+        else:
+            error_kind = "network"
+        record("error", "parse_error", error_kind)
+        raise exc
 
 
 def _parse_description(body: str) -> str:

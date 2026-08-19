@@ -17,9 +17,10 @@ static uint32_t servo_duty_for_angle(uint16_t angle)
     return period / 40 + (uint32_t)angle * period / 1800;
 }
 
-void servo_init(uint8_t servo_id)
+void servo_init(uint8_t servo_id, uint8_t channel)
 {
     (void)servo_id;
+    (void)channel;
     DL_Timer_setLoadValue(SERVO_PWM_INST, servo_period());
     DL_Timer_setCaptureCompareValue(
         SERVO_PWM_INST, servo_duty_for_angle(0), GPIO_SERVO_PWM_C0_IDX);

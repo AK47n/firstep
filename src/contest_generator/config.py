@@ -13,6 +13,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .vision import DEFAULT_VISION_BASE_URL, DEFAULT_VISION_MODEL
+
 CONFIG_DIRNAME = ".contest_generator"
 CONFIG_FILENAME = "config.json"
 DEFAULT_CONFIG_PATH = Path.home() / CONFIG_DIRNAME / CONFIG_FILENAME
@@ -50,10 +52,10 @@ class AppConfig:
     local_llm_base_url: str = ""
     local_llm_model: str = ""
     # 视觉通道（工单 vision-eyes/01）：免费云端 GLM-4V-Flash（OpenAI 兼容）。
-    # api_key 空 = 视觉功能关闭（抽取行为与现状逐字节一致）
-    vision_base_url: str = ""
+    # api_key 空 = 视觉功能关闭；base_url / model 缺省填官方免费通道
+    vision_base_url: str = DEFAULT_VISION_BASE_URL
     vision_api_key: str = ""
-    vision_model: str = ""
+    vision_model: str = DEFAULT_VISION_MODEL
     # LLM 单价覆盖（工单 llm-cost-control/01 + 缓存拆分计价更新）：None = 用内置
     # 默认参考价；dict 形态 {"deepseek": {"input_cache_hit_per_million": x,
     # "input_cache_miss_per_million": y, "output_per_million": z}, "local": {...}}
@@ -133,16 +135,21 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     local_llm_model = data.get("local_llm_model", "")
     if not isinstance(local_llm_model, str):
         raise ConfigError(f"local_llm_model 必须是字符串：{path}")
-    # 视觉通道（工单 vision-eyes/01）：api_key 空 = 关闭（缺省兼容旧 config）
-    vision_base_url = data.get("vision_base_url", "")
+    # 视觉通道（工单 vision-eyes/01）：api_key 空 = 关闭；旧 config 缺字段或
+    # base/model 为空串时回落官方免费默认值（只填 key 即可用）。
+    vision_base_url = data.get("vision_base_url", DEFAULT_VISION_BASE_URL)
     if not isinstance(vision_base_url, str):
         raise ConfigError(f"vision_base_url 必须是字符串：{path}")
+    if not vision_base_url.strip():
+        vision_base_url = DEFAULT_VISION_BASE_URL
     vision_api_key = data.get("vision_api_key", "")
     if not isinstance(vision_api_key, str):
         raise ConfigError(f"vision_api_key 必须是字符串：{path}")
-    vision_model = data.get("vision_model", "")
+    vision_model = data.get("vision_model", DEFAULT_VISION_MODEL)
     if not isinstance(vision_model, str):
         raise ConfigError(f"vision_model 必须是字符串：{path}")
+    if not vision_model.strip():
+        vision_model = DEFAULT_VISION_MODEL
     # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 None = 内置默认价
     llm_prices = data.get("llm_prices")
     if llm_prices is not None and not isinstance(llm_prices, dict):

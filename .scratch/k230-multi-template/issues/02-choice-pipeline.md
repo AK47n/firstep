@@ -4,7 +4,7 @@
 
 **被谁阻塞：** k230/01（python_artifact 多模板解析）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] webapp /api/generate 接受可选 python_templates 载荷，形状判决归域层（非法 slug / 非法 id / 非多模板模块带选择 → 400 中文）
 - [ ] _write_python_artifacts 按选择渲染：选中模板文件读出 → render_python_artifact → 写 output；缺省 default

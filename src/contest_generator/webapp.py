@@ -53,6 +53,7 @@ from .extraction import (
     extract_image,
     extract_pdf_with_image_notes,
 )
+from .vision import DEFAULT_VISION_BASE_URL, DEFAULT_VISION_MODEL
 from .fix_errors import (
     FixError,
     fix_backup_root,
@@ -670,23 +671,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             config = _require_config(context)
             suffix = tmp_path.suffix.lower()
             if suffix in IMAGE_FILE_SUFFIXES:
-                return {
-                    "text": extract_image(
-                        tmp_path,
-                        vision_base_url=config.vision_base_url,
-                        vision_api_key=config.vision_api_key,
-                        vision_model=config.vision_model,
-                    )
-                }
+                collector = create_llm_observation_collector("vision-describe")
+                result = extract_image(
+                    tmp_path,
+                    vision_base_url=config.vision_base_url,
+                    vision_api_key=config.vision_api_key,
+                    vision_model=config.vision_model,
+                    observation_collector=collector,
+                )
+                context.recent_llm_workflows.add_completed(collector)
+                return {"text": result}
             if suffix == ".pdf":
-                return {
-                    "text": extract_pdf_with_image_notes(
-                        tmp_path,
-                        vision_base_url=config.vision_base_url,
-                        vision_api_key=config.vision_api_key,
-                        vision_model=config.vision_model,
-                    )
-                }
+                collector = create_llm_observation_collector("vision-describe")
+                result = extract_pdf_with_image_notes(
+                    tmp_path,
+                    vision_base_url=config.vision_base_url,
+                    vision_api_key=config.vision_api_key,
+                    vision_model=config.vision_model,
+                    observation_collector=collector,
+                )
+                context.recent_llm_workflows.add_completed(collector)
+                return {"text": result}
             return {"text": extract_file(tmp_path)}
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -1497,14 +1502,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 本地 LLM 端点（工单 local-llm-routing/01-03）：空串 = 本地路由关闭
             "local_llm_base_url": config.local_llm_base_url if config is not None else "",
             "local_llm_model": config.local_llm_model if config is not None else "",
-            # 视觉通道（工单 vision-eyes/01）：空串 = 视觉关闭（api_key 掩码同主 key）
-            "vision_base_url": config.vision_base_url if config is not None else "",
+            # 视觉通道（工单 vision-eyes/01）：base/model 缺省官方免费通道；
+            # api_key 掩码同主 key，空 key = 视觉关闭
+            "vision_base_url": (
+                config.vision_base_url if config is not None else DEFAULT_VISION_BASE_URL
+            ),
             "vision_api_key": (
                 _mask_api_key(config.vision_api_key)
                 if config is not None and config.vision_api_key
                 else ""
             ),
-            "vision_model": config.vision_model if config is not None else "",
+            "vision_model": (
+                config.vision_model if config is not None else DEFAULT_VISION_MODEL
+            ),
             # LLM 单价（工单 llm-cost-control/01）：返回当前生效表（默认 + 覆盖
             # 合并），前端可直接显示；未配置 / 无覆盖 = 内置默认
             "llm_prices": price_tables_to_config(
@@ -1565,13 +1575,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 本地 LLM 端点（工单 local-llm-routing/03）：缺省 / 空串 = 关闭本地路由
             local_llm_base_url=_optional_str(payload, "local_llm_base_url"),
             local_llm_model=_optional_str(payload, "local_llm_model"),
-            # 视觉通道（工单 vision-eyes/01）：缺省 / 空串 = 视觉关闭；key 掩码
-            # 沿用旧值（与 api_key 同款语义）
-            vision_base_url=_optional_str(payload, "vision_base_url"),
+            # 视觉通道（工单 vision-eyes/01）：缺省 / 空串 = 官方免费通道；key 掩码
+            # 沿用旧值（与 api_key 同款语义），空 key = 关闭视觉
+            vision_base_url=(
+                _optional_str(payload, "vision_base_url") or DEFAULT_VISION_BASE_URL
+            ),
             vision_api_key=_masked_optional_key(
                 payload, "vision_api_key", existing.vision_api_key if existing else ""
             ),
-            vision_model=_optional_str(payload, "vision_model"),
+            vision_model=(
+                _optional_str(payload, "vision_model") or DEFAULT_VISION_MODEL
+            ),
             # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 / 空对象 = 恢复内置默认
             llm_prices=_optional_dict(payload, "llm_prices"),
             # 计费时段（工单 01 扩展）：缺省 peak；非法值 400
@@ -1862,8 +1876,14 @@ def _generation_result(summary: GenerationSummary) -> dict:
         # （slug → 输出文件名，工程根）——前端摘要「模块文件」行显示 k230
         # 这类 files 空模块的 main.py；未选任何带声明模块 = 空数组
         "python_artifacts": [
-            {"slug": slug, "output": output}
-            for slug, output in summary.python_artifacts
+            {
+                "slug": artifact.slug,
+                "output": artifact.output,
+                "template_id": artifact.template_id,
+                "template_name": artifact.template_name,
+                "template_description": artifact.template_description,
+            }
+            for artifact in summary.python_artifacts
         ],
         # 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
         # 工具链时非空，前端摘要区展示一行提示

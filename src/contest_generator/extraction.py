@@ -16,6 +16,7 @@ from __future__ import annotations
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Any
 
 from pypdf import PdfReader
 
@@ -87,6 +88,7 @@ def extract_pdf_with_image_notes(
     vision_base_url: str,
     vision_api_key: str,
     vision_model: str,
+    observation_collector: object | None = None,
 ) -> str:
     """PDF 文本抽取 + 嵌入示意图视觉描述（工单 vision-eyes/02）。
 
@@ -100,6 +102,7 @@ def extract_pdf_with_image_notes(
         vision_base_url=vision_base_url,
         vision_api_key=vision_api_key,
         vision_model=vision_model,
+        observation_collector=observation_collector,
     )
     if not notes:
         return text
@@ -112,6 +115,7 @@ def _pdf_image_notes(
     vision_base_url: str,
     vision_api_key: str,
     vision_model: str,
+    observation_collector: object | None = None,
 ) -> str:
     """电子版 PDF 嵌入图 → 图注段（每张一行 `[示意图N：<描述>]`）。
 
@@ -145,12 +149,17 @@ def _pdf_image_notes(
                 skipped += 1
                 continue
             try:
+                describe_kwargs: dict[str, Any] = {
+                    "base_url": vision_base_url,
+                    "api_key": vision_api_key,
+                    "model": vision_model,
+                }
+                if observation_collector is not None:
+                    describe_kwargs["observation_collector"] = observation_collector
                 description = describe_image_cached(
                     data,
                     _image_mime(image.name),
-                    base_url=vision_base_url,
-                    api_key=vision_api_key,
-                    model=vision_model,
+                    **describe_kwargs,
                 )
             except Exception:
                 skipped += 1
@@ -181,6 +190,7 @@ def extract_image(
     vision_base_url: str,
     vision_api_key: str,
     vision_model: str,
+    observation_collector: object | None = None,
 ) -> str:
     """图片文件 → 视觉描述文本（工单 vision-eyes/03）。
 
@@ -198,12 +208,17 @@ def extract_image(
     if not data:
         raise ExtractionError(f"图片文件为空：{file_path}")
     try:
+        describe_kwargs: dict[str, Any] = {
+            "base_url": vision_base_url,
+            "api_key": vision_api_key,
+            "model": vision_model,
+        }
+        if observation_collector is not None:
+            describe_kwargs["observation_collector"] = observation_collector
         description = describe_image_cached(
             data,
             _IMAGE_MIME_BY_SUFFIX.get(file_path.suffix.lower(), "image/png"),
-            base_url=vision_base_url,
-            api_key=vision_api_key,
-            model=vision_model,
+            **describe_kwargs,
         )
     except Exception as exc:
         if isinstance(exc, ExtractionError):
