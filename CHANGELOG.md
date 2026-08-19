@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e1ded663c973d24321b8303707dccdd1f0948a5e -->
+<!-- changelog-auto: last-commit=61669c014c152e5b6be36287b5133d3f319fefad -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 00:15 计费时段选择（高峰期/空闲期）——按所选时段官方价计算与展示
 - 10:55 推荐结果携带题面评分点
 - 11:52 生成产物输出评分点清单
+- 12:50 推荐结果展示评分点并完成前端回归
 
 ## 2026-08-18
 - 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
