@@ -104,7 +104,7 @@ def test_saved_file_is_plain_json(tmp_path):
         # 视觉通道（工单 vision-eyes/01）：api_key 空 = 视觉关闭，base/model 有默认
         "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
         "vision_api_key": "",
-        "vision_model": "glm-4v-flash",
+        "vision_model": "glm-4.6v-flash",
         # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
         "recommend_cache_enabled": True,
         # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
@@ -185,21 +185,21 @@ def test_vision_fields_default_and_roundtrip(tmp_path):
     loaded = load_config(path)
     assert loaded.vision_base_url == "https://open.bigmodel.cn/api/paas/v4"
     assert loaded.vision_api_key == ""
-    assert loaded.vision_model == "glm-4v-flash"
+    assert loaded.vision_model == "glm-4.6v-flash"
 
     save_config(
         AppConfig(
             api_key="sk-test",
             vision_base_url="https://open.bigmodel.cn/api/paas/v4",
             vision_api_key="sk-vision",
-            vision_model="glm-4v-flash",
+            vision_model="glm-4.6v-flash",
         ),
         path,
     )
     loaded = load_config(path)
     assert loaded.vision_base_url == "https://open.bigmodel.cn/api/paas/v4"
     assert loaded.vision_api_key == "sk-vision"
-    assert loaded.vision_model == "glm-4v-flash"
+    assert loaded.vision_model == "glm-4.6v-flash"
 
     path.write_text(
         json.dumps({"api_key": "sk-test", "vision_api_key": 123}),

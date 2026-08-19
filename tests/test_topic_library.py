@@ -28,6 +28,7 @@ from contest_generator.topic_library import (
     TopicError,
     confirm_topics,
     delete_topic,
+    enrich_topic_image_notes,
     list_topics,
     parse_confirm_entries,
     resolve_number,
@@ -447,6 +448,203 @@ def test_resolve_number_loads_programs_and_pdf_name(topic_root, pdf, tmp_path):
 
     assert entry.original_pdf == "真题.pdf"
     assert entry.programs == (str(program),)
+
+
+# ---------------------------------------------------------------------------
+# 存量条目补图注（工单 topic-vision-notes/02）：取题面自动补 + 幂等 + 降级
+# ---------------------------------------------------------------------------
+
+
+def _confirm_figure_topic(topic_root, pdf, problem_text="系统功能如图1所示。"):
+    """入库一个题面引用图（图1）的 2026C 条目，返回该条目。"""
+    return confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2026", number="C", problem_text=problem_text),),
+    )[0]
+
+
+def test_enrich_topic_image_notes_appends_and_is_idempotent(topic_root, pdf, monkeypatch):
+    """补图注：图注段追加题面文末并写回；二次调用幂等（不再跑视觉）。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    calls: list[str] = []
+
+    def fake_notes(path, **kwargs):
+        calls.append(str(path))
+        return "[示意图1：这是功能示意图]"
+
+    monkeypatch.setattr(topic_library, "pdf_image_notes", fake_notes)
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+    assert entry.problem_text == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    # 写回磁盘
+    on_disk = (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8")
+    assert on_disk == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    assert len(calls) == 1
+    # 幂等：已含图注 → 二次调用不再跑视觉
+    topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+    assert len(calls) == 1
+
+
+def test_enrich_topic_image_notes_skips_without_figure_ref(topic_root, pdf, monkeypatch):
+    """题面无图引用（无"图N"）→ 原样返回，不跑视觉不写回。"""
+    from contest_generator import topic_library
+
+    confirm_topics(topic_root, pdf, (DRAFTS[0],))  # "2026C 题面：数字钥匙锁……"
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_library, "pdf_image_notes", lambda *a, **k: calls.append("x") or "[示意图]"
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+    assert entry.problem_text == DRAFTS[0].problem_text
+    assert calls == []
+
+
+def test_enrich_topic_image_notes_skips_when_already_annotated(topic_root, pdf, monkeypatch):
+    """题面已含 [示意图 标注 → 幂等跳过（旧条目补过一次不再补）。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf, "系统功能如图1所示。\n\n[示意图1：旧图注]")
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_library, "pdf_image_notes", lambda *a, **k: calls.append("x") or "[示意图]"
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+    assert entry.problem_text == "系统功能如图1所示。\n\n[示意图1：旧图注]"
+    assert calls == []
+
+
+def test_enrich_topic_image_notes_skips_without_pdf(topic_root, pdf, monkeypatch):
+    """有图引用但原 PDF 不在条目目录 → 原样返回。"""
+    from contest_generator import topic_library
+
+    entry = _confirm_figure_topic(topic_root, pdf)
+    (topic_root / KEY_2026C / entry.original_pdf).unlink()
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_library, "pdf_image_notes", lambda *a, **k: calls.append("x") or "[示意图]"
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+    assert entry.problem_text == "系统功能如图1所示。"
+    assert calls == []
+
+
+def test_enrich_topic_image_notes_degrades_on_vision_failure(topic_root, pdf, monkeypatch):
+    """视觉异常 → 原样返回不写回（视觉是增强不是阻塞）。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_image_notes",
+        lambda *a, **k: (_ for _ in ()).throw(ValueError("网络瞬断")),
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+    assert entry.problem_text == "系统功能如图1所示。"
+    on_disk = (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8")
+    assert on_disk == "系统功能如图1所示。"
+
+
+def test_enrich_topic_image_notes_empty_notes_returns_unchanged(topic_root, pdf, monkeypatch):
+    """图注生成空串（无嵌入图）→ 原样返回不写回。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    monkeypatch.setattr(topic_library, "pdf_image_notes", lambda *a, **k: "")
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+    assert entry.problem_text == "系统功能如图1所示。"
+    on_disk = (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8")
+    assert on_disk == "系统功能如图1所示。"
+
+
+def test_enrich_topic_annotations_prefer_text_over_vision(topic_root, pdf, monkeypatch):
+    """文字标注优先（03）：pdf_figure_annotations 非空 → 写回标注段，不调视觉。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    vision_calls: list[str] = []
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_figure_annotations",
+        lambda *a, **k: "[图1 标注]\n-45° 门锁 60cm\n15°",
+    )
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_image_notes",
+        lambda *a, **k: vision_calls.append("x") or "[示意图1：视觉图注]",
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+
+    assert entry.problem_text == "系统功能如图1所示。\n\n[图1 标注]\n-45° 门锁 60cm\n15°"
+    assert vision_calls == []  # 文字层非空 → 视觉不被调
+
+
+def test_enrich_topic_annotations_falls_back_to_vision_when_text_empty(
+    topic_root, pdf, monkeypatch
+):
+    """文字层为空（扫描件 / 无文本层）→ 视觉兜底（现状路径）。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    vision_calls: list[str] = []
+    monkeypatch.setattr(topic_library, "pdf_figure_annotations", lambda *a, **k: "")
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_image_notes",
+        lambda *a, **k: vision_calls.append("x") or "[示意图1：扫描页描述]",
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+
+    assert entry.problem_text == "系统功能如图1所示。\n\n[示意图1：扫描页描述]"
+    assert len(vision_calls) == 1
+
+
+def test_enrich_topic_annotations_idempotent_on_figure_notes(topic_root, pdf, monkeypatch):
+    """题面已含 [图N 标注 → 幂等跳过（03 幂等判定更新）。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf, "系统功能如图1所示。\n\n[图1 标注]\n60cm")
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_library, "pdf_figure_annotations", lambda *a, **k: calls.append("x") or "[图1 标注]"
+    )
+    monkeypatch.setattr(
+        topic_library, "pdf_image_notes", lambda *a, **k: calls.append("x") or "[示意图]"
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+
+    assert entry.problem_text == "系统功能如图1所示。\n\n[图1 标注]\n60cm"
+    assert calls == []
     assert entry.problem_md == TOPIC_MD_FILENAME
 
 

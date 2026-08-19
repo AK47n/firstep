@@ -112,11 +112,12 @@
   .badge.no-master { background: rgba(139, 148, 158, .15); color: var(--muted); }
   .badge.dep { background: rgba(139, 148, 158, .12); color: var(--muted); }
   .badge.ok { background: var(--ok-dim); color: var(--ok-bright); }
-  .item { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px;
-          margin-bottom: 8px; background: var(--panel-2); }
+  .item { border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px;
+          margin-bottom: 10px; background: var(--panel-2);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 2px 8px rgba(0, 0, 0, .18); }
   .item .head { display: flex; gap: 8px; align-items: center; }
   .item .slug { font-weight: 600; font-family: var(--mono); }
-  .item .reason { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .item .reason { color: var(--muted); font-size: 13px; margin-top: 6px; line-height: 1.7; }
   /* 步骤 6 紧凑清单（工单 step6-ui）：滚动 + 两行布局 + 搜索 */
   .selected-scroll { max-height: 240px; overflow-y: auto; overflow-x: hidden;
                      border: 1px solid var(--border); border-radius: 8px;
@@ -159,8 +160,8 @@
                          padding-top: 6px; color: var(--text); white-space: pre-wrap; }
   .fix-row .fix-source-err { color: var(--danger); }
   /* 推荐卡片（工单 10）：库内命中 chips 可勾选/移除；库外建议灰色 + 需自备 */
-  .rec-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+  .rec-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
           border-radius: 12px; font-size: 13px; font-family: var(--mono);
           border: 1px solid var(--border); }
   .chip .reason { font-family: inherit; margin: 0; }
@@ -171,10 +172,11 @@
   .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
   .chip.out { background: rgba(139, 148, 158, .15); color: var(--muted); cursor: default; }
   .chip.out .reason { color: var(--muted); }
-  .score-panel { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
-                 margin-bottom: 10px; background: var(--panel-2); }
-  .score-panel .title { font-weight: 600; margin-bottom: 6px; color: var(--text); }
-  .score-panel .score-row { font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+  .score-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
+                 margin-bottom: 12px; background: var(--panel-2);
+                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 2px 8px rgba(0, 0, 0, .18); }
+  .score-panel .title { font-weight: 600; margin-bottom: 8px; color: var(--text); }
+  .score-panel .score-row { font-size: 13.5px; line-height: 1.8; white-space: pre-wrap; }
   /* 参考资料选择列表（工单：表格状对齐）：勾选 | 资料 | 平台 | 说明 四列 */
   .ref-pick-head, .ref-pick-row {
     display: grid; grid-template-columns: 28px minmax(0, 1fr) 110px minmax(0, 2fr);
@@ -192,9 +194,11 @@
   .ref-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--border);
                 border-radius: 8px; padding: 4px 10px; background: var(--panel-2); }
   /* 赛题简介（AI 预读，wait-what 效果）：一句话总览 + 功能要点，深底信息框 */
-  .topic-summary { background: var(--info-dim); border: 1px solid var(--info-border); border-radius: 6px;
-                   padding: 10px 14px; font-size: 13px; white-space: pre-line; color: var(--text); }
-  .warn-box { border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; }
+  .topic-summary { background: var(--info-dim); border: 1px solid var(--info-border); border-radius: 10px;
+                   padding: 14px 18px; font-size: 13.5px; line-height: 1.8; white-space: pre-line;
+                   color: var(--text);
+                   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 2px 10px rgba(0, 0, 0, .2); }
+  .warn-box { border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; font-size: 13px; line-height: 1.7; }
   .warn-box.missing { background: var(--danger-dim); color: var(--danger); }
   .warn-box.unverified { background: var(--warn-dim); color: var(--warn); }
   .warn-box.hardware_bound { background: var(--info-dim); color: var(--info); }
@@ -239,8 +243,9 @@
   #tab-pdf td { overflow-wrap: break-word; }
   #tab-pdf td:nth-child(4) { white-space: nowrap; }
   pre.result { background: var(--code-bg); color: #e2e8f0; border: 1px solid var(--border);
-               border-radius: 6px; padding: 12px; font-family: var(--mono); font-size: 12px;
-               overflow: auto; max-height: 320px; }
+               border-radius: 10px; padding: 14px 16px; font-family: var(--mono); font-size: 12px;
+               line-height: 1.7; overflow: auto; max-height: 320px;
+               box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03); }
   .file-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; margin-bottom: 8px; }
   .file-row textarea { min-height: 120px; }
   /* ---- 赛题库拆条校对表（工单 05）：年份 / 题号 / 题面三字段 + 删条目 ---- */
@@ -1031,10 +1036,10 @@
       <h2>视觉通道（可选）</h2>
       <div class="row">
         <div style="flex:1"><label>视觉 base_url（留空 = 默认智谱）</label><input type="text" id="set-vision-base-url" placeholder="https://open.bigmodel.cn/api/paas/v4"></div>
-        <div style="flex:1"><label>视觉模型（留空 = glm-4v-flash）</label><input type="text" id="set-vision-model" placeholder="glm-4v-flash"></div>
+        <div style="flex:1"><label>视觉模型（留空 = glm-4.6v-flash）</label><input type="text" id="set-vision-model" placeholder="glm-4.6v-flash"></div>
       </div>
-      <div style="flex:1"><label>视觉 API key（留空 = 视觉关闭；掩码保持不变）</label><input type="text" id="set-vision-api-key" placeholder="智谱开放平台免费 key（GLM-4V-Flash）" autocomplete="off"></div>
-      <div class="muted">免费云端识图（GLM-4V-Flash）：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别——AI 简介 / 推荐 / 骨架都能"看到"图的内容。key 在<a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a>免费获取；不配置 = 视觉功能关闭，其余功能不受影响。</div>
+      <div style="flex:1"><label>视觉 API key（留空 = 视觉关闭；掩码保持不变）</label><input type="text" id="set-vision-api-key" placeholder="智谱开放平台免费 key（GLM-4.6V-Flash）" autocomplete="off"></div>
+      <div class="muted">免费云端识图（GLM-4.6V-Flash）：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别——AI 简介 / 推荐 / 骨架都能"看到"图的内容。key 在<a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a>免费获取；不配置 = 视觉功能关闭，其余功能不受影响。</div>
     </div>
 
     <div class="card">

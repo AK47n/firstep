@@ -1,8 +1,9 @@
-"""视觉通道：GLM-4V-Flash 免费云端识图（工单 vision-eyes/01）。
+"""视觉通道：GLM-4.6V-Flash 免费云端识图（工单 vision-eyes/01 升级默认模型）。
 
 DeepSeek 纯文本看不见图；本模块给题面示意图 / 上传图片提供「图 → 中文
 描述」通道：OpenAI 兼容 chat/completions（content = text + image_url
-base64 data URL），默认模型 glm-4v-flash（智谱官方免费多模态 API）。
+base64 data URL），默认模型 glm-4.6v-flash（智谱官方免费多模态 API，GLM-4.6V
+免费版：128K 上下文 / 可开关思考模式 / 通用 OCR 与复杂图表识别，2026-08 默认升级）。
 
 网络层照 llm.py 先例：标准库 urllib（零第三方依赖）+ 可注入传输接缝
 （测试假件）；网络类错误指数退避重试（3 次 1/2/4s，429 限速不重试——
@@ -27,7 +28,7 @@ from typing import Any, Protocol
 # 智谱开放平台 OpenAI 兼容端点（缺省值；设置页可覆盖）
 DEFAULT_VISION_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 # 官方免费多模态模型（无 API 费用；免费层有限速，日常 2-10 张/题够用）
-DEFAULT_VISION_MODEL = "glm-4v-flash"
+DEFAULT_VISION_MODEL = "glm-4.6v-flash"
 
 # 网络重试参数（照 llm.py 网络退避先例的简化版）
 VISION_NETWORK_RETRIES = 3
@@ -143,7 +144,7 @@ def describe_image(
     """
     if not vision_configured(api_key):
         raise VisionNotConfiguredError(
-            "视觉通道未配置：请到设置页填写视觉 API key（免费 GLM-4V-Flash）"
+            "视觉通道未配置：请到设置页填写视觉 API key（免费 GLM-4.6V-Flash）"
         )
     base_url = base_url.strip() or DEFAULT_VISION_BASE_URL
     model = model.strip() or DEFAULT_VISION_MODEL
