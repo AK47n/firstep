@@ -868,6 +868,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     clarifications,
                     emit=_CacheWriterEmitter(emit, _write_cache),
                     max_rounds=max_rounds,
+                    platform=platform or "",
                 )
             finally:
                 context.recent_llm_workflows.add_completed(collector)
