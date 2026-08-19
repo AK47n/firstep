@@ -1493,7 +1493,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _current_config(context)
         tables = price_tables_from_config(
             config.llm_prices if config else None,
-            (config.llm_price_period if config else "peak"),
+            (config.llm_price_period if config else "off_peak"),
         )
         return attach_cost_estimates(context.recent_llm_workflows.to_dict(), tables)
 
@@ -1543,15 +1543,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "llm_prices": price_tables_to_config(
                 price_tables_from_config(
                     config.llm_prices if config else None,
-                    (config.llm_price_period if config else "peak"),
+                    (config.llm_price_period if config else "off_peak"),
                 )
             ),
             # 用户显式覆盖原文（None = 无覆盖）：前端据此区分「留空 = 用时段
             # 基准价」与「填值 = 自定义覆盖」
             "llm_prices_override": config.llm_prices if config is not None else None,
-            # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲
+            # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，缺省 off_peak
             "llm_price_period": (
-                config.llm_price_period if config is not None else "peak"
+                config.llm_price_period if config is not None else "off_peak"
             ),
             # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：单源
             # = llm_pricing.DEEPSEEK_FLASH_PRICE_REFERENCE，设置页折叠面板渲染
@@ -1611,9 +1611,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ),
             # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 / 空对象 = 恢复内置默认
             llm_prices=_optional_dict(payload, "llm_prices"),
-            # 计费时段（工单 01 扩展）：缺省 peak；非法值 400
+            # 计费时段（工单 01 扩展）：缺省 off_peak；非法值 400
             llm_price_period=_optional_choice(
-                payload, "llm_price_period", default="peak", choices=("peak", "off_peak")
+                payload, "llm_price_period", default="off_peak", choices=("peak", "off_peak")
             ),
             # 推荐缓存开关（工单 llm-cost-control/02）：缺省开；非布尔 400
             recommend_cache_enabled=_optional_bool(
