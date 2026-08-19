@@ -125,7 +125,7 @@ from .reference_library import (
     resolve_entry_file,
     search_references,
 )
-from .selection import parse_instances, resolve_selection, run_recommendation
+from .selection import parse_instances, parse_score_points, resolve_selection, run_recommendation
 from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -997,6 +997,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # generator.resolve_python_template_choices（PythonArtifactError →
         # 400 中文），缺省 = 全默认模板（旧行为逐字节不变）。
         python_templates = payload.get("python_templates")
+        score_points = parse_score_points(payload.get("score_points"))
         config = _require_config(context)
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
@@ -1022,6 +1023,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             bindings=bindings,
             instances=instances,
             python_templates=python_templates,
+            score_points=score_points,
         )
         return _generation_result(summary)
 
@@ -1849,7 +1851,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
 def _generation_result(summary: GenerationSummary) -> dict:
     """生成结果摘要 → JSON（推导逻辑在核心 describe_generation，这里只做形态转换）。"""
-    return {
+    result = {
         "output_dir": str(summary.output_dir),
         "structure": list(summary.structure),
         "include_dirs": list(summary.include_dirs),
@@ -1867,6 +1869,9 @@ def _generation_result(summary: GenerationSummary) -> dict:
         # 工具链时非空，前端摘要区展示一行提示
         "build_hint": summary.build_hint,
     }
+    if summary.score_points:
+        result["score_points"] = [point.to_dict() for point in summary.score_points]
+    return result
 
 
 app = create_app()

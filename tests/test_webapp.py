@@ -63,6 +63,7 @@ from contest_generator.selection import (
     ModuleSelection,
     OutOfLibrarySuggestion,
     ReferenceSuggestion,
+    ScorePoint,
     resolve_selection,
 )
 from contest_generator.reference_library import add_reference
@@ -525,6 +526,47 @@ def _fix_done(client, payload) -> dict:
     done = [data for kind, data in events if kind == EVENT_DONE]
     assert done, f"流未以 done 结束：{events}"
     return done[0]
+
+
+def test_generation_result_includes_score_points_when_present(tmp_path):
+    """生成结果摘要 JSON 使用 GenerationSummary 上同一份评分点；空清单不落键。"""
+    from contest_generator.generator import GenerationSummary
+    from contest_generator.webapp import _generation_result
+
+    summary = GenerationSummary(
+        output_dir=tmp_path / "out",
+        structure=("main.c",),
+        include_dirs=("modules/dht11/inc",),
+        modules=(("dht11", ("code/dht11.c",)),),
+        score_points=(ScorePoint("B1", "basic", "完成测距", 10.0, (2,)),),
+    )
+
+    assert _generation_result(summary)["score_points"] == [
+        {
+            "id": "B1",
+            "part": "basic",
+            "description": "完成测距",
+            "score": 10.0,
+            "sentence_refs": [2],
+        }
+    ]
+
+
+def test_generation_result_omits_score_points_when_absent(tmp_path):
+    """旧生成摘要没有评分点字段时保持旧载荷形状。"""
+    from contest_generator.generator import GenerationSummary
+    from contest_generator.webapp import _generation_result
+
+    data = _generation_result(
+        GenerationSummary(
+            output_dir=tmp_path / "out",
+            structure=("main.c",),
+            include_dirs=(),
+            modules=(),
+        )
+    )
+
+    assert "score_points" not in data
 
 
 def test_fix_errors_requires_error_text(client):

@@ -651,6 +651,7 @@
         <div class="item">输出目录：<span id="res-dir" class="slug"></span></div>
         <div class="item">include path：<span id="res-includes" class="slug"></span></div>
         <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
+        <div class="item hidden" id="res-score-points" style="white-space:pre-line"></div>
         <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
              工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
         <div class="item hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
@@ -1139,6 +1140,7 @@ let selectedSlugs = [];           // 当前选择的模块 slug（含用户增�
 let expanded = [];                // 展开后的模块 manifest（含依赖）
 let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
 let warnings = [];                // 平台警告
+let scorePoints = [];              // 推荐解析出的题面评分点（只读增强信息）
 let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
 let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
 
@@ -1243,6 +1245,7 @@ function clearTopicSummary() {
   $("topic-summary-box").classList.add("hidden");
   $("topic-summary-box").textContent = "";
   $("topic-summary-msg").textContent = "";
+  scorePoints = [];  // 题面变更后评分点失效，避免旧题验收清单串进生成 / 交接
 }
 
 $("btn-topic-summary").addEventListener("click", async () => {
@@ -1315,6 +1318,7 @@ function renderRecommendResult(data, autoAdd = true) {
   }
   expanded = []; warnings = [];
   renderSelected(); renderWarnings();
+  scorePoints = data.score_points || [];
   lastRecommend = data;
   const box = $("rec-list");
   const requirements = data.requirements || [];
@@ -1427,6 +1431,7 @@ function stopRecProgress() {   // 流未起 / 断线路径：停表 + 收起面�
 
 async function startRecommend(problem) {
   recProblem = problem;   // 补问回答重启时仍走同一实例（同一生命周期语义）
+  scorePoints = [];       // 新推荐生命周期开始，避免旧题评分点串进生成 / 交接
   $("recommend-msg").textContent = "";
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
@@ -2644,10 +2649,13 @@ function formatResModules(modules, pythonArtifacts) {
   const pyBySlug = new Map((pythonArtifacts || []).map((a) => [a.slug, a.output]));
   // 模板名回显（工单 k230-multi-template/04）：多模板模块的摘要行附当前模板名
   const pyTemplateName = (slug) => {
-    const m = (expanded || []).find((x) => x.slug === slug);
+    // node:test 直抽纯函数时没有页面全局状态；缺省按旧摘要格式处理。
+    const expandedList = typeof expanded === "undefined" ? [] : (expanded || []);
+    const templates = typeof pythonTemplates === "undefined" ? {} : pythonTemplates;
+    const m = expandedList.find((x) => x.slug === slug);
     const pa = m && m.python_artifact;
     if (!pa || !pa.templates || pa.templates.length < 2) return "";
-    const id = pythonTemplates[slug] || pa.default;
+    const id = templates[slug] || pa.default;
     const t = pa.templates.find((x) => x.id === id);
     return t && (t.name || t.id) ? "（模板：" + t.name + "）" : "";
   };
@@ -2698,10 +2706,14 @@ $("btn-generate").addEventListener("click", async () => {
     // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
     // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
     if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;
+    if (scorePoints.length) payload.score_points = scorePoints;
     const data = await apiPost("/api/generate", payload);
     $("res-dir").textContent = data.output_dir;
     $("res-includes").textContent = data.include_dirs.join("；");
     $("res-modules").textContent = formatResModules(data.modules, data.python_artifacts);
+    $("res-score-points").textContent = (data.score_points && data.score_points.length)
+      ? "评分点：\n" + formatScorePoints(data.score_points) : "";
+    $("res-score-points").classList.toggle("hidden", !(data.score_points && data.score_points.length));
     // 构建脚本提示（工单 mspm0-build-makefiles/01）：非空时展示，空则隐藏
     $("res-build-hint").textContent = data.build_hint || "";
     $("res-build-hint").classList.toggle("hidden", !data.build_hint);
@@ -2733,6 +2745,18 @@ $("btn-generate").addEventListener("click", async () => {
 // 精打磨在下一个会话完成）。交接永远在最后一步：修复中心跑完后，把编译/
 // 修复状态一起装进提示词再交给下一个会话。
 // ---------------------------------------------------------------------------
+function formatScorePoints(points) {
+  if (!points || !points.length) return "（无结构化评分点）";
+  const partLabel = (part) => part === "basic" ? "基础" : part === "development" ? "发挥" : "未知";
+  const scoreText = (score) => (typeof score === "number" && Number.isFinite(score)) ? score + " 分" : "未标分";
+  const refsText = (refs) => (refs && refs.length) ? "句子 " + refs.join("、") : "未关联原文";
+  return points.map((p, i) => {
+    const id = p.id || ("score-" + (i + 1));
+    return "- " + id + "｜" + partLabel(p.part) + "｜" + scoreText(p.score)
+      + "｜" + refsText(p.sentence_refs || []) + "｜" + (p.description || "");
+  }).join("\n");
+}
+
 function handoffPlatformLabel() {
   const pf = (state.platforms || []).find((p) => p.id === chosenPlatform);
   return pf ? pf.name : (chosenPlatform || "未选择");
@@ -2807,6 +2831,9 @@ $("btn-handoff").addEventListener("click", async () => {
     const refs = await handoffReferenceLines();
     const warns = handoffWarnings();
     const pins = handoffPinLines();
+    const hasScores = scorePoints.length > 0;
+    const scores = formatScorePoints(scorePoints);
+    const scoreSection = hasScores ? ["", "## 五、评分点验收清单", "", scores] : [];
     const lines = [
       "# 电赛工程交接提示词（Handoff）",
       "",
@@ -2827,6 +2854,7 @@ $("btn-handoff").addEventListener("click", async () => {
       "## 四、模块清单",
       "",
       handoffModuleLines(),
+      ...scoreSection,
       "",
       "## 五、平台警告",
       "",

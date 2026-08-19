@@ -36,6 +36,7 @@ from .manifest import (
     ManifestSummary,
     ModuleManifest,
     PythonArtifactSpec,
+    PythonArtifactTemplate,
     build_manifest_summaries,
 )
 from .master_store import master_project_dir
@@ -54,6 +55,7 @@ from .selection import (
     REFERENCE_SOURCE_MANUAL,
     ModuleInstance,
     ReferenceSuggestion,
+    ScorePoint,
     associated_references,
     filter_manifests_by_platform,
     manual_reference_admission,
@@ -448,6 +450,7 @@ class GenerationSummary:
     modules: tuple[tuple[str, tuple[str, ...]], ...]  # (slug, 该平台文件列表)
     build_hint: str = ""
     python_artifacts: tuple[tuple[str, str], ...] = ()
+    score_points: tuple[ScorePoint, ...] = ()
 
 
 def describe_generation(
@@ -456,6 +459,7 @@ def describe_generation(
     platform: str,
     include_dirs: Sequence[str],
     build_hint: str = "",
+    score_points: Sequence[ScorePoint] | None = None,
 ) -> GenerationSummary:
     """生成完成后的只读摘要：结构清单直接读输出目录；include 目录消费
     _copy_module_files 的实际复制结果（同一来源，不再从 manifest 二次推导
@@ -483,6 +487,7 @@ def describe_generation(
         modules=tuple(modules),
         build_hint=build_hint,
         python_artifacts=python_artifacts,
+        score_points=tuple(score_points or ()),
     )
 
 
@@ -499,6 +504,7 @@ def generate_project(
     bindings: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     python_templates: Mapping[str, str] | None = None,
+    score_points: Sequence[ScorePoint] | None = None,
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -542,9 +548,10 @@ def generate_project(
         bindings=bindings,
         instances=instances,
         template_choices=template_choices,
+        score_points=score_points,
     )
     return describe_generation(
-        result_dir, resolved.manifests, platform, include_dirs, build_hint
+        result_dir, resolved.manifests, platform, include_dirs, build_hint, score_points
     )
 
 
@@ -799,6 +806,7 @@ def generate(
     bindings: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     template_choices: Mapping[str, str] | None = None,
+    score_points: Sequence[ScorePoint] | None = None,
 ) -> tuple[Path, tuple[str, ...], str]:
     """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径,
     build_hint）。
@@ -949,6 +957,7 @@ def generate(
                 manifests,
                 resolved_bindings=resolved_bindings,
                 instance_plans=instance_plans,
+                score_points=score_points,
             ),
             encoding="utf-8",
         )
@@ -1625,7 +1634,7 @@ def _write_python_artifacts(
     大小写不敏感的同名副产物）→ PythonArtifactError 大声失败（generate 的
     try 块 rmtree 兜底不留半成品，不静默覆盖）。.py 不注册进工程文件
     （patcher 只吃 copied_files，不进 .uvprojx/.cproject 树）。"""
-    specs: list[tuple[ModuleManifest, PythonArtifactSpec]] = []
+    specs: list[tuple[ModuleManifest, PythonArtifactTemplate]] = []
     seen_outputs: dict[str, str] = {}
     for manifest in manifests:
         spec = manifest.python_artifact
