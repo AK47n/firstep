@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8f27794d73ab53e4065ba92fd4a88b1fb86eb0d6 -->
+<!-- changelog-auto: last-commit=be59ab6601b9c81ce8996bd8bd259d115c340c7f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 22:08 赛题条目补图注（取题面自动补矢量图标注布局，工单 topic-vision-notes/02）
 - 22:42 赛题条目补图注
 - 22:46 赛题条目补图注
+- 22:48 视觉通道升级与历史赛题图注闭环（GLM-4.6V-Flash 默认 / key 掩码统一 / 拆条视觉 / 存量补图注两级化——矢量图标注布局优先、视觉兜底，工单 topic-vision-notes/01-03）
 
 ## 2026-08-18
 - 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
