@@ -101,6 +101,7 @@ from .llm_recent_workflows import LLMRecentWorkflowStore, attach_cost_estimates
 from .recommend_cache import (
     cache_key,
     cache_recommend,
+    library_fingerprint,
     load_recommend,
     parameter_warnings,
     recommend_cache_path,
@@ -833,6 +834,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         clarify_maps = [{"question": q, "answer": a} for q, a in clarifications]
         # 收敛轮数上限（工单 recommend-speedup-v2/01）：设置项透传，缺省 4
         max_rounds = config.recommend_max_rounds
+        # 模块库指纹（工单 recommend-cache-fingerprint/01）：模型看到的摘要行
+        # 排序 hash——库变（模块增删/简介/能力/多实例标注）缓存失效走真实推荐；
+        # 装配点已产出 manifest_summaries，写缓存与校验同源一次计算两用
+        lib_fp = library_fingerprint(topic.manifest_summaries)
 
         def _write_cache(done_data: dict) -> None:
             """真实推荐 done 载荷落缓存（尽力而为：写失败静默旁路）。"""
@@ -847,6 +852,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 reference_ids=reference_ids,
                 clarify_hist=clarify_maps,
                 qa_text=qa_text or "",
+                library_fingerprint=lib_fp,
             )
 
         def run(emit: SseEmitter) -> None:
@@ -863,6 +869,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                             problem_text=problem_text,
                             platform=platform or "",
                             qa_text=qa_text or "",
+                            library_fingerprint=lib_fp,
                         )
                         if ok:
                             warns = parameter_warnings(

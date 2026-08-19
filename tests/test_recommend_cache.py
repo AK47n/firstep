@@ -11,6 +11,7 @@ from contest_generator.recommend_cache import (
     cache_key,
     cache_recommend,
     clarify_fingerprint,
+    library_fingerprint,
     load_recommend,
     parameter_warnings,
     problem_fingerprint,
@@ -144,6 +145,96 @@ def test_qa_fingerprint_invalidates_cache_on_change():
         qa_text="问：尺寸？答：30cm。",
     )
     assert not ok
+
+
+# ---------------------------------------------------------------------------
+# 模块库指纹（工单 recommend-cache-fingerprint/01）：库变缓存失效——
+# 指纹 = ManifestSummary 摘要行（to_line）排序 hash，模型看到什么指纹什么
+# ---------------------------------------------------------------------------
+
+
+def _summary(slug: str, description: str, *, multi: bool = False):
+    from contest_generator.manifest import ManifestSummary, MultiInstanceSpec
+
+    return ManifestSummary(
+        slug=slug,
+        description=description,
+        kits=(),
+        dependencies=(),
+        multi_instance=MultiInstanceSpec(max=8, variant="color") if multi else None,
+    )
+
+
+def test_library_fingerprint_sensitive_to_content_and_order_independent():
+    """指纹对摘要内容敏感（description / 增删模块 / 多实例标注），顺序无关。"""
+    a = _summary("led", "LED 指示灯驱动")
+    b = _summary("oled", "OLED 显示驱动")
+    assert library_fingerprint([a, b]) == library_fingerprint([b, a])  # 顺序无关
+    assert library_fingerprint([a, b]) != library_fingerprint([a])  # 删模块 → 变
+    assert library_fingerprint([a, b]) != library_fingerprint(
+        [_summary("led", "LED 指示灯驱动（改版）"), b]
+    )  # 改简介 → 变
+    assert library_fingerprint([a, b]) != library_fingerprint(
+        [_summary("led", "LED 指示灯驱动", multi=True), b]
+    )  # 多实例标注 → 变
+    # 空库 = 稳定指纹（不抛）
+    assert library_fingerprint([]) == library_fingerprint([])
+
+
+def test_validate_recommend_library_fingerprint_gates_cache():
+    """库指纹校验：匹配 = 命中；不匹配 = 失效；旧缓存无字段 = 保守失效；
+    传入空（兼容调用方）= 跳过。"""
+    fp = library_fingerprint([_summary("led", "LED 指示灯驱动")])
+    cached = _cached_dict(library_sha256=fp)
+
+    ok, _ = validate_recommend(
+        cached, topic_key="2026C", problem_text=_PROBLEM, platform="stm32",
+        library_fingerprint=fp,
+    )
+    assert ok
+
+    ok, reason = validate_recommend(
+        cached, topic_key="2026C", problem_text=_PROBLEM, platform="stm32",
+        library_fingerprint=library_fingerprint([_summary("led", "LED 改版")]),
+    )
+    assert not ok
+    assert "模块库" in reason
+
+    # 旧缓存无 library_sha256：无法证明匹配当前库 → 保守失效（宁可重推，
+    # 用错结果成本 > 重推成本——与 Q&A 先例不同，库永远存在）
+    legacy = _cached_dict()
+    assert "library_sha256" not in legacy
+    ok, reason = validate_recommend(
+        legacy, topic_key="2026C", problem_text=_PROBLEM, platform="stm32",
+        library_fingerprint=fp,
+    )
+    assert not ok
+    assert "模块库" in reason
+
+    # 调用方不传指纹（兼容既有调用）→ 跳过校验
+    ok, _ = validate_recommend(
+        legacy, topic_key="2026C", problem_text=_PROBLEM, platform="stm32"
+    )
+    assert ok
+
+
+def test_cache_recommend_stores_library_fingerprint(tmp_path):
+    """写缓存落 library_sha256 字段（读回校验用）。"""
+    from contest_generator.manifest import ManifestSummary
+
+    path = tmp_path / "recommend_2026C.json"
+    fp = library_fingerprint([ManifestSummary("led", "LED 指示灯驱动")])
+    cache_recommend(
+        path,
+        _DONE,
+        topic_key="2026C",
+        problem_text=_PROBLEM,
+        platform="stm32",
+        library_fingerprint=fp,
+    )
+
+    payload = load_recommend(path)
+    assert payload["library_sha256"] == fp
 
 
 def test_parameter_warnings_on_reference_and_clarify_drift():
