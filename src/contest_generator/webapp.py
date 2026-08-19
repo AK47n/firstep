@@ -862,14 +862,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                             )
                             _emit_cached_recommend(emit, cached, warns)
                             return
-                run_recommendation(
-                    topic,
-                    _llm(context, budget, collector),
-                    clarifications,
-                    emit=_CacheWriterEmitter(emit, _write_cache),
-                    max_rounds=max_rounds,
-                    platform=platform or "",
-                )
+                with bind_llm_telemetry(collector, emit.progress):
+                    run_recommendation(
+                        topic,
+                        _llm(context, budget, collector),
+                        clarifications,
+                        emit=_CacheWriterEmitter(emit, _write_cache),
+                        max_rounds=max_rounds,
+                        platform=platform or "",
+                    )
             finally:
                 context.recent_llm_workflows.add_completed(collector)
 
@@ -1420,7 +1421,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         def run(emit: SseEmitter) -> None:
             try:
                 projects = [scan_project(Path(d)) for d in project_dirs]
-                report = distill_master(llm, platform, projects, emit.progress)
+                with bind_llm_telemetry(collector, emit.progress):
+                    report = distill_master(llm, platform, projects, emit.progress)
                 emit.done(report.to_dict())
             finally:
                 context.recent_llm_workflows.add_completed(collector)
