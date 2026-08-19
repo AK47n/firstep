@@ -64,8 +64,9 @@ class AppConfig:
     # （展示层旁路）
     llm_prices: dict | None = None
     # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，决定未覆盖项的
-    # 基准价（官方该时段价）；覆盖项（llm_prices）优先。缺省 peak
-    llm_price_period: str = "peak"
+    # 基准价（官方该时段价）；覆盖项（llm_prices）优先。缺省 off_peak（2026-08
+    # 起默认低谷——本地工具夜间/业余使用为主，基准价按官方空闲档计）
+    llm_price_period: str = "off_peak"
     # 推荐缓存开关（工单 llm-cost-control/02）：默认开——同题重跑推荐命中
     # 缓存直出 done 载荷（省最贵的推荐段 LLM 调用）；关闭 = 每次真实推荐
     recommend_cache_enabled: bool = True
@@ -167,7 +168,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     ):
         raise ConfigError(f"recommend_max_rounds 必须是 2-4 的整数：{path}")
     # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，缺省 peak
-    llm_price_period = data.get("llm_price_period", "peak")
+    llm_price_period = data.get("llm_price_period", "off_peak")
     if llm_price_period not in ("peak", "off_peak"):
         raise ConfigError(f"llm_price_period 必须是 peak 或 off_peak：{path}")
 

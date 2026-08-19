@@ -3225,8 +3225,8 @@ def test_settings_llm_prices_roundtrip_and_defaults(client, context):
         "input_cache_miss_per_million": 3.0,
         "output_per_million": 9.0,
     }
-    # 计费时段（工单 01 扩展）：缺省 peak；override 原文带出（前端区分留空/覆盖）
-    assert saved["llm_price_period"] == "peak"
+    # 计费时段（工单 01 扩展）：缺省 off_peak（2026-08 起默认低谷）；override 原文带出（前端区分留空/覆盖）
+    assert saved["llm_price_period"] == "off_peak"
     assert saved["llm_prices_override"] == custom["llm_prices"]
     # local 未覆盖仍零成本
     assert saved["llm_prices"]["local"]["input_cache_miss_per_million"] == 0.0
@@ -3250,10 +3250,10 @@ def test_settings_llm_prices_roundtrip_and_defaults(client, context):
 
 
 def test_settings_llm_price_period_roundtrip(client, context):
-    """计费时段（工单 01 扩展）：PUT off_peak → GET 带出 + 生效表按空闲基准；
-    非法值 400；空覆盖时 override = None。"""
+    """计费时段（工单 01 扩展）：缺省 off_peak；PUT off_peak → GET 带出 +
+    生效表按空闲基准；非法值 400；空覆盖时 override = None。"""
     saved = client.get("/api/settings").json()
-    assert saved["llm_price_period"] == "peak"
+    assert saved["llm_price_period"] == "off_peak"
     assert saved["llm_prices_override"] is None
 
     base = {

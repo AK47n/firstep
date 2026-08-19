@@ -109,8 +109,8 @@ def test_saved_file_is_plain_json(tmp_path):
         "recommend_cache_enabled": True,
         # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
         "recommend_max_rounds": 4,
-        # 计费时段（工单 01 扩展）：缺省 peak
-        "llm_price_period": "peak",
+        # 计费时段（工单 01 扩展）：缺省 off_peak（2026-08 起默认低谷）
+        "llm_price_period": "off_peak",
     }
 
 
@@ -210,13 +210,14 @@ def test_vision_fields_default_and_roundtrip(tmp_path):
 
 
 def test_llm_price_period_default_and_roundtrip(tmp_path):
-    """计费时段（工单 01 扩展）：缺省 peak；off_peak 回写；非法值大声失败。"""
+    """计费时段（工单 01 扩展）：缺省 off_peak（2026-08 起默认低谷）；peak
+    回写；非法值大声失败。"""
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
-    assert load_config(path).llm_price_period == "peak"
-
-    save_config(AppConfig(api_key="sk-test", llm_price_period="off_peak"), path)
     assert load_config(path).llm_price_period == "off_peak"
+
+    save_config(AppConfig(api_key="sk-test", llm_price_period="peak"), path)
+    assert load_config(path).llm_price_period == "peak"
 
     path.write_text(
         json.dumps({"api_key": "sk-test", "llm_price_period": "evening"}),
