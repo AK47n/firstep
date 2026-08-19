@@ -558,6 +558,7 @@
       </div>
       <div id="rec-progress" class="distill-progress hidden" style="margin-top:10px">
         <div id="rec-prog-text" style="margin-bottom:6px"></div>
+        <div id="rec-llm-telemetry" class="llm-telemetry hidden" style="margin-bottom:6px"></div>
         <div class="prog-bar hidden" id="rec-bar"><div id="rec-bar-fill"></div></div>
         <div class="prog-timers">
           <span id="rec-timer-total">总用时 00:00</span>
@@ -908,6 +909,7 @@
             <span id="prog-badge" class="prog-badge hidden"></span>
           </div>
           <div class="prog-bar hidden" id="prog-bar"><div id="prog-bar-fill"></div></div>
+          <div id="prog-llm-telemetry" class="llm-telemetry hidden" style="margin-top:6px"></div>
           <div class="prog-timers">
             <span id="prog-timer-total">总用时 00:00</span>
             <span id="prog-timer-call">当前调用已等待 00:00</span>
@@ -1425,6 +1427,13 @@ const recPanel = makeProgressPanel({
       $("rec-bar").classList.remove("hidden");
       $("rec-bar-fill").style.width = "100%";
     },
+    llm_telemetry: (ev) => {
+      // 每次 LLM 调用完成的观测快照（照修复流程 telemetry 先例）：调用数 /
+      // provider 分流 / 最新 operation / 耗时——模型调用期间"AI 正在干什么"
+      const el = $("rec-llm-telemetry");
+      el.textContent = formatLLMTelemetry(ev);
+      el.classList.remove("hidden");
+    },
     done: (ev) => {
       recPanel.finish();
       $("rec-progress").classList.add("hidden");
@@ -1450,6 +1459,10 @@ const recPanel = makeProgressPanel({
 function startRecProgress() {
   recPanel.start();
   $("rec-progress").classList.remove("hidden");
+  $("rec-prog-text").textContent = "";        // 新生命周期：旧进度文本 / telemetry 清掉
+  const telemetryEl = $("rec-llm-telemetry");
+  telemetryEl.classList.add("hidden");
+  telemetryEl.textContent = "";
   $("rec-bar").classList.add("hidden");   // 首条 round 事件带 round_total 后再显示条
   $("rec-bar-fill").style.width = "0";    // 补问回答重启 = 新生命周期，条从第 1 轮重新开始
 }
@@ -4225,6 +4238,13 @@ const distPanel = makeProgressPanel({
       addLogLine("", (PHASE_LABEL[data.phase] || data.phase) + " 阶段完成，共 "
         + (data.file_count || 0) + " 份");
     },
+    llm_telemetry: (data) => {
+      // 每次 LLM 调用完成的观测快照（照修复 / 推荐流程先例）：调用数 /
+      // provider 分流 / 最新 operation / 耗时——批次间"AI 正在干什么"
+      const el = $("prog-llm-telemetry");
+      el.textContent = formatLLMTelemetry(data);
+      el.classList.remove("hidden");
+    },
     done: (data) => finishProgress(data),   // data = 完整提炼报告（与现状响应同构，原样渲染）
     error: (data) => failProgress(data.message || "提炼失败"),
   },
@@ -4408,6 +4428,9 @@ function startProgress() {
   $("prog-done").classList.add("hidden");
   $("prog-body").classList.remove("hidden");
   $("prog-log").innerHTML = "";
+  const telemetryEl = $("prog-llm-telemetry");   // 新生命周期：旧 telemetry 清掉
+  telemetryEl.classList.add("hidden");
+  telemetryEl.textContent = "";
   $("prog-log").classList.remove("hidden");
   $("prog-log-caret").textContent = "▾";
   $("prog-log-count").textContent = "";
