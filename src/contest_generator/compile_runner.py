@@ -120,11 +120,24 @@ def find_uv4(override: str = "") -> Path | None:
 
 
 def find_make(override: str = "") -> Path | None:
-    """探测 gmake：配置覆盖 > PATH（gmake 优先，make 兜底）。找不到返回 None。"""
+    """探测 gmake：配置覆盖 > CCS 自带（C:/ti/ccs*/ccs/utils/bin/gmake.exe，
+    照 find_uv4 常见路径先例）> PATH（gmake > make > mingw32-make 兜底）。
+
+    Windows 上 CCS 自带 gmake 但不在 PATH、MinGW 的 make 叫 mingw32-make——
+    都纳入探测（实测本机 C:/ti/ccs2050 自带 + C:/mingw64 均有，之前漏探显示 ❌）。
+    找不到返回 None。
+    """
     if override.strip():
         candidate = Path(override.strip())
         return candidate if candidate.is_file() else None
-    found = shutil.which("gmake") or shutil.which("make")
+    for ccs_root in Path(_CCS_SCAN_ROOT).glob("ccs*/ccs/utils/bin/gmake.exe"):
+        if ccs_root.is_file():
+            return ccs_root
+    found = (
+        shutil.which("gmake")
+        or shutil.which("make")
+        or shutil.which("mingw32-make")
+    )
     return Path(found) if found else None
 
 
