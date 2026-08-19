@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e23bb1b44a82ba7c94bde2dd660886fbc42be52b -->
+<!-- changelog-auto: last-commit=8f27794d73ab53e4065ba92fd4a88b1fb86eb0d6 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 21:08 生成页支持生成到桌面赛题文件夹——AI 题名命名与重名时间后缀（工单 desktop-topic-output/01）
 - 22:08 赛题条目补图注（取题面自动补矢量图标注布局，工单 topic-vision-notes/02）
 - 22:42 赛题条目补图注
+- 22:46 赛题条目补图注
 
 ## 2026-08-18
 - 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
