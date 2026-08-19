@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=4d4af454791a0f38078d07298ffc4d6e099c3632 -->
+<!-- changelog-auto: last-commit=fe0021acfa87b72f8675d0ecaf969e4b128537b4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-20
+- 00:00 多实例默认兜底——AI 没猜实例时按平台默认自动填（stm32 红黄绿 / mspm0 单实例，与不配置生成等价零回归，工单 instance-default-fallback/01）+ backlog 计划
 
 ## 2026-08-19
 - 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
