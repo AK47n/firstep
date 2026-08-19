@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=495ed1b44925b3aa7bac3ad8185d42a6c68f9b59 -->
+<!-- changelog-auto: last-commit=d5bb1366c8ae440b650388b7f2d5c37cbba2d9bc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 00:39 引脚自动配置（一键解冲突，合法共享保留+标注，工单 pin-auto-assign/01）+ LLM telemetry 状态行中文化（operation/状态/计数全映射，三面板共用）
 - 00:52 赛题答疑 Q&A 注入推荐——输入框随请求带 qa_text，题面后独立段注入（权威澄清，不并入题面不干扰收敛判定）+ 缓存 qa_sha256 指纹（Q&A 变化失效重推，工单 qa-material/01）
 - 00:52 赛题答疑 Q&A 输入框显示高度 4 行调 6 行 + 说明点明可输入任意多行（rows 非上限）
+- 01:01 gmake 探测补 CCS 自带路径与 mingw32-make 兜底——Windows 上 CCS 的 gmake 不在 PATH、MinGW 的 make 名为 mingw32-make，之前漏探显示 ❌（实测 C:/ti/ccs2050 自带 + C:/mingw64 均可用）
 
 ## 2026-08-19
 - 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
