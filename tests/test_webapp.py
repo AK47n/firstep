@@ -75,7 +75,10 @@ from contest_generator.report import (
     JudgmentFile,
     ReferenceCandidate,
 )
-from contest_generator.topic_library import TopicDraft
+from contest_generator.topic_library import (
+    TopicDraft,
+    confirm_topics,
+)
 from contest_generator.master import distill_master, main_c_template, scan_project
 from contest_generator.master_store import import_master
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -1347,6 +1350,78 @@ def test_topic_summarize_llm_failure_maps_to_502(client, context):
 
     assert resp.status_code == 502
     assert resp.json()["detail"] == "AI 服务调用失败：服务不可用"
+
+
+# ---------------------------------------------------------------------------
+# 拆条视觉图注（工单 topic-vision-notes/01）：配了视觉 key → 拆条文本含
+# 嵌入图图注；未配 = 纯文本（现状逐字节一致）
+# ---------------------------------------------------------------------------
+
+
+class _FakeSplitImage:
+    def __init__(self, data: bytes, name: str = "Image1.png"):
+        self.data = data
+        self.name = name
+
+
+class _FakeSplitPage:
+    def __init__(self, images, text: str):
+        self.images = images
+        self._text = text
+
+    def extract_text(self) -> str:
+        return self._text
+
+
+class _FakeSplitReader:
+    def __init__(self, pages):
+        self.pages = pages
+        self.is_encrypted = False
+
+
+def _monkeypatch_split_pdf(monkeypatch, text: str):
+    """拆条用假 PDF 阅读器 + 假视觉描述（照 test_extraction 图注先例）。"""
+    from contest_generator import extraction as extraction_mod
+
+    monkeypatch.setattr(
+        extraction_mod,
+        "PdfReader",
+        lambda _p: _FakeSplitReader([_FakeSplitPage([_FakeSplitImage(b"img-a")], text)]),
+    )
+    fake_describe = lambda image_bytes, mime, **kw: "这是电路图：" + str(len(image_bytes))
+    monkeypatch.setattr(extraction_mod, "describe_image_cached", fake_describe)
+
+
+def test_topics_split_with_vision_key_injects_image_notes(client, context, monkeypatch):
+    """配了视觉 key：拆条文本 = 原文 + [示意图1：…] 图注，LLM 收到带图注题面。"""
+    from dataclasses import replace
+
+    ctx, holder = context
+    ctx.config = replace(ctx.config, vision_api_key="sk-vision")
+    _monkeypatch_split_pdf(monkeypatch, "2026C 赛题原文")
+
+    resp = client.post(
+        "/api/topics/split", files={"upload": ("p.pdf", b"%PDF-1.4 fake", "application/pdf")}
+    )
+
+    assert resp.status_code == 200
+    text = holder["llm"].topic_split_calls[0][0]
+    assert "2026C 赛题原文" in text
+    assert "[示意图1：这是电路图：5]" in text
+
+
+def test_topics_split_without_vision_key_stays_plain_text(client, context, monkeypatch):
+    """未配视觉 key：拆条文本 = 纯文本（现状不变，无图注）。"""
+    _monkeypatch_split_pdf(monkeypatch, "2026C 赛题原文")
+
+    resp = client.post(
+        "/api/topics/split", files={"upload": ("p.pdf", b"%PDF-1.4 fake", "application/pdf")}
+    )
+
+    assert resp.status_code == 200
+    text = context[1]["llm"].topic_split_calls[0][0]
+    assert text == "2026C 赛题原文"
+    assert "[示意图" not in text
 
 
 def test_recommend_returns_modules_with_reasons(client):
@@ -2972,7 +3047,7 @@ def test_settings_vision_fields_roundtrip_and_mask(client, context):
     current = client.get("/api/settings").json()
     assert current["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
     assert current["vision_api_key"] == ""
-    assert current["vision_model"] == "glm-4v-flash"
+    assert current["vision_model"] == "glm-4.6v-flash"
     # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：GET 带出
     assert current["price_reference"]["concurrent_connections"] == 2500
 
@@ -2986,16 +3061,16 @@ def test_settings_vision_fields_roundtrip_and_mask(client, context):
             "masters_dir": current["masters_dir"],
             "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
             "vision_api_key": "sk-vision-123456",
-            "vision_model": "glm-4v-flash",
+            "vision_model": "glm-4.6v-flash",
         },
     )
     assert resp.status_code == 200
     assert context[0].config.vision_api_key == "sk-vision-123456"
     saved = client.get("/api/settings").json()
     assert saved["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
-    assert saved["vision_api_key"].startswith("sk-v")  # 掩码（前 4 位 + 省略号）
+    assert saved["vision_api_key"] == "sk-v" + "•" * 11 + "6"  # 掩码同主 key：前 4 位 + 圆点(长度-5) + 末位
     assert saved["vision_api_key"] != "sk-vision-123456"
-    assert saved["vision_model"] == "glm-4v-flash"
+    assert saved["vision_model"] == "glm-4.6v-flash"
 
     # 掩码形态 PUT = 沿用旧值；空串 = 关闭
     masked = saved["vision_api_key"]
@@ -3009,7 +3084,7 @@ def test_settings_vision_fields_roundtrip_and_mask(client, context):
             "masters_dir": current["masters_dir"],
             "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
             "vision_api_key": masked,
-            "vision_model": "glm-4v-flash",
+            "vision_model": "glm-4.6v-flash",
         },
     )
     assert resp.status_code == 200
@@ -3836,6 +3911,84 @@ def test_layout_dir_derivation_lives_in_config():
     assert (
         config.reference_library_dir(library_dir) == library_dir.parent / "references"
     )
+
+
+# ---------------------------------------------------------------------------
+# 存量条目补图注接线（工单 topic-vision-notes/02）：取题面自动补 + 幂等
+# ---------------------------------------------------------------------------
+
+
+def _confirm_webapp_topic_with_figure(context) -> None:
+    """在假上下文赛题库建 2026C 条目（题面引用图1，含原 PDF 副本）。"""
+    from dataclasses import replace
+
+    ctx = context[0]
+    topics_dir = topic_library_dir(ctx.config.module_library_dir)
+    topics_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = topics_dir.parent / "2026C.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    confirm_topics(
+        topics_dir,
+        pdf_path,
+        (TopicDraft(year="2026", number="C", problem_text="系统功能如图1所示。"),),
+    )
+    context[0].config = replace(ctx.config, vision_api_key="sk-vision")
+
+
+def test_topic_get_with_vision_key_enriches_image_notes(client, context, monkeypatch):
+    """取题面：配了视觉 key → 题面自动补图注（图注段进返回文本，幂等写回）。"""
+    from contest_generator import topic_library as topic_lib_mod
+
+    _confirm_webapp_topic_with_figure(context)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_lib_mod,
+        "pdf_image_notes",
+        lambda *a, **k: calls.append("x") or "[示意图1：这是功能示意图]",
+    )
+
+    resp = client.get("/api/topics/2026C")
+
+    assert resp.status_code == 200
+    assert resp.json()["problem_text"] == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    assert len(calls) == 1
+    # 幂等：二次取题面不再跑视觉
+    client.get("/api/topics/2026C")
+    assert len(calls) == 1
+
+
+def test_topic_get_without_vision_key_returns_plain(client, context, monkeypatch):
+    """取题面：未配视觉 key → 与现状逐字节一致（无图注）。"""
+    from contest_generator import topic_library as topic_lib_mod
+
+    ctx = context[0]
+    topics_dir = topic_library_dir(ctx.config.module_library_dir)
+    topics_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = topics_dir.parent / "2026C.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    confirm_topics(
+        topics_dir,
+        pdf_path,
+        (TopicDraft(year="2026", number="C", problem_text="系统功能如图1所示。"),),
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_lib_mod, "pdf_image_notes", lambda *a, **k: calls.append("x") or "[示意图]"
+    )
+
+    resp = client.get("/api/topics/2026C")
+
+    assert resp.status_code == 200
+    assert resp.json()["problem_text"] == "系统功能如图1所示。"
+    assert calls == []
+
+
+def test_topic_enrich_wired_into_webapp():
+    """结构钉：取题面路由的补图注接线在（webapp 与赛题库同源引用，防回退）。"""
+    import contest_generator.topic_library as topic_library
+    import contest_generator.webapp as webapp
+
+    assert webapp.enrich_topic_image_notes is topic_library.enrich_topic_image_notes
 
 
 # ---------------------------------------------------------------------------

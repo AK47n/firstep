@@ -42,6 +42,7 @@ from .entry_store import (
     validate_store_key,
     write_json,
 )
+from .extraction import pdf_figure_annotations, pdf_image_notes
 from .manifest import MANIFEST_FILENAME
 
 TOPIC_MD_FILENAME = "topic.md"  # 题面全文落盘文件名（条目目录内，唯一出处）
@@ -195,6 +196,64 @@ def resolve_number(topic_library_root: Path, key: str) -> TopicEntry:
     if not entry_dir.is_dir():
         raise TopicError(f"题库中没有该编号的赛题：{key}")
     return _load_entry(entry_dir)
+
+
+def enrich_topic_image_notes(
+    topic_library_root: Path,
+    key: str,
+    *,
+    vision_base_url: str,
+    vision_api_key: str,
+    vision_model: str,
+    observation_collector: object | None = None,
+) -> TopicEntry:
+    """存量条目补图注（工单 topic-vision-notes/02/03）：题面引用图（"图N"）但
+    无图注、且原 PDF 仍在条目目录内 → 生成图注段，追加题面文末（空行分隔，
+    不破坏原文结构）并写回，返回补图注后的条目。
+
+    两级生成（03）：**文字标注优先**——矢量图（无栅格图对象，视觉提取不到）
+    的图内标注文字留在 PDF 文本层，pdf_figure_annotations 按坐标重建布局
+    产出 `[图N 标注]` 段（零额度、标注与线段位置关系保留）；文字层为空
+    （扫描件 / 无文本层）→ 视觉兜底（pdf_image_notes，GLM-4.6V）。
+
+    幂等：题面已含 `[示意图` 或 `[图N 标注` 标注 = 跳过不跑（重复取题面不
+    重复消耗）。任何不满足条件 / 两级都失败 → 原样返回，绝不写回、绝不抛
+    ——图注是增强不是阻塞。
+    """
+    entry = resolve_number(topic_library_root, key)
+    if "[示意图" in entry.problem_text or re.search(
+        r"\[图\s*\d+\s*标注", entry.problem_text
+    ):
+        return entry  # 幂等：已补过图注 / 标注
+    if not re.search(r"图\s*\d", entry.problem_text):
+        return entry  # 题面没有引用图（无图可补）
+    if not entry.original_pdf:
+        return entry
+    entry_dir = _entry_dir(topic_library_root, key)
+    pdf_path = entry_dir / entry.original_pdf
+    if not pdf_path.is_file():
+        return entry
+    try:
+        notes = pdf_figure_annotations(pdf_path)  # 文字标注优先（零额度）
+    except Exception:
+        notes = ""
+    if not notes:
+        try:
+            notes = pdf_image_notes(
+                pdf_path,
+                vision_base_url=vision_base_url,
+                vision_api_key=vision_api_key,
+                vision_model=vision_model,
+                observation_collector=observation_collector,
+            )  # 视觉兜底（扫描件 / 无文本层）
+        except Exception:
+            return entry
+    if not notes:
+        return entry
+    new_text = entry.problem_text.rstrip("\n") + "\n\n" + notes
+    (entry_dir / entry.problem_md).write_text(new_text, encoding="utf-8")
+    commit_after_write(topic_library_root, "lib: 赛题条目补图注")
+    return resolve_number(topic_library_root, key)
 
 
 def list_topics(topic_library_root: Path) -> list[TopicEntry]:

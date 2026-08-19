@@ -13,6 +13,7 @@ ExtractionError 带明确信息，绝不让损坏文件以静默空文或崩溃�
 
 from __future__ import annotations
 
+import re
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -36,6 +37,12 @@ MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
 # 图片文件后缀（工单 vision-eyes/03：上传图片直接走视觉描述）
 IMAGE_FILE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif")
+
+# 矢量图标注布局（工单 topic-vision-notes/03）：图N 标题上下窗口 / 图内短行
+# 上限（滤正文长行）/ 行聚类 y 容差（页面坐标单位）
+FIGURE_ANNOTATION_WINDOW = 350.0
+FIGURE_ANNOTATION_MAX_LINE_CHARS = 20
+FIGURE_ANNOTATION_ROW_TOLERANCE = 6.0
 
 # pypdf ImageFile.name 后缀 → mime（GLM-4V 接受的常见类型；未知按 png 兜底）
 _IMAGE_MIME_BY_SUFFIX = {
@@ -97,7 +104,7 @@ def extract_pdf_with_image_notes(
     失败 = 静默降级（只用文本，逐字节一致）——视觉是增强不是阻塞。
     """
     text = extract_file(path)
-    notes = _pdf_image_notes(
+    notes = pdf_image_notes(
         Path(path),
         vision_base_url=vision_base_url,
         vision_api_key=vision_api_key,
@@ -109,7 +116,7 @@ def extract_pdf_with_image_notes(
     return text.rstrip("\n") + "\n\n" + notes
 
 
-def _pdf_image_notes(
+def pdf_image_notes(
     path: Path,
     *,
     vision_base_url: str,
@@ -117,7 +124,10 @@ def _pdf_image_notes(
     vision_model: str,
     observation_collector: object | None = None,
 ) -> str:
-    """电子版 PDF 嵌入图 → 图注段（每张一行 `[示意图N：<描述>]`）。
+    """PDF 嵌入图 → 图注段（每张一行 `[示意图N：<描述>]`）。
+
+    公开消费方：拆条（extract_pdf_with_image_notes 内部）与赛题库存量条目
+    补图注（工单 topic-vision-notes/02）。
 
     上限守卫：单文件 ≤ MAX_IMAGE_NOTES 张、单张 ≤ MAX_IMAGE_BYTES（超限
     跳过并标注）；单张描述失败 = 跳过该张（其余照常）；任何异常（未配置 /
@@ -176,6 +186,127 @@ def _join_notes(notes: list[str], skipped: int) -> str:
     if skipped:
         lines.append(f"（另有 {skipped} 张图跳过：超大或描述失败）")
     return "\n".join(lines)
+
+
+def pdf_figure_annotations(path: Path) -> str:
+    """矢量图标注文字布局提取（工单 topic-vision-notes/03）。
+
+    电赛题面矢量图（绘图命令绘制）无栅格图对象，视觉提取不到；但图内标注
+    文字（尺寸 / 角度 / 区域标签）留在 PDF 文本层。本函数用 visitor_text
+    回调取每个文字段的变换矩阵，**复合 cm×tm 还原页面坐标**（图内文字经
+    缩放矩阵，tm 平移是原始值），按 y 聚类成行、行内按 x 排序，定位「图N」
+    标题行后取其上下窗口内的短文本行（正文长行滤除），产出布局文本：
+
+        [图N 标注]
+        <行1：同 y 的标注按 x 从左到右>
+        ...
+
+    标注与线段的位置关系（左角度 / 右角度 / 尺寸链）由行序与行内序保留，
+    LLM 可据此还原图的结构。坏 PDF / 无图 / 无标注 → 空串（调用方降级，
+    绝不抛——文字标注是增强不是阻塞）。
+    """
+    try:
+        reader = PdfReader(str(path))
+    except Exception:
+        return ""
+    blocks: list[str] = []
+    for page in reader.pages:
+        segments: list[tuple[float, float, str]] = []
+
+        def visitor(text, cm, tm, font_dict, font_size) -> None:
+            if not (text and text.strip()):
+                return
+            x = cm[0] * tm[4] + cm[2] * tm[5] + cm[4]
+            y = cm[1] * tm[4] + cm[3] * tm[5] + cm[5]
+            segments.append((x, y, text))
+
+        try:
+            page.extract_text(visitor_text=visitor)
+        except Exception:
+            continue
+        block = _figure_annotation_block(segments)
+        if block:
+            blocks.append(block)
+    return "\n\n".join(blocks)
+
+
+def _figure_annotation_block(segments: list[tuple[float, float, str]]) -> str:
+    """单页段集合 → 标注区布局块（纯函数，可测）。
+
+    标题行 = 「图N」在**行首**的短行（正文引用"如图1所示"、序号行"8．可
+    使用图2…"、表格行"…电路图 6"的"图"都不在行首，天然排除）。图内
+    标注短行排除页码行（"C - 1 / 4" / "H 题 - 1 / 4"，坐标经变换异常）。
+
+    归属规则（每条短行 ∈ 图 N 标注区，须同时满足）：
+    1. 距「图N」标题行 ≤ 窗口（FIGURE_ANNOTATION_WINDOW）；
+    2. 与标题行之间（y 区间内）无正文长行（长行 = 图 / 正文的边界）；
+    3. 该标题是它的**最近**图标题（相邻两图之间无长行分隔时，短行归属
+       最近标题，杜绝 A 图标注混入 B 图）。
+
+    行序 = 页面上→下，行内按 x 排序（标注与线段的位置关系由此保留）。
+    无标题 / 无标注 → 空串。
+    """
+    if not segments:
+        return ""
+    rows = _cluster_rows(segments)
+    titles = [
+        (y, text)
+        for y, text in rows
+        if re.match(r"^\s*图\s*\d", text)
+    ]
+    if not titles:
+        return ""
+    max_chars = FIGURE_ANNOTATION_MAX_LINE_CHARS
+    window = FIGURE_ANNOTATION_WINDOW
+    short_rows = [
+        (y, text)
+        for y, text in rows
+        if len(text) < max_chars
+        and not re.match(r"^\s*图\s*\d", text)
+        and not re.match(r"^[^-–]*[-–]\s*\d+\s*/\s*\d+", text)  # 页码行
+    ]
+    blocks: list[str] = []
+    for title_y, title_text in titles:
+        match = re.search(r"图\s*(\d+)", title_text)
+        label = match.group(1) if match else "?"
+        own: list[tuple[float, str]] = []
+        for y, text in short_rows:
+            if abs(y - title_y) > window:
+                continue
+            # 与标题之间无长行（长行 = 正文 / 图边界）
+            if any(
+                len(t) >= max_chars and min(y, title_y) < ly < max(y, title_y)
+                for ly, t in rows
+            ):
+                continue
+            # 最近图标题归属
+            if any(
+                abs(y - other_y) < abs(y - title_y) for other_y, _ in titles
+            ):
+                continue
+            own.append((y, text))
+        own.sort(key=lambda item: -item[0])
+        if not own:
+            continue
+        blocks.append(
+            "[图" + label + " 标注]\n" + "\n".join(text for _, text in own)
+        )
+    return "\n\n".join(blocks)
+
+
+def _cluster_rows(segments: list[tuple[float, float, str]]) -> list[tuple[float, str]]:
+    """段集合 → 行（y 容差聚类，行内按 x 排序），按 y 降序（页面上→下）。"""
+    segs = sorted(segments, key=lambda s: (-s[1], s[0]))
+    rows: list[tuple[float, list[tuple[float, str]]]] = []
+    for x, y, text in segs:
+        if rows and abs(rows[-1][0] - y) <= FIGURE_ANNOTATION_ROW_TOLERANCE:
+            rows[-1][1].append((x, text))
+        else:
+            rows.append((y, [(x, text)]))
+    return [
+        (y, " ".join(text for _, text in sorted(items, key=lambda item: item[0])).strip())
+        for y, items in rows
+    ]
 
 
 def _image_mime(name: str) -> str:

@@ -444,6 +444,7 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "delete_topic": ("commit", "lib: delete topic"),
         "parse_confirm_entries": ("read", ""),
         "split_topics_document": ("read", ""),
+        "enrich_topic_image_notes": ("commit", "lib: 赛题条目补图注"),
     },
     "master_store": {
         "master_project_dir": ("read", ""),

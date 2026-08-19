@@ -198,7 +198,7 @@ def test_join_notes_format():
     assert _join_notes([], 3) == ""
 
 
-def test_pdf_image_notes_describes_embedded_images(monkeypatch, tmp_path):
+def testpdf_image_notes_describes_embedded_images(monkeypatch, tmp_path):
     """电子版 PDF 嵌入图 → 逐张描述 → 图注段（[示意图N：…] 逐行）。"""
     from contest_generator import extraction
 
@@ -210,15 +210,15 @@ def test_pdf_image_notes_describes_embedded_images(monkeypatch, tmp_path):
     ]))
     monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
 
-    notes = extraction._pdf_image_notes(
-        path, vision_base_url="", vision_api_key="sk-test", vision_model="glm-4v-flash"
+    notes = extraction.pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model="glm-4.6v-flash"
     )
     assert notes == "[示意图1：描述:5]\n[示意图2：描述:5]\n[示意图3：描述:5]"
     # mime 按后缀推断（jpg → image/jpeg）
     assert fake_describe.calls[1][1] == "image/jpeg"
 
 
-def test_pdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
+def testpdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
     """上限守卫：>8 张截断；超大 / 失败图跳过并标注。"""
     from contest_generator import extraction
 
@@ -232,7 +232,7 @@ def test_pdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
         extraction, "describe_image_cached", _fake_describe("图")
     )
 
-    notes = extraction._pdf_image_notes(
+    notes = extraction.pdf_image_notes(
         path, vision_base_url="", vision_api_key="sk-test", vision_model=""
     )
     lines = notes.splitlines()
@@ -241,7 +241,7 @@ def test_pdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
     assert "另有 1 张图跳过" in lines[-1]
 
 
-def test_pdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):
+def testpdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):
     """视觉全失败（未配置 / 网络 / 解析）→ 空串（调用方降级，不拖垮抽取）。"""
     from contest_generator import extraction
     from contest_generator.vision import VisionNotConfiguredError
@@ -256,7 +256,7 @@ def test_pdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr(extraction, "describe_image_cached", not_configured)
     assert (
-        extraction._pdf_image_notes(
+        extraction.pdf_image_notes(
             path, vision_base_url="", vision_api_key="", vision_model=""
         )
         == ""
@@ -267,7 +267,7 @@ def test_pdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr(extraction, "describe_image_cached", flaky)
     assert (
-        extraction._pdf_image_notes(
+        extraction.pdf_image_notes(
             path, vision_base_url="", vision_api_key="sk-test", vision_model=""
         )
         == ""
@@ -275,7 +275,7 @@ def test_pdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):
     # PDF 结构损坏：reader 构造失败 → 空串
     monkeypatch.setattr(extraction, "PdfReader", lambda _p: (_ for _ in ()).throw(ValueError("坏 PDF")))
     assert (
-        extraction._pdf_image_notes(
+        extraction.pdf_image_notes(
             path, vision_base_url="", vision_api_key="sk-test", vision_model=""
         )
         == ""
@@ -289,7 +289,7 @@ def test_extract_pdf_with_image_notes_appends_notes(monkeypatch, tmp_path):
     path = make_sample_pdf(tmp_path / "problem.pdf", "Contest problem 2026")
     monkeypatch.setattr(
         extraction,
-        "_pdf_image_notes",
+        "pdf_image_notes",
         lambda *a, **k: "[示意图1：电路连接 A-B]",
     )
     text = extraction.extract_pdf_with_image_notes(
@@ -299,7 +299,7 @@ def test_extract_pdf_with_image_notes_appends_notes(monkeypatch, tmp_path):
     assert "Contest problem 2026" in text
 
     # 无图注 → 纯文本（与 extract_file 逐字节一致）
-    monkeypatch.setattr(extraction, "_pdf_image_notes", lambda *a, **k: "")
+    monkeypatch.setattr(extraction, "pdf_image_notes", lambda *a, **k: "")
     assert (
         extraction.extract_pdf_with_image_notes(
             path, vision_base_url="", vision_api_key="", vision_model=""
@@ -325,3 +325,171 @@ def test_unsupported_file_type_reports_clear_error(tmp_path):
 def test_missing_file_reports_clear_error(tmp_path):
     with pytest.raises(ExtractionError, match="不存在"):
         extract_file(tmp_path / "nope.pdf")
+
+
+# ---------------------------------------------------------------------------
+# 矢量图标注文字布局（工单 topic-vision-notes/03）：visitor_text 带坐标 →
+# 复合矩阵还原页面坐标 → 行聚类 → 「图N」标题窗口内短行 → [图N 标注] 段
+# ---------------------------------------------------------------------------
+
+
+def _fake_visitor_page(segments):
+    """假页：extract_text(visitor_text=fn) 直接喂带坐标段（坐标已含复合变换）。"""
+
+    class _FakePage:
+        def extract_text(self, visitor_text=None):
+            cm = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+            for x, y, text in segments:
+                tm = (1.0, 0.0, 0.0, 1.0, x, y)
+                visitor_text(text, cm, tm, None, 10.0)
+
+    return _FakePage()
+
+
+def _figure_segments():
+    """2026C 图1 形态的段集合：正文长行 + 图内短标注 + 标题行（图在页底）。"""
+    return [
+        (120.0, 460.0, "一、"),                      # 正文标题（窗口外）
+        (160.0, 440.0, "任务"),                      # 正文标题（窗口外）
+        (120.0, 400.0, "设计制作一套基于无线通信的数字钥匙实验系统……"),  # 正文长行
+        (150.0, 350.0, "感应区 迎宾区 开锁区"),        # 图内标签行
+        (160.0, 335.0, "-45°"),                      # 左角度
+        (230.0, 335.0, "门锁"),                      # 图中央标签
+        (290.0, 335.0, "60cm"),                      # 尺寸
+        (200.0, 300.0, "37"),                        # 高度
+        (160.0, 270.0, "α"),                        # 变量
+        (150.0, 245.0, "15°"),                       # 右角度（下方）
+        (120.0, 100.0, "图"),                        # 标题行（拆段）
+        (135.0, 100.0, "1"),
+        (145.0, 100.0, "数字钥匙实验系统功能示意图"),
+    ]
+
+
+def test_figure_annotation_block_rebuilds_layout():
+    """段集合 → [图1 标注] 布局块：窗口内短行、按 y 降序、行内按 x 排序。"""
+    from contest_generator.extraction import _figure_annotation_block
+
+    block = _figure_annotation_block(_figure_segments())
+
+    assert block.startswith("[图1 标注]\n")
+    lines = block.split("\n")[1:]
+    assert "感应区 迎宾区 开锁区" in lines[0]          # 最上方标签行
+    assert "-45° 门锁 60cm" in lines[1]                # 行内按 x 排序（-45° < 门锁 < 60cm）
+    assert "37" in lines[2]
+    assert "α" in lines[3]
+    assert "15°" in lines[4]
+    assert len(lines) == 5
+    # 正文（长行 / 窗口外标题）不进标注区
+    assert "一、" not in block
+    assert "任务" not in block
+    assert "设计制作" not in block
+    assert "功能示意图" not in block  # 标题行自身排除
+
+
+def test_figure_annotation_block_no_title_returns_empty():
+    """无「图N」标题行 → 空串。"""
+    from contest_generator.extraction import _figure_annotation_block
+
+    assert _figure_annotation_block([(100.0, 300.0, "只有正文")]) == ""
+
+
+def test_figure_annotation_block_multiple_figures():
+    """一页多图 → 每图独立段。"""
+    from contest_generator.extraction import _figure_annotation_block
+
+    segs = [
+        (100.0, 600.0, "图"), (110.0, 600.0, "1"), (120.0, 600.0, "示意图一"),
+        (150.0, 570.0, "A点"), (150.0, 550.0, "B点"),
+        (100.0, 400.0, "图"), (110.0, 400.0, "2"), (120.0, 400.0, "示意图二"),
+        (150.0, 370.0, "10cm"), (150.0, 350.0, "20cm"),
+    ]
+    block = _figure_annotation_block(segs)
+
+    assert "[图1 标注]" in block
+    assert "[图2 标注]" in block
+    assert "A点" in block and "B点" in block
+    assert "10cm" in block and "20cm" in block
+
+
+def test_figure_annotation_block_excludes_fake_titles_and_page_numbers():
+    """伪标题（正文引用 / 序号行 / 表格行的"图N"不在行首）与页码行不产出块。"""
+    from contest_generator.extraction import _figure_annotation_block
+
+    segs = [
+        (120.0, 700.0, "数字钥匙实验系统的功能示意图如图"),  # 正文引用（图不在行首）
+        (300.0, 700.0, "1"), (320.0, 700.0, "所示，开锁区为1m以内"),
+        (120.0, 650.0, "8．可使用图"), (200.0, 650.0, "2"), (220.0, 650.0, "喷绘铺设测试场地"),
+        (120.0, 600.0, "设计报告"), (220.0, 600.0, "电路与程序设计"), (350.0, 600.0, "电路图"), (420.0, 600.0, "6"),
+        (120.0, 300.0, "C"), (140.0, 300.0, "-"), (155.0, 300.0, "1"), (170.0, 300.0, "/"), (185.0, 300.0, "4"),  # 页码行
+        (100.0, 100.0, "图"), (110.0, 100.0, "1"), (125.0, 100.0, "功能示意图"),  # 真标题
+        (150.0, 80.0, "60cm"),  # 图内标注
+    ]
+    block = _figure_annotation_block(segs)
+
+    assert block == "[图1 标注]\n60cm"  # 只有真标题 + 图内标注；伪标题行与页码行全排除
+
+
+def test_pdf_figure_annotations_extracts_via_visitor(monkeypatch, tmp_path):
+    """整链：假 PdfReader（visitor 喂段）→ 标注布局文本；坏 PDF → 空串。"""
+    from contest_generator import extraction
+
+    class _FakeReader:
+        def __init__(self, pages):
+            self.pages = pages
+
+    path = tmp_path / "fig.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader([_fake_visitor_page(_figure_segments())]),
+    )
+
+    text = extraction.pdf_figure_annotations(path)
+
+    assert text.startswith("[图1 标注]\n")
+    assert "-45° 门锁 60cm" in text
+
+    # 坏 PDF：reader 构造失败 → 空串（调用方降级）
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: (_ for _ in ()).throw(ValueError("坏 PDF"))
+    )
+    assert extraction.pdf_figure_annotations(path) == ""
+
+
+def test_pdf_figure_annotations_deals_scaled_coordinates(tmp_path):
+    """坐标经缩放矩阵（矢量图文本）→ 复合 cm×tm 还原为页面坐标后可聚类。"""
+    from contest_generator import extraction
+
+    class _FakeReader:
+        def __init__(self, pages):
+            self.pages = pages
+
+    class _ScaledPage:
+        """visitor 喂原始 tm（图内文字经缩放），cm 带缩放——需复合还原。"""
+
+        def extract_text(self, visitor_text=None):
+            cm = (10.0, 0.0, 0.0, 10.0, 0.0, 0.0)      # 缩放 10x
+            tm = (1.0, 0.0, 0.0, 1.0, 10.0, 20.0)      # 平移 (10, 20) → 还原 (100, 200)
+            visitor_text("60cm", cm, tm, None, 10.0)
+            tm = (1.0, 0.0, 0.0, 1.0, 10.0, 30.0)      # 平移 (10, 30) → 还原 (100, 300)
+            visitor_text("图", cm, tm, None, 10.0)
+            visitor_text("1", cm, tm, None, 10.0)
+            visitor_text("标题", cm, tm, None, 10.0)   # 同行 → 标题行
+            cm2 = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+            tm2 = (1.0, 0.0, 0.0, 1.0, 100.0, 600.0)   # 正文远在标题上方
+            visitor_text("这是很长的正文段落……" * 3, cm2, tm2, None, 10.0)
+
+    path = tmp_path / "scaled.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    original = extraction.PdfReader
+    extraction.PdfReader = lambda _p: _FakeReader([_ScaledPage()])
+    try:
+        text = extraction.pdf_figure_annotations(path)
+    finally:
+        extraction.PdfReader = original
+
+    assert "60cm" in text
+    assert text.startswith("[图1 标注]\n")
+    assert "标题" not in text   # 标题行自身排除
+    assert "正文" not in text

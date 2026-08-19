@@ -53,7 +53,11 @@ from .extraction import (
     extract_image,
     extract_pdf_with_image_notes,
 )
-from .vision import DEFAULT_VISION_BASE_URL, DEFAULT_VISION_MODEL
+from .vision import (
+    DEFAULT_VISION_BASE_URL,
+    DEFAULT_VISION_MODEL,
+    vision_configured,
+)
 from .fix_errors import (
     FixError,
     fix_backup_root,
@@ -134,6 +138,7 @@ from .stage import stage_project_files
 from .topic_library import (
     confirm_topics,
     delete_topic,
+    enrich_topic_image_notes,
     list_topics,
     parse_confirm_entries,
     resolve_number,
@@ -1521,12 +1526,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "local_llm_base_url": config.local_llm_base_url if config is not None else "",
             "local_llm_model": config.local_llm_model if config is not None else "",
             # 视觉通道（工单 vision-eyes/01）：base/model 缺省官方免费通道；
-            # api_key 掩码同主 key，空 key = 视觉关闭
+            # api_key 掩码同主 key（显示形态 = 前 4 位 + 长度圆点 + 末位），空 key = 视觉关闭
             "vision_base_url": (
                 config.vision_base_url if config is not None else DEFAULT_VISION_BASE_URL
             ),
             "vision_api_key": (
-                _mask_api_key(config.vision_api_key)
+                _mask_api_key_display(config.vision_api_key)
                 if config is not None and config.vision_api_key
                 else ""
             ),
@@ -1787,6 +1792,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     async def topics_split(upload: UploadFile = File(...)) -> dict:
         """上传历年真题长 PDF → 拆条（年份 / 编号 / 题面全文）→ 草稿列表。
 
+        配置了视觉 key 时（工单 topic-vision-notes/01）：先做嵌入图视觉
+        图注（[示意图N：…] 段，照 /api/extract 同款），拆出的题面草稿自带
+        图注；未配置 = 纯文本（现状逐字节一致）。视觉失败静默降级，不
+        阻塞拆条。
+
         路由按全文长度分流（flash 模型输出预算有限，多年长 PDF 一次拆会被
         截断而静默漏题）：≤ TOPIC_SPLIT_LLM_CHAR_CAP 单次调 LLM 拆条（支持
         任意格式，单题短 PDF 的既有路径）；超长走确定性分块
@@ -1799,7 +1809,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         tmp_path = await _save_upload(upload)
         try:
-            text = extract_file(tmp_path)
+            config = _require_config(context)
+            if config.vision_api_key and vision_configured(config.vision_api_key):
+                collector = create_llm_observation_collector("vision-describe")
+                text = extract_pdf_with_image_notes(
+                    tmp_path,
+                    vision_base_url=config.vision_base_url,
+                    vision_api_key=config.vision_api_key,
+                    vision_model=config.vision_model,
+                    observation_collector=collector,
+                )
+                context.recent_llm_workflows.add_completed(collector)
+            else:
+                text = extract_file(tmp_path)
             if len(text) <= TOPIC_SPLIT_LLM_CHAR_CAP:
                 drafts = _llm(context).topic_split_topics(text)
             else:
@@ -1856,10 +1878,30 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def topic_get(key: str) -> dict:
         """编号解析："2026C" → 题面全文 + 附带程序（生成入口素材）。
 
+        配置了视觉 key 时（工单 topic-vision-notes/02）：存量条目题面引用
+        图但无图注 → 自动对条目内原 PDF 补图注并写回（幂等），返回带图注
+        题面；任何视觉失败降级返回原题面（视觉是增强不是阻塞）。未配置 =
+        与现状逐字节一致。
+
         查无此条明确报错（不猜测编造）。
         """
         config = _require_config(context)
-        entry = resolve_number(topic_library_dir(config.module_library_dir), key)
+        topics_dir = topic_library_dir(config.module_library_dir)
+        entry = resolve_number(topics_dir, key)
+        if config.vision_api_key and vision_configured(config.vision_api_key):
+            try:
+                collector = create_llm_observation_collector("vision-describe")
+                entry = enrich_topic_image_notes(
+                    topics_dir,
+                    key,
+                    vision_base_url=config.vision_base_url,
+                    vision_api_key=config.vision_api_key,
+                    vision_model=config.vision_model,
+                    observation_collector=collector,
+                )
+                context.recent_llm_workflows.add_completed(collector)
+            except Exception:
+                pass  # 视觉失败降级：返回原题面
         return entry.to_dict()
 
     @app.delete("/api/topics/{key}")

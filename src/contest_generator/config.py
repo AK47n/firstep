@@ -51,7 +51,7 @@ class AppConfig:
     # 本地 LLM 端点可选配置（工单 local-llm-routing/01）：空串 = 本地路由关闭
     local_llm_base_url: str = ""
     local_llm_model: str = ""
-    # 视觉通道（工单 vision-eyes/01）：免费云端 GLM-4V-Flash（OpenAI 兼容）。
+    # 视觉通道（工单 vision-eyes/01，默认模型 2026-08 升级）：免费云端 GLM-4.6V-Flash（OpenAI 兼容）。
     # api_key 空 = 视觉功能关闭；base_url / model 缺省填官方免费通道
     vision_base_url: str = DEFAULT_VISION_BASE_URL
     vision_api_key: str = ""
