@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ae5bebe7c8c62e28d2c2bbe95eec8f9e007c8532 -->
+<!-- changelog-auto: last-commit=3e28e66ad5231bf9b254fffe8dd7eb2071d250b7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 22:46 赛题条目补图注
 - 22:48 视觉通道升级与历史赛题图注闭环（GLM-4.6V-Flash 默认 / key 掩码统一 / 拆条视觉 / 存量补图注两级化——矢量图标注布局优先、视觉兜底，工单 topic-vision-notes/01-03）
 - 23:11 设置页定价表格重复显示——renderPriceReference 重绘前清空 tbody（loadSettings 每次进设置页都调用，appendChild 不清空会累积，曾出现重复 4 遍）+ 结构钉测试
+- 23:11 计费时段默认改低谷 off_peak（配置 / settings GET 与 PUT 缺省同步，基准价按官方空闲档计）
 
 ## 2026-08-18
 - 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
