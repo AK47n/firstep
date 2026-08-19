@@ -800,6 +800,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         topic_id = _optional_str(payload, "topic_id")
         reference_ids = _require_str_list(payload, "reference_ids")
         platform = _optional_str(payload, "platform")
+        # 赛题答疑 Q&A（工单 qa-material/01）：赛事组对题面的澄清问答，推荐时
+        # 作题面后独立段注入（权威材料）；空 = 旧行为逐字节。参与缓存指纹
+        # （qa_sha256，Q&A 变化缓存失效走真实推荐）
+        qa_text = _optional_str(payload, "qa_text")
         # 澄清历史（工单 01 推荐先澄清后收敛）：[{question, answer}] 字符串对，
         # 缺省空 = 向后兼容；回答随请求体走、不拼进题面（题面保持原文——收敛
         # 判定的"两轮一致"对照依赖逐句编号，题面被污染会让判定失真）
@@ -842,6 +846,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 platform=platform or "",
                 reference_ids=reference_ids,
                 clarify_hist=clarify_maps,
+                qa_text=qa_text or "",
             )
 
         def run(emit: SseEmitter) -> None:
@@ -857,6 +862,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                             topic_key=ckey,
                             problem_text=problem_text,
                             platform=platform or "",
+                            qa_text=qa_text or "",
                         )
                         if ok:
                             warns = parameter_warnings(
@@ -874,6 +880,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         emit=_CacheWriterEmitter(emit, _write_cache),
                         max_rounds=max_rounds,
                         platform=platform or "",
+                        qa_material=qa_text or "",
                     )
             finally:
                 context.recent_llm_workflows.add_completed(collector)

@@ -625,6 +625,7 @@ class FakeLLM:
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        qa_material: str = "",
     ) -> ModuleSelection:
         return self._selection
 
@@ -747,6 +748,7 @@ class RecordingLLM:
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        qa_material: str = "",
     ) -> ModuleSelection:
         self._record("select_modules")
         return ModuleSelection(modules=(), reasons={})

@@ -14,6 +14,7 @@ from contest_generator.recommend_cache import (
     load_recommend,
     parameter_warnings,
     problem_fingerprint,
+    qa_fingerprint,
     recommend_cache_path,
     validate_recommend,
 )
@@ -112,6 +113,37 @@ def test_validate_recommend_invalidates_on_problem_platform_key_change(tmp_path)
         cached, topic_key="2024H", problem_text=_PROBLEM, platform="stm32"
     )
     assert "键" in reason
+
+
+def test_qa_fingerprint_invalidates_cache_on_change():
+    """赛题答疑 Q&A 指纹（工单 qa-material/01）：Q&A 变化 → 缓存失效（阻断级，
+    走真实推荐）；空文本指纹 = 空串（旧缓存无字段兼容 = 匹配）。"""
+    # 写缓存带 Q&A → 同 Q&A 命中；不同 Q&A 失效
+    cached = _cached_dict(qa_sha256=qa_fingerprint("问：尺寸？答：30cm。"))
+    ok, _ = validate_recommend(
+        cached, topic_key="2026C", problem_text=_PROBLEM, platform="stm32",
+        qa_text="问：尺寸？答：30cm。",
+    )
+    assert ok
+    ok, reason = validate_recommend(
+        cached, topic_key="2026C", problem_text=_PROBLEM, platform="stm32",
+        qa_text="问：尺寸？答：35cm。",
+    )
+    assert not ok
+    assert "Q&A" in reason
+    # 旧缓存无 qa_sha256 字段：请求空 Q&A = 匹配；请求带 Q&A = 失效（材料变了
+    # 旧结果不含材料，必须重推）
+    legacy = _cached_dict()
+    assert "qa_sha256" not in legacy
+    ok, _ = validate_recommend(
+        legacy, topic_key="2026C", problem_text=_PROBLEM, platform="stm32"
+    )
+    assert ok
+    ok, _ = validate_recommend(
+        legacy, topic_key="2026C", problem_text=_PROBLEM, platform="stm32",
+        qa_text="问：尺寸？答：30cm。",
+    )
+    assert not ok
 
 
 def test_parameter_warnings_on_reference_and_clarify_drift():

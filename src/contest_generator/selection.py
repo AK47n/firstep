@@ -942,6 +942,7 @@ def select_modules_convergent(
     progress_emitter: ProgressEmitter | None = None,
     manual_fulltexts: Mapping[str, str] | None = None,
     clarifications: Sequence[tuple[str, str]] = (),
+    qa_material: str = "",
 ) -> ModuleSelection:
     """题面驱动的收敛循环：功能需求层两轮一致即停，上限 max_rounds 轮。
 
@@ -984,6 +985,7 @@ def select_modules_convergent(
     optional_kwargs: dict[str, Any] = {
         **({"manual_fulltexts": manual_fulltexts} if manual_fulltexts else {}),
         **({"clarifications": clarifications} if clarifications else {}),
+        **({"qa_material": qa_material} if qa_material else {}),
     }
     for round_no in range(1, max_rounds + 1):
         _emit(
@@ -1072,6 +1074,7 @@ def run_recommendation(
     emit: SseEmitter,
     max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
     platform: str = "",
+    qa_material: str = "",
 ) -> None:
     """/api/recommend 的两阶段编排（工单 01 推荐先澄清后收敛）。
 
@@ -1118,6 +1121,7 @@ def run_recommendation(
         manual_fulltexts=topic.manual_fulltexts,
         clarifications=clarifications,  # 澄清历史贯穿收敛循环（题面后独立段）
         max_rounds=max_rounds,  # 轮数上限可配置（工单 01，设置项透传）
+        qa_material=qa_material,  # 赛题答疑 Q&A（工单 qa-material/01）
     )
     if selection.questions:
         emit.question({"questions": list(selection.questions)})
