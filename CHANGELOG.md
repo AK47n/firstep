@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6545b81fce59cbf60b59db1dd2c93acbc0f772b3 -->
+<!-- changelog-auto: last-commit=4b432565134e3cdcbc1cf3b6ce3c3d444057d70e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,8 @@
 - 11:52 生成产物输出评分点清单
 - 12:50 推荐结果展示评分点并完成前端回归
 - 15:07 修复 PR109 评审发现的规格偏差
+- 16:32 LLM 观测、成本控制与评分点闭环
+- 21:08 生成页支持生成到桌面赛题文件夹——AI 题名命名与重名时间后缀（工单 desktop-topic-output/01）
 
 ## 2026-08-18
 - 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
