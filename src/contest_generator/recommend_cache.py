@@ -63,6 +63,19 @@ def qa_fingerprint(qa_text: str) -> str:
     return hashlib.sha256(qa_text.encode("utf-8")).hexdigest()
 
 
+def library_fingerprint(summaries: Sequence[Any]) -> str:
+    """模块库指纹（工单 recommend-cache-fingerprint/01）：模型看到的摘要行
+    （ManifestSummary.to_line，prompt 可见契约）**排序后** hash——模块增删 /
+    简介 / 能力 / 多实例标注变化都使指纹变（to_line 是模型可见的唯一行渲染，
+    字段变化自动覆盖）；顺序无关（库遍历顺序不稳定，排序消掉）。空库 = 空
+    列表的稳定指纹（不特判）。
+    """
+    lines = sorted(summary.to_line() for summary in summaries)
+    return hashlib.sha256(
+        json.dumps(lines, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+
+
 def cache_key(topic_id: str | None, problem_text: str) -> str:
     """缓存键：topic_id 优先；无 topic_id（手动准入）用题面 sha256。"""
     return topic_id or problem_fingerprint(problem_text)
@@ -87,6 +100,7 @@ def cache_recommend(
     reference_ids: Sequence[str] = (),
     clarify_hist: Sequence[Mapping[str, str]] = (),
     qa_text: str = "",
+    library_fingerprint: str = "",
 ) -> None:
     """写缓存：done 载荷逐字 + 元数据（与 CLI generate_check 格式逐字兼容）。
 
@@ -99,6 +113,7 @@ def cache_recommend(
         "reference_ids": list(reference_ids),
         "clarify_sha256": clarify_fingerprint(clarify_hist),
         "qa_sha256": qa_fingerprint(qa_text),
+        "library_sha256": library_fingerprint,
         "done": done,
     }
     try:
@@ -138,12 +153,18 @@ def validate_recommend(
     problem_text: str,
     platform: str,
     qa_text: str = "",
+    library_fingerprint: str = "",
 ) -> tuple[bool, str]:
-    """缓存是否仍有效：题面 / 平台 / 键 / Q&A 指纹任一不符 → (False, 原因)。
+    """缓存是否仍有效：题面 / 平台 / 键 / Q&A / 模块库指纹任一不符 → (False, 原因)。
 
     Q&A 指纹（工单 qa-material/01）：有 topic_id 时键不变，Q&A 变化靠指纹拦
     （照 clarify_sha256 参数指纹先例，但 Q&A 是阻断级——材料变了必须重推，
     复用旧结果是错的）。旧缓存无 qa_sha256 字段 = 视为匹配（向后兼容）。
+
+    模块库指纹（工单 recommend-cache-fingerprint/01）：**旧缓存无
+    library_sha256 字段 = 保守失效**（无法证明匹配当前库，宁可重推——用错
+    结果成本 > 重推成本；与 Q&A 先例不同，库永远存在）；传入空（兼容既有
+    调用方）= 跳过校验。
 
     调用方拿 False 走真实推荐（Web 交互场景不报错退出——CLI 回归脚本的
     "缺失即报错"语义不适用）。
@@ -156,6 +177,9 @@ def validate_recommend(
         return False, "赛题键与缓存时不同"
     if cached.get("qa_sha256", "") != qa_fingerprint(qa_text):
         return False, "赛题答疑 Q&A 与缓存时不同"
+    if library_fingerprint:
+        if cached.get("library_sha256") != library_fingerprint:
+            return False, "模块库与缓存时不同"
     return True, ""
 
 

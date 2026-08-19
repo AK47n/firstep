@@ -4538,6 +4538,31 @@ def test_recommend_cache_invalidated_when_problem_text_changes(client, context):
     assert done, "题面变应走真实推荐并以 done 收尾"
 
 
+def test_recommend_cache_invalidated_when_library_changes(client, context):
+    """模块库变化（改模块简介）→ 库指纹失效 → 走真实推荐（不命中缓存）。
+
+    工单 recommend-cache-fingerprint/01 的立身用例：库变缓存照旧直出曾导致
+    "库内明明有 oled 却提示需自备"（旧缓存直出旧库结果）。
+    """
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    _recommend_done(client, _recommend_payload())
+
+    # 改库：dht11 简介变化（装配点摘要行变化 → 库指纹变）
+    lib = context[0].config.module_library_dir
+    manifest_path = lib / "dht11" / "manifest.json"
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["description"] = "DHT11 温湿度传感器驱动（改版简介）"
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    events = _recommend_stream(client, _recommend_payload())
+    assert not [k for k, _ in events if k == "cache_hit"]
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, "库变应走真实推荐并以 done 收尾"
+
+
 def test_recommend_cache_skipped_when_disabled_in_settings(client, context):
     """设置页关闭缓存开关后：同题重跑走真实推荐（不 cache_hit）。"""
     _wire_material_libraries(context)
