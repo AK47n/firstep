@@ -19,11 +19,16 @@ REFERENCE_FULLTEXT_BYTES wire 字节预算兜底）、摘要阶段多文件按�
 from __future__ import annotations
 
 import json
+import logging
 import math
 import time
 import urllib.error
+import uuid
 import urllib.request
-from typing import Any, Callable, Mapping, Protocol, Sequence, TypeVar
+from email.utils import parsedate_to_datetime
+from dataclasses import dataclass, field, replace
+from numbers import Real
+from typing import Any, Callable, Mapping, NoReturn, Protocol, Sequence, TypeVar
 
 from .budget import (
     FIX_PREVIOUS_FIXES_CAP,
@@ -74,7 +79,22 @@ from .wordlist import (
     format_wordlist_prompt,
 )
 
-# 截断标注契约（唯一出处）在 library.truncate_content / TRUNCATION_NOTICE
+
+def sanitize_llm_usage(usage: Mapping[str, Any] | None) -> dict[str, int | float] | None:
+    """Keep only numeric token-usage fields for logs / collector / SSE telemetry."""
+    if not usage:
+        return None
+    result: dict[str, int | float] = {}
+    for key, value in usage.items():
+        if isinstance(key, str) and isinstance(value, Real) and not isinstance(value, bool):
+            numeric = float(value)
+            result[key] = int(numeric) if numeric.is_integer() else numeric
+    return result or None
+
+
+logger = logging.getLogger(__name__)
+
+# 截断标注契约在 library.truncate_content / TRUNCATION_NOTICE
 # （工单 03 迁共享层：reference_library 的逐文件截断同用此措辞，而其不能
 # 运行时 import llm——环约束，TYPE_CHECKING 同款先例）——llm 导入重出。
 
@@ -518,6 +538,179 @@ def _extract_good_decisions(
 # 与 _retry_parse 分策略都引用，测试同样引用（词表同款单源原则）。
 ERROR_KIND_NETWORK = "network"
 ERROR_KIND_PARSE = "parse"
+ERROR_KIND_CLIENT = "client"
+ERROR_KIND_RATE_LIMIT = "rate_limit"
+ERROR_KIND_BUDGET = "budget"
+
+
+@dataclass
+class RetryBudget:
+    """一条工作流共享的 LLM 调用次数 / 耗时上限；缺省不设限。"""
+
+    max_attempts: int | None = None
+    max_elapsed_seconds: float | None = None
+    _clock: Callable[[], float] = time.monotonic
+    _started_at: float = field(init=False)
+    attempts: int = field(default=0, init=False)
+
+    def __post_init__(self) -> None:
+        if self.max_attempts is not None and self.max_attempts < 1:
+            raise ValueError("max_attempts 必须 ≥ 1")
+        if self.max_elapsed_seconds is not None and self.max_elapsed_seconds < 0:
+            raise ValueError("max_elapsed_seconds 必须 ≥ 0")
+        self._started_at = self._clock()
+
+    def consume_attempt(self) -> int:
+        elapsed = self._clock() - self._started_at
+        if self.max_elapsed_seconds is not None and elapsed >= self.max_elapsed_seconds:
+            raise LLMError(
+                "LLM 工作流累计耗时预算已耗尽，请稍后重试、减少输入或调整预算",
+                kind=ERROR_KIND_BUDGET,
+            )
+        if self.max_attempts is not None and self.attempts >= self.max_attempts:
+            raise LLMError(
+                "LLM 工作流累计尝试次数预算已耗尽，请稍后重试、减少输入或调整预算",
+                kind=ERROR_KIND_BUDGET,
+            )
+        self.attempts += 1
+        return self.attempts
+
+
+@dataclass(frozen=True)
+class LLMCallObservation:
+    """一条已脱敏的 LLM 调用观测；不包含 prompt / response / key / 文件内容。"""
+
+    workflow_id: str
+    sequence: int
+    operation: str
+    provider: str
+    route: str
+    model: str
+    duration_ms: int
+    attempts: int
+    status: str
+    final: bool
+    call_id: int | None
+    budget_attempt: int | None
+    http_status: int | None
+    error_kind: str | None
+    parse_status: str
+    request_bytes: int
+    usage: Mapping[str, Any] | None = None
+
+    def to_log_extra(self) -> dict[str, Any]:
+        usage = sanitize_llm_usage(self.usage)
+        return {
+            "workflow_id": self.workflow_id,
+            "sequence": self.sequence,
+            "operation": self.operation,
+            "provider": self.provider,
+            "route": self.route,
+            "model": self.model,
+            "duration_ms": self.duration_ms,
+            "attempts": self.attempts,
+            "status": self.status,
+            "final": self.final,
+            "call_id": self.call_id,
+            "budget_attempt": self.budget_attempt,
+            "http_status": self.http_status,
+            "error_kind": self.error_kind,
+            "parse_status": self.parse_status,
+            "request_bytes": self.request_bytes,
+            "usage": usage,
+        }
+
+
+@dataclass
+class LLMObservationCollector:
+    """工作流级 LLM 调用观测收集器：追加顺序号并只保存脱敏字段。"""
+
+    workflow_id: str
+    on_record: Callable[[], None] | None = None
+    _started_at: float = field(default_factory=time.monotonic, init=False)
+    _observations: list[LLMCallObservation] = field(default_factory=list, init=False)
+
+    def record(self, observation: LLMCallObservation) -> LLMCallObservation:
+        if observation.workflow_id != self.workflow_id:
+            raise ValueError("观测 workflow_id 与 collector 不一致")
+        if observation.sequence != len(self._observations) + 1:
+            raise ValueError("观测 sequence 必须单调递增")
+        self._observations.append(observation)
+        if self.on_record is not None:
+            try:
+                self.on_record()
+            except Exception:
+                pass
+        return observation
+
+    def collect(
+        self,
+        *,
+        operation: str,
+        provider: str,
+        route: str,
+        model: str,
+        duration_ms: int,
+        attempts: int,
+        status: str,
+        final: bool,
+        call_id: int | None,
+        budget_attempt: int | None,
+        http_status: int | None,
+        error_kind: str | None,
+        parse_status: str,
+        request_bytes: int,
+        usage: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        observation = LLMCallObservation(
+            workflow_id=self.workflow_id,
+            sequence=len(self._observations) + 1,
+            operation=operation,
+            provider=provider,
+            route=route,
+            model=model,
+            duration_ms=duration_ms,
+            attempts=attempts,
+            status=status,
+            final=final,
+            call_id=call_id,
+            budget_attempt=budget_attempt,
+            http_status=http_status,
+            error_kind=error_kind,
+            parse_status=parse_status,
+            request_bytes=request_bytes,
+            usage=sanitize_llm_usage(usage),
+        )
+        self.record(observation)
+        return observation.to_log_extra()
+
+    @property
+    def elapsed_ms(self) -> int:
+        return round((time.monotonic() - self._started_at) * 1000)
+
+    @property
+    def observations(self) -> tuple[dict[str, Any], ...]:
+        return tuple(item.to_log_extra() for item in self._observations)
+
+
+def create_llm_observation_collector(workflow_name: str) -> LLMObservationCollector:
+    """创建一次逻辑工作流的观测收集器，workflow_id = 类型 + 随机实例 id。"""
+    return LLMObservationCollector(f"{workflow_name}:{uuid.uuid4().hex}")
+
+
+@dataclass(frozen=True)
+class _ChatResult:
+    """一次真实请求的响应内容与观测元数据（解析后补记 parse_status）。"""
+
+    content: str
+    operation: str
+    started_at: float
+    request_bytes: int
+    http_status: int
+    usage: Mapping[str, Any] | None
+    call_id: int
+    attempts: int
+    budget_attempt: int | None
 
 
 class LLMError(Exception):
@@ -528,9 +721,10 @@ class LLMError(Exception):
     parse = 输出解析 / 业务失败。非 network 类别一律视为 parse。
     """
 
-    def __init__(self, message: str, kind: str = ERROR_KIND_PARSE) -> None:
+    def __init__(self, message: str, kind: str = ERROR_KIND_PARSE, *, retry_after: float | None = None) -> None:
         super().__init__(message)
         self.kind = kind
+        self.retry_after = retry_after
 
 
 # 分批 / 重试循环的条目类型限定：两阶段各自只有一对输入 / 输出类型（摘要
@@ -696,8 +890,8 @@ class Transport(Protocol):
         headers: dict[str, str],
         payload: dict[str, Any],
         timeout: float,
-    ) -> tuple[int, str]:
-        """POST JSON，返回（HTTP 状态码, 响应体文本）。"""
+    ) -> tuple[int, str, Mapping[str, str]]:
+        """POST JSON，返回（HTTP 状态码, 响应体文本, 响应头）。"""
 
 
 class UrllibTransport:
@@ -709,16 +903,24 @@ class UrllibTransport:
         headers: dict[str, str],
         payload: dict[str, Any],
         timeout: float,
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         request = urllib.request.Request(
             url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST"
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                return response.status, response.read().decode("utf-8")
+                return (
+                    response.status,
+                    response.read().decode("utf-8"),
+                    dict(response.headers.items()),
+                )
         except urllib.error.HTTPError as exc:
-            # 4xx/5xx 是业务失败，状态码透传给调用方转成 LLMError
-            return exc.code, exc.read().decode("utf-8", errors="replace")
+            # 4xx/5xx 是业务失败，状态码与 Retry-After 透传给调用方分类。
+            return (
+                exc.code,
+                exc.read().decode("utf-8", errors="replace"),
+                dict(exc.headers.items()) if exc.headers else {},
+            )
         except (urllib.error.URLError, OSError) as exc:
             # 网络层瞬断（连接重置 10054 / 超时 / DNS 失败）→ 标记 network 类，
             # _retry_parse 据此走指数退避重试（工单 deepseek-retry-hardening/01）
@@ -736,6 +938,73 @@ def _backoff_sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _http_error_kind(status: int) -> str:
+    """HTTP 状态 → 重试分类（观测与重试分支同源）。"""
+    if status == 429:
+        return ERROR_KIND_RATE_LIMIT
+    if status >= 500:
+        return ERROR_KIND_NETWORK
+    return ERROR_KIND_CLIENT
+
+
+def _retry_after_seconds(
+    headers: Mapping[str, str], *, now: Callable[[], float] = time.time
+) -> float | None:
+    """Retry-After 头解析：秒数或 HTTP-date；非法 / 缺失返回 None。"""
+    raw = next((value for name, value in headers.items() if name.lower() == "retry-after"), None)
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        try:
+            return max(0.0, parsedate_to_datetime(raw).timestamp() - now())
+        except (TypeError, ValueError):
+            return None
+
+
+def _raise_retry_exhausted(label: str, attempts: int, last_error: Exception | None) -> NoReturn:
+    """重试耗尽时保留最后一次错误分类，避免包装后退回 parse。"""
+    kind = last_error.kind if isinstance(last_error, LLMError) else ERROR_KIND_PARSE
+    retry_after = last_error.retry_after if isinstance(last_error, LLMError) else None
+    raise LLMError(
+        f"{label}连续 {attempts} 次调用失败：{last_error}",
+        kind=kind,
+        retry_after=retry_after,
+    ) from last_error
+
+
+def _unwrap_json_fence(content: str) -> str:
+    """剥掉 Markdown 代码围栏外层（工单 local-llm-json-group/01，唯一出处）。
+
+    仅当**整个输出**就是一个完整的 Markdown 代码围栏块（首行 ``` 或 ```lang
+    开头、末行 ``` 结尾、中间不含围栏行）时剥掉外层返回内部文本；非围栏 /
+    只有开头没结尾 / 内部含围栏行 / 空内容一律原样返回——绝不错伤合法内容。
+    合法 JSON 文档不可能以反引号开头，故"首行 ``` 才剥"天然不会误伤合法
+    JSON；中间出现整行 ```（嵌套/错乱围栏）无法可靠判结构，保守不剥。
+
+    与 clex.strip_code_fences 分工不同（本函数是 JSON 输出的整体围栏判定，
+    不共用其 C 源码围栏谓词——见 CONTEXT「C 词法层」；spec 定本函数为 llm 的
+    唯一出处，不引 clex）：clex 剥 C 源码**首尾围栏行**（中间围栏可能是原文
+    信息），这里要求**整个输出**恰为一个围栏块，多一行围栏/多一行尾随内容都
+    拒绝剥——"绝不错伤"的判据不同，故独立实现。
+    """
+    text = content.strip()
+    if not text:
+        return content
+    lines = text.split("\n")
+    if len(lines) < 3:
+        return content
+    opening = lines[0].rstrip()
+    if not opening.startswith("```") or "```" in opening[3:]:
+        return content
+    if lines[-1].strip() != "```":
+        return content
+    if any(line.strip().startswith("```") for line in lines[1:-1]):
+        return content
+    return "\n".join(lines[1:-1])
+
+
 class DeepSeekLLM:
     """生产 LLM：调用 DeepSeek Chat Completions，结构化输出解析为 ModuleSelection。"""
 
@@ -749,9 +1018,16 @@ class DeepSeekLLM:
         config: AppConfig,
         transport: Transport | None = None,
         hardware_words: Sequence[HardwareWordGroup] | None = None,
+        provider: str = "remote",
+        retry_budget: RetryBudget | None = None,
+        observation_collector: LLMObservationCollector | None = None,
     ) -> None:
         self._config = config
         self._transport = transport or UrllibTransport()
+        self._provider = provider
+        self._retry_budget = retry_budget
+        self._observation_collector = observation_collector
+        self._call_sequence = 0
         # 硬件词表：库外建议 name 的校验源 + 提示词科普素材；缺省用包内默认
         # 词表（wordlist.json，可手补），测试可注入自定义词表
         self._hardware_words = (
@@ -796,6 +1072,11 @@ class DeepSeekLLM:
 
         def parse(content: str) -> ModuleSelection:
             data = extract_module_selection_data(content)
+            # 核验轮短标记（工单 01）：{"converged": true} = 模型自报与上一轮
+            # 一致——无需求层可判，跳过域判决直接返回空选择（收敛驱动层据此
+            # 用上一轮结果提前停）；严格 true 才算，false / 缺字段照常走判决
+            if isinstance(data, Mapping) and data.get("converged") is True:
+                return ModuleSelection(modules=(), reasons={}, converged=True)
             try:
                 return build_module_selection(
                     data,
@@ -828,6 +1109,7 @@ class DeepSeekLLM:
             ),
             parse=parse,
             label="模块选择",
+            operation="select_modules",
             json_mode=True,
         )
 
@@ -904,30 +1186,25 @@ class DeepSeekLLM:
         )
 
     def summarize_module(self, code: str) -> str:
-        return self._chat(
-            [
-                {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"```c\n{_truncate_content(code)}\n```",
-                },
-            ]
+        return self._retry_parse(
+            system_prompt=SUMMARY_SYSTEM_PROMPT,
+            user_prompt=f"```c\n{_truncate_content(code)}\n```",
+            parse=lambda content: content,
+            label="模块简介生成",
+            operation="summarize_module",
         )
 
     def validate_module_description(
         self, description: str, code: str
     ) -> ValidationResult:
-        content = self._chat(
-            [
-                {"role": "system", "content": VALIDATION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _validation_user_prompt(description, code),
-                },
-            ],
+        return self._retry_parse(
+            system_prompt=VALIDATION_SYSTEM_PROMPT,
+            user_prompt=_validation_user_prompt(description, code),
+            parse=parse_validation_result,
+            label="简介一致性校验",
+            operation="validate_module_description",
             json_mode=True,
         )
-        return parse_validation_result(content)
 
     def fix_compile_errors(
         self,
@@ -968,6 +1245,7 @@ class DeepSeekLLM:
             ),
             label="编译错误修复",
             json_mode=True,
+            operation="fix_compile_errors",
         )
 
     def _retry_parse(
@@ -977,24 +1255,13 @@ class DeepSeekLLM:
         user_prompt: str,
         parse: Callable[[str], RT],
         label: str,
+        operation: str | None = None,
         json_mode: bool = False,
     ) -> RT:
         """整次调用级重试（单调用契约共用原语，与批处理 _retry_batch 同哲学）。
 
-        归档判定 / 逐文件简介这类"一次调用一个产物"的契约，LLM 异常或输出
-        畸形时整次重问，仍失败大声抛错——宁可多花一次调用，也不带病进入归档 /
-        入库流程（多文件归档此前无任何重试兜底，单次瞬时失败即整体放弃确认）。
-        批内条目级补问（_retry_batch）服务"一批输出多个路径键控条目"的契约，
-        这里是它的单调用孪生。
-
-        错误类别分策略（工单 deepseek-retry-hardening/01）：网络类
-        （LLMError.kind=network，连接失败 / 超时 / 网关 5xx）最多
-        NETWORK_RETRY_LIMIT 次、按连续网络失败次数指数退避（1/2/4/8 秒，
-        经 _backoff_sleep——真机教训：3 连快重试仍断、整轮推荐作废）；解析类
-        （缺省 kind，空内容 / 畸形 JSON / 业务失败）保持 SUMMARY_RETRY_LIMIT
-        次快重试（工单 recommend-call-retry/01 行为不变）。混合序列按每次
-        失败各自记账：总尝试上限 = NETWORK_RETRY_LIMIT，解析类在第
-        SUMMARY_RETRY_LIMIT 次尝试后仍失败即止。
+        HTTP / 网络错误由 _chat_once 先观测并分类；模型内容解析 / 领域校验在本层
+        观测为 parse_error，避免把空内容 / 畸形 JSON / 领域拒绝记成成功调用。
         """
         last_error: Exception | None = None
         attempts = 0
@@ -1002,26 +1269,50 @@ class DeepSeekLLM:
         while attempts < NETWORK_RETRY_LIMIT:
             attempts += 1
             try:
-                content = self._chat(
+                result = self._chat_once(
                     [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
                     json_mode=json_mode,
+                    operation=operation or label,
+                    attempt_number=attempts,
+                    observe_success=False,
                 )
-                return parse(content)
+                try:
+                    parsed = parse(result.content)
+                except LLMError as exc:
+                    self._observe_chat_result(
+                        result,
+                        status="error",
+                        parse_status="parse_error",
+                        error_kind=exc.kind,
+                    )
+                    raise
+                self._observe_chat_result(
+                    result, status="success", parse_status="success"
+                )
+                return parsed
             except LLMError as exc:
                 last_error = exc
-                if exc.kind == ERROR_KIND_NETWORK:
+                if exc.kind in (ERROR_KIND_CLIENT, ERROR_KIND_BUDGET):
+                    if exc.kind == ERROR_KIND_BUDGET:
+                        raise
+                    break
+                if exc.kind == ERROR_KIND_RATE_LIMIT:
+                    if attempts >= NETWORK_RETRY_LIMIT:
+                        break
+                    _backoff_sleep(
+                        exc.retry_after if exc.retry_after is not None else 1.0
+                    )
+                elif exc.kind == ERROR_KIND_NETWORK:
                     network_failures += 1
                     if attempts >= NETWORK_RETRY_LIMIT:
                         break
                     _backoff_sleep(2 ** (network_failures - 1))
                 elif attempts >= SUMMARY_RETRY_LIMIT:
                     break
-        raise LLMError(
-            f"{label}连续 {attempts} 次调用失败：{last_error}"
-        ) from last_error
+        _raise_retry_exhausted(label, attempts, last_error)
 
     def reference_summarize(self, material: str) -> str:
         """配套资料（例程工程 / 说明书等）→ 中文简介草稿（文本模式，工单 02）。
@@ -1179,22 +1470,17 @@ class DeepSeekLLM:
     ) -> list[R]:
         """一批条目的重试 + 补问循环（摘要 / 判定两阶段共用的唯一原语）。
 
-        模型一次输出大量 JSON 条目时偶发丢条目（判例 08：115 个文件一次返回
-        漏了 1 个），严格解析失败后不整批重来：挖出已通过逐文件校验的合法
-        条目（salvage——一个文件输出畸形只让它自己重问，好条目不连坐，见
-        _extract_good_summaries / _extract_good_decisions），只对缺失路径补问，
-        最多 SUMMARY_RETRY_LIMIT 轮；仍缺失就大声失败（宁可失败也不带病进
-        下一阶段）。严格解析不校验覆盖（master 层职责）；这里知道素材范围，
-        漏判即补问。跨轮去重：补问轮的响应可能复述已覆盖路径，同一路径只
-        保留第一次结果。每次开始补问轮（重新发请求前）发射 retry 事件（契约
-        唯一出处见 ProgressEvent）：轮次 1 起、缺失数 = 该轮要补问的文件数。
+        批处理与 _retry_parse 共享错误分类：4xx client 不重试，429 读 Retry-After，
+        网络 / 5xx 指数退避，预算耗尽立即抛出；输出畸形 / 漏条目仍走原有有限
+        补问策略，且解析异常不会被记成成功观测。
         """
         remaining = list(items)
         results: list[R] = []
         retry_round = 0
-        for _ in range(SUMMARY_RETRY_LIMIT):
-            if not remaining:
-                break
+        attempts = 0
+        network_failures = 0
+        last_error: Exception | None = None
+        while remaining and attempts < NETWORK_RETRY_LIMIT:
             if retry_round:
                 _emit(
                     progress_emitter,
@@ -1207,20 +1493,68 @@ class DeepSeekLLM:
                     ),
                 )
             retry_round += 1
-            content = self._chat(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt(remaining)},
-                ],
-                json_mode=True,
-            )
+            attempts += 1
             try:
-                parsed = parse(content, remaining)
-            except LLMError:
+                result = self._chat_once(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt(remaining)},
+                    ],
+                    json_mode=True,
+                    operation=phase_label,
+                    attempt_number=attempts,
+                    observe_success=False,
+                )
+            except LLMError as exc:
+                last_error = exc
+                if exc.kind == ERROR_KIND_BUDGET:
+                    raise
+                if exc.kind == ERROR_KIND_CLIENT:
+                    break
+                if exc.kind == ERROR_KIND_RATE_LIMIT:
+                    if attempts >= NETWORK_RETRY_LIMIT:
+                        break
+                    _backoff_sleep(
+                        exc.retry_after if exc.retry_after is not None else 1.0
+                    )
+                    continue
+                if exc.kind == ERROR_KIND_NETWORK:
+                    network_failures += 1
+                    if attempts >= NETWORK_RETRY_LIMIT:
+                        break
+                    _backoff_sleep(2 ** (network_failures - 1))
+                    continue
+                if attempts >= SUMMARY_RETRY_LIMIT:
+                    break
+                continue
+            observed = False
+            try:
+                parsed = parse(result.content, remaining)
+            except LLMError as exc:
+                last_error = exc
+                if exc.kind == ERROR_KIND_BUDGET:
+                    raise
+                if exc.kind == ERROR_KIND_CLIENT:
+                    self._observe_chat_result(
+                        result,
+                        status="error",
+                        parse_status="parse_error",
+                        error_kind=exc.kind,
+                    )
+                    break
                 # 输出整体不可用（非 JSON / 形状错）——挖出合法条目只补问坏的，
-                # 一个都挖不出才整批重问
-                parsed = salvage(content, remaining)
+                # 一个都挖不出才按解析类有限重试。
+                parsed = salvage(result.content, remaining)
+                self._observe_chat_result(
+                    result,
+                    status="error",
+                    parse_status="partial" if parsed else "parse_error",
+                    error_kind=exc.kind,
+                )
+                observed = True
                 if not parsed:
+                    if attempts >= SUMMARY_RETRY_LIMIT:
+                        break
                     continue
             results.extend(
                 x for x in parsed if x.path not in {r.path for r in results}
@@ -1228,14 +1562,36 @@ class DeepSeekLLM:
             covered = {r.path for r in results}
             missing = [x for x in remaining if x.path not in covered]
             if not missing:
+                if not observed:
+                    self._observe_chat_result(
+                        result, status="success", parse_status="success"
+                    )
                 remaining = []
                 break
+            if not observed:
+                self._observe_chat_result(
+                    result,
+                    status="error",
+                    parse_status="partial",
+                    error_kind=ERROR_KIND_PARSE,
+                )
+                last_error = LLMError(f"{phase_label}缺失 {len(missing)} 个条目")
             remaining = missing  # 漏判部分——只补问缺失路径
+            if attempts >= SUMMARY_RETRY_LIMIT:
+                break
         if remaining:
-            raise LLMError(
-                f"{phase_label}多次补问后仍缺失 "
-                + "、".join(sorted(x.path for x in remaining))[:300]
-            )
+            detail = "、".join(sorted(x.path for x in remaining))[:300]
+            if last_error is not None:
+                kind = last_error.kind if isinstance(last_error, LLMError) else ERROR_KIND_PARSE
+                retry_after = (
+                    last_error.retry_after if isinstance(last_error, LLMError) else None
+                )
+                raise LLMError(
+                    f"{phase_label}多次补问后仍缺失 {detail}：{last_error}",
+                    kind=kind,
+                    retry_after=retry_after,
+                ) from last_error
+            raise LLMError(f"{phase_label}多次补问后仍缺失 {detail}")
         return results
 
     def _summarize_batch(
@@ -1383,14 +1739,14 @@ class DeepSeekLLM:
                 "（topic_library.split_topics_document），把全文塞给模型会因"
                 "输出预算截断而静默漏题"
             )
-        content = self._chat(
-            [
-                {"role": "system", "content": TOPIC_SPLIT_SYSTEM_PROMPT},
-                {"role": "user", "content": _topic_split_user_prompt(pdf_text)},
-            ],
+        return self._retry_parse(
+            system_prompt=TOPIC_SPLIT_SYSTEM_PROMPT,
+            user_prompt=_topic_split_user_prompt(pdf_text),
+            parse=parse_topic_split,
+            label="赛题拆条",
+            operation="topic_split_topics",
             json_mode=True,
         )
-        return parse_topic_split(content)
 
     def topic_extract_number(self, text: str) -> str | None:
         """从文本提取赛题编号（如 "2026C"）；不是赛题文本返回 None。
@@ -1398,67 +1754,533 @@ class DeepSeekLLM:
         与编号解析服务配套（topic_library.resolve_number 做确定性查库）：
         粘贴题面自动识别编号时走这里，AI 提取出的编号仍以查库结果为准。
         """
-        content = self._chat(
-            [
-                {"role": "system", "content": TOPIC_NUMBER_SYSTEM_PROMPT},
-                {"role": "user", "content": _topic_number_user_prompt(text)},
-            ],
+        return self._retry_parse(
+            system_prompt=TOPIC_NUMBER_SYSTEM_PROMPT,
+            user_prompt=_topic_number_user_prompt(text),
+            parse=parse_topic_number,
+            label="赛题编号提取",
+            operation="topic_extract_number",
             json_mode=True,
         )
-        return parse_topic_number(content)
 
-    def _chat(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
+    def _observe_call(
+        self,
+        *,
+        operation: str,
+        started_at: float,
+        request_bytes: int,
+        status: str,
+        http_status: int | None,
+        parse_status: str,
+        error_kind: str | None = None,
+        usage: Mapping[str, Any] | None = None,
+        call_id: int | None = None,
+        attempts: int = 1,
+        final: bool = True,
+        budget_attempt: int | None = None,
+    ) -> None:
+        """记录一条无素材的 LLM 调用观测；请求和响应内容绝不进入日志。"""
+        observation: dict[str, Any] = {
+            "operation": operation,
+            "provider": "local" if self._provider == "local" else "deepseek",
+            "route": self._provider,
+            "model": self._config.model,
+            "duration_ms": round((time.monotonic() - started_at) * 1000),
+            "attempts": attempts,
+            "status": status,
+            "final": final,
+            "call_id": call_id,
+            "budget_attempt": budget_attempt,
+            "http_status": http_status,
+            "error_kind": error_kind,
+            "parse_status": parse_status,
+            "request_bytes": request_bytes,
+            "usage": sanitize_llm_usage(usage),
+        }
+        if self._observation_collector is not None:
+            observation = self._observation_collector.collect(**observation)
+        logger.info("LLM 调用观测", extra={"llm_observation": observation})
+
+    def _observe_chat_result(
+        self,
+        result: _ChatResult,
+        *,
+        status: str,
+        parse_status: str,
+        error_kind: str | None = None,
+    ) -> None:
+        self._observe_call(
+            operation=result.operation,
+            started_at=result.started_at,
+            request_bytes=result.request_bytes,
+            status=status,
+            http_status=result.http_status,
+            parse_status=parse_status,
+            error_kind=error_kind,
+            usage=result.usage,
+            call_id=result.call_id,
+            attempts=result.attempts,
+            budget_attempt=result.budget_attempt,
+        )
+
+    def _chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        json_mode: bool = False,
+        operation: str = "chat",
+        attempt_number: int = 1,
+    ) -> str:
+        """兼容直调用法的文本返回入口；错误分类与 _retry_parse 同款重试。"""
+        last_error: Exception | None = None
+        attempts = 0
+        network_failures = 0
+        while attempts < NETWORK_RETRY_LIMIT:
+            attempts += 1
+            try:
+                return self._chat_once(
+                    messages,
+                    json_mode=json_mode,
+                    operation=operation,
+                    attempt_number=attempt_number + attempts - 1,
+                ).content
+            except LLMError as exc:
+                last_error = exc
+                if exc.kind == ERROR_KIND_BUDGET:
+                    raise
+                if exc.kind == ERROR_KIND_CLIENT:
+                    raise
+                if exc.kind == ERROR_KIND_RATE_LIMIT:
+                    if attempts >= NETWORK_RETRY_LIMIT:
+                        break
+                    _backoff_sleep(
+                        exc.retry_after if exc.retry_after is not None else 1.0
+                    )
+                    continue
+                if exc.kind == ERROR_KIND_NETWORK:
+                    network_failures += 1
+                    if attempts >= NETWORK_RETRY_LIMIT:
+                        break
+                    _backoff_sleep(2 ** (network_failures - 1))
+                    continue
+                if attempts >= SUMMARY_RETRY_LIMIT:
+                    break
+        _raise_retry_exhausted(operation, attempts, last_error)
+
+    def _chat_once(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        json_mode: bool = False,
+        operation: str = "chat",
+        attempt_number: int = 1,
+        observe_success: bool = True,
+    ) -> _ChatResult:
+        self._call_sequence += 1
+        call_id = self._call_sequence
+        budget_attempt: int | None = None
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         body_bytes = json.dumps(payload).encode("utf-8")
+        started_at = time.monotonic()
+        request_bytes = len(body_bytes)
+        if self._retry_budget is not None:
+            try:
+                budget_attempt = self._retry_budget.consume_attempt()
+            except LLMError as exc:
+                self._observe_call(
+                    operation=operation,
+                    started_at=started_at,
+                    request_bytes=request_bytes,
+                    status="error",
+                    http_status=None,
+                    parse_status="not_sent",
+                    error_kind=exc.kind,
+                    call_id=call_id,
+                    attempts=attempt_number,
+                    budget_attempt=None,
+                )
+                raise
         if len(body_bytes) > MAX_REQUEST_BYTES:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=None,
+                parse_status="not_sent",
+                error_kind=ERROR_KIND_CLIENT,
+                call_id=call_id,
+                attempts=attempt_number,
+                budget_attempt=budget_attempt,
+            )
             # 体积断言兜底：所有嵌内容调用都应已截断 / 分批，仍超限说明有未兜底
             # 的长输入——请求发出前大声失败（可操作信息），而不是等网关 413
             raise LLMError(
                 f"请求体过大（{len(body_bytes)} 字节 > {MAX_REQUEST_BYTES} 字节）："
                 "嵌内容的调用应已按预算截断 / 分批，仍超限说明有未兜底的长输入"
-                "（如异常巨大的赛题文本）——请减小输入或减少导入工程的文件大小"
+                "（如异常巨大的赛题文本）——请减小输入或减少导入工程的文件大小",
+                kind=ERROR_KIND_CLIENT,
             )
         url = self._config.base_url.rstrip("/") + "/chat/completions"
-        status, body = self._transport.post(
-            url,
-            {
-                "Authorization": f"Bearer {self._config.api_key}",
-                "Content-Type": "application/json",
-            },
-            payload,
-            self.TIMEOUT_SECONDS,
-        )
+        headers = {"Content-Type": "application/json"}
+        if self._config.api_key:
+            headers["Authorization"] = f"Bearer {self._config.api_key}"
+        try:
+            response = self._transport.post(
+                url,
+                headers,
+                payload,
+                self.TIMEOUT_SECONDS,
+            )
+            status, body = response[:2]
+            response_headers = response[2] if len(response) == 3 else {}
+        except LLMError as exc:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=None,
+                parse_status="not_started",
+                error_kind=exc.kind,
+                call_id=call_id,
+                attempts=attempt_number,
+                budget_attempt=budget_attempt,
+            )
+            raise
         if status != 200:
+            error_kind = _http_error_kind(status)
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=status,
+                parse_status="not_started",
+                error_kind=error_kind,
+                call_id=call_id,
+                attempts=attempt_number,
+                budget_attempt=budget_attempt,
+            )
             if status == 413:
                 # 网关的请求体大小限制；嵌内容调用已截断分批，仍出现说明有未
                 # 兜底的超长输入（如超大赛题文本）——给出可操作提示
                 raise LLMError(
                     "DeepSeek API 返回 413：请求体过大。嵌内容素材已按预算截断 / "
                     "分批发送，若仍触发，请检查赛题文本是否异常巨大，或减少导入"
-                    "工程的文件数量与单文件大小"
+                    "工程的文件数量与单文件大小",
+                    kind=ERROR_KIND_CLIENT,
+                )
+            if status == 429:
+                raise LLMError(
+                    f"DeepSeek API 返回 429：请求过于频繁",
+                    kind=ERROR_KIND_RATE_LIMIT,
+                    retry_after=_retry_after_seconds(response_headers),
                 )
             if status >= 500:
-                # 5xx = 网关 / 服务端瞬时故障（重试有价值，与连接失败同款指数
-                # 退避）；4xx = 请求本身有问题（401 密钥 / 413 体积），保持
-                # 缺省 parse 类快重试（与旧行为一致）——工单 deepseek-retry-
-                # hardening/01 分策略
+                # 5xx = 网关 / 服务端瞬时故障（重试有价值，与连接失败同款指数退避）。
                 raise LLMError(
                     f"DeepSeek API 返回 {status}：{body[:200]}",
                     kind=ERROR_KIND_NETWORK,
                 )
-            raise LLMError(f"DeepSeek API 返回 {status}：{body[:200]}")
+            raise LLMError(
+                f"DeepSeek API 返回 {status}：{body[:200]}", kind=ERROR_KIND_CLIENT
+            )
         try:
             data = json.loads(body)
         except json.JSONDecodeError as exc:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=status,
+                parse_status="invalid_response_json",
+                error_kind=ERROR_KIND_PARSE,
+                call_id=call_id,
+                attempts=attempt_number,
+                budget_attempt=budget_attempt,
+            )
             raise LLMError(f"DeepSeek API 响应不是合法 JSON：{body[:200]}") from exc
         try:
-            return data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
+            self._observe_call(
+                operation=operation,
+                started_at=started_at,
+                request_bytes=request_bytes,
+                status="error",
+                http_status=status,
+                parse_status="missing_content",
+                error_kind=ERROR_KIND_PARSE,
+                call_id=call_id,
+                attempts=attempt_number,
+                budget_attempt=budget_attempt,
+            )
             raise LLMError(
                 f"DeepSeek API 响应缺少 choices[0].message.content：{body[:200]}"
             ) from exc
+        if json_mode:
+            # 本地 7B 模型偶发把 JSON 包进 Markdown 代码围栏（```json … ```），
+            # 严格解析器不接受——单点剥外层，覆盖全部 json_mode 调用；剥 = no-op
+            # 对 DeepSeek 零影响（从不包围栏），文本模式原样不动（骨架 ```c
+            # 围栏等合法内容不被 mangle）（工单 local-llm-json-group/01）
+            content = _unwrap_json_fence(content)
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        result = _ChatResult(
+            content=content,
+            operation=operation,
+            started_at=started_at,
+            request_bytes=request_bytes,
+            http_status=status,
+            usage=usage,
+            call_id=call_id,
+            attempts=attempt_number,
+            budget_attempt=budget_attempt,
+        )
+        if observe_success:
+            self._observe_chat_result(
+                result, status="success", parse_status="success"
+            )
+        return result
+
+
+# ---------------------------------------------------------------------------
+# 本地路由（工单 local-llm-routing/02）：本地方法集 / 失联提示唯一出处 + 组合式
+# RoutingLLM + build_llm 构造接线
+# ---------------------------------------------------------------------------
+
+# 本地方法集：{summarize_topic, summarize_module, reference_summarize, clarify,
+# validate_module_description, reference_judge_archivable}——三个纯文本摘要 +
+# 澄清 / 简介一致性校验 / 归档判定（spike 实测内容合理；格式障碍（围栏）已被
+# 工单 local-llm-json-group/01 的 _unwrap_json_fence 移除，JSON 调用可稳定解析）。
+# 能力事实，硬编码为常量不做用户可配。常量单源：RoutingLLM 派发与测试都引用它。
+LOCAL_LLM_METHODS = frozenset(
+    {
+        "summarize_topic",
+        "summarize_module",
+        "reference_summarize",
+        "clarify",
+        "validate_module_description",
+        "reference_judge_archivable",
+    }
+)
+
+# 本地失联提示文案（唯一出处）：RoutingLLM 包装 local 委托抛出的最终 LLMError
+# 时附上；测试与前端都引用它。用户裁决大声失败，不自动回退 DeepSeek。
+LOCAL_LLM_UNAVAILABLE_MESSAGE = (
+    "本地模型服务不可用：请启动 Ollama，或到设置页清空本地模型配置以改用 DeepSeek"
+)
+
+
+class RoutingLLM:
+    """组合式 LLM：本地方法集走 local 实例、其余方法走 remote 实例。
+
+    本地方法集 = LOCAL_LLM_METHODS（六个方法：三个纯文本摘要 + 澄清 / 简介
+    一致性校验 / 归档判定）；方法集外方法绝不落到 local。local 委托抛出的最终
+    LLMError 被包装附可操作提示（LOCAL_LLM_UNAVAILABLE_MESSAGE），错误类别
+    （kind）保持、沿用委托内既有重试机制（网络类指数退避照常），**不**自动
+    回退远程（用户裁决大声失败）。
+    """
+
+    def __init__(self, remote: LLM, local: LLM) -> None:
+        self._remote = remote
+        self._local = local
+
+    def _delegate(self, method: str) -> LLM:
+        """派发决策唯一处：读本地方法集常量——集合内方法 → local，集合外 → remote。
+
+        常量是行为开关而非装饰：改 LOCAL_LLM_METHODS 即改派发（测试以
+        「落 local 的方法集 = 常量」断言分叉即红）。
+        """
+        return self._local if method in LOCAL_LLM_METHODS else self._remote
+
+    def _local_call(self, method: str, call: Callable[[LLM], RT]) -> RT:
+        """按方法集路由调用 + 本地失联包装（本地方法集共用原语）。
+
+        _delegate 选委托后执行；仅当委托是 local 时才做失联包装（集合与派发
+        同源——集合缩了自动退化为 remote 直通，不会把远程错误误包装成本地
+        提示）。错误类别（kind）保持。
+        """
+        delegate = self._delegate(method)
+        try:
+            return call(delegate)
+        except LLMError as exc:
+            if delegate is not self._local:
+                raise
+            raise self._wrap_local_error(exc) from exc
+
+    def _wrap_local_error(self, exc: LLMError) -> LLMError:
+        """本地失联大声失败：包装附可操作提示，错误类别（kind）保持。
+
+        已带提示（防御嵌套路由）则原样返回，避免重复包装。
+        """
+        if LOCAL_LLM_UNAVAILABLE_MESSAGE in str(exc):
+            return exc
+        return LLMError(f"{LOCAL_LLM_UNAVAILABLE_MESSAGE}（{exc}）", kind=exc.kind)
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[ManifestSummary],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
+    ) -> ModuleSelection:
+        return self._remote.select_modules(
+            problem_text,
+            manifest_summaries,
+            references,
+            reference_fulltexts,
+            manual_fulltexts,
+            clarifications,
+        )
+
+    def clarify(
+        self, problem_text: str, clarifications: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]:
+        return self._local_call(
+            "clarify", lambda delegate: delegate.clarify(problem_text, clarifications)
+        )
+
+    def summarize_topic(self, problem_text: str) -> str:
+        return self._local_call(
+            "summarize_topic", lambda delegate: delegate.summarize_topic(problem_text)
+        )
+
+    def generate_main_skeleton(
+        self,
+        problem_text: str,
+        module_interfaces: Sequence[str],
+        reference_fulltexts: Mapping[str, str] | None = None,
+    ) -> str:
+        return self._remote.generate_main_skeleton(
+            problem_text, module_interfaces, reference_fulltexts
+        )
+
+    def generate_smoke_main(
+        self, problem_text: str, module_interfaces: Sequence[str]
+    ) -> str:
+        return self._remote.generate_smoke_main(problem_text, module_interfaces)
+
+    def summarize_module(self, code: str) -> str:
+        return self._local_call(
+            "summarize_module", lambda delegate: delegate.summarize_module(code)
+        )
+
+    def validate_module_description(
+        self, description: str, code: str
+    ) -> ValidationResult:
+        return self._local_call(
+            "validate_module_description",
+            lambda delegate: delegate.validate_module_description(description, code),
+        )
+
+    def fix_compile_errors(
+        self,
+        error_text: str,
+        file_contexts: Mapping[str, str],
+        *,
+        problem_text: str = "",
+        platform: str = "",
+        module_slugs: Sequence[str] = (),
+        main_c: str = "",
+        dropped_files: Sequence[str] = (),
+        previous_fixes: Sequence[Mapping[str, Any]] = (),
+    ) -> tuple[FixSuggestion, ...]:
+        return self._remote.fix_compile_errors(
+            error_text,
+            file_contexts,
+            problem_text=problem_text,
+            platform=platform,
+            module_slugs=module_slugs,
+            main_c=main_c,
+            dropped_files=dropped_files,
+            previous_fixes=previous_fixes,
+        )
+
+    def distill_master(
+        self,
+        platform: str,
+        project_names: Sequence[str],
+        judgment_files: Sequence[JudgmentFile],
+        comparison_summary: str,
+        progress_emitter: ProgressEmitter | None = None,
+    ) -> tuple[FileDecision, ...]:
+        return self._remote.distill_master(
+            platform,
+            project_names,
+            judgment_files,
+            comparison_summary,
+            progress_emitter,
+        )
+
+    def reference_summarize(self, material: str) -> str:
+        return self._local_call(
+            "reference_summarize",
+            lambda delegate: delegate.reference_summarize(material),
+        )
+
+    def reference_judge_archivable(
+        self, candidates: Sequence[ReferenceCandidate]
+    ) -> tuple[str, ...]:
+        return self._local_call(
+            "reference_judge_archivable",
+            lambda delegate: delegate.reference_judge_archivable(candidates),
+        )
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]:
+        return self._remote.topic_split_topics(pdf_text)
+
+    def topic_extract_number(self, text: str) -> str | None:
+        return self._remote.topic_extract_number(text)
+
+
+def build_llm(
+    config: AppConfig,
+    retry_budget: RetryBudget | None = None,
+    observation_collector: LLMObservationCollector | None = None,
+    transport: Transport | None = None,
+) -> LLM:
+    """按配置构造 LLM（webapp 的 AppContext.llm_factory 默认值）。
+
+    本地 base_url 为空 → 普通 DeepSeekLLM（≡ 现状，零回归）；非空 → RoutingLLM
+    （remote = 主配置实例，local = 本地 base_url / 本地 model，且不携带远程
+    api_key——本地请求默认无认证；本地 model 空串时沿用主 model，保证请求体
+    model 非空）。
+    """
+    if not config.local_llm_base_url:
+        return DeepSeekLLM(
+            config,
+            transport=transport,
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+        )
+    local_config = replace(
+        config,
+        api_key="",
+        base_url=config.local_llm_base_url,
+        model=config.local_llm_model or config.model,
+    )
+    return RoutingLLM(
+        remote=DeepSeekLLM(
+            config,
+            transport=transport,
+            provider="remote",
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+        ),
+        local=DeepSeekLLM(
+            local_config,
+            transport=transport,
+            provider="local",
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+        ),
+    )
 
 
 def extract_module_selection_data(content: str) -> dict[str, Any]:
@@ -1892,6 +2714,14 @@ def _selection_user_prompt(
         )
     if references:
         contract += ', "references": ["想读全文的参考文件 id，不需要可省略"]'
+    # 输出契约：评分点是题面可选增强信息；模型无法识别评分表时省略或返回空数组，
+    # 由 selection 层按可选信息降级，不阻断模块推荐。
+    contract = (
+        contract
+        + ', "score_points": [{"id": "评分点编号", '
+        '"part": "basic/development/unknown", "description": "评分点描述", '
+        '"score": 10 或 null, "sentence_refs": [1]}]'
+    )
     return prompt + "\n只返回 json 格式的 JSON 对象：" + contract + "}"
 
 

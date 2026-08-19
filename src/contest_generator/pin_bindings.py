@@ -157,6 +157,7 @@ def resolve_bindings(
             "enc",
             "uart_tx",
             "uart_rx",
+            "adc",
         ):
             instances = _type_level_instances(
                 bound, declaration.type, key, pin
@@ -166,6 +167,7 @@ def resolve_bindings(
             "uart_rx",
             "i2c_scl",
             "i2c_sda",
+            "adc",
         ):
             instances = _type_level_instances(
                 bound, declaration.type, key, pin

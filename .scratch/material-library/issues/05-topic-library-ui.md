@@ -14,7 +14,7 @@
 
 **Blocked by:** 04 — 拆条分块（录入流程的前置）；01 — 赛题库录入后端（已有）
 
-**Status:** done
+**Status:** resolved
 
 ## Comments
 

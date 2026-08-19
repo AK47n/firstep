@@ -34,6 +34,7 @@ from contest_generator.events import (
     EVENT_DONE,
     EVENT_ERROR,
     EVENT_FIX_START,
+    EVENT_LLM_TELEMETRY,
     EVENT_PARSE_DONE,
     EVENT_PHASE_DONE,
     EVENT_QUESTION,
@@ -47,14 +48,22 @@ from contest_generator.events import (
 )
 from contest_generator.boards import board_for_platform
 from contest_generator.fix_errors import FixSuggestion
-from contest_generator.llm import LLMError
+from contest_generator.llm import (
+    LLMObservationCollector,
+    LOCAL_LLM_UNAVAILABLE_MESSAGE,
+    LLMError,
+    RoutingLLM,
+    build_llm,
+)
 from contest_generator.pin_bindings import PinBindingError, resolve_bindings
 from contest_generator.library import ValidationResult
+from contest_generator.manifest import ManifestSummary
 from contest_generator.selection import (
     FunctionRequirement,
     ModuleSelection,
     OutOfLibrarySuggestion,
     ReferenceSuggestion,
+    ScorePoint,
     resolve_selection,
 )
 from contest_generator.reference_library import add_reference
@@ -77,6 +86,8 @@ from contest_generator.webapp import (
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
+    FakeTransport,
+    RecordingLLM,
     make_fake_ccs_master_project,
     make_fake_master_project,
     make_fake_module_library,
@@ -111,7 +122,7 @@ class RaisingLLM:
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
     ) -> ModuleSelection:
@@ -193,7 +204,7 @@ class ScriptedDistillLLM:
         self._delay = delay
 
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[str]
+        self, problem_text: str, manifest_summaries: Sequence[ManifestSummary]
     ) -> ModuleSelection:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
 
@@ -517,6 +528,47 @@ def _fix_done(client, payload) -> dict:
     return done[0]
 
 
+def test_generation_result_includes_score_points_when_present(tmp_path):
+    """生成结果摘要 JSON 使用 GenerationSummary 上同一份评分点；空清单不落键。"""
+    from contest_generator.generator import GenerationSummary
+    from contest_generator.webapp import _generation_result
+
+    summary = GenerationSummary(
+        output_dir=tmp_path / "out",
+        structure=("main.c",),
+        include_dirs=("modules/dht11/inc",),
+        modules=(("dht11", ("code/dht11.c",)),),
+        score_points=(ScorePoint("B1", "basic", "完成测距", 10.0, (2,)),),
+    )
+
+    assert _generation_result(summary)["score_points"] == [
+        {
+            "id": "B1",
+            "part": "basic",
+            "description": "完成测距",
+            "score": 10.0,
+            "sentence_refs": [2],
+        }
+    ]
+
+
+def test_generation_result_omits_score_points_when_absent(tmp_path):
+    """旧生成摘要没有评分点字段时保持旧载荷形状。"""
+    from contest_generator.generator import GenerationSummary
+    from contest_generator.webapp import _generation_result
+
+    data = _generation_result(
+        GenerationSummary(
+            output_dir=tmp_path / "out",
+            structure=("main.c",),
+            include_dirs=(),
+            modules=(),
+        )
+    )
+
+    assert "score_points" not in data
+
+
 def test_fix_errors_requires_error_text(client):
     resp = client.post("/api/fix-errors", json={"output_dir": "C:\\x"})
     assert resp.status_code == 400
@@ -603,6 +655,222 @@ def test_fix_errors_event_sequence_and_context_passed(client, context, tmp_path)
     call = holder["llm"].fix_errors_calls[0]
     assert call[1] == {"main.c": "int x = 1;\nint main(void) { return x; }\n"}
     assert call[2] == "" and call[3] == "" and call[4] == () and call[5] == ""
+
+
+def test_fix_errors_sse_emits_content_safe_llm_telemetry(tmp_path):
+    """真实 DeepSeekLLM 假传输：fix 流额外发 llm_telemetry，done 终态仍保持原形。"""
+    out = _fix_project(tmp_path)
+    body = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "fixes": [
+                                    {
+                                        "file": "main.c",
+                                        "line": 1,
+                                        "old_snippet": "int x = 1;",
+                                        "new_snippet": "int x = 2;",
+                                        "reason": "修复初始化",
+                                    }
+                                ]
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 2,
+                "total_tokens": 12,
+                "unsafe_text": "secret-usage-content",
+            },
+        }
+    )
+    transport = FakeTransport(body=body)
+
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
+        return build_llm(
+            config,
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+            transport=transport,
+        )
+
+    config = AppConfig(
+        api_key="sk-secret",
+        module_library_dir=tmp_path / "modules",
+        masters_dir=tmp_path / "masters",
+    )
+    ctx = AppContext(
+        config=config,
+        llm_factory=factory,
+    )
+    (tmp_path / "modules").mkdir()
+    client = TestClient(create_app(ctx))
+
+    events = _fix_stream(
+        client,
+        {
+            "output_dir": str(out),
+            "error_text": "main.c(1): error #20: secret-compile-output",
+            "problem_text": "secret-problem-text",
+        },
+    )
+
+    assert [kind for kind, _ in events] == [
+        EVENT_PARSE_DONE,
+        EVENT_FIX_START,
+        EVENT_LLM_TELEMETRY,
+        EVENT_APPLY_RESULT,
+        EVENT_DONE,
+    ]
+    telemetry = events[2][1]
+    assert telemetry["llm_workflow_id"].startswith("fix-errors:")
+    assert telemetry["llm_total_calls"] == 1
+    assert telemetry["llm_local_calls"] == 0
+    assert telemetry["llm_deepseek_calls"] == 1
+    assert telemetry["llm_latest_operation"] == "fix_compile_errors"
+    assert telemetry["llm_error_kind"] == ""
+    assert telemetry["llm_parse_status"] == "success"
+    assert telemetry["llm_latest_http_status"] == 200
+    assert telemetry["llm_attempts"] == 1
+    assert telemetry["llm_retry_calls"] == 0
+    assert telemetry["llm_error_calls"] == 0
+    assert telemetry["llm_parse_error_calls"] == 0
+    assert telemetry["llm_rate_limit_calls"] == 0
+    assert telemetry["llm_network_error_calls"] == 0
+    assert telemetry["llm_5xx_calls"] == 0
+    assert telemetry["llm_budget_blocked_calls"] == 0
+    assert telemetry["llm_request_bytes"] > 0
+    assert telemetry["llm_duration_ms"] >= 0
+    assert telemetry["llm_usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+    assert telemetry["llm_calls"] == [
+        {
+            "workflow_id": telemetry["llm_workflow_id"],
+            "sequence": 1,
+            "operation": "fix_compile_errors",
+            "provider": "deepseek",
+            "route": "remote",
+            "model": config.model,
+            "duration_ms": telemetry["llm_calls"][0]["duration_ms"],
+            "attempts": 1,
+            "status": "success",
+            "final": True,
+            "call_id": 1,
+            "budget_attempt": 1,
+            "http_status": 200,
+            "error_kind": None,
+            "parse_status": "success",
+            "request_bytes": telemetry["llm_request_bytes"],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        }
+    ]
+    serialized = json.dumps(telemetry, ensure_ascii=False)
+    assert "secret-problem-text" not in serialized
+    assert "secret-compile-output" not in serialized
+    assert "secret-usage-content" not in serialized
+    assert "sk-secret" not in serialized
+    assert events[-1][0] == EVENT_DONE
+    assert "llm" not in events[-1][1]
+
+
+def test_recent_llm_workflows_endpoint_returns_sanitized_completed_fix_workflow(tmp_path):
+    """只读 recent endpoint：fix 流结束后返回 content-safe summary + call details。"""
+    out = _fix_project(tmp_path)
+    body = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "fixes": [
+                                    {
+                                        "file": "main.c",
+                                        "line": 1,
+                                        "old_snippet": "int x = 1;",
+                                        "new_snippet": "int x = 2;",
+                                        "reason": "修复初始化",
+                                    }
+                                ]
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 2,
+                "total_tokens": 12,
+                "unsafe_text": "secret-usage-content",
+            },
+        }
+    )
+    transport = FakeTransport(body=body)
+
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
+        return build_llm(
+            config,
+            retry_budget=retry_budget,
+            observation_collector=observation_collector,
+            transport=transport,
+        )
+
+    config = AppConfig(
+        api_key="sk-secret",
+        module_library_dir=tmp_path / "modules",
+        masters_dir=tmp_path / "masters",
+    )
+    ctx = AppContext(config=config, llm_factory=factory)
+    (tmp_path / "modules").mkdir()
+    client = TestClient(create_app(ctx))
+
+    _fix_stream(
+        client,
+        {
+            "output_dir": str(out),
+            "error_text": "main.c(1): error #20: secret-compile-output",
+            "problem_text": "secret-problem-text",
+        },
+    )
+    resp = client.get("/api/llm-workflows/recent")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["workflows"]) == 1
+    workflow = data["workflows"][0]
+    assert workflow["workflow_id"].startswith("fix-errors:")
+    assert workflow["workflow_name"] == "fix-errors"
+    assert workflow["call_count"] == 1
+    assert workflow["local_calls"] == 0
+    assert workflow["deepseek_calls"] == 1
+    assert workflow["request_bytes"] > 0
+    assert workflow["duration_ms"] >= 0
+    assert workflow["status"] == "success"
+    assert workflow["usage"] == {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+    assert workflow["calls"][0]["operation"] == "fix_compile_errors"
+    assert workflow["calls"][0]["usage"] == workflow["usage"]
+    # 估算字段（工单 llm-cost-control/01）：展示层派生，默认单价下该用量
+    # (10 prompt × 2 + 2 completion × 8) / 1e6 ≈ 0，字段存在且为数值即可
+    assert set(workflow["est"]) == {"est_cost_actual", "est_cost_deepseek", "est_savings"}
+    assert workflow["est"]["est_cost_actual"] >= 0
+    assert workflow["est"]["est_cost_deepseek"] >= workflow["est"]["est_cost_actual"]
+    serialized = json.dumps(data, ensure_ascii=False)
+    assert "secret-problem-text" not in serialized
+    assert "secret-compile-output" not in serialized
+    assert "secret-usage-content" not in serialized
+    assert "sk-secret" not in serialized
 
 
 def test_fix_errors_unsafe_fix_path_ends_with_error_event(client, context, tmp_path):
@@ -1042,6 +1310,18 @@ def test_extract_unsupported_type_returns_clear_error(client):
     assert "不支持的文件类型" in resp.json()["detail"]
 
 
+def test_extract_image_without_vision_key_returns_actionable_error(client):
+    """图片上传未配视觉 key → 可操作中文提示（引导设置页），不崩（工单 03）。"""
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("题.png", b"\x89PNG\r\n\x1a\nfake", "image/png")},
+    )
+
+    assert resp.status_code == 400
+    assert "视觉" in resp.json()["detail"]
+    assert "设置" in resp.json()["detail"]
+
+
 def test_topic_summarize_returns_summary(client, context):
     """赛题简介：单次 LLM 调用返回一句话总览 + 功能要点（只展示，不进下游）。"""
     resp = client.post(
@@ -1169,7 +1449,15 @@ def test_generate_with_k230_writes_py_and_summary_lists_it(client, context, tmp_
     )
     # 摘要：modules 里 k230 files 空，python_artifacts 单独给出副产物清单
     assert {"slug": "k230", "files": []} in data["modules"]
-    assert data["python_artifacts"] == [{"slug": "k230", "output": "main.py"}]
+    assert data["python_artifacts"] == [
+        {
+            "slug": "k230",
+            "output": "main.py",
+            "template_id": "default",
+            "template_name": "",
+            "template_description": "",
+        }
+    ]
     assert "main.py" in data["structure"]
 
 
@@ -1232,6 +1520,79 @@ def test_skeleton_rejects_instances_with_empty_name(client):
 
     assert resp.status_code == 400
     assert "name" in resp.json()["detail"]
+
+
+
+
+def test_llm_factory_receives_shared_retry_budget_and_collector_for_skeleton(tmp_path):
+    budgets = []
+    collectors = []
+
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
+        budgets.append(retry_budget)
+        collectors.append(observation_collector)
+        return FakeLLM(main_skeleton="int main(void) { while(1) {} }\n")
+
+    modules = make_fake_module_library(tmp_path / "modules")
+    masters = tmp_path / "masters"
+    import_master(masters, PLATFORM_STM32, make_fake_master_project(tmp_path / "master"))
+    ctx = AppContext(
+        config=AppConfig(api_key="sk-test", module_library_dir=modules, masters_dir=masters),
+        llm_factory=factory,
+    )
+    client = TestClient(create_app(ctx))
+
+    response = client.post(
+        "/api/skeleton",
+        json={"problem_text": "赛题", "platform": PLATFORM_STM32, "slugs": []},
+    )
+
+    assert response.status_code == 200
+    assert len(budgets) >= 2
+    assert budgets[0] is not None
+    assert budgets[0] is budgets[1]
+    assert collectors[0] is not None
+    assert collectors[0] is collectors[1]
+    assert collectors[0].workflow_id.startswith("skeleton:")
+
+
+def test_llm_factory_receives_shared_retry_budget_and_collector_for_recommend(tmp_path):
+    budgets = []
+    collectors = []
+
+    def factory(
+        config: AppConfig,
+        retry_budget=None,
+        observation_collector: LLMObservationCollector | None = None,
+    ):
+        budgets.append(retry_budget)
+        collectors.append(observation_collector)
+        return FakeLLM(selection=ModuleSelection(modules=(), reasons={}))
+
+    ctx = AppContext(
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=tmp_path / "modules",
+            masters_dir=tmp_path / "masters",
+        ),
+        llm_factory=factory,
+    )
+    (tmp_path / "modules").mkdir()
+    client = TestClient(create_app(ctx))
+
+    frames = list(client.post("/api/recommend", json={"problem_text": "赛题"}).iter_lines())
+
+    assert any("event: done" in line for line in frames)
+    assert len(budgets) >= 2
+    assert budgets[0] is not None
+    assert budgets[0] is budgets[1]
+    assert collectors[0] is not None
+    assert collectors[0] is collectors[1]
+    assert collectors[0].workflow_id.startswith("recommend:")
 
 
 def test_skeleton_forwards_instances_to_llm(client, context):
@@ -2518,6 +2879,258 @@ def test_settings_ccs_toolchain_paths_roundtrip(client, context):
     )
 
 
+def test_settings_vision_fields_roundtrip_and_mask(client, context):
+    """视觉通道（工单 vision-eyes/01）：GET 缺省 base/model + key 掩码；PUT
+    透传；掩码形态 = 沿用旧值（与 api_key 同款语义）。"""
+    current = client.get("/api/settings").json()
+    assert current["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert current["vision_api_key"] == ""
+    assert current["vision_model"] == "glm-4v-flash"
+    # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：GET 带出
+    assert current["price_reference"]["concurrent_connections"] == 2500
+
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "vision_api_key": "sk-vision-123456",
+            "vision_model": "glm-4v-flash",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.vision_api_key == "sk-vision-123456"
+    saved = client.get("/api/settings").json()
+    assert saved["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert saved["vision_api_key"].startswith("sk-v")  # 掩码（前 4 位 + 省略号）
+    assert saved["vision_api_key"] != "sk-vision-123456"
+    assert saved["vision_model"] == "glm-4v-flash"
+
+    # 掩码形态 PUT = 沿用旧值；空串 = 关闭
+    masked = saved["vision_api_key"]
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "vision_api_key": masked,
+            "vision_model": "glm-4v-flash",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.vision_api_key == "sk-vision-123456"
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "vision_api_key": "",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.vision_api_key == ""
+
+
+def test_settings_local_llm_fields_roundtrip(client, context):
+    """local_llm_base_url / local_llm_model（工单 local-llm-routing/03）读写透传，
+    缺省空串 = 本地路由关闭（前端显示为空输入框）。"""
+    current = client.get("/api/settings").json()
+    assert current["local_llm_base_url"] == ""
+    assert current["local_llm_model"] == ""
+
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "local_llm_base_url": "http://localhost:11434/v1",
+            "local_llm_model": "qwen2.5-coder:7b-instruct",
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == "http://localhost:11434/v1"
+    assert context[0].config.local_llm_model == "qwen2.5-coder:7b-instruct"
+    saved = client.get("/api/settings").json()
+    assert saved["local_llm_base_url"] == "http://localhost:11434/v1"
+    assert saved["local_llm_model"] == "qwen2.5-coder:7b-instruct"
+
+
+def test_settings_local_llm_put_absent_or_blank_closes(client, context):
+    """PUT 缺省 / 空串两字段 = 关闭本地路由（等价于从 config.json 移除）。"""
+    current = client.get("/api/settings").json()
+    base = {
+        "base_url": current["base_url"],
+        "api_key": current["api_key"],
+        "model": current["model"],
+        "module_library_dir": current["module_library_dir"],
+        "masters_dir": current["masters_dir"],
+    }
+    set_local = {
+        "local_llm_base_url": "http://localhost:11434/v1",
+        "local_llm_model": "qwen2.5-coder:7b-instruct",
+    }
+
+    # 先填上本地字段
+    resp = client.put("/api/settings", json={**base, **set_local})
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == "http://localhost:11434/v1"
+
+    # 缺省字段 → 关闭
+    resp = client.put("/api/settings", json=base)
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == ""
+    assert context[0].config.local_llm_model == ""
+
+    # 再填上，然后空串 → 关闭
+    resp = client.put("/api/settings", json={**base, **set_local})
+    assert resp.status_code == 200
+    resp = client.put("/api/settings", json={**base, "local_llm_base_url": "", "local_llm_model": ""})
+    assert resp.status_code == 200
+    assert context[0].config.local_llm_base_url == ""
+    assert context[0].config.local_llm_model == ""
+    saved = client.get("/api/settings").json()
+    assert saved["local_llm_base_url"] == ""
+    assert saved["local_llm_model"] == ""
+
+
+def test_settings_local_llm_put_rejects_non_string(client, context):
+    """PUT 两字段非字符串 → 400 中文报错（与既有字段同严格度）。"""
+    current = client.get("/api/settings").json()
+    base = {
+        "base_url": current["base_url"],
+        "api_key": current["api_key"],
+        "model": current["model"],
+        "module_library_dir": current["module_library_dir"],
+        "masters_dir": current["masters_dir"],
+    }
+
+    resp = client.put("/api/settings", json={**base, "local_llm_base_url": 123})
+    assert resp.status_code == 400
+    assert "local_llm_base_url 必须是字符串" in resp.json()["detail"]
+
+    resp = client.put("/api/settings", json={**base, "local_llm_model": 456})
+    assert resp.status_code == 400
+    assert "local_llm_model 必须是字符串" in resp.json()["detail"]
+
+
+def test_settings_llm_prices_roundtrip_and_defaults(client, context):
+    """llm_prices（工单 llm-cost-control/01 + 缓存拆分计价更新）：GET 返回生效表
+    （默认 + 覆盖合并，输入分缓存命中/未命中两档）；PUT 覆盖透传；缺省 / 空
+    对象 = 恢复内置默认；旧形态 {input_per_million} 兼容 = 未命中档。"""
+    saved = client.get("/api/settings").json()
+    # 未配置覆盖 → 返回内置默认表（deepseek 参考价 + local 零成本）
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] > 0
+    assert saved["llm_prices"]["deepseek"]["input_cache_hit_per_million"] > 0
+    assert saved["llm_prices"]["local"]["input_cache_miss_per_million"] == 0.0
+
+    base = {
+        "base_url": saved["base_url"],
+        "api_key": saved["api_key"],
+        "model": saved["model"],
+        "module_library_dir": saved["module_library_dir"],
+        "masters_dir": saved["masters_dir"],
+    }
+    # 新形态覆盖（三字段）
+    custom = {
+        "llm_prices": {
+            "deepseek": {
+                "input_cache_hit_per_million": 0.1,
+                "input_cache_miss_per_million": 3.0,
+                "output_per_million": 9.0,
+            },
+        }
+    }
+    resp = client.put("/api/settings", json={**base, **custom})
+    assert resp.status_code == 200
+    assert context[0].config.llm_prices == custom["llm_prices"]
+    saved = client.get("/api/settings").json()
+    assert saved["llm_prices"]["deepseek"] == {
+        "input_cache_hit_per_million": 0.1,
+        "input_cache_miss_per_million": 3.0,
+        "output_per_million": 9.0,
+    }
+    # 计费时段（工单 01 扩展）：缺省 peak；override 原文带出（前端区分留空/覆盖）
+    assert saved["llm_price_period"] == "peak"
+    assert saved["llm_prices_override"] == custom["llm_prices"]
+    # local 未覆盖仍零成本
+    assert saved["llm_prices"]["local"]["input_cache_miss_per_million"] == 0.0
+
+    # 旧形态 {input_per_million} 兼容：input = 未命中档，命中档 = 内置默认
+    resp = client.put(
+        "/api/settings",
+        json={**base, "llm_prices": {"deepseek": {"input_per_million": 8.0, "output_per_million": 32.0}}},
+    )
+    assert resp.status_code == 200
+    saved = client.get("/api/settings").json()
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] == 8.0
+    assert saved["llm_prices"]["deepseek"]["output_per_million"] == 32.0
+
+    # 空对象 → 恢复默认（config.llm_prices = None）
+    resp = client.put("/api/settings", json={**base, "llm_prices": {}})
+    assert resp.status_code == 200
+    assert context[0].config.llm_prices is None
+    saved = client.get("/api/settings").json()
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] > 0
+
+
+def test_settings_llm_price_period_roundtrip(client, context):
+    """计费时段（工单 01 扩展）：PUT off_peak → GET 带出 + 生效表按空闲基准；
+    非法值 400；空覆盖时 override = None。"""
+    saved = client.get("/api/settings").json()
+    assert saved["llm_price_period"] == "peak"
+    assert saved["llm_prices_override"] is None
+
+    base = {
+        "base_url": saved["base_url"],
+        "api_key": saved["api_key"],
+        "model": saved["model"],
+        "module_library_dir": saved["module_library_dir"],
+        "masters_dir": saved["masters_dir"],
+    }
+    resp = client.put("/api/settings", json={**base, "llm_price_period": "off_peak"})
+    assert resp.status_code == 200
+    assert context[0].config.llm_price_period == "off_peak"
+    saved = client.get("/api/settings").json()
+    assert saved["llm_price_period"] == "off_peak"
+    # 未覆盖 → 生效表 = 空闲官方价（hit 0.05 / miss 1.5 / out 4.5）
+    assert saved["llm_prices"]["deepseek"]["input_cache_hit_per_million"] == 0.05
+    assert saved["llm_prices"]["deepseek"]["input_cache_miss_per_million"] == 1.5
+    assert saved["llm_prices"]["deepseek"]["output_per_million"] == 4.5
+
+    resp = client.put("/api/settings", json={**base, "llm_price_period": "evening"})
+    assert resp.status_code == 400
+    assert "llm_price_period" in resp.json()["detail"]
+
+
+def test_settings_llm_prices_put_rejects_non_object(client, context):
+    """PUT llm_prices 非 JSON 对象 → 400（外层形状严格，条目级旁路）。"""
+    current = client.get("/api/settings").json()
+    base = {
+        "base_url": current["base_url"],
+        "api_key": current["api_key"],
+        "model": current["model"],
+        "module_library_dir": current["module_library_dir"],
+        "masters_dir": current["masters_dir"],
+    }
+    resp = client.put("/api/settings", json={**base, "llm_prices": "high"})
+    assert resp.status_code == 400
+    assert "llm_prices 必须是 JSON 对象" in resp.json()["detail"]
+
+
 def test_state_reports_toolchain_availability(client, context, monkeypatch):
     """/api/state 携带 toolchains（前端置灰依据）：探测命中 → True，未命中 → False。"""
     monkeypatch.setattr(
@@ -2553,7 +3166,7 @@ class TopicAwareLLM(FakeLLM):
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
@@ -2585,7 +3198,7 @@ class ClarifyHistoryTopicLLM(TopicAwareLLM):
     def select_modules(
         self,
         problem_text: str,
-        manifest_summaries: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
@@ -3444,6 +4057,178 @@ def test_recommend_manual_overlapping_anchor_deduped(client, context):
 
 
 # ---------------------------------------------------------------------------
+# 推荐缓存（工单 llm-cost-control/02）：同题重跑命中直出 done，指纹失效走真实
+# ---------------------------------------------------------------------------
+
+
+def _recommend_payload(topic_id="2026C", **overrides):
+    payload = {
+        "problem_text": "赛题：做个智能小车，能巡线、能避障。",
+        "topic_id": topic_id,
+        "platform": "stm32",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_recommend_cache_hit_reuses_done_without_llm(client, context):
+    """同题同平台第二次推荐：cache_hit 事件 + done 载荷与首次逐字一致，不调 LLM。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    first = _recommend_done(client, _recommend_payload())
+    assert first["modules"]
+
+    # 第二次：把 LLM 换成必抛的——命中缓存则不触达 LLM
+    class _BoomLLM:
+        def __getattr__(self, name):
+            raise AssertionError(f"缓存命中不应调用 LLM：{name}")
+
+    holder["llm"] = _BoomLLM()
+    events = _recommend_stream(client, _recommend_payload())
+    cache_hits = [data for kind, data in events if kind == "cache_hit"]
+    assert cache_hits, f"应发射 cache_hit 事件：{events}"
+    assert cache_hits[0]["warns"] == []
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done and done[0] == first
+
+
+def test_recommend_cache_invalidated_when_problem_text_changes(client, context):
+    """题面变化 → 指纹失效 → 走真实推荐（不命中）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    _recommend_done(client, _recommend_payload())
+    events = _recommend_stream(client, _recommend_payload(problem_text="赛题变了：做个小车。"))
+    assert not [k for k, _ in events if k == "cache_hit"]
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, "题面变应走真实推荐并以 done 收尾"
+
+
+def test_recommend_cache_skipped_when_disabled_in_settings(client, context):
+    """设置页关闭缓存开关后：同题重跑走真实推荐（不 cache_hit）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    _recommend_done(client, _recommend_payload())
+
+    current = client.get("/api/settings").json()
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "recommend_cache_enabled": False,
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.recommend_cache_enabled is False
+
+    events = _recommend_stream(client, _recommend_payload())
+    assert not [k for k, _ in events if k == "cache_hit"]
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, "开关关闭应走真实推荐"
+
+
+def test_recommend_corrupt_cache_falls_back_to_real(client, context, tmp_path):
+    """损坏缓存文件 → 静默旁路走真实推荐（Web 交互语义，不报错退出）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    # 预置一个损坏缓存（键 = topic_id）
+    cache_dir = context[0].config_path.parent / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    (cache_dir / "recommend_2026C.json").write_text("{broken", encoding="utf-8")
+
+    events = _recommend_stream(client, _recommend_payload())
+    assert not [k for k, _ in events if k == "cache_hit"]
+    done = [data for kind, data in events if kind == EVENT_DONE]
+    assert done, "坏缓存应静默走真实推荐"
+
+
+class _EverChangingLLM(TopicAwareLLM):
+    """每轮返回不同功能需求层的假 LLM（永不收敛）：验证轮数上限接线。"""
+
+    def __init__(self) -> None:
+        super().__init__(selection=SELECTION, extracted_key=None)
+        self.select_calls = 0
+
+    def select_modules(
+        self,
+        problem_text,
+        manifest_summaries,
+        references=(),
+        reference_fulltexts=None,
+        manual_fulltexts=None,
+        clarifications=(),
+    ):
+        self.select_calls += 1
+        return ModuleSelection(
+            modules=("dht11",),
+            reasons={"dht11": f"第 {self.select_calls} 轮"},
+            requirements=(
+                FunctionRequirement(
+                    requirement=f"需求 {self.select_calls}",
+                    sentence_index=1,
+                    modules=("dht11",),
+                ),
+            ),
+        )
+
+
+def test_recommend_max_rounds_setting_controls_convergence_rounds(client, context):
+    """收敛轮数上限（工单 01）：默认 4 轮；设置 recommend_max_rounds=2 后同题
+    最多 2 轮（每轮需求层都变 → 永不收敛，轮数 = 上限）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+
+    holder["llm"] = _EverChangingLLM()
+    _recommend_done(client, _recommend_payload(problem_text="题面甲：做个小车。"))
+    assert holder["llm"].select_calls == 4  # 默认上限
+
+    current = client.get("/api/settings").json()
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "recommend_max_rounds": 2,
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.recommend_max_rounds == 2
+
+    holder["llm"] = _EverChangingLLM()
+    _recommend_done(client, _recommend_payload(problem_text="题面乙：做个智能车。"))
+    assert holder["llm"].select_calls == 2  # 上限 2
+
+    # 越界值 400
+    bad = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "recommend_max_rounds": 5,
+        },
+    )
+    assert bad.status_code == 400
+    assert "recommend_max_rounds 必须在 2-4 之间" in bad.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
 # 参考文件库：文件名搜索 + 文件清单 + 文件服务（文件名搜索 / 文件打开工单）
 # ---------------------------------------------------------------------------
 
@@ -3645,6 +4430,76 @@ def _recommend_route_node() -> ast.FunctionDef:
     ]
     assert len(routes) == 1, "webapp.py 应恰好一个 recommend 路由函数"
     return routes[0]
+
+
+# ---------------------------------------------------------------------------
+# 本地路由（工单 local-llm-routing/02）：AppContext.llm_factory 默认值 + webapp
+# 级派发两路断言（本地组端点走 local、远程组端点走 remote）
+# ---------------------------------------------------------------------------
+
+
+def test_app_context_llm_factory_default_is_build_llm():
+    """llm_factory 默认值指向 build_llm：不注入 fake 时路由按配置自动生效。"""
+    assert AppContext().llm_factory is build_llm
+
+
+def test_local_routing_webapp_routes_method_groups(tmp_path):
+    """注入 RoutingLLM（remote/local 两个记录型 fake）+ 本地配置：本地组端点
+    （赛题简介）走 local、远程组端点（编号提取）走 remote——路由全链路生效。"""
+    library_dir = make_fake_module_library(tmp_path / "module_library")
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=library_dir,
+            masters_dir=tmp_path / "masters",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="qwen2.5-coder:7b-instruct",
+        ),
+        llm_factory=lambda config: router,
+    )
+    client = TestClient(create_app(ctx))
+
+    # 本地组端点：/api/topic/summarize → summarize_topic → local
+    resp = client.post("/api/topic/summarize", json={"problem_text": "题面"})
+    assert resp.status_code == 200
+    assert local.calls == ["summarize_topic"]
+    assert remote.calls == []
+
+    # 远程组端点：/api/topics/extract-number → topic_extract_number → remote
+    resp = client.post("/api/topics/extract-number", json={"text": "2026C"})
+    assert resp.status_code == 200
+    assert remote.calls == ["topic_extract_number"]
+    assert local.calls == ["summarize_topic"]  # 本地集不被远程调用触碰
+
+
+def test_local_routing_webapp_local_failure_is_loud(tmp_path):
+    """本地失联在 webapp 层大声失败：502 + 可操作提示（错误映射表出口）。"""
+    class _FailingLocal(RecordingLLM):
+        def summarize_topic(self, problem_text: str) -> str:
+            raise LLMError("连接被拒绝", kind="network")
+
+    library_dir = make_fake_module_library(tmp_path / "module_library")
+    router = RoutingLLM(remote=RecordingLLM("remote"), local=_FailingLocal("local"))
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=library_dir,
+            masters_dir=tmp_path / "masters",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="qwen2.5-coder:7b-instruct",
+        ),
+        llm_factory=lambda config: router,
+    )
+    client = TestClient(create_app(ctx))
+
+    resp = client.post("/api/topic/summarize", json={"problem_text": "题面"})
+    assert resp.status_code == 502
+    assert LOCAL_LLM_UNAVAILABLE_MESSAGE in resp.json()["detail"]
 
 
 def _is_orchestration_call(node: ast.Call) -> bool:

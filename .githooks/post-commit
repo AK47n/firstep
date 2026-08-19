@@ -1,0 +1,12 @@
+#!/bin/sh
+# 提交后自动更新 CHANGELOG.md（changelog-auto）：
+# python -m contest_generator.changelog 把新提交补进更新记录；有变更则提交。
+# 规则见 src/contest_generator/changelog.py；任何失败都不阻塞原提交。
+root=$(git rev-parse --show-toplevel) || exit 0
+cd "$root" || exit 0
+PYTHONPATH=src python -m contest_generator.changelog || exit 0
+if ! git diff --quiet -- CHANGELOG.md; then
+  git add -- CHANGELOG.md
+  git commit -m "chore: 自动更新 CHANGELOG" --no-verify || exit 0
+fi
+exit 0

@@ -171,6 +171,10 @@
   .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
   .chip.out { background: rgba(139, 148, 158, .15); color: var(--muted); cursor: default; }
   .chip.out .reason { color: var(--muted); }
+  .score-panel { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+                 margin-bottom: 10px; background: var(--panel-2); }
+  .score-panel .title { font-weight: 600; margin-bottom: 6px; color: var(--text); }
+  .score-panel .score-row { font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
   /* 参考资料选择列表（工单：表格状对齐）：勾选 | 资料 | 平台 | 说明 四列 */
   .ref-pick-head, .ref-pick-row {
     display: grid; grid-template-columns: 28px minmax(0, 1fr) 110px minmax(0, 2fr);
@@ -300,6 +304,20 @@
   .prog-log .file-list { margin: 0 0 4px 22px; color: var(--muted); white-space: pre-wrap;
                          word-break: break-all; }
   .prog-done { font-size: 13px; color: var(--ok); font-weight: 600; }
+  .llm-telemetry { margin-top: 8px; font-size: 12px; color: var(--muted);
+                   font-family: var(--mono); line-height: 1.6; }
+  /* ---- 最近 LLM 工作流（llm-observability-dashboard/03）：设置页只读仪表盘 ---- */
+  .recent-wf-list { display: flex; flex-direction: column; gap: 8px; }
+  .recent-wf-summary { border: 1px solid var(--border); border-radius: 8px;
+                       padding: 8px 10px; font-size: 12px; font-family: var(--mono);
+                       line-height: 1.7; background: var(--code-bg); }
+  .recent-wf-summary .wf-name { font-weight: 600; }
+  .recent-wf-summary .wf-status-ok { color: var(--ok); font-weight: 600; }
+  .recent-wf-summary .wf-status-error { color: var(--danger); font-weight: 600; }
+  .recent-wf-calls { margin: 4px 0 0 10px; padding-left: 10px;
+                     border-left: 1px dashed var(--border); color: var(--muted); }
+  .recent-wf-calls .call-row { white-space: nowrap; overflow: hidden;
+                               text-overflow: ellipsis; }
   /* ---- 参考文件查看弹层（文件名搜索 + 文件打开工单）：清单 + 文本内联 ---- */
   .ref-files-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
                        display: flex; align-items: flex-start; justify-content: center;
@@ -488,9 +506,9 @@
       <h2><span class="step-no">1</span>赛题原文</h2>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
       <div class="row" style="margin-top:8px">
-        <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md">
+        <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp">
         <button id="btn-upload">上传并抽取文字</button>
-        <span class="muted">支持 .pdf / .docx / .txt / .md，纯本地解析</span>
+        <span class="muted">支持 .pdf / .docx / .txt / .md / 图片，纯本地解析；图片与 PDF 示意图经免费视觉通道识别（需在设置页配置）</span>
       </div>
       <div class="row" style="margin-top:8px">
         <input type="text" id="topic-id" placeholder="历史赛题编号，如 2026C" style="flex:1;max-width:220px">
@@ -637,6 +655,7 @@
         <div class="item">输出目录：<span id="res-dir" class="slug"></span></div>
         <div class="item">include path：<span id="res-includes" class="slug"></span></div>
         <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
+        <div class="item hidden" id="res-score-points" style="white-space:pre-line"></div>
         <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
              工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
         <div class="item hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
@@ -657,6 +676,7 @@
       </div>
       <div id="fix-center-round" class="muted" style="margin-top:8px"></div>
       <div id="fix-status" class="muted" style="margin-top:8px"></div>
+      <div id="fix-llm-telemetry" class="llm-telemetry hidden"></div>
       <div id="fix-errors-msg" class="error"></div>
       <div id="fix-results" style="margin-top:10px"></div>
       <h3 style="margin-top:12px">编译输出（自动采集）</h3>
@@ -940,6 +960,37 @@
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">计费时段</span>
+        <label style="margin:0 12px 0 8px;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="peak" id="period-peak"> 高峰期</label>
+        <label style="margin:0;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="off_peak" id="period-off-peak"> 空闲期</label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>DeepSeek 输入单价·缓存命中（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in-hit" placeholder="0.10"></div>
+        <div style="flex:1"><label>DeepSeek 输入单价·缓存未命中（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in" placeholder="3.0"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>DeepSeek 输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-out" placeholder="9.0"></div>
+      </div>
+      <div class="muted" style="margin-top:6px">输入框留空 = 按所选时段的官方价计费（placeholder 即该时段价）；填值 = 自定义覆盖，覆盖优先于时段。</div>
+      <details id="price-reference" style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted)">DeepSeek Flash 官方价格参考（点击展开）</summary>
+        <div style="margin-top:8px;font-size:12px;line-height:1.7">
+          <table style="border-collapse:collapse;width:100%;max-width:520px">
+            <thead>
+              <tr style="text-align:left"><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">计费项</th><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">空闲时段（元/百万 token）</th><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">高峰时段（元/百万 token）</th></tr>
+            </thead>
+            <tbody id="price-ref-rows"></tbody>
+          </table>
+          <div style="margin-top:6px" class="muted" id="price-ref-foot"></div>
+          <div class="muted" style="margin-top:6px">上方是官方参考价（用于费用估算展示）；可在输入框按实际时段覆盖默认值。</div>
+        </div>
+      </details>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>本地模型输入单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-in" placeholder="默认 0（本机免费）"></div>
+        <div style="flex:1"><label>本地模型输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-out" placeholder="默认 0（本机免费）"></div>
+      </div>
+      <div class="muted" style="margin-top:6px">仅用于「最近 LLM 工作流」费用估算（官方价格会调整，此处的值是参考；留空 = 维持当前）。</div>
     </div>
 
     <div class="card">
@@ -963,6 +1014,47 @@
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>SysConfig CLI 路径（留空自动探测）</label><input type="text" id="set-ccs-sysconfig-cli" placeholder="C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"></div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>本地模型（可选）</h2>
+      <div class="row">
+        <div style="flex:1"><label>本地 LLM base_url（留空 = 本地路由关闭）</label><input type="text" id="set-local-llm-base-url" placeholder="http://localhost:11434/v1"></div>
+        <div style="flex:1"><label>本地模型（留空 = 关闭）</label><input type="text" id="set-local-llm-model" placeholder="qwen2.5-coder:7b-instruct"></div>
+      </div>
+      <div class="muted">填写后，赛题简介 / 模块简介 / 参考素材简介三个纯文本摘要调用走本地模型；其余调用仍走 DeepSeek。</div>
+    </div>
+
+    <div class="card">
+      <h2>视觉通道（可选）</h2>
+      <div class="row">
+        <div style="flex:1"><label>视觉 base_url（留空 = 默认智谱）</label><input type="text" id="set-vision-base-url" placeholder="https://open.bigmodel.cn/api/paas/v4"></div>
+        <div style="flex:1"><label>视觉模型（留空 = glm-4v-flash）</label><input type="text" id="set-vision-model" placeholder="glm-4v-flash"></div>
+      </div>
+      <div style="flex:1"><label>视觉 API key（留空 = 视觉关闭；掩码保持不变）</label><input type="text" id="set-vision-api-key" placeholder="智谱开放平台免费 key（GLM-4V-Flash）" autocomplete="off"></div>
+      <div class="muted">免费云端识图（GLM-4V-Flash）：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别——AI 简介 / 推荐 / 骨架都能"看到"图的内容。key 在<a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a>免费获取；不配置 = 视觉功能关闭，其余功能不受影响。</div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="align-items:center">
+        <h2 style="margin:0;flex:1">最近 LLM 工作流</h2>
+        <label style="margin:0 12px 0 0;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">
+          <input type="checkbox" id="set-recommend-cache" style="margin:0"> 推荐缓存
+        </label>
+        <label style="margin:0 12px 0 0;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">
+          收敛轮数
+          <select id="set-recommend-rounds" style="font-size:12px">
+            <option value="4">4（默认）</option>
+            <option value="3">3</option>
+            <option value="2">2（最快）</option>
+          </select>
+        </label>
+        <button id="btn-refresh-recent-wf" style="margin-left:auto">刷新</button>
+      </div>
+      <div class="muted" style="margin:10px 0">已完成运行的只读摘要：本地 / DeepSeek 调用数、总耗时、请求字节、状态、每次调用明细与估算费用。仅保存在内存，重启即清空，不写配置。</div>
+      <div class="muted" style="margin:0 0 8px">推荐缓存：同题重跑推荐直出上次结果（省最贵的推荐段 LLM 调用）；题面 / 平台变化自动失效，参考 / 澄清变化会提示差异。收敛轮数：核验轮模型自报一致即提前停（通常 2 轮内），上限兜底。</div>
+      <div id="recent-workflows" class="recent-wf-list"></div>
+      <div class="muted" style="margin-top:8px">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
     </div>
 
     <div class="card">
@@ -1039,7 +1131,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
     if (btn.dataset.tab === "topic") loadTopics();
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
-    if (btn.dataset.tab === "settings") loadSettings();
+    if (btn.dataset.tab === "settings") { loadSettings(); loadRecentWorkflows(); }
   });
 });
 
@@ -1047,9 +1139,12 @@ document.querySelectorAll("nav button").forEach((btn) => {
 // 全局状态
 // ---------------------------------------------------------------------------
 let state = null;                 // GET /api/state
+let llmPricesDefaults = {};       // 当前生效 LLM 单价表（工单 llm-cost-control/01）
 let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
 let expanded = [];                // 展开后的模块 manifest（含依赖）
+let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
 let warnings = [];                // 平台警告
+let scorePoints = [];              // 推荐解析出的题面评分点（只读增强信息）
 let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
 let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
 
@@ -1154,6 +1249,7 @@ function clearTopicSummary() {
   $("topic-summary-box").classList.add("hidden");
   $("topic-summary-box").textContent = "";
   $("topic-summary-msg").textContent = "";
+  scorePoints = [];  // 题面变更后评分点失效，避免旧题验收清单串进生成 / 交接
 }
 
 $("btn-topic-summary").addEventListener("click", async () => {
@@ -1187,6 +1283,15 @@ function moduleBadges(m) {
   return badges.join("");
 }
 
+function pythonArtifactSummary(m) {
+  const pa = m.python_artifact;
+  if (!pa || !pa.templates || !pa.templates.length) return "";
+  const templates = pa.templates.map((t) =>
+    `<div><strong>${esc(t.name || t.id)}</strong>${t.description ? "：" + esc(t.description) : ""}</div>`
+  ).join("");
+  return `<div class="muted" style="margin-top:4px">副产物模板：${templates}</div>`;
+}
+
 // 工单 10：推荐 = SSE 流（round → converged → done / question / error）。
 // 收敛循环：功能需求层两轮一致即停、上限 4 轮；库内命中 chips 可勾选/移除，
 // 库外建议灰色 + 「需自备」标注（仅展示，不进 selectedSlugs / expand / generate）。
@@ -1203,6 +1308,16 @@ function suggestionChip(s) {
   return '<span class="chip out" title="' + esc(note) + '">' + esc(s.name)
     + '<span class="reason">需自备' + note
     + (s.examples.length ? "：" + esc(s.examples.join(" / ")) : "") + '</span></span>';
+}
+
+function renderScorePointPanel(points) {
+  if (!points || !points.length) return "";
+  const rows = formatScorePoints(points).split("\n").map((line) =>
+    '<div class="score-row">' + esc(line) + '</div>'
+  ).join("");
+  return '<div class="score-panel" id="rec-score-points">'
+    + '<div class="title">评分点验收清单</div>'
+    + rows + '</div>';
 }
 
 function renderRecommendResult(data, autoAdd = true) {
@@ -1226,14 +1341,16 @@ function renderRecommendResult(data, autoAdd = true) {
   }
   expanded = []; warnings = [];
   renderSelected(); renderWarnings();
+  scorePoints = data.score_points || [];
   lastRecommend = data;
   const box = $("rec-list");
   const requirements = data.requirements || [];
+  const scorePanel = renderScorePointPanel(scorePoints);
   if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length)) {
-    box.innerHTML = '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
+    box.innerHTML = scorePanel + '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
     return;
   }
-  box.innerHTML = requirements.map((r) => `
+  box.innerHTML = scorePanel + requirements.map((r) => `
     <div class="item">
       <div class="head"><span class="slug">句子${r.sentence} · ${esc(r.requirement)}</span></div>
       <div class="rec-chips">
@@ -1294,6 +1411,14 @@ const recPanel = makeProgressPanel({
       $("rec-bar").classList.remove("hidden");
       $("rec-bar-fill").style.width = "100%";   // round_total 是上限非保证：提前收敛就跳满
     },
+    cache_hit: (ev) => {
+      // 推荐缓存命中（工单 llm-cost-control/02）：直出上次结果，不调 LLM
+      $("rec-prog-text").textContent = (ev.warns && ev.warns.length)
+        ? "⚠ 复用本地推荐缓存，但输入与缓存时不同：" + ev.warns.join("；")
+        : "复用本地推荐缓存（题面 / 平台未变）…";
+      $("rec-bar").classList.remove("hidden");
+      $("rec-bar-fill").style.width = "100%";
+    },
     done: (ev) => {
       recPanel.finish();
       $("rec-progress").classList.add("hidden");
@@ -1330,6 +1455,7 @@ function stopRecProgress() {   // 流未起 / 断线路径：停表 + 收起面�
 
 async function startRecommend(problem) {
   recProblem = problem;   // 补问回答重启时仍走同一实例（同一生命周期语义）
+  scorePoints = [];       // 新推荐生命周期开始，避免旧题评分点串进生成 / 交接
   $("recommend-msg").textContent = "";
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
@@ -1549,6 +1675,22 @@ function renderSelected() {
     if (!selectedSlugs.includes(m.slug)) continue;
     for (const dep of (m.dependencies || [])) bringers.set(dep, m.slug);
   }
+  // 副产物模板下拉（工单 k230-multi-template/04）：多模板模块（k230）显示，
+  // 选项 = manifest.python_artifact.templates（name + description 提示）；
+  // 改动 ≠ 默认才记进 pythonTemplates（缺省 = 不发字段 = 旧行为逐字节不变）
+  const templateSelect = (m) => {
+    const pa = m.python_artifact;
+    if (!pa || !pa.templates || pa.templates.length < 2) return "";
+    const current = pythonTemplates[m.slug] || pa.default;
+    const options = pa.templates.map((t) =>
+      `<option value="${esc(t.id)}" ${t.id === current ? "selected" : ""}>${esc(t.name || t.id)}</option>`).join("");
+    const hints = pa.templates.map((t) => `${t.name || t.id}：${t.description || ""}`).join("\n");
+    return `
+      <div class="row" style="margin:6px 0 0;align-items:center;gap:6px">
+        <label style="font-size:12px;color:var(--muted)">副产物模板</label>
+        <select data-template="${esc(m.slug)}" title="${esc(hints)}" style="font-size:12px;max-width:260px">${options}</select>
+      </div>`;
+  };
   box.innerHTML = expanded.map((m) => {
     const isDep = !selectedSlugs.includes(m.slug);
     const bringer = bringers.get(m.slug);
@@ -1561,16 +1703,25 @@ function renderSelected() {
         ${isDep ? "" : `<button class="danger" data-remove="${esc(m.slug)}">移除</button>`}
       </div>
       <div class="desc" title="${esc((m.description || "") + " " + notes(m))}">${esc(m.description || "")}${(m.dependencies || []).length ? ` · 依赖：${esc(m.dependencies.join("、"))}` : ""}</div>
+      ${isDep ? "" : templateSelect(m)}
     </div>`;
   }).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
       expanded = []; warnings = [];
+      delete pythonTemplates[b.dataset.remove];  // 模板选择随模块移除清理（工单 04）
       instancePinTarget = null;  // 选脚目标随清单变化失效（工单 04）
       renderSelected(); renderWarnings(); renderModulePool(); renderModuleSearch();
       renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
       renderInstanceConfig();  // 多实例配置卡（工单 04）：被移除模块的实例清单随之清掉
+    }));
+  box.querySelectorAll("[data-template]").forEach((sel) =>
+    sel.addEventListener("change", () => {
+      const slug = sel.dataset.template;
+      const pa = expanded.find((m) => m.slug === slug)?.python_artifact;
+      if (sel.value === (pa && pa.default)) delete pythonTemplates[slug];
+      else pythonTemplates[slug] = sel.value;
     }));
 }
 
@@ -2519,11 +2670,29 @@ function formatResModules(modules, pythonArtifacts) {
   // 产物摘要「模块文件」行（工单 k230-vision-copilot/04 抽纯函数，node:test
   // 直测）：C 模块文件 + Python 副产物同列——k230 这类纯副产物模块（files
   // 空）也能在摘要里看见 main.py；不带副产物的空 files 模块只显示 slug。
-  const pyBySlug = new Map((pythonArtifacts || []).map((a) => [a.slug, a.output]));
+  const pyBySlug = new Map((pythonArtifacts || []).map((a) => [a.slug, a]));
+  // 模板名回显（工单 k230-multi-template/04）：done 载荷优先，页面状态兜底
+  const pyTemplateName = (slug, artifact) => {
+    if (artifact && (artifact.template_name || artifact.template_id)) {
+      const name = artifact.template_name || (artifact.template_id === "default" ? "" : artifact.template_id);
+      return name ? "（模板：" + name + "）" : "";
+    }
+    // node:test 直抽纯函数时没有页面全局状态；缺省按旧摘要格式处理。
+    const expandedList = typeof expanded === "undefined" ? [] : (expanded || []);
+    const templates = typeof pythonTemplates === "undefined" ? {} : pythonTemplates;
+    const m = expandedList.find((x) => x.slug === slug);
+    const pa = m && m.python_artifact;
+    if (!pa || !pa.templates || pa.templates.length < 2) return "";
+    const id = templates[slug] || pa.default;
+    const t = pa.templates.find((x) => x.id === id);
+    return t && (t.name || t.id) ? "（模板：" + (t.name || t.id) + "）" : "";
+  };
   return (modules || []).map((m) => {
     const parts = [...(m.files || [])];
-    const py = pyBySlug.get(m.slug);
-    if (py) parts.push("副产物 " + py);
+    const artifact = pyBySlug.get(m.slug);
+    if (artifact && artifact.output) {
+      parts.push("副产物 " + artifact.output + pyTemplateName(m.slug, artifact));
+    }
     return m.slug + (parts.length ? "(" + parts.join(", ") + ")" : "");
   }).join("、");
 }
@@ -2564,10 +2733,17 @@ $("btn-generate").addEventListener("click", async () => {
     };
     if (Object.keys(bindings).length) payload.bindings = bindings;
     if (Object.keys(inst).length) payload.instances = inst;
+    // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
+    // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
+    if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;
+    if (scorePoints.length) payload.score_points = scorePoints;
     const data = await apiPost("/api/generate", payload);
     $("res-dir").textContent = data.output_dir;
     $("res-includes").textContent = data.include_dirs.join("；");
     $("res-modules").textContent = formatResModules(data.modules, data.python_artifacts);
+    $("res-score-points").textContent = (data.score_points && data.score_points.length)
+      ? "评分点：\n" + formatScorePoints(data.score_points) : "";
+    $("res-score-points").classList.toggle("hidden", !(data.score_points && data.score_points.length));
     // 构建脚本提示（工单 mspm0-build-makefiles/01）：非空时展示，空则隐藏
     $("res-build-hint").textContent = data.build_hint || "";
     $("res-build-hint").classList.toggle("hidden", !data.build_hint);
@@ -2599,6 +2775,18 @@ $("btn-generate").addEventListener("click", async () => {
 // 精打磨在下一个会话完成）。交接永远在最后一步：修复中心跑完后，把编译/
 // 修复状态一起装进提示词再交给下一个会话。
 // ---------------------------------------------------------------------------
+function formatScorePoints(points) {
+  if (!points || !points.length) return "（无结构化评分点）";
+  const partLabel = (part) => part === "basic" ? "基础" : part === "development" ? "发挥" : "未知";
+  const scoreText = (score) => (typeof score === "number" && Number.isFinite(score)) ? score + " 分" : "未标分";
+  const refsText = (refs) => (refs && refs.length) ? "句子 " + refs.join("、") : "未关联原文";
+  return points.map((p, i) => {
+    const id = p.id || ("score-" + (i + 1));
+    return "- " + id + "｜" + partLabel(p.part) + "｜" + scoreText(p.score)
+      + "｜" + refsText(p.sentence_refs || []) + "｜" + (p.description || "");
+  }).join("\n");
+}
+
 function handoffPlatformLabel() {
   const pf = (state.platforms || []).find((p) => p.id === chosenPlatform);
   return pf ? pf.name : (chosenPlatform || "未选择");
@@ -2673,6 +2861,9 @@ $("btn-handoff").addEventListener("click", async () => {
     const refs = await handoffReferenceLines();
     const warns = handoffWarnings();
     const pins = handoffPinLines();
+    const hasScores = scorePoints.length > 0;
+    const scores = formatScorePoints(scorePoints);
+    const scoreSection = hasScores ? ["", "## 五、评分点验收清单", "", scores] : [];
     const lines = [
       "# 电赛工程交接提示词（Handoff）",
       "",
@@ -2693,6 +2884,7 @@ $("btn-handoff").addEventListener("click", async () => {
       "## 四、模块清单",
       "",
       handoffModuleLines(),
+      ...scoreSection,
       "",
       "## 五、平台警告",
       "",
@@ -2906,6 +3098,48 @@ function renderToolchainStatus() {
     + "（缺失时一键按钮置灰，用下方贴文本模式；可在设置页配置路径）";
 }
 
+function formatLLMTelemetry(data) {
+  const toNumber = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
+  const parts = [
+    "LLM：" + toNumber(data.llm_total_calls) + " calls",
+    "local " + toNumber(data.llm_local_calls) + " / DeepSeek " + toNumber(data.llm_deepseek_calls),
+  ];
+  if (data.llm_latest_operation) parts.push("latest " + data.llm_latest_operation);
+  if (data.llm_error_kind) parts.push("error " + data.llm_error_kind + " / parse " + (data.llm_parse_status || ""));
+  else if (data.llm_parse_status) parts.push("parse " + data.llm_parse_status);
+  if (data.llm_latest_http_status) parts.push("http " + toNumber(data.llm_latest_http_status));
+  const counters = [];
+  if (data.llm_attempts) counters.push("attempts " + toNumber(data.llm_attempts));
+  if (data.llm_retry_calls) counters.push("retries " + toNumber(data.llm_retry_calls));
+  if (data.llm_error_calls) counters.push("errors " + toNumber(data.llm_error_calls));
+  if (data.llm_parse_error_calls) counters.push("parse_errors " + toNumber(data.llm_parse_error_calls));
+  if (data.llm_rate_limit_calls) counters.push("429 " + toNumber(data.llm_rate_limit_calls));
+  if (data.llm_network_error_calls) counters.push("network " + toNumber(data.llm_network_error_calls));
+  if (data.llm_5xx_calls) counters.push("5xx " + toNumber(data.llm_5xx_calls));
+  if (data.llm_budget_blocked_calls) counters.push("budget " + toNumber(data.llm_budget_blocked_calls));
+  if (counters.length) parts.push(counters.join(", "));
+  parts.push("request " + toNumber(data.llm_request_bytes).toLocaleString("en-US") + "B");
+  parts.push("duration " + toNumber(data.llm_duration_ms).toLocaleString("en-US") + "ms");
+  const usage = data.llm_usage || null;
+  if (usage && typeof usage === "object") {
+    const usageText = Object.keys(usage).map((k) => k + "=" + usage[k]).join(", ");
+    if (usageText) parts.push("usage " + usageText);
+  }
+  return parts.join(" · ");
+}
+
+function renderFixLLMTelemetry(data) {
+  const el = $("fix-llm-telemetry");
+  el.textContent = formatLLMTelemetry(data);
+  el.classList.remove("hidden");
+}
+
+function clearFixLLMTelemetry() {
+  const el = $("fix-llm-telemetry");
+  el.classList.add("hidden");
+  el.textContent = "";
+}
+
 function updateFixCenterAvailability() {
   const ok = !!chosenPlatform && !!(toolchains || {})[chosenPlatform];
   $("btn-fix-center").disabled = !ok || fixLoop.running;
@@ -2941,6 +3175,8 @@ function fixHandleEvent(type, raw, outputDir) {
     row._source = { path: data.file, line: data.line };
     row.addEventListener("click", () => fixToggleSource(row));
     $("fix-results").appendChild(row);
+  } else if (type === "llm_telemetry") {
+    renderFixLLMTelemetry(data);
   } else if (type === "done") {
     lastFixDone = data;
     const fixes = data.fixes || [];
@@ -3131,6 +3367,7 @@ async function startFixCenter() {
   $("fix-results").innerHTML = "";
   $("fix-center-round").textContent = "";
   $("fix-center-log").value = "";
+  clearFixLLMTelemetry();
   $("btn-fix-rollback").classList.add("hidden");
   $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
   fixCenterBusy(true);
@@ -3205,6 +3442,7 @@ $("btn-fix-errors").addEventListener("click", async () => {
   const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
   if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
   $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
+  clearFixLLMTelemetry();
   lastFix = null;
   lastFixDone = null;
   fixLoop.resume = null;             // 续跑态随之失效（工单 fix-loop-continue/01）
@@ -3253,7 +3491,7 @@ async function loadLibrary() {
       <tr>
         <td class="slug">${esc(m.slug)}</td>
         <td>${esc(m.description)}</td>
-        <td class="muted">${esc((m.dependencies || []).join("、") || "—")}</td>
+        <td class="muted">${esc((m.dependencies || []).join("、") || "—")}${pythonArtifactSummary(m)}</td>
         <td>${moduleBadges(m)}</td>
         <td>
           <button data-edit-desc="${esc(m.slug)}">改简介</button>
@@ -4358,9 +4596,111 @@ async function loadSettings() {
     $("set-ccs-sdk-dir").value = s.ccs_sdk_dir || "";
     $("set-ccs-compiler-dir").value = s.ccs_compiler_dir || "";
     $("set-ccs-sysconfig-cli").value = s.ccs_sysconfig_cli || "";
+    // 本地 LLM 端点（工单 local-llm-routing/03）：空串 = 本地路由关闭
+    $("set-local-llm-base-url").value = s.local_llm_base_url || "";
+    $("set-local-llm-model").value = s.local_llm_model || "";
+    // 视觉通道（工单 vision-eyes/01）：key 只回掩码；空 = 视觉关闭
+    $("set-vision-base-url").value = s.vision_base_url || "";
+    $("set-vision-api-key").value = s.vision_api_key || "";
+    $("set-vision-model").value = s.vision_model || "";
+    // LLM 单价（工单 llm-cost-control/01 + 缓存拆分 + 计费时段）：输入框只显示
+    // 用户显式覆盖（llm_prices_override 原文）；无覆盖 = 留空，placeholder 显示
+    // 所选时段的官方价（留空 = 按时段基准价计费）
+    llmPricesDefaults = s.llm_prices || {};
+    const priceOverride = s.llm_prices_override || {};
+    const dsOv = priceOverride.deepseek || {};
+    $("set-ds-in-hit").value = dsOv.input_cache_hit_per_million ?? "";
+    $("set-ds-in").value = dsOv.input_cache_miss_per_million ?? (dsOv.input_per_million ?? "");
+    $("set-ds-out").value = dsOv.output_per_million ?? "";
+    const localOv = priceOverride.local || {};
+    $("set-local-in").value = localOv.input_cache_miss_per_million ?? (localOv.input_per_million ?? "");
+    $("set-local-out").value = localOv.output_per_million ?? "";
+    // 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，决定 placeholder 与基准价
+    const period = s.llm_price_period === "off_peak" ? "off_peak" : "peak";
+    $("period-peak").checked = period === "peak";
+    $("period-off-peak").checked = period === "off_peak";
+    renderPriceReference(s.price_reference);
+    periodPlaceholders(period);
+    // 推荐缓存开关（工单 llm-cost-control/02）：缺省开
+    $("set-recommend-cache").checked = s.recommend_cache_enabled !== false;
+    // 收敛轮数上限（工单 01）：缺省 4
+    $("set-recommend-rounds").value = String(s.recommend_max_rounds ?? 4);
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
+}
+
+/** DeepSeek Flash 官方价格参考表渲染（工单 llm-cost-control 更新）：
+ * 数据单源 = 后端 DEEPSEEK_FLASH_PRICE_REFERENCE（/api/settings
+ * price_reference），前端只渲染不硬编码；缺数据 = 面板隐藏。
+ * 同时缓存到 window.__priceRef 供 periodPlaceholders 用（placeholder =
+ * 所选时段的官方价）。 */
+function renderPriceReference(ref) {
+  const rows = $("price-ref-rows");
+  if (!ref || !rows) return;
+  window.__priceRef = ref;
+  const fmt = (v) => (v ?? "-") + " 元";
+  const row = (label, entry) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + esc(label) + "</td>"
+      + "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + fmt(entry.off_peak) + "</td>"
+      + "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + fmt(entry.peak) + "</td>";
+    rows.appendChild(tr);
+  };
+  row("输入（缓存命中）", ref.input_cache_hit || {});
+  row("输入（缓存未命中）", ref.input_cache_miss || {});
+  row("输出", ref.output || {});
+  const foot = $("price-ref-foot");
+  if (foot) {
+    const concur = ref.concurrent_connections;
+    const asOf = ref.as_of ? "（" + esc(ref.as_of) + " 官方定价）" : "";
+    foot.textContent = concur
+      ? "单服务实例最大并发连接数：" + concur + " " + asOf
+      : asOf;
+  }
+}
+
+/** 输入框 placeholder = 所选时段的官方价（留空 = 按此时段基准价计费）。 */
+function periodPlaceholders(period) {
+  const ref = window.__priceRef || {};
+  const set = (id, entry) => {
+    const v = (entry || {})[period];
+    if (v !== undefined && $(id)) $(id).placeholder = String(v);
+  };
+  set("set-ds-in-hit", ref.input_cache_hit);
+  set("set-ds-in", ref.input_cache_miss);
+  set("set-ds-out", ref.output);
+}
+
+document.querySelectorAll('input[name="price-period"]').forEach((radio) =>
+  radio.addEventListener("change", () => periodPlaceholders(radio.value)));
+
+function collectLlmPrices() {
+  // 每个 provider 的框全留空 = 不覆盖（维持当前/默认）；任一填写则按填的值
+  // （未填的沿用当前生效值）→ 空对象 = 后端恢复内置默认。
+  // DeepSeek 输入分缓存命中/未命中两档（官方差价 ~30 倍）；local 无缓存
+  // 概念：输入框值同时写命中/未命中两档。
+  const llmPrices = {};
+  const ds = {};
+  const curDs = llmPricesDefaults.deepseek || { input_cache_hit_per_million: 0, input_cache_miss_per_million: 0, output_per_million: 0 };
+  const hit = $("set-ds-in-hit").value.trim(), miss = $("set-ds-in").value.trim(), out = $("set-ds-out").value.trim();
+  if (hit || miss || out) {
+    ds.input_cache_hit_per_million = hit ? parseFloat(hit) : curDs.input_cache_hit_per_million;
+    ds.input_cache_miss_per_million = miss ? parseFloat(miss) : curDs.input_cache_miss_per_million;
+    ds.output_per_million = out ? parseFloat(out) : curDs.output_per_million;
+    llmPrices.deepseek = ds;
+  }
+  const i = $("set-local-in").value.trim(), o = $("set-local-out").value.trim();
+  if (i || o) {
+    const cur = (llmPricesDefaults.local || { input_cache_miss_per_million: 0, output_per_million: 0 });
+    const localIn = i ? parseFloat(i) : cur.input_cache_miss_per_million;
+    llmPrices.local = {
+      input_cache_hit_per_million: localIn,
+      input_cache_miss_per_million: localIn,
+      output_per_million: o ? parseFloat(o) : cur.output_per_million,
+    };
+  }
+  return llmPrices;
 }
 
 $("btn-save-settings").addEventListener("click", async () => {
@@ -4377,6 +4717,15 @@ $("btn-save-settings").addEventListener("click", async () => {
       ccs_sdk_dir: $("set-ccs-sdk-dir").value.trim(),
       ccs_compiler_dir: $("set-ccs-compiler-dir").value.trim(),
       ccs_sysconfig_cli: $("set-ccs-sysconfig-cli").value.trim(),
+      local_llm_base_url: $("set-local-llm-base-url").value.trim(),
+      local_llm_model: $("set-local-llm-model").value.trim(),
+      vision_base_url: $("set-vision-base-url").value.trim(),
+      vision_api_key: $("set-vision-api-key").value.trim(),
+      vision_model: $("set-vision-model").value.trim(),
+      llm_prices: collectLlmPrices(),
+      llm_price_period: $("period-peak").checked ? "peak" : "off_peak",
+      recommend_cache_enabled: $("set-recommend-cache").checked,
+      recommend_max_rounds: parseInt($("set-recommend-rounds").value, 10) || 4,
     });
     $("settings-msg").classList.add("ok");
     $("settings-msg").textContent = "已保存，立即生效。";
@@ -4387,6 +4736,104 @@ $("btn-save-settings").addEventListener("click", async () => {
     $("settings-msg").textContent = e.message;
   }
 });
+
+// ---------------------------------------------------------------------------
+// 最近 LLM 工作流（工单 llm-observability-dashboard/03）：只读内存仪表盘
+// ---------------------------------------------------------------------------
+function wfNum(value) {
+  return Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US") : "0";
+}
+
+function formatWorkflowUsage(usage) {
+  if (!usage || typeof usage !== "object") return "";
+  const text = Object.keys(usage)
+    .map((k) => k + "=" + usage[k])
+    .join(", ");
+  return text ? "usage(服务商上报) " + text : "";
+}
+
+function formatWorkflowCost(est) {
+  // 费用段（工单 llm-cost-control/01）：估算参考值；actual / 对照全 DeepSeek
+  // 都为零（无 usage）不显示；节省 > 0.005 元才显示「省」段
+  if (!est || typeof est !== "object") return "";
+  const fmt = (v) => "¥" + Number(v || 0).toFixed(2);
+  const actual = Number(est.est_cost_actual || 0);
+  const counter = Number(est.est_cost_deepseek || 0);
+  if (actual <= 0 && counter <= 0) return "";
+  let text = "cost " + fmt(actual) + "（全 DeepSeek " + fmt(counter) + "）";
+  const savings = Number(est.est_savings || 0);
+  if (savings > 0.005) text = text.slice(0, -1) + "，省 " + fmt(savings) + "）";
+  return text;
+}
+
+function formatWorkflowSummary(w) {
+  const parts = [
+    (w.workflow_name || "unknown") + (w.status === "error" ? " ✗" : " ✓"),
+    wfNum(w.call_count) + " calls",
+    "local " + wfNum(w.local_calls) + " / DeepSeek " + wfNum(w.deepseek_calls),
+    "request " + wfNum(w.request_bytes) + "B",
+    "duration " + wfNum(w.duration_ms) + "ms",
+  ];
+  const usageText = formatWorkflowUsage(w.usage);
+  if (usageText) parts.push(usageText);
+  const costText = formatWorkflowCost(w.est);
+  if (costText) parts.push(costText);
+  return parts.join(" · ");
+}
+
+function formatWorkflowCall(call) {
+  const parts = [
+    "#" + call.sequence,
+    call.operation || "unknown",
+    call.provider || "?",
+    call.status || "?",
+  ];
+  if (call.error_kind) parts.push("error " + call.error_kind);
+  if (call.parse_status && call.parse_status !== "success") parts.push("parse " + call.parse_status);
+  if (call.http_status) parts.push("http " + call.http_status);
+  if (call.attempts > 1) parts.push("attempts " + call.attempts);
+  if (call.budget_attempt) parts.push("budget_attempt " + call.budget_attempt);
+  parts.push("request " + wfNum(call.request_bytes) + "B");
+  parts.push("duration " + wfNum(call.duration_ms) + "ms");
+  const usageText = formatWorkflowUsage(call.usage);
+  if (usageText) parts.push(usageText);
+  return parts.join(" · ");
+}
+
+function renderRecentWorkflows(data) {
+  const el = $("recent-workflows");
+  const workflows = (data && data.workflows) || [];
+  if (!workflows.length) {
+    el.innerHTML = '<div class="muted">暂无已完成的工作流：运行一次推荐 / 骨架 / 修复 / 提炼后，这里会出现记录。</div>';
+    return;
+  }
+  el.innerHTML = workflows.map((w) => {
+    const calls = (w.calls || []).map((c) => {
+      const line = formatWorkflowCall(c);
+      return '<div class="call-row" title="' + esc(line) + '">' + esc(line) + "</div>";
+    }).join("");
+    const statusText = w.status === "error" ? "失败" : "成功";
+    const statusCls = w.status === "error" ? "wf-status-error" : "wf-status-ok";
+    return '<div class="recent-wf-summary">'
+      + '<div><span class="wf-name">' + esc(w.workflow_name || "unknown") + "</span>"
+      + ' <span class="' + statusCls + '">' + statusText + "</span>"
+      + ' <span class="muted">' + esc(w.workflow_id) + "</span></div>"
+      + '<div class="muted">' + esc(formatWorkflowSummary(w)) + "</div>"
+      + (calls ? '<div class="recent-wf-calls">' + calls + "</div>" : "")
+      + "</div>";
+  }).join("");
+}
+
+async function loadRecentWorkflows() {
+  const el = $("recent-workflows");
+  try {
+    renderRecentWorkflows(await apiGet("/api/llm-workflows/recent"));
+  } catch (e) {
+    el.innerHTML = '<div class="muted">读取失败：' + esc(e.message || String(e)) + "</div>";
+  }
+}
+
+$("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
 
 // ---------------------------------------------------------------------------
 // 启动

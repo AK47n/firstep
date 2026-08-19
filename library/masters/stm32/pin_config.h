@@ -15,6 +15,9 @@
  * 代码整体留在模块内可替换位置）。
  * ============================================================ */
 
+/* ---- ADC（模拟采样，adc 模块；通道枚举 = ml_adc 的 ADCINx_enum）---- */
+#define ADC_0_CH   ADC_Channel_0   /* PA0 */
+#define ADC_1_CH   ADC_Channel_1   /* PA1 */
 /* ---- PWM（电机调速，频率 1000Hz = 21F 原值）---- */
 #define MOTOR_A_PWM_TIM     TIM_2
 #define MOTOR_A_PWM_CH      TIM2_CH1   /* PA0 */
@@ -22,6 +25,9 @@
 #define MOTOR_B_PWM_CH      TIM2_CH2   /* PA1 */
 #define MOTOR_PWM_FREQ      1000
 
+/* ---- 舵机（servo 模块：50Hz/20ms，0.5-2.5ms 脉宽 = 0-180°；TIM4_CH1 = PB6）---- */
+#define SERVO_PWM_TIM   TIM_4
+#define SERVO_PWM_CH    TIM4_CH1   /* PB6 */
 /* ---- 方向（TB6612 AIN1/AIN2、BIN1/BIN2，21F 原值）---- */
 #define MOTOR_A_DIR_PORT    GPIO_A
 #define MOTOR_A_DIR_PIN     Pin_6

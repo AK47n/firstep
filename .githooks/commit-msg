@@ -1,0 +1,34 @@
+#!/bin/sh
+# 提交信息语言门禁：仓库约定提交信息用中文（可中英混合，保留必要英文术语），
+# 防止 CHANGELOG 自动补录（post-commit → changelog.py）出现英文条目。
+#
+# 豁免：lib: 开头的库 CRUD 机器提交（autocommit.py 固定英文模板，changelog 已跳过）。
+# 绕过：git commit --no-verify（自觉使用，不鼓励）。
+#
+# 安装：git config core.hooksPath .githooks（本机生效；新 clone 后需重配）
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+subject=$(head -n1 "$msg_file")
+case "$subject" in
+  lib:*)
+    exit 0 ;;
+esac
+# 编码兼容：PowerShell 5.1 调外部程序传参用系统 ANSI 代码页（中文 Windows = GBK），
+# 此时 COMMIT_EDITMSG 是 GBK 字节。若文件是 GBK 中文（且非 UTF-8）先转成 UTF-8，
+# 保证入库 message 是 UTF-8（changelog.py 按 UTF-8 读 git log，GBK 会乱码）。
+if LC_ALL=C grep -qP '[\xb0-\xf7][\xa1-\xfe]' "$msg_file" \
+  && ! LC_ALL=C grep -qP '[\xe4-\xe9][\x80-\xbf][\x80-\xbf]' "$msg_file"; then
+  iconv -f GBK -t UTF-8 "$msg_file" > "$msg_file.tmp" 2>/dev/null \
+    && mv "$msg_file.tmp" "$msg_file"
+fi
+# CJK 判定：UTF-8 字节模式匹配 U+4E00–U+9FFF（E4–E9 开头三字节；老 grep 不支持
+# \x{4e00} 大范围转义，故用字节模式）。LC_ALL=C 强制按字节匹配：git 从中文
+# Windows 的 PowerShell/cmd 启动时钩子环境 locale 是 GBK，grep 会按字符边界
+# 处理导致 UTF-8 字节模式失效（曾导致中文提交被误拒）。
+if LC_ALL=C grep -qP '[\xe4-\xe9][\x80-\xbf][\x80-\xbf]' "$msg_file"; then
+  exit 0
+fi
+echo "提交信息请使用中文（可中英混合，保留必要英文术语），当前没有中文字符：" >&2
+echo "  $(head -n1 "$msg_file")" >&2
+echo "如需强制提交：git commit --no-verify" >&2
+exit 1

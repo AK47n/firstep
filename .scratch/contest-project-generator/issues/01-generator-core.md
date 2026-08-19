@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] manifest 数据模型可解析/序列化：功能简介、依赖列表、平台条目（每平台文件列表、验证状态、硬件绑定标记、备注）
 - [x] 核心接口接收（平台、已选 manifest 集、母版路径、main.c 内容）并输出完整工程目录：模块文件按平台版本复制，main.c 落位

@@ -467,7 +467,9 @@ PIN_LITERAL_PATTERNS = [
 def test_module_code_has_no_pin_literals():
     """验收 grep：注释剥离后模块 .c/.h 无引脚字面量（宏名如
     DC_MOTOR_AA_PORT / HUIDU_L1_PIN 整体豁免——GPIOA/GPIOB 组宏名是
-    syscfg 生成宏的一部分）。"""
+    syscfg 生成宏的一部分）。adc 模块豁免 ADC_Channel_N 模式：mspm0 侧
+    枚举成员名复用 ml_adc 的 ADCINx_enum 形态是双平台 API 对偶契约
+    （b1-adc-servo/01，语义 = ADC12 MEM 索引而非引脚）。"""
     hits: list[str] = []
     for path in sorted(LIBRARY_MODULES.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in (".c", ".h"):
@@ -475,6 +477,11 @@ def test_module_code_has_no_pin_literals():
         text = path.read_text(encoding="utf-8", errors="replace")
         stripped = strip_comments(text, keep_preprocessor=True)
         for pattern, label in PIN_LITERAL_PATTERNS:
+            if (
+                pattern == r"\bADC_Channel_\d+\b"
+                and path.relative_to(LIBRARY_MODULES).parts[0] == "adc"
+            ):
+                continue  # API 对偶枚举（见 docstring）
             for m in re.finditer(pattern, stripped):
                 hits.append(f"{path.relative_to(LIBRARY_MODULES)}:{label}: {m.group(0)}")
     assert not hits, "模块 code 引脚字面量残留：\n" + "\n".join(hits)

@@ -31,7 +31,7 @@ from contest_generator.readme import (
     render_readme,
     sort_verification_order,
 )
-from contest_generator.selection import ExpandedInstance, ModuleInstance
+from contest_generator.selection import ExpandedInstance, ModuleInstance, ScorePoint
 from tests.fakes import (
     MAIN_SKELETON,
     _add_module,
@@ -458,6 +458,52 @@ def test_generate_project_readme_defaults_byte_identical(fake_module_library, tm
     )
 
 
+def test_generate_project_readme_score_points_and_summary(fake_module_library, tmp_path):
+    """评分点随生成流程进入 README 与只读摘要；同一份结构化数据用于两处输出。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    score_points = (
+        ScorePoint("B1", "basic", "完成测距", 10.0, (2, 3)),
+        ScorePoint("D1", "development", "提高精度", None, ()),
+    )
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out_score",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+        score_points=score_points,
+    )
+    readme = (summary.output_dir / README_FILENAME).read_text(encoding="utf-8")
+
+    assert summary.score_points == score_points
+    assert "## 评分点验收清单" in readme
+    assert "| B1 | 基础 | 10 分 | 句子 2、3 | 完成测距 |" in readme
+    assert "| D1 | 发挥 | 未标分 | 未关联原文 | 提高精度 |" in readme
+
+
+def test_generate_project_readme_omits_score_section_when_absent(
+    fake_module_library, tmp_path
+):
+    """缺省评分点不新增空章节，保持既有 README 结构。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out_no_score",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+    )
+    readme = (summary.output_dir / README_FILENAME).read_text(encoding="utf-8")
+
+    assert summary.score_points == ()
+    assert "## 评分点验收清单" not in readme
+
+
 # ---------------------------------------------------------------------------
 # 渲染器纯函数直测：确定性 / 板名可选 / 引脚行格式 / 依赖 / 边界
 # ---------------------------------------------------------------------------
@@ -655,6 +701,35 @@ def test_render_readme_defaults_byte_identical():
     baseline = render_readme("stm32", "最小系统板", manifests)
     assert render_readme("stm32", "最小系统板", manifests, None, None) == baseline
     assert render_readme("stm32", "最小系统板", manifests, (), {}) == baseline
+
+
+def test_render_readme_score_points_section():
+    """评分点验收清单章：按题面顺序展示分区、分值、句号引用与描述。"""
+    text = render_readme(
+        "stm32",
+        None,
+        [_m("delay", "软件延时")],
+        score_points=(
+            ScorePoint("B1", "basic", "完成测距", 10.0, (2, 3)),
+            ScorePoint("D1", "development", "提高精度", None, ()),
+            ScorePoint("U1", "unknown", "展示结果", 2.5, ()),
+        ),
+    )
+
+    assert "## 评分点验收清单" in text
+    assert "| B1 | 基础 | 10 分 | 句子 2、3 | 完成测距 |" in text
+    assert "| D1 | 发挥 | 未标分 | 未关联原文 | 提高精度 |" in text
+    assert "| U1 | 未分区 | 2.5 分 | 未关联原文 | 展示结果 |" in text
+
+
+def test_render_readme_score_points_absent_keeps_baseline():
+    """评分点缺省 / 空清单不新增空章节，README 文本保持逐字节兼容。"""
+    manifests = [_m("delay", "软件延时")]
+    baseline = render_readme("stm32", None, manifests)
+
+    assert render_readme("stm32", None, manifests, score_points=None) == baseline
+    assert render_readme("stm32", None, manifests, score_points=()) == baseline
+    assert "## 评分点验收清单" not in baseline
 
 
 def test_render_readme_dependencies_listed_in_order():

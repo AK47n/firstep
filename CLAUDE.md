@@ -19,6 +19,8 @@ For any non-trivial feature or change request, read `docs/agents/workflow.md` in
 
 Skip this only for trivial single-step tasks — and say so explicitly when skipping.
 
+**语言规范（硬性约定）**：spec / 工单 / git 提交信息 / CHANGELOG 一律用中文书写（技术术语、标识符、`Status:` 等标签值可保留英文）。英文提交信息会被 `.githooks/commit-msg` 拒绝（`tests/test_repo_language.py` 兜底工单与 CHANGELOG）。详见 `docs/agents/workflow.md`「语言规范」。
+
 ### Issue tracker
 
 Issues and specs live as markdown files under `.scratch/<feature-slug>/` (local tracker, one file per ticket). See `docs/agents/issue-tracker.md`.

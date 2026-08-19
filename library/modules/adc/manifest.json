@@ -1,0 +1,54 @@
+{
+  "slug": "adc",
+  "description": "模拟采样（双平台）：adc_init/adc_get 读取 ADC 通道 12 位电压值；stm32 内嵌母版 ml_adc（通道枚举 ADC_Channel_0..15 = PA0-PC5），mspm0 走母版 syscfg ADC12_0 双通道（轮询）；适用于电压监测 / 电位器调参 / 光敏检测等模拟量采集类赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "实现内嵌母版 ml_adc（adc_init/adc_get，通道枚举 ADC_Channel_0..15 = PA0-PC5），经母版接口块进骨架（先例 led/oled/delay）。引脚宏 ADC_0_CH/ADC_1_CH 在母版 pin_config.h（b1-adc-servo/01），绑定改宏值（通道枚举随引脚）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "ADC_CH0",
+          "type": "adc",
+          "default": "PA0",
+          "required": true,
+          "macros": [
+            "ADC_0_CH"
+          ]
+        },
+        {
+          "id": "ADC_CH1",
+          "type": "adc",
+          "default": "PA1",
+          "required": true,
+          "macros": [
+            "ADC_1_CH"
+          ]
+        }
+      ]
+    },
+    "mspm0": {
+      "files": [
+        "code/adc_mspm0.c",
+        "code/adc_mspm0.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg ADC12_0 实例（v1 单通道 MEM0=PA24/A0_3，轮询读取，b1-adc-servo/01）；绑定换引脚 = 改写 adcPin3.$assign + adcMem0chansel（A0_* 通道组）。第二通道的 adcPinN 槽位在 LQFP-64(PM) 设备数据不存在，双通道留后续（PA25/adcPin2 实测报 undefined）。通道枚举值 = ADC12 MEM 索引（v1 只用 0）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "ADC_CH0",
+          "type": "adc",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    }
+  }
+}

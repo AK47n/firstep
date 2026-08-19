@@ -13,6 +13,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .vision import DEFAULT_VISION_BASE_URL, DEFAULT_VISION_MODEL
+
 CONFIG_DIRNAME = ".contest_generator"
 CONFIG_FILENAME = "config.json"
 DEFAULT_CONFIG_PATH = Path.home() / CONFIG_DIRNAME / CONFIG_FILENAME
@@ -49,6 +51,28 @@ class AppConfig:
     # 本地 LLM 端点可选配置（工单 local-llm-routing/01）：空串 = 本地路由关闭
     local_llm_base_url: str = ""
     local_llm_model: str = ""
+    # 视觉通道（工单 vision-eyes/01）：免费云端 GLM-4V-Flash（OpenAI 兼容）。
+    # api_key 空 = 视觉功能关闭；base_url / model 缺省填官方免费通道
+    vision_base_url: str = DEFAULT_VISION_BASE_URL
+    vision_api_key: str = ""
+    vision_model: str = DEFAULT_VISION_MODEL
+    # LLM 单价覆盖（工单 llm-cost-control/01 + 缓存拆分计价更新）：None = 用内置
+    # 默认参考价；dict 形态 {"deepseek": {"input_cache_hit_per_million": x,
+    # "input_cache_miss_per_million": y, "output_per_million": z}, "local": {...}}
+    # （DeepSeek 输入分缓存命中/未命中两档，官方差价 ~30 倍）；旧形态
+    # {"input_per_million": x} 兼容 = 未命中档——条目级脏数据由消费侧静默跳过
+    # （展示层旁路）
+    llm_prices: dict | None = None
+    # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，决定未覆盖项的
+    # 基准价（官方该时段价）；覆盖项（llm_prices）优先。缺省 peak
+    llm_price_period: str = "peak"
+    # 推荐缓存开关（工单 llm-cost-control/02）：默认开——同题重跑推荐命中
+    # 缓存直出 done 载荷（省最贵的推荐段 LLM 调用）；关闭 = 每次真实推荐
+    recommend_cache_enabled: bool = True
+    # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：2-4，缺省 4。
+    # 调低 = 更快但更少自检修订（1 轮无收敛意义，配置层拒绝）；核验轮短标记
+    # 提前停生效后实际轮数通常少于上限
+    recommend_max_rounds: int = 4
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -111,6 +135,41 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     local_llm_model = data.get("local_llm_model", "")
     if not isinstance(local_llm_model, str):
         raise ConfigError(f"local_llm_model 必须是字符串：{path}")
+    # 视觉通道（工单 vision-eyes/01）：api_key 空 = 关闭；旧 config 缺字段或
+    # base/model 为空串时回落官方免费默认值（只填 key 即可用）。
+    vision_base_url = data.get("vision_base_url", DEFAULT_VISION_BASE_URL)
+    if not isinstance(vision_base_url, str):
+        raise ConfigError(f"vision_base_url 必须是字符串：{path}")
+    if not vision_base_url.strip():
+        vision_base_url = DEFAULT_VISION_BASE_URL
+    vision_api_key = data.get("vision_api_key", "")
+    if not isinstance(vision_api_key, str):
+        raise ConfigError(f"vision_api_key 必须是字符串：{path}")
+    vision_model = data.get("vision_model", DEFAULT_VISION_MODEL)
+    if not isinstance(vision_model, str):
+        raise ConfigError(f"vision_model 必须是字符串：{path}")
+    if not vision_model.strip():
+        vision_model = DEFAULT_VISION_MODEL
+    # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 None = 内置默认价
+    llm_prices = data.get("llm_prices")
+    if llm_prices is not None and not isinstance(llm_prices, dict):
+        raise ConfigError(f"llm_prices 必须是 JSON 对象或省略：{path}")
+    # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
+    recommend_cache_enabled = data.get("recommend_cache_enabled", True)
+    if not isinstance(recommend_cache_enabled, bool):
+        raise ConfigError(f"recommend_cache_enabled 必须是布尔值：{path}")
+    # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：2-4，缺省 4
+    recommend_max_rounds = data.get("recommend_max_rounds", 4)
+    if (
+        not isinstance(recommend_max_rounds, int)
+        or isinstance(recommend_max_rounds, bool)
+        or not 2 <= recommend_max_rounds <= 4
+    ):
+        raise ConfigError(f"recommend_max_rounds 必须是 2-4 的整数：{path}")
+    # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，缺省 peak
+    llm_price_period = data.get("llm_price_period", "peak")
+    if llm_price_period not in ("peak", "off_peak"):
+        raise ConfigError(f"llm_price_period 必须是 peak 或 off_peak：{path}")
 
     return AppConfig(
         base_url=base_url,
@@ -126,32 +185,48 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ccs_sysconfig_cli=ccs_sysconfig_cli,
         local_llm_base_url=local_llm_base_url,
         local_llm_model=local_llm_model,
+        vision_base_url=vision_base_url,
+        vision_api_key=vision_api_key,
+        vision_model=vision_model,
+        llm_prices=llm_prices,
+        recommend_cache_enabled=recommend_cache_enabled,
+        recommend_max_rounds=recommend_max_rounds,
+        llm_price_period=llm_price_period,
     )
 
 
 def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
-    """写入配置文件；父目录不存在时创建。"""
+    """写入配置文件；父目录不存在时创建。
+
+    llm_prices 为 None（未覆盖）时不写键——缺省语义与 load 一致，配置文件
+    保持最小（既有精确 JSON 断言不受新字段扰动）。
+    """
+    data: dict = {
+        "base_url": config.base_url,
+        "api_key": config.api_key,
+        "model": config.model,
+        "module_library_dir": str(config.module_library_dir),
+        "masters_dir": str(config.masters_dir),
+        "autocommit_enabled": config.autocommit_enabled,
+        "uv4_path": config.uv4_path,
+        "gmake_path": config.gmake_path,
+        "ccs_sdk_dir": config.ccs_sdk_dir,
+        "ccs_compiler_dir": config.ccs_compiler_dir,
+        "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
+        "local_llm_base_url": config.local_llm_base_url,
+        "local_llm_model": config.local_llm_model,
+        "vision_base_url": config.vision_base_url,
+        "vision_api_key": config.vision_api_key,
+        "vision_model": config.vision_model,
+        "recommend_cache_enabled": config.recommend_cache_enabled,
+        "recommend_max_rounds": config.recommend_max_rounds,
+        "llm_price_period": config.llm_price_period,
+    }
+    if config.llm_prices is not None:
+        data["llm_prices"] = config.llm_prices
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(
-            {
-                "base_url": config.base_url,
-                "api_key": config.api_key,
-                "model": config.model,
-                "module_library_dir": str(config.module_library_dir),
-                "masters_dir": str(config.masters_dir),
-                "autocommit_enabled": config.autocommit_enabled,
-                "uv4_path": config.uv4_path,
-                "gmake_path": config.gmake_path,
-                "ccs_sdk_dir": config.ccs_sdk_dir,
-                "ccs_compiler_dir": config.ccs_compiler_dir,
-                "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
-                "local_llm_base_url": config.local_llm_base_url,
-                "local_llm_model": config.local_llm_model,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
+        json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     try:

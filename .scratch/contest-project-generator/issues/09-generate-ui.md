@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — Keil 工程修改器；04 — LLM 赛题→模块选择 + 依赖解析 + 配置；05 — main.c 骨架生成 + 函数自检；06 — 赛题文本抽取（PDF/Word）
 
-**Status:** done
+**Status:** resolved
 
 - [x] 首页生成流程完整可走通（对已注册的平台）
 - [x] AI 推荐展示理由，用户可增删后重新生成

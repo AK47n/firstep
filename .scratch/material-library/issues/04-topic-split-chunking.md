@@ -17,7 +17,7 @@
 
 **Blocked by:** 01 — 赛题库录入（确认/解析流程复用）
 
-**Status:** done
+**Status:** resolved
 
 ## Comments
 

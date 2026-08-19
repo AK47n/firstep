@@ -20,7 +20,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -46,7 +46,14 @@ from .config import (
     topic_library_dir,
 )
 from .errors import error_entry
-from .extraction import extract_file
+from .events import EVENT_CACHE_HIT, ProgressEvent
+from .extraction import (
+    IMAGE_FILE_SUFFIXES,
+    extract_file,
+    extract_image,
+    extract_pdf_with_image_notes,
+)
+from .vision import DEFAULT_VISION_BASE_URL, DEFAULT_VISION_MODEL
 from .fix_errors import (
     FixError,
     fix_backup_root,
@@ -73,8 +80,26 @@ from .library import (
 )
 from .llm import (
     LLM,
-    DeepSeekLLM,
+    LLMObservationCollector,
+    RetryBudget,
     TOPIC_SPLIT_LLM_CHAR_CAP,
+    build_llm,
+    create_llm_observation_collector,
+)
+from .llm_telemetry import bind_llm_telemetry
+from .llm_pricing import (
+    DEEPSEEK_FLASH_PRICE_REFERENCE,
+    price_tables_from_config,
+    price_tables_to_config,
+)
+from .llm_recent_workflows import LLMRecentWorkflowStore, attach_cost_estimates
+from .recommend_cache import (
+    cache_key,
+    cache_recommend,
+    load_recommend,
+    parameter_warnings,
+    recommend_cache_path,
+    validate_recommend,
 )
 from .master import (
     confirm_distillation,
@@ -101,7 +126,7 @@ from .reference_library import (
     resolve_entry_file,
     search_references,
 )
-from .selection import parse_instances, resolve_selection, run_recommendation
+from .selection import parse_instances, parse_score_points, resolve_selection, run_recommendation
 from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -212,9 +237,10 @@ class AppContext:
 
     config_path: Path = DEFAULT_CONFIG_PATH
     config: AppConfig | None = None  # None → 按需从配置文件加载
-    llm_factory: Callable[[AppConfig], LLM] = DeepSeekLLM
+    llm_factory: Callable[..., LLM] = build_llm
     tab_registry: TabRegistry = field(default_factory=TabRegistry)
     pick_directory: Callable[[], str | None] = _tkinter_pick_directory
+    recent_llm_workflows: LLMRecentWorkflowStore = field(default_factory=LLMRecentWorkflowStore)
 
 
 # ---------------------------------------------------------------------------
@@ -241,8 +267,27 @@ def _require_config(ctx: AppContext) -> AppConfig:
     return config
 
 
-def _llm(ctx: AppContext) -> LLM:
-    return ctx.llm_factory(_require_config(ctx))
+def _llm(
+    ctx: AppContext,
+    retry_budget: RetryBudget | None = None,
+    observation_collector: LLMObservationCollector | None = None,
+) -> LLM:
+    factory = ctx.llm_factory
+    config = _require_config(ctx)
+    params = list(inspect.signature(factory).parameters.values())
+    positional = {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }
+    if any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params):
+        positional_count = 3
+    else:
+        positional_count = sum(1 for p in params if p.kind in positional)
+    if positional_count >= 3:
+        return factory(config, retry_budget, observation_collector)
+    if positional_count >= 2:
+        return factory(config, retry_budget)
+    return factory(config)
 
 
 def _library_dir(ctx: AppContext) -> Path:
@@ -425,6 +470,55 @@ def _optional_str(payload: dict, key: str) -> str:
     return value.strip()
 
 
+def _optional_dict(payload: dict, key: str) -> dict | None:
+    """可选 dict：缺省 / null / 空对象 → None（恢复默认）；类型非法抛 400。
+
+    条目级校验由消费侧（price_tables_from_config）旁路跳过，这里只保外层形状。
+    """
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise HTTPException(400, f"{key} 必须是 JSON 对象")
+    return value or None
+
+
+def _optional_bool(payload: dict, key: str, *, default: bool) -> bool:
+    """可选布尔：缺省 / null → default；类型非法抛 400。"""
+    value = payload.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise HTTPException(400, f"{key} 必须是布尔值")
+    return value
+
+
+def _optional_choice(
+    payload: dict, key: str, *, default: str, choices: tuple[str, ...]
+) -> str:
+    """可选枚举：缺省 / null → default；值不在词表抛 400（工单 01 计费时段）。"""
+    value = payload.get(key)
+    if value is None:
+        return default
+    if value not in choices:
+        raise HTTPException(400, f"{key} 必须是 {'、'.join(choices)} 之一")
+    return value
+
+
+def _optional_int_range(
+    payload: dict, key: str, *, default: int, low: int, high: int
+) -> int:
+    """可选整数（范围约束）：缺省 / null → default；类型非法 / 越界抛 400。"""
+    value = payload.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise HTTPException(400, f"{key} 必须是整数")
+    if not low <= value <= high:
+        raise HTTPException(400, f"{key} 必须在 {low}-{high} 之间")
+    return value
+
+
 def _mask_api_key(api_key: str) -> str:
     """API key 掩码（判定用）：只露前 4 位 + 省略号（PUT 收到掩码形态视为用户没改 key）。"""
     if not api_key:
@@ -443,6 +537,19 @@ def _mask_api_key_display(api_key: str) -> str:
     if len(api_key) <= 5:
         return api_key[:4] + "•" * (len(api_key) - 4)
     return api_key[:4] + "•" * (len(api_key) - 5) + api_key[-1]
+
+
+def _masked_optional_key(
+    payload: dict, key: str, existing: str
+) -> str:
+    """可选密钥字段（工单 vision-eyes/01）：缺省 / 空串 = 关闭；收到掩码形态
+    （前 4 位 + 省略号） = 用户没改，沿用旧值；其余 = 新值。"""
+    value = _optional_str(payload, key)
+    if not value:
+        return ""
+    if value in (_mask_api_key(existing), _mask_api_key_display(existing)):
+        return existing
+    return value
 
 
 async def _save_upload(upload: UploadFile) -> Path:
@@ -550,23 +657,102 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/extract")
     @_map_errors
     async def extract(upload: UploadFile = File(...)) -> dict:
-        """上传赛题文件（PDF / .docx / .txt / .md）→ 抽取纯文本。"""
+        """上传赛题文件（PDF / .docx / .txt / .md / 图片）→ 抽取文本。
+
+        PDF 且配了视觉 key（工单 vision-eyes/02）：文本后追加嵌入示意图
+        描述（[示意图N：…]）；未配 key = 纯文本（现状逐字节一致）；视觉
+        失败静默降级。图片（工单 vision-eyes/03）：直接走视觉描述。"""
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=Path(upload.filename or "").suffix
         ) as tmp:
             tmp.write(await upload.read())
             tmp_path = Path(tmp.name)
         try:
+            config = _require_config(context)
+            suffix = tmp_path.suffix.lower()
+            if suffix in IMAGE_FILE_SUFFIXES:
+                collector = create_llm_observation_collector("vision-describe")
+                result = extract_image(
+                    tmp_path,
+                    vision_base_url=config.vision_base_url,
+                    vision_api_key=config.vision_api_key,
+                    vision_model=config.vision_model,
+                    observation_collector=collector,
+                )
+                context.recent_llm_workflows.add_completed(collector)
+                return {"text": result}
+            if suffix == ".pdf":
+                collector = create_llm_observation_collector("vision-describe")
+                result = extract_pdf_with_image_notes(
+                    tmp_path,
+                    vision_base_url=config.vision_base_url,
+                    vision_api_key=config.vision_api_key,
+                    vision_model=config.vision_model,
+                    observation_collector=collector,
+                )
+                context.recent_llm_workflows.add_completed(collector)
+                return {"text": result}
             return {"text": extract_file(tmp_path)}
         finally:
             tmp_path.unlink(missing_ok=True)
+
+    class _CacheWriterEmitter(SseEmitter):
+        """转发 SseEmitter 四方法；done 时先写推荐缓存（尽力而为）再转发。
+
+        路由装配细节（工单 llm-cost-control/02）：done 载荷在域内
+        （run_recommendation）组装，路由经此包装拦截写缓存——写失败不阻塞
+        终态发射（旁路），question / error 终态原样透传。
+        """
+
+        def __init__(
+            self, inner: SseEmitter, write_cb: Callable[[dict], None]
+        ) -> None:
+            self._inner = inner
+            self._write_cb = write_cb
+
+        def progress(self, event: ProgressEvent) -> None:
+            self._inner.progress(event)
+
+        def done(self, data: dict) -> None:
+            try:
+                self._write_cb(data)
+            except Exception:
+                pass  # 旁路：缓存写失败不阻塞 done 终态
+            self._inner.done(data)
+
+        def question(self, data: dict) -> None:
+            self._inner.question(data)
+
+        def error(self, data: dict) -> None:
+            self._inner.error(data)
+
+    def _load_recommend_safely(path: Path) -> dict | None:
+        """读推荐缓存：损坏 / 形状非法 → None（旁路走真实推荐，不报错退出）。
+
+        Web 是交互工具（对照 CLI 回归脚本的"缺失即报错"）：坏缓存静默重算。
+        """
+        try:
+            return load_recommend(path)
+        except ValueError:
+            return None
+
+    def _emit_cached_recommend(
+        emit: SseEmitter, cached: Mapping[str, Any], warns: Sequence[str]
+    ) -> None:
+        """推荐缓存命中的终态发射（工单 llm-cost-control/02，路由装配细节）。
+
+        独立于路由函数体（结构防回退：/api/recommend 路由体内不出现
+        emit.done / emit.question——本函数是运行器旁路的专用发射点）：
+        cache_hit 进度事件 + done 终态（载荷 = 缓存 done 逐字）。
+        """
+        emit.progress(ProgressEvent(type=EVENT_CACHE_HIT, warns=tuple(warns)))
+        emit.done(cached["done"])
 
     @app.post("/api/recommend")
     @_map_errors
     def recommend(payload: dict) -> StreamingResponse:
         """AI 按赛题推荐模块（SSE 流，工单 10）：round → … → converged →
         done（推荐结果）或 question（向用户补问）或 error（中文信息）→ 流结束。
-
         请求体契约：problem_text（必填）；topic_id（可选，历史赛题显式入口）；
         reference_ids（可选 list[str]，手动选参考资料——幻觉 / 重复 id 大声
         失败 400）；platform（可选，锚定命中按生成平台过滤）；clarifications
@@ -596,15 +782,72 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 未识别到历史赛题，no-topic 形同样携带全模块摘要）；手动选参考资料
         # 的准入 / 全文直读同样在装配点完成。platform（工单 01）= 锚定命中
         # 按生成平台过滤（手动选不过滤），缺省 / 空 = 现状不过滤
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("recommend")
         topic = _assemble_topic_context(
-            context, topic_id, problem_text, _llm(context), reference_ids, platform
+            context,
+            topic_id,
+            problem_text,
+            _llm(context, budget, collector),
+            reference_ids,
+            platform,
         )
+        # 推荐缓存（工单 llm-cost-control/02）：同题重跑命中直出 done 载荷，
+        # 省最贵的推荐段 LLM 调用；缓存目录 = 配置目录同级 cache/（与 CLI
+        # generate_check 缓存格式逐字兼容，双客户端对偶）
+        config = _require_config(context)
+        cache_enabled = config.recommend_cache_enabled
+        ckey = cache_key(topic_id, problem_text)
+        cpath = recommend_cache_path(ckey, cache_dir=context.config_path.parent / "cache")
+        clarify_maps = [{"question": q, "answer": a} for q, a in clarifications]
+        # 收敛轮数上限（工单 recommend-speedup-v2/01）：设置项透传，缺省 4
+        max_rounds = config.recommend_max_rounds
+
+        def _write_cache(done_data: dict) -> None:
+            """真实推荐 done 载荷落缓存（尽力而为：写失败静默旁路）。"""
+            if not cache_enabled:
+                return
+            cache_recommend(
+                cpath,
+                done_data,
+                topic_key=ckey,
+                problem_text=problem_text,
+                platform=platform or "",
+                reference_ids=reference_ids,
+                clarify_hist=clarify_maps,
+            )
 
         def run(emit: SseEmitter) -> None:
             # 两阶段编排归 selection.run_recommendation（澄清先行 → 收敛 →
             # done 载荷组装），路由只转调——终态一律由域函数发出，路由不分支；
             # run 抛错由运行器补发 error 终态（终态保证归运行器）
-            run_recommendation(topic, _llm(context), clarifications, emit=emit)
+            try:
+                if cache_enabled:
+                    cached = _load_recommend_safely(cpath)
+                    if cached is not None:
+                        ok, _ = validate_recommend(
+                            cached,
+                            topic_key=ckey,
+                            problem_text=problem_text,
+                            platform=platform or "",
+                        )
+                        if ok:
+                            warns = parameter_warnings(
+                                cached,
+                                reference_ids=reference_ids,
+                                clarify_hist=clarify_maps,
+                            )
+                            _emit_cached_recommend(emit, cached, warns)
+                            return
+                run_recommendation(
+                    topic,
+                    _llm(context, budget, collector),
+                    clarifications,
+                    emit=_CacheWriterEmitter(emit, _write_cache),
+                    max_rounds=max_rounds,
+                )
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -665,33 +908,38 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         main_mode = (
             _optional_str(payload, "main_mode") if "main_mode" in payload else "skeleton"
         )
-        topic = _assemble_topic_context(
-            context,
-            topic_id,
-            problem_text,
-            _llm(context),
-            reference_ids=reference_ids,
-            platform=platform,
-        )
-        resolved = resolve_selection(
-            _library_dir(context), platform, slugs, instances=instances
-        )
-        # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
-        # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
-        return run_skeleton(
-            llm=_llm(context),
-            problem_text=topic.problem_text,
-            manifests=resolved.manifests,
-            slugs=slugs,
-            platform=platform,
-            library_dir=_library_dir(context),
-            master_project_dir=master_project_dir(
-                _require_config(context).masters_dir, platform
-            ),
-            instances=instances,
-            reference_fulltexts=build_reference_fulltexts(topic),
-            main_mode=main_mode,
-        )
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("skeleton")
+        try:
+            topic = _assemble_topic_context(
+                context,
+                topic_id,
+                problem_text,
+                _llm(context, budget, collector),
+                reference_ids=reference_ids,
+                platform=platform,
+            )
+            resolved = resolve_selection(
+                _library_dir(context), platform, slugs, instances=instances
+            )
+            # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
+            # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
+            return run_skeleton(
+                llm=_llm(context, budget, collector),
+                problem_text=topic.problem_text,
+                manifests=resolved.manifests,
+                slugs=slugs,
+                platform=platform,
+                library_dir=_library_dir(context),
+                master_project_dir=master_project_dir(
+                    _require_config(context).masters_dir, platform
+                ),
+                instances=instances,
+                reference_fulltexts=build_reference_fulltexts(topic),
+                main_mode=main_mode,
+            )
+        finally:
+            context.recent_llm_workflows.add_completed(collector)
 
     @app.post("/api/pick-directory")
     @_map_errors
@@ -750,6 +998,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
         # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
         instances = parse_instances(payload.get("instances"), known_slugs=slugs)
+        # Python 副产物模板选择（工单 k230-multi-template/02）：形状判决归
+        # generator.resolve_python_template_choices（PythonArtifactError →
+        # 400 中文），缺省 = 全默认模板（旧行为逐字节不变）。
+        python_templates = payload.get("python_templates")
+        score_points = parse_score_points(payload.get("score_points"))
         config = _require_config(context)
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
@@ -774,6 +1027,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ccs_tools=ccs_tools,
             bindings=bindings,
             instances=instances,
+            python_templates=python_templates,
+            score_points=score_points,
         )
         return _generation_result(summary)
 
@@ -789,8 +1044,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """编译错误修复（SSE 流）：贴报错 → 逐条修复 → 直接写回工程文件。
 
         事件序列：parse_done（解析结果）→ fix_start（LLM 修复中，分钟级）→
-        apply_result…（逐处应用结果）→ done（修复结果 + 备份编号）或 error
-        （中文信息）→ 流结束。HTTP 200 起流，失败以流内 error 事件收尾
+        llm_telemetry（脱敏 LLM 调用快照，可能随每次记录更新）→ apply_result…
+        （逐处应用结果）→ done（修复结果 + 备份编号）或 error（中文信息）→
+        流结束。HTTP 200 起流，失败以流内 error 事件收尾
         （sse 运行器终态保证）；参数校验失败 / 输出目录不存在 400。
 
         请求体契约：error_text（必填，编译报错全文）；output_dir（必填，生成
@@ -819,26 +1075,31 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         backup_root = fix_backup_root(
             _require_config(context).masters_dir.parent
         )
-        llm = _llm(context)
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("fix-errors")
+        llm = _llm(context, budget, collector)
 
         def run(emit: SseEmitter) -> None:
             # 五步编排归 run_fix_round（对照 run_recommendation 归位先例）：事件
             # 发射在域内（_emit 旁路），done 载荷由本路由 emit.done 收尾（终态
             # 保证仍归运行器，run 抛错补发 error 终态）
-            emit.done(
-                run_fix_round(
-                    llm,
-                    error_text=error_text,
-                    output_dir=output_dir,
-                    backup_root=backup_root,
-                    problem_text=problem_text,
-                    platform=platform,
-                    module_slugs=slugs,
-                    main_c=main_c,
-                    previous_fixes=previous_fixes,
-                    emit=emit.progress,
-                )
-            )
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_fix_round(
+                        llm,
+                        error_text=error_text,
+                        output_dir=output_dir,
+                        backup_root=backup_root,
+                        problem_text=problem_text,
+                        platform=platform,
+                        module_slugs=slugs,
+                        main_c=main_c,
+                        previous_fixes=previous_fixes,
+                        emit=emit.progress,
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
@@ -1128,12 +1389,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         platform = _require_str(payload, "platform")
         project_dirs = _require_str_list(payload, "project_dirs")
-        llm = _llm(context)
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("masters-distill")
+        llm = _llm(context, budget, collector)
 
         def run(emit: SseEmitter) -> None:
-            projects = [scan_project(Path(d)) for d in project_dirs]
-            report = distill_master(llm, platform, projects, emit.progress)
-            emit.done(report.to_dict())
+            try:
+                projects = [scan_project(Path(d)) for d in project_dirs]
+                report = distill_master(llm, platform, projects, emit.progress)
+                emit.done(report.to_dict())
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
@@ -1152,13 +1418,22 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
         config = _require_config(context)
-        meta = confirm_distillation(
-            _masters_dir(context),
-            project_dirs,
-            payload,
-            llm_factory=lambda: _llm(context),
-            reference_library_dir=reference_library_dir(config.module_library_dir),
-        )
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("masters-confirm")
+
+        def archive_llm_factory() -> LLM:
+            return _llm(context, budget, collector)
+
+        try:
+            meta = confirm_distillation(
+                _masters_dir(context),
+                project_dirs,
+                payload,
+                llm_factory=archive_llm_factory,
+                reference_library_dir=reference_library_dir(config.module_library_dir),
+            )
+        finally:
+            context.recent_llm_workflows.add_completed(collector)
         return {
             "platform": meta.platform,
             "sources": list(meta.sources),
@@ -1183,6 +1458,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）
     # ------------------------------------------------------------------
+
+    @app.get("/api/llm-workflows/recent")
+    @_map_errors
+    def llm_workflows_recent() -> dict:
+        """最近已完成 LLM 工作流：只读、内存态、content-safe，不写 config / 磁盘。
+
+        载荷按当前生效单价表附加估算字段（est：实际 / 全 DeepSeek 对照 / 节省）；
+        估算纯展示派生，单价表缺失 / 配置未就绪时用内置默认（旁路不炸）。
+        """
+        config = _current_config(context)
+        tables = price_tables_from_config(
+            config.llm_prices if config else None,
+            (config.llm_price_period if config else "peak"),
+        )
+        return attach_cost_estimates(context.recent_llm_workflows.to_dict(), tables)
 
     @app.get("/api/settings")
     @_map_errors
@@ -1209,6 +1499,48 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "ccs_sdk_dir": config.ccs_sdk_dir if config is not None else "",
             "ccs_compiler_dir": config.ccs_compiler_dir if config is not None else "",
             "ccs_sysconfig_cli": config.ccs_sysconfig_cli if config is not None else "",
+            # 本地 LLM 端点（工单 local-llm-routing/01-03）：空串 = 本地路由关闭
+            "local_llm_base_url": config.local_llm_base_url if config is not None else "",
+            "local_llm_model": config.local_llm_model if config is not None else "",
+            # 视觉通道（工单 vision-eyes/01）：base/model 缺省官方免费通道；
+            # api_key 掩码同主 key，空 key = 视觉关闭
+            "vision_base_url": (
+                config.vision_base_url if config is not None else DEFAULT_VISION_BASE_URL
+            ),
+            "vision_api_key": (
+                _mask_api_key(config.vision_api_key)
+                if config is not None and config.vision_api_key
+                else ""
+            ),
+            "vision_model": (
+                config.vision_model if config is not None else DEFAULT_VISION_MODEL
+            ),
+            # LLM 单价（工单 llm-cost-control/01）：返回当前生效表（默认 + 覆盖
+            # 合并），前端可直接显示；未配置 / 无覆盖 = 内置默认
+            "llm_prices": price_tables_to_config(
+                price_tables_from_config(
+                    config.llm_prices if config else None,
+                    (config.llm_price_period if config else "peak"),
+                )
+            ),
+            # 用户显式覆盖原文（None = 无覆盖）：前端据此区分「留空 = 用时段
+            # 基准价」与「填值 = 自定义覆盖」
+            "llm_prices_override": config.llm_prices if config is not None else None,
+            # 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲
+            "llm_price_period": (
+                config.llm_price_period if config is not None else "peak"
+            ),
+            # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：单源
+            # = llm_pricing.DEEPSEEK_FLASH_PRICE_REFERENCE，设置页折叠面板渲染
+            "price_reference": DEEPSEEK_FLASH_PRICE_REFERENCE,
+            # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
+            "recommend_cache_enabled": (
+                config.recommend_cache_enabled if config is not None else True
+            ),
+            # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
+            "recommend_max_rounds": (
+                config.recommend_max_rounds if config is not None else 4
+            ),
             "config_path": str(context.config_path),
         }
 
@@ -1240,6 +1572,34 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ccs_sdk_dir=_optional_str(payload, "ccs_sdk_dir"),
             ccs_compiler_dir=_optional_str(payload, "ccs_compiler_dir"),
             ccs_sysconfig_cli=_optional_str(payload, "ccs_sysconfig_cli"),
+            # 本地 LLM 端点（工单 local-llm-routing/03）：缺省 / 空串 = 关闭本地路由
+            local_llm_base_url=_optional_str(payload, "local_llm_base_url"),
+            local_llm_model=_optional_str(payload, "local_llm_model"),
+            # 视觉通道（工单 vision-eyes/01）：缺省 / 空串 = 官方免费通道；key 掩码
+            # 沿用旧值（与 api_key 同款语义），空 key = 关闭视觉
+            vision_base_url=(
+                _optional_str(payload, "vision_base_url") or DEFAULT_VISION_BASE_URL
+            ),
+            vision_api_key=_masked_optional_key(
+                payload, "vision_api_key", existing.vision_api_key if existing else ""
+            ),
+            vision_model=(
+                _optional_str(payload, "vision_model") or DEFAULT_VISION_MODEL
+            ),
+            # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 / 空对象 = 恢复内置默认
+            llm_prices=_optional_dict(payload, "llm_prices"),
+            # 计费时段（工单 01 扩展）：缺省 peak；非法值 400
+            llm_price_period=_optional_choice(
+                payload, "llm_price_period", default="peak", choices=("peak", "off_peak")
+            ),
+            # 推荐缓存开关（工单 llm-cost-control/02）：缺省开；非布尔 400
+            recommend_cache_enabled=_optional_bool(
+                payload, "recommend_cache_enabled", default=True
+            ),
+            # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：2-4，缺省 4
+            recommend_max_rounds=_optional_int_range(
+                payload, "recommend_max_rounds", default=4, low=2, high=4
+            ),
         )
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
@@ -1505,7 +1865,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
 def _generation_result(summary: GenerationSummary) -> dict:
     """生成结果摘要 → JSON（推导逻辑在核心 describe_generation，这里只做形态转换）。"""
-    return {
+    result = {
         "output_dir": str(summary.output_dir),
         "structure": list(summary.structure),
         "include_dirs": list(summary.include_dirs),
@@ -1516,13 +1876,22 @@ def _generation_result(summary: GenerationSummary) -> dict:
         # （slug → 输出文件名，工程根）——前端摘要「模块文件」行显示 k230
         # 这类 files 空模块的 main.py；未选任何带声明模块 = 空数组
         "python_artifacts": [
-            {"slug": slug, "output": output}
-            for slug, output in summary.python_artifacts
+            {
+                "slug": artifact.slug,
+                "output": artifact.output,
+                "template_id": artifact.template_id,
+                "template_name": artifact.template_name,
+                "template_description": artifact.template_description,
+            }
+            for artifact in summary.python_artifacts
         ],
         # 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
         # 工具链时非空，前端摘要区展示一行提示
         "build_hint": summary.build_hint,
     }
+    if summary.score_points:
+        result["score_points"] = [point.to_dict() for point in summary.score_points]
+    return result
 
 
 app = create_app()
