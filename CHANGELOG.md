@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6acdcc89a000405955acc31949dedc5be533fca2 -->
+<!-- changelog-auto: last-commit=9a5c2c8a4f5b7a38567b718a922c4ee4f2dd858a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:00 多实例默认兜底——AI 没猜实例时按平台默认自动填（stm32 红黄绿 / mspm0 单实例，与不配置生成等价零回归，工单 instance-default-fallback/01）+ backlog 计划
 - 00:08 推荐与蒸馏进度面板接入 LLM telemetry 快照——每次调用完成显示调用数 / provider 分流 / 最新操作 / 耗时（照修复流程先例，bind_llm_telemetry + 前端展示位 + 生命周期清理 + 结构钉）
 - 00:17 赛题条目补图注
+- 00:39 引脚自动配置（一键解冲突，合法共享保留+标注，工单 pin-auto-assign/01）+ LLM telemetry 状态行中文化（operation/状态/计数全映射，三面板共用）
 
 ## 2026-08-19
 - 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
