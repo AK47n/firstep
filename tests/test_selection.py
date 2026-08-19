@@ -2312,3 +2312,34 @@ def test_default_instance_plan_single_source():
     assert [i.variant for i in default_instance_plan(PLATFORM_MSPM0)] == [""]
     assert default_instance_plan("") == ()
     assert default_instance_plan("unknown") == ()
+
+
+def test_run_recommendation_passes_qa_material_through():
+    """赛题答疑 Q&A（工单 qa-material/01）：run_recommendation → 收敛循环 →
+    select_modules 逐层透传（fake LLM 收到 qa_material）。"""
+    class _QaLLM(FakeLLM):
+        def __init__(self):
+            super().__init__(selection=ModuleSelection(modules=("led",), reasons={"led": "声光提示"}))
+            self.received_qa = []
+
+        def select_modules(
+            self, problem_text, manifest_summaries, references=(),
+            reference_fulltexts=None, manual_fulltexts=None,
+            clarifications=(), qa_material="",
+        ):
+            self.received_qa.append(qa_material)
+            return super().select_modules(
+                problem_text, manifest_summaries, references,
+                reference_fulltexts, manual_fulltexts, clarifications, qa_material,
+            )
+
+    llm = _QaLLM()
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+    run_recommendation(
+        _topic_with_multi_summaries(), llm, emit=emit, platform=PLATFORM_STM32,
+        qa_material="问：尺寸？答：30cm。",
+    )
+
+    assert llm.received_qa, "select_modules 未收到 qa_material（透传断裂）"
+    assert all(qa == "问：尺寸？答：30cm。" for qa in llm.received_qa)

@@ -51,3 +51,11 @@ test("第 7 步引脚配置有自动配置按钮与端点接线", () => {
   assert.match(handler[0], /collectBindings/);
   assert.match(handler[0], /renderPinCard\(\)/);
 });
+
+test("AI 推荐卡片有赛题答疑 Q&A 输入框并随请求发送", () => {
+  assert.match(html, /id="qa-text"/);
+  assert.match(html, /赛题答疑 Q&amp;A/);
+  const body = html.match(/body: JSON\.stringify\(\{ problem_text: problem[\s\S]*?\}\)/);
+  assert.ok(body, "未找到推荐请求体（改名了？）");
+  assert.match(body[0], /qa_text:\s*\$\("qa-text"\)\.value\.trim\(\)/);
+});

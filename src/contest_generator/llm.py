@@ -823,6 +823,7 @@ class LLM(Protocol):
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        qa_material: str = "",
     ) -> ModuleSelection: ...
 
     def clarify(
@@ -1042,6 +1043,7 @@ class DeepSeekLLM:
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        qa_material: str = "",
     ) -> ModuleSelection:
         """赛题 → 模块选择（工单 03 起带参考文件两级注入的清单 / 全文两个形态）。
 
@@ -1106,6 +1108,7 @@ class DeepSeekLLM:
                 manual_fulltexts,
                 self._hardware_words,
                 clarifications,
+                qa_material,
             ),
             parse=parse,
             label="模块选择",
@@ -2129,6 +2132,7 @@ class RoutingLLM:
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        qa_material: str = "",
     ) -> ModuleSelection:
         return self._remote.select_modules(
             problem_text,
@@ -2137,6 +2141,7 @@ class RoutingLLM:
             reference_fulltexts,
             manual_fulltexts,
             clarifications,
+            qa_material,
         )
 
     def clarify(
@@ -2617,6 +2622,7 @@ def _selection_user_prompt(
     manual_fulltexts: Mapping[str, str] | None = None,
     hardware_words: Sequence[HardwareWordGroup] = (),
     clarifications: Sequence[tuple[str, str]] = (),
+    qa_material: str = "",
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
     prompt = _build_user_prompt(
@@ -2666,6 +2672,16 @@ def _selection_user_prompt(
                     f"{_fit_fulltext_wire(fulltext)}\n```"
                 )
         prompt += "\n".join(lines)
+    if qa_material:
+        # 赛题答疑 Q&A（工单 qa-material/01）：赛事组对题面的澄清问答，权威
+        # 材料——题面/参考段之后、用户澄清之前的独立段（原文直引，不并入题面
+        # 不影响逐句编号；收敛判定的对照句编号保持稳定）。空材料不出段（缺省
+        # = 旧行为逐字节）。wire 预算兜底照 _fit_fulltext_wire（长 Q&A 截断带
+        # 标注，模型知道材料不完整）。
+        prompt += (
+            "\n\n【赛题答疑（赛事组 Q&A，权威澄清，题面有歧义处以这里为准）】\n"
+            + _fit_fulltext_wire(qa_material)
+        )
     if clarifications:
         # 澄清问答历史（工单 clarify-history-in-convergence）：题面 / 参考段之后
         # 的独立段——Q/A 逐条、不带编号、不并入题面（题面逐句编号跨轮稳定，

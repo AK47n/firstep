@@ -3976,6 +3976,34 @@ def test_select_prompt_without_clarifications_keeps_old_shape():
     assert "- key-example: 2026C 参考 —— 配套例程" in user_message  # 参考段形状不变
 
 
+def test_select_prompt_includes_qa_material():
+    """赛题答疑 Q&A（工单 qa-material/01）：题面后独立段注入（澄清段前），
+    原文直引、不并入题面；缺省空 = 旧行为无段。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "送药小车。识别数字。",
+        [ManifestSummary("dht11", "温湿度")],
+        qa_material="问：小车尺寸？答：30cm×20cm。\n问：循迹线颜色？答：黑色赛道。",
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "【赛题答疑" in user_message
+    assert "问：小车尺寸？答：30cm×20cm。" in user_message  # 原文直引
+    assert "问：循迹线颜色？答：黑色赛道。" in user_message
+    # 位置：题面后、澄清段前（若两者同出；无澄清段 = 只验证题面在前）
+    assert user_message.index("送药小车。识别数字。") < user_message.index("【赛题答疑")
+    assert "用户已澄清的问题" not in user_message \
+        or user_message.index("【赛题答疑") < user_message.index("用户已澄清的问题")
+
+    # 缺省空 = 旧行为（无 Q&A 段）
+    transport2 = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm2 = _llm(transport2)
+    llm2.select_modules("送药小车。识别数字。", [ManifestSummary("dht11", "温湿度")])
+    assert "【赛题答疑" not in transport2.calls[0][2]["messages"][1]["content"]
+
+
 def test_selection_prompt_worst_case_fits_request_budget():
     """结构测试（工单 budget-wire-unification/01 唯一硬保证，红证先行）：最坏
     情况 select 请求——REFERENCE_FULLTEXT_BYTES 上限全文（全中文，wire 口径

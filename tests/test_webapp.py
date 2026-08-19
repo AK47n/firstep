@@ -663,6 +663,32 @@ def test_bindings_auto_no_conflict_returns_empty(client, context):
     assert data["fixed"] == []
 
 
+def test_recommend_with_qa_material_flows_through(client, context):
+    """赛题答疑 Q&A（工单 qa-material/01）：请求带 qa_text → FakeLLM 收到
+    qa_material（透传断链即红）；无冲突返回正常 done。"""
+    from contest_generator.selection import ModuleSelection
+
+    received = {}
+
+    class _QaLLM(FakeLLM):
+        def select_modules(
+            self, problem_text, manifest_summaries, references=(),
+            reference_fulltexts=None, manual_fulltexts=None,
+            clarifications=(), qa_material="",
+        ):
+            received["qa"] = qa_material
+            return ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
+
+    context[1]["llm"] = _QaLLM()
+    data = _recommend_done(client, {
+        "problem_text": "采集温湿度并显示",
+        "qa_text": "问：量程？答：-10~50℃。",
+    })
+
+    assert received.get("qa") == "问：量程？答：-10~50℃。"
+    assert data["modules"][0]["slug"] == "dht11"
+
+
 # ---------------------------------------------------------------------------
 # 编译错误修复（工单 compile-error-fix/01）：SSE 流端到端 + 回滚
 # ---------------------------------------------------------------------------

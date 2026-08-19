@@ -54,6 +54,15 @@ def clarify_fingerprint(
     return hashlib.sha256(json.dumps(items, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
+def qa_fingerprint(qa_text: str) -> str:
+    """赛题答疑 Q&A 指纹（工单 qa-material/01）：参数指纹——Q&A 变化缓存
+    失效（有 topic_id 时键不变，靠它拦）；空文本 = 空串（旧缓存无字段兼容）。
+    """
+    if not qa_text:
+        return ""
+    return hashlib.sha256(qa_text.encode("utf-8")).hexdigest()
+
+
 def cache_key(topic_id: str | None, problem_text: str) -> str:
     """缓存键：topic_id 优先；无 topic_id（手动准入）用题面 sha256。"""
     return topic_id or problem_fingerprint(problem_text)
@@ -77,6 +86,7 @@ def cache_recommend(
     platform: str,
     reference_ids: Sequence[str] = (),
     clarify_hist: Sequence[Mapping[str, str]] = (),
+    qa_text: str = "",
 ) -> None:
     """写缓存：done 载荷逐字 + 元数据（与 CLI generate_check 格式逐字兼容）。
 
@@ -88,6 +98,7 @@ def cache_recommend(
         "problem_sha256": problem_fingerprint(problem_text),
         "reference_ids": list(reference_ids),
         "clarify_sha256": clarify_fingerprint(clarify_hist),
+        "qa_sha256": qa_fingerprint(qa_text),
         "done": done,
     }
     try:
@@ -126,8 +137,13 @@ def validate_recommend(
     topic_key: str,
     problem_text: str,
     platform: str,
+    qa_text: str = "",
 ) -> tuple[bool, str]:
-    """缓存是否仍有效：题面 / 平台 / 键任一不符 → (False, 原因)。
+    """缓存是否仍有效：题面 / 平台 / 键 / Q&A 指纹任一不符 → (False, 原因)。
+
+    Q&A 指纹（工单 qa-material/01）：有 topic_id 时键不变，Q&A 变化靠指纹拦
+    （照 clarify_sha256 参数指纹先例，但 Q&A 是阻断级——材料变了必须重推，
+    复用旧结果是错的）。旧缓存无 qa_sha256 字段 = 视为匹配（向后兼容）。
 
     调用方拿 False 走真实推荐（Web 交互场景不报错退出——CLI 回归脚本的
     "缺失即报错"语义不适用）。
@@ -138,6 +154,8 @@ def validate_recommend(
         return False, "平台与缓存时不同"
     if cached.get("topic_key") != topic_key:
         return False, "赛题键与缓存时不同"
+    if cached.get("qa_sha256", "") != qa_fingerprint(qa_text):
+        return False, "赛题答疑 Q&A 与缓存时不同"
     return True, ""
 
 
