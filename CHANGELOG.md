@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9a5c2c8a4f5b7a38567b718a922c4ee4f2dd858a -->
+<!-- changelog-auto: last-commit=9cf8a10edee3108fb97b973702178d746da251b0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 00:08 推荐与蒸馏进度面板接入 LLM telemetry 快照——每次调用完成显示调用数 / provider 分流 / 最新操作 / 耗时（照修复流程先例，bind_llm_telemetry + 前端展示位 + 生命周期清理 + 结构钉）
 - 00:17 赛题条目补图注
 - 00:39 引脚自动配置（一键解冲突，合法共享保留+标注，工单 pin-auto-assign/01）+ LLM telemetry 状态行中文化（operation/状态/计数全映射，三面板共用）
+- 00:52 赛题答疑 Q&A 注入推荐——输入框随请求带 qa_text，题面后独立段注入（权威澄清，不并入题面不干扰收敛判定）+ 缓存 qa_sha256 指纹（Q&A 变化失效重推，工单 qa-material/01）
 
 ## 2026-08-19
 - 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
