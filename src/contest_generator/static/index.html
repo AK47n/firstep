@@ -321,8 +321,7 @@
   .recent-wf-summary .wf-status-error { color: var(--danger); font-weight: 600; }
   .recent-wf-calls { margin: 4px 0 0 10px; padding-left: 10px;
                      border-left: 1px dashed var(--border); color: var(--muted); }
-  .recent-wf-calls .call-row { white-space: nowrap; overflow: hidden;
-                               text-overflow: ellipsis; }
+  .recent-wf-calls .call-row { white-space: normal; word-break: break-all; }
   /* ---- 参考文件查看弹层（文件名搜索 + 文件打开工单）：清单 + 文本内联 ---- */
   .ref-files-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
                        display: flex; align-items: flex-start; justify-content: center;
