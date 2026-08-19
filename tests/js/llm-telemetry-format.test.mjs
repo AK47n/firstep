@@ -13,7 +13,7 @@ const match = html.match(/function formatLLMTelemetry[\s\S]*?\n\}/);
 assert.ok(match, "index.html 中未找到 formatLLMTelemetry 函数体（改名了？）");
 const formatLLMTelemetry = new Function("return (" + match[0] + ")")();
 
-test("LLM telemetry 行显示 calls / provider split / latest / error / bytes / duration / usage", () => {
+test("LLM telemetry 行显示调用数 / provider 分流 / 最新操作 / 错误 / 字节 / 耗时 / 用量（中文）", () => {
   assert.equal(
     formatLLMTelemetry({
       llm_total_calls: 3,
@@ -35,11 +35,11 @@ test("LLM telemetry 行显示 calls / provider split / latest / error / bytes / 
       llm_duration_ms: 678,
       llm_usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
     }),
-    "LLM：3 calls · local 1 / DeepSeek 2 · latest fix_compile_errors · error network / parse parse_error · http 502 · attempts 4, retries 2, errors 2, parse_errors 1, 429 1, network 1, 5xx 1 · request 12,345B · duration 678ms · usage prompt_tokens=10, completion_tokens=2, total_tokens=12"
+    "LLM：3 次调用 · 本地 1 / DeepSeek 2 · 最新 编译修复 · 错误 网络 / 解析 解析失败 · HTTP 502 · 尝试 4, 重试 2, 错误 2, 解析错误 1, 限流 1, 网络错误 1, 5xx 1 · 请求 12,345B · 耗时 678ms · 用量 prompt=10, completion=2, total=12"
   );
 });
 
-test("无 usage / 无错误时省略对应段", () => {
+test("无 usage / 无错误时省略对应段；未知 operation 回退原文", () => {
   assert.equal(
     formatLLMTelemetry({
       llm_total_calls: 1,
@@ -50,6 +50,15 @@ test("无 usage / 无错误时省略对应段", () => {
       llm_request_bytes: 90,
       llm_duration_ms: 12,
     }),
-    "LLM：1 calls · local 0 / DeepSeek 1 · latest select_modules · parse success · request 90B · duration 12ms"
+    "LLM：1 次调用 · 本地 0 / DeepSeek 1 · 最新 选模块 · 解析 成功 · 请求 90B · 耗时 12ms"
+  );
+  assert.equal(
+    formatLLMTelemetry({
+      llm_total_calls: 1,
+      llm_local_calls: 1,
+      llm_deepseek_calls: 0,
+      llm_latest_operation: "future_op_unknown",
+    }),
+    "LLM：1 次调用 · 本地 1 / DeepSeek 0 · 最新 future_op_unknown · 请求 0B · 耗时 0ms"
   );
 });

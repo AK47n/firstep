@@ -561,6 +561,108 @@ def test_recommend_done_omits_instances_without_multi_module(client, context):
     assert "instances" not in data
 
 
+def _add_pin_modules(client, context) -> None:
+    """给假模块库补带引脚角色的模块（motor 简化 / uwb_uart），照
+    _add_fake_k230_modules 先例——自动配置端点测试素材（角色走真实板能力）。"""
+    lib = context[0].config.module_library_dir
+    modules = {
+        "motor": {
+            "description": "电机驱动（简化）",
+            "platforms": {
+                "stm32": {
+                    "files": [],
+                    "verified": True,
+                    "pins": [
+                        {"id": "MOTOR_A_PWM", "type": "pwm", "label": "A 路 PWM", "default": "PA0"},
+                        {"id": "MOTOR_A_DIR", "type": "gpio_out", "label": "A 路方向", "default": "PA6"},
+                        {"id": "MOTOR_A_DIR2", "type": "gpio_out", "label": "A 路方向2", "default": "PA7"},
+                    ],
+                }
+            },
+        },
+        "uwb_uart": {
+            "description": "UWB 串口（简化）",
+            "platforms": {
+                "stm32": {
+                    "files": [],
+                    "verified": True,
+                    "pins": [
+                        {"id": "UWB_UART_TX", "type": "uart_tx", "label": "TX", "default": "PA9"},
+                        {"id": "UWB_UART_RX", "type": "uart_rx", "label": "RX", "default": "PA10"},
+                    ],
+                }
+            },
+        },
+    }
+    for slug, body in modules.items():
+        (lib / slug).mkdir(exist_ok=True)
+        (lib / slug / "manifest.json").write_text(
+            json.dumps({"slug": slug, **body}, ensure_ascii=False), encoding="utf-8"
+        )
+
+
+def test_bindings_auto_resolves_conflict_and_keeps_sharing(client, context):
+    """自动配置端点（工单 pin-auto-assign/01）：能力冲突角色被重分到合法脚，
+    合法共享保留并标注；契约与 validate 同源（resolve_bindings）。"""
+    _add_pin_modules(client, context)
+    resp = client.post(
+        "/api/bindings/auto",
+        json={
+            "platform": "stm32",
+            "slugs": ["motor", "uwb_uart"],
+            "bindings": {
+                "motor.MOTOR_A_PWM": "PA4",          # PA4 无 pwm → 冲突
+                "uwb_uart.UWB_UART_TX": "PB10",      # UART_3
+                "uwb_uart.UWB_UART_RX": "PA10",      # UART_1 → 成对冲突
+                "motor.MOTOR_A_DIR": "PB12",         # 合法共享（同脚两角色）
+                "motor.MOTOR_A_DIR2": "PB12",
+            },
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    # 两个冲突角色都被重分；合法共享角色不动
+    assert "motor.MOTOR_A_PWM" in data["bindings"]
+    assert "uwb_uart.UWB_UART_TX" in data["bindings"]
+    assert "motor.MOTOR_A_DIR" not in data["bindings"]
+    assert len(data["fixed"]) == 2
+    # 重分后整体合法（同 validate 端点验证）
+    merged = {
+        "motor.MOTOR_A_PWM": data["bindings"]["motor.MOTOR_A_PWM"],
+        "uwb_uart.UWB_UART_TX": data["bindings"]["uwb_uart.UWB_UART_TX"],
+        "uwb_uart.UWB_UART_RX": "PA10",
+    }
+    check = client.post(
+        "/api/bindings/validate",
+        json={"platform": "stm32", "slugs": ["motor", "uwb_uart"], "bindings": merged},
+    )
+    assert check.json() == {"ok": True}
+    # 共享标注：PB12 同脚两角色（DIR / DIR2）保留并标注
+    group = next((s for s in data["shared"] if s["pin"] == "PB12"), None)
+    assert group is not None
+    assert set(group["roles"]) == {"motor.MOTOR_A_DIR", "motor.MOTOR_A_DIR2"}
+    assert "共享" in str(group["reason"])
+
+
+def test_bindings_auto_no_conflict_returns_empty(client, context):
+    """无冲突 → 空增量 + ok（不误动）。"""
+    _add_pin_modules(client, context)
+    resp = client.post(
+        "/api/bindings/auto",
+        json={
+            "platform": "stm32",
+            "slugs": ["motor"],
+            "bindings": {"motor.MOTOR_A_PWM": "PA0"},
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["bindings"] == {}
+    assert data["fixed"] == []
+
+
 # ---------------------------------------------------------------------------
 # 编译错误修复（工单 compile-error-fix/01）：SSE 流端到端 + 回滚
 # ---------------------------------------------------------------------------

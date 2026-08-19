@@ -119,7 +119,11 @@ from .master_store import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .pdf_library import list_pdfs, resolve_pdf
-from .pin_bindings import PinBindingError, resolve_bindings
+from .pin_bindings import (
+    PinBindingError,
+    auto_assign_bindings,
+    resolve_bindings,
+)
 from .reference_library import (
     PLATFORM_ANY,
     add_reference,
@@ -1000,6 +1004,36 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         except PinBindingError as exc:
             return {"ok": False, "error": str(exc)}
         return {"ok": True}
+
+    @app.post("/api/bindings/auto")
+    @_map_errors
+    def bindings_auto(payload: dict) -> dict:
+        """自动配置（工单 pin-auto-assign/01）：一键解冲突——确定性算法把真
+        冲突角色（能力 / UART 成对 / mspm0 槽位互斥 / 类型级实例约束）重新
+        分配到不冲突引脚，合法共享保留并标注；只动冲突角色，用户合法绑定
+        不动。校验与 validate / generate 同源（resolve_bindings + 同一份
+        manifests / board）。
+
+        契约：{platform, slugs, bindings} → {ok:true, bindings(增量),
+        fixed(调整说明), shared(保留共享标注)} 或 {ok:false, error}。
+        """
+        platform = _require_str(payload, "platform")
+        slugs = _require_str_list(payload, "slugs")
+        bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
+        resolved = resolve_selection(_library_dir(context), platform, slugs)
+        board = board_for_platform(platform)
+        try:
+            result = auto_assign_bindings(
+                resolved.manifests, platform, board, bindings
+            )
+        except PinBindingError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {
+            "ok": True,
+            "bindings": result.bindings,
+            "fixed": list(result.fixed),
+            "shared": [dict(item) for item in result.shared],
+        }
 
     @app.post("/api/generate")
     @_map_errors

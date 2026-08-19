@@ -42,3 +42,12 @@ test("蒸馏进度面板有 telemetry 展示位与 handler（照推荐先例）"
   assert.ok(start, "未找到 startProgress（改名了？）");
   assert.match(start[0], /prog-llm-telemetry/);
 });
+
+test("第 7 步引脚配置有自动配置按钮与端点接线", () => {
+  assert.match(html, /id="btn-pin-auto"/);
+  assert.match(html, /\/api\/bindings\/auto/);
+  const handler = html.match(/\$\("btn-pin-auto"\)\.addEventListener\([\s\S]*?\n\}\);/);
+  assert.ok(handler, "未找到 btn-pin-auto 事件监听（改名了？）");
+  assert.match(handler[0], /collectBindings/);
+  assert.match(handler[0], /renderPinCard\(\)/);
+});

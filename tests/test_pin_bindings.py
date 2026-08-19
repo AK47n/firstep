@@ -812,4 +812,81 @@ def test_generate_with_invalid_bindings_creates_no_output_dir(tmp_path):
             main_c_content="int main(void) { while (1); }\n",
             bindings={"motor.MOTOR_A_PWM": "PB4"},  # PB4 无 pwm token（类型级下限）
         )
-    assert not out_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# 自动配置（工单 pin-auto-assign/01）：一键解冲突——合法共享保留 + 标注，
+# 只动冲突角色；无解中文报错。校验面 = resolve_bindings（与 validate 同源）。
+# ---------------------------------------------------------------------------
+
+
+def _auto(platform: str, bindings: dict[str, str]):
+    from contest_generator.pin_bindings import auto_assign_bindings
+
+    return auto_assign_bindings(ALL_MANIFESTS, platform, BOARDS[platform], bindings)
+
+
+def test_auto_assign_keeps_legal_sharing_with_annotation():
+    """合法共享（同脚多角色，ADR 0010）→ 不拆，返回空增量 + shared 标注。"""
+    result = _auto("stm32", {
+        "motor.MOTOR_A_DIR": "PB6",
+        "key.KEY_START": "PB6",
+    })
+
+    assert result.bindings == {}
+    assert result.fixed == ()
+    group = next((s for s in result.shared if s["pin"] == "PB6"), None)
+    assert group is not None
+    assert {"motor.MOTOR_A_DIR", "key.KEY_START"} <= set(group["roles"])
+    assert "共享" in str(group["reason"])
+
+
+def test_auto_assign_relocates_capability_conflict():
+    """能力冲突（pwm 角色绑到无 pwm 能力的脚）→ 自动移到有 pwm 能力的脚。"""
+    result = _auto("stm32", {"motor.MOTOR_A_PWM": "PA4"})  # PA4 无 pwm token
+
+    assert list(result.bindings) == ["motor.MOTOR_A_PWM"]
+    new_pin = result.bindings["motor.MOTOR_A_PWM"]
+    assert new_pin != "PA4"
+    assert "pwm" in " ".join(BOARDS["stm32"].pin_index[new_pin].capabilities)
+    assert "motor.MOTOR_A_PWM → " in result.fixed[0]
+    assert "原 PA4 冲突" in result.fixed[0]
+    # 重分后的整体绑定合法（同一 resolve_bindings 验证）
+    _resolve("stm32", result.bindings)
+
+
+def test_auto_assign_fixes_uart_pair_mismatch():
+    """UART TX/RX 成对约束：不同实例 → 自动重分 TX 到同实例脚（UART_1）。"""
+    result = _auto("stm32", {
+        "uwb_uart.UWB_UART_TX": "PB10",  # uart_tx:UART_3
+        "uwb_uart.UWB_UART_RX": "PA10",  # uart_rx:UART_1
+    })
+
+    assert result.bindings == {"uwb_uart.UWB_UART_TX": "PA9"}  # uart_tx:UART_1
+    _resolve("stm32", {
+        "uwb_uart.UWB_UART_TX": "PA9",
+        "uwb_uart.UWB_UART_RX": "PA10",
+    })  # 成对同实例，合法
+
+
+def test_auto_assign_keeps_user_valid_bindings_untouched():
+    """无冲突的合法绑定 → 增量空（用户绑定不动）。"""
+    result = _auto("stm32", {"motor.MOTOR_A_PWM": "PA0"})  # PA0 pwm:TIM2_CH1 合法
+
+    assert result.bindings == {}
+    assert result.fixed == ()
+
+
+def test_auto_assign_no_solution_reports_explicitly():
+    """所有 pwm 脚被占用 → 无解，中文报错（不静默失败）。"""
+    occupants = {
+        "config.LED_RED": "PA0", "config.LED_YELLOW": "PA1",
+        "config.LED_GREEN": "PA2", "config.BUZZER": "PA3",
+        "config.DIP0": "PA6", "config.DIP1": "PA7",
+        "key.KEY_START": "PB0", "motor.MOTOR_A_DIR": "PB1",
+        "motor.MOTOR_A_DIR2": "PB6", "motor.MOTOR_B_DIR": "PB7",
+        "motor.MOTOR_B_DIR2": "PB8", "motor.MOTOR_A_ENC_DIR": "PB9",
+    }
+
+    with pytest.raises(PinBindingError, match="自动配置无法为 motor.MOTOR_A_PWM"):
+        _auto("stm32", {**occupants, "motor.MOTOR_A_PWM": "PA4"})
