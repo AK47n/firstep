@@ -171,6 +171,10 @@
   .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
   .chip.out { background: rgba(139, 148, 158, .15); color: var(--muted); cursor: default; }
   .chip.out .reason { color: var(--muted); }
+  .score-panel { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+                 margin-bottom: 10px; background: var(--panel-2); }
+  .score-panel .title { font-weight: 600; margin-bottom: 6px; color: var(--text); }
+  .score-panel .score-row { font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
   /* 参考资料选择列表（工单：表格状对齐）：勾选 | 资料 | 平台 | 说明 四列 */
   .ref-pick-head, .ref-pick-row {
     display: grid; grid-template-columns: 28px minmax(0, 1fr) 110px minmax(0, 2fr);
@@ -1297,6 +1301,16 @@ function suggestionChip(s) {
     + (s.examples.length ? "：" + esc(s.examples.join(" / ")) : "") + '</span></span>';
 }
 
+function renderScorePointPanel(points) {
+  if (!points || !points.length) return "";
+  const rows = formatScorePoints(points).split("\n").map((line) =>
+    '<div class="score-row">' + esc(line) + '</div>'
+  ).join("");
+  return '<div class="score-panel" id="rec-score-points">'
+    + '<div class="title">评分点验收清单</div>'
+    + rows + '</div>';
+}
+
 function renderRecommendResult(data, autoAdd = true) {
   if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
   renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
@@ -1322,11 +1336,12 @@ function renderRecommendResult(data, autoAdd = true) {
   lastRecommend = data;
   const box = $("rec-list");
   const requirements = data.requirements || [];
+  const scorePanel = renderScorePointPanel(scorePoints);
   if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length)) {
-    box.innerHTML = '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
+    box.innerHTML = scorePanel + '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
     return;
   }
-  box.innerHTML = requirements.map((r) => `
+  box.innerHTML = scorePanel + requirements.map((r) => `
     <div class="item">
       <div class="head"><span class="slug">句子${r.sentence} · ${esc(r.requirement)}</span></div>
       <div class="rec-chips">
