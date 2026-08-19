@@ -68,6 +68,7 @@ from .generator import (
     generate_project,
     resolve_topic_context,
 )
+from .generation_output import topic_title_from_summary, unique_desktop_topic_dir
 from .library import (
     add_module,
     add_platform_files,
@@ -240,6 +241,7 @@ class AppContext:
     llm_factory: Callable[..., LLM] = build_llm
     tab_registry: TabRegistry = field(default_factory=TabRegistry)
     pick_directory: Callable[[], str | None] = _tkinter_pick_directory
+    desktop_dir: Callable[[], Path] = lambda: Path.home() / "Desktop"
     recent_llm_workflows: LLMRecentWorkflowStore = field(default_factory=LLMRecentWorkflowStore)
 
 
@@ -565,9 +567,25 @@ async def _save_upload(upload: UploadFile) -> Path:
     return Path(tmp.name)
 
 
-# ---------------------------------------------------------------------------
-# 应用工厂（测试注入上下文用）
-# ---------------------------------------------------------------------------
+def _desktop_output_requested(payload: dict) -> bool:
+    """桌面输出开关：显式值优先；旧请求无 problem_text 时保持手填目录。"""
+    if "create_desktop_topic_dir" in payload:
+        return _optional_bool(payload, "create_desktop_topic_dir", default=False)
+    return bool(_optional_str(payload, "problem_text"))
+
+
+def _resolve_generation_output_dir(
+    context: AppContext,
+    payload: dict,
+) -> Path:
+    """生成请求 → 最终 output_dir；桌面模式用 AI 题名命名。"""
+    if not _desktop_output_requested(payload):
+        return Path(_require_str(payload, "output_dir"))
+    problem_text = _require_str(payload, "problem_text")
+    title = topic_title_from_summary(_llm(context).summarize_topic(problem_text))
+    return unique_desktop_topic_dir(context.desktop_dir(), title)
+
+
 
 
 def create_app(ctx: AppContext | None = None) -> FastAPI:
@@ -992,7 +1010,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
-        output_dir = Path(_require_str(payload, "output_dir"))
+        output_dir = _resolve_generation_output_dir(context, payload)
         topic_id = _optional_str(payload, "topic_id")
         bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
