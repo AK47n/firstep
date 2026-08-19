@@ -2714,6 +2714,14 @@ def _selection_user_prompt(
         )
     if references:
         contract += ', "references": ["想读全文的参考文件 id，不需要可省略"]'
+    # 输出契约：评分点是题面可选增强信息；模型无法识别评分表时省略或返回空数组，
+    # 由 selection 层按可选信息降级，不阻断模块推荐。
+    contract = (
+        contract
+        + ', "score_points": [{"id": "评分点编号", '
+        '"part": "basic/development/unknown", "description": "评分点描述", '
+        '"score": 10 或 null, "sentence_refs": [1]}]'
+    )
     return prompt + "\n只返回 json 格式的 JSON 对象：" + contract + "}"
 
 

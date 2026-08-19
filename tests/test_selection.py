@@ -37,6 +37,7 @@ from contest_generator.selection import (
     REFERENCE_SOURCE_AUTO,
     REFERENCE_SOURCE_MANUAL,
     ReferenceSuggestion,
+    ScorePoint,
     SelectionError,
     UnknownModuleError,
     _functional_layer_key,
@@ -47,6 +48,7 @@ from contest_generator.selection import (
     check_platform_warnings,
     filter_manifests_by_platform,
     manual_reference_admission,
+    parse_score_points,
     reference_suggestions,
     resolve_dependencies,
     resolve_selection,
@@ -1639,9 +1641,118 @@ def test_build_selection_requirements_present_ignores_plain_modules():
     assert result.modules == ("dht11",)  # 派生为准
 
 
-# ---------------------------------------------------------------------------
-# 结构测试（防回退，先例 errors.py / 04 / 05 工单）：域判决归 selection 的边界 pin
-# ---------------------------------------------------------------------------
+def test_build_selection_keeps_score_points_for_requirements_contract():
+    result = build_module_selection(
+        {
+            "requirements": [],
+            "score_points": [
+                {
+                    "id": "B1",
+                    "part": "basic",
+                    "description": "基础功能完成",
+                    "score": 8,
+                    "sentence_refs": [1],
+                }
+            ],
+        },
+        known_slugs=(),
+    )
+
+    assert result.score_points == (
+        ScorePoint("B1", "basic", "基础功能完成", 8.0, (1,)),
+    )
+
+
+def test_build_selection_keeps_score_points_for_plain_modules_contract():
+    result = build_module_selection(
+        {
+            "modules": [{"slug": "dht11", "reason": "测量"}],
+            "score_points": [
+                {"id": "D1", "description": "发挥项", "part": "development"}
+            ],
+        },
+        known_slugs=("dht11",),
+    )
+
+    assert result.score_points == (
+        ScorePoint("D1", "development", "发挥项", None, ()),
+    )
+
+
+def test_build_selection_score_points_are_optional_and_invalid_points_degrade():
+    assert build_module_selection({"modules": []}, known_slugs=()).score_points == ()
+    assert build_module_selection(
+        {
+            "modules": [{"slug": "dht11", "reason": "测量"}],
+            "score_points": [{"description": ""}],
+        },
+        known_slugs=("dht11",),
+    ).modules == ("dht11",)
+    assert build_module_selection(
+        {
+            "modules": [{"slug": "dht11", "reason": "测量"}],
+            "score_points": [{"description": ""}],
+        },
+        known_slugs=("dht11",),
+    ).score_points == ()
+
+
+def test_parse_score_points_preserves_topic_order_and_normalizes_fields():
+    raw = [
+        {
+            "id": "A1",
+            "part": "basic",
+            "description": "完成测距",
+            "score": 10,
+            "sentence_refs": [2, 3],
+        },
+        {
+            "id": "A2",
+            "part": "development",
+            "description": "优化精度",
+            "score": 2.5,
+            "sentence_refs": [],
+        },
+        {
+            "id": "A3",
+            "part": "题面未分区",
+            "description": "完成展示",
+            "score": "按完成情况给分",
+        },
+    ]
+
+    result = parse_score_points(raw)
+
+    assert result == (
+        ScorePoint("A1", "basic", "完成测距", 10.0, (2, 3)),
+        ScorePoint("A2", "development", "优化精度", 2.5, ()),
+        ScorePoint("A3", "unknown", "完成展示", None, ()),
+    )
+
+
+
+def test_parse_score_points_missing_or_malformed_input_degrades_to_empty():
+    assert parse_score_points(None) == ()
+    assert parse_score_points([]) == ()
+    assert parse_score_points({"bad": "shape"}) == ()
+    assert parse_score_points([{"description": "缺少分值也应保留"}]) == (
+        ScorePoint("score-1", "unknown", "缺少分值也应保留", None, ()),
+    )
+    assert parse_score_points([42]) == ()
+    assert parse_score_points([{"description": ""}]) == ()
+    assert parse_score_points([{"id": 1, "description": "非法编号"}]) == ()
+    assert parse_score_points([{"description": "非法引用", "sentence_refs": [0]}]) == ()
+
+
+def test_parse_score_points_non_finite_score_degrades_to_null():
+    result = parse_score_points(
+        [
+            {"description": "未知分值", "score": float("nan")},
+            {"description": "未知上限", "score": float("inf")},
+        ]
+    )
+
+    assert [point.score for point in result] == [None, None]
 
 
 def test_build_module_selection_consumed_by_llm():
@@ -1993,6 +2104,55 @@ def test_run_recommendation_done_payload_verbatim():
             {"id": "ref-both", "title": "双重参考", "source": "manual", "platform": PLATFORM_MSPM0},
         ],
     }
+
+
+def test_run_recommendation_done_payload_includes_score_points_when_present():
+    llm = FakeLLM(
+        selection=ModuleSelection(
+            modules=("dht11",),
+            reasons={"dht11": "测量"},
+            score_points=(
+                ScorePoint("B1", "basic", "完成测量", 5.0, (1,)),
+                ScorePoint("D1", "development", "提高精度", None, ()),
+            ),
+        )
+    )
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    data = _drain_events(events)[-1][1]
+    assert data["score_points"] == [
+        {
+            "id": "B1",
+            "part": "basic",
+            "description": "完成测量",
+            "score": 5.0,
+            "sentence_refs": [1],
+        },
+        {
+            "id": "D1",
+            "part": "development",
+            "description": "提高精度",
+            "score": None,
+            "sentence_refs": [],
+        },
+    ]
+
+
+def test_convergence_ignores_score_point_changes_when_requirements_are_stable():
+    first = _selection_with("识别数字")
+    second = ModuleSelection(
+        modules=first.modules,
+        reasons=first.reasons,
+        requirements=first.requirements,
+        score_points=(ScorePoint("B1", "basic", "完成识别", 10.0, (1,)),),
+    )
+    fake = _RecordingConvergenceLLM([first, second])
+
+    result = select_modules_convergent(fake, "识别数字。", ["- dht11: 温湿度"])
+
+    assert len(fake.calls) == 2
+    assert result.score_points == second.score_points
 
 
 def test_run_recommendation_no_topic_key_omits_topic_fields():

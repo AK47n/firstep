@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
@@ -372,6 +373,66 @@ class FunctionRequirement:
 
 
 @dataclass(frozen=True)
+class ScorePoint:
+    """题面评分点的结构化投影，不参与模块推荐判决。"""
+
+    id: str
+    part: str
+    description: str
+    score: float | None
+    sentence_refs: tuple[int, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "part": self.part,
+            "description": self.description,
+            "score": self.score,
+            "sentence_refs": list(self.sentence_refs),
+        }
+
+
+def parse_score_points(raw: Any) -> tuple[ScorePoint, ...]:
+    """解析可选评分点；形状不完整时降级为空，不阻断推荐主链。"""
+    if raw in (None, [], ()) or not isinstance(raw, list):
+        return ()
+    points: list[ScorePoint] = []
+    for index, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            return ()
+        description = item.get("description")
+        if not isinstance(description, str) or not description.strip():
+            return ()
+        raw_id = item.get("id", f"score-{index}")
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            return ()
+        part = item.get("part", "unknown")
+        if part not in ("basic", "development"):
+            part = "unknown"
+        score = item.get("score")
+        if isinstance(score, bool) or not isinstance(score, (int, float)):
+            score = None
+        elif not isfinite(score):
+            score = None
+        raw_refs = item.get("sentence_refs", [])
+        if not isinstance(raw_refs, list) or any(
+            isinstance(ref, bool) or not isinstance(ref, int) or ref < 1
+            for ref in raw_refs
+        ):
+            return ()
+        points.append(
+            ScorePoint(
+                id=raw_id.strip(),
+                part=part,
+                description=description.strip(),
+                score=float(score) if score is not None else None,
+                sentence_refs=tuple(raw_refs),
+            )
+        )
+    return tuple(points)
+
+
+@dataclass(frozen=True)
 class ModuleInstance:
     """多实例选择里的单个实例。
 
@@ -408,6 +469,7 @@ class ModuleSelection:
     reasons: dict[str, str]  # slug -> 推荐理由
     reference_ids: tuple[str, ...] = ()  # 两级注入第一级：想读全文的参考文件 id
     requirements: tuple[FunctionRequirement, ...] = ()  # 功能需求层
+    score_points: tuple[ScorePoint, ...] = ()  # 题面评分点（可选增强信息）
     questions: tuple[str, ...] = ()  # 向用户补问（非空 → 暂停分析）
     instances: dict[str, tuple[ModuleInstance, ...]] = field(default_factory=dict)
     converged: bool = False  # 核验轮短标记（工单 01）：模型自报与上一轮一致
@@ -499,6 +561,7 @@ def build_module_selection(
         reasons=reasons,
         reference_ids=reference_ids,
         requirements=requirements,
+        score_points=parse_score_points(raw.get("score_points")),
         questions=questions,
         instances=instances,
     )
@@ -1068,7 +1131,10 @@ def run_recommendation(
             for requirement in selection.requirements
         ],
     }
-    # 多实例推荐（工单 module-multi-instance/06）：实例清单进 done 载荷
+    if selection.score_points:
+        result["score_points"] = [
+            point.to_dict() for point in selection.score_points
+        ]
     # （前端据此回填实例卡，用户确认后仍可增删改）；无实例的选择不落键
     # （旧载荷逐字节不变 = 单默认实例旧行为）
     if selection.instances:
