@@ -2198,3 +2198,117 @@ def test_run_recommendation_done_payload_includes_instances():
             {"name": "状态灯", "variant": "", "pin": ""},
         ]
     }
+
+
+# ---------------------------------------------------------------------------
+# 多实例默认兜底（工单 instance-default-fallback/01）：AI 没猜实例且命中
+# 多实例模块 → done 载荷按平台默认清单自动填入（stm32 红黄绿 / mspm0 单
+# 实例）；AI 猜了用 AI 结果；空 platform / 无多实例命中 = 不落键
+# ---------------------------------------------------------------------------
+
+
+def _topic_with_multi_summaries() -> TopicContext:
+    """装配素材带 led 多实例摘要（multi_instance = 能力证据）。"""
+    from contest_generator.manifest import MultiInstanceSpec, ManifestSummary
+
+    summaries = (
+        ManifestSummary(
+            slug="led",
+            description="LED 指示灯驱动",
+            kits=(),
+            dependencies=(),
+            multi_instance=MultiInstanceSpec(max=8, variant="color"),
+        ),
+    )
+    return TopicContext(
+        key="",
+        problem_text="送药小车。识别数字。",
+        references=(),
+        manifest_summaries=summaries,
+        suggestions=(),
+        read_fulltext=lambda entry_id: "",
+    )
+
+
+def _run_recommendation_platform(
+    llm: FakeLLM, platform: str
+) -> tuple[SseEmitter, Queue]:
+    """直调 run_recommendation（带 platform 参数）。"""
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+    run_recommendation(_topic_with_multi_summaries(), llm, emit=emit, platform=platform)
+    return emit, events
+
+
+def test_run_recommendation_default_instances_stm32_fallback():
+    """AI 没猜实例 + stm32 → done 载荷带红黄绿 3 实例（与不配置生成等价）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("led",), reasons={"led": "声光提示"})
+    )
+
+    _, events = _run_recommendation_platform(llm, PLATFORM_STM32)
+
+    data = _drain_events(events)[-1][1]
+    assert data["instances"] == {
+        "led": [
+            {"name": "红灯", "variant": "red", "pin": ""},
+            {"name": "黄灯", "variant": "yellow", "pin": ""},
+            {"name": "绿灯", "variant": "green", "pin": ""},
+        ]
+    }
+
+
+def test_run_recommendation_default_instances_mspm0_fallback():
+    """AI 没猜实例 + mspm0 → done 载荷带单实例（无颜色，LED_1 通用编号）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("led",), reasons={"led": "声光提示"})
+    )
+
+    _, events = _run_recommendation_platform(llm, PLATFORM_MSPM0)
+
+    data = _drain_events(events)[-1][1]
+    assert data["instances"] == {
+        "led": [{"name": "LED", "variant": "", "pin": ""}]
+    }
+
+
+def test_run_recommendation_default_instances_skipped_without_platform():
+    """空 platform → 不兜底（done 无 instances 键，旧载荷不变）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("led",), reasons={"led": "声光提示"})
+    )
+
+    _, events = _run_recommendation_platform(llm, "")
+
+    data = _drain_events(events)[-1][1]
+    assert "instances" not in data
+
+
+def test_run_recommendation_default_instances_ai_guess_wins():
+    """AI 猜了实例 → 用 AI 结果，不覆盖（兜底只在缺省时生效）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(
+            modules=("led",),
+            reasons={"led": "4 个指示灯"},
+            instances={
+                "led": (ModuleInstance(name="红", variant="red"),),
+            },
+        )
+    )
+
+    _, events = _run_recommendation_platform(llm, PLATFORM_STM32)
+
+    data = _drain_events(events)[-1][1]
+    assert data["instances"] == {"led": [{"name": "红", "variant": "red", "pin": ""}]}
+
+
+def test_default_instance_plan_single_source():
+    """平台默认清单单源：stm32 红黄绿 / mspm0 单实例 / 未知空。"""
+    from contest_generator.selection import default_instance_plan
+
+    assert [i.variant for i in default_instance_plan(PLATFORM_STM32)] == [
+        "red", "yellow", "green",
+    ]
+    assert [i.variant for i in default_instance_plan(PLATFORM_MSPM0)] == [""]
+    assert default_instance_plan("") == ()
+    assert default_instance_plan("unknown") == ()

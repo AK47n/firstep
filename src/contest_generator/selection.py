@@ -1071,6 +1071,7 @@ def run_recommendation(
     *,
     emit: SseEmitter,
     max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
+    platform: str = "",
 ) -> None:
     """/api/recommend 的两阶段编排（工单 01 推荐先澄清后收敛）。
 
@@ -1142,6 +1143,19 @@ def run_recommendation(
             slug: [instance.to_dict() for instance in instances]
             for slug, instances in selection.instances.items()
         }
+    else:
+        # 多实例默认兜底（工单 instance-default-fallback/01）：AI 没猜实例
+        # （题面无数量）且命中多实例模块 → 按平台默认清单自动填入——与
+        # 「不配置 = 单默认实例」的生成结果等价（stm32 红黄绿 / mspm0 单
+        # 实例），实例卡直接可见可改；空 platform / 无多实例命中 = 不落键
+        default_instances = _default_instances_for(
+            selection.modules, topic.manifest_summaries, platform
+        )
+        if default_instances:
+            result["instances"] = {
+                slug: [instance.to_dict() for instance in instances]
+                for slug, instances in default_instances.items()
+            }
     if topic.key:
         result["topic_id"] = topic.key
     # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；
@@ -1168,6 +1182,25 @@ def run_recommendation(
 # （ModuleInstance 只认空串语义：空串 variant = 非内置色、空串 pin = 自动
 # 分配默认脚）。上限守卫（>max）在 expand_instances，不在这里。
 # ---------------------------------------------------------------------------
+
+
+def _default_instances_for(
+    modules: Sequence[str],
+    summaries: Sequence[ManifestSummary],
+    platform: str,
+) -> dict[str, tuple[ModuleInstance, ...]]:
+    """AI 没猜实例时的平台默认清单（工单 instance-default-fallback/01）。
+
+    命中模块里带 multi_instance 能力的 slug → 平台默认清单（default_instance_
+    plan 单源）；空 platform / 无多实例命中 → 空 dict（不落键，旧载荷不变）。
+    """
+    if not platform:
+        return {}
+    defaults = default_instance_plan(platform)
+    if not defaults:
+        return {}
+    multi = {summary.slug for summary in summaries if summary.multi_instance is not None}
+    return {slug: defaults for slug in modules if slug in multi}
 
 
 def parse_instances(
@@ -1266,6 +1299,25 @@ class ExpandedInstance:
     index: int
     macro: str
     pin: str
+
+
+def default_instance_plan(platform: str) -> tuple[ModuleInstance, ...]:
+    """多实例模块的平台默认实例（工单 instance-default-fallback/01，单源）。
+
+    与「不配置 = 单默认实例」的生成结果等价（渲染零回归）：stm32 = 红黄绿
+    3 实例（对应母版默认 led_instances.h 三通道）；mspm0 = 单实例无颜色
+    （LED_1 通用编号 + 默认脚，对应库内默认单通道）；未知 / 空平台 = 空
+    （不兜底）。
+    """
+    if platform == PLATFORM_STM32:
+        return (
+            ModuleInstance(name="红灯", variant="red"),
+            ModuleInstance(name="黄灯", variant="yellow"),
+            ModuleInstance(name="绿灯", variant="green"),
+        )
+    if platform == PLATFORM_MSPM0:
+        return (ModuleInstance(name="LED", variant=""),)
+    return ()
 
 
 def expand_instances(

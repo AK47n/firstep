@@ -498,6 +498,69 @@ def _recommend_done(client, payload) -> dict:
     return done[0]
 
 
+def test_recommend_done_includes_default_instances_for_multi_module(client, context):
+    """多实例默认兜底（工单 instance-default-fallback/01）端到端：命中 led
+    （multi_instance）+ stm32 且 AI 没猜实例 → done 载荷带红黄绿默认实例；
+    AI 猜了用 AI 结果。"""
+    from contest_generator.selection import ModuleInstance, ModuleSelection
+
+    lib = context[0].config.module_library_dir
+    (lib / "led").mkdir()
+    (lib / "led" / "code").mkdir()
+    (lib / "led" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "led",
+                "description": "LED 指示灯驱动",
+                "multi_instance": {"max": 8, "variant": "color"},
+                "platforms": {
+                    "stm32": {"files": ["code/led.c", "code/led.h"], "verified": True},
+                    "mspm0": {"files": ["code/led.c", "code/led.h"], "verified": True},
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (lib / "led" / "code" / "led.c").write_text("int led_init(void){return 0;}\n", encoding="utf-8")
+    (lib / "led" / "code" / "led.h").write_text("int led_init(void);\n", encoding="utf-8")
+
+    # AI 没猜实例 → stm32 平台默认（红黄绿）
+    context[1]["llm"] = FakeLLM(
+        selection=ModuleSelection(modules=("led",), reasons={"led": "声光提示"})
+    )
+    data = _recommend_done(client, {"problem_text": "要求有声光提示", "platform": "stm32"})
+    assert data["instances"] == {
+        "led": [
+            {"name": "红灯", "variant": "red", "pin": ""},
+            {"name": "黄灯", "variant": "yellow", "pin": ""},
+            {"name": "绿灯", "variant": "green", "pin": ""},
+        ]
+    }
+
+    # AI 猜了实例 → 用 AI 结果（不覆盖）
+    context[1]["llm"] = FakeLLM(
+        selection=ModuleSelection(
+            modules=("led",),
+            reasons={"led": "4 个指示灯"},
+            instances={"led": (ModuleInstance(name="红", variant="red"),)},
+        )
+    )
+    data = _recommend_done(client, {"problem_text": "4 个指示灯", "platform": "stm32"})
+    assert data["instances"] == {"led": [{"name": "红", "variant": "red", "pin": ""}]}
+
+
+def test_recommend_done_omits_instances_without_multi_module(client, context):
+    """未命中多实例模块 → done 无 instances 键（旧载荷逐字节不变）。"""
+    context[1]["llm"] = FakeLLM(
+        selection=ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
+    )
+
+    data = _recommend_done(client, {"problem_text": "采集温湿度", "platform": "stm32"})
+
+    assert "instances" not in data
+
+
 # ---------------------------------------------------------------------------
 # 编译错误修复（工单 compile-error-fix/01）：SSE 流端到端 + 回滚
 # ---------------------------------------------------------------------------
