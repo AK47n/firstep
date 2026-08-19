@@ -142,6 +142,173 @@ def test_scanned_pdf_without_text_reports_clear_error(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 视觉图注（工单 vision-eyes/02）：电子版 PDF 嵌入图 → [示意图N：描述]
+# ---------------------------------------------------------------------------
+
+
+class _FakeImage:
+    """pypdf ImageFile 的测试替身（data / name）。"""
+
+    def __init__(self, data: bytes, name: str = "Image1.png"):
+        self.data = data
+        self.name = name
+
+
+class _FakePage:
+    def __init__(self, images):
+        self.images = images
+
+
+class _FakeReader:
+    """PdfReader 测试替身（pages 带假图）。"""
+
+    def __init__(self, pages):
+        self.pages = pages
+
+
+def _fake_describe(description: str):
+    """describe_image_cached 假件：记录调用，返回固定描述或抛错。"""
+
+    def fake(image_bytes, mime, *, base_url="", api_key="", model=""):
+        fake.calls.append((image_bytes, mime))
+        if callable(description):
+            return description(image_bytes, mime)
+        return description
+
+    fake.calls = []
+    return fake
+
+
+def test_image_mime_mapping():
+    from contest_generator.extraction import _image_mime
+
+    assert _image_mime("Image1.png") == "image/png"
+    assert _image_mime("photo.JPG") == "image/jpeg"
+    assert _image_mime("a.bmp") == "image/bmp"
+    assert _image_mime("weird.xyz") == "image/png"  # 未知兜底
+
+
+def test_join_notes_format():
+    from contest_generator.extraction import _join_notes
+
+    assert _join_notes(["布局 A", "电路 B"], 0) == "[示意图1：布局 A]\n[示意图2：电路 B]"
+    assert _join_notes(["只有一张"], 2) == (
+        "[示意图1：只有一张]\n（另有 2 张图跳过：超大或描述失败）"
+    )
+    assert _join_notes([], 3) == ""
+
+
+def test_pdf_image_notes_describes_embedded_images(monkeypatch, tmp_path):
+    """电子版 PDF 嵌入图 → 逐张描述 → 图注段（[示意图N：…] 逐行）。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest 2026")
+    fake_describe = _fake_describe(lambda data, mime: f"描述:{len(data)}")
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([
+        _FakePage([_FakeImage(b"img-a", "a.png"), _FakeImage(b"img-b", "b.jpg")]),
+        _FakePage([_FakeImage(b"img-c", "c.png")]),
+    ]))
+    monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
+
+    notes = extraction._pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model="glm-4v-flash"
+    )
+    assert notes == "[示意图1：描述:5]\n[示意图2：描述:5]\n[示意图3：描述:5]"
+    # mime 按后缀推断（jpg → image/jpeg）
+    assert fake_describe.calls[1][1] == "image/jpeg"
+
+
+def test_pdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
+    """上限守卫：>8 张截断；超大 / 失败图跳过并标注。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    images = [_FakeImage(b"small") for _ in range(9)]
+    images[0] = _FakeImage(b"x" * (4 * 1024 * 1024 + 1))  # 超大
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([
+        _FakePage(images),
+    ]))
+    monkeypatch.setattr(
+        extraction, "describe_image_cached", _fake_describe("图")
+    )
+
+    notes = extraction._pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+    )
+    lines = notes.splitlines()
+    assert len(lines) == 9  # 8 张描述 + 1 行跳过标注
+    assert lines[0] == "[示意图1：图]"
+    assert "另有 1 张图跳过" in lines[-1]
+
+
+def test_pdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):
+    """视觉全失败（未配置 / 网络 / 解析）→ 空串（调用方降级，不拖垮抽取）。"""
+    from contest_generator import extraction
+    from contest_generator.vision import VisionNotConfiguredError
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([
+        _FakePage([_FakeImage(b"img")]),
+    ]))
+    # 未配置：describe 抛 VisionNotConfiguredError → 降级空串
+    def not_configured(data, mime, **kwargs):
+        raise VisionNotConfiguredError("视觉通道未配置")
+
+    monkeypatch.setattr(extraction, "describe_image_cached", not_configured)
+    assert (
+        extraction._pdf_image_notes(
+            path, vision_base_url="", vision_api_key="", vision_model=""
+        )
+        == ""
+    )
+    # 单张失败：跳过该张，其余照常
+    def flaky(data, mime, **kwargs):
+        raise ValueError("网络瞬断")
+
+    monkeypatch.setattr(extraction, "describe_image_cached", flaky)
+    assert (
+        extraction._pdf_image_notes(
+            path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+        )
+        == ""
+    )
+    # PDF 结构损坏：reader 构造失败 → 空串
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: (_ for _ in ()).throw(ValueError("坏 PDF")))
+    assert (
+        extraction._pdf_image_notes(
+            path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+        )
+        == ""
+    )
+
+
+def test_extract_pdf_with_image_notes_appends_notes(monkeypatch, tmp_path):
+    """文本 + 图注拼接（尾部追加）；无图注 = 与 extract_file 一致。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest problem 2026")
+    monkeypatch.setattr(
+        extraction,
+        "_pdf_image_notes",
+        lambda *a, **k: "[示意图1：电路连接 A-B]",
+    )
+    text = extraction.extract_pdf_with_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+    )
+    assert text.endswith("[示意图1：电路连接 A-B]")
+    assert "Contest problem 2026" in text
+
+    # 无图注 → 纯文本（与 extract_file 逐字节一致）
+    monkeypatch.setattr(extraction, "_pdf_image_notes", lambda *a, **k: "")
+    assert (
+        extraction.extract_pdf_with_image_notes(
+            path, vision_base_url="", vision_api_key="", vision_model=""
+        )
+        == extract_file(path)
+    )
+
+
+# ---------------------------------------------------------------------------
 # 不支持的格式与缺失文件
 # ---------------------------------------------------------------------------
 

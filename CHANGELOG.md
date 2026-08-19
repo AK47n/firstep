@@ -1,8 +1,30 @@
-<!-- changelog-auto: last-commit=ad5af45bbe41467990f307d17596269f427847fa -->
+<!-- changelog-auto: last-commit=6545b81fce59cbf60b59db1dd2c93acbc0f772b3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-19
+- 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
+- 00:15 计费时段选择（高峰期/空闲期）——按所选时段官方价计算与展示
+- 10:55 推荐结果携带题面评分点
+- 11:52 生成产物输出评分点清单
+- 12:50 推荐结果展示评分点并完成前端回归
+- 15:07 修复 PR109 评审发现的规格偏差
+
+## 2026-08-18
+- 09:53 LLM 调用结构化观测（llm_observation 记录：operation/provider/status/parse_status/error_kind/request_bytes/usage，日志脱敏）（工单 llm-observability-dashboard/01）
+- 13:49 LLM 重试预算护栏（RetryBudget 上限 + 预算耗尽 not_sent 观测）（工单 llm-observability-dashboard/01）
+- 14:45 LLM 观测收集器（工作流级 collector：workflow_id + 单调 sequence + 脱敏收集）（工单 llm-observability-dashboard/01）
+- 17:18 修复 SSE 流内实时 LLM 遥测（llm_telemetry 事件 + 前端紧凑状态行）（工单 llm-observability-dashboard/02）
+- 18:59 设置页最近 LLM 工作流仪表盘（内存 ring buffer + 只读端点 + 脱敏摘要/明细）（工单 llm-observability-dashboard/03）
+- 19:29 规范：仓库文档与提交信息统一中文——工单与 CHANGELOG 英文记录全量翻译、.githooks/commit-msg 中文门禁（GBK/UTF-8 兼容 + lib 机器提交豁免）、语言规范写入 workflow.md/CLAUDE.md、tests/test_repo_language.py 兜底
+- 20:13 LLM 成本控制闭环——费用估算（可配置单价表 + 仪表盘费用行 + 本地路由节省额）与推荐缓存上 Web（done 载荷复用 + 指纹校验 + 设置开关）
+- 20:44 推荐收敛提速——核验轮短标记提前停（模型自报无修订即收敛，省 2-4 分钟/轮）+ 收敛轮数上限可配置（设置页 2/3/4）
+- 22:22 新增 adc/servo 模块（b1-adc-servo/01-03）——模拟采样与舵机角度双平台落地
+- 22:24 K230 副产物多模板（k230-multi-template/01-04）——python_artifact 多模板声明 + 矩形识别模板
+- 23:32 给 DeepSeek 装眼睛（vision-eyes/01-04）——免费云端视觉通道 GLM-4V-Flash
+- 23:42 设置页 DeepSeek Flash 官方价格参考表（2026-08 官方定价）
 
 ## 2026-08-17
 - 00:02 ball_detect 模块重命名为 coord_detect（坐标检测）——纯机械改名（git mv 保留历史，解析逻辑/协议一字不改）：C 符号 BallResult→CoordResult、ball_detect_*→coord_detect_*、BALL_RX_BUF_SIZE→COORD_RX_BUF_SIZE、引脚宏 BALL_DETECT_UART*→COORD_DETECT_UART*；帧契约单源 BALL_FRAME_*→COORD_FRAME_*（前缀值 "B" 保持——协议字节与模块名解耦）、模板占位符 ball_frame_format→coord_frame_format、BALL_THRESHOLD→COLOR_THRESHOLD；k230 依赖/母版/测试/CONTEXT 同步（工单 coord-detect-rename/01）
@@ -15,6 +37,10 @@
 - 14:00 README 引脚表：绑定生效引脚 + 多实例每实例一行（工单 project-readme/03）
 - 14:02 README 引脚表：绑定生效引脚 + 多实例每实例一行（工单 project-readme/03）
 - 20:48 配置扩展：AppConfig 增可选本地 LLM 端点字段（工单 local-llm-routing/01）
+- 21:08 路由层：RoutingLLM 本地文本三调用派发 + build_llm 接线（工单 local-llm-routing/02）
+- 21:20 设置页 UI：本地模型端点可填写/清空 + /api/settings GET/PUT 新字段（工单 local-llm-routing/03）
+- 22:43 解析层剥围栏：_unwrap_json_fence 单点剥 json_mode 外层 + 文本模式不动（工单 local-llm-json-group/01）
+- 23:14 扩本地组：LOCAL_LLM_METHODS 3→6（澄清/简介校验/归档判定转本地，其余仍留 DeepSeek）（工单 local-llm-json-group/02）
 
 ## 2026-08-16
 - 00:19 骨架生成新增自检冒烟模式（main_mode=smoke，OLED 为主串口为辅）

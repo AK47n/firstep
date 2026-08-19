@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — 赛题库录入；02 — 参考文件库；04 — LLM 赛题→模块选择
 
-**Status:** done
+**Status:** resolved
 
 ## Comments
 

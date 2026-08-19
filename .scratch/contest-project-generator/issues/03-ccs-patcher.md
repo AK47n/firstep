@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — 生成器核心骨架 + fixture 测试基座
 
-**Status:** done
+**Status:** resolved
 
 - [x] 改写 .cproject：include path 正确写入所选模块头文件所在目录
 - [x] 模块源文件复制到工程对应目录，CCS 工程树中可见

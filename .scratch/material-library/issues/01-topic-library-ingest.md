@@ -4,7 +4,7 @@
 
 **Blocked by:** 04 — LLM 赛题→模块选择；07 — 模块库管理（AI 录入/校验流程复用）
 
-**Status:** done
+**Status:** resolved
 
 ## Comments
 

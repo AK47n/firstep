@@ -31,6 +31,8 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "ZIGBEE_UART": ("zigbee_uart", "zigbee_uart_key"),
     "OLED": ("oled",),
     "I2C_0": ("ml_mpu6050",),
+    "ADC12_0": ("adc",),
+    "SERVO_PWM": ("servo",),
 }
 
 # slug → 该模块 GPIO 角色可能落脚的实例名元组（INSTANCE_CONSUMERS 反转）。

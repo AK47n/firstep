@@ -1,0 +1,2 @@
+# git 钩子脚本必须在 checkout 时保持 LF（CRLF 会让 sh 执行失败）
+.githooks/* text eol=lf

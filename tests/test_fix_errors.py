@@ -1028,6 +1028,30 @@ def test_run_fix_round_emitter_failure_bypassed(tmp_path):
     assert done["parsed"][0]["path"] == "main.c"
 
 
+
+class _FailingBudgetLLM(FakeLLM):
+    def fix_compile_errors(self, *args, **kwargs):
+        from contest_generator.llm import LLMError
+        raise LLMError("LLM 工作流累计尝试次数预算已耗尽")
+
+
+def test_run_fix_round_budget_exhaustion_before_apply_leaves_files_untouched(tmp_path):
+    """编译修复预算在 LLM 阶段耗尽：apply_fixes 前失败，不写文件也不建备份。"""
+    out = _make_project(tmp_path)
+    original = (out / "main.c").read_text(encoding="utf-8")
+
+    from contest_generator.llm import LLMError
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        run_fix_round(
+            _FailingBudgetLLM(),
+            error_text="main.c(1): error #20: boom",
+            output_dir=out,
+            backup_root=_backup_root(tmp_path),
+        )
+
+    assert (out / "main.c").read_text(encoding="utf-8") == original
+    assert not _backup_root(tmp_path).exists()
+
 # 上一轮应用结果回喂（工单 fix-loop-progress/01）：形状校验（非法 → FixError
 # → 400 中文，登记 errors.py）/ 合法转传 LLM / 缺省空零回归（done 载荷与
 # 事件序列不动，previous 只进 LLM 素材）

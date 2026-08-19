@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] PDF 与 .docx 本地解析为纯文本
 - [x] 纯文本输入直通，不重复抽取

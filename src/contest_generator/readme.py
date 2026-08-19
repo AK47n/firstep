@@ -29,7 +29,7 @@ from .manifest import ModuleManifest, PinDeclaration
 
 if TYPE_CHECKING:
     from .pin_bindings import ResolvedBinding
-    from .selection import ExpandedInstance
+    from .selection import ExpandedInstance, ScorePoint
 
 # README 输出文件名（生成写侧单源，generator 消费）
 README_FILENAME = "README.md"
@@ -95,6 +95,7 @@ def render_readme(
     manifests: Sequence[ModuleManifest],
     resolved_bindings: Sequence[ResolvedBinding] | None = None,
     instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
+    score_points: Sequence[ScorePoint] | None = None,
 ) -> str:
     """渲染工程 README 完整文本（五章，确定性模板）。
 
@@ -153,6 +154,15 @@ def render_readme(
             lines.append(f"- {manifest.slug}：{manifest.description}")
     lines.append("")
 
+    if score_points:
+        lines.append("## 评分点验收清单")
+        lines.append("")
+        lines.append("| 编号 | 分区 | 分值 | 原文句子 | 描述 |")
+        lines.append("|---|---|---|---|---|")
+        for row in _score_point_rows(score_points):
+            lines.append("| " + " | ".join(row) + " |")
+        lines.append("")
+
     lines.append("## 验证顺序清单")
     lines.append("")
     lines.append(VERIFICATION_GUIDE)
@@ -208,3 +218,41 @@ def _pin_remark(decl: PinDeclaration) -> str:
     """说明列 = 类型 + required 必接标记（仅声明行；实例行只带类型，见
     _pin_rows）。"""
     return decl.type + ("（必接）" if decl.required else "")
+
+
+def _score_point_rows(
+    score_points: Sequence[ScorePoint],
+) -> list[tuple[str, str, str, str, str]]:
+    """评分点表格行：编号 / 分区 / 分值 / 题面句号引用 / 描述。"""
+    rows: list[tuple[str, str, str, str, str]] = []
+    for point in score_points:
+        rows.append(
+            (
+                point.id,
+                _score_part_label(point.part),
+                _score_value_text(point.score),
+                _sentence_refs_text(point.sentence_refs),
+                point.description,
+            )
+        )
+    return rows
+
+
+def _score_part_label(part: str) -> str:
+    if part == "basic":
+        return "基础"
+    if part == "development":
+        return "发挥"
+    return "未分区"
+
+
+def _score_value_text(score: float | None) -> str:
+    if score is None:
+        return "未标分"
+    return f"{score:g} 分"
+
+
+def _sentence_refs_text(refs: Sequence[int]) -> str:
+    if not refs:
+        return "未关联原文"
+    return "句子 " + "、".join(str(ref) for ref in refs)

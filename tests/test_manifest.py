@@ -7,9 +7,11 @@ import pytest
 from contest_generator.manifest import (
     MANIFEST_FILENAME,
     ManifestError,
+    ManifestSummary,
     ModuleManifest,
     PlatformEntry,
     PythonArtifactSpec,
+    PythonArtifactTemplate,
     collect_kits,
 )
 
@@ -324,12 +326,18 @@ def test_legacy_manifest_serializes_without_python_artifact_field():
 
 
 def test_python_artifact_roundtrip_preserves_spec():
-    """python_artifact 往返稳定：to_dict → from_dict 无损。"""
+    """python_artifact 往返稳定：to_dict → from_dict 无损（旧单模板形状）。"""
     manifest = ModuleManifest(
         slug="k230",
         description="K230 视觉副控",
         python_artifact=PythonArtifactSpec(
-            template="code/k230_main.py", output="main.py"
+            templates=(
+                PythonArtifactTemplate(
+                    id="default", name="", description="",
+                    template="code/k230_main.py", output="main.py",
+                ),
+            ),
+            default_id="default",
         ),
     )
 
@@ -337,8 +345,15 @@ def test_python_artifact_roundtrip_preserves_spec():
 
     assert parsed == manifest
     assert parsed.python_artifact == PythonArtifactSpec(
-        template="code/k230_main.py", output="main.py"
+        templates=(
+            PythonArtifactTemplate(
+                id="default", name="", description="",
+                template="code/k230_main.py", output="main.py",
+            ),
+        ),
+        default_id="default",
     )
+    # 单模板序列化回旧形状（存量 manifest 逐字节兼容）
     assert manifest.to_dict()["python_artifact"] == {
         "template": "code/k230_main.py",
         "output": "main.py",
@@ -404,3 +419,163 @@ def test_python_artifact_must_be_object():
 
     with pytest.raises(ManifestError, match="python_artifact"):
         ModuleManifest.from_dict(data)
+
+
+# ---------------------------------------------------------------------------
+# k230-multi-template/01：python_artifact 多模板形状（旧形状兼容 + 新形状校验）
+# ---------------------------------------------------------------------------
+
+_MULTI_TEMPLATE_BLOCK = {
+    "default": "blob",
+    "templates": [
+        {
+            "id": "blob",
+            "name": "色块追踪",
+            "description": "find_blobs 色块追踪，输出 B 帧",
+            "template": "code/main.py",
+            "output": "main.py",
+        },
+        {
+            "id": "rect",
+            "name": "矩形识别",
+            "description": "find_rects 矩形定位，输出 B 帧",
+            "template": "code/main_rect.py",
+            "output": "main.py",
+        },
+    ],
+}
+
+
+def _multi_manifest() -> ModuleManifest:
+    return ModuleManifest.from_dict(
+        {
+            "slug": "k230",
+            "description": "K230 视觉副控",
+            "python_artifact": _MULTI_TEMPLATE_BLOCK,
+            "platforms": {"stm32": {"files": [], "verified": True}},
+        }
+    )
+
+
+def test_python_artifact_multi_template_parses():
+    manifest = _multi_manifest()
+    assert manifest.python_artifact is not None
+    assert [t.id for t in manifest.python_artifact.templates] == ["blob", "rect"]
+    assert manifest.python_artifact.default_id == "blob"
+    assert manifest.python_artifact.default_template.id == "blob"
+    # 旧消费方 property = default 模板
+    assert manifest.python_artifact.template == "code/main.py"
+    assert manifest.python_artifact.output == "main.py"
+
+
+def test_python_artifact_multi_template_roundtrip():
+    manifest = _multi_manifest()
+    parsed = ModuleManifest.from_dict(manifest.to_dict())
+    assert parsed == manifest
+    # 多模板序列化 = 新形状（含 default）
+    assert manifest.to_dict()["python_artifact"] == _MULTI_TEMPLATE_BLOCK
+
+
+def test_python_artifact_multi_template_rejects_duplicate_ids():
+    block = {
+        "default": "a",
+        "templates": [
+            {"id": "a", "template": "code/a.py", "output": "a.py"},
+            {"id": "a", "template": "code/b.py", "output": "b.py"},
+        ],
+    }
+    with pytest.raises(ManifestError, match="id 重复"):
+        ModuleManifest.from_dict(
+            {
+                "slug": "k230",
+                "description": "K230 视觉副控",
+                "python_artifact": block,
+                "platforms": {"stm32": {"files": [], "verified": True}},
+            }
+        )
+
+
+def test_python_artifact_multi_template_rejects_missing_default():
+    block = {
+        "templates": [
+            {"id": "a", "template": "code/a.py", "output": "a.py"},
+        ],
+    }
+    with pytest.raises(ManifestError, match="default"):
+        ModuleManifest.from_dict(
+            {
+                "slug": "k230",
+                "description": "K230 视觉副控",
+                "python_artifact": block,
+                "platforms": {"stm32": {"files": [], "verified": True}},
+            }
+        )
+
+
+def test_python_artifact_multi_template_rejects_default_not_in_list():
+    block = {
+        "default": "nope",
+        "templates": [
+            {"id": "a", "template": "code/a.py", "output": "a.py"},
+        ],
+    }
+    with pytest.raises(ManifestError, match="不在模板 id 列表"):
+        ModuleManifest.from_dict(
+            {
+                "slug": "k230",
+                "description": "K230 视觉副控",
+                "python_artifact": block,
+                "platforms": {"stm32": {"files": [], "verified": True}},
+            }
+        )
+
+
+def test_python_artifact_multi_template_rejects_empty_list():
+    block = {"default": "a", "templates": []}
+    with pytest.raises(ManifestError, match="非空数组"):
+        ModuleManifest.from_dict(
+            {
+                "slug": "k230",
+                "description": "K230 视觉副控",
+                "python_artifact": block,
+                "platforms": {"stm32": {"files": [], "verified": True}},
+            }
+        )
+
+
+def test_python_artifact_multi_template_item_path_validation():
+    """模板条目内的 template/output 沿用旧口径（相对路径 / 纯文件名）。"""
+    block = {
+        "default": "a",
+        "templates": [
+            {"id": "a", "template": "../up.py", "output": "main.py"},
+        ],
+    }
+    with pytest.raises(ManifestError, match="相对且无"):
+        ModuleManifest.from_dict(
+            {
+                "slug": "k230",
+                "description": "K230 视觉副控",
+                "python_artifact": block,
+                "platforms": {"stm32": {"files": [], "verified": True}},
+            }
+        )
+
+
+def test_manifest_summary_annotates_multi_template():
+    """ManifestSummary.to_line 有多个模板时展示模板清单（能力证据，AI 可选）。"""
+    summary = ManifestSummary.from_manifest(_multi_manifest())
+    line = summary.to_line()
+    assert "副产物模板可选" in line
+    assert "色块追踪" in line and "矩形识别" in line
+    assert "默认 = blob" in line
+    # 单模板模块（存量 k230 形状）无标注（旧行格式逐字不变）
+    legacy = ModuleManifest.from_dict(
+        {
+            "slug": "k230",
+            "description": "K230 视觉副控",
+            "python_artifact": {"template": "code/main.py", "output": "main.py"},
+            "platforms": {"stm32": {"files": [], "verified": True}},
+        }
+    )
+    assert "副产物模板可选" not in ManifestSummary.from_manifest(legacy).to_line()

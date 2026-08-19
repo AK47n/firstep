@@ -69,6 +69,17 @@ _SYSCFG_ASSIGN_RE = re.compile(
 _MSPM0_PERIPHERAL_TYPES = ("uart_tx", "uart_rx", "i2c_scl", "i2c_sda", "pwm")
 _PERIPHERAL_PIN_FIELDS = ("txPin", "rxPin", "sdaPin", "sclPin", "ccp0Pin", "ccp1Pin")
 
+# ADC12 通道行：`<实例>.adcMem<N>chansel = "DL_ADC12_INPUT_CHAN_<M>"`——普通赋值
+# 行（非 $assign），绑定换引脚时随 adcPin 落点一起改写（b1-adc-servo/01）。
+_ADC_MEM_RE = re.compile(
+    r'^(?P<head>\s*(?P<path>[A-Za-z_]\w*\.adcMem\dchansel)\s*=\s*)'
+    r'"(?P<value>[^"]+)"(?P<tail>.*?)(?P<eol>\r?\n)?$'
+)
+
+# ADC 能力实例 token → 通道号：A0_3 → 3（DL_ADC12_INPUT_CHAN_3，TI 命名
+# A0_<N> 与 CHAN_<N> 对应）；A1_* 组 v1 不支持（返回 None 大声失败）。
+_ADC_CHAN_RE = re.compile(r"A0_(\d+)\Z")
+
 
 class SyscfgModelError(ValueError):
     """syscfg 文件模型操作失败（母版漂移 / 数据漂移等防御路径）。
@@ -200,11 +211,19 @@ class SyscfgModel:
                     f"{binding.pin} —— 请绑到同一引脚"
                 )
             by_slot[slot] = binding.pin
+            # adc 换通道 = 换槽位名（adcPin<N> 的 N = 通道号，b1-adc-servo/01）：
+            # 绑定到别的通道脚时 $assign 行路径 adcPin3 → adcPin<新通道>，否则
+            # SysConfig 按槽位路由旧通道引脚、新脚无法路由（真机红证 bound/mspm0）
+            head = m.group("head")
+            if binding.declaration.type == "adc":
+                head = _adc_slot_head(head, binding)
             lines[line_no] = (
-                f'{m.group("head")}"{binding.pin}"'
+                f'{head}"{binding.pin}"'
                 f'{m.group("tail")}{m.group("eol") or ""}'
             )
             if binding.declaration.type not in _MSPM0_PERIPHERAL_TYPES:
+                if binding.declaration.type == "adc":
+                    _rewrite_adc_mem_line(lines, binding)
                 continue
             peripheral_path = _peripheral_path(m.group("path"))
             if peripheral_path is None:
@@ -288,6 +307,13 @@ def syscfg_path_matches(
         if role_id.endswith("_C1"):
             return path.endswith(".ccp1Pin")
         return path.endswith((".ccp0Pin", ".ccp1Pin"))
+    if decl_type == "adc":
+        # adc 落点 = `<实例>.peripheral.adcPin<N>`（N = 通道号，TI 命名）；
+        # 实例名（ADC12_0）从消费表反查，多实例时按 slug 过滤。
+        if not re.search(r"\.adcPin\d+$", path):
+            return False
+        instance = path.split(".peripheral.", 1)[0]
+        return instance in INSTANCES_BY_SLUG.get(slug, ())
     return False
 
 
@@ -326,6 +352,88 @@ def _locate_mspm0_site(
         f"唯一一行（找到 {len(line_nos)} 行，路径形过滤后剩"
         f" {len(candidates)} 行）——声明默认值与 syscfg 漂移，请核对工单 01"
         f"数据"
+    )
+
+
+def _adc_mem_index(role_id: str) -> int:
+    """adc 角色 id 尾 `_CH<N>` → ADC12 MEM 索引（ADC_CH0 → 0、ADC_CH1 → 1）。
+
+    非 _CH 尾形 = 声明漂移，大声失败（母版/模块数据错，宁明不默）。
+    """
+    match = re.search(r"_CH(\d+)$", role_id)
+    if match is None:
+        raise SyscfgModelError(
+            f"adc 角色 {role_id} 的 id 不以 _CH<N> 结尾——无法推导 ADC12 "
+            f"MEM 槽位（模块 manifest 漂移）"
+        )
+    return int(match.group(1))
+
+
+def _adc_slot_head(head: str, binding: "ResolvedBinding") -> str:
+    """$assign 行 head（含路径）按绑定通道换 adcPin 槽位名：adcPin3 → adcPin1。
+
+    通道号从绑定脚能力实例解析（与 _rewrite_adc_mem_line 同源）；head 不含
+    adcPin 槽位 = 母版漂移，大声失败。"""
+    channel = _binding_adc_channel(binding)
+    if not re.search(r"\.adcPin\d+\.\$assign\s*=\s*$", head):
+        raise SyscfgModelError(
+            f"绑定 {binding.role_key} 的 $assign 路径不含 adcPin 槽位"
+            f"（{head.strip()}）——母版漂移，请核对"
+        )
+    return re.sub(
+        r"\.adcPin\d+\.\$assign\s*=\s*$",
+        f".adcPin{channel}.$assign = ",
+        head,
+    )
+
+
+def _rewrite_adc_mem_line(
+    lines: list[str], binding: "ResolvedBinding"
+) -> None:
+    """adc 绑定连带改写 `<实例>.adcMem<N>chansel` 通道行（b1-adc-servo/01）。
+
+    换引脚 = 换 ADC 通道（A0_<M> 与 DL_ADC12_INPUT_CHAN_<M> 对应）：$assign
+    落点行已在 rewrite 主循环换成新引脚，此处把对应 MEM 的 chansel 行换成
+    新引脚通道号。通道号从绑定脚能力实例解析（类型级推导，如 PA26 → A0_1）；
+    A1_* 组 v1 不支持，大声失败。通道行缺失 = 母版漂移，大声失败。
+    """
+    mem = _adc_mem_index(binding.declaration.id)
+    channel = _binding_adc_channel(binding)
+    instances = INSTANCES_BY_SLUG.get(binding.slug, ())
+    if not instances:
+        raise SyscfgModelError(
+            f"绑定 {binding.role_key} 的模块没有 syscfg ADC 实例登记"
+            f"（syscfg_instances 漂移）"
+        )
+    path = f"{instances[0]}.adcMem{mem}chansel"
+    for i, line in enumerate(lines):
+        m = _ADC_MEM_RE.match(line)
+        if m is None or m.group("path") != path:
+            continue
+        new_value = f"DL_ADC12_INPUT_CHAN_{channel}"
+        if m.group("value") != new_value:
+            lines[i] = (
+                f'{m.group("head")}"{new_value}"'
+                f'{m.group("tail")}{m.group("eol") or ""}'
+            )
+        return
+    raise SyscfgModelError(
+        f"绑定 {binding.role_key} 的通道行 {path} 不在母版"
+        f" {MSPM0_SYSCFG_FILENAME} 中——母版漂移，请核对"
+    )
+
+
+def _binding_adc_channel(binding: "ResolvedBinding") -> int:
+    """绑定脚能力实例 → ADC 通道号（A0_3 → 3）；多实例取首个（同脚同通道
+    组，确定性）；A1_* 或缺失 = 大声失败。"""
+    for instance in binding.instances:
+        m = _ADC_CHAN_RE.match(instance)
+        if m:
+            return int(m.group(1))
+    raise SyscfgModelError(
+        f"绑定 {binding.role_key} 的引脚 {binding.pin} 没有 A0_* 通道实例"
+        f"（实例 {'、'.join(binding.instances) or '无'}）——v1 只支持"
+        f" A0 通道组（A1_* 留待后续）"
     )
 
 

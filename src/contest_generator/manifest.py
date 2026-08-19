@@ -116,19 +116,76 @@ class MultiInstanceSpec:
 
 
 @dataclass(frozen=True)
-class PythonArtifactSpec:
-    """Python 副产物能力声明（模块级）：模块除主控 C 代码外，生成时额外
-    产出 K230 侧 .py 脚本（如 CanMV main.py）。
+class PythonArtifactTemplate:
+    """多模板中的一个模板条目（工单 k230-multi-template/01）。
 
-    template = .py 模板文件路径（相对模块目录，生成侧据此读模板）；
-    output = 生成的输出文件名（纯文件名，落盘位置由生成侧决定）。
+    id = 模板唯一标识（生成请求 python_templates 的取值键）；name /
+    description = 前端下拉与（将来的）AI 推荐消费的展示信息；template /
+    output 语义与单模板形状一致（相对模块目录 / 纯文件名）。
     """
 
+    id: str
+    name: str
+    description: str
     template: str
     output: str
 
     def to_dict(self) -> dict[str, Any]:
-        return {"template": self.template, "output": self.output}
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "template": self.template,
+            "output": self.output,
+        }
+
+
+@dataclass(frozen=True)
+class PythonArtifactSpec:
+    """Python 副产物能力声明（模块级）：模块除主控 C 代码外，生成时额外
+    产出 K230 侧 .py 脚本（如 CanMV main.py）。
+
+    两种形状（工单 k230-multi-template/01，向后兼容）：
+    - 旧：`{"template", "output"}`——解析为单模板（id = "default"），
+      序列化回旧形状逐字节不变（存量 manifest 契约）；
+    - 新：`{"templates": [{id, name, description, template, output}...],
+      "default": <id>}`——多模板，default 必须存在于列表。
+    统一为 templates 列表 + default_id；template / output property 返回
+    default 模板（旧消费方零改动，选择渲染在生成请求层按模板 id 取）。
+    """
+
+    templates: tuple[PythonArtifactTemplate, ...]
+    default_id: str = "default"
+
+    @property
+    def default_template(self) -> PythonArtifactTemplate:
+        for template in self.templates:
+            if template.id == self.default_id:
+                return template
+        raise ManifestError(
+            f"python_artifact 的 default 模板 {self.default_id!r} 不在模板列表"
+            "（解析校验应已拦截，防御路径）"
+        )
+
+    @property
+    def template(self) -> str:
+        """default 模板的 template 路径（旧消费方兼容）。"""
+        return self.default_template.template
+
+    @property
+    def output(self) -> str:
+        """default 模板的 output 文件名（旧消费方兼容）。"""
+        return self.default_template.output
+
+    def to_dict(self) -> dict[str, Any]:
+        # 单模板（id = default 且无展示信息）序列化回旧形状逐字节不变
+        if len(self.templates) == 1 and self.templates[0].id == "default":
+            template = self.templates[0]
+            return {"template": template.template, "output": template.output}
+        return {
+            "default": self.default_id,
+            "templates": [t.to_dict() for t in self.templates],
+        }
 
 
 @dataclass(frozen=True)
@@ -376,15 +433,90 @@ def _parse_multi_instance(data: dict[str, Any]) -> MultiInstanceSpec | None:
 def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
     """解析模块级 python_artifact 能力块（缺省 / null = None，旧 manifest 兼容）。
 
-    存在则严格校验：template 为安全相对路径（模板文件路径相对模块目录，
-    生成侧据此读模板——is_unsafe_path 口径照 _parse_file_list）；output 为
-    纯文件名（生成侧写进输出目录，路径逃逸 / 子目录大声失败）。
+    两种形状（工单 k230-multi-template/01）：
+    - 旧：template/output 单模板 → id="default" 单模板列表（存量 manifest
+      逐字节兼容，序列化回旧形状）；
+    - 新：templates 数组 + default id——id 唯一非空、default 必须在列表、
+      template 为安全相对路径、output 为纯文件名（照旧口径），任一非法
+      大声失败。
     """
     raw = data.get("python_artifact")
     if raw is None:
         return None
     if not isinstance(raw, dict):
         raise ManifestError("python_artifact 必须是对象")
+
+    def _parse_template_item(
+        item: dict[str, Any], index: int
+    ) -> PythonArtifactTemplate:
+        tid = item.get("id")
+        if not isinstance(tid, str) or not tid:
+            raise ManifestError(f"python_artifact.templates[{index}] 的 id 必须是非空字符串")
+        template = item.get("template")
+        if not isinstance(template, str) or not template:
+            raise ManifestError(
+                f"python_artifact.templates[{index}] 的 template 必须是非空字符串"
+            )
+        if is_unsafe_path(template) or template == ".":
+            raise ManifestError(
+                f"python_artifact.templates[{index}] 的 template 必须是相对且无"
+                f" .. 的文件路径：{template!r}"
+            )
+        output = item.get("output")
+        if not isinstance(output, str) or not output:
+            raise ManifestError(
+                f"python_artifact.templates[{index}] 的 output 必须是非空字符串"
+            )
+        if is_unsafe_path(output) or "/" in output or output == ".":
+            raise ManifestError(
+                f"python_artifact.templates[{index}] 的 output 必须是纯文件名："
+                f"{output!r}"
+            )
+        name = item.get("name")
+        if name is None:
+            name = ""
+        if not isinstance(name, str):
+            raise ManifestError(
+                f"python_artifact.templates[{index}] 的 name 必须是字符串"
+            )
+        description = item.get("description")
+        if description is None:
+            description = ""
+        if not isinstance(description, str):
+            raise ManifestError(
+                f"python_artifact.templates[{index}] 的 description 必须是字符串"
+            )
+        return PythonArtifactTemplate(
+            id=tid, name=name, description=description,
+            template=template, output=output,
+        )
+
+    if "templates" in raw:
+        templates_raw = raw["templates"]
+        if not isinstance(templates_raw, list) or not templates_raw:
+            raise ManifestError("python_artifact.templates 必须是非空数组")
+        templates: list[PythonArtifactTemplate] = []
+        seen_ids: set[str] = set()
+        for index, item in enumerate(templates_raw):
+            if not isinstance(item, dict):
+                raise ManifestError(f"python_artifact.templates[{index}] 必须是对象")
+            parsed = _parse_template_item(item, index)
+            if parsed.id in seen_ids:
+                raise ManifestError(
+                    f"python_artifact.templates 的 id 重复：{parsed.id!r}"
+                )
+            seen_ids.add(parsed.id)
+            templates.append(parsed)
+        default = raw.get("default")
+        if not isinstance(default, str) or not default:
+            raise ManifestError("python_artifact 的 default 必须是非空字符串")
+        if default not in seen_ids:
+            raise ManifestError(
+                f"python_artifact 的 default {default!r} 不在模板 id 列表"
+                f"（{'、'.join(sorted(seen_ids))}）"
+            )
+        return PythonArtifactSpec(templates=tuple(templates), default_id=default)
+
     template = raw.get("template")
     if not isinstance(template, str) or not template:
         raise ManifestError("python_artifact 的 template 必须是非空字符串")
@@ -397,7 +529,15 @@ def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
         raise ManifestError("python_artifact 的 output 必须是非空字符串")
     if is_unsafe_path(output) or "/" in output or output == ".":
         raise ManifestError(f"python_artifact 的 output 必须是纯文件名：{output!r}")
-    return PythonArtifactSpec(template=template, output=output)
+    return PythonArtifactSpec(
+        templates=(
+            PythonArtifactTemplate(
+                id="default", name="", description="",
+                template=template, output=output,
+            ),
+        ),
+        default_id="default",
+    )
 
 
 def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
@@ -432,6 +572,7 @@ class ManifestSummary:
     kits: tuple[str, ...] = ()  # collect_kits 单源（保序去重，有 kit 才显示）
     dependencies: tuple[str, ...] = ()
     multi_instance: MultiInstanceSpec | None = None  # 多实例能力（缺省 = 单实例）
+    python_artifact: PythonArtifactSpec | None = None  # Python 副产物（缺省 = 无）
 
     @classmethod
     def from_manifest(cls, manifest: ModuleManifest) -> "ManifestSummary":
@@ -441,6 +582,7 @@ class ManifestSummary:
             kits=tuple(collect_kits([manifest])),
             dependencies=manifest.dependencies,
             multi_instance=manifest.multi_instance,
+            python_artifact=manifest.python_artifact,
         )
 
     def to_line(self) -> str:
@@ -464,6 +606,14 @@ class ManifestSummary:
             line += (
                 f"（多实例：上限 {self.multi_instance.max}，"
                 f"变体 = {self.multi_instance.variant}）"
+            )
+        if self.python_artifact is not None and len(self.python_artifact.templates) > 1:
+            names = [
+                t.name or t.id for t in self.python_artifact.templates
+            ]
+            line += (
+                f"（副产物模板可选：{'、'.join(names)}，"
+                f"默认 = {self.python_artifact.default_id}）"
             )
         return line
 

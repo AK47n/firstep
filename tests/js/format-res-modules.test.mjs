@@ -25,13 +25,13 @@ test("k230（files 空 + 副产物）→ slug(副产物 main.py)", () => {
   );
 });
 
-test("无副产物选择 → 旧格式逐字不变（向后兼容）", () => {
+test("done 载荷带模板名 → 副产物摘要回显模板", () => {
   assert.equal(
     formatResModules(
-      [{ slug: "dht11", files: ["stm32/src/dht11.c", "inc/dht11.h"] }],
-      []
+      [{ slug: "k230", files: [] }],
+      [{ slug: "k230", output: "main.py", template_id: "rect", template_name: "矩形识别" }]
     ),
-    "dht11(stm32/src/dht11.c, inc/dht11.h)"
+    "k230(副产物 main.py（模板：矩形识别）)"
   );
 });
 

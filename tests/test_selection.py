@@ -7,6 +7,7 @@ homing/01）：澄清先行 → 收敛 → done 载荷组装（run_recommendatio
 FakeLLM 记录调用形状断言（不碰网络）。
 """
 
+from pathlib import Path
 from queue import Queue
 from typing import Mapping, Sequence
 
@@ -36,6 +37,7 @@ from contest_generator.selection import (
     REFERENCE_SOURCE_AUTO,
     REFERENCE_SOURCE_MANUAL,
     ReferenceSuggestion,
+    ScorePoint,
     SelectionError,
     UnknownModuleError,
     _functional_layer_key,
@@ -46,6 +48,7 @@ from contest_generator.selection import (
     check_platform_warnings,
     filter_manifests_by_platform,
     manual_reference_admission,
+    parse_score_points,
     reference_suggestions,
     resolve_dependencies,
     resolve_selection,
@@ -534,7 +537,7 @@ class _RecordingConvergenceLLM(FakeLLM):
         self.calls: list[
             tuple[
                 str,
-                tuple[str, ...],
+                tuple[ManifestSummary, ...],
                 tuple[str, ...],
                 dict[str, str],
                 dict[str, str],
@@ -655,10 +658,58 @@ def test_convergent_second_round_carries_previous_layer_with_stable_numbering():
     assert "句子2「识别数字」" in round2_topic
 
 
-def test_convergent_question_stops_immediately():
-    """补问路径：模型拿不准（questions 非空）→ 本轮即停，不再收敛确认。"""
+def test_convergent_short_marker_stops_with_previous_result():
+    """核验轮短标记（工单 recommend-speedup-v2/01）：模型自报无修订
+    （converged=True）→ 用上一轮结果提前停——省掉全量输出的核验轮。"""
+    first = _selection_with("识别数字", suggestions=("视觉模块",))
+    fake = _RecordingConvergenceLLM(
+        [first, ModuleSelection(modules=(), reasons={}, converged=True)]
+    )
+    events: list[ProgressEvent] = []
+
+    result = select_modules_convergent(
+        fake, "送药小车题", ["- dht11: 温湿度"], progress_emitter=events.append
+    )
+
+    assert len(fake.calls) == 2  # 核验轮仍是真实调用（短输出），但不再需要第 3 轮
+    assert result is first  # 自报一致 → 上一轮结果原样
+    assert [e.type for e in events] == [EVENT_ROUND, EVENT_ROUND, EVENT_CONVERGED]
+
+
+def test_convergent_short_marker_on_round_one_ignored():
+    """第 1 轮出现 converged 标记（模型违反"仅核验轮可输出"指令）→ 当空结果
+    忽略该字段，继续正常收敛比较（不提前停、不炸）。"""
     fake = _RecordingConvergenceLLM(
         [
+            ModuleSelection(modules=(), reasons={}, converged=True),
+            _selection_with("识别数字"),
+            _selection_with("识别数字"),
+        ]
+    )
+
+    result = select_modules_convergent(fake, "题面", ["- dht11: 温湿度"])
+
+    assert len(fake.calls) == 3  # 轮1 当空结果，轮2/3 两轮一致收敛
+    assert result.requirements == (_requirement("识别数字"),)
+
+
+def test_convergent_respects_max_rounds_parameter():
+    """max_rounds 参数（设置项透传）：未收敛时按上限停（默认 4，可调 2）。"""
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("需求一"), _selection_with("需求二")]
+    )
+
+    result = select_modules_convergent(
+        fake, "题面", ["- dht11: 温湿度"], max_rounds=2
+    )
+
+    assert len(fake.calls) == 2
+    assert result.requirements == (_requirement("需求二"),)
+
+
+def test_convergent_question_stops_immediately():
+    """补问路径：模型拿不准（questions 非空）→ 本轮即停，不再收敛确认。"""
+    fake = _RecordingConvergenceLLM(        [
             ModuleSelection(
                 modules=(),
                 reasons={},
@@ -854,6 +905,85 @@ def test_convergent_round_events_tolerate_failing_emitter():
     assert result.requirements == (_requirement("识别数字"),)
     assert len(fake.calls) == 2
 
+
+
+class _BudgetedRecommendationLLM:
+    """推荐工作流假件：按调用数模拟共享累计预算。"""
+
+    def __init__(self, *, max_attempts: int | None = None) -> None:
+        self.max_attempts = max_attempts
+        self.attempts = 0
+        self.clarify_calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
+        self.select_calls: list[str] = []
+
+    def _consume(self) -> None:
+        if self.max_attempts is not None and self.attempts >= self.max_attempts:
+            from contest_generator.llm import LLMError
+            raise LLMError("LLM 工作流累计尝试次数预算已耗尽")
+        self.attempts += 1
+
+    def clarify(self, problem_text: str, clarifications: Sequence[tuple[str, str]]) -> tuple[str, ...]:
+        self._consume()
+        self.clarify_calls.append((problem_text, tuple(clarifications)))
+        return ()
+
+    def select_modules(
+        self,
+        problem_text: str,
+        manifest_summaries: Sequence[ManifestSummary],
+        references: Sequence[ReferenceSuggestion] = (),
+        reference_fulltexts: Mapping[str, str] | None = None,
+        manual_fulltexts: Mapping[str, str] | None = None,
+        clarifications: Sequence[tuple[str, str]] = (),
+    ) -> ModuleSelection:
+        self._consume()
+        self.select_calls.append(problem_text)
+        return _selection_with("识别数字", modules=("dht11",))
+
+
+def test_run_recommendation_budget_accumulates_across_clarify_and_convergence():
+    """推荐入口共享预算：clarify 与后续全部 select 调用累计记账。"""
+    topic = TopicContext(
+        key="",
+        problem_text="送药小车。识别数字。",
+        references=(),
+        manifest_summaries=(ManifestSummary("dht11", "温湿度"),),
+        suggestions=(),
+        read_fulltext=lambda _entry_id: "",
+    )
+    llm = _BudgetedRecommendationLLM(max_attempts=2)
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    from contest_generator.llm import LLMError
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        run_recommendation(topic, llm, emit=emit)
+
+    assert llm.attempts == 2
+    assert len(llm.clarify_calls) == 1
+    assert len(llm.select_calls) == 1
+    assert not [event for event in _drain_events(events) if not isinstance(event, ProgressEvent) and event[0] == "done"]
+
+
+def test_run_recommendation_default_budget_compatibility_still_reaches_done():
+    """缺省无限预算保持既有成功路径：clarify + 两轮收敛后正常 done。"""
+    topic = TopicContext(
+        key="",
+        problem_text="送药小车。识别数字。",
+        references=(),
+        manifest_summaries=(ManifestSummary("dht11", "温湿度"),),
+        suggestions=(),
+        read_fulltext=lambda _entry_id: "",
+    )
+    llm = _BudgetedRecommendationLLM()
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    run_recommendation(topic, llm, emit=emit)
+
+    assert llm.attempts == 3
+    done = [event[1] for event in _drain_events(events) if not isinstance(event, ProgressEvent) and event[0] == "done"]
+    assert done and done[0]["modules"] == [{"slug": "dht11", "reason": ""}]
 
 # ---------------------------------------------------------------------------
 # 工单 06：模型输出 → ModuleSelection 解释链（域判决单址，随 build_module_selection
@@ -1511,9 +1641,118 @@ def test_build_selection_requirements_present_ignores_plain_modules():
     assert result.modules == ("dht11",)  # 派生为准
 
 
-# ---------------------------------------------------------------------------
-# 结构测试（防回退，先例 errors.py / 04 / 05 工单）：域判决归 selection 的边界 pin
-# ---------------------------------------------------------------------------
+def test_build_selection_keeps_score_points_for_requirements_contract():
+    result = build_module_selection(
+        {
+            "requirements": [],
+            "score_points": [
+                {
+                    "id": "B1",
+                    "part": "basic",
+                    "description": "基础功能完成",
+                    "score": 8,
+                    "sentence_refs": [1],
+                }
+            ],
+        },
+        known_slugs=(),
+    )
+
+    assert result.score_points == (
+        ScorePoint("B1", "basic", "基础功能完成", 8.0, (1,)),
+    )
+
+
+def test_build_selection_keeps_score_points_for_plain_modules_contract():
+    result = build_module_selection(
+        {
+            "modules": [{"slug": "dht11", "reason": "测量"}],
+            "score_points": [
+                {"id": "D1", "description": "发挥项", "part": "development"}
+            ],
+        },
+        known_slugs=("dht11",),
+    )
+
+    assert result.score_points == (
+        ScorePoint("D1", "development", "发挥项", None, ()),
+    )
+
+
+def test_build_selection_score_points_are_optional_and_invalid_points_degrade():
+    assert build_module_selection({"modules": []}, known_slugs=()).score_points == ()
+    assert build_module_selection(
+        {
+            "modules": [{"slug": "dht11", "reason": "测量"}],
+            "score_points": [{"description": ""}],
+        },
+        known_slugs=("dht11",),
+    ).modules == ("dht11",)
+    assert build_module_selection(
+        {
+            "modules": [{"slug": "dht11", "reason": "测量"}],
+            "score_points": [{"description": ""}],
+        },
+        known_slugs=("dht11",),
+    ).score_points == ()
+
+
+def test_parse_score_points_preserves_topic_order_and_normalizes_fields():
+    raw = [
+        {
+            "id": "A1",
+            "part": "basic",
+            "description": "完成测距",
+            "score": 10,
+            "sentence_refs": [2, 3],
+        },
+        {
+            "id": "A2",
+            "part": "development",
+            "description": "优化精度",
+            "score": 2.5,
+            "sentence_refs": [],
+        },
+        {
+            "id": "A3",
+            "part": "题面未分区",
+            "description": "完成展示",
+            "score": "按完成情况给分",
+        },
+    ]
+
+    result = parse_score_points(raw)
+
+    assert result == (
+        ScorePoint("A1", "basic", "完成测距", 10.0, (2, 3)),
+        ScorePoint("A2", "development", "优化精度", 2.5, ()),
+        ScorePoint("A3", "unknown", "完成展示", None, ()),
+    )
+
+
+
+def test_parse_score_points_missing_or_malformed_input_degrades_to_empty():
+    assert parse_score_points(None) == ()
+    assert parse_score_points([]) == ()
+    assert parse_score_points({"bad": "shape"}) == ()
+    assert parse_score_points([{"description": "缺少分值也应保留"}]) == (
+        ScorePoint("score-1", "unknown", "缺少分值也应保留", None, ()),
+    )
+    assert parse_score_points([42]) == ()
+    assert parse_score_points([{"description": ""}]) == ()
+    assert parse_score_points([{"id": 1, "description": "非法编号"}]) == ()
+    assert parse_score_points([{"description": "非法引用", "sentence_refs": [0]}]) == ()
+
+
+def test_parse_score_points_non_finite_score_degrades_to_null():
+    result = parse_score_points(
+        [
+            {"description": "未知分值", "score": float("nan")},
+            {"description": "未知上限", "score": float("inf")},
+        ]
+    )
+
+    assert [point.score for point in result] == [None, None]
 
 
 def test_build_module_selection_consumed_by_llm():
@@ -1865,6 +2104,55 @@ def test_run_recommendation_done_payload_verbatim():
             {"id": "ref-both", "title": "双重参考", "source": "manual", "platform": PLATFORM_MSPM0},
         ],
     }
+
+
+def test_run_recommendation_done_payload_includes_score_points_when_present():
+    llm = FakeLLM(
+        selection=ModuleSelection(
+            modules=("dht11",),
+            reasons={"dht11": "测量"},
+            score_points=(
+                ScorePoint("B1", "basic", "完成测量", 5.0, (1,)),
+                ScorePoint("D1", "development", "提高精度", None, ()),
+            ),
+        )
+    )
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    data = _drain_events(events)[-1][1]
+    assert data["score_points"] == [
+        {
+            "id": "B1",
+            "part": "basic",
+            "description": "完成测量",
+            "score": 5.0,
+            "sentence_refs": [1],
+        },
+        {
+            "id": "D1",
+            "part": "development",
+            "description": "提高精度",
+            "score": None,
+            "sentence_refs": [],
+        },
+    ]
+
+
+def test_convergence_ignores_score_point_changes_when_requirements_are_stable():
+    first = _selection_with("识别数字")
+    second = ModuleSelection(
+        modules=first.modules,
+        reasons=first.reasons,
+        requirements=first.requirements,
+        score_points=(ScorePoint("B1", "basic", "完成识别", 10.0, (1,)),),
+    )
+    fake = _RecordingConvergenceLLM([first, second])
+
+    result = select_modules_convergent(fake, "识别数字。", ["- dht11: 温湿度"])
+
+    assert len(fake.calls) == 2
+    assert result.score_points == second.score_points
 
 
 def test_run_recommendation_no_topic_key_omits_topic_fields():

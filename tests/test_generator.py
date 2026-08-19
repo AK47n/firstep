@@ -55,6 +55,7 @@ from contest_generator.reference_library import ReferenceError
 from contest_generator.selection import (
     ManualReferenceError,
     REFERENCE_SOURCE_MANUAL,
+    ScorePoint,
 )
 from contest_generator.topic_library import TopicError
 from contest_generator.treewalk import iter_project_files
@@ -106,6 +107,25 @@ def test_generate_project_full_flow_returns_summary(fake_module_library, tmp_pat
     assert (output_dir / "modules" / "delay" / "delay.c").is_file()
     assert "modules/dht11/stm32/src" in summary.include_dirs
     assert any(slug == "delay" for slug, _ in summary.modules)
+
+
+def test_generate_project_summary_keeps_score_points(fake_module_library, tmp_path):
+    """生成摘要携带评分点结构；缺省路径为空元组，旧调用不用改。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    score_points = (ScorePoint("B1", "basic", "完成测距", 10.0, (2,)),)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out_score_summary",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+        score_points=score_points,
+    )
+
+    assert summary.score_points == score_points
 
 
 def test_generate_project_master_missing_fails(fake_module_library, tmp_path):

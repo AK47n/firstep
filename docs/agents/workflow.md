@@ -14,6 +14,15 @@ Before writing a spec:
 - When the plan or decision is consequential, stress-test it with the `grilling` skill. When domain terms get resolved, update `CONTEXT.md` / `docs/adr/` (see the `domain-modeling` skill).
 - Do not proceed until the user confirms the shape of the work.
 
+## 语言规范（硬性约定）
+
+仓库面向用户与代理的文档一律用**中文**书写（技术术语 / 标识符 / 状态标签可保留英文）：
+
+- spec 与工单正文（`.scratch/**/spec.md`、`issues/*.md`）必须中文；工单模板字段用中文（见下文模板），`Status:` / `Blocked by:` 等标签值保持英文规范值（`ready-for-agent` / `claimed` / `resolved` 等）。
+- git 提交信息必须中文（可中英混合）：`.githooks/commit-msg` 钩子强制（安装：`git config core.hooksPath .githooks`，新 clone 后需重配）；`--no-verify` 可绕过但不鼓励。
+- CHANGELOG 条目由提交信息自动补录（post-commit → changelog.py），提交信息中文即保证中文；`tests/test_repo_language.py` 对工单 / spec / CHANGELOG 做第二道兜底。
+- 反例（发生过，勿重演）：llm-observability-dashboard 的工单与 08-18 的 CHANGELOG 记录整段英文。
+
 ## Step 2 — To spec
 
 Synthesize the clarified conversation into a spec and publish it to the issue tracker at `.scratch/<feature-slug>/spec.md`. Do NOT re-interview the user — synthesize what was already agreed.
@@ -23,45 +32,45 @@ Before finalizing the spec, check the test seams with the user: where will this 
 Use the spec template below. Do NOT include specific file paths or code snippets — they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose (state machine, reducer, schema, type shape), inline the decision-rich part and note that it came from a prototype.
 
 ```markdown
-## Problem Statement
+## 问题陈述
 
-The problem that the user is facing, from the user's perspective.
+用户面临的问题，从用户视角描述。
 
-## Solution
+## 方案
 
-The solution to the problem, from the user's perspective.
+问题的解决方案，从用户视角描述。
 
-## User Stories
+## 用户故事
 
-A LONG, numbered list of user stories, each in the form:
+一个长编号列表，每条形如：
 
-1. As an <actor>, I want a <feature>, so that <benefit>
+1. 作为<角色>，我想要<能力>，以便<收益>
 
-This list should be extensive and cover all aspects of the feature.
+列表应详尽，覆盖特性的所有方面。
 
-## Implementation Decisions
+## 实现决策
 
-- Modules that will be built/modified
-- Interfaces of those modules that will be modified
-- Technical clarifications
-- Architectural decisions
-- Schema changes
-- API contracts
-- Specific interactions
+- 将构建/修改的模块
+- 这些模块将被修改的接口
+- 技术澄清
+- 架构决策
+- 模式变更
+- API 契约
+- 具体交互
 
-## Testing Decisions
+## 测试决策
 
-- What makes a good test (only test external behavior, not implementation details)
-- Which modules will be tested
-- Prior art for the tests (similar types of tests already in the codebase)
+- 什么构成好测试（只测外部行为，不测实现细节）
+- 将测试哪些模块
+- 测试的既有先例（代码库中已有的类似测试）
 
-## Out of Scope
+## 范围外
 
-Things explicitly out of scope for this spec.
+明确不在本 spec 范围内的事项。
 
-## Further Notes
+## 补充说明
 
-Any further notes about the feature.
+关于该特性的任何进一步说明。
 ```
 
 ## Step 3 — To tickets
@@ -92,16 +101,16 @@ Iterate until the user approves the breakdown.
 Write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Never a single combined file. Use the template below.
 
 ```markdown
-# <NN> — <Ticket title>
+# <NN> — <工单标题>
 
-**What to build:** the end-to-end behaviour this ticket makes work, from the user's perspective — not a layer-by-layer implementation list.
+**要做什么：** 本工单让什么端到端行为可用（从用户视角），不是分层实现清单。
 
-**Blocked by:** the numbers/titles of the tickets that gate this one, or "None — can start immediately".
+**被谁阻塞：** 前置工单的编号/标题，或「无——可立即开始」。
 
-**Status:** ready-for-agent
+**状态：** ready-for-agent
 
-- [ ] Acceptance criterion 1
-- [ ] Acceptance criterion 2
+- [ ] 验收标准 1
+- [ ] 验收标准 2
 ```
 
 ## Step 4 — Implement ticket by ticket

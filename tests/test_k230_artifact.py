@@ -303,8 +303,12 @@ def test_generate_project_summary_lists_python_artifact(tmp_path):
 
     assert "main.py" in summary.structure
     assert (summary.output_dir / "main.py").is_file()
-    # 摘要带副产物清单（工单 04 前端「模块文件」行消费）：(slug, 输出文件名)
-    assert summary.python_artifacts == (("k230_probe", "main.py"),)
+    # 摘要带副产物清单（工单 04 前端「模块文件」行消费）：含 done 模板回显
+    assert len(summary.python_artifacts) == 1
+    artifact = summary.python_artifacts[0]
+    assert artifact.slug == "k230_probe"
+    assert artifact.output == "main.py"
+    assert artifact.template_id == "default"
 
 
 def test_generate_without_artifact_module_is_byte_identical(tmp_path):
@@ -597,7 +601,9 @@ def test_generate_project_stm32_k230_expands_dependency_and_writes_py(tmp_path):
     assert (out / "modules" / "coord_detect" / "code" / "coord_detect_stm32.h").is_file()
     assert "main.py" in summary.structure
     # 摘要副产物清单（工单 04）：k230 的 files 空，前端靠它显示 main.py
-    assert summary.python_artifacts == (("k230", "main.py"),)
+    assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
+        ("k230", "main.py", "blob")
+    ]
     _assert_k230_output(out)
 
 
@@ -616,5 +622,245 @@ def test_generate_project_mspm0_k230_expands_dependency_and_writes_py(tmp_path):
     assert (out / "modules" / "coord_detect" / "code" / "coord_detect.c").is_file()
     syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const DIGIT_UART = UART.addInstance();" in syscfg  # coord_detect 共享实例
-    assert summary.python_artifacts == (("k230", "main.py"),)
+    assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
+        ("k230", "main.py", "blob")
+    ]
     _assert_k230_output(out)
+
+
+# ---------------------------------------------------------------------------
+# k230-multi-template/02：模板选择请求管线（多模板探针）
+# ---------------------------------------------------------------------------
+
+K230_RECT_PROBE_TEMPLATE = (
+    "# 矩形识别探针模板（测试内构造，工单 02）\n"
+    "RECT_MARKER = 1\n"
+    "FRAME_FORMAT = '{{coord_frame_format}}'\n"
+    "NO_DETECT = '{{no_detect_frame}}'\n"
+    "BAUD = {{uart_baudrate}}\n"
+    "while True:\n"
+    "    uart.write('R\\n')\n"
+)
+
+
+def _add_k230_multi_probe_module(library: Path) -> None:
+    """多模板探针：blob（默认，K230_PROBE_TEMPLATE）+ rect（矩形模板）——
+    两模板 output 同名 main.py（同一模块一次只渲染一个）。"""
+    _add_module(
+        library,
+        {
+            "slug": "k230_multi",
+            "description": "K230 多模板链路探针（测试内构造，工单 02）",
+            "dependencies": [],
+            "python_artifact": {
+                "default": "blob",
+                "templates": [
+                    {
+                        "id": "blob",
+                        "name": "色块追踪",
+                        "description": "默认模板",
+                        "template": "code/k230_probe.py",
+                        "output": "main.py",
+                    },
+                    {
+                        "id": "rect",
+                        "name": "矩形识别",
+                        "description": "矩形模板",
+                        "template": "code/k230_rect_probe.py",
+                        "output": "main.py",
+                    },
+                ],
+            },
+            "platforms": {
+                "stm32": {"files": [], "verified": True},
+                "mspm0": {"files": [], "verified": True},
+            },
+        },
+        {
+            "code/k230_probe.py": K230_PROBE_TEMPLATE,
+            "code/k230_rect_probe.py": K230_RECT_PROBE_TEMPLATE,
+        },
+    )
+
+
+def _multi_probe_library(tmp_path: Path) -> Path:
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_k230_multi_probe_module(library)
+    return library
+
+
+def test_resolve_python_template_choices_defaults_and_valid(tmp_path):
+    from contest_generator.generator import resolve_python_template_choices
+
+    library = _multi_probe_library(tmp_path)
+    manifest = ModuleManifest.load(library / "k230_multi")
+    assert resolve_python_template_choices([manifest], None) == {}
+    assert resolve_python_template_choices([manifest], {}) == {}
+    assert resolve_python_template_choices(
+        [manifest], {"k230_multi": "rect"}
+    ) == {"k230_multi": "rect"}
+
+
+@pytest.mark.parametrize(
+    ("choices", "match"),
+    [
+        ({"nope": "blob"}, "不在所选模块集内"),
+        ({"k230_multi": "nope"}, "不在声明模板列表"),
+        ({"k230_multi": ""}, "非空字符串"),
+        ({"k230_multi": 3}, "非空字符串"),
+    ],
+)
+def test_resolve_python_template_choices_rejects(tmp_path, choices, match):
+    from contest_generator.generator import resolve_python_template_choices
+
+    library = _multi_probe_library(tmp_path)
+    manifest = ModuleManifest.load(library / "k230_multi")
+    with pytest.raises(PythonArtifactError, match=match):
+        resolve_python_template_choices([manifest], choices)
+
+
+def test_resolve_python_template_choices_rejects_non_mapping(tmp_path):
+    from contest_generator.generator import resolve_python_template_choices
+
+    library = _multi_probe_library(tmp_path)
+    manifest = ModuleManifest.load(library / "k230_multi")
+    with pytest.raises(PythonArtifactError, match="必须是 JSON 对象"):
+        resolve_python_template_choices([manifest], ["blob"])  # type: ignore[arg-type]
+
+
+def test_resolve_python_template_choices_rejects_plain_module(tmp_path):
+    """未声明 python_artifact 的模块带选择 = 大声失败（不是静默忽略）。"""
+    from contest_generator.generator import resolve_python_template_choices
+
+    library = _probe_library(tmp_path)
+    dht11 = ModuleManifest.load(library / "dht11")
+    with pytest.raises(PythonArtifactError, match="未声明 python_artifact"):
+        resolve_python_template_choices([dht11], {"dht11": "blob"})
+
+
+def test_generate_selects_rect_template(tmp_path):
+    """选择 rect → 渲染 rect 模板写 main.py；缺省 → 渲染 blob（default）。"""
+    library = _multi_probe_library(tmp_path)
+    master = make_fake_master_project(tmp_path / "master")
+    manifest = ModuleManifest.load(library / "k230_multi")
+
+    out_rect = generate(
+        platform=PLATFORM_STM32,
+        manifests=[manifest],
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out_rect",
+        main_c_content="int main(void) { while (1); }\n",
+        template_choices={"k230_multi": "rect"},
+    )[0]
+    rect_py = (out_rect / "main.py").read_text(encoding="utf-8")
+    assert "RECT_MARKER" in rect_py
+    assert "find_blobs" not in rect_py
+    # 帧契约占位符仍被渲染（契约单源）
+    assert "B,{cx},{cy},{confidence},{x1},{y1},{x2},{y2}" in rect_py
+
+    out_default = generate(
+        platform=PLATFORM_STM32,
+        manifests=[manifest],
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out_default",
+        main_c_content="int main(void) { while (1); }\n",
+    )[0]
+    assert (out_default / "main.py").read_text(encoding="utf-8") == (
+        K230_PROBE_EXPECTED
+    )
+
+
+def test_generate_project_passes_template_choices(tmp_path):
+    """流程接缝：generate_project 的 python_templates 透传（webapp 同缝）。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    library = _multi_probe_library(tmp_path)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["k230_multi"],
+        main_c_content="int main(void) { while (1); }\n",
+        output_dir=tmp_path / "out",
+        module_library_dir=library,
+        masters_dir=masters_dir,
+        python_templates={"k230_multi": "rect"},
+    )
+    assert "RECT_MARKER" in (summary.output_dir / "main.py").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_generate_rejects_unknown_template_at_project_level(tmp_path):
+    """generate_project 层非法选择在创建输出目录前大声失败（不留半成品）。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    library = _multi_probe_library(tmp_path)
+
+    with pytest.raises(PythonArtifactError, match="不在声明模板列表"):
+        generate_project(
+            platform=PLATFORM_STM32,
+            slugs=["k230_multi"],
+            main_c_content="int main(void) { while (1); }\n",
+            output_dir=tmp_path / "out",
+            module_library_dir=library,
+            masters_dir=masters_dir,
+            python_templates={"k230_multi": "nope"},
+        )
+    assert not (tmp_path / "out").exists()
+
+
+# ---------------------------------------------------------------------------
+# k230-multi-template/03：矩形识别模板落地（真库 k230 多模板）
+# ---------------------------------------------------------------------------
+
+K230_RECT_TEMPLATE = (
+    REPO_ROOT / "library" / "modules" / "k230" / "code" / "main_rect.py"
+)
+
+
+def test_k230_manifest_multi_template_declared():
+    """真库 k230 manifest 升级为多模板：blob（默认）+ rect，依赖不变。"""
+    manifest = ModuleManifest.load(LIBRARY_MODULES / "k230")
+    assert manifest.python_artifact is not None
+    assert [t.id for t in manifest.python_artifact.templates] == ["blob", "rect"]
+    assert manifest.python_artifact.default_id == "blob"
+    assert manifest.dependencies == ("coord_detect",)
+
+
+def test_k230_rect_template_renders_contract_placeholders():
+    """rect 模板渲染后帧契约与 C 侧一致（防漂移：改 C 不同步契约即红）。
+
+    占位符渲染后 = COORD_FRAME_FORMAT / NO_DETECT_FRAME / 波特率；模板不
+    重抄字面量（占位符原样存在于模板文件）。"""
+    template_text = K230_RECT_TEMPLATE.read_text(encoding="utf-8")
+    assert "{{coord_frame_format}}" in template_text
+    assert "{{no_detect_frame}}" in template_text
+    assert "{{uart_baudrate}}" in template_text
+    rendered = render_python_artifact(template_text)
+    assert COORD_FRAME_FORMAT in rendered
+    assert NO_DETECT_FRAME in rendered
+    assert str(UART_BAUDRATE) in rendered
+    # 识别核心：二值化 + find_rects + corners 外接框
+    for marker in ("to_grayscale", "binary", "find_rects", "corners"):
+        assert marker in template_text
+
+
+def test_generate_project_k230_rect_template_selected(tmp_path):
+    """生成接缝：k230 选 rect 模板 → main.py 为矩形识别内容（渲染后契约一致）。"""
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["k230"],
+        main_c_content=K230_MAIN_C_STM32,
+        output_dir=tmp_path / "out",
+        module_library_dir=LIBRARY_MODULES,
+        masters_dir=LIBRARY_MASTERS,
+        python_templates={"k230": "rect"},
+    )
+    py = (summary.output_dir / "main.py").read_text(encoding="utf-8")
+    assert "find_rects" in py and "find_blobs" not in py
+    assert COORD_FRAME_FORMAT in py  # 帧契约渲染后与主控解析一致
+    assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
+        ("k230", "main.py", "rect")
+    ]

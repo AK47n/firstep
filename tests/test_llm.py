@@ -4,6 +4,7 @@
 """
 
 import json
+import logging
 import urllib.error
 import urllib.request
 from typing import Any, Mapping, Sequence
@@ -31,6 +32,7 @@ from contest_generator.llm import (
     DEFAULT_WORDLIST,
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
+    LLMObservationCollector,
     EMBEDDED_CONTENT_CAP,
     ERROR_KIND_NETWORK,
     FIX_PREVIOUS_FIXES_CAP,
@@ -42,14 +44,19 @@ from contest_generator.llm import (
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
+    LOCAL_LLM_METHODS,
+    LOCAL_LLM_UNAVAILABLE_MESSAGE,
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
     NETWORK_RETRY_LIMIT,
+    RetryBudget,
     REFERENCE_FULLTEXT_BYTES,
     SKELETON_REFERENCE_TOTAL_BYTES,
+    RoutingLLM,
     SUMMARY_RETRY_LIMIT,
     TRUNCATION_NOTICE,
     UrllibTransport,
+    build_llm,
     VALIDATION_SYSTEM_PROMPT,
     VALIDATION_UNIVERSALITY_RULE,
     TOPIC_SPLIT_LLM_CHAR_CAP,
@@ -64,6 +71,7 @@ from contest_generator.llm import (
     _split_versions,
     _summarize_user_prompt,
     _truncate_content,
+    _unwrap_json_fence,
     _validation_user_prompt,
     extract_module_selection_data,
     parse_archive_judgment,
@@ -98,7 +106,7 @@ from contest_generator.report import (
 )
 from contest_generator.topic_library import TopicDraft
 from contest_generator.manifest import ModuleManifest, PlatformEntry
-from tests.fakes import FakeLLM, FakeTransport
+from tests.fakes import FakeLLM, FakeTransport, RecordingLLM
 
 SELECTION_JSON = json.dumps(
     {"modules": [{"slug": "dht11", "reason": "赛题要求采集温湿度"}]}
@@ -137,10 +145,14 @@ def _llm(
     *,
     base_url: str = "https://api.deepseek.com",
     model: str = "deepseek-chat",
+    retry_budget: RetryBudget | None = None,
+    observation_collector: LLMObservationCollector | None = None,
 ) -> DeepSeekLLM:
     return DeepSeekLLM(
         AppConfig(base_url=base_url, api_key="sk-test", model=model),
         transport=transport,
+        retry_budget=retry_budget,
+        observation_collector=observation_collector,
     )
 
 
@@ -311,6 +323,87 @@ def test_fake_llm_receives_manifest_summaries_with_kit():
 # ---------------------------------------------------------------------------
 
 
+def test_local_llm_route_does_not_forward_remote_authorization(monkeypatch):
+    transport = FakeTransport(body=_api_response("text"))
+    monkeypatch.setattr(llm_module, "UrllibTransport", lambda: transport)
+    llm = build_llm(
+        AppConfig(
+            base_url="https://api.deepseek.com",
+            api_key="sk-test",
+            model="deepseek-chat",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="local-model",
+        )
+    )
+
+    llm.summarize_topic("题面摘要")
+
+    url, headers, _, _ = transport.calls[0]
+    assert url == "http://localhost:11434/v1/chat/completions"
+    assert "Authorization" not in headers
+    assert headers["Content-Type"] == "application/json"
+
+
+def test_llm_call_emits_redacted_structured_observation(caplog):
+    transport = FakeTransport(
+        body=json.dumps(
+            {
+                "choices": [{"message": {"content": "摘要"}}],
+                "usage": {"prompt_tokens": 10, "unsafe_text": "secret-usage"},
+            }
+        )
+    )
+    collector = LLMObservationCollector("workflow-1")
+    llm = _llm(transport, observation_collector=collector)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    llm.summarize_module("题面原文与源码 secret-source compile-output-secret")
+
+    record = next(record for record in caplog.records if record.name == llm_module.__name__)
+    observation = record.__dict__["llm_observation"]
+    assert observation["workflow_id"] == "workflow-1"
+    assert observation["sequence"] == 1
+    assert observation["operation"] == "summarize_module"
+    assert observation["provider"] == "deepseek"
+    assert observation["route"] == "remote"
+    assert observation["model"] == "deepseek-chat"
+    assert observation["status"] == "success"
+    assert observation["attempts"] == 1
+    assert observation["http_status"] == 200
+    assert observation["parse_status"] == "success"
+    assert observation["request_bytes"] > 0
+    assert observation["usage"] == {"prompt_tokens": 10}
+    assert collector.observations == (observation,)
+    serialized_observation = json.dumps(observation, ensure_ascii=False)
+    assert "题面原文" not in serialized_observation
+    assert "secret-source" not in serialized_observation
+    assert "compile-output-secret" not in serialized_observation
+    assert "secret-usage" not in serialized_observation
+    assert "sk-test" not in serialized_observation
+    assert "题面原文" not in record.getMessage()
+    assert "secret-source" not in record.getMessage()
+    assert "compile-output-secret" not in record.getMessage()
+    assert "secret-usage" not in record.getMessage()
+    assert "sk-test" not in record.getMessage()
+
+
+def test_llm_call_emits_failure_observation_without_response_body(caplog):
+    transport = FakeTransport(status=401, body="credential-body-secret")
+    llm = _llm(transport)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    with pytest.raises(LLMError):
+        llm._chat([{"role": "user", "content": "题面 secret-prompt"}])
+
+    observation = caplog.records[-1].__dict__["llm_observation"]
+    assert observation["status"] == "error"
+    assert observation["http_status"] == 401
+    assert observation["error_kind"] == "client"
+    assert observation["parse_status"] == "not_started"
+    assert "credential-body-secret" not in caplog.records[-1].getMessage()
+    assert "secret-prompt" not in caplog.records[-1].getMessage()
+
+
 def test_select_modules_posts_chat_completion_with_expected_request():
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
@@ -361,6 +454,115 @@ def test_select_modules_http_error_raises_with_status():
 
     with pytest.raises(LLMError, match="401"):
         llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    assert len(transport.calls) == 1
+
+
+def test_rate_limit_uses_retry_after(monkeypatch):
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = SequenceTransport([
+        (429, "rate limited", {"Retry-After": "7"}),
+        _api_response(SELECTION_JSON),
+    ])
+    llm = _llm(transport)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    assert sleeps == [7.0]
+
+
+def test_retry_budget_stops_before_next_attempt_and_collects_not_sent_observation():
+    transport = SequenceTransport([_api_response("")] * 3)
+    budget = RetryBudget(max_attempts=2)
+    collector = LLMObservationCollector("workflow-budget")
+    llm = _llm(transport, retry_budget=budget, observation_collector=collector)
+
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    assert len(transport.calls) == 2
+    assert [item["parse_status"] for item in collector.observations] == [
+        "parse_error",
+        "parse_error",
+        "not_sent",
+    ]
+    assert collector.observations[-1]["error_kind"] == "budget"
+    assert collector.observations[-1]["http_status"] is None
+    assert collector.observations[-1]["request_bytes"] > 0
+    assert [item["sequence"] for item in collector.observations] == [1, 2, 3]
+
+
+def test_retry_budget_elapsed_time_stops_before_request():
+    now = [0.0]
+    budget = RetryBudget(max_elapsed_seconds=1, _clock=lambda: now[0])
+    now[0] = 1.0
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport, retry_budget=budget)
+
+    with pytest.raises(LLMError, match="累计耗时预算已耗尽"):
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+    assert transport.calls == []
+
+
+
+def test_retry_exhaustion_preserves_last_error_kind():
+    transport = FakeTransport(status=401, body="invalid api key")
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as excinfo:
+        llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert excinfo.value.kind == "client"
+
+
+
+def test_build_llm_uses_shared_budget_and_collector_across_remote_and_local_routes():
+    budget = RetryBudget(max_attempts=2)
+    collector = LLMObservationCollector("workflow-routing")
+    transport = SequenceTransport(
+        [
+            _api_response(json.dumps({"questions": []})),
+            _api_response(SELECTION_JSON),
+        ]
+    )
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="local-model",
+        ),
+        retry_budget=budget,
+        observation_collector=collector,
+        transport=transport,
+    )
+
+    llm.clarify("赛题", ())
+    llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert budget.attempts == 2
+    assert [item["workflow_id"] for item in collector.observations] == [
+        "workflow-routing",
+        "workflow-routing",
+    ]
+    assert [item["sequence"] for item in collector.observations] == [1, 2]
+    assert [item["route"] for item in collector.observations] == ["local", "remote"]
+    assert [item["provider"] for item in collector.observations] == ["local", "deepseek"]
+
+
+
+def test_parse_failure_observation_not_marked_success(caplog):
+    transport = SequenceTransport([_api_response(""), _api_response(SELECTION_JSON)])
+    llm = _llm(transport)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+    assert observations[0]["status"] == "error"
+    assert observations[0]["parse_status"] == "parse_error"
+    assert observations[0]["error_kind"] == "parse"
+    assert observations[1]["status"] == "success"
+    assert observations[1]["parse_status"] == "success"
 
 
 def test_select_modules_invalid_json_response_raises():
@@ -455,7 +657,7 @@ class _NetworkFailureTransport(FakeTransport):
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         self.calls.append((url, headers, payload, timeout))
         raise LLMError("无法连接 LLM 服务：连接重置", kind=ERROR_KIND_NETWORK)
 
@@ -469,11 +671,11 @@ class _FlakyNetworkTransport(FakeTransport):
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         self.calls.append((url, headers, payload, timeout))
         if len(self.calls) <= self._failures:
             raise LLMError("无法连接 LLM 服务：连接重置", kind=ERROR_KIND_NETWORK)
-        return self.status, self.body
+        return self.status, self.body, {}
 
 
 def test_llm_error_kind_defaults_to_parse():
@@ -1199,6 +1401,66 @@ def test_parse_validation_rejects_non_bool_consistent():
 
 
 # ---------------------------------------------------------------------------
+# json 围栏剥离（工单 local-llm-json-group/01）：本地模型把 JSON 包进 Markdown
+# 代码围栏时，json_mode 单点剥外层；文本模式输出原样不动
+# ---------------------------------------------------------------------------
+
+
+def test_unwrap_json_fence_strips_fence_with_language():
+    assert _unwrap_json_fence('```json\n{"a": 1}\n```') == '{"a": 1}'
+
+
+def test_unwrap_json_fence_strips_fence_without_language():
+    assert _unwrap_json_fence('```\n{"a": 1}\n```') == '{"a": 1}'
+
+
+def test_unwrap_json_fence_strips_wrapping_newlines():
+    # 真实模型输出常带首尾换行——整块围栏剥完返回内部 JSON
+    assert _unwrap_json_fence('\n```json\n{"a": 1}\n```\n') == '{"a": 1}'
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"a": 1}',                      # 非围栏（合法 JSON 原样）
+        '```json\n{"a": 1}',             # 只有开头没结尾（半截围栏）
+        '```',                           # 只有开头
+        '```json\n{"a": 1}\n```\nextra',  # 闭合后有尾随内容
+        '```json\n```\n{"a": 1}\n```',   # 内部含围栏行（无法可靠判结构，不剥）
+        '',                              # 空内容
+        '   \n  ',                       # 空白内容
+    ],
+)
+def test_unwrap_json_fence_keeps_ambiguous_or_empty(content):
+    assert _unwrap_json_fence(content) == content
+
+
+def test_validate_module_description_unwraps_fenced_json_response():
+    """json_mode 返回被 ```json 围栏包裹 → 剥外层后真实 parse 成功。"""
+    fenced = '```json\n' + json.dumps({"consistent": True, "issues": ""}) + '\n```'
+    transport = FakeTransport(body=_api_response(fenced))
+    llm = _llm(transport)
+
+    result = llm.validate_module_description(
+        "DHT11 温湿度传感器驱动", "float dht11_read(void);"
+    )
+
+    assert result.consistent is True
+    assert result.issues == ""
+
+
+def test_text_mode_keeps_fence_content_untouched():
+    """文本模式（json_mode=False）输出原样不动——骨架 ```c 围栏不被 mangle。"""
+    fenced_code = "```c\nint main(void) { while (1); }\n```"
+    transport = FakeTransport(body=_api_response(fenced_code))
+    llm = _llm(transport)
+
+    result = llm.summarize_module("int main(void);")
+
+    assert result == fenced_code
+
+
+# ---------------------------------------------------------------------------
 # 母版提炼判定：两阶段（读全文出摘要 → 基于摘要判定），json 结构化输出
 # ---------------------------------------------------------------------------
 
@@ -1263,16 +1525,134 @@ SUMMARY_REPORT_JSON = json.dumps(
 class SequenceTransport(FakeTransport):
     """按调用顺序返回固定响应列表的传输假件（两阶段请求形状测试）。"""
 
-    def __init__(self, bodies: list[str]) -> None:
+    def __init__(self, responses: list[tuple[int, str, Mapping[str, str]] | str]) -> None:
         super().__init__()
-        self._bodies = list(bodies)
+        self._responses = list(responses)
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
-        body = self._bodies.pop(0)
+    ) -> tuple[int, str, Mapping[str, str]]:
+        response = self._responses.pop(0)
         self.calls.append((url, headers, payload, timeout))
-        return self.status, body
+        if isinstance(response, str):
+            return self.status, response, {}
+        return response
+
+
+
+def test_distill_master_shared_retry_budget_across_summary_and_decide():
+    """母版提炼两阶段共享累计预算：摘要批消耗后，判定阶段开始前预算耗尽。
+
+    这是工作流级预算，不是单个 HTTP 调用各自从零算；缺省预算仍不限制。
+    """
+    transport = SequenceTransport(
+        [_api_response(SUMMARY_REPORT_JSON), _api_response(DISTILL_DECISIONS_JSON)]
+    )
+    budget = RetryBudget(max_attempts=1)
+    llm = _llm(transport, retry_budget=budget)
+
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert len(transport.calls) == 1
+
+
+
+def test_retry_batch_reuses_retry_after_and_budget(monkeypatch):
+    """_retry_batch 与 _retry_parse 同款分类：429 读 Retry-After，并共用累计预算。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = SequenceTransport(
+        [
+            (429, "rate limited", {"Retry-After": "3"}),
+            _api_response(SUMMARY_REPORT_JSON),
+            _api_response(DISTILL_DECISIONS_JSON),
+        ]
+    )
+    budget = RetryBudget(max_attempts=2)
+    llm = _llm(transport, retry_budget=budget)
+
+    with pytest.raises(LLMError, match="累计尝试次数预算已耗尽"):
+        llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    assert sleeps == [3.0]
+    assert len(transport.calls) == 2
+
+
+
+def test_retry_observations_keep_request_attempts_independent_but_budget_accumulates(caplog):
+    """每次实际请求各有独立观测；预算 attempts 表示逻辑工作流累计请求序号。"""
+    transport = SequenceTransport([_api_response(""), _api_response(SELECTION_JSON)])
+    budget = RetryBudget(max_attempts=5)
+    llm = _llm(transport, retry_budget=budget)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    result = llm.select_modules("赛题", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.modules == ("dht11",)
+    observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+    assert [o["call_id"] for o in observations] == [1, 2]
+    assert [o["attempts"] for o in observations] == [1, 2]
+    assert budget.attempts == 2
+
+
+
+
+def test_batch_salvage_partial_observation_is_not_double_logged(caplog):
+    transport = SequenceTransport(
+        [
+            _api_response(json.dumps({"summaries": [
+                {"path": "src/oled.c", "versions": [
+                    {"projects": ["proj-a"], "summary": "A"},
+                    {"projects": ["proj-b"], "summary": "B"},
+                ]},
+                {"path": "ghost.c", "versions": [{"projects": ["proj-a"], "summary": "ghost"}]},
+            ]})),
+            _api_response(json.dumps({"summaries": [
+                {"path": "sensors/dht11.c", "versions": [
+                    {"projects": ["proj-a"], "summary": "DHT"},
+                ]}
+            ]})),
+            _api_response(DISTILL_DECISIONS_JSON),
+        ]
+    )
+    llm = _llm(transport)
+    caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+    llm.distill_master("stm32", ("proj-a", "proj-b"), JUDGMENT_FILES, "对比摘要")
+
+    observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+    first_call = [o for o in observations if o["call_id"] == 1]
+    assert len(first_call) == 1
+    assert first_call[0]["parse_status"] == "partial"
+
+
+def test_batch_missing_coverage_observation_is_partial(caplog):
+    old = llm_module.JUDGMENT_BATCH_SIZE
+    llm_module.JUDGMENT_BATCH_SIZE = 1
+    try:
+        transport = SequenceTransport(
+            [
+                _api_response(json.dumps({"summaries": [
+                    {"path": "src/oled.c", "versions": [
+                        {"projects": ["proj-a"], "summary": "A"},
+                        {"projects": ["proj-b"], "summary": "B"},
+                    ]}
+                ]})),
+                _api_response(json.dumps({"decisions": []})),
+                _api_response(DISTILL_DECISIONS_JSON),
+            ]
+        )
+        llm = _llm(transport)
+        caplog.set_level(logging.INFO, logger=llm_module.__name__)
+
+        llm.distill_master("stm32", ("proj-a", "proj-b"), (JUDGMENT_FILES[0],), "对比摘要")
+
+        observations = [r.__dict__["llm_observation"] for r in caplog.records if "llm_observation" in r.__dict__]
+        partial = next(o for o in observations if o["parse_status"] == "partial")
+        assert partial["status"] == "error"
+        assert partial["error_kind"] == "parse"
+    finally:
+        llm_module.JUDGMENT_BATCH_SIZE = old
 
 
 def test_distill_master_two_phase_posts_summaries_then_decisions():
@@ -1535,6 +1915,29 @@ def test_summarize_module_truncates_oversized_code():
     message = payload["messages"][1]["content"]
     assert len(message) < EMBEDDED_CONTENT_CAP + 500
     assert "截断" in message
+
+
+
+def test_chat_direct_retry_uses_retry_after(monkeypatch):
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = SequenceTransport([
+        (429, "rate limited", {"Retry-After": "4"}),
+        _api_response("ok"),
+    ])
+    llm = _llm(transport)
+
+    assert llm._chat([{"role": "user", "content": "hi"}]) == "ok"
+    assert sleeps == [4.0]
+    assert len(transport.calls) == 2
+
+
+def test_request_too_large_is_client_kind():
+    llm = _llm(FakeTransport())
+
+    with pytest.raises(LLMError) as excinfo:
+        llm._chat([{"role": "user", "content": "x" * (MAX_REQUEST_BYTES + 1024)}])
+
+    assert excinfo.value.kind == "client"
 
 
 def test_http_413_raises_with_actionable_message():
@@ -3199,11 +3602,11 @@ class _FlakyTransport(FakeTransport):
 
     def post(
         self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, Mapping[str, str]]:
         self.calls.append((url, headers, payload, timeout))
         if len(self.calls) <= self._failures:
-            return 502, "transient failure"
-        return self.status, self.body
+            return 502, "transient failure", {}
+        return self.status, self.body, {}
 
 
 def test_reference_judge_archivable_retries_transient_failure(monkeypatch):
@@ -3359,6 +3762,28 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
     assert result.modules == ("dht11", "oled")
     assert result.requirements[0].requirement == "识别数字"
     assert result.requirements[0].suggestions[0].name == "视觉模块"
+
+
+def test_select_modules_parses_converged_short_marker():
+    """核验轮短标记（工单 recommend-speedup-v2/01）：模型输出 {"converged": true}
+    → 返回 converged=True 的空选择（跳过域判决——无需求层可判）。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"converged": True})))
+    llm = _llm(transport)
+
+    result = llm.select_modules("设计一个送药小车", [ManifestSummary("dht11", "温湿度")])
+
+    assert result.converged is True
+    assert result.modules == () and result.requirements == ()
+
+
+def test_select_modules_converged_false_is_normal_selection():
+    """{"converged": false} 不是短标记（须严格 true）→ 照常走域判决（缺 modules
+    = 畸形，重试后失败抛错——converged 字段不豁免校验）。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"converged": False})))
+    llm = _llm(transport)
+
+    with pytest.raises(Exception):
+        llm.select_modules("设计一个送药小车", [ManifestSummary("dht11", "温湿度")])
 
 
 REQUIREMENTS_INSTANCES_JSON = json.dumps(
@@ -3660,3 +4085,239 @@ def test_prompts_carry_one_shot_question_rule():
     assert "不要分批渐进追问" in CLARIFY_SYSTEM_PROMPT
     assert "最多 10 条" in SELECT_SYSTEM_PROMPT  # 上限防问题轰炸
     assert "最多 10 条" in CLARIFY_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# 本地路由（工单 local-llm-routing/02）：RoutingLLM 派发 / 失联包装 / build_llm
+# ---------------------------------------------------------------------------
+
+
+class _FailingLocal(RecordingLLM):
+    """本地委托失败的记录型假件：summarize_topic 抛 LLMError（本地失联形态）。"""
+
+    def summarize_topic(self, problem_text: str) -> str:
+        raise LLMError("连接被拒绝", kind=ERROR_KIND_NETWORK)
+
+
+class _FailingRemote(RecordingLLM):
+    """远程委托失败的记录型假件：topic_extract_number 抛 LLMError（DeepSeek 形态）。"""
+
+    def topic_extract_number(self, text: str) -> str | None:
+        raise LLMError("DeepSeek API 返回 500")
+
+
+# LLM 协议全部方法名（派发测试的覆盖清单；本地集之外的 = 远程集）
+PROTOCOL_METHOD_NAMES = frozenset(
+    {
+        "select_modules",
+        "clarify",
+        "summarize_topic",
+        "generate_main_skeleton",
+        "generate_smoke_main",
+        "summarize_module",
+        "validate_module_description",
+        "fix_compile_errors",
+        "distill_master",
+        "reference_summarize",
+        "reference_judge_archivable",
+        "topic_split_topics",
+        "topic_extract_number",
+    }
+)
+
+
+def _call_all_protocol_methods(router: RoutingLLM) -> None:
+    """对 router 依次调用 LLM 协议的全部方法（本地路由派发测试的公共扫描）。"""
+    router.summarize_topic("题面")
+    router.summarize_module("代码")
+    router.reference_summarize("素材")
+    router.select_modules("题面", [])
+    router.clarify("题面", [])
+    router.generate_main_skeleton("题面", [])
+    router.generate_smoke_main("题面", [])
+    router.validate_module_description("简介", "代码")
+    router.fix_compile_errors("报错", {})
+    router.distill_master("stm32", ["proj-a"], [], "")
+    router.reference_judge_archivable([])
+    router.topic_split_topics("全文")
+    router.topic_extract_number("2026C")
+
+
+def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
+    """派发：本地方法集六个方法走 local，其余所有方法走 remote（方法集
+    外方法绝不落到 local）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    _call_all_protocol_methods(router)
+
+    assert local.calls == [
+        "summarize_topic",
+        "summarize_module",
+        "reference_summarize",
+        "clarify",
+        "validate_module_description",
+        "reference_judge_archivable",
+    ]
+    assert remote.calls == [
+        "select_modules",
+        "generate_main_skeleton",
+        "generate_smoke_main",
+        "fix_compile_errors",
+        "distill_master",
+        "topic_split_topics",
+        "topic_extract_number",
+    ]
+
+
+def test_clarify_dispatch_to_local():
+    """扩组（local-llm-json-group/02）：澄清走 local（fake 记录 + remote 零调用）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.clarify("题面", [])
+
+    assert local.calls == ["clarify"]
+    assert remote.calls == []
+
+
+def test_validate_module_description_dispatch_to_local():
+    """扩组（local-llm-json-group/02）：简介一致性校验走 local（fake 记录 +
+    remote 零调用）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.validate_module_description("简介", "代码")
+
+    assert local.calls == ["validate_module_description"]
+    assert remote.calls == []
+
+
+def test_reference_judge_archivable_dispatch_to_local():
+    """扩组（local-llm-json-group/02）：归档判定走 local（fake 记录 +
+    remote 零调用）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.reference_judge_archivable([])
+
+    assert local.calls == ["reference_judge_archivable"]
+    assert remote.calls == []
+
+
+def test_unexpanded_methods_stay_remote():
+    """扩组（local-llm-json-group/02）：未扩方法仍走 remote——模块推荐 / 骨架 /
+    smoke / 编译修复 / 提炼 / 拆条 / 编号提取（7B 能力上限或未 spike，保守留
+    DeepSeek）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.select_modules("题面", [])
+    router.generate_main_skeleton("题面", [])
+    router.generate_smoke_main("题面", [])
+    router.fix_compile_errors("报错", {})
+    router.distill_master("stm32", ["proj-a"], [], "")
+    router.topic_split_topics("全文")
+    router.topic_extract_number("2026C")
+
+    assert remote.calls == [
+        "select_modules",
+        "generate_main_skeleton",
+        "generate_smoke_main",
+        "fix_compile_errors",
+        "distill_master",
+        "topic_split_topics",
+        "topic_extract_number",
+    ]
+    assert local.calls == []
+
+
+def test_local_llm_methods_constant_matches_routing_dispatch():
+    """本地方法集常量与派发行为同源：扫完全部协议方法后，落 local 的方法集
+    恰好 = LOCAL_LLM_METHODS——常量是派发开关（_delegate 读它）而非装饰；
+    常量与派发分叉（常量多了 / 少了某方法）即红。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    _call_all_protocol_methods(router)
+
+    assert set(local.calls) == set(LOCAL_LLM_METHODS)
+    assert set(remote.calls) == PROTOCOL_METHOD_NAMES - set(LOCAL_LLM_METHODS)
+
+
+def test_routing_llm_local_failure_wraps_with_actionable_message():
+    """本地失联：捕获 local 委托抛出的最终 LLMError，附可操作提示、kind 保持、
+    不自动回退远程（异常照抛、remote 未被调用）。"""
+    remote = RecordingLLM("remote")
+    router = RoutingLLM(remote=remote, local=_FailingLocal("local"))
+    with pytest.raises(LLMError) as exc_info:
+        router.summarize_topic("题面")
+    assert exc_info.value.kind == ERROR_KIND_NETWORK  # 错误类别保持
+    assert LOCAL_LLM_UNAVAILABLE_MESSAGE in str(exc_info.value)  # 附可操作提示
+    assert "连接被拒绝" in str(exc_info.value)  # 保留原始信息
+    assert remote.calls == []  # 不自动回退远程
+
+
+def test_routing_llm_remote_failure_propagates_unchanged():
+    """远程失败原样传播：不附本地提示（本地路由只管本地方法的包装）。"""
+    router = RoutingLLM(remote=_FailingRemote("remote"), local=RecordingLLM("local"))
+    with pytest.raises(LLMError) as exc_info:
+        router.topic_extract_number("2026C")
+    assert "本地模型服务不可用" not in str(exc_info.value)
+    assert "DeepSeek API 返回 500" in str(exc_info.value)
+
+
+def test_build_llm_without_local_fields_returns_plain_deepseek_llm():
+    """无本地字段 → 普通 DeepSeekLLM（非 RoutingLLM，零回归断言）。"""
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            base_url="https://api.deepseek.com",
+            model="deepseek-chat",
+        )
+    )
+    assert isinstance(llm, DeepSeekLLM)
+    assert not isinstance(llm, RoutingLLM)
+
+
+def test_build_llm_with_local_fields_returns_routing_llm_with_correct_wiring():
+    """有本地字段 → RoutingLLM：remote 保留主凭据，local 默认无认证。"""
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            base_url="https://api.deepseek.com",
+            model="deepseek-chat",
+            local_llm_base_url="http://localhost:11434/v1",
+            local_llm_model="qwen2.5-coder:7b-instruct",
+        )
+    )
+    assert isinstance(llm, RoutingLLM)
+    # remote = 主配置实例（base_url / model / api_key 原样）
+    assert llm._remote._config.base_url == "https://api.deepseek.com"
+    assert llm._remote._config.model == "deepseek-chat"
+    assert llm._remote._config.api_key == "sk-test"
+    # local = 本地 base_url / 本地 model，默认不复用远程 api_key
+    assert llm._local._config.base_url == "http://localhost:11434/v1"
+    assert llm._local._config.model == "qwen2.5-coder:7b-instruct"
+    assert llm._local._config.api_key == ""
+
+
+def test_build_llm_local_base_url_without_model_falls_back_to_main_model():
+    """本地 base_url 配了但本地 model 空：沿用主 model（请求体 model 非空）。"""
+    llm = build_llm(
+        AppConfig(
+            api_key="sk-test",
+            base_url="https://api.deepseek.com",
+            model="deepseek-chat",
+            local_llm_base_url="http://localhost:11434/v1",
+        )
+    )
+    assert isinstance(llm, RoutingLLM)
+    assert llm._local._config.base_url == "http://localhost:11434/v1"
+    assert llm._local._config.model == "deepseek-chat"

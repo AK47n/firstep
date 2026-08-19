@@ -65,6 +65,14 @@ WHITELIST = {
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
     # 复位后可用；实际接线经引脚绑定消解——module-functionalize/04）
     "PB3": {"key.KEY_START", "pid.GRAY_D6"},
+    # adc 默认 PA0/PA1 与 motor PWM 重叠（b1-adc-servo/01）：蓝药丸 ADC 通道
+    # 脚（PA0-7/PB0-1）全部被既有模块占用，无空闲可挪——实际接线经引脚绑定
+    # 消解；adc 与 motor 同用时必须改绑
+    "PA0": {"motor.MOTOR_A_PWM", "adc.ADC_CH0"},
+    "PA1": {"motor.MOTOR_B_PWM", "adc.ADC_CH1"},
+    # servo 默认 PB6 与 pid.GRAY_D7 重叠（b1-adc-servo/02）：蓝药丸可 PWM 脚
+    # 全被占用，无空闲可挪——实际接线经引脚绑定消解
+    "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0"},
 }
 
 
