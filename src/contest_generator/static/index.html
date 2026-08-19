@@ -605,6 +605,7 @@
           <div class="pin-board-wrap">
             <div class="pin-toolbar">
               <button id="btn-pin-overview">总览</button>
+              <button id="btn-pin-auto">自动配置</button>
               <button id="btn-pin-rotate">旋转 90°</button>
               <span class="hint">板图视角旋转（不影响引脚数据）</span>
             </div>
@@ -2514,6 +2515,43 @@ $("btn-pin-overview").addEventListener("click", () => {
   renderPinCard();  // 总览着色 + 模块图例切换
 });
 
+// 自动配置（工单 pin-auto-assign/01）：一键解冲突——确定性算法把真冲突角色
+// 重分到不冲突引脚，合法共享保留并标注；只动冲突角色，用户合法绑定不动。
+$("btn-pin-auto").addEventListener("click", async () => {
+  const msg = $("pin-config-msg");
+  msg.classList.add("hidden");
+  if (!chosenPlatform) { msg.textContent = "请先选择目标平台"; msg.classList.remove("hidden"); return; }
+  const slugs = expanded.map((m) => m.slug);
+  const bindings = collectBindings(slugs, pinBindings, instances);
+  const btn = $("btn-pin-auto");
+  btn.disabled = true;
+  try {
+    const res = await apiPost("/api/bindings/auto", {
+      platform: chosenPlatform, slugs, bindings: Object.keys(bindings).length ? bindings : null,
+    });
+    if (!res.ok) { msg.textContent = res.error || "自动配置失败"; msg.classList.remove("hidden"); return; }
+    // 应用增量：只覆盖冲突角色（其余绑定不动）
+    for (const [key, pin] of Object.entries(res.bindings || {})) {
+      pinBindings[key] = pin;
+    }
+    renderPinCard();
+    // 结果说明条：已调整 + 保留共享
+    const lines = [];
+    for (const line of res.fixed || []) lines.push("✓ " + line);
+    for (const s of res.shared || []) {
+      lines.push("🔗 " + s.pin + "：" + s.roles.join(" / ") + " —— " + s.reason);
+    }
+    if (!lines.length) lines.push("当前绑定无冲突，无需调整。");
+    msg.textContent = lines.join("\n");
+    msg.classList.remove("hidden");
+  } catch (e) {
+    msg.textContent = e.message || String(e);
+    msg.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function unbindRole(key) {
   delete pinBindings[key];
   pinUnbound.add(key);  // 显式解除 = 红显未绑（生成仍按默认走）
@@ -3143,30 +3181,49 @@ function renderToolchainStatus() {
 
 function formatLLMTelemetry(data) {
   const toNumber = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
+  // 中文标签表（operation / 解析状态 / 错误类型 / usage 键；未知回退原文）
+  const opLabels = {
+    select_modules: "选模块", clarify: "澄清提问", summarize_topic: "赛题简介",
+    summarize_module: "模块简介", reference_summarize: "参考资料摘要",
+    validate_module_description: "简介校验", reference_judge_archivable: "归档判定",
+    generate_main_skeleton: "生成骨架", generate_smoke_main: "自检冒烟",
+    fix_compile_errors: "编译修复", distill_master: "母版提炼",
+    topic_split_topics: "拆条", topic_extract_number: "编号识别",
+    vision_describe: "视觉识别",
+  };
+  const parseLabels = { success: "成功", parse_error: "解析失败", not_sent: "未发送" };
+  const errLabels = { network: "网络", rate_limit: "限流", client: "客户端", server: "服务端" };
+  const usageLabels = { prompt_tokens: "prompt", completion_tokens: "completion", total_tokens: "total" };
+  const op = data.llm_latest_operation || "";
   const parts = [
-    "LLM：" + toNumber(data.llm_total_calls) + " calls",
-    "local " + toNumber(data.llm_local_calls) + " / DeepSeek " + toNumber(data.llm_deepseek_calls),
+    "LLM：" + toNumber(data.llm_total_calls) + " 次调用",
+    "本地 " + toNumber(data.llm_local_calls) + " / DeepSeek " + toNumber(data.llm_deepseek_calls),
   ];
-  if (data.llm_latest_operation) parts.push("latest " + data.llm_latest_operation);
-  if (data.llm_error_kind) parts.push("error " + data.llm_error_kind + " / parse " + (data.llm_parse_status || ""));
-  else if (data.llm_parse_status) parts.push("parse " + data.llm_parse_status);
-  if (data.llm_latest_http_status) parts.push("http " + toNumber(data.llm_latest_http_status));
+  if (op) parts.push("最新 " + (opLabels[op] || op));
+  if (data.llm_error_kind) {
+    parts.push("错误 " + (errLabels[data.llm_error_kind] || data.llm_error_kind)
+      + " / 解析 " + (parseLabels[data.llm_parse_status] || data.llm_parse_status || ""));
+  } else if (data.llm_parse_status) {
+    parts.push("解析 " + (parseLabels[data.llm_parse_status] || data.llm_parse_status));
+  }
+  if (data.llm_latest_http_status) parts.push("HTTP " + toNumber(data.llm_latest_http_status));
   const counters = [];
-  if (data.llm_attempts) counters.push("attempts " + toNumber(data.llm_attempts));
-  if (data.llm_retry_calls) counters.push("retries " + toNumber(data.llm_retry_calls));
-  if (data.llm_error_calls) counters.push("errors " + toNumber(data.llm_error_calls));
-  if (data.llm_parse_error_calls) counters.push("parse_errors " + toNumber(data.llm_parse_error_calls));
-  if (data.llm_rate_limit_calls) counters.push("429 " + toNumber(data.llm_rate_limit_calls));
-  if (data.llm_network_error_calls) counters.push("network " + toNumber(data.llm_network_error_calls));
+  if (data.llm_attempts) counters.push("尝试 " + toNumber(data.llm_attempts));
+  if (data.llm_retry_calls) counters.push("重试 " + toNumber(data.llm_retry_calls));
+  if (data.llm_error_calls) counters.push("错误 " + toNumber(data.llm_error_calls));
+  if (data.llm_parse_error_calls) counters.push("解析错误 " + toNumber(data.llm_parse_error_calls));
+  if (data.llm_rate_limit_calls) counters.push("限流 " + toNumber(data.llm_rate_limit_calls));
+  if (data.llm_network_error_calls) counters.push("网络错误 " + toNumber(data.llm_network_error_calls));
   if (data.llm_5xx_calls) counters.push("5xx " + toNumber(data.llm_5xx_calls));
-  if (data.llm_budget_blocked_calls) counters.push("budget " + toNumber(data.llm_budget_blocked_calls));
+  if (data.llm_budget_blocked_calls) counters.push("预算拦截 " + toNumber(data.llm_budget_blocked_calls));
   if (counters.length) parts.push(counters.join(", "));
-  parts.push("request " + toNumber(data.llm_request_bytes).toLocaleString("en-US") + "B");
-  parts.push("duration " + toNumber(data.llm_duration_ms).toLocaleString("en-US") + "ms");
+  parts.push("请求 " + toNumber(data.llm_request_bytes).toLocaleString("en-US") + "B");
+  parts.push("耗时 " + toNumber(data.llm_duration_ms).toLocaleString("en-US") + "ms");
   const usage = data.llm_usage || null;
   if (usage && typeof usage === "object") {
-    const usageText = Object.keys(usage).map((k) => k + "=" + usage[k]).join(", ");
-    if (usageText) parts.push("usage " + usageText);
+    const usageText = Object.keys(usage)
+      .map((k) => (usageLabels[k] || k) + "=" + usage[k]).join(", ");
+    if (usageText) parts.push("用量 " + usageText);
   }
   return parts.join(" · ");
 }

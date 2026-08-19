@@ -479,3 +479,122 @@ def _mspm0_same_slot(left: ResolvedBinding, right: ResolvedBinding) -> bool:
 def _pwm_channel(role_id: str) -> str:
     """角色 id 尾 C0/C1 → 通道；非通道形返回原 id（保持同槽位保守判等）。"""
     return role_id.rsplit("_", 1)[-1] if "_" in role_id else role_id
+
+
+@dataclass(frozen=True)
+class AutoAssignResult:
+    """自动配置结果（工单 pin-auto-assign/01）：bindings 增量 + 调整说明 +
+    保留共享标注。"""
+
+    bindings: dict[str, str]  # 增量：只含冲突角色新绑定（key → PIN）
+    fixed: tuple[str, ...]  # 说明行："<role_key> → <PIN>（原 <old> 冲突，已自动移开）"
+    shared: tuple[dict[str, object], ...]  # 保留共享标注：{pin, roles, reason}
+
+
+def auto_assign_bindings(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    board: Board,
+    raw: Mapping[str, str] | None,
+) -> AutoAssignResult:
+    """一键解冲突（工单 pin-auto-assign/01）：确定性贪心求解，零 LLM。
+
+    只动「真冲突」角色（resolve_bindings 校验面，与 /api/bindings/validate
+    同源：能力不匹配 / UART TX-RX 成对 / mspm0 槽位互斥 / 类型级实例约束），
+    合法共享（同脚多角色，ADR 0010）保留并标注。用户合法绑定与未冲突默认
+    脚不动。无冲突 → 空增量 + shared 标注。无解 → PinBindingError（中文
+    说明缺什么）。TIM/EXTI/UART 实例级冲突属生成门禁（需 main_c 上下文），
+    不在本功能范围。
+
+    算法：逐角色修复（顺序 = 载荷键序）——先试原绑定值（在已修复集合上
+    整体 resolve_bindings 验证，合法 = 保留不动）；非法 → 换候选引脚（板
+    排针，跳过已占用——自动配置倾向不制造新共享），逐个试绑整体验证，
+    首个成功者。唯一校验 = resolve_bindings，不复制判定。
+    """
+    bindings = dict(raw or {})
+    # 1. 现状合法 = 无冲突（含合法共享），直接返回
+    try:
+        resolve_bindings(manifests, platform, board, bindings or None)
+        return AutoAssignResult(
+            bindings={}, fixed=(), shared=_shared_groups(manifests, platform, board, bindings)
+        )
+    except PinBindingError:
+        pass
+    # 2. 逐角色修复：先试原值（合法保留），非法换脚（跳过已占用）
+    repaired: dict[str, str] = {}
+    used: set[str] = set()
+    fixed: list[str] = []
+    for key, value in bindings.items():
+        trial = dict(repaired)
+        trial[key] = value
+        try:
+            resolve_bindings(manifests, platform, board, trial)
+        except PinBindingError:
+            pass
+        else:
+            repaired[key] = value
+            used.add(value)
+            continue
+        # 原值非法 → 换脚
+        for pin in board.pins:
+            if pin.name in used:
+                continue
+            trial = dict(repaired)
+            trial[key] = pin.name
+            try:
+                resolve_bindings(manifests, platform, board, trial)
+            except PinBindingError:
+                continue
+            repaired[key] = pin.name
+            used.add(pin.name)
+            fixed.append(f"{key} → {pin.name}（原 {value} 冲突，已自动移开）")
+            break
+        else:
+            raise PinBindingError(
+                f"自动配置无法为 {key} 找到可用引脚（能力匹配且未被占用的引脚"
+                "不存在或与其余绑定冲突），请手动调整"
+            )
+    delta = {
+        key: pin for key, pin in repaired.items()
+        if (raw or {}).get(key) != pin
+    }
+    return AutoAssignResult(
+        bindings=delta,
+        fixed=tuple(fixed),
+        shared=_shared_groups(manifests, platform, board, repaired),
+    )
+
+
+def _shared_groups(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    board: Board,
+    bindings: Mapping[str, str],
+) -> tuple[dict[str, object], ...]:
+    """保留的合法共享标注：同引脚多角色组（含绑定与默认脚）。
+
+    I2C 总线角色（i2c_scl / i2c_sda）标注协议允许同挂；其余 = 同引脚共享
+    （ADR 0010 允许，不拆）。仅对在板上存在的引脚标注。
+    """
+    groups: dict[str, list[str]] = {}
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for decl in entry.pins:
+            key = f"{manifest.slug}.{decl.id}"
+            pin = bindings.get(key) or decl.default
+            if pin:
+                groups.setdefault(pin, []).append(key)
+    shared: list[dict[str, object]] = []
+    for pin, roles in sorted(groups.items()):
+        if len(roles) < 2 or board.pin_index.get(pin) is None:
+            continue
+        is_i2c = any(".i2c_" in role for role in roles)
+        reason = (
+            "I2C 总线共享（MPU6050 / HMC5883L 等可同挂 SCL/SDA，协议允许）"
+            if is_i2c
+            else "同引脚共享（合法共享，不拆）"
+        )
+        shared.append({"pin": pin, "roles": roles, "reason": reason})
+    return tuple(shared)
