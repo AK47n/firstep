@@ -1642,7 +1642,10 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
     client, context, tmp_path
 ):
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
-    output_dir = tmp_path / "out" / "demo"
+    context[1]["llm"] = FakeLLM(topic_summary="智能巡检小车\n- 采集温湿度\n- OLED 显示")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    requested_output_dir = tmp_path / "out" / "demo"
 
     resp = client.post(
         "/api/generate",
@@ -1650,17 +1653,21 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
             "platform": PLATFORM_STM32,
             "slugs": ["dht11", "oled"],
             "main_c": "int main(void) { while (1); }\n",
-            "output_dir": str(output_dir),
+            "problem_text": "赛题：设计并制作智能巡检小车",
+            "output_dir": str(requested_output_dir),
         },
     )
 
     assert resp.status_code == 200
     data = resp.json()
+    output_dir = desktop_dir / "智能巡检小车"
     # 验收项 4：工程结构 / include path / main.c 就位
     assert data["output_dir"] == str(output_dir)
+    assert not requested_output_dir.exists()
     assert (output_dir / "main.c").is_file()
     assert (output_dir / "modules" / "dht11" / "inc" / "dht11.h").is_file()
     assert (output_dir / "modules" / "delay" / "delay.c").is_file()
+    assert context[1]["llm"].topic_summarize_calls == [("赛题：设计并制作智能巡检小车",)]
     # include 目录与生成器实际注册的一致：根目录文件 → modules/<slug>，不含 "/."
     assert data["include_dirs"] == [
         "modules/delay",
@@ -1677,6 +1684,86 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
     uvprojx = next(output_dir.glob("*.uvprojx")).read_text(encoding="utf-8")
     assert "modules" in uvprojx
     assert "modules\\dht11\\inc" in uvprojx
+
+
+def test_generate_respects_explicit_output_dir_when_desktop_output_disabled(
+    client, context, tmp_path
+):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_summary="不应调用")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    output_dir = tmp_path / "out" / "manual-demo"
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：不会用于命名",
+            "output_dir": str(output_dir),
+            "create_desktop_topic_dir": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["output_dir"] == str(output_dir)
+    assert (output_dir / "main.c").is_file()
+    assert not desktop_dir.exists()
+    assert context[1]["llm"].topic_summarize_calls == []
+
+
+def test_generate_desktop_output_cleans_title_and_uses_timestamp_on_collision(
+    client, context, tmp_path, monkeypatch
+):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_summary='  CON<>:"/\\|?*  ')
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    (desktop_dir / "CON_").mkdir(parents=True)
+    (desktop_dir / "CON_20260819-153000").mkdir()
+    monkeypatch.setattr("contest_generator.generation_output.time.strftime", lambda fmt: "20260819-153000")
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：非法字符标题",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 200
+    output_dir = desktop_dir / "CON_20260819-153000_2"
+    assert resp.json()["output_dir"] == str(output_dir)
+    assert (output_dir / "main.c").is_file()
+
+
+def test_generate_desktop_output_propagates_ai_title_error(
+    client, context, tmp_path
+):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = RaisingLLM()
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：AI 失败",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 502
+    assert "服务不可用" in resp.json()["detail"]
+    assert not desktop_dir.exists()
 
 
 def test_generate_mspm0_with_ccs_tools_writes_makefile_set(

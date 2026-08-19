@@ -637,7 +637,9 @@
 
     <div class="card">
       <h2><span class="step-no">9</span>输出目录并生成</h2>
-      <label for="output-dir">输出目录（必须不存在或为空；生成失败不留下半成品）</label>
+      <label style="margin-bottom:8px"><input type="checkbox" id="desktop-topic-output" checked> 在桌面按 AI 赛题名创建文件夹（推荐）</label>
+      <div class="muted" style="margin-bottom:10px">勾选后会忽略手动输出目录，生成到桌面/赛题名；同名目录自动加时间。</div>
+      <label for="output-dir">手动输出目录（取消桌面选项时必填；必须不存在或为空）</label>
       <div class="row">
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
         <button id="btn-pick-output-dir">选择文件夹…</button>
@@ -2645,6 +2647,24 @@ $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
 // ---------------------------------------------------------------------------
 // 生成页：9. 输出目录并生成
 // ---------------------------------------------------------------------------
+function desktopTopicOutputEnabled() {
+  const checkbox = $("desktop-topic-output");
+  return checkbox ? checkbox.checked : true;
+}
+
+function generationOutputDirPayload(manualOutputDir, desktopOutput) {
+  if (desktopOutput) return manualOutputDir || ".";
+  return manualOutputDir;
+}
+
+$("desktop-topic-output").addEventListener("change", () => {
+  const manual = !desktopTopicOutputEnabled();
+  $("output-dir").disabled = !manual;
+  $("btn-pick-output-dir").disabled = !manual;
+});
+$("output-dir").disabled = desktopTopicOutputEnabled();
+$("btn-pick-output-dir").disabled = desktopTopicOutputEnabled();
+
 $("btn-pick-output-dir").addEventListener("click", async () => {
   try {
     const data = await apiPost("/api/pick-directory", {});
@@ -2702,8 +2722,11 @@ $("btn-generate").addEventListener("click", async () => {
   $("generate-result").classList.add("hidden");
   if (!chosenPlatform) { $("generate-msg").textContent = "请先选择目标平台"; return; }
   if (!selectedSlugs.length) { $("generate-msg").textContent = "请先选择模块"; return; }
+  const desktopOutput = desktopTopicOutputEnabled();
+  const problem = $("problem").value.trim();
+  if (desktopOutput && !problem) { $("generate-msg").textContent = "请先填写赛题原文"; return; }
   const outputDir = $("output-dir").value.trim();
-  if (!outputDir) { $("generate-msg").textContent = "请填写输出目录"; return; }
+  if (!desktopOutput && !outputDir) { $("generate-msg").textContent = "请填写输出目录"; return; }
   const status = $("gen-status");
   status.innerHTML = '<span class="spinner"></span>生成中…';
   $("btn-generate").disabled = true;
@@ -2728,7 +2751,10 @@ $("btn-generate").addEventListener("click", async () => {
 
     const payload = {
       platform: chosenPlatform, slugs: selectedSlugs,
-      main_c: $("main-c").value, output_dir: outputDir,
+      main_c: $("main-c").value,
+      problem_text: problem,
+      output_dir: generationOutputDirPayload(outputDir, desktopOutput),
+      create_desktop_topic_dir: desktopOutput,
       topic_id: currentTopicId || undefined,
     };
     if (Object.keys(bindings).length) payload.bindings = bindings;
