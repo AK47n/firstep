@@ -59,6 +59,13 @@ EVENT_COMPILE_START = "compile_start"
 # 不同，结果沿用旧推荐）；前端显示「复用本地缓存」，带警告时提示差异。
 EVENT_CACHE_HIT = "cache_hit"
 
+# 修订影响分析（工单 revise-deepen/02）的事件类型：impact_analyzing = LLM
+# 影响分析开始（分钟级阻塞调用）；diff_ready = 确定性 diff 与平台警告重算
+# 完成（done 载荷前）。done 的 data = 影响产物（impacts + suggested_slugs +
+# diff + warnings）。
+EVENT_IMPACT_ANALYZING = "impact_analyzing"
+EVENT_DIFF_READY = "diff_ready"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；

@@ -52,6 +52,7 @@ from .events import (
 )
 from .fix_errors import FixSuggestion
 from .library import TRUNCATION_NOTICE, ValidationResult, truncate_content
+from .impact import ImpactAnalysis, ImpactError, build_impact_analysis
 from .manifest import ManifestSummary
 from .report import (
     ACTION_MERGE,
@@ -138,6 +139,22 @@ CLARIFY_SYSTEM_PROMPT = (
     "所有疑问全部列出（宁全勿漏、每条具体可答、最多 10 条），用户一轮全部"
     "答完，不要分批渐进追问；用户已回答过的问题"
     "不要重复问；没有疑问时输出空 questions 数组。只输出 JSON 对象。"
+)
+
+# 修订影响分析系统提示词（工单 revise-deepen/02）：评审新增赛题答疑 Q&A 对
+# 既有模块推荐的影响。逐条 Q&A → 影响结论（影响哪些功能需求 → 建议模块
+# 增/删/不变 + 理由）；输出**建议的最终模块集**（完整列表，diff 由工具算——
+# spec「AI 只负责解释为什么，不负责算差异」）。Q&A 是权威材料（赛事组澄清）。
+IMPACT_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发助手，熟悉 MSPM0G3507（CCS）与 "
+    "STM32F103C8T6（Keil5）两条平台线。你在评审一组新增的赛题答疑 Q&A 对"
+    "既有模块推荐的影响（赛题文本可能被截断，见末尾标注，"
+    + TRUNCATION_NOTICE
+    + "）。逐条核对新 Q&A（用户消息末尾独立段，权威澄清材料）：每条说明它"
+    "影响哪些功能需求（引用功能需求层原文）、建议模块增 / 删 / 不变及理由；"
+    "最后给出建议的最终模块集（**完整列表**，不是增量——从功能需求层出发："
+    "保留仍被需求支撑的模块、删除被 Q&A 推翻或不再有需求支撑的模块、补充"
+    "新需求命中的模块；只输出库内模块 slug）。只输出 JSON 对象。"
 )
 
 # 骨架「不声明未使用变量」规则的唯一表述：系统提示词与用户提示词在同一个 API
@@ -882,6 +899,15 @@ class LLM(Protocol):
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
     def topic_extract_number(self, text: str) -> str | None: ...
+
+    def analyze_impact(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        current_slugs: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
+        new_qa_text: str,
+    ) -> ImpactAnalysis: ...
 
 
 class Transport(Protocol):
@@ -1768,6 +1794,51 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def analyze_impact(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        current_slugs: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
+        new_qa_text: str,
+    ) -> ImpactAnalysis:
+        """修订影响分析（工单 revise-deepen/02）：逐条新 Q&A → 影响结论 +
+        建议模块集。
+
+        输入 = 题面 + 功能需求层（推荐产物摘要）+ 当前模块集 + 模块库摘要 +
+        新 Q&A（独立段，权威材料）。输出 JSON 由 impact.build_impact_analysis
+        域判决（对照 build_module_selection 先例：任何结构 / 内容问题大声
+        失败）；域判决错误由传输侧翻译回 LLMError（错误契约 502，impact 不
+        import LLMError——与 llm → selection 边同款防环）。
+
+        瞬时失败整次重问（_retry_parse，与 select_modules 同款兜底）：空内容 /
+        畸形输出重问至多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错。
+        """
+        known_slugs = [summary.slug for summary in manifest_summaries]
+
+        def parse(content: str) -> ImpactAnalysis:
+            try:
+                return build_impact_analysis(
+                    extract_module_selection_data(content), known_slugs=known_slugs
+                )
+            except ImpactError as exc:
+                raise LLMError(str(exc)) from exc
+
+        return self._retry_parse(
+            system_prompt=IMPACT_SYSTEM_PROMPT,
+            user_prompt=_impact_user_prompt(
+                problem_text,
+                requirements,
+                current_slugs,
+                manifest_summaries,
+                new_qa_text,
+            ),
+            parse=parse,
+            label="影响分析",
+            operation="analyze_impact",
+            json_mode=True,
+        )
+
     def _observe_call(
         self,
         *,
@@ -2245,6 +2316,24 @@ class RoutingLLM:
     def topic_extract_number(self, text: str) -> str | None:
         return self._remote.topic_extract_number(text)
 
+    def analyze_impact(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        current_slugs: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
+        new_qa_text: str,
+    ) -> ImpactAnalysis:
+        # 影响分析走 remote（质量优先，不走本地方法集——LOCAL_LLM_METHODS
+        # 不含本方法，集合外方法恒落 remote）
+        return self._remote.analyze_impact(
+            problem_text,
+            requirements,
+            current_slugs,
+            manifest_summaries,
+            new_qa_text,
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -2614,6 +2703,46 @@ def _clarify_user_prompt(
         '{"questions": ["仍存的疑问，没有疑问时为空数组"]}'
     )
     return "\n".join(lines)
+
+
+def _impact_user_prompt(
+    problem_text: str,
+    requirements: Sequence[Mapping[str, Any]],
+    current_slugs: Sequence[str],
+    manifest_summaries: Sequence[ManifestSummary],
+    new_qa_text: str,
+) -> str:
+    """修订影响分析的 user 消息（工单 revise-deepen/02）：题面 + 功能需求层 +
+    当前模块集 + 模块库摘要 + 新 Q&A 独立段。各段截断带标注（_truncate_content
+    与所有嵌内容调用同款预算）；Q&A 独立段（不并入题面——题面逐句编号不受
+    影响）。"""
+    # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    prompt = _build_user_prompt(
+        problem_text,
+        "模块库可用模块：",
+        [summary.to_line() for summary in manifest_summaries],
+    )
+    if requirements:
+        lines = ["", "既有功能需求层（逐条核验新 Q&A 的影响引用这里的原文）："]
+        for index, req in enumerate(requirements, 1):
+            requirement = req.get("requirement", "") if isinstance(req, Mapping) else ""
+            sentence = req.get("sentence", "") if isinstance(req, Mapping) else ""
+            lines.append(
+                f"- {index}. {requirement}（题面句子 {sentence}）"
+            )
+        prompt += "\n".join(lines)
+    lines = ["", "当前模块集（生成时选定，含依赖展开）：", "、".join(current_slugs)]
+    prompt += "\n".join(lines)
+    prompt += (
+        "\n\n【新增赛题答疑 Q&A（赛事组权威澄清，逐条核对影响）】\n"
+        + _fit_fulltext_wire(new_qa_text)
+        + "\n\n只返回 json 格式的 JSON 对象："
+        '{"impacts": [{"qa_index": 1, "requirement_refs": ["受影响的'
+        '功能需求原文"], "add": ["新增模块 slug"], "remove": ["移除模块 '
+        'slug"], "reason": "中文理由"}], "suggested_slugs": ["建议的最终'
+        '模块集完整列表（只含库内 slug）"]}'
+    )
+    return prompt
 
 
 def _selection_user_prompt(

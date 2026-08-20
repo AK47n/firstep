@@ -87,6 +87,7 @@ from .generation_output import (
     topic_title_from_summary,
     unique_desktop_topic_dir,
 )
+from .impact import run_impact_analysis
 from .library import (
     add_module,
     add_platform_files,
@@ -97,6 +98,7 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
+from .manifest import ManifestSummary
 from .llm import (
     LLM,
     LLMObservationCollector,
@@ -291,6 +293,20 @@ def _require_config(ctx: AppContext) -> AppConfig:
             400, "未配置 AI API：请先到设置页填写 API 后再使用 AI 功能"
         )
     return config
+
+
+def _module_library_summaries(module_library_dir: Path) -> tuple[ManifestSummary, ...]:
+    """模块库摘要行（影响分析 / 修订的 AI 素材）：从库一次扫描构建。
+
+    与推荐装配点（resolve_topic_context 的 manifest_summaries）同源同构——
+    修订分析不依赖赛题装配，直接按库全量构建（影响分析需要看到库内全部
+    模块才能判断增删）。
+    """
+    from .manifest import build_manifest_summaries
+
+    if not module_library_dir.is_dir():
+        return ()
+    return tuple(build_manifest_summaries(list_modules(module_library_dir)))
 
 
 def _llm(
@@ -1203,6 +1219,79 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "context": fields,
             "missing": missing,
         }
+
+    # ------------------------------------------------------------------
+    # 修订与深化 · 影响分析（工单 revise-deepen/02）：粘贴新 Q&A → AI 逐条
+    # 影响结论 + 建议模块集 → 确定性 diff + 平台警告重算。域判决在 impact.py
+    # （对照 run_recommendation 先例），路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/revise/analyze")
+    @_map_errors
+    def revise_analyze(payload: dict) -> StreamingResponse:
+        """修订影响分析（SSE 流）：影响分析中 → diff 就绪 → done（影响产物）。
+
+        请求体契约：output_dir（必填，生成结果目录）；new_qa_text（必填，
+        新增赛题答疑 Q&A 原文）；slugs / platform（可选覆盖——用户手动调整
+        模块集或平台后分析）。服务端重新加载上下文（清单直读 / 无清单反推，
+        与 /api/revise/context 同源），覆盖后过形状校验（400 中文）。
+
+        事件序列：impact_analyzing（LLM 分钟级）→ diff_ready（diff + 平台
+        警告就绪）→ done（{"impacts": [...], "suggested_slugs": [...],
+        "diff": {"added/removed/unchanged"}, "warnings": [...],
+        "platform": ...}）或 error（中文信息）→ 流结束。HTTP 200 起流，失败
+        以流内 error 事件收尾（sse 运行器终态保证）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise ContextError(f"输出目录不存在：{output_dir}")
+        new_qa_text = _require_str(payload, "new_qa_text")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        # 服务端重新加载上下文（前端不直传——清单 / 反推单址，防陈旧回传）；
+        # 可选覆盖：用户手动调整模块集 / 平台后分析
+        fields = read_context_fields(output_dir)
+        if fields is not None:
+            validate_context_fields(fields, module_library_dir)
+        else:
+            fields, _ = infer_context(output_dir, module_library_dir)
+            validate_context_fields(fields, module_library_dir)
+        if payload.get("slugs") is not None:
+            fields["slugs"] = _require_str_list(payload, "slugs")
+            validate_context_fields(fields, module_library_dir)
+        if payload.get("platform") is not None:
+            fields["platform"] = _require_str(payload, "platform")
+            validate_context_fields(fields, module_library_dir)
+        if not fields.get("problem_text"):
+            raise ContextError("缺少赛题原文——请先补题面（修订分析需要题面证据）")
+
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("revise-analyze")
+        summaries = _module_library_summaries(module_library_dir)
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_impact_analysis(
+                        llm=llm,
+                        problem_text=fields["problem_text"],
+                        requirements=fields.get("requirements") or (),
+                        current_slugs=fields["slugs"],
+                        manifest_summaries=summaries,
+                        new_qa_text=new_qa_text,
+                        platform=fields["platform"],
+                        library_dir=module_library_dir,
+                        emit=emit,
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
 
     # ------------------------------------------------------------------
     # 编译错误修复（工单 compile-error-fix/01）：贴报错 → LLM 修复 →
