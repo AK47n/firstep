@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=69a2cebbea9f381a0c5e508643c7c5d8cca3ea1c -->
+<!-- changelog-auto: last-commit=8b22f51258c70686c9d33177acd6f47311d326ec -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:54 生成尾部落盘上下文清单 + 历史目录反推 + 加载 API（工单 revise-deepen/01）
 - 01:08 工单 01 评审整改——清单字段收敛 spec、main.c 现读、空模块集提示、反推健壮性
 - 01:14 修订影响分析与确定性 diff（工单 revise-deepen/02）
+- 01:23 工单 02 评审整改——事件常量单源、逐条覆盖与一致性校验、重试兜底测试
 
 ## 2026-08-20
 - 00:00 多实例默认兜底——AI 没猜实例时按平台默认自动填（stm32 红黄绿 / mspm0 单实例，与不配置生成等价零回归，工单 instance-default-fallback/01）+ backlog 计划
