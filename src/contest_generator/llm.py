@@ -896,10 +896,6 @@ class LLM(Protocol):
         self, candidates: Sequence[ReferenceCandidate]
     ) -> tuple[str, ...]: ...
 
-    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
-
-    def topic_extract_number(self, text: str) -> str | None: ...
-
     def analyze_impact(
         self,
         problem_text: str,
@@ -907,7 +903,12 @@ class LLM(Protocol):
         current_slugs: Sequence[str],
         manifest_summaries: Sequence[ManifestSummary],
         new_qa_text: str,
+        qa_count: int | None = None,
     ) -> ImpactAnalysis: ...
+
+    def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
+
+    def topic_extract_number(self, text: str) -> str | None: ...
 
 
 class Transport(Protocol):
@@ -1801,6 +1802,7 @@ class DeepSeekLLM:
         current_slugs: Sequence[str],
         manifest_summaries: Sequence[ManifestSummary],
         new_qa_text: str,
+        qa_count: int | None = None,
     ) -> ImpactAnalysis:
         """修订影响分析（工单 revise-deepen/02）：逐条新 Q&A → 影响结论 +
         建议模块集。
@@ -1811,6 +1813,9 @@ class DeepSeekLLM:
         失败）；域判决错误由传输侧翻译回 LLMError（错误契约 502，impact 不
         import LLMError——与 llm → selection 边同款防环）。
 
+        qa_count（可选）= 新 Q&A 条数，透传解析层做「逐条覆盖」校验（漏判
+        大声失败，宁严勿假绿）。
+
         瞬时失败整次重问（_retry_parse，与 select_modules 同款兜底）：空内容 /
         畸形输出重问至多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错。
         """
@@ -1819,7 +1824,9 @@ class DeepSeekLLM:
         def parse(content: str) -> ImpactAnalysis:
             try:
                 return build_impact_analysis(
-                    extract_module_selection_data(content), known_slugs=known_slugs
+                    extract_module_selection_data(content),
+                    known_slugs=known_slugs,
+                    qa_count=qa_count,
                 )
             except ImpactError as exc:
                 raise LLMError(str(exc)) from exc
@@ -2323,6 +2330,7 @@ class RoutingLLM:
         current_slugs: Sequence[str],
         manifest_summaries: Sequence[ManifestSummary],
         new_qa_text: str,
+        qa_count: int | None = None,
     ) -> ImpactAnalysis:
         # 影响分析走 remote（质量优先，不走本地方法集——LOCAL_LLM_METHODS
         # 不含本方法，集合外方法恒落 remote）
@@ -2332,6 +2340,7 @@ class RoutingLLM:
             current_slugs,
             manifest_summaries,
             new_qa_text,
+            qa_count,
         )
 
 

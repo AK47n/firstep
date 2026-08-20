@@ -736,6 +736,7 @@ class FakeLLM:
         current_slugs: Sequence[str],
         manifest_summaries: Sequence[ManifestSummary],
         new_qa_text: str,
+        qa_count: int | None = None,
     ) -> ImpactAnalysis:
         self.impact_calls.append(
             (
@@ -864,6 +865,7 @@ class RecordingLLM:
         current_slugs: Sequence[str],
         manifest_summaries: Sequence[ManifestSummary],
         new_qa_text: str,
+        qa_count: int | None = None,
     ) -> ImpactAnalysis:
         self._record("analyze_impact")
         return ImpactAnalysis()

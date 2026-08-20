@@ -309,6 +309,31 @@ def _module_library_summaries(module_library_dir: Path) -> tuple[ManifestSummary
     return tuple(build_manifest_summaries(list_modules(module_library_dir)))
 
 
+def _load_revision_context(
+    output_dir: Path, module_library_dir: Path
+) -> tuple[str, dict[str, Any]]:
+    """修订 / 深化端点共用的上下文装载（revise-context 与 revise-analyze 单址）。
+
+    有清单直读（read_context_fields 缺字段补空兼容；main.c 现读磁盘覆盖生成
+    时快照——手工编辑不丢）；无清单自动反推（infer_context：平台 / 模块 /
+    绑定 / main.c 尽力回读）。两者都过形状校验（平台词表 / slugs 库内存在性 /
+    绑定键形状，非法 400 中文）。返回 (source, fields)。
+    """
+    fields = read_context_fields(output_dir)
+    if fields is not None:
+        validate_context_fields(fields, module_library_dir)
+        # main.c 统一现读磁盘（spec「main.c 原样保留，不丢手工编辑」）：
+        # 清单里是生成时快照，用户生成后手改过 → 加载必须反映当前内容，
+        # 深化/修订基于现读，不基于陈旧快照
+        current_main = read_project_main_c(output_dir)
+        if current_main:
+            fields["main_c"] = current_main
+        return "manifest", fields
+    fields, _ = infer_context(output_dir, module_library_dir)
+    validate_context_fields(fields, module_library_dir)
+    return "inferred", fields
+
+
 def _llm(
     ctx: AppContext,
     retry_budget: RetryBudget | None = None,
@@ -1198,26 +1223,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _require_config(context)
         module_library_dir = config.module_library_dir
 
-        fields = read_context_fields(output_dir)
-        if fields is not None:
-            validate_context_fields(fields, module_library_dir)
-            # main.c 统一现读磁盘（spec「main.c 原样保留，不丢手工编辑」）：
-            # 清单里是生成时快照，用户生成后手改过 → 加载必须反映当前内容，
-            # 深化/修订基于现读，不基于陈旧快照
-            current_main = read_project_main_c(output_dir)
-            if current_main:
-                fields["main_c"] = current_main
-            return {
-                "source": "manifest",
-                "context": fields,
-                "missing": missing_fields_for(fields),
-            }
-        fields, missing = infer_context(output_dir, module_library_dir)
-        validate_context_fields(fields, module_library_dir)
+        source, fields = _load_revision_context(output_dir, module_library_dir)
         return {
-            "source": "inferred",
+            "source": source,
             "context": fields,
-            "missing": missing,
+            "missing": missing_fields_for(fields),
         }
 
     # ------------------------------------------------------------------
@@ -1232,9 +1242,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """修订影响分析（SSE 流）：影响分析中 → diff 就绪 → done（影响产物）。
 
         请求体契约：output_dir（必填，生成结果目录）；new_qa_text（必填，
-        新增赛题答疑 Q&A 原文）；slugs / platform（可选覆盖——用户手动调整
-        模块集或平台后分析）。服务端重新加载上下文（清单直读 / 无清单反推，
-        与 /api/revise/context 同源），覆盖后过形状校验（400 中文）。
+        新增赛题答疑 Q&A 原文）；qa_count（可选整数，Q&A 条数——给定时影响
+        结论必须逐条覆盖，漏判大声失败）；slugs / platform（可选覆盖——用户
+        手动调整模块集或平台后分析）。服务端重新加载上下文（清单直读 / 无清单
+        反推，与 /api/revise/context 同源），覆盖后过形状校验（400 中文）。
 
         事件序列：impact_analyzing（LLM 分钟级）→ diff_ready（diff + 平台
         警告就绪）→ done（{"impacts": [...], "suggested_slugs": [...],
@@ -1250,12 +1261,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         module_library_dir = config.module_library_dir
         # 服务端重新加载上下文（前端不直传——清单 / 反推单址，防陈旧回传）；
         # 可选覆盖：用户手动调整模块集 / 平台后分析
-        fields = read_context_fields(output_dir)
-        if fields is not None:
-            validate_context_fields(fields, module_library_dir)
-        else:
-            fields, _ = infer_context(output_dir, module_library_dir)
-            validate_context_fields(fields, module_library_dir)
+        _, fields = _load_revision_context(output_dir, module_library_dir)
         if payload.get("slugs") is not None:
             fields["slugs"] = _require_str_list(payload, "slugs")
             validate_context_fields(fields, module_library_dir)
@@ -1264,6 +1270,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             validate_context_fields(fields, module_library_dir)
         if not fields.get("problem_text"):
             raise ContextError("缺少赛题原文——请先补题面（修订分析需要题面证据）")
+        qa_count = payload.get("qa_count")
+        if qa_count is not None and (
+            not isinstance(qa_count, int)
+            or isinstance(qa_count, bool)
+            or qa_count < 1
+        ):
+            raise ContextError("qa_count 必须是正整数（新 Q&A 条数）")
 
         budget = RetryBudget()
         collector = create_llm_observation_collector("revise-analyze")
@@ -1283,6 +1296,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         platform=fields["platform"],
                         library_dir=module_library_dir,
                         emit=emit,
+                        qa_count=qa_count,
                     )
                 emit.done(result)
             finally:
