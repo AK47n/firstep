@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 from .context_manifest import (
     build_context_fields,
     read_context_fields,
+    read_project_main_c,
     write_context_manifest,
 )
 from .events import (
@@ -40,6 +41,7 @@ from .selection import resolve_selection
 from .skeleton import generate_skeleton
 
 if TYPE_CHECKING:
+    from .compile_runner import CcsTools
     from .llm import LLM  # 仅类型注解（生成流程不运行时拉 LLM 栈，先例同款）
     from .selection import ModuleInstance
     from .sse import SseEmitter
@@ -62,10 +64,13 @@ def backup_tree(backup_root: Path, output_dir: Path) -> str:
     """整树备份（修订执行第一步）：<backup_root>/<timestamp>/<相对路径>。
 
     输出目录外镜像（带编号 = 回滚入口）；输出目录不存在 / 为空 → RevisionError
-    （修订目标必须是已生成的工程）。备份根不存在则创建。
+    （修订目标必须是已生成的工程）。备份根不存在则创建。生成产物无 .git
+    （copytree 先例），备份排除 .git 是防御。
     """
     if not output_dir.is_dir():
         raise RevisionError(f"输出目录不存在：{output_dir}")
+    if not any(output_dir.iterdir()):
+        raise RevisionError(f"输出目录为空，没有可修订的工程：{output_dir}")
     backup_id = _unique_backup_id(backup_root)
     target_dir = backup_root / backup_id
     shutil.copytree(
@@ -83,7 +88,9 @@ def restore_revision(
     内容，spec「回滚 = 目录内容恢复为备份内容」）。
 
     backup_id 必须是安全目录名（防 `..` / 绝对路径）；备份或输出目录不存在 →
-    RevisionError（400 中文）。恢复的文件相对路径（POSIX）排序返回。
+    RevisionError（400 中文）。恢复前校验备份树内全部路径安全（is_unsafe_path
+    ——与 fix_errors.restore_backup 同规，防恶意备份内容越出目录）；恢复的
+    文件相对路径（POSIX）排序返回。
     """
     if is_unsafe_path(backup_id):
         raise RevisionError(f"非法的备份编号：{backup_id}")
@@ -92,6 +99,15 @@ def restore_revision(
         raise RevisionError(f"备份不存在：{backup_id}")
     if not output_dir.is_dir():
         raise RevisionError(f"输出目录不存在：{output_dir}")
+    # 恢复前整树路径安全校验（备份内容不可信）：任一相对路径不安全 →
+    # 大声失败，不清空不恢复
+    unsafe = [
+        p.relative_to(backup_dir).as_posix()
+        for p in backup_dir.rglob("*")
+        if p.is_file() and is_unsafe_path(p.relative_to(backup_dir).as_posix())
+    ]
+    if unsafe:
+        raise RevisionError(f"备份内包含非法路径：{unsafe[0]}")
     # 回滚 = 目录内容恢复为备份内容：先清空现有内容（修订后的产物全删），
     # 再整体恢复备份（不留修订残留）
     for child in output_dir.iterdir():
@@ -138,6 +154,9 @@ def run_revision(
     python_templates: Mapping[str, str] | None = None,
     emit: SseEmitter,
     tool_version: str = "",
+    impacts: Sequence[Mapping[str, Any]] = (),
+    topic_id: str = "",
+    ccs_tools: CcsTools | None = None,
 ) -> dict[str, Any]:
     """/api/revise/apply 的域编排（工单 03）：备份 → （模块集变化时）骨架
     重生成 → 覆盖式重生成 → 上下文清单更新 → diff 记录。
@@ -145,20 +164,31 @@ def run_revision(
     进度事件：revision_backup（整树备份中）→ revision_generating（重生成中，
     仅模块集变化时发射）→ 终态 done（diff 记录，由路由 emit.done 收尾）。
 
-    模块集不变 → 跳过重生成（main.c 原样保留，不丢手工编辑），只更新上下文
-    清单（新 Q&A 并入 qa_text）并出 diff 记录（增删全空 + regenerated=false）。
+    **模块集判定用依赖展开后的集合**（resolve_selection 展开，与生成产物
+    同源）：确认集缺依赖时展开补回 = 模块集实际没变 → 不重生成、main.c 保留
+    （不丢手工编辑）；diff 的增删同样按展开集算（与产物一致，不误报）。
+
+    impacts（可选）= 影响结论记录（分析阶段产物，随 diff 记录留痕）。
 
     返回 done 载荷（JSON 形状稳定）：
     {"backup_id": ..., "regenerated": bool, "diff": {"added": [...],
-    "removed": [...]}, "qa_text": 并入后的 Q&A 原文, "output_dir": ...,
-    "generated_at": ...}。失败路径：备份成功但重生成失败 → 抛 RevisionError /
-    原异常（sse 运行器补发 error 终态，备份保留 = 目录保持可回滚）。
+    "removed": [...]}, "impacts": [...], "qa_text": 并入后的 Q&A 原文,
+    "output_dir": ..., "generated_at": ...}。失败路径：备份成功但重生成失败
+    → 抛 RevisionError / 原异常（sse 运行器补发 error 终态，备份保留 =
+    目录保持可回滚）。
     """
     emit.progress(ProgressEvent(type=EVENT_REVISION_BACKUP))
     backup_id = backup_tree(backup_root, output_dir)
 
-    old_set = set(current_slugs)
-    new_set = set(confirmed_slugs)
+    # 依赖展开后的模块集（与生成产物同源）：判定变化与算 diff 都用它
+    expanded_current = tuple(
+        m.slug for m in resolve_selection(library_dir, platform, current_slugs).manifests
+    )
+    expanded_confirmed = tuple(
+        m.slug for m in resolve_selection(library_dir, platform, confirmed_slugs).manifests
+    )
+    old_set = set(expanded_current)
+    new_set = set(expanded_confirmed)
     regenerated = new_set != old_set
     merged_qa = _merge_qa(qa_text, new_qa_text)
 
@@ -184,10 +214,12 @@ def run_revision(
             output_dir=output_dir,
             module_library_dir=library_dir,
             masters_dir=masters_dir,
+            ccs_tools=ccs_tools,  # mspm0 构建脚本（makefile 集）随全链路复用
             bindings=bindings,
             instances=instances,
             python_templates=python_templates,
             problem_text=problem_text,
+            topic_id=topic_id,
             qa_text=merged_qa,
             requirements=requirements,
             references=references,
@@ -195,16 +227,17 @@ def run_revision(
         )
     else:
         # 模块集不变：不重生成、main.c 原样保留（不丢手工编辑）——只把
-        # 新 Q&A 并入上下文清单（修订的输入记录保持最新）
+        # 新 Q&A 并入上下文清单（修订的输入记录保持最新）；main_c 现读磁盘
+        # （手工编辑过的内容进清单，与读侧语义一致）
         fields = read_context_fields(output_dir) or {}
         write_context_manifest(
             output_dir,
             build_context_fields(
                 platform=platform,
-                slugs=list(confirmed_slugs),
-                main_c=fields.get("main_c", ""),
+                slugs=list(expanded_confirmed),
+                main_c=read_project_main_c(output_dir),
                 problem_text=problem_text,
-                topic_id=fields.get("topic_id", ""),
+                topic_id=topic_id or fields.get("topic_id", ""),
                 qa_text=merged_qa,
                 requirements=requirements,
                 references=references,
@@ -222,9 +255,10 @@ def run_revision(
         "backup_id": backup_id,
         "regenerated": regenerated,
         "diff": {
-            "added": [slug for slug in confirmed_slugs if slug not in old_set],
-            "removed": [slug for slug in current_slugs if slug not in new_set],
+            "added": [slug for slug in expanded_confirmed if slug not in old_set],
+            "removed": [slug for slug in expanded_current if slug not in new_set],
         },
+        "impacts": list(impacts),
         "qa_text": merged_qa,
         "output_dir": str(output_dir),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
