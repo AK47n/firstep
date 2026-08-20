@@ -350,6 +350,10 @@ def test_generate_without_artifact_module_is_byte_identical(tmp_path):
             # README 随 manifest 集渲染（工单 project-readme/01）：probe 多选
             # 一个模块 → README 模块清单自然不同，非「既有生成文件」契约
             continue
+        if rel == ".contest_context.json":
+            # 上下文清单随 manifest 集渲染（工单 revise-deepen/01）：同 README
+            # 语义——记录本次生成输入（slugs 含 probe），非既有生成文件契约
+            continue
         assert probe_files[rel] == content  # 共现文件逐字节一致
 
 

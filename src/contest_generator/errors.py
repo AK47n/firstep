@@ -19,6 +19,7 @@ from typing import Callable
 from .ccs import CcsProjectError
 from .compile_runner import CompileRunnerError
 from .config import ConfigError
+from .context_manifest import ContextError
 from .extraction import ExtractionError
 from .fix_errors import FixError
 from .generator import (
@@ -85,6 +86,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             TopicError,
             StageError,
             VisionError,  # 视觉通道失败（工单 vision-eyes/01）：未配置 / 网络 / 上游非法——调用方按降级政策决定阻断与否
+            ContextError,  # 上下文清单损坏 / 形状非法 / 平台无法识别（工单 revise-deepen/01）
         ),
         400,
         str,

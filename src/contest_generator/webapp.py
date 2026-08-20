@@ -25,6 +25,7 @@ from typing import Any, Callable, Mapping, Sequence
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
 from .compile_runner import (
@@ -44,6 +45,13 @@ from .config import (
     reference_library_dir,
     save_config,
     topic_library_dir,
+)
+from .context_manifest import (
+    CONTEXT_MANIFEST_FILENAME,
+    ContextError,
+    infer_context,
+    read_context_fields,
+    validate_context_fields,
 )
 from .errors import error_entry
 from .events import EVENT_CACHE_HIT, ProgressEvent
@@ -1103,6 +1111,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if topic_id:
             # 显式编号路径不需要 AI 提取（题面 / 关联素材已装配）；查无此条大声报错
             _assemble_topic_context(context, topic_id, "", None)
+        # 上下文清单字段（工单 revise-deepen/01）：随生成请求回传并落盘——
+        # 题面 / Q&A / 功能需求清单（推荐产物摘要）/ 参考条目 / 工具版本；
+        # 缺省 = 清单内容缺省（旧行为逐字节）。requirements 必须是数组，
+        # 非法形状 400 中文（其余字段 _optional_str 已有类型闸）。
+        problem_text = _optional_str(payload, "problem_text")
+        qa_text = _optional_str(payload, "qa_text")
+        requirements = payload.get("requirements")
+        if requirements is not None and not isinstance(requirements, list):
+            raise ContextError("requirements 必须是数组（推荐产物摘要）")
+        references = _require_str_list(payload, "references")
         # CCS 三件套探测（工单 mspm0-build-makefiles/01）：config 覆盖 > 自动
         # 扫描；mspm0 生成自动产出 Debug/makefile 集（探测不到 = 生成照常 +
         # build_hint 提示，不阻断）。stm32 不探。
@@ -1125,8 +1143,58 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             instances=instances,
             python_templates=python_templates,
             score_points=score_points,
+            problem_text=problem_text,
+            topic_id=topic_id,
+            qa_text=qa_text,
+            requirements=requirements,
+            references=references,
+            tool_version=__version__,
         )
         return _generation_result(summary)
+
+    # ------------------------------------------------------------------
+    # 修订与深化 · 上下文加载（工单 revise-deepen/01）：给一个输出目录，
+    # 返回可修订的上下文——有上下文清单（.contest_context.json）直读；无
+    # 清单（历史工程）自动反推平台 / 模块 / 绑定 / main.c。域判决在
+    # context_manifest（反推尽力而为），路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/revise/context")
+    @_map_errors
+    def revise_context(payload: dict) -> dict:
+        """加载生成上下文（同步端点）：{output_dir} → 可修订的上下文。
+
+        有清单直读（read_context_fields，缺字段补空兼容）；无清单自动反推
+        （infer_context：工程配置文件认平台、modules/<slug>/ 认模块、写侧
+        逆运算回读绑定、main.c 现读）。两者都过形状校验（validate_context_fields：
+        平台词表 / slugs 库内存在性 / 绑定键形状，非法 400 中文——库外模块
+        校验失败 = 前端手动勾选兜底入口）。
+
+        返回 {"source": "manifest" | "inferred", "context": {...字段...},
+        "missing": [反推不了需用户补的字段名]}。目录不存在 / 平台无法识别 /
+        清单损坏 → ContextError 400 中文。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise ContextError(f"输出目录不存在：{output_dir}")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+
+        fields = read_context_fields(output_dir)
+        if fields is not None:
+            validate_context_fields(fields, module_library_dir)
+            return {
+                "source": "manifest",
+                "context": fields,
+                "missing": [],
+            }
+        fields, missing = infer_context(output_dir, module_library_dir)
+        validate_context_fields(fields, module_library_dir)
+        return {
+            "source": "inferred",
+            "context": fields,
+            "missing": missing,
+        }
 
     # ------------------------------------------------------------------
     # 编译错误修复（工单 compile-error-fix/01）：贴报错 → LLM 修复 →
