@@ -223,6 +223,17 @@ def test_dimx_fixed_resources(boards):
     assert occupies["SWD 调试"] == ("PA19", "PA20")
 
 
+def test_dimx_physical_header_confirmation(boards):
+    """2026-08-20 用户实物核验：2×20P 排针正确，A13/A14 在板上；A19/A20 未找到。"""
+    dimx = boards["mspm0-dimx"]
+    assert board_pin(dimx, "PA13") is not None
+    assert board_pin(dimx, "PA14") is not None
+    assert board_pin(dimx, "PA19") is None
+    assert board_pin(dimx, "PA20") is None
+    swd = next(resource for resource in dimx.fixed if resource.name == "SWD 调试")
+    assert swd.occupies == ("PA19", "PA20")
+
+
 def test_pin_supports_with_and_without_instance(boards):
     dimx = boards["mspm0-dimx"]
     pa12 = board_pin(dimx, "PA12")
