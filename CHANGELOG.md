@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=32ce78d6c07e771d7ba7150a78daf70cc6e5d3b1 -->
+<!-- changelog-auto: last-commit=dfc207886aa72121c2bcfa02fc000d1a66dd3d34 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 01:08 推荐缓存加模块库指纹——library_sha256 = ManifestSummary 摘要行排序 hash，库变（模块增删/简介/能力/多实例标注）缓存失效走真实推荐，旧缓存无字段保守失效（工单 recommend-cache-fingerprint/01，backlog 清零）
 - 11:19 赛题条目补图注
 - 21:38 赛题条目补图注
+- 22:05 赛题文件重清洗 + 补图注加共享 PDF 守卫
 
 ## 2026-08-19
 - 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
