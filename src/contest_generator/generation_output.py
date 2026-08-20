@@ -20,6 +20,9 @@ WINDOWS_RESERVED_FILENAMES = frozenset(
 _INVALID_FILENAME_CHARS_RE = re.compile(r'[<>:"/\\|?*]+')
 _FILENAME_WHITESPACE_RE = re.compile(r"\s+")
 _TOPIC_TITLE_PREFIX_RE = re.compile(r"^(?:题名|标题|赛题名称|赛题名)[:：]\s*")
+_TOPIC_LINE_MARKDOWN_RE = re.compile(r"^#{1,6}\s*")
+_TOPIC_LINE_PREFIX_RE = re.compile(r"^[A-Za-z0-9]+\s*题\s*[:：]\s*")
+_TOPIC_TRAILING_PAREN_RE = re.compile(r"（[^）]*(?:题|本科|高职|组)[^）]*）$")
 
 
 def topic_title_from_summary(summary: str) -> str:
@@ -34,6 +37,32 @@ def topic_title_from_summary(summary: str) -> str:
             continue
         return _TOPIC_TITLE_PREFIX_RE.sub("", line).strip()
     return summary.strip()
+
+
+def topic_short_title(problem_text: str) -> str:
+    """赛题题面首行 → 短题名（目录名用，确定性）。
+
+    历史赛题首行形态：`自动行驶小车（H 题）` / `C 题：无线充电电动小车（本科）`
+    / `# 基于无线通信的数字钥匙实验系统（C题）`——去掉 markdown 标题符、
+    行首题号前缀与行尾（题号/组别）括号，得 `自动行驶小车` 式短名。
+    """
+    first = next(
+        (line.strip() for line in problem_text.splitlines() if line.strip()), ""
+    )
+    line = _TOPIC_LINE_MARKDOWN_RE.sub("", first)
+    line = _TOPIC_LINE_PREFIX_RE.sub("", line).strip()
+    line = _TOPIC_TRAILING_PAREN_RE.sub("", line).strip()
+    return line or first
+
+
+def topic_dir_title(key: str, problem_text: str) -> str:
+    """历史赛题目录名：`2024H 自动行驶小车`（编号 + 首行短题名）。
+
+    修订（2024H 复盘）：有历史赛题编号时目录名不再取 AI 简介首行——简介是
+    长句（如“设计一个采用 TI MSPM0 系列 MCU 控制的自动行驶小车…”），目录名
+    又长又每次生成都可能变；编号 + 短题名稳定、可预期。
+    """
+    return f"{key} {topic_short_title(problem_text)}".strip()
 
 
 def windows_safe_folder_name(title: str) -> str:

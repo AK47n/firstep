@@ -2008,6 +2008,39 @@ def test_generate_desktop_output_cleans_title_and_uses_timestamp_on_collision(
     assert (output_dir / "main.c").is_file()
 
 
+def test_generate_desktop_output_uses_topic_key_title_for_historical_topic(
+    client, context, tmp_path
+):
+    """2024H 复盘：历史赛题（topic_id 给定）→ 桌面目录名 = 「编号 + 首行
+    短题名」（如 2024H 自动行驶小车），确定性、不调 AI 简介（简介首行是
+    长句，曾直接变成目录名：设计一个采用 TI MSPM0 系列 MCU 控制的自动
+    行驶小车…）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _wire_material_libraries(context)
+    context[1]["llm"] = FakeLLM(topic_summary="不应调用")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "用户粘贴的片段",
+            "topic_id": "2026C",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 200
+    output_dir = desktop_dir / "2026C 2026C 数字钥匙题面全文（长 PDF 拆条入库）"
+    assert resp.json()["output_dir"] == str(output_dir)
+    assert (output_dir / "main.c").is_file()
+    # 目录名不再走 AI 简介（省一次 LLM 调用）
+    assert context[1]["llm"].topic_summarize_calls == []
+
+
 def test_generate_desktop_output_propagates_ai_title_error(
     client, context, tmp_path
 ):

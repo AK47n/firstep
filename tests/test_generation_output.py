@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from contest_generator.generation_output import (
+    topic_dir_title,
+    topic_short_title,
     topic_title_from_summary,
     unique_desktop_topic_dir,
     windows_safe_folder_name,
@@ -21,6 +23,35 @@ def test_topic_title_from_summary_uses_first_non_bullet_line():
 
 def test_topic_title_from_summary_strips_title_prefix():
     assert topic_title_from_summary("题名：智能巡检小车\n- 要点") == "智能巡检小车"
+
+
+@pytest.mark.parametrize(
+    ("problem_text", "expected"),
+    [
+        # 历史赛题首行真实形态（2024H 复盘：目录名 = 编号 + 短题名）
+        ("自动行驶小车（H 题）\n一、 任务\n", "自动行驶小车"),
+        ("智能送药小车（F题）\n【本科组】\n", "智能送药小车"),
+        ("小车跟随行驶系统（C 题）\n一、 任务\n", "小车跟随行驶系统"),
+        ("C 题：无线充电电动小车（本科）\n1. 任务\n", "无线充电电动小车"),
+        ("# 基于无线通信的数字钥匙实验系统（C题）\n", "基于无线通信的数字钥匙实验系统"),
+        ("电动小车动态无线充电系统（A 题）\n", "电动小车动态无线充电系统"),
+    ],
+)
+def test_topic_short_title_extracts_short_name_from_first_line(problem_text, expected):
+    """首行短题名提取：去掉 markdown 标题符 / 行首题号前缀 / 行尾（题号/组别）括号。"""
+    assert topic_short_title(problem_text) == expected
+
+
+def test_topic_short_title_keeps_unparseable_first_line():
+    """首行没有题号/括号形态 → 原样保留（不猜不删）。"""
+    assert topic_short_title("2026C 数字钥匙题面全文（长 PDF 拆条入库）") == (
+        "2026C 数字钥匙题面全文（长 PDF 拆条入库）"
+    )
+
+
+def test_topic_dir_title_prefixes_key():
+    assert topic_dir_title("2024H", "自动行驶小车（H 题）\n") == "2024H 自动行驶小车"
+    assert topic_dir_title("2021F", "智能送药小车（F题）\n") == "2021F 智能送药小车"
 
 
 def test_windows_safe_folder_name_cleans_invalid_chars_and_empty_title():
