@@ -414,6 +414,33 @@ def test_revise_analyze_missing_problem_text_errors(analyze_client):
     assert "题面" in resp.json()["detail"]
 
 
+def test_revise_analyze_accepts_supplied_problem_text(analyze_client):
+    """补题面闭环：历史目录缺题面 → 请求带 problem_text 覆盖 → 可分析。"""
+    client, holder, tmp_path = analyze_client
+    out = tmp_path / "hist"
+    out.mkdir()
+    (out / "project.uvprojx").write_text("<Project/>", encoding="utf-8")
+    (out / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
+    holder["llm"] = FakeLLM(
+        impact_analysis=ImpactAnalysis(
+            impacts=(QaImpact(qa_index=1, reason="确认原方案"),),
+            suggested_slugs=["delay", "dht11"],
+        )
+    )
+    resp = client.post(
+        "/api/revise/analyze",
+        json={
+            "output_dir": str(out),
+            "new_qa_text": "新答疑",
+            "problem_text": "2024 巡线小车赛题",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    events = _sse_events(resp)
+    assert events[-1][0] == "done"
+    assert events[-1][1]["suggested_slugs"] == ["delay", "dht11"]
+
+
 # ---------------------------------------------------------------------------
 # LLM 传输层：analyze_impact 的解析与重试兜底（_retry_parse 契约）
 # ---------------------------------------------------------------------------
