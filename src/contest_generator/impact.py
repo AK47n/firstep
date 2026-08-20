@@ -15,10 +15,11 @@ ImpactError（400 中文，登记 errors.py）——模型输出不可信，宁�
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+from .events import EVENT_DIFF_READY, EVENT_IMPACT_ANALYZING, ProgressEvent
 from .manifest import ManifestSummary
 from .selection import PlatformWarning, resolve_selection
 
@@ -110,7 +111,10 @@ def compute_module_diff(old_slugs: Sequence[str], new_slugs: Sequence[str]) -> M
 
 
 def build_impact_analysis(
-    raw: Mapping[str, Any], *, known_slugs: Sequence[str]
+    raw: Mapping[str, Any],
+    *,
+    known_slugs: Sequence[str],
+    qa_count: int | None = None,
 ) -> ImpactAnalysis:
     """把模型输出的原始 JSON（llm 已解析为 dict）解析校验为 ImpactAnalysis。
 
@@ -123,6 +127,14 @@ def build_impact_analysis(
     数组且全部已知 slug（库外 = 幻觉大声失败，宁严勿假绿）。缺字段 = 补空
     （旧版本模型输出容忍），但 suggested_slugs 缺失 / 非数组 = 大声失败
     （diff 与修订执行必需）。
+
+    qa_count（可选，前端数出的新 Q&A 条数）给定时校验「逐条覆盖」：impacts
+    的 qa_index 恰好覆盖 1..qa_count 且不重复（贴 3 条只回 1 条 = 漏判，大声
+    失败）；不给 = 不校验（向后兼容，旧调用方行为不变）。
+
+    一致性校验（宁严勿假绿）：每条 add 的模块必须在建议最终集内、每条
+    remove 的模块不得在建议最终集内——模型声称「增 X」而最终集无 X =
+    展示自相矛盾，大声失败。
     """
     if not isinstance(raw, Mapping):
         raise ImpactError("影响分析输出必须是 JSON 对象")
@@ -132,6 +144,7 @@ def build_impact_analysis(
     if not isinstance(raw_impacts, list):
         raise ImpactError("影响分析缺少 impacts 数组")
     impacts: list[QaImpact] = []
+    seen_indexes: set[int] = set()
     for index, item in enumerate(raw_impacts, 1):
         if not isinstance(item, Mapping):
             raise ImpactError(f"影响分析第 {index} 条不是对象")
@@ -142,6 +155,9 @@ def build_impact_analysis(
             or qa_index < 1
         ):
             raise ImpactError(f"影响分析第 {index} 条的 qa_index 必须是正整数")
+        if qa_index in seen_indexes:
+            raise ImpactError(f"影响分析第 {index} 条的 qa_index {qa_index} 重复")
+        seen_indexes.add(qa_index)
         reason = item.get("reason", "")
         if not isinstance(reason, str) or not reason.strip():
             raise ImpactError(f"影响分析第 {index} 条缺少理由（reason）")
@@ -172,6 +188,32 @@ def build_impact_analysis(
         raise ImpactError(
             "建议模块集含库外模块：" + "、".join(unknown) + " —— 请核对模块库"
         )
+    if len(set(raw_slugs)) != len(raw_slugs):
+        raise ImpactError("建议模块集含重复 slug（diff 由集合差计算，重复 = 数据歧义）")
+    suggested = set(raw_slugs)
+    for impact in impacts:
+        stray_add = [slug for slug in impact.add if slug not in suggested]
+        if stray_add:
+            raise ImpactError(
+                f"Q&A {impact.qa_index} 建议新增模块不在最终模块集内："
+                + "、".join(stray_add)
+                + " —— 建议集与影响结论自相矛盾"
+            )
+        stray_remove = [slug for slug in impact.remove if slug in suggested]
+        if stray_remove:
+            raise ImpactError(
+                f"Q&A {impact.qa_index} 建议移除的模块仍在最终模块集内："
+                + "、".join(stray_remove)
+                + " —— 建议集与影响结论自相矛盾"
+            )
+    if qa_count is not None:
+        if seen_indexes != set(range(1, qa_count + 1)):
+            missing_indexes = sorted(set(range(1, qa_count + 1)) - seen_indexes)
+            raise ImpactError(
+                "影响分析未覆盖全部新 Q&A：缺 "
+                + "、".join(str(i) for i in missing_indexes)
+                + f"（共 {qa_count} 条，应逐条给出影响结论）"
+            )
     return ImpactAnalysis(
         impacts=tuple(impacts), suggested_slugs=tuple(raw_slugs)
     )
@@ -207,29 +249,35 @@ def run_impact_analysis(
     platform: str,
     library_dir: Path,
     emit: SseEmitter,
+    qa_count: int | None = None,
 ) -> dict[str, Any]:
     """/api/revise/analyze 的两段编排（工单 02 第一段：分析）。
 
     影响分析（LLM，分钟级）→ 确定性 diff（集合差纯函数）→ 平台警告按建议
     模块集重算（resolve_selection 复用——缺版本 / 未验证 / 硬件绑定三类）。
     进度事件：impact_analyzing（LLM 调用开始）→ diff_ready（diff 就绪）。
+    qa_count（可选）= 新 Q&A 条数（前端数出），透传解析层做「逐条覆盖」
+    校验（缺判大声失败）。
     返回 done 载荷（终态由路由 emit.done 收尾，终态保证归运行器）：
     {"impacts": [...], "suggested_slugs": [...], "diff": {...},
     "warnings": [...], "platform": ...}——JSON 形状稳定，前端可渲染可放弃。
     """
-    emit.progress(_impact_event("impact_analyzing"))
+    emit.progress(
+        ProgressEvent(type=EVENT_IMPACT_ANALYZING)  # 词表单源 = events.py
+    )
     analysis = llm.analyze_impact(
         problem_text=problem_text,
         requirements=requirements,
         current_slugs=current_slugs,
         manifest_summaries=manifest_summaries,
         new_qa_text=new_qa_text,
+        qa_count=qa_count,
     )
     diff = compute_module_diff(current_slugs, analysis.suggested_slugs)
     warnings = resolve_selection(
         library_dir, platform, analysis.suggested_slugs
     ).warnings
-    emit.progress(_impact_event("diff_ready"))
+    emit.progress(ProgressEvent(type=EVENT_DIFF_READY))
     return {
         "impacts": [impact.to_dict() for impact in analysis.impacts],
         "suggested_slugs": list(analysis.suggested_slugs),
@@ -246,10 +294,3 @@ def warning_to_dict(warning: PlatformWarning) -> dict[str, Any]:
         "kind": warning.kind,
         "message": warning.message,
     }
-
-
-def _impact_event(event_type: str):
-    """影响分析进度事件（事件词表唯一出处 = events.py；本层只装配）。"""
-    from .events import ProgressEvent
-
-    return ProgressEvent(type=event_type)

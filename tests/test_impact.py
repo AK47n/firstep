@@ -28,7 +28,6 @@ from tests.fakes import (
     make_fake_master_project,
     make_fake_module_library,
 )
-from tests.test_context_manifest import _DummyLLM  # 复用：加载 API 不触 LLM 的桩
 
 
 # ---------------------------------------------------------------------------
@@ -130,9 +129,76 @@ def test_build_impact_analysis_rejects_bad_qa_index_and_reason():
         )
 
 
+def test_build_impact_analysis_rejects_duplicate_slugs():
+    """建议模块集重复 slug → 大声失败（diff 集合差会出重复条目，数据歧义）。"""
+    with pytest.raises(ImpactError, match="重复"):
+        build_impact_analysis(
+            {"impacts": [], "suggested_slugs": ["delay", "delay"]},
+            known_slugs=["delay"],
+        )
+
+
 def test_build_impact_analysis_rejects_non_list_impacts():
     with pytest.raises(ImpactError, match="impacts"):
         build_impact_analysis({"impacts": {}}, known_slugs=[])
+
+
+def test_build_impact_analysis_qa_count_coverage():
+    """qa_count 给定时逐条覆盖校验：漏判（贴 3 条只回 1 条）→ 大声失败。"""
+    base = {
+        "impacts": [{"qa_index": 1, "reason": "确认原方案"}],
+        "suggested_slugs": [],
+    }
+    with pytest.raises(ImpactError, match="未覆盖"):
+        build_impact_analysis(base, known_slugs=[], qa_count=3)
+    # 完整覆盖（含乱序）→ 通过
+    analysis = build_impact_analysis(
+        {
+            "impacts": [
+                {"qa_index": 3, "reason": "第三条"},
+                {"qa_index": 1, "reason": "第一条"},
+                {"qa_index": 2, "reason": "第二条"},
+            ],
+            "suggested_slugs": [],
+        },
+        known_slugs=[],
+        qa_count=3,
+    )
+    assert len(analysis.impacts) == 3
+
+
+def test_build_impact_analysis_rejects_duplicate_qa_index():
+    with pytest.raises(ImpactError, match="重复"):
+        build_impact_analysis(
+            {
+                "impacts": [
+                    {"qa_index": 1, "reason": "a"},
+                    {"qa_index": 1, "reason": "b"},
+                ],
+                "suggested_slugs": [],
+            },
+            known_slugs=[],
+        )
+
+
+def test_build_impact_analysis_consistency_add_remove():
+    """一致性校验：add 不在最终集 / remove 仍在最终集 → 大声失败。"""
+    with pytest.raises(ImpactError, match="自相矛盾"):
+        build_impact_analysis(
+            {
+                "impacts": [{"qa_index": 1, "add": ["motor"], "reason": "要电机"}],
+                "suggested_slugs": ["delay"],
+            },
+            known_slugs=["delay", "motor"],
+        )
+    with pytest.raises(ImpactError, match="自相矛盾"):
+        build_impact_analysis(
+            {
+                "impacts": [{"qa_index": 1, "remove": ["oled"], "reason": "不要屏"}],
+                "suggested_slugs": ["delay", "oled"],
+            },
+            known_slugs=["delay", "oled"],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +251,7 @@ def test_run_impact_analysis_full_pipeline(fake_module_library, tmp_path):
 
 
 def test_run_impact_analysis_warnings_recomputed(fake_module_library, tmp_path):
-    """平台警告按建议模块集重算：建议集含无 stm32 版本的模块 → missing 警告。"""
+    """平台警告按建议模块集重算：建议集含未验证模块 → unverified 警告。"""
     llm = FakeLLM(
         impact_analysis=ImpactAnalysis(
             suggested_slugs=["delay", "dht11", "broken"],  # broken 无 stm32 版本
@@ -346,3 +412,76 @@ def test_revise_analyze_missing_problem_text_errors(analyze_client):
     )
     assert resp.status_code == 400
     assert "题面" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# LLM 传输层：analyze_impact 的解析与重试兜底（_retry_parse 契约）
+# ---------------------------------------------------------------------------
+
+
+def _api_response(content: str) -> str:
+    """模拟 Chat Completions 响应包络（test_llm 同款）。"""
+    return json.dumps({"choices": [{"message": {"content": content}}]})
+
+
+def _deepseek_llm(transport) -> "DeepSeekLLM":
+    from contest_generator.config import AppConfig
+    from contest_generator.llm import DeepSeekLLM
+
+    return DeepSeekLLM(
+        AppConfig(base_url="https://api.deepseek.com", api_key="sk-test"),
+        transport=transport,
+    )
+
+
+def test_analyze_impact_parses_valid_response():
+    """合法响应 → ImpactAnalysis（建议集 + 影响结论）。"""
+    from tests.fakes import FakeTransport
+
+    body = json.dumps(
+        {
+            "impacts": [{"qa_index": 1, "reason": "确认原方案"}],
+            "suggested_slugs": [],
+        }
+    )
+    llm = _deepseek_llm(FakeTransport(body=_api_response(body)))
+    result = llm.analyze_impact(
+        problem_text="题面",
+        requirements=(),
+        current_slugs=[],
+        manifest_summaries=(),
+        new_qa_text="Q&A",
+    )
+    assert result.suggested_slugs == ()
+    assert result.impacts[0].qa_index == 1
+
+
+class _SequenceTransport:
+    """按调用顺序返回固定响应列表的传输假件（test_llm.SequenceTransport 同款）。"""
+
+    def __init__(self, responses: list[str]) -> None:
+        self._responses = list(responses)
+        self.calls: list[str] = []
+
+    def post(self, url, headers, payload, timeout):
+        self.calls.append(url)
+        return 200, self._responses.pop(0), {}
+
+
+def test_analyze_impact_retries_on_malformed_output(monkeypatch):
+    """非法输出（缺 suggested_slugs）→ 整次重问（_retry_parse 兜底），
+    第二次合法 → 成功（工单验收 4：非法输出重试兜底）。"""
+    first = _api_response(json.dumps({"impacts": []}))  # 缺 suggested_slugs
+    second = _api_response(json.dumps({"impacts": [], "suggested_slugs": []}))
+    transport = _SequenceTransport([first, second])
+    monkeypatch.setattr("contest_generator.llm._backoff_sleep", lambda s: None)
+    llm = _deepseek_llm(transport)
+    result = llm.analyze_impact(
+        problem_text="题面",
+        requirements=(),
+        current_slugs=[],
+        manifest_summaries=(),
+        new_qa_text="Q&A",
+    )
+    assert result.suggested_slugs == ()
+    assert len(transport.calls) == 2  # 一次失败重问 + 一次成功
