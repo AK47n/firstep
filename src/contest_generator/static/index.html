@@ -3726,8 +3726,10 @@ function clearReviseTelemetry(slot) {
 
 function reviseSetBusy(busy) {
   revise.busy = busy;
+  // 禁用集合含回滚按钮：深化 SSE / 写盘 / 编译进行中不允许并发回滚；
+  // 回滚按钮默认 hidden 由 class 控制，disabled 不影响其 hidden 状态。
   ["btn-revise-analyze", "btn-revise-apply", "btn-revise-deepen",
-   "btn-revise-session", "btn-revise-load-dir"].forEach((id) => { $(id).disabled = busy; });
+   "btn-revise-session", "btn-revise-load-dir", "btn-revise-rollback"].forEach((id) => { $(id).disabled = busy; });
 }
 
 function reviseResetAll() {
@@ -3785,7 +3787,9 @@ function reviseRenderContext() {
     : '<span class="muted">（空）</span>';
   $("revise-context-source").textContent = "（来源："
     + (revise.source === "manifest" ? "上下文清单直读" : "历史目录反推") + "）";
-  $("revise-problem").textContent = c.problem_text || "（缺失）";
+  // 题面展示优先用补题面输入框的值（非空时）：补题面后上下文区即时反映，无需重新加载
+  const problemFill = $("revise-problem-text").value.trim();
+  $("revise-problem").textContent = problemFill || c.problem_text || "（缺失）";
   $("revise-qa").textContent = c.qa_text || "（无）";
   const m = revise.missing || [];
   const warns = [];
@@ -3889,6 +3893,8 @@ function reviseRenderAnalysis(data) {
 
 /** 放弃分析结果：清空影响结论 / diff / 预填建议集，回到可重新分析的干净态。 */
 function reviseDiscard() {
+  // busy 守卫：分析 / 修订 / 深化进行中放弃无效（SSE 无法取消，完成后仍会渲染），直接忽略
+  if (revise.busy) { $("revise-analyze-msg").textContent = "流程进行中，请等待完成后再放弃"; return; }
   revise.analysis = null;
   $("revise-analysis").classList.add("hidden");
   $("revise-analysis").innerHTML = "";
@@ -3947,6 +3953,9 @@ async function reviseApply() {
   if (!slugs.length) { $("revise-exec-msg").textContent = "请填写确认模块集（逗号分隔，可编辑）"; return; }
   if (!qa) { $("revise-exec-msg").textContent = "请先粘贴新 Q&A 文本（修订的 diff 记录需要 Q&A 原文）"; return; }
   const body = { output_dir: revise.outputDir, confirmed_slugs: slugs, new_qa_text: qa };
+  // 补题面覆盖回传：与分析入口一致，输入框有值即带（后端 apply 端点支持 payload.problem_text）
+  const fill = $("revise-problem-text").value.trim();
+  if (fill) body.problem_text = fill;
   if (revise.analysis && (revise.analysis.impacts || []).length) body.impacts = revise.analysis.impacts;
   reviseSetBusy(true);
   $("revise-exec-msg").textContent = "";
@@ -3987,6 +3996,11 @@ function reviseRenderApplyDone(data) {
   }
   parts.push('<div class="reason" style="margin-top:8px">备份：<span class="slug">' + esc(data.backup_id || "—")
     + "</span> · 修订时间：" + esc(data.generated_at || "—") + "</div>");
+  // 用户故事 10：diff 记录含 Q&A 原文——展示本次并入的 Q&A 全文（esc 转义 + pre-wrap 保留换行）
+  if (data.qa_text) {
+    parts.push('<div class="reason" style="margin-top:8px;white-space:pre-wrap"><strong>本次并入 Q&A：</strong>'
+      + esc(data.qa_text) + "</div>");
+  }
   parts.push("</div>");
   box.innerHTML = parts.join("");
   box.classList.remove("hidden");
@@ -4009,7 +4023,11 @@ async function reviseRunDeepen() {
   $("revise-exec-status").textContent = "请求中…";
   clearReviseTelemetry("exec");
   try {
-    const data = await reviseRunSSE("/api/revise/deepen", { output_dir: revise.outputDir }, {
+    const body = { output_dir: revise.outputDir };
+    // 补题面覆盖回传：深化同样需要题面证据（与 analyze / apply 入口一致）
+    const fill = $("revise-problem-text").value.trim();
+    if (fill) body.problem_text = fill;
+    const data = await reviseRunSSE("/api/revise/deepen", body, {
       deepening_start: () => { $("revise-exec-status").textContent = "AI 填 TODO 中…（分钟级调用，请等待）"; },
       compile_start: () => { $("revise-exec-status").textContent = "编译中…"; },
       fix_start: () => { $("revise-exec-status").textContent = "AI 修复中…（首轮编译未过，自动修复一轮）"; },
@@ -4100,6 +4118,12 @@ $("btn-revise-discard").addEventListener("click", reviseDiscard);
 $("btn-revise-apply").addEventListener("click", reviseApply);
 $("btn-revise-deepen").addEventListener("click", reviseDeepen);
 $("btn-revise-rollback").addEventListener("click", reviseRollback);
+// 补题面输入即时更新上下文区题面展示（无需重新加载；无输入时回落到上下文清单值）
+$("revise-problem-text").addEventListener("input", () => {
+  const fill = $("revise-problem-text").value.trim();
+  $("revise-problem").textContent = fill
+    || (revise.context && revise.context.problem_text) || "（缺失）";
+});
 
 // ---------------------------------------------------------------------------
 // 模块库页
