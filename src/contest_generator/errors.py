@@ -20,6 +20,7 @@ from .ccs import CcsProjectError
 from .compile_runner import CompileRunnerError
 from .config import ConfigError
 from .context_manifest import ContextError
+from .deepen import DeepenError
 from .extraction import ExtractionError
 from .fix_errors import FixError
 from .generator import (
@@ -91,6 +92,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ContextError,  # 上下文清单损坏 / 形状非法 / 平台无法识别（工单 revise-deepen/01）
             ImpactError,  # 影响分析输出非法（工单 revise-deepen/02）：缺数组 / 未知 slug / 字段类型错
             RevisionError,  # 修订执行失败（工单 revise-deepen/03）：备份缺失 / 回滚目标非法
+            DeepenError,  # 深化失败（工单 revise-deepen/04）：main.c 缺失 / 深化结果为空
         ),
         400,
         str,

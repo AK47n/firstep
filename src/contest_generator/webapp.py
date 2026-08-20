@@ -55,6 +55,7 @@ from .context_manifest import (
     read_project_main_c,
     validate_context_fields,
 )
+from .deepen import DeepenError, run_deepen
 from .errors import error_entry
 from .events import EVENT_CACHE_HIT, ProgressEvent
 from .extraction import (
@@ -1419,6 +1420,75 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             output_dir,
         )
         return {"restored": list(restored)}
+
+    # ------------------------------------------------------------------
+    # 修订与深化 · 深化（工单 revise-deepen/04）：AI 按功能需求填 main.c
+    # TODO + 编译验证闭环（绿 = 已验证；无工具链 = 大声降级）。域判决在
+    # deepen.py（对照 run_recommendation 先例），路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/revise/deepen")
+    @_map_errors
+    def revise_deepen(payload: dict) -> StreamingResponse:
+        """深化（SSE 流）：填 TODO → 备份 → 写盘 → 编译验证闭环 → 完成。
+
+        请求体契约：output_dir（必填，生成结果目录）；main_c（可选，深化前
+        的 main.c 内容——缺省 = 服务端现读磁盘，手工编辑天然保留）。
+
+        事件序列：deepening_start（LLM 填 TODO）→ compile_start（编译中）→
+        fix_start（失败修复中，仅首轮编译失败时）→ verify_result → done
+        （{"status": verified | unverified | failed, "backup_id", "compile",
+        "message"}）或 error（中文信息）→ 流结束。无工具链 = 大声降级
+        （status = unverified，结果保留）；修一轮仍红 = failed。HTTP 200 起流，
+        失败以流内 error 事件收尾（sse 运行器终态保证）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise ContextError(f"输出目录不存在：{output_dir}")
+        main_c = _optional_str(payload, "main_c")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if not main_c:
+            main_c = read_project_main_c(output_dir)
+        if not main_c:
+            raise DeepenError("工程 main.c 为空，无法深化（请先生成或修订工程）")
+        platform = fields["platform"]
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("revise-deepen")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_deepen(
+                        llm=llm,
+                        problem_text=fields.get("problem_text", ""),
+                        qa_text=fields.get("qa_text", ""),
+                        requirements=fields.get("requirements") or (),
+                        manifests=resolved.manifests,
+                        platform=platform,
+                        library_dir=module_library_dir,
+                        master_project_dir=master_project_dir(
+                            config.masters_dir, platform
+                        ),
+                        main_c=main_c,
+                        output_dir=output_dir,
+                        work_root=config.masters_dir.parent,
+                        emit=emit,
+                        uv4_override=config.uv4_path,
+                        make_override=config.gmake_path,
+                        module_slugs=fields["slugs"],
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
 
     # ------------------------------------------------------------------
     # 编译错误修复（工单 compile-error-fix/01）：贴报错 → LLM 修复 →

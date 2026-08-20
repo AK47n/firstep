@@ -169,6 +169,22 @@ SKELETON_NO_UNUSED_RULE = (
     "编译警告，验收要求 0 警告）。"
 )
 
+# 深化系统提示词（工单 revise-deepen/04）：按功能需求清单逐条填充 main.c 的
+# TODO 预留区——输出与需求清单对应（逐条可追踪，不做题外发挥）；只调真实
+# 接口；保证可编译。深化不设自动循环，用户可重复触发。
+DEEPEN_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师。在现有 main.c 骨架上按功能需求清单逐条填充 TODO "
+    "预留区（赛题文本 / 接口过长可能被截断，见末尾标注，"
+    + TRUNCATION_NOTICE
+    + "）：每条需求对应一段实现（可跨函数），不要遗漏任何一条需求、不要实现"
+    "需求清单之外的功能（禁止题外发挥）；只调用给定接口中真实存在的函数，"
+    "绝不凭空造函数；保留原有初始化序列与已有代码（那是用户可能手工编辑过的"
+    "内容），只填充 TODO 预留区。"
+    + SKELETON_NO_UNUSED_RULE
+    + "输出完整 main.c（整个文件，不是片段），纯 C 代码，不要用 ``` 或 ~~~ "
+    "代码围栏包裹，不要输出任何 Markdown 标记。"
+)
+
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
 SKELETON_INTERFACES_HEADING = "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："
 
@@ -905,6 +921,15 @@ class LLM(Protocol):
         new_qa_text: str,
         qa_count: int | None = None,
     ) -> ImpactAnalysis: ...
+
+    def deepen_main_c(
+        self,
+        main_c: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -1846,6 +1871,32 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def deepen_main_c(
+        self,
+        main_c: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        """深化（工单 revise-deepen/04）：按功能需求逐条填充 main.c 的 TODO。
+
+        输入 = 现有 main.c（含 TODO）+ 功能需求清单 + 模块接口清单 + 题面与
+        Q&A；输出 = 实现后的 main.c 全文（文本模式，非 JSON——输出就是代码）。
+        需求清单逐条注入（每条需求一行，带序号），prompt 要求逐条对应、不做
+        题外发挥；接口块与骨架同源（build_skeleton_interfaces），保证只调真实
+        函数。瞬时失败整次重问（_retry_parse，与骨架同款兜底）。
+        """
+        return self._retry_parse(
+            system_prompt=DEEPEN_SYSTEM_PROMPT,
+            user_prompt=_deepen_user_prompt(
+                main_c, requirements, module_interfaces, problem_text, qa_text
+            ),
+            parse=lambda content: content,
+            label="深化实现",
+            operation="deepen_main_c",
+        )
+
     def _observe_call(
         self,
         *,
@@ -2343,6 +2394,19 @@ class RoutingLLM:
             qa_count,
         )
 
+    def deepen_main_c(
+        self,
+        main_c: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        # 深化走 remote（质量优先，不进本地方法集）
+        return self._remote.deepen_main_c(
+            main_c, requirements, module_interfaces, problem_text, qa_text
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -2711,6 +2775,36 @@ def _clarify_user_prompt(
         "只返回 json 格式的 JSON 对象："
         '{"questions": ["仍存的疑问，没有疑问时为空数组"]}'
     )
+    return "\n".join(lines)
+
+
+def _deepen_user_prompt(
+    main_c: str,
+    requirements: Sequence[Mapping[str, Any]],
+    module_interfaces: Sequence[str],
+    problem_text: str,
+    qa_text: str,
+) -> str:
+    """深化的 user 消息（工单 revise-deepen/04）：题面 + 需求清单 + 接口 +
+    Q&A + 现有 main.c。各段截断带标注（_truncate_content / _fit_fulltext_wire
+    同款预算）。"""
+    lines = ["赛题：", _truncate_content(problem_text)]
+    if qa_text:
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+    if requirements:
+        req_lines = ["", "功能需求清单（逐条填充，不要遗漏、不要题外发挥）："]
+        for index, req in enumerate(requirements, 1):
+            requirement = req.get("requirement", "") if isinstance(req, Mapping) else ""
+            lines_note = (
+                f"（题面句子 {req.get('sentence', '')}）"
+                if isinstance(req, Mapping) and req.get("sentence")
+                else ""
+            )
+            req_lines.append(f"{index}. {requirement}{lines_note}")
+        lines += req_lines
+    lines += ["", "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："]
+    lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += ["", "现有 main.c（在 TODO 预留区填充实现，其余内容原样保留）：", main_c]
     return "\n".join(lines)
 
 

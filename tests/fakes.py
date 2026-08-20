@@ -593,6 +593,7 @@ class FakeLLM:
         topic_summary: str = "AI 生成的赛题简介",
         fixes: tuple[FixSuggestion, ...] = (),
         impact_analysis: ImpactAnalysis | None = None,
+        deepened_main_c: str = "",
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -604,6 +605,7 @@ class FakeLLM:
         self._topic_summary = topic_summary
         self._fixes = fixes
         self._impact_analysis = impact_analysis or ImpactAnalysis()
+        self._deepened_main_c = deepened_main_c
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
@@ -622,6 +624,7 @@ class FakeLLM:
         self.impact_calls: list[
             tuple[str, tuple, tuple, tuple, str]
         ] = []
+        self.deepen_calls: list[tuple[str, tuple, tuple, str, str]] = []
 
     def select_modules(
         self,
@@ -749,6 +752,21 @@ class FakeLLM:
         )
         return self._impact_analysis
 
+    def deepen_main_c(
+        self,
+        main_c: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        self.deepen_calls.append(
+            (main_c, tuple(requirements), tuple(module_interfaces), problem_text, qa_text)
+        )
+        return self._deepened_main_c or main_c.replace(
+            "/* TODO */", "/* 已实现 */"
+        )
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -869,6 +887,17 @@ class RecordingLLM:
     ) -> ImpactAnalysis:
         self._record("analyze_impact")
         return ImpactAnalysis()
+
+    def deepen_main_c(
+        self,
+        main_c: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        self._record("deepen_main_c")
+        return main_c
 
 
 class RecordingPatcher:
