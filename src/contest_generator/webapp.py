@@ -152,6 +152,7 @@ from .reference_library import (
     resolve_entry_file,
     search_references,
 )
+from .revision import restore_revision, revise_backup_root, run_revision
 from .selection import parse_instances, parse_score_points, resolve_selection, run_recommendation
 from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
@@ -1306,6 +1307,102 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             run_sse(run, error_message=_error_message),
             headers={"Content-Type": "text/event-stream"},
         )
+
+    # ------------------------------------------------------------------
+    # 修订与深化 · 修订执行（工单 revise-deepen/03）：确认载荷 → 备份 →
+    # 覆盖式重生成 → diff 记录；回滚 = 恢复备份。域判决在 revision.py
+    # （对照 run_recommendation 先例），路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/revise/apply")
+    @_map_errors
+    def revise_apply(payload: dict) -> StreamingResponse:
+        """修订执行（SSE 流）：备份 → （模块集变化时）重生成 → 完成（diff 记录）。
+
+        请求体契约：output_dir（必填，生成结果目录）；confirmed_slugs（必填，
+        用户确认后的模块集——影响分析的 diff 展示后由用户确认）；new_qa_text
+        （必填，本次修订的新 Q&A 原文，进 diff 记录与上下文清单）；impacts
+        （可选，影响结论记录，随 diff 记录留痕）。
+
+        事件序列：revision_backup（整树备份）→ revision_generating（重生成
+        中，仅模块集变化时）→ done（{"backup_id", "regenerated", "diff":
+        {"added", "removed"}, "qa_text", "output_dir", "generated_at"}）或
+        error（中文信息）→ 流结束。失败路径：备份成功但重生成失败 → error
+        终态（备份保留 = 目录保持可回滚）。HTTP 200 起流，失败以流内 error
+        事件收尾（sse 运行器终态保证）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise ContextError(f"输出目录不存在：{output_dir}")
+        confirmed_slugs = _require_str_list(payload, "confirmed_slugs")
+        new_qa_text = _require_str(payload, "new_qa_text")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        # 确认载荷的形状校验（平台 / 绑定 / 多实例 / 副产物模板）——库外模块
+        # 在 validate 拦（400 中文，前端手动勾选兜底）
+        validate_context_fields(fields, module_library_dir)
+        bindings = fields.get("bindings") or None
+        instances = parse_instances(
+            fields.get("instances") or None, known_slugs=confirmed_slugs
+        )
+        python_templates = fields.get("python_templates") or None
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("revise-apply")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_revision(
+                        llm=llm,
+                        problem_text=fields.get("problem_text", ""),
+                        qa_text=fields.get("qa_text", ""),
+                        requirements=fields.get("requirements") or (),
+                        references=fields.get("references") or (),
+                        current_slugs=fields["slugs"],
+                        confirmed_slugs=confirmed_slugs,
+                        new_qa_text=new_qa_text,
+                        platform=fields["platform"],
+                        library_dir=module_library_dir,
+                        masters_dir=config.masters_dir,
+                        output_dir=output_dir,
+                        backup_root=revise_backup_root(
+                            config.masters_dir.parent
+                        ),
+                        bindings=bindings,
+                        instances=instances,
+                        python_templates=python_templates,
+                        emit=emit,
+                        tool_version=__version__,
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    @app.post("/api/revise/rollback")
+    @_map_errors
+    def revise_rollback(payload: dict) -> dict:
+        """修订回滚（同步端点）：把 <backup_root>/<backup_id>/ 备份内容整体
+        恢复回输出目录（回滚 = 目录内容恢复为备份内容，修订残留全清）。
+
+        backup_id 必须是安全目录名（is_unsafe_path 拒绝对 `..` / 绝对路径）；
+        备份或输出目录不存在 → RevisionError（400 中文）。返回恢复的文件
+        相对路径列表。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        backup_id = _require_str(payload, "backup_id")
+        restored = restore_revision(
+            revise_backup_root(_require_config(context).masters_dir.parent),
+            backup_id,
+            output_dir,
+        )
+        return {"restored": list(restored)}
 
     # ------------------------------------------------------------------
     # 编译错误修复（工单 compile-error-fix/01）：贴报错 → LLM 修复 →

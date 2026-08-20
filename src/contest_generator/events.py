@@ -66,6 +66,13 @@ EVENT_CACHE_HIT = "cache_hit"
 EVENT_IMPACT_ANALYZING = "impact_analyzing"
 EVENT_DIFF_READY = "diff_ready"
 
+# 修订执行（工单 revise-deepen/03）的事件类型：revision_backup = 整树备份
+# 中；revision_generating = 覆盖式重生成中（骨架 LLM + 生成管线，仅模块集
+# 变化时发射）。done 的 data = diff 记录（backup_id / regenerated / diff /
+# qa_text / output_dir / generated_at）。
+EVENT_REVISION_BACKUP = "revision_backup"
+EVENT_REVISION_GENERATING = "revision_generating"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；
