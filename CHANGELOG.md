@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=68003f9942a3e58bc2d73418266b6ed45799e217 -->
+<!-- changelog-auto: last-commit=cac660256bfca0b1953681bffac7325c9a112a48 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 00:52 赛题答疑 Q&A 输入框显示高度 4 行调 6 行 + 说明点明可输入任意多行（rows 非上限）
 - 01:01 gmake 探测补 CCS 自带路径与 mingw32-make 兜底——Windows 上 CCS 的 gmake 不在 PATH、MinGW 的 make 名为 mingw32-make，之前漏探显示 ❌（实测 C:/ti/ccs2050 自带 + C:/mingw64 均可用）
 - 01:08 推荐缓存加模块库指纹——library_sha256 = ManifestSummary 摘要行排序 hash，库变（模块增删/简介/能力/多实例标注）缓存失效走真实推荐，旧缓存无字段保守失效（工单 recommend-cache-fingerprint/01，backlog 清零）
+- 11:19 赛题条目补图注
 
 ## 2026-08-19
 - 00:02 费用估算按缓存命中/未命中拆分计价（DeepSeek Flash 官方两档输入价）
