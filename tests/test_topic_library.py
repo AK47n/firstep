@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -648,6 +649,40 @@ def test_enrich_topic_annotations_idempotent_on_figure_notes(topic_root, pdf, mo
     assert entry.problem_md == TOPIC_MD_FILENAME
 
 
+def test_enrich_topic_image_notes_skips_shared_pdf(topic_root, pdf, monkeypatch):
+    """共享 PDF 守卫（2024H 复盘）：同一 PDF 被多个条目共引（真题汇总 PDF）
+    → 跳过补图注——全文档图注提取没有页范围信息，会把其它题的 [图N 标注]
+    追进当前题面（曾把约 280 行别的题的图注追加进 2024H 并自动提交）。"""
+    from contest_generator import topic_library
+
+    confirm_topics(
+        topic_root,
+        pdf,
+        (
+            TopicDraft(year="2026", number="C", problem_text="2026C 系统功能如图1所示。"),
+            TopicDraft(year="2026", number="D", problem_text="2026D 系统功能如图2所示。"),
+        ),
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_figure_annotations",
+        lambda *a, **k: calls.append("x") or "[图1 标注]\n其它题的标注",
+    )
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_image_notes",
+        lambda *a, **k: calls.append("x") or "[示意图1]",
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+
+    assert entry.problem_text == "2026C 系统功能如图1所示。"  # 原样，没追尾
+    assert calls == []  # 一次图注提取都没跑
+
+
 def test_resolve_number_corrupt_manifest_raises(topic_root, pdf):
     confirm_topics(topic_root, pdf, (DRAFTS[0],))
     (topic_root / KEY_2026C / MANIFEST_FILENAME).write_text(
@@ -1064,3 +1099,59 @@ def test_topics_delete_bad_key_returns_400(topic_context):
 
     assert response.status_code == 400
     assert "编号" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 真库不变量：赛题题面无跨题污染（修订前置排查修复，防拆条串页回退）
+# ---------------------------------------------------------------------------
+
+TOPICS_ROOT = Path(__file__).resolve().parents[1] / "library" / "topics"
+
+# 跨题污染黑名单：2017-2025 真题汇总 PDF 拆条串页时混入的其它题目特征词。
+# 本库 7 个赛题（2018C/2019A/2020C/2021F/2022C/2022H/2024H/2026C）无一
+# 涉及这些词，命中即红；新增赛题入库若真用到（如将来收录声源定位题），
+# 需人工更新词表。
+FOREIGN_TOPIC_MARKERS = (
+    "野生动物",
+    "播撒作业",
+    "用电器分析",
+    "线路故障",
+    "声源定位跟踪",
+    "总谐波失真",
+    "目标板和背景板",
+    "飞行器起降点",
+    "激光笔",
+)
+
+# 乱码签名（2024H 编码事故防回退）：GBK 误读 UTF-8 的高频产物——"锛"（（）、
+# "銆"（。）、"鐨"（的）、"鏄"（是）、"鑷"（自）等。正常中文题面不会出现
+# 这些生僻字；出现即文件被双重编码（UTF-8 字节按 GBK 误解码后重编码）。
+MOJIBAKE_SIGNATURES = ("锛", "銆", "鐨", "鏄", "鑷", "閬", "涓€")
+
+
+def test_real_topic_files_free_of_cross_topic_pollution():
+    """真库不变量：每份 topic.md 不得含其它题目的特征词（拆条串页防回退），
+    也不得含乱码签名（编码事故防回退）。
+
+    历史：2024H（78 行真题面后混入约 280 行声源定位/无人机播撒/用电器分析
+    等串页内容）、2021F（420 行中约 300 行垃圾）、2022C、2022H 均被同一本
+    真题汇总 PDF 串页污染——推荐 AI 读到的题面混入大量无关题目要求，推荐
+    质量失真（2024H 需要直线行驶却未推荐陀螺仪即典型受害场景）。已人工
+    清洗，本测试锁定防回退。清洗过程曾发生编码事故（PowerShell 按 GBK
+    读 UTF-8 再写回 = 双重编码乱码），签名词同时防该类回退。
+    """
+    assert TOPICS_ROOT.is_dir(), f"真库缺失：{TOPICS_ROOT}"
+    topics = [
+        p for p in TOPICS_ROOT.iterdir() if (p / TOPIC_MD_FILENAME).is_file()
+    ]
+    assert topics, "真库没有任何赛题条目"
+    foreign: list[str] = []
+    for topic in topics:
+        text = (topic / TOPIC_MD_FILENAME).read_text(encoding="utf-8")
+        for marker in FOREIGN_TOPIC_MARKERS:
+            if marker in text:
+                foreign.append(f"{topic.name}: 跨题污染 {marker}")
+        for sig in MOJIBAKE_SIGNATURES:
+            if sig in text:
+                foreign.append(f"{topic.name}: 疑似乱码 {sig}")
+    assert not foreign, "赛题题面异常：\n" + "\n".join(foreign)
