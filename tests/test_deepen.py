@@ -48,6 +48,27 @@ def _deepen_env(tmp_path):
     return library
 
 
+def _no_toolchain(monkeypatch):
+    """无工具链：resolve_compile_toolchain 抛 CompileRunnerError（与 /api/compile
+    起流前 400 同源，deepen 转降级）。"""
+    from contest_generator.compile_runner import CompileRunnerError
+
+    def _raise(platform, uv4_override="", make_override=""):
+        raise CompileRunnerError("未检测到工具链")
+
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain", _raise
+    )
+
+
+def _uv4_toolchain(monkeypatch, tmp_path):
+    """有工具链：resolve_compile_toolchain 返回 (UV4, None)。"""
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+
+
 def test_run_deepen_without_toolchain_degrades_loudly(tmp_path, monkeypatch):
     """无工具链 → 大声降级：结果保留、状态 = 未验证、备份可回滚、中文提示。"""
     from contest_generator.generator import generate_project
@@ -63,8 +84,7 @@ def test_run_deepen_without_toolchain_degrades_loudly(tmp_path, monkeypatch):
         masters_dir=tmp_path / "masters",
         problem_text="题面",
     )
-    monkeypatch.setattr("contest_generator.deepen.find_uv4", lambda override="": None)
-    monkeypatch.setattr("contest_generator.deepen.find_make", lambda override="": None)
+    _no_toolchain(monkeypatch)
     llm = FakeLLM(deepened_main_c="int main(void) { /* 已实现 */ while (1); }\n")
     events: list[str] = []
 
@@ -110,8 +130,7 @@ def test_run_deepen_verified_when_compile_passes(tmp_path, monkeypatch):
         masters_dir=tmp_path / "masters",
         problem_text="题面",
     )
-    monkeypatch.setattr("contest_generator.deepen.find_uv4", lambda override="": tmp_path / "UV4.exe")
-    monkeypatch.setattr("contest_generator.deepen.find_make", lambda override="": None)
+    _uv4_toolchain(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "contest_generator.deepen.collect_build_log",
         lambda platform, out_dir, uv4=None, make=None: _build(0),
@@ -158,8 +177,7 @@ def test_run_deepen_fixes_once_then_verifies(tmp_path, monkeypatch):
         masters_dir=tmp_path / "masters",
         problem_text="题面",
     )
-    monkeypatch.setattr("contest_generator.deepen.find_uv4", lambda override="": tmp_path / "UV4.exe")
-    monkeypatch.setattr("contest_generator.deepen.find_make", lambda override="": None)
+    _uv4_toolchain(monkeypatch, tmp_path)
     calls = {"n": 0}
 
     def fake_collect(platform, out_dir, uv4=None, make=None):
@@ -215,8 +233,7 @@ def test_run_deepen_failed_after_one_fix_round(tmp_path, monkeypatch):
         masters_dir=tmp_path / "masters",
         problem_text="题面",
     )
-    monkeypatch.setattr("contest_generator.deepen.find_uv4", lambda override="": tmp_path / "UV4.exe")
-    monkeypatch.setattr("contest_generator.deepen.find_make", lambda override="": None)
+    _uv4_toolchain(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "contest_generator.deepen.collect_build_log",
         lambda platform, out_dir, uv4=None, make=None: _build(2, "error: x"),
@@ -289,8 +306,7 @@ def test_revise_deepen_sse_flow_unverified(deepen_client, monkeypatch):
     client, holder, tmp_path = deepen_client
     output_dir = _generate_project(client, tmp_path)
     holder["llm"] = FakeLLM(deepened_main_c="int main(void) { /* 已实现 */ }\n")
-    monkeypatch.setattr("contest_generator.deepen.find_uv4", lambda override="": None)
-    monkeypatch.setattr("contest_generator.deepen.find_make", lambda override="": None)
+    _no_toolchain(monkeypatch)
     resp = client.post("/api/revise/deepen", json={"output_dir": output_dir})
     assert resp.status_code == 200, resp.text
     events = _sse_events(resp)
@@ -309,10 +325,7 @@ def test_revise_deepen_verified(deepen_client, monkeypatch):
     client, holder, tmp_path = deepen_client
     output_dir = _generate_project(client, tmp_path)
     holder["llm"] = FakeLLM(deepened_main_c="int main(void) { /* 已实现 */ }\n")
-    monkeypatch.setattr(
-        "contest_generator.deepen.find_uv4", lambda override="": tmp_path / "UV4.exe"
-    )
-    monkeypatch.setattr("contest_generator.deepen.find_make", lambda override="": None)
+    _uv4_toolchain(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "contest_generator.deepen.collect_build_log",
         lambda platform, out_dir, uv4=None, make=None: _build(0),
