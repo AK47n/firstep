@@ -237,6 +237,7 @@ def resolve_topic_context(
     reference_library_dir: Path,
     reference_ids: Sequence[str] = (),
     platform: str = "",
+    slugs: Sequence[str] = (),
 ) -> TopicContext:
     """生成入口素材装配：显式编号或粘贴题面中的编号（AI 理解）→ 完整赛题上下文。
 
@@ -259,6 +260,13 @@ def resolve_topic_context(
     平台过滤（工单 ref-platform-filter 模块侧对偶——本平台没有的模块不进
     候选，摘要行同源同滤，需求走库外建议）。recommend 传请求体 platform；
     skeleton / generate 不注入参考文件，传缺省（空串 = 不过滤）。
+
+    slugs（修订 revise-deepen 前置排查）：选中模块集 → 套件锚定只收选中
+    模块的 kit（骨架阶段注入"选了这套件就给配套例程"的正确语义）；空 =
+    只做题面锚定 + 手动准入，不再全库扫描套件词表——原全库扫描让任意赛题
+    的推荐都注入全库套件素材（如 2024H 推荐里出现 UWB ALX 套件参考，UI
+    显示为"自动勾选"很蹊跷且会带偏推荐），模块摘要行已带套件名，AI 无需
+    靠全库套件参考发现模块。skeleton 传 slugs；recommend / summarize 不传。
     """
     manual_entries = (
         manual_reference_admission(reference_library_dir, reference_ids)
@@ -315,12 +323,18 @@ def resolve_topic_context(
         )
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
-    # 参考锚定用全量候选收集套件词表（kit 锚定是参考文件机制，不随模块平台
-    # 过滤——条目自身有平台属性，any 条目按现有语义注入）
+    # 套件锚定（修订）：只收选中模块的 kit（slugs 非空时）；空 = 只题面锚定
+    # + 手动准入——不再全库扫描套件词表（原行为让任意赛题都注入全库套件
+    # 参考，UI 自动勾选误导且带偏推荐；模块摘要行已带套件名供 AI 分辨）。
+    kit_manifests = tuple(
+        manifest for manifest in candidates if manifest.slug in set(slugs)
+    ) if slugs else ()
+    # 参考锚定用选中模块收集套件词表（kit 锚定是"选了这套件给配套例程"的
+    # 语义，不随模块平台过滤——条目自身有平台属性，any 条目按现有语义注入）
     references = associated_references(
         reference_library_dir,
         topic_key=entry.key,
-        manifests=candidates,
+        manifests=kit_manifests,
         platform=platform,
     )
     # 推荐层平台过滤（工单 ref-platform-filter 模块侧对偶）：模块候选只含本

@@ -317,6 +317,7 @@ def _assemble_topic_context(
     llm: LLM | None,
     reference_ids: Sequence[str] = (),
     platform: str = "",
+    slugs: Sequence[str] = (),
 ) -> TopicContext:
     """生成流程的历史赛题入口素材装配（单一 helper，三路由共用）。
 
@@ -329,7 +330,9 @@ def _assemble_topic_context(
     reference_ids = 手动选参考资料（工单 01；推荐与骨架路由传——骨架阶段
     注入参考实现草稿，生成不注入，见 ADR 0006 修订）。platform（工单 01
     平台属性）= 锚定命中过滤依据：推荐与骨架路由传请求体 platform（生成
-    不注入参考文件，传缺省）。
+    不注入参考文件，传缺省）。slugs（修订）= 套件锚定只收选中模块的 kit：
+    骨架路由传（选了这套件给配套例程）；推荐 / 生成不传（推荐无选中集，
+    生成不注入参考）。
     """
     config = _require_config(context)
     return resolve_topic_context(
@@ -341,6 +344,7 @@ def _assemble_topic_context(
         reference_library_dir=reference_library_dir(config.module_library_dir),
         reference_ids=reference_ids,
         platform=platform,
+        slugs=slugs,
     )
 
 
@@ -961,6 +965,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 _llm(context, budget, collector),
                 reference_ids=reference_ids,
                 platform=platform,
+                slugs=slugs,
             )
             resolved = resolve_selection(
                 _library_dir(context), platform, slugs, instances=instances
