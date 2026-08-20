@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a95508797ede1a90f2f06b2cb42b6d1697de3cfc -->
+<!-- changelog-auto: last-commit=12c9d05a3a5ef8f6547f9fb902258a315c78369d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 01:27 修订执行——备份 + 覆盖式重生成 + 回滚（工单 revise-deepen/03）
 - 01:35 工单 03 评审整改——ccs_tools 透传、回滚路径安全、展开集 diff、清单一致性
 - 01:39 深化——填 TODO + 编译验证闭环（工单 revise-deepen/04）
+- 01:44 工单 04 评审整改——工具链探测复用单源、状态文案单源、工单目录入库
 
 ## 2026-08-20
 - 00:00 多实例默认兜底——AI 没猜实例时按平台默认自动填（stm32 红黄绿 / mspm0 单实例，与不配置生成等价零回归，工单 instance-default-fallback/01）+ backlog 计划
