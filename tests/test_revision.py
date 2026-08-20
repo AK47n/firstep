@@ -68,6 +68,13 @@ def test_backup_tree_missing_output_raises(tmp_path):
         backup_tree(revise_backup_root(tmp_path / "work"), tmp_path / "nope")
 
 
+def test_backup_tree_empty_output_raises(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    with pytest.raises(RevisionError, match="输出目录为空"):
+        backup_tree(revise_backup_root(tmp_path / "work"), out)
+
+
 def test_restore_revision_unsafe_backup_id_raises(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
@@ -188,12 +195,56 @@ def test_run_revision_keeps_main_c_when_modules_unchanged(tmp_path):
     assert result["diff"] == {"added": [], "removed": []}
     # main.c 原样保留（不丢手工编辑）
     assert (output_dir / "main.c").read_text(encoding="utf-8") == edited
-    # 上下文清单 Q&A 并入新答疑
+    # 上下文清单 Q&A 并入新答疑；main_c 现读（手工编辑内容进清单）
     fields = json.loads(
         (output_dir / CONTEXT_MANIFEST_FILENAME).read_text(encoding="utf-8")
     )
     assert fields["qa_text"] == "新答疑：确认原方案"
+    assert fields["main_c"] == edited
     assert llm.impact_calls == []  # 未调用影响分析（无 LLM 骨架调用）
+
+
+def test_run_revision_expands_dependencies_before_compare(tmp_path):
+    """模块集判定用依赖展开后的集合：确认集缺依赖（展开补回）= 实际没变 →
+    不重生成（diff 与产物一致，不误报 removed）。"""
+    from contest_generator.generator import generate_project
+
+    library, env = _revision_env(tmp_path)
+    output_dir = tmp_path / "out"
+    generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11", "oled"],
+        main_c_content="int main(void) { /* 骨架 */ while (1); }\n",
+        output_dir=output_dir,
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+        problem_text="2024 巡线小车",
+        requirements=(),
+    )
+    edited = "int main(void) { /* 手工逻辑 */ while (1); }\n"
+    (output_dir / "main.c").write_text(edited, encoding="utf-8")
+    llm = FakeLLM(main_skeleton="int main(void) { /* 不该用 */ }\n")
+    emitter = _RecordEmitter()
+    # 确认集省略 delay（dht11 的依赖）——展开后与当前集相同
+    result = run_revision(
+        llm=llm,
+        problem_text="2024 巡线小车",
+        qa_text="",
+        requirements=(),
+        references=(),
+        current_slugs=["delay", "dht11", "oled"],
+        confirmed_slugs=["dht11", "oled"],
+        new_qa_text="新答疑",
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        masters_dir=tmp_path / "masters",
+        output_dir=output_dir,
+        backup_root=revise_backup_root(tmp_path / "work"),
+        emit=emitter,  # type: ignore[arg-type]
+    )
+    assert result["regenerated"] is False
+    assert result["diff"] == {"added": [], "removed": []}
+    assert (output_dir / "main.c").read_text(encoding="utf-8") == edited  # 手工编辑保留
 
 
 def test_run_revision_failure_keeps_backup(tmp_path):
@@ -344,3 +395,29 @@ def test_revise_apply_rollback_missing_backup_400(apply_client):
     )
     assert resp.status_code == 400
     assert "备份不存在" in resp.json()["detail"]
+
+
+def test_revise_apply_failure_emits_chinese_error(apply_client):
+    """失败路径（重生成失败）：SSE error 终态中文文案，备份保留可回滚。"""
+    client, holder, tmp_path = apply_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(main_skeleton="int main(void) { /* 新骨架 */ }\n")
+    # 删掉母版 → 重生成时 MasterNotFoundError（备份后失败）
+    import shutil
+
+    shutil.rmtree(tmp_path / "masters" / PLATFORM_STM32)
+    resp = client.post(
+        "/api/revise/apply",
+        json={
+            "output_dir": output_dir,
+            "confirmed_slugs": ["dht11"],
+            "new_qa_text": "新答疑",
+        },
+    )
+    assert resp.status_code == 200  # SSE 起流
+    events = _sse_events(resp)
+    assert events[-1][0] == "error"
+    assert "母版" in events[-1][1]["message"]
+    # 备份保留（目录可回滚）——revise-backups 下有时间戳备份
+    backup_root = tmp_path / "masters" / ".." / "revise-backups"
+    assert list(backup_root.glob("*"))

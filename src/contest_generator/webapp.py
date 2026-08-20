@@ -1326,16 +1326,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         事件序列：revision_backup（整树备份）→ revision_generating（重生成
         中，仅模块集变化时）→ done（{"backup_id", "regenerated", "diff":
-        {"added", "removed"}, "qa_text", "output_dir", "generated_at"}）或
-        error（中文信息）→ 流结束。失败路径：备份成功但重生成失败 → error
-        终态（备份保留 = 目录保持可回滚）。HTTP 200 起流，失败以流内 error
-        事件收尾（sse 运行器终态保证）。
+        {"added", "removed"}, "impacts", "qa_text", "output_dir",
+        "generated_at"}）或 error（中文信息）→ 流结束。失败路径：备份成功但
+        重生成失败 → error 终态（备份保留 = 目录保持可回滚）。HTTP 200 起流，
+        失败以流内 error 事件收尾（sse 运行器终态保证）。
         """
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
             raise ContextError(f"输出目录不存在：{output_dir}")
         confirmed_slugs = _require_str_list(payload, "confirmed_slugs")
         new_qa_text = _require_str(payload, "new_qa_text")
+        # 影响结论记录（可选，分析阶段产物——随 diff 记录留痕，不参与判决）
+        impacts = payload.get("impacts")
+        if impacts is not None and not isinstance(impacts, list):
+            raise ContextError("impacts 必须是数组（影响结论记录）")
         config = _require_config(context)
         module_library_dir = config.module_library_dir
         _, fields = _load_revision_context(output_dir, module_library_dir)
@@ -1347,6 +1351,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             fields.get("instances") or None, known_slugs=confirmed_slugs
         )
         python_templates = fields.get("python_templates") or None
+        # CCS 三件套探测（与 /api/generate 同款）：mspm0 修订重生成要复用
+        # 构建脚本全链路（spec「复用既有生成管线…构建脚本」）；stm32 不探。
+        ccs_tools = None
+        if fields["platform"] == PLATFORM_MSPM0:
+            ccs_tools = find_ccs_tools(
+                config.ccs_sdk_dir,
+                config.ccs_compiler_dir,
+                config.ccs_sysconfig_cli,
+            )
         budget = RetryBudget()
         collector = create_llm_observation_collector("revise-apply")
         llm = _llm(context, budget, collector)
@@ -1375,6 +1388,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         python_templates=python_templates,
                         emit=emit,
                         tool_version=__version__,
+                        impacts=impacts or (),
+                        topic_id=fields.get("topic_id", ""),
+                        ccs_tools=ccs_tools,
                     )
                 emit.done(result)
             finally:
