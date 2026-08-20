@@ -1047,7 +1047,6 @@ def generate(
                     for slug, items in (instances or {}).items()
                 },
                 python_templates=template_choices or {},
-                score_points=[point.to_dict() for point in (score_points or ())],
                 tool_version=tool_version,
             ),
         )
