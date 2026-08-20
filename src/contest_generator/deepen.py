@@ -23,10 +23,10 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .compile_runner import (
     BuildLog,
+    CompileRunnerError,
     collect_build_log,
     compile_passed,
-    find_make,
-    find_uv4,
+    resolve_compile_toolchain,
 )
 from .events import (
     EVENT_COMPILE_START,
@@ -106,21 +106,19 @@ def run_deepen(
     backup_id = _backup_main_c(work_root, output_dir, main_c)
     (output_dir / "main.c").write_text(deepened, encoding="utf-8")
 
-    # 4. 编译验证闭环：工具链探测（config 覆盖 > 自动）→ 无 = 大声降级；
-    #    有 → 编译 → 失败修一轮 → 重编译 → 绿 = 已验证
-    uv4 = find_uv4(uv4_override)
-    make = find_make(make_override)
-    toolchain = uv4 if platform == "stm32" else make
-    if toolchain is None:
+    # 4. 编译验证闭环：工具链探测（resolve_compile_toolchain 单源，config 覆盖
+    #    > 自动）→ 无 = 大声降级（探测抛 CompileRunnerError = 无工具链，语义
+    #    与 /api/compile 的起流前 400 同源，此处转降级不 400）；有 → 编译 →
+    #    失败修一轮 → 重编译 → 绿 = 已验证
+    try:
+        uv4, make = resolve_compile_toolchain(platform, uv4_override, make_override)
+    except CompileRunnerError:
         emit.progress(ProgressEvent(type=EVENT_VERIFY_RESULT))
         return {
             "status": STATUS_UNVERIFIED,
             "backup_id": backup_id,
             "compile": {"passed": None, "exit_code": None, "summary": ""},
-            "message": (
-                "未检测到工具链（stm32 需 Keil UV4 / mspm0 需 gmake，可在设置页"
-                "填路径覆盖）——深化结果已保留，但状态 = 未验证：请自行编译确认"
-            ),
+            "message": _status_message(STATUS_UNVERIFIED),
         }
 
     last_build: BuildLog | None = None
@@ -194,9 +192,12 @@ def _summarize(output: str, parsed) -> dict[str, Any]:
 
 
 def _status_message(status: str) -> str:
-    """验证状态的中文提示（done 载荷 message 字段单源）。"""
+    """验证状态的中文提示（done 载荷 message 字段单源，三分支全活）。"""
     if status == STATUS_VERIFIED:
         return "编译验证通过：深化结果已标记为「已验证」"
     if status == STATUS_UNVERIFIED:
-        return "无工具链降级：深化结果保留，状态 = 未验证（请自行编译确认）"
+        return (
+            "未检测到工具链（stm32 需 Keil UV4 / mspm0 需 gmake，可在设置页填"
+            "路径覆盖）——深化结果已保留，但状态 = 未验证：请自行编译确认"
+        )
     return "编译验证未通过（修复一轮后仍红）：深化结果保留，可回滚或再次触发深化"
