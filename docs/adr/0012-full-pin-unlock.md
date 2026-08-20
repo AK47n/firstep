@@ -50,8 +50,13 @@ ADR 0011 解了 stm32 pwm 类型级与软 I2C，三类"真锁"记遗留：① en
    DIP×GRAY_D1-4（PB12-15）为唯一残留（全库 42 角色 vs 排针 32 脚，全互异数学上
    不可达），白名单留痕 tests/test_default_layout.py。**mspm0 侧默认布局 = 理论上限：
    syscfg-prune/01 起生成按选中模块裁剪 syscfg，未选模块引脚空出可绑。**
-8. **包型号悬案**：纳入并行前置（既有工单 .scratch/mspm0-board-package/issues/01，
-   用户物理看丝印），不阻塞主链。
+8. **mspm0 包型号收口**：2026-08-20 用户实物核验：主控丝印可见 `42WG4`、
+   `ABDL`，芯片外周为 48 脚；地猛星 2×20P 排针分布确认正确，`PA13` /
+   `PA14` 在 2×20P 上，可作为普通可用脚；板上未找到 `PA19` / `PA20`，
+   继续作为 SWD/DEBUG 锁脚，不进入普通模块默认分配。TI 封装命名中
+   `LQFP(PT)` = 48 脚、`LQFP(PM)` = 64 脚；当前 SysConfig 仍沿用可工作的
+   `LQFP-64(PM)` / LP-MSPM0G3507 模型，不以此反推实物脚数，实际可引出范围由
+   `mspm0-dimx` 板定义约束。
 9. **验收口径**：编译级 + 产物断言（UV4/gmake 0 错 + pin_config.h 宏值 / isr.c 聚合 /
    syscfg 字段逐项核对）+ 红证先行；运行级用户上板自验（ADR 0011 口径延续）。
 
