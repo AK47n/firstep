@@ -17,7 +17,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 from .boards import (
     Board,
@@ -68,6 +68,7 @@ from .clex import (
     strip_comments,
     top_level_defines,
 )
+from .context_manifest import build_context_fields, write_context_manifest
 from .skeleton import (
     format_interface_blocks,
     is_header_path,
@@ -542,6 +543,15 @@ def generate_project(
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     python_templates: Mapping[str, str] | None = None,
     score_points: Sequence[ScorePoint] | None = None,
+    # 上下文清单字段（工单 revise-deepen/01）：生成尾部落盘
+    # .contest_context.json（纯新增隐藏文件）——题面 / Q&A / 功能需求清单 /
+    # 参考条目 / 工具版本；缺省空 = 清单内容缺省，既有文件逐字节不变。
+    problem_text: str = "",
+    topic_id: str = "",
+    qa_text: str = "",
+    requirements: Sequence[Mapping[str, Any]] | None = None,
+    references: Sequence[str] = (),
+    tool_version: str = "",
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -586,6 +596,12 @@ def generate_project(
         instances=instances,
         template_choices=template_choices,
         score_points=score_points,
+        problem_text=problem_text,
+        topic_id=topic_id,
+        qa_text=qa_text,
+        requirements=requirements,
+        references=references,
+        tool_version=tool_version,
     )
     return describe_generation(
         result_dir, resolved.manifests, platform, include_dirs, build_hint,
@@ -845,6 +861,14 @@ def generate(
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     template_choices: Mapping[str, str] | None = None,
     score_points: Sequence[ScorePoint] | None = None,
+    # 上下文清单字段（工单 revise-deepen/01）：生成尾部落盘，缺省空 = 旧行为
+    # 逐字节（清单内容缺省，不触碰任何既有生成文件）
+    problem_text: str = "",
+    topic_id: str = "",
+    qa_text: str = "",
+    requirements: Sequence[Mapping[str, Any]] | None = None,
+    references: Sequence[str] = (),
+    tool_version: str = "",
 ) -> tuple[Path, tuple[str, ...], str]:
     """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径,
     build_hint）。
@@ -998,6 +1022,34 @@ def generate(
                 score_points=score_points,
             ),
             encoding="utf-8",
+        )
+
+        # 上下文清单（工单 revise-deepen/01）：README 之后写工程根
+        # .contest_context.json——纯新增隐藏文件（README 先例），记录本次生成
+        # 的输入（题面 / 平台 / 模块 / 绑定 / 多实例 / 副产物模板 / Q&A /
+        # 功能需求清单 / 参考条目 / main.c / 时间 / 工具版本），供「修订与
+        # 深化」历史目录入口直读；缺省路径（全字段空）内容自洽，既有文件
+        # 逐字节不变。写失败走既有 rmtree 兜底（生成原子性不破）。
+        write_context_manifest(
+            output_dir,
+            build_context_fields(
+                platform=platform,
+                slugs=tuple(m.slug for m in manifests),
+                main_c=main_c_content,
+                problem_text=problem_text,
+                topic_id=topic_id,
+                qa_text=qa_text,
+                requirements=requirements,
+                references=references,
+                bindings=bindings or {},
+                instances={
+                    slug: [item.to_dict() for item in items]
+                    for slug, items in (instances or {}).items()
+                },
+                python_templates=template_choices or {},
+                score_points=[point.to_dict() for point in (score_points or ())],
+                tool_version=tool_version,
+            ),
         )
     except Exception:
         # 复制中途失败不要留下半成品

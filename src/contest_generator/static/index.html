@@ -1035,10 +1035,16 @@
     <div class="card">
       <h2>本地模型（可选）</h2>
       <div class="row">
-        <div style="flex:1"><label>本地 LLM base_url（留空 = 本地路由关闭）</label><input type="text" id="set-local-llm-base-url" placeholder="http://localhost:11434/v1"></div>
-        <div style="flex:1"><label>本地模型（留空 = 关闭）</label><input type="text" id="set-local-llm-model" placeholder="qwen2.5-coder:7b-instruct"></div>
+        <div style="flex:1"><label>本地 LLM base_url</label><input type="text" id="set-local-llm-base-url" placeholder="http://localhost:11434/v1"></div>
+        <div style="flex:1"><label>本地模型（速度 / 质量自选）</label>
+          <select id="set-local-llm-model" style="width:100%">
+            <option value="">关闭（本地路由关闭，走 DeepSeek 云端）</option>
+            <option value="qwen3-coder:30b-local">Qwen3-Coder 30B — 质量优先（较慢）</option>
+            <option value="qwen2.5-coder:7b-local">Qwen2.5-Coder 7B — 速度优先</option>
+          </select>
+        </div>
       </div>
-      <div class="muted">填写后，赛题简介 / 模块简介 / 参考素材简介三个纯文本摘要调用走本地模型；其余调用仍走 DeepSeek。</div>
+      <div class="muted">选择本地模型后，赛题简介 / 模块简介 / 参考素材简介三个纯文本摘要调用走本地模型，其余调用仍走 DeepSeek。30B 质量更好但较慢（约 5-15 秒/次），7B 更快（约 1-3 秒/次）；选择「关闭」则全部走云端。</div>
     </div>
 
     <div class="card">
@@ -2835,6 +2841,14 @@ $("btn-generate").addEventListener("click", async () => {
     // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
     if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;
     if (scorePoints.length) payload.score_points = scorePoints;
+    // 上下文清单字段（工单 revise-deepen/01）：功能需求清单（推荐产物摘要）/
+    // 赛题答疑 Q&A 随生成请求回传并落盘，供「修订与深化」历史目录直读；
+    // 没推荐过 / 没填 Q&A = 不带字段（清单内容缺省，旧行为逐字节不变）
+    if (lastRecommend && lastRecommend.requirements && lastRecommend.requirements.length) {
+      payload.requirements = lastRecommend.requirements;
+    }
+    const qa = $("qa-text").value.trim();
+    if (qa) payload.qa_text = qa;
     const data = await apiPost("/api/generate", payload);
     $("res-dir").textContent = data.output_dir;
     $("res-includes").textContent = data.include_dirs.join("；");
@@ -4725,7 +4739,15 @@ async function loadSettings() {
     $("set-ccs-sysconfig-cli").value = s.ccs_sysconfig_cli || "";
     // 本地 LLM 端点（工单 local-llm-routing/03）：空串 = 本地路由关闭
     $("set-local-llm-base-url").value = s.local_llm_base_url || "";
-    $("set-local-llm-model").value = s.local_llm_model || "";
+    // 本地模型下拉（速度/质量自选）：预设三档；自定义旧值保留为附加选项
+    const llmSel = $("set-local-llm-model");
+    if (s.local_llm_model && !Array.from(llmSel.options).some((o) => o.value === s.local_llm_model)) {
+      const opt = document.createElement("option");
+      opt.value = s.local_llm_model;
+      opt.textContent = s.local_llm_model + "（自定义）";
+      llmSel.appendChild(opt);
+    }
+    llmSel.value = s.local_llm_model || "";
     // 视觉通道（工单 vision-eyes/01）：key 只回掩码；空 = 视觉关闭
     $("set-vision-base-url").value = s.vision_base_url || "";
     $("set-vision-api-key").value = s.vision_api_key || "";
@@ -4756,6 +4778,16 @@ async function loadSettings() {
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
 }
+
+// 本地模型下拉联动：选「关闭」→ 清空 base_url（本地路由关闭）；选模型 → 补默认端点
+$("set-local-llm-model").addEventListener("change", () => {
+  const urlEl = $("set-local-llm-base-url");
+  if ($("set-local-llm-model").value === "") {
+    urlEl.value = "";
+  } else if (!urlEl.value.trim()) {
+    urlEl.value = "http://localhost:11434/v1";
+  }
+});
 
 /** DeepSeek Flash 官方价格参考表渲染（工单 llm-cost-control 更新）：
  * 数据单源 = 后端 DEEPSEEK_FLASH_PRICE_REFERENCE（/api/settings
