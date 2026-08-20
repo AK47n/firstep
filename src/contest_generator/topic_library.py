@@ -229,6 +229,18 @@ def enrich_topic_image_notes(
         return entry  # 题面没有引用图（无图可补）
     if not entry.original_pdf:
         return entry
+    # 共享 PDF 守卫（2024H 复盘）：真题汇总 PDF 被多个赛题条目共引——图注
+    # 提取没有页范围信息，全文档扫描会把**其它题**的图注追进当前题面（曾把
+    # 约 280 行别的题的 [图N 标注] 追加进 2024H，污染推荐素材；取题面反复
+    # 触发补图注 + 自动提交，清洗后又被追尾）。共引 > 1 = 共享 PDF → 跳过
+    # 补图注（宁可没有图注，也不污染题面）；单条目专属 PDF（如 2026C）照常。
+    shared_pdf = sum(
+        1
+        for other in list_topics(topic_library_root)
+        if other.original_pdf == entry.original_pdf
+    )
+    if shared_pdf > 1:
+        return entry
     entry_dir = _entry_dir(topic_library_root, key)
     pdf_path = entry_dir / entry.original_pdf
     if not pdf_path.is_file():
