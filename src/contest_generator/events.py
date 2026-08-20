@@ -73,6 +73,12 @@ EVENT_DIFF_READY = "diff_ready"
 EVENT_REVISION_BACKUP = "revision_backup"
 EVENT_REVISION_GENERATING = "revision_generating"
 
+# 深化（工单 revise-deepen/04）的事件类型：deepening_start = LLM 按功能需求
+# 填 TODO 预留区（分钟级）；verify_result = 编译验证结果就绪（done 载荷前）。
+# 编译 / 修复环节复用 compile_start / fix_start 既有词表。
+EVENT_DEEPENING_START = "deepening_start"
+EVENT_VERIFY_RESULT = "verify_result"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；
