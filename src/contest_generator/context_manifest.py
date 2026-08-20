@@ -35,6 +35,7 @@ from typing import Any, Mapping, Sequence
 from .boards import BoardError, board_for_platform, board_pin, pin_capability_instances
 from .library import list_modules
 from .manifest import ModuleManifest
+from .pin_bindings import PinBindingError
 from .pinwriter import PIN_CONFIG_FILENAME, _DEFINE_LINE_RE, _stm32_macro_value
 from .platforms import KNOWN_PLATFORMS, PLATFORM_CONFIG_FILE_SUFFIXES
 from .syscfg_model import MSPM0_SYSCFG_FILENAME, parse_syscfg, syscfg_path_matches
@@ -63,13 +64,16 @@ def build_context_fields(
     bindings: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     python_templates: Mapping[str, str] | None = None,
-    score_points: Sequence[Mapping[str, Any]] | None = None,
     tool_version: str = "",
 ) -> dict[str, Any]:
     """组装清单字段（写侧单源：generate 尾部与测试共用同一形状）。
 
+    字段 = spec 清单（题面 / 平台 / slugs / 绑定 / 多实例 / 副产物模板 /
+    Q&A / 功能需求清单 / 参考条目 / 生成时间 / 工具版本）+ 两个输入类扩展：
+    main_c（生成时骨架快照，深化工单消费）与 topic_id（历史赛题入口）。
     可选字段缺省 = 空/空集（缺省生成路径 = 旧行为逐字节，清单内容自洽：
-    什么也没传就记什么也没用）。
+    什么也没传就记什么也没用）。生成结果类字段（score_points 等）不入清单
+    ——清单只记生成输入，结果可随时从产物树重算。
     """
     return {
         "version": CONTEXT_MANIFEST_VERSION,
@@ -84,7 +88,6 @@ def build_context_fields(
         "bindings": dict(bindings or {}),
         "instances": {slug: list(items) for slug, items in (instances or {}).items()},
         "python_templates": dict(python_templates or {}),
-        "score_points": list(score_points or ()),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "tool_version": tool_version,
     }
@@ -160,11 +163,6 @@ def read_context_fields(output_dir: Path) -> dict[str, Any] | None:
             if isinstance(data.get("python_templates"), dict)
             else {}
         ),
-        "score_points": (
-            data.get("score_points", [])
-            if isinstance(data.get("score_points"), list)
-            else []
-        ),
         "generated_at": (
             data.get("generated_at", "")
             if isinstance(data.get("generated_at"), str)
@@ -174,6 +172,26 @@ def read_context_fields(output_dir: Path) -> dict[str, Any] | None:
             data.get("tool_version", "") if isinstance(data.get("tool_version"), str) else ""
         ),
     }
+
+
+def missing_fields_for(fields: Mapping[str, Any]) -> list[str]:
+    """修订 / 深化流程必需的字段缺失清单（spec「缺字段 = 走反推或要求补」）。
+
+    有清单但字段为空（旧版本清单 / 生成时没填）与反推不了同样标记——前端
+    据此提示用户补：题面（影响分析必需）、功能需求清单（深化必需）、模块集
+    （产物树 modules/ 缺失 = 全内嵌或手工工程，需手动勾选兜底）；Q&A / 参考
+    条目为空 = 没有即可，不标记（避免常态误报）。
+    """
+    missing: list[str] = []
+    if not fields.get("problem_text"):
+        missing.append("problem_text")
+    if not fields.get("requirements"):
+        missing.append("requirements")
+    if not fields.get("main_c"):
+        missing.append("main_c")
+    if not fields.get("slugs"):
+        missing.append("slugs")
+    return missing
 
 
 # ---------------------------------------------------------------------------
@@ -198,17 +216,14 @@ def infer_context(
     slugs = _infer_slugs(output_dir)
     manifests = _load_known_manifests(module_library_dir, slugs)
     bindings = _infer_bindings(output_dir, platform, manifests)
-    main_c = _read_main_c(output_dir)
+    main_c = read_project_main_c(output_dir)
     fields = build_context_fields(
         platform=platform,
         slugs=slugs,
         main_c=main_c,
         bindings=bindings,
     )
-    missing = ["problem_text", "topic_id", "qa_text", "requirements"]
-    if not main_c:
-        missing.append("main_c")
-    return fields, missing
+    return fields, missing_fields_for(fields)
 
 
 def _infer_platform(output_dir: Path) -> str:
@@ -254,8 +269,9 @@ def _load_known_manifests(module_library_dir: Path, slugs: Sequence[str]) -> lis
     return manifests
 
 
-def _read_main_c(output_dir: Path) -> str:
-    """main.c 现读（工程根；缺失 = 空串）。"""
+def read_project_main_c(output_dir: Path) -> str:
+    """main.c 现读（工程根；缺失 = 空串）。加载 API 两条路径共用——有清单也
+    现读（清单里是生成时快照，用户手改后必须反映当前内容）。"""
     path = output_dir / "main.c"
     if not path.is_file():
         return ""
@@ -323,10 +339,13 @@ def _infer_stm32_bindings(
                 if default_pin is not None
                 else ()
             )
-            default_values = [
-                _stm32_macro_value(role_key, macro, decl.default, default_instances)
-                for macro in decl.macros
-            ]
+            try:
+                default_values = [
+                    _stm32_macro_value(role_key, macro, decl.default, default_instances)
+                    for macro in decl.macros
+                ]
+            except PinBindingError:
+                continue  # 默认引脚实例歧义 → 该角色无法判定绑定，跳过（尽力而为）
             if default_values == current:
                 continue  # 未绑定（默认值，写侧 no-op 语义）
             bound = _match_stm32_pin(board, role_key, decl.macros, current)
@@ -350,8 +369,8 @@ def _match_stm32_pin(
                 _stm32_macro_value(role_key, macro, pin.name, instances)
                 for macro in macros
             ]
-        except Exception:
-            continue
+        except PinBindingError:
+            continue  # 候选引脚实例歧义（多实例）→ 该引脚算不出宏值，跳过
         if values == list(current):
             return pin.name
     return None

@@ -182,7 +182,7 @@ def test_generate_writes_context_manifest_with_all_fields(tmp_path):
 def test_generate_default_manifest_has_empty_optional_fields(tmp_path):
     """缺省路径（不带上下文字段）：清单内容缺省（空串/空集），生成仍成功。"""
     library = make_fake_module_library(tmp_path / "modules")
-    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    master = make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
     summary = generate_project(
         platform=PLATFORM_STM32,
         slugs=["dht11", "oled"],
@@ -199,6 +199,16 @@ def test_generate_default_manifest_has_empty_optional_fields(tmp_path):
     assert fields["requirements"] == []
     assert fields["references"] == []
     assert fields["bindings"] == {}
+    # 既有母版文件逐字节保留（清单写侧不触碰任何既有生成文件——main.c /
+    # README / uvprojx 是骨架替换与 patcher/渲染器各自契约内改动，其余母版
+    # 文件原样）
+    for p in master.rglob("*"):
+        if not p.is_file() or ".git" in p.parts:
+            continue
+        if p.name in ("main.c", "project.uvprojx"):
+            continue
+        rel = p.relative_to(master)
+        assert (summary.output_dir / rel).read_bytes() == p.read_bytes(), rel
     # 清单之外的所有生成文件与第二次生成逐字节一致（确定性 + 无副作用）
     first = {
         p.relative_to(summary.output_dir).as_posix(): p.read_bytes()
@@ -245,7 +255,7 @@ def test_read_context_fields_roundtrip(tmp_path):
     for key in (
         "platform", "slugs", "main_c", "problem_text", "qa_text",
         "requirements", "bindings", "instances", "python_templates",
-        "score_points", "references", "tool_version",
+        "references", "tool_version",
     ):
         assert read[key] == fields[key], key
     assert read["generated_at"]
@@ -268,10 +278,12 @@ def test_read_context_fields_tolerates_missing_keys(tmp_path):
 
 
 def test_read_context_fields_none_without_manifest(tmp_path):
+    """无清单目录 → 读侧返回 None（调用方走反推路径）。"""
     assert read_context_fields(tmp_path) is None
 
 
 def test_read_context_fields_bad_json_raises(tmp_path):
+    """清单损坏（非 JSON）→ ContextError（400 中文，不静默吞）。"""
     out = tmp_path / "out"
     out.mkdir()
     (out / CONTEXT_MANIFEST_FILENAME).write_text("{not json", encoding="utf-8")
@@ -363,6 +375,7 @@ def test_infer_context_platform_unrecognized_raises(tmp_path):
 
 
 def test_validate_context_fields_rejects_unknown_platform(tmp_path):
+    """平台不在词表 → ContextError（加载 API 400 关口）。"""
     library = make_fake_module_library(tmp_path / "modules")
     fields = build_context_fields(platform="riscv", slugs=["dht11"], main_c="")
     with pytest.raises(ContextError, match="未知平台"):
@@ -370,6 +383,7 @@ def test_validate_context_fields_rejects_unknown_platform(tmp_path):
 
 
 def test_validate_context_fields_rejects_unknown_slugs(tmp_path):
+    """slugs 有库外模块 → ContextError（前端手动勾选兜底入口）。"""
     library = make_fake_module_library(tmp_path / "modules")
     fields = build_context_fields(platform=PLATFORM_STM32, slugs=["nope"], main_c="")
     with pytest.raises(ContextError, match="不在模块库内"):
@@ -377,6 +391,7 @@ def test_validate_context_fields_rejects_unknown_slugs(tmp_path):
 
 
 def test_validate_context_fields_rejects_bad_bindings_shape(tmp_path):
+    """bindings 键没有 <slug>.<role> 形态 → ContextError。"""
     library = make_fake_module_library(tmp_path / "modules")
     fields = build_context_fields(platform=PLATFORM_STM32, slugs=["dht11"], main_c="")
     fields["bindings"] = {"badkey": "PA1"}  # 键没有 <slug>.<role> 形态
@@ -385,6 +400,7 @@ def test_validate_context_fields_rejects_bad_bindings_shape(tmp_path):
 
 
 def test_validate_context_fields_accepts_known_slugs(tmp_path):
+    """合法字段（库内 slugs + 空绑定）→ 不抛。"""
     library = make_fake_module_library(tmp_path / "modules")
     fields = build_context_fields(platform=PLATFORM_STM32, slugs=["dht11"], main_c="")
     validate_context_fields(fields, library)  # 不抛
@@ -417,7 +433,7 @@ class _DummyLLM:
 
 def test_revise_context_reads_manifest_directly(revise_client):
     client, library_dir, tmp_path = revise_client
-    master = make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
     summary = generate_project(
         platform=PLATFORM_STM32,
         slugs=["dht11", "oled"],
@@ -431,11 +447,31 @@ def test_revise_context_reads_manifest_directly(revise_client):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["source"] == "manifest"
-    assert data["missing"] == []
     assert data["context"]["platform"] == PLATFORM_STM32
     assert data["context"]["slugs"] == ["delay", "dht11", "oled"]
     assert data["context"]["problem_text"] == "2024 巡线小车"
     assert data["context"]["main_c"] == MAIN_SKELETON
+    # 题面已落盘；功能需求清单为空（本次生成没回传）→ 标记 missing 提示补
+    assert data["missing"] == ["requirements"]
+
+
+def test_revise_context_reads_fresh_main_c_after_manual_edit(revise_client):
+    """有清单路径 main.c 现读磁盘（不返回清单里的生成时快照——手工编辑保留）。"""
+    client, library_dir, tmp_path = revise_client
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11", "oled"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=library_dir,
+        masters_dir=tmp_path / "masters",
+    )
+    edited = "int main(void) { /* 手工补充的逻辑 */ while (1); }\n"
+    (summary.output_dir / "main.c").write_text(edited, encoding="utf-8")
+    resp = client.post("/api/revise/context", json={"output_dir": str(summary.output_dir)})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["context"]["main_c"] == edited
 
 
 def test_revise_context_infers_without_manifest(revise_client):

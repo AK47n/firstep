@@ -50,7 +50,9 @@ from .context_manifest import (
     CONTEXT_MANIFEST_FILENAME,
     ContextError,
     infer_context,
+    missing_fields_for,
     read_context_fields,
+    read_project_main_c,
     validate_context_fields,
 )
 from .errors import error_entry
@@ -1183,10 +1185,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         fields = read_context_fields(output_dir)
         if fields is not None:
             validate_context_fields(fields, module_library_dir)
+            # main.c 统一现读磁盘（spec「main.c 原样保留，不丢手工编辑」）：
+            # 清单里是生成时快照，用户生成后手改过 → 加载必须反映当前内容，
+            # 深化/修订基于现读，不基于陈旧快照
+            current_main = read_project_main_c(output_dir)
+            if current_main:
+                fields["main_c"] = current_main
             return {
                 "source": "manifest",
                 "context": fields,
-                "missing": [],
+                "missing": missing_fields_for(fields),
             }
         fields, missing = infer_context(output_dir, module_library_dir)
         validate_context_fields(fields, module_library_dir)
