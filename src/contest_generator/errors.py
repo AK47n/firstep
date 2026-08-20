@@ -31,6 +31,7 @@ from .generator import (
     UartInstanceConflictError,
     UsartHandlerInMainError,
 )
+from .impact import ImpactError
 from .keil import KeilProjectError
 from .library import LibraryError
 from .llm import LLMError
@@ -87,6 +88,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             StageError,
             VisionError,  # 视觉通道失败（工单 vision-eyes/01）：未配置 / 网络 / 上游非法——调用方按降级政策决定阻断与否
             ContextError,  # 上下文清单损坏 / 形状非法 / 平台无法识别（工单 revise-deepen/01）
+            ImpactError,  # 影响分析输出非法（工单 revise-deepen/02）：缺数组 / 未知 slug / 字段类型错
         ),
         400,
         str,

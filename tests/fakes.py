@@ -16,6 +16,7 @@ from pypdf import PdfWriter
 
 from contest_generator.events import ProgressEmitter
 from contest_generator.fix_errors import FixSuggestion
+from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
 from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
@@ -591,6 +592,7 @@ class FakeLLM:
         clarify_questions: tuple[str, ...] = (),
         topic_summary: str = "AI 生成的赛题简介",
         fixes: tuple[FixSuggestion, ...] = (),
+        impact_analysis: ImpactAnalysis | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -601,6 +603,7 @@ class FakeLLM:
         self._clarify_questions = clarify_questions
         self._topic_summary = topic_summary
         self._fixes = fixes
+        self._impact_analysis = impact_analysis or ImpactAnalysis()
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
@@ -616,6 +619,9 @@ class FakeLLM:
         self.clarify_calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
         self.topic_summarize_calls: list[tuple[str, ...]] = []
         self.fix_errors_calls: list[tuple[str, dict, str, str, tuple, str, tuple]] = []
+        self.impact_calls: list[
+            tuple[str, tuple, tuple, tuple, str]
+        ] = []
 
     def select_modules(
         self,
@@ -722,6 +728,25 @@ class FakeLLM:
     def topic_extract_number(self, text: str) -> str | None:
         self.topic_extract_calls.append((text,))
         return None
+
+    def analyze_impact(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        current_slugs: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
+        new_qa_text: str,
+    ) -> ImpactAnalysis:
+        self.impact_calls.append(
+            (
+                problem_text,
+                tuple(requirements),
+                tuple(current_slugs),
+                tuple(summary.slug for summary in manifest_summaries),
+                new_qa_text,
+            )
+        )
+        return self._impact_analysis
 
 
 class RecordingLLM:
@@ -831,6 +856,17 @@ class RecordingLLM:
     def topic_extract_number(self, text: str) -> str | None:
         self._record("topic_extract_number")
         return None
+
+    def analyze_impact(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        current_slugs: Sequence[str],
+        manifest_summaries: Sequence[ManifestSummary],
+        new_qa_text: str,
+    ) -> ImpactAnalysis:
+        self._record("analyze_impact")
+        return ImpactAnalysis()
 
 
 class RecordingPatcher:
