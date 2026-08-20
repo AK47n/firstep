@@ -51,7 +51,7 @@ from contest_generator.patchers import (
     external_headers,
     include_search_dirs,
 )
-from contest_generator.reference_library import ReferenceError
+from contest_generator.reference_library import ReferenceError, add_reference
 from contest_generator.selection import (
     ManualReferenceError,
     REFERENCE_SOURCE_MANUAL,
@@ -79,6 +79,7 @@ from tests.generate_wiring_fakes import (
     OTHER_REFERENCE_ID,
     TOPIC_PROBLEM_TEXT,
     TOPIC_REFERENCE_ID,
+    UWB_KIT,
     UWB_REFERENCE_ID,
     make_fake_reference_library,
     make_fake_topic_library,
@@ -1314,8 +1315,10 @@ def _wired_dirs(tmp_path):
 
 
 def test_resolve_topic_context_explicit_key_materializes_entry(tmp_path):
-    """显式编号：题面全文（长 PDF 题面全文只在选了该赛题时进上下文）+ 关联素材
-    （锚定该题或候选模块套件的参考文件）。"""
+    """显式编号：题面全文（长 PDF 题面全文只在选了该赛题时进上下文）+ 题面
+    锚定参考（修订起：未给 slugs 时套件锚定不再全库扫描——KIT_REFERENCE_ID
+    在此是题面锚定子串命中：夹具 KIT_KEY = "2026C 钥匙套件" 含题号，属既有
+    search_references 子串语义，不是模块套件扫描）。"""
     library, topics, references = _wired_dirs(tmp_path)
 
     ctx = resolve_topic_context(
@@ -1333,19 +1336,30 @@ def test_resolve_topic_context_explicit_key_materializes_entry(tmp_path):
     assert [e.id for e in ctx.references] == [
         TOPIC_REFERENCE_ID,
         KIT_REFERENCE_ID,
-        UWB_REFERENCE_ID,
     ]
+    assert UWB_REFERENCE_ID not in [e.id for e in ctx.references]
 
 
-def test_resolve_topic_context_without_specific_modules_still_carries_kit_refs(
-    tmp_path,
-):
-    """候选模块的 kit 词表锚定的参考文件仍经套件进清单（评审 c2：关联面
-    不依赖任何"题专用模块"存在）。"""
+def test_resolve_topic_context_without_specific_modules_omits_kit_refs(tmp_path):
+    """修订（revise-deepen 前置排查）：未给 slugs 时套件锚定 = 空——不再全库
+    扫描候选模块的 kit 词表。历史行为把全库套件参考注入任意赛题的推荐
+    （2024H 推荐里出现 UWB ALX 套件参考，UI 自动勾选很蹊跷且带偏推荐）。
+    本测试用套件名不含题号的参考条目（真实场景），隔离子串命中干扰。"""
     library = make_fake_module_library(tmp_path / "modules")
-    make_kit_candidate_module(library)
+    make_kit_candidate_module(library)  # uwb：UWB_KIT，库里存在但未选中
     topics = make_fake_topic_library(tmp_path / "topics")
-    references = make_fake_reference_library(tmp_path / "references")
+    references = tmp_path / "references"
+    references.mkdir()
+    add_reference(
+        references,
+        title="UWB 套件例程",
+        type="例程工程",
+        description="UWB 测距套件配套例程",
+        anchor_kind="kit",
+        anchor_value=UWB_KIT,
+        files={"uwb_example.c": "/* UWB 例程 */\n"},
+        kit_vocabulary=(UWB_KIT,),
+    )
 
     ctx = resolve_topic_context(
         llm=None,
@@ -1357,7 +1371,50 @@ def test_resolve_topic_context_without_specific_modules_still_carries_kit_refs(
     )
 
     assert ctx is not None
-    assert UWB_REFERENCE_ID in [e.id for e in ctx.references]
+    # 题面锚定无命中（套件名不含题号）+ 无模块套件扫描 = 零参考
+    assert [e.id for e in ctx.references] == []
+
+
+def test_resolve_topic_context_kit_refs_follow_selected_slugs(tmp_path):
+    """修订：套件锚定只收选中模块的 kit——slugs 给了哪个模块，才注入哪个
+    套件的参考（"选了这套件给配套例程"语义）；未选中的套件不注入。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    make_kit_candidate_module(library)  # uwb：UWB_KIT
+    make_topic_specific_module(library)  # lock_control：KIT_KEY
+    topics = make_fake_topic_library(tmp_path / "topics")
+    references = make_fake_reference_library(tmp_path / "references")
+
+    picked_uwb = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="粘贴",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        slugs=["uwb"],
+    )
+    # KIT_REFERENCE_ID 仍经题面锚定子串命中（KIT_KEY 含 2026C，既有语义）；
+    # UWB_REFERENCE_ID 只随 slugs=["uwb"] 的模块套件进来
+    assert [e.id for e in picked_uwb.references] == [
+        TOPIC_REFERENCE_ID,
+        KIT_REFERENCE_ID,
+        UWB_REFERENCE_ID,
+    ]
+
+    picked_lock = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="粘贴",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        slugs=["lock_control"],
+    )
+    assert [e.id for e in picked_lock.references] == [
+        TOPIC_REFERENCE_ID,
+        KIT_REFERENCE_ID,
+    ]
+    assert UWB_REFERENCE_ID not in [e.id for e in picked_lock.references]
 
 
 def test_resolve_topic_context_filters_candidates_by_platform(tmp_path):

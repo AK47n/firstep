@@ -3602,9 +3602,12 @@ def test_recommend_with_topic_id_uses_full_text_and_carries_materials(client, co
     # 第 2 轮收敛确认带上一轮功能需求层（自检修订指令）
     assert llm.problem_texts[0] == "1. " + TOPIC_PROBLEM_TEXT
     assert "上一轮功能需求层" in llm.problem_texts[1]
+    # 修订（revise-deepen 前置排查）：推荐无选中模块集 → 套件锚定不再全库
+    # 扫描——UWB_REFERENCE_ID（普通候选模块 uwb 的套件）不再进清单；
+    # KIT_REFERENCE_ID 仍经题面锚定子串命中（夹具 KIT_KEY 含 "2026C"，既有语义）
     assert llm.reference_ids == [
-        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID, UWB_REFERENCE_ID),
-        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID, UWB_REFERENCE_ID),
+        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID),
+        (TOPIC_REFERENCE_ID, KIT_REFERENCE_ID),
     ]
     assert data["topic_id"] == "2026C"
     assert data["modules"] == [
@@ -4308,7 +4311,8 @@ def test_recommend_no_topic_manual_reference_is_only_admission(client, context):
 
 def test_recommend_without_reference_ids_keeps_old_behavior(client, context):
     """缺省兼容（回归）：不传 reference_ids → 链路与现状一致（无手动全文、最终
-    清单只含锚定 auto）。"""
+    清单只含锚定 auto）。修订起推荐不再全库扫描套件——UWB 套件例程不进清单
+    （KIT_REFERENCE_ID 仍经题面锚定子串命中，夹具套件名含题号）。"""
     _wire_material_libraries(context)
     holder = context[1]
     holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
@@ -4320,7 +4324,6 @@ def test_recommend_without_reference_ids_keeps_old_behavior(client, context):
     assert {ref["id"] for ref in data["references"]} == {
         TOPIC_REFERENCE_ID,
         KIT_REFERENCE_ID,
-        UWB_REFERENCE_ID,
     }
     assert {ref["source"] for ref in data["references"]} == {"auto"}
 
@@ -4351,11 +4354,11 @@ def test_recommend_platform_filters_anchored_references(client, context):
         ref["id"] for ref in stm32_data["references"]
     ]
     assert TOPIC_REFERENCE_ID in [ref["id"] for ref in stm32_data["references"]]
-    # 喂给选模块 LLM 的清单段同样不含 mspm0 条目（透传到装配点）
+    # 喂给选模块 LLM 的清单段同样不含 mspm0 条目（透传到装配点）；修订起
+    # 推荐不再全库扫描套件——UWB 套件例程不在清单（KIT 仍经子串命中）
     assert holder["llm"].reference_ids[0] == (
         TOPIC_REFERENCE_ID,
         KIT_REFERENCE_ID,
-        UWB_REFERENCE_ID,
     )
 
     mspm0_data = _recommend_done(
@@ -4365,7 +4368,6 @@ def test_recommend_platform_filters_anchored_references(client, context):
     assert set(holder["llm"].reference_ids[2]) == {
         TOPIC_REFERENCE_ID,
         KIT_REFERENCE_ID,
-        UWB_REFERENCE_ID,
         "巡线模板-mspm0",
     }
 

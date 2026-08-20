@@ -4010,8 +4010,11 @@ def test_selection_prompt_worst_case_fits_request_budget():
     6 字节/字符）+ 20 条长问答历史（截断后形态）+ 词表 + 摘要 + 题面 4000
     （推导最坏形态）——完整 payload 按 json.dumps 序列化（对齐 llm._chat 预检
     口径，不继承旧 select 测试的 prompt.encode 3 字节假口径：红证实测同一
-    载荷旧实现真实线 256001 字节 > 120832）≤ MAX_REQUEST_BYTES，余量 ≥ 10KB；
-    REFERENCE_FULLTEXT_BYTES 改大即红（实测 +4096 → 124582 > 120832 红）。"""
+    载荷旧实现真实线 256001 字节 > 120832）≤ MAX_REQUEST_BYTES，余量 ≥ 9KB；
+    REFERENCE_FULLTEXT_BYTES 改大即红（实测 +4096 → 124582 > 120832 红）。
+    余量 10KB → 9KB（2026-08 修订）：SELECT_SYSTEM_PROMPT 新增控制常识两条
+    （航向保持非脑补 / 时间限制不推计时模块，2024H 复盘），最坏形态实测
+    121514 字节；9KB 余量仍远超响应与网关开销的充分距离。"""
     problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（推导最坏形态 4000 中文）
     summaries = [
         ManifestSummary(f"mod{i}", "温湿度传感器采集与显示" * 8)
@@ -4039,7 +4042,7 @@ def test_selection_prompt_worst_case_fits_request_budget():
         "response_format": {"type": "json_object"},
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 10 * 1024
+    assert total <= MAX_REQUEST_BYTES - 9 * 1024
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
     assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in prompt  # 全文 wire 预算截断带标注
@@ -4113,6 +4116,17 @@ def test_prompts_carry_one_shot_question_rule():
     assert "不要分批渐进追问" in CLARIFY_SYSTEM_PROMPT
     assert "最多 10 条" in SELECT_SYSTEM_PROMPT  # 上限防问题轰炸
     assert "最多 10 条" in CLARIFY_SYSTEM_PROMPT
+
+
+def test_select_system_prompt_carries_control_domain_rules():
+    """控制常识两条（2024H 复盘，2026-08 修订）：① 无引导标记路径的自主行驶
+    → 航向保持（陀螺仪/姿态传感器）是题面证据驱动的需求，不算题外联想——
+    防推荐漏陀螺仪（2024H 直线段无引导线，AI 曾只推 motor/pid 等速直行）；
+    ② "用时不大于 X 秒"是裁判侧指标 → 不构成计时需求——防多推计时模块
+    （2024H 曾被推荐 ntb_time，理由是 15s 到达计时，实为裁判手机计时）。"""
+    assert "航向保持（陀螺仪/姿态传感器）" in SELECT_SYSTEM_PROMPT
+    assert "裁判侧指标" in SELECT_SYSTEM_PROMPT
+    assert "不据此推荐计时模块" in SELECT_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
