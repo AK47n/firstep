@@ -1270,6 +1270,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if payload.get("platform") is not None:
             fields["platform"] = _require_str(payload, "platform")
             validate_context_fields(fields, module_library_dir)
+        # 题面覆盖（历史目录补题面流程）：前端补的题面是上下文的一部分——
+        # 覆盖后分析 / 执行 / 深化都能用（缺题面 400 之前）
+        if payload.get("problem_text") is not None:
+            fields["problem_text"] = _require_str(payload, "problem_text")
         if not fields.get("problem_text"):
             raise ContextError("缺少赛题原文——请先补题面（修订分析需要题面证据）")
         qa_count = payload.get("qa_count")
@@ -1347,6 +1351,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 确认载荷的形状校验（平台 / 绑定 / 多实例 / 副产物模板）——库外模块
         # 在 validate 拦（400 中文，前端手动勾选兜底）
         validate_context_fields(fields, module_library_dir)
+        # 题面覆盖（历史目录补题面流程）：补的题面进重生成骨架上下文
+        if payload.get("problem_text") is not None:
+            fields["problem_text"] = _require_str(payload, "problem_text")
         bindings = fields.get("bindings") or None
         instances = parse_instances(
             fields.get("instances") or None, known_slugs=confirmed_slugs
@@ -1449,6 +1456,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _require_config(context)
         module_library_dir = config.module_library_dir
         _, fields = _load_revision_context(output_dir, module_library_dir)
+        # 题面覆盖（历史目录补题面流程）：补的题面进深化 prompt
+        if payload.get("problem_text") is not None:
+            fields["problem_text"] = _require_str(payload, "problem_text")
         if not main_c:
             main_c = read_project_main_c(output_dir)
         if not main_c:
