@@ -39,6 +39,7 @@ from .master_store import MasterError
 from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError
 from .reference_library import ReferenceError
+from .revision import RevisionError
 from .selection import ManualReferenceError, SelectionError
 from .skeleton import SkeletonError
 from .stage import StageError
@@ -89,6 +90,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             VisionError,  # 视觉通道失败（工单 vision-eyes/01）：未配置 / 网络 / 上游非法——调用方按降级政策决定阻断与否
             ContextError,  # 上下文清单损坏 / 形状非法 / 平台无法识别（工单 revise-deepen/01）
             ImpactError,  # 影响分析输出非法（工单 revise-deepen/02）：缺数组 / 未知 slug / 字段类型错
+            RevisionError,  # 修订执行失败（工单 revise-deepen/03）：备份缺失 / 回滚目标非法
         ),
         400,
         str,
