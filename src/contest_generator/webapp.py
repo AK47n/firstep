@@ -72,7 +72,11 @@ from .generator import (
     generate_project,
     resolve_topic_context,
 )
-from .generation_output import topic_title_from_summary, unique_desktop_topic_dir
+from .generation_output import (
+    topic_dir_title,
+    topic_title_from_summary,
+    unique_desktop_topic_dir,
+)
 from .library import (
     add_module,
     add_platform_files,
@@ -592,11 +596,25 @@ def _resolve_generation_output_dir(
     context: AppContext,
     payload: dict,
 ) -> Path:
-    """生成请求 → 最终 output_dir；桌面模式用 AI 题名命名。"""
+    """生成请求 → 最终 output_dir；桌面模式用题名命名。
+
+    历史赛题（topic_id 给定）：确定性取「编号 + 首行短题名」（如
+    `2024H 自动行驶小车`，topic_dir_title）——不依赖 AI 简介（省一次 LLM
+    调用，目录名稳定可预期；AI 简介首行是长句，曾直接变成目录名）；粘贴
+    题面（无 topic_id）：沿用 AI 简介首行（topic_title_from_summary）。
+    """
     if not _desktop_output_requested(payload):
         return Path(_require_str(payload, "output_dir"))
     problem_text = _require_str(payload, "problem_text")
-    title = topic_title_from_summary(_llm(context).summarize_topic(problem_text))
+    topic_id = _optional_str(payload, "topic_id")
+    if topic_id:
+        config = _require_config(context)
+        entry = resolve_number(
+            topic_library_dir(config.module_library_dir), topic_id
+        )
+        title = topic_dir_title(entry.key, entry.problem_text)
+    else:
+        title = topic_title_from_summary(_llm(context).summarize_topic(problem_text))
     return unique_desktop_topic_dir(context.desktop_dir(), title)
 
 
