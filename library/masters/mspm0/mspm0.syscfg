@@ -18,9 +18,12 @@
  *   STEP_MOTOR_PORT 整组 GPIOB）；DCC_100_PWM2：TIMG12 C0 = PA14（板上经
  *   LED2+15k 到地，PWM 输出时 LED 微亮，可忽略）
  * 板上固定占用：CH340E PA10/PA11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、
- * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针）、
- * NRST。板载芯片为 48 脚（疑 LQFP-48 PT），syscfg 仍声明 LQFP-64(PM)（LaunchPad
- * 遗留，PB4/PB5 仅 PM 模型存在——留待板级引脚配置工单核实包型号）。
+ * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针，
+ * 用户实物未在 2×20P 上找到 A19/A20）、NRST。2026-08-20 用户实物核验：芯片丝印
+ * 可见 42WG4 / ABDL，外周为 48 脚，2×20P 排针分布正确，PA13/PA14 在排针上可用。
+ * TI 封装命名中 LQFP(PT)=48 脚、LQFP(PM)=64 脚；当前 SysConfig 仍沿用可工作的
+ * LQFP-64(PM) / LP-MSPM0G3507 模型，不以此反推实物脚数。实际地猛星 2×20P
+ * 引出范围由 mspm0-dimx 板定义约束，PB4/PB5 为 LaunchPad 遗留模型脚、不在 2×20P 上。
  */
 //@cliArgs --device "MSPM0G350X" --package "LQFP-64(PM)" --part "Default"
 //@v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)"
