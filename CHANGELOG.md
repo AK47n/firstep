@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=aad2d1fa7e9f307443df3c71172a42264807e94a -->
+<!-- changelog-auto: last-commit=e607cfe57a6ece9beea23740419efe944518ba0e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
+- 01:25 UI 打磨（ui-polish/02）：生成页左侧步骤导航与完成态
 
 ## 2026-08-21
 - 00:54 生成尾部落盘上下文清单 + 历史目录反推 + 加载 API（工单 revise-deepen/01）
