@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=7149685c887a9ebdf5a81dc8a9251b205184906b -->
+<!-- changelog-auto: last-commit=aad2d1fa7e9f307443df3c71172a42264807e94a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-22
+- 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
 
 ## 2026-08-21
 - 00:54 生成尾部落盘上下文清单 + 历史目录反推 + 加载 API（工单 revise-deepen/01）
