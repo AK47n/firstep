@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fc53c461aeb26881d31d6d1ad918d7d7b8051265 -->
+<!-- changelog-auto: last-commit=ddf8b78c6f5ac1c19d167ce534c9a8050e52d939 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 01:44 工单 04 评审整改——工具链探测复用单源、状态文案单源、工单目录入库
 - 01:53 前端「修订与深化」阶段卡 + 补题面闭环（工单 revise-deepen/05）
 - 01:58 工单 05 评审整改——补题面闭环前端接线、回滚竞态、Q&A 原文展示
+- 20:42 视觉通道切 DeepSeek 原生——默认值/主 key 复用/BMP 友好报错/观测文案全链路（工单 vision-deepseek-native/01）
 
 ## 2026-08-20
 - 00:00 多实例默认兜底——AI 没猜实例时按平台默认自动填（stm32 红黄绿 / mspm0 单实例，与不配置生成等价零回归，工单 instance-default-fallback/01）+ backlog 计划
