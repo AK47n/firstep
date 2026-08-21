@@ -36,8 +36,8 @@
          font: 14px/1.6 "Microsoft YaHei", "PingFang SC", sans-serif; }
   ::selection { background: var(--accent-dim); }
   header { background: var(--panel); border-bottom: 1px solid var(--border);
-           padding: 12px 24px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
-  header h1 { font-size: 22px; margin: 0; display: flex; align-items: center; gap: 12px; }
+           padding: 6px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 10px; }
   header h1 .brand-en { font-family: var(--mono); font-weight: 700; letter-spacing: 1px;
                         display: inline-flex; align-items: baseline; }
   header h1 .brand-en .b1 { color: var(--text); }
@@ -46,19 +46,19 @@
                                 background: var(--accent); box-shadow: 0 0 12px rgba(0, 212, 255, .5);
                                 animation: brand-blink 1.1s steps(2, start) infinite; }
   @keyframes brand-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
-  header h1 .brand-cn { color: var(--muted); font-size: 12px; font-weight: 500;
+  header h1 .brand-cn { color: var(--muted); font-size: 11px; font-weight: 500;
                          padding: 2px 10px; border: 1px solid var(--border);
                          border-radius: 999px; background: var(--panel-2); white-space: nowrap; }
-  header .sub { color: var(--muted); font-size: 12px; }
+  header .sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
   header .sub .arr { color: var(--accent); margin: 0 2px; }
+  @media (max-width: 1179px) { header .sub { display: none; } }  /* 窄屏隐藏流程链 */
   .step-no { display: inline-flex; align-items: center; justify-content: center;
              min-width: 22px; height: 22px; margin-right: 8px; padding: 0 6px;
              border-radius: 6px; background: var(--accent); color: #04222b;
              font-size: 13px; font-weight: 700; }
-  nav { display: flex; gap: 4px; padding: 0 24px; background: var(--panel);
-        border-bottom: 1px solid var(--border); }
-  nav button { border: none; background: none; padding: 10px 16px; cursor: pointer;
-               font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; }
+  nav { display: flex; gap: 2px; margin-left: auto; align-items: center; }
+  nav button { border: none; background: none; padding: 8px 12px; cursor: pointer;
+               font-size: 13.5px; color: var(--muted); border-bottom: 2px solid transparent; }
   nav button:hover { color: var(--text); }
   nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
   main { max-width: 980px; margin: 20px auto; padding: 0 16px; }
@@ -552,17 +552,17 @@
 <header>
   <h1><span class="brand-en"><span class="b1">first</span><span class="b2">ep</span><span class="cursor"></span></span><span class="brand-cn">电赛工程生成器</span></h1>
   <span class="sub">赛题原文<span class="arr">→</span>AI 推荐<span class="arr">→</span>引脚配置<span class="arr">→</span>骨架<span class="arr">→</span>生成<span class="arr">→</span>编译修复<span class="arr">→</span>交接提示词</span>
+  <nav>
+    <button data-tab="generate" class="active">生成</button>
+    <button data-tab="library">模块库</button>
+    <button data-tab="reference">参考文件库</button>
+    <button data-tab="pdf">PDF 资料库</button>
+    <button data-tab="topic">赛题库</button>
+    <button data-tab="master">母版</button>
+    <button data-tab="changelog">更新记录</button>
+    <button data-tab="settings">设置</button>
+  </nav>
 </header>
-<nav>
-  <button data-tab="generate" class="active">生成</button>
-  <button data-tab="library">模块库</button>
-  <button data-tab="reference">参考文件库</button>
-  <button data-tab="pdf">PDF 资料库</button>
-  <button data-tab="topic">赛题库</button>
-  <button data-tab="master">母版</button>
-  <button data-tab="changelog">更新记录</button>
-  <button data-tab="settings">设置</button>
-</nav>
 
 <main>
   <!-- ============================ 生成页 ============================ -->
@@ -5725,7 +5725,9 @@ function syncStep7() {
 (function initStepNav() {
   const nav = $("step-nav");
   if (!nav) return;
-  const cards = Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR));
+  // 只收带 .step-no 徽章的步骤卡（6.5 多实例配置卡无徽章，不进导航）
+  const cards = Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR))
+    .filter((c) => c.querySelector(".step-no"));
   if (!cards.length) return;
   nav.innerHTML = stepNavDotsHTML(stepNavTitles(cards));
   nav.addEventListener("click", (e) => {
