@@ -516,7 +516,7 @@
       <div class="row" style="margin-top:8px">
         <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp">
         <button id="btn-upload">上传并抽取文字</button>
-        <span class="muted">支持 .pdf / .docx / .txt / .md / 图片，纯本地解析；图片与 PDF 示意图经免费视觉通道识别（需在设置页配置）</span>
+        <span class="muted">支持 .pdf / .docx / .txt / .md / 图片，纯本地解析；图片与 PDF 示意图经视觉通道识别（默认复用主 DeepSeek key，无需额外配置）</span>
       </div>
       <div class="row" style="margin-top:8px">
         <input type="text" id="topic-id" placeholder="历史赛题编号，如 2026C" style="flex:1;max-width:220px">
@@ -1124,11 +1124,11 @@
     <div class="card">
       <h2>视觉通道（可选）</h2>
       <div class="row">
-        <div style="flex:1"><label>视觉 base_url（留空 = 默认智谱）</label><input type="text" id="set-vision-base-url" placeholder="https://open.bigmodel.cn/api/paas/v4"></div>
-        <div style="flex:1"><label>视觉模型（留空 = glm-4.6v-flash）</label><input type="text" id="set-vision-model" placeholder="glm-4.6v-flash"></div>
+        <div style="flex:1"><label>视觉 base_url（留空 = DeepSeek 官方端点）</label><input type="text" id="set-vision-base-url" placeholder="https://api.deepseek.com"></div>
+        <div style="flex:1"><label>视觉模型（留空 = deepseek-v4-flash-vision-exp）</label><input type="text" id="set-vision-model" placeholder="deepseek-v4-flash-vision-exp"></div>
       </div>
-      <div style="flex:1"><label>视觉 API key（留空 = 视觉关闭；掩码保持不变）</label><input type="text" id="set-vision-api-key" placeholder="智谱开放平台免费 key（GLM-4.6V-Flash）" autocomplete="off"></div>
-      <div class="muted">免费云端识图（GLM-4.6V-Flash）：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别——AI 简介 / 推荐 / 骨架都能"看到"图的内容。key 在<a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a>免费获取；不配置 = 视觉功能关闭，其余功能不受影响。</div>
+      <div style="flex:1"><label>视觉 API key（留空 = 复用主 DeepSeek key；掩码保持不变）</label><input type="text" id="set-vision-api-key" placeholder="DeepSeek API key（与主 key 共用）" autocomplete="off"></div>
+      <div class="muted">云端识图（DeepSeek 视觉模型）：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别——AI 简介 / 推荐 / 骨架都能"看到"图的内容。key 与主 DeepSeek key 共用：视觉 key 留空且 base_url 为 DeepSeek 官方端点时自动复用，零额外配置；改成其它 OpenAI 兼容视觉服务则须自备 key。不配置 = 视觉功能关闭，其余功能不受影响。</div>
     </div>
 
     <div class="card">
@@ -5263,7 +5263,8 @@ async function loadSettings() {
       llmSel.appendChild(opt);
     }
     llmSel.value = s.local_llm_model || "";
-    // 视觉通道（工单 vision-eyes/01）：key 只回掩码；空 = 视觉关闭
+    // 视觉通道（工单 vision-deepseek-native/01）：key 只回掩码；空 = 复用主
+    // DeepSeek key（自定义视觉端点 = 关闭，见设置页说明）
     $("set-vision-base-url").value = s.vision_base_url || "";
     $("set-vision-api-key").value = s.vision_api_key || "";
     $("set-vision-model").value = s.vision_model || "";
