@@ -4,6 +4,7 @@
 不提交二进制 fixture。
 """
 
+import io
 import zipfile
 
 import pytest
@@ -241,15 +242,62 @@ def testpdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
     assert "另有 1 张图跳过" in lines[-1]
 
 
-def testpdf_image_notes_skips_bmp_embedded_images(monkeypatch, tmp_path):
-    """PDF 内嵌 BMP：发送前跳过（工单 vision-deepseek-native/01——DeepSeek
-    必拒 BMP，不浪费注定失败的视觉调用；跳过计入尾部标注）。"""
+def _pil_image_bytes(fmt: str) -> bytes:
+    """PIL 现场生成指定格式小图字节（BMP / JPEG2000 等，测试用）。"""
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), (200, 30, 30)).save(buf, format=fmt)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize(
+    "fmt,name",
+    [("BMP", "a.bmp"), ("JPEG2000", "a.jp2")],
+    ids=["bmp", "jpeg2000"],
+)
+def testpdf_image_notes_transcodes_non_supported_embedded_images(
+    fmt, name, monkeypatch, tmp_path
+):
+    """PDF 内嵌 DeepSeek 不支持格式（BMP / JPEG2000）：转 PNG 后发送
+    （工单 vision-format-transcode/01）；旧实现 BMP 跳过 / JPEG2000 兜底
+    直发原字节 → 红证。Pillow 无 JPEG2000 支持时精确 skip 防脆。"""
+    from contest_generator import extraction
+
+    if fmt == "JPEG2000":
+        from PIL import Image
+
+        if "JPEG2000" not in Image.registered_extensions().values():
+            pytest.skip("Pillow 无 JPEG2000 支持（缺 OpenJPEG）")
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    fake_describe = _fake_describe("图")
+    src_bytes = _pil_image_bytes(fmt)
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([
+        _FakePage([_FakeImage(src_bytes, name), _FakeImage(b"img-png", "b.png")]),
+    ]))
+    monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
+
+    notes = extraction.pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+    )
+    assert notes == "[示意图1：图]\n[示意图2：图]"  # 非直发格式不再跳过
+    from PIL import Image
+
+    sent, mime = fake_describe.calls[0]
+    assert mime == "image/png"
+    with Image.open(io.BytesIO(sent)) as im:
+        assert im.format == "PNG"  # 旧实现跳过/兜底直发 → 红
+    assert fake_describe.calls[1] == (b"img-png", "image/png")
+
+
+def testpdf_image_notes_skips_undecodable_non_supported_image(monkeypatch, tmp_path):
+    """非支持格式且 PIL 无法解码（垃圾字节 + .bmp 后缀）→ 跳过计尾部标注。"""
     from contest_generator import extraction
 
     path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
     fake_describe = _fake_describe("图")
     monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([
-        _FakePage([_FakeImage(b"img-bmp", "a.bmp"), _FakeImage(b"img-png", "b.png")]),
+        _FakePage([_FakeImage(b"not-an-image", "a.bmp"), _FakeImage(b"img-png", "b.png")]),
     ]))
     monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
 
@@ -257,7 +305,28 @@ def testpdf_image_notes_skips_bmp_embedded_images(monkeypatch, tmp_path):
         path, vision_base_url="", vision_api_key="sk-test", vision_model=""
     )
     assert notes == "[示意图1：图]\n（另有 1 张图跳过：超大或描述失败）"
-    assert fake_describe.calls == [(b"img-png", "image/png")]  # BMP 未发出
+    assert fake_describe.calls == [(b"img-png", "image/png")]
+
+
+def testpdf_image_notes_all_images_undecodable_returns_empty(monkeypatch, tmp_path):
+    """全部嵌入图无法解码 → 空串（_join_notes 空 notes 语义：跳过计数不
+    呈现——既有行为边界，记录于工单 vision-format-transcode/01）。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    fake_describe = _fake_describe("图")
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([
+        _FakePage([_FakeImage(b"not-an-image", "a.bmp")]),
+    ]))
+    monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
+
+    assert (
+        extraction.pdf_image_notes(
+            path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+        )
+        == ""
+    )
+    assert fake_describe.calls == []
 
 
 def testpdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):

@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.141",
     "uvicorn>=0.52",
     "python-multipart>=0.0.20",  # FastAPI 文件上传
+    "pillow>=11",  # PDF 内嵌图转码（BMP / JPEG2000 → PNG，工单 vision-format-transcode/01）
 ]
 
 [project.optional-dependencies]
