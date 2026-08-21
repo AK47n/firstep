@@ -53,6 +53,12 @@
 - **Standards 轴：无硬违规**（语言规范 / 中文注释全过）。判断项 4 项全落实：① `Path(name or "").suffix.lower()` 两处重复 → 抽 `_image_suffix` helper；② `import io` 懒加载无谓 → 移模块顶层（PIL 仍 lazy）；③ 注释失真（未知后缀「png 兜底」在 pdf_image_notes 路径不可达）→ 注释改写说明 .bmp 条目保留原因与直发/转码判定关系；④ BMP/JPEG2000 两测试脚手架重复 → `pytest.mark.parametrize` 合并。
 - **Spec 轴：主体正确、DoD 代码项全满足**。建议项全落实：① JPEG2000 skip 判定过宽（捕获生成异常=假绿）→ 改用 `"JPEG2000" in Image.registered_extensions().values()` 精确预判；② 全跳过边界未覆盖 → 新增 `testpdf_image_notes_all_images_undecodable_returns_empty`（`_join_notes` 空 notes → "" 的既有语义文档化）；③ 评审范围外文档（revise-deepen/04、05）提交时排除。
 
+### 真机验证（真实赛题长 PDF，用户授权）
+
+- **离线转码**（verify_transcode_real_pdf.py，零额度）：261 页长 PDF 全部 472 图格式分布复现（jpg 230 + png 230 + jp2 12）；**12/12 JPEG2000 转 PNG 成功**（p37-p159，450KB→220KB 等，PIL 逐一验证 format=PNG）。
+- **真实视觉**（verify_vision_real_jp2.py，DeepSeek 官方端点 + 用户主 key，12 次调用 ≈ 5K token 几分钱）：**12/12 识别成功 0 失败**——p37 功率放大电路、p39 场地 500×400cm、p141 场地 80×70cm 圆角 R10、p145 CC3200 WiFi 双终端、p148 尺寸标注 125/150cm 等，描述质量正常。主 key 只读不打印、未改任何配置。
+- **真实流程边界**：p142 图 4.82MB > MAX_IMAGE_BYTES（4MB）→ pdf_image_notes 既有守卫会「超大跳过」（验证脚本绕过守卫直调，故也识别成功）；其余 11 张均进图注。
+
 ### 最终回归
 
 - 评审落实后：`tests/test_extraction.py` 31 passed（parametrize 2 用例 + 降级 + 全跳过边界）；`mypy src` 57 文件干净；全量 pytest（待收尾确认）
