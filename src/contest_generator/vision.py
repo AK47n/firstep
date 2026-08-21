@@ -1,17 +1,19 @@
-"""视觉通道：GLM-4.6V-Flash 免费云端识图（工单 vision-eyes/01 升级默认模型）。
+"""视觉通道：DeepSeek 官方视觉模型云端识图（工单 vision-deepseek-native/01）。
 
-DeepSeek 纯文本看不见图；本模块给题面示意图 / 上传图片提供「图 → 中文
-描述」通道：OpenAI 兼容 chat/completions（content = text + image_url
-base64 data URL），默认模型 glm-4.6v-flash（智谱官方免费多模态 API，GLM-4.6V
-免费版：128K 上下文 / 可开关思考模式 / 通用 OCR 与复杂图表识别，2026-08 默认升级）。
+主 LLM 是 DeepSeek 纯文本模型，看不见图；本模块给题面示意图 / 上传图片提供
+「图 → 中文描述」通道：OpenAI 兼容 chat/completions（content = text + image_url
+base64 data URL），默认模型 deepseek-v4-flash-vision-exp（DeepSeek 官方视觉
+模型，与 V4 Flash 同价，2026-08 上线；支持 JPEG/PNG/GIF/WebP，单图 384 token
+封顶，图片仅限 user 消息）。
 
 网络层照 llm.py 先例：标准库 urllib（零第三方依赖）+ 可注入传输接缝
 （测试假件）；网络类错误指数退避重试（3 次 1/2/4s，429 限速不重试——
-免费层限速重试只会继续 429，直接失败由调用方降级）；describe_image_cached
+限速重试只会继续 429，直接失败由调用方降级）；describe_image_cached
 进程内 sha256 缓存（同图重跑不重复调用/花钱）。
 
-纯函数层：不 import 生成流程、不碰盘；配置（base_url / api_key / model）
-与传输由调用方注入（webapp 装配层照 _llm 先例）。
+key 复用：视觉 key 留空且视觉 base_url 为 DeepSeek 官方端点时，装配层经
+effective_vision_api_key 复用主 DeepSeek key（本模块只提供纯函数判定，
+不 import 生成流程、不碰盘；配置与传输由调用方注入）。
 """
 
 from __future__ import annotations
@@ -25,10 +27,17 @@ import urllib.request
 from collections.abc import Mapping
 from typing import Any, Protocol
 
-# 智谱开放平台 OpenAI 兼容端点（缺省值；设置页可覆盖）
-DEFAULT_VISION_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
-# 官方免费多模态模型（无 API 费用；免费层有限速，日常 2-10 张/题够用）
-DEFAULT_VISION_MODEL = "glm-4.6v-flash"
+# DeepSeek 官方 OpenAI 兼容端点（缺省值；设置页可覆盖；含 /v1 形态）
+DEFAULT_VISION_BASE_URL = "https://api.deepseek.com"
+# 官方视觉模型（与 V4 Flash 同价；单图 token 计费封顶 384）
+DEFAULT_VISION_MODEL = "deepseek-v4-flash-vision-exp"
+
+# 视觉 key 复用守卫：仅 DeepSeek 官方端点允许「视觉 key 留空 = 复用主 key」。
+# 用户改成其它 OpenAI 兼容视觉服务仍须自备 key——不把主 key 发给别的服务商。
+DEEPSEEK_VISION_BASE_URLS = (
+    "https://api.deepseek.com",
+    "https://api.deepseek.com/v1",
+)
 
 # 网络重试参数（照 llm.py 网络退避先例的简化版）
 VISION_NETWORK_RETRIES = 3
@@ -116,6 +125,27 @@ def vision_configured(api_key: str) -> bool:
     return bool(api_key and api_key.strip())
 
 
+def effective_vision_api_key(
+    vision_api_key: str,
+    main_api_key: str,
+    vision_base_url: str,
+) -> str:
+    """有效视觉 key（装配层调用；config 保持原始值语义，回显不因复用失真）。
+
+    - 视觉 key 非空 → 原样（显式 key 优先）；
+    - 视觉 key 留空 + 视觉 base_url 为 DeepSeek 官方端点 → 复用主 key
+      （用户只配一套 DeepSeek key，视觉零额外配置）；
+    - 视觉 key 留空 + 自定义端点 → 空串（自定义视觉服务须自备 key，
+      不把主 key 发给别的服务商）。
+    """
+    if vision_configured(vision_api_key):
+        return vision_api_key
+    base = (vision_base_url or DEFAULT_VISION_BASE_URL).strip().rstrip("/")
+    if base in DEEPSEEK_VISION_BASE_URLS:
+        return main_api_key
+    return ""
+
+
 def _image_data_url(image_bytes: bytes, mime: str) -> str:
     """图片字节 → data URL（视觉请求的 image_url 形态）。"""
     return "data:{mime};base64,{b64}".format(
@@ -144,7 +174,9 @@ def describe_image(
     """
     if not vision_configured(api_key):
         raise VisionNotConfiguredError(
-            "视觉通道未配置：请到设置页填写视觉 API key（免费 GLM-4.6V-Flash）"
+            "视觉通道未配置：请到设置页填写视觉 API key"
+            "（视觉 base_url 为 DeepSeek 官方端点且主 key 已配置时，"
+            "留空自动复用主 key）"
         )
     base_url = base_url.strip() or DEFAULT_VISION_BASE_URL
     model = model.strip() or DEFAULT_VISION_MODEL
@@ -182,7 +214,7 @@ def describe_image(
         try:
             observation_collector.collect(
                 operation="vision_describe",
-                provider="zhipu",
+                provider="deepseek",
                 route="vision",
                 model=model,
                 duration_ms=round((time.monotonic() - started_at) * 1000),
@@ -213,7 +245,7 @@ def describe_image(
             last_http_status = status
             if status == 429:
                 raise VisionError(
-                    f"视觉服务限流（HTTP 429，免费层有限速）：{body[:200]}"
+                    f"视觉服务限流（HTTP 429）：{body[:200]}"
                 )
             if status >= 500:
                 if attempt + 1 < VISION_NETWORK_RETRIES:

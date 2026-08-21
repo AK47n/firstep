@@ -101,10 +101,10 @@ def test_saved_file_is_plain_json(tmp_path):
         # 本地 LLM 端点（工单 local-llm-routing/01）：缺省空串 = 本地路由关闭
         "local_llm_base_url": "",
         "local_llm_model": "",
-        # 视觉通道（工单 vision-eyes/01）：api_key 空 = 视觉关闭，base/model 有默认
-        "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
+        # 视觉通道（工单 vision-deepseek-native/01）：api_key 空 = 复用主 key，base/model 有默认
+        "vision_base_url": "https://api.deepseek.com",
         "vision_api_key": "",
-        "vision_model": "glm-4.6v-flash",
+        "vision_model": "deepseek-v4-flash-vision-exp",
         # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
         "recommend_cache_enabled": True,
         # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
@@ -178,14 +178,15 @@ def test_ccs_toolchain_paths_default_blank_and_roundtrip(tmp_path):
 
 
 def test_vision_fields_default_and_roundtrip(tmp_path):
-    """视觉通道（工单 vision-eyes/01）：缺省 base/model = 官方免费通道；key
-    空串 = 视觉关闭；非空回写；类型非法大声失败（local_llm 同款）。"""
+    """视觉通道（工单 vision-deepseek-native/01）：缺省 base/model = DeepSeek
+    官方端点与模型；key 空串 = 复用主 key（装配层判定）；非空回写；类型非法
+    大声失败（local_llm 同款）。roundtrip 用自定义值验证「旧配置读回不变」。"""
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
     loaded = load_config(path)
-    assert loaded.vision_base_url == "https://open.bigmodel.cn/api/paas/v4"
+    assert loaded.vision_base_url == "https://api.deepseek.com"
     assert loaded.vision_api_key == ""
-    assert loaded.vision_model == "glm-4.6v-flash"
+    assert loaded.vision_model == "deepseek-v4-flash-vision-exp"
 
     save_config(
         AppConfig(
