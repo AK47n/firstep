@@ -1,7 +1,7 @@
-"""视觉通道（工单 vision-eyes/01，默认模型 2026-08 升级）：GLM-4.6V-Flash 云端识图。
+"""视觉通道（工单 vision-deepseek-native/01，默认 DeepSeek 视觉）：云端识图。
 
 假传输注入（照 llm.Transport 接缝先例）：请求体形状 / 重试 / 解析 / 缓存 /
-错误登记。真实网络不在此测试（真机验收需用户配置智谱 key）。
+错误登记 / key 复用守卫。真实网络不在此测试（真机验收需用户配置 DeepSeek key）。
 """
 
 import json
@@ -11,6 +11,7 @@ import pytest
 from contest_generator.errors import error_entry
 from contest_generator.vision import (
     DEFAULT_DESCRIBE_PROMPT,
+    DEFAULT_VISION_BASE_URL,
     DEFAULT_VISION_MODEL,
     VisionError,
     VisionNotConfiguredError,
@@ -18,6 +19,7 @@ from contest_generator.vision import (
     clear_describe_cache,
     describe_image,
     describe_image_cached,
+    effective_vision_api_key,
     vision_configured,
 )
 
@@ -67,6 +69,56 @@ def test_vision_configured_requires_key():
     assert not vision_configured("")
     assert not vision_configured("   ")
     assert vision_configured("sk-test")
+
+
+def test_effective_vision_api_key_reuses_main_key_for_deepseek_base():
+    """视觉 key 留空 + DeepSeek 官方端点（默认 / 带 /v1 / 尾斜杠）→ 复用主 key。"""
+    assert effective_vision_api_key("", "sk-main", DEFAULT_VISION_BASE_URL) == "sk-main"
+    assert effective_vision_api_key("", "sk-main", "https://api.deepseek.com/v1") == "sk-main"
+    assert effective_vision_api_key("", "sk-main", "https://api.deepseek.com/") == "sk-main"
+
+
+def test_effective_vision_api_key_does_not_leak_main_key_to_custom_base():
+    """视觉 key 留空 + 自定义视觉服务端点 → 空串（主 key 不发给别家）。
+    空 base_url = 回落默认端点（与 describe_image 同语义）→ DeepSeek → 复用。"""
+    assert effective_vision_api_key("", "sk-main", "https://open.bigmodel.cn/api/paas/v4") == ""
+    assert effective_vision_api_key("", "sk-main", "http://localhost:9999/v1") == ""
+    assert effective_vision_api_key("", "sk-main", "") == "sk-main"
+
+
+def test_effective_vision_api_key_explicit_key_wins():
+    """显式视觉 key 优先于复用（任意端点都用它）。"""
+    assert effective_vision_api_key("sk-vision", "sk-main", DEFAULT_VISION_BASE_URL) == "sk-vision"
+    assert (
+        effective_vision_api_key("sk-vision", "sk-main", "https://open.bigmodel.cn/api/paas/v4")
+        == "sk-vision"
+    )
+
+
+class FakeObservationCollector:
+    """观测接缝假件：收集 collect 调用（照 LLMObservationCollector 形状）。"""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def collect(self, **kwargs):
+        self.calls.append(kwargs)
+        return kwargs
+
+
+def test_describe_records_deepseek_provider_observation():
+    """观测 provider 标签 = deepseek（工单 vision-deepseek-native/01 去智谱化）。"""
+    collector = FakeObservationCollector()
+    describe_image(
+        PNG_BYTES,
+        PNG_MIME,
+        api_key="sk-test",
+        transport=FakeTransport(_ok_body()),
+        observation_collector=collector,
+    )
+    assert collector.calls
+    assert collector.calls[0]["operation"] == "vision_describe"
+    assert collector.calls[0]["provider"] == "deepseek"
 
 
 def test_describe_without_key_raises_not_configured():

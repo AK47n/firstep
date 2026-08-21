@@ -51,8 +51,9 @@ class AppConfig:
     # 本地 LLM 端点可选配置（工单 local-llm-routing/01）：空串 = 本地路由关闭
     local_llm_base_url: str = ""
     local_llm_model: str = ""
-    # 视觉通道（工单 vision-eyes/01，默认模型 2026-08 升级）：免费云端 GLM-4.6V-Flash（OpenAI 兼容）。
-    # api_key 空 = 视觉功能关闭；base_url / model 缺省填官方免费通道
+    # 视觉通道（工单 vision-deepseek-native/01，默认 DeepSeek 官方视觉）：
+    # OpenAI 兼容 /chat/completions；api_key 空 = 装配层复用主 key（仅 DeepSeek
+    # 官方端点）；base_url / model 缺省填官方默认值
     vision_base_url: str = DEFAULT_VISION_BASE_URL
     vision_api_key: str = ""
     vision_model: str = DEFAULT_VISION_MODEL
@@ -136,8 +137,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     local_llm_model = data.get("local_llm_model", "")
     if not isinstance(local_llm_model, str):
         raise ConfigError(f"local_llm_model 必须是字符串：{path}")
-    # 视觉通道（工单 vision-eyes/01）：api_key 空 = 关闭；旧 config 缺字段或
-    # base/model 为空串时回落官方免费默认值（只填 key 即可用）。
+    # 视觉通道（工单 vision-eyes/01 + vision-deepseek-native/01）：api_key 空 =
+    # 复用主 key（装配层判定）；旧 config 缺字段或 base/model 为空串时回落
+    # DeepSeek 官方默认值（只填 key 即可用）。
     vision_base_url = data.get("vision_base_url", DEFAULT_VISION_BASE_URL)
     if not isinstance(vision_base_url, str):
         raise ConfigError(f"vision_base_url 必须是字符串：{path}")

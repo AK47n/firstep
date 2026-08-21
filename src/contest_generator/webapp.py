@@ -67,6 +67,7 @@ from .extraction import (
 from .vision import (
     DEFAULT_VISION_BASE_URL,
     DEFAULT_VISION_MODEL,
+    effective_vision_api_key,
     vision_configured,
 )
 from .fix_errors import (
@@ -625,6 +626,20 @@ def _masked_optional_key(
     return value
 
 
+def _resolve_vision(config: AppConfig) -> tuple[str, str, str]:
+    """装配层解析有效视觉参数 (base_url, api_key, model)（工单
+    vision-deepseek-native/01）：视觉 key 留空 + DeepSeek 官方端点 = 复用主
+    key；config 保持原始值语义（设置页回显不因复用失真）。四个消费点共用，
+    防装配漂移。"""
+    return (
+        config.vision_base_url,
+        effective_vision_api_key(
+            config.vision_api_key, config.api_key, config.vision_base_url
+        ),
+        config.vision_model,
+    )
+
+
 async def _save_upload(upload: UploadFile) -> Path:
     """上传文件 → 临时文件（保留原后缀，抽取 / 录入按后缀选解析器）。
 
@@ -762,9 +777,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     async def extract(upload: UploadFile = File(...)) -> dict:
         """上传赛题文件（PDF / .docx / .txt / .md / 图片）→ 抽取文本。
 
-        PDF 且配了视觉 key（工单 vision-eyes/02）：文本后追加嵌入示意图
-        描述（[示意图N：…]）；未配 key = 纯文本（现状逐字节一致）；视觉
-        失败静默降级。图片（工单 vision-eyes/03）：直接走视觉描述。"""
+        PDF 且视觉通道可用（工单 vision-eyes/02 + vision-deepseek-native/01）：
+        文本后追加嵌入示意图描述（[示意图N：…]）；视觉 key 留空 + DeepSeek
+        官方端点 = 复用主 key（零额外配置）；未配置 = 纯文本（现状逐字节一致）；
+        视觉失败静默降级。图片（工单 vision-eyes/03）：直接走视觉描述。"""
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=Path(upload.filename or "").suffix
         ) as tmp:
@@ -772,14 +788,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             tmp_path = Path(tmp.name)
         try:
             config = _require_config(context)
+            vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
             suffix = tmp_path.suffix.lower()
             if suffix in IMAGE_FILE_SUFFIXES:
                 collector = create_llm_observation_collector("vision-describe")
                 result = extract_image(
                     tmp_path,
-                    vision_base_url=config.vision_base_url,
-                    vision_api_key=config.vision_api_key,
-                    vision_model=config.vision_model,
+                    vision_base_url=vision_base_url,
+                    vision_api_key=vision_api_key,
+                    vision_model=vision_model,
                     observation_collector=collector,
                 )
                 context.recent_llm_workflows.add_completed(collector)
@@ -788,9 +805,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 collector = create_llm_observation_collector("vision-describe")
                 result = extract_pdf_with_image_notes(
                     tmp_path,
-                    vision_base_url=config.vision_base_url,
-                    vision_api_key=config.vision_api_key,
-                    vision_model=config.vision_model,
+                    vision_base_url=vision_base_url,
+                    vision_api_key=vision_api_key,
+                    vision_model=vision_model,
                     observation_collector=collector,
                 )
                 context.recent_llm_workflows.add_completed(collector)
@@ -2238,10 +2255,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     async def topics_split(upload: UploadFile = File(...)) -> dict:
         """上传历年真题长 PDF → 拆条（年份 / 编号 / 题面全文）→ 草稿列表。
 
-        配置了视觉 key 时（工单 topic-vision-notes/01）：先做嵌入图视觉
-        图注（[示意图N：…] 段，照 /api/extract 同款），拆出的题面草稿自带
-        图注；未配置 = 纯文本（现状逐字节一致）。视觉失败静默降级，不
-        阻塞拆条。
+        视觉通道可用时（工单 topic-vision-notes/01 + vision-deepseek-native/01）：
+        先做嵌入图视觉图注（[示意图N：…] 段，照 /api/extract 同款），拆出的
+        题面草稿自带图注；视觉 key 留空 + DeepSeek 官方端点 = 复用主 key；
+        未配置 = 纯文本（现状逐字节一致）。视觉失败静默降级，不阻塞拆条。
 
         路由按全文长度分流（flash 模型输出预算有限，多年长 PDF 一次拆会被
         截断而静默漏题）：≤ TOPIC_SPLIT_LLM_CHAR_CAP 单次调 LLM 拆条（支持
@@ -2256,13 +2273,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         tmp_path = await _save_upload(upload)
         try:
             config = _require_config(context)
-            if config.vision_api_key and vision_configured(config.vision_api_key):
+            vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
+            if vision_configured(vision_api_key):
                 collector = create_llm_observation_collector("vision-describe")
                 text = extract_pdf_with_image_notes(
                     tmp_path,
-                    vision_base_url=config.vision_base_url,
-                    vision_api_key=config.vision_api_key,
-                    vision_model=config.vision_model,
+                    vision_base_url=vision_base_url,
+                    vision_api_key=vision_api_key,
+                    vision_model=vision_model,
                     observation_collector=collector,
                 )
                 context.recent_llm_workflows.add_completed(collector)
@@ -2324,9 +2342,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def topic_get(key: str) -> dict:
         """编号解析："2026C" → 题面全文 + 附带程序（生成入口素材）。
 
-        配置了视觉 key 时（工单 topic-vision-notes/02）：存量条目题面引用
-        图但无图注 → 自动对条目内原 PDF 补图注并写回（幂等），返回带图注
-        题面；任何视觉失败降级返回原题面（视觉是增强不是阻塞）。未配置 =
+        视觉通道可用时（工单 topic-vision-notes/02 + vision-deepseek-native/01）：
+        存量条目题面引用图但无图注 → 自动对条目内原 PDF 补图注并写回（幂等），
+        返回带图注题面；视觉 key 留空 + DeepSeek 官方端点 = 复用主 key；
+        任何视觉失败降级返回原题面（视觉是增强不是阻塞）。未配置 =
         与现状逐字节一致。
 
         查无此条明确报错（不猜测编造）。
@@ -2334,15 +2353,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _require_config(context)
         topics_dir = topic_library_dir(config.module_library_dir)
         entry = resolve_number(topics_dir, key)
-        if config.vision_api_key and vision_configured(config.vision_api_key):
+        vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
+        if vision_configured(vision_api_key):
             try:
                 collector = create_llm_observation_collector("vision-describe")
                 entry = enrich_topic_image_notes(
                     topics_dir,
                     key,
-                    vision_base_url=config.vision_base_url,
-                    vision_api_key=config.vision_api_key,
-                    vision_model=config.vision_model,
+                    vision_base_url=vision_base_url,
+                    vision_api_key=vision_api_key,
+                    vision_model=vision_model,
                     observation_collector=collector,
                 )
                 context.recent_llm_workflows.add_completed(collector)

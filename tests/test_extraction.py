@@ -241,6 +241,25 @@ def testpdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
     assert "另有 1 张图跳过" in lines[-1]
 
 
+def testpdf_image_notes_skips_bmp_embedded_images(monkeypatch, tmp_path):
+    """PDF 内嵌 BMP：发送前跳过（工单 vision-deepseek-native/01——DeepSeek
+    必拒 BMP，不浪费注定失败的视觉调用；跳过计入尾部标注）。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    fake_describe = _fake_describe("图")
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([
+        _FakePage([_FakeImage(b"img-bmp", "a.bmp"), _FakeImage(b"img-png", "b.png")]),
+    ]))
+    monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
+
+    notes = extraction.pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+    )
+    assert notes == "[示意图1：图]\n（另有 1 张图跳过：超大或描述失败）"
+    assert fake_describe.calls == [(b"img-png", "image/png")]  # BMP 未发出
+
+
 def testpdf_image_notes_degrades_to_empty_on_failure(monkeypatch, tmp_path):
     """视觉全失败（未配置 / 网络 / 解析）→ 空串（调用方降级，不拖垮抽取）。"""
     from contest_generator import extraction
@@ -325,6 +344,28 @@ def test_unsupported_file_type_reports_clear_error(tmp_path):
 def test_missing_file_reports_clear_error(tmp_path):
     with pytest.raises(ExtractionError, match="不存在"):
         extract_file(tmp_path / "nope.pdf")
+
+
+def test_extract_image_rejects_bmp_with_actionable_message(tmp_path, monkeypatch):
+    """.bmp 直接上传 → 入口拦截，友好中文报错引导转存 PNG/JPEG
+    （工单 vision-deepseek-native/01：DeepSeek 视觉不支持 BMP，不浪费
+    一次注定失败的视觉调用）。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "图.bmp"
+    path.write_bytes(b"BMfake-bmp")
+    monkeypatch.setattr(
+        extraction, "describe_image_cached", lambda *a, **k: "不该走到这里"
+    )
+
+    with pytest.raises(ExtractionError) as excinfo:
+        extraction.extract_image(
+            path, vision_base_url="", vision_api_key="sk-test", vision_model=""
+        )
+    message = str(excinfo.value)
+    assert "BMP" in message
+    assert "PNG" in message or "JPEG" in message  # 引导转存方向
+
 
 
 # ---------------------------------------------------------------------------

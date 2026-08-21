@@ -1504,8 +1504,18 @@ def test_extract_unsupported_type_returns_clear_error(client):
     assert "不支持的文件类型" in resp.json()["detail"]
 
 
-def test_extract_image_without_vision_key_returns_actionable_error(client):
-    """图片上传未配视觉 key → 可操作中文提示（引导设置页），不崩（工单 03）。"""
+def test_extract_image_without_vision_key_returns_actionable_error(client, context):
+    """图片上传未配视觉 key → 可操作中文提示（引导设置页），不崩（工单 03）。
+
+    key 复用后（工单 vision-deepseek-native/01）：默认 DeepSeek 端点留空视觉
+    key = 复用主 key 生效（见 test_extract_image_reuses_main_key…）；本测试
+    模拟自定义视觉服务（非 DeepSeek 端点）未配 key → 仍报「视觉通道未配置」。
+    """
+    from dataclasses import replace
+
+    ctx, _ = context
+    ctx.config = replace(ctx.config, vision_base_url="https://open.bigmodel.cn/api/paas/v4")
+
     resp = client.post(
         "/api/extract",
         files={"upload": ("题.png", b"\x89PNG\r\n\x1a\nfake", "image/png")},
@@ -1514,6 +1524,45 @@ def test_extract_image_without_vision_key_returns_actionable_error(client):
     assert resp.status_code == 400
     assert "视觉" in resp.json()["detail"]
     assert "设置" in resp.json()["detail"]
+
+
+def test_extract_image_reuses_main_key_when_vision_key_blank(client, context, monkeypatch):
+    """未配视觉 key + DeepSeek 默认端点 → 复用主 key 走视觉（工单 vision-deepseek-native/01）。
+
+    主 key 已配（夹具 sk-test）：视觉零额外配置即可识别上传图片。
+    """
+    from contest_generator import extraction as extraction_mod
+
+    seen: dict = {}
+
+    def fake_describe(data, mime, **kwargs):
+        seen["api_key"] = kwargs.get("api_key")
+        return "复用主 key 的描述"
+
+    monkeypatch.setattr(extraction_mod, "describe_image_cached", fake_describe)
+
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("题.png", b"\x89PNG\r\n\x1a\nfake", "image/png")},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["text"] == "复用主 key 的描述"
+    assert seen["api_key"] == "sk-test"  # 复用的是主 key
+
+
+def test_extract_image_bmp_returns_400_with_guidance(client, context):
+    """.bmp 上传 → 400 中文提示引导转存 PNG/JPEG（工单 vision-deepseek-native/01：
+    DeepSeek 视觉不支持 BMP，web 层直接可操作报错，不浪费视觉调用）。"""
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("题.bmp", b"BMfake", "image/bmp")},
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "BMP" in detail
+    assert "PNG" in detail or "JPEG" in detail  # 引导转存方向
 
 
 def test_topic_summarize_returns_summary(client, context):
@@ -1602,7 +1651,12 @@ def test_topics_split_with_vision_key_injects_image_notes(client, context, monke
 
 
 def test_topics_split_without_vision_key_stays_plain_text(client, context, monkeypatch):
-    """未配视觉 key：拆条文本 = 纯文本（现状不变，无图注）。"""
+    """自定义视觉服务（非 DeepSeek 端点）未配视觉 key：拆条文本 = 纯文本
+    （主 key 不发给别家，现状不变，无图注）。"""
+    from dataclasses import replace
+
+    ctx, _ = context
+    ctx.config = replace(ctx.config, vision_base_url="https://open.bigmodel.cn/api/paas/v4")
     _monkeypatch_split_pdf(monkeypatch, "2026C 赛题原文")
 
     resp = client.post(
@@ -1612,7 +1666,21 @@ def test_topics_split_without_vision_key_stays_plain_text(client, context, monke
     assert resp.status_code == 200
     text = context[1]["llm"].topic_split_calls[0][0]
     assert text == "2026C 赛题原文"
-    assert "[示意图" not in text
+
+
+def test_topics_split_reuses_main_key_when_vision_key_blank(client, context, monkeypatch):
+    """未配视觉 key + DeepSeek 默认端点 → 拆条复用主 key 注入图注
+    （工单 vision-deepseek-native/01，PDF 主路径零额外配置）。"""
+    _monkeypatch_split_pdf(monkeypatch, "2026C 赛题原文")
+
+    resp = client.post(
+        "/api/topics/split", files={"upload": ("p.pdf", b"%PDF-1.4 fake", "application/pdf")}
+    )
+
+    assert resp.status_code == 200
+    text = context[1]["llm"].topic_split_calls[0][0]
+    assert "2026C 赛题原文" in text
+    assert "[示意图1：这是电路图：5]" in text
 
 
 def test_recommend_returns_modules_with_reasons(client):
@@ -3266,12 +3334,12 @@ def test_settings_ccs_toolchain_paths_roundtrip(client, context):
 
 
 def test_settings_vision_fields_roundtrip_and_mask(client, context):
-    """视觉通道（工单 vision-eyes/01）：GET 缺省 base/model + key 掩码；PUT
-    透传；掩码形态 = 沿用旧值（与 api_key 同款语义）。"""
+    """视觉通道（工单 vision-deepseek-native/01）：GET 缺省 base/model + key
+    掩码；PUT 透传；掩码形态 = 沿用旧值（与 api_key 同款语义）。"""
     current = client.get("/api/settings").json()
-    assert current["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert current["vision_base_url"] == "https://api.deepseek.com"
     assert current["vision_api_key"] == ""
-    assert current["vision_model"] == "glm-4.6v-flash"
+    assert current["vision_model"] == "deepseek-v4-flash-vision-exp"
     # DeepSeek Flash 官方价格参考（工单 llm-cost-control 更新）：GET 带出
     assert current["price_reference"]["concurrent_connections"] == 2500
 
@@ -3283,18 +3351,18 @@ def test_settings_vision_fields_roundtrip_and_mask(client, context):
             "model": current["model"],
             "module_library_dir": current["module_library_dir"],
             "masters_dir": current["masters_dir"],
-            "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "vision_base_url": "https://api.deepseek.com",
             "vision_api_key": "sk-vision-123456",
-            "vision_model": "glm-4.6v-flash",
+            "vision_model": "deepseek-v4-flash-vision-exp",
         },
     )
     assert resp.status_code == 200
     assert context[0].config.vision_api_key == "sk-vision-123456"
     saved = client.get("/api/settings").json()
-    assert saved["vision_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert saved["vision_base_url"] == "https://api.deepseek.com"
     assert saved["vision_api_key"] == "sk-v" + "•" * 11 + "6"  # 掩码同主 key：前 4 位 + 圆点(长度-5) + 末位
     assert saved["vision_api_key"] != "sk-vision-123456"
-    assert saved["vision_model"] == "glm-4.6v-flash"
+    assert saved["vision_model"] == "deepseek-v4-flash-vision-exp"
 
     # 掩码形态 PUT = 沿用旧值；空串 = 关闭
     masked = saved["vision_api_key"]
@@ -3306,9 +3374,9 @@ def test_settings_vision_fields_roundtrip_and_mask(client, context):
             "model": current["model"],
             "module_library_dir": current["module_library_dir"],
             "masters_dir": current["masters_dir"],
-            "vision_base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "vision_base_url": "https://api.deepseek.com",
             "vision_api_key": masked,
-            "vision_model": "glm-4.6v-flash",
+            "vision_model": "deepseek-v4-flash-vision-exp",
         },
     )
     assert resp.status_code == 200
@@ -4185,10 +4253,14 @@ def test_topic_get_with_vision_key_enriches_image_notes(client, context, monkeyp
 
 
 def test_topic_get_without_vision_key_returns_plain(client, context, monkeypatch):
-    """取题面：未配视觉 key → 与现状逐字节一致（无图注）。"""
+    """取题面：自定义视觉服务（非 DeepSeek 端点）未配视觉 key → 与现状逐字节
+    一致（无图注；主 key 不发给别家，工单 vision-deepseek-native/01）。"""
+    from dataclasses import replace
+
     from contest_generator import topic_library as topic_lib_mod
 
     ctx = context[0]
+    ctx.config = replace(ctx.config, vision_base_url="https://open.bigmodel.cn/api/paas/v4")
     topics_dir = topic_library_dir(ctx.config.module_library_dir)
     topics_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = topics_dir.parent / "2026C.pdf"
@@ -4208,6 +4280,35 @@ def test_topic_get_without_vision_key_returns_plain(client, context, monkeypatch
     assert resp.status_code == 200
     assert resp.json()["problem_text"] == "系统功能如图1所示。"
     assert calls == []
+
+
+def test_topic_get_reuses_main_key_when_vision_key_blank(client, context, monkeypatch):
+    """取题面：未配视觉 key + DeepSeek 默认端点 → 复用主 key 自动补图注
+    （工单 vision-deepseek-native/01，存量条目路径零额外配置）。"""
+    from contest_generator import topic_library as topic_lib_mod
+
+    ctx = context[0]
+    topics_dir = topic_library_dir(ctx.config.module_library_dir)
+    topics_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = topics_dir.parent / "2026C.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    confirm_topics(
+        topics_dir,
+        pdf_path,
+        (TopicDraft(year="2026", number="C", problem_text="系统功能如图1所示。"),),
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_lib_mod,
+        "pdf_image_notes",
+        lambda *a, **k: calls.append("x") or "[示意图1：这是功能示意图]",
+    )
+
+    resp = client.get("/api/topics/2026C")
+
+    assert resp.status_code == 200
+    assert resp.json()["problem_text"] == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    assert len(calls) == 1  # 复用主 key 生效，视觉路径被调用
 
 
 def test_topic_enrich_wired_into_webapp():

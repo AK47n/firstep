@@ -44,7 +44,8 @@ FIGURE_ANNOTATION_WINDOW = 350.0
 FIGURE_ANNOTATION_MAX_LINE_CHARS = 20
 FIGURE_ANNOTATION_ROW_TOLERANCE = 6.0
 
-# pypdf ImageFile.name 后缀 → mime（GLM-4V 接受的常见类型；未知按 png 兜底）
+# pypdf ImageFile.name 后缀 → mime（DeepSeek 视觉支持的常见类型；.bmp 条目
+# 保留作 PDF 结构兼容，发送前按后缀跳过；未知按 png 兜底）
 _IMAGE_MIME_BY_SUFFIX = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -156,6 +157,11 @@ def pdf_image_notes(
                 skipped += 1
                 continue
             if not data:
+                skipped += 1
+                continue
+            # DeepSeek 视觉不支持 BMP：发送前按后缀跳过（工单
+            # vision-deepseek-native/01），不浪费注定失败的视觉调用
+            if Path(image.name or "").suffix.lower() == ".bmp":
                 skipped += 1
                 continue
             try:
@@ -310,7 +316,7 @@ def _cluster_rows(segments: list[tuple[float, float, str]]) -> list[tuple[float,
 
 
 def _image_mime(name: str) -> str:
-    """ImageFile.name → mime（未知后缀按 png 兜底，GLM-4V 兼容）。"""
+    """ImageFile.name → mime（未知后缀按 png 兜底，DeepSeek 视觉兼容）。"""
     suffix = Path(name or "").suffix.lower()
     return _IMAGE_MIME_BY_SUFFIX.get(suffix, "image/png")
 
@@ -328,10 +334,17 @@ def extract_image(
     描述文本 = 题面上下文补充（与 PDF 图注同形态 `[示意图1：…]` 或纯描述）。
     未配视觉 key → ExtractionError（可操作提示引导设置页）；视觉失败 →
     ExtractionError（用户主动传图 = 明确意图，报错比静默空文诚实）。
+    .bmp 入口拦截（工单 vision-deepseek-native/01）：DeepSeek 视觉不支持
+    BMP，直接友好报错引导转存，不浪费一次注定失败的视觉调用。
     """
     file_path = Path(path)
     if not file_path.is_file():
         raise ExtractionError(f"文件不存在：{file_path}")
+    if file_path.suffix.lower() == ".bmp":
+        raise ExtractionError(
+            "暂不支持 BMP 格式的图片：DeepSeek 视觉仅支持 PNG / JPEG / GIF / WebP，"
+            "请用画图等工具将图片转存为 PNG 或 JPEG 后重新上传"
+        )
     try:
         data = file_path.read_bytes()
     except OSError as exc:
