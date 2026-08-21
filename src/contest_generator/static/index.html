@@ -487,6 +487,39 @@
   .instance-row .instance-pin input[type=text] { width: 74px; flex: none; font-family: var(--mono); }
   .instance-actions { margin-top: 8px; display: flex; gap: 10px; align-items: center; }
   .instance-picking { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  /* ---- UI 打磨（工单 ui-polish/01）：过渡 / 渐变 / 微光 / 空状态 ---- */
+  button, input, textarea, select, .card, .item, .platform-card, .chip, .fix-row,
+  .pin-role, .decision, .ref-pick-row, .instance-mod, .score-panel {
+    transition: border-color .15s ease, color .15s ease, background-color .15s ease,
+                box-shadow .15s ease, transform .15s ease; }
+  .card:hover { border-color: var(--border-strong);
+                box-shadow: 0 2px 14px rgba(0, 0, 0, .35), 0 1px 0 rgba(255, 255, 255, .03);
+                transform: translateY(-1px); }
+  .item:hover, .score-panel:hover, .fix-row:hover { border-color: var(--border-strong); }
+  .fix-row:hover { transform: translateY(-1px); }
+  button.primary {
+    background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
+    border-color: transparent;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 10px rgba(0, 212, 255, .16); }
+  button.primary:hover {
+    background: linear-gradient(135deg, #33dcff 0%, #00b8de 100%);
+    box-shadow: 0 0 18px rgba(0, 212, 255, .45), 0 2px 10px rgba(0, 212, 255, .22);
+    transform: translateY(-1px); }
+  button.primary:active { transform: translateY(0); box-shadow: 0 0 8px rgba(0, 212, 255, .3); }
+  .step-no { background: linear-gradient(135deg, #00d4ff, #0094b5);
+             box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 0 10px rgba(0, 212, 255, .3); }
+  .brand-en .b2 { animation: brand-breathe 3.2s ease-in-out infinite; }
+  @keyframes brand-breathe {
+    0%, 100% { text-shadow: 0 0 10px rgba(0, 212, 255, .35); }
+    50% { text-shadow: 0 0 24px rgba(0, 212, 255, .85); } }
+  /* 空状态（表格行 / 独立区块两用） */
+  .empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px;
+                 padding: 30px 16px; text-align: center; color: var(--muted); }
+  .empty-state .es-icon { font-size: 30px; line-height: 1; opacity: .8;
+                          filter: drop-shadow(0 0 10px rgba(0, 212, 255, .3)); }
+  .empty-state .es-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .empty-state .es-hint { font-size: 12px; line-height: 1.8; max-width: 400px; }
+  table td.empty-td { padding: 0; border-bottom: none; }
 </style>
 </head>
 <body>
@@ -4144,7 +4177,7 @@ async function loadLibrary() {
     const modules = await apiGet("/api/modules");
     state.modules = modules;
     renderModulePool();
-    $("lib-rows").innerHTML = modules.map((m) => `
+    $("lib-rows").innerHTML = modules.length ? modules.map((m) => `
       <tr>
         <td class="slug">${esc(m.slug)}</td>
         <td>${esc(m.description)}</td>
@@ -4154,7 +4187,8 @@ async function loadLibrary() {
           <button data-edit-desc="${esc(m.slug)}">改简介</button>
           <button data-del="${esc(m.slug)}" class="danger">删除</button>
         </td>
-      </tr>`).join("");
+      </tr>`).join("")
+      : '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">📦</div><div class="es-title">模块库还是空的</div><div class="es-hint">用上方表单添加第一个模块（slug + 平台 + 源文件），AI 校验后入库。</div></div></td></tr>';
     $("lib-rows").querySelectorAll("[data-edit-desc]").forEach((b) =>
       b.addEventListener("click", () => editDescription(b.dataset.editDesc)));
     $("lib-rows").querySelectorAll("[data-del]").forEach((b) =>
@@ -4362,7 +4396,7 @@ async function loadReferences() {
         <td class="muted" title="${esc(`${e.files.length} 个素材文件，路径清单见磁盘目录`)}">${e.file_count} 个文件 · ${formatSize(e.size_bytes)}</td>
         <td><button data-ref-view="${esc(e.id)}">查看</button> <button class="danger" data-ref-del="${esc(e.id)}">删除</button></td>
       </tr>`).join("")
-      : '<tr><td colspan="6" class="muted">库中暂无条目。</td></tr>';
+      : '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📚</div><div class="es-title">参考文件库暂无条目</div><div class="es-hint">到「参考文件库」页录入资料；生成时勾选条目可注入为学习素材。</div></div></td></tr>';
     $("ref-rows").querySelectorAll("[data-ref-view]").forEach((b) =>
       b.addEventListener("click", () => viewReferenceFiles(b.dataset.refView)));
     $("ref-rows").querySelectorAll("[data-mf]").forEach((a) =>
@@ -4554,7 +4588,7 @@ async function loadPdfs() {
         <td class="muted">${formatSize(p.size_bytes)}</td>
         <td><button data-open-pdf="${esc(p.rel_path)}">打开</button></td>
       </tr>`).join("")
-      : '<tr><td colspan="4" class="muted">素材库中暂无 PDF。</td></tr>';
+      : '<tr><td colspan="4" class="empty-td"><div class="empty-state"><div class="es-icon">📄</div><div class="es-title">素材库中暂无 PDF</div><div class="es-hint">把赛题配套 PDF 放进资料库目录后刷新，这里会按批次列出。</div></div></td></tr>';
     $("pdf-rows").querySelectorAll("[data-open-pdf]").forEach((el) =>
       el.addEventListener("click", (e) => {
         e.preventDefault();
@@ -4623,7 +4657,7 @@ async function loadTopics() {
           <td><button class="danger" data-topic-del="${esc(t.key)}">删除</button></td>
         </tr>`).join("");
     $("topic-rows").innerHTML = rows
-      || '<tr><td colspan="4" class="muted">库中暂无条目。</td></tr>';
+      || '<tr><td colspan="4" class="empty-td"><div class="empty-state"><div class="es-icon">🏆</div><div class="es-title">库中暂无条目</div><div class="es-hint">录入历史赛题后，可直接按编号取题面一键生成工程。</div></div></td></tr>';
     $("topic-rows").querySelectorAll("[data-topic-del]").forEach((b) =>
       b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
     $("topic-msg").textContent = "";
@@ -5227,7 +5261,7 @@ async function loadChangelog() {
   try {
     const groups = await apiGet("/api/changelog");
     if (!groups.length) {
-      box.innerHTML = '<div class="muted">暂无更新记录。</div>';
+      box.innerHTML = '<div class="empty-state"><div class="es-icon">📝</div><div class="es-title">暂无更新记录</div><div class="es-hint">每次提交代码后，这里会自动补录 CHANGELOG 条目。</div></div>';
       return;
     }
     box.innerHTML = groups.map((g) => `
@@ -5558,7 +5592,7 @@ function renderRecentWorkflows(data) {
   const el = $("recent-workflows");
   const workflows = (data && data.workflows) || [];
   if (!workflows.length) {
-    el.innerHTML = '<div class="muted">暂无已完成的工作流：运行一次推荐 / 骨架 / 修复 / 提炼后，这里会出现记录。</div>';
+    el.innerHTML = '<div class="empty-state"><div class="es-icon">⚙️</div><div class="es-title">暂无已完成的工作流</div><div class="es-hint">运行一次推荐 / 骨架 / 修复 / 提炼后，这里会出现记录。</div></div>';
     return;
   }
   el.innerHTML = workflows.map((w) => {
