@@ -4,11 +4,11 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 生成页左侧 sticky 步骤导航容器（12 项，编号对齐现有卡片 `.step-no`）
-- [ ] 点击导航项平滑滚动到对应卡片（`scrollIntoView` smooth）
-- [ ] 滚动时当前步骤高亮（IntersectionObserver 或 scroll 监听）
-- [ ] 步骤成功信号点追加「标记 done」调用（简介生成成功 / 平台选定 / 模块推荐完成 / 清单更新 / 引脚绑定完成 / 骨架生成 / 工程生成 / 修复完成 / 修订完成 / 交接生成）；done 步导航变绿 ✓ + 卡片徽章同步
-- [ ] 新增的步骤计算逻辑写成可被 `tests/js/*.test.mjs` 抽取的纯函数并补一个 js 单测
-- [ ] `node tests/js/*.test.mjs` 与契约钉测试全绿
+- [x] 生成页左侧 sticky 步骤导航容器（12 项，编号对齐现有卡片 `.step-no`）
+- [x] 点击导航项平滑滚动到对应卡片（`scrollIntoView` smooth）
+- [x] 滚动时当前步骤高亮（scroll + rAF 监听，`stepNavCurrent` 纯函数判定）
+- [x] 步骤成功信号点追加「标记 done」调用（简介生成成功 / 平台选定 / 模块推荐完成 / 清单更新 / 引脚绑定完成 / 骨架生成 / 工程生成 / 修复完成 / 修订完成 / 交接生成）；done 步导航变绿 ✓ + 卡片徽章同步
+- [x] 新增的步骤计算逻辑写成可被 `tests/js/*.test.mjs` 抽取的纯函数并补一个 js 单测
+- [x] `node tests/js/*.test.mjs`（56/56）与契约钉测试（50/50）全绿

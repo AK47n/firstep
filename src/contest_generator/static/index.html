@@ -520,6 +520,32 @@
   .empty-state .es-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
   .empty-state .es-hint { font-size: 12px; line-height: 1.8; max-width: 400px; }
   table td.empty-td { padding: 0; border-bottom: none; }
+  /* 步骤导航（工单 ui-polish/02）：宽屏左侧 sticky 圆点 + 完成变绿 ✓；
+     窄屏隐藏（不挤占表单区）；卡片徽章与圆点同色联动 */
+  .gen-layout { display: block; }
+  .gen-steps { min-width: 0; }
+  @media (min-width: 1180px) {
+    .gen-layout { display: flex; gap: 18px; align-items: flex-start; }
+    .step-nav { position: sticky; top: 14px; width: 46px; flex: none;
+                display: flex; flex-direction: column; gap: 7px;
+                padding: 4px 0; }
+    .step-nav .step-dot { width: 27px; height: 27px; border-radius: 50%;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 12px; font-weight: 600; color: var(--muted);
+                background: var(--panel); border: 1px solid var(--border);
+                cursor: pointer; transition: all .25s; user-select: none; }
+    .step-nav .step-dot:hover { color: var(--text); border-color: var(--accent);
+                box-shadow: 0 0 8px rgba(0, 212, 255, .35); }
+    .step-nav .step-dot.current { color: #001018; border-color: transparent;
+                background: linear-gradient(135deg, #33dcff, #00b8de);
+                box-shadow: 0 0 12px rgba(0, 212, 255, .5); }
+    .step-nav .step-dot.done { color: #04170c; border-color: transparent;
+                background: linear-gradient(135deg, #34d399, #059669);
+                box-shadow: 0 0 10px rgba(52, 211, 153, .4); }
+  }
+  @media (max-width: 1179px) { .step-nav { display: none; } }
+  .card.done .step-no { background: linear-gradient(135deg, #34d399, #059669);
+             box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 0 10px rgba(52, 211, 153, .35); }
 </style>
 </head>
 <body>
@@ -543,6 +569,9 @@
   <section id="tab-generate" class="page active">
     <div id="gen-banner" class="banner hidden">尚未配置 AI API：请先到「设置」页填写 API 后再使用 AI 功能。</div>
 
+    <div class="gen-layout">
+      <nav id="step-nav" class="step-nav" aria-label="生成步骤向导"></nav>
+      <div class="gen-steps">
     <div class="card">
       <h2><span class="step-no">1</span>赛题原文</h2>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
@@ -822,6 +851,8 @@
       <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
       <div id="handoff-msg" class="error"></div>
     </div>
+      </div><!-- /.gen-steps -->
+    </div><!-- /.gen-layout -->
   </section>
 
   <!-- ============================ 模块库页 ============================ -->
@@ -1318,6 +1349,8 @@ function renderPlatforms() {
     if (p.status === "ready") {
       card.addEventListener("click", () => {
         chosenPlatform = p.id;
+        markStepDone(3);
+        unmarkSteps([5, 6, 7, 8, 9, 10, 11, 12]);  // 换平台：下游全部重来
         renderPlatforms();
         updateFixCenterAvailability();
         selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
@@ -1352,6 +1385,7 @@ $("btn-upload").addEventListener("click", async () => {
     clearTopicSummary();
     $("upload-msg").classList.add("ok");
     $("upload-msg").textContent = "抽取成功：" + file.name;
+    markStepDone(1);
   } catch (e) {
     $("upload-msg").classList.remove("ok");
     $("upload-msg").textContent = e.message;
@@ -1368,6 +1402,7 @@ $("btn-topic-load").addEventListener("click", async () => {
     currentTopicId = data.key;
     clearTopicSummary();
     $("topic-msg").textContent = "已取题面：" + data.key;
+    markStepDone(1);
   } catch (e) {
     $("topic-msg").textContent = e.message;
     currentTopicId = "";
@@ -1377,6 +1412,7 @@ $("btn-topic-load").addEventListener("click", async () => {
 $("problem").addEventListener("input", () => {
   if (currentTopicId) { currentTopicId = ""; $("topic-msg").textContent = ""; }
   clearTopicSummary();  // 题面变了 = 旧简介对不上，立即清掉（wait-what 要的是当前题面）
+  if (!$("problem").value.trim()) markStepUndone(1);
 });
 
 // ---------------------------------------------------------------------------
@@ -1390,6 +1426,7 @@ function clearTopicSummary() {
   $("topic-summary-box").textContent = "";
   $("topic-summary-msg").textContent = "";
   scorePoints = [];  // 题面变更后评分点失效，避免旧题验收清单串进生成 / 交接
+  unmarkSteps([2, 5, 6, 7, 8, 9, 10, 11, 12]);  // 题面变了：AI 产物与生成结果全部失效
 }
 
 $("btn-topic-summary").addEventListener("click", async () => {
@@ -1466,6 +1503,7 @@ function renderScorePointPanel(points) {
 }
 
 function renderRecommendResult(data, autoAdd = true) {
+  markStepDone(5);  // AI 推荐成功返回即视为完成（含"未推荐到模块"的空结果）
   if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
   renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
   if (autoAdd) {
@@ -1815,6 +1853,7 @@ function renderModuleSearch() {
 
 function renderSelected() {
   const box = $("selected-list");
+  if (selectedSlugs.length) markStepDone(6); else markStepUndone(6);
   if (!expanded.length) {
     $("selected-count").textContent = "";
     box.innerHTML = selectedSlugs.length
@@ -2697,6 +2736,7 @@ function unbindRole(key) {
   delete pinBindings[key];
   pinUnbound.add(key);  // 显式解除 = 红显未绑（生成仍按默认走）
   renderPinCard();
+  syncStep7();
 }
 
 function bindRole(key, pinName) {
@@ -2714,6 +2754,7 @@ function bindRole(key, pinName) {
   pinUnbound.delete(key);
   pinHighlight = null;
   renderPinCard();
+  syncStep7();
   // 共享宏族提示（v1 不拦截，接线语义用户把关）
   const famInfo = pinMacroFamilies(roles).get(key);
   pinHint(famInfo
@@ -2824,6 +2865,7 @@ async function generateMain(mode) {
     if (Object.keys(inst).length) payload.instances = inst;
     const data = await apiPost("/api/skeleton", payload);
     $("main-c").value = data.main_c;
+    markStepDone(8);
     const box = $("intercepted");
     if (data.intercepted.length) {
       box.classList.remove("hidden");
@@ -2942,6 +2984,7 @@ $("btn-generate").addEventListener("click", async () => {
       $("generate-msg").classList.remove("ok");
       $("generate-msg").textContent = check.error;
       status.textContent = "";
+      markStepUndone(7);  // 引脚校验不过 = 第 7 步未完成
       return;
     }
 
@@ -2982,6 +3025,7 @@ $("btn-generate").addEventListener("click", async () => {
     status.textContent = "";
     $("generate-msg").classList.add("ok");
     $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
+    markStepDone(9);
     // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
     // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
     // compile-experience-ui/01：无工具链也要显眼，不再静默跳过）
@@ -3155,6 +3199,7 @@ $("btn-handoff").addEventListener("click", async () => {
     ];
     $("handoff-text").value = lines.join("\n");
     $("btn-handoff-copy").classList.remove("hidden");
+    markStepDone(12);
   } catch (e) {
     msg.textContent = e.message;
   } finally { $("btn-handoff").disabled = false; }
@@ -3196,6 +3241,7 @@ function compileBanner(kind, text) {
   const b = $("compile-banner");
   b.className = kind;   // 重置状态类（同时移除初始 hidden）
   b.textContent = text;
+  if (kind === "success") markStepDone(10);  // 编译通过 = 修复中心闭环完成
 }
 
 function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
@@ -4012,6 +4058,7 @@ async function reviseApply() {
       llm_telemetry: (d) => renderReviseTelemetry("exec", d),
     });
     revise.applyDone = data;
+    markStepDone(11);
     reviseRenderApplyDone(data);
     if ($("revise-deepen-check").checked) {
       $("revise-exec-status").textContent = "修订完成，开始深化…";
@@ -4079,6 +4126,7 @@ async function reviseRunDeepen() {
       llm_telemetry: (d) => renderReviseTelemetry("exec", d),
     });
     reviseRenderVerify(data);
+    if (data.status !== "failed") markStepDone(11);  // 验证通过 / 降级未验证都算闭环
     $("revise-exec-status").textContent = "深化完成";
   } catch (e) {
     $("revise-exec-status").textContent = "";
@@ -5622,6 +5670,95 @@ async function loadRecentWorkflows() {
 }
 
 $("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
+
+// ---------------------------------------------------------------------------
+// 生成页步骤导航（工单 ui-polish/02）：左侧圆点随滚动高亮，完成变绿 ✓
+// ---------------------------------------------------------------------------
+const STEP_NAV_CARD_SELECTOR = "#tab-generate .gen-steps > .card";
+function stepNavTitles(cards) {
+  return Array.from(cards).map((c) => {
+    const no = c.querySelector(".step-no");
+    const h2 = c.querySelector("h2");
+    return {
+      n: no ? parseInt(no.textContent, 10) : NaN,
+      title: h2 ? h2.textContent.replace(/^\d+/, "").trim() : "",
+    };
+  });
+}
+function stepNavDotsHTML(titles) {
+  return titles.map((t) =>
+    '<button type="button" class="step-dot" data-step="' + t.n + '" title="'
+    + String(t.title || "").replace(/"/g, "&quot;") + '">' + t.n + "</button>"
+  ).join("");
+}
+function stepNavCurrent(entries, threshold) {
+  let cur = entries.length ? entries[0].n : NaN;
+  for (const e of entries) if (e.top <= threshold) cur = e.n;
+  return cur;
+}
+function stepCard(n) {
+  const cards = document.querySelectorAll(STEP_NAV_CARD_SELECTOR);
+  return Array.from(cards).find((c) => {
+    const no = c.querySelector(".step-no");
+    return no && parseInt(no.textContent, 10) === n;
+  }) || null;
+}
+function markStepDone(n) {
+  const dot = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
+  if (dot) { dot.classList.add("done"); dot.textContent = "✓"; }
+  const card = stepCard(n);
+  if (card) card.classList.add("done");
+}
+function markStepUndone(n) {
+  const dot = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
+  if (dot) { dot.classList.remove("done"); dot.textContent = String(n); }
+  const card = stepCard(n);
+  if (card) card.classList.remove("done");
+}
+function unmarkSteps(steps) {
+  for (const n of steps) markStepUndone(n);
+}
+function syncStep7() {
+  if (Object.keys(pinBindings).length) markStepDone(7);
+  else markStepUndone(7);
+}
+(function initStepNav() {
+  const nav = $("step-nav");
+  if (!nav) return;
+  const cards = Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR));
+  if (!cards.length) return;
+  nav.innerHTML = stepNavDotsHTML(stepNavTitles(cards));
+  nav.addEventListener("click", (e) => {
+    const dot = e.target.closest(".step-dot");
+    if (!dot) return;
+    const card = stepCard(parseInt(dot.dataset.step, 10));
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  let ticking = false;
+  const update = () => {
+    ticking = false;
+    const entries = cards.map((c) => {
+      const no = c.querySelector(".step-no");
+      const r = c.getBoundingClientRect();
+      return { n: no ? parseInt(no.textContent, 10) : NaN, top: r.top };
+    });
+    let cur = stepNavCurrent(entries, 120);
+    // 滚到底仍够不到阈值时（末卡较短）直接定位最后一步
+    if (entries.length && window.innerHeight + window.scrollY
+        >= document.documentElement.scrollHeight - 80) {
+      cur = entries[entries.length - 1].n;
+    }
+    nav.querySelectorAll(".step-dot").forEach((d) => {
+      d.classList.toggle("current", parseInt(d.dataset.step, 10) === cur);
+    });
+  };
+  const onScroll = () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(update); }
+  };
+  document.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll, { passive: true });
+  update();
+})();
 
 // ---------------------------------------------------------------------------
 // 启动
