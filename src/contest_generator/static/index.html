@@ -1123,12 +1123,23 @@
 
     <div class="card">
       <h2>视觉通道（可选）</h2>
-      <div class="row">
-        <div style="flex:1"><label>视觉 base_url（留空 = DeepSeek 官方端点）</label><input type="text" id="set-vision-base-url" placeholder="https://api.deepseek.com"></div>
-        <div style="flex:1"><label>视觉模型（留空 = deepseek-v4-flash-vision-exp）</label><input type="text" id="set-vision-model" placeholder="deepseek-v4-flash-vision-exp"></div>
+      <div class="row" style="align-items:center">
+        <div style="flex:1">
+          <label>视觉服务（一键切换，自动填充下方参数）</label>
+          <select id="set-vision-provider">
+            <option value="deepseek">DeepSeek 视觉（推荐，复用主 key）</option>
+            <option value="zhipu">智谱 GLM（GLM-4.6V-Flash）</option>
+            <option value="custom">自定义（自备 key）</option>
+          </select>
+        </div>
+        <div style="flex:2"><div class="muted" id="vision-provider-hint"></div></div>
       </div>
-      <div style="flex:1"><label>视觉 API key（留空 = 复用主 DeepSeek key；掩码保持不变）</label><input type="text" id="set-vision-api-key" placeholder="DeepSeek API key（与主 key 共用）" autocomplete="off"></div>
-      <div class="muted">云端识图（DeepSeek 视觉模型）：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别——AI 简介 / 推荐 / 骨架都能"看到"图的内容。key 与主 DeepSeek key 共用：视觉 key 留空且 base_url 为 DeepSeek 官方端点时自动复用，零额外配置；改成其它 OpenAI 兼容视觉服务则须自备 key。不配置 = 视觉功能关闭，其余功能不受影响。</div>
+      <div class="row">
+        <div style="flex:1"><label>视觉 base_url（跟随上方选择自动填，可手动改）</label><input type="text" id="set-vision-base-url" placeholder="https://api.deepseek.com"></div>
+        <div style="flex:1"><label>视觉模型（跟随上方选择自动填，可手动改）</label><input type="text" id="set-vision-model" placeholder="deepseek-v4-flash-vision-exp"></div>
+      </div>
+      <div style="flex:1"><label>视觉 API key（DeepSeek 模式留空 = 复用主 key；智谱模式填智谱 key）</label><input type="text" id="set-vision-api-key" placeholder="" autocomplete="off"></div>
+      <div class="muted">云端识图：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别。视觉服务下拉一键切换 DeepSeek / 智谱预设；手动修改 base_url 或模型会自动转为「自定义」模式（自备 key）。DeepSeek 模式下 key 留空自动复用主 key（同 key 同价）；智谱模式自动沿用已保存的智谱 key。不配置 = 视觉功能关闭，其余功能不受影响。</div>
     </div>
 
     <div class="card">
@@ -5268,6 +5279,10 @@ async function loadSettings() {
     $("set-vision-base-url").value = s.vision_base_url || "";
     $("set-vision-api-key").value = s.vision_api_key || "";
     $("set-vision-model").value = s.vision_model || "";
+    // 视觉服务下拉（工单 vision-provider-switch/01）：掩码 key 存档供切回智谱
+    // 时回填沿用；按 base_url 推断当前模式（不覆盖用户已存字段）
+    visionZhipuMask = s.vision_api_key || "";
+    syncVisionProviderFromFields();
     // LLM 单价（工单 llm-cost-control/01 + 缓存拆分 + 计费时段）：输入框只显示
     // 用户显式覆盖（llm_prices_override 原文）；无覆盖 = 留空，placeholder 显示
     // 所选时段的官方价（留空 = 按时段基准价计费）
@@ -5294,6 +5309,69 @@ async function loadSettings() {
     $("settings-banner").classList.toggle("hidden", !!s.configured);
   } catch (e) { $("settings-msg").textContent = e.message; }
 }
+
+// 视觉服务下拉（工单 vision-provider-switch/01）：一键切换 DeepSeek / 智谱
+// 预设，自动填 base_url 与模型；切 DeepSeek 清空 key（防显式 key 优先把智谱
+// key 发给 DeepSeek），切智谱回填已存掩码（PUT 掩码 → 后端沿用旧值）。
+let visionZhipuMask = "";
+let visionApplyingPreset = false;
+const VISION_PRESETS = {
+  deepseek: { base: "https://api.deepseek.com", model: "deepseek-v4-flash-vision-exp" },
+  zhipu: { base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash" },
+};
+const VISION_HINTS = {
+  deepseek: "DeepSeek 官方视觉模型，与主 LLM 同 key 同价；key 留空自动复用主 key，零额外配置。",
+  zhipu: "智谱 GLM-4.6V-Flash 视觉通道；key 自动沿用已保存的智谱 key（掩码不变），留空则需自行填写。",
+  custom: "其它 OpenAI 兼容视觉服务须自备 key；主 key 只在 DeepSeek 官方端点时复用，绝不外发其它服务商。",
+};
+function syncVisionProviderFromFields() {
+  // 按 base_url 推断当前模式：bigmodel.cn → 智谱；api.deepseek.com 或空
+  // （空 = 回落默认 DeepSeek）→ DeepSeek；其它 → 自定义。只动下拉与提示，
+  // 不覆盖用户已存字段。
+  const base = ($("set-vision-base-url").value || "").trim().toLowerCase();
+  let mode = "custom";
+  if (!base || base.includes("api.deepseek.com")) mode = "deepseek";
+  else if (base.includes("bigmodel.cn")) mode = "zhipu";
+  $("set-vision-provider").value = mode;
+  $("vision-provider-hint").textContent = VISION_HINTS[mode];
+}
+function applyVisionPreset(mode) {
+  visionApplyingPreset = true;
+  try {
+    if (mode === "deepseek") {
+      $("set-vision-base-url").value = VISION_PRESETS.deepseek.base;
+      $("set-vision-model").value = VISION_PRESETS.deepseek.model;
+      $("set-vision-api-key").value = "";   // 安全必需：显式 key 优先，不清空会把旧智谱 key 发给 DeepSeek
+      $("set-vision-api-key").placeholder = "留空 = 复用主 DeepSeek key";
+    } else if (mode === "zhipu") {
+      $("set-vision-base-url").value = VISION_PRESETS.zhipu.base;
+      $("set-vision-model").value = VISION_PRESETS.zhipu.model;
+      $("set-vision-api-key").value = visionZhipuMask || "";
+      $("set-vision-api-key").placeholder = "智谱开放平台 API key";
+    } else {
+      $("set-vision-api-key").placeholder = "自定义服务 API key";
+    }
+  } finally {
+    visionApplyingPreset = false;
+  }
+  $("vision-provider-hint").textContent = VISION_HINTS[mode];
+}
+$("set-vision-provider").addEventListener("change", () =>
+  applyVisionPreset($("set-vision-provider").value));
+// 手动改 base_url / 模型与当前预设不符 → 自动转「自定义」（key 手改不触发；
+// 预设填充期间用 visionApplyingPreset 屏蔽，避免与切换互相覆盖）
+["set-vision-base-url", "set-vision-model"].forEach((id) => {
+  $(id).addEventListener("input", () => {
+    if (visionApplyingPreset) return;
+    const mode = $("set-vision-provider").value;
+    const pres = VISION_PRESETS[mode];
+    const key = id === "set-vision-base-url" ? "base" : "model";
+    if (pres && $(id).value.trim() !== pres[key]) {
+      $("set-vision-provider").value = "custom";
+      $("vision-provider-hint").textContent = VISION_HINTS.custom;
+    }
+  });
+});
 
 // 本地模型下拉联动：选「关闭」→ 清空 base_url（本地路由关闭）；选模型 → 补默认端点
 $("set-local-llm-model").addEventListener("change", () => {
