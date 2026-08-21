@@ -13,6 +13,7 @@ ExtractionError 带明确信息，绝不让损坏文件以静默空文或崩溃�
 
 from __future__ import annotations
 
+import io
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -44,8 +45,9 @@ FIGURE_ANNOTATION_WINDOW = 350.0
 FIGURE_ANNOTATION_MAX_LINE_CHARS = 20
 FIGURE_ANNOTATION_ROW_TOLERANCE = 6.0
 
-# pypdf ImageFile.name 后缀 → mime（DeepSeek 视觉支持的常见类型；.bmp 条目
-# 保留作 PDF 结构兼容，发送前按后缀跳过；未知按 png 兜底）
+# pypdf ImageFile.name 后缀 → mime（通用映射；.bmp 条目保留作映射完整性
+# 与 PDF 结构兼容——PDF 内嵌图发送前由 _VISION_PASSTHROUGH_SUFFIXES 判定
+# 直发/转码，非直发格式（.bmp / JPEG2000 / 未知）走 _transcode_to_png）
 _IMAGE_MIME_BY_SUFFIX = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -54,6 +56,11 @@ _IMAGE_MIME_BY_SUFFIX = {
     ".webp": "image/webp",
     ".gif": "image/gif",
 }
+
+# DeepSeek 视觉支持直发的后缀集（工单 vision-format-transcode/01）：其余
+# （BMP / JPEG2000 / 未知）发送前用 Pillow 转 PNG——DeepSeek 不收 BMP 与
+# JPEG2000，且未知后缀兜底 image/png 直发原字节必然解码失败
+_VISION_PASSTHROUGH_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
 
 
 class ExtractionError(Exception):
@@ -159,11 +166,17 @@ def pdf_image_notes(
             if not data:
                 skipped += 1
                 continue
-            # DeepSeek 视觉不支持 BMP：发送前按后缀跳过（工单
-            # vision-deepseek-native/01），不浪费注定失败的视觉调用
-            if Path(image.name or "").suffix.lower() == ".bmp":
-                skipped += 1
-                continue
+            # DeepSeek 不收 BMP / JPEG2000 等：发送前转 PNG（工单
+            # vision-format-transcode/01，替换「BMP 发送前跳过」）；Pillow
+            # 未装 / 解码失败 → 降级跳过（不浪费注定失败的视觉调用）
+            if _needs_transcode(image.name):
+                png = _transcode_to_png(data)
+                if png is None:
+                    skipped += 1
+                    continue
+                data, mime = png, "image/png"
+            else:
+                mime = _image_mime(image.name)
             try:
                 describe_kwargs: dict[str, Any] = {
                     "base_url": vision_base_url,
@@ -174,7 +187,7 @@ def pdf_image_notes(
                     describe_kwargs["observation_collector"] = observation_collector
                 description = describe_image_cached(
                     data,
-                    _image_mime(image.name),
+                    mime,
                     **describe_kwargs,
                 )
             except Exception:
@@ -315,10 +328,37 @@ def _cluster_rows(segments: list[tuple[float, float, str]]) -> list[tuple[float,
     ]
 
 
+def _image_suffix(name: str) -> str:
+    """ImageFile.name / 文件路径 → 小写后缀（空名兜底 ""）。"""
+    return Path(name or "").suffix.lower()
+
+
 def _image_mime(name: str) -> str:
     """ImageFile.name → mime（未知后缀按 png 兜底，DeepSeek 视觉兼容）。"""
-    suffix = Path(name or "").suffix.lower()
-    return _IMAGE_MIME_BY_SUFFIX.get(suffix, "image/png")
+    return _IMAGE_MIME_BY_SUFFIX.get(_image_suffix(name), "image/png")
+
+
+def _needs_transcode(name: str) -> bool:
+    """后缀 ∉ DeepSeek 直发集 → 需转码（BMP / JPEG2000 / 未知）。"""
+    return _image_suffix(name) not in _VISION_PASSTHROUGH_SUFFIXES
+
+
+def _transcode_to_png(data: bytes) -> bytes | None:
+    """非 DeepSeek 支持格式（BMP / JPEG2000 等）→ PNG 字节（工单
+    vision-format-transcode/01）。
+
+    Pillow lazy import：未安装（老环境未升级依赖）或无法解码 → None，
+    调用方降级跳过——绝不崩启动，也不让格式问题拖垮图注。
+    """
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as im:
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, format="PNG")
+            return buf.getvalue()
+    except Exception:
+        return None
 
 
 def extract_image(
