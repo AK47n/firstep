@@ -60,7 +60,7 @@
   ::selection { background: var(--accent-dim); }
   header { background: var(--panel); border-bottom: 1px solid var(--border);
            padding: 6px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
   header h1 .brand-en { font-family: var(--mono); font-weight: 700; letter-spacing: 1px;
                         display: inline-flex; align-items: baseline; }
   header h1 .brand-en .b1 { color: var(--text); }
@@ -92,9 +92,9 @@
   section.page.active { display: block; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
           padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 0 rgba(255, 255, 255, .02); }
-  .card h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; }
+  .card h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; }
   .card h3 { font-size: 13px; margin: 14px 0 8px; color: var(--muted); font-weight: 600; }
-  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
   textarea, input[type=text], input[type=password], select {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
     font: inherit; background: var(--input-bg); color: var(--text); }
@@ -103,7 +103,7 @@
     font: inherit; background: var(--input-bg); color: var(--text); }
   input[type=search]::placeholder { color: var(--muted); }
   ::placeholder { color: var(--muted); }
-  textarea { resize: vertical; font-family: var(--mono); font-size: 13px; }
+  textarea { resize: vertical; font-family: var(--mono); font-size: 14px; }
   textarea:focus, input:focus, select:focus, button:focus-visible {
     outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
   input:-webkit-autofill {
@@ -122,10 +122,10 @@
   textarea:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
   button .spinner { vertical-align: middle; }                                 /* 按钮内 spinner 垂直居中 */
   .muted { color: var(--muted); font-size: 12px; }
-  .error { color: var(--danger); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  .error { color: var(--danger); font-size: 14px; margin-top: 8px; white-space: pre-wrap; }
   .ok { color: var(--ok); }
   .banner { background: var(--warn-dim); border: 1px solid var(--warn-border); color: var(--warn);
-            border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+            border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
   .platform-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
                    cursor: pointer; flex: 1; min-width: 220px; background: var(--panel); }
   .platform-card:hover { border-color: var(--border-strong); }
@@ -146,7 +146,7 @@
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 2px 8px rgba(0, 0, 0, .18); }
   .item .head { display: flex; gap: 8px; align-items: center; }
   .item .slug { font-weight: 600; font-family: var(--mono); }
-  .item .reason { color: var(--muted); font-size: 13px; margin-top: 6px; line-height: 1.7; }
+  .item .reason { color: var(--muted); font-size: 14px; margin-top: 6px; line-height: 1.7; }
   /* 步骤 6 紧凑清单（工单 step6-ui）：滚动 + 两行布局 + 搜索 */
   .selected-scroll { max-height: 240px; overflow-y: auto; overflow-x: hidden;
                      border: 1px solid var(--border); border-radius: 8px;
@@ -231,7 +231,7 @@
                    padding: 14px 18px; font-size: 13.5px; line-height: 1.8; white-space: pre-line;
                    color: var(--text);
                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 2px 10px rgba(0, 0, 0, .2); }
-  .warn-box { border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; font-size: 13px; line-height: 1.7; }
+  .warn-box { border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; font-size: 14px; line-height: 1.7; }
   .warn-box.missing { background: var(--danger-dim); color: var(--danger); }
   .warn-box.unverified { background: var(--warn-dim); color: var(--warn); }
   .warn-box.hardware_bound { background: var(--info-dim); color: var(--info); }
@@ -294,7 +294,7 @@
   .decision button { margin-left: 8px; padding: 1px 8px; font-size: 12px; }
   .decision input[data-topic] { width: 160px; margin-left: 8px; padding: 2px 6px; font-size: 12px; }
   .decision { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
-              margin-bottom: 6px; font-size: 13px; background: var(--panel-2); }
+              margin-bottom: 6px; font-size: 14px; background: var(--panel-2); }
   .decision .path { font-family: var(--mono); font-weight: 600; }
   .decision .reason { color: var(--muted); margin-top: 2px; }
   .decision select { width: auto; margin-left: 8px; padding: 2px 6px 2px 18px; font-size: 12px;
@@ -466,7 +466,7 @@
                        border: 1px solid var(--warn); border-radius: 10px;
                        font-size: 12px; color: var(--warn); }
   /* 卡 7 说明与图例美化（工单 index-html-ui-redo/01）：只动文字/排版/样式层 */
-  .pin-intro { font-size: 13px; color: var(--muted); line-height: 1.7; margin: 2px 0 6px; }
+  .pin-intro { font-size: 14px; color: var(--muted); line-height: 1.7; margin: 2px 0 6px; }
   .pin-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
                  margin-bottom: 8px; }
   .pin-toolbar .hint { font-size: 12px; color: var(--muted); }
