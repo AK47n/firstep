@@ -1200,6 +1200,25 @@
     </div>
 
     <div class="card">
+      <h2>LLM 用量统计</h2>
+      <div class="muted" style="margin-bottom:8px">估算费用按当前计费时段与已配置单价（输入框留空 = 官方默认价）。</div>
+      <div class="row" style="gap:28px;align-items:flex-start">
+        <div style="min-width:0">
+          <div class="muted" style="margin-bottom:4px">本次会话</div>
+          <div id="usage-session" style="font-size:13px;line-height:1.8">—</div>
+        </div>
+        <div style="min-width:0">
+          <div class="muted" style="margin-bottom:4px">历史累计</div>
+          <div id="usage-total" style="font-size:13px;line-height:1.8">—</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <button id="btn-usage-reset" class="danger" style="padding:4px 12px;font-size:12px">重置统计</button>
+        <span id="usage-reset-msg" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>AI API</h2>
       <div class="row">
         <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
@@ -1425,7 +1444,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
     if (btn.dataset.tab === "topic") loadTopics();
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
-    if (btn.dataset.tab === "settings") { loadSettings(); loadRecentWorkflows(); }
+    if (btn.dataset.tab === "settings") { loadSettings(); loadRecentWorkflows(); renderUsageStats(); }
   });
 });
 
@@ -1735,6 +1754,7 @@ const recPanel = makeProgressPanel({
       const el = $("rec-llm-telemetry");
       el.textContent = formatLLMTelemetry(ev);
       el.classList.remove("hidden");
+      recordLLMUsage(ev);
     },
     done: (ev) => {
       recPanel.finish();
@@ -3615,6 +3635,7 @@ function fixHandleEvent(type, raw, outputDir) {
     $("fix-results").appendChild(row);
   } else if (type === "llm_telemetry") {
     renderFixLLMTelemetry(data);
+    recordLLMUsage(data);
   } else if (type === "done") {
     lastFixDone = data;
     const fixes = data.fixes || [];
@@ -4165,7 +4186,7 @@ async function reviseAnalyze() {
     const data = await reviseRunSSE("/api/revise/analyze", body, {
       impact_analyzing: () => { $("revise-analyze-status").textContent = "AI 影响分析中…（分钟级调用，请等待）"; },
       diff_ready: () => { $("revise-analyze-status").textContent = "diff 就绪，汇总中…"; },
-      llm_telemetry: (d) => renderReviseTelemetry("analyze", d),
+      llm_telemetry: (d) => { renderReviseTelemetry("analyze", d); recordLLMUsage(d); },
     });
     revise.analysis = data;
     reviseRenderAnalysis(data);
@@ -4198,7 +4219,7 @@ async function reviseApply() {
     const data = await reviseRunSSE("/api/revise/apply", body, {
       revision_backup: () => { $("revise-exec-status").textContent = "备份中…（整树备份到输出目录外）"; },
       revision_generating: () => { $("revise-exec-status").textContent = "重生成中…（覆盖式重建输出目录）"; },
-      llm_telemetry: (d) => renderReviseTelemetry("exec", d),
+      llm_telemetry: (d) => { renderReviseTelemetry("exec", d); recordLLMUsage(d); },
     });
     revise.applyDone = data;
     markStepDone(11);
@@ -4267,7 +4288,7 @@ async function reviseRunDeepen() {
       compile_start: () => { $("revise-exec-status").textContent = "编译中…"; },
       fix_start: () => { $("revise-exec-status").textContent = "AI 修复中…（首轮编译未过，自动修复一轮）"; },
       verify_result: () => { $("revise-exec-status").textContent = "验证结果收集中…"; },
-      llm_telemetry: (d) => renderReviseTelemetry("exec", d),
+      llm_telemetry: (d) => { renderReviseTelemetry("exec", d); recordLLMUsage(d); },
     });
     reviseRenderVerify(data);
     if (data.status !== "failed") { markStepDone(11); toast("ok", "深化完成"); }  // 验证通过 / 降级未验证都算闭环
@@ -5107,6 +5128,7 @@ const distPanel = makeProgressPanel({
       const el = $("prog-llm-telemetry");
       el.textContent = formatLLMTelemetry(data);
       el.classList.remove("hidden");
+      recordLLMUsage(data);
     },
     done: (data) => finishProgress(data),   // data = 完整提炼报告（与现状响应同构，原样渲染）
     error: (data) => failProgress(data.message || "提炼失败"),
@@ -6128,6 +6150,113 @@ function initCardCollapse() {
   });
   nav.appendChild(toggleBtn);
 }
+
+// ---------------------------------------------------------------------------
+// LLM 用量统计（工单 ui-polish-5/02）：llm_telemetry 累计快照 → 会话差分 →
+// 跨会话累计持久化 + 费用估算（设置页单价优先，空则官方默认价）
+// ---------------------------------------------------------------------------
+const USAGE_STORE_KEY = "firstep.usage.v1";
+function usageDelta(snapshot, base) {
+  const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
+  const usage = snapshot.llm_usage && typeof snapshot.llm_usage === "object" ? snapshot.llm_usage : {};
+  const s = {
+    calls: num(snapshot.llm_total_calls),
+    prompt: num(usage.prompt_tokens),
+    completion: num(usage.completion_tokens),
+    cacheHit: num(usage.prompt_cache_hit_tokens),
+    durationMs: num(snapshot.llm_duration_ms),
+    requestBytes: num(snapshot.llm_request_bytes),
+  };
+  if (!base) return s;   // 首快照 = 从零到当前的增量
+  const d = {};
+  for (const k of Object.keys(s)) d[k] = Math.max(0, s[k] - (base[k] || 0));
+  return d;
+}
+function usageAccumulate(acc, delta) {
+  const out = Object.assign({}, acc || {});
+  for (const k of ["calls", "prompt", "completion", "cacheHit", "durationMs", "requestBytes"]) {
+    out[k] = (out[k] || 0) + (delta[k] || 0);
+  }
+  return out;
+}
+function llmCostEstimate(usage, prices) {
+  const p = prices || {};
+  const prompt = Number(usage.prompt) || 0;
+  const cacheHit = Number(usage.cacheHit) || 0;
+  const miss = Math.max(0, prompt - cacheHit);
+  return {
+    hitCost: (cacheHit / 1e6) * (Number(p.input_cache_hit_per_million) || 0),
+    missCost: (miss / 1e6) * (Number(p.input_cache_miss_per_million) || 0),
+    outCost: ((Number(usage.completion) || 0) / 1e6) * (Number(p.output_per_million) || 0),
+  };
+}
+function usageDisplay(acc, cost) {
+  const a = acc || {};
+  const c = cost || { hitCost: 0, missCost: 0, outCost: 0 };
+  const total = c.hitCost + c.missCost + c.outCost;
+  return {
+    calls: a.calls || 0,
+    prompt: a.prompt || 0,
+    completion: a.completion || 0,
+    cacheHit: a.cacheHit || 0,
+    durationMs: a.durationMs || 0,
+    requestBytes: a.requestBytes || 0,
+    cost: total,
+    costText: total > 0 ? "¥" + total.toFixed(4) : "—",
+  };
+}
+let usageBase = null;
+let usageSessionAcc = { calls: 0, prompt: 0, completion: 0, cacheHit: 0, durationMs: 0, requestBytes: 0 };
+function loadUsageAcc() {
+  try {
+    const raw = localStorage.getItem(USAGE_STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch (e) { /* 忽略 */ }
+  return { calls: 0, prompt: 0, completion: 0, cacheHit: 0, durationMs: 0, requestBytes: 0 };
+}
+function currentLlmPrices() {
+  const defs = llmPricesDefaults.deepseek || {};
+  const hit = $("set-ds-in-hit").value.trim();
+  const miss = $("set-ds-in").value.trim();
+  const out = $("set-ds-out").value.trim();
+  return {
+    input_cache_hit_per_million: hit ? parseFloat(hit) : (defs.input_cache_hit_per_million || 0),
+    input_cache_miss_per_million: miss ? parseFloat(miss) : (defs.input_cache_miss_per_million || 0),
+    output_per_million: out ? parseFloat(out) : (defs.output_per_million || 0),
+  };
+}
+function recordLLMUsage(snapshot) {
+  const delta = usageDelta(snapshot, usageBase);
+  usageBase = usageDelta(snapshot, null);   // 新基线 = 当前快照（重复快照差分 0）
+  if (!delta.calls && !delta.prompt && !delta.completion) return;
+  usageSessionAcc = usageAccumulate(usageSessionAcc, delta);
+  const acc = usageAccumulate(loadUsageAcc(), delta);
+  try { localStorage.setItem(USAGE_STORE_KEY, JSON.stringify(acc)); } catch (e) { /* 忽略 */ }
+  renderUsageStats();
+}
+function renderUsageStats() {
+  if (!$("usage-total")) return;
+  const prices = currentLlmPrices();
+  const acc = loadUsageAcc();
+  const fmt = (d) => d.calls + " 次调用 · " + d.prompt.toLocaleString("en-US") + " prompt · "
+    + d.completion.toLocaleString("en-US") + " completion"
+    + (d.cacheHit ? "（缓存 " + d.cacheHit.toLocaleString("en-US") + "）" : "")
+    + " · 耗时 " + d.durationMs.toLocaleString("en-US") + "ms"
+    + " · 请求 " + d.requestBytes.toLocaleString("en-US") + "B"
+    + " · 估算 " + d.costText;
+  $("usage-session").textContent = fmt(usageDisplay(usageSessionAcc, llmCostEstimate(usageSessionAcc, prices)));
+  $("usage-total").textContent = fmt(usageDisplay(acc, llmCostEstimate(acc, prices)));
+}
+$("btn-usage-reset").addEventListener("click", () => {
+  try { localStorage.removeItem(USAGE_STORE_KEY); } catch (e) { /* 忽略 */ }
+  usageSessionAcc = { calls: 0, prompt: 0, completion: 0, cacheHit: 0, durationMs: 0, requestBytes: 0 };
+  renderUsageStats();
+  $("usage-reset-msg").textContent = "已重置";
+  setTimeout(() => { $("usage-reset-msg").textContent = ""; }, 1500);
+});
 
 // ---------------------------------------------------------------------------
 // 启动
