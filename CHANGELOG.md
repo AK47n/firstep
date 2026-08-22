@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6e084eb09ecb15d8ff19b49fb8fe5fe652d512ad -->
+<!-- changelog-auto: last-commit=a9da7a306fdc38718d9f1faf502d4680e59461c2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
+- 00:25 测试：会话收尾自动清理桌面测试产物（AI 生成的赛题简介_时间戳）
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
