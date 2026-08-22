@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9a5c2f66df0eff42f95c93b2438f199cfee68c3f -->
+<!-- changelog-auto: last-commit=ed3fdba205b926b96fd1781b12e724d08197a739 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 01:36 UI 打磨（ui-polish/03）：顶栏合并为单行并全量回归验证
 - 12:18 UI 打磨（ui-polish-2/01）：步骤导航升级为胶囊标签
 - 12:31 UI 打磨（ui-polish-3/01）：生成页草稿自动记忆（localStorage）
+- 12:33 UI 打磨（ui-polish-3/02）：顶部流程进度条与完成计数
 
 ## 2026-08-21
 - 00:54 生成尾部落盘上下文清单 + 历史目录反推 + 加载 API（工单 revise-deepen/01）
