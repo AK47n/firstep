@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d6c2293b5be65dd47df91f59349bff4e64bda3c1 -->
+<!-- changelog-auto: last-commit=5103395269e4424207c7deb84f55dc6c614ac734 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 22:59 UI 打磨（ui-polish-5/01）：亮色主题切换（防闪烁 + 偏好记忆）
 - 23:04 UI 打磨（ui-polish-5/02）：LLM 用量统计（会话差分 + 历史累计 + 费用估算）
 - 23:06 UI 打磨（ui-polish-5/03）：细节包（动效降级 + 禁用态统一 + 按钮 spinner 对齐）
+- 23:44 UI 打磨（ui-polish-6/01）：内容区加宽（生成页 1400 / 其它页 1280 居中）
 
 ## 2026-08-21
 - 00:54 生成尾部落盘上下文清单 + 历史目录反推 + 加载 API（工单 revise-deepen/01）
