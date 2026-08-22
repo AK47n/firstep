@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._desktop_cleanup import cleanup_desktop_test_artifacts
+
 from contest_generator.generator import generate
 from contest_generator.manifest import ModuleManifest
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32, PatcherRegistry
@@ -124,3 +126,14 @@ def make_ccs_project(fake_ccs_master_project, fake_module_library, mspm0_selecti
         return output_dir
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# 桌面测试产物清理（收尾钩子）：见 _desktop_cleanup.py 的说明。
+# ---------------------------------------------------------------------------
+def pytest_sessionfinish(session, exitstatus):
+    """测试会话收尾：清理本会话生成到桌面的测试产物。"""
+    removed = cleanup_desktop_test_artifacts(Path.home() / "Desktop")
+    if removed:
+        head = "、".join(removed[:5]) + ("…" if len(removed) > 5 else "")
+        print(f"\n[conftest] 清理桌面测试产物 {len(removed)} 个：{head}")
