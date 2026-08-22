@@ -1,5 +1,5 @@
-// stepNavTitles / stepNavDotsHTML / stepNavCurrent 纯函数单测（工单 ui-polish/02）：
-// 生成页左侧步骤导航的标题抽取、圆点 HTML 生成、滚动高亮判定。
+// stepNavTitles / stepNavItemsHTML / stepNavCurrent 纯函数单测（工单 ui-polish/02、ui-polish-2/01）：
+// 生成页左侧步骤导航的标题抽取、胶囊项 HTML 生成、滚动高亮判定。
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -16,7 +16,7 @@ function extract(name) {
 }
 
 const stepNavTitles = extract("stepNavTitles");
-const stepNavDotsHTML = extract("stepNavDotsHTML");
+const stepNavItemsHTML = extract("stepNavItemsHTML");
 const stepNavCurrent = extract("stepNavCurrent");
 
 // 假卡片：只实现 .step-no / h2 两个查询
@@ -40,20 +40,28 @@ test("stepNavTitles 缺徽章 / 缺 h2 时兜底", () => {
   assert.deepEqual(stepNavTitles(cards), [{ n: NaN, title: "" }]);
 });
 
-test("stepNavDotsHTML 为每步生成圆点按钮", () => {
-  const titles = [
+test("stepNavItemsHTML 生成胶囊结构：dot 数字 + label 标题", () => {
+  const out = stepNavItemsHTML([
     { n: 1, title: "赛题原文" },
     { n: 2, title: "赛题简介" },
-  ];
-  const out = stepNavDotsHTML(titles);
+  ]);
   assert.equal(out.match(/class="step-dot"/g).length, 2);
   assert.ok(out.includes('data-step="1"'));
-  assert.ok(out.includes(">1</button>"));
-  assert.ok(out.includes('title="赛题简介"'));
+  assert.ok(out.includes('<span class="dot">1</span>'));
+  assert.ok(out.includes('<span class="label">赛题原文</span>'));
+  assert.ok(out.includes('title="赛题原文"'));
 });
 
-test("stepNavDotsHTML 转义标题中的引号", () => {
-  const out = stepNavDotsHTML([{ n: 7, title: '引脚配置"板图"' }]);
+test("stepNavItemsHTML 超长标题截断为 12 字符加省略号，title 保留全文", () => {
+  const longTitle = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳";
+  const out = stepNavItemsHTML([{ n: 10, title: longTitle }]);
+  assert.ok(out.includes('<span class="label">甲乙丙丁戊己庚辛壬癸子丑…</span>'));
+  assert.ok(out.includes('title="' + longTitle + '"'));
+});
+
+test("stepNavItemsHTML 转义标题中的引号（label 与 title 都转义）", () => {
+  const out = stepNavItemsHTML([{ n: 7, title: '引脚配置"板图"' }]);
+  assert.ok(out.includes('<span class="label">引脚配置&quot;板图&quot;</span>'));
   assert.ok(out.includes('title="引脚配置&quot;板图&quot;"'));
 });
 

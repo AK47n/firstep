@@ -526,22 +526,36 @@
   .gen-steps { min-width: 0; }
   @media (min-width: 1180px) {
     .gen-layout { display: flex; gap: 18px; align-items: flex-start; }
-    .step-nav { position: sticky; top: 14px; width: 46px; flex: none;
-                display: flex; flex-direction: column; gap: 7px;
+    .step-nav { position: sticky; top: 14px; width: 158px; flex: none;
+                display: flex; flex-direction: column; gap: 4px;
                 padding: 4px 0; }
-    .step-nav .step-dot { width: 27px; height: 27px; border-radius: 50%;
-                display: flex; align-items: center; justify-content: center;
-                font-size: 12px; font-weight: 600; color: var(--muted);
-                background: var(--panel); border: 1px solid var(--border);
-                cursor: pointer; transition: all .25s; user-select: none; }
-    .step-nav .step-dot:hover { color: var(--text); border-color: var(--accent);
+    .step-nav .step-dot { display: flex; align-items: center; gap: 8px;
+                width: 100%; padding: 3px 8px 3px 4px;
+                border: 1px solid transparent; border-radius: 999px;
+                background: none; cursor: pointer;
+                transition: all .25s; user-select: none; }
+    .step-nav .step-dot .dot { width: 24px; height: 24px; flex: none;
+                border-radius: 50%; display: flex; align-items: center;
+                justify-content: center; font-size: 11.5px; font-weight: 600;
+                color: var(--muted); background: var(--panel);
+                border: 1px solid var(--border); transition: all .25s; }
+    .step-nav .step-dot .label { font-size: 12px; color: var(--muted);
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                transition: color .25s; }
+    .step-nav .step-dot:hover { border-color: var(--border-strong); }
+    .step-nav .step-dot:hover .dot { color: var(--text); border-color: var(--accent);
                 box-shadow: 0 0 8px rgba(0, 212, 255, .35); }
-    .step-nav .step-dot.current { color: #001018; border-color: transparent;
+    .step-nav .step-dot:hover .label { color: var(--text); }
+    .step-nav .step-dot.current { background: var(--accent-dim);
+                border-color: rgba(0, 212, 255, .45); }
+    .step-nav .step-dot.current .dot { color: #001018; border-color: transparent;
                 background: linear-gradient(135deg, #33dcff, #00b8de);
                 box-shadow: 0 0 12px rgba(0, 212, 255, .5); }
-    .step-nav .step-dot.done { color: #04170c; border-color: transparent;
+    .step-nav .step-dot.current .label { color: var(--text); font-weight: 600; }
+    .step-nav .step-dot.done .dot { color: #04170c; border-color: transparent;
                 background: linear-gradient(135deg, #34d399, #059669);
                 box-shadow: 0 0 10px rgba(52, 211, 153, .4); }
+    .step-nav .step-dot.done .label { color: var(--ok); }
   }
   @media (max-width: 1179px) { .step-nav { display: none; } }
   .card.done .step-no { background: linear-gradient(135deg, #34d399, #059669);
@@ -5685,11 +5699,14 @@ function stepNavTitles(cards) {
     };
   });
 }
-function stepNavDotsHTML(titles) {
-  return titles.map((t) =>
-    '<button type="button" class="step-dot" data-step="' + t.n + '" title="'
-    + String(t.title || "").replace(/"/g, "&quot;") + '">' + t.n + "</button>"
-  ).join("");
+function stepNavItemsHTML(titles) {
+  return titles.map((t) => {
+    const full = String(t.title || "");
+    const label = full.length > 12 ? full.slice(0, 12) + "…" : full;
+    return '<button type="button" class="step-dot" data-step="' + t.n + '" title="'
+      + full.replace(/"/g, "&quot;") + '"><span class="dot">' + t.n + '</span><span class="label">'
+      + label.replace(/"/g, "&quot;") + "</span></button>";
+  }).join("");
 }
 function stepNavCurrent(entries, threshold) {
   let cur = entries.length ? entries[0].n : NaN;
@@ -5704,14 +5721,22 @@ function stepCard(n) {
   }) || null;
 }
 function markStepDone(n) {
-  const dot = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
-  if (dot) { dot.classList.add("done"); dot.textContent = "✓"; }
+  const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
+  if (item) {
+    item.classList.add("done");
+    const dot = item.querySelector(".dot");
+    if (dot) dot.textContent = "✓";
+  }
   const card = stepCard(n);
   if (card) card.classList.add("done");
 }
 function markStepUndone(n) {
-  const dot = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
-  if (dot) { dot.classList.remove("done"); dot.textContent = String(n); }
+  const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
+  if (item) {
+    item.classList.remove("done");
+    const dot = item.querySelector(".dot");
+    if (dot) dot.textContent = String(n);
+  }
   const card = stepCard(n);
   if (card) card.classList.remove("done");
 }
@@ -5729,7 +5754,7 @@ function syncStep7() {
   const cards = Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR))
     .filter((c) => c.querySelector(".step-no"));
   if (!cards.length) return;
-  nav.innerHTML = stepNavDotsHTML(stepNavTitles(cards));
+  nav.innerHTML = stepNavItemsHTML(stepNavTitles(cards));
   nav.addEventListener("click", (e) => {
     const dot = e.target.closest(".step-dot");
     if (!dot) return;
