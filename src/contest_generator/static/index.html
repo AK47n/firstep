@@ -560,6 +560,15 @@
   @media (max-width: 1179px) { .step-nav { display: none; } }
   .card.done .step-no { background: linear-gradient(135deg, #34d399, #059669);
              box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 0 10px rgba(52, 211, 153, .35); }
+  /* 顶部流程进度条（工单 ui-polish-3/02）：header 下 3px 细条 + 完成计数 */
+  #gen-progress { position: relative; height: 3px; background: var(--border);
+                  transition: opacity .3s; }
+  #gen-progress .gp-fill { height: 100%; width: 0%;
+                  background: linear-gradient(90deg, #00a8cc, #00d4ff);
+                  box-shadow: 0 0 8px rgba(0, 212, 255, .5);
+                  transition: width .4s ease; }
+  #gen-progress .gp-text { position: absolute; right: 10px; top: 6px;
+                  font-size: 11px; color: var(--muted); white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -577,6 +586,8 @@
     <button data-tab="settings">设置</button>
   </nav>
 </header>
+
+<div id="gen-progress" class="hidden"><div class="gp-fill"></div><span class="gp-text"></span></div>
 
 <main>
   <!-- ============================ 生成页 ============================ -->
@@ -1321,6 +1332,9 @@ document.querySelectorAll("nav button").forEach((btn) => {
     document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll("section.page").forEach((s) =>
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
+    // 进度条只属于生成流程：切出隐藏，切回按完成数恢复显示
+    const gp = $("gen-progress");
+    if (gp) gp.classList.toggle("hidden", btn.dataset.tab !== "generate" || stepDoneSet.size === 0);
     if (btn.dataset.tab === "library") loadLibrary();
     if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); }
     if (btn.dataset.tab === "pdf") loadPdfs();
@@ -5734,6 +5748,7 @@ function stepCard(n) {
   }) || null;
 }
 function markStepDone(n) {
+  syncStepDone(n, true);
   const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
   if (item) {
     item.classList.add("done");
@@ -5744,6 +5759,7 @@ function markStepDone(n) {
   if (card) card.classList.add("done");
 }
 function markStepUndone(n) {
+  syncStepDone(n, false);
   const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
   if (item) {
     item.classList.remove("done");
@@ -5887,6 +5903,32 @@ $("problem").addEventListener("input", scheduleDraftSave);
 $("topic-id").addEventListener("input", scheduleDraftSave);
 $("main-c").addEventListener("input", scheduleDraftSave);
 $("qa-text").addEventListener("input", scheduleDraftSave);
+
+// ---------------------------------------------------------------------------
+// 顶部流程进度条（工单 ui-polish-3/02）：完成步骤集合 → 细进度条 + 计数；
+// 与 markStepDone / markStepUndone 联动（STEP_TOTAL 与步骤总数保持同步）
+// ---------------------------------------------------------------------------
+const STEP_TOTAL = 12;
+const stepDoneSet = new Set();
+function stepProgress(doneCount, total) {
+  const t = Number(total);
+  const n = Number(doneCount);
+  const safeTotal = Number.isFinite(t) && t > 0 ? t : 12;
+  const safeDone = Number.isFinite(n) ? Math.max(0, Math.min(n, safeTotal)) : 0;
+  return { pct: Math.round((safeDone / safeTotal) * 100), text: "已完成 " + safeDone + "/" + safeTotal };
+}
+function syncStepDone(n, done) {
+  if (done) stepDoneSet.add(n); else stepDoneSet.delete(n);
+  renderStepProgress();
+}
+function renderStepProgress() {
+  const el = $("gen-progress");
+  if (!el) return;
+  const { pct, text } = stepProgress(stepDoneSet.size, STEP_TOTAL);
+  el.querySelector(".gp-fill").style.width = pct + "%";
+  el.querySelector(".gp-text").textContent = text;
+  el.classList.toggle("hidden", pct === 0);
+}
 
 // ---------------------------------------------------------------------------
 // 启动
