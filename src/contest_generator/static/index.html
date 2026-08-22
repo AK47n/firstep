@@ -115,6 +115,9 @@
   button.danger:hover { border-color: var(--danger); }
   button.pin-overview-on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
   button:disabled { opacity: .45; cursor: not-allowed; }
+  button:disabled:hover { border-color: var(--border); color: var(--text); }   /* 禁用态不响应悬停 */
+  textarea:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
+  button .spinner { vertical-align: middle; }                                 /* 按钮内 spinner 垂直居中 */
   .muted { color: var(--muted); font-size: 12px; }
   .error { color: var(--danger); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
   .ok { color: var(--ok); }
@@ -298,6 +301,10 @@
              border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
              vertical-align: -2px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* 动效降级（工单 ui-polish-5/03）：跟随系统「减少动态效果」偏好（须在 .spinner 定义之后，级联覆盖） */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner, .brand-breathe { animation: none; }
+  }
   /* ---- 提炼进度区（工单 03：stepper + 批进度 + 双计时器 + 补问徽标 + 可折叠日志） ---- */
   .distill-progress { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px;
                       padding: 10px 14px; background: var(--panel-2); }
