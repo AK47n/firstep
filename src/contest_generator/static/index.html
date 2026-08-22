@@ -84,7 +84,10 @@
                font-size: 13.5px; color: var(--muted); border-bottom: 2px solid transparent; }
   nav button:hover { color: var(--text); }
   nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-  main { max-width: 980px; margin: 20px auto; padding: 0 16px; }
+  main { max-width: 1400px; margin: 20px auto; padding: 0 24px; }
+  /* 内容区加宽（工单 ui-polish-6/01）：生成页 12 步流程吃满 1400px；
+     其它页（设置/赛题库/模块库等表格页）1280 居中，避免过宽空旷 */
+  main > section.page:not(#tab-generate) { max-width: 1280px; margin: 0 auto; }
   section.page { display: none; }
   section.page.active { display: block; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
@@ -554,6 +557,8 @@
      窄屏隐藏（不挤占表单区）；卡片徽章与圆点同色联动 */
   .gen-layout { display: block; }
   .gen-steps { min-width: 0; }
+  /* 生成页卡片加宽后微调 padding（工单 ui-polish-6/01）：避免内容贴边 */
+  #tab-generate .gen-steps > .card { padding: 18px 24px; }
   @media (min-width: 1180px) {
     .gen-layout { display: flex; gap: 18px; align-items: flex-start; }
     .step-nav { position: sticky; top: 14px; width: 158px; flex: none;
