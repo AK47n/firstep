@@ -583,6 +583,13 @@
   <section id="tab-generate" class="page active">
     <div id="gen-banner" class="banner hidden">尚未配置 AI API：请先到「设置」页填写 API 后再使用 AI 功能。</div>
 
+    <div id="draft-tip" class="hidden">
+      <div style="display:flex;gap:10px;align-items:center;background:var(--info-dim);border:1px solid var(--info-border);color:var(--info);border-radius:8px;padding:8px 14px;margin-bottom:16px;font-size:13px">
+        <span style="flex:1">已恢复上次草稿（题面 / 平台 / 模块 / 骨架 / Q&A 已回填，可继续编辑）。</span>
+        <button id="btn-draft-clear" class="danger" style="padding:3px 10px;font-size:12px">清除草稿</button>
+      </div>
+    </div>
+
     <div class="gen-layout">
       <nav id="step-nav" class="step-nav" aria-label="生成步骤向导"></nav>
       <div class="gen-steps">
@@ -1119,6 +1126,10 @@
       <h2>应用设置</h2>
       <div class="muted" style="margin-bottom:10px">保存后即时生效，无需重启。</div>
       <div id="settings-banner" class="banner hidden">尚未配置：请填写 API key 后保存。</div>
+      <div class="row" style="margin-top:12px;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">生成页草稿（题面 / 平台 / 模块 / 骨架 / Q&A）自动保存于本机浏览器，刷新不丢。</span>
+        <button id="btn-clear-draft" class="danger" style="margin-left:auto">清除草稿</button>
+      </div>
     </div>
 
     <div class="card">
@@ -1366,6 +1377,7 @@ function renderPlatforms() {
         markStepDone(3);
         unmarkSteps([5, 6, 7, 8, 9, 10, 11, 12]);  // 换平台：下游全部重来
         renderPlatforms();
+        scheduleDraftSave();
         updateFixCenterAvailability();
         selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
         // 引脚配置（工单 03）：切平台清空绑定重取板定义
@@ -1868,6 +1880,7 @@ function renderModuleSearch() {
 function renderSelected() {
   const box = $("selected-list");
   if (selectedSlugs.length) markStepDone(6); else markStepUndone(6);
+  scheduleDraftSave();
   if (!expanded.length) {
     $("selected-count").textContent = "";
     box.innerHTML = selectedSlugs.length
@@ -5788,6 +5801,94 @@ function syncStep7() {
 })();
 
 // ---------------------------------------------------------------------------
+// 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
+// 只存表单态，恢复不触发任何后端请求
+// ---------------------------------------------------------------------------
+const DRAFT_KEY = "firstep.draft.v1";
+const DRAFT_FIELDS = ["problem", "topicId", "platform", "slugs", "mainC", "qa"];
+function draftState(problem, topicId, platform, slugs, mainC, qa) {
+  return {
+    problem: String(problem || ""),
+    topicId: String(topicId || ""),
+    platform: String(platform || ""),
+    slugs: Array.isArray(slugs) ? slugs.filter((s) => typeof s === "string") : [],
+    mainC: String(mainC || ""),
+    qa: String(qa || ""),
+  };
+}
+function draftSave(storage, state) {
+  try { storage.setItem("firstep.draft.v1", JSON.stringify(state)); return true; }
+  catch (e) { return false; }
+}
+function draftLoad(storage) {
+  let raw = null;
+  try { raw = storage.getItem("firstep.draft.v1"); } catch (e) { return null; }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  }
+  catch (e) { return null; }   // 损坏 JSON / 被改坏 = 静默降级为新会话
+}
+function draftRestoreMeta(json) {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return null;
+  const out = {};
+  for (const f of ["problem", "topicId", "platform", "slugs", "mainC", "qa"]) {
+    const v = json[f];
+    if (f === "slugs") out[f] = Array.isArray(v) ? v.filter((s) => typeof s === "string") : [];
+    else out[f] = typeof v === "string" ? v : "";
+  }
+  return out;
+}
+function collectDraftState() {
+  return draftState(
+    $("problem").value, $("topic-id").value,
+    chosenPlatform || "", selectedSlugs,
+    $("main-c").value, $("qa-text").value
+  );
+}
+let draftTimer = null;
+function scheduleDraftSave() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => { draftSave(localStorage, collectDraftState()); }, 400);
+}
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* 忽略 */ }
+  $("draft-tip").classList.add("hidden");
+}
+function restoreDraft() {
+  const d = draftRestoreMeta(draftLoad(localStorage));
+  if (!d) return;
+  if (d.problem) { $("problem").value = d.problem; markStepDone(1); }
+  if (d.topicId) { $("topic-id").value = d.topicId; currentTopicId = d.topicId; }
+  if (d.platform && state.platforms.some((p) => p.id === d.platform)) {
+    chosenPlatform = d.platform;
+    markStepDone(3);
+  }
+  if (d.slugs.length) { selectedSlugs = d.slugs; markStepDone(6); }
+  if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); }
+  if (d.qa) { $("qa-text").value = d.qa; }
+  if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); }
+  $("draft-tip").classList.remove("hidden");
+}
+$("btn-clear-draft").addEventListener("click", () => {
+  clearDraft();
+  const btn = $("btn-clear-draft");
+  btn.textContent = "已清除";
+  setTimeout(() => { btn.textContent = "清除草稿"; }, 1500);
+});
+$("btn-draft-clear").addEventListener("click", () => {
+  clearDraft();
+  const btn = $("btn-draft-clear");
+  btn.textContent = "已清除";
+  setTimeout(() => { btn.textContent = "清除草稿"; }, 1500);
+});
+$("problem").addEventListener("input", scheduleDraftSave);
+$("topic-id").addEventListener("input", scheduleDraftSave);
+$("main-c").addEventListener("input", scheduleDraftSave);
+$("qa-text").addEventListener("input", scheduleDraftSave);
+
+// ---------------------------------------------------------------------------
 // 启动
 // ---------------------------------------------------------------------------
 (async function init() {
@@ -5811,6 +5912,7 @@ function syncStep7() {
   $("new-platform").innerHTML = state.platforms.map((p) =>
     `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
   loadReferencePicker();
+  restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
 })();
 </script>
 </body>
