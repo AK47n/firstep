@@ -795,7 +795,8 @@
              自动编译发生了、结果如何；四态 running/success/fail/notool -->
         <div id="compile-banner" class="hidden"></div>
         <h3>生成完成</h3>
-        <div class="item">输出目录：<span id="res-dir" class="slug"></span></div>
+        <div class="item">输出目录：<span id="res-dir" class="slug"></span>
+          <button id="btn-copy-dir" class="hidden" style="margin-left:8px;padding:2px 10px;font-size:12px">复制路径</button></div>
         <div class="item">include path：<span id="res-includes" class="slug"></span></div>
         <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
         <div class="item hidden" id="res-score-points" style="white-space:pre-line"></div>
@@ -3086,6 +3087,7 @@ $("btn-generate").addEventListener("click", async () => {
     if (qa) payload.qa_text = qa;
     const data = await apiPost("/api/generate", payload);
     $("res-dir").textContent = data.output_dir;
+    $("btn-copy-dir").classList.remove("hidden");
     $("res-includes").textContent = data.include_dirs.join("；");
     $("res-modules").textContent = formatResModules(data.modules, data.python_artifacts);
     $("res-score-points").textContent = (data.score_points && data.score_points.length)
@@ -3292,6 +3294,17 @@ $("btn-handoff-copy").addEventListener("click", async () => {
     $("handoff-text").select();
     document.execCommand("copy");
     $("handoff-text").blur();
+  }
+});
+
+$("btn-copy-dir").addEventListener("click", async () => {
+  const dir = $("res-dir").textContent.trim();
+  if (!dir) return;
+  try {
+    await navigator.clipboard.writeText(dir);
+    toast("ok", "已复制输出路径");
+  } catch (e) {
+    toast("error", "复制失败");
   }
 });
 
@@ -4780,12 +4793,17 @@ async function loadTopics() {
           <td class="slug">${esc(t.key)}</td>
           <td>${esc(t.year)}</td>
           <td class="muted" title="${esc(truncate(t.problem_text, 200))}">${esc(truncate(t.problem_text, 80))}</td>
-          <td><button class="danger" data-topic-del="${esc(t.key)}">删除</button></td>
+          <td>
+            <button data-topic-use="${esc(t.key)}">用此题生成</button>
+            <button class="danger" data-topic-del="${esc(t.key)}">删除</button>
+          </td>
         </tr>`).join("");
     $("topic-rows").innerHTML = rows
       || '<tr><td colspan="4" class="empty-td"><div class="empty-state"><div class="es-icon">🏆</div><div class="es-title">库中暂无条目</div><div class="es-hint">录入历史赛题后，可直接按编号取题面一键生成工程。</div></div></td></tr>';
     $("topic-rows").querySelectorAll("[data-topic-del]").forEach((b) =>
       b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
+    $("topic-rows").querySelectorAll("[data-topic-use]").forEach((b) =>
+      b.addEventListener("click", () => useTopic(b.dataset.topicUse)));
     $("topic-msg").textContent = "";
   } catch (e) { $("topic-msg").textContent = e.message; }
 }
@@ -4803,6 +4821,24 @@ async function deleteTopic(key) {
     await apiDelete(`/api/topics/${encodeURIComponent(key)}`);
     loadTopics();
   } catch (e) { alert(e.message); }
+}
+
+/** 赛题库「用此题生成」：取题面 → 填生成页 → 步 1 完成 → 切 tab + 滚顶。
+ * 与 btn-topic-load 同端点、同失效语义（clearTopicSummary 清下游状态）。 */
+async function useTopic(key) {
+  try {
+    const data = await handle(await fetch("/api/topics/" + encodeURIComponent(key)));
+    $("problem").value = data.problem_text;
+    currentTopicId = data.key;
+    clearTopicSummary();
+    markStepDone(1);
+    toast("ok", "已载入赛题 " + data.key);
+    document.querySelector('[data-tab="generate"]').click();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (e) {
+    toast("error", "载入赛题失败");
+    $("topic-msg").textContent = e.message;
+  }
 }
 
 function renderProofreadRows() {
