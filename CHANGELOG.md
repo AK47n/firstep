@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f68bc9669747ea328df295e04c02472312622730 -->
+<!-- changelog-auto: last-commit=d6c2293b5be65dd47df91f59349bff4e64bda3c1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 22:23 UI 打磨（ui-polish-4/02+03）：赛题库一键生成与复制输出路径
 - 22:59 UI 打磨（ui-polish-5/01）：亮色主题切换（防闪烁 + 偏好记忆）
 - 23:04 UI 打磨（ui-polish-5/02）：LLM 用量统计（会话差分 + 历史累计 + 费用估算）
+- 23:06 UI 打磨（ui-polish-5/03）：细节包（动效降级 + 禁用态统一 + 按钮 spinner 对齐）
 
 ## 2026-08-21
 - 00:54 生成尾部落盘上下文清单 + 历史目录反推 + 加载 API（工单 revise-deepen/01）
