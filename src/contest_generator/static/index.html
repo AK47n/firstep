@@ -592,6 +592,13 @@
   @keyframes toast-in { from { opacity: 0; transform: translateX(16px); }
                         to { opacity: 1; transform: none; } }
   @keyframes toast-out { to { opacity: 0; transform: translateX(16px); } }
+  /* 卡片折叠（工单 ui-polish-4/01）：标题行右侧按钮 + 折叠态只留标题行 */
+  .card > .card-collapse { margin-left: auto; border: none; background: none;
+                  color: var(--muted); font-size: 13px; padding: 0 6px; cursor: pointer;
+                  transition: transform .25s, color .25s; }
+  .card > .card-collapse:hover { color: var(--accent); }
+  .card.collapsed > .card-collapse { transform: rotate(-90deg); }
+  .card.collapsed > *:not(h2) { display: none !important; }
 </style>
 </head>
 <body>
@@ -5980,6 +5987,60 @@ function toast(kind, text) {
 }
 
 // ---------------------------------------------------------------------------
+// 生成页卡片折叠（工单 ui-polish-4/01）：标题行按钮 / 点击 toggle /
+// 导航底部「收起已完成」一键；折叠不持久化（刷新恢复展开）
+// ---------------------------------------------------------------------------
+const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
+function collapseToggleAll(cards, doneSet, collapse) {
+  const done = new Set(doneSet || []);
+  return Array.from(cards).map((c) => {
+    const no = c.querySelector(".step-no");
+    const n = no ? parseInt(no.textContent, 10) : NaN;
+    const isDone = done.has(n);
+    const shouldCollapse = collapse ? isDone : false;
+    c.classList.toggle("collapsed", shouldCollapse);
+    const btn = c.querySelector(".card-collapse");
+    if (btn) btn.title = shouldCollapse ? "展开" : "折叠";
+    return { n, collapsed: shouldCollapse };
+  });
+}
+function initCardCollapse() {
+  const cards = Array.from(document.querySelectorAll(CARD_COLLAPSE_SELECTOR));
+  for (const c of cards) {
+    const h2 = c.querySelector("h2");
+    if (!h2) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "card-collapse";
+    btn.title = "折叠";
+    btn.textContent = "▾";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      btn.title = c.classList.toggle("collapsed") ? "展开" : "折叠";
+    });
+    h2.appendChild(btn);
+    h2.addEventListener("click", (e) => {
+      if (e.target.closest(".card-collapse")) return;
+      btn.title = c.classList.toggle("collapsed") ? "展开" : "折叠";
+    });
+  }
+  const nav = $("step-nav");
+  if (!nav) return;
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.id = "btn-collapse-done";
+  toggleBtn.textContent = "收起已完成";
+  toggleBtn.style.cssText = "margin-top:6px;padding:4px 6px;font-size:11px;border-radius:999px;color:var(--muted);";
+  toggleBtn.addEventListener("click", () => {
+    const collapsing = !toggleBtn.classList.contains("on");
+    collapseToggleAll(cards, stepDoneSet, collapsing);
+    toggleBtn.classList.toggle("on", collapsing);
+    toggleBtn.textContent = collapsing ? "全部展开" : "收起已完成";
+  });
+  nav.appendChild(toggleBtn);
+}
+
+// ---------------------------------------------------------------------------
 // 启动
 // ---------------------------------------------------------------------------
 (async function init() {
@@ -6005,6 +6066,8 @@ function toast(kind, text) {
   loadReferencePicker();
   restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
 })();
+
+initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 </script>
 <div id="toast-root"></div>
 </body>
