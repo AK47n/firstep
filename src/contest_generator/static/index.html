@@ -569,6 +569,29 @@
                   transition: width .4s ease; }
   #gen-progress .gp-text { position: absolute; right: 10px; top: 6px;
                   font-size: 11px; color: var(--muted); white-space: nowrap; }
+  /* Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，2.5s 自动淡出 */
+  #toast-root { position: fixed; top: 14px; right: 14px; z-index: 200;
+                display: flex; flex-direction: column; gap: 8px;
+                max-width: 340px; }
+  .toast { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+           border-radius: 8px; font-size: 13px; background: var(--panel);
+           border: 1px solid var(--border); color: var(--text);
+           box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+           animation: toast-in .25s ease, toast-out .3s ease 2.2s forwards; }
+  .toast.ok { border-color: rgba(63, 185, 80, .5); }
+  .toast.ok .toast-ico { color: var(--ok); }
+  .toast.error { border-color: rgba(248, 81, 73, .5); }
+  .toast.error .toast-ico { color: var(--danger); }
+  .toast.info { border-color: rgba(139, 148, 158, .4); }
+  .toast.info .toast-ico { color: var(--muted); }
+  .toast .toast-ico { font-weight: 700; font-size: 14px; flex: none; }
+  .toast .toast-text { flex: 1; }
+  .toast .toast-close { border: none; background: none; cursor: pointer;
+                        color: var(--muted); font-size: 14px; padding: 0 2px; }
+  .toast .toast-close:hover { color: var(--text); }
+  @keyframes toast-in { from { opacity: 0; transform: translateX(16px); }
+                        to { opacity: 1; transform: none; } }
+  @keyframes toast-out { to { opacity: 0; transform: translateX(16px); } }
 </style>
 </head>
 <body>
@@ -1426,9 +1449,11 @@ $("btn-upload").addEventListener("click", async () => {
     $("upload-msg").classList.add("ok");
     $("upload-msg").textContent = "抽取成功：" + file.name;
     markStepDone(1);
+    toast("ok", "题面抽取成功");
   } catch (e) {
     $("upload-msg").classList.remove("ok");
     $("upload-msg").textContent = e.message;
+    toast("error", "题面抽取失败");
   }
 });
 
@@ -1443,6 +1468,7 @@ $("btn-topic-load").addEventListener("click", async () => {
     clearTopicSummary();
     $("topic-msg").textContent = "已取题面：" + data.key;
     markStepDone(1);
+    toast("ok", "已取题面：" + data.key);
   } catch (e) {
     $("topic-msg").textContent = e.message;
     currentTopicId = "";
@@ -3067,6 +3093,7 @@ $("btn-generate").addEventListener("click", async () => {
     $("generate-msg").classList.add("ok");
     $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
     markStepDone(9);
+    toast("ok", "工程生成完成");
     // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
     // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
     // compile-experience-ui/01：无工具链也要显眼，不再静默跳过）
@@ -3081,6 +3108,7 @@ $("btn-generate").addEventListener("click", async () => {
     $("generate-msg").classList.remove("ok");
     $("generate-msg").textContent = e.message;
     status.textContent = "";
+    toast("error", "生成失败");
   } finally { $("btn-generate").disabled = false; }
 });
 
@@ -3251,6 +3279,7 @@ $("btn-handoff-copy").addEventListener("click", async () => {
     await navigator.clipboard.writeText($("handoff-text").value);
     const btn = $("btn-handoff-copy");
     btn.textContent = "已复制";
+    toast("ok", "已复制到剪贴板");
     setTimeout(() => { btn.textContent = "复制"; }, 1500);
   } catch {
     $("handoff-text").select();
@@ -3282,7 +3311,7 @@ function compileBanner(kind, text) {
   const b = $("compile-banner");
   b.className = kind;   // 重置状态类（同时移除初始 hidden）
   b.textContent = text;
-  if (kind === "success") markStepDone(10);  // 编译通过 = 修复中心闭环完成
+  if (kind === "success") { markStepDone(10); toast("ok", "编译通过"); }  // 修复中心闭环
 }
 
 function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
@@ -4100,6 +4129,7 @@ async function reviseApply() {
     });
     revise.applyDone = data;
     markStepDone(11);
+    toast("ok", "修订完成");
     reviseRenderApplyDone(data);
     if ($("revise-deepen-check").checked) {
       $("revise-exec-status").textContent = "修订完成，开始深化…";
@@ -4167,7 +4197,7 @@ async function reviseRunDeepen() {
       llm_telemetry: (d) => renderReviseTelemetry("exec", d),
     });
     reviseRenderVerify(data);
-    if (data.status !== "failed") markStepDone(11);  // 验证通过 / 降级未验证都算闭环
+    if (data.status !== "failed") { markStepDone(11); toast("ok", "深化完成"); }  // 验证通过 / 降级未验证都算闭环
     $("revise-exec-status").textContent = "深化完成";
   } catch (e) {
     $("revise-exec-status").textContent = "";
@@ -5931,6 +5961,25 @@ function renderStepProgress() {
 }
 
 // ---------------------------------------------------------------------------
+// Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，ok 青 / error 红 / info 灰，
+// 2.5s 自动消失，最多同屏 3 条；行内提示保留（toast 只做显眼补充）
+// ---------------------------------------------------------------------------
+const TOAST_ICON = { ok: "✓", error: "✕", info: "ℹ" };
+function toast(kind, text) {
+  const root = $("toast-root");
+  if (!root) return;
+  while (root.children.length >= 3) root.removeChild(root.firstChild);
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.innerHTML = '<span class="toast-ico">' + TOAST_ICON[kind] + '</span><span class="toast-text">'
+    + String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
+    + '</span><button type="button" class="toast-close" aria-label="关闭">×</button>';
+  el.querySelector(".toast-close").addEventListener("click", () => el.remove());
+  root.appendChild(el);
+  setTimeout(() => { if (el.isConnected) el.remove(); }, 2500);
+}
+
+// ---------------------------------------------------------------------------
 // 启动
 // ---------------------------------------------------------------------------
 (async function init() {
@@ -5957,5 +6006,6 @@ function renderStepProgress() {
   restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
 })();
 </script>
+<div id="toast-root"></div>
 </body>
 </html>
