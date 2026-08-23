@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7d6d66cde708482049a593dacceede478da52916 -->
+<!-- changelog-auto: last-commit=742650b27318e47094a5f336823ed7d7c35fc7ee -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 10:49 UI 打磨（ui-polish-8/04）：生成中阶段播报（校验/子阶段轮播/等待计时，修复中心阶段已覆盖）
 - 10:49 chore(ui-polish-8)：四张工单标记 resolved
 - 11:18 UI 打磨（ui-polish-9/01）：主按钮呼吸微光（disabled 无光、hover 暂停、reduced-motion 兼容）
+- 11:20 UI 打磨（ui-polish-9/02）：赛题库卡片化（编号徽章+年份chip+题面预览，topicCardHTML 纯函数，保留 data-topic-use/del 契约）
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
