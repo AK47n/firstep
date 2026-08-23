@@ -69,6 +69,8 @@ from .clex import (
     top_level_defines,
 )
 from .context_manifest import build_context_fields, write_context_manifest
+from .demo_script import DEMO_SCRIPT_FILENAME, render_demo_script
+from .report_draft import REPORT_DRAFT_FILENAME, render_report_draft
 from .skeleton import (
     format_interface_blocks,
     is_header_path,
@@ -552,6 +554,11 @@ def generate_project(
     requirements: Sequence[Mapping[str, Any]] | None = None,
     references: Sequence[str] = (),
     tool_version: str = "",
+    # 报告草稿（工单 report-draft-demo/02）：LLM 层先产出的报告文本（方案论证
+    # + 软件流程拼接，契约见 report_draft.render_report_draft）；缺省空 = 不写
+    # 设计报告草稿.md（旧行为逐字节不变），非空 = 写盘（README / 演示脚本
+    # 之后、上下文清单之前）。
+    report_draft_text: str = "",
 ) -> GenerationSummary:
     """完整生成流程：选模块 → 定位母版 → 生成 → 摘要，一步到位的接缝。
 
@@ -602,6 +609,7 @@ def generate_project(
         requirements=requirements,
         references=references,
         tool_version=tool_version,
+        report_draft_text=report_draft_text,
     )
     return describe_generation(
         result_dir, resolved.manifests, platform, include_dirs, build_hint,
@@ -869,6 +877,10 @@ def generate(
     requirements: Sequence[Mapping[str, Any]] | None = None,
     references: Sequence[str] = (),
     tool_version: str = "",
+    # 报告草稿（工单 report-draft-demo/02）：LLM 层先产出的报告文本，缺省空 =
+    # 不写 设计报告草稿.md（旧行为逐字节不变）；非空 = README / 演示脚本之后
+    # 写盘（纯新增文件，写失败走既有 rmtree 兜底，生成原子性不破）。
+    report_draft_text: str = "",
 ) -> tuple[Path, tuple[str, ...], str]:
     """生成完整工程目录，返回（输出目录, include 目录清单 POSIX 相对路径,
     build_hint）。
@@ -1023,6 +1035,35 @@ def generate(
             ),
             encoding="utf-8",
         )
+
+        # 演示脚本（工单 report-draft-demo/01）：README 之后写工程根
+        # 演示脚本.md——纯确定性渲染（评分点 / 功能需求 / 模块清单，零 LLM
+        # 调用），数据全来自既有参数（score_points / requirements /
+        # manifests），零新参数；纯新增文件，不触碰任何既有生成文件。缺省
+        # 数据（无评分点无需求）= 模块清单验证演示，内容自洽不空文件。写
+        # 失败走既有 rmtree 兜底，生成原子性不破。
+        (output_dir / DEMO_SCRIPT_FILENAME).write_text(
+            render_demo_script(score_points, requirements, manifests),
+            encoding="utf-8",
+        )
+
+        # 设计报告草稿（工单 report-draft-demo/02）：README / 演示脚本之后写
+        # 工程根 设计报告草稿.md——LLM 文本（report_draft_text，方案论证 + 软件
+        # 流程）由生成侧先产出、作为入参传入，本层纯确定性渲染（概览 / 框图 /
+        # 选型表 / 引脚表（与 README 同源）/ 测试记录模板）；缺省空 = 不写报告
+        # 文件（旧行为逐字节不变）。写失败走既有 rmtree 兜底，生成原子性不破。
+        if report_draft_text:
+            (output_dir / REPORT_DRAFT_FILENAME).write_text(
+                render_report_draft(
+                    platform,
+                    readme_board_name,
+                    manifests,
+                    report_draft_text,
+                    resolved_bindings=resolved_bindings,
+                    instance_plans=instance_plans,
+                ),
+                encoding="utf-8",
+            )
 
         # 上下文清单（工单 revise-deepen/01）：README 之后写工程根
         # .contest_context.json——纯新增隐藏文件（README 先例），记录本次生成

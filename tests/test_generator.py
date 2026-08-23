@@ -38,6 +38,9 @@ from contest_generator.generator import (
     resolve_topic_context,
     run_generation_gates,
 )
+from contest_generator.demo_script import DEMO_SCRIPT_FILENAME
+from contest_generator.report_draft import REPORT_DRAFT_FILENAME, render_report_draft
+from contest_generator.readme import README_FILENAME
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASSES, _SETTINGS_MODULE_ID
 from contest_generator.library import list_modules
 from contest_generator.llm import LLMError
@@ -2251,3 +2254,74 @@ def test_check_main_calls_still_rejects_unknown_calls_with_master_headers(tmp_pa
 
     with pytest.raises(UndefinedCallsError, match="ghost"):
         _check_main_calls(corpus)
+
+
+# ---------------------------------------------------------------------------
+# 报告草稿 + 演示脚本产物（工单 report-draft-demo/02 + 01）：缺省路径逐字节
+# 不变 + 有文本时两产物落盘且内容与渲染函数一致（spec「测试决策」逐字规定）
+# ---------------------------------------------------------------------------
+
+
+def test_generate_report_draft_default_text_writes_nothing(fake_module_library, tmp_path):
+    """缺省路径（report_draft_text 缺省空）：不写 设计报告草稿.md，且 README /
+    演示脚本照常落盘（两产物互不依赖、不触碰既有文件）。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+    )
+
+    assert not (summary.output_dir / REPORT_DRAFT_FILENAME).exists()
+    assert (summary.output_dir / README_FILENAME).is_file()
+    assert (summary.output_dir / DEMO_SCRIPT_FILENAME).is_file()
+
+
+def test_generate_report_draft_written_matches_renderer(fake_module_library, tmp_path):
+    """有文本：设计报告草稿.md 落盘，内容与渲染函数输出一致（同一输入 → 同一
+    文本，写盘 = 渲染结果直落）；README / 演示脚本 / 上下文清单不受影响。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+        report_draft_text="论证段落\n\n流程段落",
+    )
+    report = (summary.output_dir / REPORT_DRAFT_FILENAME).read_bytes()
+    # 内容与渲染函数一致：同一输入（DFS 后序 manifests + README 板名）→ 同一
+    # 文本，写盘 = 渲染结果直落
+    manifests = [
+        ModuleManifest.load(fake_module_library / "delay"),
+        ModuleManifest.load(fake_module_library / "dht11"),
+    ]
+    readme_text = (summary.output_dir / README_FILENAME).read_text(encoding="utf-8")
+    board_name = next(
+        (
+            line.removeprefix("- 开发板：")
+            for line in readme_text.splitlines()
+            if line.startswith("- 开发板：")
+        ),
+        None,
+    )
+    expected = render_report_draft(
+        PLATFORM_STM32,
+        board_name,
+        manifests,
+        "论证段落\n\n流程段落",
+    ).encode("utf-8")
+    # 写盘经平台换行转换（README 先例：write_text 默认 newline），归一化后
+    # 与渲染函数输出逐字节一致
+    assert report.replace(b"\r\n", b"\n") == expected
+    assert (summary.output_dir / README_FILENAME).is_file()
+    assert (summary.output_dir / DEMO_SCRIPT_FILENAME).is_file()
+    assert (summary.output_dir / ".contest_context.json").is_file()

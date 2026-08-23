@@ -354,6 +354,11 @@ def test_generate_without_artifact_module_is_byte_identical(tmp_path):
             # 上下文清单随 manifest 集渲染（工单 revise-deepen/01）：同 README
             # 语义——记录本次生成输入（slugs 含 probe），非既有生成文件契约
             continue
+        if rel == "演示脚本.md":
+            # 演示脚本随 manifest 集渲染（工单 report-draft-demo/01）：模块
+            # 验证演示节列出全部模块，probe 多选一个 → 内容自然不同，非既有
+            # 生成文件契约
+            continue
         assert probe_files[rel] == content  # 共现文件逐字节一致
 
 

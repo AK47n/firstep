@@ -4363,3 +4363,91 @@ def test_build_llm_local_base_url_without_model_falls_back_to_main_model():
     assert isinstance(llm, RoutingLLM)
     assert llm._local._config.base_url == "http://localhost:11434/v1"
     assert llm._local._config.model == "deepseek-chat"
+
+
+# ---------------------------------------------------------------------------
+# 设计报告草稿 LLM 输出层（工单 report-draft-demo/03）：结构化输出
+# {rationale, workflow} / 严格解析 / 重试兜底 / 输入进提示词
+# ---------------------------------------------------------------------------
+
+REPORT_DRAFT_JSON = json.dumps(
+    {"rationale": "论证段落一\n\n论证段落二", "workflow": "流程段落"}
+)
+
+REPORT_DRAFT_INPUTS = dict(
+    problem_text="设计一个智能测距系统。",
+    requirements=[
+        {"requirement": "测量距离", "sentence": 2, "modules": ["dht11"]}
+    ],
+    manifest_summaries=build_manifest_summaries(
+        [_manifest("dht11", "DHT11 温湿度传感器驱动", deps=("delay",))]
+    ),
+    pin_summary="| key | KEY_START | PB3 | gpio_in |",
+)
+
+
+def test_generate_report_draft_returns_rationale_and_workflow():
+    """结构化输出 {rationale, workflow}：两段文本原样返回（段落内空行保留）。"""
+    transport = FakeTransport(body=_api_response(REPORT_DRAFT_JSON))
+    llm = _llm(transport)
+
+    rationale, workflow = llm.generate_report_draft(**REPORT_DRAFT_INPUTS)
+
+    assert rationale == "论证段落一\n\n论证段落二"
+    assert workflow == "流程段落"
+
+
+def test_generate_report_draft_missing_field_raises():
+    """畸形输出（缺 workflow）→ LLMError（严格解析，宁可大声失败也不带病进
+    报告——调用方捕获后降级为空文本 + 占位）。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"rationale": "只有论证"}))
+    )
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError):
+        llm.generate_report_draft(**REPORT_DRAFT_INPUTS)
+
+
+def test_generate_report_draft_retries_on_malformed_then_succeeds():
+    """畸形 JSON 整次重问（_retry_parse 兜底）：第二次返回合法 → 成功。"""
+    transport = SequenceTransport(
+        [_api_response("{not json"), _api_response(REPORT_DRAFT_JSON)]
+    )
+    llm = _llm(transport)
+
+    rationale, workflow = llm.generate_report_draft(**REPORT_DRAFT_INPUTS)
+
+    assert rationale == "论证段落一\n\n论证段落二"
+    assert workflow == "流程段落"
+
+
+def test_generate_report_draft_prompt_carries_inputs():
+    """user prompt 携带全部输入：题面 / 功能需求（含句子号与模块）/ 模块摘要
+    / 引脚表摘要；json_mode 提示含小写 json（DeepSeek json_object 模式要求）。"""
+    transport = FakeTransport(body=_api_response(REPORT_DRAFT_JSON))
+    llm = _llm(transport)
+
+    llm.generate_report_draft(**REPORT_DRAFT_INPUTS)
+
+    prompt = transport.calls[0][2]["messages"][-1]["content"]
+    assert "设计一个智能测距系统。" in prompt
+    assert "测量距离" in prompt
+    assert "句子 2" in prompt
+    assert "DHT11 温湿度传感器驱动" in prompt
+    assert "| key | KEY_START | PB3 | gpio_in |" in prompt
+    assert '"rationale"' in prompt
+    assert '"workflow"' in prompt
+    assert "json" in prompt  # 小写（DeepSeek json_object 模式要求）
+
+
+def test_generate_report_draft_empty_rationale_rejected():
+    """畸形输出（rationale 空串）→ LLMError（严格解析拒空串，调用方捕获后
+    降级占位）。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"rationale": "", "workflow": "流程"}))
+    )
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError):
+        llm.generate_report_draft(**REPORT_DRAFT_INPUTS)

@@ -594,6 +594,7 @@ class FakeLLM:
         fixes: tuple[FixSuggestion, ...] = (),
         impact_analysis: ImpactAnalysis | None = None,
         deepened_main_c: str = "",
+        report_draft: tuple[str, str] = ("AI 生成的方案论证", "AI 生成的软件流程"),
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -606,6 +607,7 @@ class FakeLLM:
         self._fixes = fixes
         self._impact_analysis = impact_analysis or ImpactAnalysis()
         self._deepened_main_c = deepened_main_c
+        self._report_draft = report_draft
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
@@ -625,6 +627,23 @@ class FakeLLM:
             tuple[str, tuple, tuple, tuple, str]
         ] = []
         self.deepen_calls: list[tuple[str, tuple, tuple, str, str]] = []
+        self.report_draft_calls: list[
+            tuple[str, tuple, tuple, str]
+        ] = []
+
+    def generate_report_draft(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        manifest_summaries: Sequence[ManifestSummary],
+        pin_summary: str,
+    ) -> tuple[str, str]:
+        """设计报告草稿 LLM 输出层（工单 report-draft-demo/03）：固定返回并
+        记录输入。"""
+        self.report_draft_calls.append(
+            (problem_text, tuple(requirements), tuple(manifest_summaries), pin_summary)
+        )
+        return self._report_draft
 
     def select_modules(
         self,
@@ -898,6 +917,16 @@ class RecordingLLM:
     ) -> str:
         self._record("deepen_main_c")
         return main_c
+
+    def generate_report_draft(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        manifest_summaries: Sequence[ManifestSummary],
+        pin_summary: str,
+    ) -> tuple[str, str]:
+        self._record("generate_report_draft")
+        return "论证", "流程"
 
 
 class RecordingPatcher:

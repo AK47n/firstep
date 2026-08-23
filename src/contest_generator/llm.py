@@ -340,6 +340,18 @@ ARCHIVE_JUDGMENT_SYSTEM_PROMPT = (
     " / 无关文件不值得归档。只输出 JSON 对象。"
 )
 
+# 设计报告草稿 LLM 输出层（工单 report-draft-demo/03）：方案论证 + 软件流程
+# 结构化输出 {rationale, workflow}。软件流程为最后一段（渲染契约：报告模块
+# 按 \n\n 分段、最后一段 = 软件流程，见 report_draft._split_llm_text），故
+# 提示词约束 workflow 内部不用空行。
+REPORT_DRAFT_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）参赛助手。根据赛题原文、功能需求清单、模块清单"
+    "与引脚分配，为设计报告撰写两节草稿：rationale = 系统方案论证（为什么用"
+    "这套架构 / 选型，结合题面与需求逐点论证，可用多个段落，段落间用空行）；"
+    "workflow = 软件流程设计（主循环 / 关键流程，写成一段，段内不要用空行）。"
+    "只输出 JSON 对象：{\"rationale\": \"...\", \"workflow\": \"...\"}。"
+)
+
 # 嵌内容上限（字符）：第一阶段提示词把每个内容版本全文嵌入，真实旧工程里的
 # 巨型源码（如 stm32f10x.h ~800KB 标准库头）全文嵌入会撑爆上下文（判例 08：
 # 三个真实工程修复前判定素材 47.6M 字符，修复后按此上限嵌入 29 万字符）。
@@ -935,6 +947,14 @@ class LLM(Protocol):
 
     def topic_extract_number(self, text: str) -> str | None: ...
 
+    def generate_report_draft(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        manifest_summaries: Sequence[ManifestSummary],
+        pin_summary: str,
+    ) -> tuple[str, str]: ...
+
 
 class Transport(Protocol):
     """HTTP 传输接缝：生产用 urllib，测试注入假件。"""
@@ -1382,6 +1402,33 @@ class DeepSeekLLM:
             user_prompt=_truncate_content(material),
             parse=lambda content: content,
             label="参考文件简介生成",
+        )
+
+    def generate_report_draft(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        manifest_summaries: Sequence[ManifestSummary],
+        pin_summary: str,
+    ) -> tuple[str, str]:
+        """设计报告草稿 LLM 输出层（工单 report-draft-demo/03）：结构化输出
+        {rationale: 方案论证, workflow: 软件流程}。
+
+        输入 = 赛题原文 + 功能需求清单 + 模块摘要 + 引脚表摘要（全部由调用方
+        装配，本操作只拼提示词与解析）。输出经 _parse_report_draft 严格解析
+        （缺键 / 非字符串拒绝）；畸形输出 / 瞬时失败整次重问（_retry_parse，
+        与归档判定同款兜底）——LLMError 由调用方捕获降级（空文本 + 报告占位
+        节），不抛生成主链。workflow 契约 = 单段（渲染器按 \\n\\n 分段、最后
+        一段 = 软件流程，提示词已约束段内不用空行）。
+        """
+        return self._retry_parse(
+            system_prompt=REPORT_DRAFT_SYSTEM_PROMPT,
+            user_prompt=_report_draft_user_prompt(
+                problem_text, requirements, manifest_summaries, pin_summary
+            ),
+            parse=_parse_report_draft,
+            label="设计报告草稿生成",
+            json_mode=True,
         )
 
     def reference_judge_archivable(
@@ -2394,6 +2441,19 @@ class RoutingLLM:
             qa_count,
         )
 
+    def generate_report_draft(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        manifest_summaries: Sequence[ManifestSummary],
+        pin_summary: str,
+    ) -> tuple[str, str]:
+        # 报告草稿走 remote（质量优先，不进本地方法集——LOCAL_LLM_METHODS
+        # 不含本方法，集合外方法恒落 remote）
+        return self._remote.generate_report_draft(
+            problem_text, requirements, manifest_summaries, pin_summary
+        )
+
     def deepen_main_c(
         self,
         main_c: str,
@@ -3077,6 +3137,54 @@ def parse_archive_judgment(content: str, paths: Sequence[str]) -> tuple[str, ...
             raise LLMError(f"模型重复判定归档：{item}")
         result.append(item)
     return tuple(result)
+
+
+def _parse_report_draft(content: str) -> tuple[str, str]:
+    """把模型返回的设计报告草稿 JSON 解析校验为 (方案论证, 软件流程)。
+
+    模型输出不可信，宁可大声失败也不带病进报告：缺键 / 非字符串拒绝
+    （LLMError → 整次重问 → 仍失败由调用方捕获降级为空文本 + 占位节）。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    if not isinstance(data, dict):
+        raise LLMError("模型输出不是 JSON 对象")
+    rationale = data.get("rationale")
+    workflow = data.get("workflow")
+    if not isinstance(rationale, str) or not rationale:
+        raise LLMError("模型输出缺少 rationale 字段")
+    if not isinstance(workflow, str) or not workflow:
+        raise LLMError("模型输出缺少 workflow 字段")
+    return rationale, workflow
+
+
+def _report_draft_user_prompt(
+    problem_text: str,
+    requirements: Sequence[Mapping[str, Any]],
+    manifest_summaries: Sequence[ManifestSummary],
+    pin_summary: str,
+) -> str:
+    """设计报告草稿用户提示词：题面 + 功能需求清单 + 模块摘要 + 引脚表摘要。
+    提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求。"""
+    lines = [f"赛题原文：\n{_truncate_content(problem_text)}", ""]
+    lines.append("功能需求清单（句子编号 = 题面句号）：")
+    for req in requirements:
+        sentence = req.get("sentence")
+        sentence_text = f"（句子 {sentence}）" if isinstance(sentence, int) else ""
+        lines.append(f"- {req.get('requirement')}{sentence_text}")
+    lines.append("")
+    lines.append("模块清单：")
+    lines.extend(summary.to_line() for summary in manifest_summaries)
+    lines.append("")
+    lines.append(f"引脚分配表：\n{pin_summary}")
+    lines.append("")
+    lines.append(
+        '只返回 json 格式的 JSON 对象：{"rationale": "方案论证（段落间用空行）",'
+        ' "workflow": "软件流程（单段，不要用空行）"}'
+    )
+    return "\n".join(lines)
 
 
 def _archive_judgment_user_prompt(

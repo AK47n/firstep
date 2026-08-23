@@ -932,6 +932,10 @@
         <h3>生成完成</h3>
         <div class="item">输出目录：<span id="res-dir" class="slug"></span>
           <button id="btn-copy-dir" class="hidden" style="margin-left:8px;padding:2px 10px;font-size:12px" data-ico="copy">复制路径</button></div>
+        <!-- 自动附带产物（工单 report-draft-demo/04）：设计报告草稿 + 演示脚本
+             随生成自动落盘工程根——badge 标注 + 点击复制文件路径入口（打开 =
+             复制后在资源管理器 / 编辑器打开，本地应用不引后端打开接口） -->
+        <div class="item hidden" id="res-artifacts"></div>
         <div class="item">include path：<span id="res-includes" class="slug"></span></div>
         <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
         <div class="item hidden" id="res-score-points" style="white-space:pre-line"></div>
@@ -3393,6 +3397,7 @@ $("btn-generate").addEventListener("click", async () => {
     $("res-build-hint").textContent = data.build_hint || "";
     $("res-build-hint").classList.toggle("hidden", !data.build_hint);
     $("res-structure").textContent = data.structure.join("\n");
+    renderArtifacts(data.structure, data.output_dir);
     $("generate-result").classList.remove("hidden");
     status.textContent = "";
     $("generate-msg").classList.add("ok");
@@ -3424,6 +3429,45 @@ $("btn-generate").addEventListener("click", async () => {
 // 精打磨在下一个会话完成）。交接永远在最后一步：修复中心跑完后，把编译/
 // 修复状态一起装进提示词再交给下一个会话。
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 自动附带产物（工单 report-draft-demo/04）：设计报告草稿.md / 演示脚本.md
+// 随生成自动落盘工程根——structure 含文件名 = 已生成；badge 标注 + 点击复制
+// 文件路径（打开 = 复制后在资源管理器 / 编辑器打开，本地应用不引后端打开
+// 接口——安全面最小）。演示脚本恒在（模块兜底），报告仅在 LLM 文本非空时在。
+// ---------------------------------------------------------------------------
+function renderArtifacts(structure, outputDir) {
+  const box = $("res-artifacts");
+  box.textContent = "";
+  const artifacts = (structure || []).filter(
+    (f) => f === "设计报告草稿.md" || f === "演示脚本.md"
+  );
+  if (!artifacts.length) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const head = document.createElement("span");
+  head.className = "muted";
+  head.textContent = "自动附带：";
+  box.appendChild(head);
+  artifacts.forEach((f) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "badge";
+    chip.style.cssText = "margin-left:6px;padding:2px 8px;font-size:12px;cursor:pointer";
+    chip.textContent = f;
+    chip.title = "点击复制文件路径（在资源管理器 / 编辑器中打开）";
+    chip.setAttribute("data-ico", "copy");
+    chip.addEventListener("click", async () => {
+      const full = outputDir.replace(/\\/g, "/") + "/" + f;
+      try {
+        await navigator.clipboard.writeText(full);
+        toast("ok", "已复制文件路径：" + full);
+      } catch {
+        toast("error", "复制失败");
+      }
+    });
+    box.appendChild(chip);
+  });
+}
+
 function formatScorePoints(points) {
   if (!points || !points.length) return "（无结构化评分点）";
   const partLabel = (part) => part === "basic" ? "基础" : part === "development" ? "发挥" : "未知";
