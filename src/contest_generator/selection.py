@@ -58,9 +58,12 @@ WARNING_MISSING = "missing"  # 无目标平台版本条目，生成必失败
 WARNING_UNVERIFIED = "unverified"  # 有版本但未验证过，可能无法编译
 WARNING_HARDWARE_BOUND = "hardware_bound"  # 绑定硬件，换平台需移植
 
-# 图内信息问题关键词（工单 recommend-vision-qa/01）：与「问题点名题面引用过
-# 的图号」合取判定——只把图上才有的事实类问题交给视觉问答，交互/实现细节
-# 类问题永不误判。宁漏判不误判：漏判 = 照旧问用户。
+# 图内信息问题关键词（工单 recommend-vision-qa/01 + clarify-vision-relax/01）：
+# 与「问题点名题面引用过的图号」互为**析取**分支——题面引用过图时，点名图号
+# 或命中本表任一关键词即交视觉通道从原题渲染页找答案。放宽后误判（交互/实现
+# 细节类问题误入视觉）由视觉消化安全网兜底：答不上（否定词/空答案）→ 照旧
+# 转问用户，代价 = 一次缓存视觉调用而非丢问题。「多少/多大」是通用子串，
+# 题面引用过图时纯正文问题也可能进视觉——spec 明示不改本表内容并接受该代价。
 VISION_ANSWERABLE_KEYWORDS = (
     "尺寸",
     "宽度",
@@ -1087,13 +1090,20 @@ def select_modules_convergent(
 
 
 def vision_answerable(question: str, problem_text: str) -> bool:
-    """机械判定「图内信息问题」（工单 recommend-vision-qa/01）。
+    """机械判定「图面信息问题」（工单 recommend-vision-qa/01 + clarify-vision-relax/01）。
 
-    合取：①问题点名的图号与题面引用过的图号交集非空（双方都按「图N」正则
-    提取编号再求交——子串匹配会把「图1」误命中「图10」；题面含 `[图N 标注`
-    的图注尾巴同样算引用）；②问题含尺寸 / 位置 / 走向类关键词
-    （VISION_ANSWERABLE_KEYWORDS 单源）。不满足 = 漏判（照旧问用户，宁漏判
-    不误判——误判会把交互问题错误丢给视觉模型）。
+    放宽后合取：①题面引用过图（题面含「图N」引用——`[图N 标注` 的图注尾巴
+    同样算引用；未引用过图 = 纯正文问题，不打扰视觉通道）；②问题点名题面
+    引用过的图号（双方都按「图N」正则提取编号再求交——子串匹配会把「图1」
+    误命中「图10」）**或**命中图内信息关键词（VISION_ANSWERABLE_KEYWORDS
+    单源）。
+
+    放宽动机（真机 2021F 用户原话「这三个问题都是应该AI从之前的图片中就能
+    找到答案的」）：未点名图但问的是图内信息（如「数字标号纸张放置在走廊
+    什么位置？」）此前直接漏判转问用户；现在交视觉通道从原题渲染页找答案
+    （渲染页含正文 + 图，答案往往就在页面上）。放宽的误判风险由视觉消化
+    安全网兜底：答不上（否定词 / 空答案）→ 照旧转问用户——误判代价 = 一次
+    缓存视觉调用，而不是丢问题。
     """
     if not question or not problem_text:
         return False
@@ -1101,8 +1111,8 @@ def vision_answerable(question: str, problem_text: str) -> bool:
     if not topic_figures:
         return False
     question_figures = set(re.findall(r"图\s*(\d+)", question))
-    if not (topic_figures & question_figures):
-        return False
+    if topic_figures & question_figures:
+        return True
     return any(keyword in question for keyword in VISION_ANSWERABLE_KEYWORDS)
 
 
