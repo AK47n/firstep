@@ -675,6 +675,22 @@
   html[data-theme="light"] .tok-pre { color: #59636e; }
   html[data-theme="light"] .tok-kw { color: #0096c7; }
   html[data-theme="light"] .tok-num { color: #8250df; }
+  /* 步骤完成庆祝动画（工单 ui-polish-8/02）：徽章弹跳 + 顶部青光扫过 */
+  @keyframes step-pop { 0% { transform: scale(1); }
+                        40% { transform: scale(1.28); }
+                        100% { transform: scale(1); } }
+  @keyframes card-glow { from { transform: translateX(-100%); }
+                         to { transform: translateX(100%); } }
+  .card.celebrate { position: relative; overflow: hidden; }
+  .card.celebrate .step-no { animation: step-pop .35s ease; }
+  .card.celebrate::before { content: ""; position: absolute; top: 0; left: 0;
+                            height: 2px; width: 100%; pointer-events: none;
+                            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+                            animation: card-glow .6s ease .1s; }
+  @media (prefers-reduced-motion: reduce) {
+    .card.celebrate .step-no { animation: none; }
+    .card.celebrate::before { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -6032,6 +6048,18 @@ function stepCard(n) {
     return no && parseInt(no.textContent, 10) === n;
   }) || null;
 }
+// 步骤完成庆祝动画（工单 ui-polish-8/02）：一次性徽章弹跳 + 顶部光带，
+// animationend 后自清理。接收类 DOM 对象（classList / addEventListener），
+// tests/js 可抽取自包含测试
+function attachCelebrate(card) {
+  if (!card || !card.classList) return;
+  card.classList.add("celebrate");
+  const done = () => {
+    card.classList.remove("celebrate");
+    card.removeEventListener("animationend", done);
+  };
+  if (card.addEventListener) card.addEventListener("animationend", done);
+}
 function markStepDone(n) {
   syncStepDone(n, true);
   const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
@@ -6041,7 +6069,7 @@ function markStepDone(n) {
     if (dot) dot.textContent = "✓";
   }
   const card = stepCard(n);
-  if (card) card.classList.add("done");
+  if (card) { card.classList.add("done"); attachCelebrate(card); }
 }
 function markStepUndone(n) {
   syncStepDone(n, false);
@@ -6052,7 +6080,7 @@ function markStepUndone(n) {
     if (dot) dot.textContent = String(n);
   }
   const card = stepCard(n);
-  if (card) card.classList.remove("done");
+  if (card) card.classList.remove("done", "celebrate");
 }
 function unmarkSteps(steps) {
   for (const n of steps) markStepUndone(n);
