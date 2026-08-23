@@ -474,17 +474,17 @@ def test_enrich_topic_image_notes_appends_and_is_idempotent(topic_root, pdf, mon
 
     def fake_notes(path, **kwargs):
         calls.append(str(path))
-        return "[示意图1：这是功能示意图]"
+        return "[示意图1：这是功能示意图的完整布局]"
 
     monkeypatch.setattr(topic_library, "pdf_image_notes", fake_notes)
 
     entry = topic_library.enrich_topic_image_notes(
         topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
     )
-    assert entry.problem_text == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    assert entry.problem_text == "系统功能如图1所示。\n\n[示意图1：这是功能示意图的完整布局]"
     # 写回磁盘
     on_disk = (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8")
-    assert on_disk == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    assert on_disk == "系统功能如图1所示。\n\n[示意图1：这是功能示意图的完整布局]"
     assert len(calls) == 1
     # 幂等：已含图注 → 二次调用不再跑视觉
     topic_library.enrich_topic_image_notes(
@@ -616,14 +616,14 @@ def test_enrich_topic_annotations_falls_back_to_vision_when_text_empty(
     monkeypatch.setattr(
         topic_library,
         "pdf_image_notes",
-        lambda *a, **k: vision_calls.append("x") or "[示意图1：扫描页描述]",
+        lambda *a, **k: vision_calls.append("x") or "[示意图1：扫描页的完整布局描述]",
     )
 
     entry = topic_library.enrich_topic_image_notes(
         topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
     )
 
-    assert entry.problem_text == "系统功能如图1所示。\n\n[示意图1：扫描页描述]"
+    assert entry.problem_text == "系统功能如图1所示。\n\n[示意图1：扫描页的完整布局描述]"
     assert len(vision_calls) == 1
 
 
@@ -649,10 +649,78 @@ def test_enrich_topic_annotations_idempotent_on_figure_notes(topic_root, pdf, mo
     assert entry.problem_md == TOPIC_MD_FILENAME
 
 
-def test_enrich_topic_image_notes_skips_shared_pdf(topic_root, pdf, monkeypatch):
-    """共享 PDF 守卫（2024H 复盘）：同一 PDF 被多个条目共引（真题汇总 PDF）
-    → 跳过补图注——全文档图注提取没有页范围信息，会把其它题的 [图N 标注]
-    追进当前题面（曾把约 280 行别的题的图注追加进 2024H 并自动提交）。"""
+def test_enrich_topic_image_notes_shared_pdf_locates_pages(topic_root, pdf, monkeypatch):
+    """共享 PDF（真题汇总）：定位题面页 → 只在该页范围提取图注（别的题的
+    [图N 标注] 不追尾——2024H 曾污染约 280 行）；页范围传给图注提取。"""
+    from contest_generator import topic_library
+
+    confirm_topics(
+        topic_root,
+        pdf,
+        (
+            TopicDraft(year="2026", number="C", problem_text="2026C 系统功能如图1所示。"),
+            TopicDraft(year="2026", number="D", problem_text="2026D 系统功能如图2所示。"),
+        ),
+    )
+    figure_pages: list[object] = []
+    vision_calls: list[str] = []
+    monkeypatch.setattr(topic_library, "locate_topic_pages", lambda *a, **k: (1, 3))
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_figure_annotations",
+        lambda *a, **k: figure_pages.append(k.get("pages")) or "[图1 标注]\n60cm 40cm",
+    )
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_image_notes",
+        lambda *a, **k: vision_calls.append("x") or "[示意图1]",
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+
+    assert entry.problem_text == "2026C 系统功能如图1所示。\n\n[图1 标注]\n60cm 40cm"
+    assert figure_pages == [[1, 2]]  # 页范围（开区间右端 range 展开）传给文字标注
+    assert vision_calls == []  # 文字层非空 → 视觉不调
+
+
+def test_enrich_topic_image_notes_shared_pdf_vision_fallback_with_pages(
+    topic_root, pdf, monkeypatch
+):
+    """共享 PDF 文字层为空（扫描件）→ 视觉兜底也带页范围（只识别本页图）。"""
+    from contest_generator import topic_library
+
+    confirm_topics(
+        topic_root,
+        pdf,
+        (
+            TopicDraft(year="2026", number="C", problem_text="2026C 系统功能如图1所示。"),
+            TopicDraft(year="2026", number="D", problem_text="2026D 系统功能如图2所示。"),
+        ),
+    )
+    vision_pages: list[object] = []
+    monkeypatch.setattr(topic_library, "locate_topic_pages", lambda *a, **k: (1, 3))
+    monkeypatch.setattr(topic_library, "pdf_figure_annotations", lambda *a, **k: "")
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_image_notes",
+        lambda *a, **k: vision_pages.append(k.get("pages")) or "[示意图1：本页图的完整布局描述]",
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+
+    assert entry.problem_text == "2026C 系统功能如图1所示。\n\n[示意图1：本页图的完整布局描述]"
+    assert vision_pages == [[1, 2]]  # 视觉兜底同样限定页范围（range 展开）
+
+
+def test_enrich_topic_image_notes_shared_pdf_skips_when_locate_fails(
+    topic_root, pdf, monkeypatch
+):
+    """共享 PDF 定位失败（扫描件无文本层 / 题面不匹配）→ 原样返回，不跑
+    图注提取——宁可没有图注，也不冒险全文档扫描。"""
     from contest_generator import topic_library
 
     confirm_topics(
@@ -664,6 +732,7 @@ def test_enrich_topic_image_notes_skips_shared_pdf(topic_root, pdf, monkeypatch)
         ),
     )
     calls: list[str] = []
+    monkeypatch.setattr(topic_library, "locate_topic_pages", lambda *a, **k: None)
     monkeypatch.setattr(
         topic_library,
         "pdf_figure_annotations",
@@ -681,6 +750,26 @@ def test_enrich_topic_image_notes_skips_shared_pdf(topic_root, pdf, monkeypatch)
 
     assert entry.problem_text == "2026C 系统功能如图1所示。"  # 原样，没追尾
     assert calls == []  # 一次图注提取都没跑
+
+
+def test_enrich_topic_image_notes_skips_meaningless_vision_text(
+    topic_root, pdf, monkeypatch
+):
+    """视觉兜底返回无实质内容（如「无实质内容」/ 过短描述）→ 视为失败，
+    原样返回不写回——装饰图 / 空图的识别结果不入库。"""
+    from contest_generator import topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    monkeypatch.setattr(topic_library, "pdf_figure_annotations", lambda *a, **k: "")
+    monkeypatch.setattr(
+        topic_library, "pdf_image_notes", lambda *a, **k: "[示意图1：无实质内容]"
+    )
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root, KEY_2026C, vision_base_url="", vision_api_key="sk-v", vision_model=""
+    )
+
+    assert entry.problem_text == "系统功能如图1所示。"  # 原样，垃圾不入库
 
 
 def test_resolve_number_corrupt_manifest_raises(topic_root, pdf):

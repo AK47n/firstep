@@ -603,3 +603,123 @@ def test_pdf_figure_annotations_deals_scaled_coordinates(tmp_path):
     assert text.startswith("[图1 标注]\n")
     assert "标题" not in text   # 标题行自身排除
     assert "正文" not in text
+
+
+# ---------------------------------------------------------------------------
+# 页范围定位与提取（工单 topic-vision-pages/01）：题面页定位 + 限定页提取——
+# 共享汇总 PDF 赛题补图注的基础能力（2021F 图1 缺失根因修复）
+# ---------------------------------------------------------------------------
+
+
+class _TextPage:
+    """假页：extract_text() 返回纯文本（locate_topic_pages 的搜索目标）。"""
+
+    def __init__(self, text):
+        self._text = text
+
+    def extract_text(self, visitor_text=None):
+        if visitor_text is not None:
+            visitor_text(
+                self._text, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0), (1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+                None, 10.0,
+            )
+            return None
+        return self._text
+
+
+def test_locate_topic_pages_finds_topic_page(monkeypatch, tmp_path):
+    """题面独特文本（去空白后前 20 字符）命中页 → 该页起 2 页范围（1-based）。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "joint.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader(
+            [
+                _TextPage("2019A 题面正文……另一个赛题"),
+                _TextPage("智能送药小车（F题）【本科组】一 任务 设计并制作智能送药小车……"),
+                _TextPage("图1 院区结构示意图 60cm 40cm 30cm"),
+            ]
+        ),
+    )
+
+    assert extraction.locate_topic_pages(
+        path, "智能送药小车（F题）【本科组】一 任务"
+    ) == (2, 4)
+
+
+def test_locate_topic_pages_miss_returns_none(monkeypatch, tmp_path):
+    """题面文本不在 PDF（扫描件无文本层 / 不匹配）→ None（调用方跳过）。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "joint.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: _FakeReader([_TextPage("别的赛题内容")])
+    )
+
+    assert extraction.locate_topic_pages(path, "不存在的题面文本") is None
+
+
+def test_locate_topic_pages_blank_or_bad_pdf(monkeypatch, tmp_path):
+    """空白题面不搜；坏 PDF → None 不抛（防御）。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "bad.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    assert extraction.locate_topic_pages(path, "   \n ") is None
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: (_ for _ in ()).throw(ValueError("坏 PDF"))
+    )
+    assert extraction.locate_topic_pages(path, "智能送药小车") is None
+
+
+def test_pdf_figure_annotations_pages_filter(monkeypatch, tmp_path):
+    """pages 限定扫描页：第 1 页图1 出、第 2 页图2 不出；None = 全部（现状）。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "fig.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    page1 = _fake_visitor_page(
+        [(100.0, 100.0, "图"), (110.0, 100.0, "1"), (120.0, 100.0, "第一页图"),
+         (150.0, 80.0, "60cm")]
+    )
+    page2 = _fake_visitor_page(
+        [(100.0, 100.0, "图"), (110.0, 100.0, "2"), (120.0, 100.0, "第二页图"),
+         (150.0, 80.0, "40cm")]
+    )
+    monkeypatch.setattr(extraction, "PdfReader", lambda _p: _FakeReader([page1, page2]))
+
+    filtered = extraction.pdf_figure_annotations(path, pages=[1])
+    assert filtered.startswith("[图1 标注]") and "60cm" in filtered
+    assert "40cm" not in filtered  # 第 2 页不扫
+
+    both = extraction.pdf_figure_annotations(path, pages=None)
+    assert "[图1 标注]" in both and "[图2 标注]" in both
+
+
+def test_pdf_image_notes_pages_filter(monkeypatch, tmp_path):
+    """pages 限定页：只描述限定页的嵌入图；None = 全部（现状）。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader(
+            [
+                _FakePage([_FakeImage(b"img-a", "a.png")]),
+                _FakePage([_FakeImage(b"img-b", "b.png")]),
+            ]
+        ),
+    )
+    fake_describe = _fake_describe(lambda data, mime: f"描述:{data.decode()}")
+    monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
+
+    notes = extraction.pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model="m", pages=[2]
+    )
+    assert notes == "[示意图1：描述:img-b]"
+    assert [call[0] for call in fake_describe.calls] == [b"img-b"]  # 只调第 2 页图

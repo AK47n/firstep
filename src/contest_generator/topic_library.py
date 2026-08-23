@@ -42,8 +42,25 @@ from .entry_store import (
     validate_store_key,
     write_json,
 )
-from .extraction import pdf_figure_annotations, pdf_image_notes
+from .extraction import (
+    locate_topic_pages,
+    pdf_figure_annotations,
+    pdf_image_notes,
+)
 from .manifest import MANIFEST_FILENAME
+
+# 视觉图注最小实质长度（工单 topic-vision-pages/02）：去壳（[示意图N：]）
+# 后低于此值视为无实质内容（视觉对装饰图/空图返回「无实质内容」等短描述）
+# → 不写回题面
+MIN_FIGURE_NOTE_CHARS = 8
+
+
+def _substantive_text(notes: str) -> str:
+    """图注段去壳后的实质文本（去掉 [示意图N： / [图N 标注] 标记与空白）。"""
+    import re
+
+    stripped = re.sub(r"\[示意图\d+：|\]|\[图\s*\d+\s*标注\]", "", notes)
+    return "".join(stripped.split())
 
 TOPIC_MD_FILENAME = "topic.md"  # 题面全文落盘文件名（条目目录内，唯一出处）
 
@@ -216,6 +233,14 @@ def enrich_topic_image_notes(
     产出 `[图N 标注]` 段（零额度、标注与线段位置关系保留）；文字层为空
     （扫描件 / 无文本层）→ 视觉兜底（pdf_image_notes，DeepSeek 视觉模型）。
 
+    共享 PDF（工单 topic-vision-pages/01）：真题汇总 PDF 被多个赛题条目共引
+    ——全文档扫描会把**其它题**的图注追进当前题面（2024H 曾把约 280 行别的
+    题的 [图N 标注] 追加进 2024H，污染推荐素材；取题面反复触发补图注 + 自动
+    提交，清洗后又被追尾）。共享 PDF → locate_topic_pages 定位题面正文页，
+    只在该页范围提取（别的题的图天然隔离）；定位失败（扫描件 / 不匹配）→
+    跳过（宁可没有图注，也不污染题面）。单条目专属 PDF（如 2026C）全文档
+    照常（单题 PDF 无跨题污染风险，最小回归面）。
+
     幂等：题面已含 `[示意图` 或 `[图N 标注` 标注 = 跳过不跑（重复取题面不
     重复消耗）。任何不满足条件 / 两级都失败 → 原样返回，绝不写回、绝不抛
     ——图注是增强不是阻塞。
@@ -229,43 +254,75 @@ def enrich_topic_image_notes(
         return entry  # 题面没有引用图（无图可补）
     if not entry.original_pdf:
         return entry
-    # 共享 PDF 守卫（2024H 复盘）：真题汇总 PDF 被多个赛题条目共引——图注
-    # 提取没有页范围信息，全文档扫描会把**其它题**的图注追进当前题面（曾把
-    # 约 280 行别的题的 [图N 标注] 追加进 2024H，污染推荐素材；取题面反复
-    # 触发补图注 + 自动提交，清洗后又被追尾）。共引 > 1 = 共享 PDF → 跳过
-    # 补图注（宁可没有图注，也不污染题面）；单条目专属 PDF（如 2026C）照常。
+    entry_dir = _entry_dir(topic_library_root, key)
+    pdf_path = entry_dir / entry.original_pdf
+    if not pdf_path.is_file():
+        return entry
     shared_pdf = sum(
         1
         for other in list_topics(topic_library_root)
         if other.original_pdf == entry.original_pdf
     )
+    page_range: Sequence[int] | None = None
     if shared_pdf > 1:
-        return entry
-    entry_dir = _entry_dir(topic_library_root, key)
-    pdf_path = entry_dir / entry.original_pdf
-    if not pdf_path.is_file():
-        return entry
-    try:
-        notes = pdf_figure_annotations(pdf_path)  # 文字标注优先（零额度）
-    except Exception:
-        notes = ""
-    if not notes:
-        try:
-            notes = pdf_image_notes(
-                pdf_path,
-                vision_base_url=vision_base_url,
-                vision_api_key=vision_api_key,
-                vision_model=vision_model,
-                observation_collector=observation_collector,
-            )  # 视觉兜底（扫描件 / 无文本层）
-        except Exception:
+        # 共享 PDF（真题汇总）：定位题面正文页 → 限定页范围提取。定位失败 =
+        # 扫描件无文本层 / 题面不匹配 → 跳过（宁可没有图注，也不冒险全文档）。
+        page_range = locate_topic_pages(pdf_path, entry.problem_text)
+        if page_range is None:
             return entry
+    notes = _figure_notes(
+        pdf_path,
+        page_range=page_range,
+        vision_base_url=vision_base_url,
+        vision_api_key=vision_api_key,
+        vision_model=vision_model,
+        observation_collector=observation_collector,
+    )
     if not notes:
+        return entry
+    if "[示意图" in notes and len(_substantive_text(notes)) < MIN_FIGURE_NOTE_CHARS:
+        # 视觉条目无实质内容（如「无实质内容」等过短描述）→ 不写回：装饰图 /
+        # 空图的识别结果入库会污染题面素材（2021F 曾把「无实质内容」追进题面）；
+        # 文字标注块（[图N 标注]）是坐标重建的可信内容，直接放行
         return entry
     new_text = entry.problem_text.rstrip("\n") + "\n\n" + notes
     (entry_dir / entry.problem_md).write_text(new_text, encoding="utf-8")
     commit_after_write(topic_library_root, "lib: 赛题条目补图注")
     return resolve_number(topic_library_root, key)
+
+
+def _figure_notes(
+    pdf_path: Path,
+    *,
+    page_range: Sequence[int] | None,
+    vision_base_url: str,
+    vision_api_key: str,
+    vision_model: str,
+    observation_collector: object | None,
+) -> str:
+    """图注获取：文字标注优先（零额度），空则视觉兜底；page_range 非 None =
+    限定页提取（共享 PDF 定位结果 (start, end) **开区间**——range 展开为页
+    列表，直接 list() 会丢掉尾页前的页，2021F 图1 所在页曾因此被跳过），
+    None = 全文档（单条目专属 PDF，现状）。任何异常降级为下一级，两级都
+    失败返回空串——图注是增强不是阻塞。"""
+    pages = list(range(*page_range)) if page_range is not None else None
+    try:
+        notes = pdf_figure_annotations(pdf_path, pages=pages)  # 文字标注优先
+    except Exception:
+        notes = ""
+    if notes:
+        return notes
+    try:
+        return pdf_image_notes(
+            pdf_path,
+            vision_base_url=vision_base_url,
+            vision_api_key=vision_api_key,
+            vision_model=vision_model,
+            observation_collector=observation_collector,
+            pages=pages,
+        )
+    except Exception:
+        return ""
 
 
 def list_topics(topic_library_root: Path) -> list[TopicEntry]:

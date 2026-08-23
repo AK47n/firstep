@@ -890,6 +890,9 @@ def test_clarify_prompt_contract():
     assert "不要重复问" in CLARIFY_SYSTEM_PROMPT
     assert "空 questions 数组" in CLARIFY_SYSTEM_PROMPT
     assert TRUNCATION_NOTICE in CLARIFY_SYSTEM_PROMPT
+    assert "图" in CLARIFY_SYSTEM_PROMPT
+    assert "不要要求用户补充图" in CLARIFY_SYSTEM_PROMPT  # 图缺失兜底（工单 topic-vision-pages/02）
+    assert "已有标注" in CLARIFY_SYSTEM_PROMPT
 
 
 def test_clarify_truncates_oversized_problem():
