@@ -3808,6 +3808,79 @@ def test_recommend_question_ends_stream_with_question_event(client, context):
     ]
 
 
+def test_recommend_vision_qa_answers_figure_question(client, context, monkeypatch):
+    """视觉已配置 + 条目带原 PDF（工单 recommend-vision-qa/02 端到端）：
+    澄清阶段的图内问题被视觉消化——无 question 事件、答案 (问题, 答案) 进
+    收敛澄清历史、流以 done 结束（用户不再被反问图内信息）。"""
+    from dataclasses import replace
+
+    ctx = context[0]
+    ctx.config = replace(ctx.config, vision_api_key="sk-vision")  # 视觉已配置（DeepSeek 官方端点）
+    make_fake_topic_library(
+        topic_library_dir(ctx.config.module_library_dir),
+        problem_text="2026C 数字钥匙题面全文。院区布局如图1所示。",
+    )
+    seen: dict = {}
+
+    class RecordingLLM(FakeLLM):
+        def select_modules(
+            self,
+            problem_text,
+            manifest_summaries,
+            references=(),
+            reference_fulltexts=None,
+            manual_fulltexts=None,
+            clarifications=(),
+            qa_material="",
+        ):
+            seen["clarifications"] = tuple(clarifications)
+            return self._selection
+
+    holder = context[1]
+    holder["llm"] = RecordingLLM(clarify_questions=("图1中的走廊宽度是多少？",))
+
+    def fake_answer(pdf_path, problem_text, question, **kwargs):
+        seen["pdf"] = pdf_path
+        seen["question"] = question
+        return "走廊宽度 30cm"
+
+    monkeypatch.setattr("contest_generator.webapp.answer_figure_question", fake_answer)
+
+    events = _recommend_stream(
+        client, {"problem_text": TOPIC_PROBLEM_TEXT, "topic_id": "2026C"}
+    )
+
+    assert EVENT_QUESTION not in [kind for kind, _ in events]
+    assert seen["question"] == "图1中的走廊宽度是多少？"
+    assert seen["pdf"].name == "topic.pdf"  # 条目原 PDF 路径
+    assert seen["clarifications"] == (("图1中的走廊宽度是多少？", "走廊宽度 30cm"),)
+    assert events[-1][0] == EVENT_DONE
+
+
+def test_recommend_vision_qa_not_injected_without_figure_pdf(client, context, monkeypatch):
+    """视觉已配置但条目无原图（no-topic 粘贴题面）→ 不注入：图内问题照旧
+    问用户（question 事件），视觉回调零调用。"""
+    from dataclasses import replace
+
+    ctx = context[0]
+    ctx.config = replace(ctx.config, vision_api_key="sk-vision")
+    holder = context[1]
+    holder["llm"] = FakeLLM(clarify_questions=("图1中的走廊宽度是多少？",))
+
+    called: list = []
+
+    def fake_answer(*args, **kwargs):
+        called.append(args)
+        return "不应被调用"
+
+    monkeypatch.setattr("contest_generator.webapp.answer_figure_question", fake_answer)
+
+    events = _recommend_stream(client, {"problem_text": "粘贴的陌生题面"})
+
+    assert [kind for kind, _ in events] == [EVENT_QUESTION]
+    assert not called
+
+
 def test_recommend_clarify_questions_end_stream_with_question_event(client, context):
     """首跑（无澄清历史）澄清阶段先行：clarify 仍有疑问 → question 事件收尾
     （不发 round——澄清阶段不属于收敛轮次，补问不再作废已跑轮次）。"""

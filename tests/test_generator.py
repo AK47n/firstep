@@ -4,6 +4,7 @@
 → 输出完整工程目录。断言输出目录的结构与文件内容。
 """
 
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -1574,6 +1575,64 @@ def _assert_no_topic_context(ctx, library, problem_text):
     }
     with pytest.raises(ReferenceError, match="不存在"):
         ctx.read_fulltext(TOPIC_REFERENCE_ID)
+
+
+def test_resolve_topic_context_figure_pdf_carried_for_entry_with_pdf(tmp_path):
+    """条目带原 PDF（工单 recommend-vision-qa/02）：装配点带出 figure_pdf
+    = 条目目录下的原 PDF 路径（按需视觉问答渲染原文作答）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="粘贴",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    expected = topics / "2026C" / "topic.pdf"
+    assert ctx.figure_pdf == expected
+    assert expected.is_file()
+
+
+def test_resolve_topic_context_figure_pdf_none_when_pdf_file_missing(tmp_path):
+    """条目 original_pdf 存在但文件缺失（手动搬家 / 库损坏）→ figure_pdf None
+    （视觉问答不可用，不猜测编造路径）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+    (topics / "2026C" / "topic.pdf").unlink()
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="粘贴",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    assert ctx.figure_pdf is None
+
+
+def test_resolve_topic_context_figure_pdf_none_for_no_topic(tmp_path):
+    """no-topic 形（粘贴题面未识别到编号）→ figure_pdf None。"""
+    library, topics, references = _wired_dirs(tmp_path)
+
+    class NoNumberLLM:
+        def topic_extract_number(self, text: str) -> None:
+            return None
+
+    ctx = resolve_topic_context(
+        llm=NoNumberLLM(),
+        topic_key="",
+        problem_text="粘贴的陌生题面",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    assert ctx.key == ""
+    assert ctx.figure_pdf is None
 
 
 def test_resolve_topic_context_explicit_unknown_key_raises(tmp_path):
