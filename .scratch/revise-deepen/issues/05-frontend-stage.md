@@ -4,7 +4,30 @@
 
 **被谁阻塞：** 02、03、04（后端 API 就绪后串联）
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-08-21 实施完成 + code-review 评审整改闭环）
+
+## Comments
+
+**实施记录（2026-08-21）：**
+- index.html 修复中心之后新增「修订与深化」阶段卡（step 11，交接卡改 12）：
+  两条入口（当前会话直取 / 历史目录 + 加载 + 补题面）、粘贴新 Q&A →
+  影响分析（qa_count 按连续空行分段）→ 逐条影响结论 + diff 卡 + 警告变化 →
+  确认（可编辑模块集）→ 执行（含深化勾选）→ SSE 进度全程（impact_analyzing
+  / diff_ready / revision_backup / revision_generating / deepening_start /
+  compile_start / fix_start / verify_result / llm_telemetry / done / error）
+  → 结果（diff 记录 / 验证状态三态 / 回滚按钮刷新）；无变化提示「无需重新生
+  成」+ 直接深化入口；错误路径全中文。
+- 后端三个修订端点（analyze / apply / deepen）支持 problem_text 覆盖——
+  历史目录补题面闭环（补的题面进分析 / 重生成骨架 / 深化 prompt）。
+- 测试补 analyze 补题面用例；全量 2113 绿 + node 语法过 + mypy 干净。
+
+**评审整改（code-review）：**
+- 硬问题：apply / deepen 前端请求补带 problem_text（闭环断裂）；回滚按钮纳入
+  busy 禁用集（深化并发竞态）。
+- 建议项：结果卡展示本次并入 Q&A 原文（用户故事 10）；放弃按钮 busy 守卫；
+  补题面后上下文区题面即时更新。
+- 待人工浏览器验收：缺题面历史目录补题面全流程、深化三态（verified /
+  unverified / failed）、修订 → 回滚真实目录恢复、SSE 断线提示。
 
 - [ ] 阶段卡两条入口可用：当前会话直取 / 历史目录选择 + 加载 + 补题面
 - [ ] 分析 → 影响结论 + diff 卡 + 警告变化展示；可放弃
