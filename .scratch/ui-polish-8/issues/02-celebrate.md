@@ -1,6 +1,6 @@
-# 工单 02：步骤完成庆祝动画
+﻿# 工单 02：步骤完成庆祝动画
 
-- Status: pending
+- Status: resolved
 - 依赖：无
 
 ## 目标

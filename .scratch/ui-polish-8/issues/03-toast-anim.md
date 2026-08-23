@@ -1,6 +1,6 @@
-# 工单 03：toast 动效升级
+﻿# 工单 03：toast 动效升级
 
-- Status: pending
+- Status: resolved
 - 依赖：无
 
 ## 目标
