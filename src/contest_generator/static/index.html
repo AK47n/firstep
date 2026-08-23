@@ -624,12 +624,13 @@
            border: 1px solid var(--border); color: var(--text);
            box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
            animation: toast-in .25s ease, toast-out .3s ease 2.2s forwards; }
-  .toast.ok { border-color: rgba(63, 185, 80, .5); }
+  /* 类型左边框 + 背景微染（工单 ui-polish-8/03）：ok 绿 / error 红 / info 青 */
+  .toast.ok { border-left: 3px solid var(--ok); background: var(--ok-dim); }
   .toast.ok .toast-ico { color: var(--ok); }
-  .toast.error { border-color: rgba(248, 81, 73, .5); }
+  .toast.error { border-left: 3px solid var(--danger); background: var(--danger-dim); }
   .toast.error .toast-ico { color: var(--danger); }
-  .toast.info { border-color: rgba(139, 148, 158, .4); }
-  .toast.info .toast-ico { color: var(--muted); }
+  .toast.info { border-left: 3px solid var(--accent); background: var(--accent-dim); }
+  .toast.info .toast-ico { color: var(--accent); }
   .toast .toast-ico { font-weight: 700; font-size: 14px; flex: none; }
   .toast .toast-text { flex: 1; }
   .toast .toast-close { border: none; background: none; cursor: pointer;
@@ -638,6 +639,7 @@
   @keyframes toast-in { from { opacity: 0; transform: translateX(16px); }
                         to { opacity: 1; transform: none; } }
   @keyframes toast-out { to { opacity: 0; transform: translateX(16px); } }
+  @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
   /* 卡片折叠（工单 ui-polish-4/01）：标题行右侧按钮 + 折叠态只留标题行。
      选择器修正（工单 ui-polish-6/02）：按钮在 h2 内，`.card > .card-collapse`
      匹配不到 → 样式全失效、退化成 44x40 默认大按钮；改独立类选择器 */
@@ -6264,7 +6266,13 @@ function toast(kind, text) {
   el.innerHTML = '<span class="toast-ico">' + TOAST_ICON[kind] + '</span><span class="toast-text">'
     + String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
     + '</span><button type="button" class="toast-close" aria-label="关闭">×</button>';
-  el.querySelector(".toast-close").addEventListener("click", () => el.remove());
+  el.querySelector(".toast-close").addEventListener("click", () => {
+    // 点击关闭走离场动画（工单 ui-polish-8/03）：重触发 toast-out 后移除
+    el.style.animation = "none";
+    void el.offsetWidth;
+    el.style.animation = "toast-out .3s ease forwards";
+    setTimeout(() => el.remove(), 300);
+  });
   root.appendChild(el);
   setTimeout(() => { if (el.isConnected) el.remove(); }, 2500);
 }
