@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=191db701d8ecb066be470c4885a9e22d0e409258 -->
+<!-- changelog-auto: last-commit=b5235a2bfd3ab81f858af3f8ec2f5d82458384d7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -29,6 +29,7 @@
 - 22:35 共享 PDF 赛题补图注——页范围定位提取（2021F 图1 落地）+ 图内标注段长判定修正 + 澄清提示词图缺失兜底
 - 23:05 赛题补图注改为渲染视觉优先——矢量图渲染+DeepSeek 视觉描述（extraction 渲染路径 + enrich 三级降级链 + 图号防撞与无实质过滤 + 双轴评审整改）；工单 01/02 实施记录入库
 - 23:06 赛题条目补图注
+- 23:18 模块选择连续 5 次失败——关闭 deepseek-v4-flash 思考模式（reasoning 吃光 max_tokens 致 content 为空、截断判确定性失败免重试）
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
