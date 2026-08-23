@@ -440,6 +440,9 @@
   .settings-section { margin-top: 14px; padding-top: 10px;
                       border-top: 1px dashed var(--border);
                       font-size: 12px; font-weight: 600; color: var(--muted); }
+  /* 按钮内联图标（工单 ui-polish-9/04） */
+  button .btn-ico { display: inline-block; width: 15px; height: 15px;
+                    vertical-align: -2px; margin-right: 6px; }
   /* ---- 引脚配置卡片（板级引脚配置工单 03）：板图 SVG + 角色清单 + 锚定菜单 ---- */
   /* 角色类型配色：派生自令牌色系（视觉参照 pin_config.html 深色 tag 风格） */
   :root {
@@ -781,7 +784,7 @@
     <div class="card">
       <h2><span class="step-no">2</span>赛题简介（AI 预读）</h2>
       <div class="row">
-        <button id="btn-topic-summary" class="primary">生成赛题简介</button>
+        <button id="btn-topic-summary" class="primary" data-ico="doc">生成赛题简介</button>
         <span class="muted">AI 先读一遍题面，把散落在各处的全部要求整理成一条条要点——心里有数再往下选平台。</span>
       </div>
       <div id="topic-summary-box" class="topic-summary hidden" style="margin-top:8px"></div>
@@ -816,7 +819,7 @@
         <div class="muted" style="margin-top:4px">赛事组发布的答疑（学生问 / 赛事组答）粘贴到这里（可输入任意多行，超出自动滚动）：AI 推荐把它作为权威澄清参考，题面有歧义处以 Q&amp;A 为准；Q&amp;A 修改后重推会重新分析（不命中旧缓存）；留空不影响。</div>
       </details>
       <div class="row" style="margin-top:8px">
-        <button id="btn-recommend" class="primary">让 AI 推荐</button>
+        <button id="btn-recommend" class="primary" data-ico="sparkles">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
       </div>
       <div id="rec-progress" class="distill-progress hidden" style="margin-top:10px">
@@ -895,8 +898,8 @@
     <div class="card">
       <h2><span class="step-no">8</span>main.c 骨架</h2>
       <div class="row">
-        <button id="btn-skeleton" class="primary">生成骨架</button>
-        <button id="btn-smoke" class="primary">生成自检骨架</button>
+        <button id="btn-skeleton" class="primary" data-ico="code">生成骨架</button>
+        <button id="btn-smoke" class="primary" data-ico="code">生成自检骨架</button>
         <span class="muted">骨架 = 初始化序列 + TODO 预留区；自检 = 逐模块初始化/读一次/打印结果（OLED 为主、串口为辅），先验硬件再写逻辑。</span>
       </div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
@@ -918,7 +921,7 @@
         <button id="btn-pick-output-dir">选择文件夹…</button>
       </div>
       <div class="row" style="margin-top:10px">
-        <button id="btn-generate" class="primary">生成工程</button>
+        <button id="btn-generate" class="primary" data-ico="rocket">生成工程</button>
         <span id="gen-status"></span>
       </div>
       <div id="generate-msg" class="error"></div>
@@ -928,7 +931,7 @@
         <div id="compile-banner" class="hidden"></div>
         <h3>生成完成</h3>
         <div class="item">输出目录：<span id="res-dir" class="slug"></span>
-          <button id="btn-copy-dir" class="hidden" style="margin-left:8px;padding:2px 10px;font-size:12px">复制路径</button></div>
+          <button id="btn-copy-dir" class="hidden" style="margin-left:8px;padding:2px 10px;font-size:12px" data-ico="copy">复制路径</button></div>
         <div class="item">include path：<span id="res-includes" class="slug"></span></div>
         <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
         <div class="item hidden" id="res-score-points" style="white-space:pre-line"></div>
@@ -943,7 +946,7 @@
     <div class="card" id="card-fix-center">
       <h2><span class="step-no">10</span>修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
       <div class="row">
-        <button id="btn-fix-center" class="primary">一键编译修复</button>
+        <button id="btn-fix-center" class="primary" data-ico="wrench">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
         <!-- 继续修复（工单 fix-loop-continue/01）：仅轮上限终态显示，从续跑态
              再来一批 ≤3 轮（不重跑初始编译、previous_fixes 回喂不丢） -->
@@ -1039,8 +1042,8 @@
     <div class="card">
       <h2><span class="step-no">12</span>交接提示词（Handoff）</h2>
       <div class="row">
-        <button id="btn-handoff" class="primary">生成交接提示词</button>
-        <button id="btn-handoff-copy" class="hidden">复制</button>
+        <button id="btn-handoff" class="primary" data-ico="clipboard">生成交接提示词</button>
+        <button id="btn-handoff-copy" class="hidden" data-ico="copy">复制</button>
         <span class="muted">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</span>
       </div>
       <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
@@ -1102,7 +1105,7 @@
         <div style="flex:1"><label>文件名</label><input type="text" id="ref-filter-filename" placeholder="文件名 / 型号"></div>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="btn-ref-search" class="primary">搜索</button>
+        <button id="btn-ref-search" class="primary" data-ico="search">搜索</button>
         <button id="btn-ref-search-clear">清空并显示全部</button>
       </div>
       <table style="margin-top:10px">
@@ -1166,7 +1169,7 @@
         <div style="flex:1"><label>文件名 / 批次 / 路径</label><input type="text" id="pdf-filter" placeholder="如 TB6612、原理图、数据手册"></div>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="btn-pdf-search" class="primary">搜索</button>
+        <button id="btn-pdf-search" class="primary" data-ico="search">搜索</button>
         <button id="btn-pdf-search-clear">清空并显示全部</button>
         <span id="pdf-count" class="muted" style="margin-left:10px"></span>
       </div>
@@ -1188,7 +1191,7 @@
         <div style="flex:1"><label>编号</label><input type="text" id="topic-filter-number" placeholder="如 C"></div>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="btn-topic-search" class="primary">搜索</button>
+        <button id="btn-topic-search" class="primary" data-ico="search">搜索</button>
         <button id="btn-topic-search-clear">清空并显示全部</button>
       </div>
       <div id="topic-grid" class="topic-grid"></div>
@@ -1199,7 +1202,7 @@
       <h2>拆条录入（上传真题长 PDF → 拆条 → 逐条校对 → 确认入库）</h2>
       <div class="row">
         <input type="file" id="topic-pdf" accept=".pdf">
-        <button id="btn-topic-split" class="primary">上传并拆条</button>
+        <button id="btn-topic-split" class="primary" data-ico="upload">上传并拆条</button>
         <span class="muted">长 PDF 自动走确定性分块（年份章节 + 题目标记），无需手动处理</span>
       </div>
       <div id="topic-split-msg" class="error"></div>
@@ -1207,7 +1210,7 @@
         <h3>校对（年份 / 题号 / 题面可改，条目可删；确认前不落盘）</h3>
         <div id="topic-proofread-rows"></div>
         <div class="row" style="margin-top:8px">
-          <button id="btn-topic-confirm" class="primary">确认入库</button>
+          <button id="btn-topic-confirm" class="primary" data-ico="check">确认入库</button>
           <span class="muted">确认失败（编号重复 / 已存在 / 格式非法）会原样显示原因，不会留下半成品</span>
         </div>
         <div id="topic-confirm-msg" class="error"></div>
@@ -1229,7 +1232,7 @@
       <div id="staged-dirs" style="margin-top:8px"></div>
       <div class="row" style="margin-top:10px">
         <button id="btn-scan">扫描工程</button>
-        <button id="btn-distill" class="primary" disabled>AI 提炼报告</button>
+        <button id="btn-distill" class="primary" disabled data-ico="wand">AI 提炼报告</button>
       </div>
       <div id="distill-progress" class="distill-progress hidden" style="margin-top:10px">
         <div id="prog-body">
@@ -1266,7 +1269,7 @@
         <h3>提炼报告（确认后入库；merge 条目可换来源工程）</h3>
         <div id="report-body"></div>
         <div class="row" style="margin-top:10px">
-          <button id="btn-confirm" class="primary">确认并入库</button>
+          <button id="btn-confirm" class="primary" data-ico="check">确认并入库</button>
           <span id="confirm-status"></span>
         </div>
         <div id="confirm-msg" class="error"></div>
@@ -1450,7 +1453,7 @@
 
     <div class="card">
       <div class="row">
-        <button id="btn-save-settings" class="primary">保存设置</button>
+        <button id="btn-save-settings" class="primary" data-ico="save">保存设置</button>
         <span class="muted">配置文件：<span id="set-config-path"></span>（含 API key，不入版本库）</span>
       </div>
       <div id="settings-msg" class="error"></div>
@@ -5095,6 +5098,33 @@ function topicCardHTML(t) {
     + '<button class="danger" data-topic-del="' + key + '">删除</button>'
     + '</div></div>';
 }
+// 按钮图标（工单 ui-polish-9/04）：data-ico 注入内联 SVG（16px stroke 风格）。
+// 自包含纯函数（tests/js 抽取）：name → SVG 字符串，未知 name 返回 ""（安全兜底）
+function btnIcon(name) {
+  const S = ' fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
+  const I = {
+    rocket: '<path d="M8 1.5 L10 5.5 L13.5 11.5 L8 14 L2.5 11.5 L6 5.5 Z"/><circle cx="8" cy="7.6" r="1.6"/>',
+    code: '<path d="M5 4 L2 8 L5 12 M11 4 L14 8 L11 12"/>',
+    sparkles: '<path d="M8 1.8 L9.6 6.4 L14.2 8 L9.6 9.6 L8 14.2 L6.4 9.6 L1.8 8 L6.4 6.4 Z"/>',
+    doc: '<path d="M4.5 1.5 H10 L12.5 4 V14.5 H4.5 Z"/><path d="M10 1.5 V4 H12.5"/>',
+    clipboard: '<path d="M5.5 3 H10.5 V5 H5.5 Z"/><path d="M4.5 5 H11.5 V14 H4.5 Z"/>',
+    wrench: '<path d="M10.2 2.2 A3.6 3.6 0 0 1 12 8.8 L5.8 15 L3.8 13 L10 7.2 A3.6 3.6 0 0 1 10.2 2.2 Z"/>',
+    search: '<circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 L14 14"/>',
+    save: '<path d="M3 1.5 H13 V14.5 H3 Z"/><path d="M5 1.5 V6 H11 V1.5 M5 8 H11 V14.5"/>',
+    copy: '<rect x="2.5" y="6" width="9" height="8.5" rx="1"/><rect x="5.5" y="2.5" width="9" height="8.5" rx="1"/>',
+    check: '<path d="M2.5 8.5 L6 12 L13.5 4"/>',
+    upload: '<path d="M8 3 V10.5 M4.5 6.5 L8 3 L11.5 6.5 M3 13.5 H13"/>',
+    wand: '<path d="M4.5 11.5 L11.5 4.5"/><path d="M6.5 2.5 V4.5 M5.5 3.5 H7.5 M12.5 7 V9 M11.5 8 H13.5"/>',
+  };
+  return I[name]
+    ? '<svg class="btn-ico" viewBox="0 0 16 16" width="15" height="15"' + S + '>' + I[name] + '</svg>'
+    : "";
+}
+(function initBtnIcons() {
+  document.querySelectorAll("[data-ico]").forEach((b) => {
+    b.insertAdjacentHTML("afterbegin", btnIcon(b.dataset.ico));
+  });
+})();
 async function loadTopics() {
   loadTopicArchiveLink();
   try {
