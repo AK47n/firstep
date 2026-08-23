@@ -23,6 +23,7 @@ from contest_generator.llm import (
     parse_topic_split,
 )
 from contest_generator.manifest import MANIFEST_FILENAME
+from contest_generator.extraction import locate_topic_pages_full
 from contest_generator.topic_library import (
     TOPIC_MD_FILENAME,
     TopicDraft,
@@ -43,6 +44,7 @@ from tests.fakes import (
     make_fake_module_library,
     make_sample_pdf,
 )
+from tests.topic_pdf_fakes import make_multi_page_pdf
 
 
 @pytest.fixture(autouse=True)
@@ -1321,6 +1323,91 @@ def test_topics_pages_endpoint_unknown_key_returns_400(topic_context):
 
     assert response.status_code == 400
     assert KEY_2026C in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 取题面页图（工单 topic-pdf-viewer/02）：多页题面完整页范围（页脚总页数扩展）
+# ---------------------------------------------------------------------------
+
+
+def test_locate_topic_pages_full_extends_by_footer_total(tmp_path):
+    """页脚总页数扩展：真题汇总 PDF 页脚「F - 1 / 4」→ 题面共 4 页，范围
+    精确覆盖，不含下一页 G 题。"""
+    pdf = make_multi_page_pdf(
+        tmp_path / "真题.pdf",
+        [
+            ("F - 1 / 4", "2021F design task page one"),
+            ("F - 2 / 4", "figure page"),
+            ("F - 3 / 4", "requirements page three"),
+            ("F - 4 / 4", "scoring page four"),
+            ("G - 1 / 4", "next topic G page one"),
+        ],
+    )
+
+    located = locate_topic_pages_full(pdf, "2021F design task page one")
+
+    assert located == (1, 5)
+
+
+def test_locate_topic_pages_full_normalizes_from_non_first_page(tmp_path):
+    """k 归一：定位命中题面非首页（页脚 k=2）→ 反推回题面首页，范围不含
+    下一题（评审提示：忽略 k 会把下一题卷进范围）。"""
+    pdf = make_multi_page_pdf(
+        tmp_path / "真题.pdf",
+        [
+            ("F - 1 / 4", "intro page"),
+            ("F - 2 / 4", "layout figure"),
+            ("F - 3 / 4", "requirements page three"),
+            ("F - 4 / 4", "scoring page four"),
+            ("G - 1 / 4", "next topic G page one"),
+        ],
+    )
+
+    # 题面独特文本只出现在第 2 页 → 定位落在 (2, 4)，k=2 反推回 (1, 5)
+    located = locate_topic_pages_full(pdf, "layout figure")
+
+    assert located == (1, 5)
+
+
+def test_locate_topic_pages_full_falls_back_without_footer(tmp_path):
+    """无页脚（单题 PDF / 测试假件）→ 回退既有 span（命中页起 2 页）。"""
+    pdf = make_multi_page_pdf(
+        tmp_path / "真题.pdf",
+        [
+            ("", "2026C design task page one"),
+            ("", "2026C design task page two"),
+        ],
+    )
+
+    located = locate_topic_pages_full(pdf, "2026C design task page one")
+
+    assert located == (1, 3)
+
+
+def test_topics_pages_endpoint_renders_all_topic_pages(topic_context, tmp_path):
+    """端点：多页题面（页脚总页数扩展）→ 全部页图，页码 1-4 完整。"""
+    ctx, _, topics_dir = topic_context
+    pdf = make_multi_page_pdf(
+        tmp_path / "真题.pdf",
+        [
+            ("F - 1 / 4", "2021F design task page one"),
+            ("F - 2 / 4", "figure page"),
+            ("F - 3 / 4", "requirements page three"),
+            ("F - 4 / 4", "scoring page four"),
+        ],
+    )
+    confirm_topics(
+        topics_dir,
+        pdf,
+        (TopicDraft(year="2021", number="F", problem_text="2021F design task page one"),),
+    )
+
+    with _client(ctx) as client:
+        response = client.get("/api/topics/2021F/pages")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [p["page_no"] for p in body["pages"]] == [1, 2, 3, 4]
 
 
 # ---------------------------------------------------------------------------
