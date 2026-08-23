@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d08a554d2f421ec0836afc7bf0046e8eb9becf1f -->
+<!-- changelog-auto: last-commit=537c863d86b6154a19db83ca8022daecf2a28fac -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -31,6 +31,7 @@
 - 23:06 赛题条目补图注
 - 23:18 模块选择连续 5 次失败——关闭 deepseek-v4-flash 思考模式（reasoning 吃光 max_tokens 致 content 为空、截断判确定性失败免重试）
 - 23:24 模块选择域拒绝免重试——非多实例模块带 instances 改报 client 立即失败（同参数重试稳定同错）+ 提示词多实例规则前置硬约束
+- 23:59 推荐阶段按需视觉问答编排（工单 recommend-vision-qa/01）——图内问题机械判定 + vision_qa 回调消化并入澄清历史 + 收敛补问带答案重跑，未注入时行为逐字节不变
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
