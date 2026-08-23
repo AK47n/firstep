@@ -46,6 +46,7 @@ from contest_generator.llm import (
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
     LOCAL_LLM_METHODS,
+    LOCAL_LLM_LOAD_FAILED_MESSAGE,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
     MAX_REQUEST_BYTES,
     MAX_SUMMARY_BATCH_CHARS,
@@ -4187,6 +4188,27 @@ class _FailingRemote(RecordingLLM):
         raise LLMError("DeepSeek API 返回 500")
 
 
+class _CrashingLocal(RecordingLLM):
+    """本地委托失败的记录型假件（llama-server 崩溃形态）：Ollama 在运行但模型进程
+    终止——500 响应体带 llama-server 崩溃特征（真实场景：qwen3-coder:30b 权重超
+    内存，ggml 分配 buffer 失败）。"""
+
+    def summarize_topic(self, problem_text: str) -> str:
+        raise LLMError(
+            'DeepSeek API 返回 500：{"error":{"message":"llama-server process has '
+            "terminated: exit status 1: ggml_backend_cpu_buffer_type_alloc_buffer: "
+            "failed to allocate buffer of size 11598741504\"}}",
+            kind=ERROR_KIND_NETWORK,
+        )
+
+
+class _UnknownFailureLocal(RecordingLLM):
+    """本地委托失败的记录型假件（未知形态）：错误特征不属于任何已知分类。"""
+
+    def summarize_topic(self, problem_text: str) -> str:
+        raise LLMError("奇怪的本地错误：权限不足", kind=ERROR_KIND_NETWORK)
+
+
 # LLM 协议全部方法名（派发测试的覆盖清单；本地集之外的 = 远程集）
 PROTOCOL_METHOD_NAMES = frozenset(
     {
@@ -4352,6 +4374,32 @@ def test_routing_llm_remote_failure_propagates_unchanged():
         router.topic_extract_number("2026C")
     assert "本地模型服务不可用" not in str(exc_info.value)
     assert "DeepSeek API 返回 500" in str(exc_info.value)
+
+
+def test_routing_llm_local_llama_server_crash_hints_model_too_big():
+    """本地 llama-server 崩溃形态（Ollama 在跑但模型进程终止/内存分配失败）：
+    提示指向「模型加载失败/换更小的模型」，而非误导「请启动 Ollama」；kind 保持、
+    remote 零调用。"""
+    remote = RecordingLLM("remote")
+    router = RoutingLLM(remote=remote, local=_CrashingLocal("local"))
+    with pytest.raises(LLMError) as exc_info:
+        router.summarize_topic("题面")
+    message = str(exc_info.value)
+    assert exc_info.value.kind == ERROR_KIND_NETWORK  # 错误类别保持
+    assert LOCAL_LLM_LOAD_FAILED_MESSAGE in message  # 换模型提示
+    assert "请启动 Ollama" not in message  # 不误导（Ollama 在跑）
+    assert "llama-server" in message  # 保留原始错误信息
+    assert remote.calls == []  # 不自动回退远程
+
+
+def test_routing_llm_local_unknown_failure_uses_generic_hint():
+    """本地未知错误形态 → 通用兜底文案（LOCAL_LLM_UNAVAILABLE_MESSAGE）。"""
+    router = RoutingLLM(remote=RecordingLLM("remote"), local=_UnknownFailureLocal("local"))
+    with pytest.raises(LLMError) as exc_info:
+        router.summarize_topic("题面")
+    message = str(exc_info.value)
+    assert LOCAL_LLM_UNAVAILABLE_MESSAGE in message
+    assert "奇怪的本地错误：权限不足" in message  # 保留原始错误信息
 
 
 def test_build_llm_without_local_fields_returns_plain_deepseek_llm():
