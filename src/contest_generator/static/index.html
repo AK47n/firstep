@@ -436,6 +436,10 @@
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   ::-webkit-scrollbar-corner { background: transparent; }
   * { scrollbar-width: thin; scrollbar-color: var(--border-strong) var(--bg); }
+  /* 设置页卡内小节（工单 ui-polish-9/03）：muted 小标题 + 虚线分隔 */
+  .settings-section { margin-top: 14px; padding-top: 10px;
+                      border-top: 1px dashed var(--border);
+                      font-size: 12px; font-weight: 600; color: var(--muted); }
   /* ---- 引脚配置卡片（板级引脚配置工单 03）：板图 SVG + 角色清单 + 锚定菜单 ---- */
   /* 角色类型配色：派生自令牌色系（视觉参照 pin_config.html 深色 tag 风格） */
   :root {
@@ -1320,11 +1324,13 @@
 
     <div class="card">
       <h2>AI API</h2>
+      <div class="settings-section">连接</div>
       <div class="row">
         <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
+      <div class="settings-section">计费</div>
       <div class="row" style="margin-top:10px;align-items:center">
         <span style="font-size:12px;color:var(--muted)">计费时段</span>
         <label style="margin:0 12px 0 8px;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="peak" id="period-peak"> 高峰期</label>
@@ -1360,6 +1366,7 @@
 
     <div class="card">
       <h2>库目录</h2>
+      <div class="settings-section">模块库 / 母版库</div>
       <div class="row">
         <div style="flex:1"><label>模块库目录</label><input type="text" id="set-lib-dir" placeholder="~/.contest_generator/modules"></div>
         <div style="flex:1"><label>母版库目录</label><input type="text" id="set-masters-dir" placeholder="~/.contest_generator/masters"></div>
@@ -1368,10 +1375,12 @@
 
     <div class="card">
       <h2>工具链</h2>
+      <div class="settings-section">Keil / gmake</div>
       <div class="row">
         <div style="flex:1"><label>Keil UV4 路径（留空自动探测）</label><input type="text" id="set-uv4-path" placeholder="C:\Keil5\Core\UV4\UV4.exe"></div>
         <div style="flex:1"><label>gmake 路径（留空走 PATH）</label><input type="text" id="set-gmake-path" placeholder="gmake / make"></div>
       </div>
+      <div class="settings-section">CCS 三件套</div>
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>CCS SDK 目录（留空自动探测 C:/ti/ccs*）</label><input type="text" id="set-ccs-sdk-dir" placeholder="C:/ti/ccs2051/mspm0_sdk_2_10_00_04"></div>
         <div style="flex:1"><label>CCS 编译器目录（留空自动探测）</label><input type="text" id="set-ccs-compiler-dir" placeholder="C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"></div>
