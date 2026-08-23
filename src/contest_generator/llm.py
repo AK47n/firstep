@@ -417,10 +417,16 @@ MAX_REQUEST_BYTES = 128 * 1024  # 发送前断言：序列化请求体超过此�
 # 20K 字符 = 实测 163K 全量必截断后的安全块上限。
 TOPIC_SPLIT_LLM_CHAR_CAP = 20000
 
-# select（模块选择）输出上限（工单 llm-select-runaway/01）：deepseek-v4-flash
-# 曾无上限输出 ~20K tokens/次（疑似退化：逐句分析/自检过程写进 JSON），单次
-# 等待 ~160s 且解析必然失败、重试重复烧钱。select 合理输出 < 2K tokens，
-# 4096 足够；超长被服务端截断 → JSON 不完整 → 快速 parse 失败。
+# select（模块选择）输出上限（工单 llm-select-runaway/01 + select-truncation/01）：
+# deepseek-v4-flash 曾无上限输出 ~20K tokens/次（疑似退化：逐句分析/自检过程
+# 写进 JSON），单次等待 ~160s 且解析必然失败、重试重复烧钱。4096 只对
+# **content** 生效（配合请求侧 thinking disabled——见 select_modules 调用处）：
+# select 合理输出 < 2K tokens；超长 = 输出退化，被服务端截断 →
+# finish_reason=length → _retry_parse 判确定性失败报 client 错误免重试，
+# 字符侧守卫（SELECT_MAX_OUTPUT_CHARS）再兜底。**不要调大此值来容纳推理
+# 输出**：v4-flash 思考模式默认开且 effort=high，select 这类确定性 JSON 任务
+# 会让模型深度推理循环不收敛，max_tokens 全被 reasoning_content 吃掉、
+# content 为空（实测 4096 / 16384 皆截断）——正确做法是关闭思考模式。
 SELECT_MAX_OUTPUT_TOKENS = 4096
 # 超长守卫阈值（字符）：响应内容超过即判输出失控，报 client 错误免重试
 # （_retry_parse 对 client 错误 break——重试只会重复烧钱烧时间）。
@@ -793,7 +799,12 @@ def create_llm_observation_collector(workflow_name: str) -> LLMObservationCollec
 
 @dataclass(frozen=True)
 class _ChatResult:
-    """一次真实请求的响应内容与观测元数据（解析后补记 parse_status）。"""
+    """一次真实请求的响应内容与观测元数据（解析后补记 parse_status）。
+
+    finish_reason = 服务端截断信号（工单 select-truncation/01）："length" =
+    输出被 max_tokens 上限截断（推理模型 reasoning 与 content 共享上限，
+    content 常为空串）——参数性确定性失败，重试必然同样截断，消费方免重试。
+    """
 
     content: str
     operation: str
@@ -804,6 +815,7 @@ class _ChatResult:
     call_id: int
     attempts: int
     budget_attempt: int | None
+    finish_reason: str | None = None
 
 
 class LLMError(Exception):
@@ -1248,6 +1260,13 @@ class DeepSeekLLM:
             operation="select_modules",
             json_mode=True,
             max_tokens=SELECT_MAX_OUTPUT_TOKENS,
+            # 关闭思考模式（工单 select-truncation/01）：v4-flash 思考默认开
+            # （effort=high），select 的「逐句对照/反复自检」要求让推理模型
+            # 深度推理且循环不收敛——max_tokens 全被 reasoning_content 吃掉、
+            # content 为空（finish_reason=length，实测 4096/16384 皆截断）→
+            # 「模型返回的不是 JSON」连续 5 次失败。select 是确定性 JSON 任务，
+            # 不需要思维链：关闭后 content 直接输出，等待 / 成本 / 截断齐解。
+            thinking_disabled=True,
         )
 
     def clarify(
@@ -1395,16 +1414,20 @@ class DeepSeekLLM:
         operation: str | None = None,
         json_mode: bool = False,
         max_tokens: int | None = None,
+        thinking_disabled: bool = False,
     ) -> RT:
         """整次调用级重试（单调用契约共用原语，与批处理 _retry_batch 同哲学）。
 
         HTTP / 网络错误由 _chat_once 先观测并分类；模型内容解析 / 领域校验在本层
         观测为 parse_error，避免把空内容 / 畸形 JSON / 领域拒绝记成成功调用。
         max_tokens = 输出上限（None = 不带字段，服务端默认）。
+        thinking_disabled = 关闭思考模式（推理模型默认开且 effort=high，确定性
+        JSON 任务会深度推理吃掉 max_tokens、content 为空——select 用）。
         """
         last_error: Exception | None = None
         attempts = 0
         network_failures = 0
+        result: _ChatResult | None = None
         while attempts < NETWORK_RETRY_LIMIT:
             attempts += 1
             try:
@@ -1418,6 +1441,7 @@ class DeepSeekLLM:
                     attempt_number=attempts,
                     observe_success=False,
                     max_tokens=max_tokens,
+                    thinking_disabled=thinking_disabled,
                 )
                 try:
                     parsed = parse(result.content)
@@ -1435,6 +1459,25 @@ class DeepSeekLLM:
                 return parsed
             except LLMError as exc:
                 last_error = exc
+                # 截断 = 参数性确定性失败（工单 select-truncation/01）：输出被
+                # max_tokens 上限截断（finish_reason=length，推理模型下 content
+                # 常为空串）——同参数重试必然同样截断，报 client 错误免重试，
+                # 不再重复烧钱烧时间（曾 5 次重试全截断 = 「模型返回的不是 JSON」
+                # 连续失败）。仅当本轮真实拿到截断响应且错误是解析类时转化
+                # （字符超长守卫已是 client 错误，不重复包装）。
+                if (
+                    result is not None
+                    and result.finish_reason == "length"
+                    and exc.kind == ERROR_KIND_PARSE
+                ):
+                    last_error = LLMError(
+                        "模型输出被 max_tokens 上限截断（finish_reason=length，"
+                        "推理模型下 reasoning 与 content 共享上限、content 常为"
+                        "空）——重试必然同样截断，已放弃重试；请重试或检查模型"
+                        "配置",
+                        kind=ERROR_KIND_CLIENT,
+                    )
+                    break
                 if exc.kind in (ERROR_KIND_CLIENT, ERROR_KIND_BUDGET):
                     if exc.kind == ERROR_KIND_BUDGET:
                         raise
@@ -2123,6 +2166,7 @@ class DeepSeekLLM:
         attempt_number: int = 1,
         observe_success: bool = True,
         max_tokens: int | None = None,
+        thinking_disabled: bool = False,
     ) -> _ChatResult:
         self._call_sequence += 1
         call_id = self._call_sequence
@@ -2132,6 +2176,14 @@ class DeepSeekLLM:
             payload["max_tokens"] = max_tokens
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
+        if thinking_disabled:
+            # 关闭思考模式（工单 select-truncation/01）：deepseek-v4-flash /
+            # v4-pro 思考模式默认开（effort=high），确定性 JSON 任务会让模型
+            # 深度推理且循环不收敛，max_tokens 全被 reasoning_content 吃掉、
+            # content 为空（finish_reason=length → 解析必失败）。结构化输出
+            # 不需要思维链——显式关闭，content 直接输出（官方参数：
+            # {"thinking": {"type": "disabled"}}，OpenAI Chat Completions 格式）
+            payload["thinking"] = {"type": "disabled"}
         body_bytes = json.dumps(payload).encode("utf-8")
         started_at = time.monotonic()
         request_bytes = len(body_bytes)
@@ -2279,6 +2331,13 @@ class DeepSeekLLM:
             # 围栏等合法内容不被 mangle）（工单 local-llm-json-group/01）
             content = _unwrap_json_fence(content)
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        # 截断信号（工单 select-truncation/01）：取 choices[0].finish_reason，
+        # "length" = 输出被 max_tokens 截断（推理模型下 content 常为空）——
+        # 供 _retry_parse 判确定性失败免重试；缺字段 = None（兼容无该键响应）
+        try:
+            finish_reason = data["choices"][0].get("finish_reason")
+        except (KeyError, IndexError, TypeError):
+            finish_reason = None
         result = _ChatResult(
             content=content,
             operation=operation,
@@ -2289,6 +2348,7 @@ class DeepSeekLLM:
             call_id=call_id,
             attempts=attempt_number,
             budget_attempt=budget_attempt,
+            finish_reason=finish_reason,
         )
         if observe_success:
             self._observe_chat_result(

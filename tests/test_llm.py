@@ -115,9 +115,11 @@ SELECTION_JSON = json.dumps(
 )
 
 
-def _api_response(content: str) -> str:
+def _api_response(content: str, finish_reason: str = "stop") -> str:
     """模拟 DeepSeek Chat Completions 响应包络：content 在 choices[0].message.content。"""
-    return json.dumps({"choices": [{"message": {"content": content}}]})
+    return json.dumps(
+        {"choices": [{"message": {"content": content}, "finish_reason": finish_reason}]}
+    )
 
 
 def _manifest(
@@ -4548,9 +4550,17 @@ def test_generate_report_draft_empty_rationale_rejected():
 # ---------------------------------------------------------------------------
 
 
-def test_select_modules_posts_max_tokens_cap():
-    """select 请求带 max_tokens 上限（deepseek-v4-flash 曾输出 ~20K tokens/次
-    失控，无上限时单次等待 ~160s 且解析必然失败）。"""
+def test_select_modules_posts_max_tokens_cap_and_disables_thinking():
+    """select 请求带 max_tokens 上限并关闭思考模式。
+
+    - max_tokens=4096：防输出失控（deepseek-v4-flash 曾无上限输出 ~20K
+      tokens/次、单次等待 ~160s）。
+    - thinking disabled（工单 select-truncation/01）：v4-flash 思考模式默认
+      开（effort=high），select 这类确定性 JSON 任务会让模型深度推理且循环
+      不收敛——4096/16384 上限实测全被 reasoning_content 吃掉、content 为空
+      （finish_reason=length → 「模型返回的不是 JSON」连续 5 次失败）。
+      结构化输出不需要思维链：关闭后 content 直接输出，等待 / 成本 / 截断
+      一并解决。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
 
@@ -4560,10 +4570,11 @@ def test_select_modules_posts_max_tokens_cap():
 
     _, _, payload, _ = transport.calls[0]
     assert payload["max_tokens"] == 4096
+    assert payload["thinking"] == {"type": "disabled"}
 
 
-def test_non_select_calls_omit_max_tokens():
-    """其余调用不带 max_tokens 字段（长输出调用保持服务端默认，零回归）。"""
+def test_non_select_calls_omit_max_tokens_and_thinking():
+    """其余调用不带 max_tokens / thinking 字段（保持服务端默认，零回归）。"""
     transport = FakeTransport(body=_api_response("摘要"))
     llm = _llm(transport)
 
@@ -4571,6 +4582,7 @@ def test_non_select_calls_omit_max_tokens():
 
     _, _, payload, _ = transport.calls[0]
     assert "max_tokens" not in payload
+    assert "thinking" not in payload
 
 
 def test_select_modules_oversized_output_fails_fast_without_retry():
@@ -4590,6 +4602,23 @@ def test_select_modules_oversized_output_fails_fast_without_retry():
     assert excinfo.value.kind == "client"
     assert len(transport.calls) == 1
     assert "异常超长" in str(excinfo.value)
+
+
+def test_select_modules_truncated_output_fails_fast_without_retry():
+    """finish_reason=length（输出被 max_tokens 截断）= 参数性确定性失败：
+    同参数重试必然再截断（推理模型 reasoning 与 content 共享 max_tokens），
+    只尝试 1 次报 client 错误，不再 5 次重试烧钱烧时间。"""
+    transport = FakeTransport(body=_api_response("", finish_reason="length"))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as excinfo:
+        llm.select_modules(
+            "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+        )
+
+    assert excinfo.value.kind == "client"
+    assert len(transport.calls) == 1
+    assert "截断" in str(excinfo.value)
 
 
 def test_select_observation_records_content_excerpt_on_success():
