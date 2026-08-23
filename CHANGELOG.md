@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=49fdfa761bf36266ba4bf28cbaed3b1e3589c9c5 -->
+<!-- changelog-auto: last-commit=a9cca185ddc2ed5015e579c1bd60c02cc0802d34 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 11:18 UI 打磨（ui-polish-9/01）：主按钮呼吸微光（disabled 无光、hover 暂停、reduced-motion 兼容）
 - 11:20 UI 打磨（ui-polish-9/02）：赛题库卡片化（编号徽章+年份chip+题面预览，topicCardHTML 纯函数，保留 data-topic-use/del 契约）
 - 11:21 UI 打磨（ui-polish-9/03）：设置页卡内小节分组（连接/计费、Keil-gmake/CCS 三件套、模块库-母版库）
+- 11:22 UI 打磨（ui-polish-9/04）：高频按钮图标化（btnIcon 内联 SVG，data-ico 注入，17 按钮）
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
