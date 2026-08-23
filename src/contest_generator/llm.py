@@ -1240,8 +1240,13 @@ class DeepSeekLLM:
             except SelectionError as exc:
                 # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；
                 # selection 不 import LLMError——否则与 llm → selection 既有边成环；
-                # 翻译在闭包内，重试循环吃的是翻译后的 LLMError）
-                raise LLMError(str(exc)) from exc
+                # 翻译在闭包内，重试循环吃的是翻译后的 LLMError）。
+                # kind=client 免重试（工单 select-domain-reject/01）：域拒绝 =
+                # 模型输出与库内事实的客观矛盾（如给非多实例模块带 instances、
+                # 幻觉模块名）——同参数重试模型稳定输出同样的幻觉（2021F 实测
+                # digit_uart 连续 5 轮同样带 instances），重试只烧钱烧时间；
+                # 报 client 错误立即结束，用户可重试或调整题面。
+                raise LLMError(str(exc), kind=ERROR_KIND_CLIENT) from exc
 
         return self._retry_parse(
             system_prompt=SELECT_SYSTEM_PROMPT,
@@ -3149,8 +3154,11 @@ def _selection_user_prompt(
     has_multi = any(summary.multi_instance for summary in manifest_summaries)
     if has_multi:
         prompt += (
-            "\n\n多实例模块（清单带「多实例」标注）按题面数量输出 instances "
-            "数组：每条 {\"name\": 显示名, \"variant\": 变体}（led 变体 = 颜色，"
+            "\n\n多实例规则（硬约束）：instances 字段**只允许**出现在清单带"
+            "「多实例」标注的模块条目上——**未标注的模块输出 instances 会被系统"
+            "直接拒绝整轮结果**（模块 digit_uart 曾因此整轮失败）。其余模块条目"
+            "绝不输出 instances 字段。多实例模块按题面数量输出 instances 数组："
+            "每条 {\"name\": 显示名, \"variant\": 变体}（led 变体 = 颜色，"
             f"内置 {'/'.join(LED_COLOR_MACROS)}，其余空串）；数量不超过清单标注"
             "上限；题面未明确数量时省略；引脚自动分配，不输出 pin；不为非多实例"
             "模块输出 instances。"

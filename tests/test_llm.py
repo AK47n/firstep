@@ -623,12 +623,13 @@ def test_select_modules_retries_on_malformed_json_then_succeeds():
     assert len(transport.calls) == 2
 
 
-def test_select_modules_retries_when_selection_rejected():
-    """SelectionError 路径在重试覆盖内：域判决拒绝（未知 slug）→ 翻译成
-    LLMError → 整次重问 → 成功。"""
+def test_select_modules_retries_when_output_malformed():
+    """畸形 JSON（解析类失败）仍在重试覆盖内：整次重问 → 成功。解析类失败
+    是瞬时性的（模型偶发畸形），重试有价值；域拒绝（SelectionError）已改
+    client 免重试——模型输出与库内事实的客观矛盾，同参数重试稳定同错。"""
     transport = SequenceTransport(
         [
-            _api_response(json.dumps({"modules": [{"slug": "ghost", "reason": "x"}]})),
+            _api_response("{broken"),
             _api_response(SELECTION_JSON),
         ]
     )
@@ -4619,6 +4620,47 @@ def test_select_modules_truncated_output_fails_fast_without_retry():
     assert excinfo.value.kind == "client"
     assert len(transport.calls) == 1
     assert "截断" in str(excinfo.value)
+
+
+def test_select_domain_rejection_fails_fast_without_retry():
+    """域拒绝（SelectionError，如给非多实例模块带 instances）= 模型输出与
+    库内事实的客观矛盾——同参数重试模型稳定输出同样幻觉（2021F 实测
+    digit_uart 连续 5 轮同样带 instances），报 client 错误只尝试 1 次，
+    不再 5 次重试烧钱烧时间。"""
+    bad = (
+        '{"modules": [{"slug": "dht11", "reason": "r", '
+        '"instances": [{"name": "a", "variant": "x"}]}]}'
+    )
+    transport = FakeTransport(body=_api_response(bad))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as excinfo:
+        llm.select_modules(
+            "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+        )
+
+    assert excinfo.value.kind == "client"
+    assert len(transport.calls) == 1
+    assert "不支持多实例" in str(excinfo.value)
+
+
+def test_select_prompt_multi_instance_rule_is_hard_constraint():
+    """多实例规则为硬约束：未标注模块输出 instances 会被整轮拒绝（2021F
+    digit_uart 曾连续 5 轮同错——规则前置强调 + 拒绝后果，提高首次成功率）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    led_summary = ManifestSummary(
+        "led", "指示灯", multi_instance=MultiInstanceSpec(max=8, variant="color")
+    )
+
+    llm.select_modules(
+        "作品需要 4 个指示灯", [led_summary, ManifestSummary("dht11", "温湿度")]
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "只允许" in user_message
+    assert "直接拒绝整轮" in user_message
+    assert "绝不输出 instances" in user_message
 
 
 def test_select_observation_records_content_excerpt_on_success():
