@@ -18,7 +18,7 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from pypdf import PdfReader
 
@@ -44,6 +44,11 @@ IMAGE_FILE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif")
 FIGURE_ANNOTATION_WINDOW = 350.0
 FIGURE_ANNOTATION_MAX_LINE_CHARS = 20
 FIGURE_ANNOTATION_ROW_TOLERANCE = 6.0
+
+# 题面页定位（工单 topic-vision-pages/01）：题面独特文本采样长度（去空白后）
+# 与定位后扫描的页跨度——共享汇总 PDF 里图紧跟正文第 1~2 页
+LOCATE_TOPIC_SAMPLE_CHARS = 20
+LOCATE_TOPIC_SPAN_PAGES = 2
 
 # pypdf ImageFile.name 后缀 → mime（通用映射；.bmp 条目保留作映射完整性
 # 与 PDF 结构兼容——PDF 内嵌图发送前由 _VISION_PASSTHROUGH_SUFFIXES 判定
@@ -131,11 +136,15 @@ def pdf_image_notes(
     vision_api_key: str,
     vision_model: str,
     observation_collector: object | None = None,
+    pages: Sequence[int] | None = None,
 ) -> str:
     """PDF 嵌入图 → 图注段（每张一行 `[示意图N：<描述>]`）。
 
     公开消费方：拆条（extract_pdf_with_image_notes 内部）与赛题库存量条目
     补图注（工单 topic-vision-notes/02）。
+
+    pages（1-based，工单 topic-vision-pages/01）：限定扫描页——共享汇总 PDF
+    只识别自己题面页的图；None = 全部（现状）。
 
     上限守卫：单文件 ≤ MAX_IMAGE_NOTES 张、单张 ≤ MAX_IMAGE_BYTES（超限
     跳过并标注）；单张描述失败 = 跳过该张（其余照常）；任何异常（未配置 /
@@ -145,9 +154,12 @@ def pdf_image_notes(
         reader = PdfReader(str(path))
     except Exception:
         return ""
+    selected = _selected_pages(len(reader.pages), pages)
     skipped = 0
     notes: list[str] = []
-    for page in reader.pages:
+    for page_no, page in enumerate(reader.pages, start=1):
+        if page_no not in selected:
+            continue
         try:
             images = list(page.images)
         except Exception:
@@ -207,8 +219,13 @@ def _join_notes(notes: list[str], skipped: int) -> str:
     return "\n".join(lines)
 
 
-def pdf_figure_annotations(path: Path) -> str:
+def pdf_figure_annotations(
+    path: Path, pages: Sequence[int] | None = None
+) -> str:
     """矢量图标注文字布局提取（工单 topic-vision-notes/03）。
+
+    pages（1-based，工单 topic-vision-pages/01）：限定扫描页——共享汇总 PDF
+    只扫自己题面所在的页，别的题的图注天然隔离；None = 全部（现状）。
 
     电赛题面矢量图（绘图命令绘制）无栅格图对象，视觉提取不到；但图内标注
     文字（尺寸 / 角度 / 区域标签）留在 PDF 文本层。本函数用 visitor_text
@@ -228,8 +245,11 @@ def pdf_figure_annotations(path: Path) -> str:
         reader = PdfReader(str(path))
     except Exception:
         return ""
+    selected = _selected_pages(len(reader.pages), pages)
     blocks: list[str] = []
-    for page in reader.pages:
+    for page_no, page in enumerate(reader.pages, start=1):
+        if page_no not in selected:
+            continue
         segments: list[tuple[float, float, str]] = []
 
         def visitor(text, cm, tm, font_dict, font_size) -> None:
@@ -247,6 +267,39 @@ def pdf_figure_annotations(path: Path) -> str:
         if block:
             blocks.append(block)
     return "\n\n".join(blocks)
+
+
+def _selected_pages(page_count: int, pages: Sequence[int] | None) -> frozenset[int]:
+    """页范围 → 命中集合（1-based）：None = 全部页；空序列 = 空集（无页可扫）。"""
+    if pages is None:
+        return frozenset(range(1, page_count + 1))
+    return frozenset(pages)
+
+
+def locate_topic_pages(pdf_path: Path, topic_text: str) -> tuple[int, int] | None:
+    """题面页定位（工单 topic-vision-pages/01）：共享汇总 PDF 里找题面正文页。
+
+    题面独特文本 = topic_text 去空白后前 LOCATE_TOPIC_SAMPLE_CHARS 字符；逐页
+    文本层去空白后子串匹配。命中页起 LOCATE_TOPIC_SPAN_PAGES 页（图紧跟正文
+    第 1~2 页）→ 返回 (start, start + span)（1-based 开区间右端，供 pages
+    参数直接使用）。坏 PDF / 空白题面 / 无命中 → None（绝不抛——定位是增强
+    不是阻塞；扫描件无文本层时调用方跳过补图注）。
+    """
+    sample = "".join(topic_text.split())[:LOCATE_TOPIC_SAMPLE_CHARS]
+    if not sample:
+        return None
+    try:
+        reader = PdfReader(str(pdf_path))
+    except Exception:
+        return None
+    for page_no, page in enumerate(reader.pages, start=1):
+        try:
+            page_text = page.extract_text() or ""
+        except Exception:
+            continue
+        if sample in "".join(page_text.split()):
+            return (page_no, page_no + LOCATE_TOPIC_SPAN_PAGES)
+    return None
 
 
 def _figure_annotation_block(segments: list[tuple[float, float, str]]) -> str:
@@ -270,17 +323,22 @@ def _figure_annotation_block(segments: list[tuple[float, float, str]]) -> str:
     rows = _cluster_rows(segments)
     titles = [
         (y, text)
-        for y, text in rows
+        for y, text, _ in rows
         if re.match(r"^\s*图\s*\d", text)
     ]
     if not titles:
         return ""
     max_chars = FIGURE_ANNOTATION_MAX_LINE_CHARS
     window = FIGURE_ANNOTATION_WINDOW
+    # 短行 / 长行判定基于**行内最长单段的去空白长度**而非拼接文本（工单
+    # topic-vision-pages/02）：图内尺寸链（60cm 与 60cm 之间大量空格）在
+    # 文本层常是**单段**长文本——按原始长度会把真标注误判成正文长行，把
+    # 整个图注区挡在窗外（2021F 图1 曾只提取出「2．发挥部分」一行）；
+    # 中文正文连续无空格、英文正文空格占比低，去空白后长度仍超长。
     short_rows = [
         (y, text)
-        for y, text in rows
-        if len(text) < max_chars
+        for y, text, max_seg in rows
+        if max_seg < max_chars
         and not re.match(r"^\s*图\s*\d", text)
         and not re.match(r"^[^-–]*[-–]\s*\d+\s*/\s*\d+", text)  # 页码行
     ]
@@ -292,10 +350,10 @@ def _figure_annotation_block(segments: list[tuple[float, float, str]]) -> str:
         for y, text in short_rows:
             if abs(y - title_y) > window:
                 continue
-            # 与标题之间无长行（长行 = 正文 / 图边界）
+            # 与标题之间无长行（长行 = 正文 / 图边界；正文整句单段即超长）
             if any(
-                len(t) >= max_chars and min(y, title_y) < ly < max(y, title_y)
-                for ly, t in rows
+                max_seg >= max_chars and min(y, title_y) < ly < max(y, title_y)
+                for ly, _, max_seg in rows
             ):
                 continue
             # 最近图标题归属
@@ -313,8 +371,15 @@ def _figure_annotation_block(segments: list[tuple[float, float, str]]) -> str:
     return "\n\n".join(blocks)
 
 
-def _cluster_rows(segments: list[tuple[float, float, str]]) -> list[tuple[float, str]]:
-    """段集合 → 行（y 容差聚类，行内按 x 排序），按 y 降序（页面上→下）。"""
+def _cluster_rows(
+    segments: list[tuple[float, float, str]],
+) -> list[tuple[float, str, int]]:
+    """段集合 → 行（y 容差聚类，行内按 x 排序），按 y 降序（页面上→下）。
+
+    返回 (y, 行文本, 行内最长单段的**去空白长度**)——第三元供短行/长行
+    判定：图内尺寸链（60cm 与 60cm 间大量空格）单段即长，去空白后才见真
+    长度（见 _figure_annotation_block）。
+    """
     segs = sorted(segments, key=lambda s: (-s[1], s[0]))
     rows: list[tuple[float, list[tuple[float, str]]]] = []
     for x, y, text in segs:
@@ -322,10 +387,17 @@ def _cluster_rows(segments: list[tuple[float, float, str]]) -> list[tuple[float,
             rows[-1][1].append((x, text))
         else:
             rows.append((y, [(x, text)]))
-    return [
-        (y, " ".join(text for _, text in sorted(items, key=lambda item: item[0])).strip())
-        for y, items in rows
-    ]
+    result: list[tuple[float, str, int]] = []
+    for y, items in rows:
+        sorted_items = sorted(items, key=lambda item: item[0])
+        result.append(
+            (
+                y,
+                " ".join(text for _, text in sorted_items).strip(),
+                max(len("".join(text.split())) for _, text in sorted_items),
+            )
+        )
+    return result
 
 
 def _image_suffix(name: str) -> str:

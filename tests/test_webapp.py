@@ -4250,13 +4250,13 @@ def test_topic_get_with_vision_key_enriches_image_notes(client, context, monkeyp
     monkeypatch.setattr(
         topic_lib_mod,
         "pdf_image_notes",
-        lambda *a, **k: calls.append("x") or "[示意图1：这是功能示意图]",
+        lambda *a, **k: calls.append("x") or "[示意图1：这是功能示意图的完整布局]",
     )
 
     resp = client.get("/api/topics/2026C")
 
     assert resp.status_code == 200
-    assert resp.json()["problem_text"] == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    assert resp.json()["problem_text"] == "系统功能如图1所示。\n\n[示意图1：这是功能示意图的完整布局]"
     assert len(calls) == 1
     # 幂等：二次取题面不再跑视觉
     client.get("/api/topics/2026C")
@@ -4312,13 +4312,13 @@ def test_topic_get_reuses_main_key_when_vision_key_blank(client, context, monkey
     monkeypatch.setattr(
         topic_lib_mod,
         "pdf_image_notes",
-        lambda *a, **k: calls.append("x") or "[示意图1：这是功能示意图]",
+        lambda *a, **k: calls.append("x") or "[示意图1：这是功能示意图的完整布局]",
     )
 
     resp = client.get("/api/topics/2026C")
 
     assert resp.status_code == 200
-    assert resp.json()["problem_text"] == "系统功能如图1所示。\n\n[示意图1：这是功能示意图]"
+    assert resp.json()["problem_text"] == "系统功能如图1所示。\n\n[示意图1：这是功能示意图的完整布局]"
     assert len(calls) == 1  # 复用主 key 生效，视觉路径被调用
 
 
