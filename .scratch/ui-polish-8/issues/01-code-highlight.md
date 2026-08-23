@@ -1,6 +1,6 @@
-# 工单 01：main.c 行号 + 语法着色
+﻿# 工单 01：main.c 行号 + 语法着色
 
-- Status: claimed
+- Status: resolved
 - 依赖：无
 
 ## 目标

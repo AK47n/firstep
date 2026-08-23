@@ -1,6 +1,6 @@
-# 工单 04：生成中阶段播报
+﻿# 工单 04：生成中阶段播报
 
-- Status: pending
+- Status: resolved
 - 依赖：无
 
 ## 目标
