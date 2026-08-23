@@ -50,7 +50,8 @@ DEFAULT_DESCRIBE_PROMPT = (
     "如果图中没有实质内容，只回复「无实质内容」。"
 )
 
-# 图片内容哈希缓存（进程内；键 = 图片字节 sha256 → 描述）
+# 图片+提示词联合哈希缓存（进程内；键 = sha256(图片字节 + prompt) → 描述，
+# 工单 recommend-vision-qa/02 起含 prompt——同图多问各问独立缓存）
 # v1 不落盘（重启即清，够用；落盘缓存留后续工单）
 _IMAGE_DESCRIBE_CACHE: dict[str, str] = {}
 
@@ -305,11 +306,10 @@ def describe_image_cached(
     prompt: str = DEFAULT_DESCRIBE_PROMPT,
     **kwargs: Any,
 ) -> str:
-    """带进程内缓存（键 = 图片内容 sha256）：同图重复调用不重发请求/花钱。
-
-    缓存键只吃图片字节（prompt 变体由调用方保证同图同 prompt——描述提示词
-    是模块内常量，实际不会变）。失败不缓存（下次重试）。"""
-    digest = hashlib.sha256(image_bytes).hexdigest()
+    """带进程内缓存（键 = 图片 + prompt 联合 sha256）：同图同问题重复调用
+    不重发请求/花钱（工单 recommend-vision-qa/02 起键含 prompt——按需视觉
+    问答同页多问各问独立缓存，互不串答案）。失败不缓存（下次重试）。"""
+    digest = hashlib.sha256(image_bytes + prompt.encode("utf-8")).hexdigest()
     cached = _IMAGE_DESCRIBE_CACHE.get(digest)
     if cached is not None:
         return cached

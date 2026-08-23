@@ -228,6 +228,8 @@ class TopicContext:
     read_fulltext: Callable[[str], str]  # 两级注入第二级（按清单段条目 id 回读全文）
     manual_references: tuple[ReferenceEntry, ...] = ()  # 手动选参考资料（完整条目，追加准入）
     manual_fulltexts: Mapping[str, str] | None = None  # 手动选参考资料全文（id → 全文，直读）
+    figure_pdf: Path | None = None  # 条目原 PDF 路径（工单 recommend-vision-qa/02：
+    # 按需视觉问答渲染原文作答）；no-topic 形 / 条目无 original_pdf / 文件缺失 → None
 
 
 def resolve_topic_context(
@@ -367,6 +369,7 @@ def resolve_topic_context(
         read_fulltext=_make_fulltext_reader(reference_library_dir, references),
         manual_references=manual_entries,
         manual_fulltexts=manual_fulltexts,
+        figure_pdf=_entry_figure_pdf(topic_library_dir, entry),
     )
 
 
@@ -424,6 +427,19 @@ def _no_topic_context(
 def _resolve_topic_entry(topic_library_dir: Path, topic_key: str) -> TopicEntry:
     """历史赛题条目（唯一解析点：查库，不猜测编造）。"""
     return resolve_number(topic_library_dir, topic_key)
+
+
+def _entry_figure_pdf(topic_library_dir: Path, entry: TopicEntry) -> Path | None:
+    """条目原 PDF 路径（工单 recommend-vision-qa/02）：original_pdf 非空且
+    文件存在 → 条目目录下路径；否则 None（按需视觉问答不可用）。
+
+    条目目录 = <root>/<key>（与 topic_library._entry_dir 同布局；key 已过
+    编号格式校验，无路径分隔符——此处不重复校验）。文件缺失（条目手动
+    搬家 / 库损坏）→ None，宁缺毋滥（不猜测编造路径）。"""
+    if not entry.original_pdf:
+        return None
+    pdf_path = topic_library_dir / entry.key / entry.original_pdf
+    return pdf_path if pdf_path.is_file() else None
 
 
 def _make_fulltext_reader(

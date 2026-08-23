@@ -312,6 +312,30 @@ def test_describe_cached_skips_second_call():
     assert all(len(k) == 64 for k in _IMAGE_DESCRIBE_CACHE)
 
 
+def test_describe_cached_keys_by_image_and_prompt():
+    """同图异 prompt = 两次请求（工单 recommend-vision-qa/02：按需视觉问答
+    同页多问各问独立缓存）；同图同 prompt 仍命中。"""
+    transport = FakeTransport(_ok_body("问题一答案"), _ok_body("问题二答案"))
+    result1 = describe_image_cached(
+        PNG_BYTES, PNG_MIME, prompt="走廊宽度是多少？",
+        api_key="sk-test", transport=transport,
+    )
+    result2 = describe_image_cached(
+        PNG_BYTES, PNG_MIME, prompt="病房尺寸是多少？",
+        api_key="sk-test", transport=transport,
+    )
+    assert result1 == "问题一答案" and result2 == "问题二答案"
+    assert len(transport.calls) == 2
+    # 同图同 prompt 仍命中缓存（不重发请求）
+    result3 = describe_image_cached(
+        PNG_BYTES, PNG_MIME, prompt="走廊宽度是多少？",
+        api_key="sk-test", transport=transport,
+    )
+    assert result3 == "问题一答案"
+    assert len(transport.calls) == 2
+    assert len(_IMAGE_DESCRIBE_CACHE) == 2
+
+
 def test_describe_cached_does_not_cache_failures():
     # 3 次尝试全 500 → 失败（不缓存）；第二次调用（无脚本 → 默认成功）重新请求
     transport = FakeTransport((500, "boom"), (500, "boom"), (500, "boom"))

@@ -70,6 +70,7 @@ from .vision import (
     effective_vision_api_key,
     vision_configured,
 )
+from .vision_qa import answer_figure_question
 from .fix_errors import (
     FixError,
     fix_backup_root,
@@ -945,6 +946,30 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 排序 hash——库变（模块增删/简介/能力/多实例标注）缓存失效走真实推荐；
         # 装配点已产出 manifest_summaries，写缓存与校验同源一次计算两用
         lib_fp = library_fingerprint(topic.manifest_summaries)
+        # 按需视觉问答（工单 recommend-vision-qa/02）：视觉已配置（effective
+        # key 非空——含主 key 复用）且条目带原 PDF → 注入供给回调（澄清 /
+        # 补问的图内问题自动消化：渲染题面页 + 视觉模型作答）；否则 None =
+        # 01 的未注入路径，行为逐字节不变。闭包在 run 外构造一次（多次 run
+        # 复用）；视觉调用成本进独立观测器（finally 一并结算）
+        vision_qa: Callable[[str], str | None] | None = None
+        vision_qa_collector = None
+        if topic.figure_pdf is not None:
+            vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
+            if vision_configured(vision_api_key):
+                vision_qa_collector = create_llm_observation_collector("vision-qa")
+
+                def vision_qa(question: str) -> str | None:
+                    """图内问题 → 条目 PDF 渲染 + 视觉模型针对性作答（02 工单）。"""
+                    assert topic.figure_pdf is not None
+                    return answer_figure_question(
+                        topic.figure_pdf,
+                        topic.problem_text,
+                        question,
+                        vision_base_url=vision_base_url,
+                        vision_api_key=vision_api_key,
+                        vision_model=vision_model,
+                        observation_collector=vision_qa_collector,
+                    )
 
         def _write_cache(done_data: dict) -> None:
             """真实推荐 done 载荷落缓存（尽力而为：写失败静默旁路）。"""
@@ -995,9 +1020,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         max_rounds=max_rounds,
                         platform=platform or "",
                         qa_material=qa_text or "",
+                        vision_qa=vision_qa,
                     )
             finally:
                 context.recent_llm_workflows.add_completed(collector)
+                if vision_qa_collector is not None:
+                    context.recent_llm_workflows.add_completed(vision_qa_collector)
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
