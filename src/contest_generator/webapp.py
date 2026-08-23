@@ -64,7 +64,7 @@ from .extraction import (
     extract_file,
     extract_image,
     extract_pdf_with_image_notes,
-    locate_topic_pages,
+    locate_topic_pages_full,
     # 页渲染原语按公开名引入（模块级函数 = monkeypatch 接缝，测试以此为
     # 稳定挂载点；工单 topic-pdf-viewer/01 取题面页图展示用）
     _render_page_png as render_page_png,
@@ -2454,8 +2454,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         取题面后默认直接展示原题 PDF 页（用户诉求「直接给我展示pdf就行了，
         不要像现在这样给我展示文字」）：题面独特文本（去空白前 20 字符）逐页
-        匹配文本层定位题面页 → 命中页起 2 页逐页渲染（PyMuPDF，既有 2 倍
-        缩放参数）→ base64 data URL 列表，前端页图叠放展示。
+        匹配文本层定位题面页 → 完整页范围逐页渲染（工单 topic-pdf-viewer/02：
+        汇总 PDF 页脚总页数扩展——2021F 共 4 页不再被截断；无页脚回退既有
+        2 页 span；PyMuPDF，既有 2 倍缩放参数）→ base64 data URL 列表，
+        前端页图叠放展示。
 
         纯展示功能不阻塞主流程：条目无原 PDF / 文件缺失 / 页定位失败 /
         渲染全失败 → 400 中文错误（各自说明原因），文字框照常可用。查无
@@ -2469,7 +2471,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         pdf_path = topics_dir / key / entry.original_pdf
         if not pdf_path.is_file():
             raise HTTPException(400, f"原 PDF 文件不存在：{entry.original_pdf}")
-        located = locate_topic_pages(pdf_path, entry.problem_text)
+        located = locate_topic_pages_full(pdf_path, entry.problem_text)
         if located is None:
             raise HTTPException(
                 400, "未能定位题面在 PDF 中的页范围（可能是扫描件或文本不匹配）"

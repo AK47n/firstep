@@ -464,6 +464,59 @@ def locate_topic_pages(pdf_path: Path, topic_text: str) -> tuple[int, int] | Non
     return None
 
 
+# 真题汇总 PDF 页脚整行形态（图注区既有观察：「C - 1 / 4」/「H 题 - 1 / 4」）：
+# 可选题号 token + 「- k/N」分数页码（k = 题内页码，N = 题面总页数）。整行
+# 匹配防正文误命中（正文句子不会恰为「- k/N」）。
+FOOTER_PAGE_RE = re.compile(r"^\s*[^\s]*\s*[-–—]\s*(\d+)\s*/\s*(\d+)\s*$")
+
+
+def _page_footer(pdf_path: Path, page_no: int) -> tuple[int, int] | None:
+    """第 page_no 页（1-based）页脚 (k, N) → 元组；无页脚 / 读取失败 → None。
+
+    真题汇总 PDF 每题页脚带题内页码与总页数（「F - 1 / 4」= 第 1/共 4 页）；
+    单题 PDF 与测试假件无页脚 → None（调用方回退既有 span）。取**最后一个**
+    匹配行——页脚是页面装饰，正文若恰好有「X - k/N」整行，页脚行在版心
+    之后更可信（真实 2021F 数据每页仅页脚一行命中）。
+    """
+    try:
+        reader = PdfReader(str(pdf_path))
+        text = reader.pages[page_no - 1].extract_text() or ""
+    except Exception:
+        return None
+    footer: tuple[int, int] | None = None
+    for line in text.splitlines():
+        match = FOOTER_PAGE_RE.match(line.strip())
+        if match:
+            footer = (int(match.group(1)), int(match.group(2)))
+    return footer
+
+
+def locate_topic_pages_full(pdf_path: Path, topic_text: str) -> tuple[int, int] | None:
+    """题面**完整**页范围（工单 topic-pdf-viewer/02）：定位 + 页脚 (k, N) 归一。
+
+    真题汇总 PDF 页脚「F - 1 / 4」的 (k, N) 即本题第 k/共 N 页 → 题面起始页
+    = 命中页 - (k - 1)，返回 (起始页, 起始页 + N)：多页题面（2021F 共 4 页）
+    不再被 span=2 截断；定位命中题面非首页（k > 1）也能反推回题面首页，
+    不会把下一题卷进范围（下一题页脚页码重新计数，k 归 1、起始页自然停）。
+    无页脚（单题 PDF / 扫描件）→ 回退既有 span（命中页起 2 页，越界页由
+    渲染端跳过）；k 异常（反推起始页 < 1）→ 同回退。定位失败 → None
+    （同 locate_topic_pages）。
+
+    仅展示端使用完整范围；补图注 / 视觉问答维持既有 span（宁少勿多防跨题
+    污染——2024H 曾把别的题的图注追进题面）。
+    """
+    located = locate_topic_pages(pdf_path, topic_text)
+    if located is None:
+        return None
+    footer = _page_footer(pdf_path, located[0])
+    if footer:
+        k, total = footer
+        start = located[0] - (k - 1)
+        if start >= 1 and total >= 1:
+            return (start, start + total)
+    return located
+
+
 def _figure_annotation_block(segments: list[tuple[float, float, str]]) -> str:
     """单页段集合 → 标注区布局块（纯函数，可测）。
 
