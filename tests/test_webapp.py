@@ -4249,6 +4249,11 @@ def test_topic_get_with_vision_key_enriches_image_notes(client, context, monkeyp
     calls: list[str] = []
     monkeypatch.setattr(
         topic_lib_mod,
+        "pdf_page_render_notes",
+        lambda *a, **k: "",  # 渲染视觉路径单测关闭（工单 topic-vision-render/02）
+    )
+    monkeypatch.setattr(
+        topic_lib_mod,
         "pdf_image_notes",
         lambda *a, **k: calls.append("x") or "[示意图1：这是功能示意图的完整布局]",
     )
@@ -4309,6 +4314,11 @@ def test_topic_get_reuses_main_key_when_vision_key_blank(client, context, monkey
         (TopicDraft(year="2026", number="C", problem_text="系统功能如图1所示。"),),
     )
     calls: list[str] = []
+    monkeypatch.setattr(
+        topic_lib_mod,
+        "pdf_page_render_notes",
+        lambda *a, **k: "",  # 渲染视觉路径单测关闭（工单 topic-vision-render/02）
+    )
     monkeypatch.setattr(
         topic_lib_mod,
         "pdf_image_notes",
