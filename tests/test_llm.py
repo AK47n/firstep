@@ -29,6 +29,7 @@ from contest_generator.fix_errors import FixSuggestion, read_file_contexts
 from contest_generator.llm import (
     CLARIFICATION_HISTORY_CAP,
     CLARIFY_SYSTEM_PROMPT,
+    CLARIFY_TOPIC_CAP,
     DEFAULT_WORDLIST,
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
@@ -812,6 +813,43 @@ def test_clarify_rejects_malformed_output(bad_content):
         _llm(transport).clarify("赛题", [])
 
 
+def test_clarify_keeps_topic_up_to_clarify_cap():
+    """题面 ≤ CLARIFY_TOPIC_CAP：完整保留（不截断）——题面是澄清唯一依据，
+    4000 字符旧预算下长赛题（如送药小车）后半句被截，模型问题面已明确的细节。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"questions": []})))
+    llm = _llm(transport)
+    problem = "题面开头。" + "中间内容。" * 1200  # ≈ 6000 字符 > 旧 4000 < 新 12000
+
+    llm.clarify(problem, [])
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert problem in user_message
+    assert "内容过长" not in user_message  # 未截断、无标注
+
+
+def test_clarify_truncates_topic_over_cap_with_notice():
+    """题面 > CLARIFY_TOPIC_CAP：保留前 12000 字符 + 截断标注（模型知道不完整，
+    不会脑补）。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"questions": []})))
+    llm = _llm(transport)
+    problem = "题面开头。" + "中间内容。" * 3000  # ≈ 15000 字符 > 12000
+
+    llm.clarify(problem, [])
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert problem[:12000] in user_message
+    assert "内容过长，已截断" in user_message
+    assert "按所见内容判断，不要脑补缺失部分" in user_message
+
+
+def test_clarify_prompt_forbids_reasking_stated_details():
+    """提示词契约：题面已明确的细节（颜色/型号/数量/类型）绝不重复问——用户
+    报告「前面都说了红色指示灯还问我颜色」。"""
+    assert "绝不重复问" in CLARIFY_SYSTEM_PROMPT
+    assert "已明确" in CLARIFY_SYSTEM_PROMPT
+    assert "宁缺毋滥" in CLARIFY_SYSTEM_PROMPT
+
+
 # clarify 整次重试兜底（工单 recommend-call-retry/01）：与 select_modules 同款
 # _retry_parse，空内容 / 畸形输出自动重问，不再一枪毙命
 
@@ -854,17 +892,18 @@ def test_clarify_prompt_contract():
 
 
 def test_clarify_truncates_oversized_problem():
-    """超大赛题文本同样截断（带标注）：澄清调用也不会让请求体超限。"""
+    """超大赛题文本同样截断（带标注）：澄清调用也不会让请求体超限
+    （预算 = CLARIFY_TOPIC_CAP，工单 clarify-dumb-questions/01 由 4000 提到 12000）。"""
     transport = FakeTransport(
         body=_api_response(json.dumps({"questions": []}))
     )
     llm = _llm(transport)
 
-    llm.clarify("赛题" * (EMBEDDED_CONTENT_CAP + 100), [])
+    llm.clarify("赛题" * (CLARIFY_TOPIC_CAP + 100), [])
 
     _, _, payload, _ = transport.calls[0]
     message = payload["messages"][1]["content"]
-    assert len(message) < EMBEDDED_CONTENT_CAP + 1000
+    assert len(message) < CLARIFY_TOPIC_CAP + 1000
     assert "截断" in message
     assert TRUNCATION_NOTICE in message
 
