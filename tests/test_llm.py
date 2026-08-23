@@ -4451,3 +4451,107 @@ def test_generate_report_draft_empty_rationale_rejected():
 
     with pytest.raises(LLMError):
         llm.generate_report_draft(**REPORT_DRAFT_INPUTS)
+
+
+# ---------------------------------------------------------------------------
+# select 输出上限与超长守卫（工单 llm-select-runaway/01）
+# ---------------------------------------------------------------------------
+
+
+def test_select_modules_posts_max_tokens_cap():
+    """select 请求带 max_tokens 上限（deepseek-v4-flash 曾输出 ~20K tokens/次
+    失控，无上限时单次等待 ~160s 且解析必然失败）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+    )
+
+    _, _, payload, _ = transport.calls[0]
+    assert payload["max_tokens"] == 4096
+
+
+def test_non_select_calls_omit_max_tokens():
+    """其余调用不带 max_tokens 字段（长输出调用保持服务端默认，零回归）。"""
+    transport = FakeTransport(body=_api_response("摘要"))
+    llm = _llm(transport)
+
+    llm.summarize_module("某模块")
+
+    _, _, payload, _ = transport.calls[0]
+    assert "max_tokens" not in payload
+
+
+def test_select_modules_oversized_output_fails_fast_without_retry():
+    """输出异常超长（>60000 字符，疑似模型输出退化/循环）→ client 错误，
+    只尝试 1 次（client 不重试——重试只会重复烧钱烧时间）。"""
+    oversized = (
+        '{"modules": [{"slug": "dht11", "reason": "' + "长" * 60000 + '"}]}'
+    )
+    transport = FakeTransport(body=_api_response(oversized))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as excinfo:
+        llm.select_modules(
+            "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+        )
+
+    assert excinfo.value.kind == "client"
+    assert len(transport.calls) == 1
+    assert "异常超长" in str(excinfo.value)
+
+
+def test_select_observation_records_content_excerpt_on_success():
+    """成功响应的观测带 content_excerpt（响应前 120 字符、换行压平、脱敏）。"""
+    collector = LLMObservationCollector("workflow-excerpt")
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport, observation_collector=collector)
+
+    llm.select_modules(
+        "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+    )
+
+    expected = SELECTION_JSON  # content 本体（_api_response 是 choices 包络）
+    observation = collector.observations[-1]
+    assert observation["content_excerpt"] == expected
+    assert observation["parse_status"] == "success"
+
+def test_select_observation_records_content_excerpt_on_parse_error():
+    """解析失败（畸形 JSON 内容）时观测仍留痕响应前缀——下次异常可直接看
+    响应头判断根因（截断 / 退化 / 语义拒绝）。"""
+    collector = LLMObservationCollector("workflow-excerpt-fail")
+    transport = FakeTransport(body=_api_response("{broken"))
+    llm = _llm(transport, observation_collector=collector)
+
+    with pytest.raises(LLMError):
+        llm.select_modules(
+            "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+        )
+
+    observation = collector.observations[-1]
+    assert observation["content_excerpt"] == "{broken"
+    assert observation["parse_status"] == "parse_error"
+
+
+def test_select_observation_content_excerpt_flattens_newlines():
+    """content_excerpt 压平换行（观测单行化），超长截断加省略号。"""
+    collector = LLMObservationCollector("workflow-excerpt-newline")
+    # 多行 JSON 文本（换行在 token 间，字符串值内裸换行非法）——模型真实输出形态
+    content = (
+        '{\n"modules": [\n{"slug": "dht11", "reason": "第一行第二行'
+        + "长" * 200
+        + '"}\n]\n}'
+    )
+    transport = FakeTransport(body=_api_response(content))
+    llm = _llm(transport, observation_collector=collector)
+
+    llm.select_modules(
+        "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+    )
+
+    excerpt = collector.observations[-1]["content_excerpt"]
+    assert "\n" not in excerpt
+    assert excerpt.startswith('{ "modules": [ {"slug": "dht11"')
+    assert len(excerpt) <= 121  # 120 字符 + 省略号
+    assert excerpt.endswith("…")
