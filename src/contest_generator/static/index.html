@@ -574,6 +574,24 @@
   .empty-state .es-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
   .empty-state .es-hint { font-size: 12px; line-height: 1.8; max-width: 400px; }
   table td.empty-td { padding: 0; border-bottom: none; }
+  /* 赛题库卡片网格（工单 ui-polish-9/02）：编号徽章 + 年份 chip + 题面预览 */
+  .topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                gap: 12px; margin-top: 12px; }
+  .topic-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+                background: var(--panel); display: flex; flex-direction: column; gap: 8px;
+                transition: border-color .2s, transform .2s, box-shadow .2s; }
+  .topic-card:hover { border-color: var(--border-strong); transform: translateY(-2px);
+                      box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
+  .topic-head { display: flex; align-items: center; gap: 8px; }
+  .topic-key { font-family: var(--mono); font-weight: 700; font-size: 13px;
+               color: var(--accent); background: var(--accent-dim);
+               padding: 2px 8px; border-radius: 6px; }
+  .topic-year { font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+                padding: 1px 8px; border-radius: 999px; }
+  .topic-preview { font-size: 13px; color: var(--muted); line-height: 1.55;
+                   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+                   overflow: hidden; }
+  .topic-actions { display: flex; gap: 8px; margin-top: auto; }
   /* 步骤导航（工单 ui-polish/02）：宽屏左侧 sticky 圆点 + 完成变绿 ✓；
      窄屏隐藏（不挤占表单区）；卡片徽章与圆点同色联动 */
   .gen-layout { display: block; }
@@ -1169,10 +1187,7 @@
         <button id="btn-topic-search" class="primary">搜索</button>
         <button id="btn-topic-search-clear">清空并显示全部</button>
       </div>
-      <table style="margin-top:10px">
-        <thead><tr><th>编号</th><th>年份</th><th>题面预览</th><th>操作</th></tr></thead>
-        <tbody id="topic-rows"></tbody>
-      </table>
+      <div id="topic-grid" class="topic-grid"></div>
       <div id="topic-msg" class="error"></div>
     </div>
 
@@ -5048,6 +5063,29 @@ async function loadTopicArchiveLink() {
   } catch (e) { /* 素材库查询失败 = 不显示链接，不打扰浏览 */ }
 }
 
+// 赛题卡片 HTML（工单 ui-polish-9/02）：编号徽章 + 年份 chip + 题面预览 + 操作。
+// 自包含纯函数（tests/js 抽取：内联 esc 与截断，不引用模块级常量/其它函数）
+function topicCardHTML(t) {
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  const trunc = (s, n) => {
+    const str = String(s == null ? "" : s);
+    return str.length > n ? str.slice(0, n) + "…" : str;
+  };
+  const key = esc(t && t.key);
+  const year = esc(t && t.year);
+  const preview = esc(trunc(t && t.problem_text, 80));
+  const full = esc(trunc(t && t.problem_text, 200));
+  return '<div class="topic-card">'
+    + '<div class="topic-head"><span class="topic-key">' + key + '</span>'
+    + '<span class="topic-year">' + year + '</span></div>'
+    + '<div class="topic-preview" title="' + full + '">' + preview + '</div>'
+    + '<div class="topic-actions">'
+    + '<button data-topic-use="' + key + '">用此题生成</button>'
+    + '<button class="danger" data-topic-del="' + key + '">删除</button>'
+    + '</div></div>';
+}
 async function loadTopics() {
   loadTopicArchiveLink();
   try {
@@ -5056,24 +5094,17 @@ async function loadTopics() {
     const topics = await apiGet("/api/topics");
     const year = $("topic-filter-year").value.trim().toLowerCase();
     const number = $("topic-filter-number").value.trim().toLowerCase();
-    const rows = topics
-      .filter((t) => (!year || t.year.toLowerCase().includes(year))
-        && (!number || t.number.toLowerCase().includes(number)))
-      .map((t) => `
-        <tr>
-          <td class="slug">${esc(t.key)}</td>
-          <td>${esc(t.year)}</td>
-          <td class="muted" title="${esc(truncate(t.problem_text, 200))}">${esc(truncate(t.problem_text, 80))}</td>
-          <td>
-            <button data-topic-use="${esc(t.key)}">用此题生成</button>
-            <button class="danger" data-topic-del="${esc(t.key)}">删除</button>
-          </td>
-        </tr>`).join("");
-    $("topic-rows").innerHTML = rows
-      || '<tr><td colspan="4" class="empty-td"><div class="empty-state"><div class="es-icon">🏆</div><div class="es-title">库中暂无条目</div><div class="es-hint">录入历史赛题后，可直接按编号取题面一键生成工程。</div></div></td></tr>';
-    $("topic-rows").querySelectorAll("[data-topic-del]").forEach((b) =>
+    const grid = $("topic-grid");
+    const filtered = topics.filter((t) => (!year || t.year.toLowerCase().includes(year))
+      && (!number || t.number.toLowerCase().includes(number)));
+    grid.innerHTML = filtered.length
+      ? filtered.map(topicCardHTML).join("")
+      : '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">🏆</div>'
+        + '<div class="es-title">库中暂无条目</div>'
+        + '<div class="es-hint">录入历史赛题后，可直接按编号取题面一键生成工程。</div></div>';
+    grid.querySelectorAll("[data-topic-del]").forEach((b) =>
       b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
-    $("topic-rows").querySelectorAll("[data-topic-use]").forEach((b) =>
+    grid.querySelectorAll("[data-topic-use]").forEach((b) =>
       b.addEventListener("click", () => useTopic(b.dataset.topicUse)));
     $("topic-msg").textContent = "";
   } catch (e) { $("topic-msg").textContent = e.message; }
