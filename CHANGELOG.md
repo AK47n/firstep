@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b5235a2bfd3ab81f858af3f8ec2f5d82458384d7 -->
+<!-- changelog-auto: last-commit=d08a554d2f421ec0836afc7bf0046e8eb9becf1f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -30,6 +30,7 @@
 - 23:05 赛题补图注改为渲染视觉优先——矢量图渲染+DeepSeek 视觉描述（extraction 渲染路径 + enrich 三级降级链 + 图号防撞与无实质过滤 + 双轴评审整改）；工单 01/02 实施记录入库
 - 23:06 赛题条目补图注
 - 23:18 模块选择连续 5 次失败——关闭 deepseek-v4-flash 思考模式（reasoning 吃光 max_tokens 致 content 为空、截断判确定性失败免重试）
+- 23:24 模块选择域拒绝免重试——非多实例模块带 instances 改报 client 立即失败（同参数重试稳定同错）+ 提示词多实例规则前置硬约束
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
