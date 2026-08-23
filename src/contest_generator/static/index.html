@@ -3188,6 +3188,19 @@ $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
 // ---------------------------------------------------------------------------
 // 生成页：9. 输出目录并生成
 // ---------------------------------------------------------------------------
+// 生成中阶段播报（工单 ui-polish-8/04）：子阶段文案轮播 + 等待计时。
+// genStageTexts / fmtWait 为自包含纯函数（tests/js 正则抽取）
+function genStageTexts(i) {
+  const texts = ["正在选配模块…", "正在定位母版…", "正在生成工程骨架…",
+                 "正在写入工程文件…", "正在生成摘要…"];
+  const n = Number.isFinite(i) ? Math.floor(i) : 0;
+  return texts[((n % texts.length) + texts.length) % texts.length];
+}
+function fmtWait(seconds) {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (s < 60) return s + " 秒";
+  return Math.floor(s / 60) + " 分 " + (s % 60) + " 秒";
+}
 function desktopTopicOutputEnabled() {
   const checkbox = $("desktop-topic-output");
   return checkbox ? checkbox.checked : true;
@@ -3269,7 +3282,15 @@ $("btn-generate").addEventListener("click", async () => {
   const outputDir = $("output-dir").value.trim();
   if (!desktopOutput && !outputDir) { $("generate-msg").textContent = "请填写输出目录"; return; }
   const status = $("gen-status");
-  status.innerHTML = '<span class="spinner"></span>生成中…';
+  // 阶段播报（工单 ui-polish-8/04）：校验（真实）→ 生成轮播 + 计时 → 清理
+  let stageTimer = null;
+  let waitSecs = 0;
+  const genStatus = (text) => { status.innerHTML = '<span class="spinner"></span>' + text; };
+  const stopStage = () => {
+    if (stageTimer) { clearInterval(stageTimer); stageTimer = null; }
+    waitSecs = 0;
+  };
+  genStatus("正在准备…");
   $("btn-generate").disabled = true;
   try {
     // bindings（工单 03 + pin-verdict-seam/01）：单源 collectBindings——validate
@@ -3282,8 +3303,10 @@ $("btn-generate").addEventListener("click", async () => {
     // 不发起 generate；空 bindings / 全默认 = ok:true（不误拦）
     const checkPayload = { platform: chosenPlatform, slugs: selectedSlugs };
     if (Object.keys(bindings).length) checkPayload.bindings = bindings;
+    genStatus("正在校验引脚绑定…");
     const check = await apiPost("/api/bindings/validate", checkPayload);
     if (check.ok === false) {
+      stopStage();
       $("generate-msg").classList.remove("ok");
       $("generate-msg").textContent = check.error;
       status.textContent = "";
@@ -3313,7 +3336,15 @@ $("btn-generate").addEventListener("click", async () => {
     }
     const qa = $("qa-text").value.trim();
     if (qa) payload.qa_text = qa;
+    // 生成请求期间：子阶段文案轮播（每 2s 切一个）+ 等待计时（每秒刷新）
+    waitSecs = 0;
+    genStatus(genStageTexts(0));
+    stageTimer = setInterval(() => {
+      waitSecs += 1;
+      genStatus(genStageTexts(Math.floor(waitSecs / 2)) + "（已等待 " + fmtWait(waitSecs) + "）");
+    }, 1000);
     const data = await apiPost("/api/generate", payload);
+    stopStage();
     $("res-dir").textContent = data.output_dir;
     $("btn-copy-dir").classList.remove("hidden");
     $("res-includes").textContent = data.include_dirs.join("；");
@@ -3342,6 +3373,7 @@ $("btn-generate").addEventListener("click", async () => {
       compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
     }
   } catch (e) {
+    stopStage();
     $("generate-msg").classList.remove("ok");
     $("generate-msg").textContent = e.message;
     status.textContent = "";
