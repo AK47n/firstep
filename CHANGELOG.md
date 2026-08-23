@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c4c8bcad0ecb1cb320d831dd3741b29ee45bcd0f -->
+<!-- changelog-auto: last-commit=d7876868b5c3615fb2635fb0b71eba5770fa2549 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 10:46 UI 打磨（ui-polish-8/02）：步骤完成庆祝动画（徽章弹跳 + 顶部青光扫过，动画结束自清理）
 - 10:47 UI 打磨（ui-polish-8/03）：toast 类型左边框与背景微染、点击关闭离场动画、reduced-motion 兼容
 - 10:49 UI 打磨（ui-polish-8/04）：生成中阶段播报（校验/子阶段轮播/等待计时，修复中心阶段已覆盖）
+- 10:49 chore(ui-polish-8)：四张工单标记 resolved
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
