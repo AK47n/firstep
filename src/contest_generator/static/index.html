@@ -311,6 +311,12 @@
   .decision select { width: auto; margin-left: 8px; padding: 2px 6px 2px 18px; font-size: 12px;
                      background-position: right 5px center; }
   .hidden { display: none; }
+  /* 取题面页图放大遮罩（工单 topic-pdf-viewer/01）：display 归类管，内联
+     style 不得设 display（会压过 .hidden，页面加载即常驻黑罩——评审抓到的
+     阻断级 bug）。 */
+  #pdf-zoom { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.88); z-index: 9999;
+              display: none; align-items: center; justify-content: center; cursor: zoom-out; }
+  #pdf-zoom:not(.hidden) { display: flex; }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
              border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
              vertical-align: -2px; margin-right: 6px; }
@@ -768,6 +774,16 @@
     <div class="card">
       <h2><span class="step-no">1</span>赛题原文</h2>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
+      <div id="topic-pdf-box" class="hidden" style="margin-top:8px">
+        <div class="row" style="margin-bottom:6px">
+          <button id="btn-topic-pdf-text">显示文字版（可编辑）</button>
+          <span class="muted">原题 PDF 页面（点击图片放大）</span>
+        </div>
+        <div id="topic-pdf-pages"></div>
+      </div>
+      <div id="pdf-zoom" class="hidden">
+        <img id="pdf-zoom-img" alt="题面页放大" style="max-width:96vw;max-height:96vh;object-fit:contain">
+      </div>
       <div class="row" style="margin-top:8px">
         <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp">
         <button id="btn-upload">上传并抽取文字</button>
@@ -1642,6 +1658,7 @@ $("btn-upload").addEventListener("click", async () => {
     $("problem").value = data.text;
     currentTopicId = "";
     clearTopicSummary();
+    hideTopicPdfViewer();  // 上传/粘贴路径无条目原 PDF：清掉旧页图展示
     $("upload-msg").classList.add("ok");
     $("upload-msg").textContent = "抽取成功：" + file.name;
     markStepDone(1);
@@ -1665,15 +1682,76 @@ $("btn-topic-load").addEventListener("click", async () => {
     $("topic-msg").textContent = "已取题面：" + data.key;
     markStepDone(1);
     toast("ok", "已取题面：" + data.key);
+    loadTopicPdf(data.key);
   } catch (e) {
     $("topic-msg").textContent = e.message;
     currentTopicId = "";
   }
 });
 
+// ---------------------------------------------------------------------------
+// 取题面页图（工单 topic-pdf-viewer/01）：默认展示原题 PDF 页，文字可切换
+// ---------------------------------------------------------------------------
+// 取题面成功后拉取条目原 PDF 的题面页渲染图 → 页图叠放展示、文字框默认
+// 收起；「显示文字版（可编辑）」随时切回编辑。AI 输入仍取文字框值，下游
+// 流程零改动。纯展示：加载失败 → 明确提示，文字框照常可用（现状兜底）。
+let topicPdfTextVisible = true;
+
+function setTopicPdfTextVisible(visible) {
+  topicPdfTextVisible = visible;
+  $("problem").classList.toggle("hidden", !visible);
+  $("btn-topic-pdf-text").textContent = visible ? "收起文字版" : "显示文字版（可编辑）";
+}
+
+function showTopicPdfViewer(data) {
+  const pagesEl = $("topic-pdf-pages");
+  pagesEl.innerHTML = "";
+  data.pages.forEach(p => {
+    const img = document.createElement("img");
+    img.src = p.data_url;
+    img.alt = "原题第 " + p.page_no + " 页";
+    img.loading = "lazy";
+    img.style.cssText = "width:100%;max-width:640px;display:block;margin:0 auto 10px;border:1px solid var(--border,#ccc);border-radius:4px;cursor:zoom-in;background:#fff";
+    img.addEventListener("click", () => {
+      $("pdf-zoom-img").src = p.data_url;
+      $("pdf-zoom").classList.remove("hidden");
+    });
+    pagesEl.appendChild(img);
+  });
+  $("topic-pdf-box").classList.remove("hidden");
+  setTopicPdfTextVisible(false);  // 默认展示 PDF，文字收起
+}
+
+function hideTopicPdfViewer() {
+  $("topic-pdf-box").classList.add("hidden");
+  $("pdf-zoom").classList.add("hidden");
+  setTopicPdfTextVisible(true);
+}
+
+async function loadTopicPdf(key) {
+  try {
+    const data = await apiGet("/api/topics/" + encodeURIComponent(key) + "/pages");
+    showTopicPdfViewer(data);
+  } catch (e) {
+    hideTopicPdfViewer();
+    toast("error", "原题 PDF 页加载失败");
+    $("topic-msg").textContent = "无法展示原题 PDF 页：" + e.message;
+  }
+}
+
+$("btn-topic-pdf-text").addEventListener("click", () => {
+  setTopicPdfTextVisible(!topicPdfTextVisible);
+});
+
+$("pdf-zoom").addEventListener("click", () => {
+  $("pdf-zoom").classList.add("hidden");
+  $("pdf-zoom-img").src = "";  // 释放大图引用（评审提示：陈旧位图驻留内存）
+});
+
 $("problem").addEventListener("input", () => {
   if (currentTopicId) { currentTopicId = ""; $("topic-msg").textContent = ""; }
   clearTopicSummary();  // 题面变了 = 旧简介对不上，立即清掉（wait-what 要的是当前题面）
+  hideTopicPdfViewer();  // 手动改写/粘贴题面 = 旧题页图对不上（工单 topic-pdf-viewer/01）
   if (!$("problem").value.trim()) markStepUndone(1);
 });
 
@@ -5220,6 +5298,7 @@ async function useTopic(key) {
     toast("ok", "已载入赛题 " + data.key);
     document.querySelector('[data-tab="generate"]').click();
     window.scrollTo({ top: 0, behavior: "smooth" });
+    loadTopicPdf(data.key);
   } catch (e) {
     toast("error", "载入赛题失败");
     $("topic-msg").textContent = e.message;

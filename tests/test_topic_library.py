@@ -1209,6 +1209,121 @@ def test_topics_delete_bad_key_returns_400(topic_context):
 
 
 # ---------------------------------------------------------------------------
+# 取题面页图（工单 topic-pdf-viewer/01）：原题 PDF 题面页渲染展示
+# ---------------------------------------------------------------------------
+
+
+def _confirm_pdf_topic(topics_dir, tmp_path, *, problem_text, pdf_text):
+    """建条目：可渲染单页 PDF（ASCII 文本层）+ 题面文本与 PDF 文本层匹配。
+
+    make_sample_pdf 只支持 ASCII 文本层，故题面文本用 ASCII——页定位按
+    「去空白前 20 字符」匹配文本层，与中文题面行为一致。
+    """
+    pdf_path = make_sample_pdf(tmp_path / "真题.pdf", pdf_text)
+    confirm_topics(
+        topics_dir,
+        pdf_path,
+        (
+            TopicDraft(
+                year="2026", number="C", problem_text=problem_text
+            ),
+        ),
+    )
+
+
+def test_topics_pages_endpoint_renders_topic_pages(topic_context, tmp_path):
+    ctx, _, topics_dir = topic_context
+    _confirm_pdf_topic(
+        topics_dir,
+        tmp_path,
+        problem_text="2026C design task: delivery car",
+        pdf_text="2026C design task: delivery car in hospital",
+    )
+
+    with _client(ctx) as client:
+        response = client.get(f"/api/topics/{KEY_2026C}/pages")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["key"] == KEY_2026C
+    assert len(body["pages"]) == 1  # 单页 PDF：命中页 1，范围右端页 2 不存在被跳过
+    page = body["pages"][0]
+    assert page["page_no"] == 1
+    assert page["data_url"].startswith("data:image/png;base64,")
+    import base64
+
+    png = base64.b64decode(page["data_url"].split(",", 1)[1])
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"  # PNG 魔数（真实渲染产物）
+
+
+def test_topics_pages_endpoint_locate_failure_returns_400(topic_context, tmp_path):
+    """题面文本在 PDF 文本层找不到（扫描件 / 不匹配）→ 400 明确报错。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_pdf_topic(
+        topics_dir,
+        tmp_path,
+        problem_text="2026C 题面：数字钥匙锁",
+        pdf_text="something else entirely",
+    )
+
+    with _client(ctx) as client:
+        response = client.get(f"/api/topics/{KEY_2026C}/pages")
+
+    assert response.status_code == 400
+    assert "定位" in response.json()["detail"]
+
+
+def test_topics_pages_endpoint_missing_pdf_returns_400(topic_context, tmp_path):
+    """条目 manifest 记了原 PDF 但文件缺失 → 400 明确报错。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_pdf_topic(
+        topics_dir,
+        tmp_path,
+        problem_text="2026C design task",
+        pdf_text="2026C design task",
+    )
+    (topics_dir / KEY_2026C / "topic.pdf").unlink()
+
+    with _client(ctx) as client:
+        response = client.get(f"/api/topics/{KEY_2026C}/pages")
+
+    assert response.status_code == 400
+    assert "不存在" in response.json()["detail"]
+
+
+def test_topics_pages_endpoint_render_failure_returns_400(
+    topic_context, tmp_path, monkeypatch
+):
+    """渲染全失败（缺 PyMuPDF / PDF 损坏）→ 400 明确报错，不返回空列表。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_pdf_topic(
+        topics_dir,
+        tmp_path,
+        problem_text="2026C design task",
+        pdf_text="2026C design task",
+    )
+    import contest_generator.webapp as webapp
+
+    monkeypatch.setattr(webapp, "render_page_png", lambda *a, **k: None)
+
+    with _client(ctx) as client:
+        response = client.get(f"/api/topics/{KEY_2026C}/pages")
+
+    assert response.status_code == 400
+    assert "渲染" in response.json()["detail"]
+
+
+def test_topics_pages_endpoint_unknown_key_returns_400(topic_context):
+    """查无此条：与取题面同一编号解析契约（明确报错、不猜测编造）。"""
+    ctx, _, _ = topic_context
+    with _client(ctx) as client:
+        response = client.get(f"/api/topics/{KEY_2026C}/pages")
+
+    assert response.status_code == 400
+    assert KEY_2026C in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
 # 真库不变量：赛题题面无跨题污染（修订前置排查修复，防拆条串页回退）
 # ---------------------------------------------------------------------------
 
