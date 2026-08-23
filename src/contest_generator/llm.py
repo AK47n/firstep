@@ -134,13 +134,19 @@ SELECT_SYSTEM_PROMPT = (
 # 输出仍存的疑问（空 = 澄清完成；有疑问一轮问全——一次性列全、最多 10 条、
 # 不渐进追问）。不带模块库——疑问只来自题面证据不足，
 # 与库内实现无关（库内有没有实现是收敛阶段的事）。
+# 工单 clarify-dumb-questions/01：题面已明确给出的细节绝不重复问（用户报告
+# 「前面都说了红色指示灯还问我颜色」）——逐句核对后再问，只问题面缺失的关键
+# 信息；宁缺毋滥。
 CLARIFY_SYSTEM_PROMPT = (
     "你是电子设计竞赛（电赛）嵌入式开发助手。逐句核对赛题原文（赛题文本可能"
-    "被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：题面证据不足以判定某项"
-    "要求（如识别方式、交互细节、性能指标）时向用户补问——有疑问时一次性把"
+    "被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：题面已明确给出的细节"
+    "（如已指定颜色、型号、数量、类型）绝不重复问——先逐句核对题面，确认某条"
+    "信息题面确实没有给出，才可提问；题面证据不足以判定某项要求（如识别方式、"
+    "交互细节、性能指标）时向用户补问——有疑问时一次性把"
     "所有疑问全部列出（宁全勿漏、每条具体可答、最多 10 条），用户一轮全部"
     "答完，不要分批渐进追问；用户已回答过的问题"
-    "不要重复问；没有疑问时输出空 questions 数组。只输出 JSON 对象。"
+    "不要重复问；没有疑问时输出空 questions 数组。宁缺毋滥——题面已覆盖的"
+    "信息不问、可合理假设的不问。只输出 JSON 对象。"
 )
 
 # 修订影响分析系统提示词（工单 revise-deepen/02）：评审新增赛题答疑 Q&A 对
@@ -420,6 +426,14 @@ SELECT_MAX_OUTPUT_CHARS = 60000
 # 观测响应留痕长度（字符）：只留前缀诊断信号（截断 / 退化 / 语义拒绝），
 # 不破坏观测「不含 prompt / response」的脱敏契约。
 CONTENT_EXCERPT_CHARS = 120
+
+# 澄清阶段题面预算（工单 clarify-dumb-questions/01）：题面是澄清的唯一依据，
+# 通用嵌内容预算（EMBEDDED_CONTENT_CAP=4000）下长赛题后半句被截（如送药小车
+# 「点亮红色指示灯」句），模型问题面已明确的细节（用户报告「前面都说了红色
+# 指示灯还问我颜色」）。wire 账本：全中文 ensure_ascii 6B/字符 → 12000×6=72KB
+# + 澄清历史段（CLARIFICATION_HISTORY_CAP=2500 → 15KB）= 87KB < MAX_REQUEST_BYTES
+# 128KB ✓；clarify 不带参考文件注入，无联动预算冲突。
+CLARIFY_TOPIC_CAP = 12000
 
 
 def _truncate_content(content: str) -> str:
@@ -2880,7 +2894,9 @@ def _clarify_user_prompt(
     problem_text: str, clarifications: Sequence[tuple[str, str]]
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
-    lines = ["赛题：", _truncate_content(problem_text)]
+    # 题面预算用 CLARIFY_TOPIC_CAP（澄清唯一依据，4000 通用预算截断长赛题会
+    # 导致模型问题面已明确的细节——工单 clarify-dumb-questions/01）
+    lines = ["赛题：", truncate_content(problem_text, CLARIFY_TOPIC_CAP)]
     if clarifications:
         lines.append(_clarification_history_segment(clarifications))
     lines.append(
