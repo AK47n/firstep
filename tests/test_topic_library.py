@@ -35,12 +35,30 @@ from contest_generator.topic_library import (
     resolve_number,
     split_topics_document,
 )
+
+
 from contest_generator.webapp import AppContext, create_app
 from tests.fakes import (
     FakeLLM,
     make_fake_module_library,
     make_sample_pdf,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_render_notes(monkeypatch):
+    """渲染视觉路径单测关闭（工单 topic-vision-render/02）：不真实渲染 / 调视觉。
+
+    _figure_notes 第一级是 pdf_page_render_notes（渲染 → DeepSeek 视觉）——
+    单测假 PDF 渲染失败走降级是碰运气（fitz 可用时会真发网络请求）。统一
+    置空：渲染失败语义 = 降级文字标注，既有断言路径不变。渲染优先的专门
+    测试自行 setattr 覆盖。
+    """
+    import contest_generator.topic_library as topic_library
+
+    monkeypatch.setattr(
+        topic_library, "pdf_page_render_notes", lambda *a, **k: ""
+    )
 
 
 class FakeTopicLLM(FakeLLM):
@@ -1244,3 +1262,114 @@ def test_real_topic_files_free_of_cross_topic_pollution():
             if sig in text:
                 foreign.append(f"{topic.name}: 疑似乱码 {sig}")
     assert not foreign, "赛题题面异常：\n" + "\n".join(foreign)
+
+
+# ---------------------------------------------------------------------------
+# 渲染视觉优先（工单 topic-vision-render/02）：三级降级链
+# ---------------------------------------------------------------------------
+
+
+def test_enrich_prefers_render_vision_over_text_annotations(
+    topic_root, pdf, monkeypatch
+):
+    """渲染视觉优先：pdf_page_render_notes 非空 → 写回，不调文字标注 / 内嵌图视觉。"""
+    import contest_generator.topic_library as topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_page_render_notes",
+        lambda *a, **k: calls.append("render") or "[图1 标注：走廊 60cm 红实线走向]",
+    )
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_figure_annotations",
+        lambda *a, **k: calls.append("annotations") or "[图1 标注]\n60cm",
+    )
+    monkeypatch.setattr(
+        topic_library, "pdf_image_notes", lambda *a, **k: calls.append("vision") or "[示意图]"
+    )
+    monkeypatch.setattr(topic_library, "commit_after_write", lambda *a, **k: None)
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root,
+        KEY_2026C,
+        vision_base_url="",
+        vision_api_key="sk",
+        vision_model="m",
+    )
+    assert calls == ["render"]  # 只走第一级
+    assert "[图1 标注：走廊 60cm 红实线走向]" in entry.problem_text
+    assert "[图1 标注]\n60cm" not in entry.problem_text  # 文字标注未参与
+
+
+def test_enrich_falls_back_to_text_annotations_when_render_empty(
+    topic_root, pdf, monkeypatch
+):
+    """渲染空（未配置 / 渲染不可用）→ 文字标注兜底（既有路径语义不变）。"""
+    import contest_generator.topic_library as topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    calls: list[str] = []
+    monkeypatch.setattr(topic_library, "pdf_page_render_notes", lambda *a, **k: "")
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_figure_annotations",
+        lambda *a, **k: calls.append("annotations") or "[图1 标注]\n60cm",
+    )
+    monkeypatch.setattr(
+        topic_library, "pdf_image_notes", lambda *a, **k: calls.append("vision") or "[示意图]"
+    )
+    monkeypatch.setattr(topic_library, "commit_after_write", lambda *a, **k: None)
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root,
+        KEY_2026C,
+        vision_base_url="",
+        vision_api_key="sk",
+        vision_model="m",
+    )
+    assert calls == ["annotations"]
+    assert "[图1 标注]\n60cm" in entry.problem_text
+
+
+def test_enrich_all_three_levels_empty_returns_unchanged(topic_root, pdf, monkeypatch):
+    """三级全空 → 原样返回，绝不写回。"""
+    import contest_generator.topic_library as topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    monkeypatch.setattr(topic_library, "pdf_page_render_notes", lambda *a, **k: "")
+    monkeypatch.setattr(topic_library, "pdf_figure_annotations", lambda *a, **k: "")
+    monkeypatch.setattr(topic_library, "pdf_image_notes", lambda *a, **k: "")
+
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root,
+        KEY_2026C,
+        vision_base_url="",
+        vision_api_key="",
+        vision_model="",
+    )
+    assert "[图" not in entry.problem_text
+    assert "[示意图" not in entry.problem_text
+
+
+def test_enrich_skips_meaningless_render_vision_text(topic_root, pdf, monkeypatch):
+    """渲染视觉段无实质内容（[图N 标注：无实质内容]）→ 不写回（工单 02 守卫）。"""
+    import contest_generator.topic_library as topic_library
+
+    _confirm_figure_topic(topic_root, pdf)
+    monkeypatch.setattr(
+        topic_library,
+        "pdf_page_render_notes",
+        lambda *a, **k: "[图1 标注：无实质内容]",
+    )
+    entry = topic_library.enrich_topic_image_notes(
+        topic_root,
+        KEY_2026C,
+        vision_base_url="",
+        vision_api_key="sk",
+        vision_model="m",
+    )
+    assert "[图" not in entry.problem_text  # 无实质 → 原样返回
+    assert entry.problem_text == "系统功能如图1所示。"

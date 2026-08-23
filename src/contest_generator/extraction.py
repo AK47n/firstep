@@ -8,7 +8,10 @@ ExtractionError 带明确信息，绝不让损坏文件以静默空文或崩溃�
 视觉图注（工单 vision-eyes/02）：extract_pdf_with_image_notes 在文本抽取
 后追加电子版 PDF 嵌入示意图的描述（[示意图N：…] 段，走 vision 通道）；
 未配视觉 key / 视觉失败 = 静默降级（只用文本，与 extract_file 逐字节
-一致）。扫描件 PDF（无文本层）维持现状报错，整页渲染留后续工单。
+一致）。扫描件 PDF（无文本层）维持现状报错；矢量图渲染视觉（工单
+topic-vision-render/01）：pdf_page_render_notes 把页面渲染成位图后走视觉
+通道（矢量图无栅格图对象，pdf_image_notes 提取不到），供赛题库存量条目
+补图注使用。
 """
 
 from __future__ import annotations
@@ -49,6 +52,47 @@ FIGURE_ANNOTATION_ROW_TOLERANCE = 6.0
 # 与定位后扫描的页跨度——共享汇总 PDF 里图紧跟正文第 1~2 页
 LOCATE_TOPIC_SAMPLE_CHARS = 20
 LOCATE_TOPIC_SPAN_PAGES = 2
+
+# 渲染视觉图注（工单 topic-vision-render/01）：矢量图 PDF 页渲染成位图 → 视觉
+# 描述。渲染倍率（fitz Matrix 缩放，实测 2.0 → 1191×1684 PNG ~187KB < 4MB 上限，
+# 质量足够识别尺寸标注）；描述下限与否定词守卫（无图页 / 正文页描述不污染题面）
+PAGE_RENDER_SCALE = 2.0
+RENDER_NOTE_MIN_CHARS = 8
+RENDER_NO_FIGURE_PATTERN = re.compile(
+    r"无(?:示意)?图|没有(?:示意)?图|仅(?:有)?文字|只有文字|无实质内容"
+)
+RENDER_DESCRIBE_PROMPT = (
+    "这是电子设计竞赛题面 PDF 渲染出的页面图像。请只描述页面中的示意图"
+    "（结构图、流程图、电路图等），忽略页面上的正文文字：提取图的布局、"
+    "尺寸标注、文字标注、部件位置关系等对解题有用的信息，用中文简洁描述。"
+    "如果页面中没有示意图（只有文字），只回复「无实质内容」。"
+)
+
+# 图标题行首正则（工单 topic-vision-render/01）：图内标题定位（_figure_annotation
+# block 的 titles 判定）与渲染页图号提取（_page_figure_label）共享——正文引用
+# 「如图1所示」不在行首，天然排除
+_FIGURE_TITLE_RE = re.compile(r"^\s*图\s*(\d+)")
+
+
+def _describe_kwargs(
+    vision_base_url: str,
+    vision_api_key: str,
+    vision_model: str,
+    observation_collector: object | None,
+) -> dict[str, Any]:
+    """describe_image_cached 参数组装（vision 三参数 + 可选观测收集器）。
+
+    三处调用共用（pdf_image_notes / pdf_page_render_notes / 上传图片识别），
+    单一出处防漂移。
+    """
+    kwargs: dict[str, Any] = {
+        "base_url": vision_base_url,
+        "api_key": vision_api_key,
+        "model": vision_model,
+    }
+    if observation_collector is not None:
+        kwargs["observation_collector"] = observation_collector
+    return kwargs
 
 # pypdf ImageFile.name 后缀 → mime（通用映射；.bmp 条目保留作映射完整性
 # 与 PDF 结构兼容——PDF 内嵌图发送前由 _VISION_PASSTHROUGH_SUFFIXES 判定
@@ -146,6 +190,10 @@ def pdf_image_notes(
     pages（1-based，工单 topic-vision-pages/01）：限定扫描页——共享汇总 PDF
     只识别自己题面页的图；None = 全部（现状）。
 
+    仅覆盖**内嵌栅格图**（page.images 对象）；矢量图（绘图命令绘制，无栅格
+    对象）走 pdf_page_render_notes（工单 topic-vision-render/01，渲染页 →
+    视觉描述）。
+
     上限守卫：单文件 ≤ MAX_IMAGE_NOTES 张、单张 ≤ MAX_IMAGE_BYTES（超限
     跳过并标注）；单张描述失败 = 跳过该张（其余照常）；任何异常（未配置 /
     网络 / 解析 / PDF 结构）→ 返回空串（调用方降级，绝不让视觉拖垮抽取）。
@@ -190,17 +238,15 @@ def pdf_image_notes(
             else:
                 mime = _image_mime(image.name)
             try:
-                describe_kwargs: dict[str, Any] = {
-                    "base_url": vision_base_url,
-                    "api_key": vision_api_key,
-                    "model": vision_model,
-                }
-                if observation_collector is not None:
-                    describe_kwargs["observation_collector"] = observation_collector
                 description = describe_image_cached(
                     data,
                     mime,
-                    **describe_kwargs,
+                    **_describe_kwargs(
+                        vision_base_url,
+                        vision_api_key,
+                        vision_model,
+                        observation_collector,
+                    ),
                 )
             except Exception:
                 skipped += 1
@@ -276,6 +322,122 @@ def _selected_pages(page_count: int, pages: Sequence[int] | None) -> frozenset[i
     return frozenset(pages)
 
 
+# ---------------------------------------------------------------------------
+# 渲染视觉图注（工单 topic-vision-render/01）：矢量图 PDF 页渲染 → 视觉描述
+# ---------------------------------------------------------------------------
+
+
+def _render_page_png(path: Path, page_no: int) -> bytes | None:
+    """第 page_no 页（1-based）渲染成 PNG 字节；无 PyMuPDF / 任何失败 → None。
+
+    矢量图（绘图命令绘制）无栅格图对象，pdf_image_notes 提取不到——渲染成
+    位图后走视觉通道（2021F 图1 实测：Matrix(2,2) → 1191×1684 PNG，DeepSeek
+    vision-exp 完整还原尺寸标注与红实线走向）。模块级函数 = 测试 monkeypatch
+    接缝；渲染是增强不是阻塞，失败静默降级。
+    """
+    try:
+        import fitz  # type: ignore[import-untyped]  # PyMuPDF 无类型 stub
+    except ImportError:
+        return None
+    try:
+        with fitz.open(str(path)) as doc:
+            page = doc[page_no - 1]
+            pix = page.get_pixmap(
+                matrix=fitz.Matrix(PAGE_RENDER_SCALE, PAGE_RENDER_SCALE)
+            )
+            return pix.tobytes("png")
+    except Exception:
+        return None
+
+
+def _page_figure_label(page: Any) -> str | None:
+    """页文本层行首「图N」标题 → 图号；无（正文引用 / 无文本层）→ None。
+
+    行首正则与 _figure_annotation_block 的标题判定同源（_FIGURE_TITLE_RE，
+    正文引用「如图1 所示」不在行首天然排除）；None = 扫描件无文本层 →
+    顺序编号兜底。
+    """
+    try:
+        text = page.extract_text() or ""
+    except Exception:
+        return None
+    for line in text.splitlines():
+        match = _FIGURE_TITLE_RE.match(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def pdf_page_render_notes(
+    path: Path,
+    *,
+    vision_base_url: str,
+    vision_api_key: str,
+    vision_model: str,
+    observation_collector: object | None = None,
+    pages: Sequence[int] | None = None,
+) -> str:
+    """渲染页 → 视觉描述图注段（工单 topic-vision-render/01）：`[图N 标注：…]` 逐行。
+
+    矢量图（无栅格图对象）路径：逐页渲染（_render_page_png）→ DeepSeek 视觉
+    描述（RENDER_DESCRIBE_PROMPT，只描述示意图忽略正文）。无图页过滤：
+    描述 < RENDER_NOTE_MIN_CHARS 或命中否定词（「无实质内容」「只有文字」等）
+    → 跳过（正文页误描述不污染题面）。图号 = 页文本层行首「图N」标题优先，
+    无文本层 → 顺序编号（第 k 个产出 → k）。
+
+    pages（1-based，与 pdf_image_notes 同约定）：限定扫描页；None = 全部。
+    单页渲染 / 视觉失败 = 跳过该页（其余照常）；坏 PDF / 全失败 → 空串
+    （调用方降级，绝不抛——图注是增强不是阻塞）。上限 MAX_IMAGE_NOTES 封顶。
+    段前缀 `[图N 标注` 命中 enrich 幂等正则（`\\[图\\s*\\d+\\s*标注`）。
+    """
+    try:
+        reader = PdfReader(str(path))
+    except Exception:
+        return ""
+    selected = _selected_pages(len(reader.pages), pages)
+    notes: list[str] = []
+    used_labels: set[str] = set()  # 已产出图号（真实 + 顺序兜底），防重复
+    for page_no, page in enumerate(reader.pages, start=1):
+        if page_no not in selected:
+            continue
+        if len(notes) >= MAX_IMAGE_NOTES:
+            break
+        try:
+            png = _render_page_png(path, page_no)
+            if png is None:
+                continue
+            description = describe_image_cached(
+                png,
+                "image/png",
+                RENDER_DESCRIBE_PROMPT,
+                **_describe_kwargs(
+                    vision_base_url,
+                    vision_api_key,
+                    vision_model,
+                    observation_collector,
+                ),
+            ).strip()
+        except Exception:
+            continue  # 渲染 / 视觉失败降级（含未配置 / 网络 / 限流）
+        if len(description) < RENDER_NOTE_MIN_CHARS or RENDER_NO_FIGURE_PATTERN.search(
+            description
+        ):
+            continue  # 无图页 / 正文页误描述：不写回
+        label = _page_figure_label(page)
+        if label is None:
+            # 顺序编号兜底（扫描件无文本层）：从 1 找第一个未被占用的号——
+            # 真实图号不连续时（如已有「图1」「图3」）直接取 len+1 会撞车
+            candidate = 1
+            while str(candidate) in used_labels:
+                candidate += 1
+            label = str(candidate)
+        if label in used_labels:
+            continue  # 真实图号撞车（两页同「图N」标题）：跳过，宁缺毋滥
+        used_labels.add(label)
+        notes.append(f"[图{label} 标注：{description}]")
+    return "\n".join(notes)
+
+
 def locate_topic_pages(pdf_path: Path, topic_text: str) -> tuple[int, int] | None:
     """题面页定位（工单 topic-vision-pages/01）：共享汇总 PDF 里找题面正文页。
 
@@ -324,7 +486,7 @@ def _figure_annotation_block(segments: list[tuple[float, float, str]]) -> str:
     titles = [
         (y, text)
         for y, text, _ in rows
-        if re.match(r"^\s*图\s*\d", text)
+        if _FIGURE_TITLE_RE.match(text)
     ]
     if not titles:
         return ""
@@ -464,17 +626,15 @@ def extract_image(
     if not data:
         raise ExtractionError(f"图片文件为空：{file_path}")
     try:
-        describe_kwargs: dict[str, Any] = {
-            "base_url": vision_base_url,
-            "api_key": vision_api_key,
-            "model": vision_model,
-        }
-        if observation_collector is not None:
-            describe_kwargs["observation_collector"] = observation_collector
         description = describe_image_cached(
             data,
             _IMAGE_MIME_BY_SUFFIX.get(file_path.suffix.lower(), "image/png"),
-            **describe_kwargs,
+            **_describe_kwargs(
+                vision_base_url,
+                vision_api_key,
+                vision_model,
+                observation_collector,
+            ),
         )
     except Exception as exc:
         if isinstance(exc, ExtractionError):

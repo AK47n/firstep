@@ -9,6 +9,7 @@ dependencies = [
     "uvicorn>=0.52",
     "python-multipart>=0.0.20",  # FastAPI 文件上传
     "pillow>=11",  # PDF 内嵌图转码（BMP / JPEG2000 → PNG，工单 vision-format-transcode/01）
+    "pymupdf>=1.24",  # PDF 页渲染位图（矢量图视觉通道，工单 topic-vision-render/01）
 ]
 
 [project.optional-dependencies]

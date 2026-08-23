@@ -46,6 +46,7 @@ from .extraction import (
     locate_topic_pages,
     pdf_figure_annotations,
     pdf_image_notes,
+    pdf_page_render_notes,
 )
 from .manifest import MANIFEST_FILENAME
 
@@ -56,10 +57,15 @@ MIN_FIGURE_NOTE_CHARS = 8
 
 
 def _substantive_text(notes: str) -> str:
-    """图注段去壳后的实质文本（去掉 [示意图N： / [图N 标注] 标记与空白）。"""
+    """图注段去壳后的实质文本（去 [示意图N： / [图N 标注] / [图N 标注： 与空白）。
+
+    渲染视觉段 `[图N 标注：<描述>]`（工单 topic-vision-render/01）与文字标注
+    块 `[图N 标注]` 同前缀——冒号形态一并剥离，MIN_FIGURE_NOTE_CHARS 守卫
+    对两种视觉产物（示意图 / 渲染段）都生效。
+    """
     import re
 
-    stripped = re.sub(r"\[示意图\d+：|\]|\[图\s*\d+\s*标注\]", "", notes)
+    stripped = re.sub(r"\[示意图\d+：|\]|\[图\s*\d+\s*标注[：]?", "", notes)
     return "".join(stripped.split())
 
 TOPIC_MD_FILENAME = "topic.md"  # 题面全文落盘文件名（条目目录内，唯一出处）
@@ -228,10 +234,13 @@ def enrich_topic_image_notes(
     无图注、且原 PDF 仍在条目目录内 → 生成图注段，追加题面文末（空行分隔，
     不破坏原文结构）并写回，返回补图注后的条目。
 
-    两级生成（03）：**文字标注优先**——矢量图（无栅格图对象，视觉提取不到）
-    的图内标注文字留在 PDF 文本层，pdf_figure_annotations 按坐标重建布局
-    产出 `[图N 标注]` 段（零额度、标注与线段位置关系保留）；文字层为空
-    （扫描件 / 无文本层）→ 视觉兜底（pdf_image_notes，DeepSeek 视觉模型）。
+    三级生成（工单 topic-vision-render/01，视觉优先）：**渲染视觉优先**——
+    矢量图（无栅格图对象，视觉提取不到）渲染成位图后走视觉通道
+    （pdf_page_render_notes，DeepSeek 视觉模型，产出 `[图N 标注：<描述>]`
+    ——2021F 图1 实测：文字标注只留碎片词、渲染视觉完整还原尺寸标注与
+    红实线走向）；视觉失败（未配置 / 渲染不可用 / 网络）→ **文字标注兜底**
+    （pdf_figure_annotations 按坐标重建布局，零额度）；文字层也为空 →
+    **内嵌栅格图视觉**（pdf_image_notes）。
 
     共享 PDF（工单 topic-vision-pages/01）：真题汇总 PDF 被多个赛题条目共引
     ——全文档扫描会把**其它题**的图注追进当前题面（2024H 曾把约 280 行别的
@@ -242,8 +251,8 @@ def enrich_topic_image_notes(
     照常（单题 PDF 无跨题污染风险，最小回归面）。
 
     幂等：题面已含 `[示意图` 或 `[图N 标注` 标注 = 跳过不跑（重复取题面不
-    重复消耗）。任何不满足条件 / 两级都失败 → 原样返回，绝不写回、绝不抛
-    ——图注是增强不是阻塞。
+    重复消耗；渲染视觉段 `[图N 标注：…]` 同前缀命中）。任何不满足条件 /
+    三级都失败 → 原样返回，绝不写回、绝不抛——图注是增强不是阻塞。
     """
     entry = resolve_number(topic_library_root, key)
     if "[示意图" in entry.problem_text or re.search(
@@ -280,10 +289,15 @@ def enrich_topic_image_notes(
     )
     if not notes:
         return entry
-    if "[示意图" in notes and len(_substantive_text(notes)) < MIN_FIGURE_NOTE_CHARS:
+    is_vision_note = "[示意图" in notes or re.search(
+        r"\[图\s*\d+\s*标注：", notes
+    )
+    if is_vision_note and len(_substantive_text(notes)) < MIN_FIGURE_NOTE_CHARS:
         # 视觉条目无实质内容（如「无实质内容」等过短描述）→ 不写回：装饰图 /
         # 空图的识别结果入库会污染题面素材（2021F 曾把「无实质内容」追进题面）；
-        # 文字标注块（[图N 标注]）是坐标重建的可信内容，直接放行
+        # 覆盖内嵌图段（[示意图N：]）与渲染视觉段（[图N 标注：]，工单
+        # topic-vision-render/01）；纯文字标注块（[图N 标注]）是坐标重建的
+        # 可信内容，直接放行
         return entry
     new_text = entry.problem_text.rstrip("\n") + "\n\n" + notes
     (entry_dir / entry.problem_md).write_text(new_text, encoding="utf-8")
@@ -300,14 +314,33 @@ def _figure_notes(
     vision_model: str,
     observation_collector: object | None,
 ) -> str:
-    """图注获取：文字标注优先（零额度），空则视觉兜底；page_range 非 None =
-    限定页提取（共享 PDF 定位结果 (start, end) **开区间**——range 展开为页
-    列表，直接 list() 会丢掉尾页前的页，2021F 图1 所在页曾因此被跳过），
-    None = 全文档（单条目专属 PDF，现状）。任何异常降级为下一级，两级都
-    失败返回空串——图注是增强不是阻塞。"""
+    """图注获取（三级降级链，工单 topic-vision-render/01，视觉优先）：
+
+    1. pdf_page_render_notes——渲染页 → 视觉描述（矢量图路径，质量最高：
+       2021F 图1 实测完整还原尺寸标注与红实线走向；文字标注只留碎片词）；
+    2. pdf_figure_annotations——文字标注兜底（零额度，坐标重建布局）；
+    3. pdf_image_notes——内嵌栅格图视觉兜底（现状保留）。
+
+    各级异常 → 空串，逐级降级；三级都失败返回空串——图注是增强不是阻塞。
+    page_range 非 None = 限定页提取（共享 PDF 定位结果 (start, end) **开区间**
+    ——range 展开为页列表，直接 list() 会丢掉尾页前的页，2021F 图1 所在页曾
+    因此被跳过），None = 全文档（单条目专属 PDF，现状）。"""
     pages = list(range(*page_range)) if page_range is not None else None
     try:
-        notes = pdf_figure_annotations(pdf_path, pages=pages)  # 文字标注优先
+        notes = pdf_page_render_notes(
+            pdf_path,
+            pages=pages,
+            vision_base_url=vision_base_url,
+            vision_api_key=vision_api_key,
+            vision_model=vision_model,
+            observation_collector=observation_collector,
+        )
+    except Exception:
+        notes = ""
+    if notes:
+        return notes
+    try:
+        notes = pdf_figure_annotations(pdf_path, pages=pages)  # 文字标注兜底
     except Exception:
         notes = ""
     if notes:

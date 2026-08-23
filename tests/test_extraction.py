@@ -6,6 +6,7 @@
 
 import io
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -723,3 +724,365 @@ def test_pdf_image_notes_pages_filter(monkeypatch, tmp_path):
     )
     assert notes == "[示意图1：描述:img-b]"
     assert [call[0] for call in fake_describe.calls] == [b"img-b"]  # 只调第 2 页图
+
+
+# ---------------------------------------------------------------------------
+# 渲染视觉图注（工单 topic-vision-render/01）：矢量图 PDF 页渲染 → 视觉描述
+# ---------------------------------------------------------------------------
+
+
+def _render_fake(description):
+    """describe_image_cached 假件（渲染场景专用）：记录全 kwargs，返回固定描述或抛错。"""
+
+    def fake(image_bytes, mime, prompt, **kwargs):
+        fake.calls.append((image_bytes, mime, prompt, kwargs))
+        if callable(description):
+            return description(image_bytes, mime)
+        return description
+
+    fake.calls = []
+    return fake
+
+
+class _FakePixmap:
+    def tobytes(self, fmt):
+        return b"PNG-DATA"
+
+
+class _FakeFitzPage:
+    def get_pixmap(self, matrix):
+        self.matrix = matrix
+        return _FakePixmap()
+
+
+class _FakeFitzDoc:
+    def __init__(self):
+        self._pages = {}
+        self.index = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __getitem__(self, index):
+        self.index = index
+        if index not in self._pages:
+            self._pages[index] = _FakeFitzPage()
+        return self._pages[index]
+
+
+class _FakeFitz:
+    """fitz 测试替身：open → doc[page_no-1] → get_pixmap(Matrix(2,2)) → PNG。"""
+
+    last_open = None
+    last_doc = None
+
+    @classmethod
+    def open(cls, path):
+        cls.last_open = str(path)
+        cls.last_doc = _FakeFitzDoc()
+        return cls.last_doc
+
+    @staticmethod
+    def Matrix(a, b):
+        return (a, b)
+
+
+def test_render_page_png_without_fitz_returns_none(monkeypatch):
+    """无 PyMuPDF（import 失败）→ None（渲染路径静默降级）。"""
+    import sys
+
+    from contest_generator import extraction
+
+    monkeypatch.setitem(sys.modules, "fitz", None)
+    assert extraction._render_page_png(Path("vec.pdf"), 1) is None
+
+
+def test_render_page_png_renders_via_fitz(monkeypatch):
+    """fitz 可用：第 page_no 页（1-based）渲染成 PNG 字节。"""
+    import sys
+
+    from contest_generator import extraction
+
+    monkeypatch.setitem(sys.modules, "fitz", _FakeFitz)
+    png = extraction._render_page_png(Path("vec.pdf"), 2)
+    assert png == b"PNG-DATA"
+    assert _FakeFitz.last_open == str(Path("vec.pdf"))
+    assert _FakeFitz.last_doc.index == 1  # 1-based → fitz 0-based 索引
+    assert _FakeFitz.last_doc[1].matrix == (2.0, 2.0)  # PAGE_RENDER_SCALE
+
+
+def test_render_page_png_bad_pdf_returns_none(monkeypatch):
+    """fitz.open 失败（坏 PDF）→ None 不抛。"""
+    import sys
+
+    from contest_generator import extraction
+
+    class _BadFitz:
+        @staticmethod
+        def open(path):
+            raise RuntimeError("坏 PDF")
+
+        @staticmethod
+        def Matrix(a, b):
+            return (a, b)
+
+    monkeypatch.setitem(sys.modules, "fitz", _BadFitz)
+    assert extraction._render_page_png(Path("bad.pdf"), 1) is None
+
+
+def test_page_figure_label_extracts_title_number():
+    """页文本层行首「图N」标题 → 图号；正文引用 / 无文本层 → None。"""
+    from contest_generator.extraction import _page_figure_label
+
+    assert _page_figure_label(_TextPage("图1 院区结构示意图\n正文行")) == "1"
+    assert _page_figure_label(_TextPage("  图 2 系统框图")) == "2"
+    assert _page_figure_label(_TextPage("如图1所示，小车沿走廊行驶")) is None  # 行内引用
+    assert _page_figure_label(_TextPage("")) is None  # 无文本层
+
+
+def test_pdf_page_render_notes_formats_figure_notes(monkeypatch, tmp_path):
+    """渲染页 → 视觉描述 → [图N 标注：…] 逐行；真实图号优先 + 顺序编号兜底。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(
+        extraction, "_render_page_png", lambda p, n: b"PNG-%d" % n
+    )
+    fake = _render_fake(lambda data, mime: "走廊 60cm 红实线走向")
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader(
+            [_TextPage("图1 院区结构示意图"), _TextPage("正文文字无图")]
+        ),
+    )
+
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="https://api.deepseek.com", vision_api_key="sk", vision_model="m"
+    )
+    # 页1 真实图号 1；页2 无图标题 → 顺序编号（第 2 个产出 → 2）
+    assert notes == (
+        "[图1 标注：走廊 60cm 红实线走向]\n"
+        "[图2 标注：走廊 60cm 红实线走向]"
+    )
+    assert fake.calls[0][1] == "image/png"  # mime
+    assert fake.calls[0][2] == extraction.RENDER_DESCRIBE_PROMPT  # 渲染场景提示词
+    assert fake.calls[0][3] == {
+        "base_url": "https://api.deepseek.com",
+        "api_key": "sk",
+        "model": "m",
+    }  # 视觉参数透传
+
+
+def test_pdf_page_render_notes_filters_no_figure_pages(monkeypatch, tmp_path):
+    """无实质内容 / 否定词描述（无图页、正文页）→ 丢弃不写回。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(extraction, "_render_page_png", lambda p, n: b"pg%d" % n)
+    fake = _render_fake(
+        lambda data, mime: {
+            b"pg1": "无实质内容",
+            b"pg2": "页面只有文字，没有示意图",
+            b"pg3": "布局完整描述：走廊与病房",
+        }[data]
+    )
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader([_TextPage(""), _TextPage(""), _TextPage("")]),
+    )
+
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+    )
+    assert notes == "[图1 标注：布局完整描述：走廊与病房]"  # 第 1 个产出 → 顺序号 1
+
+
+def test_pdf_page_render_notes_skips_failed_pages(monkeypatch, tmp_path):
+    """渲染失败 / 视觉失败 → 跳过该页；全部失败 → 空串（绝不抛）。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(extraction, "_render_page_png", lambda p, n: b"x" if n == 2 else None)
+    fake = _render_fake(lambda data, mime: "这是一段完整的布局描述")
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader([_TextPage(""), _TextPage(""), _TextPage("")]),
+    )
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+    )
+    assert notes == "[图1 标注：这是一段完整的布局描述]"  # 只页2 产出（第 1 个）
+
+    # 视觉全失败 → 空串
+    def failing(data, mime):
+        from contest_generator.vision import VisionError
+
+        raise VisionError("视觉失败")
+
+    monkeypatch.setattr(extraction, "describe_image_cached", _render_fake(failing))
+    assert (
+        extraction.pdf_page_render_notes(
+            path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        )
+        == ""
+    )
+
+
+def test_pdf_page_render_notes_rendering_exception_skips_page(monkeypatch, tmp_path):
+    """渲染函数抛异常（防御外异常）→ 跳过该页，绝不外泄。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+
+    def exploding_render(p, n):
+        if n == 1:
+            raise RuntimeError("渲染器爆炸")
+        return b"x"
+
+    monkeypatch.setattr(extraction, "_render_page_png", exploding_render)
+    monkeypatch.setattr(
+        extraction, "describe_image_cached", _render_fake("这是一段完整的布局描述")
+    )
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader([_TextPage(""), _TextPage("")]),
+    )
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+    )
+    assert notes == "[图1 标注：这是一段完整的布局描述]"  # 页1 跳过，页2 照常
+
+
+def test_pdf_page_render_notes_avoids_label_collisions(monkeypatch, tmp_path):
+    """图号防撞：真实图号不连续时顺序兜底跳过已占用号。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(extraction, "_render_page_png", lambda p, n: b"x")
+    monkeypatch.setattr(
+        extraction, "describe_image_cached", _render_fake("这是一段完整的布局描述")
+    )
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader(
+            [
+                _TextPage("图1 结构示意"),  # 真实图号 1
+                _TextPage("图3 布局示意"),  # 真实图号 3（不连续）
+                _TextPage(""),  # 无文本层 → 顺序兜底
+            ]
+        ),
+    )
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+    )
+    lines = notes.splitlines()
+    assert lines[0].startswith("[图1 标注：")
+    assert lines[1].startswith("[图3 标注：")
+    # 顺序兜底：已用 {1,3}，len+1=3 被占用 → 取 2
+    assert lines[2].startswith("[图2 标注：")
+    assert len(lines) == 3
+
+
+def test_pdf_page_render_notes_skips_duplicate_real_label(monkeypatch, tmp_path):
+    """两页同真实图号（如都是「图1」）→ 后者跳过，宁缺毋滥。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(extraction, "_render_page_png", lambda p, n: b"x")
+    monkeypatch.setattr(
+        extraction, "describe_image_cached", _render_fake("这是一段完整的布局描述")
+    )
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader([_TextPage("图1 结构示意"), _TextPage("图1 重复标题")]),
+    )
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+    )
+    assert notes.count("[图") == 1  # 第二个「图1」被跳过
+
+
+def test_pdf_page_render_notes_pages_filter(monkeypatch, tmp_path):
+    """pages 限定（1-based）：只渲染限定页。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    rendered = []
+
+    def fake_render(p, n):
+        rendered.append(n)
+        return b"x"
+
+    monkeypatch.setattr(extraction, "_render_page_png", fake_render)
+    monkeypatch.setattr(extraction, "describe_image_cached", _render_fake("这是一段完整的布局描述"))
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader([_TextPage(""), _TextPage(""), _TextPage("")]),
+    )
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m", pages=[2]
+    )
+    assert rendered == [2]
+    assert notes == "[图1 标注：这是一段完整的布局描述]"
+
+
+def test_pdf_page_render_notes_caps_at_eight(monkeypatch, tmp_path):
+    """产出上限 MAX_IMAGE_NOTES=8：第 9 页不再渲染。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    rendered = []
+    monkeypatch.setattr(
+        extraction, "_render_page_png", lambda p, n: rendered.append(n) or b"x"
+    )
+    monkeypatch.setattr(extraction, "describe_image_cached", _render_fake("这是一段完整的布局描述"))
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader([_TextPage("") for _ in range(9)]),
+    )
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+    )
+    assert notes.count("[图") == 8
+    assert len(rendered) == 8  # 第 9 页未渲染
+
+
+def test_pdf_page_render_notes_bad_pdf_returns_empty(monkeypatch, tmp_path):
+    """坏 PDF → 空串不抛。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "bad.pdf"
+    path.write_bytes(b"not a pdf")
+    monkeypatch.setattr(extraction, "_render_page_png", lambda p, n: b"x")
+    monkeypatch.setattr(extraction, "describe_image_cached", _render_fake("这是一段完整的布局描述"))
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: (_ for _ in ()).throw(ValueError("坏 PDF"))
+    )
+    assert (
+        extraction.pdf_page_render_notes(
+            path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        )
+        == ""
+    )
