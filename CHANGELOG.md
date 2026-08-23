@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=537c863d86b6154a19db83ca8022daecf2a28fac -->
+<!-- changelog-auto: last-commit=868cb6eb1f5547c616413c4f414393caccc21e66 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-24
+- 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
