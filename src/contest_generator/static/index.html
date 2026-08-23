@@ -647,6 +647,34 @@
   .card-collapse:hover { color: var(--accent); }
   .card.collapsed .card-collapse { transform: rotate(-90deg); }
   .card.collapsed > *:not(h2) { display: none !important; }
+  /* main.c 行号 + 语法着色（工单 ui-polish-8/01）：textarea 透明文字 + 行号列 +
+     高亮层三明治；滚动三同步 */
+  .code-wrap { position: relative; border: 1px solid var(--border);
+               border-radius: 8px; background: var(--code-bg); overflow: hidden; }
+  .code-wrap textarea, .code-wrap .hl-layer {
+    font-family: var(--mono); font-size: 13px; line-height: 1.55; tab-size: 4;
+    padding: 12px; margin: 0; border: none; white-space: pre-wrap;
+    word-break: break-all; }
+  .code-wrap .line-nums { position: absolute; left: 0; top: 0; bottom: 0; width: 44px;
+                          padding: 12px 8px 12px 0; text-align: right; overflow: hidden;
+                          color: var(--muted); user-select: none;
+                          font-family: var(--mono); font-size: 13px; line-height: 1.55;
+                          border-right: 1px solid var(--border);
+                          background: var(--panel-2); }
+  .code-wrap .hl-layer { position: absolute; left: 44px; top: 0; right: 0; bottom: 0;
+                         pointer-events: none; color: var(--text); }
+  .code-wrap textarea { position: relative; z-index: 1; background: transparent;
+                        color: transparent; caret-color: var(--accent);
+                        resize: vertical; min-height: 180px; }
+  .code-wrap textarea::placeholder { color: var(--muted); opacity: 1; }
+  .tok-com { color: #3fb950; }  .tok-str { color: #d29922; }
+  .tok-pre { color: #8b949e; }  .tok-kw { color: #00d4ff; }
+  .tok-num { color: #bc8cff; }
+  html[data-theme="light"] .tok-com { color: #1a7f37; }
+  html[data-theme="light"] .tok-str { color: #9a6700; }
+  html[data-theme="light"] .tok-pre { color: #59636e; }
+  html[data-theme="light"] .tok-kw { color: #0096c7; }
+  html[data-theme="light"] .tok-num { color: #8250df; }
 </style>
 </head>
 <body>
@@ -822,7 +850,11 @@
         <span class="muted">骨架 = 初始化序列 + TODO 预留区；自检 = 逐模块初始化/读一次/打印结果（OLED 为主、串口为辅），先验硬件再写逻辑。</span>
       </div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
-      <textarea id="main-c" rows="16" style="margin-top:8px" placeholder="点击「生成骨架」后这里会出现 main.c 内容，可手动编辑…"></textarea>
+      <div class="code-wrap" style="margin-top:8px">
+        <div id="main-c-nums" class="line-nums" aria-hidden="true"></div>
+        <pre id="main-c-hl" class="hl-layer" aria-hidden="true"></pre>
+        <textarea id="main-c" rows="16" placeholder="点击「生成骨架」后这里会出现 main.c 内容，可手动编辑…"></textarea>
+      </div>
       <div id="skeleton-msg" class="error"></div>
     </div>
 
@@ -3009,6 +3041,85 @@ function showPinMenu(pinEl, pinName) {
 }
 
 // ---------------------------------------------------------------------------
+// main.c 行号 + 语法着色（工单 ui-polish-8/01）：textarea 透明文字 + 行号列 +
+// 高亮层三明治；滚动三同步。cHighlight / cLineCount 为自包含纯函数（tests/js
+// 正则抽取：不引用模块级常量、不调用其它抽取函数）
+// ---------------------------------------------------------------------------
+function cHighlight(code) {
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  const src = String(code == null ? "" : code);
+  const kw = {};
+  "auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while".split(" ")
+    .forEach((w) => { kw[w] = true; });
+  let html = "";
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const ch = src[i];
+    if (ch === "/" && src[i + 1] === "/") {           // 行注释
+      let j = src.indexOf("\n", i); if (j < 0) j = n;
+      html += '<span class="tok-com">' + esc(src.slice(i, j)) + "</span>";
+      i = j;
+    } else if (ch === "/" && src[i + 1] === "*") {    // 块注释
+      let j = src.indexOf("*/", i + 2); j = j < 0 ? n : j + 2;
+      html += '<span class="tok-com">' + esc(src.slice(i, j)) + "</span>";
+      i = j;
+    } else if (ch === '"' || ch === "'") {            // 字符串
+      let j = i + 1;
+      while (j < n && src[j] !== ch) { if (src[j] === "\\") j++; j++; }
+      if (j < n) j++;
+      html += '<span class="tok-str">' + esc(src.slice(i, j)) + "</span>";
+      i = j;
+    } else if (/[0-9]/.test(ch) || (ch === "." && /[0-9]/.test(src[i + 1] || ""))) {  // 数字
+      let j = i;
+      while (j < n && /[0-9a-fA-FxXbBoO._]/.test(src[j])) j++;
+      html += '<span class="tok-num">' + esc(src.slice(i, j)) + "</span>";
+      i = j;
+    } else if (/[A-Za-z_]/.test(ch)) {                // 标识符 / 关键字
+      let j = i;
+      while (j < n && /[A-Za-z0-9_]/.test(src[j])) j++;
+      const word = src.slice(i, j);
+      html += kw[word] ? '<span class="tok-kw">' + word + "</span>" : esc(word);
+      i = j;
+    } else if (ch === "#" && (i === 0 || src[i - 1] === "\n")) {  // 预处理行
+      let j = src.indexOf("\n", i); if (j < 0) j = n;
+      html += '<span class="tok-pre">' + esc(src.slice(i, j)) + "</span>";
+      i = j;
+    } else {
+      html += esc(ch);
+      i++;
+    }
+  }
+  return html;
+}
+function cLineCount(code) {
+  const lines = String(code == null ? "" : code).split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) out.push(String(i + 1));
+  return out.join("\n");
+}
+function syncMainCHighlight() {
+  const ta = $("main-c"); const nums = $("main-c-nums"); const hl = $("main-c-hl");
+  if (!ta || !nums || !hl) return;
+  nums.textContent = cLineCount(ta.value);
+  hl.innerHTML = cHighlight(ta.value);
+  hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft;
+  nums.scrollTop = ta.scrollTop;
+}
+(function initMainCHighlight() {
+  const ta = $("main-c"); const nums = $("main-c-nums"); const hl = $("main-c-hl");
+  if (!ta || !nums || !hl) return;
+  ta.addEventListener("input", syncMainCHighlight);
+  ta.addEventListener("scroll", () => {
+    hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft;
+    nums.scrollTop = ta.scrollTop;
+  });
+  syncMainCHighlight();
+})();
+
+// ---------------------------------------------------------------------------
 // 生成页：8. main.c 骨架 / 自检冒烟（工单 skeleton-smoke-refs/01）
 // 共用校验 / 请求 / intercepted 渲染；差异 = 按钮 id、main_mode、占位文案。
 // ---------------------------------------------------------------------------
@@ -3038,6 +3149,7 @@ async function generateMain(mode) {
     if (Object.keys(inst).length) payload.instances = inst;
     const data = await apiPost("/api/skeleton", payload);
     $("main-c").value = data.main_c;
+    syncMainCHighlight();
     markStepDone(8);
     const box = $("intercepted");
     if (data.intercepted.length) {
@@ -6062,7 +6174,7 @@ function restoreDraft() {
     markStepDone(3);
   }
   if (d.slugs.length) { selectedSlugs = d.slugs; markStepDone(6); }
-  if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); }
+  if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); syncMainCHighlight(); }
   if (d.qa) { $("qa-text").value = d.qa; }
   if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); }
   $("draft-tip").classList.remove("hidden");
