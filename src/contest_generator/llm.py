@@ -2320,6 +2320,26 @@ LOCAL_LLM_METHODS = frozenset(
 LOCAL_LLM_UNAVAILABLE_MESSAGE = (
     "本地模型服务不可用：请启动 Ollama，或到设置页清空本地模型配置以改用 DeepSeek"
 )
+# 本地模型加载/运行失败（Ollama 在运行但 llama-server 崩溃：模型过大 / 内存不足）
+# 的提示文案——区别于「未启动」，避免误导用户去启动本就运行着的 Ollama。
+LOCAL_LLM_LOAD_FAILED_MESSAGE = (
+    "本地模型加载或运行失败（Ollama 服务在运行但模型进程崩溃，常见原因：模型过大"
+    "超出内存，如 30B 模型需约 19GB 而常见机器只有 16GB）：请换更小的模型"
+    "（如 qwen3:8b），或到设置页清空本地模型配置以改用 DeepSeek"
+)
+
+
+def _local_error_hint(exc: LLMError) -> str:
+    """本地失联提示分类：按错误特征选文案。
+
+    llama-server 崩溃特征（500 响应体含 llama-server / failed to allocate /
+    exit status）→ 加载失败文案（模型过大 / 内存不足）；连接被拒绝 → 未启动
+    文案；其余未知形态 → 通用兜底文案。
+    """
+    message = str(exc)
+    if "llama-server" in message or "failed to allocate" in message or "exit status" in message:
+        return LOCAL_LLM_LOAD_FAILED_MESSAGE
+    return LOCAL_LLM_UNAVAILABLE_MESSAGE
 
 
 class RoutingLLM:
@@ -2360,13 +2380,17 @@ class RoutingLLM:
             raise self._wrap_local_error(exc) from exc
 
     def _wrap_local_error(self, exc: LLMError) -> LLMError:
-        """本地失联大声失败：包装附可操作提示，错误类别（kind）保持。
+        """本地失联大声失败：包装附分类可操作提示（_local_error_hint），错误类别
+        （kind）保持。
 
-        已带提示（防御嵌套路由）则原样返回，避免重复包装。
+        已带任一提示文案（防御嵌套路由）则原样返回，避免重复包装。
         """
-        if LOCAL_LLM_UNAVAILABLE_MESSAGE in str(exc):
+        if (
+            LOCAL_LLM_UNAVAILABLE_MESSAGE in str(exc)
+            or LOCAL_LLM_LOAD_FAILED_MESSAGE in str(exc)
+        ):
             return exc
-        return LLMError(f"{LOCAL_LLM_UNAVAILABLE_MESSAGE}（{exc}）", kind=exc.kind)
+        return LLMError(f"{_local_error_hint(exc)}（{exc}）", kind=exc.kind)
 
     def select_modules(
         self,
