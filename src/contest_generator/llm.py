@@ -125,7 +125,9 @@ SELECT_SYSTEM_PROMPT = (
     "不动。题面证据不足以判定时，在 questions 数组向用户补问，不要瞎猜；"
     "有疑问时一次性把所有疑问全部列出（宁全勿漏、每条具体可答、最多 10 条），"
     "用户一轮全部答完，不要分批渐进追问。用户已回答过的问题不要重复问，仅"
-    "补充新疑问（与澄清阶段同规，问答历史在题面后的独立段）。只输出 JSON 对象。"
+    "补充新疑问（与澄清阶段同规，问答历史在题面后的独立段）。输出保持紧凑："
+    "每条功能需求描述 ≤ 40 字、reason ≤ 20 字、不重复题面原文——只输出结论"
+    "不输出分析过程。只输出 JSON 对象。"
 )
 
 # 澄清阶段系统提示词（工单 01 推荐先澄清后收敛）：只看题面 + 已有问答历史，
@@ -406,6 +408,19 @@ MAX_REQUEST_BYTES = 128 * 1024  # 发送前断言：序列化请求体超过此�
 # 20K 字符 = 实测 163K 全量必截断后的安全块上限。
 TOPIC_SPLIT_LLM_CHAR_CAP = 20000
 
+# select（模块选择）输出上限（工单 llm-select-runaway/01）：deepseek-v4-flash
+# 曾无上限输出 ~20K tokens/次（疑似退化：逐句分析/自检过程写进 JSON），单次
+# 等待 ~160s 且解析必然失败、重试重复烧钱。select 合理输出 < 2K tokens，
+# 4096 足够；超长被服务端截断 → JSON 不完整 → 快速 parse 失败。
+SELECT_MAX_OUTPUT_TOKENS = 4096
+# 超长守卫阈值（字符）：响应内容超过即判输出失控，报 client 错误免重试
+# （_retry_parse 对 client 错误 break——重试只会重复烧钱烧时间）。
+SELECT_MAX_OUTPUT_CHARS = 60000
+
+# 观测响应留痕长度（字符）：只留前缀诊断信号（截断 / 退化 / 语义拒绝），
+# 不破坏观测「不含 prompt / response」的脱敏契约。
+CONTENT_EXCERPT_CHARS = 120
+
 
 def _truncate_content(content: str) -> str:
     """单内容截断（带标注）：超长内容只送前 EMBEDDED_CONTENT_CAP 字符。
@@ -623,6 +638,16 @@ class RetryBudget:
         return self.attempts
 
 
+def _content_excerpt(content: str) -> str:
+    """响应内容 → 脱敏诊断摘要：换行压平为单空格、取前 CONTENT_EXCERPT_CHARS
+    字符、超长加省略号。只留前缀信号（截断 / 退化 / 语义拒绝的判别线索），
+    完整响应绝不进入观测与日志。"""
+    flattened = " ".join(content.split())
+    if len(flattened) <= CONTENT_EXCERPT_CHARS:
+        return flattened
+    return flattened[:CONTENT_EXCERPT_CHARS] + "…"
+
+
 @dataclass(frozen=True)
 class LLMCallObservation:
     """一条已脱敏的 LLM 调用观测；不包含 prompt / response / key / 文件内容。"""
@@ -644,6 +669,7 @@ class LLMCallObservation:
     parse_status: str
     request_bytes: int
     usage: Mapping[str, Any] | None = None
+    content_excerpt: str | None = None
 
     def to_log_extra(self) -> dict[str, Any]:
         usage = sanitize_llm_usage(self.usage)
@@ -665,6 +691,7 @@ class LLMCallObservation:
             "parse_status": self.parse_status,
             "request_bytes": self.request_bytes,
             "usage": usage,
+            "content_excerpt": self.content_excerpt,
         }
 
 
@@ -708,6 +735,7 @@ class LLMObservationCollector:
         parse_status: str,
         request_bytes: int,
         usage: Mapping[str, Any] | None = None,
+        content_excerpt: str | None = None,
     ) -> dict[str, Any]:
         observation = LLMCallObservation(
             workflow_id=self.workflow_id,
@@ -727,6 +755,7 @@ class LLMObservationCollector:
             parse_status=parse_status,
             request_bytes=request_bytes,
             usage=sanitize_llm_usage(usage),
+            content_excerpt=content_excerpt,
         )
         self.record(observation)
         return observation.to_log_extra()
@@ -1147,6 +1176,19 @@ class DeepSeekLLM:
         """
 
         def parse(content: str) -> ModuleSelection:
+            # 输出失控守卫（工单 llm-select-runaway/01）：deepseek-v4-flash 曾
+            # 无上限输出 ~20K tokens/次（逐句分析/自检过程写进 JSON），超长必然
+            # 解析失败且单次等待 ~160s。超过合理输出量级 = 模型退化/循环——
+            # 报 client 错误免重试（_retry_parse 对 client break），不再重复烧钱
+            # 烧时间。配合请求侧 max_tokens 截断双保险。
+            if len(content) > SELECT_MAX_OUTPUT_CHARS:
+                raise LLMError(
+                    "模块选择输出异常超长（"
+                    f"{len(content)} 字符 > {SELECT_MAX_OUTPUT_CHARS}）："
+                    "疑似模型输出退化或循环（逐句分析写进 JSON），放弃重试——"
+                    "请重试或检查模型配置",
+                    kind=ERROR_KIND_CLIENT,
+                )
             data = extract_module_selection_data(content)
             # 核验轮短标记（工单 01）：{"converged": true} = 模型自报与上一轮
             # 一致——无需求层可判，跳过域判决直接返回空选择（收敛驱动层据此
@@ -1188,6 +1230,7 @@ class DeepSeekLLM:
             label="模块选择",
             operation="select_modules",
             json_mode=True,
+            max_tokens=SELECT_MAX_OUTPUT_TOKENS,
         )
 
     def clarify(
@@ -1334,11 +1377,13 @@ class DeepSeekLLM:
         label: str,
         operation: str | None = None,
         json_mode: bool = False,
+        max_tokens: int | None = None,
     ) -> RT:
         """整次调用级重试（单调用契约共用原语，与批处理 _retry_batch 同哲学）。
 
         HTTP / 网络错误由 _chat_once 先观测并分类；模型内容解析 / 领域校验在本层
         观测为 parse_error，避免把空内容 / 畸形 JSON / 领域拒绝记成成功调用。
+        max_tokens = 输出上限（None = 不带字段，服务端默认）。
         """
         last_error: Exception | None = None
         attempts = 0
@@ -1355,6 +1400,7 @@ class DeepSeekLLM:
                     operation=operation or label,
                     attempt_number=attempts,
                     observe_success=False,
+                    max_tokens=max_tokens,
                 )
                 try:
                     parsed = parse(result.content)
@@ -1959,6 +2005,7 @@ class DeepSeekLLM:
         attempts: int = 1,
         final: bool = True,
         budget_attempt: int | None = None,
+        content_excerpt: str | None = None,
     ) -> None:
         """记录一条无素材的 LLM 调用观测；请求和响应内容绝不进入日志。"""
         observation: dict[str, Any] = {
@@ -1977,6 +2024,7 @@ class DeepSeekLLM:
             "parse_status": parse_status,
             "request_bytes": request_bytes,
             "usage": sanitize_llm_usage(usage),
+            "content_excerpt": content_excerpt,
         }
         if self._observation_collector is not None:
             observation = self._observation_collector.collect(**observation)
@@ -2002,6 +2050,7 @@ class DeepSeekLLM:
             call_id=result.call_id,
             attempts=result.attempts,
             budget_attempt=result.budget_attempt,
+            content_excerpt=_content_excerpt(result.content),
         )
 
     def _chat(
@@ -2056,11 +2105,14 @@ class DeepSeekLLM:
         operation: str = "chat",
         attempt_number: int = 1,
         observe_success: bool = True,
+        max_tokens: int | None = None,
     ) -> _ChatResult:
         self._call_sequence += 1
         call_id = self._call_sequence
         budget_attempt: int | None = None
         payload: dict[str, Any] = {"model": self._config.model, "messages": messages}
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         body_bytes = json.dumps(payload).encode("utf-8")
