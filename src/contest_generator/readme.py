@@ -130,17 +130,7 @@ def render_readme(
 
     lines.append("## 引脚接线表")
     lines.append("")
-    rows = _pin_rows(platform, manifests, resolved_bindings, instance_plans)
-    if rows:
-        lines.append("| 模块 | 角色 | 引脚 | 说明 |")
-        lines.append("|---|---|---|---|")
-        for slug, role, pin, remark in rows:
-            lines.append(f"| {slug} | {role} | {pin} | {remark} |")
-    else:
-        lines.append("本工程所选模块未声明引脚接线。")
-    lines.append("")
-    lines.append(f"> {PIN_TABLE_FOOTNOTE}")
-    lines.append("")
+    _append_pin_table(lines, platform, manifests, resolved_bindings, instance_plans)
 
     lines.append("## 模块清单与依赖")
     lines.append("")
@@ -173,6 +163,39 @@ def render_readme(
     # 恒以单个尾部换行收尾（幂等）：rstrip 去尾部空行再补一个 \n——空 manifest
     # 等尾段无内容时也不会留下多余空行，同输入两次调用逐字节一致。
     return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def _append_pin_table(
+    lines: list[str],
+    platform: str,
+    manifests: Sequence[ModuleManifest],
+    resolved_bindings: Sequence[ResolvedBinding] | None = None,
+    instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
+) -> None:
+    """引脚接线表（表头 + 数据行 + 空回退文案 + 尾注）追加进 lines。
+
+    README「引脚接线表」与报告草稿「系统框图·引脚连接 / 引脚分配表」共用
+    （工单 report-draft-demo/02 单一出处，防漂移）——行数据源 = _pin_rows，
+    本函数只负责表格外壳（含无行时的占位句与固定尾注）。
+    """
+    rows = _pin_rows(platform, manifests, resolved_bindings, instance_plans)
+    if rows:
+        lines.append("| 模块 | 角色 | 引脚 | 说明 |")
+        lines.append("|---|---|---|---|")
+        for row in rows:
+            lines.append(_pin_row_text(row))
+    else:
+        lines.append("本工程所选模块未声明引脚接线。")
+    lines.append("")
+    lines.append(f"> {PIN_TABLE_FOOTNOTE}")
+    lines.append("")
+
+
+def _pin_row_text(row: tuple[str, str, str, str]) -> str:
+    """单行引脚表（行格式单一出处：README / 报告草稿 / LLM 引脚表摘要共用，
+    改列格式只动这里）。"""
+    slug, role, pin, remark = row
+    return f"| {slug} | {role} | {pin} | {remark} |"
 
 
 def _pin_rows(

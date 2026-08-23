@@ -100,15 +100,18 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
-from .manifest import ManifestSummary
+from .manifest import ManifestSummary, ModuleManifest
 from .llm import (
     LLM,
+    LLMError,
     LLMObservationCollector,
     RetryBudget,
     TOPIC_SPLIT_LLM_CHAR_CAP,
     build_llm,
     create_llm_observation_collector,
 )
+from .readme import _pin_row_text, _pin_rows
+from .report_draft import PLACEHOLDER
 from .llm_telemetry import bind_llm_telemetry
 from .llm_pricing import (
     DEEPSEEK_FLASH_PRICE_REFERENCE,
@@ -310,6 +313,18 @@ def _module_library_summaries(module_library_dir: Path) -> tuple[ManifestSummary
     if not module_library_dir.is_dir():
         return ()
     return tuple(build_manifest_summaries(list_modules(module_library_dir)))
+
+
+def _pin_summary_text(platform: str, manifests: Sequence[ModuleManifest]) -> str:
+    """引脚表摘要（设计报告草稿 LLM 素材，工单 report-draft-demo/03）：与
+    README 同源（readme._pin_rows，生效引脚口径 = 声明默认值——绑定覆盖 /
+    多实例行不进素材，docstring 声明口径，评审留痕）；行格式与 README / 报告
+    草稿共用（readme._pin_row_text 单一出处）。无声明 = 占位句（LLM 不必硬
+    猜）。"""
+    rows = _pin_rows(platform, manifests)
+    if not rows:
+        return "（本工程模块未声明引脚接线）"
+    return "\n".join(_pin_row_text(row) for row in rows)
 
 
 def _load_revision_context(
@@ -1193,6 +1208,34 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 config.ccs_compiler_dir,
                 config.ccs_sysconfig_cli,
             )
+        # 设计报告草稿 LLM 输出层（工单 report-draft-demo/03）：生成前一次
+        # 调用产出 {rationale, workflow} → 拼接 report_draft_text 传
+        # generate_project（报告渲染层 = 纯确定性，LLM 文本是入参——骨架先
+        # 例）。题面空 = 不调（无题面无可论证，走缺省路径不写报告文件）；
+        # LLMError（网络 / 解析 / 预算）→ 占位文本进报告（报告仍写、LLM 节
+        # 中文占位，spec 失败策略），生成主链不阻断；LLM telemetry 照常采集
+        # （_retry_parse 观测 + recent_llm_workflows 收尾）。
+        report_draft_text = ""
+        if problem_text:
+            collector = create_llm_observation_collector("generate-report-draft")
+            try:
+                llm = _llm(context, RetryBudget(), collector)
+                selected_manifests = resolve_selection(
+                    _library_dir(context), platform, slugs
+                ).manifests
+                from .manifest import build_manifest_summaries
+
+                rationale, workflow = llm.generate_report_draft(
+                    problem_text=problem_text,
+                    requirements=requirements or (),
+                    manifest_summaries=build_manifest_summaries(selected_manifests),
+                    pin_summary=_pin_summary_text(platform, selected_manifests),
+                )
+                report_draft_text = f"{rationale}\n\n{workflow}"
+            except LLMError:
+                report_draft_text = f"{PLACEHOLDER}\n\n{PLACEHOLDER}"
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
         summary = generate_project(
             platform=platform,
             slugs=slugs,
@@ -1211,6 +1254,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             requirements=requirements,
             references=references,
             tool_version=__version__,
+            report_draft_text=report_draft_text,
         )
         return _generation_result(summary)
 

@@ -47,6 +47,8 @@ from contest_generator.events import (
     ProgressEvent,
 )
 from contest_generator.boards import board_for_platform
+from contest_generator.demo_script import DEMO_SCRIPT_FILENAME
+from contest_generator.report_draft import REPORT_DRAFT_FILENAME
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.llm import (
     LLMObservationCollector,
@@ -182,6 +184,15 @@ class RaisingLLM:
         raise LLMError("服务不可用")
 
     def topic_extract_number(self, text: str) -> str | None:
+        raise LLMError("服务不可用")
+
+    def generate_report_draft(
+        self,
+        problem_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        manifest_summaries: Sequence[ManifestSummary],
+        pin_summary: str,
+    ) -> tuple[str, str]:
         raise LLMError("服务不可用")
 
 
@@ -5209,3 +5220,159 @@ def test_changelog_route_lists_daily_groups(client):
     )
     # 08-12 条目应带 HH:MM 时间前缀（工单实施当日真实 commit 时间）
     assert re.fullmatch(r"\d{1,2}:\d{2}", data[0]["items"][0]["time"])
+
+
+# ---------------------------------------------------------------------------
+# 设计报告草稿 LLM 输出层（工单 report-draft-demo/03）：生成路由接线
+# ---------------------------------------------------------------------------
+
+
+def _generate_with_report(client, context, output_dir, problem_text="赛题原文。", llm=None):
+    """生成请求（带题面，LLM 默认 = context holder 的 FakeLLM）。"""
+    if llm is not None:
+        context[1]["llm"] = llm
+    return client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+            "create_desktop_topic_dir": False,
+            "problem_text": problem_text,
+            "requirements": [
+                {"requirement": "测量距离", "sentence": 2, "modules": ["dht11"]}
+            ],
+        },
+    )
+
+
+def test_generate_writes_report_draft_with_llm_text(client, context, tmp_path):
+    """带题面生成：LLM 结构化输出 {rationale, workflow} 拼接进报告草稿落盘
+    （方案论证 / 软件流程两节），生成照常成功。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    output_dir = tmp_path / "out" / "with_report"
+
+    resp = _generate_with_report(client, context, output_dir)
+
+    assert resp.status_code == 200
+    report = (output_dir / REPORT_DRAFT_FILENAME).read_text(encoding="utf-8")
+    assert "AI 生成的方案论证" in report
+    assert "AI 生成的软件流程" in report
+    assert "## 系统方案论证" in report
+    assert "## 软件流程设计" in report
+    # LLM 收到题面 / 需求 / 模块摘要 / 引脚表摘要
+    calls = context[1]["llm"].report_draft_calls
+    assert len(calls) == 1
+    problem_text, requirements, summaries, pin_summary = calls[0]
+    assert problem_text == "赛题原文。"
+    assert requirements[0]["requirement"] == "测量距离"
+    assert any(s.slug == "dht11" for s in summaries)
+    assert pin_summary == "（本工程模块未声明引脚接线）"
+
+
+def test_generate_report_draft_roundtrip_paragraph_split(client, context, tmp_path):
+    """往返契约：LLM 返回多段 rationale → 拼接 → 渲染器按 \\n\\n 切回（论证
+    节 = 多段原文、流程节 = 最后一段）——产侧（webapp 拼接）与消费侧
+    （report_draft._split_llm_text）往返钉住。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"]._report_draft = ("论证A\n\n论证B", "流程C")
+    output_dir = tmp_path / "out" / "roundtrip"
+
+    resp = _generate_with_report(client, context, output_dir)
+
+    assert resp.status_code == 200
+    report = (output_dir / REPORT_DRAFT_FILENAME).read_text(encoding="utf-8")
+    rationale = report.split("## 系统方案论证")[1].split("## 软件流程设计")[0].strip()
+    workflow = report.split("## 软件流程设计")[1].strip()
+    assert rationale == "论证A\n\n论证B"
+    assert workflow == "流程C"
+
+
+def test_generate_report_draft_llm_error_degrades_to_placeholder(
+    client, context, tmp_path
+):
+    """LLM 失败（LLMError）：生成照常成功，报告仍写盘、两节中文占位（spec
+    失败策略：报告不缺失章节、不阻断生成主链）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    output_dir = tmp_path / "out" / "llm_error"
+
+    resp = _generate_with_report(
+        client, context, output_dir, llm=RaisingLLM()
+    )
+
+    assert resp.status_code == 200
+    report = (output_dir / REPORT_DRAFT_FILENAME).read_text(encoding="utf-8")
+    assert "本节 AI 生成失败，请手动补充" in report
+
+
+def test_generate_without_problem_text_skips_llm_and_report(
+    client, context, tmp_path
+):
+    """无题面：不调 LLM（无题面无可论证）、报告不写（缺省路径逐字节不变——
+    旧请求行为），演示脚本照常落盘。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    output_dir = tmp_path / "out" / "no_problem"
+
+    resp = _generate_with_report(client, context, output_dir, problem_text="")
+
+    assert resp.status_code == 200
+    assert context[1]["llm"].report_draft_calls == []
+    assert not (output_dir / REPORT_DRAFT_FILENAME).exists()
+    assert (output_dir / DEMO_SCRIPT_FILENAME).is_file()
+
+
+def test_generate_report_draft_telemetry_recorded(tmp_path):
+    """LLM telemetry 照常（工单 03 验收）：真 DeepSeekLLM + 假传输 → 生成请求
+    后 recent_llm_workflows 记录 1 条 generate-report-draft 工作流（成功态、
+    1 次调用）。"""
+    _import_stm32_master(tmp_path / "masters", tmp_path)
+    library = make_fake_module_library(tmp_path / "modules")
+    body = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"rationale": "论证段落", "workflow": "流程段落"}
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        }
+    )
+    transport = FakeTransport(body=body)
+    holders = {}
+
+    def factory(config, retry_budget=None, observation_collector=None):
+        llm = build_llm(config, retry_budget, observation_collector, transport)
+        holders["llm"] = llm
+        return llm
+
+    ctx = AppContext(
+        config=AppConfig(api_key="sk-test", module_library_dir=library, masters_dir=tmp_path / "masters"),
+        llm_factory=factory,
+    )
+    client = TestClient(create_app(ctx))
+    output_dir = tmp_path / "out" / "telemetry"
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+            "create_desktop_topic_dir": False,
+            "problem_text": "赛题原文。",
+        },
+    )
+
+    assert resp.status_code == 200
+    workflows = ctx.recent_llm_workflows.to_dict()["workflows"]
+    assert len(workflows) == 1
+    assert workflows[0]["workflow_name"] == "generate-report-draft"
+    assert workflows[0]["call_count"] == 1
+    assert workflows[0]["status"] == "success"
+    assert (output_dir / REPORT_DRAFT_FILENAME).is_file()
