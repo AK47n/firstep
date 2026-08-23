@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=868cb6eb1f5547c616413c4f414393caccc21e66 -->
+<!-- changelog-auto: last-commit=6b059d30241ba8363fce1e70794e65e8bd4561e7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
+- 01:04 取题面默认展示原题 PDF 页（工单 topic-pdf-viewer/01）——新增 /api/topics/{key}/pages 页图端点（定位题面页+逐页渲染 PNG+base64 data URL，四种失败路径 400 中文明确报错）+ 前端页图叠放/点击放大/文字收起切换，输入编号与用此题生成双路径接入
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
