@@ -5,6 +5,7 @@
 逐字形状，照 test_selection.py 先例）。
 """
 
+from pathlib import Path
 from queue import Queue
 
 from contest_generator.events import (
@@ -127,7 +128,8 @@ def _kinds(items: list) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# vision_answerable：机械判定（宁漏判不误判）
+# vision_answerable：机械判定（工单 clarify-vision-relax/01 放宽：题面引用图
+# ∧（点名图N ∨ 命中关键词）；答不上由视觉安全网兜底转问用户）
 # ---------------------------------------------------------------------------
 
 
@@ -148,31 +150,58 @@ def test_vision_answerable_multi_figure_problem():
     assert vision_answerable("图1中的走廊宽度？", problem)
 
 
+def test_vision_answerable_named_figure_without_keyword_hits():
+    """放宽：点名图号本身即命中（图号引用问题天然是图面问题）——视觉安全网
+    兜底答不上转用户，误判代价 = 一次缓存调用。"""
+    problem = "院区尺寸如图1所示。"
+    assert vision_answerable("图1里小车用什么方式识别数字？", problem)
+    assert vision_answerable("图1区域需要几块电池？", problem)
+    # 未点名图 + 无关键词 → 仍不命中（纯正文交互问题）
+    assert not vision_answerable("小车用什么方式识别数字？", problem)
+    assert not vision_answerable("需要几块电池？", problem)
+
+
+def test_vision_answerable_no_figure_name_but_keyword_hits():
+    """放宽核心（真机 2021F Q2 场景）：未点名图号但命中图内信息关键词且题面
+    引用过图 → 命中，交视觉通道从渲染页找答案。"""
+    problem = "院区尺寸如图1所示。"
+    assert vision_answerable("走廊宽度是多少？", problem)
+    assert vision_answerable("门口区域的精确尺寸是多少？", problem)
+    assert vision_answerable("数字标号纸张放置在走廊什么位置？", problem)
+    assert vision_answerable("距离交叉口多远？", problem)
+
+
 def test_vision_answerable_figure_number_intersection_not_substring():
-    """图号按编号求交而非子串匹配：题面只引图1，问题写「图10」不命中。"""
+    """图号按编号求交而非子串匹配（题面只引图1，「图10」点名不命中）；但
+    关键词分支不看图号：无关键词时交集仍生效。"""
     problem = "院区尺寸如图1所示。"
-    assert not vision_answerable("图10中的走廊宽度是多少？", problem)
-
-
-def test_vision_answerable_misses_without_figure_number_in_question():
-    """问题没点名图号（如「走廊宽度是多少？」）→ 漏判（保守：照旧问用户）。"""
-    problem = "院区尺寸如图1所示。"
-    assert not vision_answerable("走廊宽度是多少？", problem)
-    assert not vision_answerable("门口区域的精确尺寸是多少？", problem)
+    assert not vision_answerable("图10中的标题是什么？", problem)
+    assert vision_answerable("图10中的走廊宽度是多少？", problem)  # 关键词分支
 
 
 def test_vision_answerable_misses_when_problem_has_no_figure_reference():
-    """题面没引用任何图号（no-topic 粘贴题面）→ 永不命中。"""
+    """题面没引用任何图号（no-topic 粘贴题面）→ 永不命中（纯正文问题不打扰
+    视觉通道）。"""
     problem = "送药小车。识别数字。"
     assert not vision_answerable("图1中的走廊宽度是多少？", problem)
     assert not vision_answerable("图中走廊宽度？", problem)
+    assert not vision_answerable("走廊宽度是多少？", problem)
 
 
-def test_vision_answerable_misses_interaction_question():
-    """图号命中但问题非图上事实（交互/实现细节）→ 漏判。"""
-    problem = "院区尺寸如图1所示。"
-    assert not vision_answerable("图1里小车用什么方式识别数字？", problem)
-    assert not vision_answerable("图1区域需要几块电池？", problem)
+def test_vision_answerable_real_questions_2021F():
+    """真机回归（工单 clarify-vision-relax/01）：2021F 真实题面 + 用户被问的
+    3 问原文——Q1（点名图1）与 Q2（未点名但命中走廊/位置/距离/门口）→ 可
+    视觉消化；Q3（流程/指示灯/总时间，无图号无关键词）→ 不命中走澄清。"""
+    topic_md = (
+        Path(__file__).resolve().parents[1] / "library" / "topics" / "2021F" / "topic.md"
+    )
+    problem = topic_md.read_text(encoding="utf-8")
+    q1 = "院区走廊的具体尺寸（宽度、各段长度、交叉点位置）以及药房/病房门口区域的尺寸（长×宽）和坐标？图1标注中的“门口区域5cm”具体指什么？"
+    q2 = "数字标号纸张（1-8号）在测试时具体放置在走廊的什么位置？是否固定在每个病房门口的地面上？距离交叉口多远？小车在交叉口能否通过识别数字判断行进方向？"
+    q3 = "发挥部分（2）中“取药”的完整流程：小车2是否需要在药房装载药品？到达病房后亮红色指示灯表示什么？是否需要返回药房？如果不需要返回，任务总时间的计算是否只到小车2到达病房为止？"
+    assert vision_answerable(q1, problem)
+    assert vision_answerable(q2, problem)
+    assert not vision_answerable(q3, problem)
 
 
 def test_vision_answerable_empty_inputs():
@@ -210,7 +239,7 @@ def test_clarify_partial_vision_consumption_keeps_remaining_for_user():
     llm = _FakeLLM(
         clarify_questions=(
             "图1中的走廊宽度是多少？",
-            "小车最大尺寸限制是多少？",  # 无图号 → 漏判，保留
+            "小车最大限制规则是什么？",  # 无图号 + 无关键词 → 保留问用户
         ),
     )
 
@@ -220,7 +249,7 @@ def test_clarify_partial_vision_consumption_keeps_remaining_for_user():
 
     assert record["vision_calls"] == [("图1中的走廊宽度是多少？", "走廊宽 30cm")]
     assert _drain(events) == [
-        ("question", {"questions": ["小车最大尺寸限制是多少？"]})
+        ("question", {"questions": ["小车最大限制规则是什么？"]})
     ]
     assert llm.select_calls == []  # 有剩余待问：不进收敛
 

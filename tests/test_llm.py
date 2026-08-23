@@ -848,10 +848,16 @@ def test_clarify_truncates_topic_over_cap_with_notice():
 
 def test_clarify_prompt_forbids_reasking_stated_details():
     """提示词契约：题面已明确的细节（颜色/型号/数量/类型）绝不重复问——用户
-    报告「前面都说了红色指示灯还问我颜色」。"""
+    报告「前面都说了红色指示灯还问我颜色」；流程/时序/指示灯含义/计时起止
+    同属题面已给出的信息（工单 clarify-vision-relax/02，真机 2021F Q3 场景：
+    取药流程/红灯含义/总时间起止全在题面正文）。"""
     assert "绝不重复问" in CLARIFY_SYSTEM_PROMPT
     assert "已明确" in CLARIFY_SYSTEM_PROMPT
     assert "宁缺毋滥" in CLARIFY_SYSTEM_PROMPT
+    assert "流程" in CLARIFY_SYSTEM_PROMPT
+    assert "时序" in CLARIFY_SYSTEM_PROMPT
+    assert "指示灯含义" in CLARIFY_SYSTEM_PROMPT
+    assert "计时起止" in CLARIFY_SYSTEM_PROMPT
 
 
 # clarify 整次重试兜底（工单 recommend-call-retry/01）：与 select_modules 同款
