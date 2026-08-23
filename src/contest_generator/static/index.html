@@ -28,6 +28,7 @@
   }
   :root {
     color-scheme: dark;  /* 原生下拉/滚动条/日期选择等随深色 */
+    --header-h: 58px;  /* 吸顶栏实际高度，JS 按视口宽度实时刷新（窄屏换行变高） */
     --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
     --border: #30363d; --border-strong: #3d444d;
     --input-bg: #0d1117; --code-bg: #0a0e14;
@@ -563,7 +564,7 @@
   #tab-generate .gen-steps > .card { padding: 18px 24px; }
   @media (min-width: 1180px) {
     .gen-layout { display: flex; gap: 18px; align-items: flex-start; }
-    .step-nav { position: sticky; top: 14px; width: 158px; flex: none;
+    .step-nav { position: sticky; top: calc(var(--header-h) + 14px); width: 158px; flex: none;
                 display: flex; flex-direction: column; gap: 4px;
                 padding: 4px 0; }
     .step-nav .step-dot { display: flex; align-items: center; gap: 8px;
@@ -5975,8 +5976,15 @@ function syncStep7() {
   const onScroll = () => {
     if (!ticking) { ticking = true; requestAnimationFrame(update); }
   };
+  // 吸顶栏高度实时写入 CSS 变量（header 窄屏会换行变高，写死会挡住/留白）
+  const syncHeaderH = () => {
+    const h = document.querySelector("header");
+    if (h) document.documentElement.style.setProperty(
+      "--header-h", Math.ceil(h.getBoundingClientRect().height) + "px");
+  };
   document.addEventListener("scroll", onScroll, { passive: true });
-  window.addEventListener("resize", onScroll, { passive: true });
+  window.addEventListener("resize", () => { syncHeaderH(); onScroll(); }, { passive: true });
+  syncHeaderH();
   update();
 })();
 
