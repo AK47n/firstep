@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import base64
 import functools
 import inspect
 import json
@@ -63,6 +64,10 @@ from .extraction import (
     extract_file,
     extract_image,
     extract_pdf_with_image_notes,
+    locate_topic_pages,
+    # 页渲染原语按公开名引入（模块级函数 = monkeypatch 接缝，测试以此为
+    # 稳定挂载点；工单 topic-pdf-viewer/01 取题面页图展示用）
+    _render_page_png as render_page_png,
 )
 from .vision import (
     DEFAULT_VISION_BASE_URL,
@@ -2441,6 +2446,50 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             except Exception:
                 pass  # 视觉失败降级：返回原题面
         return entry.to_dict()
+
+    @app.get("/api/topics/{key}/pages")
+    @_map_errors
+    def topic_pages_get(key: str) -> dict:
+        """取题面页图（工单 topic-pdf-viewer/01）：条目原 PDF 的题面页渲染 PNG。
+
+        取题面后默认直接展示原题 PDF 页（用户诉求「直接给我展示pdf就行了，
+        不要像现在这样给我展示文字」）：题面独特文本（去空白前 20 字符）逐页
+        匹配文本层定位题面页 → 命中页起 2 页逐页渲染（PyMuPDF，既有 2 倍
+        缩放参数）→ base64 data URL 列表，前端页图叠放展示。
+
+        纯展示功能不阻塞主流程：条目无原 PDF / 文件缺失 / 页定位失败 /
+        渲染全失败 → 400 中文错误（各自说明原因），文字框照常可用。查无
+        此条与取题面同一编号解析契约（明确报错，不猜测编造）。
+        """
+        config = _require_config(context)
+        topics_dir = topic_library_dir(config.module_library_dir)
+        entry = resolve_number(topics_dir, key)
+        if not entry.original_pdf:
+            raise HTTPException(400, "该赛题条目没有原 PDF 文件")
+        pdf_path = topics_dir / key / entry.original_pdf
+        if not pdf_path.is_file():
+            raise HTTPException(400, f"原 PDF 文件不存在：{entry.original_pdf}")
+        located = locate_topic_pages(pdf_path, entry.problem_text)
+        if located is None:
+            raise HTTPException(
+                400, "未能定位题面在 PDF 中的页范围（可能是扫描件或文本不匹配）"
+            )
+        pages: list[dict[str, Any]] = []
+        start, end = located
+        for page_no in range(start, end):
+            png = render_page_png(pdf_path, page_no)
+            if png is None:
+                continue  # 单页渲染失败跳过（范围右端越界页天然落这里）
+            pages.append(
+                {
+                    "page_no": page_no,
+                    "data_url": "data:image/png;base64,"
+                    + base64.b64encode(png).decode("ascii"),
+                }
+            )
+        if not pages:
+            raise HTTPException(400, "题面页渲染失败（缺少 PyMuPDF 或 PDF 损坏）")
+        return {"key": entry.key, "pages": pages}
 
     @app.delete("/api/topics/{key}")
     @_map_errors
