@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9d0a1c558c06c95f6a3bf15c861f078a235f0fe2 -->
+<!-- changelog-auto: last-commit=eb39cbda38e93b96735279857cbe48adc7460305 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 11:22 UI 打磨（ui-polish-9/04）：高频按钮图标化（btnIcon 内联 SVG，data-ico 注入，17 按钮）
 - 13:40 生成工程自动附带设计报告草稿与演示脚本（A2/A3）——demo_script/report_draft 纯函数渲染器 + LLM 方案段接线 + 前端摘要卡标注（四工单 resolved，实施与评审整改记录入库）
 - 21:46 模块推荐 LLM 输出失控防护——select 请求加 max_tokens 上限（4096）+ 超长输出免重试守卫 + 观测响应前缀留痕（deepseek-v4-flash 曾无上限输出 20K tokens/次致解析失败重试烧钱烧时间）
+- 21:56 澄清阶段蠢问题——clarify 题面预算 4000 提到 12000 字符（长赛题后半句被截导致模型问题面已明确的细节，如送药小车已说红色指示灯还问颜色）+ 提示词强制题面已明确的细节绝不重复问
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
