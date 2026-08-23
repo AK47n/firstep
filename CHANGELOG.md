@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6b059d30241ba8363fce1e70794e65e8bd4561e7 -->
+<!-- changelog-auto: last-commit=0eb79cc86024fc508d6effec6046a82d329f878a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -7,6 +7,7 @@
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
 - 01:04 取题面默认展示原题 PDF 页（工单 topic-pdf-viewer/01）——新增 /api/topics/{key}/pages 页图端点（定位题面页+逐页渲染 PNG+base64 data URL，四种失败路径 400 中文明确报错）+ 前端页图叠放/点击放大/文字收起切换，输入编号与用此题生成双路径接入
+- 01:13 推荐澄清少问能从题面/图找到答案的问题（工单 clarify-vision-relax/01/02）——vision_answerable 放宽为题面引用图∧（点名图∨关键词），未点名图但问图内信息也走视觉从原题渲染页找答案（答不上照旧问用户）；CLARIFY_SYSTEM_PROMPT 补流程/时序/指示灯含义/计时起止绝不重复问条款；真机 2021F 三问原文回归测试
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
