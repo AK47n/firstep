@@ -58,6 +58,26 @@ WARNING_MISSING = "missing"  # 无目标平台版本条目，生成必失败
 WARNING_UNVERIFIED = "unverified"  # 有版本但未验证过，可能无法编译
 WARNING_HARDWARE_BOUND = "hardware_bound"  # 绑定硬件，换平台需移植
 
+# 图内信息问题关键词（工单 recommend-vision-qa/01）：与「问题点名题面引用过
+# 的图号」合取判定——只把图上才有的事实类问题交给视觉问答，交互/实现细节
+# 类问题永不误判。宁漏判不误判：漏判 = 照旧问用户。
+VISION_ANSWERABLE_KEYWORDS = (
+    "尺寸",
+    "宽度",
+    "长度",
+    "走廊",
+    "门口",
+    "位置",
+    "走向",
+    "标注",
+    "距离",
+    "坐标",
+    "多大",
+    "多少",
+    "面积",
+    "高度",
+)
+
 
 class SelectionError(ValueError):
     """选择 / 依赖解析失败，message 说明具体问题。"""
@@ -1066,6 +1086,53 @@ def select_modules_convergent(
 # ---------------------------------------------------------------------------
 
 
+def vision_answerable(question: str, problem_text: str) -> bool:
+    """机械判定「图内信息问题」（工单 recommend-vision-qa/01）。
+
+    合取：①问题点名的图号与题面引用过的图号交集非空（双方都按「图N」正则
+    提取编号再求交——子串匹配会把「图1」误命中「图10」；题面含 `[图N 标注`
+    的图注尾巴同样算引用）；②问题含尺寸 / 位置 / 走向类关键词
+    （VISION_ANSWERABLE_KEYWORDS 单源）。不满足 = 漏判（照旧问用户，宁漏判
+    不误判——误判会把交互问题错误丢给视觉模型）。
+    """
+    if not question or not problem_text:
+        return False
+    topic_figures = set(re.findall(r"图\s*(\d+)", problem_text))
+    if not topic_figures:
+        return False
+    question_figures = set(re.findall(r"图\s*(\d+)", question))
+    if not (topic_figures & question_figures):
+        return False
+    return any(keyword in question for keyword in VISION_ANSWERABLE_KEYWORDS)
+
+
+def _answer_vision_questions(
+    questions: Sequence[str],
+    vision_qa: Callable[[str], str | None] | None,
+    problem_text: str,
+    clarifications: Sequence[tuple[str, str]],
+) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """逐条尝试视觉消化（工单 recommend-vision-qa/01）。
+
+    命中的图内问题交给 vision_qa：答出非空内容 → 从待问清单移除、以
+    (问题, 答案) 并入澄清历史（与用户回答同构，题面后独立段）；答不上 /
+    空答案 / 未注入回调 / 非图内问题 → 保留待问。返回 (剩余待问, 合并后的
+    澄清历史)。纯函数，视觉失败永不阻塞主流程。
+    """
+    if not questions or vision_qa is None:
+        return tuple(questions), tuple(clarifications)
+    remaining: list[str] = []
+    merged = list(clarifications)
+    for question in questions:
+        if vision_answerable(question, problem_text):
+            answer = vision_qa(question)
+            if answer and answer.strip():
+                merged.append((question, answer.strip()))
+                continue
+        remaining.append(question)
+    return tuple(remaining), tuple(merged)
+
+
 def run_recommendation(
     topic: TopicContext,
     llm: LLM,
@@ -1075,6 +1142,7 @@ def run_recommendation(
     max_rounds: int = SELECT_CONVERGENCE_MAX_ROUNDS,
     platform: str = "",
     qa_material: str = "",
+    vision_qa: Callable[[str], str | None] | None = None,
 ) -> None:
     """/api/recommend 的两阶段编排（工单 01 推荐先澄清后收敛）。
 
@@ -1085,6 +1153,14 @@ def run_recommendation(
     承载，clarify 的补问功能被收敛循环覆盖——每轮补问省一次串行 LLM 调用
     （约 2-4 min）；"一轮问全"（A 棱镜）摊薄"答案没清完疑问"的风险，
     select_modules 本身仍会补问，不会漏问。
+
+    按需视觉问答（工单 recommend-vision-qa/01）：澄清门与收敛补问的待问
+    问题在问用户之前，先经 vision_qa 回调逐条尝试视觉消化（vision_answerable
+    机械判定图内信息问题 → 回调返回视觉答案 → 以 (问题, 答案) 并入澄清历史
+    → 从待问清单移除）。剩余待问才发 question 事件；被视觉全部消化 → 带
+    答案直接进收敛（澄清门场景）或重跑一轮收敛（收敛补问场景，最多一次——
+    重跑后仍有疑问直接问用户，视觉已尽力，防问问题链死循环）。回调未注入
+    （未配置视觉 / 无原图 / 调用方不接入）= 行为与现状逐字节一致。
 
     收敛循环（select_modules_convergent）：功能需求层两轮一致即停、上限 4 轮
     （成本 2-4 轮 × 2-4K token），轮次经 emit.progress 推送；循环内模型拿不准
@@ -1106,26 +1182,45 @@ def run_recommendation(
     # recommend-speedup/01）：select_modules 已带历史段 + 已答不重问，补问
     # 功能被收敛循环覆盖——每轮补问省一次串行 LLM 调用；"一轮问全"（A 棱镜）
     # 摊薄"答案没清完疑问"的风险，select_modules 本身仍会补问、不会漏问。
+    # 按需视觉问答（工单 recommend-vision-qa/01）：待问问题先过 vision_qa
+    # 视觉消化（答案并入澄清历史），剩余才问用户。
+    def _converge(clarifs: Sequence[tuple[str, str]]) -> ModuleSelection:
+        """收敛循环局部装配（澄清历史每次带当前值——视觉消化后重跑同参）。"""
+        return select_modules_convergent(
+            llm,
+            topic.problem_text,  # 识别到时题面用库内全文；no-topic 形 = 粘贴原样
+            topic.manifest_summaries,
+            references=topic.suggestions,
+            reader=topic.read_fulltext,
+            progress_emitter=emit.progress,
+            manual_fulltexts=topic.manual_fulltexts,
+            clarifications=clarifs,  # 澄清历史贯穿收敛循环（题面后独立段）
+            max_rounds=max_rounds,  # 轮数上限可配置（工单 01，设置项透传）
+            qa_material=qa_material,  # 赛题答疑 Q&A（工单 qa-material/01）
+        )
+
     if not clarifications:
         pending = llm.clarify(topic.problem_text, clarifications)
+        pending, clarifications = _answer_vision_questions(
+            pending, vision_qa, topic.problem_text, clarifications
+        )
         if pending:
             emit.question({"questions": list(pending)})
             return
-    selection = select_modules_convergent(
-        llm,
-        topic.problem_text,  # 识别到时题面用库内全文；no-topic 形 = 粘贴原样
-        topic.manifest_summaries,
-        references=topic.suggestions,
-        reader=topic.read_fulltext,
-        progress_emitter=emit.progress,
-        manual_fulltexts=topic.manual_fulltexts,
-        clarifications=clarifications,  # 澄清历史贯穿收敛循环（题面后独立段）
-        max_rounds=max_rounds,  # 轮数上限可配置（工单 01，设置项透传）
-        qa_material=qa_material,  # 赛题答疑 Q&A（工单 qa-material/01）
-    )
+    selection = _converge(clarifications)
     if selection.questions:
-        emit.question({"questions": list(selection.questions)})
-        return
+        remaining, clarifications = _answer_vision_questions(
+            selection.questions, vision_qa, topic.problem_text, clarifications
+        )
+        if remaining:
+            emit.question({"questions": list(remaining)})
+            return
+        # 视觉消化了全部补问：答案已并入历史 → 重跑收敛（"回答并入历史重发"
+        # 既有语义）；重跑后仍有疑问直接问用户（视觉已尽力，防问问题链死循环）
+        selection = _converge(clarifications)
+        if selection.questions:
+            emit.question({"questions": list(selection.questions)})
+            return
     result: dict[str, Any] = {
         "modules": [
             {"slug": slug, "reason": selection.reasons.get(slug, "")}
