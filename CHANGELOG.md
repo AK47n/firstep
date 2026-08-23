@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b45b874877251bb2b266a1aee0851f7f5a45da97 -->
+<!-- changelog-auto: last-commit=389108a89ec6f17b9b5a12b1b6617dcea66b4243 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 00:57 UI 打磨（ui-polish-7/02）：顶部导航字号加大（13.5→16px）并加字重与过渡
 - 10:04 UI 打磨（ui-polish-7/03）：顶部导航栏吸顶固定（sticky）便于随时切换
 - 10:09 UI 打磨（ui-polish-7/04）：步骤导航吸顶避开固定顶栏（CSS 变量跟随头部高度）
+- 10:32 UI 打磨（ui-polish-7/05）：导航 hover 淡青圆角背景与激活 tab 渐变下划线（青→紫发光）
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
