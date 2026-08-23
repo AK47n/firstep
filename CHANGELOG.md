@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=bc7e809b5149d34628b369dff15f0f3ddd418509 -->
+<!-- changelog-auto: last-commit=25a1900699e7f9f7beb90f858baad8087064db84 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 10:32 UI 打磨（ui-polish-7/05）：导航 hover 淡青圆角背景与激活 tab 渐变下划线（青→紫发光）
 - 10:43 UI 打磨（ui-polish-8/01）：main.c 行号与语法着色（注释/字符串/关键字/数字/预处理五类 token）
 - 10:46 UI 打磨（ui-polish-8/02）：步骤完成庆祝动画（徽章弹跳 + 顶部青光扫过，动画结束自清理）
+- 10:47 UI 打磨（ui-polish-8/03）：toast 类型左边框与背景微染、点击关闭离场动画、reduced-motion 兼容
 
 ## 2026-08-22
 - 01:18 UI 打磨（ui-polish/01）：全局动效渐变微光与空状态升级
