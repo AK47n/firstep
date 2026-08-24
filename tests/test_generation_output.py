@@ -8,6 +8,7 @@ import pytest
 
 from contest_generator.generation_output import (
     TOPIC_EN_TITLES,
+    desktop_topic_dir_verdict,
     topic_dir_title,
     topic_en_title,
     topic_short_title,
@@ -104,3 +105,46 @@ def test_unique_desktop_topic_dir_adds_timestamp_then_counter(tmp_path, monkeypa
     monkeypatch.setattr("contest_generator.generation_output.time.strftime", lambda fmt: "20260819-153000")
 
     assert unique_desktop_topic_dir(desktop, "CON") == desktop / "CON_20260819-153000_2"
+
+
+def test_desktop_topic_dir_verdict_new_when_missing(tmp_path):
+    """目录不存在 → "new"：候选目录 = 桌面根 + 清洗后题名（无时间戳后缀）。"""
+    desktop = tmp_path / "Desktop"
+
+    path, verdict = desktop_topic_dir_verdict(desktop, "2024H_Auto_Car")
+
+    assert verdict == "new"
+    assert path == desktop / "2024H_Auto_Car"
+    # 保留名清洗照常（CON → CON_）
+    assert desktop_topic_dir_verdict(desktop, "CON") == (desktop / "CON_", "new")
+
+
+def test_desktop_topic_dir_verdict_clean_marks_half_baked(tmp_path):
+    """目录存在但无 .contest_context.json / main.c（半成品残渣）→ "clean"。"""
+    desktop = tmp_path / "Desktop"
+    half = desktop / "Auto_Car"
+    half.mkdir(parents=True)
+    (half / ".ccsproject").write_text("<projectOptions/>", encoding="utf-8")
+
+    path, verdict = desktop_topic_dir_verdict(desktop, "Auto_Car")
+
+    assert verdict == "clean"
+    assert path == half
+    # 空目录同样按残渣清理
+    empty = desktop / "Empty_Dir"
+    empty.mkdir()
+    assert desktop_topic_dir_verdict(desktop, "Empty_Dir") == (empty, "clean")
+
+
+def test_desktop_topic_dir_verdict_exists_when_complete(tmp_path):
+    """有 main.c 或 .contest_context.json 任一 = 完整工程 → "exists"（不覆盖）。"""
+    desktop = tmp_path / "Desktop"
+    with_main = desktop / "With_Main"
+    with_main.mkdir(parents=True)
+    (with_main / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
+    with_manifest = desktop / "With_Manifest"
+    with_manifest.mkdir()
+    (with_manifest / ".contest_context.json").write_text("{}", encoding="utf-8")
+
+    assert desktop_topic_dir_verdict(desktop, "With_Main")[1] == "exists"
+    assert desktop_topic_dir_verdict(desktop, "With_Manifest")[1] == "exists"

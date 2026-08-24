@@ -2178,17 +2178,20 @@ def test_generate_respects_explicit_output_dir_when_desktop_output_disabled(
     assert context[1]["llm"].topic_summarize_calls == []
 
 
-def test_generate_desktop_output_cleans_title_and_uses_timestamp_on_collision(
-    client, context, tmp_path, monkeypatch
+def test_generate_desktop_output_reuses_cleaned_half_baked_dir(
+    client, context, tmp_path
 ):
+    """工单 generate-conflict-guard/01：同名目录存在但无完整工程标记（空 /
+    半成品残渣）→ 清理后用原目录名生成（不再静默改名攒时间戳目录）；AI
+    题名照常过 windows_safe 清洗（CON → CON_ 保留名）。"""
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
-    # AI 英文短名照常过 windows_safe 清洗 + 重名唯一化
     context[1]["llm"] = FakeLLM(topic_en_name='  CON<>:"/\\|?*  ')
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
     (desktop_dir / "CON_").mkdir(parents=True)
-    (desktop_dir / "CON_20260819-153000").mkdir()
-    monkeypatch.setattr("contest_generator.generation_output.time.strftime", lambda fmt: "20260819-153000")
+    (desktop_dir / "CON_").joinpath(".ccsproject").write_text(
+        "<projectOptions/>", encoding="utf-8"
+    )
 
     resp = client.post(
         "/api/generate",
@@ -2202,9 +2205,130 @@ def test_generate_desktop_output_cleans_title_and_uses_timestamp_on_collision(
     )
 
     assert resp.status_code == 200
-    output_dir = desktop_dir / "CON_20260819-153000_2"
+    output_dir = desktop_dir / "CON_"
     assert resp.json()["output_dir"] == str(output_dir)
     assert (output_dir / "main.c").is_file()
+    # 残渣被替换为完整工程（模块副产物在）
+    assert (output_dir / "modules" / "dht11" / "inc" / "dht11.h").is_file()
+
+
+def test_generate_desktop_rejects_existing_complete_project(
+    client, context, tmp_path
+):
+    """工单 generate-conflict-guard/01：同名完整工程已存在 → 400 中文（不静默
+    换名、不覆盖，目录内容原样未动）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    existing = desktop_dir / "Auto_Car"
+    existing.mkdir(parents=True)
+    (existing / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
+    (existing / "README.md").write_text("不要动我", encoding="utf-8")
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：同名冲突",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "已有同名工程" in resp.json()["detail"]
+    assert (existing / "main.c").read_text(encoding="utf-8") == "int main(void) {}\n"
+    assert (existing / "README.md").read_text(encoding="utf-8") == "不要动我"
+
+
+def test_generate_desktop_busy_while_same_key_in_progress(
+    client, context, tmp_path
+):
+    """工单 generate-conflict-guard/01：同名工程生成中（互斥注册表已占键）→
+    409 中文「正在生成中」，第二次请求不进生成流程。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    context[0].pending_generations.add("desktop:Auto_Car")
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：并发",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 409
+    assert "正在生成中" in resp.json()["detail"]
+    assert not desktop_dir.exists()
+
+
+def test_generate_desktop_cleans_partial_dir_on_failure(
+    client, context, tmp_path, monkeypatch
+):
+    """工单 generate-conflict-guard/01：桌面模式生成失败 → 删除本次目录不留
+    半成品（下次同题可干净重来）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    def boom(**kwargs):
+        raise OSError("磁盘已满")
+
+    monkeypatch.setattr("contest_generator.webapp.generate_project", boom)
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：失败清理",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 400
+    assert (desktop_dir / "Auto_Car").exists() is False
+
+
+def test_generate_desktop_opens_explorer_on_success(
+    client, context, tmp_path, monkeypatch
+):
+    """工单 generate-conflict-guard/04：桌面模式生成成功 → 自动 explorer 打开
+    工程目录（聚焦，用户不用自己翻桌面找）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    opened = []
+
+    monkeypatch.setattr(
+        "contest_generator.webapp._open_in_explorer",
+        lambda directory: opened.append(str(directory)),
+    )
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：自动聚焦",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 200
+    assert opened == [str(desktop_dir / "Auto_Car")]
 
 
 def test_generate_desktop_output_uses_topic_key_title_for_historical_topic(
