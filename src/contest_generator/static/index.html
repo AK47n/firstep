@@ -1610,6 +1610,15 @@ async function refreshState() {
 // 生成页：2. 平台选择
 // ---------------------------------------------------------------------------
 let chosenPlatform = null;
+function platformClickAction(current, clicked) {
+  // 平台卡点击决策三态（工单 platform-click-guard/01）：
+  // same = 重复点击当前已选平台（无操作，防误触丢推荐勾选——推荐完成后点一下
+  // 已选平台卡不该把刚勾选的模块清掉）；first = 未选平台首次选择（保留下游选择，
+  // 仅按新平台重展开做兼容检查）；switch = 真实切换平台（换平台语义，下游全部重来）。
+  if (current === clicked) return "same";
+  if (current === null) return "first";
+  return "switch";
+}
 function renderPlatforms() {
   const box = $("platforms");
   box.innerHTML = "";
@@ -1622,17 +1631,29 @@ function renderPlatforms() {
     card.innerHTML = `<div class="name">${esc(p.name)}</div>${badge}`;
     if (p.status === "ready") {
       card.addEventListener("click", () => {
+        const action = platformClickAction(chosenPlatform, p.id);
+        if (action === "same") return;  // 重复点击已选平台：无操作（防误触丢选择）
         chosenPlatform = p.id;
         markStepDone(3);
-        unmarkSteps([5, 6, 7, 8, 9, 10, 11, 12]);  // 换平台：下游全部重来
+        unmarkSteps(action === "switch" ? [5, 6, 7, 8, 9, 10, 11, 12] : [6, 7, 8, 9, 10, 11, 12]);  // 首次选平台保留推荐（步骤 5 不退）
         renderPlatforms();
         scheduleDraftSave();
         updateFixCenterAvailability();
-        selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
-        // 引脚配置（工单 03）：切平台清空绑定重取板定义
-        pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
-        // 多实例配置（工单 04）：切平台清空实例清单与选脚目标
-        instances = {}; instancePinTarget = null; renderInstanceConfig();
+        if (action === "switch") {
+          // 换平台：清空选择与配置，下游全部重来
+          selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
+          // 引脚配置（工单 03）：切平台清空绑定重取板定义
+          pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
+          // 多实例配置（工单 04）：切平台清空实例清单与选脚目标
+          instances = {}; instancePinTarget = null; renderInstanceConfig();
+        } else {
+          // 首次选平台：保留既有选择（如推荐勾选）与实例清单，只重展开做平台兼容检查
+          expanded = []; warnings = []; renderSelected(); renderWarnings();
+          if (selectedSlugs.length) runExpand();
+          // 引脚配置（工单 03）：首次选平台同样重取板定义（实例清单保留）
+          pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
+          instancePinTarget = null;
+        }
         loadPinBoard();
       });
     }
