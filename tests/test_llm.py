@@ -84,6 +84,7 @@ from contest_generator.llm import (
     parse_validation_result,
 )
 from contest_generator.selection import (
+    MAX_QUESTIONS,
     REFERENCE_SOURCE_MANUAL,
     ModuleInstance,
     ModuleSelection,
@@ -926,6 +927,15 @@ def test_parse_clarify_questions_pure_parse():
     assert parse_clarify_questions('{"questions": []}') == ()
     assert parse_clarify_questions("{}") == ()
     assert parse_clarify_questions('{"questions": ["a", "b"]}') == ("a", "b")
+
+
+def test_parse_clarify_questions_caps_at_max():
+    """补问条数硬上限（工单 clarify-no-restriction/01）：提示词要求最多
+    MAX_QUESTIONS 条，解析层截尾兜底——超出即噪音，不轰炸用户。"""
+    questions = [f"疑问{i}" for i in range(MAX_QUESTIONS + 2)]
+    assert parse_clarify_questions(
+        json.dumps({"questions": questions})
+    ) == tuple(questions[:MAX_QUESTIONS])
 
 
 # ---------------------------------------------------------------------------
@@ -4066,7 +4076,10 @@ def test_selection_prompt_worst_case_fits_request_budget():
     REFERENCE_FULLTEXT_BYTES 改大即红（实测 +4096 → 124582 > 120832 红）。
     余量 10KB → 9KB（2026-08 修订）：SELECT_SYSTEM_PROMPT 新增控制常识两条
     （航向保持非脑补 / 时间限制不推计时模块，2024H 复盘），最坏形态实测
-    121514 字节；9KB 余量仍远超响应与网关开销的充分距离。"""
+    121514 字节；9KB 余量仍远超响应与网关开销的充分距离。余量 9KB → 8KB
+     （2026-08 修订 2，工单 clarify-no-restriction/01）：SELECT_SYSTEM_PROMPT
+     新增「无规定即无限制 + 材料性门槛 + 上限 5 条」（2024H 用户报告蠢问题），
+     最坏形态实测 122220 字节；8KB 余量仍远超响应与网关开销的充分距离。"""
     problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（推导最坏形态 4000 中文）
     summaries = [
         ManifestSummary(f"mod{i}", "温湿度传感器采集与显示" * 8)
@@ -4094,7 +4107,7 @@ def test_selection_prompt_worst_case_fits_request_budget():
         "response_format": {"type": "json_object"},
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 9 * 1024
+    assert total <= MAX_REQUEST_BYTES - 8 * 1024
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
     assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in prompt  # 全文 wire 预算截断带标注
@@ -4159,15 +4172,30 @@ def test_select_system_prompt_carries_no_reask_rule():
 
 def test_prompts_carry_one_shot_question_rule():
     """两阶段提示词补"一轮问全"（工单 recommend-speedup/01）：有疑问时一次性
-    把所有疑问全部列出（宁全勿漏、每条具体可答、最多 10 条），用户一轮全部
+    把所有疑问全部列出（每条具体可答、最多 MAX_QUESTIONS 条），用户一轮全部
     答完，不要分批渐进追问——2021F 补问 4 轮 10 条的历史教训：渐进式追问
-    是问答轮数多的根因。两阶段同款措辞。"""
+    是问答轮数多的根因。两阶段同款措辞；上限由 selection.MAX_QUESTIONS 单一
+    出处插值（工单 clarify-no-restriction/01，提示词与解析层不漂移）。"""
     assert "一次性把所有疑问全部列出" in SELECT_SYSTEM_PROMPT
     assert "一次性把所有疑问全部列出" in CLARIFY_SYSTEM_PROMPT  # 同款措辞在场
     assert "不要分批渐进追问" in SELECT_SYSTEM_PROMPT
     assert "不要分批渐进追问" in CLARIFY_SYSTEM_PROMPT
-    assert "最多 10 条" in SELECT_SYSTEM_PROMPT  # 上限防问题轰炸
-    assert "最多 10 条" in CLARIFY_SYSTEM_PROMPT
+    assert f"最多 {MAX_QUESTIONS} 条" in SELECT_SYSTEM_PROMPT  # 上限防问题轰炸
+    assert f"最多 {MAX_QUESTIONS} 条" in CLARIFY_SYSTEM_PROMPT
+
+
+def test_prompts_carry_default_open_no_restriction_rule():
+    """「题目中没有提到 = 没有限制」（工单 clarify-no-restriction/01，2024H 用户
+    报告：题面已写「每经过一个点声光提示一次」还问是不是 A/B/C/D）：题面未提及
+    的细节（指示灯颜色/亮度、蜂鸣器音调、提示方式等）一律视为无限制，按合理
+    默认实现，不为此提问；只有题面缺失且直接影响模块选择或方案核心结构的关键
+    信息才补问。澄清与收敛两阶段同款措辞。"""
+    for prompt in (CLARIFY_SYSTEM_PROMPT, SELECT_SYSTEM_PROMPT):
+        assert "就是没有限制" in prompt
+        assert "未提及" in prompt
+        assert "不为此提问" in prompt
+        assert "影响模块选择" in prompt
+        assert "绝不重复问" in prompt
 
 
 def test_select_system_prompt_carries_control_domain_rules():

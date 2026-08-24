@@ -842,15 +842,23 @@ def _parse_reference_ids(
     return tuple(reference_ids)
 
 
+# 补问条数上限（工单 clarify-no-restriction/01）：「题目中没有提到 = 没有限制」
+# 收紧后提问数应自然收敛到个位数，本常量是提示词与解析层共用的单一出处——
+# llm 层系统提示词「最多 N 条」由它插值，解析层截尾兜底（模型被要求最多输出
+# 该条数，超出即噪音，不轰炸用户）。
+MAX_QUESTIONS = 5
+
+
 def _parse_questions(raw: Any) -> tuple[str, ...]:
-    """questions 数组解析：缺省 / 空 → ()；非空时必须是字符串数组（补问文本）。"""
+    """questions 数组解析：缺省 / 空 → ()；非空时必须是字符串数组（补问文本）。
+    超出 MAX_QUESTIONS 条截尾保留前 N 条（与提示词同源，防问题轰炸）。"""
     if raw in (None, [], ()):
         return ()
     if not isinstance(raw, list) or not all(
         isinstance(question, str) and question for question in raw
     ):
         raise SelectionError("questions 必须是字符串数组")
-    return tuple(raw)
+    return tuple(raw[:MAX_QUESTIONS])
 
 
 # ---------------------------------------------------------------------------
