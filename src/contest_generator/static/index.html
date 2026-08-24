@@ -221,6 +221,19 @@
                  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 2px 8px rgba(0, 0, 0, .18); }
   .score-panel .title { font-weight: 600; margin-bottom: 8px; color: var(--text); }
   .score-panel .score-row { font-size: 13.5px; line-height: 1.8; white-space: pre-wrap; }
+  /* 功能组选择卡（工单 recommend-exclusive-groups/04）：同功能互斥模块单选 */
+  .group-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
+                margin-bottom: 12px; background: var(--panel-2);
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 2px 8px rgba(0, 0, 0, .18); }
+  .group-card .title { font-weight: 600; margin-bottom: 6px; color: var(--text); }
+  .group-card .hint-note { font-size: 12px; color: var(--warn); margin-bottom: 4px; }
+  .group-member { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px;
+                  border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .group-member:hover { background: var(--accent-dim); }
+  .group-member.checked { background: var(--accent-dim); }
+  .group-member .slug { font-family: var(--mono); font-weight: 600; }
+  .group-member .role { color: var(--muted); flex: 1; font-size: 12px; line-height: 1.6; }
+  .group-member .reason { color: var(--muted); font-size: 12px; }
   /* 参考资料选择列表（工单：表格状对齐）：勾选 | 资料 | 平台 | 说明 四列 */
   .ref-pick-head, .ref-pick-row {
     display: grid; grid-template-columns: 28px minmax(0, 1fr) 110px minmax(0, 2fr);
@@ -246,6 +259,7 @@
   .warn-box.missing { background: var(--danger-dim); color: var(--danger); }
   .warn-box.unverified { background: var(--warn-dim); color: var(--warn); }
   .warn-box.hardware_bound { background: var(--info-dim); color: var(--info); }
+  .warn-box.group { background: var(--warn-dim); color: var(--warn); }
   /* renderWarnings 直通提示 JS 内联浅绿 #d1fae5——JS 不动，样式表 !important 压成深色 */
   .warn-box.ok { background: var(--ok-dim) !important; color: var(--ok-bright) !important; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -552,7 +566,7 @@
   .card:hover { border-color: var(--border-strong);
                 box-shadow: 0 2px 14px rgba(0, 0, 0, .35), 0 1px 0 rgba(255, 255, 255, .03);
                 transform: translateY(-1px); }
-  .item:hover, .score-panel:hover, .fix-row:hover { border-color: var(--border-strong); }
+  .item:hover, .score-panel:hover, .fix-row:hover, .group-card:hover { border-color: var(--border-strong); }
   .fix-row:hover { transform: translateY(-1px); }
   button.primary {
     background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
@@ -1876,13 +1890,116 @@ function renderScorePointPanel(points) {
     + rows + '</div>';
 }
 
+// ---------------------------------------------------------------------------
+// 功能组选择卡（工单 recommend-exclusive-groups/04）：纯函数层——组卡渲染、
+// 单选交换/取消、autoAdd 同组去重、同组多选冲突判定。交互逻辑全部下沉为
+// 纯函数（不碰 DOM），照 score-points-format 先例喂 node:test 单测。
+// 载荷形状（工单 02）：exclusive_groups = [{id, label, hint, members:[{slug,
+// role}], recommended:[slug]}]；旧载荷无该键 → 一律 || [] 容错（无卡）。
+// ---------------------------------------------------------------------------
+
+function groupOfSlug(groups, slug) {
+  for (const g of (groups || [])) {
+    if ((g.members || []).some((m) => m.slug === slug)) return g;
+  }
+  return null;
+}
+
+function applyGroupRadio(groups, selectedSlugs, groupId, slug) {
+  // 单选交互：点击成员 → 从 selectedSlugs 移除同组其他成员后加入该成员；
+  // 点击已选成员 = 取消整组（该组全部成员移出）。未知组 id / 旧载荷按无组
+  // 处理（只加入，无移除）。
+  const group = (groups || []).find((g) => g.id === groupId) || null;
+  const members = group ? (group.members || []).map((m) => m.slug) : [slug];
+  const without = selectedSlugs.filter((s) => !members.includes(s));
+  if (selectedSlugs.includes(slug)) return without;
+  return without.concat(slug);
+}
+
+function autoAddDedup(groups, selectedSlugs, modules) {
+  // autoAdd 同组去重：data.modules 逐个加入时，若该 slug 属某组且已选里已有
+  // 同组任一成员 → 跳过（仅首个推荐成员入集；AI 的其它同组推荐仅以组卡徽标
+  // 展示）。非组模块照常加入；旧载荷（无组）行为与现状一致。
+  const out = (selectedSlugs || []).slice();
+  for (const m of (modules || [])) {
+    const slug = m && m.slug;
+    if (!slug || out.includes(slug)) continue;
+    const g = groupOfSlug(groups, slug);
+    if (g && (g.members || []).some((mem) => out.includes(mem.slug))) continue;
+    out.push(slug);
+  }
+  return out;
+}
+
+function groupConflicts(groups, selectedSlugs) {
+  // renderSelected 兜底：同组 ≥2 成员在 selectedSlugs → 黄字警告条目（用户
+  // 拥有最终选择权，不硬拦）。返回 [{id, label, slugs}]，无冲突 = []。
+  const out = [];
+  for (const g of (groups || [])) {
+    const slugs = (g.members || []).map((m) => m.slug)
+      .filter((s) => selectedSlugs.includes(s));
+    if (slugs.length >= 2) out.push({ id: g.id, label: g.label, slugs });
+  }
+  return out;
+}
+
+function renderGroupCards(groups, modules, selectedSlugs) {
+  // 组卡渲染：label + (hint 卡)「AI 未推荐，题面疑似需要——请确认」标注 +
+  // 成员行（radio + slug + role + 「AI 推荐」徽标与理由）。默认选中 = 组内当前
+  // 在 selectedSlugs 的成员，多个按 data.modules 序（AI 推荐序）取第一个；
+  // 不在 data.modules 的成员（用户手动加的）按组成员登记序兜底（spec:107 注：
+  // AI 首选由 data.modules 顺序决定，不依赖 recommended 字段）。
+  const reasons = {};
+  for (const m of (modules || [])) reasons[m.slug] = m.reason || "";
+  return (groups || []).map((g) => {
+    const members = g.members || [];
+    const checkedMembers = members.filter((m) => selectedSlugs.includes(m.slug));
+    let checked = "";
+    if (checkedMembers.length) {
+      const firstInModules = (modules || []).find((m) =>
+        checkedMembers.some((x) => x.slug === m.slug));
+      checked = firstInModules
+        ? checkedMembers.find((x) => x.slug === firstInModules.slug).slug
+        : checkedMembers[0].slug;
+    }
+    const rows = members.map((m) => {
+      const isRec = (g.recommended || []).includes(m.slug);
+      const reason = reasons[m.slug];
+      return '<label class="group-member' + (m.slug === checked ? " checked" : "") + '">'
+        + '<input type="radio" name="group-' + esc(g.id) + '"'
+        + ' data-group-id="' + esc(g.id) + '" data-group-slug="' + esc(m.slug) + '"'
+        + (m.slug === checked ? " checked" : "") + '>'
+        + '<span class="slug">' + esc(m.slug) + '</span>'
+        + '<span class="role">' + esc(m.role || "") + '</span>'
+        + (isRec ? '<span class="badge ok">AI 推荐</span>'
+            + (reason ? '<span class="reason">' + esc(reason) + '</span>' : "") : "")
+        + '</label>';
+    }).join("");
+    return '<div class="group-card">'
+      + '<div class="title">功能组选择 · ' + esc(g.label) + '</div>'
+      + (g.hint ? '<div class="hint-note">AI 未推荐，题面疑似需要——请确认</div>' : "")
+      + rows + '</div>';
+  }).join("");
+}
+
+function groupRequirementNote(groups, slug, reason) {
+  // 需求清单灰注：组内成员的 slug 不再渲染成可移除 chip，改为灰注（需求句 / 
+  // 理由可见性保留）；非组模块返回 null（调用方走 recommendChip 原逻辑）。
+  if (!groupOfSlug(groups, slug)) return null;
+  return '<span class="muted">' + esc(slug)
+    + '（已在『功能组选择』中' + (reason ? "，" + esc(reason) : "") + '）</span>';
+}
+
 function renderRecommendResult(data, autoAdd = true) {
   markStepDone(5);  // AI 推荐成功返回即视为完成（含"未推荐到模块"的空结果）
   if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
   renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
+  const groups = data.exclusive_groups || [];  // 旧载荷无该键 = 无组卡（工单 04）
   if (autoAdd) {
-    const fresh = data.modules.filter((m) => !selectedSlugs.includes(m.slug));
-    for (const m of fresh) selectedSlugs.push(m.slug);
+    // autoAdd 同组去重（工单 recommend-exclusive-groups/04）：data.modules 逐个
+    // 加入时，若该 slug 属某组且已选里已有同组任一成员 → 跳过（仅首个入集；
+    // AI 的其它同组推荐仅以组卡徽标展示，不重复进已选）
+    selectedSlugs = autoAddDedup(groups, selectedSlugs, data.modules);
     // 多实例回填（工单 module-multi-instance/06）：AI 猜的实例清单进 6.5 实例卡
     // （显示名/颜色，引脚恒空 = 自动分配）；用户确认后仍可增删改。载荷里带
     // 实例的模块 = 新猜测覆盖旧清单；AI 未猜（题面无明确数量）的模块保留用户
@@ -1897,31 +2014,50 @@ function renderRecommendResult(data, autoAdd = true) {
     }
   }
   expanded = []; warnings = [];
-  renderSelected(); renderWarnings();
   scorePoints = data.score_points || [];
-  lastRecommend = data;
+  lastRecommend = data;  // 组卡渲染/冲突警告/单选交换共用（exclusive_groups 在此）
+  renderSelected(); renderWarnings();
   const box = $("rec-list");
   const requirements = data.requirements || [];
   const scorePanel = renderScorePointPanel(scorePoints);
-  if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length)) {
+  const groupPanel = renderGroupCards(groups, data.modules, selectedSlugs);
+  if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length) && !groups.length) {
     box.innerHTML = scorePanel + '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
     return;
   }
-  box.innerHTML = scorePanel + requirements.map((r) => `
+  box.innerHTML = scorePanel + groupPanel + requirements.map((r) => `
     <div class="item">
       <div class="head"><span class="slug">句子${r.sentence} · ${esc(r.requirement)}</span></div>
       <div class="rec-chips">
-        ${r.modules.map((slug) => recommendChip(slug, (data.modules.find((m) => m.slug === slug) || {}).reason)).join("") || '<span class="muted">库内无命中</span>'}
+        ${r.modules.map((slug) => {
+          const reason = (data.modules.find((m) => m.slug === slug) || {}).reason;
+          return groupRequirementNote(groups, slug, reason) || recommendChip(slug, reason);
+        }).join("") || '<span class="muted">库内无命中</span>'}
         ${(r.suggestions || []).map(suggestionChip).join("")}
       </div>
     </div>`).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
-      expanded = []; warnings = [];
-      renderSelected(); renderWarnings(); renderRecommendResult(lastRecommend, false);
+      reRenderAfterSelectionChange();
+    }));
+  // 组卡单选交互（工单 04）：点击 radio → 换选（同组互斥）/ 再点已选 = 取消
+  // 整组。用 click 而非 change——再点已选 radio 不触发 change（原生行为），
+  // 取消整组会丢。
+  box.querySelectorAll("[data-group-slug]").forEach((input) =>
+    input.addEventListener("click", () => {
+      selectedSlugs = applyGroupRadio((lastRecommend || {}).exclusive_groups || [],
+        selectedSlugs, input.dataset.groupId, input.dataset.groupSlug);
+      reRenderAfterSelectionChange();
     }));
   if (autoAdd && data.modules.length) runExpand();
+}
+
+function reRenderAfterSelectionChange() {
+  // chip 移除 / 组卡单选共用：选择集变化后清空展开与警告、重绘已选/警告/推荐区
+  // （照原 data-remove 回调尾段行为——重渲染推荐卡不 autoAdd，避免重复加入）
+  expanded = []; warnings = [];
+  renderSelected(); renderWarnings(); renderRecommendResult(lastRecommend, false);
 }
 
 function showRecommendError(message) {
@@ -2299,8 +2435,18 @@ function renderSelected() {
 function renderWarnings() {
   const box = $("warnings");
   box.innerHTML = "";
+  // 功能组冲突警告（工单 recommend-exclusive-groups/04）：selectedSlugs 同组
+  // ≥2 成员 → 黄字警告（共用同一硬件，建议只留一个）；不硬拦（用户选择权）。
+  // 与平台警告并列展示，仍在时不影响平台警告/绿 OK 框逻辑。
+  const groupIssues = groupConflicts((lastRecommend || {}).exclusive_groups || [], selectedSlugs);
+  for (const issue of groupIssues) {
+    const div = document.createElement("div");
+    div.className = "warn-box group";
+    div.textContent = "[功能组冲突] 同属一组「" + issue.label + "」共用同一硬件，建议只留一个（已选：" + issue.slugs.join("、") + "）";
+    box.appendChild(div);
+  }
   if (!warnings.length) {
-    if (expanded.length) box.innerHTML = '<div class="warn-box ok" style="color:var(--ok);background:#d1fae5">所选模块在该平台均可直接用。</div>';
+    if (expanded.length && !groupIssues.length) box.innerHTML = '<div class="warn-box ok" style="color:var(--ok);background:#d1fae5">所选模块在该平台均可直接用。</div>';
     return;
   }
   for (const w of warnings) {
