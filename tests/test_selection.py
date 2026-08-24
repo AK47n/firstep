@@ -1295,9 +1295,11 @@ def test_build_selection_plain_modules_parse_instances():
     }
 
 
-def test_build_selection_instances_conflicting_across_requirements_rejected():
-    """同一模块在两条需求里带了不同的实例清单 = 模型自相矛盾 → 大声失败
-    （不一致比首见者赢更诚实——用户拿到的一定是自洽的猜测）。"""
+def test_build_selection_instances_merged_across_requirements():
+    """同一模块在两条需求里带了不同的实例清单 = 题面拆分（一条说红灯、一条
+    说黄灯 = 题面要两灯）→ 并集合并宁多勿少，不再大声失败（2021F + stm32
+    真跑 3/3 被旧校验拦截判例，工单 recommend-exclusive-groups/05）；多出的
+    实例用户可在实例卡删除。"""
     raw = {
         "requirements": [
             {
@@ -1321,6 +1323,7 @@ def test_build_selection_instances_conflicting_across_requirements_rejected():
                         "instances": [
                             {"name": "红", "variant": "red"},
                             {"name": "黄", "variant": "yellow"},
+                            {"name": "红灯", "variant": "red"},
                         ],
                     }
                 ],
@@ -1328,10 +1331,19 @@ def test_build_selection_instances_conflicting_across_requirements_rejected():
         ]
     }
 
-    with pytest.raises(SelectionError, match="不一致"):
-        build_module_selection(
-            raw, known_slugs=("led",), multi_instance_slugs=("led",)
+    result = build_module_selection(
+        raw, known_slugs=("led",), multi_instance_slugs=("led",)
+    )
+    assert result.modules == ("led",)
+    # 并集：已有红（名称"红"）+ 后面的黄；第三条"红灯"/red 与第一条 name
+    # 不同但 variant 相同——去重键是 (name, variant)，所以"红灯"也并入
+    assert result.instances == {
+        "led": (
+            ModuleInstance(name="红", variant="red"),
+            ModuleInstance(name="黄", variant="yellow"),
+            ModuleInstance(name="红灯", variant="red"),
         )
+    }
 
 
 def test_build_selection_instances_identical_across_requirements_ok():

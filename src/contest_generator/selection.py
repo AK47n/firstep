@@ -639,16 +639,26 @@ def _record_instances(
     slug: str,
     parsed: tuple[ModuleInstance, ...],
 ) -> None:
-    """实例聚合（跨需求条目）：同 slug 的实例清单必须一致——两条需求带不同
-    清单 = 模型自相矛盾，大声失败；相同（幂等重复挂多条需求）接受；缺省
-    （无 instances）不覆盖已记清单。"""
+    """实例聚合（跨需求条目）：同 slug 的实例清单取并集（键 = name+variant，
+    保首见顺序）。两条需求可各提一部分灯（题面拆分：一条说红灯、一条说黄灯
+    = 题面要两灯），与旧版"不一致 = 模型自相矛盾 → 大声失败"相比并集宁多勿少——
+    多出的实例用户可在实例卡删除，失败则整次推荐卡死（2021F + stm32 真跑 3/3
+    被拦判例，工单 recommend-exclusive-groups/05）。完全相同清单（模型常把同一
+    灯幂等挂在多条需求下）接受；缺省（无 instances）不覆盖已记清单。"""
     if not parsed:
         return
     existing = instances.get(slug)
     if existing is None:
         instances[slug] = parsed
-    elif existing != parsed:
-        raise SelectionError(f"模块 {slug} 的实例清单在不同需求条目中不一致")
+        return
+    seen = {(e.name, e.variant) for e in existing}
+    merged: list[ModuleInstance] = list(existing)
+    for e in parsed:
+        key = (e.name, e.variant)
+        if key not in seen:
+            seen.add(key)
+            merged.append(e)
+    instances[slug] = tuple(merged)
 
 
 def _parse_plain_modules(
