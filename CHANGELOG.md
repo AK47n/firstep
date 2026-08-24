@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=466e940b1c74cc3a6bf6fe36b3d4f323b22da27e -->
+<!-- changelog-auto: last-commit=eea664836fa867591bc7d15a7a0cf34b81c895c7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 19:59 前端功能组选择卡——单选交换/取消/同组去重/需求灰注/多选警告（工单 recommend-exclusive-groups/04）
 - 20:48 main.c 预览行号逐行显示 + 滚动三同步——三明治布局补齐 white-space/overflow/display/gutter（此前行号 1-9 两两挤行、滚动只动行号列不动代码、尾部 7px 错位）
 - 20:55 main.c 预览加字号缩放（−/＋ 80%-200%，三明治三层 em 同缩 + localStorage 记忆；工单 code-zoom/01）
+- 21:06 修复步骤2/4完成打勾：补齐赛题简介与参考资料判定（此前从未打勾）
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
