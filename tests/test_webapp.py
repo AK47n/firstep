@@ -141,6 +141,9 @@ class RaisingLLM:
     def summarize_topic(self, problem_text: str) -> str:
         raise LLMError("服务不可用")
 
+    def name_topic_english(self, problem_text: str) -> str:
+        raise LLMError("服务不可用")
+
     def generate_main_skeleton(
         self,
         problem_text: str,
@@ -2102,7 +2105,7 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
     client, context, tmp_path
 ):
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
-    context[1]["llm"] = FakeLLM(topic_summary="智能巡检小车\n- 采集温湿度\n- OLED 显示")
+    context[1]["llm"] = FakeLLM(topic_en_name="Smart_Inspection_Car")
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
     requested_output_dir = tmp_path / "out" / "demo"
@@ -2120,14 +2123,15 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
 
     assert resp.status_code == 200
     data = resp.json()
-    output_dir = desktop_dir / "智能巡检小车"
+    # AI 英文短名做目录名（工单 ascii-project-name/02）
+    output_dir = desktop_dir / "Smart_Inspection_Car"
     # 验收项 4：工程结构 / include path / main.c 就位
     assert data["output_dir"] == str(output_dir)
     assert not requested_output_dir.exists()
     assert (output_dir / "main.c").is_file()
     assert (output_dir / "modules" / "dht11" / "inc" / "dht11.h").is_file()
     assert (output_dir / "modules" / "delay" / "delay.c").is_file()
-    assert context[1]["llm"].topic_summarize_calls == [("赛题：设计并制作智能巡检小车",)]
+    assert context[1]["llm"].topic_en_name_calls == [("赛题：设计并制作智能巡检小车",)]
     # include 目录与生成器实际注册的一致：根目录文件 → modules/<slug>，不含 "/."
     assert data["include_dirs"] == [
         "modules/delay",
@@ -2178,7 +2182,8 @@ def test_generate_desktop_output_cleans_title_and_uses_timestamp_on_collision(
     client, context, tmp_path, monkeypatch
 ):
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
-    context[1]["llm"] = FakeLLM(topic_summary='  CON<>:"/\\|?*  ')
+    # AI 英文短名照常过 windows_safe 清洗 + 重名唯一化
+    context[1]["llm"] = FakeLLM(topic_en_name='  CON<>:"/\\|?*  ')
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
     (desktop_dir / "CON_").mkdir(parents=True)
@@ -2205,13 +2210,13 @@ def test_generate_desktop_output_cleans_title_and_uses_timestamp_on_collision(
 def test_generate_desktop_output_uses_topic_key_title_for_historical_topic(
     client, context, tmp_path
 ):
-    """2024H 复盘：历史赛题（topic_id 给定）→ 桌面目录名 = 「编号 + 首行
-    短题名」（如 2024H 自动行驶小车），确定性、不调 AI 简介（简介首行是
-    长句，曾直接变成目录名：设计一个采用 TI MSPM0 系列 MCU 控制的自动
-    行驶小车…）。"""
+    """历史赛题（topic_id 给定）→ 桌面目录名 = 「编号 + 英文短名」（如
+    2024H_Auto_Car，内置字典 / ASCII 兜底），确定性、不调 AI（工单
+    ascii-project-name/01：中文路径在 CCS/gmake 链上乱码，目录名改纯英文）。
+    本夹具的 2026C 题面未收录字典 → ASCII 兜底，保留编号 token。"""
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
     _wire_material_libraries(context)
-    context[1]["llm"] = FakeLLM(topic_summary="不应调用")
+    context[1]["llm"] = FakeLLM(topic_en_name="不应调用")
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
 
@@ -2228,11 +2233,12 @@ def test_generate_desktop_output_uses_topic_key_title_for_historical_topic(
     )
 
     assert resp.status_code == 200
-    output_dir = desktop_dir / "2026C 2026C 数字钥匙题面全文（长 PDF 拆条入库）"
+    # 未收录字典 → ASCII 兜底保留字母数字 token（2026C + PDF）
+    output_dir = desktop_dir / "2026C_2026C_PDF"
     assert resp.json()["output_dir"] == str(output_dir)
     assert (output_dir / "main.c").is_file()
-    # 目录名不再走 AI 简介（省一次 LLM 调用）
-    assert context[1]["llm"].topic_summarize_calls == []
+    # 目录名不再走 AI（省一次 LLM 调用）
+    assert context[1]["llm"].topic_en_name_calls == []
 
 
 def test_generate_desktop_output_propagates_ai_title_error(

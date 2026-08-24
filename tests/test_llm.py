@@ -3761,6 +3761,56 @@ def test_summarize_topic_retries_transient_failure(monkeypatch):
     assert sleeps == [1.0, 2.0]
 
 
+def test_name_topic_english_posts_plain_text_prompt():
+    """英文目录短名：文本模式（非 json_mode）、纯 ASCII 短名的提示词契约。"""
+    transport = FakeTransport(body=_api_response("Auto_Car"))
+    llm = _llm(transport)
+
+    name = llm.name_topic_english("设计并制作一个自动行驶小车")
+
+    assert name == "Auto_Car"
+    _, _, payload, _ = transport.calls[0]
+    messages = payload["messages"]
+    assert "英文" in messages[0]["content"]
+    assert "Auto_Car" in messages[0]["content"]
+    assert "设计并制作一个自动行驶小车" in messages[1]["content"]
+    assert "response_format" not in payload  # 文本模式
+
+
+def test_name_topic_english_truncates_oversized_problem():
+    """超长题面截断带标注（与赛题简介同款预算）。"""
+    transport = FakeTransport(body=_api_response("Auto_Car"))
+    llm = _llm(transport)
+    long_problem = "题" * (EMBEDDED_CONTENT_CAP + 100)
+
+    llm.name_topic_english(long_problem)
+
+    _, _, payload, _ = transport.calls[0]
+    user = payload["messages"][1]["content"]
+    assert len(user) < len(long_problem)
+    assert TRUNCATION_NOTICE in user
+
+
+def test_name_topic_english_retries_transient_failure(monkeypatch):
+    """瞬时失败（网关 502）整次重问：退避 1/2s 后成功（同款兜底）。"""
+    sleeps = _record_backoff_sleeps(monkeypatch)
+    transport = _FlakyTransport(body=_api_response("Auto_Car"), failures=2)
+    llm = _llm(transport)
+
+    assert llm.name_topic_english("题面") == "Auto_Car"
+    assert len(transport.calls) == 3
+    assert sleeps == [1.0, 2.0]
+
+
+def test_name_topic_english_rejects_empty_output():
+    """空输出（模型未给短名）→ 解析失败整次重问，固定为空时大声失败。"""
+    transport = FakeTransport(body=_api_response("  \n "))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError, match="英文短名生成返回空内容"):
+        llm.name_topic_english("题面")
+
+
 def test_reference_judge_archivable_retries_on_malformed_json_output():
     """输出畸形（非 JSON）也整次重问，直到严格解析通过。"""
     transport = FakeTransport(body=_api_response("{broken"))
@@ -4366,6 +4416,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "select_modules",
         "clarify",
         "summarize_topic",
+        "name_topic_english",
         "generate_main_skeleton",
         "generate_smoke_main",
         "summarize_module",
@@ -4383,6 +4434,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
 def _call_all_protocol_methods(router: RoutingLLM) -> None:
     """对 router 依次调用 LLM 协议的全部方法（本地路由派发测试的公共扫描）。"""
     router.summarize_topic("题面")
+    router.name_topic_english("题面")
     router.summarize_module("代码")
     router.reference_summarize("素材")
     router.select_modules("题面", [])
@@ -4415,6 +4467,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "reference_judge_archivable",
     ]
     assert remote.calls == [
+        "name_topic_english",
         "select_modules",
         "generate_main_skeleton",
         "generate_smoke_main",

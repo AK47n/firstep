@@ -591,6 +591,7 @@ class FakeLLM:
         distillation: tuple[FileDecision, ...] = (),
         clarify_questions: tuple[str, ...] = (),
         topic_summary: str = "AI 生成的赛题简介",
+        topic_en_name: str = "Auto_Car",
         fixes: tuple[FixSuggestion, ...] = (),
         impact_analysis: ImpactAnalysis | None = None,
         deepened_main_c: str = "",
@@ -604,6 +605,7 @@ class FakeLLM:
         self._distillation = distillation
         self._clarify_questions = clarify_questions
         self._topic_summary = topic_summary
+        self._topic_en_name = topic_en_name
         self._fixes = fixes
         self._impact_analysis = impact_analysis or ImpactAnalysis()
         self._deepened_main_c = deepened_main_c
@@ -622,6 +624,7 @@ class FakeLLM:
         self.topic_extract_calls: list[tuple[str, ...]] = []
         self.clarify_calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
         self.topic_summarize_calls: list[tuple[str, ...]] = []
+        self.topic_en_name_calls: list[tuple[str, ...]] = []
         self.fix_errors_calls: list[tuple[str, dict, str, str, tuple, str, tuple]] = []
         self.impact_calls: list[
             tuple[str, tuple, tuple, tuple, str]
@@ -666,6 +669,10 @@ class FakeLLM:
     def summarize_topic(self, problem_text: str) -> str:
         self.topic_summarize_calls.append((problem_text,))
         return self._topic_summary
+
+    def name_topic_english(self, problem_text: str) -> str:
+        self.topic_en_name_calls.append((problem_text,))
+        return self._topic_en_name
 
     def generate_main_skeleton(
         self,
@@ -825,6 +832,10 @@ class RecordingLLM:
     def summarize_topic(self, problem_text: str) -> str:
         self._record("summarize_topic")
         return f"{self.name}:topic"
+
+    def name_topic_english(self, problem_text: str) -> str:
+        self._record("name_topic_english")
+        return f"{self.name}:en_topic"
 
     def generate_main_skeleton(
         self,

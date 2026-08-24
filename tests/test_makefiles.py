@@ -3,7 +3,8 @@
 覆盖：渲染确定性（同参必同文）、模块过滤（未选模块不出现）、三件套路径
 参数化（SDK / 编译器 / SysConfig CLI 各入各文件、零硬编码）、落盘完整性
 （全文件集 + 返回清单与渲染一致）、空模块集 / 平铺模块（subdir 空串）形态、
-recipe 行 tab 契约（gmake 语法硬要求）。
+recipe 行 tab 契约（gmake 语法硬要求）、工程路径相对化（工单
+mspm0-cjk-path-fix/01——recipe 不含工程绝对路径，中文工程名可编译）。
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ SDK = "C:/ti/ccs2051/mspm0_sdk_2_10_00_04"
 COMPILER = "C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"
 SYSCFG = "C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"
 PROJ = Path("C:/work/out_2024H_mspm0")
+PROJ_CN = Path("C:/Users/luoji/Desktop/2024H 自动行驶小车")
 
 # 模块源形状（生成侧从 manifest 推导）：(slug, 子目录, (源文件名, ...))——
 # ml_mpu6050 的 ml_libs 子目录形态天然覆盖
@@ -33,7 +35,6 @@ SOURCES = (
 def _render(**overrides):
     args = dict(
         module_sources=SOURCES,
-        proj_dir=PROJ,
         sdk_dir=SDK,
         compiler_dir=COMPILER,
         sysconfig_cli=SYSCFG,
@@ -109,13 +110,27 @@ def test_toolchain_paths_parameterized():
     assert "X:/sdk_alt" not in alt["objects.mk"]  # 静态文件无路径
 
 
-def test_project_dir_parameterized():
-    """工程根路径入参（INC / SysConfig --script / 链接 -i）：换工程根输出跟随。"""
-    other_dir = Path("D:/another/out")
-    other = _render(proj_dir=other_dir)
-    text = "\n".join(other.values())
+def test_project_dir_not_in_recipes_relative_paths():
+    """工程根不进 recipe（工单 mspm0-cjk-path-fix/01）：-I / --script / -Wl,-i
+    全是相对 Debug 目录的相对路径（.. / . / ../modules/...）——绝不写工程
+    绝对路径，中文工程名可编译（Windows gmake→cmd.exe ANSI 代码页转码会把
+    UTF-8 中文绝对路径变乱码，真机复现 "does not exist"）。"""
+    text = "\n".join(_render().values())
+    assert "C:/work" not in text
     assert str(PROJ) not in text
-    assert str(other_dir) in text  # Windows 下 str(Path) 是反斜杠形态
+    assert "--script \"../mspm0.syscfg\"" in text
+    assert '-I".." -I"."' in text
+    assert f'-I"../modules/ml_mpu6050/ml_libs"' in text
+    assert '-Wl,-i".."' in text
+    assert '-Wl,-i"./syscfg"' in text
+
+
+def test_cjk_project_name_renders_ascii_only():
+    """中文工程名（2024H 自动行驶小车 真机形态）：渲染文本不含工程路径，
+    全 ASCII（工单 mspm0-cjk-path-fix/01 红证回归钉）。"""
+    text = "\n".join(_render().values())
+    assert "自动行驶" not in text
+    assert all(ord(ch) < 128 for ch in text), "makefile 模板文本应为纯 ASCII"
 def test_header_only_module_include_dirs_enter_compile_flags():
     """只含 .h 的模块目录（config_mspm0.h 先例）不产生编译条目，但必须进 -I
     ——否则 gmake 命令行构建找不到跨模块引号 include（IDE 走 .cproject）。"""
@@ -123,12 +138,12 @@ def test_header_only_module_include_dirs_enter_compile_flags():
     compile_lines = "\n".join(
         rendered[k] for k in rendered if k.endswith("subdir_rules.mk")
     )
-    assert f'-I"{PROJ}/modules/config/code"' in compile_lines
+    assert f'-I"../modules/config/code"' in compile_lines
     assert "modules/config/code/subdir_vars.mk" not in rendered
     # 缺省（无额外目录）= 旧输出逐字节：module_sources 目录仍进 -I
     default = _render()
-    assert f'-I"{PROJ}/modules/dht11/code"' in default["subdir_rules.mk"]
-    assert f'-I"{PROJ}/modules/config/code"' not in default["subdir_rules.mk"]
+    assert f'-I"../modules/dht11/code"' in default["subdir_rules.mk"]
+    assert f'-I"../modules/config/code"' not in default["subdir_rules.mk"]
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +155,7 @@ def test_write_makefile_set_writes_full_file_set(tmp_path):
     out = tmp_path / "proj"
     out.mkdir()
     written = write_makefile_set(out, SOURCES, SDK, COMPILER, SYSCFG)
-    rendered = render_makefile_set(SOURCES, out.resolve(), SDK, COMPILER, SYSCFG)
+    rendered = render_makefile_set(SOURCES, SDK, COMPILER, SYSCFG)
     assert set(written) == set(rendered)  # 返回清单 = 渲染清单
     for rel, text in rendered.items():
         assert (out / "Debug" / rel).read_text(encoding="utf-8") == text
