@@ -716,15 +716,34 @@
                           padding: 12px 8px 12px 0; text-align: right; overflow: hidden;
                           color: var(--muted); user-select: none;
                           font-family: var(--mono); font-size: 13px; line-height: 1.55;
+                          white-space: pre;  /* 行号按 \n 逐行，防默认折叠成空格
+                                                挤成一行（bug：1-9 两两同行） */
                           border-right: 1px solid var(--border);
                           background: var(--panel-2); }
-  .code-wrap .hl-layer { position: absolute; left: 44px; top: 0; right: 0; bottom: 0;
-                         pointer-events: none; color: var(--text); }
+  .code-wrap .hl-layer { position: absolute; left: 44px; top: 0; right: 12px; bottom: 0;
+                         pointer-events: none; color: var(--text);
+                         overflow: hidden;  /* 可程序滚动：scrollTop 赋值在
+                                                overflow:visible 下恒 0（bug：
+                                                只同步了行号列，代码不滚） */
+                         /* right: 12px = ta 滚动条宽（webkit 固定 12px + gutter
+                            stable），保证 hl 视口宽 = ta 内容视口宽，软换行点一致 */
+                         }
   .code-wrap textarea { position: relative; z-index: 1; background: transparent;
                         color: transparent; caret-color: var(--accent);
                         padding-left: 56px;  /* 44 行号列 + 12 内边距：占位/光标与高亮层
                                                对齐，避开行号列（工单 ui-polish-10/01） */
-                        resize: vertical; min-height: 180px; }
+                        resize: vertical; min-height: 180px;
+                        display: block;          /* 行内盒底部的行盒空隙让容器比 ta 高
+                                                    ~7px，hl/nums 视口 353≠346，滚动范围
+                                                    不一致（bug：尾部 7px 错位） */
+                        scrollbar-gutter: stable; /* 无滚动条时也预留 12px，内容宽恒定 =
+                                                    有滚动条时的宽，保证换行点与 hl 一致 */
+                        }
+  /* 滚动条固定 12px（默认 15-17px）：scrollbar-gutter 预留宽 = 实际宽 = hl 的
+     right 12px，换行点三明治对齐（仅 .code-wrap textarea，页面其它滚动条不动） */
+  .code-wrap textarea::-webkit-scrollbar { width: 12px; height: 12px; }
+  .code-wrap textarea::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+  .code-wrap textarea::-webkit-scrollbar-track { background: transparent; }
   .code-wrap textarea::placeholder { color: var(--muted); opacity: 1; }
   .tok-com { color: #3fb950; }  .tok-str { color: #d29922; }
   .tok-pre { color: #8b949e; }  .tok-kw { color: #00d4ff; }
