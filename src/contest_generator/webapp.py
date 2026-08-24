@@ -164,7 +164,13 @@ from .reference_library import (
     search_references,
 )
 from .revision import restore_revision, revise_backup_root, run_revision
-from .selection import parse_instances, parse_score_points, resolve_selection, run_recommendation
+from .selection import (
+    parse_instances,
+    parse_score_points,
+    resolve_dependencies,
+    resolve_selection,
+    run_recommendation,
+)
 from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -383,6 +389,17 @@ def _llm(
 
 def _library_dir(ctx: AppContext) -> Path:
     return _require_config(ctx).module_library_dir
+
+
+def _instance_known_slugs(module_library_dir: Path, slugs: Sequence[str]) -> list[str]:
+    """parse_instances 的合法 slug 集 = 选中 ∪ 依赖展开（工单 instance-config-deps/01）。
+
+    依赖带入的多实例模块（如 led_beep 依赖 led）也允许配实例清单：用户只选了
+    声光组合模块也能配多灯（前端实例卡据此显示）。未进工程的模块仍大声失败
+    （防幻觉 / 手滑），防线不缩。
+    """
+    by_slug = {m.slug: m for m in list_modules(module_library_dir)}
+    return [m.slug for m in resolve_dependencies(slugs, by_slug)]
 
 
 def _masters_dir(ctx: AppContext) -> Path:
@@ -1085,7 +1102,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         reference_ids = _require_str_list(payload, "reference_ids")
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
         # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
-        instances = parse_instances(payload.get("instances"), known_slugs=slugs)
+        # known_slugs = 选中 ∪ 依赖展开（工单 instance-config-deps/01）：依赖带入的
+        # 多实例模块（led_beep → led）也允许配实例清单。
+        instances = parse_instances(
+            payload.get("instances"),
+            known_slugs=_instance_known_slugs(_library_dir(context), slugs),
+        )
         # main_mode 非法值 / 冒烟守卫的 400 归 run_skeleton（SkeletonError → 400
         # 中文），路由只做缺省回填（未提供 = skeleton）
         main_mode = (
@@ -1211,7 +1233,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
         # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
-        instances = parse_instances(payload.get("instances"), known_slugs=slugs)
+        # known_slugs = 选中 ∪ 依赖展开（工单 instance-config-deps/01）：依赖带入的
+        # 多实例模块（led_beep → led）也允许配实例清单。
+        instances = parse_instances(
+            payload.get("instances"),
+            known_slugs=_instance_known_slugs(_library_dir(context), slugs),
+        )
         # Python 副产物模板选择（工单 k230-multi-template/02）：形状判决归
         # generator.resolve_python_template_choices（PythonArtifactError →
         # 400 中文），缺省 = 全默认模板（旧行为逐字节不变）。
@@ -1450,7 +1477,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             fields["problem_text"] = _require_str(payload, "problem_text")
         bindings = fields.get("bindings") or None
         instances = parse_instances(
-            fields.get("instances") or None, known_slugs=confirmed_slugs
+            fields.get("instances") or None,
+            known_slugs=_instance_known_slugs(module_library_dir, confirmed_slugs),
         )
         python_templates = fields.get("python_templates") or None
         # CCS 三件套探测（与 /api/generate 同款）：mspm0 修订重生成要复用

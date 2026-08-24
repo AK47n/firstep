@@ -1419,9 +1419,11 @@ def parse_instances(
     """webapp 请求体 instances 字段 → {slug: (ModuleInstance, ...)}。
 
     严格校验（任何非法抛 SelectionError → 400 中文）：instances 必须是对象；
-    每个键是非空 slug 且在选中集内（未选中 = 幻觉 / 乱编，大声失败）；每个值
-    是对象数组；每个实例 name 非空字符串、variant/pin 为字符串（null 归一
-    空串）。缺省 None / 空对象 = 空 dict（旧行为）。
+    每个键是非空 slug 且在最终进工程集内（选中 ∪ 依赖展开，工单
+    instance-config-deps/01——依赖带入的多实例模块如 led_beep→led 也允许；
+    未进工程 = 幻觉 / 乱编，大声失败）；每个值是对象数组；每个实例 name 非空
+    字符串、variant/pin 为字符串（null 归一空串）。缺省 None / 空对象 = 空
+    dict（旧行为）。
     """
     if raw is None:
         return {}
@@ -1435,7 +1437,7 @@ def parse_instances(
         if not isinstance(slug, str) or not slug:
             raise SelectionError("instances 的键必须是非空模块 slug")
         if slug not in known:
-            raise SelectionError(f"实例清单包含未选中的模块：{slug}")
+            raise SelectionError(f"实例清单包含未进工程的模块：{slug}")
         if not isinstance(items, list):
             raise SelectionError(f"实例清单 {slug} 必须是数组")
         parsed: list[ModuleInstance] = []
