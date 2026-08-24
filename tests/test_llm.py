@@ -4198,6 +4198,17 @@ def test_prompts_carry_default_open_no_restriction_rule():
         assert "绝不重复问" in prompt
 
 
+def test_prompts_treat_ziding_and_specs_as_answered_or_unrestricted():
+    """第二波 2024H 复现（工单 clarify-no-restriction/02）：① 题面写明「自定/不限」
+    的条目（如「起始点摆放方向自定」）= 题面已给出的答案，绝不问；② 未提及的
+    规格参数（传感器几路、尺寸大小等）= 无限制实现细节，不为此提问；③ 规格参数
+    （数量/路数/颜色/音调/时长）不构成补问理由。两阶段同款措辞。"""
+    for prompt in (CLARIFY_SYSTEM_PROMPT, SELECT_SYSTEM_PROMPT):
+        assert "自定" in prompt
+        assert "规格参数" in prompt
+        assert "不构成补问理由" in prompt
+
+
 def test_select_system_prompt_carries_control_domain_rules():
     """控制常识两条（2024H 复盘，2026-08 修订）：① 无引导标记路径的自主行驶
     → 航向保持（陀螺仪/姿态传感器）是题面证据驱动的需求，不算题外联想——
