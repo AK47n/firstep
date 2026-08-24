@@ -116,6 +116,26 @@ class MultiInstanceSpec:
 
 
 @dataclass(frozen=True)
+class ExclusiveGroupSpec:
+    """功能组互斥声明（模块级，工单 recommend-exclusive-groups/01）。
+
+    同一种功能 / 同一硬件上的多个模块互斥（选一个就够，选多个 = 同功能重复
+    配置，如 pid / xunji / huidu 共用同一颗 8 路灰度传感器）。声明 = 模块
+    归属哪个组；id = 库内唯一组 id（跨模块相同 = 同组），label = 组名（同组
+    id 的各模块 label 必须逐字一致，库级校验见 collect_exclusive_groups），
+    role = 本模块在组内的差异定位（选择卡上给用户看的"选它差在哪"）。
+    缺省不落键 = 不属任何组（旧 manifest 兼容）。
+    """
+
+    id: str
+    label: str
+    role: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "label": self.label, "role": self.role}
+
+
+@dataclass(frozen=True)
 class PythonArtifactTemplate:
     """多模板中的一个模板条目（工单 k230-multi-template/01）。
 
@@ -198,13 +218,14 @@ class ModuleManifest:
     platforms: dict[str, PlatformEntry] = field(default_factory=dict)
     multi_instance: MultiInstanceSpec | None = None  # 多实例能力（缺省 = 单实例）
     python_artifact: PythonArtifactSpec | None = None  # Python 副产物（缺省 = 无）
+    exclusive_group: ExclusiveGroupSpec | None = None  # 功能组互斥（缺省 = 无组）
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 兼容 dict。
 
-        multi_instance / python_artifact 缺省（None）时不落键——旧 manifest
-        序列化产物与基线逐字节一致（save_manifest 写回存量 manifest 不会
-        平白加一个 null 字段）。
+        multi_instance / python_artifact / exclusive_group 缺省（None）时
+        不落键——旧 manifest 序列化产物与基线逐字节一致（save_manifest
+        写回存量 manifest 不会平白加一个 null 字段）。
         """
         data: dict[str, Any] = {
             "slug": self.slug,
@@ -215,6 +236,8 @@ class ModuleManifest:
             data["multi_instance"] = self.multi_instance.to_dict()
         if self.python_artifact is not None:
             data["python_artifact"] = self.python_artifact.to_dict()
+        if self.exclusive_group is not None:
+            data["exclusive_group"] = self.exclusive_group.to_dict()
         data["platforms"] = {
             platform: {
                 "files": list(entry.files),
@@ -263,6 +286,7 @@ class ModuleManifest:
             platforms=platforms,
             multi_instance=_parse_multi_instance(data),
             python_artifact=_parse_python_artifact(data),
+            exclusive_group=_parse_exclusive_group(data),
         )
 
     @classmethod
@@ -430,6 +454,31 @@ def _parse_multi_instance(data: dict[str, Any]) -> MultiInstanceSpec | None:
     return MultiInstanceSpec(max=max_value, variant=variant)
 
 
+def _parse_exclusive_group(data: dict[str, Any]) -> ExclusiveGroupSpec | None:
+    """解析模块级 exclusive_group 声明（缺省 / null = None，旧 manifest 兼容）。
+
+    存在则严格校验：id / label / role 全为非空字符串——`isinstance(x, str)`
+    已天然拒绝 bool（bool 不是 str 子类），再叠加 `or not x` 拒绝空串；错值
+    大声失败（不静默强转）。组内 label 一致性（同 id 各模块 label 逐字一致）
+    是库级校验，归 collect_exclusive_groups——单模块解析看不见其他模块。
+    """
+    raw = data.get("exclusive_group")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ManifestError("exclusive_group 必须是对象")
+    group_id = raw.get("id")
+    if not isinstance(group_id, str) or not group_id:
+        raise ManifestError("exclusive_group 的 id 必须是非空字符串")
+    label = raw.get("label")
+    if not isinstance(label, str) or not label:
+        raise ManifestError("exclusive_group 的 label 必须是非空字符串")
+    role = raw.get("role")
+    if not isinstance(role, str) or not role:
+        raise ManifestError("exclusive_group 的 role 必须是非空字符串")
+    return ExclusiveGroupSpec(id=group_id, label=label, role=role)
+
+
 def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
     """解析模块级 python_artifact 能力块（缺省 / null = None，旧 manifest 兼容）。
 
@@ -559,6 +608,87 @@ def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
 
 
 @dataclass(frozen=True)
+class ExclusiveGroupMember:
+    """功能组成员：slug + 组内差异定位（role，选择卡展示用）。"""
+
+    slug: str
+    role: str
+
+
+@dataclass(frozen=True)
+class ExclusiveGroup:
+    """功能组定义（库级汇总）：同 id 各模块聚合为成员清单（库登记顺序）。
+
+    members 按 manifests 传入顺序保序；成员人可多平台，平台过滤（该平台
+    有条目才算候选）在 collect_exclusive_groups 内完成。
+    """
+
+    id: str
+    label: str
+    members: tuple[ExclusiveGroupMember, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "members": [
+                {"slug": member.slug, "role": member.role}
+                for member in self.members
+            ],
+        }
+
+
+def collect_exclusive_groups(
+    manifests: Sequence[ModuleManifest], platform: str = ""
+) -> list[ExclusiveGroup]:
+    """按 exclusive_group 声明汇总功能组（工单 recommend-exclusive-groups/01）。
+
+    同 id 的 label 逐字一致（不一致 = 库错误，ManifestError 大声失败——组名
+    漂移会让选择卡标题出现在不同模块上各不相同）；members 按库登记顺序
+    （manifests 传入顺序）保序。platform 非空 = 平台过滤：成员只保留该平台
+    有条目的模块；过滤后仅 1 成员的组 = 无意义组（无可选），不返回。platform
+    空串 = 全平台视图（不做过滤、不做单成员剔除——供校验与全库清单）。
+    """
+    by_id: dict[str, tuple[str, list[ExclusiveGroupMember]]] = {}
+    slug_platforms: dict[str, tuple[str, ...]] = {}
+    for manifest in manifests:
+        spec = manifest.exclusive_group
+        if spec is None:
+            continue
+        slug_platforms[manifest.slug] = tuple(manifest.platforms)
+        known = by_id.get(spec.id)
+        if known is None:
+            by_id[spec.id] = (spec.label, [])
+        elif known[0] != spec.label:
+            raise ManifestError(
+                f"功能组 {spec.id!r} 的 label 不一致：{known[0]!r} vs {spec.label!r}"
+            )
+        by_id[spec.id][1].append(
+            ExclusiveGroupMember(slug=manifest.slug, role=spec.role)
+        )
+    result: list[ExclusiveGroup] = []
+    if platform:
+        for group_id, (label, members) in by_id.items():
+            filtered = tuple(
+                member
+                for member in members
+                if platform in slug_platforms.get(member.slug, ())
+            )
+            if len(filtered) < 2:
+                # 该平台只有 1 个候选（或没有）→ 无可选，组不出卡
+                continue
+            result.append(
+                ExclusiveGroup(id=group_id, label=label, members=filtered)
+            )
+    else:
+        for group_id, (label, members) in by_id.items():
+            result.append(
+                ExclusiveGroup(id=group_id, label=label, members=tuple(members))
+            )
+    return result
+
+
+@dataclass(frozen=True)
 class ManifestSummary:
     """模块库摘要对象（喂给 LLM 的可用模块清单——协议层收对象，字符串只在
     prompt 边界渲染一次，不再有两端解析耦合）。
@@ -573,6 +703,7 @@ class ManifestSummary:
     dependencies: tuple[str, ...] = ()
     multi_instance: MultiInstanceSpec | None = None  # 多实例能力（缺省 = 单实例）
     python_artifact: PythonArtifactSpec | None = None  # Python 副产物（缺省 = 无）
+    exclusive_group: ExclusiveGroupSpec | None = None  # 功能组互斥（缺省 = 无组）
 
     @classmethod
     def from_manifest(cls, manifest: ModuleManifest) -> "ManifestSummary":
@@ -583,6 +714,7 @@ class ManifestSummary:
             dependencies=manifest.dependencies,
             multi_instance=manifest.multi_instance,
             python_artifact=manifest.python_artifact,
+            exclusive_group=manifest.exclusive_group,
         )
 
     def to_line(self) -> str:
@@ -614,6 +746,11 @@ class ManifestSummary:
             line += (
                 f"（副产物模板可选：{'、'.join(names)}，"
                 f"默认 = {self.python_artifact.default_id}）"
+            )
+        if self.exclusive_group is not None:
+            line += (
+                f"（同组互斥：{self.exclusive_group.label}，"
+                "组内仅选其一）"
             )
         return line
 

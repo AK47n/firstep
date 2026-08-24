@@ -12,6 +12,7 @@ from contest_generator.manifest import (
     PlatformEntry,
     PythonArtifactSpec,
     PythonArtifactTemplate,
+    collect_exclusive_groups,
     collect_kits,
 )
 
@@ -579,3 +580,158 @@ def test_manifest_summary_annotates_multi_template():
         }
     )
     assert "副产物模板可选" not in ManifestSummary.from_manifest(legacy).to_line()
+
+
+# ---------------------------------------------------------------------------
+# 功能组互斥声明（工单 recommend-exclusive-groups/01）
+# ---------------------------------------------------------------------------
+
+
+def _group_manifest(
+    slug: str, group_block: dict | None, platforms: dict | None = None
+) -> ModuleManifest:
+    """构造带（或不带）exclusive_group 声明的 manifest。"""
+    data: dict = {
+        "slug": slug,
+        "description": f"{slug} 描述",
+        "platforms": platforms
+        or {"mspm0": {"files": [f"code/{slug}.c"], "verified": True}},
+    }
+    if group_block is not None:
+        data["exclusive_group"] = group_block
+    return ModuleManifest.from_dict(data)
+
+
+_GROUP_BLOCK = {
+    "id": "gray-track",
+    "label": "8 路灰度传感器驱动",
+    "role": "灰度读取 + 加权质心巡线（开环，真机控制代码移植）",
+}
+
+
+def test_exclusive_group_parse_and_roundtrip():
+    manifest = _group_manifest("xunji", _GROUP_BLOCK)
+    assert manifest.exclusive_group is not None
+    assert manifest.exclusive_group.id == "gray-track"
+    assert manifest.exclusive_group.label == "8 路灰度传感器驱动"
+    assert manifest.exclusive_group.role == _GROUP_BLOCK["role"]
+    parsed = ModuleManifest.from_dict(manifest.to_dict())
+    assert parsed == manifest
+
+
+def test_exclusive_group_missing_absent_omitted_in_to_dict():
+    """缺省 = 不属任何组；to_dict 不落键（旧 manifest 序列化逐字节一致）。"""
+    manifest = _group_manifest("huidu", None)
+    assert manifest.exclusive_group is None
+    assert "exclusive_group" not in manifest.to_dict()
+
+
+def test_exclusive_group_rejects_wrong_type():
+    with pytest.raises(ManifestError, match="exclusive_group"):
+        ModuleManifest.from_dict(
+            {
+                "slug": "pid",
+                "description": "pid 描述",
+                "exclusive_group": "gray-track",
+                "platforms": {"mspm0": {"files": ["code/pid.c"], "verified": True}},
+            }
+        )
+
+
+def test_exclusive_group_rejects_missing_or_empty_fields():
+    for bad, match in [
+        ({"label": "x", "role": "y"}, "id"),
+        ({"id": "g", "role": "y"}, "label"),
+        ({"id": "g", "label": "x"}, "role"),
+        ({"id": "", "label": "x", "role": "y"}, "id"),
+        ({"id": "g", "label": "", "role": "y"}, "label"),
+        ({"id": "g", "label": "x", "role": ""}, "role"),
+        ({"id": "g", "label": "x", "role": 1}, "role"),
+    ]:
+        with pytest.raises(ManifestError, match=match):
+            _group_manifest("pid", dict(bad))
+
+
+def test_summary_to_line_annotates_exclusive_group():
+    """摘要行带「同组互斥」标注（进推荐提示词与缓存指纹）。"""
+    summary = ManifestSummary.from_manifest(_group_manifest("xunji", _GROUP_BLOCK))
+    line = summary.to_line()
+    assert "同组互斥" in line
+    assert "8 路灰度传感器驱动" in line
+    assert "组内仅选其一" in line
+    # 无组声明 = 旧行格式逐字不变（无标注）
+    plain = ManifestSummary.from_manifest(_group_manifest("huidu", None))
+    assert "同组互斥" not in plain.to_line()
+
+
+def test_collect_exclusive_groups_aggregates_members_in_order():
+    manifests = [
+        _group_manifest("huidu", {**_GROUP_BLOCK, "role": "仅读取"}),
+        _group_manifest("pid", {**_GROUP_BLOCK, "role": "PID 巡线"}),
+        _group_manifest("xunji", {**_GROUP_BLOCK, "role": "质心巡线"}),
+    ]
+    groups = collect_exclusive_groups(manifests)
+    assert len(groups) == 1
+    group = groups[0]
+    assert group.id == "gray-track"
+    assert group.label == "8 路灰度传感器驱动"
+    assert [m.slug for m in group.members] == ["huidu", "pid", "xunji"]
+    assert [m.role for m in group.members] == ["仅读取", "PID 巡线", "质心巡线"]
+
+
+def test_collect_exclusive_groups_platform_filter_and_single_member_dropped():
+    """平台过滤：成员 = 该平台有条目的模块；过滤后仅 1 成员的组 = 无意义组。"""
+    mspm0_only = _group_manifest("xunji", _GROUP_BLOCK)
+    both = _group_manifest(
+        "pid",
+        _GROUP_BLOCK,
+        platforms={
+            "mspm0": {"files": ["code/pid_mspm0.c"], "verified": True},
+            "stm32": {"files": ["code/pid.c"], "verified": True},
+        },
+    )
+    manifests = [mspm0_only, both]
+    assert len(collect_exclusive_groups(manifests)) == 1
+    mspm0_groups = collect_exclusive_groups(manifests, platform="mspm0")
+    assert [m.slug for m in mspm0_groups[0].members] == ["xunji", "pid"]
+    # stm32 只有 pid（xunji 无条目）→ 单成员组不出卡
+    assert collect_exclusive_groups(manifests, platform="stm32") == []
+    # 平台过滤不影响成员顺序（库登记顺序）
+    assert [m.slug for m in collect_exclusive_groups(manifests)[0].members] == [
+        "xunji",
+        "pid",
+    ]
+
+
+def test_collect_exclusive_groups_rejects_label_mismatch():
+    """同 id 的 label 逐字一致（不一致 = 库错误，大声失败）。"""
+    a = _group_manifest("huidu", {**_GROUP_BLOCK, "label": "灰度驱动"})
+    b = _group_manifest("pid", {**_GROUP_BLOCK, "label": "灰度巡线驱动"})
+    with pytest.raises(ManifestError, match="label"):
+        collect_exclusive_groups([a, b])
+
+
+def test_collect_exclusive_groups_keeps_distinct_groups():
+    manifests = [
+        _group_manifest("xunji", _GROUP_BLOCK),
+        _group_manifest(
+            "imu_uart",
+            {
+                "id": "attitude-hold",
+                "label": "航向保持 / 姿态传感器",
+                "role": "UART 串口陀螺仪",
+            },
+        ),
+        _group_manifest(
+            "ml_mpu6050",
+            {
+                "id": "attitude-hold",
+                "label": "航向保持 / 姿态传感器",
+                "role": "I2C + DMP 解算",
+            },
+        ),
+    ]
+    groups = collect_exclusive_groups(manifests)
+    assert [g.id for g in groups] == ["gray-track", "attitude-hold"]
+    assert [g.label for g in groups] == ["8 路灰度传感器驱动", "航向保持 / 姿态传感器"]
+

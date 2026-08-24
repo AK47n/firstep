@@ -2,6 +2,11 @@
   "slug": "huidu",
   "description": "8 路灰度传感器读取（MSPM0）：huidu_value[8] 输出黑线检测（1=黑线），接线 PA25/PA24/PA23/PA22/PA26/PA27/PB4/PB5。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "gray-track",
+    "label": "8 路灰度传感器驱动",
+    "role": "仅 8 路灰度读取（黑线检测位图），不含巡线/电机控制；适合自写巡线逻辑"
+  },
   "platforms": {
     "mspm0": {
       "files": [

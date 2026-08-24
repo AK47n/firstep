@@ -36,6 +36,7 @@ from .manifest import (
     ManifestError,
     ModuleManifest,
     PlatformEntry,
+    collect_exclusive_groups,
 )
 
 if TYPE_CHECKING:
@@ -122,7 +123,9 @@ def list_modules(library_root: Path) -> list[ModuleManifest]:
     """返回库中全部模块（按 slug 排序）；manifest 损坏的模块目录抛 LibraryError。
 
     库根不存在 = 空库、点开头目录不影响浏览（与赛题库 / 参考库浏览同哲学，
-    目录迭代走 entry_store 原语）。
+    目录迭代走 entry_store 原语）。加载后做功能组一致性校验（工单
+    recommend-exclusive-groups/01：同组 id 各模块 label 逐字一致——组名漂移
+    会让选择卡标题不一致），不一致 = 库错误大声失败。
     """
     manifests = []
     for entry in iter_entry_dirs(library_root):
@@ -132,6 +135,10 @@ def list_modules(library_root: Path) -> list[ModuleManifest]:
             raise LibraryError(
                 f"模块目录 {entry.name} 的 manifest 无法读取：{exc}"
             ) from exc
+    try:
+        collect_exclusive_groups(manifests)
+    except ManifestError as exc:
+        raise LibraryError(f"模块库功能组不一致：{exc}") from exc
     return manifests
 
 

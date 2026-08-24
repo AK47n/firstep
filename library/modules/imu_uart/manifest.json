@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "attitude-hold",
+    "label": "航向保持 / 姿态传感器",
+    "role": "UART 串口陀螺仪（9 字节帧 + CRC16，yaw/角速度直出，接 PA28/PA31）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

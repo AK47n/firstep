@@ -4,6 +4,11 @@
   "dependencies": [
     "motor"
   ],
+  "exclusive_group": {
+    "id": "gray-track",
+    "label": "8 路灰度传感器驱动",
+    "role": "灰度读取 + 边缘中点巡线偏差 + PID/PD 巡线 + 电机目标速度（含速度环，双平台）"
+  },
   "platforms": {
     "mspm0": {
       "files": [
