@@ -53,7 +53,7 @@ from .events import (
 from .fix_errors import FixSuggestion
 from .library import TRUNCATION_NOTICE, ValidationResult, truncate_content
 from .impact import ImpactAnalysis, ImpactError, build_impact_analysis
-from .manifest import ManifestSummary
+from .manifest import EXCLUSIVE_GROUP_TAG, ManifestSummary
 from .report import (
     ACTION_MERGE,
     FileDecision,
@@ -451,6 +451,11 @@ SELECT_MAX_OUTPUT_TOKENS = 4096
 # 超长守卫阈值（字符）：响应内容超过即判输出失控，报 client 错误免重试
 # （_retry_parse 对 client 错误 break——重试只会重复烧钱烧时间）。
 SELECT_MAX_OUTPUT_CHARS = 60000
+
+# 航向保持/姿态类组 id 前缀（工单 recommend-exclusive-groups/03）：提示词题面
+# 核查条触发条件 = 库内存在该前缀的组（约定见库 manifest 登记，2024H =
+# attitude-hold）。命名约定单源：组 id 改名或新增同前缀组只改这里。
+ATTITUDE_GROUP_ID_PREFIX = "attitude"
 
 # 观测响应留痕长度（字符）：只留前缀诊断信号（截断 / 退化 / 语义拒绝），
 # 不破坏观测「不含 prompt / response」的脱敏契约。
@@ -3183,6 +3188,42 @@ def _selection_user_prompt(
             f"内置 {'/'.join(LED_COLOR_MACROS)}，其余空串）；数量不超过清单标注"
             "上限；题面未明确数量时省略；引脚自动分配，不输出 pin；不为非多实例"
             "模块输出 instances。"
+        )
+    # 功能组互斥规则段（工单 recommend-exclusive-groups/03）：库内存在互斥组才
+    # 出段（与多实例规则段同款条件段先例——最坏情形预算成本仅新增段体量，旧库
+    # 提示词逐字节不变）；组统计从摘要投影（清单带「同组互斥」标注），零参数
+    # 传递——条件与正文同源，不存在两侧漂移。成员计数按摘要视图（已按目标平台
+    # 过滤）：单成员组（该平台无可选，如 stm32 的 gray-track 仅 pid）= 不出段
+    # （spec「单成员组 / 无组库 → 无提示词段」）
+    group_stats: dict[str, tuple[int, str]] = {}  # 组 id -> (该平台成员数, label)
+    for summary in manifest_summaries:
+        if summary.exclusive_group is None:
+            continue
+        count, label = group_stats.get(
+            summary.exclusive_group.id, (0, summary.exclusive_group.label)
+        )
+        group_stats[summary.exclusive_group.id] = (count + 1, label)
+    group_ids = {gid for gid, (count, _) in group_stats.items() if count >= 2}
+    if group_ids:
+        prompt += (
+            f"\n\n{EXCLUSIVE_GROUP_TAG}（硬约束）：清单带「{EXCLUSIVE_GROUP_TAG}」"
+            "标注的模块共用同一传感器/同一功能，同一题内**只推荐一个**；同组多个"
+            "被推荐 = 配置页出现两份相同硬件配置（2024H 复盘）。按题面择优推荐一个"
+            "即可，同组其它候选由系统展示给用户选择。"
+        )
+    # 题面核查条（工单 recommend-exclusive-groups/03）：库内存在航向保持类组
+    # （组 id 前缀 ATTITUDE_GROUP_ID_PREFIX）才出段——无引导线/无指示标记直线
+    # 行驶的题面必须荐姿态传感器，否则直线段无法完成（2024H 复盘：AI 曾漏
+    # mpu6050/陀螺仪）；组名取库内实际 label（同组 label 经 01 库级校验逐字一致）
+    attitude_groups = {
+        gid for gid in group_ids if gid.startswith(ATTITUDE_GROUP_ID_PREFIX)
+    }
+    if attitude_groups:
+        label = group_stats[min(attitude_groups)][1]
+        prompt += (
+            "\n\n题面核查（硬约束）：无引导线/无其他指示标记/沿直线自主行驶 → "
+            f"必须从清单「{label}」组中推荐一个；漏推荐 = 直线段无法完成"
+            "（2024H 复盘）。"
         )
     # 输出契约：旧库（无多实例模块）用旧契约逐字节不变（验收②——旧推荐无
     # instances 现行为不变，模型照旧不输出该字段）；多实例库扩展 instances 形状

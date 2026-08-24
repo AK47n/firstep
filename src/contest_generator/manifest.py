@@ -115,6 +115,12 @@ class MultiInstanceSpec:
         return {"max": self.max, "variant": self.variant}
 
 
+# 功能组互斥标注词（prompt 可见契约 token 单源，工单 recommend-exclusive-groups/03）：
+# 摘要行标注（to_line）与推荐提示词规则段正文共用同一词——改词只改这一处，
+# 两端（AI 看到的标注 + 规则）不漂移。
+EXCLUSIVE_GROUP_TAG = "同组互斥"
+
+
 @dataclass(frozen=True)
 class ExclusiveGroupSpec:
     """功能组互斥声明（模块级，工单 recommend-exclusive-groups/01）。
@@ -767,7 +773,7 @@ class ManifestSummary:
             )
         if self.exclusive_group is not None:
             line += (
-                f"（同组互斥：{self.exclusive_group.label}，"
+                f"（{EXCLUSIVE_GROUP_TAG}：{self.exclusive_group.label}，"
                 "组内仅选其一）"
             )
         return line
