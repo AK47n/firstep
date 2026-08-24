@@ -34,7 +34,14 @@ from .events import (
 from .boards import Board, pin_supports
 from .entry_store import StoreError
 from .library import list_modules
-from .manifest import ManifestSummary, ModuleManifest, collect_kits
+from .manifest import (
+    ExclusiveGroup,
+    ExclusiveGroupMember,
+    ManifestSummary,
+    ModuleManifest,
+    collect_kits,
+    scope_group_members,
+)
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
     PLATFORM_ANY,
@@ -1151,6 +1158,69 @@ def _answer_vision_questions(
     return tuple(remaining), tuple(merged)
 
 
+def _group_card(
+    group: ExclusiveGroup,
+    members: Sequence[ExclusiveGroupMember],
+    *,
+    hint: bool,
+    recommended: Sequence[str],
+) -> dict[str, Any]:
+    """选择卡 dict 构造（命中卡与 hint 卡共用）。"""
+    return {
+        "id": group.id,
+        "label": group.label,
+        "hint": hint,
+        "members": [{"slug": m.slug, "role": m.role} for m in members],
+        "recommended": list(recommended),
+    }
+
+
+def build_exclusive_groups(
+    selection_modules: Sequence[str],
+    group_defs: Sequence[ExclusiveGroup],
+    platform: str,
+    *,
+    hint_module_groups: Sequence[str] = (),
+) -> list[dict[str, Any]]:
+    """功能组选择卡派生（工单 recommend-exclusive-groups/02）：纯函数。
+
+    输入 = AI 推荐 slug 集 + 库级组定义（collect_exclusive_groups 全平台
+    视图）+ 目标平台。输出 = 出卡列表（命中卡在前按库登记顺序，hint-only
+    卡按 hint 声明顺序在后）：
+    - 命中卡：组内成员（scope_group_members 平台投影后）∩ 推荐集非空 →
+      {id, label, hint: False, members: [{slug, role}], recommended:
+      [命中 slug 按成员顺序]}
+    - hint 卡：AI 未命中但赛题声明 hint_module_groups 的组 → hint: True、
+      recommended 空（卡内无默认选中）；AI 已命中 = 只出命中卡不重复
+    - 单成员组不出卡（无可选）；hint id 库内无对应组 → 静默忽略（不炸推荐）。
+    """
+    selected = set(selection_modules)
+    hit_ids: set[str] = set()
+    cards: list[dict[str, Any]] = []
+    for group in group_defs:
+        members = scope_group_members(group.members, platform)
+        if len(members) < 2:
+            continue  # 单成员组 = 无可选，不出卡
+        recommended = [member.slug for member in members if member.slug in selected]
+        if not recommended:
+            continue  # 未命中：留给 hint 兜底（若有声明）
+        hit_ids.add(group.id)
+        cards.append(_group_card(group, members, hint=False, recommended=recommended))
+    seen_hint: set[str] = set()
+    for hint_id in hint_module_groups:
+        if hint_id in hit_ids or hint_id in seen_hint:
+            continue
+        seen_hint.add(hint_id)
+        hint_group = next((g for g in group_defs if g.id == hint_id), None)
+        if hint_group is None:
+            continue  # hint id 库内无对应组：静默忽略
+        members = scope_group_members(hint_group.members, platform)
+        if len(members) < 2:
+            continue
+        cards.append(_group_card(hint_group, members, hint=True, recommended=()))
+    return cards
+
+
 def run_recommendation(
     topic: TopicContext,
     llm: LLM,
@@ -1287,6 +1357,17 @@ def run_recommendation(
         {"id": ref.id, "title": ref.title, "source": "manual", "platform": ref.platform}
         for ref in topic.manual_references
     ]
+    # 功能组选择卡（工单 recommend-exclusive-groups/02）：命中组 / hint 组
+    # 机器侧派生（AI 输出契约不变——组不新增模型字段）；无组库或全空 →
+    # 不落键（旧载荷逐字节兼容）
+    group_cards = build_exclusive_groups(
+        selection.modules,
+        topic.exclusive_groups,
+        platform,
+        hint_module_groups=topic.hint_module_groups,
+    )
+    if group_cards:
+        result["exclusive_groups"] = group_cards
     emit.done(result)
 
 

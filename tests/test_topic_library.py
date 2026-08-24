@@ -471,6 +471,39 @@ def test_resolve_number_loads_programs_and_pdf_name(topic_root, pdf, tmp_path):
     assert entry.programs == (str(program),)
 
 
+def test_resolve_number_loads_hint_module_groups(topic_root, pdf):
+    """topic manifest 可选 hint_module_groups（工单 recommend-exclusive-groups/02）：
+    组 id 清单解析进条目；缺省 / 空 = 空元组（旧 manifest 兼容）。"""
+    confirm_topics(topic_root, pdf, (DRAFTS[0],))
+    entry = resolve_number(topic_root, KEY_2026C)
+    assert entry.hint_module_groups == ()
+
+    manifest_path = topic_root / KEY_2026C / MANIFEST_FILENAME
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["hint_module_groups"] = ["attitude-hold", "gray-track"]
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    entry = resolve_number(topic_root, KEY_2026C)
+    assert entry.hint_module_groups == ("attitude-hold", "gray-track")
+    assert entry.to_dict()["hint_module_groups"] == ["attitude-hold", "gray-track"]
+
+
+@pytest.mark.parametrize(
+    "bad", ["attitude-hold", [123], [""], {"g": "attitude-hold"}, [True], None]
+)
+def test_resolve_number_rejects_bad_hint_module_groups(topic_root, pdf, bad):
+    """hint_module_groups 类型错（非字符串列表 / 空串成员）→ TopicError 大声
+    失败（与 programs 同款严格校验）。"""
+    confirm_topics(topic_root, pdf, (DRAFTS[0],))
+    manifest_path = topic_root / KEY_2026C / MANIFEST_FILENAME
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["hint_module_groups"] = bad
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(TopicError, match="hint_module_groups"):
+        resolve_number(topic_root, KEY_2026C)
+
+
 # ---------------------------------------------------------------------------
 # 存量条目补图注（工单 topic-vision-notes/02）：取题面自动补 + 幂等 + 降级
 # ---------------------------------------------------------------------------

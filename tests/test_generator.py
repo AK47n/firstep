@@ -40,6 +40,7 @@ from contest_generator.generator import (
     run_generation_gates,
 )
 from contest_generator.demo_script import DEMO_SCRIPT_FILENAME
+from contest_generator.manifest import MANIFEST_FILENAME
 from contest_generator.report_draft import REPORT_DRAFT_FILENAME, render_report_draft
 from contest_generator.readme import README_FILENAME
 from contest_generator.ccs import INCLUDE_OPTION_SUPERCLASSES, _SETTINGS_MODULE_ID
@@ -1480,6 +1481,79 @@ def test_no_topic_context_filters_candidates_by_platform(tmp_path):
     )
     assert ctx.key == ""
     assert {s.slug for s in ctx.manifest_summaries} == {"dht11", "delay"}
+
+
+def test_resolve_topic_context_carries_exclusive_groups_and_hint(tmp_path):
+    """TopicContext 携带功能组（工单 recommend-exclusive-groups/02）：装配点从
+    库 manifest 汇总组定义（exclusive_groups，全平台视图——平台成员过滤归
+    build_exclusive_groups）+ topic manifest 的 hint_module_groups 解析进条目
+    → 上下文（推荐链路消费两字段）。"""
+    library, topics, references = _wired_dirs(tmp_path)
+    for slug, role in (("dht11", "温湿度读取"), ("delay", "软件延时")):
+        path = library / slug / MANIFEST_FILENAME
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["exclusive_group"] = {
+            "id": "sensor-group",
+            "label": "传感器组",
+            "role": role,
+        }
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    topic_manifest = topics / "2026C" / MANIFEST_FILENAME
+    data = json.loads(topic_manifest.read_text(encoding="utf-8"))
+    data["hint_module_groups"] = ["sensor-group"]
+    topic_manifest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    assert ctx is not None
+    assert [g.id for g in ctx.exclusive_groups] == ["sensor-group"]
+    group = ctx.exclusive_groups[0]
+    assert group.label == "传感器组"
+    # 成员按库登记顺序（list_modules 按 slug 排序：delay < dht11）
+    assert [(m.slug, m.role) for m in group.members] == [
+        ("delay", "软件延时"),
+        ("dht11", "温湿度读取"),
+    ]
+    assert ctx.hint_module_groups == ("sensor-group",)
+
+
+def test_no_topic_context_carries_exclusive_groups(tmp_path):
+    """no-topic 形（粘贴题面）同样带全库功能组（组卡照常出）；hint 恒空（无
+    topic manifest 可声明）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    for slug, role in (("dht11", "温湿度读取"), ("delay", "软件延时")):
+        path = library / slug / MANIFEST_FILENAME
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["exclusive_group"] = {
+            "id": "sensor-group",
+            "label": "传感器组",
+            "role": role,
+        }
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    class NoNumberLLM:
+        def topic_extract_number(self, text: str) -> None:
+            return None
+
+    ctx = resolve_topic_context(
+        llm=NoNumberLLM(),
+        topic_key="",
+        problem_text="普通粘贴题面",
+        module_library_dir=library,
+        topic_library_dir=tmp_path / "topics",
+        reference_library_dir=tmp_path / "references",
+    )
+
+    assert ctx.key == ""
+    assert [g.id for g in ctx.exclusive_groups] == ["sensor-group"]
+    assert ctx.hint_module_groups == ()
 
 
 def test_resolve_topic_context_recognizes_number_in_pasted_text(tmp_path):

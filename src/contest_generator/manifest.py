@@ -609,18 +609,24 @@ def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:
 
 @dataclass(frozen=True)
 class ExclusiveGroupMember:
-    """功能组成员：slug + 组内差异定位（role，选择卡展示用）。"""
+    """功能组成员：slug + 组内差异定位（role，选择卡展示用）+ 所在平台。
+
+    platforms 供组内平台成员过滤（build_exclusive_groups 按目标平台只留
+    该平台有条目的成员）；不进对外载荷（契约成员形状 = {slug, role}）。
+    """
 
     slug: str
     role: str
+    platforms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class ExclusiveGroup:
     """功能组定义（库级汇总）：同 id 各模块聚合为成员清单（库登记顺序）。
 
-    members 按 manifests 传入顺序保序；成员人可多平台，平台过滤（该平台
-    有条目才算候选）在 collect_exclusive_groups 内完成。
+    members 按 manifests 传入顺序保序；成员可多平台，平台投影（该平台
+    有条目才算候选）统一由 scope_group_members 定义，collect 平台视图与
+    推荐链路 build_exclusive_groups 各自调用。
     """
 
     id: str
@@ -638,6 +644,20 @@ class ExclusiveGroup:
         }
 
 
+def scope_group_members(
+    members: Sequence[ExclusiveGroupMember], platform: str
+) -> tuple[ExclusiveGroupMember, ...]:
+    """组内成员平台投影（平台过滤唯一实现）。
+
+    platform 非空 = 只留该平台有条目的成员；platform 空串 = 全成员（不过滤）。
+    调用方自行决定是否做单成员剔除（collect 平台视图与推荐链路出卡语义不同：
+    collect 仅在平台视图剔除，出卡侧恒剔除无可选组）。
+    """
+    if not platform:
+        return tuple(members)
+    return tuple(member for member in members if platform in member.platforms)
+
+
 def collect_exclusive_groups(
     manifests: Sequence[ModuleManifest], platform: str = ""
 ) -> list[ExclusiveGroup]:
@@ -645,17 +665,15 @@ def collect_exclusive_groups(
 
     同 id 的 label 逐字一致（不一致 = 库错误，ManifestError 大声失败——组名
     漂移会让选择卡标题出现在不同模块上各不相同）；members 按库登记顺序
-    （manifests 传入顺序）保序。platform 非空 = 平台过滤：成员只保留该平台
-    有条目的模块；过滤后仅 1 成员的组 = 无意义组（无可选），不返回。platform
-    空串 = 全平台视图（不做过滤、不做单成员剔除——供校验与全库清单）。
+    （manifests 传入顺序）保序。platform 非空 = 平台视图：成员经
+    scope_group_members 投影后仅 1 成员的组 = 无意义组（无可选），不返回。
+    platform 空串 = 全平台视图（不做投影、不做单成员剔除——供校验与全库清单）。
     """
     by_id: dict[str, tuple[str, list[ExclusiveGroupMember]]] = {}
-    slug_platforms: dict[str, tuple[str, ...]] = {}
     for manifest in manifests:
         spec = manifest.exclusive_group
         if spec is None:
             continue
-        slug_platforms[manifest.slug] = tuple(manifest.platforms)
         known = by_id.get(spec.id)
         if known is None:
             by_id[spec.id] = (spec.label, [])
@@ -664,16 +682,16 @@ def collect_exclusive_groups(
                 f"功能组 {spec.id!r} 的 label 不一致：{known[0]!r} vs {spec.label!r}"
             )
         by_id[spec.id][1].append(
-            ExclusiveGroupMember(slug=manifest.slug, role=spec.role)
+            ExclusiveGroupMember(
+                slug=manifest.slug,
+                role=spec.role,
+                platforms=tuple(manifest.platforms),
+            )
         )
     result: list[ExclusiveGroup] = []
     if platform:
         for group_id, (label, members) in by_id.items():
-            filtered = tuple(
-                member
-                for member in members
-                if platform in slug_platforms.get(member.slug, ())
-            )
+            filtered = scope_group_members(members, platform)
             if len(filtered) < 2:
                 # 该平台只有 1 个候选（或没有）→ 无可选，组不出卡
                 continue

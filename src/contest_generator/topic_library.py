@@ -144,6 +144,9 @@ class TopicEntry:
     problem_md: str = TOPIC_MD_FILENAME
     original_pdf: str = ""  # 原 PDF 文件名（保留在条目目录，AI 拆错可查原文）
     programs: tuple[str, ...] = ()  # 附带程序目录（绝对路径，引用方式）
+    hint_module_groups: tuple[str, ...] = ()  # 功能组 hint（工单 recommend-
+    # exclusive-groups/02）：赛题疑似需要但 AI 未命中时出兜底选择卡（组 id
+    # 清单，缺省空；id 库内无对应组时推荐链路静默忽略）
 
     @property
     def key(self) -> str:
@@ -159,6 +162,7 @@ class TopicEntry:
             "problem_md": self.problem_md,
             "original_pdf": self.original_pdf,
             "programs": list(self.programs),
+            "hint_module_groups": list(self.hint_module_groups),
         }
 
 
@@ -610,6 +614,13 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
         raise TopicError(
             f"赛题条目 {entry_dir.name} 的 programs 必须是非空字符串列表"
         )
+    raw_hint = data.get("hint_module_groups", [])
+    if not isinstance(raw_hint, list) or not all(
+        isinstance(item, str) and item for item in raw_hint
+    ):
+        raise TopicError(
+            f"赛题条目 {entry_dir.name} 的 hint_module_groups 必须是非空字符串列表"
+        )
     try:
         problem_text = (entry_dir / problem_md).read_text(encoding="utf-8")
     except OSError as exc:
@@ -623,6 +634,7 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
         problem_md=problem_md,
         original_pdf=original_pdf,
         programs=tuple(raw_programs),
+        hint_module_groups=tuple(raw_hint),
     )
 
 

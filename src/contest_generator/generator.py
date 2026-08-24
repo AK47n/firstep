@@ -33,11 +33,13 @@ from .library import list_modules
 from .llm import LLMError
 from .makefiles import write_makefile_set
 from .manifest import (
+    ExclusiveGroup,
     ManifestSummary,
     ModuleManifest,
     PythonArtifactSpec,
     PythonArtifactTemplate,
     build_manifest_summaries,
+    collect_exclusive_groups,
 )
 from .master_store import master_project_dir
 from .patchers import (
@@ -230,6 +232,10 @@ class TopicContext:
     manual_fulltexts: Mapping[str, str] | None = None  # 手动选参考资料全文（id → 全文，直读）
     figure_pdf: Path | None = None  # 条目原 PDF 路径（工单 recommend-vision-qa/02：
     # 按需视觉问答渲染原文作答）；no-topic 形 / 条目无 original_pdf / 文件缺失 → None
+    exclusive_groups: tuple[ExclusiveGroup, ...] = ()  # 库级功能组（全平台视图，
+    # 工单 recommend-exclusive-groups/02——平台成员过滤归 build_exclusive_groups）
+    hint_module_groups: tuple[str, ...] = ()  # 赛题 manifest 声明的疑似需要组 id
+    # （AI 未命中时前端出 hint 卡兜底；no-topic 形恒空）
 
 
 def resolve_topic_context(
@@ -328,6 +334,10 @@ def resolve_topic_context(
         )
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
+    # 功能组（工单 recommend-exclusive-groups/02）：库级组定义 = 全平台视图
+    # （平台成员过滤 / 单成员剔除归推荐链路 build_exclusive_groups——组定义
+    # 不随 platform 重复汇总，装配点一次产出，显式 / no-topic 两路径同构）
+    exclusive_groups = tuple(collect_exclusive_groups(candidates))
     # 套件锚定（修订）：只收选中模块的 kit（slugs 非空时）；空 = 只题面锚定
     # + 手动准入——不再全库扫描套件词表（原行为让任意赛题都注入全库套件
     # 参考，UI 自动勾选误导且带偏推荐；模块摘要行已带套件名供 AI 分辨）。
@@ -370,6 +380,8 @@ def resolve_topic_context(
         manual_references=manual_entries,
         manual_fulltexts=manual_fulltexts,
         figure_pdf=_entry_figure_pdf(topic_library_dir, entry),
+        exclusive_groups=exclusive_groups,
+        hint_module_groups=entry.hint_module_groups,
     )
 
 
@@ -411,6 +423,9 @@ def _no_topic_context(
     按平台过滤，空串 = 不过滤（缺省，现状保持）。
     """
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
+    # 功能组 = 全平台视图（与显式路径同构：平台成员过滤归推荐链路
+    # build_exclusive_groups，组定义不随 platform 重复汇总）
+    exclusive_groups = tuple(collect_exclusive_groups(candidates))
     candidates = list(filter_manifests_by_platform(candidates, platform))
     return TopicContext(
         key="",
@@ -421,6 +436,7 @@ def _no_topic_context(
         read_fulltext=_make_fulltext_reader(reference_library_dir, (), manual_entries),
         manual_references=tuple(manual_entries),
         manual_fulltexts=manual_fulltexts,
+        exclusive_groups=exclusive_groups,
     )
 
 
