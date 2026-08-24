@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=af82d5181fb837c1df1f93669d5075ff5a22d5b3 -->
+<!-- changelog-auto: last-commit=73be22f172607043c76fa90dd0e6d305ced986fb -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 19:20 模块 exclusive_group 声明 + 库级校验 + 摘要行互斥标注（工单 recommend-exclusive-groups/01）
 - 19:35 ﻿feat: 推荐链路功能组选择卡 + hint 兜底（工单 recommend-exclusive-groups/02）
 - 19:45 ﻿feat: 推荐提示词功能组互斥规则段 + 题面核查条（工单 recommend-exclusive-groups/03）
+- 19:59 前端功能组选择卡——单选交换/取消/同组去重/需求灰注/多选警告（工单 recommend-exclusive-groups/04）
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
