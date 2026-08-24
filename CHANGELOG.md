@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f11917b6abe822d97ed4310ed22dbcc68de5b14b -->
+<!-- changelog-auto: last-commit=1240b124c8ae2214ac9638383af0aeed01f1d9c2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 08:41 赛题条目补图注
 - 12:33 推荐补问全面收紧——无规定即无限制 + 材料性门槛 + 上限 5 条（工单 clarify-no-restriction/01）
 - 12:52 题面「自定」即答案，未提及规格参数视为无限制（工单 02）
+- 13:18 平台卡点击不再误清推荐勾选（工单 platform-click-guard/01）
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
