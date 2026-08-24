@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7147bbf701e979a32278914d615565e6b3bcbd37 -->
+<!-- changelog-auto: last-commit=c03dee88a65a4d026fdaffc6d585beb73485219d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -7,6 +7,7 @@
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
 - 00:12 工单 deepen-report/01 补丁：跨行块注释（/* TODO: …）起始行也能提取深化效果标题——真实深化发现任务状态机 TODO 是跨行注释
+- 00:38 generate-conflict-guard：桌面同名工程冲突防护（同键互斥 + 目录裁决 + 失败清理 + 成功自动打开）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
