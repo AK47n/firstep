@@ -29,6 +29,7 @@ from contest_generator.selection import (
     WARNING_UNVERIFIED,
     DependencyCycleError,
     FunctionRequirement,
+    MAX_QUESTIONS,
     ManualReferenceError,
     ModuleInstance,
     ModuleSelection,
@@ -42,6 +43,7 @@ from contest_generator.selection import (
     UnknownModuleError,
     _functional_layer_key,
     _number_topic_sentences,
+    _parse_questions,
     _revision_prompt,
     associated_references,
     build_module_selection,
@@ -1695,6 +1697,13 @@ def test_build_selection_score_points_are_optional_and_invalid_points_degrade():
         },
         known_slugs=("dht11",),
     ).score_points == ()
+
+
+def test_parse_questions_caps_at_max():
+    """补问条数硬上限（工单 clarify-no-restriction/01）：模型输出超出
+    MAX_QUESTIONS 条时截尾保留前 MAX_QUESTIONS 条（提示词同源插值）。"""
+    raw = [f"疑问{i}" for i in range(MAX_QUESTIONS + 2)]
+    assert _parse_questions(raw) == tuple(raw[:MAX_QUESTIONS])
 
 
 def test_parse_score_points_preserves_topic_order_and_normalizes_fields():
