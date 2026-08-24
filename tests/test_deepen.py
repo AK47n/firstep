@@ -309,6 +309,17 @@ def test_main_diff_title_falls_back_to_plain_comment():
     assert diff["hunks"][0]["title"] == ""  # 无注释无 TODO → 空标题
 
 
+def test_main_diff_title_block_comment_todo():
+    """跨行块注释起始行（/* TODO: … 未闭合）也能提取标题（真实深化踩坑：
+    任务状态机 TODO 是跨行注释，只匹配闭合 /*…*/ 会拿到空标题）。"""
+    before = "int main(void) {\n    /* TODO: 正式任务状态机\n     * 任务1: A -> B\n     */\n    while (1);\n}\n"
+    after = "int main(void) {\n    /* ===== 已实现 ===== */\n    while (1);\n}\n"
+    diff = _main_diff(before, after)
+    assert diff is not None
+    assert "正式任务状态机" in diff["hunks"][0]["title"]
+    assert diff["hunks"][0]["title"].startswith("填充 TODO")
+
+
 # ---------------------------------------------------------------------------
 # run_deepen：done 载荷含 main_diff（深化效果报告）
 # ---------------------------------------------------------------------------
