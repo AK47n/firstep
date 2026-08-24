@@ -20,6 +20,8 @@ const extract = (name) => {
 const multiInstanceModules = (expandedArg) => extract("multiInstanceModules")(expandedArg)();
 const instancePayload = (expandedArg, instancesArg) =>
   extract("instancePayload")(expandedArg, instancesArg)();
+const ensureDefaultInstances = (expandedArg, instancesArg) =>
+  extract("ensureDefaultInstances")(expandedArg, instancesArg)();
 
 const led = { slug: "led", multi_instance: { max: 4, variant: 2 } };
 const ledBeep = { slug: "led_beep", multi_instance: null };
@@ -57,4 +59,46 @@ test("instancePayload：非多实例模块的清单即使有也不发", () => {
     instancePayload(expanded, { dht11: [{ name: "温", variant: "", pin: "" }] }),
     {}
   );
+});
+
+// ensureDefaultInstances：实例卡首次呈现预填平台默认（工单 instance-config-defaults/01）
+const ledWithDefaults = {
+  ...led,
+  default_instances: [
+    { name: "红灯", variant: "red", pin: "" },
+    { name: "黄灯", variant: "yellow", pin: "" },
+    { name: "绿灯", variant: "green", pin: "" },
+  ],
+};
+
+test("ensureDefaultInstances：键不存在 → 预填平台默认清单", () => {
+  const instances = {};
+  ensureDefaultInstances([ledBeep, ledWithDefaults], instances);
+  assert.deepEqual(instances, {
+    led: [
+      { name: "红灯", variant: "red", pin: "" },
+      { name: "黄灯", variant: "yellow", pin: "" },
+      { name: "绿灯", variant: "green", pin: "" },
+    ],
+  });
+});
+
+test("ensureDefaultInstances：键已存在（AI 猜过 / 用户配过）→ 不覆盖", () => {
+  const instances = { led: [{ name: "自定义", variant: "red", pin: "PA15" }] };
+  ensureDefaultInstances([ledBeep, ledWithDefaults], instances);
+  assert.deepEqual(instances, {
+    led: [{ name: "自定义", variant: "red", pin: "PA15" }],
+  });
+});
+
+test("ensureDefaultInstances：用户删空（键在、清单空）→ 不复活默认", () => {
+  const instances = { led: [] };
+  ensureDefaultInstances([ledBeep, ledWithDefaults], instances);
+  assert.deepEqual(instances, { led: [] });
+});
+
+test("ensureDefaultInstances：模块无 default_instances → 不填", () => {
+  const instances = {};
+  ensureDefaultInstances([ledBeep, led, dht], instances);
+  assert.deepEqual(instances, {});
 });

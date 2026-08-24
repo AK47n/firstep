@@ -165,6 +165,7 @@ from .reference_library import (
 )
 from .revision import restore_revision, revise_backup_root, run_revision
 from .selection import (
+    default_instance_plan,
     parse_instances,
     parse_score_points,
     resolve_dependencies,
@@ -1070,12 +1071,24 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/selection/expand")
     @_map_errors
     def expand_selection(payload: dict) -> dict:
-        """展开依赖 + 平台可用性检查：用户增删选择后重跑一次即可。"""
+        """展开依赖 + 平台可用性检查：用户增删选择后重跑一次即可。
+
+        多实例模块附带 default_instances（工单 instance-config-defaults/01）：
+        展示端实例卡首次呈现即预填平台默认（AI 未猜 / 依赖带入的多实例模块
+        也有「第一版」可改）——default_instance_plan 单源，与「不配置 = 单
+        默认实例」的生成结果等价；前端键已存在（AI 猜过 / 用户配过）不覆盖。
+        """
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         resolved = resolve_selection(_library_dir(context), platform, slugs)
+        modules = [m.to_dict() for m in resolved.manifests]
+        defaults = default_instance_plan(platform)
+        if defaults:
+            for manifest, module in zip(resolved.manifests, modules):
+                if manifest.multi_instance is not None:
+                    module["default_instances"] = [inst.to_dict() for inst in defaults]
         return {
-            "modules": [m.to_dict() for m in resolved.manifests],
+            "modules": modules,
             "warnings": [
                 {"slug": w.slug, "kind": w.kind, "message": w.message}
                 for w in resolved.warnings

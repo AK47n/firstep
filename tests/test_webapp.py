@@ -1792,6 +1792,42 @@ def test_expand_k230_brings_coord_detect_pins_generically(client, context):
     assert {"unverified", "hardware_bound"} <= kinds  # k230 未上板 + 硬件绑定
 
 
+def test_expand_carries_default_instances_for_multi_module(client, context):
+    """工单 instance-config-defaults/01：展开端点给多实例模块带平台默认清单
+    （default_instance_plan 单源）——实例卡首次呈现即预填「第一版」，依赖带入
+    的 led（led_beep → led）也带；非多实例模块不挂该键。"""
+    _add_fake_led_module(context[0].config.module_library_dir)
+    _add_fake_led_beep_module(context[0].config.module_library_dir)
+
+    resp = client.post(
+        "/api/selection/expand",
+        json={"slugs": ["led_beep"], "platform": PLATFORM_MSPM0},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    led = next(m for m in data["modules"] if m["slug"] == "led")
+    # mspm0 平台默认 = 单实例 LED（无颜色 = 通用编号 + 默认脚）
+    assert led["default_instances"] == [{"name": "LED", "variant": "", "pin": ""}]
+    for m in data["modules"]:
+        if m["slug"] != "led":
+            assert "default_instances" not in m
+
+
+def test_expand_default_instances_stm32_three_channels(client, context):
+    """stm32 平台默认 = 红黄绿 3 实例（与母版默认 led_instances.h 三通道一致）。"""
+    _add_fake_led_module(context[0].config.module_library_dir)
+
+    resp = client.post(
+        "/api/selection/expand",
+        json={"slugs": ["led"], "platform": PLATFORM_STM32},
+    )
+
+    assert resp.status_code == 200
+    led = next(m for m in resp.json()["modules"] if m["slug"] == "led")
+    assert [i["name"] for i in led["default_instances"]] == ["红灯", "黄灯", "绿灯"]
+
+
 def test_generate_with_k230_writes_py_and_summary_lists_it(client, context, tmp_path):
     """工单 k230-vision-copilot/04 验收②：勾选 k230 → 生成产物 = 主控工程
     （coord_detect 解析随依赖进工程）+ K230 main.py 副产物（工程根）；摘要
