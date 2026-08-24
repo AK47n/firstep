@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5b56b7133ae6635d9caf1d1f444c33b6f5ea5bdf -->
+<!-- changelog-auto: last-commit=82d5be01ac62a679f2ea4c9a088913aac1c9538e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 01:04 取题面默认展示原题 PDF 页（工单 topic-pdf-viewer/01）——新增 /api/topics/{key}/pages 页图端点（定位题面页+逐页渲染 PNG+base64 data URL，四种失败路径 400 中文明确报错）+ 前端页图叠放/点击放大/文字收起切换，输入编号与用此题生成双路径接入
 - 01:13 推荐澄清少问能从题面/图找到答案的问题（工单 clarify-vision-relax/01/02）——vision_answerable 放宽为题面引用图∧（点名图∨关键词），未点名图但问图内信息也走视觉从原题渲染页找答案（答不上照旧问用户）；CLARIFY_SYSTEM_PROMPT 补流程/时序/指示灯含义/计时起止绝不重复问条款；真机 2021F 三问原文回归测试
 - 01:26 取题面展示多页题面完整页范围（工单 topic-pdf-viewer/02）——2021F 共 4 页此前只显示前 2 页（定位硬编码命中页起 2 页），现按真题汇总 PDF 页脚 (k, N) 归一：起始页=命中页-(k-1)、范围=起始页起 N 页（k 归一防定位落非首页卷进下一题），无页脚回退既有 span；补图注/视觉问答路径零改动；多页 PDF 假件独立成 tests/topic_pdf_fakes.py
+- 08:41 赛题条目补图注
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
