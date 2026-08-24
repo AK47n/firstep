@@ -25,7 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from contest_generator.library import find_topic_word_hits  # 判据④词表单源
-from contest_generator.manifest import ModuleManifest
+from contest_generator.manifest import ModuleManifest, collect_exclusive_groups
 
 LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
 
@@ -126,3 +126,33 @@ def test_capability_word_does_not_shield_topic_phrase():
 def test_blacklist_hit_inside_capability_word_is_ignored():
     """命中区间落在能力词内不计：词表把"锁"加进黑名单时，"锁定"（latch 语境）不误伤。"""
     assert find_topic_word_hits("锁定方向", banned=("锁",), capability=("锁定",)) == []
+
+
+def _real_manifests() -> list[ModuleManifest]:
+    return [
+        ModuleManifest.load(path)
+        for path in sorted(LIBRARY_MODULES.iterdir())
+        if path.is_dir()
+    ]
+
+
+def test_exclusive_groups_aggregate_on_the_real_library():
+    """真库功能组声明聚合正确（防回退，工单 recommend-exclusive-groups/01）。
+
+    冒烟基准（实施时）：gray-track = huidu/pid/xunji（8 路灰度传感器驱动），
+    attitude-hold = imu_uart/ml_mpu6050（航向保持 / 姿态传感器）；同 id label
+    不一致会在 collect 时抛 ManifestError（本测试能通过 = 声明一致）；stm32
+    平台两组均只剩 1 成员（pid / ml_mpu6050 双平台）→ 单成员组剔除 → 输出空。
+    """
+    manifests = _real_manifests()
+    groups = collect_exclusive_groups(manifests)
+    assert {g.id for g in groups} == {"gray-track", "attitude-hold"}
+    by_id = {g.id: g for g in groups}
+    assert by_id["gray-track"].label == "8 路灰度传感器驱动"
+    assert [m.slug for m in by_id["gray-track"].members] == ["huidu", "pid", "xunji"]
+    assert by_id["attitude-hold"].label == "航向保持 / 姿态传感器"
+    assert [m.slug for m in by_id["attitude-hold"].members] == ["imu_uart", "ml_mpu6050"]
+    # mspm0 侧两组完整；stm32 侧两组均单成员 → 剔除（无意义组不出现）
+    msp_groups = collect_exclusive_groups(manifests, platform="mspm0")
+    assert {g.id for g in msp_groups} == {"gray-track", "attitude-hold"}
+    assert collect_exclusive_groups(manifests, platform="stm32") == []

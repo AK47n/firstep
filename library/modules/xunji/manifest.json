@@ -4,6 +4,11 @@
   "dependencies": [
     "motor"
   ],
+  "exclusive_group": {
+    "id": "gray-track",
+    "label": "8 路灰度传感器驱动",
+    "role": "灰度读取（位图）+ 加权质心巡线 + 编码器采样（开环速度输出；真机控制代码移植）"
+  },
   "platforms": {
     "mspm0": {
       "files": [
