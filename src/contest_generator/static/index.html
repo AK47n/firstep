@@ -705,22 +705,26 @@
   .card.collapsed .card-collapse { transform: rotate(-90deg); }
   .card.collapsed > *:not(h2) { display: none !important; }
   /* main.c 行号 + 语法着色（工单 ui-polish-8/01）：textarea 透明文字 + 行号列 +
-     高亮层三明治；滚动三同步 */
+     高亮层三明治；滚动三同步。字号缩放（工单 code-zoom/01）：.code-wrap 为
+     字号基准，三明治子元素全部 1em / em 尺寸——一处改 font-size 三层同缩，
+     行号列宽 / 缩进随字号联动，不会错位 */
   .code-wrap { position: relative; border: 1px solid var(--border);
-               border-radius: 8px; background: var(--code-bg); overflow: hidden; }
+               border-radius: 8px; background: var(--code-bg); overflow: hidden;
+               font-size: 13px; }
   .code-wrap textarea, .code-wrap .hl-layer {
-    font-family: var(--mono); font-size: 13px; line-height: 1.55; tab-size: 4;
+    font-family: var(--mono); font-size: 1em; line-height: 1.55; tab-size: 4;
     padding: 12px; margin: 0; border: none; white-space: pre-wrap;
     word-break: break-all; }
-  .code-wrap .line-nums { position: absolute; left: 0; top: 0; bottom: 0; width: 44px;
-                          padding: 12px 8px 12px 0; text-align: right; overflow: hidden;
+  .code-wrap .line-nums { position: absolute; left: 0; top: 0; bottom: 0; width: 3.4em;
+                          padding: 0.92em 0.62em 0.92em 0; text-align: right;
+                          overflow: hidden;
                           color: var(--muted); user-select: none;
-                          font-family: var(--mono); font-size: 13px; line-height: 1.55;
+                          font-family: var(--mono); font-size: 1em; line-height: 1.55;
                           white-space: pre;  /* 行号按 \n 逐行，防默认折叠成空格
                                                 挤成一行（bug：1-9 两两同行） */
                           border-right: 1px solid var(--border);
                           background: var(--panel-2); }
-  .code-wrap .hl-layer { position: absolute; left: 44px; top: 0; right: 12px; bottom: 0;
+  .code-wrap .hl-layer { position: absolute; left: 3.4em; top: 0; right: 12px; bottom: 0;
                          pointer-events: none; color: var(--text);
                          overflow: hidden;  /* 可程序滚动：scrollTop 赋值在
                                                 overflow:visible 下恒 0（bug：
@@ -730,8 +734,10 @@
                          }
   .code-wrap textarea { position: relative; z-index: 1; background: transparent;
                         color: transparent; caret-color: var(--accent);
-                        padding-left: 56px;  /* 44 行号列 + 12 内边距：占位/光标与高亮层
-                                               对齐，避开行号列（工单 ui-polish-10/01） */
+                        padding-left: calc(3.4em + 12px);  /* 行号列宽 + 12 内边距：
+                                                              占位/光标与高亮层对齐，
+                                                              避开行号列（工单
+                                                              ui-polish-10/01） */
                         resize: vertical; min-height: 180px;
                         display: block;          /* 行内盒底部的行盒空隙让容器比 ta 高
                                                     ~7px，hl/nums 视口 353≠346，滚动范围
@@ -745,6 +751,17 @@
   .code-wrap textarea::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
   .code-wrap textarea::-webkit-scrollbar-track { background: transparent; }
   .code-wrap textarea::placeholder { color: var(--muted); opacity: 1; }
+  /* 字号缩放工具条（工单 code-zoom/01）：浮在代码框右上角，面板背景防压字 */
+  .code-zoom { position: absolute; top: 6px; right: 6px; z-index: 2;
+               display: flex; align-items: center; gap: 2px;
+               padding: 2px 4px; border-radius: 6px;
+               background: var(--panel-2); border: 1px solid var(--border); }
+  .code-zoom button { border: none; background: none; color: var(--muted);
+                      font-size: 13px; width: 22px; height: 22px; line-height: 1;
+                      cursor: pointer; border-radius: 4px; padding: 0; }
+  .code-zoom button:hover { color: var(--text); background: var(--border); }
+  .code-zoom span { min-width: 38px; text-align: center; font-size: 12px;
+                    color: var(--muted); user-select: none; }
   .tok-com { color: #3fb950; }  .tok-str { color: #d29922; }
   .tok-pre { color: #8b949e; }  .tok-kw { color: #00d4ff; }
   .tok-num { color: #bc8cff; }
@@ -955,6 +972,11 @@
       </div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
       <div class="code-wrap" style="margin-top:8px">
+        <div class="code-zoom" title="代码字号">
+          <button id="btn-code-zoom-out" type="button" title="缩小">−</button>
+          <span id="code-zoom-label">100%</span>
+          <button id="btn-code-zoom-in" type="button" title="放大">＋</button>
+        </div>
         <div id="main-c-nums" class="line-nums" aria-hidden="true"></div>
         <pre id="main-c-hl" class="hl-layer" aria-hidden="true"></pre>
         <textarea id="main-c" rows="16" placeholder="点击「生成骨架」后这里会出现 main.c 内容，可手动编辑…"></textarea>
@@ -3453,6 +3475,45 @@ function syncMainCHighlight() {
     nums.scrollTop = ta.scrollTop;
   });
   syncMainCHighlight();
+})();
+// main.c 代码字号缩放（工单 code-zoom/01）：三明治以 .code-wrap 为字号基准，
+// 改一层 font-size 三层同缩（行号列宽/缩进已是 em 联动）。codeZoomClamp /
+// parseZoomStored 为自包含纯函数（tests/js 正则抽取：不引用模块级常量）
+// ---------------------------------------------------------------------------
+const CODE_ZOOM_MIN = 80, CODE_ZOOM_MAX = 200, CODE_ZOOM_STEP = 10;
+const CODE_ZOOM_BASE = 13, CODE_ZOOM_KEY = "firstep.mainc.zoom";
+function codeZoomClamp(pct) {
+  const min = 80, max = 200; // 自包含：pct 非法/越界时收敛到 [80,200]
+  if (typeof pct !== "number" || !Number.isFinite(pct)) return 100;
+  return Math.min(max, Math.max(min, Math.round(pct)));
+}
+function parseZoomStored(raw) {
+  if (raw == null) return 100;
+  const n = parseInt(String(raw), 10);
+  return codeZoomClamp(Number.isNaN(n) ? 100 : n);
+}
+function currentCodeZoomPct() {
+  const wrap = $("main-c").closest(".code-wrap");
+  const px = parseFloat(wrap ? wrap.style.fontSize : "");
+  return px > 0 ? Math.round((px / CODE_ZOOM_BASE) * 100) : 100;
+}
+function applyCodeZoom(pct) {
+  const wrap = $("main-c").closest(".code-wrap");
+  if (!wrap) return;
+  pct = codeZoomClamp(pct);
+  wrap.style.fontSize = (CODE_ZOOM_BASE * pct / 100) + "px";
+  $("code-zoom-label").textContent = pct + "%";
+  try { localStorage.setItem(CODE_ZOOM_KEY, String(pct)); } catch (e) {}
+  syncMainCHighlight(); // 行距变了，滚动位置/行号列重新对齐
+}
+(function initCodeZoom() {
+  const btnIn = $("btn-code-zoom-in"), btnOut = $("btn-code-zoom-out");
+  if (!btnIn || !btnOut) return;
+  let pct = 100;
+  try { pct = parseZoomStored(localStorage.getItem(CODE_ZOOM_KEY)); } catch (e) {}
+  applyCodeZoom(pct);
+  btnIn.addEventListener("click", () => applyCodeZoom(currentCodeZoomPct() + CODE_ZOOM_STEP));
+  btnOut.addEventListener("click", () => applyCodeZoom(currentCodeZoomPct() - CODE_ZOOM_STEP));
 })();
 
 // ---------------------------------------------------------------------------
