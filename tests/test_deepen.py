@@ -406,6 +406,9 @@ def deepen_client(tmp_path):
             masters_dir=tmp_path / "masters",
         ),
         llm_factory=lambda config: holder["llm"],
+        # 桌面目录钉在 tmp（工单 generate-conflict-guard/01）：不注入就生成到
+        # 真实桌面，同名工程二次生成在新行为下 400，夹具必须自净
+        desktop_dir=lambda: tmp_path / "Desktop",
     )
     return TestClient(create_app(ctx)), holder, tmp_path
 

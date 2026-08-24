@@ -10,6 +10,8 @@ import re
 import time
 from pathlib import Path
 
+from .context_manifest import CONTEXT_MANIFEST_FILENAME
+
 WINDOWS_RESERVED_FILENAMES = frozenset(
     {
         "CON", "PRN", "AUX", "NUL",
@@ -115,7 +117,13 @@ def windows_safe_folder_name(title: str) -> str:
 
 
 def unique_desktop_topic_dir(desktop_dir: Path, title: str) -> Path:
-    """桌面根 + 题名 → 唯一输出目录；重名追加时间，再冲突追加序号。"""
+    """桌面根 + 题名 → 唯一输出目录；重名追加时间，再冲突追加序号。
+
+    [DEPRECATED]（工单 generate-conflict-guard/01）：webapp 已改用
+    desktop_topic_dir_verdict——旧行为静默换名，多标签页连点会攒出一圈带
+    时间戳的半成品目录。保留纯为兼容外部调用方（测试 / 脚本），不再被
+    生成路由使用。
+    """
     base = windows_safe_folder_name(title)
     candidate = desktop_dir / base
     if not candidate.exists():
@@ -133,6 +141,51 @@ def unique_desktop_topic_dir(desktop_dir: Path, title: str) -> Path:
         if not candidate.exists():
             return candidate
         index += 1
+
+
+class GenerationConflictError(Exception):
+    """桌面同名工程已存在（工单 generate-conflict-guard/01）。
+
+    与生成中途撞车的 OutputDirNotEmptyError 语义不同：这是「用户已经有一个
+    同名完整工程」的正常业务拒绝——不静默换名攒目录（旧 unique_desktop_topic_dir
+    行为），400 中文提示用户删除或改题名，绝不自动覆盖。
+    """
+
+
+class GenerationBusyError(Exception):
+    """同名工程正在生成中（工单 generate-conflict-guard/01）。
+
+    多标签页 / 并发请求同题并发生成：第二个请求拿 409 中文「正在生成中」，
+    不浪费一次完整生成流程（也避免两个流程同时写同一目录交错留残渣）。
+    """
+
+
+def desktop_topic_dir_verdict(
+    desktop_dir: Path, title: str
+) -> tuple[Path, str]:
+    """桌面同题目录裁决（工单 generate-conflict-guard/01）。
+
+    返回 (候选目录, verdict)：候选目录 = 桌面根 + windows_safe 题名（不再
+    追加时间戳，目录名稳定可预期）；verdict 三选一：
+
+    - "new"    目录不存在，可直接生成；
+    - "clean"  目录存在但既无 .contest_context.json 也无 main.c（空目录 /
+               上次生成失败的半成品残渣），调用方清理后生成；
+    - "exists" 目录存在且含完整工程标记（.contest_context.json 或 main.c），
+               调用方 400 拒绝（不静默覆盖 / 改名）。
+
+    完整工程判定取 .contest_context.json（新生成必有）或 main.c（老工程 /
+    手工工程）：两者皆无 = 不可能是有用户价值的工程，按残渣清理。
+    """
+    candidate = desktop_dir / windows_safe_folder_name(title)
+    if not candidate.exists():
+        return candidate, "new"
+    if (
+        (candidate / CONTEXT_MANIFEST_FILENAME).exists()
+        or (candidate / "main.c").exists()
+    ):
+        return candidate, "exists"
+    return candidate, "clean"
 
 
 def _is_windows_reserved_filename(name: str) -> bool:

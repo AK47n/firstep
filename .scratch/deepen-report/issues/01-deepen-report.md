@@ -1,6 +1,6 @@
 # 01 深化效果报告（deepen-report）
 
-Status: claimed
+Status: resolved (commit 62fd8a6)
 
 ## 目标
 

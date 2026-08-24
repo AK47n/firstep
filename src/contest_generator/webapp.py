@@ -12,16 +12,19 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import functools
 import inspect
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -91,8 +94,10 @@ from .generator import (
     resolve_topic_context,
 )
 from .generation_output import (
+    GenerationBusyError,
+    GenerationConflictError,
+    desktop_topic_dir_verdict,
     topic_dir_title,
-    unique_desktop_topic_dir,
 )
 from .impact import run_impact_analysis
 from .library import (
@@ -287,6 +292,11 @@ class AppContext:
     pick_directory: Callable[[], str | None] = _tkinter_pick_directory
     desktop_dir: Callable[[], Path] = lambda: Path.home() / "Desktop"
     recent_llm_workflows: LLMRecentWorkflowStore = field(default_factory=LLMRecentWorkflowStore)
+    # 生成互斥注册表（工单 generate-conflict-guard/01）：同键（桌面=题名 /
+    # 手动=目录）同时只放一个生成流程进闸，其余 409「正在生成中」——防多
+    # 标签页 / 连点攒半成品目录（旧 unique 静默换名行为已废弃）。
+    pending_generations: set[str] = field(default_factory=set)
+    _generation_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 # ---------------------------------------------------------------------------
@@ -698,20 +708,55 @@ def _desktop_output_requested(payload: dict) -> bool:
     return bool(_optional_str(payload, "problem_text"))
 
 
+@contextlib.contextmanager
+def _generation_guard(context: AppContext, key: str) -> Iterator[None]:
+    """同键生成互斥（工单 generate-conflict-guard/01）。
+
+    键已注册 = 同名工程生成中 → GenerationBusyError（409 中文，路由透传）；
+    未注册 → 注册后 yield，生成完成 / 失败后在 finally 注销。注册表是
+    AppContext 共享 set + Lock：多标签页进程内并发请求都走同一把闸。"""
+    with context._generation_lock:
+        if key in context.pending_generations:
+            raise GenerationBusyError("同名工程正在生成中，请等待生成完成后再试")
+        context.pending_generations.add(key)
+    try:
+        yield
+    finally:
+        with context._generation_lock:
+            context.pending_generations.discard(key)
+
+
+def _open_in_explorer(directory: Path) -> None:
+    """生成成功后自动打开资源管理器（工单 generate-conflict-guard/04）。"""
+    try:
+        subprocess.Popen(
+            ["explorer.exe", str(directory)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        pass  # 打不开资源管理器：生成已成功，静默（不因聚焦失败报 500）
+
+
 def _resolve_generation_output_dir(
     context: AppContext,
     payload: dict,
-) -> Path:
-    """生成请求 → 最终 output_dir；桌面模式用题名命名。
+) -> tuple[Path, str]:
+    """生成请求 → (最终 output_dir, 目录裁决 verdict)。
 
     历史赛题（topic_id 给定）：确定性取「编号 + 英文短名」（如
     `2024H_Auto_Car`，topic_dir_title + 内置字典）——不依赖 AI 简介（省一次
     LLM 调用，目录名稳定可预期，且纯 ASCII 绕开 CCS/gmake 中文路径乱码，
     工单 ascii-project-name/01）；粘贴题面（无 topic_id）：AI 起英文短名为
     目录名（name_topic_english，工单 ascii-project-name/02）。
+
+    verdict（工单 generate-conflict-guard/01）：桌面模式 = desktop_topic_dir_verdict
+    三分支 new / clean / exists（路由按 verdict：new 直接生成、clean 清理
+    残渣后生成、exists 400 拒绝——不再静默换名攒目录）；手动模式 = "manual"
+    （目录判定归 generate_project 非空检查兜底，路由不为手动模式清理）。
     """
     if not _desktop_output_requested(payload):
-        return Path(_require_str(payload, "output_dir"))
+        return Path(_require_str(payload, "output_dir")), "manual"
     problem_text = _require_str(payload, "problem_text")
     topic_id = _optional_str(payload, "topic_id")
     if topic_id:
@@ -722,7 +767,7 @@ def _resolve_generation_output_dir(
         title = topic_dir_title(entry.key, entry.problem_text)
     else:
         title = _llm(context).name_topic_english(problem_text)
-    return unique_desktop_topic_dir(context.desktop_dir(), title)
+    return desktop_topic_dir_verdict(context.desktop_dir(), title)
 
 
 
@@ -1241,7 +1286,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
-        output_dir = _resolve_generation_output_dir(context, payload)
+        output_dir, output_verdict = _resolve_generation_output_dir(context, payload)
         topic_id = _optional_str(payload, "topic_id")
         bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
@@ -1309,26 +1354,53 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 report_draft_text = f"{PLACEHOLDER}\n\n{PLACEHOLDER}"
             finally:
                 context.recent_llm_workflows.add_completed(collector)
-        summary = generate_project(
-            platform=platform,
-            slugs=slugs,
-            main_c_content=main_c,
-            output_dir=output_dir,
-            module_library_dir=config.module_library_dir,
-            masters_dir=config.masters_dir,
-            ccs_tools=ccs_tools,
-            bindings=bindings,
-            instances=instances,
-            python_templates=python_templates,
-            score_points=score_points,
-            problem_text=problem_text,
-            topic_id=topic_id,
-            qa_text=qa_text,
-            requirements=requirements,
-            references=references,
-            tool_version=__version__,
-            report_draft_text=report_draft_text,
+        # 同键互斥 + 目录裁决（工单 generate-conflict-guard/01）：锁键 = 桌面
+        # 用题名 / 手动用输出目录；已存在完整同名工程 → 400（不静默改名攒
+        # 目录，不覆盖）；半成品残渣 → 清理后生成；失败 → 桌面模式不留半成品。
+        lock_key = (
+            f"desktop:{output_dir.name}"
+            if _desktop_output_requested(payload)
+            else f"manual:{output_dir}"
         )
+        with _generation_guard(context, lock_key):
+            if output_verdict == "exists":
+                raise GenerationConflictError(
+                    f"桌面上已有同名工程「{output_dir.name}」：为避免覆盖你的"
+                    "已有工程，请先删除该目录或修改题名后再生成（不会自动"
+                    "改名或覆盖）"
+                )
+            if output_verdict == "clean":
+                shutil.rmtree(output_dir, ignore_errors=True)
+            try:
+                summary = generate_project(
+                    platform=platform,
+                    slugs=slugs,
+                    main_c_content=main_c,
+                    output_dir=output_dir,
+                    module_library_dir=config.module_library_dir,
+                    masters_dir=config.masters_dir,
+                    ccs_tools=ccs_tools,
+                    bindings=bindings,
+                    instances=instances,
+                    python_templates=python_templates,
+                    score_points=score_points,
+                    problem_text=problem_text,
+                    topic_id=topic_id,
+                    qa_text=qa_text,
+                    requirements=requirements,
+                    references=references,
+                    tool_version=__version__,
+                    report_draft_text=report_draft_text,
+                )
+            except GenerationConflictError:
+                raise
+            except Exception:
+                if _desktop_output_requested(payload):
+                    shutil.rmtree(output_dir, ignore_errors=True)
+                raise
+        if _desktop_output_requested(payload):
+            # 生成成功 → 自动打开资源管理器聚焦工程目录（用户「要」）
+            _open_in_explorer(output_dir)
         return _generation_result(summary)
 
     # ------------------------------------------------------------------

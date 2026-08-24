@@ -23,6 +23,7 @@ from .context_manifest import ContextError
 from .deepen import DeepenError
 from .extraction import ExtractionError
 from .fix_errors import FixError
+from .generation_output import GenerationBusyError, GenerationConflictError
 from .generator import (
     DuplicateFilePathError,
     ExtiLineConflictError,
@@ -93,10 +94,14 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ImpactError,  # 影响分析输出非法（工单 revise-deepen/02）：缺数组 / 未知 slug / 字段类型错
             RevisionError,  # 修订执行失败（工单 revise-deepen/03）：备份缺失 / 回滚目标非法
             DeepenError,  # 深化失败（工单 revise-deepen/04）：main.c 缺失 / 深化结果为空
+            GenerationConflictError,  # 桌面同名工程已存在（工单 generate-conflict-guard/01）：不静默换名/覆盖
         ),
         400,
         str,
     ),
+    # 同名工程生成进行中（工单 generate-conflict-guard/01）：HTTP 语义冲突，
+    # 多标签页 / 并发请求同题只放一个进闸，其余等前一个完成再试
+    _ErrorEntry((GenerationBusyError,), 409, str),
     # 未知平台（用户可控输入打在生成流程，原为漏登记的 500）：400 中文，
     # message 带已注册平台清单，用户可直接修正重试
     _ErrorEntry((UnknownPlatformError,), 400, str),

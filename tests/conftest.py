@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -131,6 +132,24 @@ def make_ccs_project(fake_ccs_master_project, fake_module_library, mspm0_selecti
 # ---------------------------------------------------------------------------
 # 桌面测试产物清理（收尾钩子）：见 _desktop_cleanup.py 的说明。
 # ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _no_real_explorer(monkeypatch):
+    """桌面模式生成成功会调 subprocess.Popen(explorer.exe) 聚焦工程目录
+    （工单 generate-conflict-guard/04）——测试里不许真弹资源管理器窗口。
+    subprocess 模块是全局单例（compile_runner 也用它跑编译器子进程），
+    所以只吞 explorer.exe 调用、其余转发真 Popen（绝不整函数替换）。
+    断言 explorer 调用的测试自行覆盖（monkeypatch 后设盖先设）。"""
+    real_popen = subprocess.Popen
+
+    def guarded_popen(*args, **kwargs):
+        argv = args[0] if args else kwargs.get("args", ())
+        if isinstance(argv, (list, tuple)) and argv and argv[0] == "explorer.exe":
+            return None
+        return real_popen(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", guarded_popen)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """测试会话收尾：清理本会话生成到桌面的测试产物。"""
     removed = cleanup_desktop_test_artifacts(Path.home() / "Desktop")
