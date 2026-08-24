@@ -305,9 +305,9 @@ def test_parse_instances_rejects_invalid(raw, match):
 
 
 def test_parse_instances_rejects_slug_not_in_selection():
-    """slug 不在选中集内 = 幻觉 / 乱编（照 build_module_selection 的 unknown slug
-    口径），大声失败。"""
-    with pytest.raises(SelectionError, match="未选中"):
+    """slug 没进工程（选中 ∪ 依赖展开之外）= 幻觉 / 乱编（照 build_module_selection
+    的 unknown slug 口径），大声失败。"""
+    with pytest.raises(SelectionError, match="未进工程"):
         parse_instances({"led": [{"name": "红灯"}]}, known_slugs=("dht11",))
 
 

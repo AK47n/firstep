@@ -452,6 +452,33 @@ def _add_fake_led_module(library_dir: Path) -> None:
     )
 
 
+def _add_fake_led_beep_module(library_dir: Path) -> None:
+    """给假模块库补一个 led_beep（依赖 led 的多实例带入者，工单
+    instance-config-deps/01 素材）：自身非多实例，依赖把 led 带进工程。"""
+    (library_dir / "led_beep").mkdir(parents=True, exist_ok=True)
+    (library_dir / "led_beep" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "led_beep",
+                "description": "声光组合模块",
+                "dependencies": ["led"],
+                "platforms": {
+                    "stm32": {
+                        "files": [],
+                        "verified": True,
+                        "hardware_bound": False,
+                        "notes": "",
+                        "kit": "",
+                        "source_url": "",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
 # ---------------------------------------------------------------------------
 # SSE 提炼流（工单 02）测试助手：解析 + done 载荷提取
 # ---------------------------------------------------------------------------
@@ -1836,7 +1863,7 @@ def test_skeleton_returns_main_c_and_intercepts_undefined_calls(client, context)
 
 
 def test_skeleton_rejects_instances_with_unknown_slug(client):
-    """instances 的 slug 不在选中集 → 400 中文（module-multi-instance/04 请求层）。"""
+    """instances 的 slug 没进工程（选中 ∪ 依赖展开之外）→ 400 中文（请求层）。"""
     resp = client.post(
         "/api/skeleton",
         json={
@@ -1848,7 +1875,35 @@ def test_skeleton_rejects_instances_with_unknown_slug(client):
     )
 
     assert resp.status_code == 400
-    assert "未选中" in resp.json()["detail"]
+    assert "未进工程" in resp.json()["detail"]
+
+
+def test_skeleton_accepts_instances_for_dependency_brought_module(client, context):
+    """依赖带入的多实例模块（led_beep → led）允许配实例清单
+    （instance-config-deps/01）：用户只选声光组合也能配多灯——known_slugs =
+    选中 ∪ 依赖展开，不再 400。"""
+    _add_fake_led_module(context[0].config.module_library_dir)
+    _add_fake_led_beep_module(context[0].config.module_library_dir)
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "声光报警",
+            "slugs": ["led_beep"],
+            "platform": PLATFORM_STM32,
+            "instances": {
+                "led": [
+                    {"name": "红灯", "variant": "red"},
+                    {"name": "黄灯", "variant": "yellow"},
+                ]
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    interfaces = context[1]["llm"].skeleton_calls[0][1]
+    # 依赖带入的 led 清单生效：两实例（红 + 黄）→ 双通道宏注入接口块
+    assert any("#define LED_CHANNEL_COUNT 2" in block for block in interfaces)
+    assert any("#define LED_YELLOW" in block for block in interfaces)
 
 
 def test_skeleton_rejects_instances_with_empty_name(client):
@@ -1965,7 +2020,7 @@ def test_skeleton_forwards_instances_to_llm(client, context):
 
 
 def test_generate_rejects_instances_with_unknown_slug(client, context, tmp_path):
-    """generate 请求层同样校验 instances（slug 不在选中集 → 400 中文）。"""
+    """generate 请求层同样校验 instances（slug 没进工程 → 400 中文）。"""
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
     output_dir = tmp_path / "out" / "demo"
     resp = client.post(
@@ -1980,7 +2035,31 @@ def test_generate_rejects_instances_with_unknown_slug(client, context, tmp_path)
     )
 
     assert resp.status_code == 400
-    assert "未选中" in resp.json()["detail"]
+    assert "未进工程" in resp.json()["detail"]
+
+
+def test_generate_accepts_instances_for_dependency_brought_module(
+    client, context, tmp_path
+):
+    """generate 同样接受依赖带入模块的实例清单（instance-config-deps/01）：只需
+    选中 led_beep，实例清单键 = led（依赖带入）也能过校验并完成生成。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _add_fake_led_module(context[0].config.module_library_dir)
+    _add_fake_led_beep_module(context[0].config.module_library_dir)
+    context[1]["llm"] = FakeLLM(topic_summary="智能声光报警\n- LED 闪烁\n- 蜂鸣器报警")
+    output_dir = tmp_path / "out" / "demo"
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["led_beep"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+            "instances": {"led": [{"name": "红灯", "variant": "red"}]},
+        },
+    )
+
+    assert resp.status_code == 200
 
 
 def test_generate_assembles_project_with_structure_include_path_and_main(

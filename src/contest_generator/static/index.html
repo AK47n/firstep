@@ -2520,12 +2520,11 @@ function renderWarnings() {
 const LED_COLORS = [["red", "红"], ["yellow", "黄"], ["green", "绿"], ["", "无颜色（通用编号）"]];
 
 function multiInstanceModules() {
-  // 只列用户显式选择的模块（修订排查修复）：依赖带入的多实例模块（如
-  // led_beep 带入 led）其实例清单会被 renderInstanceConfig 的清理守卫删除
-  // （instancePayload 只发 selectedSlugs，后端 parse_instances 也只认用户
-  // slugs）——留着会显示"添加实例点了没反应"的死按钮。想配实例请显式添加
-  // 该模块。
-  return expanded.filter((m) => m.multi_instance && selectedSlugs.includes(m.slug));
+  // 依赖带入的多实例模块（如 led_beep 依赖 led）也显示实例卡（工单
+  // instance-config-deps/01）：实例清单随 instancePayload 走 expanded 全集，
+  // 后端 parse_instances 认"选中 ∪ 依赖"——不再是加了没反应的死按钮。
+  // 未展开（expanded 空）时本函数为空 → 卡隐藏（旧行为）。
+  return expanded.filter((m) => m.multi_instance);
 }
 
 function instList(slug) {
@@ -2533,12 +2532,15 @@ function instList(slug) {
 }
 
 function instancePayload() {
-  // 只带仍在选择集内且配了 ≥1 实例的模块；空清单 = 不发 instances（旧行为）
+  // 只带仍在最终工程集（expanded = 选中 ∪ 依赖）内且配了 ≥1 实例的模块；
+  // 空清单 = 不发 instances（旧行为）。依赖带入的多实例模块同样能发——
+  // 未展开时 expanded 空 → 空对象（旧行为零变化）。
   const out = {};
-  for (const slug of selectedSlugs) {
-    const list = instances[slug] || [];
+  for (const m of expanded) {
+    if (!m.multi_instance) continue;
+    const list = instances[m.slug] || [];
     if (list.length) {
-      out[slug] = list.map((i) => ({ name: i.name, variant: i.variant, pin: i.pin }));
+      out[m.slug] = list.map((i) => ({ name: i.name, variant: i.variant, pin: i.pin }));
     }
   }
   return out;
@@ -2546,14 +2548,16 @@ function instancePayload() {
 
 function renderInstanceConfig() {
   const card = $("card-instance-config");
-  // 清掉已不在选择集内模块的实例清单（模块被移除后不残留）
+  // 清掉已不在最终工程集内模块的实例清单（模块被移除后不残留；expanded
+  // 未展开时按 selectedSlugs 兜底 = 旧行为——推荐回填的实例清单不被误删）
+  const keep = new Set(expanded.length ? expanded.map((m) => m.slug) : selectedSlugs);
   for (const slug of Object.keys(instances)) {
-    if (!selectedSlugs.includes(slug)) delete instances[slug];
+    if (!keep.has(slug)) delete instances[slug];
   }
   // 选脚目标失效守卫：slug 已不在选择集 / 实例号越界 → 清掉（防陈旧高亮）
   if (instancePinTarget) {
     const targetList = instances[instancePinTarget.slug] || [];
-    if (!selectedSlugs.includes(instancePinTarget.slug) || instancePinTarget.index >= targetList.length) {
+    if (!keep.has(instancePinTarget.slug) || instancePinTarget.index >= targetList.length) {
       instancePinTarget = null;
     }
   }
