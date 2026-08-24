@@ -1869,6 +1869,7 @@ $("btn-topic-summary").addEventListener("click", async () => {
     $("topic-summary-box").textContent = data.summary;
     $("topic-summary-box").classList.remove("hidden");
     $("btn-topic-summary").innerHTML = "重新生成";
+    markStepDone(2);  // 简介生成成功即视为完成（题面变更时 clearTopicSummary 会取消）
   } catch (e) {
     $("topic-summary-msg").textContent = e.message;
   } finally {
@@ -2297,6 +2298,7 @@ function renderReferencePicker() {
       selectedReferenceIds = selectedReferenceIds.filter((x) => x !== id);
       if (cb.checked) selectedReferenceIds.push(id);
       renderRefSelected();
+      syncStep4();  // 勾选变更 = 参考资料集合变化，重算步骤 4 完成状态
     }));
   renderRefSelected();
 }
@@ -2323,11 +2325,19 @@ function renderRefSelected() {
     : '<div class="muted">尚未选中参考资料（AI 推荐后会自动关联赛题 / 套件资料）。</div>';
 }
 
+// 步骤 4（参考资料）完成判定：手动勾选或自动关联任一有值即视为完成（可选
+// 步骤，全空 = 未处理，不取消其它步骤）；勾选变更、AI 推荐自动关联后调用
+function syncStep4() {
+  if (selectedReferenceIds.length || autoReferenceIds.length) markStepDone(4);
+  else markStepUndone(4);
+}
+
 function renderReferenceResult(data) {
   const refs = data.references || [];
   autoReferenceIds = refs.filter((r) => r.source !== "manual").map((r) => r.id);
   renderReferencePicker();
   renderRefSelected();
+  syncStep4();  // 推荐自动关联后重算步骤 4（无自动关联也不取消手动勾选）
 }
 
 // ---------------------------------------------------------------------------
