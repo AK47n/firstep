@@ -325,6 +325,20 @@ TOPIC_SUMMARY_SYSTEM_PROMPT = (
     "表述，保留全部实质要求。只输出简介文本，不要额外格式。"
 )
 
+# 英文目录短名生成（工单 ascii-project-name/02）：AI 给粘贴题面起一个纯英文
+# 短名（如 Auto_Car），做桌面生成目录名——中文目录名在 Windows CCS/gmake 链上
+# 乱码（工单 mspm0-cjk-path-fix/01 只修模板，管不住 CCS IDE 重建 makefile）。
+# 纯文本契约，与赛题简介同款：文本模式、无结构化输出、短名本身即整段输出
+# （严格 ASCII：字母数字 + 下划线/连字符，3~5 个词，不含中文）。
+TOPIC_EN_NAME_SYSTEM_PROMPT = (
+    "你是电子设计竞赛（电赛）嵌入式开发助手。为下面的赛题起一个英文短名，"
+    "用作工程目录名（赛题文本可能被截断，见末尾标注，" + TRUNCATION_NOTICE
+    + "）：只输出短名本身——纯 ASCII 字符（字母、数字、下划线或连字符），"
+    "3~5 个词，每个词首字母大写并用下划线连接（如 Auto_Car、"
+    "Smart_Medicine_Car、Car_Following_System）。不要输出任何多余格式、解释"
+    "或引号，只输出短名一行。"
+)
+
 # 编译错误修复（工单 compile-error-fix/01 + fix-snippet-match/01）：贴报错 →
 # 逐条修复建议（snippet 替换协议）。old_snippet 给从行首开始的语句本体片段
 # （可省前导缩进 / 行尾注释，语句本体须逐字一致）——工具先精确匹配，失败时
@@ -962,6 +976,8 @@ class LLM(Protocol):
 
     def summarize_topic(self, problem_text: str) -> str: ...
 
+    def name_topic_english(self, problem_text: str) -> str: ...
+
     def generate_main_skeleton(
         self,
         problem_text: str,
@@ -1334,6 +1350,26 @@ class DeepSeekLLM:
             user_prompt=_truncate_content(problem_text),
             parse=lambda content: content,
             label="赛题简介生成",
+        )
+
+    def name_topic_english(self, problem_text: str) -> str:
+        """赛题题面 → 英文目录短名（工单 ascii-project-name/02，目录名用）。
+
+        粘贴自定义题面生成时目录名取 AI 英文短名（如 Auto_Car）：题面超长
+        截断带标注（_truncate_content，与所有嵌内容调用同款预算）；瞬时失败
+        整次重问（_retry_parse，与赛题简介同款兜底）；输出为纯文本短名，
+        仅当整段非空才接受。
+        """
+        def parse(content: str) -> str:
+            if not content.strip():
+                raise LLMError("英文短名生成返回空内容")
+            return content.strip()
+
+        return self._retry_parse(
+            system_prompt=TOPIC_EN_NAME_SYSTEM_PROMPT,
+            user_prompt=_truncate_content(problem_text),
+            parse=parse,
+            label="英文短名生成",
         )
 
     def generate_main_skeleton(
@@ -2516,6 +2552,9 @@ class RoutingLLM:
         return self._local_call(
             "summarize_topic", lambda delegate: delegate.summarize_topic(problem_text)
         )
+
+    def name_topic_english(self, problem_text: str) -> str:
+        return self._remote.name_topic_english(problem_text)
 
     def generate_main_skeleton(
         self,

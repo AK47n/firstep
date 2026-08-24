@@ -5,7 +5,10 @@
 Debug/makefile 集——makefile + sources.mk + objects.mk + 根 subdir_vars.mk /
 subdir_rules.mk + 逐模块目录 subdir_vars.mk / subdir_rules.mk，模板镜像 IDE
 生成的 makefile 集（2024H 真机 gmake 0 错验证），`gmake -C Debug -f makefile`
-即可全量构建。路径全部参数化（proj / SDK / 编译器 / SysConfig CLI），零硬编码。
+即可全量构建。路径全部参数化（SDK / 编译器 / SysConfig CLI），零硬编码；
+工程相关路径一律相对 Debug 目录（工单 mspm0-cjk-path-fix/01——Windows
+gmake → cmd.exe 按 ANSI 代码页转码，UTF-8 中文绝对路径会变乱码导致
+SysConfig "File ... does not exist" 真机复现；相对路径纯 ASCII 无损）。
 
 纯函数模板：render_makefile_set 参数化产出 {相对路径: 文本}（同参必同文，
 测试钉死确定性）；write_makefile_set 落盘（mkdir + 写文件）。module_sources
@@ -156,21 +159,28 @@ def _root_subdir_vars(startup: str) -> str:
 
 
 def _root_subdir_rules(
-    proj: str,
     sdk_dir: str,
     compiler_dir: str,
     sysconfig_cli: str,
     inc: str,
     startup: str,
 ) -> str:
-    """Debug/subdir_rules.mk（根）：SysConfig 生成规则 + 根三源的编译规则。"""
+    """Debug/subdir_rules.mk（根）：SysConfig 生成规则 + 根三源的编译规则。
+
+    注意：`--script` 用相对 Debug 目录的 "../mspm0.syscfg"（recipe 在 Debug 下
+    执行），绝不写工程绝对路径（工单 mspm0-cjk-path-fix/01）——Windows 上
+    gmake 经 SHELL=cmd.exe 跑 recipe 时按 ANSI 代码页把 makefile 的 UTF-8
+    中文路径误解码成乱码（如 "2024H 自动行驶小车" → "2024H 鑷姩..."），
+    真有中文工程名时 SysConfig 直接报 "File ... does not exist"、gmake
+    Error 1（真机复现；相对路径纯 ASCII 任何代码页无损）。
+    """
     compile_line = _compile_recipe(compiler_dir, inc)
     parts = [
         _HEADER,
         "build-1290584808: ../mspm0.syscfg\n",
         '\t@echo \'SysConfig - building file: "$<"\'\n',
         f'\t"{sysconfig_cli}" -s "{sdk_dir}/.metadata/product.json" '
-        f'--script "{proj}/mspm0.syscfg" -o "." --compiler ticlang\n',
+        f'--script "../mspm0.syscfg" -o "." --compiler ticlang\n',
         "\t@echo 'Finished building: \"$<\"'\n\t@echo ' '\n\n",
     ]
     for gen in _GEN_FILES:
@@ -219,7 +229,7 @@ def _module_makefiles(
 
 
 def _render_makefile(
-    module_sources: ModuleSources, proj: str, sdk_dir: str, compiler_dir: str
+    module_sources: ModuleSources, sdk_dir: str, compiler_dir: str
 ) -> str:
     """Debug/makefile：include 全量 subdir 文件 + ORDERED_OBJS + 链接 / clean 规则。"""
     mod_dirs = [_module_dir(slug, subdir) for slug, subdir, _ in module_sources]
@@ -260,11 +270,14 @@ def _render_makefile(
         + [f'"{d.replace("/", "\\")}\\{cfile[:-2]}.d"'
            for d, (_, _, cfiles) in zip(mod_dirs, module_sources) for cfile in cfiles]
     )
+    # 链接 -i 搜索路径：工程根 / Debug/syscfg 用相对形态（工单
+    # mspm0-cjk-path-fix/01，理由同 _compile_includes——gmake→cmd.exe 的
+    # ANSI 代码页转码会被 UTF-8 中文绝对路径破坏，相对路径纯 ASCII 无损）。
     link = (
         f'\t"{compiler_dir}/bin/tiarmclang.exe" @"device.opt"  '
         "-march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian "
         f'-mthumb -O0 -gdwarf-3 -Wall -Wl,-m"{_OUT_NAME}.map" '
-        f'-Wl,-i"{sdk_dir}/source" -Wl,-i"{proj}" -Wl,-i"{proj}/Debug/syscfg" '
+        f'-Wl,-i"{sdk_dir}/source" -Wl,-i".." -Wl,-i"./syscfg" '
         f'-Wl,-i"{compiler_dir}/lib" -Wl,--diag_wrap=off '
         f'-Wl,--display_error_number -Wl,--warn_sections '
         f'-Wl,--xml_link_info="{_OUT_NAME}_linkInfo.xml" -Wl,--rom_model '
@@ -304,7 +317,6 @@ def _render_makefile(
 
 
 def _compile_includes(
-    proj: str,
     sdk_dir: str,
     module_dirs: Sequence[str],
     extra_include_dirs: Sequence[Path],
@@ -315,14 +327,23 @@ def _compile_includes(
     .h 的模块（config）不产生模块源条目、mod_dirs 不会收录，但它的头目录必须
     进 -I，否则 uwb_uart_mspm0.c 的 #include "config_mspm0.h" 在命令行构建
     找不到（IDE 读 .cproject，gmake 只读本串）。
+
+    工程相关目录全部用相对 Debug 目录的相对路径（".." 工程根 / "." Debug /
+    "../modules/..."）——绝不写工程绝对路径：Windows 上 gmake 经 SHELL=cmd.exe
+    执行 recipe 时（GNU make Windows 版按 ANSI 代码页 CP936 转 UTF-16），
+    makefile 里的 UTF-8 中文绝对路径会被误解码成乱码，SysConfig 的
+    --script / tiarmclang 的 -I 全链失效（中文工程名真机复现
+    "File ... does not exist" 红证，见下方 _root_subdir_rules 注）。
+    相对路径是纯 ASCII，任何代码页转码都无损；工程放哪里都能编译。
+    （工单 mspm0-cjk-path-fix/01）
     """
-    dirs: list[str] = [proj, f"{proj}/Debug"]
+    dirs: list[str] = ["..", "."]
     seen = set(dirs)
     for rel in [*module_dirs, *(d.as_posix() for d in extra_include_dirs)]:
         if rel in seen:
             continue
         seen.add(rel)
-        dirs.append(f"{proj}/{rel}")
+        dirs.append(f"../{rel}")
     dirs.extend(
         [
             f"{sdk_dir}/source/third_party/CMSIS/Core/Include",
@@ -334,7 +355,6 @@ def _compile_includes(
 
 def render_makefile_set(
     module_sources: ModuleSources,
-    proj_dir: Path,
     sdk_dir: str,
     compiler_dir: str,
     sysconfig_cli: str,
@@ -342,19 +362,21 @@ def render_makefile_set(
 ) -> dict[str, str]:
     """参数化渲染完整 makefile 集 → {相对 Debug 目录的路径（POSIX）: 文本}。
 
-    纯函数（不碰盘）：同参必同文——测试钉死确定性；路径全部入参（工程根 /
-    SDK / 编译器 / SysConfig CLI），零硬编码。
+    纯函数（不碰盘）：同参必同文——测试钉死确定性；路径全部入参（SDK /
+    编译器 / SysConfig CLI），零硬编码。工程根不进任何 recipe（全部相对
+    Debug 目录的相对路径，工单 mspm0-cjk-path-fix/01——Windows gmake 经
+    cmd.exe 执行 recipe 时按 ANSI 代码页转码，UTF-8 中文绝对路径会变乱码
+    导致 SysConfig/编译器全线找不到文件；相对路径纯 ASCII 无损）。
     """
-    proj = str(proj_dir)
     startup = f"{sdk_dir}/{_STARTUP_REL}"
     mod_dirs = [_module_dir(slug, subdir) for slug, subdir, _ in module_sources]
-    inc = _compile_includes(proj, sdk_dir, mod_dirs, extra_include_dirs)
+    inc = _compile_includes(sdk_dir, mod_dirs, extra_include_dirs)
     files: dict[str, str] = {
         "sources.mk": _SOURCES_MK,
         "objects.mk": _OBJECTS_MK,
         "subdir_vars.mk": _root_subdir_vars(startup),
         "subdir_rules.mk": _root_subdir_rules(
-            proj, sdk_dir, compiler_dir, sysconfig_cli, inc, startup
+            sdk_dir, compiler_dir, sysconfig_cli, inc, startup
         ),
     }
     for (slug, subdir, cfiles), mod_dir in zip(module_sources, mod_dirs):
@@ -363,7 +385,7 @@ def render_makefile_set(
         )
         files[f"{mod_dir}/subdir_vars.mk"] = vars_text
         files[f"{mod_dir}/subdir_rules.mk"] = rules_text
-    files["makefile"] = _render_makefile(module_sources, proj, sdk_dir, compiler_dir)
+    files["makefile"] = _render_makefile(module_sources, sdk_dir, compiler_dir)
     return files
 
 
@@ -379,7 +401,6 @@ def write_makefile_set(
     相对路径（POSIX，排序，结构测试 / 生成摘要可用）。"""
     rendered = render_makefile_set(
         module_sources,
-        output_dir.resolve(),
         sdk_dir,
         compiler_dir,
         sysconfig_cli,

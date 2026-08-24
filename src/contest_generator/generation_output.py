@@ -23,6 +23,23 @@ _TOPIC_TITLE_PREFIX_RE = re.compile(r"^(?:题名|标题|赛题名称|赛题名)[
 _TOPIC_LINE_MARKDOWN_RE = re.compile(r"^#{1,6}\s*")
 _TOPIC_LINE_PREFIX_RE = re.compile(r"^[A-Za-z0-9]+\s*题\s*[:：]\s*")
 _TOPIC_TRAILING_PAREN_RE = re.compile(r"（[^）]*(?:题|本科|高职|组)[^）]*）$")
+# ASCII 兜底：非字母数字序列整体切词（保留运行号/字母 token，防 2026C 这类
+# 名字在兜底时整段中文全丢）。
+_ASCII_KEEP_WORDS_RE = re.compile(r"[^A-Za-z0-9]+")
+
+# 中文短题名 → 英文目录名单词（工单 ascii-project-name/01）：历史赛题目录名
+# 确定性来源——键 = topic_short_title 的提取结果（题面首行短题名），值 = 英文
+# 短名（下划线连接单词，无空格无中文）。覆盖现题库全部 8 题；未收录题走
+# ASCII 兜底（topic_en_title）。
+TOPIC_EN_TITLES: dict[str, str] = {
+    "自动行驶小车": "Auto_Car",
+    "智能送药小车": "Smart_Medicine_Car",
+    "小车跟随行驶系统": "Car_Following_System",
+    "无线充电电动小车": "Wireless_Charging_Electric_Car",
+    "电动小车动态无线充电系统": "Dynamic_Wireless_Charging_System",
+    "坡道行驶电动小车": "Slope_Driving_Electric_Car",
+    "2026年全国大学生电子设计竞赛赛区赛(TI杯)": "2026_TI_Cup",
+}
 
 
 def topic_title_from_summary(summary: str) -> str:
@@ -55,14 +72,34 @@ def topic_short_title(problem_text: str) -> str:
     return line or first
 
 
+def topic_en_title(short_title: str) -> str:
+    """中文短题名 → 英文短名（目录名用，工单 ascii-project-name/01）。
+
+    命中 TOPIC_EN_TITLES 字典直接返回（历史赛题确定性、可预期）；未命中走
+    ASCII 兜底：保留字母数字 token、下划线连接（如「2026年全国…(TI杯)」→
+    `2026_TI`）；兜底为空（纯中文字符串）→ 回退原短题名（保底可生成，提示
+    补词即可），保证函数恒有值且不抛。
+    """
+    hit = TOPIC_EN_TITLES.get(short_title)
+    if hit:
+        return hit
+    words = [w for w in _ASCII_KEEP_WORDS_RE.split(short_title) if w]
+    fallback = "_".join(words)
+    return fallback or short_title
+
+
 def topic_dir_title(key: str, problem_text: str) -> str:
-    """历史赛题目录名：`2024H 自动行驶小车`（编号 + 首行短题名）。
+    """历史赛题目录名：`2024H_Auto_Car`（编号 + 英文短名，工单 ascii-project-name/01）。
 
     修订（2024H 复盘）：有历史赛题编号时目录名不再取 AI 简介首行——简介是
     长句（如“设计一个采用 TI MSPM0 系列 MCU 控制的自动行驶小车…”），目录名
-    又长又每次生成都可能变；编号 + 短题名稳定、可预期。
+    又长又每次生成都可能变；编号 + 短题名稳定、可预期。2024H 实测中文路径在
+    CCS/gmake 链上乱码（工单 mspm0-cjk-path-fix/01 只修模板、管不住 CCS IDE
+    重建 makefile），目录名改纯英文：编号 + 英文字典短名（ASCII，Windows
+    gmake→cmd.exe 转码无损），彻底绕开编码链路。
     """
-    return f"{key} {topic_short_title(problem_text)}".strip()
+    en = topic_en_title(topic_short_title(problem_text))
+    return f"{key}_{en}"
 
 
 def windows_safe_folder_name(title: str) -> str:

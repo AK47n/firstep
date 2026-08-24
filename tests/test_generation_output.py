@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from contest_generator.generation_output import (
+    TOPIC_EN_TITLES,
     topic_dir_title,
+    topic_en_title,
     topic_short_title,
     topic_title_from_summary,
     unique_desktop_topic_dir,
@@ -49,9 +51,40 @@ def test_topic_short_title_keeps_unparseable_first_line():
     )
 
 
-def test_topic_dir_title_prefixes_key():
-    assert topic_dir_title("2024H", "自动行驶小车（H 题）\n") == "2024H 自动行驶小车"
-    assert topic_dir_title("2021F", "智能送药小车（F题）\n") == "2021F 智能送药小车"
+def test_topic_dir_title_prefixes_key_with_ascii_english():
+    """历史赛题目录名 = 编号 + 英文短名（工单 ascii-project-name/01：中文路径
+    在 CCS/gmake 链上乱码，目录名改纯英文）。"""
+    assert topic_dir_title("2024H", "自动行驶小车（H 题）\n") == "2024H_Auto_Car"
+    assert topic_dir_title("2021F", "智能送药小车（F题）\n") == "2021F_Smart_Medicine_Car"
+
+
+def test_topic_en_title_dictionary_covers_all_library_topics():
+    """内置字典覆盖现题库全部 8 题的短题名（topic_short_title 提取结果）。"""
+    from pathlib import Path
+    topics_root = (
+        Path(__file__).resolve().parents[1] / "library" / "topics"
+    )
+    assert topics_root.is_dir(), "题库目录缺失（library/topics）"
+    for entry in topics_root.iterdir():
+        md = entry / "topic.md"
+        if not md.is_file():
+            continue
+        first = md.read_text(encoding="utf-8").splitlines()[0].strip()
+        short = topic_short_title(first)
+        assert short in TOPIC_EN_TITLES, (
+            f"题库 {entry.name} 短题名 {short!r} 未收录进 TOPIC_EN_TITLES"
+        )
+
+
+def test_topic_en_title_ascii_fallback_keeps_alnum_tokens():
+    """字典未命中：ASCII 兜底保留字母数字 token、下划线连接。"""
+    assert topic_en_title("2027年全国电子设计竞赛(F题)") == "2027_F"
+    assert topic_en_title("ECCI D 2027") == "ECCI_D_2027"
+
+
+def test_topic_en_title_falls_back_to_chinese_when_no_ascii():
+    """纯中文兜底 → 回退原短题名（保底可生成）。"""
+    assert topic_en_title("完全中文题名") == "完全中文题名"
 
 
 def test_windows_safe_folder_name_cleans_invalid_chars_and_empty_title():
