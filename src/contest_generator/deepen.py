@@ -267,15 +267,20 @@ def _strip_todo_prefix(text: str) -> str:
 
 
 def _comment_text(line: str) -> str:
-    """行内注释文本：/* … */（同行）或 // …；剥前导 * 与空白，无注释 = 空串。"""
+    """行内注释文本：/* … */（同行）或 // …；块注释的起始行（/* XXX 未闭合，
+    跨行注释）取 /* 之后的第一行内容；剥前导 * 与空白，无注释 = 空串。"""
     m = _COMMENT_BLOCK_RE.search(line)
     if m:
         text = m.group(1)
     else:
         idx = line.find("//")
         if idx < 0:
-            return ""
-        text = line[idx + 2 :]
+            idx = line.find("/*")
+            if idx < 0:
+                return ""
+            text = line[idx + 2 :]
+        else:
+            text = line[idx + 2 :]
     return text.strip().lstrip("*").strip()
 
 
