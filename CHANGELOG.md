@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3c83d8d57eb0d37e627bc511e56816a746bd6610 -->
+<!-- changelog-auto: last-commit=1e1127eb6b1cac352b24f5bfe7dc4710d72f2f8c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 12:52 题面「自定」即答案，未提及规格参数视为无限制（工单 02）
 - 13:18 平台卡点击不再误清推荐勾选（工单 platform-click-guard/01）
 - 13:35 main.c 编辑器行号与占位文字重叠 + 取题面 PDF 渲染期占位（工单 ui-polish-10/01,02）
+- 19:20 模块 exclusive_group 声明 + 库级校验 + 摘要行互斥标注（工单 recommend-exclusive-groups/01）
 
 ## 2026-08-23
 - 00:06 UI 打磨（ui-polish-6/02）：修复卡片折叠按钮（选择器失效变大 + 空状态无反馈）
