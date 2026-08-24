@@ -708,6 +708,8 @@
                          pointer-events: none; color: var(--text); }
   .code-wrap textarea { position: relative; z-index: 1; background: transparent;
                         color: transparent; caret-color: var(--accent);
+                        padding-left: 56px;  /* 44 行号列 + 12 内边距：占位/光标与高亮层
+                                               对齐，避开行号列（工单 ui-polish-10/01） */
                         resize: vertical; min-height: 180px; }
   .code-wrap textarea::placeholder { color: var(--muted); opacity: 1; }
   .tok-com { color: #3fb950; }  .tok-str { color: #d29922; }
@@ -1740,7 +1742,8 @@ function showTopicPdfViewer(data) {
     pagesEl.appendChild(img);
   });
   $("topic-pdf-box").classList.remove("hidden");
-  setTopicPdfTextVisible(false);  // 默认展示 PDF，文字收起
+  // 不再强制收起文字版（工单 ui-polish-10/02）：加载期 loadTopicPdf 已默认收起文字；
+  // 若用户在渲染期手动打开了文字版，页图到达后尊重用户选择。
 }
 
 function hideTopicPdfViewer() {
@@ -1750,6 +1753,16 @@ function hideTopicPdfViewer() {
 }
 
 async function loadTopicPdf(key) {
+  // 渲染期占位（工单 ui-polish-10/02）：页图要几秒才渲染完，期间不先露文字版，
+  // 显示「渲染中…」占位；文字版保持「显示文字版（可编辑）」可随时手动打开。
+  $("topic-pdf-box").classList.remove("hidden");
+  $("topic-pdf-pages").innerHTML =
+    '<div class="empty-state" style="padding:18px 0">' +
+    '<div class="es-icon">📄</div>' +
+    '<div class="es-title">原题 PDF 页渲染中…</div>' +
+    '<div class="es-hint">题面文字已就绪，可点上方「显示文字版（可编辑）」提前查看；页图渲染完成后自动展示。</div>' +
+    '</div>';
+  setTopicPdfTextVisible(false);
   try {
     const data = await apiGet("/api/topics/" + encodeURIComponent(key) + "/pages");
     showTopicPdfViewer(data);
