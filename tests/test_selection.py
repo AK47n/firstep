@@ -21,7 +21,13 @@ from contest_generator.events import (
     ProgressEvent,
 )
 from contest_generator.generator import TopicContext
-from contest_generator.manifest import ManifestSummary, ModuleManifest, PlatformEntry
+from contest_generator.manifest import (
+    ExclusiveGroup,
+    ExclusiveGroupMember,
+    ManifestSummary,
+    ModuleManifest,
+    PlatformEntry,
+)
 from contest_generator.reference_library import PLATFORM_ANY, ReferenceEntry, add_reference
 from contest_generator.selection import (
     WARNING_HARDWARE_BOUND,
@@ -46,6 +52,7 @@ from contest_generator.selection import (
     _parse_questions,
     _revision_prompt,
     associated_references,
+    build_exclusive_groups,
     build_module_selection,
     check_platform_warnings,
     filter_manifests_by_platform,
@@ -1946,11 +1953,13 @@ def _run_recommendation(
     topic: TopicContext,
     llm: FakeLLM,
     clarifications: Sequence[tuple[str, str]] = (),
+    *,
+    platform: str = "",
 ) -> tuple[SseEmitter, Queue]:
     """直调 run_recommendation，返回 (emitter, 事件队列)（同线程无竞态）。"""
     events: Queue = Queue()
     emit = SseEmitter(events, terminal_timeout=1.0)
-    run_recommendation(topic, llm, clarifications, emit=emit)
+    run_recommendation(topic, llm, clarifications, emit=emit, platform=platform)
     return emit, events
 
 
@@ -1973,6 +1982,8 @@ def _topic(
     *,
     references: Sequence[ReferenceEntry] = (),
     manual_references: Sequence[ReferenceEntry] = (),
+    exclusive_groups: Sequence[ExclusiveGroup] = (),
+    hint_module_groups: Sequence[str] = (),
 ) -> TopicContext:
     """最小装配素材：收敛与载荷组装够用的字段，其余取安全缺省。"""
     return TopicContext(
@@ -1983,6 +1994,8 @@ def _topic(
         suggestions=(),
         read_fulltext=lambda entry_id: "",
         manual_references=tuple(manual_references),
+        exclusive_groups=tuple(exclusive_groups),
+        hint_module_groups=tuple(hint_module_groups),
     )
 
 
@@ -2352,3 +2365,251 @@ def test_run_recommendation_passes_qa_material_through():
 
     assert llm.received_qa, "select_modules 未收到 qa_material（透传断裂）"
     assert all(qa == "问：尺寸？答：30cm。" for qa in llm.received_qa)
+
+
+# ---------------------------------------------------------------------------
+# 功能组选择卡派生（工单 recommend-exclusive-groups/02）：命中组 / 平台成员
+# 过滤 / 单成员组不出卡 / hint 兜底（未命中出卡、已命中不重复、未知 id 静默
+# 忽略）；done 载荷契约（仅命中或 hint 非空时落键）。
+# ---------------------------------------------------------------------------
+
+
+def _group(
+    group_id: str,
+    label: str,
+    members: Sequence[tuple[str, tuple[str, ...], str]],
+) -> ExclusiveGroup:
+    """组定义构造器：(slug, platforms, role) → ExclusiveGroup（纯函数测试用）。"""
+    return ExclusiveGroup(
+        id=group_id,
+        label=label,
+        members=tuple(
+            ExclusiveGroupMember(slug=slug, role=role, platforms=tuple(platforms))
+            for slug, platforms, role in members
+        ),
+    )
+
+
+def test_build_exclusive_groups_derives_hit_cards():
+    """命中派生：成员 ∩ 推荐集非空 → 出卡（hint False），recommended = 命中
+    slug（按成员登记顺序，与 AI 推荐顺序无关）；未命中成员仍出卡供选择。"""
+    gray = _group(
+        "gray-track",
+        "8 路灰度传感器驱动",
+        [
+            ("huidu", ("mspm0", "stm32"), "仅 8 路灰度读取"),
+            ("pid", ("mspm0", "stm32"), "PID 巡线"),
+            ("xunji", ("mspm0",), "质心巡线"),
+        ],
+    )
+
+    cards = build_exclusive_groups(("pid", "xunji"), (gray,), "mspm0")
+
+    assert cards == [
+        {
+            "id": "gray-track",
+            "label": "8 路灰度传感器驱动",
+            "hint": False,
+            "members": [
+                {"slug": "huidu", "role": "仅 8 路灰度读取"},
+                {"slug": "pid", "role": "PID 巡线"},
+                {"slug": "xunji", "role": "质心巡线"},
+            ],
+            "recommended": ["pid", "xunji"],
+        }
+    ]
+
+
+def test_build_exclusive_groups_filters_members_by_platform():
+    """平台成员过滤：只留该平台有条目的成员（跨平台成员保留）；推荐集里
+    异平台模块不计命中（xunji stm32-only 在 mspm0 视图不出现、不算命中）。"""
+    group = _group(
+        "gray-track",
+        "灰度",
+        [
+            ("huidu", ("mspm0",), "读取"),
+            ("pid", ("mspm0", "stm32"), "PID"),
+            ("xunji", ("stm32",), "质心"),
+        ],
+    )
+
+    cards = build_exclusive_groups(("pid", "xunji"), (group,), "mspm0")
+
+    assert len(cards) == 1
+    card = cards[0]
+    assert [m["slug"] for m in card["members"]] == ["huidu", "pid"]
+    assert card["recommended"] == ["pid"]
+
+
+def test_build_exclusive_groups_single_member_group_no_card():
+    """单成员组不出卡：平台过滤后只剩 1 个候选（无选择权）→ 命中也不出卡
+    （stm32 侧 gray-track = pid 单成员）。"""
+    group = _group(
+        "gray-track",
+        "灰度",
+        [("pid", ("stm32",), "PID"), ("xunji", ("mspm0",), "质心")],
+    )
+
+    assert build_exclusive_groups(("pid",), (group,), "stm32") == []
+
+
+def test_build_exclusive_groups_hint_unhit_emits_card():
+    """hint 兜底：AI 未命中 hint 组 → 出卡 hint True、recommended 空（卡内
+    无默认选中）。"""
+    att = _group(
+        "attitude-hold",
+        "航向保持 / 姿态传感器",
+        [("imu_uart", ("mspm0",), "UART 串口陀螺仪"), ("ml_mpu6050", ("mspm0",), "I2C DMP")],
+    )
+
+    cards = build_exclusive_groups(
+        (), (att,), "mspm0", hint_module_groups=("attitude-hold",)
+    )
+
+    assert cards == [
+        {
+            "id": "attitude-hold",
+            "label": "航向保持 / 姿态传感器",
+            "hint": True,
+            "members": [
+                {"slug": "imu_uart", "role": "UART 串口陀螺仪"},
+                {"slug": "ml_mpu6050", "role": "I2C DMP"},
+            ],
+            "recommended": [],
+        }
+    ]
+
+
+def test_build_exclusive_groups_hint_hit_is_single_hit_card():
+    """hint 组被 AI 命中：只出一张命中卡（hint False），不再重复出 hint 卡。"""
+    att = _group(
+        "attitude-hold",
+        "姿态",
+        [("imu_uart", ("mspm0",), "UART"), ("ml_mpu6050", ("mspm0",), "I2C")],
+    )
+
+    cards = build_exclusive_groups(
+        ("imu_uart",), (att,), "mspm0", hint_module_groups=("attitude-hold",)
+    )
+
+    assert len(cards) == 1
+    assert cards[0]["hint"] is False
+    assert cards[0]["recommended"] == ["imu_uart"]
+
+
+def test_build_exclusive_groups_unknown_hint_id_ignored():
+    """hint id 库内无对应组 → 静默忽略（不炸推荐、不出卡）。"""
+    att = _group(
+        "attitude-hold",
+        "姿态",
+        [("imu_uart", ("mspm0",), "UART"), ("ml_mpu6050", ("mspm0",), "I2C")],
+    )
+
+    assert build_exclusive_groups((), (att,), "mspm0", hint_module_groups=("nope",)) == []
+
+
+def test_build_exclusive_groups_no_defs_no_cards():
+    """无组库 / 全空输入 → 空列表（done 不落键的前置）。"""
+    assert build_exclusive_groups(("dht11",), (), "mspm0") == []
+    assert build_exclusive_groups((), (), "mspm0", hint_module_groups=("a",)) == []
+
+
+def test_build_exclusive_groups_hint_single_member_platform_no_card():
+    """hint 组平台过滤后单成员 → 不出卡（stm32 侧 attitude-hold 单成员，
+    hint 也不出）。"""
+    att = _group(
+        "attitude-hold",
+        "姿态",
+        [("imu_uart", ("mspm0",), "UART"), ("ml_mpu6050", ("stm32", "mspm0"), "I2C")],
+    )
+
+    assert build_exclusive_groups(
+        (), (att,), "stm32", hint_module_groups=("attitude-hold",)
+    ) == []
+
+
+def test_run_recommendation_done_includes_exclusive_groups_when_hit():
+    """done 载荷带 exclusive_groups（工单 02）：命中组出卡（hint False，
+    recommended = 命中 slug）——前端据此渲染组卡 + autoAdd 去重。"""
+    gray = _group(
+        "gray-track",
+        "8 路灰度传感器驱动",
+        [
+            ("huidu", ("mspm0",), "仅 8 路灰度读取"),
+            ("pid", ("mspm0",), "PID 巡线"),
+            ("xunji", ("mspm0",), "质心巡线"),
+        ],
+    )
+    llm = FakeLLM(
+        selection=ModuleSelection(
+            modules=("pid", "xunji"),
+            reasons={"pid": "PID 巡线", "xunji": "质心巡线"},
+        )
+    )
+
+    _, events = _run_recommendation(
+        _topic(exclusive_groups=(gray,)), llm, platform="mspm0"
+    )
+
+    data = _drain_events(events)[-1][1]
+    assert data["exclusive_groups"] == [
+        {
+            "id": "gray-track",
+            "label": "8 路灰度传感器驱动",
+            "hint": False,
+            "members": [
+                {"slug": "huidu", "role": "仅 8 路灰度读取"},
+                {"slug": "pid", "role": "PID 巡线"},
+                {"slug": "xunji", "role": "质心巡线"},
+            ],
+            "recommended": ["pid", "xunji"],
+        }
+    ]
+
+
+def test_run_recommendation_done_includes_hint_cards():
+    """hint 兜底进 done：AI 未命中航向保持组但 topic 声明 hint → 出卡
+    hint True（recommended 空）。"""
+    att = _group(
+        "attitude-hold",
+        "航向保持 / 姿态传感器",
+        [
+            ("imu_uart", ("mspm0",), "UART 串口陀螺仪"),
+            ("ml_mpu6050", ("mspm0",), "I2C DMP"),
+        ],
+    )
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("motor",), reasons={"motor": "电机驱动"})
+    )
+
+    _, events = _run_recommendation(
+        _topic(exclusive_groups=(att,), hint_module_groups=("attitude-hold",)),
+        llm,
+        platform="mspm0",
+    )
+
+    data = _drain_events(events)[-1][1]
+    assert data["exclusive_groups"] == [
+        {
+            "id": "attitude-hold",
+            "label": "航向保持 / 姿态传感器",
+            "hint": True,
+            "members": [
+                {"slug": "imu_uart", "role": "UART 串口陀螺仪"},
+                {"slug": "ml_mpu6050", "role": "I2C DMP"},
+            ],
+            "recommended": [],
+        }
+    ]
+
+
+def test_run_recommendation_done_omits_exclusive_groups_when_none():
+    """无组库 / 全空 → done 不落 exclusive_groups 键（旧载荷逐字节不变）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
+    )
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    data = _drain_events(events)[-1][1]
+    assert "exclusive_groups" not in data

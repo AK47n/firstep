@@ -100,9 +100,12 @@ stm32 侧：`gray-track` 只有 pid（huidu 无 stm32 条目 / xunji 仅 mspm0�
 
 - AI 输出契约**不变**（requirements/modules/suggestions/questions 照旧）——组是
   机器侧派生，不新增模型字段，无新解析风险。
-- 派生纯函数：`build_exclusive_groups(selection_modules, group_defs, platform)` →
-  命中组（成员 ∩ 推荐集非空）列表；每项 = {id, label, members:[{slug, role}],
-  recommended:[命中的 slug]}。done 载荷增：
+- 派生纯函数：`build_exclusive_groups(selection_modules, group_defs, platform,
+  *, hint_module_groups=())` → 命中组（成员 ∩ 推荐集非空）列表；每项 = {id,
+  label, members:[{slug, role}], recommended:[命中的 slug 按成员登记序]}。
+  `recommended` 为成员登记序（非 AI 推荐序）；AI 首选由 AI 原输出的
+  `data.modules` 顺序决定（前端默认勾选取 `data.modules` 序，不依赖本字段）。
+  done 载荷增：
 
 ```json
 "exclusive_groups": [
@@ -158,7 +161,8 @@ stm32 侧：`gray-track` 只有 pid（huidu 无 stm32 条目 / xunji 仅 mspm0�
 ## 测试决策
 
 - 后端纯函数（`build_exclusive_groups`）：命中组派生 / 平台成员过滤 / 单成员组
-  不出卡 / hint 触发（hint 未命中出卡、hint id 未知静默忽略）/ role 回退。
+  不出卡 / hint 触发（hint 未命中出卡、hint id 未知静默忽略）。role 回退不需要
+  ——工单 01 已强校验 role 非空（spec:92），成员必然带 role。
 - 库校验：同 id label 不一致报错、字段类型错报错、缺省兼容（新单测文件）。
 - 提示词契约：用户消息段含「同组互斥」「航向保持」核查条（库有组时）；契约
   预算断言更新（新增段字节计入最坏形态）。
