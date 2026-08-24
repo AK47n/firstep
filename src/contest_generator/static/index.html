@@ -2546,6 +2546,21 @@ function instancePayload() {
   return out;
 }
 
+function ensureDefaultInstances() {
+  // 实例卡首次呈现即预填平台默认（expand 端点 default_instances，工单
+  // instance-config-defaults/01）：AI 未猜 / 依赖带入（led_beep → led）的多实例
+  // 模块也有「第一版」可改，而不是空卡。键已存在不覆盖——AI 猜过 / 用户配过 /
+  // 用户删空（键在、清单空 = 用户明确要默认单实例）都不复活。
+  for (const m of expanded) {
+    if (!m.multi_instance) continue;
+    if (m.slug in instances) continue;
+    if (!m.default_instances || !m.default_instances.length) continue;
+    instances[m.slug] = m.default_instances.map((i) => ({
+      name: String(i.name || ""), variant: i.variant || "", pin: i.pin || "",
+    }));
+  }
+}
+
 function renderInstanceConfig() {
   const card = $("card-instance-config");
   // 清掉已不在最终工程集内模块的实例清单（模块被移除后不残留；expanded
@@ -2554,6 +2569,7 @@ function renderInstanceConfig() {
   for (const slug of Object.keys(instances)) {
     if (!keep.has(slug)) delete instances[slug];
   }
+  ensureDefaultInstances();  // 首次呈现预填平台默认（键不存在才填）
   // 选脚目标失效守卫：slug 已不在选择集 / 实例号越界 → 清掉（防陈旧高亮）
   if (instancePinTarget) {
     const targetList = instances[instancePinTarget.slug] || [];
