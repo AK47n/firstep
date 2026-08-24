@@ -91,6 +91,7 @@ from contest_generator.selection import (
     ReferenceSuggestion,
 )
 from contest_generator.manifest import (
+    ExclusiveGroupSpec,
     ManifestSummary,
     MultiInstanceSpec,
     build_manifest_summaries,
@@ -4079,11 +4080,31 @@ def test_selection_prompt_worst_case_fits_request_budget():
     121514 字节；9KB 余量仍远超响应与网关开销的充分距离。余量 9KB → 8KB
      （2026-08 修订 2，工单 clarify-no-restriction/01）：SELECT_SYSTEM_PROMPT
      新增「无规定即无限制 + 材料性门槛 + 上限 5 条」（2024H 用户报告蠢问题），
-     最坏形态实测 122220 字节；8KB 余量仍远超响应与网关开销的充分距离。"""
+     最坏形态实测 122220 字节；8KB 余量仍远超响应与网关开销的充分距离。
+     余量 8KB → 6KB（2026-08 修订 3，工单 recommend-exclusive-groups/03）：
+     功能组互斥规则段 + 题面核查条计入最坏形态（摘要 14 条中 4 条带组标注 =
+     两组都出的形态；真实 stm32 线仅 2 条带组，此为安全上界），最坏形态实测
+     124143 字节、余量 6929B ≈ 6.7KB；网关/响应开销为 KB 级，6.7KB 仍远超
+     充分距离。触发点：MAX_REQUEST_BYTES 改用 6KB 边界（124928），距实测仍
+     余 785B，新增段再加即红。"""
     problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（推导最坏形态 4000 中文）
     summaries = [
-        ManifestSummary(f"mod{i}", "温湿度传感器采集与显示" * 8)
-        for i in range(14)  # stm32 线 14 条摘要
+        ManifestSummary(
+            f"mod{i}",
+            "温湿度传感器采集与显示" * 8,
+            exclusive_group=(
+                ExclusiveGroupSpec(
+                    id="gray-track", label="8 路灰度传感器驱动", role=f"role-{i}"
+                )
+                if i < 2
+                else ExclusiveGroupSpec(
+                    id="attitude-hold", label="航向保持 / 姿态传感器", role=f"role-{i}"
+                )
+                if i < 4
+                else None
+            ),
+        )
+        for i in range(14)  # stm32 线 14 条摘要（带两组声明 = 互斥段+核查条都出的最坏形态）
     ]
     clarifications = tuple(
         (f"第{i}问：" + "疑" * 200, "答" * 5000) for i in range(20)
@@ -4107,7 +4128,7 @@ def test_selection_prompt_worst_case_fits_request_budget():
         "response_format": {"type": "json_object"},
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 8 * 1024
+    assert total <= MAX_REQUEST_BYTES - 6 * 1024
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
     assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in prompt  # 全文 wire 预算截断带标注
@@ -4218,6 +4239,85 @@ def test_select_system_prompt_carries_control_domain_rules():
     assert "航向保持（陀螺仪/姿态传感器）" in SELECT_SYSTEM_PROMPT
     assert "裁判侧指标" in SELECT_SYSTEM_PROMPT
     assert "不据此推荐计时模块" in SELECT_SYSTEM_PROMPT
+
+
+def _grouped_summary(slug: str, group_id: str, label: str, desc: str = "") -> ManifestSummary:
+    """带功能组声明的摘要：组卡相关提示词条件段测试用。"""
+    return ManifestSummary(
+        slug,
+        desc or f"{slug} 描述",
+        exclusive_group=ExclusiveGroupSpec(id=group_id, label=label, role=f"{slug} 组内定位"),
+    )
+
+
+def test_selection_prompt_carries_exclusive_group_rules():
+    """功能组规则段 + 题面核查条（工单 recommend-exclusive-groups/03）：库内
+    存在互斥组才出「同组互斥（硬约束）」段（成员按摘要视图计数 ≥2）；存在
+    航向保持类组（id 前缀 attitude）才出「题面核查（硬约束）」条（组名取库内
+    label）；单成员组视图（该平台无可选，如 stm32 的 gray-track 仅 pid）→
+    两段都不出（spec「单成员组 / 无组库 → 无提示词段」）。规则在**用户消息段**
+    （教训：只改系统提示词会被用户消息尾句盖过），且位于输出契约（尾句「只
+    返回 json 格式的 JSON 对象」）之前。缺省（库无组）= 旧行为，两段不出。"""
+    # 库有灰度组 + 航向组 → 两段都出，且都在契约前
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    llm.select_modules(
+        "2024 年 H 题：无引导线自动行驶小车。",
+        [
+            _grouped_summary("huidu", "gray-track", "8 路灰度传感器驱动"),
+            _grouped_summary("pid", "gray-track", "8 路灰度传感器驱动"),
+            _grouped_summary("imu_uart", "attitude-hold", "航向保持 / 姿态传感器"),
+            _grouped_summary("ml_mpu6050", "attitude-hold", "航向保持 / 姿态传感器"),
+            ManifestSummary("dht11", "温湿度"),  # SELECTION_JSON 推荐 slug，校验需在场
+        ],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "同组互斥（硬约束）" in user_message
+    assert "只推荐一个" in user_message
+    assert "题面核查（硬约束）" in user_message
+    assert "航向保持 / 姿态传感器" in user_message  # 组名取库内实际 label
+    assert user_message.index("同组互斥（硬约束）") < user_message.index(
+        "只返回 json 格式的 JSON 对象"
+    )
+    assert user_message.index("题面核查（硬约束）") < user_message.index(
+        "只返回 json 格式的 JSON 对象"
+    )
+    # 库只有灰度组（无航向类组）→ 互斥段出、核查条不出
+    transport2 = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm2 = _llm(transport2)
+    llm2.select_modules(
+        "送药小车。识别数字。",
+        [
+            _grouped_summary("huidu", "gray-track", "8 路灰度传感器驱动"),
+            _grouped_summary("pid", "gray-track", "8 路灰度传感器驱动"),
+            ManifestSummary("dht11", "温湿度"),
+        ],
+    )
+    user_message2 = transport2.calls[0][2]["messages"][1]["content"]
+    assert "同组互斥（硬约束）" in user_message2
+    assert "题面核查（硬约束）" not in user_message2
+    # 单成员组视图（stm32 形态：gray-track 仅 pid、attitude-hold 仅
+    # ml_mpu6050）→ 两段都不出（spec：单成员组 / 无组库 → 无提示词段）
+    transport4 = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm4 = _llm(transport4)
+    llm4.select_modules(
+        "送药小车。识别数字。",
+        [
+            _grouped_summary("pid", "gray-track", "8 路灰度传感器驱动"),
+            _grouped_summary("ml_mpu6050", "attitude-hold", "航向保持 / 姿态传感器"),
+            ManifestSummary("dht11", "温湿度"),
+        ],
+    )
+    user_message4 = transport4.calls[0][2]["messages"][1]["content"]
+    assert "同组互斥（硬约束）" not in user_message4
+    assert "题面核查（硬约束）" not in user_message4
+    # 缺省（库无组）= 旧行为：两段都不出现
+    transport3 = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm3 = _llm(transport3)
+    llm3.select_modules("送药小车。识别数字。", [ManifestSummary("dht11", "温湿度")])
+    user_message3 = transport3.calls[0][2]["messages"][1]["content"]
+    assert "同组互斥（硬约束）" not in user_message3
+    assert "题面核查（硬约束）" not in user_message3
 
 
 # ---------------------------------------------------------------------------
