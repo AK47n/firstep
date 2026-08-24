@@ -18,6 +18,8 @@ verified。修一轮仍红 = failed（结果保留，报错中文）。不设自
 
 from __future__ import annotations
 
+import difflib
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -80,7 +82,11 @@ def run_deepen(
 
     返回 done 载荷（JSON 形状稳定）：
     {"status": verified | unverified | failed, "backup_id": ...,
-    "compile": {"passed", "exit_code", "summary"}, "message": 中文提示}。
+    "compile": {"passed", "exit_code", "summary"},
+    "main_diff": 深化效果报告（工单 deepen-report/01）——深化前 vs 深化后的
+    main.c 确定性 diff（{"text", "stats": {"additions", "deletions",
+    "hunks"}, "hunks": [...]}），无差异 = None，
+    "message": 中文提示}。
     失败路径（main_c 缺失 / 编译异常）抛 DeepenError / 原异常（sse 运行器
     补发 error 终态，备份保留可回滚）。
     """
@@ -102,11 +108,13 @@ def run_deepen(
     if not deepened.strip():
         raise DeepenError("深化结果为空——LLM 未产出实现后的 main.c，请重试")
 
-    # 2. 写盘前备份（可回滚）→ 3. 写盘
+    # 2. 写盘前备份（可回滚）→ 3. 写盘 → 4. 深化效果报告（真实 diff，不依赖
+    #    LLM 自述——「说做了 A 实际做了 B」场景下展示的是改动的真相）
     backup_id = _backup_main_c(work_root, output_dir, main_c)
     (output_dir / "main.c").write_text(deepened, encoding="utf-8")
+    main_diff = _main_diff(main_c, deepened)
 
-    # 4. 编译验证闭环：工具链探测（resolve_compile_toolchain 单源，config 覆盖
+    # 5. 编译验证闭环：工具链探测（resolve_compile_toolchain 单源，config 覆盖
     #    > 自动）→ 无 = 大声降级（探测抛 CompileRunnerError = 无工具链，语义
     #    与 /api/compile 的起流前 400 同源，此处转降级不 400）；有 → 编译 →
     #    失败修一轮 → 重编译 → 绿 = 已验证
@@ -118,6 +126,7 @@ def run_deepen(
             "status": STATUS_UNVERIFIED,
             "backup_id": backup_id,
             "compile": {"passed": None, "exit_code": None, "summary": ""},
+            "main_diff": main_diff,
             "message": _status_message(STATUS_UNVERIFIED),
         }
 
@@ -150,8 +159,124 @@ def run_deepen(
         "status": status,
         "backup_id": backup_id,
         "compile": compile_summary,
+        "main_diff": main_diff,
         "message": _status_message(status),
     }
+
+
+# ---------------------------------------------------------------------------
+# 深化效果报告（工单 deepen-report/01）：main.c 前后确定性 diff。
+#
+# 事实源 = 深化前 main_c vs 深化后 deepened（difflib.unified_diff, n=2），
+# 不依赖 LLM 自述（「说做了 A 实际做了 B」场景展示的是改动真相）；标题
+# 优先取被替换的 TODO 注释（需求可追踪），退化取注释行，再退化空串（前端
+# 用 hunk 行号 fallback）。
+# ---------------------------------------------------------------------------
+
+_COMMENT_BLOCK_RE = re.compile(r"/\*(.*?)\*/")
+_TODO_RE = re.compile(r"TODO|FIXME|XXX", re.IGNORECASE)
+_HUNK_HEADER_RE = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+
+def _main_diff(before: str, after: str) -> dict[str, Any] | None:
+    """深化前 vs 深化后的 main.c 确定性 diff；无差异 = None。
+
+    返回：{"text": unified diff 全文, "stats": {"additions", "deletions",
+    "hunks"}, "hunks": [{"header", "line"（新文件起始行号）, "title",
+    "lines": [{"kind": add|del|ctx, "text": 无前缀原文}]}]}。
+    """
+    if before == after:
+        return None
+    b_lines = before.splitlines()
+    a_lines = after.splitlines()
+    text = list(
+        difflib.unified_diff(
+            b_lines,
+            a_lines,
+            fromfile="main.c（深化前）",
+            tofile="main.c（深化后）",
+            n=2,
+            lineterm="",
+        )
+    )
+    hunks: list[dict[str, Any]] = []
+    cur: dict[str, Any] | None = None
+    for line in text:
+        if line.startswith("@@"):
+            cur = {
+                "header": line,
+                "line": _hunk_new_start(line),
+                "title": "",
+                "lines": [],
+            }
+            hunks.append(cur)
+        elif cur is None or line.startswith(("---", "+++", "\\")):
+            continue  # 文件头 / 无换行符标记不进 hunk
+        elif line.startswith("+"):
+            cur["lines"].append({"kind": "add", "text": line[1:]})
+        elif line.startswith("-"):
+            cur["lines"].append({"kind": "del", "text": line[1:]})
+        else:  # 上下文行：unified diff 以单个空格开头
+            cur["lines"].append({"kind": "ctx", "text": line[1:]})
+    for hunk in hunks:
+        hunk["title"] = _hunk_title(hunk["lines"])
+    stats = {
+        "additions": sum(1 for h in hunks for e in h["lines"] if e["kind"] == "add"),
+        "deletions": sum(1 for h in hunks for e in h["lines"] if e["kind"] == "del"),
+        "hunks": len(hunks),
+    }
+    return {"text": "\n".join(text), "stats": stats, "hunks": hunks}
+
+
+def _hunk_new_start(header: str) -> int:
+    """hunk 头 @@ -a,b +c,d @@ → 新文件起始行号 c（前端 fallback 行号用）。"""
+    m = _HUNK_HEADER_RE.match(header)
+    return int(m.group(1)) if m else 0
+
+
+def _hunk_title(lines: Sequence[dict[str, str]]) -> str:
+    """hunk 标题：① 删除行 TODO/FIXME/XXX 注释 → 「填充 TODO「…」」（剥注释
+    自带的前缀，避免「填充 TODO「TODO: 初始化电机」」重复）；② 删除行注释 →
+    注释文本；③ 上下文行注释 → 注释文本；④ 空串。"""
+    for entry in lines:
+        if entry["kind"] != "del":
+            continue
+        text = _comment_text(entry["text"])
+        if text and _TODO_RE.search(text):
+            inner = _strip_todo_prefix(text)
+            return f"填充 TODO「{inner or text}」"
+    for entry in lines:
+        if entry["kind"] == "del":
+            text = _comment_text(entry["text"])
+            if text:
+                return text
+    for entry in lines:
+        if entry["kind"] == "ctx":
+            text = _comment_text(entry["text"])
+            if text:
+                return text
+    return ""
+
+
+def _strip_todo_prefix(text: str) -> str:
+    """剥注释里自带的前导标记（"TODO: 循迹" → "循迹"），只剥标记 + 分隔
+    （冒号 / 空白 / 横线），不剥后续中文说明（[^A-Za-z]* 会把中文一起吃
+    掉——那是本函数踩过的坑）。"""
+    m = re.match(r"^(TODO|FIXME|XXX)\s*([:：\-]|$)", text, re.IGNORECASE)
+    return text[m.end() :].strip() if m else text
+
+
+def _comment_text(line: str) -> str:
+    """行内注释文本：/* … */（同行）或 // …；剥前导 * 与空白，无注释 = 空串。"""
+    m = _COMMENT_BLOCK_RE.search(line)
+    if m:
+        text = m.group(1)
+    else:
+        idx = line.find("//")
+        if idx < 0:
+            return ""
+        text = line[idx + 2 :]
+    return text.strip().lstrip("*").strip()
 
 
 def _backup_main_c(work_root: Path, output_dir: Path, main_c: str) -> str:
