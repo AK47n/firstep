@@ -4960,9 +4960,42 @@ function reviseRenderVerify(data) {
   box.innerHTML = box.innerHTML
     + '<div class="item" style="margin-top:10px"><div class="head"><span class="slug">深化验证</span> ' + badgeHtml + "</div>"
     + '<div class="reason">' + detailHtml + "</div>"
-    + '<div class="reason">备份：<span class="slug">' + esc(data.backup_id || "—") + "</span></div></div>";
+    + '<div class="reason">备份：<span class="slug">' + esc(data.backup_id || "—") + "</span></div>"
+    + reviseRenderDeepenDiff(data.main_diff)
+    + "</div>";
   box.classList.remove("hidden");
   $("btn-revise-rollback").classList.toggle("hidden", !revise.backupId);
+}
+
+/** 深化效果（工单 deepen-report/01）：main.c 前后确定性 diff 介绍卡——
+ * 统计行（新增 / 删除 / 处数）+ 每个 hunk 一个可折叠改动点（标题优先取被
+ * 替换的 TODO 注释，展开 = 逐行着色 diff：新增绿 / 删除红 / 上下文灰）。
+ * 事实源 = 后端真实 diff（不依赖 LLM 自述）；main_diff = null → 占位提示；
+ * 字段缺失（旧后端）→ 不渲染。 */
+function reviseRenderDeepenDiff(diff) {
+  if (diff === undefined) return "";
+  if (diff === null) return '<div class="muted" style="margin-top:8px">深化未改动 main.c（无差异）。</div>';
+  const hunks = diff.hunks || [];
+  if (!hunks.length) return '<div class="muted" style="margin-top:8px">深化未改动 main.c（无差异）。</div>';
+  const s = diff.stats || {};
+  const parts = ['<div class="reason" style="margin-top:8px"><strong>深化效果：</strong>'
+    + '新增 <span class="ok">+' + (s.additions || 0) + "</span> 行 · 删除 <span style=\"color:var(--danger)\">−"
+    + (s.deletions || 0) + "</span> 行 · " + (s.hunks || 0) + " 处改动</div>"];
+  hunks.forEach((h) => {
+    const title = h.title || "第 " + (h.line || "?") + " 行附近";
+    parts.push('<details style="margin-top:6px"><summary class="slug" style="cursor:pointer">'
+      + esc(title) + '</summary><pre style="margin:6px 0 0;padding:8px;background:#f7f7f7;border-radius:4px;font-size:12px;line-height:1.5;overflow:auto;white-space:pre">'
+      + (h.lines || []).map(reviseDiffLineHtml).join("") + "</pre></details>");
+  });
+  return parts.join("");
+}
+
+/** diff 行着色渲染（内容已由后端剥离 +/- 前缀，此处只补前缀与颜色）。 */
+function reviseDiffLineHtml(entry) {
+  const text = esc(entry.text);
+  if (entry.kind === "add") return '<span style="color:#2e7d32;background:#e8f5e9">+' + text + "</span>\n";
+  if (entry.kind === "del") return '<span style="color:#c62828;background:#fdecea">-' + text + "</span>\n";
+  return '<span style="color:#777">' + text + "</span>\n";
 }
 
 /** 回滚：恢复备份整树 → 清结果 → 重新加载上下文刷新状态。 */

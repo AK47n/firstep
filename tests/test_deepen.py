@@ -19,6 +19,7 @@ from contest_generator.deepen import (
     STATUS_FAILED,
     STATUS_UNVERIFIED,
     STATUS_VERIFIED,
+    _main_diff,
     run_deepen,
 )
 from contest_generator.platforms import PLATFORM_STM32
@@ -262,6 +263,119 @@ def test_run_deepen_failed_after_one_fix_round(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# 深化效果报告（工单 deepen-report/01）：main.c 前后确定性 diff 纯函数
+# ---------------------------------------------------------------------------
+
+
+def test_main_diff_none_when_unchanged():
+    """深化前后相同 → main_diff = None（无差异，前端展示占位）。"""
+    assert _main_diff("int main(void) { }\n", "int main(void) { }\n") is None
+
+
+def test_main_diff_single_hunk_stats_and_todo_title():
+    """单 hunk：统计正确；hunk 标题取被替换的 TODO 注释（可追踪）。"""
+    before = "int main(void) {\n    // TODO: 循迹\n    while (1);\n}\n"
+    after = "int main(void) {\n    line_follow();\n    while (1);\n}\n"
+    diff = _main_diff(before, after)
+    assert diff is not None
+    assert diff["stats"] == {"additions": 1, "deletions": 1, "hunks": 1}
+    hunk = diff["hunks"][0]
+    assert hunk["header"].startswith("@@ -")
+    assert hunk["line"] == 1
+    assert "TODO" in hunk["title"]
+    kinds = [entry["kind"] for entry in hunk["lines"]]
+    assert kinds[0] == "ctx" and kinds[1] == "del" and kinds[2] == "add"
+    assert hunk["lines"][1]["text"] == "    // TODO: 循迹"
+    assert hunk["lines"][2]["text"] == "    line_follow();"
+    assert diff["text"].startswith("---")
+
+
+def test_main_diff_multi_hunk_stats():
+    """相距 >2n 行的两处改动 → 两个独立 hunk，统计逐项正确。"""
+    before = "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\n"
+    after = "l1\nX2\nl3\nl4\nl5\nl6\nl7\nl8\nX9\nl10\nl11\n"
+    diff = _main_diff(before, after)
+    assert diff is not None
+    assert diff["stats"] == {"additions": 2, "deletions": 2, "hunks": 2}
+    assert [h["line"] for h in diff["hunks"]] == [1, 7]
+
+
+def test_main_diff_title_falls_back_to_plain_comment():
+    """无 TODO 注释时：标题退化为删除行注释文本，再退化空串（前端用行号）。"""
+    before = "int main(void) {\n    dummy();\n}\n"
+    after = "int main(void) {\n    real();\n}\n"
+    diff = _main_diff(before, after)
+    assert diff is not None
+    assert diff["hunks"][0]["title"] == ""  # 无注释无 TODO → 空标题
+
+
+# ---------------------------------------------------------------------------
+# run_deepen：done 载荷含 main_diff（深化效果报告）
+# ---------------------------------------------------------------------------
+
+
+def test_run_deepen_main_diff_in_payload(tmp_path, monkeypatch):
+    """rune_deepen 返回载荷含 main_diff；LLM 原样返回 → None（无差异）。"""
+    from contest_generator.generator import generate_project
+
+    library = _deepen_env(tmp_path)
+    output_dir = tmp_path / "out"
+    main_c = "int main(void) { /* TODO */ while (1); }\n"
+    generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=main_c,
+        output_dir=output_dir,
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+        problem_text="题面",
+    )
+    _uv4_toolchain(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+
+    # 有差异：深化改动了 main.c
+    llm = FakeLLM(deepened_main_c="int main(void) { /* 已实现 */ while (1); }\n")
+    result = run_deepen(
+        llm=llm,
+        problem_text="题面",
+        qa_text="",
+        requirements=(),
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c=main_c,
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["main_diff"] is not None
+    assert result["main_diff"]["stats"] == {"additions": 1, "deletions": 1, "hunks": 1}
+    assert "已实现" in result["main_diff"]["text"]
+
+    # 无差异：LLM 原样返回 → main_diff = None（前端显示占位，不冒充改动）
+    llm2 = FakeLLM(deepened_main_c=main_c)
+    result2 = run_deepen(
+        llm=llm2,
+        problem_text="题面",
+        qa_text="",
+        requirements=(),
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c=main_c,
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result2["main_diff"] is None
+
+
+# ---------------------------------------------------------------------------
 # webapp /api/revise/deepen：SSE 事件序列与错误路径
 # ---------------------------------------------------------------------------
 
@@ -316,6 +430,10 @@ def test_revise_deepen_sse_flow_unverified(deepen_client, monkeypatch):
     assert done["status"] == STATUS_UNVERIFIED
     assert "deepening_start" in types
     assert "verify_result" in types
+    # 深化效果报告：done 载荷含 main_diff（深化前 vs 深化后真实 diff）
+    assert done["main_diff"] is not None
+    assert done["main_diff"]["stats"]["additions"] == 1
+    assert "已实现" in done["main_diff"]["text"]
     # 深化写盘生效
     assert "已实现" in (Path(output_dir) / "main.c").read_text(encoding="utf-8")
 
@@ -335,6 +453,7 @@ def test_revise_deepen_verified(deepen_client, monkeypatch):
     events = _sse_events(resp)
     assert events[-1][0] == "done"
     assert events[-1][1]["status"] == STATUS_VERIFIED
+    assert events[-1][1]["main_diff"] is not None
 
 
 def test_revise_deepen_missing_main_c_400(deepen_client):
