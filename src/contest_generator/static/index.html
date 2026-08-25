@@ -410,6 +410,19 @@
   .lib-table .desc-cell { max-width: 340px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   /* 操作列（各库表最后一列）按钮不折行——窄列下"查看/删除"不换行成竖排 */
   table td:last-child { white-space: nowrap; }
+  /* 模块库工具栏（library-toolbar/02）：搜索 / 排序 / 过滤 chips / 统计条。
+     全部客户端过滤（GET /api/modules 数据已全量在手）；样式沿用既有令牌
+     （--panel-2 / --border / --accent / --accent-dim / --muted），不新造颜色值 */
+  .lib-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 8px; }
+  .lib-toolbar input[type="search"] { flex: 1 1 220px; min-width: 180px; margin: 0; }
+  .lib-toolbar select { flex: none; width: auto; padding: 7px 10px; margin: 0; }
+  .lib-chips-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+  .lib-chip { padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);
+              background: var(--panel-2); color: var(--muted); font-family: var(--mono);
+              font-size: 12.5px; cursor: pointer; }
+  .lib-chip:hover { border-color: var(--accent); color: var(--text); }
+  .lib-chip.on { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+  .lib-stats { margin: 8px 0 4px; font-size: 12.5px; color: var(--muted); }
   /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
      操作列加宽让查看/删除横排；长文本列按宽换行、体量列完整显示 */
   /* 赛题库表：固定列宽布局（同参考库模式）——长题面不再挤压编号/年份短列，
@@ -1546,6 +1559,19 @@
   <section id="tab-library" class="page">
     <div class="card">
       <h2>模块库 <span class="muted">（磁盘目录即数据库，操作即时生效）</span></h2>
+      <div class="lib-toolbar">
+        <input type="search" id="lib-search" placeholder="搜索 slug / 简介 / 依赖 / 套件 / 备注…">
+        <select id="lib-sort" title="排序字段">
+          <option value="slug">排序：模块名</option>
+          <option value="platforms">排序：平台数</option>
+          <option value="deps">排序：依赖数</option>
+        </select>
+        <button id="lib-sort-dir">↑ 升序</button>
+        <button id="lib-filter-clear">清空过滤</button>
+      </div>
+      <div class="lib-chips-row"><span class="muted">平台</span><span id="lib-platform-chips"></span></div>
+      <div class="lib-chips-row"><span class="muted">状态</span><span id="lib-status-chips"></span></div>
+      <div id="lib-stats" class="lib-stats"></div>
       <table class="lib-table">
         <thead><tr><th>模块</th><th>简介</th><th>依赖</th><th>平台版本</th><th style="width:150px">操作</th></tr></thead>
         <tbody id="lib-rows"></tbody>
@@ -6025,6 +6051,91 @@ $("revise-problem-text").addEventListener("input", () => {
 // 行渲染（library-table-polish/01）：纯函数（喂 tests/js node:test）——
 // 简介列单行截断 + title 全文（配合 .desc-cell 样式）；后续工单（详情 /
 // 编辑 / 悬空警示）在此扩展行内容。
+// —— 模块库工具栏（library-toolbar/02）：过滤 / 排序 / 统计 / chips 纯函数 ——
+// 均为顶层纯函数（tests/js 可注入）；DOM 层只做转发，交互逻辑不散落事件里。
+// libFilterModules(modules, f)：f={q, platform, status}。
+// q 大小写不敏感子串，匹配 slug / 简介 / 依赖串 / 任一平台条目 kit 或 notes；
+// platform='' 全平台，否则要求存在该平台条目；
+// status=''|'verified'|'unverified'|'hardware_bound'，任选平台条目满足即命中
+// （unverified 语义 = 该平台无 verified===true 的条目）。
+function libFilterModules(modules, f) {
+  const q = String((f && f.q) || "").trim().toLowerCase();
+  const platform = (f && f.platform) || "";
+  const status = (f && f.status) || "";
+  return (modules || []).filter((m) => {
+    if (q) {
+      const hay = [m.slug || "", m.description || "", (m.dependencies || []).join("、")];
+      for (const p of Object.values(m.platforms || {})) if (p) hay.push(p.kit || "", p.notes || "");
+      if (!hay.some((s) => String(s).toLowerCase().includes(q))) return false;
+    }
+    if (platform && !(m.platforms || {})[platform]) return false;
+    if (status) {
+      const any = (m.platforms && Object.values(m.platforms).some((p) => p && (
+        status === "verified" ? p.verified === true :
+        status === "unverified" ? p.verified !== true :
+        status === "hardware_bound" ? p.hardware_bound === true : false)));
+      if (!any) return false;
+    }
+    return true;
+  });
+}
+
+// libSortModules(modules, s)：s={by:'slug'|'platforms'|'deps', dir:'asc'|'desc'}；
+// 返回新数组（不改原数组）；Array.sort 稳定 → 同键保持入库序。
+function libSortModules(modules, s) {
+  const by = (s && s.by) || "slug";
+  const dir = (s && s.dir) === "desc" ? -1 : 1;
+  const count = (m) => by === "platforms" ? Object.keys(m.platforms || {}).length
+    : by === "deps" ? (m.dependencies || []).length : 0;
+  const out = (modules || []).slice();
+  out.sort((a, b) => {
+    const cmp = by === "slug"
+      ? String(a.slug || "").localeCompare(String(b.slug || ""))
+      : (count(a) === count(b) ? 0 : (count(a) < count(b) ? -1 : 1));
+    return cmp * dir;
+  });
+  return out;
+}
+
+// libStats(modules)：全量统计（不过滤）。verified / hardware_bound / unverified 为
+// 模块级计数（存在任一平台条目满足即计 1，平台间可重叠）；exclusiveGroups 按 id 去重。
+function libStats(modules) {
+  const platforms = {};
+  let verified = 0, unverified = 0, hardware_bound = 0;
+  const groups = new Set();
+  for (const m of modules || []) {
+    const ps = Object.values(m.platforms || {});
+    // 与 libFilterModules 语义一致：null/缺失条目视作「无该平台」，不计数
+    for (const [name, p] of Object.entries(m.platforms || {})) {
+      if (p) platforms[name] = (platforms[name] || 0) + 1;
+    }
+    if (ps.some((p) => p && p.verified === true)) verified += 1;
+    if (ps.some((p) => p && p.verified !== true)) unverified += 1;
+    if (ps.some((p) => p && p.hardware_bound === true)) hardware_bound += 1;
+    if (m.exclusive_group && m.exclusive_group.id) groups.add(m.exclusive_group.id);
+  }
+  return { total: (modules || []).length, platforms, verified, unverified,
+           hardware_bound, exclusiveGroups: groups.size };
+}
+
+// libStatsText(stats)：统计条文案（平台名沿用徽章惯例 toUpperCase 显示）。
+function libStatsText(stats) {
+  const parts = ["共 " + stats.total + " 个模块"];
+  for (const name of Object.keys(stats.platforms)) parts.push(String(name).toUpperCase() + " " + stats.platforms[name]);
+  parts.push("已验证 " + stats.verified);
+  parts.push("硬件绑定 " + stats.hardware_bound);
+  parts.push("互斥组 " + stats.exclusiveGroups);
+  return parts.join(" · ");
+}
+
+// libChipRowHTML(options, selected)：筛选 chips 纯函数。options=[{value,label,count?}]，
+// selected 命中项加 on 类（'' = 未选中）；value 经 esc 转义。
+function libChipRowHTML(options, selected) {
+  return (options || []).map((o) =>
+    `<button type="button" class="lib-chip${o.value === selected ? " on" : ""}" data-lib-chip="${esc(o.value)}">${esc(o.label)}${o.count != null ? "（" + o.count + "）" : ""}</button>`
+  ).join("");
+}
+
 function moduleRowHTML(m) {
   const description = String(m.description || "");
   return `<tr>
@@ -6039,6 +6150,78 @@ function moduleRowHTML(m) {
   </tr>`;
 }
 
+// —— 模块库工具栏状态与渲染（library-toolbar/02）：过滤条件集中于此，
+// 事件层只改状态再调 renderLibraryTable()（纯函数转发）
+const libUI = { q: "", platform: "", status: "", sortBy: "slug", sortDir: "asc" };
+
+function renderLibraryChips() {
+  const stats = libStats(state.modules || []);
+  const platOpts = [{ value: "", label: "全部" }];
+  for (const name of Object.keys(stats.platforms)) {
+    platOpts.push({ value: name, label: String(name).toUpperCase(), count: stats.platforms[name] });
+  }
+  $("lib-platform-chips").innerHTML = libChipRowHTML(platOpts, libUI.platform);
+  $("lib-status-chips").innerHTML = libChipRowHTML([
+    { value: "", label: "全部" },
+    { value: "verified", label: "已验证", count: stats.verified },
+    { value: "unverified", label: "未验证", count: stats.unverified },
+    { value: "hardware_bound", label: "硬件绑定", count: stats.hardware_bound },
+  ], libUI.status);
+}
+
+function renderLibraryStats() {
+  $("lib-stats").textContent = libStatsText(libStats(state.modules || []));
+}
+
+function renderLibraryTable() {
+  const modules = state.modules || [];
+  // 排序读 {by, dir}（纯函数约定），libUI 存 sortBy/sortDir——调用点映射，勿直传 libUI
+  const rows = libSortModules(libFilterModules(modules, libUI), { by: libUI.sortBy, dir: libUI.sortDir });
+  if (!modules.length) {
+    $("lib-rows").innerHTML = '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">📦</div><div class="es-title">模块库还是空的</div><div class="es-hint">用上方表单添加第一个模块（slug + 平台 + 源文件），AI 校验后入库。</div></div></td></tr>';
+  } else if (!rows.length) {
+    // 过滤后的空结果 ≠ 库为空：提示「清空过滤」而不是「添加模块」
+    $("lib-rows").innerHTML = '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的模块</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
+  } else {
+    $("lib-rows").innerHTML = rows.map(moduleRowHTML).join("");
+  }
+  $("lib-rows").querySelectorAll("[data-edit-desc]").forEach((b) =>
+    b.addEventListener("click", () => editDescription(b.dataset.editDesc)));
+  $("lib-rows").querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", () => deleteModule(b.dataset.del)));
+  renderLibraryChips();
+  renderLibraryStats();
+}
+
+function clearLibraryFilter() {
+  libUI.q = ""; libUI.platform = ""; libUI.status = "";
+  $("lib-search").value = "";
+  renderLibraryTable();
+}
+
+function initLibraryToolbar() {
+  $("lib-search").addEventListener("input", (e) => { libUI.q = e.target.value; renderLibraryTable(); });
+  $("lib-search").addEventListener("keydown", (e) => { if (e.key === "Escape") clearLibraryFilter(); });
+  $("lib-sort").addEventListener("change", (e) => { libUI.sortBy = e.target.value; renderLibraryTable(); });
+  $("lib-sort-dir").addEventListener("click", () => {
+    libUI.sortDir = libUI.sortDir === "asc" ? "desc" : "asc";
+    $("lib-sort-dir").textContent = libUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
+    renderLibraryTable();
+  });
+  $("lib-filter-clear").addEventListener("click", clearLibraryFilter);
+  // chips 事件委托（行内动态渲染）；再点已选中项 = 取消该维度过滤
+  $("lib-platform-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-lib-chip]"); if (!b) return;
+    libUI.platform = libUI.platform === b.dataset.libChip ? "" : b.dataset.libChip;
+    renderLibraryTable();
+  });
+  $("lib-status-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-lib-chip]"); if (!b) return;
+    libUI.status = libUI.status === b.dataset.libChip ? "" : b.dataset.libChip;
+    renderLibraryTable();
+  });
+}
+
 async function loadLibrary() {
   // 加载态（工单 01）：fetched 前给占位，读盘快也避免旧内容残留
   $("lib-msg").textContent = "";
@@ -6047,12 +6230,8 @@ async function loadLibrary() {
     const modules = await apiGet("/api/modules");
     state.modules = modules;
     renderModulePool();
-    $("lib-rows").innerHTML = modules.length ? modules.map(moduleRowHTML).join("")
-      : '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">📦</div><div class="es-title">模块库还是空的</div><div class="es-hint">用上方表单添加第一个模块（slug + 平台 + 源文件），AI 校验后入库。</div></div></td></tr>';
-    $("lib-rows").querySelectorAll("[data-edit-desc]").forEach((b) =>
-      b.addEventListener("click", () => editDescription(b.dataset.editDesc)));
-    $("lib-rows").querySelectorAll("[data-del]").forEach((b) =>
-      b.addEventListener("click", () => deleteModule(b.dataset.del)));
+    // 工单 02：过滤 / 排序 / 统计走统一渲染入口（刷新后保持过滤条件不丢）
+    renderLibraryTable();
   } catch (e) {
     $("lib-rows").innerHTML = "";
     $("lib-msg").textContent = e.message;
@@ -8781,6 +8960,7 @@ initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路�
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
+initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 </script>
 <div id="toast-root"></div>
 </body>

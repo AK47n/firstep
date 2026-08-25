@@ -94,3 +94,138 @@ test("moduleRowHTML 无平台：徽章区为空、行仍完整", () => {
   assert.ok(out.includes('<td class="slug">empty</td>'));
   assert.ok(!out.includes("badge"));
 });
+
+// ================= 工单 02：工具栏与统计条纯函数 =================
+// libFilterModules / libSortModules / libStats / libStatsText / libChipRowHTML。
+
+const libFilterModules = extract("libFilterModules");
+const libSortModules = extract("libSortModules");
+const libStats = extract("libStats");
+const libStatsText = extract("libStatsText");
+const libChipRowHTML = extract("libChipRowHTML", { esc });
+
+const libMods = [
+  {
+    slug: "ultrasonic",
+    description: "超声波测距模块",
+    dependencies: ["delay"],
+    platforms: {
+      stm32: { verified: true, hardware_bound: false, kit: "LaunchPad", notes: "接 PA1" },
+      mspm0: { verified: false, hardware_bound: true },
+    },
+  },
+  {
+    slug: "delay",
+    description: "阻塞延时",
+    dependencies: [],
+    platforms: { stm32: { verified: true, hardware_bound: false } },
+  },
+  {
+    slug: "servo",
+    description: "PWM 舵机驱动",
+    dependencies: ["delay"],
+    platforms: { mspm0: { verified: false, hardware_bound: true } },
+    exclusive_group: { id: "pwm", label: "PWM 输出" },
+  },
+  {
+    slug: "oled",
+    description: "I2C 屏幕",
+    dependencies: [],
+    platforms: {},
+    exclusive_group: { id: "display", label: "显示" },
+  },
+];
+
+test("libFilterModules 关键字：大小写不敏感匹配 slug / 简介 / 依赖 / 套件 / 备注", () => {
+  assert.deepEqual(libFilterModules(libMods, { q: "ULTRA", platform: "", status: "" }).map((m) => m.slug), ["ultrasonic"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "舵机", platform: "", status: "" }).map((m) => m.slug), ["servo"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "delay", platform: "", status: "" }).map((m) => m.slug), ["ultrasonic", "delay", "servo"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "launchpad", platform: "", status: "" }).map((m) => m.slug), ["ultrasonic"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "pa1", platform: "", status: "" }).map((m) => m.slug), ["ultrasonic"]);
+});
+
+test("libFilterModules 空条件：全量返回（同一数组内容，不修改原数组）", () => {
+  const before = libMods.map((m) => m.slug);
+  const out = libFilterModules(libMods, { q: "", platform: "", status: "" });
+  assert.deepEqual(out.map((m) => m.slug), before);
+  assert.equal(libMods.length, 4);
+});
+
+test("libFilterModules 平台过滤：存在该平台条目即命中", () => {
+  assert.deepEqual(libFilterModules(libMods, { q: "", platform: "stm32", status: "" }).map((m) => m.slug), ["ultrasonic", "delay"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "", platform: "mspm0", status: "" }).map((m) => m.slug), ["ultrasonic", "servo"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "", platform: "mega", status: "" }).map((m) => m.slug), []);
+});
+
+test("libFilterModules 状态过滤：任一平台条目满足即命中（verified / unverified / hardware_bound）", () => {
+  assert.deepEqual(libFilterModules(libMods, { q: "", platform: "", status: "verified" }).map((m) => m.slug), ["ultrasonic", "delay"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "", platform: "", status: "unverified" }).map((m) => m.slug), ["ultrasonic", "servo"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "", platform: "", status: "hardware_bound" }).map((m) => m.slug), ["ultrasonic", "servo"]);
+  assert.deepEqual(libFilterModules(libMods, { q: "", platform: "", status: "verified2" }).map((m) => m.slug), []);
+});
+
+test("libFilterModules 条件叠加：关键字 + 平台 + 状态同时生效", () => {
+  assert.deepEqual(libFilterModules(libMods, { q: "delay", platform: "stm32", status: "" }).map((m) => m.slug), ["ultrasonic", "delay"]);
+  // unverified = 任一平台条目未验证：ultrasonic 的 mspm0 未验证 → 仍命中
+  assert.deepEqual(libFilterModules(libMods, { q: "delay", platform: "stm32", status: "unverified" }).map((m) => m.slug), ["ultrasonic"]);
+  // hardware_bound = 任一平台条目硬件绑定：ultrasonic 的 mspm0 绑定 → 命中
+  assert.deepEqual(libFilterModules(libMods, { q: "delay", platform: "stm32", status: "hardware_bound" }).map((m) => m.slug), ["ultrasonic"]);
+});
+
+test("libSortModules slug 升/降序；平台数、依赖数排序保持稳定", () => {
+  const asc = libSortModules(libMods, { by: "slug", dir: "asc" }).map((m) => m.slug);
+  assert.deepEqual(asc, ["delay", "oled", "servo", "ultrasonic"]);
+  const desc = libSortModules(libMods, { by: "slug", dir: "desc" }).map((m) => m.slug);
+  assert.deepEqual(desc, ["ultrasonic", "servo", "oled", "delay"]);
+  // platforms 数：ultrasonic 2、delay/servo 1、oled 0；同 1 的两项保持原相对序（delay 在 servo 前）
+  assert.deepEqual(libSortModules(libMods, { by: "platforms", dir: "asc" }).map((m) => m.slug), ["oled", "delay", "servo", "ultrasonic"]);
+  // deps 数：delay/oled 0、ultrasonic/servo 1；同 0 保持 delay 在 oled 前、同 1 保持 ultrasonic 在 servo 前
+  assert.deepEqual(libSortModules(libMods, { by: "deps", dir: "asc" }).map((m) => m.slug), ["delay", "oled", "ultrasonic", "servo"]);
+});
+
+test("libStats 统计：总数 / 平台计数 / 模块级已验证 / 硬件绑定 / 互斥组去重", () => {
+  assert.deepEqual(libStats(libMods), {
+    total: 4,
+    platforms: { stm32: 2, mspm0: 2 },
+    verified: 2,
+    unverified: 2,
+    hardware_bound: 2,
+    exclusiveGroups: 2,
+  });
+  assert.deepEqual(libStats([]), { total: 0, platforms: {}, verified: 0, unverified: 0, hardware_bound: 0, exclusiveGroups: 0 });
+});
+
+test("libStats 与 libFilterModules 一致：null 平台条目不计数也不命中", () => {
+  const mods = [{ slug: "x", description: "", dependencies: [], platforms: { stm32: null } }];
+  assert.deepEqual(libStats(mods).platforms, {});
+  assert.deepEqual(libFilterModules(mods, { q: "", platform: "stm32", status: "" }), []);
+});
+
+test("libStatsText 统计条文案：全量分段含互斥组", () => {
+  const text = libStatsText(libStats(libMods));
+  assert.ok(text.includes("共 4 个模块"));
+  assert.ok(text.includes("STM32 2"));
+  assert.ok(text.includes("MSPM0 2"));
+  assert.ok(text.includes("已验证 2"));
+  assert.ok(text.includes("硬件绑定 2"));
+  assert.ok(text.includes("互斥组 2"));
+  assert.ok(libStatsText(libStats([])).includes("共 0 个模块"));
+});
+
+test("libChipRowHTML：每项一个按钮，选中项带 on 类，计数可带可不带", () => {
+  const out = libChipRowHTML([{ value: "", label: "全部" }, { value: "stm32", label: "STM32", count: 3 }], "stm32");
+  const opts = out.split("<button").slice(1);
+  assert.equal(opts.length, 2);
+  assert.ok(out.includes('data-lib-chip=""'));
+  assert.ok(out.includes('data-lib-chip="stm32"'));
+  assert.ok(out.includes("STM32（3）"));
+  // 选中项带 on 类，未选中不带
+  const sel = opts[1].split(">")[0];
+  assert.ok(sel.includes('class="lib-chip on"'), sel);
+  const unsel = opts[0].split(">")[0];
+  assert.ok(unsel.includes('class="lib-chip"') || unsel.includes('class="lib-chip "'), unsel);
+  assert.ok(!unsel.includes(" on"));
+  // 带特殊字符的值被转义
+  const evil = libChipRowHTML([{ value: 'a"b', label: "x" }], "");
+  assert.ok(evil.includes('data-lib-chip="a&quot;b"'));
+});
