@@ -48,6 +48,9 @@
     --shadow-item: 0 2px 8px rgba(0, 0, 0, .18);
     --shadow-summary: 0 2px 10px rgba(0, 0, 0, .2);
     --shadow-toast: 0 4px 16px rgba(0, 0, 0, .4);
+    /* 氛围光/面板高光（工单 ui-polish-11/02）：装饰色令牌化，暗/亮各一套 */
+    --ambient-glow: rgba(0, 212, 255, .07);
+    --card-sheen: rgba(255, 255, 255, .02);
   }
   /* 亮色主题（工单 ui-polish-5/01）：GitHub 亮色系，强调色加深保证浅底对比 */
   html[data-theme="light"] {
@@ -71,6 +74,8 @@
     --shadow-item: 0 2px 8px rgba(31, 35, 40, .08);
     --shadow-summary: 0 2px 8px rgba(31, 35, 40, .08);
     --shadow-toast: 0 4px 12px rgba(31, 35, 40, .12);
+    --ambient-glow: rgba(0, 150, 199, .06);
+    --card-sheen: rgba(31, 35, 40, .015);
   }
   /* 亮色下激活 tab 渐变微光收敛（避免过曝） */
   html[data-theme="light"] nav button.active::after { box-shadow: 0 0 5px rgba(0, 150, 199, .3); }
@@ -78,6 +83,16 @@
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.6 "Microsoft YaHei", "PingFang SC", sans-serif;
          transition: background-color .25s ease, color .25s ease; }
+  /* 背景氛围光（工单 ui-polish-11/02）：body 后固定层，顶部青色径向微光；
+     z-index:-1 衬在内容之下，pointer-events:none 不拦截交互；亮色减淡点睛 */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(1100px 480px at 50% -12%, var(--ambient-glow), transparent 70%);
+  }
+  html[data-theme="light"] body::before {
+    background: radial-gradient(900px 400px at 50% -12%, var(--ambient-glow), transparent 70%);
+  }
   ::selection { background: var(--accent-dim); }
   header { background: var(--panel); border-bottom: 1px solid var(--border);
            padding: 6px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
@@ -119,8 +134,13 @@
   main > section.page:not(#tab-generate) { max-width: 1280px; margin: 0 auto; }
   section.page { display: none; }
   section.page.active { display: block; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  .card { background-color: var(--panel);
+          background-image: linear-gradient(180deg, var(--card-sheen), rgba(255, 255, 255, 0) 34%);
+          border: 1px solid var(--border); border-radius: 8px;
           padding: 16px 20px; margin-bottom: 16px; box-shadow: var(--shadow-card); }
+  /* 面板微渐变（工单 ui-polish-11/02）：亮色白卡上白色高光不可见 → 极浅灰顶光 */
+  html[data-theme="light"] .card {
+    background-image: linear-gradient(180deg, var(--card-sheen), rgba(31, 35, 40, 0) 30%); }
   .card h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; }
   .card h3 { font-size: 13px; margin: 14px 0 8px; color: var(--muted); font-weight: 600; }
   label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
