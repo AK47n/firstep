@@ -3077,11 +3077,13 @@ function renderPinCard() {
   if (!chosenPlatform) {
     body.classList.add("hidden"); empty.classList.remove("hidden");
     empty.textContent = "请先选择目标平台（步骤 3）。";
+    syncStep7();
     return;
   }
   if (!pinBoard) {
     body.classList.add("hidden"); empty.classList.remove("hidden");
     empty.textContent = pinBoardError ? "板定义加载失败：" + pinBoardError : "板定义加载中…";
+    syncStep7();
     return;
   }
   // 选了平台就能看板图（不必等推荐/展开）：未展开模块清单时角色区显示占位文案
@@ -3105,6 +3107,8 @@ function renderPinCard() {
     .join("");
   $("pin-warn-list").innerHTML = warnHtml;
   $("pin-warn-sub").classList.toggle("hidden", !warnHtml);
+  // 步骤 7 完成判定随角色/绑定/展开变化重算（工单 step7-done/01）
+  syncStep7();
 }
 
 async function loadPinBoard() {
@@ -3910,6 +3914,7 @@ $("btn-generate").addEventListener("click", async () => {
     $("generate-msg").classList.add("ok");
     $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
     markStepDone(9);
+    syncStep7();  // 按默认布线生成成功 = 引脚步骤视为完成（工单 step7-done/01）
     toast("ok", "工程生成完成");
     // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
     // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
@@ -6784,8 +6789,26 @@ function markStepUndone(n) {
 function unmarkSteps(steps) {
   for (const n of steps) markStepUndone(n);
 }
+// 步骤 7 完成判定（工单 step7-done/01 修正：默认布线 / 无需配置时从未显示完成）。
+// 完成 = 平台已选且已展开模块，且满足其一：① 无引脚角色（无需配置）
+// ② 有角色已显式绑定 ③ 多实例已配引脚 ④ 已按默认布线生成成功（隐式接受默认）
+function step7DoneState(state) {
+  if (!state.chosenPlatform || !state.expandedCount) return false;
+  if (!state.roles.length || state.roleBound || state.instBound || state.generated) return true;
+  return false;
+}
 function syncStep7() {
-  if (Object.keys(pinBindings).length) markStepDone(7);
+  const roles = pinRoles();
+  const done = step7DoneState({
+    chosenPlatform: chosenPlatform,
+    expandedCount: expanded.length,
+    roles: roles,
+    roleBound: roles.some((r) => pinBindings[r.key]),
+    instBound: Object.values(instances || {}).some((arr) =>
+      (arr || []).some((i) => i && i.pin)),
+    generated: stepDoneSet.has(9),
+  });
+  if (done) markStepDone(7);
   else markStepUndone(7);
 }
 (function initStepNav() {
