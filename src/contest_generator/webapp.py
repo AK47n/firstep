@@ -129,6 +129,7 @@ from .llm import (
     LLMObservationCollector,
     RetryBudget,
     TOPIC_SPLIT_LLM_CHAR_CAP,
+    DeepSeekLLM,
     build_llm,
     create_llm_observation_collector,
 )
@@ -861,6 +862,80 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 }
                 for platform in KNOWN_PLATFORMS
             ],
+        }
+
+    # 环境体检静态聚合（工单 env-check-center/01）：只读探测、零 LLM 调用；
+    # 体检语义 = 报问题不炸端点（模块库/目录异常落入字段描述，绝不 500）
+    @app.get("/api/env/status")
+    @_map_errors
+    def env_status() -> dict:
+        config = _current_config(context)
+        dirs = config or AppConfig()  # 未配置时按默认路径探测
+        masters = (
+            list_masters(dirs.masters_dir) if dirs.masters_dir.is_dir() else []
+        )
+        master_platforms = {meta.platform for meta in masters}
+        uv4 = find_uv4(dirs.uv4_path)
+        make = find_make(dirs.gmake_path)
+        lib_exists = dirs.module_library_dir.is_dir()
+        lib_count = 0
+        lib_error = None
+        if not lib_exists:
+            lib_error = "模块库目录不存在"
+        else:
+            try:
+                lib_count = len(list_modules(dirs.module_library_dir))
+            except Exception as e:  # 畸形 manifest 等：报问题，不打断体检
+                lib_error = f"模块库加载失败：{e}"
+        desktop = context.desktop_dir()
+        return {
+            "api_configured": config is not None,
+            "llm": (
+                {
+                    "base_url": config.base_url,
+                    "model": config.model,
+                    "local_llm_base_url": config.local_llm_base_url or "",
+                }
+                if config is not None
+                else None
+            ),
+            "toolchains": {
+                PLATFORM_STM32: {
+                    "found": uv4 is not None,
+                    "path": str(uv4) if uv4 is not None else None,
+                    "override": bool(config.uv4_path if config else ""),
+                },
+                PLATFORM_MSPM0: {
+                    "found": make is not None,
+                    "path": str(make) if make is not None else None,
+                    "override": bool(config.gmake_path if config else ""),
+                },
+            },
+            "platforms": [
+                {
+                    "id": platform,
+                    "name": PLATFORM_DISPLAY_NAMES[platform],
+                    "status": (
+                        "ready" if platform in master_platforms else "no-master"
+                    ),
+                }
+                for platform in KNOWN_PLATFORMS
+            ],
+            "module_library": {
+                "dir": str(dirs.module_library_dir),
+                "exists": lib_exists,
+                "count": lib_count,
+                "error": lib_error,
+            },
+            "masters_dir": {
+                "dir": str(dirs.masters_dir),
+                "exists": dirs.masters_dir.is_dir(),
+            },
+            "output_dir": {
+                "dir": str(desktop),
+                "exists": desktop.is_dir(),
+                "writable": os.access(desktop, os.W_OK) if desktop.is_dir() else False,
+            },
         }
 
     # 板定义（板图坐标/能力集单源，工单 pin-board-config/01）：前端板图
@@ -2428,6 +2503,39 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "elapsed_ms": elapsed_ms,
             "model": model,
             "message": message,
+        }
+
+    @app.post("/api/llm/selfcheck")
+    @_map_errors
+    def llm_selfcheck() -> dict:
+        """主 LLM 文本通道自检（工单 env-check-center/01）：云端主通道直连
+        （不走 RoutingLLM——本地路由只服务摘要类调用，主通道才是一切流程的
+        底座）、单次探针不重试（探测语义）、极小成本（max_tokens=16 +
+        thinking_disabled）。契约与 vision_selfcheck 同构：未配置先于调用
+        错误区分（配置问题 vs 链路问题）。
+        """
+        config = _current_config(context)
+        if config is None:
+            raise HTTPException(400, "请先保存主 API key 配置")
+        if not config.api_key:
+            raise HTTPException(400, "主 LLM 未配置：请到设置页填写 API key")
+        started_at = time.monotonic()
+        try:
+            llm = DeepSeekLLM(config)
+            result = llm._chat_once(
+                [{"role": "user", "content": "请只回复：PONG"}],
+                operation="llm_selfcheck",
+                max_tokens=16,
+                thinking_disabled=True,
+            )
+        except LLMError as e:
+            raise HTTPException(400, f"文本通道自检失败：{e}")
+        elapsed_ms = int((time.monotonic() - started_at) * 1000)
+        return {
+            "ok": True,
+            "elapsed_ms": elapsed_ms,
+            "model": config.model,
+            "reply": (result.content or "").strip()[:100],
         }
 
     # ------------------------------------------------------------------

@@ -6050,3 +6050,118 @@ def test_generate_report_draft_telemetry_recorded(tmp_path):
     assert workflows[0]["call_count"] == 1
     assert workflows[0]["status"] == "success"
     assert (output_dir / REPORT_DRAFT_FILENAME).is_file()
+
+# ---------------------------------------------------------------------------
+# 环境体检中心（工单 env-check-center/01）：/api/env/status 静态聚合 +
+# /api/llm/selfcheck 文本通道自检
+# ---------------------------------------------------------------------------
+
+class _ChatResultStub:
+    def __init__(self, content):
+        self.content = content
+
+
+class _SelfCheckStub:
+    """文本自检假 LLM：_chat_once 返回固定内容（测试套件默认实现）。"""
+
+    def __init__(self, config=None):
+        self.config = config
+
+    def _chat_once(self, messages, **kwargs):
+        return _ChatResultStub(content="PONG")
+
+
+class _SelfCheckBoomLLM:
+    def __init__(self, config=None):
+        self.config = config
+
+    def _chat_once(self, messages, **kwargs):
+        raise LLMError("模拟链路失败：连接超时", kind="network")
+
+
+def test_env_status_aggregates_static_facts(client, context):
+    """环境体检静态聚合（工单 env-check-center/01）：配置/LLM 参数/工具链结构/
+    模块库计数/母版目录/输出目录存在且可写——零 LLM 调用秒回。"""
+    ctx, holder = context
+    ctx.config.masters_dir.mkdir(parents=True, exist_ok=True)  # 母版目录建好但为空
+    ctx.desktop_dir = lambda: ctx.config.masters_dir.parent  # tmp 目录，存在且可写
+    resp = client.get("/api/env/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["api_configured"] is True
+    assert data["llm"]["model"]
+    assert set(data["toolchains"]) == {"stm32", "mspm0"}
+    for entry in data["toolchains"].values():
+        assert set(entry) == {"found", "path", "override"}
+        # path 与 found 一致性（不硬编码机器环境：测试机可能装了 Keil/gmake）
+        assert (entry["path"] is not None) == entry["found"]
+        assert isinstance(entry["override"], bool)
+    assert data["module_library"]["exists"] is True
+    assert data["module_library"]["count"] > 0
+    assert data["module_library"]["error"] is None
+    assert data["masters_dir"]["exists"] is True
+    assert data["output_dir"]["exists"] is True
+    assert data["output_dir"]["writable"] is True
+
+
+def test_env_status_module_library_error_reported_not_500(client, context, tmp_path):
+    """畸形 manifest → error 字段携带中文描述，端点仍 200（体检=报问题不炸）。"""
+    from dataclasses import replace
+
+    ctx, holder = context
+    bad = tmp_path / "badlib"
+    (bad / "broken").mkdir(parents=True)
+    (bad / "broken" / "manifest.json").write_text("{ 不是合法 JSON", encoding="utf-8")
+    ctx.config = replace(ctx.config, module_library_dir=bad)
+    resp = client.get("/api/env/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["module_library"]["exists"] is True
+    assert data["module_library"]["count"] == 0
+    assert data["module_library"]["error"]
+
+
+def test_env_status_unconfigured_shape(client, context):
+    """未配置（config = None）→ api_configured False，其余字段形状仍完整。"""
+    ctx, holder = context
+    ctx.config = None
+    resp = client.get("/api/env/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["api_configured"] is False
+    assert data["llm"] is None
+    assert data["toolchains"]["stm32"]["found"] in (True, False)
+    assert "count" in data["module_library"]
+
+
+def test_llm_selfcheck_ok_returns_reply_elapsed_model(client, context, monkeypatch):
+    """文本通道自检成功（工单 env-check-center/01）：ok/耗时/模型/回复摘录回显。"""
+    import contest_generator.webapp as webapp_mod
+
+    monkeypatch.setattr(webapp_mod, "DeepSeekLLM", _SelfCheckStub)
+    resp = client.post("/api/llm/selfcheck")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert "PONG" in data["reply"]
+    assert data["model"]
+    assert data["elapsed_ms"] >= 0
+
+
+def test_llm_selfcheck_unconfigured_400_chinese(client, context):
+    """未配置 → 400 中文引导（与 vision_selfcheck 契约同构）。"""
+    ctx, holder = context
+    ctx.config = None
+    resp = client.post("/api/llm/selfcheck")
+    assert resp.status_code == 400
+    assert "配置" in resp.json()["detail"]
+
+
+def test_llm_selfcheck_llm_error_400_chinese(client, context, monkeypatch):
+    """LLM 链路失败（key 错/网络不通）→ 400 中文原因，与「未配置」分开对待。"""
+    import contest_generator.webapp as webapp_mod
+
+    monkeypatch.setattr(webapp_mod, "DeepSeekLLM", _SelfCheckBoomLLM)
+    resp = client.post("/api/llm/selfcheck")
+    assert resp.status_code == 400
+    assert "自检失败" in resp.json()["detail"]
