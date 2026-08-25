@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=de649223a7bfd88911f0c6b20976f87f17f3a3df -->
+<!-- changelog-auto: last-commit=0d1754b0d6fa40b186177c2c6dcfcfa83622ac4f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -46,6 +46,7 @@
 - 23:28 模块库 UI 提升（工单 01 表格视觉令牌化）：表头底纹、slug 等宽（限 .lib-table 作用域）、简介单行截断 + title 全文；行高亮沿用全局 tbody tr:hover 不新增斑马纹（与生成页/参考库一致）；行渲染抽纯函数 moduleRowHTML（tests/js 6 项单测全绿）+ 加载态占位 + 错误态复用全局 .error；冒烟 8 项 PASS；评审双轴修订落实（撤斑马纹、td.slug 限域、删重复规则），工单 resolved
 - 23:41 模块库工具栏与统计条（工单 02）：搜索即过滤（slug/简介/依赖/套件/备注，大小写不敏感）、平台与状态单选 chips（再点一次取消、Esc 全清）、排序（模块名/平台数/依赖数可逆序）、统计条（总数/平台计数/已验证/硬件绑定/互斥组去重）；全部客户端过滤，纯函数 libFilterModules/libSortModules/libStats/libStatsText/libChipRowHTML（tests/js 16 例全绿）；冒烟 20 项 PASS；评审修订落实（排序调用点 {by,dir} 映射 HIGH、null 平台条目统计一致性、内联样式/_comment 清理）
 - 23:47 模块库行详情弹窗（工单 03）：每行新增「详情」按钮，复用 module-info-dialog/01 的 moduleInfoHTML 全量信息渲染与 openModuleInfo 弹窗交互（遮罩/✕/Esc/替换/remove 清理）；openModuleInfo 参数化为 (slug, platform=chosenPlatform)，库行显式传 null 展示全部平台分段（无当前平台无此版本提示），生成页单参调用上下文保留；tests/js 296 绿、冒烟 27 项 PASS、pytest 2365 绿；评审两轴零缺陷，补 ✕ 关闭冒烟断言
+- 23:54 模块库悬空依赖检测与警示（工单 04）：纯函数 danglingDependencies(modules)（{缺失依赖:[引用方...]}，同模块重复声明只记一次，零后端）；行内依赖列悬空名 ⚠ 警示标（title=缺失清单+引用方，行渲染先去重）；libStats 增 dangling 统计、统计条悬空时红色「悬空依赖 N」（无则不显示）；tests/js 301 绿、冒烟 31 项 PASS、pytest 2365 绿；评审修订落实（行内去重 LOW、冒烟颜色主题无关化、注释措辞、CSS 归位）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
