@@ -112,9 +112,12 @@
   header .sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
   header .sub .arr { color: var(--accent); margin: 0 2px; }
   @media (max-width: 1179px) { header .sub { display: none; } }  /* 窄屏隐藏流程链 */
+  /* 步骤编号徽章（工单 ui-polish-11/06）：24px 正圆，与左侧 24px 步骤圆点同径；
+     min-width 取 24 而非 26——26 会使单位数成 26×24 椭圆；两位数 10-12 由
+     内容+padding 自然 ≥26px（实测 28px）呈胶囊，不挤压 */
   .step-no { display: inline-flex; align-items: center; justify-content: center;
-             min-width: 22px; height: 22px; margin-right: 8px; padding: 0 6px;
-             border-radius: 6px; background: var(--accent); color: #04222b;
+             min-width: 24px; height: 24px; margin-right: 8px; padding: 0 6px;
+             border-radius: 50%; background: var(--accent); color: #04222b;
              font-size: 13px; font-weight: 700; }
   nav { display: flex; gap: 6px; margin-left: auto; align-items: center; }
   nav button { border: none; background: none; padding: 12px 18px; cursor: pointer;
