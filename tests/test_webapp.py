@@ -2847,7 +2847,10 @@ def test_conflict_message_prefix_anchored_both_sides():
     repo = Path(__file__).resolve().parents[1]
     webapp_src = (repo / "src" / "contest_generator" / "webapp.py").read_text(encoding="utf-8")
     index_src = (repo / "src" / "contest_generator" / "static" / "index.html").read_text(encoding="utf-8")
-    prefix = "桌面上已有同名工程"
+    # 锚定「前缀 + 引号紧随」：后端 f-string 字形连续（「桌面上已有同名工程「…」），
+    # 前端 isConflictError 前缀判定 indexOf===0——子串存在式断言弱于前缀语义
+    # （改文案忘改判定仍绿），前缀+引号紧随才能锁死两侧锚点。
+    prefix = "桌面上已有同名工程「"
     assert prefix in webapp_src
     assert prefix in index_src
 
