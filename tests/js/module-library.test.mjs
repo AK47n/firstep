@@ -107,10 +107,12 @@ test("moduleRowHTML 无平台：徽章区为空、行仍完整", () => {
 
 // ================= 工单 02：工具栏与统计条纯函数 =================
 // libFilterModules / libSortModules / libStats / libStatsText / libChipRowHTML。
+// danglingDependencies（工单 04）定义在前：libStats 引用它（extract 注入依赖）。
 
 const libFilterModules = extract("libFilterModules");
 const libSortModules = extract("libSortModules");
-const libStats = extract("libStats");
+const danglingDependencies = extract("danglingDependencies");
+const libStats = extract("libStats", { danglingDependencies });
 const libStatsText = extract("libStatsText");
 const libChipRowHTML = extract("libChipRowHTML", { esc });
 
@@ -201,14 +203,65 @@ test("libStats 统计：总数 / 平台计数 / 模块级已验证 / 硬件绑�
     unverified: 2,
     hardware_bound: 2,
     exclusiveGroups: 2,
+    dangling: 0,
   });
-  assert.deepEqual(libStats([]), { total: 0, platforms: {}, verified: 0, unverified: 0, hardware_bound: 0, exclusiveGroups: 0 });
+  assert.deepEqual(libStats([]), { total: 0, platforms: {}, verified: 0, unverified: 0, hardware_bound: 0, exclusiveGroups: 0, dangling: 0 });
 });
 
 test("libStats 与 libFilterModules 一致：null 平台条目不计数也不命中", () => {
   const mods = [{ slug: "x", description: "", dependencies: [], platforms: { stm32: null } }];
   assert.deepEqual(libStats(mods).platforms, {});
   assert.deepEqual(libFilterModules(mods, { q: "", platform: "stm32", status: "" }), []);
+});
+
+// ================= 工单 04：悬空依赖检测 =================
+// danglingDependencies(modules) → { 缺失依赖: [引用方模块 slug...] }；空对象 = 无悬空。
+// （提取已在 02 组完成，libStats 依赖注入。）
+
+test("danglingDependencies：库内依赖不报、缺失依赖报出并附引用方", () => {
+  const mods = [
+    { slug: "a", description: "", dependencies: ["b"] },
+    { slug: "b", description: "", dependencies: [] },
+    { slug: "c", description: "", dependencies: ["missing"] },
+  ];
+  assert.deepEqual(danglingDependencies(mods), { missing: ["c"] });
+  assert.deepEqual(danglingDependencies([{ slug: "a", description: "", dependencies: ["b"] }, { slug: "b", description: "", dependencies: [] }]), {});
+});
+
+test("danglingDependencies：多缺失合并、多引用方按签名合并、同模块重复声明不重复报", () => {
+  const mods = [
+    { slug: "a", description: "", dependencies: ["x", "x", "y"] },
+    { slug: "b", description: "", dependencies: ["x"] },
+  ];
+  assert.deepEqual(danglingDependencies(mods), { x: ["a", "b"], y: ["a"] });
+});
+
+test("danglingDependencies：空依赖与空库不产生条目", () => {
+  assert.deepEqual(danglingDependencies([]), {});
+  assert.deepEqual(danglingDependencies([{ slug: "a", description: "", dependencies: [] }]), {});
+});
+
+test("moduleRowHTML 悬空依赖警示标：⚠ + title 含缺失清单与引用方；无悬空不渲染", () => {
+  const dmap = { delay: ["a", "b"] };
+  const out = moduleRowHTML({ slug: "m", description: "", dependencies: ["delay"], platforms: {} }, dmap);
+  assert.ok(out.includes('class="dangling-tag"'), out);
+  assert.ok(out.includes("依赖未入库：delay"));
+  assert.ok(out.includes("被 a、b 引用"));
+  // 无悬空（dmap 缺失该依赖或不传）→ 无警示标
+  const clean = moduleRowHTML({ slug: "m", description: "", dependencies: ["delay"], platforms: {} }, {});
+  assert.ok(!clean.includes("dangling-tag"));
+  const noArg = moduleRowHTML({ slug: "m", description: "", dependencies: ["delay"], platforms: {} });
+  assert.ok(!noArg.includes("dangling-tag"));
+  // 同一依赖重复声明：只渲染一个 ⚠（与 danglingDependencies 不重复报语义一致）
+  const dup = moduleRowHTML({ slug: "m", description: "", dependencies: ["x", "x"], platforms: {} }, { x: ["m"] });
+  assert.equal((dup.match(/dangling-tag/g) || []).length, 1);
+});
+
+test("libStats 统计含悬空依赖数（dangling 字段）", () => {
+  const stats = libStats([{ slug: "a", description: "", dependencies: ["gone"], platforms: {} }]);
+  assert.equal(stats.dangling, 1);
+  assert.equal(libStats(libMods).dangling, 0);
+  assert.equal(libStats([]).dangling, 0);
 });
 
 test("libStatsText 统计条文案：全量分段含互斥组", () => {

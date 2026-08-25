@@ -271,5 +271,55 @@ if (!d03.skipped) {
   check("详情弹窗（无模块数据，跳过）", true);
 }
 
+// ---- 工单 04：悬空依赖警示（行内 ⚠ + 统计条红色计数） ----
+const d04 = await Eval(`(() => {
+  const dmap = typeof danglingDependencies === 'function' ? danglingDependencies(state.modules || []) : null;
+  const expectCount = dmap ? Object.keys(dmap).length : -1;
+  const statsSpan = document.querySelector('#lib-stats .lib-dangling-count');
+  const statsHas = statsSpan ? parseInt(statsSpan.textContent.replace(/[^0-9]/g, ''), 10) : 0;
+  const tagCount = document.querySelectorAll('#lib-rows .dangling-tag').length;
+  const expectTags = dmap ? (state.modules || []).reduce((s, m) =>
+    s + [...new Set(m.dependencies || [])].filter((d) => dmap[d]).length, 0) : -1;
+  return { expectCount, statsHas, tagCount, expectTags };
+})()`);
+check("统计条悬空计数 = 纯函数期望（无悬空时不显示红段）",
+  d04.expectCount === d04.statsHas,
+  `expect=${d04.expectCount} shown=${d04.statsHas}`);
+check("行内 ⚠ 警示标数量 = 悬空依赖声明数",
+  d04.expectTags === d04.tagCount, `${d04.tagCount} vs ${d04.expectTags}`);
+// 有悬空时：警示标 title 含「依赖未入库」与引用方；颜色与统计条红段一致（主题无关）
+if (d04.expectCount > 0) {
+  const d04b = await Eval(`(() => {
+    const tag = document.querySelector('#lib-rows .dangling-tag');
+    const countSpan = document.querySelector('#lib-stats .lib-dangling-count');
+    return {
+      title: (tag && tag.getAttribute('title')) || '',
+      color: tag ? getComputedStyle(tag).color : '',
+      countColor: countSpan ? getComputedStyle(countSpan).color : '',
+    };
+  })()`);
+  check("警示标 title = 缺失清单 + 引用方",
+    d04b.title.includes("依赖未入库") && d04b.title.includes("引用"), d04b.title);
+  // 不比对具体 rgb（--danger 随主题变）：只需两者同为 danger 令牌色
+  check("警示标与统计条红段同色（danger 令牌，主题无关）",
+    !!d04b.color && d04b.color === d04b.countColor, `${d04b.color} vs ${d04b.countColor}`);
+} else {
+  check("警示标 title/红色检查（库无悬空，跳过）", true);
+}
+// 修好即消失：给悬空依赖「补库」后（纯前端重算）统计条消失——用已入库模块验证：
+// 实际写入入库需后端，这里验证渲染一致性：dmap 空 → 无 span 且无 tag
+const d04c = await Eval(`(() => {
+  const dmap = danglingDependencies(state.modules || []);
+  return Object.keys(dmap).length === 0
+    ? { noSpan: !document.querySelector('#lib-stats .lib-dangling-count'),
+        noTags: document.querySelectorAll('#lib-rows .dangling-tag').length === 0 }
+    : { noSpan: true, noTags: true, skipped: true };
+})()`);
+if (!d04c.skipped) {
+  check("无悬空时统计条无红段且行内无 ⚠", d04c.noSpan && d04c.noTags);
+} else {
+  check("无悬空一致性（库有悬空，跳过）", true);
+}
+
 console.log(failed === 0 ? "SMOKE ALL PASS" : `SMOKE FAILED (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

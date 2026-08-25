@@ -408,6 +408,8 @@
   .lib-table thead th { background: var(--panel-2); }
   .lib-table td.slug { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
   .lib-table .desc-cell { max-width: 340px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  /* 悬空依赖警示（library-dangling-deps/04）：行内 ⚠ 警示标 */
+  .dangling-tag { color: var(--danger); cursor: help; font-size: 12px; margin-left: 2px; }
   /* 操作列（各库表最后一列）按钮不折行——窄列下"查看/删除"不换行成竖排 */
   table td:last-child { white-space: nowrap; }
   /* 模块库工具栏（library-toolbar/02）：搜索 / 排序 / 过滤 chips / 统计条。
@@ -423,6 +425,7 @@
   .lib-chip:hover { border-color: var(--accent); color: var(--text); }
   .lib-chip.on { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
   .lib-stats { margin: 8px 0 4px; font-size: 12.5px; color: var(--muted); }
+  .lib-dangling-count { color: var(--danger); font-weight: 600; }
   /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
      操作列加宽让查看/删除横排；长文本列按宽换行、体量列完整显示 */
   /* 赛题库表：固定列宽布局（同参考库模式）——长题面不再挤压编号/年份短列，
@@ -6097,8 +6100,25 @@ function libSortModules(modules, s) {
   return out;
 }
 
+// danglingDependencies(modules)：悬空依赖体检（工单 04 纯函数）。
+// 返回 { 缺失依赖slug: [引用方模块slug...] }；空对象 = 无悬空。
+// 同模块重复声明只记一次引用方；不同模块引用同一缺失依赖合并引用方列表。
+function danglingDependencies(modules) {
+  const slugs = new Set((modules || []).map((m) => m.slug));
+  const map = {};
+  for (const m of modules || []) {
+    for (const dep of m.dependencies || []) {
+      if (slugs.has(dep)) continue;
+      if (!map[dep]) map[dep] = [];
+      if (!map[dep].includes(m.slug)) map[dep].push(m.slug);
+    }
+  }
+  return map;
+}
+
 // libStats(modules)：全量统计（不过滤）。verified / hardware_bound / unverified 为
-// 模块级计数（存在任一平台条目满足即计 1，平台间可重叠）；exclusiveGroups 按 id 去重。
+// 模块级计数（存在任一平台条目满足即计 1，平台间可重叠）；exclusiveGroups 按 id 去重；
+// dangling = 悬空依赖数（依赖不在库内 slug 集合）。
 function libStats(modules) {
   const platforms = {};
   let verified = 0, unverified = 0, hardware_bound = 0;
@@ -6115,7 +6135,8 @@ function libStats(modules) {
     if (m.exclusive_group && m.exclusive_group.id) groups.add(m.exclusive_group.id);
   }
   return { total: (modules || []).length, platforms, verified, unverified,
-           hardware_bound, exclusiveGroups: groups.size };
+           hardware_bound, exclusiveGroups: groups.size,
+           dangling: Object.keys(danglingDependencies(modules)).length };
 }
 
 // libStatsText(stats)：统计条文案（平台名沿用徽章惯例 toUpperCase 显示）。
@@ -6136,12 +6157,21 @@ function libChipRowHTML(options, selected) {
   ).join("");
 }
 
-function moduleRowHTML(m) {
+function moduleRowHTML(m, dangling) {
   const description = String(m.description || "");
+  // 依赖列（工单 04）：悬空依赖名后加 ⚠ 警示标，title = 缺失清单 + 引用方。
+  // 重复声明先按名去重（与 danglingDependencies 语义一致：不重复报）
+  const depNames = [...new Set(m.dependencies || [])];
+  const deps = depNames.map((d) => {
+    const refs = dangling && dangling[d];
+    return esc(d) + (refs
+      ? '<span class="dangling-tag" title="依赖未入库：' + esc(d) + "（被 " + esc(refs.join("、")) + " 引用）\">⚠</span>"
+      : "");
+  }).join("、") || "—";
   return `<tr>
     <td class="slug">${esc(m.slug || "")}</td>
     <td class="desc-cell" title="${esc(description)}">${esc(description)}</td>
-    <td class="muted">${esc((m.dependencies || []).join("、") || "—")}${pythonArtifactSummary(m)}</td>
+    <td class="muted">${deps}${pythonArtifactSummary(m)}</td>
     <td>${moduleBadges(m)}</td>
     <td>
       <button data-info="${esc(m.slug || "")}" title="查看模块详情">详情</button>
@@ -6171,20 +6201,24 @@ function renderLibraryChips() {
 }
 
 function renderLibraryStats() {
-  $("lib-stats").textContent = libStatsText(libStats(state.modules || []));
+  const stats = libStats(state.modules || []);
+  $("lib-stats").innerHTML = esc(libStatsText(stats))
+    + (stats.dangling ? ' <span class="lib-dangling-count" title="依赖未入库的模块，点击详情确认">悬空依赖 ' + stats.dangling + "</span>" : "");
 }
 
 function renderLibraryTable() {
   const modules = state.modules || [];
   // 排序读 {by, dir}（纯函数约定），libUI 存 sortBy/sortDir——调用点映射，勿直传 libUI
   const rows = libSortModules(libFilterModules(modules, libUI), { by: libUI.sortBy, dir: libUI.sortDir });
+  // 悬空依赖映射（工单 04）：行内警示标 + 统计条计数同源
+  const dmap = danglingDependencies(modules);
   if (!modules.length) {
     $("lib-rows").innerHTML = '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">📦</div><div class="es-title">模块库还是空的</div><div class="es-hint">用上方表单添加第一个模块（slug + 平台 + 源文件），AI 校验后入库。</div></div></td></tr>';
   } else if (!rows.length) {
     // 过滤后的空结果 ≠ 库为空：提示「清空过滤」而不是「添加模块」
     $("lib-rows").innerHTML = '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的模块</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
   } else {
-    $("lib-rows").innerHTML = rows.map(moduleRowHTML).join("");
+    $("lib-rows").innerHTML = rows.map((m) => moduleRowHTML(m, dmap)).join("");
   }
   $("lib-rows").querySelectorAll("[data-edit-desc]").forEach((b) =>
     b.addEventListener("click", () => editDescription(b.dataset.editDesc)));
