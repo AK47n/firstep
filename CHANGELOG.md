@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=af692adbe6d10f2c94f9aabca0c6ecc6dd5231b5 -->
+<!-- changelog-auto: last-commit=e8c5a295a4e35540e39b27f368dc9ec5250c00e1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-26
+- 00:06 模块编辑弹窗（工单 06）：每行「编辑」→ 平台级编辑模态（复用 05 骨架 + addFileRow/collectFiles/pickFilesInto 文件行机制）：平台下拉切换、套件词表 datalist（libPlatformKits 库内去重）、购买链接 URL 校验（libIsValidHttpUrl，空=保留原值）、文件清单（含内嵌母版态）+ 逐文件 ✕ 确认删除、新文件行/磁盘选取推送（POST platform-files 携带硬件绑定与身份现值）；保存身份/推送/删除成功 → 返回 manifest 本地替换即时刷新表格与统计条，失败展示原因表单保留；LOW-MEDIUM 修复（删最后文件后平台条目移除 → rebuildPlatSelect 重建下拉落位）+ isConnected 守卫（数据始终更新，05 同构）+ 消息红色兜底；tests/js 305 绿、冒烟 40 项 PASS、pytest 2365 绿；评审两轴无硬违规（多选删除为 Spec 判定可接受口径差异）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
