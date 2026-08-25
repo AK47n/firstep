@@ -402,6 +402,12 @@
   tbody tr:hover { background: var(--panel-2); }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
+  /* 模块库表（library-table-polish/01）：表头底纹区分、slug 等宽不折行、
+     简介单行截断（title 全文由 JS 行渲染同步给）；行高亮沿用全局
+     tbody tr:hover（与生成页 / 参考库一致），不新增底纹与令牌值 */
+  .lib-table thead th { background: var(--panel-2); }
+  .lib-table td.slug { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+  .lib-table .desc-cell { max-width: 340px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   /* 操作列（各库表最后一列）按钮不折行——窄列下"查看/删除"不换行成竖排 */
   table td:last-child { white-space: nowrap; }
   /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
@@ -1540,7 +1546,7 @@
   <section id="tab-library" class="page">
     <div class="card">
       <h2>模块库 <span class="muted">（磁盘目录即数据库，操作即时生效）</span></h2>
-      <table>
+      <table class="lib-table">
         <thead><tr><th>模块</th><th>简介</th><th>依赖</th><th>平台版本</th><th style="width:150px">操作</th></tr></thead>
         <tbody id="lib-rows"></tbody>
       </table>
@@ -6016,29 +6022,41 @@ $("revise-problem-text").addEventListener("input", () => {
 // ---------------------------------------------------------------------------
 // 模块库页
 // ---------------------------------------------------------------------------
+// 行渲染（library-table-polish/01）：纯函数（喂 tests/js node:test）——
+// 简介列单行截断 + title 全文（配合 .desc-cell 样式）；后续工单（详情 /
+// 编辑 / 悬空警示）在此扩展行内容。
+function moduleRowHTML(m) {
+  const description = String(m.description || "");
+  return `<tr>
+    <td class="slug">${esc(m.slug || "")}</td>
+    <td class="desc-cell" title="${esc(description)}">${esc(description)}</td>
+    <td class="muted">${esc((m.dependencies || []).join("、") || "—")}${pythonArtifactSummary(m)}</td>
+    <td>${moduleBadges(m)}</td>
+    <td>
+      <button data-edit-desc="${esc(m.slug || "")}">改简介</button>
+      <button data-del="${esc(m.slug || "")}" class="danger">删除</button>
+    </td>
+  </tr>`;
+}
+
 async function loadLibrary() {
+  // 加载态（工单 01）：fetched 前给占位，读盘快也避免旧内容残留
+  $("lib-msg").textContent = "";
+  $("lib-rows").innerHTML = '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">正在读取模块库…</div></div></td></tr>';
   try {
     const modules = await apiGet("/api/modules");
     state.modules = modules;
     renderModulePool();
-    $("lib-rows").innerHTML = modules.length ? modules.map((m) => `
-      <tr>
-        <td class="slug">${esc(m.slug)}</td>
-        <td>${esc(m.description)}</td>
-        <td class="muted">${esc((m.dependencies || []).join("、") || "—")}${pythonArtifactSummary(m)}</td>
-        <td>${moduleBadges(m)}</td>
-        <td>
-          <button data-edit-desc="${esc(m.slug)}">改简介</button>
-          <button data-del="${esc(m.slug)}" class="danger">删除</button>
-        </td>
-      </tr>`).join("")
+    $("lib-rows").innerHTML = modules.length ? modules.map(moduleRowHTML).join("")
       : '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">📦</div><div class="es-title">模块库还是空的</div><div class="es-hint">用上方表单添加第一个模块（slug + 平台 + 源文件），AI 校验后入库。</div></div></td></tr>';
     $("lib-rows").querySelectorAll("[data-edit-desc]").forEach((b) =>
       b.addEventListener("click", () => editDescription(b.dataset.editDesc)));
     $("lib-rows").querySelectorAll("[data-del]").forEach((b) =>
       b.addEventListener("click", () => deleteModule(b.dataset.del)));
-    $("lib-msg").textContent = "";
-  } catch (e) { $("lib-msg").textContent = e.message; }
+  } catch (e) {
+    $("lib-rows").innerHTML = "";
+    $("lib-msg").textContent = e.message;
+  }
 }
 
 async function editDescription(slug) {
