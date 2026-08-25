@@ -94,13 +94,17 @@ const staticRows = await Eval(`(() => {
 check("静态行数>0", staticRows.count > 0, "count=" + staticRows.count);
 check("含文本/视觉通道行", staticRows.keys.includes("llm-text") && staticRows.keys.includes("llm-vision"),
   "keys=" + staticRows.keys.join(","));
-const pendingCh = await Eval(`(() => {
+const earlyCh = await Eval(`(() => {
   const rows = [...document.querySelectorAll('#env-check-results .env-row')];
   const text = rows.find((r) => r.dataset.envRow === 'llm-text');
   const vis = rows.find((r) => r.dataset.envRow === 'llm-vision');
-  return { textPending: !!(text && text.textContent.includes('待检查')), visPending: !!(vis && vis.textContent.includes('待检查')) };
+  const done = (r) => r && !r.textContent.includes('待检查');
+  return { text: done(text), vis: done(vis),
+    textTxt: text ? text.textContent.slice(0, 40) : null,
+    visTxt: vis ? vis.textContent.slice(0, 40) : null };
 })()`);
-check("双通道初始「待检查」态", pendingCh.textPending && pendingCh.visPending);
+check("点击后通道行无「待检查」残留（应为检查中…或终态）", earlyCh.text && earlyCh.vis,
+  "text=" + JSON.stringify(earlyCh.textTxt) + " vis=" + JSON.stringify(earlyCh.visTxt));
 
 let terminal = false;
 let terminalInfo = null;

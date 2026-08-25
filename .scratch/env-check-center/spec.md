@@ -46,7 +46,7 @@
 ### 前端（index.html，设置页新增卡）
 
 - 新卡位置：视觉通道卡之后、「最近 LLM 工作流」卡之前；`<div class="card" data-collapse-id="env-check">`，标题「环境体检」；头部按钮「一键体检」+ 说明；容器 `#env-check-results`。
-- 纯函数 `envCheckStatusHTML(status)`（自包含内联 esc，同 moduleGridHTML 范式）→ 逐行渲染：徽章类 `env-ok` / `env-warn` / `env-err`（分别 ok/warn/danger 色系）+ 名称 + 详情（mono 路径/错误文本）；缺省字段不渲染行。
+- 纯函数 `envCheckStatusHTML(status, textCh, visionCh)`（自包含内联 esc，同 moduleGridHTML 范式；`textCh`/`visionCh` ∈ `null`（待检查）| `"pending"`（检查中…）| `{ok,data}` 成功 | `{ok:false,msg}` 失败；单参 status 版为初始签名，三分支为工单 01 实现决策）→ 逐行渲染：徽章类 `env-ok` / `env-warn` / `env-err`（分别 ok/warn/danger 色系）+ 名称 + 详情（mono 路径/错误文本）；缺省字段不渲染行。
 - `envCheckRun()`：置 busy → `GET /api/env/status` → 渲染静态行（同时清空真实调用行 → 「检查中…」）→ `Promise.allSettled([POST /api/llm/selfcheck, POST /api/vision/selfcheck])` → 各自行更新结果（成功：`✓ 耗时 Xms 模型 Y`；失败：400 提取中文 message，同 handle() 错误提取语义）→ 结束 busy。
 - 视觉行「再测」与一键按钮共用 `envCheckRun()`（简单为先：一键 = 全部；单行再测 = 同函数重跑，不做行级局部——第一个切片直接一键）。
 - 既有 `btn-vision-selfcheck`（视觉卡内）不动——体检卡是另一个入口，同一端点。
