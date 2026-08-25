@@ -2360,6 +2360,61 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
     assert "modules\\dht11\\inc" in uvprojx
 
 
+def test_recent_lifecycle_after_generate(client, context, tmp_path):
+    """最近生成列表（工单 recent-jobs/01）端到端：生成成功自动记录 →
+    编译状态上报 → 删除 → 404。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Smart_Inspection_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11", "oled"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：设计并制作智能巡检小车",
+        },
+    )
+    assert resp.status_code == 200
+    output_dir = resp.json()["output_dir"]
+
+    recent = client.get("/api/recent")
+    assert recent.status_code == 200
+    entries = recent.json()
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["output_dir"] == output_dir
+    assert entry["platform"] == PLATFORM_STM32
+    assert entry["slugs"] == ["dht11", "oled"]
+    assert entry["status"] == "generated"
+
+    upd = client.post("/api/recent/status", json={"output_dir": output_dir, "status": "compiled_ok"})
+    assert upd.status_code == 200
+    assert upd.json()["updated"] is True
+    assert client.get("/api/recent").json()[0]["status"] == "compiled_ok"
+
+    # 未知目录不建假记录
+    upd_none = client.post(
+        "/api/recent/status", json={"output_dir": str(tmp_path / "nope"), "status": "compiled_ok"}
+    )
+    assert upd_none.status_code == 200
+    assert upd_none.json()["updated"] is False
+
+    dele = client.delete(f"/api/recent/{entry['id']}")
+    assert dele.status_code == 200
+    assert client.get("/api/recent").json() == []
+    assert client.delete(f"/api/recent/{entry['id']}").status_code == 404
+
+
+def test_recent_status_rejects_unknown_status(client):
+    """最近生成状态白名单（工单 recent-jobs/01）：非法状态 → 400 中文。"""
+    resp = client.post("/api/recent/status", json={"output_dir": "D:/x", "status": "compiled_maybe"})
+    assert resp.status_code == 400
+    assert "未知状态" in resp.json()["detail"]
+
+
 def test_generate_respects_explicit_output_dir_when_desktop_output_disabled(
     client, context, tmp_path
 ):
@@ -5889,6 +5944,7 @@ def test_generate_report_draft_telemetry_recorded(tmp_path):
         return llm
 
     ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
         config=AppConfig(api_key="sk-test", module_library_dir=library, masters_dir=tmp_path / "masters"),
         llm_factory=factory,
     )

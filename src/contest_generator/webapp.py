@@ -103,6 +103,13 @@ from .generation_output import (
     desktop_topic_dir_verdict,
     topic_dir_title,
 )
+from .recent_jobs import (
+    delete_recent,
+    load_recent,
+    recent_file,
+    record_recent,
+    update_recent_status,
+)
 from .impact import run_impact_analysis
 from .library import (
     add_module,
@@ -1424,7 +1431,54 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if _desktop_output_requested(payload):
             # 生成成功 → 自动打开资源管理器聚焦工程目录（用户「要」）
             _open_in_explorer(output_dir)
+        # 最近生成记录（工单 recent-jobs/01）：生成成功自动落盘
+        # （status=generated；编译状态由前端随后上报更新）。写失败不阻断
+        # 生成主流程——本地工具，记录坏掉不能挡住刚生成的工程。
+        try:
+            record_recent(
+                recent_file(context.config_path),
+                output_dir=str(summary.output_dir),
+                platform=platform,
+                slugs=slugs,
+                topic_id=topic_id,
+            )
+        except OSError:
+            pass
         return _generation_result(summary)
+
+    @app.get("/api/recent")
+    @_map_errors
+    def recent_list() -> list[dict]:
+        """最近生成记录（工单 recent-jobs/01）：新 → 旧，cap 20；
+        未配置 = 空列表（没配置自然没有生成记录）。"""
+        config = _current_config(context)
+        if config is None:
+            return []
+        return load_recent(recent_file(context.config_path))
+
+    @app.post("/api/recent/status")
+    @_map_errors
+    def recent_status(payload: dict) -> dict:
+        """编译状态上报（工单 recent-jobs/01）：前端每次编译完成调一次；
+        状态白名单 / 400 中文由 RecentStatusError 经 errors.py 统一映射
+        （路由薄壳，不重复校验）；目录无记录 → 忽略不建（手动模式直接编译
+        未生成的路径不产生脏记录）。"""
+        output_dir = _require_str(payload, "output_dir")
+        status = _require_str(payload, "status")
+        config = _current_config(context)
+        if config is None:
+            return {"ok": True, "updated": False}
+        updated = update_recent_status(recent_file(context.config_path), output_dir, status)
+        return {"ok": True, "updated": updated is not None}
+
+    @app.delete("/api/recent/{entry_id}")
+    @_map_errors
+    def recent_delete(entry_id: str) -> dict:
+        """删除一条最近生成记录（清错记）；不存在 → 404 中文。"""
+        config = _current_config(context)
+        if config is None or not delete_recent(recent_file(context.config_path), entry_id):
+            raise HTTPException(404, "最近生成记录不存在")
+        return {"ok": True}
 
     # ------------------------------------------------------------------
     # 修订与深化 · 上下文加载（工单 revise-deepen/01）：给一个输出目录，
