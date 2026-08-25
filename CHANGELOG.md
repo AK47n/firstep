@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c899a8daa1d7becd01cbd1db9cfa94dc909d5895 -->
+<!-- changelog-auto: last-commit=48aeffcbdc49157976bc0b22ea4d41d183486925 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 19:04 生成页新增「检查能否生成」：判据与生成按钮同源 + 检查单面板（a3-readiness-check/01-02）
 - 19:10 修正步骤 7 完成判定：默认布线生成 / 无需配置也显示完成（step7-done/01）
 - 19:24 上传 PDF 显示页图：/api/extract 返回渲染页 + 前端页图展示（upload-pdf-pages/01-02）
+- 19:29 图片上传显示原图：/api/extract 回传原图 + 前端原图箱展示（upload-image-preview/01-02）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
