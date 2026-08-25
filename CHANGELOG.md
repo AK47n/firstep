@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c866ad6c5f8051475396e6d74aa72b940e44ae16 -->
+<!-- changelog-auto: last-commit=43178fed20f0471867dd09198ca273404493dc17 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -29,6 +29,7 @@
 - 20:46 main.c 工具栏（复制/下载/全屏）与视觉通道自检（mainc-tools/01、vision-selfcheck/01）
 - 21:08 最近生成列表：recent.json 落盘与生成页历史条（recent-jobs/01）
 - 21:13 最近生成条与下方卡片间距微调（recent-jobs-spacing）
+- 21:32 评分点核对清单与模块选择网格（score-checklist/01、module-grid/01）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
