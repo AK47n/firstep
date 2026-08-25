@@ -67,6 +67,7 @@ from .extraction import (
     extract_file,
     extract_image,
     extract_pdf_with_image_notes,
+    image_data_url,
     locate_topic_pages_full,
     render_pdf_pages,
     # 页渲染原语按公开名引入（模块级函数 = monkeypatch 接缝，测试以此为
@@ -885,7 +886,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     observation_collector=collector,
                 )
                 context.recent_llm_workflows.add_completed(collector)
-                return {"text": result}
+                # 上传原图（工单 upload-image-preview/01）：视觉描述之外回传原图
+                # data URL，前端直接显示；读失败 → None（仅文字，不阻塞）
+                return {"text": result, "image_data_url": image_data_url(tmp_path)}
             if suffix == ".pdf":
                 collector = create_llm_observation_collector("vision-describe")
                 result = extract_pdf_with_image_notes(

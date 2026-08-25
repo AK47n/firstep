@@ -1584,6 +1584,30 @@ def test_extract_uploaded_pdf_pages_capped_at_six(client, tmp_path):
     assert [p["page_no"] for p in body["pages"]] == [1, 2, 3, 4, 5, 6]
 
 
+def test_extract_uploaded_png_returns_original_image(client, context, monkeypatch):
+    """图片上传返回原图（工单 upload-image-preview/01）：image_data_url 为
+    base64 data URL，解码后与上传字节完全一致（无损回传）。"""
+    import base64
+    from contest_generator import extraction as extraction_mod
+
+    png_1px = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ"
+        "DwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    monkeypatch.setattr(extraction_mod, "describe_image_cached", lambda *a, **k: "1x1 图描述")
+
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("图.png", png_1px, "image/png")},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["text"] == "1x1 图描述"
+    assert body["image_data_url"].startswith("data:image/png;base64,")
+    assert base64.b64decode(body["image_data_url"].split(",", 1)[1]) == png_1px
+
+
 
 def test_extract_unsupported_type_returns_clear_error(client):
     resp = client.post(

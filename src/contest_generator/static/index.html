@@ -963,6 +963,16 @@
         </div>
         <div id="topic-pdf-pages"></div>
       </div>
+      <!-- 图片上传原图展示（工单 upload-image-preview/02）：视觉描述之外直接
+           显示原图（点击放大走 #pdf-zoom 通用遮罩），文字版可切换 -->
+      <div id="topic-image-box" class="hidden" style="margin-top:8px">
+        <div class="row" style="margin-bottom:6px">
+          <button id="btn-topic-image-text">显示文字版（可编辑）</button>
+          <span class="muted">上传原图（点击图片放大）</span>
+        </div>
+        <img id="topic-image-view" alt="上传原图"
+             style="width:100%;max-width:640px;display:block;margin:0 auto 10px;border:1px solid var(--border,#ccc);border-radius:4px;cursor:zoom-in;background:#fff">
+      </div>
       <div id="pdf-zoom" class="hidden">
         <img id="pdf-zoom-img" alt="题面页放大" style="max-width:96vw;max-height:96vh;object-fit:contain">
       </div>
@@ -1874,12 +1884,20 @@ $("btn-upload").addEventListener("click", async () => {
     $("problem").value = data.text;
     currentTopicId = "";
     clearTopicSummary();
-    // 上传 PDF 页图（工单 upload-pdf-pages/02）：与题库取题面同款展示
-    // （页图 + 点击放大 + 可切文字版）；非 PDF / 渲染失败 → 只显示文字
-    if (data.pages && data.pages.length) {
+    // 页图展示（工单 upload-pdf-pages/02 + upload-image-preview/02）：
+    // 图片上传 → 原图箱；PDF 上传 → 页图箱；都没有 → 只显示文字
+    if (data.image_data_url) {
+      $("topic-pdf-box").classList.add("hidden");
+      $("topic-pdf-pages").innerHTML = "";
+      $("topic-image-box").classList.remove("hidden");
+      $("topic-image-view").src = data.image_data_url;
+      setTopicPdfTextVisible(false, $("btn-topic-image-text"));
+    } else if (data.pages && data.pages.length) {
+      $("topic-image-box").classList.add("hidden");
       setTopicPdfTextVisible(false);
       showTopicPdfViewer(data);
     } else {
+      $("topic-image-box").classList.add("hidden");
       hideTopicPdfViewer();
     }
     $("upload-msg").classList.add("ok");
@@ -1920,15 +1938,17 @@ $("btn-topic-load").addEventListener("click", async () => {
 // 流程零改动。纯展示：加载失败 → 明确提示，文字框照常可用（现状兜底）。
 let topicPdfTextVisible = true;
 
-function setTopicPdfTextVisible(visible) {
+function setTopicPdfTextVisible(visible, btn) {
   topicPdfTextVisible = visible;
   $("problem").classList.toggle("hidden", !visible);
-  $("btn-topic-pdf-text").textContent = visible ? "收起文字版" : "显示文字版（可编辑）";
+  const el = btn || $("btn-topic-pdf-text");
+  if (el) el.textContent = visible ? "收起文字版" : "显示文字版（可编辑）";
 }
 
 function showTopicPdfViewer(data) {
   const pagesEl = $("topic-pdf-pages");
   pagesEl.innerHTML = "";
+  $("topic-image-box").classList.add("hidden");  // 与图片原图箱互斥
   data.pages.forEach(p => {
     const img = document.createElement("img");
     img.src = p.data_url;
@@ -1958,6 +1978,7 @@ function showTopicPdfViewer(data) {
 
 function hideTopicPdfViewer() {
   $("topic-pdf-box").classList.add("hidden");
+  $("topic-image-box").classList.add("hidden");
   $("pdf-zoom").classList.add("hidden");
   setTopicPdfTextVisible(true);
 }
@@ -1985,6 +2006,15 @@ async function loadTopicPdf(key) {
 
 $("btn-topic-pdf-text").addEventListener("click", () => {
   setTopicPdfTextVisible(!topicPdfTextVisible);
+});
+
+$("btn-topic-image-text").addEventListener("click", () => {
+  setTopicPdfTextVisible(!topicPdfTextVisible, $("btn-topic-image-text"));
+});
+
+$("topic-image-view").addEventListener("click", () => {
+  $("pdf-zoom-img").src = $("topic-image-view").src;
+  $("pdf-zoom").classList.remove("hidden");
 });
 
 $("pdf-zoom").addEventListener("click", () => {
