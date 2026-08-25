@@ -514,6 +514,9 @@
   .settings-collapse .collapse-ico { transition: transform .25s ease; }
   .settings-collapse.collapsed .collapse-ico { transform: rotate(-90deg); }
   .settings-collapse.collapsed > :not(.settings-collapse-head) { display: none !important; }
+  /* 设置页折叠总开关（工单 settings-infoarch/03）：页首工具栏两端对齐 */
+  .settings-toolbar { display: flex; align-items: center; justify-content: space-between;
+                      gap: 12px; margin-bottom: 14px; }
   /* 按钮内联图标（工单 ui-polish-9/04） */
   button .btn-ico { display: inline-block; width: 15px; height: 15px;
                     vertical-align: -2px; margin-right: 6px; }
@@ -1430,6 +1433,10 @@
 
   <!-- ============================ 设置页 ============================ -->
   <section id="tab-settings" class="page">
+    <div class="settings-toolbar">
+      <span class="muted">点击卡片标题可折叠/展开，状态自动保存。</span>
+      <button id="btn-settings-collapse-all" type="button">全部收起</button>
+    </div>
     <div class="card" data-collapse-id="app">
       <h2>应用设置</h2>
       <div class="muted" style="margin-bottom:10px">保存后即时生效，无需重启。</div>
