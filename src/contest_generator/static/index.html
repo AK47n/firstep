@@ -333,6 +333,19 @@
   .lib-mod-files .muted { font-family: inherit; }
   .lib-mod-msg { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; }
   .lib-mod-msg.ok { color: var(--ok); }
+  /* 添加模块分区折叠（library-add-collapse/07）：折叠视觉与设置页整卡折叠同一语言
+     （分区块头常驻 + ▾ 旋转 + 内容区 display:none——不销毁 DOM，收起不丢状态） */
+  .add-section { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0;
+                 background: var(--panel-2); }
+  .add-section-head { display: flex; align-items: center; gap: 8px; width: 100%;
+                      padding: 9px 12px; background: none; border: none; cursor: pointer;
+                      font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .add-section-head:hover { color: var(--accent); }
+  .add-section-head .add-section-arrow { transition: transform var(--dur-fast) var(--ease-ui);
+                                         font-size: 11px; color: var(--muted); }
+  .add-section.collapsed .add-section-head .add-section-arrow { transform: rotate(-90deg); }
+  .add-section-body { padding: 2px 12px 10px; }
+  .add-section.collapsed .add-section-body { display: none; }
   /* 编译结果横幅（工单 compile-experience-ui/01）：四态颜色 + 初始 hidden */
   #compile-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
                     font-size: 13px; font-weight: 600; }
@@ -1613,28 +1626,53 @@
 
     <div class="card">
       <h2>添加模块（AI 校验后入库）</h2>
-      <div class="row">
-        <div style="flex:1"><label>模块 slug（英文标识，即目录名）</label><input type="text" id="new-slug" placeholder="例如 ultrasonic"></div>
-        <div style="flex:1"><label>平台</label><select id="new-platform"></select></div>
+      <div class="add-section" id="add-sec-basic">
+        <button type="button" class="add-section-head" aria-expanded="true">
+          <span class="add-section-arrow" aria-hidden="true">▾</span>① 基本信息（slug / 平台 / 简介 / 依赖）
+        </button>
+        <div class="add-section-body">
+          <div class="row">
+            <div style="flex:1"><label>模块 slug（英文标识，即目录名）</label><input type="text" id="new-slug" placeholder="例如 ultrasonic"></div>
+            <div style="flex:1"><label>平台</label><select id="new-platform"></select></div>
+          </div>
+          <div class="row">
+            <div style="flex:1"><label>功能简介（留空则让 AI 先出草稿）</label><input type="text" id="new-desc" placeholder="例如 超声波测距模块，返回厘米距离"></div>
+            <div style="flex:1"><label>依赖模块（逗号分隔）</label><input type="text" id="new-deps" placeholder="例如 delay"></div>
+          </div>
+        </div>
       </div>
-      <div class="row">
-        <div style="flex:1"><label>功能简介（留空则让 AI 先出草稿）</label><input type="text" id="new-desc" placeholder="例如 超声波测距模块，返回厘米距离"></div>
-        <div style="flex:1"><label>依赖模块（逗号分隔）</label><input type="text" id="new-deps" placeholder="例如 delay"></div>
+      <div class="add-section collapsed" id="add-sec-files">
+        <button type="button" class="add-section-head" aria-expanded="false">
+          <span class="add-section-arrow" aria-hidden="true">▾</span>② 平台版本与源文件
+        </button>
+        <div class="add-section-body">
+          <h3>源文件（.c / .h）</h3>
+          <div id="new-files"></div>
+          <div class="row" style="margin-top:8px">
+            <button id="btn-add-file-row">+ 文件</button>
+            <button id="btn-pick-mod-files">选择文件…</button>
+            <button id="btn-pick-mod-dir">选择文件夹…</button>
+            <input type="file" id="pick-mod-files" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">
+            <input type="file" id="pick-mod-dir" webkitdirectory multiple style="display:none">
+          </div>
+        </div>
       </div>
-      <div class="row">
-        <label style="margin-top:10px"><input type="checkbox" id="new-hw"> 硬件绑定（换平台需移植）</label>
-        <label style="margin-top:10px"><input type="checkbox" id="new-verified"> 已在该平台验证过</label>
-        <label style="margin-top:10px">备注 <input type="text" id="new-notes" style="width:260px" placeholder="例如 接 PA1"></label>
+      <div class="add-section collapsed" id="add-sec-adv">
+        <button type="button" class="add-section-head" aria-expanded="false">
+          <span class="add-section-arrow" aria-hidden="true">▾</span>③ 进阶能力（硬件绑定 / 已验证 / 备注 / AI 草稿）
+        </button>
+        <div class="add-section-body">
+          <div class="row">
+            <label style="margin-top:10px"><input type="checkbox" id="new-hw"> 硬件绑定（换平台需移植）</label>
+            <label style="margin-top:10px"><input type="checkbox" id="new-verified"> 已在该平台验证过</label>
+            <label style="margin-top:10px">备注 <input type="text" id="new-notes" style="width:260px" placeholder="例如 接 PA1"></label>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="btn-draft-desc">AI 出简介草稿</button>
+          </div>
+        </div>
       </div>
-      <h3>源文件（.c / .h）</h3>
-      <div id="new-files"></div>
       <div class="row" style="margin-top:8px">
-        <button id="btn-add-file-row">+ 文件</button>
-        <button id="btn-pick-mod-files">选择文件…</button>
-        <button id="btn-pick-mod-dir">选择文件夹…</button>
-        <input type="file" id="pick-mod-files" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">
-        <input type="file" id="pick-mod-dir" webkitdirectory multiple style="display:none">
-        <button id="btn-draft-desc">AI 出简介草稿</button>
         <button id="btn-add-module-submit" class="primary">校验并入库</button>
       </div>
       <div id="add-msg" class="error"></div>
@@ -6270,6 +6308,19 @@ function clearLibraryFilter() {
   renderLibraryTable();
 }
 
+// 添加模块分区折叠（library-add-collapse/07）：纯布局交互——分区头点击切换
+// collapsed（内容 display:none，DOM 不销毁 → 收起不丢已填内容/文件行）。
+function initAddSections() {
+  document.querySelectorAll(".add-section").forEach((sec) => {
+    const head = sec.querySelector(".add-section-head");
+    if (!head) return;
+    head.addEventListener("click", () => {
+      const collapsed = sec.classList.toggle("collapsed");
+      head.setAttribute("aria-expanded", String(!collapsed));
+    });
+  });
+}
+
 function initLibraryToolbar() {
   $("lib-search").addEventListener("input", (e) => { libUI.q = e.target.value; renderLibraryTable(); });
   $("lib-search").addEventListener("keydown", (e) => { if (e.key === "Escape") clearLibraryFilter(); });
@@ -9298,6 +9349,7 @@ initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
+initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
 </script>
 <div id="toast-root"></div>
 </body>
