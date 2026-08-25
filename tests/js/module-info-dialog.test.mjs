@@ -38,6 +38,7 @@ function extract(name, deps) {
 const moduleInfoHTML = extract("moduleInfoHTML", {
   moduleGridPlatformLabel: extract("moduleGridPlatformLabel"),
   moduleGridStatusText: extract("moduleGridStatusText"),
+  moduleGridBadgeClass: extract("moduleGridBadgeClass"),
 });
 
 // 全量 fixture：两平台 + 引脚声明 + 依赖 + 多实例 + 互斥组 + 旧形状副产物
@@ -117,7 +118,9 @@ test("缺省字段不渲染行（依赖/多实例/副产物/互斥组）", () =>
   assert.ok(!out.includes("可配置"));
   assert.ok(!out.includes("副产物"));
   assert.ok(!out.includes("互斥"));
-  assert.ok(!out.includes("依赖："));
+  // 依赖行不渲染：行标记为 >依赖</span>（评审 2026-08-26：原 "依赖：" 断言恒真属假置信）
+  assert.ok(!out.includes(">依赖</span>"));
+  assert.ok(!out.includes("mi-row"));
 });
 
 test("空 platforms：不渲染平台区块", () => {

@@ -32,11 +32,15 @@ const Eval = async (expr) => {
 };
 
 let ready = false;
-// 重新加载页面：webapp 静态文件实时更新，但浏览器内存中的 JS 需刷新才换新
+// 重新加载页面：webapp 静态文件实时更新，但浏览器内存中的 JS 需刷新才换新。
+// 打标记防竞态：旧文档 readyState 早已 complete，仅靠 readyState 会被旧文档
+// 立即满足——等「旧标记消失」（新文档）才继续。
+await Eval(`window.__smokeMarker = 1`);
 await cdp("Page.reload", { ignoreCache: true });
 for (let i = 0; i < 100 && !ready; i++) {
   try {
-    ready = await Eval(`document.readyState === 'complete' && !!document.getElementById('module-grid')
+    ready = await Eval(`document.readyState === 'complete' && !window.__smokeMarker
+      && !!document.getElementById('module-grid')
       && typeof state !== 'undefined' && state && state.modules && state.modules.length > 0`);
   } catch {}
   if (!ready) await new Promise((r) => setTimeout(r, 300));
@@ -120,8 +124,13 @@ await Eval(`document.querySelector('.module-info-overlay').click()`);   // 关�
 await new Promise((r) => setTimeout(r, 150));
 
 // ---- 卡片本体点击 → 添加模块且不弹窗（主流程回归）----
+// 点「当前未选中的第一张卡」（重跑幂等：selectedSlugs 可能已含上一轮添加的卡）
 const beforeSel = await Eval(`selectedSlugs.length`);
-await Eval(`document.querySelectorAll('#module-grid .module-card')[0].click()`);
+await Eval(`(() => {
+  const card = Array.from(document.querySelectorAll('#module-grid .module-card'))
+    .find((c) => !selectedSlugs.includes(c.dataset.add));
+  card.click();
+})()`);
 await new Promise((r) => setTimeout(r, 200));
 const after = await Eval(`({ sel: selectedSlugs.length, overlays: document.querySelectorAll('.module-info-overlay').length })`);
 check("点卡片本体 → 添加模块（selectedSlugs +1）", after.sel === beforeSel + 1, `before=${beforeSel},after=${after.sel}`);

@@ -2800,6 +2800,15 @@ function moduleGridStatusText(entry) {
   if (entry.verified) return "已验证";
   return "未验证";
 }
+// 平台条目 → 徽章类名（hw/ok/un）：与 moduleGridStatusText 并列单源（评审 2026-08-26），
+// moduleGridHTML 与 moduleInfoHTML 共用；moduleBadges（推荐区）的 unverified 异形体另属
+// 其组件，收敛范围外
+function moduleGridBadgeClass(entry) {
+  if (!entry) return "un";
+  if (entry.hardware_bound) return "hw";
+  if (entry.verified) return "ok";
+  return "un";
+}
 function moduleGridFilter(modules, selectedSet, query) {
   const q = String(query || "").trim().toLowerCase();
   const selected = selectedSet || [];
@@ -2832,7 +2841,7 @@ function moduleGridHTML(modules, selectedSet, query, platform) {
     const short = desc.length > 26 ? desc.slice(0, 26) + "…" : desc;
     const badges = Object.keys(m.platforms || {}).map((p) => {
       const e = (m.platforms || {})[p];
-      const cls = e && e.hardware_bound ? "hw" : e && e.verified ? "ok" : "un";
+      const cls = moduleGridBadgeClass(e);
       let html = '<span class="mc-plat ' + cls + '">' + escHtml(moduleGridPlatformLabel(p))
         + "·" + escHtml(moduleGridStatusText(e)) + "</span>";
       // 母版内嵌标注（2024H 复盘）：平台条目 files 空且无副产物 = 实现内嵌母版
@@ -2904,7 +2913,7 @@ function moduleInfoHTML(module, platform) {
   const platHtml = Object.keys(plats).map((p) => {
     const e = plats[p] || {};
     const status = moduleGridStatusText(e);
-    const cls = e.hardware_bound ? "hw" : e.verified ? "ok" : "un";
+    const cls = moduleGridBadgeClass(e);
     const files = (e.files && e.files.length)
       ? e.files.map((f) => "<li>" + escHtml(f) + "</li>").join("")
       : '<li class="muted">实现内嵌母版（随母版进工程，不复制文件、不重复）</li>';
