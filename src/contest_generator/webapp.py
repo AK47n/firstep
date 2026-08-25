@@ -77,6 +77,8 @@ from .extraction import (
 from .vision import (
     DEFAULT_VISION_BASE_URL,
     DEFAULT_VISION_MODEL,
+    VisionError,
+    describe_image,
     effective_vision_api_key,
     vision_configured,
 )
@@ -688,6 +690,18 @@ def _resolve_vision(config: AppConfig) -> tuple[str, str, str]:
         ),
         config.vision_model,
     )
+
+
+# 视觉通道自检（工单 vision-selfcheck/01）：内置 1×1 PNG（与测试同款常量）
+# + 独立自检 prompt——describe_image 无缓存真实调用一次，通过 = 配置当前可用
+VISION_SELFCHECK_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ"
+    "DwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+VISION_SELFCHECK_PROMPT = (
+    "这是一张 1×1 像素测试图，请用一句话描述你看到的内容；若看不清，"
+    "直接回复「测试图」。"
+)
 
 
 async def _save_upload(upload: UploadFile) -> Path:
@@ -2298,6 +2312,50 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
         return {"ok": True}
+
+    @app.post("/api/vision/selfcheck")
+    @_map_errors
+    def vision_selfcheck() -> dict:
+        """视觉通道自检（工单 vision-selfcheck/01）：用当前生效的视觉参数
+        （_resolve_vision 同源：DeepSeek 官方端点视觉 key 留空 = 复用主 key）
+        对内置 1×1 PNG 做一次无缓存真实识别——通过 = 配置当前可用（模型 /
+        耗时 / 描述一并回显，用户可核对模型是否配错）。
+
+        失败策略与业务一致：未配置 / 网络 / 上游非法 → 400 中文（含设置页
+        引导），前端统一走 handle() 错误提取直接展示。自检不做二轮精注记
+        （detail_qa）——只验证可用性，省一次视觉调用。
+        """
+        config = _current_config(context)
+        if config is None:
+            raise HTTPException(400, "请先保存主 API key 配置")
+        base_url, api_key, model = _resolve_vision(config)
+        # 未配置与调用失败分开对待（工单 vision-selfcheck/01 评审意见）：
+        # 空 key = 配置问题 → 直接引导设置页；VisionError = 链路问题 → 报原因
+        if not api_key:
+            raise HTTPException(
+                400,
+                "视觉通道未配置：请到设置页填写视觉 API key"
+                "（DeepSeek 官方端点且主 key 已配置时，视觉 key 留空自动复用主 key）",
+            )
+        started_at = time.monotonic()
+        try:
+            message = describe_image(
+                base64.b64decode(VISION_SELFCHECK_PNG_B64),
+                "image/png",
+                VISION_SELFCHECK_PROMPT,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+            )
+        except VisionError as e:
+            raise HTTPException(400, f"视觉自检失败：{e}")
+        elapsed_ms = int((time.monotonic() - started_at) * 1000)
+        return {
+            "ok": True,
+            "elapsed_ms": elapsed_ms,
+            "model": model,
+            "message": message,
+        }
 
     # ------------------------------------------------------------------
     # 参考文件库（工单 02）：浏览 / 搜索 / AI 简介草稿 / 入库 / 删除

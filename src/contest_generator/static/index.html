@@ -954,6 +954,22 @@
                display: flex; align-items: center; gap: 2px;
                padding: 2px 4px; border-radius: 6px;
                background: var(--panel-2); border: 1px solid var(--border); }
+  /* 工具栏分隔线（工单 mainc-tools/01）：缩放组与操作组之间的细竖线 */
+  .code-zoom .sep { width: 1px; height: 14px; margin: 0 3px;
+                    background: var(--border); }
+  .code-zoom button { white-space: nowrap; }
+  /* 操作按钮（复制/下载/全屏）：宽高自适应文字，不受缩放按钮 22px 定宽挤压；
+     字号沿用 .code-zoom button 的 13px（评审：与缩放钮视觉一致） */
+  .code-zoom .act { width: auto; height: auto; padding: 0 3px; }
+  /* main.c 全屏编辑（工单 mainc-tools/01）：同一 DOM 原地 fixed 撑满视口——
+     行号/高亮层/滚动三同步与字号缩放全保留，只换容器几何；body 锁滚动防
+     背景页随滚轮卷动。textarea 高 = 视口 - 上下 12px 内边距，外沿恰为
+     100vh，与行号/高亮层 bottom:0 精确对齐（评审意见：无底部错位） */
+  .code-wrap.fullscreen { position: fixed; inset: 0; z-index: 300;
+                          background: var(--bg); border: none; border-radius: 0; }
+  .code-wrap.fullscreen textarea { height: calc(100vh - 24px);
+                                   min-height: 0; resize: none; }
+  body.code-full-body-lock { overflow: hidden; }
   .code-zoom button { border: none; background: none; color: var(--muted);
                       font-size: 13px; width: 22px; height: 22px; line-height: 1;
                       cursor: pointer; border-radius: 4px; padding: 0; }
@@ -1186,6 +1202,10 @@
           <button id="btn-code-zoom-out" type="button" title="缩小">−</button>
           <span id="code-zoom-label">100%</span>
           <button id="btn-code-zoom-in" type="button" title="放大">＋</button>
+          <span class="sep" aria-hidden="true"></span>
+          <button id="btn-main-c-copy" class="act" type="button" title="复制 main.c 内容">复制</button>
+          <button id="btn-main-c-download" class="act" type="button" title="下载 main.c 文件">下载</button>
+          <button id="btn-main-c-fullscreen" class="act" type="button" title="全屏编辑">全屏</button>
         </div>
         <div id="main-c-nums" class="line-nums" aria-hidden="true"></div>
         <pre id="main-c-hl" class="hl-layer" aria-hidden="true"></pre>
@@ -1747,7 +1767,11 @@
         <input type="checkbox" id="set-vision-detail-qa" style="margin:0">
         <label for="set-vision-detail-qa" style="margin:0;font-size:12px;color:var(--muted)">问答式精注记（默认开：每张图第一轮描述后追问一轮细节，型号/尺寸标注/引脚号更全；关闭 = 省一半视觉调用）</label>
       </div>
-      <div class="muted">云端识图：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别。视觉服务下拉一键切换 DeepSeek / 智谱预设；手动修改 base_url 或模型会自动转为「自定义」模式（自备 key）。DeepSeek 模式下 key 留空自动复用主 key（同 key 同价）；智谱模式自动沿用已保存的智谱 key。不配置 = 视觉功能关闭，其余功能不受影响。</div>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <button id="btn-vision-selfcheck" type="button" data-ico="check">自检视觉通道</button>
+        <span id="vision-selfcheck-status" class="muted" style="flex:1"></span>
+      </div>
+      <div class="muted">云端识图：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别。视觉服务下拉一键切换 DeepSeek / 智谱预设；手动修改 base_url 或模型会自动转为「自定义」模式（自备 key）。DeepSeek 模式下 key 留空自动复用主 key（同 key 同价）；智谱模式自动沿用已保存的智谱 key。不配置 = 视觉功能关闭，其余功能不受影响。「自检」用当前填写参数真实调用一次视觉模型（含复用主 key 逻辑），通过 = 配置可用。</div>
     </div>
 
     <div class="card" data-collapse-id="recent-wf">
@@ -3830,6 +3854,77 @@ function applyCodeZoom(pct) {
   btnIn.addEventListener("click", () => applyCodeZoom(currentCodeZoomPct() + CODE_ZOOM_STEP));
   btnOut.addEventListener("click", () => applyCodeZoom(currentCodeZoomPct() - CODE_ZOOM_STEP));
 })();
+
+// ---------------------------------------------------------------------------
+// main.c 工具栏（工单 mainc-tools/01）：复制 / 下载 / 全屏。
+// 悬浮在 .code-wrap 右上角（与字号缩放同一工具条）；全屏 = 同一 DOM 原地
+// fixed（三明治机制零改动）；maincContentEmpty / maincFullscreenLabel 为
+// 自包含纯函数（tests/js 正则抽取：不引用模块级常量）
+// ---------------------------------------------------------------------------
+function maincContentEmpty(value) {
+  const text = value == null ? "" : String(value);
+  return text.trim() === "";
+}
+function maincFullscreenLabel(active) {
+  return active ? "退出全屏" : "全屏";
+}
+function initMainCTools() {
+  const ta = $("main-c");
+  const wrap = ta ? ta.closest(".code-wrap") : null;
+  const btnCopy = $("btn-main-c-copy");
+  const btnDownload = $("btn-main-c-download");
+  const btnFull = $("btn-main-c-fullscreen");
+  if (!ta || !wrap || !btnCopy || !btnDownload || !btnFull) return;
+  // 空内容守卫 + 统一错误文案（复制/下载共用，防三处重复）
+  const guardEmpty = () => {
+    if (maincContentEmpty(ta.value)) {
+      toast("info", "main.c 还没有内容，先生成骨架");
+      return true;
+    }
+    return false;
+  };
+  const errText = (what, e) => what + "失败：" + (e && e.message || "未知错误");
+  function copyValue() {
+    if (guardEmpty()) return;
+    const done = () => toast("ok", "main.c 已复制");
+    const fallback = () => {
+      try {
+        ta.select();
+        if (document.execCommand && document.execCommand("copy")) { toast("ok", "main.c 已复制"); return; }
+        toast("error", "复制失败：请手动全选复制");
+      } catch (e) { toast("error", errText("复制", e)); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(done).catch(fallback);
+    } else fallback();
+  }
+  function downloadValue() {
+    if (guardEmpty()) return;
+    try {
+      const blob = new Blob([ta.value], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "main.c";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast("ok", "main.c 已下载");
+    } catch (e) { toast("error", errText("下载", e)); }
+  }
+  function setFullscreen(active) {
+    wrap.classList.toggle("fullscreen", active);
+    document.body.classList.toggle("code-full-body-lock", active);
+    btnFull.textContent = maincFullscreenLabel(active);
+  }
+  btnCopy.addEventListener("click", copyValue);
+  btnDownload.addEventListener("click", downloadValue);
+  btnFull.addEventListener("click", () => setFullscreen(!wrap.classList.contains("fullscreen")));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && wrap.classList.contains("fullscreen")) setFullscreen(false);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // 生成页：8. main.c 骨架 / 自检冒烟（工单 skeleton-smoke-refs/01）
@@ -6647,6 +6742,24 @@ $("set-vision-provider").addEventListener("change", () =>
   });
 });
 
+// 视觉通道自检（工单 vision-selfcheck/01）：用当前填写参数（含"key 留空 =
+// 复用主 key"装配逻辑，后端 _resolve_vision 同源）真实调用一次视觉模型；
+// 成功绿字回显模型/耗时，失败红字显示后端中文原因（handle() 统一提取）。
+$("btn-vision-selfcheck").addEventListener("click", async () => {
+  const status = $("vision-selfcheck-status");
+  status.className = "muted";
+  status.textContent = "正在调用视觉模型…";
+  try {
+    const data = await apiPost("/api/vision/selfcheck");
+    status.className = "ok";
+    status.textContent = "✓ 视觉通道正常（模型 " + esc(data.model || "?") + "，耗时 "
+      + (data.elapsed_ms ?? "?") + "ms）：" + esc(data.message || "");
+  } catch (e) {
+    status.className = "error";
+    status.textContent = "✕ 自检失败：" + e.message;
+  }
+});
+
 // 本地模型下拉联动：选「关闭」→ 清空 base_url（本地路由关闭）；选模型 → 补默认端点
 $("set-local-llm-model").addEventListener("change", () => {
   const urlEl = $("set-local-llm-base-url");
@@ -7809,6 +7922,7 @@ $("btn-usage-reset").addEventListener("click", () => {
 
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）
 initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
+initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪，纯本地交互
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 </script>
