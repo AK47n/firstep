@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=71cf355c203d5c92146f64949112240653e9a954 -->
+<!-- changelog-auto: last-commit=751806654d292a5079e9ef7bc57ebb376946f9af -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -41,6 +41,7 @@
 - 22:38 评审修订（env-check-center/01）Spec 轴：模块库加载错误行改 ⚠（env-warn，spec 行 57「仅库异常」语义，原 ✕ 且被测试固化）；一键体检点击后双通道行置「检查中…」行级加载态（spec 行 50，原直接终态无加载中）；缺省字段不渲染行补全（module_library/masters_dir/output_dir/api_configured 键缺失跳过）；spec 签名补三分支实现决策；单测 14 项、冒烟 11 项、全量 JS 273/pytest 2355 绿
 - 22:50 生成前覆盖保护（generate-overwrite/01）：同名工程 400 → 确认框（旧工程备份为 .bak）→ 确认自动重发 overwrite=true；后端 exists+overwrite 先备份后覆盖（单份 .bak 整体改名，失败 400 文件操作失败且旧工程未动）；strict is True 非布尔视为缺省；前端 isConflictError/conflictDirName 纯函数 + renderGenerateSuccess 抽取共用；修复 payload 块级作用域 bug（冒烟抓到）；pytest 2364 绿、tests/js 278 绿、冒烟 12 项全 PASS
 - 22:56 评审修订（generate-overwrite/01）双轴：护栏断言改前缀锚定「桌面上已有同名工程「」——前端 CONFLICT_MSG_PREFIX 同步含「（只认完整前缀形态，无「 文案不误判 + JS 负例测试）；补 backup_project_dir rename 失败专项测试（monkeypatch Path.rename 抛 OSError 32，原目录与内容未动、无 .bak 残留）；spec.md:46 代际措辞修正（二次覆盖后 .bak=第二代产物、原名目录=第三代）；pytest 2365 绿、tests/js 278 绿
+- 23:20 生成页就绪总览收尾：宽屏（≥1180px）隐藏顶部步骤 chips 去重导航，摘要提示语随步导航位置（左侧/上方）动态跟随，窄屏保持兼作唯一步骤导航；genOverviewSummaryHTML 增 navHint 参数，缺省不渲染
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
