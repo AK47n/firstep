@@ -52,6 +52,7 @@ from contest_generator.reference_library import (
     read_fulltext,
     resolve_entry_file,
     search_references,
+    update_reference,
     validate_topic_anchor,
 )
 from contest_generator.report import (
@@ -2040,3 +2041,620 @@ def test_motor_fulltext_shows_code_bodies():
     assert "Modbus_ParseFrame" in fulltext
     assert "从站地址" in fulltext
     assert "存储累计编码器值" in fulltext
+
+
+# ---------------------------------------------------------------------------
+# 条目编辑（工单 reference-library-ui/01）：update_reference 元数据全量 +
+# 文件增量，一次事务（校验全在落盘前，失败磁盘零变化）
+# ---------------------------------------------------------------------------
+
+
+def _edit_sample_entry(tmp_path) -> reference_library.ReferenceEntry:
+    """建一条可编辑的样例题（锚定 none、单文件 example.c）。"""
+    return add_reference(
+        _reference_root(tmp_path),
+        title="待编辑条目",
+        type="例程工程",
+        description="原始简介",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"example.c": EXAMPLE_C},
+        kit_vocabulary=(KIT_ALX,),
+    )
+
+
+def test_update_reference_metadata_roundtrip(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+
+    updated = update_reference(
+        root,
+        entry.id,
+        title="改过的标题",
+        type="说明书",
+        description="改过的简介",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        add_files={},
+        remove_files=(),
+        kit_vocabulary=(),
+    )
+
+    # 标题 / 类型 / 简介 / 平台写回元数据；id 与目录名不动（编辑不重命名）
+    assert updated.id == entry.id
+    assert (root / entry.id).is_dir()
+    assert updated.title == "改过的标题"
+    assert updated.type == "说明书"
+    assert updated.description == "改过的简介"
+    # 文件不变：磁盘文件还在、files 清单原样
+    assert updated.files == entry.files
+    assert (root / entry.id / "example.c").read_text(encoding="utf-8") == EXAMPLE_C
+    # 读盘回读一致
+    assert get_reference(root, entry.id) == updated
+
+
+def test_update_reference_platform_roundtrip(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+
+    updated = update_reference(
+        root,
+        entry.id,
+        title=entry.title,
+        type=entry.type,
+        description=entry.description,
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        platform="mspm0",
+        add_files={},
+        remove_files=(),
+        kit_vocabulary=(),
+    )
+
+    assert updated.platform == "mspm0"
+    meta = json.loads((root / entry.id / "reference.json").read_text(encoding="utf-8"))
+    assert meta["platform"] == "mspm0"
+
+
+@pytest.mark.parametrize(
+    "kind,value",
+    [
+        (ANCHOR_KIND_TOPIC, "2026C"),
+        (ANCHOR_KIND_KIT, KIT_ALX),
+    ],
+)
+def test_update_reference_anchor_kind_switches(tmp_path, kind, value):
+    """锚定三态可互相切换：none → topic / kit 写回；再切回 none 清空值。"""
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    kit_vocabulary = (KIT_ALX,)
+
+    switched = update_reference(
+        root,
+        entry.id,
+        title=entry.title,
+        type=entry.type,
+        description=entry.description,
+        anchor_kind=kind,
+        anchor_value=value,
+        add_files={},
+        remove_files=(),
+        kit_vocabulary=kit_vocabulary,
+    )
+    assert switched.anchor_kind == kind
+    assert switched.anchor_value == value
+
+    back = update_reference(
+        root,
+        entry.id,
+        title=entry.title,
+        type=entry.type,
+        description=entry.description,
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        add_files={},
+        remove_files=(),
+        kit_vocabulary=kit_vocabulary,
+    )
+    assert back.anchor_kind == ANCHOR_KIND_NONE
+    assert back.anchor_value == ""
+
+
+def test_update_reference_add_files(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+
+    updated = update_reference(
+        root,
+        entry.id,
+        title=entry.title,
+        type=entry.type,
+        description=entry.description,
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        add_files={"new.c": "/* 新增 */\n", "子目录/note.txt": "说明"},
+        remove_files=(),
+        kit_vocabulary=(),
+    )
+
+    assert (root / entry.id / "new.c").read_text(encoding="utf-8") == "/* 新增 */\n"
+    assert (root / entry.id / "子目录" / "note.txt").read_text(encoding="utf-8") == "说明"
+    # files 清单保序追加：原有在前、新增按序在后
+    assert updated.files == ("example.c", "new.c", "子目录/note.txt")
+    # 体量实况更新（新增文件计入）
+    assert updated.file_count == entry.file_count + 2
+
+
+def test_update_reference_remove_files(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    # 清单外散文件（磁盘实况）也可删：与浏览「磁盘目录即数据库」同口径
+    stray = root / entry.id / "散文件.bin"
+    stray.write_bytes(b"xyz")
+
+    updated = update_reference(
+        root,
+        entry.id,
+        title=entry.title,
+        type=entry.type,
+        description=entry.description,
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        add_files={},
+        remove_files=("example.c", "散文件.bin"),
+        kit_vocabulary=(),
+    )
+
+    assert not (root / entry.id / "example.c").exists()
+    assert not stray.exists()
+    assert updated.files == ()
+    meta = json.loads((root / entry.id / "reference.json").read_text(encoding="utf-8"))
+    assert meta["files"] == []
+    # reference.json 本身保留
+    assert (root / entry.id / "reference.json").is_file()
+
+
+def test_update_reference_rejects_bad_metadata_without_side_effects(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    meta_before = (root / entry.id / "reference.json").read_text(encoding="utf-8")
+
+    with pytest.raises(ReferenceError, match="不能为空"):
+        update_reference(
+            root,
+            entry.id,
+            title="",  # 空标题
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+    with pytest.raises(ReferenceError, match="不能为空"):
+        update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type="",
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+    with pytest.raises(ReferenceError, match="不能为空"):
+        update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description="  ",
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+
+    # 磁盘零变化（元数据逐字节未动）
+    assert (root / entry.id / "reference.json").read_text(encoding="utf-8") == meta_before
+
+
+@pytest.mark.parametrize(
+    "anchor_kind,anchor_value",
+    [
+        (ANCHOR_KIND_TOPIC, "26C"),  # 格式非法
+        (ANCHOR_KIND_KIT, "某网店杂牌套件"),  # 词表外
+        (ANCHOR_KIND_NONE, "2026C"),  # 未锚定却塞值
+        ("series", "2026C"),  # 词表外类型
+    ],
+)
+def test_update_reference_rejects_bad_anchor(tmp_path, anchor_kind, anchor_value):
+    entry = _edit_sample_entry(tmp_path)
+
+    with pytest.raises(ReferenceError):
+        update_reference(
+            _reference_root(tmp_path),
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=anchor_kind,
+            anchor_value=anchor_value,
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(KIT_ALX,),
+        )
+
+
+def test_update_reference_rejects_invalid_platform(tmp_path):
+    entry = _edit_sample_entry(tmp_path)
+
+    with pytest.raises(ReferenceError, match="非法平台属性"):
+        update_reference(
+            _reference_root(tmp_path),
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            platform="esp32",
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+
+
+@pytest.mark.parametrize(
+    "add_files",
+    [
+        {"../evil.c": "x"},  # 路径穿越
+        {"a\\b.c": "x"},  # 反斜杠
+        {"/abs.c": "x"},  # 绝对路径
+        {"reference.json": "x"},  # 与元数据文件冲突
+        {},  # 空对象 = 无新增（合法，只走元数据）
+    ],
+)
+def test_update_reference_accepts_or_rejects_add_paths(tmp_path, add_files):
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+
+    if not add_files:
+        updated = update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files=add_files,
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+        assert updated.id == entry.id
+    else:
+        with pytest.raises(ReferenceError):
+            update_reference(
+                root,
+                entry.id,
+                title=entry.title,
+                type=entry.type,
+                description=entry.description,
+                anchor_kind=ANCHOR_KIND_NONE,
+                anchor_value="",
+                add_files=add_files,
+                remove_files=(),
+                kit_vocabulary=(),
+            )
+
+
+def test_update_reference_rejects_add_existing_path(tmp_path):
+    """同名文件已存在 = 内容修改语义：拒绝（本轮不支持改内容，先删后加）。"""
+    entry = _edit_sample_entry(tmp_path)
+
+    with pytest.raises(ReferenceError, match="已存在"):
+        update_reference(
+            _reference_root(tmp_path),
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={"example.c": "/* 覆盖 */\n"},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+
+
+def test_update_reference_rejects_remove_missing_or_meta(tmp_path):
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    meta_before = (root / entry.id / "reference.json").read_text(encoding="utf-8")
+
+    with pytest.raises(ReferenceError, match="不存在"):
+        update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=("不存在.c",),
+            kit_vocabulary=(),
+        )
+    with pytest.raises(ReferenceError, match="冲突"):
+        update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=("reference.json",),
+            kit_vocabulary=(),
+        )
+    # 校验失败磁盘零变化
+    assert (root / entry.id / "reference.json").read_text(encoding="utf-8") == meta_before
+    assert (root / entry.id / "example.c").is_file()
+
+
+def test_update_reference_rejects_add_remove_overlap(tmp_path):
+    entry = _edit_sample_entry(tmp_path)
+
+    with pytest.raises(ReferenceError, match="既添加又删除|同一文件"):
+        update_reference(
+            _reference_root(tmp_path),
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={"both.c": "x"},
+            remove_files=("both.c",),
+            kit_vocabulary=(),
+        )
+
+
+def test_update_reference_validation_failure_leaves_files_untouched(tmp_path):
+    """混合请求（合法 add + 非法元数据）：全部校验在落盘前，新文件不落盘。"""
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+
+    with pytest.raises(ReferenceError):
+        update_reference(
+            root,
+            entry.id,
+            title="",
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={"should_not_exist.c": "/* 不应出现 */\n"},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+    assert not (root / entry.id / "should_not_exist.c").exists()
+
+
+def test_update_reference_cleans_added_files_on_write_failure(tmp_path, monkeypatch):
+    """写入中途失败：已写的新增文件清理、元数据保持原样（不留半成品）。"""
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    meta_before = (root / entry.id / "reference.json").read_text(encoding="utf-8")
+    target = root / entry.id / "boom.c"
+    real_write_text = Path.write_text
+
+    def flaky_write_text(self, *args, **kwargs):
+        if self == target:
+            raise OSError("磁盘写失败")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", flaky_write_text)
+    with pytest.raises(OSError, match="磁盘写失败"):
+        update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={"ok.c": "/* ok */\n", "boom.c": "/* 写失败 */\n"},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+    # 先写的 ok.c 被清理、boom.c 不落盘、元数据原样
+    assert not (root / entry.id / "ok.c").exists()
+    assert not target.exists()
+    assert (root / entry.id / "reference.json").read_text(encoding="utf-8") == meta_before
+
+
+def test_update_reference_cleans_added_files_on_meta_write_failure(
+    tmp_path, monkeypatch
+):
+    """元数据写入失败：已写的新增文件同样清理、元数据保持原样。"""
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    meta_before = (root / entry.id / "reference.json").read_text(encoding="utf-8")
+    monkeypatch.setattr(
+        reference_library,
+        "write_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("磁盘写失败")),
+    )
+
+    with pytest.raises(OSError, match="磁盘写失败"):
+        update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={"ok.c": "/* ok */\n"},
+            remove_files=("example.c",),
+            kit_vocabulary=(),
+        )
+    # 新增文件清理、被删文件未删（元数据写失败不丢实体）、元数据原样
+    assert not (root / entry.id / "ok.c").exists()
+    assert (root / entry.id / "example.c").is_file()
+    assert (root / entry.id / "reference.json").read_text(encoding="utf-8") == meta_before
+
+
+def test_update_reference_missing_entry(tmp_path):
+    with pytest.raises(ReferenceError, match="不存在"):
+        update_reference(
+            _reference_root(tmp_path),
+            "nope",
+            title="t",
+            type="例程工程",
+            description="x",
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+
+
+# ---------------------------------------------------------------------------
+# 条目编辑：webapp 路由（PUT /api/references/{entry_id}）
+# ---------------------------------------------------------------------------
+
+
+def test_references_update_route_end_to_end(tmp_path):
+    client = _app(tmp_path, ReferenceLLM())
+    added = client.post(
+        "/api/references",
+        json={
+            "title": "待编辑条目",
+            "type": "例程工程",
+            "description": "原始简介",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2026C",
+            "files": {"example.c": EXAMPLE_C},
+        },
+    ).json()
+    entry_id = added["id"]
+
+    updated = client.put(
+        f"/api/references/{entry_id}",
+        json={
+            "title": "改过的标题",
+            "type": "说明书",
+            "description": "改过的简介",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2026C",
+            "platform": "mspm0",
+            "add_files": {"new.c": "/* 新增 */\n"},
+            "remove_files": ["example.c"],
+        },
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["title"] == "改过的标题"
+    assert body["platform"] == "mspm0"
+    assert body["files"] == ["new.c"]
+
+    # 列表反映变更；元数据编辑后条目 id / 目录名不变
+    listed = client.get("/api/references").json()
+    assert [e["id"] for e in listed] == [entry_id]
+    assert [e["title"] for e in listed] == ["改过的标题"]
+    # 旧文件已被删：服务 404 通道（400 中文）
+    assert client.get(f"/api/references/{entry_id}/files/example.c").status_code == 400
+    assert client.get(f"/api/references/{entry_id}/files/new.c").status_code == 200
+
+
+def test_references_update_route_rejects_bad_payloads(tmp_path):
+    client = _app(tmp_path, ReferenceLLM())
+    added = client.post(
+        "/api/references",
+        json={
+            "title": "待编辑条目",
+            "type": "例程工程",
+            "description": "原始简介",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2026C",
+            "files": {"example.c": EXAMPLE_C},
+        },
+    ).json()
+    entry_id = added["id"]
+
+    base = {
+        "title": "t",
+        "type": "说明书",
+        "description": "x",
+        "anchor_kind": ANCHOR_KIND_TOPIC,
+        "anchor_value": "2026C",
+        "platform": "any",
+    }
+
+    # 缺必填字段（元数据全量必填：PUT 是替换语义，platform 缺省不得兜底 any）
+    assert client.put(
+        f"/api/references/{entry_id}", json={"title": "t"}
+    ).status_code == 400
+    assert (
+        client.put(
+            f"/api/references/{entry_id}", json={**base, "platform": None}
+        ).status_code
+        == 400
+    )
+    assert "platform" in client.put(
+        f"/api/references/{entry_id}", json={k: v for k, v in base.items() if k != "platform"}
+    ).json()["detail"]
+    # add_files 形状错（非对象，含空数组也不放行）
+    assert (
+        client.put(
+            f"/api/references/{entry_id}",
+            json={**base, "add_files": ["not-a-dict"]},
+        ).status_code
+        == 400
+    )
+    assert (
+        client.put(
+            f"/api/references/{entry_id}", json={**base, "add_files": []}
+        ).status_code
+        == 400
+    )
+    # remove_files 形状错
+    assert (
+        client.put(
+            f"/api/references/{entry_id}",
+            json={**base, "remove_files": "not-a-list"},
+        ).status_code
+        == 400
+    )
+    # 删不存在的文件
+    bad_remove = client.put(
+        f"/api/references/{entry_id}",
+        json={**base, "remove_files": ["不存在.c"]},
+    )
+    assert bad_remove.status_code == 400
+    assert "不存在" in bad_remove.json()["detail"]
+    # 条目不存在
+    assert (
+        client.put(
+            "/api/references/missing",
+            json=base,
+        ).status_code
+        == 400
+    )
+    # 显式空容器 = 合法：remove_files: [] 与 add_files: {} 都是无操作
+    assert (
+        client.put(
+            f"/api/references/{entry_id}",
+            json={**base, "add_files": {}, "remove_files": []},
+        ).status_code
+        == 200
+    )

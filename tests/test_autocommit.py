@@ -30,7 +30,11 @@ from contest_generator.library import (
     update_platform_identity,
 )
 from contest_generator.master_store import delete_master
-from contest_generator.reference_library import add_reference, delete_reference
+from contest_generator.reference_library import (
+    add_reference,
+    delete_reference,
+    update_reference,
+)
 from contest_generator.report import (
     ArchiveDecision,
     DistillationReport,
@@ -237,6 +241,30 @@ def test_delete_reference_autocommits(tmp_path, default_on_config):
     ]
 
 
+def test_update_reference_autocommits(tmp_path, default_on_config):
+    """update_reference 落盘后自动提交：消息带条目 id（工单 reference-library-ui/01）。"""
+    repo = _init_repo(tmp_path)
+    entry_id = _add_reference_entry(_references_dir(repo))
+
+    update_reference(
+        _references_dir(repo),
+        entry_id,
+        title="改过的标题",
+        type="例程工程",
+        description="DHT11 温湿度传感器参考例程",
+        anchor_kind="none",
+        anchor_value="",
+        add_files={},
+        remove_files=(),
+        kit_vocabulary=(),
+    )
+
+    assert _log_messages(repo) == [
+        f"lib: add reference {entry_id}",
+        f"lib: update reference {entry_id}",
+    ]
+
+
 def test_delete_topic_autocommits(tmp_path, default_on_config):
     """delete_topic 落盘后自动提交：消息带赛题编号。"""
     repo = _init_repo(tmp_path)
@@ -426,6 +454,7 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "read_fulltext": ("read", ""),
         "draft_description": ("read", ""),
         "add_reference": ("commit", "lib: add reference"),
+        "update_reference": ("commit", "lib: update reference"),
         "archive_reference": ("delegated", ""),
         # 文件名搜索 / 文件打开工单新增的读函数：素材清单解析 + 文件定位，不落盘
         "list_entry_files": ("read", ""),

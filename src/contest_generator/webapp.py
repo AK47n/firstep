@@ -181,6 +181,7 @@ from .reference_library import (
     module_kit_vocabulary,
     resolve_entry_file,
     search_references,
+    update_reference,
 )
 from .revision import restore_revision, revise_backup_root, run_revision
 from .selection import (
@@ -2624,6 +2625,46 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             entry_id,
         )
         return {"ok": True}
+
+    @app.put("/api/references/{entry_id}")
+    @_map_errors
+    def reference_update(entry_id: str, payload: dict) -> dict:
+        """编辑参考文件条目（工单 reference-library-ui/01）：元数据全量 +
+        文件增量一次事务；校验与录入同源，失败磁盘零变化。
+
+        body 契约：{title, type, description, anchor_kind, anchor_value, platform,
+        add_files?: {文件名: 内容}, remove_files?: [相对路径, ...]}；元数据全量
+        必填（PUT 是替换语义——platform 缺省兜底 any 会把存量条目平台静默降级，
+        故强制提供）；add_files / remove_files 缺省 = 不增不减。编辑不改条目
+        id / 目录名。
+        """
+        add_files = payload.get("add_files")
+        if add_files is None:
+            add_files = {}
+        if not isinstance(add_files, dict):
+            raise HTTPException(400, "add_files 必须是 {文件名: 内容} 对象")
+        remove_files = payload.get("remove_files")
+        if remove_files is None:
+            remove_files = []
+        if not isinstance(remove_files, list) or not all(
+            isinstance(item, str) for item in remove_files
+        ):
+            raise HTTPException(400, "remove_files 必须是字符串列表")
+        config = _require_config(context)
+        entry = update_reference(
+            reference_library_dir(config.module_library_dir),
+            entry_id,
+            title=_require_str(payload, "title"),
+            type=_require_str(payload, "type"),
+            description=_require_str(payload, "description"),
+            anchor_kind=_require_str(payload, "anchor_kind"),
+            anchor_value=_require_str(payload, "anchor_value"),
+            add_files=add_files,
+            remove_files=tuple(remove_files),
+            kit_vocabulary=module_kit_vocabulary(config.module_library_dir),
+            platform=_require_str(payload, "platform"),
+        )
+        return entry.to_dict()
 
     @app.get("/api/references/{entry_id}/files")
     @_map_errors
