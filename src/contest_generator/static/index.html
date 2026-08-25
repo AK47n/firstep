@@ -347,6 +347,23 @@
                border-radius: 10px; padding: 14px 16px; font-family: var(--mono); font-size: 12px;
                line-height: 1.7; overflow: auto; max-height: 320px;
                box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03); }
+  /* 生成结果面板两列网格（工单 gen-result-panel/01）：宽屏左=工程文件/
+     产物/评分点，右=工程结构树；窄屏单列 */
+  .res-grid { display: grid; grid-template-columns: 1fr 380px; gap: 14px;
+              align-items: start; }
+  .res-main, .res-side { display: flex; flex-direction: column; gap: 10px;
+                         min-width: 0; }
+  .res-block { background: var(--panel-2); border: 1px solid var(--border);
+               border-radius: 10px; padding: 10px 14px; box-shadow: var(--shadow-item); }
+  .res-block .res-label { font-size: 11px; font-weight: 600; color: var(--muted);
+                          letter-spacing: .04em; margin-bottom: 6px;
+                          text-transform: uppercase; }
+  .res-block .res-value { font-size: 13px; line-height: 1.7; min-width: 0;
+                          overflow-wrap: break-word; }
+  .res-block pre.result { max-height: 420px; margin: 0; }
+  @media (max-width: 1179px) {
+    .res-grid { grid-template-columns: 1fr; }
+  }
   .file-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; margin-bottom: 8px; }
   .file-row textarea { min-height: 120px; }
   /* ---- 赛题库拆条校对表（工单 05）：年份 / 题号 / 题面三字段 + 删条目 ---- */
@@ -758,6 +775,22 @@
   .ov-summary .ov-missing { color: var(--warn); }
   .ov-summary .ov-next { color: var(--accent); font-weight: 600; }
   .ov-summary .ov-sep { margin: 0 8px; color: var(--border-strong); }
+  /* 行动区（工单 gen-overview-act/01）：一键补齐 + 就绪生成按钮 + 补齐全程
+     临时高亮（1.6s 自清，见 runOverviewFill setTimeout 移除） */
+  .ov-actions { width: 100%; margin-top: 10px; display: flex; gap: 8px;
+                align-items: center; flex-wrap: wrap; }
+  .ov-actions .ov-fill { padding: 5px 14px; border-radius: 999px; font-size: 12.5px;
+                         border: 1px solid var(--border-strong);
+                         background: var(--panel-2); color: var(--text);
+                         cursor: pointer; }
+  .ov-actions .ov-fill:hover { border-color: var(--accent); color: var(--accent); }
+  .ov-actions .ov-generate { padding: 5px 16px; border-radius: 999px; font-size: 12.5px; }
+  .ov-fill-target { outline: 2px solid var(--accent); outline-offset: 2px;
+                    animation: ovFillPulse 1.2s ease-in-out; }
+  @keyframes ovFillPulse {
+    0%, 100% { outline-color: var(--accent); }
+    50% { outline-color: var(--warn); }
+  }
   /* 卡片标题状态徽章（工单 gen-overview/02） */
   .card-step-status { margin-left: 8px; padding: 1px 8px; border-radius: 999px;
                       font-size: 11px; font-weight: 600; border: 1px solid transparent;
@@ -1144,21 +1177,37 @@
         <!-- 编译结果横幅（工单 compile-experience-ui/01）：生成完成一眼确认
              自动编译发生了、结果如何；四态 running/success/fail/notool -->
         <div id="compile-banner" class="hidden"></div>
-        <h3>生成完成</h3>
-        <div class="item">输出目录：<span id="res-dir" class="slug"></span>
-          <button id="btn-copy-dir" class="hidden" style="margin-left:8px;padding:2px 10px;font-size:12px" data-ico="copy">复制路径</button></div>
-        <!-- 自动附带产物（工单 report-draft-demo/04）：设计报告草稿 + 演示脚本
-             随生成自动落盘工程根——badge 标注 + 点击复制文件路径入口（打开 =
-             复制后在资源管理器 / 编辑器打开，本地应用不引后端打开接口） -->
-        <div class="item hidden" id="res-artifacts"></div>
-        <div class="item">include path：<span id="res-includes" class="slug"></span></div>
-        <div class="item">模块文件：<span id="res-modules" class="muted"></span></div>
-        <div class="item hidden" id="res-score-points" style="white-space:pre-line"></div>
-        <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
-             工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
-        <div class="item hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
-        <h3>工程结构</h3>
-        <pre id="res-structure" class="result"></pre>
+        <div class="res-grid">
+          <div class="res-main">
+            <div class="res-block">
+              <div class="res-label">输出目录</div>
+              <div class="res-value"><span id="res-dir" class="slug"></span>
+                <button id="btn-copy-dir" class="hidden" style="margin-left:8px;padding:2px 10px;font-size:12px" data-ico="copy">复制路径</button></div>
+            </div>
+            <!-- 自动附带产物（工单 report-draft-demo/04）：设计报告草稿 + 演示脚本
+                 随生成自动落盘工程根——badge 标注 + 点击复制文件路径入口（打开 =
+                 复制后在资源管理器 / 编辑器打开，本地应用不引后端打开接口） -->
+            <div class="res-block hidden" id="res-artifacts"></div>
+            <div class="res-block">
+              <div class="res-label">include path</div>
+              <div class="res-value"><span id="res-includes" class="slug"></span></div>
+            </div>
+            <div class="res-block">
+              <div class="res-label">模块文件</div>
+              <div class="res-value"><span id="res-modules" class="muted"></span></div>
+            </div>
+            <div class="res-block hidden" id="res-score-points" style="white-space:pre-line"></div>
+            <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
+                 工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
+            <div class="res-block hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
+          </div>
+          <div class="res-side">
+            <div class="res-block">
+              <div class="res-label">工程结构树</div>
+              <pre id="res-structure" class="result"></pre>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -7070,6 +7119,40 @@ function genOverviewSummaryHTML(doneSet, titles, critical, recommended) {
   }
   return parts.join('<span class="ov-sep">·</span>');
 }
+// 一键补齐计划（工单 gen-overview-act/01）：关键路径待办序列；
+// 9（生成）非缺失项而是行动——但其「输出目录」前置（手动模式为空）列入
+// 补齐（已确认扩规；doneSet 不含 9，须以 outputDirMissing 显式传入）。
+// action 语义：focus = 滚到并聚焦输入、spotlight = 滚到并高亮（平台不
+// 自动选）、adopt = 有推荐且清单为空时自动采用（半自动——无推荐只高亮，
+// 不替用户做主）
+function overviewFillPlan(doneSet, canAdopt, outputDirMissing) {
+  const done = doneSet || [];
+  const plan = [];
+  if (done.indexOf(1) === -1) plan.push({ n: 1, action: "focus" });
+  if (done.indexOf(3) === -1) plan.push({ n: 3, action: "spotlight" });
+  if (done.indexOf(6) === -1) {
+    plan.push({ n: 6, action: canAdopt ? "adopt" : "spotlight" });
+  }
+  if (outputDirMissing) plan.push({ n: 9, action: "focus-dir" });
+  return plan;
+}
+// 就绪判定（工单 gen-overview-act/01）：直接复用 generateReadinessChecks
+// （与 btn-generate 前置校验同源）——总览条「生成」按钮与「点了生成被拦」
+// 永不吵架
+function overviewReadyToGenerate(checks) {
+  return (checks || []).every((c) => c.ok);
+}
+// 当前补齐计划（refreshGenOverview 显隐 / runOverviewFill 执行共用同一判定，
+// 工单 gen-overview-act/01）：两个派生值只算一次，避免两处逐字重复
+function overviewPlanNow(doneArr) {
+  // canAdopt：有推荐结果且模块清单为空才自动采用（清单非空时 renderSelected
+  // 已 markStepDone(6)，计划不含 6——显式判定防状态漂移误重复采用）
+  const canAdopt = !!(lastRecommend && (lastRecommend.modules || []).length)
+    && !selectedSlugs.length;
+  const outputDirMissing = !desktopTopicOutputEnabled()
+    && !$("output-dir").value.trim();
+  return overviewFillPlan(doneArr, canAdopt, outputDirMissing);
+}
 function cardStepStatusHTML(done, warn, current) {
   const cls = done ? "done" : (warn ? "warn" : (current ? "current" : ""));
   if (!cls) return "";
@@ -7128,6 +7211,46 @@ function refreshGenOverview() {
       badge.textContent = "";
     }
   });
+  // 行动区（工单 gen-overview-act/01）：补齐按钮仅有关键路径缺失时显示；
+  // 生成按钮仅就绪（与 btn-generate 校验同源）时显示，且同步其禁用态
+  const plan = overviewPlanNow(doneArr);
+  const fillBtn = box.querySelector(".ov-fill");
+  if (fillBtn) fillBtn.classList.toggle("hidden", plan.length === 0);
+  const genBtn = box.querySelector(".ov-generate");
+  if (genBtn) {
+    const ready = overviewReadyToGenerate(generateReadinessChecks(readinessState()));
+    const generating = !!( $("btn-generate") && $("btn-generate").disabled );
+    genBtn.classList.toggle("hidden", !ready);
+    if (genBtn.disabled !== generating) genBtn.disabled = generating;
+  }
+}
+// 一键补齐（工单 gen-overview-act/01）：按计划依次滚到卡片 + 临时高亮，
+// 半自动动作（聚焦题面/输出目录、自动采用已有推荐；平台只高亮不自动选）
+const FOCUS_TARGETS = { 1: "problem", 9: "output-dir" };
+function runOverviewFill() {
+  const plan = overviewPlanNow(Array.from(stepDoneSet));
+  let i = 0;
+  const next = () => {
+    if (i >= plan.length) return;
+    const item = plan[i++];
+    const card = stepCard(item.n);
+    if (card) {
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+      card.classList.add("ov-fill-target");
+      setTimeout(() => { if (card) card.classList.remove("ov-fill-target"); }, 1600);
+    }
+    if (item.action === "focus" || item.action === "focus-dir") {
+      const t = $(FOCUS_TARGETS[item.n]);
+      if (t) t.focus();
+    }
+    if (item.action === "adopt") {
+      // 自动采用既有推荐结果（可回退：renderSelected 后清单仍可增删；
+      // 多实例回填/评分点/runExpand 全走 renderRecommendResult 既有路径）
+      renderRecommendResult(lastRecommend, true);
+    }
+    setTimeout(next, 700);
+  };
+  next();
 }
 function initGenOverview() {
   const box = $("gen-overview");
@@ -7138,8 +7261,19 @@ function initGenOverview() {
   if (!genOverviewTitles.length) return;
   box.innerHTML =
     '<div class="ov-chips">' + genOverviewChipsHTML(genOverviewTitles, [], NaN)
-    + '</div><div class="ov-summary"></div>';
+    + '</div><div class="ov-summary"></div><div class="ov-actions">'
+    + '<button type="button" class="ov-fill hidden">一键补齐</button>'
+    + '<button type="button" class="ov-generate primary hidden">生成</button>'
+    + '</div>';
   box.addEventListener("click", (e) => {
+    const fill = e.target.closest(".ov-fill");
+    if (fill) { runOverviewFill(); return; }
+    const gen = e.target.closest(".ov-generate");
+    if (gen) {
+      const btn = $("btn-generate");
+      if (btn && !btn.disabled) btn.click();
+      return;
+    }
     const chip = e.target.closest(".ov-chip");
     if (!chip) return;
     const card = stepCard(parseInt(chip.dataset.step, 10));
