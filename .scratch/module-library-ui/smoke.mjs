@@ -201,5 +201,75 @@ if (nonEmpty) {
     sort.seqMatch, `first=${sort.rowsNow[0]} exp=${sort.expectedSeq[0]}`);
 }
 
+// ---- 工单 03：行「详情」→ 全量信息弹窗（无平台上下文） ----
+const d03 = await Eval(`(() => {
+  const infoBtn = document.querySelector('#lib-rows [data-info]');
+  if (!infoBtn) return { skipped: true };
+  const slug = infoBtn.getAttribute('data-info');
+  const mod = (state.modules || []).find((m) => m.slug === slug) || {};
+  const platCount = Object.keys(mod.platforms || {}).length;
+  infoBtn.click();
+  return { skipped: false, slug, platCount };
+})()`);
+if (!d03.skipped) {
+  const d03b = await Eval(`(() => {
+    const overlay = document.querySelector('.module-info-overlay');
+    const overlayCount = document.querySelectorAll('.module-info-overlay').length;
+    const title = overlay ? (overlay.querySelector('.module-info-title .slug') || {}).textContent || '' : '';
+    const plats = overlay ? overlay.querySelectorAll('.module-info-platforms .mi-plat').length : 0;
+    const offText = overlay ? overlay.querySelector('.module-info-off') : null;
+    const files = overlay ? overlay.querySelectorAll('.mi-files li').length : 0;
+    return { overlayCount, title, plats, offText: !!offText, files };
+  })()`);
+  check("点「详情」→ 弹窗出现（唯一）", d03b.overlayCount === 1, `overlay=${d03b.overlayCount}`);
+  check("弹窗标题 = 该行 slug", d03b.title === d03.slug, `${d03b.title} vs ${d03.slug}`);
+  check("全部平台分段展示（无 off 提示）", d03b.plats === d03.platCount && !d03b.offText,
+    `plats=${d03b.plats}/${d03.platCount}`);
+  // Esc 关闭 → 无残留
+  await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await new Promise((r) => setTimeout(r, 250));
+  const d03c = await Eval(`document.querySelectorAll('.module-info-overlay').length`);
+  check("Esc 关闭弹窗（无残留）", d03c === 0, `overlay=${d03c}`);
+  // 再开弹窗 → 遮罩点击关闭
+  await Eval(`document.querySelector('#lib-rows [data-info]').click()`);
+  await new Promise((r) => setTimeout(r, 250));
+  const d03d = await Eval(`(() => {
+    const overlay = document.querySelector('.module-info-overlay');
+    if (!overlay) return { mask: false };
+    overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return { mask: true };
+  })()`);
+  await new Promise((r) => setTimeout(r, 250));
+  const d03e = await Eval(`document.querySelectorAll('.module-info-overlay').length`);
+  check("遮罩点击关闭弹窗", d03d.mask && d03e === 0, `overlay=${d03e}`);
+  // ✕ 按钮关闭
+  await Eval(`document.querySelector('#lib-rows [data-info]').click()`);
+  await new Promise((r) => setTimeout(r, 250));
+  const d03g = await Eval(`(() => {
+    const overlay = document.querySelector('.module-info-overlay');
+    const closeBtn = overlay && overlay.querySelector('.ref-files-close');
+    if (!closeBtn) return { x: false };
+    closeBtn.click();
+    return { x: true };
+  })()`);
+  await new Promise((r) => setTimeout(r, 250));
+  const d03h = await Eval(`document.querySelectorAll('.module-info-overlay').length`);
+  check("✕ 按钮关闭弹窗", d03g.x && d03h === 0, `overlay=${d03h}`);
+  // 重复打开 = 替换（先开一个再点另一行详情，仍只有一个 overlay）
+  const d03f = await Eval(`(async () => {
+    const btns = [...document.querySelectorAll('#lib-rows [data-info]')];
+    btns[0].click();
+    await new Promise((r) => setTimeout(r, 250));
+    btns[1].click();
+    await new Promise((r) => setTimeout(r, 250));
+    const count = document.querySelectorAll('.module-info-overlay').length;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return { count };
+  })()`);
+  check("重复打开 = 替换（无叠层残留）", d03f.count === 1, `overlay=${d03f.count}`);
+} else {
+  check("详情弹窗（无模块数据，跳过）", true);
+}
+
 console.log(failed === 0 ? "SMOKE ALL PASS" : `SMOKE FAILED (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

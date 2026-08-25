@@ -52,8 +52,18 @@ test("moduleRowHTML 骨干结构：slug 等宽类、简介截断类 + title 全�
   assert.ok(out.includes('<td class="slug">ultrasonic</td>'));
   assert.ok(out.includes('<td class="desc-cell" title="超声波测距模块，返回厘米距离">'));
   assert.ok(out.includes("超声波测距模块，返回厘米距离"));
+  assert.ok(out.includes('<button data-info="ultrasonic" title="查看模块详情">详情</button>'));
   assert.ok(out.includes('<button data-edit-desc="ultrasonic">改简介</button>'));
   assert.ok(out.includes('<button data-del="ultrasonic" class="danger">删除</button>'));
+});
+
+test("moduleRowHTML 操作列三按钮并存且 slug 转义（工单 03 详情入口）", () => {
+  const out = moduleRowHTML({ ...base, slug: 'a"b' });
+  assert.ok(out.includes('data-info="a&quot;b"'));
+  assert.ok(out.includes('data-edit-desc="a&quot;b"'));
+  assert.ok(out.includes('data-del="a&quot;b"'));
+  assert.ok(out.indexOf("data-info") < out.indexOf("data-edit-desc"));
+  assert.ok(out.indexOf("data-edit-desc") < out.indexOf("data-del"));
 });
 
 test("moduleRowHTML 简介含特殊字符：单元格与 title 双转义", () => {

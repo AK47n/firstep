@@ -3002,7 +3002,7 @@ function moduleInfoHTML(module, platform) {
     + '<div class="module-info-platforms">' + platHtml + "</div></div>";
 }
 
-function openModuleInfo(slug) {
+function openModuleInfo(slug, platform = chosenPlatform) {
   const module = (state.modules || []).find((mo) => mo.slug === slug);
   if (!module) { toast("info", "未找到模块 " + slug); return; }
   // 重复打开 = 替换（同 showPinMenu 先例）
@@ -3013,7 +3013,7 @@ function openModuleInfo(slug) {
   modal.className = "module-info-modal";
   modal.innerHTML = '<div class="module-info-head"><strong>模块详情</strong>'
     + '<button class="ref-files-close" title="关闭">×</button></div>'
-    + '<div class="module-info-scroll">' + moduleInfoHTML(module, chosenPlatform) + "</div>";
+    + '<div class="module-info-scroll">' + moduleInfoHTML(module, platform) + "</div>";
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
@@ -6144,6 +6144,7 @@ function moduleRowHTML(m) {
     <td class="muted">${esc((m.dependencies || []).join("、") || "—")}${pythonArtifactSummary(m)}</td>
     <td>${moduleBadges(m)}</td>
     <td>
+      <button data-info="${esc(m.slug || "")}" title="查看模块详情">详情</button>
       <button data-edit-desc="${esc(m.slug || "")}">改简介</button>
       <button data-del="${esc(m.slug || "")}" class="danger">删除</button>
     </td>
@@ -6189,6 +6190,9 @@ function renderLibraryTable() {
     b.addEventListener("click", () => editDescription(b.dataset.editDesc)));
   $("lib-rows").querySelectorAll("[data-del]").forEach((b) =>
     b.addEventListener("click", () => deleteModule(b.dataset.del)));
+  // 详情（工单 03）：不带平台上下文 → moduleInfoHTML 展示全部平台分段
+  $("lib-rows").querySelectorAll("[data-info]").forEach((b) =>
+    b.addEventListener("click", () => openModuleInfo(b.dataset.info, null)));
   renderLibraryChips();
   renderLibraryStats();
 }
