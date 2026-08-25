@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8faf683b8d46e0c311641f46e2c2d0e16d4c89e5 -->
+<!-- changelog-auto: last-commit=e910b1eb100232ade5bee8156f3d3e52ad226c1a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 13:08 ui-polish-11/05：折叠按钮弱化——默认半透明 hover 显现 + aria-label 读屏同步（collapseBtnLabel/syncCollapseBtn 纯函数 + 单测）
 - 13:10 ui-polish-11/06：步号徽章统一圆角——24px 正圆与左侧步骤圆点呼应，两位数 10-12 自然加宽不挤压
 - 13:54 ui-polish-12/01：设置页整卡折叠——默认收起次要卡 + localStorage 记忆，保存卡不可折叠
+- 18:37 ui-polish-12/02：AI API 卡内「计费」小节折叠——默认收起 + 独立 toggle + 状态记忆；修复祖先卡被误判为小节的判别 bug
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
