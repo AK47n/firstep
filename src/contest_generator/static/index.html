@@ -266,7 +266,7 @@
   /* 模块详情弹窗（工单 module-info-dialog/01）：复用 .ref-files-overlay 模式
      （遮罩 + 居中卡 + ✕），新建 module-info-* 前缀——不动既有 ref-files 类 */
   .module-info-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
-                         display: flex; align-items: flex-start; justify-content: center;
+                         display: flex; align-items: center; justify-content: center;
                          /* 全屏遮罩统一层：高于置顶目录(100)、低于 toast(200) */
                          z-index: 150; padding: 40px 16px; }
   .module-info-modal { background: var(--panel); border: 1px solid var(--border);
@@ -308,7 +308,7 @@
   /* 改简介模态（library-edit-description/05）：复用详情弹窗遮罩/居中卡模式，
      新建 .lib-edit-* 前缀，不动既有 module-info / ref-files 类 */
   .lib-edit-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
-                      display: flex; align-items: flex-start; justify-content: center;
+                      display: flex; align-items: center; justify-content: center;
                       z-index: 150; padding: 40px 16px; }
   .lib-edit-modal { background: var(--panel); border: 1px solid var(--border);
                     border-radius: 8px; box-shadow: var(--shadow-pop);
@@ -626,7 +626,7 @@
   .recent-wf-calls .call-row { white-space: normal; word-break: break-all; }
   /* ---- 参考文件查看弹层（文件名搜索 + 文件打开工单）：清单 + 文本内联 ---- */
   .ref-files-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
-                       display: flex; align-items: flex-start; justify-content: center;
+                       display: flex; align-items: center; justify-content: center;
                        z-index: 150; padding: 40px 16px; }
   .ref-files-modal { background: var(--panel); border: 1px solid var(--border);
                      border-radius: 8px; box-shadow: var(--shadow-pop);
