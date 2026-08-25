@@ -301,6 +301,8 @@
   /* renderWarnings 直通提示 JS 内联浅绿 #d1fae5——JS 不动，样式表 !important 压成深色 */
   .warn-box.ok { background: var(--ok-dim) !important; color: var(--ok-bright) !important; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  /* 表格行 hover 高亮（工单 ui-polish-11/03）：长表格定位当前行 */
+  tbody tr:hover { background: var(--panel-2); }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
   /* 操作列（各库表最后一列）按钮不折行——窄列下"查看/删除"不换行成竖排 */
