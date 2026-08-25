@@ -225,6 +225,16 @@ if (!d03.skipped) {
   check("弹窗标题 = 该行 slug", d03b.title === d03.slug, `${d03b.title} vs ${d03.slug}`);
   check("全部平台分段展示（无 off 提示）", d03b.plats === d03.platCount && !d03b.offText,
     `plats=${d03b.plats}/${d03.platCount}`);
+  // 层级回归：全屏遮罩必须高于置顶目录（header sticky z=100），否则弹窗被目录覆盖
+  const d03z = await Eval(`(() => {
+    const ov = document.querySelector('.module-info-overlay');
+    const hd = document.querySelector('header');
+    const ovZ = ov ? Number(getComputedStyle(ov).zIndex) : NaN;
+    const hdZ = hd ? Number(getComputedStyle(hd).zIndex) : NaN;
+    return { ovZ, hdZ };
+  })()`);
+  check("弹窗遮罩层级高于置顶目录", d03z.ovZ > d03z.hdZ,
+    `overlay=${d03z.ovZ} header=${d03z.hdZ}`);
   // Esc 关闭 → 无残留
   await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await new Promise((r) => setTimeout(r, 250));
