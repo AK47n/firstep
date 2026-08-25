@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=918614e6530d4814e5414e295b039cce3fe09e1a -->
+<!-- changelog-auto: last-commit=0f152a296d7d552ee1a2bf903a08fb8618d7b583 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 12:56 ui-polish-11/01：阴影令牌化——亮色柔和灰影、普通卡片 hover 只提阴影不上浮
 - 12:59 ui-polish-11/02：背景氛围光——body 固定层顶部青色径向微光 + 卡片顶部微渐变（装饰色令牌化）
 - 13:01 ui-polish-11/03：表格行 hover 高亮——模块库/参考库/PDF 库/母版库 tbody 行背景 panel-2
+- 13:04 ui-polish-11/04：呼吸光晕收敛——只有生成工程/让 AI 推荐/一键编译修复/确认入库/保存设置 5 个关键 CTA 保留 btn-breathe
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
