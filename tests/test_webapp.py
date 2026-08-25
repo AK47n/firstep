@@ -2680,6 +2680,178 @@ def test_generate_desktop_suffix_separates_platforms(
     assert "已有同名工程" in same.json()["detail"]
 
 
+def _seed_desktop_project(desktop_dir, name, main_c, marker):
+    """制造 verdict=exists 的「完整工程」目录（含 .contest_context.json 或
+    main.c）+ 旧工程标记文件（区分覆盖前后代际，工单 generate-overwrite/01）。"""
+    project = desktop_dir / name
+    project.mkdir(parents=True)
+    (project / "main.c").write_text(main_c, encoding="utf-8")
+    (project / ".contest_context.json").write_text('{"gen": "old"}', encoding="utf-8")
+    (project / "OLD_MARKER.txt").write_text(marker, encoding="utf-8")
+    return project
+
+
+def test_generate_desktop_overwrite_backs_up_and_succeeds(client, context, tmp_path):
+    """工单 generate-overwrite/01：同名完整工程 + overwrite=true → 旧工程整体
+    改名为 <name>.bak（含旧标记），原名目录重新生成全新工程。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    existing = _seed_desktop_project(desktop_dir, "Auto_Car_STM32", "旧 main.c 内容", "第一代")
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：覆盖生成",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+            "overwrite": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["output_dir"] == str(existing)
+    backup = desktop_dir / "Auto_Car_STM32.bak"
+    assert backup.is_dir()
+    assert (backup / "OLD_MARKER.txt").read_text(encoding="utf-8") == "第一代"
+    assert (backup / "main.c").read_text(encoding="utf-8") == "旧 main.c 内容"
+    # 原名目录 = 全新工程（旧标记没了、main.c 是骨架产物）
+    assert not (existing / "OLD_MARKER.txt").exists()
+    assert (existing / "main.c").is_file()
+    assert (existing / ".contest_context.json").is_file()
+
+
+def test_generate_desktop_overwrite_replaces_old_backup(client, context, tmp_path):
+    """工单 generate-overwrite/01：连续两次覆盖 → .bak 只留一代（单份策略）：
+    第一次备份第一代；第二次备份第二代（第一代 .bak 被替换）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    existing = _seed_desktop_project(desktop_dir, "Auto_Car_STM32", "旧 main.c 内容", "第一代")
+
+    def post():
+        return client.post(
+            "/api/generate",
+            json={
+                "platform": PLATFORM_STM32,
+                "slugs": ["dht11"],
+                "main_c": "int main(void) { while (1); }\n",
+                "problem_text": "赛题：连续覆盖",
+                "output_dir": str(tmp_path / "out" / "ignored"),
+                "overwrite": True,
+            },
+        )
+
+    first = post()
+    assert first.status_code == 200
+    backup = desktop_dir / "Auto_Car_STM32.bak"
+    assert (backup / "OLD_MARKER.txt").read_text(encoding="utf-8") == "第一代"
+
+    # 第二次覆盖：把「第一代生成结果」备份走，.bak 换成第二代（无第一代标记）
+    second = post()
+    assert second.status_code == 200
+    assert not (backup / "OLD_MARKER.txt").exists()
+    assert (backup / "main.c").is_file()
+    assert (existing / "main.c").is_file()
+
+
+def test_generate_desktop_overwrite_missing_still_conflict(client, context, tmp_path):
+    """工单 generate-overwrite/01：overwrite 缺省（旧请求行为）→ 现行 400 原文案，
+    既有工程内容分毫未动。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    existing = _seed_desktop_project(desktop_dir, "Auto_Car_STM32", "旧 main.c 内容", "护住的")
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：不覆盖",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "已有同名工程" in detail
+    assert "请先删除该目录" in detail
+    assert "换平台" in detail  # E2 提示仍在
+    assert not (desktop_dir / "Auto_Car_STM32.bak").exists()
+    assert (existing / "OLD_MARKER.txt").read_text(encoding="utf-8") == "护住的"
+
+
+def test_generate_desktop_overwrite_non_boolean_ignored(client, context, tmp_path):
+    """工单 generate-overwrite/01：overwrite 非布尔（字符串 "true"）→ 视为缺省
+    （严格 `is True`），不误覆盖——护栏宁严勿松。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    _seed_desktop_project(desktop_dir, "Auto_Car_STM32", "旧 main.c 内容", "护住的")
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：字符串覆盖",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+            "overwrite": "true",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "已有同名工程" in resp.json()["detail"]
+
+
+def test_generate_desktop_overwrite_ignored_when_new(client, context, tmp_path):
+    """工单 generate-overwrite/01：目录不存在（verdict=new）+ overwrite=true →
+    幂等忽略（无备份行为），正常生成成功。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：新目录覆盖参数",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+            "overwrite": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert (desktop_dir / "Auto_Car_STM32" / "main.c").is_file()
+    assert not (desktop_dir / "Auto_Car_STM32.bak").exists()
+
+
+def test_conflict_message_prefix_anchored_both_sides():
+    """一致性护栏（工单 generate-overwrite/01）：冲突 400 文案前缀
+    「桌面上已有同名工程」= 后端（webapp.py 生成）与前端（index.html
+    isConflictError 判定）共用锚点——两边漂移（改文案忘改判定）会红。"""
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    webapp_src = (repo / "src" / "contest_generator" / "webapp.py").read_text(encoding="utf-8")
+    index_src = (repo / "src" / "contest_generator" / "static" / "index.html").read_text(encoding="utf-8")
+    prefix = "桌面上已有同名工程"
+    assert prefix in webapp_src
+    assert prefix in index_src
+
+
 def test_generate_desktop_output_propagates_ai_title_error(
     client, context, tmp_path
 ):

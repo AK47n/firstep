@@ -4297,6 +4297,50 @@ $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
 // ---------------------------------------------------------------------------
 // 生成中阶段播报（工单 ui-polish-8/04）：子阶段文案轮播 + 等待计时。
 // genStageTexts / fmtWait 为自包含纯函数（tests/js 正则抽取）
+// 生成前覆盖保护（工单 generate-overwrite/01）：冲突 400 识别 + 目录名提取。
+// CONFLICT_MSG_PREFIX 与后端 GenerationConflictError 消息前缀单源锚定，
+// 跨文件一致性由
+// tests/test_webapp.py::test_conflict_message_prefix_anchored_both_sides 兜底。
+const CONFLICT_MSG_PREFIX = "桌面上已有同名工程";
+function isConflictError(message) {
+  return typeof message === "string" && message.indexOf(CONFLICT_MSG_PREFIX) === 0;
+}
+function conflictDirName(message) {
+  const m = /「([^」]+)」/.exec(message || "");
+  return m ? m[1] : "";
+}
+// 生成成功渲染（工单 generate-overwrite/01 抽取，供主路径与覆盖重发共用）
+function renderGenerateSuccess(data) {
+  $("res-dir").textContent = data.output_dir;
+  $("btn-copy-dir").classList.remove("hidden");
+  $("res-includes").textContent = data.include_dirs.join("；");
+  $("res-modules").textContent = formatResModules(data.modules, data.python_artifacts);
+  renderScoreChecklist(data.score_points, data.output_dir);  // 评分点核对清单（工单 score-checklist/01）
+  $("res-score-points").classList.toggle("hidden", !(data.score_points && data.score_points.length));
+  // 构建脚本提示（工单 mspm0-build-makefiles/01）：非空时展示，空则隐藏
+  $("res-build-hint").textContent = data.build_hint || "";
+  $("res-build-hint").classList.toggle("hidden", !data.build_hint);
+  $("res-structure").textContent = data.structure.join("\n");
+  renderArtifacts(data.structure, data.output_dir);
+  $("generate-result").classList.remove("hidden");
+  $("gen-status").textContent = "";
+  $("generate-msg").classList.add("ok");
+  $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
+  markStepDone(9);
+  syncStep7();  // 按默认布线生成成功 = 引脚步骤视为完成（工单 step7-done/01）
+  refreshRecent();  // 生成成功 → 最近生成列表补一条（工单 recent-jobs/01）
+  toast("ok", "工程生成完成");
+  // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
+  // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
+  // compile-experience-ui/01：无工具链也要显眼，不再静默跳过）
+  if ((toolchains || {})[chosenPlatform]) {
+    $("generate-msg").textContent += "已自动触发编译修复（见第 10 栏）…";
+    $("card-fix-center").scrollIntoView({ block: "nearest" });
+    setTimeout(() => startFixCenter(), 100);   // 等结果字段渲染完成再起流
+  } else {
+    compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
+  }
+}
 function genStageTexts(i) {
   const texts = ["正在选配模块…", "正在定位母版…", "正在生成工程骨架…",
                  "正在写入工程文件…", "正在生成摘要…"];
@@ -4400,6 +4444,9 @@ $("btn-generate").addEventListener("click", async () => {
   };
   genStatus("正在准备…");
   $("btn-generate").disabled = true;
+  // 覆盖重发（工单 generate-overwrite/01）：payload 声明在 try 外——catch
+  // 块引用 try 块内 const 会 ReferenceError（块级作用域）
+  let payload;
   try {
     // bindings（工单 03 + pin-verdict-seam/01）：单源 collectBindings——validate
     // 与 generate 发同一份；未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）
@@ -4422,7 +4469,7 @@ $("btn-generate").addEventListener("click", async () => {
       return;
     }
 
-    const payload = {
+    const payloadData = {
       platform: chosenPlatform, slugs: selectedSlugs,
       main_c: $("main-c").value,
       problem_text: problem,
@@ -4430,6 +4477,7 @@ $("btn-generate").addEventListener("click", async () => {
       create_desktop_topic_dir: desktopOutput,
       topic_id: currentTopicId || undefined,
     };
+    payload = payloadData;
     if (Object.keys(bindings).length) payload.bindings = bindings;
     if (Object.keys(inst).length) payload.instances = inst;
     // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
@@ -4453,40 +4501,38 @@ $("btn-generate").addEventListener("click", async () => {
     }, 1000);
     const data = await apiPost("/api/generate", payload);
     stopStage();
-    $("res-dir").textContent = data.output_dir;
-    $("btn-copy-dir").classList.remove("hidden");
-    $("res-includes").textContent = data.include_dirs.join("；");
-    $("res-modules").textContent = formatResModules(data.modules, data.python_artifacts);
-    renderScoreChecklist(data.score_points, data.output_dir);  // 评分点核对清单（工单 score-checklist/01）
-    $("res-score-points").classList.toggle("hidden", !(data.score_points && data.score_points.length));
-    // 构建脚本提示（工单 mspm0-build-makefiles/01）：非空时展示，空则隐藏
-    $("res-build-hint").textContent = data.build_hint || "";
-    $("res-build-hint").classList.toggle("hidden", !data.build_hint);
-    $("res-structure").textContent = data.structure.join("\n");
-    renderArtifacts(data.structure, data.output_dir);
-    $("generate-result").classList.remove("hidden");
-    status.textContent = "";
-    $("generate-msg").classList.add("ok");
-    $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
-    markStepDone(9);
-    syncStep7();  // 按默认布线生成成功 = 引脚步骤视为完成（工单 step7-done/01）
-    refreshRecent();  // 生成成功 → 最近生成列表补一条（工单 recent-jobs/01）
-    toast("ok", "工程生成完成");
-    // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
-    // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
-    // compile-experience-ui/01：无工具链也要显眼，不再静默跳过）
-    if ((toolchains || {})[chosenPlatform]) {
-      $("generate-msg").textContent += "已自动触发编译修复（见第 10 栏）…";
-      $("card-fix-center").scrollIntoView({ block: "nearest" });
-      setTimeout(() => startFixCenter(), 100);   // 等结果字段渲染完成再起流
-    } else {
-      compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
-    }
+    renderGenerateSuccess(data);
   } catch (e) {
     stopStage();
     $("generate-msg").classList.remove("ok");
-    $("generate-msg").textContent = e.message;
     status.textContent = "";
+    // 生成前覆盖保护（工单 generate-overwrite/01）：同名完整工程 400 →
+    // 确认框（旧工程将备份为 .bak）→ 确认后自动重发 overwrite=true；
+    // 取消 = 显示原 400 文案
+    if (isConflictError(e.message)) {
+      const dirName = conflictDirName(e.message);
+      const hint = dirName
+        ? "旧工程将先备份为「" + dirName + ".bak」，然后覆盖生成全新工程"
+        : "旧工程将先备份为同名 .bak 备份";
+      if (confirm("桌面上已有同名工程"
+        + (dirName ? "「" + dirName + "」" : "")
+        + "：" + hint + "。确定覆盖并重新生成？")) {
+        genStatus("正在覆盖生成…");
+        try {
+          const data = await apiPost("/api/generate", { ...payload, overwrite: true });
+          stopStage();
+          renderGenerateSuccess(data);
+          toast("ok", "已覆盖生成（旧工程备份为 .bak）");
+          return;
+        } catch (e2) {
+          $("generate-msg").textContent = e2.message;
+        }
+      } else {
+        $("generate-msg").textContent = e.message;
+      }
+    } else {
+      $("generate-msg").textContent = e.message;
+    }
     toast("error", "生成失败");
   } finally { $("btn-generate").disabled = false; }
 });

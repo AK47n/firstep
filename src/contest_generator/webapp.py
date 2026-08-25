@@ -100,6 +100,7 @@ from .generator import (
 from .generation_output import (
     GenerationBusyError,
     GenerationConflictError,
+    backup_project_dir,
     desktop_topic_dir_verdict,
     topic_dir_title,
     with_platform_suffix,
@@ -1411,6 +1412,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         main_c = _require_str(payload, "main_c")
         output_dir, output_verdict = _resolve_generation_output_dir(context, payload)
         topic_id = _optional_str(payload, "topic_id")
+        # 覆盖确认（工单 generate-overwrite/01）：严格 `is True`——非布尔（如
+        # 字符串 "true"）视为缺省（护栏宁严勿松），旧请求行为逐字节不变。
+        overwrite = payload.get("overwrite") is True
         bindings = payload.get("bindings") or None  # 形状判决归域层（400 中文）
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
         # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
@@ -1487,12 +1491,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
         with _generation_guard(context, lock_key):
             if output_verdict == "exists":
-                raise GenerationConflictError(
-                    f"桌面上已有同名工程「{output_dir.name}」：为避免覆盖你的"
-                    "已有工程，请先删除该目录或修改题名后再生成（不会自动"
-                    "改名或覆盖）。同一赛题换平台再生成时，会自动使用带平台"
-                    "后缀的新目录（如 Auto_Car_MSPM0），不会误删旧工程"
-                )
+                if not overwrite:
+                    raise GenerationConflictError(
+                        f"桌面上已有同名工程「{output_dir.name}」：为避免覆盖你的"
+                        "已有工程，请先删除该目录或修改题名后再生成（不会自动"
+                        "改名或覆盖）。同一赛题换平台再生成时，会自动使用带平台"
+                        "后缀的新目录（如 Auto_Car_MSPM0），不会误删旧工程"
+                    )
+                # 覆盖通道（工单 generate-overwrite/01）：用户确认后先快照
+                # （旧工程整体改名为 <name>.bak，单份策略）再生成——备份失败
+                # （OSError → 400 文件操作失败）时原名目录未动，数据不丢。
+                backup_project_dir(output_dir)
             if output_verdict == "clean":
                 shutil.rmtree(output_dir, ignore_errors=True)
             try:

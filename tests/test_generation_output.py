@@ -8,6 +8,7 @@ import pytest
 
 from contest_generator.generation_output import (
     TOPIC_EN_TITLES,
+    backup_project_dir,
     desktop_topic_dir_verdict,
     topic_dir_title,
     topic_en_title,
@@ -165,3 +166,52 @@ def test_with_platform_suffix_raises_on_unknown_platform():
     生成无后缀目录会让新旧平台目录重新撞名——漂移暴露优于静默。"""
     with pytest.raises(ValueError, match="未知平台：esp32"):
         with_platform_suffix("Auto_Car", "esp32")
+
+
+def test_backup_project_dir_renames_to_single_bak(tmp_path):
+    """覆盖前快照（工单 generate-overwrite/01）：旧工程整体改名为 <name>.bak
+    （原子、零复制）；原目录消失、备份含全部内容，返回备份路径。"""
+    project = tmp_path / "Auto_Car_STM32"
+    project.mkdir()
+    (project / "main.c").write_text("旧工程", encoding="utf-8")
+    (project / ".contest_context.json").write_text('{"旧": true}', encoding="utf-8")
+
+    backup = backup_project_dir(project)
+
+    assert backup == tmp_path / "Auto_Car_STM32.bak"
+    assert not project.exists()
+    assert (backup / "main.c").read_text(encoding="utf-8") == "旧工程"
+    assert (backup / ".contest_context.json").read_text(encoding="utf-8") == '{"旧": true}'
+
+
+def test_backup_project_dir_replaces_previous_bak(tmp_path):
+    """单份策略（工单 generate-overwrite/01）：目标 .bak 已存在（上一代备份）
+    → 先移除再改名——桌面不留多代 .bak 堆积。"""
+    project = tmp_path / "Auto_Car_STM32"
+    project.mkdir()
+    (project / "main.c").write_text("第二代", encoding="utf-8")
+    # 上一代备份：既有目录残留 + 一棵空垃圾子目录也一并清走
+    old_bak = tmp_path / "Auto_Car_STM32.bak"
+    old_bak.mkdir()
+    (old_bak / "main.c").write_text("第一代", encoding="utf-8")
+    (old_bak / "trash").mkdir()
+
+    backup = backup_project_dir(project)
+
+    assert backup == old_bak
+    assert (backup / "main.c").read_text(encoding="utf-8") == "第二代"
+    assert not (backup / "trash").exists()
+
+
+def test_backup_project_dir_unlinks_bak_file_that_is_not_dir(tmp_path):
+    """防御（工单 generate-overwrite/01）：.bak 位被同名文件占用（非目录）→
+    unlink 后改名，不让 rename 撞已存在文件失败。"""
+    project = tmp_path / "Auto_Car_STM32"
+    project.mkdir()
+    (project / "main.c").write_text("新一代", encoding="utf-8")
+    (tmp_path / "Auto_Car_STM32.bak").write_text("挡路的文件", encoding="utf-8")
+
+    backup = backup_project_dir(project)
+
+    assert backup == tmp_path / "Auto_Car_STM32.bak"
+    assert (backup / "main.c").read_text(encoding="utf-8") == "新一代"
