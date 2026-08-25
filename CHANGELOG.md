@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1eb05e7ba1d7705413be2c6f256cbeea3f52d03d -->
+<!-- changelog-auto: last-commit=f646105f5e667b32b5d4a528c12aeb97424e9946 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -36,6 +36,7 @@
 - 22:16 文档与约定收尾：PowerShell 脚本 UTF-8 BOM 硬性约定写入 CLAUDE.md 与 workflow.md（含 nav-states.ps1 补 BOM 与 test_ps1_encoding.py 兜底测试）；E2/E3 工单状态标记 resolved
 - 22:16 工单 module-info-dialog/01：模块卡「详情」按钮 → 全量信息弹窗（完整描述/依赖/多实例/副产物/互斥组 + 每平台验证状态/文件清单/备注/套件/购买链接/引脚声明表），卡点击仍添加模块，Esc/遮罩/✕ 三种关闭，off 卡附提示条——零后端
 - 22:19 评审修订（module-info-dialog/01）：moduleGridBadgeClass 单源化徽章类谓词（hw/ok/un，moduleGridHTML 与 moduleInfoHTML 共用，含单测）；修复单测恒真断言（>依赖</span> 标记）；冒烟补 reload 竞态防护（旧文档标记 + 点未选中卡幂等）
+- 22:19 评审修订（module-info-dialog/01）Spec 轴：副产物新形状每模板按规格渲染 template → output（原缺失模板源路径，箭头左为 name）；默认模板展示 name 回退 id；单测补两断言
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
