@@ -459,5 +459,50 @@ if (!f06.skipped) {
   check("编辑弹窗（无模块数据，跳过）", true);
 }
 
+// ---- 工单 07：添加模块表单分区折叠（纯布局，字段/提交零改动） ----
+const g07 = await Eval(`(() => {
+  const secs = ["basic", "files", "adv"].map((k) => document.getElementById("add-sec-" + k));
+  const heads = secs.map((s) => s && s.querySelector(".add-section-head"));
+  const basicCollapsed = secs[0] && secs[0].classList.contains("collapsed");
+  const filesCollapsed = secs[1] && secs[1].classList.contains("collapsed");
+  const advCollapsed = secs[2] && secs[2].classList.contains("collapsed");
+  const ids = ["new-slug","new-platform","new-desc","new-deps","new-hw","new-verified",
+    "new-notes","new-files","btn-add-file-row","btn-pick-mod-files","btn-pick-mod-dir",
+    "btn-draft-desc","btn-add-module-submit","add-msg"].map((i) => !!document.getElementById(i));
+  return { hasSecs: secs.every(Boolean), hasHeads: heads.every(Boolean),
+           basicCollapsed, filesCollapsed, advCollapsed, idsAll: ids.every(Boolean) };
+})()`);
+check("三分区存在 + 分区头齐备", g07.hasSecs && g07.hasHeads);
+check("默认态：① 展开、② ③ 折叠", !g07.basicCollapsed && g07.filesCollapsed && g07.advCollapsed,
+  `basic=${g07.basicCollapsed} files=${g07.filesCollapsed} adv=${g07.advCollapsed}`);
+check("全部字段 id / 提交按钮仍在（零改动校验）", g07.idsAll);
+// 收起不丢状态：填 slug → 收起① → 展开① → 值保留；文件行在折叠往返中保留
+const g07b = await Eval(`(async () => {
+  const slug = document.getElementById('new-slug');
+  slug.value = 'probe_collapse';
+  const head0 = document.querySelector('#add-sec-basic .add-section-head');
+  head0.click();
+  await new Promise((r) => setTimeout(r, 100));
+  const basic1 = document.getElementById('add-sec-basic').classList.contains('collapsed');
+  head0.click();
+  await new Promise((r) => setTimeout(r, 100));
+  const basic2 = document.getElementById('add-sec-basic').classList.contains('collapsed');
+  const slugBack = document.getElementById('new-slug').value;
+  const fileRows = document.querySelectorAll('#new-files .file-row').length;
+  const head1 = document.querySelector('#add-sec-files .add-section-head');
+  head1.click();
+  await new Promise((r) => setTimeout(r, 100));
+  const files1 = document.getElementById('add-sec-files').classList.contains('collapsed');
+  head1.click();
+  await new Promise((r) => setTimeout(r, 100));
+  const fileRows2 = document.querySelectorAll('#new-files .file-row').length;
+  const draftInAdv = document.getElementById('btn-draft-desc').closest('.add-section').id === 'add-sec-adv';
+  slug.value = '';
+  return { basic1, basic2, slugBack, fileRows, files1, fileRows2, draftInAdv };
+})()`);
+check("① 收起后可再展开，已填 slug 保留", g07b.basic1 && !g07b.basic2 && g07b.slugBack === "probe_collapse");
+check("② 折叠往返后文件行保留（display:none 不销毁）", g07b.files1 === false && g07b.fileRows2 === g07b.fileRows, `${g07b.fileRows2} vs ${g07b.fileRows}`);
+check("「AI 出简介草稿」归入进阶能力区", g07b.draftInAdv);
+
 console.log(failed === 0 ? "SMOKE ALL PASS" : `SMOKE FAILED (${failed})`);
 process.exit(failed === 0 ? 0 : 1);
