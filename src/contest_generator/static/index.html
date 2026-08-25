@@ -250,6 +250,52 @@
                           background: rgba(139, 148, 158, .12); color: var(--muted); }
   .module-card .mc-pa { font-size: 10px; padding: 1px 6px; border-radius: 999px;
                         background: var(--accent-dim); color: var(--accent); }
+  /* 模块详情按钮（工单 module-info-dialog/01）：卡头右侧，卡片点击仍添加模块 */
+  .module-card .mc-info { flex: none; margin-left: auto; border: 1px solid var(--border);
+                          background: var(--panel); color: var(--accent); font-size: 10px;
+                          padding: 1px 7px; border-radius: 999px; cursor: pointer; }
+  .module-card .mc-info:hover { border-color: var(--accent); background: var(--accent-dim); }
+  /* 模块详情弹窗（工单 module-info-dialog/01）：复用 .ref-files-overlay 模式
+     （遮罩 + 居中卡 + ✕），新建 module-info-* 前缀——不动既有 ref-files 类 */
+  .module-info-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
+                         display: flex; align-items: flex-start; justify-content: center;
+                         z-index: 50; padding: 40px 16px; }
+  .module-info-modal { background: var(--panel); border: 1px solid var(--border);
+                       border-radius: 8px; box-shadow: var(--shadow-pop);
+                       max-width: 760px; width: 100%; max-height: 80vh;
+                       display: flex; flex-direction: column; }
+  .module-info-head { display: flex; justify-content: space-between; align-items: center;
+                      padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .module-info-scroll { overflow-y: auto; }
+  .module-info-body { padding: 12px 14px; font-size: 13px; }
+  .module-info-title .slug { font-family: var(--mono); font-weight: 600; font-size: 14px; }
+  .module-info-title .desc { margin-top: 4px; color: var(--text); line-height: 1.5;
+                             word-break: break-all; }
+  .module-info-off { margin-top: 8px; padding: 5px 10px; border-radius: 6px;
+                     background: var(--warn-dim); color: var(--warn);
+                     border: 1px solid var(--warn-border); font-size: 12px; }
+  .module-info-rows { list-style: none; margin: 10px 0 0; padding: 0; }
+  .module-info-rows .mi-row { display: flex; gap: 10px; padding: 3px 0; font-size: 12px;
+                              color: var(--muted); }
+  .module-info-rows .mi-k { flex: none; color: var(--text); }
+  .module-info-platforms { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .mi-plat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+             background: var(--panel-2); }
+  .mi-plat h4 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .mi-plat .mc-plat { font-size: 10px; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+  .mi-plat .mc-plat.ok { background: var(--ok-dim); color: var(--ok-bright); }
+  .mi-plat .mc-plat.hw { background: var(--info-dim); color: var(--info); }
+  .mi-plat .mc-plat.un { background: rgba(139, 148, 158, .15); color: var(--muted); }
+  .mi-files { list-style: none; margin: 0 0 6px; padding: 0; font-family: var(--mono);
+              font-size: 12px; }
+  .mi-files li { padding: 1px 0; word-break: break-all; }
+  .mi-note { font-size: 12px; color: var(--muted); margin: 2px 0; }
+  .mi-note a { color: var(--accent); text-decoration: none; }
+  .mi-pins { margin-top: 6px; border-collapse: collapse; width: 100%; font-size: 12px; }
+  .mi-pins th, .mi-pins td { border: 1px solid var(--border); padding: 3px 8px;
+                             text-align: left; }
+  .mi-pins th { background: var(--panel); color: var(--muted); font-weight: 600; }
+  .mi-pin-id { color: var(--muted); font-family: var(--mono); font-size: 11px; }
   /* 编译结果横幅（工单 compile-experience-ui/01）：四态颜色 + 初始 hidden */
   #compile-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
                     font-size: 13px; font-weight: 600; }
@@ -2801,6 +2847,7 @@ function moduleGridHTML(modules, selectedSet, query, platform) {
     return '<div class="module-card' + (off ? " off" : "") + '" data-add="' + escHtml(m.slug) + '"'
       + ' title="' + escHtml(desc) + '">'
       + '<div class="mc-head"><span class="slug">' + escHtml(m.slug) + "</span>"
+      + '<button class="mc-info" data-info="' + escHtml(m.slug) + '" title="查看模块详情">详情</button>'
       + (off ? '<span class="mc-offtag">需切换平台</span>' : "") + "</div>"
       + '<div class="mc-desc">' + escHtml(short) + "</div>"
       + '<div class="mc-meta">' + badges + deps + pa + "</div></div>";
@@ -2816,10 +2863,111 @@ function renderModulePool() {
   if (count) count.textContent = moduleGridCountText(state.modules || [], selectedSlugs, q);
 }
 
+// —— 模块详情弹窗（工单 module-info-dialog/01）：零后端，数据 = /api/modules 全量 ──
+function moduleInfoHTML(module, platform) {
+  // 自包含内联 esc（同 moduleGridHTML 范式）
+  const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  const m = module || {};
+  const plats = m.platforms || {};
+  const off = !!(platform && !plats[platform]);
+  const rows = [];
+  if ((m.dependencies || []).length) {
+    rows.push('<li class="mi-row"><span class="mi-k">依赖</span><span>'
+      + escHtml(m.dependencies.join("、")) + "</span></li>");
+  }
+  if (m.multi_instance) {
+    rows.push('<li class="mi-row"><span class="mi-k">多实例</span><span>可配置 '
+      + escHtml(String(m.multi_instance.max)) + " 个实例，按 "
+      + escHtml(m.multi_instance.variant) + " 区分</span></li>");
+  }
+  if (m.python_artifact) {
+    const pa = m.python_artifact;
+    let text;
+    if (pa.templates && pa.templates.length) {
+      // 新形状（k230-multi-template）：default + templates 列表
+      text = "默认：" + escHtml(pa.default || "default") + "；" + pa.templates.map((t) =>
+        escHtml(t.name) + (t.description ? "（" + escHtml(t.description) + "）" : "") + " → "
+        + escHtml(t.output)).join("；");
+    } else {
+      // 旧形状：template → output
+      text = escHtml(pa.template || "") + " → " + escHtml(pa.output || "");
+    }
+    rows.push('<li class="mi-row"><span class="mi-k">副产物</span><span>' + text + "</span></li>");
+  }
+  if (m.exclusive_group) {
+    rows.push('<li class="mi-row"><span class="mi-k">互斥组</span><span>'
+      + escHtml(m.exclusive_group.label) + "（" + escHtml(m.exclusive_group.role)
+      + "）·同组互斥</span></li>");
+  }
+  const platHtml = Object.keys(plats).map((p) => {
+    const e = plats[p] || {};
+    const status = moduleGridStatusText(e);
+    const cls = e.hardware_bound ? "hw" : e.verified ? "ok" : "un";
+    const files = (e.files && e.files.length)
+      ? e.files.map((f) => "<li>" + escHtml(f) + "</li>").join("")
+      : '<li class="muted">实现内嵌母版（随母版进工程，不复制文件、不重复）</li>';
+    const notes = e.notes ? '<div class="mi-note">备注：' + escHtml(e.notes) + "</div>" : "";
+    const kit = e.kit ? '<div class="mi-note">套件：' + escHtml(e.kit) + "</div>" : "";
+    const source = e.source_url ? '<div class="mi-note"><a href="' + escHtml(e.source_url)
+      + '" target="_blank" rel="noopener">购买链接</a></div>' : "";
+    const pins = (e.pins && e.pins.length)
+      ? '<table class="mi-pins"><thead><tr><th>角色</th><th>类型</th><th>默认引脚</th>'
+        + '<th>必接</th><th>宏名</th></tr></thead><tbody>'
+        + e.pins.map((pin) => {
+          const label = pin.label || pin.id;
+          const idPart = pin.id && pin.id !== label
+            ? ' <span class="mi-pin-id">' + escHtml(pin.id) + "</span>" : "";
+          return "<tr><td>" + escHtml(label) + idPart + "</td><td>" + escHtml(pin.type)
+            + "</td><td>" + escHtml(pin.default) + "</td><td>" + (pin.required ? "必接" : "")
+            + "</td><td>" + escHtml((pin.macros || []).join("、")) + "</td></tr>";
+        }).join("") + "</tbody></table>"
+      : "";
+    return '<section class="mi-plat" data-platform="' + escHtml(p) + '">'
+      + "<h4>" + escHtml(moduleGridPlatformLabel(p))
+      + ' <span class="mc-plat ' + cls + '">' + status + "</span></h4>"
+      + '<ul class="mi-files">' + files + "</ul>" + notes + kit + source + pins + "</section>";
+  }).join("");
+  return '<div class="module-info-body">'
+    + '<div class="module-info-title"><span class="slug">' + escHtml(m.slug || "") + "</span>"
+    + '<div class="desc">' + escHtml(m.description || "") + "</div></div>"
+    + (off ? '<div class="module-info-off">当前平台 ' + escHtml(moduleGridPlatformLabel(platform))
+      + " 无此模块版本</div>" : "")
+    + (rows.length ? '<ul class="module-info-rows">' + rows.join("") + "</ul>" : "")
+    + '<div class="module-info-platforms">' + platHtml + "</div></div>";
+}
+
+function openModuleInfo(slug) {
+  const module = (state.modules || []).find((mo) => mo.slug === slug);
+  if (!module) { toast("info", "未找到模块 " + slug); return; }
+  // 重复打开 = 替换（同 showPinMenu 先例）
+  document.querySelectorAll(".module-info-overlay").forEach((o) => o.remove());
+  const overlay = document.createElement("div");
+  overlay.className = "module-info-overlay";
+  const modal = document.createElement("div");
+  modal.className = "module-info-modal";
+  modal.innerHTML = '<div class="module-info-head"><strong>模块详情</strong>'
+    + '<button class="ref-files-close" title="关闭">×</button></div>'
+    + '<div class="module-info-scroll">' + moduleInfoHTML(module, chosenPlatform) + "</div>";
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  modal.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+}
+
+
 function initModuleGrid() {
   const box = $("module-grid");
   if (!box) return;
   box.addEventListener("click", (ev) => {
+    // 详情按钮优先（工单 module-info-dialog/01）：先判 .mc-info，卡片本体仍添加模块
+    const infoBtn = ev.target.closest ? ev.target.closest(".mc-info") : null;
+    if (infoBtn) { openModuleInfo(infoBtn.dataset.info); return; }
     const card = ev.target.closest ? ev.target.closest(".module-card") : null;
     if (!card) return;
     const slug = card.dataset.add;
