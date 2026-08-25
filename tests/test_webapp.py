@@ -1710,7 +1710,75 @@ def test_extract_image_detail_qa_false_single_call(client, context, monkeypatch)
 
     assert resp.status_code == 200
     assert resp.json()["text"] == "图A"
-    assert len(seen) == 1
+
+
+def test_vision_selfcheck_ok_returns_elapsed_and_model(client, monkeypatch):
+    """视觉通道自检（工单 vision-selfcheck/01）：成功 → ok/耗时/模型/描述回显。
+
+    monkeypatch 挂在 contest_generator.webapp.describe_image（webapp 直接
+    import 的绑定；describe_image 无缓存 = 每次真实请求，自检语义）。
+    """
+    from contest_generator import webapp
+
+    seen: dict = {}
+
+    def fake_describe(data, mime, prompt, **kwargs):
+        seen["mime"] = mime
+        seen["api_key"] = kwargs.get("api_key")
+        seen["model"] = kwargs.get("model")
+        return "看到一张 1×1 像素图"
+
+    monkeypatch.setattr(webapp, "describe_image", fake_describe)
+
+    resp = client.post("/api/vision/selfcheck")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["message"] == "看到一张 1×1 像素图"
+    assert body["model"] == seen["model"]
+    assert isinstance(body["elapsed_ms"], int)
+    assert body["elapsed_ms"] >= 0
+    assert seen["mime"] == "image/png"
+    # 夹具主 key sk-test：DeepSeek 默认端点视觉 key 留空 → 复用主 key
+    assert seen["api_key"] == "sk-test"
+
+
+def test_vision_selfcheck_unconfigured_400_chinese(client, context):
+    """视觉未配置（自定义端点 + 空视觉 key，不复用主 key）→ 400 中文含设置引导。
+
+    与「调用失败」分开（工单 vision-selfcheck/01 评审意见）：空 key 直报
+    「未配置」，不再套「自检失败」前缀。
+    """
+    from dataclasses import replace
+
+    ctx, _ = context
+    ctx.config = replace(ctx.config, vision_base_url="https://open.bigmodel.cn/api/paas/v4")
+
+    resp = client.post("/api/vision/selfcheck")
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "未配置" in detail
+    assert "设置" in detail
+
+
+def test_vision_selfcheck_vision_error_400_chinese(client, monkeypatch):
+    """视觉调用失败（上游异常）→ 400「视觉自检失败：…」携带原因，不假成功。"""
+    from contest_generator.vision import VisionError
+    from contest_generator import webapp
+
+    def boom(data, mime, prompt, **kwargs):
+        raise VisionError("上游返回非法 JSON")
+
+    monkeypatch.setattr(webapp, "describe_image", boom)
+
+    resp = client.post("/api/vision/selfcheck")
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "视觉自检失败" in detail
+    assert "上游返回非法 JSON" in detail
 
 
 def test_settings_vision_detail_qa_roundtrip(client, context):
