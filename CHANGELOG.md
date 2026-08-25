@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b6fc3c43d92f0900799c7e6a43569b9a1caa2782 -->
+<!-- changelog-auto: last-commit=fa91c90fdf50bcc7a52f39e387553b56a6e8df03 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -39,6 +39,7 @@
 - 22:19 评审修订（module-info-dialog/01）Spec 轴：副产物新形状每模板按规格渲染 template → output（原缺失模板源路径，箭头左为 name）；默认模板展示 name 回退 id；单测补两断言
 - 22:32 环境体检中心（env-check-center/01）：设置页新卡一键体检——静态聚合 /api/env/status（配置/工具链/母版/模块库/输出目录）+ 文本通道自检 /api/llm/selfcheck 单次探针 + 复用视觉自检，逐项徽章行实时更新；pytest 2355 绿、tests/js 271 绿、冒烟 11 项全 PASS
 - 22:38 评审修订（env-check-center/01）Spec 轴：模块库加载错误行改 ⚠（env-warn，spec 行 57「仅库异常」语义，原 ✕ 且被测试固化）；一键体检点击后双通道行置「检查中…」行级加载态（spec 行 50，原直接终态无加载中）；缺省字段不渲染行补全（module_library/masters_dir/output_dir/api_configured 键缺失跳过）；spec 签名补三分支实现决策；单测 14 项、冒烟 11 项、全量 JS 273/pytest 2355 绿
+- 22:50 生成前覆盖保护（generate-overwrite/01）：同名工程 400 → 确认框（旧工程备份为 .bak）→ 确认自动重发 overwrite=true；后端 exists+overwrite 先备份后覆盖（单份 .bak 整体改名，失败 400 文件操作失败且旧工程未动）；strict is True 非布尔视为缺省；前端 isConflictError/conflictDirName 纯函数 + renderGenerateSuccess 抽取共用；修复 payload 块级作用域 bug（冒烟抓到）；pytest 2364 绿、tests/js 278 绿、冒烟 12 项全 PASS
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
