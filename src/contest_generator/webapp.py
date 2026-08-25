@@ -102,6 +102,7 @@ from .generation_output import (
     GenerationConflictError,
     desktop_topic_dir_verdict,
     topic_dir_title,
+    with_platform_suffix,
 )
 from .recent_jobs import (
     delete_recent,
@@ -161,6 +162,7 @@ from .master_store import (
     master_project_dir,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .patchers import UnknownPlatformError
 from .pdf_library import list_pdfs, resolve_pdf
 from .pin_bindings import (
     PinBindingError,
@@ -767,11 +769,12 @@ def _resolve_generation_output_dir(
 ) -> tuple[Path, str]:
     """生成请求 → (最终 output_dir, 目录裁决 verdict)。
 
-    历史赛题（topic_id 给定）：确定性取「编号 + 英文短名」（如
-    `2024H_Auto_Car`，topic_dir_title + 内置字典）——不依赖 AI 简介（省一次
-    LLM 调用，目录名稳定可预期，且纯 ASCII 绕开 CCS/gmake 中文路径乱码，
-    工单 ascii-project-name/01）；粘贴题面（无 topic_id）：AI 起英文短名为
-    目录名（name_topic_english，工单 ascii-project-name/02）。
+    历史赛题（topic_id 给定）：确定性取「编号 + 英文短名 + 平台后缀」（如
+    `2024H_Auto_Car_STM32`，topic_dir_title + with_platform_suffix + 内置字典）
+    ——不依赖 AI 简介（省一次 LLM 调用，目录名稳定可预期，且纯 ASCII 绕开
+    CCS/gmake 中文路径乱码，工单 ascii-project-name/01、desktop-platform-suffix/01）；
+    粘贴题面（无 topic_id）：AI 起英文短名为目录名（name_topic_english，工单
+    ascii-project-name/02），同样带平台后缀。
 
     verdict（工单 generate-conflict-guard/01）：桌面模式 = desktop_topic_dir_verdict
     三分支 new / clean / exists（路由按 verdict：new 直接生成、clean 清理
@@ -782,6 +785,14 @@ def _resolve_generation_output_dir(
         return Path(_require_str(payload, "output_dir")), "manual"
     problem_text = _require_str(payload, "problem_text")
     topic_id = _optional_str(payload, "topic_id")
+    platform = _require_str(payload, "platform")
+    if platform not in KNOWN_PLATFORMS:
+        # 未知平台（用户可控输入，工单 C6 先例）：桌面模式在拼后缀前就校验，
+        # 400 中文带已注册平台清单——不落到 with_platform_suffix 的未登记
+        # ValueError（500 大声失败只留给真 bug 漂移）。
+        raise UnknownPlatformError(
+            f"未知平台 {platform!r}，已注册的平台：{', '.join(KNOWN_PLATFORMS)}"
+        )
     if topic_id:
         config = _require_config(context)
         entry = resolve_number(
@@ -790,7 +801,14 @@ def _resolve_generation_output_dir(
         title = topic_dir_title(entry.key, entry.problem_text)
     else:
         title = _llm(context).name_topic_english(problem_text)
-    return desktop_topic_dir_verdict(context.desktop_dir(), title)
+    # 平台后缀（工单 desktop-platform-suffix/01）：同题双平台目录自动分流
+    # （Auto_Car_STM32 / Auto_Car_MSPM0）；后缀在裁决前拼——desktop_topic_dir_verdict
+    # 看到的已是带后缀的标题，护栏 / 锁键 / 失败清理 / explorer 聚焦全部自动
+    # 跟随目录名，无需另改。未知平台由 with_platform_suffix 大声失败。
+    return desktop_topic_dir_verdict(
+        context.desktop_dir(),
+        with_platform_suffix(title, platform),
+    )
 
 
 
@@ -1397,7 +1415,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 raise GenerationConflictError(
                     f"桌面上已有同名工程「{output_dir.name}」：为避免覆盖你的"
                     "已有工程，请先删除该目录或修改题名后再生成（不会自动"
-                    "改名或覆盖）"
+                    "改名或覆盖）。同一赛题换平台再生成时，会自动使用带平台"
+                    "后缀的新目录（如 Auto_Car_MSPM0），不会误删旧工程"
                 )
             if output_verdict == "clean":
                 shutil.rmtree(output_dir, ignore_errors=True)
