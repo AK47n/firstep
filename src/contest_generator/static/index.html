@@ -768,6 +768,24 @@
                            background: var(--warn-dim); }
   .card-step-status.current { color: var(--accent); border-color: rgba(0, 212, 255, .45);
                               background: var(--accent-dim); }
+  /* 检查能否生成（工单 a3-readiness-check/02）：第 9 步下方的检查单面板 */
+  #readiness-check { border: 1px solid var(--border); border-radius: 10px;
+                     background: var(--panel-2); padding: 8px 12px;
+                     box-shadow: var(--shadow-card); }
+  .rc-row { display: flex; align-items: center; gap: 8px; padding: 6px 2px;
+            font-size: 13px; min-width: 0; }
+  .rc-row + .rc-row { border-top: 1px dashed var(--border); }
+  .rc-row .rc-ico { width: 18px; flex: none; text-align: center; font-weight: 700; }
+  .rc-row.ok .rc-ico { color: var(--ok); }
+  .rc-row.bad .rc-ico { color: var(--danger); }
+  .rc-row.soft .rc-ico { color: var(--warn); }
+  .rc-row .rc-title { flex: none; font-weight: 600; }
+  .rc-row.ok .rc-title { color: var(--ok); }
+  .rc-row .rc-reason { flex: 1; color: var(--muted); min-width: 0; }
+  .rc-row .rc-actions { display: inline-flex; gap: 6px; flex: none; }
+  .rc-row .rc-go, .rc-row .rc-recommend { padding: 2px 10px; font-size: 12px;
+            border-radius: 999px; }
+  .rc-row .rc-recommend { color: var(--accent); border-color: rgba(0, 212, 255, .4); }
   /* 顶部流程进度条（工单 ui-polish-3/02）：header 下 3px 细条 + 完成计数 */
   #gen-progress { position: relative; height: 3px; background: var(--border);
                   transition: opacity .3s; }
@@ -1107,8 +1125,10 @@
       </div>
       <div class="row" style="margin-top:10px">
         <button id="btn-generate" class="primary breathe" data-ico="rocket">生成工程</button>
+        <button id="btn-readiness-check" data-ico="check">检查能否生成</button>
         <span id="gen-status"></span>
       </div>
+      <div id="readiness-check" class="hidden" style="margin-top:10px"></div>
       <div id="generate-msg" class="error"></div>
       <div id="generate-result" class="hidden" style="margin-top:12px">
         <!-- 编译结果横幅（工单 compile-experience-ui/01）：生成完成一眼确认
@@ -3801,13 +3821,14 @@ function formatResModules(modules, pythonArtifacts) {
 $("btn-generate").addEventListener("click", async () => {
   $("generate-msg").textContent = "";
   $("generate-result").classList.add("hidden");
-  if (!chosenPlatform) { $("generate-msg").textContent = "请先选择目标平台"; return; }
-  if (!selectedSlugs.length) { $("generate-msg").textContent = "请先选择模块"; return; }
-  const desktopOutput = desktopTopicOutputEnabled();
-  const problem = $("problem").value.trim();
-  if (desktopOutput && !problem) { $("generate-msg").textContent = "请先填写赛题原文"; return; }
-  const outputDir = $("output-dir").value.trim();
-  if (!desktopOutput && !outputDir) { $("generate-msg").textContent = "请填写输出目录"; return; }
+  // 前置校验（工单 a3-readiness-check/01）：判据单一事实源——与「检查能否生成」
+  // 共用 generateReadinessChecks，文案/顺序与旧逻辑逐字一致（平台 → 模块 → 题面 → 目录）
+  const rstate = readinessState();
+  const missing = generateReadinessChecks(rstate).filter((c) => !c.ok);
+  if (missing.length) { $("generate-msg").textContent = missing[0].reason; return; }
+  const desktopOutput = rstate.desktopOutput;
+  const problem = rstate.problem;
+  const outputDir = rstate.outputDir;
   const status = $("gen-status");
   // 阶段播报（工单 ui-polish-8/04）：校验（真实）→ 生成轮播 + 计时 → 清理
   let stageTimer = null;
@@ -6919,6 +6940,7 @@ function syncStepDone(n, done) {
   if (done) stepDoneSet.add(n); else stepDoneSet.delete(n);
   renderStepProgress();
   refreshGenOverview();
+  refreshReadinessPanel();
 }
 function renderStepProgress() {
   const el = $("gen-progress");
@@ -7059,6 +7081,119 @@ function initGenOverview() {
   document.addEventListener("scroll", () => refreshGenOverview(), { passive: true });
   window.addEventListener("resize", () => refreshGenOverview(), { passive: true });
   refreshGenOverview();
+}
+
+// ---------------------------------------------------------------------------
+// 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验
+// 同源（单一事实源，先例 collectBindings/pin-verdict-seam/01）——「检查单结论」
+// 与「点了生成被拦的提示」永不吵架。渲染走纯函数（node:test 直抽直测），
+// 交互在 initReadinessCheck 用容器事件委托。
+// ---------------------------------------------------------------------------
+function generateReadinessChecks(state) {
+  // 顺序 = btn-generate 原提示顺序（平台 → 模块 → 题面 → 目录）；reason 逐字复用
+  return [
+    { step: 3, title: "目标平台", reason: "请先选择目标平台",
+      ok: !!state.chosenPlatform, autoFixable: false },
+    { step: 6, title: "模块清单与平台警告", reason: "请先选择模块",
+      ok: (state.selectedSlugs || []).length > 0, autoFixable: true },
+    { step: 1, title: "赛题原文", reason: "请先填写赛题原文",
+      ok: !state.desktopOutput || !!state.problem, autoFixable: false },
+    { step: 9, title: "输出目录并生成", reason: "请填写输出目录",
+      ok: state.desktopOutput || !!state.outputDir, autoFixable: false },
+  ];
+}
+function readinessSoftChecks(state) {
+  // 软条件：不阻断生成，⚠ 展示。5 仅在模块非空时出现（空模块由硬检查 6 覆盖）
+  const out = [];
+  if ((state.selectedSlugs || []).length && !state.recommended) {
+    out.push({ step: 5, title: "AI 推荐模块", reason: "建议跑一次 AI 推荐（可选）",
+      ok: false, soft: true });
+  }
+  if (!state.hasMainC) {
+    out.push({ step: 8, title: "main.c 骨架", reason: "骨架未生成（可选，生成时可留空）",
+      ok: false, soft: true });
+  }
+  return out;
+}
+function readinessRowHTML(check, opts) {
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const cls = check.ok ? "ok" : (check.soft ? "soft" : "bad");
+  const ico = check.ok ? "✓" : (check.soft ? "⚠" : "✗");
+  const reason = check.ok ? "已就绪" : check.reason;
+  let actions = "";
+  if (!check.ok) {
+    actions = '<span class="rc-actions"><button type="button" class="rc-go" data-step="'
+      + check.step + '">去第 ' + check.step + ' 步</button>';
+    // 可自动补项：仅模块清单（❌ 且开启一键）——题面为空时 renderReadinessPanel
+    // 不传 recommendEnabled，跳到第 1 步先填题面
+    if (check.autoFixable && opts && opts.recommendEnabled) {
+      actions += '<button type="button" class="rc-recommend" data-action="recommend"'
+        + ' data-step="' + check.step + '">一键跑推荐</button>';
+    }
+    actions += "</span>";
+  }
+  return '<div class="rc-row ' + cls + '" data-step="' + check.step + '">'
+    + '<span class="rc-ico">' + ico + '</span>'
+    + '<span class="rc-title">' + esc(check.title) + '</span>'
+    + '<span class="rc-reason">' + esc(reason) + '</span>'
+    + actions + "</div>";
+}
+function readinessRowsHTML(checks, opts) {
+  return checks.map((c) => readinessRowHTML(c, opts)).join("");
+}
+function readinessState() {
+  return {
+    chosenPlatform: chosenPlatform,
+    selectedSlugs: selectedSlugs,
+    problem: $("problem").value.trim(),
+    desktopOutput: desktopTopicOutputEnabled(),
+    outputDir: $("output-dir").value.trim(),
+    recommended: stepDoneSet.has(5),
+    hasMainC: !!$("main-c").value.trim(),
+  };
+}
+function renderReadinessPanel() {
+  const box = $("readiness-check");
+  if (!box || box.classList.contains("hidden")) return;
+  const state = readinessState();
+  // 一键跑推荐需要题面：题面缺时不给自动按钮（引导先去第 1 步）
+  const recommendEnabled = !!state.problem;
+  box.innerHTML =
+    readinessRowsHTML(generateReadinessChecks(state), { recommendEnabled })
+    + readinessRowsHTML(readinessSoftChecks(state), { recommendEnabled: false });
+}
+function refreshReadinessPanel() {
+  renderReadinessPanel();
+}
+function initReadinessCheck() {
+  const btn = $("btn-readiness-check");
+  const box = $("readiness-check");
+  if (!btn || !box) return;
+  btn.addEventListener("click", () => {
+    box.classList.toggle("hidden");
+    if (!box.classList.contains("hidden")) renderReadinessPanel();
+  });
+  // 事件委托：定位按钮 / 一键跑推荐（与「让 AI 推荐」同一入口）
+  box.addEventListener("click", (e) => {
+    const go = e.target.closest(".rc-go");
+    if (go) {
+      const card = stepCard(parseInt(go.dataset.step, 10));
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const rec = e.target.closest(".rc-recommend");
+    if (rec) {
+      const problem = $("problem").value.trim();
+      if (!problem) {
+        const card = stepCard(1);
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      recommendClarifications = [];
+      startRecommend(problem);
+    }
+  });
 }
 
 
@@ -7412,6 +7547,7 @@ $("btn-usage-reset").addEventListener("click", () => {
 })();
 
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）
+initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 </script>
