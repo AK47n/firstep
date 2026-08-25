@@ -812,6 +812,39 @@
     0%, 100% { outline-color: var(--accent); }
     50% { outline-color: var(--warn); }
   }
+  /* 最近生成（工单 recent-jobs/01）：生成成功自动落盘 recent.json 的历史
+     条目条——时间 / 平台徽章 / 模块数 / 状态点 / 目录名；点击复制路径 */
+  .gen-recent { margin-top: 10px; padding: 10px 14px; background: var(--panel);
+                border: 1px solid var(--border); border-radius: 12px;
+                box-shadow: var(--shadow-card); }
+  .gen-recent-head { display: flex; align-items: center; gap: 8px; }
+  .gen-recent-title { font-size: 13px; font-weight: 600; }
+  #btn-recent-refresh { margin-left: auto; padding: 3px 10px; border-radius: 999px;
+                        font-size: 12px; border: 1px solid var(--border-strong);
+                        background: var(--panel-2); color: var(--text); cursor: pointer; }
+  #btn-recent-refresh:hover { border-color: var(--accent); color: var(--accent); }
+  .gen-recent-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .recent-chip { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+                 background: var(--panel-2); border: 1px solid var(--border);
+                 border-radius: 8px; cursor: pointer; font-size: 12.5px; }
+  .recent-chip:hover { border-color: var(--accent); }
+  .recent-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+                       background: var(--border-strong); }
+  .recent-chip.st-ok .recent-status-dot { background: var(--ok); }
+  .recent-chip.st-warn .recent-status-dot { background: var(--warn); }
+  .recent-chip.st-fail .recent-status-dot { background: var(--danger); }
+  .recent-time { color: var(--muted); flex-shrink: 0; }
+  .recent-platform { padding: 1px 7px; border-radius: 999px; flex-shrink: 0;
+                     border: 1px solid var(--border-strong); color: var(--accent);
+                     font-size: 11px; }
+  .recent-mods { color: var(--muted); flex-shrink: 0; }
+  .recent-dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                white-space: nowrap; color: var(--text); }
+  .recent-del { flex-shrink: 0; width: 20px; height: 20px; border-radius: 6px;
+                border: none; background: transparent; color: var(--muted);
+                cursor: pointer; font-size: 12px; line-height: 1; }
+  .recent-del:hover { background: var(--danger-dim); color: var(--danger); }
+  .recent-empty { padding: 8px 4px; color: var(--muted); font-size: 12.5px; }
   /* 卡片标题状态徽章（工单 gen-overview/02） */
   .card-step-status { margin-left: 8px; padding: 1px 8px; border-radius: 999px;
                       font-size: 11px; font-weight: 600; border: 1px solid transparent;
@@ -1035,6 +1068,15 @@
     </div>
 
     <div id="gen-overview" class="gen-overview" aria-label="生成步骤就绪总览"></div>
+<!-- 最近生成（工单 recent-jobs/01）：几天做一题场景——第二天打开页面
+     一眼看到上次工程目录与编译状态，点击复制路径即可继续 -->
+<div id="gen-recent" class="gen-recent hidden" aria-label="最近生成">
+  <div class="gen-recent-head">
+    <span class="gen-recent-title">最近生成</span>
+    <button id="btn-recent-refresh" type="button">刷新</button>
+  </div>
+  <div id="gen-recent-list" class="gen-recent-list"></div>
+</div>
 
     <div class="gen-layout">
       <nav id="step-nav" class="step-nav" aria-label="生成步骤向导"></nav>
@@ -4153,6 +4195,7 @@ $("btn-generate").addEventListener("click", async () => {
     $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
     markStepDone(9);
     syncStep7();  // 按默认布线生成成功 = 引脚步骤视为完成（工单 step7-done/01）
+    refreshRecent();  // 生成成功 → 最近生成列表补一条（工单 recent-jobs/01）
     toast("ok", "工程生成完成");
     // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
     // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
@@ -4709,6 +4752,7 @@ async function runCompileOnce(outputDir) {
   if (errorMsg) { compileBanner("fail", "编译失败：" + errorMsg); throw new Error(errorMsg); }
   if (!done) throw new Error(finished ? "编译未返回结果" : "连接中断：本次编译未完成，可安全重试");
   renderCompileBanner(done);
+  reportRecentStatus(outputDir, done);  // 编译结果上报最近生成列表（工单 recent-jobs/01）
   return done;
 }
 
@@ -7458,6 +7502,133 @@ function initGenOverview() {
 }
 
 // ---------------------------------------------------------------------------
+// 最近生成（工单 recent-jobs/01）：生成成功自动落盘 recent.json（后端
+// GET /api/recent / POST /api/recent/status / DELETE /api/recent/{id}），
+// 顶部列表展示历史条目：状态点 / 平台徽章 / 模块数 / 时间 / 目录名；
+// 点击复制路径、X 删除、刷新重拉。纯函数自包含（tests/js 抽取范式）。
+// ---------------------------------------------------------------------------
+function recentStatusMeta(status) {
+  const meta = {
+    generated: { label: "已生成", cls: "gen" },
+    compiled_ok: { label: "编译成功", cls: "ok" },
+    compiled_warn: { label: "有警告", cls: "warn" },
+    compile_failed: { label: "编译失败", cls: "fail" },
+  };
+  return meta[status] || { label: "未知", cls: "gen" };
+}
+function recentTimeLabel(ts) {
+  const t = new Date(parseFloat(ts) * 1000);
+  if (!Number.isFinite(t.getTime())) return "";
+  const p = (n) => (n < 10 ? "0" + n : "" + n);
+  return p(t.getMonth() + 1) + "-" + p(t.getDate()) + " "
+    + p(t.getHours()) + ":" + p(t.getMinutes());
+}
+function recentPlatformLabel(platform) {
+  // 查表（前端展示层；后端 /api/generate 收的是平台别名 stm32/mspm0，
+  // 兼容长 id 形态：历史记录或手工构造）
+  const labels = {
+    stm32: "STM32", stm32f103c8t6: "STM32",
+    mspm0: "MSPM0", mspm0g3507: "MSPM0",
+  };
+  return labels[platform] || (platform || "");
+}
+function recentChipHTML(entry) {
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  const meta = recentStatusMeta(entry.status);
+  const dir = String(entry.output_dir || "");
+  const base = dir.split(/[\\/]/).filter(Boolean).pop() || "（未知目录）";
+  const mods = (entry.slugs || []).length;
+  const cls = "recent-chip" + (meta.cls ? " st-" + meta.cls : "");
+  return '<div class="' + cls + '" data-id="' + esc(entry.id)
+    + '" data-dir="' + esc(dir) + '" title="点击复制路径：' + esc(dir) + '">'
+    + '<span class="recent-status-dot" title="' + esc(meta.label) + '"></span>'
+    + '<span class="recent-time">' + esc(recentTimeLabel(entry.ts)) + "</span>"
+    + '<span class="recent-platform">' + esc(recentPlatformLabel(entry.platform)) + "</span>"
+    + '<span class="recent-mods">' + mods + " 个模块</span>"
+    + '<span class="recent-dir" title="' + esc(base) + '">' + esc(base) + "</span>"
+    + '<button type="button" class="recent-del" data-id="' + esc(entry.id)
+    + '" title="删除这条记录" aria-label="删除">✕</button>'
+    + "</div>";
+}
+function recentListHTML(entries) {
+  if (!entries || !entries.length) {
+    return '<div class="recent-empty">还没有生成记录——完成一次生成后会出现在这里</div>';
+  }
+  return entries.map(recentChipHTML).join("");
+}
+// 编译 done 载荷 → 状态枚举（超时/失败/带错误 → failed；0 错 N 警 → warn；
+// 否则 ok）。if (!done) 为防御默认：runCompileOnce 正常不会返回空（早 throw），
+// 兜底语义 = 仅生成未编译。
+function recentStatusNow(done) {
+  if (!done) return "generated";
+  if (done.timed_out || !done.passed
+      || ((done.summary || {}).errors || 0) > 0) return "compile_failed";
+  if ((done.summary && done.summary.warnings || 0) > 0) return "compiled_warn";
+  return "compiled_ok";
+}
+function renderRecentList(entries) {
+  const list = $("gen-recent-list");
+  const box = $("gen-recent");
+  if (!list || !box) return;
+  box.classList.remove("hidden");
+  list.innerHTML = recentListHTML(entries || []);
+}
+async function refreshRecent() {
+  const box = $("gen-recent");
+  if (!box) return;
+  let entries = [];
+  try { entries = await apiGet("/api/recent"); }
+  catch (e) { toast("error", "最近生成加载失败：" + e.message); }
+  renderRecentList(entries || []);
+}
+// 编译完成上报（fire-and-forget：失败不打断编译循环，静默）+ 刷新列表
+async function reportRecentStatus(outputDir, done) {
+  try {
+    await apiPost("/api/recent/status",
+      { output_dir: outputDir, status: recentStatusNow(done) });
+  } catch (e) { /* 上报失败不打断编译循环 */ }
+  refreshRecent();
+}
+function initRecent() {
+  const refresh = $("btn-recent-refresh");
+  if (refresh) refresh.addEventListener("click", () => refreshRecent());
+  const list = $("gen-recent-list");
+  if (!list) return;
+  list.addEventListener("click", async (e) => {
+    const del = e.target.closest(".recent-del");
+    if (del) {
+      e.stopPropagation();
+      try {
+        await apiDelete("/api/recent/" + encodeURIComponent(del.dataset.id || ""));
+      } catch (err) { toast("error", "删除失败：" + err.message); }
+      refreshRecent();
+      return;
+    }
+    const chip = e.target.closest(".recent-chip");
+    if (!chip) return;
+    const dir = chip.dataset.dir || "";
+    // 复制路径（与 btn-copy-dir / main.c 工具栏同款：clipboard 失败 → execCommand 兜底）
+    const done = () => toast("ok", "已复制路径");
+    const fallback = () => {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = dir;
+        document.body.appendChild(ta);
+        ta.select();
+        if (document.execCommand && document.execCommand("copy")) { toast("ok", "已复制路径"); return; }
+        toast("error", "复制失败：请手动复制");
+      } catch (err) { toast("error", "复制失败：" + err.message); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(dir).then(done).catch(fallback);
+    } else fallback();
+  });
+  refreshRecent();
+}
+
+// ---------------------------------------------------------------------------
 // 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验
 // 同源（单一事实源，先例 collectBindings/pin-verdict-seam/01）——「检查单结论」
 // 与「点了生成被拦的提示」永不吵架。渲染走纯函数（node:test 直抽直测），
@@ -7923,6 +8094,7 @@ $("btn-usage-reset").addEventListener("click", () => {
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）
 initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
 initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪，纯本地交互
+initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 </script>
