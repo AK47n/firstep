@@ -99,6 +99,11 @@
     background: radial-gradient(900px 400px at 50% -12%, var(--ambient-glow), transparent 70%);
   }
   ::selection { background: var(--accent-dim); }
+  /* main.c 错误行定位选区（工单 compile-error-jump/01）：持续高亮——选区即
+     定位状态（点其他错误行切换、页面别处点击由浏览器自然清选）。textarea
+     内选区与全局规则有跨浏览器差异，此规则显式兜底并更醒目 */
+  #main-c::selection { background: rgba(0, 212, 255, .28); color: #fff; }
+  html[data-theme="light"] #main-c::selection { background: rgba(0, 150, 199, .25); color: inherit; }
   header { background: var(--panel); border-bottom: 1px solid var(--border);
            padding: 6px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
            position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow-header); }
@@ -4734,10 +4739,77 @@ function fixKeyBasename(path, line) {
   return "~" + (parts[parts.length - 1] || "") + ":" + (line || 0);
 }
 
-/** 点击条目 → 展开/收起对应源码行（薄接口 /api/compile/source-line，缓存防重复请求）。 */
+// ---------------------------------------------------------------------------
+// main.c 错误行定位（工单 compile-error-jump/01）：点 main.c 的错误行 = 滚动
+// 到预览卡并选中该行文本（选区即持续高亮，点其他行切换）；非 main.c 的行
+// 维持 fixToggleSource 展开源码行。偏移 / 路径判定为自包含纯函数（tests/js
+// 正则抽取先例：不引用模块级常量）
+// ---------------------------------------------------------------------------
+function isMainCPath(path) {
+  const parts = String(path == null ? "" : path).replace(/\\/g, "/").split("/");
+  return (parts[parts.length - 1] || "") === "main.c";
+}
+function maincLineOffsetRange(text, line) {
+  const lines = String(text == null ? "" : text).split("\n");
+  const n = Number(line);
+  if (!Number.isInteger(n) || n < 1 || n > lines.length) return null;
+  let start = 0;
+  for (let i = 0; i < n - 1; i++) start += lines[i].length + 1;  // +1 = \n
+  return { start, end: start + lines[n - 1].length };
+}
+// 选区滚入 textarea 视口：浏览器 focus 的滚动窗口行为不可靠（headless 实测
+// scrollTop 不动），这里在高亮层临时量测目标行视觉位置——hl-layer 与
+// textarea 排版参数同源（font/line-height/padding/pre-wrap/视口宽，三明治
+// 对齐设计保证换行点一致），折行场景同样精确，全程无像素行高公式。
+function maincScrollToRange(ta, range) {
+  const hl = $("main-c-hl");
+  if (!hl) return;
+  const _probe_style = "display:block;white-space:pre-wrap;word-break:break-all;";
+  const before = document.createElement("span");
+  before.style.cssText = _probe_style;
+  before.textContent = ta.value.slice(0, range.start);
+  const target = document.createElement("span");
+  target.style.cssText = _probe_style;
+  target.textContent = ta.value.slice(range.start, range.end);
+  hl.appendChild(before);
+  hl.appendChild(target);
+  const top = target.offsetTop, h = target.offsetHeight;
+  before.remove();
+  target.remove();
+  const viewH = ta.clientHeight - 24;   // 上下 padding 12px × 2
+  ta.scrollTop = Math.max(0, top - (viewH - h) / 2);
+}
+function maincJumpToLine(line) {
+  const ta = $("main-c");
+  if (!ta) return;
+  if (maincContentEmpty(ta.value)) {
+    toast("info", "main.c 还没有内容，先「生成骨架」再跳转");
+    return;
+  }
+  const range = maincLineOffsetRange(ta.value, line);
+  if (!range) {
+    toast("info", "行号超出 main.c 范围：" + line);
+    return;
+  }
+  const card = ta.closest(".card");
+  if (card && card.classList.contains("collapsed")) {
+    card.classList.remove("collapsed");
+    const btn = card.querySelector(".card-collapse");
+    if (btn) syncCollapseBtn(btn, false);
+  }
+  ta.scrollIntoView({ block: "center", behavior: "smooth" });
+  ta.focus();
+  ta.setSelectionRange(range.start, range.end);
+  maincScrollToRange(ta, range);   // 内部滚动到选区（折行也精确）
+}
+
+/** 点击条目 → 展开/收起对应源码行（薄接口 /api/compile/source-line，缓存防重复请求）。
+ * main.c 错误行例外（工单 compile-error-jump/01）：整行点击 = 跳转 main.c
+ * 预览定位（选中该行文本高亮），不再展开源码行。 */
 async function fixToggleSource(row) {
   const src = row._source;
   if (!src || !src.path) return;
+  if (isMainCPath(src.path)) { maincJumpToLine(src.line); return; }
   const existing = row.querySelector(".fix-source");
   if (existing) { existing.remove(); return; }   // 再点收起
   const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
