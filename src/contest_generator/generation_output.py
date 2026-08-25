@@ -7,6 +7,7 @@ webapp 只负责收请求与调用 LLM；题名裁剪、Windows 文件名清洗�
 from __future__ import annotations
 
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -204,6 +205,25 @@ def with_platform_suffix(title: str, platform: str) -> str:
     if suffix is None:
         raise ValueError(f"未知平台：{platform}")
     return f"{title}{suffix}"
+
+
+def backup_project_dir(output_dir: Path) -> Path:
+    """覆盖前快照（工单 generate-overwrite/01）：旧工程目录整体改名为
+    `<name>.bak`（同目录、原子、零复制），返回备份路径。
+
+    单份策略：目标 .bak 已存在（目录或文件皆处理）→ 先移除再改名——桌面
+    不留多代 .bak 堆积。rename 失败（如 Keil 正打开工程文件占用 → WinError
+    32）OSError 上抛，经 errors.py 映射 400「文件操作失败」——此时旧工程
+    仍在原名目录未被破坏，用户关闭占用程序后重试即可，绝不遗留半状态。
+    """
+    backup = output_dir.with_name(output_dir.name + ".bak")
+    if backup.exists() or backup.is_symlink():
+        if backup.is_dir() and not backup.is_symlink():
+            shutil.rmtree(backup)
+        else:
+            backup.unlink()
+    output_dir.rename(backup)
+    return backup
 
 
 def _is_windows_reserved_filename(name: str) -> bool:
