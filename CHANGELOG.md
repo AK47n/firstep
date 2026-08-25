@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0d1754b0d6fa40b186177c2c6dcfcfa83622ac4f -->
+<!-- changelog-auto: last-commit=af692adbe6d10f2c94f9aabca0c6ecc6dd5231b5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -47,6 +47,7 @@
 - 23:41 模块库工具栏与统计条（工单 02）：搜索即过滤（slug/简介/依赖/套件/备注，大小写不敏感）、平台与状态单选 chips（再点一次取消、Esc 全清）、排序（模块名/平台数/依赖数可逆序）、统计条（总数/平台计数/已验证/硬件绑定/互斥组去重）；全部客户端过滤，纯函数 libFilterModules/libSortModules/libStats/libStatsText/libChipRowHTML（tests/js 16 例全绿）；冒烟 20 项 PASS；评审修订落实（排序调用点 {by,dir} 映射 HIGH、null 平台条目统计一致性、内联样式/_comment 清理）
 - 23:47 模块库行详情弹窗（工单 03）：每行新增「详情」按钮，复用 module-info-dialog/01 的 moduleInfoHTML 全量信息渲染与 openModuleInfo 弹窗交互（遮罩/✕/Esc/替换/remove 清理）；openModuleInfo 参数化为 (slug, platform=chosenPlatform)，库行显式传 null 展示全部平台分段（无当前平台无此版本提示），生成页单参调用上下文保留；tests/js 296 绿、冒烟 27 项 PASS、pytest 2365 绿；评审两轴零缺陷，补 ✕ 关闭冒烟断言
 - 23:54 模块库悬空依赖检测与警示（工单 04）：纯函数 danglingDependencies(modules)（{缺失依赖:[引用方...]}，同模块重复声明只记一次，零后端）；行内依赖列悬空名 ⚠ 警示标（title=缺失清单+引用方，行渲染先去重）；libStats 增 dangling 统计、统计条悬空时红色「悬空依赖 N」（无则不显示）；tests/js 301 绿、冒烟 31 项 PASS、pytest 2365 绿；评审修订落实（行内去重 LOW、冒烟颜色主题无关化、注释措辞、CSS 归位）
+- 23:59 改简介模态编辑器（工单 05）：替换 window.prompt 为 .lib-edit-* 模态（原简介只读对照 + 新简介文本域预填 + 保存/取消，复用 03 弹窗交互：替换式/遮罩/✕/Esc/remove 清理）；editDescStatus 纯函数状态机（idle/saving/ok/rejected，saved/error 仅从 saving 转移）；保存中用端点返回 manifest 本地替换 + renderModulePool/renderLibraryTable（零额外请求），驳回展示后端原因保留表单；保存中关闭隔离守卫；tests/js 303 绿、冒烟 35 项 PASS、pytest 2365 绿；评审两轴零缺陷
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
