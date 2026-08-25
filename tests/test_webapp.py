@@ -2333,8 +2333,8 @@ def test_generate_assembles_project_with_structure_include_path_and_main(
 
     assert resp.status_code == 200
     data = resp.json()
-    # AI 英文短名做目录名（工单 ascii-project-name/02）
-    output_dir = desktop_dir / "Smart_Inspection_Car"
+    # AI 英文短名做目录名（工单 ascii-project-name/02 + desktop-platform-suffix/01）
+    output_dir = desktop_dir / "Smart_Inspection_Car_STM32"
     # 验收项 4：工程结构 / include path / main.c 就位
     assert data["output_dir"] == str(output_dir)
     assert not requested_output_dir.exists()
@@ -2448,13 +2448,15 @@ def test_generate_desktop_output_reuses_cleaned_half_baked_dir(
 ):
     """工单 generate-conflict-guard/01：同名目录存在但无完整工程标记（空 /
     半成品残渣）→ 清理后用原目录名生成（不再静默改名攒时间戳目录）；AI
-    题名照常过 windows_safe 清洗（CON → CON_ 保留名）。"""
+    题名照常过 windows_safe 清洗（CON → CON_ 保留名），平台后缀一并
+    清洗（工单 desktop-platform-suffix/01）。"""
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
     context[1]["llm"] = FakeLLM(topic_en_name='  CON<>:"/\\|?*  ')
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
-    (desktop_dir / "CON_").mkdir(parents=True)
-    (desktop_dir / "CON_").joinpath(".ccsproject").write_text(
+    target = "CON_ _STM32"
+    (desktop_dir / target).mkdir(parents=True)
+    (desktop_dir / target).joinpath(".ccsproject").write_text(
         "<projectOptions/>", encoding="utf-8"
     )
 
@@ -2470,7 +2472,7 @@ def test_generate_desktop_output_reuses_cleaned_half_baked_dir(
     )
 
     assert resp.status_code == 200
-    output_dir = desktop_dir / "CON_"
+    output_dir = desktop_dir / target
     assert resp.json()["output_dir"] == str(output_dir)
     assert (output_dir / "main.c").is_file()
     # 残渣被替换为完整工程（模块副产物在）
@@ -2481,12 +2483,13 @@ def test_generate_desktop_rejects_existing_complete_project(
     client, context, tmp_path
 ):
     """工单 generate-conflict-guard/01：同名完整工程已存在 → 400 中文（不静默
-    换名、不覆盖，目录内容原样未动）。"""
+    换名、不覆盖，目录内容原样未动）。目录名含平台后缀（工单
+    desktop-platform-suffix/01：Auto_Car_STM32）。"""
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
     context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
-    existing = desktop_dir / "Auto_Car"
+    existing = desktop_dir / "Auto_Car_STM32"
     existing.mkdir(parents=True)
     (existing / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
     (existing / "README.md").write_text("不要动我", encoding="utf-8")
@@ -2504,6 +2507,9 @@ def test_generate_desktop_rejects_existing_complete_project(
 
     assert resp.status_code == 400
     assert "已有同名工程" in resp.json()["detail"]
+    # 文案提示换平台路径（工单 desktop-platform-suffix/01）：用户知道可以
+    # 换平台生成带后缀的新目录，而不是被「删除/改题名」堵死
+    assert "换平台" in resp.json()["detail"]
     assert (existing / "main.c").read_text(encoding="utf-8") == "int main(void) {}\n"
     assert (existing / "README.md").read_text(encoding="utf-8") == "不要动我"
 
@@ -2517,7 +2523,7 @@ def test_generate_desktop_busy_while_same_key_in_progress(
     context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
-    context[0].pending_generations.add("desktop:Auto_Car")
+    context[0].pending_generations.add("desktop:Auto_Car_STM32")
 
     resp = client.post(
         "/api/generate",
@@ -2562,7 +2568,7 @@ def test_generate_desktop_cleans_partial_dir_on_failure(
     )
 
     assert resp.status_code == 400
-    assert (desktop_dir / "Auto_Car").exists() is False
+    assert (desktop_dir / "Auto_Car_STM32").exists() is False
 
 
 def test_generate_desktop_opens_explorer_on_success(
@@ -2593,7 +2599,7 @@ def test_generate_desktop_opens_explorer_on_success(
     )
 
     assert resp.status_code == 200
-    assert opened == [str(desktop_dir / "Auto_Car")]
+    assert opened == [str(desktop_dir / "Auto_Car_STM32")]
 
 
 def test_generate_desktop_output_uses_topic_key_title_for_historical_topic(
@@ -2623,11 +2629,55 @@ def test_generate_desktop_output_uses_topic_key_title_for_historical_topic(
 
     assert resp.status_code == 200
     # 未收录字典 → ASCII 兜底保留字母数字 token（2026C + PDF）
-    output_dir = desktop_dir / "2026C_2026C_PDF"
+    output_dir = desktop_dir / "2026C_2026C_PDF_STM32"
     assert resp.json()["output_dir"] == str(output_dir)
     assert (output_dir / "main.c").is_file()
     # 目录名不再走 AI（省一次 LLM 调用）
     assert context[1]["llm"].topic_en_name_calls == []
+
+
+def test_generate_desktop_suffix_separates_platforms(
+    client, context, tmp_path
+):
+    """工单 desktop-platform-suffix/01：同题两个平台各生成各的目录
+    （Auto_Car_STM32 / Auto_Car_MSPM0）——换平台不再被「同名完整工程」护栏
+    卡死；同平台同题再生成仍撞护栏（400，护栏语义不变）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    import_master(
+        context[0].config.masters_dir,
+        PLATFORM_MSPM0,
+        make_fake_ccs_master_project(tmp_path / "ccs_master_src"),
+    )
+    context[1]["llm"] = FakeLLM(topic_en_name="Auto_Car")
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    def post(platform):
+        return client.post(
+            "/api/generate",
+            json={
+                "platform": platform,
+                "slugs": ["dht11"],
+                "main_c": "int main(void) { while (1); }\n",
+                "problem_text": "赛题：双平台同题",
+                "output_dir": str(tmp_path / "out" / "ignored"),
+            },
+        )
+
+    first = post(PLATFORM_STM32)
+    assert first.status_code == 200
+    assert first.json()["output_dir"] == str(desktop_dir / "Auto_Car_STM32")
+    assert (desktop_dir / "Auto_Car_STM32" / "main.c").is_file()
+
+    second = post(PLATFORM_MSPM0)
+    assert second.status_code == 200
+    assert second.json()["output_dir"] == str(desktop_dir / "Auto_Car_MSPM0")
+    assert (desktop_dir / "Auto_Car_MSPM0" / "main.c").is_file()
+
+    # 同平台同题 → 护栏：400（不覆盖既有工程）
+    same = post(PLATFORM_STM32)
+    assert same.status_code == 400
+    assert "已有同名工程" in same.json()["detail"]
 
 
 def test_generate_desktop_output_propagates_ai_title_error(
@@ -2782,6 +2832,36 @@ def test_generate_unknown_platform_returns_400_chinese(client, context, tmp_path
     detail = resp.json()["detail"]
     assert "未知平台" in detail
     assert "stm32" in detail  # 带已注册平台清单，用户可直接修正重试
+
+
+def test_generate_desktop_unknown_platform_returns_400_chinese(
+    client, context, tmp_path
+):
+    """工单 desktop-platform-suffix/01：桌面模式未知平台 → 400 中文带平台清单。
+
+    目录裁决拼平台后缀在未知平台上先抛的话会落未登记 500——用户可控输入
+    照 C6 先例走 400（校验前置），不因新装配点倒退成 500。
+    """
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": "foo",
+            "slugs": ["dht11"],
+            "main_c": "int main(void) { while (1); }\n",
+            "problem_text": "赛题：未知平台",
+            "output_dir": str(tmp_path / "out" / "ignored"),
+        },
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "未知平台" in detail
+    assert "mspm0" in detail
+    assert not desktop_dir.exists()
 
 
 # ---------------------------------------------------------------------------

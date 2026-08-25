@@ -18,3 +18,12 @@ PLATFORM_CONFIG_FILE_SUFFIXES = {
     PLATFORM_STM32: (".uvprojx",),
     PLATFORM_MSPM0: (".cproject", ".project"),
 }
+
+# 桌面目录平台后缀（工单 desktop-platform-suffix/01）：同一赛题为两个平台
+# 各生成各的工程，目录名带平台标记分流（2024H_Auto_Car_STM32 /
+# 2024H_Auto_Car_MSPM0）——换平台同题不再撞「同名完整工程」护栏。映射单源
+# 照 PLATFORM_CONFIG_FILE_SUFFIXES 先例；缺 key = 未知平台（生成侧大声失败）。
+PLATFORM_DIR_SUFFIXES = {
+    PLATFORM_STM32: "_STM32",
+    PLATFORM_MSPM0: "_MSPM0",
+}

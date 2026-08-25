@@ -15,7 +15,9 @@ from contest_generator.generation_output import (
     topic_title_from_summary,
     unique_desktop_topic_dir,
     windows_safe_folder_name,
+    with_platform_suffix,
 )
+from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
 
 def test_topic_title_from_summary_uses_first_non_bullet_line():
@@ -148,3 +150,18 @@ def test_desktop_topic_dir_verdict_exists_when_complete(tmp_path):
 
     assert desktop_topic_dir_verdict(desktop, "With_Main")[1] == "exists"
     assert desktop_topic_dir_verdict(desktop, "With_Manifest")[1] == "exists"
+
+
+def test_with_platform_suffix_appends_known_platform_marker():
+    """平台目录后缀（工单 desktop-platform-suffix/01）：同题两个平台各生成
+    各的目录——标题追加平台标记（2024H_Auto_Car_STM32 / Auto_Car_MSPM0），
+    双平台目录不再同名。后缀映射与 PLATFORM_CONFIG_FILE_SUFFIXES 同域单源。"""
+    assert with_platform_suffix("2024H_Auto_Car", PLATFORM_STM32) == "2024H_Auto_Car_STM32"
+    assert with_platform_suffix("Auto_Car", PLATFORM_MSPM0) == "Auto_Car_MSPM0"
+
+
+def test_with_platform_suffix_raises_on_unknown_platform():
+    """未知平台大声失败（工单 desktop-platform-suffix/01）：映射缺 key 时静默
+    生成无后缀目录会让新旧平台目录重新撞名——漂移暴露优于静默。"""
+    with pytest.raises(ValueError, match="未知平台：esp32"):
+        with_platform_suffix("Auto_Car", "esp32")

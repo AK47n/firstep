@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from .context_manifest import CONTEXT_MANIFEST_FILENAME
+from .platforms import PLATFORM_DIR_SUFFIXES
 
 WINDOWS_RESERVED_FILENAMES = frozenset(
     {
@@ -186,6 +187,23 @@ def desktop_topic_dir_verdict(
     ):
         return candidate, "exists"
     return candidate, "clean"
+
+
+def with_platform_suffix(title: str, platform: str) -> str:
+    """目录标题 → 带平台后缀（工单 desktop-platform-suffix/01）。
+
+    同一赛题在两个平台各生成各的目录：标题追加平台标记
+    （Auto_Car_STM32 / Auto_Car_MSPM0），换平台同题不再撞「同名完整工程」
+    护栏，同平台同题仍同名（护栏语义不变）。后缀映射单源在 platforms.py
+    （PLATFORM_DIR_SUFFIXES，照 PLATFORM_CONFIG_FILE_SUFFIXES 先例）。
+
+    未知平台大声失败（ValueError → 未登记 500）：映射缺 key 时静默返回
+    无后缀目录会让新旧平台目录重新撞名——漂移暴露优于静默。
+    """
+    suffix = PLATFORM_DIR_SUFFIXES.get(platform)
+    if suffix is None:
+        raise ValueError(f"未知平台：{platform}")
+    return f"{title}{suffix}"
 
 
 def _is_windows_reserved_filename(name: str) -> bool:
