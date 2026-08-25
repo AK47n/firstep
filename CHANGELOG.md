@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c6f1a072197f64cb2e2107919ab4e360e076906b -->
+<!-- changelog-auto: last-commit=1c07478ff3c6dd5c26cac57f3c5d976d21a21d66 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -44,6 +44,7 @@
 - 23:20 生成页就绪总览收尾：宽屏（≥1180px）隐藏顶部步骤 chips 去重导航，摘要提示语随步导航位置（左侧/上方）动态跟随，窄屏保持兼作唯一步骤导航；genOverviewSummaryHTML 增 navHint 参数，缺省不渲染
 - 23:20 模块库 UI 提升（第二栏目）：spec 确定「信息查看 + 编辑体验 + 美感」三主轴、表格精修形态、零新后端（复用 description / platform-identity / platform-files 端点）；切 7 张竖切工单（01 表格令牌化 → 02 工具栏统计 → 03 详情弹窗 → 04 悬空依赖 → 05 改简介模态 → 06 编辑弹窗 → 07 添加表单折叠）
 - 23:28 模块库 UI 提升（工单 01 表格视觉令牌化）：表头底纹、slug 等宽（限 .lib-table 作用域）、简介单行截断 + title 全文；行高亮沿用全局 tbody tr:hover 不新增斑马纹（与生成页/参考库一致）；行渲染抽纯函数 moduleRowHTML（tests/js 6 项单测全绿）+ 加载态占位 + 错误态复用全局 .error；冒烟 8 项 PASS；评审双轴修订落实（撤斑马纹、td.slug 限域、删重复规则），工单 resolved
+- 23:41 模块库工具栏与统计条（工单 02）：搜索即过滤（slug/简介/依赖/套件/备注，大小写不敏感）、平台与状态单选 chips（再点一次取消、Esc 全清）、排序（模块名/平台数/依赖数可逆序）、统计条（总数/平台计数/已验证/硬件绑定/互斥组去重）；全部客户端过滤，纯函数 libFilterModules/libSortModules/libStats/libStatsText/libChipRowHTML（tests/js 16 例全绿）；冒烟 20 项 PASS；评审修订落实（排序调用点 {by,dir} 映射 HIGH、null 平台条目统计一致性、内联样式/_comment 清理）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
