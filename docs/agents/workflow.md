@@ -22,6 +22,7 @@ Before writing a spec:
 - git 提交信息必须中文（可中英混合）：`.githooks/commit-msg` 钩子强制（安装：`git config core.hooksPath .githooks`，新 clone 后需重配）；`--no-verify` 可绕过但不鼓励。
 - CHANGELOG 条目由提交信息自动补录（post-commit → changelog.py），提交信息中文即保证中文；`tests/test_repo_language.py` 对工单 / spec / CHANGELOG 做第二道兜底。
 - 反例（发生过，勿重演）：llm-observability-dashboard 的工单与 08-18 的 CHANGELOG 记录整段英文。
+- **PowerShell 脚本编码（硬性约定）**：所有 .ps1（含检查 / 探针脚本）必须存成 **UTF-8 with BOM**。Windows PowerShell 5.1 对无 BOM 的 .ps1 按系统 ANSI 代码页（中文系统 GBK/CP936）解码：UTF-8 中文注释的字节流经 GBK 双字节硬配对后，行尾剩余字节与换行符 0x0A 构成无效配对被双双丢弃 → 换行符消失 → 注释行吞掉下一行代码（"行解析错位"，变量/语句静默丢失）。是否吞行取决于逐字节配对路径，无法按字符数奇偶推断，故一律带 BOM 杜绝。`tests/test_ps1_encoding.py` 兜底。
 
 ## Step 2 — To spec
 

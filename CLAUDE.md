@@ -21,6 +21,8 @@ Skip this only for trivial single-step tasks — and say so explicitly when skip
 
 **语言规范（硬性约定）**：spec / 工单 / git 提交信息 / CHANGELOG 一律用中文书写（技术术语、标识符、`Status:` 等标签值可保留英文）。英文提交信息会被 `.githooks/commit-msg` 拒绝（`tests/test_repo_language.py` 兜底工单与 CHANGELOG）。详见 `docs/agents/workflow.md`「语言规范」。
 
+**PowerShell 编码（硬性约定）**：所有 .ps1（含检查/探针脚本）必须存成 **UTF-8 with BOM**——Windows PowerShell 5.1 对无 BOM 脚本按系统 ANSI（GBK）解码，UTF-8 中文注释会触发 GBK 硬配对吞掉行尾换行符，导致下一行代码被注释、脚本行为错位（`tests/test_ps1_encoding.py` 兜底；`sources/` 第三方脚本除外）。
+
 ### Issue tracker
 
 Issues and specs live as markdown files under `.scratch/<feature-slug>/` (local tracker, one file per ticket). See `docs/agents/issue-tracker.md`.

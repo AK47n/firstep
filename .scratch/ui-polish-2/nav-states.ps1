@@ -1,4 +1,4 @@
-# verify capsule nav states via CDP: mark done 1-3, scroll to step 6, shot + computed styles
+﻿# verify capsule nav states via CDP: mark done 1-3, scroll to step 6, shot + computed styles
 param([int]$Port = 9250)
 $ErrorActionPreference = "Stop"
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
