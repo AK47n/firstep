@@ -50,7 +50,7 @@ test("注入逻辑存在：initBtnIcons 遍历 [data-ico] 前置插入", () => {
 
 test("关键高频按钮已带 data-ico", () => {
   for (const id of ["btn-generate", "btn-skeleton", "btn-recommend", "btn-fix-center",
-    "btn-handoff", "btn-save-settings", "btn-topic-search", "btn-ref-search",
+    "btn-handoff", "btn-save-settings", "btn-topic-search",
     "btn-pdf-search", "btn-topic-split", "btn-topic-confirm", "btn-confirm"]) {
     const m = html.match(new RegExp('<button id="' + id + '"[^>]*data-ico="[^"]+"'));
     assert.ok(m, id + " 缺 data-ico");

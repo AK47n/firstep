@@ -493,6 +493,24 @@
   #tab-reference th:nth-child(6), #tab-reference td:nth-child(6) { width: 140px; }
   #tab-reference td { overflow-wrap: break-word; }
   #tab-reference td:nth-child(6) { white-space: nowrap; }
+  /* 参考文件库（reference-library-ui/02 表格精修）：标题列单行截断 + 全文
+     tooltip（行渲染同步给 title）；锚定三色徽章复用 .badge 基础样式
+     （赛题 = accent 主题色 / 套件 = info / 未锚定 = 灰）；详情弹窗
+     元数据段 + 文件清单段两段式（scroll 容器承接滚动，viewer 固定底部） */
+  .ref-title-cell { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .ref-title-cell .ref-matched { white-space: normal; }
+  .badge.ref-topic { background: var(--accent-dim); color: var(--accent); }
+  .badge.ref-kit { background: var(--info-dim); color: var(--info); }
+  .badge.ref-none { background: rgba(139, 148, 158, .15); color: var(--muted); }
+  .ref-detail-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex;
+                       flex-direction: column; }
+  .ref-detail-meta { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .ref-detail-title { font-size: 15px; font-weight: 600; margin-bottom: 6px;
+                      overflow-wrap: break-word; }
+  .ref-detail-row { display: flex; gap: 10px; padding: 3px 0; font-size: 13px;
+                    align-items: baseline; min-width: 0; }
+  .ref-detail-k { flex: none; width: 52px; color: var(--muted); font-size: 12px; }
+  .ref-detail-desc { overflow-wrap: break-word; white-space: pre-wrap; min-width: 0; }
   /* PDF 资料库表：文件名自适应、批次固定宽、操作列窄 */
   #tab-pdf table { table-layout: fixed; min-width: 760px; }
   #tab-pdf .card { overflow-x: auto; }
@@ -1684,17 +1702,22 @@
   <section id="tab-reference" class="page">
     <div class="card">
       <h2>参考文件库 <span class="muted">（不编译进生成工程的配套资料，生成时按锚定作学习素材注入；磁盘目录即数据库）</span></h2>
-      <div class="row">
-        <div style="flex:1"><label>标题</label><input type="text" id="ref-filter-title" placeholder="标题子串"></div>
-        <div style="flex:1"><label>类型</label><input type="text" id="ref-filter-type" placeholder="类型子串"></div>
-        <div style="flex:1"><label>锚定</label><input type="text" id="ref-filter-anchor" placeholder="赛题编号 / 套件型号"></div>
-        <div style="flex:1"><label>文件名</label><input type="text" id="ref-filter-filename" placeholder="文件名 / 型号"></div>
+      <div class="lib-toolbar">
+        <input type="search" id="ref-filter" placeholder="搜索标题 / 类型 / 锚定值 / 简介 / 文件名…">
+        <select id="ref-sort" title="排序维度">
+          <option value="title">按标题</option>
+          <option value="type">按类型</option>
+          <option value="size">按体量</option>
+          <option value="files">按文件数</option>
+          <option value="platform">按平台</option>
+        </select>
+        <button id="ref-sort-dir">↑ 升序</button>
+        <button id="ref-filter-clear">清空过滤</button>
       </div>
-      <div class="row" style="margin-top:8px">
-        <button id="btn-ref-search" class="primary" data-ico="search">搜索</button>
-        <button id="btn-ref-search-clear">清空并显示全部</button>
-      </div>
-      <table style="margin-top:10px">
+      <div class="lib-chips-row"><span class="muted">平台</span><span id="ref-platform-chips"></span></div>
+      <div class="lib-chips-row"><span class="muted">锚定</span><span id="ref-anchor-chips"></span></div>
+      <div id="ref-stats" class="lib-stats"></div>
+      <table class="lib-table" style="margin-top:10px">
         <thead><tr><th>标题</th><th>类型</th><th>锚定</th><th>简介</th><th>体量</th><th>操作</th></tr></thead>
         <tbody id="ref-rows"></tbody>
       </table>
@@ -6771,6 +6794,226 @@ $("btn-add-module-submit").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 // 参考文件库页：浏览 / 搜索 / AI 简介草稿 / 入库 / 删除
 // ---------------------------------------------------------------------------
+// —— 参考库表格精修（reference-library-ui/02）：过滤 / 排序 / 统计 / 行渲染
+// 纯函数组（tests/js 可注入，对偶模块库 lib-* 系列）——
+// refFilterEntries(entries, f)：f={q, platform, anchorKind}。q 大小写不敏感
+// 子串匹配标题 / 类型 / 锚定值 / 简介 / 任一文件名（四合一关键字）；
+// platform / anchorKind 空串 = 该维度不过滤。
+function refFilterEntries(entries, f) {
+  const q = String((f && f.q) || "").trim().toLowerCase();
+  const platform = (f && f.platform) || "";
+  const anchorKind = (f && f.anchorKind) || "";
+  return (entries || []).filter((e) => {
+    if (q) {
+      const hay = [e.title, e.type,
+        e.anchor_kind === "none" ? "" : e.anchor_value, e.description,
+        ...(e.files || [])];
+      if (!hay.some((s) => String(s == null ? "" : s).toLowerCase().includes(q))) return false;
+    }
+    if (platform && e.platform !== platform) return false;
+    if (anchorKind && e.anchor_kind !== anchorKind) return false;
+    return true;
+  });
+}
+
+// refSortEntries(entries, s)：s={by:'title'|'type'|'size'|'files'|'platform',
+// dir:'asc'|'desc'}；返回新数组（不改原数组）；Array.sort 稳定 → 同键保持入库序。
+// by 分派集中在 key() 一处（数值键按数值、文本键按 localeCompare）。
+function refSortEntries(entries, s) {
+  const by = (s && s.by) || "title";
+  const dir = (s && s.dir) === "desc" ? -1 : 1;
+  const key = (e) => {
+    if (by === "size") return Number(e.size_bytes || 0);
+    if (by === "files") return Number(e.file_count != null ? e.file_count : (e.files || []).length);
+    if (by === "type") return String(e.type || "");
+    if (by === "platform") return String(e.platform || "");
+    return String(e.title || "");
+  };
+  const out = (entries || []).slice();
+  out.sort((a, b) => {
+    const av = key(a), bv = key(b);
+    const cmp = (typeof av === "number" && typeof bv === "number")
+      ? (av === bv ? 0 : (av < bv ? -1 : 1))
+      : String(av).localeCompare(String(bv));
+    return cmp * dir;
+  });
+  return out;
+}
+
+// refStats(entries)：统计（对传入集合计算——统计条随过滤结果联动）。
+// platforms / anchorKinds 三键恒显（统计条固定口径）；totalBytes 求和。
+function refStats(entries) {
+  const list = entries || [];
+  const platforms = { any: 0, stm32: 0, mspm0: 0 };
+  const anchorKinds = { topic: 0, kit: 0, none: 0 };
+  let totalBytes = 0;
+  for (const e of list) {
+    if (platforms[e.platform] != null) platforms[e.platform] += 1;
+    if (anchorKinds[e.anchor_kind] != null) anchorKinds[e.anchor_kind] += 1;
+    totalBytes += Number(e.size_bytes || 0);
+  }
+  return { total: list.length, platforms, anchorKinds, unanchored: anchorKinds.none, totalBytes };
+}
+
+// refStatsText(stats)：统计条文案（平台名沿用徽章惯例 toUpperCase 显示）。
+function refStatsText(stats) {
+  const parts = ["共 " + stats.total + " 条参考"];
+  for (const name of ["any", "stm32", "mspm0"]) {
+    parts.push(String(name).toUpperCase() + " " + (stats.platforms[name] || 0));
+  }
+  parts.push("赛题 " + (stats.anchorKinds.topic || 0));
+  parts.push("套件 " + (stats.anchorKinds.kit || 0));
+  parts.push("未锚定 " + (stats.unanchored || 0));
+  if (stats.totalBytes) parts.push("总体积 " + formatSize(stats.totalBytes));
+  return parts.join(" · ");
+}
+
+// refMatchFiles(entry, q)：文件名命中清单（客户端版 matched_files）。
+// 从条目 files 元数据清单按子串（大小写不敏感）计算；空关键字 = 无命中。
+function refMatchFiles(entry, q) {
+  const needle = String(q || "").trim().toLowerCase();
+  if (!needle) return [];
+  return (entry.files || []).filter((p) => String(p).toLowerCase().includes(needle));
+}
+
+// refAnchorBadge(entry)：锚定三色徽章（赛题 = ref-topic / 套件 = ref-kit /
+// 未锚定 = ref-none），复用 .badge 基础样式。
+function refAnchorBadge(entry) {
+  if (entry.anchor_kind === "topic") return `<span class="badge ref-topic">赛题 ${esc(entry.anchor_value)}</span>`;
+  if (entry.anchor_kind === "kit") return `<span class="badge ref-kit">套件 ${esc(entry.anchor_value)}</span>`;
+  return `<span class="badge ref-none">未锚定</span>`;
+}
+
+// refChipRowHTML(options, selected)：筛选 chips 纯函数（对偶 libChipRowHTML，
+// 换 data-ref-chip 属性）；selected 命中项加 on 类（'' = 未选中）。
+function refChipRowHTML(options, selected) {
+  return (options || []).map((o) =>
+    `<button type="button" class="lib-chip${o.value === selected ? " on" : ""}" data-ref-chip="${esc(o.value)}">${esc(o.label)}${o.count != null ? "（" + o.count + "）" : ""}</button>`
+  ).join("");
+}
+
+// refRowHTML(entry, f)：行渲染（标题截断 + 全文 tooltip、文件名命中直出链接、
+// 锚定徽章 + 平台 chip、简介截断 + tooltip、体量口径、操作按钮）。
+function refRowHTML(entry, f) {
+  const q = (f && f.q) || "";
+  const title = String(entry.title || "");
+  const desc = String(entry.description || "");
+  const matches = refMatchFiles(entry, q);
+  return `<tr>
+    <td class="ref-title-cell" title="${esc(title)}">${esc(title)}
+      ${matches.length ? '<div class="ref-matched">' + matches.map((p) =>
+        `<a href="#" data-mf="${esc(entry.id)}" data-path="${esc(p)}">▸ ${esc(p)}</a>`).join("") + "</div>" : ""}
+    </td>
+    <td>${esc(entry.type)}</td>
+    <td class="muted">${refAnchorBadge(entry)}${referencePlatformChip(entry)}</td>
+    <td class="desc-cell" title="${esc(desc)}">${esc(desc)}</td>
+    <td class="muted" title="${esc(`${(entry.files || []).length} 个素材文件，路径清单见磁盘目录`)}">${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</td>
+    <td><button data-ref-view="${esc(entry.id)}" title="查看条目详情">详情</button> <button class="danger" data-ref-del="${esc(entry.id)}">删除</button></td>
+  </tr>`;
+}
+
+// refDetailHTML(entry, files)：详情弹窗内容（元数据段 + 文件过滤输入 +
+// 文件清单段；files = 磁盘实况端点结果，逐路径大小 + 打开链接）。
+function refDetailHTML(entry, files) {
+  return `<div class="ref-detail-meta">
+    <div class="ref-detail-title">${esc(entry.title)}</div>
+    <div class="ref-detail-row"><span class="ref-detail-k">编号</span><span class="mono">${esc(entry.id)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">类型</span><span>${esc(entry.type)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">锚定</span><span>${refAnchorBadge(entry)}${referencePlatformChip(entry)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">简介</span><span class="ref-detail-desc">${esc(entry.description)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">体量</span><span>${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</span></div>
+  </div>
+  <input class="ref-files-filter" placeholder="过滤文件名…">
+  <ul class="ref-files-list">
+    ${files.length ? files.map((f) => `
+    <li data-path="${esc(f.path)}"><a href="#" data-path="${esc(f.path)}">${esc(f.path)}</a>
+        <span class="muted">${formatSize(f.size_bytes)}</span></li>`).join("")
+      : '<li class="muted">无文件（素材清单缺失）。</li>'}
+  </ul>`;
+}
+
+// —— 参考库工具栏状态与渲染（工单 02）：过滤条件集中于此，事件层只转发 ——
+const refUI = { q: "", platform: "", anchorKind: "", sortBy: "title", sortDir: "asc" };
+let refSearchTimer = null;
+
+function renderReferenceChips() {
+  // chips 计数 = 全量（维度概览）；统计条 = 过滤结果（随过滤联动）
+  const stats = refStats(refEntryCache || []);
+  $("ref-platform-chips").innerHTML = refChipRowHTML([
+    { value: "", label: "全部" },
+    { value: "any", label: "ANY", count: stats.platforms.any },
+    { value: "stm32", label: "STM32", count: stats.platforms.stm32 },
+    { value: "mspm0", label: "MSPM0", count: stats.platforms.mspm0 },
+  ], refUI.platform);
+  $("ref-anchor-chips").innerHTML = refChipRowHTML([
+    { value: "", label: "全部" },
+    { value: "topic", label: "赛题", count: stats.anchorKinds.topic },
+    { value: "kit", label: "套件", count: stats.anchorKinds.kit },
+    { value: "none", label: "未锚定", count: stats.anchorKinds.none },
+  ], refUI.anchorKind);
+}
+
+function renderReferenceStats() {
+  const stats = refStats(refFilterEntries(refEntryCache || [], refUI));
+  $("ref-stats").innerHTML = esc(refStatsText(stats));
+}
+
+function renderReferences() {
+  const list = refEntryCache || [];
+  const rows = refSortEntries(refFilterEntries(list, refUI), { by: refUI.sortBy, dir: refUI.sortDir });
+  if (!list.length) {
+    $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📚</div><div class="es-title">参考文件库暂无条目</div><div class="es-hint">用下方表单录入资料；生成时按锚定自动注入为学习素材。</div></div></td></tr>';
+  } else if (!rows.length) {
+    // 过滤后的空结果 ≠ 库为空：提示「清空过滤」而不是「录入条目」
+    $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的参考条目</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
+  } else {
+    $("ref-rows").innerHTML = rows.map((e) => refRowHTML(e, refUI)).join("");
+  }
+  $("ref-rows").querySelectorAll("[data-ref-view]").forEach((b) =>
+    b.addEventListener("click", () => viewReferenceDetail(b.dataset.refView)));
+  $("ref-rows").querySelectorAll("[data-mf]").forEach((a) =>
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      openReferenceFile(a.dataset.mf, a.dataset.path);
+    }));
+  $("ref-rows").querySelectorAll("[data-ref-del]").forEach((b) =>
+    b.addEventListener("click", () => deleteReference(b.dataset.refDel)));
+  renderReferenceChips();
+  renderReferenceStats();
+}
+
+function clearReferenceFilter() {
+  refUI.q = ""; refUI.platform = ""; refUI.anchorKind = "";
+  $("ref-filter").value = "";
+  renderReferences();
+}
+
+function initReferenceToolbar() {
+  $("ref-filter").addEventListener("input", (e) => {
+    clearTimeout(refSearchTimer);
+    refSearchTimer = setTimeout(() => { refUI.q = e.target.value; renderReferences(); }, 150);
+  });
+  $("ref-search").addEventListener("keydown", (e) => { if (e.key === "Escape") clearReferenceFilter(); });
+  $("ref-sort").addEventListener("change", (e) => { refUI.sortBy = e.target.value; renderReferences(); });
+  $("ref-sort-dir").addEventListener("click", () => {
+    refUI.sortDir = refUI.sortDir === "asc" ? "desc" : "asc";
+    $("ref-sort-dir").textContent = refUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
+    renderReferences();
+  });
+  $("ref-filter-clear").addEventListener("click", clearReferenceFilter);
+  // chips 事件委托（行内动态渲染）；再点已选中项 = 取消该维度过滤
+  $("ref-platform-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ref-chip]"); if (!b) return;
+    refUI.platform = refUI.platform === b.dataset.refChip ? "" : b.dataset.refChip;
+    renderReferences();
+  });
+  $("ref-anchor-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ref-chip]"); if (!b) return;
+    refUI.anchorKind = refUI.anchorKind === b.dataset.refChip ? "" : b.dataset.refChip;
+    renderReferences();
+  });
+}
+
 // 套件锚定的合法取值 = 模块库已有 kit 词表（从 /api/modules 各平台条目 kit
 // 字段去重收集，不新打字——词表外值后端校验拒绝）
 let kitVocabulary = [];
@@ -6805,46 +7048,19 @@ let refEntryCache = [];
 
 async function loadReferences() {
   try {
-    const params = new URLSearchParams();
-    const filters = [["title", "ref-filter-title"], ["type", "ref-filter-type"], ["anchor", "ref-filter-anchor"], ["filename", "ref-filter-filename"]];
-    for (const [key, id] of filters) {
-      const v = $(id).value.trim();
-      if (v) params.set(key, v);
-    }
-    const qs = params.toString();
-    const entries = await apiGet("/api/references" + (qs ? "?" + qs : ""));
-    refEntryCache = entries;
-    $("ref-rows").innerHTML = entries.length ? entries.map((e) => `
-      <tr>
-        <td class="slug">${esc(e.title)}
-          ${(e.matched_files || []).length ? '<div class="ref-matched">' + e.matched_files.map((p) =>
-            `<a href="#" data-mf="${esc(e.id)}" data-path="${esc(p)}">▸ ${esc(p)}</a>`).join("") + '</div>' : ''}
-        </td>
-        <td>${esc(e.type)}</td>
-        <td class="muted">${e.anchor_kind === "kit" ? "套件：" + esc(e.anchor_value) : e.anchor_kind === "none" ? "未锚定" : "赛题：" + esc(e.anchor_value)}${referencePlatformChip(e)}</td>
-        <td class="muted">${esc(e.description)}</td>
-        <td class="muted" title="${esc(`${e.files.length} 个素材文件，路径清单见磁盘目录`)}">${e.file_count} 个文件 · ${formatSize(e.size_bytes)}</td>
-        <td><button data-ref-view="${esc(e.id)}">查看</button> <button class="danger" data-ref-del="${esc(e.id)}">删除</button></td>
-      </tr>`).join("")
-      : '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📚</div><div class="es-title">参考文件库暂无条目</div><div class="es-hint">到「参考文件库」页录入资料；生成时勾选条目可注入为学习素材。</div></div></td></tr>';
-    $("ref-rows").querySelectorAll("[data-ref-view]").forEach((b) =>
-      b.addEventListener("click", () => viewReferenceFiles(b.dataset.refView)));
-    $("ref-rows").querySelectorAll("[data-mf]").forEach((a) =>
-      a.addEventListener("click", (e) => {
-        e.preventDefault();
-        openReferenceFile(a.dataset.mf, a.dataset.path);
-      }));
-    $("ref-rows").querySelectorAll("[data-ref-del]").forEach((b) =>
-      b.addEventListener("click", () => deleteReference(b.dataset.refDel)));
+    // 加载态占位（对偶模块库先例）：fetched 前给占位，读盘快也避免旧内容残留
     $("ref-msg").textContent = "";
-  } catch (e) { $("ref-msg").textContent = e.message; }
+    $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">正在读取参考文件库…</div></div></td></tr>';
+    // 全量在手 → 客户端即时过滤 / 排序 / 统计（工单 02 替换服务端四框筛选）
+    const entries = await apiGet("/api/references");
+    refEntryCache = entries;
+    renderReferences();
+  } catch (e) {
+    // 对偶模块库先例：失败清空占位（错误信息留 ref-msg，不留假加载态）
+    $("ref-rows").innerHTML = "";
+    $("ref-msg").textContent = e.message;
+  }
 }
-
-$("btn-ref-search").addEventListener("click", loadReferences);
-$("btn-ref-search-clear").addEventListener("click", () => {
-  ["ref-filter-title", "ref-filter-type", "ref-filter-anchor", "ref-filter-filename"].forEach((id) => ($(id).value = ""));
-  loadReferences();
-});
 
 async function deleteReference(entryId) {
   const entry = refEntryCache.find((e) => e.id === entryId);
@@ -6884,29 +7100,26 @@ async function openReferenceFile(entryId, path, viewer, viewerPre) {
   window.open(url, "_blank"); // 其余类型：服务端按扩展名给 Content-Type，浏览器转下载
 }
 
-async function viewReferenceFiles(entryId) {
-  try {
-    const files = await apiGet(`/api/references/${encodeURIComponent(entryId)}/files`);
-    showReferenceFiles(entryId, files);
-  } catch (e) { alert(e.message); }
+// 参考文件详情（工单 02）：元数据（缓存全量在手）+ 文件清单（磁盘实况端点）
+// 合并一窗；文件打开行为沿用（.pdf 预览 / 文本内联 / 其余下载）。
+function viewReferenceDetail(entryId) {
+  const entry = (refEntryCache || []).find((e) => e.id === entryId);
+  if (!entry) { toast("info", "未找到条目 " + entryId); return; }
+  apiGet(`/api/references/${encodeURIComponent(entryId)}/files`).then((files) => {
+    showReferenceDetail(entry, files);
+  }).catch((e) => alert(e.message));
 }
 
-function showReferenceFiles(entryId, files) {
+function showReferenceDetail(entry, files) {
   const overlay = document.createElement("div");
   overlay.className = "ref-files-overlay";
   overlay.innerHTML = `
     <div class="ref-files-modal">
       <div class="ref-files-head">
-        <strong>${esc(entryId)} · ${files.length} 个文件</strong>
+        <strong>参考条目详情</strong>
         <button class="ref-files-close" title="关闭">×</button>
       </div>
-      <input class="ref-files-filter" placeholder="过滤文件名…">
-      <ul class="ref-files-list">
-        ${files.length ? files.map((f) => `
-          <li data-path="${esc(f.path)}"><a href="#" data-path="${esc(f.path)}">${esc(f.path)}</a>
-              <span class="muted">${formatSize(f.size_bytes)}</span></li>`).join("")
-          : '<li class="muted">无文件（素材清单缺失）。</li>'}
-      </ul>
+      <div class="ref-detail-scroll">${refDetailHTML(entry, files)}</div>
       <div class="ref-files-viewer hidden"><pre></pre></div>
     </div>`;
   const close = () => overlay.remove();
@@ -6926,7 +7139,7 @@ function showReferenceFiles(entryId, files) {
   overlay.querySelectorAll(".ref-files-list a").forEach((a) =>
     a.addEventListener("click", async (e) => {
       e.preventDefault();
-      await openReferenceFile(entryId, a.dataset.path, viewer, viewerPre);
+      await openReferenceFile(entry.id, a.dataset.path, viewer, viewerPre);
     }));
   const onKey = (e) => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
@@ -9351,6 +9564,7 @@ initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
+initReferenceToolbar();  // 参考库工具栏（工单 02）：防抖搜索 / 排序 / chips 事件绑定（DOM 已就绪）
 </script>
 <div id="toast-root"></div>
 </body>
