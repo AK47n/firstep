@@ -1419,7 +1419,7 @@
 
   <!-- ============================ 设置页 ============================ -->
   <section id="tab-settings" class="page">
-    <div class="card">
+    <div class="card" data-collapse-id="app">
       <h2>应用设置</h2>
       <div class="muted" style="margin-bottom:10px">保存后即时生效，无需重启。</div>
       <div id="settings-banner" class="banner hidden">尚未配置：请填写 API key 后保存。</div>
@@ -1429,7 +1429,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-collapse-id="usage">
       <h2>LLM 用量统计</h2>
       <div class="muted" style="margin-bottom:8px">估算费用按当前计费时段与已配置单价（输入框留空 = 官方默认价）。</div>
       <div class="row" style="gap:28px;align-items:flex-start">
@@ -1448,7 +1448,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-collapse-id="llm-api">
       <h2>AI API</h2>
       <div class="settings-section">连接</div>
       <div class="row">
@@ -1490,7 +1490,7 @@
       <div class="muted" style="margin-top:6px">仅用于「最近 LLM 工作流」费用估算（官方价格会调整，此处的值是参考；留空 = 维持当前）。</div>
     </div>
 
-    <div class="card">
+    <div class="card" data-collapse-id="libs">
       <h2>库目录</h2>
       <div class="settings-section">模块库 / 母版库</div>
       <div class="row">
@@ -1499,7 +1499,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-collapse-id="toolchain">
       <h2>工具链</h2>
       <div class="settings-section">Keil / gmake</div>
       <div class="row">
@@ -1516,7 +1516,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-collapse-id="local-llm">
       <h2>本地模型（可选）</h2>
       <div class="row">
         <div style="flex:1"><label>本地 LLM base_url</label><input type="text" id="set-local-llm-base-url" placeholder="http://localhost:11434/v1"></div>
@@ -1531,7 +1531,7 @@
       <div class="muted">选择本地模型后，赛题简介 / 模块简介 / 参考素材简介三个纯文本摘要调用走本地模型，其余调用仍走 DeepSeek。30B 质量更好但较慢（约 5-15 秒/次），7B 更快（约 1-3 秒/次）；选择「关闭」则全部走云端。</div>
     </div>
 
-    <div class="card">
+    <div class="card" data-collapse-id="vision">
       <h2>视觉通道（可选）</h2>
       <div class="row" style="align-items:center">
         <div style="flex:1">
@@ -1552,9 +1552,9 @@
       <div class="muted">云端识图：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别。视觉服务下拉一键切换 DeepSeek / 智谱预设；手动修改 base_url 或模型会自动转为「自定义」模式（自备 key）。DeepSeek 模式下 key 留空自动复用主 key（同 key 同价）；智谱模式自动沿用已保存的智谱 key。不配置 = 视觉功能关闭，其余功能不受影响。</div>
     </div>
 
-    <div class="card">
+    <div class="card" data-collapse-id="recent-wf">
+      <h2>最近 LLM 工作流</h2>
       <div class="row" style="align-items:center">
-        <h2 style="margin:0;flex:1">最近 LLM 工作流</h2>
         <label style="margin:0 12px 0 0;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">
           <input type="checkbox" id="set-recommend-cache" style="margin:0"> 推荐缓存
         </label>
@@ -6951,6 +6951,123 @@ function initCardCollapse() {
 }
 
 // ---------------------------------------------------------------------------
+// 设置页折叠（工单 settings-infoarch/01-03）：整卡折叠 + 默认收起次要项 +
+// 状态记忆；与生成页折叠（CARD_COLLAPSE_SELECTOR）互不干扰。
+// 存储：localStorage「firstep.settingsCollapse.v1」，JSON {id: collapsed}，
+// 用户选择优先于默认集；解析失败按 {}。默认集单源 = SETTINGS_DEFAULT_COLLAPSED
+// ---------------------------------------------------------------------------
+const SETTINGS_COLLAPSE_KEY = "firstep.settingsCollapse.v1";
+const SETTINGS_DEFAULT_COLLAPSED =
+  new Set(["libs", "toolchain", "local-llm", "vision", "ai-billing"]);
+function parseSettingsCollapse(raw) {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch { return {}; }
+}
+function settingsDefaultCollapsed(id) {
+  return SETTINGS_DEFAULT_COLLAPSED.has(id);
+}
+function effectiveCollapsed(id, stored) {
+  return id in stored ? !!stored[id] : settingsDefaultCollapsed(id);
+}
+// 总开关标签：全部折叠 → 「全部展开」，否则「全部收起」
+function settingsMasterLabel(allCollapsed) {
+  return allCollapsed ? "全部展开" : "全部收起";
+}
+// 计费小节折叠按钮读屏文案（区别于卡片的 collapseBtnLabel）
+function sectionCollapseLabel(collapsed) {
+  return collapsed ? "展开计费区" : "折叠计费区";
+}
+// 应用折叠态到一个元素：卡片走 .card-collapse（syncCollapseBtn 同步
+// title/aria-label），计费小节走 .settings-collapse-head（sectionCollapseLabel）
+function applySettingsCollapseState(elm, collapsed) {
+  elm.classList.toggle("collapsed", collapsed);
+  const head = elm.querySelector(".settings-collapse-head");
+  if (head) {
+    head.title = collapsed ? "展开" : "折叠";
+    head.setAttribute("aria-label", sectionCollapseLabel(collapsed));
+    return;
+  }
+  const btn = elm.querySelector(".card-collapse");
+  if (btn) syncCollapseBtn(btn, collapsed);
+}
+function saveSettingsCollapse(state) {
+  try { localStorage.setItem(SETTINGS_COLLAPSE_KEY, JSON.stringify(state)); }
+  catch (e) { /* 忽略，沿主题/用量先例 */ }
+}
+function initSettingsCollapse() {
+  const section = $("tab-settings");
+  if (!section) return;
+  const items = Array.from(section.querySelectorAll("[data-collapse-id]"));
+  if (!items.length) return;
+  const stored = parseSettingsCollapse(localStorage.getItem(SETTINGS_COLLAPSE_KEY));
+  const state = {};
+  const syncMasterLabel = () => {
+    const master = $("btn-settings-collapse-all");
+    if (!master) return;
+    const allCollapsed = items.every((c) => c.classList.contains("collapsed"));
+    master.textContent = settingsMasterLabel(allCollapsed);
+  };
+  for (const c of items) {
+    const id = c.dataset.collapseId;
+    const collapsed = effectiveCollapsed(id, stored);
+    state[id] = collapsed;
+    const head = c.querySelector(".settings-collapse-head");
+    if (head) {   // 计费小节：头按钮即 toggle（无 h2）
+      applySettingsCollapseState(c, collapsed);
+      head.addEventListener("click", () => {
+        const next = c.classList.toggle("collapsed");
+        state[id] = next;
+        applySettingsCollapseState(c, next);
+        saveSettingsCollapse(state);
+        syncMasterLabel();
+      });
+      continue;
+    }
+    const h2 = c.querySelector("h2");
+    if (!h2) continue;   // 保存设置卡无 h2 → 不可折叠
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "card-collapse";
+    btn.textContent = "▾";
+    applySettingsCollapseState(c, collapsed);
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const next = c.classList.toggle("collapsed");
+      state[id] = next;
+      applySettingsCollapseState(c, next);
+      saveSettingsCollapse(state);
+      syncMasterLabel();
+    });
+    h2.appendChild(btn);
+    h2.addEventListener("click", (e) => {
+      if (e.target.closest(".card-collapse")) return;
+      const next = c.classList.toggle("collapsed");
+      state[id] = next;
+      applySettingsCollapseState(c, next);
+      saveSettingsCollapse(state);
+      syncMasterLabel();
+    });
+  }
+  const master = $("btn-settings-collapse-all");
+  if (master) {
+    master.addEventListener("click", () => {
+      const target = !items.every((c) => c.classList.contains("collapsed"));
+      for (const c of items) {
+        const id = c.dataset.collapseId;
+        state[id] = target;
+        applySettingsCollapseState(c, target);
+      }
+      saveSettingsCollapse(state);
+      syncMasterLabel();
+    });
+    syncMasterLabel();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // LLM 用量统计（工单 ui-polish-5/02）：llm_telemetry 累计快照 → 会话差分 →
 // 跨会话累计持久化 + 费用估算（设置页单价优先，空则官方默认价）
 // ---------------------------------------------------------------------------
@@ -7085,6 +7202,7 @@ $("btn-usage-reset").addEventListener("click", () => {
 })();
 
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
+initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 </script>
 <div id="toast-root"></div>
 </body>
