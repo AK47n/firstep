@@ -235,6 +235,15 @@ if (!d03.skipped) {
   })()`);
   check("弹窗遮罩层级高于置顶目录", d03z.ovZ > d03z.hdZ,
     `overlay=${d03z.ovZ} header=${d03z.hdZ}`);
+  // 垂直居中：modal 中心应贴近视口中心（±60px 容差）
+  const d03v = await Eval(`(() => {
+    const md = document.querySelector('.module-info-modal');
+    if (!md) return { ok: false };
+    const r = md.getBoundingClientRect();
+    const drift = Math.abs((r.top + r.bottom) / 2 - window.innerHeight / 2);
+    return { ok: drift <= 60, drift: Math.round(drift) };
+  })()`);
+  check("弹窗垂直居中", d03v.ok, `drift=${d03v.drift}px`);
   // Esc 关闭 → 无残留
   await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await new Promise((r) => setTimeout(r, 250));
