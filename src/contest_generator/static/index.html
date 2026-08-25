@@ -738,10 +738,13 @@
   /* 卡片折叠（工单 ui-polish-4/01）：标题行右侧按钮 + 折叠态只留标题行。
      选择器修正（工单 ui-polish-6/02）：按钮在 h2 内，`.card > .card-collapse`
      匹配不到 → 样式全失效、退化成 44x40 默认大按钮；改独立类选择器 */
+  /* 折叠按钮弱化（工单 ui-polish-11/05）：默认半透明、hover 显现，避免右上角
+     三角像噪点；transition 含 opacity */
   .card-collapse { margin-left: auto; border: none; background: none;
                   color: var(--muted); font-size: 13px; padding: 0 6px; cursor: pointer;
-                  border-radius: 6px; transition: transform .25s, color .25s; }
-  .card-collapse:hover { color: var(--accent); }
+                  border-radius: 6px; opacity: .35;
+                  transition: transform .25s, color .25s, opacity .2s; }
+  .card-collapse:hover { color: var(--accent); opacity: 1; }
   .card.collapsed .card-collapse { transform: rotate(-90deg); }
   .card.collapsed > *:not(h2) { display: none !important; }
   /* main.c 行号 + 语法着色（工单 ui-polish-8/01）：textarea 透明文字 + 行号列 +
@@ -6880,6 +6883,16 @@ function toast(kind, text) {
 // 导航底部「收起已完成」一键；折叠不持久化（刷新恢复展开）
 // ---------------------------------------------------------------------------
 const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
+// 折叠按钮读屏文案（工单 ui-polish-11/05）：title 保留「折叠/展开」，
+// aria-label 用完整语义，随状态切换
+function collapseBtnLabel(collapsed) {
+  return collapsed ? "展开该卡片" : "折叠该卡片";
+}
+// title + aria-label 同步（三处共用，避免重复块）
+function syncCollapseBtn(btn, collapsed) {
+  btn.title = collapsed ? "展开" : "折叠";
+  btn.setAttribute("aria-label", collapseBtnLabel(collapsed));
+}
 function collapseToggleAll(cards, doneSet, collapse) {
   const done = new Set(doneSet || []);
   return Array.from(cards).map((c) => {
@@ -6889,7 +6902,7 @@ function collapseToggleAll(cards, doneSet, collapse) {
     const shouldCollapse = collapse ? isDone : false;
     c.classList.toggle("collapsed", shouldCollapse);
     const btn = c.querySelector(".card-collapse");
-    if (btn) btn.title = shouldCollapse ? "展开" : "折叠";
+    if (btn) syncCollapseBtn(btn, shouldCollapse);
     return { n, collapsed: shouldCollapse };
   });
 }
@@ -6901,16 +6914,16 @@ function initCardCollapse() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "card-collapse";
-    btn.title = "折叠";
+    syncCollapseBtn(btn, false);
     btn.textContent = "▾";
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      btn.title = c.classList.toggle("collapsed") ? "展开" : "折叠";
+      syncCollapseBtn(btn, c.classList.toggle("collapsed"));
     });
     h2.appendChild(btn);
     h2.addEventListener("click", (e) => {
       if (e.target.closest(".card-collapse")) return;
-      btn.title = c.classList.toggle("collapsed") ? "展开" : "折叠";
+      syncCollapseBtn(btn, c.classList.toggle("collapsed"));
     });
   }
   const nav = $("step-nav");
