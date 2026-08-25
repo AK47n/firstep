@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e00233d2a92d760f412209a656478df0a5e9c35b -->
+<!-- changelog-auto: last-commit=e5427b40899285c6cfb10dc9f44aeebd5b1dcd7e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -24,6 +24,7 @@
 - 19:24 上传 PDF 显示页图：/api/extract 返回渲染页 + 前端页图展示（upload-pdf-pages/01-02）
 - 19:29 图片上传显示原图：/api/extract 回传原图 + 前端原图箱展示（upload-image-preview/01-02）
 - 19:47 问答式精注记：图注一轮描述后追问细节补型号/尺寸/引脚号，设置页加开关（vision-detail-qa/01-02）
+- 20:17 生成页就绪总览条一键补齐与结果面板两列网格（gen-overview-act/01、gen-result-panel/01）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
