@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=577011a1a2004da4b555f2148f196e343b8ee19c -->
+<!-- changelog-auto: last-commit=92954daaf6e8e0161cfabf63d8346082c1433055 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 19:47 问答式精注记：图注一轮描述后追问细节补型号/尺寸/引脚号，设置页加开关（vision-detail-qa/01-02）
 - 20:17 生成页就绪总览条一键补齐与结果面板两列网格（gen-overview-act/01、gen-result-panel/01）
 - 20:23 生成页细节打磨 D 系列：状态色三处统一 / 动效令牌化 / 修复·修订卡内分组（ui-detail/01-03）
+- 20:46 main.c 工具栏（复制/下载/全屏）与视觉通道自检（mainc-tools/01、vision-selfcheck/01）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
