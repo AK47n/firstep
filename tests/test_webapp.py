@@ -1603,7 +1603,7 @@ def test_extract_uploaded_png_returns_original_image(client, context, monkeypatc
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["text"] == "1x1 图描述"
+    assert body["text"].startswith("1x1 图描述")  # 默认精注记：二轮细节已合并
     assert body["image_data_url"].startswith("data:image/png;base64,")
     assert base64.b64decode(body["image_data_url"].split(",", 1)[1]) == png_1px
 
@@ -1661,8 +1661,77 @@ def test_extract_image_reuses_main_key_when_vision_key_blank(client, context, mo
     )
 
     assert resp.status_code == 200
-    assert resp.json()["text"] == "复用主 key 的描述"
+    assert resp.json()["text"].startswith("复用主 key 的描述")
     assert seen["api_key"] == "sk-test"  # 复用的是主 key
+
+
+def test_extract_image_detail_qa_doubles_describe_calls_by_default(client, context, monkeypatch):
+    """问答式精注记（工单 vision-detail-qa/01）：默认开——上传图片走两轮
+    视觉调用，二轮细节合并进描述（`描述；细节补充：…`）。"""
+    from contest_generator import extraction as extraction_mod
+
+    seen = []
+
+    def fake_describe(data, mime, prompt="", **kwargs):
+        seen.append(prompt)
+        return "布局描述" if len(seen) == 1 else "R1 10kΩ；引脚 PA1"
+
+    monkeypatch.setattr(extraction_mod, "describe_image_cached", fake_describe)
+
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("题.png", b"\x89PNG\r\n\x1a\nfake", "image/png")},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["text"] == "布局描述；细节补充：R1 10kΩ；引脚 PA1"
+    assert len(seen) == 2
+
+
+def test_extract_image_detail_qa_false_single_call(client, context, monkeypatch):
+    """设置关掉精注记（vision_detail_qa=False）→ 上传图片仅一轮视觉调用。"""
+    from dataclasses import replace
+
+    from contest_generator import extraction as extraction_mod
+
+    ctx, _ = context
+    ctx.config = replace(ctx.config, vision_detail_qa=False)
+    seen = []
+    monkeypatch.setattr(
+        extraction_mod,
+        "describe_image_cached",
+        lambda data, mime, prompt="", **k: seen.append(prompt) or "图A",
+    )
+
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("题.png", b"\x89PNG\r\n\x1a\nfake", "image/png")},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["text"] == "图A"
+    assert len(seen) == 1
+
+
+def test_settings_vision_detail_qa_roundtrip(client, context):
+    """设置页开关（工单 vision-detail-qa/01）：GET 缺省开；PUT False 往返生效。"""
+    current = client.get("/api/settings").json()
+    assert current["vision_detail_qa"] is True
+
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+            "vision_detail_qa": False,
+        },
+    )
+    assert resp.status_code == 200
+    assert context[0].config.vision_detail_qa is False
+    assert client.get("/api/settings").json()["vision_detail_qa"] is False
 
 
 def test_extract_image_bmp_returns_400_with_guidance(client, context):

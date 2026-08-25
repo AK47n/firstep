@@ -863,7 +863,8 @@ def test_pdf_page_render_notes_formats_figure_notes(monkeypatch, tmp_path):
     )
 
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="https://api.deepseek.com", vision_api_key="sk", vision_model="m"
+        path, vision_base_url="https://api.deepseek.com", vision_api_key="sk", vision_model="m",
+        detail_qa=False,
     )
     # 页1 真实图号 1；页2 无图标题 → 顺序编号（第 2 个产出 → 2）
     assert notes == (
@@ -877,6 +878,29 @@ def test_pdf_page_render_notes_formats_figure_notes(monkeypatch, tmp_path):
         "api_key": "sk",
         "model": "m",
     }  # 视觉参数透传
+
+
+def test_pdf_page_render_notes_detail_qa_merges(monkeypatch, tmp_path):
+    """渲染图注默认开启精注记（工单 vision-detail-qa/01）：二轮细节合并进
+    [图N 标注：…]，每页两次视觉调用。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "vec.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(extraction, "_render_page_png", lambda p, n: b"pg1")
+    fake = _render_fake(
+        lambda data, mime: "布局完整描述：走廊布局" if len(fake.calls) == 1 else "尺寸 60cm；红色实线"
+    )
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: _FakeReader([_TextPage("")])
+    )
+
+    notes = extraction.pdf_page_render_notes(
+        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+    )
+    assert notes == "[图1 标注：布局完整描述：走廊布局；细节补充：尺寸 60cm；红色实线]"
+    assert len(fake.calls) == 2
 
 
 def test_pdf_page_render_notes_filters_no_figure_pages(monkeypatch, tmp_path):
@@ -901,7 +925,8 @@ def test_pdf_page_render_notes_filters_no_figure_pages(monkeypatch, tmp_path):
     )
 
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        path, vision_base_url="", vision_api_key="sk", vision_model="m",
+        detail_qa=False,
     )
     assert notes == "[图1 标注：布局完整描述：走廊与病房]"  # 第 1 个产出 → 顺序号 1
 
@@ -921,7 +946,8 @@ def test_pdf_page_render_notes_skips_failed_pages(monkeypatch, tmp_path):
         lambda _p: _FakeReader([_TextPage(""), _TextPage(""), _TextPage("")]),
     )
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        path, vision_base_url="", vision_api_key="sk", vision_model="m",
+        detail_qa=False,
     )
     assert notes == "[图1 标注：这是一段完整的布局描述]"  # 只页2 产出（第 1 个）
 
@@ -962,7 +988,8 @@ def test_pdf_page_render_notes_rendering_exception_skips_page(monkeypatch, tmp_p
         lambda _p: _FakeReader([_TextPage(""), _TextPage("")]),
     )
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        path, vision_base_url="", vision_api_key="sk", vision_model="m",
+        detail_qa=False,
     )
     assert notes == "[图1 标注：这是一段完整的布局描述]"  # 页1 跳过，页2 照常
 
@@ -989,7 +1016,8 @@ def test_pdf_page_render_notes_avoids_label_collisions(monkeypatch, tmp_path):
         ),
     )
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        path, vision_base_url="", vision_api_key="sk", vision_model="m",
+        detail_qa=False,
     )
     lines = notes.splitlines()
     assert lines[0].startswith("[图1 标注：")
@@ -1015,7 +1043,8 @@ def test_pdf_page_render_notes_skips_duplicate_real_label(monkeypatch, tmp_path)
         lambda _p: _FakeReader([_TextPage("图1 结构示意"), _TextPage("图1 重复标题")]),
     )
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        path, vision_base_url="", vision_api_key="sk", vision_model="m",
+        detail_qa=False,
     )
     assert notes.count("[图") == 1  # 第二个「图1」被跳过
 
@@ -1040,7 +1069,8 @@ def test_pdf_page_render_notes_pages_filter(monkeypatch, tmp_path):
         lambda _p: _FakeReader([_TextPage(""), _TextPage(""), _TextPage("")]),
     )
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="", vision_api_key="sk", vision_model="m", pages=[2]
+        path, vision_base_url="", vision_api_key="sk", vision_model="m", pages=[2],
+        detail_qa=False,
     )
     assert rendered == [2]
     assert notes == "[图1 标注：这是一段完整的布局描述]"
@@ -1063,7 +1093,8 @@ def test_pdf_page_render_notes_caps_at_eight(monkeypatch, tmp_path):
         lambda _p: _FakeReader([_TextPage("") for _ in range(9)]),
     )
     notes = extraction.pdf_page_render_notes(
-        path, vision_base_url="", vision_api_key="sk", vision_model="m"
+        path, vision_base_url="", vision_api_key="sk", vision_model="m",
+        detail_qa=False,
     )
     assert notes.count("[图") == 8
     assert len(rendered) == 8  # 第 9 页未渲染
@@ -1086,3 +1117,131 @@ def test_pdf_page_render_notes_bad_pdf_returns_empty(monkeypatch, tmp_path):
         )
         == ""
     )
+
+
+# ---------------------------------------------------------------------------
+# 问答式精注记（工单 vision-detail-qa/01）：第一轮描述基础上追问细节，
+# 补偿图→文字转译的信息损耗（数字标注 / 型号 / 颜色线型 / 引脚号）
+# ---------------------------------------------------------------------------
+
+
+def _qa_fake(responses):
+    """精注记假件：按调用顺序返回 responses（可 callable），记录 prompt。
+
+    与 _fake_describe 不同：接受位置 prompt（refine 第二轮调用把
+    DETAIL_QA_PROMPT 当位置参数传）。单响应 = 恒返。
+    """
+
+    def fake(image_bytes, mime, prompt="", **kwargs):
+        fake.calls.append((image_bytes, mime, prompt))
+        idx = len(fake.calls) - 1
+        result = responses[idx] if idx < len(responses) else responses[-1]
+        if callable(result):
+            return result(image_bytes, mime)
+        return result
+
+    fake.calls = []
+    return fake
+
+
+def test_refine_image_description_merges_details(monkeypatch):
+    """二轮有细节 → 合并成「描述；细节补充：细节」，prompt 含第一轮描述。"""
+    from contest_generator import extraction
+
+    fake = _qa_fake(["R1 10kΩ；红色实线；PA1"])
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+
+    out = extraction.refine_image_description(
+        b"img", "image/png", "R1 10kΩ",
+        vision_base_url="", vision_api_key="sk-test", vision_model="m",
+    )
+    assert out == "R1 10kΩ；细节补充：R1 10kΩ；红色实线；PA1"
+    assert len(fake.calls) == 1
+    assert "R1 10kΩ" in fake.calls[0][2]  # 追问 prompt 带上第一轮描述
+
+
+def test_refine_image_description_keeps_original_on_error(monkeypatch):
+    """二轮异常 → 返回原描述（精注记是增强，不抛）。"""
+    from contest_generator import extraction
+
+    def boom(*a, **k):
+        raise RuntimeError("视觉挂了")
+
+    monkeypatch.setattr(extraction, "describe_image_cached", boom)
+    assert extraction.refine_image_description(
+        b"img", "image/png", "原描述",
+        vision_base_url="", vision_api_key="sk-test", vision_model="m",
+    ) == "原描述"
+
+
+def test_refine_image_description_keeps_original_on_no_supplement(monkeypatch):
+    """二轮回复「无补充」/ 空 → 不合并，返回原描述。"""
+    from contest_generator import extraction
+
+    monkeypatch.setattr(extraction, "describe_image_cached", _qa_fake(["无补充"]))
+    assert extraction.refine_image_description(
+        b"img", "image/png", "原描述",
+        vision_base_url="", vision_api_key="sk-test", vision_model="m",
+    ) == "原描述"
+
+    monkeypatch.setattr(extraction, "describe_image_cached", _qa_fake([""]))
+    assert extraction.refine_image_description(
+        b"img", "image/png", "原描述",
+        vision_base_url="", vision_api_key="sk-test", vision_model="m",
+    ) == "原描述"
+
+
+def test_pdf_image_notes_detail_qa_true_merges(monkeypatch, tmp_path):
+    """默认 detail_qa=True：pdf_image_notes 每张图二轮追问并合并。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    monkeypatch.setattr(
+        extraction, "PdfReader",
+        lambda _p: _FakeReader([_FakePage([_FakeImage(b"img-a", "a.png")])]),
+    )
+    fake = _qa_fake(["布局描述", "尺寸 10cm；引脚 PA1"])
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+
+    notes = extraction.pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model="m"
+    )
+    assert notes == "[示意图1：布局描述；细节补充：尺寸 10cm；引脚 PA1]"
+    assert len(fake.calls) == 2
+
+
+def test_pdf_image_notes_detail_qa_false_single_call(monkeypatch, tmp_path):
+    """detail_qa=False：完全不发起二轮调用（行为与现状一致）。"""
+    from contest_generator import extraction
+
+    path = make_sample_pdf(tmp_path / "problem.pdf", "Contest")
+    monkeypatch.setattr(
+        extraction, "PdfReader",
+        lambda _p: _FakeReader([_FakePage([_FakeImage(b"img-a", "a.png")])]),
+    )
+    fake = _qa_fake(["布局描述"])
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+
+    notes = extraction.pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model="m",
+        detail_qa=False,
+    )
+    assert notes == "[示意图1：布局描述]"
+    assert len(fake.calls) == 1
+
+
+def test_extract_image_detail_qa_false_single_call(monkeypatch, tmp_path):
+    """extract_image detail_qa=False：一轮描述即返回，无二轮调用。"""
+    from contest_generator import extraction
+
+    p = tmp_path / "img.png"
+    p.write_bytes(b"fakeimg")
+    fake = _qa_fake(["图A"])
+    monkeypatch.setattr(extraction, "describe_image_cached", fake)
+
+    out = extraction.extract_image(
+        p, vision_base_url="", vision_api_key="sk-test", vision_model="m",
+        detail_qa=False,
+    )
+    assert out == "图A"
+    assert len(fake.calls) == 1

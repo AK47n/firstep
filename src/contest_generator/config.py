@@ -57,6 +57,10 @@ class AppConfig:
     vision_base_url: str = DEFAULT_VISION_BASE_URL
     vision_api_key: str = ""
     vision_model: str = DEFAULT_VISION_MODEL
+    # 问答式精注记开关（工单 vision-detail-qa/01）：默认开——图注一轮描述后
+    # 追加二轮视觉追问补细节（型号/尺寸标注/引脚号）；关闭 = 仅一轮描述
+    # （每张图省一次视觉调用）
+    vision_detail_qa: bool = True
     # LLM 单价覆盖（工单 llm-cost-control/01 + 缓存拆分计价更新）：None = 用内置
     # 默认参考价；dict 形态 {"deepseek": {"input_cache_hit_per_million": x,
     # "input_cache_miss_per_million": y, "output_per_million": z}, "local": {...}}
@@ -153,6 +157,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         raise ConfigError(f"vision_model 必须是字符串：{path}")
     if not vision_model.strip():
         vision_model = DEFAULT_VISION_MODEL
+    vision_detail_qa = data.get("vision_detail_qa", True)
+    if not isinstance(vision_detail_qa, bool):
+        raise ConfigError(f"vision_detail_qa 必须是布尔值：{path}")
     # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 None = 内置默认价
     llm_prices = data.get("llm_prices")
     if llm_prices is not None and not isinstance(llm_prices, dict):
@@ -191,6 +198,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         vision_base_url=vision_base_url,
         vision_api_key=vision_api_key,
         vision_model=vision_model,
+        vision_detail_qa=vision_detail_qa,
         llm_prices=llm_prices,
         recommend_cache_enabled=recommend_cache_enabled,
         recommend_max_rounds=recommend_max_rounds,
@@ -221,6 +229,7 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "vision_base_url": config.vision_base_url,
         "vision_api_key": config.vision_api_key,
         "vision_model": config.vision_model,
+        "vision_detail_qa": config.vision_detail_qa,
         "recommend_cache_enabled": config.recommend_cache_enabled,
         "recommend_max_rounds": config.recommend_max_rounds,
         "llm_price_period": config.llm_price_period,

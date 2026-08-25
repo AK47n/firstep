@@ -105,6 +105,8 @@ def test_saved_file_is_plain_json(tmp_path):
         "vision_base_url": "https://api.deepseek.com",
         "vision_api_key": "",
         "vision_model": "deepseek-v4-flash-vision-exp",
+        # 问答式精注记开关（工单 vision-detail-qa/01）：缺省开
+        "vision_detail_qa": True,
         # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
         "recommend_cache_enabled": True,
         # 推荐收敛轮数上限（工单 recommend-speedup-v2/01）：缺省 4
@@ -278,6 +280,24 @@ def test_autocommit_enabled_defaults_on_and_roundtrips(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(ConfigError, match="autocommit_enabled"):
+        load_config(path)  # 非布尔值大声失败（与其余字段同严格度）
+
+
+def test_vision_detail_qa_defaults_on_and_roundtrips(tmp_path):
+    """问答式精注记开关（工单 vision-detail-qa/01）：缺省开；False 往返；非布尔报错。"""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
+
+    assert load_config(path).vision_detail_qa is True  # 缺省开
+
+    save_config(AppConfig(api_key="sk-test", vision_detail_qa=False), path)
+    assert load_config(path).vision_detail_qa is False
+
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "vision_detail_qa": "no"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="vision_detail_qa"):
         load_config(path)  # 非布尔值大声失败（与其余字段同严格度）
 
 
