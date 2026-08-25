@@ -4301,7 +4301,7 @@ $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
 // CONFLICT_MSG_PREFIX 与后端 GenerationConflictError 消息前缀单源锚定，
 // 跨文件一致性由
 // tests/test_webapp.py::test_conflict_message_prefix_anchored_both_sides 兜底。
-const CONFLICT_MSG_PREFIX = "桌面上已有同名工程";
+const CONFLICT_MSG_PREFIX = "桌面上已有同名工程「";
 function isConflictError(message) {
   return typeof message === "string" && message.indexOf(CONFLICT_MSG_PREFIX) === 0;
 }

@@ -43,7 +43,7 @@
 
 - 后端 pytest（tests/test_webapp.py，桌面端到端先例 = E2 家族 test_generate_desktop_*）：
   - `test_generate_desktop_overwrite_backs_up_and_succeeds`：预置 exists 工程（.contest_context.json + main.c + 旧标记文件）→ POST（topic_id + overwrite=true）→ 200；断言 `<name>.bak` 存在且含旧标记；`<name>` 为新工程（含新 .contest_context.json、无旧标记）。
-  - `test_generate_desktop_overwrite_replaces_old_backup`：连续两次覆盖 → .bak 只剩一代（内容 = 第一代工程标记，第二代工程在原名目录）。
+  - `test_generate_desktop_overwrite_replaces_old_backup`：连续两次覆盖 → .bak 只剩一代（第二次覆盖后 .bak = 第二代工程产物，第一代标记消失；原名目录 = 第三代）。
   - `test_generate_desktop_overwrite_missing_still_conflict`：overwrite 缺省或 False → 400 原文案（含「请先删除该目录」）。
   - `test_generate_desktop_overwrite_non_boolean_ignored`：`"true"`（字符串）→ 视为缺省 → 400（严格 `is True`）。
   - `test_generate_desktop_overwrite_ignored_when_new`：目录不存在 + overwrite=true → 正常生成、无 `.bak`。

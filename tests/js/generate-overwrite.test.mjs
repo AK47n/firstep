@@ -35,8 +35,9 @@ function extract(name, deps) {
   throw new Error("未找到 " + name + " 函数体结束花括号");
 }
 
-// 与 index.html 内联 const 逐字一致（测试抽取函数体时注入同名常量）
-const CONFLICT_MSG_PREFIX = "桌面上已有同名工程";
+// 与 index.html 内联 const 逐字一致（测试抽取函数体时注入同名常量）；
+// 前缀含「：只认完整前缀形态（后端 f-string 模板恒为「前缀+「」），无「 的非冲突文案不误判。
+const CONFLICT_MSG_PREFIX = "桌面上已有同名工程「";
 const isConflictError = extract("isConflictError", { CONFLICT_MSG_PREFIX });
 const conflictDirName = extract("conflictDirName");
 
@@ -53,6 +54,7 @@ test("isConflictError：未命中（其他错误/空值/非字符串）→ false
   assert.equal(isConflictError(undefined), false);
   assert.equal(isConflictError(42), false);
   assert.equal(isConflictError("已存在同名工程（前缀不同）"), false);
+  assert.equal(isConflictError("桌面上已有同名工程：无引号形态（非冲突文案）"), false);
 });
 
 test("conflictDirName：提取「」内目录名", () => {

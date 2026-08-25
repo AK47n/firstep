@@ -215,3 +215,26 @@ def test_backup_project_dir_unlinks_bak_file_that_is_not_dir(tmp_path):
 
     assert backup == tmp_path / "Auto_Car_STM32.bak"
     assert (backup / "main.c").read_text(encoding="utf-8") == "新一代"
+
+
+def test_backup_project_dir_rename_failure_leaves_original(tmp_path, monkeypatch):
+    """原目录不受影响（工单 generate-overwrite/01 四场景之一）：包夹/占用导致
+    rename 失败（如 Keil 打开工程文件 → WinError 32）→ OSError 上抛（经
+    errors.py 映射 400「文件操作失败」），旧工程仍在原名目录未被破坏。"""
+    project = tmp_path / "Auto_Car_STM32"
+    project.mkdir()
+    (project / "main.c").write_text("旧工程", encoding="utf-8")
+    (project / ".contest_context.json").write_text('{"旧": true}', encoding="utf-8")
+
+    def _boom_rename(self, target):
+        raise OSError(32, "另一个程序正在使用此文件，无法重命名")
+
+    monkeypatch.setattr(Path, "rename", _boom_rename)
+
+    with pytest.raises(OSError):
+        backup_project_dir(project)
+
+    # 原目录与内容未动、无 .bak 残留（未产生半状态）
+    assert (project / "main.c").read_text(encoding="utf-8") == "旧工程"
+    assert (project / ".contest_context.json").read_text(encoding="utf-8") == '{"旧": true}'
+    assert not (tmp_path / "Auto_Car_STM32.bak").exists()
