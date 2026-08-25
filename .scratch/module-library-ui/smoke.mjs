@@ -386,5 +386,78 @@ if (!e05.skipped) {
   check("改简介模态（无模块数据，跳过）", true);
 }
 
+// ---- 工单 06：编辑弹窗（套件 / 链接 + 平台文件增删） ----
+const f06 = await Eval(`(() => {
+  const btn = document.querySelector('#lib-rows [data-edit-mod]');
+  if (!btn) return { skipped: true };
+  btn.click();
+  return { skipped: false };
+})()`);
+if (!f06.skipped) {
+  const f06b = await Eval(`(async () => {
+    await new Promise((r) => setTimeout(r, 250));
+    const overlay = document.querySelector('.lib-edit-overlay');
+    const sel = overlay && overlay.querySelector('.lib-mod-platform');
+    const opts = sel ? [...sel.options].map((o) => o.value) : [];
+    const slug = overlay.querySelector('.lib-edit-slug').textContent;
+    const mod = (state.modules || []).find((m) => m.slug === slug) || {};
+    const plat = opts[0];
+    const entry = (mod.platforms || {})[plat] || {};
+    const kit = overlay.querySelector('.lib-mod-kit').value;
+    const url = overlay.querySelector('.lib-mod-url').value;
+    const fileLis = overlay.querySelectorAll('.lib-mod-files li').length;
+    const fileNames = [...overlay.querySelectorAll('.lib-mod-files .fname')].map((x) => x.textContent);
+    const embedded = !!(entry.files || []).length === false && overlay.querySelector('.lib-mod-files .muted');
+    const hasSave = !!overlay.querySelector('.lib-mod-save');
+    const hasPush = !!overlay.querySelector('.lib-mod-push');
+    // 前端 URL 校验：非法值 → 提示（不发请求）
+    overlay.querySelector('.lib-mod-url').value = 'not-a-url';
+    overlay.querySelector('.lib-mod-save').click();
+    await new Promise((r) => setTimeout(r, 200));
+    const msg = overlay.querySelector('.lib-mod-msg').textContent;
+    // 还原 url
+    overlay.querySelector('.lib-mod-url').value = url;
+    return { optCount: opts.length, platNames: Object.keys(mod.platforms || {}).length,
+             kitMatch: kit === (entry.kit || ''), urlMatch: url === (entry.source_url || ''),
+             fileLis, expFiles: (entry.files || []).length, fileNames, hasSave, hasPush, msg, embedded };
+  })()`);
+  check("「编辑」→ 模态出现，平台下拉 = 模块平台列表", f06b.optCount === f06b.platNames, `${f06b.optCount} vs ${f06b.platNames}`);
+  check("套件 / 链接预填 = 当前平台条目值", f06b.kitMatch && f06b.urlMatch);
+  check("文件清单行数 = 条目文件数（内嵌母版态正确）",
+    f06b.fileLis === (f06b.expFiles || (f06b.embedded ? 1 : 0)), `lis=${f06b.fileLis} exp=${f06b.expFiles}`);
+  check("保存身份 / 推送新文件按钮齐备", f06b.hasSave && f06b.hasPush);
+  check("非法 URL → 前端拦截提示（不发请求）", f06b.msg.includes("购买链接格式不正确"), f06b.msg);
+  // 内存注入假模块 → 保存身份 → 后端 404 错误路径（不动真实库）
+  const f06c = await Eval(`(async () => {
+    const base = { description: 'probe', dependencies: [] };
+    state.modules = [...(state.modules || []), { ...base, slug: 'probe_edit',
+      platforms: { stm32: { files: ['p.c'], verified: false, hardware_bound: false, kit: '', source_url: '' } } }];
+    renderLibraryTable();
+    await new Promise((r) => setTimeout(r, 250));
+    document.querySelector('#lib-rows [data-edit-mod="probe_edit"]').click();
+    await new Promise((r) => setTimeout(r, 250));
+    const overlay = document.querySelector('.lib-edit-overlay');
+    overlay.querySelector('.lib-mod-url').value = 'https://example.com/buy';
+    overlay.querySelector('.lib-mod-save').click();
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      const msg = overlay.querySelector('.lib-mod-msg').textContent;
+      if (msg) return { msg, gone: document.querySelectorAll('.lib-edit-overlay').length === 0 };
+    }
+    return { msg: 'TIMEOUT', gone: false };
+  })()`);
+  check("假模块保存身份 → 后端错误展示（404 路径，表单保留）",
+    f06c.msg && f06c.msg !== 'TIMEOUT' && !f06c.gone, f06c.msg && f06c.msg.slice(0, 60));
+  // 关闭清理
+  await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await new Promise((r) => setTimeout(r, 250));
+  const f06d = await Eval(`document.querySelectorAll('.lib-edit-overlay').length`);
+  check("Esc 关闭编辑弹窗（无残留）", f06d === 0, `overlay=${f06d}`);
+  // 还原内存（去掉假模块，避免影响其他检查）
+  await Eval(`state.modules = (state.modules || []).filter((m) => m.slug !== 'probe_edit'); renderLibraryTable();`);
+} else {
+  check("编辑弹窗（无模块数据，跳过）", true);
+}
+
 console.log(failed === 0 ? "SMOKE ALL PASS" : `SMOKE FAILED (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

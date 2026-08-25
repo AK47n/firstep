@@ -284,6 +284,30 @@ test("editDescStatus 非法事件：保持原状态（重入保护由按钮禁�
   assert.equal(editDescStatus("rejected", "saved"), "rejected");
 });
 
+// ================= 工单 06：编辑弹窗纯函数 =================
+// libIsValidHttpUrl（URL 格式校验）/ libPlatformKits（库内套件词表去重）。
+
+const libIsValidHttpUrl = extract("libIsValidHttpUrl");
+const libPlatformKits = extract("libPlatformKits");
+
+test("libIsValidHttpUrl：http/https 合法，其余协议/非 URL/空串非法", () => {
+  assert.equal(libIsValidHttpUrl("https://example.com/buy?a=1"), true);
+  assert.equal(libIsValidHttpUrl("http://127.0.0.1:8000/x"), true);
+  assert.equal(libIsValidHttpUrl("ftp://example.com"), false);
+  assert.equal(libIsValidHttpUrl("not-a-url"), false);
+  assert.equal(libIsValidHttpUrl(""), false);
+  assert.equal(libIsValidHttpUrl("javascript:alert(1)"), false);
+});
+
+test("libPlatformKits：全平台条目 kit 去重（空值忽略），顺序 = 首见序", () => {
+  const mods = [
+    { slug: "a", description: "", platforms: { stm32: { kit: "LaunchPad" }, mspm0: { kit: "LaunchPad" } } },
+    { slug: "b", description: "", platforms: { stm32: { kit: "BluePill" }, mspm0: { kit: "" } } },
+  ];
+  assert.deepEqual(libPlatformKits(mods), ["LaunchPad", "BluePill"]);
+  assert.deepEqual(libPlatformKits([]), []);
+});
+
 test("libStatsText 统计条文案：全量分段含互斥组", () => {
   const text = libStatsText(libStats(libMods));
   assert.ok(text.includes("共 4 个模块"));
