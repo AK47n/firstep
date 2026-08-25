@@ -68,6 +68,7 @@ from .extraction import (
     extract_image,
     extract_pdf_with_image_notes,
     locate_topic_pages_full,
+    render_pdf_pages,
     # 页渲染原语按公开名引入（模块级函数 = monkeypatch 接缝，测试以此为
     # 稳定挂载点；工单 topic-pdf-viewer/01 取题面页图展示用）
     _render_page_png as render_page_png,
@@ -895,7 +896,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     observation_collector=collector,
                 )
                 context.recent_llm_workflows.add_completed(collector)
-                return {"text": result}
+                # 上传页图（工单 upload-pdf-pages/01）：与题库 /pages 同款渲染，
+                # 前端页图展示；渲染失败降级为空 → 前端只显示文字，不阻塞
+                pages, total_pages = render_pdf_pages(tmp_path)
+                return {"text": result, "pages": pages, "total_pages": total_pages}
             return {"text": extract_file(tmp_path)}
         finally:
             tmp_path.unlink(missing_ok=True)

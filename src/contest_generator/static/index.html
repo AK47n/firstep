@@ -1874,7 +1874,14 @@ $("btn-upload").addEventListener("click", async () => {
     $("problem").value = data.text;
     currentTopicId = "";
     clearTopicSummary();
-    hideTopicPdfViewer();  // 上传/粘贴路径无条目原 PDF：清掉旧页图展示
+    // 上传 PDF 页图（工单 upload-pdf-pages/02）：与题库取题面同款展示
+    // （页图 + 点击放大 + 可切文字版）；非 PDF / 渲染失败 → 只显示文字
+    if (data.pages && data.pages.length) {
+      setTopicPdfTextVisible(false);
+      showTopicPdfViewer(data);
+    } else {
+      hideTopicPdfViewer();
+    }
     $("upload-msg").classList.add("ok");
     $("upload-msg").textContent = "抽取成功：" + file.name;
     markStepDone(1);
@@ -1934,6 +1941,16 @@ function showTopicPdfViewer(data) {
     });
     pagesEl.appendChild(img);
   });
+  // 上传 PDF 截断提示（工单 upload-pdf-pages/02）：页数超上限只显示前 M 页；
+  // 题库 /pages 响应无 total_pages 字段 → 不提示
+  if (data.total_pages && data.total_pages > data.pages.length) {
+    const hint = document.createElement("div");
+    hint.className = "muted";
+    hint.style.cssText = "text-align:center;font-size:12px;margin:4px 0 8px";
+    hint.textContent = "共 " + data.total_pages + " 页，已显示前 "
+      + data.pages.length + " 页（其余页未展示）。";
+    pagesEl.appendChild(hint);
+  }
   $("topic-pdf-box").classList.remove("hidden");
   // 不再强制收起文字版（工单 ui-polish-10/02）：加载期 loadTopicPdf 已默认收起文字；
   // 若用户在渲染期手动打开了文字版，页图到达后尊重用户选择。

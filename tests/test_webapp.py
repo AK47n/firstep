@@ -1536,6 +1536,55 @@ def test_extract_uploaded_docx_file(client, tmp_path):
     assert "信号采集" in resp.json()["text"]
 
 
+def test_extract_uploaded_pdf_returns_text_and_pages(client, tmp_path):
+    """上传 PDF 返回抽取文本 + 页图（工单 upload-pdf-pages/01）：PyMuPDF 渲染
+    页图为 base64 PNG（与题库 /pages 端点同款渲染，真实渲染产物断言魔数）。"""
+    from tests.topic_pdf_fakes import make_multi_page_pdf
+
+    pdf = make_multi_page_pdf(
+        tmp_path / "题.pdf",
+        [("F - 1 / 2", "Page 1: timer design"), ("F - 2 / 2", "Page 2: requirement list")],
+    )
+
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("题.pdf", pdf.read_bytes(), "application/pdf")},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "timer" in body["text"]
+    assert body["total_pages"] == 2
+    assert [p["page_no"] for p in body["pages"]] == [1, 2]
+
+    import base64
+
+    png = base64.b64decode(body["pages"][0]["data_url"].split(",", 1)[1])
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"  # PNG 魔数（真实渲染产物）
+
+
+def test_extract_uploaded_pdf_pages_capped_at_six(client, tmp_path):
+    """上传 PDF 页图截断到前 6 页（防超大 PDF 拖慢响应）；total_pages 报全量。"""
+    from tests.topic_pdf_fakes import make_multi_page_pdf
+
+    pdf = make_multi_page_pdf(
+        tmp_path / "多页.pdf",
+        [(f"F - {i} / 8", f"Page {i} body") for i in range(1, 9)],
+    )
+
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("多页.pdf", pdf.read_bytes(), "application/pdf")},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_pages"] == 8
+    assert len(body["pages"]) == 6
+    assert [p["page_no"] for p in body["pages"]] == [1, 2, 3, 4, 5, 6]
+
+
+
 def test_extract_unsupported_type_returns_clear_error(client):
     resp = client.post(
         "/api/extract", files={"upload": ("题.exe", b"MZ", "application/octet-stream")}
