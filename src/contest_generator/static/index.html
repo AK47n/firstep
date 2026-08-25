@@ -503,6 +503,17 @@
   .settings-section { margin-top: 14px; padding-top: 10px;
                       border-top: 1px dashed var(--border);
                       font-size: 12px; font-weight: 600; color: var(--muted); }
+  /* 设置页计费小节折叠（工单 settings-infoarch/02）：头部按钮即包装块标题；
+     hover 与 ▾ 旋转 transition 沿 .card-collapse 既有惯例 */
+  .settings-collapse-head { display: flex; align-items: center; gap: 6px;
+                            width: 100%; margin: 0; padding: 0;
+                            border: none; background: none;
+                            font: inherit; color: var(--muted);
+                            cursor: pointer; text-align: left; }
+  .settings-collapse-head:hover { color: var(--accent); }
+  .settings-collapse .collapse-ico { transition: transform .25s ease; }
+  .settings-collapse.collapsed .collapse-ico { transform: rotate(-90deg); }
+  .settings-collapse.collapsed > :not(.settings-collapse-head) { display: none !important; }
   /* 按钮内联图标（工单 ui-polish-9/04） */
   button .btn-ico { display: inline-block; width: 15px; height: 15px;
                     vertical-align: -2px; margin-right: 6px; }
@@ -1456,7 +1467,8 @@
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
       <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
-      <div class="settings-section">计费</div>
+      <div class="settings-section settings-collapse" data-collapse-id="ai-billing">
+        <button type="button" class="settings-collapse-head">计费<span class="collapse-ico" aria-hidden="true">▾</span></button>
       <div class="row" style="margin-top:10px;align-items:center">
         <span style="font-size:12px;color:var(--muted)">计费时段</span>
         <label style="margin:0 12px 0 8px;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="peak" id="period-peak"> 高峰期</label>
@@ -1488,6 +1500,7 @@
         <div style="flex:1"><label>本地模型输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-out" placeholder="默认 0（本机免费）"></div>
       </div>
       <div class="muted" style="margin-top:6px">仅用于「最近 LLM 工作流」费用估算（官方价格会调整，此处的值是参考；留空 = 维持当前）。</div>
+      </div>
     </div>
 
     <div class="card" data-collapse-id="libs">
@@ -6980,11 +6993,19 @@ function settingsMasterLabel(allCollapsed) {
 function sectionCollapseLabel(collapsed) {
   return collapsed ? "展开计费区" : "折叠计费区";
 }
+// 计费小节头按钮：仅当元素自身是 .settings-collapse 才查后代——不用无条件
+// querySelector，否则「卡片内含计费小节」的祖先卡片会被误判为小节
+//（（工单 settings-infoarch/02）CDP 回归）
+function settingsSectionHead(elm) {
+  return elm.classList.contains("settings-collapse")
+    ? elm.querySelector(".settings-collapse-head")
+    : null;
+}
 // 应用折叠态到一个元素：卡片走 .card-collapse（syncCollapseBtn 同步
 // title/aria-label），计费小节走 .settings-collapse-head（sectionCollapseLabel）
 function applySettingsCollapseState(elm, collapsed) {
   elm.classList.toggle("collapsed", collapsed);
-  const head = elm.querySelector(".settings-collapse-head");
+  const head = settingsSectionHead(elm);
   if (head) {
     head.title = collapsed ? "展开" : "折叠";
     head.setAttribute("aria-label", sectionCollapseLabel(collapsed));
@@ -7010,20 +7031,23 @@ function initSettingsCollapse() {
     const allCollapsed = items.every((c) => c.classList.contains("collapsed"));
     master.textContent = settingsMasterLabel(allCollapsed);
   };
+  // 单元素切换（计费头 / ▾ / 标题三处共用）：toggle → 落 state → 同步按钮 →
+  // 写盘 → 刷新总开关标签
+  const toggleSettingsCollapse = (c) => {
+    const next = c.classList.toggle("collapsed");
+    state[c.dataset.collapseId] = next;
+    applySettingsCollapseState(c, next);
+    saveSettingsCollapse(state);
+    syncMasterLabel();
+  };
   for (const c of items) {
     const id = c.dataset.collapseId;
     const collapsed = effectiveCollapsed(id, stored);
     state[id] = collapsed;
-    const head = c.querySelector(".settings-collapse-head");
+    const head = settingsSectionHead(c);
     if (head) {   // 计费小节：头按钮即 toggle（无 h2）
       applySettingsCollapseState(c, collapsed);
-      head.addEventListener("click", () => {
-        const next = c.classList.toggle("collapsed");
-        state[id] = next;
-        applySettingsCollapseState(c, next);
-        saveSettingsCollapse(state);
-        syncMasterLabel();
-      });
+      head.addEventListener("click", () => toggleSettingsCollapse(c));
       continue;
     }
     const h2 = c.querySelector("h2");
@@ -7032,23 +7056,16 @@ function initSettingsCollapse() {
     btn.type = "button";
     btn.className = "card-collapse";
     btn.textContent = "▾";
+    h2.appendChild(btn);   // 先挂载再应用（工单 settings-infoarch/02）：apply 经
+                           // querySelector 找按钮同步初始 title/aria
     applySettingsCollapseState(c, collapsed);
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const next = c.classList.toggle("collapsed");
-      state[id] = next;
-      applySettingsCollapseState(c, next);
-      saveSettingsCollapse(state);
-      syncMasterLabel();
+      toggleSettingsCollapse(c);
     });
-    h2.appendChild(btn);
     h2.addEventListener("click", (e) => {
       if (e.target.closest(".card-collapse")) return;
-      const next = c.classList.toggle("collapsed");
-      state[id] = next;
-      applySettingsCollapseState(c, next);
-      saveSettingsCollapse(state);
-      syncMasterLabel();
+      toggleSettingsCollapse(c);
     });
   }
   const master = $("btn-settings-collapse-all");
