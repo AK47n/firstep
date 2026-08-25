@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9ca34bbb697583accf56ca9990ff8577dc883e19 -->
+<!-- changelog-auto: last-commit=34394f4cfc1029fd57878cda2aee85ee356d8234 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 00:21 修复：全屏弹窗遮罩与置顶目录重叠（z-index 层级常量统一）
 - 00:24 样式：详情/编辑/参考文件弹窗改为垂直居中
 - 00:38 参考文件库 UI 提升（工单 01 条目编辑端点）：PUT /api/references/{entry_id} 一次保存元数据（标题/类型/简介/锚定/平台）+ 文件增删——校验与录入同源（三字段非空/锚定三态/平台词表/路径安全/remove 须真实存在/加删重叠拒绝/改内容先删后加）、校验失败磁盘零变化、写入期失败清理已写文件、成功一次 commit_after_write 自动提交（lib: update reference {id}）、标题编辑不动 id/目录名；tests 2390 绿（+25）；评审双轴修订落实（元数据写失败清理、platform 必填防静默降级、docstring 收窄），工单 resolved
+- 00:49 参考文件库 UI 提升（工单 02 表格精修 + 客户端即时检索 + 详情弹窗）：旧服务端四框筛选区替换为防抖关键字即时检索（标题/类型/锚定值/简介/文件名四合一）+ 平台/锚定 chips + 五维排序 + 统计条（随过滤联动）；行渲染令牌化（标题/简介截断 + tooltip、锚定三色徽章、命中文件直出链接）；「查看」升级为详情弹窗（元数据段 + 文件清单段，磁盘实况端点）；纯函数 refFilterEntries/refSortEntries/refStats/refRowHTML/refDetailHTML 等下沉 tests/js（21 项新单测），全量 326 绿；冒烟 26 项 PASS；评审双轴修订落实（搜索框 id 冲突致检索失效→改名 ref-filter 并加防回归检查、标题格内命中链接恢复换行、加载失败清占位、排序分派集中），工单 resolved
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
