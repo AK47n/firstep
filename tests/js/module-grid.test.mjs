@@ -36,12 +36,14 @@ function extract(name, deps) {
 
 const moduleGridPlatformLabel = extract("moduleGridPlatformLabel");
 const moduleGridStatusText = extract("moduleGridStatusText");
+const moduleGridBadgeClass = extract("moduleGridBadgeClass");
 const moduleGridFilter = extract("moduleGridFilter", { moduleGridPlatformLabel });
 const moduleGridCountText = extract("moduleGridCountText", { moduleGridFilter });
 const moduleGridHTML = extract("moduleGridHTML", {
   moduleGridFilter,
   moduleGridPlatformLabel,
   moduleGridStatusText,
+  moduleGridBadgeClass,
 });
 
 const MODULES = [
@@ -73,6 +75,13 @@ test("moduleGridStatusText 状态文本", () => {
   assert.equal(moduleGridStatusText({ verified: true }), "已验证");
   assert.equal(moduleGridStatusText({ verified: false }), "未验证");
   assert.equal(moduleGridStatusText(undefined), "未验证");
+});
+
+test("moduleGridBadgeClass 徽章类名（与 StatusText 单源并列）", () => {
+  assert.equal(moduleGridBadgeClass({ hardware_bound: true }), "hw");
+  assert.equal(moduleGridBadgeClass({ verified: true }), "ok");
+  assert.equal(moduleGridBadgeClass({ verified: false }), "un");
+  assert.equal(moduleGridBadgeClass(undefined), "un");
 });
 
 test("moduleGridFilter 排除已选 + 搜索匹配", () => {
