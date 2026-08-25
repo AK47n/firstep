@@ -155,7 +155,11 @@ test("副产物两形状：旧 template/output 与新 default/templates", () => 
   assert.ok(newShape.includes("双目"));
   assert.ok(newShape.includes("单摄像头"));
   assert.ok(newShape.includes("main_mono.py"));
-  assert.ok(newShape.includes("默认：dual"));
+  // spec 契约：每模板 template → output（评审 2026-08-26：原实现箭头左为 name 漏源路径）
+  assert.ok(newShape.includes("t/dual.py → main.py"));
+  assert.ok(newShape.includes("t/mono.py → main_mono.py"));
+  // 默认模板展示 name（可读性），缺省回退 id
+  assert.ok(newShape.includes("默认：双目"));
 });
 
 test("off 提示：platform 无版本才提示，不传/命中不提示", () => {

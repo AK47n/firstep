@@ -2895,10 +2895,12 @@ function moduleInfoHTML(module, platform) {
     const pa = m.python_artifact;
     let text;
     if (pa.templates && pa.templates.length) {
-      // 新形状（k230-multi-template）：default + templates 列表
-      text = "默认：" + escHtml(pa.default || "default") + "；" + pa.templates.map((t) =>
-        escHtml(t.name) + (t.description ? "（" + escHtml(t.description) + "）" : "") + " → "
-        + escHtml(t.output)).join("；");
+      // 新形状（k230-multi-template）：default + templates 列表；每模板
+      // name（desc）：template → output（spec 契约：箭头左 = 模板源路径）
+      const defT = pa.templates.find((t) => t.id === (pa.default || "default")) || pa.templates[0];
+      text = "默认：" + escHtml(defT.name || defT.id) + "；" + pa.templates.map((t) =>
+        escHtml(t.name) + (t.description ? "（" + escHtml(t.description) + "）" : "")
+        + "：" + escHtml(t.template) + " → " + escHtml(t.output)).join("；");
     } else {
       // 旧形状：template → output
       text = escHtml(pa.template || "") + " → " + escHtml(pa.output || "");
