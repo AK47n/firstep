@@ -16,6 +16,7 @@ topic-vision-render/01）：pdf_page_render_notes 把页面渲染成位图后走
 
 from __future__ import annotations
 
+import base64
 import io
 import re
 import zipfile
@@ -348,6 +349,40 @@ def _render_page_png(path: Path, page_no: int) -> bytes | None:
             return pix.tobytes("png")
     except Exception:
         return None
+
+
+def render_pdf_pages(
+    pdf_path: Path, max_pages: int = 6
+) -> tuple[list[dict[str, str]], int]:
+    """上传 PDF 页图（工单 upload-pdf-pages/01)：渲染前 max_pages 页 →
+    (pages, total_pages)；pages = [{page_no, data_url}]（base64 PNG data URL）。
+
+    复用 _render_page_png（题库 /pages 端点同款渲染与降级语义）：单页渲染失败
+    跳过；无 PyMuPDF / PDF 打不开 → (pages, total) 返回空与 0，调用方前端仅
+    显示文字，不阻塞。max_pages 上限防超大 PDF 拖慢 /api/extract 响应。
+    """
+    try:
+        import fitz  # type: ignore[import-untyped]  # PyMuPDF 无类型 stub
+    except ImportError:
+        return [], 0
+    try:
+        with fitz.open(str(pdf_path)) as doc:
+            total = doc.page_count
+            pages: list[dict[str, str]] = []
+            for page_no in range(1, min(total, max_pages) + 1):
+                png = _render_page_png(pdf_path, page_no)
+                if png is None:
+                    continue  # 单页渲染失败跳过（与题库 /pages 同语义）
+                pages.append(
+                    {
+                        "page_no": page_no,
+                        "data_url": "data:image/png;base64,"
+                        + base64.b64encode(png).decode("ascii"),
+                    }
+                )
+            return pages, total
+    except Exception:
+        return [], 0
 
 
 def _page_figure_label(page: Any) -> str | None:
