@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a8011b13ccdcbceb6351388b2173585baa92f3ed -->
+<!-- changelog-auto: last-commit=2adbb3ed330a9ea307fb3032f61c775206ce313b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 18:40 ui-polish-12/03：设置页折叠总开关——页首工具栏一键「全部收起/全部展开」，含计费小节并落盘记忆
 - 18:54 生成页就绪总览条与卡片状态徽章（gen-overview/01-02）
 - 19:04 生成页新增「检查能否生成」：判据与生成按钮同源 + 检查单面板（a3-readiness-check/01-02）
+- 19:10 修正步骤 7 完成判定：默认布线生成 / 无需配置也显示完成（step7-done/01）
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
