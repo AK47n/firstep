@@ -552,6 +552,104 @@ def add_reference(
     return entry
 
 
+def update_reference(
+    reference_root: Path,
+    entry_id: str,
+    *,
+    title: str,
+    type: str,
+    description: str,
+    anchor_kind: str,
+    anchor_value: str,
+    add_files: Mapping[str, str],
+    remove_files: Sequence[str],
+    kit_vocabulary: Sequence[str],
+    platform: str = PLATFORM_ANY,
+) -> ReferenceEntry:
+    """编辑条目：元数据全量更新 + 文件增量增删，一次提交（工单
+    reference-library-ui/01）。
+
+    校验全部在第一次落盘前完成（与录入同源：标题 / 类型 / 简介非空、锚定合法、
+    平台词表、文件路径安全），任何**校验**失败抛 ReferenceError 且磁盘零变化；
+    成功后自动 git 提交。编辑不改条目 id / 目录名（目录名 = 身份不变量，标题
+    只是元数据）。文件管理范围：add_files 新增（UTF-8 文本），remove_files 删除
+    （含清单外散文件——磁盘目录即数据库，与浏览 / 统计同口径）；同名文件已
+    存在拒绝（不支持修改内容，先删后加）；add / remove 重叠拒绝。写入期失败
+    （新增文件 / 元数据）会清理已写的新增文件并保持元数据原值；删除实体失败
+    只留清单外散文件（与浏览 / 统计的磁盘实况容忍语义一致）。
+    """
+    entry = get_reference(reference_root, entry_id)  # 条目不存在大声失败
+    title = title.strip()
+    type_ = type.strip()
+    description = description.strip()
+    anchor_value = anchor_value.strip()
+    platform = platform.strip()
+    if not title:
+        raise ReferenceError("条目标题不能为空")
+    if not type_:
+        raise ReferenceError("条目类型不能为空")
+    if not description:
+        raise ReferenceError("条目简介不能为空")
+    _validate_anchor(anchor_kind, anchor_value, kit_vocabulary)
+    if platform not in REFERENCE_PLATFORMS:
+        raise ReferenceError(
+            f"非法平台属性：{platform!r}（应为 stm32、mspm0 或 any）"
+        )
+    entry_dir = reference_root / entry_id
+    if add_files:
+        _validate_files(add_files)
+    for name in remove_files:
+        if is_unsafe_path(name):
+            raise ReferenceError(f"文件路径必须是相对且无 .. 的：{name!r}")
+        if name == REFERENCE_META_FILENAME:
+            raise ReferenceError(f"文件名不能与 {REFERENCE_META_FILENAME} 冲突")
+    overlap = set(add_files) & set(remove_files)
+    if overlap:
+        raise ReferenceError(f"同一文件既添加又删除：{sorted(overlap)[0]!r}")
+    for name in add_files:
+        if (entry_dir / name).exists():
+            raise ReferenceError(
+                f"文件已存在：{name!r}（不支持修改内容，请先删除再添加）"
+            )
+    for name in remove_files:
+        if not (entry_dir / name).is_file():
+            raise ReferenceError(f"文件不存在：{name!r}")
+    # 新文件清单：先删后加（保序去重，与磁盘变更一致）
+    removed = set(remove_files)
+    new_files = tuple(f for f in entry.files if f not in removed)
+    new_files = new_files + tuple(n for n in add_files if n not in new_files)
+    new_entry = replace(
+        entry,
+        title=title,
+        type=type_,
+        description=description,
+        anchor_kind=anchor_kind,
+        anchor_value=anchor_value,
+        files=new_files,
+        platform=platform,
+    )
+    # 落盘顺序：先写新增文件 + 元数据（失败清理已写文件并保持元数据原值）→
+    # 删实体（先改引用再删实体：元数据写失败不丢已删除的文件；删除失败只留
+    # 清单外散文件——与浏览/统计「磁盘目录即数据库」容忍语义一致）
+    written: list[Path] = []
+    try:
+        for name, content in add_files.items():
+            path = entry_dir / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            written.append(path)
+        write_json(entry_dir, REFERENCE_META_FILENAME, new_entry.to_dict())
+    except Exception:
+        for path in written:
+            path.unlink(missing_ok=True)
+        raise
+    for name in remove_files:
+        (entry_dir / name).unlink(missing_ok=True)
+    updated = get_reference(reference_root, entry_id)
+    commit_after_write(reference_root, f"lib: update reference {entry_id}")
+    return updated
+
+
 # ---------------------------------------------------------------------------
 # 归档（确认提炼报告时的"归档为该题参考文件"动作）：复制入库、内容自持
 # ---------------------------------------------------------------------------
