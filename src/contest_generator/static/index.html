@@ -304,6 +304,24 @@
                              text-align: left; }
   .mi-pins th { background: var(--panel); color: var(--muted); font-weight: 600; }
   .mi-pin-id { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  /* 改简介模态（library-edit-description/05）：复用详情弹窗遮罩/居中卡模式，
+     新建 .lib-edit-* 前缀，不动既有 module-info / ref-files 类 */
+  .lib-edit-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
+                      display: flex; align-items: flex-start; justify-content: center;
+                      z-index: 50; padding: 40px 16px; }
+  .lib-edit-modal { background: var(--panel); border: 1px solid var(--border);
+                    border-radius: 8px; box-shadow: var(--shadow-pop);
+                    max-width: 560px; width: 100%; display: flex; flex-direction: column; }
+  .lib-edit-head { display: flex; justify-content: space-between; align-items: center;
+                   padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .lib-edit-body { padding: 12px 14px; }
+  .lib-edit-old { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+                  background: var(--panel-2); color: var(--muted); font-size: 13px;
+                  line-height: 1.5; word-break: break-all; margin-bottom: 10px; }
+  .lib-edit-body textarea { width: 100%; min-height: 96px; resize: vertical; }
+  .lib-edit-msg { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; }
+  .lib-edit-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px;
+                   border-top: 1px solid var(--border); }
   /* 编译结果横幅（工单 compile-experience-ui/01）：四态颜色 + 初始 hidden */
   #compile-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
                     font-size: 13px; font-weight: 600; }
@@ -6276,13 +6294,77 @@ async function loadLibrary() {
   }
 }
 
+// editDescStatus(status, event)：改简介模态状态机（工单 05 纯函数，可测）。
+// idle → saving → ok / rejected；reset 回 idle；非法事件保持原状态（重入由按钮禁用承担）。
+function editDescStatus(status, event) {
+  switch (event) {
+    case "save": return "saving";
+    case "saved": return status === "saving" ? "ok" : status;
+    case "error": return status === "saving" ? "rejected" : status;
+    case "reset": return "idle";
+    default: return status;
+  }
+}
+
 async function editDescription(slug) {
-  const text = prompt("模块 " + slug + " 的新简介（AI 校验与代码一致后才会保存）：");
-  if (text === null || !text.trim()) return;
-  try {
-    await apiPut(`/api/modules/${encodeURIComponent(slug)}/description`, { description: text.trim() });
-    loadLibrary();
-  } catch (e) { alert(e.message); }
+  const module = (state.modules || []).find((mo) => mo.slug === slug);
+  if (!module) { toast("info", "未找到模块 " + slug); return; }
+  // 替换式打开（同 openModuleInfo 先例）；全字段 textContent 填充免转义
+  document.querySelectorAll(".lib-edit-overlay").forEach((o) => o.remove());
+  const overlay = document.createElement("div");
+  overlay.className = "lib-edit-overlay";
+  const modal = document.createElement("div");
+  modal.className = "lib-edit-modal";
+  modal.innerHTML = '<div class="lib-edit-head"><strong>修改简介：<span class="lib-edit-slug"></span></strong>'
+    + '<button class="ref-files-close" title="关闭">×</button></div>'
+    + '<div class="lib-edit-body">'
+    + '<label>原简介（只读对照）</label><div class="lib-edit-old"></div>'
+    + '<label>新简介（AI 校验与代码一致后写入）</label><textarea class="lib-edit-text"></textarea>'
+    + '<div class="lib-edit-msg"></div></div>'
+    + '<div class="lib-edit-foot"><button class="lib-edit-cancel">取消</button>'
+    + '<button class="primary lib-edit-save">保存</button></div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  modal.querySelector(".lib-edit-slug").textContent = module.slug;
+  modal.querySelector(".lib-edit-old").textContent = String(module.description || "");
+  const textEl = modal.querySelector(".lib-edit-text");
+  textEl.value = String(module.description || "");
+  const msgEl = modal.querySelector(".lib-edit-msg");
+  const saveBtn = modal.querySelector(".lib-edit-save");
+  let status = "idle";
+  const close = () => overlay.remove();
+  const doSave = async () => {
+    status = editDescStatus(status, "save");
+    saveBtn.disabled = true;
+    saveBtn.textContent = "保存中…";
+    msgEl.textContent = "";
+    try {
+      const data = await apiPut(`/api/modules/${encodeURIComponent(module.slug)}/description`,
+        { description: textEl.value.trim() });
+      status = editDescStatus(status, "saved");
+      // saving 中被取消/关闭：模态已移除，跳过后续渲染（对已移除节点是安全 no-op，仅省一次无用 work）
+      if (!overlay.isConnected) return;
+      // 端点返回新 manifest：本地替换 + 全量重算（零额外请求）
+      state.modules = (state.modules || []).map((m) => (m.slug === module.slug ? data : m));
+      renderModulePool();
+      renderLibraryTable();
+      close();
+    } catch (e) {
+      status = editDescStatus(status, "error");
+      if (!overlay.isConnected) return;
+      saveBtn.disabled = false;
+      saveBtn.textContent = "保存";
+      msgEl.textContent = e.message;
+    }
+  };
+  saveBtn.addEventListener("click", doSave);
+  modal.querySelector(".lib-edit-cancel").addEventListener("click", close);
+  modal.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  textEl.focus();
 }
 
 async function deleteModule(slug) {

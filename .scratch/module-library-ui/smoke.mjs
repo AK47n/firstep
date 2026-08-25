@@ -321,5 +321,70 @@ if (!d04c.skipped) {
   check("无悬空一致性（库有悬空，跳过）", true);
 }
 
+// ---- 工单 05：改简介模态（替代 window.prompt，三态反馈） ----
+const e05 = await Eval(`(() => {
+  const btn = document.querySelector('#lib-rows [data-edit-desc]');
+  if (!btn) return { skipped: true };
+  const slug = btn.getAttribute('data-edit-desc');
+  const mod = (state.modules || []).find((m) => m.slug === slug) || {};
+  const desc = String(mod.description || '');
+  btn.click();
+  return { skipped: false, slug, desc, overlayCount: document.querySelectorAll('.lib-edit-overlay').length };
+})()`);
+if (!e05.skipped) {
+  const e05b = await Eval(`(() => {
+    const overlay = document.querySelector('.lib-edit-overlay');
+    const textEl = overlay && overlay.querySelector('.lib-edit-text');
+    const oldEl = overlay && overlay.querySelector('.lib-edit-old');
+    const slugEl = overlay && overlay.querySelector('.lib-edit-slug');
+    const hasSave = overlay && !!overlay.querySelector('.lib-edit-save');
+    const hasCancel = overlay && !!overlay.querySelector('.lib-edit-cancel');
+    return { text: textEl ? textEl.value : null, old: oldEl ? oldEl.textContent : null,
+             slug: slugEl ? slugEl.textContent : null, hasSave, hasCancel };
+  })()`);
+  check("点「改简介」→ 模态出现（替换式唯一）", e05.overlayCount === 1, `overlay=${e05.overlayCount}`);
+  check("模态标题 slug + 文本域预填当前简介 + 原简介对照区",
+    e05b.slug === e05.slug && e05b.text === e05.desc && e05b.old === e05.desc,
+    `slug=${e05b.slug} text=${e05b.text} old=${e05b.old}`);
+  check("保存 / 取消按钮齐备", e05b.hasSave && e05b.hasCancel);
+  // 取消关闭
+  await Eval(`document.querySelector('.lib-edit-overlay .lib-edit-cancel').click()`);
+  await new Promise((r) => setTimeout(r, 250));
+  const e05c = await Eval(`document.querySelectorAll('.lib-edit-overlay').length`);
+  check("取消关闭（无残留）", e05c === 0, `overlay=${e05c}`);
+  // Esc 关闭
+  await Eval(`document.querySelector('#lib-rows [data-edit-desc]').click()`);
+  await new Promise((r) => setTimeout(r, 250));
+  await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await new Promise((r) => setTimeout(r, 250));
+  const e05d = await Eval(`document.querySelectorAll('.lib-edit-overlay').length`);
+  check("Esc 关闭（无残留）", e05d === 0, `overlay=${e05d}`);
+  // 真实保存（原文不动）：成功（AI 校验一致）→ 模态关闭；驳回（未配置/不一致）→ 错误展示。
+  // 二态任一均符合「三态反馈」验收；轮询至多 8s。
+  const e05e = await Eval(`(async () => {
+    document.querySelector('#lib-rows [data-edit-desc]').click();
+    await new Promise((r) => setTimeout(r, 250));
+    document.querySelector('.lib-edit-overlay .lib-edit-save').click();
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      const gone = document.querySelectorAll('.lib-edit-overlay').length === 0;
+      const msg = (document.querySelector('.lib-edit-overlay .lib-edit-msg') || {}).textContent || '';
+      if (gone) return { closed: true, msg };
+      if (msg) return { closed: false, msg };
+    }
+    return { closed: false, msg: 'TIMEOUT' };
+  })()`);
+  check("保存 = 成功关闭或驳回展示（两种状态流转均成立）",
+    (e05e.closed && !e05e.msg) || (!e05e.closed && e05e.msg && e05e.msg !== 'TIMEOUT'),
+    e05e.closed ? "closed(ok)" : e05e.msg);
+  // 清理：若驳回残留模态，Esc 关闭
+  if (!e05e.closed) {
+    await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+} else {
+  check("改简介模态（无模块数据，跳过）", true);
+}
+
 console.log(failed === 0 ? "SMOKE ALL PASS" : `SMOKE FAILED (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

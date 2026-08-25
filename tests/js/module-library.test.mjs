@@ -264,6 +264,26 @@ test("libStats 统计含悬空依赖数（dangling 字段）", () => {
   assert.equal(libStats([]).dangling, 0);
 });
 
+// ================= 工单 05：改简介模态状态机 =================
+// editDescStatus(status, event)：idle → saving → ok / rejected；reset 回 idle；非法事件保持。
+
+const editDescStatus = extract("editDescStatus");
+
+test("editDescStatus 状态机：save/saved/error/reset 流转", () => {
+  assert.equal(editDescStatus("idle", "save"), "saving");
+  assert.equal(editDescStatus("saving", "saved"), "ok");
+  assert.equal(editDescStatus("saving", "error"), "rejected");
+  assert.equal(editDescStatus("rejected", "reset"), "idle");
+  assert.equal(editDescStatus("saving", "reset"), "idle");
+  assert.equal(editDescStatus("ok", "reset"), "idle");
+});
+
+test("editDescStatus 非法事件：保持原状态（重入保护由按钮禁用承担）", () => {
+  assert.equal(editDescStatus("idle", "bogus"), "idle");
+  assert.equal(editDescStatus("saving", "save"), "saving");
+  assert.equal(editDescStatus("rejected", "saved"), "rejected");
+});
+
 test("libStatsText 统计条文案：全量分段含互斥组", () => {
   const text = libStatsText(libStats(libMods));
   assert.ok(text.includes("共 4 个模块"));
