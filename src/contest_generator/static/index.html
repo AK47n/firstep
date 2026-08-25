@@ -187,6 +187,14 @@
   .muted { color: var(--muted); font-size: 12px; }
   .error { color: var(--danger); font-size: 14px; margin-top: 8px; white-space: pre-wrap; }
   .ok { color: var(--ok); }
+  .env-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .env-row:last-child { border-bottom: none; }
+  .env-badge { flex: 0 0 auto; align-self: center; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; }
+  .env-badge.env-ok { background: var(--ok); }
+  .env-badge.env-warn { background: var(--warn); }
+  .env-badge.env-err { background: var(--danger); }
+  .env-name { flex: 0 0 118px; color: var(--muted); }
+  .env-detail { flex: 1; white-space: pre-wrap; word-break: break-all; }
   .banner { background: var(--warn-dim); border: 1px solid var(--warn-border); color: var(--warn);
             border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
   .platform-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
@@ -1912,6 +1920,15 @@
         <span id="vision-selfcheck-status" class="muted" style="flex:1"></span>
       </div>
       <div class="muted">云端识图：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别。视觉服务下拉一键切换 DeepSeek / 智谱预设；手动修改 base_url 或模型会自动转为「自定义」模式（自备 key）。DeepSeek 模式下 key 留空自动复用主 key（同 key 同价）；智谱模式自动沿用已保存的智谱 key。不配置 = 视觉功能关闭，其余功能不受影响。「自检」用当前填写参数真实调用一次视觉模型（含复用主 key 逻辑），通过 = 配置可用。</div>
+    </div>
+
+    <div class="card" data-collapse-id="env-check">
+      <h2>环境体检</h2>
+      <div class="row" style="margin-bottom:8px;align-items:center">
+        <button id="btn-env-check" type="button" data-ico="check">一键体检</button>
+        <span class="muted" style="flex:1">静态探测配置 / 工具链 / 模块库 / 母版 / 输出目录，并对 LLM 文本 + 视觉双通道各真实调用一次（各消耗一次最小调用）。</span>
+      </div>
+      <div id="env-check-results"></div>
     </div>
 
     <div class="card" data-collapse-id="recent-wf">
@@ -7272,6 +7289,119 @@ $("btn-vision-selfcheck").addEventListener("click", async () => {
     status.textContent = "✕ 自检失败：" + e.message;
   }
 });
+
+// 环境体检（工单 env-check-center/01）：静态探测 + 文本/视觉双通道真实自检。
+// 行结构 data-env-row 标记；ch 参数 = null（待检查）| {ok:true,data} | {ok:false,msg}。
+const ENV_BADGE_GLYPH = { "env-ok": "✓", "env-warn": "!", "env-err": "✕" };
+function envRowHTML(key, badgeCls, name, detail) {
+  return '<div class="env-row" data-env-row="' + key + '">'
+    + '<span class="env-badge ' + badgeCls + '">' + ENV_BADGE_GLYPH[badgeCls] + '</span>'
+    + '<span class="env-name">' + name + '</span>'
+    + '<span class="env-detail">' + detail + '</span></div>';
+}
+function envChannelHTML(key, name, ch) {
+  let badge, detail;
+  if (!ch) {
+    badge = "env-warn";
+    detail = "待检查（点「一键体检」触发）";
+  } else if (ch.ok) {
+    badge = "env-ok";
+    const d = ch.data || {};
+    detail = "正常（模型 " + esc(d.model || "?") + "，耗时 " + (d.elapsed_ms ?? "?") + "ms）"
+      + (d.reply ? "，回复：" + esc(d.reply) : "");
+  } else {
+    badge = "env-err";
+    detail = "失败：" + esc(ch.msg || "未知原因");
+  }
+  return envRowHTML(key, badge, name, detail);
+}
+function envCheckStatusHTML(status, textCh, visionCh) {
+  if (!status) return "";
+  const rows = [];
+  if (status.api_configured) {
+    const llm = status.llm || {};
+    const local = llm.local_llm_base_url || "";
+    rows.push(envRowHTML("api", "env-ok", "API 配置",
+      esc("已保存（模型 " + (llm.model || "?") + "，"
+        + (local ? "本地路由 " + local : "端点 " + (llm.base_url || "?")) + "）")));
+  } else {
+    rows.push(envRowHTML("api", "env-err", "API 配置", "未保存主 API key，请到设置页「主 API」填写"));
+  }
+  rows.push(envChannelHTML("llm-text", "文本通道", textCh));
+  rows.push(envChannelHTML("llm-vision", "视觉通道", visionCh));
+  const tc = status.toolchains || {};
+  const tcMeta = {
+    stm32: { name: "Keil UV4（stm32）", miss: "未找到 UV4（可在设置页填 uv4_path 覆盖）" },
+    mspm0: { name: "gmake（mspm0）", miss: "未找到 gmake（可在设置页填 gmake_path 覆盖）" },
+  };
+  for (const [plat, meta] of Object.entries(tcMeta)) {
+    const entry = tc[plat];
+    if (!entry) continue;
+    if (entry.found) {
+      rows.push(envRowHTML("toolchain-" + plat, "env-ok", meta.name,
+        esc(entry.path || "") + (entry.override ? "（设置页路径覆盖）" : "")));
+    } else {
+      rows.push(envRowHTML("toolchain-" + plat, "env-err", meta.name, meta.miss));
+    }
+  }
+  for (const p of status.platforms || []) {
+    const ready = p.status === "ready";
+    rows.push(envRowHTML("platform-" + p.id, ready ? "env-ok" : "env-warn", p.name + " 母版",
+      ready ? "已就绪（可生成）" : "未导入母版（生成前需导入）"));
+  }
+  const lib = status.module_library || {};
+  if (lib.error) {
+    rows.push(envRowHTML("module-library", "env-err", "模块库", esc(lib.error)));
+  } else if (!lib.exists) {
+    rows.push(envRowHTML("module-library", "env-err", "模块库", "目录不存在：" + esc(lib.dir || "")));
+  } else {
+    const n = lib.count || 0;
+    rows.push(envRowHTML("module-library", n > 0 ? "env-ok" : "env-warn", "模块库",
+      esc((String(n) + " 个模块：") + (lib.dir || ""))));
+  }
+  const md = status.masters_dir || {};
+  if (md.exists) {
+    rows.push(envRowHTML("masters-dir", "env-ok", "母版目录", esc(md.dir || "")));
+  } else {
+    rows.push(envRowHTML("masters-dir", "env-warn", "母版目录", "不存在（首次导入母版时创建）"));
+  }
+  const out = status.output_dir || {};
+  if (out.exists && out.writable) {
+    rows.push(envRowHTML("output-dir", "env-ok", "输出目录", esc(out.dir || "") + "（可写）"));
+  } else {
+    const why = !out.exists ? "目录不存在：" : "目录不可写：";
+    rows.push(envRowHTML("output-dir", "env-err", "输出目录", why + esc(out.dir || "")));
+  }
+  return rows.join("");
+}
+async function envCheckRun() {
+  const btn = $("btn-env-check");
+  const box = $("env-check-results");
+  if (!btn || !box || btn.disabled) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>体检中…';
+  let status;
+  try {
+    status = await apiGet("/api/env/status");
+  } catch (e) {
+    box.innerHTML = '<div class="error">体检失败：' + esc(e.message) + "</div>";
+    btn.disabled = false;
+    btn.textContent = "一键体检";
+    return;
+  }
+  box.innerHTML = envCheckStatusHTML(status, null, null);
+  const [textRes, visionRes] = await Promise.allSettled([
+    apiPost("/api/llm/selfcheck"),
+    apiPost("/api/vision/selfcheck"),
+  ]);
+  const settleCh = (r) => r.status === "fulfilled"
+    ? { ok: true, data: r.value }
+    : { ok: false, msg: (r.reason && r.reason.message) || "请求失败" };
+  box.innerHTML = envCheckStatusHTML(status, settleCh(textRes), settleCh(visionRes));
+  btn.disabled = false;
+  btn.textContent = "一键体检";
+}
+$("btn-env-check").addEventListener("click", envCheckRun);
 
 // 本地模型下拉联动：选「关闭」→ 清空 base_url（本地路由关闭）；选模型 → 补默认端点
 $("set-local-llm-model").addEventListener("change", () => {
