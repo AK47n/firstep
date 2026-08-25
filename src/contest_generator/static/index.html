@@ -1651,6 +1651,10 @@
         <div style="flex:1"><label>视觉模型（跟随上方选择自动填，可手动改）</label><input type="text" id="set-vision-model" placeholder="deepseek-v4-flash-vision-exp"></div>
       </div>
       <div style="flex:1"><label>视觉 API key（DeepSeek 模式留空 = 复用主 key；智谱模式填智谱 key）</label><input type="text" id="set-vision-api-key" placeholder="" autocomplete="off"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
+        <input type="checkbox" id="set-vision-detail-qa" style="margin:0">
+        <label for="set-vision-detail-qa" style="margin:0;font-size:12px;color:var(--muted)">问答式精注记（默认开：每张图第一轮描述后追问一轮细节，型号/尺寸标注/引脚号更全；关闭 = 省一半视觉调用）</label>
+      </div>
       <div class="muted">云端识图：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别。视觉服务下拉一键切换 DeepSeek / 智谱预设；手动修改 base_url 或模型会自动转为「自定义」模式（自备 key）。DeepSeek 模式下 key 留空自动复用主 key（同 key 同价）；智谱模式自动沿用已保存的智谱 key。不配置 = 视觉功能关闭，其余功能不受影响。</div>
     </div>
 
@@ -6454,6 +6458,9 @@ async function loadSettings() {
     $("set-vision-base-url").value = s.vision_base_url || "";
     $("set-vision-api-key").value = s.vision_api_key || "";
     $("set-vision-model").value = s.vision_model || "";
+// 问答式精注记开关（工单 vision-detail-qa/01）：缺省开——旧 state 无该字段
+// 时按开处理（`!== false`），避免老用户升级后悄悄丢精注记
+$("set-vision-detail-qa").checked = s.vision_detail_qa !== false;
     // 视觉服务下拉（工单 vision-provider-switch/01）：掩码 key 存档供切回智谱
     // 时回填沿用；按 base_url 推断当前模式（不覆盖用户已存字段）
     visionZhipuMask = s.vision_api_key || "";
@@ -6651,6 +6658,7 @@ $("btn-save-settings").addEventListener("click", async () => {
       vision_base_url: $("set-vision-base-url").value.trim(),
       vision_api_key: $("set-vision-api-key").value.trim(),
       vision_model: $("set-vision-model").value.trim(),
+      vision_detail_qa: $("set-vision-detail-qa").checked,
       llm_prices: collectLlmPrices(),
       llm_price_period: $("period-peak").checked ? "peak" : "off_peak",
       recommend_cache_enabled: $("set-recommend-cache").checked,

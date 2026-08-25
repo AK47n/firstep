@@ -233,6 +233,7 @@ def enrich_topic_image_notes(
     vision_api_key: str,
     vision_model: str,
     observation_collector: object | None = None,
+    detail_qa: bool = True,
 ) -> TopicEntry:
     """存量条目补图注（工单 topic-vision-notes/02/03）：题面引用图（"图N"）但
     无图注、且原 PDF 仍在条目目录内 → 生成图注段，追加题面文末（空行分隔，
@@ -290,6 +291,7 @@ def enrich_topic_image_notes(
         vision_api_key=vision_api_key,
         vision_model=vision_model,
         observation_collector=observation_collector,
+        detail_qa=detail_qa,
     )
     if not notes:
         return entry
@@ -317,6 +319,7 @@ def _figure_notes(
     vision_api_key: str,
     vision_model: str,
     observation_collector: object | None,
+    detail_qa: bool = True,
 ) -> str:
     """图注获取（三级降级链，工单 topic-vision-render/01，视觉优先）：
 
@@ -338,6 +341,7 @@ def _figure_notes(
             vision_api_key=vision_api_key,
             vision_model=vision_model,
             observation_collector=observation_collector,
+            detail_qa=detail_qa,
         )
     except Exception:
         notes = ""
@@ -357,6 +361,7 @@ def _figure_notes(
             vision_model=vision_model,
             observation_collector=observation_collector,
             pages=pages,
+            detail_qa=detail_qa,
         )
     except Exception:
         return ""

@@ -69,6 +69,24 @@ RENDER_DESCRIBE_PROMPT = (
     "如果页面中没有示意图（只有文字），只回复「无实质内容」。"
 )
 
+# 问答式精注记（工单 vision-detail-qa/01）：第一轮描述基础上追加一轮视觉
+# 追问——模型看图补第一轮遗漏的数字标注 / 型号 / 颜色线型 / 引脚号等；
+# 命中否定词 = 视为无补充（不合并，返回原描述，不付合并噪声）
+DETAIL_QA_PROMPT = (
+    "这是同一张图的第二次审阅。第一轮的描述如下：\n{description}\n\n"
+    "请只看图，逐条补充第一轮遗漏的具体细节：数字标注与单位、型号与字符串"
+    "编号、颜色与线型（如红色实线）、引脚号与接口名、元件位置关系。"
+    "若这些细节均已在第一轮覆盖，只回复「无补充」。"
+)
+DETAIL_QA_NO_SUPPLEMENT = (
+    "无补充",
+    "无需补充",
+    "没有补充",
+    "无更多",
+    "无其它补充",
+    "无其他补充",
+)
+
 # 图标题行首正则（工单 topic-vision-render/01）：图内标题定位（_figure_annotation
 # block 的 titles 判定）与渲染页图号提取（_page_figure_label）共享——正文引用
 # 「如图1所示」不在行首，天然排除
@@ -94,6 +112,51 @@ def _describe_kwargs(
     if observation_collector is not None:
         kwargs["observation_collector"] = observation_collector
     return kwargs
+
+
+def refine_image_description(
+    data: bytes,
+    mime: str,
+    description: str,
+    *,
+    vision_base_url: str,
+    vision_api_key: str,
+    vision_model: str,
+    observation_collector: object | None = None,
+) -> str:
+    """问答式精注记（工单 vision-detail-qa/01）：二轮视觉追问合并细节。
+
+    图 → 文字单轮转译有系统性信息损耗（型号 / 尺寸标注 / 引脚号常被省略）。
+    本函数把第一轮描述连同原图再发一轮视觉追问（DETAIL_QA_PROMPT），
+    补回数字标注 / 型号 / 颜色线型 / 引脚号 / 位置关系，合并为
+    `描述；细节补充：<细节>`——产出仍是纯文字，下游零感知。
+
+    降级原则（与「视觉是增强不是阻塞」一致）：二轮异常 / 空回复 / 命中
+    DETAIL_QA_NO_SUPPLEMENT 否定词 → 原样返回第一轮描述，绝不抛。
+    缓存：describe_image_cached 键 = 图片 + prompt 联合 sha256，二轮
+    prompt 与一轮不同 → 天然独立缓存，互不串答案。
+    """
+    text = (description or "").strip()
+    if not text:
+        return description
+    try:
+        detail = describe_image_cached(
+            data,
+            mime,
+            DETAIL_QA_PROMPT.replace("{description}", text),
+            **_describe_kwargs(
+                vision_base_url,
+                vision_api_key,
+                vision_model,
+                observation_collector,
+            ),
+        )
+    except Exception:
+        return description
+    detail = (detail or "").strip()
+    if not detail or any(token in detail for token in DETAIL_QA_NO_SUPPLEMENT):
+        return description
+    return text + "；细节补充：" + detail
 
 # pypdf ImageFile.name 后缀 → mime（通用映射；.bmp 条目保留作映射完整性
 # 与 PDF 结构兼容——PDF 内嵌图发送前由 _VISION_PASSTHROUGH_SUFFIXES 判定
@@ -154,12 +217,17 @@ def extract_pdf_with_image_notes(
     vision_api_key: str,
     vision_model: str,
     observation_collector: object | None = None,
+    detail_qa: bool = True,
 ) -> str:
     """PDF 文本抽取 + 嵌入示意图视觉描述（工单 vision-eyes/02）。
 
     文本部分与 extract_file 完全一致；图注段 `[示意图N：<描述>]` 追加在
     尾部（下游简介 / 推荐 / 骨架零改动全受益）。视觉未配置 / 任何视觉
     失败 = 静默降级（只用文本，逐字节一致）——视觉是增强不是阻塞。
+
+    detail_qa（工单 vision-detail-qa/01）：True = 每张图在描述后追加一轮
+    问答式精注记（见 refine_image_description）；False = 仅一轮描述
+    （省一次视觉调用，行为与开关前一致）。
     """
     text = extract_file(path)
     notes = pdf_image_notes(
@@ -168,6 +236,7 @@ def extract_pdf_with_image_notes(
         vision_api_key=vision_api_key,
         vision_model=vision_model,
         observation_collector=observation_collector,
+        detail_qa=detail_qa,
     )
     if not notes:
         return text
@@ -182,6 +251,7 @@ def pdf_image_notes(
     vision_model: str,
     observation_collector: object | None = None,
     pages: Sequence[int] | None = None,
+    detail_qa: bool = True,
 ) -> str:
     """PDF 嵌入图 → 图注段（每张一行 `[示意图N：<描述>]`）。
 
@@ -249,6 +319,18 @@ def pdf_image_notes(
                         observation_collector,
                     ),
                 )
+                if detail_qa:
+                    # 问答式精注记（工单 vision-detail-qa/01）：一轮描述后
+                    # 追加二轮追问补细节；失败/无补充 = 原描述
+                    description = refine_image_description(
+                        data,
+                        mime,
+                        description,
+                        vision_base_url=vision_base_url,
+                        vision_api_key=vision_api_key,
+                        vision_model=vision_model,
+                        observation_collector=observation_collector,
+                    )
             except Exception:
                 skipped += 1
                 continue  # 单张失败降级（含未配置 / 网络 / 限流）
@@ -427,6 +509,7 @@ def pdf_page_render_notes(
     vision_model: str,
     observation_collector: object | None = None,
     pages: Sequence[int] | None = None,
+    detail_qa: bool = True,
 ) -> str:
     """渲染页 → 视觉描述图注段（工单 topic-vision-render/01）：`[图N 标注：…]` 逐行。
 
@@ -485,6 +568,16 @@ def pdf_page_render_notes(
         if label in used_labels:
             continue  # 真实图号撞车（两页同「图N」标题）：跳过，宁缺毋滥
         used_labels.add(label)
+        if detail_qa:
+            description = refine_image_description(
+                png,
+                "image/png",
+                description,
+                vision_base_url=vision_base_url,
+                vision_api_key=vision_api_key,
+                vision_model=vision_model,
+                observation_collector=observation_collector,
+            )
         notes.append(f"[图{label} 标注：{description}]")
     return "\n".join(notes)
 
@@ -706,6 +799,7 @@ def extract_image(
     vision_api_key: str,
     vision_model: str,
     observation_collector: object | None = None,
+    detail_qa: bool = True,
 ) -> str:
     """图片文件 → 视觉描述文本（工单 vision-eyes/03）。
 
@@ -740,6 +834,18 @@ def extract_image(
                 observation_collector,
             ),
         )
+        if detail_qa:
+            # 问答式精注记（工单 vision-detail-qa/01）：一轮描述后追加
+            # 二轮追问补细节；失败/无补充 = 原描述
+            description = refine_image_description(
+                data,
+                _IMAGE_MIME_BY_SUFFIX.get(file_path.suffix.lower(), "image/png"),
+                description,
+                vision_base_url=vision_base_url,
+                vision_api_key=vision_api_key,
+                vision_model=vision_model,
+                observation_collector=observation_collector,
+            )
     except Exception as exc:
         if isinstance(exc, ExtractionError):
             raise

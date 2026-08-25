@@ -884,6 +884,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
                     observation_collector=collector,
+                    detail_qa=config.vision_detail_qa,
                 )
                 context.recent_llm_workflows.add_completed(collector)
                 # 上传原图（工单 upload-image-preview/01）：视觉描述之外回传原图
@@ -897,6 +898,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
                     observation_collector=collector,
+                    detail_qa=config.vision_detail_qa,
                 )
                 context.recent_llm_workflows.add_completed(collector)
                 # 上传页图（工单 upload-pdf-pages/01）：与题库 /pages 同款渲染，
@@ -2198,6 +2200,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "vision_model": (
                 config.vision_model if config is not None else DEFAULT_VISION_MODEL
             ),
+            # 问答式精注记开关（工单 vision-detail-qa/01）：图注一轮描述后追加
+            # 二轮视觉追问补细节；缺省开
+            "vision_detail_qa": (
+                config.vision_detail_qa if config is not None else True
+            ),
             # LLM 单价（工单 llm-cost-control/01）：返回当前生效表（默认 + 覆盖
             # 合并），前端可直接显示；未配置 / 无覆盖 = 内置默认
             "llm_prices": price_tables_to_config(
@@ -2268,6 +2275,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ),
             vision_model=(
                 _optional_str(payload, "vision_model") or DEFAULT_VISION_MODEL
+            ),
+            # 问答式精注记开关（工单 vision-detail-qa/01）：缺省开；非布尔 400
+            vision_detail_qa=_optional_bool(
+                payload, "vision_detail_qa", default=True
             ),
             # LLM 单价覆盖（工单 llm-cost-control/01）：缺省 / 空对象 = 恢复内置默认
             llm_prices=_optional_dict(payload, "llm_prices"),
@@ -2479,6 +2490,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
                     observation_collector=collector,
+                    detail_qa=config.vision_detail_qa,
                 )
                 context.recent_llm_workflows.add_completed(collector)
             else:
@@ -2561,6 +2573,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
                     observation_collector=collector,
+                    detail_qa=config.vision_detail_qa,
                 )
                 context.recent_llm_workflows.add_completed(collector)
             except Exception:
