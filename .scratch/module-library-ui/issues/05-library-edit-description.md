@@ -7,12 +7,19 @@
 
 **被谁阻塞：** 01——模态样式与表格准入改造先就位。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 全程不再调用 window.prompt；点「改简介」打开模态，文本域预填当前简介
-- [ ] 模态含原简介对照区（只读展示），方便比对新旧
-- [ ] 保存中按钮禁用 + 状态提示；成功后关闭模态并刷新表格
-- [ ] 校验驳回：模态保持打开，展示后端错误消息，可修改后重试
-- [ ] 取消 / 遮罩 / ✕ / Esc 关闭（无残留监听，同 03 先例）
-- [ ] 状态机（idle / saving / ok / rejected）若抽为纯函数，tests/js 有单测
-- [ ] 现有 tests/js 全绿、pytest 全量全绿、冒烟清单不回归
+- [x] 全程不再调用 window.prompt；点「改简介」打开模态，文本域预填当前简介
+- [x] 模态含原简介对照区（只读展示），方便比对新旧
+- [x] 保存中按钮禁用 + 状态提示；成功后关闭模态并刷新表格
+- [x] 校验驳回：模态保持打开，展示后端错误消息，可修改后重试
+- [x] 取消 / 遮罩 / ✕ / Esc 关闭（无残留监听，同 03 先例）
+- [x] 状态机（idle / saving / ok / rejected）抽为纯函数，tests/js 有单测
+- [x] 现有 tests/js 全绿（303）、pytest 全量全绿（2365）、冒烟清单不回归（35 项）
+
+**实现说明：** 替换 window.prompt → .lib-edit-* 模态（复用 03 弹窗交互模式：替换式/
+遮罩/Esc/remove 清理）；editDescStatus 纯函数（save/saved/error/reset，saved/error 仅从
+saving 转移）；成功用端点返回 manifest 本地替换 + renderModulePool/renderLibraryTable
+（零额外请求）；saving 中被关闭后（overlay.isConnected 守卫）不再触碰已移除 DOM。
+评审两轴：无缺失/越界/硬违规；Standards 建议落实（竞态守卫）；Spec 备注成功路径
+冒烟不兜底（真实环境 AI 校验必驳回，静态代码保证成功刷新，接受）。
