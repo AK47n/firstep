@@ -860,12 +860,16 @@
              box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 0 10px rgba(52, 211, 153, .35); }
   /* 生成页就绪总览条（工单 gen-overview/01）：顶部步骤 chips + 摘要；状态与
      左侧 step-nav / stepDoneSet 同源（done ✓ 绿 / current 青 / warn ⚠ 黄），
-     窄屏（step-nav 隐藏）时兼作唯一步骤导航 */
+     窄屏（step-nav 隐藏）时兼作唯一步骤导航。
+     宽屏去重：≥1180px 左侧 step-nav 可见时隐藏
+     chips——每一步骤导航只留一处；窄屏 step-nav 隐藏、chips 兼作
+     唯一步骤导航，仍显示 */
   .gen-overview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
                   border: 1px solid var(--border); border-radius: 12px;
                   background: var(--panel); padding: 10px 12px; margin-bottom: 16px;
                   box-shadow: var(--shadow-card); }
   .ov-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+  @media (min-width: 1180px) { .ov-chips { display: none; } }
   .ov-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0;
              padding: 4px 9px 4px 5px; border-radius: 999px; cursor: pointer;
              border: 1px solid var(--border); background: transparent;
@@ -7935,7 +7939,9 @@ function renderStepProgress() {
 
 // ---------------------------------------------------------------------------
 // 生成页就绪总览（工单 gen-overview/01）：顶部步骤 chips + 摘要，状态与
-// stepDoneSet / step-nav current 同源；窄屏（step-nav 隐藏）兼作唯一步骤导航。
+// stepDoneSet / step-nav current 同源。宽屏（≥1180px）左侧 step-nav 可见时
+// chips 隐藏（避免每步导航重复出现）；窄屏 step-nav 隐藏时 chips 兼作
+// 唯一步骤导航。
 // 关键路径 = 缺了就不能生成的步骤（题面/平台/模块/生成）；
 // 软建议 = 不强制但强烈建议先走的步骤（AI 推荐/骨架）。
 // ---------------------------------------------------------------------------
@@ -7953,7 +7959,7 @@ function genOverviewChipsHTML(titles, doneSet, current) {
       + title.replace(/"/g, "&quot;") + "</span></button>";
   }).join("");
 }
-function genOverviewSummaryHTML(doneSet, titles, critical, recommended) {
+function genOverviewSummaryHTML(doneSet, titles, critical, recommended, navHint) {
   const done = doneSet || [];
   const byN = {};
   for (const t of titles) byN[t.n] = t.title;
@@ -7964,7 +7970,7 @@ function genOverviewSummaryHTML(doneSet, titles, critical, recommended) {
   const parts = ['<span class="ov-ready">已就绪 ' + doneCount + "/" + total + "</span>"];
   if (missing.length) {
     parts.push('<span class="ov-missing">还差：<b>'
-      + missing.map((n) => byN[n]).join("、") + "</b>（点上方 chips 直达）</span>");
+      + missing.map((n) => byN[n]).join("、") + "</b>" + (navHint || "") + "</span>");
   } else {
     parts.push('<span class="ov-next">关键步骤齐了，可以点「生成工程」</span>');
   }
@@ -8051,8 +8057,12 @@ function refreshGenOverview() {
   });
   const summary = box.querySelector(".ov-summary");
   if (summary) {
+    // 步骤导航位置随宽度切换（宽屏左侧 step-nav / 窄屏顶部 chips），
+    // 摘要提示语跟随，避免指向不可见的导航
+    const navHint = window.matchMedia("(max-width: 1179px)").matches
+      ? "（点上方步骤条直达）" : "（点左侧步骤条直达）";
     summary.innerHTML = genOverviewSummaryHTML(doneArr, genOverviewTitles,
-      GEN_CRITICAL_STEPS, GEN_RECOMMENDED_STEPS);
+      GEN_CRITICAL_STEPS, GEN_RECOMMENDED_STEPS, navHint);
   }
   // 卡片标题状态徽章（A2）：已就绪 / 有警告 / 当前，其余隐藏
   genOverviewTitles.forEach((t) => {

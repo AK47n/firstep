@@ -105,6 +105,18 @@ test("genOverviewSummaryHTML 软建议全部完成时不再出现建议段", () 
   assert.ok(!out.includes("建议顺带完成"));
 });
 
+test("genOverviewSummaryHTML 还差提示跟随导航 hint（缺省不渲染）", () => {
+  // 宽屏：左侧 step-nav 可见，提示指向左侧步骤条
+  const wide = genOverviewSummaryHTML([1], titles, [1, 3, 6, 9], [], "（点左侧步骤条直达）");
+  assert.ok(wide.includes("（点左侧步骤条直达）"));
+  // 窄屏：chips 在顶部
+  const narrow = genOverviewSummaryHTML([1], titles, [1, 3, 6, 9], [], "（点上方步骤条直达）");
+  assert.ok(narrow.includes("（点上方步骤条直达）"));
+  // 缺省：不渲染任何括号提示（纯函数调用方未传时静默）
+  const plain = genOverviewSummaryHTML([1], titles, [1, 3, 6, 9], []);
+  assert.ok(!plain.includes("直达"));
+});
+
 test("cardStepStatusHTML 四态：done / warn / current / 无状态", () => {
   assert.ok(cardStepStatusHTML(true, false, false).includes('class="card-step-status done"'));
   assert.ok(cardStepStatusHTML(true, false, false).includes("✓ 已就绪"));
