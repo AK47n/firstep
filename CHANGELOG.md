@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f646105f5e667b32b5d4a528c12aeb97424e9946 -->
+<!-- changelog-auto: last-commit=8417e3b5d38c8d0c961ebc3c2650f03067b2f1d6 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -37,6 +37,7 @@
 - 22:16 工单 module-info-dialog/01：模块卡「详情」按钮 → 全量信息弹窗（完整描述/依赖/多实例/副产物/互斥组 + 每平台验证状态/文件清单/备注/套件/购买链接/引脚声明表），卡点击仍添加模块，Esc/遮罩/✕ 三种关闭，off 卡附提示条——零后端
 - 22:19 评审修订（module-info-dialog/01）：moduleGridBadgeClass 单源化徽章类谓词（hw/ok/un，moduleGridHTML 与 moduleInfoHTML 共用，含单测）；修复单测恒真断言（>依赖</span> 标记）；冒烟补 reload 竞态防护（旧文档标记 + 点未选中卡幂等）
 - 22:19 评审修订（module-info-dialog/01）Spec 轴：副产物新形状每模板按规格渲染 template → output（原缺失模板源路径，箭头左为 name）；默认模板展示 name 回退 id；单测补两断言
+- 22:32 环境体检中心（env-check-center/01）：设置页新卡一键体检——静态聚合 /api/env/status（配置/工具链/母版/模块库/输出目录）+ 文本通道自检 /api/llm/selfcheck 单次探针 + 复用视觉自检，逐项徽章行实时更新；pytest 2355 绿、tests/js 271 绿、冒烟 11 项全 PASS
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
