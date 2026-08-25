@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=839814d3d201659fd7ba5d461bc8cd0ca9efcf48 -->
+<!-- changelog-auto: last-commit=9ca34bbb697583accf56ca9990ff8577dc883e19 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 00:11 工单07：标记 resolved，勾选验收清单
 - 00:21 修复：全屏弹窗遮罩与置顶目录重叠（z-index 层级常量统一）
 - 00:24 样式：详情/编辑/参考文件弹窗改为垂直居中
+- 00:38 参考文件库 UI 提升（工单 01 条目编辑端点）：PUT /api/references/{entry_id} 一次保存元数据（标题/类型/简介/锚定/平台）+ 文件增删——校验与录入同源（三字段非空/锚定三态/平台词表/路径安全/remove 须真实存在/加删重叠拒绝/改内容先删后加）、校验失败磁盘零变化、写入期失败清理已写文件、成功一次 commit_after_write 自动提交（lib: update reference {id}）、标题编辑不动 id/目录名；tests 2390 绿（+25）；评审双轴修订落实（元数据写失败清理、platform 必填防静默降级、docstring 收窄），工单 resolved
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
