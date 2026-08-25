@@ -385,6 +385,22 @@ def render_pdf_pages(
         return [], 0
 
 
+def image_data_url(path: Path) -> str | None:
+    """上传原图 data URL（工单 upload-image-preview/01）：图片上传随响应回传
+    原图（≤ MAX_IMAGE_BYTES，extract_image 已拒超限），浏览器直接显示。
+
+    无损回传（不缩放）：mime 由 mimetypes.guess_type 判定；读文件失败 → None，
+    前端只显示文字描述，不阻塞。
+    """
+    try:
+        import mimetypes
+
+        mime = mimetypes.guess_type(str(path))[0] or "image/png"
+        return "data:" + mime + ";base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+    except Exception:
+        return None
+
+
 def _page_figure_label(page: Any) -> str | None:
     """页文本层行首「图N」标题 → 图号；无（正文引用 / 无文本层）→ None。
 
