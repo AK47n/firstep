@@ -322,6 +322,17 @@
   .lib-edit-msg { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; }
   .lib-edit-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px;
                    border-top: 1px solid var(--border); }
+  /* 编辑弹窗（library-edit-dialog/06）：复用 .lib-edit-* 模态骨架，内部 .lib-mod-* 字段区 */
+  .lib-mod-status { font-size: 12px; color: var(--muted); margin: 6px 0 10px; }
+  .lib-mod-files { list-style: none; margin: 4px 0 8px; padding: 0; font-family: var(--mono);
+                   font-size: 12.5px; }
+  .lib-mod-files li { display: flex; justify-content: space-between; align-items: center;
+                      gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  .lib-mod-files .fname { word-break: break-all; }
+  .lib-mod-files .file-del { font-size: 11px; padding: 1px 6px; flex: none; }
+  .lib-mod-files .muted { font-family: inherit; }
+  .lib-mod-msg { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; }
+  .lib-mod-msg.ok { color: var(--ok); }
   /* 编译结果横幅（工单 compile-experience-ui/01）：四态颜色 + 初始 hidden */
   #compile-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
                     font-size: 13px; font-weight: 600; }
@@ -1594,7 +1605,7 @@
       <div class="lib-chips-row"><span class="muted">状态</span><span id="lib-status-chips"></span></div>
       <div id="lib-stats" class="lib-stats"></div>
       <table class="lib-table">
-        <thead><tr><th>模块</th><th>简介</th><th>依赖</th><th>平台版本</th><th style="width:150px">操作</th></tr></thead>
+        <thead><tr><th>模块</th><th>简介</th><th>依赖</th><th>平台版本</th><th style="width:190px">操作</th></tr></thead>
         <tbody id="lib-rows"></tbody>
       </table>
       <div id="lib-msg" class="error"></div>
@@ -6193,6 +6204,7 @@ function moduleRowHTML(m, dangling) {
     <td>${moduleBadges(m)}</td>
     <td>
       <button data-info="${esc(m.slug || "")}" title="查看模块详情">详情</button>
+      <button data-edit-mod="${esc(m.slug || "")}" title="编辑平台版本（套件 / 链接 / 文件）">编辑</button>
       <button data-edit-desc="${esc(m.slug || "")}">改简介</button>
       <button data-del="${esc(m.slug || "")}" class="danger">删除</button>
     </td>
@@ -6245,6 +6257,9 @@ function renderLibraryTable() {
   // 详情（工单 03）：不带平台上下文 → moduleInfoHTML 展示全部平台分段
   $("lib-rows").querySelectorAll("[data-info]").forEach((b) =>
     b.addEventListener("click", () => openModuleInfo(b.dataset.info, null)));
+  // 编辑（工单 06）：平台级编辑弹窗
+  $("lib-rows").querySelectorAll("[data-edit-mod]").forEach((b) =>
+    b.addEventListener("click", () => editModule(b.dataset.editMod)));
   renderLibraryChips();
   renderLibraryStats();
 }
@@ -6306,6 +6321,29 @@ function editDescStatus(status, event) {
   }
 }
 
+// libIsValidHttpUrl(s)：编辑弹窗购买链接格式校验（工单 06 纯函数）。
+function libIsValidHttpUrl(s) {
+  const text = String(s || "").trim();
+  if (!text) return false;
+  try {
+    const u = new URL(text);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch { return false; }
+}
+
+// libPlatformKits(modules)：库内所有平台条目 kit 去重词表（首见序，空值忽略）。
+function libPlatformKits(modules) {
+  const seen = new Set();
+  const out = [];
+  for (const m of modules || []) {
+    for (const p of Object.values(m.platforms || {})) {
+      const kit = p && p.kit ? String(p.kit).trim() : "";
+      if (kit && !seen.has(kit)) { seen.add(kit); out.push(kit); }
+    }
+  }
+  return out;
+}
+
 async function editDescription(slug) {
   const module = (state.modules || []).find((mo) => mo.slug === slug);
   if (!module) { toast("info", "未找到模块 " + slug); return; }
@@ -6342,10 +6380,10 @@ async function editDescription(slug) {
       const data = await apiPut(`/api/modules/${encodeURIComponent(module.slug)}/description`,
         { description: textEl.value.trim() });
       status = editDescStatus(status, "saved");
-      // saving 中被取消/关闭：模态已移除，跳过后续渲染（对已移除节点是安全 no-op，仅省一次无用 work）
-      if (!overlay.isConnected) return;
-      // 端点返回新 manifest：本地替换 + 全量重算（零额外请求）
+      // 端点返回新 manifest：本地替换 + 全量重算（零额外请求）。数据始终更新；
+      // saving 中被取消/关闭则跳过 DOM 渲染（对已移除节点是安全 no-op）
       state.modules = (state.modules || []).map((m) => (m.slug === module.slug ? data : m));
+      if (!overlay.isConnected) return;
       renderModulePool();
       renderLibraryTable();
       close();
@@ -6365,6 +6403,185 @@ async function editDescription(slug) {
   document.addEventListener("keydown", onKey);
   overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
   textEl.focus();
+}
+
+// —— 编辑弹窗（library-edit-dialog/06）：平台级编辑——硬件身份（kit/链接）+ 文件增删。
+// 复用 05 模态骨架（.lib-edit-*）、文件行（addFileRow/collectFiles/pickFilesInto）。
+function editModule(slug) {
+  const module = (state.modules || []).find((mo) => mo.slug === slug);
+  if (!module) { toast("info", "未找到模块 " + slug); return; }
+  document.querySelectorAll(".lib-edit-overlay").forEach((o) => o.remove());
+  const overlay = document.createElement("div");
+  overlay.className = "lib-edit-overlay";
+  const modal = document.createElement("div");
+  modal.className = "lib-edit-modal";
+  modal.style.maxWidth = "640px";
+  modal.innerHTML = '<div class="lib-edit-head"><strong>编辑模块：<span class="lib-edit-slug"></span></strong>'
+    + '<button class="ref-files-close" title="关闭">×</button></div>'
+    + '<div class="lib-edit-body">'
+    + '<label>平台版本</label><select class="lib-mod-platform"></select>'
+    + '<div class="lib-mod-status"></div>'
+    + '<label>套件型号（词表提示）</label><input class="lib-mod-kit" list="lib-mod-kit-list" placeholder="例如 LaunchPad / 最小系统板">'
+    + '<datalist id="lib-mod-kit-list"></datalist>'
+    + '<label>购买链接（留空 = 保留原值）</label><input class="lib-mod-url" placeholder="https://…">'
+    + '<h3>平台文件</h3><ul class="lib-mod-files"></ul>'
+    + '<div class="lib-mod-newfiles"></div>'
+    + '<div class="row" style="margin-top:4px"><button class="lib-mod-addrow">+ 文件</button>'
+    + '<button class="lib-mod-pick">选择文件…</button>'
+    + '<input type="file" class="lib-mod-pick-input" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.inc,.s,.asm" style="display:none"></div>'
+    + '<div class="lib-mod-msg"></div></div>'
+    + '<div class="lib-edit-foot"><button class="lib-mod-cancel">取消</button>'
+    + '<button class="primary lib-mod-save">保存身份</button>'
+    + '<button class="primary lib-mod-push">推送新文件</button></div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  modal.querySelector(".lib-edit-slug").textContent = module.slug;
+  const platSel = modal.querySelector(".lib-mod-platform");
+  const statusEl = modal.querySelector(".lib-mod-status");
+  const kitEl = modal.querySelector(".lib-mod-kit");
+  const urlEl = modal.querySelector(".lib-mod-url");
+  const filesUl = modal.querySelector(".lib-mod-files");
+  const newfilesBox = modal.querySelector(".lib-mod-newfiles");
+  const msgEl = modal.querySelector(".lib-mod-msg");
+  const saveBtn = modal.querySelector(".lib-mod-save");
+  const pushBtn = modal.querySelector(".lib-mod-push");
+  const kitList = modal.querySelector("#lib-mod-kit-list");
+  const close = () => overlay.remove();
+  const setMsg = (text, ok) => {
+    msgEl.textContent = text || "";
+    msgEl.classList.toggle("ok", !!ok);
+  };
+  // 平台下拉（首见序）
+  const platNames = Object.keys(module.platforms || {});
+  platSel.innerHTML = platNames.map((p) =>
+    `<option value="${esc(p)}">${esc(String(p).toUpperCase())}</option>`).join("");
+  let curPlatform = platNames[0] || "";
+  const curEntry = () => (module.platforms || {})[curPlatform] || {};
+  // 删除后平台集合可能变化（最后一个文件删除 → 该平台条目移除）：重建下拉并落位
+  const rebuildPlatSelect = () => {
+    const names = Object.keys(module.platforms || {});
+    platSel.innerHTML = names.map((p) =>
+      `<option value="${esc(p)}">${esc(String(p).toUpperCase())}</option>`).join("");
+    if (!names.includes(curPlatform)) curPlatform = names[0] || "";
+    platSel.value = curPlatform;
+    renderPlat();
+  };
+  // 词表：库内全部 kit 去重
+  kitList.innerHTML = libPlatformKits(state.modules || []).map((k) =>
+    `<option value="${esc(k)}"></option>`).join("");
+  const renderPlat = () => {
+    if (!curPlatform) {
+      statusEl.textContent = "该模块暂无平台版本（先到「添加模块」录入源文件）";
+      kitEl.value = ""; urlEl.value = "";
+      filesUl.innerHTML = "";
+      return;
+    }
+    const entry = curEntry();
+    statusEl.textContent = "验证状态：" + (entry.verified ? "已验证" : "未验证")
+      + " · 硬件绑定：" + (entry.hardware_bound ? "是" : "否")
+      + "（只读；信息走「详情」，简介走「改简介」）";
+    kitEl.value = entry.kit || "";
+    urlEl.value = entry.source_url || "";
+    if (entry.files && entry.files.length) {
+      filesUl.innerHTML = entry.files.map((f) =>
+        `<li><span class="fname">${esc(f)}</span><button class="danger file-del" title="从该平台移除文件">✕</button></li>`).join("");
+    } else {
+      filesUl.innerHTML = '<li class="muted">实现内嵌母版（随母版进工程，不复制文件、不重复）</li>';
+    }
+  };
+  platSel.addEventListener("change", () => { curPlatform = platSel.value; renderPlat(); });
+  const refresh = (data) => {
+    // 端点返回新 manifest：本地替换 + 全量重算（同 05 成功路径）
+    state.modules = (state.modules || []).map((m) => (m.slug === module.slug ? data : m));
+    Object.assign(module, data);
+    renderLibraryTable();
+  };
+  const doSaveIdentity = async () => {
+    const kit = kitEl.value.trim();
+    const url = urlEl.value.trim();
+    if (url && !libIsValidHttpUrl(url)) {
+      setMsg("购买链接格式不正确（须 http/https 开头）"); return;
+    }
+    if (!curPlatform) { setMsg("该模块暂无平台版本"); return; }
+    saveBtn.disabled = true; saveBtn.textContent = "保存中…";
+    try {
+      const data = await apiPut(`/api/modules/${encodeURIComponent(module.slug)}/platform-identity`, {
+        platform: curPlatform,
+        kit: kit || undefined,      // 空 = 未提供 = 后端保留原值
+        source_url: url || undefined,
+      });
+      refresh(data);   // 数据始终更新（后端已写库）
+      if (!overlay.isConnected) return;
+      renderPlat();
+      setMsg("身份已保存");
+    } catch (e) {
+      if (!overlay.isConnected) return;
+      setMsg(e.message);
+    } finally {
+      saveBtn.disabled = false; saveBtn.textContent = "保存身份";
+    }
+  };
+  const doPushFiles = async () => {
+    const files = collectFiles(newfilesBox);
+    if (files === null) return;
+    const names = Object.keys(files);
+    if (!names.length) { setMsg("没有待推送的文件（先填文件名 + 内容或选择文件）"); return; }
+    if (!curPlatform) { setMsg("该模块暂无平台版本"); return; }
+    pushBtn.disabled = true; pushBtn.textContent = "推送中…";
+    try {
+      const data = await apiPost(`/api/modules/${encodeURIComponent(module.slug)}/platform-files`, {
+        platform: curPlatform,
+        files,
+        hardware_bound: !!curEntry().hardware_bound,
+        kit: curEntry().kit || undefined,
+        source_url: curEntry().source_url || undefined,
+      });
+      refresh(data);
+      if (!overlay.isConnected) return;
+      newfilesBox.innerHTML = "";
+      renderPlat();
+      setMsg("已推送 " + names.length + " 个文件");
+    } catch (e) {
+      if (!overlay.isConnected) return;
+      setMsg(e.message);
+    } finally {
+      pushBtn.disabled = false; pushBtn.textContent = "推送新文件";
+    }
+  };
+  const doRemoveFile = async (fname) => {
+    if (!confirm("从平台 " + curPlatform + " 移除文件 " + fname + "？（共享文件只移出条目，磁盘保留）")) return;
+    try {
+      const data = await apiDelete(`/api/modules/${encodeURIComponent(module.slug)}/platform-files`, {
+        platform: curPlatform, filenames: [fname],
+      });
+      refresh(data);
+      if (!overlay.isConnected) return;
+      // 最后一个文件删除 → 后端移除该平台条目：重建下拉并落位到剩余平台
+      rebuildPlatSelect();
+      setMsg("已移除 " + fname);
+    } catch (e) {
+      if (!overlay.isConnected) return;
+      setMsg(e.message);
+    }
+  };
+  saveBtn.addEventListener("click", doSaveIdentity);
+  pushBtn.addEventListener("click", doPushFiles);
+  modal.querySelector(".lib-mod-cancel").addEventListener("click", close);
+  modal.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  filesUl.addEventListener("click", (e) => {
+    const b = e.target.closest(".file-del");
+    if (b) doRemoveFile(b.closest("li").querySelector(".fname").textContent);
+  });
+  modal.querySelector(".lib-mod-addrow").addEventListener("click", () => addFileRow(newfilesBox));
+  modal.querySelector(".lib-mod-pick").addEventListener("click", () => modal.querySelector(".lib-mod-pick-input").click());
+  modal.querySelector(".lib-mod-pick-input").addEventListener("change", (e) =>
+    pickFilesInto(e.target, newfilesBox, msgEl));
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  renderPlat();
+  platSel.focus();
 }
 
 async function deleteModule(slug) {
