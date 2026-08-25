@@ -216,6 +216,35 @@
   .selected-scroll .desc { display: block; max-width: 100%; overflow: hidden;
                            text-overflow: ellipsis; white-space: nowrap;
                            color: var(--muted); font-size: 12px; margin-top: 2px; }
+  /* 模块选择网格（工单 module-grid/01）：卡片网格 + 平台不兼容置灰 */
+  .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                 gap: 10px; }
+  .module-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+                 background: var(--panel-2); cursor: pointer; box-shadow: var(--shadow-item);
+                 transition: border-color var(--dur-fast) var(--ease-ui),
+                             transform var(--dur-fast) var(--ease-ui); }
+  .module-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .module-card.off { opacity: .55; cursor: not-allowed; }
+  .module-card.off:hover { border-color: var(--border); transform: none; }
+  .module-card .mc-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .module-card .mc-head .slug { font-weight: 600; font-family: var(--mono); font-size: 13px;
+                                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .module-card .mc-offtag { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 999px;
+                            background: var(--warn-dim); color: var(--warn);
+                            border: 1px solid var(--warn-border); }
+  .module-card .mc-desc { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.5;
+                          min-height: 36px; display: -webkit-box; -webkit-line-clamp: 2;
+                          -webkit-box-orient: vertical; overflow: hidden; }
+  .module-card .mc-meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .module-card .mc-plat { font-size: 10px; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+  .module-card .mc-plat.ok { background: var(--ok-dim); color: var(--ok-bright); }
+  .module-card .mc-plat.hw { background: var(--info-dim); color: var(--info); }
+  .module-card .mc-plat.un { background: rgba(139, 148, 158, .15); color: var(--muted); }
+  .module-card .mc-plat.embed { background: var(--accent-dim); color: var(--accent); }
+  .module-card .mc-deps { font-size: 10px; padding: 1px 6px; border-radius: 999px;
+                          background: rgba(139, 148, 158, .12); color: var(--muted); }
+  .module-card .mc-pa { font-size: 10px; padding: 1px 6px; border-radius: 999px;
+                        background: var(--accent-dim); color: var(--accent); }
   /* 编译结果横幅（工单 compile-experience-ui/01）：四态颜色 + 初始 hidden */
   #compile-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
                     font-size: 13px; font-weight: 600; }
@@ -367,6 +396,21 @@
   .res-block .res-value { font-size: 13px; line-height: 1.7; min-width: 0;
                           overflow-wrap: break-word; }
   .res-block pre.result { max-height: 420px; margin: 0; }
+  /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
+     复制核对表；done 行弱化描边表示已核对 */
+  .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #btn-score-export { margin-left: auto; padding: 3px 12px; border-radius: 999px;
+                      font-size: 12px; border: 1px solid var(--border-strong);
+                      background: var(--panel); color: var(--text); cursor: pointer; }
+  #btn-score-export:hover { border-color: var(--accent); color: var(--accent); }
+  .sp-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 8px;
+             border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
+  .sp-item:hover { background: var(--panel); border-color: var(--border); }
+  .sp-item.done { background: var(--ok-dim); border-color: rgba(63, 185, 80, .25); }
+  .sp-item input[type="checkbox"] { margin-top: 3px; accent-color: var(--ok); flex: none; }
+  .sp-line { font-size: 12.5px; line-height: 1.6; color: var(--text);
+             overflow-wrap: break-word; min-width: 0; }
+  .sp-item.done .sp-line { color: var(--muted); }
   @media (max-width: 1179px) {
     .res-grid { grid-template-columns: 1fr; }
   }
@@ -1174,15 +1218,11 @@
     <div class="card">
       <h2><span class="step-no">6</span>模块清单与平台警告</h2>
       <div class="row">
-        <select id="module-pool" style="flex:1"></select>
-        <button id="btn-add-module">添加模块</button>
-        <button id="btn-expand" class="primary">展开依赖并检查平台</button>
-      </div>
-      <div class="row" style="margin-top:8px">
         <input type="search" id="module-search" placeholder="搜索模块以添加…" style="flex:1;max-width:300px">
         <span class="muted" id="module-count"></span>
+        <button id="btn-expand" class="primary">展开依赖并检查平台</button>
       </div>
-      <div id="module-search-results" class="hidden" style="margin-top:6px"></div>
+      <div id="module-grid" class="module-grid" style="margin-top:8px"></div>
       <div id="warnings" style="margin-top:10px"></div>
       <div class="muted" id="selected-count" style="margin-top:8px"></div>
       <div id="selected-list" class="selected-scroll" style="margin-top:8px"></div>
@@ -1295,7 +1335,14 @@
               <div class="res-label">模块文件</div>
               <div class="res-value"><span id="res-modules" class="muted"></span></div>
             </div>
-            <div class="res-block hidden" id="res-score-points" style="white-space:pre-line"></div>
+            <div class="res-block hidden" id="res-score-points">
+              <div class="res-label">评分点核对</div>
+              <div class="sp-actions">
+                <span class="muted" id="sp-progress"></span>
+                <button id="btn-score-export" type="button">复制核对表</button>
+              </div>
+              <div id="sp-list"></div>
+            </div>
             <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
                  工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
             <div class="res-block hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
@@ -2004,6 +2051,7 @@ function renderPlatforms() {
         markStepDone(3);
         unmarkSteps(action === "switch" ? [5, 6, 7, 8, 9, 10, 11, 12] : [6, 7, 8, 9, 10, 11, 12]);  // 首次选平台保留推荐（步骤 5 不退）
         renderPlatforms();
+        renderModulePool();  // 模块网格（工单 module-grid/01）：平台切换刷新置灰态
         scheduleDraftSave();
         updateFixCenterAvailability();
         if (action === "switch") {
@@ -2690,22 +2738,100 @@ function renderReferenceResult(data) {
 // ---------------------------------------------------------------------------
 // 生成页：5. 模块清单（增删 + 依赖展开 + 平台警告）
 // ---------------------------------------------------------------------------
-function shortDesc(s, n) {
-  if (!s) return "";
-  return s.length > n ? s.slice(0, n) + "…" : s;
+// —— 模块网格（工单 module-grid/01）——平台不兼容置灰保留 + 搜索 + 卡片网格
+function moduleGridPlatformLabel(platform) {
+  const map = { stm32: "STM32", stm32f103c8t6: "STM32", mspm0: "MSPM0", mspm0g3507: "MSPM0" };
+  return map[platform] || platform;
+}
+function moduleGridStatusText(entry) {
+  if (!entry) return "未验证";
+  if (entry.hardware_bound) return "硬件绑定";
+  if (entry.verified) return "已验证";
+  return "未验证";
+}
+function moduleGridFilter(modules, selectedSet, query) {
+  const q = String(query || "").trim().toLowerCase();
+  const selected = selectedSet || [];
+  const avail = (modules || []).filter((m) => selected.indexOf(m.slug) === -1);
+  if (!q) return avail;
+  return avail.filter((m) => {
+    const text = (m.slug + " " + (m.description || "") + " " + (m.dependencies || []).join(" ")
+      + " " + Object.keys(m.platforms || {}).map((p) => moduleGridPlatformLabel(p)).join(" ")).toLowerCase();
+    return text.includes(q);
+  });
+}
+function moduleGridCountText(modules, selectedSet, query) {
+  const q = String(query || "").trim();
+  const n = moduleGridFilter(modules, selectedSet, query).length;
+  return q ? "匹配 " + n + " 个可用模块" : "共 " + n + " 个可用模块";
+}
+function moduleGridHTML(modules, selectedSet, query, platform) {
+  // 自包含内联 esc（纯函数抽取范式，同 scoreChecklistItemsHTML）——不依赖全局 esc
+  const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  const hits = moduleGridFilter(modules, selectedSet, query);
+  if (!hits.length) {
+    const q = String(query || "").trim();
+    return '<div class="muted" style="padding:6px 2px">' + (q ? "没有匹配的可用模块。" : "暂无可用模块。") + "</div>";
+  }
+  return hits.map((m) => {
+    const off = platform && !(m.platforms || {})[platform];
+    const desc = String(m.description || "");
+    const short = desc.length > 26 ? desc.slice(0, 26) + "…" : desc;
+    const badges = Object.keys(m.platforms || {}).map((p) => {
+      const e = (m.platforms || {})[p];
+      const cls = e && e.hardware_bound ? "hw" : e && e.verified ? "ok" : "un";
+      let html = '<span class="mc-plat ' + cls + '">' + escHtml(moduleGridPlatformLabel(p))
+        + "·" + escHtml(moduleGridStatusText(e)) + "</span>";
+      // 母版内嵌标注（2024H 复盘）：平台条目 files 空且无副产物 = 实现内嵌母版
+      if (!(e && e.files && e.files.length) && !m.python_artifact) {
+        html += '<span class="mc-plat embed" title="实现内嵌母版（随母版进工程），不复制文件、不重复">内嵌母版</span>';
+      }
+      return html;
+    }).join("");
+    const deps = (m.dependencies || []).length
+      ? '<span class="mc-deps">依赖：' + escHtml(m.dependencies.join("、")) + "</span>" : "";
+    const pa = m.python_artifact ? '<span class="mc-pa">副产物</span>' : "";
+    return '<div class="module-card' + (off ? " off" : "") + '" data-add="' + escHtml(m.slug) + '"'
+      + ' title="' + escHtml(desc) + '">'
+      + '<div class="mc-head"><span class="slug">' + escHtml(m.slug) + "</span>"
+      + (off ? '<span class="mc-offtag">需切换平台</span>' : "") + "</div>"
+      + '<div class="mc-desc">' + escHtml(short) + "</div>"
+      + '<div class="mc-meta">' + badges + deps + pa + "</div></div>";
+  }).join("");
 }
 
 function renderModulePool() {
-  $("module-pool").innerHTML = (state.modules || [])
-    .filter((m) => !selectedSlugs.includes(m.slug))
-    .map((m) => `<option value="${esc(m.slug)}">${esc(m.slug)} — ${esc(shortDesc(m.description, 24))}</option>`).join("");
+  const box = $("module-grid");
+  if (!box) return;
+  const q = ($("module-search") ? $("module-search").value : "") || "";
+  box.innerHTML = moduleGridHTML(state.modules || [], selectedSlugs, q, chosenPlatform);
+  const count = $("module-count");
+  if (count) count.textContent = moduleGridCountText(state.modules || [], selectedSlugs, q);
+}
+
+function initModuleGrid() {
+  const box = $("module-grid");
+  if (!box) return;
+  box.addEventListener("click", (ev) => {
+    const card = ev.target.closest ? ev.target.closest(".module-card") : null;
+    if (!card) return;
+    const slug = card.dataset.add;
+    if (!slug) return;
+    if (card.classList.contains("off")) {
+      toast("info", "该模块不支持当前平台，请先切换目标平台");
+      return;
+    }
+    addModule(slug);
+  });
 }
 
 function addModule(slug) {
   if (!slug || selectedSlugs.includes(slug)) return;
   selectedSlugs.push(slug);
   expanded = []; warnings = [];
-  renderSelected(); renderWarnings(); renderModulePool(); renderModuleSearch();
+  renderSelected(); renderWarnings(); renderModulePool();
   runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
 }
 
@@ -2723,42 +2849,11 @@ async function runExpand() {
   } catch (e) { $("expand-msg").textContent = e.message; }
 }
 
-$("btn-add-module").addEventListener("click", () => addModule($("module-pool").value));
-
 $("btn-expand").addEventListener("click", runExpand);
 
-$("module-search").addEventListener("input", renderModuleSearch);
+$("module-search").addEventListener("input", renderModulePool);
 
-function renderModuleSearch() {
-  const box = $("module-search-results");
-  const q = ($("module-search").value || "").trim().toLowerCase();
-  if (!q) {
-    box.classList.add("hidden");
-    box.innerHTML = "";
-    $("module-count").textContent = "";
-    return;
-  }
-  const available = (state.modules || []).filter((m) => !selectedSlugs.includes(m.slug));
-  const hits = available.filter((m) =>
-    (m.slug + " " + (m.description || "") + " " + (m.dependencies || []).join(" ")).toLowerCase().includes(q));
-  $("module-count").textContent = `匹配 ${hits.length} 个可用模块`;
-  box.classList.remove("hidden");
-  if (!hits.length) {
-    box.innerHTML = '<div class="muted">没有匹配的可用模块。</div>';
-    return;
-  }
-  box.innerHTML = hits.map((m) => `
-    <div class="item">
-      <div class="head" title="${esc(m.description || "")}">
-        <span class="slug">${esc(m.slug)}</span>
-        ${moduleBadges(m)}
-        <button data-add="${esc(m.slug)}" style="margin-left:auto">添加</button>
-      </div>
-      <div class="desc">${esc(m.description || "")}${(m.dependencies || []).length ? ` · 依赖：${esc(m.dependencies.join("、"))}` : ""}</div>
-    </div>`).join("");
-  box.querySelectorAll("[data-add]").forEach((b) =>
-    b.addEventListener("click", () => addModule(b.dataset.add)));
-}
+initModuleGrid();
 
 function renderSelected() {
   const box = $("selected-list");
@@ -2817,7 +2912,7 @@ function renderSelected() {
       expanded = []; warnings = [];
       delete pythonTemplates[b.dataset.remove];  // 模板选择随模块移除清理（工单 04）
       instancePinTarget = null;  // 选脚目标随清单变化失效（工单 04）
-      renderSelected(); renderWarnings(); renderModulePool(); renderModuleSearch();
+      renderSelected(); renderWarnings(); renderModulePool();
       renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
       renderInstanceConfig();  // 多实例配置卡（工单 04）：被移除模块的实例清单随之清掉
     }));
@@ -4181,8 +4276,7 @@ $("btn-generate").addEventListener("click", async () => {
     $("btn-copy-dir").classList.remove("hidden");
     $("res-includes").textContent = data.include_dirs.join("；");
     $("res-modules").textContent = formatResModules(data.modules, data.python_artifacts);
-    $("res-score-points").textContent = (data.score_points && data.score_points.length)
-      ? "评分点：\n" + formatScorePoints(data.score_points) : "";
+    renderScoreChecklist(data.score_points, data.output_dir);  // 评分点核对清单（工单 score-checklist/01）
     $("res-score-points").classList.toggle("hidden", !(data.score_points && data.score_points.length));
     // 构建脚本提示（工单 mspm0-build-makefiles/01）：非空时展示，空则隐藏
     $("res-build-hint").textContent = data.build_hint || "";
@@ -4272,6 +4366,150 @@ function formatScorePoints(points) {
       + "｜" + refsText(p.sentence_refs || []) + "｜" + (p.description || "");
   }).join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// 评分点核对清单（工单 score-checklist/01）：生成结果评分点从只读文本升级为
+// 可勾选清单——逐条核对 + 进度 + 复制核对表（☑/□）；勾选进度按工程目录
+// 持久化 localStorage（key = score-checklist:<output_dir>）。纯函数自包含
+// （tests/js 抽取范式），交互在 initScoreChecklist 事件委托。
+// ---------------------------------------------------------------------------
+function scoreChecklistPartLabel(part) {
+  return part === "basic" ? "基础" : part === "development" ? "发挥" : "未知";
+}
+function scoreChecklistScoreText(score) {
+  return (typeof score === "number" && Number.isFinite(score)) ? score + " 分" : "未标分";
+}
+function scoreChecklistRefsText(refs) {
+  return (refs && refs.length) ? "句子 " + refs.join("、") : "未关联原文";
+}
+function scoreChecklistId(p, i) {
+  return p.id || ("score-" + (i + 1));
+}
+function scoreChecklistChecked(checkedSet, id) {
+  return (checkedSet && typeof checkedSet.has === "function")
+    ? checkedSet.has(id)
+    : (checkedSet || []).indexOf(id) !== -1;
+}
+function scoreChecklistLineText(p, i) {
+  const id = scoreChecklistId(p, i);
+  return id + "｜" + scoreChecklistPartLabel(p.part) + "｜"
+    + scoreChecklistScoreText(p.score) + "｜" + scoreChecklistRefsText(p.sentence_refs || [])
+    + "｜" + (p.description || "");
+}
+function scoreChecklistKey(outputDir) {
+  return outputDir ? "score-checklist:" + String(outputDir) : "";
+}
+function scoreChecklistItemsHTML(points, checkedSet) {
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  if (!points || !points.length) return '<div class="muted">没有可核对的评分点。</div>';
+  return points.map((p, i) => {
+    const id = scoreChecklistId(p, i);
+    const crumb = scoreChecklistChecked(checkedSet, id);
+    return '<label class="sp-item' + (crumb ? " done" : "") + '">'
+      + '<input type="checkbox" data-idx="' + i + '"' + (crumb ? " checked" : "") + ">"
+      + '<span class="sp-line">' + esc(scoreChecklistLineText(p, i)) + "</span></label>";
+  }).join("");
+}
+function scoreChecklistProgressHTML(checkedCount, total) {
+  const n = Number(checkedCount) || 0;
+  const m = Number(total) || 0;
+  return "已核对 " + n + "/" + m;
+}
+function scoreChecklistExportText(points, checkedSet) {
+  if (!points || !points.length) return "";
+  return points.map((p, i) => {
+    const id = scoreChecklistId(p, i);
+    const mark = scoreChecklistChecked(checkedSet, id) ? "☑" : "□";
+    return mark + " " + scoreChecklistLineText(p, i);
+  }).join("\n");
+}
+function scoreChecklistParse(storageValue) {
+  try {
+    const data = JSON.parse(storageValue == null ? "" : String(storageValue));
+    return Array.isArray(data) ? new Set(data.filter((x) => typeof x === "string")) : new Set();
+  } catch (e) { return new Set(); }
+}
+function scoreChecklistLoad(key, storage) {
+  if (!key || !storage) return new Set();
+  try { return scoreChecklistParse(storage.getItem(key)); }
+  catch (e) { return new Set(); }
+}
+function scoreChecklistSave(key, ids, storage) {
+  if (!key || !storage) return false;
+  try { storage.setItem(key, JSON.stringify(Array.from(ids || []))); return true; }
+  catch (e) { return false; }
+}
+// 渲染 + 交互（DOM 部分）：生成成功回调调用；勾选/复制走 #res-score-points 委托。
+// box._scorePoints/_scoreIds 在 render 时挂载（同步当前勾选 id 与导出文本用）。
+function renderScoreChecklist(points, outputDir) {
+  const box = $("res-score-points");
+  if (!box) return;
+  const list = $("sp-list");
+  const progress = $("sp-progress");
+  if (!list || !progress) return;
+  box._scorePoints = points || [];
+  box._scoreIds = box._scorePoints.map((p, i) => scoreChecklistId(p, i));
+  const storage = (typeof localStorage !== "undefined") ? localStorage : null;
+  const saved = scoreChecklistLoad(scoreChecklistKey(outputDir), storage);
+  list.innerHTML = scoreChecklistItemsHTML(box._scorePoints, saved);
+  progress.textContent = scoreChecklistProgressHTML(
+    list.querySelectorAll('input[type="checkbox"]:checked').length, box._scorePoints.length);
+}
+function scoreChecklistIdsNow(box) {
+  if (!box || !box._scoreIds) return [];
+  return Array.from(box.querySelectorAll('input[type="checkbox"]:checked'))
+    .map((c) => box._scoreIds[parseInt(c.dataset.idx, 10)])
+    .filter((id) => id != null);
+}
+function scoreChecklistSyncCurrent(box) {
+  const list = $("sp-list");
+  const progress = $("sp-progress");
+  if (!box || !list || !progress) return;
+  progress.textContent = scoreChecklistProgressHTML(
+    list.querySelectorAll('input[type="checkbox"]:checked').length,
+    list.querySelectorAll('input[type="checkbox"]').length);
+  const storage = (typeof localStorage !== "undefined") ? localStorage : null;
+  const dirBox = $("res-dir");
+  scoreChecklistSave(scoreChecklistKey(dirBox ? dirBox.textContent : ""),
+    scoreChecklistIdsNow(box), storage);
+}
+function scoreChecklistExportNow(box) {
+  if (!box || !box._scorePoints || !box._scorePoints.length) return "";
+  return scoreChecklistExportText(box._scorePoints, scoreChecklistIdsNow(box));
+}
+function initScoreChecklist() {
+  const box = $("res-score-points");
+  if (!box) return;
+  box.addEventListener("change", (e) => {
+    if (!(e.target && e.target.matches('input[type="checkbox"]'))) return;
+    const item = e.target.closest(".sp-item");
+    if (item) item.classList.toggle("done", e.target.checked);
+    scoreChecklistSyncCurrent(box);
+  });
+  const btn = $("btn-score-export");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const text = scoreChecklistExportNow(box);
+    if (!text) { toast("info", "还没有评分点可复制"); return; }
+    const done = () => toast("ok", "核对表已复制");
+    const fallback = () => {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        if (document.execCommand && document.execCommand("copy")) { toast("ok", "核对表已复制"); return; }
+        toast("error", "复制失败：请手动复制");
+      } catch (err) { toast("error", "复制失败：" + err.message); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else fallback();
+  });
+}
+
 
 function handoffPlatformLabel() {
   const pf = (state.platforms || []).find((p) => p.id === chosenPlatform);
@@ -8095,6 +8333,7 @@ initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav cur
 initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
 initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪，纯本地交互
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
+initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 </script>

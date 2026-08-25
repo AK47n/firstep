@@ -87,7 +87,7 @@ test("index.html 推荐结果区会渲染只读评分点面板", () => {
 
 test("index.html 生成结果摘要区有评分点落点", () => {
   assert.match(html, /id="res-score-points"/);
-  assert.match(html, /formatScorePoints\(data\.score_points\)/);
+  assert.match(html, /renderScoreChecklist\(data\.score_points, data\.output_dir\)/);
 });
 
 test("Handoff 评分点章节只在有评分点时插入", () => {
