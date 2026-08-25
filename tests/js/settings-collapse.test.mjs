@@ -38,22 +38,35 @@ for (const name of ["parseSettingsCollapse", "settingsDefaultCollapsed", "effect
 // 存储键契约：firstep.settingsCollapse.v1 必须出现在 index.html（防漂移）
 assert.match(html, /firstep\.settingsCollapse\.v1/, "设置页折叠存储键 firstep.settingsCollapse.v1 缺失");
 
-// 假卡片：只实现 classList.toggle / querySelector(".card-collapse") / title/aria-label 回写
-function fakeCardEl(collapsed, withBtn = true) {
-  const state = { collapsed: !!collapsed, btnTitle: "", ariaLabel: "" };
+// 假卡片：只实现 classList.toggle / contains / querySelector(".card-collapse") /
+// title/aria-label 回写；withNestedHead=true 时模拟「卡片内嵌计费小节」的祖先
+// 关系（querySelector 会命中后代 head，但判别应看自身 class 而非后代查询）
+function fakeCardEl(collapsed, withBtn = true, withNestedHead = false) {
+  const state = { collapsed: !!collapsed, btnTitle: "", ariaLabel: "", headTouched: false };
   const btn = {
     set title(v) { state.btnTitle = v; },
     setAttribute(k, v) { if (k === "aria-label") state.ariaLabel = v; },
   };
+  const head = {
+    set title(v) { state.headTouched = true; },
+    setAttribute(k, v) { if (k === "aria-label") state.headTouched = true; },
+  };
   return {
     _state: state,
     _btn: btn,
-    querySelector: (sel) => (sel === ".card-collapse" && withBtn ? btn : null),
-    classList: { toggle: (k, v) => { if (k === "collapsed") state.collapsed = v; } },
+    _head: head,
+    querySelector: (sel) =>
+      sel === ".settings-collapse-head" && withNestedHead ? head
+      : sel === ".card-collapse" && withBtn ? btn : null,
+    classList: {
+      toggle: (k, v) => { if (k === "collapsed") state.collapsed = v; },
+      contains: (k) => k === "collapsed" ? state.collapsed : false,
+    },
   };
 }
 
-// 假计费小节：querySelector(".settings-collapse-head") 返回头按钮，无 .card-collapse
+// 假计费小节：自身含 settings-collapse 类（判别走小节分支），
+// querySelector(".settings-collapse-head") 返回头按钮，无 .card-collapse
 function fakeSectionEl(collapsed) {
   const state = { collapsed: !!collapsed, headTitle: "", ariaLabel: "" };
   const head = {
@@ -64,7 +77,10 @@ function fakeSectionEl(collapsed) {
     _state: state,
     querySelector: (sel) =>
       sel === ".settings-collapse-head" ? head : sel === ".card-collapse" ? null : null,
-    classList: { toggle: (k, v) => { if (k === "collapsed") state.collapsed = v; } },
+    classList: {
+      toggle: (k, v) => { if (k === "collapsed") state.collapsed = v; },
+      contains: (k) => k === "settings-collapse" ? true : (k === "collapsed" ? state.collapsed : false),
+    },
   };
 }
 
@@ -129,6 +145,15 @@ test("applySettingsCollapseState：无按钮元素只切 class 不崩", () => {
   const el = fakeCardEl(false, false);
   applySettingsCollapseState(el, true);
   assert.equal(el._state.collapsed, true);
+});
+
+test("applySettingsCollapseState：卡片内嵌计费小节 head 后代仍走卡片分支（回归：祖先误判）", () => {
+  const el = fakeCardEl(false, true, true);   // querySelector 会命中后代 .settings-collapse-head
+  applySettingsCollapseState(el, true);
+  assert.equal(el._state.collapsed, true);
+  assert.equal(el._state.btnTitle, "展开");
+  assert.equal(el._state.ariaLabel, "展开该卡片");
+  assert.equal(el._state.headTouched, false);   // 后代 head 不应被触碰
 });
 
 test("settingsMasterLabel：全部折叠/非全折双向", () => {
