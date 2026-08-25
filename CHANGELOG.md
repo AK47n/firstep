@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=43178fed20f0471867dd09198ca273404493dc17 -->
+<!-- changelog-auto: last-commit=98d57016f91fd0c947d330ad4f606c9de10bf655 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -30,6 +30,7 @@
 - 21:08 最近生成列表：recent.json 落盘与生成页历史条（recent-jobs/01）
 - 21:13 最近生成条与下方卡片间距微调（recent-jobs-spacing）
 - 21:32 评分点核对清单与模块选择网格（score-checklist/01、module-grid/01）
+- 21:54 工单 desktop-platform-suffix/01：桌面工程目录名带平台后缀（Auto_Car_STM32 / Auto_Car_MSPM0），同题双平台各生成各的目录不撞护栏
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
