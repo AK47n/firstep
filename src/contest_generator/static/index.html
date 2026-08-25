@@ -7301,7 +7301,10 @@ function envRowHTML(key, badgeCls, name, detail) {
 }
 function envChannelHTML(key, name, ch) {
   let badge, detail;
-  if (!ch) {
+  if (ch === "pending") {
+    badge = "env-warn";
+    detail = '<span class="spinner"></span>检查中…';
+  } else if (!ch) {
     badge = "env-warn";
     detail = "待检查（点「一键体检」触发）";
   } else if (ch.ok) {
@@ -7318,13 +7321,13 @@ function envChannelHTML(key, name, ch) {
 function envCheckStatusHTML(status, textCh, visionCh) {
   if (!status) return "";
   const rows = [];
-  if (status.api_configured) {
+  if (status.api_configured === true) {
     const llm = status.llm || {};
     const local = llm.local_llm_base_url || "";
     rows.push(envRowHTML("api", "env-ok", "API 配置",
       esc("已保存（模型 " + (llm.model || "?") + "，"
         + (local ? "本地路由 " + local : "端点 " + (llm.base_url || "?")) + "）")));
-  } else {
+  } else if (status.api_configured === false) {
     rows.push(envRowHTML("api", "env-err", "API 配置", "未保存主 API key，请到设置页「主 API」填写"));
   }
   rows.push(envChannelHTML("llm-text", "文本通道", textCh));
@@ -7349,28 +7352,35 @@ function envCheckStatusHTML(status, textCh, visionCh) {
     rows.push(envRowHTML("platform-" + p.id, ready ? "env-ok" : "env-warn", p.name + " 母版",
       ready ? "已就绪（可生成）" : "未导入母版（生成前需导入）"));
   }
-  const lib = status.module_library || {};
-  if (lib.error) {
-    rows.push(envRowHTML("module-library", "env-err", "模块库", esc(lib.error)));
-  } else if (!lib.exists) {
-    rows.push(envRowHTML("module-library", "env-err", "模块库", "目录不存在：" + esc(lib.dir || "")));
-  } else {
-    const n = lib.count || 0;
-    rows.push(envRowHTML("module-library", n > 0 ? "env-ok" : "env-warn", "模块库",
-      esc((String(n) + " 个模块：") + (lib.dir || ""))));
+  const lib = status.module_library;
+  if (lib !== undefined) {
+    if (lib.error) {
+      // 模块库异常 = 仅库不可用（其他功能可用）：⚠ 而非 ✗（spec 行 57）
+      rows.push(envRowHTML("module-library", "env-warn", "模块库", esc(lib.error)));
+    } else if (!lib.exists) {
+      rows.push(envRowHTML("module-library", "env-warn", "模块库", "目录不存在：" + esc(lib.dir || "")));
+    } else {
+      const n = lib.count || 0;
+      rows.push(envRowHTML("module-library", n > 0 ? "env-ok" : "env-warn", "模块库",
+        esc((String(n) + " 个模块：") + (lib.dir || ""))));
+    }
   }
-  const md = status.masters_dir || {};
-  if (md.exists) {
-    rows.push(envRowHTML("masters-dir", "env-ok", "母版目录", esc(md.dir || "")));
-  } else {
-    rows.push(envRowHTML("masters-dir", "env-warn", "母版目录", "不存在（首次导入母版时创建）"));
+  const md = status.masters_dir;
+  if (md !== undefined) {
+    if (md.exists) {
+      rows.push(envRowHTML("masters-dir", "env-ok", "母版目录", esc(md.dir || "")));
+    } else {
+      rows.push(envRowHTML("masters-dir", "env-warn", "母版目录", "不存在（首次导入母版时创建）"));
+    }
   }
-  const out = status.output_dir || {};
-  if (out.exists && out.writable) {
-    rows.push(envRowHTML("output-dir", "env-ok", "输出目录", esc(out.dir || "") + "（可写）"));
-  } else {
-    const why = !out.exists ? "目录不存在：" : "目录不可写：";
-    rows.push(envRowHTML("output-dir", "env-err", "输出目录", why + esc(out.dir || "")));
+  const out = status.output_dir;
+  if (out !== undefined) {
+    if (out.exists && out.writable) {
+      rows.push(envRowHTML("output-dir", "env-ok", "输出目录", esc(out.dir || "") + "（可写）"));
+    } else {
+      const why = !out.exists ? "目录不存在：" : "目录不可写：";
+      rows.push(envRowHTML("output-dir", "env-err", "输出目录", why + esc(out.dir || "")));
+    }
   }
   return rows.join("");
 }
@@ -7389,7 +7399,7 @@ async function envCheckRun() {
     btn.textContent = "一键体检";
     return;
   }
-  box.innerHTML = envCheckStatusHTML(status, null, null);
+  box.innerHTML = envCheckStatusHTML(status, "pending", "pending");
   const [textRes, visionRes] = await Promise.allSettled([
     apiPost("/api/llm/selfcheck"),
     apiPost("/api/vision/selfcheck"),

@@ -94,6 +94,17 @@ test("文本通道三态：待检查 / 正常（模型+耗时+回复） / 失败
   assert.ok(fail.includes("env-err"));
 });
 
+test("检查中态：点击后双通道行呈现「检查中…」+ env-warn（spec 行级加载中）", () => {
+  const out = envCheckStatusHTML(status, "pending", "pending");
+  assert.ok(out.includes("检查中…"));
+  assert.ok(!out.includes("待检查"));
+  const textRow = out.slice(out.indexOf('data-env-row="llm-text"'), out.indexOf('data-env-row="llm-vision"'));
+  assert.ok(textRow.includes("检查中…"));
+  assert.ok(textRow.includes("env-warn"));
+  const visionRow = out.slice(out.indexOf('data-env-row="llm-vision"'));
+  assert.ok(visionRow.includes("检查中…"));
+});
+
 test("视觉通道：独立行 + 成功回显", () => {
   const out = envCheckStatusHTML(status, null, { ok: true, data: { model: "deepseek-v4-flash-vision-exp", elapsed_ms: 1500 } });
   assert.ok(out.includes('data-env-row="llm-vision"'));
@@ -121,12 +132,14 @@ test("平台母版：ready env-ok / no-master env-warn", () => {
   assert.ok(out.includes("未导入母版（生成前需导入）"));
 });
 
-test("模块库四态：错误 / 目录不存在 / 有模块 / 空目录", () => {
+test("模块库四态：错误（⚠ 非 ✗，spec）/ 目录不存在 / 有模块 / 空目录", () => {
   const err = envCheckStatusHTML(
     { ...status, module_library: { dir: "C:\\libs\\modules", exists: true, count: 0, error: "模块库加载失败：x" } },
     null, null);
   assert.ok(err.includes("模块库加载失败：x"));
-  assert.ok(err.includes("env-err"));
+  // spec 行 57：模块库加载错误 = 仅库异常（其他功能可用）→ ⚠（env-warn）而非 ✗
+  assert.ok(err.includes("env-warn"));
+  assert.ok(!err.slice(err.indexOf('data-env-row="module-library"'), err.indexOf('data-env-row="masters-dir"')).includes("env-err"));
 
   const missing = envCheckStatusHTML(
     { ...status, module_library: { dir: "C:\\libs\\modules", exists: false, count: 0, error: null } },
@@ -175,6 +188,15 @@ test("转义：路径/错误文本中的 HTML 字符不直出", () => {
   const out = envCheckStatusHTML(evil, null, null);
   assert.ok(!out.includes("<x>"));
   assert.ok(out.includes("&lt;x&gt;"));
+});
+
+test("缺省字段不渲染行：module_library/masters_dir/output_dir/api 键缺失 → 无对应行", () => {
+  const { module_library, masters_dir, output_dir, api_configured, ...sparse } = status;
+  const out = envCheckStatusHTML(sparse, null, null);
+  assert.ok(!out.includes('data-env-row="module-library"'));
+  assert.ok(!out.includes('data-env-row="masters-dir"'));
+  assert.ok(!out.includes('data-env-row="output-dir"'));
+  assert.ok(!out.includes('data-env-row="api"'));
 });
 
 test("status 为 null/空 → 空串", () => {
