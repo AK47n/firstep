@@ -616,16 +616,17 @@
     box-shadow: 0 0 18px rgba(0, 212, 255, .45), 0 2px 10px rgba(0, 212, 255, .22);
     transform: translateY(-1px); }
   button.primary:active { transform: translateY(0); box-shadow: 0 0 8px rgba(0, 212, 255, .3); }
-  /* 主按钮呼吸微光（工单 ui-polish-9/01）：常态青色外光循环，disabled 无光，
-     hover 暂停让增强阴影生效；只动 box-shadow 不碰 transform（避免与 hover
-     上浮 / active 下压冲突） */
+  /* 主按钮呼吸微光（工单 ui-polish-9/01；ui-polish-11/04 收敛为关键 CTA 专属）：
+     只有 .primary.breathe（生成工程/让 AI 推荐/一键编译修复/确认入库/保存设置）
+     常态青色外光循环，disabled 无光，hover 暂停让增强阴影生效；只动 box-shadow
+     不碰 transform（避免与 hover 上浮 / active 下压冲突） */
   @keyframes btn-breathe {
     0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 10px rgba(0, 212, 255, .16); }
     50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 0 18px rgba(0, 212, 255, .42); }
   }
-  button.primary:not(:disabled) { animation: btn-breathe 2.8s ease-in-out infinite; }
-  button.primary:hover { animation-play-state: paused; }
-  @media (prefers-reduced-motion: reduce) { button.primary:not(:disabled) { animation: none; } }
+  button.primary.breathe:not(:disabled) { animation: btn-breathe 2.8s ease-in-out infinite; }
+  button.primary.breathe:hover { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) { button.primary.breathe:not(:disabled) { animation: none; } }
   .step-no { background: linear-gradient(135deg, #00d4ff, #0094b5);
              box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 0 10px rgba(0, 212, 255, .3); }
   .brand-en .b2 { animation: brand-breathe 3.2s ease-in-out infinite; }
@@ -926,7 +927,7 @@
         <div class="muted" style="margin-top:4px">赛事组发布的答疑（学生问 / 赛事组答）粘贴到这里（可输入任意多行，超出自动滚动）：AI 推荐把它作为权威澄清参考，题面有歧义处以 Q&amp;A 为准；Q&amp;A 修改后重推会重新分析（不命中旧缓存）；留空不影响。</div>
       </details>
       <div class="row" style="margin-top:8px">
-        <button id="btn-recommend" class="primary" data-ico="sparkles">让 AI 推荐</button>
+        <button id="btn-recommend" class="primary breathe" data-ico="sparkles">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
       </div>
       <div id="rec-progress" class="distill-progress hidden" style="margin-top:10px">
@@ -1033,7 +1034,7 @@
         <button id="btn-pick-output-dir">选择文件夹…</button>
       </div>
       <div class="row" style="margin-top:10px">
-        <button id="btn-generate" class="primary" data-ico="rocket">生成工程</button>
+        <button id="btn-generate" class="primary breathe" data-ico="rocket">生成工程</button>
         <span id="gen-status"></span>
       </div>
       <div id="generate-msg" class="error"></div>
@@ -1062,7 +1063,7 @@
     <div class="card" id="card-fix-center">
       <h2><span class="step-no">10</span>修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
       <div class="row">
-        <button id="btn-fix-center" class="primary" data-ico="wrench">一键编译修复</button>
+        <button id="btn-fix-center" class="primary breathe" data-ico="wrench">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
         <!-- 继续修复（工单 fix-loop-continue/01）：仅轮上限终态显示，从续跑态
              再来一批 ≤3 轮（不重跑初始编译、previous_fixes 回喂不丢） -->
@@ -1326,7 +1327,7 @@
         <h3>校对（年份 / 题号 / 题面可改，条目可删；确认前不落盘）</h3>
         <div id="topic-proofread-rows"></div>
         <div class="row" style="margin-top:8px">
-          <button id="btn-topic-confirm" class="primary" data-ico="check">确认入库</button>
+          <button id="btn-topic-confirm" class="primary breathe" data-ico="check">确认入库</button>
           <span class="muted">确认失败（编号重复 / 已存在 / 格式非法）会原样显示原因，不会留下半成品</span>
         </div>
         <div id="topic-confirm-msg" class="error"></div>
@@ -1569,7 +1570,7 @@
 
     <div class="card">
       <div class="row">
-        <button id="btn-save-settings" class="primary" data-ico="save">保存设置</button>
+        <button id="btn-save-settings" class="primary breathe" data-ico="save">保存设置</button>
         <span class="muted">配置文件：<span id="set-config-path"></span>（含 API key，不入版本库）</span>
       </div>
       <div id="settings-msg" class="error"></div>
