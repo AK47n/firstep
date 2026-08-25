@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=569eddd8ad76ecdab110122aa9bc641757e194fe -->
+<!-- changelog-auto: last-commit=71fe8e601524943d9be761d6a99e62c0a8075f64 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -33,6 +33,7 @@
 - 21:54 工单 desktop-platform-suffix/01：桌面工程目录名带平台后缀（Auto_Car_STM32 / Auto_Car_MSPM0），同题双平台各生成各的目录不撞护栏
 - 22:02 工单 compile-error-jump/01：错误列表点 main.c 错误行 = 预览滚动定位并高亮（整行选中、折行精确），非 main.c 行维持源码行展开
 - 22:06 工单 compile-error-jump/01 补充：headless 冒烟脚本（CDP 探针断言选区偏移/卡片可见/折行精确/非 main.c 回归/空预览 toast，11 项全 PASS）——验收证据随工单入库
+- 22:16 文档与约定收尾：PowerShell 脚本 UTF-8 BOM 硬性约定写入 CLAUDE.md 与 workflow.md（含 nav-states.ps1 补 BOM 与 test_ps1_encoding.py 兜底测试）；E2/E3 工单状态标记 resolved
 
 ## 2026-08-24
 - 00:09 按需视觉问答传输层与装配（工单 recommend-vision-qa/02）——vision_qa 渲染题面页针对性作答（否定词/异常判无绝不阻塞）+ 缓存键升级含 prompt + TopicContext.figure_pdf 带出 + /api/recommend 视觉配置时注入回调
