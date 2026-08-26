@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4966a35601e6b28d08f319a1d6f7354804862e12 -->
+<!-- changelog-auto: last-commit=8457eed6c3cae948dccc41e32b9eb388075a9739 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -62,6 +62,7 @@
 - 21:54 前端纯函数 ES 模块化收尾——fx-guard 防回退护栏 + CONTEXT.md 词表（阶段 1 完成）
 - 22:17 前端纯函数模块化补漏——workflow 域 5 函数迁入 fx/workflow.js（阶段 2 工单 01）
 - 22:34 前端共享壳迁入 static/js/app.js（阶段 2 工单 02）
+- 22:40 共享进度面板工厂迁 ui/progress.js + fmtClock/fmtDuration 迁 fx/core.js（阶段 2 工单 03）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
