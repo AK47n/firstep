@@ -918,18 +918,31 @@
   .topic-meta-item { font-family: var(--mono); }
   .topic-warn { font-size: 11.5px; color: var(--danger); font-weight: 600;
                 cursor: default; }
+  /* 详情/编辑弹窗（轮内美化）：弹窗加宽为阅读宽度；元数据两列网格省高，
+     题面全文成为主内容区（13.5px / 1.8 行高 + 52vh 折叠 + 展开/收起切换） */
+  .topic-modal { max-width: 920px; }
+  .topic-detail-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px 24px; align-items: baseline; }
+  .topic-detail-meta .ref-detail-k { width: 60px; }
   /* 详情弹窗内容（工单 topic-library-ui/04）：题面全文 / 页图叠放 */
   .topic-detail-problem-title, .topic-detail-pages-title { font-size: 12px;
     font-weight: 600; margin: 10px 0 4px; }
-  .topic-detail-problem { white-space: pre-wrap; font-size: 12.5px; line-height: 1.7;
+  .topic-detail-problem-title { display: flex; align-items: baseline; gap: 8px; }
+  .topic-detail-count { color: var(--muted); font-weight: 400; font-size: 11.5px; }
+  .topic-detail-toggle { margin-left: auto; border: none; background: none;
+    color: var(--accent); cursor: pointer; font-size: 12px; padding: 2px 6px;
+    border-radius: 4px; font-weight: 600; }
+  .topic-detail-toggle:hover { background: var(--accent-dim); }
+  .topic-detail-problem { white-space: pre-wrap; font-size: 13.5px; line-height: 1.8;
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px 12px; max-height: 320px; overflow-y: auto; margin: 0 0 4px; }
+    padding: 12px 14px; max-height: min(52vh, 560px); overflow-y: auto; margin: 0 0 4px; }
+  .topic-detail-problem.expanded { max-height: none; }
   .topic-detail-prog { display: block; font-size: 12px; line-height: 1.6; }
   .topic-detail-actions { display: flex; gap: 8px; margin-top: 12px; }
   .topic-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
   .topic-page { margin: 0; }
-  .topic-page img { max-width: 260px; border: 1px solid var(--border);
-                    border-radius: 6px; }
+  .topic-page img { max-width: 300px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; box-shadow: var(--shadow-item); }
   .topic-page figcaption { font-size: 11px; color: var(--muted); text-align: center; }
   /* 编辑弹窗（工单 topic-library-ui/05）：表单字段 / 功能组勾选 */
   .topic-edit-field { margin-top: 10px; }
@@ -8290,7 +8303,7 @@ function topicDetailHTML(entry, vocab) {
     : '<span class="muted">无</span>';
   const row = (k, v) => '<div class="ref-detail-row"><span class="ref-detail-k">' + k
     + '</span><span>' + v + '</span></div>';
-  return '<div class="ref-detail-meta">'
+  return '<div class="ref-detail-meta topic-detail-meta">'
     + row('编号', '<span class="mono">' + esc((entry && entry.key) || '') + '</span>')
     + row('年份', esc((entry && entry.year) || ''))
     + row('题面字数', String(String((entry && entry.problem_text) || '').length) + ' 字')
@@ -8302,7 +8315,10 @@ function topicDetailHTML(entry, vocab) {
     + (problems.length
       ? row('数据问题', '<span class="topic-warn">⚠ ' + esc(problems.join('；')) + '</span>') : '')
     + '</div>'
-    + '<div class="topic-detail-problem-title">题面全文</div>'
+    + '<div class="topic-detail-problem-title"><span>题面全文</span>'
+    + '<span class="topic-detail-count">'
+    + String(String((entry && entry.problem_text) || '').length) + ' 字</span>'
+    + '<button class="topic-detail-toggle" data-topic-expand>展开全文</button></div>'
     + '<pre class="topic-detail-problem">' + esc((entry && entry.problem_text) || '') + '</pre>'
     + '<div class="topic-detail-pages-title">题面页图（懒加载）</div>'
     + '<div class="topic-pages" data-topic-pages></div>'
@@ -8558,7 +8574,7 @@ async function viewTopicDetail(key) {
   const overlay = document.createElement("div");
   overlay.className = "ref-files-overlay";
   overlay.innerHTML = `
-    <div class="ref-files-modal">
+    <div class="ref-files-modal topic-modal">
       <div class="ref-files-head">
         <strong>赛题详情 · ${esc(key)}</strong>
         <button class="ref-files-close" title="关闭">×</button>
@@ -8579,6 +8595,13 @@ async function viewTopicDetail(key) {
     b.addEventListener("click", () => { close(); viewTopicEdit(key); }));
   overlay.querySelectorAll("[data-topic-del]").forEach((b) =>
     b.addEventListener("click", () => { close(); deleteTopic(key); }));
+  // 题面全文「展开/收起」：折叠态 52vh 可滚，展开态全文直读
+  const expandBtn = overlay.querySelector("[data-topic-expand]");
+  const problemEl = overlay.querySelector(".topic-detail-problem");
+  expandBtn.addEventListener("click", () => {
+    const expanded = problemEl.classList.toggle("expanded");
+    expandBtn.textContent = expanded ? "收起" : "展开全文";
+  });
   // 页图懒取三态：加载中 / 成功（memo 缓存）/ 失败（后端 400 中文原因）
   const pagesBox = overlay.querySelector("[data-topic-pages]");
   pagesBox.innerHTML = '<span class="muted">页图加载中…</span>';
@@ -8596,7 +8619,7 @@ async function viewTopicEdit(key) {
   const overlay = document.createElement("div");
   overlay.className = "ref-files-overlay";
   overlay.innerHTML = `
-    <div class="ref-files-modal">
+    <div class="ref-files-modal topic-modal">
       <div class="ref-files-head">
         <strong>编辑赛题 · ${esc(key)}</strong>
         <button class="ref-files-close" title="关闭">×</button>
