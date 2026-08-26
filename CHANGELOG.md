@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=58af82b6902a1ec53b5e6b32260c7ec037028b0a -->
+<!-- changelog-auto: last-commit=dcaf51ec9642fef0116d28fa7858b0811eae573c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -67,6 +67,7 @@
 - 22:51 PDF 资料库 tab 迁 ui/pdf.js，truncate 迁 fx/core.js 补测（阶段 2 工单 05）
 - 22:53 共用文件件迁 ui/files.js（阶段 2 工单 06）
 - 23:20 推荐簇 A + 步骤状态核心迁 ui/generate-recommend.js / ui/step-state.js（阶段 2 工单 12）
+- 23:26 模块库 tab 迁 ui/library.js（阶段 2 工单 07）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
