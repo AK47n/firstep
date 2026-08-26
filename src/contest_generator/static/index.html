@@ -935,11 +935,13 @@
   .topic-detail-toggle:hover { background: var(--accent-dim); }
   .topic-detail-problem { white-space: pre-wrap; font-size: 13.5px; line-height: 1.8;
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px 14px; max-height: min(52vh, 560px); overflow-y: auto; margin: 0 0 4px; }
+    padding: 12px 14px; max-height: min(52vh, 560px); overflow-y: auto; margin: 0 0 4px;
+    flex-shrink: 0; }
   .topic-detail-problem.expanded { max-height: none; }
   .topic-detail-prog { display: block; font-size: 12px; line-height: 1.6; }
   .topic-detail-actions { display: flex; gap: 8px; margin-top: 12px; }
-  .topic-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+  .topic-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px;
+    flex-shrink: 0; }
   .topic-page { margin: 0; }
   .topic-page img { max-width: 300px; border: 1px solid var(--border);
     border-radius: 6px; background: #fff; box-shadow: var(--shadow-item); }

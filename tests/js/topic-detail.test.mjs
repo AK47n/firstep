@@ -114,6 +114,14 @@ test("详情题面全文标题行：字数统计 + 展开/收起按钮", () => {
   assert.ok(out.includes("展开全文"));
 });
 
+test("详情题面全文防压扁：pre 与页图 flex-shrink 0（先前回归：弹窗 80vh 不足时 flex 压缩把 pre 压到一行）", () => {
+  const cs = html.slice(html.indexOf(".topic-detail-problem {"));
+  assert.ok(cs.includes("flex-shrink: 0"), ".topic-detail-problem 未防 flex 压缩");
+  const pages = html.slice(html.indexOf(".topic-pages {"));
+  assert.ok(pages.includes(".topic-pages {") && pages.match(/\.topic-page[s]? \{[^}]*flex-shrink: 0/),
+    ".topic-pages 未防 flex 压缩");
+});
+
 test("详情题面全文段：pre 容器 + 原文（含图注段原样）", () => {
   const out = topicDetailHTML(ENTRY, VOCAB);
   assert.ok(out.includes("topic-detail-problem"));
