@@ -2,6 +2,7 @@
 // master 域纯函数组：表格行 / 删除确认 / 详情弹窗 / 关键文件清单行 / 内容
 // 端点 URL 拼装）。域内常量无；esc / formatSize 单源取自 fx/core.js。模块约定见 fx/core.js 头部。
 import { esc, formatSize } from "./core.js";
+import { languageOf, highlightText } from "./highlight.js";
 
 // masterHealthBadgeHTML(h)：健康徽章纯函数（工单 master-library-ui-2/01）——
 // h = /api/masters 条目的 health 字段（ok / missing_key_files /
@@ -141,6 +142,25 @@ export function masterTreeFileURL(platform, path) {
   return _masterFileURL(platform, "tree", path);
 }
 
+// masterContentHTML(cached, path)：内容箱渲染纯件（工单 03）——关键文件与
+// 树文件共用的「复制按钮 + 语法高亮 + 加载三态」统一收口。cached = null
+// （加载中）| {ok:true, content} | {ok:false, message}；path 仅用于语言判定
+// （高亮纯前端展示，content 后端契约原样）。失败 = 中文原因 + 可重试提示；
+// 成功 = 复制按钮（data-master-copy 交事件层）+ pre（>128KB / plain 回退纯文本）。
+export function masterContentHTML(cached, path) {
+  if (!cached) {
+    return '<span class="muted">加载中…</span>';
+  }
+  if (!cached.ok) {
+    return '<div class="error">加载失败：' + esc(cached.message || "未知错误")
+      + '</div><span class="muted">点击上方文件可重试。</span>';
+  }
+  const content = cached.content || "";
+  const body = highlightText(content, languageOf(path));
+  return '<div class="master-content-bar"><button type="button" class="master-copy-btn" data-master-copy>复制</button></div>'
+    + '<pre class="master-file-pre">' + body + "</pre>";
+}
+
 // masterKeyFileRowHTML(f)：清单行——相对路径 mono + label + 大小 + 缺失 ⚠。
 // f = key_files 条目 {path, label, size_bytes, exists}；缺失项禁用不可点。
 export function masterKeyFileRowHTML(f) {
@@ -202,5 +222,5 @@ export function archiveItem(a) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem, masterHealthBadgeHTML, masterStatsHTML, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML });
+  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem, masterHealthBadgeHTML, masterStatsHTML, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML });
 }

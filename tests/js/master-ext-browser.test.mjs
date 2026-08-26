@@ -10,6 +10,7 @@ import {
   buildMasterTree,
   masterTreeNodeHTML,
   masterTreeFileURL,
+  masterContentHTML,
 } from "../../src/contest_generator/static/js/fx/master.js";
 
 const HEALTH_OK = {
@@ -180,4 +181,35 @@ test("masterTreeFileURL：/api/masters/{platform}/tree/{path}，逐段编码", (
     === "/api/masters/stm32/tree/user/keil/startup.s");
   assert.ok(masterTreeFileURL("stm32", "a b/c") === "/api/masters/stm32/tree/a%20b/c");
   assert.ok(masterTreeFileURL("a/b", "x") === "/api/masters/a%2Fb/tree/x");
+});
+
+// ================= 工单 03：内容箱渲染（复制钮 + 高亮） =================
+
+test("masterContentHTML：成功 = 复制按钮 + 语言高亮 pre", () => {
+  const out = masterContentHTML({ ok: true, content: "int x = 1;\n" }, "main.c");
+  assert.ok(out.includes('data-master-copy'));
+  assert.ok(out.includes("复制"));
+  assert.ok(out.includes('class="master-file-pre"'));
+  assert.match(out, /<span class="tok-kw">int<\/span>/);
+});
+
+test("masterContentHTML：plain / 未知语言无高亮 span，内容仍转义", () => {
+  const out = masterContentHTML({ ok: true, content: "a < b && c\n" }, "readme.txt");
+  assert.ok(out.includes("&lt;"));
+  assert.ok(!out.includes("tok-"));
+  assert.ok(!out.includes("a < b"));
+});
+
+test("masterContentHTML：失败 = 中文原因 + 可重试提示，无复制钮", () => {
+  const out = masterContentHTML({ ok: false, message: "非法路径：../x" }, "a.c");
+  assert.ok(out.includes("加载失败"));
+  assert.ok(out.includes("非法路径"));
+  assert.ok(out.includes("可重试"));
+  assert.ok(!out.includes("data-master-copy"));
+});
+
+test("masterContentHTML：null = 加载中占位（三态），无复制钮", () => {
+  const out = masterContentHTML(null, "main.c");
+  assert.ok(out.includes("加载中"));
+  assert.ok(!out.includes("data-master-copy"));
 });

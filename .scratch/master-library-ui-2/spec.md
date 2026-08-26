@@ -100,11 +100,13 @@
   `buildMasterTree(files)`（递归 details/summary 树，兄弟排序 = 目录在前、
   同级按名字码点序，确定性；文件行 data 属性交事件层）、
   `masterTreeFileURL(platform, path)`（与 masterFileURL 同拼法，共享 helper）。
-- 新 fx/highlight.js：`highlightC(text)` / `highlightXml(text)`（先切 token
+- 新 fx/highlight.js：`highlightText(text, lang)`（C 分发复用既有
+  fx/code.js 的 cHighlight 单源——spec 修订：原命名 highlightC，发现
+  单源先例后改为分发形态，少一份复制）/ `highlightXml(text)`（先切 token
   后逐段转义再拼 HTML，杜绝注入；关键字/注释/字符串/预处理/数字/标签/
   属性/引号值分类着色）；语言判定 `languageOf(path)`（.c/.h → C；
   .syscfg/.uvprojx/.cproject/.xml → XML；其余纯文本）；超 128KB 回退纯文本
-  （常量 HIGHLIGHT_MAX_BYTES）。
+  （常量 HIGHLIGHT_MAX_BYTES，按 UTF-8 字节计）。
 - 内容箱渲染统一走 `masterContentHTML`（复制按钮 + 高亮内容 + 加载三态），
   关键文件与树文件共用同一渲染与 memo（key = platform/path 不变）。
 - 快速导入 UI：母版卡「直接导入替换」按钮 → 选文件夹（webkitdirectory，

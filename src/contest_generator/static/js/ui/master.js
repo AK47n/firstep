@@ -12,7 +12,7 @@ import { makeProgressPanel } from "/js/ui/progress.js";
 import { esc, fmtDuration } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
-import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML } from "/js/fx/master.js";
+import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML } from "/js/fx/master.js";
 
 let scannedProjects = null;   // 扫描结果（含报告确认所需）
 let currentReport = null;
@@ -439,11 +439,43 @@ async function loadMasterFileState(platform, path, url) {
   }
 }
 
-function renderMasterFileContent(box, cached) {
-  box.innerHTML = cached.ok
-    ? '<pre class="master-file-pre">' + esc(cached.content) + "</pre>"
-    : '<div class="error">加载失败：' + esc(cached.message)
-      + "</div><span class=\"muted\">点击上方文件可重试。</span>";
+function renderMasterFileContent(box, cached, path) {
+  box.innerHTML = masterContentHTML(cached, path);
+  if (cached.ok) {
+    const btn = box.querySelector("[data-master-copy]");
+    if (btn) btn.addEventListener("click", () => copyMasterContent(cached.content || "", btn));
+  }
+}
+
+// copyMasterContent(content, btn)：复制按钮行内反馈——成功 = 「✓ 已复制」1.5s
+// 还原；失败 = toast 中文（非安全上下文 / 拒绝授权回退 execCommand 后再败）。
+async function copyMasterContent(content, btn) {
+  if (await writeClipboard(content)) {
+    btn.textContent = "✓ 已复制";
+    setTimeout(() => { btn.textContent = "复制"; }, 1500);
+  } else {
+    toast("error", "复制失败：当前页面环境不允许访问剪贴板（需要 HTTPS 或 localhost 页面，且浏览器已授权）");
+  }
+}
+
+async function writeClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* 授权拒绝 / 非安全上下文 → 回退 execCommand */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch { return false; }
 }
 
 // openMasterPath(platform, path, url, box, btn)：点文件行 → 三态（加载中 /
@@ -453,9 +485,9 @@ function renderMasterFileContent(box, cached) {
 // 与渲染，key = platform/path 不变（工单 master-library-ui-2/02）。
 async function openMasterPath(platform, path, url, box, btn) {
   const key = platform + "/" + path;
-  if (!masterFileCache.has(key)) box.innerHTML = '<span class="muted">加载中…</span>';
+  if (!masterFileCache.has(key)) box.innerHTML = masterContentHTML(null, path);
   const cached = await loadMasterFileState(platform, path, url);
-  renderMasterFileContent(box, cached);
+  renderMasterFileContent(box, cached, path);
   box.closest(".ref-files-modal").querySelectorAll("[data-master-file], [data-master-tree-file]")
     .forEach((b) => b.classList.remove("on"));
   if (btn && cached.ok) btn.classList.add("on");
