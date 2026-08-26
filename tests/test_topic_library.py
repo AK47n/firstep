@@ -38,6 +38,7 @@ from contest_generator.topic_library import (
     resolve_number,
     split_topics_document,
     topic_health,
+    update_topic,
 )
 
 
@@ -991,6 +992,213 @@ def test_delete_topic_rejects_bad_key(topic_root, bad_key):
 
 
 # ---------------------------------------------------------------------------
+# 编辑（工单 topic-library-ui/02）：题面全文 / 附带程序 / 功能组一次事务修改，
+# 身份字段（year/number/original_pdf/problem_md）不可改，校验全在落盘前
+# ---------------------------------------------------------------------------
+
+
+def _confirm_editable(topic_root, pdf, tmp_path):
+    """入库一个带程序目录 + hint 组的 2026C（编辑测试母本）。"""
+    program = tmp_path / "2026C-lock"
+    program.mkdir()
+    confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2026", number="C", problem_text="2026C 原题面"),),
+        program_dirs=[program],
+        pdf_filename="真题.pdf",
+    )
+    manifest_path = topic_root / KEY_2026C / MANIFEST_FILENAME
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["hint_module_groups"] = ["attitude-hold"]
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return program
+
+
+def test_update_topic_edits_all_three_fields(topic_root, pdf, tmp_path):
+    program = _confirm_editable(topic_root, pdf, tmp_path)
+    new_program = tmp_path / "2026C-key-new"
+    new_program.mkdir()
+
+    entry = update_topic(
+        topic_root,
+        KEY_2026C,
+        problem_text="2026C 新题面：数字钥匙……\n\n[图1 标注]\n60cm",
+        programs=[str(new_program)],
+        hint_module_groups=["gray-track", "attitude-hold"],
+    )
+
+    assert entry.key == KEY_2026C
+    assert entry.problem_text == "2026C 新题面：数字钥匙……\n\n[图1 标注]\n60cm"
+    assert entry.programs == (str(new_program),)
+    assert entry.hint_module_groups == ("gray-track", "attitude-hold")
+    # 磁盘实况：题面文件与 manifest 都更新
+    assert (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(
+        encoding="utf-8"
+    ) == "2026C 新题面：数字钥匙……\n\n[图1 标注]\n60cm"
+    manifest = json.loads(
+        (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["programs"] == [str(new_program)]
+    assert manifest["hint_module_groups"] == ["gray-track", "attitude-hold"]
+
+
+def test_update_topic_keeps_identity_fields(topic_root, pdf, tmp_path):
+    """身份不变量：year / number / original_pdf / problem_md 编辑后原样。"""
+    _confirm_editable(topic_root, pdf, tmp_path)
+
+    update_topic(
+        topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=[]
+    )
+
+    manifest = json.loads(
+        (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["year"] == "2026"
+    assert manifest["number"] == "C"
+    assert manifest["original_pdf"] == "真题.pdf"
+    assert manifest["problem_md"] == TOPIC_MD_FILENAME
+
+
+def test_update_topic_rejects_empty_problem_text_zero_write(topic_root, pdf, tmp_path):
+    _confirm_editable(topic_root, pdf, tmp_path)
+    before_text = (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8")
+    before_manifest = (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+
+    with pytest.raises(TopicError, match="题面不能为空"):
+        update_topic(
+            topic_root, KEY_2026C, problem_text="   ", programs=[], hint_module_groups=[]
+        )
+
+    # 校验失败：磁盘零变化
+    assert (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8") == before_text
+    assert (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8") == before_manifest
+
+
+def test_update_topic_rejects_missing_program_dir_zero_write(topic_root, pdf, tmp_path):
+    _confirm_editable(topic_root, pdf, tmp_path)
+    before_manifest = (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+
+    with pytest.raises(TopicError, match="程序目录不存在"):
+        update_topic(
+            topic_root,
+            KEY_2026C,
+            problem_text="新题面",
+            programs=[str(tmp_path / "幽灵")],
+            hint_module_groups=[],
+        )
+
+    assert (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8") == before_manifest
+    assert (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8") == "2026C 原题面"
+
+
+def test_update_topic_rejects_blank_program_dir(topic_root, pdf, tmp_path):
+    _confirm_editable(topic_root, pdf, tmp_path)
+
+    with pytest.raises(TopicError, match="不能为空"):
+        update_topic(
+            topic_root, KEY_2026C, problem_text="新题面", programs=["  "], hint_module_groups=[]
+        )
+
+
+def test_update_topic_rejects_blank_hint_group(topic_root, pdf, tmp_path):
+    _confirm_editable(topic_root, pdf, tmp_path)
+
+    with pytest.raises(TopicError, match="hint_module_groups"):
+        update_topic(
+            topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=["", "gray-track"]
+        )
+
+
+@pytest.mark.parametrize(
+    "programs, hint, fragment",
+    [
+        ([123], [], "programs"),
+        ([], [1], "hint_module_groups"),
+    ],
+)
+def test_update_topic_rejects_non_string_elements(
+    topic_root, pdf, tmp_path, programs, hint, fragment
+):
+    """非字符串元素 → TopicError（禁止静默强转——错误类型复用 TopicError，
+    直调域层与 HTTP 断言语义一致）；磁盘零变化。"""
+    _confirm_editable(topic_root, pdf, tmp_path)
+    before_manifest = (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+
+    with pytest.raises(TopicError, match=fragment):
+        update_topic(
+            topic_root, KEY_2026C, problem_text="新题面", programs=programs, hint_module_groups=hint
+        )
+
+    assert (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8") == before_manifest
+    assert (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8") == "2026C 原题面"
+
+
+def test_update_topic_restores_problem_text_on_write_failure(
+    topic_root, pdf, tmp_path, monkeypatch
+):
+    """写盘中途失败（manifest 写失败）→ 题面恢复旧值、manifest 原值保留
+    （对偶 update_reference 写入期清理契约）。"""
+    import contest_generator.topic_library as topic_library
+
+    _confirm_editable(topic_root, pdf, tmp_path)
+    before_manifest = (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    monkeypatch.setattr(
+        topic_library, "write_json", lambda *a, **k: (_ for _ in ()).throw(OSError("磁盘满"))
+    )
+
+    with pytest.raises(OSError, match="磁盘满"):
+        update_topic(
+            topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=[]
+        )
+
+    assert (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8") == "2026C 原题面"
+    assert (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8") == before_manifest
+
+
+def test_update_topic_missing_entry_raises(topic_root):
+    with pytest.raises(TopicError, match=KEY_2026C):
+        update_topic(
+            topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=[]
+        )
+
+
+@pytest.mark.parametrize("bad_key", ["../evil", "2026", "2026C1", "2026c"])
+def test_update_topic_rejects_bad_key(topic_root, bad_key):
+    with pytest.raises(TopicError, match="编号"):
+        update_topic(
+            topic_root, bad_key, problem_text="新题面", programs=[], hint_module_groups=[]
+        )
+
+
+def test_update_topic_commits_autocommit(topic_root, pdf, tmp_path, monkeypatch):
+    """写库成功后自动 git 提交（提交信息含条目编号）。"""
+    import contest_generator.topic_library as topic_library
+
+    _confirm_editable(topic_root, pdf, tmp_path)
+    messages: list[str] = []
+    monkeypatch.setattr(topic_library, "commit_after_write", lambda root, msg: messages.append(msg))
+
+    update_topic(
+        topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=[]
+    )
+
+    assert messages == [f"lib: update topic {KEY_2026C}"]
+
+
+def test_update_topic_can_remove_all_programs(topic_root, pdf, tmp_path):
+    """附带程序清单可清空（悬空引用 / 录错 → 编辑弹窗移除）。"""
+    _confirm_editable(topic_root, pdf, tmp_path)
+
+    entry = update_topic(
+        topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=[]
+    )
+
+    assert entry.programs == ()
+    assert entry.hint_module_groups == ()
+
+
+# ---------------------------------------------------------------------------
 # HTTP 层：拆条上传 / 确认入库（multipart）/ 编号解析
 # ---------------------------------------------------------------------------
 
@@ -1369,6 +1577,119 @@ def test_topics_delete_bad_key_returns_400(topic_context):
 
     assert response.status_code == 400
     assert "编号" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 编辑路由（工单 topic-library-ui/02）：PUT /api/topics/{key} 三字段全量替换
+# ---------------------------------------------------------------------------
+
+
+def test_topics_put_endpoint_updates_entry(topic_context, tmp_path):
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+    program = tmp_path / "锁程序"
+    program.mkdir()
+
+    with _client(ctx) as client:
+        response = client.put(
+            f"/api/topics/{KEY_2026C}",
+            json={
+                "problem_text": "2026C 编辑后题面",
+                "programs": [str(program)],
+                "hint_module_groups": ["gray-track"],
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["key"] == KEY_2026C
+    assert body["problem_text"] == "2026C 编辑后题面"
+    assert body["programs"] == [str(program)]
+    assert body["hint_module_groups"] == ["gray-track"]
+    # 落盘实况
+    assert (topics_dir / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8") == "2026C 编辑后题面"
+    manifest = json.loads(
+        (topics_dir / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["programs"] == [str(program)]
+    assert manifest["hint_module_groups"] == ["gray-track"]
+
+
+def test_topics_put_endpoint_ignores_identity_keys(topic_context, tmp_path):
+    """body 里的身份键（year / number / original_pdf）一概忽略——不可改。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+
+    with _client(ctx) as client:
+        response = client.put(
+            f"/api/topics/{KEY_2026C}",
+            json={
+                "problem_text": "新题面",
+                "programs": [],
+                "hint_module_groups": [],
+                "year": "1999",
+                "number": "Z",
+                "original_pdf": "偷换.pdf",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["year"] == "2026"
+    assert response.json()["number"] == "C"
+    assert response.json()["original_pdf"] == "topic.pdf"
+    assert not (topics_dir / KEY_2026C / "偷换.pdf").exists()
+
+
+@pytest.mark.parametrize(
+    "body, detail_fragment",
+    [
+        ({"programs": [], "hint_module_groups": []}, "problem_text"),
+        ({"problem_text": "题面", "hint_module_groups": []}, "programs"),
+        ({"problem_text": "题面", "programs": []}, "hint_module_groups"),
+        ({"problem_text": "题面", "programs": "not-a-list", "hint_module_groups": []}, "programs"),
+        ({"problem_text": "题面", "programs": [], "hint_module_groups": [1]}, "hint_module_groups"),
+    ],
+)
+def test_topics_put_endpoint_rejects_bad_shapes(topic_context, tmp_path, body, detail_fragment):
+    """形状校验（薄壳层）：缺字段 / 非字符串列表 → 400 中文。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+
+    with _client(ctx) as client:
+        response = client.put(f"/api/topics/{KEY_2026C}", json=body)
+
+    assert response.status_code == 400
+    assert detail_fragment in response.json()["detail"]
+
+
+def test_topics_put_endpoint_rejects_missing_program_dir(topic_context, tmp_path):
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+
+    with _client(ctx) as client:
+        response = client.put(
+            f"/api/topics/{KEY_2026C}",
+            json={
+                "problem_text": "新题面",
+                "programs": [str(tmp_path / "幽灵")],
+                "hint_module_groups": [],
+            },
+        )
+
+    assert response.status_code == 400
+    assert "程序目录不存在" in response.json()["detail"]
+
+
+def test_topics_put_endpoint_missing_entry_returns_400(topic_context):
+    ctx, _, _ = topic_context
+    with _client(ctx) as client:
+        response = client.put(
+            f"/api/topics/{KEY_2026C}",
+            json={"problem_text": "题面", "programs": [], "hint_module_groups": []},
+        )
+
+    assert response.status_code == 400
+    assert KEY_2026C in response.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
