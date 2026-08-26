@@ -385,5 +385,150 @@ check("过滤无结果空态（es-title 文案 + 清空按钮恢复）",
   !!(d05 && d05.hasEmpty && d05.text.includes("没有匹配的 PDF 文件") && d05.restored === d04.rows),
   d05 && d05.text);
 
+// ================= 工单 06：疑似重复回收删除（仅重复组可删，不真删） =================
+// 自助一对同内容小 PDF（同名不同子目录 → 命中重复组）：真实素材零触碰；
+// 单删（行内按钮）+ 组级「保留一份删其余」（详情弹窗）→ trash 落盘核对 →
+// 脚本清理回收文件与恢复源目录。
+import { mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
+const dateStr = (() => { const t = new Date(); const p = (n) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`; })();
+const dupRel1 = smokeBatch + "/zz-smoke-dup/zz-smoke-pair.pdf";
+const dupRel2 = smokeBatch + "/zz-smoke-dup-2/zz-smoke-pair.pdf";
+const dupRel3 = smokeBatch + "/zz-smoke-dup-3/zz-smoke-pair.pdf";
+const dupAbs1 = resolve("sources/materials", dupRel1);
+const dupAbs2 = resolve("sources/materials", dupRel2);
+const dupAbs3 = resolve("sources/materials", dupRel3);
+const dupBytes = "%PDF-1.4\nzz smoke pair（工单 06 自助冒烟对）";
+let dupCreated = false;
+try {
+  if (smokeBatch) {
+    mkdirSync(resolve("sources/materials", smokeBatch + "/zz-smoke-dup"), { recursive: true });
+    mkdirSync(resolve("sources/materials", smokeBatch + "/zz-smoke-dup-2"), { recursive: true });
+    writeFileSync(dupAbs1, dupBytes);
+    writeFileSync(dupAbs2, dupBytes);
+    dupCreated = true;
+
+    // 行内单删：确认弹窗内容（路径/大小/去向/取消确认）→ 先取消 → 再确认
+    const d06a = await Eval(`(async () => {
+      await loadPdfs();
+      await new Promise((r) => setTimeout(r, 400));
+      const btns = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
+        .filter((b) => b.dataset.pdfTrash === '${dupRel1}');
+      if (!btns.length) return { found: 0 };
+      btns[0].click();
+      await new Promise((r) => setTimeout(r, 200));
+      const ov = document.querySelector('.ref-files-overlay');
+      if (!ov) return { found: 0 };
+      const text = ov.textContent;
+      const hasCancel = !!ov.querySelector('[data-pdf-trash-cancel]');
+      const hasConfirm = !!ov.querySelector('[data-pdf-trash-confirm]');
+      ov.querySelector('[data-pdf-trash-cancel]').click(); // 取消不删
+      await new Promise((r) => setTimeout(r, 200));
+      const cancelled = !document.querySelector('.ref-files-overlay');
+      const stillHas1 = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
+        .some((b) => b.dataset.pdfTrash === '${dupRel1}');
+      // 再次打开并确认（渲染后重新 query——detached 元素 click 不冒泡）
+      const again = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
+        .find((b) => b.dataset.pdfTrash === '${dupRel1}');
+      if (!again) return { found: 0, cancelled, stillHas1, text, hasCancel, hasConfirm };
+      again.click();
+      await new Promise((r) => setTimeout(r, 200));
+      const ov2 = document.querySelector('.ref-files-overlay');
+      ov2.querySelector('[data-pdf-trash-confirm]').click();
+      await new Promise((r) => setTimeout(r, 900)); // POST + toast + loadPdfs 重拉
+      const pairBtnsAfter = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
+        .filter((b) => b.dataset.pdfTrash === '${dupRel1}' || b.dataset.pdfTrash === '${dupRel2}').length;
+      return { found: 1, cancelled, stillHas1, text, hasCancel, hasConfirm, pairBtnsAfter,
+               toastText: [...document.querySelectorAll('.toast .toast-text')].map((t) => t.textContent).join("|") };
+    })()`);
+    check("自配套：行内删除按钮出现（重复组 2 行）", !!(d06a && d06a.found), d06a && `found=${d06a && d06a.found}`);
+    check("确认弹窗：路径/大小/去向 + 取消确认按钮 + 参考镜像提示",
+      !!(d06a && d06a.text && d06a.text.includes(dupRel1) && d06a.hasCancel && d06a.hasConfirm
+        && d06a.text.includes('大小') && d06a.text.includes('回收去向')
+        && d06a.text.includes('参考库条目引用') && d06a.text.includes('git 已忽略')),
+      d06a && "text-ok");
+    check("取消按钮：弹窗关闭且文件未删（目标行删除按钮仍在）",
+      !!(d06a && d06a.cancelled && d06a.stillHas1), d06a && `stillHas1=${d06a && d06a.stillHas1}`);
+    check("确认删除：toast「已移入回收目录」+ 重复对按钮全部消失（剩余单份不成组）",
+      !!(d06a && d06a.toastText.includes("已移入回收目录") && d06a.pairBtnsAfter === 0),
+      d06a && `toast=${d06a && d06a.toastText}, pairBtns=${d06a && d06a.pairBtnsAfter}`);
+    // 后端核对：trash 落盘（镜像内容一致）+ 源文件消失 + 不出现在清单
+    check("trash 落盘：镜像内容与源一致",
+      existsSync(resolve("sources/.trash-pdf", dateStr, dupRel1))
+      && readFileSync(resolve("sources/.trash-pdf", dateStr, dupRel1), "utf8") === dupBytes,
+      dateStr + "/" + dupRel1);
+    check("源文件消失（列表不再含 zz-smoke-pair 第一份）",
+      !(await Eval(`(pdfCache || []).some((p) => p.rel_path === '${dupRel1}')`)));
+
+    // 组级「保留此文件，删除其余 N 份」：单删后只剩 1 份不成组——再注入
+    // 第三份合成新对（dupRel2 + dupRel3），详情弹窗 → 组级按钮 → 确认 →
+    // 保留 dupRel2、回收 dupRel3 → 列表无 zz 重复行
+    mkdirSync(resolve("sources/materials", smokeBatch + "/zz-smoke-dup-3"), { recursive: true });
+    writeFileSync(dupAbs3, dupBytes);
+    await Eval(`loadPdfs().catch(() => {})`);
+    const d06b = await Eval(`(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+      const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
+        .find((b) => b.dataset.pdfDetail === '${dupRel2}');
+      if (!btn) return { found: 0 };
+      btn.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const ov = document.querySelector('.ref-files-overlay');
+      const groupBtn = ov && ov.querySelector('[data-pdf-delete-group]');
+      if (!groupBtn) return { found: 0 };
+      const groupText = groupBtn.textContent.trim();
+      groupBtn.click();
+      await new Promise((r) => setTimeout(r, 200));
+      // 精确查找确认弹窗（含确认按钮的那个——不依赖叠层语义）
+      const ov2 = [...document.querySelectorAll('.ref-files-overlay')]
+        .find((o) => o.querySelector('[data-pdf-trash-confirm]'));
+      if (!ov2) return { found: 0, groupText };
+      const members = ov2.querySelectorAll('.pdf-trash-members li').length;
+      const memberText = (ov2.querySelector('.pdf-trash-members') || {}).textContent || '';
+      ov2.querySelector('[data-pdf-trash-confirm]').click();
+      await new Promise((r) => setTimeout(r, 900));
+      const pairBtnsAfter = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
+        .filter((b) => b.dataset.pdfTrash === '${dupRel2}' || b.dataset.pdfTrash === '${dupRel3}').length;
+      return { found: 1, groupText, members, memberText, pairBtnsAfter };
+    })()`);
+    check("组级按钮文案 = 保留此文件，删除其余 1 份",
+      !!(d06b && d06b.found && d06b.groupText.includes("删除其余 1 份")), d06b && d06b.groupText);
+    check("组级确认弹窗：成员清单 2 项（含保留与删除对象）",
+      !!(d06b && d06b.members === 2 && d06b.memberText.includes(dupRel2) && d06b.memberText.includes(dupRel3)),
+      d06b && `members=${d06b && d06b.members}`);
+    check("组级确认后：重复对按钮全部消失（列表无 zz-smoke-pair 重复行）",
+      !!(d06b && d06b.pairBtnsAfter === 0), d06b && `pairBtns=${d06b && d06b.pairBtnsAfter}`);
+    // 组级语义核对：保留 dupRel2（仍在素材库）、其余 dupRel3 已回收落盘
+    const kept2 = await Eval(`(pdfCache || []).some((p) => p.rel_path === '${dupRel2}')`);
+    check("组级确认后：保留对象仍在素材库（清单命中）", kept2 === true);
+    check("组级确认后：其余成员已回收落盘（镜像内容一致）",
+      existsSync(resolve("sources/.trash-pdf", dateStr, dupRel3))
+      && readFileSync(resolve("sources/.trash-pdf", dateStr, dupRel3), "utf8") === dupBytes,
+      dateStr + "/" + dupRel3);
+  }
+} finally {
+  if (dupCreated) {
+    // 清理：源目录（含空目录）+ trash 镜像 → 重拉列表回真实全量
+    for (const p of [dupAbs1, dupAbs2, dupAbs3]) { try { unlinkSync(p); } catch {} }
+    for (const d of [
+      resolve("sources/materials", smokeBatch + "/zz-smoke-dup"),
+      resolve("sources/materials", smokeBatch + "/zz-smoke-dup-2"),
+      resolve("sources/materials", smokeBatch + "/zz-smoke-dup-3"),
+      resolve("sources/.trash-pdf", dateStr, smokeBatch + "/zz-smoke-dup"),
+      resolve("sources/.trash-pdf", dateStr, smokeBatch + "/zz-smoke-dup-2"),
+      resolve("sources/.trash-pdf", dateStr, smokeBatch + "/zz-smoke-dup-3"),
+    ]) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
+    await Eval(`loadPdfs().catch(() => {})`);
+    const d06c = await Eval(`(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      const pair = (pdfCache || []).filter((p) => p.name === 'zz-smoke-pair.pdf');
+      return { pair: pair.length, rows: document.querySelectorAll('#pdf-rows tr').length };
+    })()`);
+    check("清理后回到真实全量（无 zz-smoke 痕迹）",
+      !!(d06c && d06c.pair === 0 && d06c.rows === (d04 && d04.rows)),
+      d06c && `rows=${d06c && d06c.rows}`);
+  }
+}
+
 console.log(failed ? `\n冒烟结果：${failed} 项失败` : "\n冒烟结果：全部通过");
 process.exit(failed ? 1 : 0);

@@ -8,6 +8,7 @@ webapp 两端点（/api/pdfs 清单 + /api/pdfs/{rel_path} 预览）的全部逻
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from .entry_store import is_unsafe_path
@@ -79,8 +80,47 @@ def pdf_page_count(root: Path, rel_path: str) -> int:
         import fitz  # type: ignore[import-untyped]  # PyMuPDF 无类型 stub
     except ImportError as exc:
         raise RuntimeError("服务器缺少 PyMuPDF，无法读取 PDF 页数") from exc
+    doc = None
     try:
-        with fitz.open(str(path)) as doc:
-            return doc.page_count
+        doc = fitz.open(str(path))
+        return doc.page_count
     except fitz.FileDataError as exc:
         raise ReferenceError(f"无法读取 PDF 页数（文件损坏或为空）：{rel_path}") from exc
+    finally:
+        if doc is not None:
+            doc.close()  # 显式关闭：fitz 句柄留给 GC 会在 Windows 上锁文件（rename 撞 WinError 32）
+
+
+def trash_pdf(root: Path, rel_path: str, trash_dir: Path) -> str:
+    """将素材 PDF 移入回收目录（不真删），返回相对 trash 根的 POSIX 路径。
+
+    目标 = trash_dir/<YYYY-MM-DD>/<rel_path 镜像>——保留批次层级，手动恢复直观
+    （整段 mv 回 materials 即可）；同日同路径已回收过 → 文件名加 _1/_2 数字后缀
+    （插在扩展名前，不覆盖旧件）；父目录自动创建。resolve_pdf 先校验（非法 /
+    缺失 → ReferenceError，webapp 映射 400）；移动失败（回收根被文件占位 /
+    不可写等）OSError 原样抛——webapp 映射 400，不伪装成功、不吞错误。
+    """
+    path = resolve_pdf(root, rel_path)
+    date = time.strftime("%Y-%m-%d")
+    rel = Path(rel_path)
+    target = trash_dir / date / rel
+    if target.exists():
+        counter = 1
+        while True:
+            candidate = target.with_name(f"{target.stem}_{counter}{target.suffix}")
+            if not candidate.exists():
+                target = candidate
+                break
+            counter += 1
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # 短重试：Windows 上文件可能被短锁（PyMuPDF 读页数句柄随 GC 延迟释放 /
+    # 杀毒索引）——移动本身瞬时，重试 5×200ms 吞掉瞬态锁后仍失败才抛。
+    for attempt in range(5):
+        try:
+            path.rename(target)
+            break
+        except OSError:
+            if attempt == 4:
+                raise
+            time.sleep(0.2)
+    return target.relative_to(trash_dir).as_posix()

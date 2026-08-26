@@ -284,6 +284,16 @@ def materials_dir(module_library_dir: Path) -> Path:
     return repo_root if repo_root.is_dir() else sibling
 
 
+def pdf_trash_dir(materials: Path) -> Path:
+    """PDF 回收目录：素材根平级兄弟 .trash-pdf/（工单 06）。
+
+    与 materials_dir 同源推导（config.py 冻结，不新增配置项）——素材根随模块
+    库位置走，回收目录跟随。回收 = 移动不真删（git 忽略 + 手可恢复 + git 历史
+    双保险），前端的确认弹窗把去向暴露给用户。
+    """
+    return materials.parent / ".trash-pdf"
+
+
 def _require_nonempty_str(data: dict, key: str, default: str, path: Path) -> str:
     value = data.get(key, default)
     if not isinstance(value, str) or not value:

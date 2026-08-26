@@ -46,6 +46,7 @@ from .config import (
     ConfigError,
     load_config,
     materials_dir,
+    pdf_trash_dir,
     reference_library_dir,
     save_config,
     topic_library_dir,
@@ -165,7 +166,7 @@ from .master_store import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .patchers import UnknownPlatformError
-from .pdf_library import list_pdfs, pdf_page_count, resolve_pdf
+from .pdf_library import list_pdfs, pdf_page_count, resolve_pdf, trash_pdf
 from .pin_bindings import (
     PinBindingError,
     auto_assign_bindings,
@@ -2704,14 +2705,28 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _require_config(context)
         return list_pdfs(materials_dir(config.module_library_dir), name=name)
 
-    # 注意：/pages 必须注册在 /api/pdfs/{rel_path:path}（贪婪 path 匹配）
-    # 之前，否则 `xxx.pdf/pages` 会被文件预览路由吞掉（路径解析 400）。
+    # 注意：/pages 必须注册在 /api/pdfs/{rel_path:path}（贪婪 path 匹配）之前，
+    # 否则 GET `xxx.pdf/pages` 会被文件预览路由吞掉（解析出 `xxx.pdf/pages`
+    # 这一整段做路径查找 → 400）。/trash 同为 POST 方法不会被 GET 文件路由
+    # 吞噬（Starlette 对方法不匹配只记 partial），但与 /pages 同纪律注册在
+    # 前，防将来有人把 trash 改成 GET 时无声破坏。
     @app.get("/api/pdfs/{rel_path:path}/pages")
     @_map_errors
     def pdf_pages_count(rel_path: str) -> dict:
         """单文件页数（PyMuPDF 按需读取）：损坏 / 0 字节 / 非法路径 → 400。"""
         config = _require_config(context)
         return {"pages": pdf_page_count(materials_dir(config.module_library_dir), rel_path)}
+
+    @app.post("/api/pdfs/{rel_path:path}/trash")
+    @_map_errors
+    def pdf_trash(rel_path: str) -> dict:
+        """回收疑似重复组文件：移入 sources/.trash-pdf/<日期>/（不真删，git 忽略）。"""
+        config = _require_config(context)
+        materials = materials_dir(config.module_library_dir)
+        return {
+            "rel_path": rel_path,
+            "to": trash_pdf(materials, rel_path, pdf_trash_dir(materials)),
+        }
 
     @app.get("/api/pdfs/{rel_path:path}")
     @_map_errors

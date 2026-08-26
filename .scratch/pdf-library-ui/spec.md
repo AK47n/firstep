@@ -189,3 +189,45 @@
 > 改走「临时 0 字节文件 → 真实链路 → 清理」方案；工单 04 的损坏警示冒烟
 > 同样按「现状无损坏 = 红段 0 不显示 + 临时文件注入验证」双态设计，重复组
 > 数字以 04 实施期重扫为准。
+
+## 需求变更：疑似重复可回收删除（用户裁决 r2，工单 06）
+
+**背景**：04 实现「只警示不删」后，用户裁决「疑似重复的可以删掉」。
+**用户裁决（四项问答全选推荐项）**：① 粒度 = 组内一键去重 + 单文件删除
+都要；② 确认 = 弹窗确认（显示文件名 + 完整路径 + 大小）；③ 落点 = 移入
+回收目录（不真删）；④ 开放范围 = **仅疑似重复组内文件可删**（损坏 /
+健康文件不可删）。
+
+**实现决策：**
+- 回收目录：`sources/.trash-pdf/<YYYY-MM-DD>/<rel_path 镜像>`（materials
+  的兄弟目录，config.py 按 materials_dir 同源推导 `pdf_trash_dir`，不新增
+  配置项）；**加入 .gitignore**——回收区不入版本库（素材已在 git history
+  可恢复 + trash 就地手动恢复双保险；不复制 33MB 级文件膨胀仓库）。
+- 后端：pdf_library.py `trash_pdf(root, rel_path, trash_dir) -> str`——
+  resolve_pdf 先校验（非法 / 缺失 → ReferenceError 400），移动目标同名冲突
+  追加 `_1/_2` 后缀（同日同路径二次回收场景），返回相对 trash 根的 POSIX
+  路径；webapp `POST /api/pdfs/{rel_path:path}/trash`（**必须注册在
+  /api/pdfs/{rel_path:path} 文件路由之前**，与 /pages 同规则）→
+  `{"rel_path", "to"}`。
+- 前端：行操作列「删除」按钮**仅重复组成员行**（f.isDup 谓词命中才渲染）；
+  详情弹窗加「删除此文件」+「保留此文件，删除其余 N 份」（组级，展示组
+  成员清单）；确认弹窗复用 .ref-files-overlay（文件名 / 完整路径 / 大小 /
+  「将移入回收目录 sources/.trash-pdf/<日期>/」说明 + 取消 / 确认按钮）；
+  确认后 fetch trash 端点 → toast「已移入回收目录」+ loadPdfs 重拉 +
+  pdfPageCache.delete(rel_path)（页数 memo 同步失效）；纯函数
+  pdfTrashConfirmHTML(pdf) / pdfDupRemainText(n) / pdfTrashButtonHTML 可单测。
+- 提示边界：素材内部分文件是参考条目二进制镜像（reference_library.py
+  resolve_entry_file），删除后对应参考条目文件访问变 400——确认弹窗文案
+  注明「若该文件被参考库条目引用（如有），条目文件将无法打开」；不自动
+  解除引用（范围外）。
+- 测试：pytest trash_pdf（正常移动 / 非法路径 400 / 缺失 400 / 同名冲突
+  _N 后缀 / trash 目录不入 list_pdfs / trash 根不存在自动创建）+ webapp
+  端点（200 返回 to / 400 两态 / 路由顺序：trash 请求不被 file 路由吞掉）
+  + tests/js 确认弹窗与组级文案纯函数 + 冒烟（自助一对同内容小 PDF →
+  出重复组 → 行内单删 → trash 落盘核对 + 列表消失 + 组级「保留其余删」→
+  脚本清理回收文件，真实素材零触碰）。
+- 范围外：真删除（unlink）、损坏 / 健康文件删除、trash 目录清空 / 恢复
+  UI、与参考条目引用的自动联动、批量组级一次删多组。
+
+> 生效说明：本修订推翻 spec 原文「只警示不删」与「数据健康（重复 / 损坏
+> 警示）」节中删除动作相关的范围外声明（重复警示保留，删除 = 回收移动）。

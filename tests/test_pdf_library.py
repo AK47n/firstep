@@ -9,11 +9,17 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pytest
 
-from contest_generator.pdf_library import list_pdfs, pdf_page_count, resolve_pdf
+from contest_generator.pdf_library import (
+    list_pdfs,
+    pdf_page_count,
+    resolve_pdf,
+    trash_pdf,
+)
 from contest_generator.reference_library import ReferenceError
 from tests.topic_pdf_fakes import make_multi_page_pdf
 
@@ -121,3 +127,53 @@ def test_pdf_page_count_rejects_unsafe_or_missing(tmp_path):
     # 素材根缺失：先 resolve_pdf 炸（存在性），不落 fitz
     with pytest.raises(ReferenceError):
         pdf_page_count(tmp_path / "不存在", "x.pdf")
+
+
+# ---------------------------------------------------------------------------
+# 回收删除（工单 06）：疑似重复组成员 → trash_dir/日期/rel_path 镜像（不真删）
+# ---------------------------------------------------------------------------
+
+REL_B = "2026_06_电赛视觉资料/09_泰山派原理图.PDF"
+
+
+def test_trash_pdf_moves_file_out_of_library(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    trash = tmp_path / ".trash-pdf"
+    to = trash_pdf(root, REL_B, trash)
+    assert not (root / REL_B).exists()
+    assert to == f"{time.strftime('%Y-%m-%d')}/{REL_B}"
+    assert (trash / to).read_bytes() == b"%PDF-1.4\nfake b"  # 内容原样落盘
+    assert [p["name"] for p in list_pdfs(root)] == ["TB6612FNG Datasheet.pdf"]  # 回收后不入清单
+
+
+def test_trash_pdf_rejects_unsafe_or_missing(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    with pytest.raises(ReferenceError):
+        trash_pdf(root, "../secret.pdf", tmp_path / ".trash-pdf")
+    with pytest.raises(ReferenceError):
+        trash_pdf(root, "不存在.pdf", tmp_path / ".trash-pdf")
+    with pytest.raises(ReferenceError):  # 素材根缺失（resolve_pdf 通道）
+        trash_pdf(tmp_path / "不存在", "x.pdf", tmp_path / ".trash-pdf")
+
+
+def test_trash_pdf_conflict_appends_numeric_suffix(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    trash = tmp_path / ".trash-pdf"
+    to = trash_pdf(root, REL_B, trash)
+    (root / REL_B).write_bytes(b"%PDF-1.4\nfake b")  # 重建同路径文件再删
+    to1 = trash_pdf(root, REL_B, trash)
+    date = time.strftime("%Y-%m-%d")
+    assert to1 == f"{date}/2026_06_电赛视觉资料/09_泰山派原理图_1.PDF"
+    (root / REL_B).write_bytes(b"%PDF-1.4\nfake b")
+    to2 = trash_pdf(root, REL_B, trash)
+    assert to2 == f"{date}/2026_06_电赛视觉资料/09_泰山派原理图_2.PDF"
+    assert (trash / to).exists() and (trash / to1).exists() and (trash / to2).exists()
+
+
+def test_trash_pdf_trash_root_blocked_raises(tmp_path):
+    """回收根不可写（被文件占位）：OSError 明确失败，不静默。"""
+    root = _make_materials(tmp_path / "materials")
+    block = tmp_path / "阻塞文件"
+    block.write_text("x", encoding="utf-8")
+    with pytest.raises(OSError):
+        trash_pdf(root, REL_B, block)
