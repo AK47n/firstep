@@ -1,17 +1,9 @@
-// LLM telemetry 状态行格式化测试（llm-observability-dashboard/02）：
-// 从 index.html 抽取纯函数，锁定第 10 栏紧凑展示文案，不碰 DOM / fetch。
+// LLM telemetry 状态行格式化测试（工单 frontend-es-modules/09）：
+// 直接 import fx/llm.js，锁定第 10 栏紧凑展示文案，不碰 DOM / fetch。
 // 运行：node --test tests/js/
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const match = html.match(/function formatLLMTelemetry[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 formatLLMTelemetry 函数体（改名了？）");
-const formatLLMTelemetry = new Function("return (" + match[0] + ")")();
+import { formatLLMTelemetry } from "../../src/contest_generator/static/js/fx/llm.js";
 
 test("LLM telemetry 行显示调用数 / provider 分流 / 最新操作 / 错误 / 字节 / 耗时 / 用量（中文）", () => {
   assert.equal(
