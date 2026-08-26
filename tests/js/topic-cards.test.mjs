@@ -7,14 +7,43 @@ import assert from "node:assert/strict";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
 
-function extract(name) {
-  const m = html.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}"));
-  assert.ok(m, "function " + name + " not found in index.html");
-  // 自包含：用 new Function 构造，函数体内不得引用模块级常量
-  return new Function(m[0] + "; return " + name + ";")();
+// 括号配平提取（同 module-library.test.mjs 范式）；deps = 注入的兄弟函数依赖。
+function extract(name, deps) {
+  const start = html.indexOf("function " + name);
+  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
+  let i = html.indexOf("(", start);
+  assert.ok(i !== -1, name + " 函数缺少参数表");
+  let pdepth = 0;
+  for (; i < html.length; i++) {
+    if (html[i] === "(") pdepth++;
+    else if (html[i] === ")") { pdepth--; if (pdepth === 0) break; }
+  }
+  const open = html.indexOf("{", i);
+  assert.ok(open !== -1, name + " 函数体缺少左花括号");
+  let depth = 0;
+  for (let j = open; j < html.length; j++) {
+    if (html[j] === "{") depth++;
+    else if (html[j] === "}") {
+      depth--;
+      if (depth === 0) {
+        const fnSrc = html.slice(start, j + 1);
+        if (deps && Object.keys(deps).length) {
+          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
+            ...Object.values(deps)
+          );
+        }
+        return new Function("return (" + fnSrc + ")")();
+      }
+    }
+  }
+  throw new Error("未找到 " + name + " 函数体结束花括号");
 }
 
-const topicCardHTML = extract("topicCardHTML");
+// topicCardHTML 兄弟依赖（工单 topic-library-ui/03 增强引入）
+const topicHasNotes = extract("topicHasNotes");
+const topicDanglingGroups = extract("topicDanglingGroups");
+const topicHealthText = extract("topicHealthText", { topicDanglingGroups });
+const topicCardHTML = extract("topicCardHTML", { topicDanglingGroups, topicHealthText, topicHasNotes });
 
 test("卡片结构：key/year/preview/操作按钮齐全", () => {
   const out = topicCardHTML({ key: "2024H", year: "2024", problem_text: "巡线小车" });
@@ -66,4 +95,41 @@ test("HTML 已改用 #topic-grid 容器，无 tbody#topic-rows", () => {
   assert.ok(!html.includes("topic-rows"));
   assert.ok(html.includes('grid.querySelectorAll("[data-topic-del]")'));
   assert.ok(html.includes('grid.querySelectorAll("[data-topic-use]")'));
+});
+
+// =================== 工单 topic-library-ui/03 扩展断言（追加进同文件） ===================
+// 卡片扩展：元数据小行 / 健康 ⚠ / 图注 ✓ / 详情按钮（既有断言语义保持兼容）。
+
+const VOCAB = { "attitude-hold": "航向保持 / 姿态传感器", "gray-track": "8 路灰度传感器驱动" };
+const ENTRY_BAD = { key: "2026D", year: "2026", problem_text: "陆空协同无人机系统",
+  programs: [], hint_module_groups: ["data-link"], original_pdf: "D题_陆空协同无人机系统.pdf",
+  health: { original_pdf_missing: true, programs_missing: [], original_pdf_size: 0 } };
+const ENTRY_OK = { key: "2024H", year: "2024", problem_text: "巡线小车 2024H 题面",
+  programs: [], hint_module_groups: ["attitude-hold"],
+  health: { original_pdf_missing: false, programs_missing: [], original_pdf_size: 10 } };
+const ENTRY_NOTES = { key: "2026C", year: "2026", problem_text: "数字钥匙实验系统 如图1所示。\n\n[图1 标注：60cm]",
+  programs: ["C:/2026C"], hint_module_groups: [],
+  health: { original_pdf_missing: false, programs_missing: ["C:/2026C"], original_pdf_size: 1024 } };
+
+test("扩展：元数据小行（题面字数 / 程序数）+ 详情按钮 + 健康 ⚠", () => {
+  const out = topicCardHTML(ENTRY_BAD, VOCAB);
+  assert.ok(out.includes('class="topic-card"'));
+  assert.ok(out.includes('data-topic-view="2026D"')); // 详情按钮
+  assert.ok(out.includes("数据问题")); // ⚠ title 含健康描述
+  assert.ok(out.includes("9 字")); // 题面字数小行
+  assert.ok(out.includes("程序 0")); // 程序数小行
+});
+
+test("扩展：健康条目不渲染 ⚠；无 vocab 降级（旧调用兼容）", () => {
+  const healthy = topicCardHTML(ENTRY_OK, VOCAB);
+  assert.ok(!healthy.includes("数据问题"));
+  assert.ok(!healthy.includes("⚠"));
+  const noVocab = topicCardHTML(ENTRY_OK); // 词表缺失 → 不判定
+  assert.ok(!noVocab.includes("数据问题"));
+});
+
+test("扩展：图注 ✓ 徽章（题面含图注段）", () => {
+  const out = topicCardHTML(ENTRY_NOTES, VOCAB);
+  assert.ok(out.includes("图注 ✓"));
+  assert.ok(out.includes("程序 1"));
 });
