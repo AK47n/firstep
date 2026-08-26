@@ -36,6 +36,11 @@ export function fmtDuration(sec) {   // 完成行："12 分 34 秒" / "45 秒" /
   return parts.join(" ");
 }
 
+export function truncate(text, n) {
+  text = String(text);
+  return text.length <= n ? text : text.slice(0, n) + "…";
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { esc, formatSize, fmtClock, fmtDuration });
+  Object.assign(window, { esc, formatSize, fmtClock, fmtDuration, truncate });
 }
