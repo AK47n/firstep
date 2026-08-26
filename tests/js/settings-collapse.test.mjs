@@ -1,24 +1,16 @@
 // settings-collapse.test.mjs — 设置页折叠纯函数单测（工单 settings-infoarch/01/02/03）：
 // parseSettingsCollapse / settingsDefaultCollapsed / effectiveCollapsed /
 // applySettingsCollapseState（卡片 + 计费小节两分支）+ settingsMasterLabel / sectionCollapseLabel。
-// 抽取方式沿 card-collapse.test.mjs 先例：先抽既有核心块（提供 syncCollapseBtn），
-// 再抽设置页折叠块，拼进同一 Function 作用域（新块函数体引用 syncCollapseBtn）。
+// 核心块 syncCollapseBtn 已迁 fx/generate.js（工单 08），跨模块 import 注入；
+// 设置页折叠块仍在 index.html（工单 10 迁入 fx/settings.js）。
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { syncCollapseBtn } from "../../src/contest_generator/static/js/fx/generate.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
-);
-
-// 既有核心块（card-collapse.test.mjs 同款正则）：collapseBtnLabel/syncCollapseBtn/collapseToggleAll
-const coreMatch = html.match(
-  /function collapseBtnLabel[\s\S]*?function syncCollapseBtn[\s\S]*?function collapseToggleAll[\s\S]*?\n\}/
-);
-assert.ok(
-  coreMatch,
-  "index.html 中未找到既有 collapseBtnLabel/syncCollapseBtn/collapseToggleAll 块（改名了？）"
 );
 
 // 设置页折叠块：SETTINGS_COLLAPSE_KEY 常量起到 initSettingsCollapse 止
@@ -28,8 +20,9 @@ const match = html.match(
 assert.ok(match, "index.html 中未找到设置页折叠函数块（改名了？）");
 
 const fns = new Function(
-  coreMatch[0] + "\n" + match[0] + "\nreturn { parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, applySettingsCollapseState, settingsMasterLabel, sectionCollapseLabel };"
-)();
+  "syncCollapseBtn",
+  match[0] + "\nreturn { parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, applySettingsCollapseState, settingsMasterLabel, sectionCollapseLabel };"
+)(syncCollapseBtn);
 const { parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, applySettingsCollapseState, settingsMasterLabel, sectionCollapseLabel } = fns;
 for (const name of ["parseSettingsCollapse", "settingsDefaultCollapsed", "effectiveCollapsed", "applySettingsCollapseState", "settingsMasterLabel", "sectionCollapseLabel"]) {
   assert.equal(typeof fns[name], "function", `${name} 未从 index.html 抽取成功`);
