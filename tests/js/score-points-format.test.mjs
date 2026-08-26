@@ -1,28 +1,16 @@
 // formatScorePoints 纯函数单测（工单 score-points/03）：交接提示词与后续
-// 前端展示共用评分点文案。照 collect-bindings 先例：从 HTML 抽取函数体喂
-// node:test，不碰 DOM / fetch。
+// 前端展示共用评分点文案。（模块化：已迁 fx/score.js，直接 import——
+// 工单 frontend-es-modules/10；html 仅保留给下面两处「接线结构」断言）
 // 运行：node --test tests/js/
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { formatScorePoints, renderScorePointPanel } from "../../src/contest_generator/static/js/fx/score.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
-const match = html.match(/function formatScorePoints[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 formatScorePoints 函数体（改名了？）");
-const formatScorePoints = new Function("return (" + match[0] + ")")();
-
-const recMatch = html.match(/function renderScorePointPanel[\s\S]*?\n\}/);
-assert.ok(recMatch, "index.html 中未找到 renderScorePointPanel 函数体（改名了？）");
-const renderScorePointPanel = new Function(
-  "esc",
-  "formatScorePoints",
-  "return (" + recMatch[0] + ")"
-)((text) => String(text).replace(/[&<>\"']/g, (c) => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-})[c]), formatScorePoints);
 
 test("完整评分点 → 保留顺序、分区、分值和句号引用", () => {
   assert.equal(
@@ -82,7 +70,7 @@ test("推荐结果评分点面板 → 转义模型文本，避免展示区注入
 
 test("index.html 推荐结果区会渲染只读评分点面板", () => {
   assert.match(html, /renderScorePointPanel\(scorePoints\)/);
-  assert.match(html, /id="rec-score-points"/);
+  // id="rec-score-points" 输出样式契约已由上方面板用例直接断言（样式随迁 fx/score.js）
 });
 
 test("index.html 生成结果摘要区有评分点落点", () => {

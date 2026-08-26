@@ -2230,6 +2230,8 @@ import { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, f
 import { recentStatusMeta, recentTimeLabel, recentPlatformLabel, recentChipHTML, recentListHTML, recentStatusNow } from "/js/fx/recent.js";
 import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
 import { formatLLMTelemetry, parseSSE, usageDelta, usageAccumulate, llmCostEstimate, usageDisplay } from "/js/fx/llm.js";
+import { formatScorePoints, renderScorePointPanel, scoreChecklistPartLabel, scoreChecklistScoreText, scoreChecklistRefsText, scoreChecklistId, scoreChecklistChecked, scoreChecklistLineText, scoreChecklistKey, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistExportText, scoreChecklistParse, scoreChecklistLoad, scoreChecklistSave } from "/js/fx/score.js";
+import { SETTINGS_COLLAPSE_KEY, SETTINGS_DEFAULT_COLLAPSED, parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, settingsMasterLabel, sectionCollapseLabel, settingsSectionHead, applySettingsCollapseState } from "/js/fx/settings.js";
 "use strict";
 const $ = (id) => document.getElementById(id);
 
@@ -2619,15 +2621,7 @@ function suggestionChip(s) {
     + (s.examples.length ? "：" + esc(s.examples.join(" / ")) : "") + '</span></span>';
 }
 
-function renderScorePointPanel(points) {
-  if (!points || !points.length) return "";
-  const rows = formatScorePoints(points).split("\n").map((line) =>
-    '<div class="score-row">' + esc(line) + '</div>'
-  ).join("");
-  return '<div class="score-panel" id="rec-score-points">'
-    + '<div class="title">评分点验收清单</div>'
-    + rows + '</div>';
-}
+// 已迁至 static/js/fx/score.js（工单 10）：renderScorePointPanel。
 
 // ---------------------------------------------------------------------------
 // 功能组选择卡（工单 recommend-exclusive-groups/04）：纯函数层——组卡渲染、
@@ -4402,92 +4396,14 @@ function renderArtifacts(structure, outputDir) {
   });
 }
 
-function formatScorePoints(points) {
-  if (!points || !points.length) return "（无结构化评分点）";
-  const partLabel = (part) => part === "basic" ? "基础" : part === "development" ? "发挥" : "未知";
-  const scoreText = (score) => (typeof score === "number" && Number.isFinite(score)) ? score + " 分" : "未标分";
-  const refsText = (refs) => (refs && refs.length) ? "句子 " + refs.join("、") : "未关联原文";
-  return points.map((p, i) => {
-    const id = p.id || ("score-" + (i + 1));
-    return "- " + id + "｜" + partLabel(p.part) + "｜" + scoreText(p.score)
-      + "｜" + refsText(p.sentence_refs || []) + "｜" + (p.description || "");
-  }).join("\n");
-}
-
-// ---------------------------------------------------------------------------
-// 评分点核对清单（工单 score-checklist/01）：生成结果评分点从只读文本升级为
-// 可勾选清单——逐条核对 + 进度 + 复制核对表（☑/□）；勾选进度按工程目录
-// 持久化 localStorage（key = score-checklist:<output_dir>）。纯函数自包含
-// （tests/js 抽取范式），交互在 initScoreChecklist 事件委托。
-// ---------------------------------------------------------------------------
-function scoreChecklistPartLabel(part) {
-  return part === "basic" ? "基础" : part === "development" ? "发挥" : "未知";
-}
-function scoreChecklistScoreText(score) {
-  return (typeof score === "number" && Number.isFinite(score)) ? score + " 分" : "未标分";
-}
-function scoreChecklistRefsText(refs) {
-  return (refs && refs.length) ? "句子 " + refs.join("、") : "未关联原文";
-}
-function scoreChecklistId(p, i) {
-  return p.id || ("score-" + (i + 1));
-}
-function scoreChecklistChecked(checkedSet, id) {
-  return (checkedSet && typeof checkedSet.has === "function")
-    ? checkedSet.has(id)
-    : (checkedSet || []).indexOf(id) !== -1;
-}
-function scoreChecklistLineText(p, i) {
-  const id = scoreChecklistId(p, i);
-  return id + "｜" + scoreChecklistPartLabel(p.part) + "｜"
-    + scoreChecklistScoreText(p.score) + "｜" + scoreChecklistRefsText(p.sentence_refs || [])
-    + "｜" + (p.description || "");
-}
-function scoreChecklistKey(outputDir) {
-  return outputDir ? "score-checklist:" + String(outputDir) : "";
-}
-function scoreChecklistItemsHTML(points, checkedSet) {
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[c]);
-  if (!points || !points.length) return '<div class="muted">没有可核对的评分点。</div>';
-  return points.map((p, i) => {
-    const id = scoreChecklistId(p, i);
-    const crumb = scoreChecklistChecked(checkedSet, id);
-    return '<label class="sp-item' + (crumb ? " done" : "") + '">'
-      + '<input type="checkbox" data-idx="' + i + '"' + (crumb ? " checked" : "") + ">"
-      + '<span class="sp-line">' + esc(scoreChecklistLineText(p, i)) + "</span></label>";
-  }).join("");
-}
-function scoreChecklistProgressHTML(checkedCount, total) {
-  const n = Number(checkedCount) || 0;
-  const m = Number(total) || 0;
-  return "已核对 " + n + "/" + m;
-}
-function scoreChecklistExportText(points, checkedSet) {
-  if (!points || !points.length) return "";
-  return points.map((p, i) => {
-    const id = scoreChecklistId(p, i);
-    const mark = scoreChecklistChecked(checkedSet, id) ? "☑" : "□";
-    return mark + " " + scoreChecklistLineText(p, i);
-  }).join("\n");
-}
-function scoreChecklistParse(storageValue) {
-  try {
-    const data = JSON.parse(storageValue == null ? "" : String(storageValue));
-    return Array.isArray(data) ? new Set(data.filter((x) => typeof x === "string")) : new Set();
-  } catch (e) { return new Set(); }
-}
-function scoreChecklistLoad(key, storage) {
-  if (!key || !storage) return new Set();
-  try { return scoreChecklistParse(storage.getItem(key)); }
-  catch (e) { return new Set(); }
-}
-function scoreChecklistSave(key, ids, storage) {
-  if (!key || !storage) return false;
-  try { storage.setItem(key, JSON.stringify(Array.from(ids || []))); return true; }
-  catch (e) { return false; }
-}
+// 评分点核对清单（工单 score-checklist/01）：评分点可勾选清单——逐条核对 +
+// 进度 + 复制核对表（☑/□），勾选进度按工程目录持久化 localStorage
+// （key = score-checklist:<output_dir>）。纯函数已迁至 static/js/fx/score.js
+// （工单 10）：formatScorePoints / scoreChecklistPartLabel /
+// scoreChecklistScoreText / scoreChecklistRefsText / scoreChecklistId /
+// scoreChecklistChecked / scoreChecklistLineText / scoreChecklistKey /
+// scoreChecklistItemsHTML / scoreChecklistProgressHTML / scoreChecklistExportText /
+// scoreChecklistParse / scoreChecklistLoad / scoreChecklistSave。渲染 / 事件委托留内联。
 // 渲染 + 交互（DOM 部分）：生成成功回调调用；勾选/复制走 #res-score-points 委托。
 // box._scorePoints/_scoreIds 在 render 时挂载（同步当前勾选 id 与导出文本用）。
 function renderScoreChecklist(points, outputDir) {
@@ -8953,51 +8869,10 @@ function initCardCollapse() {
 // 存储：localStorage「firstep.settingsCollapse.v1」，JSON {id: collapsed}，
 // 用户选择优先于默认集；解析失败按 {}。默认集单源 = SETTINGS_DEFAULT_COLLAPSED
 // ---------------------------------------------------------------------------
-const SETTINGS_COLLAPSE_KEY = "firstep.settingsCollapse.v1";
-const SETTINGS_DEFAULT_COLLAPSED =
-  new Set(["libs", "toolchain", "local-llm", "vision", "ai-billing"]);
-function parseSettingsCollapse(raw) {
-  if (!raw) return {};
-  try {
-    const v = JSON.parse(raw);
-    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
-  } catch { return {}; }
-}
-function settingsDefaultCollapsed(id) {
-  return SETTINGS_DEFAULT_COLLAPSED.has(id);
-}
-function effectiveCollapsed(id, stored) {
-  return id in stored ? !!stored[id] : settingsDefaultCollapsed(id);
-}
-// 总开关标签：全部折叠 → 「全部展开」，否则「全部收起」
-function settingsMasterLabel(allCollapsed) {
-  return allCollapsed ? "全部展开" : "全部收起";
-}
-// 计费小节折叠按钮读屏文案（区别于卡片的 collapseBtnLabel）
-function sectionCollapseLabel(collapsed) {
-  return collapsed ? "展开计费区" : "折叠计费区";
-}
-// 计费小节头按钮：仅当元素自身是 .settings-collapse 才查后代——不用无条件
-// querySelector，否则「卡片内含计费小节」的祖先卡片会被误判为小节
-//（（工单 settings-infoarch/02）CDP 回归）
-function settingsSectionHead(elm) {
-  return elm.classList.contains("settings-collapse")
-    ? elm.querySelector(".settings-collapse-head")
-    : null;
-}
-// 应用折叠态到一个元素：卡片走 .card-collapse（syncCollapseBtn 同步
-// title/aria-label），计费小节走 .settings-collapse-head（sectionCollapseLabel）
-function applySettingsCollapseState(elm, collapsed) {
-  elm.classList.toggle("collapsed", collapsed);
-  const head = settingsSectionHead(elm);
-  if (head) {
-    head.title = collapsed ? "展开" : "折叠";
-    head.setAttribute("aria-label", sectionCollapseLabel(collapsed));
-    return;
-  }
-  const btn = elm.querySelector(".card-collapse");
-  if (btn) syncCollapseBtn(btn, collapsed);
-}
+// 已迁至 static/js/fx/settings.js（工单 10）：SETTINGS_COLLAPSE_KEY /
+// SETTINGS_DEFAULT_COLLAPSED / parseSettingsCollapse / settingsDefaultCollapsed /
+// effectiveCollapsed / settingsMasterLabel / sectionCollapseLabel /
+// settingsSectionHead / applySettingsCollapseState。保存 / 初始化胶水留内联。
 function saveSettingsCollapse(state) {
   try { localStorage.setItem(SETTINGS_COLLAPSE_KEY, JSON.stringify(state)); }
   catch (e) { /* 忽略，沿主题/用量先例 */ }
