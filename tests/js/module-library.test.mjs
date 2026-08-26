@@ -1,44 +1,15 @@
-// 模块库表格行渲染纯函数单测（工单 module-library-ui/01）：
-// moduleRowHTML（模块数据 → 表格行 HTML）。只测外部行为（渲染结果），
-// 子串断言防脆。后续工单（详情 / 编辑 / 悬空警示）在本文件扩展。
-import { readFileSync } from "node:fs";
+// 模块库表格行渲染纯函数单测（工单 frontend-es-modules/06）：
+// moduleRowHTML（模块数据 → 表格行 HTML）+ 工具栏过滤排序统计 chips +
+// 改简介状态机 + 编辑弹窗校验词表。只测外部行为（渲染结果），
+// 子串断言防脆。直接 import fx/module.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { esc } from "../../src/contest_generator/static/js/fx/core.js";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取（同 module-info-dialog.test.mjs 范式）；deps = 注入的兄弟函数依赖
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  const open = html.indexOf("{", start);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let i = open; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, i + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const moduleBadges = extract("moduleBadges", { esc });
-const pythonArtifactSummary = extract("pythonArtifactSummary", { esc });
-const moduleRowHTML = extract("moduleRowHTML", { esc, moduleBadges, pythonArtifactSummary });
+import {
+  moduleBadges, pythonArtifactSummary, moduleRowHTML,
+  libFilterModules, libSortModules, danglingDependencies, libStats,
+  libStatsText, libChipRowHTML, editDescStatus, libIsValidHttpUrl,
+  libPlatformKits,
+} from "../../src/contest_generator/static/js/fx/module.js";
 
 const base = {
   slug: "ultrasonic",
@@ -107,14 +78,7 @@ test("moduleRowHTML 无平台：徽章区为空、行仍完整", () => {
 
 // ================= 工单 02：工具栏与统计条纯函数 =================
 // libFilterModules / libSortModules / libStats / libStatsText / libChipRowHTML。
-// danglingDependencies（工单 04）定义在前：libStats 引用它（extract 注入依赖）。
-
-const libFilterModules = extract("libFilterModules");
-const libSortModules = extract("libSortModules");
-const danglingDependencies = extract("danglingDependencies");
-const libStats = extract("libStats", { danglingDependencies });
-const libStatsText = extract("libStatsText");
-const libChipRowHTML = extract("libChipRowHTML", { esc });
+// danglingDependencies（工单 04）同模块直接引用：libStats 统计悬空依赖数。
 
 const libMods = [
   {
@@ -267,8 +231,6 @@ test("libStats 统计含悬空依赖数（dangling 字段）", () => {
 // ================= 工单 05：改简介模态状态机 =================
 // editDescStatus(status, event)：idle → saving → ok / rejected；reset 回 idle；非法事件保持。
 
-const editDescStatus = extract("editDescStatus");
-
 test("editDescStatus 状态机：save/saved/error/reset 流转", () => {
   assert.equal(editDescStatus("idle", "save"), "saving");
   assert.equal(editDescStatus("saving", "saved"), "ok");
@@ -286,9 +248,6 @@ test("editDescStatus 非法事件：保持原状态（重入保护由按钮禁�
 
 // ================= 工单 06：编辑弹窗纯函数 =================
 // libIsValidHttpUrl（URL 格式校验）/ libPlatformKits（库内套件词表去重）。
-
-const libIsValidHttpUrl = extract("libIsValidHttpUrl");
-const libPlatformKits = extract("libPlatformKits");
 
 test("libIsValidHttpUrl：http/https 合法，其余协议/非 URL/空串非法", () => {
   assert.equal(libIsValidHttpUrl("https://example.com/buy?a=1"), true);

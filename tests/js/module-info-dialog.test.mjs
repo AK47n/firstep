@@ -1,45 +1,9 @@
-// 模块详情弹窗纯函数单测（工单 module-info-dialog/01）：
+// 模块详情弹窗纯函数单测（工单 frontend-es-modules/06）：
 // moduleInfoHTML（模块数据 → 全量信息 HTML）。只测外部行为（渲染结果），
-// 不断言完整 HTML 结构（子串断言防脆）。
-import { readFileSync } from "node:fs";
+// 不断言完整 HTML 结构（子串断言防脆）。直接 import fx/module.js。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取（同 module-grid.test.mjs 范式）；deps = 注入的兄弟函数依赖
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  const open = html.indexOf("{", start);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let i = open; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, i + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const moduleInfoHTML = extract("moduleInfoHTML", {
-  moduleGridPlatformLabel: extract("moduleGridPlatformLabel"),
-  moduleGridStatusText: extract("moduleGridStatusText"),
-  moduleGridBadgeClass: extract("moduleGridBadgeClass"),
-});
+import { moduleInfoHTML } from "../../src/contest_generator/static/js/fx/module.js";
 
 // 全量 fixture：两平台 + 引脚声明 + 依赖 + 多实例 + 互斥组 + 旧形状副产物
 const full = {
