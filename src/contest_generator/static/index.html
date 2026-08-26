@@ -918,6 +918,19 @@
   .topic-meta-item { font-family: var(--mono); }
   .topic-warn { font-size: 11.5px; color: var(--danger); font-weight: 600;
                 cursor: default; }
+  /* 详情弹窗内容（工单 topic-library-ui/04）：题面全文 / 页图叠放 */
+  .topic-detail-problem-title, .topic-detail-pages-title { font-size: 12px;
+    font-weight: 600; margin: 10px 0 4px; }
+  .topic-detail-problem { white-space: pre-wrap; font-size: 12.5px; line-height: 1.7;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; max-height: 320px; overflow-y: auto; margin: 0 0 4px; }
+  .topic-detail-prog { display: block; font-size: 12px; line-height: 1.6; }
+  .topic-detail-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .topic-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+  .topic-page { margin: 0; }
+  .topic-page img { max-width: 260px; border: 1px solid var(--border);
+                    border-radius: 6px; }
+  .topic-page figcaption { font-size: 11px; color: var(--muted); text-align: center; }
   .topic-preview { font-size: 13px; color: var(--muted); line-height: 1.55;
                    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
                    overflow: hidden; }
@@ -8237,6 +8250,75 @@ function topicChipRowHTML(options, selected) {
   ).join("");
 }
 
+// 详情弹窗（工单 topic-library-ui/04）：元数据段（复用 ref-detail-* 布局
+// 令牌）+ 题面全文段 + 页图懒加载容器 + 操作段。数据 = 浏览列表同源
+// （entry 含 health），hint 悬空判定与卡片同词表、同一判定（topicDanglingGroups
+// ——词表空 = 不判定，防空词表误报；vocab 缺省 = 降级）。
+function topicDetailHTML(entry, vocab) {
+  const health = (entry && entry.health) || {};
+  const groupIds = vocab ? Object.keys(vocab) : [];
+  const danglingGroups = topicDanglingGroups(entry, groupIds);
+  const problems = topicHealthText(entry, vocab);
+  const missingPrograms = (health.programs_missing || []);
+  const programs = ((entry && entry.programs) || []).map((p) =>
+    '<span class="topic-detail-prog mono">' + esc(p) + '</span>'
+    + (missingPrograms.includes(p)
+      ? ' <span class="topic-warn" title="附带程序目录不存在">⚠</span>' : '')
+  ).join("");
+  const groups = ((entry && entry.hint_module_groups) || []).map((g) => {
+    const label = vocab ? vocab[g] : "";
+    const dangling = danglingGroups.includes(g);
+    return label
+      ? '<span class="badge">' + esc(label) + '</span> <span class="mono muted">' + esc(g) + '</span>'
+      : '<span>' + esc(g) + '</span>' + (dangling
+        ? ' <span class="topic-warn" title="库内无此组，推荐链路会忽略">⚠ 库内无此组</span>' : "");
+  }).join(" ");
+  const pdfLine = (entry && entry.original_pdf)
+    ? '<span class="mono">' + esc(entry.original_pdf) + '</span>'
+      + (health.original_pdf_missing
+        ? ' <span class="topic-warn" title="原 PDF 文件不在条目目录，页图端点不可用">⚠ 缺失</span>'
+        : (health.original_pdf_size ? ' <span class="muted">' + Number(health.original_pdf_size) + ' B</span>' : ""))
+    : '<span class="muted">无</span>';
+  const row = (k, v) => '<div class="ref-detail-row"><span class="ref-detail-k">' + k
+    + '</span><span>' + v + '</span></div>';
+  return '<div class="ref-detail-meta">'
+    + row('编号', '<span class="mono">' + esc((entry && entry.key) || '') + '</span>')
+    + row('年份', esc((entry && entry.year) || ''))
+    + row('题面字数', String(String((entry && entry.problem_text) || '').length) + ' 字')
+    + row('原 PDF', pdfLine)
+    + row('附带程序', programs || '<span class="muted">无</span>')
+    + row('功能组', groups || '<span class="muted">无</span>')
+    + row('图注', topicHasNotes(entry && entry.problem_text)
+      ? '<span class="badge ok">✓ 已含图注段</span>' : '<span class="muted">无</span>')
+    + (problems.length
+      ? row('数据问题', '<span class="topic-warn">⚠ ' + esc(problems.join('；')) + '</span>') : '')
+    + '</div>'
+    + '<div class="topic-detail-problem-title">题面全文</div>'
+    + '<pre class="topic-detail-problem">' + esc((entry && entry.problem_text) || '') + '</pre>'
+    + '<div class="topic-detail-pages-title">题面页图（懒加载）</div>'
+    + '<div class="topic-pages" data-topic-pages></div>'
+    + '<div class="topic-detail-actions">'
+    + '<button data-topic-use="' + esc((entry && entry.key) || '') + '">用此题生成</button>'
+    + '<button data-topic-edit="' + esc((entry && entry.key) || '') + '">编辑</button>'
+    + '<button class="danger" data-topic-del="' + esc((entry && entry.key) || '') + '">删除</button>'
+    + '</div>';
+}
+
+// topicPagesHTML(pages)：页图成功列表（data_url 叠放 + 页码标注）。
+function topicPagesHTML(pages) {
+  return (pages || []).map((p) => {
+    const pageNo = Number(p.page_no || 0);
+    return '<figure class="topic-page"><figcaption>第 ' + pageNo + ' 页</figcaption>'
+      + '<img src="' + String(p.data_url || '') + '" alt="题面页 ' + pageNo
+      + '" loading="lazy"></figure>';
+  }).join("");
+}
+
+// topicPagesErrorHTML(message)：页图失败态（后端 400 中文原因原样展示）。
+function topicPagesErrorHTML(message) {
+  return '<p class="muted">页图不可用：' + esc(message) + '</p>';
+}
+
 // 赛题卡片 HTML（工单 ui-polish-9/02 + topic-library-ui/03 增强）：编号徽章
 // + 年份 chip + 元数据小行（题面字数 / 程序数 / 图注 ✓）+ 健康 ⚠ + 题面预览
 // + 操作（详情 / 用此题生成 / 删除）。自包含纯函数（内联 esc 与截断，deps
@@ -8362,10 +8444,72 @@ function renderTopics() {
     b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
   grid.querySelectorAll("[data-topic-use]").forEach((b) =>
     b.addEventListener("click", () => useTopic(b.dataset.topicUse)));
-  // 详情按钮的打开行为归工单 04（viewTopicDetail 与其弹窗一起落地）
+  grid.querySelectorAll("[data-topic-view]").forEach((b) =>
+    b.addEventListener("click", () => viewTopicDetail(b.dataset.topicView)));
   renderTopicYearChips();
   renderTopicStats();
   $("topic-browse-msg").textContent = "";
+}
+
+// 页图懒取 memo（工单 topic-library-ui/04）：Map key → {ok, pages} |
+// {ok:false, message}。业务 400（数据现状，重试无意义）缓存；网络 /
+// 服务端错误（e.status 缺失或 ≥500）不缓存——瞬时故障重开可重试
+// （对偶 pdf 轮 loadPdfPages 只缓存 400 的先例）。
+const topicPageCache = new Map();
+
+async function loadTopicPageState(key) {
+  if (topicPageCache.has(key)) return topicPageCache.get(key);
+  try {
+    const data = await apiGet(`/api/topics/${encodeURIComponent(key)}/pages`);
+    const cached = { ok: true, pages: data.pages || [] };
+    topicPageCache.set(key, cached);
+    return cached;
+  } catch (e) {
+    const cached = { ok: false, message: e.message };
+    if (e.status && e.status < 500) topicPageCache.set(key, cached);  // 业务 400 缓存
+    return cached;
+  }
+}
+
+function renderTopicPages(box, cached) {
+  box.innerHTML = cached.ok
+    ? (cached.pages.length ? topicPagesHTML(cached.pages) : '<span class="muted">无页图</span>')
+    : topicPagesErrorHTML(cached.message);
+}
+
+/** 赛题详情弹窗：元数据 + 题面全文 + 页图懒加载 + 操作（用此题生成 / 编辑 /
+ * 删除）。复用 .ref-files-overlay 遮罩与关闭模式（Esc / × / 点遮罩）；
+ * 数据 = 浏览列表缓存同源（不另发请求）。编辑按钮的打开行为归工单 05。 */
+async function viewTopicDetail(key) {
+  const entry = (topicEntries || []).find((t) => t.key === key);
+  if (!entry) { toast("info", "未找到赛题 " + key); return; }
+  const overlay = document.createElement("div");
+  overlay.className = "ref-files-overlay";
+  overlay.innerHTML = `
+    <div class="ref-files-modal">
+      <div class="ref-files-head">
+        <strong>赛题详情 · ${esc(key)}</strong>
+        <button class="ref-files-close" title="关闭">×</button>
+      </div>
+      <div class="ref-detail-scroll">${topicDetailHTML(entry, topicGroupVocab)}</div>
+    </div>`;
+  const close = () => overlay.remove();
+  overlay.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  document.body.appendChild(overlay);
+  // 操作按钮：用此题生成 / 删除先关弹窗（useTopic 切 tab、deleteTopic 刷新列表）
+  overlay.querySelectorAll("[data-topic-use]").forEach((b) =>
+    b.addEventListener("click", () => { close(); useTopic(key); }));
+  overlay.querySelectorAll("[data-topic-del]").forEach((b) =>
+    b.addEventListener("click", () => { close(); deleteTopic(key); }));
+  // 页图懒取三态：加载中 / 成功（memo 缓存）/ 失败（后端 400 中文原因）
+  const pagesBox = overlay.querySelector("[data-topic-pages]");
+  pagesBox.innerHTML = '<span class="muted">页图加载中…</span>';
+  const cached = await loadTopicPageState(key);
+  renderTopicPages(pagesBox, cached);
 }
 
 function clearTopicFilter() {
