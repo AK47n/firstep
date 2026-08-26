@@ -9,6 +9,7 @@
 // 脚本延迟执行，DOM 已就绪（与 stage 1 桥接约定同理）。
 import { $, handle, apiGet, apiPost, apiDelete, toast } from "/js/app.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { esc, fmtDuration } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -570,6 +571,85 @@ function openMasterDetail(platform) {
     if (cached.ok) wireMasterTree(m.platform, treeBox, contentBox);
   });
 }
+
+// ---------------------------------------------------------------------------
+// 快速导入（工单 master-library-ui-2/04）：选文件夹整夹暂存 → 确认弹窗
+// （平台下拉 + 替换警告，共享 confirmModal 工厂的 pilot）→ POST
+// /api/masters/import → toast + 刷新列表。全程零 LLM；失败弹窗已关则 toast
+// 中文原因，可重新发起。
+// ---------------------------------------------------------------------------
+
+// 平台下拉选项 = 既有「新增平台」select 的当前选项（host 启动时经
+// renderNewPlatformOptions 渲染，同一数据源 /api/state）。
+function importPlatformOptions() {
+  return Array.from($("new-platform").options || []).map((o) => ({
+    id: o.value,
+    name: o.textContent,
+  }));
+}
+
+$("btn-direct-import").addEventListener("click", () => $("import-pick-dirs").click());
+
+$("import-pick-dirs").addEventListener("change", async () => {
+  const input = $("import-pick-dirs");
+  const files = Array.from(input.files).filter((f) => {
+    const parts = f.webkitRelativePath.split("/");
+    return parts.length > 1 && !parts.includes(".git");
+  });
+  input.value = "";
+  if (!files.length) return;
+  // 整夹暂存（与扫描同一条流程 /api/masters/stage：路径穿越拒绝 / 目录名
+  // 清洗 / 噪音跳过 / 512MB 上限）
+  const form = new FormData();
+  for (const f of files) form.append("files", f, f.webkitRelativePath);
+  let staged;
+  try {
+    const data = await handle(await fetch("/api/masters/stage", { method: "POST", body: form }));
+    staged = data.staged[0];
+  } catch (e) {
+    toast("error", "暂存失败：" + e.message);
+    return;
+  }
+  if (!staged) {
+    toast("error", "未获得暂存目录（所选文件夹没有可用的文件？）");
+    return;
+  }
+  const options = importPlatformOptions();
+  if (!options.length) {
+    toast("error", "平台列表不可用（请先刷新页面）");
+    return;
+  }
+  const baseMessage = "选择目标平台后，该平台的旧母版将被整体替换（来源：「"
+    + staged.name + "」目录）。结构校验通过才落盘，旧母版先备份、失败自动"
+    + "回滚，库写入自动进 git 历史；替换后该平台的生成以新母版为准。";
+  const extra = `<div class="import-platform-field"><label>目标平台</label>`
+    + `<select data-confirm-value>`
+    + options.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")
+    + `</select></div>`;
+  // 失败弹窗保留可重试：失败原因并入消息重新打开确认弹窗（免重选文件夹）
+  let errorNote = "";
+  for (;;) {
+    const platform = await confirmModal({
+      title: "直接导入替换母版？",
+      message: (errorNote ? "导入失败：" + errorNote + "\n\n" : "") + baseMessage,
+      danger: true,
+      confirmText: "确认替换",
+      cancelText: "取消",
+      extra,
+    });
+    if (!platform) return;   // 取消 / 遮罩 / Esc：零写库
+    try {
+      const meta = await apiPost("/api/masters/import", {
+        platform, project_dir: staged.path,
+      });
+      toast("ok", "已导入平台 " + platform + " 的母版（来源：" + meta.sources.join("、") + "）");
+      loadMasters();
+      return;
+    } catch (e) {
+      errorNote = e.message;   // 结构校验失败等：零库写入，弹窗重开可重试
+    }
+  }
+});
 
 export async function loadMasters() {
   try {

@@ -22,6 +22,7 @@ from contest_generator.master_store import (
     delete_master,
     get_master,
     import_master,
+    import_master_direct,
     list_masters,
     master_health,
     master_key_files,
@@ -707,6 +708,59 @@ def test_read_master_tree_file_missing_raises(fake_masters_dir):
 def test_read_master_tree_file_platform_not_in_library_raises(fake_masters_dir):
     with pytest.raises(MasterError, match="不存在"):
         read_master_tree_file(fake_masters_dir, PLATFORM_STM32, "main.c")
+
+
+# ---------------------------------------------------------------------------
+# 免提炼快速导入（工单 master-library-ui-2/04）：直接替换同平台母版
+# ---------------------------------------------------------------------------
+
+
+def test_import_master_direct_replaces_existing_master(fake_masters_dir, tmp_path):
+    """免提炼入库：结构校验通过 → 直接替换同平台旧母版，sources = [源目录名]，
+    元数据与库内文件均随替换更新。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)  # 旧母版
+    source = make_fake_master_project(tmp_path / "official_template")
+
+    meta = import_master_direct(fake_masters_dir, PLATFORM_STM32, source)
+
+    assert meta.platform == PLATFORM_STM32
+    assert meta.sources == ("official_template",)
+    assert meta.warnings == ()
+    # 库内 main.c 已被新源替换（源 main.c 内容 ≠ 旧母版 main.c）
+    assert (
+        fake_masters_dir / "stm32" / "main.c"
+    ).read_text(encoding="utf-8") == source.joinpath("main.c").read_text(encoding="utf-8")
+    assert (fake_masters_dir / ".stm32.importing").exists() is False
+    assert (fake_masters_dir / ".stm32.backup").exists() is False
+
+
+def test_import_master_direct_structure_failure_leaves_store_intact(
+    fake_masters_dir, tmp_path
+):
+    """结构校验失败（源缺工程配置文件）→ 旧母版零盘面改动。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    before = (fake_masters_dir / "stm32" / "main.c").read_text(encoding="utf-8")
+    bad_dir = tmp_path / "bad_src"
+    bad_dir.mkdir()
+    (bad_dir / "main.c").write_text("void main(void){}\n", encoding="utf-8")
+
+    with pytest.raises(MasterError, match="工程配置文件"):
+        import_master_direct(fake_masters_dir, PLATFORM_STM32, bad_dir)
+
+    assert (fake_masters_dir / "stm32" / "main.c").read_text(encoding="utf-8") == before
+    assert (fake_masters_dir / "stm32").is_dir()
+
+
+def test_import_master_direct_source_dir_missing_raises(fake_masters_dir, tmp_path):
+    with pytest.raises(MasterError, match="源目录不存在"):
+        import_master_direct(fake_masters_dir, PLATFORM_STM32, tmp_path / "nope")
+
+
+def test_import_master_direct_invalid_platform_raises(fake_masters_dir, tmp_path):
+    source = make_fake_master_project(tmp_path / "src")
+
+    with pytest.raises(MasterError, match="非法平台名"):
+        import_master_direct(fake_masters_dir, "../evil", source)
 
 
 
