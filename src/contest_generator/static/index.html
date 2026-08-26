@@ -912,6 +912,12 @@
                padding: 2px 8px; border-radius: 6px; }
   .topic-year { font-size: 12px; color: var(--muted); border: 1px solid var(--border);
                 padding: 1px 8px; border-radius: 999px; }
+  /* 元数据小行（工单 topic-library-ui/03）：题面字数 / 程序数 / 图注 ✓ */
+  .topic-meta { display: flex; align-items: center; gap: 10px; font-size: 11.5px;
+                color: var(--muted); flex-wrap: wrap; }
+  .topic-meta-item { font-family: var(--mono); }
+  .topic-warn { font-size: 11.5px; color: var(--danger); font-weight: 600;
+                cursor: default; }
   .topic-preview { font-size: 13px; color: var(--muted); line-height: 1.55;
                    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
                    overflow: hidden; }
@@ -1851,16 +1857,19 @@
     <div class="card">
       <h2>赛题库 <span class="muted">（历年真题拆条入库，编号可解析为题面作生成入口；磁盘目录即数据库）</span></h2>
       <div id="topic-archive-link" style="margin:6px 0"></div>
-      <div class="row">
-        <div style="flex:1"><label>年份</label><input type="text" id="topic-filter-year" placeholder="如 2026"></div>
-        <div style="flex:1"><label>编号</label><input type="text" id="topic-filter-number" placeholder="如 C"></div>
+      <div class="lib-toolbar">
+        <input type="search" id="topic-filter" placeholder="搜索编号 / 年份 / 题面全文…">
+        <select id="topic-sort" title="排序字段">
+          <option value="key">排序：编号</option>
+          <option value="chars">排序：题面字数</option>
+        </select>
+        <button id="topic-sort-dir">↑ 升序</button>
+        <button id="topic-filter-clear">清空过滤</button>
       </div>
-      <div class="row" style="margin-top:8px">
-        <button id="btn-topic-search" class="primary" data-ico="search">搜索</button>
-        <button id="btn-topic-search-clear">清空并显示全部</button>
-      </div>
+      <div class="lib-chips-row"><span class="muted">年份</span><span id="topic-year-chips"></span></div>
+      <div id="topic-stats" class="lib-stats"></div>
       <div id="topic-grid" class="topic-grid"></div>
-      <div id="topic-msg" class="error"></div>
+      <div id="topic-browse-msg" class="error"></div>
     </div>
 
     <div class="card">
@@ -2245,7 +2254,7 @@ document.querySelectorAll("nav button").forEach((btn) => {
     if (btn.dataset.tab === "library") loadLibrary();
     if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); }
     if (btn.dataset.tab === "pdf") loadPdfs();
-    if (btn.dataset.tab === "topic") loadTopics();
+    if (btn.dataset.tab === "topic") { loadTopics(); loadTopicGroupVocabulary(); }
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
     if (btn.dataset.tab === "settings") { loadSettings(); loadRecentWorkflows(); renderUsageStats(); }
@@ -8094,9 +8103,146 @@ async function loadTopicArchiveLink() {
   } catch (e) { /* 素材库查询失败 = 不显示链接，不打扰浏览 */ }
 }
 
-// 赛题卡片 HTML（工单 ui-polish-9/02）：编号徽章 + 年份 chip + 题面预览 + 操作。
-// 自包含纯函数（tests/js 抽取：内联 esc 与截断，不引用模块级常量/其它函数）
-function topicCardHTML(t) {
+// ===========================================================================
+// 赛题库浏览区（工单 topic-library-ui/03）：即时检索 / 排序 / 统计 / 健康
+// 警示 / 卡片增强。交互逻辑全部下沉纯函数（tests/js 括号配平抽取 + deps
+// 注入兄弟函数），DOM 事件层只转发——照 ref 系列 / pdf 系列先例。
+// ===========================================================================
+
+// topicHasNotes(text)：题面是否已含图注段（[示意图N：…] / [图N 标注] /
+// [图N 标注：…]——与后端 enrich 幂等判定同前缀，前端仅作展示徽章）。
+function topicHasNotes(text) {
+  const s = String(text == null ? "" : text);
+  return s.indexOf("[示意图") !== -1 || /\[图\s*\d+\s*标注/.test(s);
+}
+
+// topicGroupVocabulary(modules)：/api/modules → 功能组 id→label 唯一表
+//（模块序保序去重；无 exclusive_group 的模块跳过——对偶 kitVocabulary
+// 派生先例，不新设词表端点）。
+function topicGroupVocabulary(modules) {
+  const out = {};
+  for (const m of (modules || [])) {
+    const g = m && m.exclusive_group;
+    if (g && g.id) out[g.id] = g.label || "";
+  }
+  return out;
+}
+
+// topicDanglingGroups(entry, groupIds)：hint 组悬空体检（对偶
+// refDanglingAnchors 降级语义）——组 id 不在模块库词表 = 推荐链路静默
+// 忽略；词表空（模块库未配置 / 拉取失败）= 空结果降级不判定（零误报）。
+function topicDanglingGroups(entry, groupIds) {
+  const ids = (groupIds || []).filter((g) => String(g || "").length > 0);
+  if (!ids.length) return [];
+  return (((entry || {}).hint_module_groups) || []).filter((g) => !ids.includes(g));
+}
+
+// topicHealthText(entry, vocab)：数据问题中文描述（空数组 = 健康）。
+// 三类：原 PDF 缺失 / 附带程序目录悬空 / 功能组 hint 悬空；vocab = 组词表
+// 对象（{id: label}，缺省 = 不判定 hint 方向）。
+function topicHealthText(entry, vocab) {
+  const out = [];
+  const health = (entry && entry.health) || {};
+  if (health.original_pdf_missing) {
+    out.push("原 PDF 缺失（" + String((entry || {}).original_pdf || "?") + " 不在条目目录）");
+  }
+  for (const p of (health.programs_missing || [])) {
+    out.push("附带程序目录不存在：" + String(p));
+  }
+  const dangling = topicDanglingGroups(entry, vocab ? Object.keys(vocab) : []);
+  for (const g of dangling) {
+    out.push("功能组 " + g + " 库内无此组（推荐链路会忽略）");
+  }
+  return out;
+}
+
+// topicFilterEntries(entries, f)：f={q, year, health, groupIds}——关键字
+// （编号 / 年份 / 题面全文，大小写不敏感）× 年份 × 健康状态正交过滤；
+// 空条件 = 全量（对偶 refFilterEntries）。
+function topicFilterEntries(entries, f) {
+  const q = String((f && f.q) || "").trim().toLowerCase();
+  const year = (f && f.year) || "";
+  const groupIds = (f && f.groupIds) || [];
+  return (entries || []).filter((t) => {
+    if (q) {
+      const hay = [t.key, t.year, t.problem_text];
+      if (!hay.some((s) => String(s == null ? "" : s).toLowerCase().includes(q))) return false;
+    }
+    if (year && t.year !== year) return false;
+    if (f && f.health) {
+      const health = t.health || {};
+      const dangling = topicDanglingGroups(t, groupIds);
+      if (!(health.original_pdf_missing
+        || (health.programs_missing || []).length || dangling.length)) return false;
+    }
+    return true;
+  });
+}
+
+// topicSortEntries(entries, s)：s={by:'key'|'chars', dir:'asc'|'desc'}；
+// 返回新数组（不改原数组）；Array.sort 稳定 → 同键保持全量序。
+function topicSortEntries(entries, s) {
+  const by = (s && s.by) || "key";
+  const dir = (s && s.dir) === "desc" ? -1 : 1;
+  const key = (t) => {
+    if (by === "chars") return Number((t.problem_text || "").length);
+    return String(t.key || "");
+  };
+  const out = (entries || []).slice();
+  out.sort((a, b) => {
+    const av = key(a), bv = key(b);
+    const cmp = (typeof av === "number" && typeof bv === "number")
+      ? (av === bv ? 0 : (av < bv ? -1 : 1))
+      : String(av).localeCompare(String(bv));
+    return cmp * dir;
+  });
+  return out;
+}
+
+// topicStats(entries, groupIds)：统计（对传入集合计算——统计条随过滤联动）。
+// issues = 任一健康缺项（PDF 缺失 / 程序悬空 / hint 悬空）的条目数。
+function topicStats(entries, groupIds) {
+  const list = entries || [];
+  let withPrograms = 0, withNotes = 0, totalChars = 0, issues = 0;
+  for (const t of list) {
+    if ((t.programs || []).length) withPrograms += 1;
+    if (topicHasNotes(t.problem_text)) withNotes += 1;
+    totalChars += Number((t.problem_text || "").length);
+    const health = t.health || {};
+    if (health.original_pdf_missing
+      || (health.programs_missing || []).length
+      || topicDanglingGroups(t, groupIds).length) issues += 1;
+  }
+  return { total: list.length, withPrograms, withNotes, totalChars, issues };
+}
+
+// topicStatsText(stats)：统计条文案（字数 K 缩写；0 项不显）。
+function topicStatsText(stats) {
+  const chars = Number(stats.totalChars || 0);
+  const charsText = chars >= 1000 ? (chars / 1000).toFixed(1) + "K" : String(chars);
+  const parts = ["共 " + Number(stats.total || 0) + " 题"];
+  if (stats.withPrograms) parts.push("含附带程序 " + Number(stats.withPrograms || 0));
+  if (stats.withNotes) parts.push("含图注 " + Number(stats.withNotes || 0));
+  if (chars) parts.push("题面合计 ~" + charsText + " 字");
+  return parts.join(" · ");
+}
+
+// topicChipRowHTML(options, selected)：年份筛选 chips 纯函数（对偶
+// refChipRowHTML，换 data-topic-chip 属性）；selected 命中项加 on 类。
+function topicChipRowHTML(options, selected) {
+  return (options || []).map((o) =>
+    '<button type="button" class="lib-chip' + (o.value === selected ? " on" : "")
+      + '" data-topic-chip="' + esc(o.value) + '">' + esc(o.label)
+      + (o.count != null ? "（" + o.count + "）" : "") + '</button>'
+  ).join("");
+}
+
+// 赛题卡片 HTML（工单 ui-polish-9/02 + topic-library-ui/03 增强）：编号徽章
+// + 年份 chip + 元数据小行（题面字数 / 程序数 / 图注 ✓）+ 健康 ⚠ + 题面预览
+// + 操作（详情 / 用此题生成 / 删除）。自包含纯函数（内联 esc 与截断，deps
+// 注入 topicDanglingGroups / topicHealthText / topicHasNotes——tests/js
+// 括号配平抽取）；vocab 缺省 = 不判定 hint 悬空（旧调用兼容，零 ⚠）。
+function topicCardHTML(t, vocab) {
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
@@ -8108,11 +8254,22 @@ function topicCardHTML(t) {
   const year = esc(t && t.year);
   const preview = esc(trunc(t && t.problem_text, 80));
   const full = esc(trunc(t && t.problem_text, 200));
+  const chars = String((t && t.problem_text) || "").length;
+  const programs = ((t && t.programs) || []).length;
+  const notes = topicHasNotes(t && t.problem_text);
+  const problems = topicHealthText(t, vocab);
   return '<div class="topic-card">'
     + '<div class="topic-head"><span class="topic-key">' + key + '</span>'
     + '<span class="topic-year">' + year + '</span></div>'
+    + '<div class="topic-meta"><span class="topic-meta-item">' + chars + ' 字</span>'
+    + '<span class="topic-meta-item">程序 ' + programs + '</span>'
+    + (notes ? '<span class="badge ok">图注 ✓</span>' : "")
+    + '</div>'
+    + (problems.length
+      ? '<div class="topic-warn" title="' + esc(problems.join("；")) + '">⚠ 数据问题</div>' : "")
     + '<div class="topic-preview" title="' + full + '">' + preview + '</div>'
     + '<div class="topic-actions">'
+    + '<button data-topic-view="' + key + '">详情</button>'
     + '<button data-topic-use="' + key + '">用此题生成</button>'
     + '<button class="danger" data-topic-del="' + key + '">删除</button>'
     + '</div></div>';
@@ -8128,7 +8285,6 @@ function btnIcon(name) {
     doc: '<path d="M4.5 1.5 H10 L12.5 4 V14.5 H4.5 Z"/><path d="M10 1.5 V4 H12.5"/>',
     clipboard: '<path d="M5.5 3 H10.5 V5 H5.5 Z"/><path d="M4.5 5 H11.5 V14 H4.5 Z"/>',
     wrench: '<path d="M10.2 2.2 A3.6 3.6 0 0 1 12 8.8 L5.8 15 L3.8 13 L10 7.2 A3.6 3.6 0 0 1 10.2 2.2 Z"/>',
-    search: '<circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 L14 14"/>',
     save: '<path d="M3 1.5 H13 V14.5 H3 Z"/><path d="M5 1.5 V6 H11 V1.5 M5 8 H11 V14.5"/>',
     copy: '<rect x="2.5" y="6" width="9" height="8.5" rx="1"/><rect x="5.5" y="2.5" width="9" height="8.5" rx="1"/>',
     check: '<path d="M2.5 8.5 L6 12 L13.5 4"/>',
@@ -8144,36 +8300,131 @@ function btnIcon(name) {
     b.insertAdjacentHTML("afterbegin", btnIcon(b.dataset.ico));
   });
 })();
-async function loadTopics() {
-  loadTopicArchiveLink();
-  try {
-    // 过滤在前端做（与参考库服务端搜索不同）：题库条目少、列表一次取回，
-    // 年份/编号子串过滤本地完成
-    const topics = await apiGet("/api/topics");
-    const year = $("topic-filter-year").value.trim().toLowerCase();
-    const number = $("topic-filter-number").value.trim().toLowerCase();
-    const grid = $("topic-grid");
-    const filtered = topics.filter((t) => (!year || t.year.toLowerCase().includes(year))
-      && (!number || t.number.toLowerCase().includes(number)));
-    grid.innerHTML = filtered.length
-      ? filtered.map(topicCardHTML).join("")
+// —— 赛题库工具栏状态与渲染（工单 topic-library-ui/03）：过滤条件集中于此，
+// 事件层只转发；loadTopics 只负责拉数据入缓存，rendering 全走 renderTopics。
+let topicUI = { q: "", year: "", sortBy: "key", sortDir: "asc", health: false };
+let topicEntries = [];      // /api/topics 全量缓存（含 health 字段）
+let topicGroupVocab = {};   // 功能组词表（/api/modules 派生，空 = hint 悬空降级）
+let topicSearchTimer = null;
+let topicLoading = false;   // 列表拉取中（加载态）
+
+function topicFilterContext() {
+  return {
+    q: topicUI.q,
+    year: topicUI.year,
+    health: topicUI.health,
+    groupIds: Object.keys(topicGroupVocab),
+  };
+}
+
+function renderTopicYearChips() {
+  const counts = {};
+  for (const t of topicEntries) counts[t.year] = (counts[t.year] || 0) + 1;
+  const options = [{ value: "", label: "全部", count: topicEntries.length }]
+    .concat(Object.keys(counts).sort().map((y) => ({
+      value: y, label: y, count: counts[y],
+    })));
+  $("topic-year-chips").innerHTML = topicChipRowHTML(options, topicUI.year);
+}
+
+function renderTopicStats() {
+  const f = topicFilterContext();
+  const filtered = topicFilterEntries(topicEntries, f);
+  const stats = topicStats(filtered, f.groupIds);
+  $("topic-stats").innerHTML = esc(topicStatsText(stats)) + (stats.issues
+    ? ` <span class="lib-stats-red${topicUI.health ? " on" : ""}" data-topic-health title="原 PDF 缺失 / 附带程序悬空 / 功能组悬空的条目；点击只看问题条目，再点取消">数据问题 ${stats.issues}</span>`
+    : "");
+}
+
+function renderTopics() {
+  const grid = $("topic-grid");
+  if (!topicEntries.length) {
+    grid.innerHTML = topicLoading
+      ? '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">⏳</div>'
+        + '<div class="es-title">加载中…</div></div>'
       : '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">🏆</div>'
         + '<div class="es-title">库中暂无条目</div>'
         + '<div class="es-hint">录入历史赛题后，可直接按编号取题面一键生成工程。</div></div>';
-    grid.querySelectorAll("[data-topic-del]").forEach((b) =>
-      b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
-    grid.querySelectorAll("[data-topic-use]").forEach((b) =>
-      b.addEventListener("click", () => useTopic(b.dataset.topicUse)));
-    $("topic-msg").textContent = "";
-  } catch (e) { $("topic-msg").textContent = e.message; }
+    $("topic-stats").textContent = "";
+    $("topic-year-chips").innerHTML = "";
+    $("topic-browse-msg").textContent = "";
+    return;
+  }
+  const f = topicFilterContext();
+  const rows = topicSortEntries(topicFilterEntries(topicEntries, f),
+    { by: topicUI.sortBy, dir: topicUI.sortDir });
+  grid.innerHTML = rows.length
+    ? rows.map((t) => topicCardHTML(t, topicGroupVocab)).join("")
+    : '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">🔍</div>'
+      + '<div class="es-title">没有匹配的赛题</div>'
+      + '<div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div>';
+  grid.querySelectorAll("[data-topic-del]").forEach((b) =>
+    b.addEventListener("click", () => deleteTopic(b.dataset.topicDel)));
+  grid.querySelectorAll("[data-topic-use]").forEach((b) =>
+    b.addEventListener("click", () => useTopic(b.dataset.topicUse)));
+  // 详情按钮的打开行为归工单 04（viewTopicDetail 与其弹窗一起落地）
+  renderTopicYearChips();
+  renderTopicStats();
+  $("topic-browse-msg").textContent = "";
 }
 
-$("btn-topic-search").addEventListener("click", loadTopics);
-$("btn-topic-search-clear").addEventListener("click", () => {
-  $("topic-filter-year").value = "";
-  $("topic-filter-number").value = "";
-  loadTopics();
-});
+function clearTopicFilter() {
+  topicUI.q = ""; topicUI.year = ""; topicUI.health = false;
+  $("topic-filter").value = "";
+  renderTopics();
+}
+
+function initTopicToolbar() {
+  $("topic-filter").addEventListener("input", () => {
+    clearTimeout(topicSearchTimer);
+    // 防抖回调里直接读 DOM（不依赖事件对象 target 的异步引用——派发后就失效）
+    topicSearchTimer = setTimeout(() => { topicUI.q = $("topic-filter").value; renderTopics(); }, 150);
+  });
+  $("topic-filter").addEventListener("keydown", (e) => { if (e.key === "Escape") clearTopicFilter(); });
+  $("topic-sort").addEventListener("change", (e) => { topicUI.sortBy = e.target.value; renderTopics(); });
+  $("topic-sort-dir").addEventListener("click", () => {
+    topicUI.sortDir = topicUI.sortDir === "asc" ? "desc" : "asc";
+    $("topic-sort-dir").textContent = topicUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
+    renderTopics();
+  });
+  $("topic-filter-clear").addEventListener("click", clearTopicFilter);
+  // chips 事件委托（行内动态渲染）；再点已选中项 = 取消该维度过滤
+  $("topic-year-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-topic-chip]"); if (!b) return;
+    topicUI.year = topicUI.year === b.dataset.topicChip ? "" : b.dataset.topicChip;
+    renderTopics();
+  });
+  // 统计条红段（数据问题）：点击 = 只看问题条目，再点取消（与过滤 / 排序正交）
+  $("topic-stats").addEventListener("click", (e) => {
+    if (!e.target.closest("[data-topic-health]")) return;
+    topicUI.health = !topicUI.health;
+    renderTopics();
+  });
+}
+initTopicToolbar();
+
+// 功能组词表（hint 悬空判定数据源）：/api/modules 派生；未配置 / 拉取失败 =
+// 空词表（hint 方向降级不判定，不误报）。
+async function loadTopicGroupVocabulary() {
+  try {
+    topicGroupVocab = topicGroupVocabulary(await apiGet("/api/modules"));
+  } catch (e) { topicGroupVocab = {}; }
+  if (topicEntries.length) renderTopics();  // 词表到达后重渲染（⚠ 收敛）
+}
+
+async function loadTopics() {
+  loadTopicArchiveLink();
+  try {
+    topicLoading = true;
+    renderTopics();  // 加载态（本地 API 快，瞬时闪过）
+    topicEntries = await apiGet("/api/topics");
+    topicLoading = false;
+    renderTopics();
+  } catch (e) {
+    topicLoading = false;
+    $("topic-browse-msg").textContent = e.message;
+  }
+}
 
 async function deleteTopic(key) {
   if (!confirm("删除赛题 " + key + " 的整个条目目录（含题面与原 PDF）？")) return;
@@ -8198,7 +8449,7 @@ async function useTopic(key) {
     loadTopicPdf(data.key);
   } catch (e) {
     toast("error", "载入赛题失败");
-    $("topic-msg").textContent = e.message;
+    $("topic-browse-msg").textContent = e.message;
   }
 }
 
