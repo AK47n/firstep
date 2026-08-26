@@ -9,7 +9,7 @@ fx/master.js 内容渲染纯件）。
 **被谁阻塞：** 02（内容箱渲染在 02 已被树文件共用，本工单统一收口
 masterContentHTML）
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 ## 验收标准
 
@@ -33,4 +33,33 @@ masterContentHTML）
 
 ## 实施记录
 
-（待实施）
+（2026-08-27 完成）
+
+- 新建 fx/highlight.js：languageOf（.c/.h → c；.syscfg/.uvprojx/.cproject/.xml
+  → xml；其余 plain，大小写不敏感）/ highlightXml（注释 / CDATA / 声明与
+  PI / 标签名 / 属性名 / 引号值分类 tok-* 着色，先切 token 后逐段 esc，
+  无注入面）/ highlightText（C 分发复用既有 fx/code.js 的 cHighlight 单源
+  而非复制——spec 当时未见该先例，偏离「highlightC 命名」但单源性更优；
+  >128KB 按 UTF-8 字节数（TextEncoder）回退纯文本，plain 恒 esc）。
+- fx/master.js 增 masterContentHTML（null = 加载中 / ok = 复制按钮 +
+  高亮 pre / 失败 = 中文原因 + 可重试，三态统一收口）；ui/master.js
+  renderMasterFileContent 改调纯件，新增 copyMasterContent / writeClipboard
+  （clipboard API → execCommand 回退 → toast 中文失败文案），成功行内
+  「✓ 已复制」1.5s 还原；index.html 增 tok-tag/tok-attr/tok-val（暗/亮主题
+  成对）+ .master-content-bar/.master-copy-btn。
+- 测试：tests/js/highlight.test.mjs（languageOf 9 例映射、XML 五类 token、
+  CDATA/DOCTYPE、注入转义、C 分发 tok-kw、plain 无高亮、超限回退）；
+  master-ext-browser.test.mjs 增内容箱 4 例（成功高亮 / plain 转义 /
+  失败可重试 / 加载中占位）。
+- 回归：node --test 468/468、pytest 2491（本工单零 Python 改动）；真实
+  文件冒烟：library/masters/stm32/pin_config.h → c 语言 113 个高亮 span、
+  mspm0/mspm0.syscfg → 0 span（.syscfg 实为 TI-TXT 非 XML，按 spec 映射
+  xml 零着色、无害，未来如要着色需 config 类高亮器，超出本轮轻量范围）。
+- 评审：code-review 双轴——Standards 无硬违反（cHighlight 复用非复制、
+  fx 纯函数边界、tok-* 成对主题均合规），判断项 4 记录在案（高亮/XML 扫描
+  骨架同构——语法集不同提取收益低；"c"/"xml"/"plain" 字符串枚举隐式握手
+  ——两函数相邻无碍；「复制」字面量两处——按钮还原文案场景不同；highlightXml
+  85 行长方法——内聚单一不需拆）；Spec 缺口 2 已修（加载三态并入
+  masterContentHTML、超限按字节计），交互级 CDP 冒烟属收尾工单 06 清单
+  （本工单做实文件级冒烟），execCommand 回退为对 spec「回退文案」的加码
+  （真实可用优先，保留）。
