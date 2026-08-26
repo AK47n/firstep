@@ -27,7 +27,9 @@ from contest_generator.extraction import locate_topic_pages_full
 from contest_generator.topic_library import (
     TOPIC_MD_FILENAME,
     TopicDraft,
+    TopicEntry,
     TopicError,
+    TopicHealth,
     confirm_topics,
     delete_topic,
     enrich_topic_image_notes,
@@ -35,6 +37,7 @@ from contest_generator.topic_library import (
     parse_confirm_entries,
     resolve_number,
     split_topics_document,
+    topic_health,
 )
 
 
@@ -844,6 +847,88 @@ def test_resolve_number_missing_problem_md_raises(topic_root, pdf):
 
 
 # ---------------------------------------------------------------------------
+# 数据健康（工单 topic-library-ui/01）：附带程序悬空 + 原 PDF 缺失服务端实况
+# ---------------------------------------------------------------------------
+
+
+def test_topic_health_all_ok(topic_root, pdf, tmp_path):
+    program = tmp_path / "2026C-src"
+    program.mkdir()
+    confirm_topics(
+        topic_root, pdf, (DRAFTS[0],), program_dirs=[program], pdf_filename="真题.pdf"
+    )
+
+    health = topic_health(topic_root, resolve_number(topic_root, KEY_2026C))
+
+    assert health.original_pdf_missing is False
+    assert health.programs_missing == ()
+    assert health.original_pdf_size == pdf.stat().st_size  # 体量随列表带出
+
+
+def test_topic_health_missing_original_pdf(topic_root, pdf):
+    confirm_topics(topic_root, pdf, (DRAFTS[0],), pdf_filename="真题.pdf")
+    (topic_root / KEY_2026C / "真题.pdf").unlink()
+
+    health = topic_health(topic_root, resolve_number(topic_root, KEY_2026C))
+
+    assert health.original_pdf_missing is True
+    assert health.programs_missing == ()
+    assert health.original_pdf_size == 0  # 缺失 = 0（详情弹窗显示「无法读取」）
+
+
+def test_topic_health_missing_program_dirs(topic_root, pdf, tmp_path):
+    """附带程序清单里的悬空引用（入库后目录被删）逐个列出；存在的目录不算。"""
+    ghost = tmp_path / "幽灵程序"
+    alive = tmp_path / "还在的程序"
+    ghost.mkdir()
+    alive.mkdir()
+    confirm_topics(
+        topic_root, pdf, (DRAFTS[0],), program_dirs=[ghost, alive]
+    )
+    shutil.rmtree(ghost)  # 模拟运行期腐坏：用户删了源目录
+
+    health = topic_health(topic_root, resolve_number(topic_root, KEY_2026C))
+
+    assert health.programs_missing == (str(ghost),)
+
+
+def test_topic_health_mixed_programs_lists_only_dangling(topic_root, pdf, tmp_path):
+    """多条程序引用：存在 / 悬空夹杂 → 只列悬空的（按 manifest 声明序）。"""
+    a = tmp_path / "a_exists"
+    b = tmp_path / "b_ghost"
+    c = tmp_path / "c_ghost"
+    for p in (a, b, c):
+        p.mkdir()
+    confirm_topics(topic_root, pdf, (DRAFTS[0],), program_dirs=[a, b, c])
+    shutil.rmtree(b)
+    shutil.rmtree(c)
+
+    health = topic_health(topic_root, resolve_number(topic_root, KEY_2026C))
+
+    assert health.programs_missing == (str(b), str(c))
+
+
+def test_topic_health_no_original_pdf_declared_not_missing(topic_root):
+    """原 PDF 字段为空（无声明）→ 不算缺失（没有就不查）。"""
+    entry = TopicEntry(year="2026", number="C", problem_text="题面", original_pdf="")
+
+    assert topic_health(topic_root, entry).original_pdf_missing is False
+
+
+def test_topic_health_dangling_program_is_a_file_not_missing(topic_root, pdf, tmp_path):
+    """声明路径存在但指向文件（非目录）→ 悬空（与确认入库 is_dir 判据一致）。"""
+    program_path = tmp_path / "程序目录"
+    program_path.mkdir()
+    confirm_topics(topic_root, pdf, (DRAFTS[0],), program_dirs=[program_path])
+    program_path.rmdir()
+    program_path.write_text("x", encoding="utf-8")  # 同名文件顶替
+
+    health = topic_health(topic_root, resolve_number(topic_root, KEY_2026C))
+
+    assert health.programs_missing == (str(program_path),)
+
+
+# ---------------------------------------------------------------------------
 # 浏览列表 / 删除（工单 05）：list_topics 按编号排序、损坏 manifest 大声失败；
 # delete_topic 条目目录移除、删除后编号解析报错
 # ---------------------------------------------------------------------------
@@ -1193,6 +1278,49 @@ def test_topics_list_endpoint_sorted(topic_context, tmp_path):
     assert [t["key"] for t in body] == ["2018A", KEY_2026C]
     by_key = {t["key"]: t for t in body}
     assert by_key[KEY_2026C]["problem_text"] == DRAFTS[0].problem_text
+
+
+def test_topics_list_endpoint_includes_health(topic_context, tmp_path):
+    """浏览列表每条带 health 实况（工单 topic-library-ui/01）：原 PDF 缺失 /
+    程序目录悬空在列表端点一次算好，前端不按条回查。"""
+    ctx, _, topics_dir = topic_context
+    ghost = tmp_path / "幽灵"
+    ghost.mkdir()
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])  # 2026C 无程序
+    draft_with_program = TopicDraft(
+        year="2026", number="D", problem_text="2026D 题面"
+    )
+    confirm_topics(topics_dir, tmp_path / "真题.pdf", (draft_with_program,),
+                   program_dirs=[ghost])
+    shutil.rmtree(ghost)  # 运行期腐坏：程序目录被删
+
+    with _client(ctx) as client:
+        response = client.get("/api/topics")
+
+    assert response.status_code == 200
+    by_key = {t["key"]: t for t in response.json()}
+    assert by_key[KEY_2026C]["health"] == {
+        "original_pdf_missing": False,
+        "programs_missing": [],
+        "original_pdf_size": (tmp_path / "真题.pdf").stat().st_size,
+    }
+    assert by_key["2026D"]["health"] == {
+        "original_pdf_missing": False,
+        "programs_missing": [str(ghost)],
+        "original_pdf_size": (tmp_path / "真题.pdf").stat().st_size,
+    }
+
+
+def test_topic_get_endpoint_has_no_health(topic_context, tmp_path):
+    """单条取题面（生成入口素材）不带 health——字段现状保持，不扩大形状。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+
+    with _client(ctx) as client:
+        response = client.get(f"/api/topics/{KEY_2026C}")
+
+    assert response.status_code == 200
+    assert "health" not in response.json()
 
 
 def test_topics_list_endpoint_corrupt_manifest_returns_400(topic_context, tmp_path):
