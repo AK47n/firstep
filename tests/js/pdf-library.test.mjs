@@ -11,19 +11,27 @@ const html = readFileSync(
   "utf8"
 );
 
-// 括号配平提取（同 reference-library.test.mjs 范式）；deps = 注入的兄弟函数依赖
+// 括号配平提取（同 reference-library.test.mjs 范式）；deps = 注入的兄弟函数依赖。
+// 先跳过参数区（参数可能含默认值花括号，如 flags = {}），从函数体 { 开始配平。
 function extract(name, deps) {
   const start = html.indexOf("function " + name);
   assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  const open = html.indexOf("{", start);
+  let i = html.indexOf("(", start);
+  assert.ok(i !== -1, name + " 函数缺少参数表");
+  let pdepth = 0;
+  for (; i < html.length; i++) {
+    if (html[i] === "(") pdepth++;
+    else if (html[i] === ")") { pdepth--; if (pdepth === 0) break; }
+  }
+  const open = html.indexOf("{", i);
   assert.ok(open !== -1, name + " 函数体缺少左花括号");
   let depth = 0;
-  for (let i = open; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
+  for (let j = open; j < html.length; j++) {
+    if (html[j] === "{") depth++;
+    else if (html[j] === "}") {
       depth--;
       if (depth === 0) {
-        const fnSrc = html.slice(start, i + 1);
+        const fnSrc = html.slice(start, j + 1);
         if (deps && Object.keys(deps).length) {
           return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
             ...Object.values(deps)
@@ -45,13 +53,18 @@ const pdfFilterEntries = extract("pdfFilterEntries", { pdfSubdir });
 const pdfSortEntries = extract("pdfSortEntries", { pdfSubdir });
 const pdfStats = extract("pdfStats");
 const pdfStatsText = extract("pdfStatsText", { formatSize });
-const pdfRowHTML = extract("pdfRowHTML", { esc, formatSize, pdfSubdir, formatMtime });
+const pdfBadgeTags = extract("pdfBadgeTags");
+const pdfRowHTML = extract("pdfRowHTML", { esc, formatSize, pdfSubdir, formatMtime, pdfBadgeTags });
 const pdfChipRowHTML = extract("pdfChipRowHTML", { esc });
 // 工单 03：详情弹窗（pdfPagesText 先于 pdfDetailHTML 提取）
 const pdfEncodedPath = extract("pdfEncodedPath");
 const pdfPagesUrl = extract("pdfPagesUrl", { pdfEncodedPath });
 const pdfPagesText = extract("pdfPagesText", { esc });
-const pdfDetailHTML = extract("pdfDetailHTML", { esc, formatSize, formatMtime, pdfSubdir, pdfPagesText });
+const pdfDetailHTML = extract("pdfDetailHTML", { esc, formatSize, formatMtime, pdfSubdir, pdfPagesText, pdfBadgeTags });
+// 工单 04：数据健康（pdfBroken 先于 pdfDupGroups/pdfHealth 提取）
+const pdfBroken = extract("pdfBroken");
+const pdfDupGroups = extract("pdfDupGroups");
+const pdfHealth = extract("pdfHealth", { pdfBroken, pdfDupGroups });
 
 // 样例：跨批次 + 批次内子目录 + 0 字节损坏（3/04 轮才警示，此处只当普通数据）
 const pdfs = [
@@ -251,4 +264,91 @@ test("pdfDetailHTML 页数成功 / 无法读取两态渲染；HTML 转义生效"
   assert.ok(pdfDetailHTML(pdfs[1], "error").includes("无法读取"), "400 态");
   const amp = pdfDetailHTML({ rel_path: "批/A&B.pdf", name: "A&B.pdf", batch: "批", size_bytes: 3, mtime: 1 }, 4);
   assert.ok(amp.includes("A&amp;B.pdf"), "文件名 & 应转义");
+});
+
+// ================= 数据健康（工单 04）：pdfBroken / pdfDupGroups / pdfHealth =================
+test("pdfBroken 判据：size_bytes === 0 为损坏，>0 非损坏", () => {
+  assert.equal(pdfBroken({ size_bytes: 0 }), true);
+  assert.equal(pdfBroken({ size_bytes: 1 }), false);
+  assert.equal(pdfBroken({ size_bytes: "0" }), true, "字符串 0 也判损坏（防御宽松，配套 Number 防护）");
+  assert.equal(pdfBroken({}), false);
+  assert.equal(pdfBroken({ size_bytes: null }), false, "null 不判损坏（缺失字段≠空文件）");
+});
+
+test("pdfBadgeTags 徽章拼接：损坏/重复独立开关，双 false = 空串", () => {
+  assert.ok(pdfBadgeTags(true, false).includes("⚠ 损坏") && !pdfBadgeTags(true, false).includes("疑似重复"));
+  assert.ok(pdfBadgeTags(false, true).includes("⚠ 疑似重复") && !pdfBadgeTags(false, true).includes("损坏"));
+  assert.ok(pdfBadgeTags(true, true).includes("⚠ 损坏") && pdfBadgeTags(true, true).includes("⚠ 疑似重复"));
+  assert.equal(pdfBadgeTags(false, false), "", "无标注 = 空串（行/详情共用）");
+});
+
+test("pdfDupGroups 判据：同名（大小写不敏感）+ 同大小 + 大小>0，组内 ≥2 成员", () => {
+  const list = [
+    { name: "A.pdf", size_bytes: 10, rel_path: "批1/A.pdf" },
+    { name: "a.pdf", size_bytes: 10, rel_path: "批2/A.pdf" },   // 大小写不敏感 + 同大小 → 同组
+    { name: "A.pdf", size_bytes: 20, rel_path: "批3/A.pdf" },   // 同名不同大小 = 版本差异，不判
+    { name: "B.pdf", size_bytes: 0, rel_path: "批1/B.pdf" },
+    { name: "b.pdf", size_bytes: 0, rel_path: "批2/B.pdf" },    // 0 字节归损坏，不参与重复
+    { name: "C.pdf", size_bytes: 5, rel_path: "批1/C.pdf" },    // 单成员不判
+  ];
+  const groups = pdfDupGroups(list);
+  assert.equal(groups.length, 1, "唯一重复组");
+  assert.equal(groups[0].name, "A.pdf");
+  assert.equal(groups[0].size, 10);
+  assert.equal(groups[0].count, 2);
+  assert.deepEqual(groups[0].paths, ["批1/A.pdf", "批2/A.pdf"], "组内成员 = 原输入序（稳定）");
+});
+
+test("pdfDupGroups 空数组 / 单成员 / 输入序稳定", () => {
+  assert.deepEqual(pdfDupGroups([]), []);
+  const one = [{ name: "X.pdf", size_bytes: 3, rel_path: "p/X.pdf" }];
+  assert.deepEqual(pdfDupGroups(one), []);
+  const three = [
+    { name: "z.pdf", size_bytes: 9, rel_path: "a/z.pdf" },
+    { name: "z.pdf", size_bytes: 9, rel_path: "b/z.pdf" },
+    { name: "z.pdf", size_bytes: 9, rel_path: "c/z.pdf" },
+  ];
+  const groups = pdfDupGroups(three);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].count, 3);
+  assert.deepEqual(groups[0].paths, ["a/z.pdf", "b/z.pdf", "c/z.pdf"], "组成员保持输入序");
+});
+
+test("pdfHealth 全量派生：dupPaths 集合 + broken 集合（对偶 refDanglingAnchors）", () => {
+  const mockPdfs = [
+    { name: "B.pdf", size_bytes: 0, rel_path: "批1/B.pdf" },
+    { name: "b.pdf", size_bytes: 0, rel_path: "批2/b.pdf" },       // 损坏两份（非重复）
+    { name: "A.pdf", size_bytes: 7, rel_path: "批1/A.pdf" },
+    { name: "A.pdf", size_bytes: 7, rel_path: "批2/A.pdf" },       // 重复组
+    { name: "C.pdf", size_bytes: 7, rel_path: "批1/C.pdf" },       // 健康
+  ];
+  const h = pdfHealth(mockPdfs);
+  assert.equal(h.dupGroups.length, 1);
+  assert.ok(h.dupPaths.has("批1/A.pdf") && h.dupPaths.has("批2/A.pdf"), "重复组成员进 dupPaths");
+  assert.ok(h.broken.has("批1/B.pdf") && h.broken.has("批2/b.pdf"), "0 字节进 broken");
+  assert.equal(h.broken.size, 2);
+  assert.ok(!h.dupPaths.has("批1/B.pdf"), "损坏文件不属重复组");
+  assert.ok(!h.dupPaths.has("批1/C.pdf"), "健康文件不属于任何组");
+});
+
+test("pdfRowHTML 健康徽章：f.isBroken / f.isDup 谓词 → ⚠ 徽章；无谓词不标注", () => {
+  // 判据谓词命中场景：size 0（损坏）+ rel_path 命中（重复）
+  const p = { name: "A.pdf", rel_path: "批/A.pdf", batch: "批", size_bytes: 0, mtime: 1 };
+  const fAll = { isBroken: pdfBroken, isDup: (x) => x.rel_path === "批/A.pdf" };
+  const row = pdfRowHTML(p, fAll);
+  assert.ok(row.includes("⚠ 损坏"), "损坏徽章（谓词命中）");
+  assert.ok(row.includes("⚠ 疑似重复"), "重复徽章（谓词命中）");
+  const none = pdfRowHTML(p, {});
+  assert.ok(!none.includes("⚠"), "无谓词 = 无徽章（不标注）");
+  const fBrokenOnly = { isBroken: pdfBroken, isDup: null };
+  const row2 = pdfRowHTML(p, fBrokenOnly);
+  assert.ok(row2.includes("⚠ 损坏") && !row2.includes("疑似重复"), "两徽章正交（isDup null 不标）");
+});
+
+test("pdfDetailHTML 健康徽章：flags={broken,dup} 标注；缺省不标注", () => {
+  const p = { name: "A.pdf", rel_path: "批/A.pdf", batch: "批", size_bytes: 0, mtime: 1 };
+  assert.ok(pdfDetailHTML(p, null, { broken: true, dup: false }).includes("⚠ 损坏"), "损坏标注");
+  assert.ok(pdfDetailHTML(p, null, { broken: false, dup: true }).includes("⚠ 疑似重复"), "重复标注");
+  assert.ok(!pdfDetailHTML(p, null).includes("⚠"), "缺省 flags = 不标注（03 兼容）");
+  assert.ok(!pdfDetailHTML(p, null, {}).includes("⚠"), "空 flags = 不标注");
 });
