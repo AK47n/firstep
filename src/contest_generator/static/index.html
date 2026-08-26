@@ -1614,7 +1614,7 @@
           <span class="muted">没有工具链时手动粘贴 Keil / CCS 编译报错，AI 逐条修复并直接写回工程文件；写回前自动备份到输出目录外，可一键回滚。</span>
         </div>
         <textarea id="fix-errors-text" rows="8" style="margin-top:8px" placeholder="粘贴编译报错全文（UV4：..\out\code\main.c(123): error #20: …；CCS / armclang：code/sub/mod.c:45: error: …）…"></textarea>
-        <div id="fix-errors-msg" class="error"></div>
+        <div id="fix-errors-msg-manual" class="error"></div>
       </div>
     </div>
 
@@ -5740,12 +5740,12 @@ $("btn-fix-continue").addEventListener("click", continueFixCenter);
 $("btn-fix-continue").textContent = "继续修复（再来 " + FIX_MAX_ROUNDS + " 轮）";
 
 $("btn-fix-errors").addEventListener("click", async () => {
-  $("fix-errors-msg").textContent = "";
+  $("fix-errors-msg-manual").textContent = "";
   $("fix-status").textContent = "";
   const errorText = $("fix-errors-text").value.trim();
-  if (!errorText) { $("fix-errors-msg").textContent = "请先粘贴编译报错全文"; return; }
+  if (!errorText) { $("fix-errors-msg-manual").textContent = "请先粘贴编译报错全文"; return; }
   const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
-  if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
+  if (!outputDir) { $("fix-errors-msg-manual").textContent = "请先生成工程（或填写输出目录）"; return; }
   $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
   clearFixLLMTelemetry();
   lastFix = null;
@@ -5759,7 +5759,7 @@ $("btn-fix-errors").addEventListener("click", async () => {
   try {
     await runFixOnce(errorText, outputDir);
   } catch (e) {
-    $("fix-errors-msg").textContent = e.message;
+    $("fix-errors-msg-manual").textContent = e.message;
   } finally {
     fixSetBusy(false);
   }
