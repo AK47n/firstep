@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ccfd1d8e349668c132661359f9d8e3c4c376f3b4 -->
+<!-- changelog-auto: last-commit=27abee7e31aea6f74a091dba68ea90bb310df99c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -25,6 +25,7 @@
 - 13:11 数据：参考库锚定治理——MPU6050 姿态解算（DMP 库）锚定到套件 MPU6050（用户确认，词表现有值）；审计决策表同步更新；CHANGELOG 机器行核定
 - 13:19 工单03 轻量详情弹窗：页数懒取+复制路径+评审修复（pdfEncodedPath提取/单Map memo/handle附status/ref-detail-scroll复用）
 - 13:21 赛题条目补图注
+- 13:22 赛题条目补图注
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
