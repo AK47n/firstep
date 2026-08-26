@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f3f164a402f65dff6b7bb195c0ec2bd64573c090 -->
+<!-- changelog-auto: last-commit=b06e5f653b10cdb2e66c1c5dacf42fea6f2bc12e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -51,6 +51,7 @@
 - 20:26 工单05 评审回执：CONTEXT.md 母版行补内容端点三态语义（清单外/穿越路径、平台不存在、白名单内文件缺失均 400 中文）——spec 轴 minor 建议落地
 - 21:04 前端纯函数 ES 模块化第 1 批（core/env/btn-icon/platform/code 五模块 + 主体脚本 module 化）
 - 21:09 前端纯函数 ES 模块化第 2 批（pdf 域 19 函数迁入 fx/pdf.js）
+- 21:16 前端纯函数 ES 模块化第 3 批（reference 域 15 函数迁入 fx/reference.js）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
