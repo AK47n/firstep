@@ -1,0 +1,88 @@
+// ui/generate-readiness.js — 生成页 · 就绪检查面板（工单 a3-readiness-check/01-02：
+// 判据与 btn-generate 前置校验同源——「检查单结论」与「点了生成被拦的提示」
+// 永不吵架）DOM 胶水（阶段 2 工单 19，源自 index.html 检查能否生成节）。
+//
+// 簇体全量迁入：readinessState（判据单源——btn-generate 监听器（host）与
+// refreshGenOverview（generate-steps）各自 readiness 判定共用）/ renderReadinessPanel /
+// refreshReadinessPanel / initReadinessCheck（按钮 + 容器事件委托：.rc-go 定位 /
+// .rc-recommend 一键跑推荐——与「让 AI 推荐」同一入口）。纯件在 fx/readiness.js
+//（工单 08 迁）。
+// 状态读：A 簇 generate-recommend（chosenPlatform / selectedSlugs /
+// setRecommendClarifications / startRecommend）+ ui/step-state.js（stepDoneSet /
+// stepCard——工单 12 拥有；issue 所述 generate-steps.js 不实）+
+// ui/generate-core.js（desktopTopicOutputEnabled）。
+// 跨簇读方：generate-steps.js 经静态 import 调 readinessState（工单 18 的
+// setStepsDeps 接缝已由本票取代）；host 经顶部 import 调 readinessState（btn-generate
+// 监听器）/ refreshReadinessPanel（setOnStepChange 回调）/ initReadinessCheck（启动区）。
+import { $ } from "/js/app.js";
+import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
+import { stepDoneSet, stepCard } from "/js/ui/step-state.js";
+import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend } from "/js/ui/generate-recommend.js";
+import { desktopTopicOutputEnabled } from "/js/ui/generate-core.js";
+
+// ---------------------------------------------------------------------------
+// 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验
+// 同源（单一事实源，先例 collectBindings/pin-verdict-seam/01）——「检查单结论」
+// 与「点了生成被拦的提示」永不吵架。渲染走纯函数（node:test 直抽直测），
+// 交互在 initReadinessCheck 用容器事件委托。
+// ---------------------------------------------------------------------------
+// 已迁至 static/js/fx/readiness.js（工单 08）：generateReadinessChecks / readinessSoftChecks /
+// readinessRowHTML / readinessRowsHTML。
+function readinessState() {
+  return {
+    chosenPlatform: chosenPlatform,
+    selectedSlugs: selectedSlugs,
+    problem: $("problem").value.trim(),
+    desktopOutput: desktopTopicOutputEnabled(),
+    outputDir: $("output-dir").value.trim(),
+    recommended: stepDoneSet.has(5),
+    hasMainC: !!$("main-c").value.trim(),
+  };
+}
+function renderReadinessPanel() {
+  const box = $("readiness-check");
+  if (!box || box.classList.contains("hidden")) return;
+  const state = readinessState();
+  // 一键跑推荐需要题面：题面缺时不给自动按钮（引导先去第 1 步）
+  const recommendEnabled = !!state.problem;
+  box.innerHTML =
+    readinessRowsHTML(generateReadinessChecks(state), { recommendEnabled })
+    + readinessRowsHTML(readinessSoftChecks(state), { recommendEnabled: false });
+}
+function refreshReadinessPanel() {
+  renderReadinessPanel();
+}
+function initReadinessCheck() {
+  const btn = $("btn-readiness-check");
+  const box = $("readiness-check");
+  if (!btn || !box) return;
+  btn.addEventListener("click", () => {
+    box.classList.toggle("hidden");
+    if (!box.classList.contains("hidden")) renderReadinessPanel();
+  });
+  // 事件委托：定位按钮 / 一键跑推荐（与「让 AI 推荐」同一入口）
+  box.addEventListener("click", (e) => {
+    const go = e.target.closest(".rc-go");
+    if (go) {
+      const card = stepCard(parseInt(go.dataset.step, 10));
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const rec = e.target.closest(".rc-recommend");
+    if (rec) {
+      const problem = $("problem").value.trim();
+      if (!problem) {
+        const card = stepCard(1);
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      setRecommendClarifications([]);
+      startRecommend(problem);
+    }
+  });
+}
+
+
+
+// ---- 本簇导出面（host / generate-steps 顶部 import 活绑定调用点） ----
+export { readinessState, renderReadinessPanel, refreshReadinessPanel, initReadinessCheck };
