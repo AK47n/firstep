@@ -1,52 +1,17 @@
-// 赛题详情弹窗纯函数单测（工单 topic-library-ui/04）：topicDetailHTML /
-// topicPagesHTML / topicPagesErrorHTML。extract 括号配平 + deps 注入范式。
+// 赛题详情弹窗纯函数单测（工单 frontend-es-modules/04）：topicDetailHTML /
+// topicPagesHTML / topicPagesErrorHTML。直接 import fx/topic.js。
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { esc } from "../../src/contest_generator/static/js/fx/core.js";
+import {
+  topicDanglingGroups, topicHasNotes, topicHealthText, topicDetailHTML,
+  topicPagesHTML, topicPagesErrorHTML,
+} from "../../src/contest_generator/static/js/fx/topic.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
-
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  let i = html.indexOf("(", start);
-  assert.ok(i !== -1, name + " 函数缺少参数表");
-  let pdepth = 0;
-  for (; i < html.length; i++) {
-    if (html[i] === "(") pdepth++;
-    else if (html[i] === ")") { pdepth--; if (pdepth === 0) break; }
-  }
-  const open = html.indexOf("{", i);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let j = open; j < html.length; j++) {
-    if (html[j] === "{") depth++;
-    else if (html[j] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, j + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const topicDanglingGroups = extract("topicDanglingGroups");
-const topicHasNotes = extract("topicHasNotes");
-const topicHealthText = extract("topicHealthText", { topicDanglingGroups });
-const topicDetailHTML = extract("topicDetailHTML", { topicDanglingGroups, topicHealthText, topicHasNotes, esc });
-const topicPagesHTML = extract("topicPagesHTML");
-const topicPagesErrorHTML = extract("topicPagesErrorHTML", { esc });
 
 const VOCAB = { "attitude-hold": "航向保持 / 姿态传感器", "gray-track": "8 路灰度传感器驱动" };
 const ENTRY = {
