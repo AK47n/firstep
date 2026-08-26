@@ -9,6 +9,13 @@ export function pdfEncodedPath(relPath) {
   return relPath.split("/").map(encodeURIComponent).join("/");
 }
 
+// pdfFileUrl(relPath)：素材库文件直开 URL（段编码 + 库相对路径）。
+// 工单 09 单源修正：05 迁移时主体函数被删而 fx/pdf.js 未补导出，题库
+// archive 链接调用点悬空；本函数下沉为纯函数，ui/pdf.js / ui/topic.js 共用。
+export function pdfFileUrl(relPath) {
+  return "/api/pdfs/" + pdfEncodedPath(relPath);
+}
+
 // pdfSubdir(relPath)：批次内子目录（rel 去掉批次段与文件名；空 = 批次根）
 export function pdfSubdir(relPath) {
   const parts = String(relPath || "").split("/");
