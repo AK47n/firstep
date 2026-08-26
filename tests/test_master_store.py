@@ -23,6 +23,7 @@ from contest_generator.master_store import (
     get_master,
     import_master,
     list_masters,
+    master_key_files,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.report import (
@@ -325,6 +326,114 @@ def test_delete_master_removes_dir_and_meta(fake_masters_dir, tmp_path):
 def test_delete_master_missing_raises(fake_masters_dir):
     with pytest.raises(MasterError, match="不存在"):
         delete_master(fake_masters_dir, "stm32")
+
+
+# ---------------------------------------------------------------------------
+# 关键文件目录（工单 master-library-ui/01）：白名单单源 + 磁盘实况
+# ---------------------------------------------------------------------------
+
+
+def _make_stm32_master_with_key_files(masters_dir: Path) -> None:
+    """手工搭一个与真实母版同布局的关键文件目录（stm32：根级 main.c /
+    pin_config.h / led_instances.h + user/Project.uvprojx）。
+
+    不经 import_master：假 .uvprojx 的源码引用是根级相对路径（.\main.c 等），
+    真实布局下用户子目录会触发结构校验的引用缺失——白名单目录函数只吃目录
+    实况，不依赖元数据与结构校验。
+    """
+    master = masters_dir / "stm32"
+    (master / "user").mkdir(parents=True)
+    (master / "main.c").write_text("/* master's old main */\n", encoding="utf-8")
+    (master / "pin_config.h").write_text("/* board pins */\n", encoding="utf-8")
+    (master / "led_instances.h").write_text("/* led channels */\n", encoding="utf-8")
+    (master / "user" / "Project.uvprojx").write_text("/* keil */\n", encoding="utf-8")
+
+
+def test_master_key_files_stm32_catalog_with_exists_and_size(fake_masters_dir, tmp_path):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+
+    infos = master_key_files(fake_masters_dir, PLATFORM_STM32)
+
+    assert [i.path for i in infos] == [
+        "main.c",
+        "pin_config.h",
+        "led_instances.h",
+        "user/Project.uvprojx",
+    ]
+    assert [i.label for i in infos] == [
+        "模板 main.c",
+        "板级引脚宏",
+        "LED 多实例通道宏",
+        "Keil 工程配置",
+    ]
+    assert all(i.exists for i in infos)
+    assert all(i.size_bytes > 0 for i in infos)
+    assert infos[0].size_bytes == (fake_masters_dir / "stm32" / "main.c").stat().st_size
+
+
+def test_master_key_files_missing_file_flags_false(fake_masters_dir, tmp_path):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "pin_config.h").unlink()
+
+    infos = master_key_files(fake_masters_dir, PLATFORM_STM32)
+
+    assert not infos[1].exists
+    assert infos[1].size_bytes == 0
+
+
+def test_master_key_files_mspm0_catalog(fake_masters_dir, tmp_path):
+    master = make_fake_ccs_theia_master_project(tmp_path / "theia_src")
+    (master / ".cproject").write_text("/* ccs config */\n", encoding="utf-8")
+    import_master(fake_masters_dir, PLATFORM_MSPM0, master)
+
+    infos = master_key_files(fake_masters_dir, PLATFORM_MSPM0)
+
+    assert [i.path for i in infos] == ["main.c", "mspm0.syscfg", ".cproject"]
+    assert all(i.exists for i in infos)
+    assert infos[2].label == "CCS 工程配置"
+
+
+def test_master_key_files_mspm0_whitelist_path_not_present_false(fake_masters_dir, tmp_path):
+    """假 Theia 母版只写 project.cproject（非白名单点文件 .cproject）→ 缺失标注。"""
+    import_master(
+        fake_masters_dir,
+        PLATFORM_MSPM0,
+        make_fake_ccs_theia_master_project(tmp_path / "theia_src"),
+    )
+
+    infos = master_key_files(fake_masters_dir, PLATFORM_MSPM0)
+
+    assert infos[2].path == ".cproject"
+    assert not infos[2].exists
+
+
+def test_master_key_files_platform_not_in_library_raises(fake_masters_dir):
+    with pytest.raises(MasterError, match="不存在"):
+        master_key_files(fake_masters_dir, PLATFORM_STM32)
+
+
+def test_master_key_files_unknown_platform_raises(fake_masters_dir):
+    (fake_masters_dir / "vxworks").mkdir(parents=True)
+
+    with pytest.raises(MasterError, match="未知平台"):
+        master_key_files(fake_masters_dir, "vxworks")
+
+
+def test_master_key_files_missing_catalog_raises(fake_masters_dir, monkeypatch):
+    """已知平台没配白名单 = 开发错误（platforms.py 与白名单不同模块，漏配是
+    真实风险）：大声失败，绝不静默回空清单误导浏览（评审修正）。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    monkeypatch.setattr(
+        "contest_generator.master_store.MASTER_KEY_FILES", {PLATFORM_MSPM0: ()}
+    )
+
+    with pytest.raises(MasterError, match="白名单未配置"):
+        master_key_files(fake_masters_dir, PLATFORM_STM32)
+
+
+def test_master_key_files_rejects_path_traversal(fake_masters_dir):
+    with pytest.raises(MasterError, match="非法平台名"):
+        master_key_files(fake_masters_dir, "../evil")
 
 
 # ---------------------------------------------------------------------------

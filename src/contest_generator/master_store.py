@@ -55,6 +55,47 @@ class MasterError(ValueError):
 
 
 @dataclass(frozen=True)
+class KeyFileInfo:
+    """母版关键文件的浏览目录项（工单 master-library-ui/01）。
+
+    浏览列表每条带出：路径（相对母版根，正斜杠）/ 中文标签 / 磁盘实况
+    （存在与否 + 字节数，一次算好，前端不按条回查——对偶 topic 轮 health 先例）。
+    白名单 = MASTER_KEY_FILES（单一出处，内容端点复用），清单外文件不可见。
+    """
+
+    path: str
+    label: str
+    size_bytes: int  # 文件缺失 = 0
+    exists: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "label": self.label,
+            "size_bytes": self.size_bytes,
+            "exists": self.exists,
+        }
+
+
+# 母版关键文件白名单（平台 → (rel_path, label) 有序元组）：浏览清单与内容端点
+# 共用的单一出处。母版是生成根（模板 main.c / 板级配置 / 工程配置文件），
+# 只读预览、不开放任意路径（工单 master-library-ui/01，方案 A 七条）。
+MASTER_KEY_FILES: dict[str, tuple[tuple[str, str], ...]] = {
+    PLATFORM_STM32: (
+        ("main.c", "模板 main.c"),
+        ("pin_config.h", "板级引脚宏"),
+        ("led_instances.h", "LED 多实例通道宏"),
+        ("user/Project.uvprojx", "Keil 工程配置"),
+    ),
+    PLATFORM_MSPM0: (
+        ("main.c", "模板 main.c"),
+        ("mspm0.syscfg", "SysConfig 配置"),
+        (".cproject", "CCS 工程配置"),
+    ),
+}
+
+
+@dataclass(frozen=True)
 class StructureAnalysis:
     """入库时的结构分析结果。"""
 
@@ -90,6 +131,31 @@ class MasterMeta:
 # ---------------------------------------------------------------------------
 # 母版库：入库（结构分析 + 可更换）、浏览、删除
 # ---------------------------------------------------------------------------
+
+
+def master_key_files(masters_dir: Path, platform: str) -> tuple[KeyFileInfo, ...]:
+    """平台母版的关键文件目录（浏览列表用）：按白名单 MASTER_KEY_FILES 逐条
+    报磁盘实况（存在 / 字节数），清单外文件不可见——白名单墙，无任意路径面。
+
+    平台不在库（目录不存在）→ MasterError 与 get_master 同文案；未知平台
+    （目录在但不在词表）→ 大声失败（与 analyze_structure 同口径）。
+    """
+    master_dir = master_project_dir(masters_dir, platform)  # 平台名合法性校验
+    if not master_dir.is_dir():
+        raise MasterError(f"母版 {platform!r} 不存在")
+    catalog = MASTER_KEY_FILES.get(platform)
+    if catalog is None:
+        _validate_known_platform(platform)  # 未知平台大声失败
+        # 已知平台却没配白名单 = 开发错误（platforms.py 与白名单不同模块，
+        # 漏配是真实风险）：大声失败，绝不静默回空清单误导浏览
+        raise MasterError(f"平台 {platform!r} 的关键文件白名单未配置")
+    infos: list[KeyFileInfo] = []
+    for rel_path, label in catalog:
+        path = master_dir / rel_path
+        exists = path.is_file()
+        size = path.stat().st_size if exists else 0
+        infos.append(KeyFileInfo(path=rel_path, label=label, size_bytes=size, exists=exists))
+    return tuple(infos)
 
 
 def master_project_dir(masters_dir: Path, platform: str) -> Path:
