@@ -186,5 +186,105 @@ check("清空过滤恢复全量", await Eval(`(async () => {
   return document.querySelectorAll('#pdf-rows tr').length === (pdfCache || []).length;
 })()`));
 
+// ================= 工单 03：轻量详情弹窗（页数懒取 + 复制相对路径） =================
+const d03 = await Eval(`(async () => {
+  const pdf = (pdfCache || []).find((p) => p.name === 'TB6612FNG电机驱动芯片数据手册.pdf')
+    || (pdfCache || [])[0];
+  if (!pdf) return null;
+  const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
+    .find((b) => b.dataset.pdfDetail === pdf.rel_path);
+  if (!btn) return null;
+  btn.click();
+  await new Promise((r) => setTimeout(r, 800)); // 页数懒取
+  const overlay = document.querySelector('.ref-files-overlay');
+  if (!overlay) return { open: false };
+  const text = overlay.textContent;
+  const pagesText = overlay.querySelector('[data-pdf-pages]')?.textContent || '';
+  const hasCopyMsg = !!overlay.querySelector('.pdf-detail-copy-msg');
+  overlay.querySelector('.ref-files-close').click(); // × 关闭
+  await new Promise((r) => setTimeout(r, 100));
+  const closedByX = !document.querySelector('.ref-files-overlay');
+  return { open: true, hasPath: text.includes(pdf.rel_path), pagesText, hasCopyMsg, closedByX, name: pdf.name };
+})()`);
+check("详情弹窗打开（行「详情」→ 遮罩弹窗）", !!(d03 && d03.open), d03 && d03.name);
+check("详情含完整相对路径", !!(d03 && d03.hasPath));
+check("页数懒取：真实文件成功显示 N 页",
+  !!(d03 && d03.pagesText.includes("页") && !d03.pagesText.includes("无法读取") && !d03.pagesText.includes("读取中")),
+  d03 && d03.pagesText);
+check("操作区含复制按钮消息槽", !!(d03 && d03.hasCopyMsg));
+check("× 关闭弹窗", !!(d03 && d03.closedByX));
+
+// 损坏三态验证：素材库现无 0 字节文件（历史 3 份均已修复为真 PDF），
+// 临时创建 0 字节文件走真实链路（写入/清理由本脚本负责，不留痕迹）。
+import { writeFileSync, unlinkSync } from "node:fs";
+import { resolve } from "node:path";
+const smokeBatch = await Eval(`(pdfCache[0] || {}).batch`);
+const brokenRel = smokeBatch + "/zz-smoke-broken.pdf";
+const brokenAbs = resolve("sources/materials", brokenRel);
+let brokenCreated = false;
+try {
+  if (smokeBatch) { // 空防御：库为空（无批次）时跳过损坏专测，不写盘
+    writeFileSync(brokenAbs, "");
+    brokenCreated = true;
+    const d03b = await Eval(`(async () => {
+      await loadPdfs(); // 重拉全量（含临时损坏文件）
+      await new Promise((r) => setTimeout(r, 300));
+      const pdf = (pdfCache || []).find((p) => p.name === 'zz-smoke-broken.pdf');
+      if (!pdf) return { found: false };
+      const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
+        .find((b) => b.dataset.pdfDetail === pdf.rel_path);
+      if (!btn) return { found: false };
+      btn.click();
+      await new Promise((r) => setTimeout(r, 800));
+      const overlay = document.querySelector('.ref-files-overlay');
+      const pagesText = overlay?.querySelector('[data-pdf-pages]')?.textContent || '';
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 100));
+      const closedByEsc = !document.querySelector('.ref-files-overlay');
+      return { found: true, pagesText, closedByEsc };
+    })()`);
+    check("0 字节损坏文件详情 → 无法读取三态", !!(d03b && d03b.found && d03b.pagesText.includes("无法读取")), d03b && d03b.pagesText);
+    check("Esc 关闭弹窗", !!(d03b && d03b.closedByEsc));
+    const d03b2 = await Eval(`(async () => {
+      const pdf = (pdfCache || []).find((p) => p.name === 'zz-smoke-broken.pdf');
+      if (!pdf) return null;
+      const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
+        .find((b) => b.dataset.pdfDetail === pdf.rel_path);
+      if (!btn) return null;
+      btn.click();
+      await new Promise((r) => setTimeout(r, 150));
+      const overlay = document.querySelector('.ref-files-overlay');
+      if (!overlay) return null;
+      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 100));
+      return { closed: !document.querySelector('.ref-files-overlay') };
+    })()`);
+    check("遮罩点击关闭弹窗", !!(d03b2 && d03b2.closed));
+  }
+} finally {
+  if (brokenCreated) { try { unlinkSync(brokenAbs); } catch {} }
+  await Eval(`loadPdfs().catch(() => {})`); // 清理后列表即时回到真实全量
+}
+
+const d03c = await Eval(`(async () => {
+  const pdf = (pdfCache || [])[0];
+  if (!pdf) return null;
+  const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
+    .find((b) => b.dataset.pdfDetail === pdf.rel_path);
+  if (!btn) return null;
+  btn.click();
+  await new Promise((r) => setTimeout(r, 300));
+  const overlay = document.querySelector('.ref-files-overlay');
+  const copyBtn = overlay?.querySelector('[data-pdf-copy]');
+  if (!overlay || !copyBtn) return null;
+  copyBtn.click();
+  await new Promise((r) => setTimeout(r, 400));
+  const msg = overlay.querySelector('.pdf-detail-copy-msg')?.textContent || '';
+  overlay.querySelector('.ref-files-close').click();
+  return { msg };
+})()`);
+check("复制相对路径触发反馈（已复制或降级失败提示）",
+  !!(d03c && (d03c.msg === "已复制相对路径" || d03c.msg === "复制失败，请手动复制")), d03c && d03c.msg);
+
 console.log(failed ? `\n冒烟结果：${failed} 项失败` : "\n冒烟结果：全部通过");
 process.exit(failed ? 1 : 0);
