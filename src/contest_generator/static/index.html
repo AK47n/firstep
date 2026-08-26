@@ -1990,7 +1990,7 @@
     <div class="card">
       <h2>母版库（每平台一个）</h2>
       <table>
-        <thead><tr><th>平台</th><th>提炼来源</th><th>入库警告</th><th style="width:90px">操作</th></tr></thead>
+        <thead><tr><th>平台</th><th>提炼来源</th><th>入库警告</th><th style="width:150px">操作</th></tr></thead>
         <tbody id="master-rows"></tbody>
       </table>
       <div id="master-msg" class="error"></div>
@@ -9310,22 +9310,87 @@ $("btn-confirm").addEventListener("click", async () => {
   } finally { $("btn-confirm").disabled = false; }
 });
 
+// ===== 母版库表格（工单 master-library-ui/03）：增强行渲染 + 删除确认弹窗 =====
+// 交互逻辑下沉纯函数（extract 范式对偶 pdf* / ref* 系列），DOM 层只转发；
+// 详情按钮本轮先渲染占位，交互在工单 04 接入。
+
+let masterCache = [];
+
+// masterTableRowHTML(m)：母版库表格行纯函数——平台展示名（platform_label，
+// 缺省回退 platform）、提炼来源 join("、")、入库警告 join("；")、详情 + 删除
+// 按钮（data-master-detail / data-master-del）。m = /api/masters 条目。
+function masterTableRowHTML(m) {
+  return `<tr>
+    <td class="slug">${esc(m.platform_label || m.platform)}</td>
+    <td class="muted">${esc(m.sources.join("、") || "—")}</td>
+    <td class="muted">${esc(m.warnings.join("；") || "—")}</td>
+    <td>
+      <button data-master-detail="${esc(m.platform)}">详情</button>
+      <button class="danger" data-master-del="${esc(m.platform)}">删除</button>
+    </td>
+  </tr>`;
+}
+
+// masterDeleteConfirmHTML(m)：删除确认弹窗内容纯函数——平台展示名 + 元数据
+// （平台标识 / 提炼来源 / 关键文件数）+ 不可恢复警告 + 确认/取消双钮。
+function masterDeleteConfirmHTML(m) {
+  const files = (m.key_files || []).length;
+  return `<div class="ref-detail-meta">
+    <div class="ref-detail-title">${esc(m.platform_label || m.platform)}</div>
+    <div class="ref-detail-row"><span class="ref-detail-k">平台标识</span><span class="mono">${esc(m.platform)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">提炼来源</span><span>${esc(m.sources.join("、") || "—")}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">关键文件</span><span>${files} 项预览清单</span></div>
+    <div class="ref-detail-note">删除后该平台母版目录与元数据一并移除，<strong>不可恢复</strong>——该平台的生成将找不到母版。确认删除？</div>
+  </div>
+  <div class="pdf-detail-actions">
+    <button type="button" class="danger" data-master-del-confirm>确认删除</button>
+    <button type="button" data-master-del-cancel>取消</button>
+  </div>`;
+}
+
+// openMasterDeleteConfirm(platform)：删除确认弹窗（对偶 pdf 轮 trash 确认：
+// 复用 .ref-files-overlay 遮罩 + Esc / × / 点遮罩关闭；确认 → 既有 DELETE
+// 端点 → toast + 重拉列表；失败 = 弹窗保留 + toast 错误，可重试或取消）。
+function openMasterDeleteConfirm(platform) {
+  const m = (masterCache || []).find((x) => x.platform === platform);
+  if (!m) { toast("info", "未找到平台 " + platform + "（列表可能已刷新）"); return; }
+  document.querySelectorAll(".ref-files-overlay").forEach((o) => o.remove());
+  const overlay = document.createElement("div");
+  overlay.className = "ref-files-overlay";
+  overlay.innerHTML = `<div class="ref-files-modal">
+    <div class="ref-files-head"><strong>删除母版？</strong><button class="ref-files-close" title="关闭">×</button></div>
+    <div class="ref-detail-scroll">${masterDeleteConfirmHTML(m)}</div>
+  </div>`;
+  const close = () => overlay.remove();
+  overlay.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  overlay.querySelector("[data-master-del-cancel]").addEventListener("click", close);
+  const confirmBtn = overlay.querySelector("[data-master-del-confirm]");
+  confirmBtn.addEventListener("click", async () => {
+    confirmBtn.disabled = true;
+    try {
+      await apiDelete(`/api/masters/${encodeURIComponent(m.platform)}`);
+      close();
+      toast("ok", "已删除平台 " + m.platform + " 的母版");
+      loadMasters();
+    } catch (e) {
+      toast("error", e.message);   // 失败：弹窗保留，用户可重试或取消
+      confirmBtn.disabled = false;
+    }
+  });
+  document.body.appendChild(overlay);
+}
+
 async function loadMasters() {
   try {
     const masters = await apiGet("/api/masters");
-    $("master-rows").innerHTML = masters.map((m) => `
-      <tr>
-        <td class="slug">${esc(m.platform)}</td>
-        <td class="muted">${esc(m.sources.join("、") || "—")}</td>
-        <td class="muted">${esc(m.warnings.join("；") || "—")}</td>
-        <td><button class="danger" data-del="${esc(m.platform)}">删除</button></td>
-      </tr>`).join("");
-    $("master-rows").querySelectorAll("[data-del]").forEach((b) =>
-      b.addEventListener("click", async () => {
-        if (!confirm("删除平台 " + b.dataset.del + " 的母版？")) return;
-        try { await apiDelete(`/api/masters/${encodeURIComponent(b.dataset.del)}`); loadMasters(); }
-        catch (e) { alert(e.message); }
-      }));
+    masterCache = masters;
+    $("master-rows").innerHTML = masters.map(masterTableRowHTML).join("");
+    $("master-rows").querySelectorAll("[data-master-del]").forEach((b) =>
+      b.addEventListener("click", () => openMasterDeleteConfirm(b.dataset.masterDel)));
     $("master-msg").textContent = "";
   } catch (e) { $("master-msg").textContent = e.message; }
 }
