@@ -452,8 +452,9 @@
   .lib-table thead th { background: var(--panel-2); }
   .lib-table td.slug { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
   .lib-table .desc-cell { max-width: 340px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  /* 悬空依赖警示（library-dangling-deps/04）：行内 ⚠ 警示标 */
-  .dangling-tag { color: var(--danger); cursor: help; font-size: 12px; margin-left: 2px; }
+  /* 悬空依赖警示（library-dangling-deps/04）：行内 ⚠ 警示标（.ref-dangling-tag 为
+     参考库「悬空锚定」同款标注——样式共享，语义各自解释） */
+  .dangling-tag, .ref-dangling-tag { color: var(--danger); cursor: help; font-size: 12px; margin-left: 2px; }
   /* 操作列（各库表最后一列）按钮不折行——窄列下"查看/删除"不换行成竖排 */
   table td:last-child { white-space: nowrap; }
   /* 模块库工具栏（library-toolbar/02）：搜索 / 排序 / 过滤 chips / 统计条。
@@ -470,7 +471,8 @@
   .lib-chip.on { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
   .lib-stats { margin: 8px 0 4px; font-size: 12.5px; color: var(--muted); }
   .lib-dangling-count { color: var(--danger); font-weight: 600; }
-  /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
+  /* 参考库悬空锚定计数红段（reference-library-ui/04）：与模块库同款式，独立命名空间 */
+  .ref-dangling-count { color: var(--danger); font-weight: 600; cursor: pointer; }  /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
      操作列加宽让查看/删除横排；长文本列按宽换行、体量列完整显示 */
   /* 赛题库表：固定列宽布局（同参考库模式）——长题面不再挤压编号/年份短列，
      操作列加宽保底 100px */
@@ -6797,14 +6799,15 @@ $("btn-add-module-submit").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 // —— 参考库表格精修（reference-library-ui/02）：过滤 / 排序 / 统计 / 行渲染
 // 纯函数组（tests/js 可注入，对偶模块库 lib-* 系列）——
-// refFilterEntries(entries, f)：f={q, platform, anchorKind}。q 大小写不敏感
-// 子串匹配标题 / 类型 / 锚定值 / 简介 / 任一文件名（四合一关键字）；
-// platform / anchorKind 空串 = 该维度不过滤。
+// refFilterEntries(entries, f)：f={q, platform, anchorKind, dangling, topicKeys,
+// kitVocab}。q 大小写不敏感子串匹配标题 / 类型 / 锚定值 / 简介 / 任一文件名
+// （四合一关键字）；platform / anchorKind 空串 = 该维度不过滤；dangling=true =
+// 只看悬空条目（与既有维度正交，词表数据来自 f.topicKeys / f.kitVocab）。
 function refFilterEntries(entries, f) {
   const q = String((f && f.q) || "").trim().toLowerCase();
   const platform = (f && f.platform) || "";
   const anchorKind = (f && f.anchorKind) || "";
-  return (entries || []).filter((e) => {
+  let out = (entries || []).filter((e) => {
     if (q) {
       const hay = [e.title, e.type,
         e.anchor_kind === "none" ? "" : e.anchor_value, e.description,
@@ -6814,6 +6817,36 @@ function refFilterEntries(entries, f) {
     if (platform && e.platform !== platform) return false;
     if (anchorKind && e.anchor_kind !== anchorKind) return false;
     return true;
+  });
+  if (f && f.dangling) {
+    out = refDanglingAnchors(out, f.topicKeys, f.kitVocab);
+  }
+  return out;
+}
+
+// refDanglingAnchors(entries, topicKeys, kitVocab)：悬空锚定体检（工单 04）。
+// 悬空 = 锚定值永远不命中和生成侧关联注入的判定（selection.py 按赛题 key /
+// 模块库 kit 词表逐值 search_references 子串匹配 + 平台过滤，匹配方向为
+// 词表值 in 锚定值）：
+// - topic 方向：库内不存在任何赛题 key 是锚定值的子串（key in anchor_value）；
+// - kit 方向：词表内不存在任何值是锚定值的子串（与生成侧同为子串语义——
+//   锚定值带词表值前后缀（如「ALX-套件-v2」）仍会被自动关联，不算悬空）；
+// - none 无此概念；数据集为空 = 对应方向跳过检查（零误报降级）。
+function refDanglingAnchors(entries, topicKeys, kitVocab) {
+  // 空 key / 空词表项不参与子串匹配（"" 是任何值的子串会误命中）；过滤后
+  // 无有效项 = 该方向数据缺失 → 降级不判定（零误报）
+  const tk = (topicKeys || []).filter((k) => String(k || "").length > 0);
+  const kv = (kitVocab || []).filter((k) => String(k || "").length > 0);
+  return (entries || []).filter((e) => {
+    const kind = e.anchor_kind;
+    const av = String(e.anchor_value || "");
+    if (kind === "topic" && tk.length) {
+      return !tk.some((k) => av.indexOf(k) !== -1);
+    }
+    if (kind === "kit" && kv.length) {
+      return !kv.some((k) => av.indexOf(k) !== -1);
+    }
+    return false;
   });
 }
 
@@ -6841,9 +6874,11 @@ function refSortEntries(entries, s) {
   return out;
 }
 
-// refStats(entries)：统计（对传入集合计算——统计条随过滤结果联动）。
-// platforms / anchorKinds 三键恒显（统计条固定口径）；totalBytes 求和。
-function refStats(entries) {
+// refStats(entries, ctx?)：统计（对传入集合计算——统计条随过滤结果联动）。
+// platforms / anchorKinds 三键恒显（统计条固定口径）；totalBytes 求和；
+// ctx={topicKeys,kitVocab} 可选——传入时按悬空锚定语义补 dangling 计数
+// （spec 契约：统计输出含悬空数；无 ctx / 词表缺失 = dangling 0，不误报）。
+function refStats(entries, ctx) {
   const list = entries || [];
   const platforms = { any: 0, stm32: 0, mspm0: 0 };
   const anchorKinds = { topic: 0, kit: 0, none: 0 };
@@ -6853,7 +6888,9 @@ function refStats(entries) {
     if (anchorKinds[e.anchor_kind] != null) anchorKinds[e.anchor_kind] += 1;
     totalBytes += Number(e.size_bytes || 0);
   }
-  return { total: list.length, platforms, anchorKinds, unanchored: anchorKinds.none, totalBytes };
+  const dangling = ctx
+    ? refDanglingAnchors(list, ctx.topicKeys, ctx.kitVocab).length : 0;
+  return { total: list.length, platforms, anchorKinds, unanchored: anchorKinds.none, totalBytes, dangling };
 }
 
 // refStatsText(stats)：统计条文案（平台名沿用徽章惯例 toUpperCase 显示）。
@@ -6900,13 +6937,16 @@ function refRowHTML(entry, f) {
   const title = String(entry.title || "");
   const desc = String(entry.description || "");
   const matches = refMatchFiles(entry, q);
+  // 悬空锚定警示（工单 04）：降级语义集中在 refDanglingAnchors 内部
+  // （无词表上下文 = 不判定不渲染 ⚠）
+  const dangling = refDanglingAnchors([entry], f && f.topicKeys, f && f.kitVocab).length > 0;
   return `<tr>
     <td class="ref-title-cell" title="${esc(title)}">${esc(title)}
       ${matches.length ? '<div class="ref-matched">' + matches.map((p) =>
         `<a href="#" data-mf="${esc(entry.id)}" data-path="${esc(p)}">▸ ${esc(p)}</a>`).join("") + "</div>" : ""}
     </td>
     <td>${esc(entry.type)}</td>
-    <td class="muted">${refAnchorBadge(entry)}${referencePlatformChip(entry)}</td>
+    <td class="muted">${refAnchorBadge(entry)}${referencePlatformChip(entry)}${dangling ? '<span class="ref-dangling-tag" title="锚定值不命中任何库内赛题 / 套件，生成时不会自动关联（点「编辑」改正锚定）">⚠</span>' : ""}</td>
     <td class="desc-cell" title="${esc(desc)}">${esc(desc)}</td>
     <td class="muted" title="${esc(`${(entry.files || []).length} 个素材文件，路径清单见磁盘目录`)}">${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</td>
     <td><button data-ref-view="${esc(entry.id)}" title="查看条目详情">详情</button> <button data-ref-edit="${esc(entry.id)}" title="编辑条目元数据与文件">编辑</button> <button class="danger" data-ref-del="${esc(entry.id)}">删除</button></td>
@@ -7003,7 +7043,10 @@ function refEditPayload(fields, plan) {
 }
 
 // —— 参考库工具栏状态与渲染（工单 02）：过滤条件集中于此，事件层只转发 ——
-const refUI = { q: "", platform: "", anchorKind: "", sortBy: "title", sortDir: "asc" };
+// （工单 04 增 dangling 维度 = 只看悬空条目；refFilterContext 组装过滤上下文：
+// 用户条件 + 悬空判定词表——行渲染与统计渲染共用同一定义，防两处漂移）
+const refUI = { q: "", platform: "", anchorKind: "", sortBy: "title", sortDir: "asc", dangling: false };
+const refFilterContext = () => ({ ...refUI, topicKeys: refTopicKeys, kitVocab: kitVocabulary });
 let refSearchTimer = null;
 
 function renderReferenceChips() {
@@ -7024,20 +7067,26 @@ function renderReferenceChips() {
 }
 
 function renderReferenceStats() {
-  const stats = refStats(refFilterEntries(refEntryCache || [], refUI));
-  $("ref-stats").innerHTML = esc(refStatsText(stats));
+  const ctx = refFilterContext();
+  const filtered = refFilterEntries(refEntryCache || [], ctx);
+  const stats = refStats(filtered, ctx);
+  // 悬空计数红段（工单 04）：0 时不渲染红色形态；点击 = 只看悬空（再点取消）
+  $("ref-stats").innerHTML = esc(refStatsText(stats)) + (stats.dangling
+    ? ` <span class="ref-dangling-count" data-ref-dangling title="锚定值不命中任何库内赛题 / 套件，生成时不会自动关联；点击只看悬空条目，再点取消">悬空 ${stats.dangling}</span>`
+    : "");
 }
 
 function renderReferences() {
   const list = refEntryCache || [];
-  const rows = refSortEntries(refFilterEntries(list, refUI), { by: refUI.sortBy, dir: refUI.sortDir });
+  const f = refFilterContext();
+  const rows = refSortEntries(refFilterEntries(list, f), { by: refUI.sortBy, dir: refUI.sortDir });
   if (!list.length) {
     $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📚</div><div class="es-title">参考文件库暂无条目</div><div class="es-hint">用下方表单录入资料；生成时按锚定自动注入为学习素材。</div></div></td></tr>';
   } else if (!rows.length) {
     // 过滤后的空结果 ≠ 库为空：提示「清空过滤」而不是「录入条目」
     $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的参考条目</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
   } else {
-    $("ref-rows").innerHTML = rows.map((e) => refRowHTML(e, refUI)).join("");
+    $("ref-rows").innerHTML = rows.map((e) => refRowHTML(e, f)).join("");
   }
   $("ref-rows").querySelectorAll("[data-ref-view]").forEach((b) =>
     b.addEventListener("click", () => viewReferenceDetail(b.dataset.refView)));
@@ -7084,6 +7133,12 @@ function initReferenceToolbar() {
     refUI.anchorKind = refUI.anchorKind === b.dataset.refChip ? "" : b.dataset.refChip;
     renderReferences();
   });
+  // 统计条悬空红段（工单 04）：点击 = 只看悬空条目，再点取消（与过滤 / 排序正交）
+  $("ref-stats").addEventListener("click", (e) => {
+    if (!e.target.closest("[data-ref-dangling]")) return;
+    refUI.dangling = !refUI.dangling;
+    renderReferences();
+  });
 }
 
 // 套件锚定的合法取值 = 模块库已有 kit 词表（从 /api/modules 各平台条目 kit
@@ -7099,6 +7154,10 @@ async function loadKitVocabulary() {
   $("ref-anchor-kit").innerHTML = kitVocabulary.length
     ? kitVocabulary.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("")
     : '<option value="">（模块库暂无 kit 词表）</option>';
+  // 悬空判定（工单 04）依赖 kit 词表：词表到达后重渲染（行内 ⚠ / 统计红段收敛）
+  if (refEntryCache && refEntryCache.length) {
+    renderReferences();
+  }
 }
 
 $("ref-anchor-kind").addEventListener("change", () => {
@@ -7117,6 +7176,9 @@ function formatSize(bytes) {
 
 // 最近一次浏览的条目缓存：删除确认框显示体量（避免删 1630 个文件还不知道多大）
 let refEntryCache = [];
+// 悬空锚定判定数据源（工单 04）：赛题库 key 清单（/api/topics）——降级 = 空数组
+// （数据未就绪 / 拉取失败时 topic 方向不判定不误报，行内 ⚠ 与红段随之不渲染）
+let refTopicKeys = [];
 
 async function loadReferences() {
   try {
@@ -7126,6 +7188,11 @@ async function loadReferences() {
     // 全量在手 → 客户端即时过滤 / 排序 / 统计（工单 02 替换服务端四框筛选）
     const entries = await apiGet("/api/references");
     refEntryCache = entries;
+    // 赛题库 key 清单（悬空判定）；失败降级 = 空数组（不阻塞条目渲染）
+    try {
+      const topics = await apiGet("/api/topics");
+      refTopicKeys = Array.isArray(topics) ? topics.map((t) => t.key).filter(Boolean) : [];
+    } catch { refTopicKeys = []; }
     renderReferences();
   } catch (e) {
     // 对偶模块库先例：失败清空占位（错误信息留 ref-msg，不留假加载态）
