@@ -1,62 +1,16 @@
 // 参考文件库表格精修纯函数单测（工单 reference-library-ui/02）：
 // refFilterEntries / refSortEntries / refStats / refStatsText / refMatchFiles /
-// refAnchorBadge / refChipRowHTML / refRowHTML / refDetailHTML。
+// refAnchorBadge / refChipRowHTML / refRowHTML / refDetailHTML + 编辑弹窗 /
+// 悬空锚定 / referencePlatformChip。
 // 只测外部行为（过滤结果 / 统计数值 / 渲染子串），子串断言防脆。
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { esc, formatSize } from "../../src/contest_generator/static/js/fx/core.js";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取（同 module-library.test.mjs 范式）；deps = 注入的兄弟函数依赖。
-// 先跳过参数区（参数可能含默认值花括号，如 flags = {}），从函数体 { 开始配平。
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  let i = html.indexOf("(", start);
-  assert.ok(i !== -1, name + " 函数缺少参数表");
-  let pdepth = 0;
-  for (; i < html.length; i++) {
-    if (html[i] === "(") pdepth++;
-    else if (html[i] === ")") { pdepth--; if (pdepth === 0) break; }
-  }
-  const open = html.indexOf("{", i);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let j = open; j < html.length; j++) {
-    if (html[j] === "{") depth++;
-    else if (html[j] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, j + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const referencePlatformChip = extract("referencePlatformChip", { esc });
-// refDanglingAnchors 先于 refFilterEntries 提取（后者 dangling 分支依赖注入）
-const refDanglingAnchors = extract("refDanglingAnchors");
-const refFilterEntries = extract("refFilterEntries", { refDanglingAnchors });
-const refSortEntries = extract("refSortEntries");
-const refStats = extract("refStats", { refDanglingAnchors });
-const refStatsText = extract("refStatsText", { formatSize });
-const refMatchFiles = extract("refMatchFiles");
-const refAnchorBadge = extract("refAnchorBadge", { esc });
-const refChipRowHTML = extract("refChipRowHTML", { esc });
-const refRowHTML = extract("refRowHTML", { esc, formatSize, refMatchFiles, refAnchorBadge, referencePlatformChip, refDanglingAnchors });
-const refDetailHTML = extract("refDetailHTML", { esc, formatSize, refAnchorBadge, referencePlatformChip });
+import {
+  referencePlatformChip, refFilterEntries, refDanglingAnchors, refSortEntries,
+  refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML,
+  refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan,
+  refEditPayload,
+} from "../../src/contest_generator/static/js/fx/reference.js";
 
 const refs = [
   { id: "adc12", title: "ADC12 例程", type: "例程代码", description: "MSPM0 ADC12 采样例程", anchor_kind: "topic", anchor_value: "2026C", platform: "mspm0", files: ["main.c", "adc.c"], file_count: 2, size_bytes: 4096 },
@@ -283,10 +237,6 @@ test("refDetailHTML 文件清单段：逐文件路径 + 大小 + 打开链接；
 });
 
 // ================= 编辑弹窗纯函数（工单 03） =================
-const refEditState = extract("refEditState");
-const refEditValidate = extract("refEditValidate");
-const refEditFilePlan = extract("refEditFilePlan");
-const refEditPayload = extract("refEditPayload");
 
 test("refEditState 状态机：idle→saving→ok/rejected；reset 回 idle；非法事件保持原态", () => {
   assert.equal(refEditState("idle", "save"), "saving");
