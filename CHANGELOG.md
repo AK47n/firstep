@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4ac70c11b99bdcbbb55814178ca9e106cef4c3bb -->
+<!-- changelog-auto: last-commit=a3fe53f38fdfdc29bd2079267eba4575878a4fa2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -33,6 +33,7 @@
 - 13:36 工单05 视觉与环境收尾：CONTEXT.md 补 PDF 资料库词表行 + 空态冒烟断言
 - 13:48 修复: 题面采样剥 markdown 标题与全角括号折叠——2026 系列 PDF 页图预览全 400
 - 13:56 修复: 页脚识别改 PyMuPDF 优先——2026D/H 只显示前 2 页修复
+- 18:22 工单06 疑似重复可回收删除：trash_pdf 回收端点 + 行内/详情删除入口 + 确认弹窗（组级保留一份删其余）；fitz 显式关闭防 WinError32 + rename 短重试；pytest 2413 / tests-js 368 / 冒烟全绿
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
