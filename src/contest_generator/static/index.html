@@ -2239,6 +2239,8 @@ import { recordLLMUsage, llmPricesDefaults, setLlmPricesDefaults, renderUsageSta
 import { loadMasters, loadChangelog } from "/js/ui/master.js";
 import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
 import { addFileRow, collectFiles, readPickedText, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
+import { renderPlatforms, renderModulePool, renderSelected, renderWarnings, renderRecommendResult, startRecommend, loadReferencePicker, useTopic, openModuleInfo, chosenPlatform, selectedSlugs, expanded, lastRecommend, selectedReferenceIds, autoReferenceIds, pythonTemplates, scorePoints, setChosenPlatform, setSelectedSlugs, setCurrentTopicId, setRecommendClarifications, setClusterDeps } from "/js/ui/generate-recommend.js";
+import { stepCard, markStepDone, markStepUndone, syncStep7, stepDoneSet, STEP_NAV_CARD_SELECTOR, initCardCollapse, setOnStepChange } from "/js/ui/step-state.js";
 "use strict";
 
 // 主题切换（工单 ui-polish-5/01）：currentTheme / applyTheme / initTheme 及
@@ -2275,15 +2277,14 @@ document.querySelectorAll("nav button").forEach((btn) => {
 // ---------------------------------------------------------------------------
 // 全局状态
 // ---------------------------------------------------------------------------
-// state（GET /api/state）已迁至 static/js/app.js（阶段 2 工单 02）：
-// 本文件经 host import 的 setState 整换；ui 模块属性写（state.modules = ...）合法。
-// llmPricesDefaults（当前生效 LLM 单价表）已迁至 static/js/ui/usage.js（阶段 2 工单 04）：
-// 写入走 setLlmPricesDefaults（loadSettings），collectLlmPrices 经 import 只读（ESM 活绑定）。
-let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
-let expanded = [];                // 展开后的模块 manifest（含依赖）
-let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
-let warnings = [];                // 平台警告
-let scorePoints = [];              // 推荐解析出的题面评分点（只读增强信息）
+// 生成页推荐簇状态（selectedSlugs / expanded / pythonTemplates / warnings /
+// scorePoints / chosenPlatform / currentTopicId / topicPdfTextVisible /
+// lastRecommend / recProblem / recommendClarifications / selectedReferenceIds /
+// autoReferenceIds / referenceEntries）已随簇迁至 static/js/ui/generate-recommend.js
+// （阶段 2 工单 12）：host 经顶部 import 活绑定只读，写入经各 setter
+// （setChosenPlatform / setSelectedSlugs / setCurrentTopicId /
+// setRecommendClarifications）。instances / instancePinTarget 属引脚-多实例簇
+// （工单 13 迁），留 host。
 let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
 let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
 
@@ -2301,763 +2302,15 @@ async function refreshState() {
 }
 
 // ---------------------------------------------------------------------------
-// 生成页：2. 平台选择
+// 生成页：1-3 题面 / 推荐 / 参考选择 + 5 模块池 / 选中 / 警告（推荐簇 A）
 // ---------------------------------------------------------------------------
-let chosenPlatform = null;
-function renderPlatforms() {
-  const box = $("platforms");
-  box.innerHTML = "";
-  for (const p of state.platforms) {
-    const card = document.createElement("div");
-    card.className = "platform-card" + (chosenPlatform === p.id ? " selected" : "") + (p.status !== "ready" ? " disabled" : "");
-    const badge = p.status === "ready"
-      ? '<span class="badge ok">可用</span>'
-      : '<span class="badge no-master">暂不可用：尚未导入母版</span>';
-    card.innerHTML = `<div class="name">${esc(p.name)}</div>${badge}`;
-    if (p.status === "ready") {
-      card.addEventListener("click", () => {
-        const action = platformClickAction(chosenPlatform, p.id);
-        if (action === "same") return;  // 重复点击已选平台：无操作（防误触丢选择）
-        chosenPlatform = p.id;
-        markStepDone(3);
-        unmarkSteps(action === "switch" ? [5, 6, 7, 8, 9, 10, 11, 12] : [6, 7, 8, 9, 10, 11, 12]);  // 首次选平台保留推荐（步骤 5 不退）
-        renderPlatforms();
-        renderModulePool();  // 模块网格（工单 module-grid/01）：平台切换刷新置灰态
-        scheduleDraftSave();
-        updateFixCenterAvailability();
-        if (action === "switch") {
-          // 换平台：清空选择与配置，下游全部重来
-          selectedSlugs = []; expanded = []; warnings = []; renderSelected(); renderWarnings();
-          // 引脚配置（工单 03）：切平台清空绑定重取板定义
-          pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
-          // 多实例配置（工单 04）：切平台清空实例清单与选脚目标
-          instances = {}; instancePinTarget = null; renderInstanceConfig();
-        } else {
-          // 首次选平台：保留既有选择（如推荐勾选）与实例清单，只重展开做平台兼容检查
-          expanded = []; warnings = []; renderSelected(); renderWarnings();
-          if (selectedSlugs.length) runExpand();
-          // 引脚配置（工单 03）：首次选平台同样重取板定义（实例清单保留）
-          pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
-          instancePinTarget = null;
-        }
-        loadPinBoard();
-      });
-    }
-    box.appendChild(card);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 生成页：1. 上传抽取 + 历史赛题取题面
-// ---------------------------------------------------------------------------
-// 当前生效的赛题编号（历史赛题入口）：透传给推荐 / 骨架 / 生成三个请求；
-// 换题（上传 / 手动改题面）时清除，避免旧题专用模块串进新工程。
-let currentTopicId = "";
-
-$("btn-upload").addEventListener("click", async () => {
-  const file = $("problem-file").files[0];
-  $("upload-msg").textContent = "";
-  if (!file) { $("upload-msg").textContent = "请先选择文件"; return; }
-  const form = new FormData();
-  form.append("upload", file);
-  try {
-    const data = await handle(await fetch("/api/extract", { method: "POST", body: form }));
-    $("problem").value = data.text;
-    currentTopicId = "";
-    clearTopicSummary();
-    // 页图展示（工单 upload-pdf-pages/02 + upload-image-preview/02）：
-    // 图片上传 → 原图箱；PDF 上传 → 页图箱；都没有 → 只显示文字
-    if (data.image_data_url) {
-      $("topic-pdf-box").classList.add("hidden");
-      $("topic-pdf-pages").innerHTML = "";
-      $("topic-image-box").classList.remove("hidden");
-      $("topic-image-view").src = data.image_data_url;
-      setTopicPdfTextVisible(false, $("btn-topic-image-text"));
-    } else if (data.pages && data.pages.length) {
-      $("topic-image-box").classList.add("hidden");
-      setTopicPdfTextVisible(false);
-      showTopicPdfViewer(data);
-    } else {
-      $("topic-image-box").classList.add("hidden");
-      hideTopicPdfViewer();
-    }
-    $("upload-msg").classList.add("ok");
-    $("upload-msg").textContent = "抽取成功：" + file.name;
-    markStepDone(1);
-    toast("ok", "题面抽取成功");
-  } catch (e) {
-    $("upload-msg").classList.remove("ok");
-    $("upload-msg").textContent = e.message;
-    toast("error", "题面抽取失败");
-  }
-});
-
-$("btn-topic-load").addEventListener("click", async () => {
-  const key = $("topic-id").value.trim().toUpperCase();
-  $("topic-msg").textContent = "";
-  if (!key) { $("topic-msg").textContent = "请先填写赛题编号"; return; }
-  try {
-    const data = await handle(await fetch("/api/topics/" + encodeURIComponent(key)));
-    $("problem").value = data.problem_text;
-    currentTopicId = data.key;
-    clearTopicSummary();
-    $("topic-msg").textContent = "已取题面：" + data.key;
-    markStepDone(1);
-    toast("ok", "已取题面：" + data.key);
-    loadTopicPdf(data.key);
-  } catch (e) {
-    $("topic-msg").textContent = e.message;
-    currentTopicId = "";
-  }
-});
-
-// ---------------------------------------------------------------------------
-// 取题面页图（工单 topic-pdf-viewer/01）：默认展示原题 PDF 页，文字可切换
-// ---------------------------------------------------------------------------
-// 取题面成功后拉取条目原 PDF 的题面页渲染图 → 页图叠放展示、文字框默认
-// 收起；「显示文字版（可编辑）」随时切回编辑。AI 输入仍取文字框值，下游
-// 流程零改动。纯展示：加载失败 → 明确提示，文字框照常可用（现状兜底）。
-let topicPdfTextVisible = true;
-
-function setTopicPdfTextVisible(visible, btn) {
-  topicPdfTextVisible = visible;
-  $("problem").classList.toggle("hidden", !visible);
-  const el = btn || $("btn-topic-pdf-text");
-  if (el) el.textContent = visible ? "收起文字版" : "显示文字版（可编辑）";
-}
-
-function showTopicPdfViewer(data) {
-  const pagesEl = $("topic-pdf-pages");
-  pagesEl.innerHTML = "";
-  $("topic-image-box").classList.add("hidden");  // 与图片原图箱互斥
-  data.pages.forEach(p => {
-    const img = document.createElement("img");
-    img.src = p.data_url;
-    img.alt = "原题第 " + p.page_no + " 页";
-    img.loading = "lazy";
-    img.style.cssText = "width:100%;max-width:640px;display:block;margin:0 auto 10px;border:1px solid var(--border,#ccc);border-radius:4px;cursor:zoom-in;background:#fff";
-    img.addEventListener("click", () => {
-      $("pdf-zoom-img").src = p.data_url;
-      $("pdf-zoom").classList.remove("hidden");
-    });
-    pagesEl.appendChild(img);
-  });
-  // 上传 PDF 截断提示（工单 upload-pdf-pages/02）：页数超上限只显示前 M 页；
-  // 题库 /pages 响应无 total_pages 字段 → 不提示
-  if (data.total_pages && data.total_pages > data.pages.length) {
-    const hint = document.createElement("div");
-    hint.className = "muted";
-    hint.style.cssText = "text-align:center;font-size:12px;margin:4px 0 8px";
-    hint.textContent = "共 " + data.total_pages + " 页，已显示前 "
-      + data.pages.length + " 页（其余页未展示）。";
-    pagesEl.appendChild(hint);
-  }
-  $("topic-pdf-box").classList.remove("hidden");
-  // 不再强制收起文字版（工单 ui-polish-10/02）：加载期 loadTopicPdf 已默认收起文字；
-  // 若用户在渲染期手动打开了文字版，页图到达后尊重用户选择。
-}
-
-function hideTopicPdfViewer() {
-  $("topic-pdf-box").classList.add("hidden");
-  $("topic-image-box").classList.add("hidden");
-  $("pdf-zoom").classList.add("hidden");
-  setTopicPdfTextVisible(true);
-}
-
-async function loadTopicPdf(key) {
-  // 渲染期占位（工单 ui-polish-10/02）：页图要几秒才渲染完，期间不先露文字版，
-  // 显示「渲染中…」占位；文字版保持「显示文字版（可编辑）」可随时手动打开。
-  $("topic-pdf-box").classList.remove("hidden");
-  $("topic-pdf-pages").innerHTML =
-    '<div class="empty-state" style="padding:18px 0">' +
-    '<div class="es-icon">📄</div>' +
-    '<div class="es-title">原题 PDF 页渲染中…</div>' +
-    '<div class="es-hint">题面文字已就绪，可点上方「显示文字版（可编辑）」提前查看；页图渲染完成后自动展示。</div>' +
-    '</div>';
-  setTopicPdfTextVisible(false);
-  try {
-    const data = await apiGet("/api/topics/" + encodeURIComponent(key) + "/pages");
-    showTopicPdfViewer(data);
-  } catch (e) {
-    hideTopicPdfViewer();
-    toast("error", "原题 PDF 页加载失败");
-    $("topic-msg").textContent = "无法展示原题 PDF 页：" + e.message;
-  }
-}
-
-$("btn-topic-pdf-text").addEventListener("click", () => {
-  setTopicPdfTextVisible(!topicPdfTextVisible);
-});
-
-$("btn-topic-image-text").addEventListener("click", () => {
-  setTopicPdfTextVisible(!topicPdfTextVisible, $("btn-topic-image-text"));
-});
-
-$("topic-image-view").addEventListener("click", () => {
-  $("pdf-zoom-img").src = $("topic-image-view").src;
-  $("pdf-zoom").classList.remove("hidden");
-});
-
-$("pdf-zoom").addEventListener("click", () => {
-  $("pdf-zoom").classList.add("hidden");
-  $("pdf-zoom-img").src = "";  // 释放大图引用（评审提示：陈旧位图驻留内存）
-});
-
-$("problem").addEventListener("input", () => {
-  if (currentTopicId) { currentTopicId = ""; $("topic-msg").textContent = ""; }
-  clearTopicSummary();  // 题面变了 = 旧简介对不上，立即清掉（wait-what 要的是当前题面）
-  hideTopicPdfViewer();  // 手动改写/粘贴题面 = 旧题页图对不上（工单 topic-pdf-viewer/01）
-  if (!$("problem").value.trim()) markStepUndone(1);
-});
-
-// ---------------------------------------------------------------------------
-// 生成页：2. 赛题简介（AI 预读，wait-what 效果）——总览 + 整理后的功能要点
-// ---------------------------------------------------------------------------
-// 只展示给用户确认认知（把散落在题面各处的全部要求整理成条目），不进任何
-// 下游流程；题面一变（手改 / 上传 / 取题面）立即清掉旧简介，避免对不上
-// 题面的过时认知误导后续步骤。
-function clearTopicSummary() {
-  $("topic-summary-box").classList.add("hidden");
-  $("topic-summary-box").textContent = "";
-  $("topic-summary-msg").textContent = "";
-  scorePoints = [];  // 题面变更后评分点失效，避免旧题验收清单串进生成 / 交接
-  unmarkSteps([2, 5, 6, 7, 8, 9, 10, 11, 12]);  // 题面变了：AI 产物与生成结果全部失效
-}
-
-$("btn-topic-summary").addEventListener("click", async () => {
-  $("topic-summary-msg").textContent = "";
-  const problem = $("problem").value.trim();
-  if (!problem) { $("topic-summary-msg").textContent = "请先填写赛题原文"; return; }
-  $("btn-topic-summary").disabled = true;
-  $("btn-topic-summary").innerHTML = '<span class="spinner"></span>AI 读题中…';
-  try {
-    const data = await apiPost("/api/topic/summarize", { problem_text: problem });
-    $("topic-summary-box").textContent = data.summary;
-    $("topic-summary-box").classList.remove("hidden");
-    $("btn-topic-summary").innerHTML = "重新生成";
-    markStepDone(2);  // 简介生成成功即视为完成（题面变更时 clearTopicSummary 会取消）
-  } catch (e) {
-    $("topic-summary-msg").textContent = e.message;
-  } finally {
-    $("btn-topic-summary").disabled = false;
-  }
-});
-
-// ---------------------------------------------------------------------------
-// 生成页：3. AI 推荐
-// ---------------------------------------------------------------------------
-// 已迁至 static/js/fx/module.js（工单 06）：moduleBadges / pythonArtifactSummary。
-
-// 工单 10：推荐 = SSE 流（round → converged → done / question / error）。
-// 收敛循环：功能需求层两轮一致即停、上限 4 轮；库内命中 chips 可勾选/移除，
-// 库外建议灰色 + 「需自备」标注（仅展示，不进 selectedSlugs / expand / generate）。
-let lastRecommend = null;  // 最近一次推荐结果（移除勾选 chip 后重渲染用）
-
-function recommendChip(slug, reason) {
-  return '<span class="chip rec" data-remove="' + esc(slug) + '">' + esc(slug)
-    + (reason ? '<span class="reason">' + esc(reason) + '</span>' : "")
-    + '<span class="chip-x">✕</span></span>';
-}
-
-function suggestionChip(s) {
-  const note = s.degraded ? "（型号不在词表，按类别展示）" : "";
-  return '<span class="chip out" title="' + esc(note) + '">' + esc(s.name)
-    + '<span class="reason">需自备' + note
-    + (s.examples.length ? "：" + esc(s.examples.join(" / ")) : "") + '</span></span>';
-}
-
-// 已迁至 static/js/fx/score.js（工单 10）：renderScorePointPanel。
-
-// ---------------------------------------------------------------------------
-// 功能组选择卡（工单 recommend-exclusive-groups/04）：纯函数层——组卡渲染、
-// 单选交换/取消、autoAdd 同组去重、同组多选冲突判定。交互逻辑全部下沉为
-// 纯函数（不碰 DOM），照 score-points-format 先例喂 node:test 单测。
-// 载荷形状（工单 02）：exclusive_groups = [{id, label, hint, members:[{slug,
-// role}], recommended:[slug]}]；旧载荷无该键 → 一律 || [] 容错（无卡）。
-// ---------------------------------------------------------------------------
-
-// 已迁至 static/js/fx/module.js（工单 06）：功能组选择卡纯函数组——groupOfSlug /
-// applyGroupRadio / autoAddDedup / groupConflicts / renderGroupCards / groupRequirementNote。
-
-function renderRecommendResult(data, autoAdd = true) {
-  markStepDone(5);  // AI 推荐成功返回即视为完成（含"未推荐到模块"的空结果）
-  if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
-  renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
-  const groups = data.exclusive_groups || [];  // 旧载荷无该键 = 无组卡（工单 04）
-  if (autoAdd) {
-    // autoAdd 同组去重（工单 recommend-exclusive-groups/04）：data.modules 逐个
-    // 加入时，若该 slug 属某组且已选里已有同组任一成员 → 跳过（仅首个入集；
-    // AI 的其它同组推荐仅以组卡徽标展示，不重复进已选）
-    selectedSlugs = autoAddDedup(groups, selectedSlugs, data.modules);
-    // 多实例回填（工单 module-multi-instance/06）：AI 猜的实例清单进 6.5 实例卡
-    // （显示名/颜色，引脚恒空 = 自动分配）；用户确认后仍可增删改。载荷里带
-    // 实例的模块 = 新猜测覆盖旧清单；AI 未猜（题面无明确数量）的模块保留用户
-    // 已配清单——上限守卫是 expand_instances 的活（生成时拦），前端不截断
-    if (data.instances) {
-      for (const slug of Object.keys(data.instances)) {
-        instances[slug] = (data.instances[slug] || []).map((i) => ({
-          name: String(i.name || ""), variant: i.variant || "", pin: i.pin || "",
-        }));
-      }
-      instancePinTarget = null;  // 旧选脚目标可能越界，清掉防陈旧高亮
-    }
-  }
-  expanded = []; warnings = [];
-  scorePoints = data.score_points || [];
-  lastRecommend = data;  // 组卡渲染/冲突警告/单选交换共用（exclusive_groups 在此）
-  renderSelected(); renderWarnings();
-  const box = $("rec-list");
-  const requirements = data.requirements || [];
-  const scorePanel = renderScorePointPanel(scorePoints);
-  const groupPanel = renderGroupCards(groups, data.modules, selectedSlugs);
-  if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length) && !groups.length) {
-    box.innerHTML = scorePanel + '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
-    return;
-  }
-  box.innerHTML = scorePanel + groupPanel + requirements.map((r) => `
-    <div class="item">
-      <div class="head"><span class="slug">句子${r.sentence} · ${esc(r.requirement)}</span></div>
-      <div class="rec-chips">
-        ${r.modules.map((slug) => {
-          const reason = (data.modules.find((m) => m.slug === slug) || {}).reason;
-          return groupRequirementNote(groups, slug, reason) || recommendChip(slug, reason);
-        }).join("") || '<span class="muted">库内无命中</span>'}
-        ${(r.suggestions || []).map(suggestionChip).join("")}
-      </div>
-    </div>`).join("");
-  box.querySelectorAll("[data-remove]").forEach((b) =>
-    b.addEventListener("click", () => {
-      selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
-      reRenderAfterSelectionChange();
-    }));
-  // 组卡单选交互（工单 04）：点击 radio → 换选（同组互斥）/ 再点已选 = 取消
-  // 整组。用 click 而非 change——再点已选 radio 不触发 change（原生行为），
-  // 取消整组会丢。
-  box.querySelectorAll("[data-group-slug]").forEach((input) =>
-    input.addEventListener("click", () => {
-      selectedSlugs = applyGroupRadio((lastRecommend || {}).exclusive_groups || [],
-        selectedSlugs, input.dataset.groupId, input.dataset.groupSlug);
-      reRenderAfterSelectionChange();
-    }));
-  if (autoAdd && data.modules.length) runExpand();
-}
-
-function reRenderAfterSelectionChange() {
-  // chip 移除 / 组卡单选共用：选择集变化后清空展开与警告、重绘已选/警告/推荐区
-  // （照原 data-remove 回调尾段行为——重渲染推荐卡不 autoAdd，避免重复加入）
-  expanded = []; warnings = [];
-  renderSelected(); renderWarnings(); renderRecommendResult(lastRecommend, false);
-}
-
-function showRecommendError(message) {
-  $("recommend-msg").textContent = message;
-  $("btn-recommend").innerHTML = "让 AI 推荐";
-  $("btn-recommend").disabled = false;
-}
-
-function showRecommendQuestions(problem, questions) {
-  const box = $("rec-list");
-  box.innerHTML = '<div class="warn-box" style="border:1px solid var(--border)">'
-    + '<div class="muted">AI 拿不准，需要你确认（回答只用于澄清，不改写题面）：</div>'
-    + questions.map((q, i) => '<div class="item" style="margin-top:6px">' + esc(q)
-      + '<input id="recommend-answer-' + i + '" style="margin-top:4px;width:100%" placeholder="补充说明（可选）"></div>').join("")
-    + '<div class="row" style="margin-top:8px"><button id="btn-recommend-answer" class="primary">补充回答并继续</button></div></div>';
-  $("btn-recommend-answer").addEventListener("click", () => {
-    // 回答进澄清历史（随请求体发送），题面保持原文——收敛判定依赖题面句子
-    // 编号稳定，拼进题面会污染"两轮一致"对照（工单 01）
-    questions.forEach((q, i) => {
-      recommendClarifications.push({ question: q, answer: ($("recommend-answer-" + i).value || "").trim() });
-    });
-    startRecommend(problem);
-  });
-}
-
-// 推荐进度面板实例（共享模块 makeProgressPanel，定义见"进度面板模块"段）。
-// 生命周期 = 一次点击到 done / question / error / 断线；词表镜像 events.py：
-// round / converged / done / question / error（JS 侧单点声明，改词表须同步）。
-let recProblem = "";   // 当前推荐题面：澄清回答后重启流程仍用原文（回答走请求体，不污染题面）
-let recommendClarifications = [];   // 澄清历史 [{question, answer}]，随请求体发送；手动重推清空（新生命周期）
-const recPanel = makeProgressPanel({
-  timerTotalId: "rec-timer-total",
-  timerCallId: "rec-timer-round",
-  totalLabel: "总用时 ",
-  callLabel: "当前轮已等待 ",
-  events: {
-    round: (ev) => {
-      $("rec-prog-text").textContent = "AI 收敛自检：第 " + ev.round + "/" + ev.round_total + " 轮…";
-      $("rec-bar").classList.remove("hidden");
-      $("rec-bar-fill").style.width = (ev.round_total ? Math.min(100, ev.round * 100 / ev.round_total) : 100) + "%";
-    },
-    converged: (ev) => {
-      $("rec-prog-text").textContent = "功能需求层已收敛（第 " + ev.round + " 轮）…";
-      $("rec-bar").classList.remove("hidden");
-      $("rec-bar-fill").style.width = "100%";   // round_total 是上限非保证：提前收敛就跳满
-    },
-    cache_hit: (ev) => {
-      // 推荐缓存命中（工单 llm-cost-control/02）：直出上次结果，不调 LLM
-      $("rec-prog-text").textContent = (ev.warns && ev.warns.length)
-        ? "⚠ 复用本地推荐缓存，但输入与缓存时不同：" + ev.warns.join("；")
-        : "复用本地推荐缓存（题面 / 平台未变）…";
-      $("rec-bar").classList.remove("hidden");
-      $("rec-bar-fill").style.width = "100%";
-    },
-    llm_telemetry: (ev) => {
-      // 每次 LLM 调用完成的观测快照（照修复流程 telemetry 先例）：调用数 /
-      // provider 分流 / 最新 operation / 耗时——模型调用期间"AI 正在干什么"
-      const el = $("rec-llm-telemetry");
-      el.textContent = formatLLMTelemetry(ev);
-      el.classList.remove("hidden");
-      recordLLMUsage(ev);
-    },
-    done: (ev) => {
-      recPanel.finish();
-      $("rec-progress").classList.add("hidden");
-      renderRecommendResult(ev);
-      $("btn-recommend").innerHTML = "重新推荐";
-      $("btn-recommend").disabled = false;
-    },
-    question: (ev) => {
-      recPanel.finish();
-      $("rec-progress").classList.add("hidden");
-      $("btn-recommend").innerHTML = "让 AI 推荐";
-      $("btn-recommend").disabled = false;
-      showRecommendQuestions(recProblem, ev.questions || []);
-    },
-    error: (ev) => {
-      recPanel.finish();
-      $("rec-progress").classList.add("hidden");
-      showRecommendError(ev.message || "推荐失败");
-    },
-  },
-});
-
-function startRecProgress() {
-  recPanel.start();
-  $("rec-progress").classList.remove("hidden");
-  $("rec-prog-text").textContent = "";        // 新生命周期：旧进度文本 / telemetry 清掉
-  const telemetryEl = $("rec-llm-telemetry");
-  telemetryEl.classList.add("hidden");
-  telemetryEl.textContent = "";
-  $("rec-bar").classList.add("hidden");   // 首条 round 事件带 round_total 后再显示条
-  $("rec-bar-fill").style.width = "0";    // 补问回答重启 = 新生命周期，条从第 1 轮重新开始
-}
-
-function stopRecProgress() {   // 流未起 / 断线路径：停表 + 收起面板（终态路径由事件表 finish）
-  recPanel.finish();
-  $("rec-progress").classList.add("hidden");
-}
-
-async function startRecommend(problem) {
-  recProblem = problem;   // 补问回答重启时仍走同一实例（同一生命周期语义）
-  scorePoints = [];       // 新推荐生命周期开始，避免旧题评分点串进生成 / 交接
-  $("recommend-msg").textContent = "";
-  $("btn-recommend").disabled = true;
-  $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
-  $("rec-list").innerHTML = "";   // 旧结果清空，状态文本进进度面板
-  startRecProgress();
-  let resp;
-  try {
-    resp = await fetch("/api/recommend", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problem_text: problem, topic_id: currentTopicId || undefined, reference_ids: selectedReferenceIds, clarifications: recommendClarifications, platform: chosenPlatform || undefined, qa_text: $("qa-text").value.trim() }),
-    });
-  } catch (e) { stopRecProgress(); showRecommendError(e.message); return; }
-  if (!resp.body) { stopRecProgress(); showRecommendError("服务响应无流"); return; }
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    stopRecProgress();
-    showRecommendError(err.detail || ("请求失败（HTTP " + resp.status + "）"));
-    return;
-  }
-  try {
-    await parseSSE(resp, recPanel.handleEvent);
-  } catch (e) { if (recPanel.p.finished) return; }   // 终态已到后的读流出错忽略，防重复提示
-  if (!recPanel.p.finished) {   // 流结束 / 读流出错但没等到终态 = 断线：推荐不落任何东西，可安全重试
-    stopRecProgress();
-    showRecommendError("连接中断：本次推荐未完成，可安全重试");
-  }
-}
-
-$("btn-recommend").addEventListener("click", () => {
-  const problem = $("problem").value.trim();
-  if (!problem) { $("recommend-msg").textContent = "请先填写赛题原文"; return; }
-  recommendClarifications = [];   // 手动重推 = 新生命周期，清空澄清历史
-  startRecommend(problem);
-});
-
-// ---------------------------------------------------------------------------
-// 生成页：3. 参考资料（可选）——手动勾选 = 追加准入 + 全文直读（工单 01）
-// ---------------------------------------------------------------------------
-let selectedReferenceIds = [];
-let autoReferenceIds = [];
-let referenceEntries = [];
-
-function referenceAnchorLabel(e) {
-  if (e.anchor_kind === "topic") return "赛题 " + esc(e.anchor_value) + " 关联";
-  if (e.anchor_kind === "kit") return "套件 " + esc(e.anchor_value) + " 关联";
-  return "未关联";
-}
-
-// 平台标注 chip：已迁至 static/js/fx/reference.js（工单 03）
-
-async function loadReferencePicker() {
-  try {
-    referenceEntries = await apiGet("/api/references");
-    renderReferencePicker();
-    $("ref-picker-msg").textContent = "";
-  } catch (e) { $("ref-picker-msg").textContent = e.message; }
-}
-
-function renderReferencePicker() {
-  const q = ($("ref-search").value || "").trim().toLowerCase();
-  const visible = referenceEntries.filter((e) =>
-    !q || (e.id + " " + (e.title || "") + " " + (e.description || "") + " " + referenceAnchorLabel(e)).toLowerCase().includes(q));
-  $("ref-count").textContent = referenceEntries.length
-    ? (q ? `匹配 ${visible.length} / ${referenceEntries.length} 条` : `共 ${referenceEntries.length} 条`)
-    : "";
-  $("ref-picker").innerHTML = visible.length
-    ? '<div class="ref-pick-head"><span></span><span>资料</span><span>平台</span><span>说明</span></div>'
-      + visible.map((e) => {
-          const isAuto = autoReferenceIds.includes(e.id);
-          const isManual = selectedReferenceIds.includes(e.id);
-          const checked = isAuto || isManual ? "checked" : "";
-          const disabled = isAuto ? "disabled" : "";
-          const autoChip = isAuto ? ' <span class="chip out">自动</span>' : "";
-          return `
-    <label class="ref-pick-row">
-      <input type="checkbox" data-ref-pick="${esc(e.id)}" ${checked} ${disabled}>
-      <span class="ref-pick-title" title="${esc(e.title)}">${esc(e.title)}</span>
-      <span>${referencePlatformChip(e)}${autoChip}</span>
-      <span class="ref-pick-desc" title="${esc(referenceAnchorLabel(e) + (e.description ? " · " + e.description : ""))}">${referenceAnchorLabel(e)}${e.description ? " · " + esc(e.description) : ""}</span>
-    </label>`;
-        }).join("")
-    : (referenceEntries.length
-      ? '<div class="muted">没有匹配的资料。</div>'
-      : '<div class="muted">参考文件库为空——可到「参考文件库」页录入资料。</div>');
-  $("ref-picker").querySelectorAll("[data-ref-pick]").forEach((cb) =>
-    cb.addEventListener("change", () => {
-      const id = cb.dataset.refPick;
-      selectedReferenceIds = selectedReferenceIds.filter((x) => x !== id);
-      if (cb.checked) selectedReferenceIds.push(id);
-      renderRefSelected();
-      syncStep4(selectedReferenceIds, autoReferenceIds, markStepDone, markStepUndone);  // 勾选变更 = 参考资料集合变化，重算步骤 4 完成状态
-    }));
-  renderRefSelected();
-}
-
-$("ref-search").addEventListener("input", renderReferencePicker);
-
-function renderRefSelected() {
-  const box = $("ref-selected");
-  const byId = new Map(referenceEntries.map((e) => [e.id, e]));
-  const selected = [];
-  for (const id of selectedReferenceIds) {
-    const e = byId.get(id);
-    selected.push({ id, title: e ? e.title : id, source: "手动" });
-  }
-  for (const id of autoReferenceIds) {
-    if (selectedReferenceIds.includes(id)) continue;  // 手动也勾了 = 只显示手动
-    const e = byId.get(id);
-    selected.push({ id, title: e ? e.title : id, source: "自动" });
-  }
-  box.innerHTML = selected.length
-    ? '<div class="muted" style="margin-bottom:4px">已选中（将注入 AI 上下文）：</div>'
-      + selected.map((s) =>
-          `<span class="chip out" title="${esc(s.id)}">✔ ${esc(s.title)} · ${s.source}</span>`).join(" ")
-    : '<div class="muted">尚未选中参考资料（AI 推荐后会自动关联赛题 / 套件资料）。</div>';
-}
-
-// 已迁至 static/js/fx/draft.js（工单 07）：syncStep4（迁入后参数化 = selectedReferenceIds, autoReferenceIds, markStepDone, markStepUndone）。
-
-function renderReferenceResult(data) {
-  const refs = data.references || [];
-  autoReferenceIds = refs.filter((r) => r.source !== "manual").map((r) => r.id);
-  renderReferencePicker();
-  renderRefSelected();
-  syncStep4(selectedReferenceIds, autoReferenceIds, markStepDone, markStepUndone);  // 推荐自动关联后重算步骤 4（无自动关联也不取消手动勾选）
-}
-
-// ---------------------------------------------------------------------------
-// 生成页：5. 模块清单（增删 + 依赖展开 + 平台警告）
-// ---------------------------------------------------------------------------
-// 已迁至 static/js/fx/module.js（工单 06）：模块网格纯函数组——moduleGridPlatformLabel /
-// moduleGridStatusText / moduleGridBadgeClass / moduleGridFilter / moduleGridCountText / moduleGridHTML。
-
-function renderModulePool() {
-  const box = $("module-grid");
-  if (!box) return;
-  const q = ($("module-search") ? $("module-search").value : "") || "";
-  box.innerHTML = moduleGridHTML(state.modules || [], selectedSlugs, q, chosenPlatform);
-  const count = $("module-count");
-  if (count) count.textContent = moduleGridCountText(state.modules || [], selectedSlugs, q);
-}
-
-// 已迁至 static/js/fx/module.js（工单 06）：moduleInfoHTML。
-
-function openModuleInfo(slug, platform = chosenPlatform) {
-  const module = (state.modules || []).find((mo) => mo.slug === slug);
-  if (!module) { toast("info", "未找到模块 " + slug); return; }
-  // 重复打开 = 替换（同 showPinMenu 先例）
-  document.querySelectorAll(".module-info-overlay").forEach((o) => o.remove());
-  const overlay = document.createElement("div");
-  overlay.className = "module-info-overlay";
-  const modal = document.createElement("div");
-  modal.className = "module-info-modal";
-  modal.innerHTML = '<div class="module-info-head"><strong>模块详情</strong>'
-    + '<button class="ref-files-close" title="关闭">×</button></div>'
-    + '<div class="module-info-scroll">' + moduleInfoHTML(module, platform) + "</div>";
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  modal.querySelector(".ref-files-close").addEventListener("click", close);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
-}
-
-
-function initModuleGrid() {
-  const box = $("module-grid");
-  if (!box) return;
-  box.addEventListener("click", (ev) => {
-    // 详情按钮优先（工单 module-info-dialog/01）：先判 .mc-info，卡片本体仍添加模块
-    const infoBtn = ev.target.closest ? ev.target.closest(".mc-info") : null;
-    if (infoBtn) { openModuleInfo(infoBtn.dataset.info); return; }
-    const card = ev.target.closest ? ev.target.closest(".module-card") : null;
-    if (!card) return;
-    const slug = card.dataset.add;
-    if (!slug) return;
-    if (card.classList.contains("off")) {
-      toast("info", "该模块不支持当前平台，请先切换目标平台");
-      return;
-    }
-    addModule(slug);
-  });
-}
-
-function addModule(slug) {
-  if (!slug || selectedSlugs.includes(slug)) return;
-  selectedSlugs.push(slug);
-  expanded = []; warnings = [];
-  renderSelected(); renderWarnings(); renderModulePool();
-  runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
-}
-
-async function runExpand() {
-  $("expand-msg").textContent = "";
-  if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
-  if (!selectedSlugs.length) { $("expand-msg").textContent = "请先选择至少一个模块"; return; }
-  try {
-    const data = await apiPost("/api/selection/expand", { slugs: selectedSlugs, platform: chosenPlatform });
-    expanded = data.modules;
-    warnings = data.warnings;
-    renderSelected(); renderWarnings();
-    renderPinCard();  // 引脚配置卡（工单 03）：角色清单随展开结果重算
-    renderInstanceConfig();  // 多实例配置卡（工单 04）：随展开结果重算
-  } catch (e) { $("expand-msg").textContent = e.message; }
-}
-
-$("btn-expand").addEventListener("click", runExpand);
-
-$("module-search").addEventListener("input", renderModulePool);
-
-initModuleGrid();
-
-function renderSelected() {
-  const box = $("selected-list");
-  if (selectedSlugs.length) markStepDone(6); else markStepUndone(6);
-  scheduleDraftSave();
-  if (!expanded.length) {
-    $("selected-count").textContent = "";
-    box.innerHTML = selectedSlugs.length
-      ? '<div class="muted">已选（未展开依赖）：' + selectedSlugs.map(esc).join("、") + '</div>'
-      : '<div class="muted">尚未选择模块。</div>';
-    return;
-  }
-  const depCount = expanded.filter((m) => !selectedSlugs.includes(m.slug)).length;
-  $("selected-count").textContent = `已展开 ${expanded.length} 个模块（含 ${depCount} 个自动带入）`;
-  const notes = (m) => Object.entries(m.platforms || {}).map(([platform, entry]) =>
-    entry.notes ? `【${platform} 配置】${entry.notes}` : "").filter(Boolean).join(" ");
-  const bringers = new Map();
-  for (const m of expanded) {
-    if (!selectedSlugs.includes(m.slug)) continue;
-    for (const dep of (m.dependencies || [])) bringers.set(dep, m.slug);
-  }
-  // 副产物模板下拉（工单 k230-multi-template/04）：多模板模块（k230）显示，
-  // 选项 = manifest.python_artifact.templates（name + description 提示）；
-  // 改动 ≠ 默认才记进 pythonTemplates（缺省 = 不发字段 = 旧行为逐字节不变）
-  const templateSelect = (m) => {
-    const pa = m.python_artifact;
-    if (!pa || !pa.templates || pa.templates.length < 2) return "";
-    const current = pythonTemplates[m.slug] || pa.default;
-    const options = pa.templates.map((t) =>
-      `<option value="${esc(t.id)}" ${t.id === current ? "selected" : ""}>${esc(t.name || t.id)}</option>`).join("");
-    const hints = pa.templates.map((t) => `${t.name || t.id}：${t.description || ""}`).join("\n");
-    return `
-      <div class="row" style="margin:6px 0 0;align-items:center;gap:6px">
-        <label style="font-size:12px;color:var(--muted)">副产物模板</label>
-        <select data-template="${esc(m.slug)}" title="${esc(hints)}" style="font-size:12px;max-width:260px">${options}</select>
-      </div>`;
-  };
-  box.innerHTML = expanded.map((m) => {
-    const isDep = !selectedSlugs.includes(m.slug);
-    const bringer = bringers.get(m.slug);
-    return `
-    <div class="item">
-      <div class="head" title="${esc((m.description || "") + " " + notes(m))}">
-        <span class="slug">${esc(m.slug)}</span>
-        ${isDep ? `<span class="badge dep" title="由 ${esc(bringer || "其它模块")} 依赖带入">自动带入${bringer ? "·" + esc(bringer) : ""}</span>` : ""}
-        ${moduleBadges(m)}
-        ${isDep ? "" : `<button class="danger" data-remove="${esc(m.slug)}">移除</button>`}
-      </div>
-      <div class="desc" title="${esc((m.description || "") + " " + notes(m))}">${esc(m.description || "")}${(m.dependencies || []).length ? ` · 依赖：${esc(m.dependencies.join("、"))}` : ""}</div>
-      ${isDep ? "" : templateSelect(m)}
-    </div>`;
-  }).join("");
-  box.querySelectorAll("[data-remove]").forEach((b) =>
-    b.addEventListener("click", () => {
-      selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
-      expanded = []; warnings = [];
-      delete pythonTemplates[b.dataset.remove];  // 模板选择随模块移除清理（工单 04）
-      instancePinTarget = null;  // 选脚目标随清单变化失效（工单 04）
-      renderSelected(); renderWarnings(); renderModulePool();
-      renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
-      renderInstanceConfig();  // 多实例配置卡（工单 04）：被移除模块的实例清单随之清掉
-    }));
-  box.querySelectorAll("[data-template]").forEach((sel) =>
-    sel.addEventListener("change", () => {
-      const slug = sel.dataset.template;
-      const pa = expanded.find((m) => m.slug === slug)?.python_artifact;
-      if (sel.value === (pa && pa.default)) delete pythonTemplates[slug];
-      else pythonTemplates[slug] = sel.value;
-    }));
-}
-
-function renderWarnings() {
-  const box = $("warnings");
-  box.innerHTML = "";
-  // 功能组冲突警告（工单 recommend-exclusive-groups/04）：selectedSlugs 同组
-  // ≥2 成员 → 黄字警告（共用同一硬件，建议只留一个）；不硬拦（用户选择权）。
-  // 与平台警告并列展示，仍在时不影响平台警告/绿 OK 框逻辑。
-  const groupIssues = groupConflicts((lastRecommend || {}).exclusive_groups || [], selectedSlugs);
-  for (const issue of groupIssues) {
-    const div = document.createElement("div");
-    div.className = "warn-box group";
-    div.textContent = "[功能组冲突] 同属一组「" + issue.label + "」共用同一硬件，建议只留一个（已选：" + issue.slugs.join("、") + "）";
-    box.appendChild(div);
-  }
-  if (!warnings.length) {
-    if (expanded.length && !groupIssues.length) box.innerHTML = '<div class="warn-box ok" style="color:var(--ok);background:#d1fae5">所选模块在该平台均可直接用。</div>';
-    return;
-  }
-  for (const w of warnings) {
-    const div = document.createElement("div");
-    div.className = "warn-box " + w.kind;
-    div.textContent = "[" + KIND_TEXT[w.kind] + "] " + w.message;
-    box.appendChild(div);
-  }
-}
+// 已迁至 static/js/ui/generate-recommend.js（阶段 2 工单 12）：题面 PDF viewer /
+// 上传抽取 / 历史赛题取题面 useTopic / AI 推荐 SSE 流（recPanel / 进度 / 澄清）/
+// 参考文件选择器 / 模块池与推荐结果 / 已选清单与副产物模板 / 平台警告与功能组
+// 冲突 / 平台卡 renderPlatforms。状态随簇（chosenPlatform / selectedSlugs 等，
+// host 经 import 活绑定读、经 setter 写）；host 侧跨簇服务（引脚-多实例 /
+// 修复中心 / 草稿）经 setClusterDeps 接缝注册（见启动区），工单 13 / 16 / 18
+// 迁出后改静态 import。
 
 // ---------------------------------------------------------------------------
 // 生成页：6.5 多实例配置（工单 module-multi-instance/04）
@@ -3458,13 +2711,13 @@ function renderPinCard() {
   if (!chosenPlatform) {
     body.classList.add("hidden"); empty.classList.remove("hidden");
     empty.textContent = "请先选择目标平台（步骤 3）。";
-    syncStep7();
+    syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
     return;
   }
   if (!pinBoard) {
     body.classList.add("hidden"); empty.classList.remove("hidden");
     empty.textContent = pinBoardError ? "板定义加载失败：" + pinBoardError : "板定义加载中…";
-    syncStep7();
+    syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
     return;
   }
   // 选了平台就能看板图（不必等推荐/展开）：未展开模块清单时角色区显示占位文案
@@ -3489,7 +2742,7 @@ function renderPinCard() {
   $("pin-warn-list").innerHTML = warnHtml;
   $("pin-warn-sub").classList.toggle("hidden", !warnHtml);
   // 步骤 7 完成判定随角色/绑定/展开变化重算（工单 step7-done/01）
-  syncStep7();
+  syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
 }
 
 async function loadPinBoard() {
@@ -3852,7 +3105,7 @@ function unbindRole(key) {
   delete pinBindings[key];
   pinUnbound.add(key);  // 显式解除 = 红显未绑（生成仍按默认走）
   renderPinCard();
-  syncStep7();
+  syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
 }
 
 function bindRole(key, pinName) {
@@ -3870,7 +3123,7 @@ function bindRole(key, pinName) {
   pinUnbound.delete(key);
   pinHighlight = null;
   renderPinCard();
-  syncStep7();
+  syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
   // 共享宏族提示（v1 不拦截，接线语义用户把关）
   const famInfo = pinMacroFamilies(roles).get(key);
   pinHint(famInfo
@@ -4140,7 +3393,7 @@ function renderGenerateSuccess(data) {
   $("generate-msg").classList.add("ok");
   $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
   markStepDone(9);
-  syncStep7();  // 按默认布线生成成功 = 引脚步骤视为完成（工单 step7-done/01）
+  syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })  // 按默认布线生成成功 = 引脚步骤视为完成（工单 step7-done/01）
   refreshRecent();  // 生成成功 → 最近生成列表补一条（工单 recent-jobs/01）
   toast("ok", "工程生成完成");
   // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
@@ -6839,24 +6092,9 @@ async function deleteTopic(key) {
   } catch (e) { alert(e.message); }
 }
 
-/** 赛题库「用此题生成」：取题面 → 填生成页 → 步 1 完成 → 切 tab + 滚顶。
- * 与 btn-topic-load 同端点、同失效语义（clearTopicSummary 清下游状态）。 */
-async function useTopic(key) {
-  try {
-    const data = await handle(await fetch("/api/topics/" + encodeURIComponent(key)));
-    $("problem").value = data.problem_text;
-    currentTopicId = data.key;
-    clearTopicSummary();
-    markStepDone(1);
-    toast("ok", "已载入赛题 " + data.key);
-    document.querySelector('[data-tab="generate"]').click();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    loadTopicPdf(data.key);
-  } catch (e) {
-    toast("error", "载入赛题失败");
-    $("topic-browse-msg").textContent = e.message;
-  }
-}
+// 赛题库「用此题生成」已迁至 static/js/ui/generate-recommend.js（阶段 2 工单 12）：
+// useTopic 事务（取题面 → 填生成页 → 步 1 完成 → 切 tab 滚顶 → 加载题面页图）。
+// host（topic 簇）调用点 6639 / 6698 不变，经顶部 import 引用。
 
 function renderProofreadRows() {
   const box = $("topic-proofread-rows");
@@ -7291,104 +6529,11 @@ async function loadRecentWorkflows() {
 $("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
 
 // ---------------------------------------------------------------------------
-// 生成页步骤导航（工单 ui-polish/02）：左侧圆点随滚动高亮，完成变绿 ✓
-// ---------------------------------------------------------------------------
-const STEP_NAV_CARD_SELECTOR = "#tab-generate .gen-steps > .card";
-// 已迁至 static/js/fx/draft.js（工单 07）：stepNavTitles / stepNavItemsHTML / stepNavCurrent。
-function stepCard(n) {
-  const cards = document.querySelectorAll(STEP_NAV_CARD_SELECTOR);
-  return Array.from(cards).find((c) => {
-    const no = c.querySelector(".step-no");
-    return no && parseInt(no.textContent, 10) === n;
-  }) || null;
-}
-// 已迁至 static/js/fx/generate.js（工单 08）：attachCelebrate。
-function markStepDone(n) {
-  syncStepDone(n, true);
-  const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
-  if (item) {
-    item.classList.add("done");
-    const dot = item.querySelector(".dot");
-    if (dot) dot.textContent = "✓";
-  }
-  const card = stepCard(n);
-  if (card) { card.classList.add("done"); attachCelebrate(card); }
-}
-function markStepUndone(n) {
-  syncStepDone(n, false);
-  const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
-  if (item) {
-    item.classList.remove("done");
-    const dot = item.querySelector(".dot");
-    if (dot) dot.textContent = String(n);
-  }
-  const card = stepCard(n);
-  if (card) card.classList.remove("done", "celebrate");
-}
-function unmarkSteps(steps) {
-  for (const n of steps) markStepUndone(n);
-}
-// 已迁至 static/js/fx/draft.js（工单 07）：step7DoneState。
-function syncStep7() {
-  const roles = pinRoles();
-  const done = step7DoneState({
-    chosenPlatform: chosenPlatform,
-    expandedCount: expanded.length,
-    roles: roles,
-    roleBound: roles.some((r) => pinBindings[r.key]),
-    instBound: Object.values(instances || {}).some((arr) =>
-      (arr || []).some((i) => i && i.pin)),
-    generated: stepDoneSet.has(9),
-  });
-  if (done) markStepDone(7);
-  else markStepUndone(7);
-}
-(function initStepNav() {
-  const nav = $("step-nav");
-  if (!nav) return;
-  // 只收带 .step-no 徽章的步骤卡（6.5 多实例配置卡无徽章，不进导航）
-  const cards = Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR))
-    .filter((c) => c.querySelector(".step-no"));
-  if (!cards.length) return;
-  nav.innerHTML = stepNavItemsHTML(stepNavTitles(cards));
-  nav.addEventListener("click", (e) => {
-    const dot = e.target.closest(".step-dot");
-    if (!dot) return;
-    const card = stepCard(parseInt(dot.dataset.step, 10));
-    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-  let ticking = false;
-  const update = () => {
-    ticking = false;
-    const entries = cards.map((c) => {
-      const no = c.querySelector(".step-no");
-      const r = c.getBoundingClientRect();
-      return { n: no ? parseInt(no.textContent, 10) : NaN, top: r.top };
-    });
-    let cur = stepNavCurrent(entries, 120);
-    // 滚到底仍够不到阈值时（末卡较短）直接定位最后一步
-    if (entries.length && window.innerHeight + window.scrollY
-        >= document.documentElement.scrollHeight - 80) {
-      cur = entries[entries.length - 1].n;
-    }
-    nav.querySelectorAll(".step-dot").forEach((d) => {
-      d.classList.toggle("current", parseInt(d.dataset.step, 10) === cur);
-    });
-  };
-  const onScroll = () => {
-    if (!ticking) { ticking = true; requestAnimationFrame(update); }
-  };
-  // 吸顶栏高度实时写入 CSS 变量（header 窄屏会换行变高，写死会挡住/留白）
-  const syncHeaderH = () => {
-    const h = document.querySelector("header");
-    if (h) document.documentElement.style.setProperty(
-      "--header-h", Math.ceil(h.getBoundingClientRect().height) + "px");
-  };
-  document.addEventListener("scroll", onScroll, { passive: true });
-  window.addEventListener("resize", () => { syncHeaderH(); onScroll(); }, { passive: true });
-  syncHeaderH();
-  update();
-})();
+// 生成页步骤导航 / 完成态核心（工单 ui-polish/02）：已迁至
+// static/js/ui/step-state.js（阶段 2 工单 12）——STEP_NAV_CARD_SELECTOR /
+// stepCard / markStepDone / markStepUndone / unmarkSteps / syncStep7 /
+// initStepNav IIFE；host 经顶部 import 调用（syncStep7 已参数化，调用点传
+// {platform, expanded, roles, bindings, instances}）与读 stepDoneSet。
 
 // ---------------------------------------------------------------------------
 // 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
@@ -7417,12 +6562,12 @@ function restoreDraft() {
   const d = draftRestoreMeta(draftLoad(localStorage));
   if (!d) return;
   if (d.problem) { $("problem").value = d.problem; markStepDone(1); }
-  if (d.topicId) { $("topic-id").value = d.topicId; currentTopicId = d.topicId; }
+  if (d.topicId) { $("topic-id").value = d.topicId; setCurrentTopicId(d.topicId); }
   if (d.platform && state.platforms.some((p) => p.id === d.platform)) {
-    chosenPlatform = d.platform;
+    setChosenPlatform(d.platform);
     markStepDone(3);
   }
-  if (d.slugs.length) { selectedSlugs = d.slugs; markStepDone(6); }
+  if (d.slugs.length) { setSelectedSlugs(d.slugs); markStepDone(6); }
   if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); syncMainCHighlight(); }
   if (d.qa) { $("qa-text").value = d.qa; }
   if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); }
@@ -7446,26 +6591,10 @@ $("main-c").addEventListener("input", scheduleDraftSave);
 $("qa-text").addEventListener("input", scheduleDraftSave);
 
 // ---------------------------------------------------------------------------
-// 顶部流程进度条（工单 ui-polish-3/02）：完成步骤集合 → 细进度条 + 计数；
-// 与 markStepDone / markStepUndone 联动（STEP_TOTAL 与步骤总数保持同步）
-// ---------------------------------------------------------------------------
-const STEP_TOTAL = 12;
-const stepDoneSet = new Set();
-// 已迁至 static/js/fx/draft.js（工单 07）：stepProgress。
-function syncStepDone(n, done) {
-  if (done) stepDoneSet.add(n); else stepDoneSet.delete(n);
-  renderStepProgress();
-  refreshGenOverview();
-  refreshReadinessPanel();
-}
-function renderStepProgress() {
-  const el = $("gen-progress");
-  if (!el) return;
-  const { pct, text } = stepProgress(stepDoneSet.size, STEP_TOTAL);
-  el.querySelector(".gp-fill").style.width = pct + "%";
-  el.querySelector(".gp-text").textContent = text;
-  el.classList.toggle("hidden", pct === 0);
-}
+// 步骤完成集合与顶部进度条（工单 ui-polish-3/02）：STEP_TOTAL / stepDoneSet /
+// syncStepDone / renderStepProgress 已迁至 static/js/ui/step-state.js（阶段 2
+// 工单 12）；host 经 import 读 stepDoneSet（页签切换 / 总览 / 就绪面板），
+// 步骤变化联动总览 / 就绪面板经 setOnStepChange 注册（见启动区）。
 
 // ---------------------------------------------------------------------------
 // 生成页就绪总览（工单 gen-overview/01）：顶部步骤 chips + 摘要，状态与
@@ -7754,7 +6883,7 @@ function initReadinessCheck() {
         if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
       }
-      recommendClarifications = [];
+      setRecommendClarifications([]);
       startRecommend(problem);
     }
   });
@@ -7767,51 +6896,8 @@ function initReadinessCheck() {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// 生成页卡片折叠（工单 ui-polish-4/01）：标题行按钮 / 点击 toggle /
-// 导航底部「收起已完成」一键；折叠不持久化（刷新恢复展开）
-// ---------------------------------------------------------------------------
-const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
-// 已迁至 static/js/fx/generate.js（工单 08）：collapseBtnLabel / syncCollapseBtn / collapseToggleAll。
-function initCardCollapse() {
-  const cards = Array.from(document.querySelectorAll(CARD_COLLAPSE_SELECTOR));
-  for (const c of cards) {
-    const h2 = c.querySelector("h2");
-    if (!h2) continue;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "card-collapse";
-    syncCollapseBtn(btn, false);
-    btn.textContent = "▾";
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      syncCollapseBtn(btn, c.classList.toggle("collapsed"));
-    });
-    h2.appendChild(btn);
-    h2.addEventListener("click", (e) => {
-      if (e.target.closest(".card-collapse")) return;
-      syncCollapseBtn(btn, c.classList.toggle("collapsed"));
-    });
-  }
-  const nav = $("step-nav");
-  if (!nav) return;
-  const toggleBtn = document.createElement("button");
-  toggleBtn.type = "button";
-  toggleBtn.id = "btn-collapse-done";
-  toggleBtn.textContent = "收起已完成";
-  toggleBtn.style.cssText = "margin-top:6px;padding:2px 8px;font-size:10px;border-radius:999px;color:var(--muted);";
-  toggleBtn.addEventListener("click", () => {
-    const doneCount = stepDoneSet ? stepDoneSet.size : 0;
-    if (!doneCount) {   // 无完成步骤时点击无视觉变化 → 给明确反馈
-      toast("info", "还没有已完成的步骤，先完成前面的步骤吧");
-      return;
-    }
-    const collapsing = !toggleBtn.classList.contains("on");
-    collapseToggleAll(cards, stepDoneSet, collapsing);
-    toggleBtn.classList.toggle("on", collapsing);
-    toggleBtn.textContent = collapsing ? "全部展开" : "收起已完成";
-  });
-  nav.appendChild(toggleBtn);
-}
+// 生成页卡片折叠（工单 ui-polish-4/01）：CARD_COLLAPSE_SELECTOR / initCardCollapse
+// 已迁至 static/js/ui/step-state.js（阶段 2 工单 12）；host 启动区 7935 经 import 调用。
 
 // ---------------------------------------------------------------------------
 // 设置页折叠（工单 settings-infoarch/01-03）：整卡折叠 + 默认收起次要项 +
@@ -7899,6 +6985,37 @@ function initSettingsCollapse() {
 // 纯计算在 fx/llm.js。host 经顶部 import 调 recordLLMUsage（推荐 / 修复 / 修订流）
 // 与 renderUsageStats（设置 tab 分发器）。
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// 跨簇接缝注册（阶段 2 工单 12）：推荐簇 A 迁出后，模块内对 host 侧跨簇服务的
+// 调用经 setClusterDeps / setOnStepChange 注册进来（模块无法 import host 作用域）：
+//   - setClusterDeps：引脚-多实例（renderPinCard / renderInstanceConfig /
+//     loadPinBoard / resetPinState / resetInstances / clearInstanceTarget /
+//     backfillInstances——工单 13 迁出后改静态 import）、修复中心
+//     （updateFixCenterAvailability——工单 16 迁）、草稿（scheduleDraftSave——
+//     工单 18 迁）。
+//   - setOnStepChange：步骤完成态变化 → 总览（refreshGenOverview——工单 18 迁）/
+//     就绪面板（refreshReadinessPanel——工单 19 迁）；注册模式避免
+//     step-state → generate-steps 环。
+setClusterDeps({
+  scheduleDraftSave: () => scheduleDraftSave(),
+  updateFixCenterAvailability: () => updateFixCenterAvailability(),
+  resetPinState: () => { pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint(""); },
+  resetInstances: () => { instances = {}; instancePinTarget = null; renderInstanceConfig(); },
+  clearInstanceTarget: () => { instancePinTarget = null; },
+  renderPinCard: () => renderPinCard(),
+  renderInstanceConfig: () => renderInstanceConfig(),
+  loadPinBoard: () => loadPinBoard(),
+  backfillInstances: (dataInstances) => {
+    for (const slug of Object.keys(dataInstances)) {
+      instances[slug] = (dataInstances[slug] || []).map((i) => ({
+        name: String(i.name || ""), variant: i.variant || "", pin: i.pin || "",
+      }));
+    }
+    instancePinTarget = null;  // 旧选脚目标可能越界，清掉防陈旧高亮
+  },
+});
+setOnStepChange(() => { refreshGenOverview(); refreshReadinessPanel(); });
 
 // ---------------------------------------------------------------------------
 // 启动
