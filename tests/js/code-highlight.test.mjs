@@ -1,19 +1,8 @@
 // cHighlight / cLineCount 纯函数单测（工单 ui-polish-8/01）：
 // main.c 语法着色 token 化与行号生成。
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const m1 = html.match(/function cHighlight[\s\S]*?\n\}/);
-assert.ok(m1, "index.html 中未找到 cHighlight 函数体（改名了？）");
-const cHighlight = new Function("return (" + m1[0] + ")")();
-const m2 = html.match(/function cLineCount[\s\S]*?\n\}/);
-assert.ok(m2, "index.html 中未找到 cLineCount 函数体（改名了？）");
-const cLineCount = new Function("return (" + m2[0] + ")")();
+import { cHighlight, cLineCount } from "../../src/contest_generator/static/js/fx/code.js";
 
 test("行注释 → tok-com", () => {
   const out = cHighlight("// 初始化时钟");

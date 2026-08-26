@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { esc, formatSize } from "../../src/contest_generator/static/js/fx/core.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
@@ -44,8 +45,6 @@ function extract(name, deps) {
   throw new Error("未找到 " + name + " 函数体结束花括号");
 }
 
-const esc = extract("esc");
-const formatSize = extract("formatSize");
 const referencePlatformChip = extract("referencePlatformChip", { esc });
 // refDanglingAnchors 先于 refFilterEntries 提取（后者 dangling 分支依赖注入）
 const refDanglingAnchors = extract("refDanglingAnchors");

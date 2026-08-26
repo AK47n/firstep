@@ -2211,7 +2211,14 @@
   </section>
 </main>
 
-<script>
+<script type="module">
+// 前端纯函数模块（工单 frontend-es-modules/01）：静态 import 保证本模块执行前
+// fx/*.js 已加载完毕——DOM 胶水里的裸引用即模块作用域绑定，时序零等待
+import { esc, formatSize } from "/js/fx/core.js";
+import { envRowHTML, envChannelHTML, envCheckStatusHTML } from "/js/fx/env.js";
+import { btnIcon } from "/js/fx/btn-icon.js";
+import { platformClickAction } from "/js/fx/platform.js";
+import { cHighlight, cLineCount, codeZoomClamp, parseZoomStored, maincContentEmpty, maincFullscreenLabel, isMainCPath, maincLineOffsetRange } from "/js/fx/code.js";
 "use strict";
 const $ = (id) => document.getElementById(id);
 
@@ -2273,11 +2280,6 @@ async function apiDelete(url, body) {
   }));
 }
 
-function esc(text) {
-  return String(text).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[c]);
-}
 const KIND_TEXT = { missing: "缺平台版本（生成将失败）", unverified: "未验证", hardware_bound: "硬件绑定" };
 
 // ---------------------------------------------------------------------------
@@ -2344,15 +2346,6 @@ async function refreshState() {
 // 生成页：2. 平台选择
 // ---------------------------------------------------------------------------
 let chosenPlatform = null;
-function platformClickAction(current, clicked) {
-  // 平台卡点击决策三态（工单 platform-click-guard/01）：
-  // same = 重复点击当前已选平台（无操作，防误触丢推荐勾选——推荐完成后点一下
-  // 已选平台卡不该把刚勾选的模块清掉）；first = 未选平台首次选择（保留下游选择，
-  // 仅按新平台重展开做兼容检查）；switch = 真实切换平台（换平台语义，下游全部重来）。
-  if (current === clicked) return "same";
-  if (current === null) return "first";
-  return "switch";
-}
 function renderPlatforms() {
   const box = $("platforms");
   box.innerHTML = "";
@@ -4309,64 +4302,9 @@ function showPinMenu(pinEl, pinName) {
 
 // ---------------------------------------------------------------------------
 // main.c 行号 + 语法着色（工单 ui-polish-8/01）：textarea 透明文字 + 行号列 +
-// 高亮层三明治；滚动三同步。cHighlight / cLineCount 为自包含纯函数（tests/js
-// 正则抽取：不引用模块级常量、不调用其它抽取函数）
+// 高亮层三明治；滚动三同步。cHighlight / cLineCount 已迁至 static/js/fx/code.js
+// （本模块顶部 import，DOM 胶水直接引用）
 // ---------------------------------------------------------------------------
-function cHighlight(code) {
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[c]);
-  const src = String(code == null ? "" : code);
-  const kw = {};
-  "auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while".split(" ")
-    .forEach((w) => { kw[w] = true; });
-  let html = "";
-  let i = 0;
-  const n = src.length;
-  while (i < n) {
-    const ch = src[i];
-    if (ch === "/" && src[i + 1] === "/") {           // 行注释
-      let j = src.indexOf("\n", i); if (j < 0) j = n;
-      html += '<span class="tok-com">' + esc(src.slice(i, j)) + "</span>";
-      i = j;
-    } else if (ch === "/" && src[i + 1] === "*") {    // 块注释
-      let j = src.indexOf("*/", i + 2); j = j < 0 ? n : j + 2;
-      html += '<span class="tok-com">' + esc(src.slice(i, j)) + "</span>";
-      i = j;
-    } else if (ch === '"' || ch === "'") {            // 字符串
-      let j = i + 1;
-      while (j < n && src[j] !== ch) { if (src[j] === "\\") j++; j++; }
-      if (j < n) j++;
-      html += '<span class="tok-str">' + esc(src.slice(i, j)) + "</span>";
-      i = j;
-    } else if (/[0-9]/.test(ch) || (ch === "." && /[0-9]/.test(src[i + 1] || ""))) {  // 数字
-      let j = i;
-      while (j < n && /[0-9a-fA-FxXbBoO._]/.test(src[j])) j++;
-      html += '<span class="tok-num">' + esc(src.slice(i, j)) + "</span>";
-      i = j;
-    } else if (/[A-Za-z_]/.test(ch)) {                // 标识符 / 关键字
-      let j = i;
-      while (j < n && /[A-Za-z0-9_]/.test(src[j])) j++;
-      const word = src.slice(i, j);
-      html += kw[word] ? '<span class="tok-kw">' + word + "</span>" : esc(word);
-      i = j;
-    } else if (ch === "#" && (i === 0 || src[i - 1] === "\n")) {  // 预处理行
-      let j = src.indexOf("\n", i); if (j < 0) j = n;
-      html += '<span class="tok-pre">' + esc(src.slice(i, j)) + "</span>";
-      i = j;
-    } else {
-      html += esc(ch);
-      i++;
-    }
-  }
-  return html;
-}
-function cLineCount(code) {
-  const lines = String(code == null ? "" : code).split("\n");
-  const out = [];
-  for (let i = 0; i < lines.length; i++) out.push(String(i + 1));
-  return out.join("\n");
-}
 function syncMainCHighlight() {
   const ta = $("main-c"); const nums = $("main-c-nums"); const hl = $("main-c-hl");
   if (!ta || !nums || !hl) return;
@@ -4387,20 +4325,10 @@ function syncMainCHighlight() {
 })();
 // main.c 代码字号缩放（工单 code-zoom/01）：三明治以 .code-wrap 为字号基准，
 // 改一层 font-size 三层同缩（行号列宽/缩进已是 em 联动）。codeZoomClamp /
-// parseZoomStored 为自包含纯函数（tests/js 正则抽取：不引用模块级常量）
+// parseZoomStored 已迁至 static/js/fx/code.js（本模块顶部 import）
 // ---------------------------------------------------------------------------
-const CODE_ZOOM_MIN = 80, CODE_ZOOM_MAX = 200, CODE_ZOOM_STEP = 10;
+const CODE_ZOOM_STEP = 10;
 const CODE_ZOOM_BASE = 13, CODE_ZOOM_KEY = "firstep.mainc.zoom";
-function codeZoomClamp(pct) {
-  const min = 80, max = 200; // 自包含：pct 非法/越界时收敛到 [80,200]
-  if (typeof pct !== "number" || !Number.isFinite(pct)) return 100;
-  return Math.min(max, Math.max(min, Math.round(pct)));
-}
-function parseZoomStored(raw) {
-  if (raw == null) return 100;
-  const n = parseInt(String(raw), 10);
-  return codeZoomClamp(Number.isNaN(n) ? 100 : n);
-}
 function currentCodeZoomPct() {
   const wrap = $("main-c").closest(".code-wrap");
   const px = parseFloat(wrap ? wrap.style.fontSize : "");
@@ -4428,16 +4356,9 @@ function applyCodeZoom(pct) {
 // ---------------------------------------------------------------------------
 // main.c 工具栏（工单 mainc-tools/01）：复制 / 下载 / 全屏。
 // 悬浮在 .code-wrap 右上角（与字号缩放同一工具条）；全屏 = 同一 DOM 原地
-// fixed（三明治机制零改动）；maincContentEmpty / maincFullscreenLabel 为
-// 自包含纯函数（tests/js 正则抽取：不引用模块级常量）
+// fixed（三明治机制零改动）；maincContentEmpty / maincFullscreenLabel 已迁至
+// static/js/fx/code.js（本模块顶部 import）
 // ---------------------------------------------------------------------------
-function maincContentEmpty(value) {
-  const text = value == null ? "" : String(value);
-  return text.trim() === "";
-}
-function maincFullscreenLabel(active) {
-  return active ? "退出全屏" : "全屏";
-}
 function initMainCTools() {
   const ta = $("main-c");
   const wrap = ta ? ta.closest(".code-wrap") : null;
@@ -5216,21 +5137,9 @@ function fixKeyBasename(path, line) {
 // ---------------------------------------------------------------------------
 // main.c 错误行定位（工单 compile-error-jump/01）：点 main.c 的错误行 = 滚动
 // 到预览卡并选中该行文本（选区即持续高亮，点其他行切换）；非 main.c 的行
-// 维持 fixToggleSource 展开源码行。偏移 / 路径判定为自包含纯函数（tests/js
-// 正则抽取先例：不引用模块级常量）
+// 维持 fixToggleSource 展开源码行。偏移 / 路径判定已迁至 static/js/fx/code.js
+// （本模块顶部 import）
 // ---------------------------------------------------------------------------
-function isMainCPath(path) {
-  const parts = String(path == null ? "" : path).replace(/\\/g, "/").split("/");
-  return (parts[parts.length - 1] || "") === "main.c";
-}
-function maincLineOffsetRange(text, line) {
-  const lines = String(text == null ? "" : text).split("\n");
-  const n = Number(line);
-  if (!Number.isInteger(n) || n < 1 || n > lines.length) return null;
-  let start = 0;
-  for (let i = 0; i < n - 1; i++) start += lines[i].length + 1;  // +1 = \n
-  return { start, end: start + lines[n - 1].length };
-}
 // 选区滚入 textarea 视口：浏览器 focus 的滚动窗口行为不可靠（headless 实测
 // scrollTop 不动），这里在高亮层临时量测目标行视觉位置——hl-layer 与
 // textarea 排版参数同源（font/line-height/padding/pre-wrap/视口宽，三明治
@@ -7285,14 +7194,6 @@ $("ref-anchor-kind").addEventListener("change", () => {
   $("ref-anchor-topic").classList.toggle("hidden", kind !== "topic");
 });
 
-function formatSize(bytes) {
-  if (!Number.isFinite(bytes)) return "";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let v = bytes, i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return (i === 0 ? String(Math.round(v)) : v.toFixed(1)) + " " + units[i];
-}
-
 // 最近一次浏览的条目缓存：删除确认框显示体量（避免删 1630 个文件还不知道多大）
 let refEntryCache = [];
 // 悬空锚定判定数据源（工单 04）：赛题库 key 清单（/api/topics）——降级 = 空数组
@@ -8463,26 +8364,7 @@ function topicCardHTML(t, vocab) {
     + '</div></div>';
 }
 // 按钮图标（工单 ui-polish-9/04）：data-ico 注入内联 SVG（16px stroke 风格）。
-// 自包含纯函数（tests/js 抽取）：name → SVG 字符串，未知 name 返回 ""（安全兜底）
-function btnIcon(name) {
-  const S = ' fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
-  const I = {
-    rocket: '<path d="M8 1.5 L10 5.5 L13.5 11.5 L8 14 L2.5 11.5 L6 5.5 Z"/><circle cx="8" cy="7.6" r="1.6"/>',
-    code: '<path d="M5 4 L2 8 L5 12 M11 4 L14 8 L11 12"/>',
-    sparkles: '<path d="M8 1.8 L9.6 6.4 L14.2 8 L9.6 9.6 L8 14.2 L6.4 9.6 L1.8 8 L6.4 6.4 Z"/>',
-    doc: '<path d="M4.5 1.5 H10 L12.5 4 V14.5 H4.5 Z"/><path d="M10 1.5 V4 H12.5"/>',
-    clipboard: '<path d="M5.5 3 H10.5 V5 H5.5 Z"/><path d="M4.5 5 H11.5 V14 H4.5 Z"/>',
-    wrench: '<path d="M10.2 2.2 A3.6 3.6 0 0 1 12 8.8 L5.8 15 L3.8 13 L10 7.2 A3.6 3.6 0 0 1 10.2 2.2 Z"/>',
-    save: '<path d="M3 1.5 H13 V14.5 H3 Z"/><path d="M5 1.5 V6 H11 V1.5 M5 8 H11 V14.5"/>',
-    copy: '<rect x="2.5" y="6" width="9" height="8.5" rx="1"/><rect x="5.5" y="2.5" width="9" height="8.5" rx="1"/>',
-    check: '<path d="M2.5 8.5 L6 12 L13.5 4"/>',
-    upload: '<path d="M8 3 V10.5 M4.5 6.5 L8 3 L11.5 6.5 M3 13.5 H13"/>',
-    wand: '<path d="M4.5 11.5 L11.5 4.5"/><path d="M6.5 2.5 V4.5 M5.5 3.5 H7.5 M12.5 7 V9 M11.5 8 H13.5"/>',
-  };
-  return I[name]
-    ? '<svg class="btn-ico" viewBox="0 0 16 16" width="15" height="15"' + S + '>' + I[name] + '</svg>'
-    : "";
-}
+// btnIcon 已迁至 static/js/fx/btn-icon.js（本模块顶部 import）
 (function initBtnIcons() {
   document.querySelectorAll("[data-ico]").forEach((b) => {
     b.insertAdjacentHTML("afterbegin", btnIcon(b.dataset.ico));
@@ -9709,99 +9591,8 @@ $("btn-vision-selfcheck").addEventListener("click", async () => {
 });
 
 // 环境体检（工单 env-check-center/01）：静态探测 + 文本/视觉双通道真实自检。
-// 行结构 data-env-row 标记；ch 参数 = null（待检查）| {ok:true,data} | {ok:false,msg}。
-const ENV_BADGE_GLYPH = { "env-ok": "✓", "env-warn": "!", "env-err": "✕" };
-function envRowHTML(key, badgeCls, name, detail) {
-  return '<div class="env-row" data-env-row="' + key + '">'
-    + '<span class="env-badge ' + badgeCls + '">' + ENV_BADGE_GLYPH[badgeCls] + '</span>'
-    + '<span class="env-name">' + name + '</span>'
-    + '<span class="env-detail">' + detail + '</span></div>';
-}
-function envChannelHTML(key, name, ch) {
-  let badge, detail;
-  if (ch === "pending") {
-    badge = "env-warn";
-    detail = '<span class="spinner"></span>检查中…';
-  } else if (!ch) {
-    badge = "env-warn";
-    detail = "待检查（点「一键体检」触发）";
-  } else if (ch.ok) {
-    badge = "env-ok";
-    const d = ch.data || {};
-    detail = "正常（模型 " + esc(d.model || "?") + "，耗时 " + (d.elapsed_ms ?? "?") + "ms）"
-      + (d.reply ? "，回复：" + esc(d.reply) : "");
-  } else {
-    badge = "env-err";
-    detail = "失败：" + esc(ch.msg || "未知原因");
-  }
-  return envRowHTML(key, badge, name, detail);
-}
-function envCheckStatusHTML(status, textCh, visionCh) {
-  if (!status) return "";
-  const rows = [];
-  if (status.api_configured === true) {
-    const llm = status.llm || {};
-    const local = llm.local_llm_base_url || "";
-    rows.push(envRowHTML("api", "env-ok", "API 配置",
-      esc("已保存（模型 " + (llm.model || "?") + "，"
-        + (local ? "本地路由 " + local : "端点 " + (llm.base_url || "?")) + "）")));
-  } else if (status.api_configured === false) {
-    rows.push(envRowHTML("api", "env-err", "API 配置", "未保存主 API key，请到设置页「主 API」填写"));
-  }
-  rows.push(envChannelHTML("llm-text", "文本通道", textCh));
-  rows.push(envChannelHTML("llm-vision", "视觉通道", visionCh));
-  const tc = status.toolchains || {};
-  const tcMeta = {
-    stm32: { name: "Keil UV4（stm32）", miss: "未找到 UV4（可在设置页填 uv4_path 覆盖）" },
-    mspm0: { name: "gmake（mspm0）", miss: "未找到 gmake（可在设置页填 gmake_path 覆盖）" },
-  };
-  for (const [plat, meta] of Object.entries(tcMeta)) {
-    const entry = tc[plat];
-    if (!entry) continue;
-    if (entry.found) {
-      rows.push(envRowHTML("toolchain-" + plat, "env-ok", meta.name,
-        esc(entry.path || "") + (entry.override ? "（设置页路径覆盖）" : "")));
-    } else {
-      rows.push(envRowHTML("toolchain-" + plat, "env-err", meta.name, meta.miss));
-    }
-  }
-  for (const p of status.platforms || []) {
-    const ready = p.status === "ready";
-    rows.push(envRowHTML("platform-" + p.id, ready ? "env-ok" : "env-warn", p.name + " 母版",
-      ready ? "已就绪（可生成）" : "未导入母版（生成前需导入）"));
-  }
-  const lib = status.module_library;
-  if (lib !== undefined) {
-    if (lib.error) {
-      // 模块库异常 = 仅库不可用（其他功能可用）：⚠ 而非 ✗（spec 行 57）
-      rows.push(envRowHTML("module-library", "env-warn", "模块库", esc(lib.error)));
-    } else if (!lib.exists) {
-      rows.push(envRowHTML("module-library", "env-warn", "模块库", "目录不存在：" + esc(lib.dir || "")));
-    } else {
-      const n = lib.count || 0;
-      rows.push(envRowHTML("module-library", n > 0 ? "env-ok" : "env-warn", "模块库",
-        esc((String(n) + " 个模块：") + (lib.dir || ""))));
-    }
-  }
-  const md = status.masters_dir;
-  if (md !== undefined) {
-    if (md.exists) {
-      rows.push(envRowHTML("masters-dir", "env-ok", "母版目录", esc(md.dir || "")));
-    } else {
-      rows.push(envRowHTML("masters-dir", "env-warn", "母版目录", "不存在（首次导入母版时创建）"));
-    }
-  }
-  const out = status.output_dir;
-  if (out !== undefined) {
-    if (out.exists && out.writable) {
-      rows.push(envRowHTML("output-dir", "env-ok", "输出目录", esc(out.dir || "") + "（可写）"));
-    } else {
-      const why = !out.exists ? "目录不存在：" : "目录不可写：";
-      rows.push(envRowHTML("output-dir", "env-err", "输出目录", why + esc(out.dir || "")));
-    }
-  }
-  return rows.join("");
-}
+// envRowHTML / envChannelHTML / envCheckStatusHTML / ENV_BADGE_GLYPH 已迁至
+// static/js/fx/env.js（本模块顶部 import，含模块级常量）
 async function envCheckRun() {
   const btn = $("btn-env-check");
   const box = $("env-check-results");

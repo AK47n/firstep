@@ -1,20 +1,8 @@
 // codeZoomClamp / parseZoomStored 纯函数单测（工单 code-zoom/01）：
 // main.c 代码字号缩放的范围收敛与存储解析。
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const m1 = html.match(/function codeZoomClamp[\s\S]*?\n\}/);
-assert.ok(m1, "index.html 中未找到 codeZoomClamp 函数体（改名了？）");
-const codeZoomClamp = new Function("return (" + m1[0] + ")")();
-const m2 = html.match(/function parseZoomStored[\s\S]*?\n\}/);
-assert.ok(m2, "index.html 中未找到 parseZoomStored 函数体（改名了？）");
-// parseZoomStored 内部调用 codeZoomClamp：分开 eval 后无共享全局，注入闭包
-const parseZoomStored = new Function("codeZoomClamp", "return (" + m2[0] + ")")(codeZoomClamp);
+import { codeZoomClamp, parseZoomStored } from "../../src/contest_generator/static/js/fx/code.js";
 
 test("clamp：正常值原样返回", () => {
   assert.equal(codeZoomClamp(100), 100);

@@ -1,49 +1,10 @@
 // 环境体检纯函数单测（工单 env-check-center/01）：envCheckStatusHTML
 // （/api/env/status 数据 → 体检行 HTML）。只测外部行为（渲染结果），
 // 子串断言防脆；兄弟函数注入沿用 module-info-dialog.test.mjs 范式。
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取（同 module-info-dialog.test.mjs 范式）；deps = 注入的兄弟函数依赖
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  const open = html.indexOf("{", start);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let i = open; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, i + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const ENV_BADGE_GLYPH = { "env-ok": "✓", "env-warn": "!", "env-err": "✕" };
-const esc = extract("esc");
-const envRowHTML = extract("envRowHTML", { ENV_BADGE_GLYPH });
-const envChannelHTML = extract("envChannelHTML", { envRowHTML, esc });
-const envCheckStatusHTML = extract("envCheckStatusHTML", {
-  esc,
-  envRowHTML,
-  envChannelHTML,
-});
+import { esc } from "../../src/contest_generator/static/js/fx/core.js";
+import { ENV_BADGE_GLYPH, envRowHTML, envChannelHTML, envCheckStatusHTML } from "../../src/contest_generator/static/js/fx/env.js";
 
 // fixture：全字段形状（字段名与 /api/env/status 契约一致）
 const status = {

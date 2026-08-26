@@ -28,6 +28,7 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
@@ -831,6 +832,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
+
+    # 前端纯函数模块（工单 frontend-es-modules/01）：/js/fx/*.js 静态直挂，
+    # 无构建步骤（浏览器原生 ESM）；STATIC_DIR/js 下有 package.json {"type":"module"}
+    # 供 node 端测试按 ESM import
+    app.mount("/js", StaticFiles(directory=STATIC_DIR / "js"), name="js")
 
     # 全局状态：平台可用性 / 配置状态 / 工作目录
     @app.get("/api/state")

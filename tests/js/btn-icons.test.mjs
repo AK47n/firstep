@@ -3,17 +3,10 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { btnIcon } from "../../src/contest_generator/static/js/fx/btn-icon.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
-
-function extract(name) {
-  const m = html.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}"));
-  assert.ok(m, "function " + name + " not found in index.html");
-  return new Function(m[0] + "; return " + name + ";")();
-}
-
-const btnIcon = extract("btnIcon");
 
 const NAMES = ["rocket", "code", "sparkles", "doc", "clipboard", "wrench",
   "save", "copy", "check", "upload", "wand"];
