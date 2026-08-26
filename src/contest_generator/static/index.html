@@ -2235,7 +2235,7 @@ import { SETTINGS_COLLAPSE_KEY, SETTINGS_DEFAULT_COLLAPSED, parseSettingsCollaps
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
 import { $, handle, apiGet, apiPost, apiPut, apiDelete, KIND_TEXT, state, setState, toast } from "/js/app.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
-import { recordLLMUsage, llmPricesDefaults, setLlmPricesDefaults, renderUsageStats } from "/js/ui/usage.js";
+import { renderUsageStats } from "/js/ui/usage.js";
 import { loadMasters, loadChangelog } from "/js/ui/master.js";
 import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
 import { addFileRow, collectFiles, readPickedText, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
@@ -2244,6 +2244,7 @@ import { stepCard, markStepDone, markStepUndone, syncStep7, stepDoneSet, STEP_NA
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
 import { loadReferences, loadKitVocabulary, initReferenceToolbar, deleteReference, editReference, openReferenceFile, viewReferenceDetail } from "/js/ui/reference.js";
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
+import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 "use strict";
 
 // 主题切换（工单 ui-polish-5/01）：currentTheme / applyTheme / initTheme 及
@@ -2291,18 +2292,11 @@ document.querySelectorAll("nav button").forEach((btn) => {
 let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
 let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
 
-async function refreshState() {
-  setState(await apiGet("/api/state"));
-  $("gen-banner").classList.toggle("hidden", !!state.api_configured);
-  // 未配置时模块库读不到：保留旧列表（可能为空），不能让渲染中断
-  try { state.modules = await apiGet("/api/modules"); }
-  catch (e) { state.modules = state.modules || []; }
-  // 工具链可用性（工单 autocompile-loop/01）：一键编译修复按钮的置灰依据
-  toolchains = state.toolchains || { stm32: false, mspm0: false };
-  renderToolchainStatus();
-  renderPlatforms();
-  renderModulePool();
-}
+// 保存设置后的状态重载（refreshState）已随其唯一调用点（btn-save-settings）
+// 迁至 static/js/ui/settings.js（阶段 2 工单 10）：state / modules 重拉 +
+// 工具链重算（经 setSettingsDeps 接缝写宿主 toolchains +
+// renderToolchainStatus——工单 16 迁出后改静态 import）+ 平台卡 / 模块池重渲染。
+
 
 // ---------------------------------------------------------------------------
 // 生成页：1-3 题面 / 推荐 / 参考选择 + 5 模块池 / 选中 / 警告（推荐簇 A）
@@ -4956,345 +4950,21 @@ $("revise-problem-text").addEventListener("input", () => {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// 设置页
+// 设置页：配置加载 / 保存 / 视觉预设 / 环境体检 / 价格参考 / 单价收集 / 折叠
+// 与最近工作流（全部已迁 ui/settings.js）
 // ---------------------------------------------------------------------------
-async function loadSettings() {
-  try {
-    const s = await apiGet("/api/settings");
-    $("set-base-url").value = s.base_url || "https://api.deepseek.com";
-    $("set-model").value = s.model || "deepseek-v4-flash";
-    // key 只回掩码（前 4 位 + 与真实长度一致的圆点），直接填入文本框
-    $("set-api-key").value = s.api_key;
-    $("set-lib-dir").value = s.module_library_dir;
-    $("set-masters-dir").value = s.masters_dir;
-    // 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
-    $("set-uv4-path").value = s.uv4_path || "";
-    $("set-gmake-path").value = s.gmake_path || "";
-    // CCS 三件套可选覆盖（工单 mspm0-build-makefiles/01）：空串 = 自动探测
-    $("set-ccs-sdk-dir").value = s.ccs_sdk_dir || "";
-    $("set-ccs-compiler-dir").value = s.ccs_compiler_dir || "";
-    $("set-ccs-sysconfig-cli").value = s.ccs_sysconfig_cli || "";
-    // 本地 LLM 端点（工单 local-llm-routing/03）：空串 = 本地路由关闭
-    $("set-local-llm-base-url").value = s.local_llm_base_url || "";
-    // 本地模型下拉（速度/质量自选）：预设三档；自定义旧值保留为附加选项
-    const llmSel = $("set-local-llm-model");
-    if (s.local_llm_model && !Array.from(llmSel.options).some((o) => o.value === s.local_llm_model)) {
-      const opt = document.createElement("option");
-      opt.value = s.local_llm_model;
-      opt.textContent = s.local_llm_model + "（自定义）";
-      llmSel.appendChild(opt);
-    }
-    llmSel.value = s.local_llm_model || "";
-    // 视觉通道（工单 vision-deepseek-native/01）：key 只回掩码；空 = 复用主
-    // DeepSeek key（自定义视觉端点 = 关闭，见设置页说明）
-    $("set-vision-base-url").value = s.vision_base_url || "";
-    $("set-vision-api-key").value = s.vision_api_key || "";
-    $("set-vision-model").value = s.vision_model || "";
-// 问答式精注记开关（工单 vision-detail-qa/01）：缺省开——旧 state 无该字段
-// 时按开处理（`!== false`），避免老用户升级后悄悄丢精注记
-$("set-vision-detail-qa").checked = s.vision_detail_qa !== false;
-    // 视觉服务下拉（工单 vision-provider-switch/01）：掩码 key 存档供切回智谱
-    // 时回填沿用；按 base_url 推断当前模式（不覆盖用户已存字段）
-    visionZhipuMask = s.vision_api_key || "";
-    syncVisionProviderFromFields();
-    // LLM 单价（工单 llm-cost-control/01 + 缓存拆分 + 计费时段）：输入框只显示
-    // 用户显式覆盖（llm_prices_override 原文）；无覆盖 = 留空，placeholder 显示
-    // 所选时段的官方价（留空 = 按时段基准价计费）
-    setLlmPricesDefaults(s.llm_prices || {});
-    const priceOverride = s.llm_prices_override || {};
-    const dsOv = priceOverride.deepseek || {};
-    $("set-ds-in-hit").value = dsOv.input_cache_hit_per_million ?? "";
-    $("set-ds-in").value = dsOv.input_cache_miss_per_million ?? (dsOv.input_per_million ?? "");
-    $("set-ds-out").value = dsOv.output_per_million ?? "";
-    const localOv = priceOverride.local || {};
-    $("set-local-in").value = localOv.input_cache_miss_per_million ?? (localOv.input_per_million ?? "");
-    $("set-local-out").value = localOv.output_per_million ?? "";
-    // 计费时段（工单 01 扩展）：peak 高峰 / off_peak 空闲，决定 placeholder 与基准价
-    const period = s.llm_price_period === "off_peak" ? "off_peak" : "peak";
-    $("period-peak").checked = period === "peak";
-    $("period-off-peak").checked = period === "off_peak";
-    renderPriceReference(s.price_reference);
-    periodPlaceholders(period);
-    // 推荐缓存开关（工单 llm-cost-control/02）：缺省开
-    $("set-recommend-cache").checked = s.recommend_cache_enabled !== false;
-    // 收敛轮数上限（工单 01）：缺省 4
-    $("set-recommend-rounds").value = String(s.recommend_max_rounds ?? 4);
-    $("set-config-path").textContent = s.config_path;
-    $("settings-banner").classList.toggle("hidden", !!s.configured);
-  } catch (e) { $("settings-msg").textContent = e.message; }
-}
+// 已迁至 static/js/ui/settings.js（阶段 2 工单 10）：loadSettings /
+// syncVisionProviderFromFields / applyVisionPreset / envCheckRun /
+// renderPriceReference / periodPlaceholders / collectLlmPrices /
+// renderRecentWorkflows / loadRecentWorkflows / refreshState + 视觉预设与
+// 全部按钮监听（set-vision-provider / btn-vision-selfcheck / btn-env-check /
+// price-period / set-local-llm-model / btn-save-settings /
+// btn-refresh-recent-wf）。单价表（llmPricesDefaults / setLlmPricesDefaults）
+// 属 ui/usage.js（工单 04 前置拆分），本模块经 import 读写活绑定；
+// 纯件在 fx/settings.js / fx/workflow.js / fx/env.js。
+// host 页签分发器 / 启动区经顶部 import 调 loadSettings / loadRecentWorkflows /
+// initSettingsCollapse（见 import 行与启动区）。
 
-// 视觉服务下拉（工单 vision-provider-switch/01）：一键切换 DeepSeek / 智谱
-// 预设，自动填 base_url 与模型；切 DeepSeek 清空 key（防显式 key 优先把智谱
-// key 发给 DeepSeek），切智谱回填已存掩码（PUT 掩码 → 后端沿用旧值）。
-let visionZhipuMask = "";
-let visionApplyingPreset = false;
-const VISION_PRESETS = {
-  deepseek: { base: "https://api.deepseek.com", model: "deepseek-v4-flash-vision-exp" },
-  zhipu: { base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash" },
-};
-const VISION_HINTS = {
-  deepseek: "DeepSeek 官方视觉模型，与主 LLM 同 key 同价；key 留空自动复用主 key，零额外配置。",
-  zhipu: "智谱 GLM-4.6V-Flash 视觉通道；key 自动沿用已保存的智谱 key（掩码不变），留空则需自行填写。",
-  custom: "其它 OpenAI 兼容视觉服务须自备 key；主 key 只在 DeepSeek 官方端点时复用，绝不外发其它服务商。",
-};
-function syncVisionProviderFromFields() {
-  // 按 base_url 推断当前模式：bigmodel.cn → 智谱；api.deepseek.com 或空
-  // （空 = 回落默认 DeepSeek）→ DeepSeek；其它 → 自定义。只动下拉与提示，
-  // 不覆盖用户已存字段。
-  const base = ($("set-vision-base-url").value || "").trim().toLowerCase();
-  let mode = "custom";
-  if (!base || base.includes("api.deepseek.com")) mode = "deepseek";
-  else if (base.includes("bigmodel.cn")) mode = "zhipu";
-  $("set-vision-provider").value = mode;
-  $("vision-provider-hint").textContent = VISION_HINTS[mode];
-}
-function applyVisionPreset(mode) {
-  visionApplyingPreset = true;
-  try {
-    if (mode === "deepseek") {
-      $("set-vision-base-url").value = VISION_PRESETS.deepseek.base;
-      $("set-vision-model").value = VISION_PRESETS.deepseek.model;
-      $("set-vision-api-key").value = "";   // 安全必需：显式 key 优先，不清空会把旧智谱 key 发给 DeepSeek
-      $("set-vision-api-key").placeholder = "留空 = 复用主 DeepSeek key";
-    } else if (mode === "zhipu") {
-      $("set-vision-base-url").value = VISION_PRESETS.zhipu.base;
-      $("set-vision-model").value = VISION_PRESETS.zhipu.model;
-      $("set-vision-api-key").value = visionZhipuMask || "";
-      $("set-vision-api-key").placeholder = "智谱开放平台 API key";
-    } else {
-      $("set-vision-api-key").placeholder = "自定义服务 API key";
-    }
-  } finally {
-    visionApplyingPreset = false;
-  }
-  $("vision-provider-hint").textContent = VISION_HINTS[mode];
-}
-$("set-vision-provider").addEventListener("change", () =>
-  applyVisionPreset($("set-vision-provider").value));
-// 手动改 base_url / 模型与当前预设不符 → 自动转「自定义」（key 手改不触发；
-// 预设填充期间用 visionApplyingPreset 屏蔽，避免与切换互相覆盖）
-["set-vision-base-url", "set-vision-model"].forEach((id) => {
-  $(id).addEventListener("input", () => {
-    if (visionApplyingPreset) return;
-    const mode = $("set-vision-provider").value;
-    const pres = VISION_PRESETS[mode];
-    const key = id === "set-vision-base-url" ? "base" : "model";
-    if (pres && $(id).value.trim() !== pres[key]) {
-      $("set-vision-provider").value = "custom";
-      $("vision-provider-hint").textContent = VISION_HINTS.custom;
-    }
-  });
-});
-
-// 视觉通道自检（工单 vision-selfcheck/01）：用当前填写参数（含"key 留空 =
-// 复用主 key"装配逻辑，后端 _resolve_vision 同源）真实调用一次视觉模型；
-// 成功绿字回显模型/耗时，失败红字显示后端中文原因（handle() 统一提取）。
-$("btn-vision-selfcheck").addEventListener("click", async () => {
-  const status = $("vision-selfcheck-status");
-  status.className = "muted";
-  status.textContent = "正在调用视觉模型…";
-  try {
-    const data = await apiPost("/api/vision/selfcheck");
-    status.className = "ok";
-    status.textContent = "✓ 视觉通道正常（模型 " + esc(data.model || "?") + "，耗时 "
-      + (data.elapsed_ms ?? "?") + "ms）：" + esc(data.message || "");
-  } catch (e) {
-    status.className = "error";
-    status.textContent = "✕ 自检失败：" + e.message;
-  }
-});
-
-// 环境体检（工单 env-check-center/01）：静态探测 + 文本/视觉双通道真实自检。
-// envRowHTML / envChannelHTML / envCheckStatusHTML / ENV_BADGE_GLYPH 已迁至
-// static/js/fx/env.js（本模块顶部 import，含模块级常量）
-async function envCheckRun() {
-  const btn = $("btn-env-check");
-  const box = $("env-check-results");
-  if (!btn || !box || btn.disabled) return;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>体检中…';
-  let status;
-  try {
-    status = await apiGet("/api/env/status");
-  } catch (e) {
-    box.innerHTML = '<div class="error">体检失败：' + esc(e.message) + "</div>";
-    btn.disabled = false;
-    btn.textContent = "一键体检";
-    return;
-  }
-  box.innerHTML = envCheckStatusHTML(status, "pending", "pending");
-  const [textRes, visionRes] = await Promise.allSettled([
-    apiPost("/api/llm/selfcheck"),
-    apiPost("/api/vision/selfcheck"),
-  ]);
-  const settleCh = (r) => r.status === "fulfilled"
-    ? { ok: true, data: r.value }
-    : { ok: false, msg: (r.reason && r.reason.message) || "请求失败" };
-  box.innerHTML = envCheckStatusHTML(status, settleCh(textRes), settleCh(visionRes));
-  btn.disabled = false;
-  btn.textContent = "一键体检";
-}
-$("btn-env-check").addEventListener("click", envCheckRun);
-
-// 本地模型下拉联动：选「关闭」→ 清空 base_url（本地路由关闭）；选模型 → 补默认端点
-$("set-local-llm-model").addEventListener("change", () => {
-  const urlEl = $("set-local-llm-base-url");
-  if ($("set-local-llm-model").value === "") {
-    urlEl.value = "";
-  } else if (!urlEl.value.trim()) {
-    urlEl.value = "http://localhost:11434/v1";
-  }
-});
-
-/** DeepSeek Flash 官方价格参考表渲染（工单 llm-cost-control 更新）：
- * 数据单源 = 后端 DEEPSEEK_FLASH_PRICE_REFERENCE（/api/settings
- * price_reference），前端只渲染不硬编码；缺数据 = 面板隐藏。
- * 同时缓存到 window.__priceRef 供 periodPlaceholders 用（placeholder =
- * 所选时段的官方价）。 */
-function renderPriceReference(ref) {
-  const rows = $("price-ref-rows");
-  if (!ref || !rows) return;
-  rows.innerHTML = "";   // 重绘前清空：loadSettings 每次进设置页都调用，不清空会累积重复
-  window.__priceRef = ref;
-  const fmt = (v) => (v ?? "-") + " 元";
-  const row = (label, entry) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + esc(label) + "</td>"
-      + "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + fmt(entry.off_peak) + "</td>"
-      + "<td style='padding:4px 8px;border-bottom:1px solid var(--border,#333)'>" + fmt(entry.peak) + "</td>";
-    rows.appendChild(tr);
-  };
-  row("输入（缓存命中）", ref.input_cache_hit || {});
-  row("输入（缓存未命中）", ref.input_cache_miss || {});
-  row("输出", ref.output || {});
-  const foot = $("price-ref-foot");
-  if (foot) {
-    const concur = ref.concurrent_connections;
-    const asOf = ref.as_of ? "（" + esc(ref.as_of) + " 官方定价）" : "";
-    foot.textContent = concur
-      ? "单服务实例最大并发连接数：" + concur + " " + asOf
-      : asOf;
-  }
-}
-
-/** 输入框 placeholder = 所选时段的官方价（留空 = 按此时段基准价计费）。 */
-function periodPlaceholders(period) {
-  const ref = window.__priceRef || {};
-  const set = (id, entry) => {
-    const v = (entry || {})[period];
-    if (v !== undefined && $(id)) $(id).placeholder = String(v);
-  };
-  set("set-ds-in-hit", ref.input_cache_hit);
-  set("set-ds-in", ref.input_cache_miss);
-  set("set-ds-out", ref.output);
-}
-
-document.querySelectorAll('input[name="price-period"]').forEach((radio) =>
-  radio.addEventListener("change", () => periodPlaceholders(radio.value)));
-
-function collectLlmPrices() {
-  // 每个 provider 的框全留空 = 不覆盖（维持当前/默认）；任一填写则按填的值
-  // （未填的沿用当前生效值）→ 空对象 = 后端恢复内置默认。
-  // DeepSeek 输入分缓存命中/未命中两档（官方差价 ~30 倍）；local 无缓存
-  // 概念：输入框值同时写命中/未命中两档。
-  const llmPrices = {};
-  const ds = {};
-  const curDs = llmPricesDefaults.deepseek || { input_cache_hit_per_million: 0, input_cache_miss_per_million: 0, output_per_million: 0 };
-  const hit = $("set-ds-in-hit").value.trim(), miss = $("set-ds-in").value.trim(), out = $("set-ds-out").value.trim();
-  if (hit || miss || out) {
-    ds.input_cache_hit_per_million = hit ? parseFloat(hit) : curDs.input_cache_hit_per_million;
-    ds.input_cache_miss_per_million = miss ? parseFloat(miss) : curDs.input_cache_miss_per_million;
-    ds.output_per_million = out ? parseFloat(out) : curDs.output_per_million;
-    llmPrices.deepseek = ds;
-  }
-  const i = $("set-local-in").value.trim(), o = $("set-local-out").value.trim();
-  if (i || o) {
-    const cur = (llmPricesDefaults.local || { input_cache_miss_per_million: 0, output_per_million: 0 });
-    const localIn = i ? parseFloat(i) : cur.input_cache_miss_per_million;
-    llmPrices.local = {
-      input_cache_hit_per_million: localIn,
-      input_cache_miss_per_million: localIn,
-      output_per_million: o ? parseFloat(o) : cur.output_per_million,
-    };
-  }
-  return llmPrices;
-}
-
-$("btn-save-settings").addEventListener("click", async () => {
-  $("settings-msg").textContent = "";
-  try {
-    const data = await apiPut("/api/settings", {
-      base_url: $("set-base-url").value.trim(),
-      api_key: $("set-api-key").value.trim(),
-      model: $("set-model").value.trim(),
-      module_library_dir: $("set-lib-dir").value.trim(),
-      masters_dir: $("set-masters-dir").value.trim(),
-      uv4_path: $("set-uv4-path").value.trim(),
-      gmake_path: $("set-gmake-path").value.trim(),
-      ccs_sdk_dir: $("set-ccs-sdk-dir").value.trim(),
-      ccs_compiler_dir: $("set-ccs-compiler-dir").value.trim(),
-      ccs_sysconfig_cli: $("set-ccs-sysconfig-cli").value.trim(),
-      local_llm_base_url: $("set-local-llm-base-url").value.trim(),
-      local_llm_model: $("set-local-llm-model").value.trim(),
-      vision_base_url: $("set-vision-base-url").value.trim(),
-      vision_api_key: $("set-vision-api-key").value.trim(),
-      vision_model: $("set-vision-model").value.trim(),
-      vision_detail_qa: $("set-vision-detail-qa").checked,
-      llm_prices: collectLlmPrices(),
-      llm_price_period: $("period-peak").checked ? "peak" : "off_peak",
-      recommend_cache_enabled: $("set-recommend-cache").checked,
-      recommend_max_rounds: parseInt($("set-recommend-rounds").value, 10) || 4,
-    });
-    $("settings-msg").classList.add("ok");
-    $("settings-msg").textContent = "已保存，立即生效。";
-    await refreshState();
-    loadSettings();
-  } catch (e) {
-    $("settings-msg").classList.remove("ok");
-    $("settings-msg").textContent = e.message;
-  }
-});
-
-// ---------------------------------------------------------------------------
-// 最近 LLM 工作流（工单 llm-observability-dashboard/03）：只读内存仪表盘
-// 纯函数已迁至 static/js/fx/workflow.js（阶段 2 工单 01）：wfNum / formatWorkflowUsage /
-// formatWorkflowCost / formatWorkflowSummary / formatWorkflowCall；以下为渲染胶水。
-// ---------------------------------------------------------------------------
-function renderRecentWorkflows(data) {
-  const el = $("recent-workflows");
-  const workflows = (data && data.workflows) || [];
-  if (!workflows.length) {
-    el.innerHTML = '<div class="empty-state"><div class="es-icon">⚙️</div><div class="es-title">暂无已完成的工作流</div><div class="es-hint">运行一次推荐 / 骨架 / 修复 / 提炼后，这里会出现记录。</div></div>';
-    return;
-  }
-  el.innerHTML = workflows.map((w) => {
-    const calls = (w.calls || []).map((c) => {
-      const line = formatWorkflowCall(c);
-      return '<div class="call-row" title="' + esc(line) + '">' + esc(line) + "</div>";
-    }).join("");
-    const statusText = w.status === "error" ? "失败" : "成功";
-    const statusCls = w.status === "error" ? "wf-status-error" : "wf-status-ok";
-    return '<div class="recent-wf-summary">'
-      + '<div><span class="wf-name">' + esc(w.workflow_name || "unknown") + "</span>"
-      + ' <span class="' + statusCls + '">' + statusText + "</span>"
-      + ' <span class="muted">' + esc(w.workflow_id) + "</span></div>"
-      + '<div class="muted">' + esc(formatWorkflowSummary(w)) + "</div>"
-      + (calls ? '<div class="recent-wf-calls">' + calls + "</div>" : "")
-      + "</div>";
-  }).join("");
-}
-
-async function loadRecentWorkflows() {
-  const el = $("recent-workflows");
-  try {
-    renderRecentWorkflows(await apiGet("/api/llm-workflows/recent"));
-  } catch (e) {
-    el.innerHTML = '<div class="muted">读取失败：' + esc(e.message || String(e)) + "</div>";
-  }
-}
-
-$("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
 
 // ---------------------------------------------------------------------------
 // 生成页步骤导航 / 完成态核心（工单 ui-polish/02）：已迁至
@@ -5668,84 +5338,11 @@ function initReadinessCheck() {
 // 已迁至 static/js/ui/step-state.js（阶段 2 工单 12）；host 启动区 7935 经 import 调用。
 
 // ---------------------------------------------------------------------------
-// 设置页折叠（工单 settings-infoarch/01-03）：整卡折叠 + 默认收起次要项 +
-// 状态记忆；与生成页折叠（CARD_COLLAPSE_SELECTOR）互不干扰。
-// 存储：localStorage「firstep.settingsCollapse.v1」，JSON {id: collapsed}，
-// 用户选择优先于默认集；解析失败按 {}。默认集单源 = SETTINGS_DEFAULT_COLLAPSED
-// ---------------------------------------------------------------------------
-// 已迁至 static/js/fx/settings.js（工单 10）：SETTINGS_COLLAPSE_KEY /
-// SETTINGS_DEFAULT_COLLAPSED / parseSettingsCollapse / settingsDefaultCollapsed /
-// effectiveCollapsed / settingsMasterLabel / sectionCollapseLabel /
-// settingsSectionHead / applySettingsCollapseState。保存 / 初始化胶水留内联。
-function saveSettingsCollapse(state) {
-  try { localStorage.setItem(SETTINGS_COLLAPSE_KEY, JSON.stringify(state)); }
-  catch (e) { /* 忽略，沿主题/用量先例 */ }
-}
-function initSettingsCollapse() {
-  const section = $("tab-settings");
-  if (!section) return;
-  const items = Array.from(section.querySelectorAll("[data-collapse-id]"));
-  if (!items.length) return;
-  const stored = parseSettingsCollapse(localStorage.getItem(SETTINGS_COLLAPSE_KEY));
-  const state = {};
-  const syncMasterLabel = () => {
-    const master = $("btn-settings-collapse-all");
-    if (!master) return;
-    const allCollapsed = items.every((c) => c.classList.contains("collapsed"));
-    master.textContent = settingsMasterLabel(allCollapsed);
-  };
-  // 单元素切换（计费头 / ▾ / 标题三处共用）：toggle → 落 state → 同步按钮 →
-  // 写盘 → 刷新总开关标签
-  const toggleSettingsCollapse = (c) => {
-    const next = c.classList.toggle("collapsed");
-    state[c.dataset.collapseId] = next;
-    applySettingsCollapseState(c, next);
-    saveSettingsCollapse(state);
-    syncMasterLabel();
-  };
-  for (const c of items) {
-    const id = c.dataset.collapseId;
-    const collapsed = effectiveCollapsed(id, stored);
-    state[id] = collapsed;
-    const head = settingsSectionHead(c);
-    if (head) {   // 计费小节：头按钮即 toggle（无 h2）
-      applySettingsCollapseState(c, collapsed);
-      head.addEventListener("click", () => toggleSettingsCollapse(c));
-      continue;
-    }
-    const h2 = c.querySelector("h2");
-    if (!h2) continue;   // 保存设置卡无 h2 → 不可折叠
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "card-collapse";
-    btn.textContent = "▾";
-    h2.appendChild(btn);   // 先挂载再应用（工单 settings-infoarch/02）：apply 经
-                           // querySelector 找按钮同步初始 title/aria
-    applySettingsCollapseState(c, collapsed);
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleSettingsCollapse(c);
-    });
-    h2.addEventListener("click", (e) => {
-      if (e.target.closest(".card-collapse")) return;
-      toggleSettingsCollapse(c);
-    });
-  }
-  const master = $("btn-settings-collapse-all");
-  if (master) {
-    master.addEventListener("click", () => {
-      const target = !items.every((c) => c.classList.contains("collapsed"));
-      for (const c of items) {
-        const id = c.dataset.collapseId;
-        state[id] = target;
-        applySettingsCollapseState(c, target);
-      }
-      saveSettingsCollapse(state);
-      syncMasterLabel();
-    });
-    syncMasterLabel();
-  }
-}
+// 设置页折叠（工单 settings-infoarch/01-03）：saveSettingsCollapse /
+// initSettingsCollapse 已迁至 static/js/ui/settings.js（阶段 2 工单 10）；
+// 纯件在 fx/settings.js（SETTINGS_COLLAPSE_KEY / parseSettingsCollapse /
+// effectiveCollapsed / settingsMasterLabel / settingsSectionHead /
+// applySettingsCollapseState 等）。host 启动区 5821 经 import 调用。
 
 // ---------------------------------------------------------------------------
 // LLM 用量统计（工单 ui-polish-5/02）：记录服务（recordLLMUsage / 单价表 /
@@ -5784,6 +5381,7 @@ setClusterDeps({
   },
 });
 setOnStepChange(() => { refreshGenOverview(); refreshReadinessPanel(); });
+setSettingsDeps({ applyToolchains: (ts) => { toolchains = ts; renderToolchainStatus(); } });
 
 // ---------------------------------------------------------------------------
 // 启动

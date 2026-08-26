@@ -16,6 +16,11 @@ const recSrc = readFileSync(
   new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
   "utf8"
 );
+// 工作流加载/渲染胶水已迁 ui/settings.js（阶段 2 工单 10 重指向）
+const settingsSrc = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/settings.js", import.meta.url),
+  "utf8"
+);
 
 test("summary 行：provider 拆分 / call 数 / 耗时 / 请求字节 / 状态 / usage", () => {
   assert.equal(
@@ -131,7 +136,7 @@ test("仪表盘文案：token 标注服务商上报、费用为估算参考值�
   assert.ok(html.includes("估算的参考值"), "卡片脚注应声明费用为估算参考值");
   assert.ok(html.includes("官方账单为准"), "卡片脚注应声明以官方账单为准");
   assert.ok(html.includes("仅保存在内存"), "卡片脚注应声明仅内存、重启清空");
-  assert.ok(html.includes("/api/llm-workflows/recent"), "应调用只读 recent 端点");
+  assert.ok(settingsSrc.includes("/api/llm-workflows/recent"), "应调用只读 recent 端点（随簇迁 settings.js）");
 });
 
 test("推荐缓存（工单 llm-cost-control/02）：开关与 cache_hit 处理存在", () => {

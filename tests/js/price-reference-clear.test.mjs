@@ -10,10 +10,15 @@ const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
+// 函数体断言按归属指向 ui/settings.js（阶段 2 工单 10 重指向）
+const settingsSrc = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/settings.js", import.meta.url),
+  "utf8"
+);
 
 test("renderPriceReference 重绘前清空 price-ref-rows", () => {
-  const match = html.match(/function renderPriceReference[\s\S]*?\n\}/);
-  assert.ok(match, "index.html 中未找到 renderPriceReference 函数体（改名了？）");
+  const match = settingsSrc.match(/function renderPriceReference[\s\S]*?\n\}/);
+  assert.ok(match, "settings.js 中未找到 renderPriceReference 函数体（改名了？）");
   const body = match[0];
   // 清空语句必须在 appendChild 之前（先清后画）
   const clearIdx = body.indexOf('rows.innerHTML = ""');
@@ -22,7 +27,7 @@ test("renderPriceReference 重绘前清空 price-ref-rows", () => {
   assert.ok(appendIdx > clearIdx, "清空语句必须在追加之前");
 });
 
-test("index.html 定价表 tbody 存在且数据单源 = 后端", () => {
+test("index.html 定价表 tbody 存在且数据单源 = 后端（调用点随簇迁 settings.js）", () => {
   assert.match(html, /id="price-ref-rows"/);
-  assert.match(html, /renderPriceReference\(s\.price_reference\)/);
+  assert.match(settingsSrc, /renderPriceReference\(s\.price_reference\)/);
 });
