@@ -2658,3 +2658,74 @@ def test_references_update_route_rejects_bad_payloads(tmp_path):
         ).status_code
         == 200
     )
+
+
+def test_references_anchor_value_empty_allowed_for_none(tmp_path):
+    """未锚定条目：anchor_value 空串是合法值（页面「未锚定」单选提交 ""）。
+
+    回归：路由曾用 _require_str 校验 anchor_value（拒空串），导致「未锚定」
+    条目永远无法新增 / 编辑（存量 148/154 条均为早期录入）。键必须存在且为
+    字符串（非字符串仍 400）；空串合法性由 _validate_anchor 域校验裁决
+    （none 强制空值 / topic 格式 / kit 词表）。
+    """
+    client = _app(tmp_path, ReferenceLLM())
+    added = client.post(
+        "/api/references",
+        json={
+            "title": "未锚定条目",
+            "type": "说明书",
+            "description": "不属于任何赛题 / 套件",
+            "anchor_kind": ANCHOR_KIND_NONE,
+            "anchor_value": "",
+            "files": {"doc.txt": "正文"},
+        },
+    )
+    assert added.status_code == 200
+    entry_id = added.json()["id"]
+    assert added.json()["anchor_kind"] == ANCHOR_KIND_NONE
+    assert added.json()["anchor_value"] == ""
+
+    updated = client.put(
+        f"/api/references/{entry_id}",
+        json={
+            "title": "未锚定条目（改）",
+            "type": "说明书",
+            "description": "改过",
+            "anchor_kind": ANCHOR_KIND_NONE,
+            "anchor_value": "",
+            "platform": "any",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "未锚定条目（改）"
+    assert updated.json()["anchor_value"] == ""
+
+    # 非字符串值仍拒（400）；未锚定 + 非空锚定值仍拒（域校验）
+    assert (
+        client.post(
+            "/api/references",
+            json={
+                "title": "x",
+                "type": "y",
+                "description": "z",
+                "anchor_kind": ANCHOR_KIND_NONE,
+                "anchor_value": 123,
+                "files": {"a.c": "int a;"},
+            },
+        ).status_code
+        == 400
+    )
+    assert (
+        client.put(
+            f"/api/references/{entry_id}",
+            json={
+                "title": "未锚定条目",
+                "type": "说明书",
+                "description": "改",
+                "anchor_kind": ANCHOR_KIND_NONE,
+                "anchor_value": "2026C",
+                "platform": "any",
+            },
+        ).status_code
+        == 400
+    )
