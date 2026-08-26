@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=39247a55e8a112f755235ab1b649c919273b2fa6 -->
+<!-- changelog-auto: last-commit=f56c55a35b76b27258994b3b96b441628ba4a9d4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 00:49 参考文件库 UI 提升（工单 02 表格精修 + 客户端即时检索 + 详情弹窗）：旧服务端四框筛选区替换为防抖关键字即时检索（标题/类型/锚定值/简介/文件名四合一）+ 平台/锚定 chips + 五维排序 + 统计条（随过滤联动）；行渲染令牌化（标题/简介截断 + tooltip、锚定三色徽章、命中文件直出链接）；「查看」升级为详情弹窗（元数据段 + 文件清单段，磁盘实况端点）；纯函数 refFilterEntries/refSortEntries/refStats/refRowHTML/refDetailHTML 等下沉 tests/js（21 项新单测），全量 326 绿；冒烟 26 项 PASS；评审双轴修订落实（搜索框 id 冲突致检索失效→改名 ref-filter 并加防回归检查、标题格内命中链接恢复换行、加载失败清占位、排序分派集中），工单 resolved
 - 12:06 参考文件库 UI 提升（工单 03 编辑弹窗：全字段表单 + 文件增删 + 一次保存）：操作列加「编辑」；弹窗预填元数据（磁盘实况文件清单勾删 + 新增文本行，一次 PUT）；refEditState 状态机驱动保存三态（idle→saving→ok/rejected），refEditValidate/refEditFilePlan/refEditPayload 纯函数下沉 tests/js（330 绿），失败保留弹窗显示后端中文原因；修复既有缺陷 A：路由 _require_str 拒空串致「未锚定」条目无法新增/编辑→改 _require_str(allow_empty=True) 仅用于 anchor_value + 回归测试（pytest 2393 绿）；修复既有缺陷 B：.lib-edit-* 弹窗从未限高致长文件清单条目头部/保存按钮顶出视口→max-height+内滚+清单限高（模块库弹窗一并受益，回归检查通过）；冒烟 34 项 PASS（临时条目 add→edit→持久化→清理零残留）；评审双轴修订落实（状态机接线、kit 补 trim、allow_empty 参数化、foot flex:none），工单 resolved
 - 12:25 参考文件库 UI 提升（工单 04 悬空锚定警示：跨库判定 + 行内标注 + 统计红段）：refDanglingAnchors 纯函数（topic/kit 两方向子串判定与生成侧 search_references 一致〔评审修订：kit 原成员判定对「词表值+前后缀」假阳性→改子串，spec 同步修订〕，空 key/空词表项降级零误报）；refFilterEntries 增 dangling 维度（正交组合）+ refFilterContext 统一组装；行内 .ref-dangling-tag ⚠（title 解释）；统计条 .ref-dangling-count 红段（0 不渲染，点击只看悬空/再点取消，refStats 增 ctx 可选参数补 dangling 契约）；数据源 /api/topics 失败降级不阻塞渲染、kit 词表到达收敛重渲染；tests/js 336 绿（kit 子串/降级/ctx 契约/行渲染 ⚠），pytest 2393 绿，冒烟 43 项 PASS（真实库 2 悬空 + 临时条目编辑闭环改锚定 ⚠ 消失 + 零残留）；评审双轴修订落实（kit 子串语义、refStats ctx、冒烟数据源真断言、守卫生效语义集中、ref-/ref- 命名空间、refFilterContext 去重、双 extract 合并），工单 resolved
+- 12:32 参考文件库 UI 提升（工单 05 录入表单分区折叠 + 视觉收尾）：参考文件录入表单改三段 .add-section 分区（①基本信息默认展开 / ②素材与锚定 锚定+简介+素材文件+AI 草稿 / ③平台属性与入库 平台+入库按钮），复用模块库全局 initAddSections（零新 JS，aria-expanded + DOM 不销毁收起不丢状态），入库按钮按最后动作归位③；评审修订：AI 草稿/文件载入反馈从默认收起的③（ref-add-msg）拆到②内新 ref-draft-msg 就近可见、冒烟增分区归属回归检查 + 表单预置基线行恢复；视觉收尾三勾（按钮统一/聚焦态、空态加载错误态、规则视觉）由 02-04 轮兑现本轮核对；无回归（录入/校验/删除/搜索全流程冒烟通过）：tests/js 336 绿，pytest 2393 绿，冒烟 48 项 PASS（折叠默认态/展开/收起不丢状态/按钮可见性），工单 resolved
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
