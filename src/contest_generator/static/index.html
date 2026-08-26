@@ -471,9 +471,11 @@
   .lib-chip.on { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
   .lib-stats { margin: 8px 0 4px; font-size: 12.5px; color: var(--muted); }
   .lib-dangling-count { color: var(--danger); font-weight: 600; }
-  /* 参考库悬空锚定计数红段（reference-library-ui/04）：与模块库同款式，独立命名空间 */
-  .ref-dangling-count { color: var(--danger); font-weight: 600; cursor: pointer; }  /* 参考文件库表：固定列宽布局——长简介不再挤压"类型/体量"短列成竖排，
-     操作列加宽让查看/删除横排；长文本列按宽换行、体量列完整显示 */
+  /* 统计条红段（可点击过滤 toggle）：lib 系列共享类；ref 库悬空计数沿用
+     .ref-dangling-count 旧名（选择器组共用一条规则，不重复定义） */
+  .lib-stats-red, .ref-dangling-count { color: var(--danger); font-weight: 600;
+                                        cursor: pointer; }
+  .lib-stats-red.on { text-decoration: underline; }
   /* 赛题库表：固定列宽布局（同参考库模式）——长题面不再挤压编号/年份短列，
      操作列加宽保底 100px */
   #tab-topic table { table-layout: fixed; min-width: 760px; }
@@ -507,6 +509,12 @@
   .badge.ref-topic { background: var(--accent-dim); color: var(--accent); }
   .badge.ref-kit { background: var(--info-dim); color: var(--info); }
   .badge.ref-none { background: rgba(139, 148, 158, .15); color: var(--muted); }
+  /* 数据健康徽章（pdf-library-ui/04）：损坏 = 红（danger 令牌）、
+     疑似重复 = 橙（warn 令牌，badge.unverified 同族——随主题切换） */
+  .badge.pdf-broken { background: var(--danger-dim); color: var(--danger);
+                      margin-left: 6px; }
+  .badge.pdf-dup { background: var(--warn-dim); color: var(--warn);
+                   margin-left: 6px; }
   .ref-detail-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex;
                        flex-direction: column; }
   .ref-detail-meta { padding: 10px 14px; border-bottom: 1px solid var(--border); }
@@ -7575,6 +7583,56 @@ function formatMtime(epochSec) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// pdfBroken(p)：损坏判据（0 字节 = 无法打开/无内容的空文件）。
+// 显式接受字符串 "0"（防御宽松——后端 st_size 为 int，但 Number 防护同理）；
+// null/undefined/"" 不判损坏（字段缺失 ≠ 空文件）。
+function pdfBroken(p) {
+  return !!(p && (p.size_bytes === 0 || p.size_bytes === "0"));
+}
+
+// pdfBadgeTags(broken, dup)：健康徽章 HTML（行内与详情弹窗共用）。
+function pdfBadgeTags(broken, dup) {
+  return (broken ? '<span class="badge pdf-broken">⚠ 损坏</span>' : "") +
+         (dup ? '<span class="badge pdf-dup">⚠ 疑似重复</span>' : "");
+}
+
+// pdfDupGroups(pdfs)：疑似重复分组——同名（大小写不敏感）+ 同大小 +
+// 大小 > 0，组内 ≥ 2 成员（0 字节归损坏不参与重复；同名不同大小 = 版本
+// 差异不判；判据纯客户端，不读内容 hash）。返回
+// [{name, size, count, paths: string[]}]，按组内首成员输入序稳定。
+function pdfDupGroups(pdfs) {
+  const groups = new Map(); // nameLower|size → {name, size, paths}
+  for (const p of pdfs || []) {
+    if (!p || !(p.size_bytes > 0) || !p.name) continue;
+    const key = p.name.toLowerCase() + "|" + p.size_bytes;
+    if (!groups.has(key)) groups.set(key, { name: p.name, size: p.size_bytes, paths: [] });
+    groups.get(key).paths.push(p.rel_path);
+  }
+  return [...groups.values()]
+    .filter((g) => g.paths.length >= 2)
+    .map((g) => ({ ...g, count: g.paths.length }));
+}
+
+// pdfHealth(pdfs)：全量健康派生（对偶 refDanglingAnchors——统计条红段与
+// 行内徽章用全量口径，不随过滤结果收缩）。返回
+// {dupGroups, dupPaths: Set<rel_path>, broken: Set<rel_path>}。
+function pdfHealth(pdfs) {
+  const dupGroups = pdfDupGroups(pdfs);
+  const dupPaths = new Set();
+  for (const g of dupGroups) for (const p of g.paths) dupPaths.add(p);
+  const broken = new Set();
+  for (const p of pdfs || []) if (pdfBroken(p)) broken.add(p.rel_path);
+  return { dupGroups, dupPaths, broken };
+}
+
+// pdfHealthPredicates(pdfs)：健康谓词装配（对偶 ref 系列「行渲染与统计渲染
+// 共用同一定义，防两处漂移」契约——renderPdfs 与 renderPdfStats 都从这里
+// 取同一组谓词；统计条「共 N 份」随 health 过滤收缩，与表格行数一致）。
+function pdfHealthPredicates(pdfs) {
+  const h = pdfHealth(pdfs);
+  return { isBroken: pdfBroken, isDup: (p) => h.dupPaths.has(p.rel_path) };
+}
+
 // pdfFilterEntries(pdfs, f)：f={q, batch, health?, isDup?, isBroken?}。q 大小写
 // 不敏感子串匹配文件名 / 批次 / 目录 / 完整路径（四合一）；batch 空串 = 该维度
 // 不过滤；health（"" | "dup" | "broken"）与 q / batch 正交——谓词由调用方注入
@@ -7652,11 +7710,15 @@ function pdfChipRowHTML(options, selected) {
 }
 
 // pdfRowHTML(p, f)：行渲染（文件名链接 + 完整路径 tooltip、批次 chip、目录列、
-// 大小、修改时间、操作按钮）。健康 ⚠ 标注位与统计红段为工单 04 预留。
+// 大小、修改时间、操作按钮）。f.isBroken / f.isDup 谓词（工单 04 注入）=
+// 行内 ⚠ 健康徽章；无谓词不标注。
 function pdfRowHTML(p, f) {
   const subdir = pdfSubdir(p.rel_path || "");
+  const broken = !!(f && f.isBroken && f.isBroken(p));
+  const dup = !!(f && f.isDup && f.isDup(p));
+  const tags = pdfBadgeTags(broken, dup);
   return `<tr>
-    <td class="desc-cell" title="${esc(p.rel_path)}"><a href="#" data-open-pdf="${esc(p.rel_path)}" title="${esc(p.rel_path)}">${esc(p.name)}</a></td>
+    <td class="desc-cell" title="${esc(p.rel_path)}"><a href="#" data-open-pdf="${esc(p.rel_path)}" title="${esc(p.rel_path)}">${esc(p.name)}</a>${tags}</td>
     <td><span class="lib-chip">${esc(p.batch)}</span></td>
     <td class="muted" title="${esc(subdir || "批次根")}">${esc(subdir || "—")}</td>
     <td class="muted">${formatSize(p.size_bytes)}</td>
@@ -7678,13 +7740,14 @@ function pdfPagesText(pages) {
   return esc(pages) + " 页";
 }
 
-// pdfDetailHTML(pdf, pages)：详情弹窗内容（元数据段 + 操作段）。
+// pdfDetailHTML(pdf, pages, flags)：详情弹窗内容（元数据段 + 操作段）。
 // 页数懒取三态占位（data-pdf-pages 槽由 showPdfDetail 落盘）；
-// 损坏 / 重复 ⚠ 标注位为工单 04 预留。
-function pdfDetailHTML(pdf, pages) {
+// flags={broken, dup}（工单 04）= 标题旁 ⚠ 健康徽章，缺省不标注。
+function pdfDetailHTML(pdf, pages, flags = {}) {
   const subdir = pdfSubdir(pdf.rel_path || "");
+  const tags = pdfBadgeTags(flags.broken, flags.dup);
   return `<div class="ref-detail-meta">
-    <div class="ref-detail-title">${esc(pdf.name)}</div>
+    <div class="ref-detail-title">${esc(pdf.name)}${tags}</div>
     <div class="ref-detail-row"><span class="ref-detail-k">路径</span><span class="mono" style="word-break:break-all">${esc(pdf.rel_path)}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">批次</span><span><span class="lib-chip">${esc(pdf.batch)}</span></span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">目录</span><span>${esc(subdir || "—")}</span></div>
@@ -7726,9 +7789,12 @@ async function copyPdfPath(text) {
 function showPdfDetail(pdf) {
   const overlay = document.createElement("div");
   overlay.className = "ref-files-overlay";
+  // 健康标注（工单 04）：全量派生，弹窗内同步行内徽章
+  const h = pdfHealth(pdfCache);
+  const flags = { broken: pdfBroken(pdf), dup: h.dupPaths.has(pdf.rel_path) };
   overlay.innerHTML = `<div class="ref-files-modal">
     <div class="ref-files-head"><strong>PDF 文件详情</strong><button class="ref-files-close" title="关闭">×</button></div>
-    <div class="ref-detail-scroll">${pdfDetailHTML(pdf, null)}</div>
+    <div class="ref-detail-scroll">${pdfDetailHTML(pdf, null, flags)}</div>
   </div>`;
   const close = () => overlay.remove();
   overlay.querySelector(".ref-files-close").addEventListener("click", close);
@@ -7757,7 +7823,7 @@ function showPdfDetail(pdf) {
 }
 
 // —— 工具栏状态与渲染（对偶 ref 系列）：过滤条件集中于此，事件层只转发 ——
-const pdfUI = { q: "", batch: "", sortBy: "name", sortDir: "asc" };
+const pdfUI = { q: "", batch: "", sortBy: "name", sortDir: "asc", health: "" }; // health: "" | "dup" | "broken"
 const pdfFilterContext = () => ({ ...pdfUI });
 let pdfCache = [];        // 全量（GET /api/pdfs 无参，客户端即时过滤排序统计）
 let pdfSearchTimer = null;
@@ -7773,12 +7839,28 @@ function renderPdfChips() {
 }
 
 function renderPdfStats() {
-  const filtered = pdfFilterEntries(pdfCache, pdfFilterContext());
-  $("pdf-stats").innerHTML = esc(pdfStatsText(pdfStats(filtered)));
+  // 与 renderPdfs 共用同一组健康谓词（行渲染/统计渲染同一口径，防漂移）
+  const f = pdfFilterContext();
+  Object.assign(f, pdfHealthPredicates(pdfCache));
+  const filtered = pdfFilterEntries(pdfCache, f);
+  // 红段 = 全量口径（对偶参考库 dangling 红段：真值不随过滤收缩——注意
+  // 参考库 dangling 计数随过滤收缩，pdf 健康红段有意全量：问题总数恒显），
+  // 点击 = 只看该类（再点取消），与关键字 / 批次 chips 正交
+  const h = pdfHealth(pdfCache);
+  const parts = [esc(pdfStatsText(pdfStats(filtered)))];
+  if (h.dupGroups.length) {
+    parts.push(`<span class="lib-stats-red${pdfUI.health === "dup" ? " on" : ""}" data-pdf-health="dup" title="同名同大小疑似重复（全量口径）">疑似重复 ${h.dupGroups.length} 组</span>`);
+  }
+  if (h.broken.size) {
+    parts.push(`<span class="lib-stats-red${pdfUI.health === "broken" ? " on" : ""}" data-pdf-health="broken" title="0 字节损坏文件（全量口径）">损坏 ${h.broken.size} 份</span>`);
+  }
+  $("pdf-stats").innerHTML = parts.join(" · ");
 }
 
 function renderPdfs() {
   const f = pdfFilterContext();
+  // 行内徽章 = 全量口径恒显；pdfFilterEntries 仅在 health 置位时消费谓词
+  Object.assign(f, pdfHealthPredicates(pdfCache));
   const rows = pdfSortEntries(pdfFilterEntries(pdfCache, f),
     { by: pdfUI.sortBy, dir: pdfUI.sortDir });
   if (!pdfCache.length) {
@@ -7806,7 +7888,7 @@ function renderPdfs() {
 }
 
 function clearPdfFilter() {
-  pdfUI.q = ""; pdfUI.batch = "";
+  pdfUI.q = ""; pdfUI.batch = ""; pdfUI.health = "";
   $("pdf-filter").value = "";
   renderPdfs();
 }
@@ -7838,6 +7920,12 @@ function initPdfToolbar() {
   $("pdf-batch-chips").addEventListener("click", (e) => {
     const b = e.target.closest("[data-pdf-chip]"); if (!b) return;
     pdfUI.batch = pdfUI.batch === b.dataset.pdfChip ? "" : b.dataset.pdfChip;
+    renderPdfs();
+  });
+  // 统计条红段（工单 04）：点击 = 只看该类，再点取消（与 q / batch 正交）
+  $("pdf-stats").addEventListener("click", (e) => {
+    const s = e.target.closest("[data-pdf-health]"); if (!s) return;
+    pdfUI.health = pdfUI.health === s.dataset.pdfHealth ? "" : s.dataset.pdfHealth;
     renderPdfs();
   });
 }

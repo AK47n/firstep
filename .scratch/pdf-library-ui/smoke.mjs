@@ -286,5 +286,85 @@ const d03c = await Eval(`(async () => {
 check("复制相对路径触发反馈（已复制或降级失败提示）",
   !!(d03c && (d03c.msg === "已复制相对路径" || d03c.msg === "复制失败，请手动复制")), d03c && d03c.msg);
 
+// ================= 工单 04：数据健康（重复 / 损坏警示） =================
+// 现状修订基线：4 组疑似重复（000_2017-2025 两批各一 + 塔克R3 三份芯片手册
+// 各两组）、0 字节损坏 0 份。断言按「≥ 下限 + 双态」设计——素材库增删数字
+// 变化只影响下限与双态注入，判据不变。
+const d04 = await Eval(`(async () => {
+  const stats = document.querySelector('#pdf-stats');
+  if (!stats) return null;
+  const text = stats.textContent || '';
+  const dupSeg = [...stats.querySelectorAll('[data-pdf-health="dup"]')][0];
+  const dupN = dupSeg ? Number((dupSeg.textContent.match(/(\\d+)/) || [])[1]) : 0;
+  const brokenSeg = stats.querySelector('[data-pdf-health="broken"]');
+  const dupMarks = document.querySelectorAll('#pdf-rows .badge.pdf-dup').length;
+  const brokenMarks = document.querySelectorAll('#pdf-rows .badge.pdf-broken').length;
+  return { text, dupN, brokenSeg: !!brokenSeg, brokenText: brokenSeg ? brokenSeg.textContent : "",
+           dupMarks, brokenMarks, rows: document.querySelectorAll('#pdf-rows tr').length };
+})()`);
+check("健康红段：疑似重复 ≥ 4 组（全量口径真值）", !!(d04 && d04.dupN >= 4), d04 && `dup=${d04.dupN}`);
+check("行内重复徽章 ≥ 8 个（4 组 × 2 成员下限）", !!(d04 && d04.dupMarks >= 8), d04 && `marks=${d04.dupMarks}`);
+check("现状无损坏：损坏红段不显示 / 无行内损坏徽章",
+  !!(d04 && !d04.brokenSeg && d04.brokenMarks === 0));
+
+const d04f = await Eval(`(async () => {
+  const seg = document.querySelector('[data-pdf-health="dup"]');
+  if (!seg) return null;
+  seg.click(); // 点击 = 只看重复类（innerHTML 重渲染后旧 span 已分离，
+               // 每次操作都重新 query——detached 元素 click 不冒泡到容器）
+  await new Promise((r) => setTimeout(r, 100));
+  const rows = document.querySelectorAll('#pdf-rows tr').length;
+  const marks = document.querySelectorAll('#pdf-rows .badge.pdf-dup').length;
+  const statsText = (document.querySelector('#pdf-stats') || {}).textContent || '';
+  const on = !!(document.querySelector('[data-pdf-health="dup"]') || {}).classList?.contains('on');
+  document.querySelector('[data-pdf-health="dup"]').click(); // 再点取消（新 span）
+  await new Promise((r) => setTimeout(r, 100));
+  const restored = document.querySelectorAll('#pdf-rows tr').length;
+  return { rows, marks, on, restored, statsText };
+})()`);
+check("红段点击过滤：只显示重复类（行数 = 徽章数，全是重复）",
+  !!(d04f && d04f.rows >= 8 && d04f.rows === d04f.marks && d04f.rows === 2 * (d04 && d04.dupN)),
+  d04f && `rows=${d04f.rows}`);
+check("统计条随 health 过滤收缩（共 N 份 = 行数）",
+  !!(d04f && d04f.statsText.includes(`共 ${d04f.rows} 份`)), d04f && d04f.statsText);
+check("红段再点取消恢复全量", !!(d04f && d04f.on && d04f.restored === d04.rows));
+
+// 损坏双态：临时注入 0 字节 → 红段「损坏 1 份」+ 行内徽章 + 点击只显示损坏 → 清理
+let brokenInjected = false;
+try {
+  if (smokeBatch) {
+    writeFileSync(brokenAbs, "");
+    brokenInjected = true;
+    const d04b = await Eval(`(async () => {
+      await loadPdfs();
+      await new Promise((r) => setTimeout(r, 300));
+      const seg = document.querySelector('[data-pdf-health="broken"]');
+      const segText = seg ? seg.textContent : '';
+      const marks = document.querySelectorAll('#pdf-rows .badge.pdf-broken').length;
+      const dupMarks = document.querySelectorAll('#pdf-rows .badge.pdf-dup').length;
+      if (!seg) return { segText, marks, dupMarks };
+      seg.click();
+      await new Promise((r) => setTimeout(r, 100));
+      const rows = document.querySelectorAll('#pdf-rows tr').length;
+      document.querySelector('[data-pdf-health="broken"]').click(); // 还原（新 span）
+      await new Promise((r) => setTimeout(r, 100));
+      return { segText, marks, dupMarks, rows };
+    })()`);
+    check("临时损坏注入 → 红段「损坏 1 份」", !!(d04b && d04b.segText.includes("损坏 1 份")), d04b && d04b.segText);
+    check("临时损坏注入 → 行内 ⚠ 损坏徽章恰好 1 个", !!(d04b && d04b.marks === 1), d04b && `marks=${d04b && d04b.marks}`);
+    check("损坏红段点击：只显示损坏 1 行；重复徽章仍为全量 ≥ 8",
+      !!(d04b && d04b.rows === 1 && d04b.dupMarks >= 8), d04b && `rows=${d04b && d04b.rows}`);
+  }
+} finally {
+  if (brokenInjected) { try { unlinkSync(brokenAbs); } catch {} }
+  await Eval(`loadPdfs().catch(() => {})`); // 清理后回到真实全量
+  const d04c = await Eval(`(async () => {
+    await new Promise((r) => setTimeout(r, 200));
+    const seg = document.querySelector('[data-pdf-health="broken"]');
+    return { hasBroken: !!seg, rows: document.querySelectorAll('#pdf-rows tr').length };
+  })()`);
+  check("清理后损坏红段消失（回真实全量）", !!(d04c && !d04c.hasBroken));
+}
+
 console.log(failed ? `\n冒烟结果：${failed} 项失败` : "\n冒烟结果：全部通过");
 process.exit(failed ? 1 : 0);
