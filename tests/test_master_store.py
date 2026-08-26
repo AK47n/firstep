@@ -24,6 +24,7 @@ from contest_generator.master_store import (
     import_master,
     list_masters,
     master_key_files,
+    read_master_file,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.report import (
@@ -434,6 +435,60 @@ def test_master_key_files_missing_catalog_raises(fake_masters_dir, monkeypatch):
 def test_master_key_files_rejects_path_traversal(fake_masters_dir):
     with pytest.raises(MasterError, match="非法平台名"):
         master_key_files(fake_masters_dir, "../evil")
+
+
+# ---------------------------------------------------------------------------
+# 关键文件内容（工单 master-library-ui/02）：白名单墙按需读取
+# ---------------------------------------------------------------------------
+
+
+def test_read_master_file_returns_content_with_meta(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    disk = fake_masters_dir / "stm32" / "pin_config.h"
+
+    result = read_master_file(fake_masters_dir, PLATFORM_STM32, "pin_config.h")
+
+    assert result["path"] == "pin_config.h"
+    assert result["label"] == "板级引脚宏"
+    # size_bytes = 磁盘字节数（Windows 文本写入含 \r\n）；content = 换行归一化后全文
+    assert result["size_bytes"] == disk.stat().st_size
+    assert result["content"] == "/* board pins */\n"
+
+
+def test_read_master_file_rejects_outside_whitelist(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+
+    with pytest.raises(MasterError, match="非关键文件"):
+        read_master_file(fake_masters_dir, PLATFORM_STM32, "inc/stm32f10x_conf.h")
+    with pytest.raises(MasterError, match="非关键文件"):
+        read_master_file(fake_masters_dir, PLATFORM_STM32, "../evil.c")
+    with pytest.raises(MasterError, match="非关键文件"):
+        read_master_file(fake_masters_dir, PLATFORM_STM32, "MAIN.C")  # 大小写敏感
+
+
+def test_read_master_file_whitelisted_but_missing_raises(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "led_instances.h").unlink()
+
+    with pytest.raises(MasterError, match="关键文件缺失"):
+        read_master_file(fake_masters_dir, PLATFORM_STM32, "led_instances.h")
+
+
+def test_read_master_file_platform_not_in_library_raises(fake_masters_dir):
+    with pytest.raises(MasterError, match="不存在"):
+        read_master_file(fake_masters_dir, PLATFORM_STM32, "main.c")
+
+
+def test_read_master_file_replaces_invalid_utf8(fake_masters_dir):
+    """读文本惯例 utf-8 errors=\"replace\"：非 UTF-8 字节（如 GBK 注释）不崩，
+    替换为 U+FFFD——与 skeleton.read_module_sources 同读法（母版关键文件可含
+    GBK 注释，如 21F pin_config.h）。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "pin_config.h").write_bytes(b"\xff\xfe hello")
+
+    result = read_master_file(fake_masters_dir, PLATFORM_STM32, "pin_config.h")
+
+    assert "\ufffd\ufffd hello" == result["content"]
 
 
 # ---------------------------------------------------------------------------

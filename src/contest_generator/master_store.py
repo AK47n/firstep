@@ -158,6 +158,38 @@ def master_key_files(masters_dir: Path, platform: str) -> tuple[KeyFileInfo, ...
     return tuple(infos)
 
 
+def read_master_file(
+    masters_dir: Path, platform: str, rel_path: str
+) -> dict[str, Any]:
+    """关键文件内容（详情预览用，工单 master-library-ui/02）：白名单墙。
+
+    只允许 MASTER_KEY_FILES 内的 rel_path——无任意路径读取面（白名单判定
+    在路径拼接之前，../ 等穿越进不了白名单即拒绝）；平台不在库 / 白名单外 /
+    文件缺失各报中文 MasterError。读取 = utf-8 errors=\"replace\"（仓库读文本
+    惯例，防 GBK 注释乱码，与 skeleton.read_module_sources 同读法），返回
+    {path, label, size_bytes, content}。
+    """
+    infos = master_key_files(masters_dir, platform)  # 平台存在性 + 白名单判定
+    found = next((info for info in infos if info.path == rel_path), None)
+    if found is None:
+        # 文件真实存在但不在白名单 = 不可预览（评审修正：与「关键文件缺失」
+        # 区分——后者是白名单内文件真没了，前者只是不在预览清单）
+        raise MasterError(f"非关键文件，不可预览：{rel_path}")
+    if not found.exists:
+        raise MasterError(f"关键文件缺失：{found.path}")
+    content = (master_project_dir(masters_dir, platform) / found.path).read_text(
+        encoding="utf-8", errors="replace"
+    )
+    # size_bytes = 磁盘字节数（Windows 文本写入含 \\r\\n，stat 实况）；
+    # content = 通用换行归一化（\\r\\n → \\n）后的全文，两者不相等属正常
+    return {
+        "path": found.path,
+        "label": found.label,
+        "size_bytes": found.size_bytes,
+        "content": content,
+    }
+
+
 def master_project_dir(masters_dir: Path, platform: str) -> Path:
     """母版在库里的目录位置：<masters_dir>/<platform>（库布局的唯一出处）。
 

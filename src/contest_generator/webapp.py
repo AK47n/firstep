@@ -164,6 +164,7 @@ from .master_store import (
     list_masters,
     master_key_files,
     master_project_dir,
+    read_master_file,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .patchers import UnknownPlatformError
@@ -2330,6 +2331,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def master_delete(platform: str) -> dict:
         delete_master(_masters_dir(context), platform)
         return {"ok": True}
+
+    @app.get("/api/masters/{platform}/files/{path:path}")
+    @_map_errors
+    def master_file(platform: str, path: str) -> dict:
+        """母版关键文件内容（只读预览，工单 master-library-ui/02）。
+
+        白名单墙（MASTER_KEY_FILES 单源）：清单外路径 / 平台不存在 / 文件缺失
+        一律 400 中文；成功返回 {path, label, size_bytes, content}（utf-8
+        errors=\"replace\" 读取）。
+        """
+        return read_master_file(_masters_dir(context), platform, path)
 
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）

@@ -3568,6 +3568,69 @@ def test_masters_list_includes_platform_label_and_key_files(client, context, tmp
     assert entry["warnings"] == []
 
 
+def test_master_file_content_endpoint_returns_text(client, context, tmp_path):
+    """母版关键文件内容端点（工单 master-library-ui/02）：白名单.wall 内成功
+    200（path/label/size_bytes/content）；主 content 为 utf-8 replace 读全文。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    pin = context[0].config.masters_dir / "stm32" / "pin_config.h"
+    pin.write_text("/* board pins */\n", encoding="utf-8")
+
+    resp = client.get("/api/masters/stm32/files/pin_config.h")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"] == "pin_config.h"
+    assert body["label"] == "板级引脚宏"
+    assert body["size_bytes"] == pin.stat().st_size  # 磁盘字节数
+    assert body["content"] == "/* board pins */\n"
+
+
+def test_master_file_content_endpoint_rejects_outside_whitelist(client, context, tmp_path):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+
+    resp = client.get(f"/api/masters/stm32/files/{quote('inc/stm32f10x_conf.h')}")
+
+    assert resp.status_code == 400
+    assert "非关键文件" in resp.json()["detail"]
+
+
+def test_master_file_content_endpoint_nested_path_ok(client, context, tmp_path):
+    """白名单嵌套项（user/Project.uvprojx）经 {path:path} 转换器成功读取。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    user_dir = context[0].config.masters_dir / "stm32" / "user"
+    user_dir.mkdir()
+    (user_dir / "Project.uvprojx").write_text(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n", encoding="utf-8"
+    )
+
+    resp = client.get(
+        f"/api/masters/stm32/files/{quote('user/Project.uvprojx')}"
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"] == "user/Project.uvprojx"
+    assert body["label"] == "Keil 工程配置"
+    assert body["content"].startswith("<?xml version=\"1.0\"")
+
+
+def test_master_file_content_endpoint_missing_file_400(client, context, tmp_path):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    (context[0].config.masters_dir / "stm32" / "main.c").unlink()
+
+    resp = client.get("/api/masters/stm32/files/main.c")
+
+    assert resp.status_code == 400
+    assert "关键文件缺失" in resp.json()["detail"]
+
+
+def test_master_file_content_endpoint_platform_not_in_library_400(client, context, tmp_path):
+    resp = client.get("/api/masters/stm32/files/main.c")
+
+    assert resp.status_code == 400
+    assert "母版" in resp.json()["detail"] and "不存在" in resp.json()["detail"]
+
+
 def test_master_confirm_rejects_user_edited_merge_on_unique(client, context, tmp_path):
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = DEFAULT_DECISIONS
