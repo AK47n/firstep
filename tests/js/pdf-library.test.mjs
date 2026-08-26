@@ -60,11 +60,15 @@ const pdfChipRowHTML = extract("pdfChipRowHTML", { esc });
 const pdfEncodedPath = extract("pdfEncodedPath");
 const pdfPagesUrl = extract("pdfPagesUrl", { pdfEncodedPath });
 const pdfPagesText = extract("pdfPagesText", { esc });
-const pdfDetailHTML = extract("pdfDetailHTML", { esc, formatSize, formatMtime, pdfSubdir, pdfPagesText, pdfBadgeTags });
+const pdfDupRemainText = extract("pdfDupRemainText");
+const pdfDetailHTML = extract("pdfDetailHTML", { esc, formatSize, formatMtime, pdfSubdir, pdfPagesText, pdfBadgeTags, pdfDupRemainText });
 // 工单 04：数据健康（pdfBroken 先于 pdfDupGroups/pdfHealth 提取）
 const pdfBroken = extract("pdfBroken");
 const pdfDupGroups = extract("pdfDupGroups");
 const pdfHealth = extract("pdfHealth", { pdfBroken, pdfDupGroups });
+// 工单 06：回收删除（pdfTrashUrl 对偶 pdfPagesUrl；pdfDupRemainText 在 03 块已提）
+const pdfTrashUrl = extract("pdfTrashUrl", { pdfEncodedPath });
+const pdfTrashConfirmHTML = extract("pdfTrashConfirmHTML", { esc, formatSize, pdfBadgeTags });
 
 // 样例：跨批次 + 批次内子目录 + 0 字节损坏（3/04 轮才警示，此处只当普通数据）
 const pdfs = [
@@ -351,4 +355,59 @@ test("pdfDetailHTML 健康徽章：flags={broken,dup} 标注；缺省不标注",
   assert.ok(pdfDetailHTML(p, null, { broken: false, dup: true }).includes("⚠ 疑似重复"), "重复标注");
   assert.ok(!pdfDetailHTML(p, null).includes("⚠"), "缺省 flags = 不标注（03 兼容）");
   assert.ok(!pdfDetailHTML(p, null, {}).includes("⚠"), "空 flags = 不标注");
+});
+
+// ================= 回收删除（工单 06）：pdfTrashUrl / pdfDupRemainText / pdfTrashConfirmHTML =================
+test("pdfTrashUrl 回收端点：逐段编码 + /trash 尾缀", () => {
+  assert.equal(pdfTrashUrl("批 A/文件(1).pdf"),
+    "/api/pdfs/" + encodeURIComponent("批 A") + "/" + encodeURIComponent("文件(1).pdf") + "/trash");
+});
+
+test("pdfDupRemainText 组级文案：组内 N 份 → 删除其余 N-1 份", () => {
+  assert.equal(pdfDupRemainText({ count: 2 }), "保留此文件，删除其余 1 份");
+  assert.equal(pdfDupRemainText({ count: 3 }), "保留此文件，删除其余 2 份");
+  assert.equal(pdfDupRemainText({}), "保留此文件，删除其余 0 份", "缺省 count 防御 = 0 份（不炸）");
+});
+
+test("pdfTrashConfirmHTML 单文件：完整路径 / 大小 / 回收去向 / 提示 / 确认取消按钮", () => {
+  const p = { name: "A&B.pdf", rel_path: "批一/子/A&B.pdf", batch: "批一", size_bytes: 999, mtime: 1 };
+  const d = pdfTrashConfirmHTML(p, "one", null, "sources/.trash-pdf/2026-08-26/批一/子/A&B.pdf");
+  assert.ok(d.includes("A&amp;B.pdf"), "文件名 & 应转义");
+  assert.ok(d.includes("批一/子/A&amp;B.pdf"), "完整路径（转义）");
+  assert.ok(d.includes(formatSize(999)), "大小 = formatSize 口径");
+  assert.ok(d.includes("sources/.trash-pdf/2026-08-26/批一/子/A&amp;B.pdf"), "回收去向文案");
+  assert.ok(d.includes("git 已忽略"), "回收语义提示（不真删）");
+  assert.ok(d.includes("参考库条目引用"), "参考镜像提示");
+  assert.ok(d.includes('data-pdf-trash-confirm="批一/子/A&amp;B.pdf"'), "确认按钮数据属性 = rel_path");
+  assert.ok(d.includes(">确认删除</button>") && d.includes(">取消</button>"), "按钮文案");
+  assert.ok(!d.includes("组内成员"), "单文件模式不列组成员");
+});
+
+test("pdfTrashConfirmHTML 组级：组内成员清单 + 确认删除其余按钮", () => {
+  const p = { name: "同一.pdf", rel_path: "批一/子/同一.pdf", batch: "批一", size_bytes: 5, mtime: 1 };
+  const group = { name: "同一.pdf", size: 5, count: 2, paths: ["批一/子/同一.pdf", "批二/子/同一.pdf"] };
+  const d = pdfTrashConfirmHTML(p, "group", group, "sources/.trash-pdf/2026-08-26/批一/子/同一.pdf");
+  assert.ok(d.includes("组内成员"), "组成员清单标题");
+  assert.ok(d.includes("批一/子/同一.pdf") && d.includes("批二/子/同一.pdf"), "列出全部成员");
+  assert.ok(d.includes(">确认删除其余</button>"), "组级确认按钮文案");
+  assert.ok(!d.includes("保留此文件，删除其余 1 份"), "组级文案在弹窗头（openPdfTrashConfirm 生成），纯函数体不含");
+});
+
+test("pdfDetailHTML flags.group / flags.dup：删除按钮渲染；缺省不渲染", () => {
+  const p = { name: "同一.pdf", rel_path: "批一/子/同一.pdf", batch: "批一", size_bytes: 5, mtime: 1 };
+  const group = { name: "同一.pdf", size: 5, count: 3, paths: ["批一/子/同一.pdf", "批二/子/同一.pdf", "批三/子/同一.pdf"] };
+  const d = pdfDetailHTML(p, null, { broken: false, dup: true, group });
+  assert.ok(d.includes('data-pdf-delete="批一/子/同一.pdf"'), "dup → 单删按钮");
+  assert.ok(d.includes('data-pdf-delete-group="批一/子/同一.pdf"'), "group → 组级按钮");
+  assert.ok(d.includes("保留此文件，删除其余 2 份"), "组级文案 = count-1");
+  assert.ok(!pdfDetailHTML(p, null).includes("data-pdf-delete"), "缺省 flags 无删除按钮（03 兼容）");
+});
+
+test("pdfRowHTML 重复行渲染删除按钮（data-pdf-trash），非重复行不渲染", () => {
+  const dupP = { name: "du.pdf", rel_path: "批/du.pdf", batch: "批", size_bytes: 9, mtime: 1 };
+  const dupRow = pdfRowHTML(dupP, { isDup: (x) => x.rel_path === "批/du.pdf" });
+  assert.ok(dupRow.includes('data-pdf-trash="批/du.pdf"'), "dup 行删除按钮");
+  assert.ok(dupRow.includes(">删除</button>"), "删除按钮文案");
+  const plain = pdfRowHTML(dupP, {});
+  assert.ok(!plain.includes("data-pdf-trash"), "非重复行无删除按钮");
 });

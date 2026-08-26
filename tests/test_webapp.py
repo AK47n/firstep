@@ -6098,6 +6098,48 @@ def test_pdf_file_route_not_shadowed_by_pages_route(client, context, tmp_path):
     assert file.headers["content-type"] == "application/pdf"
 
 
+def test_pdf_trash_route_moves_file_and_returns_path(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    rel = "2026_06_电赛视觉资料/09_泰山派原理图.PDF"
+    url = "/api/pdfs/" + quote(rel, safe="/") + "/trash"
+    resp = client.post(url)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["rel_path"] == rel
+    assert body["to"] == f"{time.strftime('%Y-%m-%d')}/{rel}"
+    # 源文件消失：清单与文件路由都不再命中
+    assert rel not in [p["rel_path"] for p in client.get("/api/pdfs").json()]
+    assert client.get("/api/pdfs/" + quote(rel, safe="/")).status_code == 400
+    # 回收落盘（内容原样）
+    trash_file = (
+        tmp_path
+        / "sources"
+        / ".trash-pdf"
+        / time.strftime("%Y-%m-%d")
+        / rel
+    )
+    assert trash_file.read_bytes() == b"%PDF-1.4\nfake b"
+
+
+def test_pdf_trash_route_rejects_unsafe_and_missing(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    bad = client.post("/api/pdfs/" + quote("../secret.pdf", safe="") + "/trash")
+    assert bad.status_code == 400
+    assert "非法文件路径" in bad.json()["detail"]
+    missing = client.post("/api/pdfs/" + quote("不存在/资料.pdf", safe="/") + "/trash")
+    assert missing.status_code == 400
+    assert "不存在" in missing.json()["detail"]
+
+
+def test_pdf_trash_route_not_shadowed_by_file_route(client, context, tmp_path):
+    """路由注册顺序回归：/trash 在 {rel_path:path} 之前——POST 命中回收端点不 405/400。"""
+    _make_materials_pdfs(tmp_path)
+    rel = "2026_04_地猛星配套资料/6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"
+    resp = client.post("/api/pdfs/" + quote(rel, safe="/") + "/trash")
+    assert resp.status_code == 200
+    assert resp.json()["to"].endswith(rel)
+
+
 # ---------------------------------------------------------------------------
 # 更新记录（工单 changelog-tab/01）：GET /api/changelog 按天分组时间轴
 # ---------------------------------------------------------------------------

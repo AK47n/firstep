@@ -526,6 +526,13 @@
   .ref-detail-desc { overflow-wrap: break-word; white-space: pre-wrap; min-width: 0; }
   .pdf-detail-actions { display: flex; gap: 8px; align-items: center;
                         padding: 10px 14px; flex-wrap: wrap; }
+  /* 工单 06 确认弹窗：组内成员清单（滚动）+ 回收去向提示段 */
+  .pdf-trash-members { margin: 2px 0 0; padding-left: 18px; font-size: 12px;
+                       color: var(--muted); max-height: 96px; overflow-y: auto;
+                       word-break: break-all; }
+  .ref-detail-note { padding: 8px 0 0; font-size: 12px; color: var(--muted);
+                     line-height: 1.5; overflow-wrap: break-word; }
+  .ref-detail-note code { font-size: 12px; }
   /* PDF 资料库表（pdf-library-ui/02）：固定列宽布局——目录/修改时间列不再
      挤压「文件名/操作」列；文件名列单行截断 + 全文 tooltip（.desc-cell 令牌）；
      表头底纹 / 行 hover / 空态走 .lib-table 与全局统一令牌 */
@@ -536,7 +543,7 @@
   #tab-pdf th:nth-child(3), #tab-pdf td:nth-child(3) { width: 150px; }
   #tab-pdf th:nth-child(4), #tab-pdf td:nth-child(4) { width: 90px; }
   #tab-pdf th:nth-child(5), #tab-pdf td:nth-child(5) { width: 140px; }
-  #tab-pdf th:nth-child(6), #tab-pdf td:nth-child(6) { width: 120px; }
+  #tab-pdf th:nth-child(6), #tab-pdf td:nth-child(6) { width: 180px; }
   #tab-pdf td { overflow-wrap: break-word; }
   #tab-pdf td:nth-child(6) { white-space: nowrap; }
   pre.result { background: var(--code-bg); color: #e2e8f0; border: 1px solid var(--border);
@@ -7723,7 +7730,7 @@ function pdfRowHTML(p, f) {
     <td class="muted" title="${esc(subdir || "批次根")}">${esc(subdir || "—")}</td>
     <td class="muted">${formatSize(p.size_bytes)}</td>
     <td class="muted">${formatMtime(p.mtime)}</td>
-    <td><button data-open-pdf="${esc(p.rel_path)}" title="新标签打开 PDF">打开</button> <button data-pdf-detail="${esc(p.rel_path)}" title="查看完整信息">详情</button></td>
+    <td><button data-open-pdf="${esc(p.rel_path)}" title="新标签打开 PDF">打开</button> <button data-pdf-detail="${esc(p.rel_path)}" title="查看完整信息">详情</button>${dup ? ` <button class="danger" data-pdf-trash="${esc(p.rel_path)}" title="移入回收目录（疑似重复）">删除</button>` : ""}</td>
   </tr>`;
 }
 
@@ -7742,7 +7749,8 @@ function pdfPagesText(pages) {
 
 // pdfDetailHTML(pdf, pages, flags)：详情弹窗内容（元数据段 + 操作段）。
 // 页数懒取三态占位（data-pdf-pages 槽由 showPdfDetail 落盘）；
-// flags={broken, dup}（工单 04）= 标题旁 ⚠ 健康徽章，缺省不标注。
+// flags={broken, dup, group}（工单 04/06）= 标题旁 ⚠ 健康徽章 + 操作段删除
+// 按钮（dup 单删 / group 组级「保留一份删其余」），缺省不标注不渲染。
 function pdfDetailHTML(pdf, pages, flags = {}) {
   const subdir = pdfSubdir(pdf.rel_path || "");
   const tags = pdfBadgeTags(flags.broken, flags.dup);
@@ -7758,6 +7766,8 @@ function pdfDetailHTML(pdf, pages, flags = {}) {
   <div class="pdf-detail-actions">
     <button type="button" class="primary" data-pdf-open="${esc(pdf.rel_path)}">打开 PDF</button>
     <button type="button" data-pdf-copy="${esc(pdf.rel_path)}">复制相对路径</button>
+    ${flags.dup ? `<button type="button" class="danger" data-pdf-delete="${esc(pdf.rel_path)}">删除此文件</button>` : ""}
+    ${flags.group ? `<button type="button" data-pdf-delete-group="${esc(pdf.rel_path)}" title="${esc(pdfDupRemainText(flags.group))}">${esc(pdfDupRemainText(flags.group))}</button>` : ""}
     <span class="pdf-detail-copy-msg muted"></span>
   </div>`;
 }
@@ -7789,9 +7799,11 @@ async function copyPdfPath(text) {
 function showPdfDetail(pdf) {
   const overlay = document.createElement("div");
   overlay.className = "ref-files-overlay";
-  // 健康标注（工单 04）：全量派生，弹窗内同步行内徽章
+  // 健康标注（工单 04/06）：全量派生，弹窗内同步行内徽章；dup 组对象供
+  // 组级「保留一份删其余」按钮（无组 = 单文件不在重复组，仅单删）。
   const h = pdfHealth(pdfCache);
-  const flags = { broken: pdfBroken(pdf), dup: h.dupPaths.has(pdf.rel_path) };
+  const dupGroup = h.dupGroups.find((g) => g.paths.includes(pdf.rel_path));
+  const flags = { broken: pdfBroken(pdf), dup: h.dupPaths.has(pdf.rel_path), group: dupGroup };
   overlay.innerHTML = `<div class="ref-files-modal">
     <div class="ref-files-head"><strong>PDF 文件详情</strong><button class="ref-files-close" title="关闭">×</button></div>
     <div class="ref-detail-scroll">${pdfDetailHTML(pdf, null, flags)}</div>
@@ -7813,6 +7825,18 @@ function showPdfDetail(pdf) {
       const msg = overlay.querySelector(".pdf-detail-copy-msg");
       if (msg) msg.textContent = ok ? "已复制相对路径" : "复制失败，请手动复制";
     }));
+  // 删除入口（工单 06）：详情数据同源（openPdfTrashConfirm 仍走 pdfCache 查
+  // 对象，避免 dataset 里的 stale 数据与页码缓存不一致）；先关详情再开确认
+  // ——确认弹窗是独立交互层，不叠层（遮罩点击/Esc 语义干净，用户不会被
+  // 两层弹窗困住）。
+  overlay.querySelectorAll("[data-pdf-delete],[data-pdf-delete-group]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const rp = b.dataset.pdfDelete || b.dataset.pdfDeleteGroup;
+      const pdf = (pdfCache || []).find((p) => p.rel_path === rp);
+      if (!pdf) { toast("info", "未找到该 PDF（列表可能已刷新）"); return; }
+      close();
+      openPdfTrashConfirm(pdf, b.dataset.pdfDeleteGroup ? dupGroup : null);
+    }));
   document.body.appendChild(overlay);
   // 页数懒取落盘（memo 命中则同步返回；槽判空防弹窗已关闭——DOM 分离后
   // querySelector 仍返回节点，写入无害，但保持防御语义）
@@ -7820,6 +7844,104 @@ function showPdfDetail(pdf) {
     const slot = overlay.querySelector("[data-pdf-pages]");
     if (slot) slot.innerHTML = pdfPagesText(v);
   });
+}
+
+// —— 工单 06：疑似重复回收删除（用户裁决 r2）——
+// 删除 = 移入回收目录 sources/.trash-pdf/<日期>/<rel_path 镜像>（不真删：
+// git 忽略 + 可手动恢复 + git 历史双保险）；仅疑似重复组成员可删
+// （f.isDup 命中 / 详情弹窗 dup+group 标注），损坏与健康文件不可删。
+// pdfTrashUrl(relPath)：回收端点 URL（对偶 pdfPagesUrl：逐段编码 + /trash）。
+function pdfTrashUrl(relPath) {
+  return "/api/pdfs/" + pdfEncodedPath(relPath) + "/trash";
+}
+
+// pdfDupRemainText(group)：「保留一份删其余」文案（组级按钮 + 确认标题共用）。
+function pdfDupRemainText(group) {
+  const n = Math.max(0, ((group && group.count) || 1) - 1);
+  return "保留此文件，删除其余 " + n + " 份";
+}
+
+// pdfTrashConfirmHTML(pdf, mode, group, trashHint)：确认弹窗内容纯函数。
+// mode = "one" 单文件 / "group" 组级；group（04 的 pdfDupGroups 组形如
+// {name,size,count,paths}）组级时列出组内成员（删除对象与保留对象一目了然）；
+// trashHint = 回收去向展示文案（不含仓库根——提示性，服务端实际路径为准）。
+function pdfTrashConfirmHTML(pdf, mode, group, trashHint) {
+  const members = (mode === "group" && group && group.paths) ? group.paths : [];
+  return `<div class="ref-detail-meta">
+    <div class="ref-detail-title">${esc(pdf.name)}${pdfBadgeTags(false, true)}</div>
+    <div class="ref-detail-row"><span class="ref-detail-k">完整路径</span><span class="mono" style="word-break:break-all">${esc(pdf.rel_path)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">大小</span><span>${formatSize(pdf.size_bytes)}</span></div>
+    ${members.length ? `<div class="ref-detail-row"><span class="ref-detail-k">组内成员</span><ul class="pdf-trash-members">${members.map((rp) => `<li class="mono">${esc(rp)}</li>`).join("")}</ul></div>` : ""}
+    <div class="ref-detail-row"><span class="ref-detail-k">回收去向</span><span class="mono">${esc(trashHint)}</span></div>
+    <div class="ref-detail-note">删除 = 移入回收目录（不真删）：文件出现在 <code>sources/.trash-pdf/‹日期›/</code>，git 已忽略、可手动恢复；若该文件被参考库条目引用，删除后条目文件将无法打开。</div>
+  </div>
+  <div class="pdf-detail-actions">
+    <button type="button" class="danger" data-pdf-trash-confirm="${esc(pdf.rel_path)}">确认${mode === "group" ? "删除其余" : "删除"}</button>
+    <button type="button" data-pdf-trash-cancel>取消</button>
+  </div>`;
+}
+
+// openPdfTrashConfirm(pdf, group)：确认弹窗（对偶 showPdfDetail 的遮罩骨架：
+// × / 遮罩点击 / Esc 关闭；确认 → POST /trash → toast + 重拉列表）。
+function openPdfTrashConfirm(pdf, group) {
+  const overlay = document.createElement("div");
+  overlay.className = "ref-files-overlay";
+  const mode = group ? "group" : "one";
+  const hint = "sources/.trash-pdf/" + pdfTrashDate() + "/" + (pdf.rel_path || "");
+  overlay.innerHTML = `<div class="ref-files-modal">
+    <div class="ref-files-head"><strong>${mode === "group" ? esc(pdfDupRemainText(group)) : "删除此文件？"}</strong><button class="ref-files-close" title="关闭">×</button></div>
+    <div class="ref-detail-scroll">${pdfTrashConfirmHTML(pdf, mode, group, hint)}</div>
+  </div>`;
+  const close = () => overlay.remove();
+  overlay.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  overlay.querySelector("[data-pdf-trash-cancel]").addEventListener("click", close);
+  // 确认：单文件删（pdf.rel_path）/ 组级删「其余成员」（保留 pdf——确认按钮
+  // 携带的是「此文件」标识，目标 = group.paths 中除 pdf 之外的全部成员）
+  overlay.querySelectorAll("[data-pdf-trash-confirm]").forEach((b) =>
+    b.addEventListener("click", () => {
+      if (group) confirmTrashGroup(pdf, group, close);
+      else confirmTrashPdf(b.dataset.pdfTrashConfirm, close);
+    }));
+  document.body.appendChild(overlay);
+}
+
+// pdfTrashDate()：本地日期 YYYY-MM-DD（回收去向提示文案——服务端按同规则
+// 落目录，跨时区/午夜差一天仅影响提示文字，不落错处）。
+function pdfTrashDate() {
+  const t = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+}
+
+// confirmTrashPdf(relPath, close)：POST 回收端点 → 关确认弹窗 → toast →
+// 缓存失效 + 全量重拉（pdfPageCache 同步清该文件页数——已回收，详情不再命中）。
+async function confirmTrashPdf(relPath, close) {
+  try {
+    await apiPost(pdfTrashUrl(relPath));
+    if (close) close(); // 成功后必关（不关会残留弹窗挡住后续交互）
+    toast("ok", "已移入回收目录");
+    pdfPageCache.delete(relPath);
+    loadPdfs();
+  } catch (e) { toast("error", e.message); } // 失败：弹窗保留，用户可重试或取消
+}
+
+// confirmTrashGroup(pdf, group, close)：组级「保留一份删其余」——循环 POST
+// 组内除 pdf 之外的全部成员（保留对象不动）；全部成功才关弹窗（部分失败 =
+// toast 报错 + 弹窗保留可重试；已成功的成员重试时 400「不存在」由后端语义
+// 兜底——同批重试幂等性靠文件消失后的 400 保护，不误删）。
+async function confirmTrashGroup(pdf, group, close) {
+  const others = (group.paths || []).filter((p) => p !== pdf.rel_path);
+  try {
+    for (const rp of others) await apiPost(pdfTrashUrl(rp));
+    if (close) close();
+    toast("ok", `已移入回收目录（${others.length} 份）`);
+    others.forEach((rp) => pdfPageCache.delete(rp));
+    loadPdfs();
+  } catch (e) { toast("error", e.message); }
 }
 
 // —— 工具栏状态与渲染（对偶 ref 系列）：过滤条件集中于此，事件层只转发 ——
@@ -7881,6 +8003,14 @@ function renderPdfs() {
     b.addEventListener("click", () => {
       const pdf = (pdfCache || []).find((p) => p.rel_path === b.dataset.pdfDetail);
       if (pdf) showPdfDetail(pdf);
+      else toast("info", "未找到该 PDF（列表可能已刷新）");
+    }));
+  // 行内删除接线（工单 06）：仅疑似重复行渲染按钮（pdfRowHTML 判定），
+  // 确认弹窗打开 = 行数据透传（与详情同源）
+  $("pdf-rows").querySelectorAll("[data-pdf-trash]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const pdf = (pdfCache || []).find((p) => p.rel_path === b.dataset.pdfTrash);
+      if (pdf) openPdfTrashConfirm(pdf);
       else toast("info", "未找到该 PDF（列表可能已刷新）");
     }));
   renderPdfChips();
