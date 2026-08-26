@@ -1,0 +1,44 @@
+// ui/progress.js — 共享进度面板工厂（阶段 2 工单 03）
+//
+// 推荐（recPanel，生成页 ui/generate-recommend.js）与提炼（distPanel，母版页
+// ui/master.js）两个 SSE 工作流共用的进度状态机 + 双计时器 + 事件分发；面板
+// 实例 = 实例化配置 + 事件回调，留在各自簇，本模块只提供工厂。
+// 共享状态机语义：状态 = {startedAt, lastEventAt, timerId, finished}；计时器
+// 每秒跳动是"没卡死"的唯一证明（模型单次调用期间后端不发任何事件，见
+// ADR 0004）；finished 置位后流中断不再报"连接中断"（终态已到后的读流出错 /
+// 流结束都放行）。事件词表在 events.py（后端唯一出处）——面板实例的 events
+// 表是 JS 侧单点声明，改词表须同步这里与后端契约测试。
+import { $ } from "/js/app.js";
+import { fmtClock } from "/js/fx/core.js";
+
+export function makeProgressPanel(spec) {
+  const p = { startedAt: 0, lastEventAt: 0, timerId: null, finished: false };
+  const totalEl = $(spec.timerTotalId);
+  const callEl = $(spec.timerCallId);
+  const events = spec.events || {};
+  function tick() {   // 双计时器：总用时 + 当前轮/调用等待（lastEventAt = 上次事件心跳）
+    const now = Date.now();
+    totalEl.textContent = spec.totalLabel + fmtClock((now - p.startedAt) / 1000);
+    callEl.textContent = spec.callLabel + fmtClock((now - p.lastEventAt) / 1000);
+  }
+  function start() {   // 新生命周期：计时归零，秒表跳起（自动清旧定时器，防双击）
+    p.startedAt = Date.now();
+    p.lastEventAt = Date.now();
+    p.finished = false;
+    if (p.timerId) clearInterval(p.timerId);
+    p.timerId = setInterval(tick, 1000);
+    tick();
+  }
+  function finish() {   // 终态：停表 + 置位（流中断守卫据此放行）
+    p.finished = true;
+    if (p.timerId) { clearInterval(p.timerId); p.timerId = null; }
+  }
+  function handleEvent(type, raw) {   // parseSSE 事件回调：JSON 解析 + 心跳 + 词表分发
+    let data = {};
+    try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
+    p.lastEventAt = Date.now();
+    const handler = events[type];
+    if (handler) handler(data);   // 预留事件类型（token 级流式等）——忽略
+  }
+  return { p, start, finish, handleEvent, tick };
+}

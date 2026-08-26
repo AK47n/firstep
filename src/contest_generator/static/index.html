@@ -2214,7 +2214,7 @@
 <script type="module">
 // 前端纯函数模块（工单 frontend-es-modules/01）：静态 import 保证本模块执行前
 // fx/*.js 已加载完毕——DOM 胶水里的裸引用即模块作用域绑定，时序零等待
-import { esc, formatSize } from "/js/fx/core.js";
+import { esc, formatSize, fmtDuration } from "/js/fx/core.js";
 import { envRowHTML, envChannelHTML, envCheckStatusHTML } from "/js/fx/env.js";
 import { btnIcon } from "/js/fx/btn-icon.js";
 import { platformClickAction } from "/js/fx/platform.js";
@@ -2234,6 +2234,7 @@ import { formatScorePoints, renderScorePointPanel, scoreChecklistPartLabel, scor
 import { SETTINGS_COLLAPSE_KEY, SETTINGS_DEFAULT_COLLAPSED, parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, settingsMasterLabel, sectionCollapseLabel, settingsSectionHead, applySettingsCollapseState } from "/js/fx/settings.js";
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
 import { $, handle, apiGet, apiPost, apiPut, apiDelete, KIND_TEXT, state, setState, toast } from "/js/app.js";
+import { makeProgressPanel } from "/js/ui/progress.js";
 "use strict";
 
 // 主题切换（工单 ui-polish-5/01）：currentTheme / applyTheme / initTheme 及
@@ -7404,58 +7405,8 @@ const distPanel = makeProgressPanel({
 
 // 已迁至 static/js/fx/llm.js（工单 09）：parseSSE（SSE 流解析纯函数）。
 
-// ===== 进度面板模块（工单 A 深化）：推荐 / 提炼两个 SSE 工作流共用的
-// 进度状态机 + 双计时器 + 事件分发 =====
-// 状态 = {startedAt, lastEventAt, timerId, finished}；计时器每秒跳动是"没卡死"
-// 的唯一证明（模型单次调用期间后端不发任何事件，见 ADR 0004）；finished 置位
-// 后流中断不再报"连接中断"（终态已到后的读流出错 / 流结束都放行）。事件词表
-// 在 events.py（后端唯一出处）——本模块的 events 表是 JS 侧单点声明，改词表
-// 须同步这里与后端契约测试。
-function makeProgressPanel(spec) {
-  const p = { startedAt: 0, lastEventAt: 0, timerId: null, finished: false };
-  const totalEl = $(spec.timerTotalId);
-  const callEl = $(spec.timerCallId);
-  const events = spec.events || {};
-  function tick() {   // 双计时器：总用时 + 当前轮/调用等待（lastEventAt = 上次事件心跳）
-    const now = Date.now();
-    totalEl.textContent = spec.totalLabel + fmtClock((now - p.startedAt) / 1000);
-    callEl.textContent = spec.callLabel + fmtClock((now - p.lastEventAt) / 1000);
-  }
-  function start() {   // 新生命周期：计时归零，秒表跳起（自动清旧定时器，防双击）
-    p.startedAt = Date.now();
-    p.lastEventAt = Date.now();
-    p.finished = false;
-    if (p.timerId) clearInterval(p.timerId);
-    p.timerId = setInterval(tick, 1000);
-    tick();
-  }
-  function finish() {   // 终态：停表 + 置位（流中断守卫据此放行）
-    p.finished = true;
-    if (p.timerId) { clearInterval(p.timerId); p.timerId = null; }
-  }
-  function handleEvent(type, raw) {   // parseSSE 事件回调：JSON 解析 + 心跳 + 词表分发
-    let data = {};
-    try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
-    p.lastEventAt = Date.now();
-    const handler = events[type];
-    if (handler) handler(data);   // 预留事件类型（token 级流式等）——忽略
-  }
-  return { p, start, finish, handleEvent, tick };
-}
-
-function fmtClock(sec) {   // 计时器显示：mm:ss（分可超 59）
-  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
-}
-function fmtDuration(sec) {   // 完成行："12 分 34 秒" / "45 秒" / "1 小时 2 分 3 秒"
-  sec = Math.round(sec);
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  const parts = [];
-  if (h) parts.push(h + " 小时");
-  if (m || h) parts.push(m + " 分");
-  parts.push(s + " 秒");
-  return parts.join(" ");
-}
+// ===== 进度面板工厂（阶段 2 工单 03）：makeProgressPanel 已迁至
+// static/js/ui/progress.js；fmtClock / fmtDuration 已迁至 static/js/fx/core.js。=====
 
 function setStep(n, state) {   // n = 步号（0 开始…3 完成）；state = "active" | "done"
   const steps = document.querySelectorAll("#prog-stepper .step");

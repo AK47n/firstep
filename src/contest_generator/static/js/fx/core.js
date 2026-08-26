@@ -22,6 +22,20 @@ export function formatSize(bytes) {
   return (i === 0 ? String(Math.round(v)) : v.toFixed(1)) + " " + units[i];
 }
 
+export function fmtClock(sec) {   // 计时器显示：mm:ss（分可超 59）
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+}
+export function fmtDuration(sec) {   // 完成行："12 分 34 秒" / "45 秒" / "1 小时 2 分 3 秒"
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  const parts = [];
+  if (h) parts.push(h + " 小时");
+  if (m || h) parts.push(m + " 分");
+  parts.push(s + " 秒");
+  return parts.join(" ");
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { esc, formatSize });
+  Object.assign(window, { esc, formatSize, fmtClock, fmtDuration });
 }
