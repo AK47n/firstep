@@ -54,7 +54,8 @@ const DOMAINS = {
   },
   "master.js": {
     masterTableRowHTML: "fn", masterDeleteConfirmHTML: "fn", masterFileURL: "fn",
-    masterKeyFileRowHTML: "fn", masterDetailHTML: "fn",
+    masterKeyFileRowHTML: "fn", masterDetailHTML: "fn", decisionItem: "fn",
+    archiveItem: "fn",
   },
   "module.js": {
     moduleBadges: "fn", pythonArtifactSummary: "fn", groupOfSlug: "fn",
