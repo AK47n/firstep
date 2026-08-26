@@ -3569,6 +3569,29 @@ def test_masters_list_includes_platform_label_and_key_files(client, context, tmp
     assert entry["warnings"] == []
 
 
+def test_masters_list_includes_health_and_stats(client, context, tmp_path):
+    """母版库浏览列表（工单 master-library-ui-2/01）：每条带 health / stats
+    实况（一次算好，前端不按条回查）——关键文件缺失如实标注、体积为统一噪音
+    跳过后的全量；列表不带内容不变量不变。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    pin = context[0].config.masters_dir / "stm32" / "pin_config.h"
+    pin.write_text("/* board pins */\n", encoding="utf-8")
+
+    entry = client.get("/api/masters").json()[0]
+
+    assert entry["health"] == {
+        "ok": False,
+        "missing_key_files": ["led_instances.h", "user/Project.uvprojx"],
+        "config_file_ok": True,
+        "artifact_dirs": [],
+    }
+    stats = entry["stats"]
+    assert stats["total_size_bytes"] > 0
+    assert stats["file_count"] >= 2
+    assert stats["big_files"] == []
+    assert "content" not in entry
+
+
 def test_master_file_content_endpoint_returns_text(client, context, tmp_path):
     """母版关键文件内容端点（工单 master-library-ui/02）：白名单.wall 内成功
     200（path/label/size_bytes/content）；主 content 为 utf-8 replace 读全文。"""

@@ -163,8 +163,10 @@ from .master_store import (
     delete_master,
     import_master,
     list_masters,
+    master_health,
     master_key_files,
     master_project_dir,
+    master_stats,
     read_master_file,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
@@ -2315,9 +2317,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def masters() -> list[dict]:
         """浏览母版库（每平台一个母版）。
 
-        每条带 platform_label（平台展示名，仅界面用）与 key_files 关键文件
+        每条带 platform_label（平台展示名，仅界面用）、key_files 关键文件
         目录（path / label / size_bytes / exists 实况，不含内容——内容经
-        内容端点按需取，工单 master-library-ui/01）。
+        内容端点按需取）与 health / stats 体检实况（工单 master-library-ui/01
+        与 master-library-ui-2/01：关键词缺失 / 配置文件 / 构建产物残留 +
+        体积统计，一次算好不按条回查）。
         """
         masters_dir = _masters_dir(context)
         return [
@@ -2328,6 +2332,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     info.to_dict()
                     for info in master_key_files(masters_dir, m.platform)
                 ],
+                "health": master_health(masters_dir, m.platform).to_dict(),
+                "stats": master_stats(masters_dir, m.platform).to_dict(),
             }
             for m in list_masters(masters_dir)
         ]

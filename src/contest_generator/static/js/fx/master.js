@@ -1,16 +1,55 @@
 // fx/master.js — 母版库纯函数（工单 frontend-es-modules/05，迁自 index.html
 // master 域纯函数组：表格行 / 删除确认 / 详情弹窗 / 关键文件清单行 / 内容
-// 端点 URL 拼装）。域内常量无；esc 单源取自 fx/core.js。模块约定见 fx/core.js 头部。
-import { esc } from "./core.js";
+// 端点 URL 拼装）。域内常量无；esc / formatSize 单源取自 fx/core.js。模块约定见 fx/core.js 头部。
+import { esc, formatSize } from "./core.js";
+
+// masterHealthBadgeHTML(h)：健康徽章纯函数（工单 master-library-ui-2/01）——
+// h = /api/masters 条目的 health 字段（ok / missing_key_files /
+// config_file_ok / artifact_dirs，后端一次算好）。✓ 健康 / ⚠ 需关注，
+// title 明细 = 缺失清单 / 配置缺失 / 构建残留三项组合（悬停看明细）。
+export function masterHealthBadgeHTML(h) {
+  if (!h) return "";
+  const parts = [];
+  if ((h.missing_key_files || []).length) {
+    parts.push("关键文件缺失：" + h.missing_key_files.join("、"));
+  }
+  if (h.config_file_ok === false) parts.push("缺少工程配置文件");
+  if ((h.artifact_dirs || []).length) {
+    parts.push("构建产物残留：" + h.artifact_dirs.join("、"));
+  }
+  const title = h.ok
+    ? "健康：关键文件齐全、工程配置文件在、无构建产物残留"
+    : parts.join("；");
+  return `<span class="master-health-pill ${h.ok ? "master-health-ok" : "master-health-warn"}" title="${esc(title)}">${h.ok ? "✓ 健康" : "⚠ 有缺失或残留"}</span>`;
+}
+
+// masterStatsHTML(s)：体积统计行纯函数（工单 master-library-ui-2/01）——
+// s = /api/masters 条目的 stats 字段（total_size_bytes / file_count /
+// big_files[{path,size_bytes}]）；formatSize 单源取自 fx/core.js，big_files
+// 空 = 占位 —。
+export function masterStatsHTML(s) {
+  if (!s) return "";
+  const total = typeof s.total_size_bytes === "number" ? formatSize(s.total_size_bytes) : "—";
+  const count = typeof s.file_count === "number" ? s.file_count + " 个" : "—";
+  const big = (s.big_files || [])
+    .map((b) => `${esc(b.path)}（${formatSize(b.size_bytes)}）`)
+    .join("、");
+  return `<div class="ref-detail-row"><span class="ref-detail-k">总体积</span><span>${esc(total)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">文件数</span><span>${esc(count)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">大文件</span><span>${big || "—"}</span></div>`;
+}
 
 // masterTableRowHTML(m)：母版库表格行纯函数——平台展示名（platform_label，
-// 缺省回退 platform）、提炼来源 join("、")、入库警告 join("；")、详情 + 删除
-// 按钮（data-master-detail / data-master-del）。m = /api/masters 条目。
+// 缺省回退 platform）、提炼来源 join("、")、入库警告 join("；")、健康徽章列
+// （带 health 字段时，工单 master-library-ui-2/01）、详情 + 删除按钮
+// （data-master-detail / data-master-del）。m = /api/masters 条目。
 export function masterTableRowHTML(m) {
+  const healthCell = m.health ? `<td>${masterHealthBadgeHTML(m.health)}</td>` : "";
   return `<tr>
     <td class="slug">${esc(m.platform_label || m.platform)}</td>
     <td class="muted">${esc(m.sources.join("、") || "—")}</td>
     <td class="muted">${esc(m.warnings.join("；") || "—")}</td>
+    ${healthCell}
     <td>
       <button data-master-detail="${esc(m.platform)}">详情</button>
       <button class="danger" data-master-del="${esc(m.platform)}">删除</button>
@@ -45,17 +84,11 @@ export function masterFileURL(platform, path) {
 // masterKeyFileRowHTML(f)：清单行——相对路径 mono + label + 大小 + 缺失 ⚠。
 // f = key_files 条目 {path, label, size_bytes, exists}；缺失项禁用不可点。
 export function masterKeyFileRowHTML(f) {
-  const size = typeof f.size_bytes === "number"
-    ? (f.size_bytes >= 1048576
-        ? (f.size_bytes / 1048576).toFixed(1) + " MB"
-        : f.size_bytes >= 1024
-          ? (f.size_bytes / 1024).toFixed(1) + " KB"
-          : f.size_bytes + " B")
-    : "—";
+  const size = typeof f.size_bytes === "number" ? formatSize(f.size_bytes) : "—";
   return `<li><button type="button" class="master-file-btn"
       data-master-file="${esc(f.path)}"${f.exists ? "" : " disabled"}>
       <span class="master-file-name">${esc(f.path)}</span>
-      <span class="muted">${esc(f.label)} · ${size}${f.exists ? "" : " · ⚠ 缺失"}</span>
+      <span class="muted">${esc(f.label)} · ${formatSize(f.size_bytes)}${f.exists ? "" : " · ⚠ 缺失"}</span>
     </button></li>`;
 }
 
@@ -72,6 +105,7 @@ export function masterDetailHTML(m) {
       <span>${esc((m.warnings || []).join("；") || "—")}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">关键文件</span>
       <span>${files.length} 项</span></div>
+    ${m.stats ? masterStatsHTML(m.stats) : ""}
   </div>
   <div class="topic-detail-problem-title">关键文件清单</div>
   <ul class="master-detail-files">${files.length
@@ -106,5 +140,5 @@ export function archiveItem(a) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem });
+  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem, masterHealthBadgeHTML, masterStatsHTML });
 }
