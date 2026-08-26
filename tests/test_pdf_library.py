@@ -8,12 +8,14 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
-from contest_generator.pdf_library import list_pdfs, resolve_pdf
+from contest_generator.pdf_library import list_pdfs, pdf_page_count, resolve_pdf
 from contest_generator.reference_library import ReferenceError
+from tests.topic_pdf_fakes import make_multi_page_pdf
 
 
 def _make_materials(root: Path) -> Path:
@@ -58,6 +60,16 @@ def test_list_pdfs_missing_root_returns_empty(tmp_path):
     assert list_pdfs(tmp_path / "不存在") == []
 
 
+def test_list_pdfs_each_entry_has_int_mtime(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    rel = "2026_04_地猛星配套资料/6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"
+    os.utime(root / rel, (1_000_000_000, 1_000_000_000))
+    pdfs = list_pdfs(root)
+    assert all(isinstance(p["mtime"], int) for p in pdfs)
+    by_name = {p["name"]: p for p in pdfs}
+    assert by_name["TB6612FNG Datasheet.pdf"]["mtime"] == 1_000_000_000
+
+
 def test_resolve_pdf_happy_path(tmp_path):
     root = _make_materials(tmp_path / "materials")
     rel = "2026_04_地猛星配套资料/6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"
@@ -81,3 +93,31 @@ def test_resolve_pdf_missing_or_non_pdf_raises(tmp_path):
         resolve_pdf(root, "2026_04_地猛星配套资料/readme.txt")
     with pytest.raises(ReferenceError):  # 素材根缺失
         resolve_pdf(tmp_path / "不存在", "x.pdf")
+
+
+def test_pdf_page_count_reads_real_pdf(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    rel = "2026_06_电赛视觉资料/09_手册_多页.pdf"
+    make_multi_page_pdf(root / rel, [("", "page 1"), ("", "page 2"), ("", "page 3")])
+    assert pdf_page_count(root, rel) == 3
+
+
+def test_pdf_page_count_rejects_zero_byte_and_corrupt(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    (root / "2026_06_电赛视觉资料/空文件.pdf").write_bytes(b"")
+    with pytest.raises(ReferenceError):
+        pdf_page_count(root, "2026_06_电赛视觉资料/空文件.pdf")
+    (root / "2026_06_电赛视觉资料/损坏.pdf").write_bytes(b"not a pdf at all")
+    with pytest.raises(ReferenceError):
+        pdf_page_count(root, "2026_06_电赛视觉资料/损坏.pdf")
+
+
+def test_pdf_page_count_rejects_unsafe_or_missing(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    with pytest.raises(ReferenceError):  # 非法路径（resolve_pdf 通道）
+        pdf_page_count(root, "../secret.pdf")
+    with pytest.raises(ReferenceError):  # 不存在
+        pdf_page_count(root, "不存在.pdf")
+    # 素材根缺失：先 resolve_pdf 炸（存在性），不落 fitz
+    with pytest.raises(ReferenceError):
+        pdf_page_count(tmp_path / "不存在", "x.pdf")
