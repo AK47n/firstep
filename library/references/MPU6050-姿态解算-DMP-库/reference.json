@@ -3,8 +3,8 @@
   "title": "MPU6050 姿态解算（DMP 库）",
   "type": "TI MSPM0 SDK 例程",
   "description": "Empty project using DriverLib. This example shows a basic empty project using DriverLib with just main file and SysConfig initialization.（SDK 例程：MSPM0G3507_MPU6050）",
-  "anchor_kind": "none",
-  "anchor_value": "",
+  "anchor_kind": "kit",
+  "anchor_value": "MPU6050",
   "platform": "mspm0",
   "files": [
     "board.h",
@@ -81,6 +81,6 @@
     "ti_msp_dl_config.c",
     "ti_msp_dl_config.h"
   ],
-  "file_count": 0,
-  "size_bytes": 0
+  "file_count": 74,
+  "size_bytes": 2398691
 }
