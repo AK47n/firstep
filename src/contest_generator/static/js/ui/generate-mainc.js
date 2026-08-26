@@ -21,22 +21,25 @@ import { cHighlight, cLineCount, codeZoomClamp, parseZoomStored, maincContentEmp
 // 高亮层三明治；滚动三同步。cHighlight / cLineCount 已迁至 static/js/fx/code.js
 // （本模块顶部 import，DOM 胶水直接引用）
 // ---------------------------------------------------------------------------
+// 滚动三同步（textarea → 行号列 / 高亮层）：syncMainCHighlight 与 scroll
+// 监听器共用（评审工单 25 抽取，消除两处内联重复）。
+function syncPanels(ta) {
+  const nums = $("main-c-nums"); const hl = $("main-c-hl");
+  hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft;
+  nums.scrollTop = ta.scrollTop;
+}
 function syncMainCHighlight() {
   const ta = $("main-c"); const nums = $("main-c-nums"); const hl = $("main-c-hl");
   if (!ta || !nums || !hl) return;
   nums.textContent = cLineCount(ta.value);
   hl.innerHTML = cHighlight(ta.value);
-  hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft;
-  nums.scrollTop = ta.scrollTop;
+  syncPanels(ta);
 }
 (function initMainCHighlight() {
   const ta = $("main-c"); const nums = $("main-c-nums"); const hl = $("main-c-hl");
   if (!ta || !nums || !hl) return;
   ta.addEventListener("input", syncMainCHighlight);
-  ta.addEventListener("scroll", () => {
-    hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft;
-    nums.scrollTop = ta.scrollTop;
-  });
+  ta.addEventListener("scroll", () => { syncPanels(ta); });
   syncMainCHighlight();
 })();
 // main.c 代码字号缩放（工单 code-zoom/01）：三明治以 .code-wrap 为字号基准，

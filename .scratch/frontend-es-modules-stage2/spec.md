@@ -89,7 +89,7 @@
 | 测试 | 钉 | 新目标 |
 |---|---|---|
 | tests/js/group-cards.test.mjs | 推荐区接线 | ui/generate-recommend.js |
-| tests/js/step-done-refs.test.mjs | markStepDone(2) / syncStep4( 调用点 | ui/generate-steps.js |
+| tests/js/step-done-refs.test.mjs | markStepDone(2) / syncStep4( 调用点 | ui/generate-recommend.js（工单 12 重指向：cut 方案复核后非 generate-steps） |
 | tests/js/score-points-format.test.mjs | renderScorePointPanel(scorePoints) 调用点 | ui/generate-core.js |
 | tests/js/recommend-telemetry.test.mjs | recPanel / startRecProgress 接线 | ui/generate-recommend.js |
 | tests/js/btn-icons.test.mjs | initBtnIcons + `[data-ico]` 选择器 | app.js |

@@ -10,7 +10,7 @@
 // 状态读：A 簇 generate-recommend（chosenPlatform / selectedSlugs /
 // setRecommendClarifications / startRecommend）+ ui/step-state.js（stepDoneSet /
 // stepCard——工单 12 拥有；issue 所述 generate-steps.js 不实）+
-// ui/generate-core.js（desktopTopicOutputEnabled）。
+// 本模块拥有 desktopTopicOutputEnabled（工单 21 自 generate-core 归位——判据输入）。
 // 跨簇读方：generate-steps.js 经静态 import 调 readinessState（工单 18 的
 // setStepsDeps 接缝已由本票取代）；host 经顶部 import 调 readinessState（btn-generate
 // 监听器）/ refreshReadinessPanel（setOnStepChange 回调）/ initReadinessCheck（启动区）。
@@ -18,7 +18,6 @@ import { $ } from "/js/app.js";
 import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
 import { stepDoneSet, stepCard } from "/js/ui/step-state.js";
 import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend } from "/js/ui/generate-recommend.js";
-import { desktopTopicOutputEnabled } from "/js/ui/generate-core.js";
 
 // ---------------------------------------------------------------------------
 // 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验
@@ -28,6 +27,14 @@ import { desktopTopicOutputEnabled } from "/js/ui/generate-core.js";
 // ---------------------------------------------------------------------------
 // 已迁至 static/js/fx/readiness.js（工单 08）：generateReadinessChecks / readinessSoftChecks /
 // readinessRowHTML / readinessRowsHTML。
+
+// 桌面输出开关（工单 21 自 ui/generate-core.js 归位）：readinessState 的
+// desktopOutput 判据输入（「输出目录手动」开 = 桌面输出关）。纯 DOM 读，
+// core / steps 簇经静态 import 读（单向依赖——无环）。
+function desktopTopicOutputEnabled() {
+  const checkbox = $("desktop-topic-output");
+  return checkbox ? checkbox.checked : true;
+}
 function readinessState() {
   return {
     chosenPlatform: chosenPlatform,
@@ -85,4 +92,4 @@ function initReadinessCheck() {
 
 
 // ---- 本簇导出面（host / generate-steps 顶部 import 活绑定调用点） ----
-export { readinessState, renderReadinessPanel, refreshReadinessPanel, initReadinessCheck };
+export { readinessState, desktopTopicOutputEnabled, renderReadinessPanel, refreshReadinessPanel, initReadinessCheck };
