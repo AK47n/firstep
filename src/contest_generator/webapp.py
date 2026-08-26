@@ -162,6 +162,7 @@ from .master import (
 from .master_store import (
     delete_master,
     import_master,
+    import_master_direct,
     list_masters,
     master_health,
     master_key_files,
@@ -2356,6 +2357,22 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         errors=\"replace\" 读取）。
         """
         return read_master_file(_masters_dir(context), platform, path)
+
+    @app.post("/api/masters/import")
+    @_map_errors
+    def masters_import(payload: dict) -> dict:
+        """母版免提炼快速导入（工单 master-library-ui-2/04）。
+
+        project_dir = 服务器本地绝对路径（与 /api/masters/scan 同风险面——
+        本机工具语义，用户显式提供）；复用既有入库编排（结构校验 + 临时目录
+        + 原子替换 + 备份回滚 + autocommit），全程零 LLM 调用；失败 400
+        中文（结构校验失败不动盘）。
+        """
+        platform = _require_str(payload, "platform")
+        project_dir = _require_str(payload, "project_dir")
+        return import_master_direct(
+            _masters_dir(context), platform, Path(project_dir)
+        ).to_dict()
 
     @app.get("/api/masters/{platform}/tree")
     @_map_errors

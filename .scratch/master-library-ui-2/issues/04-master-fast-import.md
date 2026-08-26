@@ -10,7 +10,7 @@ SDK）不必再走「扫描 → AI 提炼 → 报告」全流程。
 **被谁阻塞：** 03（需共享确认弹窗已就位，且母版卡 UI 改动与 01-03 同文件
 防冲突）
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 ## 验收标准
 
@@ -34,4 +34,42 @@ SDK）不必再走「扫描 → AI 提炼 → 报告」全流程。
 
 ## 实施记录
 
-（待实施）
+（2026-08-27 完成）
+
+- 后端：master_store.py 新增 `import_master_direct`（复用 import_master 全编排
+  ——结构校验（失败零盘面）/ 临时目录 / 原子替换 / 备份回滚 / 占用中文 /
+  autocommit；sources = [源目录名]；源目录不存在 → 「源目录不存在：…」；
+  平台名校验前置（非法平台名先于源目录检查报错，注释说明次序意图））；
+  webapp 新增 POST /api/masters/import（payload {platform, project_dir}，
+  与 /api/masters/scan 同风险面——scan 的 project_dirs 同样来自请求体，
+  本机工具语义；成功返回 MasterMeta.to_dict()）。
+- 共享确认工厂（本工单创建，pilot = 快速导入确认；spec 05 的 pilot 表述为
+  「母版提炼确认」，两处不一致但 05 会迁移全部 8 处，先引入工厂不构成冲突）：
+  新建 fx/overlay.js overlayConfirmHTML（title/message/danger/confirmText/
+  cancelText/extra 纯件，消息 esc、extra 由调用方保证）+ ui/confirm.js
+  confirmModal（Promise 解析：取消/遮罩/Esc → false；确认 → true，或有
+  [data-confirm-value] 时解析其 value——spec 只写 Promise<boolean>，为平台
+  下拉加 string 型，属 pilot 所需合理扩展）；交互与既有 .ref-files-overlay
+  模式一致（Esc/×/点遮罩）。
+- UI：母版库卡顶部工具栏「直接导入替换（免提炼）」+ 隐藏 webkitdirectory
+  输入（复用 /api/masters/stage 整夹暂存：穿越拒绝/清洗/噪音跳过/512MB）→
+  confirmModal（平台下拉选项 = 既有「新增平台」select 的当前选项，同源
+  /api/state，未新开数据面）→ POST → toast + loadMasters()；
+  失败弹窗保留可重试：失败原因并入消息、确认弹窗重开（免重选文件夹）。
+- 测试：test_master_store.py 增 4 例（成功替换旧母版 sources=[目录名] /
+  结构校验失败零盘面 / 源目录不存在 / 平台非法）；test_webapp.py 增 3 例
+  （200 形状 / 非法平台 400 / 结构失败 400 零库写入）；test_autocommit.py：
+  import_master_direct 登记 delegated，并把 delegated 校验从「调用方链」扩展
+  为「调用方 ∪ 被调用链」（_reaches_commit 双向 BFS）——薄委托的调用方在
+  webapp（五模块外），旧规则必红；扩展为旧规则超集（既有 delegated 无一
+  放宽变绿），注册表注释同步改写；tests/js/overlay-confirm.test.mjs 新增
+  （纯件 4 例：结构/默认文案/extra 透传/转义）。
+- 回归：pytest 全量 2498 绿、node --test 472/472。
+- 评审：code-review 双轴——Standards 无硬违反，判断项 4 留档（_reaches_commit
+  放宽经论证合理——注释说明放宽理由；import_master_direct 与 import_master
+  双平台校验——次序意图注释已补；confirm 选项 schema 双处解构——纯件单源
+  记录在案，超小先不抽象；通用弹窗复用特性域类名——与既有先例一致）；
+  Spec 采纳 2 项（弹窗保留可重试按工单落实、平台校验前置注释），其余偏差
+  可接受（confirmModal string 返回/extra、客户端 .git 预滤、按钮落母版库卡
+  而非卡片1、文案走「备份+git 兜底」而非「不可恢复」——与 spec 的 git
+  回滚表述一致）。

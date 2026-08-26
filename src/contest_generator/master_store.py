@@ -544,6 +544,24 @@ def import_master(
     return meta
 
 
+def import_master_direct(
+    masters_dir: Path, platform: str, source_dir: Path
+) -> MasterMeta:
+    """免提炼快速入库（工单 master-library-ui-2/04）：单工程直接替换母版。
+
+    复用 import_master 全编排（结构校验 → 临时目录 → 原子替换 → 备份回滚 →
+    autocommit），仅 sources 语义不同 = [源目录名]（免提炼：没有合成来源，
+    来源名即目录名——官方模板升级等单工程场景不必走扫描/AI 提炼/报告）。
+    源目录不存在 → 中文说明（防到 import_master 里报成「母版目录不存在」
+    误导）；平台名非法与 import_master 同入口校验——平台名校验前置：非法
+    平台名优先于源目录检查报错（次序刻意，与 webapp 层校验兜底一致）。
+    """
+    _validate_store_key(platform)
+    if not source_dir.is_dir():
+        raise MasterError(f"源目录不存在：{source_dir}")
+    return import_master(masters_dir, platform, source_dir, sources=(source_dir.name,))
+
+
 def list_masters(masters_dir: Path) -> list[MasterMeta]:
     """返回母版库中全部母版（按平台排序）；元数据缺失或损坏抛 MasterError。"""
     if not masters_dir.is_dir():

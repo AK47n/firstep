@@ -3666,6 +3666,55 @@ def test_masters_tree_file_endpoint_platform_missing_400(client, context, tmp_pa
     assert "不存在" in resp.json()["detail"]
 
 
+def test_masters_import_direct_ok(client, context, tmp_path):
+    """免提炼快速导入（工单 master-library-ui-2/04）：POST 200 → MasterMeta
+    形状（platform/sources/warnings），列表随之刷新；全程零 LLM（FakeLLM）。"""
+    source = make_fake_master_project(tmp_path / "official_template")
+
+    resp = client.post(
+        "/api/masters/import",
+        json={"platform": PLATFORM_STM32, "project_dir": str(source)},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "platform": PLATFORM_STM32,
+        "sources": ["official_template"],
+        "warnings": [],
+    }
+    masters = client.get("/api/masters").json()
+    assert [m["platform"] for m in masters] == [PLATFORM_STM32]
+    assert masters[0]["sources"] == ["official_template"]
+
+
+def test_masters_import_direct_bad_platform_400(client, context, tmp_path):
+    source = make_fake_master_project(tmp_path / "src")
+
+    resp = client.post(
+        "/api/masters/import",
+        json={"platform": "../evil", "project_dir": str(source)},
+    )
+
+    assert resp.status_code == 400
+    assert "非法平台名" in resp.json()["detail"]
+
+
+def test_masters_import_direct_structure_failure_400(client, context, tmp_path):
+    """源缺工程配置文件 → 结构校验 400 中文，零库写入。"""
+    bad = tmp_path / "bad_src"
+    bad.mkdir()
+    (bad / "main.c").write_text("x", encoding="utf-8")
+
+    resp = client.post(
+        "/api/masters/import",
+        json={"platform": PLATFORM_STM32, "project_dir": str(bad)},
+    )
+
+    assert resp.status_code == 400
+    assert "工程配置文件" in resp.json()["detail"]
+    assert client.get("/api/masters").json() == []
+
+
 def test_master_file_content_endpoint_returns_text(client, context, tmp_path):
     """母版关键文件内容端点（工单 master-library-ui/02）：白名单.wall 内成功
     200（path/label/size_bytes/content）；主 content 为 utf-8 replace 读全文。"""

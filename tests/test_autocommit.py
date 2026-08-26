@@ -413,9 +413,9 @@ _WRITE_MARKERS = (
 
 # 分类注册表：五模块全部公开函数 → (类别, 消息片段)。
 # - commit：源码含 commit_after_write( 且含消息片段（写函数直接挂自动提交）
-# - delegated：源码不含 commit_after_write(，写盘由调用方链兜底（archive_reference
-#   的唯一调用方 write_archive_entries 已批次级提交；save_manifest 的调用方
-#   update_module_description / update_platform_identity 均已挂）
+# - delegated：源码不含 commit_after_write(，写盘由委托链兜底（archive_reference
+#   的写盘由调用方兜底；import_master_direct 向下委托 import_master——调用方
+#   在 webapp 不在五模块内）；委托链 = 调用方链 ∪ 被调用链（见 _reaches_commit）
 # - read：源码不含任何写原语标记（纯读）
 # 新增公开函数必须入表（未知即红）；类别与源码事实不符（read 含写原语 /
 # delegated 含 commit / commit 缺挂点或缺消息片段）也红。参考 errors.py
@@ -496,6 +496,9 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 工单 master-library-ui-2/02：文件树清单 / 树文件内容——只读、不落盘
         "master_tree_files": ("read", ""),
         "read_master_tree_file": ("read", ""),
+        # 工单 master-library-ui-2/04：免提炼快速导入——委托 import_master
+        #（commit 语义随其落盘面，注册表只认 src 模块内落盘面）
+        "import_master_direct": ("delegated", ""),
     },
     "archive": {
         "prepare_archive": ("read", ""),
@@ -521,14 +524,17 @@ def _module_functions() -> dict[str, dict[str, Callable[..., object]]]:
     }
 
 
-def _callers_reach_commit(
+def _reaches_commit(
     func_name: str, functions: dict[str, dict[str, Callable[..., object]]]
 ) -> bool:
-    """delegated 校验：func_name 的调用方链（五模块内部）最终达 commit 类函数。
+    """delegated 校验：func_name 的委托链（调用方链 ∪ 被调用链，五模块内部）
+    最终达 commit 类函数——本函数不直接落盘，写盘由链路兜底。
 
     调用图边：模块内任一函数源码含 "<name>(" 即视为调用 name——跨模块同名
     私有函数互认只会多连边、让校验更宽松，不掩盖漏登（未知函数本身即红，
-    此处是次一级保证）。BFS 沿调用方方向找 commit 类函数。
+    此处是次一级保证）。双向 BFS：既有先例（archive_reference 的写盘由
+    调用方兜底）与薄委托先例（import_master_direct → import_master 向下
+    委托，调用方在 webapp 不在五模块内）都覆盖。
     """
     commit_names = {
         name
@@ -538,22 +544,29 @@ def _callers_reach_commit(
     }
     all_names = {name for funcs in functions.values() for name in funcs}
     callers: dict[str, set[str]] = {}
+    callees: dict[str, set[str]] = {}
     for funcs in functions.values():
         for caller_name, caller in funcs.items():
             source = inspect.getsource(caller)
             for name in all_names:
-                if f"{name}(" in source:
-                    callers.setdefault(name, set()).add(caller_name)
+                if f"{name}(" not in source:
+                    continue
+                callers.setdefault(name, set()).add(caller_name)
+                callees.setdefault(caller_name, set()).add(name)
     seen: set[str] = set()
-    queue = list(callers.get(func_name, ()))
+    queue = (
+        list(callees.get(func_name, ()))
+        + list(callers.get(func_name, ()))
+    )
     while queue:
-        caller = queue.pop()
-        if caller in seen:
+        nxt = queue.pop()
+        if nxt in seen:
             continue
-        seen.add(caller)
-        if caller in commit_names:
+        seen.add(nxt)
+        if nxt in commit_names:
             return True
-        queue.extend(callers.get(caller, ()))
+        queue.extend(callees.get(nxt, ()))
+        queue.extend(callers.get(nxt, ()))
     return False
 
 
@@ -588,8 +601,8 @@ def test_write_function_classification_registry():
                 assert "commit_after_write(" not in source, (
                     f"{module_name}.{func_name} 分类 delegated 却含 commit_after_write("
                 )
-                assert _callers_reach_commit(func_name, functions), (
-                    f"{module_name}.{func_name} 分类 delegated 但调用方链不达任何 commit 函数"
+                assert _reaches_commit(func_name, functions), (
+                    f"{module_name}.{func_name} 分类 delegated 但委托链不达任何 commit 函数"
                 )
             else:  # read
                 assert not any(marker in source for marker in _WRITE_MARKERS), (
