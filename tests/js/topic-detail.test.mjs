@@ -101,6 +101,19 @@ test("详情功能组：空词表不误报（spec 降级语义：词表空 = 全
   assert.ok(out.includes("data-link")); // 组 id 仍显示
 });
 
+test("详情元数据容器：topic-detail-meta 两列网格钩子（省高、全文区更宽）", () => {
+  const out = topicDetailHTML(ENTRY, VOCAB);
+  assert.ok(out.includes('class="ref-detail-meta topic-detail-meta"'));
+});
+
+test("详情题面全文标题行：字数统计 + 展开/收起按钮", () => {
+  const out = topicDetailHTML(ENTRY, VOCAB);
+  assert.ok(out.includes("题面全文"));
+  assert.ok(out.includes(String(ENTRY.problem_text.length) + " 字"));
+  assert.ok(out.includes('data-topic-expand'));
+  assert.ok(out.includes("展开全文"));
+});
+
 test("详情题面全文段：pre 容器 + 原文（含图注段原样）", () => {
   const out = topicDetailHTML(ENTRY, VOCAB);
   assert.ok(out.includes("topic-detail-problem"));
