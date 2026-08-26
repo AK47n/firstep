@@ -1,6 +1,10 @@
 # 07 — 模块库 tab：static/js/ui/library.js
 
-**要做什么：** 模块库 tab 全部 DOM 胶水迁入 `static/js/ui/library.js`（chips/stats/表格/过滤器/工具栏/加载/描述编辑/模块编辑弹窗/删除/新建载荷）；`state.modules` 属性写点随簇。**被谁阻塞：** 02（app.js）+ 06（files.js）
+**要做什么：** 模块库 tab 全部 DOM 胶水迁入 `static/js/ui/library.js`（chips/stats/表格/过滤器/工具栏/加载/描述编辑/模块编辑弹窗/删除/新建载荷）；`state.modules` 属性写点随簇。**被谁阻塞：** 02（app.js）+ 06（files.js）+ **12（生成推荐簇 ui/generate-recommend.js + 步骤状态核心 ui/step-state.js）**
+
+## ⚠ 工单序调整（2026-08-27，实施中发现）
+
+library 簇有两个跨簇硬边：renderLibraryTable 的「详情」按键调 `openModuleInfo`、loadLibrary 成功路径调 `renderModulePool`——均为**生成推荐簇 A** 的函数（模块化前在 host，library 模块无法引用）。故本票**改挂在工单 12 之后**（12 交付 A + 步骤状态核心后，本票从 ui/generate-recommend.js import 两函数）。spec.md 已追加「工单序调整」小节。
 
 **状态：** 待实施
 
