@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=00e806c0300164c7703158c9023007d65f48246e -->
+<!-- changelog-auto: last-commit=25e71ecd6a1ef0f7f54325d343c3194a4a9bf606 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -48,6 +48,7 @@
 - 20:13 工单03 母版库表格增强+删除确认弹窗：纯函数 masterTableRowHTML/masterDeleteConfirmHTML/openMasterDeleteConfirm（.ref-files-overlay 遮罩+Esc/×/点遮罩四路关闭，失败弹窗保留可重试）+ loadMasters 改造；替换原生 confirm/alert；tests/js master-browser.test.mjs 4 用例；探针 12 项全 PASS；pytest 2465/tests-js 411 绿
 - 20:20 工单04 母版详情弹窗：纯函数 masterFileURL/masterKeyFileRowHTML/masterDetailHTML（清单行 label+路径+大小+缺失⚠）+ masterFileCache memo（platform/path 三态，400 缓存网络可重试）+ openMasterDetail（.ref-files-overlay 遮罩，开窗零请求点行加载，缓存命中不闪加载中）；CSS master-file-btn/pre 令牌复用；master-browser.test.mjs +5 用例；探针 13 项全 PASS（PC13/addInstance 真实子串、零重复请求）；pytest 2465/tests-js 416 绿
 - 20:24 工单05 母版库浏览 UI 收尾：冒烟 smoke.mjs 21 项全绿（真实库断言+截图+页面 id 唯一）；顺带修复修复中心 #fix-errors-msg 重复 id（手动模式独立 #fix-errors-msg-manual 并路由写入，回滚保持原 div——id 唯一检查暴露的既有隐患）；CONTEXT.md 母版行补 platform_label/key_files 白名单/内容端点/浏览 UI 语义；pytest 2465/tests-js 416 全绿
+- 20:26 工单05 评审回执：CONTEXT.md 母版行补内容端点三态语义（清单外/穿越路径、平台不存在、白名单内文件缺失均 400 中文）——spec 轴 minor 建议落地
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
