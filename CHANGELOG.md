@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b7f8593a07326bf01131aa981db9d01b33c27945 -->
+<!-- changelog-auto: last-commit=54110b0baf153a0468ecbf21f5d7fab5224913e1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 13:10 数据：参考库锚定治理——MPU6050 姿态解算（DMP 库）锚定到套件 MPU6050（用户确认；词表现有值，74 文件），悬空警示仍为 0；审计决策表同步更新（见 .scratch/reference-library-ui/anchor-audit.md）
 - 13:11 pdf-library-ui 02：PDF 资料库表格精修 + 客户端即时检索（关键字防抖/批次 chips/五维排序/统计条）
 - 13:11 数据：参考库锚定治理——MPU6050 姿态解算（DMP 库）锚定到套件 MPU6050（用户确认，词表现有值）；审计决策表同步更新；CHANGELOG 机器行核定
+- 13:19 工单03 轻量详情弹窗：页数懒取+复制路径+评审修复（pdfEncodedPath提取/单Map memo/handle附status/ref-detail-scroll复用）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
