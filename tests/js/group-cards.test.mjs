@@ -1,33 +1,20 @@
 // 功能组选择卡纯函数单测（工单 recommend-exclusive-groups/04）：组卡渲染
 // （radio/徽标/role/hint 标注）、autoAdd 同组去重、换选 swap、取消整组、
-// 同组多选警告、旧载荷（无 exclusive_groups）容错。照 score-points-format
-// 先例：从 HTML 抽取函数体喂 node:test，不碰 DOM / fetch。
+// 同组多选警告、旧载荷（无 exclusive_groups）容错。直接 import fx/module.js
+//（不再字符串提取）；不碰 DOM / fetch。
 // 运行：node --test tests/js/
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import {
+  groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts,
+  renderGroupCards, groupRequirementNote,
+} from "../../src/contest_generator/static/js/fx/module.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
-
-function extract(name, params = []) {
-  const match = html.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}"));
-  assert.ok(match, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  return new Function(...params, "return (" + match[0] + ")");
-}
-
-const esc = (text) => String(text).replace(/[&<>"']/g, (c) => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-})[c]);
-
-const groupOfSlug = extract("groupOfSlug")();
-const applyGroupRadio = extract("applyGroupRadio")();
-const autoAddDedup = extract("autoAddDedup", ["groupOfSlug"])(groupOfSlug);
-const groupConflicts = extract("groupConflicts")();
-const renderGroupCards = extract("renderGroupCards", ["esc"])(esc);
-const groupRequirementNote = extract("groupRequirementNote", ["esc", "groupOfSlug"])(esc, groupOfSlug);
 
 const groups = [
   {
