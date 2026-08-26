@@ -205,6 +205,7 @@ from .topic_library import (
     resolve_number,
     split_topics_document,
     topic_health,
+    update_topic,
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -2863,6 +2864,37 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         key = _llm(context).topic_extract_number(_require_str(payload, "text"))
         return {"key": key}
+
+    @app.put("/api/topics/{key}")
+    @_map_errors
+    def topic_update(key: str, payload: dict) -> dict:
+        """编辑赛题条目（工单 topic-library-ui/02）：题面全文 / 附带程序 /
+        功能组全量一次保存；校验与确认入库同口径，失败磁盘零变化。
+
+        body 契约：{problem_text, programs: [绝对路径...], hint_module_groups:
+        [组 id...]}——三字段全量必填（表单总是提交完整值）；其余键一概忽略
+        （身份键不可改：year / number / original_pdf / problem_md 由后端
+        保持，前端表单只读展示）。
+        """
+        programs = payload.get("programs")
+        if not isinstance(programs, list) or not all(
+            isinstance(item, str) for item in programs
+        ):
+            raise HTTPException(400, "programs 必须是字符串列表")
+        hint_module_groups = payload.get("hint_module_groups")
+        if not isinstance(hint_module_groups, list) or not all(
+            isinstance(item, str) for item in hint_module_groups
+        ):
+            raise HTTPException(400, "hint_module_groups 必须是字符串列表")
+        config = _require_config(context)
+        entry = update_topic(
+            topic_library_dir(config.module_library_dir),
+            key,
+            problem_text=_require_str(payload, "problem_text"),
+            programs=tuple(programs),
+            hint_module_groups=tuple(hint_module_groups),
+        )
+        return entry.to_dict()
 
     @app.get("/api/topics/{key}")
     @_map_errors

@@ -476,6 +476,8 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "enrich_topic_image_notes": ("commit", "lib: 赛题条目补图注"),
         # 工单 topic-library-ui/01：浏览健康判定——只读文件系统实况、不落盘
         "topic_health": ("read", ""),
+        # 工单 topic-library-ui/02：编辑条目——写题面 + manifest 后自动提交
+        "update_topic": ("commit", "lib: update topic"),
     },
     "master_store": {
         "master_project_dir": ("read", ""),

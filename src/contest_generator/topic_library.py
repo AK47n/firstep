@@ -420,6 +420,65 @@ def list_topics(topic_library_root: Path) -> list[TopicEntry]:
     return sorted(entries, key=lambda entry: entry.key)
 
 
+def update_topic(
+    topic_library_root: Path,
+    key: str,
+    *,
+    problem_text: str,
+    programs: Sequence[str],
+    hint_module_groups: Sequence[str],
+) -> TopicEntry:
+    """编辑赛题条目（工单 topic-library-ui/02）：题面全文 / 附带程序 / 功能组
+    一次保存，全部校验在首次落盘前，成功自动 git 提交并返回更新后条目。
+
+    身份不变量：year / number（目录名 = 编号身份）与 original_pdf /
+    problem_md（文件引用）不可改——本函数只接收三个可编辑字段（题面 /
+    附带程序 / 功能组），调用方提交的其余键一概忽略。校验与确认入库
+    同口径：题面非空、程序目录必须存在（悬空引用要移除就在清单里删掉，
+    不允许写入）、hint 组非空字符串。写题面文件（沿用条目 problem_md
+    文件名）+ 更新 manifest（既有字段原样保留）。
+    """
+    entry = resolve_number(topic_library_root, key)  # 格式 + 查无此条（同文案）
+    if not problem_text.strip():
+        raise TopicError(f"赛题 {key} 的题面不能为空")
+    for program in programs:
+        if not isinstance(program, str):
+            raise TopicError(
+                f"赛题 {key} 的 programs 必须是非空字符串列表"
+            )
+    normalized_programs = tuple(_normalize_program_dir(program) for program in programs)
+    for program in normalized_programs:
+        if not Path(program).is_dir():
+            raise TopicError(f"附带程序目录不存在：{program}")
+    for group in hint_module_groups:
+        if not isinstance(group, str) or not group.strip():
+            raise TopicError(
+                f"赛题 {key} 的 hint_module_groups 必须是非空字符串列表"
+            )
+    entry_dir = _entry_dir(topic_library_root, key)
+    # 落盘：先写题面再写 manifest；写盘失败恢复题面旧值（manifest 保持原值）
+    # ——对偶 update_reference「写入期失败清理已写内容」契约（本函数无新增
+    # 文件，被改的就是题面与 manifest，恢复题面即尽清理职责）
+    old_problem_text = entry.problem_text
+    try:
+        (entry_dir / entry.problem_md).write_text(problem_text, encoding="utf-8")
+        data = read_json(entry_dir, MANIFEST_FILENAME)
+        write_json(
+            entry_dir,
+            MANIFEST_FILENAME,
+            {
+                **data,
+                "programs": list(normalized_programs),
+                "hint_module_groups": list(hint_module_groups),
+            },
+        )
+    except Exception:
+        (entry_dir / entry.problem_md).write_text(old_problem_text, encoding="utf-8")
+        raise
+    commit_after_write(topic_library_root, f"lib: update topic {key}")
+    return resolve_number(topic_library_root, key)
+
+
 def delete_topic(topic_library_root: Path, key: str) -> None:
     """删除赛题条目：整个目录移除（含题面与原 PDF 副本）。
 
