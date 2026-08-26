@@ -54,6 +54,40 @@ FIGURE_ANNOTATION_ROW_TOLERANCE = 6.0
 LOCATE_TOPIC_SAMPLE_CHARS = 20
 LOCATE_TOPIC_SPAN_PAGES = 2
 
+# markdown 题面装饰（修复 2026-08）：采样剥行首井号与整行分隔线——2026 条目
+# topic.md 以「# 2026年全国大学生电子设计竞赛赛区赛(TI杯)」标题行开头，井号
+# 原样进采样会与 PDF 文本层（无 #）永不匹配，/api/topics/{key}/pages 全 2026
+# 系列 400「未能定位题面在 PDF 中的页范围」。
+_MD_HEADING_RE = re.compile(r"^\s*#+\s*")
+_MD_RULE_RE = re.compile(r"^\s*(?:[-*_]\s*){3,}\s*$")
+
+# 全角括号 → 半角（2026H 修复：官方题名「（TI 杯）」全角括号 vs PDF 文本层
+# 「(TI杯)」半角——括号恰落在采样第 N 位且样式相反时永不匹配；双方同折
+# 后样式差异消除，任一方向都命中）。
+_WIDTH_TRANS = str.maketrans({"（": "(", "）": ")"})
+
+
+def _fold_text(text: str) -> str:
+    """全角括号折叠为半角（定位匹配两侧统一调用）。"""
+    return text.translate(_WIDTH_TRANS)
+
+
+def _topic_sample(topic_text: str) -> str:
+    """题面独特文本采样（去空白后前 LOCATE_TOPIC_SAMPLE_CHARS 字）。
+
+    先剥 markdown 装饰：行首井号（# / ## / ### 标题）、整行分隔线
+    （--- / *** / - - -）与空行；行内空白由去空白统一消除（页面文本层
+    提取带零散换行/空格，去空白后子串匹配才稳定）——与旧行为
+    「整文去空白取前 20」唯一差异是装饰行不再参与采样。
+    """
+    lines: list[str] = []
+    for line in topic_text.splitlines():
+        stripped = _MD_HEADING_RE.sub("", line).strip()
+        if not stripped or _MD_RULE_RE.match(stripped):
+            continue
+        lines.append(stripped)
+    return "".join("".join(lines).split())[:LOCATE_TOPIC_SAMPLE_CHARS]
+
 # 渲染视觉图注（工单 topic-vision-render/01）：矢量图 PDF 页渲染成位图 → 视觉
 # 描述。渲染倍率（fitz Matrix 缩放，实测 2.0 → 1191×1684 PNG ~187KB < 4MB 上限，
 # 质量足够识别尺寸标注）；描述下限与否定词守卫（无图页 / 正文页描述不污染题面）
@@ -591,7 +625,7 @@ def locate_topic_pages(pdf_path: Path, topic_text: str) -> tuple[int, int] | Non
     参数直接使用）。坏 PDF / 空白题面 / 无命中 → None（绝不抛——定位是增强
     不是阻塞；扫描件无文本层时调用方跳过补图注）。
     """
-    sample = "".join(topic_text.split())[:LOCATE_TOPIC_SAMPLE_CHARS]
+    sample = _fold_text(_topic_sample(topic_text))
     if not sample:
         return None
     try:
@@ -603,7 +637,7 @@ def locate_topic_pages(pdf_path: Path, topic_text: str) -> tuple[int, int] | Non
             page_text = page.extract_text() or ""
         except Exception:
             continue
-        if sample in "".join(page_text.split()):
+        if sample in _fold_text("".join(page_text.split())):
             return (page_no, page_no + LOCATE_TOPIC_SPAN_PAGES)
     return None
 

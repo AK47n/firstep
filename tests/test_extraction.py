@@ -651,6 +651,63 @@ def test_locate_topic_pages_finds_topic_page(monkeypatch, tmp_path):
     ) == (2, 4)
 
 
+def test_locate_topic_pages_strips_markdown_heading(monkeypatch, tmp_path):
+    """markdown 标题头不污染采样（2026 赛区赛题面修复）：
+
+    2026 条目 topic.md 以「# 2026年全国大学生电子设计竞赛赛区赛(TI杯)」
+    标题行开头，井号保留在采样里会使 PDF 文本层（无 #）永不匹配——首页
+    页图端点 /api/topics/{key}/pages 全 2026 系列 400「未能定位题面…」。
+    采样须剥行首井号 / 整行分隔线（--- 等），行内空白仍被统一消除。
+    """
+    from contest_generator import extraction
+
+    path = tmp_path / "joint.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader(
+            [
+                _TextPage(
+                    "2026年全国大学生电子设计竞赛赛区赛(TI杯)暨模拟电子系统"
+                    "设计专题赛选拔赛赛题……"
+                )
+            ]
+        ),
+    )
+
+    assert extraction.locate_topic_pages(
+        path,
+        "# 2026年全国大学生电子设计竞赛赛区赛(TI杯)\n\n"
+        "## 暨模拟电子系统设计专题赛选拔赛赛题\n\n---\n\n"
+        "### 参赛注意事项\n\n1. 7月29日8:00竞赛正式开始。",
+    ) == (1, 3)
+
+
+def test_locate_topic_pages_folds_fullwidth_paren(monkeypatch, tmp_path):
+    """全角括号折叠（2026H 修复）：官方题名「（TI 杯）」全角括号 vs PDF
+    文本层「(TI杯)」半角——括号恰落在采样第 20 位，左右都不中。折叠后
+    命中（页面方同折，双方一致即匹配）。"""
+    from contest_generator import extraction
+
+    path = tmp_path / "joint.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda _p: _FakeReader(
+            [_TextPage("H-1/42026年全国大学生电子设计竞赛赛区赛(TI杯)暨模拟电"
+                       "子系统设计专题赛选拔赛赛题……")]
+        ),
+    )
+
+    assert extraction.locate_topic_pages(
+        path,
+        "# 2026 年全国大学生电子设计竞赛赛区赛（TI 杯）—— 暨模拟电子系统"
+        "设计专题赛选拔赛赛题\n\n## 参赛注意事项\n\n1. 安装摆球位置监测图传装置。",
+    ) == (1, 3)
+
+
 def test_locate_topic_pages_miss_returns_none(monkeypatch, tmp_path):
     """题面文本不在 PDF（扫描件无文本层 / 不匹配）→ None（调用方跳过）。"""
     from contest_generator import extraction
