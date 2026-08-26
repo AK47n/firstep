@@ -81,3 +81,4 @@
 - 模块源读路径单源：模块文件的读盘与头部判定归 skeleton.py 原语（read_module_sources + is_header_path），errors="replace" 编码策略单源——骨架（build_skeleton_interfaces）与生成语料（build_module_corpus）同读法，非 UTF-8 头文件骨架阶段不再崩（曾各抄一份读盘、两种容错）。
 - 不变量：任何校验失败都在落盘前发生，绝不产出残缺工程。
 - 模块形态：模块 = 纯驱动切片（ADR 0009）——状态机/调度/流程逻辑归生成骨架，跨题复用逻辑归参考文件库；机械验证 = 结构测试黑名单（题号/年份/题名，词表单源 = library.py，能力词白名单防误伤）+ AI 语义校验（判据③能力方向 / ④无题绑定，llm.py 校验提示词双端同源）。
+- 前端纯函数单源 = static/js/fx/*.js：index.html 内联脚本已 `<script type="module">` 顶部静态 import（0 构建 / 0 捆绑，浏览器原生 ESM + webapp 静态挂载 /js）；被测试纯函数从 index.html 迁出后不再允许回迁（fx-guard.test.mjs 枚举全部已搬名称兜底「双源回退」）；window 同名桥 = 兼容层（探针脚本 / devtools 按全局名取用）；DOM 胶水（render / load / 事件绑定）仍在 index.html，属阶段 2 迁移对象。
