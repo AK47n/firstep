@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c3b9871622f3bc09de4d3edaaf7a680688418b34 -->
+<!-- changelog-auto: last-commit=b7f8593a07326bf01131aa981db9d01b33c27945 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 13:01 数据：赛题库录入 2026H（H题_车载平衡滚球运动控制系统，2026 赛区赛）——题面用工程目录规范整理版（sources/contest/2026H/26H，含任务/要求表/说明/评分标准/图注），原 PDF 副本 + manifest + 附带程序目录 C:/Users/luoji/Desktop/2026H/26H；参考库两条 2026H 锚定条目的悬空警示随之归零
 - 13:10 数据：参考库锚定治理——MPU6050 姿态解算（DMP 库）锚定到套件 MPU6050（用户确认；词表现有值，74 文件），悬空警示仍为 0；审计决策表同步更新（见 .scratch/reference-library-ui/anchor-audit.md）
 - 13:11 pdf-library-ui 02：PDF 资料库表格精修 + 客户端即时检索（关键字防抖/批次 chips/五维排序/统计条）
+- 13:11 数据：参考库锚定治理——MPU6050 姿态解算（DMP 库）锚定到套件 MPU6050（用户确认，词表现有值）；审计决策表同步更新；CHANGELOG 机器行核定
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
