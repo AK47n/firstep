@@ -13,6 +13,7 @@
 // host 页签分发器经顶部 import 调 loadTopics / loadTopicGroupVocabulary；
 // initTopicToolbar 在模块顶部调用（import 时绑定，DOM 已就绪）。
 import { $, apiGet, apiPut, apiDelete, toast, handle } from "/js/app.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { pdfFileUrl } from "/js/fx/pdf.js";
 import { topicChipRowHTML, topicFilterEntries, topicSortEntries, topicStats, topicStatsText, topicCardHTML, topicDetailHTML, topicPagesHTML, topicPagesErrorHTML, topicEditHTML, topicEditValidate, topicEditPayload, topicGroupVocabulary } from "/js/fx/topic.js";
@@ -297,11 +298,16 @@ export async function loadTopics() {
 }
 
 export async function deleteTopic(key) {
-  if (!confirm("删除赛题 " + key + " 的整个条目目录（含题面与原 PDF）？")) return;
+  if (!await confirmModal({
+    title: "删除赛题条目？",
+    message: "删除赛题 " + key + " 的整个条目目录（含题面与原 PDF）？",
+    danger: true,
+    confirmText: "确认删除",
+  })) return;
   try {
     await apiDelete(`/api/topics/${encodeURIComponent(key)}`);
     loadTopics();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast("error", e.message); }
 }
 
 export function renderProofreadRows() {

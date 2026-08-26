@@ -20,6 +20,7 @@
 // btn-ref-add / 两个 bindFilePicker）在 import 时绑定（module 延迟执行，
 // DOM 已就绪）。
 import { $, apiGet, apiPost, apiPut, apiDelete, toast } from "/js/app.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { esc, formatSize } from "/js/fx/core.js";
 import { refStats, refStatsText, refChipRowHTML, refFilterEntries, refSortEntries, refRowHTML, refDetailHTML, refEditValidate, refEditFilePlan, refEditPayload, refEditState } from "/js/fx/reference.js";
 import { addFileRow, collectFiles, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
@@ -178,11 +179,16 @@ export async function loadReferences() {
 export async function deleteReference(entryId) {
   const entry = refEntryCache.find((e) => e.id === entryId);
   const bulk = entry ? `（${entry.file_count} 个文件，${formatSize(entry.size_bytes)}）` : "";
-  if (!confirm(`删除参考文件条目 ${entryId}${bulk} 的整个目录？`)) return;
+  if (!await confirmModal({
+    title: "删除参考文件条目？",
+    message: `删除参考文件条目 ${entryId}${bulk} 的整个目录？`,
+    danger: true,
+    confirmText: "确认删除",
+  })) return;
   try {
     await apiDelete(`/api/references/${encodeURIComponent(entryId)}`);
     loadReferences();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast("error", e.message); }
 }
 
 // ===== 参考库编辑弹窗（工单 03）：改元数据 + 文件增删，一次 PUT 落盘 =====
@@ -191,7 +197,7 @@ export async function deleteReference(entryId) {
 // 校验与后端同源（原生中文 400 原因保留弹窗）；成功 = 关窗 + 表格即时刷新。
 export async function editReference(entryId) {
   const entry = (refEntryCache || []).find((e) => e.id === entryId);
-  if (!entry) { alert("未找到参考条目 " + entryId); return; }
+  if (!entry) { toast("error", "未找到参考条目 " + entryId); return; }
   document.querySelectorAll(".lib-edit-overlay").forEach((o) => o.remove());
   const overlay = document.createElement("div");
   overlay.className = "lib-edit-overlay";
@@ -360,7 +366,7 @@ export async function openReferenceFile(entryId, path, viewer, viewerPre) {
       if (!resp.ok) throw new Error(await resp.text().catch(() => "HTTP " + resp.status));
       viewerPre.textContent = `${path}\n\n${await resp.text()}`;
       viewer.classList.remove("hidden");
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast("error", err.message); }
     return;
   }
   window.open(url, "_blank"); // 其余类型：服务端按扩展名给 Content-Type，浏览器转下载
@@ -373,7 +379,7 @@ export function viewReferenceDetail(entryId) {
   if (!entry) { toast("info", "未找到条目 " + entryId); return; }
   apiGet(`/api/references/${encodeURIComponent(entryId)}/files`).then((files) => {
     showReferenceDetail(entry, files);
-  }).catch((e) => alert(e.message));
+  }).catch((e) => toast("error", e.message));
 }
 
 function showReferenceDetail(entry, files) {

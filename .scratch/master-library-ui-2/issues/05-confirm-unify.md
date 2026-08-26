@@ -10,7 +10,7 @@
 **被谁阻塞：** 04（母版卡 UI 在本系列 01-04 连续改动，pilot 的
 btn-confirm 接线在 04 之后做防冲突）
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 ## 验收标准
 
@@ -32,4 +32,28 @@ btn-confirm 接线在 04 之后做防冲突）
 
 ## 实施记录
 
-（待实施）
+（2026-08-27 完成）
+
+- 8 处原生 confirm() 全部迁移到共享 confirmModal（既有工厂即本系列 04
+  创建的 ui/confirm.js + fx/overlay.js 纯件）：母版提炼确认「确认并入库」
+  （btn-confirm）/ generate-core 桌面同名工程覆盖 / generate-fix 修复回滚 /
+  generate-revise 修订深化回滚 / library 平台文件移除与模块删除 / reference
+  条目删除 / topic 条目删除；确认文案 message 保持原文（1:1 等价），
+  title 为弹窗短标题；rollback 两处 title 评审修正为「确认回滚？」（避免与
+  message 首句逐字重复）。
+- 原生 alert() 8 处全部迁移 toast：files.js 文件名重复（补 toast import）、
+  library 模块删除失败与「至少需要一个源文件」、reference 删除失败/未找到
+  条目/文件打开失败/详情失败、topic 删除失败。
+- 新增 tests/js/confirm-guard.test.mjs：static/js 全树（ui + fx + app.js
+  递归）剥注释后扫描，断言无裸 \bconfirm( / \balert(（评审修正：原守卫只扫
+  ui 目录，扩到仓库全静态面）。
+- confirmModal 级联清理（评审修正）：新工厂创建时先关旧弹窗——cleanup
+  解绑 keydown 监听并 resolve(false)，消除并发/重入时监听残留与 Promise
+  永不 settle 的隐患（activeCleanup 单槽，无并发场景零影响）。
+- 回归：node --test 473/473（新增守卫）、pytest 2498；node --check 全部
+  改动 ui 模块语法通过。
+- 评审：code-review 双轴——Standards 无硬违反（confirm.js 被 7 模块单向
+  import 无环、overlay.js 纯件/桥合规、app.js 不入链）；判断项 3 已修 2
+  （title/message 重复、keydown 残留）留档 1（8 文件同构迁移属规格所致）；
+  Spec 部分实现 1（守卫仓库级覆盖，已修），confirmModal boolean|string 型
+  为 04 既有差异（8 处均 boolean 路径），无 creep。

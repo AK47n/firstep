@@ -21,6 +21,7 @@
 //（markStepDone）。无跨簇状态读（本簇状态 = revise 对象私有）；host 对本簇
 // 零调用点（监听器全部随簇迁入，无 init 可调）。
 import { $, apiPost, toast } from "/js/app.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -453,7 +454,12 @@ function reviseDiffLineHtml(entry) {
 /** 回滚：恢复备份整树 → 清结果 → 重新加载上下文刷新状态。 */
 async function reviseRollback() {
   if (!revise.backupId) return;
-  if (!confirm("回滚本次修订/深化？将把输出目录整体恢复到备份时的状态（含手工编辑），修订/深化的改动全部撤销。")) return;
+  if (!await confirmModal({
+    title: "确认回滚？",
+    message: "回滚本次修订/深化？将把输出目录整体恢复到备份时的状态（含手工编辑），修订/深化的改动全部撤销。",
+    danger: true,
+    confirmText: "确认回滚",
+  })) return;
   const btn = $("btn-revise-rollback");
   btn.disabled = true;
   $("revise-rollback-status").textContent = "";

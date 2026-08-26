@@ -18,6 +18,7 @@
 // btn-draft-desc / btn-add-module-submit）在 import 时绑定（module 延迟执行，
 // DOM 已就绪）。
 import { $, apiGet, apiPost, apiPut, apiDelete, toast, state } from "/js/app.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { libStats, libStatsText, libChipRowHTML, libSortModules, libFilterModules, moduleRowHTML, danglingDependencies, editDescStatus, libIsValidHttpUrl, libPlatformKits } from "/js/fx/module.js";
 import { addFileRow, collectFiles, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
@@ -339,7 +340,12 @@ export function editModule(slug) {
     }
   };
   const doRemoveFile = async (fname) => {
-    if (!confirm("从平台 " + curPlatform + " 移除文件 " + fname + "？（共享文件只移出条目，磁盘保留）")) return;
+    if (!await confirmModal({
+      title: "移除平台文件？",
+      message: "从平台 " + curPlatform + " 移除文件 " + fname + "？（共享文件只移出条目，磁盘保留）",
+      danger: true,
+      confirmText: "确认移除",
+    })) return;
     try {
       const data = await apiDelete(`/api/modules/${encodeURIComponent(module.slug)}/platform-files`, {
         platform: curPlatform, filenames: [fname],
@@ -375,11 +381,16 @@ export function editModule(slug) {
 }
 
 export async function deleteModule(slug) {
-  if (!confirm("删除模块 " + slug + " 的整个目录？")) return;
+  if (!await confirmModal({
+    title: "删除模块？",
+    message: "删除模块 " + slug + " 的整个目录？",
+    danger: true,
+    confirmText: "确认删除",
+  })) return;
   try {
     await apiDelete(`/api/modules/${encodeURIComponent(slug)}`);
     loadLibrary();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast("error", e.message); }
 }
 
 // 动态文件行（模块库 / 参考文件库共用）已迁至 static/js/ui/files.js（阶段 2 工单 06）；
@@ -396,7 +407,7 @@ bindFilePicker("btn-pick-mod-dir", "pick-mod-dir", "new-files", "add-msg");
 export function newModulePayload() {
   const files = collectFiles();
   if (files === null) return null;
-  if (!Object.keys(files).length) { alert("至少需要一个源文件"); return null; }
+  if (!Object.keys(files).length) { toast("error", "至少需要一个源文件"); return null; }
   return {
     slug: $("new-slug").value.trim(),
     platform: $("new-platform").value,
