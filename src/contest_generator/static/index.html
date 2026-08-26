@@ -493,7 +493,9 @@
   #tab-reference th:nth-child(3), #tab-reference td:nth-child(3) { width: 120px; }
   #tab-reference th:nth-child(4), #tab-reference td:nth-child(4) { width: auto; }
   #tab-reference th:nth-child(5), #tab-reference td:nth-child(5) { width: 140px; }
-  #tab-reference th:nth-child(6), #tab-reference td:nth-child(6) { width: 140px; }
+  /* 操作列（详情 / 编辑 / 删除 三按钮 ≈190px；140px 为两按钮时代的旧值，
+     三按钮超宽被裁切——详情弹窗「详情」按钮只露一半，加宽至 210px） */
+  #tab-reference th:nth-child(6), #tab-reference td:nth-child(6) { width: 210px; }
   #tab-reference td { overflow-wrap: break-word; }
   #tab-reference td:nth-child(6) { white-space: nowrap; }
   /* 参考文件库（reference-library-ui/02 表格精修）：标题列单行截断 + 全文
