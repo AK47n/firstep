@@ -312,21 +312,22 @@
                       z-index: 150; padding: 40px 16px; }
   .lib-edit-modal { background: var(--panel); border: 1px solid var(--border);
                     border-radius: 8px; box-shadow: var(--shadow-pop);
-                    max-width: 560px; width: 100%; display: flex; flex-direction: column; }
+                    max-width: 560px; width: 100%; display: flex; flex-direction: column;
+                    max-height: calc(100vh - 80px); }
   .lib-edit-head { display: flex; justify-content: space-between; align-items: center;
-                   padding: 10px 14px; border-bottom: 1px solid var(--border); }
-  .lib-edit-body { padding: 12px 14px; }
+                   padding: 10px 14px; border-bottom: 1px solid var(--border); flex: none; }
+  .lib-edit-body { padding: 12px 14px; flex: 1; min-height: 0; overflow-y: auto; }
   .lib-edit-old { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
                   background: var(--panel-2); color: var(--muted); font-size: 13px;
                   line-height: 1.5; word-break: break-all; margin-bottom: 10px; }
   .lib-edit-body textarea { width: 100%; min-height: 96px; resize: vertical; }
   .lib-edit-msg { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; }
   .lib-edit-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px;
-                   border-top: 1px solid var(--border); }
+                   border-top: 1px solid var(--border); flex: none; }
   /* 编辑弹窗（library-edit-dialog/06）：复用 .lib-edit-* 模态骨架，内部 .lib-mod-* 字段区 */
   .lib-mod-status { font-size: 12px; color: var(--muted); margin: 6px 0 10px; }
   .lib-mod-files { list-style: none; margin: 4px 0 8px; padding: 0; font-family: var(--mono);
-                   font-size: 12.5px; }
+                   font-size: 12.5px; overflow-y: auto; max-height: 200px; }
   .lib-mod-files li { display: flex; justify-content: space-between; align-items: center;
                       gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--border); }
   .lib-mod-files .fname { word-break: break-all; }
@@ -6908,7 +6909,7 @@ function refRowHTML(entry, f) {
     <td class="muted">${refAnchorBadge(entry)}${referencePlatformChip(entry)}</td>
     <td class="desc-cell" title="${esc(desc)}">${esc(desc)}</td>
     <td class="muted" title="${esc(`${(entry.files || []).length} 个素材文件，路径清单见磁盘目录`)}">${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</td>
-    <td><button data-ref-view="${esc(entry.id)}" title="查看条目详情">详情</button> <button class="danger" data-ref-del="${esc(entry.id)}">删除</button></td>
+    <td><button data-ref-view="${esc(entry.id)}" title="查看条目详情">详情</button> <button data-ref-edit="${esc(entry.id)}" title="编辑条目元数据与文件">编辑</button> <button class="danger" data-ref-del="${esc(entry.id)}">删除</button></td>
   </tr>`;
 }
 
@@ -6930,6 +6931,75 @@ function refDetailHTML(entry, files) {
         <span class="muted">${formatSize(f.size_bytes)}</span></li>`).join("")
       : '<li class="muted">无文件（素材清单缺失）。</li>'}
   </ul>`;
+}
+
+// ===== 参考库编辑弹窗纯函数（工单 03，tests/js 可注入）=====
+
+// refEditState(status, event)：编辑保存状态机（对偶 editDescStatus）。
+// idle → saving → ok / rejected；reset 回 idle；非法事件保持原状态
+// （重入由保存按钮禁用承担）。
+function refEditState(status, event) {
+  switch (event) {
+    case "save": return "saving";
+    case "saved": return status === "saving" ? "ok" : status;
+    case "error": return status === "saving" ? "rejected" : status;
+    case "reset": return "idle";
+    default: return status;
+  }
+}
+
+// refEditValidate(fields)：保存前本地校验（与后端同源口径的轻量前置）。
+// 必填：标题 / 类型 / 简介非空（strip 后）；topic / kit 锚定必须给出值。
+// 返回 {ok, message}；合法 message 为空串。返回值语义与后端校验一致，
+// 后端仍全量校验（失败 = 400 中文原因，保留弹窗）。
+function refEditValidate(fields) {
+  const need = (v) => String(v || "").trim().length > 0;
+  if (!need(fields.title)) return { ok: false, message: "标题不能为空" };
+  if (!need(fields.type)) return { ok: false, message: "类型不能为空" };
+  if (!need(fields.description)) return { ok: false, message: "简介不能为空（留空让 AI 出草稿仅限录入时）" };
+  if ((fields.anchor_kind === "topic" || fields.anchor_kind === "kit")
+      && !need(fields.anchor_value)) {
+    return { ok: false, message: fields.anchor_kind === "topic" ? "赛题锚定必须填写赛题号" : "套件锚定必须选择套件" };
+  }
+  return { ok: true, message: "" };
+}
+
+// refEditFilePlan(existing, removeChecked, added)：文件增减计划。
+// existing = 磁盘实况路径清单；removeChecked = 用户勾选删除的既有路径；
+// added = 新增行 {文件名: 内容}。规则与后端（工单 01）一致：
+// ① 同名既删又增 = 拒绝（后端「同一文件既添加又删除」——不支持替换内容）；
+// ② 新增名已存在于既有清单且未勾删 = 拒绝（后端「文件已存在…请先删除再添加」）；
+// ③ 勾删的路径不在既有清单（外部已删）也透传，存在性由后端裁决。
+// 返回 {ok, add_files, remove_files} 或 {ok:false, message}。
+function refEditFilePlan(existing, removeChecked, added) {
+  const addNames = Object.keys(added || {});
+  const remove = (removeChecked || []).slice();
+  for (const name of addNames) {
+    if (remove.includes(name)) {
+      return { ok: false, message: "文件 " + name + " 既勾选了删除又新增同名：不支持修改内容，请取消勾选或改新增文件名" };
+    }
+    if ((existing || []).includes(name)) {
+      return { ok: false, message: "文件 " + name + " 已存在：不支持修改内容，请先勾选删除（保存一次）后再添加新文件" };
+    }
+  }
+  return { ok: true, add_files: { ...(added || {}) }, remove_files: remove };
+}
+
+// refEditPayload(fields, plan)：组装 PUT 元数据全量（照录入表单语义：
+// none 锚定强制空值；topic / kit 取对应输入；全部 trim）。
+function refEditPayload(fields, plan) {
+  const anchor_value = fields.anchor_kind === "topic" ? String(fields.anchor_value || "").trim()
+    : fields.anchor_kind === "kit" ? String(fields.anchor_value || "").trim() : "";
+  return {
+    title: String(fields.title || "").trim(),
+    type: String(fields.type || "").trim(),
+    description: String(fields.description || "").trim(),
+    anchor_kind: fields.anchor_kind,
+    anchor_value,
+    platform: fields.platform || "any",
+    add_files: plan.add_files,
+    remove_files: plan.remove_files,
+  };
 }
 
 // —— 参考库工具栏状态与渲染（工单 02）：过滤条件集中于此，事件层只转发 ——
@@ -6971,6 +7041,8 @@ function renderReferences() {
   }
   $("ref-rows").querySelectorAll("[data-ref-view]").forEach((b) =>
     b.addEventListener("click", () => viewReferenceDetail(b.dataset.refView)));
+  $("ref-rows").querySelectorAll("[data-ref-edit]").forEach((b) =>
+    b.addEventListener("click", () => editReference(b.dataset.refEdit)));
   $("ref-rows").querySelectorAll("[data-mf]").forEach((a) =>
     a.addEventListener("click", (e) => {
       e.preventDefault();
@@ -6993,7 +7065,7 @@ function initReferenceToolbar() {
     clearTimeout(refSearchTimer);
     refSearchTimer = setTimeout(() => { refUI.q = e.target.value; renderReferences(); }, 150);
   });
-  $("ref-search").addEventListener("keydown", (e) => { if (e.key === "Escape") clearReferenceFilter(); });
+  $("ref-filter").addEventListener("keydown", (e) => { if (e.key === "Escape") clearReferenceFilter(); });
   $("ref-sort").addEventListener("change", (e) => { refUI.sortBy = e.target.value; renderReferences(); });
   $("ref-sort-dir").addEventListener("click", () => {
     refUI.sortDir = refUI.sortDir === "asc" ? "desc" : "asc";
@@ -7070,6 +7142,159 @@ async function deleteReference(entryId) {
     await apiDelete(`/api/references/${encodeURIComponent(entryId)}`);
     loadReferences();
   } catch (e) { alert(e.message); }
+}
+
+// ===== 参考库编辑弹窗（工单 03）：改元数据 + 文件增删，一次 PUT 落盘 =====
+// 骨架对偶模块库编辑弹窗（.lib-edit-*）；字段照录入表单；文件管理 = 勾选
+// 删除清单（磁盘实况） + 新增文本行（addFileRow / pickFilesInto 共用）。
+// 校验与后端同源（原生中文 400 原因保留弹窗）；成功 = 关窗 + 表格即时刷新。
+async function editReference(entryId) {
+  const entry = (refEntryCache || []).find((e) => e.id === entryId);
+  if (!entry) { alert("未找到参考条目 " + entryId); return; }
+  document.querySelectorAll(".lib-edit-overlay").forEach((o) => o.remove());
+  const overlay = document.createElement("div");
+  overlay.className = "lib-edit-overlay";
+  const modal = document.createElement("div");
+  modal.className = "lib-edit-modal";
+  modal.style.maxWidth = "720px";
+  modal.innerHTML = '<div class="lib-edit-head"><strong>编辑参考条目：<span class="ref-edit-id"></span></strong>'
+    + '<button class="ref-files-close" title="关闭">×</button></div>'
+    + '<div class="lib-edit-body">'
+    + '<div class="row"><div style="flex:1"><label>标题</label><input class="ref-edit-title" type="text"></div>'
+    + '<div style="flex:1"><label>类型</label><input class="ref-edit-type" type="text"></div></div>'
+    + '<label>锚定（套件型号只能从模块库已有 kit 词表选，不能自由输入）</label>'
+    + '<div class="row"><select class="ref-edit-kind" style="width:130px">'
+    + '<option value="topic">赛题编号</option><option value="kit">套件型号</option>'
+    + '<option value="none">未锚定</option></select>'
+    + '<input class="ref-edit-topic" type="text" placeholder="如 2026C" style="flex:1;max-width:200px">'
+    + '<select class="ref-edit-kit hidden" style="flex:1;max-width:280px"></select></div>'
+    + '<label>平台属性（any = 不限平台；stm32 / mspm0 = 只注入对应平台工程）</label>'
+    + '<div class="row"><label style="cursor:pointer"><input type="radio" name="ref-edit-platform" value="any"> any（不限平台）</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="ref-edit-platform" value="stm32"> stm32</label>'
+    + '<label style="cursor:pointer"><input type="radio" name="ref-edit-platform" value="mspm0"> mspm0</label></div>'
+    + '<label>简介</label><textarea class="ref-edit-desc" rows="3"></textarea>'
+    + '<h3>素材文件 <span class="muted">（勾选 = 删除；支持增，不支持改内容——替换请先勾删保存，再回来添加）</span></h3>'
+    + '<ul class="lib-mod-files ref-edit-files"></ul>'
+    + '<div class="ref-edit-newfiles"></div>'
+    + '<div class="row" style="margin-top:4px"><button class="ref-edit-addrow">+ 文件</button>'
+    + '<button class="ref-edit-pick">选择文件…</button>'
+    + '<button class="ref-edit-pickdir">选择文件夹…</button>'
+    + '<input type="file" class="ref-edit-pick-input" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">'
+    + '<input type="file" class="ref-edit-pickdir-input" webkitdirectory multiple style="display:none"></div>'
+    + '<div class="lib-edit-msg"></div></div>'
+    + '<div class="lib-edit-foot"><button class="ref-edit-cancel">取消</button>'
+    + '<button class="primary ref-edit-save">保存</button></div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  modal.querySelector(".ref-edit-id").textContent = entry.id;
+  const titleEl = modal.querySelector(".ref-edit-title");
+  const typeEl = modal.querySelector(".ref-edit-type");
+  const kindEl = modal.querySelector(".ref-edit-kind");
+  const topicEl = modal.querySelector(".ref-edit-topic");
+  const kitEl = modal.querySelector(".ref-edit-kit");
+  const descEl = modal.querySelector(".ref-edit-desc");
+  const filesUl = modal.querySelector(".ref-edit-files");
+  const newfilesBox = modal.querySelector(".ref-edit-newfiles");
+  const msgEl = modal.querySelector(".lib-edit-msg");
+  const saveBtn = modal.querySelector(".ref-edit-save");
+  // 保存三态（refEditState 状态机驱动按钮渲染：saving → 禁用 + 「保存中…」）
+  let saveState = "idle";
+  const renderSaveBtn = () => {
+    const saving = saveState === "saving";
+    saveBtn.disabled = saving;
+    saveBtn.textContent = saving ? "保存中…" : "保存";
+  };
+  const close = () => overlay.remove();
+  const setMsg = (text, ok) => {
+    msgEl.textContent = text || "";
+    msgEl.classList.toggle("ok", !!ok);
+  };
+  // 预填元数据（id / 目录名不变；锚定/平台按当前值落位）
+  titleEl.value = entry.title || "";
+  typeEl.value = entry.type || "";
+  descEl.value = entry.description || "";
+  kindEl.value = ["topic", "kit", "none"].includes(entry.anchor_kind) ? entry.anchor_kind : "none";
+  topicEl.value = kindEl.value === "topic" ? (entry.anchor_value || "") : "";
+  const kits = kitVocabulary.includes(entry.anchor_value)
+    ? kitVocabulary
+    : (entry.anchor_value ? [entry.anchor_value, ...kitVocabulary] : kitVocabulary);
+  kitEl.innerHTML = kits.length
+    ? kits.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("")
+    : '<option value="">（模块库暂无 kit 词表）</option>';
+  kitEl.value = entry.anchor_value || "";
+  (modal.querySelector(`input[name="ref-edit-platform"][value="${esc(entry.platform || "any")}"]`)
+    || modal.querySelector('input[name="ref-edit-platform"][value="any"]')).checked = true;
+  const syncKind = () => {
+    const kind = kindEl.value;
+    kitEl.classList.toggle("hidden", kind !== "kit");
+    topicEl.classList.toggle("hidden", kind !== "topic");
+  };
+  syncKind();
+  kindEl.addEventListener("change", syncKind);
+  // 文件清单（磁盘实况端点：逐路径 + 大小）；读取失败降级 = 只改元数据
+  let files = [];
+  try {
+    files = await apiGet(`/api/references/${encodeURIComponent(entryId)}/files`);
+  } catch (e) { setMsg("文件清单读取失败：" + e.message + "（仍可保存元数据）"); }
+  const renderFiles = () => {
+    filesUl.innerHTML = files.length
+      ? files.map((f) => `<li><label style="cursor:pointer;display:flex;gap:10px;align-items:baseline">`
+          + `<input type="checkbox" data-edit-rm="${esc(f.path)}" style="flex:none">`
+          + `<span class="fname">${esc(f.path)}</span>`
+          + `<span class="muted">${formatSize(f.size_bytes)}</span></label></li>`).join("")
+      : '<li class="muted">无文件（素材清单缺失）。</li>';
+  };
+  renderFiles();
+  const doSave = async () => {
+    const kind = kindEl.value;
+    const fields = {
+      title: titleEl.value,
+      type: typeEl.value,
+      description: descEl.value,
+      anchor_kind: kind,
+      anchor_value: kind === "topic" ? topicEl.value : kind === "kit" ? kitEl.value : "",
+      platform: (modal.querySelector('input[name="ref-edit-platform"]:checked') || {}).value || "any",
+    };
+    const v = refEditValidate(fields);
+    if (!v.ok) { setMsg(v.message); return; }
+    const added = collectFiles(newfilesBox);
+    if (added === null) return;   // collectFiles 已 alert 重名
+    const removed = Array.from(modal.querySelectorAll("[data-edit-rm]:checked"))
+      .map((c) => c.dataset.editRm);
+    const plan = refEditFilePlan(files.map((f) => f.path), removed, added);
+    if (!plan.ok) { setMsg(plan.message); return; }
+    const payload = refEditPayload(fields, plan);
+    // 保存三态由 refEditState 状态机驱动（idle→saving→ok/rejected；reset 回收）
+    saveState = refEditState(saveState, "save");
+    renderSaveBtn();
+    try {
+      await apiPut(`/api/references/${encodeURIComponent(entryId)}`, payload);
+      saveState = refEditState(saveState, "saved");
+      if (!overlay.isConnected) return;
+      close();
+      loadReferences();   // 行 / 统计即时刷新（体量、锚定、平台可见变化）
+    } catch (e) {
+      saveState = refEditState(saveState, "error");
+      if (!overlay.isConnected) return;
+      setMsg(e.message);   // 后端 400 中文原因（校验同源）
+    } finally {
+      saveState = refEditState(saveState, "reset");
+      renderSaveBtn();
+    }
+  };
+  saveBtn.addEventListener("click", doSave);
+  modal.querySelector(".ref-edit-cancel").addEventListener("click", close);
+  modal.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  modal.querySelector(".ref-edit-addrow").addEventListener("click", () => addFileRow(newfilesBox));
+  modal.querySelector(".ref-edit-pick").addEventListener("click", () => modal.querySelector(".ref-edit-pick-input").click());
+  modal.querySelector(".ref-edit-pickdir").addEventListener("click", () => modal.querySelector(".ref-edit-pickdir-input").click());
+  modal.querySelector(".ref-edit-pick-input").addEventListener("change", (e) => pickFilesInto(e.target, newfilesBox, msgEl));
+  modal.querySelector(".ref-edit-pickdir-input").addEventListener("change", (e) => pickFilesInto(e.target, newfilesBox, msgEl));
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  titleEl.focus();
 }
 
 // 参考文件查看（文件名搜索 + 文件打开工单）：清单弹层 + 按扩展名分流

@@ -243,5 +243,121 @@ await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' 
 await new Promise((r) => setTimeout(r, 200));
 check("Esc 关闭详情弹窗", await Eval(`!document.querySelector('.ref-files-overlay')`));
 
+// ================= 工单 03：编辑弹窗（改元数据 + 文件增删，一次 PUT） =================
+// 用「临时条目」流：add → edit → 持久化验证 → delete；finally 兜底清理（幂等：
+// 先清历史残留的同名前缀条目再新建，重复跑不累积污染）。真实数据零改动。
+const TMP_TITLE = "冒烟临时-编辑条目";
+const cleanupTmp = async () => {
+  try {
+    await Eval(`(async () => {
+      const all = await (await fetch('/api/references')).json();
+      for (const e of all) {
+        if ((e.title || '').startsWith('${TMP_TITLE}')) {
+          await fetch('/api/references/' + encodeURIComponent(e.id), { method: 'DELETE' });
+        }
+      }
+      return 'ok';
+    })()`);
+  } catch {}
+};
+try {
+  // 幂等：清历史残留 → 新建临时条目
+  await cleanupTmp();
+  const tmpId = await Eval(`(async () => {
+    const r = await fetch('/api/references', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: '${TMP_TITLE}', type: '冒烟测试', description: '工单 03 冒烟专用，脚本结束后删除',
+        anchor_kind: 'none', anchor_value: '', platform: 'any', files: { 'demo.txt': '冒烟临时文件' },
+      }),
+    });
+    if (!r.ok) throw new Error('add 失败 ' + r.status + ' ' + (await r.text()));
+    const entry = await r.json();
+    if (typeof loadReferences === 'function') loadReferences();
+    return entry.id;
+  })()`);
+  await new Promise((r) => setTimeout(r, 700));
+
+  // 打开编辑弹窗（按 id 找行内「编辑」按钮）
+  await Eval(`(() => {
+    const b = document.querySelector('#ref-rows [data-ref-edit="${tmpId}"]');
+    if (b) b.click();
+    return !!b;
+  })()`);
+  await new Promise((r) => setTimeout(r, 600));
+  const t03a = await Eval(`(() => {
+    const overlay = document.querySelector('.lib-edit-overlay');
+    if (!overlay) return null;
+    const head = overlay.querySelector('.ref-edit-id');
+    const title = overlay.querySelector('.ref-edit-title');
+    const kind = overlay.querySelector('.ref-edit-kind');
+    const desc = overlay.querySelector('.ref-edit-desc');
+    return { head: head ? head.textContent : null, title: title ? title.value : null,
+      kind: kind ? kind.value : null, hasSave: !!overlay.querySelector('.ref-edit-save'),
+      hasFiles: !!overlay.querySelector('.ref-edit-files') };
+  })()`);
+  check("编辑弹窗打开，头部 = 条目 id", !!(t03a && t03a.head === tmpId), t03a && t03a.head);
+  check("编辑弹窗预填标题 / 锚定 / 简介", !!(t03a && t03a.title === TMP_TITLE && t03a.kind === 'none'), t03a && t03a.title);
+  check("编辑弹窗：保存按钮 + 文件清单区就位", !!(t03a && t03a.hasSave && t03a.hasFiles));
+
+  // 改标题 + 简介 + 勾选删除 demo.txt → 保存（一次 PUT：元数据 + remove_files）
+  const NEW_TITLE = TMP_TITLE + "-改";
+  await Eval(`(() => {
+    const o = document.querySelector('.lib-edit-overlay');
+    o.querySelector('.ref-edit-title').value = '${NEW_TITLE}';
+    o.querySelector('.ref-edit-desc').value = '工单 03 已编辑（冒烟验证持久化）';
+    const rm = o.querySelector('[data-edit-rm]');
+    if (rm) rm.checked = true;
+    o.querySelector('.ref-edit-save').click();
+  })()`);
+  await new Promise((r) => setTimeout(r, 900));
+  // 保存后 loadReferences 异步重取全量（含 commit_after_write 的 git 提交耗时）：
+  // 轮询等 refEntryCache 更新到新标题（最多 5s），避免固定等待落在加载占位期
+  let t03b = null;
+  for (let i = 0; i < 50; i++) {
+    t03b = await Eval(`(() => {
+      const cache = (refEntryCache || []).find((e) => e.id === '${tmpId}');
+      const rowTitle = [...document.querySelectorAll('#ref-rows [data-ref-edit="${tmpId}"]')].length
+        ? document.querySelector('#ref-rows [data-ref-edit="${tmpId}"]').closest('tr')
+            .querySelector('.ref-title-cell').textContent.trim() : null;
+      return { overlayGone: !document.querySelector('.lib-edit-overlay'),
+        cacheTitle: cache ? cache.title : null, rowTitle };
+    })()`);
+    if (t03b.cacheTitle === NEW_TITLE && t03b.overlayGone) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  check("保存成功：弹窗关闭 + refEntryCache 更新", !!(t03b.overlayGone && t03b.cacheTitle === NEW_TITLE), t03b.cacheTitle);
+  check("保存成功：表格行即时刷新新标题", t03b.rowTitle === NEW_TITLE, t03b.rowTitle);
+  const t03b2 = await Eval(`fetch('/api/references/${tmpId}/files').then((r) => r.json()).then((f) => f.length)`);
+  check("勾选删除文件生效（磁盘实况端点 files 已空）", t03b2 === 0, "files=" + t03b2);
+
+  // 持久化：刷新页面后仍为已改标题
+  await Eval(`window.__smokeMarker = 1`);
+  await cdp("Page.reload", { ignoreCache: true });
+  let ready2 = false;
+  for (let i = 0; i < 100 && !ready2; i++) {
+    try {
+      ready2 = await Eval(`document.readyState === 'complete' && !window.__smokeMarker
+        && typeof loadReferences === 'function'`);
+    } catch {}
+    if (!ready2) await new Promise((r) => setTimeout(r, 300));
+  }
+  await Eval(`loadReferences()`);
+  await new Promise((r) => setTimeout(r, 900));
+  const t03c = await Eval(`(() => {
+    const e = (refEntryCache || []).find((x) => x.id === '${tmpId}');
+    return e ? e.title : null;
+  })()`);
+  check("刷新页面后编辑仍持久（GET 回读新标题）", t03c === NEW_TITLE, t03c);
+} finally {
+  await cleanupTmp();
+  await new Promise((r) => setTimeout(r, 500));
+}
+const t03d = await Eval(`(async () => {
+  const all = await (await fetch('/api/references')).json();
+  return all.some((e) => (e.title || '').startsWith('${TMP_TITLE}'));
+})()`);
+check("临时条目已清理（真实库零残留，服务器直查）", t03d === false);
+
 console.log(failed ? `SMOKE FAILED(${failed})` : "SMOKE ALL PASS");
 process.exit(failed ? 1 : 0);

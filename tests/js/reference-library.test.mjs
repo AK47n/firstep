@@ -214,6 +214,7 @@ test("refRowHTML 骨干结构：标题截断类 + 全文 tooltip、简介截断�
   assert.ok(out.includes("badge ref-topic"));
   assert.ok(out.includes("2 个文件 · 4.0 KB"));
   assert.ok(out.includes('<button data-ref-view="adc12"'));
+  assert.ok(out.includes('<button data-ref-edit="adc12"'));
   assert.ok(out.includes('class="danger" data-ref-del="adc12"'));
 });
 
@@ -267,4 +268,73 @@ test("refDetailHTML 文件清单段：逐文件路径 + 大小 + 打开链接；
   assert.ok(out.includes("100 B"));
   const empty = refDetailHTML(refs[0], []);
   assert.ok(empty.includes("无文件"));
+});
+
+// ================= 编辑弹窗纯函数（工单 03） =================
+const refEditState = extract("refEditState");
+const refEditValidate = extract("refEditValidate");
+const refEditFilePlan = extract("refEditFilePlan");
+const refEditPayload = extract("refEditPayload");
+
+test("refEditState 状态机：idle→saving→ok/rejected；reset 回 idle；非法事件保持原态", () => {
+  assert.equal(refEditState("idle", "save"), "saving");
+  assert.equal(refEditState("saving", "saved"), "ok");
+  assert.equal(refEditState("saving", "error"), "rejected");
+  assert.equal(refEditState("ok", "reset"), "idle");
+  assert.equal(refEditState("rejected", "reset"), "idle");
+  // 非 saving 态收 saved / error 不动
+  assert.equal(refEditState("idle", "saved"), "idle");
+  assert.equal(refEditState("ok", "error"), "ok");
+  assert.equal(refEditState("idle", "error"), "idle");
+  // 非法事件保持原态
+  assert.equal(refEditState("idle", "boom"), "idle");
+  assert.equal(refEditState("saving", "boom"), "saving");
+  // save 事件不校验来源态（对偶 editDescStatus：重入由保存按钮禁用承担）
+  assert.equal(refEditState("saving", "save"), "saving");
+});
+
+test("refEditValidate 校验：标题 / 类型 / 简介非空（strip 后）；topic/kit 锚定须给值", () => {
+  const base = { title: "t", type: "例程代码", description: "d", anchor_kind: "none", anchor_value: "" };
+  assert.deepEqual(refEditValidate(base), { ok: true, message: "" });
+  assert.equal(refEditValidate({ ...base, title: "  " }).ok, false);
+  assert.ok(refEditValidate({ ...base, title: "  " }).message.includes("标题"));
+  assert.equal(refEditValidate({ ...base, type: "" }).ok, false);
+  assert.equal(refEditValidate({ ...base, description: "   " }).ok, false);
+  assert.equal(refEditValidate({ ...base, anchor_kind: "topic", anchor_value: "" }).ok, false);
+  assert.equal(refEditValidate({ ...base, anchor_kind: "kit", anchor_value: " " }).ok, false);
+  assert.equal(refEditValidate({ ...base, anchor_kind: "topic", anchor_value: "2026C" }).ok, true);
+  assert.equal(refEditValidate({ ...base, anchor_kind: "kit", anchor_value: "ALX 套件" }).ok, true);
+});
+
+test("refEditFilePlan 文件计划：增删透传（加保序、删保列表）；全空返回空容器；重叠与已存在同名的替换拒绝", () => {
+  const plan = refEditFilePlan(["a.c", "b.c"], ["a.c"], { "c.c": "int x;", "d.c": "int y;" });
+  assert.deepEqual(plan, { ok: true, add_files: { "c.c": "int x;", "d.c": "int y;" }, remove_files: ["a.c"] });
+  assert.deepEqual(refEditFilePlan(["a.c"], [], {}), { ok: true, add_files: {}, remove_files: [] });
+  assert.deepEqual(refEditFilePlan([], [], {}), { ok: true, add_files: {}, remove_files: [] });
+  // 同名既删又增：与后端一致拒绝（一句话提示替换路径）
+  const dup = refEditFilePlan(["a.c"], ["a.c"], { "a.c": "int z;" });
+  assert.equal(dup.ok, false);
+  assert.ok(dup.message.includes("a.c"));
+  // 同名新增但未勾删：后端拒绝"文件已存在"，前端先拦（提示先删后加）
+  const exists = refEditFilePlan(["a.c"], [], { "a.c": "new" });
+  assert.equal(exists.ok, false);
+  assert.ok(exists.message.includes("a.c"));
+  // 勾删的路径不在既有清单（外部删除）：透传，存在性由后端裁决
+  const stale = refEditFilePlan(["a.c"], ["gone.c"], {});
+  assert.deepEqual(stale, { ok: true, add_files: {}, remove_files: ["gone.c"] });
+});
+
+test("refEditPayload 组装：元数据全量（trim）；topic 取 topic 值、kit 取 kit 值、none 强制空；文件计划透传", () => {
+  const plan = { ok: true, add_files: { "a.c": "x" }, remove_files: ["b.c"] };
+  const fields = { title: " t ", type: "例程代码", description: " d ", anchor_kind: "topic", anchor_value: " 2026C ", platform: "mspm0" };
+  assert.deepEqual(refEditPayload(fields, plan), {
+    title: "t", type: "例程代码", description: "d",
+    anchor_kind: "topic", anchor_value: "2026C", platform: "mspm0",
+    add_files: { "a.c": "x" }, remove_files: ["b.c"],
+  });
+  const kit = refEditPayload({ ...fields, anchor_kind: "kit", anchor_value: " ALX 套件 " }, plan);
+  assert.equal(kit.anchor_value, "ALX 套件");
+  const none = refEditPayload({ ...fields, anchor_kind: "none", anchor_value: "ignored" }, plan);
+  assert.equal(none.anchor_value, "");
+  assert.equal(none.anchor_kind, "none");
 });

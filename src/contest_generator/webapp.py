@@ -541,10 +541,12 @@ def _map_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
 # ---------------------------------------------------------------------------
 
 
-def _require_str(payload: dict, key: str) -> str:
-    """必填非空字符串；缺失 / 空白抛 400。"""
+def _require_str(payload: dict, key: str, *, allow_empty: bool = False) -> str:
+    """必填字符串字段（键缺失或非字符串抛 400）；allow_empty=False（缺省）
+    时空白也拒——空串合法性由领域校验裁决（如未锚定条目的锚定值必须为空，
+    topic / kit 锚定不可为空），故仅 anchor_value 传 allow_empty=True。"""
     value = payload.get(key)
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str) or (not allow_empty and not value.strip()):
         raise HTTPException(400, f"缺少必填字段：{key}")
     return value.strip()
 
@@ -2607,7 +2609,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             type=_require_str(payload, "type"),
             description=_require_str(payload, "description"),
             anchor_kind=_require_str(payload, "anchor_kind"),
-            anchor_value=_require_str(payload, "anchor_value"),
+            # 未锚定条目提交空串是合法（anchor_value 允许空，非空由域校验裁决）
+            anchor_value=_require_str(payload, "anchor_value", allow_empty=True),
             files=files,
             kit_vocabulary=module_kit_vocabulary(config.module_library_dir),
             # 平台属性（工单 01）：缺省 / 空 = any（平台无关，向后兼容）；
@@ -2658,7 +2661,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             type=_require_str(payload, "type"),
             description=_require_str(payload, "description"),
             anchor_kind=_require_str(payload, "anchor_kind"),
-            anchor_value=_require_str(payload, "anchor_value"),
+            anchor_value=_require_str(payload, "anchor_value", allow_empty=True),
             add_files=add_files,
             remove_files=tuple(remove_files),
             kit_vocabulary=module_kit_vocabulary(config.module_library_dir),
