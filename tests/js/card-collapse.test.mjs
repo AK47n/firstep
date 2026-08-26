@@ -1,30 +1,11 @@
-// collapseToggleAll / collapseBtnLabel 纯函数单测（工单 ui-polish-4/01 + ui-polish-11/05）：
+// collapseToggleAll / collapseBtnLabel 纯函数单测（工单 frontend-es-modules/08）：
 // 生成页卡片折叠决策 + 折叠按钮 aria-label 同步（读屏可感知折叠/展开状态）。
-import { readFileSync } from "node:fs";
+// 直接 import fx/generate.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-// 抽取 collapseBtnLabel + syncCollapseBtn + collapseToggleAll 三个相邻函数
-// （后者调用前者，需同一作用域构造）
-const match = html.match(
-  /function collapseBtnLabel[\s\S]*?function syncCollapseBtn[\s\S]*?function collapseToggleAll[\s\S]*?\n\}/
-);
-assert.ok(
-  match,
-  "index.html 中未找到 collapseBtnLabel/syncCollapseBtn/collapseToggleAll 函数体（改名了？）"
-);
-const fns = new Function(
-  match[0] + "\nreturn { collapseBtnLabel, syncCollapseBtn, collapseToggleAll };"
-)();
-const { collapseBtnLabel, collapseToggleAll } = fns;
-// 产物守卫：正则可能静默截断（惰性匹配首个 \n}），确保三函数都抽出
-for (const name of ["collapseBtnLabel", "syncCollapseBtn", "collapseToggleAll"]) {
-  assert.equal(typeof fns[name], "function", `${name} 未从 index.html 抽取成功`);
-}
+import {
+  collapseBtnLabel, collapseToggleAll,
+} from "../../src/contest_generator/static/js/fx/generate.js";
 
 // 假卡片：只实现 .step-no 查询、classList.toggle、.card-collapse title/aria-label 回写
 function fakeCard(n) {

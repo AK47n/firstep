@@ -1,19 +1,10 @@
-// collectBindings 纯函数单测（工单 pin-verdict-seam/01）：validate 与 generate
+// collectBindings 纯函数单测（工单 frontend-es-modules/08）：validate 与 generate
 // 必须发同一份 bindings——校验通过但生成拿到不同绑定会撞 400，故抽成单源纯
-// 函数后直测（照 sse-parser.test.mjs 先例：从 HTML 抽取函数体喂 node:test，
-// 不碰 DOM / fetch）。
+// 函数后直测。直接 import fx/generate.js，不碰 DOM / fetch。
 // 运行：node --test tests/js/
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const match = html.match(/function collectBindings[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 collectBindings 函数体（改名了？）");
-const collectBindings = new Function("return (" + match[0] + ")")();
+import { collectBindings } from "../../src/contest_generator/static/js/fx/generate.js";
 
 test("只带仍在选择集内的用户绑定（模块移除后不残留）", () => {
   assert.deepEqual(

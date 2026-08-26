@@ -1,46 +1,13 @@
 // generateReadinessChecks / readinessSoftChecks / readinessRowHTML /
-// readinessRowsHTML 纯函数单测（工单 a3-readiness-check/01）：
+// readinessRowsHTML 纯函数单测（工单 frontend-es-modules/08）：
 // 「检查能否生成」的判据（与 btn-generate 前置校验同源）与检查单行渲染。
-import { readFileSync } from "node:fs";
+// 直接 import fx/readiness.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取：函数体内含 `} else {` / 箭头块时，naive 的 [\s\S]*?\n\}
-// 会在第一个顶格 `}` 处截断，这里按花括号深度配平到真正的函数结尾
-function extractSrc(name) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  const open = html.indexOf("{", start);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let i = open; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        return html.slice(start, i + 1);
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-function extract(name) {
-  return new Function("return (" + extractSrc(name) + ")")();
-}
-
-const generateReadinessChecks = extract("generateReadinessChecks");
-const readinessSoftChecks = extract("readinessSoftChecks");
-const readinessRowHTML = extract("readinessRowHTML");
-// readinessRowsHTML 调用兄弟函数 readinessRowHTML：把依赖作为参数注入作用域
-const readinessRowsHTML = new Function(
-  "readinessRowHTML",
-  "return (" + extractSrc("readinessRowsHTML") + ")"
-)(readinessRowHTML);
+import {
+  generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
+  readinessRowsHTML,
+} from "../../src/contest_generator/static/js/fx/readiness.js";
 
 test("generateReadinessChecks 全空（桌面模式默认）：3/6/1 ❌，输出目录 ✅", () => {
   const checks = generateReadinessChecks({

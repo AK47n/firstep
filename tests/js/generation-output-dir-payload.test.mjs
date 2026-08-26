@@ -1,16 +1,9 @@
-// generationOutputDirPayload 纯函数单测（工单 desktop-topic-output/01）：
+// generationOutputDirPayload 纯函数单测（工单 frontend-es-modules/08）：
 // 桌面输出默认勾选时可不填手动目录；取消勾选时按手动目录发给后端。
-import { readFileSync } from "node:fs";
+// 直接 import fx/generate.js。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const match = html.match(/function generationOutputDirPayload[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 generationOutputDirPayload 函数体（改名了？）");
-const generationOutputDirPayload = new Function("return (" + match[0] + ")")();
+import { generationOutputDirPayload } from "../../src/contest_generator/static/js/fx/generate.js";
 
 test("桌面输出开启且手动目录为空 → 发送占位目录", () => {
   assert.equal(generationOutputDirPayload("", true), ".");

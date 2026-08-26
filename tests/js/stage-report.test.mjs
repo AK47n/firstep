@@ -1,19 +1,8 @@
-// genStageTexts / fmtWait 纯函数单测（工单 ui-polish-8/04）：
-// 生成中阶段播报的子阶段文案轮播与等待计时。
-import { readFileSync } from "node:fs";
+// genStageTexts / fmtWait 纯函数单测（工单 frontend-es-modules/08）：
+// 生成中阶段播报的子阶段文案轮播与等待计时。直接 import fx/generate.js。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const m1 = html.match(/function genStageTexts[\s\S]*?\n\}/);
-assert.ok(m1, "index.html 中未找到 genStageTexts 函数体（改名了？）");
-const genStageTexts = new Function("return (" + m1[0] + ")")();
-const m2 = html.match(/function fmtWait[\s\S]*?\n\}/);
-assert.ok(m2, "index.html 中未找到 fmtWait 函数体（改名了？）");
-const fmtWait = new Function("return (" + m2[0] + ")")();
+import { genStageTexts, fmtWait } from "../../src/contest_generator/static/js/fx/generate.js";
 
 test("genStageTexts 首阶段文案", () => {
   assert.equal(genStageTexts(0), "正在选配模块…");

@@ -2840,19 +2840,20 @@ def test_generate_desktop_overwrite_ignored_when_new(client, context, tmp_path):
 
 def test_conflict_message_prefix_anchored_both_sides():
     """一致性护栏（工单 generate-overwrite/01）：冲突 400 文案前缀
-    「桌面上已有同名工程」= 后端（webapp.py 生成）与前端（index.html
-    isConflictError 判定）共用锚点——两边漂移（改文案忘改判定）会红。"""
+    「桌面上已有同名工程」= 后端（webapp.py 生成）与前端（fx/generate.js
+    isConflictError 判定）共用锚点——两边漂移（改文案忘改判定）会红。
+    （工单 frontend-es-modules/08：前端判定随纯函数迁入 fx/generate.js。）"""
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[1]
     webapp_src = (repo / "src" / "contest_generator" / "webapp.py").read_text(encoding="utf-8")
-    index_src = (repo / "src" / "contest_generator" / "static" / "index.html").read_text(encoding="utf-8")
+    js_src = (repo / "src" / "contest_generator" / "static" / "js" / "fx" / "generate.js").read_text(encoding="utf-8")
     # 锚定「前缀 + 引号紧随」：后端 f-string 字形连续（「桌面上已有同名工程「…」），
     # 前端 isConflictError 前缀判定 indexOf===0——子串存在式断言弱于前缀语义
     # （改文案忘改判定仍绿），前缀+引号紧随才能锁死两侧锚点。
     prefix = "桌面上已有同名工程「"
     assert prefix in webapp_src
-    assert prefix in index_src
+    assert prefix in js_src
 
 
 def test_generate_desktop_output_propagates_ai_title_error(

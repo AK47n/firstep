@@ -1,19 +1,11 @@
-// formatResModules 纯函数单测（工单 k230-vision-copilot/04）：产物摘要
+// formatResModules 纯函数单测（工单 frontend-es-modules/08）：产物摘要
 // 「模块文件」行——纯副产物模块（files 空 + python_artifact）在摘要里显示
-// main.py，普通 C 模块显示文件清单，两者同列。照 collect-bindings 先例：
-// 从 HTML 抽取函数体喂 node:test，不碰 DOM / fetch。
+// main.py，普通 C 模块显示文件清单，两者同列。直接 import fx/generate.js，
+// 不碰 DOM / fetch。
 // 运行：node --test tests/js/
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const match = html.match(/function formatResModules[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 formatResModules 函数体（改名了？）");
-const formatResModules = new Function("return (" + match[0] + ")")();
+import { formatResModules } from "../../src/contest_generator/static/js/fx/generate.js";
 
 test("k230（files 空 + 副产物）→ slug(副产物 main.py)", () => {
   assert.equal(

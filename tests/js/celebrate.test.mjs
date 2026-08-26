@@ -1,16 +1,8 @@
-// attachCelebrate 纯逻辑单测（工单 ui-polish-8/02）：步骤完成庆祝动画的
-// 类加/移除契约——animationend 后自清理。
-import { readFileSync } from "node:fs";
+// attachCelebrate 纯逻辑单测（工单 frontend-es-modules/08）：步骤完成庆祝动画的
+// 类加/移除契约——animationend 后自清理。直接 import fx/generate.js。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const match = html.match(/function attachCelebrate[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 attachCelebrate 函数体（改名了？）");
-const attachCelebrate = new Function("return (" + match[0] + ")")();
+import { attachCelebrate } from "../../src/contest_generator/static/js/fx/generate.js";
 
 function fakeCard() {
   const classes = new Set();
