@@ -3,8 +3,9 @@
   "title": "k230资料",
   "type": "开发板资料",
   "description": "嘉楠 CanMV K230 开发板资料：micropython 固件镜像、CanMV IDE、摄像头 / 视觉 Python 例程（21 个 .py）、python 基础笔记等。文本脚本已入库；固件镜像 / IDE 安装包（约 1G）不入库，完整保真见 sources/materials 备份。",
-  "anchor_kind": "topic",
-  "anchor_value": "2021F",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
   "files": [
     "素材清单.txt",
     "code/01test.py",
@@ -30,5 +31,7 @@
     "codecao/09_2AI识别数字.py",
     "python基础.ipynb",
     "天猛星资料/天猛星资料.txt"
-  ]
+  ],
+  "file_count": 25,
+  "size_bytes": 117672
 }
