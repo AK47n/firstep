@@ -2245,6 +2245,7 @@ import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteMod
 import { loadReferences, loadKitVocabulary, initReferenceToolbar, deleteReference, editReference, openReferenceFile, viewReferenceDetail } from "/js/ui/reference.js";
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
+import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 "use strict";
 
 // 主题切换（工单 ui-polish-5/01）：currentTheme / applyTheme / initTheme 及
@@ -5198,72 +5199,12 @@ function initGenOverview() {
 }
 
 // ---------------------------------------------------------------------------
-// 最近生成（工单 recent-jobs/01）：生成成功自动落盘 recent.json（后端
-// GET /api/recent / POST /api/recent/status / DELETE /api/recent/{id}），
-// 顶部列表展示历史条目：状态点 / 平台徽章 / 模块数 / 时间 / 目录名；
-// 点击复制路径、X 删除、刷新重拉。纯函数自包含（tests/js 抽取范式）。
-// ---------------------------------------------------------------------------
-// 已迁至 static/js/fx/recent.js（工单 08）：recentStatusMeta / recentTimeLabel / recentPlatformLabel /
-// recentChipHTML / recentListHTML / recentStatusNow。
-function renderRecentList(entries) {
-  const list = $("gen-recent-list");
-  const box = $("gen-recent");
-  if (!list || !box) return;
-  box.classList.remove("hidden");
-  list.innerHTML = recentListHTML(entries || []);
-}
-async function refreshRecent() {
-  const box = $("gen-recent");
-  if (!box) return;
-  let entries = [];
-  try { entries = await apiGet("/api/recent"); }
-  catch (e) { toast("error", "最近生成加载失败：" + e.message); }
-  renderRecentList(entries || []);
-}
-// 编译完成上报（fire-and-forget：失败不打断编译循环，静默）+ 刷新列表
-async function reportRecentStatus(outputDir, done) {
-  try {
-    await apiPost("/api/recent/status",
-      { output_dir: outputDir, status: recentStatusNow(done) });
-  } catch (e) { /* 上报失败不打断编译循环 */ }
-  refreshRecent();
-}
-function initRecent() {
-  const refresh = $("btn-recent-refresh");
-  if (refresh) refresh.addEventListener("click", () => refreshRecent());
-  const list = $("gen-recent-list");
-  if (!list) return;
-  list.addEventListener("click", async (e) => {
-    const del = e.target.closest(".recent-del");
-    if (del) {
-      e.stopPropagation();
-      try {
-        await apiDelete("/api/recent/" + encodeURIComponent(del.dataset.id || ""));
-      } catch (err) { toast("error", "删除失败：" + err.message); }
-      refreshRecent();
-      return;
-    }
-    const chip = e.target.closest(".recent-chip");
-    if (!chip) return;
-    const dir = chip.dataset.dir || "";
-    // 复制路径（与 btn-copy-dir / main.c 工具栏同款：clipboard 失败 → execCommand 兜底）
-    const done = () => toast("ok", "已复制路径");
-    const fallback = () => {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = dir;
-        document.body.appendChild(ta);
-        ta.select();
-        if (document.execCommand && document.execCommand("copy")) { toast("ok", "已复制路径"); return; }
-        toast("error", "复制失败：请手动复制");
-      } catch (err) { toast("error", "复制失败：" + err.message); }
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(dir).then(done).catch(fallback);
-    } else fallback();
-  });
-  refreshRecent();
-}
+// 最近生成（工单 recent-jobs/01）：renderRecentList / refreshRecent /
+// reportRecentStatus / initRecent 已迁至 static/js/ui/recent.js（阶段 2
+// 工单 11）；纯件在 fx/recent.js（工单 08 迁：recentStatusMeta /
+// recentTimeLabel / recentPlatformLabel / recentChipHTML / recentListHTML /
+// recentStatusNow）。host 侧调用点：renderGenerateSuccess@3394 refreshRecent、
+// fixHandleEvent@4159 reportRecentStatus、启动区 initRecent——均经顶部 import。
 
 // ---------------------------------------------------------------------------
 // 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验
