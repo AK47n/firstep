@@ -474,6 +474,8 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "parse_confirm_entries": ("read", ""),
         "split_topics_document": ("read", ""),
         "enrich_topic_image_notes": ("commit", "lib: 赛题条目补图注"),
+        # 工单 topic-library-ui/01：浏览健康判定——只读文件系统实况、不落盘
+        "topic_health": ("read", ""),
     },
     "master_store": {
         "master_project_dir": ("read", ""),

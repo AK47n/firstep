@@ -204,6 +204,7 @@ from .topic_library import (
     parse_confirm_entries,
     resolve_number,
     split_topics_document,
+    topic_health,
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -2763,15 +2764,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/topics")
     @_map_errors
     def topics() -> list[dict]:
-        """浏览赛题库：全部条目按编号排序（浏览列表用）。
+        """浏览赛题库：全部条目按编号排序 + 每条的 health 实况（浏览列表用）。
 
         列表一次性算好返回，前端不再按条回查——单条 GET /api/topics/{key}
-        是生成入口素材，与浏览列表各司其职。
+        是生成入口素材（不带 health，字段现状保持），与浏览列表各司其职。
         """
         config = _require_config(context)
+        topics_dir = topic_library_dir(config.module_library_dir)
         return [
-            entry.to_dict()
-            for entry in list_topics(topic_library_dir(config.module_library_dir))
+            {**entry.to_dict(), "health": topic_health(topics_dir, entry).to_dict()}
+            for entry in list_topics(topics_dir)
         ]
 
     @app.post("/api/topics/split")

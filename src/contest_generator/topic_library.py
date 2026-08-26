@@ -367,6 +367,46 @@ def _figure_notes(
         return ""
 
 
+@dataclass(frozen=True)
+class TopicHealth:
+    """赛题条目浏览健康实况（工单 topic-library-ui/01，提示语义）。
+
+    浏览列表每条带出：原 PDF 缺失（条目目录内文件不在，AI 拆错核对原文 /
+    页图端点的能力丢失）+ 附带程序目录悬空（引用目录不存在，素材不可用）。
+    只标记不改数据；判定在服务端（文件系统实况，前端无从判断）。
+    original_pdf_size 供详情弹窗展示体量（缺失 = 0；随列表一次算好，
+    前端不按条回查——对偶 PDF 轮列表带 mtime 先例）。
+    """
+
+    original_pdf_missing: bool
+    programs_missing: tuple[str, ...]  # 悬空的附带程序绝对路径（按声明序）
+    original_pdf_size: int = 0  # 原 PDF 字节数（文件缺失 = 0）
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "original_pdf_missing": self.original_pdf_missing,
+            "programs_missing": list(self.programs_missing),
+            "original_pdf_size": self.original_pdf_size,
+        }
+
+
+def topic_health(topic_library_root: Path, entry: TopicEntry) -> TopicHealth:
+    """条目健康判定（浏览列表用）：原 PDF 缺失 = 有声明但文件不在条目目录
+    （无声明不算缺失——没有就不查）；附带程序悬空 = 引用路径不是目录
+    （Path.is_dir() 与确认入库同判据，引用指向文件 / 已删目录都算悬空）。"""
+    entry_dir = _entry_dir(topic_library_root, entry.key)
+    pdf_path = entry_dir / entry.original_pdf if entry.original_pdf else None
+    original_pdf_missing = bool(pdf_path) and not pdf_path.is_file()
+    programs_missing = tuple(
+        program for program in entry.programs if not Path(program).is_dir()
+    )
+    return TopicHealth(
+        original_pdf_missing=original_pdf_missing,
+        programs_missing=programs_missing,
+        original_pdf_size=pdf_path.stat().st_size if pdf_path and pdf_path.is_file() else 0,
+    )
+
+
 def list_topics(topic_library_root: Path) -> list[TopicEntry]:
     """浏览赛题库：全部条目按编号排序（磁盘目录即数据库，操作即时生效）。
 
