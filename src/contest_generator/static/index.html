@@ -2236,7 +2236,7 @@ import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
 import { $, handle, apiGet, apiPost, apiPut, apiDelete, KIND_TEXT, state, setState, toast } from "/js/app.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { renderUsageStats } from "/js/ui/usage.js";
-import { loadMasters, loadChangelog } from "/js/ui/master.js";
+import { loadMasters, loadChangelog, renderNewPlatformOptions } from "/js/ui/master.js";
 import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
 import { addFileRow, collectFiles, readPickedText, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
 import { renderPlatforms, renderModulePool, renderSelected, renderWarnings, renderRecommendResult, startRecommend, loadReferencePicker, chosenPlatform, selectedSlugs, expanded, lastRecommend, currentTopicId, selectedReferenceIds, autoReferenceIds, pythonTemplates, scorePoints, setChosenPlatform, setSelectedSlugs, setCurrentTopicId, setRecommendClarifications, setClusterDeps } from "/js/ui/generate-recommend.js";
@@ -2341,9 +2341,9 @@ document.querySelectorAll("nav button").forEach((btn) => {
 // 生成页：8. main.c 骨架 / 自检冒烟 + 生成页：9. 输出目录并生成（成功区 / 桌面输出开关）
 // ---------------------------------------------------------------------------
 // 已迁至 static/js/ui/generate-core.js（阶段 2 工单 15）：SKELETON_MODES +
-// generateMain / renderGenerateSuccess / desktopTopicOutputEnabled + 骨架与
+// generateMain / renderGenerateSuccess + 骨架与
 // 冒烟按钮 / 桌面输出开关 / 选目录监听器。host 经顶部 import 调用
-// renderGenerateSuccess / desktopTopicOutputEnabled（readiness 检查）——btn-generate
+// initScoreChecklist；btn-generate
 // 覆盖重发监听器亦随迁（工单 20——readinessState 已随工单 19 迁出）。
 
 // 已迁至 static/js/fx/generate.js（工单 08）：collectBindings。
@@ -2590,8 +2590,7 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
   renderPlatforms();
   renderModulePool();
   renderPinCard();  // 引脚配置卡（工单 03）：初始占位文案
-  $("new-platform").innerHTML = state.platforms.map((p) =>
-    `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  renderNewPlatformOptions(state.platforms);
   loadReferencePicker();
   restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
 })();

@@ -3,7 +3,8 @@
 //
 // DOM 胶水全量迁入：SKELETON_MODES + generateMain（骨架/自检冒烟共用） /
 // renderGenerateSuccess（成功区：目录/包含路径/模块/评分清单/产物树/自动编译） /
-// desktopTopicOutputEnabled（桌面输出开关） / renderArtifacts（自动附带产物） /
+// renderArtifacts（自动附带产物） /
+// desktopTopicOutputEnabled 工单 21 归位 ui/generate-readiness.js（判据输入，读方 import）
 // 评分清单 5 函数（renderScoreChecklist / scoreChecklistIdsNow /
 // scoreChecklistSyncCurrent / scoreChecklistExportNow / initScoreChecklist） /
 // 交接 6 函数（handoffPlatformLabel / handoffPlatformIde / handoffModuleLines /
@@ -32,7 +33,7 @@ import { markStepDone, markStepUndone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { refreshRecent } from "/js/ui/recent.js";
-import { readinessState } from "/js/ui/generate-readiness.js";
+import { readinessState, desktopTopicOutputEnabled } from "/js/ui/generate-readiness.js";
 import { startFixCenter, compileBanner, toolchains } from "/js/ui/generate-fix.js";  // 修复中心（工单 16 迁出→静态 import，取代工单 15 接缝）
 
 // ---------------------------------------------------------------------------
@@ -122,10 +123,6 @@ function renderGenerateSuccess(data) {
   }
 }
 // 已迁至 static/js/fx/generate.js（工单 08）：genStageTexts / fmtWait。
-function desktopTopicOutputEnabled() {
-  const checkbox = $("desktop-topic-output");
-  return checkbox ? checkbox.checked : true;
-}
 
 // 已迁至 static/js/fx/generate.js（工单 08）：generationOutputDirPayload。
 
@@ -562,8 +559,8 @@ $("btn-generate").addEventListener("click", async () => {
 // 说明（工单 15 记录，工单 16 修订）：generateMain / renderScoreChecklist /
 // scoreChecklistSyncCurrent / scoreChecklistExportNow 当前无 host 调用点
 //（监听器随簇迁入），按检查表导出为模块 API；host 实际使用
-// renderGenerateSuccess / desktopTopicOutputEnabled / initScoreChecklist /
+// renderGenerateSuccess / initScoreChecklist /
 // 修复中心服务已随工单 16 改静态 import（startFixCenter / compileBanner / toolchains）。
-export { generateMain, renderGenerateSuccess, desktopTopicOutputEnabled,
+export { generateMain, renderGenerateSuccess,
   renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow,
   initScoreChecklist };

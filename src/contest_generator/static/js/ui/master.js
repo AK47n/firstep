@@ -499,6 +499,13 @@ export async function loadMasters() {
   } catch (e) { $("master-msg").textContent = e.message; }
 }
 
+// 新增平台下拉（评审工单 23 自 host 迁入）：母版 tab「新增平台」表单的平台选项，
+// host 启动 IIFE 调 renderNewPlatformOptions(state.platforms)。
+export function renderNewPlatformOptions(platforms) {
+  $("new-platform").innerHTML = platforms.map((p) =>
+    `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+}
+
 // ---------------------------------------------------------------------------
 // 更新记录页（工单 changelog-tab/01）：按天分组时间轴，数据源 CHANGELOG.md（提交后自动补录）
 // ---------------------------------------------------------------------------

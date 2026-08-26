@@ -16,15 +16,14 @@
 // selectedSlugs）与渲染（renderPlatforms / renderSelected / renderWarnings /
 // renderRecommendResult）+ setter（setChosenPlatform / setSelectedSlugs /
 // setCurrentTopicId）import 自 ui/generate-recommend.js；desktopTopicOutputEnabled
-// import 自 ui/generate-core.js；syncMainCHighlight import 自 ui/generate-mainc.js。
+// import 自 ui/generate-readiness.js（工单 21 归位）；syncMainCHighlight import 自 ui/generate-mainc.js。
 import { $, state } from "/js/app.js";
 import { draftState, draftSave, draftLoad, draftRestoreMeta, stepNavTitles } from "/js/fx/draft.js";
 import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, hasWarnContent } from "/js/fx/overview.js";
 import { generateReadinessChecks } from "/js/fx/readiness.js";
-import { readinessState } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）
+import { readinessState, desktopTopicOutputEnabled } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位
 import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone } from "/js/ui/step-state.js";
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
-import { desktopTopicOutputEnabled } from "/js/ui/generate-core.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 
 // ---------------------------------------------------------------------------
@@ -65,18 +64,16 @@ function restoreDraft() {
   if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); }
   $("draft-tip").classList.remove("hidden");
 }
-$("btn-clear-draft").addEventListener("click", () => {
-  clearDraft();
-  const btn = $("btn-clear-draft");
-  btn.textContent = "已清除";
-  setTimeout(() => { btn.textContent = "清除草稿"; }, 1500);
-});
-$("btn-draft-clear").addEventListener("click", () => {
-  clearDraft();
-  const btn = $("btn-draft-clear");
-  btn.textContent = "已清除";
-  setTimeout(() => { btn.textContent = "清除草稿"; }, 1500);
-});
+function bindClearDraftButton(btnId) {
+  $(btnId).addEventListener("click", () => {
+    clearDraft();
+    const btn = $(btnId);
+    btn.textContent = "已清除";
+    setTimeout(() => { btn.textContent = "清除草稿"; }, 1500);
+  });
+}
+bindClearDraftButton("btn-clear-draft");
+bindClearDraftButton("btn-draft-clear");
 $("problem").addEventListener("input", scheduleDraftSave);
 $("topic-id").addEventListener("input", scheduleDraftSave);
 $("main-c").addEventListener("input", scheduleDraftSave);
@@ -113,9 +110,9 @@ function overviewPlanNow(doneArr) {
 // 已迁至 static/js/fx/overview.js（工单 07）：cardStepStatusHTML / hasWarnContent。
 let genOverviewTitles = [];
 let genOverviewBadges = {};
-function genOverviewWarn(n) {
-  return (n === 6 && hasWarnContent($("warnings")))
-      || (n === 7 && hasWarnContent($("pin-warn-list")));
+function genOverviewWarn(stepNo) {
+  return (stepNo === 6 && hasWarnContent($("warnings")))
+      || (stepNo === 7 && hasWarnContent($("pin-warn-list")));
 }
 function refreshGenOverview() {
   const box = $("gen-overview");
