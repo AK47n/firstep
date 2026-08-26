@@ -1,53 +1,12 @@
-// 母版库浏览区纯函数组（工单 master-library-ui/03）：表格增强行 + 删除确认弹窗。
-// extract 范式与 topic-browser.test.mjs / pdf-library.test.mjs 同款
-// （括号配平 + deps 注入兄弟函数依赖；函数体不得引用模块级常量）。
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+// 母版库浏览区纯函数组（工单 frontend-es-modules/05）：表格增强行 + 删除确认
+// 弹窗 + 详情弹窗（元数据 / 清单 / URL 拼装）。直接 import fx/master.js
+//（不再字符串提取）；只测外部行为，子串断言防脆。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { esc } from "../../src/contest_generator/static/js/fx/core.js";
-
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
-
-// 括号配平提取（同 topic-browser.test.mjs 范式）；deps = 注入的兄弟函数依赖。
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  let i = html.indexOf("(", start);
-  assert.ok(i !== -1, name + " 函数缺少参数表");
-  let pdepth = 0;
-  for (; i < html.length; i++) {
-    if (html[i] === "(") pdepth++;
-    else if (html[i] === ")") { pdepth--; if (pdepth === 0) break; }
-  }
-  const open = html.indexOf("{", i);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let j = open; j < html.length; j++) {
-    if (html[j] === "{") depth++;
-    else if (html[j] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, j + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const masterTableRowHTML = extract("masterTableRowHTML", { esc });
-const masterDeleteConfirmHTML = extract("masterDeleteConfirmHTML", { esc });
-const masterFileURL = extract("masterFileURL");
-const masterKeyFileRowHTML = extract("masterKeyFileRowHTML", { esc });
-const masterDetailHTML = extract("masterDetailHTML", { esc, masterKeyFileRowHTML });
+import {
+  masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL,
+  masterKeyFileRowHTML, masterDetailHTML,
+} from "../../src/contest_generator/static/js/fx/master.js";
 
 // 测试母本：与 /api/masters 列表响应同形状（platform_label / key_files 自工单 01）
 const MASTER_STM32 = {
