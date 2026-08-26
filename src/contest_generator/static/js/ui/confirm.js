@@ -8,6 +8,11 @@
 // overlayConfirmHTML 在 fx/overlay.js，本模块只做 DOM 接线与事件解绑。
 import { overlayConfirmHTML } from "/js/fx/overlay.js";
 
+// 级联清理（评审 05 修正）：并发/重入时旧弹窗被直接 remove 会残留 keydown
+// 监听且 Promise 永不 settle——新工厂创建时先关旧弹窗（cleanup 解绑 +
+// resolve(false)），无并发场景零影响。
+let activeCleanup = null;
+
 export function confirmModal({
   title,
   message,
@@ -17,6 +22,11 @@ export function confirmModal({
   extra = "",
 } = {}) {
   return new Promise((resolve) => {
+    if (activeCleanup) {
+      const old = activeCleanup;
+      activeCleanup = null;
+      old();
+    }
     document.querySelectorAll(".ref-files-overlay").forEach((o) => o.remove());
     const overlay = document.createElement("div");
     overlay.className = "ref-files-overlay";
@@ -30,8 +40,10 @@ export function confirmModal({
       settled = true;
       document.removeEventListener("keydown", onKey);
       overlay.remove();
+      activeCleanup = null;
       resolve(value);
     };
+    activeCleanup = () => finish(false);
     overlay.querySelector(".ref-files-close").addEventListener("click", () => finish(false));
     overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(false); });
     overlay.querySelector("[data-confirm-cancel]").addEventListener("click", () => finish(false));

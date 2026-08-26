@@ -6,7 +6,7 @@
 // 绑定（bindFilePicker）。引用方 import 本模块；文件行绑定时机 = 调用方（弹窗
 // 打开时）逐行绑定，顶部无跨域监听。
 // 注：「文件名（含相对路径）」语义 + 二进制/超大跳过 + GBK 兜底同前端域约定。
-import { $ } from "/js/app.js";
+import { $, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 
 // 动态文件行（模块库 / 参考文件库共用；container 缺省为模块库的 #new-files）
@@ -31,7 +31,7 @@ export function collectFiles(container) {
     const name = row.querySelector("input").value.trim();
     const content = row.querySelector("textarea").value;
     if (!name) continue;
-    if (files[name] !== undefined) { alert("文件名重复：" + name); return null; }
+    if (files[name] !== undefined) { toast("error", "文件名重复：" + name); return null; }
     files[name] = content;
   }
   return files;

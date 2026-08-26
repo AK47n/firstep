@@ -19,6 +19,7 @@
 // host 启动区注册的 setClusterDeps 闭包（与工单 13 pins 同构——A 不 import
 // 本簇，避免 ui→ui 环；本簇单向 import A）。
 import { $, apiPost, toast } from "/js/app.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { fmtSeconds, syncCollapseBtn } from "/js/fx/generate.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { maincContentEmpty, maincLineOffsetRange, isMainCPath } from "/js/fx/code.js";
@@ -572,7 +573,12 @@ $("btn-fix-errors").addEventListener("click", async () => {
 
 $("btn-fix-rollback").addEventListener("click", async () => {
   if (!lastFix) return;
-  if (!confirm("回滚本次修复？将把备份的文件内容恢复到写回前状态。")) return;
+  if (!await confirmModal({
+    title: "确认回滚？",
+    message: "回滚本次修复？将把备份的文件内容恢复到写回前状态。",
+    danger: true,
+    confirmText: "确认回滚",
+  })) return;
   $("btn-fix-rollback").disabled = true;
   $("fix-errors-msg").textContent = "";
   try {

@@ -23,6 +23,7 @@
 // 工单 15 的接缝改为静态 import）；host 侧不再注册。
 // btn-generate 覆盖重发监听器（工单 20 补迁——readinessState 随工单 19 迁出后
 import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName } from "/js/fx/generate.js";
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
@@ -532,9 +533,14 @@ $("btn-generate").addEventListener("click", async () => {
       const hint = dirName
         ? "旧工程将先备份为「" + dirName + ".bak」，然后覆盖生成全新工程"
         : "旧工程将先备份为同名 .bak 备份";
-      if (confirm("桌面上已有同名工程"
-        + (dirName ? "「" + dirName + "」" : "")
-        + "：" + hint + "。确定覆盖并重新生成？")) {
+      if (await confirmModal({
+        title: "覆盖生成？",
+        message: "桌面上已有同名工程"
+          + (dirName ? "「" + dirName + "」" : "")
+          + "：" + hint + "。确定覆盖并重新生成？",
+        danger: true,
+        confirmText: "确定覆盖",
+      })) {
         genStatus("正在覆盖生成…");
         try {
           const data = await apiPost("/api/generate", { ...payload, overwrite: true });

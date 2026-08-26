@@ -345,7 +345,13 @@ $("btn-confirm").addEventListener("click", async () => {
   const suffix = archiveCount
     ? "\n另有 " + archiveCount + " 条归档动作：复制入库参考文件库并锚定赛题编号（需 AI 服务，失败可去掉归档后重试）。"
     : "";
-  if (!confirm("确认按此报告提炼母版并入库？（将整体替换该平台的旧母版）" + suffix)) return;
+  const ok = await confirmModal({
+    title: "确认提炼母版并入库？",
+    message: "确认按此报告提炼母版并入库？（将整体替换该平台的旧母版）" + suffix,
+    danger: true,
+    confirmText: "确认并入库",
+  });
+  if (!ok) return;
   $("btn-confirm").disabled = true;
   $("confirm-status").innerHTML = '<span class="spinner"></span>落盘与入库中…';
   try {
