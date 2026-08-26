@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=23fe9d8ff732f2654cbc2f6481ae6696a8a92ae6 -->
+<!-- changelog-auto: last-commit=59bccf70ab16a0ade7e738cb79cd2ac1748c9e6e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 12:53 数据：参考库锚定治理——k230资料 取消 2021F 锚定改未锚定（用户决策：视觉板资料不绑定赛题）；锚定审计记录 anchor-audit.md（154 条全库审计，26H 两条待赛题库补录 2026H、塔克/2026 资料/通用例程维持未锚）；CHANGELOG 核定去除冒烟行
 - 12:57 pdf-library-ui 01：列表加 mtime + 页数端点（PyMuPDF 按需、路由顺序回归）
 - 13:01 数据：赛题库录入 2026H（H题_车载平衡滚球运动控制系统，2026 赛区赛）——题面用工程目录规范整理版（sources/contest/2026H/26H，含任务/要求表/说明/评分标准/图注），原 PDF 副本 + manifest + 附带程序目录 C:/Users/luoji/Desktop/2026H/26H；参考库两条 2026H 锚定条目的悬空警示随之归零
+- 13:10 update reference MPU6050-姿态解算-DMP-库
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
