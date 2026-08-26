@@ -2246,7 +2246,8 @@ import { initMainCTools, syncMainCHighlight, currentCodeZoomPct, applyCodeZoom }
 import { generateMain, renderGenerateSuccess, desktopTopicOutputEnabled, renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow, initScoreChecklist } from "/js/ui/generate-core.js";
 import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } from "/js/ui/generate-fix.js";
 import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext } from "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
-import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview, setStepsDeps } from "/js/ui/generate-steps.js";
+import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
+import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
 import { loadReferences, loadKitVocabulary, initReferenceToolbar, deleteReference, editReference, openReferenceFile, viewReferenceDetail } from "/js/ui/reference.js";
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
@@ -2612,8 +2613,8 @@ $("btn-generate").addEventListener("click", async () => {
 // GEN_RECOMMENDED_STEPS / genOverviewTitles / genOverviewBadges /
 // overviewPlanNow / genOverviewWarn / refreshGenOverview / FOCUS_TARGETS /
 // runOverviewFill / initGenOverview（host 启动区经 import 调）。
-// refreshGenOverview 对 readinessState 的调用经 setStepsDeps 接缝（host 注册；
-// 工单 19 迁出 readiness 后改静态 import）；变化联动经 setOnStepChange 注册。
+// refreshGenOverview 对 readinessState 的调用为静态 import（工单 18 接缝已由
+// 工单 19 改静态 import）；变化联动经 setOnStepChange 注册。
 
 // ---------------------------------------------------------------------------
 // 最近生成（工单 recent-jobs/01）：renderRecentList / refreshRecent /
@@ -2624,67 +2625,13 @@ $("btn-generate").addEventListener("click", async () => {
 // fixHandleEvent@4159 reportRecentStatus、启动区 initRecent——均经顶部 import。
 
 // ---------------------------------------------------------------------------
-// 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验
-// 同源（单一事实源，先例 collectBindings/pin-verdict-seam/01）——「检查单结论」
-// 与「点了生成被拦的提示」永不吵架。渲染走纯函数（node:test 直抽直测），
-// 交互在 initReadinessCheck 用容器事件委托。
+// 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验同源
 // ---------------------------------------------------------------------------
-// 已迁至 static/js/fx/readiness.js（工单 08）：generateReadinessChecks / readinessSoftChecks /
-// readinessRowHTML / readinessRowsHTML。
-function readinessState() {
-  return {
-    chosenPlatform: chosenPlatform,
-    selectedSlugs: selectedSlugs,
-    problem: $("problem").value.trim(),
-    desktopOutput: desktopTopicOutputEnabled(),
-    outputDir: $("output-dir").value.trim(),
-    recommended: stepDoneSet.has(5),
-    hasMainC: !!$("main-c").value.trim(),
-  };
-}
-function renderReadinessPanel() {
-  const box = $("readiness-check");
-  if (!box || box.classList.contains("hidden")) return;
-  const state = readinessState();
-  // 一键跑推荐需要题面：题面缺时不给自动按钮（引导先去第 1 步）
-  const recommendEnabled = !!state.problem;
-  box.innerHTML =
-    readinessRowsHTML(generateReadinessChecks(state), { recommendEnabled })
-    + readinessRowsHTML(readinessSoftChecks(state), { recommendEnabled: false });
-}
-function refreshReadinessPanel() {
-  renderReadinessPanel();
-}
-function initReadinessCheck() {
-  const btn = $("btn-readiness-check");
-  const box = $("readiness-check");
-  if (!btn || !box) return;
-  btn.addEventListener("click", () => {
-    box.classList.toggle("hidden");
-    if (!box.classList.contains("hidden")) renderReadinessPanel();
-  });
-  // 事件委托：定位按钮 / 一键跑推荐（与「让 AI 推荐」同一入口）
-  box.addEventListener("click", (e) => {
-    const go = e.target.closest(".rc-go");
-    if (go) {
-      const card = stepCard(parseInt(go.dataset.step, 10));
-      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    const rec = e.target.closest(".rc-recommend");
-    if (rec) {
-      const problem = $("problem").value.trim();
-      if (!problem) {
-        const card = stepCard(1);
-        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
-        return;
-      }
-      setRecommendClarifications([]);
-      startRecommend(problem);
-    }
-  });
-}
-
+// 已迁至 static/js/ui/generate-readiness.js（阶段 2 工单 19）：readinessState /
+// renderReadinessPanel / refreshReadinessPanel / initReadinessCheck。host 经
+// 顶部 import 调 readinessState（btn-generate 监听器）/ refreshReadinessPanel
+//（setOnStepChange 回调）/ initReadinessCheck（启动区）；generate-steps 静态
+// import readinessState（工单 18 接缝已删除）。
 
 // ---------------------------------------------------------------------------
 // Toast 轻通知（工单 ui-polish-3/03）：toast / TOAST_ICON 已迁至
@@ -2733,7 +2680,6 @@ setClusterDeps({
 });
 setOnStepChange(() => { refreshGenOverview(); refreshReadinessPanel(); });
 setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainStatus(); } });
-setStepsDeps({ readinessState });  // readiness 簇服务接缝（工单 19 迁出后改静态 import）
 
 // ---------------------------------------------------------------------------
 // 启动

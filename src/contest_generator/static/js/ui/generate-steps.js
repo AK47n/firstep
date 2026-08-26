@@ -10,8 +10,8 @@
 // 状态：本模块无跨簇 mutable 状态；stepDoneSet 拥有者 = ui/step-state.js
 //（工单 12），本模块经 import 读；stepCard / stepNavTitles / markStepDone /
 // STEP_NAV_CARD_SELECTOR 同（step-state / fx/draft）。
-// 跨簇服务（host 内联暂不可静态 import）：readinessState（readiness 簇，
-// 工单 19 迁出后改静态 import）经 setStepsDeps 接缝注册（index.html 启动区）。
+// 跨簇服务（readiness 簇）：readinessState 静态 import 自 ui/generate-readiness.js
+//（工单 19 迁出后由工单 18 的接缝改为静态 import）。
 // 纯件在 fx/*.js（draft / overview / readiness）；A 簇状态读（lastRecommend /
 // selectedSlugs）与渲染（renderPlatforms / renderSelected / renderWarnings /
 // renderRecommendResult）+ setter（setChosenPlatform / setSelectedSlugs /
@@ -21,15 +21,11 @@ import { $, state } from "/js/app.js";
 import { draftState, draftSave, draftLoad, draftRestoreMeta, stepNavTitles } from "/js/fx/draft.js";
 import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, hasWarnContent } from "/js/fx/overview.js";
 import { generateReadinessChecks } from "/js/fx/readiness.js";
+import { readinessState } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）
 import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone } from "/js/ui/step-state.js";
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
 import { desktopTopicOutputEnabled } from "/js/ui/generate-core.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
-
-const stepsDeps = { readinessState: null };
-// readiness 簇服务（host 注册）：refreshGenOverview 的「生成按钮就绪」判定。
-// 工单 19 迁出 readineess 簇后改静态 import。
-function setStepsDeps(deps) { Object.assign(stepsDeps, deps); }
 
 // ---------------------------------------------------------------------------
 // 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
@@ -177,7 +173,7 @@ function refreshGenOverview() {
   if (fillBtn) fillBtn.classList.toggle("hidden", plan.length === 0);
   const genBtn = box.querySelector(".ov-generate");
   if (genBtn) {
-    const ready = overviewReadyToGenerate(generateReadinessChecks(stepsDeps.readinessState()));
+    const ready = overviewReadyToGenerate(generateReadinessChecks(readinessState()));
     const generating = !!( $("btn-generate") && $("btn-generate").disabled );
     genBtn.classList.toggle("hidden", !ready);
     if (genBtn.disabled !== generating) genBtn.disabled = generating;
@@ -258,7 +254,6 @@ function initGenOverview() {
 // ---- 本簇导出面（host 顶部 import 活绑定调用点） ----
 // host 实际使用：restoreDraft（启动区末位）/ initGenOverview（启动区）/
 // scheduleDraftSave（A 簇 clusterDeps 注册闭包）/ refreshGenOverview
-//（setOnStepChange 回调）/ setStepsDeps（启动区接缝）。
+//（setOnStepChange 回调）。
 export { restoreDraft, scheduleDraftSave, collectDraftState, clearDraft,
-  initGenOverview, refreshGenOverview, runOverviewFill, overviewPlanNow,
-  setStepsDeps };
+  initGenOverview, refreshGenOverview, runOverviewFill, overviewPlanNow };
