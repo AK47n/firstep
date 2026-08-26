@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b8c2b502a37a12a4a3e6275cb3fd3a4a6c082b89 -->
+<!-- changelog-auto: last-commit=f26e1fa7afb8b3918e97257822217ea3482039c2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 00:53 草稿+就绪总览迁 ui/generate-steps.js（阶段 2 工单 18）
 - 00:57 就绪检查迁 ui/generate-readiness.js（阶段 2 工单 19，generate 八簇收尾）
 - 01:02 阶段 2 收尾——btn-generate 监听器补迁 + host 主体瘦身（工单 20）
+- 01:35 阶段 2 评审收尾工单 21-25——断 generate-core/generate-readiness 环、spec 结构钉表修正、new-platform 渲染归 master、smell 清理（node 447/447 + pytest 2465 + diag 零 EXC + smoke 11/11）
 
 ## 2026-08-26
 - 00:06 模块编辑弹窗（工单 06）：每行「编辑」→ 平台级编辑模态（复用 05 骨架 + addFileRow/collectFiles/pickFilesInto 文件行机制）：平台下拉切换、套件词表 datalist（libPlatformKits 库内去重）、购买链接 URL 校验（libIsValidHttpUrl，空=保留原值）、文件清单（含内嵌母版态）+ 逐文件 ✕ 确认删除、新文件行/磁盘选取推送（POST platform-files 携带硬件绑定与身份现值）；保存身份/推送/删除成功 → 返回 manifest 本地替换即时刷新表格与统计条，失败展示原因表单保留；LOW-MEDIUM 修复（删最后文件后平台条目移除 → rebuildPlatSelect 重建下拉落位）+ isConnected 守卫（数据始终更新，05 同构）+ 消息红色兜底；tests/js 305 绿、冒烟 40 项 PASS、pytest 2365 绿；评审两轴无硬违规（多选删除为 Spec 判定可接受口径差异）
