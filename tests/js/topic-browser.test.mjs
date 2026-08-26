@@ -1,60 +1,13 @@
-// 赛题库浏览区纯函数组（工单 topic-library-ui/03）：过滤 / 排序 / 统计 /
+// 赛题库浏览区纯函数组（工单 frontend-es-modules/04）：过滤 / 排序 / 统计 /
 // 组词表派生 / hint 悬空判定 / 图注判定 / 健康描述 / 卡片扩展渲染。
-// extract 范式与 topic-cards.test.mjs / reference-library.test.mjs 同款
-// （括号配平 + deps 注入兄弟函数依赖；函数体不得引用模块级常量）。
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+// 直接 import fx/topic.js（不再字符串提取）；只测外部行为，子串断言防脆。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { esc } from "../../src/contest_generator/static/js/fx/core.js";
-
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
-
-// 括号配平提取（同 module-library.test.mjs 范式）；deps = 注入的兄弟函数依赖。
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  let i = html.indexOf("(", start);
-  assert.ok(i !== -1, name + " 函数缺少参数表");
-  let pdepth = 0;
-  for (; i < html.length; i++) {
-    if (html[i] === "(") pdepth++;
-    else if (html[i] === ")") { pdepth--; if (pdepth === 0) break; }
-  }
-  const open = html.indexOf("{", i);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let j = open; j < html.length; j++) {
-    if (html[j] === "{") depth++;
-    else if (html[j] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, j + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-// topicDanglingGroups 先提取（filter/stats/card 的依赖注入顺序）
-const topicDanglingGroups = extract("topicDanglingGroups");
-const topicHasNotes = extract("topicHasNotes");
-const topicFilterEntries = extract("topicFilterEntries", { topicDanglingGroups });
-const topicSortEntries = extract("topicSortEntries");
-const topicStats = extract("topicStats", { topicDanglingGroups, topicHasNotes });
-const topicStatsText = extract("topicStatsText");
-const topicGroupVocabulary = extract("topicGroupVocabulary");
-const topicHealthText = extract("topicHealthText", { topicDanglingGroups });
-const topicChipRowHTML = extract("topicChipRowHTML", { esc });
-const topicCardHTML = extract("topicCardHTML", { topicDanglingGroups, topicHealthText, topicHasNotes });
+import {
+  topicHasNotes, topicGroupVocabulary, topicDanglingGroups, topicHealthText,
+  topicFilterEntries, topicSortEntries, topicStats, topicStatsText,
+  topicChipRowHTML, topicCardHTML,
+} from "../../src/contest_generator/static/js/fx/topic.js";
 
 // 测试母本：两条健康 / 一条带图注 / 一条 hint 悬空
 const ENTRIES = [
