@@ -16,6 +16,11 @@ const recSrc = readFileSync(
   new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
   "utf8"
 );
+// 生成结果摘要区 / Handoff 评分点章节已迁 ui/generate-core.js（阶段 2 工单 15 重指向）
+const coreSrc = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/generate-core.js", import.meta.url),
+  "utf8"
+);
 
 test("完整评分点 → 保留顺序、分区、分值和句号引用", () => {
   assert.equal(
@@ -78,12 +83,12 @@ test("generate-recommend.js 推荐结果区会渲染只读评分点面板", () =
   // id="rec-score-points" 输出样式契约已由上方面板用例直接断言（样式随迁 fx/score.js）
 });
 
-test("index.html 生成结果摘要区有评分点落点", () => {
+test("generate-core.js 生成成功回调渲染评分清单（html 仅保留 #res-score-points 落点）", () => {
   assert.match(html, /id="res-score-points"/);
-  assert.match(html, /renderScoreChecklist\(data\.score_points, data\.output_dir\)/);
+  assert.match(coreSrc, /renderScoreChecklist\(data\.score_points, data\.output_dir\)/);
 });
 
 test("Handoff 评分点章节只在有评分点时插入", () => {
-  assert.match(html, /const scoreSection = hasScores \? \["", "## 五、评分点验收清单", "", scores\] : \[\]/);
-  assert.match(html, /\.\.\.scoreSection/);
+  assert.match(coreSrc, /const scoreSection = hasScores \? \["", "## 五、评分点验收清单", "", scores\] : \[\]/);
+  assert.match(coreSrc, /\.\.\.scoreSection/);
 });
