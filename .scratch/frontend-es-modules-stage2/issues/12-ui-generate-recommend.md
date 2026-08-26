@@ -1,6 +1,12 @@
-# 12 — 生成页 · 推荐/参考选择/模块池/选中/警告/题面 viewer：static/js/ui/generate-recommend.js
+# 12 — 生成页 · 推荐/参考选择/模块池/选中/警告/题面 viewer：static/js/ui/generate-recommend.js（含步骤状态核心 ui/step-state.js）
 
-**要做什么：** generate tab 的「步骤 1-3」大簇迁入 `static/js/ui/generate-recommend.js`：题面 PDF viewer + 推荐流（SSE 接收 recPanel / 进度 / 澄清问题）/ 参考文件选择器 / 模块池与推荐结果 / 选中箱 / 警告区 / 平台卡 renderPlatforms / useTopic 题面载入事务。**get 簇拥有 chosenPlatform（含 setChosenPlatform）。** **被谁阻塞：** 02 + 03（progress.js）
+**要做什么：** generate tab 的「步骤 1-3」大簇迁入 `static/js/ui/generate-recommend.js`：题面 PDF viewer + 推荐流（SSE 接收 recPanel / 进度 / 澄清问题）/ 参考文件选择器 / 模块池与推荐结果 / 选中箱 / 警告区 / 平台卡 renderPlatforms / useTopic 题面载入事务。**get 簇拥有 chosenPlatform（含 setChosenPlatform）。** 本票**同时**交付**步骤状态核心 ui/step-state.js**（前置原因见「⚠ 工单序调整」）。 **被谁阻塞：** 02 + 03（progress.js）+ 04（usage.js——recordLLMUsage 在 ui/usage.js，非工单 10）
+
+## ⚠ 工单序调整（2026-08-27，实施中发现；spec.md 已同步）
+
+- **A↔ST 循环**：A（推荐簇）useTopic→markStepDone(1)；ST（步骤簇）restoreDraft→写 chosenPlatform + 调 renderPlatforms/renderSelected/renderWarnings（A 函数）。ESM 循环 import 本身合法（全是函数级引用、无顶层互调），但**模块边界上不存在有效全序**——A 先迁则 markStepDone 不在任何模块可 import；ST 先迁则 A 函数不在任何模块。
+- **cut 方案**：ST 拆两半——**ui/step-state.js**（无 A 依赖：STEP_NAV_CARD_SELECTOR / stepCard / markStepDone / markStepUndone / unmarkSteps / syncStep7 / stepDoneSet / STEP_TOTAL / syncStepDone / renderStepProgress / initStepNav IIFE / CARD_COLLAPSE_SELECTOR / initCardCollapse）+ **ST 剩余胶水留 host**（DRAFT 与总览：collectDraftState / scheduleDraftSave / clearDraft / restoreDraft / overviewPlanNow / genOverviewWarn / refreshGenOverview / runOverviewFill / initGenOverview——工单 18 迁，届时从 step-state 与 generate-recommend import）。**A 只需 markStepDone（step-state 提供）；step-state 零 A 依赖 ⇒ 票内同时交付两模块，循环在模块边界内自洽。**
+- **工单序变化**：07（library）改挂在本票之后（renderLibraryTable→openModuleInfo / loadLibrary→renderModulePool 两条 A 硬边）；其余顺序不变（07 后 08 reference → 09 topic → 10 settings → 11 recent/readiness → 13-17 其余生成簇 → 18 steps 胶水 → 19 RD → 20 收尾）。
 
 **状态：** 待实施
 

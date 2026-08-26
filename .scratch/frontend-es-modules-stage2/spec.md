@@ -56,6 +56,13 @@
 - 页签分发器（host 保留）→ 各 tab `load*` 函数（host import）；
 - init\*（host 启动）→ 各模块 init 函数。
 
+### 工单序调整（2026-08-27，实施中发现）
+
+- **A↔ST 循环事实**：A（推荐簇）useTopic→`markStepDone(1)`；ST（步骤簇）restoreDraft→写 chosenPlatform + 调 renderPlatforms / renderSelected / renderWarnings（均 A 函数）。ESM 循环 import 合法（函数级引用、无顶层互调），但**模块边界上不存在有效全序**：A 先迁则 markStepDone 无可 import；ST 先迁则 A 函数无可 import。
+- **cut 方案（已定）**：ST 拆两半——**ui/step-state.js**（步骤状态核心，零 A 依赖：STEP_NAV_CARD_SELECTOR / stepCard / markStepDone / markStepUndone / unmarkSteps / syncStep7 / stepDoneSet / STEP_TOTAL / syncStepDone / renderStepProgress / initStepNav IIFE / CARD_COLLAPSE_SELECTOR / initCardCollapse）与 **ST 剩余胶水**（DRAFT + 总览：collectDraftState / scheduleDraftSave / clearDraft / restoreDraft / overviewPlanNow / genOverviewWarn / refreshGenOverview / runOverviewFill / initGenOverview——留 host，工单 18 迁，届时 import step-state 与 generate-recommend）。**step-state 与 generate-recommend 在同一票（12）同时交付**，循环在模块边界内自洽；A 仅从 step-state import markStepDone。
+- **工单序变更**：07（library）改挂工单 12 之后（renderLibraryTable→openModuleInfo、loadLibrary→renderModulePool 两条 A 硬边）；其余顺序不变（08 reference → 09 topic → 10 settings → 11 recent/readiness → 13 pins → 14 mainc → 15 core → 16 fix → 17 revise → 18 steps 胶水 → 19 readiness → 20 收尾）。
+- chosenPlatform 写点全审计：renderPlatforms 点击（A 内，随迁）+ restoreDraft（ST，工单 18 改 `setChosenPlatform`）+ **实施 12 时 grep `chosenPlatform\s*=` 逐一处理主体残留写点**（import 绑定只读——但 host 内 `chosenPlatform =` 写点若存在须即刻改 setter 或交由 A 提供 setChosenPlatform）。
+
 ## 用户故事
 
 1. 作为维护者，我想要每个 tab 的 DOM 胶水独立成文件，以便 6830 行单文件按域消解、AI 可导航性上升。
