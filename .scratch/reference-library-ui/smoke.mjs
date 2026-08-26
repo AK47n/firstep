@@ -55,7 +55,13 @@ await Eval(`(() => {
   if (tab) tab.click();
   return !!tab;
 })()`);
-await new Promise((r) => setTimeout(r, 900));
+// 轮询等首屏数据就绪（loadReferences 异步 + commit_after_write 耗时；
+// 固定等待曾落在加载占位期 → 偶发假 FAIL）
+for (let i = 0; i < 40; i++) {
+  const n = await Eval(`(refEntryCache || []).length`);
+  if (n > 0) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
 
 const loaded = await Eval(`(refEntryCache || []).length`);
 check("参考条目已加载（refEntryCache 非空）", loaded > 0, "entries=" + loaded);
@@ -107,13 +113,13 @@ check("首行简介列 tooltip 全文", !!(t02e && t02e.descTitle), t02e && t02e
 check("首行锚定徽章（ref-topic / ref-kit / ref-none）", !!(t02e && t02e.badgeClass && /badge ref-(topic|kit|none)/.test(t02e.badgeClass)), t02e && t02e.badgeClass);
 check("操作列：详情 + danger 删除", !!(t02e && t02e.btnViewText === "详情" && t02e.hasDel));
 
-// ---- 统计条（全量口径） ----
+// ---- 统计条（全量口径；工单 04 追加悬空红段，故用「包含」而非严格相等） ----
 const t02f = await Eval(`(() => {
   const text = document.getElementById('ref-stats').textContent;
   const expected = refStatsText(refStats(refEntryCache));
-  return { text, expected, match: text === expected };
+  return { text, expected, match: text.includes(expected) };
 })()`);
-check("统计条文案 = refStatsText(refStats(全量))", t02f.match, t02f.text);
+check("统计条文案含 refStatsText(refStats(全量))", t02f.match, t02f.text);
 
 // ---- 关键字即时过滤（防抖 150ms） ----
 const qProbe = await Eval(`(refEntryCache[0].title || '').slice(0, 4)`);
@@ -156,7 +162,7 @@ const t02h = await Eval(`(() => {
 })()`);
 check("平台 chip（mspm0）过滤行数 = 期望", t02h.n === t02h.exp, `n=${t02h.n}, exp=${t02h.exp}`);
 check("选中 chip 带 on 态", t02h.onVal === "mspm0", t02h.onVal);
-check("统计条随过滤联动 = 纯函数期望", t02h.statsText === t02h.statsExpected, t02h.statsText);
+check("统计条随过滤联动 = 纯函数期望（含悬空段）", t02h.statsText.includes(t02h.statsExpected), t02h.statsText);
 
 // ---- 锚定类型 chips 过滤（未锚定） ----
 await Eval(`document.querySelector('#ref-platform-chips .lib-chip.on').click()`);
@@ -358,6 +364,122 @@ const t03d = await Eval(`(async () => {
   return all.some((e) => (e.title || '').startsWith('${TMP_TITLE}'));
 })()`);
 check("临时条目已清理（真实库零残留，服务器直查）", t03d === false);
+
+// ================= 工单 04：悬空锚定警示 =================
+// 确保全量态 + 悬空判定数据源就绪（赛题库 key / kit 词表）
+await Eval(`(() => {
+  const tab = [...document.querySelectorAll('nav button, header button, .nav button')]
+    .find((b) => b.textContent.trim() === '参考文件库');
+  if (tab) tab.click();
+})()`);
+await new Promise((r) => setTimeout(r, 600));
+await Eval(`Promise.all([loadReferences(), loadKitVocabulary()])`);
+await new Promise((r) => setTimeout(r, 900));
+
+const t04a = await Eval(`(() => ({ topics: (refTopicKeys || []).length, kits: (kitVocabulary || []).length }))()`);
+check("悬空判定数据源就绪（赛题库 key / kit 词表已拉取且非空）", t04a.topics > 0 && t04a.kits > 0, `topics=${t04a.topics}, kits=${t04a.kits}`);
+
+// 期望值 = 页面内纯函数（与 DOM 比对；赛题库空 / 词表空 = 降级零误报也 PASS）
+const t04b = await Eval(`(() => {
+  const exp = refDanglingAnchors(refEntryCache, refTopicKeys, kitVocabulary);
+  const withTag = [...document.querySelectorAll('#ref-rows tr')]
+    .filter((tr) => tr.querySelector('.ref-dangling-tag')).length;
+  const red = document.querySelector('#ref-stats [data-ref-dangling]');
+  return { exp: exp.length, withTag, hasRed: !!red, redText: red ? red.textContent : null };
+})()`);
+check("行内 ⚠ 数 = 悬空条目数", t04b.withTag === t04b.exp, `withTag=${t04b.withTag}, exp=${t04b.exp}`);
+check("统计条红色悬空段（0 时不渲染红色形态）", t04b.hasRed === (t04b.exp > 0), t04b.redText || "none");
+
+// 红段点击过滤（只显示悬空）→ 再点取消（与过滤 / 排序正交）
+if (t04b.exp > 0) {
+  await Eval(`document.querySelector('#ref-stats [data-ref-dangling]').click()`);
+  await new Promise((r) => setTimeout(r, 400));
+  const t04c = await Eval(`(() => {
+    const n = document.querySelectorAll('#ref-rows tr').length;
+    // 期望 = 悬空集本身（dangling 过滤后即悬空条目；refUI 无词表故不可复用 refFilterEntries 算期望）
+    const exp = refDanglingAnchors(refEntryCache, refTopicKeys, kitVocabulary).length;
+    return { n, exp, on: refUI.dangling };
+  })()`);
+  check("点击红段：只显示悬空条目", t04c.on && t04c.n === t04c.exp, `n=${t04c.n}, exp=${t04c.exp}`);
+  await Eval(`document.querySelector('#ref-stats [data-ref-dangling]').click()`);
+  await new Promise((r) => setTimeout(r, 400));
+  check("再点取消：恢复全量", await Eval(`!refUI.dangling && document.querySelectorAll('#ref-rows tr').length === refEntryCache.length`));
+} else {
+  check("空库降级分支：红段未渲染（跳过点击验证）", true);
+}
+
+// 编辑闭环：临时 topic 悬空条目（格式合法但赛题库不存在的编号）→ ⚠ 出现 →
+// 编辑改未锚定 → ⚠ 消失 → finally 清理（真实数据零改动）
+const D_TITLE = "冒烟悬空-临时条目";
+const cleanupD = async () => {
+  try {
+    await Eval(`(async () => {
+      const all = await (await fetch('/api/references')).json();
+      for (const e of all) {
+        if ((e.title || '').startsWith('${D_TITLE}')) {
+          await fetch('/api/references/' + encodeURIComponent(e.id), { method: 'DELETE' });
+        }
+      }
+      return 'ok';
+    })()`);
+  } catch {}
+};
+try {
+  await cleanupD();
+  const dId = await Eval(`(async () => {
+    let last = null;
+    for (const av of ['1999Z', '2099Z', '2088Z']) {
+      const r = await fetch('/api/references', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '${D_TITLE}', type: '冒烟测试',
+          description: '悬空警示冒烟，脚本结束后删除', anchor_kind: 'topic', anchor_value: av,
+          platform: 'any', files: { 'demo.txt': 'x' } }),
+      });
+      if (r.ok) { const e = await r.json(); return { ...e, tried: [av] }; }
+      last = av;
+    }
+    throw new Error('所有候选悬空编号都被拒（最后: ' + last + '）');
+  })()`);
+  await Eval(`loadReferences()`);
+  let foundTag = false;
+  for (let i = 0; i < 40; i++) {
+    foundTag = await Eval(`(() => {
+      const tr = document.querySelector('#ref-rows [data-ref-edit="${dId.id}"]');
+      if (!tr) return false;
+      return !!tr.closest('tr').querySelector('.ref-dangling-tag');
+    })()`);
+    if (foundTag) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  check("悬空临时条目行内 ⚠（topic 锚定未被任何赛题 key 命中）", foundTag, dId.tried[0]);
+
+  // 编辑 → 改未锚定 → 保存 → ⚠ 消失
+  await Eval(`(() => {
+    const b = document.querySelector('#ref-rows [data-ref-edit="${dId.id}"]');
+    if (b) b.click();
+  })()`);
+  await new Promise((r) => setTimeout(r, 600));
+  await Eval(`(() => {
+    const o = document.querySelector('.lib-edit-overlay');
+    const k = o.querySelector('.ref-edit-kind');
+    k.value = 'none';
+    k.dispatchEvent(new Event('change', { bubbles: true }));
+    o.querySelector('.ref-edit-save').click();
+  })()`);
+  let gone = false;
+  for (let i = 0; i < 50; i++) {
+    gone = await Eval(`(() => {
+      const tr = document.querySelector('#ref-rows [data-ref-edit="${dId.id}"]');
+      if (!tr) return false;
+      return !tr.closest('tr').querySelector('.ref-dangling-tag');
+    })()`);
+    if (gone) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  check("编辑改未锚定保存后 ⚠ 消失（警示闭环）", gone);
+} finally {
+  await cleanupD();
+}
 
 console.log(failed ? `SMOKE FAILED(${failed})` : "SMOKE ALL PASS");
 process.exit(failed ? 1 : 0);

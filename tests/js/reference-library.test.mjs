@@ -39,14 +39,16 @@ function extract(name, deps) {
 const esc = extract("esc");
 const formatSize = extract("formatSize");
 const referencePlatformChip = extract("referencePlatformChip", { esc });
-const refFilterEntries = extract("refFilterEntries");
+// refDanglingAnchors 先于 refFilterEntries 提取（后者 dangling 分支依赖注入）
+const refDanglingAnchors = extract("refDanglingAnchors");
+const refFilterEntries = extract("refFilterEntries", { refDanglingAnchors });
 const refSortEntries = extract("refSortEntries");
-const refStats = extract("refStats");
+const refStats = extract("refStats", { refDanglingAnchors });
 const refStatsText = extract("refStatsText", { formatSize });
 const refMatchFiles = extract("refMatchFiles");
 const refAnchorBadge = extract("refAnchorBadge", { esc });
 const refChipRowHTML = extract("refChipRowHTML", { esc });
-const refRowHTML = extract("refRowHTML", { esc, formatSize, refMatchFiles, refAnchorBadge, referencePlatformChip });
+const refRowHTML = extract("refRowHTML", { esc, formatSize, refMatchFiles, refAnchorBadge, referencePlatformChip, refDanglingAnchors });
 const refDetailHTML = extract("refDetailHTML", { esc, formatSize, refAnchorBadge, referencePlatformChip });
 
 const refs = [
@@ -132,6 +134,7 @@ test("refStats 全量统计：总数 / 三平台恒显 / 三锚定类型恒显 /
     anchorKinds: { topic: 2, kit: 1, none: 1 },
     unanchored: 1,
     totalBytes: 15360,
+    dangling: 0,
   });
   assert.deepEqual(refStats([]), {
     total: 0,
@@ -139,6 +142,7 @@ test("refStats 全量统计：总数 / 三平台恒显 / 三锚定类型恒显 /
     anchorKinds: { topic: 0, kit: 0, none: 0 },
     unanchored: 0,
     totalBytes: 0,
+    dangling: 0,
   });
 });
 
@@ -150,6 +154,7 @@ test("refStats 对过滤后子集统计（统计条随过滤联动）", () => {
     anchorKinds: { topic: 1, kit: 0, none: 1 },
     unanchored: 1,
     totalBytes: 8192 + 1024,
+    dangling: 0,
   });
 });
 
@@ -337,4 +342,81 @@ test("refEditPayload 组装：元数据全量（trim）；topic 取 topic 值、
   const none = refEditPayload({ ...fields, anchor_kind: "none", anchor_value: "ignored" }, plan);
   assert.equal(none.anchor_value, "");
   assert.equal(none.anchor_kind, "none");
+});
+
+// ================= 悬空锚定警示（工单 04） =================
+const drefs = [
+  { id: "ok-topic", title: "赛题命中", anchor_kind: "topic", anchor_value: "2026C" },
+  { id: "dang-topic", title: "悬空赛题", anchor_kind: "topic", anchor_value: "1999Z" },
+  { id: "ok-kit", title: "套件命中", anchor_kind: "kit", anchor_value: "ALX-AOA-FIT-套件" },
+  { id: "dang-kit", title: "悬空套件", anchor_kind: "kit", anchor_value: "不存在的套件" },
+  { id: "none", title: "未锚定", anchor_kind: "none", anchor_value: "" },
+];
+
+test("refDanglingAnchors topic 方向：库内存在赛题 key 是锚定值子串 = 不悬空；否则悬空", () => {
+  const tk = ["2026C", "2026H", "21F"];
+  // 命中（key in anchor_value）；锚定值带前后缀也能命中
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "topic", anchor_value: "2026C" }], tk, []).map((e) => e.id), []);
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "topic", anchor_value: "2026C-巡线模板" }], tk, []), []);
+  assert.deepEqual(refDanglingAnchors([{ id: "x", anchor_kind: "topic", anchor_value: "1999Z" }], tk, []).map((e) => e.id), ["x"]);
+});
+
+test("refDanglingAnchors kit 方向：与生成侧同构子串判定（词表值 in 锚定值 = 会关联不悬空）；空词表降级不报", () => {
+  const kv = ["ALX-AOA-FIT-套件", "塔克R3-DB20"];
+  // 精确值 = 词表值是锚定值子串 → 命中不悬空
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "kit", anchor_value: "ALX-AOA-FIT-套件" }], [], kv), []);
+  // 锚定值带前后缀（如 ALX-套件-v2）：生成侧 search_references 走子串仍会关联 → 不算悬空
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "kit", anchor_value: "ALX-AOA-FIT-套件-核心子集" }], [], kv), []);
+  // 词表内无任何值是锚定值子串 = 悬空
+  assert.equal(refDanglingAnchors([{ anchor_kind: "kit", anchor_value: "没有这个套件" }], [], kv).length, 1);
+  // 降级：词表空 = 跳过 kit 方向检查（零误报）
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "kit", anchor_value: "任意值" }], [], []), []);
+});
+
+test("refDanglingAnchors 集合判定：none 不参与；空 key 忽略；topic 侧赛题库空降级", () => {
+  const out = refDanglingAnchors(drefs, ["2026C", "21F"], ["ALX-AOA-FIT-套件"]);
+  assert.deepEqual(out.map((e) => e.id), ["dang-topic", "dang-kit"]);
+  // none 条目（含空锚定值）永不悬空
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "none", anchor_value: "" }], [], []), []);
+  // 空 key 不参与子串匹配（"".indexOf 恒 0 会误命中）
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "topic", anchor_value: "2026C" }], [""], []), []);
+  // 赛题库空 = topic 方向降级不报
+  assert.deepEqual(refDanglingAnchors([{ anchor_kind: "topic", anchor_value: "2026C" }], [], []), []);
+});
+
+test("refFilterEntries 悬空过滤（dangling 维度）：与平台/关键字正交组合", () => {
+  const base = { q: "", platform: "", anchorKind: "", dangling: true, topicKeys: ["2026C", "21F"], kitVocab: ["ALX-AOA-FIT-套件"] };
+  const out = refFilterEntries(drefs, base).map((e) => e.id);
+  assert.deepEqual(out, ["dang-topic", "dang-kit"]);
+  // 平台正交
+  const mspm0 = refFilterEntries(drefs, { ...base, platform: "mspm0" });
+  assert.deepEqual(mspm0, []);
+  // 关键字正交（dangling + q 命中「悬空」）
+  const q = refFilterEntries(drefs, { ...base, q: "悬空" });
+  assert.deepEqual(q.map((e) => e.id), ["dang-topic", "dang-kit"]);
+  // dangling=false = 不限制（与既有行为一致）
+  const off = refFilterEntries(drefs, { q: "", platform: "", anchorKind: "", dangling: false, topicKeys: ["2026C"], kitVocab: [] });
+  assert.deepEqual(off.map((e) => e.id), drefs.map((e) => e.id));
+});
+
+test("refRowHTML 悬空标注：锚定列 ⚠（title 解释「不会自动关联」）；非悬空 / 无词表上下文不渲染", () => {
+  const f = { topicKeys: ["2026C", "21F"], kitVocab: ["ALX-AOA-FIT-套件"] };
+  const dang = refRowHTML({ id: "d1", title: "t", type: "例程", description: "d", anchor_kind: "kit", anchor_value: "没有这个套件", platform: "any", files: [], file_count: 0, size_bytes: 0 }, f);
+  assert.ok(dang.includes("ref-dangling-tag"));
+  assert.ok(dang.includes("不会自动关联"));
+  const ok = refRowHTML({ ...refs[0], anchor_kind: "topic", anchor_value: "2026C" }, f);
+  assert.ok(!ok.includes("ref-dangling-tag"));
+  // 无词表上下文（数据未就绪）时降级不渲染 ⚠
+  const noctx = refRowHTML({ id: "d2", title: "t", type: "例程", description: "d", anchor_kind: "topic", anchor_value: "2026C", platform: "any", files: [], file_count: 0, size_bytes: 0 }, {});
+  assert.ok(!noctx.includes("ref-dangling-tag"));
+});
+
+test("refStats 悬空计数（ctx 契约）：含 ctx 算 dangling / 缺 ctx 零误报", () => {
+  const ctx = { topicKeys: ["2026C", "21F"], kitVocab: ["ALX-AOA-FIT-套件"] };
+  const s = refStats(drefs, ctx);
+  assert.equal(s.dangling, 2);
+  assert.equal(s.total, drefs.length);
+  // 无 ctx（or 词表空）→ dangling 0（降级不误报）
+  assert.equal(refStats(drefs).dangling, 0);
+  assert.equal(refStats(drefs, { topicKeys: [], kitVocab: [] }).dangling, 0);
 });

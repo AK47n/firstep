@@ -99,7 +99,10 @@ update 端点，改标题 / 类型 / 简介 / 锚定 / 平台或增删文件只�
   `refFilterEntries`（四合一关键字 + 平台 + 锚定类型过滤）、`refSortEntries`
   （标题 / 类型 / 体量 / 文件数 / 平台，稳定排序）、`refStats`（总数、平台分布、
   锚定类型分布、未锚定数、总体积、悬空数）、`refDanglingAnchors`（悬空判定：
-  topic = 不存在任何库内赛题 key 是锚定值子串；kit = 锚定值不在 kit 词表）、
+  topic = 不存在任何库内赛题 key 是锚定值子串；kit = 词表内不存在任何值是
+  锚定值子串——与生成侧 `search_references` 的统一子串方向一致（评审修订：
+  原「锚定值不在 kit 词表」的成员判定会把「词表值+前后缀」的条目误标悬空，
+  而生成侧子串匹配仍会自动关联它们））、
   `refRowHTML`（行渲染：标题 + 命中文件直出链接、简介截断 + tooltip、锚定徽章、
   平台 chip、体量、操作按钮）、`refMatchFiles`（文件名命中清单，从条目 files
   清单计算，替代原服务端 matched_files 的客户端版本）、`refAnchorBadge`、
