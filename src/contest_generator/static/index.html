@@ -946,6 +946,22 @@
   .topic-page img { max-width: 300px; border: 1px solid var(--border);
     border-radius: 6px; background: #fff; box-shadow: var(--shadow-item); }
   .topic-page figcaption { font-size: 11px; color: var(--muted); text-align: center; }
+  /* 母版详情弹窗（工单 master-library-ui/04）：关键文件清单行 + 内容 pre-wrap */
+  .master-modal { max-width: 860px; }
+  .master-detail-files { list-style: none; margin: 6px 0 0; padding: 0; max-height: 30vh;
+    overflow-y: auto; }
+  .master-detail-files li { margin: 4px 0; }
+  .master-file-btn { width: 100%; text-align: left; display: flex; flex-direction: column;
+    gap: 1px; padding: 8px 10px; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .master-file-btn:hover:not(:disabled) { border-color: var(--accent); }
+  .master-file-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .master-file-btn.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); }
+  .master-file-name { font-family: var(--mono); font-size: 12.5px; }
+  .master-file-pre { white-space: pre-wrap; word-break: break-all; font-size: 12.5px;
+    line-height: 1.7; max-height: min(52vh, 560px); overflow-y: auto; padding: 12px 14px;
+    margin: 6px 0 0; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; font-family: var(--mono); }
   /* 编辑弹窗（工单 topic-library-ui/05）：表单字段 / 功能组勾选 */
   .topic-edit-field { margin-top: 10px; }
   .topic-edit-field label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
@@ -9384,11 +9400,133 @@ function openMasterDeleteConfirm(platform) {
   document.body.appendChild(overlay);
 }
 
+// ---------------------------------------------------------------------------
+// 母版详情弹窗（工单 master-library-ui/04）：元数据段 + 关键文件清单 +
+// 内容懒加载（memo、三态）。交互逻辑下沉纯函数（extract 范式），
+// DOM 层只做转发；对偶 topic 轮 detail 弹窗模式。
+// ---------------------------------------------------------------------------
+
+// masterFileURL(platform, path)：关键文件内容端点 URL 拼装——platform 与
+// path 逐段 encodeURIComponent（对偶 ref 轮 href 先例，路径经编码不进 URL 面）。
+function masterFileURL(platform, path) {
+  return "/api/masters/" + encodeURIComponent(platform) + "/files/"
+    + path.split("/").map(encodeURIComponent).join("/");
+}
+
+// masterKeyFileRowHTML(f)：清单行——相对路径 mono + label + 大小 + 缺失 ⚠。
+// f = key_files 条目 {path, label, size_bytes, exists}；缺失项禁用不可点。
+function masterKeyFileRowHTML(f) {
+  const size = typeof f.size_bytes === "number"
+    ? (f.size_bytes >= 1048576
+        ? (f.size_bytes / 1048576).toFixed(1) + " MB"
+        : f.size_bytes >= 1024
+          ? (f.size_bytes / 1024).toFixed(1) + " KB"
+          : f.size_bytes + " B")
+    : "—";
+  return `<li><button type="button" class="master-file-btn"
+      data-master-file="${esc(f.path)}"${f.exists ? "" : " disabled"}>
+      <span class="master-file-name">${esc(f.path)}</span>
+      <span class="muted">${esc(f.label)} · ${size}${f.exists ? "" : " · ⚠ 缺失"}</span>
+    </button></li>`;
+}
+
+// masterDetailHTML(m)：详情弹窗内容——元数据段（平台 / 来源 / 警告 / 文件数）
+// + 文件清单段 + 内容段（点击行按需加载全文）。
+function masterDetailHTML(m) {
+  const files = m.key_files || [];
+  return `<div class="ref-detail-meta">
+    <div class="ref-detail-row"><span class="ref-detail-k">平台标识</span>
+      <span class="mono">${esc(m.platform)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">提炼来源</span>
+      <span>${esc((m.sources || []).join("、") || "—")}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">入库警告</span>
+      <span>${esc((m.warnings || []).join("；") || "—")}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">关键文件</span>
+      <span>${files.length} 项</span></div>
+  </div>
+  <div class="topic-detail-problem-title">关键文件清单</div>
+  <ul class="master-detail-files">${files.length
+    ? files.map(masterKeyFileRowHTML).join("")
+    : '<li class="muted">未配置关键文件清单</li>'}</ul>
+  <div class="topic-detail-problem-title">文件内容</div>
+  <div data-master-content><span class="muted">点击上方文件加载全文（纯文本，按需取）。</span></div>`;
+}
+
+// 文件内容 memo（工单 04）：key = platform/path → {ok:true, content} |
+// {ok:false, message}。业务 400 缓存（数据现状，重试无意义）；网络 /
+// 服务端错误（e.status 缺失或 ≥500）不缓存——瞬时故障可重试
+// （对偶 topic 轮 loadTopicPageState 先例）。
+const masterFileCache = new Map();
+
+async function loadMasterFileState(platform, path) {
+  const key = platform + "/" + path;
+  if (masterFileCache.has(key)) return masterFileCache.get(key);
+  try {
+    const data = await apiGet(masterFileURL(platform, path));
+    const cached = { ok: true, content: data.content || "" };
+    masterFileCache.set(key, cached);
+    return cached;
+  } catch (e) {
+    const cached = { ok: false, message: e.message };
+    if (e.status && e.status < 500) masterFileCache.set(key, cached);
+    return cached;
+  }
+}
+
+function renderMasterFileContent(box, cached) {
+  box.innerHTML = cached.ok
+    ? '<pre class="master-file-pre">' + esc(cached.content) + "</pre>"
+    : '<div class="error">加载失败：' + esc(cached.message)
+      + "</div><span class=\"muted\">点击上方文件可重试。</span>";
+}
+
+// openMasterFile(platform, path, box, btn)：点击清单行 → 三态
+// （加载中 / 成功 pre-wrap / 失败中文原因可重试），仅成功行高亮。
+// memo 命中（含缓存业务错误）不闪「加载中」直接渲染；网络 / ≥500
+// 未缓存 → 再点重取。
+async function openMasterFile(platform, path, box, btn) {
+  const key = platform + "/" + path;
+  if (!masterFileCache.has(key)) box.innerHTML = '<span class="muted">加载中…</span>';
+  const cached = await loadMasterFileState(platform, path);
+  renderMasterFileContent(box, cached);
+  box.closest(".ref-files-modal").querySelectorAll("[data-master-file]")
+    .forEach((b) => b.classList.remove("on"));
+  if (btn && cached.ok) btn.classList.add("on");
+}
+
+// openMasterDetail(platform)：母版详情弹窗——复用 .ref-files-overlay 遮罩与
+// 关闭模式（Esc / × / 点遮罩）；打开只渲染清单（零内容请求），点文件行才取。
+function openMasterDetail(platform) {
+  const m = (masterCache || []).find((x) => x.platform === platform);
+  if (!m) { toast("info", "未找到平台 " + platform + "（列表可能已刷新）"); return; }
+  document.querySelectorAll(".ref-files-overlay").forEach((o) => o.remove());
+  const overlay = document.createElement("div");
+  overlay.className = "ref-files-overlay";
+  overlay.innerHTML = `<div class="ref-files-modal master-modal">
+    <div class="ref-files-head"><strong>母版详情 · ${esc(m.platform_label || m.platform)}</strong>
+      <button class="ref-files-close" title="关闭">×</button></div>
+    <div class="ref-detail-scroll">${masterDetailHTML(m)}</div>
+  </div>`;
+  const close = () => overlay.remove();
+  overlay.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  const contentBox = overlay.querySelector("[data-master-content]");
+  overlay.querySelectorAll("[data-master-file]").forEach((b) =>
+    b.addEventListener("click", () =>
+      openMasterFile(m.platform, b.dataset.masterFile, contentBox, b)));
+  document.body.appendChild(overlay);
+}
+
 async function loadMasters() {
   try {
     const masters = await apiGet("/api/masters");
     masterCache = masters;
     $("master-rows").innerHTML = masters.map(masterTableRowHTML).join("");
+    $("master-rows").querySelectorAll("[data-master-detail]").forEach((b) =>
+      b.addEventListener("click", () => openMasterDetail(b.dataset.masterDetail)));
     $("master-rows").querySelectorAll("[data-master-del]").forEach((b) =>
       b.addEventListener("click", () => openMasterDeleteConfirm(b.dataset.masterDel)));
     $("master-msg").textContent = "";
