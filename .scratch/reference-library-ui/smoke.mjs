@@ -481,5 +481,58 @@ try {
   await cleanupD();
 }
 
+// ================= 工单 05：录入表单分区折叠 + 视觉收尾 =================
+const t05a = await Eval(`(() => {
+  const sec = (id) => document.getElementById(id);
+  const basic = sec('add-sec-ref-basic'), mat = sec('add-sec-ref-material'), plat = sec('add-sec-ref-platform');
+  if (!basic || !mat || !plat) return { n: 0 };
+  const aria = [basic, mat, plat].map((s) => s.querySelector('.add-section-head').getAttribute('aria-expanded')).join(',');
+  return { n: document.querySelectorAll('#tab-reference .add-section').length,
+    basicOpen: !basic.classList.contains('collapsed'),
+    matCollapsed: mat.classList.contains('collapsed'),
+    platCollapsed: plat.classList.contains('collapsed'), aria };
+})()`);
+check("录入表单三分区折叠（默认展开①，②③收起，aria-expanded 正确）",
+  t05a.n === 3 && t05a.basicOpen && t05a.matCollapsed && t05a.platCollapsed && t05a.aria === 'true,false,false', JSON.stringify(t05a));
+
+await Eval(`document.querySelector('#add-sec-ref-material .add-section-head').click()`);
+const t05b = await Eval(`(() => {
+  const sec = document.getElementById('add-sec-ref-material');
+  return { open: !sec.classList.contains('collapsed'), aria: sec.querySelector('.add-section-head').getAttribute('aria-expanded') };
+})()`);
+check("点击②分区头展开（aria-expanded=true）", t05b.open && t05b.aria === 'true', JSON.stringify(t05b));
+
+// 收起不丢状态：②展开记基线行数（表单初始化预置 1 行，既有设计）→ 加文件行 →
+// 收起 → 再展开 → 行数与加行后一致（DOM 不销毁）
+const t05base = await Eval(`document.querySelectorAll('#ref-files .file-row').length`);
+await Eval(`document.querySelector('#btn-ref-add-file-row').click()`);
+await Eval(`document.querySelector('#add-sec-ref-material .add-section-head').click()`);
+await Eval(`document.querySelector('#add-sec-ref-material .add-section-head').click()`);
+const t05c = await Eval(`document.querySelectorAll('#ref-files .file-row').length`);
+check("折叠收起不丢已填状态（文件行仍在，行数不变）", t05c === t05base + 1, `rows=${t05c}, base=${t05base}`);
+await Eval(`(() => {
+  [...document.querySelectorAll('#ref-files .file-row')].forEach((r) => r.remove());
+  addFileRow($("ref-files")); // 恢复表单预置基线 1 行（与初始态一致，避免污染后续复跑）
+})()`);
+await Eval(`document.querySelector('#add-sec-ref-material .add-section-head').click()`); // 还原收起
+
+// ③ 展开后入库按钮真实可见（offsetParent 非空 = 可点击）
+await Eval(`document.querySelector('#add-sec-ref-platform .add-section-head').click()`);
+const t05d = await Eval(`(() => {
+  const sec = document.getElementById('add-sec-ref-platform');
+  const btn = sec.querySelector('#btn-ref-add');
+  return { open: !sec.classList.contains('collapsed'), visible: !!btn && btn.offsetParent !== null };
+})()`);
+check("③ 平台属性展开后入库按钮可见", t05d.open && t05d.visible, JSON.stringify(t05d));
+await Eval(`document.querySelector('#add-sec-ref-platform .add-section-head').click()`); // 还原收起
+
+// AI 草稿反馈（②素材与锚定）与入库反馈（③平台属性与入库）分区就近——
+// 评审修订：原草稿反馈写 ref-add-msg（③默认收起）→ 用户不可见，拆行修复
+const t05e = await Eval(`(() => ({
+  inMat: !!document.querySelector('#add-sec-ref-material #ref-draft-msg'),
+  inPlat: !!document.querySelector('#add-sec-ref-platform #ref-add-msg'),
+}))()`);
+check("AI 草稿反馈在②区、入库反馈在③区（就近可见）", t05e.inMat && t05e.inPlat, JSON.stringify(t05e));
+
 console.log(failed ? `SMOKE FAILED(${failed})` : "SMOKE ALL PASS");
 process.exit(failed ? 1 : 0);

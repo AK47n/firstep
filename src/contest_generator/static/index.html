@@ -1729,47 +1729,71 @@
 
     <div class="card">
       <h2>录入参考文件（素材 → AI 简介草稿 → 补锚定 → 入库）</h2>
-      <div class="row">
-        <div style="flex:1"><label>标题</label><input type="text" id="ref-title" placeholder="例如 ALX 套件 STM32F1 串口例程"></div>
-        <div style="flex:1"><label>类型</label><input type="text" id="ref-type" placeholder="例如 例程代码 / 说明书"></div>
-      </div>
-      <div class="row">
-        <div style="flex:1.2">
-          <label>锚定（套件型号只能从模块库已有 kit 词表选，不能自由输入）</label>
+      <div class="add-section" id="add-sec-ref-basic">
+        <button type="button" class="add-section-head" aria-expanded="true">
+          <span class="add-section-arrow" aria-hidden="true">▾</span>① 基本信息（标题 / 类型）
+        </button>
+        <div class="add-section-body">
           <div class="row">
-            <select id="ref-anchor-kind" style="width:130px">
-              <option value="topic">赛题编号</option>
-              <option value="kit">套件型号</option>
-              <option value="none">未锚定</option>
-            </select>
-            <input type="text" id="ref-anchor-topic" placeholder="如 2026C" style="flex:1;max-width:200px">
-            <select id="ref-anchor-kit" class="hidden" style="flex:1;max-width:280px"></select>
-          </div>
-        </div>
-        <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label><textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…"></textarea></div>
-      </div>
-      <div class="row">
-        <div style="flex:1">
-          <label>平台属性（any = 平台无关，任何生成平台都注入；stm32 / mspm0 = 只注入对应平台工程，生成时按平台过滤）</label>
-          <div class="row">
-            <label style="cursor:pointer"><input type="radio" name="ref-platform" value="any" checked> any（不限平台）</label>
-            <label style="cursor:pointer"><input type="radio" name="ref-platform" value="stm32"> stm32</label>
-            <label style="cursor:pointer"><input type="radio" name="ref-platform" value="mspm0"> mspm0</label>
+            <div style="flex:1"><label>标题</label><input type="text" id="ref-title" placeholder="例如 ALX 套件 STM32F1 串口例程"></div>
+            <div style="flex:1"><label>类型</label><input type="text" id="ref-type" placeholder="例如 例程代码 / 说明书"></div>
           </div>
         </div>
       </div>
-      <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库；可点「选择文件 / 选择文件夹」直接载入，二进制自动跳过）</h3>
-      <div id="ref-files"></div>
-      <div class="row" style="margin-top:8px">
-        <button id="btn-ref-add-file-row">+ 文件</button>
-        <button id="btn-ref-pick-files">选择文件…</button>
-        <button id="btn-ref-pick-dir">选择文件夹…</button>
-        <input type="file" id="ref-pick-files" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">
-        <input type="file" id="ref-pick-dir" webkitdirectory multiple style="display:none">
-        <button id="btn-ref-draft-desc">AI 生成简介草稿</button>
-        <button id="btn-ref-add" class="primary">入库</button>
+      <div class="add-section collapsed" id="add-sec-ref-material">
+        <button type="button" class="add-section-head" aria-expanded="false">
+          <span class="add-section-arrow" aria-hidden="true">▾</span>② 素材与锚定（锚定 / 简介草稿 / 素材文件）
+        </button>
+        <div class="add-section-body">
+          <div class="row">
+            <div style="flex:1.2">
+              <label>锚定（套件型号只能从模块库已有 kit 词表选，不能自由输入）</label>
+              <div class="row">
+                <select id="ref-anchor-kind" style="width:130px">
+                  <option value="topic">赛题编号</option>
+                  <option value="kit">套件型号</option>
+                  <option value="none">未锚定</option>
+                </select>
+                <input type="text" id="ref-anchor-topic" placeholder="如 2026C" style="flex:1;max-width:200px">
+                <select id="ref-anchor-kit" class="hidden" style="flex:1;max-width:280px"></select>
+              </div>
+            </div>
+            <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label><textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…"></textarea></div>
+          </div>
+          <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库；可点「选择文件 / 选择文件夹」直接载入，二进制自动跳过）</h3>
+          <div id="ref-files"></div>
+          <div class="row" style="margin-top:8px">
+            <button id="btn-ref-add-file-row">+ 文件</button>
+            <button id="btn-ref-pick-files">选择文件…</button>
+            <button id="btn-ref-pick-dir">选择文件夹…</button>
+            <input type="file" id="ref-pick-files" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">
+            <input type="file" id="ref-pick-dir" webkitdirectory multiple style="display:none">
+            <button id="btn-ref-draft-desc">AI 生成简介草稿</button>
+          </div>
+          <div id="ref-draft-msg" class="error"></div>
+        </div>
       </div>
-      <div id="ref-add-msg" class="error"></div>
+      <div class="add-section collapsed" id="add-sec-ref-platform">
+        <button type="button" class="add-section-head" aria-expanded="false">
+          <span class="add-section-arrow" aria-hidden="true">▾</span>③ 平台属性与入库（平台 / 入库）
+        </button>
+        <div class="add-section-body">
+          <div class="row">
+            <div style="flex:1">
+              <label>平台属性（any = 平台无关，任何生成平台都注入；stm32 / mspm0 = 只注入对应平台工程，生成时按平台过滤）</label>
+              <div class="row">
+                <label style="cursor:pointer"><input type="radio" name="ref-platform" value="any" checked> any（不限平台）</label>
+                <label style="cursor:pointer"><input type="radio" name="ref-platform" value="stm32"> stm32</label>
+                <label style="cursor:pointer"><input type="radio" name="ref-platform" value="mspm0"> mspm0</label>
+              </div>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="btn-ref-add" class="primary">入库</button>
+          </div>
+          <div id="ref-add-msg" class="error"></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -6738,8 +6762,8 @@ function bindFilePicker(btnId, inputId, containerId, msgId) {
 }
 bindFilePicker("btn-pick-mod-files", "pick-mod-files", "new-files", "add-msg");
 bindFilePicker("btn-pick-mod-dir", "pick-mod-dir", "new-files", "add-msg");
-bindFilePicker("btn-ref-pick-files", "ref-pick-files", "ref-files", "ref-add-msg");
-bindFilePicker("btn-ref-pick-dir", "ref-pick-dir", "ref-files", "ref-add-msg");
+bindFilePicker("btn-ref-pick-files", "ref-pick-files", "ref-files", "ref-draft-msg");
+bindFilePicker("btn-ref-pick-dir", "ref-pick-dir", "ref-files", "ref-draft-msg");
 
 function newModulePayload() {
   const files = collectFiles();
@@ -7445,20 +7469,21 @@ addFileRow($("ref-files"));
 function refCollectFiles() { return collectFiles($("ref-files")); }
 
 $("btn-ref-draft-desc").addEventListener("click", async () => {
-  $("ref-add-msg").textContent = "";
+  // 草稿反馈留在 ② 素材与锚定区（对应按钮就近可见；入库反馈仍走 ③ 的 ref-add-msg）
+  $("ref-draft-msg").textContent = "";
   const files = refCollectFiles();
   if (files === null) return;
-  if (!Object.keys(files).length) { $("ref-add-msg").textContent = "至少需要一个素材文件"; return; }
+  if (!Object.keys(files).length) { $("ref-draft-msg").textContent = "至少需要一个素材文件"; return; }
   $("btn-ref-draft-desc").disabled = true;
   $("btn-ref-draft-desc").innerHTML = '<span class="spinner"></span>生成中…';
   try {
     const data = await apiPost("/api/references/draft", { files });
     $("ref-desc").value = data.draft;
-    $("ref-add-msg").classList.add("ok");
-    $("ref-add-msg").textContent = "AI 简介草稿已填入，可修改后点击「入库」。（请求体有大小预算，素材过大后端会报 413）";
+    $("ref-draft-msg").classList.add("ok");
+    $("ref-draft-msg").textContent = "AI 简介草稿已填入，可修改后点击「入库」。（请求体有大小预算，素材过大后端会报 413）";
   } catch (e) {
-    $("ref-add-msg").classList.remove("ok");
-    $("ref-add-msg").textContent = e.message;
+    $("ref-draft-msg").classList.remove("ok");
+    $("ref-draft-msg").textContent = e.message;
   } finally {
     $("btn-ref-draft-desc").disabled = false;
     $("btn-ref-draft-desc").innerHTML = "AI 生成简介草稿";
