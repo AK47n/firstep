@@ -45,6 +45,9 @@ function extract(name, deps) {
 const esc = extract("esc");
 const masterTableRowHTML = extract("masterTableRowHTML", { esc });
 const masterDeleteConfirmHTML = extract("masterDeleteConfirmHTML", { esc });
+const masterFileURL = extract("masterFileURL");
+const masterKeyFileRowHTML = extract("masterKeyFileRowHTML", { esc });
+const masterDetailHTML = extract("masterDetailHTML", { esc, masterKeyFileRowHTML });
 
 // 测试母本：与 /api/masters 列表响应同形状（platform_label / key_files 自工单 01）
 const MASTER_STM32 = {
@@ -98,4 +101,66 @@ test("masterDeleteConfirmHTML：无 key_files 字段兜底 0 项 + 转义", () =
   const evil = masterDeleteConfirmHTML({ ...MASTER_STM32, platform_label: "<b>x</b>" });
   assert.ok(evil.includes("&lt;b&gt;x&lt;/b&gt;"));
   assert.ok(!evil.includes("<b>x</b>"));
+});
+
+// ================= 工单 04：详情弹窗（元数据 + 清单 + URL 拼装） =================
+
+const STM32_FILES = MASTER_STM32.key_files;
+
+test("masterKeyFileRowHTML：存在项 = 路径 mono + label + 大小 + 无 ⚠ 不禁用", () => {
+  const out = masterKeyFileRowHTML(STM32_FILES[0]);
+  assert.ok(out.includes("main.c"));
+  assert.ok(out.includes("模板 main.c"));
+  assert.ok(out.includes("909 B"));
+  assert.ok(!out.includes("⚠"));
+  assert.ok(!out.includes("disabled"));
+});
+
+test("masterKeyFileRowHTML：缺失项 = ⚠ 缺失 + disabled；大小 KB/MB 格式化", () => {
+  const missing = masterKeyFileRowHTML({
+    path: "user/Project.uvprojx", label: "Keil 工程配置", size_bytes: 17606, exists: false,
+  });
+  assert.ok(missing.includes("⚠ 缺失"));
+  assert.ok(missing.includes("disabled"));
+  assert.ok(missing.includes("17.2 KB"));
+
+  const mb = masterKeyFileRowHTML({
+    path: "x.bin", label: "大文件", size_bytes: 2621440, exists: true,
+  });
+  assert.ok(mb.includes("2.5 MB"));
+});
+
+test("masterDetailHTML：元数据段（平台/来源/警告/文件数）+ 清单段 + 内容容器", () => {
+  const out = masterDetailHTML(MASTER_STM32);
+  assert.ok(out.includes('class="mono">stm32'));
+  assert.ok(out.includes("2026C、21F"));
+  assert.ok(out.includes("—")); // 警告空 → 占位
+  assert.ok(out.includes("2 项"));
+  assert.ok(out.includes("关键文件清单"));
+  assert.ok(out.includes("data-master-file=\"main.c\""));
+  assert.ok(out.includes("data-master-content"));
+  assert.ok(out.includes("点击上方文件加载全文"));
+});
+
+test("masterDetailHTML：sources/warnings/key_files 缺失回退占位 + 转义", () => {
+  const out = masterDetailHTML({
+    ...MASTER_STM32, sources: undefined, warnings: undefined, key_files: undefined,
+  });
+  assert.ok(out.includes("—"));
+  assert.ok(out.includes("0 项"));
+  assert.ok(out.includes("未配置关键文件清单"));
+
+  const evil = masterDetailHTML({ ...MASTER_STM32, platform: "<i>evil</i>" });
+  assert.ok(evil.includes("&lt;i&gt;evil&lt;/i&gt;"));
+  assert.ok(!evil.includes("<i>evil</i>"));
+});
+
+test("masterFileURL：/api/masters/{platform}/files/{path}，逐段 encodeURIComponent", () => {
+  assert.ok(masterFileURL("stm32", "pin_config.h")
+    === "/api/masters/stm32/files/pin_config.h");
+  assert.ok(masterFileURL("stm32", "user/Project.uvprojx")
+    === "/api/masters/stm32/files/user/Project.uvprojx");
+  // 平台名与路径段含特殊字符 → 编码（裸斜杠只作段分隔，段内斜杠编码）
+  assert.ok(masterFileURL("a/b", "x") === "/api/masters/a%2Fb/files/x");
+  assert.ok(masterFileURL("stm32", "a b/c") === "/api/masters/stm32/files/a%20b/c");
 });
