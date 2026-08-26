@@ -1,30 +1,16 @@
 // 最近 LLM 工作流仪表盘格式化单测（llm-observability-dashboard/03）：
-// 从 index.html 抽取纯函数，锁定 summary / detail 行文案，不碰 DOM / fetch。
-// 运行：node --test tests/js/
+// 纯函数已迁 static/js/fx/workflow.js（阶段 2 工单 01），直接 import 直测；
+// html 读入保留给尾部「仪表盘文案 / 推荐缓存接线」两段静态断言。
+// 运行：node --test "tests/js/*.test.mjs"
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { formatWorkflowUsage, formatWorkflowCost, formatWorkflowSummary, formatWorkflowCall } from "../../src/contest_generator/static/js/fx/workflow.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
-
-function extract(name) {
-  const match = html.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}"));
-  assert.ok(match, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  return match[0];
-}
-
-const ns = new Function(
-  "return (() => {"
-    + ["wfNum", "formatWorkflowUsage", "formatWorkflowCost", "formatWorkflowSummary", "formatWorkflowCall"]
-      .map(extract)
-      .join("\n")
-    + "\nreturn { formatWorkflowUsage, formatWorkflowCost, formatWorkflowSummary, formatWorkflowCall };"
-    + "})()"
-)();
-const { formatWorkflowUsage, formatWorkflowCost, formatWorkflowSummary, formatWorkflowCall } = ns;
 
 test("summary 行：provider 拆分 / call 数 / 耗时 / 请求字节 / 状态 / usage", () => {
   assert.equal(
