@@ -20,18 +20,19 @@
 // syncMainCHighlight（generate-mainc）/ refreshRecent（recent）。
 // 跨簇服务（修复中心）静态 import 自 ui/generate-fix.js（工单 16 迁出后由
 // 工单 15 的接缝改为静态 import）；host 侧不再注册。
-// 留 host：btn-generate 覆盖重发监听器（依赖 host 内联 readinessState 前置
-// 校验；经顶部 import 调用本模块 renderGenerateSuccess）。
+// btn-generate 覆盖重发监听器（工单 20 补迁——readinessState 随工单 19 迁出后
 import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
-import { formatResModules } from "/js/fx/generate.js";
+import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName } from "/js/fx/generate.js";
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
 import { syncStep7 } from "/js/ui/step-state.js";
-import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId } from "/js/ui/generate-recommend.js";
+import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId, pythonTemplates, lastRecommend } from "/js/ui/generate-recommend.js";
 import { instances, pinBindings, pinUnbound, pinRoles } from "/js/ui/generate-pins.js";
-import { markStepDone } from "/js/ui/step-state.js";
+import { markStepDone, markStepUndone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
+import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { refreshRecent } from "/js/ui/recent.js";
+import { readinessState } from "/js/ui/generate-readiness.js";
 import { startFixCenter, compileBanner, toolchains } from "/js/ui/generate-fix.js";  // 修复中心（工单 16 迁出→静态 import，取代工单 15 接缝）
 
 // ---------------------------------------------------------------------------
@@ -441,6 +442,121 @@ $("btn-copy-dir").addEventListener("click", async () => {
   }
 });
 
+
+$("btn-generate").addEventListener("click", async () => {
+  $("generate-msg").textContent = "";
+  $("generate-result").classList.add("hidden");
+  // 前置校验（工单 a3-readiness-check/01）：判据单一事实源——与「检查能否生成」
+  // 共用 generateReadinessChecks，文案/顺序与旧逻辑逐字一致（平台 → 模块 → 题面 → 目录）
+  const rstate = readinessState();
+  const missing = generateReadinessChecks(rstate).filter((c) => !c.ok);
+  if (missing.length) { $("generate-msg").textContent = missing[0].reason; return; }
+  const desktopOutput = rstate.desktopOutput;
+  const problem = rstate.problem;
+  const outputDir = rstate.outputDir;
+  const status = $("gen-status");
+  // 阶段播报（工单 ui-polish-8/04）：校验（真实）→ 生成轮播 + 计时 → 清理
+  let stageTimer = null;
+  let waitSecs = 0;
+  const genStatus = (text) => { status.innerHTML = '<span class="spinner"></span>' + text; };
+  const stopStage = () => {
+    if (stageTimer) { clearInterval(stageTimer); stageTimer = null; }
+    waitSecs = 0;
+  };
+  genStatus("正在准备…");
+  $("btn-generate").disabled = true;
+  // 覆盖重发（工单 generate-overwrite/01）：payload 声明在 try 外——catch
+  // 块引用 try 块内 const 会 ReferenceError（块级作用域）
+  let payload;
+  try {
+    // bindings（工单 03 + pin-verdict-seam/01）：单源 collectBindings——validate
+    // 与 generate 发同一份；未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）
+    const inst = instancePayload(expanded, instances);  // 多实例清单（工单 04）：空 = 不发（旧行为）
+    const bindings = collectBindings(selectedSlugs, pinBindings, inst);
+
+    // 校验端点（工单 pin-verdict-seam/01）：进入生成前跑 resolve_bindings，跨角色
+    // 冲突（mspm0 槽位 / GPIO 同端口 / PWM 通道对 / 成对实例）在生成前暴露并阻断，
+    // 不发起 generate；空 bindings / 全默认 = ok:true（不误拦）
+    const checkPayload = { platform: chosenPlatform, slugs: selectedSlugs };
+    if (Object.keys(bindings).length) checkPayload.bindings = bindings;
+    genStatus("正在校验引脚绑定…");
+    const check = await apiPost("/api/bindings/validate", checkPayload);
+    if (check.ok === false) {
+      stopStage();
+      $("generate-msg").classList.remove("ok");
+      $("generate-msg").textContent = check.error;
+      status.textContent = "";
+      markStepUndone(7);  // 引脚校验不过 = 第 7 步未完成
+      return;
+    }
+
+    const payloadData = {
+      platform: chosenPlatform, slugs: selectedSlugs,
+      main_c: $("main-c").value,
+      problem_text: problem,
+      output_dir: generationOutputDirPayload(outputDir, desktopOutput),
+      create_desktop_topic_dir: desktopOutput,
+      topic_id: currentTopicId || undefined,
+    };
+    payload = payloadData;
+    if (Object.keys(bindings).length) payload.bindings = bindings;
+    if (Object.keys(inst).length) payload.instances = inst;
+    // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
+    // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
+    if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;
+    if (scorePoints.length) payload.score_points = scorePoints;
+    // 上下文清单字段（工单 revise-deepen/01）：功能需求清单（推荐产物摘要）/
+    // 赛题答疑 Q&A 随生成请求回传并落盘，供「修订与深化」历史目录直读；
+    // 没推荐过 / 没填 Q&A = 不带字段（清单内容缺省，旧行为逐字节不变）
+    if (lastRecommend && lastRecommend.requirements && lastRecommend.requirements.length) {
+      payload.requirements = lastRecommend.requirements;
+    }
+    const qa = $("qa-text").value.trim();
+    if (qa) payload.qa_text = qa;
+    // 生成请求期间：子阶段文案轮播（每 2s 切一个）+ 等待计时（每秒刷新）
+    waitSecs = 0;
+    genStatus(genStageTexts(0));
+    stageTimer = setInterval(() => {
+      waitSecs += 1;
+      genStatus(genStageTexts(Math.floor(waitSecs / 2)) + "（已等待 " + fmtWait(waitSecs) + "）");
+    }, 1000);
+    const data = await apiPost("/api/generate", payload);
+    stopStage();
+    renderGenerateSuccess(data);
+  } catch (e) {
+    stopStage();
+    $("generate-msg").classList.remove("ok");
+    status.textContent = "";
+    // 生成前覆盖保护（工单 generate-overwrite/01）：同名完整工程 400 →
+    // 确认框（旧工程将备份为 .bak）→ 确认后自动重发 overwrite=true；
+    // 取消 = 显示原 400 文案
+    if (isConflictError(e.message)) {
+      const dirName = conflictDirName(e.message);
+      const hint = dirName
+        ? "旧工程将先备份为「" + dirName + ".bak」，然后覆盖生成全新工程"
+        : "旧工程将先备份为同名 .bak 备份";
+      if (confirm("桌面上已有同名工程"
+        + (dirName ? "「" + dirName + "」" : "")
+        + "：" + hint + "。确定覆盖并重新生成？")) {
+        genStatus("正在覆盖生成…");
+        try {
+          const data = await apiPost("/api/generate", { ...payload, overwrite: true });
+          stopStage();
+          renderGenerateSuccess(data);
+          toast("ok", "已覆盖生成（旧工程备份为 .bak）");
+          return;
+        } catch (e2) {
+          $("generate-msg").textContent = e2.message;
+        }
+      } else {
+        $("generate-msg").textContent = e.message;
+      }
+    } else {
+      $("generate-msg").textContent = e.message;
+    }
+    toast("error", "生成失败");
+  } finally { $("btn-generate").disabled = false; }
+});
 
 // ---- 本簇导出面（host 顶部 import 活绑定调用点） ----
 // 说明（工单 15 记录，工单 16 修订）：generateMain / renderScoreChecklist /
