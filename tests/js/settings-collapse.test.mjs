@@ -1,35 +1,20 @@
 // settings-collapse.test.mjs — 设置页折叠纯函数单测（工单 settings-infoarch/01/02/03）：
 // parseSettingsCollapse / settingsDefaultCollapsed / effectiveCollapsed /
 // applySettingsCollapseState（卡片 + 计费小节两分支）+ settingsMasterLabel / sectionCollapseLabel。
-// 核心块 syncCollapseBtn 已迁 fx/generate.js（工单 08），跨模块 import 注入；
-// 设置页折叠块仍在 index.html（工单 10 迁入 fx/settings.js）。
-import { readFileSync } from "node:fs";
+// （模块化：设置页折叠块已迁 fx/settings.js，直接 import——工单
+// frontend-es-modules/10；syncCollapseBtn 由 fx/generate.js 供给，为
+// applySettingsCollapseState 内部的跨模块引用，本文件无需再注入。）
 import test from "node:test";
 import assert from "node:assert/strict";
-import { syncCollapseBtn } from "../../src/contest_generator/static/js/fx/generate.js";
+import {
+  parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed,
+  applySettingsCollapseState, settingsMasterLabel, sectionCollapseLabel,
+  SETTINGS_COLLAPSE_KEY,
+} from "../../src/contest_generator/static/js/fx/settings.js";
 
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 设置页折叠块：SETTINGS_COLLAPSE_KEY 常量起到 initSettingsCollapse 止
-const match = html.match(
-  /const SETTINGS_COLLAPSE_KEY[\s\S]*?function initSettingsCollapse[\s\S]*?\n\}/
-);
-assert.ok(match, "index.html 中未找到设置页折叠函数块（改名了？）");
-
-const fns = new Function(
-  "syncCollapseBtn",
-  match[0] + "\nreturn { parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, applySettingsCollapseState, settingsMasterLabel, sectionCollapseLabel };"
-)(syncCollapseBtn);
-const { parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, applySettingsCollapseState, settingsMasterLabel, sectionCollapseLabel } = fns;
-for (const name of ["parseSettingsCollapse", "settingsDefaultCollapsed", "effectiveCollapsed", "applySettingsCollapseState", "settingsMasterLabel", "sectionCollapseLabel"]) {
-  assert.equal(typeof fns[name], "function", `${name} 未从 index.html 抽取成功`);
-}
-
-// 存储键契约：firstep.settingsCollapse.v1 必须出现在 index.html（防漂移）
-assert.match(html, /firstep\.settingsCollapse\.v1/, "设置页折叠存储键 firstep.settingsCollapse.v1 缺失");
+// 存储键契约：SETTINGS_COLLAPSE_KEY 随迁 fx/settings.js（工单 10），
+// 常量值必须保持（防漂移）
+assert.equal(SETTINGS_COLLAPSE_KEY, "firstep.settingsCollapse.v1");
 
 // 假卡片：只实现 classList.toggle / contains / querySelector(".card-collapse") /
 // title/aria-label 回写；withNestedHead=true 时模拟「卡片内嵌计费小节」的祖先

@@ -1,65 +1,15 @@
 // 评分点核对清单纯函数单测（工单 score-checklist/01）：行文本 / 清单 HTML /
 // 进度 / 导出文本（☑□）/ localStorage 解析与往返。
-import { readFileSync } from "node:fs";
+// （模块化：已迁 fx/score.js，直接 import——工单 frontend-es-modules/10）
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取（同 gen-overview.test.mjs 范式）；deps = 注入的兄弟函数依赖
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  const open = html.indexOf("{", start);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let i = open; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, i + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const scoreChecklistPartLabel = extract("scoreChecklistPartLabel");
-const scoreChecklistScoreText = extract("scoreChecklistScoreText");
-const scoreChecklistRefsText = extract("scoreChecklistRefsText");
-const scoreChecklistId = extract("scoreChecklistId");
-const scoreChecklistChecked = extract("scoreChecklistChecked");
-const scoreChecklistLineText = extract("scoreChecklistLineText", {
-  scoreChecklistPartLabel,
-  scoreChecklistScoreText,
-  scoreChecklistRefsText,
-  scoreChecklistId,
-});
-const scoreChecklistKey = extract("scoreChecklistKey");
-const scoreChecklistItemsHTML = extract("scoreChecklistItemsHTML", {
-  scoreChecklistLineText,
-  scoreChecklistId,
-  scoreChecklistChecked,
-});
-const scoreChecklistProgressHTML = extract("scoreChecklistProgressHTML");
-const scoreChecklistExportText = extract("scoreChecklistExportText", {
-  scoreChecklistLineText,
-  scoreChecklistId,
-  scoreChecklistChecked,
-});
-const scoreChecklistParse = extract("scoreChecklistParse");
-const scoreChecklistLoad = extract("scoreChecklistLoad", { scoreChecklistParse });
-const scoreChecklistSave = extract("scoreChecklistSave");
+import {
+  scoreChecklistPartLabel, scoreChecklistScoreText, scoreChecklistRefsText,
+  scoreChecklistId, scoreChecklistChecked, scoreChecklistLineText,
+  scoreChecklistKey, scoreChecklistItemsHTML, scoreChecklistProgressHTML,
+  scoreChecklistExportText, scoreChecklistParse, scoreChecklistLoad,
+  scoreChecklistSave,
+} from "../../src/contest_generator/static/js/fx/score.js";
 
 const POINTS = [
   { id: "a1", part: "basic", score: 5, sentence_refs: ["1", "2"], description: "巡线稳定" },
