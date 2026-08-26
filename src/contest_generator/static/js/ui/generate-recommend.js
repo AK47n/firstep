@@ -16,7 +16,7 @@
 // instances / instancePinTarget 属引脚-多实例簇（已随工单 13 迁 ui/generate-pins.js）。
 // host → 本簇的跨簇服务调用经 setClusterDeps 接缝（模块无法 import host）：
 //   scheduleDraftSave（草稿——工单 18 迁）/ updateFixCenterAvailability（修复
-//   中心——工单 16 迁）/ resetPinState / resetInstances / clearInstanceTarget /
+//   中心——已随工单 16 迁 ui/generate-fix.js，经 host 注册闭包）/ resetPinState / resetInstances / clearInstanceTarget /
 //   renderInstanceConfig / renderPinCard / loadPinBoard / backfillInstances
 //   （引脚-多实例——工单 13 已迁入 ui/generate-pins.js，host 启动区注册改挂
 //   静态 import）。其余项迁出后同改。

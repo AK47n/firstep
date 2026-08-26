@@ -85,7 +85,7 @@ const DOMAINS = {
     isConflictError: "fn", conflictDirName: "fn", genStageTexts: "fn",
     fmtWait: "fn", generationOutputDirPayload: "fn", collectBindings: "fn",
     formatResModules: "fn", attachCelebrate: "fn", collapseBtnLabel: "fn",
-    syncCollapseBtn: "fn", collapseToggleAll: "fn",
+    syncCollapseBtn: "fn", collapseToggleAll: "fn", fmtSeconds: "fn",
   },
   "recent.js": {
     recentStatusMeta: "fn", recentTimeLabel: "fn", recentPlatformLabel: "fn",

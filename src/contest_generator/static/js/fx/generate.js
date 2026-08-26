@@ -128,6 +128,11 @@ export function collapseToggleAll(cards, doneSet, collapse) {
   });
 }
 
+export function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n.toFixed(1) : "0.0";
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll });
+  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, fmtSeconds });
 }
