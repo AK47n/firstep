@@ -1,73 +1,11 @@
-// PDF 资料库表格精修纯函数单测（工单 pdf-library-ui/02）：
+// PDF 资料库表格精修纯函数单测（工单 pdf-library-ui/02 + frontend-es-modules/02）：
 // pdfSubdir / formatMtime / pdfFilterEntries / pdfSortEntries / pdfStats /
-// pdfStatsText / pdfRowHTML。只测外部行为（过滤结果 / 排序 / 统计 / 渲染子串），
-// 子串断言防脆。对偶 reference-library.test.mjs 范式。
-import { readFileSync } from "node:fs";
+// pdfStatsText / pdfRowHTML / 详情 / 健康 / 回收删除。只测外部行为（过滤结果 /
+// 排序 / 统计 / 渲染子串），子串断言防脆。对偶 reference-library.test.mjs 范式。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { esc, formatSize } from "../../src/contest_generator/static/js/fx/core.js";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取（同 reference-library.test.mjs 范式）；deps = 注入的兄弟函数依赖。
-// 先跳过参数区（参数可能含默认值花括号，如 flags = {}），从函数体 { 开始配平。
-function extract(name, deps) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  let i = html.indexOf("(", start);
-  assert.ok(i !== -1, name + " 函数缺少参数表");
-  let pdepth = 0;
-  for (; i < html.length; i++) {
-    if (html[i] === "(") pdepth++;
-    else if (html[i] === ")") { pdepth--; if (pdepth === 0) break; }
-  }
-  const open = html.indexOf("{", i);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let j = open; j < html.length; j++) {
-    if (html[j] === "{") depth++;
-    else if (html[j] === "}") {
-      depth--;
-      if (depth === 0) {
-        const fnSrc = html.slice(start, j + 1);
-        if (deps && Object.keys(deps).length) {
-          return new Function(...Object.keys(deps), "return (" + fnSrc + ")")(
-            ...Object.values(deps)
-          );
-        }
-        return new Function("return (" + fnSrc + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-// 依赖顺序：先提取 pdfSubdir / formatMtime，再提取使用它们的函数
-const pdfSubdir = extract("pdfSubdir");
-const formatMtime = extract("formatMtime");
-const pdfFilterEntries = extract("pdfFilterEntries", { pdfSubdir });
-const pdfSortEntries = extract("pdfSortEntries", { pdfSubdir });
-const pdfStats = extract("pdfStats");
-const pdfStatsText = extract("pdfStatsText", { formatSize });
-const pdfBadgeTags = extract("pdfBadgeTags");
-const pdfRowHTML = extract("pdfRowHTML", { esc, formatSize, pdfSubdir, formatMtime, pdfBadgeTags });
-const pdfChipRowHTML = extract("pdfChipRowHTML", { esc });
-// 工单 03：详情弹窗（pdfPagesText 先于 pdfDetailHTML 提取）
-const pdfEncodedPath = extract("pdfEncodedPath");
-const pdfPagesUrl = extract("pdfPagesUrl", { pdfEncodedPath });
-const pdfPagesText = extract("pdfPagesText", { esc });
-const pdfDupRemainText = extract("pdfDupRemainText");
-const pdfDetailHTML = extract("pdfDetailHTML", { esc, formatSize, formatMtime, pdfSubdir, pdfPagesText, pdfBadgeTags, pdfDupRemainText });
-// 工单 04：数据健康（pdfBroken 先于 pdfDupGroups/pdfHealth 提取）
-const pdfBroken = extract("pdfBroken");
-const pdfDupGroups = extract("pdfDupGroups");
-const pdfHealth = extract("pdfHealth", { pdfBroken, pdfDupGroups });
-// 工单 06：回收删除（pdfTrashUrl 对偶 pdfPagesUrl；pdfDupRemainText 在 03 块已提）
-const pdfTrashUrl = extract("pdfTrashUrl", { pdfEncodedPath });
-const pdfTrashConfirmHTML = extract("pdfTrashConfirmHTML", { esc, formatSize, pdfBadgeTags });
+import { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML } from "../../src/contest_generator/static/js/fx/pdf.js";
 
 // 样例：跨批次 + 批次内子目录 + 0 字节损坏（3/04 轮才警示，此处只当普通数据）
 const pdfs = [

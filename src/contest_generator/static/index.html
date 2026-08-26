@@ -2219,6 +2219,7 @@ import { envRowHTML, envChannelHTML, envCheckStatusHTML } from "/js/fx/env.js";
 import { btnIcon } from "/js/fx/btn-icon.js";
 import { platformClickAction } from "/js/fx/platform.js";
 import { cHighlight, cLineCount, codeZoomClamp, parseZoomStored, maincContentEmpty, maincFullscreenLabel, isMainCPath, maincLineOffsetRange } from "/js/fx/code.js";
+import { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML } from "/js/fx/pdf.js";
 "use strict";
 const $ = (id) => document.getElementById(id);
 
@@ -7527,74 +7528,12 @@ $("btn-ref-add").addEventListener("click", async () => {
 // PDF 资料库页：素材库全量 PDF 浏览 / 客户端即时检索 / 排序 / 统计 / 直开预览
 // （给人看的资料库；工单 pdf-library-ui/02 表格精修，对偶参考文件库）
 // ---------------------------------------------------------------------------
-// pdfEncodedPath(relPath)：相对路径逐段编码（每段 encodeURIComponent，
-// 不编码段间 "/"——段内特殊字符安全、分隔符保留；预览 / 页数 URL 共用）。
-function pdfEncodedPath(relPath) {
-  return relPath.split("/").map(encodeURIComponent).join("/");
-}
-
 function pdfFileUrl(relPath) {
   return "/api/pdfs/" + pdfEncodedPath(relPath);
 }
 
-// —— 纯函数组（tests/js 括号配平抽取；对偶 ref 系列）——
-// pdfSubdir(relPath)：批次内子目录（rel 去掉批次段与文件名；空 = 批次根）
-function pdfSubdir(relPath) {
-  const parts = String(relPath || "").split("/");
-  return parts.slice(1, -1).join("/");
-}
-
-// formatMtime(epochSec)：UNIX 秒 → 本地 "YYYY-MM-DD HH:mm"；缺失/非法 → "—"
-function formatMtime(epochSec) {
-  if (epochSec == null) return "—";
-  const d = new Date(Number(epochSec) * 1000);
-  if (!Number.isFinite(d.getTime())) return "—";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-// pdfBroken(p)：损坏判据（0 字节 = 无法打开/无内容的空文件）。
-// 显式接受字符串 "0"（防御宽松——后端 st_size 为 int，但 Number 防护同理）；
-// null/undefined/"" 不判损坏（字段缺失 ≠ 空文件）。
-function pdfBroken(p) {
-  return !!(p && (p.size_bytes === 0 || p.size_bytes === "0"));
-}
-
-// pdfBadgeTags(broken, dup)：健康徽章 HTML（行内与详情弹窗共用）。
-function pdfBadgeTags(broken, dup) {
-  return (broken ? '<span class="badge pdf-broken">⚠ 损坏</span>' : "") +
-         (dup ? '<span class="badge pdf-dup">⚠ 疑似重复</span>' : "");
-}
-
-// pdfDupGroups(pdfs)：疑似重复分组——同名（大小写不敏感）+ 同大小 +
-// 大小 > 0，组内 ≥ 2 成员（0 字节归损坏不参与重复；同名不同大小 = 版本
-// 差异不判；判据纯客户端，不读内容 hash）。返回
-// [{name, size, count, paths: string[]}]，按组内首成员输入序稳定。
-function pdfDupGroups(pdfs) {
-  const groups = new Map(); // nameLower|size → {name, size, paths}
-  for (const p of pdfs || []) {
-    if (!p || !(p.size_bytes > 0) || !p.name) continue;
-    const key = p.name.toLowerCase() + "|" + p.size_bytes;
-    if (!groups.has(key)) groups.set(key, { name: p.name, size: p.size_bytes, paths: [] });
-    groups.get(key).paths.push(p.rel_path);
-  }
-  return [...groups.values()]
-    .filter((g) => g.paths.length >= 2)
-    .map((g) => ({ ...g, count: g.paths.length }));
-}
-
-// pdfHealth(pdfs)：全量健康派生（对偶 refDanglingAnchors——统计条红段与
-// 行内徽章用全量口径，不随过滤结果收缩）。返回
-// {dupGroups, dupPaths: Set<rel_path>, broken: Set<rel_path>}。
-function pdfHealth(pdfs) {
-  const dupGroups = pdfDupGroups(pdfs);
-  const dupPaths = new Set();
-  for (const g of dupGroups) for (const p of g.paths) dupPaths.add(p);
-  const broken = new Set();
-  for (const p of pdfs || []) if (pdfBroken(p)) broken.add(p.rel_path);
-  return { dupGroups, dupPaths, broken };
-}
-
+// —— 纯函数组已迁至 static/js/fx/pdf.js（本模块顶部 import，含域内全部
+// 过滤/排序/统计/健康/渲染纯函数）——
 // pdfHealthPredicates(pdfs)：健康谓词装配（对偶 ref 系列「行渲染与统计渲染
 // 共用同一定义，防两处漂移」契约——renderPdfs 与 renderPdfStats 都从这里
 // 取同一组谓词；统计条「共 N 份」随 health 过滤收缩，与表格行数一致）。
@@ -7603,139 +7542,8 @@ function pdfHealthPredicates(pdfs) {
   return { isBroken: pdfBroken, isDup: (p) => h.dupPaths.has(p.rel_path) };
 }
 
-// pdfFilterEntries(pdfs, f)：f={q, batch, health?, isDup?, isBroken?}。q 大小写
-// 不敏感子串匹配文件名 / 批次 / 目录 / 完整路径（四合一）；batch 空串 = 该维度
-// 不过滤；health（"" | "dup" | "broken"）与 q / batch 正交——谓词由调用方注入
-// （工单 04 用 pdfDupGroups / pdfBroken 组装；health 置位但无谓词 = 该维度
-// 不参与，不静默清空）。
-function pdfFilterEntries(pdfs, f) {
-  const q = String((f && f.q) || "").trim().toLowerCase();
-  const batch = (f && f.batch) || "";
-  const health = (f && f.health) || "";
-  return (pdfs || []).filter((p) => {
-    if (batch && p.batch !== batch) return false;
-    if (health === "broken" && (f.isBroken ? !f.isBroken(p) : false)) return false;
-    if (health === "dup" && (f.isDup ? !f.isDup(p) : false)) return false;
-    if (q) {
-      const hay = [p.name, p.batch, pdfSubdir(p.rel_path || ""), p.rel_path];
-      if (!hay.some((s) => String(s == null ? "" : s).toLowerCase().includes(q))) return false;
-    }
-    return true;
-  });
-}
-
-// pdfSortEntries(pdfs, s)：s={by:'name'|'batch'|'subdir'|'size'|'mtime',
-// dir:'asc'|'desc'}；返回新数组（不改原数组）；稳定排序 → 同键保持列表序；
-// 数值键（大小 / 修改时间）按数值比较，文本键按 localeCompare。
-function pdfSortEntries(pdfs, s) {
-  const by = (s && s.by) || "name";
-  const dir = (s && s.dir) === "desc" ? -1 : 1;
-  const key = (p) => {
-    if (by === "size") return Number(p.size_bytes || 0);
-    if (by === "mtime") return Number(p.mtime || 0);
-    if (by === "batch") return String(p.batch || "");
-    if (by === "subdir") return pdfSubdir(p.rel_path || "");
-    return String(p.name || "");
-  };
-  const out = (pdfs || []).slice();
-  out.sort((a, b) => {
-    const av = key(a), bv = key(b);
-    const cmp = (typeof av === "number" && typeof bv === "number")
-      ? (av === bv ? 0 : (av < bv ? -1 : 1))
-      : String(av).localeCompare(String(bv));
-    return cmp * dir;
-  });
-  return out;
-}
-
-// pdfStats(pdfs)：统计（对传入集合计算——统计条随过滤结果联动）。
-// {total, totalBytes, batchCount, batchCounts}；batchCounts 供批次 chips 计数
-// （维度概览 = 全量口径；统计条 = 过滤结果口径，调用处分开传）。
-function pdfStats(pdfs) {
-  const list = pdfs || [];
-  const batchCounts = {};
-  let totalBytes = 0;
-  for (const p of list) {
-    if (p.batch) batchCounts[p.batch] = (batchCounts[p.batch] || 0) + 1;
-    totalBytes += Number(p.size_bytes || 0);
-  }
-  return { total: list.length, totalBytes,
-           batchCount: Object.keys(batchCounts).length, batchCounts };
-}
-
-// pdfStatsText(stats)：统计条文案（formatSize 注入；0 字节不显示「总体积」段）。
-function pdfStatsText(stats) {
-  const parts = ["共 " + stats.total + " 份"];
-  if (stats.totalBytes) parts.push("总体积 " + formatSize(stats.totalBytes));
-  parts.push(stats.batchCount + " 个批次");
-  return parts.join(" · ");
-}
-
-// pdfChipRowHTML(options, selected)：批次筛选 chips 纯函数（对偶 refChipRowHTML，
-// 换 data-pdf-chip 属性）；selected 命中项加 on 类（'' = 未选中）。
-function pdfChipRowHTML(options, selected) {
-  return (options || []).map((o) =>
-    `<button type="button" class="lib-chip${o.value === selected ? " on" : ""}" data-pdf-chip="${esc(o.value)}">${esc(o.label)}${o.count != null ? "（" + o.count + "）" : ""}</button>`
-  ).join("");
-}
-
-// pdfRowHTML(p, f)：行渲染（文件名链接 + 完整路径 tooltip、批次 chip、目录列、
-// 大小、修改时间、操作按钮）。f.isBroken / f.isDup 谓词（工单 04 注入）=
-// 行内 ⚠ 健康徽章；无谓词不标注。
-function pdfRowHTML(p, f) {
-  const subdir = pdfSubdir(p.rel_path || "");
-  const broken = !!(f && f.isBroken && f.isBroken(p));
-  const dup = !!(f && f.isDup && f.isDup(p));
-  const tags = pdfBadgeTags(broken, dup);
-  return `<tr>
-    <td class="desc-cell" title="${esc(p.rel_path)}"><a href="#" data-open-pdf="${esc(p.rel_path)}" title="${esc(p.rel_path)}">${esc(p.name)}</a>${tags}</td>
-    <td><span class="lib-chip">${esc(p.batch)}</span></td>
-    <td class="muted" title="${esc(subdir || "批次根")}">${esc(subdir || "—")}</td>
-    <td class="muted">${formatSize(p.size_bytes)}</td>
-    <td class="muted">${formatMtime(p.mtime)}</td>
-    <td><button data-open-pdf="${esc(p.rel_path)}" title="新标签打开 PDF">打开</button> <button data-pdf-detail="${esc(p.rel_path)}" title="查看完整信息">详情</button>${dup ? ` <button class="danger" data-pdf-trash="${esc(p.rel_path)}" title="移入回收目录（疑似重复）">删除</button>` : ""}</td>
-  </tr>`;
-}
-
-// —— 工单 03：详情弹窗（页数按需懒取 + 复制相对路径）——
-// pdfPagesUrl(relPath)：页数端点 URL（复用 pdfEncodedPath 逐段编码，尾缀 /pages）。
-function pdfPagesUrl(relPath) {
-  return "/api/pdfs/" + pdfEncodedPath(relPath) + "/pages";
-}
-
-// pdfPagesText(pages)：页数三态（null = 读取中 / number = N 页 / "error" = 无法读取）。
-function pdfPagesText(pages) {
-  if (pages == null) return '<span class="muted">页数读取中…</span>';
-  if (pages === "error") return '<span class="danger">无法读取（文件损坏或为空）</span>';
-  return esc(pages) + " 页";
-}
-
-// pdfDetailHTML(pdf, pages, flags)：详情弹窗内容（元数据段 + 操作段）。
-// 页数懒取三态占位（data-pdf-pages 槽由 showPdfDetail 落盘）；
-// flags={broken, dup, group}（工单 04/06）= 标题旁 ⚠ 健康徽章 + 操作段删除
-// 按钮（dup 单删 / group 组级「保留一份删其余」），缺省不标注不渲染。
-function pdfDetailHTML(pdf, pages, flags = {}) {
-  const subdir = pdfSubdir(pdf.rel_path || "");
-  const tags = pdfBadgeTags(flags.broken, flags.dup);
-  return `<div class="ref-detail-meta">
-    <div class="ref-detail-title">${esc(pdf.name)}${tags}</div>
-    <div class="ref-detail-row"><span class="ref-detail-k">路径</span><span class="mono" style="word-break:break-all">${esc(pdf.rel_path)}</span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">批次</span><span><span class="lib-chip">${esc(pdf.batch)}</span></span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">目录</span><span>${esc(subdir || "—")}</span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">大小</span><span>${formatSize(pdf.size_bytes)}</span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">修改时间</span><span>${formatMtime(pdf.mtime)}</span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">页数</span><span data-pdf-pages>${pdfPagesText(pages)}</span></div>
-  </div>
-  <div class="pdf-detail-actions">
-    <button type="button" class="primary" data-pdf-open="${esc(pdf.rel_path)}">打开 PDF</button>
-    <button type="button" data-pdf-copy="${esc(pdf.rel_path)}">复制相对路径</button>
-    ${flags.dup ? `<button type="button" class="danger" data-pdf-delete="${esc(pdf.rel_path)}">删除此文件</button>` : ""}
-    ${flags.group ? `<button type="button" data-pdf-delete-group="${esc(pdf.rel_path)}" title="${esc(pdfDupRemainText(flags.group))}">${esc(pdfDupRemainText(flags.group))}</button>` : ""}
-    <span class="pdf-detail-copy-msg muted"></span>
-  </div>`;
-}
-
-// 页数懒取 + memo：单一 promise 缓存（同一 rel_path 重复打开零重复请求，
+// pdfFilterEntries / pdfSortEntries / pdfStats / pdfStatsText / pdfChipRowHTML /
+// pdfRowHTML / pdfPagesUrl / pdfPagesText / pdfDetailHTML 已迁至 static/js/fx/pdf.js
 // 并发重复 = 同一 promise 去重——never-reject，失败 resolve("error")）。
 // 确定态语义：400（损坏/非法/缺失）→ "error" 落缓存（文件已坏，重试无益）；
 // 网络错误 / 500（服务器缺陷）→ 不落缓存，下次打开重试；number = 页数。
@@ -7813,39 +7621,7 @@ function showPdfDetail(pdf) {
 // 删除 = 移入回收目录 sources/.trash-pdf/<日期>/<rel_path 镜像>（不真删：
 // git 忽略 + 可手动恢复 + git 历史双保险）；仅疑似重复组成员可删
 // （f.isDup 命中 / 详情弹窗 dup+group 标注），损坏与健康文件不可删。
-// pdfTrashUrl(relPath)：回收端点 URL（对偶 pdfPagesUrl：逐段编码 + /trash）。
-function pdfTrashUrl(relPath) {
-  return "/api/pdfs/" + pdfEncodedPath(relPath) + "/trash";
-}
-
-// pdfDupRemainText(group)：「保留一份删其余」文案（组级按钮 + 确认标题共用）。
-function pdfDupRemainText(group) {
-  const n = Math.max(0, ((group && group.count) || 1) - 1);
-  return "保留此文件，删除其余 " + n + " 份";
-}
-
-// pdfTrashConfirmHTML(pdf, mode, group, trashHint)：确认弹窗内容纯函数。
-// mode = "one" 单文件 / "group" 组级；group（04 的 pdfDupGroups 组形如
-// {name,size,count,paths}）组级时列出组内成员（删除对象与保留对象一目了然）；
-// trashHint = 回收去向展示文案（不含仓库根——提示性，服务端实际路径为准）。
-function pdfTrashConfirmHTML(pdf, mode, group, trashHint) {
-  const members = (mode === "group" && group && group.paths) ? group.paths : [];
-  return `<div class="ref-detail-meta">
-    <div class="ref-detail-title">${esc(pdf.name)}${pdfBadgeTags(false, true)}</div>
-    <div class="ref-detail-row"><span class="ref-detail-k">完整路径</span><span class="mono" style="word-break:break-all">${esc(pdf.rel_path)}</span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">大小</span><span>${formatSize(pdf.size_bytes)}</span></div>
-    ${members.length ? `<div class="ref-detail-row"><span class="ref-detail-k">组内成员</span><ul class="pdf-trash-members">${members.map((rp) => `<li class="mono">${esc(rp)}</li>`).join("")}</ul></div>` : ""}
-    <div class="ref-detail-row"><span class="ref-detail-k">回收去向</span><span class="mono">${esc(trashHint)}</span></div>
-    <div class="ref-detail-note">删除 = 移入回收目录（不真删）：文件出现在 <code>sources/.trash-pdf/‹日期›/</code>，git 已忽略、可手动恢复；若该文件被参考库条目引用，删除后条目文件将无法打开。</div>
-  </div>
-  <div class="pdf-detail-actions">
-    <button type="button" class="danger" data-pdf-trash-confirm="${esc(pdf.rel_path)}">确认${mode === "group" ? "删除其余" : "删除"}</button>
-    <button type="button" data-pdf-trash-cancel>取消</button>
-  </div>`;
-}
-
-// openPdfTrashConfirm(pdf, group)：确认弹窗（对偶 showPdfDetail 的遮罩骨架：
-// × / 遮罩点击 / Esc 关闭；确认 → POST /trash → toast + 重拉列表）。
+// pdfTrashUrl / pdfDupRemainText / pdfTrashConfirmHTML 已迁至 static/js/fx/pdf.js
 function openPdfTrashConfirm(pdf, group) {
   const overlay = document.createElement("div");
   overlay.className = "ref-files-overlay";
