@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c9406bb1056b4e908c75b851f30e111f55f95511 -->
+<!-- changelog-auto: last-commit=766d0289bbeb23a51824ce66b2c3f74b3cb64a48 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -70,6 +70,7 @@
 - 23:26 模块库 tab 迁 ui/library.js（阶段 2 工单 07）
 - 23:30 参考文件库 tab 迁 ui/reference.js（阶段 2 工单 08）
 - 23:37 赛题库 tab + 拆条校对迁 ui/topic.js（阶段 2 工单 09）
+- 23:42 设置 tab 迁 ui/settings.js（阶段 2 工单 10）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
