@@ -1,23 +1,12 @@
-// LLM 用量统计纯函数单测（工单 ui-polish-5/02）：
+// LLM 用量统计纯函数单测（工单 frontend-es-modules/09）：
 // usageDelta（telemetry 快照差分）/ llmCostEstimate（费用分档估算）/
 // usageAccumulate（累计合并）/ usageDisplay（统计展示格式化）。
-import { readFileSync } from "node:fs";
+// 直接 import fx/llm.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-function extract(name) {
-  const m = html.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}"));
-  assert.ok(m, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  return new Function("return (" + m[0] + ")")();
-}
-const usageDelta = extract("usageDelta");
-const usageAccumulate = extract("usageAccumulate");
-const llmCostEstimate = extract("llmCostEstimate");
-const usageDisplay = extract("usageDisplay");
+import {
+  usageDelta, usageAccumulate, llmCostEstimate, usageDisplay,
+} from "../../src/contest_generator/static/js/fx/llm.js";
 
 const SNAP = {
   llm_total_calls: 3,

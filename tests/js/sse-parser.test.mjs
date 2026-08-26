@@ -1,18 +1,10 @@
-// SSE 解析器单测（工单 A 深化）：parseSSE 是 index.html 里唯一的纯函数接缝
-// （不碰 DOM，只依赖 Response 流 / TextDecoder / 回调），从 HTML 抽取函数体
-// 直接喂浏览器同构的 Response + ReadableStream 测试——替代 devtools 手测。
+// SSE 解析器单测（工单 frontend-es-modules/09）：parseSSE 是 fx/llm.js 里唯一的
+// 纯函数接缝（不碰 DOM，只依赖 Response 流 / TextDecoder / 回调），直接 import
+// 喂浏览器同构的 Response + ReadableStream 测试——替代 devtools 手测。
 // 运行：node --test tests/js/
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const match = html.match(/async function parseSSE[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 parseSSE 函数体（改名了？）");
-const parseSSE = new Function("return (" + match[0] + ")")(); // 函数声明包成表达式取引用
+import { parseSSE } from "../../src/contest_generator/static/js/fx/llm.js";
 
 /** 构造带流的 Response：按 chunk 依次推字节（测分片）。 */
 function streamResponse(chunks, crlf = false) {

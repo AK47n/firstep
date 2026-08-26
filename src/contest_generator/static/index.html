@@ -2229,6 +2229,7 @@ import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, draftState, draftSave,
 import { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll } from "/js/fx/generate.js";
 import { recentStatusMeta, recentTimeLabel, recentPlatformLabel, recentChipHTML, recentListHTML, recentStatusNow } from "/js/fx/recent.js";
 import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
+import { formatLLMTelemetry, parseSSE, usageDelta, usageAccumulate, llmCostEstimate, usageDisplay } from "/js/fx/llm.js";
 "use strict";
 const $ = (id) => document.getElementById(id);
 
@@ -4937,54 +4938,7 @@ function renderToolchainStatus() {
     + "（缺失时一键按钮置灰，用下方贴文本模式；可在设置页配置路径）";
 }
 
-function formatLLMTelemetry(data) {
-  const toNumber = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
-  // 中文标签表（operation / 解析状态 / 错误类型 / usage 键；未知回退原文）
-  const opLabels = {
-    select_modules: "选模块", clarify: "澄清提问", summarize_topic: "赛题简介",
-    summarize_module: "模块简介", reference_summarize: "参考资料摘要",
-    validate_module_description: "简介校验", reference_judge_archivable: "归档判定",
-    generate_main_skeleton: "生成骨架", generate_smoke_main: "自检冒烟",
-    fix_compile_errors: "编译修复", distill_master: "母版提炼",
-    topic_split_topics: "拆条", topic_extract_number: "编号识别",
-    vision_describe: "视觉识别",
-  };
-  const parseLabels = { success: "成功", parse_error: "解析失败", not_sent: "未发送" };
-  const errLabels = { network: "网络", rate_limit: "限流", client: "客户端", server: "服务端" };
-  const usageLabels = { prompt_tokens: "prompt", completion_tokens: "completion", total_tokens: "total" };
-  const op = data.llm_latest_operation || "";
-  const parts = [
-    "LLM：" + toNumber(data.llm_total_calls) + " 次调用",
-    "本地 " + toNumber(data.llm_local_calls) + " / DeepSeek " + toNumber(data.llm_deepseek_calls),
-  ];
-  if (op) parts.push("最新 " + (opLabels[op] || op));
-  if (data.llm_error_kind) {
-    parts.push("错误 " + (errLabels[data.llm_error_kind] || data.llm_error_kind)
-      + " / 解析 " + (parseLabels[data.llm_parse_status] || data.llm_parse_status || ""));
-  } else if (data.llm_parse_status) {
-    parts.push("解析 " + (parseLabels[data.llm_parse_status] || data.llm_parse_status));
-  }
-  if (data.llm_latest_http_status) parts.push("HTTP " + toNumber(data.llm_latest_http_status));
-  const counters = [];
-  if (data.llm_attempts) counters.push("尝试 " + toNumber(data.llm_attempts));
-  if (data.llm_retry_calls) counters.push("重试 " + toNumber(data.llm_retry_calls));
-  if (data.llm_error_calls) counters.push("错误 " + toNumber(data.llm_error_calls));
-  if (data.llm_parse_error_calls) counters.push("解析错误 " + toNumber(data.llm_parse_error_calls));
-  if (data.llm_rate_limit_calls) counters.push("限流 " + toNumber(data.llm_rate_limit_calls));
-  if (data.llm_network_error_calls) counters.push("网络错误 " + toNumber(data.llm_network_error_calls));
-  if (data.llm_5xx_calls) counters.push("5xx " + toNumber(data.llm_5xx_calls));
-  if (data.llm_budget_blocked_calls) counters.push("预算拦截 " + toNumber(data.llm_budget_blocked_calls));
-  if (counters.length) parts.push(counters.join(", "));
-  parts.push("请求 " + toNumber(data.llm_request_bytes).toLocaleString("en-US") + "B");
-  parts.push("耗时 " + toNumber(data.llm_duration_ms).toLocaleString("en-US") + "ms");
-  const usage = data.llm_usage || null;
-  if (usage && typeof usage === "object") {
-    const usageText = Object.keys(usage)
-      .map((k) => (usageLabels[k] || k) + "=" + usage[k]).join(", ");
-    if (usageText) parts.push("用量 " + usageText);
-  }
-  return parts.join(" · ");
-}
+// 已迁至 static/js/fx/llm.js（工单 09）：formatLLMTelemetry。
 
 function renderFixLLMTelemetry(data) {
   const el = $("fix-llm-telemetry");
@@ -7598,47 +7552,7 @@ const distPanel = makeProgressPanel({
   },
 });
 
-// ===== SSE 解析器开始（工单 03；纯函数：输入 Response → 逐事件回调，不碰 DOM）=====
-// 工单 02 契约：HTTP 200、text/event-stream；每个事件 = "event: <type>\n" +
-// "data: <JSON>\n" + "\n"（空行分隔）；断线 = 放弃本次（无自动重连）。
-// 本地手测：浏览器 devtools 用 new Response(new ReadableStream(...)) 构造假流喂它。
-async function parseSSE(resp, onEvent) {
-  if (!resp.body) throw new Error("服务响应无流");
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let type = "";
-  let data = "";
-  const feed = (block) => {
-    for (const line of block.split("\n")) {
-      if (!line) continue;
-      if (line.startsWith("event:")) type = line.slice(6).trim();
-      else if (line.startsWith("data:")) data += line.slice(5).replace(/^ /, "") + "\n";
-      // 其他行（id / 注释等）本次契约不用，忽略
-    }
-  };
-  const flush = () => {
-    if (type || data) {
-      onEvent(type || "message", data.replace(/\n$/, ""));
-      type = "";
-      data = "";
-    }
-  };
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    let idx;
-    while ((idx = buffer.indexOf("\n\n")) !== -1) {
-      feed(buffer.slice(0, idx));
-      buffer = buffer.slice(idx + 2);
-      flush();
-    }
-  }
-  buffer += decoder.decode();
-  if (buffer) { feed(buffer); flush(); }   // 流末尾缺最后一个空行也认
-}
-// ===== SSE 解析器结束 =====
+// 已迁至 static/js/fx/llm.js（工单 09）：parseSSE（SSE 流解析纯函数）。
 
 // ===== 进度面板模块（工单 A 深化）：推荐 / 提炼两个 SSE 工作流共用的
 // 进度状态机 + 双计时器 + 事件分发 =====
@@ -9159,55 +9073,7 @@ function initSettingsCollapse() {
 // 跨会话累计持久化 + 费用估算（设置页单价优先，空则官方默认价）
 // ---------------------------------------------------------------------------
 const USAGE_STORE_KEY = "firstep.usage.v1";
-function usageDelta(snapshot, base) {
-  const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
-  const usage = snapshot.llm_usage && typeof snapshot.llm_usage === "object" ? snapshot.llm_usage : {};
-  const s = {
-    calls: num(snapshot.llm_total_calls),
-    prompt: num(usage.prompt_tokens),
-    completion: num(usage.completion_tokens),
-    cacheHit: num(usage.prompt_cache_hit_tokens),
-    durationMs: num(snapshot.llm_duration_ms),
-    requestBytes: num(snapshot.llm_request_bytes),
-  };
-  if (!base) return s;   // 首快照 = 从零到当前的增量
-  const d = {};
-  for (const k of Object.keys(s)) d[k] = Math.max(0, s[k] - (base[k] || 0));
-  return d;
-}
-function usageAccumulate(acc, delta) {
-  const out = Object.assign({}, acc || {});
-  for (const k of ["calls", "prompt", "completion", "cacheHit", "durationMs", "requestBytes"]) {
-    out[k] = (out[k] || 0) + (delta[k] || 0);
-  }
-  return out;
-}
-function llmCostEstimate(usage, prices) {
-  const p = prices || {};
-  const prompt = Number(usage.prompt) || 0;
-  const cacheHit = Number(usage.cacheHit) || 0;
-  const miss = Math.max(0, prompt - cacheHit);
-  return {
-    hitCost: (cacheHit / 1e6) * (Number(p.input_cache_hit_per_million) || 0),
-    missCost: (miss / 1e6) * (Number(p.input_cache_miss_per_million) || 0),
-    outCost: ((Number(usage.completion) || 0) / 1e6) * (Number(p.output_per_million) || 0),
-  };
-}
-function usageDisplay(acc, cost) {
-  const a = acc || {};
-  const c = cost || { hitCost: 0, missCost: 0, outCost: 0 };
-  const total = c.hitCost + c.missCost + c.outCost;
-  return {
-    calls: a.calls || 0,
-    prompt: a.prompt || 0,
-    completion: a.completion || 0,
-    cacheHit: a.cacheHit || 0,
-    durationMs: a.durationMs || 0,
-    requestBytes: a.requestBytes || 0,
-    cost: total,
-    costText: total > 0 ? "¥" + total.toFixed(4) : "—",
-  };
-}
+// 已迁至 static/js/fx/llm.js（工单 09）：usageDelta / usageAccumulate / llmCostEstimate / usageDisplay。
 let usageBase = null;
 let usageSessionAcc = { calls: 0, prompt: 0, completion: 0, cacheHit: 0, durationMs: 0, requestBytes: 0 };
 function loadUsageAcc() {
