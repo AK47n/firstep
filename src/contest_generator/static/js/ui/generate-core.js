@@ -18,9 +18,8 @@
 // B 簇 generate-pins 的 instances / pinBindings / pinUnbound / pinRoles()。
 // 跨域调用：syncStep7（step-state）/ markStepDone（step-state）/
 // syncMainCHighlight（generate-mainc）/ refreshRecent（recent）。
-// 跨簇服务（修复中心，host 内联暂不可静态 import）：startFixCenter /
-// compileBanner / toolchainsGet 经 setGenerateCoreDeps 接缝注册（index.html
-// 启动区；工单 16 迁出修复中心后改静态 import）。
+// 跨簇服务（修复中心）静态 import 自 ui/generate-fix.js（工单 16 迁出后由
+// 工单 15 的接缝改为静态 import）；host 侧不再注册。
 // 留 host：btn-generate 覆盖重发监听器（依赖 host 内联 readinessState 前置
 // 校验；经顶部 import 调用本模块 renderGenerateSuccess）。
 import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
@@ -33,11 +32,7 @@ import { instances, pinBindings, pinUnbound, pinRoles } from "/js/ui/generate-pi
 import { markStepDone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 import { refreshRecent } from "/js/ui/recent.js";
-
-const coreDeps = { startFixCenter: null, compileBanner: null, toolchainsGet: null };
-// 修复中心服务（host 注册）：renderGenerateSuccess 的自动编译触发 / 无工具链横幅 /
-// 工具链可用性读取。工单 16 迁出修复中心后改静态 import。
-function setGenerateCoreDeps(deps) { Object.assign(coreDeps, deps); }
+import { startFixCenter, compileBanner, toolchains } from "/js/ui/generate-fix.js";  // 修复中心（工单 16 迁出→静态 import，取代工单 15 接缝）
 
 // ---------------------------------------------------------------------------
 // 生成页：8. main.c 骨架 / 自检冒烟（工单 skeleton-smoke-refs/01）
@@ -117,12 +112,12 @@ function renderGenerateSuccess(data) {
   // 生成成功 → 自动触发编译修复（工单 autocompile-loop/01，决策记录 3：
   // 用户"懒得编译一遍"）；无工具链则横幅灰条提示（展示层工单
   // compile-experience-ui/01：无工具链也要显眼，不再静默跳过）
-  if ((coreDeps.toolchainsGet ? coreDeps.toolchainsGet() : {})[chosenPlatform]) {
+  if ((toolchains || {})[chosenPlatform]) {
     $("generate-msg").textContent += "已自动触发编译修复（见第 10 栏）…";
     $("card-fix-center").scrollIntoView({ block: "nearest" });
-    setTimeout(() => coreDeps.startFixCenter(), 100);   // 等结果字段渲染完成再起流
+    setTimeout(() => startFixCenter(), 100);   // 等结果字段渲染完成再起流
   } else {
-    coreDeps.compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
+    compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
   }
 }
 // 已迁至 static/js/fx/generate.js（工单 08）：genStageTexts / fmtWait。
@@ -448,11 +443,11 @@ $("btn-copy-dir").addEventListener("click", async () => {
 
 
 // ---- 本簇导出面（host 顶部 import 活绑定调用点） ----
-// 说明（工单 15 记录）：generateMain / renderScoreChecklist /
+// 说明（工单 15 记录，工单 16 修订）：generateMain / renderScoreChecklist /
 // scoreChecklistSyncCurrent / scoreChecklistExportNow 当前无 host 调用点
 //（监听器随簇迁入），按检查表导出为模块 API；host 实际使用
 // renderGenerateSuccess / desktopTopicOutputEnabled / initScoreChecklist /
-// setGenerateCoreDeps。
+// 修复中心服务已随工单 16 改静态 import（startFixCenter / compileBanner / toolchains）。
 export { generateMain, renderGenerateSuccess, desktopTopicOutputEnabled,
   renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow,
-  initScoreChecklist, setGenerateCoreDeps };
+  initScoreChecklist };
