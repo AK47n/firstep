@@ -1,24 +1,11 @@
-// draftState / draftSave / draftLoad / draftRestoreMeta 纯函数单测（工单 ui-polish-3/01）：
+// draftState / draftSave / draftLoad / draftRestoreMeta 纯函数单测（工单 frontend-es-modules/07）：
 // 生成页草稿 localStorage 记忆——存取往返、损坏 JSON 兜底、非法字段裁剪。
-import { readFileSync } from "node:fs";
+// 直接 import fx/draft.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-function extract(name) {
-  const match = html.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}"));
-  assert.ok(match, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  return new Function("return (" + match[0] + ")")();
-}
-
-const draftState = extract("draftState");
-const draftSave = extract("draftSave");
-const draftLoad = extract("draftLoad");
-const draftRestoreMeta = extract("draftRestoreMeta");
+import {
+  draftState, draftSave, draftLoad, draftRestoreMeta,
+} from "../../src/contest_generator/static/js/fx/draft.js";
 
 // 假 storage：内存 Map，可模拟抛错
 function fakeStorage(seed, { throwOnGet = false } = {}) {

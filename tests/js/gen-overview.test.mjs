@@ -1,39 +1,13 @@
 // genOverviewChipsHTML / genOverviewSummaryHTML / cardStepStatusHTML /
-// hasWarnContent 纯函数单测（工单 gen-overview/01、02）：
+// hasWarnContent 纯函数单测（工单 frontend-es-modules/07）：
 // 生成页顶部就绪总览的 chips 渲染、摘要文案、卡片状态徽章与警告判定。
-import { readFileSync } from "node:fs";
+// 直接 import fx/overview.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-// 括号配平提取：函数体内含 `} else {` / 箭头块时，naive 的 [\s\S]*?\n\}
-// 会在第一个顶格 `}` 处截断，这里按花括号深度配平到真正的函数结尾
-function extract(name) {
-  const start = html.indexOf("function " + name);
-  assert.ok(start !== -1, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  const open = html.indexOf("{", start);
-  assert.ok(open !== -1, name + " 函数体缺少左花括号");
-  let depth = 0;
-  for (let i = open; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        return new Function("return (" + html.slice(start, i + 1) + ")")();
-      }
-    }
-  }
-  throw new Error("未找到 " + name + " 函数体结束花括号");
-}
-
-const genOverviewChipsHTML = extract("genOverviewChipsHTML");
-const genOverviewSummaryHTML = extract("genOverviewSummaryHTML");
-const cardStepStatusHTML = extract("cardStepStatusHTML");
-const hasWarnContent = extract("hasWarnContent");
+import {
+  genOverviewChipsHTML, genOverviewSummaryHTML, cardStepStatusHTML,
+  hasWarnContent,
+} from "../../src/contest_generator/static/js/fx/overview.js";
 
 const titles = [
   { n: 1, title: "赛题原文" },
