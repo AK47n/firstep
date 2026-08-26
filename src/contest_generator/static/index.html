@@ -931,6 +931,15 @@
   .topic-page img { max-width: 260px; border: 1px solid var(--border);
                     border-radius: 6px; }
   .topic-page figcaption { font-size: 11px; color: var(--muted); text-align: center; }
+  /* 编辑弹窗（工单 topic-library-ui/05）：表单字段 / 功能组勾选 */
+  .topic-edit-field { margin-top: 10px; }
+  .topic-edit-field label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
+  .topic-edit-field textarea { width: 100%; box-sizing: border-box; margin: 0;
+    font-family: var(--mono); font-size: 12px; line-height: 1.6; }
+  .topic-edit-groups { display: flex; flex-direction: column; gap: 4px; }
+  .topic-edit-group { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+  .topic-edit-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .topic-edit-msg { margin-top: 8px; }
   .topic-preview { font-size: 13px; color: var(--muted); line-height: 1.55;
                    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
                    overflow: hidden; }
@@ -8319,6 +8328,69 @@ function topicPagesErrorHTML(message) {
   return '<p class="muted">页图不可用：' + esc(message) + '</p>';
 }
 
+// ===========================================================================
+// 编辑弹窗（工单 topic-library-ui/05）：题面全文 / 附带程序 / 功能组勾选，
+// 一次保存调 PUT（年份 + 编号只读 = 目录身份不可改）。交互逻辑下沉纯函数
+// （topicEditHTML / topicEditValidate / topicEditPayload），DOM 只转发。
+// ===========================================================================
+
+// topicEditHTML(entry, vocab)：编辑表单渲染。功能组选项 = 词表组 + 词表外
+// 当前值兜底（标注「库内无此组」——勾选保留或取消，不静默丢弃）。
+function topicEditHTML(entry, vocab) {
+  const current = ((entry && entry.hint_module_groups) || []);
+  const groupIds = vocab ? Object.keys(vocab) : [];
+  const groupOptions = groupIds.map((id) => ({ id, label: vocab[id], dangling: false }));
+  for (const g of current) {
+    if (!groupIds.includes(g)) groupOptions.push({ id: g, label: g, dangling: true });
+  }
+  const groupBox = groupOptions.map((o) =>
+    '<label class="topic-edit-group">'
+    + '<input type="checkbox" data-topic-group="' + esc(o.id) + '"'
+    + (current.includes(o.id) ? " checked" : "") + '><span>'
+    + esc(o.label) + '</span>'
+    + (o.dangling ? '<span class="topic-warn" title="库内无此组，推荐链路会忽略">⚠ 库内无此组</span>' : "")
+    + '</label>'
+  ).join("");
+  return '<div class="ref-detail-meta">'
+    + '<div class="ref-detail-row"><span class="ref-detail-k">编号</span>'
+    + '<span class="mono">' + esc((entry && entry.key) || '') + '</span>'
+    + ' <span class="muted">（年份 + 编号不可改 = 目录身份，已有引用不失效）</span></div>'
+    + '<div class="ref-detail-row"><span class="ref-detail-k">年份</span>'
+    + '<span>' + esc((entry && entry.year) || '') + '</span></div>'
+    + '</div>'
+    + '<div class="topic-edit-field"><label>题面全文（可改，含图注段原样可编辑）</label>'
+    + '<textarea class="topic-edit-problem" rows="12">' + esc((entry && entry.problem_text) || '') + '</textarea></div>'
+    + '<div class="topic-edit-field"><label>附带程序目录（每行一个绝对路径，留空 = 无）</label>'
+    + '<textarea class="topic-edit-programs" rows="3">'
+    + esc((((entry && entry.programs) || [])).join('\n')) + '</textarea></div>'
+    + '<div class="topic-edit-field"><label>功能组（勾选；AI 未命中模块时出兜底选择卡）</label>'
+    + '<div class="topic-edit-groups">' + (groupBox || '<span class="muted">模块库暂无功能组</span>')
+    + '</div></div>'
+    + '<div class="topic-edit-foot"><button data-topic-save>保存</button>'
+    + ' <span class="muted">保存后题面 / 程序 / 功能组一次生效；校验失败不改数据</span></div>';
+}
+
+// topicEditValidate(fields)：保存前本地校验（与后端同口径的轻量前置）。
+// 题面非空；程序路径存在性由后端兜底（目录可能在保存前被删，服务端为准）。
+function topicEditValidate(fields) {
+  if (!String((fields && fields.problem_text) || "").trim()) {
+    return { ok: false, message: "题面不能为空" };
+  }
+  return { ok: true, message: "" };
+}
+
+// topicEditPayload(fields)：组装 PUT body（全量三字段）。programs 逐行拆分
+// （空行忽略 + 逐行 trim）；hint_module_groups = 勾选值清单。
+function topicEditPayload(fields) {
+  const programs = String((fields && fields.programs) || "").split("\n")
+    .map((s) => s.trim()).filter((s) => s.length > 0);
+  return {
+    problem_text: String((fields && fields.problem_text) || ""),
+    programs,
+    hint_module_groups: ((fields && fields.hint_module_groups) || []).slice(),
+  };
+}
+
 // 赛题卡片 HTML（工单 ui-polish-9/02 + topic-library-ui/03 增强）：编号徽章
 // + 年份 chip + 元数据小行（题面字数 / 程序数 / 图注 ✓）+ 健康 ⚠ + 题面预览
 // + 操作（详情 / 用此题生成 / 删除）。自包含纯函数（内联 esc 与截断，deps
@@ -8500,9 +8572,11 @@ async function viewTopicDetail(key) {
   document.addEventListener("keydown", onKey);
   overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
   document.body.appendChild(overlay);
-  // 操作按钮：用此题生成 / 删除先关弹窗（useTopic 切 tab、deleteTopic 刷新列表）
+  // 操作按钮：用此题生成 / 编辑 / 删除先关弹窗（useTopic 切 tab、deleteTopic 刷新列表）
   overlay.querySelectorAll("[data-topic-use]").forEach((b) =>
     b.addEventListener("click", () => { close(); useTopic(key); }));
+  overlay.querySelectorAll("[data-topic-edit]").forEach((b) =>
+    b.addEventListener("click", () => { close(); viewTopicEdit(key); }));
   overlay.querySelectorAll("[data-topic-del]").forEach((b) =>
     b.addEventListener("click", () => { close(); deleteTopic(key); }));
   // 页图懒取三态：加载中 / 成功（memo 缓存）/ 失败（后端 400 中文原因）
@@ -8510,6 +8584,65 @@ async function viewTopicDetail(key) {
   pagesBox.innerHTML = '<span class="muted">页图加载中…</span>';
   const cached = await loadTopicPageState(key);
   renderTopicPages(pagesBox, cached);
+}
+
+/** 赛题编辑弹窗：全字段表单（题面 / 附带程序 / 功能组）+ 保存 PUT 三态。
+ * 复用 .ref-files-overlay 遮罩与关闭模式；年份 + 编号只读展示（身份不可改）；
+ * 成功 = 刷新列表（health 服务端重算）+ 关窗，失败 = 弹窗内显示 400 中文
+ * 原因（磁盘零变化）。 */
+async function viewTopicEdit(key) {
+  const entry = (topicEntries || []).find((t) => t.key === key);
+  if (!entry) { toast("info", "未找到赛题 " + key); return; }
+  const overlay = document.createElement("div");
+  overlay.className = "ref-files-overlay";
+  overlay.innerHTML = `
+    <div class="ref-files-modal">
+      <div class="ref-files-head">
+        <strong>编辑赛题 · ${esc(key)}</strong>
+        <button class="ref-files-close" title="关闭">×</button>
+      </div>
+      <div class="ref-detail-scroll">${topicEditHTML(entry, topicGroupVocab)}</div>
+      <div class="error topic-edit-msg"></div>
+    </div>`;
+  const close = () => overlay.remove();
+  overlay.querySelector(".ref-files-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  document.body.appendChild(overlay);
+  const problemEl = overlay.querySelector(".topic-edit-problem");
+  const programsEl = overlay.querySelector(".topic-edit-programs");
+  const saveBtn = overlay.querySelector("[data-topic-save]");
+  const msgBox = overlay.querySelector(".topic-edit-msg");
+  saveBtn.addEventListener("click", async () => {
+    const check = topicEditValidate({ problem_text: problemEl.value });
+    if (!check.ok) {
+      msgBox.textContent = check.message;
+      return;
+    }
+    const payload = topicEditPayload({
+      problem_text: problemEl.value,
+      programs: programsEl.value,
+      hint_module_groups: [...overlay.querySelectorAll("[data-topic-group]:checked")]
+        .map((c) => c.dataset.topicGroup),
+    });
+    saveBtn.disabled = true;
+    saveBtn.textContent = "保存中…";
+    msgBox.textContent = "";
+    try {
+      await apiPut(`/api/topics/${encodeURIComponent(key)}`, payload);
+      topicPageCache.delete(key);  // 题面变了 → 页图定位缓存失效
+      overlay.remove();
+      toast("ok", "已保存赛题 " + key);
+      loadTopics();  // health（程序悬空）服务端重算，全量刷新
+    } catch (e) {
+      msgBox.textContent = e.message;
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "保存";
+    }
+  });
 }
 
 function clearTopicFilter() {
