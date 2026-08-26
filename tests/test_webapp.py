@@ -6045,6 +6045,59 @@ def test_pdf_file_missing_returns_400(client, context, tmp_path):
     assert "不存在" in resp.json()["detail"]
 
 
+def test_pdfs_entries_have_int_mtime(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    pdfs = client.get("/api/pdfs").json()
+    assert all(isinstance(p["mtime"], int) and p["mtime"] > 0 for p in pdfs)
+
+
+def test_pdf_pages_route_returns_page_count(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    from tests.topic_pdf_fakes import make_multi_page_pdf
+
+    rel = "2026_06_电赛视觉资料/09_手册_多页.pdf"
+    make_multi_page_pdf(tmp_path / "sources" / "materials" / rel, [("", "page 1"), ("", "page 2"), ("", "page 3")])
+    resp = client.get("/api/pdfs/" + quote(rel, safe="/") + "/pages")
+    assert resp.status_code == 200
+    assert resp.json() == {"pages": 3}
+
+
+def test_pdf_pages_route_rejects_broken_zero_byte(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    rel = "2026_06_电赛视觉资料/空文件.pdf"
+    (tmp_path / "sources" / "materials" / rel).write_bytes(b"")
+    resp = client.get("/api/pdfs/" + quote(rel, safe="/") + "/pages")
+    assert resp.status_code == 400
+    assert "无法读取" in resp.json()["detail"]
+
+
+def test_pdf_pages_route_rejects_unsafe_and_missing(client, context, tmp_path):
+    _make_materials_pdfs(tmp_path)
+    bad = client.get("/api/pdfs/" + quote("../secret.pdf", safe="") + "/pages")
+    assert bad.status_code == 400
+    assert "非法文件路径" in bad.json()["detail"]
+    missing = client.get("/api/pdfs/" + quote("不存在/资料.pdf", safe="/") + "/pages")
+    assert missing.status_code == 400
+    assert "不存在" in missing.json()["detail"]
+
+
+def test_pdf_file_route_not_shadowed_by_pages_route(client, context, tmp_path):
+    """路由注册顺序回归：/pages 先于 {rel_path:path} 注册——文件预览不被贪婪吞掉。"""
+    _make_materials_pdfs(tmp_path)
+    from tests.topic_pdf_fakes import make_multi_page_pdf
+
+    rel = "2026_04_地猛星配套资料/6 TB6612电机驱动资料/3.芯片手册/TB6612FNG Datasheet.pdf"
+    make_multi_page_pdf(tmp_path / "sources" / "materials" / rel, [("", "page")])
+    # pages 路由命中：200 + 页数 JSON（若被文件路由吞掉 = 400 文件不存在）
+    pages = client.get("/api/pdfs/" + quote(rel, safe="/") + "/pages")
+    assert pages.status_code == 200
+    assert pages.json() == {"pages": 1}
+    # 文件路由不受影响：200 + application/pdf
+    file = client.get("/api/pdfs/" + quote(rel, safe="/"))
+    assert file.status_code == 200
+    assert file.headers["content-type"] == "application/pdf"
+
+
 # ---------------------------------------------------------------------------
 # 更新记录（工单 changelog-tab/01）：GET /api/changelog 按天分组时间轴
 # ---------------------------------------------------------------------------
