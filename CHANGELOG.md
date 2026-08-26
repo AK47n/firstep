@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=95fa5ee6f59a08d82516645bcad3e5f630f0da4b -->
+<!-- changelog-auto: last-commit=cc51bf5b8efb2010d8248b70af37addba5212634 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -43,6 +43,7 @@
 - 19:31 工单06 收尾：赛题库浏览 UI 冒烟全量 24 项（含临时 2099Z 健康悬空端到端注入→清理还原零污染）+ 截图；领域词表赛题库行补浏览 UI 语义；pytest 2446 / tests-js 404 / 冒烟全绿
 - 19:52 赛题库详情美化：题面全文主内容化——弹窗加宽 920px（.topic-modal 专属不动 ref/pdf），元数据两列网格，全文 13.5px/1.8 + 52vh 折叠 + 展开/收起切换，页图 300px 白底；tests-js 406 / pytest 2454 全绿
 - 19:54 工单01 关键文件目录单源 + 浏览列表字段：MASTER_KEY_FILES 白名单（stm32 四条 / mspm0 三条）+ master_key_files 磁盘实况（exists/大小，缺失标注）+ /api/masters 每条 platform_label + key_files（无内容，内容按需取）；pytest 2455 绿
+- 19:55 修复赛题详情题面全文被 flex 压扁：.ref-detail-scroll 为纵向 flex 容器，弹窗 80vh 不足时 flex-shrink 把 pre/页图压到一行（用户反馈'依旧一小点'）——pre 与页图 flex-shrink:0，高度保 52vh 上限、内容区整体滚动；加防回归单测；tests-js 407 全绿
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
