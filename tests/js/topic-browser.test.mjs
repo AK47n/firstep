@@ -7,6 +7,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { esc } from "../../src/contest_generator/static/js/fx/core.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
@@ -52,7 +53,6 @@ const topicStats = extract("topicStats", { topicDanglingGroups, topicHasNotes })
 const topicStatsText = extract("topicStatsText");
 const topicGroupVocabulary = extract("topicGroupVocabulary");
 const topicHealthText = extract("topicHealthText", { topicDanglingGroups });
-const esc = extract("esc");
 const topicChipRowHTML = extract("topicChipRowHTML", { esc });
 const topicCardHTML = extract("topicCardHTML", { topicDanglingGroups, topicHealthText, topicHasNotes });
 

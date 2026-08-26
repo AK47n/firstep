@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { esc } from "../../src/contest_generator/static/js/fx/core.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
@@ -35,7 +36,6 @@ function extract(name, deps) {
   throw new Error("未找到 " + name + " 函数体结束花括号");
 }
 
-const esc = extract("esc");
 const moduleBadges = extract("moduleBadges", { esc });
 const pythonArtifactSummary = extract("pythonArtifactSummary", { esc });
 const moduleRowHTML = extract("moduleRowHTML", { esc, moduleBadges, pythonArtifactSummary });

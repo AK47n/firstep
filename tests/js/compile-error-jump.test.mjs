@@ -1,19 +1,8 @@
 // 编译错误行 → main.c 预览定位纯函数单测（工单 compile-error-jump/01）：
 // maincLineOffsetRange（行号 → 字符偏移区间）与 isMainCPath（路径判定）。
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const m1 = html.match(/function maincLineOffsetRange[\s\S]*?\n\}/);
-assert.ok(m1, "index.html 中未找到 maincLineOffsetRange 函数体（改名了？）");
-const maincLineOffsetRange = new Function("return (" + m1[0] + ")")();
-const m2 = html.match(/function isMainCPath[\s\S]*?\n\}/);
-assert.ok(m2, "index.html 中未找到 isMainCPath 函数体（改名了？）");
-const isMainCPath = new Function("return (" + m2[0] + ")")();
+import { maincLineOffsetRange, isMainCPath } from "../../src/contest_generator/static/js/fx/code.js";
 
 test("偏移：多行文本按 \\n 前缀和定位", () => {
   const text = "int a;\nint b;\nint c;\n";

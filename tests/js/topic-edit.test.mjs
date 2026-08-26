@@ -5,6 +5,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { esc } from "../../src/contest_generator/static/js/fx/core.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
@@ -40,7 +41,6 @@ function extract(name, deps) {
   throw new Error("未找到 " + name + " 函数体结束花括号");
 }
 
-const esc = extract("esc");
 const topicEditHTML = extract("topicEditHTML", { esc });
 const topicEditValidate = extract("topicEditValidate");
 const topicEditPayload = extract("topicEditPayload");
