@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=195cd6b9fd0cd485a84cb126344952c73fdfcf66 -->
+<!-- changelog-auto: last-commit=cefe0364793c95df5371b70e6ab4316a68c36216 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -45,6 +45,7 @@
 - 19:54 工单01 关键文件目录单源 + 浏览列表字段：MASTER_KEY_FILES 白名单（stm32 四条 / mspm0 三条）+ master_key_files 磁盘实况（exists/大小，缺失标注）+ /api/masters 每条 platform_label + key_files（无内容，内容按需取）；pytest 2455 绿
 - 19:55 修复赛题详情题面全文被 flex 压扁：.ref-detail-scroll 为纵向 flex 容器，弹窗 80vh 不足时 flex-shrink 把 pre/页图压到一行（用户反馈'依旧一小点'）——pre 与页图 flex-shrink:0，高度保 52vh 上限、内容区整体滚动；加防回归单测；tests-js 407 全绿
 - 20:07 工单02 关键文件内容端点：read_master_file 白名单墙按需读取（utf-8 replace，非关键文件/缺失/不存在 400 中文）+ GET /api/masters/{platform}/files/{path:path}；评审修正：白名单外文案区分不误导；pytest 2465 绿
+- 20:13 工单03 母版库表格增强+删除确认弹窗：纯函数 masterTableRowHTML/masterDeleteConfirmHTML/openMasterDeleteConfirm（.ref-files-overlay 遮罩+Esc/×/点遮罩四路关闭，失败弹窗保留可重试）+ loadMasters 改造；替换原生 confirm/alert；tests/js master-browser.test.mjs 4 用例；探针 12 项全 PASS；pytest 2465/tests-js 411 绿
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
