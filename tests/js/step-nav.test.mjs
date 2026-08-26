@@ -1,23 +1,11 @@
-// stepNavTitles / stepNavItemsHTML / stepNavCurrent 纯函数单测（工单 ui-polish/02、ui-polish-2/01）：
+// stepNavTitles / stepNavItemsHTML / stepNavCurrent 纯函数单测（工单 frontend-es-modules/07）：
 // 生成页左侧步骤导航的标题抽取、胶囊项 HTML 生成、滚动高亮判定。
-import { readFileSync } from "node:fs";
+// 直接 import fx/draft.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-
-function extract(name) {
-  const match = html.match(new RegExp("function " + name + "[\\s\\S]*?\\n\\}"));
-  assert.ok(match, "index.html 中未找到 " + name + " 函数体（改名了？）");
-  return new Function("return (" + match[0] + ")")();
-}
-
-const stepNavTitles = extract("stepNavTitles");
-const stepNavItemsHTML = extract("stepNavItemsHTML");
-const stepNavCurrent = extract("stepNavCurrent");
+import {
+  stepNavTitles, stepNavItemsHTML, stepNavCurrent,
+} from "../../src/contest_generator/static/js/fx/draft.js";
 
 // 假卡片：只实现 .step-no / h2 两个查询
 const card = (no, text) => ({

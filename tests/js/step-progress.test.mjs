@@ -1,15 +1,8 @@
-// stepProgress 纯函数单测（工单 ui-polish-3/02）：顶部进度条百分比与计数文本。
-import { readFileSync } from "node:fs";
+// stepProgress 纯函数单测（工单 frontend-es-modules/07）：顶部进度条百分比与计数文本。
+// 直接 import fx/draft.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
-
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
-const match = html.match(/function stepProgress[\s\S]*?\n\}/);
-assert.ok(match, "index.html 中未找到 stepProgress 函数体（改名了？）");
-const stepProgress = new Function("return (" + match[0] + ")")();
+import { stepProgress } from "../../src/contest_generator/static/js/fx/draft.js";
 
 test("0/12 → 0% 与计数文本", () => {
   assert.deepEqual(stepProgress(0, 12), { pct: 0, text: "已完成 0/12" });

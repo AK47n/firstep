@@ -2224,6 +2224,8 @@ import { referencePlatformChip, refFilterEntries, refDanglingAnchors, refSortEnt
 import { topicHasNotes, topicGroupVocabulary, topicDanglingGroups, topicHealthText, topicFilterEntries, topicSortEntries, topicStats, topicStatsText, topicChipRowHTML, topicDetailHTML, topicPagesHTML, topicPagesErrorHTML, topicEditHTML, topicEditValidate, topicEditPayload, topicCardHTML } from "/js/fx/topic.js";
 import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML } from "/js/fx/master.js";
 import { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, multiInstanceModules, instancePayload, ensureDefaultInstances, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits } from "/js/fx/module.js";
+import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, cardStepStatusHTML, hasWarnContent } from "/js/fx/overview.js";
+import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, draftState, draftSave, draftLoad, draftRestoreMeta, stepProgress, step7DoneState, syncStep4 } from "/js/fx/draft.js";
 "use strict";
 const $ = (id) => document.getElementById(id);
 
@@ -2895,7 +2897,7 @@ function renderReferencePicker() {
       selectedReferenceIds = selectedReferenceIds.filter((x) => x !== id);
       if (cb.checked) selectedReferenceIds.push(id);
       renderRefSelected();
-      syncStep4();  // 勾选变更 = 参考资料集合变化，重算步骤 4 完成状态
+      syncStep4(selectedReferenceIds, autoReferenceIds, markStepDone, markStepUndone);  // 勾选变更 = 参考资料集合变化，重算步骤 4 完成状态
     }));
   renderRefSelected();
 }
@@ -2922,19 +2924,14 @@ function renderRefSelected() {
     : '<div class="muted">尚未选中参考资料（AI 推荐后会自动关联赛题 / 套件资料）。</div>';
 }
 
-// 步骤 4（参考资料）完成判定：手动勾选或自动关联任一有值即视为完成（可选
-// 步骤，全空 = 未处理，不取消其它步骤）；勾选变更、AI 推荐自动关联后调用
-function syncStep4() {
-  if (selectedReferenceIds.length || autoReferenceIds.length) markStepDone(4);
-  else markStepUndone(4);
-}
+// 已迁至 static/js/fx/draft.js（工单 07）：syncStep4（迁入后参数化 = selectedReferenceIds, autoReferenceIds, markStepDone, markStepUndone）。
 
 function renderReferenceResult(data) {
   const refs = data.references || [];
   autoReferenceIds = refs.filter((r) => r.source !== "manual").map((r) => r.id);
   renderReferencePicker();
   renderRefSelected();
-  syncStep4();  // 推荐自动关联后重算步骤 4（无自动关联也不取消手动勾选）
+  syncStep4(selectedReferenceIds, autoReferenceIds, markStepDone, markStepUndone);  // 推荐自动关联后重算步骤 4（无自动关联也不取消手动勾选）
 }
 
 // ---------------------------------------------------------------------------
@@ -8559,30 +8556,7 @@ $("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
 // 生成页步骤导航（工单 ui-polish/02）：左侧圆点随滚动高亮，完成变绿 ✓
 // ---------------------------------------------------------------------------
 const STEP_NAV_CARD_SELECTOR = "#tab-generate .gen-steps > .card";
-function stepNavTitles(cards) {
-  return Array.from(cards).map((c) => {
-    const no = c.querySelector(".step-no");
-    const h2 = c.querySelector("h2");
-    return {
-      n: no ? parseInt(no.textContent, 10) : NaN,
-      title: h2 ? h2.textContent.replace(/^\d+/, "").trim() : "",
-    };
-  });
-}
-function stepNavItemsHTML(titles) {
-  return titles.map((t) => {
-    const full = String(t.title || "");
-    const label = full.length > 12 ? full.slice(0, 12) + "…" : full;
-    return '<button type="button" class="step-dot" data-step="' + t.n + '" title="'
-      + full.replace(/"/g, "&quot;") + '"><span class="dot">' + t.n + '</span><span class="label">'
-      + label.replace(/"/g, "&quot;") + "</span></button>";
-  }).join("");
-}
-function stepNavCurrent(entries, threshold) {
-  let cur = entries.length ? entries[0].n : NaN;
-  for (const e of entries) if (e.top <= threshold) cur = e.n;
-  return cur;
-}
+// 已迁至 static/js/fx/draft.js（工单 07）：stepNavTitles / stepNavItemsHTML / stepNavCurrent。
 function stepCard(n) {
   const cards = document.querySelectorAll(STEP_NAV_CARD_SELECTOR);
   return Array.from(cards).find((c) => {
@@ -8627,14 +8601,7 @@ function markStepUndone(n) {
 function unmarkSteps(steps) {
   for (const n of steps) markStepUndone(n);
 }
-// 步骤 7 完成判定（工单 step7-done/01 修正：默认布线 / 无需配置时从未显示完成）。
-// 完成 = 平台已选且已展开模块，且满足其一：① 无引脚角色（无需配置）
-// ② 有角色已显式绑定 ③ 多实例已配引脚 ④ 已按默认布线生成成功（隐式接受默认）
-function step7DoneState(state) {
-  if (!state.chosenPlatform || !state.expandedCount) return false;
-  if (!state.roles.length || state.roleBound || state.instBound || state.generated) return true;
-  return false;
-}
+// 已迁至 static/js/fx/draft.js（工单 07）：step7DoneState。
 function syncStep7() {
   const roles = pinRoles();
   const done = step7DoneState({
@@ -8702,40 +8669,7 @@ function syncStep7() {
 // ---------------------------------------------------------------------------
 const DRAFT_KEY = "firstep.draft.v1";
 const DRAFT_FIELDS = ["problem", "topicId", "platform", "slugs", "mainC", "qa"];
-function draftState(problem, topicId, platform, slugs, mainC, qa) {
-  return {
-    problem: String(problem || ""),
-    topicId: String(topicId || ""),
-    platform: String(platform || ""),
-    slugs: Array.isArray(slugs) ? slugs.filter((s) => typeof s === "string") : [],
-    mainC: String(mainC || ""),
-    qa: String(qa || ""),
-  };
-}
-function draftSave(storage, state) {
-  try { storage.setItem("firstep.draft.v1", JSON.stringify(state)); return true; }
-  catch (e) { return false; }
-}
-function draftLoad(storage) {
-  let raw = null;
-  try { raw = storage.getItem("firstep.draft.v1"); } catch (e) { return null; }
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-  }
-  catch (e) { return null; }   // 损坏 JSON / 被改坏 = 静默降级为新会话
-}
-function draftRestoreMeta(json) {
-  if (!json || typeof json !== "object" || Array.isArray(json)) return null;
-  const out = {};
-  for (const f of ["problem", "topicId", "platform", "slugs", "mainC", "qa"]) {
-    const v = json[f];
-    if (f === "slugs") out[f] = Array.isArray(v) ? v.filter((s) => typeof s === "string") : [];
-    else out[f] = typeof v === "string" ? v : "";
-  }
-  return out;
-}
+// 已迁至 static/js/fx/draft.js（工单 07）：draftState / draftSave / draftLoad / draftRestoreMeta。
 function collectDraftState() {
   return draftState(
     $("problem").value, $("topic-id").value,
@@ -8790,13 +8724,7 @@ $("qa-text").addEventListener("input", scheduleDraftSave);
 // ---------------------------------------------------------------------------
 const STEP_TOTAL = 12;
 const stepDoneSet = new Set();
-function stepProgress(doneCount, total) {
-  const t = Number(total);
-  const n = Number(doneCount);
-  const safeTotal = Number.isFinite(t) && t > 0 ? t : 12;
-  const safeDone = Number.isFinite(n) ? Math.max(0, Math.min(n, safeTotal)) : 0;
-  return { pct: Math.round((safeDone / safeTotal) * 100), text: "已完成 " + safeDone + "/" + safeTotal };
-}
+// 已迁至 static/js/fx/draft.js（工单 07）：stepProgress。
 function syncStepDone(n, done) {
   if (done) stepDoneSet.add(n); else stepDoneSet.delete(n);
   renderStepProgress();
@@ -8822,62 +8750,8 @@ function renderStepProgress() {
 // ---------------------------------------------------------------------------
 const GEN_CRITICAL_STEPS = [1, 3, 6, 9];
 const GEN_RECOMMENDED_STEPS = [5, 8];
-function genOverviewChipsHTML(titles, doneSet, current) {
-  const done = doneSet || [];
-  return titles.map((t) => {
-    const isDone = done.indexOf(t.n) !== -1;
-    const title = String(t.title || "");
-    const cls = "ov-chip" + (isDone ? " done" : "") + (current === t.n ? " current" : "");
-    return '<button type="button" class="' + cls + '" data-step="' + t.n
-      + '" title="' + title.replace(/"/g, "&quot;") + '"><span class="ov-dot">'
-      + (isDone ? "✓" : t.n) + '</span><span class="ov-label">'
-      + title.replace(/"/g, "&quot;") + "</span></button>";
-  }).join("");
-}
-function genOverviewSummaryHTML(doneSet, titles, critical, recommended, navHint) {
-  const done = doneSet || [];
-  const byN = {};
-  for (const t of titles) byN[t.n] = t.title;
-  const total = titles.length;
-  const doneCount = titles.filter((t) => done.indexOf(t.n) !== -1).length;
-  const missing = (critical || []).filter((n) => done.indexOf(n) === -1 && byN[n]);
-  const advised = (recommended || []).filter((n) => done.indexOf(n) === -1 && byN[n]);
-  const parts = ['<span class="ov-ready">已就绪 ' + doneCount + "/" + total + "</span>"];
-  if (missing.length) {
-    parts.push('<span class="ov-missing">还差：<b>'
-      + missing.map((n) => byN[n]).join("、") + "</b>" + (navHint || "") + "</span>");
-  } else {
-    parts.push('<span class="ov-next">关键步骤齐了，可以点「生成工程」</span>');
-  }
-  if (advised.length) {
-    parts.push('<span class="ov-missing">建议顺带完成：'
-      + advised.map((n) => byN[n]).join("、") + "</span>");
-  }
-  return parts.join('<span class="ov-sep">·</span>');
-}
-// 一键补齐计划（工单 gen-overview-act/01）：关键路径待办序列；
-// 9（生成）非缺失项而是行动——但其「输出目录」前置（手动模式为空）列入
-// 补齐（已确认扩规；doneSet 不含 9，须以 outputDirMissing 显式传入）。
-// action 语义：focus = 滚到并聚焦输入、spotlight = 滚到并高亮（平台不
-// 自动选）、adopt = 有推荐且清单为空时自动采用（半自动——无推荐只高亮，
-// 不替用户做主）
-function overviewFillPlan(doneSet, canAdopt, outputDirMissing) {
-  const done = doneSet || [];
-  const plan = [];
-  if (done.indexOf(1) === -1) plan.push({ n: 1, action: "focus" });
-  if (done.indexOf(3) === -1) plan.push({ n: 3, action: "spotlight" });
-  if (done.indexOf(6) === -1) {
-    plan.push({ n: 6, action: canAdopt ? "adopt" : "spotlight" });
-  }
-  if (outputDirMissing) plan.push({ n: 9, action: "focus-dir" });
-  return plan;
-}
-// 就绪判定（工单 gen-overview-act/01）：直接复用 generateReadinessChecks
-// （与 btn-generate 前置校验同源）——总览条「生成」按钮与「点了生成被拦」
-// 永不吵架
-function overviewReadyToGenerate(checks) {
-  return (checks || []).every((c) => c.ok);
-}
+// 已迁至 static/js/fx/overview.js（工单 07）：genOverviewChipsHTML / genOverviewSummaryHTML /
+// overviewFillPlan / overviewReadyToGenerate。
 // 当前补齐计划（refreshGenOverview 显隐 / runOverviewFill 执行共用同一判定，
 // 工单 gen-overview-act/01）：两个派生值只算一次，避免两处逐字重复
 function overviewPlanNow(doneArr) {
@@ -8889,19 +8763,7 @@ function overviewPlanNow(doneArr) {
     && !$("output-dir").value.trim();
   return overviewFillPlan(doneArr, canAdopt, outputDirMissing);
 }
-function cardStepStatusHTML(done, warn, current) {
-  const cls = done ? "done" : (warn ? "warn" : (current ? "current" : ""));
-  if (!cls) return "";
-  const text = done ? "✓ 已就绪" : (warn ? "⚠ 有警告" : "● 当前");
-  return '<span class="card-step-status ' + cls + '">' + text + "</span>";
-}
-// 警告内容判定：el 内有非 .ok 的子元素才算有警告（第 6 步「该平台均可直接用」
-// 是绿色 ok 盒，不算警告——工单 gen-overview/01 细节）
-function hasWarnContent(el) {
-  if (!el) return false;
-  const kids = el.children || [];
-  return Array.from(kids).some((c) => !(c.classList && c.classList.contains("ok")));
-}
+// 已迁至 static/js/fx/overview.js（工单 07）：cardStepStatusHTML / hasWarnContent。
 let genOverviewTitles = [];
 let genOverviewBadges = {};
 function genOverviewWarn(n) {
