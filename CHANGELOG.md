@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=876c52702afaa11f4c33c527ce76cd1eb8fde935 -->
+<!-- changelog-auto: last-commit=bb18274cf98d25e4b43840fdd991053bf64751ac -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 13:19 工单03 轻量详情弹窗：页数懒取+复制路径+评审修复（pdfEncodedPath提取/单Map memo/handle附status/ref-detail-scroll复用）
 - 13:21 赛题条目补图注
 - 13:22 赛题条目补图注
+- 13:30 数据：赛题库录入 2026 赛区赛 A/B/D/E/F/G 六题（TI 杯赛区 8 题补齐；题面 docx 规范整理、PDF 原文核对公式，D 题附图 4 张随条目）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
