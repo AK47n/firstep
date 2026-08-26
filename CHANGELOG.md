@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f4357a9743c426374e520708e102795abf9d3b57 -->
+<!-- changelog-auto: last-commit=cc8b67bf4f1684bd627d7a3e80247ed4d6e36a33 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -36,6 +36,7 @@
 - 18:22 工单06 疑似重复可回收删除：trash_pdf 回收端点 + 行内/详情删除入口 + 确认弹窗（组级保留一份删其余）；fitz 显式关闭防 WinError32 + rename 短重试；pytest 2413 / tests-js 368 / 冒烟全绿
 - 18:24 领域词表：PDF 资料库行更新回收删除语义（工单 06——只警示不删升级为疑似重复组可回收删除，含 .trash-pdf 落点与参考镜像边界）
 - 18:42 工单01 赛题库浏览列表补健康字段：topic_health 服务端实况判定（原 PDF 缺失/程序目录悬空/体积）+ 浏览列表 health 字段 + 结构测试注册；pytest 2421 绿
+- 18:49 工单02 PUT 编辑端点：update_topic 三字段全量替换（题面/附带程序/功能组）+ 身份不变量 + 校验全在落盘前 + 写盘失败恢复题面；webapp PUT 路由；pytest 2446 绿
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
