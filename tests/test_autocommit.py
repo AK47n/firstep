@@ -486,6 +486,8 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "list_masters": ("read", ""),
         "get_master": ("read", ""),
         "delete_master": ("commit", "lib: delete master"),
+        # 工单 master-library-ui/01：关键文件目录——只读文件系统实况、不落盘
+        "master_key_files": ("read", ""),
     },
     "archive": {
         "prepare_archive": ("read", ""),

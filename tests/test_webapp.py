@@ -3533,6 +3533,41 @@ def test_master_flow_scan_distill_confirm_list_delete(client, context, tmp_path)
     assert client.get("/api/masters").json() == []
 
 
+def test_masters_list_includes_platform_label_and_key_files(client, context, tmp_path):
+    """母版库浏览列表（工单 master-library-ui/01）：每条带 platform_label 展示名
+    + key_files 关键文件目录（path/label/size_bytes/exists 实况，无内容——
+    内容按需取，列表保持轻）。假母版只有 main.c，其余白名单文件缺失须如实标注。
+    """
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+
+    masters = client.get("/api/masters").json()
+
+    assert len(masters) == 1
+    entry = masters[0]
+    assert entry["platform"] == PLATFORM_STM32
+    assert entry["platform_label"] == "STM32F103C8T6 最小系统板 · Keil5"
+    assert [kf["path"] for kf in entry["key_files"]] == [
+        "main.c",
+        "pin_config.h",
+        "led_instances.h",
+        "user/Project.uvprojx",
+    ]
+    main = entry["key_files"][0]
+    assert main["label"] == "模板 main.c"
+    assert main["exists"] is True
+    assert main["size_bytes"] > 0
+    # 假母版没有这几个文件：缺失标注 + 大小 0，提示语义不拦截浏览
+    for missing in entry["key_files"][1:]:
+        assert missing["exists"] is False
+        assert missing["size_bytes"] == 0
+    # 列表不带内容（内容端点按需取）
+    assert "content" not in entry
+    assert "content" not in entry["key_files"][0]
+    # 既有字段语义不变
+    assert entry["sources"] == []
+    assert entry["warnings"] == []
+
+
 def test_master_confirm_rejects_user_edited_merge_on_unique(client, context, tmp_path):
     proj_a, proj_b = make_fake_stm32_projects(tmp_path / "old_projects")
     context[1]["llm"]._distillation = DEFAULT_DECISIONS
@@ -3593,11 +3628,17 @@ def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
     assert resp.status_code == 200
     stored = context[0].config.masters_dir / PLATFORM_STM32
     assert not (stored / "inc/stm32f10x_conf.h").exists()
-    assert client.get("/api/masters").json() == [{
-        "platform": PLATFORM_STM32,
-        "sources": ["proj-a", "proj-b"],
-        "warnings": [],
-    }]
+    masters = client.get("/api/masters").json()
+    assert masters[0]["platform"] == PLATFORM_STM32
+    assert masters[0]["sources"] == ["proj-a", "proj-b"]
+    assert masters[0]["warnings"] == []
+    assert masters[0]["platform_label"] == "STM32F103C8T6 最小系统板 · Keil5"
+    assert [kf["path"] for kf in masters[0]["key_files"]] == [
+        "main.c",
+        "pin_config.h",
+        "led_instances.h",
+        "user/Project.uvprojx",
+    ]
 
 
 def test_master_confirm_invalid_ai_merged_uvprojx_returns_400(context, tmp_path):
