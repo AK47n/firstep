@@ -655,12 +655,26 @@ def _page_footer(pdf_path: Path, page_no: int) -> tuple[int, int] | None:
     单题 PDF 与测试假件无页脚 → None（调用方回退既有 span）。取**最后一个**
     匹配行——页脚是页面装饰，正文若恰好有「X - k/N」整行，页脚行在版心
     之后更可信（真实 2021F 数据每页仅页脚一行命中）。
+
+    提取用 **PyMuPDF 优先**（修复 2026-08：官方赛区赛 PDF 2026D/H 的文本层
+    被 pypdf 逐字符打散成行——'D' / ' ' / '-' 各占一行，整行正则永不命中，
+    题面显示被截断成 span=2；fitz 提取同页给出规整的「D - 1 / 4」独立行）；
+    PyMuPDF 缺失 / 打开失败回退 pypdf（既有行为）。
     """
+    text: str | None = None
     try:
-        reader = PdfReader(str(pdf_path))
-        text = reader.pages[page_no - 1].extract_text() or ""
+        import fitz  # type: ignore[import-untyped]  # PyMuPDF 无类型 stub
+
+        with fitz.open(str(pdf_path)) as doc:
+            text = doc[page_no - 1].get_text() or ""
     except Exception:
-        return None
+        text = None
+    if text is None:
+        try:
+            reader = PdfReader(str(pdf_path))
+            text = reader.pages[page_no - 1].extract_text() or ""
+        except Exception:
+            return None
     footer: tuple[int, int] | None = None
     for line in text.splitlines():
         match = FOOTER_PAGE_RE.match(line.strip())

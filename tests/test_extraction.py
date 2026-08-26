@@ -890,6 +890,78 @@ def test_render_page_png_bad_pdf_returns_none(monkeypatch):
     assert extraction._render_page_png(Path("bad.pdf"), 1) is None
 
 
+class _SparseFooterPage:
+    """pypdf 假件：官方赛区赛 PDF 页脚被逐字符打散成行（2026D/H 实况）——
+    'D' / ' ' / '-' / '1' / '/' / '4' 各占一行，整行正则永不命中。"""
+
+    def extract_text(self):
+        return "D\n \n-\n1\n/\n4\n \n2026 年全国大学生电子设计竞赛赛区赛（TI 杯）……\n正文"
+
+
+def test_page_footer_sparse_extraction_via_fitz(monkeypatch, tmp_path):
+    """pypdf 打散页脚 → fitz 提取规整「D - 1 / 4」独立行 → (1, 4)。
+
+    2026D/H 官方 PDF 的文本层被 pypdf 逐字符拆行，整行页脚正则永不命中 →
+    题面显示被截断成 span=2（用户实测「只生成前 2 页」）；同页 fitz 给出
+    规整行，页脚识别恢复 → 完整页范围。
+    """
+    import sys
+
+    from contest_generator import extraction
+
+    class _Doc:
+        def __init__(self, text):
+            self._text = text
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def __getitem__(self, idx):
+            return self
+
+        def get_text(self):
+            return self._text
+
+    class _Fitz:
+        @staticmethod
+        def open(path):
+            return _Doc("D - 1 / 4 \n \n \n 2026 年全国大学生电子设计竞赛赛区赛（TI 杯）……")
+
+    path = tmp_path / "d.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setitem(sys.modules, "fitz", _Fitz)
+    # pypdf 侧给打散行：fitz 正常时不应被读取（若读取则 None，测试即红）
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: _FakeReader([_SparseFooterPage()])
+    )
+
+    assert extraction._page_footer(path, 1) == (1, 4)
+
+
+def test_page_footer_falls_back_to_pypdf_without_fitz(monkeypatch, tmp_path):
+    """PyMuPDF 缺失 → pypdf 路径维持既有行为：规整行命中 (1,4)、打散行 None
+    （调用方回退 span；与修复前行为一致）。"""
+    import sys
+
+    from contest_generator import extraction
+
+    path = tmp_path / "f.pdf"
+    path.write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setitem(sys.modules, "fitz", None)
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: _FakeReader([_TextPage("F - 1 / 4\n正文……")])
+    )
+    assert extraction._page_footer(path, 1) == (1, 4)
+
+    monkeypatch.setattr(
+        extraction, "PdfReader", lambda _p: _FakeReader([_SparseFooterPage()])
+    )
+    assert extraction._page_footer(path, 1) is None
+
+
 def test_page_figure_label_extracts_title_number():
     """页文本层行首「图N」标题 → 图号；正文引用 / 无文本层 → None。"""
     from contest_generator.extraction import _page_figure_label
