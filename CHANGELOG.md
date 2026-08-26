@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=21c2728532c9a43bce437bc5d4c99aa97018bcbf -->
+<!-- changelog-auto: last-commit=23b3fb48178e91d5eb9ab6fe6c5704b637f00565 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -56,6 +56,7 @@
 - 21:25 前端纯函数 ES 模块化第 5 批（master 域 5 函数迁入 fx/master.js）
 - 21:32 前端纯函数 ES 模块化第 6 批（module 域 28 函数迁入 fx/module.js）
 - 21:36 前端纯函数 ES 模块化第 7 批（overview/steps 域 16 函数迁入 fx/overview.js + fx/draft.js）
+- 21:42 前端纯函数 ES 模块化第 8 批（generate/recent/readiness 域 20 函数迁入 fx/generate.js + fx/recent.js + fx/readiness.js）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
