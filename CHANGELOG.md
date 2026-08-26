@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c00cdfd42978d4ac18bcce7eb98c4716a511534f -->
+<!-- changelog-auto: last-commit=139d0dfd3ad82590b7e222a742816229c063382f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -65,6 +65,7 @@
 - 22:40 共享进度面板工厂迁 ui/progress.js + fmtClock/fmtDuration 迁 fx/core.js（阶段 2 工单 03）
 - 22:47 母版页+更新记录迁 ui/master.js，用量记录服务拆 ui/usage.js（阶段 2 工单 04）
 - 22:51 PDF 资料库 tab 迁 ui/pdf.js，truncate 迁 fx/core.js 补测（阶段 2 工单 05）
+- 22:53 共用文件件迁 ui/files.js（阶段 2 工单 06）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
