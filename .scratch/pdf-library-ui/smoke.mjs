@@ -366,5 +366,24 @@ try {
   check("清理后损坏红段消失（回真实全量）", !!(d04c && !d04c.hasBroken));
 }
 
+// ================= 工单 05：空态 / 加载态 / 错误态 =================
+// 过滤无结果空态（对偶参考库「没有匹配的参考条目」文案）
+const d05 = await Eval(`(async () => {
+  const input = document.getElementById('pdf-filter');
+  if (!input) return null;
+  input.value = 'zz-绝对不存在的关键字-zz';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 400)); // 150ms 防抖 + 渲染
+  const empty = document.querySelector('#pdf-rows .empty-state');
+  const text = empty ? empty.textContent : '';
+  document.getElementById('pdf-filter-clear').click();
+  await new Promise((r) => setTimeout(r, 200));
+  const restored = document.querySelectorAll('#pdf-rows tr').length;
+  return { hasEmpty: !!empty, text, restored };
+})()`);
+check("过滤无结果空态（es-title 文案 + 清空按钮恢复）",
+  !!(d05 && d05.hasEmpty && d05.text.includes("没有匹配的 PDF 文件") && d05.restored === d04.rows),
+  d05 && d05.text);
+
 console.log(failed ? `\n冒烟结果：${failed} 项失败` : "\n冒烟结果：全部通过");
 process.exit(failed ? 1 : 0);
