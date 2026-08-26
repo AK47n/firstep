@@ -47,6 +47,11 @@ const pdfStats = extract("pdfStats");
 const pdfStatsText = extract("pdfStatsText", { formatSize });
 const pdfRowHTML = extract("pdfRowHTML", { esc, formatSize, pdfSubdir, formatMtime });
 const pdfChipRowHTML = extract("pdfChipRowHTML", { esc });
+// 工单 03：详情弹窗（pdfPagesText 先于 pdfDetailHTML 提取）
+const pdfEncodedPath = extract("pdfEncodedPath");
+const pdfPagesUrl = extract("pdfPagesUrl", { pdfEncodedPath });
+const pdfPagesText = extract("pdfPagesText", { esc });
+const pdfDetailHTML = extract("pdfDetailHTML", { esc, formatSize, formatMtime, pdfSubdir, pdfPagesText });
 
 // 样例：跨批次 + 批次内子目录 + 0 字节损坏（3/04 轮才警示，此处只当普通数据）
 const pdfs = [
@@ -206,5 +211,44 @@ test("pdfRowHTML 批次根文件：目录列显示 —；HTML 转义生效", () 
   const rootRow = pdfRowHTML(pdfs[0], {});
   assert.ok(rootRow.includes(">—</td>"), "批次根目录列应为 —");
   const amp = pdfRowHTML({ rel_path: "批/A&B.pdf", name: "A&B.pdf", batch: "批", size_bytes: 3, mtime: 1 }, {});
+  assert.ok(amp.includes("A&amp;B.pdf"), "文件名 & 应转义");
+});
+
+// ================= 详情弹窗（工单 03）：pdfPagesText / pdfDetailHTML =================
+test("pdfEncodedPath 逐段编码（分隔符保留，段内特殊字符转义）", () => {
+  assert.equal(pdfEncodedPath("批 A/文件(1).pdf"),
+    encodeURIComponent("批 A") + "/" + encodeURIComponent("文件(1).pdf"));
+  assert.equal(pdfEncodedPath("单层.pdf"), encodeURIComponent("单层.pdf"));
+});
+
+test("pdfPagesUrl 页数端点：逐段编码 + /pages 尾缀", () => {
+  assert.equal(pdfPagesUrl("批 A/文件(1).pdf"),
+    "/api/pdfs/" + encodeURIComponent("批 A") + "/" + encodeURIComponent("文件(1).pdf") + "/pages");
+});
+
+test("pdfPagesText 三态：读取中 / N 页 / 无法读取", () => {
+  assert.ok(pdfPagesText(null).includes("页数读取中"), "加载中占位");
+  assert.ok(pdfPagesText(12).includes("12 页"), "页数成功");
+  assert.ok(pdfPagesText("error").includes("无法读取"), "损坏 400 → 无法读取");
+});
+
+test("pdfDetailHTML 元数据段（路径/批次 chip/目录/大小/mtime/页数占位）+ 操作段（打开/复制）", () => {
+  const d = pdfDetailHTML(pdfs[1], null);
+  const rel = pdfs[1].rel_path;
+  assert.ok(d.includes("TB6612FNG电机驱动芯片数据手册.pdf"), "标题 = 文件名");
+  assert.ok(d.includes(rel), "完整相对路径");
+  assert.ok(d.includes("class=\"lib-chip\"") && d.includes("塔克R3两驱小车底盘资料"), "批次 chip");
+  assert.ok(d.includes("6 TB6612电机驱动资料/3.芯片手册"), "目录");
+  assert.ok(d.includes(formatSize(1048576)) && d.includes(formatMtime(1700000100)), "大小 + mtime");
+  assert.ok(d.includes("页数读取中"), "页数加载占位（懒取）");
+  assert.ok(d.includes('data-pdf-open="' + rel + '"'), "打开按钮数据属性 = rel_path");
+  assert.ok(d.includes(">打开 PDF</button>") && d.includes(">复制相对路径</button>"), "操作按钮文案");
+  assert.ok(d.includes('data-pdf-copy="' + rel + '"'), "复制按钮数据属性 = rel_path（原始路径，非编码）");
+});
+
+test("pdfDetailHTML 页数成功 / 无法读取两态渲染；HTML 转义生效", () => {
+  assert.ok(pdfDetailHTML(pdfs[1], 12).includes(">12 页<"), "成功态");
+  assert.ok(pdfDetailHTML(pdfs[1], "error").includes("无法读取"), "400 态");
+  const amp = pdfDetailHTML({ rel_path: "批/A&B.pdf", name: "A&B.pdf", batch: "批", size_bytes: 3, mtime: 1 }, 4);
   assert.ok(amp.includes("A&amp;B.pdf"), "文件名 & 应转义");
 });
