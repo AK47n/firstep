@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7e7fac71436543a2c2983544850d7550c00d10a9 -->
+<!-- changelog-auto: last-commit=4ac70c11b99bdcbbb55814178ca9e106cef4c3bb -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -32,6 +32,7 @@
 - 13:35 工单04 数据健康警示：重复/损坏判据+行内徽章+统计红段+评审修复（warn令牌/pdfHealthPredicates单源/pdfBadgeTags提取）
 - 13:36 工单05 视觉与环境收尾：CONTEXT.md 补 PDF 资料库词表行 + 空态冒烟断言
 - 13:48 修复: 题面采样剥 markdown 标题与全角括号折叠——2026 系列 PDF 页图预览全 400
+- 13:56 修复: 页脚识别改 PyMuPDF 优先——2026D/H 只显示前 2 页修复
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
