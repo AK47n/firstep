@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fc2035d356275f96a153ac977144448c456706cf -->
+<!-- changelog-auto: last-commit=f3f164a402f65dff6b7bb195c0ec2bd64573c090 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -50,6 +50,7 @@
 - 20:24 工单05 母版库浏览 UI 收尾：冒烟 smoke.mjs 21 项全绿（真实库断言+截图+页面 id 唯一）；顺带修复修复中心 #fix-errors-msg 重复 id（手动模式独立 #fix-errors-msg-manual 并路由写入，回滚保持原 div——id 唯一检查暴露的既有隐患）；CONTEXT.md 母版行补 platform_label/key_files 白名单/内容端点/浏览 UI 语义；pytest 2465/tests-js 416 全绿
 - 20:26 工单05 评审回执：CONTEXT.md 母版行补内容端点三态语义（清单外/穿越路径、平台不存在、白名单内文件缺失均 400 中文）——spec 轴 minor 建议落地
 - 21:04 前端纯函数 ES 模块化第 1 批（core/env/btn-icon/platform/code 五模块 + 主体脚本 module 化）
+- 21:09 前端纯函数 ES 模块化第 2 批（pdf 域 19 函数迁入 fx/pdf.js）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
