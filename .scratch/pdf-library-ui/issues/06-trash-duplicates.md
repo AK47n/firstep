@@ -9,7 +9,7 @@ git 忽略，可手动恢复 / git 历史双保险）；删除前弹窗确认（
 
 **被谁阻塞：** 04（重复组判据与行内徽章）
 
-**状态：** claimed
+**状态：** resolved
 
 - [x] 后端 `trash_pdf(root, rel_path, trash_dir)`：resolve_pdf 校验（非法 /
       缺失 → ReferenceError 中文）→ 移动（目标 = trash_dir/日期/rel_path 镜像，
