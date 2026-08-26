@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=be7fdabd584a08225f7a6c594a9a0da8a90247d5 -->
+<!-- changelog-auto: last-commit=412455d67ee5ae555c8fb9a3a4bdb64ea25dde69 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -29,6 +29,7 @@
 - 13:30 数据：赛题库录入 2026 赛区赛 A/B/D/E/F/G 六题（TI 杯赛区 8 题补齐；题面 docx 规范整理、PDF 原文核对公式，D 题附图 4 张随条目）
 - 13:33 赛题条目补图注
 - 13:34 赛题条目补图注
+- 13:35 工单04 数据健康警示：重复/损坏判据+行内徽章+统计红段+评审修复（warn令牌/pdfHealthPredicates单源/pdfBadgeTags提取）
 
 ## 2026-08-25
 - 00:04 工单 deepen-report/01：深化完成后展示「深化效果」——main.c 前后确定性 diff 报告（统计+逐处改动点），不再只有一句深化完成
