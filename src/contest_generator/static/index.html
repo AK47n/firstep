@@ -965,6 +965,19 @@
     border-color: rgba(63, 185, 80, .3); }
   .master-health-warn { background: var(--warn-dim); color: var(--warn);
     border-color: var(--warn-border); }
+  /* 母版文件树（工单 master-library-ui-2/02）：原生 details 收起，行按钮紧凑 */
+  .master-tree { list-style: none; margin: 6px 0 0; padding: 0 0 0 14px; }
+  .master-tree .master-tree { border-left: 1px solid var(--border); padding-left: 8px; }
+  .master-tree-dir summary { cursor: pointer; font-weight: 600; padding: 2px 4px;
+    font-size: 12.5px; border-radius: 4px; }
+  .master-tree-dir summary:hover { background: var(--panel-2); }
+  .master-tree-file button { width: 100%; text-align: left; display: flex; justify-content: space-between;
+    align-items: center; gap: 8px; padding: 3px 8px; background: none; color: var(--text);
+    border: 0; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+  .master-tree-file button:hover { background: var(--panel-2); }
+  .master-tree-file button.on { background: var(--accent-dim); color: var(--accent); }
+  .master-tree-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
   .master-file-name { font-family: var(--mono); font-size: 12.5px; }
   .master-file-pre { white-space: pre-wrap; word-break: break-all; font-size: 12.5px;
     line-height: 1.7; max-height: min(52vh, 560px); overflow-y: auto; padding: 12px 14px;

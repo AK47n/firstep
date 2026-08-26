@@ -12,7 +12,7 @@ import { makeProgressPanel } from "/js/ui/progress.js";
 import { esc, fmtDuration } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
-import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem } from "/js/fx/master.js";
+import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML } from "/js/fx/master.js";
 
 let scannedProjects = null;   // 扫描结果（含报告确认所需）
 let currentReport = null;
@@ -424,11 +424,11 @@ function openMasterDeleteConfirm(platform) {
 // （对偶 topic 轮 loadTopicPageState 先例）。
 const masterFileCache = new Map();
 
-async function loadMasterFileState(platform, path) {
+async function loadMasterFileState(platform, path, url) {
   const key = platform + "/" + path;
   if (masterFileCache.has(key)) return masterFileCache.get(key);
   try {
-    const data = await apiGet(masterFileURL(platform, path));
+    const data = await apiGet(url);
     const cached = { ok: true, content: data.content || "" };
     masterFileCache.set(key, cached);
     return cached;
@@ -446,18 +446,65 @@ function renderMasterFileContent(box, cached) {
       + "</div><span class=\"muted\">点击上方文件可重试。</span>";
 }
 
-// openMasterFile(platform, path, box, btn)：点击清单行 → 三态
-// （加载中 / 成功 pre-wrap / 失败中文原因可重试），仅成功行高亮。
-// memo 命中（含缓存业务错误）不闪「加载中」直接渲染；网络 / ≥500
-// 未缓存 → 再点重取。
-async function openMasterFile(platform, path, box, btn) {
+// openMasterPath(platform, path, url, box, btn)：点文件行 → 三态（加载中 /
+// 成功 pre-wrap / 失败中文原因可重试），仅成功行高亮。memo 命中（含缓存
+// 业务错误）不闪「加载中」直接渲染；网络 / ≥500 未缓存 → 再点重取。
+// 关键文件（masterFileURL）与树文件（masterTreeFileURL）共用同一 memo
+// 与渲染，key = platform/path 不变（工单 master-library-ui-2/02）。
+async function openMasterPath(platform, path, url, box, btn) {
   const key = platform + "/" + path;
   if (!masterFileCache.has(key)) box.innerHTML = '<span class="muted">加载中…</span>';
-  const cached = await loadMasterFileState(platform, path);
+  const cached = await loadMasterFileState(platform, path, url);
   renderMasterFileContent(box, cached);
-  box.closest(".ref-files-modal").querySelectorAll("[data-master-file]")
+  box.closest(".ref-files-modal").querySelectorAll("[data-master-file], [data-master-tree-file]")
     .forEach((b) => b.classList.remove("on"));
   if (btn && cached.ok) btn.classList.add("on");
+}
+
+function openMasterFile(platform, path, box, btn) {
+  return openMasterPath(platform, path, masterFileURL(platform, path), box, btn);
+}
+
+function openMasterTreeFile(platform, path, box, btn) {
+  return openMasterPath(platform, path, masterTreeFileURL(platform, path), box, btn);
+}
+
+// 树清单 memo（工单 02）：platform → {ok, files} | {ok:false, message}。
+// 业务 400 缓存（数据现状）；网络 / ≥500 不缓存可重试；loadMasters 成功
+// 拉新列表时整表失效（库变了树不旧）。
+const masterTreeCache = new Map();
+
+async function loadMasterTreeState(platform) {
+  if (masterTreeCache.has(platform)) return masterTreeCache.get(platform);
+  try {
+    const files = await apiGet("/api/masters/" + encodeURIComponent(platform) + "/tree");
+    const cached = { ok: true, files };
+    masterTreeCache.set(platform, cached);
+    return cached;
+  } catch (e) {
+    const cached = { ok: false, message: e.message };
+    if (e.status && e.status < 500) masterTreeCache.set(platform, cached);
+    return cached;
+  }
+}
+
+function renderMasterTree(box, cached) {
+  if (!cached.ok) {
+    box.innerHTML = '<div class="error">加载失败：' + esc(cached.message) + "</div>";
+    return;
+  }
+  const nodes = buildMasterTree(cached.files);
+  box.innerHTML = nodes.length
+    ? '<ul class="master-tree">' + masterTreeNodeHTML(nodes) + "</ul>"
+    : '<span class="muted">（没有文件）</span>';
+}
+
+// 树点击接线：按钮在渲染后才存在，故渲染完再挂事件（对偶 openMasterDetail
+// 关键文件行接线模式）；点树文件 → 同内容箱（与关键文件共用 data-master-content）。
+function wireMasterTree(platform, box, contentBox) {
+  box.querySelectorAll("[data-master-tree-file]").forEach((b) =>
+    b.addEventListener("click", () =>
+      openMasterTreeFile(platform, b.dataset.masterTreeFile, contentBox, b)));
 }
 
 // openMasterDetail(platform)：母版详情弹窗——复用 .ref-files-overlay 遮罩与
@@ -484,12 +531,19 @@ function openMasterDetail(platform) {
     b.addEventListener("click", () =>
       openMasterFile(m.platform, b.dataset.masterFile, contentBox, b)));
   document.body.appendChild(overlay);
+  // 全部文件树（工单 master-library-ui-2/02）：异步拉清单 → 渲染 → 接线
+  const treeBox = overlay.querySelector("[data-master-tree]");
+  loadMasterTreeState(m.platform).then((cached) => {
+    renderMasterTree(treeBox, cached);
+    if (cached.ok) wireMasterTree(m.platform, treeBox, contentBox);
+  });
 }
 
 export async function loadMasters() {
   try {
     const masters = await apiGet("/api/masters");
     masterCache = masters;
+    masterTreeCache.clear();   // 库变了树不旧：新列表成功拉取即失效树清单
     $("master-rows").innerHTML = masters.map(masterTableRowHTML).join("");
     $("master-rows").querySelectorAll("[data-master-detail]").forEach((b) =>
       b.addEventListener("click", () => openMasterDetail(b.dataset.masterDetail)));

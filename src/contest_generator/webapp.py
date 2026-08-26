@@ -167,7 +167,9 @@ from .master_store import (
     master_key_files,
     master_project_dir,
     master_stats,
+    master_tree_files,
     read_master_file,
+    read_master_tree_file,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .patchers import UnknownPlatformError
@@ -2354,6 +2356,28 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         errors=\"replace\" 读取）。
         """
         return read_master_file(_masters_dir(context), platform, path)
+
+    @app.get("/api/masters/{platform}/tree")
+    @_map_errors
+    def master_tree(platform: str) -> list[dict]:
+        """母版全部文件的树清单（工单 master-library-ui-2/02）：统一噪音
+        跳过（构建产物目录 / .git 不计入），每条 {path, size_bytes} 一次算好；
+        前端渲染递归树，与关键文件白名单端点（/files）两条路线并存。
+        """
+        return [
+            info.to_dict()
+            for info in master_tree_files(_masters_dir(context), platform)
+        ]
+
+    @app.get("/api/masters/{platform}/tree/{path:path}")
+    @_map_errors
+    def master_tree_file(platform: str, path: str) -> dict:
+        """母版树内文件内容（工单 master-library-ui-2/02）：平台目录内任意
+        文本文件——路径安全 / 二进制 / 超 1MB 三类均 400 中文；成功返回
+        {path, size_bytes, content}（utf-8 errors="replace" 读取 + 换行归一化，
+        与关键文件端点同文案惯例）。
+        """
+        return read_master_tree_file(_masters_dir(context), platform, path)
 
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）

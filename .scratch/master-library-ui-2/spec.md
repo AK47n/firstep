@@ -97,8 +97,9 @@
 
 - fx/master.js 增：`masterHealthBadgeHTML(h)`（✓/⚠ + title 说明）、
   `masterStatsHTML(s)`（统计行富文本）、`masterTreeNodeHTML(nodes)` /
-  `buildMasterTree(files)`（递归 details/summary 树，文件行 data 属性交
-  事件层）、`masterTreeFileURL(platform, path)`（与 masterFileURL 同拼法）。
+  `buildMasterTree(files)`（递归 details/summary 树，兄弟排序 = 目录在前、
+  同级按名字码点序，确定性；文件行 data 属性交事件层）、
+  `masterTreeFileURL(platform, path)`（与 masterFileURL 同拼法，共享 helper）。
 - 新 fx/highlight.js：`highlightC(text)` / `highlightXml(text)`（先切 token
   后逐段转义再拼 HTML，杜绝注入；关键字/注释/字符串/预处理/数字/标签/
   属性/引号值分类着色）；语言判定 `languageOf(path)`（.c/.h → C；

@@ -191,6 +191,26 @@ class MasterStats:
 BIG_FILE_THRESHOLD_BYTES = 256 * 1024
 BIG_FILE_TOP_N = 10
 
+# 树文件全文预览上限（工单 master-library-ui-2/02）：超过即按 400 中文拒绝，
+# 不读全文——母版是生成根，树是浏览面，任何单文件都不应大到需要读全文
+TREE_FILE_MAX_PREVIEW_BYTES = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class TreeFileInfo:
+    """母版全部文件的树清单项（工单 master-library-ui-2/02）。
+
+    path = 相对母版根（正斜杠）；size_bytes = 磁盘实况一次算好。
+    清单口径 = master_stats 同一次噪音跳过遍历（iter_project_files），
+    树与统计互不矛盾。
+    """
+
+    path: str
+    size_bytes: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"path": self.path, "size_bytes": self.size_bytes}
+
 
 # ---------------------------------------------------------------------------
 # 母版库：入库（结构分析 + 可更换）、浏览、删除
@@ -343,6 +363,71 @@ def master_project_dir(masters_dir: Path, platform: str) -> Path:
     """
     _validate_store_key(platform)
     return masters_dir / platform
+
+
+def master_tree_files(masters_dir: Path, platform: str) -> tuple[TreeFileInfo, ...]:
+    """母版全部文件的树清单（工单 master-library-ui-2/02）：平台目录下统一
+    噪音跳过后的全部文件（构建产物目录 / .git 不计入），每条 {path, size_bytes}
+    一次算好（path 为相对母版根的正斜杠）。
+
+    平台不存在 / 未知平台与 master_health 同文案。排序确定性 = treewalk
+    iter_project_files 的全路径排序（sorted rglob）。
+    """
+    master_dir = _disk_master_dir(masters_dir, platform)
+    return tuple(
+        TreeFileInfo(
+            path=path.relative_to(master_dir).as_posix(),
+            size_bytes=path.stat().st_size,
+        )
+        for path in iter_project_files(master_dir)
+    )
+
+
+def read_master_tree_file(
+    masters_dir: Path, platform: str, rel_path: str
+) -> dict[str, Any]:
+    """树内文件全文（工单 master-library-ui-2/02，详情树点选预览用）。
+
+    平台目录内任意文本文件读面，三重约束收窄（与参考文件库 read_fulltext
+    同安全立场，判定在盘访问之前）：路径安全（与 entry_store.is_unsafe_path
+    同拒绝面——首字符 `/`、`:`（NTFS ADS）、`\\`、任意层级 `..` 与空段
+    `a//b`，另有 resolve 后必须在平台目录内的兜底判定）、二进制拒绝
+    （NUL 字节）、超 TREE_FILE_MAX_PREVIEW_BYTES 拒绝——三类均 400 中文
+    MasterError；文件缺失单独报错。读取沿用仓库惯例 utf-8 errors="replace"
+    + 换行归一化（与 read_master_file 同读法）。返回 {path, size_bytes,
+    content}（树文件无 label——与关键文件白名单端点 read_master_file 区分）。
+    """
+    master_dir = _disk_master_dir(masters_dir, platform)
+    parts = rel_path.split("/")
+    if (
+        rel_path.startswith("/")
+        or ":" in rel_path
+        or "\\" in rel_path
+        or any(seg in ("", "..") for seg in parts)
+    ):
+        raise MasterError(f"非法路径：{rel_path}")
+    candidate = (master_dir / rel_path).resolve()
+    try:
+        candidate.relative_to(master_dir.resolve())  # 父解析必须是平台目录内
+    except ValueError:
+        raise MasterError(f"非法路径：{rel_path}") from None
+    if not candidate.is_file():
+        raise MasterError(f"文件不存在：{rel_path}")
+    size = candidate.stat().st_size
+    if size > TREE_FILE_MAX_PREVIEW_BYTES:
+        limit_mb = TREE_FILE_MAX_PREVIEW_BYTES // (1024 * 1024)
+        raise MasterError(f"文件超过预览上限（{limit_mb}MB）：{rel_path}")
+    data = candidate.read_bytes()
+    if b"\x00" in data:
+        raise MasterError(f"二进制文件不可预览：{rel_path}")
+    # 换行归一化与 read_master_file 同惯例（read_text 通用换行：
+    # \r\n / \r → \n），读取与预览两侧行为一致
+    content = data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    return {
+        "path": rel_path,
+        "size_bytes": size,
+        "content": content,
+    }
 
 
 def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:

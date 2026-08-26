@@ -7,6 +7,9 @@ import {
   masterStatsHTML,
   masterTableRowHTML,
   masterDetailHTML,
+  buildMasterTree,
+  masterTreeNodeHTML,
+  masterTreeFileURL,
 } from "../../src/contest_generator/static/js/fx/master.js";
 
 const HEALTH_OK = {
@@ -120,4 +123,61 @@ test("masterDetailHTML：带 stats = 元数据段增统计行；不带 = 既有�
   const legacy = masterDetailHTML(base);
   assert.ok(!legacy.includes("总体积"));
   assert.ok(legacy.includes("关键文件清单"));
+});
+
+// ================= 工单 02：文件树（构建 / 树 HTML / URL 拼装） =================
+
+const TREE_FILES = [
+  { path: "main.c", size_bytes: 909 },
+  { path: "inc/stm32f10x_conf.h", size_bytes: 500 },
+  { path: "user/Project.uvprojx", size_bytes: 17606 },
+  { path: "user/oled.c", size_bytes: 2048 },
+  { path: "user/keil/startup.s", size_bytes: 8192 },
+];
+
+test("buildMasterTree：扁平清单 → 嵌套树（目录在前，目录/文件内按码点序）", () => {
+  const nodes = buildMasterTree(TREE_FILES);
+  assert.deepEqual(nodes.map((n) => n.name), ["inc", "user", "main.c"]);
+  assert.equal(nodes[0].isDir, true);
+  assert.equal(nodes[0].path, "inc");
+  assert.deepEqual(nodes[0].children.map((n) => n.name), ["stm32f10x_conf.h"]);
+  assert.equal(nodes[0].children[0].path, "inc/stm32f10x_conf.h");
+  assert.equal(nodes[0].children[0].size_bytes, 500);
+  assert.equal(nodes[0].children[0].isDir, false);
+  const user = nodes[1];
+  assert.deepEqual(user.children.map((n) => n.name), ["keil", "Project.uvprojx", "oled.c"]);
+  assert.equal(user.children[0].path, "user/keil");
+  assert.equal(user.children[0].children[0].path, "user/keil/startup.s");
+  assert.equal(nodes[2].path, "main.c");
+  assert.equal(nodes[2].isDir, false);
+});
+
+test("buildMasterTree：空清单 → []；根级单文件", () => {
+  assert.deepEqual(buildMasterTree([]), []);
+  const one = buildMasterTree([{ path: "main.c", size_bytes: 1 }]);
+  assert.equal(one.length, 1);
+  assert.equal(one[0].isDir, false);
+  assert.equal(one[0].size_bytes, 1);
+});
+
+test("masterTreeNodeHTML：递归 details/summary + 行按钮 data 属性 + 大小 + 转义", () => {
+  const html = masterTreeNodeHTML(buildMasterTree(TREE_FILES));
+  assert.ok(html.includes("<details open><summary>user</summary>"));
+  assert.ok(html.includes("<details open><summary>keil</summary>"));
+  assert.ok(html.includes('data-master-tree-file="main.c"'));
+  assert.ok(html.includes('data-master-tree-file="user/oled.c"'));
+  assert.ok(html.includes('data-master-tree-file="user/keil/startup.s"'));
+  assert.ok(html.includes("909 B"));
+  assert.ok(html.includes("17.2 KB"));
+  const evil = masterTreeNodeHTML(buildMasterTree([{ path: "<i>.c", size_bytes: 1 }]));
+  assert.ok(evil.includes("&lt;i&gt;.c"));
+  assert.ok(!evil.includes("<i>.c"));
+});
+
+test("masterTreeFileURL：/api/masters/{platform}/tree/{path}，逐段编码", () => {
+  assert.ok(masterTreeFileURL("stm32", "main.c") === "/api/masters/stm32/tree/main.c");
+  assert.ok(masterTreeFileURL("stm32", "user/keil/startup.s")
+    === "/api/masters/stm32/tree/user/keil/startup.s");
+  assert.ok(masterTreeFileURL("stm32", "a b/c") === "/api/masters/stm32/tree/a%20b/c");
+  assert.ok(masterTreeFileURL("a/b", "x") === "/api/masters/a%2Fb/tree/x");
 });
