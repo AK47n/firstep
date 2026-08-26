@@ -7,6 +7,7 @@ import { btnIcon } from "../../src/contest_generator/static/js/fx/btn-icon.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
+const appJs = readFileSync(resolve(root, "src/contest_generator/static/js/app.js"), "utf8");
 
 const NAMES = ["rocket", "code", "sparkles", "doc", "clipboard", "wrench",
   "save", "copy", "check", "upload", "wand"];
@@ -35,10 +36,10 @@ test("HTML 中 data-ico 按钮均已注入图标映射内", () => {
   }
 });
 
-test("注入逻辑存在：initBtnIcons 遍历 [data-ico] 前置插入", () => {
-  assert.ok(html.includes("function initBtnIcons()"));
-  assert.ok(html.includes('document.querySelectorAll("[data-ico]")'));
-  assert.ok(html.includes('insertAdjacentHTML("afterbegin", btnIcon(b.dataset.ico))'));
+test("注入逻辑存在：initBtnIcons 遍历 [data-ico] 前置插入（已迁 app.js）", () => {
+  assert.ok(appJs.includes("function initBtnIcons()"));
+  assert.ok(appJs.includes('document.querySelectorAll("[data-ico]")'));
+  assert.ok(appJs.includes('insertAdjacentHTML("afterbegin", btnIcon(b.dataset.ico))'));
 });
 
 test("关键高频按钮已带 data-ico", () => {

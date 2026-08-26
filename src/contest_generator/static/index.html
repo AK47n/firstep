@@ -2233,81 +2233,18 @@ import { formatLLMTelemetry, parseSSE, usageDelta, usageAccumulate, llmCostEstim
 import { formatScorePoints, renderScorePointPanel, scoreChecklistPartLabel, scoreChecklistScoreText, scoreChecklistRefsText, scoreChecklistId, scoreChecklistChecked, scoreChecklistLineText, scoreChecklistKey, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistExportText, scoreChecklistParse, scoreChecklistLoad, scoreChecklistSave } from "/js/fx/score.js";
 import { SETTINGS_COLLAPSE_KEY, SETTINGS_DEFAULT_COLLAPSED, parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, settingsMasterLabel, sectionCollapseLabel, settingsSectionHead, applySettingsCollapseState } from "/js/fx/settings.js";
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
+import { $, handle, apiGet, apiPost, apiPut, apiDelete, KIND_TEXT, state, setState, toast } from "/js/app.js";
 "use strict";
-const $ = (id) => document.getElementById(id);
 
-// ---------------------------------------------------------------------------
-// 主题切换（工单 ui-polish-5/01）：亮/暗两套变量；偏好存 localStorage；
-// head 内联脚本已防闪烁，这里负责按钮图标 / 监听 / 持久化
-// ---------------------------------------------------------------------------
-function currentTheme() {
-  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-}
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  try { localStorage.setItem("firstep.theme", theme); } catch (e) { /* 忽略 */ }
-  const btn = $("btn-theme");
-  if (btn) {
-    btn.textContent = theme === "light" ? "☀️" : "🌙";
-    btn.title = theme === "light" ? "切换到深色主题" : "切换到亮色主题";
-  }
-}
-function initTheme() {
-  let t = "dark";
-  try {
-    const saved = localStorage.getItem("firstep.theme");
-    if (saved === "light" || saved === "dark") t = saved;
-  } catch (e) { /* 忽略 */ }
-  applyTheme(t);
-  const btn = $("btn-theme");
-  if (btn) btn.addEventListener("click", () => applyTheme(currentTheme() === "light" ? "dark" : "light"));
-}
-initTheme();
+// 主题切换（工单 ui-polish-5/01）：currentTheme / applyTheme / initTheme 及
+// initTheme() 启动调用已迁至 static/js/app.js（阶段 2 工单 02）。
 
-// ---------------------------------------------------------------------------
-// API 辅助：统一错误提取（detail 是后端的中文 message）
-// ---------------------------------------------------------------------------
-async function handle(resp) {
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) {
-    const err = new Error(data.detail || ("请求失败（HTTP " + resp.status + "）"));
-    err.status = resp.status; // 调用方按状态码区分错误面（如页数端点 400 = 文件损坏）
-    throw err;
-  }
-  return data;
-}
-async function apiGet(url) { return handle(await fetch(url)); }
-async function apiPost(url, body) {
-  return handle(await fetch(url, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  }));
-}
-async function apiPut(url, body) {
-  return handle(await fetch(url, {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  }));
-}
-async function apiDelete(url, body) {
-  return handle(await fetch(url, {
-    method: "DELETE", headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  }));
-}
+// API 辅助（统一错误提取，detail 是后端的中文 message）：handle / apiGet /
+// apiPost / apiPut / apiDelete 已迁至 static/js/app.js（阶段 2 工单 02）。
+// KIND_TEXT（平台警告文案映射）已迁至 static/js/app.js（阶段 2 工单 02）。
 
-const KIND_TEXT = { missing: "缺平台版本（生成将失败）", unverified: "未验证", hardware_bound: "硬件绑定" };
-
-// ---------------------------------------------------------------------------
-// 标签会话（启动器模式）：打开登记、关闭注销——最后一个标签关掉 = 停服务
-// ---------------------------------------------------------------------------
-const TAB_ID_KEY = "firstep_tab_id";
-let tabId = sessionStorage.getItem(TAB_ID_KEY);
-if (!tabId) { tabId = crypto.randomUUID(); sessionStorage.setItem(TAB_ID_KEY, tabId); }
-fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ tab_id: tabId }) }).catch(() => {});
-window.addEventListener("pagehide", () => {
-  navigator.sendBeacon("/api/tabs/bye", new Blob([JSON.stringify({ tab_id: tabId })],
-    { type: "application/json" }));
-});
+// 标签会话（启动器模式）：TAB_ID_KEY / tabId 登记与 pagehide sendBeacon 已迁至
+// static/js/app.js（阶段 2 工单 02）。
 
 // ---------------------------------------------------------------------------
 // 页签
@@ -2333,7 +2270,8 @@ document.querySelectorAll("nav button").forEach((btn) => {
 // ---------------------------------------------------------------------------
 // 全局状态
 // ---------------------------------------------------------------------------
-let state = null;                 // GET /api/state
+// state（GET /api/state）已迁至 static/js/app.js（阶段 2 工单 02）：
+// 本文件经 host import 的 setState 整换；ui 模块属性写（state.modules = ...）合法。
 let llmPricesDefaults = {};       // 当前生效 LLM 单价表（工单 llm-cost-control/01）
 let selectedSlugs = [];           // 当前选择的模块 slug（含用户增删，未展开）
 let expanded = [];                // 展开后的模块 manifest（含依赖）
@@ -2344,7 +2282,7 @@ let instances = {};               // 多实例配置（工单 04）：{ slug: [{
 let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
 
 async function refreshState() {
-  state = await apiGet("/api/state");
+  setState(await apiGet("/api/state"));
   $("gen-banner").classList.toggle("hidden", !!state.api_configured);
   // 未配置时模块库读不到：保留旧列表（可能为空），不能让渲染中断
   try { state.modules = await apiGet("/api/modules"); }
@@ -6959,13 +6897,8 @@ async function loadTopicArchiveLink() {
 
 // 已迁至 static/js/fx/topic.js（工单 04）：赛题库纯函数组——图注 / 词表 /
 // 悬空体检 / 健康 / 过滤 / 排序 / 统计 / 卡片 / 详情 / 页图 / 编辑弹窗。
-// 按钮图标（工单 ui-polish-9/04）：data-ico 注入内联 SVG（16px stroke 风格）。
-// btnIcon 已迁至 static/js/fx/btn-icon.js（本模块顶部 import）
-(function initBtnIcons() {
-  document.querySelectorAll("[data-ico]").forEach((b) => {
-    b.insertAdjacentHTML("afterbegin", btnIcon(b.dataset.ico));
-  });
-})();
+// 按钮图标（工单 ui-polish-9/04）：btnIcon 纯件在 fx/btn-icon.js；注入 IIFE
+// initBtnIcons（data-ico → 内联 SVG）已迁至 static/js/app.js（阶段 2 工单 02）。
 // —— 赛题库工具栏状态与渲染（工单 topic-library-ui/03）：过滤条件集中于此，
 // 事件层只转发；loadTopics 只负责拉数据入缓存，rendering 全走 renderTopics。
 let topicUI = { q: "", year: "", sortBy: "key", sortDir: "asc", health: false };
@@ -8735,29 +8668,9 @@ function initReadinessCheck() {
 
 
 // ---------------------------------------------------------------------------
-// Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，ok 青 / error 红 / info 灰，
-// 2.5s 自动消失，最多同屏 3 条；行内提示保留（toast 只做显眼补充）
+// Toast 轻通知（工单 ui-polish-3/03）：toast / TOAST_ICON 已迁至
+// static/js/app.js（阶段 2 工单 02）；右上角堆叠 2.5s 自动消失，最多同屏 3 条。
 // ---------------------------------------------------------------------------
-const TOAST_ICON = { ok: "✓", error: "✕", info: "ℹ" };
-function toast(kind, text) {
-  const root = $("toast-root");
-  if (!root) return;
-  while (root.children.length >= 3) root.removeChild(root.firstChild);
-  const el = document.createElement("div");
-  el.className = "toast " + kind;
-  el.innerHTML = '<span class="toast-ico">' + TOAST_ICON[kind] + '</span><span class="toast-text">'
-    + String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
-    + '</span><button type="button" class="toast-close" aria-label="关闭">×</button>';
-  el.querySelector(".toast-close").addEventListener("click", () => {
-    // 点击关闭走离场动画（工单 ui-polish-8/03）：重触发 toast-out 后移除
-    el.style.animation = "none";
-    void el.offsetWidth;
-    el.style.animation = "toast-out .3s ease forwards";
-    setTimeout(() => el.remove(), 300);
-  });
-  root.appendChild(el);
-  setTimeout(() => { if (el.isConnected) el.remove(); }, 2500);
-}
 
 // ---------------------------------------------------------------------------
 // 生成页卡片折叠（工单 ui-polish-4/01）：标题行按钮 / 点击 toggle /
@@ -8950,7 +8863,7 @@ $("btn-usage-reset").addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 (async function init() {
   try {
-    state = await apiGet("/api/state");
+    setState(await apiGet("/api/state"));
   } catch (e) {
     $("gen-banner").textContent = "加载失败：" + e.message;
     $("gen-banner").classList.remove("hidden");
