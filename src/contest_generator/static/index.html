@@ -516,15 +516,19 @@
                     align-items: baseline; min-width: 0; }
   .ref-detail-k { flex: none; width: 52px; color: var(--muted); font-size: 12px; }
   .ref-detail-desc { overflow-wrap: break-word; white-space: pre-wrap; min-width: 0; }
-  /* PDF 资料库表：文件名自适应、批次固定宽、操作列窄 */
-  #tab-pdf table { table-layout: fixed; min-width: 760px; }
+  /* PDF 资料库表（pdf-library-ui/02）：固定列宽布局——目录/修改时间列不再
+     挤压「文件名/操作」列；文件名列单行截断 + 全文 tooltip（.desc-cell 令牌）；
+     表头底纹 / 行 hover / 空态走 .lib-table 与全局统一令牌 */
+  #tab-pdf table { table-layout: fixed; min-width: 900px; }
   #tab-pdf .card { overflow-x: auto; }
   #tab-pdf th:nth-child(1), #tab-pdf td:nth-child(1) { width: auto; }
-  #tab-pdf th:nth-child(2), #tab-pdf td:nth-child(2) { width: 220px; }
-  #tab-pdf th:nth-child(3), #tab-pdf td:nth-child(3) { width: 110px; }
-  #tab-pdf th:nth-child(4), #tab-pdf td:nth-child(4) { width: 80px; }
+  #tab-pdf th:nth-child(2), #tab-pdf td:nth-child(2) { width: 110px; }
+  #tab-pdf th:nth-child(3), #tab-pdf td:nth-child(3) { width: 150px; }
+  #tab-pdf th:nth-child(4), #tab-pdf td:nth-child(4) { width: 90px; }
+  #tab-pdf th:nth-child(5), #tab-pdf td:nth-child(5) { width: 140px; }
+  #tab-pdf th:nth-child(6), #tab-pdf td:nth-child(6) { width: 120px; }
   #tab-pdf td { overflow-wrap: break-word; }
-  #tab-pdf td:nth-child(4) { white-space: nowrap; }
+  #tab-pdf td:nth-child(6) { white-space: nowrap; }
   pre.result { background: var(--code-bg); color: #e2e8f0; border: 1px solid var(--border);
                border-radius: 10px; padding: 14px 16px; font-family: var(--mono); font-size: 12px;
                line-height: 1.7; overflow: auto; max-height: 320px;
@@ -1803,16 +1807,22 @@
   <section id="tab-pdf" class="page">
     <div class="card">
       <h2>PDF 资料库 <span class="muted">（素材库全部 PDF 的直通入口——给人看的资料库；点「打开」浏览器原生预览）</span></h2>
-      <div class="row">
-        <div style="flex:1"><label>文件名 / 批次 / 路径</label><input type="text" id="pdf-filter" placeholder="如 TB6612、原理图、数据手册"></div>
+      <div class="lib-toolbar">
+        <input type="search" id="pdf-filter" placeholder="搜索文件名 / 批次 / 目录 / 路径…">
+        <select id="pdf-sort" title="排序维度">
+          <option value="name">按文件名</option>
+          <option value="batch">按批次</option>
+          <option value="subdir">按目录</option>
+          <option value="size">按大小</option>
+          <option value="mtime">按修改时间</option>
+        </select>
+        <button id="pdf-sort-dir">↑ 升序</button>
+        <button id="pdf-filter-clear">清空过滤</button>
       </div>
-      <div class="row" style="margin-top:8px">
-        <button id="btn-pdf-search" class="primary" data-ico="search">搜索</button>
-        <button id="btn-pdf-search-clear">清空并显示全部</button>
-        <span id="pdf-count" class="muted" style="margin-left:10px"></span>
-      </div>
-      <table style="margin-top:10px">
-        <thead><tr><th>文件名</th><th>批次</th><th>大小</th><th>操作</th></tr></thead>
+      <div class="lib-chips-row"><span class="muted">批次</span><span id="pdf-batch-chips"></span></div>
+      <div id="pdf-stats" class="lib-stats"></div>
+      <table class="lib-table" style="margin-top:10px">
+        <thead><tr><th>文件名</th><th>批次</th><th>目录</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead>
         <tbody id="pdf-rows"></tbody>
       </table>
       <div id="pdf-msg" class="error"></div>
@@ -7530,41 +7540,198 @@ $("btn-ref-add").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// PDF 资料库页：素材库全量 PDF 浏览 / 搜索 / 直开预览（给人看的资料库）
+// PDF 资料库页：素材库全量 PDF 浏览 / 客户端即时检索 / 排序 / 统计 / 直开预览
+// （给人看的资料库；工单 pdf-library-ui/02 表格精修，对偶参考文件库）
 // ---------------------------------------------------------------------------
 function pdfFileUrl(relPath) {
   const segments = relPath.split("/").map(encodeURIComponent).join("/");
   return "/api/pdfs/" + segments;
 }
 
+// —— 纯函数组（tests/js 括号配平抽取；对偶 ref 系列）——
+// pdfSubdir(relPath)：批次内子目录（rel 去掉批次段与文件名；空 = 批次根）
+function pdfSubdir(relPath) {
+  const parts = String(relPath || "").split("/");
+  return parts.slice(1, -1).join("/");
+}
+
+// formatMtime(epochSec)：UNIX 秒 → 本地 "YYYY-MM-DD HH:mm"；缺失/非法 → "—"
+function formatMtime(epochSec) {
+  if (epochSec == null) return "—";
+  const d = new Date(Number(epochSec) * 1000);
+  if (!Number.isFinite(d.getTime())) return "—";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// pdfFilterEntries(pdfs, f)：f={q, batch, health?, isDup?, isBroken?}。q 大小写
+// 不敏感子串匹配文件名 / 批次 / 目录 / 完整路径（四合一）；batch 空串 = 该维度
+// 不过滤；health（"" | "dup" | "broken"）与 q / batch 正交——谓词由调用方注入
+// （工单 04 用 pdfDupGroups / pdfBroken 组装；health 置位但无谓词 = 该维度
+// 不参与，不静默清空）。
+function pdfFilterEntries(pdfs, f) {
+  const q = String((f && f.q) || "").trim().toLowerCase();
+  const batch = (f && f.batch) || "";
+  const health = (f && f.health) || "";
+  return (pdfs || []).filter((p) => {
+    if (batch && p.batch !== batch) return false;
+    if (health === "broken" && (f.isBroken ? !f.isBroken(p) : false)) return false;
+    if (health === "dup" && (f.isDup ? !f.isDup(p) : false)) return false;
+    if (q) {
+      const hay = [p.name, p.batch, pdfSubdir(p.rel_path || ""), p.rel_path];
+      if (!hay.some((s) => String(s == null ? "" : s).toLowerCase().includes(q))) return false;
+    }
+    return true;
+  });
+}
+
+// pdfSortEntries(pdfs, s)：s={by:'name'|'batch'|'subdir'|'size'|'mtime',
+// dir:'asc'|'desc'}；返回新数组（不改原数组）；稳定排序 → 同键保持列表序；
+// 数值键（大小 / 修改时间）按数值比较，文本键按 localeCompare。
+function pdfSortEntries(pdfs, s) {
+  const by = (s && s.by) || "name";
+  const dir = (s && s.dir) === "desc" ? -1 : 1;
+  const key = (p) => {
+    if (by === "size") return Number(p.size_bytes || 0);
+    if (by === "mtime") return Number(p.mtime || 0);
+    if (by === "batch") return String(p.batch || "");
+    if (by === "subdir") return pdfSubdir(p.rel_path || "");
+    return String(p.name || "");
+  };
+  const out = (pdfs || []).slice();
+  out.sort((a, b) => {
+    const av = key(a), bv = key(b);
+    const cmp = (typeof av === "number" && typeof bv === "number")
+      ? (av === bv ? 0 : (av < bv ? -1 : 1))
+      : String(av).localeCompare(String(bv));
+    return cmp * dir;
+  });
+  return out;
+}
+
+// pdfStats(pdfs)：统计（对传入集合计算——统计条随过滤结果联动）。
+// {total, totalBytes, batchCount, batchCounts}；batchCounts 供批次 chips 计数
+// （维度概览 = 全量口径；统计条 = 过滤结果口径，调用处分开传）。
+function pdfStats(pdfs) {
+  const list = pdfs || [];
+  const batchCounts = {};
+  let totalBytes = 0;
+  for (const p of list) {
+    if (p.batch) batchCounts[p.batch] = (batchCounts[p.batch] || 0) + 1;
+    totalBytes += Number(p.size_bytes || 0);
+  }
+  return { total: list.length, totalBytes,
+           batchCount: Object.keys(batchCounts).length, batchCounts };
+}
+
+// pdfStatsText(stats)：统计条文案（formatSize 注入；0 字节不显示「总体积」段）。
+function pdfStatsText(stats) {
+  const parts = ["共 " + stats.total + " 份"];
+  if (stats.totalBytes) parts.push("总体积 " + formatSize(stats.totalBytes));
+  parts.push(stats.batchCount + " 个批次");
+  return parts.join(" · ");
+}
+
+// pdfChipRowHTML(options, selected)：批次筛选 chips 纯函数（对偶 refChipRowHTML，
+// 换 data-pdf-chip 属性）；selected 命中项加 on 类（'' = 未选中）。
+function pdfChipRowHTML(options, selected) {
+  return (options || []).map((o) =>
+    `<button type="button" class="lib-chip${o.value === selected ? " on" : ""}" data-pdf-chip="${esc(o.value)}">${esc(o.label)}${o.count != null ? "（" + o.count + "）" : ""}</button>`
+  ).join("");
+}
+
+// pdfRowHTML(p, f)：行渲染（文件名链接 + 完整路径 tooltip、批次 chip、目录列、
+// 大小、修改时间、操作按钮）。健康 ⚠ 标注位与统计红段为工单 04 预留。
+function pdfRowHTML(p, f) {
+  const subdir = pdfSubdir(p.rel_path || "");
+  return `<tr>
+    <td class="desc-cell" title="${esc(p.rel_path)}"><a href="#" data-open-pdf="${esc(p.rel_path)}" title="${esc(p.rel_path)}">${esc(p.name)}</a></td>
+    <td><span class="lib-chip">${esc(p.batch)}</span></td>
+    <td class="muted" title="${esc(subdir || "批次根")}">${esc(subdir || "—")}</td>
+    <td class="muted">${formatSize(p.size_bytes)}</td>
+    <td class="muted">${formatMtime(p.mtime)}</td>
+    <td><button data-open-pdf="${esc(p.rel_path)}" title="新标签打开 PDF">打开</button> <button data-pdf-detail="${esc(p.rel_path)}" title="查看完整信息">详情</button></td>
+  </tr>`;
+}
+
+// —— 工具栏状态与渲染（对偶 ref 系列）：过滤条件集中于此，事件层只转发 ——
+const pdfUI = { q: "", batch: "", sortBy: "name", sortDir: "asc" };
+const pdfFilterContext = () => ({ ...pdfUI });
+let pdfCache = [];        // 全量（GET /api/pdfs 无参，客户端即时过滤排序统计）
+let pdfSearchTimer = null;
+
+function renderPdfChips() {
+  // chips 计数 = 全量（维度概览）；统计条 = 过滤结果（随过滤联动）
+  const stats = pdfStats(pdfCache);
+  const batches = Object.keys(stats.batchCounts).sort((a, b) => a.localeCompare(b));
+  $("pdf-batch-chips").innerHTML = pdfChipRowHTML([
+    { value: "", label: "全部", count: stats.total },
+    ...batches.map((b) => ({ value: b, label: b, count: stats.batchCounts[b] })),
+  ], pdfUI.batch);
+}
+
+function renderPdfStats() {
+  const filtered = pdfFilterEntries(pdfCache, pdfFilterContext());
+  $("pdf-stats").innerHTML = esc(pdfStatsText(pdfStats(filtered)));
+}
+
+function renderPdfs() {
+  const f = pdfFilterContext();
+  const rows = pdfSortEntries(pdfFilterEntries(pdfCache, f),
+    { by: pdfUI.sortBy, dir: pdfUI.sortDir });
+  if (!pdfCache.length) {
+    $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📄</div><div class="es-title">素材库中暂无 PDF</div><div class="es-hint">把赛题配套 PDF 放进资料库目录后刷新，这里会按批次列出。</div></div></td></tr>';
+  } else if (!rows.length) {
+    // 过滤后的空结果 ≠ 库为空：提示「清空过滤」而不是「暂无 PDF」
+    $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的 PDF 文件</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
+  } else {
+    $("pdf-rows").innerHTML = rows.map((p) => pdfRowHTML(p, f)).join("");
+  }
+  $("pdf-rows").querySelectorAll("[data-open-pdf]").forEach((el) =>
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.open(pdfFileUrl(el.dataset.openPdf), "_blank"); // 浏览器原生 PDF 预览
+    }));
+  renderPdfChips();
+  renderPdfStats();
+}
+
+function clearPdfFilter() {
+  pdfUI.q = ""; pdfUI.batch = "";
+  $("pdf-filter").value = "";
+  renderPdfs();
+}
+
 async function loadPdfs() {
   try {
-    const q = $("pdf-filter").value.trim();
-    const url = "/api/pdfs" + (q ? "?name=" + encodeURIComponent(q) : "");
-    const pdfs = await apiGet(url);
-    $("pdf-count").textContent = q ? `命中 ${pdfs.length} 份` : `共 ${pdfs.length} 份 PDF`;
-    $("pdf-rows").innerHTML = pdfs.length ? pdfs.map((p) => `
-      <tr>
-        <td><a href="#" data-open-pdf="${esc(p.rel_path)}" title="${esc(p.rel_path)}">${esc(p.name)}</a></td>
-        <td class="muted">${esc(p.batch)}</td>
-        <td class="muted">${formatSize(p.size_bytes)}</td>
-        <td><button data-open-pdf="${esc(p.rel_path)}">打开</button></td>
-      </tr>`).join("")
-      : '<tr><td colspan="4" class="empty-td"><div class="empty-state"><div class="es-icon">📄</div><div class="es-title">素材库中暂无 PDF</div><div class="es-hint">把赛题配套 PDF 放进资料库目录后刷新，这里会按批次列出。</div></div></td></tr>';
-    $("pdf-rows").querySelectorAll("[data-open-pdf]").forEach((el) =>
-      el.addEventListener("click", (e) => {
-        e.preventDefault();
-        window.open(pdfFileUrl(el.dataset.openPdf), "_blank"); // 浏览器原生 PDF 预览
-      }));
+    // 加载态占位（对偶模块库 / 参考库「正在读取…」）
+    $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">正在读取 PDF 资料库…</div></div></td></tr>';
+    pdfCache = await apiGet("/api/pdfs");
+    renderPdfs();
     $("pdf-msg").textContent = "";
   } catch (e) { $("pdf-msg").textContent = e.message; }
 }
 
-$("btn-pdf-search").addEventListener("click", loadPdfs);
-$("btn-pdf-search-clear").addEventListener("click", () => {
-  $("pdf-filter").value = "";
-  loadPdfs();
-});
+function initPdfToolbar() {
+  $("pdf-filter").addEventListener("input", (e) => {
+    clearTimeout(pdfSearchTimer);
+    pdfSearchTimer = setTimeout(() => { pdfUI.q = e.target.value; renderPdfs(); }, 150);
+  });
+  $("pdf-filter").addEventListener("keydown", (e) => { if (e.key === "Escape") clearPdfFilter(); });
+  $("pdf-sort").addEventListener("change", (e) => { pdfUI.sortBy = e.target.value; renderPdfs(); });
+  $("pdf-sort-dir").addEventListener("click", () => {
+    pdfUI.sortDir = pdfUI.sortDir === "asc" ? "desc" : "asc";
+    $("pdf-sort-dir").textContent = pdfUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
+    renderPdfs();
+  });
+  $("pdf-filter-clear").addEventListener("click", clearPdfFilter);
+  // 批次 chips 事件委托（行内动态渲染）；再点已选中项 = 取消该维度过滤
+  $("pdf-batch-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pdf-chip]"); if (!b) return;
+    pdfUI.batch = pdfUI.batch === b.dataset.pdfChip ? "" : b.dataset.pdfChip;
+    renderPdfs();
+  });
+}
 
 // ---------------------------------------------------------------------------
 // 赛题库页：浏览 / 过滤 / 拆条录入（逐条校对）/ 删除
@@ -9884,6 +10051,7 @@ initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
 initReferenceToolbar();  // 参考库工具栏（工单 02）：防抖搜索 / 排序 / chips 事件绑定（DOM 已就绪）
+initPdfToolbar();  // PDF 资料库工具栏（工单 02）：防抖搜索 / 排序 / 批次 chips 事件绑定（DOM 已就绪）
 </script>
 <div id="toast-root"></div>
 </body>
