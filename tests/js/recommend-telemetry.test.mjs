@@ -1,6 +1,9 @@
 // 推荐流程 llm_telemetry 展示结构钉（工单 recommend-telemetry/01）：
 // 推荐 SSE 流绑定 telemetry 后，每次 LLM 调用完成前端显示观测快照
 // （调用数 / provider 分流 / 最新 operation / 耗时）——"AI 正在干什么"。
+// recPanel / startRecProgress / 推荐请求体按归属指向 ui/generate-recommend.js
+// （阶段 2 工单 12 重指向）；markup（rec-llm-telemetry / qa-text 等 id）在
+// index.html 不动。
 // 运行：node --test tests/js/
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -8,6 +11,10 @@ import assert from "node:assert/strict";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
+  "utf8"
+);
+const recSrc = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
   "utf8"
 );
 const masterJs = readFileSync(
@@ -21,7 +28,7 @@ test("推荐进度面板有 telemetry 展示位", () => {
 });
 
 test("recPanel 事件表含 llm_telemetry handler（复用 formatLLMTelemetry）", () => {
-  const match = html.match(/const recPanel = makeProgressPanel\([\s\S]*?\n\}\);/);
+  const match = recSrc.match(/const recPanel = makeProgressPanel\([\s\S]*?\n\}\);/);
   assert.ok(match, "未找到 recPanel 定义（改名了？）");
   const body = match[0];
   assert.match(body, /llm_telemetry:\s*\(ev\)\s*=>/);
@@ -29,7 +36,7 @@ test("recPanel 事件表含 llm_telemetry handler（复用 formatLLMTelemetry）
 });
 
 test("新推荐生命周期清掉旧 telemetry", () => {
-  const match = html.match(/function startRecProgress\(\)[\s\S]*?\n\}/);
+  const match = recSrc.match(/function startRecProgress\(\)[\s\S]*?\n\}/);
   assert.ok(match, "未找到 startRecProgress（改名了？）");
   const body = match[0];
   assert.match(body, /rec-llm-telemetry/);
@@ -59,7 +66,7 @@ test("第 7 步引脚配置有自动配置按钮与端点接线", () => {
 test("AI 推荐卡片有赛题答疑 Q&A 输入框并随请求发送", () => {
   assert.match(html, /id="qa-text"/);
   assert.match(html, /赛题答疑 Q&amp;A/);
-  const body = html.match(/body: JSON\.stringify\(\{ problem_text: problem[\s\S]*?\}\)/);
+  const body = recSrc.match(/body: JSON\.stringify\(\{ problem_text: problem[\s\S]*?\}\)/);
   assert.ok(body, "未找到推荐请求体（改名了？）");
   assert.match(body[0], /qa_text:\s*\$\("qa-text"\)\.value\.trim\(\)/);
 });

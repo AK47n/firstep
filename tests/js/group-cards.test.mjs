@@ -2,6 +2,7 @@
 // （radio/徽标/role/hint 标注）、autoAdd 同组去重、换选 swap、取消整组、
 // 同组多选警告、旧载荷（无 exclusive_groups）容错。直接 import fx/module.js
 //（不再字符串提取）；不碰 DOM / fetch。
+// 接线静态断言按归属指向 ui/generate-recommend.js（阶段 2 工单 12 重指向）。
 // 运行：node --test tests/js/
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -11,8 +12,8 @@ import {
   renderGroupCards, groupRequirementNote,
 } from "../../src/contest_generator/static/js/fx/module.js";
 
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
+const src = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
   "utf8"
 );
 
@@ -172,9 +173,9 @@ test("需求清单灰注：非组模块 → null（chips 交互不变）", () =>
   assert.equal(groupRequirementNote([], "pid", ""), null);
 });
 
-test("index.html 推荐结果区接线：组卡渲染 / autoAdd 去重 / 单选交互 / 冲突警告", () => {
-  assert.match(html, /renderGroupCards\(groups, data\.modules, selectedSlugs\)/);
-  assert.match(html, /selectedSlugs = autoAddDedup\(groups, selectedSlugs, data\.modules\)/);
-  assert.match(html, /applyGroupRadio\(\(lastRecommend \|\| \{\}\)\.exclusive_groups \|\| \[\],/);
-  assert.match(html, /groupConflicts\(\(lastRecommend \|\| \{\}\)\.exclusive_groups \|\| \[\], selectedSlugs\)/);
+test("generate-recommend.js 推荐结果区接线：组卡渲染 / autoAdd 去重 / 单选交互 / 冲突警告", () => {
+  assert.match(src, /renderGroupCards\(groups, data\.modules, selectedSlugs\)/);
+  assert.match(src, /selectedSlugs = autoAddDedup\(groups, selectedSlugs, data\.modules\)/);
+  assert.match(src, /applyGroupRadio\(\(lastRecommend \|\| \{\}\)\.exclusive_groups \|\| \[\],/);
+  assert.match(src, /groupConflicts\(\(lastRecommend \|\| \{\}\)\.exclusive_groups \|\| \[\], selectedSlugs\)/);
 });

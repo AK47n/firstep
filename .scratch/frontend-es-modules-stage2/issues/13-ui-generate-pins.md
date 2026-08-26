@@ -24,4 +24,4 @@
 
 - svgPin/renderPinRoles（大函数，~190 行）含 SVG 字符串拼接——逐字搬移（含模板字符串）；若内部用局部 esc 或局部 helper，照搬。
 - showPinMenu 用 document.body.append + 全局点击关闭（top-level 或函数内绑定）——随迁后作用域不变。
-- 本簇与 A 簇共享 expanded/instances 等状态：A 迁后 instances 属 B（本簇），A import 本簇读 instances；**写点全在 B** → 归属成立。
+- **（工单 12 修正）**「A 迁后 instances 属 B（本簇），A import 本簇读 instances；写点全在 B」**为错误**：A 有回填（renderRecommendResult→backfillInstances）与选脚目标清除（renderSelected/backfill→clearInstanceTarget / instancePinTarget=null）写点。工单 12 已把 A→B 写点收进 **generate-recommend.js 的 clusterDeps 接缝**（setClusterDeps 注册的薄胶水写 instances/instancePinTarget + 调 renderInstanceConfig / renderPinCard / loadPinBoard / resetPinState / resetInstances / clearInstanceTarget / backfillInstances）。**13 实施时**：把 host 启动区的 setClusterDeps 注册改为从 ui/generate-pins.js import 相应函数（或保留 host 胶水转调 import 名）；本簇函数导出面补 resetPinState / resetInstances / clearInstanceTarget / backfillInstances（若原为内联语句则提为函数）。16（updateFixCenterAvailability）/ 18（scheduleDraftSave）同理代入。

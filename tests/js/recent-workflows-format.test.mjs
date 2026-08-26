@@ -11,6 +11,11 @@ const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
+// 推荐事件表（cache_hit handler）已迁 ui/generate-recommend.js（阶段 2 工单 12 重指向）
+const recSrc = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
+  "utf8"
+);
 
 test("summary 行：provider 拆分 / call 数 / 耗时 / 请求字节 / 状态 / usage", () => {
   assert.equal(
@@ -131,7 +136,7 @@ test("仪表盘文案：token 标注服务商上报、费用为估算参考值�
 
 test("推荐缓存（工单 llm-cost-control/02）：开关与 cache_hit 处理存在", () => {
   assert.ok(html.includes("set-recommend-cache"), "设置页应有推荐缓存开关");
-  assert.ok(html.includes("cache_hit"), "推荐事件表应处理 cache_hit 事件");
-  assert.ok(html.includes("复用本地推荐缓存"), "cache_hit 应显示复用缓存文案");
+  assert.ok(recSrc.includes("cache_hit"), "推荐事件表应处理 cache_hit 事件");
+  assert.ok(recSrc.includes("复用本地推荐缓存"), "cache_hit 应显示复用缓存文案");
   assert.ok(html.includes("参考 / 澄清变化会提示差异"), "应说明参数变化提示差异");
 });

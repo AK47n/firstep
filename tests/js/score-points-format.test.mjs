@@ -11,6 +11,11 @@ const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
+// 推荐结果区接线已迁 ui/generate-recommend.js（阶段 2 工单 12 重指向）
+const recSrc = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
+  "utf8"
+);
 
 test("完整评分点 → 保留顺序、分区、分值和句号引用", () => {
   assert.equal(
@@ -68,8 +73,8 @@ test("推荐结果评分点面板 → 转义模型文本，避免展示区注入
   assert.doesNotMatch(rendered, /<(input|button|textarea|select)\b/);
 });
 
-test("index.html 推荐结果区会渲染只读评分点面板", () => {
-  assert.match(html, /renderScorePointPanel\(scorePoints\)/);
+test("generate-recommend.js 推荐结果区会渲染只读评分点面板", () => {
+  assert.match(recSrc, /renderScorePointPanel\(scorePoints\)/);
   // id="rec-score-points" 输出样式契约已由上方面板用例直接断言（样式随迁 fx/score.js）
 });
 
