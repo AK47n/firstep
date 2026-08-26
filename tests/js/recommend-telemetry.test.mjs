@@ -10,6 +10,10 @@ const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
+const masterJs = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/master.js", import.meta.url),
+  "utf8"
+);
 
 test("推荐进度面板有 telemetry 展示位", () => {
   assert.match(html, /id="rec-llm-telemetry"/);
@@ -32,13 +36,13 @@ test("新推荐生命周期清掉旧 telemetry", () => {
   assert.match(body, /classList\.add\("hidden"\)/);
 });
 
-test("蒸馏进度面板有 telemetry 展示位与 handler（照推荐先例）", () => {
+test("蒸馏进度面板有 telemetry 展示位与 handler（照推荐先例；胶水已迁 ui/master.js）", () => {
   assert.match(html, /id="prog-llm-telemetry"/);
-  const dist = html.match(/const distPanel = makeProgressPanel\([\s\S]*?\n\}\);/);
+  const dist = masterJs.match(/const distPanel = makeProgressPanel\([\s\S]*?\n\}\);/);
   assert.ok(dist, "未找到 distPanel 定义（改名了？）");
   assert.match(dist[0], /llm_telemetry:\s*\(data\)\s*=>/);
   assert.match(dist[0], /formatLLMTelemetry\(data\)/);
-  const start = html.match(/function startProgress\(\)[\s\S]*?\n\}/);
+  const start = masterJs.match(/function startProgress\(\)[\s\S]*?\n\}/);
   assert.ok(start, "未找到 startProgress（改名了？）");
   assert.match(start[0], /prog-llm-telemetry/);
 });

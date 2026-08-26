@@ -81,6 +81,30 @@ export function masterDetailHTML(m) {
   <div data-master-content><span class="muted">点击上方文件加载全文（纯文本，按需取）。</span></div>`;
 }
 
+// decisionItem(d, sourceOptions)：报告"判定行"纯函数——keep 原样 / merge 带
+// 来源工程下拉（默认 d.source 选中）/ exclude 剔除；每行附「归档为该题参考
+// 文件」按钮（data-archive）+ 判定理由。d = {path, action, source, reason}。
+export function decisionItem(d, sourceOptions) {
+  const source = d.action === "merge" ? `
+    <select data-path="${esc(d.path)}">
+      ${sourceOptions.map((s) => `<option value="${esc(s)}" ${s === d.source ? "selected" : ""}>${esc(s)}</option>`).join("")}
+    </select>` : "";
+  return `<div class="decision"><span class="path">${esc(d.path)}</span>
+    <span class="muted">（${d.action === "keep" ? "保留" : d.action === "merge" ? "合并" : "剔除"}${source}）</span>
+    <button data-archive="${esc(d.path)}" title="该文件不进母版，复制入库参考文件库并锚定赛题编号">归档为该题参考文件</button>
+    <div class="reason">${esc(d.reason)}</div></div>`;
+}
+
+// archiveItem(a)：归档行纯函数——路径 + 赛题编号输入（data-topic）+ 移除按钮
+// （data-unarchive）+ 理由。a = {path, topic, reason}。
+export function archiveItem(a) {
+  return `<div class="decision"><span class="path">${esc(a.path)}</span>
+    <span class="muted">（归档为该题参考文件，确认时复制入库）</span>
+    <input type="text" data-topic="${esc(a.path)}" placeholder="锚定赛题编号，如 2026C" value="${esc(a.topic)}">
+    <button data-unarchive="${esc(a.path)}">移除</button>
+    <div class="reason">${esc(a.reason || "（无理由）")}</div></div>`;
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML });
+  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem });
 }
