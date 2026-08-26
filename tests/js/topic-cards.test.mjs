@@ -9,6 +9,8 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(resolve(root, "src/contest_generator/static/index.html"), "utf8");
+// 卡片接线断言按归属指向 ui/topic.js（阶段 2 工单 09 重指向）
+const topicSrc = readFileSync(resolve(root, "src/contest_generator/static/js/ui/topic.js"), "utf8");
 
 test("卡片结构：key/year/preview/操作按钮齐全", () => {
   const out = topicCardHTML({ key: "2024H", year: "2024", problem_text: "巡线小车" });
@@ -58,8 +60,8 @@ test("空字段兜底：key/year/problem_text 缺失不抛错", () => {
 test("HTML 已改用 #topic-grid 容器，无 tbody#topic-rows", () => {
   assert.ok(html.includes('<div id="topic-grid" class="topic-grid">'));
   assert.ok(!html.includes("topic-rows"));
-  assert.ok(html.includes('grid.querySelectorAll("[data-topic-del]")'));
-  assert.ok(html.includes('grid.querySelectorAll("[data-topic-use]")'));
+  assert.ok(topicSrc.includes('grid.querySelectorAll("[data-topic-del]")'));
+  assert.ok(topicSrc.includes('grid.querySelectorAll("[data-topic-use]")'));
 });
 
 // =================== 工单 topic-library-ui/03 扩展断言（追加进同文件） ===================

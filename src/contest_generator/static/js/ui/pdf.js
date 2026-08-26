@@ -6,14 +6,11 @@
 import { $, apiGet, apiPost, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import {
-  pdfEncodedPath, pdfHealth, pdfBroken, pdfFilterEntries, pdfSortEntries,
+  pdfHealth, pdfBroken, pdfFilterEntries, pdfSortEntries,
   pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText,
   pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML,
+  pdfFileUrl,
 } from "/js/fx/pdf.js";
-
-function pdfFileUrl(relPath) {
-  return "/api/pdfs/" + pdfEncodedPath(relPath);
-}
 
 // —— 纯函数组在 fx/pdf.js（本模块顶部 import，含域内全部过滤/排序/统计/健康/
 // 渲染纯函数）——

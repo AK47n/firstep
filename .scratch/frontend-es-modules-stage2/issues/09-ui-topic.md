@@ -2,26 +2,27 @@
 
 **要做什么：** 题库 tab 全部 DOM 胶水迁入 `static/js/ui/topic.js`（archive 链接 / 年份 chips / stats / 列表 / 分页 / 详情弹窗 / 编辑弹窗 / 过滤器 / 工具栏 / 词汇表 / 删除 / 校对行编辑器）。`useTopic`（题面载入事务）归生成推荐簇（工单 12），本票**不迁**——题 tab 的「载入到生成页」按钮经 import 调用。**被谁阻塞：** 02（app.js）
 
-**状态：** 待实施
+**状态：** resolved（2026-08-27；JS 442 全绿、pytest 2465 全绿、diag 零 EXC、smoke 11/11、probe-09 题库实况 7/7）
 
-## 关键事实（1-based 行号，实施时以 grep 复核）
+## 实施记录
 
-- 区段 = 6937-7332：loadTopicArchiveLink 6937 / topicFilterContext 6976 / renderTopicYearChips 6985 / renderTopicStats 6995 / renderTopics 7004 / loadTopicPageState 7043 / renderTopicPages 7057 / viewTopicDetail 7066（弹窗内「载入到生成页」调 useTopic @7088——import 自 ui/generate-recommend.js，工单 12 未迁前先经主体 import 代理名）/ viewTopicEdit 7111 / clearTopicFilter 7166 / initTopicToolbar 7172 / loadTopicGroupVocabulary 7203 / loadTopics 7210 / deleteTopic 7224 / renderProofreadRows 7251 + 校对其余（7251-7332：proofread 状态/按钮/提交，容器 #topic-proofread-rows @1936 markup 在题库 tab）；状态 topicRows 6926 / topicEntries 6971（写作点在 above 函数内，grep 复核）。
-- **跳过区**：6963 initBtnIcons IIFE（归 app.js，工单 02 已迁）；7234 useTopic（归 12）。
-- topic 域纯件已迁 fx/topic.js（16 函数：topicChipRowHTML / topicDetailHTML / topicPagesHTML / topicEditHTML / topicCardHTML 等）——胶水 import 调用；esc 自 fx/core.js。
-- markup：tab-topic @1908-1947；#topic-grid / 分页 / 弹窗 / proofread id 全不动。
-- host 页签分发器 import loadTopics + loadTopicGroupVocabulary + loadTopicArchiveLink（若分发器调用）。
+- **static/js/ui/topic.js**（新建 ~430 行）：9 状态（topicRows / topicPdfFile / topicArchiveLoaded / topicUI / topicEntries / topicGroupVocab / topicSearchTimer / topicLoading / topicPageCache）+ 15 函数逐字搬移（loadTopicArchiveLink / topicFilterContext / renderTopicYearChips / renderTopicStats / renderTopics / loadTopicPageState / renderTopicPages / viewTopicDetail / viewTopicEdit / clearTopicFilter / initTopicToolbar / loadTopicGroupVocabulary / loadTopics / deleteTopic / renderProofreadRows）+ 拆条录入监听（btn-topic-split / btn-topic-confirm）；initTopicToolbar() 顶层调用随迁（import 时绑定）。import app.js（$ / apiGet / apiPut / apiDelete / toast / handle）/ fx/core.js（esc）/ fx/topic.js（12 纯名）/ **ui/generate-recommend.js（useTopic——卡片「用此题生成」+ 详情弹窗按钮；12 交付后直接 import，无代理期）** / **fx/pdf.js（pdfFileUrl——见单源修正）**。export：loadTopics / loadTopicGroupVocabulary / initTopicToolbar / viewTopicDetail / viewTopicEdit / deleteTopic / renderProofreadRows。
+- **pdfFileUrl 单源修正（顺带，05 遗留潜 bug）**：05 迁移时把 host 的 `function pdfFileUrl` 删掉却未在 fx/pdf.js 补导出——题库 archive 链接点击回调直接 ReferenceError（topic 簇调用点在 host 未触发过，无探针覆盖）。本票下沉纯函数 `pdfFileUrl(relPath) = "/api/pdfs/" + pdfEncodedPath(relPath)` 到 fx/pdf.js；ui/pdf.js 删本地副本改 import（顺带裁掉已不用的 pdfEncodedPath import）；无测试钉旧解，fx-guard DOMAINS 登记新名。
+- **index.html（apply-09.mjs，6204→5829 行）**：①host import 行（topic.js 7 名代理）+ generate-recommend 代理行**裁 useTopic**（调用点随簇迁入 topic.js，host 不再用）；②赛题库整簇（区段头 → btn-topic-confirm 监听末）→注记。校验：15 函数 + 9 状态零残留、host 保留 `loadTopics(); loadTopicGroupVocabulary();`（tab 分发器）、useTopic / pdfFileUrl 调用点零残留。
+- 验证：node --test 442 全绿（topic-cards.test.mjs 的 2 条卡片接线断言重指向 topic.js——按归属复核；fx-guard 增 pdfFileUrl）；pytest 2465 全绿（bg）；diag 零 EXC；smoke 11/11；probe-09.mjs 7/7（切 tab → loadTopics + loadTopicGroupVocabulary → 15 卡 + 年份 chips 8 + 统计「共 15 题 · 含附带程序 9 · 含图注 6 · 题面合计 ~38.1K 字」+ archive 链接 → 详情弹窗（页图懒取容器）→ 详情内「用此题生成」（useTopic 接线）→ 详情内「编辑」（viewTopicEdit 预填 1093 字题面）→ 拆条表单 → 零 EXC）。
 
 ## 检查表
 
-- [ ] 新建 `static/js/ui/topic.js`：上述 15 函数逐字搬移 + import（app.js / fx/topic.js / fx/core.js）+ export（loadTopics / loadTopicGroupVocabulary / initTopicToolbar / viewTopicDetail / viewTopicEdit / deleteTopic / renderProofreadRows）+ 头部注释
-- [ ] index.html：CRLF 感知行区间删除（6937-7332 内目标名；**物理升序**；避开 6963 initBtnIcons 与 7234 useTopic）+ 顶部 import 行追加
-- [ ] 「载入到生成页」按钮接线：viewTopicDetail 内经 import { useTopic }（工单 12 前：主体/模块 import 代理）调用——实施时以 grep 确认调用点形态，保持行为零变化
-- [ ] `node --test` 全绿 + pytest + diag 零 EXC + smoke 11/11 + 题库 tab 实况探针（loadTopics 后卡片数 > 0）
-- [ ] grep 零残留：index.html 无 `function loadTopics(` 等 15 名定义
-- [ ] 中文提交
+- [x] 新建 `static/js/ui/topic.js`：15 函数 + 9 状态 + 监听逐字搬移 + import（app.js / fx/topic.js / fx/core.js / fx/pdf.js / ui/generate-recommend.js）+ export + 头部注释
+- [x] index.html：apply-09.mjs（CRLF 感知 1 大段删除 + import 行 + 代理行裁 useTopic）
+- [x] pdfFileUrl 单源修正（fx/pdf.js 导出 + gurad 登记 + ui/pdf.js 改 import）
+- [x] `node --test` 442 全绿 + pytest 2465 全绿 + diag 零 EXC + smoke 11/11 + probe-09 题库实况 7/7
+- [x] grep 零残留：index.html 无 15 函数定义 / 无 topic 状态 / 无 useTopic 调用点
+- [x] 中文提交
 
-## 风险点
+## 风险点 / 跟踪
 
-- 本票与工单 12 的 useTopic 归属交界：12 未迁时，viewTopicDetail 内裸引用 useTopic 仍有效（主体作用域）；12 迁走后本模块 import。工单 12 实施时**必须**回查本模块调用点。
-- viewTopicEdit（7111-7165）含证明题编辑/提交逻辑，若引用 `state`（主题/平台）——补 import。
+- **host import 代理 7 名**：loadTopics / loadTopicGroupVocabulary（tab 分发器）真实使用；initTopicToolbar / viewTopicDetail / viewTopicEdit / deleteTopic / renderProofreadRows 自本票起 host 不再直接调用——收尾工单 20 统一核对裁代理。
+- **topic.js → ui/generate-recommend.js 单向 import（useTopic）**：generate-recommend 不 import topic.js，无环；12 的 clusterDeps / setOnStepChange 接缝不受本票影响。
+- **fx/topic.js 在 host 的 import 行（2224 一带）自本票起零使用**；fx/reference.js 自 08 后、fx/module.js 自 07 后亦可能零使用——20 收尾统一核对裁剪（勿逐票删，避免误伤其它 host 引用点如 fx/pdf.js——host 仍用 pdfPagesUrl 等？确认：pdf 域已全迁 ui/pdf.js，host 侧 fx/pdf.js 仅剩 topic.js 用过 pdfFileUrl——现由模块 import，host 的 fx/pdf.js import 行亦零使用）。
+- **卡片无「编辑」按钮**（详见探针校正）：编辑入口只在详情弹窗内（topicDetailHTML 带 data-topic-edit；topicCardHTML 只有 view/use/del）——行为未变，探针初版误按卡片编辑按钮而假失败。

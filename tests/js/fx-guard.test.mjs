@@ -35,6 +35,7 @@ const DOMAINS = {
     pdfStatsText: "fn", pdfChipRowHTML: "fn", pdfRowHTML: "fn",
     pdfPagesUrl: "fn", pdfPagesText: "fn", pdfDetailHTML: "fn",
     pdfTrashUrl: "fn", pdfDupRemainText: "fn", pdfTrashConfirmHTML: "fn",
+    pdfFileUrl: "fn",
   },
   "reference.js": {
     referencePlatformChip: "fn",
