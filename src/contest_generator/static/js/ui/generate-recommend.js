@@ -8,7 +8,8 @@
 // （draft / module / score / reference / llm / platform / core）。
 // 状态所有权表（本模块 = 主写簇；host 经 import 活绑定读，写经各 setter）：
 //   chosenPlatform（setChosenPlatform）/ selectedSlugs（setSelectedSlugs）/
-//   currentTopicId（setCurrentTopicId）/ recommendClarifications（setRecommendClarifications）
+//   currentTopicId（setCurrentTopicId——工单 15 起 export let，生成簇/生成执行
+//   读取方 import）/ recommendClarifications（setRecommendClarifications）
 //   expanded / pythonTemplates / warnings / scorePoints / lastRecommend /
 //   topicPdfTextVisible / recProblem / selectedReferenceIds / autoReferenceIds /
 //   referenceEntries —— 读写均在本模块；host 只读点名见下表。
@@ -42,7 +43,8 @@ export let expanded = [];                // 展开后的模块 manifest（含依
 export let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
 export let warnings = [];                // 平台警告
 export let scorePoints = [];              // 推荐解析出的题面评分点（只读增强信息）
-let currentTopicId = "";           // 当前生效的赛题编号（历史赛题入口）
+export let currentTopicId = "";      // 当前生效的赛题编号（历史赛题入口；工单 15 起
+                                          // export——生成簇 generateMain 读取方 import）
 export function setCurrentTopicId(v) { currentTopicId = v; }
 let topicPdfTextVisible = true;   // 题面页图 / 文字版切换（纯展示态）
 export let lastRecommend = null;         // 最近一次推荐结果（移除勾选 chip 后重渲染用）
