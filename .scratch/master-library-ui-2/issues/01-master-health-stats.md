@@ -9,7 +9,7 @@
 
 **被谁阻塞：** 无——可立即开始
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 ## 验收标准
 
@@ -36,4 +36,28 @@
 
 ## 实施记录
 
-（待实施）
+（2026-08-27 完成）
+
+- 后端：master_store.py 新增 MasterHealth / MasterStats / BigFileInfo 三数据
+  形状与 `master_health` / `master_stats` 域函数（阈值常量
+  BIG_FILE_THRESHOLD_BYTES = 256KB、BIG_FILE_TOP_N = 10）；存在性判定收敛进
+  `_disk_master_dir`（「母版 {platform!r} 不存在」文案自此单源）、白名单查询
+  收敛进 `_master_key_catalog`、构建产物残留判定收敛进 `_top_level_artifact_dirs`
+  （与 analyze_structure 同口径）；webapp GET /api/masters 每条带 `health` /
+  `stats`（既有字段零改动）。
+- 前端：fx/master.js 新增 masterHealthBadgeHTML（✓ 健康 / ⚠ 有缺失或残留 +
+  title 明细）与 masterStatsHTML（总体积 / 文件数 / 大文件清单，formatSize
+  单源）；masterTableRowHTML 带 health 时出徽章列、masterDetailHTML 带
+  stats 时出统计行（均条件渲染，旧调用零变化）；index.html 表头补「健康」
+  列 + 徽章样式（评审修复）；masterKeyFileRowHTML 内联大小格式化顺手收口
+  formatSize（行为等价）。
+- 测试：test_master_store.py 增 11 例（正常/缺失/配置缺失/残留/不存在/
+  未知平台 + 计数/噪音跳过/阈值与 Top10）；test_webapp.py 增列表字段断言；
+  test_autocommit.py 注册表补 master_health/master_stats（read）；
+  tests/js/master-ext-browser.test.mjs 新增（徽章/统计行/条件渲染/转义）。
+- 回归：pytest 全量绿（2476 passed）、node --test 454/454；真实库实扫
+  stm32 / mspm0 两平台 health ok:true、文件数与体积正常。
+- 评审：code-review 双轴——Standards 硬缺陷 1（表头缺健康列，已修）+ 去重
+  3 项（已修）+ 观察 2 项（fx-guard 观察项经评估不修：新名从未进
+  index.html，不触发双源回退）；Spec 无缺口（仅徽章文案「需关注」→
+  「有缺失或残留」对齐 spec，已修）。

@@ -128,6 +128,70 @@ class MasterMeta:
         )
 
 
+@dataclass(frozen=True)
+class MasterHealth:
+    """母版健康实况（工单 master-library-ui-2/01，一次算好随列表带出）。
+
+    三项体检：关键文件缺失（白名单内文件磁盘不在）/ 工程配置文件是否存在
+    （平台能否被 IDE 打开）/ 构建产物残留（顶层构建目录，与入库结构分析
+    analyze_structure 同口径）。ok = 三项全部无恙；否则前端以 ⚠ 徽章提示并
+    悬停展示明细。
+    """
+
+    ok: bool
+    missing_key_files: tuple[str, ...]  # 白名单内缺失（相对路径，正斜杠）
+    config_file_ok: bool  # 平台工程配置文件在否（后缀表单源
+    # platforms.PLATFORM_CONFIG_FILE_SUFFIXES，任意层级命中即可——平台能否被
+    # IDE 打开，与入库结构分析 analyze_structure 同口径）
+    artifact_dirs: tuple[str, ...]  # 顶层构建产物目录名（Debug / Release / …）
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "missing_key_files": list(self.missing_key_files),
+            "config_file_ok": self.config_file_ok,
+            "artifact_dirs": list(self.artifact_dirs),
+        }
+
+
+@dataclass(frozen=True)
+class BigFileInfo:
+    """大文件统计条目：体积统计的 Top N 清单项。"""
+
+    path: str
+    size_bytes: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"path": self.path, "size_bytes": self.size_bytes}
+
+
+@dataclass(frozen=True)
+class MasterStats:
+    """母版体积统计实况（工单 master-library-ui-2/01，一次算好随列表带出）。
+
+    口径 = 统一噪音跳过后的全部文件（iter_project_files：构建产物目录与
+    .git 不计入——与浏览/校验同口径，发现母版膨胀源头时不疑心构建残留）。
+    big_files = 严格大于 BIG_FILE_THRESHOLD_BYTES 的文件按大小降序取
+    BIG_FILE_TOP_N 条（大小相同按路径排序，确定性）。
+    """
+
+    total_size_bytes: int
+    file_count: int
+    big_files: tuple[BigFileInfo, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_size_bytes": self.total_size_bytes,
+            "file_count": self.file_count,
+            "big_files": [bf.to_dict() for bf in self.big_files],
+        }
+
+
+# 大文件阈值与清单上限（体量统计）：>256KB 且按大小降序 Top 10
+BIG_FILE_THRESHOLD_BYTES = 256 * 1024
+BIG_FILE_TOP_N = 10
+
+
 # ---------------------------------------------------------------------------
 # 母版库：入库（结构分析 + 可更换）、浏览、删除
 # ---------------------------------------------------------------------------
@@ -140,15 +204,8 @@ def master_key_files(masters_dir: Path, platform: str) -> tuple[KeyFileInfo, ...
     平台不在库（目录不存在）→ MasterError 与 get_master 同文案；未知平台
     （目录在但不在词表）→ 大声失败（与 analyze_structure 同口径）。
     """
-    master_dir = master_project_dir(masters_dir, platform)  # 平台名合法性校验
-    if not master_dir.is_dir():
-        raise MasterError(f"母版 {platform!r} 不存在")
-    catalog = MASTER_KEY_FILES.get(platform)
-    if catalog is None:
-        _validate_known_platform(platform)  # 未知平台大声失败
-        # 已知平台却没配白名单 = 开发错误（platforms.py 与白名单不同模块，
-        # 漏配是真实风险）：大声失败，绝不静默回空清单误导浏览
-        raise MasterError(f"平台 {platform!r} 的关键文件白名单未配置")
+    master_dir = _disk_master_dir(masters_dir, platform)  # 存在性 + 平台合法性
+    catalog = _master_key_catalog(platform)
     infos: list[KeyFileInfo] = []
     for rel_path, label in catalog:
         path = master_dir / rel_path
@@ -156,6 +213,38 @@ def master_key_files(masters_dir: Path, platform: str) -> tuple[KeyFileInfo, ...
         size = path.stat().st_size if exists else 0
         infos.append(KeyFileInfo(path=rel_path, label=label, size_bytes=size, exists=exists))
     return tuple(infos)
+
+
+def _disk_master_dir(masters_dir: Path, platform: str) -> Path:
+    """母版磁盘目录校验（浏览域唯一出处）：平台名文法 → 目录存在（缺失 =
+    「不存在」）→ 未知平台大声失败；返回校验后的目录路径。
+
+    关键文件 / 健康 / 体积统计共用的存在性判定——「母版 {platform!r} 不存在」
+    文案曾三处各写一份，一处改易漂移（评审修正）。
+    """
+    master_dir = master_project_dir(masters_dir, platform)
+    if not master_dir.is_dir():
+        raise MasterError(f"母版 {platform!r} 不存在")
+    _validate_known_platform(platform)
+    return master_dir
+
+
+def _master_key_catalog(platform: str) -> tuple[tuple[str, str], ...]:
+    """白名单查询（浏览域唯一出处）：已知平台没配白名单 = 开发错误
+    （platforms.py 与白名单不同模块，漏配是真实风险）：大声失败，绝不静默
+    回空清单误导浏览。
+    """
+    catalog = MASTER_KEY_FILES.get(platform)
+    if catalog is None:
+        raise MasterError(f"平台 {platform!r} 的关键文件白名单未配置")
+    return catalog
+
+
+def _top_level_artifact_dirs(master_dir: Path) -> tuple[str, ...]:
+    """顶层构建产物目录名（入库分析 / 体检共用口径，BUILD_ARTIFACT_DIRS 单源）。"""
+    return tuple(
+        sorted(name for name in BUILD_ARTIFACT_DIRS if (master_dir / name).is_dir())
+    )
 
 
 def read_master_file(
@@ -190,6 +279,62 @@ def read_master_file(
     }
 
 
+def master_health(masters_dir: Path, platform: str) -> MasterHealth:
+    """母版健康实况（工单 master-library-ui-2/01）：关键文件缺失 / 工程配置
+    文件 / 构建产物残留三项一次算好，随列表带出不按条回查。
+
+    平台不存在 / 未知平台 / 非法平台名与 master_key_files 同文案同路径
+    （本函数委托其做存在性与白名单判定——关键文件缺失清单即其口径）。
+    构建产物残留检测与入库结构分析 analyze_structure 同口径（顶层目录名，
+    BUILD_ARTIFACT_DIRS 单源）。
+    """
+    master_dir = _disk_master_dir(masters_dir, platform)
+    catalog = _master_key_catalog(platform)
+    missing = tuple(
+        rel_path
+        for rel_path, _ in catalog
+        if not (master_dir / rel_path).is_file()
+    )
+    config_file_ok = any(
+        _find_config_files(master_dir, f"*{suffix}")
+        for suffix in PLATFORM_CONFIG_FILE_SUFFIXES[platform]
+    )
+    artifact_dirs = _top_level_artifact_dirs(master_dir)
+    return MasterHealth(
+        ok=not missing and config_file_ok and not artifact_dirs,
+        missing_key_files=missing,
+        config_file_ok=config_file_ok,
+        artifact_dirs=artifact_dirs,
+    )
+
+
+def master_stats(masters_dir: Path, platform: str) -> MasterStats:
+    """母版体积统计（工单 master-library-ui-2/01）：统一噪音跳过后的全部文件
+    总字节 / 文件数 / 大文件 Top 10（>256KB，降序）。
+
+    平台不存在 / 未知平台与 master_health 同文案。遍历走 treewalk 统一噪音
+    跳过（构建产物目录不计入），与浏览 / 校验口径一致。
+    """
+    master_dir = _disk_master_dir(masters_dir, platform)
+    entries = [
+        (path, path.stat().st_size) for path in iter_project_files(master_dir)
+    ]
+    total = sum(size for _, size in entries)
+    big = sorted(
+        (
+            BigFileInfo(path=path.relative_to(master_dir).as_posix(), size_bytes=size)
+            for path, size in entries
+            if size > BIG_FILE_THRESHOLD_BYTES
+        ),
+        key=lambda bf: (-bf.size_bytes, bf.path),
+    )[:BIG_FILE_TOP_N]
+    return MasterStats(
+        total_size_bytes=total,
+        file_count=len(entries),
+        big_files=tuple(big),
+    )
+
+
 def master_project_dir(masters_dir: Path, platform: str) -> Path:
     """母版在库里的目录位置：<masters_dir>/<platform>（库布局的唯一出处）。
 
@@ -220,10 +365,10 @@ def analyze_structure(master_dir: Path, platform: str) -> StructureAnalysis:
             )
     if platform == PLATFORM_STM32:
         _validate_keil_structure(master_dir)
-    warnings: list[str] = []
-    for name in sorted(BUILD_ARTIFACT_DIRS):
-        if (master_dir / name).is_dir():
-            warnings.append(f"母版含 {name}/ 构建产物目录，建议清理")
+    warnings = [
+        f"母版含 {name}/ 构建产物目录，建议清理"
+        for name in _top_level_artifact_dirs(master_dir)
+    ]
     return StructureAnalysis(platform=platform, warnings=tuple(warnings))
 
 

@@ -23,7 +23,9 @@ from contest_generator.master_store import (
     get_master,
     import_master,
     list_masters,
+    master_health,
     master_key_files,
+    master_stats,
     read_master_file,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -489,6 +491,125 @@ def test_read_master_file_replaces_invalid_utf8(fake_masters_dir):
     result = read_master_file(fake_masters_dir, PLATFORM_STM32, "pin_config.h")
 
     assert "\ufffd\ufffd hello" == result["content"]
+
+
+# ---------------------------------------------------------------------------
+# 母版体检（工单 master-library-ui-2/01）：健康 + 体积统计
+# ---------------------------------------------------------------------------
+
+
+def test_master_health_ok_for_complete_master(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+
+    health = master_health(fake_masters_dir, PLATFORM_STM32)
+
+    assert health.ok is True
+    assert health.missing_key_files == ()
+    assert health.config_file_ok is True
+    assert health.artifact_dirs == ()
+
+
+def test_master_health_flags_missing_key_file(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "pin_config.h").unlink()
+
+    health = master_health(fake_masters_dir, PLATFORM_STM32)
+
+    assert health.ok is False
+    assert health.missing_key_files == ("pin_config.h",)
+
+
+def test_master_health_flags_missing_config_file(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "user" / "Project.uvprojx").unlink()
+
+    health = master_health(fake_masters_dir, PLATFORM_STM32)
+
+    assert health.ok is False
+    assert health.config_file_ok is False
+
+
+def test_master_health_flags_artifact_dirs(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "Debug").mkdir()
+
+    health = master_health(fake_masters_dir, PLATFORM_STM32)
+
+    assert health.ok is False
+    assert health.artifact_dirs == ("Debug",)
+
+
+def test_master_health_platform_not_in_library_raises(fake_masters_dir):
+    with pytest.raises(MasterError, match="不存在"):
+        master_health(fake_masters_dir, PLATFORM_STM32)
+
+
+def test_master_health_unknown_platform_raises(fake_masters_dir):
+    (fake_masters_dir / "vxworks").mkdir(parents=True)
+
+    with pytest.raises(MasterError, match="未知平台"):
+        master_health(fake_masters_dir, "vxworks")
+
+
+def test_master_stats_counts_files_and_bytes(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+
+    stats = master_stats(fake_masters_dir, PLATFORM_STM32)
+
+    expected = sum(
+        (fake_masters_dir / "stm32" / p).stat().st_size
+        for p in ("main.c", "pin_config.h", "led_instances.h", "user/Project.uvprojx")
+    )
+    assert stats.total_size_bytes == expected
+    assert stats.file_count == 4
+    assert stats.big_files == ()
+
+
+def test_master_stats_skips_artifact_dirs(fake_masters_dir):
+    """体积/文件数走统一噪音跳过：构建产物目录（如 Debug/）不计入。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "Debug").mkdir(parents=True)
+    (fake_masters_dir / "stm32" / "Debug" / "x.obj").write_bytes(b"\0" * 10)
+
+    stats = master_stats(fake_masters_dir, PLATFORM_STM32)
+
+    assert stats.file_count == 4
+
+
+def test_master_stats_big_files_threshold_and_top10(fake_masters_dir):
+    """big_files：仅严格大于 BIG_FILE_THRESHOLD_BYTES（256KB）的文件，
+    按大小降序取 Top 10；恰好等于阈值与更小的文件不入列。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    master = fake_masters_dir / "stm32"
+    (master / "edge.bin").write_bytes(bytes(256 * 1024))  # 恰好阈值：不入列
+    (master / "small.txt").write_text("ok")
+    # 12 个大文件（300..311KB）：只保留最大的 10 个
+    for i in range(12):
+        (master / f"big_{i:02d}.bin").write_bytes(bytes((300 + i) * 1024))
+
+    stats = master_stats(fake_masters_dir, PLATFORM_STM32)
+
+    paths = [bf.path for bf in stats.big_files]
+    assert len(paths) == 10
+    assert paths[0] == "big_11.bin"  # 311KB 最大
+    assert paths[-1] == "big_02.bin"  # 302KB 第 10 大
+    assert "big_01.bin" not in paths  # 301KB 第 11 大：出列
+    assert "big_00.bin" not in paths
+    assert "edge.bin" not in paths
+    assert "small.txt" not in paths
+
+
+def test_master_stats_platform_not_in_library_raises(fake_masters_dir):
+    with pytest.raises(MasterError, match="不存在"):
+        master_stats(fake_masters_dir, PLATFORM_STM32)
+
+
+def test_master_stats_unknown_platform_raises(fake_masters_dir):
+    (fake_masters_dir / "vxworks").mkdir(parents=True)
+
+    with pytest.raises(MasterError, match="未知平台"):
+        master_stats(fake_masters_dir, "vxworks")
+
 
 
 # ---------------------------------------------------------------------------

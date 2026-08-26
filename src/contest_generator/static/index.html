@@ -957,6 +957,14 @@
   .master-file-btn:hover:not(:disabled) { border-color: var(--accent); }
   .master-file-btn:disabled { opacity: .55; cursor: not-allowed; }
   .master-file-btn.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); }
+  /* 母版健康徽章（工单 master-library-ui-2/01）：表格行体检直观化，悬停看明细 */
+  .master-health-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+    border-radius: 999px; border: 1px solid transparent; font-size: 12px; font-weight: 600;
+    white-space: nowrap; cursor: help; user-select: none; }
+  .master-health-ok { background: var(--ok-dim); color: var(--ok-bright);
+    border-color: rgba(63, 185, 80, .3); }
+  .master-health-warn { background: var(--warn-dim); color: var(--warn);
+    border-color: var(--warn-border); }
   .master-file-name { font-family: var(--mono); font-size: 12.5px; }
   .master-file-pre { white-space: pre-wrap; word-break: break-all; font-size: 12.5px;
     line-height: 1.7; max-height: min(52vh, 560px); overflow-y: auto; padding: 12px 14px;
@@ -2006,7 +2014,7 @@
     <div class="card">
       <h2>母版库（每平台一个）</h2>
       <table>
-        <thead><tr><th>平台</th><th>提炼来源</th><th>入库警告</th><th style="width:150px">操作</th></tr></thead>
+        <thead><tr><th>平台</th><th>提炼来源</th><th>入库警告</th><th>健康</th><th style="width:150px">操作</th></tr></thead>
         <tbody id="master-rows"></tbody>
       </table>
       <div id="master-msg" class="error"></div>
