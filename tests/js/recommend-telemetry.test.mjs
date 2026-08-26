@@ -2,8 +2,9 @@
 // 推荐 SSE 流绑定 telemetry 后，每次 LLM 调用完成前端显示观测快照
 // （调用数 / provider 分流 / 最新 operation / 耗时）——"AI 正在干什么"。
 // recPanel / startRecProgress / 推荐请求体按归属指向 ui/generate-recommend.js
-// （阶段 2 工单 12 重指向）；markup（rec-llm-telemetry / qa-text 等 id）在
-// index.html 不动。
+// （阶段 2 工单 12 重指向），btn-pin-auto 自动配置接线按归属指向
+// ui/generate-pins.js（阶段 2 工单 13 重指向）；markup（rec-llm-telemetry /
+// qa-text / btn-pin-auto 等 id）在 index.html 不动。
 // 运行：node --test tests/js/
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -19,6 +20,10 @@ const recSrc = readFileSync(
 );
 const masterJs = readFileSync(
   new URL("../../src/contest_generator/static/js/ui/master.js", import.meta.url),
+  "utf8"
+);
+const pinsSrc = readFileSync(
+  new URL("../../src/contest_generator/static/js/ui/generate-pins.js", import.meta.url),
   "utf8"
 );
 
@@ -54,10 +59,10 @@ test("蒸馏进度面板有 telemetry 展示位与 handler（照推荐先例；�
   assert.match(start[0], /prog-llm-telemetry/);
 });
 
-test("第 7 步引脚配置有自动配置按钮与端点接线", () => {
+test("第 7 步引脚配置有自动配置按钮与端点接线（胶水已迁 ui/generate-pins.js）", () => {
   assert.match(html, /id="btn-pin-auto"/);
-  assert.match(html, /\/api\/bindings\/auto/);
-  const handler = html.match(/\$\("btn-pin-auto"\)\.addEventListener\([\s\S]*?\n\}\);/);
+  assert.match(pinsSrc, /\/api\/bindings\/auto/);
+  const handler = pinsSrc.match(/\$\("btn-pin-auto"\)\.addEventListener\([\s\S]*?\n\}\);/);
   assert.ok(handler, "未找到 btn-pin-auto 事件监听（改名了？）");
   assert.match(handler[0], /collectBindings/);
   assert.match(handler[0], /renderPinCard\(\)/);

@@ -12,12 +12,13 @@
 //   expanded / pythonTemplates / warnings / scorePoints / lastRecommend /
 //   topicPdfTextVisible / recProblem / selectedReferenceIds / autoReferenceIds /
 //   referenceEntries —— 读写均在本模块；host 只读点名见下表。
-// instances / instancePinTarget 属引脚-多实例簇（工单 13 迁），留 host。
+// instances / instancePinTarget 属引脚-多实例簇（已随工单 13 迁 ui/generate-pins.js）。
 // host → 本簇的跨簇服务调用经 setClusterDeps 接缝（模块无法 import host）：
 //   scheduleDraftSave（草稿——工单 18 迁）/ updateFixCenterAvailability（修复
 //   中心——工单 16 迁）/ resetPinState / resetInstances / clearInstanceTarget /
-//   renderInstanceConfig / renderPinCard / loadPinBoard（引脚-多实例——工单 13
-//   迁）/ backfillInstances（推荐回填实例清单）。各簇迁出后改静态 import。
+//   renderInstanceConfig / renderPinCard / loadPinBoard / backfillInstances
+//   （引脚-多实例——工单 13 已迁入 ui/generate-pins.js，host 启动区注册改挂
+//   静态 import）。其余项迁出后同改。
 // 顶层 addEventListener / initModuleGrid() 在 import 时绑定（module 脚本延迟
 // 执行，DOM 已就绪）。
 import { $, handle, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
@@ -317,7 +318,7 @@ export function renderRecommendResult(data, autoAdd = true) {
     // 实例的模块 = 新猜测覆盖旧清单；AI 未猜（题面无明确数量）的模块保留用户
     // 已配清单——上限守卫是 expand_instances 的活（生成时拦），前端不截断
     if (data.instances) {
-      clusterDeps.backfillInstances(data.instances);  // 回填实例清单（host：instances 属 B 簇，工单 13 迁）
+      clusterDeps.backfillInstances(data.instances);  // 回填实例清单（instances 属 B 簇 ui/generate-pins.js——工单 13 已迁）
     }
   }
   expanded = []; warnings = [];
