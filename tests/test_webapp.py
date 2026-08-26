@@ -3592,6 +3592,80 @@ def test_masters_list_includes_health_and_stats(client, context, tmp_path):
     assert "content" not in entry
 
 
+def test_masters_tree_endpoint_returns_file_list(client, context, tmp_path):
+    """母版文件树端点（工单 master-library-ui-2/02）：平台目录下统一噪音跳过
+    的全部文件清单（一次算好 size），噪音目录不出现。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    master = context[0].config.masters_dir / "stm32"
+    (master / "user").mkdir()
+    (master / "user" / "oled.c").write_text("void oled_init(void){}\n", encoding="utf-8")
+    (master / "Debug").mkdir()
+    (master / "Debug" / "x.o").write_bytes(b"\0")
+
+    resp = client.get("/api/masters/stm32/tree")
+
+    assert resp.status_code == 200
+    paths = [f["path"] for f in resp.json()]
+    assert "user/oled.c" in paths
+    assert "main.c" in paths
+    assert "Debug/x.o" not in paths
+    oled = next(f for f in resp.json() if f["path"] == "user/oled.c")
+    assert oled["size_bytes"] == (master / "user" / "oled.c").stat().st_size
+
+
+def test_masters_tree_file_endpoint_returns_content(client, context, tmp_path):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    master = context[0].config.masters_dir / "stm32"
+    (master / "user").mkdir()
+    (master / "user" / "oled.c").write_text("void oled_init(void){}\n", encoding="utf-8")
+
+    resp = client.get("/api/masters/stm32/tree/user/oled.c")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"] == "user/oled.c"
+    assert body["content"] == "void oled_init(void){}\n"
+
+
+def test_masters_tree_file_endpoint_rejects_traversal(client, context, tmp_path):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+
+    # 斜杠须编码（safe=""）：裸 `..` 段会被 httpx 归一化删掉变 404，绕过路由
+    resp = client.get(f"/api/masters/stm32/tree/{quote('../evil.c', safe='')}")
+
+    assert resp.status_code == 400
+    assert "非法路径" in resp.json()["detail"]
+
+
+def test_masters_tree_file_endpoint_rejects_binary(client, context, tmp_path):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    (context[0].config.masters_dir / "stm32" / "blob.bin").write_bytes(b"ab\x00cd")
+
+    resp = client.get("/api/masters/stm32/tree/blob.bin")
+
+    assert resp.status_code == 400
+    assert "二进制" in resp.json()["detail"]
+
+
+def test_masters_tree_file_endpoint_rejects_oversize(client, context, tmp_path):
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    (context[0].config.masters_dir / "stm32" / "big.c").write_bytes(
+        b" " * (1024 * 1024 + 1)
+    )
+
+    resp = client.get("/api/masters/stm32/tree/big.c")
+
+    assert resp.status_code == 400
+    assert "预览上限" in resp.json()["detail"]
+
+
+def test_masters_tree_file_endpoint_platform_missing_400(client, context, tmp_path):
+    resp = client.get("/api/masters/stm32/tree/main.c")
+
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
+
+
 def test_master_file_content_endpoint_returns_text(client, context, tmp_path):
     """母版关键文件内容端点（工单 master-library-ui/02）：白名单.wall 内成功
     200（path/label/size_bytes/content）；主 content 为 utf-8 replace 读全文。"""

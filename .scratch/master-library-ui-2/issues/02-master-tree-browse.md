@@ -9,7 +9,7 @@
 **被谁阻塞：** 01（同改详情弹窗 / masterDetailHTML，先 01 后 02 防冲突；
 且树文件内容端点与 01 的 stats 同吃目录遍历口径）
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 ## 验收标准
 
@@ -41,4 +41,37 @@
 
 ## 实施记录
 
-（待实施）
+（2026-08-27 完成）
+
+- 后端：master_store.py 新增 TreeFileInfo + `master_tree_files`（统一噪音跳过、
+  全路径排序确定性）+ `read_master_tree_file`（路径安全拒绝面与
+  entry_store.is_unsafe_path 对齐：`..` 任意层级 / 空段 / 首字符 `/` / 反斜杠 /
+  冒号（NTFS ADS），另有 resolve 后必须落平台目录内的兜底；NUL 二进制拒绝；
+  超 TREE_FILE_MAX_PREVIEW_BYTES = 1MB 拒绝；utf-8 errors="replace" + 换行
+  归一化（与 read_master_file 同读法））；webapp 新增 GET
+  /api/masters/{platform}/tree 与 /tree/{path:path}（既有 /files 白名单端点
+  零改动）。
+- 前端：fx/master.js 新增 masterTreeFileURL / buildMasterTree / masterTreeNodeHTML
+  （目录 = 原生 details/summary 零 JS 收起；兄弟排序目录在前、同级按码点序
+  ——确定性，不用 localeCompare）；masterFileURL 与 masterTreeFileURL 收敛进
+  共享 helper _masterFileURL（评审去重）；masterDetailHTML 关键文件清单后加
+  「全部文件」段（data-master-tree 容器）；ui/master.js 新增
+  loadMasterTreeState（platform 级 memo，business 400 缓存）/ renderMasterTree /
+  wireMasterTree，点树文件 → 与关键文件共用同一内容箱（memo key =
+  platform/path 不变，openMasterPath 共享三态）；loadMasters 成功拉新列表
+  时 masterTreeCache 整体失效（库变树不旧）；index.html 树样式。
+- 测试：test_master_store.py 增 9 例（清单噪音跳过/确定性、内容读取、穿越
+  六形态、二进制、超限、缺失、平台不存在）；test_webapp.py 增 7 例（tree
+  清单 / 内容 200 / 穿越与二进制与超限与平台缺失 400——穿越用例须 safe=""
+  编码斜杠：裸 `..` 段会被 httpx 归一化删掉变 404 绕过路由）；test_autocommit.py
+  登记 master_tree_files/read_master_tree_file（read）；tests/js 增 4 例
+  （树构建嵌套/排序、树 HTML 递归与转义、URL 拼装）。
+- 回归：pytest 全量 2491 绿、node --test 458/458；真实库实扫（stm32 42 文件 /
+  mspm0 9 文件，ml_libs/ml_adc.c 与 targetConfigs/readme.txt 读取成功，
+  穿越路径 400）。
+- 评审：code-review 双轴——Standards 硬缺陷 1（路径安全弱于 is_unsafe_path
+  先例：补 `:`/`\\`/首字符 `/` 拒绝面，已修）+ 判断项 3（URL helper 共形重复
+  → _masterFileURL 收敛已修；openMasterFile 转发层保留——一行的命名转发器
+  可读性优于调用点内联；memo 键双端点共享经评估无害——同一磁盘文件同换行
+  归一化，注释已说明）；Spec 无缺项（树排序「目录在前」口径写入 spec 明示；
+  树错误文案删误导句；master_tree_files docstring 措辞修正为全路径排序）。

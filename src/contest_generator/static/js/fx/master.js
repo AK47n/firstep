@@ -39,6 +39,54 @@ export function masterStatsHTML(s) {
     <div class="ref-detail-row"><span class="ref-detail-k">大文件</span><span>${big || "—"}</span></div>`;
 }
 
+// buildMasterTree(files)：扁平文件清单 → 嵌套节点树（工单 02，按路径逐层
+// 聚合）。files = [{path, size_bytes}]（/tree 端点直出，顺序无关）；节点 =
+// {name, path, isDir, children?, size_bytes?}。兄弟排序：目录在前、同级内按
+// 名字码点序（确定性；跨运行时一致——localeCompare 依 locale 漂移，不用）。
+export function buildMasterTree(files) {
+  const root = { name: "", path: "", isDir: true, children: [] };
+  for (const f of files || []) {
+    const parts = f.path.split("/");
+    let node = root;
+    let prefix = [];
+    for (let i = 0; i < parts.length; i++) {
+      const name = parts[i];
+      prefix.push(name);
+      const isFile = i === parts.length - 1;
+      let child = node.children.find((c) => c.name === name);
+      if (!child) {
+        child = { name, path: prefix.join("/"), isDir: !isFile,
+          children: isFile ? undefined : [], size_bytes: isFile ? f.size_bytes : undefined };
+        node.children.push(child);
+      }
+      node = child;
+    }
+  }
+  return sortMasterTree(root.children);
+}
+
+function sortMasterTree(nodes) {
+  for (const n of nodes) if (n.children) sortMasterTree(n.children);
+  return nodes.sort((a, b) => (a.isDir === b.isDir
+    ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+    : a.isDir ? -1 : 1));
+}
+
+// masterTreeNodeHTML(nodes)：递归树 HTML（工单 02）——目录 = 原生
+// <details open>/<summary>（零 JS 收起逻辑），文件 = 行按钮
+// （data-master-tree-file 交事件层，data 属性 = 相对路径）。目录内子节点
+// 渲染为 <ul>；根 <ul class="master-tree"> 由调用方包裹。
+export function masterTreeNodeHTML(nodes) {
+  return (nodes || []).map((n) => n.isDir
+    ? `<li class="master-tree-dir"><details open><summary>${esc(n.name)}</summary>
+        <ul>${masterTreeNodeHTML(n.children)}</ul></details></li>`
+    : `<li class="master-tree-file">
+        <button type="button" class="master-tree-btn" data-master-tree-file="${esc(n.path)}">
+          <span class="master-tree-name">${esc(n.name)}</span>
+          <span class="muted">${formatSize(n.size_bytes)}</span></button></li>`
+  ).join("");
+}
+
 // masterTableRowHTML(m)：母版库表格行纯函数——平台展示名（platform_label，
 // 缺省回退 platform）、提炼来源 join("、")、入库警告 join("；")、健康徽章列
 // （带 health 字段时，工单 master-library-ui-2/01）、详情 + 删除按钮
@@ -74,11 +122,23 @@ export function masterDeleteConfirmHTML(m) {
   </div>`;
 }
 
-// masterFileURL(platform, path)：关键文件内容端点 URL 拼装——platform 与
-// path 逐段 encodeURIComponent（对偶 ref 轮 href 先例，路径经编码不进 URL 面）。
-export function masterFileURL(platform, path) {
-  return "/api/masters/" + encodeURIComponent(platform) + "/files/"
+// _masterFileURL(platform, endpoint, path)：母版文件内容端点 URL 拼装——
+// platform 与 path 逐段 encodeURIComponent（对偶 ref 轮 href 先例，路径经
+// 编码不进 URL 面）；endpoint = "files"（关键文件白名单）| "tree"（树文件），
+// 仅此一处有差异（评审去重：masterFileURL 与 masterTreeFileURL 共形）。
+function _masterFileURL(platform, endpoint, path) {
+  return "/api/masters/" + encodeURIComponent(platform) + "/" + endpoint + "/"
     + path.split("/").map(encodeURIComponent).join("/");
+}
+
+// masterFileURL(platform, path)：关键文件内容端点 URL。
+export function masterFileURL(platform, path) {
+  return _masterFileURL(platform, "files", path);
+}
+
+// masterTreeFileURL(platform, path)：树文件内容端点 URL（工单 02）。
+export function masterTreeFileURL(platform, path) {
+  return _masterFileURL(platform, "tree", path);
 }
 
 // masterKeyFileRowHTML(f)：清单行——相对路径 mono + label + 大小 + 缺失 ⚠。
@@ -111,6 +171,8 @@ export function masterDetailHTML(m) {
   <ul class="master-detail-files">${files.length
     ? files.map(masterKeyFileRowHTML).join("")
     : '<li class="muted">未配置关键文件清单</li>'}</ul>
+  <div class="topic-detail-problem-title">全部文件</div>
+  <div data-master-tree><span class="muted">加载中…</span></div>
   <div class="topic-detail-problem-title">文件内容</div>
   <div data-master-content><span class="muted">点击上方文件加载全文（纯文本，按需取）。</span></div>`;
 }
@@ -140,5 +202,5 @@ export function archiveItem(a) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem, masterHealthBadgeHTML, masterStatsHTML });
+  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem, masterHealthBadgeHTML, masterStatsHTML, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML });
 }

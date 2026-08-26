@@ -26,7 +26,9 @@ from contest_generator.master_store import (
     master_health,
     master_key_files,
     master_stats,
+    master_tree_files,
     read_master_file,
+    read_master_tree_file,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.report import (
@@ -609,6 +611,102 @@ def test_master_stats_unknown_platform_raises(fake_masters_dir):
 
     with pytest.raises(MasterError, match="未知平台"):
         master_stats(fake_masters_dir, "vxworks")
+
+
+# ---------------------------------------------------------------------------
+# 文件树（工单 master-library-ui-2/02）：全部文件清单 + 树内文件内容
+# ---------------------------------------------------------------------------
+
+
+def test_master_tree_files_lists_all_with_noise_skip(fake_masters_dir):
+    """树清单 = 统一噪音跳过后的全部文件（构建产物目录 / .git 不计入），
+    排序确定性（目录序），每条 {path, size_bytes}。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    master = fake_masters_dir / "stm32"
+    (master / "user" / "main.c").write_text("int main(void){}\n", encoding="utf-8")
+    (master / "Debug").mkdir()
+    (master / "Debug" / "main.o").write_bytes(b"\0" * 8)
+    (master / ".git").mkdir()
+    (master / ".git" / "HEAD").write_text("ref", encoding="utf-8")
+
+    files = master_tree_files(fake_masters_dir, PLATFORM_STM32)
+
+    paths = [f.path for f in files]
+    assert set(paths) == {
+        "main.c",
+        "pin_config.h",
+        "led_instances.h",
+        "user/Project.uvprojx",
+        "user/main.c",
+    }
+    assert ".git/HEAD" not in paths
+    assert "Debug/main.o" not in paths
+    assert all(isinstance(f.size_bytes, int) and f.size_bytes > 0 for f in files)
+    # 排序确定性：同输入两次调用逐条相等（跨平台路径序语义不同，不做具体序断言）
+    assert files == master_tree_files(fake_masters_dir, PLATFORM_STM32)
+
+
+def test_master_tree_files_platform_not_in_library_raises(fake_masters_dir):
+    with pytest.raises(MasterError, match="不存在"):
+        master_tree_files(fake_masters_dir, PLATFORM_STM32)
+
+
+def test_read_master_tree_file_returns_content(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    master = fake_masters_dir / "stm32"
+    (master / "user" / "oled.c").write_text("void oled_init(void){}\n", encoding="utf-8")
+
+    result = read_master_tree_file(fake_masters_dir, PLATFORM_STM32, "user/oled.c")
+
+    assert result["path"] == "user/oled.c"
+    assert result["size_bytes"] == (master / "user" / "oled.c").stat().st_size
+    assert result["content"] == "void oled_init(void){}\n"
+
+
+def test_read_master_tree_file_rejects_traversal(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+
+    # 拒绝面与 entry_store.is_unsafe_path 对齐：.. 任意层级 / 空段 / 首字符
+    # 斜杠（绝对路径）/ 反斜杠 / 冒号（NTFS ADS）
+    for path in (
+        "../evil.c",
+        "user/../../evil.c",
+        "a//b.c",
+        "..\\windir.c",
+        "/abs.c",
+        "a:b.c",
+    ):
+        with pytest.raises(MasterError, match="非法路径"):
+            read_master_tree_file(fake_masters_dir, PLATFORM_STM32, path)
+
+
+def test_read_master_tree_file_rejects_binary(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "blob.bin").write_bytes(b"ab\x00cd")
+
+    with pytest.raises(MasterError, match="二进制"):
+        read_master_tree_file(fake_masters_dir, PLATFORM_STM32, "blob.bin")
+
+
+def test_read_master_tree_file_rejects_oversize(fake_masters_dir):
+    """超过 TREE_FILE_MAX_PREVIEW_BYTES（1MB）拒绝——大文件不读全文。"""
+    _make_stm32_master_with_key_files(fake_masters_dir)
+    (fake_masters_dir / "stm32" / "big.c").write_bytes(b" " * (1024 * 1024 + 1))
+
+    with pytest.raises(MasterError, match="预览上限"):
+        read_master_tree_file(fake_masters_dir, PLATFORM_STM32, "big.c")
+
+
+def test_read_master_tree_file_missing_raises(fake_masters_dir):
+    _make_stm32_master_with_key_files(fake_masters_dir)
+
+    with pytest.raises(MasterError, match="文件不存在"):
+        read_master_tree_file(fake_masters_dir, PLATFORM_STM32, "nope.c")
+
+
+def test_read_master_tree_file_platform_not_in_library_raises(fake_masters_dir):
+    with pytest.raises(MasterError, match="不存在"):
+        read_master_tree_file(fake_masters_dir, PLATFORM_STM32, "main.c")
 
 
 

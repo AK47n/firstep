@@ -493,6 +493,9 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 工单 master-library-ui-2/01：健康 / 体积统计——只读文件系统实况、不落盘
         "master_health": ("read", ""),
         "master_stats": ("read", ""),
+        # 工单 master-library-ui-2/02：文件树清单 / 树文件内容——只读、不落盘
+        "master_tree_files": ("read", ""),
+        "read_master_tree_file": ("read", ""),
     },
     "archive": {
         "prepare_archive": ("read", ""),
