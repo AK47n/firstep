@@ -114,6 +114,10 @@ const DOMAINS = {
     sectionCollapseLabel: "fn", settingsSectionHead: "fn",
     applySettingsCollapseState: "fn",
   },
+  "workflow.js": {
+    wfNum: "fn", formatWorkflowUsage: "fn", formatWorkflowCost: "fn",
+    formatWorkflowSummary: "fn", formatWorkflowCall: "fn",
+  },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
