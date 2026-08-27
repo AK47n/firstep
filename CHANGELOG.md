@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=94425fd00680ac33fb43c046f659748790235803 -->
+<!-- changelog-auto: last-commit=22750eb0e20a283e9064f2436920790a5566461e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-08-28
 - 00:18 任务商量与序号（task-chat/01-03）：每卡多轮对话区 + 对话结论采纳注入执行 + 建议序号
+- 00:26 任务商量评审整改：序号补「（建议顺序）」、采纳按钮补 data-task-adopt、discuss 去掉 message 双通道（单通道 = history 末条）+ 工单 resolved + CONTEXT.md 词条
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
