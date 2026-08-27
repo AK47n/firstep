@@ -1725,6 +1725,22 @@
         <div id="revise-result" class="hidden" style="margin-top:10px"></div>
         <div id="revise-exec-msg" class="error"></div>
       </div>
+
+      <!-- 任务推进（工单 task-progress/01-03）：AI 拆解任务清单 → 逐任务执行
+           → 每步编译验证 → 状态徽章。上下文复用上方「上下文入口」的加载结果。 -->
+      <div id="tasks-box" class="card-group hidden" style="margin-top:12px">
+        <div class="card-group-title">任务推进（拆解 → 逐任务执行 → 每步编译验证）</div>
+        <div class="muted" style="margin-bottom:6px">AI 按题面拆成有序任务清单：每个任务 = 一段可独立实现的 main.c 增量，点「做这一步」执行 —— 写盘前整树备份、自动编译验证（绿 = 已验证；无工具链 = 降级提示）；已跳过的任务不阻塞。</div>
+        <div class="row">
+          <button id="btn-tasks-plan" class="primary">拆解任务</button>
+          <button id="btn-tasks-replan" class="hidden">重新拆解（覆盖）</button>
+          <span id="tasks-progress" class="muted"></span>
+          <span id="tasks-status" class="muted"></span>
+        </div>
+        <div id="tasks-llm-telemetry" class="llm-telemetry hidden"></div>
+        <div id="tasks-grid" class="hidden" style="margin-top:10px"></div>
+        <div id="tasks-msg" class="error"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -2273,6 +2289,7 @@ import { recentStatusMeta, recentTimeLabel, recentPlatformLabel, recentChipHTML,
 import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
 import { formatLLMTelemetry, parseSSE, usageDelta, usageAccumulate, llmCostEstimate, usageDisplay } from "/js/fx/llm.js";
 import { formatScorePoints, renderScorePointPanel, scoreChecklistPartLabel, scoreChecklistScoreText, scoreChecklistRefsText, scoreChecklistId, scoreChecklistChecked, scoreChecklistLineText, scoreChecklistKey, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistExportText, scoreChecklistParse, scoreChecklistLoad, scoreChecklistSave } from "/js/fx/score.js";
+import { taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel, taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText } from "/js/fx/task.js";
 import { SETTINGS_COLLAPSE_KEY, SETTINGS_DEFAULT_COLLAPSED, parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, settingsMasterLabel, sectionCollapseLabel, settingsSectionHead, applySettingsCollapseState } from "/js/fx/settings.js";
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
 import { $, handle, apiGet, apiPost, apiPut, apiDelete, KIND_TEXT, state, setState, toast } from "/js/app.js";
@@ -2287,7 +2304,8 @@ import { instances, pinBindings, pinUnbound, pinRoles, renderInstanceConfig, ren
 import { initMainCTools, syncMainCHighlight, currentCodeZoomPct, applyCodeZoom } from "/js/ui/generate-mainc.js";
 import { initScoreChecklist } from "/js/ui/generate-core.js";
 import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } from "/js/ui/generate-fix.js";
-import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext } from "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
+import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext, reviseGetDir } from "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
+import { tasksPlan } from "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";

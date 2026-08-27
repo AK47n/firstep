@@ -62,6 +62,7 @@ from .context_manifest import (
     validate_context_fields,
 )
 from .deepen import DeepenError, run_deepen
+from .task_progress import TaskError, check_plan_replaceable, run_task_planning
 from .errors import error_entry
 from .events import EVENT_CACHE_HIT, ProgressEvent
 from .extraction import (
@@ -1907,10 +1908,92 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
 
     # ------------------------------------------------------------------
-    # 编译错误修复（工单 compile-error-fix/01）：贴报错 → LLM 修复 →
-    # 直接写回（备份 + 可回滚）。域判决与单轮编排在 fix_errors.py
-    # （run_fix_round，对照 run_recommendation 先例），路由只做薄壳装配。
+    # 任务推进 · 拆解（工单 task-progress/01）：AI 把题面 + 功能需求 +
+    # 评分点 + 模块接口 + 当前 main.c 拆成有序任务清单 → 落盘
+    # .contest_tasks.json。域判决在 task_progress.py（照 run_deepen 先例），
+    # 路由只做薄壳装配。
     # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/plan")
+    @_map_errors
+    def tasks_plan(payload: dict) -> StreamingResponse:
+        """任务拆解（SSE 流）：拆解中 → done（任务清单）或 error（中文信息）。
+
+        请求体契约：output_dir（必填，生成结果目录）；problem_text（可选覆盖，
+        历史目录补题面流程）；score_points（可选，当前会话推荐结果——历史
+        目录缺省空，任务不带分值标注）；force（可选布尔，重新拆解——旧清单
+        备档 .contest_tasks.json.bak 后覆盖）。
+
+        事件序列：task_planning（LLM 拆解中，分钟级）→ done（{"version",
+        "generated_at", "tasks": [...]}，任务状态全部 pending）或 error
+        （中文信息）→ 流结束。HTTP 200 起流，失败以流内 error 事件收尾。
+
+        缺上下文（无题面 / 无功能需求清单 / main.c 空）→ 400 中文提示
+        （照 /api/revise/deepen 判断口径）；清单已存在且未带 force →
+        TaskError（前端引导用「重新拆解」，防误覆盖进度）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if payload.get("problem_text") is not None:
+            fields["problem_text"] = _require_str(payload, "problem_text")
+        if not fields.get("problem_text"):
+            raise TaskError(
+                "缺少赛题原文——请先补题面（任务拆解需要题面证据，历史工程"
+                "请粘贴题面后重试）"
+            )
+        if not fields.get("requirements"):
+            raise TaskError(
+                "缺少功能需求清单——任务拆解依赖功能需求层"
+                "（请用含上下文清单的新工程，或重新生成 / 修订）"
+            )
+        platform = fields["platform"]
+        # main.c 现读（与深化同口径：手工编辑保留，拆解基于当前内容）
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        if not main_c:
+            raise TaskError("工程 main.c 为空，无法拆解任务")
+        # 评分点：当前会话推荐结果直传；历史目录 / 未选 = 空（拆解仍可进行）
+        score_points = parse_score_points(payload.get("score_points"))
+        force = payload.get("force") is True
+        # 防误覆盖守卫：清单已存在且未 force → 同步 400（起流前明确失败，
+        # 前端据 deatil 引导「重新拆解」；域编排内部另有背兜）
+        check_plan_replaceable(output_dir, force)
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("tasks-plan")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_task_planning(
+                        llm=llm,
+                        problem_text=fields["problem_text"],
+                        qa_text=fields.get("qa_text", ""),
+                        requirements=fields.get("requirements") or (),
+                        score_points=[p.to_dict() for p in score_points],
+                        manifests=resolved.manifests,
+                        platform=platform,
+                        library_dir=module_library_dir,
+                        master_project_dir=master_project_dir(
+                            config.masters_dir, platform
+                        ),
+                        main_c=main_c,
+                        output_dir=output_dir,
+                        emit=emit,
+                        force=force,
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
 
     @app.post("/api/fix-errors")
     @_map_errors

@@ -74,6 +74,7 @@ from .selection import (
     SelectionError,
     build_module_selection,
 )
+from .task_progress import TaskError, TaskPlan, build_task_plan
 from .topic_library import TopicDraft, validate_topic_key
 from .wordlist import (
     DEFAULT_WORDLIST,
@@ -214,6 +215,30 @@ DEEPEN_SYSTEM_PROMPT = (
     + SKELETON_NO_UNUSED_RULE
     + "输出完整 main.c（整个文件，不是片段），纯 C 代码，不要用 ``` 或 ~~~ "
     "代码围栏包裹，不要输出任何 Markdown 标记。"
+)
+
+# 任务拆解系统提示词（工单 task-progress/01）：把题面 + 功能需求层 + 评分点 +
+# 模块接口 + 现有 main.c 拆成有序任务清单。任务 = 可独立执行并独立编译验证的
+# main.c 增量；id 由域层按顺序分配，这里只产标题/描述/关联/前置/验收方式。
+TASK_PLAN_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师与赛题施工队长。把赛题实现拆解为有序任务清单"
+    "（赛题文本 / 接口过长可能被截断，见末尾标注，"
+    + TRUNCATION_NOTICE
+    + "）：每个任务 = 对现有 main.c 的一次可独立实现、可独立编译验证的增量"
+    "（如「ADC 采样与显示」「PID 闭环」「循迹决策」）。规则："
+    "① 覆盖题面全部实质要求与功能需求清单，不遗漏、不题外发挥；"
+    "② 任务按实现顺序排列（基础在前、依赖在前），后续任务基于前序任务结果；"
+    "③ 只调用给定接口中真实存在的函数；"
+    "④ 粒度适中：一次任务对应一次 LLM 实现调用（约一段 TODO / 一个功能闭环），"
+    "不要拆到单函数，也不要一个任务吃掉整个题；"
+    "⑤ depends_on = 前置任务序号（1 起，本清单内的位置），无前置 = 空数组；"
+    "⑥ score_refs = 关联评分点 id（只引用题面评分点清单里的 id，无评分点 = "
+    "空数组；一条任务可关联多个评分点）；"
+    "⑦ verify = 该任务完成后的验收方式：compile = 编译绿即算验证通过；"
+    "manual = 需要上板观察现象人工确认（如循迹效果、显示内容正确性）。"
+    '只输出 JSON 对象：{"tasks": [{"title": "短标题（8-16 字）", '
+    '"description": "做什么、用哪些接口、落到 main.c 哪里（带 TODO 上下文）", '
+    '"score_refs": ["s1"], "depends_on": [1, 2], "verify": "compile"}]}'
 )
 
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
@@ -1041,6 +1066,16 @@ class LLM(Protocol):
         problem_text: str,
         qa_text: str,
     ) -> str: ...
+
+    def plan_tasks(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+    ) -> TaskPlan: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -2116,6 +2151,57 @@ class DeepSeekLLM:
             operation="deepen_main_c",
         )
 
+    def plan_tasks(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+    ) -> TaskPlan:
+        """任务拆解（工单 task-progress/01）：题面 + 功能需求 + 评分点 + 接口 +
+        现有 main.c → 有序任务清单。
+
+        输入 = 现有 main.c（含 TODO）+ 功能需求清单 + 评分点清单 + 模块接口
+        清单 + 题面与 Q&A；输出 JSON 由 task_progress.build_task_plan 域判决
+        （id 顺序分配 / depends_on 序号转 id / score_refs 校验 / verify 词表
+        修正）；域判决错误由传输侧翻译回 LLMError（错误契约 502，task_progress
+        不 import LLMError——与 llm → selection 边同款防环，但 build_task_plan
+        在 llm 层调用，TaskError 在此翻译）。畸形输出 / 瞬时失败整次重问
+        （_retry_parse ≤SUMMARY_RETRY_LIMIT 轮）。
+        """
+        known_score_ids = [
+            str(point.get("id", f"score-{index}"))
+            for index, point in enumerate(score_points, 1)
+            if isinstance(point, Mapping)
+        ]
+
+        def parse(content: str) -> TaskPlan:
+            try:
+                return build_task_plan(
+                    extract_module_selection_data(content),
+                    known_score_ids=known_score_ids,
+                )
+            except TaskError as exc:
+                raise LLMError(str(exc)) from exc
+
+        return self._retry_parse(
+            system_prompt=TASK_PLAN_SYSTEM_PROMPT,
+            user_prompt=_task_plan_user_prompt(
+                problem_text,
+                qa_text,
+                requirements,
+                score_points,
+                module_interfaces,
+                main_c,
+            ),
+            parse=parse,
+            label="任务拆解",
+            operation="plan_tasks",
+            json_mode=True,
+        )
+
     def _observe_call(
         self,
         *,
@@ -2689,6 +2775,26 @@ class RoutingLLM:
             main_c, requirements, module_interfaces, problem_text, qa_text
         )
 
+    def plan_tasks(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+    ) -> TaskPlan:
+        # 任务拆解走 remote（质量优先，不进本地方法集——拆解质量决定
+        # 整个任务推进的可用性，本地小模型拆粒度偏差大）
+        return self._remote.plan_tasks(
+            problem_text,
+            qa_text,
+            requirements,
+            score_points,
+            module_interfaces,
+            main_c,
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -3063,6 +3169,26 @@ def _clarify_user_prompt(
     return "\n".join(lines)
 
 
+def _requirement_lines(
+    requirements: Sequence[Mapping[str, Any]], heading: str
+) -> list[str]:
+    """功能需求清单的编号行（深化 / 任务拆解共用，单源防分叉）。
+
+    每行 = "{序号}. {需求原文}（题面句子 N）"——题面句子注记可追踪来源；
+    requirements 为空 → 空列表（调用方保证已有空段判断）。
+    """
+    lines = ["", heading]
+    for index, req in enumerate(requirements, 1):
+        requirement = req.get("requirement", "") if isinstance(req, Mapping) else ""
+        lines_note = (
+            f"（题面句子 {req.get('sentence', '')}）"
+            if isinstance(req, Mapping) and req.get("sentence")
+            else ""
+        )
+        lines.append(f"{index}. {requirement}{lines_note}")
+    return lines
+
+
 def _deepen_user_prompt(
     main_c: str,
     requirements: Sequence[Mapping[str, Any]],
@@ -3077,19 +3203,50 @@ def _deepen_user_prompt(
     if qa_text:
         lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
     if requirements:
-        req_lines = ["", "功能需求清单（逐条填充，不要遗漏、不要题外发挥）："]
-        for index, req in enumerate(requirements, 1):
-            requirement = req.get("requirement", "") if isinstance(req, Mapping) else ""
-            lines_note = (
-                f"（题面句子 {req.get('sentence', '')}）"
-                if isinstance(req, Mapping) and req.get("sentence")
-                else ""
-            )
-            req_lines.append(f"{index}. {requirement}{lines_note}")
-        lines += req_lines
-    lines += ["", "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："]
+        lines += _requirement_lines(
+            requirements, "功能需求清单（逐条填充，不要遗漏、不要题外发挥）："
+        )
+    lines += ["", SKELETON_INTERFACES_HEADING]
     lines.extend(_truncate_content(block) for block in module_interfaces)
     lines += ["", "现有 main.c（在 TODO 预留区填充实现，其余内容原样保留）：", main_c]
+    return "\n".join(lines)
+
+
+def _task_plan_user_prompt(
+    problem_text: str,
+    qa_text: str,
+    requirements: Sequence[Mapping[str, Any]],
+    score_points: Sequence[Mapping[str, Any]],
+    module_interfaces: Sequence[str],
+    main_c: str,
+) -> str:
+    """任务拆解的 user 消息（工单 task-progress/01）：题面 + Q&A + 功能需求
+    清单 + 评分点清单 + 接口 + 现有 main.c。各段截断带标注（_truncate_content
+    / _fit_fulltext_wire 同款预算）。"""
+    lines = ["赛题：", _truncate_content(problem_text)]
+    if qa_text:
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+    if requirements:
+        lines += _requirement_lines(
+            requirements, "功能需求清单（任务必须逐条覆盖，不遗漏、不题外发挥）："
+        )
+    if score_points:
+        pt_lines = ["", "题面评分点（score_refs 只引用这里的 id）："]
+        for index, point in enumerate(score_points, 1):
+            if not isinstance(point, Mapping):
+                continue
+            pid = point.get("id", f"score-{index}")
+            score_text = (
+                f"{point.get('score')} 分"
+                if isinstance(point.get("score"), (int, float))
+                and not isinstance(point.get("score"), bool)
+                else "未标分"
+            )
+            pt_lines.append(f"- {pid}｜{point.get('description', '')}（{score_text}）")
+        lines += pt_lines
+    lines += ["", SKELETON_INTERFACES_HEADING]
+    lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += ["", "现有 main.c（任务是填入 TODO 预留区的增量，其余内容原样保留）：", main_c]
     return "\n".join(lines)
 
 

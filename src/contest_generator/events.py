@@ -79,6 +79,11 @@ EVENT_REVISION_GENERATING = "revision_generating"
 EVENT_DEEPENING_START = "deepening_start"
 EVENT_VERIFY_RESULT = "verify_result"
 
+# 任务推进（工单 task-progress/01）的事件类型：task_planning = 任务拆解
+# LLM 调用开始（分钟级）；执行侧 task_executing（工单 02）+ 复用
+# compile_start / fix_start / verify_result 既有词表。
+EVENT_TASK_PLANNING = "task_planning"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；

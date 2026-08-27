@@ -115,6 +115,9 @@ async function reviseLoad(outputDir) {
     revise.missing = data.missing || [];
     reviseRenderContext();
     $("revise-load-status").textContent = "加载完成";
+    // 跨簇通知（任务推进簇监听，按目录差异重置自身状态——事件总线承担
+    // 「状态生命周期与广播时机」，任务簇已单向 import 取值函数 reviseGetDir）
+    window.dispatchEvent(new CustomEvent("revise-context-loaded", { detail: { output_dir: outputDir } }));
   } catch (e) {
     revise.outputDir = "";
     $("revise-load-status").textContent = "";
@@ -147,6 +150,8 @@ function reviseRenderContext() {
   $("revise-context").classList.remove("hidden");
   $("revise-analyze-box").classList.remove("hidden");
   $("revise-exec-box").classList.remove("hidden");
+  // 任务推进（工单 task-progress/01）：上下文就绪才展示拆解入口（同一输出目录）
+  $("tasks-box").classList.remove("hidden");
 }
 
 /** 修订 / 深化 SSE 流（runCompileOnce 先例）：done 载荷返回；error 终态 /
@@ -510,6 +515,11 @@ $("revise-problem-text").addEventListener("input", () => {
 });
 
 
+/** 已加载上下文的输出目录（跨簇只读访问：任务推进簇经此复用，不重复选目录）。 */
+function reviseGetDir() {
+  return revise.outputDir;
+}
+
 // ---- 本簇导出面（host 零调用点——按工单 17 检查表导出为模块 API） ----
 export { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen,
-  reviseResetAll, reviseRenderContext };
+  reviseResetAll, reviseRenderContext, reviseGetDir };
