@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.platforms import PLATFORM_STM32
+from contest_generator.revision import revise_backup_root
 from contest_generator.task_progress import (
     ALLOWED_STATUS_TRANSITIONS,
     STATUS_DOING,
@@ -35,6 +36,7 @@ from contest_generator.task_progress import (
     build_task_plan,
     find_task,
     read_task_plan,
+    rollback_task_iteration,
     run_task,
     run_task_planning,
     update_task_status,
@@ -739,6 +741,56 @@ def test_run_task_empty_llm_result_reverts_doing(tmp_path):
     assert saved.tasks[0].status == STATUS_PENDING  # 恢复 previous，不钉 doing
 
 
+def test_run_task_feedback_empty_result_reverts_terminal(tmp_path, monkeypatch):
+    """反馈轮 LLM 空结果 → 恢复**反馈前终态**而非 pending（评审 (c) 修复回归：
+    previous_status 必须在自动重开前捕获——若在重开后捕获会拿到 pending，
+    任务错位恢复为「pending + 旧 verified 实现」）。"""
+    library, output_dir = _task_env(tmp_path)
+    _green_toolchain(monkeypatch, tmp_path)
+    plan = TaskPlan(
+        tasks=(Task(id="t1", title="循迹", description="循迹决策"),)
+    )
+    # 首轮：verified
+    run_task(
+        llm=FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"),
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert read_task_plan(output_dir).tasks[0].status == STATUS_VERIFIED
+    # 反馈轮：LLM 空结果 → TaskError；状态必须回 verified（反馈前终态）
+    with pytest.raises(TaskError):
+        run_task(
+            llm=FakeLLM(executed_main_c="   "),
+            task_id="t1",
+            note="",
+            problem_text="题面",
+            qa_text="",
+            manifests=[],
+            platform=PLATFORM_STM32,
+            library_dir=library,
+            master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+            main_c="int main(void) { /* 循迹已实现 */ while (1); }\n",
+            output_dir=output_dir,
+            work_root=tmp_path / "work",
+            emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+            feedback="上板发现左轮不转",
+        )
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.tasks[0].status == STATUS_VERIFIED  # 反馈前终态，非 pending
+    assert len(saved.tasks[0].iterations) == 1  # 失败轮不落迭代记录
+
+
 def test_find_task_missing_plan():
     """清单未拆解（None）→ TaskError；找不到任务 → TaskError。"""
     with pytest.raises(TaskError):
@@ -804,6 +856,243 @@ def test_tasks_execute_sse_flow(tasks_client, monkeypatch):
     assert saved["tasks"][0]["status"] == STATUS_VERIFIED
     # 写盘生效
     assert "循迹已实现" in (Path(output_dir) / "main.c").read_text(encoding="utf-8")
+
+
+def test_tasks_execute_feedback_not_string_400(tasks_client):
+    """feedback 非字符串 → 400 中文（表单契约校验，_optional_str 单源）。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    resp = client.post(
+        "/api/tasks/execute",
+        json={
+            "output_dir": output_dir,
+            "task_id": "t1",
+            "feedback": ["左轮不转"],
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert "必须是字符串" in resp.json()["detail"]
+
+
+def test_tasks_execute_unknown_task_error_event(tasks_client):
+    """任务不存在 → SSE 流内 error 事件（find_task TaskError 走错误映射，
+    不裸 500）；事件含任务 id 便于前端定位。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    resp = client.post(
+        "/api/tasks/execute",
+        json={"output_dir": output_dir, "task_id": "t99"},
+    )
+    assert resp.status_code == 200, resp.text
+    events = _sse_events(resp)
+    assert events[-1][0] == "error"
+    assert "t99" in events[-1][1]["message"]
+
+
+def test_tasks_execute_feedback_flow(tasks_client, monkeypatch):
+    """反馈轮 SSE：已验证任务 + feedback → 自动重开 → done（task 带 2 条迭代，
+    第 2 条 kind=feedback）；清单落盘含迭代记录。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(
+            tasks=(Task(id="t1", title="循迹", description="循迹决策"),)
+        )
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    holder["llm"] = FakeLLM(
+        executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    # 首轮执行 → verified
+    resp = client.post(
+        "/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"}
+    )
+    assert resp.status_code == 200, resp.text
+    # 反馈轮 → 自动重开 + 迭代追加
+    resp = client.post(
+        "/api/tasks/execute",
+        json={
+            "output_dir": output_dir,
+            "task_id": "t1",
+            "feedback": "上板发现左轮不转",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    events = _sse_events(resp)
+    done = events[-1][1]
+    assert done["status"] == STATUS_VERIFIED
+    iterations = done["task"]["iterations"]
+    assert len(iterations) == 2
+    assert iterations[1]["kind"] == "feedback"
+    assert iterations[1]["feedback"] == "上板发现左轮不转"
+    # 落盘一致
+    saved = json.loads(
+        (Path(output_dir) / TASKS_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert len(saved["tasks"][0]["iterations"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# 轮次回滚（工单 task-feedback/03）：撤销语义（恢复该轮执行前快照 + 前轮终态）
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_task_iteration_restores_previous_state(tmp_path, monkeypatch):
+    """回滚第 2 轮：main.c 恢复为第 2 轮执行前内容（= 第 1 轮成果），
+    状态恢复为该轮前终态（verified）；迭代历史保留。"""
+    library, output_dir = _task_env(tmp_path)
+    _green_toolchain(monkeypatch, tmp_path)
+    kwargs = dict(
+        llm=FakeLLM(executed_main_c="// v1\nint main(void) { return 0; }\n"),
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    run_task(**kwargs)
+    run_task(
+        **{
+            **kwargs,
+            "llm": FakeLLM(executed_main_c="// v2\nint main(void) { return 0; }\n"),
+            "feedback": "左轮不转，改慢一点",
+        }
+    )
+    assert "// v2" in (output_dir / "main.c").read_text(encoding="utf-8")
+    result = rollback_task_iteration(
+        output_dir, "t1", 2, revise_backup_root(tmp_path / "work")
+    )
+    main_c = (output_dir / "main.c").read_text(encoding="utf-8")
+    assert "// v1" in main_c
+    assert "// v2" not in main_c
+    assert result["task"]["status"] == STATUS_VERIFIED  # 第 2 轮前终态 = 轮 1 verified
+    assert result["restored"]  # 恢复文件列表非空
+    # 迭代历史保留（撤销不改历史）
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert len(saved.tasks[0].iterations) == 2
+
+
+def test_rollback_task_iteration_seq1_returns_to_pending(tmp_path, monkeypatch):
+    """回滚第 1 轮（无前轮）：main.c 回到执行前 TODO 内容，状态回 pending。"""
+    library, output_dir = _task_env(tmp_path)
+    _green_toolchain(monkeypatch, tmp_path)
+    result = run_task(
+        llm=FakeLLM(
+            executed_main_c="// v1\nint main(void) { /* 循迹已实现 */ while (1); }\n"
+        ),
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_VERIFIED
+    out = rollback_task_iteration(
+        output_dir, "t1", 1, revise_backup_root(tmp_path / "work")
+    )
+    main_c = (output_dir / "main.c").read_text(encoding="utf-8")
+    assert "/* TODO */" in main_c  # 回到执行前骨架
+    assert "循迹已实现" not in main_c
+    assert out["task"]["status"] == STATUS_PENDING
+
+
+def test_rollback_task_iteration_missing_seq_raises(tmp_path, monkeypatch):
+    """轮次不存在：TaskError，不写盘。"""
+    library, output_dir = _task_env(tmp_path)
+    _green_toolchain(monkeypatch, tmp_path)
+    run_task(
+        llm=FakeLLM(
+            executed_main_c="// v1\nint main(void) { /* 循迹已实现 */ while (1); }\n"
+        ),
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    with pytest.raises(TaskError, match="没有第 99 轮记录"):
+        rollback_task_iteration(
+            output_dir, "t1", 99, revise_backup_root(tmp_path / "work")
+        )
+
+
+def test_tasks_rollback_iteration_endpoint(tasks_client, monkeypatch):
+    """回滚端点：执行 → 回滚 seq=1 → 200（status=pending + restored 非空）。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(
+            tasks=(Task(id="t1", title="循迹", description="循迹决策"),)
+        )
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    holder["llm"] = FakeLLM(
+        executed_main_c="// v1\nint main(void) { /* 循迹已实现 */ while (1); }\n"
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    client.post("/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"})
+    resp = client.post(
+        "/api/tasks/rollback-iteration",
+        json={"output_dir": output_dir, "task_id": "t1", "seq": 1},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["task"]["status"] == STATUS_PENDING
+    assert body["restored"]
+    assert "/* TODO */" in (Path(output_dir) / "main.c").read_text(encoding="utf-8")
+
+
+def test_tasks_rollback_iteration_seq_bad_400(tasks_client):
+    """seq 非正整数 → TaskError 400 中文。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    resp = client.post(
+        "/api/tasks/rollback-iteration",
+        json={"output_dir": output_dir, "task_id": "t1", "seq": "x"},
+    )
+    assert resp.status_code == 400, resp.text
+    assert "正整数" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -903,6 +1192,249 @@ def test_run_task_manual_verify_stays_unverified(tmp_path, monkeypatch):
     saved = read_task_plan(output_dir)
     assert saved is not None
     assert saved.tasks[0].status == STATUS_UNVERIFIED
+
+
+# ---------------------------------------------------------------------------
+# 迭代历史（工单 task-feedback/01）：每轮执行记录 + 旧清单兼容
+# ---------------------------------------------------------------------------
+
+
+def test_run_task_records_first_iteration(tmp_path, monkeypatch):
+    """初始执行后：任务带 1 条迭代记录（seq=1/kind=execute/status 终态/backup_id）。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    task = saved.tasks[0]
+    assert len(task.iterations) == 1
+    iteration = task.iterations[0]
+    assert iteration.seq == 1
+    assert iteration.kind == "execute"
+    assert iteration.feedback == ""
+    assert iteration.status == STATUS_VERIFIED  # 该轮终态（回滚恢复用）
+    assert iteration.backup_id
+    assert iteration.at  # 时间戳非空
+    # 编译摘要已落（形状如 {'errors': 0, 'warnings': 0}，存在即可）
+    assert iteration.compile_summary
+    # 未执行任务不受影响
+    assert saved.tasks[1].iterations == ()
+
+
+def test_run_task_appends_iteration_on_reexecute(tmp_path, monkeypatch):
+    """再次执行（反馈/重做）→ 追加而非覆盖，seq 递增。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    kwargs = dict(
+        llm=FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"),
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    run_task(**kwargs)
+    run_task(**kwargs)
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    iterations = saved.tasks[0].iterations
+    assert len(iterations) == 2
+    assert [it.seq for it in iterations] == [1, 2]
+
+
+def test_task_plan_from_dict_legacy_without_iterations():
+    """旧 shape 清单（无 iterations 字段）读回 → iterations = ()。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [{"id": "t1", "title": "循迹", "description": "循迹决策"}],
+        }
+    )
+    assert plan.tasks[0].iterations == ()
+
+
+def test_task_plan_from_dict_bad_iteration_ignored():
+    """单条 iteration 形状非法（非 dict / 缺 seq）→ 忽略该条，不报错。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "iterations": [
+                        "not-a-dict",
+                        {"kind": "execute"},  # 缺 seq
+                        {"seq": 2, "kind": "bad-kind"},  # kind 词表外
+                        None,
+                    ],
+                }
+            ],
+        }
+    )
+    assert plan.tasks[0].iterations == ()
+
+
+def test_task_iteration_roundtrip():
+    """迭代记录 to_dict/from_dict roundtrip（seq/kind/feedback/status/backup_id/at）。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "iterations": [
+                        {
+                            "seq": 1,
+                            "kind": "execute",
+                            "feedback": "",
+                            "status": "verified",
+                            "backup_id": "b1",
+                            "compile_summary": "编译通过",
+                            "at": "2026-08-27T10:00:00+0800",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    iteration = plan.tasks[0].iterations[0]
+    assert iteration.seq == 1
+    assert iteration.kind == "execute"
+    assert iteration.status == STATUS_VERIFIED
+    assert iteration.backup_id == "b1"
+    assert iteration.compile_summary == "编译通过"
+    assert iteration.at == "2026-08-27T10:00:00+0800"
+    # 落盘 → 读回同一形状
+    dumped = TaskPlan(tasks=plan.tasks).to_dict()
+    assert dumped["tasks"][0]["iterations"][0]["seq"] == 1
+    assert dumped["tasks"][0]["iterations"][0]["backup_id"] == "b1"
+
+
+# ---------------------------------------------------------------------------
+# 上板反馈（工单 task-feedback/02）：反馈执行 = 自动重开 + 第 2 轮 kind=feedback
+# ---------------------------------------------------------------------------
+
+
+def _green_toolchain(monkeypatch, tmp_path):
+    """有工具链 + 编译绿（反馈轮共用）。"""
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+
+
+def test_run_task_feedback_reexecutes_verified_task(tmp_path, monkeypatch):
+    """已验证任务 + 上板反馈 → 自动重开（先回 pending 再执行），第 2 轮 kind=feedback。"""
+    library, output_dir = _task_env(tmp_path)
+    _green_toolchain(monkeypatch, tmp_path)
+    kwargs = dict(
+        llm=FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"),
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    run_task(**kwargs)
+    result = run_task(**{**kwargs, "feedback": "上板发现左轮不转"})
+    assert result["status"] == STATUS_VERIFIED  # compile 类反馈绿 → 已验证
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    iterations = saved.tasks[0].iterations
+    assert len(iterations) == 2
+    assert iterations[1].seq == 2
+    assert iterations[1].kind == "feedback"
+    assert iterations[1].feedback == "上板发现左轮不转"
+    assert iterations[1].backup_id
+
+
+def test_run_task_feedback_manual_keeps_unverified(tmp_path, monkeypatch):
+    """manual 任务 + 反馈轮编译绿 → 仍 unverified（上板人工确认，spec 拍板）。"""
+    library, output_dir = _task_env(tmp_path)
+    _green_toolchain(monkeypatch, tmp_path)
+    write_task_plan(
+        output_dir,
+        TaskPlan(
+            tasks=(Task(id="t1", title="循迹", description="循迹决策", verify=VERIFY_MANUAL),)
+        ),
+    )
+    result = run_task(
+        llm=FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"),
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        feedback="上板发现不沿线，向右偏",
+    )
+    assert result["status"] == STATUS_UNVERIFIED
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    iterations = saved.tasks[0].iterations
+    assert len(iterations) == 1
+    assert iterations[0].kind == "feedback"
+    assert iterations[0].feedback == "上板发现不沿线，向右偏"
 
 
 def test_tasks_status_endpoint(tasks_client):

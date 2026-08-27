@@ -17,7 +17,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCardActions, tasksGridHTML, tasksProgressText, verifyStatusMarkup } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, verifyStatusMarkup, taskLatestFeedbackNote } from "/js/fx/task.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { scorePoints } from "./generate-recommend.js";  // 当前会话推荐评分点（历史目录为空）
@@ -64,7 +64,14 @@ function tasksRender() {
             + (task.status === "skipped" ? "恢复" : "重做") + "</button>");
         }
         if (actions.includes("mark")) {
-          parts.push('<button class="btn-task-mark" data-task="' + esc(task.id) + '">上板已验证</button>');
+          parts.push('<button class="btn-task-mark" data-task="' + esc(task.id) + '">确认通过</button>');
+        }
+        if (taskCanFeedback(task)) {
+          parts.push('<button class="btn-task-feedback" data-task="' + esc(task.id) + '">上板反馈</button>'
+            + '<div id="task-feedback-' + esc(task.id) + '" class="hidden" style="width:100%">'
+            + '<textarea placeholder="描述上板实测现象（如：左轮不转 / 不沿线向右偏 / 灰度读不到）…" style="width:100%;min-height:56px"></textarea>'
+            + '<button class="btn-task-feedback-send" data-task="' + esc(task.id) + '">按反馈修复</button>'
+            + "</div>");
         }
         return parts.join("");
       },
@@ -151,8 +158,9 @@ async function tasksPlan(force) {
   }
 }
 
-/** 单任务执行（工单 02）：读补充框 → SSE → 状态回填渲染 + 结果面板。 */
-async function tasksExecute(taskId) {
+/** 单任务执行（工单 02 + task-feedback/02）：读补充框 → SSE（feedback 非空 =
+ * 上板反馈轮）→ 状态回填渲染 + 结果面板。 */
+async function tasksExecute(taskId, feedback) {
   if (tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
@@ -161,9 +169,9 @@ async function tasksExecute(taskId) {
   tasksResetMessages();
   $("tasks-status").textContent = "执行中…";
   try {
-    const data = await tasksRunSSE("/api/tasks/execute", {
-      output_dir: dir, task_id: taskId, note: note,
-    }, {
+    const body = { output_dir: dir, task_id: taskId, note: note };
+    if (feedback) body.feedback = feedback;
+    const data = await tasksRunSSE("/api/tasks/execute", body, {
       task_executing: () => { $("tasks-status").textContent = "AI 实现本任务中…（分钟级调用，请等待）"; },
       compile_start: () => { $("tasks-status").textContent = "编译中…"; },
       fix_start: () => { $("tasks-status").textContent = "AI 修复中…（首轮编译未过，自动修复一轮）"; },
@@ -181,10 +189,13 @@ async function tasksExecute(taskId) {
     }
     tasksRender();
     tasksRenderResult(taskId, data);
-    if (data.status !== "failed") { markStepDone(11); toast("ok", "任务已完成"); }
+    if (data.status !== "failed") { markStepDone(11); }
+    toast("ok", feedback ? "已按反馈修复" : "任务已完成");
     $("tasks-status").textContent = data.status === "failed"
       ? "任务失败（修复一轮后仍红）——可回滚或重试"
-      : "任务完成——继续下一卡或人工改标";
+      : feedback
+        ? "已按反馈修复——请再次上板验证，或确认通过进入下一卡"
+        : "任务完成——继续下一卡或人工改标";
   } catch (e) {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = e.message;
@@ -203,9 +214,13 @@ function tasksRenderResult(taskId, data) {
   });
   const task = data.task || {};
   const backupId = data.backup_id || "";
+  // 反馈轮提示：最近一轮若是上板反馈，把用户反馈原文展示在结果面板（追溯）
+  // ——纯函数单源 fx/task.js taskLatestFeedbackNote（评审整改：胶水层不拼 HTML）
+  const feedbackNote = taskLatestFeedbackNote(task);
   $("tasks-grid").insertAdjacentHTML("afterend",
     '<div class="item" id="tasks-result" style="margin-top:10px">'
     + '<div class="head"><span class="slug">' + esc(task.id || taskId) + " · " + esc(task.title || "") + " 执行结果</span> " + markup.badge + "</div>"
+    + feedbackNote
     + '<div class="reason">' + markup.detail + "</div>"
     + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
     + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '" data-task="' + esc(task.id || taskId) + '">回滚到本任务执行前</button>' : "")
@@ -276,13 +291,66 @@ async function tasksSetStatus(taskId, status) {
   }
 }
 
+/** 上板反馈（工单 task-feedback/03）：展开反馈输入区（每卡一个 textarea，
+ * 状态不落内存态——存在即展开，重渲染自然收起）。 */
+function tasksFeedbackToggle(taskId) {
+  const box = $("task-feedback-" + taskId);
+  if (box) box.classList.toggle("hidden");
+}
+
+async function tasksFeedbackSend(taskId) {
+  const box = $("task-feedback-" + taskId);
+  if (!box) return;
+  const textarea = box.querySelector("textarea");
+  const feedback = (textarea && textarea.value || "").trim();
+  if (!feedback) { $("tasks-msg").textContent = "请先描述上板实测现象（如「左轮不转」「灰度读不到」）"; return; }
+  box.classList.add("hidden");
+  await tasksExecute(taskId, feedback);
+}
+
+/** 回滚到指定轮次之前（工单 task-feedback/03）：撤销语义——代码恢复为该轮
+ * 执行前快照、状态回该轮前终态；历史留痕保留。 */
+async function tasksRollbackIteration(taskId, seq) {
+  if (tasks.busy) return;
+  if (!await confirmModal({
+    title: "回到第 " + seq + " 轮之前？",
+    message: "将撤销第 " + seq + " 轮（及其后所有轮次）的修改：代码恢复到该轮执行前，任务状态回到该轮之前。操作可再重做/反馈造出新轮次。",
+    danger: true,
+    confirmText: "确认回滚",
+  })) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-status").textContent = "回滚中…";
+  try {
+    const data = await apiPost("/api/tasks/rollback-iteration", {
+      output_dir: dir, task_id: taskId, seq: seq,
+    });
+    tasks.plan = data.plan || tasks.plan;
+    tasksRender();
+    toast("ok", "已回到第 " + seq + " 轮之前");
+  } catch (e) {
+    $("tasks-status").textContent = "";
+    $("tasks-msg").textContent = "回滚失败：" + e.message;
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
 $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
 $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
 // 任务卡「做这一步」事件委托（列随状态重渲染，监听器挂容器）
 $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-run");
   if (!btn) return;
-  tasksExecute(btn.dataset.task);
+  tasksExecute(btn.dataset.task, "");
+});
+// 上板反馈：展开输入区 / 发送反馈（工单 task-feedback/03）
+$("tasks-grid").addEventListener("click", (event) => {
+  const toggle = event.target.closest(".btn-task-feedback");
+  if (toggle) { tasksFeedbackToggle(toggle.dataset.task); return; }
+  const send = event.target.closest(".btn-task-feedback-send");
+  if (send) tasksFeedbackSend(send.dataset.task);
 });
 // 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板改标）
 $("tasks-grid").addEventListener("click", (event) => {
@@ -297,6 +365,12 @@ $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-rollback");
   if (!btn) return;
   tasksRollback(btn.dataset.backup, btn.dataset.task);
+});
+// 轮次历史「回到这轮之前」（工单 task-feedback/03：撤销语义）
+$("tasks-grid").addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-task-iteration-rollback");
+  if (!btn) return;
+  tasksRollbackIteration(btn.dataset.task, btn.dataset.seq);
 });
 // 跨簇通知（revise 上下文入口加载后广播）：目录不同 = 旧清单与当前目录无关，
 // 清空本簇状态（显示占位，等用户拆解）——revise 簇负责状态生命周期与广播时机，
