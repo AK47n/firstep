@@ -1685,7 +1685,6 @@ def test_tasks_discuss_endpoint(tasks_client):
         json={
             "output_dir": output_dir,
             "task_id": "t1",
-            "message": "左轮不转怎么办",
             "history": [{"role": "user", "content": "左轮不转怎么办"}],
         },
     )
@@ -1697,24 +1696,24 @@ def test_tasks_discuss_endpoint(tasks_client):
     assert history == (("user", "左轮不转怎么办"),)
     assert main_c.strip()
 
-    # 缺 message → 400
+    # 空 history → 400（单通道：最后一条 user = 本轮消息，无独立 message 参数）
     resp = client.post(
         "/api/tasks/discuss",
         json={"output_dir": output_dir, "task_id": "t1", "history": []},
     )
     assert resp.status_code == 400
-    assert "message" in resp.json()["detail"]
+    assert "history" in resp.json()["detail"]
     # history 非数组 → 400
     resp = client.post(
         "/api/tasks/discuss",
-        json={"output_dir": output_dir, "task_id": "t1", "message": "你好", "history": "不是数组"},
+        json={"output_dir": output_dir, "task_id": "t1", "history": "不是数组"},
     )
     assert resp.status_code == 400
     assert "history" in resp.json()["detail"]
     # 任务不存在 → 400
     resp = client.post(
         "/api/tasks/discuss",
-        json={"output_dir": output_dir, "task_id": "t9", "message": "你好", "history": []},
+        json={"output_dir": output_dir, "task_id": "t9", "history": [{"role": "user", "content": "你好"}]},
     )
     assert resp.status_code == 400
     # LLM 失败 → 502
@@ -1725,7 +1724,7 @@ def test_tasks_discuss_endpoint(tasks_client):
     holder["llm"] = _BoomTask()
     resp = client.post(
         "/api/tasks/discuss",
-        json={"output_dir": output_dir, "task_id": "t1", "message": "你好", "history": []},
+        json={"output_dir": output_dir, "task_id": "t1", "history": [{"role": "user", "content": "你好"}]},
     )
     assert resp.status_code == 502
     assert "上游超时" in resp.json()["detail"]

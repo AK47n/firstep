@@ -43,11 +43,12 @@ export function taskScoreRefsText(scoreRefs, points) {
   }).join("、");
 }
 
-/** 任务序号标签（工单 task-chat/03）：index = 清单内序号（0 起）→ 「第 N 步」。
- * 仅展示层换算——id / depends_on 不变（建议顺序 = LLM 拆解输出顺序，用户拍板
- * 不做手动重排；序号是建议不是强制，网格顶部有声明行）。 */
+/** 任务序号标签（工单 task-chat/03）：index = 清单内序号（0 起）→ 「第 N 步
+ * （建议顺序）」。仅展示层换算——id / depends_on 不变（建议顺序 = LLM 拆解
+ * 输出顺序，用户拍板不做手动重排；序号是建议不是强制，网格顶部有声明行；
+ * 「（建议顺序）」是 spec 指定用户可见文案，不能只给序号）。 */
 export function taskOrderLabel(index) {
-  return "第 " + (Number(index) + 1) + " 步";
+  return "第 " + (Number(index) + 1) + " 步（建议顺序）";
 }
 
 export function taskCardHTML(task, index, opts) {
@@ -179,7 +180,7 @@ export function taskDialogAdoptHTML(task) {
   const text = String(note).trim();
   return '<div class="muted" style="margin-top:4px">'
     + '<span class="badge ok">已采纳对话结论</span> '
-    + esc(text.length > 30 ? text.slice(0, 30) + "…" : text)
+    + esc(text.length > 30 ? text.slice(0, 30) + "…" : text)  // 摘要截 30 字 = spec「前 30 字」定数
     + ' <button class="btn-task-dialog-clear" data-task="' + esc(task.id || "") + '">取消采纳</button>'
     + "</div>";
 }
@@ -208,7 +209,8 @@ export function taskDialogAreaHTML(task, st) {
     const isAi = m.role === "assistant";
     const roleLabel = isAi ? "AI" : "我";
     const adopt = isAi
-      ? ' <button class="btn-task-dialog-adopt" data-task="' + esc(taskId) + '" data-idx="'
+      ? ' <button class="btn-task-dialog-adopt" data-task-adopt="' + esc(taskId)
+        + '" data-task="' + esc(taskId) + '" data-idx="'
         + esc(String(i)) + '">采纳这条结论</button>'
       : "";
     return '<div class="sugg-msg ' + (isAi ? "ai" : "user") + '">'
@@ -227,12 +229,13 @@ export function taskDialogAreaHTML(task, st) {
     + "</div>";
 }
 
-/** 对话区输入行（send 语义共享：发送按钮 + busy 禁用）。 */
-function dialogInputHTML(taskId, s) {
+/** 对话区输入行（send 语义共享：发送按钮 + busy 禁用）。st = 对话状态
+ *（draft = 输入框未发送内容——重渲染不丢；busy = 一轮 LLM 调用中禁用输入）。 */
+function dialogInputHTML(taskId, st) {
   return '<input id="task-dialog-input-' + esc(taskId) + '" class="sugg-discuss-input"'
-    + ' placeholder="说说你的想法或纠正（如：左轮不转，改成脉冲式）…" value="' + (s.draft || "") + '">'
+    + ' placeholder="说说你的想法或纠正（如：左轮不转，改成脉冲式）…" value="' + (st.draft || "") + '">'
     + '<button class="btn-task-dialog-send" data-task="' + esc(taskId) + '"'
-    + (s.busy ? " disabled" : "") + ">" + (s.busy ? "回应中…" : "发送") + "</button>";
+    + (st.busy ? " disabled" : "") + ">" + (st.busy ? "回应中…" : "发送") + "</button>";
 }
 
 /** 结果面板「上板反馈」原文回溯（评审整改：Feature Envy——胶水层不再拼

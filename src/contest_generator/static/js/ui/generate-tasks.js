@@ -384,7 +384,8 @@ async function tasksDialogSend(taskId) {
   if (!message) { $("tasks-msg").textContent = "请先说你的想法或纠正（如「左轮不转，改成脉冲式」）"; return; }
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
-  // 用户消息入历史后再发（历史含本条——后端 prompt 以 history[-1] 为最新消息）
+  // 用户消息入历史后再发（历史含本条——后端 prompt 以 history[-1] 为最新消息，
+  // 单通道：无独立 message 参数，评审整改——分离 message 与 history 会丢消息）
   st.history.push({ role: "user", content: message });
   st.draft = "";
   st.busy = true;
@@ -394,7 +395,6 @@ async function tasksDialogSend(taskId) {
     const data = await apiPost("/api/tasks/discuss", {
       output_dir: dir,
       task_id: taskId,
-      message: message,
       history: st.history.map((m) => ({ role: m.role, content: m.content })),
     });
     st.history.push({ role: "assistant", content: data.reply || "" });

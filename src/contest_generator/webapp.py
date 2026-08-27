@@ -2230,17 +2230,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/tasks/discuss")
     @_map_errors
     def tasks_discuss(payload: dict) -> dict:
-        """任务商量（同步端点）：{output_dir, task_id, message, history} → {reply}。
+        """任务商量（同步端点）：{output_dir, task_id, history} → {reply}。
 
         请求契约：output_dir（必填，生成结果目录）；task_id（必填，任务 id）；
-        message（必填非空字符串，用户本轮的想法的/纠正）；history（必填数组，
-        旧 → 新，[{role: user|assistant, content}]，前端逐轮积累）。
+        history（必填非空数组，旧 → 新，[{role: user|assistant, content}]，
+        前端逐轮积累——最后一条 user = 本轮消息，service 侧 prompt 以
+        history[-1] 为「你的最新消息」，与 /api/buy/discuss 单通道同款，无
+        独立 message 参数（评审整改：double channel 会丢消息——非前端客户端
+        若分离 message 与 history，最新消息即错位）。
         服务端读 .contest_context.json（题面 / Q&A / 需求 / 模块集）+ 现读
         main.c + 任务清单（任务须存在）→ LLM 任务顾问 → {reply}。
 
         校验失败 → TaskError 400 中文；LLM 失败 → 502（error_to_http 表）。
-        缺题面 / 工程 main.c 为空 → 400（讨论需要题面与实现现状）。telemetry
-        照常采集——同步端点无 SSE 通道，观测进 recent_llm_workflows 记录。
+        缺题面 / 工程 main.c 为空 → 400（讨论需要题面与实现现状；评审判定
+        合理防御保留）。telemetry 照常采集——同步端点无 SSE 通道，观测进
+        recent_llm_workflows 记录。
         """
         from .skeleton import build_skeleton_interfaces
         from .task_progress import find_task, read_task_plan
@@ -2249,12 +2253,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if not output_dir.is_dir():
             raise TaskError(f"输出目录不存在：{output_dir}")
         task_id = _require_str(payload, "task_id")
-        message = payload.get("message")
-        if not isinstance(message, str) or not message.strip():
-            raise TaskError("缺讨论消息（message）——请先说说你的想法或纠正")
-        raw_history = payload.get("history", [])
-        if not isinstance(raw_history, list):
-            raise TaskError("history 必须是数组（旧 → 新的讨论记录）")
+        raw_history = payload.get("history")
+        if not isinstance(raw_history, list) or not raw_history:
+            raise TaskError(
+                "history 必须是数组（旧 → 新的讨论记录，最后一条 = 本轮消息）"
+            )
         history: list[tuple[str, str]] = []
         for index, item in enumerate(raw_history, 1):
             if not isinstance(item, dict):

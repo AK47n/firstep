@@ -214,17 +214,17 @@ test("taskCardHTML: 卡内渲染轮次历史（有记录追加，无记录不变
 // 任务序号 + 每卡对话区（工单 task-chat/03）
 // ---------------------------------------------------------------------------
 
-test("taskOrderLabel: index 0 起 → 「第 N 步」", () => {
-  assert.equal(taskOrderLabel(0), "第 1 步");
-  assert.equal(taskOrderLabel(2), "第 3 步");
+test("taskOrderLabel: index 0 起 → 「第 N 步（建议顺序）」", () => {
+  assert.equal(taskOrderLabel(0), "第 1 步（建议顺序）");
+  assert.equal(taskOrderLabel(2), "第 3 步（建议顺序）");
 });
 
-test("taskCardHTML: 序号进标题行（第 N 步 · t1 · 标题）", () => {
+test("taskCardHTML: 序号进标题行（第 N 步（建议顺序）· t1 · 标题）", () => {
   const html = taskCardHTML({
     id: "t1", title: "循迹决策", description: "根据灰度值控制电机",
     score_refs: [], depends_on: [], verify: "compile", status: "pending",
   }, 0, {});
-  assert.ok(html.includes("第 1 步 · t1 · 循迹决策"));
+  assert.ok(html.includes("第 1 步（建议顺序） · t1 · 循迹决策"));
 });
 
 test("tasksGridHTML: 建议顺序声明行（不强制，可跳着做）", () => {
@@ -275,6 +275,7 @@ test("taskDialogAreaHTML: 未展开 → 空串；展开空历史 → 引导语�
   assert.ok(html.includes('<span class="sugg-msg-role">AI</span>：'));
   assert.ok(html.includes("建议改成脉冲式"));
   assert.ok(html.includes("采纳这条结论"));
+  assert.ok(html.includes("data-task-adopt=\"t1\""));
   assert.ok(html.includes("data-idx=\"1\""));
   // AI 行才有采纳按钮（user 行不带）
   assert.ok(!html.includes("data-idx=\"0\""));
