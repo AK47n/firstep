@@ -60,6 +60,7 @@ export function taskCardHTML(task, index, opts) {
     + '<div class="reason">' + esc(task.description) + "</div>"
     + (refs ? '<div class="muted" style="margin-top:4px">评分点：' + esc(refs) + verifyNote + "</div>" : (verifyNote ? '<div class="muted" style="margin-top:4px">' + verifyNote + "</div>" : ""))
     + deps
+    + taskIterationsHTML(task)
     + (o.actions ? '<div class="row" style="margin-top:8px">' + o.actions(task, index) + "</div>" : "")
     + "</div>";
 }
@@ -89,6 +90,81 @@ export function taskCardActions(status) {
     case "failed": return ["run", "mark", "revert"];
     default: return [];
   }
+}
+
+/** 上板反馈按钮显隐（工单 task-feedback/03，单源）：非 doing 且已有可观察
+ * 产物（执行过至少一轮 = 有迭代记录）或已是终态（unverified / failed /
+ * verified——旧清单无迭代记录的终态任务也允许反馈）。从未执行且待做 →
+ * 无上板对象，不显示。 */
+export function taskCanFeedback(task) {
+  if (!task || task.status === "doing") return false;
+  const hasRun = (task.iterations || []).length > 0;
+  const isTerminal = ["unverified", "failed", "verified"].includes(task.status);
+  return hasRun || isTerminal;
+}
+
+/** 轮次种类标签（初始执行 / 上板反馈）。 */
+export function taskIterationLabel(kind) {
+  return kind === "execute" ? "初始执行"
+    : kind === "feedback" ? "上板反馈" : "执行";
+}
+
+/** 轮次历史展开区（工单 task-feedback/03）：空历史 = 空串（不渲染）。
+ * 每轮一行：轮次号 + 种类 + 反馈摘要（截断 40 字）+ 该轮终态徽章 +
+ * 编译结果徽章（compile_summary，截断 40 字；颜色按该轮终态推断——
+ * verified=绿 / failed=红 / 其余灰）+ 时间（at）+ 备份 + 「回到这轮之前」
+ * 按钮（撤销语义——备份 = 该轮执行前快照，恢复后状态回该轮前终态）。
+ * 无备份的轮次不给按钮（防御）。 */
+export function taskIterationsHTML(task) {
+  const iterations = (task && task.iterations) || [];
+  if (!iterations.length) return "";
+  const rows = iterations.map((it) => {
+    const feedback = it.feedback
+      ? '<span class="muted">「' + esc(it.feedback.length > 40
+        ? it.feedback.slice(0, 40) + "…" : it.feedback) + "」</span> "
+      : "";
+    const compile = it.compile_summary
+      ? ' <span class="badge ' + iterationCompileBadgeClass(it.status) + '">编译：'
+        + esc(it.compile_summary.length > 40
+          ? it.compile_summary.slice(0, 40) + "…" : it.compile_summary)
+        + "</span>"
+      : "";
+    const at = it.at ? ' <span class="muted">' + esc(String(it.at)) + "</span>" : "";
+    const rollback = it.backup_id
+      ? '<button class="btn-task-iteration-rollback" data-task="' + esc(task.id || "")
+        + '" data-seq="' + esc(String(it.seq)) + '">回到这轮之前</button>'
+      : "";
+    return '<div class="reason" style="margin-top:4px">第 ' + esc(String(it.seq))
+      + " 轮 · " + esc(taskIterationLabel(it.kind)) + " " + feedback
+      + '<span class="badge ' + taskStatusBadgeClass(it.status || "pending") + '">'
+      + taskStatusLabel(it.status || "pending") + "</span>"
+      + compile + at
+      + (it.backup_id ? ' 备份 <span class="slug">' + esc(String(it.backup_id)) + "</span>" : "")
+      + " " + rollback + "</div>";
+  }).join("");
+  return '<div class="muted" style="margin-top:8px">历史记录（共 ' + esc(String(iterations.length))
+    + " 轮）</div>" + rows;
+}
+
+/** 编译结果徽章颜色：按该轮终态推断（verifyStatusMarkup 同判据——
+ * verified=编译绿、failed=红、unverified=灰、其余灰）。 */
+function iterationCompileBadgeClass(status) {
+  switch (status) {
+    case "verified": return "ok";
+    case "failed": return "del";
+    default: return "out";
+  }
+}
+
+/** 结果面板「上板反馈」原文回溯（评审整改：Feature Envy——胶水层不再拼
+ * HTML，纯函数单源）：最近一轮是上板反馈且有原文 → 返回展示 HTML（转义），
+ * 否则空串。 */
+export function taskLatestFeedbackNote(task) {
+  const iterations = (task && task.iterations) || [];
+  const last = iterations.length ? iterations[iterations.length - 1] : null;
+  if (!last || last.kind !== "feedback" || !last.feedback) return "";
+  return '<div class="reason">上板反馈：<span class="slug">'
+    + esc(String(last.feedback)) + "</span></div>";
 }
 
 /** 验证状态徽章 + 摘要文案（深化 / 任务执行结果面板共用，单源防分叉——
@@ -130,6 +206,7 @@ if (typeof window !== "undefined") {
   Object.assign(window, {
     taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
     taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
-    verifyStatusMarkup,
+    verifyStatusMarkup, taskCanFeedback, taskIterationLabel,
+    taskIterationsHTML, taskLatestFeedbackNote,
   });
 }

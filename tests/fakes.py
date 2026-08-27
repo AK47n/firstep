@@ -649,7 +649,7 @@ class FakeLLM:
         self.plan_tasks_calls: list[
             tuple[str, str, tuple, tuple, tuple, str]
         ] = []
-        self.execute_task_calls: list[tuple[str, dict, str, tuple, str, str]] = []
+        self.execute_task_calls: list[tuple[str, dict, str, tuple, str, str, str]] = []
 
     def generate_report_draft(
         self,
@@ -841,6 +841,7 @@ class FakeLLM:
         module_interfaces: Sequence[str],
         problem_text: str,
         qa_text: str,
+        feedback: str = "",
     ) -> str:
         self.execute_task_calls.append(
             (
@@ -850,6 +851,7 @@ class FakeLLM:
                 tuple(module_interfaces),
                 problem_text,
                 qa_text,
+                feedback,
             )
         )
         return self._executed_main_c or main_c
@@ -1024,6 +1026,7 @@ class RecordingLLM:
         module_interfaces: Sequence[str],
         problem_text: str,
         qa_text: str,
+        feedback: str = "",
     ) -> str:
         self._record("execute_task")
         return main_c

@@ -6,6 +6,7 @@ import {
   taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
   taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
   taskCardActions, verifyStatusMarkup,
+  taskCanFeedback, taskIterationLabel, taskIterationsHTML, taskLatestFeedbackNote,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -125,4 +126,85 @@ test("verifyStatusMarkup: unverified 按 cause 区分徽章（无工具链 / 手
   const manual = verifyStatusMarkup({ status: "unverified", verify_cause: "manual", message: "请烧录观察后标记" }, {});
   assert.ok(manual.badge.includes("上板确认"));
   assert.ok(manual.detail.includes("请烧录观察后标记"));
+});
+
+// ---------------------------------------------------------------------------
+// 上板反馈（工单 task-feedback/03）：反馈按钮显隐 / 轮次历史渲染
+// ---------------------------------------------------------------------------
+
+test("taskCanFeedback: 反馈按钮显隐矩阵（非 doing 且有产物或已终态）", () => {
+  // 从未执行（无迭代）且待做 → 没有可观察产物，不显示
+  assert.equal(taskCanFeedback({ status: "pending", iterations: [] }), false);
+  // 执行过 → 可反馈（含回滚后的 pending——产物还在）
+  assert.equal(taskCanFeedback({ status: "pending", iterations: [{ seq: 1 }] }), true);
+  assert.equal(taskCanFeedback({ status: "verified", iterations: [{ seq: 1 }] }), true);
+  assert.equal(taskCanFeedback({ status: "unverified", iterations: [{ seq: 1 }] }), true);
+  assert.equal(taskCanFeedback({ status: "failed", iterations: [{ seq: 1 }] }), true);
+  // 终态但无迭代记录（旧清单兼容）→ 也允许反馈
+  assert.equal(taskCanFeedback({ status: "verified", iterations: [] }), true);
+  assert.equal(taskCanFeedback({ status: "unverified", iterations: [] }), true);
+  // 执行中 → 禁止
+  assert.equal(taskCanFeedback({ status: "doing", iterations: [] }), false);
+});
+
+test("taskIterationLabel: 轮次种类标签", () => {
+  assert.equal(taskIterationLabel("execute"), "初始执行");
+  assert.equal(taskIterationLabel("feedback"), "上板反馈");
+  assert.equal(taskIterationLabel("bogus"), "执行");
+});
+
+test("taskIterationsHTML: 空历史 → 空串；有记录 → 轮次行 + 回滚按钮", () => {
+  assert.equal(taskIterationsHTML({ iterations: [] }), "");
+  const html = taskIterationsHTML({
+    id: "t1",
+    iterations: [
+      { seq: 1, kind: "execute", feedback: "", status: "verified", backup_id: "b1", at: "2026-08-27T10:00:00+0800", compile_summary: "Build succeeded (0 error)" },
+      { seq: 2, kind: "feedback", feedback: "左轮不转，向右偏", status: "unverified", backup_id: "b2", at: "2026-08-27T11:00:00+0800", compile_summary: "" },
+    ],
+  });
+  assert.ok(html.includes("第 1 轮"));
+  assert.ok(html.includes("初始执行"));
+  assert.ok(html.includes("第 2 轮"));
+  assert.ok(html.includes("上板反馈"));
+  assert.ok(html.includes("左轮不转"));
+  assert.ok(html.includes("data-seq=\"2\""));
+  // 时间 + 编译结果徽章（评审 (a)：at / compile_summary 落盘必须有 UI 出口）
+  assert.ok(html.includes("2026-08-27T10:00:00+0800"));
+  assert.ok(html.includes("编译：Build succeeded"));
+  assert.ok(html.includes("2026-08-27T11:00:00+0800"));
+  // 编译徽章颜色按该轮终态推断：verified → ok
+  assert.ok(html.includes("badge ok\">编译："));
+  // 无备份的轮次不给回滚按钮（防御：历史记录里可能有空 backup_id）
+  const noBackup = taskIterationsHTML({
+    id: "t1",
+    iterations: [{ seq: 3, kind: "execute", feedback: "", status: "failed", backup_id: "", at: "" }],
+  });
+  assert.ok(!noBackup.includes("data-seq=\"3\""));
+});
+
+test("taskLatestFeedbackNote: 最近一轮是上板反馈 → 原文回溯；否则空串", () => {
+  assert.equal(taskLatestFeedbackNote({ iterations: [] }), "");
+  assert.equal(taskLatestFeedbackNote({}), "");
+  assert.equal(taskLatestFeedbackNote({ iterations: [{ kind: "execute", feedback: "x" }] }), "");
+  assert.equal(taskLatestFeedbackNote({ iterations: [{ kind: "feedback", feedback: "" }] }), "");
+  const html = taskLatestFeedbackNote({
+    iterations: [{ kind: "execute", feedback: "" }, { kind: "feedback", feedback: "上板发现左轮不转" }],
+  });
+  assert.ok(html.includes("上板反馈"));
+  assert.ok(html.includes("上板发现左轮不转"));
+});
+
+test("taskCardHTML: 卡内渲染轮次历史（有记录追加，无记录不变）", () => {
+  const base = taskCardHTML({
+    id: "t1", title: "循迹", description: "决策",
+    score_refs: [], depends_on: [], verify: "compile", status: "verified",
+  }, 0, {});
+  assert.ok(!base.includes("历史记录"));
+  const withHistory = taskCardHTML({
+    id: "t1", title: "循迹", description: "决策",
+    score_refs: [], depends_on: [], verify: "compile", status: "verified",
+    iterations: [{ seq: 1, kind: "execute", feedback: "", status: "verified", backup_id: "b1", at: "2026-08-27T10:00:00+0800" }],
+  }, 0, {});
+  assert.ok(withHistory.includes("历史记录"));
+  assert.ok(withHistory.includes("第 1 轮"));
 });

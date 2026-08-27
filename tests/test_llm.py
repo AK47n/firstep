@@ -4003,6 +4003,30 @@ def test_discuss_buy_options_empty_reply_raises():
         llm.discuss_buy_options("题面", "需求", "stm32", [DISCUSS_SOLUTION], [("user", "你好")])
 
 
+def test_task_execute_feedback_prompt_segments():
+    """上板反馈段（工单 task-feedback/02）：feedback 非空 → 独立段在「用户补充
+    说明」段之后；feedback 空 → 无该段（对既有调用形状逐字节兼容）。"""
+    transport = FakeTransport(body=_api_response("int main(void) { return 0; }\n"))
+    llm = _llm(transport)
+    task = {"title": "循迹", "description": "循迹决策"}
+    llm.execute_task(
+        "main.c", task, "note here", ("x.h",), "题面", "", feedback="上板发现左轮不转"
+    )
+    _, _, payload, _ = transport.calls[0]
+    user = payload["messages"][1]["content"]
+    assert "上板实测反馈" in user
+    assert user.index("上板实测反馈") > user.index("用户补充说明")
+    assert "上板发现左轮不转" in user
+    assert "note here" in user
+    # 空 feedback：整段不出现（既有形状不变）
+    transport2 = FakeTransport(body=_api_response("int main(void) { return 0; }\n"))
+    llm2 = _llm(transport2)
+    llm2.execute_task("main.c", task, "", ("x.h",), "题面", "")
+    _, _, payload2, _ = transport2.calls[0]
+    user2 = payload2["messages"][1]["content"]
+    assert "上板实测反馈" not in user2
+
+
 def test_discuss_buy_options_user_prompt_sections():
     """讨论 prompt 契约：题面 / 需求句 / 平台 / 方案（含接口价格）/ 历史逐段 +
     最新消息段；超长历史截断带标注。"""

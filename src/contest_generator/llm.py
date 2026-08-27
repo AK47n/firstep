@@ -267,6 +267,10 @@ TASK_EXECUTE_SYSTEM_PROMPT = (
     "内容）；已有的实现即使看起来不完美也不要改（其它任务的成果）；"
     "只调用给定接口中真实存在的函数，绝不凭空造函数。"
     + SKELETON_NO_UNUSED_RULE
+    + "若用户提供了【上板实测反馈】——那是用户把程序烧到真机运行后观察到的"
+    "实际现象（如某功能不工作 / 行为异常）：你的任务变为按反馈修复该任务的"
+    "实现，只改与反馈问题相关的部分（定位现象的功能点的初始化 / 调用 / 逻辑），"
+    "不重写无关代码、不动其它任务成果。"
     + "输出完整 main.c（整个文件，不是片段），纯 C 代码，不要用 ``` 或 ~~~ "
     "代码围栏包裹，不要输出任何 Markdown 标记。"
 )
@@ -1223,6 +1227,7 @@ class LLM(Protocol):
         module_interfaces: Sequence[str],
         problem_text: str,
         qa_text: str,
+        feedback: str = "",
     ) -> str: ...
 
     def discuss_buy_options(
@@ -2371,18 +2376,22 @@ class DeepSeekLLM:
         module_interfaces: Sequence[str],
         problem_text: str,
         qa_text: str,
+        feedback: str = "",
     ) -> str:
-        """单任务执行（工单 task-progress/02）：在现有 main.c 上只实现一个任务。
+        """单任务执行（工单 task-progress/02 + task-feedback/02）：在现有
+        main.c 上只实现一个任务；feedback 非空 = 上板反馈修复轮（用户烧录
+        实测现象，prompt 按反馈修）。
 
-        输入 = 现有 main.c + 任务描述 + 用户补充说明（note）+ 模块接口清单 +
-        题面与 Q&A；输出 = 实现后的 main.c 全文（文本模式，与深化同形状）。
-        瞬时失败整次重问（_retry_parse，与骨架同款兜底）；空结果由域层
-        run_task 拒绝（TaskError）。
+        输入 = 现有 main.c + 任务描述 + 用户补充说明（note）+ 上板反馈
+        （feedback，可选）+ 模块接口清单 + 题面与 Q&A；输出 = 实现后的
+        main.c 全文（文本模式，与深化同形状）。瞬时失败整次重问
+        （_retry_parse，与骨架同款兜底）；空结果由域层 run_task 拒绝
+        （TaskError）。
         """
         return self._retry_parse(
             system_prompt=TASK_EXECUTE_SYSTEM_PROMPT,
             user_prompt=_task_execute_user_prompt(
-                main_c, task, note, module_interfaces, problem_text, qa_text
+                main_c, task, note, module_interfaces, problem_text, qa_text, feedback
             ),
             parse=lambda content: content,
             label="任务执行",
@@ -3043,10 +3052,11 @@ class RoutingLLM:
         module_interfaces: Sequence[str],
         problem_text: str,
         qa_text: str,
+        feedback: str = "",
     ) -> str:
         # 单任务执行走 remote（质量优先，不进本地方法集）
         return self._remote.execute_task(
-            main_c, task, note, module_interfaces, problem_text, qa_text
+            main_c, task, note, module_interfaces, problem_text, qa_text, feedback
         )
 
     def discuss_buy_options(
@@ -3555,10 +3565,15 @@ def _task_execute_user_prompt(
     module_interfaces: Sequence[str],
     problem_text: str,
     qa_text: str,
+    feedback: str = "",
 ) -> str:
-    """单任务执行的 user 消息（工单 task-progress/02）：任务描述 + 补充框 +
-    题面 + Q&A + 接口 + 现有 main.c。补充框（note）独立段（用户对本次执行的
-    附加说明，如"循迹用 10ms 定时器"），为空 = 无该段。"""
+    """单任务执行的 user 消息（工单 task-progress/02 + task-feedback/02）：
+    任务描述 + 补充框 + 上板反馈 + 题面 + Q&A + 接口 + 现有 main.c。
+
+    补充框（note）独立段（用户对本次执行的附加说明，如"循迹用 10ms
+    定时器"），为空 = 无该段；上板实测反馈（feedback）另立一段（放在
+    note 段之后——真实烧录后的现象，对话语义晚于预填写说明），为空 =
+    无该段（既有调用形状逐字节不变）。"""
     lines = [
         "【本次要实现的单个任务】",
         f"任务：{task.get('title', '')}",
@@ -3566,6 +3581,8 @@ def _task_execute_user_prompt(
     ]
     if note:
         lines += ["", "【用户补充说明（本次执行的附加要求）】", note]
+    if feedback:
+        lines += ["", "【上板实测反馈（按反馈修复，不重写无关部分）】", feedback]
     lines += ["", "赛题：", _truncate_content(problem_text)]
     if qa_text:
         lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]

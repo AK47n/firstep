@@ -78,6 +78,12 @@ VERIFY_MANUAL = "manual"  # 上板人工确认（如循迹效果观察）
 
 VALID_VERIFY = frozenset({VERIFY_COMPILE, VERIFY_MANUAL})
 
+# 迭代记录种类（工单 task-feedback/01）：execute = 初始执行 / feedback = 上板反馈轮
+ITERATION_KIND_EXECUTE = "execute"
+ITERATION_KIND_FEEDBACK = "feedback"
+
+VALID_ITERATION_KINDS = frozenset({ITERATION_KIND_EXECUTE, ITERATION_KIND_FEEDBACK})
+
 # 状态转移表（单源：人工改标端点 / 前端显隐 / 测试共用）——from → 允许的 to。
 # 语义：pending → skipped（跳过不打算做的）；skipped → pending（恢复）；
 # verified / unverified / failed → pending（重做）；unverified / failed →
@@ -104,13 +110,45 @@ class TaskError(ValueError):
 
 
 @dataclass(frozen=True)
+class TaskIteration:
+    """一轮执行记录（初始执行 / 上板反馈轮共同形状，工单 task-feedback/01）。
+
+    seq = 任务内轮次序号（1 起）；kind = execute（初始实现）| feedback（上板
+    反馈修复）；feedback = 用户反馈文本（execute 轮 = 空串）；status = 该轮
+    结束后的任务终态（回滚到该轮时恢复用）；backup_id = 该轮整树备份 id
+    （可回滚——用户拍板全部保留，一轮几十 KB~几 MB）；compile_summary =
+    编译摘要（供卡上展示）；at = 轮次时间戳。
+    """
+
+    seq: int
+    kind: str = ITERATION_KIND_EXECUTE
+    feedback: str = ""
+    status: str = ""
+    backup_id: str = ""
+    compile_summary: str = ""
+    at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "seq": self.seq,
+            "kind": self.kind,
+            "feedback": self.feedback,
+            "status": self.status,
+            "backup_id": self.backup_id,
+            "compile_summary": self.compile_summary,
+            "at": self.at,
+        }
+
+
+@dataclass(frozen=True)
 class Task:
     """一个实现任务（可独立执行、可独立编译验证的 main.c 增量）。
 
     id = 清单内序号（t1..tn，解析层分配）；score_refs = 关联评分点 id
     （来自题面评分点清单，无评分点 = 空）；depends_on = 前置任务 id
     （展示与排序用途，不强制阻断）；verify = 验收方式；status = 状态机
-    当前态；note = 补充框内容（用户向 AI 补的一句说明，执行时透传）。
+    当前态；note = 补充框内容（用户向 AI 补的一句说明，执行时透传）；
+    iterations = 执行轮次历史（上板反馈闭环，向后兼容读回）。
     """
 
     id: str
@@ -121,6 +159,7 @@ class Task:
     verify: str = VERIFY_COMPILE
     status: str = STATUS_PENDING
     note: str = ""
+    iterations: tuple[TaskIteration, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -132,6 +171,7 @@ class Task:
             "verify": self.verify,
             "status": self.status,
             "note": self.note,
+            "iterations": [iteration.to_dict() for iteration in self.iterations],
         }
 
 
@@ -206,9 +246,50 @@ class TaskPlan:
                     verify=verify,
                     status=status,
                     note=item.get("note", "") if isinstance(item.get("note", ""), str) else "",
+                    iterations=_parse_iterations(item.get("iterations", [])),
                 )
             )
         return cls(version=version, generated_at=generated_at, tasks=tuple(tasks))
+
+
+def _parse_iterations(raw: Any) -> tuple[TaskIteration, ...]:
+    """迭代历史读回（清单文件 → 模型）：整段损坏容错。
+
+    旧清单无该字段 / 非数组 → 空元组（向后兼容）；单条非 dict / 缺 seq /
+    kind 词表外 → 忽略该条（历史记录是展示与回滚辅助，坏值不应让整份
+    清单不可用——与 status 词表外修正为默认同哲学，宁丢一条不误伤全清单）。
+    其余字段非字符串 → 空串（to_dict 形状契约由本函数单源）。
+    """
+    if not isinstance(raw, list):
+        return ()
+    iterations: list[TaskIteration] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        seq = item.get("seq")
+        if isinstance(seq, bool) or not isinstance(seq, int):
+            continue
+        kind = item.get("kind", ITERATION_KIND_EXECUTE)
+        if kind not in VALID_ITERATION_KINDS:
+            continue
+        iterations.append(
+            TaskIteration(
+                seq=seq,
+                kind=kind,
+                feedback=_iter_opt_str(item, "feedback"),
+                status=_iter_opt_str(item, "status"),
+                backup_id=_iter_opt_str(item, "backup_id"),
+                compile_summary=_iter_opt_str(item, "compile_summary"),
+                at=_iter_opt_str(item, "at"),
+            )
+        )
+    return tuple(iterations)
+
+
+def _iter_opt_str(item: dict[str, Any], key: str) -> str:
+    """迭代记录的可空字符串字段：非 str（含缺失/None/错型）一律落空串。"""
+    value = item.get(key)
+    return value if isinstance(value, str) else ""
 
 
 # ---------------------------------------------------------------------------
@@ -472,13 +553,20 @@ def run_task(
     uv4_override: str = "",
     make_override: str = "",
     module_slugs: Sequence[str] = (),
+    feedback: str = "",
 ) -> dict[str, Any]:
     """/api/tasks/execute 的域编排：单任务 LLM 实现 → 备份 → 写盘 → 编译
     验证闭环（与深化共用 verify_compile_tail 尾段）→ 状态回填清单。
 
     任务 = 清单里的一个任务（find_task 查）。LLM 输入 = 当前 main.c + 任务
-    描述 + 补充框（note，用户对本次执行的附加说明）+ 模块接口 + 题面/Q&A；
+    描述 + 补充框（note，用户对本次执行的附加说明）+ 上板反馈（feedback，
+    可选——用户烧录实测现象，工单 task-feedback/02）+ 模块接口 + 题面/Q&A；
     输出 = 实现后的 main.c 全文（与深化同形状，prompt 约束只实现本任务）。
+
+    feedback 非空 = 上板反馈轮：任务当前为终态（verified / unverified /
+    failed）时先自动重开（转移表 verified / unverified / failed → pending
+    均合法），保证反馈修复的执行语义从 pending 起步（执行中 doing 不可人工
+    操作的不变量不被破坏）；该轮迭代记录 kind = feedback。
 
     返回 done 载荷：{"task": 执行后任务 to_dict（状态 doing 已回填 -> 终态
     verified/unverified/failed）, "status", "backup_id", "compile",
@@ -496,7 +584,20 @@ def run_task(
     if plan is None:
         raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
     task = find_task(plan, task_id)
-    previous_status = task.status  # 失败路径恢复用（不把任务钉死在 doing）
+    # 失败路径恢复用（不把任务钉死在 doing）——必须在自动重开**之前**捕获：
+    # 反馈轮的终态任务先重开为 pending，若在重开后取 previous_status 会拿到
+    # pending，LLM 失败时任务被错位恢复为 pending（而非反馈前终态，状态与
+    # main.c 旧实现不一致）。先捕获原终态，重开只在成功后生效。
+    previous_status = task.status
+    # 上板反馈轮：终态任务先自动重开（verified/unverified/failed → pending
+    # 均已在转移表；用户主动反馈 = 撤销终态改判，重新进入执行语义）
+    if feedback and task.status in (
+        STATUS_VERIFIED,
+        STATUS_UNVERIFIED,
+        STATUS_FAILED,
+    ):
+        plan, task = update_task_status(plan, task_id, STATUS_PENDING)
+        write_task_plan(output_dir, plan)
     emit.progress(ProgressEvent(type=EVENT_TASK_EXECUTING))
 
     # 执行起始：状态 → doing 并落盘（前端实时可见；失败路径恢复 previous_status
@@ -515,6 +616,7 @@ def run_task(
             module_interfaces=interfaces,
             problem_text=problem_text,
             qa_text=qa_text,
+            feedback=feedback,
         )
         if not executed.strip():
             raise TaskError("任务执行结果为空——LLM 未产出实现后的 main.c，请重试")
@@ -564,20 +666,42 @@ def run_task(
             ),
         }
 
-    # 状态回填（终态写盘；note 持久化——补充框内容刷新不丢，spec 用户故事 10）
-    updated_plan = _with_task_status(plan, task_id, result["status"], note=note)
+    # 状态回填（终态写盘；note 持久化——补充框内容刷新不丢，spec 用户故事 10；
+    # 迭代历史追加——每轮执行记录（备份点 / 终态），回滚到任意轮靠它）
+    iteration = TaskIteration(
+        seq=len(task.iterations) + 1,
+        kind=ITERATION_KIND_FEEDBACK if feedback else ITERATION_KIND_EXECUTE,
+        feedback=feedback,
+        status=result["status"],
+        backup_id=backup_id,
+        compile_summary=str(result.get("compile", {}).get("summary", "") or ""),
+        at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    )
+    updated_plan = _with_task_status(
+        plan,
+        task_id,
+        result["status"],
+        note=note,
+        iterations=task.iterations + (iteration,),
+    )
     write_task_plan(output_dir, updated_plan)
     updated = find_task(updated_plan, task_id)
     return {"task": updated.to_dict(), **result}
 
 
 def _with_task_status(
-    plan: TaskPlan, task_id: str, status: str, note: str | None = None
+    plan: TaskPlan,
+    task_id: str,
+    status: str,
+    note: str | None = None,
+    iterations: tuple[TaskIteration, ...] | None = None,
 ) -> TaskPlan:
     """任务状态替换（纯函数）：任务不存在 → TaskError；状态词表外 → TaskError。
 
     note 非 None 时一并替换（执行后持久化补充框内容——spec 用户故事 10
     「任务清单与进度（id / 描述 / 状态 / 备注）」；None = 只改状态）。
+    iterations 非 None 时一并替换（执行后追加轮次历史——工单 task-feedback/01；
+    None = 保留原值）。
     """
     if status not in ALL_STATUSES:
         raise TaskError(f"非法任务状态：{status}")
@@ -596,6 +720,7 @@ def _with_task_status(
                     verify=task.verify,
                     status=status,
                     note=task.note if note is None else note,
+                    iterations=task.iterations if iterations is None else iterations,
                 )
             )
         else:
@@ -644,3 +769,50 @@ def apply_task_status(output_dir: Path, task_id: str, status: str) -> dict[str, 
     updated_plan, task = update_task_status(plan, task_id, status)
     write_task_plan(output_dir, updated_plan)
     return {"task": task.to_dict(), "plan": updated_plan.to_dict()}
+
+
+def rollback_task_iteration(
+    output_dir: Path, task_id: str, seq: int, backup_root: Path
+) -> dict[str, Any]:
+    """回滚到指定轮次（工单 task-feedback/03）：撤销语义。
+
+    备份时机 = 该轮写盘**前**（run_task：backup_tree → write），故该轮迭代
+    记录的 backup_id = 「该轮执行前」的整树快照——回滚 = 恢复该快照 + 状态
+    恢复为「该轮之前的终态」（向前找最近历史轮次的 status；无前轮 →
+    pending），代码与状态同源一致（回到做这一轮之前的样子）。迭代历史
+    本身保留（撤销不改历史，留痕可追溯，用户可再执行/再反馈造新轮）。
+
+    校验：清单存在 / 任务存在 / 轮次存在且有备份 id → 否则 TaskError 400；
+    备份恢复走 revision.restore_revision（路径安全校验 + 清空恢复内建，
+    与修订回滚同入口）。轮次状态恢复绕过转移表（回滚 = 恢复历史事实，
+    非人工改标）。
+
+    返回 {"task": 回滚后任务 to_dict, "plan": 全量清单 to_dict,
+    "restored": 恢复文件相对路径列表}。
+    """
+    from .revision import restore_revision
+
+    plan = read_task_plan(output_dir)
+    if plan is None:
+        raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
+    task = find_task(plan, task_id)
+    iteration = next((it for it in task.iterations if it.seq == seq), None)
+    if iteration is None:
+        raise TaskError(f"任务 {task_id} 没有第 {seq} 轮记录——无法回滚")
+    if not iteration.backup_id:
+        raise TaskError(f"任务 {task_id} 第 {seq} 轮没有备份——无法回滚")
+    restored = restore_revision(backup_root, iteration.backup_id, output_dir)
+    # 该轮之前的终态：向前找最近历史轮次（iterations 按 seq 递增追加）；
+    # 无前轮（seq=1）→ pending；前轮终态词表外 → 兜底 pending
+    prev_status = STATUS_PENDING
+    for it in task.iterations:
+        if it.seq < seq and it.status in ALL_STATUSES:
+            prev_status = it.status
+    updated_plan = _with_task_status(plan, task_id, prev_status)
+    write_task_plan(output_dir, updated_plan)
+    updated = find_task(updated_plan, task_id)
+    return {
+        "task": updated.to_dict(),
+        "plan": updated_plan.to_dict(),
+        "restored": list(restored),
+    }

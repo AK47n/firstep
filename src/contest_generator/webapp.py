@@ -2038,7 +2038,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         请求体契约：output_dir（必填，生成结果目录）；task_id（必填，任务
         id）；note（可选字符串，补充框——用户对本次执行的附加说明，透传
-        LLM）；problem_text（可选覆盖，历史目录补题面流程）。
+        LLM）；feedback（可选字符串，上板实测反馈——用户烧录运行后描述的
+        实际现象，透传 LLM 按反馈修复轮；非字符串 400）；problem_text
+        （可选覆盖，历史目录补题面流程）。
 
         事件序列：task_executing（LLM 实现中，分钟级）→ compile_start →
         fix_start（仅首轮编译失败）→ verify_result → done（{"task",
@@ -2055,6 +2057,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise TaskError(f"输出目录不存在：{output_dir}")
         task_id = _require_str(payload, "task_id")
         note = _optional_str(payload, "note") or ""
+        feedback = _optional_str(payload, "feedback") or ""
         config = _require_config(context)
         module_library_dir = config.module_library_dir
         _, fields = _load_revision_context(output_dir, module_library_dir)
@@ -2092,6 +2095,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         uv4_override=config.uv4_path,
                         make_override=config.gmake_path,
                         module_slugs=fields["slugs"],
+                        feedback=feedback,
                     )
                 emit.done(result)
             finally:
@@ -2150,6 +2154,41 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         task_id = _require_str(payload, "task_id")
         status = _require_str(payload, "status")
         return apply_task_status(output_dir, task_id, status)
+
+    # ------------------------------------------------------------------
+    # 任务推进 · 轮次回滚（工单 task-feedback/03）：撤销到指定轮次之前。
+    # 域判决在 task_progress.rollback_task_iteration（复用修订回滚
+    # restore_revision），路由只做薄壳装配（seq 正整数校验）。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/rollback-iteration")
+    @_map_errors
+    def tasks_rollback_iteration(payload: dict) -> dict:
+        """轮次回滚（同步端点）：{output_dir, task_id, seq} → 撤销该轮。
+
+        seq = 迭代记录轮次序号（1 起正整数，非正整数 → TaskError 400）。
+        撤销语义：恢复该轮执行前的整树快照（备份在写盘前）+ 状态恢复为该轮
+        之前的终态（无前轮 → pending）；迭代历史保留。轮次 / 任务 / 清单
+        不存在 → TaskError 400；备份损坏 → RevisionError 400。
+
+        返回 {"task", "plan", "restored"}——前端单卡重渲染 + 进度刷新。
+        """
+        from .task_progress import rollback_task_iteration
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        task_id = _require_str(payload, "task_id")
+        seq = payload.get("seq")
+        if isinstance(seq, bool) or not isinstance(seq, int) or seq < 1:
+            raise TaskError("seq 必须是正整数（轮次序号）")
+        config = _require_config(context)
+        return rollback_task_iteration(
+            output_dir,
+            task_id,
+            seq,
+            revise_backup_root(config.masters_dir.parent),
+        )
 
     @app.post("/api/buy/discuss")
     @_map_errors
