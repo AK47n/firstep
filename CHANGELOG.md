@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d9f0cef649353d14b96044a9072edc2e3e4be064 -->
+<!-- changelog-auto: last-commit=4166a15684e50ac7059affd90f7750bfb3302460 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -36,6 +36,7 @@
 - 20:23 工单 topic-framework/03-04：补评审记录
 - 22:23 工单 buy-guide/01-02：库外建议买件指引（词表选购方案 + 前端选型参考展开）
 - 22:24 buy-guide：spec 标记 resolved（工单 01-02 完成）
+- 23:10 工单 buy-discuss/01-05：买件方案商量（讨论 + AI 校核 + 已定方案记忆与上下文注入）
 
 ## 2026-08-26
 - 00:06 模块编辑弹窗（工单 06）：每行「编辑」→ 平台级编辑模态（复用 05 骨架 + addFileRow/collectFiles/pickFilesInto 文件行机制）：平台下拉切换、套件词表 datalist（libPlatformKits 库内去重）、购买链接 URL 校验（libIsValidHttpUrl，空=保留原值）、文件清单（含内嵌母版态）+ 逐文件 ✕ 确认删除、新文件行/磁盘选取推送（POST platform-files 携带硬件绑定与身份现值）；保存身份/推送/删除成功 → 返回 manifest 本地替换即时刷新表格与统计条，失败展示原因表单保留；LOW-MEDIUM 修复（删最后文件后平台条目移除 → rebuildPlatSelect 重建下拉落位）+ isConnected 守卫（数据始终更新，05 同构）+ 消息红色兜底；tests/js 305 绿、冒烟 40 项 PASS、pytest 2365 绿；评审两轴无硬违规（多选删除为 Spec 判定可接受口径差异）
