@@ -6,7 +6,9 @@
 
 **状态：** resolved
 
-**验收：** 全部 ✓（`_topic_framework_info` 装配（平台过滤 / 保序首个 / 降级）+ `POST /api/skeleton` 返回体带 `topic_framework` + `GET /api/references/topic-types` 端点；前端参考库表格「题型」列 + 编辑弹窗/录入表单「题型」下拉 + 生成页步骤 8「题型框架已注入」提示行（`frameworkNoteHTML` 入 fx/generate.js）；JS 492 全绿 + 后台 webapp 集成测试 3 条 + E2E 实跑全绿）。
+**评审记录**（code-review 双轴，HEAD=5b6a08f）：骨架装配由本票原 `_topic_framework_info`（webapp 内联）改为 `generator.build_topic_framework_info`（域函数，Standards ② 域归位）+ `_topic_framework_response`（webapp 只留返回形状）；手动条目纳入（Standards ④ 真 bug）；source= 条目标题（Spec ④）。
+
+**验收：** 全部 ✓（`build_topic_framework_info` 装配（references ∪ manual_references、平台过滤 platform_matches、保序首个、降级）+ `POST /api/skeleton` 返回体带 `topic_framework` + `GET /api/references/topic-types` 端点；前端参考库表格「题型」列 + 编辑弹窗/录入表单「题型」下拉 + 生成页步骤 8「题型框架已注入」提示行（`frameworkNoteHTML` 入 fx/generate.js）；JS 492 全绿 + 后台 webapp 集成测试 4 条 + E2E 实跑全绿）。
 
 - [ ] `/api/skeleton` 装配 framework（保序取首个平台匹配 + topic_type 非空；`build_topic_framework` None = 降级 injected false）+ 透传 + 返回体带 `topic_framework`（null 时 `{"injected": false}`）
 - [ ] GET /api/references 响应附 `topic_types`（词表；单源 dropdown+校验同源）
