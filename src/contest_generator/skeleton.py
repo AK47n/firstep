@@ -417,6 +417,7 @@ def generate_skeleton(
     master_project_dir: Path | None = None,
     reference_fulltexts: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
+    topic_framework: str | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """LLM 出稿 → 静态自检：返回（可写入工程的 main.c, 被拦截的调用名）。
 
@@ -424,7 +425,9 @@ def generate_skeleton(
     main.c 骨架保证可编译。调用方如想"明确报错"而非占位，对拦截列表
     非空时自行抛错即可。母版目录给定时接口集并入母版头（母版内嵌实现
     的 ml_* API 不再被占位改写）。reference_fulltexts 非空时注入骨架
-    prompt（参考实现草稿），None / 空 = 现行为。instances（工单
+    prompt（参考实现草稿），None / 空 = 现行为。topic_framework（工单
+    topic-framework/03）非空时注入题型框架段（确定性强约束：保留框架
+    结构只填 TODO），None = 现行为。instances（工单
     module-multi-instance/03）= 多实例清单 {slug: [{name, variant, pin}]}，
     展开计划注入接口块（通道宏清单）；缺省 / 空 = 现行为（多实例模块仍注入
     单实例默认通道宏）。
@@ -439,6 +442,7 @@ def generate_skeleton(
         llm.generate_main_skeleton,
         reference_fulltexts,
         instances,
+        topic_framework,
     )
 
 
@@ -484,6 +488,7 @@ def run_skeleton(
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     reference_fulltexts: Mapping[str, str] | None = None,
     main_mode: str = "skeleton",
+    topic_framework: str | None = None,
 ) -> dict[str, Any]:
     """/api/skeleton 的域编排（工单 route-orchestration-homing/01）：main_mode
     分支 + 冒烟守卫 + generate_skeleton / generate_smoke_main 分派。
@@ -518,6 +523,7 @@ def run_skeleton(
             master_project_dir,
             reference_fulltexts=reference_fulltexts,
             instances=instances,
+            topic_framework=topic_framework,
         )
     return {"main_c": main_c, "intercepted": list(intercepted)}
 
@@ -532,12 +538,15 @@ def _generate_main_c(
     generate: Any,
     reference_fulltexts: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
+    topic_framework: str | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。
 
     reference_fulltexts 只对骨架路径有意义（冒烟不写题逻辑不传）——非 None
     时按三参调用 generate（协议方法带 reference_fulltexts），None 时按两参
-    调用（冒烟方法 / 旧骨架零回归）。instances 经 expand_instance_plans 展开
+    调用（冒烟方法 / 旧骨架零回归）。topic_framework（工单 topic-framework/03）
+    一样只对骨架路径有意义：非 None 时按四参调用（协议方法带 topic_framework），
+    None = 现行为。instances 经 expand_instance_plans 展开
     后注入接口块（与生成侧渲染同源——LLM 见到的通道宏 = 工程实际生成的宏；
     board 缺省时展开层现加载板定义）。
     """
@@ -545,8 +554,10 @@ def _generate_main_c(
     interfaces = build_skeleton_interfaces(
         manifests, platform, library_dir, master_project_dir, instance_plans=plans
     )
-    if reference_fulltexts is None:
+    if reference_fulltexts is None and topic_framework is None:
         raw = generate(problem_text, interfaces)
+    elif topic_framework is not None:
+        raw = generate(problem_text, interfaces, reference_fulltexts, topic_framework)
     else:
         raw = generate(problem_text, interfaces, reference_fulltexts)
     raw = strip_code_fences(raw)  # 首尾包裹形态先剥（契约见 clex）

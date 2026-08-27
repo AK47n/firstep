@@ -1276,6 +1276,40 @@ def test_skeleton_prompt_with_references_adds_section_and_rewrite_rule():
     assert _skeleton_user_prompt("赛题", ("x.h",), {}) == base
 
 
+def test_skeleton_prompt_with_topic_framework_injects_strong_section():
+    """题型框架段（工单 topic-framework/03）：非空 → 框架段在参考段**之前**，
+    None = 零回归。"""
+    framework = "/* 巡线框架 */\ntypedef enum { S_FOLLOW, S_TURN } state_t;\n"
+    base = _skeleton_user_prompt("赛题", ("x.h",))
+    with_fw = _skeleton_user_prompt("赛题", ("x.h",), None, framework)
+    with_both = _skeleton_user_prompt(
+        "赛题", ("x.h",), {"ref-1": "巡线决策源码"}, framework
+    )
+
+    assert "题型框架" in with_fw
+    assert framework in with_fw
+    assert "必须保留" in with_fw
+    assert "`// TODO:`" in with_fw
+    # 框架段在参考段之前（强约束在前）
+    assert with_both.index("题型框架") < with_both.index("### 参考资料")
+    assert _skeleton_user_prompt("赛题", ("x.h",), None, None) == base
+    assert _skeleton_user_prompt("赛题", ("x.h",)) == base
+
+
+def test_generate_main_skeleton_forwards_topic_framework():
+    """DeepSeekLLM.generate_main_skeleton 把题型框架透传进 user 消息。"""
+    transport = FakeTransport(body=_api_response("int main(void) { /* TODO */ }"))
+    llm = _llm(transport)
+    framework = "/* 巡线框架 */\n"
+
+    llm.generate_main_skeleton("赛题", ["x.h"], None, framework)
+
+    _, _, payload, _ = transport.calls[0]
+    user_message = payload["messages"][1]["content"]
+    assert "题型框架" in user_message
+    assert framework in user_message
+
+
 def test_generate_smoke_main_routes_to_smoke_prompts():
     """自检冒烟职责走独立系统/用户提示词，不经骨架提示词。"""
     transport = FakeTransport(body=_api_response("int main(void) { /* smoke */ }"))
