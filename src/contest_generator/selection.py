@@ -274,7 +274,17 @@ def associated_references(
 
 def _platform_matches(reference: ReferenceEntry, platform: str) -> bool:
     """条目平台属性匹配：any 全进；platform 空串 = 不过滤（向后兼容）；否则
-    条目平台必须与生成平台一致。"""
+    条目平台必须与生成平台一致。
+
+    公开名 platform_matches（工单 topic-framework/04 起 cross-module 复用）；
+    两者同实现，只读谓词。"""
+    return platform_matches(reference, platform)
+
+
+def platform_matches(reference: ReferenceEntry, platform: str) -> bool:
+    """条目平台属性匹配（公开）：any 全进；platform 空串 = 不过滤（向后兼容）；
+    否则条目平台必须与生成平台一致。单一判据——associated_references /
+    build_topic_framework_info / filter_manifests_by_platform 共用，防分叉。"""
     return (
         not platform
         or reference.platform == PLATFORM_ANY

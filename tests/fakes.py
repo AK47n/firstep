@@ -691,7 +691,7 @@ class FakeLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
-        topic_framework: str | None = None,
+        topic_framework: object | None = None,
     ) -> str:
         self.skeleton_calls.append((problem_text, tuple(module_interfaces)))
         self.skeleton_ref_calls.append(dict(reference_fulltexts or {}))
@@ -898,7 +898,7 @@ class RecordingLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
-        topic_framework: str | None = None,
+        topic_framework: object | None = None,
     ) -> str:
         self._record("generate_main_skeleton")
         return f"{self.name}:skeleton"

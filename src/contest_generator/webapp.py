@@ -103,6 +103,7 @@ from .generator import (
     GenerationSummary,
     TopicContext,
     build_reference_fulltexts,
+    build_topic_framework_info,
     generate_project,
     resolve_topic_context,
 )
@@ -139,6 +140,7 @@ from .llm import (
     LLMObservationCollector,
     RetryBudget,
     TOPIC_SPLIT_LLM_CHAR_CAP,
+    TopicFramework,
     DeepSeekLLM,
     build_llm,
     create_llm_observation_collector,
@@ -192,7 +194,6 @@ from .reference_library import (
     TOPIC_TYPES,
     ReferenceEntry,
     add_reference,
-    build_topic_framework,
     delete_reference,
     draft_description as reference_draft_description,
     list_entry_files,
@@ -491,27 +492,18 @@ def _assemble_topic_context(
     )
 
 
-def _topic_framework_info(
-    reference_root: Path, topic: TopicContext, platform: str
-) -> tuple[str | None, ReferenceEntry | None]:
-    """题型框架装配（工单 topic-framework/04）：首个平台匹配 + topic_type 非空
-    的参考条目 → (框架全文, 条目)；无 → (None, None)。
-
-    与 build_reference_fulltexts 同域：锚定命中 ∪ 手动选过的条目都可能带题型
-    标记（手动选参考也可以有题型框架——与全文注入同语义）。保序取首个匹配
-    （spec：不做多条目合并）；平台过滤沿用 _platform_matches 同判据（any 全进、
-    空串 = 不过滤、带平台只进对应平台）。框架文件缺失由 build_topic_framework
-    降级（None 继续找下一个，理论上仍无 = 无框架）。
-    """
-    for entry in topic.references:
-        if not entry.topic_type:
-            continue
-        if platform and entry.platform not in (PLATFORM_ANY, platform):
-            continue
-        framework = build_topic_framework(reference_root, entry)
-        if framework is not None:
-            return framework, entry
-    return None, None
+def _topic_framework_response(
+    framework: TopicFramework | None, entry: ReferenceEntry | None
+) -> dict[str, Any]:
+    """/api/skeleton 返回体的 topic_framework 字段形状（工单 topic-framework/04）：
+    injected 恒有；为真时带 topic_type / source（= 条目标题，展示用）。"""
+    if framework is None:
+        return {"injected": False}
+    return {
+        "injected": True,
+        "topic_type": framework.topic_type,
+        "source": framework.source,
+    }
 
 
 def _error_message(exc: Exception) -> str:
@@ -1355,14 +1347,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             resolved = resolve_selection(
                 _library_dir(context), platform, slugs, instances=instances
             )
-            # 题型框架（工单 topic-framework/04）：与参考全文同域装配——首个平台
-            # 匹配 + topic_type 非空条目的 framework/main.c（确定性注入）。冒烟
-            # 模式不注入（不写题逻辑，见 run_skeleton 分派）。main_mode 分支 +
-            # 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
+            # 题型框架（工单 topic-framework/04）：与参考全文同域装配（域函数
+            # build_topic_framework_info——锚定 ∪ 手动、平台匹配、首个 topic_type
+            # 非空条目）。冒烟模式不注入（不写题逻辑，见 run_skeleton 分派）。
+            # main_mode 分支 + 冒烟守卫 + 分派归 skeleton.run_skeleton（对照
             # run_recommendation / run_fix_round 先例），路由只装配输入 + 返回
             ref_root = reference_library_dir(_require_config(context).module_library_dir)
             framework, framework_entry = (
-                _topic_framework_info(ref_root, topic, platform)
+                build_topic_framework_info(ref_root, topic, platform)
                 if main_mode == "skeleton"
                 else (None, None)
             )
@@ -1381,14 +1373,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 main_mode=main_mode,
                 topic_framework=framework if main_mode == "skeleton" else None,
             )
-            if framework_entry is None:
-                result["topic_framework"] = {"injected": False}
-            else:
-                result["topic_framework"] = {
-                    "injected": True,
-                    "topic_type": framework_entry.topic_type,
-                    "source": framework_entry.id,
-                }
+            result["topic_framework"] = _topic_framework_response(framework, framework_entry)
             return result
         finally:
             context.recent_llm_workflows.add_completed(collector)

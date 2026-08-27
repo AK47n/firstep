@@ -201,6 +201,15 @@ SKELETON_NO_UNUSED_RULE = (
     "编译警告，验收要求 0 警告）。"
 )
 
+# 题型框架强指令（工单 topic-framework/03）：框架段注入骨架 user prompt 时的
+# 约束——必须保留框架结构，只填 TODO。单源常量（与 SKELETON_NO_UNUSED_RULE
+# 同款：改约束只动这里，契约测试断言）。
+SKELETON_FRAMEWORK_RULE = (
+    "按此框架写 main.c：状态机枚举 / 调度循环 / 框架函数名保持原样，"
+    "只在 `// TODO:` 处填当前所选模块接口的实现（实现不存在的调用写成注释"
+    "占位，保证可编译）。框架段之外的赛题功能按需补充。"
+)
+
 # 深化系统提示词（工单 revise-deepen/04）：按功能需求清单逐条填充 main.c 的
 # TODO 预留区——输出与需求清单对应（逐条可追踪，不做题外发挥）；只调真实
 # 接口；保证可编译。深化不设自动循环，用户可重复触发。
@@ -998,6 +1007,20 @@ def _batches(
     return tuple(tuple(batch) for batch in batches)
 
 
+@dataclass(frozen=True)
+class TopicFramework:
+    """题型确定性框架段（工单 topic-framework/03）：注入骨架 prompt 的结构化载体。
+
+    code = 框架全文（framework/main.c，不经 LLM 改写）；topic_type = 题型
+    （词表 TOPIC_TYPES 值）；source = 来源条目标题（prompt 展示用——id 与
+    标题可能不同（编辑改标题时 id=目录名不变），展示用标题更贴近用户认知。
+    """
+
+    code: str
+    topic_type: str
+    source: str
+
+
 class LLM(Protocol):
     def select_modules(
         self,
@@ -1023,7 +1046,7 @@ class LLM(Protocol):
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
-        topic_framework: str | None = None,
+        topic_framework: TopicFramework | None = None,
     ) -> str: ...
 
     def generate_smoke_main(
@@ -1438,7 +1461,7 @@ class DeepSeekLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
-        topic_framework: str | None = None,
+        topic_framework: TopicFramework | None = None,
     ) -> str:
         def parse(content: str) -> str:
             if not content.strip():
@@ -2703,7 +2726,7 @@ class RoutingLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
-        topic_framework: str | None = None,
+        topic_framework: TopicFramework | None = None,
     ) -> str:
         return self._remote.generate_main_skeleton(
             problem_text,
@@ -3745,13 +3768,13 @@ def _skeleton_user_prompt(
     problem_text: str,
     module_interfaces: Sequence[str],
     reference_fulltexts: Mapping[str, str] | None = None,
-    topic_framework: str | None = None,
+    topic_framework: TopicFramework | None = None,
 ) -> str:
     """main.c 骨架生成的 user 消息：赛题 + 接口块 + 可选题型框架段 + 可选参考段。
 
     topic_framework（工单 topic-framework/03）非空时在参考段**之前**插题型框架段
     （确定性注入——直接从参考条目 framework/main.c 读来，不经 LLM 改写）：强指令
-    "必须保留框架结构（状态机枚举 / 调度循环 / 函数名不动），只在 TODO 位填实现"。
+    SKELETON_FRAMEWORK_RULE（单源——"必须保留框架结构，只在 TODO 位填实现"）。
     框架段 = 强约束（必须保留的结构）与参考全文（弱约束学习素材）互补：「框架
     代码段走确定性注入、学习说明走 LLM 段」（决策点 3）。None / 空 = 现行为逐
     字节不变。reference_fulltexts 非空时在输出指令前插参考段（每条 id 标注 +
@@ -3765,12 +3788,10 @@ def _skeleton_user_prompt(
     )
     if topic_framework:
         prompt += (
-            "\n\n题型框架（确定性注入，来源：参考条目 framework/main.c）——"
-            "必须保留的 main.c 结构：\n"
-            f"```c\n{topic_framework}\n```\n"
-            "按此框架写 main.c：状态机枚举 / 调度循环 / 框架函数名保持原样，"
-            "只在 `// TODO:` 处填当前所选模块接口的实现（实现不存在的调用写成"
-            "注释占位，保证可编译）。框架段之外的赛题功能按需补充。"
+            f"\n\n### 题型框架：{topic_framework.topic_type}"
+            f"（来源 {topic_framework.source}）——必须保留的 main.c 结构：\n"
+            f"```c\n{topic_framework.code}\n```\n"
+            + SKELETON_FRAMEWORK_RULE
         )
     if reference_fulltexts:
         per_ref_budget = max(
