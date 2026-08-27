@@ -6,6 +6,7 @@
   "anchor_kind": "topic",
   "anchor_value": "2026H",
   "platform": "mspm0",
+  "topic_type": "line_follow",
   "files": [
     "code/pid.c",
     "code/pid.h",
@@ -14,6 +15,6 @@
     "user/isr.c",
     "user/main.c"
   ],
-  "file_count": 0,
-  "size_bytes": 0
+  "file_count": 8,
+  "size_bytes": 35960
 }
