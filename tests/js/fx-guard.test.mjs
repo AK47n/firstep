@@ -109,6 +109,11 @@ const DOMAINS = {
     scoreChecklistParse: "fn", scoreChecklistLoad: "fn",
     scoreChecklistSave: "fn",
   },
+  "task.js": {
+    taskStatusLabel: "fn", taskStatusBadgeClass: "fn", taskVerifyLabel: "fn",
+    taskScoreRefsText: "fn", taskCardHTML: "fn", tasksGridHTML: "fn",
+    tasksProgressText: "fn",
+  },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
     parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",

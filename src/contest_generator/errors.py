@@ -46,6 +46,7 @@ from .revision import RevisionError
 from .selection import ManualReferenceError, SelectionError
 from .skeleton import SkeletonError
 from .stage import StageError
+from .task_progress import TaskError
 from .topic_library import TopicError
 from .vision import VisionError
 
@@ -95,6 +96,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ImpactError,  # 影响分析输出非法（工单 revise-deepen/02）：缺数组 / 未知 slug / 字段类型错
             RevisionError,  # 修订执行失败（工单 revise-deepen/03）：备份缺失 / 回滚目标非法
             DeepenError,  # 深化失败（工单 revise-deepen/04）：main.c 缺失 / 深化结果为空
+            TaskError,  # 任务推进失败（工单 task-progress/01）：清单损坏 / 缺上下文 / 拆解输出畸形
             GenerationConflictError,  # 桌面同名工程已存在（工单 generate-conflict-guard/01）：不静默换名/覆盖
             RecentStatusError,  # 最近生成状态非法（工单 recent-jobs/01）：前端上报未知状态值
         ),

@@ -4427,6 +4427,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "reference_judge_archivable",
         "topic_split_topics",
         "topic_extract_number",
+        "plan_tasks",
     }
 )
 
@@ -4447,6 +4448,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.reference_judge_archivable([])
     router.topic_split_topics("全文")
     router.topic_extract_number("2026C")
+    router.plan_tasks("题面", "", [], [], [], "main.c")
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -4475,6 +4477,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "distill_master",
         "topic_split_topics",
         "topic_extract_number",
+        "plan_tasks",
     ]
 
 

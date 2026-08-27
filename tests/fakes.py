@@ -21,6 +21,7 @@ from contest_generator.library import ValidationResult
 from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
+from contest_generator.task_progress import Task, TaskPlan
 from contest_generator.topic_library import TopicDraft
 
 # ---------------------------------------------------------------------------
@@ -596,6 +597,7 @@ class FakeLLM:
         impact_analysis: ImpactAnalysis | None = None,
         deepened_main_c: str = "",
         report_draft: tuple[str, str] = ("AI 生成的方案论证", "AI 生成的软件流程"),
+        task_plan: TaskPlan | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -610,6 +612,9 @@ class FakeLLM:
         self._impact_analysis = impact_analysis or ImpactAnalysis()
         self._deepened_main_c = deepened_main_c
         self._report_draft = report_draft
+        self._task_plan = task_plan or TaskPlan(
+            tasks=(Task(id="t1", title="占位任务", description="占位描述"),)
+        )
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
@@ -632,6 +637,9 @@ class FakeLLM:
         self.deepen_calls: list[tuple[str, tuple, tuple, str, str]] = []
         self.report_draft_calls: list[
             tuple[str, tuple, tuple, str]
+        ] = []
+        self.plan_tasks_calls: list[
+            tuple[str, str, tuple, tuple, tuple, str]
         ] = []
 
     def generate_report_draft(
@@ -793,6 +801,27 @@ class FakeLLM:
             "/* TODO */", "/* 已实现 */"
         )
 
+    def plan_tasks(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+    ) -> TaskPlan:
+        self.plan_tasks_calls.append(
+            (
+                problem_text,
+                qa_text,
+                tuple(requirements),
+                tuple(score_points),
+                tuple(module_interfaces),
+                main_c,
+            )
+        )
+        return self._task_plan
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -928,6 +957,18 @@ class RecordingLLM:
     ) -> str:
         self._record("deepen_main_c")
         return main_c
+
+    def plan_tasks(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+    ) -> TaskPlan:
+        self._record("plan_tasks")
+        return TaskPlan()
 
     def generate_report_draft(
         self,
