@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-27T19:29:33+0800",
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "补齐外设初始化",
+      "description": "在 main.c 的 TODO 按键引脚初始化处添加 gpio_init(GPIO_A, Pin_0, ID) 配置按键为上拉输入；在 TODO 载药检测传感器初始化处添加 adc_pin_init(ADC_Channel_5) 配置载药检测 ADC 通道；在 TODO 数字识别模块（K230/UART）初始化处调用 uart_init(UART_1, 115200, 1) 配置 K230 通信；在 TODO 无线通信模块初始化处调用 uart_init(UART_2, 115200, 1) 配置无线透传模块。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [],
+      "verify": "compile",
+      "status": "doing",
+      "note": ""
+    },
+    {
+      "id": "t2",
+      "title": "主状态机框架",
+      "description": "在 main 函数 while 循环中定义状态枚举：WAIT_RECOGNIZE, WAIT_LOAD, DELIVERY, WAIT_UNLOAD, RETURN, DONE，并定义变量 state。实现 switch(state) 分支框架，初始状态为 WAIT_RECOGNIZE，各分支暂时仅执行 delay_ms(10)。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t1"
+      ],
+      "verify": "compile",
+      "status": "pending",
+      "note": ""
+    },
+    {
+      "id": "t3",
+      "title": "灰度循迹行驶",
+      "description": "实现灰度循迹：定义函数 line_follow()，内部调用 adc_get(ADC_1, ADC_Channel_0) 和 adc_get(ADC_1, ADC_Channel_1) 读取左右灰度值，计算偏差，使用比例控制计算 PWM 占空比，通过 motor_set_duty 和 motor_set_direction 控制左右电机。在状态机 DELIVERY 状态下调用 line_follow()，并在 RETURN 状态下以反向调用。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t2"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": ""
+    },
+    {
+      "id": "t4",
+      "title": "数字识别与载药检测",
+      "description": "实现数字识别与载药检测：定义函数 read_room_number()，通过 uart_getbyte(UART_1) 循环读取数据，解析出病房号 1-8；定义函数 check_loaded()，通过 adc_get(ADC_1, ADC_Channel_5) 或 gpio_get 检测载药传感器，返回是否装载完成。在状态机 WAIT_RECOGNIZE 状态中调用 read_room_number() 获取目标病房号，若有效则转入 WAIT_LOAD；在 WAIT_LOAD 状态中调用 check_loaded()，若检测到装载完成则转入 DELIVERY。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t3"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": ""
+    },
+    {
+      "id": "t5",
+      "title": "到达病房停车亮红灯",
+      "description": "在状态机 DELIVERY 分支中，根据数字识别结果判断是否到达目标病房（例如 read_room_number() 返回目标数字），若到达则调用 motor_set_direction(0,0); motor_set_direction(1,0); 停车，并调用 led_on(LED_RED) 点亮红灯，状态转为 WAIT_UNLOAD。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t4"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": ""
+    },
+    {
+      "id": "t6",
+      "title": "卸载检测与返程亮绿灯",
+      "description": "在状态机 WAIT_UNLOAD 分支中，调用 check_loaded() 检测到药品已卸载，则调用 led_off(LED_RED) 熄灭红灯，状态转为 RETURN；在 RETURN 分支中，调用反向的 line_follow() 沿红线返回药房，当识别到药房标志（如距离或数字）时停车，调用 led_on(LED_GREEN) 点亮绿灯，状态转为 DONE。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t5"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": ""
+    },
+    {
+      "id": "t7",
+      "title": "双车协同同送中部病房",
+      "description": "在现有状态机基础上增加双车协同模式：通过 UART2 无线通信，实现指令发送与接收（uart_sendbyte/uart_getbyte）。小车1送药到病房后，发送指令让小车2启动；小车2在自选暂停点暂停并亮黄灯，等待小车1卸载后发送指令继续。使用 get_time_stamp_ms 记录时间，并确保暂停期间小车完全停止。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t6"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": ""
+    },
+    {
+      "id": "t8",
+      "title": "双车协同不同远端病房送取药",
+      "description": "实现双车协同取药模式：小车1送药到远端病房后，返回时通过 UART2 无线发送取药指令；小车2在药房收到指令后启动，行驶到目标病房停车并亮红灯。利用编码器或时间控制停车位置。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t7"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": ""
+    }
+  ]
+}
