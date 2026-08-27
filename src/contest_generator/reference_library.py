@@ -802,6 +802,16 @@ def _validate_files(files: Mapping[str, str]) -> None:
             raise ReferenceError(f"文件路径必须是相对且无 .. 的：{name!r}")
         if name == REFERENCE_META_FILENAME:
             raise ReferenceError(f"文件名不能与 {REFERENCE_META_FILENAME} 冲突")
+        if name == REFERENCE_FRAMEWORK_FILENAME:
+            # 控制文件（工单 topic-framework/02）：framework/main.c 是题型确定性
+            # 框架段（build_topic_framework 直读磁盘），不进 files 清单——入清单
+            # 会让 read_fulltext 与确定性注入双份（控制文件语义不自洽即 bug，
+            # 录入时大声拒绝）。框架文件只能经脚本/编辑弹窗写盘，不能进素材清单。
+            raise ReferenceError(
+                f"文件名 {REFERENCE_FRAMEWORK_FILENAME!r} 是控制文件（题型框架段），"
+                "不能录入为素材（它由 build_topic_framework 直读，进素材会与确定"
+                "性注入重复）"
+            )
 
 
 def _validate_entry_id(entry_id: str) -> None:

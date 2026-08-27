@@ -39,9 +39,11 @@ from contest_generator.llm import (
     FIX_PREVIOUS_FIXES_CAP,
     FIX_SYSTEM_PROMPT,
     SELECT_SYSTEM_PROMPT,
+    SKELETON_FRAMEWORK_RULE,
     SKELETON_NO_UNUSED_RULE,
     SKELETON_SYSTEM_PROMPT,
     SMOKE_SYSTEM_PROMPT,
+    TopicFramework,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
@@ -1279,15 +1281,20 @@ def test_skeleton_prompt_with_references_adds_section_and_rewrite_rule():
 def test_skeleton_prompt_with_topic_framework_injects_strong_section():
     """题型框架段（工单 topic-framework/03）：非空 → 框架段在参考段**之前**，
     None = 零回归。"""
-    framework = "/* 巡线框架 */\ntypedef enum { S_FOLLOW, S_TURN } state_t;\n"
+    framework = TopicFramework(
+        code="/* 巡线框架 */\ntypedef enum { S_FOLLOW, S_TURN } state_t;\n",
+        topic_type="line_follow",
+        source="21F-巡线送药决策例程",
+    )
     base = _skeleton_user_prompt("赛题", ("x.h",))
     with_fw = _skeleton_user_prompt("赛题", ("x.h",), None, framework)
     with_both = _skeleton_user_prompt(
         "赛题", ("x.h",), {"ref-1": "巡线决策源码"}, framework
     )
 
-    assert "题型框架" in with_fw
-    assert framework in with_fw
+    assert "### 题型框架：line_follow（来源 21F-巡线送药决策例程）" in with_fw
+    assert framework.code in with_fw
+    assert SKELETON_FRAMEWORK_RULE in with_fw
     assert "必须保留" in with_fw
     assert "`// TODO:`" in with_fw
     # 框架段在参考段之前（强约束在前）
@@ -1300,14 +1307,14 @@ def test_generate_main_skeleton_forwards_topic_framework():
     """DeepSeekLLM.generate_main_skeleton 把题型框架透传进 user 消息。"""
     transport = FakeTransport(body=_api_response("int main(void) { /* TODO */ }"))
     llm = _llm(transport)
-    framework = "/* 巡线框架 */\n"
+    framework = TopicFramework(code="/* 巡线框架 */\n", topic_type="line_follow", source="21F 巡线");
 
     llm.generate_main_skeleton("赛题", ["x.h"], None, framework)
 
     _, _, payload, _ = transport.calls[0]
     user_message = payload["messages"][1]["content"]
     assert "题型框架" in user_message
-    assert framework in user_message
+    assert framework.code in user_message
 
 
 def test_generate_smoke_main_routes_to_smoke_prompts():

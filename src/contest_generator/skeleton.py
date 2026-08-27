@@ -36,7 +36,7 @@ from .manifest import ModuleManifest
 if TYPE_CHECKING:
     # 仅类型注解用（skeleton 是纯文本模块，运行时导入 llm 会把整条 LLM 栈
     # 拉进生成流程的 import 图——master.py 同规先例，工单 C3 链收敛）
-    from .llm import LLM
+    from .llm import LLM, TopicFramework
     # 仅类型注解用（实例类型归选择域；instance_render 运行时已消费）
     from .selection import ExpandedInstance, ModuleInstance
 
@@ -417,7 +417,7 @@ def generate_skeleton(
     master_project_dir: Path | None = None,
     reference_fulltexts: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
-    topic_framework: str | None = None,
+    topic_framework: TopicFramework | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """LLM 出稿 → 静态自检：返回（可写入工程的 main.c, 被拦截的调用名）。
 
@@ -488,7 +488,7 @@ def run_skeleton(
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     reference_fulltexts: Mapping[str, str] | None = None,
     main_mode: str = "skeleton",
-    topic_framework: str | None = None,
+    topic_framework: TopicFramework | None = None,
 ) -> dict[str, Any]:
     """/api/skeleton 的域编排（工单 route-orchestration-homing/01）：main_mode
     分支 + 冒烟守卫 + generate_skeleton / generate_smoke_main 分派。
@@ -538,7 +538,7 @@ def _generate_main_c(
     generate: Any,
     reference_fulltexts: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
-    topic_framework: str | None = None,
+    topic_framework: TopicFramework | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。
 

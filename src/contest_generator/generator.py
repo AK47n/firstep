@@ -30,7 +30,7 @@ from .compile_runner import CCS_NOT_FOUND_HINT, CcsTools
 from .instance_render import expand_instance_plans, render_instances
 from .k230_render import render_python_artifact
 from .library import list_modules
-from .llm import LLMError
+from .llm import LLMError, TopicFramework
 from .makefiles import write_makefile_set
 from .manifest import (
     ExclusiveGroup,
@@ -52,7 +52,12 @@ from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
 from .pinwriter import apply_pin_bindings
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .readme import README_FILENAME, render_readme
-from .reference_library import ReferenceEntry, ReferenceError, read_fulltext
+from .reference_library import (
+    ReferenceEntry,
+    ReferenceError,
+    build_topic_framework,
+    read_fulltext,
+)
 from .selection import (
     REFERENCE_SOURCE_MANUAL,
     ModuleInstance,
@@ -61,6 +66,7 @@ from .selection import (
     associated_references,
     filter_manifests_by_platform,
     manual_reference_admission,
+    platform_matches,
     reference_suggestions,
     resolve_selection,
 )
@@ -401,6 +407,41 @@ def build_reference_fulltexts(topic: TopicContext) -> dict[str, str] | None:
         if ref.id not in fulltexts:
             fulltexts[ref.id] = topic.read_fulltext(ref.id)
     return fulltexts or None
+
+
+def build_topic_framework_info(
+    reference_library_dir: Path, topic: TopicContext, platform: str
+) -> tuple[TopicFramework | None, ReferenceEntry | None]:
+    """题型框架装配（工单 topic-framework/04，域函数——随 build_reference_fulltexts
+    同址）：锚定 ∪ 手动选中首个平台匹配 + topic_type 非空的参考条目 →
+    (TopicFramework, 条目)；无 → (None, None)。
+
+    与 build_reference_fulltexts 同语义（并集去重手工覆盖锚定判定）：手动条目
+    装配时已入 topic.references 吗——否：manual_entries 单独挂。故遍历
+    topic.references ∪ topic.manual_references。平台过滤用 selection.
+    platform_matches 同判据（any 全进 / 空串 = 不过滤 / 带平台只进对应平台，
+    与全文注入过滤一致——条目标 topic_type 但平台不匹配时框架段仍不注入）。
+    framework 文件缺失由 reference_library.build_topic_framework 降级（None 继续找
+    下一个；理论上仍无 = 无框架）。TopicFramework（llm 协议模型）含
+    code / topic_type / source（条目标题——展示用，id 可变标题不变）。
+    """
+    candidates = (*topic.references, *topic.manual_references)
+    for entry in candidates:
+        if not entry.topic_type:
+            continue
+        if not platform_matches(entry, platform):
+            continue
+        framework = build_topic_framework(reference_library_dir, entry)
+        if framework is not None:
+            return (
+                TopicFramework(
+                    code=framework,
+                    topic_type=entry.topic_type,
+                    source=entry.title,
+                ),
+                entry,
+            )
+    return None, None
 
 
 def _no_topic_context(

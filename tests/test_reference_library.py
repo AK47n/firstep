@@ -651,6 +651,23 @@ def test_read_fulltext_excludes_framework_control_file(tmp_path):
     assert "example.c" in fulltext
 
 
+def test_add_reference_rejects_framework_control_file(tmp_path):
+    """控制文件防双份（工单 topic-framework/02 违例）：framework/main.c 不能
+    录入为素材（否则 read_fulltext 与确定性注入双份）。"""
+    root = _reference_root(tmp_path)
+    with pytest.raises(ReferenceError, match="控制文件"):
+        add_reference(
+            root,
+            title="巡线决策例程",
+            type="例程代码",
+            description="x",
+            anchor_kind=ANCHOR_KIND_TOPIC,
+            anchor_value="2021F",
+            files={"framework/main.c": "/* 框架段 */\n"},
+            kit_vocabulary=(),
+        )
+
+
 def test_entry_stats_counts_framework_dir(tmp_path):
     """体量照旧磁盘实况：framework/ 控制目录也计入（与删除影响面一致）。"""
     root = _reference_root(tmp_path)

@@ -5200,7 +5200,9 @@ def test_skeleton_injects_topic_framework(client, context):
     assert data["topic_framework"]["source"] == "巡线决策框架例程"
     framework = holder["llm"].skeleton_framework_calls[0]
     assert framework is not None
-    assert "巡线框架" in framework
+    assert "巡线框架" in framework.code
+    assert framework.source == "巡线决策框架例程"
+    assert framework.topic_type == "line_follow"
 
 
 def test_skeleton_no_framework_when_no_topic_type(client, context):
@@ -5224,6 +5226,32 @@ def test_skeleton_no_framework_when_no_topic_type(client, context):
     data = resp.json()
     assert data["topic_framework"] == {"injected": False}
     assert holder["llm"].skeleton_framework_calls[0] is None
+
+
+def test_skeleton_manual_reference_with_framework_injects(client, context):
+    """手动选参考也会带题型框架（锚定 ∪ 手动同语义——manual_references 纳入）。"""
+    _wire_material_libraries(context)
+    _wire_framework_entry(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "reference_ids": ["巡线决策框架例程"],
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["topic_framework"] == {
+        "injected": True,
+        "topic_type": "line_follow",
+        "source": "巡线决策框架例程",
+    }
+    assert holder["llm"].skeleton_framework_calls[0] is not None
 
 
 def test_skeleton_smoke_does_not_inject_framework(client, context):
