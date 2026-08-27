@@ -1,6 +1,6 @@
 # 库外建议买件指引（buy-guide）
 
-> spec 状态：draft（用户已拍板：必给多方案、思想打开、方便用户选择）
+> spec 状态：resolved（工单 01-02 已实施 + 双轴评审整改，2026-08-27；前端 E2E 18/18）
 > 关联：工单 10 库外建议（wordlist.py / selection.py，已 resolved）· wordlist.json 8 类
 
 ---
