@@ -46,6 +46,8 @@ from contest_generator.llm import (
     SMOKE_SYSTEM_PROMPT,
     TopicFramework,
     WORDLIST_PROMPT_BYTES,
+    _decision_note,
+    _requirement_lines,
     _wordlist_prompt_segment,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
@@ -115,6 +117,7 @@ from contest_generator.report import (
 )
 from contest_generator.topic_library import TopicDraft
 from contest_generator.manifest import ModuleManifest, PlatformEntry
+from contest_generator.wordlist import SolutionOption
 from tests.fakes import FakeLLM, FakeTransport, RecordingLLM
 
 SELECTION_JSON = json.dumps(
@@ -3938,6 +3941,160 @@ def test_wordlist_segment_covers_default_wordlist_and_budget():
     assert wire_size(segment) > WORDLIST_PROMPT_BYTES // 2  # 预算非名义：仍送满大部分
 
 
+DISCUSS_SOLUTION = SolutionOption(
+    name="红外遥控接收头 VS1838B", interface="GPIO 中断 + NEC 解码",
+    price="￥2-5/套", note="视距 8m", suitable="室内遥控启动", recommended=True,
+)
+
+
+def test_discuss_buy_options_parses_reply_and_review():
+    """讨论解析（工单 buy-discuss/01）：合法 JSON → reply + review（verdict 三档）。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({
+            "reply": "红外怕强光，建议 NRF24L01；你场地阳光强的话红外需要遮光罩。",
+            "review": {"verdict": "risky", "reason": "阳光直射红外易误判", "suggestion": "改选 NRF24L01 遥控（含手柄）"},
+        }))
+    )
+    llm = _llm(transport)
+
+    result = llm.discuss_buy_options(
+        "设计一个识别数字的送药小车", "遥控接收", "stm32",
+        [DISCUSS_SOLUTION], [("user", "我想用红外，但场地阳光很强")],
+    )
+
+    assert "红外怕强光" in result.reply
+    assert result.review is not None
+    assert result.review.verdict == "risky"
+    assert "阳光直射" in result.review.reason
+    assert "NRF24L01" in result.review.suggestion
+
+
+def test_discuss_buy_options_review_optional_and_verdict_fallback():
+    """讨论解析：review null / 缺失 → None；verdict 词表外 → 修正回 feasible。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({
+            "reply": "两个方案都可以，看你预算。",
+            "review": None,
+        }))
+    )
+    llm = _llm(transport)
+    result = llm.discuss_buy_options("题面", "需求", "mspm0", [DISCUSS_SOLUTION], [("user", "哪个便宜")])
+    assert result.review is None
+
+    transport = FakeTransport(
+        body=_api_response(json.dumps({
+            "reply": "可行，注意分压。",
+            "review": {"verdict": "maybe", "reason": "试试", "suggestion": ""},
+        }))
+    )
+    llm = _llm(transport)
+    result = llm.discuss_buy_options("题面", "需求", "mspm0", [DISCUSS_SOLUTION], [("user", "我有旧 HC-SR04")])
+    assert result.review is not None
+    assert result.review.verdict == "feasible"  # 词表外修正
+
+
+def test_discuss_buy_options_empty_reply_raises():
+    """讨论解析：reply 空 / 缺失 = 解析失败（重试后仍坏 → LLMError，不静默丢回复）。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reply": "", "review": None}))
+    )
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
+    with pytest.raises(LLMError):
+        llm.discuss_buy_options("题面", "需求", "stm32", [DISCUSS_SOLUTION], [("user", "你好")])
+
+
+def test_discuss_buy_options_user_prompt_sections():
+    """讨论 prompt 契约：题面 / 需求句 / 平台 / 方案（含接口价格）/ 历史逐段 +
+    最新消息段；超长历史截断带标注。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reply": "好", "review": None}))
+    )
+    llm = _llm(transport)
+    llm.discuss_buy_options(
+        "设计一个识别数字的送药小车", "遥控接收", "stm32",
+        [DISCUSS_SOLUTION],
+        [("user", "我仓库只有红外和 NRF24L01"), ("assistant", "NRF 更稳但需 SPI 自写驱动")],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "设计一个识别数字的送药小车" in user_message
+    assert "【本需求（该库外建议对应的功能要求）】" in user_message
+    assert "遥控接收" in user_message
+    assert "【所选平台】" in user_message and "stm32" in user_message
+    assert "红外遥控接收头 VS1838B" in user_message
+    assert "GPIO 中断 + NEC 解码" in user_message  # 讨论用全量细节（非紧凑科普段）
+    assert "￥2-5/套" in user_message
+    assert "我仓库只有红外和 NRF24L01" in user_message
+    assert "用户：" in user_message and "AI：" in user_message
+
+    # 超长历史（单条超限）→ 截断标注
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reply": "好", "review": None}))
+    )
+    llm = _llm(transport)
+    llm.discuss_buy_options(
+        "题面" * (EMBEDDED_CONTENT_CAP + 100), "需求", "stm32", [],
+        [("user", "疑" * (EMBEDDED_CONTENT_CAP + 100))],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "截断" in user_message
+
+
+def test_discuss_buy_options_routes_to_remote():
+    """RoutingLLM：discuss_buy_options 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.discuss_buy_options("题面", "需求", "stm32", [DISCUSS_SOLUTION], [("user", "你好")])
+
+    assert remote.calls == ["discuss_buy_options"]
+    assert local.calls == []
+
+
+def test_decision_note_wordlist_and_custom():
+    """_decision_note（工单 buy-discuss/02）：wordlist / custom 两形态注记；
+    无 decision / 形状坏 = 空串（旧载荷逐字节）。"""
+    assert _decision_note({
+        "name": "遥控接收",
+        "decision": {"source": "wordlist", "name": "NRF24L01 2.4G 遥控（含手柄/摇杆）"},
+    }) == "（已定：NRF24L01 2.4G 遥控（含手柄/摇杆））"
+    assert _decision_note({
+        "name": "感知传感器",
+        "decision": {"source": "custom", "name": "我的旧 HC-SR04", "verdict": "risky"},
+    }) == "（已定·自定：我的旧 HC-SR04；AI 审核：risky）"
+    # 自定全文（note 承载，评审项 spec/②）：长想法必须进写码上下文
+    assert _decision_note({
+        "name": "感知传感器",
+        "decision": {
+            "source": "custom", "name": "我的旧 HC-SR04…", "note": "仓库翻出来的 HC-SR04，接 PA0/PA1，5V 回波需分压", "verdict": "risky",
+        },
+    }) == "（已定·自定：我的旧 HC-SR04…；仓库翻出来的 HC-SR04，接 PA0/PA1，5V 回波需分压；AI 审核：risky）"
+    assert _decision_note({"name": "遥控接收"}) == ""
+    assert _decision_note({"name": "遥控接收", "decision": "坏形状"}) == ""
+    assert _decision_note({"name": "遥控接收", "decision": {"source": "wordlist", "name": "  "}}) == ""
+
+
+def test_requirement_lines_append_decision_notes():
+    """需求行注记（工单 buy-discuss/02）：深化 / 任务拆解共用的 _requirement_lines
+    在库外建议带已定方案时追加缩进注记行（写码阶段 AI 知悉买件决策）。"""
+    lines = _requirement_lines([
+        {
+            "requirement": "遥控接收", "sentence": 2, "modules": [],
+            "suggestions": [{
+                "name": "遥控接收",
+                "decision": {"source": "wordlist", "name": "NRF24L01 2.4G 遥控（含手柄/摇杆）"},
+            }],
+        },
+    ], "功能需求清单：")
+    assert "1. 遥控接收（题面句子 2）" in lines
+    assert "    · 遥控接收 → （已定：NRF24L01 2.4G 遥控（含手柄/摇杆））" in lines
+    # 旧载荷（无 decision）不追加
+    lines = _requirement_lines([
+        {"requirement": "遥控接收", "sentence": 2, "suggestions": [{"name": "遥控接收"}]},
+    ], "功能需求清单：")
+    assert all("已定" not in line for line in lines)
+
+
 def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
     """生产 LLM 端到端：新契约 JSON → 功能需求层 + 库外建议（默认词表校验）。"""
     transport = FakeTransport(body=_api_response(REQUIREMENTS_JSON))
@@ -4502,6 +4659,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "topic_extract_number",
         "plan_tasks",
         "execute_task",
+        "discuss_buy_options",
     }
 )
 
@@ -4524,6 +4682,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.topic_extract_number("2026C")
     router.plan_tasks("题面", "", [], [], [], "main.c")
     router.execute_task("main.c", {}, "", [], "题面", "")
+    router.discuss_buy_options("题面", "需求", "stm32", [], [])
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -4554,6 +4713,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "topic_extract_number",
         "plan_tasks",
         "execute_task",
+        "discuss_buy_options",
     ]
 
 

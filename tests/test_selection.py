@@ -46,6 +46,7 @@ from contest_generator.selection import (
     ReferenceSuggestion,
     ScorePoint,
     SelectionError,
+    SuggestionDecision,
     UnknownModuleError,
     _functional_layer_key,
     _number_topic_sentences,
@@ -54,6 +55,7 @@ from contest_generator.selection import (
     associated_references,
     build_exclusive_groups,
     build_module_selection,
+    parse_decision,
     check_platform_warnings,
     filter_manifests_by_platform,
     manual_reference_admission,
@@ -2770,3 +2772,46 @@ def test_run_recommendation_done_omits_exclusive_groups_when_none():
 
     data = _drain_events(events)[-1][1]
     assert "exclusive_groups" not in data
+
+
+# ===== 已定方案决策（工单 buy-discuss/02）=====
+
+
+def test_parse_decision_wordlist_and_custom():
+    """parse_decision：wordlist / custom 两形态 + note/verdict 带出。"""
+    d = parse_decision({
+        "source": "wordlist", "name": "NRF24L01 2.4G 遥控（含手柄/摇杆）",
+        "note": "", "verdict": "feasible",
+    })
+    assert d is not None
+    assert d.source == "wordlist"
+    assert "NRF24L01" in d.name
+    assert d.verdict == "feasible"
+    assert d.to_dict() == {
+        "source": "wordlist", "name": "NRF24L01 2.4G 遥控（含手柄/摇杆）",
+        "note": "", "verdict": "feasible",
+    }
+
+    d = parse_decision({
+        "source": "custom", "name": "我的旧 HC-SR04", "note": "仓库翻出来的",
+        "verdict": "risky",
+    })
+    assert d is not None
+    assert d.source == "custom"
+    assert d.note == "仓库翻出来的"
+
+
+def test_parse_decision_invalid_shapes_return_none():
+    """parse_decision：非 dict / 缺 name / name 空白 = None（不阻断导览）。"""
+    assert parse_decision(None) is None
+    assert parse_decision("文本") is None
+    assert parse_decision({}) is None
+    assert parse_decision({"source": "wordlist", "name": "  "}) is None
+
+
+def test_parse_decision_wordlist_unknown_values_corrected():
+    """parse_decision：source 词表外 → custom；verdict 词表外 → 置空。"""
+    d = parse_decision({"source": "自造来源", "name": "X", "verdict": "maybe"})
+    assert d is not None
+    assert d.source == "custom"
+    assert d.verdict == ""

@@ -413,6 +413,26 @@
   .sugg-suitable { margin-top: 2px; font-size: 12px; color: var(--muted); }
   .badge.sugg-rec { background: var(--ok-dim); color: var(--ok-bright); }
   .badge.sugg-ai { background: var(--info-dim); color: var(--info); }
+  /* 已定方案 / AI 审核（工单 buy-discuss/04） */
+  .badge.sugg-decided { background: var(--ok-dim); color: var(--ok-bright); }
+  .badge.sugg-review { font-size: 11px; }
+  .badge.sugg-review-feasible { background: var(--ok-dim); color: var(--ok-bright); }
+  .badge.sugg-review-risky { background: var(--warn-dim); color: var(--warn); }
+  .badge.sugg-review-infeasible { background: var(--danger-dim); color: var(--danger); }
+  .sugg-discuss { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px; }
+  .sugg-discuss-toggle { font-size: 12.5px; }
+  .sugg-discuss-box { display: none; margin-top: 8px; }
+  .sugg-discuss-box.open { display: block; }
+  .sugg-discuss-msgs { max-height: 180px; overflow-y: auto; display: flex;
+                       flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .sugg-msg { font-size: 13px; line-height: 1.55; }
+  .sugg-msg.user { color: var(--text); }
+  .sugg-msg.ai { color: var(--muted); }
+  .sugg-msg-role { font-weight: 600; }
+  .sugg-msg.muted { color: var(--muted); }
+  .sugg-discuss-row { display: flex; gap: 8px; }
+  .sugg-discuss-input { flex: 1; }
+  .sugg-discuss-note { font-size: 11.5px; margin-top: 6px; }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }

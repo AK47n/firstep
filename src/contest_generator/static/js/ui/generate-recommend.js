@@ -27,7 +27,10 @@ import { esc } from "/js/fx/core.js";
 import { platformClickAction } from "/js/fx/platform.js";
 import { moduleBadges, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
 import { referencePlatformChip } from "/js/fx/reference.js";
-import { suggestionChipHTML } from "/js/fx/recommend.js";
+import {
+  suggestionChipHTML, decisionPayload, suggestionKey,
+  loadBuyDecisions, saveBuyDecisions, matchBuyDecision,
+} from "/js/fx/recommend.js";
 import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
 import { syncStep4 } from "/js/fx/draft.js";
@@ -299,18 +302,153 @@ function recommendChip(slug, reason) {
     + '<span class="chip-x">✕</span></span>';
 }
 
-// 库外建议 chip（工单 buy-guide/02）：solutions 词表方案 → 可展开选型参考
-// 面板；点击委托在模块级（.sugg-chip toggle 外层 .sugg-wrap 的 active 类，
-// CSS 控制面板显隐——不重渲染；建议 chip 无 data-remove，不与移除委托冲突）
+// 库外建议 chip（工单 buy-guide/02 + 工单 buy-discuss/05）：chip 展开 /
+// 讨论区开关 / 发送 / 确定全部走 state + 重渲染（discussions Map 按建议名
+// 键存 {openPanel, open, busy, history, review, decision}——渲染函数纯输出，
+// 交互态不回写 DOM，重渲染不丢；data-sugg-key 反查建议对象）。
+const DISCUSS_MAX_ROUNDS = 8;   // 讨论轮数上限（spec 预算/费用防线）
+const discussions = new Map();
+
+function newDiscussionState() {
+  return { openPanel: false, open: false, busy: false, history: [], review: null, decision: null };
+}
+
+function findSuggestion(key) {
+  if (!lastRecommend) return null;
+  for (const req of lastRecommend.requirements || []) {
+    for (const s of req.suggestions || []) {
+      if (s && suggestionKey(s) === key) return s;
+    }
+  }
+  return null;
+}
+
+// 已定结论恢复（localStorage 记忆 → 本轮 suggestion.decision）：重推 / 刷新
+// 后徽标即现；「本轮已确定」（s.decision 已有）不被旧记忆覆盖。
+function hydrateDecisions(data) {
+  const memory = loadBuyDecisions(localStorage);
+  if (!Object.keys(memory).length) return;
+  for (const req of data.requirements || []) {
+    for (const s of req.suggestions || []) {
+      if (typeof s !== "object" || !s) continue;
+      const d = matchBuyDecision(memory, suggestionKey(s));
+      if (d && !s.decision) s.decision = decisionPayload(d);
+    }
+  }
+}
+
+function applyDecision(key, s, decision) {
+  const st = discussions.get(key) || newDiscussionState();
+  st.decision = decision;
+  discussions.set(key, st);
+  s.decision = decisionPayload(decision);   // 写回载荷 —— 生成请求上行原文
+  const memory = loadBuyDecisions(localStorage);
+  memory[key] = decision;                   // 键 = 建议名（会话间记忆）
+  saveBuyDecisions(localStorage, memory);
+  renderRecommendResult(lastRecommend, false);
+}
+
+function suggestRequirement(s) {
+  for (const req of lastRecommend.requirements || []) {
+    if ((req.suggestions || []).some((x) => x === s)) return req.requirement || "";
+  }
+  return "";
+}
+
+async function sendDiscuss(wrap) {
+  const key = wrap.dataset.suggKey;
+  const st = discussions.get(key) || newDiscussionState();
+  const s = findSuggestion(key);
+  const input = wrap.querySelector(".sugg-discuss-input");
+  const text = (input.value || "").trim();
+  const userRounds = st.history.filter((m) => m.role === "user").length;
+  if (!text || st.busy || userRounds >= DISCUSS_MAX_ROUNDS || !s) return;
+  st.history.push({ role: "user", content: text });
+  input.value = "";
+  st.busy = true;
+  renderRecommendResult(lastRecommend, false);
+  try {
+    const data = await apiPost("/api/buy/discuss", {
+      problem_text: $("problem").value.trim(),
+      requirement: suggestRequirement(s),
+      platform: chosenPlatform || undefined,
+      suggestion_name: s.name,
+      history: st.history.map((m) => ({ role: m.role, content: m.content })),
+    });
+    st.history.push({ role: "assistant", content: data.reply || "（无回复）" });
+    st.review = data.review || null;
+  } catch (err) {
+    st.history.push({ role: "assistant", content: "（讨论失败：" + err.message + "）" });
+  } finally {
+    st.busy = false;
+    renderRecommendResult(lastRecommend, false);
+  }
+}
+
+function pickCustom(wrap) {
+  const key = wrap.dataset.suggKey;
+  const s = findSuggestion(key);
+  const st = discussions.get(key) || newDiscussionState();
+  const input = wrap.querySelector(".sugg-discuss-input");
+  // 输入框可能已被「发送」清空：回退到最后一条用户消息（AI 校核的正是它）。
+  // verdict 只在「用最后一条消息」（typed 为空）时借用——新输入未经校核
+  // （评审项 buy-discuss/07：别把上一轮的审核意见贴到新想法上）
+  const typed = (input.value || "").trim();
+  const lastUser = [...st.history].reverse().find((m) => m.role === "user");
+  const text = typed || (lastUser ? String(lastUser.content || "").trim() : "");
+  if (!text || !s) { toast("先把你的想法写在输入框里（AI 会校核可行性）"); return; }
+  const verdict = (!typed && st.review) ? st.review.verdict : "";
+  applyDecision(key, s, {
+    source: "custom",
+    name: text.length > 30 ? text.slice(0, 30) + "…" : text,
+    note: text,
+    verdict,
+  });
+}
+
 document.addEventListener("click", (e) => {
   const chip = e.target.closest(".sugg-chip");
-  if (chip) chip.closest(".sugg-wrap").classList.toggle("active");
+  if (chip) {
+    const wrap = chip.closest(".sugg-wrap");
+    const key = wrap && wrap.dataset.suggKey;
+    if (key) {
+      const st = discussions.get(key) || newDiscussionState();
+      st.openPanel = !st.openPanel;
+      discussions.set(key, st);
+      renderRecommendResult(lastRecommend, false);
+    }
+    return;
+  }
+  const toggle = e.target.closest(".sugg-discuss-toggle");
+  if (toggle) {
+    const wrap = toggle.closest(".sugg-wrap");
+    const key = wrap && wrap.dataset.suggKey;
+    if (key) {
+      const st = discussions.get(key) || newDiscussionState();
+      st.open = !st.open;
+      discussions.set(key, st);
+      renderRecommendResult(lastRecommend, false);
+    }
+    return;
+  }
+  const send = e.target.closest(".sugg-discuss-send");
+  if (send) { sendDiscuss(send.closest(".sugg-wrap")); return; }
+  const custom = e.target.closest("[data-buy-self]");
+  if (custom) { pickCustom(custom.closest(".sugg-wrap")); return; }
+  const pick = e.target.closest("[data-buy-pick]");
+  if (pick) {
+    const wrap = pick.closest(".sugg-wrap");
+    const key = wrap && wrap.dataset.suggKey;
+    const s = findSuggestion(key);
+    if (s) applyDecision(key, s, { source: "wordlist", name: pick.dataset.buyPick, note: "", verdict: "" });
+  }
 });
 
 export function renderRecommendResult(data, autoAdd = true) {
   markStepDone(5);  // AI 推荐成功返回即视为完成（含"未推荐到模块"的空结果）
   if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
   renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
+  hydrateDecisions(data);  // 已定结论恢复（localStorage → suggestion.decision，工单 buy-discuss/05）
   const groups = data.exclusive_groups || [];  // 旧载荷无该键 = 无组卡（工单 04）
   if (autoAdd) {
     // autoAdd 同组去重（工单 recommend-exclusive-groups/04）：data.modules 逐个
@@ -345,7 +483,15 @@ export function renderRecommendResult(data, autoAdd = true) {
           const reason = (data.modules.find((m) => m.slug === slug) || {}).reason;
           return groupRequirementNote(groups, slug, reason) || recommendChip(slug, reason);
         }).join("") || '<span class="muted">库内无命中</span>'}
-        ${(r.suggestions || []).map(suggestionChipHTML).join("")}
+        ${(r.suggestions || []).map((s) => {
+          const key = suggestionKey(s);
+          let st = discussions.get(key);
+          if (!st) { st = newDiscussionState(); discussions.set(key, st); }
+          // 已定结论升格（hydrate 写回 s.decision / applyDecision 已写 st）：
+          // 刷新 / 重推后从 localStorage 恢复的结论直接进交互态（徽标可见）
+          if (!st.decision && s.decision && s.decision.name) st.decision = s.decision;
+          return suggestionChipHTML(s, st);
+        }).join("")}
       </div>
     </div>`).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>
@@ -417,6 +563,7 @@ function stopRecProgress() {   // 流未起 / 断线路径：停表 + 收起面�
 export async function startRecommend(problem) {
   recProblem = problem;   // 补问回答重启时仍走同一实例（同一生命周期语义）
   scorePoints = [];       // 新推荐生命周期开始，避免旧题评分点串进生成 / 交接
+  discussions.clear();    // 讨论态随新生命周期清空（已定结论经 localStorage 恢复）
   $("recommend-msg").textContent = "";
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
