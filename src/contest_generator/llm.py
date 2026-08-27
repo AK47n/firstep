@@ -1023,6 +1023,7 @@ class LLM(Protocol):
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
+        topic_framework: str | None = None,
     ) -> str: ...
 
     def generate_smoke_main(
@@ -1437,6 +1438,7 @@ class DeepSeekLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
+        topic_framework: str | None = None,
     ) -> str:
         def parse(content: str) -> str:
             if not content.strip():
@@ -1446,7 +1448,10 @@ class DeepSeekLLM:
         return self._retry_parse(
             system_prompt=SKELETON_SYSTEM_PROMPT,
             user_prompt=_skeleton_user_prompt(
-                problem_text, module_interfaces, reference_fulltexts
+                problem_text,
+                module_interfaces,
+                reference_fulltexts,
+                topic_framework,
             ),
             parse=parse,
             label="骨架 main.c 生成",
@@ -2698,9 +2703,13 @@ class RoutingLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
+        topic_framework: str | None = None,
     ) -> str:
         return self._remote.generate_main_skeleton(
-            problem_text, module_interfaces, reference_fulltexts
+            problem_text,
+            module_interfaces,
+            reference_fulltexts,
+            topic_framework,
         )
 
     def generate_smoke_main(
@@ -3736,18 +3745,33 @@ def _skeleton_user_prompt(
     problem_text: str,
     module_interfaces: Sequence[str],
     reference_fulltexts: Mapping[str, str] | None = None,
+    topic_framework: str | None = None,
 ) -> str:
-    """main.c 骨架生成的 user 消息：赛题 + 接口块 + 可选参考实现段。
+    """main.c 骨架生成的 user 消息：赛题 + 接口块 + 可选题型框架段 + 可选参考段。
 
-    reference_fulltexts 非空时在输出指令前插参考段（每条 id 标注 + 截断全文），
-    并加改写约束：参考资料里有的功能 → 适配当前所选模块接口的草稿实现；
-    没有的 → 保持 TODO。空 / None = 现行为逐字节不变。
+    topic_framework（工单 topic-framework/03）非空时在参考段**之前**插题型框架段
+    （确定性注入——直接从参考条目 framework/main.c 读来，不经 LLM 改写）：强指令
+    "必须保留框架结构（状态机枚举 / 调度循环 / 函数名不动），只在 TODO 位填实现"。
+    框架段 = 强约束（必须保留的结构）与参考全文（弱约束学习素材）互补：「框架
+    代码段走确定性注入、学习说明走 LLM 段」（决策点 3）。None / 空 = 现行为逐
+    字节不变。reference_fulltexts 非空时在输出指令前插参考段（每条 id 标注 +
+    截断全文），并加改写约束：参考资料里有的功能 → 适配当前所选模块接口的
+    草稿实现；没有的 → 保持 TODO。
     """
     prompt = _build_user_prompt(
         problem_text,
         SKELETON_INTERFACES_HEADING,
         module_interfaces,
     )
+    if topic_framework:
+        prompt += (
+            "\n\n题型框架（确定性注入，来源：参考条目 framework/main.c）——"
+            "必须保留的 main.c 结构：\n"
+            f"```c\n{topic_framework}\n```\n"
+            "按此框架写 main.c：状态机枚举 / 调度循环 / 框架函数名保持原样，"
+            "只在 `// TODO:` 处填当前所选模块接口的实现（实现不存在的调用写成"
+            "注释占位，保证可编译）。框架段之外的赛题功能按需补充。"
+        )
     if reference_fulltexts:
         per_ref_budget = max(
             0, SKELETON_REFERENCE_TOTAL_BYTES // len(reference_fulltexts)

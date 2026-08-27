@@ -619,6 +619,7 @@ class FakeLLM:
         self._executed_main_c = executed_main_c
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
+        self.skeleton_framework_calls: list[str | None] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
         self.validation_calls: list[tuple[str, str]] = []
@@ -690,9 +691,11 @@ class FakeLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
+        topic_framework: str | None = None,
     ) -> str:
         self.skeleton_calls.append((problem_text, tuple(module_interfaces)))
         self.skeleton_ref_calls.append(dict(reference_fulltexts or {}))
+        self.skeleton_framework_calls.append(topic_framework)
         return self._main_skeleton
 
     def generate_smoke_main(
@@ -895,6 +898,7 @@ class RecordingLLM:
         problem_text: str,
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
+        topic_framework: str | None = None,
     ) -> str:
         self._record("generate_main_skeleton")
         return f"{self.name}:skeleton"
