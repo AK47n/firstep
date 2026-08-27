@@ -124,6 +124,8 @@ const DOMAINS = {
     tasksProgressText: "fn", verifyStatusMarkup: "fn", taskCardActions: "fn",
     taskCanFeedback: "fn", taskIterationLabel: "fn", taskIterationsHTML: "fn",
     taskLatestFeedbackNote: "fn",
+    taskOrderLabel: "fn", taskDialogAdoptHTML: "fn", taskDialogButtonHTML: "fn",
+    taskDialogAreaHTML: "fn",
   },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",

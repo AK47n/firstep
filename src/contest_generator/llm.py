@@ -298,6 +298,22 @@ DISCUSS_SYSTEM_PROMPT = (
     "自定方案时，review 输出 null（只答问题）。"
 )
 
+# 任务商量（工单 task-chat/02）：用户对某个实现任务发表想法/纠正 → AI 先回应。
+# 立场 = 任务顾问非执行者：回应结构（先判可行性 → 再说对任务实现的影响 →
+# 给修正建议）；用户采纳哪条由前端 / dialog-adopt 端点处理，模型不替用户
+# 决定。只输出 JSON 契约（json_object 模式，reply 必填）。
+TASK_DISCUSS_SYSTEM_PROMPT = (
+    "你是嵌入式 C 开发顾问。学生在做某个实现任务前 / 后，向你发表自己的想法"
+    "或纠正（赛题文本 / 模块接口 / 对话历史过长可能被截断，见末尾标注，"
+    + TRUNCATION_NOTICE + "）：结合当前任务描述、赛题要求、所选模块接口与"
+    "当前 main.c 的实现情况，先判断学生的想法是否可行（不直接改代码——"
+    "「做这一步」时才由任务执行实现），再说明它对本任务实现的影响（改哪里、"
+    "涉及哪些接口 / 引脚 / 定时器），最后给出具体、可执行的修正建议；需要"
+    "更多信息时反问关键问题。若学生的想法与现状冲突，明确指出冲突点与替代"
+    "方案，不要含糊附和。"
+    '只输出 JSON 对象：{"reply": "回复文本"}；reply 必须非空、用中文。'
+)
+
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
 SKELETON_INTERFACES_HEADING = "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："
 SKELETON_SYSTEM_PROMPT = (
@@ -1124,6 +1140,17 @@ class BuyDiscussion:
     review: BuyReview | None = None
 
 
+@dataclass(frozen=True)
+class TaskDiscussion:
+    """一轮任务商量的产物：AI 的回应文本（工单 task-chat/02）。
+
+    只有 reply——讨论是沟通不是选型（无 review 结构）；回应的内容结构
+    （可行性判断 → 影响 → 建议）由系统提示词引导，不落结构化字段。
+    """
+
+    reply: str
+
+
 class LLM(Protocol):
     def select_modules(
         self,
@@ -1238,6 +1265,17 @@ class LLM(Protocol):
         solutions: Sequence[SolutionOption],
         history: Sequence[tuple[str, str]],
     ) -> BuyDiscussion: ...
+
+    def discuss_task(
+        self,
+        task: Mapping[str, Any],
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -2447,6 +2485,41 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def discuss_task(
+        self,
+        task: Mapping[str, Any],
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        """任务商量（工单 task-chat/02）：一轮讨论回复（任务顾问）。
+
+        输入 = 任务描述 + 题面 + Q&A + 需求行 + 模块接口 + 当前 main.c +
+        讨论历史（用户 / AI 交替）；输出 JSON 由解析器校验：reply 空 /
+        缺失 = 整次重问（_retry_parse，对话语境回复为空毫无价值）。
+        """
+
+        def parse(content: str) -> TaskDiscussion:
+            data = extract_module_selection_data(content)
+            reply = data.get("reply")
+            if not isinstance(reply, str) or not reply.strip():
+                raise LLMError("任务商量回复为空：模型未输出 reply 或为空串")
+            return TaskDiscussion(reply=reply.strip())
+
+        return self._retry_parse(
+            system_prompt=TASK_DISCUSS_SYSTEM_PROMPT,
+            user_prompt=_task_discuss_user_prompt(
+                task, problem_text, qa_text, requirements, module_interfaces, main_c, history
+            ),
+            parse=parse,
+            label="任务商量",
+            operation="discuss_task",
+            json_mode=True,
+        )
+
     def _observe_call(
         self,
         *,
@@ -3072,6 +3145,21 @@ class RoutingLLM:
             problem_text, requirement, platform, solutions, history
         )
 
+    def discuss_task(
+        self,
+        task: Mapping[str, Any],
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        # 任务商量走 remote（讨论质量优先，不进本地方法集）
+        return self._remote.discuss_task(
+            task, problem_text, qa_text, requirements, module_interfaces, main_c, history
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -3567,13 +3655,16 @@ def _task_execute_user_prompt(
     qa_text: str,
     feedback: str = "",
 ) -> str:
-    """单任务执行的 user 消息（工单 task-progress/02 + task-feedback/02）：
-    任务描述 + 补充框 + 上板反馈 + 题面 + Q&A + 接口 + 现有 main.c。
+    """单任务执行的 user 消息（工单 task-progress/02 + task-feedback/02 +
+    task-chat/01）：任务描述 + 补充框 + 对话结论 + 上板反馈 + 题面 + Q&A +
+    接口 + 现有 main.c。
 
     补充框（note）独立段（用户对本次执行的附加说明，如"循迹用 10ms
-    定时器"），为空 = 无该段；上板实测反馈（feedback）另立一段（放在
-    note 段之后——真实烧录后的现象，对话语义晚于预填写说明），为空 =
-    无该段（既有调用形状逐字节不变）。"""
+    定时器"），为空 = 无该段；对话结论（dialog_note，任务卡「和 AI 商量」
+    里用户采纳的 AI 回复全文，工单 task-chat/01）另立一段（放在 note 段
+    之后——对话语义晚于预填写说明、早于烧录反馈）；上板实测反馈（feedback）
+    再另立一段（真实烧录后的现象，对话语义晚于预填写说明），两者为空 =
+    无对应段（既有调用形状逐字节不变）。"""
     lines = [
         "【本次要实现的单个任务】",
         f"任务：{task.get('title', '')}",
@@ -3581,6 +3672,13 @@ def _task_execute_user_prompt(
     ]
     if note:
         lines += ["", "【用户补充说明（本次执行的附加要求）】", note]
+    dialog_note = task.get("dialog_note", "")
+    if isinstance(dialog_note, str) and dialog_note.strip():
+        lines += [
+            "",
+            "【用户沟通结论（采纳自对话，按此修正实现）】",
+            dialog_note.strip(),
+        ]
     if feedback:
         lines += ["", "【上板实测反馈（按反馈修复，不重写无关部分）】", feedback]
     lines += ["", "赛题：", _truncate_content(problem_text)]
@@ -3668,6 +3766,41 @@ def _discuss_user_prompt(
         "",
         "请按系统提示词中的 json 契约输出（reply 必填，review 按规则输出）。",
     ]
+    return "\n".join(lines)
+
+
+def _task_discuss_user_prompt(
+    task: Mapping[str, Any],
+    problem_text: str,
+    qa_text: str,
+    requirements: Sequence[Mapping[str, Any]],
+    module_interfaces: Sequence[str],
+    main_c: str,
+    history: Sequence[tuple[str, str]],
+) -> str:
+    """任务商量的 user 消息（工单 task-chat/02）：任务描述 + 题面 + Q&A（空则
+    无段）+ 功能需求行 + 模块接口 + 当前 main.c + 讨论历史（旧 → 新，逐条
+    字符帽）+ 用户最新一轮消息。各段截断带标注（_truncate_content /
+    _discuss_history_segment / _requirement_lines 先例）。
+    """
+    lines = ["【当前任务】"]
+    lines.append(f"任务：{task.get('title', '')}")
+    if task.get("description"):
+        lines.append(f"描述：{task.get('description', '')}")
+    lines += ["", "【赛题】", _truncate_content(problem_text)]
+    if qa_text:
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+    requirement_lines = _requirement_lines(requirements, "【功能需求层】")
+    if requirement_lines:
+        lines += ["", requirement_lines[0]]
+        lines.extend(requirement_lines[1:])
+    lines += ["", SKELETON_INTERFACES_HEADING]
+    lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += ["", "当前 main.c（讨论对象，不直接修改——采纳后才由任务执行实现）：", main_c]
+    history_text = _discuss_history_segment(history)
+    if history_text:
+        lines += ["", "【讨论历史（旧 → 新）】", history_text]
+    lines += ["", "【你的最新消息】", history[-1][1] if history else ""]
     return "\n".join(lines)
 
 

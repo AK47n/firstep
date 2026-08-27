@@ -4027,6 +4027,35 @@ def test_task_execute_feedback_prompt_segments():
     assert "上板实测反馈" not in user2
 
 
+def test_task_execute_dialog_note_prompt_segments():
+    """对话结论段（工单 task-chat/01）：task dict 带 dialog_note → 独立段在
+    「用户补充说明」之后、「上板实测反馈」之前；空 = 无该段（既有形状不变）。"""
+    transport = FakeTransport(body=_api_response("int main(void) { return 0; }\n"))
+    llm = _llm(transport)
+    task = {
+        "title": "循迹",
+        "description": "循迹决策",
+        "dialog_note": "左轮不转：改为脉冲式控制",
+    }
+    llm.execute_task(
+        "main.c", task, "note here", ("x.h",), "题面", "",
+        feedback="上板发现还是不转",
+    )
+    _, _, payload, _ = transport.calls[0]
+    user = payload["messages"][1]["content"]
+    assert "用户沟通结论" in user
+    assert "左轮不转：改为脉冲式控制" in user
+    assert user.index("用户沟通结论") > user.index("用户补充说明")
+    assert user.index("上板实测反馈") > user.index("用户沟通结论")
+    # 空 dialog_note：整段不出现（既有形状不变）
+    transport2 = FakeTransport(body=_api_response("int main(void) { return 0; }\n"))
+    llm2 = _llm(transport2)
+    llm2.execute_task("main.c", {"title": "循迹", "description": "循迹决策"}, "", ("x.h",), "题面", "")
+    _, _, payload2, _ = transport2.calls[0]
+    user2 = payload2["messages"][1]["content"]
+    assert "用户沟通结论" not in user2
+
+
 def test_discuss_buy_options_user_prompt_sections():
     """讨论 prompt 契约：题面 / 需求句 / 平台 / 方案（含接口价格）/ 历史逐段 +
     最新消息段；超长历史截断带标注。"""
@@ -4072,6 +4101,89 @@ def test_discuss_buy_options_routes_to_remote():
     router.discuss_buy_options("题面", "需求", "stm32", [DISCUSS_SOLUTION], [("user", "你好")])
 
     assert remote.calls == ["discuss_buy_options"]
+    assert local.calls == []
+
+
+def test_discuss_task_parsing():
+    """任务商量解析（工单 task-chat/02）：reply 必填；空/缺失 → 重试后仍坏 → LLMError。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reply": "可行，但 GPIO 需改为脉冲输出。"}))
+    )
+    llm = _llm(transport)
+    result = llm.discuss_task(
+        {"id": "t1", "title": "循迹", "description": "循迹决策", "dialog_note": ""},
+        "题面",
+        "",
+        (),
+        ("x.h",),
+        "main.c",
+        [("user", "左轮不转怎么办")],
+    )
+    assert result.reply == "可行，但 GPIO 需改为脉冲输出。"
+
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": ""})))
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
+    with pytest.raises(LLMError):
+        llm.discuss_task(
+            {"id": "t1", "title": "循迹", "description": "循迹决策"},
+            "题面", "", (), ("x.h",), "main.c", [("user", "你好")],
+        )
+
+
+def test_discuss_task_user_prompt_sections():
+    """任务商量 prompt 契约：任务描述 / 题面 / Q&A / 需求行 / 接口 / 现有 main.c /
+    历史（用户：AI：逐条）+ 最新消息段；超长历史截断带标注。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reply": "好"}))
+    )
+    llm = _llm(transport)
+    llm.discuss_task(
+        {"id": "t1", "title": "循迹", "description": "循迹决策"},
+        "2024 巡线小车",
+        "赛题答疑：摄像头禁用于小车",
+        [{"requirement": "循迹", "sentence": 1, "modules": ["xunji"]}],
+        ("xunji.h 接口说明",),
+        "int main(void) {}",
+        [("user", "我想用 PID"), ("assistant", "9ms 采样会快吗"), ("user", "10ms 吧")],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "循迹" in user_message and "循迹决策" in user_message
+    assert "2024 巡线小车" in user_message
+    assert "赛题答疑：摄像头禁用于小车" in user_message
+    assert "需求" in user_message  # 需求行段
+    assert "xunji.h 接口说明" in user_message
+    assert "int main(void) {}" in user_message
+    assert "用户：" in user_message and "AI：" in user_message
+    assert "10ms 吧" in user_message
+
+    # 超长历史（单条超限）→ 截断标注
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": "好"})))
+    llm = _llm(transport)
+    llm.discuss_task(
+        {"id": "t1", "title": "循迹", "description": "循迹决策"},
+        "题面",
+        "",
+        (),
+        ("x.h",),
+        "main.c",
+        [("user", "疑" * (EMBEDDED_CONTENT_CAP + 100))],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "截断" in user_message
+
+
+def test_discuss_task_routes_to_remote():
+    """RoutingLLM：discuss_task 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.discuss_task(
+        {"id": "t1", "title": "循迹", "description": "循迹决策"},
+        "题面", "", (), ("x.h",), "main.c", [("user", "你好")],
+    )
+
+    assert remote.calls == ["discuss_task"]
     assert local.calls == []
 
 
@@ -4684,6 +4796,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "plan_tasks",
         "execute_task",
         "discuss_buy_options",
+        "discuss_task",
     }
 )
 
@@ -4707,6 +4820,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.plan_tasks("题面", "", [], [], [], "main.c")
     router.execute_task("main.c", {}, "", [], "题面", "")
     router.discuss_buy_options("题面", "需求", "stm32", [], [])
+    router.discuss_task({}, "题面", "", [], [], "main.c", [])
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -4738,6 +4852,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "plan_tasks",
         "execute_task",
         "discuss_buy_options",
+        "discuss_task",
     ]
 
 

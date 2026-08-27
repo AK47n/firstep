@@ -39,9 +39,11 @@ from contest_generator.task_progress import (
     rollback_task_iteration,
     run_task,
     run_task_planning,
+    set_task_dialog_note,
     update_task_status,
     write_task_plan,
 )
+from contest_generator.task_progress import _with_task_status
 from contest_generator.webapp import AppContext, AppConfig, create_app
 from tests.fakes import FakeLLM, make_fake_master_project, make_fake_module_library
 from tests.test_impact import _sse_events
@@ -1551,3 +1553,179 @@ def test_revision_unchanged_keeps_tasks(tmp_path):
     )
     assert result["tasks_invalidated"] is False
     assert (output_dir / TASKS_MANIFEST_FILENAME).exists() is True
+
+
+# ---------------------------------------------------------------------------
+# 任务对话结论（工单 task-chat/01：dialog_note 字段落盘 + 采纳/清除域编排）
+# ---------------------------------------------------------------------------
+
+
+def test_task_dialog_note_roundtrip(tmp_path):
+    """dialog_note 往返：Task → to_dict → from_dict 保留；旧清单无字段 → 空串。"""
+    task = Task(
+        id="t1",
+        title="循迹",
+        description="循迹决策",
+        dialog_note="左轮不转，改成脉冲式控制",
+        note="pre note",
+    )
+    plan = TaskPlan(tasks=(task,))
+    with open(tmp_path / TASKS_MANIFEST_FILENAME, "w", encoding="utf-8") as fh:
+        json.dump(plan.to_dict(), fh)
+    loaded = read_task_plan(tmp_path)
+    assert loaded is not None
+    assert loaded.tasks[0].dialog_note == "左轮不转，改成脉冲式控制"
+    assert loaded.tasks[0].note == "pre note"
+    # 旧清单（无 dialog_note 字段）→ 空串，不报错
+    legacy = {
+        "version": 1,
+        "generated_at": "2026-01-01T00:00:00+0800",
+        "tasks": [{"id": "t1", "title": "循迹", "description": "循迹决策"}],
+    }
+    with open(tmp_path / TASKS_MANIFEST_FILENAME, "w", encoding="utf-8") as fh:
+        json.dump(legacy, fh)
+    loaded = read_task_plan(tmp_path)
+    assert loaded is not None
+    assert loaded.tasks[0].dialog_note == ""
+    assert loaded.tasks[0].status == STATUS_PENDING
+
+
+def test_with_task_status_preserves_and_replaces_dialog_note():
+    """_with_task_status：dialog_note None = 保留原值；传值 = 替换；清除 = 空串。"""
+    plan = TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策", dialog_note="结论A"),))
+    kept = _with_task_status(plan, "t1", STATUS_SKIPPED)
+    assert kept.tasks[0].dialog_note == "结论A"
+    assert kept.tasks[0].status == STATUS_SKIPPED
+    replaced = _with_task_status(plan, "t1", STATUS_PENDING, dialog_note="结论B")
+    assert replaced.tasks[0].dialog_note == "结论B"
+    cleared = _with_task_status(plan, "t1", STATUS_PENDING, dialog_note="")
+    assert cleared.tasks[0].dialog_note == ""
+
+
+def test_set_task_dialog_note_writes_and_clears(tmp_path):
+    """采纳域编排：写盘 / 清除（空串）/ 未知任务 / 未拆解 → TaskError。"""
+    plan = TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    write_task_plan(tmp_path, plan)
+    result = set_task_dialog_note(tmp_path, "t1", "按反馈改为 PID 循迹")
+    assert result["task"]["dialog_note"] == "按反馈改为 PID 循迹"
+    assert result["plan"]["tasks"][0]["dialog_note"] == "按反馈改为 PID 循迹"
+    loaded = read_task_plan(tmp_path)
+    assert loaded is not None and loaded.tasks[0].dialog_note == "按反馈改为 PID 循迹"
+    # 清除
+    cleared = set_task_dialog_note(tmp_path, "t1", "")
+    assert cleared["task"]["dialog_note"] == ""
+    # 未知任务
+    with pytest.raises(TaskError):
+        set_task_dialog_note(tmp_path, "t9", "谁也不")
+    # 未拆解
+    with pytest.raises(TaskError):
+        set_task_dialog_note(tmp_path / "nope", "t1", "谁也不")
+
+
+def test_tasks_dialog_adopt_endpoint(tasks_client):
+    """采纳端点：200 写盘 → 清除；text 非字符串 → 400。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    resp = client.post(
+        "/api/tasks/plan",
+        json={"output_dir": output_dir, "score_points": []},
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.post(
+        "/api/tasks/dialog-adopt",
+        json={"output_dir": output_dir, "task_id": "t1", "text": "左轮不转：改为脉冲式控制"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["task"]["dialog_note"] == "左轮不转：改为脉冲式控制"
+    assert body["plan"]["tasks"][0]["dialog_note"] == "左轮不转：改为脉冲式控制"
+    # 清除
+    resp = client.post(
+        "/api/tasks/dialog-adopt",
+        json={"output_dir": output_dir, "task_id": "t1", "text": ""},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["task"]["dialog_note"] == ""
+    # text 非字符串 → 400
+    resp = client.post(
+        "/api/tasks/dialog-adopt",
+        json={"output_dir": output_dir, "task_id": "t1", "text": 123},
+    )
+    assert resp.status_code == 400
+    # 输出目录不存在 → 400
+    resp = client.post(
+        "/api/tasks/dialog-adopt",
+        json={"output_dir": str(tmp_path / "nope"), "task_id": "t1", "text": "x"},
+    )
+    assert resp.status_code == 400
+
+
+def test_tasks_discuss_endpoint(tasks_client):
+    """任务商量端点（工单 task-chat/02）：正常流 → {reply}（历史/任务透传 LLM）；
+    校验 400（缺 message / history 非法 / 任务不存在）；LLM 失败 → 502。"""
+    from contest_generator.llm import LLMError, TaskDiscussion
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),)),
+        task_discussion=TaskDiscussion(reply="可行，建议 10ms 采样"),
+    )
+    resp = client.post(
+        "/api/tasks/plan",
+        json={"output_dir": output_dir, "score_points": []},
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = client.post(
+        "/api/tasks/discuss",
+        json={
+            "output_dir": output_dir,
+            "task_id": "t1",
+            "message": "左轮不转怎么办",
+            "history": [{"role": "user", "content": "左轮不转怎么办"}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["reply"] == "可行，建议 10ms 采样"
+    (task, problem, qa, reqs, interfaces, main_c, history) = holder["llm"].task_discuss_calls[0]
+    assert task["id"] == "t1" and task["title"] == "循迹"
+    assert "循迹" in problem or "巡线" in problem
+    assert history == (("user", "左轮不转怎么办"),)
+    assert main_c.strip()
+
+    # 缺 message → 400
+    resp = client.post(
+        "/api/tasks/discuss",
+        json={"output_dir": output_dir, "task_id": "t1", "history": []},
+    )
+    assert resp.status_code == 400
+    assert "message" in resp.json()["detail"]
+    # history 非数组 → 400
+    resp = client.post(
+        "/api/tasks/discuss",
+        json={"output_dir": output_dir, "task_id": "t1", "message": "你好", "history": "不是数组"},
+    )
+    assert resp.status_code == 400
+    assert "history" in resp.json()["detail"]
+    # 任务不存在 → 400
+    resp = client.post(
+        "/api/tasks/discuss",
+        json={"output_dir": output_dir, "task_id": "t9", "message": "你好", "history": []},
+    )
+    assert resp.status_code == 400
+    # LLM 失败 → 502
+    class _BoomTask:
+        def discuss_task(self, **kwargs):
+            raise LLMError("上游超时")
+
+    holder["llm"] = _BoomTask()
+    resp = client.post(
+        "/api/tasks/discuss",
+        json={"output_dir": output_dir, "task_id": "t1", "message": "你好", "history": []},
+    )
+    assert resp.status_code == 502
+    assert "上游超时" in resp.json()["detail"]
