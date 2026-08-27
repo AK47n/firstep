@@ -67,6 +67,7 @@ from .task_progress import (
     check_plan_replaceable,
     run_task,
     run_task_planning,
+    write_task_plan,
 )
 from .errors import error_entry
 from .events import EVENT_CACHE_HIT, ProgressEvent
@@ -2099,6 +2100,33 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise TaskError(f"输出目录不存在：{output_dir}")
         plan = read_task_plan(output_dir)
         return {"plan": plan.to_dict() if plan is not None else None}
+
+    # ------------------------------------------------------------------
+    # 任务推进 · 人工改标（工单 task-progress/03）：跳过 / 重做 / 上板
+    # 确认改标（verified）。转移表在 task_progress.ALLOWED_STATUS_TRANSITIONS
+    # 单源，路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/status")
+    @_map_errors
+    def tasks_status(payload: dict) -> dict:
+        """任务状态改标（同步端点）：{output_dir, task_id, status} → 落盘。
+
+        status ∈ pending（重做）/ verified（上板人工确认）/ skipped（跳过）。
+        非法转移 → TaskError 400 中文（消息带允许目标清单）；doing（执行中）
+        不可人工操作；清单未拆解 / 任务不存在 → TaskError。
+
+        返回 {"task": 改标后的任务 to_dict, "plan": 全量清单 to_dict}——
+        前端据此单卡重渲染 + 进度刷新。
+        """
+        from .task_progress import apply_task_status
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        task_id = _require_str(payload, "task_id")
+        status = _require_str(payload, "status")
+        return apply_task_status(output_dir, task_id, status)
 
     @app.post("/api/fix-errors")
     @_map_errors

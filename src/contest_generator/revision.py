@@ -205,7 +205,14 @@ def run_revision(
             master_project_dir=master_project_dir(masters_dir, platform),
             instances=instances,
         )
-        # 覆盖式重生成进同一输出目录（生成前清空——备份已完成，可回滚）
+        # 任务清单作废（工单 task-progress/03）：重生成替换了 main.c 与模块集，
+        # 旧任务清单（含进度/备注）已与新工程无关——**重生成前**记录存在性
+        # （rmtree 会清掉文件，事后判存在 = 常 False；存在性 = 是否曾拆解过）
+        from .task_progress import TASKS_MANIFEST_FILENAME  # 函数级延迟导入（防环）
+
+        tasks_invalidated = (output_dir / TASKS_MANIFEST_FILENAME).is_file()
+        # 覆盖式重生成进同一输出目录（生成前清空——备份已完成，可回滚；
+        # 任务清单文件随 rmtree 一并清除，无需再删）
         shutil.rmtree(output_dir, ignore_errors=True)
         generate_project(
             platform=platform,
@@ -226,6 +233,7 @@ def run_revision(
             tool_version=tool_version,
         )
     else:
+        tasks_invalidated = False
         # 模块集不变：不重生成、main.c 原样保留（不丢手工编辑）——只把
         # 新 Q&A 并入上下文清单（修订的输入记录保持最新）；main_c 现读磁盘
         # （手工编辑过的内容进清单，与读侧语义一致）
@@ -254,6 +262,7 @@ def run_revision(
     return {
         "backup_id": backup_id,
         "regenerated": regenerated,
+        "tasks_invalidated": tasks_invalidated,  # 工单 task-progress/03：清单作废标记（前端提示重新拆解）
         "diff": {
             "added": [slug for slug in expanded_confirmed if slug not in old_set],
             "removed": [slug for slug in expanded_current if slug not in new_set],

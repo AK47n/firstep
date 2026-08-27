@@ -17,7 +17,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { tasksGridHTML, tasksProgressText, verifyStatusMarkup } from "/js/fx/task.js";
+import { taskCardActions, tasksGridHTML, tasksProgressText, verifyStatusMarkup } from "/js/fx/task.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { scorePoints } from "./generate-recommend.js";  // 当前会话推荐评分点（历史目录为空）
@@ -47,13 +47,26 @@ function tasksRender() {
     grid.innerHTML = tasksGridHTML(plan, {
       scorePoints: scorePoints,
       actions: (task) => {
-        // 可执行 = 待做 / 失败（重做）/ 未验证（重做）；已验证 / 跳过只读
-        const show = task.status === "pending" || task.status === "failed"
-          || task.status === "unverified";
-        if (!show) return "";
-        return '<input type="text" id="task-note-' + esc(task.id)
-          + '" placeholder="补充说明（可选）…" style="flex:1">'
-          + '<button class="btn-task-run" data-task="' + esc(task.id) + '">做这一步</button>';
+        // 操作显隐单源 = fx/task.js taskCardActions（与后端转移表镜像，
+        // 同一状态机一份 JS 编码——曾内联 if/else 与转移表分叉风险）
+        const actions = taskCardActions(task.status);
+        const parts = [];
+        if (actions.includes("run")) {
+          parts.push('<input type="text" id="task-note-' + esc(task.id)
+            + '" placeholder="补充说明（可选）…" style="flex:1">'
+            + '<button class="btn-task-run" data-task="' + esc(task.id) + '">做这一步</button>');
+        }
+        if (actions.includes("skip")) {
+          parts.push('<button class="btn-task-skip" data-task="' + esc(task.id) + '">跳过</button>');
+        }
+        if (actions.includes("revert")) {
+          parts.push('<button class="btn-task-revert" data-task="' + esc(task.id) + '">'
+            + (task.status === "skipped" ? "恢复" : "重做") + "</button>");
+        }
+        if (actions.includes("mark")) {
+          parts.push('<button class="btn-task-mark" data-task="' + esc(task.id) + '">上板已验证</button>');
+        }
+        return parts.join("");
       },
     });
     grid.classList.remove("hidden");
@@ -240,6 +253,29 @@ async function tasksReload() {
   }
 }
 
+/** 人工改标（工单 03）：跳过 / 恢复 / 重做 / 上板改标 → 落盘 + 单卡重渲染。 */
+async function tasksSetStatus(taskId, status) {
+  if (tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-msg").textContent = "";
+  try {
+    const data = await apiPost("/api/tasks/status", {
+      output_dir: dir, task_id: taskId, status: status,
+    });
+    if (tasks.plan && tasks.plan.tasks) {
+      tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? data.task : t);
+    }
+    tasksRender();
+    toast("ok", "状态已更新");
+  } catch (e) {
+    $("tasks-msg").textContent = e.message;   // 后端中文（含非法转移提示）
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
 $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
 $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
 // 任务卡「做这一步」事件委托（列随状态重渲染，监听器挂容器）
@@ -247,6 +283,14 @@ $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-run");
   if (!btn) return;
   tasksExecute(btn.dataset.task);
+});
+// 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板改标）
+$("tasks-grid").addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark");
+  if (!btn) return;
+  const status = btn.classList.contains("btn-task-skip") ? "skipped"
+    : btn.classList.contains("btn-task-mark") ? "verified" : "pending";
+  tasksSetStatus(btn.dataset.task, status);
 });
 // 结果面板「回滚到本任务执行前」（同备份族，复用 /api/revise/rollback）
 $("tasks-grid").addEventListener("click", (event) => {
@@ -269,6 +313,22 @@ window.addEventListener("revise-context-loaded", (event) => {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = "";
   }
+});
+// 修订重生成 → 任务清单已作废（后端已删除清单文件）：清空本簇缓存 + 提示
+//（含陈旧结果面板——重置状态一致性，照 revise-context-loaded 同款）
+window.addEventListener("tasks-invalidated", (event) => {
+  const dir = event.detail && event.detail.output_dir;
+  if (dir && tasks.outputDir && dir !== tasks.outputDir) return;  // 与当前目录无关：不动本簇状态
+  tasks.outputDir = "";
+  tasks.plan = null;
+  $("tasks-grid").classList.add("hidden");
+  $("tasks-grid").innerHTML = "";
+  const stale = $("tasks-result");
+  if (stale) stale.remove();
+  $("tasks-progress").textContent = "";
+  $("btn-tasks-replan").classList.add("hidden");
+  $("tasks-status").textContent = "";
+  $("tasks-msg").textContent = "任务清单已作废（修订重生成）：请点「拆解任务」按新工程重新拆解";
 });
 
 export { tasksPlan, tasksRender, tasksResetMessages };

@@ -77,9 +77,26 @@ export function tasksProgressText(plan) {
   return "进度 " + done + "/" + tasks.length;
 }
 
+/** 任务卡操作显隐（单源，与后端 ALLOWED_STATUS_TRANSITIONS 镜像）：
+ * 返回该状态下应显示的操作键（run = 做这一步；skip = 跳过；revert = 重做 /
+ * 恢复；mark = 上板已验证）。doing = 无操作（执行中，退出终态由执行回填）。 */
+export function taskCardActions(status) {
+  switch (status) {
+    case "pending": return ["run", "skip"];
+    case "skipped": return ["revert"];
+    case "verified": return ["revert"];
+    case "unverified":
+    case "failed": return ["run", "mark", "revert"];
+    default: return [];
+  }
+}
+
 /** 验证状态徽章 + 摘要文案（深化 / 任务执行结果面板共用，单源防分叉——
  * 曾两处各抄一份 if/else，措辞漂移即分叉）。returns {badge, detail}：
- * badge = 内嵌 HTML 徽章；detail = 转义后的摘要文本（调用方决定布局）。 */
+ * badge = 内嵌 HTML 徽章；detail = 转义后的摘要文本（调用方决定布局）。
+ * unverified 有两种成因（cause）：无工具链降级（默认文案「无工具链降级」）
+ * 与手动验收待确认（verify_cause = manual，后端下发——编译绿但需上板观察），
+ * 徽章必须按 cause 区分，不能只按 status（工单 03 评审发现）。 */
 export function verifyStatusMarkup(data, fallbacks) {
   const compile = (data && data.compile) || {};
   const fb = fallbacks || {};
@@ -92,9 +109,13 @@ export function verifyStatusMarkup(data, fallbacks) {
     };
   }
   if (data && data.status === "unverified") {
+    const manual = data.verify_cause === "manual";
     return {
-      badge: '<span style="color:var(--warn);font-weight:600">⚠ 未验证（无工具链降级）</span>',
-      detail: esc((data && data.message) || fb.unverified
+      badge: manual
+        ? '<span style="color:var(--warn);font-weight:600">⚠ 未验证（上板确认）</span>'
+        : '<span style="color:var(--warn);font-weight:600">⚠ 未验证（无工具链降级）</span>',
+      detail: esc((data && data.message) || (manual ? fb.manual
+        : fb.unverified)
         || "未检测到编译工具链：结果已写入 main.c，但未经编译验证——请配置工具链后手动编译（上板类任务可直接人工标记为已验证）。"),
     };
   }

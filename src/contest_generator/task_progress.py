@@ -78,6 +78,21 @@ VERIFY_MANUAL = "manual"  # 上板人工确认（如循迹效果观察）
 
 VALID_VERIFY = frozenset({VERIFY_COMPILE, VERIFY_MANUAL})
 
+# 状态转移表（单源：人工改标端点 / 前端显隐 / 测试共用）——from → 允许的 to。
+# 语义：pending → skipped（跳过不打算做的）；skipped → pending（恢复）；
+# verified / unverified / failed → pending（重做）；unverified / failed →
+# verified（人工上板确认改标）。doing（执行中）不可人工操作（LLM 调用 /
+# 编译验证进行中，退出终态由 run_task 回填）；doing → 终态由域编排
+# （run_task）不可经此表。
+ALLOWED_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
+    STATUS_PENDING: frozenset({STATUS_SKIPPED}),
+    STATUS_SKIPPED: frozenset({STATUS_PENDING}),
+    STATUS_VERIFIED: frozenset({STATUS_PENDING}),
+    STATUS_UNVERIFIED: frozenset({STATUS_VERIFIED, STATUS_PENDING}),
+    STATUS_FAILED: frozenset({STATUS_VERIFIED, STATUS_PENDING}),
+    STATUS_DOING: frozenset(),
+}
+
 
 class TaskError(ValueError):
     """任务推进失败（清单损坏 / 缺上下文 / LLM 输出畸形），400 中文。"""
@@ -346,20 +361,6 @@ def backup_task_plan(output_dir: Path) -> bool:
     return True
 
 
-def discard_task_plan(output_dir: Path) -> bool:
-    """清单作废（修订重生成后）：删 .contest_tasks.json 与 .bak。
-
-    返回是否有清单被删除（修订联动的 tasks_invalidated 标记依据）。
-    """
-    removed = False
-    for name in (TASKS_MANIFEST_FILENAME, TASKS_MANIFEST_BAK_FILENAME):
-        path = output_dir / name
-        if path.is_file():
-            path.unlink()
-            removed = True
-    return removed
-
-
 # ---------------------------------------------------------------------------
 # 域编排：拆解（工单 01）。执行编排（run_task）归工单 02。
 # ---------------------------------------------------------------------------
@@ -548,6 +549,21 @@ def run_task(
         subject="任务结果",
     )
 
+    # verify=manual 的任务：即使编译通过初始也为 unverified（spec 用户拍板
+    # ——编译绿只证明语法/链接正确，该任务的验收方式是上板观察现象，由学生
+    # 上板后人工改标 verified；message + verify_cause 覆盖提示语义——前端
+    # 徽章按 cause 区分「无工具链降级」与「手动验收待确认」，不能只按 status）
+    if task.verify == VERIFY_MANUAL and result["status"] == STATUS_VERIFIED:
+        result = {
+            **result,
+            "status": STATUS_UNVERIFIED,
+            "verify_cause": "manual",
+            "message": (
+                "编译验证通过，但本任务验收方式为「上板人工确认」——状态为"
+                "未验证：请烧录观察现象后标记为「已验证」"
+            ),
+        }
+
     # 状态回填（终态写盘；note 持久化——补充框内容刷新不丢，spec 用户故事 10）
     updated_plan = _with_task_status(plan, task_id, result["status"], note=note)
     write_task_plan(output_dir, updated_plan)
@@ -591,3 +607,40 @@ def _with_task_status(
         generated_at=plan.generated_at,
         tasks=tuple(tasks),
     )
+
+
+def update_task_status(
+    plan: TaskPlan, task_id: str, status: str
+) -> tuple[TaskPlan, Task]:
+    """人工改标（纯函数，工单 03）：按转移表校验 → 替换状态 → (新清单, 任务)。
+
+    校验失败 → TaskError（400 中文，消息带允许的目标状态清单）；doing
+    （执行中）不可人工操作。只改状态不动 note。
+    """
+    if status not in ALL_STATUSES:
+        raise TaskError(f"非法任务状态：{status}")
+    task = find_task(plan, task_id)
+    allowed = ALLOWED_STATUS_TRANSITIONS.get(task.status, frozenset())
+    if status not in allowed:
+        targets = "、".join(sorted(allowed)) if allowed else "无（执行中不可操作）"
+        raise TaskError(
+            f"任务 {task_id} 当前状态 {task.status} 不能改为 {status}"
+            f"（允许：{targets}）"
+        )
+    updated_plan = _with_task_status(plan, task_id, status)
+    return updated_plan, find_task(updated_plan, task_id)
+
+
+def apply_task_status(output_dir: Path, task_id: str, status: str) -> dict[str, Any]:
+    """人工改标域编排（工单 03）：读清单 → 转移校验 → 落盘 → (任务, 清单)。
+
+    路由薄壳（对照 /api/revise/apply → run_revision 先例）：读-验-写单址，
+    不变量「校验失败都在落盘前」由纯函数 update_task_status 保证（先校验
+    后写盘，无部分写入窗口）。返回 {"task", "plan"}。
+    """
+    plan = read_task_plan(output_dir)
+    if plan is None:
+        raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
+    updated_plan, task = update_task_status(plan, task_id, status)
+    write_task_plan(output_dir, updated_plan)
+    return {"task": task.to_dict(), "plan": updated_plan.to_dict()}
