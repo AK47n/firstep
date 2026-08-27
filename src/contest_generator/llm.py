@@ -3782,6 +3782,11 @@ def _task_discuss_user_prompt(
     无段）+ 功能需求行 + 模块接口 + 当前 main.c + 讨论历史（旧 → 新，逐条
     字符帽）+ 用户最新一轮消息。各段截断带标注（_truncate_content /
     _discuss_history_segment / _requirement_lines 先例）。
+
+    注意：任务类 prompt 的分段拼装与 _task_execute_user_prompt 同构（赛题 /
+    Q&A / 接口 / main.c 四段文本一致，段序与标题因语义不同而有差异）——
+    改其中一处时须两处核对（漂移即分叉，见 SKELETON_INTERFACES_HEADING 的
+    双份教训）。
     """
     lines = ["【当前任务】"]
     lines.append(f"任务：{task.get('title', '')}")
