@@ -153,6 +153,11 @@ async function tasksPlan(force) {
   } catch (e) {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = e.message;   // 后端中文（含缺题面 / 已有清单提示）
+    // 兜底：报错引导「重新拆解」时按钮必须可见（计划外路径——目录加载自动
+    // plan-read 失败 / 漏发事件——也不让用户死锁在一条必错的提示前）
+    if (e.message && e.message.includes("已有任务清单")) {
+      $("btn-tasks-replan").classList.remove("hidden");
+    }
   } finally {
     tasksSetBusy(false);
   }
@@ -255,12 +260,15 @@ async function tasksRollback(backupId, taskId) {
   }
 }
 
-/** 重读磁盘任务清单（回滚后 / 跨入口刷新）：磁盘态即真相，内存态只作缓存。 */
+/** 重读磁盘任务清单（回滚后 / 跨入口刷新 / 目录加载自动读回）：磁盘态即
+ * 真相，内存态只作缓存。成功时绑定 tasks.outputDir（后续执行/回滚的目录
+ * 权威来源；失败静默——清单损坏留待下一次操作提示）。 */
 async function tasksReload() {
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) return;
   try {
     const data = await apiPost("/api/tasks/plan-read", { output_dir: dir });
+    tasks.outputDir = dir;
     tasks.plan = data.plan || null;
     tasksRender();
   } catch (e) {
@@ -386,6 +394,11 @@ window.addEventListener("revise-context-loaded", (event) => {
     $("btn-tasks-replan").classList.add("hidden");
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = "";
+    // 目录已加载：自动读回磁盘任务清单（若该目录拆解过）——任务卡与
+    // 「重新拆解」按钮随之出现；无清单则保持占位等用户拆解。修复「提示
+    // 已有清单却看不到重新拆解按钮」的死锁：此前只有 plan 已加载才显示
+    // 按钮，而加载目录从未 plan-read，用户只能点「拆解任务」撞同样的错。
+    tasksReload();
   }
 });
 // 修订重生成 → 任务清单已作废（后端已删除清单文件）：清空本簇缓存 + 提示
