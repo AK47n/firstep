@@ -83,6 +83,18 @@ REFERENCE_PLATFORMS = (PLATFORM_STM32, PLATFORM_MSPM0, PLATFORM_ANY)
 # 归档条目固定类型：被剔除的业务代码复制入库即为"例程代码"参考
 ARCHIVE_ENTRY_TYPE = "例程代码"
 
+# 题型词表（工单 B2/topic-framework）：条目标注的"决策题型"枚举——非空即带
+# 确定性框架段（条目目录 framework/main.c，见 build_topic_framework）；空 =
+# 未标记题型（向后兼容）。加新题型 = 加常量 + 词表元组 + （可后续）素材条目标记。
+TOPIC_TYPE_LINE_FOLLOW = "line_follow"  # 巡线/循迹决策（21F / 26H / car-1-1）
+TOPIC_TYPE_GENERIC = "generic"  # 通用决策结构（状态机枚举 + 主循环调度骨架）
+TOPIC_TYPES = (TOPIC_TYPE_LINE_FOLLOW, TOPIC_TYPE_GENERIC)
+
+# 题型框架文件（相对条目目录）：控制文件——与 reference.json 同阶，不入
+# files 清单、read_fulltext 不读（避免与注入段重复）；entry_stats /
+# list_entry_files 磁盘实况口径照旧统计。语义 = 该条目的题型确定性框架段。
+REFERENCE_FRAMEWORK_FILENAME = "framework/main.c"
+
 _ENTRY_ID_PATTERN = re.compile(r"^[^.\s/\\][\w.\- ]*$")
 
 
@@ -107,6 +119,7 @@ class ReferenceEntry:
     anchor_value: str  # 锚定值（赛题编号 或 模块库已有 kit 型号）
     files: tuple[str, ...]  # 素材文件路径（相对条目目录）
     platform: str = PLATFORM_ANY  # 平台属性：stm32 / mspm0 / any（缺省 any 向后兼容）
+    topic_type: str = ""  # 题型标记（词表 TOPIC_TYPES；空 = 未标记，向后兼容）
     file_count: int = 0  # 条目目录文件数（含 reference.json）
     size_bytes: int = 0  # 条目目录总体积（字节）
 
@@ -120,6 +133,7 @@ class ReferenceEntry:
             "anchor_kind": self.anchor_kind,
             "anchor_value": self.anchor_value,
             "platform": self.platform,
+            "topic_type": self.topic_type,
             "files": list(self.files),
             "file_count": self.file_count,
             "size_bytes": self.size_bytes,
@@ -161,6 +175,10 @@ class ReferenceEntry:
             raise ReferenceError(
                 f"非法平台属性：{platform!r}（应为 stm32、mspm0 或 any）"
             )
+        topic_type = data.get("topic_type", "")
+        if not isinstance(topic_type, str):
+            raise ReferenceError("题型标记必须是字符串")
+        validate_topic_type(topic_type)
         return cls(
             id=entry_id,
             title=title,
@@ -170,6 +188,7 @@ class ReferenceEntry:
             anchor_value=anchor_value,
             files=tuple(files),
             platform=platform,
+            topic_type=topic_type,
         )
 
 
@@ -193,6 +212,19 @@ def module_kit_vocabulary(module_library_dir: Path) -> tuple[str, ...]:
     由 list_modules 抛 LibraryError，透传给调用方（webapp 错误映射已登记）。
     """
     return tuple(collect_kits(list_modules(module_library_dir)))
+
+
+def validate_topic_type(topic_type: str) -> None:
+    """题型词表校验（工单 topic-framework/01）：空串 = 未标记（合法）；
+    词表外值 = 元数据损坏 / 录入非法，大声失败（与 platform 同款）。
+
+    非法文案提示合法取值（如"应为 line_follow、generic"），词表单源 =
+    TOPIC_TYPES。
+    """
+    if topic_type and topic_type not in TOPIC_TYPES:
+        raise ReferenceError(
+            f"非法题型：{topic_type!r}（应为 " + "、".join(TOPIC_TYPES) + "）"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +513,31 @@ def read_fulltext(reference_root: Path, entry: ReferenceEntry) -> str:
     return "\n".join(chunks)
 
 
+def build_topic_framework(
+    reference_root: Path, entry: ReferenceEntry
+) -> str | None:
+    """题型确定性框架段（工单 topic-framework/02）：条目目录 framework/main.c 全文。
+
+    语义：该条目标记了题型（topic_type 非空）时的决策结构框架（状态机枚举 /
+    主循环调度 / TODO 填充位），骨架 prompt 注入用——prompt 侧强指令"保留
+    框架结构只填 TODO"，与全文注入（参考实现草稿）互为补充：全文弱约束
+    （学习素材），框架段强约束（必须保留的结构）。
+
+    **控制文件**：referece.json 同阶——不入 files 清单、read_fulltext 不读
+    （本条目不参与全文拼装），entry_stats / list_entry_files 磁盘实况照旧
+    统计。topic_type 空 = 未标记题型（None，向后兼容）；文件缺失 / 不可读
+    （OSError / UnicodeDecodeError）= None（降级不抛错——框架是增强不是闸门，
+    没有它就走全文注入现行为）。
+    """
+    if not entry.topic_type:
+        return None
+    path = reference_root / entry.id / REFERENCE_FRAMEWORK_FILENAME
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # AI 录入流程：草稿 → 用户修改 / 补锚定 → 结构校验 → 入库
 # ---------------------------------------------------------------------------
@@ -502,6 +559,7 @@ def add_reference(
     files: Mapping[str, str],
     kit_vocabulary: Sequence[str],
     platform: str = PLATFORM_ANY,
+    topic_type: str = "",
 ) -> ReferenceEntry:
     """完整录入流程：结构校验通过才入库；失败不留半成品（与模块录入同款）。
 
@@ -529,6 +587,7 @@ def add_reference(
         raise ReferenceError(
             f"非法平台属性：{platform!r}（应为 stm32、mspm0 或 any）"
         )
+    validate_topic_type(topic_type)
     _validate_files(files)
 
     reference_root.mkdir(parents=True, exist_ok=True)
@@ -542,6 +601,7 @@ def add_reference(
         anchor_value=anchor_value,
         files=tuple(files),
         platform=platform,
+        topic_type=topic_type,
     )
     with entry_transaction(reference_root, [entry_id]) as (entry_dir,):
         _write_files(entry_dir, files)
@@ -565,6 +625,7 @@ def update_reference(
     remove_files: Sequence[str],
     kit_vocabulary: Sequence[str],
     platform: str = PLATFORM_ANY,
+    topic_type: str = "",
 ) -> ReferenceEntry:
     """编辑条目：元数据全量更新 + 文件增量增删，一次提交（工单
     reference-library-ui/01）。
@@ -595,6 +656,7 @@ def update_reference(
         raise ReferenceError(
             f"非法平台属性：{platform!r}（应为 stm32、mspm0 或 any）"
         )
+    validate_topic_type(topic_type)
     entry_dir = reference_root / entry_id
     if add_files:
         _validate_files(add_files)
@@ -627,6 +689,7 @@ def update_reference(
         anchor_value=anchor_value,
         files=new_files,
         platform=platform,
+        topic_type=topic_type,
     )
     # 落盘顺序：先写新增文件 + 元数据（失败清理已写文件并保持元数据原值）→
     # 删实体（先改引用再删实体：元数据写失败不丢已删除的文件；删除失败只留
