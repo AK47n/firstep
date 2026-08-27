@@ -24,7 +24,7 @@
 // btn-generate 覆盖重发监听器（工单 20 补迁——readinessState 随工单 19 迁出后
 import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
-import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName } from "/js/fx/generate.js";
+import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, frameworkNoteHTML } from "/js/fx/generate.js";
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
 import { syncStep7 } from "/js/ui/step-state.js";
@@ -75,6 +75,13 @@ async function generateMain(mode) {
       box.textContent = "AI 调用以下函数在所选模块接口中不存在，已改写为注释占位，请在" + cfg.interceptHint
         + "里替换为真实接口：" + data.intercepted.join("、");
     } else { box.classList.add("hidden"); }
+    // 题型框架注入提示（工单 topic-framework/04）：injected 为真才显示
+    const fwNote = frameworkNoteHTML(data);
+    const fwBox = $("framework-note");
+    if (fwNote) {
+      fwBox.classList.remove("hidden");
+      fwBox.textContent = fwNote;
+    } else { fwBox.classList.add("hidden"); }
   } catch (e) { $("skeleton-msg").textContent = e.message; }
   finally {
     btn.disabled = false;

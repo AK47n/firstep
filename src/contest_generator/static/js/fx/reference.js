@@ -10,6 +10,13 @@ export function referencePlatformChip(e) {
     ? ` <span class="chip out">${esc(e.platform)} 平台</span>` : "";
 }
 
+// 题型标注 chip（工单 topic-framework/04）：topic_type 空 = 未标记，不标注；
+// 非空显示"<题型> 框架"——标了题型即骨架阶段注入决策框架段（含 framework/main.c）
+export function referenceTopicTypeChip(e) {
+  return e.topic_type
+    ? ` <span class="chip" title="已标记题型：骨架生成时按此题型注入决策框架段（条目目录 framework/main.c）">${esc(e.topic_type)} 框架</span>` : "";
+}
+
 // —— 参考库表格精修（reference-library-ui/02）：过滤 / 排序 / 统计 / 行渲染
 // 纯函数组（tests/js 可注入，对偶模块库 lib-* 系列）——
 // refFilterEntries(entries, f)：f={q, platform, anchorKind, dangling, topicKeys,
@@ -159,6 +166,7 @@ export function refRowHTML(entry, f) {
         `<a href="#" data-mf="${esc(entry.id)}" data-path="${esc(p)}">▸ ${esc(p)}</a>`).join("") + "</div>" : ""}
     </td>
     <td>${esc(entry.type)}</td>
+    <td>${entry.topic_type ? esc(entry.topic_type) : '<span class="muted">—</span>'}</td>
     <td class="muted">${refAnchorBadge(entry)}${referencePlatformChip(entry)}${dangling ? '<span class="ref-dangling-tag" title="锚定值不命中任何库内赛题 / 套件，生成时不会自动关联（点「编辑」改正锚定）">⚠</span>' : ""}</td>
     <td class="desc-cell" title="${esc(desc)}">${esc(desc)}</td>
     <td class="muted" title="${esc(`${(entry.files || []).length} 个素材文件，路径清单见磁盘目录`)}">${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</td>
@@ -173,7 +181,7 @@ export function refDetailHTML(entry, files) {
     <div class="ref-detail-title">${esc(entry.title)}</div>
     <div class="ref-detail-row"><span class="ref-detail-k">编号</span><span class="mono">${esc(entry.id)}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">类型</span><span>${esc(entry.type)}</span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">锚定</span><span>${refAnchorBadge(entry)}${referencePlatformChip(entry)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">锚定</span><span>${refAnchorBadge(entry)}${referencePlatformChip(entry)}${referenceTopicTypeChip(entry)}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">简介</span><span class="ref-detail-desc">${esc(entry.description)}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">体量</span><span>${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</span></div>
   </div>
@@ -250,11 +258,12 @@ export function refEditPayload(fields, plan) {
     anchor_kind: fields.anchor_kind,
     anchor_value,
     platform: fields.platform || "any",
+    topic_type: String(fields.topic_type || "").trim(),
     add_files: plan.add_files,
     remove_files: plan.remove_files,
   };
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { referencePlatformChip, refFilterEntries, refDanglingAnchors, refSortEntries, refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML, refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan, refEditPayload });
+  Object.assign(window, { referencePlatformChip, referenceTopicTypeChip, refFilterEntries, refDanglingAnchors, refSortEntries, refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML, refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan, refEditPayload });
 }

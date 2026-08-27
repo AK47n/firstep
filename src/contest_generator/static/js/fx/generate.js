@@ -133,6 +133,15 @@ export function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
   return Number.isFinite(n) && n >= 0 ? n.toFixed(1) : "0.0";
 }
 
+// frameworkNoteHTML(data)：题型框架注入提示（工单 topic-framework/04）。
+// /api/skeleton 返回 topic_framework {injected, topic_type?, source?}；
+// injected=false / 数据缺失 → ""（不渲染提示行）。文案带题型与来源条目。
+export function frameworkNoteHTML(data) {
+  const fw = data && data.topic_framework;
+  if (!fw || !fw.injected) return "";
+  return `已注入题型框架：「${fw.topic_type || "题型"}」（来源参考条目 ${fw.source || "?"}）—— main.c 已按该框架生成，请在其 TODO 位继续实现。`;
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, fmtSeconds });
+  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, fmtSeconds, frameworkNoteHTML });
 }

@@ -1547,6 +1547,7 @@
         <span class="muted">骨架 = 初始化序列 + TODO 预留区；自检 = 逐模块初始化/读一次/打印结果（OLED 为主、串口为辅），先验硬件再写逻辑。</span>
       </div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
+      <div id="framework-note" class="warn-box ok hidden" style="margin-top:8px"></div>
       <div class="code-wrap" style="margin-top:8px">
         <div class="code-zoom" title="代码字号">
           <button id="btn-code-zoom-out" type="button" title="缩小">−</button>
@@ -1856,7 +1857,7 @@
       <div class="lib-chips-row"><span class="muted">锚定</span><span id="ref-anchor-chips"></span></div>
       <div id="ref-stats" class="lib-stats"></div>
       <table class="lib-table" style="margin-top:10px">
-        <thead><tr><th>标题</th><th>类型</th><th>锚定</th><th>简介</th><th>体量</th><th>操作</th></tr></thead>
+        <thead><tr><th>标题</th><th>类型</th><th>题型</th><th>锚定</th><th>简介</th><th>体量</th><th>操作</th></tr></thead>
         <tbody id="ref-rows"></tbody>
       </table>
       <div id="ref-msg" class="error"></div>
@@ -1872,6 +1873,7 @@
           <div class="row">
             <div style="flex:1"><label>标题</label><input type="text" id="ref-title" placeholder="例如 ALX 套件 STM32F1 串口例程"></div>
             <div style="flex:1"><label>类型</label><input type="text" id="ref-type" placeholder="例如 例程代码 / 说明书"></div>
+            <div style="flex:1"><label>题型（未标记 = 不注入决策框架；标记后骨架生成时按题型注入框架段，目录内需有 framework/main.c）</label><select id="ref-topic-type"><option value="">（未标记）</option></select></div>
           </div>
         </div>
       </div>
@@ -2309,7 +2311,7 @@ import { tasksPlan } from "/js/ui/generate-tasks.js";  // 任务推进：host �
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
-import { loadReferences, loadKitVocabulary, initReferenceToolbar, deleteReference, editReference, openReferenceFile, viewReferenceDetail } from "/js/ui/reference.js";
+import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar, deleteReference, editReference, openReferenceFile, viewReferenceDetail } from "/js/ui/reference.js";
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
@@ -2340,7 +2342,7 @@ document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
     const gp = $("gen-progress");
     if (gp) gp.classList.toggle("hidden", btn.dataset.tab !== "generate" || stepDoneSet.size === 0);
     if (btn.dataset.tab === "library") loadLibrary();
-    if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); }
+    if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); loadTopicTypes(); }
     if (btn.dataset.tab === "pdf") loadPdfs();
     if (btn.dataset.tab === "topic") { loadTopics(); loadTopicGroupVocabulary(); }
     if (btn.dataset.tab === "master") loadMasters();

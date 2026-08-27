@@ -5151,6 +5151,105 @@ def test_skeleton_with_reference_ids_injects_fulltexts(client, context):
     assert "数字钥匙例程" in refs[TOPIC_REFERENCE_ID]
 
 
+def _wire_framework_entry(context) -> None:
+    """追加一条带题型标记 + framework/main.c 的参考条目（锚定 2026C）。
+
+    make_fake_reference_library 不碰（共享假件）；本助手只在测试内追加。
+    """
+    ctx = context[0]
+    root = reference_library_dir(ctx.config.module_library_dir)
+    entry = add_reference(
+        root,
+        title="巡线决策框架例程",
+        type="例程代码",
+        description="2026C 配套巡线决策例程",
+        anchor_kind="topic",
+        anchor_value="2026C",
+        topic_type="line_follow",
+        files={"code/pid.c": "/* 决策源码 */\n"},
+        kit_vocabulary=(),
+    )
+    (root / entry.id / "framework").mkdir()
+    (root / entry.id / "framework" / "main.c").write_text(
+        "/* 巡线框架 */\ntypedef enum { S_FOLLOW } state_t;\n", encoding="utf-8"
+    )
+
+
+def test_skeleton_injects_topic_framework(client, context):
+    """骨架命中带题型条目标 → topic_framework 注入 + 返回体带注入信息。"""
+    _wire_material_libraries(context)
+    _wire_framework_entry(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "topic_id": "2026C",
+            "reference_ids": [TOPIC_REFERENCE_ID],
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["topic_framework"]["injected"] is True
+    assert data["topic_framework"]["topic_type"] == "line_follow"
+    assert data["topic_framework"]["source"] == "巡线决策框架例程"
+    framework = holder["llm"].skeleton_framework_calls[0]
+    assert framework is not None
+    assert "巡线框架" in framework
+
+
+def test_skeleton_no_framework_when_no_topic_type(client, context):
+    """无题型标记条目 → topic_framework.injected=False + 不注入（零回归）。"""
+    _wire_material_libraries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11"],
+            "topic_id": "2026C",
+            "reference_ids": [TOPIC_REFERENCE_ID],
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["topic_framework"] == {"injected": False}
+    assert holder["llm"].skeleton_framework_calls[0] is None
+
+
+def test_skeleton_smoke_does_not_inject_framework(client, context):
+    """冒烟模式不注入题型框架（不写题逻辑）。"""
+    _wire_material_libraries(context)
+    _wire_framework_entry(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",
+            "platform": PLATFORM_STM32,
+            "slugs": ["dht11", "oled"],
+            "topic_id": "2026C",
+            "reference_ids": [TOPIC_REFERENCE_ID],
+            "main_mode": "smoke",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["topic_framework"] == {"injected": False}
+    assert holder["llm"].skeleton_framework_calls == []
+
+
 def test_skeleton_rejects_duplicate_reference_ids(client, context):
     """骨架阶段重复 reference_id：manual_reference_admission → 400 中文。"""
     _wire_material_libraries(context)

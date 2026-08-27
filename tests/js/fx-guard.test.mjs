@@ -39,6 +39,7 @@ const DOMAINS = {
   },
   "reference.js": {
     referencePlatformChip: "fn",
+    referenceTopicTypeChip: "fn",
     refFilterEntries: "fn", refDanglingAnchors: "fn", refSortEntries: "fn",
     refStats: "fn", refStatsText: "fn", refMatchFiles: "fn", refAnchorBadge: "fn",
     refChipRowHTML: "fn", refRowHTML: "fn", refDetailHTML: "fn",
@@ -86,6 +87,7 @@ const DOMAINS = {
     fmtWait: "fn", generationOutputDirPayload: "fn", collectBindings: "fn",
     formatResModules: "fn", attachCelebrate: "fn", collapseBtnLabel: "fn",
     syncCollapseBtn: "fn", collapseToggleAll: "fn", fmtSeconds: "fn",
+    frameworkNoteHTML: "fn",
   },
   "recent.js": {
     recentStatusMeta: "fn", recentTimeLabel: "fn", recentPlatformLabel: "fn",
