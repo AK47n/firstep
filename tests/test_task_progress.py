@@ -17,9 +17,11 @@ from fastapi.testclient import TestClient
 
 from contest_generator.platforms import PLATFORM_STM32
 from contest_generator.task_progress import (
+    ALLOWED_STATUS_TRANSITIONS,
     STATUS_DOING,
     STATUS_FAILED,
     STATUS_PENDING,
+    STATUS_SKIPPED,
     STATUS_UNVERIFIED,
     STATUS_VERIFIED,
     TASKS_MANIFEST_BAK_FILENAME,
@@ -31,11 +33,11 @@ from contest_generator.task_progress import (
     VERIFY_MANUAL,
     backup_task_plan,
     build_task_plan,
-    discard_task_plan,
     find_task,
     read_task_plan,
     run_task,
     run_task_planning,
+    update_task_status,
     write_task_plan,
 )
 from contest_generator.webapp import AppContext, AppConfig, create_app
@@ -202,7 +204,8 @@ def test_task_plan_from_dict_tolerates_unknown_status_and_missing_fields():
 
 
 def test_backup_and_discard(tmp_path):
-    """备档：旧清单 → .bak（旧 .bak 先删）；作废：双文件删除。"""
+    """备档：旧清单 → .bak（旧 .bak 先删）；修订作废路径由 revision 的 rmtree
+    覆盖（清单文件随整树删除，见 test_revision_regeneration_invalidates_tasks）。"""
     output_dir = tmp_path / "out"
     output_dir.mkdir()
     plan = TaskPlan(tasks=(Task(id="t1", title="A", description="x"),))
@@ -212,13 +215,6 @@ def test_backup_and_discard(tmp_path):
     assert (output_dir / TASKS_MANIFEST_BAK_FILENAME).exists() is True
     # 无清单 = False
     assert backup_task_plan(output_dir) is False
-    # 作废：当前 + 备档双删
-    write_task_plan(output_dir, plan)
-    assert discard_task_plan(output_dir) is True
-    assert (output_dir / TASKS_MANIFEST_FILENAME).exists() is False
-    assert (output_dir / TASKS_MANIFEST_BAK_FILENAME).exists() is False
-    # 空目录 = False（不误报）
-    assert discard_task_plan(output_dir) is False
 
 
 def test_run_task_planning_writes_plan_and_emits_event(tmp_path):
@@ -808,3 +804,218 @@ def test_tasks_execute_sse_flow(tasks_client, monkeypatch):
     assert saved["tasks"][0]["status"] == STATUS_VERIFIED
     # 写盘生效
     assert "循迹已实现" in (Path(output_dir) / "main.c").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# 工单 03：状态机转移表 / 人工改标端点 / manual 验收降级 / 修订联动作废
+# ---------------------------------------------------------------------------
+
+
+def test_update_task_status_transitions():
+    """转移表：pending→skipped / skipped→pending / verified→pending /
+    unverified→verified / unverified→pending / failed→verified / failed→pending；
+    非法转移（pending→verified 直达等）→ TaskError。"""
+    plan = TaskPlan(
+        tasks=(
+            Task(id="t1", title="A", description="x", status=STATUS_PENDING),
+            Task(id="t2", title="B", description="x", status=STATUS_SKIPPED),
+            Task(id="t3", title="C", description="x", status=STATUS_VERIFIED),
+            Task(id="t4", title="D", description="x", status=STATUS_UNVERIFIED),
+            Task(id="t5", title="E", description="x", status=STATUS_FAILED),
+            Task(id="t6", title="F", description="x", status=STATUS_DOING),
+        )
+    )
+    # 合法
+    plan, t1 = update_task_status(plan, "t1", STATUS_SKIPPED)
+    assert t1.status == STATUS_SKIPPED
+    plan, t1b = update_task_status(plan, "t1", STATUS_PENDING)
+    assert t1b.status == STATUS_PENDING
+    _, t3 = update_task_status(plan, "t3", STATUS_PENDING)
+    assert t3.status == STATUS_PENDING
+    _, t4 = update_task_status(plan, "t4", STATUS_VERIFIED)
+    assert t4.status == STATUS_VERIFIED
+    _, t5 = update_task_status(plan, "t5", STATUS_VERIFIED)
+    assert t5.status == STATUS_VERIFIED
+    # 非法：pending 未执行直接 verified（绕过 AI 执行）；doing 任何改标；
+    # 未知状态词
+    with pytest.raises(TaskError):
+        update_task_status(plan, "t1", STATUS_VERIFIED)
+    with pytest.raises(TaskError):
+        update_task_status(plan, "t6", STATUS_VERIFIED)
+    with pytest.raises(TaskError):
+        update_task_status(plan, "t1", "bogus")
+    # 错误消息带允许目标
+    with pytest.raises(TaskError) as exc_info:
+        update_task_status(plan, "t6", STATUS_SKIPPED)
+    assert "无（执行中不可操作）" in str(exc_info.value)
+
+
+def test_transition_table_consistency():
+    """转移表自洽：每个状态条目的目标都在词表内；doing 无出口（终态由
+    run_task 回填，不经人工转移表）。"""
+    assert set(ALLOWED_STATUS_TRANSITIONS) == {
+        STATUS_PENDING, STATUS_SKIPPED, STATUS_VERIFIED,
+        STATUS_UNVERIFIED, STATUS_FAILED, STATUS_DOING,
+    }
+    for targets in ALLOWED_STATUS_TRANSITIONS.values():
+        for target in targets:
+            assert target in ALLOWED_STATUS_TRANSITIONS
+    assert ALLOWED_STATUS_TRANSITIONS[STATUS_DOING] == frozenset()
+
+
+def test_run_task_manual_verify_stays_unverified(tmp_path, monkeypatch):
+    """verify=manual 的任务：编译绿 → 仍 unverified（上板人工改标，spec 拍板）。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    # 换成 manual 任务
+    write_task_plan(
+        output_dir,
+        TaskPlan(
+            tasks=(Task(id="t1", title="循迹", description="循迹决策", verify=VERIFY_MANUAL),)
+        ),
+    )
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    result = run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_UNVERIFIED  # 编译绿但 manual → 未验证
+    assert result["verify_cause"] == "manual"  # 徽章按 cause 区分（非无工具链降级）
+    assert "上板人工确认" in result["message"]
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.tasks[0].status == STATUS_UNVERIFIED
+
+
+def test_tasks_status_endpoint(tasks_client):
+    """改标端点：pending→skipped 落盘；非法转移 400 中文。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    resp = client.post(
+        "/api/tasks/status",
+        json={"output_dir": output_dir, "task_id": "t1", "status": "skipped"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["task"]["status"] == STATUS_SKIPPED
+    # 落盘
+    saved = json.loads(
+        (Path(output_dir) / TASKS_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert saved["tasks"][0]["status"] == STATUS_SKIPPED
+    # 非法：skipped → verified 直达
+    resp = client.post(
+        "/api/tasks/status",
+        json={"output_dir": output_dir, "task_id": "t1", "status": "verified"},
+    )
+    assert resp.status_code == 400
+    assert "不能改为" in resp.json()["detail"]
+    # 未拆解目录
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    resp = client.post(
+        "/api/tasks/status",
+        json={"output_dir": str(empty), "task_id": "t1", "status": "skipped"},
+    )
+    assert resp.status_code == 400
+    assert "尚未拆解" in resp.json()["detail"]
+
+
+def test_revision_regeneration_invalidates_tasks(tmp_path, monkeypatch):
+    """修订重生成后任务清单删除（含 .bak）；模块集不变路径不删。"""
+    from contest_generator.revision import run_revision
+
+    library = make_fake_module_library(tmp_path / "modules")
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    write_task_plan(
+        output_dir,
+        TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),)),
+    )
+    (output_dir / TASKS_MANIFEST_BAK_FILENAME).write_text("{}", encoding="utf-8")
+    # 假生成器：不真生成（run_revision 的生成链不在此测）
+    monkeypatch.setattr(
+        "contest_generator.revision.generate_skeleton",
+        lambda llm, problem, manifests, platform, library_dir=None, master_project_dir=None, instances=None: (
+            "int main(void) { while (1); }\n", [],
+        ),
+    )
+    monkeypatch.setattr(
+        "contest_generator.revision.generate_project",
+        lambda **kwargs: None,
+    )
+    llm = FakeLLM()
+    result = run_revision(
+        llm=llm,
+        problem_text="题面",
+        qa_text="",
+        requirements=(),
+        references=(),
+        current_slugs=["dht11"],
+        confirmed_slugs=["dht11", "oled"],  # 模块集变化 → 重生成
+        new_qa_text="新 Q&A",
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        masters_dir=tmp_path / "masters",
+        output_dir=output_dir,
+        backup_root=tmp_path / "revise-backups",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["tasks_invalidated"] is True
+    assert (output_dir / TASKS_MANIFEST_FILENAME).exists() is False
+    assert (output_dir / TASKS_MANIFEST_BAK_FILENAME).exists() is False
+
+
+def test_revision_unchanged_keeps_tasks(tmp_path):
+    """模块集不变路径：不删任务清单（tasks_invalidated = False）。"""
+    from contest_generator.revision import run_revision
+
+    library = make_fake_module_library(tmp_path / "modules")
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    write_task_plan(
+        output_dir,
+        TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),)),
+    )
+    # 模块集相同（dht11 + 依赖 delay 不变）：不重生成
+    result = run_revision(
+        llm=FakeLLM(),
+        problem_text="题面",
+        qa_text="",
+        requirements=(),
+        references=(),
+        current_slugs=["dht11"],
+        confirmed_slugs=["dht11"],
+        new_qa_text="新 Q&A",
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        masters_dir=tmp_path / "masters",
+        output_dir=output_dir,
+        backup_root=tmp_path / "revise-backups",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["tasks_invalidated"] is False
+    assert (output_dir / TASKS_MANIFEST_FILENAME).exists() is True

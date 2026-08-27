@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import {
   taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
   taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
-  verifyStatusMarkup,
+  taskCardActions, verifyStatusMarkup,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -102,4 +102,27 @@ test("verifyStatusMarkup: 三态徽章 + 摘要（深化/任务面板共用单�
   // message 优先于 fallback（后端中文）
   const withMessage = verifyStatusMarkup({ status: "failed", message: "仍红的中文提示" }, {});
   assert.ok(withMessage.detail.includes("仍红的中文提示"));
+});
+
+test("taskCardActions: 显隐与后端转移表镜像", () => {
+  // pending → 做这一步 + 跳过
+  assert.deepEqual(taskCardActions("pending"), ["run", "skip"]);
+  // skipped → 恢复；verified → 重做
+  assert.deepEqual(taskCardActions("skipped"), ["revert"]);
+  assert.deepEqual(taskCardActions("verified"), ["revert"]);
+  // unverified / failed → 做 + 上板改标 + 重做
+  assert.deepEqual(taskCardActions("unverified"), ["run", "mark", "revert"]);
+  assert.deepEqual(taskCardActions("failed"), ["run", "mark", "revert"]);
+  // doing → 无操作（执行中）
+  assert.deepEqual(taskCardActions("doing"), []);
+  // 未知状态 → 无操作（不猜）
+  assert.deepEqual(taskCardActions("bogus"), []);
+});
+
+test("verifyStatusMarkup: unverified 按 cause 区分徽章（无工具链 / 手动验收）", () => {
+  const noToolchain = verifyStatusMarkup({ status: "unverified", compile: {} }, {});
+  assert.ok(noToolchain.badge.includes("无工具链降级"));
+  const manual = verifyStatusMarkup({ status: "unverified", verify_cause: "manual", message: "请烧录观察后标记" }, {});
+  assert.ok(manual.badge.includes("上板确认"));
+  assert.ok(manual.detail.includes("请烧录观察后标记"));
 });

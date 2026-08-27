@@ -320,6 +320,11 @@ async function reviseApply() {
     markStepDone(11);
     toast("ok", "修订完成");
     reviseRenderApplyDone(data);
+    // 任务清单作废通知（工单 task-progress/03：重生成后旧清单已被后端删除，
+    // 前端任务的清单缓存必须清空——广播时机归 revise 簇，消费归任务簇）
+    if (data.tasks_invalidated) {
+      window.dispatchEvent(new CustomEvent("tasks-invalidated", { detail: { output_dir: revise.outputDir } }));
+    }
     if ($("revise-deepen-check").checked) {
       $("revise-exec-status").textContent = "修订完成，开始深化…";
       await reviseRunDeepen();   // 模块集无变化时同样自动进入深化
@@ -335,7 +340,8 @@ async function reviseApply() {
 }
 
 /** 修订执行结果：diff 记录（新增 / 移除 + 备份 + 时间）；模块集无变化 →
- * 「无需重生成」提示（main.c 手工编辑保留，深化可直接进行）。 */
+ * 「无需重生成」提示（main.c 手工编辑保留，深化可直接进行）；重生成 → 任务
+ * 清单已作废提示（工单 task-progress/03，前端提示重新拆解）。 */
 function reviseRenderApplyDone(data) {
   if (data.backup_id) revise.backupId = data.backup_id;
   const box = $("revise-result");
@@ -344,6 +350,9 @@ function reviseRenderApplyDone(data) {
     parts.push('<div class="ok" style="font-weight:600">无需重生成：模块集无变化，main.c 手工编辑保留；新 Q&A 已并入上下文清单。</div>');
   } else {
     parts.push(reviseRenderDiff(data.diff, { summary: true }));
+  }
+  if (data.tasks_invalidated) {
+    parts.push('<div class="warn-box unverified" style="margin-top:8px">⚠ 任务清单已作废（模块集变化 → 重生成）：原清单的推进进度 / 备注已与新工程无关。请到下方「任务推进」重新拆解任务。</div>');
   }
   parts.push('<div class="reason" style="margin-top:8px">备份：<span class="slug">' + esc(data.backup_id || "—")
     + "</span> · 修订时间：" + esc(data.generated_at || "—") + "</div>");
