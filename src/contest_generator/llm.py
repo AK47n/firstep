@@ -122,7 +122,10 @@ SELECT_SYSTEM_PROMPT = (
     "无命中 → 库外建议 suggestions（name + 常识举例，仅展示、不进工程、"
     "不参与生成）。库外建议的 name 必须来自硬件词表（类别名或具体型号名，"
     "词表见用户消息）；具体型号不在词表内时，降级输出为它所属的类别名并"
-    "在 category 字段注明，宁可给类别也不编造型号。以题面为裁判反复自检"
+    "在 category 字段注明，宁可给类别也不编造型号。每条库外建议按题面判断"
+    "后在词表给出的选购方案（solutions）中选一个最适合本赛题的方案名填 "
+    "selected（只从 solutions.name 里挑，不得自创方案名；方案列表看用户消息"
+    "里的硬件词表，无合适方案则不填 selected）。以题面为裁判反复自检"
     "修订（删脑补 / 补遗漏 / 重查覆盖），连续两轮功能需求层一致即可保持"
     "不动。题面已明确给出的细节（如颜色、型号、数量、类型、位置点）绝不重复问；"
     "题面写明'自定/不限'的条目（如'起始点摆放方向自定'）就是题面已给出的答案，"
@@ -560,6 +563,41 @@ def _fit_fulltext_wire(
             f"\n……（内容过长，已截断：仅展示前 {budget} "
             f"wire 字节，原文共 {len(fulltext)} 字符；{TRUNCATION_NOTICE}）……\n"
         )
+    return fitted
+
+
+# 硬件词表科普段 wire 字节预算（工单 buy-guide/01）：词表行含选购方案名后
+# 体积上升（方案名是 selected 判决依据——模型必须看到全部类别的方案名才能
+# 按题面选 selected，截掉尾部类别 = 该类别 selected 恒空、买件指引核心功能
+# 折损）。预算取「默认词表完整 wire（实测 3170）+ 膨胀余量」= 4200：默认
+# 词表全量送达（不截断）、未来加类/加方案留 ~1KB 余量，同时段级兜底防
+# 词表无界膨胀撑爆请求预算（budget.REFERENCE_FULLTEXT_BYTES 推导里的
+# 「词表」项按本预算计）。截断标注自身 wire 字节计入预算（fit 前预扣，
+# 对齐 fit_wire_budget 文档契约「标注非免费、进记账」）。
+WORDLIST_PROMPT_BYTES = 4200
+
+# 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
+# （后续类别仍由界面展示加载），与 content 截断契约（题面/参考）语义不同界，
+# 避免干扰断言「内容不被截断」的调用方测试（fulltext 注入测试）。
+WORDLIST_TRUNCATION_NOTICE = "\n……（硬件词表过长，已截断，仅保留前部类别与方案）……\n"
+
+
+def _wordlist_prompt_segment(
+    hardware_words: Sequence[HardwareWordGroup],
+) -> str:
+    """硬件词表科普段（wire 预算截断 + 标注）：只送预算内前缀。
+
+    词表是科普素材不是判决依据（模型可以从截断前的类目联想到库外建议），
+    截断只影响发送素材；完整词表仍在界面展示（载荷 solutions 来自词表
+    数据模型，不经 prompt）。截断标注进预算：fit 到 (预算 − 标注 wire)，
+    保证实发 ≤ 预算（对齐 fit_wire_budget 文档契约）。
+    """
+    segment = format_wordlist_prompt(hardware_words)
+    fitted = fit_wire_budget(
+        segment, WORDLIST_PROMPT_BYTES - wire_size(WORDLIST_TRUNCATION_NOTICE)
+    )
+    if fitted != segment:
+        fitted += WORDLIST_TRUNCATION_NOTICE
     return fitted
 
 
@@ -3496,7 +3534,7 @@ def _selection_user_prompt(
         lines.append(_clarification_history_segment(clarifications))
         prompt += "\n".join(lines)
     if hardware_words:
-        prompt += "\n\n" + format_wordlist_prompt(hardware_words)
+        prompt += "\n\n" + _wordlist_prompt_segment(hardware_words)
     # 多实例猜测规则段（工单 module-multi-instance/06）：库内有多实例模块才出段
     # （与参考/澄清段同款条件段先例——最坏情形请求预算零成本，旧库提示词逐字节
     # 不变）；内置变体 token 词表单源 = selection.LED_COLOR_MACROS（提示词可见

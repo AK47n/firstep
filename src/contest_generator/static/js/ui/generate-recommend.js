@@ -27,6 +27,7 @@ import { esc } from "/js/fx/core.js";
 import { platformClickAction } from "/js/fx/platform.js";
 import { moduleBadges, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
 import { referencePlatformChip } from "/js/fx/reference.js";
+import { suggestionChipHTML } from "/js/fx/recommend.js";
 import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
 import { syncStep4 } from "/js/fx/draft.js";
@@ -298,12 +299,13 @@ function recommendChip(slug, reason) {
     + '<span class="chip-x">✕</span></span>';
 }
 
-function suggestionChip(s) {
-  const note = s.degraded ? "（型号不在词表，按类别展示）" : "";
-  return '<span class="chip out" title="' + esc(note) + '">' + esc(s.name)
-    + '<span class="reason">需自备' + note
-    + (s.examples.length ? "：" + esc(s.examples.join(" / ")) : "") + '</span></span>';
-}
+// 库外建议 chip（工单 buy-guide/02）：solutions 词表方案 → 可展开选型参考
+// 面板；点击委托在模块级（.sugg-chip toggle 外层 .sugg-wrap 的 active 类，
+// CSS 控制面板显隐——不重渲染；建议 chip 无 data-remove，不与移除委托冲突）
+document.addEventListener("click", (e) => {
+  const chip = e.target.closest(".sugg-chip");
+  if (chip) chip.closest(".sugg-wrap").classList.toggle("active");
+});
 
 export function renderRecommendResult(data, autoAdd = true) {
   markStepDone(5);  // AI 推荐成功返回即视为完成（含"未推荐到模块"的空结果）
@@ -343,7 +345,7 @@ export function renderRecommendResult(data, autoAdd = true) {
           const reason = (data.modules.find((m) => m.slug === slug) || {}).reason;
           return groupRequirementNote(groups, slug, reason) || recommendChip(slug, reason);
         }).join("") || '<span class="muted">库内无命中</span>'}
-        ${(r.suggestions || []).map(suggestionChip).join("")}
+        ${(r.suggestions || []).map(suggestionChipHTML).join("")}
       </div>
     </div>`).join("");
   box.querySelectorAll("[data-remove]").forEach((b) =>

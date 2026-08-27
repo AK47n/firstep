@@ -65,7 +65,7 @@ from contest_generator.selection import (
     select_modules_convergent,
 )
 from contest_generator.sse import SseEmitter
-from contest_generator.wordlist import HardwareWordGroup
+from contest_generator.wordlist import HardwareWordGroup, SolutionOption
 from tests.fakes import FakeLLM
 from tests.generate_wiring_fakes import (
     KIT_REFERENCE_ID,
@@ -1619,6 +1619,145 @@ def test_build_selection_suggestions_without_wordlist_rejected():
         build_module_selection(raw, known_slugs=())
 
 
+# 带选购方案的测试词表（买件指引，工单 buy-guide/01）
+WORDS_WITH_SOLUTIONS = (
+    HardwareWordGroup(
+        category="视觉模块",
+        models=("K230", "OpenMV"),
+        solutions=(
+            SolutionOption(name="K230（CanMV）", interface="UART", price="￥100-200/板", recommended=True),
+            SolutionOption(name="OpenMV Cam H7", interface="UART", price="￥200-300/板"),
+        ),
+    ),
+    HardwareWordGroup(category="声光提示器件", models=("LED", "蜂鸣器")),  # 无方案
+)
+
+
+def test_build_selection_suggestion_fills_solutions_from_wordlist():
+    """库外建议命中词表类别 → solutions 按词表行填充（买件指引）。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别目标",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [{"name": "视觉模块"}],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=(), hardware_words=WORDS_WITH_SOLUTIONS
+    )
+    suggestion = result.requirements[0].suggestions[0]
+    assert [s.name for s in suggestion.solutions] == ["K230（CanMV）", "OpenMV Cam H7"]
+    assert suggestion.solutions[0].recommended is True
+    assert suggestion.solutions[1].recommended is False
+    assert suggestion.selected == ""  # 未提供 selected → 空串
+
+
+def test_build_selection_suggestion_solutions_by_model_name():
+    """型号名命中（词表 models 里）→ 同行的 solutions 也填充。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别目标",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [{"name": "K230"}],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=(), hardware_words=WORDS_WITH_SOLUTIONS
+    )
+    assert result.requirements[0].suggestions[0].solutions
+
+
+def test_build_selection_suggestion_degraded_still_fills_solutions():
+    """词表外型号 → 降级为类别名展示，solutions 仍按类别填充。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别目标",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [{"name": "YOLO-板", "category": "视觉模块"}],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=(), hardware_words=WORDS_WITH_SOLUTIONS
+    )
+    suggestion = result.requirements[0].suggestions[0]
+    assert suggestion.degraded is True
+    assert suggestion.solutions  # 降级也有方案可看
+
+
+def test_build_selection_suggestion_selected_validated_against_solutions():
+    """selected 必须在词表 solutions.name 内：命中保留、词表外/缺失置空。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别目标",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [
+                    {"name": "视觉模块", "selected": "OpenMV Cam H7"},  # 词表内
+                    {"name": "视觉模块", "selected": "不存在的方案"},  # 词表外
+                    {"name": "视觉模块"},  # 缺失
+                ],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=(), hardware_words=WORDS_WITH_SOLUTIONS
+    )
+    selected = [s.selected for s in result.requirements[0].suggestions]
+    assert selected == ["OpenMV Cam H7", "", ""]
+
+
+def test_build_selection_suggestion_to_dict_includes_solutions():
+    """to_dict 透出 solutions（每项 dict）+ selected——界面据此渲染选型参考。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "识别目标",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [{"name": "视觉模块", "selected": "K230（CanMV）"}],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=(), hardware_words=WORDS_WITH_SOLUTIONS
+    )
+    payload = result.requirements[0].suggestions[0].to_dict()
+    assert payload["selected"] == "K230（CanMV）"
+    assert payload["solutions"] == [
+        {
+            "name": "K230（CanMV）",
+            "interface": "UART",
+            "price": "￥100-200/板",
+            "note": "",
+            "suitable": "",
+            "recommended": True,
+        },
+        {
+            "name": "OpenMV Cam H7",
+            "interface": "UART",
+            "price": "￥200-300/板",
+            "note": "",
+            "suitable": "",
+            "recommended": False,
+        },
+    ]
+
+
 def test_build_selection_questions_accepted():
     """拿不准向用户补问：questions 数组解析；纯补问输出（无需求层无模块）合法。"""
     raw = {"questions": ["题面没有说明识别方式，用摄像头还是传感器？"]}
@@ -2127,7 +2266,13 @@ def test_run_recommendation_done_payload_verbatim():
                 "sentence": 2,
                 "modules": ["dht11"],
                 "suggestions": [
-                    {"name": "视觉模块", "examples": ["K230", "OpenMV"], "degraded": False}
+                    {
+                        "name": "视觉模块",
+                        "examples": ["K230", "OpenMV"],
+                        "degraded": False,
+                        "solutions": [],
+                        "selected": "",
+                    }
                 ],
             }
         ],

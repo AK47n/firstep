@@ -103,13 +103,13 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # 256001 字节 > 120832）。
 #
 # 取值反推（全中文最坏口径，与修复侧同款推导）：题面（4000 截断上限）× 6
-# ≈ 24KB + 摘要 14 条 ≈ 7.6KB + 词表 ≈ 1.1KB + 澄清历史
+# ≈ 24KB + 摘要 14 条 ≈ 7.6KB + 词表 ≈ 4.2KB（WORDLIST_PROMPT_BYTES
+# 段级预算——工单 buy-guide/01 后词表行含选购方案名、体积过 3KB）+ 澄清历史
 # （CLARIFICATION_HISTORY_CAP=2500 字符 × 6 ≈ 15KB + 标注）+ 契约文本 ≈ 1KB
 # + 系统提示词 ≈ 3.3KB + JSON 壳 ≈ 0.1KB + 参考清单 / 全文段壳 ≈ 0.5KB ≈
-# 53.2KB（实测 53168 字节）→ 全文预算 = 128KB − 10KB 目标余量 − 53.2KB −
-# 全文段壳 / 截断标注 ≈ 0.4KB ≈ 64.4KB → REFERENCE_FULLTEXT_BYTES = 67000
-# （wire 字节）→ 最坏形态总量 ≈120.6KB，总余量 ≈10.5KB ≥ 10KB。最坏情况
-# 结构测试钉死（tests/test_llm.py::
-# test_selection_prompt_worst_case_fits_request_budget），改大即红。超出的
-# 截头带标注（TRUNCATION_NOTICE 文案沿用），不静默丢内容。
-REFERENCE_FULLTEXT_BYTES = 67000
+# 56.3KB → 全文预算 = 128KB − 10KB 目标余量 − 56.3KB − 全文段壳 / 截断标注
+# ≈ 0.4KB ≈ 61.3KB → REFERENCE_FULLTEXT_BYTES = 64000（按最坏情况结构测试
+# 实测校准：词表段增量后总量 ≈123KB，距 MAX_REQUEST_BYTES−6KB 边界仍留
+# ≈1.9KB；改大即红，见 tests/test_llm.py::test_selection_prompt_worst_case_fits_request_budget）。
+# 超出的截头带标注（TRUNCATION_NOTICE 文案沿用），不静默丢内容。
+REFERENCE_FULLTEXT_BYTES = 64000

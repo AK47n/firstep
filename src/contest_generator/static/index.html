@@ -391,6 +391,28 @@
   .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
   .chip.out { background: rgba(139, 148, 158, .15); color: var(--muted); cursor: default; }
   .chip.out .reason { color: var(--muted); }
+  /* 买件指引（工单 buy-guide/02）：库外建议 chip 可展开选型参考面板 */
+  .sugg-wrap { display: contents; }
+  .chip.out.sugg-chip { cursor: pointer; }
+  .chip.out.sugg-chip:hover { border-color: var(--accent); }
+  .chip.out.sugg-chip:hover .reason { color: var(--text); }
+  .sugg-count { font-size: 11px; opacity: .85; border: 1px solid var(--border);
+                border-radius: 8px; padding: 0 6px; margin-left: 2px; }
+  .sugg-panel { display: none; flex-basis: 100%; border: 1px dashed var(--border);
+                border-radius: 8px; padding: 8px 12px; margin-top: 6px;
+                background: var(--panel-2); }
+  .sugg-wrap.active .sugg-panel { display: block; }
+  .sugg-panel-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .sugg-row { padding: 4px 0; border-top: 1px dashed var(--border); }
+  .sugg-row:first-of-type { border-top: none; }
+  .sugg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .sugg-name { font-weight: 600; font-family: var(--mono); }
+  .sugg-meta { font-family: var(--mono); font-size: 12px; color: var(--muted);
+               border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
+  .sugg-note { margin-top: 2px; font-size: 12.5px; color: var(--text); }
+  .sugg-suitable { margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .badge.sugg-rec { background: var(--ok-dim); color: var(--ok-bright); }
+  .badge.sugg-ai { background: var(--info-dim); color: var(--info); }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }

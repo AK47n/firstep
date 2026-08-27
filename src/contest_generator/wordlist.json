@@ -1,10 +1,230 @@
 [
-  { "category": "视觉模块", "models": ["K230", "OpenMV", "摄像头"] },
-  { "category": "声光提示器件", "models": ["LED", "蜂鸣器"] },
-  { "category": "感知传感器", "models": ["编码器", "MPU6050", "九轴传感器", "红外传感器", "超声波传感器"] },
-  { "category": "执行机构", "models": ["电机", "舵机"] },
-  { "category": "无线通信模块", "models": ["ESP8266", "蓝牙模块", "NRF24L01"] },
-  { "category": "显示模块", "models": ["OLED", "数码管"] },
-  { "category": "定位模块", "models": ["GPS", "北斗模块"] },
-  { "category": "电源模块", "models": ["稳压模块", "充电管理模块"] }
+  {
+    "category": "视觉模块",
+    "models": ["K230", "OpenMV", "摄像头"],
+    "solutions": [
+      {
+        "name": "K230（CanMV，库内已有模块）",
+        "interface": "UART（CSV 帧给主控）+ 副控板",
+        "price": "￥100-200/板",
+        "note": "官方 CanMV 训练；库内 k230+coord_detect 已打通；图像识别/色块/形状",
+        "suitable": "视觉识别/色块追踪/大模型推理",
+        "recommended": true
+      },
+      {
+        "name": "OpenMV Cam H7",
+        "interface": "UART（Python 脚本）",
+        "price": "￥200-300/板",
+        "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果",
+        "suitable": "快速开发视觉功能/数字识别"
+      },
+      {
+        "name": "串口摄像头（JPEG 输出 UART 转接）",
+        "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+        "price": "￥30-60/个",
+        "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+        "suitable": "极简视觉/无副控板预算"
+      }
+    ]
+  },
+  {
+    "category": "声光提示器件",
+    "models": ["LED", "蜂鸣器"]
+  },
+  {
+    "category": "感知传感器",
+    "models": ["编码器", "MPU6050", "红外传感器", "超声波传感器", "磁力计"],
+    "solutions": [
+      {
+        "name": "超声波测距（HC-SR04）",
+        "interface": "GPIO trigger/echo（定时输入捕获读回响）",
+        "price": "￥3-8/个",
+        "note": "测 2cm-4m；5V 供电，echo 回 5V 需分压或串电阻；探头发声有方向性",
+        "suitable": "避障/定高/车位感知（>10cm 距离）",
+        "recommended": true
+      },
+      {
+        "name": "串口超声波（JSN-SR04T 等）",
+        "interface": "UART（帧协议，免捕获）",
+        "price": "￥15-30/个",
+        "note": "收发一体防水探头，免分压免定时器；帧格式查手册；低速但够用",
+        "suitable": "室内远距/空旷场地；省引脚场景",
+        "recommended": true
+      },
+      {
+        "name": "激光测距（VL53L0X）",
+        "interface": "I2C",
+        "price": "￥10-25/个",
+        "note": "测 3cm-2m、精度 1mm 级；I2C 地址/寄存器要初始化序列；光线强时需遮蔽",
+        "suitable": "近距离高精度测距/落点检测"
+      },
+      {
+        "name": "红外对管循迹数组（低价替代）",
+        "interface": "GPIO 数字量（5-8 路红外对管）",
+        "price": "￥5-15/组",
+        "note": "比灰度省一个 ADC/采集接口；黑白线识别与灰度同原理，日照下易误判；库内已有 xunji 灰度模块（更稳，首选）",
+        "suitable": "循迹赛道补充方案/预算极低",
+        "recommended": true
+      },
+      {
+        "name": "红外避障探头（GPIO）",
+        "interface": "GPIO 数字量（带电位器调距）",
+        "price": "￥2-6/个",
+        "note": "输出高低电平，免调试；探测 2-30cm 对应挡位；只能做有无判定",
+        "suitable": "撞墙检测/近距避障/边界判定"
+      },
+      {
+        "name": "磁力计指南针（QMC5883L）",
+        "interface": "I2C（QMC/IST 系列同寄存器族）",
+        "price": "￥5-15/个",
+        "note": "出 2D 航向角；需椭球标定与磁偏角校正；库内 imu_uart/MPU6050 可作信息融合",
+        "suitable": "航向保持/无 GPS 场的朝向判定",
+        "recommended": true
+      },
+      {
+        "name": "磁力计指南针（HMC5883L）",
+        "interface": "I2C",
+        "price": "￥8-20/个",
+        "note": "经典型号、例程最多；已停产抖货多，注意区分翻新",
+        "suitable": "航向保持/依赖旧例程的项目"
+      },
+      {
+        "name": "磁力计指南针（IST8310）",
+        "interface": "I2C 或 SPI",
+        "price": "￥15-40/个",
+        "note": "常与 BMI160/MPU9250 底座搭配；低噪声，需配套驱动库",
+        "suitable": "高精度姿态/飞控系扩展"
+      }
+    ]
+  },
+  {
+    "category": "执行机构",
+    "models": ["电机", "舵机"],
+    "solutions": [
+      {
+        "name": "直流减速电机 + TB6612 双路驱动板（库内已有 motor 模块）",
+        "interface": "GPIO PWM + 方向 IO",
+        "price": "￥15-30/套（电机+驱动）",
+        "note": "两路 1.2A；带编码器版本可闭环；库内 API 已对齐双平台",
+        "suitable": "循迹小车/两轮差速",
+        "recommended": true
+      },
+      {
+        "name": "L298N 大电流驱动板",
+        "interface": "GPIO PWM（无细分，压降 ~1.5V）",
+        "price": "￥10-20/块",
+        "note": "双 H 桥；发热大、压降大，适合大轮大车；无编码器闭环",
+        "suitable": "大电流/低成本驱动"
+      },
+      {
+        "name": "车模自带驱动板（整车/轮组+驱动成品）",
+        "interface": "UART 或现成接线按说明书",
+        "price": "￥80-200/套",
+        "note": "到手即用，但接线不标准；生成器按库内模块写，需改引脚宏",
+        "suitable": "快速起步/学生套件"
+      }
+    ]
+  },
+  {
+    "category": "无线通信模块",
+    "models": ["ESP8266", "蓝牙模块", "NRF24L01"],
+    "solutions": [
+      {
+        "name": "NRF24L01 2.4G 点对点",
+        "interface": "SPI（裸寄存器或参考库）",
+        "price": "￥10-20/对",
+        "note": "双向低功耗；信道/地址自配；短帧传输数据包",
+        "suitable": "双车通信/遥控/无线触发（距离 20-50m）",
+        "recommended": true
+      },
+      {
+        "name": "蓝牙 4.0/5.0（HM-10 等 BLE 模块）",
+        "interface": "UART 串口透传",
+        "price": "￥10-20/个",
+        "note": "手机连 App 控；最大 1Mbps 级；需配对",
+        "suitable": "手机端/调试/低速率遥测",
+        "recommended": true
+      },
+      {
+        "name": "ESP8266 WiFi 模块",
+        "interface": "UART AT 指令",
+        "price": "￥8-15/个",
+        "note": "接入路由器发数据；能上云（MQTT）；配网复杂",
+        "suitable": "地面站/手机网页监控（200m 内）"
+      },
+      {
+        "name": "LoRa 数传（SX1278 等）",
+        "interface": "SPI",
+        "price": "￥30-60/对",
+        "note": "超远距离 1-3km、低速率 2.7kbps；丢包重传自写；占 SPI",
+        "suitable": "远距双机通信/大场地"
+      }
+    ]
+  },
+  {
+    "category": "显示模块",
+    "models": ["OLED", "数码管"]
+  },
+  {
+    "category": "定位模块",
+    "models": ["GPS", "北斗模块"],
+    "solutions": [
+      {
+        "name": "GPS/北斗（NEO-6M/ATGM336H 等）",
+        "interface": "UART（NMEA 0183）",
+        "price": "￥20-40/个",
+        "note": "定位 2.5m 级；冷启动 30s-1min；室内无信号——电赛场地多在室内，慎用",
+        "suitable": "室外/开阔场地定位",
+        "recommended": true
+      },
+      {
+        "name": "UWB 定位（库内已有 uwb_uart 模块）",
+        "interface": "UART",
+        "price": "￥150-400/套",
+        "note": "室内 10cm 级定位；库内 ALX-AOA 套件有例程；需要基站布点",
+        "suitable": "室内高精度定位/位置场",
+        "recommended": true
+      },
+      {
+        "name": "蓝牙信标定位（Estimote/自建 Beacon）",
+        "interface": "UART/扫描 RSSI",
+        "price": "￥30-60/套",
+        "note": "精度 1-3m、RSSI 波动大；热门但只能做粗定位",
+        "suitable": "室内低精度定位/区域判定"
+      }
+    ]
+  },
+  {
+    "category": "电源模块",
+    "models": ["稳压模块", "充电管理模块"]
+  },
+  {
+    "category": "遥控接收",
+    "models": ["红外遥控接收头", "NRF24L01 遥控", "蓝牙遥控"],
+    "solutions": [
+      {
+        "name": "红外遥控接收头 VS1838B",
+        "interface": "GPIO 中断 + NEC 解码（需自写解码，约 20 行）",
+        "price": "￥2-5/套（接收头+遥控器）",
+        "note": "视距 ~8m、需对准；占 1 个定时器；现场防误触需加校验",
+        "suitable": "现场遥控启动/停车/模式切换；室内无遮挡",
+        "recommended": true
+      },
+      {
+        "name": "NRF24L01 2.4G 遥控（含手柄/摇杆）",
+        "interface": "SPI（裸寄存器，需自写驱动）",
+        "price": "￥15-30/对",
+        "note": "双向通信、多信道可编组；SPI 驱动与配对逻辑要自写；CE/CSN 占 2-3 个 IO",
+        "suitable": "远距遥控（>8m）/双车协同/多车编组",
+        "recommended": true
+      },
+      {
+        "name": "蓝牙遥控（HM-10 / HC-05）",
+        "interface": "UART 透明传输",
+        "price": "￥10-20/个",
+        "note": "手机 App 直接控，免自写协议；现场手机信号干扰需注意；HC-05 是主从一体",
+        "suitable": "日常调试 / 手机方案 / 数据透传"
+      }
+    ]
+  }
 ]

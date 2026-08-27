@@ -53,8 +53,7 @@ from .reference_library import (
 from .sse import SseEmitter  # 终端事件发射面（sse 是叶子模块，运行时导入无环）
 from .wordlist import (
     HardwareWordGroup,
-    category_names,
-    model_names,
+    SolutionOption,
 )
 
 if TYPE_CHECKING:
@@ -374,17 +373,24 @@ class OutOfLibrarySuggestion:
 
     name = 展示名：词表内条目（型号或类别）原样显示；词表外型号经解析器
     降级为其类别名（degraded=True）。examples 常识举例（用户自行核实）。
+    solutions = 买件指引的可选方案（词表确定性知识，工单 buy-guide/01）——
+    展示层亮全部方案；selected = LLM 从 solutions.name 里选的「AI 建议」
+    （词表外 → 置空不高亮，编造不阻断导览）。
     """
 
     name: str
     examples: tuple[str, ...] = ()
     degraded: bool = False  # 词表外型号 → 降级为类别名显示
+    solutions: tuple[SolutionOption, ...] = ()  # 买件指引方案（词表知识）
+    selected: str = ""  # LLM 选出的 AI 建议方案名（词表 solutions 内才保留）
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "examples": list(self.examples),
             "degraded": self.degraded,
+            "solutions": [solution.to_dict() for solution in self.solutions],
+            "selected": self.selected,
         }
 
 
@@ -806,8 +812,6 @@ def _parse_suggestions(
         raise SelectionError(f"requirements[{req_index}] 的 suggestions 必须是数组")
     if raw and not hardware_words:
         raise SelectionError("模型输出了库外建议但未提供硬件词表")
-    categories = category_names(hardware_words)
-    models = model_names(hardware_words)
     suggestions: list[OutOfLibrarySuggestion] = []
     for index, item in enumerate(raw):
         if not isinstance(item, dict):
@@ -827,25 +831,78 @@ def _parse_suggestions(
                 f"requirements[{req_index}] suggestions[{index}] 的 examples "
                 "必须是字符串数组"
             )
-        if name in categories or name in models:
+        matched = _solution_group(name, hardware_words)  # 命中判定单源（审查项）
+        if matched is not None:
             suggestions.append(
-                OutOfLibrarySuggestion(name=name, examples=tuple(examples))
+                OutOfLibrarySuggestion(
+                    name=name,
+                    examples=tuple(examples),
+                    solutions=matched.solutions,
+                    selected=_resolve_selected(item, matched.solutions),
+                )
             )
             continue
         # 词表外：降级为类别（模型给出词表内类别名时）或拒收
         category = item.get("category")
-        if isinstance(category, str) and category in categories:
-            suggestions.append(
-                OutOfLibrarySuggestion(
-                    name=category, examples=tuple(examples), degraded=True
+        if isinstance(category, str):
+            matched = _solution_group(category, hardware_words)
+            if matched is not None:
+                suggestions.append(
+                    OutOfLibrarySuggestion(
+                        name=category,
+                        examples=tuple(examples),
+                        degraded=True,
+                        solutions=matched.solutions,
+                        selected=_resolve_selected(item, matched.solutions),
+                    )
                 )
-            )
-            continue
+                continue
         raise SelectionError(
             f"库外建议的硬件名不在硬件词表中：{name}（词表外型号请降级为"
             "词表内的类别名）"
         )
     return tuple(suggestions)
+
+
+def _solution_group(
+    name: str, hardware_words: Sequence[HardwareWordGroup]
+) -> HardwareWordGroup | None:
+    """词表行命中判定单源（审查项 buy-guide/01-1：原 _parse_suggestions 用
+    categories/models 集合判定、_entry_solutions 又线性重扫一遍——同一命中
+    语义两种写法）。类别名命中该行；型号名命中它所属的行（同行的 solutions
+    全体展示——买件指引按类别给方案，型号不单独定义方案）；未命中 = None。
+    """
+    for group in hardware_words:
+        if group.category == name or name in group.models:
+            return group
+    return None
+
+
+def _solutions_for(
+    name: str, hardware_words: Sequence[HardwareWordGroup]
+) -> tuple[SolutionOption, ...]:
+    """库外建议的买件指引方案：词表行命中 → 该行 solutions；未命中 = 空。"""
+    matched = _solution_group(name, hardware_words)
+    return matched.solutions if matched is not None else ()
+
+
+def _resolve_selected(
+    item: Mapping[str, Any], solutions: Sequence[SolutionOption]
+) -> str:
+    """LLM 可选的 `selected`（AI 建议方案名）：必须在词表 solutions.name 内。
+
+    词表外 / 未提供 = 空串（不高亮、不阻断）——编造方案名不报错，只是
+    展示层无「AI 建议」徽标（买件指引是导览，不是判决；宁缺毋编由词表
+    solutions 保证，selected 只是高亮）。solutions 由调用方传入（命中行已
+    知，不再重复查词表）。
+    """
+    raw = item.get("selected")
+    if not isinstance(raw, str) or not raw:
+        return ""
+    for solution in solutions:
+        if solution.name == raw:
+            return raw
+    return ""
 
 
 def _parse_reference_ids(
