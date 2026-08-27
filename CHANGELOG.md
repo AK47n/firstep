@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ae16bdc7db51663ad3a7963097534768dfc16069 -->
+<!-- changelog-auto: last-commit=ca9af1890d0535b1a51a42cb6c77b8ff863f55bd -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 02:36 confirm 仓库级统一——8 处原生 confirm 迁移共享弹窗 + alert 归 toast（工单 master-library-ui-2/05）
 - 12:30 生成页泡泡状态栏点击黑屏——页签切换误绑 step-nav 按钮
 - 13:19 工单 task-progress/01：任务拆解——AI 把题面+功能需求+评分点+接口+main.c 拆成有序任务清单，落盘 .contest_tasks.json
+- 13:40 工单 task-progress/02：单任务执行——一次 LLM 实现一个任务，备份 + 编译验证闭环 + 状态回填
 
 ## 2026-08-26
 - 00:06 模块编辑弹窗（工单 06）：每行「编辑」→ 平台级编辑模态（复用 05 骨架 + addFileRow/collectFiles/pickFilesInto 文件行机制）：平台下拉切换、套件词表 datalist（libPlatformKits 库内去重）、购买链接 URL 校验（libIsValidHttpUrl，空=保留原值）、文件清单（含内嵌母版态）+ 逐文件 ✕ 确认删除、新文件行/磁盘选取推送（POST platform-files 携带硬件绑定与身份现值）；保存身份/推送/删除成功 → 返回 manifest 本地替换即时刷新表格与统计条，失败展示原因表单保留；LOW-MEDIUM 修复（删最后文件后平台条目移除 → rebuildPlatSelect 重建下拉落位）+ isConnected 守卫（数据始终更新，05 同构）+ 消息红色兜底；tests/js 305 绿、冒烟 40 项 PASS、pytest 2365 绿；评审两轴无硬违规（多选删除为 Spec 判定可接受口径差异）
