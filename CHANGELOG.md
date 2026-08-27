@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=ca2a26daa82ea5001daf641dd623c11d5d956a50 -->
+<!-- changelog-auto: last-commit=94425fd00680ac33fb43c046f659748790235803 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-08-28
+- 00:18 任务商量与序号（task-chat/01-03）：每卡多轮对话区 + 对话结论采纳注入执行 + 建议序号
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
