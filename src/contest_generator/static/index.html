@@ -2310,9 +2310,12 @@ import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from 
 // ---------------------------------------------------------------------------
 // 页签
 // ---------------------------------------------------------------------------
-document.querySelectorAll("nav button").forEach((btn) => {
+// 页签按钮选择器限定 [data-tab]（bug 修复：裸 nav button 会把生成页
+// #step-nav 里的 step-dot 泡泡 / 收起按钮一起绑进页签切换——点击泡泡时
+// btn.dataset.tab 为 undefined，section.page 全被剥掉 active → 整页黑屏）
+document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll("nav button[data-tab]").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll("section.page").forEach((s) =>
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
     // 进度条只属于生成流程：切出隐藏，切回按完成数恢复显示
