@@ -83,6 +83,7 @@ EVENT_VERIFY_RESULT = "verify_result"
 # LLM 调用开始（分钟级）；执行侧 task_executing（工单 02）+ 复用
 # compile_start / fix_start / verify_result 既有词表。
 EVENT_TASK_PLANNING = "task_planning"
+EVENT_TASK_EXECUTING = "task_executing"
 
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；

@@ -77,9 +77,38 @@ export function tasksProgressText(plan) {
   return "进度 " + done + "/" + tasks.length;
 }
 
+/** 验证状态徽章 + 摘要文案（深化 / 任务执行结果面板共用，单源防分叉——
+ * 曾两处各抄一份 if/else，措辞漂移即分叉）。returns {badge, detail}：
+ * badge = 内嵌 HTML 徽章；detail = 转义后的摘要文本（调用方决定布局）。 */
+export function verifyStatusMarkup(data, fallbacks) {
+  const compile = (data && data.compile) || {};
+  const fb = fallbacks || {};
+  if (data && data.status === "verified") {
+    return {
+      badge: '<span class="ok" style="font-weight:600">✓ 已验证（编译通过）</span>',
+      detail: esc("编译通过 · exit "
+        + (compile.exit_code === null || compile.exit_code === undefined ? "—" : compile.exit_code)
+        + (compile.summary ? " · " + compile.summary : "")),
+    };
+  }
+  if (data && data.status === "unverified") {
+    return {
+      badge: '<span style="color:var(--warn);font-weight:600">⚠ 未验证（无工具链降级）</span>',
+      detail: esc((data && data.message) || fb.unverified
+        || "未检测到编译工具链：结果已写入 main.c，但未经编译验证——请配置工具链后手动编译（上板类任务可直接人工标记为已验证）。"),
+    };
+  }
+  return {
+    badge: '<span style="color:var(--danger);font-weight:600">✗ 未通过（编译验证失败）</span>',
+    detail: esc((data && data.message) || fb.failed
+      || "编译验证未通过，结果已写入 main.c（已备份，可回滚）。"),
+  };
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
     taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
+    verifyStatusMarkup,
   });
 }

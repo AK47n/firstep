@@ -598,6 +598,7 @@ class FakeLLM:
         deepened_main_c: str = "",
         report_draft: tuple[str, str] = ("AI 生成的方案论证", "AI 生成的软件流程"),
         task_plan: TaskPlan | None = None,
+        executed_main_c: str = "",
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -615,6 +616,7 @@ class FakeLLM:
         self._task_plan = task_plan or TaskPlan(
             tasks=(Task(id="t1", title="占位任务", description="占位描述"),)
         )
+        self._executed_main_c = executed_main_c
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
@@ -641,6 +643,7 @@ class FakeLLM:
         self.plan_tasks_calls: list[
             tuple[str, str, tuple, tuple, tuple, str]
         ] = []
+        self.execute_task_calls: list[tuple[str, dict, str, tuple, str, str]] = []
 
     def generate_report_draft(
         self,
@@ -822,6 +825,27 @@ class FakeLLM:
         )
         return self._task_plan
 
+    def execute_task(
+        self,
+        main_c: str,
+        task: Mapping[str, Any],
+        note: str,
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        self.execute_task_calls.append(
+            (
+                main_c,
+                dict(task),
+                note,
+                tuple(module_interfaces),
+                problem_text,
+                qa_text,
+            )
+        )
+        return self._executed_main_c or main_c
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -969,6 +993,18 @@ class RecordingLLM:
     ) -> TaskPlan:
         self._record("plan_tasks")
         return TaskPlan()
+
+    def execute_task(
+        self,
+        main_c: str,
+        task: Mapping[str, Any],
+        note: str,
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        self._record("execute_task")
+        return main_c
 
     def generate_report_draft(
         self,

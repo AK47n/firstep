@@ -68,6 +68,7 @@ from contest_generator.selection import (
     ScorePoint,
     resolve_selection,
 )
+from contest_generator.task_progress import TaskPlan
 from contest_generator.reference_library import add_reference
 from contest_generator.report import (
     ACTION_EXCLUDE,
@@ -196,6 +197,28 @@ class RaisingLLM:
         manifest_summaries: Sequence[ManifestSummary],
         pin_summary: str,
     ) -> tuple[str, str]:
+        raise LLMError("服务不可用")
+
+    def plan_tasks(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+    ) -> TaskPlan:
+        raise LLMError("服务不可用")
+
+    def execute_task(
+        self,
+        main_c: str,
+        task: Mapping[str, Any],
+        note: str,
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
         raise LLMError("服务不可用")
 
 

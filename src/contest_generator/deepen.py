@@ -56,6 +56,83 @@ class DeepenError(ValueError):
     """深化失败（main.c 缺失 / 工程不可编译等），400 中文。"""
 
 
+def verify_compile_tail(
+    *,
+    llm: LLM,
+    platform: str,
+    output_dir: Path,
+    work_root: Path,
+    problem_text: str,
+    module_slugs: Sequence[str],
+    main_c: str,
+    uv4_override: str,
+    make_override: str,
+    emit: SseEmitter,
+    backup_id: str,
+    main_diff: dict[str, Any] | None,
+    subject: str = "深化结果",
+) -> dict[str, Any]:
+    """编译验证闭环尾段（run_deepen 与 run_task 共用，工单 task-progress/02）。
+
+    工具链探测（resolve_compile_toolchain 单源，config 覆盖 > 自动）→ 无 =
+    大声降级（探测抛 CompileRunnerError = 无工具链，语义与 /api/compile 的
+    起流前 400 同源，此处转降级不 400）；有 → 编译 → 失败修一轮（
+    run_fix_round 复用）→ 重编译 → 绿 = 已验证。不设自动循环，用户可重复
+    触发。
+
+    事件：compile_start（复用 compile 词表）→ fix_start（仅首轮编译失败）→
+    verify_result。返回 done 载荷：
+    {"status": verified | unverified | failed, "backup_id", "compile":
+    {"passed", "exit_code", "summary"}, "main_diff", "message"}——
+    backup_id / main_diff 由调用方传入（写盘前已备份、diff 已算好）。
+    subject = 结果主语（深化 / 任务上下文用词，message 措辞服务调用方语义
+    ——共享尾段不泄漏「深化」字眼）。
+    """
+    try:
+        uv4, make = resolve_compile_toolchain(platform, uv4_override, make_override)
+    except CompileRunnerError:
+        emit.progress(ProgressEvent(type=EVENT_VERIFY_RESULT))
+        return {
+            "status": STATUS_UNVERIFIED,
+            "backup_id": backup_id,
+            "compile": {"passed": None, "exit_code": None, "summary": ""},
+            "main_diff": main_diff,
+            "message": _status_message(STATUS_UNVERIFIED, subject),
+        }
+
+    last_build: BuildLog | None = None
+    status = STATUS_FAILED
+    for attempt in (1, 2):  # 至多一次修复后重编译（不设自动循环，用户可重复触发）
+        emit.progress(ProgressEvent(type=EVENT_COMPILE_START))
+        build = collect_build_log(platform, output_dir, uv4=uv4, make=make)
+        last_build = build
+        if compile_passed(platform, build.run.exit_code):
+            status = STATUS_VERIFIED
+            break
+        if attempt == 1:
+            emit.progress(ProgressEvent(type=EVENT_FIX_START))
+            run_fix_round(
+                llm,
+                error_text=build.run.output,
+                output_dir=output_dir,
+                backup_root=fix_backup_root(work_root),
+                problem_text=problem_text,
+                platform=platform,
+                module_slugs=module_slugs,
+                main_c=main_c,
+                previous_fixes=(),
+                emit=emit.progress,
+            )
+    emit.progress(ProgressEvent(type=EVENT_VERIFY_RESULT))
+    return {
+        "status": status,
+        "backup_id": backup_id,
+        "compile": _compile_summary(last_build),
+        "main_diff": main_diff,
+        "message": _status_message(status, subject),
+    }
+
+
 def run_deepen(
     *,
     llm: LLM,
@@ -112,56 +189,24 @@ def run_deepen(
     #    LLM 自述——「说做了 A 实际做了 B」场景下展示的是改动的真相）
     backup_id = _backup_main_c(work_root, output_dir, main_c)
     (output_dir / "main.c").write_text(deepened, encoding="utf-8")
-    main_diff = _main_diff(main_c, deepened)
+    diff = main_diff(main_c, deepened)  # 公共 main_diff（工单 task-progress/02）
 
-    # 5. 编译验证闭环：工具链探测（resolve_compile_toolchain 单源，config 覆盖
-    #    > 自动）→ 无 = 大声降级（探测抛 CompileRunnerError = 无工具链，语义
-    #    与 /api/compile 的起流前 400 同源，此处转降级不 400）；有 → 编译 →
-    #    失败修一轮 → 重编译 → 绿 = 已验证
-    try:
-        uv4, make = resolve_compile_toolchain(platform, uv4_override, make_override)
-    except CompileRunnerError:
-        emit.progress(ProgressEvent(type=EVENT_VERIFY_RESULT))
-        return {
-            "status": STATUS_UNVERIFIED,
-            "backup_id": backup_id,
-            "compile": {"passed": None, "exit_code": None, "summary": ""},
-            "main_diff": main_diff,
-            "message": _status_message(STATUS_UNVERIFIED),
-        }
-
-    last_build: BuildLog | None = None
-    status = STATUS_FAILED
-    for attempt in (1, 2):  # 至多一次修复后重编译（不设自动循环，用户可重复触发）
-        emit.progress(ProgressEvent(type=EVENT_COMPILE_START))
-        build = collect_build_log(platform, output_dir, uv4=uv4, make=make)
-        last_build = build
-        if compile_passed(platform, build.run.exit_code):
-            status = STATUS_VERIFIED
-            break
-        if attempt == 1:
-            emit.progress(ProgressEvent(type=EVENT_FIX_START))
-            run_fix_round(
-                llm,
-                error_text=build.run.output,
-                output_dir=output_dir,
-                backup_root=fix_backup_root(work_root),
-                problem_text=problem_text,
-                platform=platform,
-                module_slugs=module_slugs,
-                main_c=deepened,
-                previous_fixes=(),
-                emit=emit.progress,
-            )
-    emit.progress(ProgressEvent(type=EVENT_VERIFY_RESULT))
-    compile_summary = _compile_summary(last_build)
-    return {
-        "status": status,
-        "backup_id": backup_id,
-        "compile": compile_summary,
-        "main_diff": main_diff,
-        "message": _status_message(status),
-    }
+    # 5. 编译验证闭环（公共尾段，工单 task-progress/02 抽取）：无工具链 = 大声
+    #    降级（状态 = 未验证，结果保留）；有 → 编译 → 失败修一轮 → 重编译 → 绿
+    return verify_compile_tail(
+        llm=llm,
+        platform=platform,
+        output_dir=output_dir,
+        work_root=work_root,
+        problem_text=problem_text,
+        module_slugs=module_slugs,
+        main_c=deepened,
+        uv4_override=uv4_override,
+        make_override=make_override,
+        emit=emit,
+        backup_id=backup_id,
+        main_diff=diff,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +215,8 @@ def run_deepen(
 # 事实源 = 深化前 main_c vs 深化后 deepened（difflib.unified_diff, n=2），
 # 不依赖 LLM 自述（「说做了 A 实际做了 B」场景展示的是改动真相）；标题
 # 优先取被替换的 TODO 注释（需求可追踪），退化取注释行，再退化空串（前端
-# 用 hunk 行号 fallback）。
+# 用 hunk 行号 fallback）。**公共函数**（工单 task-progress/02：run_task 的
+# 单任务 diff 与深化共用同一实现，不各写一份）。
 # ---------------------------------------------------------------------------
 
 _COMMENT_BLOCK_RE = re.compile(r"/\*(.*?)\*/")
@@ -178,7 +224,7 @@ _TODO_RE = re.compile(r"TODO|FIXME|XXX", re.IGNORECASE)
 _HUNK_HEADER_RE = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 
-def _main_diff(before: str, after: str) -> dict[str, Any] | None:
+def main_diff(before: str, after: str) -> dict[str, Any] | None:
     """深化前 vs 深化后的 main.c 确定性 diff；无差异 = None。
 
     返回：{"text": unified diff 全文, "stats": {"additions", "deletions",
@@ -321,13 +367,18 @@ def _summarize(output: str, parsed) -> dict[str, Any]:
     return summarize_compile_output(output, parsed)
 
 
-def _status_message(status: str) -> str:
-    """验证状态的中文提示（done 载荷 message 字段单源，三分支全活）。"""
+def _status_message(status: str, subject: str = "深化结果") -> str:
+    """验证状态的中文提示（done 载荷 message 字段单源，三分支全活）。
+
+    subject = 结果主语（深化 / 任务上下文用词）——共享尾段不泄漏「深化」
+    字眼给任务流（工单 task-progress/02 评审发现：任务 done 载荷误写
+    「深化结果已标记为已验证」）。
+    """
     if status == STATUS_VERIFIED:
-        return "编译验证通过：深化结果已标记为「已验证」"
+        return f"编译验证通过：{subject}已标记为「已验证」"
     if status == STATUS_UNVERIFIED:
         return (
             "未检测到工具链（stm32 需 Keil UV4 / mspm0 需 gmake，可在设置页填"
-            "路径覆盖）——深化结果已保留，但状态 = 未验证：请自行编译确认"
+            f"路径覆盖）——{subject}已保留，但状态 = 未验证：请自行编译确认"
         )
-    return "编译验证未通过（修复一轮后仍红）：深化结果保留，可回滚或再次触发深化"
+    return f"编译验证未通过（修复一轮后仍红）：{subject}保留，可回滚或再次执行"

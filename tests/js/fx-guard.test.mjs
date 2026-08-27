@@ -112,7 +112,7 @@ const DOMAINS = {
   "task.js": {
     taskStatusLabel: "fn", taskStatusBadgeClass: "fn", taskVerifyLabel: "fn",
     taskScoreRefsText: "fn", taskCardHTML: "fn", tasksGridHTML: "fn",
-    tasksProgressText: "fn",
+    tasksProgressText: "fn", verifyStatusMarkup: "fn",
   },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",

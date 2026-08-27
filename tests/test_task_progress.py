@@ -17,7 +17,11 @@ from fastapi.testclient import TestClient
 
 from contest_generator.platforms import PLATFORM_STM32
 from contest_generator.task_progress import (
+    STATUS_DOING,
+    STATUS_FAILED,
     STATUS_PENDING,
+    STATUS_UNVERIFIED,
+    STATUS_VERIFIED,
     TASKS_MANIFEST_BAK_FILENAME,
     TASKS_MANIFEST_FILENAME,
     Task,
@@ -28,7 +32,9 @@ from contest_generator.task_progress import (
     backup_task_plan,
     build_task_plan,
     discard_task_plan,
+    find_task,
     read_task_plan,
+    run_task,
     run_task_planning,
     write_task_plan,
 )
@@ -463,3 +469,342 @@ def test_tasks_plan_output_dir_missing_400(tasks_client):
     )
     assert resp.status_code == 400
     assert "不存在" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# run_task：单任务执行（工单 02）——备份 / 写盘 / 编译三态 / 状态回填
+# ---------------------------------------------------------------------------
+
+
+def _task_env(tmp_path):
+    """假模块库 + 假母版 + 生成工程 + 拆好任务清单（t1 循迹）。"""
+    from contest_generator.generator import generate_project
+
+    library = make_fake_module_library(tmp_path / "modules")
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    output_dir = tmp_path / "out"
+    generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+        problem_text="题面",
+    )
+    write_task_plan(
+        output_dir,
+        TaskPlan(
+            tasks=(
+                Task(id="t1", title="循迹", description="循迹决策"),
+                Task(id="t2", title="OLED 显示", description="显示", depends_on=("t1",)),
+            )
+        ),
+    )
+    return library, output_dir
+
+
+def _build(exit_code: int, output: str = ""):
+    """假编译结果（compile_runner.BuildLog 同构形状，照 test_deepen 先例）。"""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        platform=PLATFORM_STM32,
+        run=SimpleNamespace(
+            exit_code=exit_code, output=output, timed_out=False, duration=0.1
+        ),
+    )
+
+
+def _no_toolchain(monkeypatch):
+    """无工具链：resolve_compile_toolchain 抛 CompileRunnerError（转降级）。"""
+    from contest_generator.compile_runner import CompileRunnerError
+
+    def _raise(platform, uv4_override="", make_override=""):
+        raise CompileRunnerError("未检测到工具链")
+
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain", _raise
+    )
+
+
+def test_run_task_without_toolchain_degrades_loudly(tmp_path, monkeypatch):
+    """无工具链 → 降级：结果保留、状态 = unverified、备份存在、清单回填未验证。"""
+    library, output_dir = _task_env(tmp_path)
+    _no_toolchain(monkeypatch)
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    events: list[str] = []
+
+    def emit_progress(event) -> None:
+        events.append(event.type)
+
+    result = run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=emit_progress),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_UNVERIFIED
+    assert "未验证" in result["message"]
+    assert result["backup_id"]
+    assert "循迹已实现" in (output_dir / "main.c").read_text(encoding="utf-8")
+    assert events[0] == "task_executing"
+    assert "verify_result" in events
+    # 清单回填：任务状态 = unverified
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.tasks[0].status == STATUS_UNVERIFIED
+    assert saved.tasks[1].status == STATUS_PENDING  # 未执行任务不受影响
+
+
+def test_run_task_verified_when_compile_passes(tmp_path, monkeypatch):
+    """有工具链 + 编译绿 → 状态 = verified；note 进 LLM 调用。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    result = run_task(
+        llm=llm,
+        task_id="t1",
+        note="循迹用 10ms 定时器",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_VERIFIED
+    assert result["compile"]["passed"] is True
+    assert result["task"]["status"] == STATUS_VERIFIED
+    assert "main_diff" in result
+    # note 透传 LLM
+    assert llm.execute_task_calls[0][2] == "循迹用 10ms 定时器"
+    assert llm.execute_task_calls[0][1]["id"] == "t1"
+
+
+def test_run_task_failed_after_one_fix_round(tmp_path, monkeypatch):
+    """修一轮仍红 → 状态 = failed（结果保留，中文提示）。"""
+    from types import SimpleNamespace
+
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(2, "error: x"),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.run_fix_round",
+        lambda llm, **kwargs: SimpleNamespace(backup_id="fix-1", results=()),
+    )
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    result = run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_FAILED
+    assert "仍红" in result["message"]
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.tasks[0].status == STATUS_FAILED
+
+
+def test_run_task_unknown_task_id_raises(tmp_path):
+    """任务 id 不存在 / 清单未拆解 → TaskError（400 中文）。"""
+    library, output_dir = _task_env(tmp_path)
+    llm = FakeLLM()
+    with pytest.raises(TaskError):
+        run_task(
+            llm=llm,
+            task_id="t99",
+            note="",
+            problem_text="题面",
+            qa_text="",
+            manifests=[],
+            platform=PLATFORM_STM32,
+            library_dir=library,
+            master_project_dir=tmp_path,
+            main_c="main",
+            output_dir=output_dir,
+            work_root=tmp_path / "work",
+            emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        )
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    with pytest.raises(TaskError):
+        run_task(
+            llm=llm,
+            task_id="t1",
+            note="",
+            problem_text="题面",
+            qa_text="",
+            manifests=[],
+            platform=PLATFORM_STM32,
+            library_dir=library,
+            master_project_dir=tmp_path,
+            main_c="main",
+            output_dir=empty_dir,
+            work_root=tmp_path / "work",
+            emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        )
+
+
+def test_run_task_note_persisted_and_message_task_flavored(tmp_path, monkeypatch):
+    """note 落盘（刷新不丢，spec 用户故事 10）；message 用「任务」措辞（不泄
+    漏「深化」字眼——共享尾段 subject 参数，评审发现）。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    result = run_task(
+        llm=llm,
+        task_id="t1",
+        note="循迹用 10ms 定时器",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_VERIFIED
+    assert "任务结果" in result["message"]  # 任务语境措辞
+    assert "深化" not in result["message"]  # 不泄漏深化字眼
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.tasks[0].note == "循迹用 10ms 定时器"  # note 落盘
+
+
+def test_run_task_empty_llm_result_reverts_doing(tmp_path):
+    """LLM 空结果 → TaskError；任务状态恢复 previous（不钉死在 doing）。"""
+    library, output_dir = _task_env(tmp_path)
+    llm = FakeLLM(executed_main_c="   ")
+    with pytest.raises(TaskError):
+        run_task(
+            llm=llm,
+            task_id="t1",
+            note="",
+            problem_text="题面",
+            qa_text="",
+            manifests=[],
+            platform=PLATFORM_STM32,
+            library_dir=library,
+            master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+            main_c="int main(void) { /* TODO */ while (1); }\n",
+            output_dir=output_dir,
+            work_root=tmp_path / "work",
+            emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        )
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.tasks[0].status == STATUS_PENDING  # 恢复 previous，不钉 doing
+
+
+def test_find_task_missing_plan():
+    """清单未拆解（None）→ TaskError；找不到任务 → TaskError。"""
+    with pytest.raises(TaskError):
+        find_task(None, "t1")
+    plan = TaskPlan(tasks=(Task(id="t1", title="A", description="x"),))
+    assert find_task(plan, "t1").title == "A"
+    with pytest.raises(TaskError):
+        find_task(plan, "t2")
+
+
+def test_tasks_plan_read_endpoint(tasks_client):
+    """清单读取端点：未拆解 = plan None；拆解后 = 清单全量（回滚后刷新用）。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    resp = client.post("/api/tasks/plan-read", json={"output_dir": output_dir})
+    assert resp.status_code == 200
+    assert resp.json()["plan"] is None
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    resp = client.post("/api/tasks/plan-read", json={"output_dir": output_dir})
+    assert resp.status_code == 200
+    assert resp.json()["plan"]["tasks"][0]["title"] == "循迹"
+
+
+def test_tasks_execute_sse_flow(tasks_client, monkeypatch):
+    """执行端点：task_executing → done（verified）；清单状态已回填。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(
+            tasks=(Task(id="t1", title="循迹", description="循迹决策"),)
+        )
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    holder["llm"] = FakeLLM(
+        executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    resp = client.post(
+        "/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"}
+    )
+    assert resp.status_code == 200, resp.text
+    events = _sse_events(resp)
+    types = [event_type for event_type, _ in events]
+    assert types[-1] == "done"
+    assert "task_executing" in types
+    done = events[-1][1]
+    assert done["status"] == STATUS_VERIFIED
+    assert done["task"]["status"] == STATUS_VERIFIED
+    # 清单落盘回填
+    saved = json.loads(
+        (Path(output_dir) / TASKS_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert saved["tasks"][0]["status"] == STATUS_VERIFIED
+    # 写盘生效
+    assert "循迹已实现" in (Path(output_dir) / "main.c").read_text(encoding="utf-8")
