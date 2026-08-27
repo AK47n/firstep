@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=28358f8fbe258220dcabd72561407644f7438edb -->
+<!-- changelog-auto: last-commit=64876acc2b7ac5ac5594477a11449a5a55280c3a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -31,6 +31,7 @@
 - 20:14 工单 topic-framework/04：webapp 装配 + 前端（题型列/下拉/骨架提示行）
 - 20:14 工单 topic-framework/05：三条例目标题型 + 巡线决策框架文件（21F / 26H / car-1-1）
 - 20:17 词表：题型 / 题型框架（工单 topic-framework 收尾，CONTEXT.md 续行）
+- 20:17 工单 topic-framework/05：标记 resolved
 
 ## 2026-08-26
 - 00:06 模块编辑弹窗（工单 06）：每行「编辑」→ 平台级编辑模态（复用 05 骨架 + addFileRow/collectFiles/pickFilesInto 文件行机制）：平台下拉切换、套件词表 datalist（libPlatformKits 库内去重）、购买链接 URL 校验（libIsValidHttpUrl，空=保留原值）、文件清单（含内嵌母版态）+ 逐文件 ✕ 确认删除、新文件行/磁盘选取推送（POST platform-files 携带硬件绑定与身份现值）；保存身份/推送/删除成功 → 返回 manifest 本地替换即时刷新表格与统计条，失败展示原因表单保留；LOW-MEDIUM 修复（删最后文件后平台条目移除 → rebuildPlatSelect 重建下拉落位）+ isConnected 守卫（数据始终更新，05 同构）+ 消息红色兜底；tests/js 305 绿、冒烟 40 项 PASS、pytest 2365 绿；评审两轴无硬违规（多选删除为 Spec 判定可接受口径差异）
