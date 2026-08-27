@@ -42,6 +42,7 @@ from contest_generator.reference_library import (
     add_reference,
     archive_reference,
     build_material_manifest,
+    build_topic_framework,
     delete_reference,
     draft_description,
     get_reference,
@@ -432,6 +433,244 @@ def test_reference_entry_from_dict_rejects_invalid_platform(tmp_path):
 
     with pytest.raises(ReferenceError, match="元数据不合法"):
         list_references(root)
+
+
+def test_add_reference_topic_type_roundtrip(tmp_path):
+    """题型标记（工单 topic-framework/01）：入库带 topic_type → 元数据落盘、
+    读盘回读、序列化带出。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="巡线决策例程",
+        type="例程代码",
+        description="2021F 巡线送药小车决策层源码",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        topic_type="line_follow",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+
+    assert entry.topic_type == "line_follow"
+    meta = json.loads((root / entry.id / "reference.json").read_text(encoding="utf-8"))
+    assert meta["topic_type"] == "line_follow"
+    assert get_reference(root, entry.id).topic_type == "line_follow"
+    assert entry.to_dict()["topic_type"] == "line_follow"
+
+
+def test_add_reference_topic_type_defaults_empty(tmp_path):
+    """缺省 = 未标记（""）：既有录入流程不带 topic_type 字段行为不变。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="通用开发板资料",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+
+    assert entry.topic_type == ""
+    assert get_reference(root, entry.id).topic_type == ""
+
+
+def test_add_reference_rejects_invalid_topic_type(tmp_path):
+    """词表外题型大声失败（与平台 / 锚定词表同款严格）。"""
+    root = _reference_root(tmp_path)
+    with pytest.raises(ReferenceError, match="非法题型"):
+        add_reference(
+            root,
+            title="神秘题型资料",
+            type="说明书",
+            description="x",
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            topic_type="mystery_type",
+            files=_sample_files(),
+            kit_vocabulary=(),
+        )
+
+
+def test_reference_entry_from_dict_defaults_topic_type_for_old_meta(tmp_path):
+    """旧条目（reference.json 无 topic_type 字段）：读盘缺省 ""，向后兼容。"""
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="旧格式条目",
+        type="例程工程",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    entry = get_reference(root, list_references(root)[0].id)
+    entry_dir = root / entry.id
+    data = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    data.pop("topic_type")
+    (entry_dir / "reference.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+
+    assert get_reference(root, entry.id).topic_type == ""
+
+
+def test_reference_entry_from_dict_rejects_invalid_topic_type(tmp_path):
+    """词表外题型 = 元数据损坏：浏览时大声失败，不把坏数据带进列表。"""
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="正常条目",
+        type="例程工程",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    entry = get_reference(root, list_references(root)[0].id)
+    entry_dir = root / entry.id
+    data = json.loads((entry_dir / "reference.json").read_text(encoding="utf-8"))
+    data["topic_type"] = "mystery_type"
+    (entry_dir / "reference.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+
+    with pytest.raises(ReferenceError, match="元数据不合法"):
+        list_references(root)
+
+
+def test_update_reference_topic_type_roundtrip(tmp_path):
+    """编辑改题型（工单 topic-framework/01）：元数据更新落盘 + 回读。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="待编辑条目",
+        type="例程代码",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    updated = update_reference(
+        root,
+        entry.id,
+        title="待编辑条目",
+        type="例程代码",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        add_files={},
+        remove_files=(),
+        kit_vocabulary=(),
+        topic_type="line_follow",
+    )
+
+    assert updated.topic_type == "line_follow"
+    assert get_reference(root, entry.id).topic_type == "line_follow"
+
+
+def test_build_topic_framework_returns_none_without_topic_type(tmp_path):
+    """未标记题型 → None（无框架段，向后兼容）。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="无题型条目",
+        type="说明书",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    assert reference_library.build_topic_framework(root, entry) is None
+
+
+def test_build_topic_framework_reads_framework_file(tmp_path):
+    """正常读取：framework/main.c 全文返回（utf-8）。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="巡线决策例程",
+        type="例程代码",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        topic_type="line_follow",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    framework_dir = root / entry.id / "framework"
+    framework_dir.mkdir()
+    framework = "/* 巡线决策框架 */\ntypedef enum { S_IDLE, S_FOLLOW } state_t;\n"
+    (framework_dir / "main.c").write_text(framework, encoding="utf-8")
+
+    assert reference_library.build_topic_framework(root, entry) == framework
+
+
+def test_build_topic_framework_missing_file_returns_none(tmp_path):
+    """标了题型但文件缺失 → None（降级不抛错，走全文注入现行为）。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="巡线决策例程",
+        type="例程代码",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        topic_type="line_follow",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    assert reference_library.build_topic_framework(root, entry) is None
+
+
+def test_read_fulltext_excludes_framework_control_file(tmp_path):
+    """控制文件隔离：read_fulltext 不含 framework/main.c（与注入段不重复）。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="巡线决策例程",
+        type="例程代码",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        topic_type="line_follow",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    framework_dir = root / entry.id / "framework"
+    framework_dir.mkdir()
+    (framework_dir / "main.c").write_text("/* 框架段 */\n", encoding="utf-8")
+
+    fulltext = read_fulltext(root, entry)
+    assert "框架段" not in fulltext
+    assert "example.c" in fulltext
+
+
+def test_entry_stats_counts_framework_dir(tmp_path):
+    """体量照旧磁盘实况：framework/ 控制目录也计入（与删除影响面一致）。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="巡线决策例程",
+        type="例程代码",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    framework_dir = root / entry.id / "framework"
+    framework_dir.mkdir()
+    (framework_dir / "main.c").write_text("/* 框架段 */\n", encoding="utf-8")
+    count, total = reference_library.entry_stats(root / entry.id)
+
+    assert count == 3  # example.c + reference.json + framework/main.c
+    assert total > len("/* 框架段 */\n")
 
 
 def test_entry_stats_counts_whole_dir_including_unlisted_strays(tmp_path):
@@ -1590,6 +1829,117 @@ def test_references_add_platform_contract(tmp_path):
         "巡线模板",
         "旧式录入",
     ]
+
+
+def test_references_add_topic_type_contract(tmp_path):
+    """录入表单契约（工单 topic-framework/01）：POST 带 topic_type 入库、GET
+    响应带 topic_type；缺省 = ""；词表外值 400 大声失败。"""
+    client = _app(tmp_path, ReferenceLLM())
+    added = client.post(
+        "/api/references",
+        json={
+            "title": "巡线决策例程",
+            "type": "例程代码",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2021F",
+            "topic_type": "line_follow",
+            "files": {"xunji.c": "/* 巡线 */\n"},
+        },
+    )
+    assert added.status_code == 200
+    assert added.json()["topic_type"] == "line_follow"
+
+    listed = client.get("/api/references").json()
+    assert [e["topic_type"] for e in listed] == ["line_follow"]
+
+    # 缺省 = 未标记（向后兼容）
+    legacy = client.post(
+        "/api/references",
+        json={
+            "title": "无题型资料",
+            "type": "说明书",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_NONE,
+            "anchor_value": "",
+            "files": {"a.txt": "x"},
+        },
+    )
+    assert legacy.status_code == 200
+    assert legacy.json()["topic_type"] == ""
+
+    # 词表外值 400
+    bad = client.post(
+        "/api/references",
+        json={
+            "title": "神秘题型资料",
+            "type": "说明书",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_NONE,
+            "anchor_value": "",
+            "topic_type": "mystery_type",
+            "files": {"a.txt": "x"},
+        },
+    )
+    assert bad.status_code == 400
+    assert "非法题型" in bad.json()["detail"]
+
+
+def test_references_update_topic_type_contract(tmp_path):
+    """编辑表单契约（工单 topic-framework/01）：PUT 带 topic_type 落盘回读；
+    PUT 不带 = 清空（全量替换语义，与 platform 同款）。"""
+    client = _app(tmp_path, ReferenceLLM())
+    added = client.post(
+        "/api/references",
+        json={
+            "title": "巡线决策例程",
+            "type": "例程代码",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2021F",
+            "files": {"xunji.c": "/* 巡线 */\n"},
+        },
+    ).json()
+    # PUT 全量必填：不带 topic_type = 替换为 ""（旧前端兼容）
+    resp = client.put(
+        f"/api/references/{added['id']}",
+        json={
+            "title": "巡线决策例程",
+            "type": "例程代码",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2021F",
+            "platform": "stm32",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["topic_type"] == ""
+
+    # 带 topic_type = 落盘
+    resp2 = client.put(
+        f"/api/references/{added['id']}",
+        json={
+            "title": "巡线决策例程",
+            "type": "例程代码",
+            "description": "x",
+            "anchor_kind": ANCHOR_KIND_TOPIC,
+            "anchor_value": "2021F",
+            "platform": "stm32",
+            "topic_type": "line_follow",
+        },
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["topic_type"] == "line_follow"
+    assert client.get("/api/references").json()[0]["topic_type"] == "line_follow"
+
+
+def test_references_topic_types_endpoint(tmp_path):
+    """题型词表端点（工单 topic-framework/04）：GET /api/references/topic-types。"""
+    client = _app(tmp_path, ReferenceLLM())
+    resp = client.get("/api/references/topic-types")
+
+    assert resp.status_code == 200
+    assert set(resp.json()) == {"line_follow", "generic"}
 
 
 def test_confirm_route_passes_archive_wiring(tmp_path, fake_masters_dir):

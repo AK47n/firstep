@@ -443,6 +443,7 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
     },
     "reference_library": {
         "validate_topic_anchor": ("read", ""),
+        "validate_topic_type": ("read", ""),
         "module_kit_vocabulary": ("read", ""),
         "list_references": ("read", ""),
         # 在途工单（体量字段 file_count/size_bytes）新增的读函数：预先入表，
@@ -464,6 +465,9 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # reference.json、不触发提交；调用方在 add_reference 前调用、随条目
         # 事务入库（脚本写入口，注册表只管 src 模块内落盘面）
         "build_material_manifest": ("read", ""),
+        # 工单 topic-framework/02：题型框架段读取（framework/main.c）——只读
+        # 不落盘，不触发提交；框架文件随条目入库的兄弟动作，本函数无写面
+        "build_topic_framework": ("read", ""),
     },
     "topic_library": {
         "validate_topic_key": ("read", ""),
