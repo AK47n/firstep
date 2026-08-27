@@ -64,10 +64,10 @@ function renderReferences() {
   const f = refFilterContext();
   const rows = refSortEntries(refFilterEntries(list, f), { by: refUI.sortBy, dir: refUI.sortDir });
   if (!list.length) {
-    $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📚</div><div class="es-title">参考文件库暂无条目</div><div class="es-hint">用下方表单录入资料；生成时按锚定自动注入为学习素材。</div></div></td></tr>';
+    $("ref-rows").innerHTML = '<tr><td colspan="7" class="empty-td"><div class="empty-state"><div class="es-icon">📚</div><div class="es-title">参考文件库暂无条目</div><div class="es-hint">用下方表单录入资料；生成时按锚定自动注入为学习素材。</div></div></td></tr>';
   } else if (!rows.length) {
     // 过滤后的空结果 ≠ 库为空：提示「清空过滤」而不是「录入条目」
-    $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的参考条目</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
+    $("ref-rows").innerHTML = '<tr><td colspan="7" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的参考条目</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
   } else {
     $("ref-rows").innerHTML = rows.map((e) => refRowHTML(e, f)).join("");
   }
@@ -149,6 +149,19 @@ $("ref-anchor-kind").addEventListener("change", () => {
   $("ref-anchor-topic").classList.toggle("hidden", kind !== "topic");
 });
 
+// 题型词表（工单 topic-framework/04）：选项单源 = GET /api/references/topic-types
+// （与后端校验同源——前端不硬编码词表）；失败降级 = 空白选项（前端不阻断，
+// 后端校验兜底 400 中文）
+let refTopicTypes = [];
+export async function loadTopicTypes() {
+  try {
+    const types = await apiGet("/api/references/topic-types");
+    refTopicTypes = Array.isArray(types) ? types : [];
+  } catch (e) { refTopicTypes = []; }
+  $("ref-topic-type").innerHTML = '<option value="">（未标记）</option>'
+    + refTopicTypes.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+}
+
 // 最近一次浏览的条目缓存：删除确认框显示体量（避免删 1630 个文件还不知道多大）
 let refEntryCache = [];
 // 悬空锚定判定数据源（工单 04）：赛题库 key 清单（/api/topics）——降级 = 空数组
@@ -159,7 +172,7 @@ export async function loadReferences() {
   try {
     // 加载态占位（对偶模块库先例）：fetched 前给占位，读盘快也避免旧内容残留
     $("ref-msg").textContent = "";
-    $("ref-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">正在读取参考文件库…</div></div></td></tr>';
+    $("ref-rows").innerHTML = '<tr><td colspan="7" class="empty-td"><div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">正在读取参考文件库…</div></div></td></tr>';
     // 全量在手 → 客户端即时过滤 / 排序 / 统计（工单 02 替换服务端四框筛选）
     const entries = await apiGet("/api/references");
     refEntryCache = entries;
@@ -208,7 +221,8 @@ export async function editReference(entryId) {
     + '<button class="ref-files-close" title="关闭">×</button></div>'
     + '<div class="lib-edit-body">'
     + '<div class="row"><div style="flex:1"><label>标题</label><input class="ref-edit-title" type="text"></div>'
-    + '<div style="flex:1"><label>类型</label><input class="ref-edit-type" type="text"></div></div>'
+    + '<div style="flex:1"><label>类型</label><input class="ref-edit-type" type="text"></div>'
+    + '<div style="flex:1"><label>题型（未标记 = 不注入决策框架）</label><select class="ref-edit-topic-type"><option value="">（未标记）</option></select></div></div>'
     + '<label>锚定（套件型号只能从模块库已有 kit 词表选，不能自由输入）</label>'
     + '<div class="row"><select class="ref-edit-kind" style="width:130px">'
     + '<option value="topic">赛题编号</option><option value="kit">套件型号</option>'
@@ -260,6 +274,12 @@ export async function editReference(entryId) {
   titleEl.value = entry.title || "";
   typeEl.value = entry.type || "";
   descEl.value = entry.description || "";
+  const topicTypeEl = modal.querySelector(".ref-edit-topic-type");
+  topicTypeEl.innerHTML = '<option value="">（未标记）</option>'
+    + refTopicTypes.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("")
+    + (entry.topic_type && !refTopicTypes.includes(entry.topic_type)
+      ? `<option value="${esc(entry.topic_type)}">${esc(entry.topic_type)}（词表外，保存时后端拒绝）</option>` : "");
+  topicTypeEl.value = entry.topic_type || "";
   kindEl.value = ["topic", "kit", "none"].includes(entry.anchor_kind) ? entry.anchor_kind : "none";
   topicEl.value = kindEl.value === "topic" ? (entry.anchor_value || "") : "";
   const kits = kitVocabulary.includes(entry.anchor_value)
@@ -301,6 +321,7 @@ export async function editReference(entryId) {
       anchor_kind: kind,
       anchor_value: kind === "topic" ? topicEl.value : kind === "kit" ? kitEl.value : "",
       platform: (modal.querySelector('input[name="ref-edit-platform"]:checked') || {}).value || "any",
+      topic_type: modal.querySelector(".ref-edit-topic-type").value,
     };
     const v = refEditValidate(fields);
     if (!v.ok) { setMsg(v.message); return; }
@@ -462,15 +483,17 @@ $("btn-ref-add").addEventListener("click", async () => {
     ? $("ref-anchor-kit").value
     : anchorKind === "none" ? "" : $("ref-anchor-topic").value.trim();
   const platform = document.querySelector('input[name="ref-platform"]:checked').value;
+  const topicType = $("ref-topic-type").value;
   $("btn-ref-add").disabled = true;
   $("btn-ref-add").innerHTML = '<span class="spinner"></span>入库中…';
   try {
     const entry = await apiPost("/api/references", {
-      title, type, description, anchor_kind: anchorKind, anchor_value: anchorValue, platform, files,
+      title, type, description, anchor_kind: anchorKind, anchor_value: anchorValue, platform, topic_type: topicType, files,
     });
     $("ref-add-msg").classList.add("ok");
     $("ref-add-msg").textContent = "已入库：" + entry.title;
     ["ref-title", "ref-type", "ref-desc", "ref-anchor-topic"].forEach((id) => ($(id).value = ""));
+    $("ref-topic-type").value = "";
     $("ref-files").innerHTML = "";
     addFileRow($("ref-files"));
     loadReferences();

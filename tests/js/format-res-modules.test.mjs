@@ -5,7 +5,7 @@
 // 运行：node --test tests/js/
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatResModules } from "../../src/contest_generator/static/js/fx/generate.js";
+import { formatResModules, frameworkNoteHTML } from "../../src/contest_generator/static/js/fx/generate.js";
 
 test("k230（files 空 + 副产物）→ slug(副产物 main.py)", () => {
   assert.equal(
@@ -36,4 +36,21 @@ test("pythonArtifacts 缺省（undefined）不炸 → 只显示文件清单", ()
 
 test("空 files 且无副产物 → 只显示 slug（无空括号）", () => {
   assert.equal(formatResModules([{ slug: "led", files: [] }], []), "led");
+});
+
+// ================= 题型框架注入提示（工单 topic-framework/04） =================
+
+test("frameworkNoteHTML：injected=true → 带题型与来源的提示行", () => {
+  const html = frameworkNoteHTML({
+    topic_framework: { injected: true, topic_type: "line_follow", source: "21F-巡线送药决策例程" },
+  });
+  assert.match(html, /题型框架/);
+  assert.match(html, /line_follow/);
+  assert.match(html, /21F-巡线送药决策例程/);
+});
+
+test("frameworkNoteHTML：injected=false / 缺数据 → 空串（不渲染提示行）", () => {
+  assert.equal(frameworkNoteHTML({ topic_framework: { injected: false } }), "");
+  assert.equal(frameworkNoteHTML({}), "");
+  assert.equal(frameworkNoteHTML(undefined), "");
 });

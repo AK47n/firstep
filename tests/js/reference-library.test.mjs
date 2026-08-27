@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  referencePlatformChip, refFilterEntries, refDanglingAnchors, refSortEntries,
+  referencePlatformChip, referenceTopicTypeChip, refFilterEntries, refDanglingAnchors, refSortEntries,
   refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML,
   refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan,
   refEditPayload,
@@ -286,12 +286,12 @@ test("refEditFilePlan 文件计划：增删透传（加保序、删保列表）�
   assert.deepEqual(stale, { ok: true, add_files: {}, remove_files: ["gone.c"] });
 });
 
-test("refEditPayload 组装：元数据全量（trim）；topic 取 topic 值、kit 取 kit 值、none 强制空；文件计划透传", () => {
+test("refEditPayload 组装：元数据全量（trim）；topic 取 topic 值、kit 取 kit 值、none 强制空；题型透传；文件计划透传", () => {
   const plan = { ok: true, add_files: { "a.c": "x" }, remove_files: ["b.c"] };
-  const fields = { title: " t ", type: "例程代码", description: " d ", anchor_kind: "topic", anchor_value: " 2026C ", platform: "mspm0" };
+  const fields = { title: " t ", type: "例程代码", description: " d ", anchor_kind: "topic", anchor_value: " 2026C ", platform: "mspm0", topic_type: " line_follow " };
   assert.deepEqual(refEditPayload(fields, plan), {
     title: "t", type: "例程代码", description: "d",
-    anchor_kind: "topic", anchor_value: "2026C", platform: "mspm0",
+    anchor_kind: "topic", anchor_value: "2026C", platform: "mspm0", topic_type: "line_follow",
     add_files: { "a.c": "x" }, remove_files: ["b.c"],
   });
   const kit = refEditPayload({ ...fields, anchor_kind: "kit", anchor_value: " ALX 套件 " }, plan);
@@ -376,4 +376,26 @@ test("refStats 悬空计数（ctx 契约）：含 ctx 算 dangling / 缺 ctx 零
   // 无 ctx（or 词表空）→ dangling 0（降级不误报）
   assert.equal(refStats(drefs).dangling, 0);
   assert.equal(refStats(drefs, { topicKeys: [], kitVocab: [] }).dangling, 0);
+});
+
+// ================= 题型标记（工单 topic-framework/04） =================
+
+test("referenceTopicTypeChip：topic_type 非空 → <题型> 框架 chip；空 → 不渲染", () => {
+  assert.ok(referenceTopicTypeChip({ topic_type: "line_follow" }).includes("line_follow 框架"));
+  assert.ok(referenceTopicTypeChip({ topic_type: "generic" }).includes("generic 框架"));
+  assert.equal(referenceTopicTypeChip({ topic_type: "" }), "");
+  assert.equal(referenceTopicTypeChip({}), "");
+});
+
+test("refRowHTML 题型列：非空题型渲染题型单元格；空 → — 占位", () => {
+  const typed = refRowHTML({ ...refs[0], topic_type: "line_follow" }, {});
+  assert.ok(typed.includes(">line_follow<"));
+  const untyped = refRowHTML({ ...refs[0], topic_type: "" }, {});
+  assert.ok(untyped.includes("—"));
+  assert.ok(!untyped.includes("line_follow"));
+});
+
+test("refDetailHTML 锚定行带题型 chip（类型标注可见）", () => {
+  const detail = refDetailHTML({ ...refs[1], topic_type: "line_follow" }, []);
+  assert.ok(detail.includes("line_follow 框架"));
 });
