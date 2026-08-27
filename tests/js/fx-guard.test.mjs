@@ -92,6 +92,9 @@ const DOMAINS = {
   "recommend.js": {
     suggestionSolutionBadges: "fn", suggestionOptionRowHTML: "fn",
     suggestionOptionsHTML: "fn", suggestionChipHTML: "fn",
+    BUY_DECISIONS_KEY: "string", decisionBadgeHTML: "fn", reviewBadgeHTML: "fn",
+    decisionPayload: "fn", suggestionKey: "fn", loadBuyDecisions: "fn",
+    saveBuyDecisions: "fn", matchBuyDecision: "fn", discussionAreaHTML: "fn",
   },
   "recent.js": {
     recentStatusMeta: "fn", recentTimeLabel: "fn", recentPlatformLabel: "fn",

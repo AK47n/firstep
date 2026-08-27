@@ -7,6 +7,9 @@ import assert from "node:assert/strict";
 import {
   suggestionSolutionBadges, suggestionOptionRowHTML,
   suggestionOptionsHTML, suggestionChipHTML,
+  decisionBadgeHTML, reviewBadgeHTML, decisionPayload,
+  suggestionKey, loadBuyDecisions, saveBuyDecisions, matchBuyDecision,
+  discussionAreaHTML,
 } from "../../src/contest_generator/static/js/fx/recommend.js";
 
 // 结构护栏：纯函数单源在 fx/recommend.js，index.html / ui 层不得再定义
@@ -106,4 +109,89 @@ test("chip：有方案 → wrapper + 「⤵ N 方案」计数 + 面板 + 名称�
   assert.match(out, /sugg-chip/);
   assert.match(out, /视觉模块 &lt;v&gt;/);
   assert.equal((out.match(/sugg-row/g) || []).length, 2);
+});
+
+// ===== 已定方案与商量（工单 buy-discuss/04）=====
+
+test("已定徽标：wordlist / custom 两形态 + 缺省空", () => {
+  const w = decisionBadgeHTML({ source: "wordlist", name: "NRF24L01 遥控" });
+  assert.match(w, /sugg-decided/);
+  assert.match(w, /✓ 已定：NRF24L01 遥控/);
+  const c = decisionBadgeHTML({ source: "custom", name: "我的旧 HC-SR04", verdict: "risky" });
+  assert.match(c, /✓ 已定·自定：我的旧 HC-SR04/);
+  assert.equal(decisionBadgeHTML(null), "");
+  assert.equal(decisionBadgeHTML({ source: "wordlist", name: "" }), "");
+});
+
+test("审核徽标：三态 + reason + 缺省空（词表外 verdict 无标签回退）", () => {
+  assert.match(reviewBadgeHTML({ verdict: "feasible", reason: "接口简单" }), /sugg-review-feasible/);
+  assert.match(reviewBadgeHTML({ verdict: "risky", reason: "阳光强" }), /sugg-review-risky/);
+  assert.match(reviewBadgeHTML({ verdict: "infeasible", reason: "无此驱动" }), /sugg-review-infeasible/);
+  assert.match(reviewBadgeHTML({ verdict: "risky", reason: "阳光强" }), /AI 审核：有风险：阳光强/);
+  assert.equal(reviewBadgeHTML(null), "");
+  assert.equal(reviewBadgeHTML({ verdict: "" }), "");
+});
+
+test("decisionPayload：上行形状（wordlist / custom + note + verdict）", () => {
+  assert.deepEqual(
+    decisionPayload({ source: "wordlist", name: "NRF24L01 遥控", note: "", verdict: "" }),
+    { source: "wordlist", name: "NRF24L01 遥控", note: "", verdict: "" }
+  );
+  assert.deepEqual(
+    decisionPayload({ source: "custom", name: "旧 HC-SR04", note: "仓库翻出", verdict: "risky" }),
+    { source: "custom", name: "旧 HC-SR04", note: "仓库翻出", verdict: "risky" }
+  );
+  assert.equal(decisionPayload(null), null);
+});
+
+test("记忆读写：load 损坏 JSON → 空对象；save 写回；match 按建议名命中", () => {
+  const store = new Map();
+  const storage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+  };
+  assert.deepEqual(loadBuyDecisions(storage), {});              // 无键
+  assert.equal(saveBuyDecisions(storage, { 遥控接收: { source: "wordlist", name: "NRF" } }), true);
+  assert.deepEqual(loadBuyDecisions(storage), { 遥控接收: { source: "wordlist", name: "NRF" } });
+  assert.deepEqual(matchBuyDecision(loadBuyDecisions(storage), "遥控接收"),
+    { source: "wordlist", name: "NRF" });
+  assert.equal(matchBuyDecision(loadBuyDecisions(storage), "别的建议"), null);
+
+  // 损坏 JSON → 空对象（不炸）
+  const bad = { getItem: () => "{损坏", setItem: () => {} };
+  assert.deepEqual(loadBuyDecisions(bad), {});
+  // save 抛错（隐私模式）→ false
+  const fail = { setItem: () => { throw new Error("denied"); } };
+  assert.equal(saveBuyDecisions(fail, {}), false);
+});
+
+test("suggestionKey：建议名（词表外降级名即类别名，重推后仍可匹配恢复）", () => {
+  assert.equal(suggestionKey({ name: "遥控接收" }), "遥控接收");
+  assert.equal(suggestionKey(null), "");
+});
+
+test("讨论区：有方案渲染（toggle + 输入 + 历史消息 + AI 审核徽标）；无方案 = 空串", () => {
+  const out = discussionAreaHTML({
+    name: "遥控接收", solutions: [SOL()],
+  }, {
+    open: true, busy: false,
+    history: [{ role: "user", content: "我想用红外" }, { role: "assistant", content: "红外怕强光" }],
+    review: { verdict: "risky", reason: "阳光强" },
+  });
+  assert.match(out, /和 AI 商量/);
+  assert.match(out, /sugg-discuss-box open/);
+  assert.match(out, /我想用红外/);
+  assert.match(out, /红外怕强光/);
+  assert.match(out, /sugg-review-risky/);
+  assert.match(out, /sugg-discuss-input/);
+  assert.match(out, /发送/);
+  assert.equal(discussionAreaHTML({ name: "无方案", solutions: [] }, {}), "");
+  assert.equal(discussionAreaHTML({ name: "无方案", solutions: [], }, { open: true }), "");
+});
+
+test("面板尾部含讨论区（有方案时）", () => {
+  const out = suggestionOptionsHTML({
+    solutions: [SOL()], selected: "",
+  });
+  assert.match(out, /sugg-discuss/);
 });

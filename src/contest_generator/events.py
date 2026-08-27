@@ -85,6 +85,10 @@ EVENT_VERIFY_RESULT = "verify_result"
 EVENT_TASK_PLANNING = "task_planning"
 EVENT_TASK_EXECUTING = "task_executing"
 
+# 买件方案商量（工单 buy-discuss/01）：discuss_start = 一轮讨论的 LLM 调用
+# 开始（分钟级阻塞）；端点同步返回（非 SSE），事件供观察面板消费。
+EVENT_BUY_DISCUSS = "buy_discuss"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；

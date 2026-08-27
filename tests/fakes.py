@@ -18,11 +18,13 @@ from contest_generator.events import ProgressEmitter
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
+from contest_generator.llm import BuyDiscussion
 from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
 from contest_generator.task_progress import Task, TaskPlan
 from contest_generator.topic_library import TopicDraft
+from contest_generator.wordlist import SolutionOption
 
 # ---------------------------------------------------------------------------
 # 假模块文件内容（断言输出目录里文件内容用）
@@ -599,6 +601,7 @@ class FakeLLM:
         report_draft: tuple[str, str] = ("AI 生成的方案论证", "AI 生成的软件流程"),
         task_plan: TaskPlan | None = None,
         executed_main_c: str = "",
+        discussion: BuyDiscussion | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -617,9 +620,11 @@ class FakeLLM:
             tasks=(Task(id="t1", title="占位任务", description="占位描述"),)
         )
         self._executed_main_c = executed_main_c
+        self._discussion = discussion
+        self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
-        self.skeleton_framework_calls: list[str | None] = []
+        self.skeleton_framework_calls: list[object | None] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
         self.validation_calls: list[tuple[str, str]] = []
@@ -849,6 +854,19 @@ class FakeLLM:
         )
         return self._executed_main_c or main_c
 
+    def discuss_buy_options(
+        self,
+        problem_text: str,
+        requirement: str,
+        platform: str,
+        solutions: Sequence[SolutionOption],
+        history: Sequence[tuple[str, str]],
+    ) -> BuyDiscussion:
+        self.discuss_calls.append(
+            (problem_text, requirement, platform, tuple(solutions), tuple(history))
+        )
+        return self._discussion or BuyDiscussion(reply="好", review=None)
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -1009,6 +1027,17 @@ class RecordingLLM:
     ) -> str:
         self._record("execute_task")
         return main_c
+
+    def discuss_buy_options(
+        self,
+        problem_text: str,
+        requirement: str,
+        platform: str,
+        solutions: Sequence[SolutionOption],
+        history: Sequence[tuple[str, str]],
+    ) -> BuyDiscussion:
+        self._record("discuss_buy_options")
+        return BuyDiscussion(reply="好", review=None)
 
     def generate_report_draft(
         self,

@@ -64,6 +64,7 @@ from .report import (
     VersionSummary,
 )
 from .selection import (
+    BUY_VERDICTS,
     LED_COLOR_MACROS,
     MAX_QUESTIONS,
     FunctionRequirement,
@@ -73,12 +74,14 @@ from .selection import (
     ReferenceSuggestion,
     SelectionError,
     build_module_selection,
+    parse_decision,
 )
 from .task_progress import TaskError, TaskPlan, build_task_plan
 from .topic_library import TopicDraft, validate_topic_key
 from .wordlist import (
     DEFAULT_WORDLIST,
     HardwareWordGroup,
+    SolutionOption,
     format_wordlist_prompt,
 )
 
@@ -268,9 +271,31 @@ TASK_EXECUTE_SYSTEM_PROMPT = (
     "代码围栏包裹，不要输出任何 Markdown 标记。"
 )
 
+# 买件方案商量系统提示词（工单 buy-discuss/01）：买件指引的选型讨论 + 用户
+# 自定想法可行性校核（用户原话「用户的方法只是他的猜想，AI 校核一下这个
+# 是不是真的可行并且跟用户进一步沟通」）。立场 = 顾问非裁判：verdict 是风险
+# 意见，最终仍用户拍板（界面明确标注 AI 意见）；建议可指向词表方案比对。
+# review 只在用户最新消息提出「词表外的自定方案」时输出（词表内方案讨论
+# 无校核需求，仅回复）。输出 JSON 契约（json_object 模式）。
+DISCUSS_SYSTEM_PROMPT = (
+    "你是嵌入式硬件选型顾问。学生正在为赛题选购库外外设（词表给几个候选"
+    "方案，你只当顾问，不替学生拍板）。回答学生的问题与想法（赛题文本 / "
+    "方案清单过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）："
+    "结合赛题要求、所选平台（接口 / 引脚 / 定时器等资源）与词表方案比对，"
+    "给出具体、可执行的建议；学生提出的想法若是词表外的自定方案（他手头"
+    "已有的模块 / 自己的想法），要校核其可行性：接口与引脚资源、供电电压、"
+    "题目所需要的功能是否对症、现场环境（光照 / 距离 / 干扰）是否适合，"
+    "并与他进一步沟通（必要时反问关键信息）。verdict 三档含义：feasible = "
+    "可行；risky = 可行但有风险（说明风险点）；infeasible = 本赛题不可行"
+    "（说明理由并给出替代建议）。"
+    '只输出 JSON 对象：{"reply": "回复文本", "review": {"verdict": '
+    '"feasible" | "risky" | "infeasible", "reason": "校核理由", '
+    '"suggestion": "替代建议（可指向词表方案）"}}；学生最新消息没有提出'
+    "自定方案时，review 输出 null（只答问题）。"
+)
+
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
 SKELETON_INTERFACES_HEADING = "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："
-
 SKELETON_SYSTEM_PROMPT = (
     "你是嵌入式 C 工程师。为赛题生成 main.c 骨架（赛题文本 / 模块接口过长"
     "可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）：按所选模块的头文件"
@@ -1059,6 +1084,42 @@ class TopicFramework:
     source: str
 
 
+# 买件方案商量的校核意见（工单 buy-discuss/01）：verdict 三档词表单源在
+# selection（BUY_VERDICTS——llm 与 selection 同引一处，防环反向），词表外值
+# 由解析器修正回 feasible——用户想法校核意见是展示增强，宁可不标也不阻断讨论。
+
+
+@dataclass(frozen=True)
+class BuyReview:
+    """AI 对用户自定想法的可行性校核（用户说话 = 猜想，AI 校核 + 进一步沟通）。
+
+    verdict = feasible | risky | infeasible；reason = 校核理由（为什么）；
+    suggestion = 替代建议（可指向词表方案，字符串自由文本）。
+    """
+
+    verdict: str
+    reason: str = ""
+    suggestion: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "verdict": self.verdict,
+            "reason": self.reason,
+            "suggestion": self.suggestion,
+        }
+
+
+@dataclass(frozen=True)
+class BuyDiscussion:
+    """一轮买件方案讨论的产物：回复文本 + （可选）用户自定方案校核意见。
+
+    review 为 None（解析缺失 / 用户未提自定方案）= 仅回复，无校核意见。
+    """
+
+    reply: str
+    review: BuyReview | None = None
+
+
 class LLM(Protocol):
     def select_modules(
         self,
@@ -1163,6 +1224,15 @@ class LLM(Protocol):
         problem_text: str,
         qa_text: str,
     ) -> str: ...
+
+    def discuss_buy_options(
+        self,
+        problem_text: str,
+        requirement: str,
+        platform: str,
+        solutions: Sequence[SolutionOption],
+        history: Sequence[tuple[str, str]],
+    ) -> BuyDiscussion: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -2319,6 +2389,55 @@ class DeepSeekLLM:
             operation="execute_task",
         )
 
+    def discuss_buy_options(
+        self,
+        problem_text: str,
+        requirement: str,
+        platform: str,
+        solutions: Sequence[SolutionOption],
+        history: Sequence[tuple[str, str]],
+    ) -> BuyDiscussion:
+        """买件方案商量（工单 buy-discuss/01）：一轮讨论回复 + 用户自定方案校核。
+
+        输入 = 题面 + 需求句 + 平台 + 词表方案 + 讨论历史（用户 / AI 交替）；
+        输出 JSON 由解析器校验：reply 空 / 缺失 = 整次重问（_retry_parse，
+        对话语境回复为空毫无价值）；review 缺失 / 形状坏 = None（校核是
+        增强，不阻断讨论）；verdict 词表外 = 修正回 feasible（展示层三态）。
+        用户最新消息未提自定方案时模型被指示输出 review:null——解析层不
+        区分「没提」与「模型没判出」，都按 None 对待（宁缺毋标不误导）。
+        """
+
+        def parse(content: str) -> BuyDiscussion:
+            data = extract_module_selection_data(content)
+            reply = data.get("reply")
+            if not isinstance(reply, str) or not reply.strip():
+                raise LLMError("讨论回复为空：模型未输出 reply 或为空串")
+            review = data.get("review")
+            if not isinstance(review, dict):
+                return BuyDiscussion(reply=reply, review=None)
+            verdict = str(review.get("verdict", "")).strip()
+            if verdict not in BUY_VERDICTS:
+                verdict = "feasible"
+            return BuyDiscussion(
+                reply=reply,
+                review=BuyReview(
+                    verdict=verdict,
+                    reason=str(review.get("reason", "")).strip(),
+                    suggestion=str(review.get("suggestion", "")).strip(),
+                ),
+            )
+
+        return self._retry_parse(
+            system_prompt=DISCUSS_SYSTEM_PROMPT,
+            user_prompt=_discuss_user_prompt(
+                problem_text, requirement, platform, solutions, history
+            ),
+            parse=parse,
+            label="买件方案商量",
+            operation="discuss_buy_options",
+            json_mode=True,
+        )
+
     def _observe_call(
         self,
         *,
@@ -2930,6 +3049,19 @@ class RoutingLLM:
             main_c, task, note, module_interfaces, problem_text, qa_text
         )
 
+    def discuss_buy_options(
+        self,
+        problem_text: str,
+        requirement: str,
+        platform: str,
+        solutions: Sequence[SolutionOption],
+        history: Sequence[tuple[str, str]],
+    ) -> BuyDiscussion:
+        # 买件方案商量走 remote（讨论质量优先，不进本地方法集）
+        return self._remote.discuss_buy_options(
+            problem_text, requirement, platform, solutions, history
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -3310,7 +3442,10 @@ def _requirement_lines(
     """功能需求清单的编号行（深化 / 任务拆解共用，单源防分叉）。
 
     每行 = "{序号}. {需求原文}（题面句子 N）"——题面句子注记可追踪来源；
-    requirements 为空 → 空列表（调用方保证已有空段判断）。
+    requirements 为空 → 空列表（调用方保证已有空段判断）。库外建议带既有
+    「已定方案」结论（工单 buy-discuss/02）时，需求行下追加注记缩进行
+    （wordlist = 「已定：<方案名>」；custom = 「已定·自定：<名>；AI 审核：
+    <verdict>」）——写码阶段 AI 据此知悉用户买件决策。
     """
     lines = ["", heading]
     for index, req in enumerate(requirements, 1):
@@ -3321,7 +3456,35 @@ def _requirement_lines(
             else ""
         )
         lines.append(f"{index}. {requirement}{lines_note}")
+        if isinstance(req, Mapping):
+            for suggestion in req.get("suggestions") or []:
+                if not isinstance(suggestion, Mapping):
+                    continue
+                note = _decision_note(suggestion)
+                if note:
+                    lines.append(f"    · {suggestion.get('name', '')} → {note}")
     return lines
+
+
+def _decision_note(suggestion: Mapping[str, Any]) -> str:
+    """库外建议的「已定方案」注记（工单 buy-discuss/02；单源，读载荷 dict）。
+
+    形状校验走 selection.parse_decision（契约主人，评审项 buy-discuss/04 收敛
+    ——不再自行宽松读取 source/verdict）：decision 缺失 / 损坏 = ""（不注记，
+    旧载荷行为逐字节不变）；wordlist = 「（已定：<方案名>）」；custom =
+    「（已定·自定：<名>；AI 审核：<verdict>）」（verdict 空 = 无审核不注记）。
+    此处只读不重建，展示增强零判定。
+    """
+    decision = parse_decision(suggestion.get("decision"))
+    if decision is None:
+        return ""
+    if decision.source == "wordlist":
+        return f"（已定：{decision.name}）"
+    # note 承载自定想法全文（前端 name 截 30 字、全文放 note）：注记必带全文
+    # ——只给截断名，长自定想法进不了写码上下文（评审项 spec/②）
+    note_text = f"；{decision.note}" if decision.note and decision.note != decision.name else ""
+    verdict_text = f"；AI 审核：{decision.verdict}" if decision.verdict else ""
+    return f"（已定·自定：{decision.name}{note_text}{verdict_text}）"
 
 
 def _deepen_user_prompt(
@@ -3412,6 +3575,81 @@ def _task_execute_user_prompt(
         "",
         "现有 main.c（只实现上述任务描述要求的功能，其余内容原样保留）：",
         main_c,
+    ]
+    return "\n".join(lines)
+
+
+def _solutions_list_text(solutions: Sequence[SolutionOption]) -> str:
+    """词表方案的讨论用全量清单（每方案一行：名称 + 接口 / 价格 / 适用字段）。
+
+    买件商量需要接口 / 价格 / 适用等细节（与“仅名称”的 prompt 科普段
+    format_wordlist_prompt 紧凑版不同界——讨论是选型决策上下文）。
+    """
+    lines = []
+    for solution in solutions:
+        head = f"- {solution.name}"
+        if solution.interface:
+            head += f"｜接口：{solution.interface}"
+        if solution.price:
+            head += f"｜价格：{solution.price}"
+        if solution.recommended:
+            head += "（词表推荐）"
+        lines.append(head)
+        if solution.note:
+            lines.append(f"  注意：{solution.note}")
+        if solution.suitable:
+            lines.append(f"  适用：{solution.suitable}")
+    return "\n".join(lines)
+
+
+def _discuss_history_segment(
+    history: Sequence[tuple[str, str]],
+) -> str:
+    """讨论历史段（用户 / AI 交替逐条；旧 → 新）：逐条 _truncate_content 挡
+    单条超长 + 段级合计 CLARIFICATION_HISTORY_CAP 兜底（**字符帽**，与
+    _clarification_history_segment 同口径——truncate_content 而非
+    fit_wire_budget，避免中文 6 字节/字符把 2500 帽折成 ~416 字符的实截断
+    异常；评审项 buy-discuss/06 修正）。"""
+    lines = []
+    for role, content in history:
+        speaker = "用户" if role == "user" else "AI"
+        lines.append(f"{speaker}：{_truncate_content(content)}")
+    if not lines:
+        return ""
+    segment = "\n".join(lines)
+    if len(segment) > CLARIFICATION_HISTORY_CAP:
+        segment = truncate_content(segment, CLARIFICATION_HISTORY_CAP)
+    return segment
+
+
+def _discuss_user_prompt(
+    problem_text: str,
+    requirement: str,
+    platform: str,
+    solutions: Sequence[SolutionOption],
+    history: Sequence[tuple[str, str]],
+) -> str:
+    """买件方案商量的 user 消息（工单 buy-discuss/01）：题面 + 需求句 + 平台 +
+    词表方案（全量细节）+ 讨论历史（旧 → 新）+ 用户最新一轮消息。各段截断带
+    标注（_truncate_content / _discuss_history_segment）；方案段固定小体积。
+    """
+    lines = ["【赛题】", _truncate_content(problem_text)]
+    if requirement:
+        lines += ["", "【本需求（该库外建议对应的功能要求）】", requirement]
+    if platform:
+        lines += ["", "【所选平台】", platform]
+    if solutions:
+        lines += ["", "【词表选购方案（只顾问，不替你拍板；方案来自词表知识）】"]
+        lines.append(_solutions_list_text(solutions))
+    history_text = _discuss_history_segment(history)
+    if history_text:
+        lines += ["", "【讨论历史（旧 → 新）】", history_text]
+    lines += [
+        "",
+        "【你的最新消息】",
+        history[-1][1] if history else "",
+        "",
+        "请按系统提示词中的 json 契约输出（reply 必填，review 按规则输出）。",
     ]
     return "\n".join(lines)
 

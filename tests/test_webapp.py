@@ -51,6 +51,8 @@ from contest_generator.demo_script import DEMO_SCRIPT_FILENAME
 from contest_generator.report_draft import REPORT_DRAFT_FILENAME
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.llm import (
+    BuyDiscussion,
+    BuyReview,
     LLMObservationCollector,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
     LLMError,
@@ -6837,3 +6839,83 @@ def test_llm_selfcheck_llm_error_400_chinese(client, context, monkeypatch):
     resp = client.post("/api/llm/selfcheck")
     assert resp.status_code == 400
     assert "自检失败" in resp.json()["detail"]
+
+
+def test_buy_discuss_endpoint_normal_flow(client, context):
+    """买件方案商量端点（工单 buy-discuss/03）：正常流 → {reply, review}；
+    词表建议名匹配 → LLM 收到该行 solutions；词表外 → 空方案（不编造）。"""
+    ctx, holder = context
+    holder["llm"] = FakeLLM(discussion=BuyDiscussion(
+        reply="红外怕强光，建议 NRF24L01。",
+        review=BuyReview(verdict="risky", reason="阳光直射易误判", suggestion="改选 NRF24L01"),
+    ))
+
+    resp = client.post("/api/buy/discuss", json={
+        "problem_text": "送药小车需要遥控启动",
+        "requirement": "遥控接收",
+        "platform": "stm32",
+        "suggestion_name": "遥控接收",
+        "history": [{"role": "user", "content": "我场地阳光强"}],
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["reply"] == "红外怕强光，建议 NRF24L01。"
+    assert data["review"] == {"verdict": "risky", "reason": "阳光直射易误判", "suggestion": "改选 NRF24L01"}
+    problem, requirement, platform, solutions, history = holder["llm"].discuss_calls[0]
+    assert "送药小车" in problem
+    assert requirement == "遥控接收"
+    assert platform == "stm32"
+    assert any("VS1838B" in s.name for s in solutions)  # 词表行命中 → 方案注入
+    assert history == (("user", "我场地阳光强"),)
+
+    # 词表外建议名 → 空方案（讨论仍可进行，不编造方案文本）
+    resp = client.post("/api/buy/discuss", json={
+        "problem_text": "送药小车",
+        "history": [{"role": "user", "content": "你好"}],
+        "suggestion_name": "不存在的硬件",
+    })
+    assert resp.status_code == 200
+    assert holder["llm"].discuss_calls[-1][3] == ()
+
+
+def test_buy_discuss_endpoint_validation(client):
+    """买件方案商量端点校验：缺题面 / history 非数组 / role 词表外 / content 非字符串 → 400 中文。"""
+    resp = client.post("/api/buy/discuss", json={"history": [{"role": "user", "content": "你好"}]})
+    assert resp.status_code == 400
+    assert "problem_text" in resp.json()["detail"]
+
+    resp = client.post("/api/buy/discuss", json={
+        "problem_text": "题面", "history": "不是数组",
+    })
+    assert resp.status_code == 400
+    assert "history" in resp.json()["detail"]
+
+    resp = client.post("/api/buy/discuss", json={
+        "problem_text": "题面", "history": [{"role": "系统", "content": "你好"}],
+    })
+    assert resp.status_code == 400
+    assert "role" in resp.json()["detail"]
+
+    resp = client.post("/api/buy/discuss", json={
+        "problem_text": "题面", "history": [{"role": "user", "content": 123}],
+    })
+    assert resp.status_code == 400
+    assert "content" in resp.json()["detail"]
+
+
+def test_buy_discuss_endpoint_llm_error(client, context):
+    """LLM 失败 → 502（error_to_http 表：LLMError 翻译，不带裸 500）。"""
+    ctx, holder = context
+
+    class _BoomLLM_buy:
+        def discuss_buy_options(self, **kwargs):
+            raise LLMError("上游超时")
+
+    holder["llm"] = _BoomLLM_buy()
+    resp = client.post("/api/buy/discuss", json={
+        "problem_text": "题面",
+        "history": [{"role": "user", "content": "你好"}],
+    })
+    assert resp.status_code == 502
+    assert "上游超时" in resp.json()["detail"]

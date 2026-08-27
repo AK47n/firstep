@@ -394,6 +394,71 @@ class OutOfLibrarySuggestion:
         }
 
 
+# 已定方案的 judgment 词表（工单 buy-discuss/02）：source = 结论来源
+# （wordlist = 词表方案内选款；custom = 用户自定想法——用户说话是猜想，
+# AI 校核后仍可确定，UI 注明「自定」）；verdict 词表（可行/有风险/不可行）
+# 与 llm.BUY_VERDICTS 同值（llm 层从本模块 import，防环反向）。
+BUY_DECISION_SOURCES = ("wordlist", "custom")
+BUY_VERDICTS = ("feasible", "risky", "infeasible")
+
+
+class BuyError(ValueError):
+    """买件方案商量请求非法（工单 buy-discuss/03，登记 errors.py → 400 中文）。"""
+
+
+@dataclass(frozen=True)
+class SuggestionDecision:
+    """库外建议的「已定方案」结论（工单 buy-discuss/02，形状契约单源）。
+
+    前端与 AI 商量后确定的买件结论：source = wordlist（词表方案内选款）|
+    custom（用户自定想法）；name = 方案名（wordlist 内）或自定标题；note =
+    自定想法描述 / 补充说明；verdict = AI 可行性审核意见（feasible | risky |
+    infeasible，空 = 无审核——AI 是顾问非裁判，verdict 不阻断用户确定）。
+    结论是载荷增强（前端附加，不走 OutOfLibrarySuggestion 构造域——那个域
+    是 LLM 输出解析），此模型只保证形状契约：parse_decision 词表外修正后
+    返回 None 表示「无结论」。
+    """
+
+    source: str
+    name: str
+    note: str = ""
+    verdict: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "source": self.source,
+            "name": self.name,
+            "note": self.note,
+            "verdict": self.verdict,
+        }
+
+
+def parse_decision(raw: Any) -> SuggestionDecision | None:
+    """载荷 `decision` 字段的解析（形状契约；损坏 = None 不阻断导览）。
+
+    非 dict / 缺 name / name 空白 = None（宁缺毋编：没有结论就不标注）；
+    source 词表外 → 修正 custom（自定想法是兜底语义）；verdict 词表外 → 置空
+    （审核意见缺失不误导）。仅展示增强，不参与任何域判决。
+    """
+    if not isinstance(raw, dict):
+        return None
+    name = str(raw.get("name", "")).strip()
+    if not name:
+        return None
+    source = str(raw.get("source", "")).strip()
+    if source not in BUY_DECISION_SOURCES:
+        source = "custom"
+    verdict = str(raw.get("verdict", "")).strip()
+    if verdict not in BUY_VERDICTS:
+        verdict = ""
+    return SuggestionDecision(
+        source=source,
+        name=name,
+        note=str(raw.get("note", "")).strip(),
+        verdict=verdict,
+    )
+
+
 @dataclass(frozen=True)
 class FunctionRequirement:
     """功能需求层条目（工单 10）：题面证据驱动的能力/外设级需求。

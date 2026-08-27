@@ -2151,6 +2151,66 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         status = _require_str(payload, "status")
         return apply_task_status(output_dir, task_id, status)
 
+    @app.post("/api/buy/discuss")
+    @_map_errors
+    def buy_discuss(payload: dict) -> dict:
+        """买件方案商量（同步端点，工单 buy-discuss/03）：一轮讨论 → {reply, review}。
+
+        请求 {problem_text 必填, requirement?, platform?, suggestion_name?
+        （词表行匹配 → 该行 solutions 注入讨论），history: [{role: user|
+        assistant, content}] 必填数组（旧 → 新，前端积累）}。服务端按
+        suggestion_name 匹配词表行（selection._solution_group——类别名或
+        型号名都能命中），词表外 = 空方案（仅题面/需求/历史讨论，不编造方案
+        文本）；缺题面 / history 非数组 / 条目非对象 / role 词表外 / content
+        非字符串 → BuyError 400 中文；LLM 失败 → 502（error_to_http 表）。
+        telemetry 照常采集（观测收集绑定 _llm 实例）——同步端点无 SSE 通道，
+        观测进 recent_llm_workflows 记录。
+        """
+        from .selection import BuyError, _solutions_for
+        from .wordlist import DEFAULT_WORDLIST
+
+        problem_text = _optional_str(payload, "problem_text")
+        if not problem_text:
+            raise BuyError("缺赛题原文（problem_text）：讨论必须结合题面")
+        requirement = _optional_str(payload, "requirement")
+        platform = _optional_str(payload, "platform")
+        suggestion_name = _optional_str(payload, "suggestion_name")
+        raw_history = payload.get("history")
+        if not isinstance(raw_history, list) or not raw_history:
+            raise BuyError("history 必须是数组（讨论历史，旧 → 新）")
+        history: list[tuple[str, str]] = []
+        for index, item in enumerate(raw_history):
+            if not isinstance(item, dict):
+                raise BuyError(f"history[{index}] 必须是对象（role + content）")
+            role = item.get("role")
+            if role not in ("user", "assistant"):
+                raise BuyError(f"history[{index}] 的 role 必须是 user 或 assistant")
+            content = item.get("content")
+            if not isinstance(content, str):
+                raise BuyError(f"history[{index}] 的 content 必须是字符串")
+            history.append((role, content))
+
+        solutions = _solutions_for(suggestion_name, DEFAULT_WORDLIST)
+
+        collector = create_llm_observation_collector("buy-discuss")
+        try:
+            llm = _llm(context, RetryBudget(), collector)
+            discussion = llm.discuss_buy_options(
+                problem_text=problem_text,
+                requirement=requirement,
+                platform=platform,
+                solutions=solutions,
+                history=tuple(history),
+            )
+        finally:
+            # 观测收尾（评审项 spec/①）：漏调则观察面板 recent_llm_workflows
+            # 看不到 buy-discuss——docstring 承诺必须兑现
+            context.recent_llm_workflows.add_completed(collector)
+        return {
+            "reply": discussion.reply,
+            "review": discussion.review.to_dict() if discussion.review is not None else None,
+        }
+
     @app.post("/api/fix-errors")
     @_map_errors
     def fix_errors(payload: dict) -> StreamingResponse:
