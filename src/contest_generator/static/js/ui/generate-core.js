@@ -144,8 +144,9 @@ $("btn-pick-output-dir").addEventListener("click", async () => {
 
 
 // ---------------------------------------------------------------------------
-// （btn-generate 覆盖重发监听器与其 readiness 前置校验留 index.html——依赖
-// host 内联 readinessState；renderGenerateSuccess 经 host 顶部 import 调用）
+// （btn-generate 覆盖重发监听器与 readiness 前置校验已随工单 20 补迁至本簇：
+// readinessState / desktopTopicOutputEnabled 自 ui/generate-readiness.js 静态
+// import；renderGenerateSuccess 经 host 顶部 import 调用）
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------

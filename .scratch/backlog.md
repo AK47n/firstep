@@ -23,25 +23,12 @@
 - 关键文件预览的语法高亮 / 复制按钮——已落地（fx/highlight.js + masterContentHTML 复制钮）。
 - **单文件写侧替换**（上传替换 pin_config.h / mspm0.syscfg 等关键文件）**评估后不做**：母版 = 生成根，关键文件在生成侧全部是模板/默认值或由渲染器现写（模板 main.c 被骨架覆盖、pin_config.h 被绑定覆写、.uvprojx 由确定性渲染器现写、mspm0.syscfg 是默认外设布局），写侧替换会破坏「母版 = 生成基线」不变量；整体替换已有路径（提炼确认可更换 + 免提炼导入）。详见 .scratch/master-library-ui-2/spec.md「范围外」。
 
-## 4. 阶段 2 收尾评审（code-review b46f786^..HEAD，双轴 Standards + Spec）发现 —— 未立项（2026-08-27）
+## 4. 阶段 2 收尾评审（code-review b46f786^..HEAD，双轴 Standards + Spec）发现 —— ✅ 已落地（工单 frontend-es-modules-stage2/21-25，2026-08-27，提交 f26e1fa）
 
-**发现 1（🔴 硬，Spec/CONTEXT 违背）：ui 模块环 generate-core ↔ generate-readiness**
-- 成因：工单 20 补迁 btn-generate 监听器至 ui/generate-core.js（前置校验需 `readinessState`，core.js:35 import 自 generate-readiness）；工单 19 的 readiness 簇反向 import 了 core 的 `desktopTopicOutputEnabled`（readiness.js:21，readinessState() L36 使用）——互为双向。
-- 违反 spec.md 桥接约定 3「ui 模块之间允许单向依赖」与 CONTEXT.md「ui 模块间允许单向静态 import」；与仓库既有消环先例不一致（A↔ST 循环 spec L59-63 拆 step-state 消环；15→16→18→19 均为「改接缝 / 静态 import」单向化）。
-- 运行时安全（双方均为函数级 live binding、无顶层互调；回归 node --test 444/444、pytest 2465 passed、diag 零 EXC、smoke 11/11、probe-20 6/6），但对未来顶层引用是隐雷。
-- 建议：`desktopTopicOutputEnabled`（core.js L125-128：`$("desktop-topic-output")?.checked ?? true` 式无状态 DOM 读）是 fx 纯函数候选——迁 fx/readiness.js 或 fx/generate.js 即断环（与 A↔ST cut 同构，符合「新纯函数一律 fx」）；或按 15→16 先例改回 deps 接缝。二选一，推荐前者。
+评审发现五项（2026-08-27 以 stage2 工单 21-25 全部落地：node 447/447 + pytest 2465 + diag 零 EXC + smoke 11/11；工单 22-25 状态于 245740d 补翻 resolved）：
 
-**发现 2（文档漂移）：spec.md:92 结构钉表陈旧**
-- 表项「step-done-refs.test.mjs → ui/generate-steps.js」与实现不符：step-done-refs.test.mjs:13 实际重指向 ui/generate-recommend.js，且指向更正确（文件头注释：cut 方案复核后非 generate-steps；markStepDone(2) / syncStep4( 调用点均在 A 簇）。
-- 建议：改 spec.md L92 为 ui/generate-recommend.js（纯文档修正，无代码影响）。
-
-**发现 3（判断项，近硬）：host 残留跨 tab DOM 渲染**
-- index.html:2593-2594 启动 IIFE 内 `$("new-platform").innerHTML = state.platforms.map((p) => '<option value="..."'>...).join("")`——母版 tab「新增平台」下拉是 master 簇胶水（工单 04），inline 渲染逻辑与「主体仅剩 imports + 页签分发器 + 启动 IIFE + init* 调用」的目标形态有偏差（IIFE 内其余渲染均已委托簇函数）。
-- 建议：迁 ui/master.js（导出 renderNewPlatformOptions 或并入 loadMasters）。
-
-**发现 4（Duplicated Code，判断项）**
-- generate-steps.js:68-79：「btn-clear-draft / btn-draft-clear」两个监听器 4 行逻辑逐字重复（clearDraft + 「已清除」→1.5s 还原「清除草稿」）——历史遗留重复，迁移时未合并。建议提共享 handler。
-- generate-mainc.js:29-30 / 37-39：滚动三同步（hl.scrollTop/Left、nums.scrollTop）在 syncMainCHighlight 与 scroll 监听器内联重复——建议提 syncScrollFrom（历史遗留）。
-
-**发现 5（Mysterious Name，弱，判断项）**
-- generate-steps.js:104 `overviewPlanNow(doneArr)` / :116 `genOverviewWarn(n)`：`n` 为裸步骤号，名称不揭示「按步骤号索引的补齐/警告」语义。低优先。
+- **发现 1（🔴 硬，Spec/CONTEXT 违背）：ui 模块环 generate-core ↔ generate-readiness** —— ✅ 落地（工单 21）：`desktopTopicOutputEnabled` 从 core 归位 readiness 簇（判据输入语义归位），core / steps → readiness 恢复单向；新增 `tests/js/ui-cycle.test.mjs` 静态环检测守卫。原成因：工单 20 补迁 btn-generate 监听器（core:35 import readinessState）+ 工单 19 readiness 簇反向 import core 的 desktopTopicOutputEnabled（readiness.js:21）——互为双向，违反「ui 模块间允许单向静态 import」。
+- **发现 2（文档漂移）：spec.md:92 结构钉表陈旧** —— ✅ 落地（工单 22）：stage2 spec.md 钉表改 `ui/generate-recommend.js`（附注「工单 12 重指向：cut 方案复核后非 generate-steps」——step-done-refs.test.mjs:13 实际重指向 A 簇，markStepDone(2) / syncStep4( 调用点均在 generate-recommend）。
+- **发现 3（判断项，近硬）：host 残留跨 tab DOM 渲染** —— ✅ 落地（工单 23）：`renderNewPlatformOptions` 导出归 ui/master.js（L676），index.html 启动 IIFE 只留调用（L2635）；IIFE 内其余渲染均已委托簇函数。
+- **发现 4（Duplicated Code，判断项）** —— ✅ 落地（工单 24/25）：generate-steps.js 两按钮重复监听器提 `bindClearDraftButton(btnId)` 共享；generate-mainc.js 滚动三同步提 `syncPanels(ta)`（syncMainCHighlight 与 scroll 监听器共用）。
+- **发现 5（Mysterious Name，弱，判断项）** —— ✅ 落地（工单 24）：`genOverviewWarn(n)` → `genOverviewWarn(stepNo)`；`overviewPlanNow(doneArr)` 经核语义尚可未改。
