@@ -433,6 +433,13 @@
   .sugg-discuss-row { display: flex; gap: 8px; }
   .sugg-discuss-input { flex: 1; }
   .sugg-discuss-note { font-size: 11.5px; margin-top: 6px; }
+  /* 任务卡「和 AI 商量」对话区（工单 task-chat/03）：面板样式复用
+     .sugg-discuss-*（买件商量同一套），仅容器留白 + 采纳按钮小字 */
+  .task-dialog-box { margin-top: 8px; border-top: 1px dashed var(--border);
+                     padding-top: 8px; }
+  .task-dialog-box .sugg-discuss-msgs { max-height: 220px; }
+  .btn-task-dialog-adopt, .btn-task-dialog-clear { font-size: 12px;
+                     padding: 1px 8px; margin-left: 6px; }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }

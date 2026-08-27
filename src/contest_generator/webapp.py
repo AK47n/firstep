@@ -2190,6 +2190,122 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             revise_backup_root(config.masters_dir.parent),
         )
 
+    # ------------------------------------------------------------------
+    # 任务推进 · 对话结论采纳（工单 task-chat/01）：用户在某条 AI 回复上点
+    # 「采纳这条结论」→ 写入任务 dialog_note（落盘，刷新不丢）；下次执行
+    # 时作为独立 prompt 段注入。text 空串 = 清除采纳。域判决在
+    # task_progress.set_task_dialog_note，路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/dialog-adopt")
+    @_map_errors
+    def tasks_dialog_adopt(payload: dict) -> dict:
+        """对话结论采纳（同步端点）：{output_dir, task_id, text} → 落盘。
+
+        text 非字符串 → TaskError 400 中文（bool 也是 int 之外先判）；
+        text 空串 = 清除采纳（取消）。输出目录不存在 / 未拆解 / 任务不存在
+        → TaskError 400。
+
+        返回 {"task": 采纳后任务 to_dict, "plan": 全量清单 to_dict}——
+        前端据此单卡重渲染 + 徽标刷新。
+        """
+        from .task_progress import set_task_dialog_note
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        task_id = _require_str(payload, "task_id")
+        text = payload.get("text")
+        if not isinstance(text, str):
+            raise TaskError("text 必须是字符串（空串 = 清除采纳）")
+        return set_task_dialog_note(output_dir, task_id, text)
+
+    # ------------------------------------------------------------------
+    # 任务推进 · 任务商量（工单 task-chat/02）：每卡「和 AI 商量」的一轮
+    # 讨论——用户发表想法/纠正 → LLM 任务顾问回应（可行性/影响/建议）。
+    # 同步端点（照 /api/buy/discuss 先例：校验 → 装配 → 一轮调用 →
+    # add_completed 收尾）；对话结论采纳走 /api/tasks/dialog-adopt。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/discuss")
+    @_map_errors
+    def tasks_discuss(payload: dict) -> dict:
+        """任务商量（同步端点）：{output_dir, task_id, message, history} → {reply}。
+
+        请求契约：output_dir（必填，生成结果目录）；task_id（必填，任务 id）；
+        message（必填非空字符串，用户本轮的想法的/纠正）；history（必填数组，
+        旧 → 新，[{role: user|assistant, content}]，前端逐轮积累）。
+        服务端读 .contest_context.json（题面 / Q&A / 需求 / 模块集）+ 现读
+        main.c + 任务清单（任务须存在）→ LLM 任务顾问 → {reply}。
+
+        校验失败 → TaskError 400 中文；LLM 失败 → 502（error_to_http 表）。
+        缺题面 / 工程 main.c 为空 → 400（讨论需要题面与实现现状）。telemetry
+        照常采集——同步端点无 SSE 通道，观测进 recent_llm_workflows 记录。
+        """
+        from .skeleton import build_skeleton_interfaces
+        from .task_progress import find_task, read_task_plan
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        task_id = _require_str(payload, "task_id")
+        message = payload.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise TaskError("缺讨论消息（message）——请先说说你的想法或纠正")
+        raw_history = payload.get("history", [])
+        if not isinstance(raw_history, list):
+            raise TaskError("history 必须是数组（旧 → 新的讨论记录）")
+        history: list[tuple[str, str]] = []
+        for index, item in enumerate(raw_history, 1):
+            if not isinstance(item, dict):
+                raise TaskError(f"history 第 {index} 条必须是对象")
+            role = item.get("role")
+            if role not in ("user", "assistant"):
+                raise TaskError(
+                    f"history 第 {index} 条 role 必须是 user 或 assistant"
+                )
+            content = item.get("content")
+            if not isinstance(content, str):
+                raise TaskError(f"history 第 {index} 条 content 必须是字符串")
+            history.append((role, content))
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if not fields.get("problem_text"):
+            raise TaskError("缺少赛题原文——请先补题面（任务商量需要题面证据）")
+        # main.c 现读（手工编辑保留，与拆解 / 深化同口径）
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        if not main_c.strip():
+            raise TaskError("工程 main.c 为空，无法就实现现状商量")
+        platform = fields["platform"]
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        interfaces = build_skeleton_interfaces(
+            resolved.manifests,
+            platform,
+            module_library_dir,
+            master_project_dir(config.masters_dir, platform),
+        )
+        plan = read_task_plan(output_dir)
+        if plan is None:
+            raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
+        task = find_task(plan, task_id)
+
+        collector = create_llm_observation_collector("tasks-discuss")
+        try:
+            llm = _llm(context, RetryBudget(), collector)
+            discussion = llm.discuss_task(
+                task=task.to_dict(),
+                problem_text=fields["problem_text"],
+                qa_text=fields.get("qa_text", ""),
+                requirements=fields.get("requirements", []) or [],
+                module_interfaces=interfaces,
+                main_c=main_c,
+                history=history,
+            )
+        finally:
+            context.recent_llm_workflows.add_completed(collector)
+        return {"reply": discussion.reply}
+
     @app.post("/api/buy/discuss")
     @_map_errors
     def buy_discuss(payload: dict) -> dict:

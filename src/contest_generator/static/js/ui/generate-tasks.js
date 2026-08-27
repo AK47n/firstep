@@ -17,7 +17,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, verifyStatusMarkup, taskLatestFeedbackNote } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML } from "/js/fx/task.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { scorePoints } from "./generate-recommend.js";  // 当前会话推荐评分点（历史目录为空）
@@ -28,6 +28,20 @@ let tasks = {
   plan: null,         // /api/tasks/plan 的 done 载荷
   busy: false,        // 任一流程运行中（按钮置灰）
 };
+
+// 每卡对话区状态（工单 task-chat/03）：key = task id；{open, busy, history,
+// draft}——history = [{role, content}]（旧 → 新，含 AI 回复），draft = 输入框
+// 未发送内容（重渲染不丢）；对话历史会话级（刷新丢，采纳结论落盘不丢）。
+const taskDialogs = new Map();
+
+function taskDialogState(taskId) {
+  let st = taskDialogs.get(taskId);
+  if (!st) {
+    st = { open: false, busy: false, history: [], draft: "" };
+    taskDialogs.set(taskId, st);
+  }
+  return st;
+}
 
 function tasksSetBusy(busy) {
   tasks.busy = busy;
@@ -73,6 +87,11 @@ function tasksRender() {
             + '<button class="btn-task-feedback-send" data-task="' + esc(task.id) + '">按反馈修复</button>'
             + "</div>");
         }
+        // 每卡「和 AI 商量」对话区（工单 task-chat/03）：doing 不显示（执行中
+        // 不可操作）；对话历史 + 采纳徽标在纯函数侧渲染，本层只喂状态
+        const dialogSt = taskDialogState(task.id);
+        parts.push(taskDialogButtonHTML(task, dialogSt));
+        parts.push(taskDialogAreaHTML(task, dialogSt));
         return parts.join("");
       },
     });
@@ -345,6 +364,102 @@ async function tasksRollbackIteration(taskId, seq) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 每卡「和 AI 商量」对话区（工单 task-chat/03）：展开/收起 → 发消息 →
+// /api/tasks/discuss 一轮回应 → 采纳某条 AI 回复（/api/tasks/dialog-adopt）
+// → 任务卡徽标 + 下次执行注入。
+// ---------------------------------------------------------------------------
+
+function tasksDialogToggle(taskId) {
+  const st = taskDialogState(taskId);
+  st.open = !st.open;
+  tasksRender();
+}
+
+async function tasksDialogSend(taskId) {
+  const st = taskDialogState(taskId);
+  if (st.busy || tasks.busy) return;
+  const input = $("task-dialog-input-" + taskId);
+  const message = (input && input.value || "").trim();
+  if (!message) { $("tasks-msg").textContent = "请先说你的想法或纠正（如「左轮不转，改成脉冲式」）"; return; }
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  // 用户消息入历史后再发（历史含本条——后端 prompt 以 history[-1] 为最新消息）
+  st.history.push({ role: "user", content: message });
+  st.draft = "";
+  st.busy = true;
+  $("tasks-msg").textContent = "";
+  tasksRender();
+  try {
+    const data = await apiPost("/api/tasks/discuss", {
+      output_dir: dir,
+      task_id: taskId,
+      message: message,
+      history: st.history.map((m) => ({ role: m.role, content: m.content })),
+    });
+    st.history.push({ role: "assistant", content: data.reply || "" });
+    $("tasks-status").textContent = "";
+    toast("ok", "已回应——可继续聊，或点「采纳这条结论」");
+  } catch (e) {
+    // 失败：用户消息撤出历史（本轮未成功对话，留一条孤消息误导后续轮次）
+    st.history.pop();
+    $("tasks-status").textContent = "";
+    $("tasks-msg").textContent = e.message;
+  } finally {
+    st.busy = false;
+    tasksRender();
+  }
+}
+
+/** 采纳某条 AI 回复为对话结论（idx = 该条在历史中的下标；非 assistant 行
+ * 拒绝——采纳语义 = 采纳 AI 的确认/修正结论）。 */
+async function tasksDialogAdopt(taskId, idx) {
+  if (tasks.busy) return;
+  const st = taskDialogState(taskId);
+  const entry = st.history[Number(idx)];
+  if (!entry || entry.role !== "assistant" || !entry.content) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-msg").textContent = "";
+  try {
+    const data = await apiPost("/api/tasks/dialog-adopt", {
+      output_dir: dir, task_id: taskId, text: entry.content,
+    });
+    if (tasks.plan && tasks.plan.tasks) {
+      tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? data.task : t);
+    }
+    tasksRender();
+    toast("ok", "已采纳——「做这一步」时将按此结论实现");
+  } catch (e) {
+    $("tasks-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
+async function tasksDialogClear(taskId) {
+  if (tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-msg").textContent = "";
+  try {
+    const data = await apiPost("/api/tasks/dialog-adopt", {
+      output_dir: dir, task_id: taskId, text: "",
+    });
+    if (tasks.plan && tasks.plan.tasks) {
+      tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? data.task : t);
+    }
+    tasksRender();
+    toast("ok", "已取消采纳");
+  } catch (e) {
+    $("tasks-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
 $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
 $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
 // 任务卡「做这一步」事件委托（列随状态重渲染，监听器挂容器）
@@ -380,6 +495,17 @@ $("tasks-grid").addEventListener("click", (event) => {
   if (!btn) return;
   tasksRollbackIteration(btn.dataset.task, btn.dataset.seq);
 });
+// 每卡对话（工单 task-chat/03）：展开/收起 → 发送 → 采纳 → 取消采纳
+$("tasks-grid").addEventListener("click", (event) => {
+  const toggle = event.target.closest(".btn-task-dialog");
+  if (toggle) { tasksDialogToggle(toggle.dataset.task); return; }
+  const send = event.target.closest(".btn-task-dialog-send");
+  if (send) { tasksDialogSend(send.dataset.task); return; }
+  const adopt = event.target.closest(".btn-task-dialog-adopt");
+  if (adopt) { tasksDialogAdopt(adopt.dataset.task, adopt.dataset.idx); return; }
+  const clear = event.target.closest(".btn-task-dialog-clear");
+  if (clear) tasksDialogClear(clear.dataset.task);
+});
 // 跨簇通知（revise 上下文入口加载后广播）：目录不同 = 旧清单与当前目录无关，
 // 清空本簇状态（显示占位，等用户拆解）——revise 簇负责状态生命周期与广播时机，
 // 本簇只消费事件（零模块耦合：跨簇取值走 reviseGetDir 单点已够）。
@@ -388,6 +514,7 @@ window.addEventListener("revise-context-loaded", (event) => {
   if (dir !== tasks.outputDir) {
     tasks.outputDir = "";
     tasks.plan = null;
+    taskDialogs.clear();
     $("tasks-grid").classList.add("hidden");
     $("tasks-grid").innerHTML = "";
     $("tasks-progress").textContent = "";
@@ -408,6 +535,7 @@ window.addEventListener("tasks-invalidated", (event) => {
   if (dir && tasks.outputDir && dir !== tasks.outputDir) return;  // 与当前目录无关：不动本簇状态
   tasks.outputDir = "";
   tasks.plan = null;
+  taskDialogs.clear();
   $("tasks-grid").classList.add("hidden");
   $("tasks-grid").innerHTML = "";
   const stale = $("tasks-result");

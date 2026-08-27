@@ -43,6 +43,13 @@ export function taskScoreRefsText(scoreRefs, points) {
   }).join("、");
 }
 
+/** 任务序号标签（工单 task-chat/03）：index = 清单内序号（0 起）→ 「第 N 步」。
+ * 仅展示层换算——id / depends_on 不变（建议顺序 = LLM 拆解输出顺序，用户拍板
+ * 不做手动重排；序号是建议不是强制，网格顶部有声明行）。 */
+export function taskOrderLabel(index) {
+  return "第 " + (Number(index) + 1) + " 步";
+}
+
 export function taskCardHTML(task, index, opts) {
   const o = opts || {};
   const badge = '<span class="badge ' + taskStatusBadgeClass(task.status) + '">'
@@ -55,12 +62,14 @@ export function taskCardHTML(task, index, opts) {
     ? '<span class="muted"> · ' + taskVerifyLabel(task.verify) + "</span>"
     : "";
   return '<div class="item" data-task-id="' + esc(task.id) + '">'
-    + '<div class="head"><span class="slug">' + task.id + " · " + esc(task.title) + "</span>"
+    + '<div class="head"><span class="slug">' + taskOrderLabel(index) + " · " + task.id
+    + " · " + esc(task.title) + "</span>"
     + " " + badge + "</div>"
     + '<div class="reason">' + esc(task.description) + "</div>"
     + (refs ? '<div class="muted" style="margin-top:4px">评分点：' + esc(refs) + verifyNote + "</div>" : (verifyNote ? '<div class="muted" style="margin-top:4px">' + verifyNote + "</div>" : ""))
     + deps
     + taskIterationsHTML(task)
+    + taskDialogAdoptHTML(task)
     + (o.actions ? '<div class="row" style="margin-top:8px">' + o.actions(task, index) + "</div>" : "")
     + "</div>";
 }
@@ -69,7 +78,11 @@ export function tasksGridHTML(plan, opts) {
   const p = plan || {};
   const tasks = p.tasks || [];
   if (!tasks.length) return '<div class="muted">（任务清单为空——请点「拆解任务」生成）</div>';
-  return tasks.map((task, i) => taskCardHTML(task, i, opts)).join("");
+  // 建议顺序声明（工单 task-chat/03）：序号是 AI 按方便实现顺序排的建议，
+  // 不强制——用户可跳着做（depends_on 只作展示，后端无强制闸）
+  return '<div class="muted" style="margin-bottom:6px">'
+    + "建议按序号从上往下做（AI 按方便实现的顺序排）——不强制，可跳着做</div>"
+    + tasks.map((task, i) => taskCardHTML(task, i, opts)).join("");
 }
 
 export function tasksProgressText(plan) {
@@ -156,6 +169,72 @@ function iterationCompileBadgeClass(status) {
   }
 }
 
+/** 已采纳对话结论徽标（工单 task-chat/03）：任务 dialog_note 非空 → 徽标 +
+ * 摘要（截 30 字）+ 取消采纳按钮；未采纳 = 空串（不渲染）。
+ * dialog_note 由「和 AI 商量」对话区的采纳按钮写入（/api/tasks/dialog-adopt），
+ * 执行时作为独立 prompt 段注入（<-> 后端 task_progress.set_task_dialog_note）。 */
+export function taskDialogAdoptHTML(task) {
+  const note = task && task.dialog_note;
+  if (!note || !String(note).trim()) return "";
+  const text = String(note).trim();
+  return '<div class="muted" style="margin-top:4px">'
+    + '<span class="badge ok">已采纳对话结论</span> '
+    + esc(text.length > 30 ? text.slice(0, 30) + "…" : text)
+    + ' <button class="btn-task-dialog-clear" data-task="' + esc(task.id || "") + '">取消采纳</button>'
+    + "</div>";
+}
+
+/** 「和 AI 商量」按钮（工单 task-chat/03）：doing = 执行中不可操作（不显示）；
+ * st.open 时文案「收起讨论」。 */
+export function taskDialogButtonHTML(task, st) {
+  if (!task || task.status === "doing") return "";
+  const open = !!(st && st.open);
+  return '<button class="btn-task-dialog' + (open ? " active" : "") + '" data-task="'
+    + esc(task.id || "") + '">' + (open ? "收起讨论" : "和 AI 商量") + "</button>";
+}
+
+/** 任务对话区（工单 task-chat/03）：每卡「和 AI 商量」的展开区。
+ * st = {open, busy, history: [{role, content}]}；未展开 = 空串。
+ * 历史全量渲染（用户 / AI 逐条，转义）；每条 AI 消息下挂「采纳这条结论」
+ * 按钮（data-task + data-idx——可采纳任意一轮回复，采纳哪条由用户定）；
+ * 底部输入框 + 发送（busy 时禁用，防并发一轮）。样式复用 .sugg-discuss-*（
+ * 买件商量讨论区同一套，0 构建，不再造新视觉）。 */
+export function taskDialogAreaHTML(task, st) {
+  const s = st || {};
+  if (!s.open) return "";
+  const taskId = (task && task.id) || "";
+  const history = s.history || [];
+  const lines = history.map((m, i) => {
+    const isAi = m.role === "assistant";
+    const roleLabel = isAi ? "AI" : "我";
+    const adopt = isAi
+      ? ' <button class="btn-task-dialog-adopt" data-task="' + esc(taskId) + '" data-idx="'
+        + esc(String(i)) + '">采纳这条结论</button>'
+      : "";
+    return '<div class="sugg-msg ' + (isAi ? "ai" : "user") + '">'
+      + '<span class="sugg-msg-role">' + roleLabel + "</span>：" + esc(String(m.content))
+      + adopt + "</div>";
+  }).join("");
+  if (!lines) {
+    return '<div class="task-dialog-box">'
+      + '<div class="sugg-msg muted">可以告诉 AI 你的想法或纠正——确认后再采纳，结论会带进下一步执行。</div>'
+      + '<div class="sugg-discuss-row">' + dialogInputHTML(taskId, s) + "</div></div>";
+  }
+  return '<div class="task-dialog-box">'
+    + '<div class="sugg-discuss-msgs">' + lines + "</div>"
+    + '<div class="sugg-discuss-row">' + dialogInputHTML(taskId, s) + "</div>"
+    + (s.busy ? '<div class="sugg-discuss-note">AI 回应中…（分钟级调用，请等待）</div>' : "")
+    + "</div>";
+}
+
+/** 对话区输入行（send 语义共享：发送按钮 + busy 禁用）。 */
+function dialogInputHTML(taskId, s) {
+  return '<input id="task-dialog-input-' + esc(taskId) + '" class="sugg-discuss-input"'
+    + ' placeholder="说说你的想法或纠正（如：左轮不转，改成脉冲式）…" value="' + (s.draft || "") + '">'
+    + '<button class="btn-task-dialog-send" data-task="' + esc(taskId) + '"'
+    + (s.busy ? " disabled" : "") + ">" + (s.busy ? "回应中…" : "发送") + "</button>";
+}
+
 /** 结果面板「上板反馈」原文回溯（评审整改：Feature Envy——胶水层不再拼
  * HTML，纯函数单源）：最近一轮是上板反馈且有原文 → 返回展示 HTML（转义），
  * 否则空串。 */
@@ -208,5 +287,6 @@ if (typeof window !== "undefined") {
     taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
     verifyStatusMarkup, taskCanFeedback, taskIterationLabel,
     taskIterationsHTML, taskLatestFeedbackNote,
+    taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
   });
 }

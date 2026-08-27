@@ -26,9 +26,12 @@ id（t1..tn）由解析层按顺序分配，depends_on 用 1 起序号引用清�
     {"version": 1, "generated_at": "…",
      "tasks": [{"id": "t1", "title": "…", "description": "…",
                 "score_refs": ["s1"], "depends_on": ["t2"],
-                "verify": "compile", "status": "pending", "note": ""}]}
+                "verify": "compile", "status": "pending", "note": "",
+                "dialog_note": ""}]}
 
-note = 补充框内容（执行时透传 LLM，未执行 = 空串）。status 只在本域
+note = 补充框内容（执行时透传 LLM，未执行 = 空串）；dialog_note = 对话
+采纳结论（每卡「和 AI 商量」里用户采纳的 AI 回复全文，工单 task-chat/01；
+执行时作为独立段注入 prompt，采纳可选、空串 = 未采纳）。status 只在本域
 状态机内变化，前置任务不强制阻断（展示与排序用途）。
 """
 
@@ -148,6 +151,8 @@ class Task:
     （来自题面评分点清单，无评分点 = 空）；depends_on = 前置任务 id
     （展示与排序用途，不强制阻断）；verify = 验收方式；status = 状态机
     当前态；note = 补充框内容（用户向 AI 补的一句说明，执行时透传）；
+    dialog_note = 对话采纳结论（每卡「和 AI 商量」中用户采纳的 AI 回复
+    全文，执行时作为独立段注入 prompt——比 note 话语新、优先级高）；
     iterations = 执行轮次历史（上板反馈闭环，向后兼容读回）。
     """
 
@@ -159,6 +164,7 @@ class Task:
     verify: str = VERIFY_COMPILE
     status: str = STATUS_PENDING
     note: str = ""
+    dialog_note: str = ""
     iterations: tuple[TaskIteration, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -171,6 +177,7 @@ class Task:
             "verify": self.verify,
             "status": self.status,
             "note": self.note,
+            "dialog_note": self.dialog_note,
             "iterations": [iteration.to_dict() for iteration in self.iterations],
         }
 
@@ -246,6 +253,11 @@ class TaskPlan:
                     verify=verify,
                     status=status,
                     note=item.get("note", "") if isinstance(item.get("note", ""), str) else "",
+                    dialog_note=(
+                        item.get("dialog_note", "")
+                        if isinstance(item.get("dialog_note", ""), str)
+                        else ""
+                    ),
                     iterations=_parse_iterations(item.get("iterations", [])),
                 )
             )
@@ -694,12 +706,15 @@ def _with_task_status(
     task_id: str,
     status: str,
     note: str | None = None,
+    dialog_note: str | None = None,
     iterations: tuple[TaskIteration, ...] | None = None,
 ) -> TaskPlan:
     """任务状态替换（纯函数）：任务不存在 → TaskError；状态词表外 → TaskError。
 
     note 非 None 时一并替换（执行后持久化补充框内容——spec 用户故事 10
     「任务清单与进度（id / 描述 / 状态 / 备注）」；None = 只改状态）。
+    dialog_note 非 None 时一并替换（采纳对话结论——工单 task-chat/01；
+    None = 保留原值）。
     iterations 非 None 时一并替换（执行后追加轮次历史——工单 task-feedback/01；
     None = 保留原值）。
     """
@@ -720,6 +735,7 @@ def _with_task_status(
                     verify=task.verify,
                     status=status,
                     note=task.note if note is None else note,
+                    dialog_note=task.dialog_note if dialog_note is None else dialog_note,
                     iterations=task.iterations if iterations is None else iterations,
                 )
             )
@@ -769,6 +785,26 @@ def apply_task_status(output_dir: Path, task_id: str, status: str) -> dict[str, 
     updated_plan, task = update_task_status(plan, task_id, status)
     write_task_plan(output_dir, updated_plan)
     return {"task": task.to_dict(), "plan": updated_plan.to_dict()}
+
+
+def set_task_dialog_note(
+    output_dir: Path, task_id: str, text: str
+) -> dict[str, Any]:
+    """采纳 / 清除对话结论（工单 task-chat/01）：读清单 → 替换 dialog_note →
+    落盘 → (任务, 清单)。
+
+    text 为空串 = 清除采纳（用户取消 / 采纳错了）。text 非字符串由路由层
+    校验（照 note/feedback 的 _optional_str 先例）；本函数只做域判决：
+    清单未拆解 / 任务不存在 → TaskError 400。返回 {"task", "plan"}。
+    """
+    plan = read_task_plan(output_dir)
+    if plan is None:
+        raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
+    task = find_task(plan, task_id)
+    updated_plan = _with_task_status(plan, task_id, task.status, dialog_note=text)
+    write_task_plan(output_dir, updated_plan)
+    updated = find_task(updated_plan, task_id)
+    return {"task": updated.to_dict(), "plan": updated_plan.to_dict()}
 
 
 def rollback_task_iteration(

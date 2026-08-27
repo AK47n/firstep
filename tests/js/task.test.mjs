@@ -7,6 +7,7 @@ import {
   taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
   taskCardActions, verifyStatusMarkup,
   taskCanFeedback, taskIterationLabel, taskIterationsHTML, taskLatestFeedbackNote,
+  taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -207,4 +208,78 @@ test("taskCardHTML: 卡内渲染轮次历史（有记录追加，无记录不变
   }, 0, {});
   assert.ok(withHistory.includes("历史记录"));
   assert.ok(withHistory.includes("第 1 轮"));
+});
+
+// ---------------------------------------------------------------------------
+// 任务序号 + 每卡对话区（工单 task-chat/03）
+// ---------------------------------------------------------------------------
+
+test("taskOrderLabel: index 0 起 → 「第 N 步」", () => {
+  assert.equal(taskOrderLabel(0), "第 1 步");
+  assert.equal(taskOrderLabel(2), "第 3 步");
+});
+
+test("taskCardHTML: 序号进标题行（第 N 步 · t1 · 标题）", () => {
+  const html = taskCardHTML({
+    id: "t1", title: "循迹决策", description: "根据灰度值控制电机",
+    score_refs: [], depends_on: [], verify: "compile", status: "pending",
+  }, 0, {});
+  assert.ok(html.includes("第 1 步 · t1 · 循迹决策"));
+});
+
+test("tasksGridHTML: 建议顺序声明行（不强制，可跳着做）", () => {
+  const html = tasksGridHTML({ tasks: [
+    { id: "t1", title: "A", description: "x", score_refs: [], depends_on: [], verify: "compile", status: "pending" },
+  ] }, {});
+  assert.ok(html.includes("建议按序号从上往下做"));
+  assert.ok(html.includes("不强制，可跳着做"));
+});
+
+test("taskDialogAdoptHTML: 未采纳 → 空串；已采纳 → 徽标 + 摘要 + 取消按钮", () => {
+  assert.equal(taskDialogAdoptHTML({ dialog_note: "" }), "");
+  assert.equal(taskDialogAdoptHTML({}), "");
+  const html = taskDialogAdoptHTML({ id: "t1", dialog_note: "左轮不转：改为脉冲式控制" });
+  assert.ok(html.includes("已采纳对话结论"));
+  assert.ok(html.includes("左轮不转：改为脉冲式控制"));
+  assert.ok(html.includes("btn-task-dialog-clear"));
+  assert.ok(html.includes("data-task=\"t1\""));
+  // 超长摘要截 30 字
+  const long = taskDialogAdoptHTML({ id: "t1", dialog_note: "x".repeat(50) });
+  assert.ok(long.includes("…"));
+});
+
+test("taskDialogButtonHTML: doing 不显示；open 切换文案", () => {
+  assert.equal(taskDialogButtonHTML({ id: "t1", status: "doing" }, null), "");
+  const closed = taskDialogButtonHTML({ id: "t1", status: "pending" }, { open: false });
+  assert.ok(closed.includes("和 AI 商量"));
+  assert.ok(closed.includes("data-task=\"t1\""));
+  const open = taskDialogButtonHTML({ id: "t1", status: "verified" }, { open: true });
+  assert.ok(open.includes("收起讨论"));
+});
+
+test("taskDialogAreaHTML: 未展开 → 空串；展开空历史 → 引导语；有历史 → 消息 + 采纳按钮", () => {
+  assert.equal(taskDialogAreaHTML({ id: "t1" }, { open: false }), "");
+  const empty = taskDialogAreaHTML({ id: "t1" }, { open: true, history: [], busy: false });
+  assert.ok(empty.includes("可以告诉 AI 你的想法或纠正"));
+  assert.ok(empty.includes("task-dialog-input-t1"));
+  const st = {
+    open: true, busy: false,
+    history: [
+      { role: "user", content: "左轮不转" },
+      { role: "assistant", content: "建议改成脉冲式，GPIO 复用方向位即可。" },
+    ],
+  };
+  const html = taskDialogAreaHTML({ id: "t1" }, st);
+  assert.ok(html.includes('<span class="sugg-msg-role">我</span>：'));
+  assert.ok(html.includes("左轮不转"));
+  assert.ok(html.includes('<span class="sugg-msg-role">AI</span>：'));
+  assert.ok(html.includes("建议改成脉冲式"));
+  assert.ok(html.includes("采纳这条结论"));
+  assert.ok(html.includes("data-idx=\"1\""));
+  // AI 行才有采纳按钮（user 行不带）
+  assert.ok(!html.includes("data-idx=\"0\""));
+  // busy 提示 + 发送禁用
+  const busy = taskDialogAreaHTML({ id: "t1" }, { open: true, busy: true, history: [{ role: "user", content: "x" }] });
+  assert.ok(busy.includes("AI 回应中"));
+  assert.ok(busy.includes("disabled"));
 });

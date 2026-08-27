@@ -18,7 +18,7 @@ from contest_generator.events import ProgressEmitter
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
-from contest_generator.llm import BuyDiscussion
+from contest_generator.llm import BuyDiscussion, TaskDiscussion
 from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
@@ -602,6 +602,7 @@ class FakeLLM:
         task_plan: TaskPlan | None = None,
         executed_main_c: str = "",
         discussion: BuyDiscussion | None = None,
+        task_discussion: TaskDiscussion | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -621,7 +622,11 @@ class FakeLLM:
         )
         self._executed_main_c = executed_main_c
         self._discussion = discussion
+        self._task_discussion = task_discussion
         self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
+        self.task_discuss_calls: list[
+            tuple[dict[str, Any], str, str, tuple, tuple[str, ...], str, tuple]
+        ] = []
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
         self.skeleton_framework_calls: list[object | None] = []
@@ -869,6 +874,29 @@ class FakeLLM:
         )
         return self._discussion or BuyDiscussion(reply="好", review=None)
 
+    def discuss_task(
+        self,
+        task: Mapping[str, Any],
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        self.task_discuss_calls.append(
+            (
+                dict(task),
+                problem_text,
+                qa_text,
+                tuple(requirements),
+                tuple(module_interfaces),
+                main_c,
+                tuple(history),
+            )
+        )
+        return self._task_discussion or TaskDiscussion(reply="好")
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -1041,6 +1069,19 @@ class RecordingLLM:
     ) -> BuyDiscussion:
         self._record("discuss_buy_options")
         return BuyDiscussion(reply="好", review=None)
+
+    def discuss_task(
+        self,
+        task: Mapping[str, Any],
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        self._record("discuss_task")
+        return TaskDiscussion(reply="好")
 
     def generate_report_draft(
         self,
