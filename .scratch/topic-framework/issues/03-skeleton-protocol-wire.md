@@ -6,6 +6,8 @@
 
 **状态：** resolved
 
+**评审记录**（code-review 双轴，HEAD=5b6a08f）：Standards 判定性 6 条已修 4 条——① 平台过滤单源复刻（webapp 内联 `_platform_matches` 判据）→ `selection.platform_matches` 公开 + generator 装配统一收敛；② 域判决落进薄壳（webapp 选框架源）→ 移 `generator.build_topic_framework_info`（随 build_reference_fulltexts 同址）；③ Duplicated Code（平台匹配三处变体）→ 同 ①；④ 文档-实现不一致（manual_references 漏遍历——手动选参考带题型框架被跳过，真 bug）→ 并集 `references` ∪ `manual_references` + 集成测试；⑤ 控制文件语义不自洽（framework/main.c 进 files 清单会双份）→ `_validate_files` 拒绝入素材清单；⑥ prompt 强指令硬编码未单源 → `SKELETON_FRAMEWORK_RULE` 常量。Spec 5 条已修 2 条——① 框架段标题未带 topic_type/source（只收 str 丢元数据）→ `TopicFramework` 结构化（code/topic_type/source=标题）+ 标题还原 spec 模板；④ source 用 id 非标题 → source=entry.title。判定性保留：冒烟返回体 topic_framework:{injected:false}（无害，已注明）；词表走端点（spec 与工单打架，工单内化且端点更单源）；「continue 找下一个 vs None 降级」（工单 04 docstring 裁定）。
+
 **验收：** 全部 ✓（协议签名加参 + DeepSeek/RoutingLLM/fakes 同步；`_skeleton_user_prompt` 框架段在参考段之前 + 强指令；`_generate_main_c` / `generate_skeleton` / `run_skeleton` 透传；测试 test_llm.py 新增 2 条 + 既有 302 全绿）。
 
 - [ ] LLM 抽象 `generate_main_skeleton(..., topic_framework=None)`；DeepSeek 实现 + RoutingLLM 转发（remote 方法加参）+ FakeLLM / RecordingLLM（测试 fakes）同步
