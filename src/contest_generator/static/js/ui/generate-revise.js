@@ -23,6 +23,7 @@
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
+import { verifyStatusMarkup } from "/js/fx/task.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
@@ -396,28 +397,19 @@ async function reviseRunDeepen() {
 }
 
 /** 深化验证结果：verified = 绿 ✓；unverified = 黄降级提示（结果保留，未验证）；
- * failed = 红（已备份可回滚）。backup_id 进回滚入口。 */
+ * failed = 红（已备份可回滚）。backup_id 进回滚入口。徽章 + 摘要文案单源 =
+ * fx/task.js verifyStatusMarkup（与任务执行结果面板共用，防措辞分叉）。 */
 function reviseRenderVerify(data) {
   revise.deepenDone = data;
   if (data.backup_id) revise.backupId = data.backup_id;
-  const compile = data.compile || {};
-  let badgeHtml, detailHtml;
-  if (data.status === "verified") {
-    badgeHtml = '<span class="ok" style="font-weight:600">✓ 已验证（编译通过）</span>';
-    detailHtml = esc("编译通过 · exit "
-      + (compile.exit_code === null || compile.exit_code === undefined ? "—" : compile.exit_code)
-      + (compile.summary ? " · " + compile.summary : ""));
-  } else if (data.status === "unverified") {
-    badgeHtml = '<span style="color:var(--warn);font-weight:600">⚠ 未验证（无工具链降级）</span>';
-    detailHtml = esc(data.message || "未检测到编译工具链：深化结果已写入 main.c，但未经编译验证——请在设置页配置工具链后重新编译，或手动编译确认。");
-  } else {
-    badgeHtml = '<span style="color:var(--danger);font-weight:600">✗ 未通过（编译验证失败）</span>';
-    detailHtml = esc(data.message || "编译验证未通过，深化结果已写入 main.c（已备份，可回滚）。");
-  }
+  const markup = verifyStatusMarkup(data, {
+    unverified: "未检测到编译工具链：深化结果已写入 main.c，但未经编译验证——请在设置页配置工具链后重新编译，或手动编译确认。",
+    failed: "编译验证未通过，深化结果已写入 main.c（已备份，可回滚）。",
+  });
   const box = $("revise-result");
   box.innerHTML = box.innerHTML
-    + '<div class="item" style="margin-top:10px"><div class="head"><span class="slug">深化验证</span> ' + badgeHtml + "</div>"
-    + '<div class="reason">' + detailHtml + "</div>"
+    + '<div class="item" style="margin-top:10px"><div class="head"><span class="slug">深化验证</span> ' + markup.badge + "</div>"
+    + '<div class="reason">' + markup.detail + "</div>"
     + '<div class="reason">备份：<span class="slug">' + esc(data.backup_id || "—") + "</span></div>"
     + reviseRenderDeepenDiff(data.main_diff)
     + "</div>";
@@ -425,18 +417,21 @@ function reviseRenderVerify(data) {
   $("btn-revise-rollback").classList.toggle("hidden", !revise.backupId);
 }
 
-/** 深化效果（工单 deepen-report/01）：main.c 前后确定性 diff 介绍卡——
- * 统计行（新增 / 删除 / 处数）+ 每个 hunk 一个可折叠改动点（标题优先取被
- * 替换的 TODO 注释，展开 = 逐行着色 diff：新增绿 / 删除红 / 上下文灰）。
- * 事实源 = 后端真实 diff（不依赖 LLM 自述）；main_diff = null → 占位提示；
- * 字段缺失（旧后端）→ 不渲染。 */
-function reviseRenderDeepenDiff(diff) {
+/** 深化/任务效果（工单 deepen-report/01 + task-progress/02 复用）：main.c
+ * 前后确定性 diff 介绍卡——统计行（新增 / 删除 / 处数）+ 每个 hunk 一个可
+ * 折叠改动点（标题优先取被替换的 TODO 注释，展开 = 逐行着色 diff：新增绿 /
+ * 删除红 / 上下文灰）。事实源 = 后端真实 diff（不依赖 LLM 自述）；
+ * main_diff = null → 占位提示；字段缺失（旧后端）→ 不渲染。
+ * entity = 实体名（深化 / 任务），文案不写死（任务面板不出现「深化」）。 */
+function reviseRenderDeepenDiff(diff, entity) {
+  const name = entity || "深化";
   if (diff === undefined) return "";
-  if (diff === null) return '<div class="muted" style="margin-top:8px">深化未改动 main.c（无差异）。</div>';
+  if (diff === null) return '<div class="muted" style="margin-top:8px">' + esc(name) + "未改动 main.c（无差异）。</div>";
   const hunks = diff.hunks || [];
-  if (!hunks.length) return '<div class="muted" style="margin-top:8px">深化未改动 main.c（无差异）。</div>';
+  if (!hunks.length) return '<div class="muted" style="margin-top:8px">' + esc(name) + "未改动 main.c（无差异）。</div>";
   const s = diff.stats || {};
-  const parts = ['<div class="reason" style="margin-top:8px"><strong>深化效果：</strong>'
+  const parts = ['<div class="reason" style="margin-top:8px"><strong>' + esc(name)
+    + "效果：</strong>"
     + '新增 <span class="ok">+' + (s.additions || 0) + "</span> 行 · 删除 <span style=\"color:var(--danger)\">−"
     + (s.deletions || 0) + "</span> 行 · " + (s.hunks || 0) + " 处改动</div>"];
   hunks.forEach((h) => {
@@ -522,4 +517,4 @@ function reviseGetDir() {
 
 // ---- 本簇导出面（host 零调用点——按工单 17 检查表导出为模块 API） ----
 export { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen,
-  reviseResetAll, reviseRenderContext, reviseGetDir };
+  reviseResetAll, reviseRenderContext, reviseGetDir, reviseRenderDeepenDiff };

@@ -241,6 +241,21 @@ TASK_PLAN_SYSTEM_PROMPT = (
     '"score_refs": ["s1"], "depends_on": [1, 2], "verify": "compile"}]}'
 )
 
+# 单任务执行系统提示词（工单 task-progress/02）：在现有 main.c 上只实现一个
+# 任务（其余已实现内容与手工编辑原样保留），文本模式输出整文件——深化同款
+# 形状，prompt 约束"只实现本任务"。
+TASK_EXECUTE_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师。在现有 main.c 上实现**指定的这一个任务**"
+    "（赛题文本 / 接口过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）："
+    "只实现任务描述里要求的功能，不实现清单中其他任务、不做题外发挥；"
+    "保留原有初始化序列与已有代码（那是已完成的其它任务与用户手工编辑过的"
+    "内容）；已有的实现即使看起来不完美也不要改（其它任务的成果）；"
+    "只调用给定接口中真实存在的函数，绝不凭空造函数。"
+    + SKELETON_NO_UNUSED_RULE
+    + "输出完整 main.c（整个文件，不是片段），纯 C 代码，不要用 ``` 或 ~~~ "
+    "代码围栏包裹，不要输出任何 Markdown 标记。"
+)
+
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
 SKELETON_INTERFACES_HEADING = "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："
 
@@ -1076,6 +1091,16 @@ class LLM(Protocol):
         module_interfaces: Sequence[str],
         main_c: str,
     ) -> TaskPlan: ...
+
+    def execute_task(
+        self,
+        main_c: str,
+        task: Mapping[str, Any],
+        note: str,
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -2202,6 +2227,32 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def execute_task(
+        self,
+        main_c: str,
+        task: Mapping[str, Any],
+        note: str,
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        """单任务执行（工单 task-progress/02）：在现有 main.c 上只实现一个任务。
+
+        输入 = 现有 main.c + 任务描述 + 用户补充说明（note）+ 模块接口清单 +
+        题面与 Q&A；输出 = 实现后的 main.c 全文（文本模式，与深化同形状）。
+        瞬时失败整次重问（_retry_parse，与骨架同款兜底）；空结果由域层
+        run_task 拒绝（TaskError）。
+        """
+        return self._retry_parse(
+            system_prompt=TASK_EXECUTE_SYSTEM_PROMPT,
+            user_prompt=_task_execute_user_prompt(
+                main_c, task, note, module_interfaces, problem_text, qa_text
+            ),
+            parse=lambda content: content,
+            label="任务执行",
+            operation="execute_task",
+        )
+
     def _observe_call(
         self,
         *,
@@ -2795,6 +2846,20 @@ class RoutingLLM:
             main_c,
         )
 
+    def execute_task(
+        self,
+        main_c: str,
+        task: Mapping[str, Any],
+        note: str,
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+    ) -> str:
+        # 单任务执行走 remote（质量优先，不进本地方法集）
+        return self._remote.execute_task(
+            main_c, task, note, module_interfaces, problem_text, qa_text
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -3247,6 +3312,37 @@ def _task_plan_user_prompt(
     lines += ["", SKELETON_INTERFACES_HEADING]
     lines.extend(_truncate_content(block) for block in module_interfaces)
     lines += ["", "现有 main.c（任务是填入 TODO 预留区的增量，其余内容原样保留）：", main_c]
+    return "\n".join(lines)
+
+
+def _task_execute_user_prompt(
+    main_c: str,
+    task: Mapping[str, Any],
+    note: str,
+    module_interfaces: Sequence[str],
+    problem_text: str,
+    qa_text: str,
+) -> str:
+    """单任务执行的 user 消息（工单 task-progress/02）：任务描述 + 补充框 +
+    题面 + Q&A + 接口 + 现有 main.c。补充框（note）独立段（用户对本次执行的
+    附加说明，如"循迹用 10ms 定时器"），为空 = 无该段。"""
+    lines = [
+        "【本次要实现的单个任务】",
+        f"任务：{task.get('title', '')}",
+        f"描述：{task.get('description', '')}",
+    ]
+    if note:
+        lines += ["", "【用户补充说明（本次执行的附加要求）】", note]
+    lines += ["", "赛题：", _truncate_content(problem_text)]
+    if qa_text:
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+    lines += ["", SKELETON_INTERFACES_HEADING]
+    lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += [
+        "",
+        "现有 main.c（只实现上述任务描述要求的功能，其余内容原样保留）：",
+        main_c,
+    ]
     return "\n".join(lines)
 
 

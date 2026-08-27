@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import {
   taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
   taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
+  verifyStatusMarkup,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -86,4 +87,19 @@ test("tasksProgressText: verified + skipped 计入完成", () => {
     { status: "verified" }, { status: "skipped" }, { status: "pending" },
   ] }), "进度 2/3");
   assert.equal(tasksProgressText({}), "进度 0/0");
+});
+
+test("verifyStatusMarkup: 三态徽章 + 摘要（深化/任务面板共用单源）", () => {
+  const verified = verifyStatusMarkup({ status: "verified", compile: { exit_code: 0, summary: "0 errors" } }, {});
+  assert.ok(verified.badge.includes("已验证"));
+  assert.ok(verified.detail.includes("exit 0"));
+  const unverified = verifyStatusMarkup({ status: "unverified", compile: {} }, { unverified: "任务自定义降级文案" });
+  assert.ok(unverified.badge.includes("未验证"));
+  assert.ok(unverified.detail.includes("任务自定义降级文案"));
+  const failed = verifyStatusMarkup({ status: "failed" }, {});
+  assert.ok(failed.badge.includes("未通过"));
+  assert.ok(failed.detail.length > 0);
+  // message 优先于 fallback（后端中文）
+  const withMessage = verifyStatusMarkup({ status: "failed", message: "仍红的中文提示" }, {});
+  assert.ok(withMessage.detail.includes("仍红的中文提示"));
 });

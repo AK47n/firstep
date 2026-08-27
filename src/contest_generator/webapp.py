@@ -62,7 +62,12 @@ from .context_manifest import (
     validate_context_fields,
 )
 from .deepen import DeepenError, run_deepen
-from .task_progress import TaskError, check_plan_replaceable, run_task_planning
+from .task_progress import (
+    TaskError,
+    check_plan_replaceable,
+    run_task,
+    run_task_planning,
+)
 from .errors import error_entry
 from .events import EVENT_CACHE_HIT, ProgressEvent
 from .extraction import (
@@ -1994,6 +1999,106 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             run_sse(run, error_message=_error_message),
             headers={"Content-Type": "text/event-stream"},
         )
+
+    # ------------------------------------------------------------------
+    # 任务推进 · 单任务执行（工单 task-progress/02）：一次 LLM 调用实现
+    # 一个任务 → 备份 → 写盘 → 编译验证闭环（与深化共用尾段）→ 状态回填。
+    # 域判决在 task_progress.run_task（照 run_deepen 先例），路由薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/execute")
+    @_map_errors
+    def tasks_execute(payload: dict) -> StreamingResponse:
+        """单任务执行（SSE 流）：执行中 → 编译验证 → done（任务 + 状态）或
+        error（中文信息）。
+
+        请求体契约：output_dir（必填，生成结果目录）；task_id（必填，任务
+        id）；note（可选字符串，补充框——用户对本次执行的附加说明，透传
+        LLM）；problem_text（可选覆盖，历史目录补题面流程）。
+
+        事件序列：task_executing（LLM 实现中，分钟级）→ compile_start →
+        fix_start（仅首轮编译失败）→ verify_result → done（{"task",
+        "status", "backup_id", "compile", "main_diff", "message"}，与深化
+        尾段同形状 + task 为清单回填后的最新形状）或 error（中文信息）→
+        流结束。HTTP 200 起流，失败以流内 error 事件收尾。
+
+        缺上下文（无题面 / 无需求清单）→ 400 中文提示；清单未拆解 / 任务
+        不存在 → 400（TaskError）；工具链缺失 = 大声降级（status =
+        unverified，结果保留）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        task_id = _require_str(payload, "task_id")
+        note = _optional_str(payload, "note") or ""
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if payload.get("problem_text") is not None:
+            fields["problem_text"] = _require_str(payload, "problem_text")
+        if not fields.get("problem_text"):
+            raise TaskError("缺少赛题原文——请先补题面（任务执行需要题面证据）")
+        platform = fields["platform"]
+        # main.c 现读（手工编辑保留，与拆解 / 深化同口径）
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("tasks-execute")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_task(
+                        llm=llm,
+                        task_id=task_id,
+                        note=note,
+                        problem_text=fields["problem_text"],
+                        qa_text=fields.get("qa_text", ""),
+                        manifests=resolved.manifests,
+                        platform=platform,
+                        library_dir=module_library_dir,
+                        master_project_dir=master_project_dir(
+                            config.masters_dir, platform
+                        ),
+                        main_c=main_c,
+                        output_dir=output_dir,
+                        work_root=config.masters_dir.parent,
+                        emit=emit,
+                        uv4_override=config.uv4_path,
+                        make_override=config.gmake_path,
+                        module_slugs=fields["slugs"],
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    # ------------------------------------------------------------------
+    # 任务推进 · 清单读取（工单 task-progress/02）：回滚后 / 重新打开时前端
+    # 重读磁盘任务清单（执行 / 改标落盘 = 磁盘态即真相，内存态只作展示缓存）。
+    # 域判决在 task_progress.read_task_plan，路由只做薄壳装配。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/plan-read")
+    @_map_errors
+    def tasks_plan_read(payload: dict) -> dict:
+        """任务清单读取（同步端点）：{output_dir} → {plan}（缺 = None）。
+
+        返回 {"plan": {"version", "generated_at", "tasks": [...]} | None}——
+        未拆解 = None（前端显示占位）；坏 JSON = TaskError 400 中文。
+        """
+        from .task_progress import read_task_plan
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        plan = read_task_plan(output_dir)
+        return {"plan": plan.to_dict() if plan is not None else None}
 
     @app.post("/api/fix-errors")
     @_map_errors

@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from .events import EVENT_TASK_PLANNING, ProgressEvent
+from .events import EVENT_TASK_EXECUTING, EVENT_TASK_PLANNING, ProgressEvent
 
 if TYPE_CHECKING:
     from .llm import LLM  # 仅类型注解（llm 运行时依赖本层，反向禁止）
@@ -435,3 +435,159 @@ def run_task_planning(
     )
     write_task_plan(output_dir, stamped)
     return stamped.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# 域编排：单任务执行（工单 02）。共用深化尾段 verify_compile_tail（deepen.py）
+# 与 main_diff（改名自 _main_diff，工单 02 起公共）。
+# ---------------------------------------------------------------------------
+
+
+def find_task(plan: TaskPlan, task_id: str) -> Task:
+    """按 id 查任务；清单未拆解 / 任务不存在 → TaskError（400 中文）。"""
+    if plan is None:
+        raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
+    for task in plan.tasks:
+        if task.id == task_id:
+            return task
+    raise TaskError(f"任务清单里没有任务 {task_id}——清单可能已过期，请重新拆解")
+
+
+def run_task(
+    *,
+    llm: LLM,
+    task_id: str,
+    note: str,
+    problem_text: str,
+    qa_text: str,
+    manifests: Sequence[Any],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path,
+    main_c: str,
+    output_dir: Path,
+    work_root: Path,
+    emit: SseEmitter,
+    uv4_override: str = "",
+    make_override: str = "",
+    module_slugs: Sequence[str] = (),
+) -> dict[str, Any]:
+    """/api/tasks/execute 的域编排：单任务 LLM 实现 → 备份 → 写盘 → 编译
+    验证闭环（与深化共用 verify_compile_tail 尾段）→ 状态回填清单。
+
+    任务 = 清单里的一个任务（find_task 查）。LLM 输入 = 当前 main.c + 任务
+    描述 + 补充框（note，用户对本次执行的附加说明）+ 模块接口 + 题面/Q&A；
+    输出 = 实现后的 main.c 全文（与深化同形状，prompt 约束只实现本任务）。
+
+    返回 done 载荷：{"task": 执行后任务 to_dict（状态 doing 已回填 -> 终态
+    verified/unverified/failed）, "status", "backup_id", "compile",
+    "main_diff", "message"}——status / compile / main_diff / message 与深化
+    尾段同形状；task 为清单回填后的最新形状（前端据此重渲染该卡）。
+    """
+    from .deepen import main_diff, verify_compile_tail
+    from .revision import backup_tree, revise_backup_root
+    from .skeleton import build_skeleton_interfaces
+
+    if not main_c.strip():
+        raise TaskError("工程 main.c 为空，无法执行任务（请先生成或修订工程）")
+
+    plan = read_task_plan(output_dir)
+    if plan is None:
+        raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
+    task = find_task(plan, task_id)
+    previous_status = task.status  # 失败路径恢复用（不把任务钉死在 doing）
+    emit.progress(ProgressEvent(type=EVENT_TASK_EXECUTING))
+
+    # 执行起始：状态 → doing 并落盘（前端实时可见；失败路径恢复 previous_status
+    # ——异常 → 恢复后 re-raise，不静默回滚也不钉死）
+    plan = _with_task_status(plan, task_id, STATUS_DOING)
+    write_task_plan(output_dir, plan)
+
+    try:
+        interfaces = build_skeleton_interfaces(
+            manifests, platform, library_dir, master_project_dir
+        )
+        executed = llm.execute_task(
+            main_c=main_c,
+            task=task.to_dict(),
+            note=note,
+            module_interfaces=interfaces,
+            problem_text=problem_text,
+            qa_text=qa_text,
+        )
+        if not executed.strip():
+            raise TaskError("任务执行结果为空——LLM 未产出实现后的 main.c，请重试")
+    except Exception:
+        # 失败恢复：任务状态回 previous_status（LLM 空结果 / 接口装配失败等
+        # 早于写盘的路径不留下 doing 钉子；已落盘的事故由用户重做 / 改标）
+        try:
+            write_task_plan(output_dir, _with_task_status(plan, task_id, previous_status))
+        except TaskError:
+            pass  # 恢复失败（清单并发损坏）不掩盖原始异常
+        raise
+
+    # 备份（与深化同一回滚入口：revise-backups）→ 写盘 → 单任务 diff
+    backup_id = backup_tree(revise_backup_root(work_root), output_dir)
+    (output_dir / "main.c").write_text(executed, encoding="utf-8")
+    diff = main_diff(main_c, executed)  # deepen.main_diff（公共，工单 02）
+
+    # 编译验证闭环（与深化共用尾段；main_diff 已算好；subject = 任务上下文）
+    result = verify_compile_tail(
+        llm=llm,
+        platform=platform,
+        output_dir=output_dir,
+        work_root=work_root,
+        problem_text=problem_text,
+        module_slugs=module_slugs,
+        main_c=executed,
+        uv4_override=uv4_override,
+        make_override=make_override,
+        emit=emit,
+        backup_id=backup_id,
+        main_diff=diff,
+        subject="任务结果",
+    )
+
+    # 状态回填（终态写盘；note 持久化——补充框内容刷新不丢，spec 用户故事 10）
+    updated_plan = _with_task_status(plan, task_id, result["status"], note=note)
+    write_task_plan(output_dir, updated_plan)
+    updated = find_task(updated_plan, task_id)
+    return {"task": updated.to_dict(), **result}
+
+
+def _with_task_status(
+    plan: TaskPlan, task_id: str, status: str, note: str | None = None
+) -> TaskPlan:
+    """任务状态替换（纯函数）：任务不存在 → TaskError；状态词表外 → TaskError。
+
+    note 非 None 时一并替换（执行后持久化补充框内容——spec 用户故事 10
+    「任务清单与进度（id / 描述 / 状态 / 备注）」；None = 只改状态）。
+    """
+    if status not in ALL_STATUSES:
+        raise TaskError(f"非法任务状态：{status}")
+    tasks = []
+    found = False
+    for task in plan.tasks:
+        if task.id == task_id:
+            found = True
+            tasks.append(
+                Task(
+                    id=task.id,
+                    title=task.title,
+                    description=task.description,
+                    score_refs=task.score_refs,
+                    depends_on=task.depends_on,
+                    verify=task.verify,
+                    status=status,
+                    note=task.note if note is None else note,
+                )
+            )
+        else:
+            tasks.append(task)
+    if not found:
+        raise TaskError(f"任务清单里没有任务 {task_id}——清单可能已过期，请重新拆解")
+    return TaskPlan(
+        version=plan.version,
+        generated_at=plan.generated_at,
+        tasks=tuple(tasks),
+    )
