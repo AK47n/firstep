@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 01-04 代码落地后（字段与读取已就绪，本票纯素材）。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**验收：** 全部 ✓（三条例目 reference.json 标 `"topic_type": "line_follow"`（经 update_reference 落盘，lib-autocommit 提交）+ 各写 `framework/main.c`（21F 3866B / 26H 2489B / car-1-1 2062B，均 0 真实接口调用）+ 实测 `build_topic_framework` 三目录返回非 None 且 `read_fulltext` 不含框架内容（控制文件隔离）+ git 追踪确认）。
 
 - [ ] 21F / 26H / car-1-1 三条例目 reference.json 标 `"topic_type": "line_follow"`（经 update_reference 或直写元数据 + 校验）
 - [ ] 各条目写 `framework/main.c`（每条约 60-150 行：状态机枚举 / 调度循环 / TODO 位 / 平台与接口中立——0 个真实接口调用，纯骨架结构）
