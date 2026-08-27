@@ -5053,7 +5053,8 @@ def test_recommend_carries_requirements_and_isolates_suggestions(client, context
             "sentence": 2,
             "modules": ["dht11"],
             "suggestions": [
-                {"name": "视觉模块", "examples": ["K230", "OpenMV"], "degraded": False}
+                {"name": "视觉模块", "examples": ["K230", "OpenMV"],
+                 "degraded": False, "solutions": [], "selected": ""}
             ],
         }
     ]

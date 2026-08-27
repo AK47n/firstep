@@ -25,6 +25,7 @@ from contest_generator.events import (
     EVENT_ROUND,
     ProgressEvent,
 )
+from contest_generator.budget import wire_size
 from contest_generator.fix_errors import FixSuggestion, read_file_contexts
 from contest_generator.llm import (
     CLARIFICATION_HISTORY_CAP,
@@ -44,6 +45,8 @@ from contest_generator.llm import (
     SKELETON_SYSTEM_PROMPT,
     SMOKE_SYSTEM_PROMPT,
     TopicFramework,
+    WORDLIST_PROMPT_BYTES,
+    _wordlist_prompt_segment,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
@@ -1993,8 +1996,11 @@ def test_prompts_share_truncation_notice():
 def test_select_modules_truncates_oversized_problem():
     """超大赛题文本同样截断：模块选择请求体也不会超限（未兜底输入闭环）。
 
-    提示词开销 = 固定常数段（词表科普段 / 输出契约，工单 10 起新增），余量
-    放宽到 +1000：断言的重点是"赛题内容被截断到预算内"，开销段不随内容增长。
+    提示词开销 = 固定常数段（词表科普段 / 输出契约，工单 10 起新增）——词表
+    段全量契约（buy-guide/01：默认词表方案名必须完整送达，selected 判决
+    依据）使其长度随词表内容确定（预算 4200 wire），断言开销按真实词表段
+    动态计算 +2000 契约余量；重点仍是"赛题内容被截断到预算内"，开销段不随
+    内容增长。
     """
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
@@ -2003,7 +2009,8 @@ def test_select_modules_truncates_oversized_problem():
 
     _, _, payload, _ = transport.calls[0]
     message = payload["messages"][1]["content"]
-    assert len(message) < EMBEDDED_CONTENT_CAP + 1000
+    overhead = len(_wordlist_prompt_segment(DEFAULT_WORDLIST)) + 2000
+    assert len(message) < EMBEDDED_CONTENT_CAP + overhead
     assert "截断" in message
     assert TRUNCATION_NOTICE in message
 
@@ -3904,6 +3911,31 @@ def test_select_modules_prompt_includes_wordlist_and_new_contract():
     assert '"suggestions"' in user_message
     assert '"questions"' in user_message
     assert '"references"' not in user_message  # 无参考文件清单时旧形态保持
+
+
+def test_wordlist_segment_covers_default_wordlist_and_budget():
+    """词表段全量契约（工单 buy-guide/01 + 评审修正）：默认词表的全部类别与
+    方案名必须完整送达 select prompt——方案名是 selected 判决依据（截掉尾部
+    类别 → 该类 selected 恒空、买件指引核心功能折损）。曾经历 1100 预算只送
+    ~37%（遥控接收/无线通信/定位/执行机构类别方案全被截掉）的回归，此处钉
+    死：① 默认词表不截断（预算高于完整 wire）；② 超长词表截断时标注进预算
+    （fit 后实发 ≤ WORDLIST_PROMPT_BYTES）。"""
+    prompt = _selection_user_prompt(
+        "设计一个识别数字的送药小车", [ManifestSummary("dht11", "温湿度")],
+        hardware_words=DEFAULT_WORDLIST,
+    )
+    for group in DEFAULT_WORDLIST:
+        if not group.solutions:
+            continue
+        assert group.category in prompt  # 类别标题
+        for sol in group.solutions:
+            assert sol.name in prompt  # 方案名全量可见（selected 判决依据）
+    # 截断形态：超长词表（5 份默认词表）→ 段级截断 + 标注进预算
+    huge = DEFAULT_WORDLIST * 5
+    segment = _wordlist_prompt_segment(huge)
+    assert wire_size(segment) <= WORDLIST_PROMPT_BYTES
+    assert "已截断" in segment
+    assert wire_size(segment) > WORDLIST_PROMPT_BYTES // 2  # 预算非名义：仍送满大部分
 
 
 def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():

@@ -89,6 +89,10 @@ const DOMAINS = {
     syncCollapseBtn: "fn", collapseToggleAll: "fn", fmtSeconds: "fn",
     frameworkNoteHTML: "fn",
   },
+  "recommend.js": {
+    suggestionSolutionBadges: "fn", suggestionOptionRowHTML: "fn",
+    suggestionOptionsHTML: "fn", suggestionChipHTML: "fn",
+  },
   "recent.js": {
     recentStatusMeta: "fn", recentTimeLabel: "fn", recentPlatformLabel: "fn",
     recentChipHTML: "fn", recentListHTML: "fn", recentStatusNow: "fn",
