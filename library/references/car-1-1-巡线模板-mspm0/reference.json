@@ -6,6 +6,7 @@
   "anchor_kind": "topic",
   "anchor_value": "2024H",
   "platform": "mspm0",
+  "topic_type": "line_follow",
   "files": [
     "xunji_template.c",
     "xunji_template.h",
@@ -17,6 +18,6 @@
     "USART_JY61P/JY61P.c",
     "USART_JY61P/JY61P.h"
   ],
-  "file_count": 0,
-  "size_bytes": 0
+  "file_count": 11,
+  "size_bytes": 58015
 }
