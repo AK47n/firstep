@@ -3,9 +3,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  deliveryActionsHTML,
   deliveryCheckHTML,
   deliveryPackageHTML,
 } from "../../src/contest_generator/static/js/fx/delivery.js";
+
+test("deliveryActionsHTML: 三按钮 + busy 禁用 + 转义（无注入面）", () => {
+  const html = deliveryActionsHTML(false);
+  assert.ok(html.includes('id="btn-delivery-open"'));
+  assert.ok(html.includes('id="btn-delivery-check"'));
+  assert.ok(html.includes('id="btn-delivery-package"'));
+  assert.ok(!html.includes("disabled"));
+  const busy = deliveryActionsHTML(true);
+  assert.ok(busy.includes("disabled"));
+  assert.equal((busy.match(/disabled/g) || []).length, 3);
+});
 
 test("deliveryCheckHTML: 全部完成 → ✅ + 统计行", () => {
   const html = deliveryCheckHTML({

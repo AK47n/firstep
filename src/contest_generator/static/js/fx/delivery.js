@@ -5,6 +5,17 @@
 import { esc, formatSize } from "./core.js";
 import { taskStatusLabel, taskStatusBadgeClass } from "./task.js";
 
+/** 交付卡按钮行（工单 delivery-suite/02）：打开工程 / 交付检查 / 一键打包。
+ * busy = 任一交付动作进行中（或任务/参数流程占用共享闸）→ 三按钮全部禁用。
+ * 按钮 id 与 index.html 静态占位无关——ui/delivery.js 渲染后重绑事件。 */
+export function deliveryActionsHTML(busy) {
+  const dis = busy ? " disabled" : "";
+  return '<button id="btn-delivery-open" class="primary"' + dis
+    + ' title="stm32 优先拉起 Keil（UV4），兜底打开文件夹；mspm0 打开文件夹（CCS 手动导入）">打开工程</button>'
+    + ' <button id="btn-delivery-check" class="primary"' + dis + ">交付检查</button>"
+    + ' <button id="btn-delivery-package" class="primary"' + dis + ">一键打包</button>";
+}
+
 /** 交付检查结果 HTML：完成度统计行 + 结论（✅/⚠）+ 未完成逐条列表。
  * result 空 / 未拆解清单（plan_present False）只有结论行；全部 esc。 */
 export function deliveryCheckHTML(result) {
@@ -40,5 +51,5 @@ export function deliveryPackageHTML(result) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { deliveryCheckHTML, deliveryPackageHTML });
+  Object.assign(window, { deliveryActionsHTML, deliveryCheckHTML, deliveryPackageHTML });
 }

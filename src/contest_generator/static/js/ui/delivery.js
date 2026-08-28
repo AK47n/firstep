@@ -4,7 +4,7 @@
 // 与任务执行 / 参数流程互斥，防弹窗与写盘竞争）；目录取 reviseGetDir
 //（「修订与深化」卡已加载上下文，主写簇归 generate-revise.js）。
 import { $, apiPost, toast } from "/js/app.js";
-import { deliveryCheckHTML, deliveryPackageHTML } from "/js/fx/delivery.js";
+import { deliveryActionsHTML, deliveryCheckHTML, deliveryPackageHTML } from "/js/fx/delivery.js";
 import { reviseGetDir } from "./generate-revise.js";
 import { tasksSetBusy, tasksIsBusy } from "./generate-tasks.js";
 
@@ -14,13 +14,23 @@ function dir() {
   return reviseGetDir();
 }
 
+/** 渲染按钮行 + 绑定事件（busy 变化时重渲染——每次渲染后重绑，防
+ * innerHTML 重建后旧监听丢失）。事件 id 单源 = fx/delivery.js。 */
+function bindDeliveryActions() {
+  $("btn-delivery-open").addEventListener("click", () => deliveryOpen());
+  $("btn-delivery-check").addEventListener("click", () => deliveryCheck());
+  $("btn-delivery-package").addEventListener("click", () => deliveryPackage());
+}
+
+function renderDeliveryActions() {
+  $("delivery-actions").innerHTML = deliveryActionsHTML(state.busy);
+  bindDeliveryActions();
+}
+
 function deliverySetBusy(busy) {
   state.busy = busy;
   tasksSetBusy(busy);
-  for (const id of ["btn-delivery-open", "btn-delivery-check", "btn-delivery-package"]) {
-    const btn = $(id);
-    if (btn) btn.disabled = busy;
-  }
+  renderDeliveryActions();
 }
 
 async function deliveryRun(action, render, okText) {
@@ -73,11 +83,10 @@ export function deliveryReset() {
   if (result) result.innerHTML = "";
 }
 
-$("btn-delivery-open").addEventListener("click", () => deliveryOpen());
-$("btn-delivery-check").addEventListener("click", () => deliveryCheck());
-$("btn-delivery-package").addEventListener("click", () => deliveryPackage());
+$("delivery-actions").innerHTML = deliveryActionsHTML(false);
+bindDeliveryActions();
 // 输出目录切换（加载其他工程 / 修订重生成清清单）→ 清结果，防跨工程误读
 window.addEventListener("revise-context-loaded", () => deliveryReset());
 window.addEventListener("tasks-invalidated", () => deliveryReset());
 
-Object.assign(window, { deliveryOpen, deliveryCheck, deliveryPackage, deliveryReset });
+Object.assign(window, { deliveryActionsHTML, deliveryOpen, deliveryCheck, deliveryPackage, deliveryReset });
