@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d7aed3745433520b796400320207d8c689d7efb9 -->
+<!-- changelog-auto: last-commit=702638e0b81a00bee4a7b68336be18fd0c345a53 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 13:58 修复：指引「去设置页配置」展开工具链卡并滚动到烧录工具输入框（flash-guide-settings/03）
 - 18:20 修复：Toast 提示框下移避开吸顶栏（toast-offset/01）
 - 18:35 逐步深化：做完一步自动提示「下一步」并滚动高亮下一张待执行卡（step-next-guide/01-02）
+- 18:44 逐步深化：效果 diff 主题化美化（diff-restyle/01-02）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
