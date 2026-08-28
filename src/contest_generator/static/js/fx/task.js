@@ -191,11 +191,20 @@ export function taskCardHTML(task, index, opts) {
     + " · " + esc(task.title) + "</span>"
     + " " + badge + "</div>"
     + '<div class="reason">' + esc(task.description) + "</div>"
+    // 资源徽标（工单 task-insight/02）：本任务占用的引脚/外设/中断（拆解时
+    // AI 标注，顶部资源总览据此发现联调冲突）——非空才渲染
+    + taskResourcesHTML(task)
     + (refs ? '<div class="muted" style="margin-top:4px">评分点：' + esc(refs) + verifyNote + "</div>" : (verifyNote ? '<div class="muted" style="margin-top:4px">' + verifyNote + "</div>" : ""))
     + deps
     + taskIterationsHTML(task)
     + taskDialogAdoptHTML(task)
     + taskNextActionHTML(task)
+    // 上板自检清单常驻（工单 task-insight/02，spec 轴评审整改：结果面板只在
+    // 执行时渲染一次，刷新后不重建——勾选态 localStorage 无处回显 = 故事 3
+    // 「刷新勾选仍在」只写不可读。任务卡随 tasksRender 每次重建，最新轮
+    // checklist 常驻卡上（结果面板副本并存），刷新后勾选立即回显）。
+    // checklistState 由胶水层提供（读 localStorage 纯函数桥，fx 无副作用）。
+    + taskCardChecklistHTML(task, o)
     // 微编辑 + 调序（工单 idea-suite/04）：编辑按钮 + ↑/↓（边界禁用）+ 编辑态
     // 表单（opts.editing(task.id) 为真 = 胶水层已展开该卡编辑表单）
     + '<div class="row" style="margin-top:6px;gap:6px">'
@@ -449,17 +458,82 @@ export function taskStepReportBlocksHTML(changed, action) {
   return changedBlock + actionBlock;
 }
 
-/** 步骤报告（工单 stepwise-deepen/02）：结果面板「AI 做了什么 / 接下来你要
- * 做什么」两块，取自最新一轮迭代的 what_changed / user_action（后端工单 01
- * 落盘；报告调用失败 = 两字段空串——降级兜底文案中文，spec「降级路径必须有
- * 兜底文案」）。无轮次 = 空串（未执行过无报告可展示）。 */
-export function taskStepReportHTML(task) {
+/** 步骤报告（工单 stepwise-deepen/02 + task-insight/02）：结果面板「AI 做了
+ * 什么 / 接下来你要做什么」两块 + 上板自检清单（最新轮 checklist，可勾选
+ * 备忘——key / checkedMap 由胶水层传入，空 = 无 checklist 段不渲染），取自
+ * 最新一轮迭代（后端工单 01 落盘；报告调用失败 = 两字段空串——降级兜底文案
+ * 中文，spec「降级路径必须有兜底文案」）。无轮次 = 空串（未执行过无报告可
+ * 展示）。 */
+export function taskStepReportHTML(task, opts) {
   const last = lastIteration(task);
   if (!last) return "";
+  const o = opts || {};
   return '<div class="task-step-report" style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px">'
     + '<div class="muted" style="margin-bottom:2px">步骤报告（AI 本步总结）</div>'
     + taskStepReportBlocksHTML(last.what_changed || "", last.user_action || "")
+    + taskChecklistHTML(last, o.checkKey || "", o.checkedMap || {})
     + "</div>";
+}
+
+/** 任务卡资源徽标行（工单 task-insight/02）：本任务占用的互斥资源（拆解时
+ * AI 标注 resources——引脚/外设/中断真实名；与其它任务共用也列出）。空 = 空串
+ *（旧清单无该字段 / 本任务不新增占用）。 */
+export function taskResourcesHTML(task) {
+  const resources = (task && task.resources) || [];
+  if (!resources.length) return "";
+  return '<div class="muted" style="margin-top:4px">资源：'
+    + resources.map((r) => '<span class="res-chip">' + esc(String(r)) + "</span>")
+      .join(" ")
+    + "</div>";
+}
+
+/** 资源总览表（工单 task-insight/02，纯前端聚合零后端）：从 plan.tasks[].resources
+ * 聚合「资源名 → 用到的任务」。同一资源被 ≥2 任务占用 → .res-conflict 行标黄
+ * 「⚠ 多任务使用，上板前确认」（重复不一定是错——可能是先后复用，提示学生
+ * 联调前确认）。全部任务无资源标注 = 空串（容器隐藏）。 */
+export function resourcesOverviewHTML(plan) {
+  const tasks = (plan || {}).tasks || [];
+  const byResource = new Map();
+  tasks.forEach((task, index) => {
+    const resources = (task && task.resources) || [];
+    resources.forEach((r) => {
+      const name = String(r);
+      if (!byResource.has(name)) byResource.set(name, []);
+      byResource.get(name).push({ id: (task && task.id) || "t" + (index + 1), title: (task && task.title) || "" });
+    });
+  });
+  if (!byResource.size) return "";
+  const rows = Array.from(byResource.entries()).map(([name, users]) => {
+    const conflict = users.length >= 2;
+    const userText = users.map((u) => esc(u.id + "：" + (u.title || ""))).join(" · ");
+    return '<div class="res-row' + (conflict ? " res-conflict" : "") + '">'
+      + '<span class="res-chip">' + esc(name) + "</span>"
+      + '<span class="res-users">' + userText + "</span>"
+      + (conflict ? '<span class="res-conflict-note">⚠ 多任务使用，上板前确认</span>' : "")
+      + "</div>";
+  }).join("");
+  return '<div class="muted" style="margin-bottom:2px">资源总览（同一资源被多个任务占用 = 联调冲突暗雷，标黄提示）</div>'
+    + '<div class="res-table">' + rows + "</div>";
+}
+
+/** 上板自检清单（工单 task-insight/02）：最新一轮的 checklist 渲染为可勾选
+ * 列表——checkbox 勾选态存 localStorage（firstep.checklist.v1.<key>，key =
+ * taskId+"/"+seq），纯备忘不影响状态机；勾选态由胶水层读盘后以 checkedMap
+ * 传入（{序号: true}），纯函数不碰 localStorage（fx 约定无副作用）。空 = ""。 */
+export function taskChecklistHTML(iteration, key, checkedMap) {
+  const items = (iteration && iteration.checklist) || [];
+  // key 缺失 = 勾选无处持久化（无 taskId/seq 的调用点）：不渲染无用勾选
+  if (!items.length || !key) return "";
+  const checked = checkedMap || {};
+  const rows = items.map((item, index) => {
+    const isChecked = !!checked[index];
+    return '<label class="task-check-item"><input type="checkbox" class="task-check-input"'
+      + ' data-check-key="' + esc(String(key || "")) + '" data-check-idx="' + esc(String(index)) + '"'
+      + (isChecked ? " checked" : "") + "> " + esc(String(item)) + "</label>";
+  }).join("");
+  return '<div class="task-check-list" style="margin-top:6px">'
+    + '<div class="muted" style="margin-bottom:2px">上板自检清单（勾选为个人备忘，不改变任务状态）</div>'
+    + rows + "</div>";
 }
 
 /** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02 + 04 修正）：最新一轮
@@ -478,6 +552,30 @@ export function taskNextActionHTML(task) {
     + 'border:1px solid var(--border);border-radius:8px;background:var(--panel-2)">'
     + '<span class="badge out">下一步要做</span> '
     + esc(String(action)) + "</div>";
+}
+
+/** 上板自检清单勾选键单源（工单 task-insight/02）：localStorage key =
+ * firstep.checklist.v1.<taskId>/<seq>。纯函数（fx 约定无副作用），胶水层
+ * 读写共用本函数——单源防 ui 层硬拼 key 与读取处漂移。 */
+export function checklistStateKey(taskId, seq) {
+  return "firstep.checklist.v1." + taskId + "/" + seq;
+}
+
+/** 任务卡上的最新轮 checklist（工单 task-insight/02，spec 轴评审整改——故事 3
+ * 「刷新勾选仍在」的回显路径）：结果面板是执行时刻的一次性快照，刷新后消失；
+ * 任务卡随 tasksRender 每次重建，最新轮 checklist 常驻卡上（与结果面板副本
+ * 并存），勾选态经 opts.checklistState(taskId, seq)（胶水层读 localStorage）
+ * 回显。无轮次 / 无 checklist / 未提供 state 桥 = 空串。
+ * data-check-key 契约为裸键 "taskId/seq"（胶水层 change 委托 split 解析 +
+ * checklistStateKey 包 localStorage 键；两处同步，勿改成完整 storage key）。 */
+function taskCardChecklistHTML(task, o) {
+  const last = lastIteration(task);
+  if (!last || !(last.checklist || []).length) return "";
+  const state = o.checklistState;
+  if (typeof state !== "function") return "";  // 缺回显源：不画无法恢复勾选态的清单
+  const key = task.id + "/" + last.seq;
+  const checked = state(task.id, last.seq) || {};
+  return taskChecklistHTML(last, key, checked);
 }
 
 /** 验证状态徽章 + 摘要文案（深化 / 任务执行结果面板共用，单源防分叉——
@@ -698,5 +796,7 @@ if (typeof window !== "undefined") {
     globalChatHTML, globalNoteBadgeHTML,
     taskEditFormHTML, taskMoveButtonsHTML,
     ideaDraftListHTML,
+    taskResourcesHTML, resourcesOverviewHTML, taskChecklistHTML,
+    checklistStateKey,
   });
 }

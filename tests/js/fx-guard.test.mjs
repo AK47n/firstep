@@ -134,6 +134,8 @@ const DOMAINS = {
     globalChatHTML: "fn", globalNoteBadgeHTML: "fn",
     taskEditFormHTML: "fn", taskMoveButtonsHTML: "fn",
     ideaDraftListHTML: "fn",
+    taskResourcesHTML: "fn", resourcesOverviewHTML: "fn",
+    taskChecklistHTML: "fn", checklistStateKey: "fn",
   },
   "flash.js": {
     flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",

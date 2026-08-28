@@ -1275,6 +1275,24 @@
   .tasks-overview-bar .seg-failed { background: var(--danger); }
   .tasks-overview-bar .seg-pending { background: rgba(139, 148, 158, .35); }
   .tasks-overview-bar .seg-skipped { background: rgba(139, 148, 158, .18); }
+  /* 资源总览 + 上板自检清单（工单 task-insight/02）：资源行（chip + 使用任务 +
+     冲突提示标黄）+ 自检勾选列表——变量色零新硬编码 */
+  .res-table { border: 1px solid var(--border); border-radius: 8px;
+               padding: 4px 8px; background: var(--panel-2); }
+  .res-row { display: flex; align-items: center; gap: 8px; padding: 3px 0;
+             border-bottom: 1px dashed var(--border); flex-wrap: wrap; }
+  .res-row:last-of-type { border-bottom: none; }
+  .res-chip { font-family: var(--mono); font-size: 12px; padding: 0 6px;
+              border: 1px solid var(--border); border-radius: 6px;
+              background: var(--panel-2); color: var(--text); }
+  .res-users { flex: 1; color: var(--text); font-size: 13px; }
+  .res-conflict { background: var(--warn-dim); border-radius: 6px;
+                  padding: 3px 8px; }
+  .res-conflict-note { color: var(--warn); font-size: 12px; font-weight: 600; }
+  .task-check-list { display: flex; flex-direction: column; gap: 2px; }
+  .task-check-item { display: flex; align-items: center; gap: 6px;
+                     font-size: 13px; color: var(--text); }
+  .task-check-input { accent-color: var(--accent); }
   /* 下一步引导（工单 step-next-guide/01）：当前卡内提示行 + 下一张待执行卡
      高亮脉冲（做完一步自动定位；瞬态，不落盘） */
   .task-next-hint { margin-top: 8px; padding: 6px 10px; border-radius: 8px;
@@ -1932,6 +1950,7 @@
           <span id="tasks-status" class="muted"></span>
         </div>
         <div id="tasks-overview" class="hidden" style="margin-top:8px"></div>
+        <div id="tasks-resources" class="hidden" style="margin-top:8px"></div>
         <div id="tasks-llm-telemetry" class="llm-telemetry hidden"></div>
         <div id="tasks-grid" class="hidden" style="margin-top:10px"></div>
         <div id="tasks-msg" class="error"></div>
