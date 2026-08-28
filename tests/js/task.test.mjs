@@ -335,13 +335,18 @@ test("taskStepReportHTML: 最新一轮报告两块渲染 + 降级兜底", () => 
   assert.equal(taskStepReportHTML(null), "");
 });
 
-test("taskNextActionHTML: 未上板确认显示「下一步要做」；已确认/执行中/无指引 = 空串", () => {
+test("taskNextActionHTML: 未上板/编译通过待上板显示「下一步要做」；人工已确认/执行中/无指引 = 空串", () => {
   const iter = [{ seq: 1, kind: "execute", status: "unverified", user_action: "把 PB1 接到步进模块 DIR" }];
   const html = taskNextActionHTML({ id: "t1", status: "unverified", iterations: iter });
   assert.ok(html.includes("下一步要做"));
   assert.ok(html.includes("PB1 接到步进模块 DIR"));
-  // 已验证 → 空串（该步已闭环，无需再看指引）
-  assert.equal(taskNextActionHTML({ id: "t1", status: "verified", iterations: iter }), "");
+  // compile 任务 verified = 仅编译通过，仍需烧录上板 → 指引常驻（工单 04 修正：
+  // 旧实现 verified 一律隐藏，用户实测看不到「该怎么做上板」）
+  const compileOk = taskNextActionHTML({ id: "t1", verify: "compile", status: "verified", iterations: iter });
+  assert.ok(compileOk.includes("下一步要做"));
+  assert.ok(compileOk.includes("PB1 接到步进模块 DIR"));
+  // manual 任务 verified = 用户已上板人工确认 → 空串（该步已闭环）
+  assert.equal(taskNextActionHTML({ id: "t1", verify: "manual", status: "verified", iterations: iter }), "");
   // 执行中 → 空串（旧指引不代表当前轮）
   assert.equal(taskNextActionHTML({ id: "t1", status: "doing", iterations: iter }), "");
   // 无 user_action（降级）/ 无轮次 → 空串
@@ -364,6 +369,14 @@ test("taskCardHTML: 下一步要做摘要进卡（有则渲染，无则卡形不
     verify: "manual", status: "verified", iterations: [],
   }, 0, {});
   assert.ok(!verified.includes("待上板"));
+  // compile 任务已验证（编译绿）→ 卡上仍显示上板指引（工单 04：编译通过 ≠ 上板完成）
+  const compileOk = taskCardHTML({
+    id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],
+    verify: "compile", status: "verified",
+    iterations: [{ seq: 1, kind: "execute", status: "verified", user_action: "烧录后观察循迹效果" }],
+  }, 0, {});
+  assert.ok(compileOk.includes("下一步要做"));
+  assert.ok(compileOk.includes("烧录后观察循迹效果"));
   const plain = taskCardHTML({
     id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],
     verify: "compile", status: "pending", iterations: [],

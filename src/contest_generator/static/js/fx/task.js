@@ -314,11 +314,15 @@ export function taskStepReportHTML(task) {
     + changedBlock + actionBlock + "</div>";
 }
 
-/** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02）：最新一轮报告的
- * user_action 非空且该步尚未上板确认（verified / doing 之外）→ 显示；否则
- * 空串。让用户随时知道当前卡在哪个物理动作（接线 / 烧录 / 观察）。 */
+/** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02 + 04 修正）：最新一轮
+ * 报告的 user_action 非空 → 显示；唯一隐藏条件 = 该步已真正闭环（doing 执行
+ * 中旧指引过期；verify=manual 且 verified = 用户已上板人工确认）。**compile 任务
+ * 的 verified 只代表编译通过，仍需烧录上板**——指引必须常驻到用户实测（实测
+ * 不符会走「上板反馈」自动重开，指引随新轮次更新）。让用户随时知道当前卡在
+ * 哪个物理动作（接线 / 烧录 / 观察）。 */
 export function taskNextActionHTML(task) {
-  if (!task || task.status === "verified" || task.status === "doing") return "";
+  if (!task || task.status === "doing") return "";
+  if (task.verify === "manual" && task.status === "verified") return "";
   const last = lastIteration(task);
   const action = (last && last.user_action) || "";
   if (!String(action).trim()) return "";
