@@ -77,6 +77,7 @@ from .selection import (
     parse_decision,
 )
 from .task_progress import TaskError, TaskPlan, build_task_plan
+from .params import ParamList, build_params
 from .topic_library import TopicDraft, validate_topic_key
 from .wordlist import (
     DEFAULT_WORDLIST,
@@ -330,6 +331,32 @@ TASK_REPORT_SYSTEM_PROMPT = (
     "一次说清；本步纯软件无物理动作时才可为空串，否则必须给出明确动作。"
     '只输出 JSON 对象：{"what_changed": "做过的中文叙事", "user_action":'
     ' "接下来的中文动作"}；what_changed 必须非空，两段都用中文。'
+)
+
+# 参数识别（工单 param-tune/01）：扫描 main.c 里的可调**数值**参数——学生
+# 上板调试最频繁的改值对象（阈值 / 速度 / PID 系数 / 延时 / 占空比）。立场 =
+# 扫描器非改造者：只列参数不改代码（改值走确定性 apply，零 LLM）。anchor 是
+# 声明行原文（后续按它做逐字节定位替换——必须与源码逐字节一致且 old_value
+# 在其中恰好出现 1 次，否则无法确定性改值）。只输出 JSON 契约。
+TASK_PARAM_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师。学生在做上板调参，请你扫描给定 main.c（赛题文本 / "
+    "接口过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "），找出**数值**"
+    "类可调参数：阈值、速度、PID 系数、延时、占空比、采样次数、死区等——即"
+    "学生上板时最可能想改的常量（#define 数值 / 变量初始化赋的数值字面量）。"
+    "规则："
+    "① 只列数值参数（整数 / 浮点 / 带后缀 1.2f、3000UL 等），不列结构开关、"
+    "字符串、头文件引脚定义、计算表达式（如 a+b）、数组下标；"
+    "② name = 参数标识（如 THRESHOLD）；label = 一句话中文含义（如"
+    "「循迹阈值」）；old_value = 当前值的原文（**逐字节**：如 800 / 1.2f / "
+    "3000UL，与 main.c 中完全一致）；"
+    "③ anchor = 该参数的声明行原文（含缩进与注释，**必须与 main.c 逐字节一致**"
+    "且其中 old_value 恰好出现 1 次——后续按 anchor 首现位置做确定性替换）；"
+    "④ 同一数值被多处使用（多处定义 / 一处定义多处引用）：只列**定义处**一处，"
+    "anchor 取定义行；"
+    "⑤ 没有可调数值参数时输出空数组（不要编造）。"
+    '只输出 JSON 对象：{"params": [{"name": "THRESHOLD", "label": "循迹阈值", '
+    '"old_value": "800", "anchor": "#define THRESHOLD 800", "unit": "", '
+    '"range_hint": "500-1000"}]}；unit / range_hint 可为空串。'
 )
 
 # 新想法 / 问题分析（工单 idea-fix/01）：用户随时抛来想法 → AI 先理解并分成
@@ -1417,6 +1444,12 @@ class LLM(Protocol):
         global_note: str,
         history: Sequence[tuple[str, str]],
     ) -> TaskDiscussion: ...
+
+    def scan_params(
+        self,
+        main_c: str,
+        module_interfaces: Sequence[str],
+    ) -> ParamList: ...
 
     def report_task_step(
         self,
@@ -2781,6 +2814,36 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def scan_params(
+        self,
+        main_c: str,
+        module_interfaces: Sequence[str],
+    ) -> ParamList:
+        """参数识别（工单 param-tune/01）：扫描 main.c 可调数值参数表。
+
+        输入 = 现有 main.c + 模块接口清单；输出 JSON 由 params.build_params
+        域判决（name/label/old_value/anchor 非空、anchor 逐字节存在于
+        main_c、anchor 内 old_value 恰好 1 次——不满足 = 无法确定性改值，
+        整次重问；unit/range_hint 宽松；空参数表合法）。域判决错误由传输侧
+        翻译回 LLMError（_retry_parse ≤SUMMARY_RETRY_LIMIT 轮，与
+        build_task_plan 同款契约）。
+        """
+
+        def parse(content: str) -> ParamList:
+            try:
+                return build_params(extract_module_selection_data(content), main_c)
+            except TaskError as exc:
+                raise LLMError(str(exc)) from exc
+
+        return self._retry_parse(
+            system_prompt=TASK_PARAM_SYSTEM_PROMPT,
+            user_prompt=_param_scan_user_prompt(main_c, module_interfaces),
+            parse=parse,
+            label="参数识别",
+            operation="scan_params",
+            json_mode=True,
+        )
+
     def analyze_idea(
         self,
         idea: str,
@@ -3572,6 +3635,14 @@ class RoutingLLM:
             task, verify_result, diff_text, module_interfaces
         )
 
+    def scan_params(
+        self,
+        main_c: str,
+        module_interfaces: Sequence[str],
+    ) -> ParamList:
+        # 参数识别走 remote（识别质量决定参数表可用性，不进本地方法集）
+        return self._remote.scan_params(main_c, module_interfaces)
+
     def analyze_idea(
         self,
         idea: str,
@@ -4200,6 +4271,23 @@ def _task_report_user_prompt(
     if module_interfaces:
         lines += ["", SKELETON_INTERFACES_HEADING]
         lines.extend(_truncate_content(block) for block in module_interfaces)
+    return "\n".join(lines)
+
+
+def _param_scan_user_prompt(
+    main_c: str,
+    module_interfaces: Sequence[str],
+) -> str:
+    """参数识别的 user 消息（工单 param-tune/01）：模块接口清单 + 当前 main.c。
+
+    段序 = 接口 → main.c（识别对象）。各段截断带标注（_truncate_content
+    同款预算）；接口段为空 = 无该段（main.c 单独也可识别）。
+    """
+    lines: list[str] = []
+    if module_interfaces:
+        lines += [SKELETON_INTERFACES_HEADING]
+        lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += ["", "当前 main.c（识别其中的可调数值参数，anchor 取声明行原文）：", main_c]
     return "\n".join(lines)
 
 
