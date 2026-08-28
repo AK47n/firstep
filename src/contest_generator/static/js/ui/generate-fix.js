@@ -6,7 +6,7 @@
 // setter——host init 与设置页重算经 setter 写，其余读方 import）/ fixLoop /
 // lastFix* / fixSourceCache + compileBanner / renderCompileBanner / fmtSeconds
 //（纯函数→已迁 fx/generate.js，本模块 import）/ fixKeyOf / fixKeyBasename /
-// maincScrollToRange / maincJumpToLine / fixToggleSource / fixRenderResults /
+// fixToggleSource / fixRenderResults /
 // fixSetBusy / fixCenterBusy / renderToolchainStatus / renderFixLLMTelemetry /
 // clearFixLLMTelemetry / updateFixCenterAvailability / fixHandleEvent /
 // runCompileOnce / runFixOnce / fixRounds / startFixCenter / continueFixCenter +
@@ -20,9 +20,9 @@
 // 本簇，避免 ui→ui 环；本簇单向 import A）。
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
-import { fmtSeconds, syncCollapseBtn } from "/js/fx/generate.js";
+import { fmtSeconds } from "/js/fx/generate.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { maincContentEmpty, maincLineOffsetRange, isMainCPath } from "/js/fx/code.js";
+import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
 import { reportRecentStatus } from "/js/ui/recent.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -79,56 +79,11 @@ function fixKeyBasename(path, line) {
 }
 
 // ---------------------------------------------------------------------------
-// main.c 错误行定位（工单 compile-error-jump/01）：点 main.c 的错误行 = 滚动
-// 到预览卡并选中该行文本（选区即持续高亮，点其他行切换）；非 main.c 的行
-// 维持 fixToggleSource 展开源码行。偏移 / 路径判定已迁至 static/js/fx/code.js
-// （本模块顶部 import）
+// main.c 错误行定位（工单 compile-error-jump/01 + error-jump-task/02 单源化）：
+// 实现已迁至 static/js/fx/code.js（maincJumpToLine / maincScrollToRange——
+// 修复中心与任务结果面板共用同一份；迁出后本模块只保留调用 + 错误码 toast，
+// 三条消息语义逐字保留）。非 main.c 的行维持 fixToggleSource 展开源码行。
 // ---------------------------------------------------------------------------
-// 选区滚入 textarea 视口：浏览器 focus 的滚动窗口行为不可靠（headless 实测
-// scrollTop 不动），这里在高亮层临时量测目标行视觉位置——hl-layer 与
-// textarea 排版参数同源（font/line-height/padding/pre-wrap/视口宽，三明治
-// 对齐设计保证换行点一致），折行场景同样精确，全程无像素行高公式。
-function maincScrollToRange(ta, range) {
-  const hl = $("main-c-hl");
-  if (!hl) return;
-  const _probe_style = "display:block;white-space:pre-wrap;word-break:break-all;";
-  const before = document.createElement("span");
-  before.style.cssText = _probe_style;
-  before.textContent = ta.value.slice(0, range.start);
-  const target = document.createElement("span");
-  target.style.cssText = _probe_style;
-  target.textContent = ta.value.slice(range.start, range.end);
-  hl.appendChild(before);
-  hl.appendChild(target);
-  const top = target.offsetTop, h = target.offsetHeight;
-  before.remove();
-  target.remove();
-  const viewH = ta.clientHeight - 24;   // 上下 padding 12px × 2
-  ta.scrollTop = Math.max(0, top - (viewH - h) / 2);
-}
-function maincJumpToLine(line) {
-  const ta = $("main-c");
-  if (!ta) return;
-  if (maincContentEmpty(ta.value)) {
-    toast("info", "main.c 还没有内容，先「生成骨架」再跳转");
-    return;
-  }
-  const range = maincLineOffsetRange(ta.value, line);
-  if (!range) {
-    toast("info", "行号超出 main.c 范围：" + line);
-    return;
-  }
-  const card = ta.closest(".card");
-  if (card && card.classList.contains("collapsed")) {
-    card.classList.remove("collapsed");
-    const btn = card.querySelector(".card-collapse");
-    if (btn) syncCollapseBtn(btn, false);
-  }
-  ta.scrollIntoView({ block: "center", behavior: "smooth" });
-  ta.focus();
-  ta.setSelectionRange(range.start, range.end);
-  maincScrollToRange(ta, range);   // 内部滚动到选区（折行也精确）
-}
 
 /** 点击条目 → 展开/收起对应源码行（薄接口 /api/compile/source-line，缓存防重复请求）。
  * main.c 错误行例外（工单 compile-error-jump/01）：整行点击 = 跳转 main.c
@@ -136,7 +91,12 @@ function maincJumpToLine(line) {
 async function fixToggleSource(row) {
   const src = row._source;
   if (!src || !src.path) return;
-  if (isMainCPath(src.path)) { maincJumpToLine(src.line); return; }
+  if (isMainCPath(src.path)) {
+    const reason = maincJumpToLine(src.line);
+    if (reason === "empty") toast("info", "main.c 还没有内容，先「生成骨架」再跳转");
+    else if (reason === "out-of-range") toast("info", "行号超出 main.c 范围：" + src.line);
+    return;
+  }
   const existing = row.querySelector(".fix-source");
   if (existing) { existing.remove(); return; }   // 再点收起
   const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();

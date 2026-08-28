@@ -21,7 +21,8 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML } from "/js/fx/task.js";
+import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -989,6 +990,7 @@ function tasksRenderResult(taskId, data) {
     + '<div class="head"><span class="slug">' + esc(task.id || taskId) + " · " + esc(task.title || "") + " 执行结果</span> " + markup.badge + "</div>"
     + feedbackNote
     + '<div class="reason">' + markup.detail + "</div>"
+    + taskErrorsHTML((data.compile && data.compile.parsed_errors) || [])  // 编译错误行跳转（error-jump-task/02）：main.c 行可点高亮
     + stepReport
     + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
     + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '" data-task="' + esc(task.id || taskId) + '">回滚到本任务执行前</button>' : "")
@@ -1405,6 +1407,15 @@ $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-rollback");
   if (!btn) return;
   tasksRollback(btn.dataset.backup, btn.dataset.task);
+});
+// 编译错误行跳转 main.c（工单 error-jump-task/02）：跳转单源 = fx/code.js
+// maincJumpToLine（返回错误码，toast 在本层——原修复中心三条消息逐字保留）
+$("tasks-grid").addEventListener("click", (event) => {
+  const span = event.target.closest(".task-err-jump");
+  if (!span) return;
+  const reason = maincJumpToLine(Number(span.dataset.line));
+  if (reason === "empty") toast("info", "main.c 还没有内容，先「生成骨架」再跳转");
+  else if (reason === "out-of-range") toast("info", "行号超出 main.c 范围：" + span.dataset.line);
 });
 // 任务卡 / 结果面板「烧录到板子」（工单 flash-deploy/02 + flash-step-button/01）：
 // 两类入口同域委托——按钮 data-task-flash = 容器 uid（任务卡 = task.id，结果

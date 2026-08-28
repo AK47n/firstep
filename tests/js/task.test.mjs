@@ -16,6 +16,7 @@ import {
   ideaDraftListHTML,
   taskResourcesHTML, resourcesOverviewHTML, taskChecklistHTML,
   checklistStateKey,
+  taskErrorsHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -884,4 +885,33 @@ test("taskCardHTML: 最新轮 checklist 常驻卡上（opts.checklistState 桥�
   // 无轮次 → 不渲染
   const noIter = taskCardHTML({ ...task, iterations: [] }, 0, { checklistState: () => ({}) });
   assert.ok(!noIter.includes("上板自检清单"));
+});
+
+test("taskErrorsHTML: main.c 行可点带 data-line，非 main.c 不可点，全转义", () => {
+  const html = taskErrorsHTML([
+    { path: "main.c", line: 12, message: 'error #10234-D: unresolved symbols remain' },
+    { path: "main.c", line: 40, message: 'variable "x" <未用>' },
+    { path: "modules/led/led.c", line: 3, message: "unknown type <boom>" },
+  ]);
+  assert.ok(html.includes('class="task-err-jump" data-line="12"'));
+  assert.ok(html.includes("main.c:12"));
+  assert.ok(html.includes("main.c:40"));
+  assert.ok(!html.includes("modules/led/led.c:3\" class=\"task-err-jump"));
+  assert.ok(html.includes("modules/led/led.c:3"));
+  // 转义：消息里的 < > 与引号
+  assert.ok(html.includes("&lt;未用&gt;"));
+  assert.ok(html.includes("&quot;x&quot;"));
+  assert.ok(html.includes("&lt;boom&gt;"));
+});
+
+test("taskErrorsHTML: 空/非数组/坏条目 → 空串（全空条目过滤，有内容保留）", () => {
+  assert.equal(taskErrorsHTML([]), "");
+  assert.equal(taskErrorsHTML(null), "");
+  assert.equal(taskErrorsHTML("oops"), "");
+  assert.equal(taskErrorsHTML([null, 42, {}, { path: "", line: 0, message: "" }]), "");
+  // line=0 或 path 空但 message 有内容 → 保留展示（不可点）
+  const noLine = taskErrorsHTML([{ path: "main.c", line: 0, message: "无行号" }]);
+  assert.ok(noLine.includes("main.c"));
+  assert.ok(!noLine.includes("task-err-jump"));
+  assert.equal(taskErrorsHTML([{ path: "main.c", line: 5, message: "合法" }]) !== "", true);
 });

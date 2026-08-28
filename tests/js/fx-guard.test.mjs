@@ -26,7 +26,7 @@ const DOMAINS = {
   "code.js": {
     cHighlight: "fn", cLineCount: "fn", codeZoomClamp: "fn", parseZoomStored: "fn",
     maincLineOffsetRange: "fn", isMainCPath: "fn", maincContentEmpty: "fn",
-    maincFullscreenLabel: "fn",
+    maincFullscreenLabel: "fn", maincScrollToRange: "fn", maincJumpToLine: "fn",
   },
   "pdf.js": {
     pdfEncodedPath: "fn", pdfSubdir: "fn", formatMtime: "fn", pdfBroken: "fn",
@@ -136,6 +136,7 @@ const DOMAINS = {
     ideaDraftListHTML: "fn",
     taskResourcesHTML: "fn", resourcesOverviewHTML: "fn",
     taskChecklistHTML: "fn", checklistStateKey: "fn",
+    taskErrorsHTML: "fn",
   },
   "flash.js": {
     flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",

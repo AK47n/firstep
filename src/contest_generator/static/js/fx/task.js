@@ -1,6 +1,7 @@
 // fx/task.js — 任务推进纯函数（工单 task-progress/01）：任务卡渲染 / 状态徽章 /
 // 验收方式标注 / 进度汇总。共享件用 esc（fx/core.js）。模块约定见 fx/core.js 头部。
 import { esc, truncate } from "./core.js";
+import { isMainCPath } from "./code.js";  // 错误行跳转可点判定（error-jump-task/02；code.js 无环）
 import { flashPanelHTML } from "./flash.js";  // 任务卡烧录控制行（flash-step-button/01；flash.js 仅依赖 core.js，无环）
 
 export function taskStatusLabel(status) {
@@ -578,6 +579,30 @@ function taskCardChecklistHTML(task, o) {
   return taskChecklistHTML(last, key, checked);
 }
 
+/** 编译错误列表（工单 error-jump-task/02）：任务结果面板编译失败时列出
+ * 「文件:行号 消息」；main.c 的行渲染为可点击（.task-err-jump data-line）——
+ * 跳转单源 = fx/code.js maincJumpToLine（胶水层委托 + 错误码 toast）；非
+ * main.c 错误（头文件/模块文件）不可点（修复中心才做源码行展开，故事 3）。
+ * 空 / 非数组 → ""；全部 esc。 */
+export function taskErrorsHTML(parsedErrors) {
+  if (!Array.isArray(parsedErrors) || !parsedErrors.length) return "";
+  const rows = [];
+  for (const e of parsedErrors) {
+    if (!e || typeof e !== "object") continue;
+    const path = String(e.path == null ? "" : e.path);
+    const line = Number(e.line);
+    const message = String(e.message == null ? "" : e.message);
+    if (!path && !message) continue;  // 全空条目无展示价值
+    const jumpable = isMainCPath(path) && Number.isInteger(line) && line > 0;
+    const loc = jumpable
+      ? '<span class="task-err-jump" data-line="' + line + '">'
+        + esc(path + ":" + line) + "</span>"
+      : '<span class="muted">' + esc(path + (line ? ":" + line : "")) + "</span>";
+    rows.push('<div class="task-err-row">' + loc + " " + esc(message) + "</div>");
+  }
+  return rows.length ? '<div class="task-err-list">' + rows.join("") + "</div>" : "";
+}
+
 /** 验证状态徽章 + 摘要文案（深化 / 任务执行结果面板共用，单源防分叉——
  * 曾两处各抄一份 if/else，措辞漂移即分叉）。returns {badge, detail}：
  * badge = 内嵌 HTML 徽章；detail = 转义后的摘要文本（调用方决定布局）。
@@ -798,5 +823,6 @@ if (typeof window !== "undefined") {
     ideaDraftListHTML,
     taskResourcesHTML, resourcesOverviewHTML, taskChecklistHTML,
     checklistStateKey,
+    taskErrorsHTML,
   });
 }
