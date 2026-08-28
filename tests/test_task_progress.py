@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.platforms import PLATFORM_STM32
+from contest_generator.llm import StepReport
 from contest_generator.revision import revise_backup_root
 from contest_generator.task_progress import (
     ALLOWED_STATUS_TRANSITIONS,
@@ -848,6 +849,7 @@ def test_tasks_execute_sse_flow(tasks_client, monkeypatch):
     types = [event_type for event_type, _ in events]
     assert types[-1] == "done"
     assert "task_executing" in types
+    assert "task_reporting" in types  # 步骤报告事件（工单 stepwise-deepen/01）
     done = events[-1][1]
     assert done["status"] == STATUS_VERIFIED
     assert done["task"]["status"] == STATUS_VERIFIED
@@ -1212,7 +1214,13 @@ def test_run_task_records_first_iteration(tmp_path, monkeypatch):
         "contest_generator.deepen.collect_build_log",
         lambda platform, out_dir, uv4=None, make=None: _build(0),
     )
-    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    llm = FakeLLM(
+        executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n",
+        step_report=StepReport(
+            what_changed="在 main.c 实现循迹状态机（调用 xunji_read），编译通过。",
+            user_action="把 PA0 接到灰度模块 DIO，烧录后观察小车沿黑线行驶。",
+        ),
+    )
     run_task(
         llm=llm,
         task_id="t1",
@@ -1241,6 +1249,16 @@ def test_run_task_records_first_iteration(tmp_path, monkeypatch):
     assert iteration.at  # 时间戳非空
     # 编译摘要已落（形状如 {'errors': 0, 'warnings': 0}，存在即可）
     assert iteration.compile_summary
+    # 步骤报告（工单 stepwise-deepen/01）：what_changed / user_action 随轮次落盘
+    assert "循迹状态机" in iteration.what_changed
+    assert "PA0" in iteration.user_action
+    # 报告调用输入：任务 dict + 验证结果 + diff + 模块接口
+    assert len(llm.step_report_calls) == 1
+    report_task, verify_result, diff_text, interfaces = llm.step_report_calls[0]
+    assert report_task["id"] == "t1"
+    assert verify_result["status"] == STATUS_VERIFIED
+    assert "循迹已实现" in diff_text
+    assert interfaces == ()
     # 未执行任务不受影响
     assert saved.tasks[1].iterations == ()
 
@@ -1353,6 +1371,105 @@ def test_task_iteration_roundtrip():
     dumped = TaskPlan(tasks=plan.tasks).to_dict()
     assert dumped["tasks"][0]["iterations"][0]["seq"] == 1
     assert dumped["tasks"][0]["iterations"][0]["backup_id"] == "b1"
+
+
+def test_task_iteration_roundtrip_with_step_report():
+    """迭代记录带步骤报告字段（what_changed / user_action）roundtrip；
+    旧记录缺字段 → 读回空串（向后兼容）。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "iterations": [
+                        {
+                            "seq": 1,
+                            "kind": "execute",
+                            "status": "verified",
+                            "backup_id": "b1",
+                            "what_changed": "在 main.c 实现循迹状态机",
+                            "user_action": "把 PA0 接到灰度模块 DIO",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    iteration = plan.tasks[0].iterations[0]
+    assert iteration.what_changed == "在 main.c 实现循迹状态机"
+    assert iteration.user_action == "把 PA0 接到灰度模块 DIO"
+    dumped = TaskPlan(tasks=plan.tasks).to_dict()
+    assert dumped["tasks"][0]["iterations"][0]["what_changed"] == "在 main.c 实现循迹状态机"
+    assert dumped["tasks"][0]["iterations"][0]["user_action"] == "把 PA0 接到灰度模块 DIO"
+    # 旧记录（无步骤报告字段）→ 空串，不拒收
+    legacy = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "iterations": [{"seq": 1, "kind": "execute", "status": "verified"}],
+                }
+            ],
+        }
+    )
+    legacy_iteration = legacy.tasks[0].iterations[0]
+    assert legacy_iteration.what_changed == ""
+    assert legacy_iteration.user_action == ""
+
+
+class _ReportBrokenLLM(FakeLLM):
+    """步骤报告调用失败的假 LLM：report_task_step 抛异常（降级测试用）。"""
+
+    def report_task_step(self, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("步骤报告服务崩溃")
+
+
+def test_run_task_step_report_failure_degrades(tmp_path, monkeypatch):
+    """步骤报告失败不阻断：任务仍落盘终态，轮次记录两个字段为空串。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = _ReportBrokenLLM(
+        executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"
+    )
+    events: list[str] = []
+    result = run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: events.append(event.type)),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_VERIFIED
+    assert "task_reporting" in events  # 报告调用前已发射进度事件
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    iteration = saved.tasks[0].iterations[0]
+    assert iteration.status == STATUS_VERIFIED
+    assert iteration.what_changed == ""
+    assert iteration.user_action == ""
 
 
 # ---------------------------------------------------------------------------

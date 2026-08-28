@@ -18,7 +18,7 @@ from contest_generator.events import ProgressEmitter
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
-from contest_generator.llm import BuyDiscussion, TaskDiscussion
+from contest_generator.llm import BuyDiscussion, StepReport, TaskDiscussion
 from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
@@ -603,6 +603,7 @@ class FakeLLM:
         executed_main_c: str = "",
         discussion: BuyDiscussion | None = None,
         task_discussion: TaskDiscussion | None = None,
+        step_report: StepReport | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -623,9 +624,16 @@ class FakeLLM:
         self._executed_main_c = executed_main_c
         self._discussion = discussion
         self._task_discussion = task_discussion
+        self._step_report = step_report or StepReport(
+            what_changed="实现了步进驱动（测试默认），编译验证通过。",
+            user_action="把 PB1 接到步进模块 DIR，烧录后观察电机正转。",
+        )
         self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
         self.task_discuss_calls: list[
             tuple[dict[str, Any], str, str, tuple, tuple[str, ...], str, tuple]
+        ] = []
+        self.step_report_calls: list[
+            tuple[dict[str, Any], dict[str, Any], str, tuple[str, ...]]
         ] = []
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
@@ -897,6 +905,18 @@ class FakeLLM:
         )
         return self._task_discussion or TaskDiscussion(reply="好")
 
+    def report_task_step(
+        self,
+        task: Mapping[str, Any],
+        verify_result: Mapping[str, Any],
+        diff_text: str,
+        module_interfaces: Sequence[str],
+    ) -> StepReport:
+        self.step_report_calls.append(
+            (dict(task), dict(verify_result), diff_text, tuple(module_interfaces))
+        )
+        return self._step_report
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -1082,6 +1102,16 @@ class RecordingLLM:
     ) -> TaskDiscussion:
         self._record("discuss_task")
         return TaskDiscussion(reply="好")
+
+    def report_task_step(
+        self,
+        task: Mapping[str, Any],
+        verify_result: Mapping[str, Any],
+        diff_text: str,
+        module_interfaces: Sequence[str],
+    ) -> StepReport:
+        self._record("report_task_step")
+        return StepReport(what_changed="做了什么", user_action="下一步")
 
     def generate_report_draft(
         self,

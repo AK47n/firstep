@@ -44,6 +44,7 @@ from contest_generator.llm import (
     SKELETON_NO_UNUSED_RULE,
     SKELETON_SYSTEM_PROMPT,
     SMOKE_SYSTEM_PROMPT,
+    StepReport,
     TopicFramework,
     WORDLIST_PROMPT_BYTES,
     _decision_note,
@@ -4187,6 +4188,100 @@ def test_discuss_task_routes_to_remote():
     assert local.calls == []
 
 
+def test_report_task_step_parsing():
+    """步骤报告解析（工单 stepwise-deepen/01）：what_changed 必填；user_action
+    可缺省为空串；what_changed 空/缺失 → 重试后仍坏 → LLMError。"""
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "what_changed": "在 main.c 实现循迹状态机（调用 xunji_read），"
+                    "编译通过（0 错误 0 警告）。",
+                    "user_action": "把 PA0 接到灰度模块 DIO 排针，烧录后观察小车"
+                    "沿黑线行驶，确认后点「已验证」。",
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+    result = llm.report_task_step(
+        {"id": "t1", "title": "循迹", "description": "循迹决策", "verify": "manual"},
+        {
+            "status": "verified",
+            "message": "编译验证通过",
+            "compile": {"summary": "{'errors': 0, 'warnings': 0}"},
+        },
+        "+1 行",
+        ("xunji.h：uint16_t xunji_read(void);",),
+    )
+    assert result.what_changed == (
+        "在 main.c 实现循迹状态机（调用 xunji_read），编译通过（0 错误 0 警告）。"
+    )
+    assert "PA0" in result.user_action
+
+    # user_action 缺失 → 空串（允许：纯软件步无物理动作）；what_changed 必须非空
+    transport = FakeTransport(body=_api_response(json.dumps({"what_changed": "改了定时器"})))
+    llm = _llm(transport)
+    result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+    assert result.what_changed == "改了定时器"
+    assert result.user_action == ""
+
+    transport = FakeTransport(body=_api_response(json.dumps({"what_changed": ""})))
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
+    with pytest.raises(LLMError):
+        llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+
+
+def test_report_task_step_user_prompt_sections():
+    """步骤报告 prompt 契约：任务 / 编译验证结果 / diff / 模块接口分段；
+    超长 diff 截断带标注。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"what_changed": "好"})))
+    llm = _llm(transport)
+    llm.report_task_step(
+        {"id": "t1", "title": "循迹", "description": "循迹决策", "verify": "manual",
+         "dialog_note": "循迹用 10ms 定时器采样"},
+        {
+            "status": "unverified",
+            "message": "编译验证通过，但本任务验收方式为「上板人工确认」",
+            "compile": {"summary": "{'errors': 0, 'warnings': 0}"},
+        },
+        "+10 行：xunji_read 调用",
+        ("xunji.h 接口：uint16_t xunji_read(void);",),
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "循迹" in user_message and "循迹决策" in user_message
+    assert "上板人工确认" in user_message
+    assert "+10 行：xunji_read 调用" in user_message
+    assert "xunji.h 接口" in user_message
+    # 采纳的对话结论并入报告输入（评审补：spec 输入契约）
+    assert "用户沟通结论" in user_message
+    assert "10ms 定时器采样" in user_message
+
+    # 超长 diff → 截断标注
+    transport = FakeTransport(body=_api_response(json.dumps({"what_changed": "好"})))
+    llm = _llm(transport)
+    llm.report_task_step(
+        {"id": "t1", "title": "循迹"},
+        {"status": "verified", "message": "", "compile": {}},
+        "x" * (EMBEDDED_CONTENT_CAP + 200),
+        (),
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "截断" in user_message
+
+
+def test_report_task_step_routes_to_remote():
+    """RoutingLLM：report_task_step 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+
+    assert remote.calls == ["report_task_step"]
+    assert local.calls == []
+
+
 def test_decision_note_wordlist_and_custom():
     """_decision_note（工单 buy-discuss/02）：wordlist / custom 两形态注记；
     无 decision / 形状坏 = 空串（旧载荷逐字节）。"""
@@ -4797,6 +4892,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "execute_task",
         "discuss_buy_options",
         "discuss_task",
+        "report_task_step",
     }
 )
 
@@ -4821,6 +4917,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.execute_task("main.c", {}, "", [], "题面", "")
     router.discuss_buy_options("题面", "需求", "stm32", [], [])
     router.discuss_task({}, "题面", "", [], [], "main.c", [])
+    router.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -4853,6 +4950,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "execute_task",
         "discuss_buy_options",
         "discuss_task",
+        "report_task_step",
     ]
 
 

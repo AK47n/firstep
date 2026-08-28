@@ -85,6 +85,12 @@ EVENT_VERIFY_RESULT = "verify_result"
 EVENT_TASK_PLANNING = "task_planning"
 EVENT_TASK_EXECUTING = "task_executing"
 
+# 步骤报告（工单 stepwise-deepen/01）：task_reporting = LLM 正在总结本步
+# 「做了什么 + 接下来你要做什么」（编译验证之后、轮次落盘之前，秒级阻塞
+# 调用）；任务执行事件序列：task_executing → compile_start → fix_start →
+# verify_result → task_reporting → done。
+EVENT_TASK_REPORTING = "task_reporting"
+
 # 买件方案商量（工单 buy-discuss/01）：discuss_start = 一轮讨论的 LLM 调用
 # 开始（分钟级阻塞）；端点同步返回（非 SSE），事件供观察面板消费。
 EVENT_BUY_DISCUSS = "buy_discuss"

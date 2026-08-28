@@ -2043,7 +2043,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         （可选覆盖，历史目录补题面流程）。
 
         事件序列：task_executing（LLM 实现中，分钟级）→ compile_start →
-        fix_start（仅首轮编译失败）→ verify_result → done（{"task",
+        fix_start（仅首轮编译失败）→ verify_result → task_reporting（AI
+        总结本步「做了什么 + 接下来你要做什么」，秒级）→ done（{"task",
         "status", "backup_id", "compile", "main_diff", "message"}，与深化
         尾段同形状 + task 为清单回填后的最新形状）或 error（中文信息）→
         流结束。HTTP 200 起流，失败以流内 error 事件收尾。
