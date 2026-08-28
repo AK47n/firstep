@@ -1224,6 +1224,17 @@
                 color: var(--muted); letter-spacing: .04em; margin: 0 0 8px;
                 padding-bottom: 6px; border-bottom: 1px dashed var(--border);
                 text-transform: uppercase; }
+  /* 逐步深化进度总览（工单 stepwise-deepen/02）：分段进度条——已验证绿 /
+     进行中青 / 待上板黄 / 失败红 / 待做灰 / 已跳过暗；汇总文案在 fx/task.js */
+  .tasks-overview-bar { display: flex; height: 8px; border-radius: 99px;
+                        overflow: hidden; background: var(--border); gap: 1px; }
+  .tasks-overview-bar .seg { height: 100%; min-width: 2px; }
+  .tasks-overview-bar .seg-ok { background: var(--ok); }
+  .tasks-overview-bar .seg-doing { background: var(--accent); }
+  .tasks-overview-bar .seg-unverified { background: var(--warn); }
+  .tasks-overview-bar .seg-failed { background: var(--danger); }
+  .tasks-overview-bar .seg-pending { background: rgba(139, 148, 158, .35); }
+  .tasks-overview-bar .seg-skipped { background: rgba(139, 148, 158, .18); }
   /* 检查能否生成（工单 a3-readiness-check/02）：第 9 步下方的检查单面板 */
   #readiness-check { border: 1px solid var(--border); border-radius: 10px;
                      background: var(--panel-2); padding: 8px 12px;
@@ -1766,7 +1777,7 @@
         <label style="margin-top:10px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="revise-deepen-check"> 执行后深化：AI 按功能需求填 main.c 的 TODO 并强制编译验证（模块集无变化时也自动进入深化）</label>
         <div class="row" style="margin-top:10px">
           <button id="btn-revise-apply" class="primary">确认并执行修订</button>
-          <button id="btn-revise-deepen">直接深化（跳过修订）</button>
+          <button id="btn-revise-deepen" title="快速兜底：一次填完所有 TODO 并编译验证，不逐步执行、无步骤报告">直接深化（快速兜底）</button>
           <button id="btn-revise-rollback" class="hidden danger">回滚本次修订 / 深化</button>
           <span id="revise-exec-status" class="muted"></span>
         </div>
@@ -1776,17 +1787,19 @@
         <div id="revise-exec-msg" class="error"></div>
       </div>
 
-      <!-- 任务推进（工单 task-progress/01-03）：AI 拆解任务清单 → 逐任务执行
-           → 每步编译验证 → 状态徽章。上下文复用上方「上下文入口」的加载结果。 -->
+      <!-- 逐步深化（工单 stepwise-deepen/01-03）：AI 拆解任务清单 → 逐任务执行
+           → 每步编译验证 → 步骤报告（AI 做了什么 + 接下来你要做什么，含接线/上板
+           指引）→ 上板反馈。上下文复用上方「上下文入口」的加载结果。 -->
       <div id="tasks-box" class="card-group hidden" style="margin-top:12px">
-        <div class="card-group-title">任务推进（拆解 → 逐任务执行 → 每步编译验证）</div>
-        <div class="muted" style="margin-bottom:6px">AI 按题面拆成有序任务清单：每个任务 = 一段可独立实现的 main.c 增量，点「做这一步」执行 —— 写盘前整树备份、自动编译验证（绿 = 已验证；无工具链 = 降级提示）；已跳过的任务不阻塞。</div>
+        <div class="card-group-title">逐步深化（任务推进）</div>
+        <div class="muted" style="margin-bottom:6px">AI 按题面拆成有序任务清单：每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步可与 AI 商量、上板后可反馈修复；直接深化（上方按钮）为快速兜底。</div>
         <div class="row">
           <button id="btn-tasks-plan" class="primary">拆解任务</button>
           <button id="btn-tasks-replan" class="hidden">重新拆解（覆盖）</button>
           <span id="tasks-progress" class="muted"></span>
           <span id="tasks-status" class="muted"></span>
         </div>
+        <div id="tasks-overview" class="hidden" style="margin-top:8px"></div>
         <div id="tasks-llm-telemetry" class="llm-telemetry hidden"></div>
         <div id="tasks-grid" class="hidden" style="margin-top:10px"></div>
         <div id="tasks-msg" class="error"></div>

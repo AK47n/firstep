@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import {
   taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
   taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
+  tasksOverviewHTML, taskStepReportHTML, taskNextActionHTML,
   taskCardActions, verifyStatusMarkup,
   taskCanFeedback, taskIterationLabel, taskIterationsHTML, taskLatestFeedbackNote,
   taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
@@ -283,4 +284,103 @@ test("taskDialogAreaHTML: 未展开 → 空串；展开空历史 → 引导语�
   const busy = taskDialogAreaHTML({ id: "t1" }, { open: true, busy: true, history: [{ role: "user", content: "x" }] });
   assert.ok(busy.includes("AI 回应中"));
   assert.ok(busy.includes("disabled"));
+});
+
+// ---------------------------------------------------------------------------
+// 逐步深化（工单 stepwise-deepen/02）：进度总览 / 步骤报告 / 卡片「下一步要做」
+// ---------------------------------------------------------------------------
+
+test("tasksOverviewHTML: 分段进度条 + 状态汇总（已跳过单列不计完成）", () => {
+  const plan = { tasks: [
+    { id: "t1", status: "verified" },
+    { id: "t2", status: "verified" },
+    { id: "t3", status: "unverified" },
+    { id: "t4", status: "failed" },
+    { id: "t5", status: "doing" },
+    { id: "t6", status: "pending" },
+    { id: "t7", status: "skipped" },
+  ] };
+  const html = tasksOverviewHTML(plan);
+  assert.ok(html.includes("已完成 <b style=\"color:var(--ok-bright)\">2</b>/7"));
+  assert.ok(html.includes("待上板 1"));
+  assert.ok(html.includes("失败 1"));
+  assert.ok(html.includes("进行中 1"));
+  assert.ok(html.includes("待做 1"));
+  assert.ok(html.includes("已跳过 1（不计入完成）"));
+  assert.ok(html.includes("seg-ok"));
+  assert.ok(html.includes("seg-unverified"));
+  assert.ok(html.includes("seg-failed"));
+  assert.ok(html.includes("seg-skipped"));
+  // 空清单 → 空串（前端容器隐藏）
+  assert.equal(tasksOverviewHTML({ tasks: [] }), "");
+  assert.equal(tasksOverviewHTML(null), "");
+});
+
+test("taskStepReportHTML: 最新一轮报告两块渲染 + 降级兜底", () => {
+  const task = { id: "t1", title: "循迹", status: "unverified", iterations: [
+    { seq: 1, kind: "execute", status: "unverified", what_changed: "实现了循迹状态机与灰度阈值判定", user_action: "把 PA0 接到灰度循迹模块 DIO，烧录后观察小车是否沿线" },
+  ] };
+  const html = taskStepReportHTML(task);
+  assert.ok(html.includes("步骤报告"));
+  assert.ok(html.includes("AI 做了什么："));
+  assert.ok(html.includes("实现了循迹状态机"));
+  assert.ok(html.includes("接下来你要做什么："));
+  assert.ok(html.includes("PA0 接到灰度循迹模块 DIO"));
+  // 报告调用降级（两字段空串）→ 中文兜底文案（中性：空结果 ≠ 必然降级）
+  const degraded = taskStepReportHTML({ id: "t1", iterations: [{ seq: 1, kind: "execute", status: "verified", what_changed: "", user_action: "" }] });
+  assert.ok(degraded.includes("本步说明为空"));
+  assert.ok(degraded.includes("本步无需额外人工动作"));
+  // 无轮次 → 空串（未执行过无报告）
+  assert.equal(taskStepReportHTML({ id: "t1", iterations: [] }), "");
+  assert.equal(taskStepReportHTML(null), "");
+});
+
+test("taskNextActionHTML: 未上板确认显示「下一步要做」；已确认/执行中/无指引 = 空串", () => {
+  const iter = [{ seq: 1, kind: "execute", status: "unverified", user_action: "把 PB1 接到步进模块 DIR" }];
+  const html = taskNextActionHTML({ id: "t1", status: "unverified", iterations: iter });
+  assert.ok(html.includes("下一步要做"));
+  assert.ok(html.includes("PB1 接到步进模块 DIR"));
+  // 已验证 → 空串（该步已闭环，无需再看指引）
+  assert.equal(taskNextActionHTML({ id: "t1", status: "verified", iterations: iter }), "");
+  // 执行中 → 空串（旧指引不代表当前轮）
+  assert.equal(taskNextActionHTML({ id: "t1", status: "doing", iterations: iter }), "");
+  // 无 user_action（降级）/ 无轮次 → 空串
+  assert.equal(taskNextActionHTML({ id: "t1", status: "unverified", iterations: [{ seq: 1, status: "unverified", user_action: "" }] }), "");
+  assert.equal(taskNextActionHTML({ id: "t1", status: "pending", iterations: [] }), "");
+});
+
+test("taskCardHTML: 下一步要做摘要进卡（有则渲染，无则卡形不变）", () => {
+  const base = taskCardHTML({
+    id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],
+    verify: "manual", status: "unverified",
+    iterations: [{ seq: 1, kind: "execute", status: "unverified", user_action: "烧录后观察循迹效果" }],
+  }, 0, {});
+  assert.ok(base.includes("下一步要做"));
+  assert.ok(base.includes("烧录后观察循迹效果"));
+  // 未上板（unverified）卡上明示「待上板」（spec：总览与卡片都标注）
+  assert.ok(base.includes("待上板"));
+  const verified = taskCardHTML({
+    id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],
+    verify: "manual", status: "verified", iterations: [],
+  }, 0, {});
+  assert.ok(!verified.includes("待上板"));
+  const plain = taskCardHTML({
+    id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],
+    verify: "compile", status: "pending", iterations: [],
+  }, 0, {});
+  assert.ok(!plain.includes("下一步要做"));
+});
+
+test("taskIterationsHTML: 轮次行带「做了什么」摘要（截 40 字）", () => {
+  const task = { id: "t1", iterations: [
+    { seq: 1, kind: "execute", status: "verified", compile_summary: "ok", what_changed: "x".repeat(50) },
+  ] };
+  const html = taskIterationsHTML(task);
+  assert.ok(html.includes("x".repeat(40) + "…"));
+  // 降级空字段 → 无摘要块
+  const noReport = taskIterationsHTML({ id: "t1", iterations: [
+    { seq: 1, kind: "execute", status: "verified", compile_summary: "ok" },
+  ] });
+  assert.ok(noReport.includes("第 1 轮"));
+  assert.ok(!noReport.includes("「"));
 });
