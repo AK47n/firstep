@@ -654,6 +654,36 @@ export function taskEditFormHTML(task, opts) {
     + "</div></div>";
 }
 
+/** 草稿列表（工单 idea-suite/06）：逐条 = 文本（截 60 字展示 + title 全文）+
+ * 「分析这条」（data-draft-action="analyze" + data-draft-text=全文）+
+ * 「删除」（data-draft-action="delete" + data-draft-id）；底部「全部逐条
+ * 分析」（data-draft-action="all"）；空列表 → 引导文案；opts.busy → 按钮
+ * 全部禁用（防与一轮分析 / 删除并发）。纯函数 + esc：文本进 data 属性/
+ * 文本节点一律转义。 */
+export function ideaDraftListHTML(drafts, opts) {
+  const o = opts || {};
+  const list = drafts || [];
+  if (!list.length) {
+    return '<div class="muted">暂无草稿——现场想到什么先「存入草稿」，'
+      + "回头逐条或批量分析。</div>";
+  }
+  const disabled = o.busy ? " disabled" : "";
+  const items = list.map((d) => {
+    const text = String(d.text || "");
+    return '<div class="draft-item">'
+      + '<span class="draft-text" title="' + esc(text) + '">' + esc(truncate(text, 60)) + "</span>"
+      + ' <button class="btn-draft-analyze" data-draft-action="analyze"'
+      + ' data-draft-text="' + esc(text) + '"' + disabled + ">分析这条</button>"
+      + ' <button class="btn-draft-delete" data-draft-action="delete"'
+      + ' data-draft-id="' + esc(d.id || "") + '"' + disabled + ">删除</button>"
+      + "</div>";
+  }).join("");
+  return '<div class="muted" style="margin-bottom:4px">草稿（' + esc(String(list.length))
+    + " 条）</div>" + items
+    + '<div class="row" style="margin-top:6px"><button class="btn-draft-all"'
+    + ' data-draft-action="all"' + disabled + ">全部逐条分析</button></div>";
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
@@ -667,5 +697,6 @@ if (typeof window !== "undefined") {
     taskStepReportBlocksHTML,
     globalChatHTML, globalNoteBadgeHTML,
     taskEditFormHTML, taskMoveButtonsHTML,
+    ideaDraftListHTML,
   });
 }

@@ -13,6 +13,7 @@ import {
   ideaResultHTML, taskNeedsRedoBadge, taskStepReportBlocksHTML,
   globalChatHTML, globalNoteBadgeHTML,
   taskEditFormHTML, taskMoveButtonsHTML,
+  ideaDraftListHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -723,4 +724,34 @@ test("taskCardHTML: 编辑按钮 + ↑/↓ 集成；editing 态渲染表单", ()
   const editing = taskCardHTML(task, 0, { total: 2, editing: () => true });
   assert.ok(editing.includes("task-edit-title-t1"));
   assert.ok(editing.includes("data-task-action=\"edit-save\""));
+});
+
+test("ideaDraftListHTML: 空列表 → 引导文案；非空 → 条目 + 分析/删除/全部按钮", () => {
+  const empty = ideaDraftListHTML([], {});
+  assert.ok(empty.includes("暂无草稿"));
+  assert.ok(!empty.includes("data-draft-action"));
+  const drafts = [{ id: "a1", text: "循迹阈值太高", at: "" }, { id: "a2", text: "进弯道前先减速", at: "" }];
+  const html = ideaDraftListHTML(drafts, {});
+  assert.ok(html.includes("草稿（2 条）"));
+  assert.ok(html.includes('data-draft-action="analyze"'));
+  assert.ok(html.includes('data-draft-action="delete"'));
+  assert.ok(html.includes('data-draft-action="all"'));
+  assert.ok(html.includes('data-draft-text="循迹阈值太高"'));
+  assert.ok(html.includes('data-draft-id="a2"'));
+  // 长文本截 60 字 + title 全文
+  const long = "长".repeat(80);
+  const longHtml = ideaDraftListHTML([{ id: "a1", text: long, at: "" }], {});
+  assert.ok(longHtml.includes('title="' + long + '"'));
+  assert.ok(longHtml.includes("长".repeat(60) + "…"));
+});
+
+test("ideaDraftListHTML: busy 禁用全部按钮 + 注入转义", () => {
+  const busy = ideaDraftListHTML([{ id: "a1", text: "x", at: "" }], { busy: true });
+  assert.ok(busy.includes('data-draft-action="analyze" data-draft-text="x" disabled'));
+  assert.ok(busy.includes('data-draft-action="delete" data-draft-id="a1" disabled'));
+  assert.ok(busy.includes('data-draft-action="all" disabled'));
+  const evil = ideaDraftListHTML([{ id: 'd"1', text: '<script>alert(1)</script>', at: "" }], {});
+  assert.ok(!evil.includes("<script>alert(1)</script>"));
+  assert.ok(evil.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
+  assert.ok(evil.includes('data-draft-text="&lt;script&gt;alert(1)&lt;/script&gt;"'));
 });
