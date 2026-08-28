@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f4ae6e9dcf97728cced55b7134d9431ad3f5babb -->
+<!-- changelog-auto: last-commit=4c7e302b72bc07f20625fad998e138d1c9cc18e6 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
 - 00:23 任务推进 UI 批次：评分点覆盖总览（score-coverage/02：每评分点一行 id+分类+分值+描述截60字+覆盖任务，无覆盖整行标红⚠，清单外引用黄色警示行；#tasks-scorepoints 容器 + .score-point-* 样式；数据源落盘优先/会话回退；scorePartLabel/taskRefText 抽取共享）+ 上板自检清单默认收起（details 折叠）+ 任务卡编辑/调序收编「⋯ 更多」下拉（taskMoreMenuHTML）+ 资源总览非硬件降噪（resourceIsHardware 判据）+ 入口文案重写（判据→能力→互指）
 - 00:24 任务推进 UI 批次：评分点覆盖总览（score-coverage/02：每评分点一行 id+分类+分值+描述截60字+覆盖任务，无覆盖整行标红⚠，清单外引用黄色警示行；#tasks-scorepoints 容器 + .score-point-* 样式；数据源落盘优先/会话回退；scorePartLabel/taskRefText 抽取共享）+ 上板自检清单默认收起（details 折叠）+ 任务卡编辑/调序收编「⋯ 更多」下拉（taskMoreMenuHTML）+ 资源总览非硬件降噪（resourceIsHardware 判据 + 拆解提示词⑧禁止模块名）+ 入口文案重写（判据→能力→互指）
+- 00:46 第11步页签化骨架（step11-tabs-ui/01）：卡内 修订/任务推进/参数速调/交付 四页签——index.html 拆 4 个 revise-panel（参数速调、交付迁出任务推进区）、fx/revise-tabs.js 纯函数（页签条标记/徽章规则/方向键循环/面板映射）+ tests/js 直测、ui/revise-tabs.js 点击/方向键切换（默认修订，上下文加载后未手动切换自动激活任务推进）+ 页签条 CSS（窄屏横向滚动）
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
