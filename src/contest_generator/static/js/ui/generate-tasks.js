@@ -48,6 +48,14 @@ function tasksSetBusy(busy) {
   ["btn-tasks-plan", "btn-tasks-replan"].forEach((id) => { $(id).disabled = busy; });
 }
 
+/** 乐观置卡状态（工单 05）：点击「做这一步」即刻把该卡在内存态置为 doing 并
+ * 重渲染——卡片马上出现「进行中」徽章、执行按钮消失，不等 SSE 首帧。真实状态
+ * 后续由 task_executing / done / 失败重读（tasksReload）回填，磁盘态才是真相。 */
+function setTaskStatusLocal(taskId, status) {
+  if (!tasks.plan || !tasks.plan.tasks) return;
+  tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? { ...t, status } : t);
+}
+
 function tasksRender() {
   const plan = tasks.plan;
   const grid = $("tasks-grid");
@@ -190,13 +198,22 @@ async function tasksPlan(force) {
 /** 单任务执行（工单 02 + task-feedback/02）：读补充框 → SSE（feedback 非空 =
  * 上板反馈轮）→ 状态回填渲染 + 结果面板。 */
 async function tasksExecute(taskId, feedback) {
-  if (tasks.busy) return;
+  if (tasks.busy) {
+    // 工单 05：busy 静默吞点击 = 用户以为没反应——给显式提示
+    toast("info", "有任务正在执行中，请等当前任务完成后再操作");
+    return;
+  }
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
   const note = ($("task-note-" + taskId) || {}).value || "";
   tasksSetBusy(true);
   tasksResetMessages();
-  $("tasks-status").textContent = "执行中…";
+  // 即时可见反馈（工单 05）：点击即置「进行中」并重渲染，卡片立刻有反应
+  setTaskStatusLocal(taskId, "doing");
+  tasksRender();
+  const noteEl = $("task-note-" + taskId);   // 重渲染会清掉补充框，回填已读取的内容
+  if (noteEl && note) noteEl.value = note;
+  $("tasks-status").textContent = "已开始执行：AI 实现本任务中…";
   try {
     const body = { output_dir: dir, task_id: taskId, note: note };
     if (feedback) body.feedback = feedback;
@@ -229,6 +246,9 @@ async function tasksExecute(taskId, feedback) {
   } catch (e) {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = e.message;
+    // 工单 05：失败路径后端会恢复 previous 状态落盘——重读磁盘刷新卡（乐观 doing
+    // 与磁盘不一致会误导用户）
+    await tasksReload();
   } finally {
     tasksSetBusy(false);
   }
