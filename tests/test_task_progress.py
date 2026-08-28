@@ -2990,3 +2990,120 @@ def test_tasks_execute_injects_global_note(tasks_client, monkeypatch):
     )
     assert resp.status_code == 200, resp.text
     assert holder["llm"].execute_task_calls[-1][-1] == ""
+
+
+# ---------------------------------------------------------------------------
+# 工单 score-coverage/01：评分点定义随任务清单落盘（TaskPlan.score_points）
+# ---------------------------------------------------------------------------
+
+
+def _score_point(id: str, part: str = "basic", score: float | None = None) -> dict:
+    """评分点落盘形状（ScorePoint.to_dict 半形：id/part/description/score）。"""
+    return {
+        "id": id,
+        "part": part,
+        "description": f"{id} 描述",
+        "score": score,
+    }
+
+
+def test_task_plan_score_points_roundtrip():
+    """评分点定义往返：to_dict → from_dict 无损（覆盖视图的数据源）。"""
+    plan = TaskPlan(
+        tasks=(Task(id="t1", title="循迹", description="循迹决策", score_refs=("s1",)),),
+        score_points=(
+            _score_point("s1", part="basic", score=3),
+            _score_point("s2", part="development", score=5),
+        ),
+    )
+    dumped = plan.to_dict()
+    assert dumped["score_points"] == [
+        {"id": "s1", "part": "basic", "description": "s1 描述", "score": 3},
+        {"id": "s2", "part": "development", "description": "s2 描述", "score": 5},
+    ]
+    rebuilt = TaskPlan.from_dict(dumped)
+    assert rebuilt.score_points == plan.score_points
+
+
+def test_task_plan_score_points_from_dict_legacy_missing_field():
+    """旧契约清单（无 score_points 字段）：读回缺省空元组（向后兼容）。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {"id": "t1", "title": "循迹", "description": "循迹决策"},
+            ],
+        }
+    )
+    assert plan.score_points == ()
+
+
+def test_task_plan_score_points_from_dict_tolerates_bad_entries():
+    """读回宽松：非列表 → 空；条目非 dict / 缺 id → 丢弃该条（不拒收清单）。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [],
+            "score_points": [
+                {"id": "s1", "part": "basic", "description": "好条目", "score": 1},
+                "不是对象",
+                {"part": "basic", "description": "缺 id", "score": 1},
+                {"id": 42, "part": "basic", "description": "id 非字符串", "score": 1},
+                {"id": "s2", "part": "basic", "description": "又一好条目", "score": None},
+                None,
+            ],
+        }
+    )
+    assert [p["id"] for p in plan.score_points] == ["s1", "s2"]
+    # 坏值整体非列表 → 空
+    plan = TaskPlan.from_dict(
+        {"version": 1, "generated_at": "", "tasks": [], "score_points": "bad"}
+    )
+    assert plan.score_points == ()
+
+
+def test_task_plan_score_points_persisted_by_run_task_planning(tmp_path):
+    """拆解落盘：run_task_planning 把入参 score_points 写入清单文件；
+    read_task_plan 读回同源返回——覆盖视图跨刷新可用的关键。"""
+    from contest_generator.generator import generate_project
+
+    library = make_fake_module_library(tmp_path / "modules")
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    output_dir = tmp_path / "out"
+    generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+        problem_text="题面",
+    )
+    llm = FakeLLM(
+        task_plan=TaskPlan(
+            tasks=(Task(id="t1", title="循迹", description="循迹决策", score_refs=("s1",)),)
+        )
+    )
+    points = (_score_point("s1", part="basic", score=3), _score_point("s2", part="development"))
+    result = run_task_planning(
+        llm=llm,
+        problem_text="题面",
+        qa_text="",
+        requirements=[{"requirement": "循迹", "sentence": 1}],
+        score_points=points,
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["score_points"] == list(points)
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.score_points == tuple(points)
+    # LLM 拆解 prompt 收到评分点（与落盘同源）
+    assert llm.plan_tasks_calls[0][3] == points

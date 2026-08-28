@@ -205,17 +205,25 @@ class Task:
 
 @dataclass(frozen=True)
 class TaskPlan:
-    """任务清单（落盘与读回 = 同一模型）。"""
+    """任务清单（落盘与读回 = 同一模型）。
+
+    score_points = 题面评分点定义（工单 score-coverage/01：拆解时随任务清单
+    落盘，ScorePoint.to_dict() 形状原样透传——id/part/description/score/
+    sentence_refs；覆盖总览与任务卡标注跨刷新/历史目录的数据源）。旧清单
+    缺省空元组（向后兼容读）；读回侧宽松：非列表 → 空、坏条目丢弃。
+    """
 
     version: int = TASKS_MANIFEST_VERSION
     generated_at: str = ""
     tasks: tuple[Task, ...] = ()
+    score_points: tuple[Mapping[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "generated_at": self.generated_at,
             "tasks": [task.to_dict() for task in self.tasks],
+            "score_points": [dict(point) for point in self.score_points],
         }
 
     @classmethod
@@ -235,6 +243,22 @@ class TaskPlan:
         raw_tasks = raw.get("tasks", [])
         if not isinstance(raw_tasks, list):
             raise TaskError("任务清单 tasks 必须是数组")
+        # score_points = 题面评分点定义（工单 score-coverage/01）：读回宽松——
+        # 非列表 → 空；条目非 dict / id 非字符串 → 丢弃该条（评分点仅作覆盖
+        # 视图的增强信息，坏条目不拒收整份清单，与 status 词表外同哲学）
+        raw_points = raw.get("score_points", [])
+        if raw_points is None or isinstance(raw_points, bool):
+            raw_points = []
+        if not isinstance(raw_points, list):
+            raw_points = []
+        score_points: list[Mapping[str, Any]] = []
+        for item in raw_points:
+            if not isinstance(item, dict):
+                continue
+            point_id = item.get("id")
+            if not isinstance(point_id, str) or not point_id.strip():
+                continue
+            score_points.append(dict(item))
         tasks: list[Task] = []
         for index, item in enumerate(raw_tasks, 1):
             if not isinstance(item, dict):
@@ -288,7 +312,12 @@ class TaskPlan:
                     iterations=_parse_iterations(item.get("iterations", [])),
                 )
             )
-        return cls(version=version, generated_at=generated_at, tasks=tuple(tasks))
+        return cls(
+            version=version,
+            generated_at=generated_at,
+            tasks=tuple(tasks),
+            score_points=tuple(score_points),
+        )
 
 
 def _parse_iterations(raw: Any) -> tuple[TaskIteration, ...]:
@@ -576,6 +605,9 @@ def run_task_planning(
         version=plan.version,
         generated_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         tasks=plan.tasks,
+        # 评分点定义随清单落盘（工单 score-coverage/01）：覆盖总览与任务卡
+        # 标注跨刷新 / 历史目录的数据源——旧清单读回缺省空，不影响展示
+        score_points=tuple(score_points),
     )
     write_task_plan(output_dir, stamped)
     return stamped.to_dict()
@@ -646,6 +678,7 @@ def insert_task_from_idea(plan: TaskPlan, new_task: Mapping[str, Any]) -> TaskPl
         generated_at=plan.generated_at
         or time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         tasks=plan.tasks + (inserted,),
+        score_points=plan.score_points,
     )
 
 
@@ -682,6 +715,7 @@ def set_tasks_needs_redo(
             )
             for task in plan.tasks
         ),
+        score_points=plan.score_points,
     )
 
 
@@ -770,6 +804,7 @@ def update_task_fields(
         version=plan.version,
         generated_at=plan.generated_at,
         tasks=tuple(updated if t.id == task_id else t for t in plan.tasks),
+        score_points=plan.score_points,
     )
 
 
@@ -799,6 +834,7 @@ def move_task(plan: TaskPlan, task_id: str, direction: str) -> TaskPlan:
         version=plan.version,
         generated_at=plan.generated_at,
         tasks=tuple(tasks),
+        score_points=plan.score_points,
     )
 
 
@@ -1193,6 +1229,7 @@ def _with_task_status(
         version=plan.version,
         generated_at=plan.generated_at,
         tasks=tuple(tasks),
+        score_points=plan.score_points,
     )
 
 
