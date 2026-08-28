@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.platforms import PLATFORM_STM32
-from contest_generator.llm import StepReport
+from contest_generator.llm import IdeaAnalysis, StepReport
 from contest_generator.revision import revise_backup_root
 from contest_generator.task_progress import (
     ALLOWED_STATUS_TRANSITIONS,
@@ -36,11 +36,14 @@ from contest_generator.task_progress import (
     backup_task_plan,
     build_task_plan,
     find_task,
+    insert_task_from_idea,
     read_task_plan,
     rollback_task_iteration,
+    run_direct_fix,
     run_task,
     run_task_planning,
     set_task_dialog_note,
+    set_tasks_needs_redo,
     update_task_status,
     write_task_plan,
 )
@@ -948,6 +951,219 @@ def test_tasks_execute_feedback_flow(tasks_client, monkeypatch):
     assert len(saved["tasks"][0]["iterations"]) == 2
 
 
+def test_tasks_idea_analyze_sse_flow(tasks_client):
+    """想法分析端点：idea_analyzing → idea_result → done（analysis 载荷）；
+    LLM 收到想法 + 清单状态。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        idea_analysis=IdeaAnalysis(
+            kind="direct_fix",
+            reply="阈值太高，直接改。",
+            fix_summary="把阈值从 500 降到 350",
+            affected_task_ids=("t1",),
+        )
+    )
+    resp = client.post(
+        "/api/tasks/idea/analyze", json={"output_dir": output_dir, "idea": "阈值太高"}
+    )
+    assert resp.status_code == 200, resp.text
+    events = _sse_events(resp)
+    types = [event_type for event_type, _ in events]
+    assert types[-1] == "done"
+    assert "idea_analyzing" in types
+    assert "idea_result" in types
+    analysis = events[-1][1]["analysis"]
+    assert analysis["kind"] == "direct_fix"
+    assert analysis["fix_summary"] == "把阈值从 500 降到 350"
+    assert analysis["affected_task_ids"] == ["t1"]
+    idea_call = holder["llm"].idea_analyze_calls[0]
+    assert idea_call[0] == "阈值太高"
+    assert idea_call[7] is None  # 未拆解清单 → None（AI 仍可分类讨论 / 新功能）
+
+
+def test_tasks_idea_analyze_missing_idea_400(tasks_client):
+    """缺 idea / 缺题面 → 400 中文。"""
+    client, _, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    resp = client.post("/api/tasks/idea/analyze", json={"output_dir": output_dir})
+    assert resp.status_code == 400, resp.text
+    assert "idea" in resp.json()["detail"]
+    # 有工程但缺题面（历史目录无上下文清单且未补题面）→ 400
+    out = tmp_path / "manual"
+    out.mkdir()
+    (out / "project.uvprojx").write_text("<Project/>", encoding="utf-8")
+    (out / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
+    resp = client.post(
+        "/api/tasks/idea/analyze", json={"output_dir": str(out), "idea": "改阈值"}
+    )
+    assert resp.status_code == 400, resp.text
+    assert "题面" in resp.json()["detail"]
+
+
+def test_tasks_idea_insert_appends_and_backs_up(tasks_client):
+    """插入端点：新任务落盘 t2（依赖序号转 id）；旧清单 → .bak；无清单也允许。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    resp = client.post(
+        "/api/tasks/idea/insert",
+        json={
+            "output_dir": output_dir,
+            "new_task": {
+                "title": "弯道减速",
+                "description": "弯道降低目标速度",
+                "depends_on": [1],
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    plan = resp.json()["plan"]
+    assert [task["id"] for task in plan["tasks"]] == ["t1", "t2"]
+    assert plan["tasks"][1]["depends_on"] == ["t1"]
+    assert (Path(output_dir) / TASKS_MANIFEST_BAK_FILENAME).exists()
+    # 无清单目录也允许（建新清单只含该任务）
+    out2 = tmp_path / "fresh"
+    out2.mkdir()
+    resp = client.post(
+        "/api/tasks/idea/insert",
+        json={
+            "output_dir": str(out2),
+            "new_task": {"title": "弯道减速", "description": "弯道降低目标速度"},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert [task["id"] for task in resp.json()["plan"]["tasks"]] == ["t1"]
+
+
+def test_tasks_idea_insert_invalid_keeps_manifest(tasks_client):
+    """插入校验失败 → 400 且现有清单**仍在原位**（.bak 备份须在校验通过后——
+    评审发现 backup 是 move 语义，先备后验会吞掉现有清单）。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    manifest = Path(output_dir) / TASKS_MANIFEST_FILENAME
+    before = manifest.read_text(encoding="utf-8")
+    resp = client.post(
+        "/api/tasks/idea/insert",
+        json={
+            "output_dir": output_dir,
+            "new_task": {"title": "", "description": "空标题非法"},
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert manifest.is_file()
+    assert manifest.read_text(encoding="utf-8") == before
+    assert not (Path(output_dir) / TASKS_MANIFEST_BAK_FILENAME).exists()
+
+
+def test_tasks_idea_fix_sse_flow(tasks_client, monkeypatch):
+    """直接修正端点：复用 compile_start / verify_result / task_reporting 词表
+    → done（status/backup_id/main_diff/step_report/affected）；受影响任务
+    needs_redo=true 落盘。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    holder["llm"] = FakeLLM(
+        fixed_main_c="int main(void) { /* 阈值已调 */ while (1); }\n",
+        idea_analysis=IdeaAnalysis(
+            kind="direct_fix",
+            reply="阈值太高，直接改。",
+            fix_summary="把阈值从 500 降到 350",
+            affected_task_ids=("t1",),
+        ),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    resp = client.post(
+        "/api/tasks/idea/fix",
+        json={
+            "output_dir": output_dir,
+            "idea": "阈值太高",
+            "fix_summary": "把阈值从 500 降到 350",
+            "affected_task_ids": ["t1"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    events = _sse_events(resp)
+    types = [event_type for event_type, _ in events]
+    assert types[-1] == "done"
+    assert "compile_start" in types
+    assert "task_reporting" in types
+    done = events[-1][1]
+    assert done["status"] == STATUS_VERIFIED
+    assert done["affected"] == ["t1"]
+    assert done["step_report"]["what_changed"]
+    # 写盘 + 受影响任务标记落盘
+    assert "阈值已调" in (Path(output_dir) / "main.c").read_text(encoding="utf-8")
+    saved = json.loads(
+        (Path(output_dir) / TASKS_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert saved["tasks"][0]["needs_redo"] is True
+
+
+def test_tasks_idea_fix_with_affected_but_no_plan_400(tasks_client):
+    """有受影响任务但清单未拆解 → 400（不落失败半成品）。"""
+    client, _, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    resp = client.post(
+        "/api/tasks/idea/fix",
+        json={"output_dir": output_dir, "idea": "改阈值", "affected_task_ids": ["t1"]},
+    )
+    assert resp.status_code == 400, resp.text
+    assert "拆解" in resp.json()["detail"]
+
+
+def test_tasks_idea_mark_redo_endpoint(tasks_client):
+    """标记端点：needs_redo true/false 往返；未知 id 忽略；清单未拆解 → 400。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    resp = client.post(
+        "/api/tasks/idea/mark-redo",
+        json={"output_dir": output_dir, "task_ids": ["t1"], "needs_redo": True},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["plan"]["tasks"][0]["needs_redo"] is True
+    resp = client.post(
+        "/api/tasks/idea/mark-redo",
+        json={"output_dir": output_dir, "task_ids": ["t1"], "needs_redo": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["plan"]["tasks"][0]["needs_redo"] is False
+    resp = client.post(
+        "/api/tasks/idea/mark-redo",
+        json={"output_dir": output_dir, "task_ids": ["t99"]},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["plan"]["tasks"][0]["needs_redo"] is False
+    out = tmp_path / "none"
+    out.mkdir()
+    resp = client.post(
+        "/api/tasks/idea/mark-redo", json={"output_dir": str(out), "task_ids": ["t1"]}
+    )
+    assert resp.status_code == 400, resp.text
+    assert "拆解" in resp.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # 轮次回滚（工单 task-feedback/03）：撤销语义（恢复该轮执行前快照 + 前轮终态）
 # ---------------------------------------------------------------------------
@@ -1470,6 +1686,305 @@ def test_run_task_step_report_failure_degrades(tmp_path, monkeypatch):
     assert iteration.status == STATUS_VERIFIED
     assert iteration.what_changed == ""
     assert iteration.user_action == ""
+
+
+# ---------------------------------------------------------------------------
+# 灵活修正（工单 idea-fix/01）：needs_redo 标记 / 想法转任务卡 / 直接修正管线
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_task_without_needs_redo_defaults_false():
+    """旧清单（无 needs_redo 字段）读回 → False（向后兼容）。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [{"id": "t1", "title": "循迹", "description": "循迹决策"}],
+        }
+    )
+    assert plan.tasks[0].needs_redo is False
+
+
+def test_task_needs_redo_roundtrip():
+    """needs_redo 标记往返：to_dict / from_dict 全字段；非布尔 → False。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "needs_redo": True,
+                }
+            ],
+        }
+    )
+    assert plan.tasks[0].needs_redo is True
+    dumped = TaskPlan(tasks=plan.tasks).to_dict()
+    assert dumped["tasks"][0]["needs_redo"] is True
+    # 非布尔值 → False（读回侧不拒收，与 status 词表外同哲学）
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "needs_redo": "yes",
+                }
+            ],
+        }
+    )
+    assert plan.tasks[0].needs_redo is False
+
+
+def test_insert_task_from_idea_appends_with_id_and_deps():
+    """想法转任务卡：追加 t3、depends_on 序号转 id、score_refs 原样、
+    status=pending / needs_redo=False；旧任务原样保留。"""
+    plan = TaskPlan(
+        tasks=(
+            Task(id="t1", title="循迹", description="循迹决策"),
+            Task(id="t2", title="OLED", description="显示", depends_on=("t1",)),
+        )
+    )
+    updated = insert_task_from_idea(
+        plan,
+        {
+            "title": "弯道减速",
+            "description": "弯道降低目标速度",
+            "score_refs": ["s1"],
+            "depends_on": [1, 2],
+            "verify": VERIFY_COMPILE,
+        },
+    )
+    assert len(updated.tasks) == 3
+    new_task = updated.tasks[2]
+    assert new_task.id == "t3"
+    assert new_task.title == "弯道减速"
+    assert new_task.depends_on == ("t1", "t2")
+    assert new_task.score_refs == ("s1",)
+    assert new_task.status == STATUS_PENDING
+    assert new_task.needs_redo is False
+    assert new_task.iterations == ()
+    assert updated.tasks[0].id == "t1"
+    assert updated.tasks[1].depends_on == ("t1",)
+    assert updated.generated_at  # 空 → 落时间戳
+
+
+def test_insert_task_from_idea_validation():
+    """想法转任务卡校验：缺标题/描述、depends_on 越界/非正整数 → TaskError；
+    verify 词表外 → 修正 compile。"""
+    plan = TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    with pytest.raises(TaskError):
+        insert_task_from_idea(plan, {"description": "缺标题"})
+    with pytest.raises(TaskError):
+        insert_task_from_idea(plan, {"title": "有标题", "description": ""})
+    with pytest.raises(TaskError):
+        insert_task_from_idea(
+            plan, {"title": "越界", "description": "依赖不存在", "depends_on": [9]}
+        )
+    with pytest.raises(TaskError):
+        insert_task_from_idea(
+            plan, {"title": "非法", "description": "序号非正整数", "depends_on": [0]}
+        )
+    updated = insert_task_from_idea(
+        plan,
+        {"title": "新任务", "description": "描述", "verify": "bad-verify"},
+    )
+    assert updated.tasks[1].verify == VERIFY_COMPILE
+
+
+def test_set_tasks_needs_redo_marks_and_ignores_unknown():
+    """标记重做：已知 id 置 true；未知 id 静默忽略；False 清除；空集 = 原样。"""
+    plan = TaskPlan(
+        tasks=(
+            Task(id="t1", title="循迹", description="循迹决策"),
+            Task(id="t2", title="OLED", description="显示"),
+        )
+    )
+    marked = set_tasks_needs_redo(plan, ["t1", "t99"])
+    assert marked.tasks[0].needs_redo is True
+    assert marked.tasks[1].needs_redo is False
+    cleared = set_tasks_needs_redo(marked, ["t1"], False)
+    assert cleared.tasks[0].needs_redo is False
+    assert set_tasks_needs_redo(plan, []) is plan
+
+
+def test_run_task_clears_needs_redo(tmp_path, monkeypatch):
+    """执行过的任务清除「建议重做」标记（重做消化了标记来源）。"""
+    library, output_dir = _task_env(tmp_path)
+    plan = read_task_plan(output_dir)
+    assert plan is not None
+    write_task_plan(output_dir, set_tasks_needs_redo(plan, ["t1"], True))
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert saved.tasks[0].needs_redo is False
+
+
+def test_run_direct_fix_verified_when_compile_passes(tmp_path, monkeypatch):
+    """直接修正管线：备份 → 写盘 → 编译绿 → verified + diff + 步骤报告。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(
+        fixed_main_c="int main(void) { /* 阈值已调 */ while (1); }\n",
+        idea_analysis=IdeaAnalysis(
+            kind="direct_fix",
+            reply="阈值太高，直接改。",
+            fix_summary="把阈值从 500 降到 350",
+            affected_task_ids=("t1",),
+        ),
+    )
+    events: list[str] = []
+    result = run_direct_fix(
+        llm=llm,
+        idea="阈值太高",
+        fix_summary="把阈值从 500 降到 350",
+        affected=["t1"],
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: events.append(event.type)),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_VERIFIED
+    assert result["backup_id"]
+    assert "阈值已调" in (output_dir / "main.c").read_text(encoding="utf-8")
+    assert result["main_diff"]["stats"]["additions"] >= 1
+    assert result["step_report"]["what_changed"]
+    assert result["step_report"]["user_action"]
+    idea, fix_summary, affected, interfaces, ptext, qa, main = llm.idea_fix_calls[0]
+    assert idea == "阈值太高"
+    assert fix_summary == "把阈值从 500 降到 350"
+    assert affected == ("t1",)
+    assert "task_reporting" in events
+    assert "verify_result" in events
+    # 不造任务轮次（run_direct_fix 不 touch plan）
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    assert all(task.iterations == () for task in saved.tasks)
+
+
+def test_run_direct_fix_without_toolchain_degrades(tmp_path, monkeypatch):
+    """无工具链 → unverified 降级（结果保留，中文说明）。"""
+    library, output_dir = _task_env(tmp_path)
+    _no_toolchain(monkeypatch)
+    llm = FakeLLM(fixed_main_c="int main(void) { /* 阈值已调 */ while (1); }\n")
+    result = run_direct_fix(
+        llm=llm,
+        idea="阈值太高",
+        fix_summary="",
+        affected=[],
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_UNVERIFIED
+    assert "未验证" in result["message"]
+    assert "阈值已调" in (output_dir / "main.c").read_text(encoding="utf-8")
+
+
+def test_run_direct_fix_empty_result_raises(tmp_path, monkeypatch):
+    """LLM 输出空 → TaskError（不做任何写盘）。"""
+    library, output_dir = _task_env(tmp_path)
+    llm = FakeLLM(fixed_main_c="")
+    before = (output_dir / "main.c").read_text(encoding="utf-8")
+    with pytest.raises(TaskError):
+        run_direct_fix(
+            llm=llm,
+            idea="阈值太高",
+            fix_summary="",
+            affected=[],
+            problem_text="题面",
+            qa_text="",
+            manifests=[],
+            platform=PLATFORM_STM32,
+            library_dir=library,
+            master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+            main_c="int main(void) { /* TODO */ while (1); }\n",
+            output_dir=output_dir,
+            work_root=tmp_path / "work",
+            emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        )
+    assert (output_dir / "main.c").read_text(encoding="utf-8") == before
+
+
+class _IdeaFixBrokenLLM(FakeLLM):
+    """想法修正调用失败的假 LLM：apply_idea_fix 抛异常（防写盘测试用）。"""
+
+    def apply_idea_fix(self, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("想法修正调用崩溃")
+
+
+def test_run_direct_fix_llm_failure_propagates(tmp_path, monkeypatch):
+    """LLM 修正调用抛异常 → 原样传播（不写盘、不产生备份）。"""
+    library, output_dir = _task_env(tmp_path)
+    llm = _IdeaFixBrokenLLM()
+    before = (output_dir / "main.c").read_text(encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        run_direct_fix(
+            llm=llm,
+            idea="阈值太高",
+            fix_summary="",
+            affected=[],
+            problem_text="题面",
+            qa_text="",
+            manifests=[],
+            platform=PLATFORM_STM32,
+            library_dir=library,
+            master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+            main_c="int main(void) { /* TODO */ while (1); }\n",
+            output_dir=output_dir,
+            work_root=tmp_path / "work",
+            emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        )
+    assert (output_dir / "main.c").read_text(encoding="utf-8") == before
 
 
 # ---------------------------------------------------------------------------

@@ -91,6 +91,14 @@ EVENT_TASK_EXECUTING = "task_executing"
 # verify_result → task_reporting → done。
 EVENT_TASK_REPORTING = "task_reporting"
 
+# 灵活修正（工单 idea-fix/01）：idea_analyzing = LLM 正在分析用户的新想法 /
+# 问题（分钟级阻塞调用）；idea_result = 分析结果就绪（done 载荷前发射，
+# 载荷由 done 携带）。分析端点事件序列：idea_analyzing → idea_result → done；
+# 直接修正端点复用 compile_start / fix_start / verify_result / task_reporting
+# 既有词表（不新增）。
+EVENT_IDEA_ANALYZING = "idea_analyzing"
+EVENT_IDEA_RESULT = "idea_result"
+
 # 买件方案商量（工单 buy-discuss/01）：discuss_start = 一轮讨论的 LLM 调用
 # 开始（分钟级阻塞）；端点同步返回（非 SSE），事件供观察面板消费。
 EVENT_BUY_DISCUSS = "buy_discuss"

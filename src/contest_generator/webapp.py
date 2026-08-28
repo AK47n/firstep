@@ -66,13 +66,14 @@ from .deepen import DeepenError, run_deepen
 from .flash import FlashError, flash_project, resolve_flash_tool
 from .task_progress import (
     TaskError,
+    backup_task_plan,
     check_plan_replaceable,
     run_task,
     run_task_planning,
     write_task_plan,
 )
 from .errors import error_entry
-from .events import EVENT_CACHE_HIT, ProgressEvent
+from .events import EVENT_CACHE_HIT, EVENT_IDEA_ANALYZING, EVENT_IDEA_RESULT, ProgressEvent
 from .extraction import (
     IMAGE_FILE_SUFFIXES,
     extract_file,
@@ -2327,6 +2328,243 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         finally:
             context.recent_llm_workflows.add_completed(collector)
         return {"reply": discussion.reply}
+
+    # ------------------------------------------------------------------
+    # 灵活修正（工单 idea-fix/01）：全局「新想法 / 问题」入口——分析（分类）
+    # / 插入任务卡 / 直接修正（复用编译验证尾段与备份回滚入口）/ 标记重做。
+    # 域判决在 task_progress（insert_task_from_idea / set_tasks_needs_redo /
+    # run_direct_fix），路由薄壳装配（照 tasks 系列先例）。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/idea/analyze")
+    @_map_errors
+    def tasks_idea_analyze(payload: dict) -> StreamingResponse:
+        """新想法分析（SSE 流）：分析中 → 分析完成 → done（分类结果）。
+
+        请求体契约：output_dir（必填，生成结果目录）；idea（必填非空字符串，
+        用户的新想法 / 发现的问题）；problem_text（可选覆盖，历史目录补题面
+        流程）。
+
+        事件序列：idea_analyzing（LLM 分析中，分钟级）→ idea_result（分析
+        完成）→ done（{"analysis": {"kind", "reply", "new_task",
+        "fix_summary", "affected_task_ids"}}）或 error（中文信息）→ 流结束。
+        HTTP 200 起流，失败以流内 error 事件收尾。
+
+        缺题面 → 400 中文（分析需要题面证据）；LLM 失败 → 流内 error（错误
+        映射 502）。清单未拆解允许（analysis.new_task 无依赖语境；AI 仍可
+        分类讨论 / 新功能）。
+        """
+        from .task_progress import read_task_plan
+        from .skeleton import build_skeleton_interfaces
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        idea = _require_str(payload, "idea")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if payload.get("problem_text") is not None:
+            fields["problem_text"] = _require_str(payload, "problem_text")
+        if not fields.get("problem_text"):
+            raise TaskError("缺少赛题原文——请先补题面（想法分析需要题面证据）")
+        platform = fields["platform"]
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        interfaces = build_skeleton_interfaces(
+            resolved.manifests,
+            platform,
+            module_library_dir,
+            master_project_dir(config.masters_dir, platform),
+        )
+        plan = read_task_plan(output_dir)
+        score_points = parse_score_points(payload.get("score_points"))
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("tasks-idea-analyze")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                emit.progress(ProgressEvent(type=EVENT_IDEA_ANALYZING))
+                with bind_llm_telemetry(collector, emit.progress):
+                    analysis = llm.analyze_idea(
+                        idea=idea,
+                        problem_text=fields["problem_text"],
+                        qa_text=fields.get("qa_text", ""),
+                        requirements=fields.get("requirements") or (),
+                        score_points=[p.to_dict() for p in score_points],
+                        module_interfaces=interfaces,
+                        main_c=main_c,
+                        plan=plan.to_dict() if plan is not None else None,
+                    )
+                emit.progress(ProgressEvent(type=EVENT_IDEA_RESULT))
+                emit.done({"analysis": analysis.to_dict()})
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    @app.post("/api/tasks/idea/insert")
+    @_map_errors
+    def tasks_idea_insert(payload: dict) -> dict:
+        """思路转化为任务卡（同步端点）：{output_dir, new_task} → {plan}。
+
+        new_task = 想法分析给出的建议任务（title/description/score_refs/
+        depends_on/verify，须为对象）。插入 = 清单末尾追加 t{n+1}（依赖用
+        1 起序号引用既有任务）；旧清单先备档 .contest_tasks.json.bak（与
+        重新拆解同入口）再覆盖；清单未拆解也允许（建新清单只含该任务）。
+        校验失败 → TaskError 400 中文；返回 {"plan": 落盘后全量清单}。
+        """
+        from .task_progress import (
+            TaskPlan,
+            insert_task_from_idea,
+            read_task_plan,
+        )
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        raw_new_task = payload.get("new_task")
+        if not isinstance(raw_new_task, dict):
+            raise TaskError("new_task 必须是对象（title/description/score_refs/"
+                            "depends_on/verify）")
+        plan = read_task_plan(output_dir)
+        # 先纯函数校验与构造（失败 = 不动盘面——校验失败决不吞掉现有清单，
+        # 对照 run_task_planning 的「拆解成功后才备份」顺序：backup 是 move 语义）
+        updated = insert_task_from_idea(plan or TaskPlan(), raw_new_task)
+        backup_task_plan(output_dir)  # 校验通过后旧清单备档（无旧清单 = False）
+        write_task_plan(output_dir, updated)
+        return {"plan": updated.to_dict()}
+
+    @app.post("/api/tasks/idea/fix")
+    @_map_errors
+    def tasks_idea_fix(payload: dict) -> StreamingResponse:
+        """想法直接修正（SSE 流）：修正中 → 编译验证 → done（结果 + 受影响）。
+
+        请求体契约：output_dir（必填）；idea（必填非空字符串）；fix_summary
+        （可选字符串，想法分析给出的修正建议——透传 LLM 按此修正）；
+        affected_task_ids（可选字符串数组，受影响任务——成功后标
+        needs_redo=True 并落盘）；problem_text（可选覆盖）。
+
+        事件序列：compile_start → fix_start（仅首轮编译失败）→ verify_result
+        → task_reporting（AI 总结本步「做了什么 + 接下来做什么」，秒级）→
+        done（{"status", "backup_id", "compile", "main_diff", "message",
+        "step_report", "affected"}）或 error（中文信息）→ 流结束。HTTP 200
+        起流，失败以流内 error 事件收尾（复用执行事件词表，不新增）。
+
+        缺题面 / main.c 空 → 400；修正成功后才标记受影响任务（不落失败
+        半成品）；备份可经 /api/revise/rollback 回滚（复用入口）。
+        """
+        from .task_progress import (
+            read_task_plan,
+            run_direct_fix,
+            set_tasks_needs_redo,
+        )
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        idea = _require_str(payload, "idea")
+        fix_summary = _optional_str(payload, "fix_summary") or ""
+        raw_affected = payload.get("affected_task_ids")
+        if raw_affected in (None, []):
+            affected: list[str] = []
+        elif isinstance(raw_affected, list) and all(
+            isinstance(item, str) for item in raw_affected
+        ):
+            affected = [item.strip() for item in raw_affected if item.strip()]
+        else:
+            raise TaskError("affected_task_ids 必须是字符串数组")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if payload.get("problem_text") is not None:
+            fields["problem_text"] = _require_str(payload, "problem_text")
+        if not fields.get("problem_text"):
+            raise TaskError("缺少赛题原文——请先补题面（直接修正需要题面证据）")
+        platform = fields["platform"]
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        if not main_c.strip():
+            raise TaskError("工程 main.c 为空，无法执行修正")
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        plan = read_task_plan(output_dir)
+        if affected and plan is None:
+            raise TaskError("该目录尚未拆解任务——无法标记受影响任务，请先拆解")
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("tasks-idea-fix")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_direct_fix(
+                        llm=llm,
+                        idea=idea,
+                        fix_summary=fix_summary,
+                        affected=affected,
+                        problem_text=fields["problem_text"],
+                        qa_text=fields.get("qa_text", ""),
+                        manifests=resolved.manifests,
+                        platform=platform,
+                        library_dir=module_library_dir,
+                        master_project_dir=master_project_dir(
+                            config.masters_dir, platform
+                        ),
+                        main_c=main_c,
+                        output_dir=output_dir,
+                        work_root=config.masters_dir.parent,
+                        emit=emit,
+                        uv4_override=config.uv4_path,
+                        make_override=config.gmake_path,
+                        module_slugs=fields["slugs"],
+                    )
+                # 修正成功落盘后：受影响任务标「建议重做」（不落失败半成品）
+                if affected and plan is not None:
+                    updated_plan = set_tasks_needs_redo(plan, affected, True)
+                    write_task_plan(output_dir, updated_plan)
+                emit.done({**result, "affected": list(affected)})
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    @app.post("/api/tasks/idea/mark-redo")
+    @_map_errors
+    def tasks_idea_mark_redo(payload: dict) -> dict:
+        """标记 / 清除「建议重做」（同步端点）：{output_dir, task_ids,
+        needs_redo?} → {plan}。
+
+        task_ids 必填字符串数组；needs_redo 可选布尔（缺省 True——标记；
+        False = 清除，用户重做后调用）。未知 id 静默忽略（AI 可能编造 id）。
+        清单未拆解 → TaskError 400；返回 {"plan": 落盘后全量清单}。
+        """
+        from .task_progress import read_task_plan, set_tasks_needs_redo
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        raw_ids = payload.get("task_ids")
+        if not isinstance(raw_ids, list) or any(
+            not isinstance(item, str) for item in raw_ids
+        ):
+            raise TaskError("task_ids 必须是字符串数组")
+        needs_redo = payload.get("needs_redo", True)
+        if not isinstance(needs_redo, bool):
+            raise TaskError("needs_redo 必须是布尔值")
+        plan = read_task_plan(output_dir)
+        if plan is None:
+            raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
+        updated = set_tasks_needs_redo(
+            plan, [item.strip() for item in raw_ids if item.strip()], needs_redo
+        )
+        write_task_plan(output_dir, updated)
+        return {"plan": updated.to_dict()}
 
     @app.post("/api/buy/discuss")
     @_map_errors

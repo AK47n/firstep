@@ -18,7 +18,7 @@ from contest_generator.events import ProgressEmitter
 from contest_generator.fix_errors import FixSuggestion
 from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
-from contest_generator.llm import BuyDiscussion, StepReport, TaskDiscussion
+from contest_generator.llm import BuyDiscussion, IdeaAnalysis, StepReport, TaskDiscussion
 from contest_generator.manifest import ManifestSummary
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
@@ -604,6 +604,8 @@ class FakeLLM:
         discussion: BuyDiscussion | None = None,
         task_discussion: TaskDiscussion | None = None,
         step_report: StepReport | None = None,
+        idea_analysis: IdeaAnalysis | None = None,
+        fixed_main_c: str = "",
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -628,6 +630,10 @@ class FakeLLM:
             what_changed="实现了步进驱动（测试默认），编译验证通过。",
             user_action="把 PB1 接到步进模块 DIR，烧录后观察电机正转。",
         )
+        self._idea_analysis = idea_analysis or IdeaAnalysis(
+            kind="discussion", reply="明白了，先讨论不动代码。"
+        )
+        self._fixed_main_c = fixed_main_c
         self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
         self.task_discuss_calls: list[
             tuple[dict[str, Any], str, str, tuple, tuple[str, ...], str, tuple]
@@ -663,6 +669,12 @@ class FakeLLM:
             tuple[str, str, tuple, tuple, tuple, str]
         ] = []
         self.execute_task_calls: list[tuple[str, dict, str, tuple, str, str, str]] = []
+        self.idea_analyze_calls: list[
+            tuple[str, str, str, tuple, tuple, tuple, str, dict | None]
+        ] = []
+        self.idea_fix_calls: list[
+            tuple[str, str, tuple, tuple, str, str, str]
+        ] = []
 
     def generate_report_draft(
         self,
@@ -917,6 +929,54 @@ class FakeLLM:
         )
         return self._step_report
 
+    def analyze_idea(
+        self,
+        idea: str,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+    ) -> IdeaAnalysis:
+        self.idea_analyze_calls.append(
+            (
+                idea,
+                problem_text,
+                qa_text,
+                tuple(requirements),
+                tuple(score_points),
+                tuple(module_interfaces),
+                main_c,
+                dict(plan) if plan is not None else None,
+            )
+        )
+        return self._idea_analysis
+
+    def apply_idea_fix(
+        self,
+        idea: str,
+        fix_summary: str,
+        affected: Sequence[str],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+        main_c: str,
+    ) -> str:
+        self.idea_fix_calls.append(
+            (
+                idea,
+                fix_summary,
+                tuple(affected),
+                tuple(module_interfaces),
+                problem_text,
+                qa_text,
+                main_c,
+            )
+        )
+        return self._fixed_main_c
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -1112,6 +1172,33 @@ class RecordingLLM:
     ) -> StepReport:
         self._record("report_task_step")
         return StepReport(what_changed="做了什么", user_action="下一步")
+
+    def analyze_idea(
+        self,
+        idea: str,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+    ) -> IdeaAnalysis:
+        self._record("analyze_idea")
+        return IdeaAnalysis(kind="discussion", reply="先讨论")
+
+    def apply_idea_fix(
+        self,
+        idea: str,
+        fix_summary: str,
+        affected: Sequence[str],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+        main_c: str,
+    ) -> str:
+        self._record("apply_idea_fix")
+        return main_c
 
     def generate_report_draft(
         self,
