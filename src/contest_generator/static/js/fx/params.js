@@ -10,10 +10,14 @@ import { mainDiffHTML } from "./diff.js";
 import { flashPanelHTML } from "./flash.js";
 import { verifyStatusMarkup } from "./task.js";
 
-/** 参数表（spec 故事 2：参数一行一个，当前值可改、建议范围给参考）：
- * 每行 = 名称（slug）+ 含义 + 当前值输入框（默认值 = old_value）+ 建议范围
- * 提示；valid=false 行输入框禁用 + 「锚已失效」标记（main.c 已被改动，旧锚
- * 不再可靠——重新识别才有意义）；running = 一轮流程进行中（全部禁用）。
+/** 参数表（spec 故事 2，工单 param-grid/01 网格卡片流改版）：参数一行一个
+ * 改为响应式网格卡片（.param-grid，宽屏 3 列 / 窄屏 2 列 / 手机 1 列自适应）
+ * —— 12 参数从 12 行变约 4 行，视觉层级 = 卡头（名称 + 含义截断 + title
+ * 全文）+ 卡体（输入框 + 应用按钮）+ 提示段（范围 / 单位）。
+ * 每卡 = 名称（slug）+ 含义（label，截 24 字）+ 当前值输入框（默认值 =
+ * old_value）+ 建议范围提示；valid=false 卡置灰 + 输入框禁用 + 「锚已失效」
+ * 标记（main.c 已被改动，旧锚不再可靠——重新识别才有意义）；running =
+ * 一轮流程进行中（全部禁用）。
  * 空态两分支（opts.emptyScan，spec 轴评审整改）：未识别（false）→ 引导
  * 点「识别 main.c 参数」；已识别但无参数（true）→ 「未发现可调参数」。
  * 空态都带 data-param-empty 标记供胶水层查状态。
@@ -33,7 +37,7 @@ export function paramListHTML(params, opts = {}) {
         + '（阈值 / 速度 / PID 系数 / 延时 / 占空比…）。')
       + "</div>";
   }
-  const rows = params.map((p) => {
+  const cards = params.map((p) => {
     const name = p && p.name ? String(p.name) : "";
     const label = p && p.label ? String(p.label) : "";
     const oldValue = p && p.old_value !== undefined && p.old_value !== null
@@ -43,21 +47,30 @@ export function paramListHTML(params, opts = {}) {
     const valid = p && p.valid !== false;
     const disabled = running || !valid;
     const inputId = "params-input-" + name;
-    const hint = [rangeHint, unit].filter(Boolean).map((s) => esc(s)).join("　");
-    return '<div class="param-row' + (valid ? "" : " param-stale") + '">'
-      + '<span class="slug">' + esc(name || "?") + "</span>"
-      + '<span class="param-label">' + esc(label || oldValue || "—") + "</span>"
+    const labelText = label || oldValue || "—";
+    const hints = [];
+    if (rangeHint) hints.push("范围：" + esc(rangeHint));
+    if (unit) hints.push("单位：" + esc(unit));
+    const hint = hints.join("　");
+    return '<div class="param-card' + (valid ? "" : " param-stale") + '">'
+      + '<div class="param-card-head">'
+      + '<span class="slug" title="' + esc(name || "?") + '">'
+      + esc(name || "?") + "</span>"
+      + '<span class="param-label" title="' + esc(labelText) + '">'
+      + esc(truncate(labelText, 24)) + "</span></div>"
+      + '<div class="param-card-body">'
       + '<input class="param-input" id="' + esc(inputId) + '" type="text"'
       + ' value="' + esc(oldValue) + '"' + (disabled ? " disabled" : "")
       + ' title="当前值：' + esc(oldValue) + '" />'
-      + (hint ? '<span class="muted param-hint">' + hint + "</span>" : "")
       + (valid
         ? '<button class="btn-params-apply" data-param-name="' + esc(name)
           + '"' + (running ? " disabled" : "") + ">改这个并验证</button>"
         : '<span class="badge param-stale-badge">锚已失效</span>')
+      + "</div>"
+      + (hint ? '<div class="param-hint">' + hint + "</div>" : "")
       + "</div>";
   }).join("");
-  return '<div class="param-table">' + rows + "</div>";
+  return '<div class="param-grid">' + cards + "</div>";
 }
 
 /** 应用结果面板（spec 故事 3/4：改值 → 备份 → 编译验证 → 可回滚 / 可烧录）：

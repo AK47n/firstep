@@ -67,6 +67,36 @@ test("paramListHTML: 转义（名称 / 含义 / 值含引号与尖括号）", ()
   assert.ok(html.includes("1&quot;2"));
 });
 
+test("paramListHTML: 网格卡片流——网格容器 + 卡数 = 参数数（param-grid/01）", () => {
+  const html = paramListHTML(SAMPLE);
+  assert.ok(html.includes('class="param-grid"'));
+  const cards = html.match(/class="param-card(?: |")/g) || [];
+  assert.equal(cards.length, 2);
+  assert.ok(html.includes('class="param-card-head"'));
+  assert.ok(html.includes('class="param-card-body"'));
+  assert.ok(html.includes('class="slug" title="THRESHOLD"'));  // 长名悬停全文
+});
+
+test("paramListHTML: 卡片含义截断 + title 全文（param-grid/01）", () => {
+  const longLabel = "这是一个非常长的参数含义说明，超过二十四字后应当被截断并保留全文悬停";
+  const html = paramListHTML([
+    { name: "L", label: longLabel, old_value: "1", anchor: "x", valid: true },
+  ]);
+  assert.ok(html.includes('title="' + longLabel + '"'));
+  assert.ok(!html.includes(longLabel + "</span>"));
+  assert.ok(html.includes("…"));  // truncate 截断尾部标记
+});
+
+test("paramListHTML: 提示分段——范围 / 单位独立小段（param-grid/01）", () => {
+  const html = paramListHTML([
+    { name: "P", label: "带单位参数", old_value: "0.5s", anchor: "x",
+      unit: "秒", range_hint: "0.1-2", valid: true },
+  ]);
+  assert.ok(html.includes("范围：0.1-2"));
+  assert.ok(html.includes("单位：秒"));
+  assert.ok(html.includes('class="param-hint"'));
+});
+
 test("paramResultHTML: 结果面板 = 徽章 + 说明 + 备份回滚 + 烧录行 + diff", () => {
   const html = paramResultHTML({
     status: "verified",
