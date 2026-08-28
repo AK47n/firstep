@@ -52,6 +52,96 @@ export function taskOrderLabel(index) {
   return "第 " + (Number(index) + 1) + " 步（建议顺序）";
 }
 
+/** 建议重做徽章（工单 idea-fix/02）：task.needs_redo 为真 → 卡头「⚠ 建议
+ * 重做」；否则空串（未标记不渲染）。needs_redo 由后端灵活修正落地后写在
+ * 受影响的既有任务上（._contest_tasks.json 字段，旧清单缺省 false）。 */
+export function taskNeedsRedoBadge(task) {
+  if (!task || !task.needs_redo) return "";
+  return ' <span class="badge task-redo-badge">⚠ 建议重做</span>';
+}
+
+/** 想法分类标签（工单 idea-fix/02）：三档中文短词（与后端 IDEA_KINDS 词表
+ * 镜像）。 */
+function ideaKindLabel(kind) {
+  switch (kind) {
+    case "new_task": return "新功能任务";
+    case "direct_fix": return "改现有代码";
+    case "discussion": return "先讨论";
+    default: return "未分类";
+  }
+}
+
+/** 想法分类徽章色：新功能 = 绿（有明确产物）；改代码 = 黄（警告语义——
+ * 直接改现有实现需谨慎）；讨论 = 灰。 */
+function ideaKindBadgeClass(kind) {
+  switch (kind) {
+    case "new_task": return "ok";
+    case "direct_fix": return "unverified";
+    default: return "out";
+  }
+}
+
+/** 想法分析结果卡（工单 idea-fix/02）：分类徽章 + AI 理解 + 按 kind 渲染落地
+ * 按钮区（纯函数，无 DOM——胶水层负责取样式/定位）。
+ *
+ * analysis = {kind, reply, new_task, fix_summary, affected_task_ids}（后端
+ * /api/tasks/idea/analyze 的 done 载荷）；opts.landedNote = 非空时按钮区替换
+ * 为一条中性提示（插入/修正落地后防止重复点击造重复产物——功能已消费）。
+ * 按钮 data-idea-kind 供网格委托分类；new_task 预览 = 建议任务标题/描述/依赖
+ * 序号；direct_fix = 修正建议 + 受影响任务；discussion = 两个转换按钮（漏斗
+ * 态：把 AI 建议重新成形为可落地动作）。全部文本经 esc 防注入。 */
+export function ideaResultHTML(analysis, opts) {
+  const a = analysis || {};
+  const kind = ["new_task", "direct_fix", "discussion"].includes(a.kind)
+    ? a.kind : "discussion";
+  const o = opts || {};
+  let html = '<div class="item idea-result" style="margin-top:8px">'
+    + '<div class="head"><span class="slug">💡 想法分析</span> '
+    + '<span class="badge ' + ideaKindBadgeClass(kind) + '">' + ideaKindLabel(kind)
+    + "</span></div>"
+    // 故事 6「输入想法文本保留展示」：原文回显在结果卡（会话内；落盘以
+    // .contest_tasks.json 为准——想法本身不落盘）
+    + (o.idea ? '<div class="reason muted">你的想法：<span class="slug">' + esc(String(o.idea)) + "</span></div>" : "")
+    + '<div class="reason">' + esc(a.reply || "") + "</div>";
+  if (kind === "new_task") {
+    const nt = a.new_task || {};
+    const deps = (nt.depends_on || []).length
+      ? " · 依赖：第 " + esc(nt.depends_on.join("、")) + " 步" : "";
+    html += '<div class="reason muted">建议新任务：' + esc(nt.title || "（未给出标题）")
+      + deps + "——" + esc(nt.description || "") + "</div>";
+  } else if (kind === "direct_fix") {
+    if (a.fix_summary) {
+      html += '<div class="reason muted">修正建议：' + esc(String(a.fix_summary)) + "</div>";
+    }
+    if ((a.affected_task_ids || []).length) {
+      html += '<div class="reason muted">受影响任务（落地后建议重做）：'
+        + esc(a.affected_task_ids.join("、")) + "</div>";
+    }
+  } else {
+    html += '<div class="reason muted">这是先讨论的建议——可以继续补充想法，'
+      + "或把 AI 的建议直接落地：</div>";
+  }
+  if (o.landedNote) {
+    html += '<div class="reason muted" style="margin-top:6px">' + esc(String(o.landedNote)) + "</div>";
+  } else {
+    const buttons = kind === "new_task"
+      ? ideaActionButtonHTML("btn-idea-insert", "生成任务", kind)
+      : kind === "direct_fix"
+        ? ideaActionButtonHTML("btn-idea-fix", "改动预览并执行", kind)
+        : ideaActionButtonHTML("btn-idea-to-task", "把建议变成任务", kind)
+          + ideaActionButtonHTML("btn-idea-to-fix", "把建议变成修正", kind);
+    html += '<div class="row" style="margin-top:8px">' + buttons + "</div>";
+  }
+  return html + "</div>";
+}
+
+/** 想法结果卡的落地按钮（data-idea-kind 供委托分类；落地后由胶水层
+ * re-render 换 landedNote）。 */
+function ideaActionButtonHTML(cls, label, kind) {
+  return '<button class="' + cls + '" data-idea-kind="' + esc(kind) + '">'
+    + esc(label) + "</button>";
+}
+
 /** 下一步待执行任务（工单 step-next-guide/01）：清单顺序上当前卡**之后**第一个
  * status ∈ {pending, failed} 的任务——「做完一步 → 该点哪张卡」的引导口径。
  * verified（编译绿闭环）/ unverified（待上板）/ doing（执行中）/ skipped（已跳过）
@@ -86,7 +176,9 @@ export function taskCardHTML(task, index, opts) {
     // 待上板标注（工单 stepwise-deepen/02，spec「在总览与卡片上明确标注
     // 待上板」）：unverified = 结果已写入但未经编译验证 / 或需上板人工确认，
     // 下一步物理动作 = 上板（烧录观察）→ 卡上明示，与总览口径一致
-    + (task.status === "unverified" ? ' <span class="badge unverified">待上板</span>' : "");
+    + (task.status === "unverified" ? ' <span class="badge unverified">待上板</span>' : "")
+    // 建议重做徽章（工单 idea-fix/02）：灵活修正落地后受影响任务标记
+    + taskNeedsRedoBadge(task);
   const refs = taskScoreRefsText(task.score_refs, o.scorePoints);
   const deps = (task.depends_on || []).length
     ? '<div class="muted" style="margin-top:4px">前置：' + esc(task.depends_on.join("、")) + "</div>"
@@ -331,6 +423,19 @@ export function taskLatestFeedbackNote(task) {
     + esc(String(last.feedback)) + "</span></div>";
 }
 
+/** 步骤报告两块正文（工单 stepwise-deepen/02 + idea-fix/02 共用防分叉——
+ * 历史教训：两处各抄一份 if/else，措辞漂移）。changed / action 为空 → 中文
+ * 兜底（报告未生成 / 本步无需人工动作）。 */
+export function taskStepReportBlocksHTML(changed, action) {
+  const changedBlock = changed
+    ? '<div class="reason"><b>AI 做了什么：</b>' + esc(changed) + "</div>"
+    : '<div class="reason muted">本步说明为空（报告未生成或 AI 未总结）——可点「重做」重新执行以生成。</div>';
+  const actionBlock = action
+    ? '<div class="reason"><b>接下来你要做什么：</b>' + esc(action) + "</div>"
+    : '<div class="reason muted">本步无需额外人工动作——请按验证结果继续（上板确认后点「确认通过」）。</div>';
+  return changedBlock + actionBlock;
+}
+
 /** 步骤报告（工单 stepwise-deepen/02）：结果面板「AI 做了什么 / 接下来你要
  * 做什么」两块，取自最新一轮迭代的 what_changed / user_action（后端工单 01
  * 落盘；报告调用失败 = 两字段空串——降级兜底文案中文，spec「降级路径必须有
@@ -338,17 +443,10 @@ export function taskLatestFeedbackNote(task) {
 export function taskStepReportHTML(task) {
   const last = lastIteration(task);
   if (!last) return "";
-  const changed = last.what_changed || "";
-  const action = last.user_action || "";
-  const changedBlock = changed
-    ? '<div class="reason"><b>AI 做了什么：</b>' + esc(changed) + "</div>"
-    : '<div class="reason muted">本步说明为空（报告未生成或 AI 未总结）——可点「重做」重新执行以生成。</div>';
-  const actionBlock = action
-    ? '<div class="reason"><b>接下来你要做什么：</b>' + esc(action) + "</div>"
-    : '<div class="reason muted">本步无需额外人工动作——请按验证结果继续（上板确认后点「确认通过」）。</div>';
   return '<div class="task-step-report" style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px">'
     + '<div class="muted" style="margin-bottom:2px">步骤报告（AI 本步总结）</div>'
-    + changedBlock + actionBlock + "</div>";
+    + taskStepReportBlocksHTML(last.what_changed || "", last.user_action || "")
+    + "</div>";
 }
 
 /** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02 + 04 修正）：最新一轮
@@ -413,5 +511,7 @@ if (typeof window !== "undefined") {
     taskIterationsHTML, taskLatestFeedbackNote,
     taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
     nextTaskHint, taskNextHintHTML,
+    ideaResultHTML, taskNeedsRedoBadge,
+    taskStepReportBlocksHTML,
   });
 }

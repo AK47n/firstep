@@ -1248,6 +1248,11 @@
     100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 0%, transparent), var(--shadow-card); }
   }
   @media (prefers-reduced-motion: reduce) { .task-card-highlight { animation: none; } }
+  /* 建议重做徽章（工单 idea-fix/02）：灵活修正落地后受影响步骤的警告徽标 */
+  .task-redo-badge { background: var(--warn-dim); color: var(--warn); }
+  /* 想法结果卡（工单 idea-fix/02）：复用 .item/.badge/.row 既有样式，
+     无新视觉——落地按钮与任务卡操作行同款；分类徽章用既有 badge 色 */
+  .idea-result .row { gap: 6px; }
   /* 效果 diff（工单 diff-restyle/01）：主题化行级视图——统计行 + hunk 折叠块
      （行 = 符号列 + 内容；新增绿 / 删除红 / 上下文灰，全用主题变量） */
   .diff-stats.reason { margin-top: 8px; }
@@ -1845,6 +1850,16 @@
       <div id="tasks-box" class="card-group hidden" style="margin-top:12px">
         <div class="card-group-title">逐步深化（任务推进）</div>
         <div class="muted" style="margin-bottom:6px">AI 按题面拆成有序任务清单：每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（上方按钮）为快速兜底。</div>
+        <div class="card-group" style="margin-top:6px">
+          <div class="card-group-title">💡 新想法 / 发现的问题（不绑定任务卡）</div>
+          <div class="row">
+            <textarea id="tasks-idea-input" rows="2" placeholder="突然想到的改进点 / 发现的问题（如：进弯道前先减速；循迹阈值太高）…" style="flex:1;min-height:44px"></textarea>
+            <button id="btn-tasks-idea" class="primary">分析这个想法</button>
+          </div>
+          <div class="muted" style="margin-top:4px">想法不一定是清单里的任务：AI 会判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。</div>
+          <div id="tasks-idea-result" class="hidden" style="margin-top:8px"></div>
+          <div id="tasks-idea-msg" class="error"></div>
+        </div>
         <div class="row">
           <button id="btn-tasks-plan" class="primary">拆解任务</button>
           <button id="btn-tasks-replan" class="hidden">重新拆解（覆盖）</button>
