@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4fb6701d66f1046350191eda095878bed8d0fa75 -->
+<!-- changelog-auto: last-commit=653c6e408666385031bb16bee2d0ff442d2c4292 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 18:35 逐步深化：做完一步自动提示「下一步」并滚动高亮下一张待执行卡（step-next-guide/01-02）
 - 18:44 逐步深化：效果 diff 主题化美化（diff-restyle/01-02）
 - 18:47 逐步深化：diff 双轴评审整改（diff-restyle/01 复核）
+- 19:14 逐步深化：灵活修正后端（idea-fix/01）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
