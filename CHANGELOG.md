@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ec93a53f4342abdd3ff6ce7538ddeb6fef1d5f82 -->
+<!-- changelog-auto: last-commit=73cef7ac8239516d1630979162125e97ce63b4cc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -34,6 +34,7 @@
 - 20:27 想法套件：清单微编辑 + 调序前端 UI（idea-suite/04）
 - 20:29 想法套件：草稿箱后端（idea-suite/05）
 - 20:36 想法套件：草稿箱前端 UI（idea-suite/06）
+- 20:39 想法套件：文档回归（idea-suite/07）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
