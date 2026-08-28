@@ -9,8 +9,9 @@
 // （collectLlmPrices → llmPricesDefaults，单价表属 ui/usage.js——工单 04 前置
 // 拆分持有，本模块经 import 读写活绑定）、最近 LLM 工作流渲染
 // （renderRecentWorkflows / loadRecentWorkflows，纯件在 fx/workflow.js——
-// 工单 01 迁）、设置页折叠 glue（saveSettingsCollapse / initSettingsCollapse，
-// 纯件在 fx/settings.js——工单 10 迁）。
+// 工单 01 迁）、设置页折叠 glue（saveSettingsCollapse / initSettingsCollapse /
+// expandSettingsCollapse，纯件在 fx/settings.js——工单 10 迁；expand 为
+// flash-guide-settings/03 新增：指引「去设置页配置」展开工具链卡并落盘）。
 // 状态（模块内）：visionZhipuMask / visionApplyingPreset（视觉预设联动）。
 // 跨簇接缝（模块无法 import host 作用域）：refreshState（保存后重载——
 // 原为 host 函数，唯一调用点随本簇迁入）写 toolchains + 调
@@ -417,36 +418,69 @@ $("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
 // 存储：localStorage「firstep.settingsCollapse.v1」，JSON {id: collapsed}，
 // 用户选择优先于默认集；解析失败按 {}。默认集单源 = SETTINGS_DEFAULT_COLLAPSED
 // ---------------------------------------------------------------------------
+// 折叠元状态（工单 flash-guide-settings/03 整改：原为 initSettingsCollapse
+// 闭包局部 state 与 localStorage 双副本——expandSettingsCollapse 旁路只写盘，
+// 后续 toggle 其他卡会把陈旧闭包 state 整包写回，展开被反向清除。提升为模块
+// 级内存单源：init 从 storage 播种，toggle / expand / 总开关三处读写同一对象，
+// 写盘 = 持久化该对象。会话内唯一真相）
+const settingsCollapseState = {};
+
 function saveSettingsCollapse(state) {
   try { localStorage.setItem(SETTINGS_COLLAPSE_KEY, JSON.stringify(state)); }
   catch (e) { /* 忽略，沿主题/用量先例 */ }
 }
+
+/** 折叠总开关标签重算（单源：initSettingsCollapse 与 expandSettingsCollapse
+ * 共用——工单 flash-guide-settings/03 收敛，原为 initSettingsCollapse 私有闭包）。 */
+function syncSettingsMasterLabel(items) {
+  const master = $("btn-settings-collapse-all");
+  if (!master) return;
+  const allCollapsed = items.every((c) => c.classList.contains("collapsed"));
+  master.textContent = settingsMasterLabel(allCollapsed);
+}
+
+/** 展开指定设置卡片（工单 flash-guide-settings/03 修复）：烧录工具输入框藏在
+ * 默认折叠的「工具链」卡内（SETTINGS_DEFAULT_COLLAPSED 含 toolchain）——「去
+ * 设置页配置」只切 tab 时用户看不到输入框，误以为没跳转。展开 + 落盘用户
+ * 选择 + 刷新总开关标签；已展开 = 无操作。 */
+export function expandSettingsCollapse(collapseId) {
+  const card = document.querySelector('[data-collapse-id="' + collapseId + '"]');
+  if (!card || !card.classList.contains("collapsed")) return;
+  applySettingsCollapseState(card, false);
+  // 内存单源（settingsCollapseState）：若 init 尚未播种（极端时序），先补播
+  if (!Object.keys(settingsCollapseState).length) {
+    Object.assign(settingsCollapseState, parseSettingsCollapse(localStorage.getItem(SETTINGS_COLLAPSE_KEY)));
+  }
+  settingsCollapseState[collapseId] = false;
+  saveSettingsCollapse(settingsCollapseState);
+  const section = $("tab-settings");
+  if (section) {
+    syncSettingsMasterLabel(Array.from(section.querySelectorAll("[data-collapse-id]")));
+  }
+}
+
 export function initSettingsCollapse() {
   const section = $("tab-settings");
   if (!section) return;
   const items = Array.from(section.querySelectorAll("[data-collapse-id]"));
   if (!items.length) return;
   const stored = parseSettingsCollapse(localStorage.getItem(SETTINGS_COLLAPSE_KEY));
-  const state = {};
-  const syncMasterLabel = () => {
-    const master = $("btn-settings-collapse-all");
-    if (!master) return;
-    const allCollapsed = items.every((c) => c.classList.contains("collapsed"));
-    master.textContent = settingsMasterLabel(allCollapsed);
-  };
+  // 内存单源播种：清空后从盘面读入（模块级 settingsCollapseState，见 :420 注释）
+  for (const k of Object.keys(settingsCollapseState)) delete settingsCollapseState[k];
+  Object.assign(settingsCollapseState, stored);
   // 单元素切换（计费头 / ▾ / 标题三处共用）：toggle → 落 state → 同步按钮 →
-  // 写盘 → 刷新总开关标签
+  // 写盘 → 刷新总开关标签（标签重算 = 模块级 syncSettingsMasterLabel）
   const toggleSettingsCollapse = (c) => {
     const next = c.classList.toggle("collapsed");
-    state[c.dataset.collapseId] = next;
+    settingsCollapseState[c.dataset.collapseId] = next;
     applySettingsCollapseState(c, next);
-    saveSettingsCollapse(state);
-    syncMasterLabel();
+    saveSettingsCollapse(settingsCollapseState);
+    syncSettingsMasterLabel(items);
   };
   for (const c of items) {
     const id = c.dataset.collapseId;
     const collapsed = effectiveCollapsed(id, stored);
-    state[id] = collapsed;
+    settingsCollapseState[id] = collapsed;
     const head = settingsSectionHead(c);
     if (head) {   // 计费小节：头按钮即 toggle（无 h2）
       applySettingsCollapseState(c, collapsed);
@@ -477,12 +511,12 @@ export function initSettingsCollapse() {
       const target = !items.every((c) => c.classList.contains("collapsed"));
       for (const c of items) {
         const id = c.dataset.collapseId;
-        state[id] = target;
+        settingsCollapseState[id] = target;
         applySettingsCollapseState(c, target);
       }
-      saveSettingsCollapse(state);
-      syncMasterLabel();
+      saveSettingsCollapse(settingsCollapseState);
+      syncSettingsMasterLabel(items);
     });
-    syncMasterLabel();
+    syncSettingsMasterLabel(items);
   }
 }

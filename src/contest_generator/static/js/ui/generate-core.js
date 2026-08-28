@@ -26,6 +26,7 @@ import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, frameworkNoteHTML } from "/js/fx/generate.js";
 import { flashRunShared } from "/js/ui/flash.js";
+import { expandSettingsCollapse } from "/js/ui/settings.js";  // 指引卡「去设置页配置」展开工具链卡（flash-guide-settings/03；settings.js 无环依赖本模块）
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
 import { syncStep7 } from "/js/ui/step-state.js";
@@ -485,11 +486,21 @@ document.addEventListener("click", (event) => {
     return;
   }
   // 指引卡「去设置页配置」（spec 前端决策）：切到设置 tab（工具链卡的烧录
-  // 小节填路径）——同 tab 按钮点击先例（generate-recommend useTopic）
+  // 小节填路径）——同 tab 按钮点击先例（generate-recommend useTopic）。
+  // 修复（工单 flash-guide-settings/03）：只切 tab 不够——烧录工具输入框藏在
+  // 默认折叠的「工具链」卡内（SETTINGS_DEFAULT_COLLAPSED 含 toolchain），用户
+  // 只看得到折叠卡片 = 误以为没跳转；展开该卡 + 按平台滚动到对应输入框。
   const goto = event.target.closest(".btn-flash-goto-settings");
   if (goto) {
     const tab = document.querySelector('[data-tab="settings"]');
     if (tab) tab.click();
+    expandSettingsCollapse("toolchain");
+    requestAnimationFrame(() => {
+      const field = document.getElementById(
+        chosenPlatform === "mspm0" ? "set-dslite-path" : "set-openocd-path"
+      );
+      if (field) field.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   }
 });
 
