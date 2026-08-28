@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ee8ad616d01e9ea26e2b09d0cabd993616e899b3 -->
+<!-- changelog-auto: last-commit=17d46dd06a8d443f699e5318b09bef7d5604f741 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 13:36 烧录/02：前端烧录按钮+结果展示+指引卡+设置三输入（fx/flash.js 纯函数 + ui/flash.js 共享执行体；两处按钮 busy 防重；settings GET flash_auto_tools「已自动找到」；含 command_text 引号回归测试）（工单 resolved）
 - 13:38 烧录/03：CONTEXT.md 补「烧录」域词条（工具探测/三builder/产物定位/范围外备注）+ 全量回归（pytest 2646 + JS 540）（工单 resolved）
 - 13:49 任务卡烧录/01：任务卡常驻「烧录到板子」按钮（已实现步骤，卡内独立状态/结果容器 uid=task.id，flashContainer 单源契约）+ 双轴评审整改（工单 resolved）
+- 13:49 任务卡烧录/02：CONTEXT.md 补任务卡烧录词条（前端三处入口）+ 全量回归（pytest 2646 + JS 542）（工单 resolved）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
