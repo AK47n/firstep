@@ -595,7 +595,9 @@ def insert_task_from_idea(plan: TaskPlan, new_task: Mapping[str, Any]) -> TaskPl
                 "想法建议任务的前置任务序号越界（清单只有 "
                 f"{len(plan.tasks)} 个任务）：" + "、".join(str(i) for i in invalid)
             )
-        deps = tuple(f"t{i}" for i in raw_deps)
+        # 序号 = 数组位置（同 update_task_fields 修复：move_task 换位后 id
+        # 后缀不再等于位置，f"t{i}" 会解析到错误的既有任务）
+        deps = tuple(plan.tasks[i - 1].id for i in raw_deps)
     new_id = f"t{len(plan.tasks) + 1}"
     inserted = Task(
         id=new_id,
@@ -645,6 +647,122 @@ def set_tasks_needs_redo(
             )
             for task in plan.tasks
         ),
+    )
+
+
+def update_task_fields(
+    plan: TaskPlan,
+    task_id: str,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    depends_on: Sequence[int] | None = None,
+    verify: str | None = None,
+    score_refs: Sequence[str] | None = None,
+) -> TaskPlan:
+    """任务卡字段微编辑（纯函数，工单 idea-suite/03）：None = 保留原值。
+
+    校验（任一失败 → TaskError 400 中文，清单不动）：title / description 非空
+    字符串；verify 在 VALID_VERIFY 词表内（**拒收**而非修正——与 build /
+    read-back 的「词表外修正为 compile」哲学不同：那是机器输出容错，这是
+    用户编辑输入，拼错应明确指出）；depends_on = 1 起正整数序号数组
+    （→ t{n} 引用既有任务，越界 / 非整数 / 引用自己 → TaskError）；score_refs
+    = 非空字符串数组。status / note / dialog_note / needs_redo / iterations
+    一律原样保留（微编辑不动进度——spec「改后状态与轮次历史保留」）。
+    """
+    task = find_task(plan, task_id)
+    if title is not None:
+        if not isinstance(title, str) or not title.strip():
+            raise TaskError("title 必须是非空字符串")
+    if description is not None:
+        if not isinstance(description, str) or not description.strip():
+            raise TaskError("description 必须是非空字符串")
+    if verify is not None and verify not in VALID_VERIFY:
+        raise TaskError(f"verify 必须是 {'/'.join(sorted(VALID_VERIFY))} 之一")
+    if score_refs is not None and (
+        not isinstance(score_refs, list)
+        or any(not isinstance(ref, str) or not ref.strip() for ref in score_refs)
+    ):
+        raise TaskError("score_refs 必须是字符串数组")
+    if depends_on is not None:
+        if not isinstance(depends_on, list) or any(
+            isinstance(i, bool) or not isinstance(i, int) or i < 1
+            for i in depends_on
+        ):
+            raise TaskError(
+                "depends_on 必须是正整数序号数组（1 起，引用既有任务）"
+            )
+        invalid = sorted({i for i in depends_on if i > len(plan.tasks)})
+        if invalid:
+            raise TaskError(
+                "前置任务序号越界（清单只有 "
+                f"{len(plan.tasks)} 个任务）：" + "、".join(str(i) for i in invalid)
+            )
+        self_no = next(
+            (i for i, t in enumerate(plan.tasks, 1) if t.id == task_id), None
+        )
+        if self_no is not None and self_no in list(depends_on):
+            raise TaskError(f"任务 {task_id} 不能依赖自己（序号 {self_no}）")
+        # 序号 = **数组位置**（spec「顺序即展示顺序」「排序后 id 不变」——
+        # move_task 换位后 id 后缀不再等于位置；若按 f"t{i}" 硬编码会在调序
+        # 后解析错位，甚至逃过自依赖检查（评审发现：plan=[t2,t1] 编辑 t2 设
+        # depends_on=[2]，f"t{2}"→"t2" 生成自依赖）。用位置取 id 是唯一
+        # 与自检基准一致的语义。
+        deps: tuple[str, ...] = tuple(plan.tasks[i - 1].id for i in depends_on)
+    else:
+        deps = task.depends_on
+    updated = Task(
+        id=task.id,
+        title=title.strip() if title is not None else task.title,
+        description=(
+            description.strip() if description is not None else task.description
+        ),
+        score_refs=(
+            tuple(ref.strip() for ref in score_refs if ref.strip())
+            if score_refs is not None
+            else task.score_refs
+        ),
+        depends_on=deps,
+        verify=verify if verify is not None else task.verify,
+        status=task.status,
+        note=task.note,
+        dialog_note=task.dialog_note,
+        needs_redo=task.needs_redo,
+        iterations=task.iterations,
+    )
+    return TaskPlan(
+        version=plan.version,
+        generated_at=plan.generated_at,
+        tasks=tuple(updated if t.id == task_id else t for t in plan.tasks),
+    )
+
+
+def move_task(plan: TaskPlan, task_id: str, direction: str) -> TaskPlan:
+    """任务卡上移 / 下移调序（纯函数，工单 idea-suite/03）：数组顺序即展示
+    顺序——up = 与前一任务相邻换位，down = 与后一任务相邻换位。
+
+    id 不变（依赖引用与 needs_redo 不受影响——spec「排序后 id 不变」）；
+    首卡 up / 末卡 down → TaskError（边界不可移）；direction 词表外 →
+    TaskError；清单未拆解 / 任务不存在 → find_task 语义 400。
+    """
+    task = find_task(plan, task_id)
+    if direction not in ("up", "down"):
+        raise TaskError("direction 必须是 up 或 down")
+    index = next(i for i, t in enumerate(plan.tasks) if t.id == task_id)
+    if direction == "up":
+        if index == 0:
+            raise TaskError(f"任务 {task_id} 已是第一个任务——不能上移")
+        target = index - 1
+    else:
+        if index == len(plan.tasks) - 1:
+            raise TaskError(f"任务 {task_id} 已是最后一个任务——不能下移")
+        target = index + 1
+    tasks = list(plan.tasks)
+    tasks[index], tasks[target] = tasks[target], tasks[index]
+    return TaskPlan(
+        version=plan.version,
+        generated_at=plan.generated_at,
+        tasks=tuple(tasks),
     )
 
 
