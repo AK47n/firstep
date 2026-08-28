@@ -159,7 +159,9 @@ class Task:
     当前态；note = 补充框内容（用户向 AI 补的一句说明，执行时透传）；
     dialog_note = 对话采纳结论（每卡「和 AI 商量」中用户采纳的 AI 回复
     全文，执行时作为独立段注入 prompt——比 note 话语新、优先级高）；
-    iterations = 执行轮次历史（上板反馈闭环，向后兼容读回）。
+    needs_redo = 建议重做标记（工单 idea-fix/01：灵活修正落地后 AI 给出的
+    受影响任务标 true，前端显示「建议重做」徽章；重做执行 / 人工清除后
+    复位 false）；iterations = 执行轮次历史（上板反馈闭环，向后兼容读回）。
     """
 
     id: str
@@ -171,6 +173,7 @@ class Task:
     status: str = STATUS_PENDING
     note: str = ""
     dialog_note: str = ""
+    needs_redo: bool = False  # 建议重做（工单 idea-fix/01：灵活修正落地的受影响任务标记）
     iterations: tuple[TaskIteration, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -184,6 +187,7 @@ class Task:
             "status": self.status,
             "note": self.note,
             "dialog_note": self.dialog_note,
+            "needs_redo": self.needs_redo,
             "iterations": [iteration.to_dict() for iteration in self.iterations],
         }
 
@@ -263,6 +267,11 @@ class TaskPlan:
                         item.get("dialog_note", "")
                         if isinstance(item.get("dialog_note", ""), str)
                         else ""
+                    ),
+                    needs_redo=(
+                        item.get("needs_redo", False)
+                        if isinstance(item.get("needs_redo", False), bool)
+                        else False
                     ),
                     iterations=_parse_iterations(item.get("iterations", [])),
                 )
@@ -540,6 +549,106 @@ def run_task_planning(
 
 
 # ---------------------------------------------------------------------------
+# 灵活修正（工单 idea-fix/01）：新想法 / 问题 → 任务卡插入 / 受影响任务标记 /
+# 直接修正管线（备份 → LLM 修正 → 写盘 → 编译验证，不造任务轮次）。
+# ---------------------------------------------------------------------------
+
+
+def insert_task_from_idea(plan: TaskPlan, new_task: Mapping[str, Any]) -> TaskPlan:
+    """把 AI 建议的新任务插入清单（纯函数，工单 idea-fix/01）。
+
+    new_task = {title, description, score_refs, depends_on, verify}（想法分析
+    的 LLM 输出 pass-through，webapp 已校验为对象）。id = 清单末尾 t{n+1}；
+    depends_on 用 1 起序号引用**既有**任务（越界 / 非整数 → TaskError——结构
+    问题宁重试不猜）；score_refs 原样落（已知集校验在拆解与想法分析层，此处
+    只做形状检查）；verify 词表外 → 修正为 compile（与 build_task_plan 同
+    哲学：值修正而非拒收）。新任务 status=pending、needs_redo=False、
+    iterations=()；旧任务逐一原样保留（顺序 = 清单 append）。
+    """
+    title = new_task.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise TaskError("想法建议任务的 title 必须是非空字符串")
+    description = new_task.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise TaskError("想法建议任务的 description 必须是非空字符串")
+    verify = new_task.get("verify", VERIFY_COMPILE)
+    if verify not in VALID_VERIFY:
+        verify = VERIFY_COMPILE
+    raw_refs = new_task.get("score_refs", [])
+    if not isinstance(raw_refs, list) or any(
+        not isinstance(ref, str) or not ref.strip() for ref in raw_refs
+    ):
+        raise TaskError("想法建议任务的 score_refs 必须是字符串数组")
+    raw_deps = new_task.get("depends_on", [])
+    if raw_deps in (None, [], ()):
+        deps: tuple[str, ...] = ()
+    else:
+        if not isinstance(raw_deps, list) or any(
+            isinstance(i, bool) or not isinstance(i, int) or i < 1 for i in raw_deps
+        ):
+            raise TaskError(
+                "想法建议任务的 depends_on 必须是正整数序号数组（1 起，引用既有任务）"
+            )
+        invalid = [i for i in raw_deps if i > len(plan.tasks)]
+        if invalid:
+            raise TaskError(
+                "想法建议任务的前置任务序号越界（清单只有 "
+                f"{len(plan.tasks)} 个任务）：" + "、".join(str(i) for i in invalid)
+            )
+        deps = tuple(f"t{i}" for i in raw_deps)
+    new_id = f"t{len(plan.tasks) + 1}"
+    inserted = Task(
+        id=new_id,
+        title=title.strip(),
+        description=description.strip(),
+        score_refs=tuple(ref.strip() for ref in raw_refs if ref.strip()),
+        depends_on=deps,
+        verify=verify,
+    )
+    return TaskPlan(
+        version=plan.version,
+        generated_at=plan.generated_at
+        or time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        tasks=plan.tasks + (inserted,),
+    )
+
+
+def set_tasks_needs_redo(
+    plan: TaskPlan, task_ids: Sequence[str], needs_redo: bool = True
+) -> TaskPlan:
+    """批量标记 / 清除「建议重做」（纯函数，工单 idea-fix/01）。
+
+    needs_redo=True = 灵活修正落地后标受影响任务（AI 给出的 affected_task_ids）；
+    False = 用户重做后清除。未知 id 静默忽略（AI 可能编造 id——宁缺徽章
+    不误伤，也不让一次臆造 id 毁掉整个标记请求）；id 已知但不存在的任务
+    由调用方按既有 find 语义处理（此处只做存在性宽容）。
+    """
+    wanted = {task_id for task_id in task_ids if isinstance(task_id, str)}
+    if not wanted:
+        return plan
+    return TaskPlan(
+        version=plan.version,
+        generated_at=plan.generated_at,
+        tasks=tuple(
+            Task(
+                id=task.id,
+                title=task.title,
+                description=task.description,
+                score_refs=task.score_refs,
+                depends_on=task.depends_on,
+                verify=task.verify,
+                status=task.status,
+                note=task.note,
+                dialog_note=task.dialog_note,
+                needs_redo=needs_redo if task.id in wanted else task.needs_redo,
+                iterations=task.iterations,
+            )
+            for task in plan.tasks
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # 域编排：单任务执行（工单 02）。共用深化尾段 verify_compile_tail（deepen.py）
 # 与 main_diff（改名自 _main_diff，工单 02 起公共）。
 # ---------------------------------------------------------------------------
@@ -720,6 +829,10 @@ def run_task(
         note=note,
         iterations=task.iterations + (iteration,),
     )
+    # 执行后该任务的「建议重做」标记过期（用户实际重做了这步——想法修正
+    # 指出的影响已由本次执行消化，工单 idea-fix/01）
+    if task.needs_redo:
+        updated_plan = set_tasks_needs_redo(updated_plan, (task_id,), False)
     write_task_plan(output_dir, updated_plan)
     updated = find_task(updated_plan, task_id)
     return {"task": updated.to_dict(), **result}
@@ -764,6 +877,106 @@ def _report_task_step(
         return "", ""
 
 
+def run_direct_fix(
+    *,
+    llm: LLM,
+    idea: str,
+    fix_summary: str,
+    affected: Sequence[str],
+    problem_text: str,
+    qa_text: str,
+    manifests: Sequence[Any],
+    platform: str,
+    library_dir: Path,
+    master_project_dir: Path,
+    main_c: str,
+    output_dir: Path,
+    work_root: Path,
+    emit: SseEmitter,
+    uv4_override: str = "",
+    make_override: str = "",
+    module_slugs: Sequence[str] = (),
+) -> dict[str, Any]:
+    """/api/tasks/idea/fix 的域编排（工单 idea-fix/01）：按想法直接修正。
+
+    形状对齐 run_task 的非任务部分（与深化共用 verify_compile_tail 尾段）：
+    接口装配 → llm.apply_idea_fix（只按想法改，其余原样保留）→ 备份（整树，
+    回滚走 /api/revise/rollback 复用入口）→ 写盘 → main_diff → 编译验证
+    （subject="修正结果"）→ 步骤报告（复用 report_task_step：伪任务 id =
+    "idea-fix"，title="直接修正"——给用户「做了什么 + 接下来做什么」叙事，
+    与任务执行同一「每步说明」哲学）。
+
+    **不造 TaskIteration**（游离于任务轮次，回滚靠 backup；受影响任务的
+    needs_redo 标记由路由层在成功落盘后调用 set_tasks_needs_redo）。返回
+    done 载荷：{"status", "backup_id", "compile", "main_diff", "message",
+    "step_report": {"what_changed", "user_action"}}——status / compile /
+    main_diff / message 与深化尾段同形状。
+    """
+    from .deepen import main_diff, verify_compile_tail
+    from .revision import backup_tree, revise_backup_root
+    from .skeleton import build_skeleton_interfaces
+
+    if not main_c.strip():
+        raise TaskError("工程 main.c 为空，无法执行修正（请先生成或修订工程）")
+
+    interfaces = build_skeleton_interfaces(
+        manifests, platform, library_dir, master_project_dir
+    )
+    fixed = llm.apply_idea_fix(
+        idea=idea,
+        fix_summary=fix_summary,
+        affected=tuple(affected),
+        module_interfaces=interfaces,
+        problem_text=problem_text,
+        qa_text=qa_text,
+        main_c=main_c,
+    )
+    if not fixed.strip():
+        raise TaskError("修正结果为空——LLM 未产出修正后的 main.c，请重试")
+
+    # 备份（与任务执行 / 深化同一回滚入口）→ 写盘 → 确定性 diff
+    backup_id = backup_tree(revise_backup_root(work_root), output_dir)
+    (output_dir / "main.c").write_text(fixed, encoding="utf-8")
+    diff = main_diff(main_c, fixed)
+
+    # 编译验证闭环（与任务执行共用尾段；subject = 修正上下文）
+    result = verify_compile_tail(
+        llm=llm,
+        platform=platform,
+        output_dir=output_dir,
+        work_root=work_root,
+        problem_text=problem_text,
+        module_slugs=module_slugs,
+        main_c=fixed,
+        uv4_override=uv4_override,
+        make_override=make_override,
+        emit=emit,
+        backup_id=backup_id,
+        main_diff=diff,
+        subject="修正结果",
+    )
+
+    # 步骤报告（复用任务执行的报告调用；伪任务携带想法与修正建议——给用户
+    # 「我做了什么 + 你接下来要做什么」，失败降级空串不阻断，与 run_task 同哲学）
+    report_task = Task(
+        id="idea-fix",
+        title="直接修正",
+        description=fix_summary or idea,
+    )
+    what_changed, user_action = _report_task_step(
+        llm=llm,
+        task=report_task,
+        verify_result=result,
+        diff=diff,
+        interfaces=interfaces,
+        emit=emit,
+    )
+    return {
+        **result,
+        "step_report": {"what_changed": what_changed, "user_action": user_action},
+    }
+
+
 def _with_task_status(
     plan: TaskPlan,
     task_id: str,
@@ -799,6 +1012,7 @@ def _with_task_status(
                     status=status,
                     note=task.note if note is None else note,
                     dialog_note=task.dialog_note if dialog_note is None else dialog_note,
+                    needs_redo=task.needs_redo,
                     iterations=task.iterations if iterations is None else iterations,
                 )
             )

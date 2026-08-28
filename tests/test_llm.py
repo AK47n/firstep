@@ -44,6 +44,7 @@ from contest_generator.llm import (
     SKELETON_NO_UNUSED_RULE,
     SKELETON_SYSTEM_PROMPT,
     SMOKE_SYSTEM_PROMPT,
+    IdeaAnalysis,
     StepReport,
     TopicFramework,
     WORDLIST_PROMPT_BYTES,
@@ -4282,6 +4283,205 @@ def test_report_task_step_routes_to_remote():
     assert local.calls == []
 
 
+def test_analyze_idea_parsing():
+    """想法分析解析（工单 idea-fix/01）：kind 必填词表内；reply 必填；
+    new_task 仅 new_task 类保留；affected_task_ids 缺省空；非法 → LLMError。"""
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "kind": "new_task",
+                    "reply": "这是清单里没有的新功能：进弯道前减速。",
+                    "new_task": {
+                        "title": "弯道减速",
+                        "description": "检测到弯道时降低目标速度",
+                        "score_refs": ["s1"],
+                        "depends_on": [1],
+                        "verify": "compile",
+                    },
+                    "fix_summary": "",
+                    "affected_task_ids": ["t1"],
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+    result = llm.analyze_idea(
+        "进弯道前先减速",
+        "2024 巡线小车",
+        "",
+        [],
+        [{"id": "s1", "description": "循迹", "score": 20}],
+        ("xunji.h：uint16_t xunji_read(void);",),
+        "int main(void) {}\n",
+        {"version": 1, "tasks": [{"id": "t1", "title": "循迹", "status": "pending"}]},
+    )
+    assert result.kind == "new_task"
+    assert result.new_task["title"] == "弯道减速"
+    assert result.new_task["depends_on"] == [1]
+    assert result.affected_task_ids == ("t1",)
+    assert "新功能" in result.reply
+
+    # discussion 类：new_task 被强制置 None（防模型在讨论类也塞任务状）
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "kind": "discussion",
+                    "reply": "这个想法值得先聊聊",
+                    "new_task": {"title": "不该出现"},
+                    "affected_task_ids": [],
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+    result = llm.analyze_idea("要不要换阈值", "题面", "", [], [], (), "", None)
+    assert result.kind == "discussion"
+    assert result.new_task is None
+    assert result.affected_task_ids == ()
+
+    # kind 词表外 → 重试耗尽 → LLMError
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"kind": "rewrite", "reply": "好"}))
+    )
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
+    with pytest.raises(LLMError):
+        llm.analyze_idea("想法", "题面", "", [], [], (), "", None)
+
+    # reply 缺失 → LLMError
+    transport = FakeTransport(body=_api_response(json.dumps({"kind": "direct_fix"})))
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
+    with pytest.raises(LLMError):
+        llm.analyze_idea("想法", "题面", "", [], [], (), "", None)
+
+
+def test_analyze_idea_user_prompt_sections():
+    """想法分析 prompt 契约：想法 / 题面 / Q&A / 需求 / 评分点 / 清单摘要 /
+    接口 / main.c 分段；超长想法截断带标注。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"kind": "discussion", "reply": "好"}))
+    )
+    llm = _llm(transport)
+    llm.analyze_idea(
+        "进弯道前先减速",
+        "2024 巡线小车",
+        "Q：弯道如何判定？",
+        [{"requirement": "循迹", "sentence": 1}],
+        [{"id": "s1", "description": "循迹", "score": 20}],
+        ("xunji.h 接口：uint16_t xunji_read(void);",),
+        "int main(void) { /* TODO */ }\n",
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {"id": "t1", "title": "循迹", "status": "pending", "depends_on": []}
+            ],
+        },
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "进弯道前先减速" in user_message
+    assert "2024 巡线小车" in user_message
+    assert "Q：弯道如何判定？" in user_message
+    assert "循迹" in user_message
+    assert "s1" in user_message
+    assert "当前任务清单" in user_message
+    assert "t1｜循迹" in user_message
+    assert "xunji.h 接口" in user_message
+    assert "/* TODO */" in user_message
+
+    # 超长想法 → 截断标注；未拆解清单 → 一行说明
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"kind": "discussion", "reply": "好"}))
+    )
+    llm = _llm(transport)
+    llm.analyze_idea(
+        "x" * (EMBEDDED_CONTENT_CAP + 200),
+        "题面",
+        "",
+        [],
+        [],
+        (),
+        "",
+        None,
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "截断" in user_message
+    assert "尚未拆解任务清单" in user_message
+
+
+def test_analyze_idea_routes_to_remote():
+    """RoutingLLM：analyze_idea 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.analyze_idea("想法", "题面", "", [], [], (), "main.c", None)
+
+    assert remote.calls == ["analyze_idea"]
+    assert local.calls == []
+
+
+def test_apply_idea_fix_returns_full_main():
+    """想法修正（工单 idea-fix/01）：文本模式输出修正后的 main.c 全文。"""
+    transport = FakeTransport(
+        body=_api_response("int main(void) { /* 已修正 */ while (1); }\n")
+    )
+    llm = _llm(transport)
+    result = llm.apply_idea_fix(
+        "阈值太高",
+        "把循迹阈值从 500 降到 350",
+        ["t1"],
+        ("xunji.h：uint16_t xunji_read(void);",),
+        "2024 巡线小车",
+        "",
+        "int main(void) { /* TODO */ }\n",
+    )
+    assert result == "int main(void) { /* 已修正 */ while (1); }\n"
+
+
+def test_apply_idea_fix_user_prompt_sections():
+    """想法修正 prompt 契约：想法 / 修正建议 / 受影响任务 / 接口 / main.c 分段；
+    修正建议为空 = 无该段。"""
+    transport = FakeTransport(body=_api_response("int main(void) {}\n"))
+    llm = _llm(transport)
+    llm.apply_idea_fix(
+        "阈值太高",
+        "把循迹阈值从 500 降到 350",
+        ["t1", "t2"],
+        ("xunji.h 接口：uint16_t xunji_read(void);",),
+        "2024 巡线小车",
+        "",
+        "int main(void) { /* TODO */ }\n",
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "阈值太高" in user_message
+    assert "500 降到 350" in user_message
+    assert "受影响任务" in user_message
+    assert "t1、t2" in user_message
+    assert "xunji.h 接口" in user_message
+    assert "/* TODO */" in user_message
+
+    # fix_summary 空 → 无修正建议段
+    transport = FakeTransport(body=_api_response("int main(void) {}\n"))
+    llm = _llm(transport)
+    llm.apply_idea_fix("想法", "", [], (), "题面", "", "main.c")
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "【修正建议" not in user_message
+
+
+def test_apply_idea_fix_routes_to_remote():
+    """RoutingLLM：apply_idea_fix 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.apply_idea_fix("想法", "建议", [], (), "题面", "", "main.c")
+
+    assert remote.calls == ["apply_idea_fix"]
+    assert local.calls == []
+
+
 def test_decision_note_wordlist_and_custom():
     """_decision_note（工单 buy-discuss/02）：wordlist / custom 两形态注记；
     无 decision / 形状坏 = 空串（旧载荷逐字节）。"""
@@ -4893,6 +5093,8 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "discuss_buy_options",
         "discuss_task",
         "report_task_step",
+        "analyze_idea",
+        "apply_idea_fix",
     }
 )
 
@@ -4918,6 +5120,8 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.discuss_buy_options("题面", "需求", "stm32", [], [])
     router.discuss_task({}, "题面", "", [], [], "main.c", [])
     router.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+    router.analyze_idea("想法", "题面", "", [], [], (), "main.c", None)
+    router.apply_idea_fix("想法", "建议", [], (), "题面", "", "main.c")
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -4951,6 +5155,8 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "discuss_buy_options",
         "discuss_task",
         "report_task_step",
+        "analyze_idea",
+        "apply_idea_fix",
     ]
 
 

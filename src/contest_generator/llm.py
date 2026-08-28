@@ -332,6 +332,49 @@ TASK_REPORT_SYSTEM_PROMPT = (
     ' "接下来的中文动作"}；what_changed 必须非空，两段都用中文。'
 )
 
+# 新想法 / 问题分析（工单 idea-fix/01）：用户随时抛来想法 → AI 先理解并分成
+# 三类（new_task 新功能任务卡 / direct_fix 直接改现有代码 / discussion 先讨论
+# 不动代码），三类都带「落地」所需的字段。立场 = 顾问兼策划：分析 + 给落地
+# 方案，不直接改代码（改代码走 apply_idea_fix / 任务执行）。只输出 JSON 契约。
+TASK_IDEA_SYSTEM_PROMPT = (
+    "你是嵌入式 C 开发总顾问。用户随时抛来一个关于当前工程的新想法或发现的"
+    "问题（赛题文本 / 模块接口过长可能被截断，见末尾标注，" + TRUNCATION_NOTICE
+    + "）。先理解用户要什么，再判断它属于哪一类："
+    "new_task = 新的功能需求（当前任务清单里还没有的任务，需要新增一张任务卡）；"
+    "direct_fix = 对现有代码的直接修正（改某个已实现行为 / 阈值 / 引脚 / 状态机"
+    "条件等）；discussion = 用户拿不准、想先聊聊（不直接动代码）。规则："
+    "① new_task 时给出建议任务 new_task：title（短标题 8-16 字）、description"
+    "（做什么、用哪些接口、落到 main.c 哪里）、score_refs（只引用题面评分点"
+    "清单里的 id，无评分点 = []）、depends_on（清单内既有任务序号，1 起，"
+    "无依赖 = []）、verify（compile | manual）；"
+    "② direct_fix 时 fix_summary 用中文说明要改哪里、怎么改（具体到函数 / "
+    "引脚 / 条件），affected_task_ids 列出可能被这次修正影响的既有任务 id"
+    "（没有 = []）；"
+    "③ discussion 时不改代码，reply 给出你的理解和建议，以及下一步可以怎么走；"
+    "④ reply 必须用中文说明你对这个想法的理解与判断（为什么这样分类）。"
+    '只输出 JSON 对象：{"kind": "new_task" | "direct_fix" | "discussion", '
+    '"reply": "中文理解与判断", "new_task": {"title", "description", '
+    '"score_refs", "depends_on", "verify"} | null, "fix_summary": "中文修正建议", '
+    '"affected_task_ids": ["t1"]}'
+)
+
+# 想法直接修正（工单 idea-fix/01）：按用户想法做直接修正——只改想法相关的
+# 实现，其余原样保留；不实现清单里的新功能（那走任务卡）。文本模式输出
+# main.c 全文（与任务执行同形状，prompt 约束同款「只改指定内容」）。
+IDEAFIX_SYSTEM_PROMPT = (
+    "你是嵌入式 C 工程师。按照用户的修正想法与 AI 分析给出的修正建议，在现有"
+    "main.c 上做**直接修正**（赛题文本 / 模块接口过长可能被截断，见末尾标注，"
+    + TRUNCATION_NOTICE + "）：只改修正建议里点名的实现（行为 / 阈值 / 引脚 / "
+    "状态机条件等），不实现清单中的新功能任务、不做题外发挥；保留原有初始化"
+    "序列与已有代码（那是已完成任务与用户手工编辑过的内容）；已有的实现即使"
+    "看起来不完美也不要改；只调用给定接口中真实存在的函数，绝不凭空造函数。"
+    + SKELETON_NO_UNUSED_RULE
+    + "若【受影响任务】列出了清单中的任务——那是参考信息（修正可能影响它们），"
+    "不要顺带修改它们的实现（是否重做由用户决定）。"
+    "输出完整 main.c（整个文件，不是片段），纯 C 代码，不要用 ``` 或 ~~~ "
+    "代码围栏包裹，不要输出任何 Markdown 标记。"
+)
+
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
 SKELETON_INTERFACES_HEADING = "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："
 SKELETON_SYSTEM_PROMPT = (
@@ -1183,6 +1226,40 @@ class StepReport:
     user_action: str = ""
 
 
+# 新想法 / 问题分类词表（单源：解析层校验与前端消费共用）
+IDEA_KIND_NEW_TASK = "new_task"  # 新功能需求 → 生成任务卡插入清单
+IDEA_KIND_DIRECT_FIX = "direct_fix"  # 直接修正现有代码
+IDEA_KIND_DISCUSSION = "discussion"  # 先讨论（不动代码，漏斗态）
+IDEA_KINDS = frozenset({IDEA_KIND_NEW_TASK, IDEA_KIND_DIRECT_FIX, IDEA_KIND_DISCUSSION})
+
+
+@dataclass(frozen=True)
+class IdeaAnalysis:
+    """一个「新想法 / 问题」的分析产物（工单 idea-fix/01）。
+
+    kind = new_task | direct_fix | discussion；reply = AI 对这个想法的理解与
+    判断（中文）；new_task = new_task 类时的建议任务形状（title/description/
+    score_refs/depends_on/verify，非 new_task = None）；fix_summary = 直接
+    修正的建议说明（direct_fix 时非空，改动预览的输入上下文）；affected_task_ids
+    = 受影响的既有任务 id（两类修正都填，无影响 = 空元组）。
+    """
+
+    kind: str
+    reply: str
+    new_task: Mapping[str, Any] | None = None
+    fix_summary: str = ""
+    affected_task_ids: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "reply": self.reply,
+            "new_task": dict(self.new_task) if self.new_task is not None else None,
+            "fix_summary": self.fix_summary,
+            "affected_task_ids": list(self.affected_task_ids),
+        }
+
+
 class LLM(Protocol):
     def select_modules(
         self,
@@ -1316,6 +1393,29 @@ class LLM(Protocol):
         diff_text: str,
         module_interfaces: Sequence[str],
     ) -> StepReport: ...
+
+    def analyze_idea(
+        self,
+        idea: str,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+    ) -> IdeaAnalysis: ...
+
+    def apply_idea_fix(
+        self,
+        idea: str,
+        fix_summary: str,
+        affected: Sequence[str],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+        main_c: str,
+    ) -> str: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -2597,6 +2697,115 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def analyze_idea(
+        self,
+        idea: str,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+    ) -> IdeaAnalysis:
+        """新想法 / 问题分析（工单 idea-fix/01）：理解 + 分类 + 落地建议。
+
+        输入 = 想法文本 + 题面 + Q&A + 功能需求行 + 评分点 + 模块接口 +
+        当前 main.c + 任务清单（未拆解 = None）；输出 JSON 由解析器校验：
+        kind 词表外 / reply 空 = 整次重问（_retry_parse——分类与理解都为空
+        毫无价值）；new_task 非 new_task 类时强制置 None（防模型在讨论类
+        也塞任务状）；affected_task_ids 缺省空元组。深层形状校验（任务字段
+        合法性）交给 insert_task_from_idea 域层（本层只做机械形状提取）。
+        """
+
+        def parse(content: str) -> IdeaAnalysis:
+            data = extract_module_selection_data(content)
+            kind = data.get("kind")
+            if kind not in IDEA_KINDS:
+                raise LLMError(
+                    f"想法分析 kind 非法：{kind!r}"
+                    "（只允许 new_task / direct_fix / discussion）"
+                )
+            reply = data.get("reply")
+            if not isinstance(reply, str) or not reply.strip():
+                raise LLMError("想法分析缺少 reply：模型未输出或为空串")
+            new_task = data.get("new_task")
+            if new_task is not None and not isinstance(new_task, dict):
+                raise LLMError("想法分析 new_task 必须是 JSON 对象或 null")
+            fix_summary = data.get("fix_summary")
+            if not isinstance(fix_summary, str):
+                fix_summary = ""
+            raw_affected = data.get("affected_task_ids") or []
+            if not isinstance(raw_affected, list) or any(
+                not isinstance(item, str) for item in raw_affected
+            ):
+                raise LLMError("想法分析 affected_task_ids 必须是字符串数组")
+            return IdeaAnalysis(
+                kind=kind,
+                reply=reply.strip(),
+                new_task=(
+                    dict(new_task)
+                    if kind == IDEA_KIND_NEW_TASK and new_task is not None
+                    else None
+                ),
+                fix_summary=fix_summary.strip(),
+                affected_task_ids=tuple(
+                    item.strip() for item in raw_affected if item.strip()
+                ),
+            )
+
+        return self._retry_parse(
+            system_prompt=TASK_IDEA_SYSTEM_PROMPT,
+            user_prompt=_idea_user_prompt(
+                idea,
+                problem_text,
+                qa_text,
+                requirements,
+                score_points,
+                module_interfaces,
+                main_c,
+                plan,
+            ),
+            parse=parse,
+            label="想法分析",
+            operation="analyze_idea",
+            json_mode=True,
+        )
+
+    def apply_idea_fix(
+        self,
+        idea: str,
+        fix_summary: str,
+        affected: Sequence[str],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+        main_c: str,
+    ) -> str:
+        """想法直接修正（工单 idea-fix/01）：按用户想法改现有代码。
+
+        输入 = 想法文本 + 修正建议 + 受影响任务 id + 模块接口 + 题面/Q&A +
+        当前 main.c；输出 = 修正后的 main.c 全文（文本模式，与任务执行同
+        形状——prompt 约束只改想法相关的实现）。瞬时失败整次重问
+        （_retry_parse，与骨架同款兜底）；空结果由域层 run_direct_fix 拒绝
+        （TaskError）。
+        """
+        return self._retry_parse(
+            system_prompt=IDEAFIX_SYSTEM_PROMPT,
+            user_prompt=_idea_fix_user_prompt(
+                idea,
+                fix_summary,
+                affected,
+                module_interfaces,
+                problem_text,
+                qa_text,
+                main_c,
+            ),
+            parse=lambda content: content,
+            label="想法修正",
+            operation="apply_idea_fix",
+        )
+
     def _observe_call(
         self,
         *,
@@ -3249,6 +3458,44 @@ class RoutingLLM:
             task, verify_result, diff_text, module_interfaces
         )
 
+    def analyze_idea(
+        self,
+        idea: str,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+    ) -> IdeaAnalysis:
+        # 想法分析走 remote（分类质量决定落地路径，不进本地方法集）
+        return self._remote.analyze_idea(
+            idea,
+            problem_text,
+            qa_text,
+            requirements,
+            score_points,
+            module_interfaces,
+            main_c,
+            plan,
+        )
+
+    def apply_idea_fix(
+        self,
+        idea: str,
+        fix_summary: str,
+        affected: Sequence[str],
+        module_interfaces: Sequence[str],
+        problem_text: str,
+        qa_text: str,
+        main_c: str,
+    ) -> str:
+        # 想法修正走 remote（代码改动质量优先，不进本地方法集）
+        return self._remote.apply_idea_fix(
+            idea, fix_summary, affected, module_interfaces, problem_text, qa_text, main_c
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -3828,6 +4075,118 @@ def _task_report_user_prompt(
     if module_interfaces:
         lines += ["", SKELETON_INTERFACES_HEADING]
         lines.extend(_truncate_content(block) for block in module_interfaces)
+    return "\n".join(lines)
+
+
+def _idea_plan_summary(plan: Mapping[str, Any] | None) -> list[str]:
+    """想法分析的清单状态摘要行（工单 idea-fix/01）。
+
+    plan 未拆解（None）= 一行说明；已拆解 = 每任务一行「tN｜标题｜状态｜依赖
+    [tX]」（状态为 pending/doing/verified/unverified/failed/skipped 中文
+    短词）——AI 据此判断新想法是不是清单里已有任务（避免重复建卡）与受影响
+    任务。行内 _truncate_content 挡单条超长。
+    """
+    if plan is None:
+        return ["", "【当前任务清单】", "（尚未拆解任务清单——无既有任务可受影响）"]
+    tasks = plan.get("tasks") if isinstance(plan, Mapping) else None
+    if not isinstance(tasks, list) or not tasks:
+        return ["", "【当前任务清单】", "（清单为空——无既有任务可受影响）"]
+    status_label = {
+        "pending": "待做",
+        "doing": "执行中",
+        "verified": "已验证",
+        "unverified": "未验证",
+        "failed": "失败",
+        "skipped": "已跳过",
+    }
+    lines = ["", "【当前任务清单（id｜标题｜状态｜依赖）】"]
+    for task in tasks:
+        if not isinstance(task, Mapping):
+            continue
+        task_id = str(task.get("id", ""))
+        title = str(task.get("title", ""))
+        status = status_label.get(str(task.get("status", "")), str(task.get("status", "")))
+        deps = [str(d) for d in (task.get("depends_on") or []) if isinstance(d, str)]
+        dep_text = "、".join(deps) if deps else "-"
+        lines.append(f"- {task_id}｜{_truncate_content(title)}｜{status}｜依赖：{dep_text}")
+    return lines
+
+
+def _idea_user_prompt(
+    idea: str,
+    problem_text: str,
+    qa_text: str,
+    requirements: Sequence[Mapping[str, Any]],
+    score_points: Sequence[Mapping[str, Any]],
+    module_interfaces: Sequence[str],
+    main_c: str,
+    plan: Mapping[str, Any] | None,
+) -> str:
+    """想法分析的 user 消息（工单 idea-fix/01）：想法 + 题面 + Q&A + 功能需求
+    + 评分点 + 清单状态 + 接口 + 现有 main.c。各段截断带标注（_truncate_content
+    / _fit_fulltext_wire 同款预算）；想法段靠前（它是本调用要分析的主体）。
+    """
+    lines = ["【用户的新想法 / 发现的问题】", _truncate_content(idea)]
+    lines += ["", "赛题：", _truncate_content(problem_text)]
+    if qa_text:
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+    if requirements:
+        lines += _requirement_lines(
+            requirements, "功能需求清单（任务必须逐条覆盖，不遗漏、不题外发挥）："
+        )
+    if score_points:
+        pt_lines = ["", "题面评分点（score_refs 只引用这里的 id）："]
+        for index, point in enumerate(score_points, 1):
+            if not isinstance(point, Mapping):
+                continue
+            pid = point.get("id", f"score-{index}")
+            score_text = (
+                f"{point.get('score')} 分"
+                if isinstance(point.get("score"), (int, float))
+                and not isinstance(point.get("score"), bool)
+                else "未标分"
+            )
+            pt_lines.append(f"- {pid}｜{point.get('description', '')}（{score_text}）")
+        lines += pt_lines
+    lines += _idea_plan_summary(plan)
+    lines += ["", SKELETON_INTERFACES_HEADING]
+    lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += ["", "现有 main.c（想法的落点参考）：", main_c]
+    return "\n".join(lines)
+
+
+def _idea_fix_user_prompt(
+    idea: str,
+    fix_summary: str,
+    affected: Sequence[str],
+    module_interfaces: Sequence[str],
+    problem_text: str,
+    qa_text: str,
+    main_c: str,
+) -> str:
+    """想法直接修正的 user 消息（工单 idea-fix/01）：想法 + 修正建议 +
+    受影响任务 + 接口 + 题面/Q&A + 现有 main.c（与任务执行 prompt 同构——
+    改动时两处核对，见 SKELETON_INTERFACES_HEADING 双份教训）。
+    """
+    lines = ["【用户的想法 / 发现的问题】", _truncate_content(idea)]
+    if fix_summary:
+        lines += ["", "【修正建议（AI 分析时给出，按此修正）】", _truncate_content(fix_summary)]
+    if affected:
+        lines += [
+            "",
+            "【受影响任务（参考信息——修正可能影响它们的实现，不要顺带修改）】",
+            "、".join(affected),
+        ]
+    lines += ["", "赛题：", _truncate_content(problem_text)]
+    if qa_text:
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+    lines += ["", SKELETON_INTERFACES_HEADING]
+    lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += [
+        "",
+        "现有 main.c（只按修正建议改，其余内容原样保留）：",
+        main_c,
+    ]
     return "\n".join(lines)
 
 
