@@ -34,6 +34,17 @@ import { renderPlatforms, renderModulePool } from "/js/ui/generate-recommend.js"
 const settingsDeps = {};
 export function setSettingsDeps(deps) { Object.assign(settingsDeps, deps); }
 
+/** 烧录工具的「已自动找到」状态行（工单 flash-deploy/02）：覆盖为空且自动
+ * 探测命中 → muted 提示（display + exe 短路径）；否则清空。kind 限定用于
+ * st-flash 字段（stm32 探测优先 OpenOCD，st-flash 只在兜底命中时提示）。 */
+function flashAutoStatus(spanId, tool, override, kind) {
+  const el = $(spanId);
+  if (!el) return;
+  const hit = tool && (!override || !String(override).trim())
+    && (!kind || tool.kind === kind);
+  el.textContent = hit ? "已自动找到：" + (tool.display || "") + "（" + tool.exe + "）" : "";
+}
+
 export async function loadSettings() {
   try {
     const s = await apiGet("/api/settings");
@@ -50,6 +61,16 @@ export async function loadSettings() {
     $("set-ccs-sdk-dir").value = s.ccs_sdk_dir || "";
     $("set-ccs-compiler-dir").value = s.ccs_compiler_dir || "";
     $("set-ccs-sysconfig-cli").value = s.ccs_sysconfig_cli || "";
+    // 烧录工具可选覆盖（工单 flash-deploy/02）：空串 = 自动探测
+    $("set-openocd-path").value = s.openocd_path || "";
+    $("set-stflash-path").value = s.stflash_path || "";
+    $("set-dslite-path").value = s.dslite_path || "";
+    // 「已自动找到」状态（spec 故事 8）：覆盖为空且自动探测命中 → 显示探测
+    // 到的工具（display + exe）；覆盖非空 / 探测不到 = 空（用户手动填或留空）
+    const autoTools = s.flash_auto_tools || {};
+    flashAutoStatus("set-openocd-status", autoTools.stm32, s.openocd_path);
+    flashAutoStatus("set-stflash-status", autoTools.stm32, s.stflash_path, "stflash");
+    flashAutoStatus("set-dslite-status", autoTools.mspm0, s.dslite_path);
     // 本地 LLM 端点（工单 local-llm-routing/03）：空串 = 本地路由关闭
     $("set-local-llm-base-url").value = s.local_llm_base_url || "";
     // 本地模型下拉（速度/质量自选）：预设三档；自定义旧值保留为附加选项
@@ -311,6 +332,9 @@ $("btn-save-settings").addEventListener("click", async () => {
       ccs_sdk_dir: $("set-ccs-sdk-dir").value.trim(),
       ccs_compiler_dir: $("set-ccs-compiler-dir").value.trim(),
       ccs_sysconfig_cli: $("set-ccs-sysconfig-cli").value.trim(),
+      openocd_path: $("set-openocd-path").value.trim(),
+      stflash_path: $("set-stflash-path").value.trim(),
+      dslite_path: $("set-dslite-path").value.trim(),
       local_llm_base_url: $("set-local-llm-base-url").value.trim(),
       local_llm_model: $("set-local-llm-model").value.trim(),
       vision_base_url: $("set-vision-base-url").value.trim(),

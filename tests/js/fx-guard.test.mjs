@@ -129,6 +129,10 @@ const DOMAINS = {
     taskOrderLabel: "fn", taskDialogAdoptHTML: "fn", taskDialogButtonHTML: "fn",
     taskDialogAreaHTML: "fn",
   },
+  "flash.js": {
+    flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",
+    flashOutputHTML: "fn", flashCommandHTML: "fn", flashPanelHTML: "fn",
+  },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
     parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",

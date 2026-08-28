@@ -316,6 +316,19 @@ def test_flash_project_failure_returns_ok_false_with_tail(tmp_path):
     assert result["output_tail_lines"] == 40
 
 
+def test_flash_project_command_text_quotes_space_args(tmp_path):
+    """command_text（前端「复制烧录命令」）对含空白的参数加双引号——openocd
+    的 `-c "program <hex> …"` 裸拼会被 shell 拆参（工单 flash-deploy/01 评审
+    观察，工单 02 一并回归）。子进程执行仍用不带引号的 command 列表。"""
+    out = _stm32_project(tmp_path)
+    _touch(out / "user" / "Objects" / "proj.hex", 1000.0)
+    tool = _fake_tool_bat(tmp_path)
+    result = flash_project(PLATFORM_STM32, out, openocd_path=str(tool))
+    assert '"program ' in result["command_text"]
+    assert 'verify reset exit"' in result["command_text"]
+    assert '"program' not in result["command"]  # 执行列表不带引号
+
+
 def test_flash_project_missing_firmware_raises(tmp_path):
     out = _stm32_project(tmp_path)
     tool = _fake_tool_bat(tmp_path)
@@ -428,3 +441,27 @@ def test_flash_settings_roundtrip(tmp_path):
     assert saved["openocd_path"] == "C:/tools/openocd.exe"
     assert saved["dslite_path"] == "C:/ti/ccs2050/ccs/ccs_base/DebugServer/bin/DSLite.exe"
     assert saved["stflash_path"] == ""
+
+
+def test_flash_settings_auto_tools_reported_none_when_missing(tmp_path, monkeypatch):
+    """settings GET 的 flash_auto_tools（spec 故事 8「自动探测到则显示已自动
+    找到」）：两平台都探测不到 = null（前端不显示提示行）；探测必须纯本地
+    （which / C:/ti/ccs* 扫 DSLite），测试 monkeypatch 到空根 + 无 PATH 命中。"""
+    monkeypatch.setattr("contest_generator.flash._CCS_SCAN_ROOT", str(tmp_path / "empty"))
+    monkeypatch.setattr("contest_generator.flash.shutil.which", lambda name: None)
+    client = _flash_client(tmp_path)
+    auto = client.get("/api/settings").json()["flash_auto_tools"]
+    assert auto == {"stm32": None, "mspm0": None}
+
+
+def test_flash_settings_auto_tools_reported_stm32_openocd(tmp_path, monkeypatch):
+    openocd = tmp_path / "openocd.exe"
+    openocd.write_bytes(b"")
+    monkeypatch.setattr(
+        "contest_generator.flash.shutil.which",
+        lambda name: str(openocd) if name == "openocd" else None,
+    )
+    client = _flash_client(tmp_path)
+    auto = client.get("/api/settings").json()["flash_auto_tools"]
+    assert auto["stm32"] is not None and auto["stm32"]["kind"] == "openocd"
+    assert auto["stm32"]["exe"] == str(openocd)

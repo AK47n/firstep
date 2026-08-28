@@ -18,6 +18,8 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML } from "/js/fx/task.js";
+import { flashPanelHTML } from "/js/fx/flash.js";
+import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { scorePoints } from "./generate-recommend.js";  // 当前会话推荐评分点（历史目录为空）
@@ -59,9 +61,8 @@ function setTaskStatusLocal(taskId, status) {
 function tasksRender() {
   const plan = tasks.plan;
   const grid = $("tasks-grid");
-  // 结果面板随渲染清除（每次执行/拆解后重建，防陈旧结果残留）
-  const stale = $("tasks-result");
-  if (stale) stale.remove();
+  // 结果面板随渲染清除（每次执行/拆解后重建，防陈旧结果残留；结果面板在
+  // 网格容器内——beforeend 插入，innerHTML 清空即整体移除）
   if (!plan || !(plan.tasks || []).length) {
     grid.classList.add("hidden");
     grid.innerHTML = "";
@@ -256,6 +257,9 @@ async function tasksExecute(taskId, feedback) {
 
 /** 任务执行结果面板（照深化结果卡先例）：状态徽章 + 编译摘要 + diff + 备份 +
  * 回滚按钮（复用 /api/revise/rollback，同备份族——backup_tree 同盘）。
+ * 插入位置 = tasks-grid 容器内（beforeend）而非 afterend：结果面板的操作按钮
+ * （回滚 / 烧录）必须落在网格的点击委托覆盖范围内——afterend 是网格的兄弟
+ * 节点，冒泡不过网格，回滚按钮点击将无人处理（工单 flash-deploy/02 修）。
  * 徽章 + 摘要文案单源 = fx/task.js verifyStatusMarkup（与深化面板共用）。 */
 function tasksRenderResult(taskId, data) {
   const markup = verifyStatusMarkup(data, {
@@ -264,13 +268,14 @@ function tasksRenderResult(taskId, data) {
   });
   const task = data.task || {};
   const backupId = data.backup_id || "";
+  const dir = tasks.outputDir || "";
   // 反馈轮提示：最近一轮若是上板反馈，把用户反馈原文展示在结果面板（追溯）
   // ——纯函数单源 fx/task.js taskLatestFeedbackNote（评审整改：胶水层不拼 HTML）
   const feedbackNote = taskLatestFeedbackNote(task);
   // 步骤报告（工单 stepwise-deepen/02）：AI 本步「做了什么 + 接下来你要做什么」
   //（含接线/上板指引）；降级空串由纯函数侧渲染中文兜底
   const stepReport = taskStepReportHTML(task);
-  $("tasks-grid").insertAdjacentHTML("afterend",
+  $("tasks-grid").insertAdjacentHTML("beforeend",
     '<div class="item" id="tasks-result" style="margin-top:10px">'
     + '<div class="head"><span class="slug">' + esc(task.id || taskId) + " · " + esc(task.title || "") + " 执行结果</span> " + markup.badge + "</div>"
     + feedbackNote
@@ -279,8 +284,30 @@ function tasksRenderResult(taskId, data) {
     + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
     + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '" data-task="' + esc(task.id || taskId) + '">回滚到本任务执行前</button>' : "")
     + "</div>"
+    + flashPanelHTML(dir)
     + reviseRenderDeepenDiff(data.main_diff, "任务")
     + "</div>");
+}
+
+/** 烧录到板子（工单 flash-deploy/02）：结果面板一键烧录——执行体共享
+ * ui/flash.js flashRunShared（POST /api/flash → flashResultHTML / 400 →
+ * flashGuideHTML）；本簇只做 busy 守卫（tasks.busy 全局闸，防与任务执行/
+ * 回滚并发）。dir 优先取按钮 data-dir（结果面板渲染时快照），空则回退
+ * tasks.outputDir（同目录真相）。 */
+async function tasksFlash(dir) {
+  if (tasks.busy) {
+    toast("info", "有任务正在执行中，请等当前任务完成后再操作");
+    return;
+  }
+  const statusEl = $("tasks-flash-status");
+  const resultEl = $("tasks-flash-result");
+  if (!statusEl || !resultEl) return;  // 结果面板已随渲染清除：无处渲染，静默退出
+  await flashRunShared({
+    dir: dir || tasks.outputDir || "",
+    statusEl,
+    resultEl,
+    setBusy: tasksSetBusy,
+  });
 }
 
 /** 回滚到本任务执行前：复用 /api/revise/rollback（同备份族）→ 重读清单刷新。 */
@@ -518,6 +545,14 @@ $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-rollback");
   if (!btn) return;
   tasksRollback(btn.dataset.backup, btn.dataset.task);
+});
+// 结果面板「烧录到板子」（工单 flash-deploy/02）：结果面板现插在网格容器内
+//（beforeend，见 tasksRenderResult）——按钮点击与回滚同域委托；dir 从按钮
+// data-dir 快照回读（渲染时目录可能已切换，快照 = 结果面板所属目录）
+$("tasks-grid").addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-task-flash");
+  if (!btn) return;
+  tasksFlash(btn.dataset.dir);
 });
 // 轮次历史「回到这轮之前」（工单 task-feedback/03：撤销语义）
 $("tasks-grid").addEventListener("click", (event) => {
