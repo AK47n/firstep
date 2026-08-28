@@ -16,10 +16,10 @@ const card = (no, text) => ({
 });
 
 test("stepNavTitles 提取编号并去掉 h2 里的编号前缀", () => {
-  const cards = [card("1", "1赛题原文"), card("12", "12交接提示词（Handoff）")];
+  const cards = [card("1", "1赛题原文"), card("12", "12交接提示词")];
   assert.deepEqual(stepNavTitles(cards), [
     { n: 1, title: "赛题原文" },
-    { n: 12, title: "交接提示词（Handoff）" },
+    { n: 12, title: "交接提示词" },
   ]);
 });
 
