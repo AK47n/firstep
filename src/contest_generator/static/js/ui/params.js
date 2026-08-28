@@ -1,7 +1,7 @@
 // ui/params.js — 生成页 · 参数速调卡（工单 param-tune/02）DOM 胶水。
 //
 // 参数速调 = 任务推进区内的独立卡：AI 扫描 main.c 可调数值（阈值 / 速度 /
-// PID 系数 / 延时 / 占空比…）→ 参数表（改值输入框）→「改这个并验证」=
+// PID 系数 / 延时 / 占空比…）→ 参数表（改值输入框）→「应用」=
 // 确定性替换声明处那一个常量（零 LLM 改值）→ 备份 + 编译验证 → diff /
 // 回滚 / 烧录。参数表落盘 .contest_params.json（与任务清单独立）；改值不
 // 造任务轮次、不动任务状态（spec param-tune 故事 3——改值不是重做任务）。
@@ -136,7 +136,7 @@ async function paramsScan() {
     return;
   }
   const dir = paramsDir();
-  if (!dir) { $("params-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("params-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   paramsSetBusy(true);
   $("params-msg").textContent = "";
   paramsRenderResult(null);
@@ -155,7 +155,7 @@ async function paramsScan() {
     paramsState.plan = data.params || [];
     paramsState.scanned = true; // 识别过（空表也算——scan 无参数不落盘）
     paramsRender();
-    paramsStatus("识别完成——改值 = 只替换那一个常量，点「改这个并验证」");
+    paramsStatus("识别完成——改值 = 只替换那一个常量，点「应用」并验证");
     toast("ok", "参数识别完成");
   } catch (e) {
     $("params-msg").textContent = e.message;
@@ -174,7 +174,7 @@ async function paramsApply(name) {
     return;
   }
   const dir = paramsDir();
-  if (!dir) { $("params-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("params-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   const input = $("params-input-" + name);
   const value = input && input.value || "";
   if (!value.trim()) { $("params-msg").textContent = "新值不能为空（请输入数值后再应用）"; return; }
@@ -227,7 +227,7 @@ async function paramsRollback(backupId) {
     confirmText: "确认回滚",
   })) return;
   const dir = paramsDir();
-  if (!dir) { $("params-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("params-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   paramsSetBusy(true);
   paramsStatus("回滚中…");
   try {
