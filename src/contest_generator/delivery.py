@@ -12,8 +12,9 @@
 
 Windows-only 的进程启动/关联打开都包 try（OSError → 降级 message），不抛
 异常；只有目录缺失 / 平台未知才是 DeliveryError（400 中文）。
-from task_progress import TaskError 仅为防环占位——本模块不抛 TaskError
-（错误类型 = DeliveryError，errors.py 登记）；注释保留说明防环关系。
+模块依赖边：delivery → task_progress（函数级延迟导入 read_task_plan，防环
+惯例同 revision.py：模块顶部不 import task_progress——task_progress 不
+反向 import delivery，实际无环）；delivery → errors（Error 类型收纳）。
 """
 
 from __future__ import annotations
@@ -24,9 +25,7 @@ import subprocess
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
-
-from .task_progress import TaskError  # noqa: F401  # 防环占位（见模块 docstring）
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     pass
@@ -73,12 +72,13 @@ def open_project_dir(output_dir: Path, *, uv4_path: str = "") -> dict:
     """打开工程（平台自适应）：stm32 优先 Keil / 关联打开 / explorer 兜底；
     mspm0 = explorer 打开文件夹。返回 {"mode": "ide"|"folder", "target",
     "message"}。平台未知（_infer_platform 抛 ContextError）→ DeliveryError。"""
-    from .context_manifest import _infer_platform
+    from .context_manifest import ContextError, _infer_platform
     from .platforms import PLATFORM_STM32
 
     try:
         platform = _infer_platform(output_dir)
-    except Exception as exc:  # ContextError（400 语义透传）
+    except ContextError as exc:  # 平台未知（400 语义透传）——只捕声明异常，
+        # 不外扩吞 OSError / 真 bug（standards 评审：except Exception 过宽）
         raise DeliveryError(str(exc)) from exc
 
     if platform == PLATFORM_STM32:

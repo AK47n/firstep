@@ -147,7 +147,7 @@ const DOMAINS = {
     mainDiffHTML: "fn", diffStatsLineHTML: "fn",
   },
   "delivery.js": {
-    deliveryCheckHTML: "fn", deliveryPackageHTML: "fn",
+    deliveryActionsHTML: "fn", deliveryCheckHTML: "fn", deliveryPackageHTML: "fn",
   },
   "params.js": {
     paramListHTML: "fn", paramResultHTML: "fn",

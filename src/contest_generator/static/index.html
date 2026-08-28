@@ -1959,11 +1959,7 @@
         </div>
         <div class="card-group" style="margin-top:6px">
           <div class="card-group-title">🚀 交付（打开工程 / 检查 / 打包）</div>
-          <div class="row">
-            <button id="btn-delivery-open" class="primary" title="stm32 优先拉起 Keil（UV4），兜底打开文件夹；mspm0 打开文件夹（CCS 手动导入）">打开工程</button>
-            <button id="btn-delivery-check" class="primary">交付检查</button>
-            <button id="btn-delivery-package" class="primary">一键打包</button>
-          </div>
+          <div class="row" id="delivery-actions"></div>
           <div class="muted" style="margin-top:4px">打开发送前最后一公里：交付检查 = 任务清单完成度汇总（未完成逐条列出，失败一眼可见）；打包 = 工程目录 zip（排除 .contest_* 内部状态文件，时间戳命名不覆盖旧包，输出到工程目录隔壁）。</div>
           <div id="delivery-result" style="margin-top:8px"></div>
           <div id="delivery-msg" class="error"></div>
