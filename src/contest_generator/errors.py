@@ -21,6 +21,7 @@ from .compile_runner import CompileRunnerError
 from .config import ConfigError
 from .context_manifest import ContextError
 from .deepen import DeepenError
+from .delivery import DeliveryError
 from .extraction import ExtractionError
 from .fix_errors import FixError
 from .flash import FlashError
@@ -99,6 +100,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             DeepenError,  # 深化失败（工单 revise-deepen/04）：main.c 缺失 / 深化结果为空
             TaskError,  # 任务推进失败（工单 task-progress/01）：清单损坏 / 缺上下文 / 拆解输出畸形
             FlashError,  # 烧录失败（工单 flash-deploy/01）：平台未知 / 产物缺失 / 烧录工具缺失（带指引）
+            DeliveryError,  # 交付失败（工单 delivery-suite/01）：输出目录缺失 / 平台未知
             BuyError,  # 买件方案商量请求非法（工单 buy-discuss/03）：缺题面 / 历史形状 / 角色词表外
             GenerationConflictError,  # 桌面同名工程已存在（工单 generate-conflict-guard/01）：不静默换名/覆盖
             RecentStatusError,  # 最近生成状态非法（工单 recent-jobs/01）：前端上报未知状态值

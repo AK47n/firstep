@@ -63,6 +63,7 @@ from .context_manifest import (
     validate_context_fields,
 )
 from .deepen import DeepenError, run_deepen
+from .delivery import DeliveryError, delivery_check, open_project_dir, package_project
 from .flash import FlashError, flash_project, resolve_flash_tool
 from .task_progress import (
     TaskError,
@@ -3286,6 +3287,46 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             openocd_path=config.openocd_path if config else "",
             stflash_path=config.stflash_path if config else "",
         )
+
+    # ------------------------------------------------------------------
+    # 交付（工单 delivery-suite/01）：打开工程 / 交付检查 / 一键打包
+    # ------------------------------------------------------------------
+
+    @app.post("/api/delivery/open-ide")
+    @_map_errors
+    def delivery_open_ide(payload: dict) -> dict:
+        """打开工程（同步端点，工单 delivery-suite/01）：平台自适应——stm32
+        优先拉起 Keil（uv4_path 配置覆盖 > C:/Keil*/UV4/UV4.exe 探测 > 系统
+        关联 startfile），兜底 explorer 打开文件夹；mspm0 = explorer 打开
+        文件夹（CCS 手动导入）。返回 {mode: "ide"|"folder", target,
+        message}；目录缺失 / 平台未知 → 400 中文（DeliveryError）。
+        启动进程/关联打开的失败都降级为 message，不抛异常。"""
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise DeliveryError(f"输出目录不存在：{output_dir}")
+        config = _current_config(context)
+        return open_project_dir(
+            output_dir, uv4_path=config.uv4_path if config else ""
+        )
+
+    @app.post("/api/delivery/check")
+    @_map_errors
+    def delivery_check_endpoint(payload: dict) -> dict:
+        """交付前检查（同步端点，工单 delivery-suite/01）：任务清单完成度
+        汇总（verified+skipped = 完成）+ 未完成清单逐条列出（失败一眼可见）。
+        返回 {ok, plan_present, stats: null|计数, incomplete, message}；
+        未拆解清单 = ok False + 中文提示（不 400）；目录缺失 → 400。"""
+        output_dir = Path(_require_str(payload, "output_dir"))
+        return delivery_check(output_dir)
+
+    @app.post("/api/delivery/package")
+    @_map_errors
+    def delivery_package(payload: dict) -> dict:
+        """一键打包（同步端点，工单 delivery-suite/01）：工程目录 → zip（父
+        目录，时间戳命名不覆盖旧包；排除 .contest_* 内部文件与 *.tmp /
+        *.bak）。返回 {zip_path, size, files, message}；目录缺失 → 400。"""
+        output_dir = Path(_require_str(payload, "output_dir"))
+        return package_project(output_dir)
 
     # ------------------------------------------------------------------
     # 模块库（工单 07）：浏览 / AI 录入 / 编辑简介 / 多平台版本 / 删除
