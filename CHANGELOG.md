@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=653c6e408666385031bb16bee2d0ff442d2c4292 -->
+<!-- changelog-auto: last-commit=3edc6ffc079dce2e490d68d95746361ea1dd649e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -24,6 +24,7 @@
 - 18:44 逐步深化：效果 diff 主题化美化（diff-restyle/01-02）
 - 18:47 逐步深化：diff 双轴评审整改（diff-restyle/01 复核）
 - 19:14 逐步深化：灵活修正后端（idea-fix/01）
+- 19:21 逐步深化：灵活修正补 failed 路径测试（idea-fix/01 复核）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
