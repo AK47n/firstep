@@ -124,6 +124,9 @@ async function reviseLoad(outputDir) {
     revise.outputDir = "";
     $("revise-load-status").textContent = "";
     $("revise-load-msg").textContent = "加载失败：" + e.message;
+    // 状态徽章（step11-tabs-ui/02 评审整改）：加载失败清空目录后广播——
+    // 「修订」徽章取下旧 ✓，避免残留误导
+    window.dispatchEvent(new CustomEvent("step11-state-changed"));
   }
 }
 
@@ -154,6 +157,8 @@ function reviseRenderContext() {
   $("revise-exec-box").classList.remove("hidden");
   // 任务推进（工单 task-progress/01）：上下文就绪才展示拆解入口（同一输出目录）
   $("tasks-box").classList.remove("hidden");
+  // 状态徽章（step11-tabs-ui/02）：上下文加载后广播四页签状态快照（修订✓、任务/参数/交付清空）
+  window.dispatchEvent(new CustomEvent("step11-state-changed"));
 }
 
 /** 修订 / 深化 SSE 流（runCompileOnce 先例）：done 载荷返回；error 终态 /

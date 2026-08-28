@@ -241,10 +241,16 @@ export function tasksGridHTML(plan, opts) {
     })).join("");
 }
 
+/** 已完成任务数（口径：verified 编译绿 + skipped 已跳过）——进度文本 /
+ * 第11步页签徽章 / 总览同源计数，改口径只改这一处（step11-tabs-ui/02 评审整改）。 */
+export function tasksDoneCount(plan) {
+  const tasks = (plan || {}).tasks || [];
+  return tasks.filter((t) => t.status === "verified" || t.status === "skipped").length;
+}
+
 export function tasksProgressText(plan) {
   const tasks = (plan || {}).tasks || [];
-  const done = tasks.filter((t) => t.status === "verified" || t.status === "skipped").length;
-  return "进度 " + done + "/" + tasks.length;
+  return "进度 " + tasksDoneCount(plan) + "/" + tasks.length;
 }
 
 /** 进度总览（工单 stepwise-deepen/02）：分段进度条 + 汇总文案。

@@ -8,7 +8,7 @@ import { deliveryActionsHTML, deliveryCheckHTML, deliveryPackageHTML } from "/js
 import { reviseGetDir } from "./generate-revise.js";
 import { tasksSetBusy, tasksIsBusy } from "./generate-tasks.js";
 
-const state = { busy: false };
+const state = { busy: false, lastCheck: null };
 
 function dir() {
   return reviseGetDir();
@@ -64,7 +64,13 @@ export async function deliveryOpen() {
 export async function deliveryCheck() {
   await deliveryRun(
     "check",
-    (data) => { $("delivery-result").innerHTML = deliveryCheckHTML(data); },
+    (data) => {
+      $("delivery-result").innerHTML = deliveryCheckHTML(data);
+      // 交付徽章快照（step11-tabs-ui/02）：最近一次检查结果（ok/warn）→ 页签徽章
+      state.lastCheck = { ok: !!data.ok };
+      updateDeliveryEmptyHint();
+      window.dispatchEvent(new CustomEvent("step11-state-changed"));
+    },
     (data) => data.ok ? "全部步骤完成，可以打包交付。" : "还有步骤未完成，详见下方清单。"
   );
 }
@@ -77,10 +83,27 @@ export async function deliveryPackage() {
   );
 }
 
+/** 交付面板空态引导（工单 step11-tabs-ui/02 评审整改）：未加载输出目录时显示
+ * 提示；目录就绪后隐藏。 */
+function updateDeliveryEmptyHint() {
+  const hint = $("delivery-empty-hint");
+  if (hint) hint.classList.toggle("hidden", !!dir());
+}
+
 export function deliveryReset() {
   state.busy = false;
+  state.lastCheck = null;
   const result = $("delivery-result");
   if (result) result.innerHTML = "";
+  updateDeliveryEmptyHint();
+  // 交付徽章快照（step11-tabs-ui/02）：重置后广播（页签徽章取消勾/⚠）
+  window.dispatchEvent(new CustomEvent("step11-state-changed"));
+}
+
+/** 交付徽章快照（工单 step11-tabs-ui/02）：checked = 是否做过交付检查，
+ * ok = 最近一次检查是否全部步骤完成。 */
+export function deliverySummary() {
+  return { checked: !!state.lastCheck, ok: state.lastCheck ? !!state.lastCheck.ok : false };
 }
 
 $("delivery-actions").innerHTML = deliveryActionsHTML(false);

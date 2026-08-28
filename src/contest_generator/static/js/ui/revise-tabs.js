@@ -3,13 +3,22 @@
 // 徽章就地刷新——01 为空快照，02 接入各簇只读 getter）。
 import { $ } from "/js/app.js";
 import { REVISE_TABS, reviseTabsHTML, revisePanelFor, reviseTabNext, reviseTabBadge } from "/js/fx/revise-tabs.js";
+import { reviseGetDir } from "./generate-revise.js";
+import { tasksSummary } from "./generate-tasks.js";
+import { paramsSummary } from "./params.js";
+import { deliverySummary } from "./delivery.js";
 
 const state = { active: "revise", userPicked: false };
 
-/** 各分区状态快照（工单 02 接入 generate-revise / generate-tasks / params /
- * delivery 的只读 getter；键 = 页签 key）。 */
+/** 各分区状态快照（工单 step11-tabs-ui/02）：只读 getter 单向 import
+ *（revise-tabs → 各簇，无人 import revise-tabs，无模块环）。 */
 function collectBadges() {
-  return {};
+  return {
+    revise: { loaded: !!reviseGetDir() },
+    tasks: tasksSummary(),
+    params: paramsSummary(),
+    delivery: deliverySummary(),
+  };
 }
 
 /** 就地刷新徽章 span（不重建按钮：保焦点与 aria 状态）。 */
@@ -60,7 +69,12 @@ export function switchReviseTab(key, opts) {
 export function initReviseTabs() {
   const nav = $("revise-tabs");
   if (!nav) return;
-  nav.innerHTML = reviseTabsHTML(REVISE_TABS, state.active, collectBadges());
+  // 徽章契约：reviseTabsHTML 接收「文本»的徽章表（快照 → 文案由 fx
+  // reviseTabBadge 转换——与 refreshBadgeSpans 同一转换点，防两套规则漂移）
+  const snaps = collectBadges();
+  const badgeTexts = {};
+  for (const t of REVISE_TABS) badgeTexts[t.key] = reviseTabBadge(t.key, snaps[t.key]);
+  nav.innerHTML = reviseTabsHTML(REVISE_TABS, state.active, badgeTexts);
   applyActive();
   nav.addEventListener("click", (e) => {
     const btn = e.target.closest(".revise-tab");
@@ -85,4 +99,6 @@ export function initReviseTabs() {
   window.addEventListener("revise-context-loaded", () => {
     if (!state.userPicked) switchReviseTab("tasks", {});
   });
+  // 状态徽章（step11-tabs-ui/02）：各簇状态变化广播 → 就地刷新徽章
+  window.addEventListener("step11-state-changed", refreshReviseBadges);
 }
