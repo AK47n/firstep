@@ -1303,8 +1303,11 @@
                 text-transform: uppercase; }
   /* 第11步卡内页签（工单 step11-tabs-ui/01）：修订 / 任务推进 / 参数速调 / 交付——
      激活态 accent 底 + 徽章 pill；窄屏横向滚动不换行；徽章就地刷新（不重建按钮） */
-  .revise-tabs { display: flex; gap: 6px; margin: 2px 0 4px; padding: 4px;
-                 overflow-x: auto; scrollbar-width: thin; }
+  .revise-tabs { display: flex; gap: 6px; margin: 2px 0 4px; padding: 4px; }
+  /* 窄屏（<900px）横向滚动不换行（spec generate-ui-polish 验收第1条） */
+  @media (max-width: 900px) {
+    .revise-tabs { overflow-x: auto; scrollbar-width: thin; }
+  }
   .revise-tab { display: inline-flex; align-items: center; gap: 6px;
                 padding: 5px 12px; border-radius: 999px; cursor: pointer; flex: none;
                 border: 1px solid var(--border); background: transparent;
@@ -1328,6 +1331,19 @@
   .revise-empty-hint { padding: 10px 14px; border: 1px dashed var(--border);
       border-radius: 10px; color: var(--muted); font-size: 12.5px;
       background: var(--panel-2); margin-top: 12px; }
+  /* 卡内说明折叠（工单 generate-ui-polish/01，由 .revise-details 通用化）：
+     长文案瘦身为一行，细节收进 details——summary 主打一句摘要，展开看完整说明。
+     全页 1-12 步统一说明形态。 */
+  .card-details { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+  .card-details > summary { cursor: pointer; user-select: none;
+      list-style: none; line-height: 1.55; }
+  .card-details > summary::-webkit-details-marker { display: none; }
+  .card-details > summary::before { content: "ⓘ "; opacity: .75; }
+  .card-details[open] > summary { margin-bottom: 6px; }
+  .card-details-body { padding: 9px 12px; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 8px;
+      line-height: 1.65; color: var(--text); }
+  .card-group .card-details { margin-bottom: 4px; }
   /* 逐步深化进度总览（工单 stepwise-deepen/02）：分段进度条——已验证绿 /
      进行中青 / 待上板黄 / 失败红 / 待做灰 / 已跳过暗；汇总文案在 fx/task.js */
   .tasks-overview-bar { display: flex; height: 8px; border-radius: 99px;
@@ -1671,6 +1687,10 @@
       <div class="gen-steps">
     <div class="card">
       <h2><span class="step-no">1</span>赛题原文</h2>
+      <details class="card-details">
+        <summary>粘贴赛题原文，或上传 PDF / Word / 图片自动抽取文字。</summary>
+        <div class="card-details-body">支持 .pdf / .docx / .txt / .md / 图片上传，纯本地解析；图片与 PDF 示意图经视觉通道识别（默认复用主 DeepSeek key，无需额外配置）——识别结果可编辑，示意图可点击放大。</div>
+      </details>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
       <div id="topic-pdf-box" class="hidden" style="margin-top:8px">
         <div class="row" style="margin-bottom:6px">
@@ -1717,6 +1737,10 @@
 
     <div class="card">
       <h2><span class="step-no">3</span>目标平台</h2>
+      <details class="card-details">
+        <summary>选一条主控线：MSPM0G3507（CCS）或 STM32F103C8T6（Keil5），决定后续全部代码与工具链。</summary>
+        <div class="card-details-body">两条主控线二选一：MSPM0G3507（TI，CCS 工程）与 STM32F103C8T6（ST，Keil5 工程）。平台决定模块库可用集（依赖芯片外设）、引脚板图与编译工具链——选完并可更改，但切换平台会清空下游选择（模块 / 引脚 / 实例），已生成工程不受影响。</div>
+      </details>
       <div id="platforms" class="row"></div>
       <div id="platform-msg" class="error"></div>
     </div>
@@ -1728,6 +1752,7 @@
         <input type="search" id="ref-search" placeholder="搜索参考资料…" style="flex:1;max-width:300px">
         <span class="muted" id="ref-count"></span>
       </div>
+      <!-- 动态容器（ui/reference.js JS 填充，勿删）：选中列表 + 可勾选参考表 -->
       <div id="ref-selected" style="margin-top:8px"></div>
       <div id="ref-picker" class="ref-scroll" style="margin-top:8px"></div>
       <div id="ref-picker-msg" class="error"></div>
@@ -1766,6 +1791,7 @@
         <span class="muted" id="module-count"></span>
         <button id="btn-expand" class="primary">展开依赖并检查平台</button>
       </div>
+      <!-- 动态容器（generate-recommend.js / module-grid JS 填充，勿删） -->
       <div id="module-grid" class="module-grid" style="margin-top:8px"></div>
       <div id="warnings" style="margin-top:10px"></div>
       <div class="muted" id="selected-count" style="margin-top:8px"></div>
@@ -1782,7 +1808,10 @@
 
     <div class="card" id="card-pin-config">
       <h2><span class="step-no">7</span>引脚配置（板图点选）</h2>
-      <div class="pin-intro">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
+      <details class="card-details">
+        <summary>点引脚给接线角色改线；不配 = 按默认布线生成，打开就能编译。</summary>
+        <div class="card-details-body">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
+      </details>
       <div id="pin-config-msg" class="banner hidden" style="margin-top:8px"></div>
       <div id="pin-config-empty" class="muted" style="margin-top:8px"></div>
       <div id="pin-config-body" class="hidden">
@@ -1817,10 +1846,13 @@
 
     <div class="card">
       <h2><span class="step-no">8</span>main.c 骨架</h2>
+      <details class="card-details">
+        <summary>骨架 = 初始化序列 + TODO 预留区；自检骨架先验硬件再写逻辑。</summary>
+        <div class="card-details-body">骨架 = 初始化序列 + TODO 预留区；自检 = 逐模块初始化/读一次/打印结果（OLED 为主、串口为辅），先验硬件再写逻辑。</div>
+      </details>
       <div class="row">
         <button id="btn-skeleton" class="primary" data-ico="code">生成骨架</button>
         <button id="btn-smoke" class="primary" data-ico="code">生成自检骨架</button>
-        <span class="muted">骨架 = 初始化序列 + TODO 预留区；自检 = 逐模块初始化/读一次/打印结果（OLED 为主、串口为辅），先验硬件再写逻辑。</span>
       </div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
       <div id="framework-note" class="warn-box ok hidden" style="margin-top:8px"></div>
@@ -1914,7 +1946,11 @@
     </div>
 
     <div class="card" id="card-fix-center">
-      <h2><span class="step-no">10</span>修复中心（生成 → 自动编译 → AI 修复 → 重编译验证）</h2>
+      <h2><span class="step-no">10</span>修复中心</h2>
+      <details class="card-details">
+        <summary>一键编译 → AI 修复 → 重编译验证，自动闭环；无工具链时可手动贴报错修复。</summary>
+        <div class="card-details-body">生成 → 自动编译 → AI 修复 → 重编译验证：AI 对照编译输出逐条修复并直接写回工程文件（写回前自动备份，可一键回滚）；轮上限后可从续跑态继续一批 ≤3 轮；没有工具链时手动粘贴 Keil / CCS 编译报错，AI 逐条修复并直接写回（同样自动备份 + 回滚）。</div>
+      </details>
       <div class="row">
         <button id="btn-fix-center" class="primary breathe" data-ico="wrench">一键编译修复</button>
         <button id="btn-fix-rollback" class="hidden">回滚本次修复</button>
@@ -1944,8 +1980,13 @@
     </div>
 
     <div class="card" id="card-revise">
-      <h2><span class="step-no">11</span>修订与深化（新 Q&A → 影响分析 → 确认修订 / 可选深化 → 编译验证）</h2>
-      <div class="muted" style="margin-bottom:10px">生成之后发布的赛事答疑 Q&A 也能补进流程：AI 逐条分析影响 → 展示模块增删 diff → 确认后覆盖式重生成（修订前整树备份，可回滚）；可选深化 = AI 按功能需求填 main.c 的 TODO 并强制编译验证（绿 = 已验证；无工具链 = 降级提示）。</div>
+      <h2><span class="step-no">11</span>修订与深化</h2>
+      <!-- 修订说明（工单 step11-tabs-ui/04 视觉统一）：长文案瘦身为一行，
+           细节收进 details（不丢信息） -->
+      <details class="card-details">
+        <summary>生成后官方发布的赛事答疑 Q&amp;A 也能补进流程：分析影响 → 确认修订 / 可选深化 → 编译验证。</summary>
+        <div class="card-details-body">AI 逐条分析影响 → 展示模块增删 diff → 确认后覆盖式重生成（修订前整树备份，可回滚）；可选深化 = AI 按功能需求填 main.c 的 TODO 并强制编译验证（绿 = 已验证；无工具链 = 降级提示）。</div>
+      </details>
 
       <!-- 第11步卡内页签（工单 step11-tabs-ui/01）：修订 / 任务推进 / 参数速调 / 交付
            一次只看一个分区；徽章由 ui/revise-tabs.js 就地刷新 -->
@@ -2026,18 +2067,24 @@
       <div id="tasks-empty-hint" class="revise-empty-hint">尚未加载输出目录——请先在「修订」页签加载当前会话或历史目录。</div>
       <!-- 逐步深化（工单 stepwise-deepen/01-03）：AI 拆解任务清单 → 逐任务执行
            → 每步编译验证 → 步骤报告（AI 做了什么 + 接下来你要做什么，含接线/上板
-           指引）→ 上板反馈。上下文复用上方「上下文入口」的加载结果。 -->
+           指引）→ 上板反馈。上下文复用「修订」页签上下文入口的加载结果。 -->
       <div id="tasks-box" class="card-group hidden" style="margin-top:12px">
         <div class="card-group-title">逐步深化（任务推进）</div>
-        <div class="muted" style="margin-bottom:6px">AI 按题面拆成有序任务清单：每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（上方按钮）为快速兜底。</div>
+        <details class="card-details">
+          <summary>AI 按题面拆成有序任务清单，逐任务执行 + 自动编译验证；每步有步骤报告与上板指引。</summary>
+          <div class="card-details-body">每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（「修订」页签的按钮）为快速兜底。</div>
+        </details>
         <div class="card-group" style="margin-top:6px">
-          <div class="card-group-title">💡 新想法 / 发现的问题（不绑定任务卡）</div>
+          <div class="card-group-title">新想法 / 发现的问题（不绑定任务卡）</div>
           <div class="row">
             <textarea id="tasks-idea-input" rows="2" placeholder="想改一个具体的点，就写在这里（如：进弯道前先减速；循迹阈值太高；再加个急停功能）…" style="flex:1;min-height:44px"></textarea>
             <button id="btn-tasks-idea" class="primary">分析这个想法</button>
             <button id="btn-tasks-draft-add">存入草稿</button>
           </div>
-          <div class="muted" style="margin-top:4px">「我具体想改什么」→ 来这里：已经有明确的一个点（改参数、加功能、修 bug、调策略），AI 判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿落盘（.contest_ideas.json），回头逐条分析或全部逐条分析。如果只是想先讨论、还没有具体改法 → 用下面的「全局商量」。</div>
+          <details class="card-details">
+            <summary>「我具体想改什么」→ 写在这里：AI 判断它是新功能 / 直接修正 / 建议先聊聊。</summary>
+            <div class="card-details-body">已经有明确的一个点（改参数、加功能、修 bug、调策略），AI 判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿落盘（.contest_ideas.json），回头逐条分析或全部逐条分析。如果只是想先讨论、还没有具体改法 → 用下面的「全局商量」。</div>
+          </details>
           <div id="tasks-idea-result" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-idea-msg" class="error"></div>
           <div id="tasks-drafts" style="margin-top:8px"></div>
@@ -2045,12 +2092,15 @@
           <div id="tasks-drafts-msg" class="error"></div>
         </div>
         <div class="card-group" style="margin-top:6px">
-          <div class="card-group-title">💬 全局商量（工程级，不绑任务卡）</div>
+          <div class="card-group-title">全局商量（工程级，不绑任务卡）</div>
           <div class="row">
             <button id="btn-tasks-global-chat" class="primary">全局商量（工程级）</button>
             <div id="tasks-global-note" class="hidden" style="flex:1"></div>
           </div>
-          <div class="muted" style="margin-top:4px">「想先讨论、还没想好具体改什么」→ 来这里：对整体方案有疑惑（架构取舍 / 赛道策略 / 方案对不对），AI 结合题面、需求、任务清单现状与当前 main.c 连续回答问题，越问越清楚；每步可「转成任务 / 转成修正」落地，或「采纳为全局结论」（之后每一步任务执行与直接修正都会带上它）；历史落盘（.contest_idea_chat.json），刷新不丢。已有明确要改的一个点 → 直接用上面的「新想法」。</div>
+          <details class="card-details">
+            <summary>「想先讨论、还没想好具体改什么」→ 工程级连续问答，结论可落地。</summary>
+            <div class="card-details-body">对整体方案有疑惑（架构取舍 / 赛道策略 / 方案对不对），AI 结合题面、需求、任务清单现状与当前 main.c 连续回答问题，越问越清楚；每步可「转成任务 / 转成修正」落地，或「采纳为全局结论」（之后每一步任务执行与直接修正都会带上它）；历史落盘（.contest_idea_chat.json），刷新不丢。已有明确要改的一个点 → 直接用上面的「新想法」。</div>
+          </details>
           <div id="tasks-global-chat" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-global-msg" class="error"></div>
         </div>
@@ -2072,14 +2122,17 @@
       </section>
 
       <section id="revise-panel-params" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-params">
-        <div id="params-empty-hint" class="revise-empty-hint">先到「修订」页签加载输出目录，再识别参数。</div>
+        <div id="params-empty-hint" class="revise-empty-hint">尚未加载输出目录——请先在「修订」页签加载当前会话或历史目录，再识别参数。</div>
         <div class="card-group" style="margin-top:12px">
-          <div class="card-group-title">⚙️ 参数速调（改一个数，不用重跑整步）</div>
+          <div class="card-group-title">参数速调（改一个数，不用重跑整步）</div>
           <div class="row">
             <button id="btn-params-scan" class="primary">识别 main.c 参数</button>
             <span id="params-status" class="muted"></span>
           </div>
-          <div class="muted" style="margin-top:4px">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表落盘（.contest_params.json）。</div>
+          <details class="card-details">
+            <summary>识别 main.c 可调数值 → 改值 = 只替换那一个常量 → 自动备份 + 编译验证。</summary>
+            <div class="card-details-body">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表落盘（.contest_params.json）。</div>
+          </details>
           <div id="params-grid" class="hidden" style="margin-top:8px"></div>
           <div id="params-result" style="margin-top:8px"></div>
           <div id="params-msg" class="error"></div>
@@ -2087,11 +2140,14 @@
       </section>
 
       <section id="revise-panel-delivery" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-delivery">
-        <div id="delivery-empty-hint" class="revise-empty-hint">先到「修订」页签加载输出目录，再打开工程 / 检查 / 打包。</div>
+        <div id="delivery-empty-hint" class="revise-empty-hint">尚未加载输出目录——请先在「修订」页签加载当前会话或历史目录，再打开工程 / 检查 / 打包。</div>
         <div class="card-group" style="margin-top:12px">
-          <div class="card-group-title">🚀 交付（打开工程 / 检查 / 打包）</div>
+          <div class="card-group-title">交付（打开工程 / 检查 / 打包）</div>
           <div class="row" id="delivery-actions"></div>
-          <div class="muted" style="margin-top:4px">打开发送前最后一公里：交付检查 = 任务清单完成度汇总（未完成逐条列出，失败一眼可见）；打包 = 工程目录 zip（排除 .contest_* 内部状态文件，时间戳命名不覆盖旧包，输出到工程目录隔壁）。</div>
+          <details class="card-details">
+            <summary>打开工程 / 交付检查（完成度汇总，未完成逐条列出）/ 一键打包 zip。</summary>
+            <div class="card-details-body">打开发送前最后一公里：交付检查 = 任务清单完成度汇总（未完成逐条列出，失败一眼可见）；打包 = 工程目录 zip（排除 .contest_* 内部状态文件，时间戳命名不覆盖旧包，输出到工程目录隔壁）。</div>
+          </details>
           <div id="delivery-result" style="margin-top:8px"></div>
           <div id="delivery-msg" class="error"></div>
         </div>
@@ -2099,11 +2155,14 @@
     </div>
 
     <div class="card">
-      <h2><span class="step-no">12</span>交接提示词（Handoff）</h2>
+      <h2><span class="step-no">12</span>交接提示词</h2>
+      <details class="card-details">
+        <summary>把整个工程上下文打包成一段提示词，粘贴给下一个 AI 继续精准打磨。</summary>
+        <div class="card-details-body">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</div>
+      </details>
       <div class="row">
         <button id="btn-handoff" class="primary" data-ico="clipboard">生成交接提示词</button>
         <button id="btn-handoff-copy" class="hidden" data-ico="copy">复制</button>
-        <span class="muted">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</span>
       </div>
       <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
       <div id="handoff-msg" class="error"></div>
