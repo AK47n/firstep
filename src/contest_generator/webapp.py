@@ -55,6 +55,7 @@ from .config import (
 from .context_manifest import (
     CONTEXT_MANIFEST_FILENAME,
     ContextError,
+    _infer_platform,
     infer_context,
     missing_fields_for,
     read_context_fields,
@@ -62,6 +63,7 @@ from .context_manifest import (
     validate_context_fields,
 )
 from .deepen import DeepenError, run_deepen
+from .flash import FlashError, flash_project
 from .task_progress import (
     TaskError,
     check_plan_replaceable,
@@ -2554,6 +2556,39 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "line_text": lines[line - 1],
         }
 
+    @app.post("/api/flash")
+    @_map_errors
+    def flash_firmware(payload: dict) -> dict:
+        """烧录到板子（同步端点，工单 flash-deploy/01）：定位产物 → 探测工具
+        → 构建命令 → 执行 → 中文结果。
+
+        请求体契约：output_dir（必填，生成结果目录，必须已存在）；平台从产物
+        树反推（context_manifest._infer_platform 复用——.uvprojx → stm32 /
+        .cproject/.project → mspm0，两者都有或都没有 → 400 中文）。不要求 AI
+        配置（与 /api/compile 同规：烧录不调 LLM，只须工具路径——config 覆盖
+        为空时走自动探测）。
+
+        失败分级：平台未知 / 产物缺失（未先编译）/ 工具缺失（MSPM0 无
+        DSLite、STM32 无 OpenOCD 且无 st-flash）→ 400 中文（FlashError 登记
+        errors.py，message 带指引，前端渲染指引卡）；烧录失败（工具报错 /
+        探针未接 / 超时）→ 200 {ok: False} 携带输出尾 + 排查提示（正常返回，
+        不是异常）。成功 → 200 {ok: True, tool, command, firmware, output,
+        message, duration}。烧录秒级~分钟级（180s 超时），同步阻塞可接受
+        （前端 busy 文案防重）；事件流不加（观察后按需升级，决策记录 10）。
+        """
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise FlashError(f"输出目录不存在：{output_dir}")
+        platform = _infer_platform(output_dir)
+        config = _current_config(context)
+        return flash_project(
+            platform,
+            output_dir,
+            dslite_path=config.dslite_path if config else "",
+            openocd_path=config.openocd_path if config else "",
+            stflash_path=config.stflash_path if config else "",
+        )
+
     # ------------------------------------------------------------------
     # 模块库（工单 07）：浏览 / AI 录入 / 编辑简介 / 多平台版本 / 删除
     # ------------------------------------------------------------------
@@ -2898,6 +2933,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "ccs_sdk_dir": config.ccs_sdk_dir if config is not None else "",
             "ccs_compiler_dir": config.ccs_compiler_dir if config is not None else "",
             "ccs_sysconfig_cli": config.ccs_sysconfig_cli if config is not None else "",
+            # 烧录工具可选覆盖（工单 flash-deploy/01）：空串 = 自动探测
+            "openocd_path": config.openocd_path if config is not None else "",
+            "stflash_path": config.stflash_path if config is not None else "",
+            "dslite_path": config.dslite_path if config is not None else "",
             # 本地 LLM 端点（工单 local-llm-routing/01-03）：空串 = 本地路由关闭
             "local_llm_base_url": config.local_llm_base_url if config is not None else "",
             "local_llm_model": config.local_llm_model if config is not None else "",
@@ -2976,6 +3015,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ccs_sdk_dir=_optional_str(payload, "ccs_sdk_dir"),
             ccs_compiler_dir=_optional_str(payload, "ccs_compiler_dir"),
             ccs_sysconfig_cli=_optional_str(payload, "ccs_sysconfig_cli"),
+            # 烧录工具可选覆盖（工单 flash-deploy/01）：缺省 = 自动探测
+            openocd_path=_optional_str(payload, "openocd_path"),
+            stflash_path=_optional_str(payload, "stflash_path"),
+            dslite_path=_optional_str(payload, "dslite_path"),
             # 本地 LLM 端点（工单 local-llm-routing/03）：缺省 / 空串 = 关闭本地路由
             local_llm_base_url=_optional_str(payload, "local_llm_base_url"),
             local_llm_model=_optional_str(payload, "local_llm_model"),

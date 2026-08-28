@@ -48,6 +48,11 @@ class AppConfig:
     ccs_sdk_dir: str = ""
     ccs_compiler_dir: str = ""
     ccs_sysconfig_cli: str = ""
+    # 烧录工具可选覆盖（工单 flash-deploy/01）：空 = 自动探测（STM32 走
+    # OpenOCD/st-flash 的 PATH、MSPM0 走 C:/ti/ccs*/ 扫 DSLite）
+    openocd_path: str = ""
+    stflash_path: str = ""
+    dslite_path: str = ""
     # 本地 LLM 端点可选配置（工单 local-llm-routing/01）：空串 = 本地路由关闭
     local_llm_base_url: str = ""
     local_llm_model: str = ""
@@ -133,6 +138,16 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     ccs_sysconfig_cli = data.get("ccs_sysconfig_cli", "")
     if not isinstance(ccs_sysconfig_cli, str):
         raise ConfigError(f"ccs_sysconfig_cli 必须是字符串：{path}")
+    # 烧录工具覆盖（工单 flash-deploy/01）：空串 = 自动探测
+    openocd_path = data.get("openocd_path", "")
+    if not isinstance(openocd_path, str):
+        raise ConfigError(f"openocd_path 必须是字符串：{path}")
+    stflash_path = data.get("stflash_path", "")
+    if not isinstance(stflash_path, str):
+        raise ConfigError(f"stflash_path 必须是字符串：{path}")
+    dslite_path = data.get("dslite_path", "")
+    if not isinstance(dslite_path, str):
+        raise ConfigError(f"dslite_path 必须是字符串：{path}")
     # 本地 LLM 端点（工单 local-llm-routing/01）：空串 = 本地路由关闭；类型非法
     # 大声失败（与其余字段同严格度）
     local_llm_base_url = data.get("local_llm_base_url", "")
@@ -193,6 +208,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ccs_sdk_dir=ccs_sdk_dir,
         ccs_compiler_dir=ccs_compiler_dir,
         ccs_sysconfig_cli=ccs_sysconfig_cli,
+        openocd_path=openocd_path,
+        stflash_path=stflash_path,
+        dslite_path=dslite_path,
         local_llm_base_url=local_llm_base_url,
         local_llm_model=local_llm_model,
         vision_base_url=vision_base_url,
@@ -224,6 +242,9 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "ccs_sdk_dir": config.ccs_sdk_dir,
         "ccs_compiler_dir": config.ccs_compiler_dir,
         "ccs_sysconfig_cli": config.ccs_sysconfig_cli,
+        "openocd_path": config.openocd_path,
+        "stflash_path": config.stflash_path,
+        "dslite_path": config.dslite_path,
         "local_llm_base_url": config.local_llm_base_url,
         "local_llm_model": config.local_llm_model,
         "vision_base_url": config.vision_base_url,
