@@ -1675,6 +1675,17 @@
             <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
                  工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
             <div class="res-block hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
+            <!-- 烧录到板子（工单 flash-deploy/02）：生成完成即可一键烧录——
+                 STM32 走 OpenOCD/st-flash、MSPM0 走 CCS 自带 DSLite；结果行 /
+                 指引卡渲染在下方 #flash-result -->
+            <div class="res-block">
+              <div class="res-label">烧录</div>
+              <div class="res-value">
+                <button id="btn-flash" data-ico="upload">烧录到板子</button>
+                <span id="flash-status" class="muted" style="margin-left:8px"></span>
+              </div>
+              <div id="flash-result" style="margin-top:6px"></div>
+            </div>
           </div>
           <div class="res-side">
             <div class="res-block">
@@ -1792,7 +1803,7 @@
            指引）→ 上板反馈。上下文复用上方「上下文入口」的加载结果。 -->
       <div id="tasks-box" class="card-group hidden" style="margin-top:12px">
         <div class="card-group-title">逐步深化（任务推进）</div>
-        <div class="muted" style="margin-bottom:6px">AI 按题面拆成有序任务清单：每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；直接深化（上方按钮）为快速兜底。</div>
+        <div class="muted" style="margin-bottom:6px">AI 按题面拆成有序任务清单：每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（上方按钮）为快速兜底。</div>
         <div class="row">
           <button id="btn-tasks-plan" class="primary">拆解任务</button>
           <button id="btn-tasks-replan" class="hidden">重新拆解（覆盖）</button>
@@ -2246,6 +2257,17 @@
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>SysConfig CLI 路径（留空自动探测）</label><input type="text" id="set-ccs-sysconfig-cli" placeholder="C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"></div>
       </div>
+      <div class="settings-section">烧录工具（工单 flash-deploy/02：留空 = 自动探测）</div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>OpenOCD 路径（STM32，留空走 PATH）</label><input type="text" id="set-openocd-path" placeholder="openocd / C:\OpenOCD\bin\openocd.exe"></div>
+        <div style="flex:1"><label>st-flash 路径（STM32 备选，留空走 PATH）</label><input type="text" id="set-stflash-path" placeholder="st-flash / C:\ST\st-flash\st-flash.exe"></div>
+      </div>
+      <div class="muted" id="set-openocd-status" style="font-size:12px"></div>
+      <div class="muted" id="set-stflash-status" style="font-size:12px"></div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label>DSLite 路径（MSPM0/XDS110，留空自动探测 C:/ti/ccs*）</label><input type="text" id="set-dslite-path" placeholder="C:/ti/ccs2050/ccs/ccs_base/DebugServer/bin/DSLite.exe"></div>
+      </div>
+      <div class="muted" id="set-dslite-status" style="font-size:12px"></div>
     </div>
 
     <div class="card" data-collapse-id="local-llm">

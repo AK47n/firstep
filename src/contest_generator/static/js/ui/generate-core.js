@@ -25,6 +25,7 @@
 import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, frameworkNoteHTML } from "/js/fx/generate.js";
+import { flashRunShared } from "/js/ui/flash.js";
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
 import { syncStep7 } from "/js/ui/step-state.js";
@@ -445,6 +446,50 @@ $("btn-copy-dir").addEventListener("click", async () => {
     toast("ok", "已复制输出路径");
   } catch (e) {
     toast("error", "复制失败");
+  }
+});
+
+/** 烧录到板子（工单 flash-deploy/02）：生成结果面板一键烧录——执行体共享
+ * ui/flash.js flashRunShared（POST /api/flash → flashResultHTML / 400 →
+ * flashGuideHTML）；本簇只做按钮防重（disabled）+ 平台名（busy 文案探针名，
+ * 平台后端从产物树反推，前端仅展示用途）。 */
+async function flashRun() {
+  const dir = $("res-dir").textContent.trim();
+  if (!dir) { $("flash-status").textContent = "请先生成工程"; return; }
+  const btn = $("btn-flash");
+  await flashRunShared({
+    dir,
+    platform: chosenPlatform,
+    statusEl: $("flash-status"),
+    resultEl: $("flash-result"),
+    setBusy: (busy) => { btn.disabled = busy; },
+  });
+}
+$("btn-flash").addEventListener("click", flashRun);
+// 「复制烧录命令」（工单 flash-deploy/02，spec 故事 4 一键复制）：document 级
+// 委托统一处理——生成结果面板与任务结果面板的复制按钮共用（任务结果在
+// tasks-grid 容器内，网格委托只处理动作按钮；命令复制与网格解耦，单点）。
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-flash-copy-cmd");
+  if (btn) {
+    const cmd = btn.dataset.cmd || "";
+    if (!cmd) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cmd).then(
+        () => toast("ok", "烧录命令已复制"),
+        () => toast("error", "复制失败：请手动复制")
+      );
+    } else {
+      toast("error", "复制失败：当前环境不支持剪贴板");
+    }
+    return;
+  }
+  // 指引卡「去设置页配置」（spec 前端决策）：切到设置 tab（工具链卡的烧录
+  // 小节填路径）——同 tab 按钮点击先例（generate-recommend useTopic）
+  const goto = event.target.closest(".btn-flash-goto-settings");
+  if (goto) {
+    const tab = document.querySelector('[data-tab="settings"]');
+    if (tab) tab.click();
   }
 });
 

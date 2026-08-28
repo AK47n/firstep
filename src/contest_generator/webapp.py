@@ -63,7 +63,7 @@ from .context_manifest import (
     validate_context_fields,
 )
 from .deepen import DeepenError, run_deepen
-from .flash import FlashError, flash_project
+from .flash import FlashError, flash_project, resolve_flash_tool
 from .task_progress import (
     TaskError,
     check_plan_replaceable,
@@ -352,6 +352,22 @@ def _current_config(ctx: AppContext) -> AppConfig | None:
         except ConfigError:
             ctx.config = None  # 未配置：各端点给出"请先到设置页配置"提示
     return ctx.config
+
+
+def _flash_auto_tools() -> dict:
+    """烧录工具自动探测状态（settings GET 用，工单 flash-deploy/02）：按平台
+    各探测一次（空覆盖 = 纯自动：which / C:/ti/ccs* 扫 DSLite），返回
+    {stm32: {kind, exe, display} | null, mspm0: ...}。探测不到 = null（前端
+    不显示「已自动找到」，走设置路径配置）。resolve_flash_tool 对未知平台抛
+    FlashError——这里只传 KNOWN_PLATFORMS 两个平台，不会触发。
+    """
+    def _probe(platform: str) -> dict | None:
+        tool = resolve_flash_tool(platform)
+        if tool is None:
+            return None
+        return {"kind": tool.kind, "exe": str(tool.exe), "display": tool.display}
+
+    return {"stm32": _probe(PLATFORM_STM32), "mspm0": _probe(PLATFORM_MSPM0)}
 
 
 def _require_config(ctx: AppContext) -> AppConfig:
@@ -2984,6 +3000,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "recommend_max_rounds": (
                 config.recommend_max_rounds if config is not None else 4
             ),
+            # 烧录工具自动探测状态（工单 flash-deploy/02，spec 故事 8「自动探测
+            # 到则显示已自动找到」）：覆盖为空时前端据此渲染「已自动找到：<工具>」；
+            # 探测是纯本地 glob/which（秒级），settings GET 实时算不等缓存
+            "flash_auto_tools": _flash_auto_tools(),
             "config_path": str(context.config_path),
         }
 
