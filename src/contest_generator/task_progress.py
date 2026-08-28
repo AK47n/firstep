@@ -90,16 +90,18 @@ VALID_ITERATION_KINDS = frozenset({ITERATION_KIND_EXECUTE, ITERATION_KIND_FEEDBA
 # 状态转移表（单源：人工改标端点 / 前端显隐 / 测试共用）——from → 允许的 to。
 # 语义：pending → skipped（跳过不打算做的）；skipped → pending（恢复）；
 # verified / unverified / failed → pending（重做）；unverified / failed →
-# verified（人工上板确认改标）。doing（执行中）不可人工操作（LLM 调用 /
-# 编译验证进行中，退出终态由 run_task 回填）；doing → 终态由域编排
-# （run_task）不可经此表。
+# verified（人工上板确认改标）。doing（执行中）默认不可人工操作（LLM 调用 /
+# 编译验证进行中，退出终态由 run_task 回填）；唯一人工出口 = 执行中断恢复为
+# pending（工单 stuck-doing-recover/01：进程被杀 / 服务重启后磁盘残留 doing
+# 的僵尸卡——恢复为待做，重做走既有闭环，备份链完整可回滚；doing → 其余
+# 状态仍不可，无证据的跳过 / 验证 / 失败不做）。
 ALLOWED_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     STATUS_PENDING: frozenset({STATUS_SKIPPED}),
     STATUS_SKIPPED: frozenset({STATUS_PENDING}),
     STATUS_VERIFIED: frozenset({STATUS_PENDING}),
     STATUS_UNVERIFIED: frozenset({STATUS_VERIFIED, STATUS_PENDING}),
     STATUS_FAILED: frozenset({STATUS_VERIFIED, STATUS_PENDING}),
-    STATUS_DOING: frozenset(),
+    STATUS_DOING: frozenset({STATUS_PENDING}),
 }
 
 
@@ -1200,7 +1202,9 @@ def update_task_status(
     """人工改标（纯函数，工单 03）：按转移表校验 → 替换状态 → (新清单, 任务)。
 
     校验失败 → TaskError（400 中文，消息带允许的目标状态清单）；doing
-    （执行中）不可人工操作。只改状态不动 note。
+    （执行中）仅可人工恢复为 pending（执行中断出口，工单
+    stuck-doing-recover/01——真实执行中的拦截在路由层执行注册表）。只改
+    状态不动 note。
     """
     if status not in ALL_STATUSES:
         raise TaskError(f"非法任务状态：{status}")

@@ -161,8 +161,16 @@ function tasksRender() {
       actions: (task) => {
         // 操作显隐单源 = fx/task.js taskCardActions（与后端转移表镜像，
         // 同一状态机一份 JS 编码——曾内联 if/else 与转移表分叉风险）
-        const actions = taskCardActions(task.status);
+        // recoverable（工单 stuck-doing-recover/01）：doing + 无活跃执行 =
+        // 执行中断的僵尸卡 → 显示「恢复」；真实执行中的拦截由后端注册表兜底
+        const actions = taskCardActions(task.status, {
+          recoverable: task.status === "doing" && !tasks.busy,
+        });
         const parts = [];
+        if (actions.includes("recover")) {
+          parts.push('<button class="btn-task-recover" data-task="' + esc(task.id)
+            + '" title="该步显示进行中但没有任务在跑（上次执行可能中断）——恢复为待做后可重新点「做这一步」">已中断？恢复此步</button>');
+        }
         if (actions.includes("run")) {
           parts.push('<input type="text" id="task-note-' + esc(task.id)
             + '" placeholder="补充说明（可选）…" style="flex:1">'
@@ -1069,8 +1077,10 @@ async function tasksReload() {
   }
 }
 
-/** 人工改标（工单 03）：跳过 / 恢复 / 重做 / 上板改标 → 落盘 + 单卡重渲染。 */
-async function tasksSetStatus(taskId, status) {
+/** 人工改标（工单 03）：跳过 / 恢复 / 重做 / 上板改标 → 落盘 + 单卡重渲染。
+ * okMessage = 成功 toast 文案（缺省「状态已更新」；工单 stuck-doing-recover/01
+ * 恢复入口传专属文案）。 */
+async function tasksSetStatus(taskId, status, okMessage = "状态已更新") {
   if (tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
@@ -1084,12 +1094,25 @@ async function tasksSetStatus(taskId, status) {
       tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? data.task : t);
     }
     tasksRender();
-    toast("ok", "状态已更新");
+    toast("ok", okMessage);
   } catch (e) {
-    $("tasks-msg").textContent = e.message;   // 后端中文（含非法转移提示）
+    // 后端中文（含非法转移提示 / 正在执行中拒绝）——task-msg 常驻 + toast
+    // 双通道；tasksReload 回填磁盘真相（恢复失败时磁盘状态才是权威——防
+    // 客户端内存态与磁盘分叉，spec 轴评审整改：恢复失败路径同回填）
+    $("tasks-msg").textContent = e.message;
+    toast("error", e.message);
+    await tasksReload();
   } finally {
     tasksSetBusy(false);
   }
+}
+
+/** 执行中断恢复（工单 stuck-doing-recover/01）：僵尸 doing 卡 → 恢复为待做
+ * （走既有 /api/tasks/status 转移校验；真实执行中的拦截 = 后端注册表 400，
+ * 错误 message 落 tasks-msg 提示等待完成）。恢复只改状态——main.c / 备份 /
+ * 轮次全保留，重做走既有闭环。 */
+function tasksRecover(taskId) {
+  tasksSetStatus(taskId, "pending", "已恢复为待做——可重新点「做这一步」");
 }
 
 /** 上板反馈（工单 task-feedback/03）：展开反馈输入区（每卡一个 textarea，
@@ -1379,12 +1402,16 @@ $("tasks-grid").addEventListener("click", (event) => {
   const send = event.target.closest(".btn-task-feedback-send");
   if (send) tasksFeedbackSend(send.dataset.task);
 });
-// 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板改标）
+// 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板改标 / 执行中断恢复）
 $("tasks-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark, .btn-task-redo");
+  const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark, .btn-task-redo, .btn-task-recover");
   if (!btn) return;
   if (btn.classList.contains("btn-task-redo")) {
     tasksRedoTask(btn.dataset.task);
+    return;
+  }
+  if (btn.classList.contains("btn-task-recover")) {
+    tasksRecover(btn.dataset.task);
     return;
   }
   const status = btn.classList.contains("btn-task-skip") ? "skipped"

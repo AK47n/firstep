@@ -124,8 +124,12 @@ test("taskCardActions: 显隐与后端转移表镜像", () => {
   // unverified / failed → 做 + 上板改标 + 重做
   assert.deepEqual(taskCardActions("unverified"), ["run", "mark", "revert"]);
   assert.deepEqual(taskCardActions("failed"), ["run", "mark", "revert"]);
-  // doing → 无操作（执行中）
+  // doing → 无操作（执行中）；recoverable = true（执行中断僵尸卡，工单
+  // stuck-doing-recover/01）→ 恢复入口；recoverable 不影响其它状态
   assert.deepEqual(taskCardActions("doing"), []);
+  assert.deepEqual(taskCardActions("doing", { recoverable: true }), ["recover"]);
+  assert.deepEqual(taskCardActions("doing", { recoverable: false }), []);
+  assert.deepEqual(taskCardActions("pending", { recoverable: true }), ["run", "skip"]);
   // 未知状态 → 无操作（不猜）
   assert.deepEqual(taskCardActions("bogus"), []);
 });
