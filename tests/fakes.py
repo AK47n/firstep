@@ -606,6 +606,7 @@ class FakeLLM:
         step_report: StepReport | None = None,
         idea_analysis: IdeaAnalysis | None = None,
         fixed_main_c: str = "",
+        global_discussion: TaskDiscussion | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -634,9 +635,13 @@ class FakeLLM:
             kind="discussion", reply="明白了，先讨论不动代码。"
         )
         self._fixed_main_c = fixed_main_c
+        self._global_discussion = global_discussion
         self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
         self.task_discuss_calls: list[
             tuple[dict[str, Any], str, str, tuple, tuple[str, ...], str, tuple]
+        ] = []
+        self.global_discuss_calls: list[
+            tuple[str, str, tuple, tuple, tuple[str, ...], str, dict | None, str, tuple]
         ] = []
         self.step_report_calls: list[
             tuple[dict[str, Any], dict[str, Any], str, tuple[str, ...]]
@@ -668,12 +673,14 @@ class FakeLLM:
         self.plan_tasks_calls: list[
             tuple[str, str, tuple, tuple, tuple, str]
         ] = []
-        self.execute_task_calls: list[tuple[str, dict, str, tuple, str, str, str]] = []
+        self.execute_task_calls: list[
+            tuple[str, dict, str, tuple, str, str, str, str]
+        ] = []
         self.idea_analyze_calls: list[
             tuple[str, str, str, tuple, tuple, tuple, str, dict | None]
         ] = []
         self.idea_fix_calls: list[
-            tuple[str, str, tuple, tuple, str, str, str]
+            tuple[str, str, tuple, tuple, str, str, str, str]
         ] = []
 
     def generate_report_draft(
@@ -867,6 +874,7 @@ class FakeLLM:
         problem_text: str,
         qa_text: str,
         feedback: str = "",
+        global_note: str = "",
     ) -> str:
         self.execute_task_calls.append(
             (
@@ -877,6 +885,7 @@ class FakeLLM:
                 problem_text,
                 qa_text,
                 feedback,
+                global_note,
             )
         )
         return self._executed_main_c or main_c
@@ -916,6 +925,33 @@ class FakeLLM:
             )
         )
         return self._task_discussion or TaskDiscussion(reply="好")
+
+    def discuss_global_idea(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+        global_note: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        self.global_discuss_calls.append(
+            (
+                problem_text,
+                qa_text,
+                tuple(requirements),
+                tuple(score_points),
+                tuple(module_interfaces),
+                main_c,
+                dict(plan) if plan is not None else None,
+                global_note,
+                tuple(history),
+            )
+        )
+        return self._global_discussion or TaskDiscussion(reply="好")
 
     def report_task_step(
         self,
@@ -963,6 +999,7 @@ class FakeLLM:
         problem_text: str,
         qa_text: str,
         main_c: str,
+        global_note: str = "",
     ) -> str:
         self.idea_fix_calls.append(
             (
@@ -973,6 +1010,7 @@ class FakeLLM:
                 problem_text,
                 qa_text,
                 main_c,
+                global_note,
             )
         )
         return self._fixed_main_c
@@ -1135,6 +1173,7 @@ class RecordingLLM:
         problem_text: str,
         qa_text: str,
         feedback: str = "",
+        global_note: str = "",
     ) -> str:
         self._record("execute_task")
         return main_c
@@ -1161,6 +1200,21 @@ class RecordingLLM:
         history: Sequence[tuple[str, str]],
     ) -> TaskDiscussion:
         self._record("discuss_task")
+        return TaskDiscussion(reply="好")
+
+    def discuss_global_idea(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+        global_note: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        self._record("discuss_global_idea")
         return TaskDiscussion(reply="好")
 
     def report_task_step(
@@ -1196,6 +1250,7 @@ class RecordingLLM:
         problem_text: str,
         qa_text: str,
         main_c: str,
+        global_note: str = "",
     ) -> str:
         self._record("apply_idea_fix")
         return main_c

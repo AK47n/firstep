@@ -4189,6 +4189,159 @@ def test_discuss_task_routes_to_remote():
     assert local.calls == []
 
 
+def test_discuss_global_idea_parsing():
+    """全局商量解析（工单 idea-suite/01）：reply 必填；空/缺失 → 重试后仍坏 →
+    LLMError。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reply": "可行——建议先补灰度循迹，再接 PID。"}))
+    )
+    llm = _llm(transport)
+    result = llm.discuss_global_idea(
+        "题面",
+        "",
+        (),
+        (),
+        ("x.h",),
+        "main.c",
+        None,
+        "全局结论：布线留 5cm 余量",
+        [("user", "整体架构要不要加一个滤波？")],
+    )
+    assert result.reply == "可行——建议先补灰度循迹，再接 PID。"
+
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": ""})))
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
+    with pytest.raises(LLMError):
+        llm.discuss_global_idea(
+            "题面", "", (), (), ("x.h",), "main.c", None, "", [("user", "你好")],
+        )
+
+
+def test_discuss_global_idea_user_prompt_sections():
+    """全局商量 prompt 契约：题面 / Q&A / 需求行 / 评分点 / 清单现状 / 接口 /
+    当前 main.c / 全局结论段 / 历史（用户：AI：逐条）+ 最新消息段。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reply": "好"}))
+    )
+    llm = _llm(transport)
+    llm.discuss_global_idea(
+        "2024 巡线小车",
+        "赛题答疑：摄像头禁用于小车",
+        [{"requirement": "循迹", "sentence": 1, "modules": ["xunji"]}],
+        [{"id": "s1", "description": "循迹得分", "score": 10}],
+        ("xunji.h 接口说明",),
+        "int main(void) {}",
+        {"version": 1, "tasks": [{"id": "t1", "title": "循迹", "status": "verified"}]},
+        "全局结论：先保证循迹稳定再上 PID",
+        [("user", "我想加滤波"), ("assistant", "9ms 采样会快吗"), ("user", "10ms 吧")],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "2024 巡线小车" in user_message
+    assert "赛题答疑：摄像头禁用于小车" in user_message
+    assert "需求" in user_message  # 需求行段
+    assert "s1｜循迹得分（10 分）" in user_message  # 评分点段
+    assert "t1｜循迹｜已验证｜依赖：-" in user_message  # 清单现状段
+    assert "xunji.h 接口说明" in user_message
+    assert "int main(void) {}" in user_message
+    assert "全局结论：先保证循迹稳定再上 PID" in user_message
+    assert "用户：" in user_message and "AI：" in user_message
+    assert "10ms 吧" in user_message
+
+    # 全局结论为空 → 无该段（既有形状）
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": "好"})))
+    llm = _llm(transport)
+    llm.discuss_global_idea(
+        "题面", "", (), (), ("x.h",), "main.c", None, "", [("user", "你好")],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "工程级全局结论" not in user_message
+
+    # 超长历史（单条超限）→ 截断标注
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": "好"})))
+    llm = _llm(transport)
+    llm.discuss_global_idea(
+        "题面",
+        "",
+        (),
+        (),
+        ("x.h",),
+        "main.c",
+        None,
+        "",
+        [("user", "疑" * (EMBEDDED_CONTENT_CAP + 100))],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "截断" in user_message
+
+
+def test_discuss_global_idea_routes_to_remote():
+    """RoutingLLM：discuss_global_idea 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.discuss_global_idea(
+        "题面", "", (), (), ("x.h",), "main.c", None, "", [("user", "你好")],
+    )
+
+    assert remote.calls == ["discuss_global_idea"]
+    assert local.calls == []
+
+
+def test_execute_task_global_note_injection():
+    """工程级全局结论注入（工单 idea-suite/01）：global_note 非空 → prompt 含
+    【工程级全局结论】段；空 → 无该段（既有形状逐字节不变）。"""
+    transport = FakeTransport(body=_api_response("int main(void) {}\n"))
+    llm = _llm(transport)
+    llm.execute_task(
+        "int main(void) {}\n",
+        {"id": "t1", "title": "循迹", "description": "循迹决策"},
+        "",
+        ("x.h",),
+        "题面",
+        "",
+        global_note="全局结论：循迹阈值先按 500 起步",
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "工程级全局结论" in user_message
+    assert "全局结论：循迹阈值先按 500 起步" in user_message
+
+    transport = FakeTransport(body=_api_response("int main(void) {}\n"))
+    llm = _llm(transport)
+    llm.execute_task(
+        "int main(void) {}\n",
+        {"id": "t1", "title": "循迹", "description": "循迹决策"},
+        "",
+        ("x.h",),
+        "题面",
+        "",
+        feedback="上板后小车不走",
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "工程级全局结论" not in user_message
+    assert "上板实测反馈" in user_message  # feedback 段仍在
+
+
+def test_apply_idea_fix_global_note_injection():
+    """直接修正注入（工单 idea-suite/01）：global_note 非空 → prompt 含
+    【工程级全局结论】段；空 → 无该段。"""
+    transport = FakeTransport(body=_api_response("int main(void) {}\n"))
+    llm = _llm(transport)
+    llm.apply_idea_fix(
+        "阈值太高",
+        "把阈值从 900 降到 500",
+        ("t1",),
+        ("x.h",),
+        "题面",
+        "",
+        "int main(void) {}\n",
+        global_note="全局结论：循迹阈值先按 500 起步",
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "工程级全局结论" in user_message
+    assert "全局结论：循迹阈值先按 500 起步" in user_message
+
+
 def test_report_task_step_parsing():
     """步骤报告解析（工单 stepwise-deepen/01）：what_changed 必填；user_action
     可缺省为空串；what_changed 空/缺失 → 重试后仍坏 → LLMError。"""
@@ -5092,6 +5245,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "execute_task",
         "discuss_buy_options",
         "discuss_task",
+        "discuss_global_idea",
         "report_task_step",
         "analyze_idea",
         "apply_idea_fix",
@@ -5119,6 +5273,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.execute_task("main.c", {}, "", [], "题面", "")
     router.discuss_buy_options("题面", "需求", "stm32", [], [])
     router.discuss_task({}, "题面", "", [], [], "main.c", [])
+    router.discuss_global_idea("题面", "", [], [], (), "main.c", None, "", [])
     router.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
     router.analyze_idea("想法", "题面", "", [], [], (), "main.c", None)
     router.apply_idea_fix("想法", "建议", [], (), "题面", "", "main.c")
@@ -5154,6 +5309,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "execute_task",
         "discuss_buy_options",
         "discuss_task",
+        "discuss_global_idea",
         "report_task_step",
         "analyze_idea",
         "apply_idea_fix",

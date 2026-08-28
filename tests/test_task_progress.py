@@ -1892,10 +1892,11 @@ def test_run_direct_fix_verified_when_compile_passes(tmp_path, monkeypatch):
     assert result["main_diff"]["stats"]["additions"] >= 1
     assert result["step_report"]["what_changed"]
     assert result["step_report"]["user_action"]
-    idea, fix_summary, affected, interfaces, ptext, qa, main = llm.idea_fix_calls[0]
+    idea, fix_summary, affected, interfaces, ptext, qa, main, global_note = llm.idea_fix_calls[0]
     assert idea == "阈值太高"
     assert fix_summary == "把阈值从 500 降到 350"
     assert affected == ("t1",)
+    assert global_note == ""  # 未采纳全局结论 = 空串（工单 idea-suite/01）
     assert "task_reporting" in events
     assert "verify_result" in events
     # 不造任务轮次（run_direct_fix 不 touch plan）
@@ -1928,6 +1929,71 @@ def test_run_direct_fix_without_toolchain_degrades(tmp_path, monkeypatch):
     assert result["status"] == STATUS_UNVERIFIED
     assert "未验证" in result["message"]
     assert "阈值已调" in (output_dir / "main.c").read_text(encoding="utf-8")
+
+
+def test_run_direct_fix_passes_global_note(tmp_path, monkeypatch):
+    """工程级全局结论透传（工单 idea-suite/01）：run_direct_fix 的 global_note
+    原样交给 llm.apply_idea_fix（修正亦与之保持一致）。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(fixed_main_c="int main(void) { /* 阈值已调 */ while (1); }\n")
+    run_direct_fix(
+        llm=llm,
+        idea="阈值太高",
+        fix_summary="",
+        affected=[],
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        global_note="全局结论：阈值先按 350 起步",
+    )
+    assert llm.idea_fix_calls[0][-1] == "全局结论：阈值先按 350 起步"
+
+
+def test_run_task_passes_global_note(tmp_path, monkeypatch):
+    """工程级全局结论透传（工单 idea-suite/01）：run_task 的 global_note 原样
+    交给 llm.execute_task（任何一步执行都与之保持一致）。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n")
+    run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        global_note="全局结论：循迹阈值先按 500 起步",
+    )
+    assert llm.execute_task_calls[0][-1] == "全局结论：循迹阈值先按 500 起步"
 
 
 def test_run_direct_fix_empty_result_raises(tmp_path, monkeypatch):
@@ -2398,3 +2464,161 @@ def test_tasks_discuss_endpoint(tasks_client):
     )
     assert resp.status_code == 502
     assert "上游超时" in resp.json()["detail"]
+
+
+def test_tasks_idea_chat_send_read_adopt_flow(tasks_client):
+    """全局商量三端点（工单 idea-suite/01）：send 落盘 user+assistant 两条 →
+    read 全量读回 → adopt 覆盖 note / 空串清除；LLM 失败不落半轮。"""
+    from contest_generator.idea_chat import IDEA_CHAT_FILENAME, read_idea_chat
+    from contest_generator.llm import LLMError, TaskDiscussion
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        global_discussion=TaskDiscussion(reply="可行——先加一阶低通，再接 PID。"),
+    )
+
+    # 无文件 read → 空聊天（不 400）
+    resp = client.post("/api/tasks/idea/chat/read", json={"output_dir": output_dir})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["chat"]["messages"] == []
+    assert resp.json()["chat"]["note"] == ""
+
+    # send 一轮：历史单通道（最后一条 user = 本轮消息）
+    resp = client.post(
+        "/api/tasks/idea/chat/send",
+        json={
+            "output_dir": output_dir,
+            "history": [{"role": "user", "content": "整体架构要不要加滤波？"}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["reply"] == "可行——先加一阶低通，再接 PID。"
+    chat = read_idea_chat(Path(output_dir))
+    assert [m.role for m in chat.messages] == ["user", "assistant"]
+    assert chat.messages[0].content == "整体架构要不要加滤波？"
+    assert (Path(output_dir) / IDEA_CHAT_FILENAME).is_file()
+    # LLM 输入：题面/接口/main.c/清单(未拆解 None)/全局结论空/历史含本轮
+    (problem, qa, reqs, points, interfaces, main_c, plan, note, history) = (
+        holder["llm"].global_discuss_calls[0]
+    )
+    assert history == (("user", "整体架构要不要加滤波？"),)
+    assert note == ""
+    assert plan is None  # 未拆解允许全局商量
+    assert main_c.strip()
+
+    # read：全量读回
+    resp = client.post("/api/tasks/idea/chat/read", json={"output_dir": output_dir})
+    assert resp.status_code == 200
+    data = resp.json()["chat"]
+    assert len(data["messages"]) == 2
+    assert data["messages"][1]["content"] == "可行——先加一阶低通，再接 PID。"
+
+    # adopt：覆盖 note；再发一轮后 note 仍在（后缀消息不清除）
+    resp = client.post(
+        "/api/tasks/idea/chat/adopt",
+        json={"output_dir": output_dir, "text": "全局结论：先保证循迹稳定再上 PID"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["chat"]["note"] == "全局结论：先保证循迹稳定再上 PID"
+    assert read_idea_chat(Path(output_dir)).note == "全局结论：先保证循迹稳定再上 PID"
+
+    # adopt 空串 = 清除
+    resp = client.post(
+        "/api/tasks/idea/chat/adopt", json={"output_dir": output_dir, "text": ""}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["chat"]["note"] == ""
+    assert read_idea_chat(Path(output_dir)).note == ""
+
+    # 校验 400：history 空 / role 非法 / text 非字符串
+    resp = client.post(
+        "/api/tasks/idea/chat/send",
+        json={"output_dir": output_dir, "history": []},
+    )
+    assert resp.status_code == 400
+    resp = client.post(
+        "/api/tasks/idea/chat/send",
+        json={
+            "output_dir": output_dir,
+            "history": [{"role": "system", "content": "坏"}],
+        },
+    )
+    assert resp.status_code == 400
+    # 末条强制 user（评审整改）：assistant 结尾会被错标为 user 落盘——拒收
+    resp = client.post(
+        "/api/tasks/idea/chat/send",
+        json={
+            "output_dir": output_dir,
+            "history": [{"role": "assistant", "content": "AI 结尾"}],
+        },
+    )
+    assert resp.status_code == 400
+    assert "最后一条必须是 user" in resp.json()["detail"]
+    resp = client.post(
+        "/api/tasks/idea/chat/adopt",
+        json={"output_dir": output_dir, "text": 123},
+    )
+    assert resp.status_code == 400
+    assert "必须是字符串" in resp.json()["detail"]
+
+    # LLM 失败 → 502 且不落半轮（user 消息也不追加；历史仍是上一轮 2 条）
+    class _BoomGlobal:
+        def discuss_global_idea(self, **kwargs):
+            raise LLMError("上游超时")
+
+    holder["llm"] = _BoomGlobal()
+    before = len(read_idea_chat(Path(output_dir)).messages)
+    resp = client.post(
+        "/api/tasks/idea/chat/send",
+        json={
+            "output_dir": output_dir,
+            "history": [{"role": "user", "content": "又想到一个问题"}],
+        },
+    )
+    assert resp.status_code == 502
+    assert len(read_idea_chat(Path(output_dir)).messages) == before
+
+
+def test_tasks_execute_injects_global_note(tasks_client, monkeypatch):
+    """执行端点注入全局结论（工单 idea-suite/01）：.contest_idea_chat.json
+    的 note → run_task 的 global_note 透传 LLM；无文件 → 空串。"""
+    from contest_generator.idea_chat import read_idea_chat, set_chat_note, write_idea_chat
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    write_idea_chat(
+        Path(output_dir),
+        set_chat_note(read_idea_chat(Path(output_dir)), "全局结论：循迹阈值 500 起步"),
+    )
+    holder["llm"] = FakeLLM(
+        executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n"
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    resp = client.post(
+        "/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert holder["llm"].execute_task_calls[0][-1] == "全局结论：循迹阈值 500 起步"
+
+    # 清除聊天文件 → 空串（既有形状）
+    (Path(output_dir) / ".contest_idea_chat.json").unlink()
+    holder["llm"] = FakeLLM(
+        executed_main_c="int main(void) { /* 循迹再实现 */ while (1); }\n"
+    )
+    resp = client.post(
+        "/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert holder["llm"].execute_task_calls[-1][-1] == ""

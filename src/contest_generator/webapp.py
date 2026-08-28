@@ -658,6 +658,16 @@ def _optional_str(payload: dict, key: str) -> str:
     return value.strip()
 
 
+def _read_global_note(output_dir: Path) -> str:
+    """读工程级全局结论（工单 idea-suite/01）：全局商量采纳的结论 → 注入
+    每步任务执行 / 直接修正的 prompt；无文件 / 未采纳 = 空串（既有调用形状
+    逐字节不变）。坏 JSON → TaskError 400（与聊天路由同日径：读侧宁拒收不吞）。
+    """
+    from .idea_chat import read_idea_chat
+
+    return read_idea_chat(output_dir).note
+
+
 def _optional_dict(payload: dict, key: str) -> dict | None:
     """可选 dict：缺省 / null / 空对象 → None（恢复默认）；类型非法抛 400。
 
@@ -2089,6 +2099,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # main.c 现读（手工编辑保留，与拆解 / 深化同口径）
         main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
         resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        # 工程级全局结论（工单 idea-suite/01）：全局商量采纳的结论 → 注入
+        # 本步执行 prompt（空串 = 未采纳，调用形状不变）
+        global_note = _read_global_note(output_dir)
         budget = RetryBudget()
         collector = create_llm_observation_collector("tasks-execute")
         llm = _llm(context, budget, collector)
@@ -2116,6 +2129,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         make_override=config.gmake_path,
                         module_slugs=fields["slugs"],
                         feedback=feedback,
+                        global_note=global_note,
                     )
                 emit.done(result)
             finally:
@@ -2330,6 +2344,140 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         return {"reply": discussion.reply}
 
     # ------------------------------------------------------------------
+    # 全局工程级商量（工单 idea-suite/01）：不绑任务卡的多轮对话——针对
+    # 整个工程的连续追问（架构 / 策略 / 方案选型），历史落盘
+    # .contest_idea_chat.json（与任务卡商量会话级不落盘不同）；回复可
+    # 「转成任务 / 转成修正」（走 idea 落地通道）/「采纳为全局结论」
+    # （note 落盘，后续每步任务执行与直接修正注入 prompt）。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/idea/chat/read")
+    @_map_errors
+    def tasks_idea_chat_read(payload: dict) -> dict:
+        """读全局商量记录（同步端点）：{output_dir} → {chat}。
+
+        无文件 = 空聊天（未聊过，不 400——与 plan-read 同先例）；坏 JSON /
+        非对象 → TaskError 400 中文。chat = {version, generated_at,
+        messages: [{role, content, at}...], note}（note = 已采纳的全局结论，
+        空串 = 未采纳）。
+        """
+        from .idea_chat import read_idea_chat
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        return {"chat": read_idea_chat(output_dir).to_dict()}
+
+    @app.post("/api/tasks/idea/chat/send")
+    @_map_errors
+    def tasks_idea_chat_send(payload: dict) -> dict:
+        """全局商量一轮（同步端点）：{output_dir, history} → {reply, chat}。
+
+        request 契约与 /api/tasks/discuss 同构：history（必填非空数组，旧 → 新，
+        [{role: user|assistant, content}]，最后一条 user = 本轮消息——单通道，
+        无独立 message 参数，防错位设计）。服务端读 .contest_context.json
+        （题面 / Q&A / 需求 / 模块集）+ 现读 main.c + 任务清单（未拆解允许——
+        全局商量不依赖清单）+ 已采纳全局结论 → LLM 工程总顾问 → 成功才追加
+        user+assistant 两条消息落盘 → {reply, chat}（原子轮次：LLM 失败 →
+        502 且不落半轮，刷新后历史仍是上一轮——回复为空无意义，本轮消息也
+        不追加）。
+
+        缺题面 → 400（商量需要题面证据）。
+        """
+        from .idea_chat import append_chat_message, read_idea_chat, write_idea_chat
+        from .skeleton import build_skeleton_interfaces
+        from .task_progress import read_task_plan
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        raw_history = payload.get("history")
+        if not isinstance(raw_history, list) or not raw_history:
+            raise TaskError(
+                "history 必须是数组（旧 → 新的讨论记录，最后一条 = 本轮消息）"
+            )
+        history: list[tuple[str, str]] = []
+        for index, item in enumerate(raw_history, 1):
+            if not isinstance(item, dict):
+                raise TaskError(f"history 第 {index} 条必须是对象")
+            role = item.get("role")
+            if role not in ("user", "assistant"):
+                raise TaskError(
+                    f"history 第 {index} 条 role 必须是 user 或 assistant"
+                )
+            content = item.get("content")
+            if not isinstance(content, str):
+                raise TaskError(f"history 第 {index} 条 content 必须是字符串")
+            history.append((role, content))
+        # 末条强制 user（评审整改）+：误传 assistant 结尾会把 AI 文本错标为
+        # user 落盘——全局聊天持久化落盘，比 task-discuss（会话级）后果重。
+        if history[-1][0] != "user":
+            raise TaskError(
+                "history 最后一条必须是 user（本轮消息）——请检查讨论记录形状"
+            )
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if not fields.get("problem_text"):
+            raise TaskError("缺少赛题原文——请先补题面（全局商量需要题面证据）")
+        platform = fields["platform"]
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        interfaces = build_skeleton_interfaces(
+            resolved.manifests,
+            platform,
+            module_library_dir,
+            master_project_dir(config.masters_dir, platform),
+        )
+        plan = read_task_plan(output_dir)
+        score_points = parse_score_points(payload.get("score_points"))
+        chat = read_idea_chat(output_dir)
+
+        collector = create_llm_observation_collector("tasks-idea-chat")
+        try:
+            llm = _llm(context, RetryBudget(), collector)
+            discussion = llm.discuss_global_idea(
+                problem_text=fields["problem_text"],
+                qa_text=fields.get("qa_text", ""),
+                requirements=fields.get("requirements", []) or [],
+                score_points=[p.to_dict() for p in score_points],
+                module_interfaces=interfaces,
+                main_c=main_c,
+                plan=plan.to_dict() if plan is not None else None,
+                global_note=chat.note,
+                history=history,
+            )
+        finally:
+            context.recent_llm_workflows.add_completed(collector)
+        # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）
+        chat = append_chat_message(chat, "user", history[-1][1])
+        chat = append_chat_message(chat, "assistant", discussion.reply)
+        write_idea_chat(output_dir, chat)
+        return {"reply": discussion.reply, "chat": chat.to_dict()}
+
+    @app.post("/api/tasks/idea/chat/adopt")
+    @_map_errors
+    def tasks_idea_chat_adopt(payload: dict) -> dict:
+        """采纳 / 清除全局结论（同步端点）：{output_dir, text} → {chat}。
+
+        text 为字符串（空串 = 清除采纳——采纳错了可撤销）；写入 note 落盘
+        （最新覆盖），后续每步任务执行与直接修正注入 prompt。text 非字符串
+        由本路由校验（照 dialog-adopt 先例）；返回 {chat}。
+        """
+        from .idea_chat import read_idea_chat, set_chat_note, write_idea_chat
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        text = payload.get("text")
+        if not isinstance(text, str):
+            raise TaskError("text 必须是字符串（空串 = 清除采纳）")
+        chat = read_idea_chat(output_dir)
+        updated = set_chat_note(chat, text)
+        write_idea_chat(output_dir, updated)
+        return {"chat": updated.to_dict()}
+
+    # ------------------------------------------------------------------
     # 灵活修正（工单 idea-fix/01）：全局「新想法 / 问题」入口——分析（分类）
     # / 插入任务卡 / 直接修正（复用编译验证尾段与备份回滚入口）/ 标记重做。
     # 域判决在 task_progress（insert_task_from_idea / set_tasks_needs_redo /
@@ -2493,6 +2641,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         plan = read_task_plan(output_dir)
         if affected and plan is None:
             raise TaskError("该目录尚未拆解任务——无法标记受影响任务，请先拆解")
+        # 工程级全局结论（工单 idea-suite/01）：注入本步修正 prompt（空串 = 未采纳）
+        global_note = _read_global_note(output_dir)
         budget = RetryBudget()
         collector = create_llm_observation_collector("tasks-idea-fix")
         llm = _llm(context, budget, collector)
@@ -2520,6 +2670,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         uv4_override=config.uv4_path,
                         make_override=config.gmake_path,
                         module_slugs=fields["slugs"],
+                        global_note=global_note,
                     )
                 # 修正成功落盘后：受影响任务标「建议重做」（不落失败半成品）
                 if affected and plan is not None:
