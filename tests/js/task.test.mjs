@@ -14,6 +14,8 @@ import {
   globalChatHTML, globalNoteBadgeHTML,
   taskEditFormHTML, taskMoveButtonsHTML,
   ideaDraftListHTML,
+  taskResourcesHTML, resourcesOverviewHTML, taskChecklistHTML,
+  checklistStateKey,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -754,4 +756,132 @@ test("ideaDraftListHTML: busy 禁用全部按钮 + 注入转义", () => {
   assert.ok(!evil.includes("<script>alert(1)</script>"));
   assert.ok(evil.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
   assert.ok(evil.includes('data-draft-text="&lt;script&gt;alert(1)&lt;/script&gt;"'));
+});
+
+// ---------------------------------------------------------------------------
+// 资源占用 + 上板自检清单（工单 task-insight/02）
+// ---------------------------------------------------------------------------
+
+test("taskResourcesHTML: 资源 chips 渲染 / 空串（旧清单无字段）", () => {
+  const html = taskResourcesHTML({ id: "t1", resources: ["PA0", "TIM1", "UART0"] });
+  assert.ok(html.includes("资源："));
+  assert.ok(html.includes('class="res-chip">PA0<'));
+  assert.ok(html.includes('class="res-chip">TIM1<'));
+  assert.ok(html.includes('class="res-chip">UART0<'));
+  assert.equal(taskResourcesHTML({ id: "t1" }), "");
+  assert.equal(taskResourcesHTML({ id: "t1", resources: [] }), "");
+  assert.equal(taskResourcesHTML(null), "");
+});
+
+test("resourcesOverviewHTML: 聚合 + 冲突标黄 + 转义 + 空串", () => {
+  const plan = {
+    tasks: [
+      { id: "t1", title: "循迹", resources: ["PA0", "TIM1"] },
+      { id: "t2", title: "显示", resources: ["PA0", "UART0"] },
+      { id: "t3", title: "电机", resources: [] },
+      { id: "t4", title: "无线" },
+    ],
+  };
+  const html = resourcesOverviewHTML(plan);
+  assert.ok(html.includes("资源总览"));
+  // PA0 被 t1/t2 共用 → 冲突行标黄
+  assert.ok(html.includes("res-conflict"));
+  assert.ok(html.includes("⚠ 多任务使用，上板前确认"));
+  assert.ok(html.includes("t1：循迹"));
+  assert.ok(html.includes("t2：显示"));
+  // 单任务资源不标冲突
+  assert.ok(html.includes(">TIM1<"));
+  const timRow = html.split("res-row").find((s) => s.includes("TIM1"));
+  assert.ok(!timRow.includes("res-conflict"));
+  // 全部无资源 → 空串
+  assert.equal(resourcesOverviewHTML({ tasks: [{ id: "t1", title: "x" }] }), "");
+  assert.equal(resourcesOverviewHTML(null), "");
+  // 转义（资源名/标题含特殊字符）
+  const evil = resourcesOverviewHTML({ tasks: [{ id: "t1", title: '<img src=x>', resources: ['A"B'] }] });
+  assert.ok(!evil.includes("<img src=x>"));
+  assert.ok(evil.includes("&lt;img src=x&gt;"));
+  assert.ok(evil.includes("A&quot;B"));
+});
+
+test("taskChecklistHTML: 勾选渲染（checkedMap）+ 空串", () => {
+  const iteration = {
+    seq: 1,
+    checklist: ["烧录后应看到 LED 闪烁。", "若不闪检查 PA0 与 LED DIO 接线。"],
+  };
+  const html = taskChecklistHTML(iteration, "t1/1", { 1: true });
+  assert.ok(html.includes("上板自检清单"));
+  assert.ok(html.includes('data-check-key="t1/1"'));
+  assert.ok(html.includes('data-check-idx="0"'));
+  assert.ok(html.includes('data-check-idx="1" checked'));
+  assert.ok(html.includes("烧录后应看到 LED 闪烁。"));
+  // 无 checklist / 空数组 → 空串；key 转义
+  assert.equal(taskChecklistHTML({ seq: 1, checklist: [] }, "t1/1", {}), "");
+  assert.equal(taskChecklistHTML(null, "t1/1", {}), "");
+  const evil = taskChecklistHTML(
+    { seq: 1, checklist: ['<script>x</script>'] },
+    't"1/1', {},
+  );
+  assert.ok(!evil.includes("<script>x</script>"));
+  assert.ok(evil.includes("&lt;script&gt;x&lt;/script&gt;"));
+});
+
+test("taskStepReportHTML: 集成上板自检清单（opts.checkKey/checkedMap）", () => {
+  const task = {
+    id: "t1",
+    iterations: [{
+      seq: 2,
+      kind: "execute",
+      what_changed: "实现了循迹。",
+      user_action: "烧录观察。",
+      checklist: ["现象 A", "异常查 B"],
+      status: "verified",
+    }],
+  };
+  const report = taskStepReportHTML(task, { checkKey: "t1/2", checkedMap: { 0: true } });
+  assert.ok(report.includes("AI 做了什么"));
+  assert.ok(report.includes("上板自检清单"));
+  assert.ok(report.includes('data-check-key="t1/2"'));
+  assert.ok(report.includes('data-check-idx="0" checked'));
+  // 无 opts（旧调用点）→ 无 checklist 段也不炸
+  const legacy = taskStepReportHTML(task);
+  assert.ok(legacy.includes("AI 做了什么"));
+  assert.ok(!legacy.includes("上板自检清单"));
+});
+
+test("taskCardHTML: 资源徽标集成（非空才渲染）", () => {
+  const base = { id: "t1", title: "循迹", description: "描述", status: "pending" };
+  const withRes = taskCardHTML({ ...base, resources: ["PA0"] }, 0, {});
+  assert.ok(withRes.includes("资源："));
+  assert.ok(withRes.includes('class="res-chip">PA0<'));
+  const without = taskCardHTML(base, 0, {});
+  assert.ok(!without.includes("资源："));
+});
+
+test("checklistStateKey: 勾选键单源格式（firstep.checklist.v1.<taskId>/<seq>）", () => {
+  assert.equal(checklistStateKey("t1", 1), "firstep.checklist.v1.t1/1");
+  assert.equal(checklistStateKey("t3", 12), "firstep.checklist.v1.t3/12");
+});
+
+test("taskCardHTML: 最新轮 checklist 常驻卡上（opts.checklistState 桥回显勾选）", () => {
+  const task = {
+    id: "t1", title: "循迹", description: "描述", status: "unverified",
+    iterations: [{
+      seq: 1, kind: "execute", status: "unverified",
+      checklist: ["烧录后应看到 LED 闪烁。", "若不闪检查接线。"],
+    }],
+  };
+  let called = null;
+  const html = taskCardHTML(task, 0, {
+    checklistState: (taskId, seq) => { called = [taskId, seq]; return { 1: true }; },
+  });
+  assert.ok(html.includes("上板自检清单"));
+  assert.ok(html.includes('data-check-key="t1/1"'));
+  assert.ok(html.includes('data-check-idx="1" checked'));
+  assert.deepEqual(called, ["t1", 1]);
+  // 无 checklistState 桥 → 不渲染（缺回显源不画无用勾选）
+  const noBridge = taskCardHTML(task, 0, {});
+  assert.ok(!noBridge.includes("上板自检清单"));
+  // 无轮次 → 不渲染
+  const noIter = taskCardHTML({ ...task, iterations: [] }, 0, { checklistState: () => ({}) });
+  assert.ok(!noIter.includes("上板自检清单"));
 });

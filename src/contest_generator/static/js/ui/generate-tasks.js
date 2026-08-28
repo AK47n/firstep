@@ -21,7 +21,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey } from "/js/fx/task.js";
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -152,6 +152,9 @@ function tasksRender() {
       // outputDir（工单 flash-step-button/01）：任务卡烧录控制行需要输出目录
       //（卡内独立容器，uid = task.id）——透传给 taskCardHTML
       outputDir: tasks.outputDir,
+      // 上板自检清单勾选桥（工单 task-insight/02）：任务卡常驻最新轮清单——
+      // 刷新后卡随 tasksRender 重建，勾选态经本桥从 localStorage 回显
+      checklistState: (taskId, seq) => checklistRead(taskId, seq),
       // 编辑态（工单 idea-suite/04）：taskEditOpen 含该卡 id = 表单已展开
       editing: (taskId) => taskEditOpen.has(taskId),
       actions: (task) => {
@@ -207,6 +210,12 @@ function tasksRender() {
   const overviewHTML = tasksOverviewHTML(plan);
   overview.innerHTML = overviewHTML;
   overview.classList.toggle("hidden", !overviewHTML);
+  // 资源总览（工单 task-insight/02）：资源 × 使用任务聚合表，冲突行标黄
+  //（同一资源 ≥2 任务占用 = 联调冲突暗雷）；紧跟进度总览，空串隐藏
+  const resBox = $("tasks-resources");
+  const resHTML = resourcesOverviewHTML(plan);
+  resBox.innerHTML = resHTML;
+  resBox.classList.toggle("hidden", !resHTML);
   $("btn-tasks-replan").classList.toggle("hidden", !(plan && (plan.tasks || []).length));
 }
 
@@ -924,6 +933,28 @@ async function tasksExecute(taskId, feedback) {
   }
 }
 
+/** 上板自检清单勾选态（工单 task-insight/02）：localStorage 备忘（key 单源
+ * = fx/task.js checklistStateKey——firstep.checklist.v1.<taskId>/<seq>，值
+ * = {序号: true} JSON）——纯前端个人备忘，不落 .contest_tasks.json、不影响
+ * 状态机（spec 决策）。读失败降级空对象（私密模式等）。 */
+function checklistRead(taskId, seq) {
+  try {
+    const raw = localStorage.getItem(checklistStateKey(taskId, seq));
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function checklistWrite(taskId, seq, checkedMap) {
+  try {
+    localStorage.setItem(checklistStateKey(taskId, seq), JSON.stringify(checkedMap));
+  } catch (e) {
+    // 写失败（配额 / 私密模式）：备忘录降级为会话内——不阻断任务流程
+  }
+}
+
 /** 任务执行结果面板（照深化结果卡先例）：状态徽章 + 编译摘要 + diff + 备份 +
  * 回滚按钮（复用 /api/revise/rollback，同备份族——backup_tree 同盘）。
  * 插入位置 = tasks-grid 容器内（beforeend）而非 afterend：结果面板的操作按钮
@@ -941,9 +972,18 @@ function tasksRenderResult(taskId, data) {
   // 反馈轮提示：最近一轮若是上板反馈，把用户反馈原文展示在结果面板（追溯）
   // ——纯函数单源 fx/task.js taskLatestFeedbackNote（评审整改：胶水层不拼 HTML）
   const feedbackNote = taskLatestFeedbackNote(task);
-  // 步骤报告（工单 stepwise-deepen/02）：AI 本步「做了什么 + 接下来你要做什么」
-  //（含接线/上板指引）；降级空串由纯函数侧渲染中文兜底
-  const stepReport = taskStepReportHTML(task);
+  // 步骤报告（工单 stepwise-deepen/02 + task-insight/02）：AI 本步「做了什么 +
+  // 接下来你要做什么」（含接线/上板指引）+ 上板自检清单（最新轮 checklist，
+  // 勾选态 localStorage 备忘——key = taskId+"/"+seq）；降级空串由纯函数侧渲染
+  // 中文兜底。checklist 勾选变化经 change 委托写盘（本函数只读盘渲染快照）。
+  const iterations = task.iterations || [];
+  const lastIter = iterations.length ? iterations[iterations.length - 1] : null;
+  const checkKey = (task.id && lastIter && lastIter.seq !== undefined)
+    ? task.id + "/" + lastIter.seq : "";
+  const stepReport = taskStepReportHTML(task, {
+    checkKey,
+    checkedMap: checkKey ? checklistRead(task.id, lastIter.seq) : {},
+  });
   $("tasks-grid").insertAdjacentHTML("beforeend",
     '<div class="item" id="tasks-result" style="margin-top:10px">'
     + '<div class="head"><span class="slug">' + esc(task.id || taskId) + " · " + esc(task.title || "") + " 执行结果</span> " + markup.badge + "</div>"
@@ -1393,6 +1433,35 @@ $("tasks-grid").addEventListener("click", (event) => {
   const clear = event.target.closest(".btn-task-dialog-clear");
   if (clear) tasksDialogClear(clear.dataset.task);
 });
+// 上板自检清单勾选（工单 task-insight/02）：change 委托（checkbox 勾选不触发
+// click 委托分支）——写 localStorage 备忘，不重渲染（DOM 态已由浏览器更新）
+$("tasks-grid").addEventListener("change", (event) => {
+  const input = event.target.closest ? event.target.closest(".task-check-input") : null;
+  if (!input) return;
+  const key = input.dataset.checkKey;
+  const idx = Number(input.dataset.checkIdx);
+  if (!key || Number.isNaN(idx)) return;
+  const parts = key.split("/");
+  if (parts.length !== 2) return;
+  const [taskId, seq] = parts;
+  const map = checklistRead(taskId, seq);
+  if (input.checked) map[idx] = true;
+  else delete map[idx];
+  checklistWrite(taskId, seq, map);
+});
+// 清空任务面板（保留类名容器状态；评审整改：两处跨簇重置与 tasksRender 的
+// 隐藏逻辑收敛——曾三处手写相同的 overview/resources 清空块，漂移即漏清）
+function clearTasksPanel() {
+  $("tasks-grid").classList.add("hidden");
+  $("tasks-grid").innerHTML = "";
+  const overview = $("tasks-overview");
+  if (overview) { overview.innerHTML = ""; overview.classList.add("hidden"); }
+  const resBox = $("tasks-resources");
+  if (resBox) { resBox.innerHTML = ""; resBox.classList.add("hidden"); }
+  $("tasks-progress").textContent = "";
+  $("btn-tasks-replan").classList.add("hidden");
+}
+
 // 跨簇通知（revise 上下文入口加载后广播）：目录不同 = 旧清单与当前目录无关，
 // 清空本簇状态（显示占位，等用户拆解）——revise 簇负责状态生命周期与广播时机，
 // 本簇只消费事件（零模块耦合：跨簇取值走 reviseGetDir 单点已够）。
@@ -1403,12 +1472,7 @@ window.addEventListener("revise-context-loaded", (event) => {
     tasks.plan = null;
     taskDialogs.clear();
     taskEditOpen.clear();
-    $("tasks-grid").classList.add("hidden");
-    $("tasks-grid").innerHTML = "";
-    const overview = $("tasks-overview");
-    if (overview) { overview.innerHTML = ""; overview.classList.add("hidden"); }
-    $("tasks-progress").textContent = "";
-    $("btn-tasks-replan").classList.add("hidden");
+    clearTasksPanel();
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = "";
     resetIdeaArea();
@@ -1430,14 +1494,9 @@ window.addEventListener("tasks-invalidated", (event) => {
   tasks.plan = null;
   taskDialogs.clear();
   taskEditOpen.clear();
-  $("tasks-grid").classList.add("hidden");
-  $("tasks-grid").innerHTML = "";
   const stale = $("tasks-result");
   if (stale) stale.remove();
-  const overview = $("tasks-overview");
-  if (overview) { overview.innerHTML = ""; overview.classList.add("hidden"); }
-  $("tasks-progress").textContent = "";
-  $("btn-tasks-replan").classList.add("hidden");
+  clearTasksPanel();
   $("tasks-status").textContent = "";
   $("tasks-msg").textContent = "任务清单已作废（修订重生成）：请点「拆解任务」按新工程重新拆解";
   resetIdeaArea();
