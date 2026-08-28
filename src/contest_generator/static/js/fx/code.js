@@ -1,11 +1,14 @@
-// fx/code.js — main.c 工具纯函数（工单 frontend-es-modules/01，迁自 index.html 4315-4369 /
+// fx/code.js — main.c 工具模块（工单 frontend-es-modules/01，迁自 index.html 4315-4369 /
 // 4394-4403 / 4434-4440 / 5222-5233）。原实现刻意自包含（不引用模块级常量、不调用
 // 其它抽取函数）；模块化后 esc 单源化自 fx/core.js（cHighlight 原局部 esc 已移除，
 // 行为零变化），其余函数保持逐字原样。
-// maincScrollToRange / maincJumpToLine 迁自 ui/generate-fix.js（工单 error-jump-task/02）：
-// 修复中心与任务结果面板共用同一跳转单源；迁入后 maincJumpToLine 返回错误码
-// （null 成功 / "empty" / "out-of-range" / "no-textarea"），toast 由调用方做
-// （fx 模块不 import app.js 的 toast）。
+// 模块约定见 fx/core.js 头部：主体为纯函数（cHighlight / cLineCount / … /
+// maincLineOffsetRange）；下述两个交互例外（error-jump-task/02 迁移说明）——
+// maincScrollToRange / maincJumpToLine 是 DOM 交互件（硬编码 #main-c /
+// #main-c-hl 全局查询 + 卡片展开 / 滚动 / 选区），fx/generate.js 的
+// syncCollapseBtn 同款先例（节点参数式）；例外已如实声明，不再与「纯函数」
+// 表述冲突。maincJumpToLine 返回错误码（null 成功 / "empty" / "out-of-range"
+// / "no-textarea"），toast 由调用方做（fx 模块不 import app.js 的 toast）。
 import { esc } from "./core.js";
 import { syncCollapseBtn } from "./generate.js";
 

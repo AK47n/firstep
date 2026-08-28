@@ -95,7 +95,10 @@ def verify_compile_tail(
         return {
             "status": STATUS_UNVERIFIED,
             "backup_id": backup_id,
-            "compile": {"passed": None, "exit_code": None, "summary": ""},
+            "compile": {
+                "passed": None, "exit_code": None, "summary": "",
+                "parsed_errors": [],  # 无工具链 = 无编译输出（error-jump-task 评审整改：与 _compile_summary 同型）
+            },
             "main_diff": main_diff,
             "message": _status_message(STATUS_UNVERIFIED, subject),
         }
