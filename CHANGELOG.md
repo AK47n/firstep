@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3f40d798fdd61accd792ceb3ffc1541953c6e8a6 -->
+<!-- changelog-auto: last-commit=381e790f34780d573cbd6cab988cb55a74015a34 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 12:36 逐步深化/03：域词条同步（深化/任务推进/步骤报告）+ 全量回归 2608 pytest + 530 JS + 50 语言检查（工单 resolved）
 - 12:58 逐步深化/04：fix 卡片上板指引消失——compile 任务已验证（编译通过）仍常驻「下一步要做」，仅 manual 人工确认后隐藏（工单 resolved）
 - 13:01 逐步深化/05：fix 做这一步点击无即时反应——点击即置进行中重渲染（徽章切换+按钮消失）+ busy 显式提示 + 失败重读磁盘回填（工单 resolved）
+- 13:03 逐步深化/06：任务卡「和 AI 商量」改澄清语义——按钮「有不懂的？问这里」+ 对话引导语/placeholder 提问导向（工单 resolved）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
