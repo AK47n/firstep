@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f4c730cf9259195e930844ef1d886137e7475366 -->
+<!-- changelog-auto: last-commit=098fc99f81ea8653294f6c33be10fa27446510bf -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 13:03 逐步深化/06：任务卡「和 AI 商量」改澄清语义——按钮「有不懂的？问这里」+ 对话引导语/placeholder 提问导向（工单 resolved）
 - 13:28 烧录/01：烧录执行层（flash.py + POST /api/flash + config 三键 + FlashError 登记）——固件定位/工具探测（DSLite零安装）/三 builder/180s 超时/输出尾40行/中文结果；平台从产物树反推（工单 resolved）
 - 13:36 烧录/02：前端烧录按钮+结果展示+指引卡+设置三输入（fx/flash.js 纯函数 + ui/flash.js 共享执行体；两处按钮 busy 防重；settings GET flash_auto_tools「已自动找到」；含 command_text 引号回归测试）（工单 resolved）
+- 13:38 烧录/03：CONTEXT.md 补「烧录」域词条（工具探测/三builder/产物定位/范围外备注）+ 全量回归（pytest 2646 + JS 540）（工单 resolved）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
