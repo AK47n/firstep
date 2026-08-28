@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9a1c896ded01919ddc4d844a2fe746ba147c37a6 -->
+<!-- changelog-auto: last-commit=43d20b5e88e07718d7ff5e6f7e14c2e05a2b4a11 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -50,6 +50,7 @@
 - 22:33 交付集成：文档回归（delivery-suite/03）
 - 22:36 交付集成：双轴评审整改（delivery-suite/01 复核）
 - 22:56 任务推进：僵尸「进行中」恢复（stuck-doing-recover/01）
+- 22:56 任务推进：僵尸「进行中」恢复文档回归（stuck-doing-recover/02）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
