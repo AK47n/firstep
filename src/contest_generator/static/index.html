@@ -1315,6 +1315,13 @@
   .task-err-row { padding: 2px 0; color: var(--text); word-break: break-all; }
   .task-err-jump { cursor: pointer; color: var(--accent); text-decoration: underline;
                    text-underline-offset: 2px; }
+  /* 交付卡（工单 delivery-suite/02）：检查结果 / 打包结果行 */
+  .delivery-ok { margin-top: 6px; color: var(--ok); font-weight: 600; }
+  .delivery-warn { margin-top: 6px; color: var(--warn); font-weight: 600; }
+  .delivery-stat-row { margin-top: 6px; display: flex; gap: 6px; }
+  .delivery-incomplete { margin-top: 4px; font-size: 13px; color: var(--text); }
+  .delivery-zip { margin-top: 6px; font-family: var(--mono); font-size: 12px;
+                  color: var(--text); word-break: break-all; }
   /* 想法结果卡（工单 idea-fix/02）：复用 .item/.badge/.row 既有样式，
      无新视觉——落地按钮与任务卡操作行同款；分类徽章用既有 badge 色 */
   .idea-result .row { gap: 6px; }
@@ -1950,6 +1957,17 @@
           <div id="params-result" style="margin-top:8px"></div>
           <div id="params-msg" class="error"></div>
         </div>
+        <div class="card-group" style="margin-top:6px">
+          <div class="card-group-title">🚀 交付（打开工程 / 检查 / 打包）</div>
+          <div class="row">
+            <button id="btn-delivery-open" class="primary" title="stm32 优先拉起 Keil（UV4），兜底打开文件夹；mspm0 打开文件夹（CCS 手动导入）">打开工程</button>
+            <button id="btn-delivery-check" class="primary">交付检查</button>
+            <button id="btn-delivery-package" class="primary">一键打包</button>
+          </div>
+          <div class="muted" style="margin-top:4px">打开发送前最后一公里：交付检查 = 任务清单完成度汇总（未完成逐条列出，失败一眼可见）；打包 = 工程目录 zip（排除 .contest_* 内部状态文件，时间戳命名不覆盖旧包，输出到工程目录隔壁）。</div>
+          <div id="delivery-result" style="margin-top:8px"></div>
+          <div id="delivery-msg" class="error"></div>
+        </div>
         <div class="row">
           <button id="btn-tasks-plan" class="primary">拆解任务</button>
           <button id="btn-tasks-replan" class="hidden">重新拆解（覆盖）</button>
@@ -2540,6 +2558,7 @@ import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } fro
 import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext, reviseGetDir } from "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
 import { tasksPlan } from "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
 import { paramsScan } from "/js/ui/params.js";  // 参数速调：同上——import 只为加载模块
+import { deliveryOpen, deliveryCheck, deliveryPackage } from "/js/ui/delivery.js";  // 交付卡：同上
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
