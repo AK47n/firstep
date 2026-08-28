@@ -21,7 +21,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
@@ -148,8 +148,13 @@ function tasksRender() {
     grid.classList.add("hidden");
     grid.innerHTML = "";
   } else {
+    // 评分点数据源统一（工单 score-coverage/02）：落盘值优先（plan.score_points
+    // 拆解时同批写入——刷新 / 历史目录仍有全量定义），会话 scorePoints 仅作
+    // 无落盘时的回退。任务卡标注与覆盖总览同源，历史目录不再只剩裸 id。
+    const scorePointsForPlan = (plan.score_points && plan.score_points.length)
+      ? plan.score_points : scorePoints;
     grid.innerHTML = tasksGridHTML(plan, {
-      scorePoints: scorePoints,
+      scorePoints: scorePointsForPlan,
       // outputDir（工单 flash-step-button/01）：任务卡烧录控制行需要输出目录
       //（卡内独立容器，uid = task.id）——透传给 taskCardHTML
       outputDir: tasks.outputDir,
@@ -225,6 +230,14 @@ function tasksRender() {
   const resHTML = resourcesOverviewHTML(plan);
   resBox.innerHTML = resHTML;
   resBox.classList.toggle("hidden", !resHTML);
+  // 评分点覆盖总览（工单 score-coverage/02）：每个评分点 → 覆盖它的任务，
+  // 无覆盖标红；数据源 = 落盘 plan.score_points（spec：空评分点容器隐藏；
+  // 会话值仅作任务卡标注回退，覆盖总览直读落盘值——旧清单无落盘即隐藏）。
+  // 紧跟在资源总览后（#tasks-scorepoints），空串隐藏
+  const scoreBox = $("tasks-scorepoints");
+  const scoreHTML = scoreRefsOverviewHTML(plan);
+  scoreBox.innerHTML = scoreHTML;
+  scoreBox.classList.toggle("hidden", !scoreHTML);
   $("btn-tasks-replan").classList.toggle("hidden", !(plan && (plan.tasks || []).length));
 }
 
@@ -1258,10 +1271,11 @@ async function tasksDialogClear(taskId) {
 }
 
 // ---------------------------------------------------------------------------
-// 任务卡微编辑 + 调序（工单 idea-suite/04）：✏️ 编辑（卡内表单，当前值回填）
-// → /api/tasks/idea/edit；↑/↓ → /api/tasks/idea/move（换序即时生效，id 不变）。
+// 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：
+// 菜单项「编辑任务信息」（卡内表单，当前值回填 → /api/tasks/idea/edit）+
+// 「上移/下移」（→ /api/tasks/idea/move，换序即时生效，id 不变）。
 // 编辑态 = taskEditOpen（会话级 Set，跨簇重置清空）；表单纯函数在
-// fx/task.js（taskEditFormHTML / taskMoveButtonsHTML），本层只做收集 + 委托。
+// fx/task.js（taskEditFormHTML / taskMoreMenuHTML），本层只做收集 + 委托。
 // ---------------------------------------------------------------------------
 
 const taskEditOpen = new Set();
@@ -1418,16 +1432,29 @@ $("tasks-grid").addEventListener("click", (event) => {
     : btn.classList.contains("btn-task-mark") ? "verified" : "pending";
   tasksSetStatus(btn.dataset.task, status);
 });
-// 任务卡微编辑 + 调序（工单 idea-suite/04）：✏️ 编辑 / 保存 / 取消 / ↑↓ 换序
+// 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：菜单项
+// 点击先收起 details（open=false）再派发动作——动作成功后 tasksRender 重建
+// 网格本就默认收起，此收尾管 busy 拦截（toast）等不重渲染的路径。
 $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-edit, .btn-task-edit-save, .btn-task-edit-cancel, .btn-task-move");
   if (!btn) return;
+  const menu = btn.closest(".task-more-details");
+  if (menu) menu.open = false;
   const taskId = btn.dataset.task;
   const action = btn.dataset.taskAction;
   if (action === "edit") { tasksEditToggle(taskId); return; }
   if (action === "edit-save") { tasksEditSave(taskId); return; }
   if (action === "edit-cancel") { tasksEditCancel(taskId); return; }
   tasksMove(taskId, action === "move-up" ? "up" : "down");
+});
+// 「⋯ 更多」菜单（收编 idea-suite/04）：点击菜单外任意处收起；summary 原生
+// toggle 不受影响（目标在任一 details 内则跳过——同开一菜单、点外部全收）。
+document.addEventListener("click", (event) => {
+  const wins = document.querySelectorAll(".task-more-details[open]");
+  if (!wins.length) return;
+  wins.forEach((d) => {
+    if (!d.contains(event.target)) d.open = false;
+  });
 });
 // 结果面板「回滚到本任务执行前」（同备份族，复用 /api/revise/rollback）
 $("tasks-grid").addEventListener("click", (event) => {

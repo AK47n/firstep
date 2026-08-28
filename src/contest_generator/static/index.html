@@ -444,17 +444,33 @@
      与任务卡对话按钮同款小字（.sugg-discuss 面板共用） */
   .btn-global-chat-action, .btn-global-chat-send { font-size: 12px;
                      padding: 1px 8px; margin-left: 6px; }
-  /* 任务卡微编辑 + 调序（工单 idea-suite/04）：卡内表单（标签 + 输入纵排）
-     与 ↑/↓ 小按钮；表单复用变量，零新硬编码色 */
+  /* 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：卡内表单
+     （标签 + 输入纵排）与低调下拉；表单复用变量，零新硬编码色。
+     下拉 = 原生 <details>：summary 小字按钮，展开菜单 absolute 定位在卡内
+     （z-index 高于相邻卡，超界不裁——.item 无 overflow:hidden） */
   .task-edit-form { padding: 8px; border: 1px solid var(--border);
                      border-radius: 8px; background: var(--panel-2); }
   .task-edit-form label { display: block; margin-top: 6px; font-size: 12px; }
   .task-edit-form input, .task-edit-form textarea, .task-edit-form select {
                      width: 100%; margin-top: 2px; }
   .task-edit-form .row { justify-content: flex-start; }
-  .task-move { margin-left: 2px; }
-  .btn-task-move, .btn-task-edit, .btn-task-edit-save, .btn-task-edit-cancel {
-                     font-size: 12px; padding: 1px 8px; }
+  .btn-task-edit-save, .btn-task-edit-cancel { font-size: 12px; padding: 1px 8px; }
+  .task-more-details { position: relative; }
+  .btn-task-more { font-size: 12px; padding: 1px 8px; cursor: pointer;
+                     color: var(--muted); list-style: none; }
+  .btn-task-more::-webkit-details-marker { display: none; }
+  .btn-task-more:hover { color: var(--text); }
+  .task-more-menu { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30;
+                     min-width: 150px; padding: 4px; border: 1px solid var(--border);
+                     border-radius: 8px; background: var(--panel-2);
+                     box-shadow: var(--shadow-item); }
+  .task-more-menu .btn-task-edit, .task-more-menu .btn-task-move {
+                     display: block; width: 100%; text-align: left; font-size: 12px;
+                     padding: 3px 8px; border: none; background: none;
+                     color: var(--text); cursor: pointer; }
+  .task-more-menu .btn-task-edit:hover, .task-more-menu .btn-task-move:hover:not(:disabled) {
+                     background: var(--panel); }
+  .task-more-menu .btn-task-move:disabled { color: var(--muted); cursor: not-allowed; }
   /* 想法草稿箱（工单 idea-suite/06）：逐条行 + 小按钮，变量色 */
   .draft-item { display: flex; align-items: center; gap: 6px; padding: 2px 0;
                      border-bottom: 1px dashed var(--border); }
@@ -1284,7 +1300,8 @@
   .tasks-overview-bar .seg-pending { background: rgba(139, 148, 158, .35); }
   .tasks-overview-bar .seg-skipped { background: rgba(139, 148, 158, .18); }
   /* 资源总览 + 上板自检清单（工单 task-insight/02）：资源行（chip + 使用任务 +
-     冲突提示标黄）+ 自检勾选列表——变量色零新硬编码 */
+     冲突提示标黄）+ 自检勾选列表（details 默认收起——清单 3-6 条展开太长，
+     摘要行「N 项 · 已勾选 M」可见进度；变色/变量名零新硬编码） */
   .res-table { border: 1px solid var(--border); border-radius: 8px;
                padding: 4px 8px; background: var(--panel-2); }
   .res-row { display: flex; align-items: center; gap: 8px; padding: 3px 0;
@@ -1297,7 +1314,40 @@
   .res-conflict { background: var(--warn-dim); border-radius: 6px;
                   padding: 3px 8px; }
   .res-conflict-note { color: var(--warn); font-size: 12px; font-weight: 600; }
-  .task-check-list { display: flex; flex-direction: column; gap: 2px; }
+  /* 非硬件资源（模块名/函数名/宏名，AI 偶发误标——xunji 先例，task-insight/02
+     评审整改）：muted 降级展示，不标黄不算冲突（多任务复用模块 = 正常代码复用） */
+  .res-soft { color: var(--muted); opacity: .75; }
+  .res-soft-note { color: var(--muted); font-size: 12px; }
+  /* 评分点覆盖总览（工单 score-coverage/02）：行流布局参照 .res-* 先例；
+     无覆盖整行红（--danger 语义），未知引用黄色警示 */
+  .score-point-table { border: 1px solid var(--border); border-radius: 8px;
+                       padding: 4px 8px; background: var(--panel-2); }
+  .score-point-row { display: flex; align-items: center; gap: 8px; padding: 3px 0;
+                     border-bottom: 1px dashed var(--border); flex-wrap: wrap; }
+  .score-point-row:last-of-type { border-bottom: none; }
+  .score-chip { font-family: var(--mono); font-size: 12px; padding: 0 6px;
+                border: 1px solid var(--border); border-radius: 6px;
+                background: var(--panel-2); color: var(--text); }
+  .score-point-part { color: var(--text); font-size: 12px; }
+  .score-point-score { color: var(--text); font-size: 12px; }
+  .score-point-desc { color: var(--text); font-size: 13px; }
+  .score-point-users { flex: 1; color: var(--text); font-size: 13px; }
+  .score-point-miss { background: var(--danger-dim); border-radius: 6px;
+                      padding: 3px 8px; }
+  .score-miss-note { color: var(--danger); font-size: 12px; font-weight: 600; }
+  .score-point-unknown { background: var(--warn-dim); border-radius: 6px;
+                         padding: 3px 8px; }
+  .score-unknown-note { color: var(--warn); font-size: 12px; font-weight: 600; }
+  .task-check-details { border: 1px solid var(--border); border-radius: 6px;
+                        background: var(--panel); overflow: hidden; }
+  .task-check-details > summary { cursor: pointer; padding: 5px 10px;
+                                  background: var(--panel-2); color: var(--text);
+                                  font-size: 12.5px; list-style: none; }
+  .task-check-details > summary::before { content: "▸"; margin-right: 6px; color: var(--accent); }
+  .task-check-details[open] > summary::before { content: "▾"; }
+  .task-check-details > summary::-webkit-details-marker { display: none; }
+  .task-check-list { display: flex; flex-direction: column; gap: 2px;
+                     padding: 0 10px 6px; }
   .task-check-item { display: flex; align-items: center; gap: 6px;
                      font-size: 13px; color: var(--text); }
   .task-check-input { accent-color: var(--accent); }
@@ -1933,11 +1983,11 @@
         <div class="card-group" style="margin-top:6px">
           <div class="card-group-title">💡 新想法 / 发现的问题（不绑定任务卡）</div>
           <div class="row">
-            <textarea id="tasks-idea-input" rows="2" placeholder="突然想到的改进点 / 发现的问题（如：进弯道前先减速；循迹阈值太高）…" style="flex:1;min-height:44px"></textarea>
+            <textarea id="tasks-idea-input" rows="2" placeholder="想改一个具体的点，就写在这里（如：进弯道前先减速；循迹阈值太高；再加个急停功能）…" style="flex:1;min-height:44px"></textarea>
             <button id="btn-tasks-idea" class="primary">分析这个想法</button>
             <button id="btn-tasks-draft-add">存入草稿</button>
           </div>
-          <div class="muted" style="margin-top:4px">想法不一定是清单里的任务：AI 会判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿落盘（.contest_ideas.json），回头逐条分析或全部逐条分析。</div>
+          <div class="muted" style="margin-top:4px">「我具体想改什么」→ 来这里：已经有明确的一个点（改参数、加功能、修 bug、调策略），AI 判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿落盘（.contest_ideas.json），回头逐条分析或全部逐条分析。如果只是想先讨论、还没有具体改法 → 用下面的「全局商量」。</div>
           <div id="tasks-idea-result" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-idea-msg" class="error"></div>
           <div id="tasks-drafts" style="margin-top:8px"></div>
@@ -1950,7 +2000,7 @@
             <button id="btn-tasks-global-chat" class="primary">全局商量（工程级）</button>
             <div id="tasks-global-note" class="hidden" style="flex:1"></div>
           </div>
-          <div class="muted" style="margin-top:4px">针对整个工程连续追问：架构取舍 / 赛道策略 / 方案对不对——AI 结合题面、需求、任务清单现状与当前 main.c 回答。每条回复可「转成任务 / 转成修正」落地，或「采纳为全局结论」（采纳后注入之后每一步任务执行与直接修正）；历史落盘（.contest_idea_chat.json），刷新不丢。</div>
+          <div class="muted" style="margin-top:4px">「想先讨论、还没想好具体改什么」→ 来这里：对整体方案有疑惑（架构取舍 / 赛道策略 / 方案对不对），AI 结合题面、需求、任务清单现状与当前 main.c 连续回答问题，越问越清楚；每步可「转成任务 / 转成修正」落地，或「采纳为全局结论」（之后每一步任务执行与直接修正都会带上它）；历史落盘（.contest_idea_chat.json），刷新不丢。已有明确要改的一个点 → 直接用上面的「新想法」。</div>
           <div id="tasks-global-chat" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-global-msg" class="error"></div>
         </div>
@@ -1980,6 +2030,7 @@
         </div>
         <div id="tasks-overview" class="hidden" style="margin-top:8px"></div>
         <div id="tasks-resources" class="hidden" style="margin-top:8px"></div>
+        <div id="tasks-scorepoints" class="hidden" style="margin-top:8px"></div>
         <div id="tasks-llm-telemetry" class="llm-telemetry hidden"></div>
         <div id="tasks-grid" class="hidden" style="margin-top:10px"></div>
         <div id="tasks-msg" class="error"></div>
