@@ -1987,6 +1987,44 @@ def test_run_direct_fix_llm_failure_propagates(tmp_path, monkeypatch):
     assert (output_dir / "main.c").read_text(encoding="utf-8") == before
 
 
+def test_run_direct_fix_failed_after_one_fix_round(tmp_path, monkeypatch):
+    """修正修一轮仍红 → status = failed（结果保留，中文提示；共享
+    verify_compile_tail 的 failed 路径在直接修正管线同样生效）。"""
+    library, output_dir = _task_env(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(2, "error: x"),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.run_fix_round",
+        lambda llm, **kwargs: SimpleNamespace(backup_id="fix-1", results=()),
+    )
+    llm = FakeLLM(fixed_main_c="int main(void) { /* 阈值已调 */ while (1); }\n")
+    result = run_direct_fix(
+        llm=llm,
+        idea="阈值太高",
+        fix_summary="把阈值从 500 降到 350",
+        affected=[],
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    assert result["status"] == STATUS_FAILED
+    assert "仍红" in result["message"]
+    assert "阈值已调" in (output_dir / "main.c").read_text(encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # 上板反馈（工单 task-feedback/02）：反馈执行 = 自动重开 + 第 2 轮 kind=feedback
 # ---------------------------------------------------------------------------
