@@ -98,6 +98,10 @@ def test_saved_file_is_plain_json(tmp_path):
         "ccs_sdk_dir": "",
         "ccs_compiler_dir": "",
         "ccs_sysconfig_cli": "",
+        # 烧录工具可选覆盖（工单 flash-deploy/01）：缺省空串 = 自动探测
+        "openocd_path": "",
+        "stflash_path": "",
+        "dslite_path": "",
         # 本地 LLM 端点（工单 local-llm-routing/01）：缺省空串 = 本地路由关闭
         "local_llm_base_url": "",
         "local_llm_model": "",
