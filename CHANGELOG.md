@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=17d46dd06a8d443f699e5318b09bef7d5604f741 -->
+<!-- changelog-auto: last-commit=54e8b79acf20f36967ea5e455e4ba5ece596a183 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 13:38 烧录/03：CONTEXT.md 补「烧录」域词条（工具探测/三builder/产物定位/范围外备注）+ 全量回归（pytest 2646 + JS 540）（工单 resolved）
 - 13:49 任务卡烧录/01：任务卡常驻「烧录到板子」按钮（已实现步骤，卡内独立状态/结果容器 uid=task.id，flashContainer 单源契约）+ 双轴评审整改（工单 resolved）
 - 13:49 任务卡烧录/02：CONTEXT.md 补任务卡烧录词条（前端三处入口）+ 全量回归（pytest 2646 + JS 542）（工单 resolved）
+- 13:58 修复：指引「去设置页配置」展开工具链卡并滚动到烧录工具输入框（flash-guide-settings/03）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
