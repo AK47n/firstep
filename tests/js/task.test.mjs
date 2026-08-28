@@ -12,9 +12,10 @@ import {
   nextTaskHint, taskNextHintHTML,
   ideaResultHTML, taskNeedsRedoBadge, taskStepReportBlocksHTML,
   globalChatHTML, globalNoteBadgeHTML,
-  taskEditFormHTML, taskMoveButtonsHTML,
+  taskEditFormHTML, taskMoreMenuHTML,
   ideaDraftListHTML,
-  taskResourcesHTML, resourcesOverviewHTML, taskChecklistHTML,
+  taskResourcesHTML, resourceIsHardware, resourcesOverviewHTML, taskChecklistHTML,
+  scoreRefsOverviewHTML,
   checklistStateKey,
   taskErrorsHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
@@ -676,18 +677,26 @@ test("globalNoteBadgeHTML: 空 → 空串；非空 → 徽标 + 摘要 30 字 + 
   assert.ok(!short.includes("<b>阈值 500</b>"));
 });
 
-test("taskMoveButtonsHTML: ↑/↓ + 边界禁用 + data 属性", () => {
-  const first = taskMoveButtonsHTML({ id: "t1" }, 0, 2);
+test("taskMoreMenuHTML: 默认收起 + 菜单项（编辑/上移/下移）+ 边界禁用 + data 属性", () => {
+  const first = taskMoreMenuHTML({ id: "t1" }, 0, 2, false);
+  assert.ok(first.includes('class="task-more-details"'));   // 原生 details 容器
+  assert.ok(!first.includes(" open"));                      // 默认收起
+  assert.ok(first.includes("⋯ 更多"));                      // summary
+  assert.ok(first.includes('data-task-action="edit" data-task="t1"'));
   assert.ok(first.includes('data-task-action="move-up"'));
   assert.ok(first.includes('data-task-action="move-down"'));
-  assert.ok(first.includes('data-task="t1"'));
   assert.ok(first.includes("move-up\" data-task=\"t1\" disabled"));  // 首卡 ↑ 禁用
   assert.ok(!first.includes("move-down\" data-task=\"t1\" disabled"));  // 末卡 ↓ 不禁用（t1 不是末卡）
-  const last = taskMoveButtonsHTML({ id: "t2" }, 1, 2);
+  assert.ok(first.includes("编辑任务信息"));                // 未展开 = 编辑文案
+  const last = taskMoreMenuHTML({ id: "t2" }, 1, 2, false);
   assert.ok(last.includes("move-down\" data-task=\"t2\" disabled"));
   assert.ok(!last.includes("move-up\" data-task=\"t2\" disabled"));
+  // editing 态 = 菜单项变「收起编辑」
+  const editing = taskMoreMenuHTML({ id: "t1" }, 0, 2, true);
+  assert.ok(editing.includes("收起编辑"));
+  assert.ok(!editing.includes("编辑任务信息"));
   // id 转义
-  const weird = taskMoveButtonsHTML({ id: 't"x' }, 0, 1);
+  const weird = taskMoreMenuHTML({ id: 't"x' }, 0, 1, false);
   assert.ok(weird.includes('data-task="t&quot;x"'));
 });
 
@@ -717,15 +726,14 @@ test("taskEditFormHTML: 当前值回填（依赖序号经 seqById 转换）+ 保
   assert.ok(empty.includes('id="task-edit-refs-t1" value=""'));
 });
 
-test("taskCardHTML: 编辑按钮 + ↑/↓ 集成；editing 态渲染表单", () => {
+test("taskCardHTML: 「⋯ 更多」菜单集成；editing 态渲染表单", () => {
   const task = {
     id: "t1", title: "循迹", description: "循迹决策", score_refs: [],
     depends_on: [], verify: "compile", status: "pending", iterations: [],
   };
   const card = taskCardHTML(task, 0, { total: 2, editing: () => false });
-  assert.ok(card.includes('class="btn-task-edit"'));
+  assert.ok(card.includes('class="task-more-details"'));
   assert.ok(card.includes('data-task-action="edit" data-task="t1"'));
-  assert.ok(card.includes('class="task-move"'));
   assert.ok(card.includes("move-up\" data-task=\"t1\" disabled"));
   assert.ok(!card.includes("task-edit-title-"));  // 未展开无表单
   const editing = taskCardHTML(task, 0, { total: 2, editing: () => true });
@@ -767,37 +775,69 @@ test("ideaDraftListHTML: busy 禁用全部按钮 + 注入转义", () => {
 // 资源占用 + 上板自检清单（工单 task-insight/02）
 // ---------------------------------------------------------------------------
 
-test("taskResourcesHTML: 资源 chips 渲染 / 空串（旧清单无字段）", () => {
+test("resourceIsHardware: 引脚/外设/中断 = 硬件；模块名/宏名 = 非硬件", () => {
+  // 引脚：MSPM0 PA/PB + STM32 PA-PG
+  for (const hw of ["PA0", "PB12", "PA15", "PB9", "PC7", "PD2"]) {
+    assert.equal(resourceIsHardware(hw), true, hw);
+  }
+  // 外设（带/不带数字、GPIOx）
+  for (const hw of ["TIM1", "UART0", "USART1", "SPI0", "I2C0", "I2S0", "ADC0", "DAC0", "DMA0", "CAN0", "PWM0", "COMP0", "GPIOA"]) {
+    assert.equal(resourceIsHardware(hw), true, hw);
+  }
+  // 中断
+  for (const hw of ["TIM1_IRQn", "SysTick_IRQn", "UART0_IRQn"]) {
+    assert.equal(resourceIsHardware(hw), true, hw);
+  }
+  // 非硬件：模块名 / 函数名 / 宏名 / 其它
+  for (const soft of ["xunji", "led_beep", "beep", "BEEP", "LED_BEEP", "xunji_init", "delay", "oled_show_string", "", "循迹"]) {
+    assert.equal(resourceIsHardware(soft), false, soft);
+  }
+  assert.equal(resourceIsHardware(null), false);
+  assert.equal(resourceIsHardware(undefined), false);
+});
+
+test("taskResourcesHTML: 资源 chips 渲染 / 非硬件项 muted 降级 / 空串", () => {
   const html = taskResourcesHTML({ id: "t1", resources: ["PA0", "TIM1", "UART0"] });
   assert.ok(html.includes("资源："));
   assert.ok(html.includes('class="res-chip">PA0<'));
   assert.ok(html.includes('class="res-chip">TIM1<'));
   assert.ok(html.includes('class="res-chip">UART0<'));
+  // 非硬件项带 .res-soft（xunji 先例：AI 偶把模块名填 resources）
+  const mixed = taskResourcesHTML({ id: "t1", resources: ["PA0", "xunji", "LED_BEEP"] });
+  assert.ok(mixed.includes('class="res-chip">PA0<'));
+  assert.ok(mixed.includes('class="res-chip res-soft">xunji<'));
+  assert.ok(mixed.includes('class="res-chip res-soft">LED_BEEP<'));
   assert.equal(taskResourcesHTML({ id: "t1" }), "");
   assert.equal(taskResourcesHTML({ id: "t1", resources: [] }), "");
   assert.equal(taskResourcesHTML(null), "");
 });
 
-test("resourcesOverviewHTML: 聚合 + 冲突标黄 + 转义 + 空串", () => {
+test("resourcesOverviewHTML: 聚合 + 硬件冲突标黄 + 非硬件不标黄 + 转义 + 空串", () => {
   const plan = {
     tasks: [
-      { id: "t1", title: "循迹", resources: ["PA0", "TIM1"] },
-      { id: "t2", title: "显示", resources: ["PA0", "UART0"] },
+      { id: "t1", title: "循迹", resources: ["PA0", "TIM1", "xunji"] },
+      { id: "t2", title: "显示", resources: ["PA0", "UART0", "xunji"] },
       { id: "t3", title: "电机", resources: [] },
       { id: "t4", title: "无线" },
     ],
   };
   const html = resourcesOverviewHTML(plan);
   assert.ok(html.includes("资源总览"));
-  // PA0 被 t1/t2 共用 → 冲突行标黄
+  // PA0 被 t1/t2 共用 → 硬件冲突行标黄
   assert.ok(html.includes("res-conflict"));
   assert.ok(html.includes("⚠ 多任务使用，上板前确认"));
   assert.ok(html.includes("t1：循迹"));
   assert.ok(html.includes("t2：显示"));
-  // 单任务资源不标冲突
+  // 单任务硬件资源不标冲突
   assert.ok(html.includes(">TIM1<"));
   const timRow = html.split("res-row").find((s) => s.includes("TIM1"));
   assert.ok(!timRow.includes("res-conflict"));
+  // 非硬件项（xunji）被 t1/t2 共同引用：不标黄、提示模块复用（xunji 先例）
+  const xunjiRow = html.split("res-row").find((s) => s.includes("xunji"));
+  assert.ok(!xunjiRow.includes("res-conflict"));
+  assert.ok(xunjiRow.includes('class="res-chip res-soft">xunji<'));
+  assert.ok(xunjiRow.includes("模块复用（非硬件，不算冲突）"));
+  assert.ok(xunjiRow.includes("res-soft-note"));
   // 全部无资源 → 空串
   assert.equal(resourcesOverviewHTML({ tasks: [{ id: "t1", title: "x" }] }), "");
   assert.equal(resourcesOverviewHTML(null), "");
@@ -808,7 +848,72 @@ test("resourcesOverviewHTML: 聚合 + 冲突标黄 + 转义 + 空串", () => {
   assert.ok(evil.includes("A&quot;B"));
 });
 
-test("taskChecklistHTML: 勾选渲染（checkedMap）+ 空串", () => {
+test("scoreRefsOverviewHTML: 覆盖行 + 未覆盖标红 + 未知引用 + 转义 + 空串", () => {
+  const plan = {
+    tasks: [
+      { id: "t1", title: "循迹", score_refs: ["s1", "s2"] },
+      { id: "t2", title: "显示", score_refs: ["s2"] },
+      { id: "t3", title: "电机" },
+    ],
+    score_points: [
+      { id: "s1", part: "basic", description: "稳定循迹", score: 3 },
+      { id: "s2", part: "development", description: "弯道减速", score: 5 },
+      { id: "s3", part: "unknown", description: "无覆盖点", score: null },
+    ],
+  };
+  const html = scoreRefsOverviewHTML(plan);
+  assert.ok(html.includes("评分点覆盖"));
+  // s1 只被 t1 覆盖：基础 3 分
+  const s1Row = html.split("score-point-row").find((s) => s.includes("s1"));
+  assert.ok(s1Row.includes(">s1<"));
+  assert.ok(s1Row.includes("基础"));
+  assert.ok(s1Row.includes("3 分"));
+  assert.ok(s1Row.includes("t1：循迹"));
+  assert.ok(!s1Row.includes("score-point-miss"));
+  // s2 被 t1/t2 覆盖：发挥 5 分，两个任务都列出
+  const s2Row = html.split("score-point-row").find((s) => s.includes("s2"));
+  assert.ok(s2Row.includes("发挥"));
+  assert.ok(s2Row.includes("5 分"));
+  assert.ok(s2Row.includes("t1：循迹"));
+  assert.ok(s2Row.includes("t2：显示"));
+  // s3 无覆盖：标红 + 警示
+  const s3Row = html.split("score-point-row").find((s) => s.includes("s3"));
+  assert.ok(s3Row.includes("score-point-miss"));
+  assert.ok(s3Row.includes("⚠ 无任务覆盖"));
+  assert.ok(s3Row.includes("其他"));
+  // 描述截断（title 悬停全文）
+  assert.ok(s1Row.includes('title="稳定循迹"'));
+  // 未知引用 + 未知引用警示行
+  const refs = scoreRefsOverviewHTML({
+    tasks: [{ id: "t1", title: "循迹", score_refs: ["s1", "s9"] }],
+    score_points: [{ id: "s1", part: "basic", description: "稳定循迹", score: 3 }],
+  });
+  assert.ok(refs.includes("s9"));
+  assert.ok(refs.includes("score-point-unknown"));
+  assert.ok(refs.includes("未识别引用"));
+  assert.ok(refs.includes("t1：循迹"));
+  // 空评分点 / 空清单 / null → 空串
+  assert.equal(scoreRefsOverviewHTML({ tasks: [{ id: "t1", title: "x" }] }), "");
+  assert.equal(scoreRefsOverviewHTML({ tasks: [], score_points: [] }), "");
+  assert.equal(scoreRefsOverviewHTML(null), "");
+  // 转义
+  const evil = scoreRefsOverviewHTML({
+    tasks: [{ id: "t1", title: '<img src=x>', score_refs: ["s1"] }],
+    score_points: [{ id: "s1", part: "basic", description: '"引号"<b>粗</b>', score: 1 }],
+  });
+  assert.ok(!evil.includes("<img src=x>"));
+  assert.ok(evil.includes("&lt;img src=x&gt;"));
+  assert.ok(evil.includes("&quot;引号&quot;"));
+  assert.ok(evil.includes("&lt;b&gt;粗&lt;/b&gt;"));
+  // 覆盖任务标题截断 24 字（长标题不撑爆行）
+  const long = scoreRefsOverviewHTML({
+    tasks: [{ id: "t1", title: "这是一条非常长的任务标题用来验证截断逻辑是否正常工作超过二十四个字了", score_refs: ["s1"] }],
+    score_points: [{ id: "s1", part: "basic", description: "d", score: 1 }],
+  });
+  assert.ok(long.includes("这是一条非常长的任务标题用来验证截断逻辑是否正常…"));
+});
+
+test("taskChecklistHTML: 勾选渲染（checkedMap）+ 默认收起 + 空串", () => {
   const iteration = {
     seq: 1,
     checklist: ["烧录后应看到 LED 闪烁。", "若不闪检查 PA0 与 LED DIO 接线。"],
@@ -819,6 +924,14 @@ test("taskChecklistHTML: 勾选渲染（checkedMap）+ 空串", () => {
   assert.ok(html.includes('data-check-idx="0"'));
   assert.ok(html.includes('data-check-idx="1" checked'));
   assert.ok(html.includes("烧录后应看到 LED 闪烁。"));
+  // 默认收起：details 无 open 属性（摘要行可见，勾选进度「已勾选 1」）
+  assert.ok(html.includes("<details"));
+  assert.ok(!html.includes(' open'));
+  assert.ok(html.includes("上板自检清单（2 项 · 已勾选 1）"));
+  // 未勾选任意项 → 摘要不显示「已勾选」段
+  const none = taskChecklistHTML(iteration, "t1/1", {});
+  assert.ok(none.includes("上板自检清单（2 项）"));
+  assert.ok(!none.includes("已勾选"));
   // 无 checklist / 空数组 → 空串；key 转义
   assert.equal(taskChecklistHTML({ seq: 1, checklist: [] }, "t1/1", {}), "");
   assert.equal(taskChecklistHTML(null, "t1/1", {}), "");

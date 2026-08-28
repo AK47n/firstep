@@ -41,7 +41,7 @@ export function taskScoreRefsText(scoreRefs, points) {
     const score = (typeof point.score === "number" && Number.isFinite(point.score))
       ? " " + point.score + " 分"
       : "";
-    return id + "（" + (point.part === "basic" ? "基础" : point.part === "development" ? "发挥" : "其他") + score + "）";
+    return id + "（" + scorePartLabel(point.part) + score + "）";
   }).join("、");
 }
 
@@ -206,11 +206,11 @@ export function taskCardHTML(task, index, opts) {
     // checklist 常驻卡上（结果面板副本并存），刷新后勾选立即回显）。
     // checklistState 由胶水层提供（读 localStorage 纯函数桥，fx 无副作用）。
     + taskCardChecklistHTML(task, o)
-    // 微编辑 + 调序（工单 idea-suite/04）：编辑按钮 + ↑/↓（边界禁用）+ 编辑态
-    // 表单（opts.editing(task.id) 为真 = 胶水层已展开该卡编辑表单）
+    // 微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：低频微调
+    // 收进小字 details 菜单（编辑任务信息 / 上移 / 下移）+ 编辑态表单
+    // （opts.editing(task.id) 为真 = 胶水层已展开该卡编辑表单）
     + '<div class="row" style="margin-top:6px;gap:6px">'
-    + taskEditButtonHTML(task, !!(o.editing && o.editing(task.id)))
-    + taskMoveButtonsHTML(task, index, Number(o.total) || 0)
+    + taskMoreMenuHTML(task, index, Number(o.total) || 0, !!(o.editing && o.editing(task.id)))
     + "</div>"
     + (o.editing && o.editing(task.id) ? taskEditFormHTML(task, o) : "")
     // 任务卡烧录控制行（工单 flash-step-button/01）：已实现过的步骤（有迭代
@@ -482,22 +482,46 @@ export function taskStepReportHTML(task, opts) {
     + "</div>";
 }
 
+/** 资源名是否硬件实体（工单 task-insight/02 评审整改）：引脚（PA0/PB12）、
+ * 外设（TIM1/UART0/ADC0/GPIOA 等）、中断（*_IRQn）。模块名（xunji）、函数名、
+ * 宏名（LED_BEEP）不是硬件——任务间复用模块是正常代码复用，不构成互斥冲突
+ * 暗雷，总览里不该标黄（AI 偶将模块名填入 resources，前端兜底降噪）。
+ * 词表式判定：引脚 /^P[A-G]\d{1,2}$/（MSPM0 PA/PB + STM32 PA-PG 兼容），
+ * 外设白名单 = TIM|TIMA|TIMB|UART|USART|SPI|I2C|I2S|ADC|DAC|DMA|CAN|PWM|COMP|GPIO[x]，
+ * 中断 = 以 _IRQn 结尾。其余（含大写宏名）一律非硬件。 */
+export function resourceIsHardware(name) {
+  const s = String(name == null ? "" : name).trim();
+  if (!s) return false;
+  if (/^P[A-G]\d{1,2}$/i.test(s)) return true;
+  if (/^(TIM|TIMA|TIMB|UART|USART|SPI|I2C|I2S|ADC|DAC|DMA|CAN|PWM|COMP)[A-Z]{0,1}\d*$/i.test(s)) return true;
+  if (/^GPIO[A-Z]$/i.test(s)) return true;
+  if (/_IRQn$/i.test(s)) return true;
+  return false;
+}
+
 /** 任务卡资源徽标行（工单 task-insight/02）：本任务占用的互斥资源（拆解时
- * AI 标注 resources——引脚/外设/中断真实名；与其它任务共用也列出）。空 = 空串
- *（旧清单无该字段 / 本任务不新增占用）。 */
+ * AI 标注 resources——引脚/外设/中断真实名；与其它任务共用也列出）。非硬件项
+ * （模块名/函数名/宏名——AI 偶发误标）以 .res-soft muted 样式降级展示：
+ * 信息保留但不与硬件资源同权重刺眼。空 = 空串（旧清单无该字段 / 不新增占用）。 */
 export function taskResourcesHTML(task) {
   const resources = (task && task.resources) || [];
   if (!resources.length) return "";
   return '<div class="muted" style="margin-top:4px">资源：'
-    + resources.map((r) => '<span class="res-chip">' + esc(String(r)) + "</span>")
-      .join(" ")
+    + resources.map((r) => {
+      const name = String(r);
+      return '<span class="res-chip' + (resourceIsHardware(name) ? "" : " res-soft") + '">'
+        + esc(name) + "</span>";
+    }).join(" ")
     + "</div>";
 }
 
 /** 资源总览表（工单 task-insight/02，纯前端聚合零后端）：从 plan.tasks[].resources
- * 聚合「资源名 → 用到的任务」。同一资源被 ≥2 任务占用 → .res-conflict 行标黄
- * 「⚠ 多任务使用，上板前确认」（重复不一定是错——可能是先后复用，提示学生
- * 联调前确认）。全部任务无资源标注 = 空串（容器隐藏）。 */
+ * 聚合「资源名 → 用到的任务」。**同一硬件资源**（引脚/外设/中断，判据 =
+ * resourceIsHardware）被 ≥2 任务占用 → .res-conflict 行标黄「⚠ 多任务使用，
+ * 上板前确认」（重复不一定是错——可能是先后复用，提示学生联调前确认）；
+ * 非硬件项（模块名/函数名/宏名，如 xunji）多任务复用 = 正常代码复用，不标黄
+ * （.res-soft muted 样式，标题注「模块复用」降噪——AI 偶把模块名填入 resources，
+ * 前端兜底不误导）。全部任务无资源标注 = 空串（容器隐藏）。 */
 export function resourcesOverviewHTML(plan) {
   const tasks = (plan || {}).tasks || [];
   const byResource = new Map();
@@ -511,36 +535,112 @@ export function resourcesOverviewHTML(plan) {
   });
   if (!byResource.size) return "";
   const rows = Array.from(byResource.entries()).map(([name, users]) => {
-    const conflict = users.length >= 2;
+    const hw = resourceIsHardware(name);
+    const conflict = hw && users.length >= 2;
     const userText = users.map((u) => esc(u.id + "：" + (u.title || ""))).join(" · ");
-    return '<div class="res-row' + (conflict ? " res-conflict" : "") + '">'
-      + '<span class="res-chip">' + esc(name) + "</span>"
+    return '<div class="res-row' + (conflict ? " res-conflict" : hw ? "" : " res-soft") + '">'
+      + '<span class="res-chip' + (hw ? "" : " res-soft") + '">' + esc(name) + "</span>"
       + '<span class="res-users">' + userText + "</span>"
-      + (conflict ? '<span class="res-conflict-note">⚠ 多任务使用，上板前确认</span>' : "")
+      + (conflict ? '<span class="res-conflict-note">⚠ 多任务使用，上板前确认</span>'
+        : hw ? "" : '<span class="res-soft-note">模块复用（非硬件，不算冲突）</span>')
       + "</div>";
   }).join("");
   return '<div class="muted" style="margin-bottom:2px">资源总览（同一资源被多个任务占用 = 联调冲突暗雷，标黄提示）</div>'
     + '<div class="res-table">' + rows + "</div>";
 }
 
+/** 评分点分类中文标签（工单 score-coverage/02 抽取）：basic=基础 /
+ * development=发挥 / 其余（unknown）=其他——与 taskScoreRefsText 同判据，
+ * 两处共享单源。 */
+function scorePartLabel(part) {
+  return part === "basic" ? "基础" : part === "development" ? "发挥" : "其他";
+}
+
+/** 任务引用行文本（「tN：标题」串联，工单 score-coverage/02 抽取）：
+ * users = [{id, title}]；titleLimit 非零时标题截断（覆盖总览 24 字）——与
+ * resourcesOverviewHTML 同形但总览要求标题截断，故带可选参数；全部 esc。 */
+function taskRefText(users, titleLimit) {
+  return users.map((u) => esc(u.id + "：" + (titleLimit ? truncate(u.title || "", titleLimit) : (u.title || "")))).join(" · ");
+}
+
+/** 评分点覆盖总览（工单 score-coverage/02，纯前端聚合零后端）：题面每个
+ * 评分点一行——id + 分类标签（基础/发挥/其他，与 taskScoreRefsText 同判据）
+ * + 分值 + 描述截断（title 悬停全文）+ 覆盖它的任务（tN：标题）；**没有
+ * 任何任务覆盖的评分点整行标红**（.score-point-miss + 「⚠ 无任务覆盖」）——
+ * 交付前一眼可见丢分风险。任务引用了评分点清单之外的 id（AI 编造 / 清单
+ * 外部改动）→ 每 id 一行「未识别引用」黄色警示（.score-point-unknown）。
+ * 数据源 = plan.score_points（落盘值，工单 01）；空评分点 / 空清单 → ""。 */
+export function scoreRefsOverviewHTML(plan) {
+  const tasks = (plan || {}).tasks || [];
+  const points = (plan || {}).score_points || [];
+  if (!points.length || !tasks.length) return "";
+  const known = new Set();
+  points.forEach((p) => { if (p && typeof p.id === "string") known.add(p.id); });
+  // 每评分点 → 覆盖它的任务（保序）
+  const cover = {};
+  tasks.forEach((task, index) => {
+    const refs = (task && task.score_refs) || [];
+    refs.forEach((id) => {
+      if (typeof id !== "string") return;
+      if (!cover[id]) cover[id] = [];
+      cover[id].push({ id: (task && task.id) || "t" + (index + 1), title: (task && task.title) || "" });
+    });
+  });
+  const rows = points.map((p) => {
+    const id = String(p.id || "");
+    const users = cover[id] || [];
+    const part = scorePartLabel(p.part);
+    const score = (typeof p.score === "number" && Number.isFinite(p.score))
+      ? " " + p.score + " 分"
+      : "";
+    const desc = typeof p.description === "string" ? p.description : "";
+    const miss = users.length === 0;
+    return '<div class="score-point-row' + (miss ? " score-point-miss" : "") + '">'
+      + '<span class="score-chip">' + esc(id) + "</span>"
+      + '<span class="score-point-part">' + esc(part) + "</span>"
+      + (score ? '<span class="score-point-score">' + esc(score) + "</span>" : "")
+      + '<span class="score-point-desc" title="' + esc(desc) + '">' + esc(truncate(desc, 60)) + "</span>"
+      + (miss ? "" : '<span class="score-point-users">' + taskRefText(users, 24) + "</span>")
+      + (miss ? '<span class="score-miss-note">⚠ 无任务覆盖</span>' : "")
+      + "</div>";
+  }).join("");
+  // 清单外引用（AI 编造 / 清单外部改动）→ 警示行
+  const unknownIds = Object.keys(cover).filter((id) => !known.has(id));
+  const unknownRows = unknownIds.map((id) => {
+    return '<div class="score-point-row score-point-unknown">'
+      + '<span class="score-chip">' + esc(id) + "</span>"
+      + '<span class="score-point-users">' + taskRefText(cover[id] || [], 24) + "</span>"
+      + '<span class="score-unknown-note">未识别引用（不在评分点清单内）</span>'
+      + "</div>";
+  }).join("");
+  return '<div class="muted" style="margin-bottom:2px">评分点覆盖总览（每个评分点对应哪些任务；无覆盖 = 丢分风险，标红提示）</div>'
+    + '<div class="score-point-table">' + rows + unknownRows + "</div>";
+}
+
 /** 上板自检清单（工单 task-insight/02）：最新一轮的 checklist 渲染为可勾选
  * 列表——checkbox 勾选态存 localStorage（firstep.checklist.v1.<key>，key =
  * taskId+"/"+seq），纯备忘不影响状态机；勾选态由胶水层读盘后以 checkedMap
- * 传入（{序号: true}），纯函数不碰 localStorage（fx 约定无副作用）。空 = ""。 */
+ * 传入（{序号: true}），纯函数不碰 localStorage（fx 约定无副作用）。空 = ""。
+ * 默认收起（details 无 open）：清单 3-6 条原子项，卡/面板展开太长压重点；
+ * 摘要行显示「N 项 · 已勾选 M」（M>0 才出现），收起也一眼可见进度。 */
 export function taskChecklistHTML(iteration, key, checkedMap) {
   const items = (iteration && iteration.checklist) || [];
   // key 缺失 = 勾选无处持久化（无 taskId/seq 的调用点）：不渲染无用勾选
   if (!items.length || !key) return "";
   const checked = checkedMap || {};
+  const checkedCount = items.reduce((n, _item, index) => n + (checked[index] ? 1 : 0), 0);
   const rows = items.map((item, index) => {
     const isChecked = !!checked[index];
     return '<label class="task-check-item"><input type="checkbox" class="task-check-input"'
       + ' data-check-key="' + esc(String(key || "")) + '" data-check-idx="' + esc(String(index)) + '"'
       + (isChecked ? " checked" : "") + "> " + esc(String(item)) + "</label>";
   }).join("");
-  return '<div class="task-check-list" style="margin-top:6px">'
-    + '<div class="muted" style="margin-bottom:2px">上板自检清单（勾选为个人备忘，不改变任务状态）</div>'
-    + rows + "</div>";
+  return '<details class="task-check-details" style="margin-top:6px">'
+    + '<summary class="task-check-summary">上板自检清单（' + String(items.length) + " 项"
+    + (checkedCount ? " · 已勾选 " + String(checkedCount) : "") + "）</summary>"
+    + '<div class="task-check-list" style="margin-top:6px">'
+    + '<div class="muted" style="margin-bottom:2px">勾选为个人备忘，不改变任务状态</div>'
+    + rows + "</div></details>";
 }
 
 /** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02 + 04 修正）：最新一轮
@@ -717,30 +817,27 @@ export function globalNoteBadgeHTML(note) {
     + "</div>";
 }
 
-/** 任务卡上移 / 下移按钮（工单 idea-suite/04）：↑/↓ 相邻换序（数组顺序 =
- * 展示顺序；id 不变，依赖引用稳定——spec「排序后 id 不变」）。边界禁用：
- * 首卡 ↑ 禁用 / 末卡 ↓ 禁用（视觉 + disabled 双保险）。data-task-action =
- * move-up|move-down + data-task（委托需要任务上下文）；
- * index = 0 起序号，total = 任务总数。
- * 注：工单签名 (index, total) 无法携带任务 id，实现为 (task, index, total)
- * ——委托必须知道换的是哪张卡（与既有 .btn-task-* 均带 data-task 同构）。 */
-export function taskMoveButtonsHTML(task, index, total) {
+/** 任务卡「⋯ 更多」菜单（收编自 idea-suite/04 的 ✏️ 编辑 + ↑/↓ 调序）：
+ * 卡面只留一个小字下拉——编辑/调序属低频微调，裸按钮行太长太抢眼；
+ * 菜单项 = 编辑任务信息（editing 态 =「收起编辑」）/ 上移 / 下移（边界
+ * 禁用：首卡上移 / 末卡下移），data-task-action 与旧按钮一致（委托零改动，
+ * 数据契约 edit|move-up|move-down + data-task）。
+ * 原生 <details> 实现展开收起（零 JS 状态），菜单项点击后由胶水层委托
+ * 收起（open=false）+ 重渲染；点击菜单外由胶水层 document 委托关闭。 */
+export function taskMoreMenuHTML(task, index, total, editing) {
   const taskId = (task && task.id) || "";
   const n = Number(index), m = Number(total);
-  const up = '<button class="btn-task-move" data-task-action="move-up" data-task="'
-    + esc(taskId) + '"' + (n <= 0 ? " disabled" : "") + ' title="上移（换序）">↑</button>';
-  const down = '<button class="btn-task-move" data-task-action="move-down" data-task="'
-    + esc(taskId) + '"' + (n >= m - 1 ? " disabled" : "") + ' title="下移（换序）">↓</button>';
-  return '<span class="task-move">' + up + down + "</span>";
-}
-
-/** 任务卡编辑按钮（工单 idea-suite/04）：点开卡内表单（胶水层切 editing 态
- * 重渲染把 taskEditFormHTML 插进卡内）；editing = 表单已展开（文案「收起」）。 */
-function taskEditButtonHTML(task, editing) {
-  return '<button class="btn-task-edit" data-task-action="edit" data-task="'
-    + esc((task && task.id) || "") + '"'
-    + (editing ? ' title="收起编辑" >收起' : ' title="编辑标题/描述/依赖/验收方式" >✏️ 编辑')
-    + "</button>";
+  const editLabel = editing ? "收起编辑" : "编辑任务信息";
+  return '<details class="task-more-details">'
+    + '<summary class="btn-task-more" title="更多操作（编辑 / 调序）">⋯ 更多</summary>'
+    + '<div class="task-more-menu">'
+    + '<button class="btn-task-edit" data-task-action="edit" data-task="'
+    + esc(taskId) + '">' + editLabel + "</button>"
+    + '<button class="btn-task-move" data-task-action="move-up" data-task="'
+    + esc(taskId) + '"' + (n <= 0 ? " disabled" : "") + '>上移（换序）</button>'
+    + '<button class="btn-task-move" data-task-action="move-down" data-task="'
+    + esc(taskId) + '"' + (n >= m - 1 ? " disabled" : "") + '>下移（换序）</button>'
+    + "</div></details>";
 }
 
 /** 任务卡编辑表单（工单 idea-suite/04）：标题/描述/依赖（逗号分隔 1 起序号，
@@ -825,9 +922,10 @@ if (typeof window !== "undefined") {
     ideaResultHTML, taskNeedsRedoBadge,
     taskStepReportBlocksHTML,
     globalChatHTML, globalNoteBadgeHTML,
-    taskEditFormHTML, taskMoveButtonsHTML,
+    taskEditFormHTML, taskMoreMenuHTML,
     ideaDraftListHTML,
-    taskResourcesHTML, resourcesOverviewHTML, taskChecklistHTML,
+    taskResourcesHTML, resourceIsHardware, resourcesOverviewHTML,
+    scoreRefsOverviewHTML,
     checklistStateKey,
     taskErrorsHTML,
   });
