@@ -1,4 +1,5 @@
 # 参数速调 UI 网格卡片流：文档回归（param-grid/02）
+Status: resolved
 
 ## 改动
 
