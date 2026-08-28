@@ -128,6 +128,7 @@ const DOMAINS = {
     taskLatestFeedbackNote: "fn",
     taskOrderLabel: "fn", taskDialogAdoptHTML: "fn", taskDialogButtonHTML: "fn",
     taskDialogAreaHTML: "fn",
+    nextTaskHint: "fn", taskNextHintHTML: "fn",
   },
   "flash.js": {
     flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",

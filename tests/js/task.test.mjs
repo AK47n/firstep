@@ -9,6 +9,7 @@ import {
   taskCardActions, verifyStatusMarkup,
   taskCanFeedback, taskIterationLabel, taskIterationsHTML, taskLatestFeedbackNote,
   taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
+  nextTaskHint, taskNextHintHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -429,4 +430,55 @@ test("taskIterationsHTML: 轮次行带「做了什么」摘要（截 40 字）",
   ] });
   assert.ok(noReport.includes("第 1 轮"));
   assert.ok(!noReport.includes("「"));
+});
+
+test("nextTaskHint: 当前卡之后第一个待执行（pending/failed）", () => {
+  const plan = { tasks: [
+    { id: "t1", title: "一", status: "verified" },
+    { id: "t2", title: "二", status: "unverified" },
+    { id: "t3", title: "三", status: "pending" },
+    { id: "t4", title: "四", status: "failed" },
+    { id: "t5", title: "五", status: "pending" },
+  ] };
+  // 命中 t3（跳过已验证/待上板）
+  assert.deepEqual(nextTaskHint(plan, "t1"), { id: "t3", orderIndex: 2, title: "三" });
+  // 命中 t4（跳过 pending 之前的状态）
+  assert.deepEqual(nextTaskHint(plan, "t3"), { id: "t4", orderIndex: 3, title: "四" });
+  // 之后无待执行 → null
+  assert.equal(nextTaskHint(plan, "t5"), null);
+  // 当前卡不存在 / 空 plan / 空 currentId → null
+  assert.equal(nextTaskHint(plan, "t99"), null);
+  assert.equal(nextTaskHint({ tasks: [] }, "t1"), null);
+  assert.equal(nextTaskHint(plan, ""), null);
+  assert.equal(nextTaskHint(null, "t1"), null);
+  // doing / skipped 不算待执行
+  const doingAfter = { tasks: [
+    { id: "t1", title: "一", status: "doing" },
+    { id: "t2", title: "二", status: "skipped" },
+    { id: "t3", title: "三", status: "pending" },
+  ] };
+  assert.deepEqual(nextTaskHint(doingAfter, "t1"), { id: "t3", orderIndex: 2, title: "三" });
+  // 当前卡之后全为不可执行（verified/unverified/doing/skipped）→ null
+  const noneExecutable = { tasks: [
+    { id: "t1", title: "一", status: "pending" },
+    { id: "t2", title: "二", status: "verified" },
+    { id: "t3", title: "三", status: "unverified" },
+    { id: "t4", title: "四", status: "skipped" },
+  ] };
+  assert.equal(nextTaskHint(noneExecutable, "t1"), null);
+});
+
+test("taskNextHintHTML: 下一步提示行（转义 + 序号 + 空串）", () => {
+  const plan = { tasks: [
+    { id: "t1", title: "一", status: "verified" },
+    { id: "t4", title: "A到B <直线> & 停车", status: "pending" },
+  ] };
+  const html = taskNextHintHTML(plan, "t1");
+  assert.ok(html.includes("task-next-hint"));
+  assert.ok(html.includes("下一步 → t4："));
+  assert.ok(html.includes("A到B &lt;直线&gt; &amp; 停车"));  // esc 转义
+  assert.ok(!html.includes("<直线>"));
+  // 无下一步 → 空串
+  assert.equal(taskNextHintHTML(plan, "t4"), "");
+  assert.equal(taskNextHintHTML({ tasks: [] }, "t1"), "");
 });

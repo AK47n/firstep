@@ -52,6 +52,33 @@ export function taskOrderLabel(index) {
   return "第 " + (Number(index) + 1) + " 步（建议顺序）";
 }
 
+/** 下一步待执行任务（工单 step-next-guide/01）：清单顺序上当前卡**之后**第一个
+ * status ∈ {pending, failed} 的任务——「做完一步 → 该点哪张卡」的引导口径。
+ * verified（编译绿闭环）/ unverified（待上板）/ doing（执行中）/ skipped（已跳过）
+ * 不算可执行；找不到 → null（调用方不提示不滚动）。纯函数，无 DOM。 */
+export function nextTaskHint(plan, currentId) {
+  const tasks = (plan || {}).tasks || [];
+  if (!currentId) return null;
+  const start = tasks.findIndex((t) => t && t.id === currentId);
+  if (start < 0) return null;
+  for (let i = start + 1; i < tasks.length; i++) {
+    const t = tasks[i];
+    if (t && (t.status === "pending" || t.status === "failed")) {
+      return { id: t.id, orderIndex: i, title: t.title || "" };
+    }
+  }
+  return null;
+}
+
+/** 当前卡内的「下一步 → tN：标题」提示行（工单 step-next-guide/01）：
+ * 纯 HTML 串（title 经 esc 防注入）；无下一步 → 空串（调用方不渲染）。 */
+export function taskNextHintHTML(plan, currentId) {
+  const next = nextTaskHint(plan, currentId);
+  if (!next) return "";
+  return '<div class="task-next-hint">下一步 → ' + esc(next.id) + "："
+    + esc(next.title) + "</div>";
+}
+
 export function taskCardHTML(task, index, opts) {
   const o = opts || {};
   const badge = '<span class="badge ' + taskStatusBadgeClass(task.status) + '">'
@@ -385,5 +412,6 @@ if (typeof window !== "undefined") {
     verifyStatusMarkup, taskCanFeedback, taskIterationLabel,
     taskIterationsHTML, taskLatestFeedbackNote,
     taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
+    nextTaskHint, taskNextHintHTML,
   });
 }

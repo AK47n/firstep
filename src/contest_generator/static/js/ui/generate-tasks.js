@@ -17,7 +17,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML } from "/js/fx/task.js";
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -199,6 +199,28 @@ async function tasksPlan(force) {
   }
 }
 
+/** 下一步引导（工单 step-next-guide/01）：执行成功（done）后——当前卡内插入
+ * 「下一步 → tN：标题」提示行（fx/task.js 纯函数生成，含转义）；下一张待执行卡
+ * （清单顺序上当前卡之后第一个 pending/failed）滚动到视口中央 + 描边高亮 2.4s
+ * （2.6s 后移除类）。瞬态：grid 下一次重渲染 / 清单重载时提示自然消失，不落盘。
+ * 无剩余待执行 = 不提示不滚动。 */
+function guideNextTask(taskId) {
+  const next = nextTaskHint(tasks.plan, taskId);
+  if (!next) return;
+  const grid = $("tasks-grid");
+  // taskId 为后端生成 id（实测 t1/t4 形式），仍按 CSS.escape 收敛——评审整改：
+  // 直接拼接未转义 id 进 attr 选择器，id 含引号/反斜杠会抛 SyntaxError
+  const sel = (id) => '[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]';
+  const card = grid && grid.querySelector(sel(taskId));
+  if (card) card.insertAdjacentHTML("beforeend", taskNextHintHTML(tasks.plan, taskId));
+  const nextCard = grid && grid.querySelector(sel(next.id));
+  if (!nextCard) return;
+  nextCard.scrollIntoView({ behavior: "smooth", block: "center" });
+  nextCard.classList.add("task-card-highlight");
+  // 瞬态高亮：2.6s 后移除（节点已分离时 classList.remove 为无害 no-op）
+  setTimeout(() => { if (nextCard.isConnected) nextCard.classList.remove("task-card-highlight"); }, 2600);
+}
+
 /** 单任务执行（工单 02 + task-feedback/02）：读补充框 → SSE（feedback 非空 =
  * 上板反馈轮）→ 状态回填渲染 + 结果面板。 */
 async function tasksExecute(taskId, feedback) {
@@ -240,6 +262,9 @@ async function tasksExecute(taskId, feedback) {
     }
     tasksRender();
     tasksRenderResult(taskId, data);
+    // 下一步引导（工单 step-next-guide/01）：做完一步 → 当前卡提示「下一步 →
+    // tN：标题」+ 滚动高亮下一张待执行卡（瞬态；失败轮不引导——还在本卡）
+    if (data.status !== "failed") guideNextTask(taskId);
     if (data.status !== "failed") { markStepDone(11); }
     toast("ok", feedback ? "已按反馈修复" : "任务已完成");
     $("tasks-status").textContent = data.status === "failed"
