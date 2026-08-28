@@ -650,7 +650,9 @@ def test_run_task_failed_after_one_fix_round(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "contest_generator.deepen.collect_build_log",
-        lambda platform, out_dir, uv4=None, make=None: _build(2, "error: x"),
+        lambda platform, out_dir, uv4=None, make=None: _build(
+            2, 'main.c(12): error #10234-D: unresolved symbols remain\n'
+        ),
     )
     monkeypatch.setattr(
         "contest_generator.deepen.run_fix_round",
@@ -674,6 +676,12 @@ def test_run_task_failed_after_one_fix_round(tmp_path, monkeypatch):
     )
     assert result["status"] == STATUS_FAILED
     assert "仍红" in result["message"]
+    # 错误行跳转（error-jump-task/01-02 评审整改）：失败路径 done 载荷的
+    # compile 带 parsed_errors（与 compile_runner 同源——任务结果面板据此渲染
+    # 错误列表 + 行号跳转）
+    compile_result = result["compile"]
+    assert [e["path"] for e in compile_result["parsed_errors"]] == ["main.c"]
+    assert compile_result["parsed_errors"][0]["line"] == 12
     saved = read_task_plan(output_dir)
     assert saved is not None
     assert saved.tasks[0].status == STATUS_FAILED
