@@ -1262,8 +1262,10 @@
                   transition: width .4s ease; }
   #gen-progress .gp-text { position: absolute; right: 10px; top: 6px;
                   font-size: 11px; color: var(--muted); white-space: nowrap; }
-  /* Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，2.5s 自动淡出 */
-  #toast-root { position: fixed; top: 14px; right: 14px; z-index: 200;
+  /* Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，2.5s 自动淡出。
+     位置（工单 toast-offset/01）：下移避开吸顶栏——原 top:14px 与 header
+     （--header-h，JS 按视口宽实时刷新）重叠，改 calc 跟随实际栏高 */
+  #toast-root { position: fixed; top: calc(var(--header-h) + 14px); right: 14px; z-index: 200;
                 display: flex; flex-direction: column; gap: 8px;
                 max-width: 340px; }
   .toast { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
