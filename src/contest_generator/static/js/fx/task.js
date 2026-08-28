@@ -218,7 +218,7 @@ function iterationCompileBadgeClass(status) {
 
 /** 已采纳对话结论徽标（工单 task-chat/03）：任务 dialog_note 非空 → 徽标 +
  * 摘要（截 30 字）+ 取消采纳按钮；未采纳 = 空串（不渲染）。
- * dialog_note 由「和 AI 商量」对话区的采纳按钮写入（/api/tasks/dialog-adopt），
+ * dialog_note 由「有不懂的？问这里」对话区的采纳按钮写入（/api/tasks/dialog-adopt），
  * 执行时作为独立 prompt 段注入（<-> 后端 task_progress.set_task_dialog_note）。 */
 export function taskDialogAdoptHTML(task) {
   const note = task && task.dialog_note;
@@ -231,17 +231,19 @@ export function taskDialogAdoptHTML(task) {
     + "</div>";
 }
 
-/** 「和 AI 商量」按钮（工单 task-chat/03）：doing = 执行中不可操作（不显示）；
- * st.open 时文案「收起讨论」。 */
+/** 「有不懂的？问这里」按钮（工单 task-chat/03 + 06 文案澄清）：本步有什么
+ * 没懂/想确认的，点开向 AI 询问——AI 先判断可行性再给影响与修正建议，采纳的
+ * 结论会带进下一步执行。doing = 执行中不可操作（不显示）；st.open 时文案
+ * 「收起讨论」。 */
 export function taskDialogButtonHTML(task, st) {
   if (!task || task.status === "doing") return "";
   const open = !!(st && st.open);
   return '<button class="btn-task-dialog' + (open ? " active" : "") + '" data-task="'
-    + esc(task.id || "") + '">' + (open ? "收起讨论" : "和 AI 商量") + "</button>";
+    + esc(task.id || "") + '">' + (open ? "收起讨论" : "有不懂的？问这里") + "</button>";
 }
 
-/** 任务对话区（工单 task-chat/03）：每卡「和 AI 商量」的展开区。
- * st = {open, busy, history: [{role, content}]}；未展开 = 空串。
+/** 任务对话区（工单 task-chat/03 + 06 文案澄清）：每卡「有不懂的？问这里」的
+ * 展开区。st = {open, busy, history: [{role, content}]}；未展开 = 空串。
  * 历史全量渲染（用户 / AI 逐条，转义）；每条 AI 消息下挂「采纳这条结论」
  * 按钮（data-task + data-idx——可采纳任意一轮回复，采纳哪条由用户定）；
  * 底部输入框 + 发送（busy 时禁用，防并发一轮）。样式复用 .sugg-discuss-*（
@@ -265,7 +267,7 @@ export function taskDialogAreaHTML(task, st) {
   }).join("");
   if (!lines) {
     return '<div class="task-dialog-box">'
-      + '<div class="sugg-msg muted">可以告诉 AI 你的想法或纠正——确认后再采纳，结论会带进下一步执行。</div>'
+      + '<div class="sugg-msg muted">这一步有不懂或想确认的地方？把你的疑问告诉 AI——它会先判断可行性，再给影响与修正建议；确认后可点「采纳这条结论」，结论会带进下一步执行。</div>'
       + '<div class="sugg-discuss-row">' + dialogInputHTML(taskId, s) + "</div></div>";
   }
   return '<div class="task-dialog-box">'
@@ -279,7 +281,7 @@ export function taskDialogAreaHTML(task, st) {
  *（draft = 输入框未发送内容——重渲染不丢；busy = 一轮 LLM 调用中禁用输入）。 */
 function dialogInputHTML(taskId, st) {
   return '<input id="task-dialog-input-' + esc(taskId) + '" class="sugg-discuss-input"'
-    + ' placeholder="说说你的想法或纠正（如：左轮不转，改成脉冲式）…" value="' + (st.draft || "") + '">'
+    + ' placeholder="有不懂的或想确认的？在这里问（如：这一步烧录后应该观察到什么？）…" value="' + (st.draft || "") + '">'
     + '<button class="btn-task-dialog-send" data-task="' + esc(taskId) + '"'
     + (st.busy ? " disabled" : "") + ">" + (st.busy ? "回应中…" : "发送") + "</button>";
 }
