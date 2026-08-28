@@ -107,6 +107,10 @@ EVENT_BUY_DISCUSS = "buy_discuss"
 # 开始（分钟级阻塞）；端点同步返回（非 SSE），事件供观察面板消费。
 EVENT_TASK_DISCUSS = "task_discuss"
 
+# 全局工程级商量（工单 idea-suite/01）：一轮全局讨论的 LLM 调用开始
+# （分钟级阻塞）；端点同步返回（非 SSE），事件供观察面板消费。
+EVENT_IDEA_CHAT = "idea_chat"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；

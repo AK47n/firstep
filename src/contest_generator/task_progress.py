@@ -683,13 +683,16 @@ def run_task(
     make_override: str = "",
     module_slugs: Sequence[str] = (),
     feedback: str = "",
+    global_note: str = "",
 ) -> dict[str, Any]:
     """/api/tasks/execute 的域编排：单任务 LLM 实现 → 备份 → 写盘 → 编译
     验证闭环（与深化共用 verify_compile_tail 尾段）→ 状态回填清单。
 
     任务 = 清单里的一个任务（find_task 查）。LLM 输入 = 当前 main.c + 任务
     描述 + 补充框（note，用户对本次执行的附加说明）+ 上板反馈（feedback，
-    可选——用户烧录实测现象，工单 task-feedback/02）+ 模块接口 + 题面/Q&A；
+    可选——用户烧录实测现象，工单 task-feedback/02）+ 工程级全局结论
+    （global_note，可选——全局商量采纳的结论，工单 idea-suite/01：任何
+    一步执行都与之保持一致，空串 = 未采纳）+ 模块接口 + 题面/Q&A；
     输出 = 实现后的 main.c 全文（与深化同形状，prompt 约束只实现本任务）。
 
     feedback 非空 = 上板反馈轮：任务当前为终态（verified / unverified /
@@ -746,6 +749,7 @@ def run_task(
             problem_text=problem_text,
             qa_text=qa_text,
             feedback=feedback,
+            global_note=global_note,
         )
         if not executed.strip():
             raise TaskError("任务执行结果为空——LLM 未产出实现后的 main.c，请重试")
@@ -896,12 +900,14 @@ def run_direct_fix(
     uv4_override: str = "",
     make_override: str = "",
     module_slugs: Sequence[str] = (),
+    global_note: str = "",
 ) -> dict[str, Any]:
     """/api/tasks/idea/fix 的域编排（工单 idea-fix/01）：按想法直接修正。
 
     形状对齐 run_task 的非任务部分（与深化共用 verify_compile_tail 尾段）：
-    接口装配 → llm.apply_idea_fix（只按想法改，其余原样保留）→ 备份（整树，
-    回滚走 /api/revise/rollback 复用入口）→ 写盘 → main_diff → 编译验证
+    接口装配 → llm.apply_idea_fix（只按想法改，其余原样保留；global_note =
+    全局商量采纳的结论，工单 idea-suite/01——修正亦与之保持一致，空串 =
+    未采纳）→ 备份（整树，回滚走 /api/revise/rollback 复用入口）→ 写盘 → main_diff → 编译验证
     （subject="修正结果"）→ 步骤报告（复用 report_task_step：伪任务 id =
     "idea-fix"，title="直接修正"——给用户「做了什么 + 接下来做什么」叙事，
     与任务执行同一「每步说明」哲学）。
@@ -930,6 +936,7 @@ def run_direct_fix(
         problem_text=problem_text,
         qa_text=qa_text,
         main_c=main_c,
+        global_note=global_note,
     )
     if not fixed.strip():
         raise TaskError("修正结果为空——LLM 未产出修正后的 main.c，请重试")

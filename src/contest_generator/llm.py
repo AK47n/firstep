@@ -358,6 +358,24 @@ TASK_IDEA_SYSTEM_PROMPT = (
     '"affected_task_ids": ["t1"]}'
 )
 
+# 全局工程级商量（工单 idea-suite/01）：学生针对**整个工程**的连续追问 →
+# AI 工程总顾问回应（结合题面 / 需求 / 清单现状 / 接口 / 当前 main.c /
+# 已采纳的全局结论）。立场 = 顾问非执行者：落地（转任务 / 转修正 / 采纳为
+# 全局结论）由前端按钮与专用端点处理，模型不替用户决定。只输出 JSON。
+TASK_GLOBAL_DISCUSS_SYSTEM_PROMPT = (
+    "你是嵌入式 C 开发总顾问。学生正在就整个工程做连续追问（不是某个具体"
+    "任务卡——任务卡有单独的商量入口；赛题文本 / 模块接口过长可能被截断，"
+    "见末尾标注，" + TRUNCATION_NOTICE + "）。结合赛题要求、功能需求清单、"
+    "任务清单现状（哪些已做 / 建议重做）、所选模块接口与当前 main.c 的实现"
+    "情况，回答学生的问题——先判断可行性（利与弊），再说明对工程现状的"
+    "影响（改哪里、涉及哪些接口 / 引脚 / 定时器 / 任务），最后给出具体、"
+    "可执行的建议；需要更多信息时反问关键问题。若学生的想法与现状冲突，"
+    "明确指出冲突点与替代方案，不要含糊附和。若工程已有采纳的全局结论"
+    "（【工程级全局结论】段），回复须与之一致；冲突时指出并说明理由。"
+    "不直接改代码——落地（转任务 / 转修正 / 采纳为全局结论）由学生决定。"
+    '只输出 JSON 对象：{"reply": "回复文本"}；reply 必须非空、用中文。'
+)
+
 # 想法直接修正（工单 idea-fix/01）：按用户想法做直接修正——只改想法相关的
 # 实现，其余原样保留；不实现清单里的新功能（那走任务卡）。文本模式输出
 # main.c 全文（与任务执行同形状，prompt 约束同款「只改指定内容」）。
@@ -1364,6 +1382,7 @@ class LLM(Protocol):
         problem_text: str,
         qa_text: str,
         feedback: str = "",
+        global_note: str = "",
     ) -> str: ...
 
     def discuss_buy_options(
@@ -1383,6 +1402,19 @@ class LLM(Protocol):
         requirements: Sequence[Mapping[str, Any]],
         module_interfaces: Sequence[str],
         main_c: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion: ...
+
+    def discuss_global_idea(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+        global_note: str,
         history: Sequence[tuple[str, str]],
     ) -> TaskDiscussion: ...
 
@@ -1415,6 +1447,7 @@ class LLM(Protocol):
         problem_text: str,
         qa_text: str,
         main_c: str,
+        global_note: str = "",
     ) -> str: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
@@ -2555,21 +2588,25 @@ class DeepSeekLLM:
         problem_text: str,
         qa_text: str,
         feedback: str = "",
+        global_note: str = "",
     ) -> str:
         """单任务执行（工单 task-progress/02 + task-feedback/02）：在现有
         main.c 上只实现一个任务；feedback 非空 = 上板反馈修复轮（用户烧录
-        实测现象，prompt 按反馈修）。
+        实测现象，prompt 按反馈修）；global_note 非空 = 工程级全局结论
+        （工单 idea-suite/01：全局商量采纳的结论，prompt 独立段注入——任何
+        一步执行都与之保持一致，空串 = 未采纳，调用形状逐字节不变）。
 
         输入 = 现有 main.c + 任务描述 + 用户补充说明（note）+ 上板反馈
-        （feedback，可选）+ 模块接口清单 + 题面与 Q&A；输出 = 实现后的
-        main.c 全文（文本模式，与深化同形状）。瞬时失败整次重问
-        （_retry_parse，与骨架同款兜底）；空结果由域层 run_task 拒绝
-        （TaskError）。
+        （feedback，可选）+ 工程级全局结论（global_note，可选）+ 模块接口
+        清单 + 题面与 Q&A；输出 = 实现后的 main.c 全文（文本模式，与深化同
+        形状）。瞬时失败整次重问（_retry_parse，与骨架同款兜底）；空结果由
+        域层 run_task 拒绝（TaskError）。
         """
         return self._retry_parse(
             system_prompt=TASK_EXECUTE_SYSTEM_PROMPT,
             user_prompt=_task_execute_user_prompt(
-                main_c, task, note, module_interfaces, problem_text, qa_text, feedback
+                main_c, task, note, module_interfaces, problem_text, qa_text,
+                feedback, global_note,
             ),
             parse=lambda content: content,
             label="任务执行",
@@ -2657,6 +2694,53 @@ class DeepSeekLLM:
             parse=parse,
             label="任务商量",
             operation="discuss_task",
+            json_mode=True,
+        )
+
+    def discuss_global_idea(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+        global_note: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        """全局工程级商量（工单 idea-suite/01）：一轮全局讨论回复（工程总顾问）。
+
+        输入 = 题面 + Q&A + 功能需求 + 评分点 + 清单现状 + 模块接口 + 当前
+        main.c + 已采纳全局结论（global_note）+ 讨论历史（用户 / AI 交替，
+        最后一条 user = 本轮消息——单通道，无独立 message 参数，与任务商量
+        同款防错位设计）；输出 JSON 由解析器校验：reply 空 / 缺失 = 整次
+        重问（_retry_parse，对话语境回复为空毫无价值）。
+        """
+
+        def parse(content: str) -> TaskDiscussion:
+            data = extract_module_selection_data(content)
+            reply = data.get("reply")
+            if not isinstance(reply, str) or not reply.strip():
+                raise LLMError("全局商量回复为空：模型未输出 reply 或为空串")
+            return TaskDiscussion(reply=reply.strip())
+
+        return self._retry_parse(
+            system_prompt=TASK_GLOBAL_DISCUSS_SYSTEM_PROMPT,
+            user_prompt=_global_idea_user_prompt(
+                problem_text,
+                qa_text,
+                requirements,
+                score_points,
+                module_interfaces,
+                main_c,
+                plan,
+                global_note,
+                history,
+            ),
+            parse=parse,
+            label="全局商量",
+            operation="discuss_global_idea",
             json_mode=True,
         )
 
@@ -2781,14 +2865,16 @@ class DeepSeekLLM:
         problem_text: str,
         qa_text: str,
         main_c: str,
+        global_note: str = "",
     ) -> str:
         """想法直接修正（工单 idea-fix/01）：按用户想法改现有代码。
 
         输入 = 想法文本 + 修正建议 + 受影响任务 id + 模块接口 + 题面/Q&A +
-        当前 main.c；输出 = 修正后的 main.c 全文（文本模式，与任务执行同
-        形状——prompt 约束只改想法相关的实现）。瞬时失败整次重问
-        （_retry_parse，与骨架同款兜底）；空结果由域层 run_direct_fix 拒绝
-        （TaskError）。
+        当前 main.c + 工程级全局结论（global_note，可选——工单 idea-suite/01，
+        与任务执行同注入：非空才插【工程级全局结论】段）；输出 = 修正后的
+        main.c 全文（文本模式，与任务执行同形状——prompt 约束只改想法相关
+        的实现）。瞬时失败整次重问（_retry_parse，与骨架同款兜底）；空结果
+        由域层 run_direct_fix 拒绝（TaskError）。
         """
         return self._retry_parse(
             system_prompt=IDEAFIX_SYSTEM_PROMPT,
@@ -2800,6 +2886,7 @@ class DeepSeekLLM:
                 problem_text,
                 qa_text,
                 main_c,
+                global_note,
             ),
             parse=lambda content: content,
             label="想法修正",
@@ -3412,10 +3499,12 @@ class RoutingLLM:
         problem_text: str,
         qa_text: str,
         feedback: str = "",
+        global_note: str = "",
     ) -> str:
         # 单任务执行走 remote（质量优先，不进本地方法集）
         return self._remote.execute_task(
-            main_c, task, note, module_interfaces, problem_text, qa_text, feedback
+            main_c, task, note, module_interfaces, problem_text, qa_text, feedback,
+            global_note,
         )
 
     def discuss_buy_options(
@@ -3444,6 +3533,31 @@ class RoutingLLM:
         # 任务商量走 remote（讨论质量优先，不进本地方法集）
         return self._remote.discuss_task(
             task, problem_text, qa_text, requirements, module_interfaces, main_c, history
+        )
+
+    def discuss_global_idea(
+        self,
+        problem_text: str,
+        qa_text: str,
+        requirements: Sequence[Mapping[str, Any]],
+        score_points: Sequence[Mapping[str, Any]],
+        module_interfaces: Sequence[str],
+        main_c: str,
+        plan: Mapping[str, Any] | None,
+        global_note: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        # 全局商量走 remote（讨论质量优先，不进本地方法集）
+        return self._remote.discuss_global_idea(
+            problem_text,
+            qa_text,
+            requirements,
+            score_points,
+            module_interfaces,
+            main_c,
+            plan,
+            global_note,
+            history,
         )
 
     def report_task_step(
@@ -3490,10 +3604,12 @@ class RoutingLLM:
         problem_text: str,
         qa_text: str,
         main_c: str,
+        global_note: str = "",
     ) -> str:
         # 想法修正走 remote（代码改动质量优先，不进本地方法集）
         return self._remote.apply_idea_fix(
-            idea, fix_summary, affected, module_interfaces, problem_text, qa_text, main_c
+            idea, fix_summary, affected, module_interfaces, problem_text, qa_text,
+            main_c, global_note,
         )
 
 
@@ -3990,17 +4106,20 @@ def _task_execute_user_prompt(
     problem_text: str,
     qa_text: str,
     feedback: str = "",
+    global_note: str = "",
 ) -> str:
     """单任务执行的 user 消息（工单 task-progress/02 + task-feedback/02 +
-    task-chat/01）：任务描述 + 补充框 + 对话结论 + 上板反馈 + 题面 + Q&A +
-    接口 + 现有 main.c。
+    task-chat/01 + idea-suite/01）：任务描述 + 补充框 + 对话结论 + 上板反馈 +
+    工程级全局结论 + 题面 + Q&A + 接口 + 现有 main.c。
 
     补充框（note）独立段（用户对本次执行的附加说明，如"循迹用 10ms
     定时器"），为空 = 无该段；对话结论（dialog_note，任务卡「和 AI 商量」
     里用户采纳的 AI 回复全文，工单 task-chat/01）另立一段（放在 note 段
     之后——对话语义晚于预填写说明、早于烧录反馈）；上板实测反馈（feedback）
-    再另立一段（真实烧录后的现象，对话语义晚于预填写说明），两者为空 =
-    无对应段（既有调用形状逐字节不变）。"""
+    再另立一段（真实烧录后的现象，对话语义晚于预填写说明）；工程级全局
+    结论（global_note，工单 idea-suite/01：全局商量采纳的结论——任何一步
+    执行都与之保持一致）在 feedback 段后、赛题段前（全局语境比单次反馈更
+    上位）；四者为空 = 无对应段（既有调用形状逐字节不变）。"""
     lines = [
         "【本次要实现的单个任务】",
         f"任务：{task.get('title', '')}",
@@ -4017,6 +4136,12 @@ def _task_execute_user_prompt(
         ]
     if feedback:
         lines += ["", "【上板实测反馈（按反馈修复，不重写无关部分）】", feedback]
+    if global_note:
+        lines += [
+            "",
+            "【工程级全局结论（采纳自全局商量，本次实现须与之保持一致）】",
+            _truncate_content(global_note),
+        ]
     lines += ["", "赛题：", _truncate_content(problem_text)]
     if qa_text:
         lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
@@ -4163,10 +4288,16 @@ def _idea_fix_user_prompt(
     problem_text: str,
     qa_text: str,
     main_c: str,
+    global_note: str = "",
 ) -> str:
-    """想法直接修正的 user 消息（工单 idea-fix/01）：想法 + 修正建议 +
-    受影响任务 + 接口 + 题面/Q&A + 现有 main.c（与任务执行 prompt 同构——
-    改动时两处核对，见 SKELETON_INTERFACES_HEADING 双份教训）。
+    """想法直接修正的 user 消息（工单 idea-fix/01 + idea-suite/01）：想法 +
+    修正建议 + 受影响任务 + 工程级全局结论 + 接口 + 题面/Q&A + 现有 main.c
+    （与任务执行 prompt 同构——改动时两处核对，见 SKELETON_INTERFACES_HEADING
+    双份教训）。
+
+    工程级全局结论（global_note，工单 idea-suite/01：全局商量采纳的结论——
+    修正亦须与之保持一致）在受影响任务段后、赛题段前（与 _task_execute_
+    user_prompt 同位置语义）；空 = 无该段（既有调用形状逐字节不变）。
     """
     lines = ["【用户的想法 / 发现的问题】", _truncate_content(idea)]
     if fix_summary:
@@ -4176,6 +4307,12 @@ def _idea_fix_user_prompt(
             "",
             "【受影响任务（参考信息——修正可能影响它们的实现，不要顺带修改）】",
             "、".join(affected),
+        ]
+    if global_note:
+        lines += [
+            "",
+            "【工程级全局结论（采纳自全局商量，本次修正须与之保持一致）】",
+            _truncate_content(global_note),
         ]
     lines += ["", "赛题：", _truncate_content(problem_text)]
     if qa_text:
@@ -4298,6 +4435,65 @@ def _task_discuss_user_prompt(
     lines += ["", SKELETON_INTERFACES_HEADING]
     lines.extend(_truncate_content(block) for block in module_interfaces)
     lines += ["", "当前 main.c（讨论对象，不直接修改——采纳后才由任务执行实现）：", main_c]
+    history_text = _discuss_history_segment(history)
+    if history_text:
+        lines += ["", "【讨论历史（旧 → 新）】", history_text]
+    lines += ["", "【你的最新消息】", history[-1][1] if history else ""]
+    return "\n".join(lines)
+
+
+def _global_idea_user_prompt(
+    problem_text: str,
+    qa_text: str,
+    requirements: Sequence[Mapping[str, Any]],
+    score_points: Sequence[Mapping[str, Any]],
+    module_interfaces: Sequence[str],
+    main_c: str,
+    plan: Mapping[str, Any] | None,
+    global_note: str,
+    history: Sequence[tuple[str, str]],
+) -> str:
+    """全局商量的 user 消息（工单 idea-suite/01）：题面 + Q&A + 功能需求 +
+    评分点 + 清单现状 + 接口 + 当前 main.c + 已采纳全局结论 + 讨论历史（旧 →
+    新，逐条字符帽）+ 用户最新一轮消息。各段截断带标注（_truncate_content /
+    _fit_fulltext_wire / _requirement_lines / _idea_plan_summary /
+    _discuss_history_segment 先例）。
+
+    历史为单通道：最后一条 user = 本轮消息（无独立 message 参数——与任务
+    商量同款防错位设计，评审整改项）。全局结论段放 main.c 段后（讨论语境
+    最上位），空 = 无该段。
+    """
+    lines = ["【赛题】", _truncate_content(problem_text)]
+    if qa_text:
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+    if requirements:
+        lines += _requirement_lines(
+            requirements, "功能需求清单（工程必须逐条覆盖，不遗漏、不题外发挥）："
+        )
+    if score_points:
+        pt_lines = ["", "题面评分点（任务 score_refs 只引用这里的 id）："]
+        for index, point in enumerate(score_points, 1):
+            if not isinstance(point, Mapping):
+                continue
+            pid = point.get("id", f"score-{index}")
+            score_text = (
+                f"{point.get('score')} 分"
+                if isinstance(point.get("score"), (int, float))
+                and not isinstance(point.get("score"), bool)
+                else "未标分"
+            )
+            pt_lines.append(f"- {pid}｜{point.get('description', '')}（{score_text}）")
+        lines += pt_lines
+    lines += _idea_plan_summary(plan)
+    lines += ["", SKELETON_INTERFACES_HEADING]
+    lines.extend(_truncate_content(block) for block in module_interfaces)
+    lines += ["", "当前 main.c（工程现状，讨论对象——不直接修改）：", main_c]
+    if global_note.strip():
+        lines += [
+            "",
+            "【工程级全局结论（学生已采纳的先前商讨结论，回复须与之保持一致）】",
+            _truncate_content(global_note),
+        ]
     history_text = _discuss_history_segment(history)
     if history_text:
         lines += ["", "【讨论历史（旧 → 新）】", history_text]
