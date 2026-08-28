@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9fa5d0dfa3861a2b3a5f5ed588c1859ad9ee1c30 -->
+<!-- changelog-auto: last-commit=ae58cc409c8340e27cfc493af6fc6cb502d9eea0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -44,6 +44,7 @@
 - 22:24 错误行跳转：编译摘要带 parsed_errors（error-jump-task/01）
 - 22:24 错误行跳转：任务结果面板错误列表 + 跳转单源迁移（error-jump-task/02）
 - 22:25 错误行跳转：文档回归（error-jump-task/03）
+- 22:32 错误行跳转：评审整改（error-jump-task/01 复核）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
