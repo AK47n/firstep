@@ -1288,6 +1288,28 @@
                 color: var(--muted); letter-spacing: .04em; margin: 0 0 8px;
                 padding-bottom: 6px; border-bottom: 1px dashed var(--border);
                 text-transform: uppercase; }
+  /* 第11步卡内页签（工单 step11-tabs-ui/01）：修订 / 任务推进 / 参数速调 / 交付——
+     激活态 accent 底 + 徽章 pill；窄屏横向滚动不换行；徽章就地刷新（不重建按钮） */
+  .revise-tabs { display: flex; gap: 6px; margin: 2px 0 4px; padding: 4px;
+                 overflow-x: auto; scrollbar-width: thin; }
+  .revise-tab { display: inline-flex; align-items: center; gap: 6px;
+                padding: 5px 12px; border-radius: 999px; cursor: pointer; flex: none;
+                border: 1px solid var(--border); background: transparent;
+                color: var(--muted); font-size: 12.5px;
+                transition: all var(--dur-base) var(--ease-ui); user-select: none; }
+  .revise-tab:hover { border-color: var(--accent); color: var(--text); }
+  .revise-tab.active { border-color: rgba(0, 212, 255, .45); background: var(--accent-dim);
+                       color: var(--text); font-weight: 600; }
+  .revise-tab.active:hover { border-color: rgba(0, 212, 255, .45); }
+  .revise-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .revise-tab-badge { padding: 1px 7px; border-radius: 999px; font-size: 10.5px;
+                      font-weight: 700; background: var(--panel-2);
+                      border: 1px solid var(--border); color: var(--muted);
+                      line-height: 1.6; }
+  .revise-tab.active .revise-tab-badge { color: var(--accent);
+                      border-color: rgba(0, 212, 255, .45); }
+  .revise-tab-badge.hidden { display: none; }
+  .revise-panel { margin-top: 10px; }
   /* 逐步深化进度总览（工单 stepwise-deepen/02）：分段进度条——已验证绿 /
      进行中青 / 待上板黄 / 失败红 / 待做灰 / 已跳过暗；汇总文案在 fx/task.js */
   .tasks-overview-bar { display: flex; height: 8px; border-radius: 99px;
@@ -1907,6 +1929,11 @@
       <h2><span class="step-no">11</span>修订与深化（新 Q&A → 影响分析 → 确认修订 / 可选深化 → 编译验证）</h2>
       <div class="muted" style="margin-bottom:10px">生成之后发布的赛事答疑 Q&A 也能补进流程：AI 逐条分析影响 → 展示模块增删 diff → 确认后覆盖式重生成（修订前整树备份，可回滚）；可选深化 = AI 按功能需求填 main.c 的 TODO 并强制编译验证（绿 = 已验证；无工具链 = 降级提示）。</div>
 
+      <!-- 第11步卡内页签（工单 step11-tabs-ui/01）：修订 / 任务推进 / 参数速调 / 交付
+           一次只看一个分区；徽章由 ui/revise-tabs.js 就地刷新 -->
+      <nav id="revise-tabs" class="revise-tabs" role="tablist" aria-label="修订与深化分区"></nav>
+
+      <section id="revise-panel-revise" class="revise-panel" role="tabpanel" aria-labelledby="revise-tab-revise">
       <div class="card-group">
         <div class="card-group-title">上下文入口</div>
         <!-- 入口 1：当前会话 -->
@@ -1973,7 +2000,9 @@
         <div id="revise-result" class="hidden" style="margin-top:10px"></div>
         <div id="revise-exec-msg" class="error"></div>
       </div>
+      </section>
 
+      <section id="revise-panel-tasks" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-tasks">
       <!-- 逐步深化（工单 stepwise-deepen/01-03）：AI 拆解任务清单 → 逐任务执行
            → 每步编译验证 → 步骤报告（AI 做了什么 + 接下来你要做什么，含接线/上板
            指引）→ 上板反馈。上下文复用上方「上下文入口」的加载结果。 -->
@@ -2004,24 +2033,8 @@
           <div id="tasks-global-chat" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-global-msg" class="error"></div>
         </div>
-        <div class="card-group" style="margin-top:6px">
-          <div class="card-group-title">⚙️ 参数速调（改一个数，不用重跑整步）</div>
-          <div class="row">
-            <button id="btn-params-scan" class="primary">识别 main.c 参数</button>
-            <span id="params-status" class="muted"></span>
-          </div>
-          <div class="muted" style="margin-top:4px">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表落盘（.contest_params.json）。</div>
-          <div id="params-grid" class="hidden" style="margin-top:8px"></div>
-          <div id="params-result" style="margin-top:8px"></div>
-          <div id="params-msg" class="error"></div>
-        </div>
-        <div class="card-group" style="margin-top:6px">
-          <div class="card-group-title">🚀 交付（打开工程 / 检查 / 打包）</div>
-          <div class="row" id="delivery-actions"></div>
-          <div class="muted" style="margin-top:4px">打开发送前最后一公里：交付检查 = 任务清单完成度汇总（未完成逐条列出，失败一眼可见）；打包 = 工程目录 zip（排除 .contest_* 内部状态文件，时间戳命名不覆盖旧包，输出到工程目录隔壁）。</div>
-          <div id="delivery-result" style="margin-top:8px"></div>
-          <div id="delivery-msg" class="error"></div>
-        </div>
+        <!-- ⚙️ 参数速调、🚀 交付已迁出任务推进面板（工单 step11-tabs-ui/01）：
+             各自独立页签面板，见下方 revise-panel-params / revise-panel-delivery -->
         <div class="row">
           <button id="btn-tasks-plan" class="primary">拆解任务</button>
           <button id="btn-tasks-replan" class="hidden">重新拆解（覆盖）</button>
@@ -2035,6 +2048,31 @@
         <div id="tasks-grid" class="hidden" style="margin-top:10px"></div>
         <div id="tasks-msg" class="error"></div>
       </div>
+      </section>
+
+      <section id="revise-panel-params" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-params">
+        <div class="card-group" style="margin-top:12px">
+          <div class="card-group-title">⚙️ 参数速调（改一个数，不用重跑整步）</div>
+          <div class="row">
+            <button id="btn-params-scan" class="primary">识别 main.c 参数</button>
+            <span id="params-status" class="muted"></span>
+          </div>
+          <div class="muted" style="margin-top:4px">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表落盘（.contest_params.json）。</div>
+          <div id="params-grid" class="hidden" style="margin-top:8px"></div>
+          <div id="params-result" style="margin-top:8px"></div>
+          <div id="params-msg" class="error"></div>
+        </div>
+      </section>
+
+      <section id="revise-panel-delivery" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-delivery">
+        <div class="card-group" style="margin-top:12px">
+          <div class="card-group-title">🚀 交付（打开工程 / 检查 / 打包）</div>
+          <div class="row" id="delivery-actions"></div>
+          <div class="muted" style="margin-top:4px">打开发送前最后一公里：交付检查 = 任务清单完成度汇总（未完成逐条列出，失败一眼可见）；打包 = 工程目录 zip（排除 .contest_* 内部状态文件，时间戳命名不覆盖旧包，输出到工程目录隔壁）。</div>
+          <div id="delivery-result" style="margin-top:8px"></div>
+          <div id="delivery-msg" class="error"></div>
+        </div>
+      </section>
     </div>
 
     <div class="card">
@@ -2614,6 +2652,7 @@ import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen
 import { tasksPlan } from "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
 import { paramsScan } from "/js/ui/params.js";  // 参数速调：同上——import 只为加载模块
 import { deliveryOpen, deliveryCheck, deliveryPackage } from "/js/ui/delivery.js";  // 交付卡：同上
+import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签（工单 step11-tabs-ui/01）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
@@ -2972,6 +3011,7 @@ initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
+initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM 已就绪，纯本地交互
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
