@@ -282,7 +282,7 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
     return false;
   }
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   const input = $("tasks-idea-input");
   const text = (sourceText || (input && input.value) || "").trim();
   if (!text) { $("tasks-idea-msg").textContent = "请先说你的想法或发现的问题（如「进弯道前先减速」）；或到 AI 建议区把『讨论』的建议转成落地动作"; return; }
@@ -331,7 +331,7 @@ async function tasksIdeaInsert() {
     return;
   }
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-idea-msg").textContent = "";
   try {
@@ -370,7 +370,7 @@ async function tasksIdeaFix() {
     return;
   }
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-idea-msg").textContent = "";
   try {
@@ -476,7 +476,7 @@ async function tasksIdeaConvert(target) {
 async function tasksRedoTask(taskId) {
   if (tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-msg").textContent = "";
   try {
@@ -527,7 +527,7 @@ function tasksGlobalRender() {
 /** 读盘加载全局商量历史（chat 为空时展开调用）；无文件 = 空聊天（不 400）。 */
 async function tasksChatLoad() {
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) throw new Error("请先在上方「上下文入口」加载当前会话或历史目录");
+  if (!dir) throw new Error("请先在「修订」页签加载当前会话或历史目录");
   const data = await apiPost("/api/tasks/idea/chat/read", { output_dir: dir });
   chatState.chat = data.chat || { messages: [], note: "" };
 }
@@ -541,7 +541,7 @@ async function tasksChatToggle() {
   }
   const dir = tasks.outputDir || reviseGetDir();
   if (!chatState.open && !dir) {
-    $("tasks-global-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录";
+    $("tasks-global-msg").textContent = "请先在「修订」页签加载当前会话或历史目录";
     return;
   }
   chatState.open = !chatState.open;
@@ -563,7 +563,7 @@ async function tasksChatToggle() {
 async function tasksChatSend() {
   if (chatState.busy || tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-global-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-global-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   const input = $("tasks-global-chat-input");
   const message = ((input && input.value) || "").trim();
   if (!message) {
@@ -604,7 +604,7 @@ async function tasksChatAdopt(text) {
     return;
   }
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-global-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-global-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-global-msg").textContent = "";
   try {
@@ -686,7 +686,7 @@ async function tasksDraftsLoad() {
 async function tasksDraftAdd() {
   if (draftState.busy || tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-drafts-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-drafts-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   const input = $("tasks-idea-input");
   const text = ((input && input.value) || "").trim();
   if (!text) {
@@ -718,7 +718,7 @@ async function tasksDraftAdd() {
 async function tasksDraftDelete(id) {
   if (draftState.busy || tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-drafts-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-drafts-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   draftState.busy = true;
   tasksDraftsRender();
   tasksSetBusy(true);   // 与想法分析共用 tasks.busy 闸（删除进行中禁并发分析）
@@ -765,7 +765,7 @@ async function tasksDraftAnalyzeAll() {
     return;
   }
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-idea-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-idea-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   const list = (draftState.drafts || []).slice();
   if (!list.length) {
     $("tasks-drafts-msg").textContent = "没有草稿可分析——先「存入草稿」";
@@ -847,7 +847,7 @@ async function tasksRunSSE(url, body, handlers) {
 async function tasksPlan(force) {
   if (tasks.busy) return;
   const dir = reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   if (force && !await confirmModal({
     title: "重新拆解？",
     message: "将重新生成任务清单：旧清单会备档为 .contest_tasks.json.bak，当前任务进度（含已完成状态）随旧清单一起归档。",
@@ -920,7 +920,7 @@ async function tasksExecute(taskId, feedback) {
     return;
   }
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   const note = ($("task-note-" + taskId) || {}).value || "";
   tasksSetBusy(true);
   tasksResetMessages();
@@ -1075,7 +1075,7 @@ async function tasksRollback(backupId, taskId) {
     confirmText: "确认回滚",
   })) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-status").textContent = "回滚中…";
   try {
@@ -1114,7 +1114,7 @@ async function tasksReload() {
 async function tasksSetStatus(taskId, status, okMessage = "状态已更新") {
   if (tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-msg").textContent = "";
   try {
@@ -1174,7 +1174,7 @@ async function tasksRollbackIteration(taskId, seq) {
     confirmText: "确认回滚",
   })) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-status").textContent = "回滚中…";
   try {
@@ -1211,7 +1211,7 @@ async function tasksDialogSend(taskId) {
   const message = (input && input.value || "").trim();
   if (!message) { $("tasks-msg").textContent = "请先说你的想法或纠正（如「左轮不转，改成脉冲式」）"; return; }
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   // 用户消息入历史后再发（历史含本条——后端 prompt 以 history[-1] 为最新消息，
   // 单通道：无独立 message 参数，评审整改——分离 message 与 history 会丢消息）
   st.history.push({ role: "user", content: message });
@@ -1247,7 +1247,7 @@ async function tasksDialogAdopt(taskId, idx) {
   const entry = st.history[Number(idx)];
   if (!entry || entry.role !== "assistant" || !entry.content) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-msg").textContent = "";
   try {
@@ -1269,7 +1269,7 @@ async function tasksDialogAdopt(taskId, idx) {
 async function tasksDialogClear(taskId) {
   if (tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-msg").textContent = "";
   try {
@@ -1319,7 +1319,7 @@ function tasksEditCancel(taskId) {
 async function tasksEditSave(taskId) {
   if (tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   const title = (($("task-edit-title-" + taskId) || {}).value || "").trim();
   const description = (($("task-edit-desc-" + taskId) || {}).value || "").trim();
   const depsText = (($("task-edit-deps-" + taskId) || {}).value || "").trim();
@@ -1367,7 +1367,7 @@ async function tasksEditSave(taskId) {
 async function tasksMove(taskId, direction) {
   if (tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
-  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
   $("tasks-msg").textContent = "";
   try {
