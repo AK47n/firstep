@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   flashBusyText, flashResultHTML, flashGuideHTML,
-  flashOutputHTML, flashCommandHTML, flashPanelHTML,
+  flashOutputHTML, flashCommandHTML, flashPanelHTML, flashContainer,
 } from "../../src/contest_generator/static/js/fx/flash.js";
 
 test("flashBusyText: 平台 → 探针名（mspm0=XDS110 / stm32=ST-Link）", () => {
@@ -85,12 +85,29 @@ test("flashCommandHTML: 空 → 空串；非空 → 命令 + 复制按钮 data-c
   assert.ok(html.includes(">复制<"));
 });
 
-test("flashPanelHTML: dir 空 → 空串；非空 → 按钮 + 状态位 + 结果容器", () => {
+test("flashContainer: uid → 容器 id 契约（缺省 result / 参数化 task.id）", () => {
+  assert.deepEqual(flashContainer("t1"), {
+    uid: "t1", statusId: "tasks-flash-status-t1", resultId: "tasks-flash-result-t1",
+  });
+  // 缺省 uid = "result"（任务执行结果面板哨兵；与 flashPanelHTML 同源）
+  assert.deepEqual(flashContainer(), {
+    uid: "result", statusId: "tasks-flash-status-result", resultId: "tasks-flash-result-result",
+  });
+});
+
+test("flashPanelHTML: dir 空 → 空串；非空 → 按钮 + 状态位 + 结果容器（uid 参数化）", () => {
   assert.equal(flashPanelHTML(""), "");
   assert.equal(flashPanelHTML(null), "");
   const html = flashPanelHTML("C:/proj");
   assert.ok(html.includes('data-dir="C:/proj"'));
   assert.ok(html.includes("烧录到板子"));
-  assert.ok(html.includes('id="tasks-flash-status"'));
-  assert.ok(html.includes('id="tasks-flash-result"'));
+  // 缺省 uid = "result"（任务执行结果面板既有调用不传即兼容）
+  assert.ok(html.includes('id="tasks-flash-status-result"'));
+  assert.ok(html.includes('id="tasks-flash-result-result"'));
+  assert.ok(html.includes('data-task-flash="result"'));
+  // uid 参数化：任务卡独立容器（uid = task.id，多卡并存不冲突）
+  const card = flashPanelHTML("C:/proj", "t1");
+  assert.ok(card.includes('id="tasks-flash-status-t1"'));
+  assert.ok(card.includes('id="tasks-flash-result-t1"'));
+  assert.ok(card.includes('data-task-flash="t1"'));
 });
