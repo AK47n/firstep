@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=54e8b79acf20f36967ea5e455e4ba5ece596a183 -->
+<!-- changelog-auto: last-commit=a076983ed96931bdc3cc77bec46fed623578007a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 13:49 任务卡烧录/01：任务卡常驻「烧录到板子」按钮（已实现步骤，卡内独立状态/结果容器 uid=task.id，flashContainer 单源契约）+ 双轴评审整改（工单 resolved）
 - 13:49 任务卡烧录/02：CONTEXT.md 补任务卡烧录词条（前端三处入口）+ 全量回归（pytest 2646 + JS 542）（工单 resolved）
 - 13:58 修复：指引「去设置页配置」展开工具链卡并滚动到烧录工具输入框（flash-guide-settings/03）
+- 18:20 修复：Toast 提示框下移避开吸顶栏（toast-offset/01）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
