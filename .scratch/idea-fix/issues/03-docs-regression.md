@@ -1,14 +1,9 @@
-# 工单 03：灵活修正文档回归（CONTEXT.md + 全量）
+﻿# 宸ュ崟 03锛氱伒娲讳慨姝ｆ枃妗ｅ洖褰掞紙CONTEXT.md + 鍏ㄩ噺锛?
+Status: resolved
 
-Status: claimed
+## 鐩爣
 
-## 目标
+- CONTEXT.md锛氫换鍔℃帹杩涜琛ャ€岀伒娲讳慨姝ｃ€嶈瘝鏉★紙/api/tasks/idea/*銆両deaAnalysis銆乶eeds_redo銆乺un_direct_fix銆丒VENT_IDEA_ANALYZING銆乫x/task.js 鏂板嚱鏁帮級锛涖€屾楠ゆ姤鍛娿€嶈濡傛秹鍙婂彈褰卞搷鏍囪鍚屾銆?- 鍏ㄩ噺鍥炲綊锛歱ytest 鍏ㄩ噺 + JS 鍏ㄩ噺 + 璇█/CHANGELOG 妫€鏌ャ€?
+## 楠屾敹
 
-- CONTEXT.md：任务推进行补「灵活修正」词条（/api/tasks/idea/*、IdeaAnalysis、needs_redo、run_direct_fix、EVENT_IDEA_ANALYZING、fx/task.js 新函数）；「步骤报告」行如涉及受影响标记同步。
-- 全量回归：pytest 全量 + JS 全量 + 语言/CHANGELOG 检查。
-
-## 验收
-
-1. CONTEXT.md 含 idea-fix 词条（入口 / 三分类 / 落地按钮 / needs_redo 联动 / 范围外排期）。
-2. pytest 全量绿；JS 全量绿；test_repo_language / test_changelog / test_ps1_encoding 绿。
-3. 工作树 src/tests/CONTEXT.md 之外无未提交源码改动。
+1. CONTEXT.md 鍚?idea-fix 璇嶆潯锛堝叆鍙?/ 涓夊垎绫?/ 钀藉湴鎸夐挳 / needs_redo 鑱斿姩 / 鑼冨洿澶栨帓鏈燂級銆?2. pytest 鍏ㄩ噺缁匡紱JS 鍏ㄩ噺缁匡紱test_repo_language / test_changelog / test_ps1_encoding 缁裤€?3. 宸ヤ綔鏍?src/tests/CONTEXT.md 涔嬪鏃犳湭鎻愪氦婧愮爜鏀瑰姩銆?
