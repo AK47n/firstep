@@ -885,11 +885,18 @@ def test_tasks_execute_sse_flow(tasks_client, monkeypatch):
         "contest_generator.deepen.collect_build_log",
         lambda platform, out_dir, uv4=None, make=None: _build(0),
     )
+    # 执行注册表（工单 stuck-doing-recover/01）：执行登记 → finally 清理。
+    # 断言必须放在 _sse_events 消费之后——run() 惰性执行，add/discard 发生在
+    # SSE 事件迭代内（spec 轴评审整改：post 后即刻断言读到的是「从未注册」，
+    # 无法证明 add/discard 触发）。
+    from contest_generator.webapp import _running_task_execs
+
     resp = client.post(
         "/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"}
     )
     assert resp.status_code == 200, resp.text
     events = _sse_events(resp)
+    assert "t1" not in _running_task_execs  # finally 已清（完成路径）
     types = [event_type for event_type, _ in events]
     assert types[-1] == "done"
     assert "task_executing" in types
@@ -939,6 +946,33 @@ def test_tasks_execute_unknown_task_error_event(tasks_client):
     events = _sse_events(resp)
     assert events[-1][0] == "error"
     assert "t99" in events[-1][1]["message"]
+
+
+def test_tasks_execute_run_error_clears_registry(tasks_client, monkeypatch):
+    """执行注册表异常路径（工单 stuck-doing-recover/01）：run_task 抛异常 →
+    SSE 流内 error（run_task 自身恢复任务状态）→ finally discard 注册表——
+    进程内异常后恢复功能仍可用（僵尸态可再恢复）。"""
+    from contest_generator.webapp import _running_task_execs
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    # webapp 顶部 from .task_progress import run_task 是导入名——monkeypatch
+    # 必须打 webapp 模块的绑定（打 task_progress 模块不生效）
+    monkeypatch.setattr(
+        "contest_generator.webapp.run_task",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    resp = client.post(
+        "/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"}
+    )
+    assert resp.status_code == 200, resp.text
+    events = _sse_events(resp)
+    assert events[-1][0] == "error"
+    assert "t1" not in _running_task_execs  # 异常路径 finally 已清
 
 
 def test_tasks_execute_feedback_flow(tasks_client, monkeypatch):
@@ -1590,23 +1624,32 @@ def test_update_task_status_transitions():
     assert t4.status == STATUS_VERIFIED
     _, t5 = update_task_status(plan, "t5", STATUS_VERIFIED)
     assert t5.status == STATUS_VERIFIED
-    # 非法：pending 未执行直接 verified（绕过 AI 执行）；doing 任何改标；
+    # 非法：pending 未执行直接 verified（绕过 AI 执行）；doing 仅可恢复
+    # pending（其余无证据改标不做——执行中退出终态由 run_task 回填）；
     # 未知状态词
     with pytest.raises(TaskError):
         update_task_status(plan, "t1", STATUS_VERIFIED)
     with pytest.raises(TaskError):
         update_task_status(plan, "t6", STATUS_VERIFIED)
     with pytest.raises(TaskError):
+        update_task_status(plan, "t6", STATUS_UNVERIFIED)
+    with pytest.raises(TaskError):
+        update_task_status(plan, "t6", STATUS_FAILED)
+    with pytest.raises(TaskError):
         update_task_status(plan, "t1", "bogus")
+    # doing → pending（执行中断恢复，工单 stuck-doing-recover/01）
+    _, t6 = update_task_status(plan, "t6", STATUS_PENDING)
+    assert t6.status == STATUS_PENDING
     # 错误消息带允许目标
     with pytest.raises(TaskError) as exc_info:
         update_task_status(plan, "t6", STATUS_SKIPPED)
-    assert "无（执行中不可操作）" in str(exc_info.value)
+    assert "允许：pending" in str(exc_info.value)
 
 
 def test_transition_table_consistency():
-    """转移表自洽：每个状态条目的目标都在词表内；doing 无出口（终态由
-    run_task 回填，不经人工转移表）。"""
+    """转移表自洽：每个状态条目的目标都在词表内；doing 仅人工可恢复为
+    pending（执行中断出口，工单 stuck-doing-recover/01——过程序被杀/服务
+    重启残留的僵尸 doing 卡，恢复为待做后重做走既有闭环）。"""
     assert set(ALLOWED_STATUS_TRANSITIONS) == {
         STATUS_PENDING, STATUS_SKIPPED, STATUS_VERIFIED,
         STATUS_UNVERIFIED, STATUS_FAILED, STATUS_DOING,
@@ -1614,7 +1657,7 @@ def test_transition_table_consistency():
     for targets in ALLOWED_STATUS_TRANSITIONS.values():
         for target in targets:
             assert target in ALLOWED_STATUS_TRANSITIONS
-    assert ALLOWED_STATUS_TRANSITIONS[STATUS_DOING] == frozenset()
+    assert ALLOWED_STATUS_TRANSITIONS[STATUS_DOING] == frozenset({STATUS_PENDING})
 
 
 def test_run_task_manual_verify_stays_unverified(tmp_path, monkeypatch):
@@ -2495,6 +2538,46 @@ def test_tasks_status_endpoint(tasks_client):
     )
     assert resp.status_code == 400
     assert "尚未拆解" in resp.json()["detail"]
+
+
+def test_tasks_status_endpoint_running_task_rejected(tasks_client):
+    """执行注册表（工单 stuck-doing-recover/01）：task 在 _running_task_execs
+    中 = 真在执行 → 人工改标 400「正在执行中」；注册表清空后同请求恢复成功
+    （僵尸 doing → pending 恢复通道）。"""
+    from contest_generator.webapp import _running_task_execs
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    # 先人为制造僵尸 doing 态（绕过执行——转移表允许 doing→pending 恢复）
+    saved = json.loads(
+        (Path(output_dir) / TASKS_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    saved["tasks"][0]["status"] = STATUS_DOING
+    (Path(output_dir) / TASKS_MANIFEST_FILENAME).write_text(
+        json.dumps(saved), encoding="utf-8"
+    )
+    # 真实执行中（注册表占用）→ 拒绝，防并发双写
+    _running_task_execs.add("t1")
+    try:
+        resp = client.post(
+            "/api/tasks/status",
+            json={"output_dir": output_dir, "task_id": "t1", "status": "pending"},
+        )
+        assert resp.status_code == 400
+        assert "正在执行中" in resp.json()["detail"]
+    finally:
+        _running_task_execs.discard("t1")
+    # 进程已死（注册表空）→ 恢复成功：doing → pending
+    resp = client.post(
+        "/api/tasks/status",
+        json={"output_dir": output_dir, "task_id": "t1", "status": "pending"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["task"]["status"] == STATUS_PENDING
 
 
 def test_revision_regeneration_invalidates_tasks(tmp_path, monkeypatch):

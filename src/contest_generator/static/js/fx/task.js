@@ -282,14 +282,20 @@ export function tasksOverviewHTML(plan) {
 
 /** 任务卡操作显隐（单源，与后端 ALLOWED_STATUS_TRANSITIONS 镜像）：
  * 返回该状态下应显示的操作键（run = 做这一步；skip = 跳过；revert = 重做 /
- * 恢复；mark = 上板已验证）。doing = 无操作（执行中，退出终态由执行回填）。 */
-export function taskCardActions(status) {
+ * 恢复；mark = 上板已验证；recover = 执行中断恢复为待做）。doing = 默认无
+ * 操作（执行中，退出终态由执行回填）；opts.recoverable（布尔，执行中断的
+ * 僵尸卡恢复入口，工单 stuck-doing-recover/01）为 true 时 doing 显示
+ * recover——前端在无活跃执行（!tasks.busy）时置 true；真实执行中的拦截
+ * 由后端 _running_task_execs 注册表兜底（点击被 400 拒 + 提示）。 */
+export function taskCardActions(status, opts) {
+  const recoverable = (opts && opts.recoverable) || false;
   switch (status) {
     case "pending": return ["run", "skip"];
     case "skipped": return ["revert"];
     case "verified": return ["revert"];
     case "unverified":
     case "failed": return ["run", "mark", "revert"];
+    case "doing": return recoverable ? ["recover"] : [];
     default: return [];
   }
 }

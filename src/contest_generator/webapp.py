@@ -226,6 +226,7 @@ from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
 from .topic_library import (
+
     confirm_topics,
     delete_topic,
     enrich_topic_image_notes,
@@ -238,6 +239,14 @@ from .topic_library import (
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# 任务执行注册表（工单 stuck-doing-recover/01）：task_id → 正在执行。
+# 模块级 = 测试可注入/断言；单进程本地工具的语义：进程活着 = 注册表有记录 =
+# 任务真在执行；进程死了 = 注册表自然清空 = 「僵尸 doing 恢复」安全。
+# tasks_execute 进 run() 时 add、finally discard（完成 / 异常都清）；
+# tasks_status 见占用记录即拒人工改标（防把正在跑的任务恢复为 pending 后
+# 并发双写 main.c）。
+_running_task_execs: set[str] = set()
 
 # 平台展示名（仅界面用；平台词表本体在 platforms.py）
 PLATFORM_DISPLAY_NAMES = {
@@ -2114,6 +2123,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         llm = _llm(context, budget, collector)
 
         def run(emit: SseEmitter) -> None:
+            _running_task_execs.add(task_id)
             try:
                 with bind_llm_telemetry(collector, emit.progress):
                     result = run_task(
@@ -2140,6 +2150,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
+                _running_task_execs.discard(task_id)
                 context.recent_llm_workflows.add_completed(collector)
 
         return StreamingResponse(
@@ -2338,9 +2349,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def tasks_status(payload: dict) -> dict:
         """任务状态改标（同步端点）：{output_dir, task_id, status} → 落盘。
 
-        status ∈ pending（重做）/ verified（上板人工确认）/ skipped（跳过）。
-        非法转移 → TaskError 400 中文（消息带允许目标清单）；doing（执行中）
-        不可人工操作；清单未拆解 / 任务不存在 → TaskError。
+        status ∈ pending（重做 / 执行中断恢复）/ verified（上板人工确认）/
+        skipped（跳过）。非法转移 → TaskError 400 中文（消息带允许目标清单）；
+        正在执行中（_running_task_execs 占用）拒绝人工改标——防止「僵尸恢复」
+        误伤真实运行的任务；清单未拆解 / 任务不存在 → TaskError。
 
         返回 {"task": 改标后的任务 to_dict, "plan": 全量清单 to_dict}——
         前端据此单卡重渲染 + 进度刷新。
@@ -2351,6 +2363,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if not output_dir.is_dir():
             raise TaskError(f"输出目录不存在：{output_dir}")
         task_id = _require_str(payload, "task_id")
+        if task_id in _running_task_execs:
+            raise TaskError(
+                f"任务 {task_id} 正在执行中，无法恢复——请等待完成"
+                "（或重启服务终止旧执行）"
+            )
         status = _require_str(payload, "status")
         return apply_task_status(output_dir, task_id, status)
 
