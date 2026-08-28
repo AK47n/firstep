@@ -18,7 +18,7 @@ export function diffStatsLineHTML(stats, name) {
 /** 单行 diff（内容已由后端剥离 +/- 前缀，此处只补符号列与着色）。 */
 function diffLineHTML(entry) {
   const kind = entry.kind === "add" ? "add" : entry.kind === "del" ? "del" : "ctx";
-  const gutter = kind === "add" ? "+" : kind === "del" ? "−" : "";
+  const gutter = kind === "add" ? "+" : kind === "del" ? "−" : " ";
   return '<div class="diff-line diff-' + kind + '"><span class="diff-gutter">'
     + gutter + '</span><span class="diff-text">' + esc(entry.text) + "</span></div>";
 }
@@ -38,9 +38,7 @@ function diffHunksHTML(hunks) {
 export function mainDiffHTML(diff, entity) {
   const name = entity || "深化";
   if (diff === undefined) return "";
-  if (diff === null) return '<div class="muted" style="margin-top:8px">'
-    + esc(name) + "未改动 main.c（无差异）。</div>";
-  const hunks = diff.hunks || [];
+  const hunks = (diff && diff.hunks) || [];
   if (!hunks.length) return '<div class="muted" style="margin-top:8px">'
     + esc(name) + "未改动 main.c（无差异）。</div>";
   return diffStatsLineHTML(diff.stats, name) + diffHunksHTML(hunks);
