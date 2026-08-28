@@ -42,7 +42,7 @@ test("mainDiffHTML: hunk 折叠块 + 三种行类型 + 符号列", () => {
   assert.ok(out.includes('class="diff-line diff-add"'));
   assert.ok(out.includes('<span class="diff-gutter">+</span>'));
   assert.ok(out.includes('<span class="diff-gutter">−</span>'));
-  assert.ok(out.includes('<span class="diff-gutter"></span>'));
+  assert.ok(out.includes('<span class="diff-gutter"> </span>'));
 });
 
 test("mainDiffHTML: 行内容转义（防注入）", () => {
@@ -76,4 +76,18 @@ test("diffStatsLineHTML: 空 stats 兜底 0", () => {
   assert.ok(out.includes(">+0</span>"));
   assert.ok(out.includes(">−0</span>"));
   assert.ok(out.includes("0 处改动"));
+});
+
+test("mainDiffHTML: window 桥全局导出（探针/devtools 兼容层）", async () => {
+  globalThis.window = {};
+  try {
+    // 带查询串强制新模块实例，使桥分支（typeof window !== "undefined"）生效
+    const mod = await import(
+      "../../src/contest_generator/static/js/fx/diff.js?bridge=" + Date.now());
+    assert.equal(typeof globalThis.window.mainDiffHTML, "function");
+    assert.equal(typeof globalThis.window.diffStatsLineHTML, "function");
+    assert.equal(typeof mod.mainDiffHTML, "function");   // 命名导出仍可用
+  } finally {
+    delete globalThis.window;
+  }
 });
