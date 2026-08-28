@@ -30,6 +30,7 @@ from contest_generator.task_progress import (
     TASKS_MANIFEST_FILENAME,
     Task,
     TaskError,
+    TaskIteration,
     TaskPlan,
     VERIFY_COMPILE,
     VERIFY_MANUAL,
@@ -37,6 +38,7 @@ from contest_generator.task_progress import (
     build_task_plan,
     find_task,
     insert_task_from_idea,
+    move_task,
     read_task_plan,
     rollback_task_iteration,
     run_direct_fix,
@@ -44,6 +46,7 @@ from contest_generator.task_progress import (
     run_task_planning,
     set_task_dialog_note,
     set_tasks_needs_redo,
+    update_task_fields,
     update_task_status,
     write_task_plan,
 )
@@ -1061,6 +1064,210 @@ def test_tasks_idea_insert_invalid_keeps_manifest(tasks_client):
     assert manifest.is_file()
     assert manifest.read_text(encoding="utf-8") == before
     assert not (Path(output_dir) / TASKS_MANIFEST_BAK_FILENAME).exists()
+
+
+def _edited_plan() -> TaskPlan:
+    """编辑 / 调序共用的两任务清单（t1 带轮次与 needs_redo，t2 依赖 t1）。"""
+    return TaskPlan(
+        generated_at="2026-01-01T00:00:00+0800",
+        tasks=(
+            Task(
+                id="t1",
+                title="循迹",
+                description="循迹决策",
+                score_refs=("s1",),
+                depends_on=(),
+                verify="manual",
+                status="verified",
+                note="补充说明",
+                dialog_note="对话结论",
+                needs_redo=True,
+                iterations=(
+                    TaskIteration(
+                        seq=1, kind="execute", status="verified",
+                        what_changed="实现了循迹",
+                    ),
+                ),
+            ),
+            Task(id="t2", title="OLED 显示", description="显示分值",
+                 depends_on=("t1",), verify="compile", status="pending"),
+        ),
+    )
+
+
+def test_update_task_fields_valid_and_preserves_progress():
+    """微编辑合法：字段改、依赖序号转 id；status/note/dialog_note/needs_redo/
+    轮次历史一律保留（spec 故事 5）。"""
+    plan = _edited_plan()
+    updated = update_task_fields(
+        plan, "t1",
+        title="循迹（改）",
+        description="循迹决策 v2",
+        depends_on=[2],
+        verify="compile",
+        score_refs=["s1", "s2"],
+    )
+    task = find_task(updated, "t1")
+    assert task.title == "循迹（改）"
+    assert task.description == "循迹决策 v2"
+    assert task.depends_on == ("t2",)
+    assert task.verify == "compile"
+    assert task.score_refs == ("s1", "s2")
+    # 进度与轮次历史原样保留
+    assert task.status == "verified"
+    assert task.note == "补充说明"
+    assert task.dialog_note == "对话结论"
+    assert task.needs_redo is True
+    assert task.iterations[0].what_changed == "实现了循迹"
+    # 未编辑的任务原样
+    assert find_task(updated, "t2").title == "OLED 显示"
+    # 未提供字段 = 保留原值
+    partial = update_task_fields(plan, "t1", title="只改标题")
+    assert find_task(partial, "t1").verify == "manual"
+    assert find_task(partial, "t1").depends_on == ()
+
+
+def test_update_task_fields_invalid_rejects():
+    """非法输入各分支 → TaskError（空标题 / 未知依赖 / verify 词表外 /
+    非字符串数组 / 依赖自己 / 未拆解）。"""
+    plan = _edited_plan()
+    with pytest.raises(TaskError, match="title 必须是非空字符串"):
+        update_task_fields(plan, "t1", title="  ")
+    with pytest.raises(TaskError, match="description 必须是非空字符串"):
+        update_task_fields(plan, "t1", description="")
+    with pytest.raises(TaskError, match="前置任务序号越界"):
+        update_task_fields(plan, "t1", depends_on=[3])
+    with pytest.raises(TaskError, match="必须是正整数"):
+        update_task_fields(plan, "t1", depends_on=[0])
+    with pytest.raises(TaskError, match="verify 必须是"):
+        update_task_fields(plan, "t1", verify="flash")
+    with pytest.raises(TaskError, match="score_refs 必须是字符串数组"):
+        update_task_fields(plan, "t1", score_refs=[1])
+    with pytest.raises(TaskError, match="不能依赖自己"):
+        update_task_fields(plan, "t1", depends_on=[1])
+    with pytest.raises(TaskError, match="尚未拆解"):
+        update_task_fields(None, "t1", title="x")
+
+
+def test_update_task_fields_depends_on_uses_position_not_id_suffix():
+    """调序后依赖序号按**数组位置**解析（评审发现的错位缺陷回归）：plan 已
+    被 move 成 [t2, t1]——编辑 t2（位置 1）设 depends_on=[2] = 依赖位置 2 的
+    t1（不是 id 后缀 t2）；depends_on=[1] = 依赖自己 → 拒收。"""
+    moved = move_task(_edited_plan(), "t1", "down")
+    assert [t.id for t in moved.tasks] == ["t2", "t1"]
+    updated = update_task_fields(moved, "t2", depends_on=[2])
+    assert find_task(updated, "t2").depends_on == ("t1",)
+    with pytest.raises(TaskError, match="不能依赖自己"):
+        update_task_fields(moved, "t2", depends_on=[1])
+    # insert 同款修复：新任务依赖「位置 2」= t1（而非 id 后缀 t2）
+    inserted = insert_task_from_idea(
+        moved, {"title": "新任务", "description": "描述", "depends_on": [2]}
+    )
+    assert inserted.tasks[-1].depends_on == ("t1",)
+
+
+def test_move_task_swaps_adjacent_and_keeps_ids():
+    """上移 / 下移相邻换位；id 不变；边界与词表外 → TaskError。"""
+    plan = _edited_plan()
+    moved = move_task(plan, "t1", "down")
+    assert [t.id for t in moved.tasks] == ["t2", "t1"]
+    assert [t.id for t in plan.tasks] == ["t1", "t2"]  # 纯函数不改原清单
+    back = move_task(moved, "t1", "up")
+    assert [t.id for t in back.tasks] == ["t1", "t2"]
+    assert find_task(back, "t1").depends_on == ()  # id 稳定，依赖原样
+    with pytest.raises(TaskError, match="已是第一个任务"):
+        move_task(plan, "t1", "up")
+    with pytest.raises(TaskError, match="已是最后一个任务"):
+        move_task(plan, "t2", "down")
+    with pytest.raises(TaskError, match="direction 必须是"):
+        move_task(plan, "t1", "left")
+    with pytest.raises(TaskError, match="尚未拆解"):
+        move_task(None, "t1", "up")
+
+
+def test_tasks_idea_edit_flow(tasks_client):
+    """edit 端点 200：改 title/verify 落盘 + .bak 备份 + 返回 {task, plan}。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    resp = client.post(
+        "/api/tasks/idea/edit",
+        json={
+            "output_dir": output_dir,
+            "task_id": "t1",
+            "fields": {"title": "循迹（改）", "verify": "manual"},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["task"]["title"] == "循迹（改）"
+    assert resp.json()["task"]["verify"] == "manual"
+    assert resp.json()["plan"]["tasks"][0]["title"] == "循迹（改）"
+    assert (Path(output_dir) / TASKS_MANIFEST_BAK_FILENAME).exists()
+    disk = read_task_plan(Path(output_dir))
+    assert disk is not None and disk.tasks[0].title == "循迹（改）"
+
+
+def test_tasks_idea_edit_invalid_keeps_manifest(tasks_client):
+    """edit 校验失败 → 400 中文且清单不动（先纯函数后备份再写）。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    manifest = Path(output_dir) / TASKS_MANIFEST_FILENAME
+    before = manifest.read_text(encoding="utf-8")
+    resp = client.post(
+        "/api/tasks/idea/edit",
+        json={"output_dir": output_dir, "task_id": "t1", "fields": {"title": ""}},
+    )
+    assert resp.status_code == 400
+    assert "非空字符串" in resp.json()["detail"]
+    assert manifest.read_text(encoding="utf-8") == before
+    assert not (Path(output_dir) / TASKS_MANIFEST_BAK_FILENAME).exists()
+    # 未拆解 / 任务不存在 / fields 非对象
+    assert client.post(
+        "/api/tasks/idea/edit",
+        json={"output_dir": str(tmp_path / "nope"), "task_id": "t1", "fields": {}},
+    ).status_code == 400
+
+
+def test_tasks_idea_move_flow(tasks_client):
+    """move 端点 200：down 换位落盘；边界 → 400；direction 词表外 → 400。"""
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(
+            Task(id="t1", title="循迹", description="循迹决策"),
+            Task(id="t2", title="OLED 显示", description="显示分值"),
+        ))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    resp = client.post(
+        "/api/tasks/idea/move",
+        json={"output_dir": output_dir, "task_id": "t1", "direction": "down"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert [t["id"] for t in resp.json()["plan"]["tasks"]] == ["t2", "t1"]
+    disk = read_task_plan(Path(output_dir))
+    assert disk is not None and [t.id for t in disk.tasks] == ["t2", "t1"]
+    resp = client.post(
+        "/api/tasks/idea/move",
+        json={"output_dir": output_dir, "task_id": "t1", "direction": "up"},
+    )
+    assert resp.status_code == 200
+    assert [t["id"] for t in resp.json()["plan"]["tasks"]] == ["t1", "t2"]
+    assert client.post(
+        "/api/tasks/idea/move",
+        json={"output_dir": output_dir, "task_id": "t1", "direction": "up"},
+    ).status_code == 400
+    assert client.post(
+        "/api/tasks/idea/move",
+        json={"output_dir": output_dir, "task_id": "t1", "direction": "left"},
+    ).status_code == 400
 
 
 def test_tasks_idea_fix_sse_flow(tasks_client, monkeypatch):

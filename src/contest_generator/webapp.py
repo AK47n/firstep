@@ -2587,6 +2587,82 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         write_task_plan(output_dir, updated)
         return {"plan": updated.to_dict()}
 
+    @app.post("/api/tasks/idea/edit")
+    @_map_errors
+    def tasks_idea_edit(payload: dict) -> dict:
+        """任务卡微编辑（同步端点，工单 idea-suite/03）：{output_dir, task_id,
+        fields} → {task, plan}。
+
+        fields = {title?, description?, depends_on?, verify?, score_refs?}——缺
+        省字段 = 保留原值；depends_on = 1 起序号数组（→ t{n} 引用既有任务；
+        序号基于当前数组顺序——调序后序号随之变化，编辑时以卡面序号为准）。
+        校验失败 → 400 中文且清单不动（先纯函数后备份再写——backup 是 move
+        语义；insert 同款顺序）；status / note / dialog_note / needs_redo /
+        iterations 一律保留（微编辑不动进度）。
+        """
+        from .task_progress import (
+            backup_task_plan,
+            find_task,
+            read_task_plan,
+            update_task_fields,
+            write_task_plan,
+        )
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        task_id = _require_str(payload, "task_id")
+        raw_fields = payload.get("fields")
+        if not isinstance(raw_fields, dict):
+            raise TaskError(
+                "fields 必须是对象（title/description/depends_on/verify/score_refs）"
+            )
+        plan = read_task_plan(output_dir)
+        find_task(plan, task_id)  # 先查存在（未拆解 / 任务不存在 → 400 中文）
+        updated = update_task_fields(
+            plan,
+            task_id,
+            title=raw_fields.get("title"),
+            description=raw_fields.get("description"),
+            depends_on=raw_fields.get("depends_on"),
+            verify=raw_fields.get("verify"),
+            score_refs=raw_fields.get("score_refs"),
+        )
+        backup_task_plan(output_dir)  # 校验通过后才备档（失败 = 盘面不动）
+        write_task_plan(output_dir, updated)
+        return {
+            "task": next(t.to_dict() for t in updated.tasks if t.id == task_id),
+            "plan": updated.to_dict(),
+        }
+
+    @app.post("/api/tasks/idea/move")
+    @_map_errors
+    def tasks_idea_move(payload: dict) -> dict:
+        """任务卡调序（同步端点，工单 idea-suite/03）：{output_dir, task_id,
+        direction} → {plan}。up / down 相邻换位（数组顺序 = 展示顺序）；id 不变
+        （依赖引用与 needs_redo 不受影响）；首卡 up / 末卡 down / direction 词
+        表外 → 400 中文；先校验后备份再写（backup 是 move 语义）。
+        """
+        from .task_progress import (
+            backup_task_plan,
+            move_task,
+            read_task_plan,
+            write_task_plan,
+        )
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        task_id = _require_str(payload, "task_id")
+        direction = payload.get("direction")
+        if direction not in ("up", "down"):
+            raise TaskError("direction 必须是 up 或 down")
+        plan = read_task_plan(output_dir)
+        updated = move_task(plan, task_id, direction)  # 校验（含未拆解）在纯函数内
+        backup_task_plan(output_dir)
+        write_task_plan(output_dir, updated)
+        return {"plan": updated.to_dict()}
+
     @app.post("/api/tasks/idea/fix")
     @_map_errors
     def tasks_idea_fix(payload: dict) -> StreamingResponse:
