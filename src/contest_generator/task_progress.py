@@ -122,7 +122,9 @@ class TaskIteration:
     （可回滚——用户拍板全部保留，一轮几十 KB~几 MB）；compile_summary =
     编译摘要（供卡上展示）；what_changed / user_action = 步骤报告（工单
     stepwise-deepen/01：AI 本步做了什么 / 用户接下来要做什么，含接线与
-    上板指引；报告调用失败降级为空串）；at = 轮次时间戳。
+    上板指引；报告调用失败降级为空串）；checklist = 上板自检清单（工单
+    task-insight/01：3-6 条原子勾选项——「应观察到什么；若不正常检查哪
+    里」，随轮次落盘，前端渲染为可勾选备忘录，不参与状态机）；at = 轮次时间戳。
     """
 
     seq: int
@@ -133,6 +135,7 @@ class TaskIteration:
     compile_summary: str = ""
     what_changed: str = ""
     user_action: str = ""
+    checklist: tuple[str, ...] = ()
     at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -145,6 +148,7 @@ class TaskIteration:
             "compile_summary": self.compile_summary,
             "what_changed": self.what_changed,
             "user_action": self.user_action,
+            "checklist": list(self.checklist),
             "at": self.at,
         }
 
@@ -161,7 +165,10 @@ class Task:
     全文，执行时作为独立段注入 prompt——比 note 话语新、优先级高）；
     needs_redo = 建议重做标记（工单 idea-fix/01：灵活修正落地后 AI 给出的
     受影响任务标 true，前端显示「建议重做」徽章；重做执行 / 人工清除后
-    复位 false）；iterations = 执行轮次历史（上板反馈闭环，向后兼容读回）。
+    复位 false）；resources = 本任务占用的互斥资源（工单 task-insight/01：
+    引脚 / 外设 / 中断真实名称，与其它任务共用也列出——资源总览据此发现
+    联调冲突暗雷；缺省空元组，旧清单读回兼容）；iterations = 执行轮次历史
+    （上板反馈闭环，向后兼容读回）。
     """
 
     id: str
@@ -174,6 +181,7 @@ class Task:
     note: str = ""
     dialog_note: str = ""
     needs_redo: bool = False  # 建议重做（工单 idea-fix/01：灵活修正落地的受影响任务标记）
+    resources: tuple[str, ...] = ()  # 互斥资源标注（工单 task-insight/01）
     iterations: tuple[TaskIteration, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -188,6 +196,7 @@ class Task:
             "note": self.note,
             "dialog_note": self.dialog_note,
             "needs_redo": self.needs_redo,
+            "resources": list(self.resources),
             "iterations": [iteration.to_dict() for iteration in self.iterations],
         }
 
@@ -273,6 +282,7 @@ class TaskPlan:
                         if isinstance(item.get("needs_redo", False), bool)
                         else False
                     ),
+                    resources=_opt_str_list(item.get("resources", [])),
                     iterations=_parse_iterations(item.get("iterations", [])),
                 )
             )
@@ -309,6 +319,7 @@ def _parse_iterations(raw: Any) -> tuple[TaskIteration, ...]:
                 compile_summary=_iter_opt_str(item, "compile_summary"),
                 what_changed=_iter_opt_str(item, "what_changed"),
                 user_action=_iter_opt_str(item, "user_action"),
+                checklist=_opt_str_list(item.get("checklist")),
                 at=_iter_opt_str(item, "at"),
             )
         )
@@ -319,6 +330,25 @@ def _iter_opt_str(item: dict[str, Any], key: str) -> str:
     """迭代记录的可空字符串字段：非 str（含缺失/None/错型）一律落空串。"""
     value = item.get(key)
     return value if isinstance(value, str) else ""
+
+
+def _opt_str_list(raw: Any) -> tuple[str, ...]:
+    """可选字符串数组字段的宽松归一（resources / checklist 共用，工单
+    task-insight/01——评审整改：_iter_opt_str_list 原为逐字节同型复制，
+    收敛到本函数单源，防三处归一逻辑漂移）。
+
+    宽松解析（辅助信息宁空勿拒——spec）：非数组 = ()；数组内非 str /
+    空串项过滤；str 项 strip 后保留非空。build / 读回 / insert / 迭代
+    四方共用。**不做接口清单交叉校验**（resources 只按模块接口真实名称
+    由 prompt 引导，域层不校验——spec「字段扩展零签名变更」）。
+    """
+    if not isinstance(raw, list):
+        return ()
+    return tuple(
+        text.strip()
+        for text in (s if isinstance(s, str) else "" for s in raw)
+        if text.strip()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +398,7 @@ def build_task_plan(
                 score_refs=score_refs,
                 depends_on=depends_on,
                 verify=verify,
+                resources=_opt_str_list(item.get("resources", [])),
             )
         )
     return TaskPlan(tasks=tuple(tasks))
@@ -606,6 +637,7 @@ def insert_task_from_idea(plan: TaskPlan, new_task: Mapping[str, Any]) -> TaskPl
         score_refs=tuple(ref.strip() for ref in raw_refs if ref.strip()),
         depends_on=deps,
         verify=verify,
+        resources=_opt_str_list(new_task.get("resources", [])),
     )
     return TaskPlan(
         version=plan.version,
@@ -643,6 +675,7 @@ def set_tasks_needs_redo(
                 note=task.note,
                 dialog_note=task.dialog_note,
                 needs_redo=needs_redo if task.id in wanted else task.needs_redo,
+                resources=task.resources,
                 iterations=task.iterations,
             )
             for task in plan.tasks
@@ -728,6 +761,7 @@ def update_task_fields(
         note=task.note,
         dialog_note=task.dialog_note,
         needs_redo=task.needs_redo,
+        resources=task.resources,
         iterations=task.iterations,
     )
     return TaskPlan(
@@ -922,7 +956,7 @@ def run_task(
     # 报告是附加产物（主产物 = 代码 + 编译验证 + diff 已落盘），失败降级为
     # 空串不阻断——不因旁路汇报失败毁掉已达成的主结果（与无工具链降级同
     # 哲学：用户拿到结果，缺的只是说明文本）。
-    what_changed, user_action = _report_task_step(
+    what_changed, user_action, checklist = _report_task_step(
         llm=llm,
         task=task,
         verify_result=result,
@@ -942,6 +976,7 @@ def run_task(
         compile_summary=str(result.get("compile", {}).get("summary", "") or ""),
         what_changed=what_changed,
         user_action=user_action,
+        checklist=checklist,
         at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     )
     updated_plan = _with_task_status(
@@ -968,15 +1003,17 @@ def _report_task_step(
     diff: Mapping[str, Any] | None,
     interfaces: Sequence[str],
     emit: SseEmitter,
-) -> tuple[str, str]:
-    """步骤报告调用（工单 stepwise-deepen/01）：编译验证后让 LLM 总结本步。
+) -> tuple[str, str, tuple[str, ...]]:
+    """步骤报告调用（工单 stepwise-deepen/01 + task-insight/01）：编译验证后
+    让 LLM 总结本步。
 
     输入 = 任务（含对话采纳结论 / 验收方式）+ 验证结果（status / message /
     compile / verify_cause）+ diff（截断在 prompt 层处理，无变化 = 空串）+
     模块接口清单；
-    返回 (what_changed, user_action)。报告是附加产物（主产物 = 代码 +
-    编译验证 + diff 已落盘），任何失败（LLM 断线 / 输出坏 / 解析重试耗尽）
-    → 降级空串，不阻断任务落盘终态——与无工具链降级同哲学。
+    返回 (what_changed, user_action, checklist)。报告是附加产物（主产物 =
+    代码 + 编译验证 + diff 已落盘），任何失败（LLM 断线 / 输出坏 / 解析重试
+    耗尽）→ 降级 (空串, 空串, 空元组)，不阻断任务落盘终态——与无工具链
+    降级同哲学。
     """
     try:
         emit.progress(ProgressEvent(type=EVENT_TASK_REPORTING))
@@ -994,9 +1031,9 @@ def _report_task_step(
             diff_text=diff_text,
             module_interfaces=interfaces,
         )
-        return report.what_changed, report.user_action
+        return report.what_changed, report.user_action, tuple(report.checklist)
     except Exception:
-        return "", ""
+        return "", "", ()
 
 
 def run_direct_fix(
@@ -1088,7 +1125,7 @@ def run_direct_fix(
         title="直接修正",
         description=fix_summary or idea,
     )
-    what_changed, user_action = _report_task_step(
+    what_changed, user_action, checklist = _report_task_step(
         llm=llm,
         task=report_task,
         verify_result=result,
@@ -1098,7 +1135,11 @@ def run_direct_fix(
     )
     return {
         **result,
-        "step_report": {"what_changed": what_changed, "user_action": user_action},
+        "step_report": {
+            "what_changed": what_changed,
+            "user_action": user_action,
+            "checklist": list(checklist),
+        },
     }
 
 
@@ -1138,6 +1179,7 @@ def _with_task_status(
                     note=task.note if note is None else note,
                     dialog_note=task.dialog_note if dialog_note is None else dialog_note,
                     needs_redo=task.needs_redo,
+                    resources=task.resources,
                     iterations=task.iterations if iterations is None else iterations,
                 )
             )

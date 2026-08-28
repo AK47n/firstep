@@ -252,9 +252,14 @@ TASK_PLAN_SYSTEM_PROMPT = (
     "空数组；一条任务可关联多个评分点）；"
     "⑦ verify = 该任务完成后的验收方式：compile = 编译绿即算验证通过；"
     "manual = 需要上板观察现象人工确认（如循迹效果、显示内容正确性）。"
+    "⑧ resources = 本任务将占用的互斥资源数组（引脚如 \"PA0\"、外设如 "
+    "\"TIM1\"/\"UART0\"、中断如 \"TIM1_IRQn\"——只用模块接口清单里出现的真实"
+    "名称；本任务不新增占用 = []；与其它任务共用的资源也要列出——后续资源"
+    "总览据此发现联调冲突，重复不一定是错，但必须如实标注）。"
     '只输出 JSON 对象：{"tasks": [{"title": "短标题（8-16 字）", '
     '"description": "做什么、用哪些接口、落到 main.c 哪里（带 TODO 上下文）", '
-    '"score_refs": ["s1"], "depends_on": [1, 2], "verify": "compile"}]}'
+    '"score_refs": ["s1"], "depends_on": [1, 2], "verify": "compile", '
+    '"resources": ["PA0"]}]}'
 )
 
 # 单任务执行系统提示词（工单 task-progress/02）：在现有 main.c 上只实现一个
@@ -315,22 +320,27 @@ TASK_DISCUSS_SYSTEM_PROMPT = (
     '只输出 JSON 对象：{"reply": "回复文本"}；reply 必须非空、用中文。'
 )
 
-# 步骤报告（工单 stepwise-deepen/01）：一步任务执行 + 编译验证刚完成，AI 用
-# 中文给学生写「我做了什么 + 接下来你要做什么」两步简报。立场 = 执行者汇报，
-# 不是顾问（执行已完成，不再讨论方案）；接线/上板指引必须落到模块接口清单
-# 里的真实引脚/接口名（user_action 是学生接下来唯一的物理动作清单——把
-# 接线、烧录、观察现象、确认动作一次说清，别让用户猜）。只输出 JSON 契约。
+# 步骤报告（工单 stepwise-deepen/01 + task-insight/01）：一步任务执行 + 编译
+# 验证刚完成，AI 用中文给学生写「我做了什么 + 接下来你要做什么」两步简报 +
+# 上板自检清单。立场 = 执行者汇报，不是顾问（执行已完成，不再讨论方案）；
+# 接线/上板指引必须落到模块接口清单里的真实引脚/接口名（user_action 是学生
+# 接下来唯一的物理动作清单——把接线、烧录、观察现象、确认动作一次说清，别
+# 让用户猜）；checklist 是 user_action 的结构化拆分（原子勾选项，供上板照
+# 单子逐条测）。只输出 JSON 契约。
 TASK_REPORT_SYSTEM_PROMPT = (
     "你是嵌入式 C 开发工程师。学生刚点「做这一步」并完成了某个实现任务，"
     "编译验证也已结束（赛题文本 / 模块接口过长可能被截断，见末尾标注，"
-    + TRUNCATION_NOTICE + "）。请用中文给学生写一份本步骤简报，分两段："
+    + TRUNCATION_NOTICE + "）。请用中文给学生写一份本步骤简报，分三段："
     "what_changed = 本步做了什么——引用具体函数 / 引脚 / 定时器名说明改动，"
     "并注明编译验证结果；如有降级（如无工具链未验证）或警告，一并说明。"
     "user_action = 学生接下来需要做的物理动作——按模块接口清单把具体接线"
     "（如「把 PA0 接到灰度模块的 DIO」）、烧录、观察什么现象、确认后的操作"
     "一次说清；本步纯软件无物理动作时才可为空串，否则必须给出明确动作。"
+    "checklist = 上板 / 验证检查清单（3-6 条，每条一句「应观察到什么；若不"
+    "正常检查哪里」，原子可勾选——烧录后逐条测；本步纯软件无物理动作 = []）。"
     '只输出 JSON 对象：{"what_changed": "做过的中文叙事", "user_action":'
-    ' "接下来的中文动作"}；what_changed 必须非空，两段都用中文。'
+    ' "接下来的中文动作", "checklist": ["应观察到什么；若不正常查哪里"]}；'
+    "what_changed 必须非空，三段都用中文。"
 )
 
 # 参数识别（工单 param-tune/01）：扫描 main.c 里的可调**数值**参数——学生
@@ -694,6 +704,22 @@ def _truncate_content(content: str) -> str:
     只绑定 llm 的嵌内容预算常量；截断只影响发送素材，不改数据模型。
     """
     return truncate_content(content, EMBEDDED_CONTENT_CAP)
+
+
+def _clean_str_list(raw: Any) -> tuple[str, ...]:
+    """可选字符串数组的宽松归一（checklist 等辅助字段，工单 task-insight/01
+    ——评审整改：report_task_step 内联生成器与 task_progress._opt_str_list
+    为同型复制，收敛到本函数防漂移）。
+
+    非数组 = ()；数组内非 str / 空串项过滤；str 项 strip 后保留非空。
+    """
+    if not isinstance(raw, list):
+        return ()
+    return tuple(
+        text.strip()
+        for text in (s if isinstance(s, str) else "" for s in raw)
+        if text.strip()
+    )
 
 
 def _fit_fulltext_wire(
@@ -1259,16 +1285,19 @@ class TaskDiscussion:
 
 @dataclass(frozen=True)
 class StepReport:
-    """一步任务执行后的步骤报告（工单 stepwise-deepen/01）。
+    """一步任务执行后的步骤报告（工单 stepwise-deepen/01 + task-insight/01）。
 
     what_changed = AI 本步做了什么（改了什么逻辑/函数、编译验证结果、任何
     降级/警告），中文叙事；user_action = 用户接下来需要做的物理动作（烧录、
     接线——具体到模块接口清单里的引脚/接口名，如「把 PA0 接到 LED 模块的
     DIO」、观察什么现象、确认后如何操作）；纯软件无物理动作时可空串。
+    checklist = 上板自检清单（3-6 条原子勾选项——「应观察到什么；若不正常
+    检查哪里」，随轮次落盘渲染为可勾选备忘录；纯软件步无物理动作 = 空元组）。
     """
 
     what_changed: str
     user_action: str = ""
+    checklist: tuple[str, ...] = ()
 
 
 # 新想法 / 问题分类词表（单源：解析层校验与前端消费共用）
@@ -2801,8 +2830,12 @@ class DeepSeekLLM:
             user_action = data.get("user_action")
             if not isinstance(user_action, str):
                 user_action = ""
+            checklist = data.get("checklist")
+            checklist_items = _clean_str_list(checklist)
             return StepReport(
-                what_changed=what_changed.strip(), user_action=user_action.strip()
+                what_changed=what_changed.strip(),
+                user_action=user_action.strip(),
+                checklist=checklist_items,
             )
 
         return self._retry_parse(

@@ -632,6 +632,10 @@ class FakeLLM:
         self._step_report = step_report or StepReport(
             what_changed="实现了步进驱动（测试默认），编译验证通过。",
             user_action="把 PB1 接到步进模块 DIR，烧录后观察电机正转。",
+            checklist=(
+                "烧录后应看到电机带动丝杆正向转动（约 1 圈/秒）。",
+                "若不转检查 PB1 与步进模块 DIR 的接线；若抖动检查使能引脚。",
+            ),
         )
         self._idea_analysis = idea_analysis or IdeaAnalysis(
             kind="discussion", reply="明白了，先讨论不动代码。"
@@ -1250,7 +1254,11 @@ class RecordingLLM:
         module_interfaces: Sequence[str],
     ) -> StepReport:
         self._record("report_task_step")
-        return StepReport(what_changed="做了什么", user_action="下一步")
+        return StepReport(
+            what_changed="做了什么",
+            user_action="下一步",
+            checklist=("烧录后应看到现象。", "若不正常检查接线与供电。"),
+        )
 
     def scan_params(
         self,
