@@ -8,7 +8,8 @@
 // 本簇状态 = tasks（私有对象）；输出目录复用「修订与深化」卡的已加载上下文
 // （reviseGetDir——跨簇只读 import，主写簇归 generate-revise.js）。
 // 赛道事件词表镜像 events.py：task_planning / task_executing / compile_start /
-// fix_start / verify_result / task_reporting / llm_telemetry / done / error。
+// fix_start / verify_result / task_reporting / idea_analyzing / idea_result /
+// llm_telemetry / done / error。
 // 纯件在 fx/task.js（taskStatusLabel / taskCardHTML / tasksGridHTML …）。
 // 依赖：app.js（$ / apiPost / toast）+ fx/core.js（esc）+ fx/llm.js
 //（parseSSE / formatLLMTelemetry）+ fx/task.js + fx/diff.js（效果 diff 渲染）
@@ -18,7 +19,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML } from "/js/fx/task.js";
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -32,6 +33,56 @@ let tasks = {
   plan: null,         // /api/tasks/plan 的 done 载荷
   busy: false,        // 任一流程运行中（按钮置灰）
 };
+
+// 新想法 / 问题区状态（工单 idea-fix/02）：analysis = 最近一次 /api/tasks/idea/
+// analyze 的 done 载荷（{kind, reply, new_task, fix_summary, affected_task_ids}）；
+// ideaText = 提交的原文（直接修正端点 idea 字段用原文而非 AI 理解——分析只改
+// 展示，落地按用户原话 + AI fix_summary 执行）；busy = 一轮分析/落地进行中。
+// 会话级（刷新丢；落盘以 .contest_tasks.json 为准）。
+let ideaState = {
+  busy: false,
+  analysis: null,
+  ideaText: "",
+};
+
+/** 想法区结果卡渲染：analysis 空 → 隐藏容器；landedNote 非空 → 按钮区替换为
+ * 中性提示（防已落地功能被重复点击造重复产物）；idea 原文随结果卡回显
+ *（故事 6——会话内保留展示）。 */
+function renderIdeaResult(landedNote) {
+  const box = $("tasks-idea-result");
+  const analysis = ideaState.analysis;
+  if (!analysis) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = ideaResultHTML(analysis, {
+    idea: ideaState.ideaText,
+    landedNote: landedNote || "",
+  });
+  box.classList.remove("hidden");
+}
+
+function ideaSetBusy(busy) {
+  ideaState.busy = busy;
+  tasksSetBusy(busy);
+  const btn = $("btn-tasks-idea");
+  if (btn) btn.disabled = busy;
+}
+
+/** 想法区重置（跨簇目录切换 / 清单作废）：清空输入与分析结果（会话级状态
+ * 随目录生命周期走，防旧目录的分析卡串到新目录）。 */
+function resetIdeaArea() {
+  ideaState.busy = false;
+  ideaState.analysis = null;
+  ideaState.ideaText = "";
+  const box = $("tasks-idea-result");
+  if (box) { box.innerHTML = ""; box.classList.add("hidden"); }
+  const input = $("tasks-idea-input");
+  if (input) input.value = "";
+  const msg = $("tasks-idea-msg");
+  if (msg) msg.textContent = "";
+}
 
 // 每卡对话区状态（工单 task-chat/03）：key = task id；{open, busy, history,
 // draft}——history = [{role, content}]（旧 → 新，含 AI 回复），draft = 输入框
@@ -51,7 +102,6 @@ function tasksSetBusy(busy) {
   tasks.busy = busy;
   ["btn-tasks-plan", "btn-tasks-replan"].forEach((id) => { $(id).disabled = busy; });
 }
-
 /** 乐观置卡状态（工单 05）：点击「做这一步」即刻把该卡在内存态置为 doing 并
  * 重渲染——卡片马上出现「进行中」徽章、执行按钮消失，不等 SSE 首帧。真实状态
  * 后续由 task_executing / done / 失败重读（tasksReload）回填，磁盘态才是真相。 */
@@ -88,11 +138,21 @@ function tasksRender() {
           parts.push('<button class="btn-task-skip" data-task="' + esc(task.id) + '">跳过</button>');
         }
         if (actions.includes("revert")) {
-          parts.push('<button class="btn-task-revert" data-task="' + esc(task.id) + '">'
-            + (task.status === "skipped" ? "恢复" : "重做") + "</button>");
+          // needs_redo 卡不显示普通「重做 / 恢复」（评审整改：与「重做此步」
+          // 重复且「重做」不清 needs_redo 标记——重做此步 = 重置 + 清标，
+          // 语义超集，一个入口够）
+          if (!task.needs_redo) {
+            parts.push('<button class="btn-task-revert" data-task="' + esc(task.id) + '">'
+              + (task.status === "skipped" ? "恢复" : "重做") + "</button>");
+          }
         }
         if (actions.includes("mark")) {
           parts.push('<button class="btn-task-mark" data-task="' + esc(task.id) + '">确认通过</button>');
+        }
+        // 建议重做（工单 idea-fix/02）：灵活修正落地后受影响的卡——一键重置
+        // 为 pending + 清 needs_redo（随后可点「做这一步」走既有闭环）
+        if (task.needs_redo) {
+          parts.push('<button class="btn-task-redo" data-task="' + esc(task.id) + '">重做此步</button>');
         }
         if (taskCanFeedback(task)) {
           parts.push('<button class="btn-task-feedback" data-task="' + esc(task.id) + '">上板反馈</button>'
@@ -126,6 +186,233 @@ function tasksResetMessages() {
   const tel = $("tasks-llm-telemetry");
   tel.classList.add("hidden");
   tel.textContent = "";
+}
+
+// ---------------------------------------------------------------------------
+// 新想法 / 问题（工单 idea-fix/02）：全局输入区 + 分析（分类）→ 落地
+//（生成任务卡 / 直接修正 / 讨论转换）。不绑定任务卡——想法不一定是清单里的
+// 任务；直接修正落地后受影响任务由后端标记 needs_redo（前端徽章 + 重做按钮）。
+// ---------------------------------------------------------------------------
+
+/** 分析想法（SSE idea_analyzing → idea_result → done）；autoLand 非空 =
+ * 讨论漏斗转换（把 AI 建议文本重新分析，结果与目标一致时自动落地）。
+ * 入口（按钮 / 转换按钮）统一走本函数——busy 守卫 + 状态行 + 结果卡渲染。 */
+async function tasksIdeaAnalyze(sourceText, autoLand) {
+  if (tasks.busy || ideaState.busy) {
+    toast("info", "有流程正在进行，请等当前操作完成后再试");
+    return;
+  }
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  const input = $("tasks-idea-input");
+  const text = (sourceText || (input && input.value) || "").trim();
+  if (!text) { $("tasks-idea-msg").textContent = "请先说你的想法或发现的问题（如「进弯道前先减速」）；或到 AI 建议区把『讨论』的建议转成落地动作"; return; }
+  ideaSetBusy(true);
+  $("tasks-idea-msg").textContent = "";
+  $("tasks-status").textContent = "AI 分析想法中…";
+  try {
+    const data = await tasksRunSSE("/api/tasks/idea/analyze", { output_dir: dir, idea: text }, {
+      idea_analyzing: () => { $("tasks-status").textContent = "AI 正在理解你的想法…（分钟级调用，请等待）"; },
+      idea_result: () => { $("tasks-status").textContent = "分析完成——按结果卡选择落地方式"; },
+      llm_telemetry: (d) => {
+        const tel = $("tasks-llm-telemetry");
+        tel.textContent = formatLLMTelemetry(d);
+        tel.classList.remove("hidden");
+        recordLLMUsage(d);
+      },
+    });
+    ideaState.analysis = data.analysis || null;
+    ideaState.ideaText = text;
+    renderIdeaResult();
+    if (autoLand === "new_task" && ideaState.analysis && ideaState.analysis.kind === "new_task") {
+      await ideaInsertCore();
+    } else if (autoLand === "direct_fix" && ideaState.analysis && ideaState.analysis.kind === "direct_fix") {
+      await ideaFixCore();
+    } else if (autoLand) {
+      toast("info", "重新分析后与目标不一致——请按结果卡选择落地方式");
+    } else {
+      toast("ok", "已分析——按结果卡选择落地方式");
+    }
+  } catch (e) {
+    $("tasks-idea-msg").textContent = e.message;
+    $("tasks-status").textContent = "";
+  } finally {
+    ideaSetBusy(false);
+  }
+}
+
+/** 生成任务卡（前端按钮）：想法分析为 new_task → /api/tasks/idea/insert →
+ * 清单整体替换重渲染（新卡出现在末尾）；落地后结果卡按钮区换「已生成」提示
+ * 防重复插入（双点 = 两张重复卡）。 */
+async function tasksIdeaInsert() {
+  if (tasks.busy || ideaState.busy) {
+    toast("info", "有流程正在进行，请等当前操作完成后再试");
+    return;
+  }
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-idea-msg").textContent = "";
+  try {
+    await ideaInsertCore();
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
+async function ideaInsertCore() {
+  const newTask = ideaState.analysis && ideaState.analysis.new_task;
+  if (!newTask) {
+    $("tasks-idea-msg").textContent = "当前分析没有可生成的任务卡——请重新分析";
+    return;
+  }
+  const dir = tasks.outputDir || reviseGetDir();
+  try {
+    const data = await apiPost("/api/tasks/idea/insert", { output_dir: dir, new_task: newTask });
+    tasks.outputDir = dir;
+    tasks.plan = data.plan || tasks.plan;
+    tasksRender();
+    renderIdeaResult("已生成任务卡（新卡已在清单末尾）——可点「做这一步」执行");
+    $("tasks-status").textContent = "已插入新任务卡——可点「做这一步」执行";
+    toast("ok", "已生成任务卡");
+  } catch (e) {
+    $("tasks-idea-msg").textContent = e.message;
+  }
+}
+
+/** 改动预览并执行（直接修正）：/api/tasks/idea/fix SSE（复用编译/报告词表）
+ * → 结果面板（diff + 编译状态 + 回滚按钮）+ 受影响任务 needs_redo 徽章刷新
+ *（重读磁盘清单——后端已落盘标记）。 */
+async function tasksIdeaFix() {
+  if (tasks.busy || ideaState.busy) {
+    toast("info", "有流程正在进行，请等当前操作完成后再试");
+    return;
+  }
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-idea-msg").textContent = "";
+  try {
+    await ideaFixCore();
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
+async function ideaFixCore() {
+  const analysis = ideaState.analysis;
+  if (!analysis) { $("tasks-idea-msg").textContent = "请先分析想法——结果卡出现后再点「改动预览并执行」"; return; }
+  const dir = tasks.outputDir || reviseGetDir();
+  $("tasks-status").textContent = "已开始修正：AI 修改 main.c 中…";
+  try {
+    const data = await tasksRunSSE("/api/tasks/idea/fix", {
+      output_dir: dir,
+      idea: ideaState.ideaText,
+      fix_summary: analysis.fix_summary || "",
+      affected_task_ids: analysis.affected_task_ids || [],
+    }, {
+      compile_start: () => { $("tasks-status").textContent = "编译中…"; },
+      fix_start: () => { $("tasks-status").textContent = "AI 修复中…（首轮编译未过，自动修复一轮）"; },
+      verify_result: () => { $("tasks-status").textContent = "验证结果收集中…"; },
+      task_reporting: () => { $("tasks-status").textContent = "AI 正在总结本步（做了什么 / 接下来做什么）…"; },
+      llm_telemetry: (d) => {
+        const tel = $("tasks-llm-telemetry");
+        tel.textContent = formatLLMTelemetry(d);
+        tel.classList.remove("hidden");
+        recordLLMUsage(d);
+      },
+    });
+    // 修正成功：受影响任务 needs_redo 已由后端落盘——重读磁盘刷新徽章
+    //（tasksReload → tasksRender 会清空网格，结果面板随后重建）
+    await tasksReload();
+    // 无任务清单的工程也能直接修正：网格容器默认隐藏（tasksRender 对空清单
+    // 置 hidden）——结果面板要可见，故放开容器
+    if (!tasks.plan) $("tasks-grid").classList.remove("hidden");
+    renderIdeaFixResult(data);
+    // 三态分流（spec 故事 4 / 验收 4：绿=已验证 / 无工具链=未验证 / 仍红=
+    // failed——绿 toast + 红徽章自相矛盾是评审缺陷，按 status 给不同文案）
+    if (data.status === "failed") {
+      // 失败：不消费结果卡（按钮保留——可直接再点「改动预览并执行」重试），
+      // 失败说明走错误消息区（error 色）
+      renderIdeaResult();
+      $("tasks-idea-msg").textContent = "修正未通过（编译仍红）——结果已写入 main.c（已备份，可回滚后重试）";
+      $("tasks-status").textContent = "修正失败（编译仍红）——结果已写入 main.c，可回滚或重试";
+      toast("error", "修正未通过（编译仍红）——已备份，可回滚或重试");
+    } else if (data.status === "unverified") {
+      renderIdeaResult("修正已落地（无工具链降级：未经编译验证）——受影响任务已标记「建议重做」");
+      $("tasks-status").textContent = "修正完成（未经编译验证）——请配置工具链或上板人工确认";
+      toast("info", "修正已落地——未经编译验证（无工具链降级）");
+    } else {
+      renderIdeaResult("修正已落地——受影响任务已标记「建议重做」，可逐卡重做");
+      $("tasks-status").textContent = "修正完成——请查看结果面板（可回滚）与受影响任务";
+      toast("ok", "修正已完成");
+    }
+  } catch (e) {
+    $("tasks-idea-msg").textContent = e.message;
+    $("tasks-status").textContent = "";
+  }
+}
+
+/** 直接修正结果面板（对照任务执行结果面板；无 task 字段——修正不绑定任务
+ * 卡，diff / 编译状态 / 备份回滚 / 步骤报告同形状）。 */
+function renderIdeaFixResult(data) {
+  const markup = verifyStatusMarkup(data, {
+    unverified: "未检测到编译工具链：修正已写入 main.c，但未经编译验证——请配置工具链后手动编译，或上板后人工确认。",
+    failed: "编译验证未通过，修正已写入 main.c（已备份，可回滚）。",
+  });
+  const sr = data.step_report || {};
+  const backupId = data.backup_id || "";
+  $("tasks-grid").insertAdjacentHTML("beforeend",
+    '<div class="item" id="tasks-result" style="margin-top:10px">'
+    + '<div class="head"><span class="slug">💡 直接修正结果</span> ' + markup.badge + "</div>"
+    // 步骤报告：任务结果面板与直接修正结果面板共用同一纯函数（防两处各抄
+    // 一份措辞漂移——评审整改 taskStepReportBlocksHTML 单源）
+    + taskStepReportBlocksHTML(sr.what_changed || "", sr.user_action || "")
+    + '<div class="reason">' + markup.detail + "</div>"
+    + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
+    + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '">回滚本次修正</button>' : "")
+    + "</div>"
+    + mainDiffHTML(data.main_diff, "修正")
+    + "</div>");
+}
+
+/** 讨论漏斗转换（工单 idea-fix/02）：把 AI 建议文本（analysis.reply）作为新
+ * 想法重新分析——建议成形为可落地动作（new_task / direct_fix）后自动落地；
+ * 结果仍为讨论 / 与目标不符 → 显示新结果卡让用户继续。 */
+async function tasksIdeaConvert(target) {
+  const analysis = ideaState.analysis;
+  if (!analysis) return;
+  const suggestion = (analysis.reply || "").trim();
+  if (!suggestion) { $("tasks-idea-msg").textContent = "AI 建议为空——无法转换"; return; }
+  if (target === "new_task" && analysis.kind === "new_task") { await tasksIdeaAnalyze(suggestion, "new_task"); return; }
+  if (target === "direct_fix" && analysis.kind === "direct_fix") { await tasksIdeaAnalyze(suggestion, "direct_fix"); return; }
+  await tasksIdeaAnalyze(suggestion, target);
+}
+
+/** 重做此步（工单 idea-fix/02）：受影响任务一键重做 = 重置 pending（转移表
+ * 内合法转移）+ 清除 needs_redo 标记；随后可点「做这一步」走既有闭环。
+ * pending 任务无需状态调用（只清标记）。 */
+async function tasksRedoTask(taskId) {
+  if (tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-msg").textContent = "";
+  try {
+    const task = ((tasks.plan || {}).tasks || []).find((t) => t.id === taskId);
+    if (task && task.status !== "pending") {
+      await apiPost("/api/tasks/status", { output_dir: dir, task_id: taskId, status: "pending" });
+    }
+    await apiPost("/api/tasks/idea/mark-redo", {
+      output_dir: dir, task_ids: [taskId], needs_redo: false,
+    });
+    await tasksReload();
+    toast("ok", "已重置为待做——点「做这一步」重新实现");
+  } catch (e) {
+    $("tasks-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+  }
 }
 
 /** SSE 流（reviseRunSSE 同款语义：done 载荷返回；error 终态 / 断线 throw）。 */
@@ -554,6 +841,17 @@ async function tasksDialogClear(taskId) {
 
 $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
 $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
+// 新想法 / 问题（工单 idea-fix/02）：分析按钮 + 结果卡落地按钮委托
+$("btn-tasks-idea").addEventListener("click", () => tasksIdeaAnalyze());
+$("tasks-idea-result").addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-idea-insert, .btn-idea-fix, .btn-idea-to-task, .btn-idea-to-fix");
+  if (!btn) return;
+  const kind = btn.dataset.ideaKind;
+  if (kind === "new_task") { tasksIdeaInsert(); return; }
+  if (kind === "direct_fix") { tasksIdeaFix(); return; }
+  if (btn.classList.contains("btn-idea-to-task")) { tasksIdeaConvert("new_task"); return; }
+  tasksIdeaConvert("direct_fix");
+});
 // 任务卡「做这一步」事件委托（列随状态重渲染，监听器挂容器）
 $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-run");
@@ -569,8 +867,12 @@ $("tasks-grid").addEventListener("click", (event) => {
 });
 // 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板改标）
 $("tasks-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark");
+  const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark, .btn-task-redo");
   if (!btn) return;
+  if (btn.classList.contains("btn-task-redo")) {
+    tasksRedoTask(btn.dataset.task);
+    return;
+  }
   const status = btn.classList.contains("btn-task-skip") ? "skipped"
     : btn.classList.contains("btn-task-mark") ? "verified" : "pending";
   tasksSetStatus(btn.dataset.task, status);
@@ -625,6 +927,7 @@ window.addEventListener("revise-context-loaded", (event) => {
     $("btn-tasks-replan").classList.add("hidden");
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = "";
+    resetIdeaArea();
     // 目录已加载：自动读回磁盘任务清单（若该目录拆解过）——任务卡与
     // 「重新拆解」按钮随之出现；无清单则保持占位等用户拆解。修复「提示
     // 已有清单却看不到重新拆解按钮」的死锁：此前只有 plan 已加载才显示
@@ -650,6 +953,7 @@ window.addEventListener("tasks-invalidated", (event) => {
   $("btn-tasks-replan").classList.add("hidden");
   $("tasks-status").textContent = "";
   $("tasks-msg").textContent = "任务清单已作废（修订重生成）：请点「拆解任务」按新工程重新拆解";
+  resetIdeaArea();
 });
 
 export { tasksPlan, tasksRender, tasksResetMessages };

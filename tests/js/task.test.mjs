@@ -10,6 +10,7 @@ import {
   taskCanFeedback, taskIterationLabel, taskIterationsHTML, taskLatestFeedbackNote,
   taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
   nextTaskHint, taskNextHintHTML,
+  ideaResultHTML, taskNeedsRedoBadge, taskStepReportBlocksHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -481,4 +482,109 @@ test("taskNextHintHTML: 下一步提示行（转义 + 序号 + 空串）", () =>
   // 无下一步 → 空串
   assert.equal(taskNextHintHTML(plan, "t4"), "");
   assert.equal(taskNextHintHTML({ tasks: [] }, "t1"), "");
+});
+
+test("ideaResultHTML: 三种分类结果卡（徽章 + 落地按钮区）", () => {
+  // new_task → 「生成任务」按钮 + 建议任务预览（标题/描述/依赖序号）
+  const nt = ideaResultHTML({
+    kind: "new_task",
+    reply: "这是清单里没有的新功能：进弯道前减速。",
+    new_task: { title: "弯道减速", description: "检测弯道后降低速度", depends_on: [1] },
+    fix_summary: "",
+    affected_task_ids: [],
+  }, {});
+  assert.ok(nt.includes("新功能任务"));
+  assert.ok(nt.includes("进弯道前减速"));
+  assert.ok(nt.includes("弯道减速"));
+  assert.ok(nt.includes("依赖：第 1 步"));
+  assert.ok(nt.includes("btn-idea-insert"));
+  assert.ok(nt.includes("生成任务"));
+  assert.ok(!nt.includes("btn-idea-fix"));
+  // direct_fix → 「改动预览并执行」按钮 + 修正建议 + 受影响任务
+  const df = ideaResultHTML({
+    kind: "direct_fix",
+    reply: "阈值太高，直接改。",
+    new_task: null,
+    fix_summary: "把阈值从 500 降到 350",
+    affected_task_ids: ["t1", "t2"],
+  }, {});
+  assert.ok(df.includes("改现有代码"));
+  assert.ok(df.includes("把阈值从 500 降到 350"));
+  assert.ok(df.includes("受影响任务"));
+  assert.ok(df.includes("t1、t2"));
+  assert.ok(df.includes("btn-idea-fix"));
+  assert.ok(df.includes("改动预览并执行"));
+  assert.ok(!df.includes("btn-idea-insert"));
+  // discussion → 两个转换按钮（漏斗态）
+  const dc = ideaResultHTML({
+    kind: "discussion", reply: "这个想法值得先聊聊。", new_task: null,
+    fix_summary: "", affected_task_ids: [],
+  }, {});
+  assert.ok(dc.includes("先讨论"));
+  assert.ok(dc.includes("btn-idea-to-task"));
+  assert.ok(dc.includes("把建议变成任务"));
+  assert.ok(dc.includes("btn-idea-to-fix"));
+  assert.ok(dc.includes("把建议变成修正"));
+  assert.ok(!dc.includes("btn-idea-insert"));
+});
+
+test("ideaResultHTML: 落地后 landedNote 替换按钮区 + 转义", () => {
+  const landed = ideaResultHTML({
+    kind: "new_task",
+    reply: "建议加一个功能。",
+    new_task: { title: "弯道减速", description: "描述" },
+  }, { landedNote: "已生成任务卡——可点「做这一步」执行" });
+  assert.ok(landed.includes("已生成任务卡"));
+  assert.ok(!landed.includes("btn-idea-insert"));
+  // reply 转义（防注入）
+  const escaped = ideaResultHTML({
+    kind: "discussion", reply: "<script>alert(1)</script> & 建议",
+  }, {});
+  assert.ok(escaped.includes("&lt;script&gt;"));
+  assert.ok(!escaped.includes("<script>alert(1)"));
+});
+
+test("ideaResultHTML: opts.idea 回显用户原文（故事 6）", () => {
+  const html = ideaResultHTML({
+    kind: "direct_fix", reply: "阈值太高，直接改。",
+    fix_summary: "把阈值从 500 降到 350",
+  }, { idea: "循迹阈值太高" });
+  assert.ok(html.includes("你的想法"));
+  assert.ok(html.includes("循迹阈值太高"));
+  // 无 idea → 不回显
+  const plain = ideaResultHTML({ kind: "direct_fix", reply: "好。" }, {});
+  assert.ok(!plain.includes("你的想法"));
+});
+
+test("taskStepReportBlocksHTML: 两块正文共享单源（结果面板共用）", () => {
+  const html = taskStepReportBlocksHTML("实现了循迹状态机。", "把 PA0 接到灰度 DIO。");
+  assert.ok(html.includes("AI 做了什么"));
+  assert.ok(html.includes("实现了循迹状态机。"));
+  assert.ok(html.includes("接下来你要做什么"));
+  assert.ok(html.includes("把 PA0 接到灰度 DIO。"));
+  // 空值 → 中文兜底
+  const fallback = taskStepReportBlocksHTML("", "");
+  assert.ok(fallback.includes("本步说明为空"));
+  assert.ok(fallback.includes("无需额外人工动作"));
+});
+
+test("taskNeedsRedoBadge: 建议重做徽章显隐", () => {
+  assert.ok(taskNeedsRedoBadge({ id: "t1", needs_redo: true }).includes("⚠ 建议重做"));
+  assert.equal(taskNeedsRedoBadge({ id: "t1", needs_redo: false }), "");
+  assert.equal(taskNeedsRedoBadge({ id: "t1" }), "");
+  assert.equal(taskNeedsRedoBadge(null), "");
+});
+
+test("taskCardHTML: needs_redo 集成徽章（卡头）", () => {
+  const html = taskCardHTML({
+    id: "t1", title: "循迹", description: "循迹决策", score_refs: [],
+    depends_on: [], verify: "compile", status: "verified", needs_redo: true,
+  }, 0, {});
+  assert.ok(html.includes("⚠ 建议重做"));
+  // 未标记 → 无徽章
+  const clean = taskCardHTML({
+    id: "t2", title: "显示", description: "显示", score_refs: [],
+    depends_on: [], verify: "compile", status: "verified", needs_redo: false,
+  }, 1, {});
+  assert.ok(!clean.includes("建议重做"));
 });
