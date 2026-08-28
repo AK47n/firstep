@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from .events import EVENT_TASK_EXECUTING, EVENT_TASK_PLANNING, ProgressEvent
+from .events import EVENT_TASK_EXECUTING, EVENT_TASK_PLANNING, EVENT_TASK_REPORTING, ProgressEvent
 
 if TYPE_CHECKING:
     from .llm import LLM  # 仅类型注解（llm 运行时依赖本层，反向禁止）
@@ -120,7 +120,9 @@ class TaskIteration:
     反馈修复）；feedback = 用户反馈文本（execute 轮 = 空串）；status = 该轮
     结束后的任务终态（回滚到该轮时恢复用）；backup_id = 该轮整树备份 id
     （可回滚——用户拍板全部保留，一轮几十 KB~几 MB）；compile_summary =
-    编译摘要（供卡上展示）；at = 轮次时间戳。
+    编译摘要（供卡上展示）；what_changed / user_action = 步骤报告（工单
+    stepwise-deepen/01：AI 本步做了什么 / 用户接下来要做什么，含接线与
+    上板指引；报告调用失败降级为空串）；at = 轮次时间戳。
     """
 
     seq: int
@@ -129,6 +131,8 @@ class TaskIteration:
     status: str = ""
     backup_id: str = ""
     compile_summary: str = ""
+    what_changed: str = ""
+    user_action: str = ""
     at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -139,6 +143,8 @@ class TaskIteration:
             "status": self.status,
             "backup_id": self.backup_id,
             "compile_summary": self.compile_summary,
+            "what_changed": self.what_changed,
+            "user_action": self.user_action,
             "at": self.at,
         }
 
@@ -292,6 +298,8 @@ def _parse_iterations(raw: Any) -> tuple[TaskIteration, ...]:
                 status=_iter_opt_str(item, "status"),
                 backup_id=_iter_opt_str(item, "backup_id"),
                 compile_summary=_iter_opt_str(item, "compile_summary"),
+                what_changed=_iter_opt_str(item, "what_changed"),
+                user_action=_iter_opt_str(item, "user_action"),
                 at=_iter_opt_str(item, "at"),
             )
         )
@@ -678,6 +686,20 @@ def run_task(
             ),
         }
 
+    # 步骤报告（工单 stepwise-deepen/01）：编译验证结束后让 AI 用中文写
+    # 「本步做了什么 + 你接下来要做什么（含接线/上板指引）」，随轮次落盘。
+    # 报告是附加产物（主产物 = 代码 + 编译验证 + diff 已落盘），失败降级为
+    # 空串不阻断——不因旁路汇报失败毁掉已达成的主结果（与无工具链降级同
+    # 哲学：用户拿到结果，缺的只是说明文本）。
+    what_changed, user_action = _report_task_step(
+        llm=llm,
+        task=task,
+        verify_result=result,
+        diff=diff,
+        interfaces=interfaces,
+        emit=emit,
+    )
+
     # 状态回填（终态写盘；note 持久化——补充框内容刷新不丢，spec 用户故事 10；
     # 迭代历史追加——每轮执行记录（备份点 / 终态），回滚到任意轮靠它）
     iteration = TaskIteration(
@@ -687,6 +709,8 @@ def run_task(
         status=result["status"],
         backup_id=backup_id,
         compile_summary=str(result.get("compile", {}).get("summary", "") or ""),
+        what_changed=what_changed,
+        user_action=user_action,
         at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     )
     updated_plan = _with_task_status(
@@ -699,6 +723,45 @@ def run_task(
     write_task_plan(output_dir, updated_plan)
     updated = find_task(updated_plan, task_id)
     return {"task": updated.to_dict(), **result}
+
+
+def _report_task_step(
+    *,
+    llm: LLM,
+    task: Task,
+    verify_result: Mapping[str, Any],
+    diff: Mapping[str, Any] | None,
+    interfaces: Sequence[str],
+    emit: SseEmitter,
+) -> tuple[str, str]:
+    """步骤报告调用（工单 stepwise-deepen/01）：编译验证后让 LLM 总结本步。
+
+    输入 = 任务（含对话采纳结论 / 验收方式）+ 验证结果（status / message /
+    compile / verify_cause）+ diff（截断在 prompt 层处理，无变化 = 空串）+
+    模块接口清单；
+    返回 (what_changed, user_action)。报告是附加产物（主产物 = 代码 +
+    编译验证 + diff 已落盘），任何失败（LLM 断线 / 输出坏 / 解析重试耗尽）
+    → 降级空串，不阻断任务落盘终态——与无工具链降级同哲学。
+    """
+    try:
+        emit.progress(ProgressEvent(type=EVENT_TASK_REPORTING))
+    except Exception:
+        pass  # 进度发射失败不阻断报告（与 events._emit 旁路同哲学）
+    try:
+        diff_text = ""
+        if isinstance(diff, Mapping):
+            raw_text = diff.get("text", "")
+            if isinstance(raw_text, str):
+                diff_text = raw_text
+        report = llm.report_task_step(
+            task=task.to_dict(),
+            verify_result=verify_result,
+            diff_text=diff_text,
+            module_interfaces=interfaces,
+        )
+        return report.what_changed, report.user_action
+    except Exception:
+        return "", ""
 
 
 def _with_task_status(

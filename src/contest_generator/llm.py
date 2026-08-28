@@ -314,6 +314,24 @@ TASK_DISCUSS_SYSTEM_PROMPT = (
     '只输出 JSON 对象：{"reply": "回复文本"}；reply 必须非空、用中文。'
 )
 
+# 步骤报告（工单 stepwise-deepen/01）：一步任务执行 + 编译验证刚完成，AI 用
+# 中文给学生写「我做了什么 + 接下来你要做什么」两步简报。立场 = 执行者汇报，
+# 不是顾问（执行已完成，不再讨论方案）；接线/上板指引必须落到模块接口清单
+# 里的真实引脚/接口名（user_action 是学生接下来唯一的物理动作清单——把
+# 接线、烧录、观察现象、确认动作一次说清，别让用户猜）。只输出 JSON 契约。
+TASK_REPORT_SYSTEM_PROMPT = (
+    "你是嵌入式 C 开发工程师。学生刚点「做这一步」并完成了某个实现任务，"
+    "编译验证也已结束（赛题文本 / 模块接口过长可能被截断，见末尾标注，"
+    + TRUNCATION_NOTICE + "）。请用中文给学生写一份本步骤简报，分两段："
+    "what_changed = 本步做了什么——引用具体函数 / 引脚 / 定时器名说明改动，"
+    "并注明编译验证结果；如有降级（如无工具链未验证）或警告，一并说明。"
+    "user_action = 学生接下来需要做的物理动作——按模块接口清单把具体接线"
+    "（如「把 PA0 接到灰度模块的 DIO」）、烧录、观察什么现象、确认后的操作"
+    "一次说清；本步纯软件无物理动作时才可为空串，否则必须给出明确动作。"
+    '只输出 JSON 对象：{"what_changed": "做过的中文叙事", "user_action":'
+    ' "接下来的中文动作"}；what_changed 必须非空，两段都用中文。'
+)
+
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
 SKELETON_INTERFACES_HEADING = "所选模块的头文件接口（main.c 只调用这里真实存在的函数）："
 SKELETON_SYSTEM_PROMPT = (
@@ -1151,6 +1169,20 @@ class TaskDiscussion:
     reply: str
 
 
+@dataclass(frozen=True)
+class StepReport:
+    """一步任务执行后的步骤报告（工单 stepwise-deepen/01）。
+
+    what_changed = AI 本步做了什么（改了什么逻辑/函数、编译验证结果、任何
+    降级/警告），中文叙事；user_action = 用户接下来需要做的物理动作（烧录、
+    接线——具体到模块接口清单里的引脚/接口名，如「把 PA0 接到 LED 模块的
+    DIO」、观察什么现象、确认后如何操作）；纯软件无物理动作时可空串。
+    """
+
+    what_changed: str
+    user_action: str = ""
+
+
 class LLM(Protocol):
     def select_modules(
         self,
@@ -1276,6 +1308,14 @@ class LLM(Protocol):
         main_c: str,
         history: Sequence[tuple[str, str]],
     ) -> TaskDiscussion: ...
+
+    def report_task_step(
+        self,
+        task: Mapping[str, Any],
+        verify_result: Mapping[str, Any],
+        diff_text: str,
+        module_interfaces: Sequence[str],
+    ) -> StepReport: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -2520,6 +2560,43 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def report_task_step(
+        self,
+        task: Mapping[str, Any],
+        verify_result: Mapping[str, Any],
+        diff_text: str,
+        module_interfaces: Sequence[str],
+    ) -> StepReport:
+        """步骤报告（工单 stepwise-deepen/01）：一步执行 + 编译验证完成后的
+        汇报简报。
+
+        输入 = 任务描述 + 编译验证结果（status / message / compile）+ 代码
+        diff 摘要 + 模块接口清单；输出 JSON 由解析器校验：what_changed 空 /
+        缺失 = 整次重问（_retry_parse——汇报里"做了什么"为空毫无价值）；
+        user_action 缺失 = 空串（纯软件步无物理动作，降级路径允许）。
+        """
+
+        def parse(content: str) -> StepReport:
+            data = extract_module_selection_data(content)
+            what_changed = data.get("what_changed")
+            if not isinstance(what_changed, str) or not what_changed.strip():
+                raise LLMError("步骤报告缺少 what_changed：模型未输出或为空串")
+            user_action = data.get("user_action")
+            if not isinstance(user_action, str):
+                user_action = ""
+            return StepReport(
+                what_changed=what_changed.strip(), user_action=user_action.strip()
+            )
+
+        return self._retry_parse(
+            system_prompt=TASK_REPORT_SYSTEM_PROMPT,
+            user_prompt=_task_report_user_prompt(task, verify_result, diff_text, module_interfaces),
+            parse=parse,
+            label="步骤报告",
+            operation="report_task_step",
+            json_mode=True,
+        )
+
     def _observe_call(
         self,
         *,
@@ -3160,6 +3237,18 @@ class RoutingLLM:
             task, problem_text, qa_text, requirements, module_interfaces, main_c, history
         )
 
+    def report_task_step(
+        self,
+        task: Mapping[str, Any],
+        verify_result: Mapping[str, Any],
+        diff_text: str,
+        module_interfaces: Sequence[str],
+    ) -> StepReport:
+        # 步骤报告走 remote（汇报质量优先，不进本地方法集）
+        return self._remote.report_task_step(
+            task, verify_result, diff_text, module_interfaces
+        )
+
 
 def build_llm(
     config: AppConfig,
@@ -3691,6 +3780,54 @@ def _task_execute_user_prompt(
         "现有 main.c（只实现上述任务描述要求的功能，其余内容原样保留）：",
         main_c,
     ]
+    return "\n".join(lines)
+
+
+def _task_report_user_prompt(
+    task: Mapping[str, Any],
+    verify_result: Mapping[str, Any],
+    diff_text: str,
+    module_interfaces: Sequence[str],
+) -> str:
+    """步骤报告的 user 消息（工单 stepwise-deepen/01）：任务描述 + 编译验证
+    结果 + 代码 diff 摘要 + 模块接口清单。各段截断带标注（_truncate_content
+    同款预算）；diff 空 = 无该段（写盘前 main.c 变化未知时按无变化处理）。
+    任务类 prompt 分段与 _task_execute_user_prompt 同构（接口段文本一致）——
+    改动时两处核对（漂移即分叉，见 SKELETON_INTERFACES_HEADING 双份教训）。
+    """
+    lines = ["【本步任务（刚执行完）】"]
+    lines.append(f"任务：{task.get('title', '')}")
+    if task.get("description"):
+        lines.append(f"描述：{task.get('description', '')}")
+    verify_cause = verify_result.get("verify_cause", "")
+    if verify_cause == "manual":
+        lines.append("验收方式：manual（需上板人工确认）")
+    elif task.get("verify") == "manual":
+        lines.append("验收方式：manual（需上板人工确认）")
+    dialog_note = task.get("dialog_note", "")
+    if isinstance(dialog_note, str) and dialog_note.strip():
+        lines += [
+            "",
+            "【用户沟通结论（采纳自对话，按此总结本步与后续动作）】",
+            dialog_note.strip(),
+        ]
+    lines += ["", "【编译验证结果】"]
+    status = verify_result.get("status", "")
+    status_label = {"verified": "已验证（编译绿）", "unverified": "未验证",
+                    "failed": "失败（修一轮仍红）"}.get(status, status)
+    lines.append(f"状态：{status_label}")
+    message = verify_result.get("message", "")
+    if message:
+        lines.append(f"说明：{message}")
+    compile_result = verify_result.get("compile") or {}
+    compile_summary = compile_result.get("summary", "") if isinstance(compile_result, Mapping) else ""
+    if compile_summary:
+        lines.append(f"编译摘要：{_truncate_content(str(compile_summary))}")
+    if diff_text.strip():
+        lines += ["", "【代码变化（diff 摘要，可能被截断）】", _truncate_content(diff_text)]
+    if module_interfaces:
+        lines += ["", SKELETON_INTERFACES_HEADING]
+        lines.extend(_truncate_content(block) for block in module_interfaces)
     return "\n".join(lines)
 
 
