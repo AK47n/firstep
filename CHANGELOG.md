@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=381e790f34780d573cbd6cab988cb55a74015a34 -->
+<!-- changelog-auto: last-commit=72ebaf386778165c87130b1c72f19c544f55998e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 12:58 逐步深化/04：fix 卡片上板指引消失——compile 任务已验证（编译通过）仍常驻「下一步要做」，仅 manual 人工确认后隐藏（工单 resolved）
 - 13:01 逐步深化/05：fix 做这一步点击无即时反应——点击即置进行中重渲染（徽章切换+按钮消失）+ busy 显式提示 + 失败重读磁盘回填（工单 resolved）
 - 13:03 逐步深化/06：任务卡「和 AI 商量」改澄清语义——按钮「有不懂的？问这里」+ 对话引导语/placeholder 提问导向（工单 resolved）
+- 13:28 烧录/01：烧录执行层（flash.py + POST /api/flash + config 三键 + FlashError 登记）——固件定位/工具探测（DSLite零安装）/三 builder/180s 超时/输出尾40行/中文结果；平台从产物树反推（工单 resolved）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
