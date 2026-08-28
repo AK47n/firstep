@@ -267,6 +267,30 @@ def test_run_deepen_failed_after_one_fix_round(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def test_compile_summary_includes_parsed_errors():
+    """错误行跳转（error-jump-task/01）：_compile_summary 返回 parsed_errors
+    （parse_compile_errors 同源），既有键不变；build None 降级 = 空列表。"""
+    from contest_generator.deepen import _compile_summary
+
+    output = (
+        'main.c(12): error #10234-D: unresolved symbols remain\n'
+        'main.c(40): warning #552-D: variable "x" was set but never used\n'
+    )
+    summary = _compile_summary(_build(2, output))
+    assert summary["passed"] is False
+    assert summary["exit_code"] == 2
+    assert summary["summary"] == {"errors": 1, "warnings": 1}
+    errors = summary["parsed_errors"]
+    assert [e["path"] for e in errors] == ["main.c", "main.c"]
+    assert [e["line"] for e in errors] == [12, 40]
+    assert "unresolved symbols" in errors[0]["message"]
+
+    degraded = _compile_summary(None)
+    assert degraded == {
+        "passed": None, "exit_code": None, "summary": "", "parsed_errors": [],
+    }
+
+
 def test_main_diff_none_when_unchanged():
     """深化前后相同 → main_diff = None（无差异，前端展示占位）。"""
     assert main_diff("int main(void) { }\n", "int main(void) { }\n") is None

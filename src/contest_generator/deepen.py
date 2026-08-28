@@ -342,14 +342,28 @@ def _backup_main_c(work_root: Path, output_dir: Path, main_c: str) -> str:
 
 
 def _compile_summary(build) -> dict[str, Any]:
-    """最后编译结果摘要（done 载荷展示用）。"""
+    """最后编译结果摘要（done 载荷展示用）。
+
+    parsed_errors = 结构化错误列表（工单 error-jump-task/01：任务结果面板
+    错误行跳转 main.c 用；parse_compile_errors 同源——compile_runner
+    /api/compile done 载荷的 parsed_errors 字段同型）；build 为 None（无
+    工具链降级）= 空列表。compile dict 只追加不改既有键（passed / exit_code
+    / summary），旧前端忽略新字段即可。
+    """
     if build is None:
-        return {"passed": None, "exit_code": None, "summary": ""}
+        return {
+            "passed": None, "exit_code": None, "summary": "",
+            "parsed_errors": [],
+        }
     parsed = _parse_errors(build.run.output)
     return {
         "passed": compile_passed(build.platform, build.run.exit_code),
         "exit_code": build.run.exit_code,
         "summary": _summarize(build.run.output, parsed),
+        "parsed_errors": [
+            {"path": e.path, "line": e.line, "message": e.message}
+            for e in parsed
+        ],
     }
 
 
