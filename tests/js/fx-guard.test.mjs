@@ -143,6 +143,9 @@ const DOMAINS = {
   "diff.js": {
     mainDiffHTML: "fn", diffStatsLineHTML: "fn",
   },
+  "params.js": {
+    paramListHTML: "fn", paramResultHTML: "fn",
+  },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
     parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",

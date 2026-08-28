@@ -1,6 +1,6 @@
 # 工单 02：参数速调前端面板（param-tune/02）
 
-Status: pending
+Status: resolved
 
 ## 目标
 

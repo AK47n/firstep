@@ -326,10 +326,50 @@ def test_run_param_scan_writes_and_emits(tmp_path):
     assert llm.scan_params_calls[0][1] == ("/* 接口 */",)
 
 
+def test_run_param_scan_empty_skips_write(tmp_path):
+    """识别结果为空表 → 不落盘（spec 用户故事 6 + spec 轴评审整改）：
+    无文件 = 未识别过，空表落盘会让「尚未识别」与「已识别无参数」两态无法区分。"""
+    events: list[Any] = []
+    emit = SimpleNamespace(progress=lambda event: events.append(event))
+    llm = FakeLLM(param_list=empty_params())
+    result = run_param_scan(
+        llm=llm,
+        main_c=MAIN_WITH_PARAM,
+        module_interfaces=(),
+        output_dir=tmp_path,
+        emit=emit,  # type: ignore[arg-type]
+    )
+    assert result.params == ()
+    assert [e.type for e in events] == ["param_scanning"]
+    assert not (tmp_path / PARAMS_FILENAME).exists()
+
+
+def test_refresh_param_after_apply():
+    """apply 后的表回写单测：目标项 old_value/anchor 同步为磁盘状态，
+    其余项与顺序原样；锚不在磁盘（修复轮改值）→ 保持旧值；无变化 → 原对象。"""
+    from contest_generator.params import _refresh_param_after_apply
+
+    table = _param_list(_item(), _item(name="SPEED", old_value="120", anchor="#define SPEED 120"))
+    refreshed = _refresh_param_after_apply(table, "THRESHOLD", "900", MAIN_WITH_PARAM.replace("800", "900", 1))
+    assert refreshed is not table
+    assert refreshed.params[0].old_value == "900"
+    assert refreshed.params[0].anchor == "#define THRESHOLD 900"
+    assert refreshed.params[1].old_value == "120"
+    assert refreshed.params[1].anchor == "#define SPEED 120"
+    # 锚不在磁盘（修复轮改值）→ 该项保持旧值（前端标失效 = 诚实）
+    stale = _refresh_param_after_apply(table, "THRESHOLD", "900", MAIN_WITH_PARAM)
+    assert stale is table
+    # 找不到 name → 原对象
+    missing = _refresh_param_after_apply(table, "NO_SUCH", "900", MAIN_WITH_PARAM)
+    assert missing is table
+
+
 def test_run_param_apply_replaces_writes_and_verifies(tmp_path, monkeypatch):
     _green_toolchain(monkeypatch, tmp_path)
     # 模拟真实工程：盘上已有 main.c（备份树非空前提，backup_tree 拒绝空目录）
     (tmp_path / "main.c").write_text(MAIN_WITH_PARAM, encoding="utf-8")
+    # 已有参数表（apply 后应回写 old_value/anchor——spec 轴评审整改）
+    write_params(tmp_path, _param_list(_item()))
     events: list[Any] = []
     emit = SimpleNamespace(progress=lambda event: events.append(event))
     result = run_param_apply(
@@ -354,6 +394,10 @@ def test_run_param_apply_replaces_writes_and_verifies(tmp_path, monkeypatch):
     # 备份目录有修改前快照（回滚入口存在）
     backup_root = tmp_path / "work" / "revise-backups"
     assert any(backup_root.iterdir())
+    # apply 后参数表已回写：old_value/new anchor 与磁盘一致（/read 重验不误标失效）
+    refreshed = read_params(tmp_path)
+    assert refreshed.params[0].old_value == "900"
+    assert refreshed.params[0].anchor == "#define THRESHOLD 900"
 
 
 def test_run_param_apply_anchor_stale_raises_before_write(tmp_path):
@@ -482,20 +526,27 @@ def test_params_apply_sse_flow(tmp_path, monkeypatch):
     assert "#define THRESHOLD 900" in main_text
     assert "int x = 800" in main_text
     assert any((tmp_path / "revise-backups").glob("*"))
+    # 参数表已回写（评审整改）：apply 后 read 的 old_value 是新值且 valid
+    resp = client.post("/api/tasks/params/read", json={"output_dir": output_dir})
+    assert resp.status_code == 200
+    assert resp.json()["params"][0]["old_value"] == "900"
+    assert resp.json()["params"][0]["valid"] is True
 
 
 def test_params_read_endpoint(tmp_path):
     client, _, _ = _params_client(tmp_path)
     output_dir = _generate_project(client, tmp_path)
-    # 无文件 = 空列表不 400
+    # 无文件 = 空列表不 400；scanned=False（未识别过）
     resp = client.post("/api/tasks/params/read", json={"output_dir": output_dir})
     assert resp.status_code == 200
     assert resp.json()["params"] == []
+    assert resp.json()["scanned"] is False
     resp = client.post("/api/tasks/params/scan", json={"output_dir": output_dir})
     assert resp.status_code == 200, resp.text
     resp = client.post("/api/tasks/params/read", json={"output_dir": output_dir})
     assert resp.status_code == 200
     assert resp.json()["params"][0]["valid"] is True
+    assert resp.json()["scanned"] is True
     # main.c 被改动（锚失效）→ valid False
     (Path(output_dir) / "main.c").write_text(
         "#define THRESHOLD 777\nint main(void) { return 0; }\n", encoding="utf-8"

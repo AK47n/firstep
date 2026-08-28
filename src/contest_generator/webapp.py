@@ -2304,24 +2304,27 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/tasks/params/read")
     @_map_errors
     def tasks_params_read(payload: dict) -> dict:
-        """参数表读取（同步端点）：{output_dir} → {params: [..+valid]}。
+        """参数表读取（同步端点）：{output_dir} → {params: [..+valid], scanned}。
 
         逐参数读当前 main.c 重验 anchor（锚失效 = main.c 被任务执行 / 手工
         编辑改动，前端禁用该行并提示「请重新识别」）；valid = anchor 逐字节
-        仍在 main.c 中（old_value 也在锚内）。无文件 = 空列表不 400。
+        仍在 main.c 中（old_value 也在锚内）。无文件 = 空列表不 400；
+        scanned = 磁盘是否存在参数表（无表 = 未识别过，前端「尚未识别」与
+        「已识别但无参数」两态区分——空表不落盘，spec 用户故事 6）。
         """
-        from .params import read_params
+        from .params import load_params_file, read_params
 
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
             raise TaskError(f"输出目录不存在：{output_dir}")
         param_list = read_params(output_dir)
+        scanned = load_params_file(output_dir) is not None
         main_c = read_project_main_c(output_dir) or ""
         params_out = []
         for item in param_list.params:
             valid = bool(main_c) and item.anchor in main_c and item.old_value in item.anchor
             params_out.append({**item.to_dict(), "valid": valid})
-        return {"params": params_out}
+        return {"params": params_out, "scanned": scanned}
 
     # ------------------------------------------------------------------
     # 任务推进 · 人工改标（工单 task-progress/03）：跳过 / 重做 / 上板

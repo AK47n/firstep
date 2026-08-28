@@ -463,6 +463,23 @@
                      white-space: nowrap; }
   .btn-draft-analyze, .btn-draft-delete, .btn-draft-all { font-size: 12px;
                      padding: 1px 8px; }
+  /* 参数速调（工单 param-tune/02）：参数表行（名称 / 含义 / 改值输入 /
+     建议范围 / 应用按钮）+ 失效标记；行内横排，变量色零新硬编码 */
+  .param-table { border: 1px solid var(--border); border-radius: 8px;
+                     border-left: 3px solid var(--accent); padding: 4px 8px;
+                     background: var(--panel-2); }
+  .param-row { display: flex; align-items: center; gap: 8px; padding: 4px 0;
+                     border-bottom: 1px dashed var(--border); flex-wrap: wrap; }
+  .param-row:last-of-type { border-bottom: none; }
+  .param-row .slug { min-width: 90px; font-family: var(--mono); }
+  .param-label { flex: 1; color: var(--text); }
+  .param-input { width: 110px; font-family: var(--mono); }
+  .param-hint { font-size: 12px; }
+  .param-stale { opacity: .65; }
+  .param-stale-badge { background: var(--warn-dim); color: var(--warn);
+                     font-size: 12px; padding: 1px 8px; }
+  .btn-params-apply { font-size: 12px; padding: 2px 10px; }
+  .btn-params-rollback { font-size: 12px; padding: 2px 10px; }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }
@@ -1897,6 +1914,17 @@
           <div id="tasks-global-chat" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-global-msg" class="error"></div>
         </div>
+        <div class="card-group" style="margin-top:6px">
+          <div class="card-group-title">⚙️ 参数速调（改一个数，不用重跑整步）</div>
+          <div class="row">
+            <button id="btn-params-scan" class="primary">识别 main.c 参数</button>
+            <span id="params-status" class="muted"></span>
+          </div>
+          <div class="muted" style="margin-top:4px">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表落盘（.contest_params.json）。</div>
+          <div id="params-grid" class="hidden" style="margin-top:8px"></div>
+          <div id="params-result" style="margin-top:8px"></div>
+          <div id="params-msg" class="error"></div>
+        </div>
         <div class="row">
           <button id="btn-tasks-plan" class="primary">拆解任务</button>
           <button id="btn-tasks-replan" class="hidden">重新拆解（覆盖）</button>
@@ -2485,6 +2513,7 @@ import { initScoreChecklist } from "/js/ui/generate-core.js";
 import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } from "/js/ui/generate-fix.js";
 import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext, reviseGetDir } from "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
 import { tasksPlan } from "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
+import { paramsScan } from "/js/ui/params.js";  // 参数速调：同上——import 只为加载模块
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
