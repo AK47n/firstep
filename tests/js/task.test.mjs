@@ -249,19 +249,19 @@ test("taskDialogAdoptHTML: 未采纳 → 空串；已采纳 → 徽标 + 摘要 
   assert.ok(long.includes("…"));
 });
 
-test("taskDialogButtonHTML: doing 不显示；open 切换文案", () => {
+test("taskDialogButtonHTML: doing 不显示；open 切换文案（工单 06 文案澄清）", () => {
   assert.equal(taskDialogButtonHTML({ id: "t1", status: "doing" }, null), "");
   const closed = taskDialogButtonHTML({ id: "t1", status: "pending" }, { open: false });
-  assert.ok(closed.includes("和 AI 商量"));
+  assert.ok(closed.includes("有不懂的？问这里"));
   assert.ok(closed.includes("data-task=\"t1\""));
   const open = taskDialogButtonHTML({ id: "t1", status: "verified" }, { open: true });
   assert.ok(open.includes("收起讨论"));
 });
 
-test("taskDialogAreaHTML: 未展开 → 空串；展开空历史 → 引导语；有历史 → 消息 + 采纳按钮", () => {
+test("taskDialogAreaHTML: 未展开 → 空串；展开空历史 → 澄清引导语；有历史 → 消息 + 采纳按钮", () => {
   assert.equal(taskDialogAreaHTML({ id: "t1" }, { open: false }), "");
   const empty = taskDialogAreaHTML({ id: "t1" }, { open: true, history: [], busy: false });
-  assert.ok(empty.includes("可以告诉 AI 你的想法或纠正"));
+  assert.ok(empty.includes("这一步有不懂或想确认的地方"));
   assert.ok(empty.includes("task-dialog-input-t1"));
   const st = {
     open: true, busy: false,
