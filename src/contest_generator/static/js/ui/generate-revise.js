@@ -7,15 +7,15 @@
 // reviseLoad / reviseRenderContext / reviseRunSSE（独立 SSE 运行器——不共用
 // progress.js 面板）/ reviseRenderDiff / reviseRenderAnalysis / reviseDiscard /
 // reviseAnalyze / reviseApply / reviseRenderApplyDone / reviseDeepen /
-// reviseRunDeepen / reviseRenderVerify / reviseRenderDeepenDiff /
-// reviseDiffLineHtml / reviseRollback）+ 7 监听器（btn-revise-session /
+// reviseRunDeepen / reviseRenderVerify / reviseRollback）+ 7 监听器（btn-revise-session /
 // btn-revise-load-dir / revise-dir-input Enter / btn-revise-analyze /
 // btn-revise-discard / btn-revise-apply / btn-revise-deepen /
 // btn-revise-rollback / revise-problem-text input——import 时绑定：module 脚本
 // 延迟执行，DOM 已就绪）。
-// 纯件：reviseDiffLineHtml / reviseCountQa / reviseRenderDiff 均为纯计算，
-// tests/js 无直测（工单 17 裁定：保持胶水随簇迁，如需直测后续单补——
-// 到时按「纯函数迁 fx + fx-guard 登记」先例处理）。
+// 纯件：reviseCountQa / reviseRenderDiff 均为纯计算，tests/js 无直测（工单
+// 17 裁定：保持胶水随簇迁，如需直测后续单补——到时按「纯函数迁 fx +
+// fx-guard 登记」先例处理）。效果 diff 渲染已迁 fx/diff.js（工单
+// diff-restyle/01：mainDiffHTML 纯函数 + 主题化 CSS）。
 // 依赖：app.js（$ / apiPost / toast）+ fx/core.js（esc）+ fx/llm.js（parseSSE /
 // formatLLMTelemetry）+ ui/usage.js（recordLLMUsage）+ ui/step-state.js
 //（markStepDone）。无跨簇状态读（本簇状态 = revise 对象私有）；host 对本簇
@@ -24,6 +24,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { verifyStatusMarkup } from "/js/fx/task.js";
+import { mainDiffHTML } from "/js/fx/diff.js";  // 效果 diff 渲染（diff-restyle/01）
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
@@ -420,44 +421,10 @@ function reviseRenderVerify(data) {
     + '<div class="item" style="margin-top:10px"><div class="head"><span class="slug">深化验证</span> ' + markup.badge + "</div>"
     + '<div class="reason">' + markup.detail + "</div>"
     + '<div class="reason">备份：<span class="slug">' + esc(data.backup_id || "—") + "</span></div>"
-    + reviseRenderDeepenDiff(data.main_diff)
+    + mainDiffHTML(data.main_diff)
     + "</div>";
   box.classList.remove("hidden");
   $("btn-revise-rollback").classList.toggle("hidden", !revise.backupId);
-}
-
-/** 深化/任务效果（工单 deepen-report/01 + task-progress/02 复用）：main.c
- * 前后确定性 diff 介绍卡——统计行（新增 / 删除 / 处数）+ 每个 hunk 一个可
- * 折叠改动点（标题优先取被替换的 TODO 注释，展开 = 逐行着色 diff：新增绿 /
- * 删除红 / 上下文灰）。事实源 = 后端真实 diff（不依赖 LLM 自述）；
- * main_diff = null → 占位提示；字段缺失（旧后端）→ 不渲染。
- * entity = 实体名（深化 / 任务），文案不写死（任务面板不出现「深化」）。 */
-function reviseRenderDeepenDiff(diff, entity) {
-  const name = entity || "深化";
-  if (diff === undefined) return "";
-  if (diff === null) return '<div class="muted" style="margin-top:8px">' + esc(name) + "未改动 main.c（无差异）。</div>";
-  const hunks = diff.hunks || [];
-  if (!hunks.length) return '<div class="muted" style="margin-top:8px">' + esc(name) + "未改动 main.c（无差异）。</div>";
-  const s = diff.stats || {};
-  const parts = ['<div class="reason" style="margin-top:8px"><strong>' + esc(name)
-    + "效果：</strong>"
-    + '新增 <span class="ok">+' + (s.additions || 0) + "</span> 行 · 删除 <span style=\"color:var(--danger)\">−"
-    + (s.deletions || 0) + "</span> 行 · " + (s.hunks || 0) + " 处改动</div>"];
-  hunks.forEach((h) => {
-    const title = h.title || "第 " + (h.line || "?") + " 行附近";
-    parts.push('<details style="margin-top:6px"><summary class="slug" style="cursor:pointer">'
-      + esc(title) + '</summary><pre style="margin:6px 0 0;padding:8px;background:#f7f7f7;border-radius:4px;font-size:12px;line-height:1.5;overflow:auto;white-space:pre">'
-      + (h.lines || []).map(reviseDiffLineHtml).join("") + "</pre></details>");
-  });
-  return parts.join("");
-}
-
-/** diff 行着色渲染（内容已由后端剥离 +/- 前缀，此处只补前缀与颜色）。 */
-function reviseDiffLineHtml(entry) {
-  const text = esc(entry.text);
-  if (entry.kind === "add") return '<span style="color:#2e7d32;background:#e8f5e9">+' + text + "</span>\n";
-  if (entry.kind === "del") return '<span style="color:#c62828;background:#fdecea">-' + text + "</span>\n";
-  return '<span style="color:#777">' + text + "</span>\n";
 }
 
 /** 回滚：恢复备份整树 → 清结果 → 重新加载上下文刷新状态。 */
@@ -526,4 +493,4 @@ function reviseGetDir() {
 
 // ---- 本簇导出面（host 零调用点——按工单 17 检查表导出为模块 API） ----
 export { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen,
-  reviseResetAll, reviseRenderContext, reviseGetDir, reviseRenderDeepenDiff };
+  reviseResetAll, reviseRenderContext, reviseGetDir };

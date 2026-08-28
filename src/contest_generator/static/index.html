@@ -1248,6 +1248,32 @@
     100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 0%, transparent), var(--shadow-card); }
   }
   @media (prefers-reduced-motion: reduce) { .task-card-highlight { animation: none; } }
+  /* 效果 diff（工单 diff-restyle/01）：主题化行级视图——统计行 + hunk 折叠块
+     （行 = 符号列 + 内容；新增绿 / 删除红 / 上下文灰，全用主题变量） */
+  .diff-stats { margin-top: 8px; }
+  .diff-count.add { color: var(--ok); font-weight: 600; }
+  .diff-count.del { color: var(--danger); font-weight: 600; }
+  .diff-hunk { margin-top: 6px; border: 1px solid var(--border); border-radius: 6px;
+               background: var(--panel); overflow: hidden; }
+  .diff-hunk > summary { cursor: pointer; padding: 6px 10px; background: var(--panel-2);
+                         color: var(--text); font-size: 12.5px; font-weight: 600;
+                         font-family: var(--mono); list-style: none; }
+  .diff-hunk > summary::before { content: "▸"; margin-right: 6px; color: var(--accent); }
+  .diff-hunk[open] > summary::before { content: "▾"; }
+  .diff-hunk > summary::-webkit-details-marker { display: none; }
+  .diff-body { border-top: 1px solid var(--border); background: var(--panel-2);
+               font-family: var(--mono); font-size: 12px; line-height: 1.7;
+               overflow-x: auto; }
+  .diff-line { display: flex; min-width: max-content; }
+  .diff-gutter { flex: 0 0 1.8em; text-align: center; user-select: none; }
+  .diff-text { white-space: pre; padding-right: 14px; }
+  .diff-add { background: var(--ok-dim); }
+  .diff-add .diff-gutter { color: var(--ok); }
+  .diff-add .diff-text { color: var(--ok-bright); }
+  .diff-del { background: var(--danger-dim); }
+  .diff-del .diff-gutter { color: var(--danger); }
+  .diff-del .diff-text { color: var(--danger); }
+  .diff-ctx .diff-text { color: var(--muted); }
   /* 检查能否生成（工单 a3-readiness-check/02）：第 9 步下方的检查单面板 */
   #readiness-check { border: 1px solid var(--border); border-radius: 10px;
                      background: var(--panel-2); padding: 8px 12px;

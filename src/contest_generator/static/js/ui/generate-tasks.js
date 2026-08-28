@@ -11,7 +11,8 @@
 // fix_start / verify_result / task_reporting / llm_telemetry / done / error。
 // 纯件在 fx/task.js（taskStatusLabel / taskCardHTML / tasksGridHTML …）。
 // 依赖：app.js（$ / apiPost / toast）+ fx/core.js（esc）+ fx/llm.js
-//（parseSSE / formatLLMTelemetry）+ fx/task.js + ui/usage.js（recordLLMUsage）
+//（parseSSE / formatLLMTelemetry）+ fx/task.js + fx/diff.js（效果 diff 渲染）
+// + ui/usage.js（recordLLMUsage）
 // + ui/step-state.js（markStepDone）+ ui/confirm.js（confirmModal）。
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
@@ -23,7 +24,8 @@ import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { scorePoints } from "./generate-recommend.js";  // 当前会话推荐评分点（历史目录为空）
-import { reviseGetDir, reviseRenderDeepenDiff } from "./generate-revise.js";  // 已加载上下文（只读）+ diff 渲染器复用
+import { reviseGetDir } from "./generate-revise.js";  // 已加载上下文（只读）
+import { mainDiffHTML } from "/js/fx/diff.js";        // 效果 diff 渲染（diff-restyle/01）
 
 let tasks = {
   outputDir: "",      // 拆解 / 执行针对的输出目录
@@ -313,7 +315,7 @@ function tasksRenderResult(taskId, data) {
     + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '" data-task="' + esc(task.id || taskId) + '">回滚到本任务执行前</button>' : "")
     + "</div>"
     + flashPanelHTML(dir)  // uid 缺省 "result"——结果面板烧录行；任务卡另有 task.id 容器（flash-step-button/01），并存互不干扰
-    + reviseRenderDeepenDiff(data.main_diff, "任务")
+    + mainDiffHTML(data.main_diff, "任务")
     + "</div>");
 }
 

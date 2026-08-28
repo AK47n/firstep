@@ -135,6 +135,9 @@ const DOMAINS = {
     flashOutputHTML: "fn", flashCommandHTML: "fn", flashPanelHTML: "fn",
     flashContainer: "fn",
   },
+  "diff.js": {
+    mainDiffHTML: "fn", diffStatsLineHTML: "fn",
+  },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
     parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",
