@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c0f8251a57f833e06a80a5f734d59bf23307e356 -->
+<!-- changelog-auto: last-commit=4ec3424989bd54eea1b931a13b05058ff3289f1f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -40,6 +40,7 @@
 - 21:40 参数速调：文档回归（param-tune/03）
 - 21:49 任务洞察：资源标注与上板自检清单后端（task-insight/01）
 - 22:05 任务洞察：资源总览与上板自检清单前端（task-insight/02）
+- 22:05 任务洞察：文档回归（task-insight/03）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
