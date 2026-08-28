@@ -444,6 +444,17 @@
      与任务卡对话按钮同款小字（.sugg-discuss 面板共用） */
   .btn-global-chat-action, .btn-global-chat-send { font-size: 12px;
                      padding: 1px 8px; margin-left: 6px; }
+  /* 任务卡微编辑 + 调序（工单 idea-suite/04）：卡内表单（标签 + 输入纵排）
+     与 ↑/↓ 小按钮；表单复用变量，零新硬编码色 */
+  .task-edit-form { padding: 8px; border: 1px solid var(--border);
+                     border-radius: 8px; background: var(--panel-2); }
+  .task-edit-form label { display: block; margin-top: 6px; font-size: 12px; }
+  .task-edit-form input, .task-edit-form textarea, .task-edit-form select {
+                     width: 100%; margin-top: 2px; }
+  .task-edit-form .row { justify-content: flex-start; }
+  .task-move { margin-left: 2px; }
+  .btn-task-move, .btn-task-edit, .btn-task-edit-save, .btn-task-edit-cancel {
+                     font-size: 12px; padding: 1px 8px; }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }
