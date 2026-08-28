@@ -384,6 +384,39 @@ test("taskCardHTML: 下一步要做摘要进卡（有则渲染，无则卡形不
   assert.ok(!plain.includes("下一步要做"));
 });
 
+test("taskCardHTML: 卡内烧录控制行（outputDir + 已实现步骤显；pending/doing/无目录隐）", () => {
+  const hasRun = {
+    id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],
+    verify: "compile", status: "verified",
+    iterations: [{ seq: 1, kind: "execute", status: "verified" }],
+  };
+  // 已终态（无迭代记录也允许——旧清单终态任务，taskCanFeedback 判据）
+  const terminal = {
+    id: "t2", title: "显示", description: "x", score_refs: [], depends_on: [],
+    verify: "compile", status: "unverified", iterations: [],
+  };
+  const withDir = taskCardHTML(hasRun, 0, { outputDir: "C:/proj" });
+  assert.ok(withDir.includes('id="tasks-flash-status-t1"'));
+  assert.ok(withDir.includes('id="tasks-flash-result-t1"'));
+  assert.ok(withDir.includes("烧录到板子"));
+  assert.ok(withDir.includes('data-task-flash="t1"'));
+  const terminalCard = taskCardHTML(terminal, 1, { outputDir: "C:/proj" });
+  assert.ok(terminalCard.includes('id="tasks-flash-status-t2"'));
+  // 未实现（pending）/ 执行中（doing）/ 无目录 → 不显示（防烧旧固件 / 防并发）
+  const pending = taskCardHTML({
+    id: "t9", title: "T", description: "x", score_refs: [], depends_on: [],
+    verify: "compile", status: "pending", iterations: [],
+  }, 0, { outputDir: "C:/proj" });
+  assert.ok(!pending.includes("tasks-flash-status-t9"));
+  const doing = taskCardHTML({
+    id: "t8", title: "T", description: "x", score_refs: [], depends_on: [],
+    verify: "compile", status: "doing", iterations: [],
+  }, 0, { outputDir: "C:/proj" });
+  assert.ok(!doing.includes("tasks-flash-status-t8"));
+  const noDir = taskCardHTML(hasRun, 0, {});
+  assert.ok(!noDir.includes("tasks-flash-status-t1"));
+});
+
 test("taskIterationsHTML: 轮次行带「做了什么」摘要（截 40 字）", () => {
   const task = { id: "t1", iterations: [
     { seq: 1, kind: "execute", status: "verified", compile_summary: "ok", what_changed: "x".repeat(50) },

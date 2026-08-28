@@ -1,6 +1,7 @@
 // fx/task.js — 任务推进纯函数（工单 task-progress/01）：任务卡渲染 / 状态徽章 /
 // 验收方式标注 / 进度汇总。共享件用 esc（fx/core.js）。模块约定见 fx/core.js 头部。
 import { esc, truncate } from "./core.js";
+import { flashPanelHTML } from "./flash.js";  // 任务卡烧录控制行（flash-step-button/01；flash.js 仅依赖 core.js，无环）
 
 export function taskStatusLabel(status) {
   switch (status) {
@@ -76,6 +77,13 @@ export function taskCardHTML(task, index, opts) {
     + taskIterationsHTML(task)
     + taskDialogAdoptHTML(task)
     + taskNextActionHTML(task)
+    // 任务卡烧录控制行（工单 flash-step-button/01）：已实现过的步骤（有迭代
+    // 记录或已终态 = taskCanFeedback 判据）常驻「烧录到板子」——做完一步直接
+    // 在卡上烧录上板检测；pending/skipped/doing 不显示（防烧旧固件 / 防并发）。
+    // 卡内独立容器（uid = task.id），与执行结果面板的烧录行（uid = "result"）并存。
+    // task.id 假值不渲染（评审整改：裸 id 传空 → flashContainer 缺省降成
+    // "result" 撞结果面板容器；真实 id 由后端生成非空，此处防御）
+    + (o.outputDir && task.id && taskCanFeedback(task) ? flashPanelHTML(o.outputDir, task.id) : "")
     + (o.actions ? '<div class="row" style="margin-top:8px">' + o.actions(task, index) + "</div>" : "")
     + "</div>";
 }

@@ -18,7 +18,7 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML } from "/js/fx/task.js";
-import { flashPanelHTML } from "/js/fx/flash.js";
+import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
@@ -69,6 +69,9 @@ function tasksRender() {
   } else {
     grid.innerHTML = tasksGridHTML(plan, {
       scorePoints: scorePoints,
+      // outputDir（工单 flash-step-button/01）：任务卡烧录控制行需要输出目录
+      //（卡内独立容器，uid = task.id）——透传给 taskCardHTML
+      outputDir: tasks.outputDir,
       actions: (task) => {
         // 操作显隐单源 = fx/task.js taskCardActions（与后端转移表镜像，
         // 同一状态机一份 JS 编码——曾内联 if/else 与转移表分叉风险）
@@ -284,24 +287,29 @@ function tasksRenderResult(taskId, data) {
     + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
     + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '" data-task="' + esc(task.id || taskId) + '">回滚到本任务执行前</button>' : "")
     + "</div>"
-    + flashPanelHTML(dir)
+    + flashPanelHTML(dir)  // uid 缺省 "result"——结果面板烧录行；任务卡另有 task.id 容器（flash-step-button/01），并存互不干扰
     + reviseRenderDeepenDiff(data.main_diff, "任务")
     + "</div>");
 }
 
-/** 烧录到板子（工单 flash-deploy/02）：结果面板一键烧录——执行体共享
- * ui/flash.js flashRunShared（POST /api/flash → flashResultHTML / 400 →
- * flashGuideHTML）；本簇只做 busy 守卫（tasks.busy 全局闸，防与任务执行/
- * 回滚并发）。dir 优先取按钮 data-dir（结果面板渲染时快照），空则回退
- * tasks.outputDir（同目录真相）。 */
-async function tasksFlash(dir) {
+/** 烧录到板子（工单 flash-deploy/02 + flash-step-button/01）：结果面板一键
+ * 烧录——执行体共享 ui/flash.js flashRunShared（POST /api/flash →
+ * flashResultHTML / 400 → flashGuideHTML）；本簇只做 busy 守卫（tasks.busy
+ * 全局闸，防与任务执行/回滚并发）。uid = 容器标识（缺省 "result" = 执行结果
+ * 面板；任务卡传 task.id → 卡内独立状态/结果位）；dir 优先取按钮 data-dir
+ *（渲染时快照），空则回退 tasks.outputDir（同目录真相）。 */
+async function tasksFlash(uid, dir) {
   if (tasks.busy) {
     toast("info", "有任务正在执行中，请等当前任务完成后再操作");
     return;
   }
-  const statusEl = $("tasks-flash-status");
-  const resultEl = $("tasks-flash-result");
-  if (!statusEl || !resultEl) return;  // 结果面板已随渲染清除：无处渲染，静默退出
+  // 容器 id 单源 = fx/flash.js flashContainer（评审整改：与 flashPanelHTML
+  // 共用契约，防两端手写 id 形态漂移后被下面 !statusEl 静默吞掉；缺省 uid
+  // "result" 也在单源内）
+  const ids = flashContainer(uid);
+  const statusEl = $(ids.statusId);
+  const resultEl = $(ids.resultId);
+  if (!statusEl || !resultEl) return;  // 容器已随渲染清除：无处渲染，静默退出
   await flashRunShared({
     dir: dir || tasks.outputDir || "",
     statusEl,
@@ -546,13 +554,15 @@ $("tasks-grid").addEventListener("click", (event) => {
   if (!btn) return;
   tasksRollback(btn.dataset.backup, btn.dataset.task);
 });
-// 结果面板「烧录到板子」（工单 flash-deploy/02）：结果面板现插在网格容器内
-//（beforeend，见 tasksRenderResult）——按钮点击与回滚同域委托；dir 从按钮
-// data-dir 快照回读（渲染时目录可能已切换，快照 = 结果面板所属目录）
+// 任务卡 / 结果面板「烧录到板子」（工单 flash-deploy/02 + flash-step-button/01）：
+// 两类入口同域委托——按钮 data-task-flash = 容器 uid（任务卡 = task.id，结果
+// 面板 = "result"——缺省兼容），data-dir = 渲染时目录快照（任务卡 = tasksRender
+// 抓取 tasks.outputDir，结果面板 = 结果面板渲染时快照，两者同为快照语义）；
+// click 后各自写入自己的状态/结果容器，互不干扰
 $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-flash");
   if (!btn) return;
-  tasksFlash(btn.dataset.dir);
+  tasksFlash(btn.dataset.taskFlash, btn.dataset.dir);
 });
 // 轮次历史「回到这轮之前」（工单 task-feedback/03：撤销语义）
 $("tasks-grid").addEventListener("click", (event) => {

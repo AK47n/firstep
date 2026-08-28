@@ -77,21 +77,38 @@ export function flashCommandHTML(commandText) {
     + '">复制</button></div>';
 }
 
-/** 任务结果面板的烧录控制行（工单 flash-deploy/02 评审整改：胶水层不拼
- * HTML——控制行结构单源在此，tasksRenderResult 只插入）：烧录按钮（data-dir
- * 由委托回读）+ 状态位 + 结果容器。dir 空 = 不渲染（无目录无烧录对象）。 */
-export function flashPanelHTML(dir) {
+/** uid 容器契约（工单 flash-step-button/01 评审整改：id 前缀 + 缺省 uid 单源
+ * 于此——生产（flashPanelHTML 渲染容器 id）与消费（tasksFlash 按 uid 定位
+ * 元素）共用同一函数，防两端手写「tasks-flash-status-<uid>」形态漂移后被
+ * !statusEl 静默吞掉）。缺省 uid = "result"（任务执行结果面板哨兵）；任务卡
+ * 传 task.id（每卡独立容器）。 */
+export function flashContainer(uid) {
+  const u = uid || "result";
+  return {
+    uid: u,
+    statusId: "tasks-flash-status-" + u,
+    resultId: "tasks-flash-result-" + u,
+  };
+}
+
+/** 烧录控制行（工单 flash-deploy/02 + flash-step-button/01）：烧录按钮
+ *（data-dir 由委托回读）+ 状态位 + 结果容器。uid 参数化（工单 01）——每张
+ * 任务卡独立容器（uid = task.id，卡内展开互不干扰），执行结果面板沿用
+ * 缺省 uid = "result"（既有调用不传即兼容）；按钮 data-task-flash = uid，
+ * 胶水层委托按 uid 定位容器。dir 空 = 不渲染（无目录无烧录对象）。 */
+export function flashPanelHTML(dir, uid) {
   if (!dir) return "";
+  const c = flashContainer(uid);
   return '<div class="row" style="margin-top:6px">'
-    + '<button class="btn-task-flash" data-dir="' + esc(dir) + '">烧录到板子</button>'
-    + '<span id="tasks-flash-status" class="muted" style="margin-left:8px"></span>'
+    + '<button class="btn-task-flash" data-task-flash="' + esc(c.uid) + '" data-dir="' + esc(dir) + '">烧录到板子</button>'
+    + '<span id="' + esc(c.statusId) + '" class="muted" style="margin-left:8px"></span>'
     + "</div>"
-    + '<div id="tasks-flash-result" style="margin-top:6px"></div>';
+    + '<div id="' + esc(c.resultId) + '" style="margin-top:6px"></div>';
 }
 
 if (typeof window !== "undefined") {
   Object.assign(window, {
     flashBusyText, flashResultHTML, flashGuideHTML,
-    flashOutputHTML, flashCommandHTML, flashPanelHTML,
+    flashOutputHTML, flashCommandHTML, flashPanelHTML, flashContainer,
   });
 }

@@ -132,6 +132,7 @@ const DOMAINS = {
   "flash.js": {
     flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",
     flashOutputHTML: "fn", flashCommandHTML: "fn", flashPanelHTML: "fn",
+    flashContainer: "fn",
   },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
