@@ -18,26 +18,30 @@ const SAMPLE = [
   },
 ];
 
-test("paramListHTML: 行渲染（名称 / 含义 / 默认值 / 建议范围 / 应用按钮）", () => {
+test("paramListHTML: 行渲染（名称 / 含义 / 默认值 / 建议范围 / 应用按钮 / 当前值标签 / 恢复旧值）", () => {
   const html = paramListHTML(SAMPLE);
   assert.ok(html.includes("THRESHOLD"));
   assert.ok(html.includes("循迹阈值"));
   assert.ok(html.includes('value="800"'));
   assert.ok(html.includes("400-1500"));
   assert.ok(html.includes('data-param-name="THRESHOLD"'));
-  assert.ok(html.includes("改这个并验证"));
+  assert.ok(html.includes(">应用</button>"));  // 紧凑按钮（step11-tabs-ui/03）
+  assert.ok(html.includes("当前值"));            // 「当前值」小标签
+  assert.ok(html.includes("↺ 恢复旧值"));        // 常驻复位按钮（纯前端）
   assert.ok(html.includes("PID_KP"));
   assert.ok(html.includes('value="1.2f"'));
 });
 
-test("paramListHTML: 失效行禁用 + 「锚已失效」标记", () => {
+test("paramListHTML: 失效行禁用 + 「锚已失效」标记（恢复按钮常驻但禁用）", () => {
   const html = paramListHTML([
     { name: "STALE", label: "失效参数", old_value: "10", anchor: "x", valid: false },
   ]);
   assert.ok(html.includes("param-stale"));
   assert.ok(html.includes("disabled"));
   assert.ok(html.includes("锚已失效"));
-  assert.ok(!html.includes("改这个并验证"));
+  assert.ok(!html.includes(">应用</button>"));
+  assert.ok(html.includes("↺ 恢复旧值"));  // 常驻（spec：每张卡都有恢复按钮）
+  assert.ok(/class="btn-params-reset"[^>]*disabled/.test(html));
 });
 
 test("paramListHTML: running 全部禁用（防并发 / 防重入）", () => {
@@ -87,14 +91,28 @@ test("paramListHTML: 卡片含义截断 + title 全文（param-grid/01）", () =
   assert.ok(html.includes("…"));  // truncate 截断尾部标记
 });
 
-test("paramListHTML: 提示分段——范围 / 单位独立小段（param-grid/01）", () => {
+test("paramListHTML: 建议范围提示 + 单位 chip（step11-tabs-ui/03：单位只进卡头 chip，提示行不重复）", () => {
   const html = paramListHTML([
     { name: "P", label: "带单位参数", old_value: "0.5s", anchor: "x",
       unit: "秒", range_hint: "0.1-2", valid: true },
   ]);
   assert.ok(html.includes("范围：0.1-2"));
-  assert.ok(html.includes("单位：秒"));
   assert.ok(html.includes('class="param-hint"'));
+  assert.ok(html.includes('class="param-unit-chip"'));  // 单位 chip（step11-tabs-ui/03）
+  assert.ok(!html.includes("单位：秒"));                  // 提示行不重复单位
+});
+
+test("paramListHTML: 卡级 data-param-name 契约（step11-tabs-ui/03：ui 层 Enter 委托 / 复位按钮同源）", () => {
+  const html = paramListHTML(SAMPLE);
+  const cards = html.match(/class="param-card(?: |")/g) || [];
+  assert.equal(cards.length, 2);
+  assert.ok(/class="param-card" data-param-name="THRESHOLD"/.test(html));
+  assert.ok(/class="btn-params-reset" data-param-name="PID_KP"/.test(html));
+});
+
+test("paramListHTML: running 时复位按钮一并禁用（step11-tabs-ui/03 评审整改）", () => {
+  const html = paramListHTML(SAMPLE, { running: true });
+  assert.ok(/class="btn-params-reset"[^>]*disabled/.test(html));
 });
 
 test("paramResultHTML: 结果面板 = 徽章 + 说明 + 备份回滚 + 烧录行 + diff", () => {

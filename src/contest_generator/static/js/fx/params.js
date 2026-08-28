@@ -10,21 +10,25 @@ import { mainDiffHTML } from "./diff.js";
 import { flashPanelHTML } from "./flash.js";
 import { verifyStatusMarkup } from "./task.js";
 
-/** 参数表（spec 故事 2，工单 param-grid/01 网格卡片流改版）：参数一行一个
- * 改为响应式网格卡片（.param-grid，宽屏 3 列 / 窄屏 2 列 / 手机 1 列自适应）
- * —— 12 参数从 12 行变约 4 行，视觉层级 = 卡头（名称 + 含义截断 + title
- * 全文）+ 卡体（输入框 + 应用按钮）+ 提示段（范围 / 单位）。
+/** 参数表（spec 故事 2，工单 param-grid/01 网格卡片流改版；step11-tabs-ui/03
+ * 呈现优化）：参数一行一个改为响应式网格卡片（.param-grid，宽屏 3 列 / 窄屏
+ * 2 列 / 手机 1 列自适应）—— 12 参数从 12 行变约 4 行，视觉层级 = 卡头
+ *（名称 + 含义截断 + 单位 chip）+ 卡体（「当前值」小标签 + 输入框 + 紧凑
+ * 应用按钮）+ 卡脚（↺ 恢复旧值 + 建议范围提示）。
  * 每卡 = 名称（slug）+ 含义（label，截 24 字）+ 当前值输入框（默认值 =
- * old_value）+ 建议范围提示；valid=false 卡置灰 + 输入框禁用 + 「锚已失效」
- * 标记（main.c 已被改动，旧锚不再可靠——重新识别才有意义）；running =
- * 一轮流程进行中（全部禁用）。
+ * old_value，输入框内 Enter 可直接应用——ui 层 keydown 委托）+ 建议范围提示；
+ * valid=false 卡置灰 + 输入框禁用 + 「锚已失效」标记（main.c 已被改动，旧锚
+ * 不再可靠——重新识别才有意义）；running = 一轮流程进行中（全部禁用）。
+ * 恢复旧值 = 纯前端复位输入框（不写盘不触发验证），常驻渲染、running/失效卡
+ * 禁用（spec：每张卡都有恢复按钮）。
  * 空态两分支（opts.emptyScan，spec 轴评审整改）：未识别（false）→ 引导
  * 点「识别 main.c 参数」；已识别但无参数（true）→ 「未发现可调参数」。
  * 空态都带 data-param-empty 标记供胶水层查状态。
  *
  * id 契约（评审提示）：输入框 id = "params-input-<name>"——ui/params.js
  * 用 `$("params-input-" + name)` 重建（$ = getElementById，契约稳定）；
- * 改动 id 公式必须两处同步（fx 写 / ui 查）。
+ * 改动 id 公式必须两处同步（fx 写 / ui 查）。data-param-name 同时挂在
+ * .param-card / .btn-params-apply / .btn-params-reset 上（ui 委托三处同源）。
  */
 export function paramListHTML(params, opts = {}) {
   const running = !!(opts && opts.running);
@@ -48,26 +52,37 @@ export function paramListHTML(params, opts = {}) {
     const disabled = running || !valid;
     const inputId = "params-input-" + name;
     const labelText = label || oldValue || "—";
-    const hints = [];
-    if (rangeHint) hints.push("范围：" + esc(rangeHint));
-    if (unit) hints.push("单位：" + esc(unit));
-    const hint = hints.join("　");
-    return '<div class="param-card' + (valid ? "" : " param-stale") + '">'
+    // 卡体 = 「当前值」小标签 + 等宽输入框 + 紧凑应用按钮；卡脚 = ↺ 恢复旧值
+    //（纯前端把输入框复位为识别时的原值，不触发 API；常驻渲染，running /
+    // 失效卡禁用——spec：每张卡常驻恢复按钮）+ 建议范围提示（单位已在卡头
+    // chip，提示行不重复）。卡级 data-param-name 供 ui 层 Enter / 复位委托。
+    return '<div class="param-card' + (valid ? "" : " param-stale")
+      + '" data-param-name="' + esc(name) + '">'
       + '<div class="param-card-head">'
       + '<span class="slug" title="' + esc(name || "?") + '">'
       + esc(name || "?") + "</span>"
       + '<span class="param-label" title="' + esc(labelText) + '">'
-      + esc(truncate(labelText, 24)) + "</span></div>"
+      + esc(truncate(labelText, 24)) + "</span>"
+      + (unit ? '<span class="param-unit-chip" title="单位">' + esc(unit) + "</span>" : "")
+      + "</div>"
       + '<div class="param-card-body">'
+      + '<label class="param-current-label" for="' + esc(inputId) + '">当前值</label>'
       + '<input class="param-input" id="' + esc(inputId) + '" type="text"'
       + ' value="' + esc(oldValue) + '"' + (disabled ? " disabled" : "")
       + ' title="当前值：' + esc(oldValue) + '" />'
       + (valid
         ? '<button class="btn-params-apply" data-param-name="' + esc(name)
-          + '"' + (running ? " disabled" : "") + ">改这个并验证</button>"
+          + '" title="自动备份 + 编译验证，把输入框的值写入 main.c（可回滚）"'
+          + (running ? " disabled" : "") + ">应用</button>"
         : '<span class="badge param-stale-badge">锚已失效</span>')
       + "</div>"
-      + (hint ? '<div class="param-hint">' + hint + "</div>" : "")
+      + '<div class="param-card-foot">'
+      + '<button class="btn-params-reset" data-param-name="' + esc(name)
+        + '" title="恢复为识别时的原值（仅复位输入框，不保存、不触发验证）"'
+        + (disabled ? " disabled" : "") + ">↺ 恢复旧值</button>"
+      + (rangeHint ? '<div class="param-hint"><span>范围：' + esc(rangeHint)
+        + "</span></div>" : "")
+      + "</div>"
       + "</div>";
   }).join("");
   return '<div class="param-grid">' + cards + "</div>";
