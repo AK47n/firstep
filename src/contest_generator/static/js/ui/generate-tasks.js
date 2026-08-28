@@ -19,9 +19,9 @@
 // + ui/step-state.js（markStepDone）+ ui/confirm.js（confirmModal）。
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
-import { esc } from "/js/fx/core.js";
+import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML } from "/js/fx/task.js";
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -57,6 +57,14 @@ let chatState = {
   chat: null,
   pending: "",
   draft: "",
+};
+
+// 草稿箱状态（工单 idea-suite/06）：drafts = 后端 /drafts/read 的数组（落盘
+// 真相，.contest_ideas.json），busy = 一轮分析/删除/批量进行中；会话内缓存，
+// 目录变化时重读（跨簇重置清空）。
+let draftState = {
+  busy: false,
+  drafts: null,
 };
 
 /** 想法区结果卡渲染：analysis 空 → 隐藏容器；landedNote 非空 → 按钮区替换为
@@ -216,7 +224,7 @@ function tasksResetMessages() {
 async function tasksIdeaAnalyze(sourceText, autoLand) {
   if (tasks.busy || ideaState.busy) {
     toast("info", "有流程正在进行，请等当前操作完成后再试");
-    return;
+    return false;
   }
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
@@ -249,9 +257,11 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
     } else {
       toast("ok", "已分析——按结果卡选择落地方式");
     }
+    return true;   // 成功信号（工单 idea-suite/06：批量循环据此停止/继续）
   } catch (e) {
     $("tasks-idea-msg").textContent = e.message;
     $("tasks-status").textContent = "";
+    return false;
   } finally {
     ideaSetBusy(false);
   }
@@ -588,6 +598,168 @@ function resetGlobalChatArea() {
   if (btn) btn.textContent = "全局商量（工程级）";
 }
 
+// ---------------------------------------------------------------------------
+// 想法草稿箱（工单 idea-suite/06）：输入区「存入草稿」→ /drafts/add；
+// 列表 = /drafts/read（随 tasksReload 的目录加载一起读回）；「分析这条」=
+// tasksIdeaAnalyze（复用想法漏斗）；「删除」= /drafts/delete；「全部逐条
+// 分析」= 顺序串行循环 + 状态行进度（第 N/总）。纯函数渲染 fx/task.js
+// ideaDraftListHTML，本层做状态 / 委托 / 跨簇重置。
+// ---------------------------------------------------------------------------
+
+function tasksDraftsRender() {
+  const box = $("tasks-drafts");
+  if (!box) return;
+  box.innerHTML = ideaDraftListHTML(draftState.drafts || [], { busy: draftState.busy });
+}
+
+/** 读盘加载草稿（目录加载 / 增删后刷新）；失败静默（不清旧展示，错误留给
+ * 下一次操作提示——照 tasksReload 哲学）。 */
+async function tasksDraftsLoad() {
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) return;
+  try {
+    const data = await apiPost("/api/tasks/idea/drafts/read", { output_dir: dir });
+    draftState.drafts = data.drafts || [];
+    tasksDraftsRender();
+  } catch (e) {
+    // 读取失败（目录没了 / 坏 JSON）：保留旧展示，不打断当前流程
+  }
+}
+
+/** 存入草稿：idea 输入框原文 → POST add（去重由后端——同文本不重复插入）
+ * → 成功后清空输入框（内容已进草稿，不占输入区）。 */
+async function tasksDraftAdd() {
+  if (draftState.busy || tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-drafts-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  const input = $("tasks-idea-input");
+  const text = ((input && input.value) || "").trim();
+  if (!text) {
+    $("tasks-drafts-msg").textContent = "先在上方输入框写下想法，再点「存入草稿」";
+    return;
+  }
+  draftState.busy = true;
+  tasksDraftsRender();
+  $("tasks-drafts-msg").textContent = "";
+  tasksSetBusy(true);   // 与想法分析共用 tasks.busy 闸（增删进行中禁并发分析）
+  try {
+    const data = await apiPost("/api/tasks/idea/drafts/add", {
+      output_dir: dir, text,
+    });
+    draftState.drafts = data.drafts || [];
+    if (input) input.value = "";
+    tasksDraftsRender();
+    toast("ok", "已存入草稿——可继续输入下一条，回头再分析");
+  } catch (e) {
+    $("tasks-drafts-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+    draftState.busy = false;
+    tasksDraftsRender();
+  }
+}
+
+/** 删除一条草稿（后端未知 id 幂等；删除后即时刷新列表）。 */
+async function tasksDraftDelete(id) {
+  if (draftState.busy || tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-drafts-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  draftState.busy = true;
+  tasksDraftsRender();
+  tasksSetBusy(true);   // 与想法分析共用 tasks.busy 闸（删除进行中禁并发分析）
+  try {
+    const data = await apiPost("/api/tasks/idea/drafts/delete", {
+      output_dir: dir, id,
+    });
+    draftState.drafts = data.drafts || [];
+    tasksDraftsRender();
+    toast("ok", "已删除草稿");
+  } catch (e) {
+    $("tasks-drafts-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+    draftState.busy = false;
+    tasksDraftsRender();
+  }
+}
+
+/** 分析一条草稿（复用想法漏斗：结果卡在想法区出现，可落地 / 继续讨论）。
+ * 异步包装：期间 draftState.busy = true → 删除/全部按钮禁用（防并发——
+ * 否则批处理会被 ideaState.busy 守卫空转还误报成功）。 */
+async function tasksDraftAnalyze(text) {
+  if (draftState.busy) {
+    toast("info", "有草稿操作进行中，请等当前操作完成后再试");
+    return;
+  }
+  draftState.busy = true;
+  tasksDraftsRender();
+  try {
+    await tasksIdeaAnalyze(text);
+  } finally {
+    draftState.busy = false;
+    tasksDraftsRender();
+  }
+}
+
+/** 全部逐条分析：快照当前列表 → 顺序串行（每条 = 一轮 LLM 分析，分钟级——
+ * 逐条才有进度意义）；状态行「分析中 第 N/总：<前 20 字>」；某条失败即停
+ * （剩余草稿可再点「全部逐条分析」重试——按钮在 finally 恢复）。 */
+async function tasksDraftAnalyzeAll() {
+  if (draftState.busy || tasks.busy) {
+    toast("info", "有流程正在进行，请等当前操作完成后再试");
+    return;
+  }
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-idea-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  const list = (draftState.drafts || []).slice();
+  if (!list.length) {
+    $("tasks-drafts-msg").textContent = "没有草稿可分析——先「存入草稿」";
+    return;
+  }
+  draftState.busy = true;
+  tasksDraftsRender();
+  const statusEl = $("tasks-drafts-status");
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      if (!item || !item.text) continue;
+      if (statusEl) {
+        statusEl.textContent = "分析中 第 " + (i + 1) + "/" + list.length
+          + "：" + truncate(item.text, 20);
+      }
+      const ok = await tasksIdeaAnalyze(item.text);
+      if (!ok) {
+        // 本轮分析失败或未真正开始（tasksIdeaAnalyze 早已把原因写进
+        // tasks-idea-msg）：停止批量——剩余草稿可再点「全部逐条分析」重试
+        throw new Error("第 " + (i + 1) + " 条分析失败（详见上方想法区提示）");
+      }
+    }
+    if (statusEl) statusEl.textContent = "全部草稿已分析完（结果卡为最后一条）——可按结果卡落地";
+    toast("ok", "全部草稿已分析");
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "";
+    $("tasks-drafts-msg").textContent = "分析中断：" + e.message
+      + "——可再点「全部逐条分析」继续剩余草稿";
+    toast("error", "分析中断（详见下方提示）");
+  } finally {
+    draftState.busy = false;
+    tasksDraftsRender();
+  }
+}
+
+/** 草稿区重置（跨簇目录切换 / 清单作废）：清状态与容器（目录变了，草稿是
+ * 另一个工程的）。 */
+function resetDraftsArea() {
+  draftState.busy = false;
+  draftState.drafts = null;
+  const box = $("tasks-drafts");
+  if (box) box.innerHTML = "";
+  const msg = $("tasks-drafts-msg");
+  if (msg) msg.textContent = "";
+  const status = $("tasks-drafts-status");
+  if (status) status.textContent = "";
+}
+
 /** SSE 流（reviseRunSSE 同款语义：done 载荷返回；error 终态 / 断线 throw）。 */
 async function tasksRunSSE(url, body, handlers) {
   let finished = false;
@@ -843,6 +1015,7 @@ async function tasksReload() {
     tasks.outputDir = dir;
     tasks.plan = data.plan || null;
     tasksRender();
+    tasksDraftsLoad();   // 目录加载 → 草稿随读（后端无文件 = []，静默）
   } catch (e) {
     // 读取失败（清单损坏 / 目录没了）：不清空旧展示，错误留给下一次操作提示
   }
@@ -1125,6 +1298,17 @@ $("tasks-box").addEventListener("click", (event) => {
   if (kind === "adopt") { tasksChatAdopt(action.dataset.globalText); return; }
   tasksChatConvert(kind, action.dataset.globalText);
 });
+// 草稿箱（工单 idea-suite/06）：存入草稿按钮 + 区内委托（分析这条 / 删除 /
+// 全部逐条分析——同样挂 tasks-box，只认 .btn-draft-*）
+$("btn-tasks-draft-add").addEventListener("click", () => tasksDraftAdd());
+$("tasks-box").addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-draft-analyze, .btn-draft-delete, .btn-draft-all");
+  if (!btn) return;
+  const action = btn.dataset.draftAction;
+  if (action === "analyze") { tasksDraftAnalyze(btn.dataset.draftText); return; }
+  if (action === "delete") { tasksDraftDelete(btn.dataset.draftId); return; }
+  tasksDraftAnalyzeAll();
+});
 $("tasks-idea-result").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-idea-insert, .btn-idea-fix, .btn-idea-to-task, .btn-idea-to-fix");
   if (!btn) return;
@@ -1223,6 +1407,7 @@ window.addEventListener("revise-context-loaded", (event) => {
     $("tasks-msg").textContent = "";
     resetIdeaArea();
     resetGlobalChatArea();
+    resetDraftsArea();
     // 目录已加载：自动读回磁盘任务清单（若该目录拆解过）——任务卡与
     // 「重新拆解」按钮随之出现；无清单则保持占位等用户拆解。修复「提示
     // 已有清单却看不到重新拆解按钮」的死锁：此前只有 plan 已加载才显示
@@ -1251,6 +1436,7 @@ window.addEventListener("tasks-invalidated", (event) => {
   $("tasks-msg").textContent = "任务清单已作废（修订重生成）：请点「拆解任务」按新工程重新拆解";
   resetIdeaArea();
   resetGlobalChatArea();
+  resetDraftsArea();
 });
 
 export { tasksPlan, tasksRender, tasksResetMessages };

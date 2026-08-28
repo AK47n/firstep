@@ -455,6 +455,14 @@
   .task-move { margin-left: 2px; }
   .btn-task-move, .btn-task-edit, .btn-task-edit-save, .btn-task-edit-cancel {
                      font-size: 12px; padding: 1px 8px; }
+  /* 想法草稿箱（工单 idea-suite/06）：逐条行 + 小按钮，变量色 */
+  .draft-item { display: flex; align-items: center; gap: 6px; padding: 2px 0;
+                     border-bottom: 1px dashed var(--border); }
+  .draft-item:last-of-type { border-bottom: none; }
+  .draft-text { flex: 1; overflow: hidden; text-overflow: ellipsis;
+                     white-space: nowrap; }
+  .btn-draft-analyze, .btn-draft-delete, .btn-draft-all { font-size: 12px;
+                     padding: 1px 8px; }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }
@@ -1870,10 +1878,14 @@
           <div class="row">
             <textarea id="tasks-idea-input" rows="2" placeholder="突然想到的改进点 / 发现的问题（如：进弯道前先减速；循迹阈值太高）…" style="flex:1;min-height:44px"></textarea>
             <button id="btn-tasks-idea" class="primary">分析这个想法</button>
+            <button id="btn-tasks-draft-add">存入草稿</button>
           </div>
-          <div class="muted" style="margin-top:4px">想法不一定是清单里的任务：AI 会判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。</div>
+          <div class="muted" style="margin-top:4px">想法不一定是清单里的任务：AI 会判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿落盘（.contest_ideas.json），回头逐条分析或全部逐条分析。</div>
           <div id="tasks-idea-result" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-idea-msg" class="error"></div>
+          <div id="tasks-drafts" style="margin-top:8px"></div>
+          <div id="tasks-drafts-status" class="muted" style="margin-top:4px"></div>
+          <div id="tasks-drafts-msg" class="error"></div>
         </div>
         <div class="card-group" style="margin-top:6px">
           <div class="card-group-title">💬 全局商量（工程级，不绑任务卡）</div>
