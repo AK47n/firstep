@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c2a192b7c5f58075514490023a27122d0940f177 -->
+<!-- changelog-auto: last-commit=880502059e87d096677913a8b8bd27515d903252 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -27,6 +27,7 @@
 - 19:21 逐步深化：灵活修正补 failed 路径测试（idea-fix/01 复核）
 - 19:43 逐步深化：灵活修正前端（idea-fix/02）
 - 19:43 逐步深化：灵活修正文档回归（idea-fix/03）
+- 19:43 逐步深化：灵活修正工单状态收尾（resolved）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
