@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=734c7284c997d850f196c010b48904efe0e06497 -->
+<!-- changelog-auto: last-commit=aa6289f8cdb2cd56bb73f15da39caabccc87d766 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -47,6 +47,7 @@
 - 22:32 错误行跳转：评审整改（error-jump-task/01 复核）
 - 22:32 交付集成：后端 delivery.py + 三路由（delivery-suite/01）
 - 22:32 交付集成：前端交付卡（delivery-suite/02）
+- 22:33 交付集成：文档回归（delivery-suite/03）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
