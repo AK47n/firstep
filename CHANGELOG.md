@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=29876265af5069f105bd6b684a857c1c1343b7a6 -->
+<!-- changelog-auto: last-commit=e811b2a7281de00c0794073ab6adb792f923a4c2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 12:31 逐步深化/01：步骤报告 LLM 操作（report_task_step）+ 轮次字段 what_changed/user_action + task_reporting 事件（工单 resolved）
 - 12:35 逐步深化/02：进度总览（分段条+汇总）+ 步骤报告（做了什么/接下来做什么）+ 卡片下一步要做 + 入口改「逐步深化（任务推进）」（工单 resolved）
 - 12:36 逐步深化/03：域词条同步（深化/任务推进/步骤报告）+ 全量回归 2608 pytest + 530 JS + 50 语言检查（工单 resolved）
+- 12:58 逐步深化/04：fix 卡片上板指引消失——compile 任务已验证（编译通过）仍常驻「下一步要做」，仅 manual 人工确认后隐藏（工单 resolved）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
