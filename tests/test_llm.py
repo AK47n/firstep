@@ -4379,11 +4379,52 @@ def test_report_task_step_parsing():
     result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
     assert result.what_changed == "改了定时器"
     assert result.user_action == ""
+    # checklist 缺失 → 空元组（纯软件步无上板动作）
+    assert result.checklist == ()
 
     transport = FakeTransport(body=_api_response(json.dumps({"what_changed": ""})))
     llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
     with pytest.raises(LLMError):
         llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+
+
+def test_report_task_step_checklist_parsing():
+    """上板自检清单解析（工单 task-insight/01）：正常列表保留（strip 去空）；
+    非 list → ()；数组内非 str / 空串项过滤。"""
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "what_changed": "实现了循迹状态机。",
+                    "user_action": "烧录后观察。",
+                    "checklist": [
+                        "烧录后应看到小车沿黑线行驶。",
+                        " 若不沿线检查 PA0 接线。  ",
+                        123,
+                        "",
+                    ],
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+    result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+    assert result.checklist == (
+        "烧录后应看到小车沿黑线行驶。",
+        "若不沿线检查 PA0 接线。",
+    )
+
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"what_changed": "好", "checklist": "不是数组"}))
+    )
+    llm = _llm(transport)
+    result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+    assert result.checklist == ()
+
+    transport = FakeTransport(body=_api_response(json.dumps({"what_changed": "好", "checklist": []})))
+    llm = _llm(transport)
+    result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+    assert result.checklist == ()
 
 
 def test_report_task_step_user_prompt_sections():

@@ -72,6 +72,7 @@ def test_build_task_plan_assigns_ids_and_converts_depends():
                     "score_refs": [],
                     "depends_on": [],
                     "verify": "compile",
+                    "resources": ["PA0", "TIM1"],
                 },
                 {
                     "title": "OLED 显示",
@@ -79,6 +80,7 @@ def test_build_task_plan_assigns_ids_and_converts_depends():
                     "score_refs": ["s1"],
                     "depends_on": [1],
                     "verify": "manual",
+                    "resources": ["UART0"],
                 },
             ]
         ),
@@ -90,6 +92,34 @@ def test_build_task_plan_assigns_ids_and_converts_depends():
     assert plan.tasks[1].score_refs == ("s1",)
     assert plan.tasks[1].verify == VERIFY_MANUAL
     assert all(task.status == STATUS_PENDING for task in plan.tasks)
+    # 互斥资源标注（工单 task-insight/01）：正常列表保留
+    assert plan.tasks[0].resources == ("PA0", "TIM1")
+    assert plan.tasks[1].resources == ("UART0",)
+
+
+def test_build_task_plan_resources_lenient():
+    """resources 宽松解析（spec：辅助信息宁空勿拒）：非数组 → ()；
+    数组内非 str / 空串项过滤（strip 后保留非空）。"""
+    plan = build_task_plan(
+        _raw_tasks(
+            [
+                {
+                    "title": "任务",
+                    "description": "描述",
+                    "resources": ["PA0", 123, "", "  TIM1  ", None],
+                }
+            ]
+        )
+    )
+    assert plan.tasks[0].resources == ("PA0", "TIM1")
+    plan_missing = build_task_plan(
+        _raw_tasks([{"title": "任务", "description": "描述"}])
+    )
+    assert plan_missing.tasks[0].resources == ()
+    plan_bad = build_task_plan(
+        _raw_tasks([{"title": "任务", "description": "描述", "resources": "PA0"}])
+    )
+    assert plan_bad.tasks[0].resources == ()
 
 
 def test_build_task_plan_verify_word_outside_list_corrected():
@@ -1642,6 +1672,10 @@ def test_run_task_records_first_iteration(tmp_path, monkeypatch):
         step_report=StepReport(
             what_changed="在 main.c 实现循迹状态机（调用 xunji_read），编译通过。",
             user_action="把 PA0 接到灰度模块 DIO，烧录后观察小车沿黑线行驶。",
+            checklist=(
+                "烧录后应看到小车沿黑线行驶（约 0.5m/s）。",
+                "若不沿线检查 PA0 与灰度模块 DIO 接线；若抖动检查阈值。",
+            ),
         ),
     )
     run_task(
@@ -1675,6 +1709,11 @@ def test_run_task_records_first_iteration(tmp_path, monkeypatch):
     # 步骤报告（工单 stepwise-deepen/01）：what_changed / user_action 随轮次落盘
     assert "循迹状态机" in iteration.what_changed
     assert "PA0" in iteration.user_action
+    # 上板自检清单（工单 task-insight/01）：checklist 随轮次落盘
+    assert iteration.checklist == (
+        "烧录后应看到小车沿黑线行驶（约 0.5m/s）。",
+        "若不沿线检查 PA0 与灰度模块 DIO 接线；若抖动检查阈值。",
+    )
     # 报告调用输入：任务 dict + 验证结果 + diff + 模块接口
     assert len(llm.step_report_calls) == 1
     report_task, verify_result, diff_text, interfaces = llm.step_report_calls[0]
@@ -1797,8 +1836,8 @@ def test_task_iteration_roundtrip():
 
 
 def test_task_iteration_roundtrip_with_step_report():
-    """迭代记录带步骤报告字段（what_changed / user_action）roundtrip；
-    旧记录缺字段 → 读回空串（向后兼容）。"""
+    """迭代记录带步骤报告字段（what_changed / user_action / checklist）roundtrip；
+    旧记录缺字段 → 读回空串 / 空元组（向后兼容）。"""
     plan = TaskPlan.from_dict(
         {
             "version": 1,
@@ -1816,6 +1855,7 @@ def test_task_iteration_roundtrip_with_step_report():
                             "backup_id": "b1",
                             "what_changed": "在 main.c 实现循迹状态机",
                             "user_action": "把 PA0 接到灰度模块 DIO",
+                            "checklist": ["烧录后应看到 LED 闪烁。", "若不闪检查接线。"],
                         }
                     ],
                 }
@@ -1825,10 +1865,14 @@ def test_task_iteration_roundtrip_with_step_report():
     iteration = plan.tasks[0].iterations[0]
     assert iteration.what_changed == "在 main.c 实现循迹状态机"
     assert iteration.user_action == "把 PA0 接到灰度模块 DIO"
+    assert iteration.checklist == ("烧录后应看到 LED 闪烁。", "若不闪检查接线。")
     dumped = TaskPlan(tasks=plan.tasks).to_dict()
     assert dumped["tasks"][0]["iterations"][0]["what_changed"] == "在 main.c 实现循迹状态机"
     assert dumped["tasks"][0]["iterations"][0]["user_action"] == "把 PA0 接到灰度模块 DIO"
-    # 旧记录（无步骤报告字段）→ 空串，不拒收
+    assert dumped["tasks"][0]["iterations"][0]["checklist"] == [
+        "烧录后应看到 LED 闪烁。", "若不闪检查接线。",
+    ]
+    # 旧记录（无步骤报告字段）→ 空串 / 空元组，不拒收
     legacy = TaskPlan.from_dict(
         {
             "version": 1,
@@ -1846,6 +1890,28 @@ def test_task_iteration_roundtrip_with_step_report():
     legacy_iteration = legacy.tasks[0].iterations[0]
     assert legacy_iteration.what_changed == ""
     assert legacy_iteration.user_action == ""
+    assert legacy_iteration.checklist == ()
+    # 坏项过滤：非 str / 空串项忽略，正常项保留
+    messy = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "iterations": [{
+                        "seq": 1,
+                        "kind": "execute",
+                        "status": "verified",
+                        "checklist": ["正常项", 123, "", None, "  另一项  "],
+                    }],
+                }
+            ],
+        }
+    )
+    assert messy.tasks[0].iterations[0].checklist == ("正常项", "另一项")
 
 
 class _ReportBrokenLLM(FakeLLM):
@@ -1893,6 +1959,7 @@ def test_run_task_step_report_failure_degrades(tmp_path, monkeypatch):
     assert iteration.status == STATUS_VERIFIED
     assert iteration.what_changed == ""
     assert iteration.user_action == ""
+    assert iteration.checklist == ()
 
 
 # ---------------------------------------------------------------------------
@@ -2099,6 +2166,9 @@ def test_run_direct_fix_verified_when_compile_passes(tmp_path, monkeypatch):
     assert result["main_diff"]["stats"]["additions"] >= 1
     assert result["step_report"]["what_changed"]
     assert result["step_report"]["user_action"]
+    # 上板自检清单（工单 task-insight/01）：直接修正的步骤报告也带 checklist
+    assert result["step_report"]["checklist"]
+    assert len(result["step_report"]["checklist"]) == 2
     idea, fix_summary, affected, interfaces, ptext, qa, main, global_note = llm.idea_fix_calls[0]
     assert idea == "阈值太高"
     assert fix_summary == "把阈值从 500 降到 350"
