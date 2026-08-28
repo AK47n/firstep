@@ -2,7 +2,12 @@
 // 4394-4403 / 4434-4440 / 5222-5233）。原实现刻意自包含（不引用模块级常量、不调用
 // 其它抽取函数）；模块化后 esc 单源化自 fx/core.js（cHighlight 原局部 esc 已移除，
 // 行为零变化），其余函数保持逐字原样。
+// maincScrollToRange / maincJumpToLine 迁自 ui/generate-fix.js（工单 error-jump-task/02）：
+// 修复中心与任务结果面板共用同一跳转单源；迁入后 maincJumpToLine 返回错误码
+// （null 成功 / "empty" / "out-of-range" / "no-textarea"），toast 由调用方做
+// （fx 模块不 import app.js 的 toast）。
 import { esc } from "./core.js";
+import { syncCollapseBtn } from "./generate.js";
 
 export function cHighlight(code) {
   const src = String(code == null ? "" : code);
@@ -93,6 +98,55 @@ export function maincLineOffsetRange(text, line) {
   return { start, end: start + lines[n - 1].length };
 }
 
+// ---------------------------------------------------------------------------
+// main.c 错误行定位（迁自 ui/generate-fix.js，工单 compile-error-jump/01 原
+// 件 + error-jump-task/02 单源化）：点 main.c 的错误行 = 滚动到预览卡并选中
+// 该行文本（选区即持续高亮，点其他行切换）。
+// ---------------------------------------------------------------------------
+// 选区滚入 textarea 视口：浏览器 focus 的滚动窗口行为不可靠（headless 实测
+// scrollTop 不动），这里在高亮层临时量测目标行视觉位置——hl-layer 与
+// textarea 排版参数同源（font/line-height/padding/pre-wrap/视口宽，三明治
+// 对齐设计保证换行点一致），折行场景同样精确，全程无像素行高公式。
+export function maincScrollToRange(ta, range) {
+  const hl = document.getElementById("main-c-hl");
+  if (!hl) return;
+  const _probe_style = "display:block;white-space:pre-wrap;word-break:break-all;";
+  const before = document.createElement("span");
+  before.style.cssText = _probe_style;
+  before.textContent = ta.value.slice(0, range.start);
+  const target = document.createElement("span");
+  target.style.cssText = _probe_style;
+  target.textContent = ta.value.slice(range.start, range.end);
+  hl.appendChild(before);
+  hl.appendChild(target);
+  const top = target.offsetTop, h = target.offsetHeight;
+  before.remove();
+  target.remove();
+  const viewH = ta.clientHeight - 24;   // 上下 padding 12px × 2
+  ta.scrollTop = Math.max(0, top - (viewH - h) / 2);
+}
+
+/** 跳转 main.c 并选中该行（返回错误码：null 成功 / "empty" main.c 为空 /
+ * "out-of-range" 行号越界 / "no-textarea" 预览未渲染；toast 由调用方做）。 */
+export function maincJumpToLine(line) {
+  const ta = document.getElementById("main-c");
+  if (!ta) return "no-textarea";
+  if (maincContentEmpty(ta.value)) return "empty";
+  const range = maincLineOffsetRange(ta.value, line);
+  if (!range) return "out-of-range";
+  const card = ta.closest(".card");
+  if (card && card.classList.contains("collapsed")) {
+    card.classList.remove("collapsed");
+    const btn = card.querySelector(".card-collapse");
+    if (btn) syncCollapseBtn(btn, false);
+  }
+  ta.scrollIntoView({ block: "center", behavior: "smooth" });
+  ta.focus();
+  ta.setSelectionRange(range.start, range.end);
+  maincScrollToRange(ta, range);   // 内部滚动到选区（折行也精确）
+  return null;
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { cHighlight, cLineCount, codeZoomClamp, parseZoomStored, maincContentEmpty, maincFullscreenLabel, isMainCPath, maincLineOffsetRange });
+  Object.assign(window, { cHighlight, cLineCount, codeZoomClamp, parseZoomStored, maincContentEmpty, maincFullscreenLabel, isMainCPath, maincLineOffsetRange, maincScrollToRange, maincJumpToLine });
 }

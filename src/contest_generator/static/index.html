@@ -1308,6 +1308,13 @@
   @media (prefers-reduced-motion: reduce) { .task-card-highlight { animation: none; } }
   /* 建议重做徽章（工单 idea-fix/02）：灵活修正落地后受影响步骤的警告徽标 */
   .task-redo-badge { background: var(--warn-dim); color: var(--warn); }
+  /* 编译错误列表（工单 error-jump-task/02）：任务结果面板失败时逐条列出，
+     main.c 错误行可点击跳转（.task-err-jump）——跳转单源 fx/code.js */
+  .task-err-list { margin-top: 6px; display: flex; flex-direction: column;
+                   gap: 2px; font-family: var(--mono); font-size: 12px; }
+  .task-err-row { padding: 2px 0; color: var(--text); word-break: break-all; }
+  .task-err-jump { cursor: pointer; color: var(--accent); text-decoration: underline;
+                   text-underline-offset: 2px; }
   /* 想法结果卡（工单 idea-fix/02）：复用 .item/.badge/.row 既有样式，
      无新视觉——落地按钮与任务卡操作行同款；分类徽章用既有 badge 色 */
   .idea-result .row { gap: 6px; }
