@@ -1,6 +1,6 @@
 # 工单 02：全局工程级商量前端 UI（fx/task.js + ui/generate-tasks.js + index.html + 测试）
 
-Status: claimed
+Status: resolved
 
 ## 目标
 

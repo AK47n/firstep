@@ -440,6 +440,10 @@
   .task-dialog-box .sugg-discuss-msgs { max-height: 220px; }
   .btn-task-dialog-adopt, .btn-task-dialog-clear { font-size: 12px;
                      padding: 1px 8px; margin-left: 6px; }
+  /* 全局商量按钮（工单 idea-suite/02）：AI 回复三按钮 + 发送 + 清除，
+     与任务卡对话按钮同款小字（.sugg-discuss 面板共用） */
+  .btn-global-chat-action, .btn-global-chat-send { font-size: 12px;
+                     padding: 1px 8px; margin-left: 6px; }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }
@@ -1859,6 +1863,16 @@
           <div class="muted" style="margin-top:4px">想法不一定是清单里的任务：AI 会判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。</div>
           <div id="tasks-idea-result" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-idea-msg" class="error"></div>
+        </div>
+        <div class="card-group" style="margin-top:6px">
+          <div class="card-group-title">💬 全局商量（工程级，不绑任务卡）</div>
+          <div class="row">
+            <button id="btn-tasks-global-chat" class="primary">全局商量（工程级）</button>
+            <div id="tasks-global-note" class="hidden" style="flex:1"></div>
+          </div>
+          <div class="muted" style="margin-top:4px">针对整个工程连续追问：架构取舍 / 赛道策略 / 方案对不对——AI 结合题面、需求、任务清单现状与当前 main.c 回答。每条回复可「转成任务 / 转成修正」落地，或「采纳为全局结论」（采纳后注入之后每一步任务执行与直接修正）；历史落盘（.contest_idea_chat.json），刷新不丢。</div>
+          <div id="tasks-global-chat" class="hidden" style="margin-top:8px"></div>
+          <div id="tasks-global-msg" class="error"></div>
         </div>
         <div class="row">
           <button id="btn-tasks-plan" class="primary">拆解任务</button>

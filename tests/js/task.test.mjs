@@ -11,6 +11,7 @@ import {
   taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,
   nextTaskHint, taskNextHintHTML,
   ideaResultHTML, taskNeedsRedoBadge, taskStepReportBlocksHTML,
+  globalChatHTML, globalNoteBadgeHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -587,4 +588,81 @@ test("taskCardHTML: needs_redo 集成徽章（卡头）", () => {
     depends_on: [], verify: "compile", status: "verified", needs_redo: false,
   }, 1, {});
   assert.ok(!clean.includes("建议重做"));
+});
+
+test("globalChatHTML: 未展开 → 空串；空历史 → 引导文案 + 输入行", () => {
+  const st = { open: true, chat: { messages: [], note: "" }, busy: false };
+  const html = globalChatHTML(st);
+  assert.ok(html.includes("task-dialog-box"));
+  assert.ok(html.includes("针对整个工程的问题区"));
+  assert.ok(html.includes('id="tasks-global-chat-input"'));
+  assert.ok(html.includes("发送"));
+  // 未展开 → 空串
+  assert.equal(globalChatHTML({ open: false }), "");
+});
+
+test("globalChatHTML: 历史分行 + AI 回复三按钮（data 属性转义）", () => {
+  const st = {
+    open: true, busy: true,
+    chat: {
+      messages: [
+        { role: "user", content: "整体架构要不要加滤波？", at: "2026-01-01T00:00:00" },
+        { role: "assistant", content: '建议加一阶低通——"阈值" 500。', at: "2026-01-01T00:00:05" },
+      ],
+      note: "",
+    },
+    pending: "",
+  };
+  const html = globalChatHTML(st);
+  // 用户行无按钮；AI 行有三按钮
+  assert.ok(html.includes('class="sugg-msg user"'));
+  assert.ok(html.includes('data-global-action="task"'));
+  assert.ok(html.includes('data-global-action="fix"'));
+  assert.ok(html.includes('data-global-action="adopt"'));
+  // data-global-text 转义：引号 → &quot;（属性上下文防注入；浏览器读回
+  // dataset 时解码回原引号——往返成立）
+  assert.ok(html.includes('data-global-text="建议加一阶低通——&quot;阈值&quot; 500。"'));
+  assert.ok(html.includes("sugg-msg-role\">AI</span>"));
+  // busy 输入禁用
+  assert.ok(html.includes("disabled"));
+  assert.ok(html.includes("回应中…"));
+});
+
+test("globalChatHTML: pending 乐观展示待确认用户消息", () => {
+  const st = {
+    open: true, busy: true,
+    chat: { messages: [], note: "" },
+    pending: "还没说的消息",
+  };
+  const html = globalChatHTML(st);
+  assert.ok(html.includes("还没说的消息"));
+  assert.ok(html.includes('class="sugg-msg user"'));
+});
+
+test("globalChatHTML: AI 回复文本注入转义（不再拼裸文本）", () => {
+  const st = {
+    open: true,
+    chat: { messages: [{ role: "assistant", content: "<script>alert(1)</script>" }], note: "" },
+  };
+  const html = globalChatHTML(st);
+  assert.ok(!html.includes("<script>alert(1)</script>"));
+  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
+});
+
+test("globalNoteBadgeHTML: 空 → 空串；非空 → 徽标 + 摘要 30 字 + 清除按钮", () => {
+  assert.equal(globalNoteBadgeHTML(""), "");
+  assert.equal(globalNoteBadgeHTML("   "), "");
+  assert.equal(globalNoteBadgeHTML(null), "");
+  const note = "全局结论：先保证循迹稳定再上 PID（这次比赛以稳定优先）——这句话超过三十个字了吗？";
+  const html = globalNoteBadgeHTML(note);
+  assert.ok(html.includes("工程级全局结论"));
+  assert.ok(html.includes('data-global-action="clear"'));
+  assert.ok(html.includes("清除"));
+  // 摘要截 30 字 + 「…」（完整全文在 title 提示里，可见文本带省略号）
+  assert.ok(html.includes(note.slice(0, 30) + "…"));
+  assert.ok(html.includes("title="));
+  // 短 note 全文显示 + 转义
+  const short = globalNoteBadgeHTML('<b>阈值 500</b>');
+  assert.ok(short.includes("&lt;b&gt;阈值 500&lt;/b&gt;"));
+  assert.ok(!short.includes("<b>阈值 500</b>"));
 });

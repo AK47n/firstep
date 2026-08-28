@@ -7,6 +7,8 @@
 //
 // 本簇状态 = tasks（私有对象）；输出目录复用「修订与深化」卡的已加载上下文
 // （reviseGetDir——跨簇只读 import，主写簇归 generate-revise.js）。
+// 全局商量（工单 idea-suite/02）同簇：/api/tasks/idea/chat/read|send|adopt
+// 三个同步端点，历史落盘 .contest_idea_chat.json。
 // 赛道事件词表镜像 events.py：task_planning / task_executing / compile_start /
 // fix_start / verify_result / task_reporting / idea_analyzing / idea_result /
 // llm_telemetry / done / error。
@@ -19,7 +21,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML } from "/js/fx/task.js";
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -43,6 +45,18 @@ let ideaState = {
   busy: false,
   analysis: null,
   ideaText: "",
+};
+
+// 全局商量区状态（工单 idea-suite/02）：chat = 后端 /chat/read|send|adopt 的
+// 落盘真相 {messages:[{role,content,at}], note}——会话内缓存，刷新后 /chat/read
+// 重读；open / busy / pending（发送中尚未确认的用户消息——乐观展示，成功后
+// 被服务端 chat 替换）/ draft（输入未发内容——失败回填便于重试）。
+let chatState = {
+  busy: false,
+  open: false,
+  chat: null,
+  pending: "",
+  draft: "",
 };
 
 /** 想法区结果卡渲染：analysis 空 → 隐藏容器；landedNote 非空 → 按钮区替换为
@@ -413,6 +427,163 @@ async function tasksRedoTask(taskId) {
   } finally {
     tasksSetBusy(false);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 全局工程级商量（工单 idea-suite/02）：多轮对话（不绑任务卡）——历史落盘
+// /chat/read 加载、/chat/send 发送（成功才追加落盘）、/chat/adopt 采纳为
+// 全局结论（后续每一步执行注入）；每条 AI 回复可「转成任务 / 转成修正」
+//（复用 idea 漏斗通道 tasksIdeaAnalyze + autoLand）。纯函数渲染在 fx/task.js
+//（globalChatHTML / globalNoteBadgeHTML），本层只喂状态 + 委托 + 跨簇重置。
+// ---------------------------------------------------------------------------
+
+/** 聊天区 / 徽标区渲染：开放时渲染聊天区（历史 + 输入行），关闭清空隐藏；
+ * 徽标区按 chat.note 独立渲染（常驻聊天区外——收合时也能看到当前全局结论）；
+ * 开关按钮文案随 open 切换。 */
+function tasksGlobalRender() {
+  const area = $("tasks-global-chat");
+  if (area) {
+    const html = globalChatHTML(chatState);
+    area.innerHTML = html;
+    area.classList.toggle("hidden", !chatState.open);
+  }
+  const note = $("tasks-global-note");
+  if (note) {
+    const noteHTML = globalNoteBadgeHTML((chatState.chat && chatState.chat.note) || "");
+    note.innerHTML = noteHTML;
+    note.classList.toggle("hidden", !noteHTML);
+  }
+  const btn = $("btn-tasks-global-chat");
+  if (btn) btn.textContent = chatState.open ? "收起全局商量" : "全局商量（工程级）";
+}
+
+/** 读盘加载全局商量历史（chat 为空时展开调用）；无文件 = 空聊天（不 400）。 */
+async function tasksChatLoad() {
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) throw new Error("请先在上方「上下文入口」加载当前会话或历史目录");
+  const data = await apiPost("/api/tasks/idea/chat/read", { output_dir: dir });
+  chatState.chat = data.chat || { messages: [], note: "" };
+}
+
+/** 展开 / 收起全局商量区；首次展开读盘加载历史（失败回卷为收起 + 错误提示，
+ * 防「空区展开」误导）。 */
+async function tasksChatToggle() {
+  if (chatState.busy || tasks.busy) {
+    toast("info", "有流程正在进行，请等当前操作完成后再试");
+    return;
+  }
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!chatState.open && !dir) {
+    $("tasks-global-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录";
+    return;
+  }
+  chatState.open = !chatState.open;
+  if (chatState.open && !chatState.chat) {
+    $("tasks-global-msg").textContent = "";
+    try {
+      await tasksChatLoad();
+    } catch (e) {
+      chatState.open = false;
+      $("tasks-global-msg").textContent = e.message;
+    }
+  }
+  tasksGlobalRender();
+}
+
+/** 发送一轮全局商量：历史单通道（history 含本轮 user 末条——与 /api/tasks/
+ * discuss 同契约）；成功服务端落 user+assistant 两条并返回全量 chat → 替换
+ * 本地缓存；失败 pending 撤出、draft 回填（用户可重试），历史不动。 */
+async function tasksChatSend() {
+  if (chatState.busy || tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-global-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  const input = $("tasks-global-chat-input");
+  const message = ((input && input.value) || "").trim();
+  if (!message) {
+    $("tasks-global-msg").textContent = "请先说你的问题（如「整体架构要不要加滤波？」）";
+    return;
+  }
+  const history = ((chatState.chat && chatState.chat.messages) || [])
+    .map((m) => ({ role: m.role, content: m.content }));
+  history.push({ role: "user", content: message });
+  chatState.pending = message;
+  chatState.draft = "";
+  chatState.busy = true;
+  $("tasks-global-msg").textContent = "";
+  $("tasks-status").textContent = "全局商量：AI 回应中…（分钟级调用，请等待）";
+  tasksGlobalRender();
+  try {
+    const data = await apiPost("/api/tasks/idea/chat/send", { output_dir: dir, history });
+    chatState.chat = data.chat || chatState.chat;
+    $("tasks-status").textContent = "";
+    toast("ok", "已回应——可继续聊，或把回复转成任务/修正、采纳为全局结论");
+  } catch (e) {
+    chatState.draft = message;   // 失败回填：历史不动（后端原子轮次），重试免重打
+    $("tasks-status").textContent = "";
+    $("tasks-global-msg").textContent = e.message;
+  } finally {
+    chatState.pending = "";
+    chatState.busy = false;
+    tasksGlobalRender();
+  }
+}
+
+/** 采纳 / 清除全局结论（/chat/adopt：text 空串 = 清除）→ 徽标区更新。
+ * chatState.busy 守卫：发送轮进行中禁用（防与 send 读写同一文件的竞态——
+ * 两侧都做读改写的 lost update）。 */
+async function tasksChatAdopt(text) {
+  if (chatState.busy || tasks.busy) {
+    toast("info", "全局商量回应中，请等当前一轮完成后再操作");
+    return;
+  }
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-global-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-global-msg").textContent = "";
+  try {
+    const data = await apiPost("/api/tasks/idea/chat/adopt", {
+      output_dir: dir, text: text || "",
+    });
+    if (data.chat) chatState.chat = data.chat;
+    tasksGlobalRender();
+    toast("ok", text ? "已采纳为全局结论——后续每一步执行都会注入该结论"
+      : "已清除全局结论");
+  } catch (e) {
+    $("tasks-global-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
+/** 把某条 AI 回复转成落地动作（讨论漏斗同款）：回复文本作为新想法重新分析，
+ * 结果与目标一致时自动落地（生成任务卡 / 直接修正）。chatState.busy 守卫同
+ * adopt——发送轮进行中不另起分析（两条 LLM 流并行易混淆，且落地基于的语境
+ * 可能还没落盘）。 */
+function tasksChatConvert(action, text) {
+  if (chatState.busy) {
+    toast("info", "全局商量回应中，请等当前一轮完成后再操作");
+    return;
+  }
+  if (action === "task") { tasksIdeaAnalyze(text, "new_task"); return; }
+  tasksIdeaAnalyze(text, "direct_fix");
+}
+
+/** 全局商量区重置（跨簇目录切换 / 清单作废）：关区清状态 + 清容器 +
+ * 按钮文案回默认。 */
+function resetGlobalChatArea() {
+  chatState.busy = false;
+  chatState.open = false;
+  chatState.chat = null;
+  chatState.pending = "";
+  chatState.draft = "";
+  const area = $("tasks-global-chat");
+  if (area) { area.innerHTML = ""; area.classList.add("hidden"); }
+  const note = $("tasks-global-note");
+  if (note) { note.innerHTML = ""; note.classList.add("hidden"); }
+  const msg = $("tasks-global-msg");
+  if (msg) msg.textContent = "";
+  const btn = $("btn-tasks-global-chat");
+  if (btn) btn.textContent = "全局商量（工程级）";
 }
 
 /** SSE 流（reviseRunSSE 同款语义：done 载荷返回；error 终态 / 断线 throw）。 */
@@ -843,6 +1014,19 @@ $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
 $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
 // 新想法 / 问题（工单 idea-fix/02）：分析按钮 + 结果卡落地按钮委托
 $("btn-tasks-idea").addEventListener("click", () => tasksIdeaAnalyze());
+// 全局商量（工单 idea-suite/02）：开关按钮 + 区内委托（发送 / 转任务 / 转修正 /
+// 采纳——采纳与清除按钮在聊天区与徽标区两处，委托挂 tasks-box 一并覆盖）
+$("btn-tasks-global-chat").addEventListener("click", () => tasksChatToggle());
+$("tasks-box").addEventListener("click", (event) => {
+  const send = event.target.closest(".btn-global-chat-send");
+  if (send) { tasksChatSend(); return; }
+  const action = event.target.closest(".btn-global-chat-action");
+  if (!action) return;
+  const kind = action.dataset.globalAction;
+  if (kind === "clear") { tasksChatAdopt(""); return; }
+  if (kind === "adopt") { tasksChatAdopt(action.dataset.globalText); return; }
+  tasksChatConvert(kind, action.dataset.globalText);
+});
 $("tasks-idea-result").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-idea-insert, .btn-idea-fix, .btn-idea-to-task, .btn-idea-to-fix");
   if (!btn) return;
@@ -928,6 +1112,7 @@ window.addEventListener("revise-context-loaded", (event) => {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = "";
     resetIdeaArea();
+    resetGlobalChatArea();
     // 目录已加载：自动读回磁盘任务清单（若该目录拆解过）——任务卡与
     // 「重新拆解」按钮随之出现；无清单则保持占位等用户拆解。修复「提示
     // 已有清单却看不到重新拆解按钮」的死锁：此前只有 plan 已加载才显示
@@ -954,6 +1139,7 @@ window.addEventListener("tasks-invalidated", (event) => {
   $("tasks-status").textContent = "";
   $("tasks-msg").textContent = "任务清单已作废（修订重生成）：请点「拆解任务」按新工程重新拆解";
   resetIdeaArea();
+  resetGlobalChatArea();
 });
 
 export { tasksPlan, tasksRender, tasksResetMessages };
