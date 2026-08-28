@@ -12,6 +12,7 @@ import {
   nextTaskHint, taskNextHintHTML,
   ideaResultHTML, taskNeedsRedoBadge, taskStepReportBlocksHTML,
   globalChatHTML, globalNoteBadgeHTML,
+  taskEditFormHTML, taskMoveButtonsHTML,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -665,4 +666,61 @@ test("globalNoteBadgeHTML: 空 → 空串；非空 → 徽标 + 摘要 30 字 + 
   const short = globalNoteBadgeHTML('<b>阈值 500</b>');
   assert.ok(short.includes("&lt;b&gt;阈值 500&lt;/b&gt;"));
   assert.ok(!short.includes("<b>阈值 500</b>"));
+});
+
+test("taskMoveButtonsHTML: ↑/↓ + 边界禁用 + data 属性", () => {
+  const first = taskMoveButtonsHTML({ id: "t1" }, 0, 2);
+  assert.ok(first.includes('data-task-action="move-up"'));
+  assert.ok(first.includes('data-task-action="move-down"'));
+  assert.ok(first.includes('data-task="t1"'));
+  assert.ok(first.includes("move-up\" data-task=\"t1\" disabled"));  // 首卡 ↑ 禁用
+  assert.ok(!first.includes("move-down\" data-task=\"t1\" disabled"));  // 末卡 ↓ 不禁用（t1 不是末卡）
+  const last = taskMoveButtonsHTML({ id: "t2" }, 1, 2);
+  assert.ok(last.includes("move-down\" data-task=\"t2\" disabled"));
+  assert.ok(!last.includes("move-up\" data-task=\"t2\" disabled"));
+  // id 转义
+  const weird = taskMoveButtonsHTML({ id: 't"x' }, 0, 1);
+  assert.ok(weird.includes('data-task="t&quot;x"'));
+});
+
+test("taskEditFormHTML: 当前值回填（依赖序号经 seqById 转换）+ 保存/取消按钮", () => {
+  const task = {
+    id: "t2",
+    title: 'OLED <b>显示</b>',
+    description: "显示分值",
+    depends_on: ["t1"],
+    verify: "manual",
+    score_refs: ["s1", "s2"],
+  };
+  const html = taskEditFormHTML(task, { seqById: { t1: 1 } });
+  // 值回填 + 转义（值进属性/文本一律 esc）
+  assert.ok(html.includes('id="task-edit-title-t2" value="OLED &lt;b&gt;显示&lt;/b&gt;"'));
+  assert.ok(html.includes("task-edit-desc-t2"));
+  assert.ok(html.includes('value="1"'));                 // 依赖 t1 → 序号 1
+  assert.ok(html.includes('value="manual" selected'));   // 验收方式选中
+  assert.ok(html.includes('value="compile"'));
+  assert.ok(html.includes('value="s1, s2"'));            // 评分点回填
+  assert.ok(html.includes('data-task-action="edit-save" data-task="t2"'));
+  assert.ok(html.includes('data-task-action="edit-cancel" data-task="t2"'));
+  // 无依赖 / compile / 空评分点
+  const empty = taskEditFormHTML({ id: "t1", title: "循迹", description: "循迹决策", depends_on: [], verify: "compile", score_refs: [] }, { seqById: {} });
+  assert.ok(empty.includes('id="task-edit-deps-t1" value=""'));
+  assert.ok(empty.includes('value="compile" selected'));
+  assert.ok(empty.includes('id="task-edit-refs-t1" value=""'));
+});
+
+test("taskCardHTML: 编辑按钮 + ↑/↓ 集成；editing 态渲染表单", () => {
+  const task = {
+    id: "t1", title: "循迹", description: "循迹决策", score_refs: [],
+    depends_on: [], verify: "compile", status: "pending", iterations: [],
+  };
+  const card = taskCardHTML(task, 0, { total: 2, editing: () => false });
+  assert.ok(card.includes('class="btn-task-edit"'));
+  assert.ok(card.includes('data-task-action="edit" data-task="t1"'));
+  assert.ok(card.includes('class="task-move"'));
+  assert.ok(card.includes("move-up\" data-task=\"t1\" disabled"));
+  assert.ok(!card.includes("task-edit-title-"));  // 未展开无表单
+  const editing = taskCardHTML(task, 0, { total: 2, editing: () => true });
+  assert.ok(editing.includes("task-edit-title-t1"));
+  assert.ok(editing.includes("data-task-action=\"edit-save\""));
 });

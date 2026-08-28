@@ -138,6 +138,8 @@ function tasksRender() {
       // outputDir（工单 flash-step-button/01）：任务卡烧录控制行需要输出目录
       //（卡内独立容器，uid = task.id）——透传给 taskCardHTML
       outputDir: tasks.outputDir,
+      // 编辑态（工单 idea-suite/04）：taskEditOpen 含该卡 id = 表单已展开
+      editing: (taskId) => taskEditOpen.has(taskId),
       actions: (task) => {
         // 操作显隐单源 = fx/task.js taskCardActions（与后端转移表镜像，
         // 同一状态机一份 JS 编码——曾内联 if/else 与转移表分叉风险）
@@ -642,6 +644,7 @@ async function tasksPlan(force) {
     });
     tasks.outputDir = dir;
     tasks.plan = data;
+    taskEditOpen.clear();   // 新清单 = 新任务集：旧编辑态（按 id 记忆）全部作废
     tasksRender();
     markStepDone(11);
     $("tasks-status").textContent = "拆解完成——逐卡点「做这一步」，每步编译验证";
@@ -1010,6 +1013,101 @@ async function tasksDialogClear(taskId) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 任务卡微编辑 + 调序（工单 idea-suite/04）：✏️ 编辑（卡内表单，当前值回填）
+// → /api/tasks/idea/edit；↑/↓ → /api/tasks/idea/move（换序即时生效，id 不变）。
+// 编辑态 = taskEditOpen（会话级 Set，跨簇重置清空）；表单纯函数在
+// fx/task.js（taskEditFormHTML / taskMoveButtonsHTML），本层只做收集 + 委托。
+// ---------------------------------------------------------------------------
+
+const taskEditOpen = new Set();
+
+function tasksEditToggle(taskId) {
+  if (tasks.busy) {
+    toast("info", "有任务正在进行，请等当前操作完成后再试");
+    return;
+  }
+  if (taskEditOpen.has(taskId)) taskEditOpen.delete(taskId);
+  else taskEditOpen.add(taskId);
+  tasksRender();
+}
+
+function tasksEditCancel(taskId) {
+  taskEditOpen.delete(taskId);
+  tasksRender();
+}
+
+/** 保存编辑：收集表单字段 → 后端校验（非法 400 中文原样展示）→ 整清单替换
+ * 重渲染（状态/轮次历史由后端保留——微编辑不动进度）。依赖文本 = 逗号分隔
+ * 序号 → 数组；本地先验非法（非正整数）拦截，少一次往返。 */
+async function tasksEditSave(taskId) {
+  if (tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  const title = (($("task-edit-title-" + taskId) || {}).value || "").trim();
+  const description = (($("task-edit-desc-" + taskId) || {}).value || "").trim();
+  const depsText = (($("task-edit-deps-" + taskId) || {}).value || "").trim();
+  const verify = (($("task-edit-verify-" + taskId) || {}).value || "");
+  const refsText = (($("task-edit-refs-" + taskId) || {}).value || "").trim();
+  if (!title) { $("tasks-msg").textContent = "标题不能为空"; return; }
+  if (!description) { $("tasks-msg").textContent = "描述不能为空"; return; }
+  const depsParts = depsText ? depsText.split(/[,，、]+/).map((s) => s.trim()).filter(Boolean) : [];
+  if (depsParts.some((s) => !/^\d+$/.test(s) || Number(s) < 1)) {
+    $("tasks-msg").textContent = "依赖必须是正整数序号（1 起，逗号分隔）——如「1, 3」";
+    return;
+  }
+  const totalSteps = ((tasks.plan || {}).tasks || []).length;
+  if (depsParts.some((s) => Number(s) > totalSteps)) {
+    $("tasks-msg").textContent = "依赖序号越界（清单只有 " + totalSteps + " 步）";
+    return;
+  }
+  const scoreRefs = refsText ? refsText.split(/[,，、]+/).map((s) => s.trim()).filter(Boolean) : [];
+  const fields = {
+    title,
+    description,
+    depends_on: depsParts.map(Number),
+    verify,
+    score_refs: scoreRefs,
+  };
+  tasksSetBusy(true);
+  $("tasks-msg").textContent = "";
+  try {
+    const data = await apiPost("/api/tasks/idea/edit", {
+      output_dir: dir, task_id: taskId, fields,
+    });
+    taskEditOpen.delete(taskId);
+    tasks.plan = data.plan || tasks.plan;
+    tasksRender();
+    toast("ok", "已保存任务卡");
+  } catch (e) {
+    $("tasks-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
+/** 上移 / 下移换序（后端相邻换位，id 不变——依赖引用与 needs_redo 不受影响）；
+ * 边界双保险：前端按钮 disabled（纯函数侧渲染）+ 后端 400（纯函数也拒）。 */
+async function tasksMove(taskId, direction) {
+  if (tasks.busy) return;
+  const dir = tasks.outputDir || reviseGetDir();
+  if (!dir) { $("tasks-msg").textContent = "请先在上方「上下文入口」加载当前会话或历史目录"; return; }
+  tasksSetBusy(true);
+  $("tasks-msg").textContent = "";
+  try {
+    const data = await apiPost("/api/tasks/idea/move", {
+      output_dir: dir, task_id: taskId, direction,
+    });
+    tasks.plan = data.plan || tasks.plan;
+    tasksRender();
+    toast("ok", direction === "up" ? "已上移（顺序已更新）" : "已下移（顺序已更新）");
+  } catch (e) {
+    $("tasks-msg").textContent = e.message;
+  } finally {
+    tasksSetBusy(false);
+  }
+}
+
 $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
 $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
 // 新想法 / 问题（工单 idea-fix/02）：分析按钮 + 结果卡落地按钮委托
@@ -1061,6 +1159,17 @@ $("tasks-grid").addEventListener("click", (event) => {
     : btn.classList.contains("btn-task-mark") ? "verified" : "pending";
   tasksSetStatus(btn.dataset.task, status);
 });
+// 任务卡微编辑 + 调序（工单 idea-suite/04）：✏️ 编辑 / 保存 / 取消 / ↑↓ 换序
+$("tasks-grid").addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-task-edit, .btn-task-edit-save, .btn-task-edit-cancel, .btn-task-move");
+  if (!btn) return;
+  const taskId = btn.dataset.task;
+  const action = btn.dataset.taskAction;
+  if (action === "edit") { tasksEditToggle(taskId); return; }
+  if (action === "edit-save") { tasksEditSave(taskId); return; }
+  if (action === "edit-cancel") { tasksEditCancel(taskId); return; }
+  tasksMove(taskId, action === "move-up" ? "up" : "down");
+});
 // 结果面板「回滚到本任务执行前」（同备份族，复用 /api/revise/rollback）
 $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-rollback");
@@ -1103,6 +1212,7 @@ window.addEventListener("revise-context-loaded", (event) => {
     tasks.outputDir = "";
     tasks.plan = null;
     taskDialogs.clear();
+    taskEditOpen.clear();
     $("tasks-grid").classList.add("hidden");
     $("tasks-grid").innerHTML = "";
     const overview = $("tasks-overview");
@@ -1128,6 +1238,7 @@ window.addEventListener("tasks-invalidated", (event) => {
   tasks.outputDir = "";
   tasks.plan = null;
   taskDialogs.clear();
+  taskEditOpen.clear();
   $("tasks-grid").classList.add("hidden");
   $("tasks-grid").innerHTML = "";
   const stale = $("tasks-result");

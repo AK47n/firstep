@@ -196,6 +196,13 @@ export function taskCardHTML(task, index, opts) {
     + taskIterationsHTML(task)
     + taskDialogAdoptHTML(task)
     + taskNextActionHTML(task)
+    // 微编辑 + 调序（工单 idea-suite/04）：编辑按钮 + ↑/↓（边界禁用）+ 编辑态
+    // 表单（opts.editing(task.id) 为真 = 胶水层已展开该卡编辑表单）
+    + '<div class="row" style="margin-top:6px;gap:6px">'
+    + taskEditButtonHTML(task, !!(o.editing && o.editing(task.id)))
+    + taskMoveButtonsHTML(task, index, Number(o.total) || 0)
+    + "</div>"
+    + (o.editing && o.editing(task.id) ? taskEditFormHTML(task, o) : "")
     // 任务卡烧录控制行（工单 flash-step-button/01）：已实现过的步骤（有迭代
     // 记录或已终态 = taskCanFeedback 判据）常驻「烧录到板子」——做完一步直接
     // 在卡上烧录上板检测；pending/skipped/doing 不显示（防烧旧固件 / 防并发）。
@@ -213,9 +220,15 @@ export function tasksGridHTML(plan, opts) {
   if (!tasks.length) return '<div class="muted">（任务清单为空——请点「拆解任务」生成）</div>';
   // 建议顺序声明（工单 task-chat/03）：序号是 AI 按方便实现顺序排的建议，
   // 不强制——用户可跳着做（depends_on 只作展示，后端无强制闸）
+  const seqById = {};
+  tasks.forEach((t, i) => { if (t && t.id) seqById[t.id] = i + 1; });
   return '<div class="muted" style="margin-bottom:6px">'
     + "建议按序号从上往下做（AI 按方便实现的顺序排）——不强制，可跳着做</div>"
-    + tasks.map((task, i) => taskCardHTML(task, i, opts)).join("");
+    + tasks.map((task, i) => taskCardHTML(task, i, {
+      ...(opts || {}),
+      seqById,           // 编辑表单依赖回填（工单 idea-suite/04）
+      total: tasks.length,
+    })).join("");
 }
 
 export function tasksProgressText(plan) {
@@ -575,6 +588,72 @@ export function globalNoteBadgeHTML(note) {
     + "</div>";
 }
 
+/** 任务卡上移 / 下移按钮（工单 idea-suite/04）：↑/↓ 相邻换序（数组顺序 =
+ * 展示顺序；id 不变，依赖引用稳定——spec「排序后 id 不变」）。边界禁用：
+ * 首卡 ↑ 禁用 / 末卡 ↓ 禁用（视觉 + disabled 双保险）。data-task-action =
+ * move-up|move-down + data-task（委托需要任务上下文）；
+ * index = 0 起序号，total = 任务总数。
+ * 注：工单签名 (index, total) 无法携带任务 id，实现为 (task, index, total)
+ * ——委托必须知道换的是哪张卡（与既有 .btn-task-* 均带 data-task 同构）。 */
+export function taskMoveButtonsHTML(task, index, total) {
+  const taskId = (task && task.id) || "";
+  const n = Number(index), m = Number(total);
+  const up = '<button class="btn-task-move" data-task-action="move-up" data-task="'
+    + esc(taskId) + '"' + (n <= 0 ? " disabled" : "") + ' title="上移（换序）">↑</button>';
+  const down = '<button class="btn-task-move" data-task-action="move-down" data-task="'
+    + esc(taskId) + '"' + (n >= m - 1 ? " disabled" : "") + ' title="下移（换序）">↓</button>';
+  return '<span class="task-move">' + up + down + "</span>";
+}
+
+/** 任务卡编辑按钮（工单 idea-suite/04）：点开卡内表单（胶水层切 editing 态
+ * 重渲染把 taskEditFormHTML 插进卡内）；editing = 表单已展开（文案「收起」）。 */
+function taskEditButtonHTML(task, editing) {
+  return '<button class="btn-task-edit" data-task-action="edit" data-task="'
+    + esc((task && task.id) || "") + '"'
+    + (editing ? ' title="收起编辑" >收起' : ' title="编辑标题/描述/依赖/验收方式" >✏️ 编辑')
+    + "</button>";
+}
+
+/** 任务卡编辑表单（工单 idea-suite/04）：标题/描述/依赖（逗号分隔 1 起序号，
+ * 空 = 无依赖）/验收方式下拉（compile=编译验证 / manual=需上板人工确认）/
+ * 评分点（逗号分隔，可空）。opts.seqById = {t1:1,...}（依赖 id → 序号回填——
+ * 序号随调序变化，纯函数从 opts 拿映射）。保存/取消按钮 data-task-action =
+ * edit-save|edit-cancel + data-task。全部当前值经 esc 回填（防注入）。 */
+export function taskEditFormHTML(task, opts) {
+  const o = opts || {};
+  const seqById = o.seqById || {};
+  const taskId = (task && task.id) || "";
+  const depsText = (task.depends_on || [])
+    .map((id) => (seqById[id] !== undefined ? String(seqById[id]) : id))
+    .join(", ");
+  const refsText = (task.score_refs || []).join(", ");
+  return '<div class="task-edit-form" style="margin-top:6px">'
+    + '<label class="muted">标题</label>'
+    + '<input type="text" id="task-edit-title-' + esc(taskId) + '" value="'
+    + esc(task.title || "") + '">'
+    + '<label class="muted">描述</label>'
+    + '<textarea id="task-edit-desc-' + esc(taskId) + '" rows="2">'
+    + esc(task.description || "") + "</textarea>"
+    + '<label class="muted">依赖（逗号分隔的步骤序号，1 起；空 = 无依赖）</label>'
+    + '<input type="text" id="task-edit-deps-' + esc(taskId) + '" value="'
+    + esc(depsText) + '">'
+    + '<label class="muted">验收方式</label>'
+    + '<select id="task-edit-verify-' + esc(taskId) + '">'
+    + '<option value="compile"' + (task.verify === "compile" ? " selected" : "")
+    + ">编译验证</option>"
+    + '<option value="manual"' + (task.verify === "manual" ? " selected" : "")
+    + ">需上板人工确认</option></select>"
+    + '<label class="muted">评分点（逗号分隔，可空）</label>'
+    + '<input type="text" id="task-edit-refs-' + esc(taskId) + '" value="'
+    + esc(refsText) + '">'
+    + '<div class="row" style="margin-top:6px">'
+    + '<button class="btn-task-edit-save primary" data-task-action="edit-save" data-task="'
+    + esc(taskId) + '">保存</button>'
+    + '<button class="btn-task-edit-cancel" data-task-action="edit-cancel" data-task="'
+    + esc(taskId) + '">取消</button>'
+    + "</div></div>";
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
@@ -587,5 +666,6 @@ if (typeof window !== "undefined") {
     ideaResultHTML, taskNeedsRedoBadge,
     taskStepReportBlocksHTML,
     globalChatHTML, globalNoteBadgeHTML,
+    taskEditFormHTML, taskMoveButtonsHTML,
   });
 }
