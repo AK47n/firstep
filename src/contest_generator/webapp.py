@@ -73,7 +73,13 @@ from .task_progress import (
     write_task_plan,
 )
 from .errors import error_entry
-from .events import EVENT_CACHE_HIT, EVENT_IDEA_ANALYZING, EVENT_IDEA_RESULT, ProgressEvent
+from .events import (
+    EVENT_CACHE_HIT,
+    EVENT_IDEA_ANALYZING,
+    EVENT_IDEA_RESULT,
+    EVENT_PARAM_RESULT,
+    ProgressEvent,
+)
 from .extraction import (
     IMAGE_FILE_SUFFIXES,
     extract_file,
@@ -2161,6 +2167,161 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise TaskError(f"输出目录不存在：{output_dir}")
         plan = read_task_plan(output_dir)
         return {"plan": plan.to_dict() if plan is not None else None}
+
+    # ------------------------------------------------------------------
+    # 参数速调（工单 param-tune/01）：识别 main.c 可调数值参数 + 确定性改值
+    # + 编译验证。与任务清单独立（main.c 存在即可用）。识别走 LLM；改值零
+    # LLM（锚定位替换）→ 备份 → 写盘 → 编译验证闭环（共用 verify 尾段）。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/tasks/params/scan")
+    @_map_errors
+    def tasks_params_scan(payload: dict) -> StreamingResponse:
+        """参数识别（SSE 流）：→ param_result → done（{params}）或
+        error（中文信息）。
+
+        请求体契约：output_dir（必填，生成结果目录）。
+
+        事件序列：param_scanning（LLM 识别中，分钟级）→ param_result →
+        done（{"params": [ParamItem...]}，与参数表文件同形状）或 error →
+        流结束。HTTP 200 起流，失败以流内 error 事件收尾。
+
+        缺上下文（无题面）→ 400 中文提示；LLM 识别结果域判决失败 →
+        流内 error（重试由前端引导）；不要求已拆解任务清单。
+        """
+        from .params import run_param_scan
+        from .skeleton import build_skeleton_interfaces
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        platform = fields["platform"]
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        if not main_c.strip():
+            raise TaskError("工程 main.c 为空，无法识别参数（请先生成或修订工程）")
+        resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
+        interfaces = build_skeleton_interfaces(
+            resolved.manifests,
+            platform,
+            module_library_dir,
+            master_project_dir(config.masters_dir, platform),
+        )
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("tasks-params-scan")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    param_list = run_param_scan(
+                        llm=llm,
+                        main_c=main_c,
+                        module_interfaces=interfaces,
+                        output_dir=output_dir,
+                        emit=emit,
+                    )
+                emit.progress(ProgressEvent(type=EVENT_PARAM_RESULT))
+                emit.done({"params": [item.to_dict() for item in param_list.params]})
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    @app.post("/api/tasks/params/apply")
+    @_map_errors
+    def tasks_params_apply(payload: dict) -> StreamingResponse:
+        """参数改值（SSE 流）：→ compile_start → fix_start → verify_result →
+        done（{status, backup_id, compile, main_diff, message}）或 error。
+
+        请求体契约：output_dir（必填）；name（必填，参数名——从参数表
+        .contest_params.json 里找）；value（必填，新值文本，非空 + ≤64 字符）。
+
+        事件序列：param_applying（改值 + 编译验证开始）→ compile_start →
+        fix_start（仅首轮编译失败）→ verify_result → done（与任务执行尾段
+        同形状）或 error → 流结束。**改值零 LLM**；首轮编译失败的自动修复
+        轮可能调 LLM（verify_compile_tail 既有闭环）。
+
+        参数表不存在 / name 不在表内 / 新值非法 → 400；锚已失效（main.c
+        被改动）→ 流内 error 中文提示「请重新识别参数」。
+        """
+        from .params import (
+            find_param,
+            read_params,
+            run_param_apply,
+            validate_param_value,
+        )
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        name = _require_str(payload, "name")
+        value = validate_param_value(_optional_str(payload, "value") or "")
+        param_list = read_params(output_dir)
+        param = find_param(param_list, name)
+        if param is None:
+            raise TaskError(f"参数表里没有参数 {name}——请先「识别 main.c 参数」")
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
+        if not main_c.strip():
+            raise TaskError("工程 main.c 为空，无法应用参数（请先生成或修订工程）")
+        budget = RetryBudget()
+        collector = create_llm_observation_collector("tasks-params-apply")
+        llm = _llm(context, budget, collector)
+
+        def run(emit: SseEmitter) -> None:
+            try:
+                with bind_llm_telemetry(collector, emit.progress):
+                    result = run_param_apply(
+                        llm=llm,
+                        param=param,
+                        new_value=value,
+                        main_c=main_c,
+                        output_dir=output_dir,
+                        work_root=config.masters_dir.parent,
+                        platform=fields["platform"],
+                        module_slugs=fields["slugs"],
+                        uv4_override=config.uv4_path,
+                        make_override=config.gmake_path,
+                        emit=emit,
+                    )
+                emit.done(result)
+            finally:
+                context.recent_llm_workflows.add_completed(collector)
+
+        return StreamingResponse(
+            run_sse(run, error_message=_error_message),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    @app.post("/api/tasks/params/read")
+    @_map_errors
+    def tasks_params_read(payload: dict) -> dict:
+        """参数表读取（同步端点）：{output_dir} → {params: [..+valid]}。
+
+        逐参数读当前 main.c 重验 anchor（锚失效 = main.c 被任务执行 / 手工
+        编辑改动，前端禁用该行并提示「请重新识别」）；valid = anchor 逐字节
+        仍在 main.c 中（old_value 也在锚内）。无文件 = 空列表不 400。
+        """
+        from .params import read_params
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        param_list = read_params(output_dir)
+        main_c = read_project_main_c(output_dir) or ""
+        params_out = []
+        for item in param_list.params:
+            valid = bool(main_c) and item.anchor in main_c and item.old_value in item.anchor
+            params_out.append({**item.to_dict(), "valid": valid})
+        return {"params": params_out}
 
     # ------------------------------------------------------------------
     # 任务推进 · 人工改标（工单 task-progress/03）：跳过 / 重做 / 上板

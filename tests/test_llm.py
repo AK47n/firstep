@@ -4436,6 +4436,101 @@ def test_report_task_step_routes_to_remote():
     assert local.calls == []
 
 
+def test_scan_params_parsing():
+    """参数识别解析（工单 param-tune/01）：合法输出 → ParamList；anchor 不在
+    main.c → 域判决拒绝重试后仍坏 → LLMError。"""
+    main_c = "#define THRESHOLD 800\n#define SPEED 120\nint main(void) { return 0; }\n"
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "params": [
+                        {
+                            "name": "THRESHOLD",
+                            "label": "循迹阈值",
+                            "old_value": "800",
+                            "anchor": "#define THRESHOLD 800",
+                            "unit": "",
+                            "range_hint": "500-1000",
+                        },
+                        {
+                            "name": "SPEED",
+                            "label": "速度",
+                            "old_value": "120",
+                            "anchor": "#define SPEED 120",
+                        },
+                    ]
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+    result = llm.scan_params(main_c, ())
+    assert len(result.params) == 2
+    assert result.params[0].name == "THRESHOLD"
+    assert result.params[0].range_hint == "500-1000"
+    assert result.params[1].unit == ""
+
+    # 锚不在 main.c → 域判决 TaskError → 重试仍坏 → LLMError
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "params": [
+                        {
+                            "name": "THRESHOLD",
+                            "label": "循迹阈值",
+                            "old_value": "800",
+                            "anchor": "#define THRESHOLD 999",
+                        }
+                    ]
+                }
+            )
+        )
+    )
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=2))
+    with pytest.raises(LLMError):
+        llm.scan_params(main_c, ())
+    # 域判决错误触发重试（不止一次传输尝试）
+    assert len(transport.calls) >= 2
+
+
+def test_scan_params_user_prompt_sections():
+    """参数识别 prompt 契约：接口段（有才加）+ 当前 main.c 段。"""
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"params": []}))
+    )
+    llm = _llm(transport)
+    llm.scan_params(
+        "#define THRESHOLD 800\n",
+        ("xunji.h 接口：uint16_t xunji_read(void);",),
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "xunji.h 接口" in user_message
+    assert "当前 main.c" in user_message
+    assert "#define THRESHOLD 800" in user_message
+
+    # 空接口：无接口段（main.c 单独也可识别）
+    transport = FakeTransport(body=_api_response(json.dumps({"params": []})))
+    llm = _llm(transport)
+    llm.scan_params("#define THRESHOLD 800\n", ())
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "xunji.h" not in user_message
+    assert "当前 main.c" in user_message
+
+
+def test_scan_params_routes_to_remote():
+    """RoutingLLM：scan_params 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.scan_params("main.c", ())
+
+    assert remote.calls == ["scan_params"]
+    assert local.calls == []
+
+
 def test_analyze_idea_parsing():
     """想法分析解析（工单 idea-fix/01）：kind 必填词表内；reply 必填；
     new_task 仅 new_task 类保留；affected_task_ids 缺省空；非法 → LLMError。"""
@@ -5249,6 +5344,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "report_task_step",
         "analyze_idea",
         "apply_idea_fix",
+        "scan_params",
     }
 )
 
@@ -5277,6 +5373,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
     router.analyze_idea("想法", "题面", "", [], [], (), "main.c", None)
     router.apply_idea_fix("想法", "建议", [], (), "题面", "", "main.c")
+    router.scan_params("main.c", ())
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -5313,6 +5410,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "report_task_step",
         "analyze_idea",
         "apply_idea_fix",
+        "scan_params",
     ]
 
 

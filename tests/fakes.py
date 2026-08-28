@@ -20,6 +20,7 @@ from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
 from contest_generator.llm import BuyDiscussion, IdeaAnalysis, StepReport, TaskDiscussion
 from contest_generator.manifest import ManifestSummary
+from contest_generator.params import ParamItem, ParamList
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
 from contest_generator.task_progress import Task, TaskPlan
@@ -607,6 +608,7 @@ class FakeLLM:
         idea_analysis: IdeaAnalysis | None = None,
         fixed_main_c: str = "",
         global_discussion: TaskDiscussion | None = None,
+        param_list: ParamList | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         self._main_skeleton = main_skeleton
@@ -636,6 +638,20 @@ class FakeLLM:
         )
         self._fixed_main_c = fixed_main_c
         self._global_discussion = global_discussion
+        self._param_list = param_list or ParamList(
+            version=1,
+            generated_at="2024-01-01T00:00:00+0000",
+            params=(
+                ParamItem(
+                    name="THRESHOLD",
+                    label="循迹阈值",
+                    old_value="800",
+                    anchor="#define THRESHOLD 800",
+                    unit="",
+                    range_hint="500-1000",
+                ),
+            ),
+        )
         self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
         self.task_discuss_calls: list[
             tuple[dict[str, Any], str, str, tuple, tuple[str, ...], str, tuple]
@@ -646,6 +662,7 @@ class FakeLLM:
         self.step_report_calls: list[
             tuple[dict[str, Any], dict[str, Any], str, tuple[str, ...]]
         ] = []
+        self.scan_params_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
         self.skeleton_framework_calls: list[object | None] = []
@@ -965,6 +982,14 @@ class FakeLLM:
         )
         return self._step_report
 
+    def scan_params(
+        self,
+        main_c: str,
+        module_interfaces: Sequence[str],
+    ) -> ParamList:
+        self.scan_params_calls.append((main_c, tuple(module_interfaces)))
+        return self._param_list
+
     def analyze_idea(
         self,
         idea: str,
@@ -1226,6 +1251,25 @@ class RecordingLLM:
     ) -> StepReport:
         self._record("report_task_step")
         return StepReport(what_changed="做了什么", user_action="下一步")
+
+    def scan_params(
+        self,
+        main_c: str,
+        module_interfaces: Sequence[str],
+    ) -> ParamList:
+        self._record("scan_params")
+        return ParamList(
+            version=1,
+            generated_at="2024-01-01T00:00:00+0000",
+            params=(
+                ParamItem(
+                    name="THRESHOLD",
+                    label="循迹阈值",
+                    old_value="800",
+                    anchor="#define THRESHOLD 800",
+                ),
+            ),
+        )
 
     def analyze_idea(
         self,

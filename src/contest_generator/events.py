@@ -91,6 +91,16 @@ EVENT_TASK_EXECUTING = "task_executing"
 # verify_result → task_reporting → done。
 EVENT_TASK_REPORTING = "task_reporting"
 
+# 参数速调（工单 param-tune/01）的事件类型：param_scanning = LLM 正在识别
+# main.c 可调数值参数（分钟级阻塞调用）；param_result = 识别结果就绪（done
+# 载荷前发射，载荷由 done 携带）；param_applying = 确定性改值 + 编译验证开始
+# （零 LLM，改值本身瞬时——事件供前端切换「改值并编译中」状态）。端点事件
+# 序列：scan = param_scanning → param_result → done；apply = param_applying →
+# compile_start → fix_start → verify_result → done。
+EVENT_PARAM_SCANNING = "param_scanning"
+EVENT_PARAM_RESULT = "param_result"
+EVENT_PARAM_APPLYING = "param_applying"
+
 # 灵活修正（工单 idea-fix/01）：idea_analyzing = LLM 正在分析用户的新想法 /
 # 问题（分钟级阻塞调用）；idea_result = 分析结果就绪（done 载荷前发射，
 # 载荷由 done 携带）。分析端点事件序列：idea_analyzing → idea_result → done；
