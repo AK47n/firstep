@@ -124,6 +124,12 @@ function tasksSetBusy(busy) {
   tasks.busy = busy;
   ["btn-tasks-plan", "btn-tasks-replan"].forEach((id) => { $(id).disabled = busy; });
 }
+
+/** 全局忙碌闸只读视图（工单 param-tune/02）：参数速调卡（ui/params.js）
+ * 与任务执行/回滚/烧录共用同一闸——两个流程都在写 main.c，互斥防撞车。 */
+function tasksIsBusy() {
+  return tasks.busy;
+}
 /** 乐观置卡状态（工单 05）：点击「做这一步」即刻把该卡在内存态置为 doing 并
  * 重渲染——卡片马上出现「进行中」徽章、执行按钮消失，不等 SSE 首帧。真实状态
  * 后续由 task_executing / done / 失败重读（tasksReload）回填，磁盘态才是真相。 */
@@ -1439,4 +1445,4 @@ window.addEventListener("tasks-invalidated", (event) => {
   resetDraftsArea();
 });
 
-export { tasksPlan, tasksRender, tasksResetMessages };
+export { tasksPlan, tasksRender, tasksResetMessages, tasksIsBusy, tasksSetBusy };

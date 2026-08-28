@@ -96,7 +96,8 @@ class ParamList:
     """参数表（version / generated_at / params）。
 
     params 可为空元组（识别结果无参数 = 合法——「未发现可调参数」，spec 用户
-    故事 6：空表也落盘，前端显示引导文案）。
+    故事 6；空表**不落盘**（run_param_scan 跳过写盘）：无文件 = 未识别过，
+    空表不产生持久化状态，前端以「已识别但无参数」区分两态）。
     """
 
     version: int
@@ -320,6 +321,49 @@ def apply_param_change(main_c: str, param: ParamItem, new_value: str) -> str:
     return main_c[:idx] + new_anchor + main_c[idx + len(anchor):]
 
 
+def _refresh_param_after_apply(
+    param_list: ParamList, name: str, new_value: str, disk_main_c: str
+) -> ParamList:
+    """apply 成功后的参数表回写（纯函数，评审整改：apply 不回写表 → /read
+    重验把刚改成功的参数标「锚已失效」+ 回填旧值，与「参数修改完成」矛盾）。
+
+    规则：找到 name 对应项 → new_anchor = anchor 内 old_value 替换为 new_value
+    （与 apply_param_change 同构，count=1）；new_anchor **逐字节存在于磁盘
+    main.c** 才更新该项（old_value=new_value、anchor=new_anchor）——编译失败
+    的 AI 修复轮可能改写了该值，此时读盘重验失败 → 保持旧表（前端标失效 =
+    诚实提示重新识别）；其余项原样。找不到 name / 无变化 → 返回原对象引用，
+    调用方无需写盘（写盘前判 is 或逐字段比较由调用方决定）。
+    """
+    changed = False
+    items: list[ParamItem] = []
+    for item in param_list.params:
+        if item.name != name:
+            items.append(item)
+            continue
+        new_anchor = item.anchor.replace(item.old_value, new_value, 1)
+        if new_anchor in disk_main_c and new_anchor != item.anchor:
+            items.append(
+                ParamItem(
+                    name=item.name,
+                    label=item.label,
+                    old_value=new_value,
+                    anchor=new_anchor,
+                    unit=item.unit,
+                    range_hint=item.range_hint,
+                )
+            )
+            changed = True
+        else:
+            items.append(item)
+    if not changed:
+        return param_list
+    return ParamList(
+        version=param_list.version,
+        generated_at=param_list.generated_at,
+        params=tuple(items),
+    )
+
+
 def run_param_scan(
     *,
     llm: LLM,
@@ -340,7 +384,10 @@ def run_param_scan(
         # 协议契约：scan_params 返回 ParamList（域判决已在 llm 层完成）；
         # 假 LLM / 未来实现偏离契约时兜底拒绝，不静默写坏表。
         raise TaskError("参数识别结果形状非法（应为参数表）")
-    write_params(output_dir, param_list)
+    if param_list.params:
+        # 空表不落盘（spec 用户故事 6 + 评审整改）：无文件 = 未识别过，
+        # 空表落盘会让 /read 的 valid 重验与「尚未识别」文案两态无法区分。
+        write_params(output_dir, param_list)
     return param_list
 
 
@@ -377,7 +424,7 @@ def run_param_apply(
     backup_id = backup_tree(revise_backup_root(work_root), output_dir)
     (output_dir / "main.c").write_text(updated, encoding="utf-8")
     diff = main_diff(main_c, updated)
-    return verify_compile_tail(
+    result = verify_compile_tail(
         llm=llm,
         platform=platform,
         output_dir=output_dir,
@@ -392,3 +439,32 @@ def run_param_apply(
         main_diff=diff,
         subject="参数修改",
     )
+    _persist_applied_param(output_dir, param, new_value)
+    return result
+
+
+def _persist_applied_param(
+    output_dir: Path, param: ParamItem, new_value: str
+) -> None:
+    """apply 后回写参数表（评审整改）：只更新本次改动的参数（old_value /
+    anchor 同步为磁盘状态），其余参数与顺序原样保留；无表 / 磁盘 main.c 不可读
+    / 锚已不在盘上（修复轮改值）→ 保持旧表不写（前端 /read 标失效 = 诚实）。
+
+    失败不阻断主流程（结果已定；表回写只是让下次 /read 的 valid 重验不误判）。
+    """
+    try:
+        disk_main_c = (output_dir / "main.c").read_text(encoding="utf-8")
+    except OSError:
+        return
+    try:
+        param_list = load_params_file(output_dir)
+    except TaskError:
+        return  # 表损坏：不覆盖坏文件（保持原样，前端标失效/提示重新识别）
+    if param_list is None:
+        return
+    refreshed = _refresh_param_after_apply(param_list, param.name, new_value, disk_main_c)
+    if refreshed is not param_list:
+        try:
+            write_params(output_dir, refreshed)
+        except OSError:
+            pass  # 写盘失败不阻断主流程
