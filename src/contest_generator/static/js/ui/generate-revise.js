@@ -352,7 +352,7 @@ function reviseRenderApplyDone(data) {
     parts.push(reviseRenderDiff(data.diff, { summary: true }));
   }
   if (data.tasks_invalidated) {
-    parts.push('<div class="warn-box unverified" style="margin-top:8px">⚠ 任务清单已作废（模块集变化 → 重生成）：原清单的推进进度 / 备注已与新工程无关。请到下方「任务推进」重新拆解任务。</div>');
+    parts.push('<div class="warn-box unverified" style="margin-top:8px">⚠ 任务清单已作废（模块集变化 → 重生成）：原清单的推进进度 / 备注已与新工程无关。请到下方「逐步深化」重新拆解任务。</div>');
   }
   parts.push('<div class="reason" style="margin-top:8px">备份：<span class="slug">' + esc(data.backup_id || "—")
     + "</span> · 修订时间：" + esc(data.generated_at || "—") + "</div>");

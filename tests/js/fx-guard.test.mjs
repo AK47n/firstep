@@ -121,7 +121,9 @@ const DOMAINS = {
   "task.js": {
     taskStatusLabel: "fn", taskStatusBadgeClass: "fn", taskVerifyLabel: "fn",
     taskScoreRefsText: "fn", taskCardHTML: "fn", tasksGridHTML: "fn",
-    tasksProgressText: "fn", verifyStatusMarkup: "fn", taskCardActions: "fn",
+    tasksProgressText: "fn", tasksOverviewHTML: "fn",
+    taskStepReportHTML: "fn", taskNextActionHTML: "fn",
+    verifyStatusMarkup: "fn", taskCardActions: "fn",
     taskCanFeedback: "fn", taskIterationLabel: "fn", taskIterationsHTML: "fn",
     taskLatestFeedbackNote: "fn",
     taskOrderLabel: "fn", taskDialogAdoptHTML: "fn", taskDialogButtonHTML: "fn",

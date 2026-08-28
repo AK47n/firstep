@@ -8,7 +8,7 @@
 // 本簇状态 = tasks（私有对象）；输出目录复用「修订与深化」卡的已加载上下文
 // （reviseGetDir——跨簇只读 import，主写簇归 generate-revise.js）。
 // 赛道事件词表镜像 events.py：task_planning / task_executing / compile_start /
-// fix_start / verify_result / llm_telemetry / done / error。
+// fix_start / verify_result / task_reporting / llm_telemetry / done / error。
 // 纯件在 fx/task.js（taskStatusLabel / taskCardHTML / tasksGridHTML …）。
 // 依赖：app.js（$ / apiPost / toast）+ fx/core.js（esc）+ fx/llm.js
 //（parseSSE / formatLLMTelemetry）+ fx/task.js + ui/usage.js（recordLLMUsage）
@@ -17,7 +17,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, taskStepReportHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML } from "/js/fx/task.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { scorePoints } from "./generate-recommend.js";  // 当前会话推荐评分点（历史目录为空）
@@ -98,6 +98,11 @@ function tasksRender() {
     grid.classList.remove("hidden");
   }
   $("tasks-progress").textContent = tasksProgressText(plan);
+  // 进度总览（工单 stepwise-deepen/02）：分段进度条 + 状态汇总；空清单隐藏
+  const overview = $("tasks-overview");
+  const overviewHTML = tasksOverviewHTML(plan);
+  overview.innerHTML = overviewHTML;
+  overview.classList.toggle("hidden", !overviewHTML);
   $("btn-tasks-replan").classList.toggle("hidden", !(plan && (plan.tasks || []).length));
 }
 
@@ -200,6 +205,7 @@ async function tasksExecute(taskId, feedback) {
       compile_start: () => { $("tasks-status").textContent = "编译中…"; },
       fix_start: () => { $("tasks-status").textContent = "AI 修复中…（首轮编译未过，自动修复一轮）"; },
       verify_result: () => { $("tasks-status").textContent = "验证结果收集中…"; },
+      task_reporting: () => { $("tasks-status").textContent = "AI 正在总结本步（做了什么 / 接下来做什么）…"; },
       llm_telemetry: (d) => {
         const tel = $("tasks-llm-telemetry");
         tel.textContent = formatLLMTelemetry(d);
@@ -241,11 +247,15 @@ function tasksRenderResult(taskId, data) {
   // 反馈轮提示：最近一轮若是上板反馈，把用户反馈原文展示在结果面板（追溯）
   // ——纯函数单源 fx/task.js taskLatestFeedbackNote（评审整改：胶水层不拼 HTML）
   const feedbackNote = taskLatestFeedbackNote(task);
+  // 步骤报告（工单 stepwise-deepen/02）：AI 本步「做了什么 + 接下来你要做什么」
+  //（含接线/上板指引）；降级空串由纯函数侧渲染中文兜底
+  const stepReport = taskStepReportHTML(task);
   $("tasks-grid").insertAdjacentHTML("afterend",
     '<div class="item" id="tasks-result" style="margin-top:10px">'
     + '<div class="head"><span class="slug">' + esc(task.id || taskId) + " · " + esc(task.title || "") + " 执行结果</span> " + markup.badge + "</div>"
     + feedbackNote
     + '<div class="reason">' + markup.detail + "</div>"
+    + stepReport
     + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
     + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '" data-task="' + esc(task.id || taskId) + '">回滚到本任务执行前</button>' : "")
     + "</div>"
@@ -517,6 +527,8 @@ window.addEventListener("revise-context-loaded", (event) => {
     taskDialogs.clear();
     $("tasks-grid").classList.add("hidden");
     $("tasks-grid").innerHTML = "";
+    const overview = $("tasks-overview");
+    if (overview) { overview.innerHTML = ""; overview.classList.add("hidden"); }
     $("tasks-progress").textContent = "";
     $("btn-tasks-replan").classList.add("hidden");
     $("tasks-status").textContent = "";
@@ -540,6 +552,8 @@ window.addEventListener("tasks-invalidated", (event) => {
   $("tasks-grid").innerHTML = "";
   const stale = $("tasks-result");
   if (stale) stale.remove();
+  const overview = $("tasks-overview");
+  if (overview) { overview.innerHTML = ""; overview.classList.add("hidden"); }
   $("tasks-progress").textContent = "";
   $("btn-tasks-replan").classList.add("hidden");
   $("tasks-status").textContent = "";
