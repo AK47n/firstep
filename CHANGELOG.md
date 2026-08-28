@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a076983ed96931bdc3cc77bec46fed623578007a -->
+<!-- changelog-auto: last-commit=d7aed3745433520b796400320207d8c689d7efb9 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 13:49 任务卡烧录/02：CONTEXT.md 补任务卡烧录词条（前端三处入口）+ 全量回归（pytest 2646 + JS 542）（工单 resolved）
 - 13:58 修复：指引「去设置页配置」展开工具链卡并滚动到烧录工具输入框（flash-guide-settings/03）
 - 18:20 修复：Toast 提示框下移避开吸顶栏（toast-offset/01）
+- 18:35 逐步深化：做完一步自动提示「下一步」并滚动高亮下一张待执行卡（step-next-guide/01-02）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
