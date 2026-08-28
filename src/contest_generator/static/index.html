@@ -463,18 +463,26 @@
                      white-space: nowrap; }
   .btn-draft-analyze, .btn-draft-delete, .btn-draft-all { font-size: 12px;
                      padding: 1px 8px; }
-  /* 参数速调（工单 param-tune/02）：参数表行（名称 / 含义 / 改值输入 /
-     建议范围 / 应用按钮）+ 失效标记；行内横排，变量色零新硬编码 */
-  .param-table { border: 1px solid var(--border); border-radius: 8px;
-                     border-left: 3px solid var(--accent); padding: 4px 8px;
-                     background: var(--panel-2); }
-  .param-row { display: flex; align-items: center; gap: 8px; padding: 4px 0;
-                     border-bottom: 1px dashed var(--border); flex-wrap: wrap; }
-  .param-row:last-of-type { border-bottom: none; }
-  .param-row .slug { min-width: 90px; font-family: var(--mono); }
-  .param-label { flex: 1; color: var(--text); }
-  .param-input { width: 110px; font-family: var(--mono); }
-  .param-hint { font-size: 12px; }
+  /* 参数速调（工单 param-tune/02 + param-grid/01）：参数表网格卡片流
+     （名称 / 含义截断 / 改值输入 / 建议范围 / 应用按钮）+ 失效标记；
+     响应式（宽屏 3 列 / 窄屏 2 列 / 手机 1 列自适应），变量色零新硬编码 */
+  .param-grid { display: grid; grid-template-columns:
+                     repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+  .param-card { border: 1px solid var(--border); border-radius: 8px;
+                     padding: 8px 10px; background: var(--panel-2);
+                     display: flex; flex-direction: column; gap: 6px; }
+  .param-card-head { display: flex; align-items: baseline; gap: 6px;
+                     min-width: 0; }
+  .param-card-head .slug { font-family: var(--mono); color: var(--accent);
+                     font-size: 12px; white-space: nowrap; }
+  .param-card-head .param-label { flex: 1; min-width: 0; font-size: 13px;
+                     color: var(--text); display: block; white-space: nowrap;
+                     overflow: hidden; text-overflow: ellipsis; }
+  .param-card-body { display: flex; gap: 6px; }
+  .param-card-body .param-input { flex: 1; min-width: 0;
+                     font-family: var(--mono); }
+  .param-card .btn-params-apply { white-space: nowrap; }
+  .param-hint { font-size: 12px; color: var(--muted); }
   .param-stale { opacity: .65; }
   .param-stale-badge { background: var(--warn-dim); color: var(--warn);
                      font-size: 12px; padding: 1px 8px; }
