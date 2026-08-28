@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0bfb2056eb1aa02f56252e01238ed5ec7e4fb2d5 -->
+<!-- changelog-auto: last-commit=0d1663fec262be137f785a7139f0f15bbe3195dc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:18 任务商量与序号（task-chat/01-03）：每卡多轮对话区 + 对话结论采纳注入执行 + 建议序号
 - 00:26 任务商量评审整改：序号补「（建议顺序）」、采纳按钮补 data-task-adopt、discuss 去掉 message 双通道（单通道 = history 末条）+ 工单 resolved + CONTEXT.md 词条
 - 12:31 逐步深化/01：步骤报告 LLM 操作（report_task_step）+ 轮次字段 what_changed/user_action + task_reporting 事件（工单 resolved）
+- 12:35 逐步深化/02：进度总览（分段条+汇总）+ 步骤报告（做了什么/接下来做什么）+ 卡片下一步要做 + 入口改「逐步深化（任务推进）」（工单 resolved）
 
 ## 2026-08-27
 - 00:08 main.c 预览工具迁 ui/generate-mainc.js（阶段 2 工单 14）
