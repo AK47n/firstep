@@ -2663,6 +2663,59 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         write_task_plan(output_dir, updated)
         return {"plan": updated.to_dict()}
 
+    @app.post("/api/tasks/idea/drafts/read")
+    @_map_errors
+    def tasks_idea_drafts_read(payload: dict) -> dict:
+        """草稿箱读取（同步端点，工单 idea-suite/05）：{output_dir} → {drafts}。
+
+        无文件 = []（不 400——照全局商量 chat/read 先例）；坏 JSON → 400
+        中文（宁拒收不吞）。"""
+        from .drafts import read_drafts
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        return {
+            "drafts": [draft.to_dict() for draft in read_drafts(output_dir).drafts]
+        }
+
+    @app.post("/api/tasks/idea/drafts/add")
+    @_map_errors
+    def tasks_idea_drafts_add(payload: dict) -> dict:
+        """存草稿（同步端点，工单 idea-suite/05）：{output_dir, text} → {drafts}。
+
+        text 空 / 纯空白 → 400；同文本已存在 → 不重复插入（去重，返回原
+        集合）；落盘 = 原子写（.tmp → replace——增删草稿是小步操作，原子写
+        已保证不写碎文件，不再另设 .bak；对照清单文件 .bak 仅用于整份覆盖
+        场景）。"""
+        from .drafts import add_draft, read_drafts, write_drafts
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        text = payload.get("text")  # 非空校验在 add_draft（照 dialog-adopt 先例）
+        updated = add_draft(read_drafts(output_dir), text)
+        write_drafts(output_dir, updated)
+        return {"drafts": [draft.to_dict() for draft in updated.drafts]}
+
+    @app.post("/api/tasks/idea/drafts/delete")
+    @_map_errors
+    def tasks_idea_drafts_delete(payload: dict) -> dict:
+        """删草稿（同步端点，工单 idea-suite/05）：{output_dir, id} → {drafts}。
+
+        未知 id 静默（幂等——双击删除按钮不是错误）；id 非字符串 → 400。"""
+        from .drafts import delete_draft, read_drafts, write_drafts
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        draft_id = payload.get("id")
+        if not isinstance(draft_id, str) or not draft_id.strip():
+            raise TaskError("id 必须是非空字符串")
+        updated = delete_draft(read_drafts(output_dir), draft_id)
+        write_drafts(output_dir, updated)
+        return {"drafts": [draft.to_dict() for draft in updated.drafts]}
+
     @app.post("/api/tasks/idea/fix")
     @_map_errors
     def tasks_idea_fix(payload: dict) -> StreamingResponse:
