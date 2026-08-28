@@ -137,7 +137,7 @@ const DOMAINS = {
     taskResourcesHTML: "fn", resourceIsHardware: "fn", resourcesOverviewHTML: "fn",
     scoreRefsOverviewHTML: "fn",
     taskChecklistHTML: "fn", checklistStateKey: "fn",
-    taskErrorsHTML: "fn",
+    taskErrorsHTML: "fn", tasksDoneCount: "fn",
   },
   "flash.js": {
     flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",
@@ -163,6 +163,11 @@ const DOMAINS = {
   "workflow.js": {
     wfNum: "fn", formatWorkflowUsage: "fn", formatWorkflowCost: "fn",
     formatWorkflowSummary: "fn", formatWorkflowCall: "fn",
+  },
+  "revise-tabs.js": {
+    REVISE_TABS: "object",
+    revisePanelFor: "fn", reviseTabsHTML: "fn", reviseTabBadge: "fn",
+    reviseTabNext: "fn",
   },
 };
 

@@ -504,6 +504,19 @@
                      font-size: 12px; padding: 1px 8px; }
   .btn-params-apply { font-size: 12px; padding: 2px 10px; }
   .btn-params-rollback { font-size: 12px; padding: 2px 10px; }
+  /* 参数卡呈现优化（工单 step11-tabs-ui/03）：单位 chip / 「当前值」小标签 /
+     卡脚（↺ 恢复旧值 + 范围/单位提示行）——金属性与提示弱化为 muted 层级 */
+  .param-card-head .param-unit-chip { font-size: 11px; color: var(--muted);
+      background: var(--panel); border: 1px solid var(--border);
+      padding: 0 7px; border-radius: 999px; white-space: nowrap; }
+  .param-card-body .param-current-label { font-size: 10.5px; color: var(--muted);
+      letter-spacing: .04em; align-self: center; white-space: nowrap; }
+  .param-card-foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .param-card-foot .param-hint { flex: 1; min-width: 0; display: flex; gap: 8px;
+      flex-wrap: wrap; }
+  .btn-params-reset { font-size: 11.5px; padding: 1px 8px; color: var(--muted);
+      background: transparent; border: 1px dashed var(--border); white-space: nowrap; }
+  .btn-params-reset:hover { color: var(--text); border-color: var(--accent); }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
   .chip.add { background: var(--ok-dim); color: var(--ok-bright); }
   .chip.del { background: var(--danger-dim); color: var(--danger); }
@@ -1310,6 +1323,11 @@
                       border-color: rgba(0, 212, 255, .45); }
   .revise-tab-badge.hidden { display: none; }
   .revise-panel { margin-top: 10px; }
+  /* 第11步页签面板空态引导（工单 step11-tabs-ui/02 评审整改）：未加载上下文时
+     提示先去「修订」页签加载目录；加载后由各簇 JS 隐藏。 */
+  .revise-empty-hint { padding: 10px 14px; border: 1px dashed var(--border);
+      border-radius: 10px; color: var(--muted); font-size: 12.5px;
+      background: var(--panel-2); margin-top: 12px; }
   /* 逐步深化进度总览（工单 stepwise-deepen/02）：分段进度条——已验证绿 /
      进行中青 / 待上板黄 / 失败红 / 待做灰 / 已跳过暗；汇总文案在 fx/task.js */
   .tasks-overview-bar { display: flex; height: 8px; border-radius: 99px;
@@ -2003,6 +2021,9 @@
       </section>
 
       <section id="revise-panel-tasks" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-tasks">
+      <!-- 空态引导（工单 step11-tabs-ui/02 评审整改）：未加载上下文时的面板引导，
+           加载后由各簇 JS 隐藏（tasks-empty-hint ↔ tasks.outputDir）。 -->
+      <div id="tasks-empty-hint" class="revise-empty-hint">尚未加载输出目录——请先在「修订」页签加载当前会话或历史目录。</div>
       <!-- 逐步深化（工单 stepwise-deepen/01-03）：AI 拆解任务清单 → 逐任务执行
            → 每步编译验证 → 步骤报告（AI 做了什么 + 接下来你要做什么，含接线/上板
            指引）→ 上板反馈。上下文复用上方「上下文入口」的加载结果。 -->
@@ -2051,6 +2072,7 @@
       </section>
 
       <section id="revise-panel-params" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-params">
+        <div id="params-empty-hint" class="revise-empty-hint">先到「修订」页签加载输出目录，再识别参数。</div>
         <div class="card-group" style="margin-top:12px">
           <div class="card-group-title">⚙️ 参数速调（改一个数，不用重跑整步）</div>
           <div class="row">
@@ -2065,6 +2087,7 @@
       </section>
 
       <section id="revise-panel-delivery" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-delivery">
+        <div id="delivery-empty-hint" class="revise-empty-hint">先到「修订」页签加载输出目录，再打开工程 / 检查 / 打包。</div>
         <div class="card-group" style="margin-top:12px">
           <div class="card-group-title">🚀 交付（打开工程 / 检查 / 打包）</div>
           <div class="row" id="delivery-actions"></div>

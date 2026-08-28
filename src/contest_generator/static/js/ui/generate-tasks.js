@@ -21,7 +21,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML, tasksDoneCount } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
@@ -131,6 +131,21 @@ function tasksSetBusy(busy) {
 function tasksIsBusy() {
   return tasks.busy;
 }
+
+/** 任务推进徽章快照（工单 step11-tabs-ui/02）：已做（verified|skipped）/ 总数；
+ * 无清单 = 0/0（页签徽章不显示）。计数复用 fx/task.js tasksDoneCount（评审
+ * 整改：与进度文本同口径单源）。 */
+export function tasksSummary() {
+  const planTasks = (tasks.plan || {}).tasks || [];
+  return { done: tasksDoneCount(tasks.plan), total: planTasks.length };
+}
+
+/** 任务推进面板空态引导（工单 step11-tabs-ui/02 评审整改）：未加载输出目录时
+ * 显示「先去修订页签加载目录」提示；目录就绪后隐藏。 */
+function updateTasksEmptyHint() {
+  const hint = $("tasks-empty-hint");
+  if (hint) hint.classList.toggle("hidden", !!tasks.outputDir);
+}
 /** 乐观置卡状态（工单 05）：点击「做这一步」即刻把该卡在内存态置为 doing 并
  * 重渲染——卡片马上出现「进行中」徽章、执行按钮消失，不等 SSE 首帧。真实状态
  * 后续由 task_executing / done / 失败重读（tasksReload）回填，磁盘态才是真相。 */
@@ -239,6 +254,9 @@ function tasksRender() {
   scoreBox.innerHTML = scoreHTML;
   scoreBox.classList.toggle("hidden", !scoreHTML);
   $("btn-tasks-replan").classList.toggle("hidden", !(plan && (plan.tasks || []).length));
+  updateTasksEmptyHint();
+  // 状态徽章（step11-tabs-ui/02）：渲染后广播任务推进状态快照（页签徽章就地刷新）
+  window.dispatchEvent(new CustomEvent("step11-state-changed"));
 }
 
 function tasksResetMessages() {
@@ -1525,6 +1543,9 @@ function clearTasksPanel() {
   if (resBox) { resBox.innerHTML = ""; resBox.classList.add("hidden"); }
   $("tasks-progress").textContent = "";
   $("btn-tasks-replan").classList.add("hidden");
+  updateTasksEmptyHint();
+  // 状态徽章（step11-tabs-ui/02）：清空路径未走 tasksRender，也要广播重置快照
+  window.dispatchEvent(new CustomEvent("step11-state-changed"));
 }
 
 // 跨簇通知（revise 上下文入口加载后广播）：目录不同 = 旧清单与当前目录无关，

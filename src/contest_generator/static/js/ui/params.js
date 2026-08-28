@@ -49,6 +49,19 @@ function paramsSetBusy(busy) {
   paramsRender();
 }
 
+/** 参数速调徽章快照（工单 step11-tabs-ui/02）：已识别参数条数（未识别 = 0）。 */
+export function paramsSummary() {
+  return { count: (paramsState.plan || []).length };
+}
+
+/** 面板空态引导（step11-tabs-ui/02 评审整改）：未加载输出目录时显示「先去
+ * 修订页签加载目录」提示（与 delivery/tasks 同判据 dir——目录就绪后隐藏；
+ * 未识别场景由网格空态文案承接，不混用）。 */
+function updateParamsEmptyHint() {
+  const hint = $("params-empty-hint");
+  if (hint) hint.classList.toggle("hidden", !!paramsDir());
+}
+
 /** 参数表渲染：plan 空（未识别）→ 引导文案（hidden 表格）；有表 → 表格。
  * 应用后重读磁盘（old_value 已变 + valid 重验）也走这里。emptyScan =
  * 已识别但无参数（scanned 两态分支，评审整改——空表不落盘靠 /read 标志）。 */
@@ -60,6 +73,20 @@ function paramsRender() {
     emptyScan: paramsState.scanned,
   });
   grid.classList.toggle("hidden", !paramsState.plan);
+  updateParamsEmptyHint();
+  // 状态徽章（step11-tabs-ui/02）：参数表任何变化（识别/应用/重读）后广播快照
+  window.dispatchEvent(new CustomEvent("step11-state-changed"));
+}
+
+/** 恢复旧值（工单 step11-tabs-ui/03）：纯前端把输入框复位为识别时的原值，
+ * 不触发 API / 不写盘——点「应用」才真正写入并验证。 */
+function paramsResetInput(name) {
+  const item = (paramsState.plan || []).find((p) => String(p.name) === name);
+  const input = item ? $("params-input-" + name) : null;
+  if (!input || item.old_value === undefined || item.old_value === null) return;
+  input.value = String(item.old_value);
+  input.focus();
+  toast("info", "输入框已恢复为原值（未保存——点「应用」才会写入并编译验证）");
 }
 
 /** 结果面板渲染（应用成功后插入；失败清空）。 */
@@ -81,6 +108,9 @@ function paramsReset() {
   const msg = $("params-msg");
   if (msg) msg.textContent = "";
   paramsStatus("");
+  updateParamsEmptyHint();
+  // 状态徽章（step11-tabs-ui/02）：重置路径未走 paramsRender，也要广播快照
+  window.dispatchEvent(new CustomEvent("step11-state-changed"));
 }
 
 /** 重读磁盘参数表（目录加载 / 应用成功后回填）：/read 带 valid 重验——
@@ -248,6 +278,21 @@ $("btn-params-scan").addEventListener("click", () => paramsScan());
 $("params-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-params-apply");
   if (btn && btn.dataset.paramName) paramsApply(btn.dataset.paramName);
+  else {
+    const reset = event.target.closest(".btn-params-reset");
+    if (reset && reset.dataset.paramName) paramsResetInput(reset.dataset.paramName);
+  }
+});
+// 输入框内 Enter 直接应用（工单 step11-tabs-ui/03）：values 输入完回车即走
+// paramsApply——与点「应用」同一条路径（busy 守卫 / 空值校验在 apply 内）。
+$("params-grid").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  const input = event.target.closest(".param-input");
+  if (!input) return;
+  event.preventDefault();
+  const card = input.closest(".param-card");
+  const name = card && card.dataset.paramName;
+  if (name) paramsApply(name);
 });
 $("params-result").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-params-rollback");

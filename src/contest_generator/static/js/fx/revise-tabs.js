@@ -64,3 +64,9 @@ export function reviseTabNext(index, dir, count) {
   const i = Number.isFinite(Number(index)) ? Math.floor(Number(index)) : 0;
   return ((i + dir) % n + n) % n;
 }
+
+// window 桥（fx 模块通用兼容层，见 fx/core.js：44）：供 index.html 直调 /
+// 旧脚本内联引用的同名全局；node 测试环境无 window。
+if (typeof window !== "undefined") {
+  Object.assign(window, { reviseTabsHTML, reviseTabBadge, reviseTabNext, revisePanelFor });
+}
