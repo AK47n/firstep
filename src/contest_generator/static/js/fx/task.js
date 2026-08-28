@@ -502,6 +502,79 @@ export function verifyStatusMarkup(data, fallbacks) {
   };
 }
 
+/** 全局商量消息行（工单 idea-suite/02）：用户 / AI 分行（复用
+ * .sugg-msg 样式）+ at 时间；AI 回复挂三按钮——转成任务 / 转成修正（
+ * data-global-action = task|fix，data-global-text = 该条全文，供胶水层走
+ * 既有 idea 漏斗通道）、采纳为全局结论（adopt，写工程级注记）。
+ * 文本进 data 属性前必须 esc（属性上下文防注入）。 */
+function globalChatMessageHTML(msg) {
+  const isAi = msg.role === "assistant";
+  const text = String(msg.content);
+  const roleLabel = isAi ? "AI" : "我";
+  const actions = isAi
+    ? ' <button class="btn-global-chat-action" data-global-action="task"'
+      + ' data-global-text="' + esc(text) + '">转成任务</button>'
+      + ' <button class="btn-global-chat-action" data-global-action="fix"'
+      + ' data-global-text="' + esc(text) + '">转成修正</button>'
+      + ' <button class="btn-global-chat-action" data-global-action="adopt"'
+      + ' data-global-text="' + esc(text) + '">采纳为全局结论</button>'
+    : "";
+  const at = msg.at ? ' <span class="muted">' + esc(String(msg.at)) + "</span>" : "";
+  return '<div class="sugg-msg ' + (isAi ? "ai" : "user") + '">'
+    + '<span class="sugg-msg-role">' + roleLabel + "</span>：" + esc(text)
+    + actions + at + "</div>";
+}
+
+/** 全局商量输入行（send 语义共享：输入框 + 发送按钮；busy 禁用防并发）。
+ * draft = 输入框未发送内容（重渲染不丢）；busy 时按钮文案「回应中…」。 */
+function globalChatInputHTML(s) {
+  return '<div class="sugg-discuss-row"><input id="tasks-global-chat-input"'
+    + ' class="sugg-discuss-input" placeholder="针对整个工程问 AI——如：整体架构要不要加滤波？赛道策略怎么取舍？…"'
+    + ' value="' + esc(s.draft || "") + '">'
+    + '<button class="btn-global-chat-send"' + (s.busy ? " disabled" : "") + ">"
+    + (s.busy ? "回应中…" : "发送") + "</button></div>";
+}
+
+/** 全局工程级商量区（工单 idea-suite/02）：多轮对话历史落盘（后端
+ * /api/tasks/idea/chat/*，.contest_idea_chat.json）；每条 AI 回复挂「转成
+ * 任务 / 转成修正 / 采纳为全局结论」；st = {open, busy, chat, pending, draft}
+ * ——chat = 后端 {messages:[{role,content,at}], note}（落盘真相）；pending =
+ * 发送中尚未确认的用户消息（乐观展示，成功后被服务端 chat 替换）；未展开 =
+ * 空串。历史全量渲染（转义）；空历史 + 无 pending → 引导文案。 */
+export function globalChatHTML(st) {
+  const s = st || {};
+  if (!s.open) return "";
+  const messages = ((s.chat && s.chat.messages) || []);
+  const lines = messages.map(globalChatMessageHTML).join("");
+  const pending = s.pending
+    ? '<div class="sugg-msg user"><span class="sugg-msg-role">我</span>：'
+      + esc(String(s.pending)) + "</div>"
+    : "";
+  const inner = (lines || pending)
+    ? '<div class="sugg-discuss-msgs">' + lines + pending + "</div>"
+    : '<div class="sugg-msg muted">这是针对整个工程的问题区（不绑任务卡）：'
+      + "架构取舍 / 策略权衡 / 方案对不对，都能连续追问。AI 先给分析建议，"
+      + "确认后可把回复「转成任务 / 转成修正」落地，或「采纳为全局结论」——"
+      + "采纳后的结论会注入之后每一步任务执行与直接修正。</div>";
+  return '<div class="task-dialog-box">' + inner
+    + globalChatInputHTML(s)
+    + (s.busy ? '<div class="sugg-discuss-note">AI 回应中…（分钟级调用，请等待）</div>' : "")
+    + "</div>";
+}
+
+/** 全局结论徽标（工单 idea-suite/02）：chat.note 非空 → 「工程级全局结论」
+ * 徽标 + 摘要（截 30 字）+ 清除按钮（data-global-action="clear"——复用聊天
+ * 区按钮委托，挂在外层容器）；空 note = 空串（不渲染）。 */
+export function globalNoteBadgeHTML(note) {
+  if (!note || !String(note).trim()) return "";
+  const text = String(note).trim();
+  return '<div class="muted" style="margin-top:4px">'
+    + '<span class="badge ok">工程级全局结论</span> '
+    + '<span title="' + esc(text) + '">' + esc(truncate(text, 30)) + "</span>"
+    + ' <button class="btn-global-chat-action" data-global-action="clear">清除</button>'
+    + "</div>";
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
@@ -513,5 +586,6 @@ if (typeof window !== "undefined") {
     nextTaskHint, taskNextHintHTML,
     ideaResultHTML, taskNeedsRedoBadge,
     taskStepReportBlocksHTML,
+    globalChatHTML, globalNoteBadgeHTML,
   });
 }
