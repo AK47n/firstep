@@ -4288,6 +4288,80 @@ def test_discuss_global_idea_routes_to_remote():
     assert local.calls == []
 
 
+def test_discuss_params_parsing():
+    """参数速调咨询解析（工单 params-chat-ai/01）：reply 必填；空/缺失 →
+    重试后仍坏 → LLMError。"""
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps({"reply": "先调 THRESHOLD——循迹阈值偏低会丢线，建议向 600~900 试。"})
+        )
+    )
+    llm = _llm(transport)
+    result = llm.discuss_params(
+        "巡线小车题面",
+        [{"name": "THRESHOLD", "label": "循迹阈值", "old_value": "800", "valid": True}],
+        {"version": 1, "tasks": []},
+        [("user", "直行跑偏了调哪个？")],
+    )
+    assert result.reply == "先调 THRESHOLD——循迹阈值偏低会丢线，建议向 600~900 试。"
+
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": ""})))
+    llm = _llm(transport, retry_budget=RetryBudget(max_elapsed_seconds=2, max_attempts=1))
+    with pytest.raises(LLMError):
+        llm.discuss_params("题面", [], None, [("user", "你好")])
+
+
+def test_discuss_params_user_prompt_sections():
+    """参数速调咨询 prompt 契约（工单 params-chat-ai/01）：题面 / 参数清单
+    逐条（名字+含义 / 当前值 / 单位 / 建议范围 / 有效·已失效）/ 任务清单现状 /
+    历史（用户：AI：逐条）+ 最新消息段；空清单 → 引导识别文案。"""
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": "好"})))
+    llm = _llm(transport)
+    llm.discuss_params(
+        "2024 巡线小车",
+        [
+            {"name": "THRESHOLD", "label": "循迹阈值", "old_value": "800", "unit": "",
+             "range_hint": "600~900", "valid": True},
+            {"name": "SPEED", "label": "车速", "old_value": "30", "unit": "%",
+             "range_hint": "20~60", "valid": False},
+        ],
+        {"version": 1, "tasks": [{"id": "t1", "title": "循迹", "status": "verified"}]},
+        [("user", "直行跑偏调哪个？"), ("assistant", "先看 THRESHOLD"),
+         ("user", "THRESHOLD 改到多少？")],
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "2024 巡线小车" in user_message
+    assert "THRESHOLD（循迹阈值）" in user_message
+    assert "当前值：800" in user_message
+    assert "建议范围：600~900" in user_message
+    assert "状态：有效" in user_message
+    assert "SPEED（车速）" in user_message
+    assert "单位：%" in user_message
+    assert "状态：已失效" in user_message
+    assert "t1｜循迹｜已验证｜依赖：-" in user_message  # 任务清单现状段
+    assert "用户：" in user_message and "AI：" in user_message
+    assert "THRESHOLD 改到多少？" in user_message
+
+    # 空清单 → 引导识别文案（恒渲染段）
+    transport = FakeTransport(body=_api_response(json.dumps({"reply": "好"})))
+    llm = _llm(transport)
+    llm.discuss_params("题面", [], None, [("user", "跑偏了")])
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "尚未识别可调参数" in user_message
+
+
+def test_discuss_params_routes_to_remote():
+    """RoutingLLM：discuss_params 走 remote（本地方法集外）。"""
+    remote = RecordingLLM("remote")
+    local = RecordingLLM("local")
+    router = RoutingLLM(remote=remote, local=local)
+
+    router.discuss_params("题面", [], None, [("user", "你好")])
+
+    assert remote.calls == ["discuss_params"]
+    assert local.calls == []
+
+
 def test_execute_task_global_note_injection():
     """工程级全局结论注入（工单 idea-suite/01）：global_note 非空 → prompt 含
     【工程级全局结论】段；空 → 无该段（既有形状逐字节不变）。"""
@@ -5382,6 +5456,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "discuss_buy_options",
         "discuss_task",
         "discuss_global_idea",
+        "discuss_params",
         "report_task_step",
         "analyze_idea",
         "apply_idea_fix",
@@ -5411,6 +5486,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.discuss_buy_options("题面", "需求", "stm32", [], [])
     router.discuss_task({}, "题面", "", [], [], "main.c", [])
     router.discuss_global_idea("题面", "", [], [], (), "main.c", None, "", [])
+    router.discuss_params("题面", [], None, [("user", "你好")])
     router.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
     router.analyze_idea("想法", "题面", "", [], [], (), "main.c", None)
     router.apply_idea_fix("想法", "建议", [], (), "题面", "", "main.c")
@@ -5448,6 +5524,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "discuss_buy_options",
         "discuss_task",
         "discuss_global_idea",
+        "discuss_params",
         "report_task_step",
         "analyze_idea",
         "apply_idea_fix",

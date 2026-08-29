@@ -417,6 +417,28 @@ TASK_GLOBAL_DISCUSS_SYSTEM_PROMPT = (
     '只输出 JSON 对象：{"reply": "回复文本"}；reply 必须非空、用中文。'
 )
 
+# 参数速调咨询（工单 params-chat-ai/01）：学生不知道现象该调哪个参数时来问
+# → AI 嵌入式 C 调参顾问（结合当前已识别参数清单 + 题面 + 任务清单现状）。
+# 立场 = 顾问非执行者：只推荐参数与方向，改值由学生在参数卡上完成。
+# 只输出 JSON。
+PARAMS_CHAT_SYSTEM_PROMPT = (
+    "你是嵌入式 C 调参顾问。学生正在就当前工程的**参数调整**做多轮咨询"
+    "（调试中不知道现象该调哪个参数时来找你）。你会拿到当前工程已识别的"
+    "可调参数清单（参数名 / 中文含义 / 当前值 / 单位 / 建议范围 / 是否仍有效）、"
+    "赛题与任务清单现状。回答规则："
+    "一、先判断症状是否足够；信息不足时反问关键问题（现象、触发条件、期望效果）。"
+    "二、推荐时**必须原样引用参数清单中真实存在的参数名**（如 THRESHOLD），"
+    "每条回复可点名多个参数并按优先级排序（先调哪个、再调哪个、为什么）。"
+    "三、每个推荐的参数说明：理由（症状 → 参数关联）、调整方向（增大 / 减小）、"
+    "建议范围（优先用清单里的建议范围；没有则给粗略区间并标注「试」）、"
+    "验证方法（改完点「应用」→ 编译验证 → 上板复测）。"
+    "四、参数清单为空或未识别时：明确告诉学生还没识别参数，建议先点"
+    "「识别 main.c 参数」；若症状更像代码逻辑 / 传感器 / 连接问题而非参数问题，"
+    "如实说明并建议检查方向，不要硬凑参数。"
+    "五、只做咨询，不直接改数值；不替学生决定必须改哪项，只给推荐与理由。"
+    '只输出 JSON 对象：{"reply": "回复文本"}；reply 必须非空、用中文。'
+)
+
 # 想法直接修正（工单 idea-fix/01）：按用户想法做直接修正——只改想法相关的
 # 实现，其余原样保留；不实现清单里的新功能（那走任务卡）。文本模式输出
 # main.c 全文（与任务执行同形状，prompt 约束同款「只改指定内容」）。
@@ -1475,6 +1497,14 @@ class LLM(Protocol):
         main_c: str,
         plan: Mapping[str, Any] | None,
         global_note: str,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion: ...
+
+    def discuss_params(
+        self,
+        problem_text: str,
+        params: Sequence[Mapping[str, Any]],
+        plan: Mapping[str, Any] | None,
         history: Sequence[tuple[str, str]],
     ) -> TaskDiscussion: ...
 
@@ -2810,6 +2840,38 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
+    def discuss_params(
+        self,
+        problem_text: str,
+        params: Sequence[Mapping[str, Any]],
+        plan: Mapping[str, Any] | None,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        """参数速调咨询（工单 params-chat-ai/01）：一轮调参诊断回复（调参顾问）。
+
+        输入 = 题面 + 当前可调参数清单（逐条含 valid——锚失效标「已失效」，
+        引导 AI 不推荐该参数）+ 任务清单现状 + 讨论历史（用户 / AI 交替，
+        最后一条 user = 本轮消息——单通道防错位，与全局商量同款）；输出 JSON
+        由解析器校验：reply 空 / 缺失 = 整次重问（_retry_parse，诊断语境
+        回复为空毫无价值）。
+        """
+
+        def parse(content: str) -> TaskDiscussion:
+            data = extract_module_selection_data(content)
+            reply = data.get("reply")
+            if not isinstance(reply, str) or not reply.strip():
+                raise LLMError("参数速调咨询回复为空：模型未输出 reply 或为空串")
+            return TaskDiscussion(reply=reply.strip())
+
+        return self._retry_parse(
+            system_prompt=PARAMS_CHAT_SYSTEM_PROMPT,
+            user_prompt=_params_chat_user_prompt(problem_text, params, plan, history),
+            parse=parse,
+            label="参数速调商量",
+            operation="discuss_params",
+            json_mode=True,
+        )
+
     def report_task_step(
         self,
         task: Mapping[str, Any],
@@ -3659,6 +3721,16 @@ class RoutingLLM:
             global_note,
             history,
         )
+
+    def discuss_params(
+        self,
+        problem_text: str,
+        params: Sequence[Mapping[str, Any]],
+        plan: Mapping[str, Any] | None,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        # 参数速调咨询走 remote（讨论质量优先，不进本地方法集）
+        return self._remote.discuss_params(problem_text, params, plan, history)
 
     def report_task_step(
         self,
@@ -4619,6 +4691,51 @@ def _global_idea_user_prompt(
             "【工程级全局结论（学生已采纳的先前商讨结论，回复须与之保持一致）】",
             _truncate_content(global_note),
         ]
+    history_text = _discuss_history_segment(history)
+    if history_text:
+        lines += ["", "【讨论历史（旧 → 新）】", history_text]
+    lines += ["", "【你的最新消息】", history[-1][1] if history else ""]
+    return "\n".join(lines)
+
+
+def _params_chat_user_prompt(
+    problem_text: str,
+    params: Sequence[Mapping[str, Any]],
+    plan: Mapping[str, Any] | None,
+    history: Sequence[tuple[str, str]],
+) -> str:
+    """参数速调咨询的 user 消息（工单 params-chat-ai/01）：题面 + 当前可调
+    参数清单（AI 只能推荐这里的参数名——逐条 name/label/当前值/单位/建议范围/
+    有效性）+ 任务清单现状 + 讨论历史（旧 → 新）+ 用户最新一轮消息。各段截断
+    带标注（_truncate_content / _idea_plan_summary / _discuss_history_segment
+    先例）。
+
+    历史为单通道：最后一条 user = 本轮消息（无独立 message 参数——与任务
+    商量 / 全局商量同款防错位设计）。参数清单恒渲染：空 = 明确「未识别」，
+    引导 AI 如实说明并建议下一步，而非硬凑推荐。
+    """
+    lines = ["【赛题】", _truncate_content(problem_text)]
+    lines += ["", "【当前可调参数清单（AI 只能推荐这里的参数名，请原样引用）】"]
+    param_items = [p for p in params if isinstance(p, Mapping)]
+    if not param_items:
+        lines.append(
+            "（尚未识别可调参数——请如实告知学生，并建议先点「识别 main.c 参数」）"
+        )
+    for index, p in enumerate(param_items, 1):
+        name = str(p.get("name", ""))
+        label = str(p.get("label", ""))
+        old_value = str(p.get("old_value", ""))
+        unit = str(p.get("unit", ""))
+        range_hint = str(p.get("range_hint", ""))
+        valid = p.get("valid", True)
+        parts = [f"{name}（{label}）", f"当前值：{old_value}"]
+        if unit:
+            parts.append(f"单位：{unit}")
+        if range_hint:
+            parts.append(f"建议范围：{range_hint}")
+        parts.append("状态：有效" if valid else "状态：已失效（main.c 已改动，需重新识别）")
+        lines.append(f"- {index}. " + "｜".join(parts))
+    lines += _idea_plan_summary(plan)
     history_text = _discuss_history_segment(history)
     if history_text:
         lines += ["", "【讨论历史（旧 → 新）】", history_text]

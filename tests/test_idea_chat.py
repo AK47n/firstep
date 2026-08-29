@@ -105,3 +105,31 @@ def test_non_object_file_raises(tmp_path):
     (tmp_path / IDEA_CHAT_FILENAME).write_text("[1, 2, 3]", encoding="utf-8")
     with pytest.raises(TaskError, match="必须是 JSON 对象"):
         read_idea_chat(tmp_path)
+
+
+def test_filename_param_isolates_chats(tmp_path):
+    """filename 参数化（工单 params-chat-ai/01）：同一读写 API 对不同文件名
+    互不干扰——写参数速调咨询文件读工程级聊天 = 空；默认参数仍写原文件。"""
+    from contest_generator.idea_chat import PARAMS_CHAT_FILENAME
+
+    chat = read_idea_chat(tmp_path, PARAMS_CHAT_FILENAME)
+    chat = append_chat_message(chat, "user", "跑偏了调哪个？")
+    chat = append_chat_message(chat, "assistant", "先调 THRESHOLD。")
+    write_idea_chat(tmp_path, chat, PARAMS_CHAT_FILENAME)
+
+    assert (tmp_path / PARAMS_CHAT_FILENAME).is_file()
+    assert not (tmp_path / IDEA_CHAT_FILENAME).exists()
+    loaded = read_idea_chat(tmp_path, PARAMS_CHAT_FILENAME)
+    assert [m.content for m in loaded.messages] == ["跑偏了调哪个？", "先调 THRESHOLD。"]
+    # 默认文件名仍读原工程级聊天（无文件 = 空）；显式同名 = 一致
+    assert read_idea_chat(tmp_path).messages == ()
+    assert read_idea_chat(tmp_path, IDEA_CHAT_FILENAME).messages == ()
+
+
+def test_bad_params_chat_file_message_names_file(tmp_path):
+    """坏参数速调咨询文件 → TaskError 消息带该文件名（不误导为工程级文件）。"""
+    from contest_generator.idea_chat import PARAMS_CHAT_FILENAME
+
+    (tmp_path / PARAMS_CHAT_FILENAME).write_text("{ 坏", encoding="utf-8")
+    with pytest.raises(TaskError, match=PARAMS_CHAT_FILENAME):
+        read_idea_chat(tmp_path, PARAMS_CHAT_FILENAME)

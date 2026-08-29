@@ -24,6 +24,7 @@ from contest_generator.params import (
     build_params,
     empty_params,
     load_params_file,
+    params_with_valid,
     read_params,
     run_param_apply,
     run_param_scan,
@@ -587,3 +588,26 @@ def test_params_endpoints_error_branches(tmp_path):
     )
     assert resp.status_code == 400
     assert "过长" in resp.json()["detail"]
+
+
+def test_params_with_valid():
+    """params_with_valid（工单 params-chat-ai/01 评审整改）：逐条补 valid——
+    main_c 非空 + anchor 逐字节在 main_c + old_value 在锚内 = True；main_c 空
+    或锚失效 = False；to_dict 字段保留。"""
+    item_ok = ParamItem(name="THRESHOLD", label="循迹阈值", old_value="800", anchor="v=800;")
+    item_bad = ParamItem(name="SPEED", label="车速", old_value="30", anchor="v=30;")
+    items = ParamList(version=1, generated_at="2024-01-01T00:00:00+0000", params=(item_ok, item_bad))
+
+    out = params_with_valid(items, "int v=800; main(void) { }\n")
+    assert [p["name"] for p in out] == ["THRESHOLD", "SPEED"]
+    assert out[0]["valid"] is True
+    assert out[0]["label"] == "循迹阈值"
+    assert out[0]["old_value"] == "800"
+    assert out[1]["valid"] is False
+
+    # main_c 空 → 全部 false（含本来锚在的）
+    out = params_with_valid(items, "")
+    assert [p["valid"] for p in out] == [False, False]
+
+    # 空表 → 空列表
+    assert params_with_valid(empty_params(), "int main(void) {}") == []

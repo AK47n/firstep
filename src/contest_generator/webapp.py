@@ -615,6 +615,39 @@ def _require_str(payload: dict, key: str, *, allow_empty: bool = False) -> str:
     return value.strip()
 
 
+def _parse_chat_history(payload: dict) -> list[tuple[str, str]]:
+    """聊天 history 归一化（单源，工单 params-chat-ai/01 评审整改）。
+
+    两个持久化聊天端点（全局商量 / 参数速调咨询）共用同一契约：history 必须
+    是非空数组（旧 → 新），逐条为 {role: user|assistant, content: str}，且
+    末条强制 user（误传 assistant 结尾会把 AI 文本错标为 user 落盘——持久化
+    聊天后果重）。任何不满足 → TaskError 400 中文。返回 [(role, content), ...]。
+    """
+    raw_history = payload.get("history")
+    if not isinstance(raw_history, list) or not raw_history:
+        raise TaskError(
+            "history 必须是数组（旧 → 新的讨论记录，最后一条 = 本轮消息）"
+        )
+    history: list[tuple[str, str]] = []
+    for index, item in enumerate(raw_history, 1):
+        if not isinstance(item, dict):
+            raise TaskError(f"history 第 {index} 条必须是对象")
+        role = item.get("role")
+        if role not in ("user", "assistant"):
+            raise TaskError(
+                f"history 第 {index} 条 role 必须是 user 或 assistant"
+            )
+        content = item.get("content")
+        if not isinstance(content, str):
+            raise TaskError(f"history 第 {index} 条 content 必须是字符串")
+        history.append((role, content))
+    if history[-1][0] != "user":
+        raise TaskError(
+            "history 最后一条必须是 user（本轮消息）——请检查讨论记录形状"
+        )
+    return history
+
+
 def _require_str_list(
     payload: dict, key: str, *, default: Sequence[str] | None = None
 ) -> list[str]:
@@ -2324,7 +2357,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         scanned = 磁盘是否存在参数表（无表 = 未识别过，前端「尚未识别」与
         「已识别但无参数」两态区分——空表不落盘，spec 用户故事 6）。
         """
-        from .params import load_params_file, read_params
+        from .params import load_params_file, params_with_valid, read_params
 
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
@@ -2332,11 +2365,86 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         param_list = read_params(output_dir)
         scanned = load_params_file(output_dir) is not None
         main_c = read_project_main_c(output_dir) or ""
-        params_out = []
-        for item in param_list.params:
-            valid = bool(main_c) and item.anchor in main_c and item.old_value in item.anchor
-            params_out.append({**item.to_dict(), "valid": valid})
-        return {"params": params_out, "scanned": scanned}
+        return {"params": params_with_valid(param_list, main_c), "scanned": scanned}
+
+    # ------------------------------------------------------------------
+    # 参数速调咨询（工单 params-chat-ai/01）：不绑任务卡的多轮诊断对话——学生
+    # 不知道现象该调哪个参数时来问；每轮把当前已识别参数清单（逐条 valid）+
+    # 题面 + 任务清单现状喂给 LLM（discuss_params，调参顾问），回复可点名
+    # 参数（前端渲染成可点击定位 chip）。历史落盘 .contest_params_chat.json
+    # （与全局商量 .contest_idea_chat.json 独立），不做采纳为全局结论。
+    # ------------------------------------------------------------------
+
+    @app.post("/api/params/chat/read")
+    @_map_errors
+    def params_chat_read(payload: dict) -> dict:
+        """读参数速调咨询记录（同步端点）：{output_dir} → {chat}。
+
+        无文件 = 空聊天（未聊过，不 400——照 idea chat read 先例）；坏 JSON /
+        非对象 → TaskError 400 中文；chat 形状与全局商量同（note 恒空——
+        调参咨询不做采纳为全局结论）。
+        """
+        from .idea_chat import PARAMS_CHAT_FILENAME, read_idea_chat
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        return {"chat": read_idea_chat(output_dir, PARAMS_CHAT_FILENAME).to_dict()}
+
+    @app.post("/api/params/chat/send")
+    @_map_errors
+    def params_chat_send(payload: dict) -> dict:
+        """参数速调咨询一轮（同步端点）：{output_dir, history} → {reply, chat}。
+
+        request 契约与 /api/tasks/idea/chat/send 同构：history 单通道（旧 → 新，
+        末条 user = 本轮消息）。服务端读 .contest_params.json（当前已识别参数
+        清单，逐条重验 valid）+ 题面 + 任务清单现状 → LLM 调参顾问 → 成功才
+        追加 user+assistant 两条落盘（.contest_params_chat.json）→ {reply, chat}
+        （原子轮次：LLM 失败 → 502 且不落半轮）。缺题面 → 400。
+
+        与全局商量不同：参数表未识别 = 空清单照常可聊（AI 如实告知先识别），
+        不 400——调参咨询的价值正在「还没识别时引导识别」。
+        """
+        from .idea_chat import (
+            PARAMS_CHAT_FILENAME,
+            append_chat_message,
+            read_idea_chat,
+            write_idea_chat,
+        )
+        from .params import params_with_valid, read_params
+        from .task_progress import read_task_plan
+
+        output_dir = Path(_require_str(payload, "output_dir"))
+        if not output_dir.is_dir():
+            raise TaskError(f"输出目录不存在：{output_dir}")
+        history = _parse_chat_history(payload)
+        config = _require_config(context)
+        module_library_dir = config.module_library_dir
+        _, fields = _load_revision_context(output_dir, module_library_dir)
+        if not fields.get("problem_text"):
+            raise TaskError("缺少赛题原文——请先补题面（调参诊断需要题面证据）")
+        param_list = read_params(output_dir)
+        main_c = read_project_main_c(output_dir) or ""
+        params_out = params_with_valid(param_list, main_c)
+        plan = read_task_plan(output_dir)
+        chat = read_idea_chat(output_dir, PARAMS_CHAT_FILENAME)
+
+        collector = create_llm_observation_collector("params-chat")
+        try:
+            llm = _llm(context, RetryBudget(), collector)
+            discussion = llm.discuss_params(
+                problem_text=fields["problem_text"],
+                params=params_out,
+                plan=plan.to_dict() if plan is not None else None,
+                history=history,
+            )
+        finally:
+            context.recent_llm_workflows.add_completed(collector)
+        # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）
+        chat = append_chat_message(chat, "user", history[-1][1])
+        chat = append_chat_message(chat, "assistant", discussion.reply)
+        write_idea_chat(output_dir, chat, PARAMS_CHAT_FILENAME)
+        return {"reply": discussion.reply, "chat": chat.to_dict()}
 
     # ------------------------------------------------------------------
     # 任务推进 · 人工改标（工单 task-progress/03）：跳过 / 重做 / 上板
@@ -2573,30 +2681,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
             raise TaskError(f"输出目录不存在：{output_dir}")
-        raw_history = payload.get("history")
-        if not isinstance(raw_history, list) or not raw_history:
-            raise TaskError(
-                "history 必须是数组（旧 → 新的讨论记录，最后一条 = 本轮消息）"
-            )
-        history: list[tuple[str, str]] = []
-        for index, item in enumerate(raw_history, 1):
-            if not isinstance(item, dict):
-                raise TaskError(f"history 第 {index} 条必须是对象")
-            role = item.get("role")
-            if role not in ("user", "assistant"):
-                raise TaskError(
-                    f"history 第 {index} 条 role 必须是 user 或 assistant"
-                )
-            content = item.get("content")
-            if not isinstance(content, str):
-                raise TaskError(f"history 第 {index} 条 content 必须是字符串")
-            history.append((role, content))
+        history = _parse_chat_history(payload)
         # 末条强制 user（评审整改）+：误传 assistant 结尾会把 AI 文本错标为
         # user 落盘——全局聊天持久化落盘，比 task-discuss（会话级）后果重。
-        if history[-1][0] != "user":
-            raise TaskError(
-                "history 最后一条必须是 user（本轮消息）——请检查讨论记录形状"
-            )
         config = _require_config(context)
         module_library_dir = config.module_library_dir
         _, fields = _load_revision_context(output_dir, module_library_dir)
