@@ -21,9 +21,9 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML, tasksDoneCount, unresolvedPrereqs, taskStatusLabel } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
-import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
+import { flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
@@ -158,13 +158,15 @@ function setTaskStatusLocal(taskId, status) {
   tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? { ...t, status } : t);
 }
 
-/** 最近一次执行结果载荷（接线图装配就绪后的面板复插用）：{taskId, data,
- * dir}——board 快照是目录级资产，就绪刷新只复插同目录的面板（防跨目录误插）。 */
+/** 最近一次执行结果载荷（接线图装配就绪后的「本轮变化」区复插用）：{taskId,
+ * data, dir}——board 快照是目录级资产，就绪刷新只复插同目录的变化区（防跨目录
+ * 误插）。刷新页面后内存态清零 = 变化区消失（折叠不占地方，历史区仍在卡上）。 */
 let lastWiringResult = null;
 
-/** 接线图装配就绪刷新（task-wiring-diagram/04）：快照拉取完成后，若目录仍是
- * 当前目录 → 重渲卡片（tasksRender 会清掉结果面板，随后按 lastWiringResult
- * 复插一次——同一数据源刷新，不多不重）；就绪后再次调用为 no-op（sync 有值）。 */
+/** 接线图装配就绪刷新（task-wiring-diagram/04，工单 task-changes-inline/02 适配）：
+ * 快照拉取完成后，若目录仍是当前目录 → 重渲卡片（tasksRender 会清掉「本轮
+ * 变化」区，随后按 lastWiringResult 复插一次——同一数据源刷新，不多不重）；
+ * 就绪后再次调用为 no-op（sync 有值）。 */
 function tasksWiringEnsure(dir) {
   if (!dir) return;
   if (wiringAssetsSync(dir)) return;   // 已就绪：无需刷新
@@ -172,7 +174,7 @@ function tasksWiringEnsure(dir) {
     if (tasks.outputDir !== dir) return;
     tasksRender();
     if (lastWiringResult && lastWiringResult.dir === dir) {
-      tasksRenderResult(lastWiringResult.taskId, lastWiringResult.data);
+      renderTaskChanges(lastWiringResult.taskId, lastWiringResult.data);
     }
   });
 }
@@ -181,10 +183,11 @@ function tasksRender() {
   const plan = tasks.plan;
   const grid = $("tasks-grid");
   // 接线图装配（task-wiring-diagram/04）：快照加载中 → 先按现况渲染（无资料 =
-  // 纯文字），就绪后 tasksWiringEnsure 重渲一次（卡片 + 结果面板单源刷新）
+  // 纯文字），就绪后 tasksWiringEnsure 重渲一次（卡片 + 「本轮变化」区单源刷新）
   const wiringAssets = wiringAssetsSync(tasks.outputDir);
-  // 结果面板随渲染清除（每次执行/拆解后重建，防陈旧结果残留；结果面板在
-  // 网格容器内——beforeend 插入，innerHTML 清空即整体移除）
+  // 「本轮变化」区随渲染清除（每次执行/拆解后重建，防陈旧结果残留；变化区
+  // 注入在任务卡内——innerHTML 清空即整体移除，复插由 tasksWiringEnsure 按
+  // lastWiringResult 内存态驱动）
   if (!plan || !(plan.tasks || []).length) {
     grid.classList.add("hidden");
     grid.innerHTML = "";
@@ -204,8 +207,9 @@ function tasksRender() {
       checklistState: (taskId, seq) => checklistRead(taskId, seq),
       // 编辑态（工单 idea-suite/04）：taskEditOpen 含该卡 id = 表单已展开
       editing: (taskId) => taskEditOpen.has(taskId),
-      // 接线图（task-wiring-diagram/04）：每任务装配（uid=card:<taskId>，
-      // 与结果面板 result:<taskId> 分开——两个 host 并存互不干扰）
+      // 接线图（task-wiring-diagram/04）：每任务装配（uid=card:<taskId>——
+      // 卡上「下一步要做」区接线图 host；执行结果变化区不重复放接线图，见
+      // renderTaskChanges）
       wiringOpts: (task) => wiringOptsFor(task, wiringAssets, "card", plan),
       actions: (task) => {
         // 操作显隐单源 = fx/task.js taskCardActions（与后端转移表镜像，
@@ -959,7 +963,7 @@ function guideNextTask(taskId) {
 }
 
 /** 单任务执行（工单 02 + task-feedback/02）：读补充框 → SSE（feedback 非空 =
- * 上板反馈轮）→ 状态回填渲染 + 结果面板。 */
+ * 上板反馈轮）→ 状态回填渲染 + 「本轮变化」区卡内注入。 */
 async function tasksExecute(taskId, feedback) {
   if (tasks.busy) {
     // 工单 05：busy 静默吞点击 = 用户以为没反应——给显式提示
@@ -999,7 +1003,7 @@ async function tasksExecute(taskId, feedback) {
       tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? data.task : t);
     }
     tasksRender();
-    tasksRenderResult(taskId, data);
+    renderTaskChanges(taskId, data);
     // 下一步引导（工单 step-next-guide/01）：做完一步 → 当前卡提示「下一步 →
     // tN：标题」+ 滚动高亮下一张待执行卡（瞬态；失败轮不引导——还在本卡）
     if (data.status !== "failed") guideNextTask(taskId);
@@ -1044,55 +1048,34 @@ function checklistWrite(taskId, seq, checkedMap) {
   }
 }
 
-/** 任务执行结果面板（照深化结果卡先例）：状态徽章 + 编译摘要 + diff + 备份 +
- * 回滚按钮（复用 /api/revise/rollback，同备份族——backup_tree 同盘）。
- * 插入位置 = tasks-grid 容器内（beforeend）而非 afterend：结果面板的操作按钮
- * （回滚 / 烧录）必须落在网格的点击委托覆盖范围内——afterend 是网格的兄弟
- * 节点，冒泡不过网格，回滚按钮点击将无人处理（工单 flash-deploy/02 修）。
- * 徽章 + 摘要文案单源 = fx/task.js verifyStatusMarkup（与深化面板共用）。 */
-function tasksRenderResult(taskId, data) {
-  const markup = verifyStatusMarkup(data, {
-    unverified: "未检测到编译工具链：任务结果已写入 main.c，但未经编译验证——请配置工具链后手动编译，或上板后人工标记为已验证。",
-    failed: "编译验证未通过，任务结果已写入 main.c（已备份，可回滚）。",
-  });
-  const task = data.task || {};
-  const backupId = data.backup_id || "";
-  const dir = tasks.outputDir || "";
-  // 反馈轮提示：最近一轮若是上板反馈，把用户反馈原文展示在结果面板（追溯）
-  // ——纯函数单源 fx/task.js taskLatestFeedbackNote（评审整改：胶水层不拼 HTML）
-  const feedbackNote = taskLatestFeedbackNote(task);
-  // 步骤报告（工单 stepwise-deepen/02 + task-insight/02）：AI 本步「做了什么 +
-  // 接下来你要做什么」（含接线/上板指引）+ 上板自检清单（最新轮 checklist，
-  // 勾选态 localStorage 备忘——key = taskId+"/"+seq）；降级空串由纯函数侧渲染
-  // 中文兜底。checklist 勾选变化经 change 委托写盘（本函数只读盘渲染快照）。
-  const iterations = task.iterations || [];
-  const lastIter = iterations.length ? iterations[iterations.length - 1] : null;
-  const checkKey = (task.id && lastIter && lastIter.seq !== undefined)
-    ? task.id + "/" + lastIter.seq : "";
-  // 接线图（task-wiring-diagram/04）：与任务卡同装配（uid=result:<taskId>），
-  // 数据 = 同目录快照资产（不在会话里重复拉取）
-  const wiringAssets = wiringAssetsSync(tasks.outputDir);
-  const stepReport = taskStepReportHTML(task, {
-    checkKey,
-    checkedMap: checkKey ? checklistRead(task.id, lastIter.seq) : {},
-    wiringOpts: (t) => wiringOptsFor(t, wiringAssets, "result", tasks.plan),
-  });
-  $("tasks-grid").insertAdjacentHTML("beforeend",
-    '<div class="item" id="tasks-result" style="margin-top:10px">'
-    + '<div class="head"><span class="slug">' + esc(task.id || taskId) + " · " + esc(task.title || "") + " 执行结果</span> " + markup.badge + "</div>"
-    + feedbackNote
-    + '<div class="reason">' + markup.detail + "</div>"
-    + taskErrorsHTML((data.compile && data.compile.parsed_errors) || [])  // 编译错误行跳转（error-jump-task/02）：main.c 行可点高亮
-    + stepReport
-    + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
-    + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '" data-task="' + esc(task.id || taskId) + '">回滚到本任务执行前</button>' : "")
-    + "</div>"
-    + flashPanelHTML(dir)  // uid 缺省 "result"——结果面板烧录行；任务卡另有 task.id 容器（flash-step-button/01），并存互不干扰
-    + mainDiffHTML(data.main_diff, "任务")
-    + "</div>");
-  wireHosts($("tasks-grid"), tasks.plan, wiringAssets);
-  lastWiringResult = { taskId, data, dir };
-  tasksWiringEnsure(dir);
+/** 任务执行结果「本轮变化」注入刚完成的任务卡（工单 task-changes-inline/02，
+ * 替代网格末尾结果面板）：执行完成后 diff / 编译详情 / 错误行跳转 / 备份回滚
+ * 直接出现在该卡历史区后的槽位锚点（fx/task.js taskCardHTML 的
+ * data-changes-anchor）之后，无需滚动到网格底部。
+ * 徽章 + 摘要文案单源 = fx/task.js verifyStatusMarkup（与深化面板共用）；
+ * 内容单源 = fx/task.js taskChangesHTML（spec 决策删重复：步骤报告两块 /
+ * checklist 副本 / feedback note / 接线图 / 烧录行不迁入——卡上历史区 / 常驻
+ * checklist / 「下一步要做」接线图 / 卡上 task.id 烧录行已有同源信息）。
+ * 无卡 / 无锚点 / html 空 → 防御跳过（tasksExecute、tasksReload 等路径先渲染
+ * 保证网格存在）。注入点在网格容器内 → 回滚 / 错误行跳转仍落进既有点击委托
+ * 覆盖。lastWiringResult 记录 + tasksWiringEnsure 尾部链路保留（接线图资产
+ * 就绪触发的重渲染复插走同一注入函数）。 */
+function renderTaskChanges(taskId, data) {
+  const grid = $("tasks-grid");
+  if (!grid) return;
+  const selId = (window.CSS && CSS.escape) ? CSS.escape(String(taskId)) : String(taskId);
+  const card = grid.querySelector('[data-task-id="' + selId + '"]');
+  if (!card) return;
+  const anchor = card.querySelector("[data-changes-anchor]");
+  if (!anchor) return;
+  // 防双份：tasksRender 重建已清空（内存态 lastWiringResult 才是复插来源），
+  // 此处防御同一 data 的重复注入路径（wiring 资产就绪刷新的复插）
+  card.querySelectorAll(".task-changes").forEach((el) => el.remove());
+  const html = taskChangesHTML((data && data.task) || {}, data, { open: true });
+  if (!html) return;
+  anchor.insertAdjacentHTML("afterend", html);
+  lastWiringResult = { taskId, data, dir: tasks.outputDir || "" };
+  tasksWiringEnsure(tasks.outputDir);
 }
 
 /** 烧录到板子（工单 flash-deploy/02 + flash-step-button/01）：结果面板一键
@@ -1552,7 +1535,8 @@ document.addEventListener("click", (event) => {
     if (!d.contains(event.target)) d.open = false;
   });
 });
-// 结果面板「回滚到本任务执行前」（同备份族，复用 /api/revise/rollback）
+// 「本轮变化」区 / 直接修正面板「回滚到本任务执行前」（同备份族，复用
+// /api/revise/rollback——域委托覆盖网格内后代：变化区注入在任务卡内）
 $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-rollback");
   if (!btn) return;

@@ -1620,6 +1620,18 @@
   .task-err-row { padding: 2px 0; color: var(--text); word-break: break-all; }
   .task-err-jump { cursor: pointer; color: var(--accent); text-decoration: underline;
                    text-underline-offset: 2px; }
+  /* 任务执行结果「本轮变化」区（工单 task-changes-inline/02）：执行结果并入
+     刚完成的任务卡——完整 diff / 编译详情 / 错误行跳转 / 备份回滚原地可见
+     （替代网格末尾结果面板，无需滚动）；无注入 = 零占位（details 不渲染） */
+  .task-changes { margin-top: 8px; border: 1px solid var(--border);
+                  border-radius: 8px; background: var(--panel-2); }
+  .task-changes > summary { cursor: pointer; padding: 6px 8px;
+                  font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .task-changes[open] > summary { border-bottom: 1px solid var(--border); }
+  .task-changes-body { padding: 6px 8px; display: flex; flex-direction: column;
+                  gap: 6px; }
+  .task-changes-detail { font-size: 12.5px; }
+  .task-changes-backup { font-size: 12.5px; }
   /* 交付卡（工单 delivery-suite/02）：检查结果 / 打包结果行 */
   .delivery-ok { margin-top: 6px; color: var(--ok); font-weight: 600; }
   .delivery-warn { margin-top: 6px; color: var(--warn); font-weight: 600; }
