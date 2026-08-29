@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e19f6a420d5756a4659c796910b9af4660295eef -->
+<!-- changelog-auto: last-commit=7c3540b50ca97510339079cbf41069804f3cbda5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 00:15 新手上手 Y2 02：8 个导航 tab 悬停中文 title + 文案守卫
 - 00:32 新手上手 Y3 01：生成页底部新手词表折叠卡（fx/glossary 单源 + 守卫测试）
 - 00:38 新手上手 Y3 02：12 张步骤卡人话副标题（card-purpose）+ 文案守卫
+- 00:42 新手上手 Y4 03：交接提示词说明 + 去任务推进按钮（复用 switchReviseTab）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
