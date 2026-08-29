@@ -1,2 +1,6 @@
 # git 钩子脚本必须在 checkout 时保持 LF（CRLF 会让 sh 执行失败）
 .githooks/* text eol=lf
+# 批处理必须 CRLF（LF 行尾会让 cmd 的 if () 块/goto 解析错乱，
+# 工单 newcomer-onboarding/01 实测踩坑）；git blob 直接存 CRLF，
+# 不依赖机器本地 core.autocrlf（换机/CI 未设 autocrlf 也不退化）
+*.bat text eol=crlf

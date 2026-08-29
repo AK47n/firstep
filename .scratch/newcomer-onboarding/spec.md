@@ -46,7 +46,7 @@
 - `README.md`（仓库根，面向人）：定位一句话 → 3 秒看懂 → 需要什么（Windows 10/11、Python 3.13+ 下载链接、DeepSeek API key 获取说明、硬件与 IDE 一句话说明）→ 三步安装（install.bat / 启动 / 配 key + 环境体检）→ 常见问题（启动没反应、端口占用、编译工具链接口）。中文。
 - `install.bat`（仓库根，GBK/ANSI 编码与现有 start-app.bat 一致）：检测 `python`（缺失 → 中文提示 + 下载链接）→ 版本 ≥3.13 校验 → 创建 `.venv` → 用 `.venv` 的 pip 安装本包（`pip install -e .`）→ 导入自检（fastapi/uvicorn/pypdf/PIL/fitz）→ 中文成功/失败提示。幂等（重复运行安全）。
 - `start-app.bat` 重写：流程 = ① 选 Python（`.venv` 优先）→ ② 版本/依赖检查（缺→中文弹窗并提示先跑 install.bat）→ ③ 探测 8000：`/api/health` 是**本应用** → 直接开浏览器退出；是**其他程序** → 中文弹窗"端口被占"；**无服务** → 后台启动（日志仍落 `%USERPROFILE%\.contest_generator\webapp.log`）→ 轮询 `/api/health` 就绪（上限 20 秒）→ 开浏览器；超时 → 中文弹窗（常见原因 + 日志路径）。
-- 中文弹窗实现：`mshta`（vbscript MsgBox）无黑窗口弹窗，文本含中文；参数里的中文按 cmd 的 GBK 编码处理（与 .bat 文件编码一致，注意事项见测试决策）。
+- 中文弹窗实现：`mshta`（vbscript MsgBox）无黑窗口弹窗，文本含中文；参数里的中文按 cmd 的 GBK 编码处理（与 .bat 文件编码一致，注意事项见测试决策）。**（实施修正 2026-08-29：改用 powershell WScript.Shell.Popup——mshta vbscript:Execute 语义不可靠：cmd 对 GUI 程序不等待、URL 引号/时序无法验证弹窗停留；powershell 全路径调用于所有 Win10/11 可用，理由详见工单 02 实施记录）**
 - 后端 `GET /api/health`：返回 `{"app": "contest-generator", "version": "<__version__>", "ok": true}`；不依赖配置（始终 200，即使未配 key）；接入 `create_app` 与既有路由注册区。
 - `stop-firstep.bat`：保持现有机制（kill 8000 进程），可顺带把进程识别改为"仅杀本应用启动的"（与 /api/health 探测共享思路，非本次核心，不扩scope，保持现状即可）。
 - 欢迎卡（`index.html` 生成页顶部 `gen-overview` 上方）+ 新前端模块（ui/fx 分层与现有约定一致）：内容 = ①一句话"这是什么" ②三步走（贴题→选平台→生成） ③两件事先做：「去配置 API key」（切到设置 tab 并聚焦 key 输入框）与「环境体检」（切到设置 tab 并触发一键体检）④「不再显示」。首见判定与显示条件做成 fx 纯函数（输入：是否已配置 key、是否有草稿、是否已选择不显示 → 输出：显示完整/精简/隐藏）；localStorage key 独立（如 `firstep.welcome-dismissed.v1`）。
