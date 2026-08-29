@@ -26,7 +26,7 @@ export function welcomeCardHTML(mode) {
   if (mode === "hidden") return "";
   if (mode === "compact") {
     return '<div class="welcome-line">'
-      + esc("贴赛题 → 生成 → 编译 → 上板；随时点开卡片里的「和 AI 商量」提问。")
+      + esc("贴赛题 → 生成 → 编译 → 上板；12 步向导会带你走每一步。")
       + "</div>";
   }
   return '<div class="welcome-head">'

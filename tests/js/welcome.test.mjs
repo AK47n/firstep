@@ -62,9 +62,10 @@ test("welcomeCardHTML：full 含三步引导与三个行动按钮", () => {
   assert.match(html, /DeepSeek API key/);
 });
 
-test("welcomeCardHTML：compact 一句话，无按钮", () => {
+test("welcomeCardHTML：compact 一句话，无按钮、不指向不存在元素", () => {
   const html = welcomeCardHTML("compact");
-  assert.match(html, /和 AI 商量/);
+  assert.match(html, /12 步向导/);
+  assert.doesNotMatch(html, /和 AI 商量/);
   assert.doesNotMatch(html, /btn-welcome-/);
 });
 
