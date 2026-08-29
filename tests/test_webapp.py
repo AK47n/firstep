@@ -95,6 +95,7 @@ from contest_generator.master import distill_master, main_c_template, scan_proje
 from contest_generator.master_store import import_master
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import (
+    __version__,
     AppContext,
     create_app,
 )
@@ -7144,3 +7145,26 @@ def test_api_reset_records_empty_when_nothing(client, context):
     assert resp.status_code == 200
     assert resp.json() == {"recent_entries": 0, "cache_files": 0}
     assert not context[0].config_path.exists()
+
+def test_api_health_ok(client):
+    """/api/health：200 + 固定载荷（工单 newcomer-onboarding/02，
+    启动器据此判定「端口上是否本应用」，不依赖任何配置）。"""
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["app"] == "contest-generator"
+    assert data["ok"] is True
+    assert data["version"] == __version__
+
+
+def test_api_health_ok_without_config(tmp_path):
+    """未配置任何 key / 库（config.json 不存在）也必须 200 —— 启动器探测
+    在用户尚未配 key 时就要工作。"""
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(api_key=""),
+    )
+    client = TestClient(create_app(ctx))
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
