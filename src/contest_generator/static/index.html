@@ -216,6 +216,10 @@
   .welcome-card .welcome-steps li { margin: 3px 0; }
   .welcome-card .welcome-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .welcome-card .welcome-line { opacity: .92; }
+  /* 生成页底部新手词表（工单 newcomer-glossary/01）：复用 .card-details
+     折叠样式，容器只负责与步骤列对齐；词条间距在 .glossary-item 上。 */
+  .glossary-card { margin-top: 16px; }
+  .glossary-card .glossary-item { margin-top: 6px; line-height: 1.65; }
   .platform-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
                    cursor: pointer; flex: 1; min-width: 220px; background: var(--panel); }
   .platform-card:hover { border-color: var(--border-strong); }
@@ -2414,6 +2418,8 @@
       <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
       <div id="handoff-msg" class="error"></div>
     </div>
+
+    <div id="glossary-card" class="glossary-card"></div>
       </div><!-- /.gen-steps -->
     </div><!-- /.gen-layout -->
   </section>
@@ -2996,6 +3002,7 @@ import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签
 import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览列表/板图切换（resource-overview-polish/02）
 import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 import { initWelcome } from "/js/ui/welcome.js";  // 首次欢迎卡 + gen-banner 行动化（newcomer-onboarding/03）
+import { initGlossary } from "/js/ui/glossary.js";  // 生成页底部新手词表（newcomer-glossary/01）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
@@ -3347,6 +3354,7 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
   loadReferencePicker();
   restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
   initWelcome();  // 首次欢迎卡（newcomer-onboarding/03）：依赖 state / 草稿已就绪
+  initGlossary();  // 新手词表（newcomer-glossary/01）：纯静态渲染，DOM 已就绪
 })();
 
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）
