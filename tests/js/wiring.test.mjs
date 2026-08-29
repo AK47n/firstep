@@ -245,6 +245,27 @@ test("布局（工单06）：分层——线在焊盘圆点/丝印标签之下�
   assert.ok(html.includes("paint-order=\"stroke\""));
 });
 
+test("端子盒：备注小字在盒内第二行（不再画盒外下方跨盒压字），超长截断", () => {
+  const html = wiringDiagramHTML({
+    board, rows, wiring: [{ pin: "PB3", target: "KEY_START", note: "注意极性" }], showAll: false,
+  });
+  // 主字 y=12、备注 y=18（盒内）；旧实现备注画在盒外 y=TERM_BOX_H+10=30
+  assert.ok(html.match(/<text x="8" y="12" font-size="10"/), "主字应在盒内第一行");
+  assert.ok(html.match(/<text x="8" y="18" font-size="7" fill="var\(--muted\)">gpio_in（必接） · 注意极性<\/text>/),
+    "备注应在盒内第二行（muted 小字）");
+  assert.ok(!html.includes('y="30"'), "不应再画盒外下方备注（旧位置）");
+  // 超长备注按估算宽截断加省略号（7px 字、盒内可用宽 TERM_W-12）
+  const longRows = [
+    { slug: "key", role: "KEY_START", role_id: "KEY_START", role_label: "", pin: "PB3", remark: "A".repeat(80) },
+  ];
+  const longHTML = wiringDiagramHTML({
+    board, rows: longRows, wiring: [{ pin: "PB3", target: "KEY_START" }], showAll: false,
+  });
+  assert.ok(longHTML.includes("…</text>"), "超长备注应截断");
+  assert.ok(!longHTML.includes("A".repeat(80)), "不应出现完整超长文本");
+  assert.ok(!longHTML.includes('y="30"'));
+});
+
 test("布局（工单06）：引脚名可读性——本步接线引脚名强调色+粗体，其余提亮基线", () => {
   const html = wiringDiagramHTML({
     board, rows, wiring: [{ pin: "PB3", target: "KEY_START" }], showAll: false,

@@ -270,6 +270,22 @@ export function layoutWiring(board, lines) {
   return out;
 }
 
+/** 端子盒备注文本（类型/必接 · note）宽度适配：按估算宽（ASCII ≈0.55em、
+ * CJK ≈1em，7px 字号）保守截断加「…」——盒内单行最坏情形（超长 note）也不
+ * 溢出盒宽、不与主字相撞（评审整改：备注曾画盒外下方，y 对齐布局相邻盒间隙
+ * 仅 2px 必然跨盒压字；移入盒内第二行）。 */
+function fitTermNote(text) {
+  const maxW = TERM_W - 12;
+  let w = 0;
+  let out = "";
+  for (const ch of text || "") {
+    w += ch.charCodeAt(0) > 0x2e7f ? 7 : 3.85;
+    if (w > maxW) return out + "…";
+    out += ch;
+  }
+  return out;
+}
+
 /** 接线图整块 HTML（纯函数，全部输出转义）：
  * 输入 {board, rows, wiring, showAll, inferred}——
  * board = 板定义 dict（快照内嵌 / /api/boards 同形；null = 空态）；
@@ -311,10 +327,10 @@ export function wiringDiagramHTML({ board, rows, wiring, showAll, inferred }) {
     const line = l.line;
     parts.push(`<g class="wiring-term" transform="translate(${l.boxX} ${l.boxY})">`
       + `<rect x="0" y="0" width="${TERM_W}" height="${TERM_BOX_H}" rx="4" fill="var(--panel-2)" stroke="${line.hl ? "var(--accent)" : "var(--border)"}" stroke-width="${line.hl ? "1.5" : "1"}"/>`
-      + `<text x="8" y="${13}" font-size="10" fill="${line.hl ? "var(--text)" : "var(--muted)"}">${esc(line.label)}</text>`
+      + `<text x="8" y="12" font-size="10" fill="${line.hl ? "var(--text)" : "var(--muted)"}">${esc(line.label)}</text>`
       + (line.remark || line.note
-        ? `<text x="8" y="${TERM_BOX_H + 10}" font-size="8" fill="var(--muted)">`
-          + esc([line.remark, line.note].filter(Boolean).join(" · ")) + "</text>"
+        ? `<text x="8" y="18" font-size="7" fill="var(--muted)">`
+          + esc(fitTermNote([line.remark, line.note].filter(Boolean).join(" · "))) + "</text>"
         : "")
       + "</g>");
   }
