@@ -28,6 +28,8 @@ import { esc } from "/js/fx/core.js";
 import { envCheckStatusHTML } from "/js/fx/env.js";
 import { SETTINGS_COLLAPSE_KEY, parseSettingsCollapse, effectiveCollapsed, settingsMasterLabel, settingsSectionHead, applySettingsCollapseState } from "/js/fx/settings.js";
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
+import { collectResettableKeys } from "/js/fx/reset.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import { llmPricesDefaults, setLlmPricesDefaults } from "/js/ui/usage.js";
 import { renderPlatforms, renderModulePool } from "/js/ui/generate-recommend.js";
 
@@ -411,6 +413,48 @@ export async function loadRecentWorkflows() {
 }
 
 $("btn-refresh-recent-wf").addEventListener("click", loadRecentWorkflows);
+
+// ---------------------------------------------------------------------------
+// 重置本地记录（工单 reset-local-records/02）：换题前一键恢复「第一次打开」
+// 的状态。确认弹窗（confirmModal）→ 清理清单单源 fx/reset.js 判定 →
+// 前端 localStorage 直清（同源页面）→ 服务端 POST /api/reset-records
+// （recent 列表 + AI 推荐缓存）→ 结果汇总。
+// ---------------------------------------------------------------------------
+$("btn-reset-records").addEventListener("click", async () => {
+  const msg = $("reset-records-msg");
+  msg.className = "muted";
+  msg.textContent = "";
+  const ok = await confirmModal({
+    title: "清空本地记录？",
+    message: "将清除：任务自检勾选、题面草稿、评分核对勾选、购买决策记忆、"
+      + "最近工程列表与 AI 推荐缓存。API 配置、主题与缩放等界面偏好、"
+      + "磁盘上的工程文件不受影响。此操作不可撤销。",
+    danger: true,
+    confirmText: "清空本地记录",
+    cancelText: "取消",
+  });
+  if (!ok) return;
+  // 前端 localStorage 直清（fx/reset.js 判定单源：只清题相关记录）
+  const localKeys = collectResettableKeys(Object.keys(localStorage));
+  for (const k of localKeys) localStorage.removeItem(k);
+  let result;
+  try {
+    result = await apiPost("/api/reset-records");
+  } catch (e) {
+    msg.className = "error";
+    msg.textContent = "本地记录已清除（" + localKeys.length + " 项）；服务端记录清除失败："
+      + esc(e.message || String(e));
+    return;
+  }
+  const parts = [];
+  if (localKeys.length) parts.push("本地记录 " + localKeys.length + " 项");
+  if (result.recent_entries) parts.push("最近工程 " + result.recent_entries + " 条");
+  if (result.cache_files) parts.push("推荐缓存 " + result.cache_files + " 个");
+  msg.className = parts.length ? "ok" : "muted";
+  msg.textContent = parts.length
+    ? "已清除：" + parts.join("；") + "。"
+    : "没有可清除的记录。";
+});
 
 // ---------------------------------------------------------------------------
 // 设置页折叠（工单 settings-infoarch/01-03）：整卡折叠 + 默认收起次要项 +

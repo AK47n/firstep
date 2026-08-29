@@ -11,6 +11,7 @@ from contest_generator.recommend_cache import (
     cache_key,
     cache_recommend,
     clarify_fingerprint,
+    clear_recommend_cache,
     library_fingerprint,
     load_recommend,
     parameter_warnings,
@@ -48,6 +49,27 @@ def test_cache_key_prefers_topic_id_and_falls_back_to_problem_hash():
 def test_cache_path_under_given_dir():
     path = recommend_cache_path("2026C", cache_dir=Path("/tmp/cache"))
     assert path == Path("/tmp/cache") / "recommend_2026C.json"
+
+
+def test_clear_recommend_cache_removes_only_recommend_files(tmp_path):
+    """清缓存（工单 reset-local-records/01）：删 recommend_*.json（含损坏文件，
+    按文件名删不解析内容），同目录其它文件保留；返回删除数。"""
+    for name in ("recommend_2026C.json", "recommend_2025B.json", "recommend_broken.json"):
+        (tmp_path / name).write_text("{}" if name != "recommend_broken.json" else "not json",
+                                     encoding="utf-8")
+    other = tmp_path / "other.json"
+    other.write_text("keep", encoding="utf-8")
+
+    assert clear_recommend_cache(tmp_path) == 3
+    assert not (tmp_path / "recommend_2026C.json").exists()
+    assert not (tmp_path / "recommend_2025B.json").exists()
+    assert not (tmp_path / "recommend_broken.json").exists()
+    assert other.exists()
+    assert clear_recommend_cache(tmp_path) == 0
+
+
+def test_clear_recommend_cache_missing_dir_returns_zero(tmp_path):
+    assert clear_recommend_cache(tmp_path / "nope") == 0
 
 
 def test_cache_roundtrip_preserves_done_verbatim(tmp_path):

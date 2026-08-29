@@ -126,6 +126,7 @@ from .generation_output import (
     with_platform_suffix,
 )
 from .recent_jobs import (
+    clear_recent,
     delete_recent,
     load_recent,
     recent_file,
@@ -167,6 +168,7 @@ from .llm_recent_workflows import LLMRecentWorkflowStore, attach_cost_estimates
 from .recommend_cache import (
     cache_key,
     cache_recommend,
+    clear_recommend_cache,
     library_fingerprint,
     load_recommend,
     parameter_warnings,
@@ -933,12 +935,6 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
-
-    # 一键清理本机浏览器旧记录页（运维便利页，无业务状态）：供用户重跑旧题
-    # 前清 localStorage 残留（任务勾选 / 题面草稿 / 评分核对 / 购买决策记忆）。
-    @app.get("/clear-cache.html")
-    def clear_cache_page() -> FileResponse:
-        return FileResponse(STATIC_DIR / "clear-cache.html")
 
     # 前端纯函数模块（工单 frontend-es-modules/01）：/js/fx/*.js 静态直挂，
     # 无构建步骤（浏览器原生 ESM）；STATIC_DIR/js 下有 package.json {"type":"module"}
@@ -3946,6 +3942,23 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         save_config(config, context.config_path)
         context.config = config  # 即时生效：后续请求直接用新配置
         return {"ok": True}
+
+    @app.post("/api/reset-records")
+    @_map_errors
+    def reset_records() -> dict:
+        """重置本地记录（工单 reset-local-records/01）：清空服务端题相关记录
+        ——最近生成列表（recent.json）与 AI 推荐缓存（cache/recommend_*.json），
+        返回各自清除条数。
+
+        换题语义：API 配置（config.json）、任务修复备份、日志与工程目录文件
+        一律不动；无记录 → 计数 0（清理尽力而为，绝不报错，前端即可安心
+        一键调用）。
+        """
+        config_path = context.config_path
+        return {
+            "recent_entries": clear_recent(recent_file(config_path)),
+            "cache_files": clear_recommend_cache(config_path.parent / "cache"),
+        }
 
     @app.post("/api/vision/selfcheck")
     @_map_errors

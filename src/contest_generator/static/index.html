@@ -2854,6 +2854,16 @@
       <div class="muted" style="margin-top:8px">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
     </div>
 
+    <div class="card" data-collapse-id="reset-records">
+      <h2>重置本地记录</h2>
+      <div class="row" style="align-items:center">
+        <button id="btn-reset-records" type="button" data-ico="trash">清空本地记录</button>
+        <span class="muted" style="flex:1">换题前一键清空 firstep 留下的全部题相关记录与缓存（任务自检勾选 / 题面草稿 / 评分核对 / 购买决策 / 最近工程列表 / AI 推荐缓存），恢复到第一次打开的状态。API 配置、主题等界面偏好与磁盘上的工程文件不受影响。</span>
+      </div>
+      <div class="muted" style="margin-top:8px">适合每道题做完后、开新题之前按一下；清理不可撤销。</div>
+      <div id="reset-records-msg" class="muted"></div>
+    </div>
+
     <div class="card">
       <div class="row">
         <button id="btn-save-settings" class="primary breathe" data-ico="save">保存设置</button>
