@@ -673,7 +673,8 @@ def test_render_readme_multi_instance_appends_rows():
     ]
 
     # mspm0：实例行说明 = 模块首个声明类型（仅类型，必接标记不随实例通道继承）
-    # ——声明行（LED 默认脚）仍在实例行前
+    # ——声明行（LED 默认脚）仍在实例行前；同脚去冗余（工单 07）：LED_RED@PA15
+    # 与声明行同 (led, PA15) → 保留声明行，实例通道行仅在 pin 不同时追加
     plans_m = {
         "led": (
             ExpandedInstance(slug="led", index=1, macro="LED_RED", pin="PA15"),
@@ -684,8 +685,81 @@ def test_render_readme_multi_instance_appends_rows():
     lines_m = _pin_data_rows(text_m)
     assert lines_m == [
         "| led | LED | PA15 | gpio_out（必接） |",
-        "| led | LED_RED | PA15 | gpio_out |",
         "| led | LED_YELLOW | PA16 | gpio_out |",
+    ]
+
+
+def test_pin_rows_dedup_same_pin():
+    """接线行同脚去冗余（工单 07）：只删「实例行与既有行同 (slug, pin)」的
+    实例行（如 led 声明行 LED@PA15 + 默认单实例行 LED_RED@PA15——物理同一条
+    线不重复表达）；**声明行之间**的同脚多角色（ADR 0010 合法共享）保留；
+    pin 不同 / 跨模块不去重。"""
+    from contest_generator.wiring import wiring_rows
+
+    # 模块 A：声明 KEY_START@PB3（必接，无 label）
+    # 模块 B：声明 BEEP@PC14
+    a = ModuleManifest(
+        slug="key",
+        description="独立按键输入",
+        platforms={PLATFORM_STM32: _entry((("KEY_START", "gpio_in", "PB3", "", True),))},
+    )
+    b = ModuleManifest(
+        slug="beep",
+        description="有源蜂鸣器",
+        platforms={PLATFORM_STM32: _entry((("BEEP_OUT", "gpio_out", "PC14", "", True),))},
+    )
+    # 同脚重复：key 的实例行 KEY_ALT@PB3 与声明行同脚 → 去重（保留声明行）
+    same_pin_plans = {
+        "key": (ExpandedInstance(slug="key", index=1, macro="KEY_ALT", pin="PB3"),),
+    }
+    rows = wiring_rows(PLATFORM_STM32, [a, b], None, same_pin_plans)
+    assert [(r["slug"], r["role_id"], r["pin"]) for r in rows] == [
+        ("key", "KEY_START", "PB3"),
+        ("beep", "BEEP_OUT", "PC14"),
+    ]
+    # 实例 pin 与声明不同 → 实例行保留
+    diff_pin_plans = {
+        "key": (ExpandedInstance(slug="key", index=1, macro="KEY_ALT", pin="PA0"),),
+    }
+    rows2 = wiring_rows(PLATFORM_STM32, [a], None, diff_pin_plans)
+    assert [(r["slug"], r["role_id"], r["pin"]) for r in rows2] == [
+        ("key", "KEY_START", "PB3"),
+        ("key", "KEY_ALT", "PA0"),
+    ]
+    # 跨模块同 pin 不去重（不同模块各一行）
+    other = ModuleManifest(
+        slug="delay",
+        description="延时模块",
+        platforms={PLATFORM_STM32: _entry((("D_OUT", "gpio_out", "PB3", "", False),))},
+    )
+    rows3 = wiring_rows(PLATFORM_STM32, [a, other], None, None)
+    assert [(r["slug"], r["role_id"], r["pin"]) for r in rows3] == [
+        ("key", "KEY_START", "PB3"),
+        ("delay", "D_OUT", "PB3"),
+    ]
+    # 同脚多角色（ADR 0010 合法共享）：两个声明同脚 → 两行都保留；实例行与
+    # 任一声明同脚才去重
+    shared = ModuleManifest(
+        slug="motor",
+        description="双路电机驱动",
+        platforms={
+            PLATFORM_STM32: _entry(
+                (
+                    ("MOTOR_A_DIR", "gpio_out", "PA6", "A 路方向", True),
+                    ("MOTOR_A_DIR2", "gpio_out", "PA6", "A 路方向（冗余）", True),
+                )
+            )
+        },
+    )
+    shared_plans = {
+        "motor": (
+            ExpandedInstance(slug="motor", index=1, macro="MOTOR_CH1", pin="PA6"),
+        ),
+    }
+    rows4 = wiring_rows(PLATFORM_STM32, [shared], None, shared_plans)
+    assert [(r["slug"], r["role_id"], r["pin"]) for r in rows4] == [
+        ("motor", "MOTOR_A_DIR", "PA6"),
+        ("motor", "MOTOR_A_DIR2", "PA6"),
     ]
 
 
@@ -857,6 +931,24 @@ def test_parse_pin_table_roundtrip_matches_wiring_rows():
     rows = parse_pin_table(text)
     assert rows == wiring_rows(PLATFORM_STM32, [key, beep, led], None, plans)
     assert [r["slug"] for r in rows] == ["key", "beep", "led"]
+
+
+def test_parse_pin_table_preserves_duplicate_rows():
+    """解析端不去冗余（工单 07）：表格文本无法区分声明行 / 实例行来源，解析 =
+    忠实恢复（双行 → 双行）；同脚冗余由旧工程兜底层（read_wiring_snapshot_
+    legacy）按模块库声明集判定后执行。"""
+    body = "## 引脚接线表\n\n| 模块 | 角色 | 引脚 | 说明 |\n|---|---|---|---|\n"
+    rows = parse_pin_table(body + (
+        "| led | LED | PA15 | gpio_out（必接） |\n"
+        "| led | LED_RED | PA15 | gpio_out |\n"
+        "| led | LED_YELLOW | PA16 | gpio_out |\n"
+    ))
+    assert rows is not None
+    assert [(r["slug"], r["role"], r["pin"]) for r in rows] == [
+        ("led", "LED", "PA15"),
+        ("led", "LED_RED", "PA15"),
+        ("led", "LED_YELLOW", "PA16"),
+    ]
 
 
 def test_parse_pin_table_normalizes_label_same_as_id():

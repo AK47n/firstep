@@ -21,6 +21,7 @@ from typing import Mapping, Sequence
 
 from .boards import Board, BoardError, board_for_platform
 from .context_manifest import CONTEXT_MANIFEST_FILENAME
+from .library import LibraryError, list_modules
 from .readme import README_FILENAME, _pin_row_items, _row_role_text, parse_pin_table
 
 # 接线快照输出文件名（生成写侧单源，generator 消费；任务推进读写同此）
@@ -117,8 +118,11 @@ def read_wiring_snapshot(output_dir: Path | str) -> dict | None:
     return data
 
 
-def read_wiring_snapshot_legacy(output_dir: Path | str) -> dict | None:
-    """旧工程接线数据兜底（工单 task-wiring-diagram/05）：无快照时从工程
+def read_wiring_snapshot_legacy(
+    output_dir: Path | str,
+    module_library_dir: Path | str | None = None,
+) -> dict | None:
+    """旧工程接线数据兜底（工单 task-wiring-diagram/05 + 07）：无快照时从工程
     产物恢复快照形 dict（version/platform/board_id/board/rows）。
 
     数据源全部**同源**（不做任何猜测，数据纪律）：
@@ -126,6 +130,12 @@ def read_wiring_snapshot_legacy(output_dir: Path | str) -> dict | None:
       快照 rows 由同一推导 _pin_row_items 渲染，解析即恢复生成时同一输出）；
     - platform = .contest_context.json 的 platform 字段（工程上下文清单）；
     - board = 静态板定义（board_for_platform，与生成时同源板文件）。
+    同脚去冗余（工单 07）：表格文本无法区分声明行 / 实例行来源，仅当
+    module_library_dir 可读时按模块库声明集判定——role_id ∈ 该模块声明引脚
+    id 集 = 声明行（保留，含 ADR 0010 同脚多角色合法共享）；否则为实例行
+    候选，仅当 (slug, pin) 与既有行重复才丢弃（声明行 / 更早实例行同脚 =
+    同一根线的冗余记录）。模块库缺失 / 不可读 / 参数 None / 库中无该模块
+    或该模块无声明 → 该来源无法判定，**保守不去重**（原样保留，宁多勿丢）。
     任一环节缺失 / 坏 JSON / 无接线表 / 未知平台 → None——调用方保持空载荷
     退化（前端资源高亮/纯文字），绝不 500，绝不无依据返回数据。
     """
@@ -142,6 +152,10 @@ def read_wiring_snapshot_legacy(output_dir: Path | str) -> dict | None:
         rows = parse_pin_table(readme_text)
         if rows is None:
             return None
+        if module_library_dir is not None:
+            rows = _dedup_legacy_instance_rows(
+                rows, _declared_role_ids(module_library_dir, platform)
+            )
         board = board_for_platform(platform).to_dict()
     except (OSError, ValueError, BoardError):
         return None
@@ -152,6 +166,62 @@ def read_wiring_snapshot_legacy(output_dir: Path | str) -> dict | None:
         "board": board,
         "rows": rows,
     }
+
+
+def _declared_role_ids(
+    module_library_dir: Path | str, platform: str
+) -> dict[str, set[str]]:
+    """模块库声明集：slug → 该模块在 platform 下声明的引脚 id 集（去重参考）。
+
+    只收录**有**声明的模块（声明集为空的 slug 不进表——其行来源无法判定，
+    调用方按「库中无该模块」保守保留）；库根不存在 / manifest 损坏（含功能组
+    一致性校验失败）→ 空表（调用方不去重，原样返回——数据纪律：宁多勿丢）。
+    """
+    try:
+        manifests = list_modules(Path(module_library_dir))
+    except (OSError, LibraryError):
+        return {}
+    out: dict[str, set[str]] = {}
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        ids = {decl.id for decl in entry.pins}
+        if ids:
+            out[manifest.slug] = ids
+    return out
+
+
+def _dedup_legacy_instance_rows(
+    rows: list[dict], declared: Mapping[str, set[str]]
+) -> list[dict]:
+    """旧工程接线行去冗余（只删实例行与既有行同 (slug, pin) 的重复记录）。
+
+    判定规则（工单 07）：
+    - slug 不在库 / 该模块无声明集 → 来源不可判 → 原样保留（不猜测）；
+    - role_id ∈ 声明集 = 声明行 → 保留；声明行之间的同脚多角色（ADR 0010
+      合法共享）从不删除；
+    - 其余 = 实例行候选：仅当 (slug, pin) 与既有行相同才丢弃（同一条线的
+      冗余记录，如 led 声明行 `LED@PA15` + 默认单实例行 `LED_RED@PA15`）。
+    """
+    seen: set[tuple[str, str]] = set()
+    out: list[dict] = []
+    for row in rows:
+        slug = row.get("slug", "")
+        ids = declared.get(slug) if isinstance(slug, str) else None
+        key = (slug, row.get("pin", ""))
+        if ids is None:
+            out.append(row)  # 来源不可判 → 保守保留
+            continue
+        if row.get("role_id") in ids:
+            out.append(row)
+            seen.add(key)
+            continue
+        if key in seen:
+            continue  # 实例行与既有行同脚 = 同一根线的冗余记录
+        seen.add(key)
+        out.append(row)
+    return out
 
 
 # ---------------------------------------------------------------------------

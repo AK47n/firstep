@@ -233,7 +233,13 @@ def _pin_row_items(
         bindings = {(b.slug, b.declaration.id): b.pin for b in resolved_bindings}
     plans = instance_plans or {}
 
+    # 同脚去冗余（工单 07）：同一 (slug, pin) 最多一行——只删「实例行与既有行
+    # 同脚」的实例行（如 led 声明行 `LED@PA15` + 默认单实例行 `LED_RED@PA15`：
+    # 物理同一条线，保留首行）；**声明行之间**的同脚多角色（ADR 0010 合法共享，
+    # 如 MOTOR_A_DIR / MOTOR_A_DIR2 同绑 PA6）必须保留——声明行从不参与去重，
+    # 只进 seen 供后随实例行比对。
     items: list[tuple[str, str, str, str, str]] = []
+    seen_pins: set[tuple[str, str]] = set()
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         if entry is None:
@@ -243,8 +249,13 @@ def _pin_row_items(
             items.append(
                 (manifest.slug, decl.id, decl.label, pin, _pin_remark(decl))
             )
+            seen_pins.add((manifest.slug, pin))
         inst_remark = entry.pins[0].type if entry.pins else ""
         for inst in plans.get(manifest.slug, ()):
+            inst_key = (manifest.slug, inst.pin)
+            if inst_key in seen_pins:
+                continue  # 实例行与既有行同脚 = 同一条线，只保留首行
+            seen_pins.add(inst_key)
             items.append((manifest.slug, inst.macro, "", inst.pin, inst_remark))
     return items
 
@@ -372,8 +383,12 @@ def parse_pin_table(text: str) -> list[dict] | None:
     后数据行（跳过 ---| 分隔行；列数不足 / slug 或 pin 空的坏行丢弃其余
     保留）；段外同形表格（报告草稿「引脚分配表」等）不误收。**同源**：解析
     即恢复生成时同一推导的输出（含多实例通道行与 label 附注），图上不会出现
-    表格之外的线。无表格段 / 表头缺失 / 无有效数据行 → None（调用方按空
-    处理，维持既有退化）。
+    表格之外的线。**不做去冗余**（工单 07）：表格文本无法区分声明行 / 实例行
+    来源（同名角色既可能是声明也可能是实例通道），解析 = 忠实恢复，同脚多行
+    的去冗余由旧工程兜底层（wiring.read_wiring_snapshot_legacy）按模块库声明
+    集判定来源后执行；新生成工程的 README 本身已无冗余行（_pin_row_items
+    去重）——round-trip 不受影响。无表格段 / 表头缺失 / 无有效数据行 → None
+    （调用方按空处理，维持既有退化）。
     """
     rows: list[dict] = []
     seen_heading = False
@@ -414,4 +429,6 @@ def parse_pin_table(text: str) -> list[dict] | None:
         else:
             if _is_header_row(_table_cells(stripped)):
                 collecting = True
-    return rows if rows else None
+    if not rows:
+        return None
+    return rows
