@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=cc96f8831cc72f7a989ce5bead1e2de1e8414182 -->
+<!-- changelog-auto: last-commit=cabf1505934ca9e1873cb4bed63e46471eb0941d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -30,6 +30,7 @@
 - 13:51 任务卡接线图 04：接线图端到端上线——GET /api/wiring 只读端点（output_dir → {platform, board, rows}；无快照/坏 JSON/版本不符 → 200 空载荷，不 500）；fx/task.js 每任务装配 wiringOpts（uid card:/result: 分 host，perComputed 防双执行）+ data-wiring-uid 占位；ui/wiring.js 胶水（快照 + /api/boards 两级缓存单飞、tier-2 资源高亮退化图 = resourceBoardHTML 按本任务 resources 过滤 + conflictLegend:false、toggle 原位重渲委托）；tasksRender/tasksRenderResult 接线图图文并存 + tasksWiringEnsure 就绪单源刷新（lastWiringResult 按目录复插）；.wiring-* CSS；pytest 2789 + tests/js 653 全绿（评审整改：单任务视图图例去误导、wiringPer 哨兵单源化、空载荷单字面量）
 - 13:53 任务卡接线图：补交 spec.md 文档（与其他 feature 的 112 份 spec 同址入库）；score-coverage/02 工单补提交（代码 f4ae6e9 已入库，工单状态/勾选/评审记录补落盘）
 - 13:57 工单状态收尾：5 个已完成但未标记的工单统一改 resolved 并勾选验收标准——step-next-guide/01（实现 d7aed37）、master-library-ui/01（95fa5ee）、clarify-no-restriction/01（2b10ced）、step11-tabs-ui/01（4c7e302）、ui-polish-7/01（dc25878）；master-library-ui 与 clarify 文件末尾重复状态行去重（模板状态字段仅顶部一处）
+- 13:59 工单状态收尾（旧格式）：clarify-dumb-questions/01（eb39cbd）、llm-select-runaway/01（9d0a1c5）、stuck-doing-recover/01（9a1c896）——实现均已入库，状态改 resolved，重复状态行去重
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
