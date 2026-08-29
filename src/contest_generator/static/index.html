@@ -441,9 +441,24 @@
   .btn-task-dialog-adopt, .btn-task-dialog-clear { font-size: 12px;
                      padding: 1px 8px; margin-left: 6px; }
   /* 全局商量按钮（工单 idea-suite/02）：AI 回复三按钮 + 发送 + 清除，
-     与任务卡对话按钮同款小字（.sugg-discuss 面板共用） */
-  .btn-global-chat-action, .btn-global-chat-send { font-size: 12px;
-                     padding: 1px 8px; margin-left: 6px; }
+     与任务卡对话按钮同款小字（.sugg-discuss 面板共用——参数速调咨询按钮
+     也并进本规则，工单 params-chat-ai/02 评审整改：去重复规则） */
+  .btn-global-chat-action, .btn-global-chat-send, .btn-params-chat-send {
+                     font-size: 12px; padding: 1px 8px; margin-left: 6px; }
+  /* 参数速调 AI 咨询（工单 params-chat-ai/02）：AI 回复里的参数名 chip
+     （accent 描边 pill，hover 提亮）+ 定位参数卡高亮动画；对话区本体复用
+     .sugg-discuss-* / .task-dialog-box，零新容器样式 */
+  .btn-param-ref { font-size: 12px; padding: 1px 7px; margin: 0 2px;
+                     border: 1px solid var(--accent); border-radius: 999px;
+                     background: var(--accent-dim); color: var(--text);
+                     cursor: pointer; vertical-align: baseline; }
+  .btn-param-ref:hover { background: var(--accent); color: var(--panel); }
+  .param-card-locate { outline: 2px solid var(--accent); outline-offset: 2px;
+                     animation: param-locate-flash 0.8s ease-in-out 2; }
+  @keyframes param-locate-flash {
+     0%, 100% { outline-color: var(--accent); }
+     50% { outline-color: var(--accent-dim); }
+  }
   /* 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：卡内表单
      （标签 + 输入纵排）与低调下拉；表单复用变量，零新硬编码色。
      下拉 = 原生 <details>：summary 小字按钮，展开菜单 absolute 定位在卡内
@@ -2137,6 +2152,17 @@
           <div id="params-result" style="margin-top:8px"></div>
           <div id="params-msg" class="error"></div>
         </div>
+        <!-- 问 AI 该调哪个参数（工单 params-chat-ai/02）：诊断对话 →
+             AI 回复里的参数名可点击定位到上方参数卡 -->
+        <div class="card-group" style="margin-top:12px">
+          <div class="card-group-title">问 AI 该调哪个参数（诊断 → 推荐 → 定位改值）</div>
+          <div class="row">
+            <button id="btn-params-chat">问 AI：我该调哪个参数？</button>
+            <span id="params-chat-status" class="muted"></span>
+          </div>
+          <div id="params-chat" class="hidden" style="margin-top:8px"></div>
+          <div id="params-chat-msg" class="error"></div>
+        </div>
       </section>
 
       <section id="revise-panel-delivery" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-delivery">
@@ -2733,6 +2759,7 @@ import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } fro
 import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext, reviseGetDir } from "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
 import { tasksPlan } from "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
 import { paramsScan } from "/js/ui/params.js";  // 参数速调：同上——import 只为加载模块
+import { paramsChatReset } from "/js/ui/params-chat.js";  // 参数速调 AI 咨询：同上——import 只为加载模块（顶层监听器绑定）
 import { deliveryOpen, deliveryCheck, deliveryPackage } from "/js/ui/delivery.js";  // 交付卡：同上
 import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签（工单 step11-tabs-ui/01）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";

@@ -54,6 +54,19 @@ export function paramsSummary() {
   return { count: (paramsState.plan || []).length };
 }
 
+/** 当前参数表（工单 params-chat-ai/02）：供 AI 咨询对话做提及 chip 集合与
+ * 定位校验（paramsPlan() 返回 paramsState.plan 原引用——纯读，调用方不改）。 */
+export function paramsPlan() {
+  return paramsState.plan;
+}
+
+/** 参数簇忙态（工单 params-chat-ai/02 评审整改）：识别/应用进行中——
+ * AI 咨询对话的 toggle/send 守卫用（paramsState.busy 与 tasksSetBusy 同步，
+ * 此处显式读口对齐 spec「busy 守卫 = paramsState.busy || tasksIsBusy()」）。 */
+export function paramsBusy() {
+  return paramsState.busy;
+}
+
 /** 面板空态引导（step11-tabs-ui/02 评审整改）：未加载输出目录时显示「先去
  * 修订页签加载目录」提示（与 delivery/tasks 同判据 dir——目录就绪后隐藏；
  * 未识别场景由网格空态文案承接，不混用）。 */
