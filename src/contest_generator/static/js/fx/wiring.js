@@ -214,6 +214,9 @@ function boardPinParts(board, hlPins) {
     const hl = hlPins.has(pin.name);
     const labelX = p.side === "L" ? p.cx - PAD_R - 7 : p.cx + PAD_R + 7;
     const anchor = p.side === "L" ? "end" : "start";
+    parts.push(hl
+      ? `<circle class="wiring-pin-hl" cx="${p.cx}" cy="${p.cy}" r="${PAD_R + 3}" fill="none" stroke="var(--accent)" stroke-width="2"/>`
+      : "");
     parts.push(`<circle cx="${p.cx}" cy="${p.cy}" r="${PAD_R}" fill="${io ? "var(--pin-pad)" : "var(--pin-fixed-pad)"}" stroke="var(--border-strong)" stroke-width="1.5"><title>${esc(String(pin.name || "") + (io ? "（空闲 IO）" : "（固定/电源）"))}</title></circle>`
       + `<text x="${labelX}" y="${p.cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="${LABEL_FS}" fill="${hl ? "var(--accent)" : "var(--text)"}" font-weight="${hl ? "700" : "500"}" stroke="var(--panel-2)" stroke-width="${hl ? "3" : "2.5"}" paint-order="stroke">${esc(String(pin.name || ""))}</text>`);
   }

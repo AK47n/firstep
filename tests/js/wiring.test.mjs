@@ -262,4 +262,11 @@ test("布局（工单06）：引脚名可读性——本步接线引脚名强调
   });
   assert.ok(allHtml.match(/<text[^>]*fill="var\(--accent\)"[^>]*font-weight="700"[^>]*>PB3<\/text>/));
   assert.ok(allHtml.match(/<text[^>]*fill="var\(--text\)"[^>]*font-weight="500"[^>]*>PA0<\/text>/));
+  // 命中引脚焊盘外高亮圈（wiring-pin-hl）：仅 PB3（PA0/3V3/GND 无）
+  assert.ok(html.match(/<circle class="wiring-pin-hl" cx="542" cy="79" r="10" fill="none" stroke="var\(--accent\)" stroke-width="2"\/>/),
+    "命中引脚应有高亮圈（与焊盘同心、强调色描边）");
+  assert.equal((html.match(/class="wiring-pin-hl"/g) || []).length, 1,
+    "高亮圈应只画在本步命中引脚上");
+  assert.ok(!html.includes(">PA0<") || !html.match(/<circle class="wiring-pin-hl"[^>]*cx="382"[^>]*cy="57"/),
+    "未命中引脚（PA0）不应有高亮圈");
 });
