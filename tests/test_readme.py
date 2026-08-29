@@ -859,6 +859,19 @@ def test_parse_pin_table_roundtrip_matches_wiring_rows():
     assert [r["slug"] for r in rows] == ["key", "beep", "led"]
 
 
+def test_parse_pin_table_normalizes_label_same_as_id():
+    """角色文本 `id（id）`（label==id）按 manifest 解析侧同一规则归一无附注：
+    role=裸 id、role_label 空（防御性：合法 manifest 经解析该形态不可达，但
+    _split_role 契约「非空 label 必为附注形态」应跨任何输入成立）。"""
+    body = "## 引脚接线表\n\n| 模块 | 角色 | 引脚 | 说明 |\n|---|---|---|---|\n"
+    rows = parse_pin_table(body + "| led | LED（LED） | PC13 | gpio_out |\n")
+    assert rows is not None
+    # role 保留 README 原文（同源恢复），归一落在 role_id/role_label
+    assert rows[0]["role"] == "LED（LED）"
+    assert rows[0]["role_id"] == "LED"
+    assert rows[0]["role_label"] == ""
+
+
 def test_parse_pin_table_degrades_or_skips_bad_lines():
     """无表格段 / 表头缺失 / 无数据行 → None；数据行坏（列数不足 / slug 或
     pin 空）跳过其余保留；表格段之外的同形行不误收。"""
