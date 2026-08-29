@@ -606,11 +606,18 @@
   /* 步骤 4 参考资料紧凑化（工单 index-html-ui-redo/01）：滚动 + 搜索 */
   .ref-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--border);
                 border-radius: 8px; padding: 4px 10px; background: var(--panel-2); }
-  /* 赛题简介（AI 预读，wait-what 效果）：一句话总览 + 功能要点，深底信息框 */
-  .topic-summary { background: var(--info-dim); border: 1px solid var(--info-border); border-radius: 10px;
+  /* 步骤 2 赛题预读（工单 topic-preread/02）：一句话总览 + 按步骤分组提醒 +
+     题面引用小字，深底信息框 */
+  .topic-preread { background: var(--info-dim); border: 1px solid var(--info-border); border-radius: 10px;
                    padding: 14px 18px; font-size: 13.5px; line-height: 1.8; white-space: pre-line;
                    color: var(--text);
                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), var(--shadow-summary); }
+  .topic-preread .preread-overview { font-weight: 600; }
+  .topic-preread .preread-group-title { font-size: 12.5px; font-weight: 600; color: var(--info);
+                                        margin: 8px 0 2px; }
+  .topic-preread .preread-item { border-left: 2px solid var(--info-border); padding-left: 10px;
+                                 margin-top: 4px; }
+  .topic-preread .preread-quote { font-size: 12px; color: var(--muted); margin-top: 1px; }
   .warn-box { border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; font-size: 14px; line-height: 1.7; }
   .warn-box.missing { background: var(--danger-dim); color: var(--danger); }
   .warn-box.unverified { background: var(--warn-dim); color: var(--warn); }
@@ -1885,13 +1892,13 @@
     </div>
 
     <div class="card">
-      <h2><span class="step-no">2</span>赛题简介（AI 预读）</h2>
+      <h2><span class="step-no">2</span>赛题预读：关键信息与提醒</h2>
       <div class="row">
-        <button id="btn-topic-summary" class="primary" data-ico="doc">生成赛题简介</button>
-        <span class="muted">AI 先读一遍题面，把散落在各处的全部要求整理成一条条要点——心里有数再往下选平台。</span>
+        <button id="btn-topic-preread" class="primary" data-ico="doc">预读题面</button>
+        <span class="muted">题面你会自己读，AI 只提炼「题面已经锁死了什么」——限定 / 约束 / 指定的硬事实（如限定 TI MSPM0 系列、指定器件、接口 / 尺寸 / 电源 / 时长），并标明要点将在哪一步用到（选平台 / 选模块 / 配引脚 / 写骨架…），走到那一步会再提醒你。</span>
       </div>
-      <div id="topic-summary-box" class="topic-summary hidden" style="margin-top:8px"></div>
-      <div id="topic-summary-msg" class="error"></div>
+      <div id="topic-preread-box" class="topic-preread hidden" style="margin-top:8px"></div>
+      <div id="topic-preread-msg" class="error"></div>
     </div>
 
     <div class="card">

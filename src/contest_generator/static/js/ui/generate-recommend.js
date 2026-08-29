@@ -33,10 +33,11 @@ import {
 } from "/js/fx/recommend.js";
 import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
-import { syncStep4 } from "/js/fx/draft.js";
+import { stepNavTitles, syncStep4 } from "/js/fx/draft.js";
+import { prereadHTML } from "/js/fx/topic-preread.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
-import { markStepDone, markStepUndone, unmarkSteps } from "/js/ui/step-state.js";
+import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
 
 export let chosenPlatform = null;
 export function setChosenPlatform(v) { chosenPlatform = v; }
@@ -47,6 +48,8 @@ export let expanded = [];                // 展开后的模块 manifest（含依
 export let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
 export let warnings = [];                // 平台警告
 export let scorePoints = [];              // 推荐解析出的题面评分点（只读增强信息）
+export let prereadOverviewText = "";      // 步骤 2 赛题预读的一句话总览（交接提示词读取方 import，工单 topic-preread/02）
+export let prereadReminders = [];         // 步骤 2 赛题预读提醒（工单 03 钉卡分发读取方 import）
 export let currentTopicId = "";      // 当前生效的赛题编号（历史赛题入口；工单 15 起
                                           // export——生成簇 generateMain 读取方 import）
 export function setCurrentTopicId(v) { currentTopicId = v; }
@@ -122,7 +125,7 @@ $("btn-upload").addEventListener("click", async () => {
     const data = await handle(await fetch("/api/extract", { method: "POST", body: form }));
     $("problem").value = data.text;
     currentTopicId = "";
-    clearTopicSummary();
+    clearTopicPreread();
     // 页图展示（工单 upload-pdf-pages/02 + upload-image-preview/02）：
     // 图片上传 → 原图箱；PDF 上传 → 页图箱；都没有 → 只显示文字
     if (data.image_data_url) {
@@ -158,7 +161,7 @@ $("btn-topic-load").addEventListener("click", async () => {
     const data = await handle(await fetch("/api/topics/" + encodeURIComponent(key)));
     $("problem").value = data.problem_text;
     currentTopicId = data.key;
-    clearTopicSummary();
+    clearTopicPreread();
     $("topic-msg").textContent = "已取题面：" + data.key;
     markStepDone(1);
     toast("ok", "已取题面：" + data.key);
@@ -258,38 +261,63 @@ $("pdf-zoom").addEventListener("click", () => {
 
 $("problem").addEventListener("input", () => {
   if (currentTopicId) { currentTopicId = ""; $("topic-msg").textContent = ""; }
-  clearTopicSummary();  // 题面变了 = 旧简介对不上，立即清掉（wait-what 要的是当前题面）
+  clearTopicPreread();  // 题面变了 = 旧预读对不上，立即清掉（wait-what 要的是当前题面）
   hideTopicPdfViewer();  // 手动改写/粘贴题面 = 旧题页图对不上（工单 topic-pdf-viewer/01）
   if (!$("problem").value.trim()) markStepUndone(1);
 });
 
 // ---------------------------------------------------------------------------
-// 生成页：2. 赛题简介（AI 预读，wait-what 效果）——总览 + 整理后的功能要点
+// 生成页：2. 赛题预读（工单 topic-preread/02）——提炼"题面已锁死什么"+
+// 决策点提醒（每条 = 影响步骤 + 提醒文本 + 题面原文引用），只展示不进下游
 // ---------------------------------------------------------------------------
-function clearTopicSummary() {
-  $("topic-summary-box").classList.add("hidden");
-  $("topic-summary-box").textContent = "";
-  $("topic-summary-msg").textContent = "";
+function topicPrereadStepTitles() {
+  // 步骤名从 DOM h2 单源读取（step-nav 同款），前端不硬编码步骤名。
+  // h2 尾部含卡片折叠按钮图标（▾/▸，step-state.js 追加），组标题剥掉。
+  const out = {};
+  for (const t of stepNavTitles(Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR)))) {
+    const title = String(t.title || "").replace(/[▾▸]\s*$/, "").trim();
+    if (Number.isFinite(t.n) && title) out[t.n] = title;
+  }
+  return out;
+}
+
+function clearTopicPreread() {
+  $("topic-preread-box").classList.add("hidden");
+  $("topic-preread-box").innerHTML = "";
+  $("topic-preread-msg").textContent = "";
+  $("btn-topic-preread").innerHTML = "预读题面";
+  prereadOverviewText = "";
+  prereadReminders = [];
+  // 工单 03 的提醒槽位统一清空路径：步骤卡上的 [data-preread-slot] 一次全清（无槽位则无操作）
+  document.querySelectorAll("[data-preread-slot]").forEach((el) => {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+  });
   scorePoints = [];  // 题面变更后评分点失效，避免旧题验收清单串进生成 / 交接
   unmarkSteps([2, 5, 6, 7, 8, 9, 10, 11, 12]);  // 题面变了：AI 产物与生成结果全部失效
 }
 
-$("btn-topic-summary").addEventListener("click", async () => {
-  $("topic-summary-msg").textContent = "";
+$("btn-topic-preread").addEventListener("click", async () => {
+  $("topic-preread-msg").textContent = "";
   const problem = $("problem").value.trim();
-  if (!problem) { $("topic-summary-msg").textContent = "请先填写赛题原文"; return; }
-  $("btn-topic-summary").disabled = true;
-  $("btn-topic-summary").innerHTML = '<span class="spinner"></span>AI 读题中…';
+  if (!problem) { $("topic-preread-msg").textContent = "请先填写赛题原文"; return; }
+  $("btn-topic-preread").disabled = true;
+  $("btn-topic-preread").innerHTML = '<span class="spinner"></span>AI 预读中…';
   try {
-    const data = await apiPost("/api/topic/summarize", { problem_text: problem });
-    $("topic-summary-box").textContent = data.summary;
-    $("topic-summary-box").classList.remove("hidden");
-    $("btn-topic-summary").innerHTML = "重新生成";
-    markStepDone(2);  // 简介生成成功即视为完成（题面变更时 clearTopicSummary 会取消）
+    const data = await apiPost("/api/topic/preread", { problem_text: problem });
+    prereadOverviewText = String(data.overview || "");
+    prereadReminders = Array.isArray(data.reminders) ? data.reminders : [];
+    $("topic-preread-box").innerHTML = prereadHTML(
+      { overview: prereadOverviewText, reminders: prereadReminders },
+      topicPrereadStepTitles()
+    );
+    $("topic-preread-box").classList.remove("hidden");
+    $("btn-topic-preread").innerHTML = "重新预读";
+    markStepDone(2);  // 预读成功即视为完成（题面变更时 clearTopicPreread 会取消）
   } catch (e) {
-    $("topic-summary-msg").textContent = e.message;
+    $("topic-preread-msg").textContent = e.message;
   } finally {
-    $("btn-topic-summary").disabled = false;
+    $("btn-topic-preread").disabled = false;
   }
 });
 
@@ -915,14 +943,14 @@ export function renderWarnings() {
 
 // ---------------------------------------------------------------------------
 // 赛题库「用此题生成」（topic 簇使用）：取题面 → 填生成页 → 步 1 完成 →
-// 切 tab + 滚顶。与 btn-topic-load 同端点、同失效语义（clearTopicSummary 清下游）
+// 切 tab + 滚顶。与 btn-topic-load 同端点、同失效语义（clearTopicPreread 清下游）
 // ---------------------------------------------------------------------------
 export async function useTopic(key) {
   try {
     const data = await handle(await fetch("/api/topics/" + encodeURIComponent(key)));
     $("problem").value = data.problem_text;
     currentTopicId = data.key;
-    clearTopicSummary();
+    clearTopicPreread();
     markStepDone(1);
     toast("ok", "已载入赛题 " + data.key);
     document.querySelector('[data-tab="generate"]').click();
