@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d84646541820281935ff6086b8f9039259441d63 -->
+<!-- changelog-auto: last-commit=22db897a574b83f7e1948b391439dc3ebd593807 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -51,6 +51,7 @@
 - 19:32 清理：赛题预读改口收尾（工单 topic-preread/04）——删除无生产调用者的 topic_title_from_summary 与其 _TOPIC_TITLE_PREFIX_RE 正则（目录名走确定性 topic_short_title/TOPIC_EN_TITLES）+ 设置页本地路由文案改口（赛题预读并修计数：本地路由方法集实为 6 个调用）+ fx/llm.js 遥测标签 preread_topic + 测试旧术语样例/注释同步；评审整改：本地方法集计数、_desktop_cleanup 前缀注释历史化、spike 失效标注同步调用行
 - 19:32 文档：local-llm-spike 失效标注与调用行同步（工单 topic-preread/04 补充）——summarize_topic 已退役为 preread_topic，spike 脚本标注失效并改调新方法
 - 20:48 功能：词表方案「库内已有」结构化 lib_modules 与源码库机械校验（工单 wordlist-lib-modules/01）——SolutionOption 加 lib_modules 字段（加载即校验引用 slug 必须命中 library/modules，未命中大声失败）+ wordlist.json 4 条迁移（K230/电机/UWB name 去散文后缀、红外对管 note 重写并补 pid）+ 买件商量注记结构化；评审整改：frozenset 小写泛型、错误文案统一无类别、解析用例显式 lib_slugs 解耦
+- 20:51 功能：选型参考方案行「库内已有」徽章（工单 wordlist-lib-modules/02）——suggestionSolutionBadges 增 sugg-lib 分支（lib_modules 非空即显「库内已有：slug1 · slug2」，置推荐徽章之后、旧载荷无键不炸）+ 载荷注释补 lib_modules[] + .sugg-lib 绿系（与 sugg-rec/sugg-decided 合并为一条选择器规则）+ js 测试 5 用例；评审整改：CSS 绿系三重复合并
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
