@@ -1,17 +1,21 @@
-"""工程级想法聊天（工单 idea-suite/01）：全局商量 + 采纳为全局结论。
+"""工程级想法聊天（工单 idea-suite/01）：全局商量 + 采纳为全局结论；
+   （工单 params-chat-ai/01 起）同时承担参数速调咨询的持久化——文件名参数化。
 
 与任务卡商量（task-chat，会话级不落盘）不同：本模块是**工程级**多轮对话，
-历史落盘工程根 `.contest_idea_chat.json`——纯新增隐藏文件（.contest_tasks.json
-先例），与生成产物零交叉。采纳的全局结论（note，最新覆盖）注入后续每步
-任务执行与直接修正的 prompt（【工程级全局结论】段，
-llm._task_execute_user_prompt / _idea_fix_user_prompt 的 global_note 参数）。
+历史落盘工程根 `.contest_idea_chat.json`（全局商量，采纳的全局结论注入后续
+每步任务执行与直接修正的 prompt——【工程级全局结论】段，llm._task_execute_
+user_prompt / _idea_fix_user_prompt 的 global_note 参数）或
+`.contest_params_chat.json`（参数速调咨询——只读参数表 + 题面，不注入执行
+路径，note 恒空）。两文件共用同一消息模型（IdeaChat / IdeaMessage），
+read / write 三函数带 filename 后置参数（缺省 = 全局商量文件，既有调用零
+改动），append / set_note 为纯模型函数不涉文件名。
 
 **文件形状**（落盘与读回 = 同一模型，version 向后兼容）：
 
     {"version": 1, "generated_at": "…",
      "messages": [{"role": "user", "content": "…", "at": "…"},
                   {"role": "assistant", "content": "…", "at": "…"}],
-     "note": "采纳的全局结论（最新覆盖，空串 = 未采纳）"}
+     "note": "采纳的全局结论（最新覆盖，空串 = 未采纳；调参咨询恒空）"}
 
 坏 JSON / 非对象 → TaskError（400 中文，照 task_progress 清单文件先例）；
 消息条逐条容错（role 词表外 / content 非字符串 → 忽略该条，坏值不误伤
@@ -30,6 +34,10 @@ from .task_progress import TaskError
 
 # 聊天文件名（写侧单源，webapp / 前端共用）
 IDEA_CHAT_FILENAME = ".contest_idea_chat.json"
+
+# 参数速调咨询聊天文件名（工单 params-chat-ai/01）：与工程级全局商量独立——
+# 调参咨询只读参数表+题面，不注入任何执行路径，历史文件分开存
+PARAMS_CHAT_FILENAME = ".contest_params_chat.json"
 
 # 聊天版本：向后兼容读（未知版本容忍：只读已知字段，缺省补默认）
 IDEA_CHAT_VERSION = 1
@@ -86,13 +94,13 @@ class IdeaChat:
         """
         version = raw.get("version", IDEA_CHAT_VERSION)
         if not isinstance(version, int) or isinstance(version, bool):
-            raise TaskError(f"工程商量记录 version 非法：{version!r}")
+            raise TaskError(f"聊天记录 version 非法：{version!r}")
         generated_at = raw.get("generated_at", "")
         if not isinstance(generated_at, str):
-            raise TaskError("工程商量记录 generated_at 必须是字符串")
+            raise TaskError("聊天记录 generated_at 必须是字符串")
         raw_messages = raw.get("messages", [])
         if not isinstance(raw_messages, list):
-            raise TaskError("工程商量记录 messages 必须是数组")
+            raise TaskError("聊天记录 messages 必须是数组")
         messages: list[IdeaMessage] = []
         for item in raw_messages:
             if not isinstance(item, dict):
@@ -121,34 +129,44 @@ def empty_chat() -> IdeaChat:
     return IdeaChat(generated_at=_now_stamp())
 
 
-def load_idea_chat_file(output_dir: Path) -> dict[str, Any] | None:
-    """读聊天原始 dict；无文件 = None；坏 JSON / 非对象 = TaskError（400）。"""
-    path = output_dir / IDEA_CHAT_FILENAME
+def load_idea_chat_file(
+    output_dir: Path, filename: str = IDEA_CHAT_FILENAME
+) -> dict[str, Any] | None:
+    """读聊天原始 dict；无文件 = None；坏 JSON / 非对象 = TaskError（400）。
+
+    filename 参数（工单 params-chat-ai/01）：默认工程级全局商量文件名；
+    参数速调咨询传 PARAMS_CHAT_FILENAME 即可复用整套读写逻辑（文件形状同模型）。
+    """
+    path = output_dir / filename
     if not path.is_file():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise TaskError(
-            f"工程商量记录 {IDEA_CHAT_FILENAME} 损坏（不是合法 JSON）：{exc}"
+            f"聊天记录 {filename} 损坏（不是合法 JSON）：{exc}"
         ) from exc
     if not isinstance(data, dict):
-        raise TaskError(f"工程商量记录 {IDEA_CHAT_FILENAME} 必须是 JSON 对象")
+        raise TaskError(f"聊天记录 {filename} 必须是 JSON 对象")
     return data
 
 
-def read_idea_chat(output_dir: Path) -> IdeaChat:
+def read_idea_chat(
+    output_dir: Path, filename: str = IDEA_CHAT_FILENAME
+) -> IdeaChat:
     """读聊天记录；无文件 = 空聊天（未聊过，不 400——与 plan-read 同先例）。"""
-    raw = load_idea_chat_file(output_dir)
+    raw = load_idea_chat_file(output_dir, filename)
     if raw is None:
         return empty_chat()
     return IdeaChat.from_dict(raw)
 
 
-def write_idea_chat(output_dir: Path, chat: IdeaChat) -> Path:
+def write_idea_chat(
+    output_dir: Path, chat: IdeaChat, filename: str = IDEA_CHAT_FILENAME
+) -> Path:
     """写聊天记录（原子写：先写 .tmp 再替换，坏写不落半成品）。"""
-    path = output_dir / IDEA_CHAT_FILENAME
-    tmp = path.with_name(IDEA_CHAT_FILENAME + ".tmp")
+    path = output_dir / filename
+    tmp = path.with_name(filename + ".tmp")
     tmp.write_text(
         json.dumps(chat.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
     )

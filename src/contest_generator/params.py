@@ -258,6 +258,21 @@ def read_params(output_dir: Path) -> ParamList:
     return loaded if loaded is not None else empty_params()
 
 
+def params_with_valid(param_list: ParamList, main_c: str) -> list[dict[str, Any]]:
+    """参数表 → 带 valid 的 dict 列表（单源，工单 params-chat-ai/01 评审整改）。
+
+    逐条重验锚：valid = main_c 非空 且 anchor 逐字节仍在 main_c 中 且
+    old_value 仍在锚内（锚失效 = main_c 被任务执行 / 手工编辑改动，前端禁用
+    该行并提示「请重新识别」）。/api/tasks/params/read 与 /api/params/chat/send
+    共用——两处曾各写一份循环，改一处忘另一处即分叉。
+    """
+    out: list[dict[str, Any]] = []
+    for item in param_list.params:
+        valid = bool(main_c) and item.anchor in main_c and item.old_value in item.anchor
+        out.append({**item.to_dict(), "valid": valid})
+    return out
+
+
 def write_params(output_dir: Path, param_list: ParamList) -> Path:
     """原子写参数表（.tmp → replace，与 idea_chat/drafts 同构）；返回文件路径。"""
     path = params_path(output_dir)

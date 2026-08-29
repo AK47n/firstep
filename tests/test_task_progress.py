@@ -16,7 +16,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.platforms import PLATFORM_STM32
-from contest_generator.llm import IdeaAnalysis, StepReport
+from contest_generator.llm import IdeaAnalysis, LLMError, StepReport, TaskDiscussion
+from contest_generator.params import ParamItem, ParamList, write_params
 from contest_generator.revision import revise_backup_root
 from contest_generator.task_progress import (
     ALLOWED_STATUS_TRANSITIONS,
@@ -3107,3 +3108,123 @@ def test_task_plan_score_points_persisted_by_run_task_planning(tmp_path):
     assert saved.score_points == tuple(points)
     # LLM 拆解 prompt 收到评分点（与落盘同源）
     assert llm.plan_tasks_calls[0][3] == points
+
+
+def test_params_chat_send_without_param_table(tasks_client):
+    """参数速调咨询：参数表未识别（无 .contest_params.json）= 空清单照常可聊
+    （不 400——spec 用户故事 5：AI 如实告知先识别；send docstring 同款）。"""
+    from contest_generator.idea_chat import PARAMS_CHAT_FILENAME, read_idea_chat
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        params_discussion=TaskDiscussion(reply="尚未识别可调参数——请先点「识别 main.c 参数」。"),
+    )
+
+    resp = client.post(
+        "/api/params/chat/send",
+        json={"output_dir": output_dir, "history": [{"role": "user", "content": "跑偏了调哪个？"}]},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["reply"].startswith("尚未识别可调参数")
+    (problem, params, plan, history) = holder["llm"].params_discuss_calls[0]
+    assert problem == "2024 巡线小车"
+    assert params == ()   # 空清单（未识别）
+    assert history == (("user", "跑偏了调哪个？"),)
+    # 落盘照常（两条消息）
+    assert len(read_idea_chat(Path(output_dir), PARAMS_CHAT_FILENAME).messages) == 2
+
+
+def test_params_chat_send_read_flow(tasks_client):
+    """参数速调咨询两端点（工单 params-chat-ai/01）：send 落盘 user+assistant
+    两条（.contest_params_chat.json，与全局商量独立）→ read 全量读回 → LLM
+    输入含参数清单（逐条 valid）→ LLM 失败不落半轮；history 校验 400。"""
+    from contest_generator.idea_chat import PARAMS_CHAT_FILENAME, read_idea_chat
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        params_discussion=TaskDiscussion(reply="先调 THRESHOLD——循迹阈值偏低会丢线，建议向 600~900 试。"),
+    )
+    # 预置参数表（anchor 须在 _generate_project 的 main.c 中——"int" 是
+    # "int main(void)" 的子串，valid 重验会通过；old_value 同取 "int"）
+    write_params(
+        Path(output_dir),
+        ParamList(
+            version=1,
+            generated_at="2024-01-01T00:00:00+0000",
+            params=(
+                ParamItem(
+                    name="THRESHOLD", label="循迹阈值", old_value="int",
+                    anchor="int", unit="", range_hint="600~900",
+                ),
+            ),
+        ),
+    )
+
+    # 无文件 read → 空聊天（不 400）
+    resp = client.post("/api/params/chat/read", json={"output_dir": output_dir})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["chat"]["messages"] == []
+
+    # send 一轮：历史单通道（最后一条 user = 本轮消息）
+    resp = client.post(
+        "/api/params/chat/send",
+        json={
+            "output_dir": output_dir,
+            "history": [{"role": "user", "content": "直行跑偏了调哪个？"}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["reply"] == "先调 THRESHOLD——循迹阈值偏低会丢线，建议向 600~900 试。"
+    chat = read_idea_chat(Path(output_dir), PARAMS_CHAT_FILENAME)
+    assert [m.role for m in chat.messages] == ["user", "assistant"]
+    assert chat.messages[0].content == "直行跑偏了调哪个？"
+    assert (Path(output_dir) / PARAMS_CHAT_FILENAME).is_file()
+    # 与全局商量独立：.contest_idea_chat.json 不存在
+    assert not (Path(output_dir) / ".contest_idea_chat.json").exists()
+    # LLM 输入：题面 / 参数清单（逐条含 valid）/ 任务清单现状（未拆解 None）/ 历史
+    (problem, params, plan, history) = holder["llm"].params_discuss_calls[0]
+    assert problem == "2024 巡线小车"
+    assert params[0]["name"] == "THRESHOLD"
+    assert params[0]["valid"] is True
+    assert plan is None  # 未拆解允许咨询
+    assert history == (("user", "直行跑偏了调哪个？"),)
+
+    # read：全量读回
+    resp = client.post("/api/params/chat/read", json={"output_dir": output_dir})
+    assert resp.status_code == 200
+    data = resp.json()["chat"]
+    assert len(data["messages"]) == 2
+    assert data["messages"][1]["content"].startswith("先调 THRESHOLD")
+
+    # 校验 400：history 空 / role 非法 / 末条非 user
+    resp = client.post(
+        "/api/params/chat/send", json={"output_dir": output_dir, "history": []}
+    )
+    assert resp.status_code == 400
+    resp = client.post(
+        "/api/params/chat/send",
+        json={"output_dir": output_dir, "history": [{"role": "system", "content": "坏"}]},
+    )
+    assert resp.status_code == 400
+    resp = client.post(
+        "/api/params/chat/send",
+        json={"output_dir": output_dir, "history": [{"role": "assistant", "content": "AI 结尾"}]},
+    )
+    assert resp.status_code == 400
+    assert "最后一条必须是 user" in resp.json()["detail"]
+
+    # LLM 失败 → 502 且不落半轮（user 消息也不追加）
+    class _BoomParams:
+        def discuss_params(self, **kwargs):
+            raise LLMError("上游超时")
+
+    holder["llm"] = _BoomParams()
+    before = len(read_idea_chat(Path(output_dir), PARAMS_CHAT_FILENAME).messages)
+    resp = client.post(
+        "/api/params/chat/send",
+        json={"output_dir": output_dir, "history": [{"role": "user", "content": "又想到一个问题"}]},
+    )
+    assert resp.status_code == 502
+    assert len(read_idea_chat(Path(output_dir), PARAMS_CHAT_FILENAME).messages) == before

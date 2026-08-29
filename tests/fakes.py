@@ -608,6 +608,7 @@ class FakeLLM:
         idea_analysis: IdeaAnalysis | None = None,
         fixed_main_c: str = "",
         global_discussion: TaskDiscussion | None = None,
+        params_discussion: TaskDiscussion | None = None,
         param_list: ParamList | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
@@ -642,6 +643,7 @@ class FakeLLM:
         )
         self._fixed_main_c = fixed_main_c
         self._global_discussion = global_discussion
+        self._params_discussion = params_discussion
         self._param_list = param_list or ParamList(
             version=1,
             generated_at="2024-01-01T00:00:00+0000",
@@ -662,6 +664,9 @@ class FakeLLM:
         ] = []
         self.global_discuss_calls: list[
             tuple[str, str, tuple, tuple, tuple[str, ...], str, dict | None, str, tuple]
+        ] = []
+        self.params_discuss_calls: list[
+            tuple[str, tuple, dict | None, tuple]
         ] = []
         self.step_report_calls: list[
             tuple[dict[str, Any], dict[str, Any], str, tuple[str, ...]]
@@ -974,6 +979,18 @@ class FakeLLM:
         )
         return self._global_discussion or TaskDiscussion(reply="好")
 
+    def discuss_params(
+        self,
+        problem_text: str,
+        params: Sequence[Mapping[str, Any]],
+        plan: Mapping[str, Any] | None,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        self.params_discuss_calls.append(
+            (problem_text, tuple(params), dict(plan) if plan is not None else None, tuple(history))
+        )
+        return self._params_discussion or TaskDiscussion(reply="好")
+
     def report_task_step(
         self,
         task: Mapping[str, Any],
@@ -1244,6 +1261,16 @@ class RecordingLLM:
         history: Sequence[tuple[str, str]],
     ) -> TaskDiscussion:
         self._record("discuss_global_idea")
+        return TaskDiscussion(reply="好")
+
+    def discuss_params(
+        self,
+        problem_text: str,
+        params: Sequence[Mapping[str, Any]],
+        plan: Mapping[str, Any] | None,
+        history: Sequence[tuple[str, str]],
+    ) -> TaskDiscussion:
+        self._record("discuss_params")
         return TaskDiscussion(reply="好")
 
     def report_task_step(
