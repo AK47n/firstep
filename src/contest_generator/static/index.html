@@ -191,6 +191,10 @@
   button.danger { color: var(--danger); }
   button.danger:hover { border-color: var(--danger); }
   button.pin-overview-on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  /* 强调按钮（工单 newcomer-glossary/03）：accent 描边 + 淡底；欢迎卡
+     「去配置 API key」与本卡「去任务推进」共用该形态（仅用既有令牌）。 */
+  button.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  button.accent:hover { background: var(--accent); color: var(--on-accent); }
   button:disabled { opacity: .45; cursor: not-allowed; }
   button:disabled:hover { border-color: var(--border); color: var(--text); }   /* 禁用态不响应悬停 */
   textarea:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
@@ -1461,8 +1465,12 @@
       line-height: 1.65; color: var(--text); }
   /* 步骤卡人话副标题（工单 newcomer-glossary/02）：h2 下一行「这步解决什么」，
      弱化小字不喧宾夺主；间距与卡内既有 12.5px 行一致。 */
-  .card-purpose { font-size: 12.5px; color: var(--muted);
-      margin: 4px 0 10px; line-height: 1.6; }
+  /* 步骤卡人话副标题（工单 newcomer-glossary/02）：h2 下一行「这步解决什么」，
+     弱化小字不喧宾夺主；间距与卡内既有 12.5px 行一致。 */
+  .card-purpose, .handoff-note { font-size: 12.5px; color: var(--muted);
+      line-height: 1.6; }
+  .card-purpose { margin: 4px 0 10px; }
+  .handoff-note { margin: 0 0 10px; }
   .card-group .card-details { margin-bottom: 4px; }
   /* 逐步深化进度总览（工单 stepwise-deepen/02）：分段进度条——已验证绿 /
      进行中青 / 待上板黄 / 失败红 / 待做灰 / 已跳过暗；汇总文案在 fx/task.js */
@@ -2427,7 +2435,9 @@
         <summary>把整个工程上下文打包成一段提示词，粘贴给下一个 AI 继续精准打磨。</summary>
         <div class="card-details-body">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</div>
       </details>
+      <p class="handoff-note">小提示：工具内已能「和 AI 商量」（第 11 步任务推进）与「参数速调 AI 咨询」，一般不需要再找外部 AI——想直接继续写代码，点「去任务推进」。</p>
       <div class="row">
+        <button id="btn-goto-tasks" class="accent">去任务推进</button>
         <button id="btn-handoff" class="primary" data-ico="clipboard">生成交接提示词</button>
         <button id="btn-handoff-copy" class="hidden" data-ico="copy">复制</button>
       </div>
@@ -3019,6 +3029,7 @@ import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览�
 import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 import { initWelcome } from "/js/ui/welcome.js";  // 首次欢迎卡 + gen-banner 行动化（newcomer-onboarding/03）
 import { initGlossary } from "/js/ui/glossary.js";  // 生成页底部新手词表（newcomer-glossary/01）
+import { initHandoffNote } from "/js/ui/handoff.js";  // 交接提示词说明 + 去任务推进（newcomer-glossary/03）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
@@ -3371,6 +3382,7 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
   restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
   initWelcome();  // 首次欢迎卡（newcomer-onboarding/03）：依赖 state / 草稿已就绪
   initGlossary();  // 新手词表（newcomer-glossary/01）：纯静态渲染，DOM 已就绪
+  initHandoffNote();  // 交接提示词说明（newcomer-glossary/03）：按钮绑定依赖 DOM 已就绪
 })();
 
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）
