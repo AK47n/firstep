@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8cccc4b8e32a88a6b15d502e2768ad5796506eab -->
+<!-- changelog-auto: last-commit=b577872a955e3fe18d6ca8d23d3c7693d40b5b0b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 11:54 任务卡接线图 02：步骤报告接线引用协议——StepReport 增可选 wiring 字段（AI 只给引脚/端子名，后端查表校验：pin∈板引脚名含供电类、target∈端子 id/label/渲染串∪板载资源∪引脚名，逐条丢弃、全非法=空）；TASK_REPORT_SYSTEM_PROMPT 四段契约 + 本工程接线数据白名单段（wiring_summary_text，与 README 同源）；TaskIteration.wiring 落盘（缺省空，旧清单零改动）；wiring_source 单入口一次读盘（评审整改：白名单收渲染合成串防误滤 + 数据源失败只清空 wiring 不吞主报告）；pytest 全绿
 - 11:55 任务卡接线图 03：接线图渲染纯件——fx/wiring.js 新增接线图 SVG 渲染（几何常量与资源总览板图交叉同步：rowH=22/topPad=46/BOARD_W=460/PAD_R=7/CHIP_X=100/CHIP_W=260/LABEL_FS=11；端子列 TERM_X=BOARD_W+24/TERM_W=208）：highlightWiringLines 命中行高亮（matchRow 收 role_id/label/渲染串，与 02 白名单同步）+ wiringAllLines 全量淡显 + wiringDiagramHTML（每线一条 path、wiring-power 电源配色、图例、显示全部接线开关、中文空态、全转义）；fx/task.js wiringSectionHTML 三级退化装配 + taskNextActionHTML/taskStepReportHTML 图文并存（缺省 opts 现状不变）；tests/js 成文（wiring.test.mjs 7 项 + task.test.mjs 三输入域），全量 652 passed
 - 13:51 任务卡接线图 04：接线图端到端上线——GET /api/wiring 只读端点（output_dir → {platform, board, rows}；无快照/坏 JSON/版本不符 → 200 空载荷，不 500）；fx/task.js 每任务装配 wiringOpts（uid card:/result: 分 host，perComputed 防双执行）+ data-wiring-uid 占位；ui/wiring.js 胶水（快照 + /api/boards 两级缓存单飞、tier-2 资源高亮退化图 = resourceBoardHTML 按本任务 resources 过滤 + conflictLegend:false、toggle 原位重渲委托）；tasksRender/tasksRenderResult 接线图图文并存 + tasksWiringEnsure 就绪单源刷新（lastWiringResult 按目录复插）；.wiring-* CSS；pytest 2789 + tests/js 653 全绿（评审整改：单任务视图图例去误导、wiringPer 哨兵单源化、空载荷单字面量）
+- 13:53 任务卡接线图：补交 spec.md 文档（与其他 feature 的 112 份 spec 同址入库）；score-coverage/02 工单补提交（代码 f4ae6e9 已入库，工单状态/勾选/评审记录补落盘）
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
