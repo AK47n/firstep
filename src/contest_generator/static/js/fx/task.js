@@ -4,6 +4,7 @@ import { esc, truncate } from "./core.js";
 import { isMainCPath } from "./code.js";  // 错误行跳转可点判定（error-jump-task/02；code.js 无环）
 import { flashPanelHTML } from "./flash.js";  // 任务卡烧录控制行（flash-step-button/01；flash.js 仅依赖 core.js，无环）
 import { wiringDiagramHTML, wiringFromResources } from "./wiring.js";  // 接线图（task-wiring-diagram/03+05；wiring.js 仅依赖 core.js，无环）
+import { mainDiffHTML } from "./diff.js";  // 任务「本轮变化」diff（task-changes-inline/01；diff.js 仅依赖 core.js，无环）
 
 export function taskStatusLabel(status) {
   switch (status) {
@@ -232,6 +233,9 @@ export function taskCardHTML(task, index, opts) {
     + '<div class="reason">' + esc(task.description) + "</div>"
     + meta
     + taskIterationsHTML(task)
+    // 本轮变化槽位（工单 task-changes-inline/01）：执行结果卡内注入位——胶水层
+    // 在任务执行完成后把「本轮变化」区插入锚点之后；无注入 = 零占位（空 span）。
+    + '<span class="task-changes-anchor" data-changes-anchor></span>'
     + taskDialogAdoptHTML(task)
     + taskNextActionHTML(task, o)
     // 上板自检清单常驻（工单 task-insight/02，spec 轴评审整改：结果面板只在
@@ -931,6 +935,40 @@ export function verifyStatusMarkup(data, fallbacks) {
   };
 }
 
+/** 任务执行结果「本轮变化」区（工单 task-changes-inline/01）：执行结果从网格
+ * 末尾面板并入刚完成的任务卡——完整 diff / 编译验证详情 / 错误行跳转 / 备份
+ * 回滚原地可见，无需滚动到网格底部。spec 决策（删重复）：步骤报告两块、
+ * checklist 副本、feedback note、接线图**不重复**——卡上历史区（每轮详情
+ * 原文）/ 常驻 checklist / 「下一步要做」接线图已有同源信息。
+ * opts.open 控制 details 默认展开（执行完成自动展开；重开页面后变化区不存在
+ * ——内存态 lastWiringResult 清零，不占地方）。data = /api/tasks/execute done
+ * 载荷（task / status / compile.parsed_errors / main_diff / backup_id）；
+ * data 缺失 → ""（防御，胶水层只在执行完成时调用）。 */
+export function taskChangesHTML(task, data, opts) {
+  if (!data || typeof data !== "object") return "";
+  const o = opts || {};
+  const t = task || {};
+  const markup = verifyStatusMarkup(data, {
+    unverified: "未检测到编译工具链：任务结果已写入 main.c，但未经编译验证——请配置工具链后手动编译，或上板后人工标记为已验证。",
+    failed: "编译验证未通过，任务结果已写入 main.c（已备份，可回滚）。",
+  });
+  const backupId = data.backup_id || "";
+  const errorsHTML = taskErrorsHTML((data.compile && data.compile.parsed_errors) || []);
+  const diffHTML = data.main_diff !== undefined ? mainDiffHTML(data.main_diff, "任务") : "";
+  const parts = ['<div class="task-changes-detail">' + markup.detail + "</div>"];
+  if (errorsHTML) parts.push(errorsHTML);
+  parts.push('<div class="task-changes-backup">备份：<span class="slug">'
+    + esc(String(backupId || "—")) + "</span>"
+    + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="'
+      + esc(String(backupId)) + '" data-task="' + esc(String(t.id || ""))
+      + '">回滚到本任务执行前</button>' : "")
+    + "</div>");
+  if (diffHTML) parts.push(diffHTML);
+  return '<details class="task-changes"' + (o.open ? " open" : "") + '>'
+    + '<summary><span class="slug">本轮变化</span> ' + markup.badge + "</summary>"
+    + '<div class="task-changes-body">' + parts.join("") + "</div></details>";
+}
+
 /** 全局商量消息行（工单 idea-suite/02）：用户 / AI 分行（复用
  * .sugg-msg 样式）+ at 时间；AI 回复挂三按钮——转成任务 / 转成修正（
  * data-global-action = task|fix，data-global-text = 该条全文，供胶水层走
@@ -1117,5 +1155,6 @@ if (typeof window !== "undefined") {
     scoreRefsOverviewHTML,
     checklistStateKey,
     taskErrorsHTML,
+    taskChangesHTML,
   });
 }
