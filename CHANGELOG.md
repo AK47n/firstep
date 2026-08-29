@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=09d0a80efad96643de23da0cb755d179db49236a -->
+<!-- changelog-auto: last-commit=fc8f3460ade862a923e03acb8dae73c9bff07188 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 00:42 新手上手 Y4 03：交接提示词说明 + 去任务推进按钮（复用 switchReviseTab）
 - 01:10 新手指引 01：导航「指南」组 + 教程页骨架——顶部导航第三组「指南 | 新手指引」入口 + section#tab-guide 四子页签壳（fx/guide.js 纯函数单源 GUIDE_TABS/guidePanelFor/guideTabNext + ui/guide.js 点击/方向键切换，初始 roving 一次给全——双轴评审整改）+ guide.test.mjs 纯函数与 HTML 契约守卫 + fx-guard 登记；探针 26 项 PASS，tests/js 785 + pytest 2827 全绿
 - 01:21 新手指引 02：教程内容「准备」+「做题主线」两章 + 渲染接入——fx/guide.js 教程正文数据与渲染单源（GUIDE_CHAPTERS 两章：四样东西/三步装好/IDE 人话/导航三组/12 步速览表/AI 边界/任务推进/新手词表 + p/note/ul/ol/table/jump 块渲染 + guideBlocksOf 单源遍历）+ ui/guide.js 章渲染与跳转按钮委托；跳转归一 gotoNavTab（ui/nav-jump.js，welcome 同步改用——评审整改）；内容守护 guide-refs.test.mjs（12 步表逐行对应卡标题 + AI 列口径 + 跳转目标 id 存在）+ guide.test.mjs 扩展 + fx-guard 登记；文案事实修正（一键体检/一键补齐语境/AI 边界精度——双轴评审整改）；探针 12 项 PASS，tests/js 796 + pytest 2827 全绿
+- 01:28 新手指引 03：教程内容「编译与上板」+「交付与收尾」两章 + 守护扩展——fx/guide.js 增后两章（编译三种方式/SWD 四线接线表/烧录与常见报错/上板自检；报告与演示草稿/交付三动作/交接提示词三步/工程在哪/停服务/下一题）；守护改单源派生（SWD 引脚读 boards/*.json、产物与 flash.py artifact 行核对）+ title 定位替代下标魔法——双轴评审整改；探针 11 项 PASS，tests/js 798 + pytest 2827 全绿
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
