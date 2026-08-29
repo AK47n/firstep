@@ -28,6 +28,7 @@ import { mainDiffHTML } from "/js/fx/diff.js";  // 效果 diff 渲染（diff-res
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 // ---------------------------------------------------------------------------
 // 修订与深化阶段卡（工单 revise-deepen/05）：两条入口（当前会话 / 历史目录）
@@ -280,6 +281,7 @@ async function reviseAnalyze() {
   const fill = $("revise-problem-text").value.trim();
   if (fill) body.problem_text = fill;   // 补题面覆盖回传（后端缺题面 400 中文提示；字段保留前向兼容）
   reviseSetBusy(true);
+  aiActionStart("修订分析");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-analyze-msg").textContent = "";
   $("revise-analyze-status").textContent = "请求中…";
   clearReviseTelemetry("analyze");
@@ -296,6 +298,7 @@ async function reviseAnalyze() {
     $("revise-analyze-status").textContent = "";
     $("revise-analyze-msg").textContent = e.message;   // 后端中文（含缺题面提示）
   } finally {
+    aiActionStop();
     reviseSetBusy(false);
   }
 }
@@ -313,6 +316,7 @@ async function reviseApply() {
   if (fill) body.problem_text = fill;
   if (revise.analysis && (revise.analysis.impacts || []).length) body.impacts = revise.analysis.impacts;
   reviseSetBusy(true);
+  aiActionStart("修订落地");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-exec-msg").textContent = "";
   $("revise-exec-status").textContent = "请求中…";
   clearReviseTelemetry("exec");
@@ -341,6 +345,7 @@ async function reviseApply() {
     $("revise-exec-status").textContent = "";
     $("revise-exec-msg").textContent = e.message;
   } finally {
+    aiActionStop();
     reviseSetBusy(false);
   }
 }
@@ -385,6 +390,7 @@ async function reviseDeepen() {
 async function reviseRunDeepen() {
   if (!revise.outputDir) { $("revise-exec-msg").textContent = "请先加载上下文（当前会话或历史目录）"; return; }
   reviseSetBusy(true);
+  aiActionStart("深化");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-exec-msg").textContent = "";
   $("revise-exec-status").textContent = "请求中…";
   clearReviseTelemetry("exec");
@@ -407,6 +413,7 @@ async function reviseRunDeepen() {
     $("revise-exec-status").textContent = "";
     $("revise-exec-msg").textContent = e.message;
   } finally {
+    aiActionStop();
     reviseSetBusy(false);
   }
 }

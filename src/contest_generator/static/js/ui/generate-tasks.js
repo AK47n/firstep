@@ -33,6 +33,7 @@ import { mainDiffHTML } from "/js/fx/diff.js";        // 效果 diff 渲染（di
 import { resourcesToolbarHTML } from "/js/fx/resource-board.js";  // 资源总览工具栏（resource-overview-polish/02）
 import { resourceView, renderResourceSection } from "/js/ui/resource-board.js";  // 资源总览视图（resource-overview-polish/02）
 import { loadWiringAssets, wiringAssetsSync, wiringOptsFor, wireHosts } from "./wiring.js";  // 接线图装配（task-wiring-diagram/04）
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 let tasks = {
   outputDir: "",      // 拆解 / 执行针对的输出目录
@@ -325,6 +326,7 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
   const text = (sourceText || (input && input.value) || "").trim();
   if (!text) { $("tasks-idea-msg").textContent = "请先说你的想法或发现的问题（如「进弯道前先减速」）；或到 AI 建议区把『讨论』的建议转成落地动作"; return; }
   ideaSetBusy(true);
+  aiActionStart("想法分析");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-idea-msg").textContent = "";
   $("tasks-status").textContent = "AI 分析想法中…";
   try {
@@ -356,6 +358,7 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
     $("tasks-status").textContent = "";
     return false;
   } finally {
+    aiActionStop();
     ideaSetBusy(false);
   }
 }
@@ -410,10 +413,12 @@ async function tasksIdeaFix() {
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   tasksSetBusy(true);
+  aiActionStart("直接修正");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-idea-msg").textContent = "";
   try {
     await ideaFixCore();
   } finally {
+    aiActionStop();
     tasksSetBusy(false);
   }
 }
@@ -614,6 +619,7 @@ async function tasksChatSend() {
   chatState.pending = message;
   chatState.draft = "";
   chatState.busy = true;
+  aiActionStart("全局商量");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-global-msg").textContent = "";
   $("tasks-status").textContent = "全局商量：AI 回应中…（分钟级调用，请等待）";
   tasksGlobalRender();
@@ -627,6 +633,7 @@ async function tasksChatSend() {
     $("tasks-status").textContent = "";
     $("tasks-global-msg").textContent = e.message;
   } finally {
+    aiActionStop();
     chatState.pending = "";
     chatState.busy = false;
     tasksGlobalRender();
@@ -893,6 +900,7 @@ async function tasksPlan(force) {
   })) return;
   tasksSetBusy(true);
   tasksResetMessages();
+  aiActionStart("任务规划");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-status").textContent = "请求中…";
   try {
     const body = { output_dir: dir };
@@ -923,6 +931,7 @@ async function tasksPlan(force) {
       $("btn-tasks-replan").classList.remove("hidden");
     }
   } finally {
+    aiActionStop();
     tasksSetBusy(false);
   }
 }
@@ -962,6 +971,7 @@ async function tasksExecute(taskId, feedback) {
   const note = ($("task-note-" + taskId) || {}).value || "";
   tasksSetBusy(true);
   tasksResetMessages();
+  aiActionStart("任务执行");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   // 即时可见反馈（工单 05）：点击即置「进行中」并重渲染，卡片立刻有反应
   setTaskStatusLocal(taskId, "doing");
   tasksRender();
@@ -1007,6 +1017,7 @@ async function tasksExecute(taskId, feedback) {
     // 与磁盘不一致会误导用户）
     await tasksReload();
   } finally {
+    aiActionStop();
     tasksSetBusy(false);
   }
 }
@@ -1262,6 +1273,7 @@ async function tasksDialogSend(taskId) {
   st.history.push({ role: "user", content: message });
   st.draft = "";
   st.busy = true;
+  aiActionStart("任务讨论");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-msg").textContent = "";
   tasksRender();
   try {
@@ -1279,6 +1291,7 @@ async function tasksDialogSend(taskId) {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = e.message;
   } finally {
+    aiActionStop();
     st.busy = false;
     tasksRender();
   }

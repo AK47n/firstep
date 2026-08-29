@@ -15,6 +15,7 @@ import { paramsChatHTML } from "/js/fx/params-chat.js";
 import { reviseGetDir } from "./generate-revise.js";
 import { tasksIsBusy } from "./generate-tasks.js";
 import { paramsBusy, paramsPlan } from "./params.js";
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 // 本簇状态（会话级；落盘真相 = .contest_params_chat.json）：chat = 后端
 // {messages} 全量（read/send 后替换）；pending = 发送中乐观展示的用户消息；
@@ -113,6 +114,7 @@ async function paramsChatSend() {
   paramsChatState.pending = message;
   paramsChatState.draft = "";
   paramsChatState.busy = true;
+  aiActionStart("参数咨询");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   if (msgEl) msgEl.textContent = "";
   paramsChatStatus("AI 诊断中…（分钟级调用，请等待）");
   paramsChatRender();
@@ -126,6 +128,7 @@ async function paramsChatSend() {
     paramsChatStatus("");
     if (msgEl) msgEl.textContent = e.message;
   } finally {
+    aiActionStop();
     paramsChatState.pending = "";
     paramsChatState.busy = false;
     paramsChatRender();

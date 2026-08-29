@@ -24,11 +24,13 @@ export function aiActionStop() {
 function render() {
   const el = $("ai-action-banner");
   if (!el) return;
+  const labelEl = $("ai-action-label");
   if (state.count > 0) {
     el.classList.remove("hidden");
-    const labelEl = $("ai-action-label");
     if (labelEl) labelEl.textContent = aiActionBannerLabel(state.label);
   } else {
     el.classList.add("hidden");
+    // 归零清空文本：留旧 label 会在下次 start 前被读到（残留），隐藏语义 = 无行动
+    if (labelEl) labelEl.textContent = "";
   }
 }

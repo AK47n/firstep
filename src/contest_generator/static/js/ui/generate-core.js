@@ -38,6 +38,7 @@ import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { refreshRecent } from "/js/ui/recent.js";
 import { readinessState, desktopTopicOutputEnabled } from "/js/ui/generate-readiness.js";
 import { startFixCenter, compileBanner, toolchains } from "/js/ui/generate-fix.js";  // 修复中心（工单 16 迁出→静态 import，取代工单 15 接缝）
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 // ---------------------------------------------------------------------------
 // 生成页：8. main.c 骨架 / 自检冒烟（工单 skeleton-smoke-refs/01）
@@ -58,6 +59,7 @@ async function generateMain(mode) {
   if (!selectedSlugs.length) { $("skeleton-msg").textContent = "请先选择模块"; return; }
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>生成中…';
+  aiActionStart("生成骨架");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   try {
     const payload = {
       problem_text: problem, slugs: selectedSlugs, platform: chosenPlatform,
@@ -86,6 +88,7 @@ async function generateMain(mode) {
     } else { fwBox.classList.add("hidden"); }
   } catch (e) { $("skeleton-msg").textContent = e.message; }
   finally {
+    aiActionStop();
     btn.disabled = false;
     btn.innerHTML = cfg.doneLabel;
   }
@@ -527,6 +530,14 @@ $("btn-generate").addEventListener("click", async () => {
   };
   genStatus("正在准备…");
   $("btn-generate").disabled = true;
+  aiActionStart("生成工程");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+  // 横幅 stop 哨兵（评审整改）：catch 首段 stop（覆盖确认弹窗等待期）+ finally
+  // stop 两处收口取其一——非冲突错误路径只 start 一次却有两个 stop 会打穿共享
+  // 计数（并发时误隐同伴横幅）；确认重发前重置哨兵开新一对。
+  let bannerReleased = false;
+  const releaseBanner = () => {
+    if (!bannerReleased) { bannerReleased = true; aiActionStop(); }
+  };
   // 覆盖重发（工单 generate-overwrite/01）：payload 声明在 try 外——catch
   // 块引用 try 块内 const 会 ReferenceError（块级作用域）
   let payload;
@@ -587,6 +598,7 @@ $("btn-generate").addEventListener("click", async () => {
     renderGenerateSuccess(data);
   } catch (e) {
     stopStage();
+    releaseBanner();   // 首段请求已终态：覆盖确认弹窗等待期无 AI 行动（工单 ai-action-banner/02）
     $("generate-msg").classList.remove("ok");
     status.textContent = "";
     // 生成前覆盖保护（工单 generate-overwrite/01）：同名完整工程 400 →
@@ -606,6 +618,8 @@ $("btn-generate").addEventListener("click", async () => {
         confirmText: "确定覆盖",
       })) {
         genStatus("正在覆盖生成…");
+        bannerReleased = false;   // 重发 = 新一对 start/stop
+        aiActionStart("生成工程");   // 确认后重发：新一段 AI 行动（工单 ai-action-banner/02）
         try {
           const data = await apiPost("/api/generate", { ...payload, overwrite: true });
           stopStage();
@@ -622,7 +636,7 @@ $("btn-generate").addEventListener("click", async () => {
       $("generate-msg").textContent = e.message;
     }
     toast("error", "生成失败");
-  } finally { $("btn-generate").disabled = false; }
+  } finally { releaseBanner(); $("btn-generate").disabled = false; }
 });
 
 // ---- 本簇导出面（host 顶部 import 活绑定调用点） ----
