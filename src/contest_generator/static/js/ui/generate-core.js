@@ -30,7 +30,7 @@ import { expandSettingsCollapse } from "/js/ui/settings.js";  // 指引卡「去
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
 import { syncStep7 } from "/js/ui/step-state.js";
-import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId, pythonTemplates, lastRecommend } from "/js/ui/generate-recommend.js";
+import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId, pythonTemplates, lastRecommend, prereadOverviewText } from "/js/ui/generate-recommend.js";
 import { instances, pinBindings, pinUnbound, pinRoles } from "/js/ui/generate-pins.js";
 import { markStepDone, markStepUndone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
@@ -345,7 +345,7 @@ $("btn-handoff").addEventListener("click", async () => {
   try {
     const platform = handoffPlatformLabel();
     const ide = handoffPlatformIde();
-    const summary = $("topic-summary-box").textContent.trim();
+    const summary = (prereadOverviewText || "").trim();
     const mainC = $("main-c").value.trim();
     const dir = $("res-dir").textContent.trim();   // 生成成功后才非空
     const structure = $("res-structure").textContent.trim();
@@ -367,9 +367,9 @@ $("btn-handoff").addEventListener("click", async () => {
       "",
       problem,
       "",
-      "## 二、功能要点（AI 预读整理）",
+      "## 二、赛题总览（AI 预读）",
       "",
-      summary || "（未生成，可在打磨时自行通读题面整理）",
+      summary || "（未预读，可在打磨时自行通读题面提炼要点）",
       "",
       "## 三、目标平台",
       "",

@@ -38,9 +38,9 @@ test("手动 + 自动并存 → 只 markStepDone(4) 一次", () => {
   assert.deepEqual(runSyncStep4(["ref-1"], ["ref-auto"]), [["done", 4]]);
 });
 
-test("静态断言：简介生成成功回调必须调用 markStepDone(2)", () => {
-  assert.match(src, /markStepDone\(2\);\s*\/\/ 简介生成成功即视为完成/,
-    "btn-topic-summary 成功分支的 markStepDone(2) 被删了？");
+test("静态断言：预读成功回调必须调用 markStepDone(2)", () => {
+  assert.match(src, /markStepDone\(2\);\s*\/\/ 预读成功即视为完成/,
+    "btn-topic-preread 成功分支的 markStepDone(2) 被删了？");
 });
 
 test("静态断言：勾选变更与自动关联两处都调用 syncStep4（参数化）", () => {
