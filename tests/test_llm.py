@@ -3911,7 +3911,7 @@ def test_name_topic_english_posts_plain_text_prompt():
 
 
 def test_name_topic_english_truncates_oversized_problem():
-    """超长题面截断带标注（与赛题简介同款预算）。"""
+    """超长题面截断带标注（与赛题预读同款预算）。"""
     transport = FakeTransport(body=_api_response("Auto_Car"))
     llm = _llm(transport)
     long_problem = "题" * (EMBEDDED_CONTENT_CAP + 100)

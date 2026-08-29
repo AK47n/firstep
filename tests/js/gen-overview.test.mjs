@@ -11,7 +11,7 @@ import {
 
 const titles = [
   { n: 1, title: "赛题原文" },
-  { n: 2, title: "赛题简介" },
+  { n: 2, title: "赛题预读" },
   { n: 3, title: "目标平台" },
   { n: 4, title: "参考资料" },
   { n: 5, title: "AI 推荐" },

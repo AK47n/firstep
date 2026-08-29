@@ -13,22 +13,11 @@ from contest_generator.generation_output import (
     topic_dir_title,
     topic_en_title,
     topic_short_title,
-    topic_title_from_summary,
     unique_desktop_topic_dir,
     windows_safe_folder_name,
     with_platform_suffix,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
-
-
-def test_topic_title_from_summary_uses_first_non_bullet_line():
-    summary = "智能巡检小车\n- 采集温湿度\n- OLED 显示"
-
-    assert topic_title_from_summary(summary) == "智能巡检小车"
-
-
-def test_topic_title_from_summary_strips_title_prefix():
-    assert topic_title_from_summary("题名：智能巡检小车\n- 要点") == "智能巡检小车"
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,8 @@
 """桌面测试产物清理函数单测（conftest 收尾钩子的核心逻辑）。
 
-cleanup_desktop_test_artifacts 只删「AI 生成的赛题简介」前缀目录（FakeLLM
-fallback 命名 = 测试产物特征）；真实命名（赛题名目录）与文件一律保留。
+cleanup_desktop_test_artifacts 只删「AI 生成的赛题简介」前缀目录（旧协议
+FakeLLM 默认值的历史遗留目录 = 测试产物特征）；真实命名（赛题名目录）与
+文件一律保留。
 """
 
 from pathlib import Path
