@@ -26,7 +26,8 @@ for (const name of ["suggestionSolutionBadges", "suggestionOptionRowHTML",
 
 const SOL = (over = {}) => ({
   name: "K230 CanMV", interface: "SPI/串口", price: "￥60-90/套",
-  note: "内置视觉AI，跑色块/矩形识别", suitable: "识别类赛题", recommended: true, ...over,
+  note: "内置视觉AI，跑色块/矩形识别", suitable: "识别类赛题", recommended: true,
+  lib_modules: [], ...over,
 });
 
 test("徽标：仅推荐 → 只出「推荐」", () => {
@@ -50,6 +51,39 @@ test("徽标：推荐 + AI 建议可共存", () => {
 test("徽标：均无 → 空串；selected 词表外 / 空串不高亮", () => {
   assert.equal(suggestionSolutionBadges(SOL({ recommended: false }), ""), "");
   assert.equal(suggestionSolutionBadges(SOL({ recommended: false }), "别的方案"), "");
+});
+
+// ===== 库内已有徽章（工单 wordlist-lib-modules/02）=====
+
+test("徽标：lib_modules 缺失 / 空数组 → 无「库内已有」徽章", () => {
+  assert.ok(!suggestionSolutionBadges({ name: "A", recommended: false }, "").includes("sugg-lib"));
+  assert.ok(!suggestionSolutionBadges(SOL({ recommended: false }), "").includes("sugg-lib"));
+});
+
+test("徽标：有 lib_modules → 「库内已有：xunji · pid」", () => {
+  const out = suggestionSolutionBadges(SOL({ lib_modules: ["xunji", "pid"], recommended: false }), "");
+  assert.match(out, /sugg-lib/);
+  assert.match(out, /库内已有：xunji · pid/);
+});
+
+test("徽标：lib_modules 含特殊字符 → HTML 转义", () => {
+  const out = suggestionSolutionBadges(
+    SOL({ lib_modules: ['xunji<&>', 'pid"x'], recommended: false }), "");
+  assert.match(out, /xunji&lt;&amp;&gt; · pid&quot;x/);
+});
+
+test("徽标：推荐 + 库内已有可共存", () => {
+  const out = suggestionSolutionBadges(SOL({ lib_modules: ["pid"] }), "");
+  assert.match(out, /sugg-rec/);
+  assert.match(out, /sugg-lib/);
+});
+
+test("方案行：行内出现「库内已有」徽章", () => {
+  const out = suggestionOptionRowHTML(
+    SOL({ lib_modules: ["xunji", "pid"], recommended: false }), "");
+  assert.match(out, /sugg-row/);
+  assert.match(out, /sugg-lib/);
+  assert.match(out, /库内已有：xunji · pid/);
 });
 
 test("方案行：名称/接口/价格/徽标/备注/适用齐全且转义", () => {
