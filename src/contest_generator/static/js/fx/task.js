@@ -170,6 +170,26 @@ export function taskNextHintHTML(plan, currentId) {
     + esc(next.title) + "</div>";
 }
 
+/** 未完成的前置任务（工单 prereq-soft-guide/01，温和引导）：任务 depends_on
+ * 中状态不在 {verified, skipped} 的前置（skipped = 用户已主动放弃，不再阻断
+ * ——否则跳过前置会造成依赖死锁）；返回 [{id, title, status}]，无依赖 / 无
+ * plan / 前置 id 在清单中找不到 / 全部完成 = 空数组；status 缺省按 pending。 */
+export function unresolvedPrereqs(task, plan) {
+  const deps = (task && task.depends_on) || [];
+  if (!deps.length || !plan || !plan.tasks) return [];
+  const byId = new Map(plan.tasks.map((t) => [t && t.id, t]));
+  const out = [];
+  for (const id of deps) {
+    const dep = byId.get(id);
+    if (!dep) continue;
+    const status = dep.status || "pending";
+    if (status !== "verified" && status !== "skipped") {
+      out.push({ id, title: dep.title || "", status });
+    }
+  }
+  return out;
+}
+
 export function taskCardHTML(task, index, opts) {
   const o = opts || {};
   const badge = '<span class="badge ' + taskStatusBadgeClass(task.status) + '">'
@@ -193,7 +213,14 @@ export function taskCardHTML(task, index, opts) {
   }
   if (refs) metaItems.push('<span class="task-meta-item">评分点：' + esc(refs) + "</span>");
   if ((task.depends_on || []).length) {
-    metaItems.push('<span class="task-meta-item">前置：'
+    // 温和引导（工单 prereq-soft-guide/01）：前置未完成 → 警告色 + 悬停提示
+    //（文案不变；警告只做视觉标记，不阻断）
+    const pend = unresolvedPrereqs(task, o.plan);
+    const warnCls = pend.length ? " task-meta-warn" : "";
+    const title = pend.length
+      ? ' title="前置未完成：' + esc(pend.map((p) => p.id).join("、")) + '"'
+      : "";
+    metaItems.push('<span class="task-meta-item' + warnCls + '"' + title + '>前置：'
       + esc(task.depends_on.join("、")) + "</span>");
   }
   const meta = metaItems.length ? '<div class="task-meta">' + metaItems.join("") + "</div>" : "";
@@ -244,6 +271,7 @@ export function tasksGridHTML(plan, opts) {
       ...(opts || {}),
       seqById,           // 编辑表单依赖回填（工单 idea-suite/04）
       total: tasks.length,
+      plan: p,           // 前置温和引导（工单 prereq-soft-guide/01）
     })).join("");
 }
 
@@ -947,6 +975,7 @@ if (typeof window !== "undefined") {
   Object.assign(window, {
     taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel,
     taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
+    unresolvedPrereqs,
     tasksOverviewHTML, taskStepReportHTML, taskNextActionHTML,
     verifyStatusMarkup, taskCanFeedback, taskIterationLabel,
     taskIterationsHTML, taskLatestFeedbackNote,

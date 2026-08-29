@@ -18,6 +18,7 @@ import {
   scoreRefsOverviewHTML,
   checklistStateKey,
   taskErrorsHTML,
+  unresolvedPrereqs,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -250,6 +251,67 @@ test("taskCardHTML: 无任何元信息 → 不渲染 .task-meta 行", () => {
     score_refs: [], depends_on: [], verify: "compile", status: "pending",
   }, 0, {});
   assert.ok(!html.includes("task-meta"));
+});
+
+// ---------------------------------------------------------------------------
+// 前置温和引导（工单 prereq-soft-guide/01）
+// ---------------------------------------------------------------------------
+
+test("unresolvedPrereqs: 无依赖 / 无 plan → 空数组", () => {
+  assert.deepEqual(unresolvedPrereqs({}, { tasks: [] }), []);
+  assert.deepEqual(unresolvedPrereqs({ depends_on: ["t1"] }, null), []);
+  assert.deepEqual(unresolvedPrereqs({ depends_on: ["t1"] }, {}), []);
+});
+
+test("unresolvedPrereqs: 前置全部完成（verified/skipped）→ 空数组", () => {
+  const plan = { tasks: [
+    { id: "t1", status: "verified", title: "一" },
+    { id: "t2", status: "skipped", title: "二" },
+  ] };
+  assert.deepEqual(unresolvedPrereqs({ depends_on: ["t1", "t2"] }, plan), []);
+});
+
+test("unresolvedPrereqs: 未完成前置逐个返回（含 title/status，按依赖顺序）", () => {
+  const plan = { tasks: [
+    { id: "t1", status: "pending", title: "循迹决策" },
+    { id: "t2", status: "verified", title: "灰度循迹" },
+    { id: "t3", status: "failed", title: "差速控制" },
+  ] };
+  assert.deepEqual(unresolvedPrereqs({ depends_on: ["t1", "t2", "t3"] }, plan), [
+    { id: "t1", title: "循迹决策", status: "pending" },
+    { id: "t3", title: "差速控制", status: "failed" },
+  ]);
+  // doing / unverified 同样算未完成；缺省状态按 pending
+  const plan2 = { tasks: [
+    { id: "a", status: "doing", title: "A" },
+    { id: "b", status: "unverified", title: "B" },
+    { id: "c", title: "C" },
+  ] };
+  assert.deepEqual(unresolvedPrereqs({ depends_on: ["a", "b", "c"] }, plan2).map((p) => p.id),
+    ["a", "b", "c"]);
+});
+
+test("unresolvedPrereqs: 前置 id 在清单中找不到 → 忽略", () => {
+  const plan = { tasks: [{ id: "t1", status: "pending", title: "一" }] };
+  assert.deepEqual(unresolvedPrereqs({ depends_on: ["t1", "t9"] }, plan),
+    [{ id: "t1", title: "一", status: "pending" }]);
+});
+
+test("taskCardHTML: 前置未完成 → 前置 chips 警告色 + 悬停提示", () => {
+  const plan = { tasks: [
+    { id: "t1", status: "pending", title: "循迹决策" },
+    { id: "t2", status: "verified", title: "灰度循迹" },
+  ] };
+  const html = taskCardHTML({ id: "t2", title: "灰度循迹", description: "x",
+    depends_on: ["t1"], status: "pending" }, 1, { plan });
+  assert.ok(html.includes('task-meta-item task-meta-warn'));
+  assert.ok(html.includes('title="前置未完成：t1"'));
+  // 全部完成 → 无警告
+  const plan2 = { tasks: [{ id: "t1", status: "verified", title: "循迹决策" }] };
+  const okHtml = taskCardHTML({ id: "t2", title: "灰度循迹", description: "x",
+    depends_on: ["t1"], status: "pending" }, 1, { plan: plan2 });
+  assert.ok(okHtml.includes('task-meta-item"'));
+  assert.ok(!okHtml.includes("task-meta-warn"));
 });
 
 test("taskIterationsHTML: 两行式结构（line 徽章行 + 带标签 detail 行）+ 回滚按钮 btn-mini", () => {

@@ -21,7 +21,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML, tasksDoneCount } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML, tasksDoneCount, unresolvedPrereqs, taskStatusLabel } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
@@ -1422,10 +1422,30 @@ $("tasks-idea-result").addEventListener("click", (event) => {
   tasksIdeaConvert("direct_fix");
 });
 // 任务卡「做这一步」事件委托（列随状态重渲染，监听器挂容器）
-$("tasks-grid").addEventListener("click", (event) => {
+$("tasks-grid").addEventListener("click", async (event) => {
   const btn = event.target.closest(".btn-task-run");
   if (!btn) return;
-  tasksExecute(btn.dataset.task, "");
+  const taskId = btn.dataset.task;
+  // 温和引导（工单 prereq-soft-guide/01）：前置未完成 → 确认弹窗（可取消或
+  // 仍继续；skipped 视为完成不拦）。只挂「做这一步」——重做/上板反馈是已
+  // 执行过的卡，不弹，避免噪音。
+  const task = ((tasks.plan && tasks.plan.tasks) || []).find((t) => t.id === taskId);
+  const pend = unresolvedPrereqs(task, tasks.plan);
+  if (pend.length) {
+    const names = pend.map((p) => "「" + p.id + " " + p.title + "」（"
+      + taskStatusLabel(p.status) + "）").join("、");
+    const go = await confirmModal({
+      title: "前置任务还未完成",
+      message: "这张卡依赖的前置还没做完：" + names + "。"
+        + "建议先完成前置任务（前置产出的代码/接线是这张卡的前提，先做容易对不上）。"
+        + "确认要继续的话点「仍然继续」。",
+      danger: false,
+      confirmText: "仍然继续",
+      cancelText: "先去做前置",
+    });
+    if (!go) return;
+  }
+  tasksExecute(taskId, "");
 });
 // 上板反馈：展开输入区 / 发送反馈（工单 task-feedback/03）
 $("tasks-grid").addEventListener("click", (event) => {
