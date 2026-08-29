@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=918d8fc2a221924bde820497c0db048e6564171c -->
+<!-- changelog-auto: last-commit=09d0a80efad96643de23da0cb755d179db49236a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 00:38 新手上手 Y3 02：12 张步骤卡人话副标题（card-purpose）+ 文案守卫
 - 00:42 新手上手 Y4 03：交接提示词说明 + 去任务推进按钮（复用 switchReviseTab）
 - 01:10 新手指引 01：导航「指南」组 + 教程页骨架——顶部导航第三组「指南 | 新手指引」入口 + section#tab-guide 四子页签壳（fx/guide.js 纯函数单源 GUIDE_TABS/guidePanelFor/guideTabNext + ui/guide.js 点击/方向键切换，初始 roving 一次给全——双轴评审整改）+ guide.test.mjs 纯函数与 HTML 契约守卫 + fx-guard 登记；探针 26 项 PASS，tests/js 785 + pytest 2827 全绿
+- 01:21 新手指引 02：教程内容「准备」+「做题主线」两章 + 渲染接入——fx/guide.js 教程正文数据与渲染单源（GUIDE_CHAPTERS 两章：四样东西/三步装好/IDE 人话/导航三组/12 步速览表/AI 边界/任务推进/新手词表 + p/note/ul/ol/table/jump 块渲染 + guideBlocksOf 单源遍历）+ ui/guide.js 章渲染与跳转按钮委托；跳转归一 gotoNavTab（ui/nav-jump.js，welcome 同步改用——评审整改）；内容守护 guide-refs.test.mjs（12 步表逐行对应卡标题 + AI 列口径 + 跳转目标 id 存在）+ guide.test.mjs 扩展 + fx-guard 登记；文案事实修正（一键体检/一键补齐语境/AI 边界精度——双轴评审整改）；探针 12 项 PASS，tests/js 796 + pytest 2827 全绿
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
