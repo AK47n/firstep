@@ -18,10 +18,10 @@ import pytest
 from contest_generator.boards import board_for_platform
 from contest_generator.context_manifest import CONTEXT_MANIFEST_FILENAME as CONTEXT_FILENAME
 from contest_generator.generator import generate_project
-from contest_generator.manifest import ModuleManifest
-from contest_generator.patchers import PLATFORM_STM32
+from contest_generator.manifest import ModuleManifest, PinDeclaration, PlatformEntry
+from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.readme import README_FILENAME, _pin_rows, render_readme
-from contest_generator.selection import ModuleInstance
+from contest_generator.selection import ExpandedInstance, ModuleInstance
 from contest_generator.wiring import (
     WIRING_SNAPSHOT_FILENAME,
     WIRING_SNAPSHOT_VERSION,
@@ -555,3 +555,188 @@ def test_read_wiring_snapshot_legacy_degrades_to_none(tmp_path):
         json.dumps({"platform": "unknown"}), encoding="utf-8"
     )
     assert read_wiring_snapshot_legacy(tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# 工单 07：同脚去冗余（只删「实例行与既有行同 (slug, pin)」；声明行共享保留）
+# ---------------------------------------------------------------------------
+
+
+def _write_mspm0_module(library: Path, slug: str, pins: list[dict]) -> None:
+    """写一个 mspm0 单平台模块（pins 声明 + 空 files），供 legacy 判源。"""
+    (library / slug).mkdir(parents=True, exist_ok=True)
+    (library / slug / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": slug,
+                "description": f"{slug} 模块",
+                "dependencies": [],
+                "platforms": {
+                    PLATFORM_MSPM0: {
+                        "files": [],
+                        "verified": True,
+                        "hardware_bound": False,
+                        "notes": "",
+                        "kit": "",
+                        "source_url": "",
+                        "pins": pins,
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+_LED_TABLE_BODY = (
+    "## 引脚接线表\n\n"
+    "| 模块 | 角色 | 引脚 | 说明 |\n"
+    "|---|---|---|---|\n"
+    "| led | LED | PA15 | gpio_out（必接） |\n"
+    "| led | LED_RED | PA15 | gpio_out |\n"
+    "| led | LED_YELLOW | PA16 | gpio_out |\n"
+)
+
+
+def test_wiring_rows_dedup_only_instance_rows_same_pin():
+    """wiring_rows（与 README 同一推导）同脚去冗余：只删「实例行与既有行
+    同 (slug, pin)」的实例行；声明行之间的同脚多角色（ADR 0010 合法共享）
+    保留——两行都出。"""
+    key = ModuleManifest(
+        slug="key",
+        description="独立按键输入",
+        platforms={
+            PLATFORM_STM32: PlatformEntry(
+                files=(),
+                pins=(PinDeclaration(id="KEY_START", type="gpio_in", default="PB3", label="", required=True),),
+            )
+        },
+    )
+    # 实例行与声明行同脚 → 删（保留声明行）
+    rows = wiring_rows(
+        PLATFORM_STM32,
+        [key],
+        None,
+        {"key": (ExpandedInstance(slug="key", index=1, macro="KEY_ALT", pin="PB3"),)},
+    )
+    assert [(r["slug"], r["role_id"], r["pin"]) for r in rows] == [
+        ("key", "KEY_START", "PB3"),
+    ]
+    # 实例 pin 与声明不同 → 实例行保留
+    rows2 = wiring_rows(
+        PLATFORM_STM32,
+        [key],
+        None,
+        {"key": (ExpandedInstance(slug="key", index=1, macro="KEY_ALT", pin="PA0"),)},
+    )
+    assert [(r["slug"], r["role_id"], r["pin"]) for r in rows2] == [
+        ("key", "KEY_START", "PB3"),
+        ("key", "KEY_ALT", "PA0"),
+    ]
+    # 同脚多角色（ADR 0010 合法共享）：两个声明同脚 → 两行都保留
+    motor = ModuleManifest(
+        slug="motor",
+        description="双路电机驱动",
+        platforms={
+            PLATFORM_STM32: PlatformEntry(
+                files=(),
+                pins=(
+                    PinDeclaration(id="MOTOR_A_DIR", type="gpio_out", default="PA6", label="A 路方向", required=True),
+                    PinDeclaration(id="MOTOR_A_DIR2", type="gpio_out", default="PA6", label="A 路方向（冗余）", required=True),
+                ),
+            )
+        },
+    )
+    rows3 = wiring_rows(PLATFORM_STM32, [motor], None, None)
+    assert [(r["slug"], r["role_id"], r["pin"]) for r in rows3] == [
+        ("motor", "MOTOR_A_DIR", "PA6"),
+        ("motor", "MOTOR_A_DIR2", "PA6"),
+    ]
+
+
+def test_read_wiring_snapshot_legacy_dedups_instance_rows_with_library(
+    tmp_path,
+):
+    """工单 07：旧 README 表内同 (slug, pin) 双行（led 声明行 + LED_RED 默认
+    单实例行，8/28 旧工程盘存形态）+ 模块库可读 → 按模块库声明集判来源：
+    声明行保留、实例行与既有行同脚删除；同脚多角色声明行（ADR 0010）不动。"""
+    (tmp_path / README_FILENAME).write_text(
+        _LED_TABLE_BODY
+        + "| motor | MOTOR_A_DIR | PA6 | gpio_out（必接） |\n"
+        + "| motor | MOTOR_A_DIR2 | PA6 | gpio_out（必接） |\n",
+        encoding="utf-8",
+    )
+    (tmp_path / CONTEXT_FILENAME).write_text(
+        json.dumps({"platform": PLATFORM_MSPM0}), encoding="utf-8"
+    )
+    library = tmp_path / "modules"
+    _write_mspm0_module(
+        library,
+        "led",
+        [
+            {"id": "LED", "type": "gpio_out", "default": "PA15", "required": True},
+        ],
+    )
+    _write_mspm0_module(
+        library,
+        "motor",
+        [
+            {"id": "MOTOR_A_DIR", "type": "gpio_out", "default": "PA6", "required": True},
+            {"id": "MOTOR_A_DIR2", "type": "gpio_out", "default": "PA6", "required": True},
+        ],
+    )
+    legacy = read_wiring_snapshot_legacy(tmp_path, library)
+    assert legacy is not None
+    assert [(r["slug"], r["role"], r["pin"]) for r in legacy["rows"]] == [
+        ("led", "LED", "PA15"),
+        ("led", "LED_YELLOW", "PA16"),
+        ("motor", "MOTOR_A_DIR", "PA6"),
+        ("motor", "MOTOR_A_DIR2", "PA6"),
+    ]
+
+
+def test_read_wiring_snapshot_legacy_keeps_rows_without_library(tmp_path):
+    """工单 07：模块库缺失 / 不可读 / 库中无该模块 → 来源无法判定，保守
+    不去重（原样返回双行）——宁多勿丢，不猜测。"""
+    (tmp_path / README_FILENAME).write_text(_LED_TABLE_BODY, encoding="utf-8")
+    (tmp_path / CONTEXT_FILENAME).write_text(
+        json.dumps({"platform": PLATFORM_MSPM0}), encoding="utf-8"
+    )
+    expected = [
+        ("led", "LED", "PA15"),
+        ("led", "LED_RED", "PA15"),
+        ("led", "LED_YELLOW", "PA16"),
+    ]
+    # 参数 None（未配置模块库）→ 原样
+    legacy = read_wiring_snapshot_legacy(tmp_path)
+    assert legacy is not None
+    assert [(r["slug"], r["role"], r["pin"]) for r in legacy["rows"]] == expected
+    # 库路径不存在（空库）→ 原样
+    legacy2 = read_wiring_snapshot_legacy(tmp_path, tmp_path / "nope")
+    assert legacy2 is not None
+    assert [(r["slug"], r["role"], r["pin"]) for r in legacy2["rows"]] == expected
+    # 库损坏（manifest 坏 JSON → LibraryError）→ 原样
+    bad = tmp_path / "badlib"
+    (bad / "led").mkdir(parents=True)
+    (bad / "led" / "manifest.json").write_text("{oops", encoding="utf-8")
+    legacy3 = read_wiring_snapshot_legacy(tmp_path, bad)
+    assert legacy3 is not None
+    assert [(r["slug"], r["role"], r["pin"]) for r in legacy3["rows"]] == expected
+    # 库可读但 led 无引脚声明（pins 空 → 声明集空，来源不可判）→ 原样
+    (tmp_path / "otherlib" / "led").mkdir(parents=True)
+    (tmp_path / "otherlib" / "led" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "led",
+                "description": "LED 模块",
+                "dependencies": [],
+                "platforms": {PLATFORM_MSPM0: {"files": [], "verified": True, "pins": []}},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    legacy4 = read_wiring_snapshot_legacy(tmp_path, tmp_path / "otherlib")
+    assert legacy4 is not None
+    assert [(r["slug"], r["role"], r["pin"]) for r in legacy4["rows"]] == expected

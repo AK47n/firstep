@@ -7015,6 +7015,80 @@ def test_api_wiring_readme_fallback_payload(client, tmp_path):
             "remark": "gpio_in（必接）",
         }
     ]
+
+
+def test_api_wiring_readme_fallback_dedups_same_pin(client, context, tmp_path):
+    """工单 07：旧 README 表内同 (slug, pin) 双行（led 声明行 + LED_RED 实例行，
+    8/28 旧工程盘存形态）+ 模块库（带 led 引脚声明）→ legacy 兜底按声明集判
+    来源：只删「实例行与既有行同脚」的实例行（返回 LED@PA15 + LED_YELLOW@PA16
+    两行，不再「一脚两个 LED 盒」）；模块库缺失 → 保守不去重（宁多勿丢）。"""
+    from dataclasses import replace
+
+    from contest_generator.readme import README_FILENAME
+
+    body = (
+        "## 引脚接线表\n\n"
+        "| 模块 | 角色 | 引脚 | 说明 |\n"
+        "|---|---|---|---|\n"
+        "| led | LED | PA15 | gpio_out（必接） |\n"
+        "| led | LED_RED | PA15 | gpio_out |\n"
+        "| led | LED_YELLOW | PA16 | gpio_out |\n"
+    )
+    (tmp_path / README_FILENAME).write_text(body, encoding="utf-8")
+    (tmp_path / CONTEXT_FILENAME).write_text(
+        json.dumps({"platform": PLATFORM_MSPM0}), encoding="utf-8"
+    )
+    # 模块库：led 声明 LED@PA15（LED_RED 不在声明集 → 判为实例行候选）
+    lib = tmp_path / "modules"
+    (lib / "led").mkdir(parents=True)
+    (lib / "led" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "led",
+                "description": "LED 模块",
+                "dependencies": [],
+                "platforms": {
+                    PLATFORM_MSPM0: {
+                        "files": [],
+                        "verified": True,
+                        "pins": [
+                            {
+                                "id": "LED",
+                                "type": "gpio_out",
+                                "default": "PA15",
+                                "required": True,
+                            }
+                        ],
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    ctx, holder = context
+    ctx.config = replace(ctx.config, module_library_dir=lib)
+
+    resp = client.get("/api/wiring", params={"output_dir": str(tmp_path)})
+    assert resp.status_code == 200
+    data = resp.json()
+    board = board_for_platform(PLATFORM_MSPM0)
+    assert data["board"]["board_id"] == board.board_id
+    assert [(r["slug"], r["role"], r["pin"]) for r in data["rows"]] == [
+        ("led", "LED", "PA15"),
+        ("led", "LED_YELLOW", "PA16"),
+    ]
+
+    # 模块库缺失（None → 未配置）→ 保守不去重，双行原样返回
+    ctx.config = replace(ctx.config, module_library_dir=None)
+    resp = client.get("/api/wiring", params={"output_dir": str(tmp_path)})
+    assert resp.status_code == 200
+    assert [(r["slug"], r["role"], r["pin"]) for r in resp.json()["rows"]] == [
+        ("led", "LED", "PA15"),
+        ("led", "LED_RED", "PA15"),
+        ("led", "LED_YELLOW", "PA16"),
+    ]
+
     # 兜底失败（无 README 可解析）→ 仍空载荷（既有退化不破）
     (tmp_path / README_FILENAME).unlink()
     resp = client.get("/api/wiring", params={"output_dir": str(tmp_path)})

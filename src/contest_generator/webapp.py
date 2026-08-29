@@ -1075,7 +1075,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         固定资源）；rows = 接线行（与 README「引脚接线表」同源——生成时同一
         推导函数落盘）。快照缺失 → **旧工程兜底**（read_wiring_snapshot_legacy：
         README「引脚接线表」同源解析 + context platform + 静态板定义——恢复
-        生成时同一数据，不做猜测）；兜底也失败（无 README / 无 context / 坏
+        生成时同一数据，不做猜测；同脚冗余行按模块库声明集判定来源后仅删
+        「实例行与既有行同脚」的重复（工单 07，模块库缺失 → 保守不去重））；
+        兜底也失败（无 README / 无 context / 坏
         JSON / 未知平台）→ 空载荷（platform 空串、board None、rows []）——
         前端走退化路径，绝不 500（条目级容错与既有任务数据读取风格一致）。
         """
@@ -1086,7 +1088,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             return empty
         snapshot = read_wiring_snapshot(output_dir)
         if snapshot is None:
-            snapshot = read_wiring_snapshot_legacy(output_dir)
+            config = _current_config(context)
+            snapshot = read_wiring_snapshot_legacy(
+                output_dir,
+                config.module_library_dir if config is not None else None,
+            )
         if snapshot is None:
             return empty
         platform = snapshot.get("platform", "")
