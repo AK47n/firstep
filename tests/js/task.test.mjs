@@ -14,7 +14,7 @@ import {
   globalChatHTML, globalNoteBadgeHTML,
   taskEditFormHTML, taskMoreMenuHTML,
   ideaDraftListHTML,
-  taskResourcesHTML, resourceIsHardware, resourcesOverviewHTML, taskChecklistHTML,
+  taskResourcesHTML, resourceIsHardware, aggregateResourceGroups, resourcesOverviewHTML, taskChecklistHTML,
   scoreRefsOverviewHTML,
   checklistStateKey,
   taskErrorsHTML,
@@ -959,6 +959,69 @@ test("resourcesOverviewHTML: 聚合 + 硬件冲突标黄 + 非硬件不标黄 + 
   assert.equal(resourcesOverviewHTML({ tasks: [{ id: "t1", title: "x" }] }), "");
   assert.equal(resourcesOverviewHTML(null), "");
   // 转义（资源名/标题含特殊字符）
+  const evil = resourcesOverviewHTML({ tasks: [{ id: "t1", title: '<img src=x>', resources: ['A"B'] }] });
+  assert.ok(!evil.includes("<img src=x>"));
+  assert.ok(evil.includes("&lt;img src=x&gt;"));
+  assert.ok(evil.includes("A&quot;B"));
+});
+
+test("aggregateResourceGroups: 引脚/外设/软资源三组 + 同用户引脚合并 + 冲突", () => {
+  const plan = {
+    tasks: [
+      { id: "t1", title: "电机", resources: ["PA12", "PA13", "PB9", "TIMG0", "xunji"] },
+      { id: "t2", title: "显示", resources: ["PA12", "PB9", "UART0", "xunji"] },
+      { id: "t3", title: "无线", resources: ["PA20", "UART0"] },
+    ],
+  };
+  const g = aggregateResourceGroups(plan);
+  assert.ok(g);
+  // pins：同用户集合（t1+t2）的 PA12/PB9 合并成一行；PA13 独属 t1 一行、PA20 一行
+  const merged = g.pins.find((e) => e.names.includes("PA12"));
+  assert.ok(merged);
+  assert.deepEqual(merged.names.sort(), ["PA12", "PB9"]);
+  assert.equal(merged.conflict, true);
+  assert.deepEqual(merged.users.map((u) => u.id), ["t1", "t2"]);
+  assert.ok(g.pins.find((e) => e.names.includes("PA13")));
+  assert.equal(g.pins.find((e) => e.names.includes("PA13")).conflict, false);
+  // other：TIMG0/UART0；soft：xunji
+  assert.deepEqual(g.other.map((e) => e.names[0]).sort(), ["TIMG0", "UART0"]);
+  assert.deepEqual(g.soft.map((e) => e.names[0]), ["xunji"]);
+  assert.equal(g.other.find((e) => e.names[0] === "UART0").conflict, true);
+  // 空聚合
+  assert.equal(aggregateResourceGroups(null), null);
+  assert.equal(aggregateResourceGroups({ tasks: [{ id: "t1" }] }), null);
+});
+
+test("resourcesOverviewHTML: 分组四段（冲突置顶/合并行/软资源 details 收起）", () => {
+  const plan = {
+    tasks: [
+      { id: "t1", title: "电机", resources: ["PA12", "PA13", "PB9", "TIM1", "xunji"] },
+      { id: "t2", title: "显示", resources: ["PA12", "PB9", "UART0", "xunji"] },
+    ],
+  };
+  const html = resourcesOverviewHTML(plan);
+  // 分组标题与顺序：冲突 → 引脚 → 外设 → 软资源(details)
+  assert.ok(html.includes("⚠ 冲突资源（多任务硬件共享）"));
+  assert.ok(html.includes("引脚占用"));
+  assert.ok(html.includes("外设与中断"));
+  assert.ok(html.indexOf("⚠ 冲突资源") < html.indexOf("引脚占用"));
+  assert.ok(html.indexOf("引脚占用") < html.indexOf("外设与中断"));
+  // 合并行：PA12+PB9 一个 chips 组，两 chip 相邻，只有一份用户文本
+  const mergedHT = html.split("res-row").find((s) => s.includes(">PA12<"));
+  assert.ok(mergedHT.includes('class="res-chip-group"'));
+  assert.ok(mergedHT.includes(">PA12<"));
+  assert.ok(mergedHT.includes(">PB9<"));
+  assert.equal((mergedHT.match(/t1：电机/g) || []).length, 1);
+  // 冲突行在冲突组而非引脚组：引脚组（引脚占用..外设与中断 之间）不含 PA12
+  const pinGroup = html.slice(html.indexOf("引脚占用"), html.indexOf("外设与中断"));
+  assert.ok(!pinGroup.includes(">PA12<"));
+  assert.ok(pinGroup.includes(">PA13<"));
+  // 软资源折叠于 details（默认不 open），summary 标题
+  assert.ok(html.includes('<details class="res-soft-details">'));
+  assert.ok(!html.includes('<details class="res-soft-details" open'));
+  assert.ok(html.includes('class="res-chip res-soft">xunji<'));
+  assert.ok(html.includes("模块复用（非硬件，不算冲突）"));
+  // 转义仍生效（资源名/标题）
   const evil = resourcesOverviewHTML({ tasks: [{ id: "t1", title: '<img src=x>', resources: ['A"B'] }] });
   assert.ok(!evil.includes("<img src=x>"));
   assert.ok(evil.includes("&lt;img src=x&gt;"));
