@@ -1748,6 +1748,7 @@ def test_build_selection_suggestion_to_dict_includes_solutions():
             "note": "",
             "suitable": "",
             "recommended": True,
+            "lib_modules": [],
         },
         {
             "name": "OpenMV Cam H7",
@@ -1756,6 +1757,7 @@ def test_build_selection_suggestion_to_dict_includes_solutions():
             "note": "",
             "suitable": "",
             "recommended": False,
+            "lib_modules": [],
         },
     ]
 

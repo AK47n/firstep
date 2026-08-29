@@ -4186,6 +4186,28 @@ def test_discuss_buy_options_routes_to_remote():
     assert local.calls == []
 
 
+def test_solutions_list_text_annotates_lib_modules():
+    """讨论清单（_solutions_list_text，工单 wordlist-lib-modules/01）：有
+    lib_modules 的方案注「库内已有：xunji、pid」段（结构化，与 note 散文解耦）；
+    无 lib_modules 方案不注；note 仍注入（讨论细节上下文）。"""
+    from contest_generator.llm import _solutions_list_text
+
+    with_lib = SolutionOption(
+        name="红外对管循迹数组（低价替代）",
+        interface="GPIO 数字量（5-8 路红外对管）",
+        note="低价替代对象=库内灰度循迹两套",
+        lib_modules=("xunji", "pid"),
+    )
+    without = SolutionOption(name="超声波测距（HC-SR04）", note="测 2cm-4m")
+    text = _solutions_list_text((with_lib, without))
+
+    assert "库内已有：xunji、pid" in text
+    assert "低价替代对象=库内灰度循迹两套" in text
+    # HC-SR04 段（无 lib_modules）不再出现「库内已有」注记
+    tail = text.split("超声波测距（HC-SR04）", 1)[1]
+    assert "库内已有" not in tail
+
+
 def test_discuss_task_parsing():
     """任务商量解析（工单 task-chat/02）：reply 必填；空/缺失 → 重试后仍坏 → LLMError。"""
     transport = FakeTransport(

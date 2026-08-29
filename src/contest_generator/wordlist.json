@@ -4,12 +4,13 @@
     "models": ["K230", "OpenMV", "摄像头"],
     "solutions": [
       {
-        "name": "K230（CanMV，库内已有模块）",
+        "name": "K230（CanMV）",
         "interface": "UART（CSV 帧给主控）+ 副控板",
         "price": "￥100-200/板",
         "note": "官方 CanMV 训练；库内 k230+coord_detect 已打通；图像识别/色块/形状",
         "suitable": "视觉识别/色块追踪/大模型推理",
-        "recommended": true
+        "recommended": true,
+        "lib_modules": ["k230", "coord_detect"]
       },
       {
         "name": "OpenMV Cam H7",
@@ -62,9 +63,10 @@
         "name": "红外对管循迹数组（低价替代）",
         "interface": "GPIO 数字量（5-8 路红外对管）",
         "price": "￥5-15/组",
-        "note": "比灰度省一个 ADC/采集接口；黑白线识别与灰度同原理，日照下易误判；库内已有 xunji 灰度模块（更稳，首选）",
-        "suitable": "循迹赛道补充方案/预算极低",
-        "recommended": true
+        "note": "低价替代对象=库内灰度循迹两套：xunji（mspm0 加权质心巡线）与 pid/gray_track（双平台 8 路灰度+PD 巡线+速度环）；红外对管与灰度同为 GPIO 数字量读取（不存在省 ADC，省的是模组单价与易得性）；红外对管数组库内无驱动需自写接线/读值/偏差算法；车底贴地测黑白线，室外强光下易误判",
+        "suitable": "预算极低/临时循迹（室外慎用）",
+        "recommended": true,
+        "lib_modules": ["xunji", "pid"]
       },
       {
         "name": "红外避障探头（GPIO）",
@@ -102,12 +104,13 @@
     "models": ["电机", "舵机"],
     "solutions": [
       {
-        "name": "直流减速电机 + TB6612 双路驱动板（库内已有 motor 模块）",
+        "name": "直流减速电机 + TB6612 双路驱动板",
         "interface": "GPIO PWM + 方向 IO",
         "price": "￥15-30/套（电机+驱动）",
         "note": "两路 1.2A；带编码器版本可闭环；库内 API 已对齐双平台",
         "suitable": "循迹小车/两轮差速",
-        "recommended": true
+        "recommended": true,
+        "lib_modules": ["motor"]
       },
       {
         "name": "L298N 大电流驱动板",
@@ -178,12 +181,13 @@
         "recommended": true
       },
       {
-        "name": "UWB 定位（库内已有 uwb_uart 模块）",
+        "name": "UWB 定位",
         "interface": "UART",
         "price": "￥150-400/套",
         "note": "室内 10cm 级定位；库内 ALX-AOA 套件有例程；需要基站布点",
         "suitable": "室内高精度定位/位置场",
-        "recommended": true
+        "recommended": true,
+        "lib_modules": ["uwb_uart"]
       },
       {
         "name": "蓝牙信标定位（Estimote/自建 Beacon）",

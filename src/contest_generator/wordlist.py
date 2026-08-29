@@ -7,6 +7,11 @@
 - 选模块提示词的科普素材（类别行 + 常见型号，模型凭它联想"视觉模块 →
   K230 / OpenMV"这类常识举例）。
 
+买件指引（工单 buy-guide/01）：词表行可挂 solutions 选购方案；方案通过
+lib_modules 声明「库内已有对应模块」（slug 列表）——加载时机械校验引用
+必须命中源码树模块库（仓库根 library/modules），「库内已有」永不指向已
+删除/改名的模块（工单 wordlist-lib-modules/01）。
+
 可手补：直接编辑 wordlist.json 增删条目组（category + models），重启后生效
 （DeepSeekLLM 构造时读盘）。词表是"不懂不要编造"的硬边界，不是品类铁律——
 功能需求层仍只由题面证据推导（ADR 0007）。
@@ -21,9 +26,24 @@ from typing import Any, Sequence
 
 WORDLIST_PATH = Path(__file__).parent / "wordlist.json"
 
+# 源码树模块库（与词表同仓同 commit 分发）：词表引用校验的锚点。仓库开发
+# 环境存在 → 加载即校验；pip/无源码树部署不存在 → 跳过（None = 不校验）。
+_SOURCE_MODULES_DIR = Path(__file__).resolve().parents[2] / "library" / "modules"
+
 
 class WordlistError(ValueError):
     """词表文件缺失、损坏或条目形状非法。"""
+
+
+def source_module_slugs() -> frozenset[str] | None:
+    """源码树模块库的 slug 集（library/modules 子目录名）；不存在 = None。
+
+    词表「库内已有」的语义锚 = 工具随附模块库（同仓同 commit），非运行时
+    用户库根（运行库根可配置、测试临时库场景锚它必炸）。
+    """
+    if not _SOURCE_MODULES_DIR.is_dir():
+        return None
+    return frozenset(entry.name for entry in _SOURCE_MODULES_DIR.iterdir() if entry.is_dir())
 
 
 @dataclass(frozen=True)
@@ -40,6 +60,7 @@ class SolutionOption:
     note: str = ""  # 关键注意点（接线/供电/协议）
     suitable: str = ""  # 适用场景
     recommended: bool = False  # 词表知识定的推荐（每类至多 2 个）
+    lib_modules: tuple[str, ...] = ()  # 库内已有对应模块 slug（加载时机械校验存在性）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +70,7 @@ class SolutionOption:
             "note": self.note,
             "suitable": self.suitable,
             "recommended": self.recommended,
+            "lib_modules": list(self.lib_modules),
         }
 
 
@@ -69,9 +91,17 @@ class HardwareWordGroup:
     solutions: tuple[SolutionOption, ...] = ()
 
 
-def load_wordlist(path: Path = WORDLIST_PATH) -> tuple[HardwareWordGroup, ...]:
+def load_wordlist(
+    path: Path = WORDLIST_PATH,
+    lib_slugs: frozenset[str] | None = None,
+) -> tuple[HardwareWordGroup, ...]:
     """读盘加载词表（形状校验：JSON 数组，每项 category 非空字符串 +
     models 为字符串数组；缺省 models 视为空）。畸形 = 大声失败。
+
+    lib_slugs = 词表 lib_modules 引用校验的已知 slug 集；None = 默认用源码树
+    模块库（仓库根 library/modules 存在时校验，不存在 = 跳过——pip 部署无
+    源码库）。引用不存在的 slug → WordlistError（词表是手补的确定性知识，
+    「库内已有」宁缺毋编：写错立即暴露，不让错误标注上车）。
     """
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -84,6 +114,9 @@ def load_wordlist(path: Path = WORDLIST_PATH) -> tuple[HardwareWordGroup, ...]:
     if not isinstance(data, list):
         raise WordlistError(f"硬件词表必须是 JSON 数组：{path}")
 
+    if lib_slugs is None:
+        lib_slugs = source_module_slugs()
+
     groups: list[HardwareWordGroup] = []
     for index, item in enumerate(data):
         if not isinstance(item, dict) or not isinstance(item.get("category"), str) \
@@ -95,6 +128,8 @@ def load_wordlist(path: Path = WORDLIST_PATH) -> tuple[HardwareWordGroup, ...]:
         ):
             raise WordlistError(f"硬件词表[{index}] 的 models 必须是字符串数组：{path}")
         solutions = _parse_solutions(item.get("solutions", ()), index, path)
+        if lib_slugs is not None:
+            _check_lib_modules(solutions, index, path, lib_slugs)
         groups.append(
             HardwareWordGroup(
                 category=item["category"],
@@ -105,14 +140,31 @@ def load_wordlist(path: Path = WORDLIST_PATH) -> tuple[HardwareWordGroup, ...]:
     return tuple(groups)
 
 
+def _check_lib_modules(
+    solutions: Sequence[SolutionOption],
+    group_index: int,
+    path: Path,
+    lib_slugs: frozenset[str],
+) -> None:
+    """机械校验：方案的 lib_modules 引用必须命中已知 slug 集（否则大声失败）。"""
+    for s_index, solution in enumerate(solutions):
+        for slug in solution.lib_modules:
+            if slug not in lib_slugs:
+                raise WordlistError(
+                    f"硬件词表[{group_index}] solutions[{s_index}] 的 lib_modules "
+                    f"引用了库中不存在的模块 slug {slug!r}：{path}"
+                )
+
+
 def _parse_solutions(
     raw: Any, group_index: int, path: Path
 ) -> tuple[SolutionOption, ...]:
     """解析词表行的 solutions 数组（买件指引）；缺省 = 空（旧词表兼容）。
 
-    形状非法 / 缺 name / recommended 非 bool → WordlistError 大声失败
-    （词表是可手补的确定性知识，宁缺毋编：手补时写错立即暴露，不让错误的
-    方案上车。price/interface/note/suitable 可空串——只显示，无硬约束）。
+    形状非法 / 缺 name / recommended 非 bool / lib_modules 形状非法 →
+    WordlistError 大声失败（词表是可手补的确定性知识，宁缺毋编：手补时写错
+    立即暴露，不让错误的方案上车。price/interface/note/suitable 可空串——
+    只显示，无硬约束）。
     """
     solutions: list[SolutionOption] = []
     if raw in (None, [], (), ""):
@@ -131,6 +183,7 @@ def _parse_solutions(
                 f"硬件词表[{group_index}] solutions[{s_index}] 的 "
                 f"recommended 必须是布尔：{path}"
             )
+        lib_modules = _parse_lib_modules(item.get("lib_modules", ()), group_index, s_index, path)
         solutions.append(
             SolutionOption(
                 name=item["name"],
@@ -139,9 +192,34 @@ def _parse_solutions(
                 note=_optional_str(item.get("note")),
                 suitable=_optional_str(item.get("suitable")),
                 recommended=recommended,
+                lib_modules=lib_modules,
             )
         )
     return tuple(solutions)
+
+
+def _parse_lib_modules(
+    raw: Any, group_index: int, s_index: int, path: Path
+) -> tuple[str, ...]:
+    """解析方案的 lib_modules（库内模块 slug 列表）；缺失 = 空（旧词表兼容）。
+
+    非数组 / 元素非非空字符串 → WordlistError（形状硬约束，与 recommended 同
+    严格度——slug 是机械校验的引用键，写错必须立即暴露）。
+    """
+    if raw in (None, [], (), ""):
+        return ()
+    if not isinstance(raw, list):
+        raise WordlistError(
+            f"硬件词表[{group_index}] solutions[{s_index}] 的 lib_modules "
+            f"必须是数组：{path}"
+        )
+    for index, slug in enumerate(raw):
+        if not isinstance(slug, str) or not slug:
+            raise WordlistError(
+                f"硬件词表[{group_index}] solutions[{s_index}] 的 "
+                f"lib_modules 的元素必须是非空字符串（第 {index} 个）：{path}"
+            )
+    return tuple(raw)
 
 
 def _optional_str(value: Any) -> str:

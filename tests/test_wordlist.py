@@ -117,3 +117,88 @@ def test_wordlist_static_helpers():
     )
     assert category_names(groups) == {"视觉模块", "声光提示器件"}
     assert model_names(groups) == {"K230", "OpenMV", "LED"}
+
+
+def test_load_wordlist_solutions_lib_modules_parsed(tmp_path):
+    """lib_modules 解析：缺失=()；数组映射 tuple；to_dict 带出列表。"""
+    path = _write(
+        tmp_path,
+        '[{"category": "感知传感器", "models": [], "solutions": ['
+        '{"name": "红外对管循迹数组（低价替代）", "lib_modules": ["xunji", "pid"]},'
+        '{"name": "超声波测距（HC-SR04）"}]}]',
+    )
+    groups = load_wordlist(path, lib_slugs=frozenset({"xunji", "pid"}))
+    solutions = groups[0].solutions
+    assert solutions[0].lib_modules == ("xunji", "pid")
+    assert solutions[1].lib_modules == ()
+    assert solutions[0].to_dict()["lib_modules"] == ["xunji", "pid"]
+    assert solutions[1].to_dict()["lib_modules"] == []
+
+
+def test_load_wordlist_solutions_lib_modules_not_array_rejected(tmp_path):
+    """lib_modules 非数组 → WordlistError（形状硬约束，与 recommended 同严格度）。"""
+    path = _write(
+        tmp_path,
+        '[{"category": "感知传感器", "solutions": '
+        '[{"name": "A", "lib_modules": "xunji"}]}]',
+    )
+    with pytest.raises(WordlistError, match="lib_modules 必须是数组"):
+        load_wordlist(path)
+
+
+def test_load_wordlist_solutions_lib_modules_bad_element_rejected(tmp_path):
+    """lib_modules 元素非字符串 / 空串 → WordlistError。"""
+    path = _write(
+        tmp_path,
+        '[{"category": "感知传感器", "solutions": '
+        '[{"name": "A", "lib_modules": ["xunji", 3]}]}]',
+    )
+    with pytest.raises(WordlistError, match="lib_modules 的元素必须是非空字符串"):
+        load_wordlist(path)
+    path = _write(
+        tmp_path,
+        '[{"category": "感知传感器", "solutions": '
+        '[{"name": "A", "lib_modules": [""]}]}]',
+    )
+    with pytest.raises(WordlistError, match="lib_modules 的元素必须是非空字符串"):
+        load_wordlist(path)
+
+
+def test_load_wordlist_lib_modules_unknown_slug_rejected(tmp_path):
+    """显式 lib_slugs 校验：引用未知 slug → WordlistError（文案含组/条目索引与 slug）。"""
+    path = _write(
+        tmp_path,
+        '[{"category": "感知传感器", "models": [], "solutions": ['
+        '{"name": "A", "lib_modules": ["xunji", "ghost"]}]}]',
+    )
+    with pytest.raises(WordlistError, match=r"ghost"):
+        load_wordlist(path, lib_slugs=frozenset({"xunji", "pid"}))
+
+
+def test_load_wordlist_lib_modules_known_slugs_ok(tmp_path):
+    """显式 lib_slugs 校验：全部已知 → 通过。"""
+    path = _write(
+        tmp_path,
+        '[{"category": "感知传感器", "models": [], "solutions": '
+        '[{"name": "A", "lib_modules": ["xunji", "pid"]}]}]',
+    )
+    groups = load_wordlist(path, lib_slugs=frozenset({"xunji", "pid"}))
+    assert groups[0].solutions[0].lib_modules == ("xunji", "pid")
+
+
+def test_default_wordlist_lib_modules_references_exist():
+    """真实词表回归（工单 wordlist-lib-modules/01）：DEFAULT_WORDLIST 的全部
+    lib_modules 引用必须命中源码树模块库（仓库根 library/modules）——手补词表
+    引入失效引用 → 加载/测试立即红。"""
+    from contest_generator.wordlist import DEFAULT_WORDLIST, source_module_slugs
+
+    slugs = source_module_slugs()
+    assert slugs, "仓库源码树应存在 library/modules（词表校验前提）"
+    referenced = {
+        slug
+        for group in DEFAULT_WORDLIST
+        for solution in group.solutions
+        for slug in solution.lib_modules
+    }
+    assert referenced, "词表应有方案声明 lib_modules（本特性迁移后）"
+    assert referenced <= slugs, f"词表引用了库中不存在的模块 slug：{referenced - slugs}"
