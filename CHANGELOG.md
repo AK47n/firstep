@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c0ff482c1f6ce7eef237c96bc4d2d9fa597b6416 -->
+<!-- changelog-auto: last-commit=54d9f0650d9c5b51ce6f0540a1323c66aef67846 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -45,6 +45,7 @@
 - 15:51 功能：一键重置本地记录（工单 reset-local-records/01+02）——服务端清 recent 列表与 AI 推荐缓存 + POST /api/reset-records 端点 + 设置页卡片入口（确认弹窗、localStorage 四类题相关键清理、结果汇总）+ 移除被取代的临时运维页 /clear-cache.html
 - 15:51 文档：重置本地记录 spec + 工单 01/02 resolved（含双轴评审结论与整改记录）
 - 15:55 修复：确认弹窗正文贴边——.confirm-message 补 10px 14px 内边距（与标题栏/按钮区对齐）
+- 19:13 功能：生成页步骤2 赛题预读后端契约（工单 topic-preread/01）——preread_topic 结构化 JSON {overview, reminders}（只提炼限定/约束/指定类事实）+ 新叶子模块 topic_preread 机械校验（steps 枚举/引用空白归一命中题面/长度条数上限）+ 路由改名 /api/topic/preread + LOCAL_LLM_METHODS 换员；评审整改：PrereadReminder 词形统一、parse_preread 公开、提示词数字 f-string 单源
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
