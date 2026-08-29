@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=22db897a574b83f7e1948b391439dc3ebd593807 -->
+<!-- changelog-auto: last-commit=5b27c9709cd9e8707e5510fb0a45f7180702e2bc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -52,6 +52,7 @@
 - 19:32 文档：local-llm-spike 失效标注与调用行同步（工单 topic-preread/04 补充）——summarize_topic 已退役为 preread_topic，spike 脚本标注失效并改调新方法
 - 20:48 功能：词表方案「库内已有」结构化 lib_modules 与源码库机械校验（工单 wordlist-lib-modules/01）——SolutionOption 加 lib_modules 字段（加载即校验引用 slug 必须命中 library/modules，未命中大声失败）+ wordlist.json 4 条迁移（K230/电机/UWB name 去散文后缀、红外对管 note 重写并补 pid）+ 买件商量注记结构化；评审整改：frozenset 小写泛型、错误文案统一无类别、解析用例显式 lib_slugs 解耦
 - 20:51 功能：选型参考方案行「库内已有」徽章（工单 wordlist-lib-modules/02）——suggestionSolutionBadges 增 sugg-lib 分支（lib_modules 非空即显「库内已有：slug1 · slug2」，置推荐徽章之后、旧载荷无键不炸）+ 载荷注释补 lib_modules[] + .sugg-lib 绿系（与 sugg-rec/sugg-decided 合并为一条选择器规则）+ js 测试 5 用例；评审整改：CSS 绿系三重复合并
+- 21:07 功能：推荐完成零库外建议时的主动提示（工单 recommend-covered-note/01）——recommendCoverageNote 纯函数（有库内命中且全需求无库外建议 → 「本题功能需求已全部在库内实现，无需库外采购。」；有建议/无命中/无需求层 = 空）+ renderRecommendResult 正常分支尾部拼接 + .rec-covered-note 信息性小字 + js 测试 5 用例；评审整改：函数注释签名式并修正注记名、空结果分支增评论说明与 hasHit 判定的互斥设计
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
