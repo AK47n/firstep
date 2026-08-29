@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=797810a7f8c7e3561772b56b7e54cf08a8dd877e -->
+<!-- changelog-auto: last-commit=c05a5bc523575c5c9be67a65a95a4e6644d02bc8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -61,6 +61,7 @@
 - 23:36 新手上手 02（newcomer-onboarding/02）：启动器全流程中文反馈——后端 GET /api/health（固定载荷、不依赖配置、未配 key 也 200，启动器据此判定端口归属）+ start-app.bat 重写（.venv 优先→版本/依赖检查→netstat+/api/health 判定：本应用直接开浏览器、他程序弹窗提示、无服务后台启动→20s 轮询就绪→超时弹窗含日志路径）+ 失败分支中文弹窗（powershell WScript.Shell.Popup，全路径免 PATH 异常；mshta 语义不可靠弃用）+ 守护用例 1 个；全量 pytest 2824 无回归
 - 23:36 新手上手 01：新手 README 与 install.bat（工单 newcomer-onboarding/01）
 - 23:37 新手上手 02：启动器全流程中文反馈（工单 newcomer-onboarding/02）
+- 23:42 新手上手 03：首次欢迎卡 + gen-banner 行动化（工单 newcomer-onboarding/03）
 - 23:58 新手上手 03（newcomer-onboarding/03）：首次欢迎卡 + gen-banner 行动化——fx/welcome.js 纯函数（welcomeMode 四态：已选不再显示 > 未配 key 完整卡 > 有草稿隐藏 > 精简卡；welcomeCardHTML）+ ui/welcome.js 胶水（跳设置页签复用 nav 点击、聚焦 #set-api-key、切页签后触发 #btn-env-check、不再显示 localStorage）+ index.html 顶部 #welcome-card 与样式 + gen-banner 内嵌「去设置」按钮（与欢迎卡按钮共用 gotoKeyAction）+ tests/js 7 用例 + fx-guard 登记；评审整改：README 删「开发者」节（spec 限面向人）、README 常见问题补编译工具链、spec 决策 49 补 mshta→powershell 实施修正、.gitattributes 固化 *.bat eol=crlf（LF 行尾在换机/CI 会解析错乱）
 
 ## 2026-08-28
