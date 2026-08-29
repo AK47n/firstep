@@ -119,6 +119,11 @@ from contest_generator.report import (
     VersionSummary,
 )
 from contest_generator.topic_library import TopicDraft
+from contest_generator.topic_preread import (
+    MAX_REMINDERS,
+    PrereadReminder,
+    PrereadResult,
+)
 from contest_generator.manifest import ModuleManifest, PlatformEntry
 from contest_generator.wordlist import SolutionOption
 from tests.fakes import FakeLLM, FakeTransport, RecordingLLM
@@ -341,7 +346,9 @@ def test_fake_llm_receives_manifest_summaries_with_kit():
 
 
 def test_local_llm_route_does_not_forward_remote_authorization(monkeypatch):
-    transport = FakeTransport(body=_api_response("text"))
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"overview": "总览", "reminders": []}))
+    )
     monkeypatch.setattr(llm_module, "UrllibTransport", lambda: transport)
     llm = build_llm(
         AppConfig(
@@ -353,7 +360,7 @@ def test_local_llm_route_does_not_forward_remote_authorization(monkeypatch):
         )
     )
 
-    llm.summarize_topic("题面摘要")
+    llm.preread_topic("题面摘要")
 
     url, headers, _, _ = transport.calls[0]
     assert url == "http://localhost:11434/v1/chat/completions"
@@ -3767,35 +3774,87 @@ def test_reference_summarize_retries_transient_failure(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 赛题简介生成（wait-what 步骤）：文本模式单调用契约
+# 赛题预读（预读步骤）：结构化 JSON 单调用契约
 # ---------------------------------------------------------------------------
 
 
-def test_summarize_topic_posts_plain_text_prompt():
-    """赛题简介：文本模式（非 json_mode），一句话总览 + 功能要点的提示词。"""
-    transport = FakeTransport(
-        body=_api_response("做一个温湿度采集系统\n- 采集温湿度\n- 显示结果")
+def test_preread_topic_posts_json_prompt():
+    """赛题预读：json_mode（response_format json_object），总览 + 决策点提醒
+    的提示词契约；机械校验后返回 PrereadResult。"""
+    body = json.dumps(
+        {
+            "overview": "做一个温湿度采集系统",
+            "reminders": [
+                {
+                    "steps": [3],
+                    "text": "题面限定采用 TI MSPM0 系列，请选 MSPM0G3507",
+                    "quote": "采用 TI 公司 MSPM0 系列处理器",
+                }
+            ],
+        }
     )
+    transport = FakeTransport(body=_api_response(body))
     llm = _llm(transport)
 
-    summary = llm.summarize_topic("温湿度采集并显示")
+    result = llm.preread_topic("采用 TI 公司 MSPM0 系列处理器\n其余题面")
 
-    assert summary == "做一个温湿度采集系统\n- 采集温湿度\n- 显示结果"
+    assert result.overview == "做一个温湿度采集系统"
+    assert len(result.reminders) == 1
+    reminder = result.reminders[0]
+    assert reminder.steps == (3,)
+    assert "MSPM0" in reminder.text
+    assert reminder.quote == "采用 TI 公司 MSPM0 系列处理器"
     _, _, payload, _ = transport.calls[0]
     messages = payload["messages"]
-    assert "一句话总览" in messages[0]["content"]
+    assert "限定" in messages[0]["content"]
+    assert "steps" in messages[0]["content"]
     assert TRUNCATION_NOTICE in messages[0]["content"]
-    assert "温湿度采集并显示" in messages[1]["content"]
-    assert "response_format" not in payload  # 文本模式
+    assert "采用 TI 公司 MSPM0 系列处理器" in messages[1]["content"]
+    assert payload["response_format"] == {"type": "json_object"}
 
 
-def test_summarize_topic_truncates_oversized_problem():
+def test_preread_topic_drops_quote_not_in_problem():
+    """防幻觉：引用空白归一后未命中题面 → 丢弃引用但保留提醒（纯展示，
+    宽松过滤不整次失败）。"""
+    body = json.dumps(
+        {
+            "overview": "做一个温湿度采集系统",
+            "reminders": [
+                {
+                    "steps": [],
+                    "text": "车体尺寸不超过 30cm",
+                    "quote": "车体尺寸  不超过\n30cm",
+                },
+                {
+                    "steps": [99, 7, "x"],
+                    "text": "上位机串口通信",
+                    "quote": "牌子上写着 30cm（题面根本没有）",
+                },
+            ],
+        }
+    )
+    transport = FakeTransport(body=_api_response(body))
+    llm = _llm(transport)
+
+    result = llm.preread_topic("车体尺寸不超过 30cm\n上位机串口通信")
+
+    assert len(result.reminders) == 2
+    first = result.reminders[0]
+    assert first.quote == "车体尺寸  不超过\n30cm"  # 归一后命中 → 引用保留
+    second = result.reminders[1]
+    assert second.steps == (7,)  # 非法 steps 洗白
+    assert second.quote == ""  # 引用不命中 → 丢弃
+
+
+def test_preread_topic_truncates_oversized_problem():
     """超长赛题截断带标注（与所有嵌内容调用同款预算）。"""
-    transport = FakeTransport(body=_api_response("概述"))
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"overview": "总览", "reminders": []}))
+    )
     llm = _llm(transport)
     long_problem = "题" * (EMBEDDED_CONTENT_CAP + 100)
 
-    llm.summarize_topic(long_problem)
+    llm.preread_topic(long_problem)
 
     _, _, payload, _ = transport.calls[0]
     user = payload["messages"][1]["content"]
@@ -3803,16 +3862,36 @@ def test_summarize_topic_truncates_oversized_problem():
     assert TRUNCATION_NOTICE in user
 
 
-def test_summarize_topic_retries_transient_failure(monkeypatch):
-    """瞬时失败（网关 502，网络类）整次重问：退避 1/2s 后成功
-    （与参考文件简介同款兜底）。"""
+def test_preread_topic_retries_transient_failure(monkeypatch):
+    """瞬时失败（网关 502，网络类）整次重问：退避 1/2s 后成功。"""
     sleeps = _record_backoff_sleeps(monkeypatch)
-    transport = _FlakyTransport(body=_api_response("概述"), failures=2)
+    transport = _FlakyTransport(
+        body=_api_response(json.dumps({"overview": "总览", "reminders": []})),
+        failures=2,
+    )
     llm = _llm(transport)
 
-    assert llm.summarize_topic("题面") == "概述"
+    result = llm.preread_topic("题面")
+
+    assert result.overview == "总览"
     assert len(transport.calls) == 3
     assert sleeps == [1.0, 2.0]
+
+
+def test_preread_topic_parse_rejects_non_json_and_missing_overview():
+    """畸形输出大声失败（整次重问，耗尽重试）：非 JSON / 缺 overview 都抛
+    LLMError（模型输出不可信，宁可失败不展示半成品）。"""
+    transport = FakeTransport(body=_api_response("不是 JSON"))
+    llm = _llm(transport)
+    with pytest.raises(llm_module.LLMError):
+        llm.preread_topic("题面")
+
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"reminders": []}))
+    )
+    llm = _llm(transport)
+    with pytest.raises(llm_module.LLMError):
+        llm.preread_topic("题面")
 
 
 def test_name_topic_english_posts_plain_text_prompt():
@@ -5464,9 +5543,9 @@ def test_selection_prompt_carries_exclusive_group_rules():
 
 
 class _FailingLocal(RecordingLLM):
-    """本地委托失败的记录型假件：summarize_topic 抛 LLMError（本地失联形态）。"""
+    """本地委托失败的记录型假件：preread_topic 抛 LLMError（本地失联形态）。"""
 
-    def summarize_topic(self, problem_text: str) -> str:
+    def preread_topic(self, problem_text: str) -> PrereadResult:
         raise LLMError("连接被拒绝", kind=ERROR_KIND_NETWORK)
 
 
@@ -5482,7 +5561,7 @@ class _CrashingLocal(RecordingLLM):
     终止——500 响应体带 llama-server 崩溃特征（真实场景：qwen3-coder:30b 权重超
     内存，ggml 分配 buffer 失败）。"""
 
-    def summarize_topic(self, problem_text: str) -> str:
+    def preread_topic(self, problem_text: str) -> PrereadResult:
         raise LLMError(
             'DeepSeek API 返回 500：{"error":{"message":"llama-server process has '
             "terminated: exit status 1: ggml_backend_cpu_buffer_type_alloc_buffer: "
@@ -5494,7 +5573,7 @@ class _CrashingLocal(RecordingLLM):
 class _UnknownFailureLocal(RecordingLLM):
     """本地委托失败的记录型假件（未知形态）：错误特征不属于任何已知分类。"""
 
-    def summarize_topic(self, problem_text: str) -> str:
+    def preread_topic(self, problem_text: str) -> PrereadResult:
         raise LLMError("奇怪的本地错误：权限不足", kind=ERROR_KIND_NETWORK)
 
 
@@ -5503,7 +5582,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
     {
         "select_modules",
         "clarify",
-        "summarize_topic",
+        "preread_topic",
         "name_topic_english",
         "generate_main_skeleton",
         "generate_smoke_main",
@@ -5531,7 +5610,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
 
 def _call_all_protocol_methods(router: RoutingLLM) -> None:
     """对 router 依次调用 LLM 协议的全部方法（本地路由派发测试的公共扫描）。"""
-    router.summarize_topic("题面")
+    router.preread_topic("题面")
     router.name_topic_english("题面")
     router.summarize_module("代码")
     router.reference_summarize("素材")
@@ -5567,7 +5646,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
     _call_all_protocol_methods(router)
 
     assert local.calls == [
-        "summarize_topic",
+        "preread_topic",
         "summarize_module",
         "reference_summarize",
         "clarify",
@@ -5682,7 +5761,7 @@ def test_routing_llm_local_failure_wraps_with_actionable_message():
     remote = RecordingLLM("remote")
     router = RoutingLLM(remote=remote, local=_FailingLocal("local"))
     with pytest.raises(LLMError) as exc_info:
-        router.summarize_topic("题面")
+        router.preread_topic("题面")
     assert exc_info.value.kind == ERROR_KIND_NETWORK  # 错误类别保持
     assert LOCAL_LLM_UNAVAILABLE_MESSAGE in str(exc_info.value)  # 附可操作提示
     assert "连接被拒绝" in str(exc_info.value)  # 保留原始信息
@@ -5705,7 +5784,7 @@ def test_routing_llm_local_llama_server_crash_hints_model_too_big():
     remote = RecordingLLM("remote")
     router = RoutingLLM(remote=remote, local=_CrashingLocal("local"))
     with pytest.raises(LLMError) as exc_info:
-        router.summarize_topic("题面")
+        router.preread_topic("题面")
     message = str(exc_info.value)
     assert exc_info.value.kind == ERROR_KIND_NETWORK  # 错误类别保持
     assert LOCAL_LLM_LOAD_FAILED_MESSAGE in message  # 换模型提示
@@ -5718,7 +5797,7 @@ def test_routing_llm_local_unknown_failure_uses_generic_hint():
     """本地未知错误形态 → 通用兜底文案（LOCAL_LLM_UNAVAILABLE_MESSAGE）。"""
     router = RoutingLLM(remote=RecordingLLM("remote"), local=_UnknownFailureLocal("local"))
     with pytest.raises(LLMError) as exc_info:
-        router.summarize_topic("题面")
+        router.preread_topic("题面")
     message = str(exc_info.value)
     assert LOCAL_LLM_UNAVAILABLE_MESSAGE in message
     assert "奇怪的本地错误：权限不足" in message  # 保留原始错误信息

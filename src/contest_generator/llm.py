@@ -2,8 +2,9 @@
 
 生产实现 DeepSeekLLM 走 DeepSeek Chat Completions API（base_url / api_key /
 模型来自本机配置文件 config.py）；HTTP 传输可注入假件，网络调用不进测试。
-LLM 承担七类协议职责：赛题→模块选择、赛题简介生成（AI 预读题面给用户
-一句话总览 + 功能要点）、main.c 骨架生成、模块简介生成与校验、母版提炼
+LLM 承担七类协议职责：赛题→模块选择、赛题预读（AI 预读题面给一句话
+总览 + 决策点提醒——限定/约束/指定类事实，供后续步骤核对）、main.c 骨架
+生成、模块简介生成与校验、母版提炼
 判定（冲突/独有文件 → 保留/合并/剔除；两阶段：先读全文出摘要，再基于
 摘要判定）、参考文件提炼归档判定、赛题库拆条 / 编号提取。
 领域模型不在此处——赛题库模型在 topic_library，判定素材模型在 report，
@@ -77,6 +78,14 @@ from .selection import (
     parse_decision,
 )
 from .task_progress import TaskError, TaskPlan, build_task_plan
+from .topic_preread import (
+    MAX_QUOTE_LEN,
+    MAX_REMINDERS,
+    MAX_REMINDER_TEXT_LEN,
+    PREREAD_STEP_NAMES,
+    PrereadResult,
+    normalize_preread,
+)
 from .wiring import WiringEntry, parse_wiring_entries
 from .params import ParamList, build_params
 from .topic_library import TopicDraft, validate_topic_key
@@ -558,28 +567,40 @@ REFERENCE_SUMMARY_SYSTEM_PROMPT = (
     "简介：它是什么、用途、适用场景。只输出简介文本，不要额外格式。"
 )
 
-# 赛题简介生成（赛题简介步骤，wait-what 效果）：AI 预读题面给"这个赛题要
-# 实现什么"的简短认知——第一行一句话总览 + 功能要点条目（把散落在题面各处
-# 的全部实质要求整理出来，按性质分组，整体比原题短而清晰）。只展示给用户
-# 确认理解，不进任何下游流程；纯文本契约，与参考文件简介同款（文本模式，
-# 无结构化输出）。要求贴题面关键词、禁止脑补，与模块推荐的证据约束同源。
-TOPIC_SUMMARY_SYSTEM_PROMPT = (
+# 赛题预读（预读步骤，wait-what 效果 + 决策点提醒）：AI 预读题面给一句话
+# 总览 + 决策点提醒列表（每条 = 影响步骤 + 提醒文本 + 题面原文引用）。用户
+# 自己会通读题面，本调用不复述功能（那是评分点/推荐职责），只提炼"限定 /
+# 约束 / 指定"类事实（必须 / 只能 / 不得 / 限定 / 采用……），让用户在后续
+# 决策步骤（选平台 / 推荐 / 模块清单 / 引脚 / 骨架 / 深化）不踩题面已锁死的
+# 坑。只展示给用户确认理解，不进任何下游流程；结构化 JSON 契约（机械校验
+# 在 topic_preread 域），与纯文本摘要类调用不同。
+PREREAD_SYSTEM_PROMPT = (
     "你是电子设计竞赛（电赛）嵌入式开发助手，熟悉 MSPM0G3507（CCS）与 "
-    "STM32F103C8T6（Keil5）两条平台线。为下面的赛题写一段简短简介"
-    "（赛题文本可能被截断，见末尾标注，" + TRUNCATION_NOTICE + "）："
-    "第一行用一句话总览这个赛题要做一个什么样的装置 / 系统，随后每行一个"
-    "功能要点（以「- 」开头），粒度贴题面关键词（如声光提示、测距、显示等）。"
-    "把题面散落在各处的全部实质要求都整理出来：功能、约束（尺寸 / 电源 / "
-    "精度等）、交互（按键 / 显示 / 声光提示等）按性质分组列成条目——条目数"
-    "按题面实际要求来，不为省篇幅漏要求，也不要为凑条数拆句。严格以题面"
-    "原文为证据，不要脑补题外功能。整体比原题短而清晰：压缩重复与过程性"
-    "表述，保留全部实质要求。只输出简介文本，不要额外格式。"
+    "STM32F103C8T6（Keil5）两条平台线。预读下面的赛题（赛题文本可能被"
+    "截断，见末尾标注，" + TRUNCATION_NOTICE + "），输出严格 JSON 对象，"
+    "仅供用户在后续生成步骤中核对「题面已经锁死了什么」，不进任何下游流程。"
+    "JSON 结构：{\"overview\": \"...\", \"reminders\": [{\"steps\": [...], "
+    "\"text\": \"...\", \"quote\": \"...\"}]}。overview = 一句话总览这个赛题"
+    "要做一个什么样的装置 / 系统。reminders = 最多 "
+    + f"{MAX_REMINDERS} 条" + "，每条一个对象："
+    "steps = 该提醒影响的下一个生成步骤编号数组——"
+    + "、".join(f"{n}={PREREAD_STEP_NAMES[n]}" for n in PREREAD_STEP_NAMES)
+    + "；若该限定不属于"
+    "任何具体步骤（尺寸 / 电源 / 时长等通用要求）用空数组 []。text = 一到两"
+    "句中文提醒（不超过 " + f"{MAX_REMINDER_TEXT_LEN} 字" + "），点明题面限定"
+    "与影响（如「题面限定采用 TI "
+    "MSPM0 系列，目标平台请选 MSPM0G3507」）。quote = 题面原文逐字短片段"
+    "（不超过 " + f"{MAX_QUOTE_LEN} 字" + "），证明该限定的出处。"
+    "只提炼限定 / 约束 / 指定类事实（必须 / 只能 / 不得 / 限定 / 采用……，"
+    "例如限定芯片、指定器件、通信接口、尺寸电源时长等硬性指标）；题面的功能"
+    "描述（如「小车需要循迹」）不是限定，不要输出。严格以题面原文为证据，"
+    "不要脑补题外限定。只输出 JSON 对象，不要额外格式。"
 )
 
 # 英文目录短名生成（工单 ascii-project-name/02）：AI 给粘贴题面起一个纯英文
 # 短名（如 Auto_Car），做桌面生成目录名——中文目录名在 Windows CCS/gmake 链上
 # 乱码（工单 mspm0-cjk-path-fix/01 只修模板，管不住 CCS IDE 重建 makefile）。
-# 纯文本契约，与赛题简介同款：文本模式、无结构化输出、短名本身即整段输出
+# 纯文本契约，与模块简介同款：文本模式、无结构化输出、短名本身即整段输出
 # （严格 ASCII：字母数字 + 下划线/连字符，3~5 个词，不含中文）。
 TOPIC_EN_NAME_SYSTEM_PROMPT = (
     "你是电子设计竞赛（电赛）嵌入式开发助手。为下面的赛题起一个英文短名，"
@@ -1394,7 +1415,7 @@ class LLM(Protocol):
         self, problem_text: str, clarifications: Sequence[tuple[str, str]]
     ) -> tuple[str, ...]: ...
 
-    def summarize_topic(self, problem_text: str) -> str: ...
+    def preread_topic(self, problem_text: str) -> PrereadResult: ...
 
     def name_topic_english(self, problem_text: str) -> str: ...
 
@@ -1860,19 +1881,21 @@ class DeepSeekLLM:
             json_mode=True,
         )
 
-    def summarize_topic(self, problem_text: str) -> str:
-        """赛题 → 简短简介（一句话总览 + 功能要点，文本模式，赛题简介步骤）。
+    def preread_topic(self, problem_text: str) -> PrereadResult:
+        """赛题 → 赛题预读产物（一句话总览 + 决策点提醒，预读步骤）。
 
-        预读题面给用户"这个赛题要实现什么"的简短认知（wait-what 效果）：只
-        展示、不进任何下游流程；赛题超长截断带标注（_truncate_content，与
-        所有嵌内容调用同款预算）；瞬时失败整次重问（_retry_parse，与参考
-        文件简介同款兜底）。
+        预读题面给用户"题面已经锁死了什么"的认知（wait-what 效果 + 后续
+        决策步骤提醒）：只展示、不进任何下游流程；赛题超长截断带标注
+        （_truncate_content，与所有嵌内容调用同款预算）；结构化 JSON +
+        机械校验（topic_preread.normalize_preread，引用必须命中题面）；
+        瞬时失败整次重问（_retry_parse 兜底）。
         """
         return self._retry_parse(
-            system_prompt=TOPIC_SUMMARY_SYSTEM_PROMPT,
+            system_prompt=PREREAD_SYSTEM_PROMPT,
             user_prompt=_truncate_content(problem_text),
-            parse=lambda content: content,
-            label="赛题简介生成",
+            parse=lambda content: parse_preread(content, problem_text),
+            label="赛题预读",
+            json_mode=True,
         )
 
     def name_topic_english(self, problem_text: str) -> str:
@@ -1880,7 +1903,7 @@ class DeepSeekLLM:
 
         粘贴自定义题面生成时目录名取 AI 英文短名（如 Auto_Car）：题面超长
         截断带标注（_truncate_content，与所有嵌内容调用同款预算）；瞬时失败
-        整次重问（_retry_parse，与赛题简介同款兜底）；输出为纯文本短名，
+        整次重问（_retry_parse，与模块简介同款兜底）；输出为纯文本短名，
         仅当整段非空才接受。
         """
         def parse(content: str) -> str:
@@ -3393,14 +3416,15 @@ class DeepSeekLLM:
 # RoutingLLM + build_llm 构造接线
 # ---------------------------------------------------------------------------
 
-# 本地方法集：{summarize_topic, summarize_module, reference_summarize, clarify,
-# validate_module_description, reference_judge_archivable}——三个纯文本摘要 +
-# 澄清 / 简介一致性校验 / 归档判定（spike 实测内容合理；格式障碍（围栏）已被
+# 本地方法集：{preread_topic, summarize_module, reference_summarize, clarify,
+# validate_module_description, reference_judge_archivable}——赛题预读 + 两个
+# 纯文本摘要（模块简介 / 参考素材简介）+ 澄清 / 简介一致性校验 / 归档判定
+# （spike 实测内容合理；格式障碍（围栏）已被
 # 工单 local-llm-json-group/01 的 _unwrap_json_fence 移除，JSON 调用可稳定解析）。
 # 能力事实，硬编码为常量不做用户可配。常量单源：RoutingLLM 派发与测试都引用它。
 LOCAL_LLM_METHODS = frozenset(
     {
-        "summarize_topic",
+        "preread_topic",
         "summarize_module",
         "reference_summarize",
         "clarify",
@@ -3439,11 +3463,11 @@ def _local_error_hint(exc: LLMError) -> str:
 class RoutingLLM:
     """组合式 LLM：本地方法集走 local 实例、其余方法走 remote 实例。
 
-    本地方法集 = LOCAL_LLM_METHODS（六个方法：三个纯文本摘要 + 澄清 / 简介
-    一致性校验 / 归档判定）；方法集外方法绝不落到 local。local 委托抛出的最终
-    LLMError 被包装附可操作提示（LOCAL_LLM_UNAVAILABLE_MESSAGE），错误类别
-    （kind）保持、沿用委托内既有重试机制（网络类指数退避照常），**不**自动
-    回退远程（用户裁决大声失败）。
+    本地方法集 = LOCAL_LLM_METHODS（六个方法：赛题预读（结构化 JSON）+ 两
+    个纯文本摘要 + 澄清 / 简介一致性校验 / 归档判定）；方法集外方法绝不落到
+    local。local 委托抛出的最终 LLMError 被包装附可操作提示
+    （LOCAL_LLM_UNAVAILABLE_MESSAGE），错误类别（kind）保持、沿用委托内既有
+    重试机制（网络类指数退避照常），**不**自动回退远程（用户裁决大声失败）。
     """
 
     def __init__(self, remote: LLM, local: LLM) -> None:
@@ -3513,9 +3537,9 @@ class RoutingLLM:
             "clarify", lambda delegate: delegate.clarify(problem_text, clarifications)
         )
 
-    def summarize_topic(self, problem_text: str) -> str:
+    def preread_topic(self, problem_text: str) -> PrereadResult:
         return self._local_call(
-            "summarize_topic", lambda delegate: delegate.summarize_topic(problem_text)
+            "preread_topic", lambda delegate: delegate.preread_topic(problem_text)
         )
 
     def name_topic_english(self, problem_text: str) -> str:
@@ -4017,6 +4041,23 @@ def parse_validation_result(content: str) -> ValidationResult:
     if not isinstance(issues, str):
         raise LLMError("校验结果的 issues 必须是字符串")
     return ValidationResult(consistent=data["consistent"], issues=issues)
+
+
+def parse_preread(content: str, problem_text: str) -> PrereadResult:
+    """预读 JSON 解析 + 机械校验（topic_preread.normalize_preread）。
+
+    非 JSON / 顶层形状错误抛 LLMError（整次重问，_retry_parse 兜底）；
+    条目级问题（引用不命中题面 / 非法 steps / 空 text）由 normalize_preread
+    宽松过滤——预读是纯展示，宁可少显示一条也不整次失败。
+    """
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise LLMError(f"模型返回的不是 JSON：{content[:200]}") from exc
+    try:
+        return normalize_preread(data, problem_text)
+    except ValueError as exc:
+        raise LLMError(str(exc)) from exc
 
 
 def parse_clarify_questions(content: str) -> tuple[str, ...]:

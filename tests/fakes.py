@@ -25,6 +25,7 @@ from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandid
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
 from contest_generator.task_progress import Task, TaskPlan
 from contest_generator.topic_library import TopicDraft
+from contest_generator.topic_preread import PrereadReminder, PrereadResult
 from contest_generator.wordlist import SolutionOption
 
 # ---------------------------------------------------------------------------
@@ -594,7 +595,7 @@ class FakeLLM:
         validation: ValidationResult = ValidationResult(consistent=True),
         distillation: tuple[FileDecision, ...] = (),
         clarify_questions: tuple[str, ...] = (),
-        topic_summary: str = "AI 生成的赛题简介",
+        preread: PrereadResult | None = None,
         topic_en_name: str = "Auto_Car",
         fixes: tuple[FixSuggestion, ...] = (),
         impact_analysis: ImpactAnalysis | None = None,
@@ -618,7 +619,16 @@ class FakeLLM:
         self._validation = validation
         self._distillation = distillation
         self._clarify_questions = clarify_questions
-        self._topic_summary = topic_summary
+        self._preread = preread or PrereadResult(
+            overview="AI 生成的赛题总览",
+            reminders=(
+                PrereadReminder(
+                    steps=(3,),
+                    text="AI 生成的赛题提醒",
+                    quote="",
+                ),
+            ),
+        )
         self._topic_en_name = topic_en_name
         self._fixes = fixes
         self._impact_analysis = impact_analysis or ImpactAnalysis()
@@ -686,7 +696,7 @@ class FakeLLM:
         self.topic_split_calls: list[tuple[str, ...]] = []
         self.topic_extract_calls: list[tuple[str, ...]] = []
         self.clarify_calls: list[tuple[str, tuple[tuple[str, str], ...]]] = []
-        self.topic_summarize_calls: list[tuple[str, ...]] = []
+        self.preread_calls: list[tuple[str, ...]] = []
         self.topic_en_name_calls: list[tuple[str, ...]] = []
         self.fix_errors_calls: list[tuple[str, dict, str, str, tuple, str, tuple]] = []
         self.impact_calls: list[
@@ -741,9 +751,9 @@ class FakeLLM:
         self.clarify_calls.append((problem_text, tuple(clarifications)))
         return self._clarify_questions
 
-    def summarize_topic(self, problem_text: str) -> str:
-        self.topic_summarize_calls.append((problem_text,))
-        return self._topic_summary
+    def preread_topic(self, problem_text: str) -> PrereadResult:
+        self.preread_calls.append((problem_text,))
+        return self._preread
 
     def name_topic_english(self, problem_text: str) -> str:
         self.topic_en_name_calls.append((problem_text,))
@@ -1104,9 +1114,9 @@ class RecordingLLM:
         self._record("clarify")
         return ()
 
-    def summarize_topic(self, problem_text: str) -> str:
-        self._record("summarize_topic")
-        return f"{self.name}:topic"
+    def preread_topic(self, problem_text: str) -> PrereadResult:
+        self._record("preread_topic")
+        return PrereadResult(overview=f"{self.name}:topic")
 
     def name_topic_english(self, problem_text: str) -> str:
         self._record("name_topic_english")

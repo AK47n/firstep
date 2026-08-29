@@ -76,7 +76,7 @@ def test_recent_workflow_store_returns_content_safe_summary_and_call_details():
     )
     _record(
         collector,
-        operation="summarize_topic",
+        operation="preread_topic",
         provider="local",
         route="local",
         status="error",
@@ -125,7 +125,7 @@ def test_recent_workflow_store_returns_content_safe_summary_and_call_details():
         {
             "workflow_id": "fix-errors:abc",
             "sequence": 2,
-            "operation": "summarize_topic",
+            "operation": "preread_topic",
             "provider": "local",
             "route": "local",
             "model": "secret-model-name",
