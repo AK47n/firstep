@@ -330,13 +330,14 @@ export function taskIterationLabel(kind) {
 }
 
 /** 轮次历史展开区（工单 task-feedback/03）：空历史 = 空串（不渲染）。
- * 每轮两行式（工单 task-card-polish/01 视觉重构，信息与契约不变）：
+ * 每轮两行式（工单 task-card-polish/01 视觉重构 + 用户反馈补漏）：
  * 第一行 .task-iteration-line = 轮次号 + 种类 + 该轮终态徽章 + 编译结果徽章
  * （compile_summary，截 40 字；颜色按该轮终态推断——verified=绿 /
  * failed=红 / 其余灰）+「回到这轮之前」按钮（右对齐；撤销语义——备份 =
  * 该轮执行前快照，恢复后状态回该轮前终态）；第二行 .task-iteration-detail
- * = 反馈摘要（截 40 字）+「做了什么」摘要（截 40 字）+ 时间 + 备份。
- * 无备份的轮次不给按钮（防御）；无备份/无摘要 = 不渲染第二行。 */
+ * = 带标签详情（上板反馈：/ 做了什么：/ 需要你做什么：，完整原文不截断——
+ * 这两条是学生核心关注内容，截断会丢信息）+ 时间 · 备份小字行。
+ * 无备份的轮次不给按钮（防御）；无任何详情/时间/备份 = 不渲染第二行。 */
 export function taskIterationsHTML(task) {
   const iterations = (task && task.iterations) || [];
   if (!iterations.length) return "";
@@ -349,11 +350,16 @@ export function taskIterationsHTML(task) {
       ? '<button class="btn-mini btn-task-iteration-rollback" data-task="' + esc(task.id || "")
         + '" data-seq="' + esc(String(it.seq)) + '">回到这轮之前</button>'
       : "";
-    const details = [];
-    if (it.feedback) details.push('「' + esc(truncate(it.feedback, 40)) + "」");
-    if (it.what_changed) details.push('「' + esc(truncate(it.what_changed, 40)) + "」");
-    if (it.at) details.push(esc(String(it.at)));
-    if (it.backup_id) details.push('备份 <span class="slug">' + esc(String(it.backup_id)) + "</span>");
+    const detail = [];
+    if (it.feedback) detail.push('<div class="task-iteration-detail-row"><b>上板反馈：</b>'
+      + esc(String(it.feedback)) + "</div>");
+    if (it.what_changed) detail.push('<div class="task-iteration-detail-row"><b>做了什么：</b>'
+      + esc(String(it.what_changed)) + "</div>");
+    if (it.user_action) detail.push('<div class="task-iteration-detail-row"><b>需要你做什么：</b>'
+      + esc(String(it.user_action)) + "</div>");
+    const meta = [];
+    if (it.at) meta.push(esc(String(it.at)));
+    if (it.backup_id) meta.push('备份 <span class="slug">' + esc(String(it.backup_id)) + "</span>");
     return '<div class="task-iteration">'
       + '<div class="task-iteration-line">'
       + '<span class="task-iteration-title">第 ' + esc(String(it.seq)) + " 轮 · "
@@ -362,8 +368,12 @@ export function taskIterationsHTML(task) {
         + taskStatusLabel(it.status || "pending") + "</span>"
       + compile + rollback
       + "</div>"
-      + (details.length
-        ? '<div class="task-iteration-detail muted">' + details.join(" · ") + "</div>"
+      + (detail.length || meta.length
+        ? '<div class="task-iteration-detail">' + detail.join("")
+          + (meta.length
+            ? '<div class="task-iteration-detail-meta muted">' + meta.join(" · ") + "</div>"
+            : "")
+          + "</div>"
         : "")
       + "</div>";
   }).join("");

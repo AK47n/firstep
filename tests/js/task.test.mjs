@@ -252,18 +252,23 @@ test("taskCardHTML: 无任何元信息 → 不渲染 .task-meta 行", () => {
   assert.ok(!html.includes("task-meta"));
 });
 
-test("taskIterationsHTML: 两行式结构（line 徽章行 + detail 摘要行）+ 回滚按钮 btn-mini", () => {
+test("taskIterationsHTML: 两行式结构（line 徽章行 + 带标签 detail 行）+ 回滚按钮 btn-mini", () => {
   const html = taskIterationsHTML({ id: "t1", iterations: [
-    { seq: 1, kind: "execute", feedback: "左轮不转", what_changed: "改了 PWM", status: "verified",
-      backup_id: "b1", at: "2026-08-27T10:00:00+0800", compile_summary: "ok" },
+    { seq: 1, kind: "execute", feedback: "左轮不转", what_changed: "改了 PWM", user_action: "调大 PID 的 P 再试",
+      status: "verified", backup_id: "b1", at: "2026-08-27T10:00:00+0800", compile_summary: "ok" },
   ] });
   assert.ok(html.includes('class="task-iteration"'));
   assert.ok(html.includes('class="task-iteration-line"'));
-  assert.ok(html.includes('class="task-iteration-detail muted"'));
+  assert.ok(html.includes('class="task-iteration-detail"'));
+  assert.ok(!html.includes('class="task-iteration-detail muted"'));
   assert.ok(html.includes("btn-mini btn-task-iteration-rollback"));
   assert.ok(html.includes("历史记录（共 1 轮）"));
-  // 细节行以 · 分隔：反馈 / 做了什么 / 时间 / 备份
-  assert.ok(html.includes("「左轮不转」 · 「改了 PWM」 · 2026-08-27T10:00:00+0800 · 备份"));
+  // 详情行带标签完整原文：上板反馈 / 做了什么 / 需要你做什么 + 时间 / 备份小字行
+  assert.ok(html.includes("<b>上板反馈：</b>左轮不转"));
+  assert.ok(html.includes("<b>做了什么：</b>改了 PWM"));
+  assert.ok(html.includes("<b>需要你做什么：</b>调大 PID 的 P 再试"));
+  assert.ok(html.includes("2026-08-27T10:00:00+0800 · 备份"));
+  assert.ok(html.includes("task-iteration-detail-meta"));
 });
 
 test("taskIterationsHTML: 无摘要无备份 → 只渲染第一行（detail 行缺省）", () => {
@@ -480,18 +485,18 @@ test("taskCardHTML: 卡内烧录控制行（outputDir + 已实现步骤显；pen
   assert.ok(!noDir.includes("tasks-flash-status-t1"));
 });
 
-test("taskIterationsHTML: 轮次行带「做了什么」摘要（截 40 字）", () => {
+test("taskIterationsHTML: 轮次行带「做了什么」完整原文（不截断）", () => {
   const task = { id: "t1", iterations: [
     { seq: 1, kind: "execute", status: "verified", compile_summary: "ok", what_changed: "x".repeat(50) },
   ] };
   const html = taskIterationsHTML(task);
-  assert.ok(html.includes("x".repeat(40) + "…"));
-  // 降级空字段 → 无摘要块
+  assert.ok(html.includes("<b>做了什么：</b>" + "x".repeat(50)));
+  // 降级空字段 → 无详情块（无反馈/做了什么/需要你做什么/时间/备份）
   const noReport = taskIterationsHTML({ id: "t1", iterations: [
     { seq: 1, kind: "execute", status: "verified", compile_summary: "ok" },
   ] });
   assert.ok(noReport.includes("第 1 轮"));
-  assert.ok(!noReport.includes("「"));
+  assert.ok(!noReport.includes("task-iteration-detail"));
 });
 
 test("nextTaskHint: 当前卡之后第一个待执行（pending/failed）", () => {

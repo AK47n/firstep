@@ -1489,8 +1489,9 @@
                color: var(--muted); }
   .task-meta-item { display: inline-flex; align-items: center; gap: 4px; }
   .task-meta-warn { color: var(--warn); font-weight: 600; }
-  /* 轮次历史两行式（工单 task-card-polish/01）：第一行轮次+徽章+回退按钮
-     （右对齐），第二行 muted 摘要/时间/备份——替代原先一行平铺 */
+  /* 轮次历史两行式（工单 task-card-polish/01 + 用户反馈补漏）：第一行
+     轮次+徽章+回退按钮（右对齐），第二行带标签详情（上板反馈/做了什么/
+     需要你做什么，完整原文）+ 时间·备份小字行——替代原先一行平铺 */
   .task-iterations { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
   .task-iteration { border: 1px solid var(--border); border-radius: 6px;
                     background: var(--panel); padding: 4px 8px; }
@@ -1499,7 +1500,10 @@
   .task-iteration-title { font-weight: 600; }
   .task-iteration-line .badge { margin-left: 0; }
   .task-iteration-line .btn-task-iteration-rollback { margin-left: auto; }
-  .task-iteration-detail { margin-top: 2px; font-size: 12px; line-height: 1.5; }
+  .task-iteration-detail { margin-top: 2px; display: flex; flex-direction: column;
+                          gap: 2px; font-size: 12px; line-height: 1.5; }
+  .task-iteration-detail-row b { color: var(--muted); font-weight: 600; }
+  .task-iteration-detail-meta { font-size: 11px; margin-top: 2px; }
   /* 任务卡按钮层级（工单 task-card-polish/01）：主操作「做这一步」accent 实底；
      物理动作「烧录到板子」与咨询「有不懂的？问这里」accent 描边；其余 base 统一 */
   .task-card .row { gap: 8px; }
