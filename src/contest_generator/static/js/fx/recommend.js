@@ -6,6 +6,24 @@
 //     suitable, recommended, lib_modules[]}], selected }
 import { esc } from "./core.js";
 
+// recommendCoverageNote(data)：推荐完成后「零库外建议」的主动提示——有库内
+// 命中且所有需求均无库外建议 → 提示文案（用户不再疑惑"库外建议区为空"）；
+// 有建议 / 无命中 / requirements 缺失空（无需求层）= ""。判定依赖 done 载荷
+// 形状（modules / requirements[].modules / requirements[].suggestions）：
+// 库外建议 = 覆盖检查「无命中」的机械产出，零建议 = 全部库内命中。
+export function recommendCoverageNote(data) {
+  const requirements = data && Array.isArray(data.requirements) ? data.requirements : [];
+  // requirements 缺失/空 = 无需求层（异常/旧载荷）→ 保守不提示
+  if (!requirements.length) return "";
+  const hasHit = requirements.some((r) => Array.isArray(r && r.modules) && r.modules.length)
+    || !!(data && Array.isArray(data.modules) && data.modules.length);
+  const hasSuggestion = requirements.some(
+    (r) => Array.isArray(r && r.suggestions) && r.suggestions.length
+  );
+  if (!hasHit || hasSuggestion) return "";
+  return '<div class="rec-covered-note muted">本题功能需求已全部在库内实现，无需库外采购。</div>';
+}
+
 // suggestionSolutionBadges(sol, selected)：单方案徽标。recommended = 词表
 // 推荐 →「推荐」；lib_modules 非空 = 库内已有对应模块 →「库内已有：…」
 // （工单 wordlist-lib-modules/02：不用重复采购，可先看库内模块）；
@@ -195,6 +213,6 @@ if (typeof window !== "undefined") {
     suggestionOptionsHTML, suggestionChipHTML,
     BUY_DECISIONS_KEY, decisionBadgeHTML, reviewBadgeHTML, decisionPayload,
     suggestionKey, loadBuyDecisions, saveBuyDecisions, matchBuyDecision,
-    discussionAreaHTML,
+    discussionAreaHTML, recommendCoverageNote,
   });
 }

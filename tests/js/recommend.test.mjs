@@ -9,7 +9,7 @@ import {
   suggestionOptionsHTML, suggestionChipHTML,
   decisionBadgeHTML, reviewBadgeHTML, decisionPayload,
   suggestionKey, loadBuyDecisions, saveBuyDecisions, matchBuyDecision,
-  discussionAreaHTML,
+  discussionAreaHTML, recommendCoverageNote,
 } from "../../src/contest_generator/static/js/fx/recommend.js";
 
 // 结构护栏：纯函数单源在 fx/recommend.js，index.html / ui 层不得再定义
@@ -18,7 +18,7 @@ const html = readFileSync(
   "utf8"
 );
 for (const name of ["suggestionSolutionBadges", "suggestionOptionRowHTML",
-  "suggestionOptionsHTML", "suggestionChipHTML"]) {
+  "suggestionOptionsHTML", "suggestionChipHTML", "recommendCoverageNote"]) {
   test(`纯函数单源：${name} 不在 index.html 内联定义`, () => {
     assert.ok(!new RegExp("function\\s+" + name + "\\s*\\(").test(html));
   });
@@ -143,6 +143,59 @@ test("chip：有方案 → wrapper + 「⤵ N 方案」计数 + 面板 + 名称�
   assert.match(out, /sugg-chip/);
   assert.match(out, /视觉模块 &lt;v&gt;/);
   assert.equal((out.match(/sugg-row/g) || []).length, 2);
+});
+
+// ===== 零库外建议主动提示（工单 recommend-covered-note/01）=====
+
+test("零建议提示：有库内命中 + 零建议 → 提示文本", () => {
+  const out = recommendCoverageNote({
+    modules: [{ slug: "xunji", reason: "循迹" }],
+    requirements: [
+      { requirement: "沿弧线行驶", sentence: 28, modules: ["xunji"], suggestions: [] },
+    ],
+  });
+  assert.match(out, /rec-covered-note/);
+  assert.match(out, /本题功能需求已全部在库内实现，无需库外采购。/);
+});
+
+test("零建议提示：2024H 型混合（命中句 + 约束句）→ 仍提示", () => {
+  const out = recommendCoverageNote({
+    modules: [{ slug: "xunji" }, { slug: "led_beep" }],
+    requirements: [
+      { requirement: "沿半弧线行驶", sentence: 28, modules: ["xunji"], suggestions: [] },
+      { requirement: "完成一圈用时不大于30秒", sentence: 31, modules: [], suggestions: [] },
+      { requirement: "小车上不得安装摄像头", sentence: 52, modules: [], suggestions: [] },
+    ],
+  });
+  assert.match(out, /rec-covered-note/);
+});
+
+test("零建议提示：任一需求有库外建议 → 空串", () => {
+  const out = recommendCoverageNote({
+    modules: [{ slug: "xunji" }],
+    requirements: [
+      { requirement: "识别", sentence: 1, modules: [], suggestions: [{ name: "K230" }] },
+      { requirement: "循迹", sentence: 2, modules: ["xunji"], suggestions: [] },
+    ],
+  });
+  assert.equal(out, "");
+  assert.equal(recommendCoverageNote({
+    modules: [], requirements: [{ requirement: "识别", sentence: 1, modules: [],
+      suggestions: [{ name: "K230" }] }],
+  }), "");
+});
+
+test("零建议提示：无库内命中 → 空串（空结果分支另有文案）", () => {
+  assert.equal(recommendCoverageNote({
+    modules: [], requirements: [{ requirement: "约束句", sentence: 1, modules: [], suggestions: [] }],
+  }), "");
+  assert.equal(recommendCoverageNote({ modules: [], requirements: [] }), "");
+});
+
+test("零建议提示：requirements 缺失 / 空 / 非数组 → 空串", () => {
+  assert.equal(recommendCoverageNote({ modules: [{ slug: "xunji" }] }), "");
+  assert.equal(recommendCoverageNote(null), "");
+  assert.equal(recommendCoverageNote(undefined), "");
 });
 
 // ===== 已定方案与商量（工单 buy-discuss/04）=====

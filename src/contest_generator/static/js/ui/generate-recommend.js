@@ -30,6 +30,7 @@ import { referencePlatformChip } from "/js/fx/reference.js";
 import {
   suggestionChipHTML, decisionPayload, suggestionKey,
   loadBuyDecisions, saveBuyDecisions, matchBuyDecision,
+  recommendCoverageNote,
 } from "/js/fx/recommend.js";
 import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
@@ -515,6 +516,10 @@ export function renderRecommendResult(data, autoAdd = true) {
   const requirements = data.requirements || [];
   const scorePanel = renderScorePointPanel(scorePoints);
   const groupPanel = renderGroupCards(groups, data.modules, selectedSlugs);
+  // 空结果分支（工单 recommend-covered-note/01）：本分支先于
+  // recommendCoverageNote 执行——真实载荷下 data.modules 必覆盖所有
+  // requirements[].modules 引用（:528 找 reason 同源），故「模块空 + 某需求
+  // 命中」的病态组合不可达；早退后无库外建议也不显示覆盖提示（互斥设计）。
   if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length) && !groups.length) {
     box.innerHTML = scorePanel + '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
     return;
@@ -537,7 +542,7 @@ export function renderRecommendResult(data, autoAdd = true) {
           return suggestionChipHTML(s, st);
         }).join("")}
       </div>
-    </div>`).join("");
+    </div>`).join("") + recommendCoverageNote(data);
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
