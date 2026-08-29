@@ -28,7 +28,7 @@ function renderStagedDirs() {
   $("staged-dirs").innerHTML = stagedDirs.map((d) => `
     <div class="item"><span class="slug">${esc(d.name)}</span>
       <span class="muted">${esc(d.path)}</span>
-      <button data-remove="${esc(d.path)}" class="danger" style="padding:2px 8px">移除</button></div>`).join("");
+      <button data-remove="${esc(d.path)}" class="btn-mini danger">移除</button></div>`).join("");
   $("staged-dirs").querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       stagedDirs = stagedDirs.filter((d) => d.path !== b.dataset.remove);

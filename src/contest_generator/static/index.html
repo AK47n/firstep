@@ -31,9 +31,10 @@
     --header-h: 58px;  /* 吸顶栏实际高度，JS 按视口宽度实时刷新（窄屏换行变高） */
     --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
     --border: #30363d; --border-strong: #3d444d;
-    --input-bg: #0d1117; --code-bg: #0a0e14;
+    --input-bg: #0d1117; --code-bg: #0a0e14; --code-text: #e2e8f0;
     --text: #e6edf3; --muted: #8b949e;
     --accent: #00d4ff; --accent-dark: #00a8cc; --accent-dim: rgba(0, 212, 255, .12);
+    --on-accent: #04222b;  /* accent 底上的文字色（button.primary 协议，polish-v2/02 令牌化） */
     --danger: #f85149; --danger-dim: rgba(248, 81, 73, .15);
     --warn: #e3a341; --warn-dim: rgba(227, 163, 65, .12); --warn-border: rgba(227, 163, 65, .35);
     --ok: #3fb950; --ok-bright: #7ee787; --ok-dim: rgba(63, 185, 80, .15);
@@ -61,9 +62,10 @@
     color-scheme: light;
     --bg: #f6f8fa; --panel: #ffffff; --panel-2: #eef1f4;
     --border: #d0d7de; --border-strong: #afb8c1;
-    --input-bg: #ffffff; --code-bg: #f6f8fa;
+    --input-bg: #ffffff; --code-bg: #f6f8fa; --code-text: #1f2328;
     --text: #1f2328; --muted: #59636e;
     --accent: #0096c7; --accent-dark: #007ea8; --accent-dim: rgba(0, 150, 199, .12);
+    --on-accent: #04222b;
     --danger: #cf222e; --danger-dim: rgba(207, 34, 46, .12);
     --warn: #9a6700; --warn-dim: rgba(154, 103, 0, .12); --warn-border: rgba(154, 103, 0, .35);
     --ok: #1a7f37; --ok-bright: #2da44e; --ok-dim: rgba(26, 127, 55, .12);
@@ -127,7 +129,7 @@
      内容+padding 自然 ≥26px（实测 28px）呈胶囊，不挤压 */
   .step-no { display: inline-flex; align-items: center; justify-content: center;
              min-width: 24px; height: 24px; margin-right: 8px; padding: 0 6px;
-             border-radius: 50%; background: var(--accent); color: #04222b;
+             border-radius: 50%; background: var(--accent); color: var(--on-accent);
              font-size: 13px; font-weight: 700; }
   nav { display: flex; gap: 6px; margin-left: auto; align-items: center; }
   nav button { border: none; background: none; padding: 12px 18px; cursor: pointer;
@@ -175,8 +177,8 @@
   button { padding: 7px 14px; border: 1px solid var(--border); border-radius: 6px;
            background: var(--panel-2); cursor: pointer; font: inherit; color: var(--text); }
   button:hover { border-color: var(--accent); color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #04222b; }
-  button.primary:hover { background: var(--accent-dark); color: #04222b; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover { background: var(--accent-dark); color: var(--on-accent); }
   button.danger { color: var(--danger); }
   button.danger:hover { border-color: var(--danger); }
   button.pin-overview-on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
@@ -473,10 +475,10 @@
   .btn-task-dialog-send, .btn-global-chat-send, .btn-params-chat-send,
   .sugg-discuss-send { border-radius: 999px; padding: 8px 18px; font-size: 13px;
                        margin-left: 0; background: var(--accent);
-                       border-color: var(--accent); color: #04222b;
+                       border-color: var(--accent); color: var(--on-accent);
                        white-space: nowrap; flex: 0 0 auto; }
   .btn-task-dialog-send:hover, .btn-global-chat-send:hover, .btn-params-chat-send:hover,
-  .sugg-discuss-send:hover { background: var(--accent-dark); color: #04222b; }
+  .sugg-discuss-send:hover { background: var(--accent-dark); color: var(--on-accent); }
   .sugg-discuss-custom { border-radius: 999px; padding: 7px 14px; font-size: 12.5px;
                          flex: 0 0 auto; }
   /* 参数速调 AI 咨询（工单 params-chat-ai/02）：AI 回复里的参数名 chip
@@ -614,17 +616,19 @@
   .warn-box.unverified { background: var(--warn-dim); color: var(--warn); }
   .warn-box.hardware_bound { background: var(--info-dim); color: var(--info); }
   .warn-box.group { background: var(--warn-dim); color: var(--warn); }
-  /* renderWarnings 直通提示 JS 内联浅绿 #d1fae5——JS 不动，样式表 !important 压成深色 */
-  .warn-box.ok { background: var(--ok-dim) !important; color: var(--ok-bright) !important; }
+  /* renderWarnings 「全绿 OK」框（polish-v2/02：JS 内联浅绿已清除，规则去掉 !important） */
+  .warn-box.ok { background: var(--ok-dim); color: var(--ok-bright); }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   /* 表格行 hover 高亮（工单 ui-polish-11/03）：长表格定位当前行 */
   tbody tr:hover { background: var(--panel-2); }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
-  /* 模块库表（library-table-polish/01）：表头底纹区分、slug 等宽不折行、
-     简介单行截断（title 全文由 JS 行渲染同步给）；行高亮沿用全局
-     tbody tr:hover（与生成页 / 参考库一致），不新增底纹与令牌值 */
-  .lib-table thead th { background: var(--panel-2); }
+  /* 表头底纹统一（polish-v2/01）：全站表格表头同款 panel-2 底纹（原仅模块库
+     独有——模块库/参考库/PDF/赛题/母版/设置价格参考六张表读感一致） */
+  thead th { background: var(--panel-2); }
+  /* 表内动作按钮统一紧凑胶囊（polish-v2/01）：详情/编辑/打开/删除 不再用
+     大号方角 base 按钮，行内节奏安静；危险色仍由 .danger 继承 */
+  table td button { font-size: 12px; padding: 2px 10px; border-radius: 999px; }
   .lib-table td.slug { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
   .lib-table .desc-cell { max-width: 340px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   /* 悬空依赖警示（library-dangling-deps/04）：行内 ⚠ 警示标（.ref-dangling-tag 为
@@ -721,7 +725,7 @@
   #tab-pdf th:nth-child(6), #tab-pdf td:nth-child(6) { width: 180px; }
   #tab-pdf td { overflow-wrap: break-word; }
   #tab-pdf td:nth-child(6) { white-space: nowrap; }
-  pre.result { background: var(--code-bg); color: #e2e8f0; border: 1px solid var(--border);
+  pre.result { background: var(--code-bg); color: var(--code-text); border: 1px solid var(--border);
                border-radius: 10px; padding: 14px 16px; font-family: var(--mono); font-size: 12px;
                line-height: 1.7; overflow: auto; max-height: 320px;
                box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03); }
@@ -759,6 +763,12 @@
   }
   .file-row { display: grid; grid-template-columns: 180px 1fr; gap: 8px; margin-bottom: 8px; }
   .file-row textarea { min-height: 120px; }
+  /* 文件行删除 ✕（polish-v2/01）：原 ui/files.js 内联定位/尺寸 → 类化 */
+  .file-row-body { position: relative; }
+  .file-row-x { position: absolute; right: 4px; top: 4px; font-size: 11px;
+                padding: 2px 6px; border-radius: 6px; }
+  /* 通用小按钮（polish-v2/01）：列表内「移除/删除 ✕」类小动作，统一迷你胶囊 */
+  .btn-mini { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
   /* ---- 赛题库拆条校对表（工单 05）：年份 / 题号 / 题面三字段 + 删条目 ---- */
   .proofread-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
   .proofread-row input { width: 90px; flex: none; }
@@ -810,7 +820,7 @@
   .prog-batch { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
   .prog-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
               margin: 6px 0 8px; }
-  .prog-bar > div { height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  .prog-bar > div { height: 100%; width: 0; background: var(--accent); transition: width var(--dur-slow); }
   .prog-timers { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 6px;
                  font-variant-numeric: tabular-nums; }
   .prog-badge { display: inline-block; background: var(--warn-dim); color: var(--warn);
@@ -886,11 +896,11 @@
   input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
   input[type=checkbox]:checked::after {
     content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
-    border: solid #04222b; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    border: solid var(--on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg); }
   input[type=radio]:checked { border-color: var(--accent); background: var(--accent); }
   input[type=radio]:checked::after {
     content: ""; position: absolute; left: 3px; top: 3px; width: 7px; height: 7px;
-    border-radius: 50%; background: #04222b; }
+    border-radius: 50%; background: var(--on-accent); }
   input[type=checkbox]:focus-visible, input[type=radio]:focus-visible {
     outline: none; box-shadow: 0 0 0 3px var(--accent-dim); }
   input[type=file] { font: inherit; font-size: 13px; color: var(--muted); cursor: pointer;
@@ -1012,6 +1022,9 @@
   .pin-menu-list li .why { color: var(--muted); }
   .pin-menu-list li .fam { color: var(--warn); }
   .pin-menu-list .pin-menu-unbind { float: right; padding: 1px 8px; font-size: 12px; }
+  /* 引脚菜单占用者圆点（polish-v2/01）：静态几何入 CSS，动态颜色留内联 */
+  .pin-menu-list li .dot { display: inline-block; width: 10px; height: 10px;
+                           border-radius: 3px; margin-right: 6px; }
   /* 多实例配置（工单 module-multi-instance/04）：led 实例列表 / 命名 / 颜色 / 引脚 */
   .instance-mod { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
                   margin-bottom: 10px; background: var(--panel-2); }
@@ -1538,7 +1551,7 @@
   #gen-progress .gp-fill { height: 100%; width: 0%;
                   background: linear-gradient(90deg, #00a8cc, #00d4ff);
                   box-shadow: 0 0 8px rgba(0, 212, 255, .5);
-                  transition: width .4s ease; }
+                  transition: width var(--dur-slow) var(--ease-ui); }
   #gen-progress .gp-text { position: absolute; right: 10px; top: 6px;
                   font-size: 11px; color: var(--muted); white-space: nowrap; }
   /* Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，2.5s 自动淡出。
@@ -1971,7 +1984,7 @@
             </div>
             <!-- 构建脚本提示（工单 mspm0-build-makefiles/01）：mspm0 未探测到 CCS
                  工具链时后端 build_hint 非空，展示一行（生成本身已成功） -->
-            <div class="res-block hidden" id="res-build-hint" style="color:var(--warn, #e6a23c)"></div>
+            <div class="res-block hidden" id="res-build-hint" style="color:var(--warn)"></div>
             <!-- 烧录到板子（工单 flash-deploy/02）：生成完成即可一键烧录——
                  STM32 走 OpenOCD/st-flash、MSPM0 走 CCS 自带 DSLite；结果行 /
                  指引卡渲染在下方 #flash-result -->

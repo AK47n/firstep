@@ -324,7 +324,7 @@ export function renderProofreadRows() {
       <input type="text" placeholder="年份" title="年份（4 位）" value="${esc(t.year)}">
       <input type="text" placeholder="题号" title="题号（如 C）" value="${esc(t.number)}">
       <textarea placeholder="题面全文（可修剪尾部杂项 / 评分汇总）">${esc(t.problem_text)}</textarea>
-      <button class="danger" title="删除该条草稿">✕</button>`;
+      <button class="btn-mini danger" title="删除该条草稿">✕</button>`;
     const inputs = div.querySelectorAll("input, textarea");
     inputs[0].addEventListener("input", (e) => (topicRows[i].year = e.target.value.trim()));
     inputs[1].addEventListener("input", (e) => (topicRows[i].number = e.target.value.trim()));
