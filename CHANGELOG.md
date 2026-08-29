@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=dc19b06271c00cf079eec8329ce4016e780906dc -->
+<!-- changelog-auto: last-commit=eef973b3c660d030c97854993e54c97c47bd7890 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 01:08 测试夹具同步卡12新标题（generate-ui-polish/01 评审整改）：step-nav.test.mjs 夹具「交接提示词（Handoff）」→「交接提示词」——纯函数行为不变，夹具与 index.html 标题保持一致
 - 09:38 参数速调 AI 咨询后端（params-chat-ai/01）：/api/params/chat/read|send 端点 + discuss_params 调参顾问
 - 09:48 参数速调 AI 咨询对话前端（params-chat-ai/02）：问 AI 该调哪个参数对话区 + 参数名定位联动
+- 10:00 AI 对话区统一视觉美化（polish-chat/01）：四区气泡化+卡片容器+胶囊输入发送，买件商量去 emoji
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
