@@ -157,6 +157,11 @@ const DOMAINS = {
   "params-chat.js": {
     paramsChatMessageHTML: "fn", paramsChatInputHTML: "fn", paramsChatHTML: "fn",
   },
+  "resource-board.js": {
+    RESOURCE_TASK_COLORS: "object",
+    resourcesToolbarHTML: "fn", resourceTaskColorMap: "fn",
+    resourceBoardSVG: "fn", resourceBoardHTML: "fn",
+  },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
     parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",

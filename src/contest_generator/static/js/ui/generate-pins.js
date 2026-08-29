@@ -506,6 +506,8 @@ function renderPinOverviewLegend(roles) {
 // ---- 板图 SVG（boards JSON 坐标内联渲染：双排焊盘 + 丝印 + 功能区） ----
 // 旋转 180° = 坐标对换重渲染（丝印天然正对、位置随板走、标签仍在焊孔两侧）；
 // 90°/270° = CSS 旋转缩放（丝印侧置，用户不要求）。板名标题在 SVG 外永远正对。
+// ⚠ 几何常量（rowH/topPad/W/焊盘 r=7/标签 font-size=11）与 fx/resource-board.js
+// 资源板图（resource-overview-polish/02）交叉同步——两处改动必须一致。
 function renderPinBoard() {
   const box = $("pin-board-svg");
   const roles = pinRoles();
