@@ -496,6 +496,12 @@ function reviseGetDir() {
   return revise.outputDir;
 }
 
+/** 已加载上下文的平台 id（mspm0|stm32——resource-overview-polish/02 板图取
+ * /api/boards 用；未加载 / 历史反推缺失 → 空串）。 */
+function reviseGetPlatform() {
+  return (revise.context && revise.context.platform) || "";
+}
+
 // ---- 本簇导出面（host 零调用点——按工单 17 检查表导出为模块 API） ----
 export { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen,
-  reviseResetAll, reviseRenderContext, reviseGetDir };
+  reviseResetAll, reviseRenderContext, reviseGetDir, reviseGetPlatform };

@@ -21,7 +21,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML, tasksDoneCount, unresolvedPrereqs, taskStatusLabel } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskLatestFeedbackNote, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, taskErrorsHTML, tasksDoneCount, unresolvedPrereqs, taskStatusLabel } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashPanelHTML, flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
@@ -30,6 +30,8 @@ import { markStepDone } from "/js/ui/step-state.js";
 import { scorePoints } from "./generate-recommend.js";  // 当前会话推荐评分点（历史目录为空）
 import { reviseGetDir } from "./generate-revise.js";  // 已加载上下文（只读）
 import { mainDiffHTML } from "/js/fx/diff.js";        // 效果 diff 渲染（diff-restyle/01）
+import { resourcesToolbarHTML } from "/js/fx/resource-board.js";  // 资源总览工具栏（resource-overview-polish/02）
+import { resourceView, renderResourceSection } from "/js/ui/resource-board.js";  // 资源总览视图（resource-overview-polish/02）
 
 let tasks = {
   outputDir: "",      // 拆解 / 执行针对的输出目录
@@ -239,12 +241,18 @@ function tasksRender() {
   const overviewHTML = tasksOverviewHTML(plan);
   overview.innerHTML = overviewHTML;
   overview.classList.toggle("hidden", !overviewHTML);
-  // 资源总览（工单 task-insight/02）：资源 × 使用任务聚合表，冲突行标黄
-  //（同一资源 ≥2 任务占用 = 联调冲突暗雷）；紧跟进度总览，空串隐藏
+  // 资源总览（工单 task-insight/02；resource-overview-polish 重构：工具栏 + 列表/板图
+  // 双视图，切换状态本簇 UI 层私有——resource-board.js 渲染主体 #res-view-body）；
+  // 空聚合（全部任务无资源标注）整段隐藏
   const resBox = $("tasks-resources");
-  const resHTML = resourcesOverviewHTML(plan);
-  resBox.innerHTML = resHTML;
-  resBox.classList.toggle("hidden", !resHTML);
+  if (aggregateResourceGroups(plan)) {
+    resBox.innerHTML = resourcesToolbarHTML(resourceView()) + '<div id="res-view-body"></div>';
+    resBox.classList.remove("hidden");
+    renderResourceSection(plan);  // async：board 视图先占位等待板定义（cache 命中则同步）
+  } else {
+    resBox.innerHTML = "";
+    resBox.classList.add("hidden");
+  }
   // 评分点覆盖总览（工单 score-coverage/02）：每个评分点 → 覆盖它的任务，
   // 无覆盖标红；数据源 = 落盘 plan.score_points（spec：空评分点容器隐藏；
   // 会话值仅作任务卡标注回退，覆盖总览直读落盘值——旧清单无落盘即隐藏）。
