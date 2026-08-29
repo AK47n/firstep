@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=562efb52945d1852e4f6fbb76ce5deee49893e22 -->
+<!-- changelog-auto: last-commit=caea14261c06d16dea215da51b3daf1d594cb003 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 10:17 视觉一致性二期（polish-v2/01+02，合并投递）：全站表头底纹统一（thead th panel-2，模块库/参考库/PDF/赛题/母版/设置价格参考六表）+ 表内动作按钮紧凑胶囊（12px/999px）+ 手搓内联按钮归类（master/topic 移除✕用 .btn-mini、files 行✕用 .file-row-x、pins 圆点几何入 .pin-menu-list li .dot 仅留动态背景）；新增 --on-accent/--code-text 令牌（:root+light 双主题）替换 7 处 #04222b 与 pre.result #e2e8f0（顺带修亮色浅字叠浅底）；两处 width .4s 过渡走 --dur-slow/--ease-ui；flash.js 兜底 var(--warn,#e6a23c)→var(--warn)（含 #res-build-hint 同款）、generate-recommend 内联浅绿清除、.warn-box.ok 去 !important
 - 10:41 任务卡视觉重构（task-card-polish/01）：元信息 chips 一行化 + 轮次历史两行式 + 按钮层级（accent 实底/描边）
 - 10:45 任务卡轮次历史补漏：详情行带标签显示「做了什么」「需要你做什么」完整原文（task-card-polish/01 整改）
+- 10:55 前置任务温和引导（prereq-soft-guide/01）：«做这一步»前置未完成弹窗确认 + 卡上前置 chips 警告标记（skipped 视为完成，可取消可继续）
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
