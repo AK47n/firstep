@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=11c095cb40c64ab2f6def28df62f87f65883d28c -->
+<!-- changelog-auto: last-commit=8b1d1bcb98f9710ec5db580b5cf6a3170129587e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 01:06 生成页1-12步UI统一打磨（generate-ui-polish/01+02）：说明折叠组件通用化（.revise-details→.card-details，全页 12 处，样式并入类、去内联margin，窄屏页签滚动加 <900px 断点）；卡10/11 h2 去超长箭头链改短标题（信息入卡内 details）；卡1/3/7/8/12 说明细节化（卡3补说明、卡7 pin-intro 迁移、卡1上传行瘦身）；第11步空态三句统一句式；card-group-title 去 emoji；卡4/6 动态容器注释标注；card-revise 内两处旧文案修正
 - 01:07 第11步无目录引导文案改指页签（step11-tabs-ui/04 收尾）：generate-tasks.js 20 处「请先在上方『上下文入口』…」→「请先在「修订」页签加载当前会话或历史目录」（同款 params.js 文案已随 step11-tabs-ui/03 提交；index.html 部分随 generate-ui-polish 提交）
 - 01:08 测试夹具同步卡12新标题（generate-ui-polish/01 评审整改）：step-nav.test.mjs 夹具「交接提示词（Handoff）」→「交接提示词」——纯函数行为不变，夹具与 index.html 标题保持一致
+- 09:38 参数速调 AI 咨询后端（params-chat-ai/01）：/api/params/chat/read|send 端点 + discuss_params 调参顾问
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
