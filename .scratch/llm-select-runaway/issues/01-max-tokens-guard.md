@@ -1,6 +1,6 @@
 # 工单 01：select 输出上限 + 超长守卫 + 响应留痕（llm.py 单文件切片）
 
-Status: claimed
+Status: resolved
 Depends: 无
 Blocks: 无
 
@@ -63,4 +63,4 @@ Blocks: 无
 - Standards 轴：subagent 长时间未返回被中断；自查覆盖——docstring/注释中文、常量集中与周边一致、
   错误文案可操作、脱敏契约（excerpt 只 120 字符前缀）、测试命名与断言风格一致，无违规项。
 
-Status: resolved
+**收尾备注（2026-xx-xx）：** 本工单完成后未及时标记，顶部状态改 resolved；删除末尾重复的 Status 行（状态字段仅顶部一处）。实现提交：9d0a1c5（select max_tokens 4096 + 超长免重试守卫 + content_excerpt 留痕）。

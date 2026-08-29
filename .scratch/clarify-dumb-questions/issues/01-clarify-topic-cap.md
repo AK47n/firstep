@@ -1,6 +1,6 @@
 # 工单 01：clarify 题面预算提升 + 提示词加固（llm.py 单文件切片）
 
-Status: claimed
+Status: resolved
 Depends: 无
 Blocks: 无
 
@@ -53,4 +53,4 @@ Blocks: 无
   - 提示词新旧句自洽：「题面证据不足以判定时补问」（缺什么问什么）+「题面已明确的不问」
     +「宁缺毋滥」——先核对后提问，语义无冲突。
 
-Status: resolved
+**收尾备注（2026-xx-xx）：** 本工单完成后未及时标记，顶部状态改 resolved；删除末尾重复的 Status 行（状态字段仅顶部一处）。实现提交：eb39cbd（clarify 题面预算 4000→12000 + 题面已明确细节绝不重复问）。
