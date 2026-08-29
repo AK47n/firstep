@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  prereadReminderGroups, prereadGroupLabel, prereadHTML, OTHER_GROUP_LABEL,
+  prereadReminderGroups, prereadGroupLabel, prereadHTML, prereadSlotHTML, OTHER_GROUP_LABEL,
 } from "../../src/contest_generator/static/js/fx/topic-preread.js";
 
 const reminders = [
@@ -82,4 +82,21 @@ test("渲染：空 reminders 只有总览；空数据输出空串", () => {
   assert.ok(prereadHTML({ overview: "只有总览", reminders: [] }, {}).includes("只有总览"));
   assert.equal(prereadHTML(null, {}), "");
   assert.equal(prereadHTML({ overview: "", reminders: null }, {}), "");
+});
+
+// ================= 钉卡横幅：prereadSlotHTML =================
+test("钉卡横幅：每条提醒一行 + 引用小字（无引用省略）+ 转义", () => {
+  const html = prereadSlotHTML([
+    { text: "题面限定采用 TI MSPM0 系列", quote: "采用 TI 公司 MSPM0 系列处理器" },
+    { text: "<script>渲染</script>", quote: "" },
+  ]);
+  assert.match(html, /题面限定采用 TI MSPM0 系列/);
+  assert.match(html, /题面原文：采用 TI 公司 MSPM0 系列处理器/);
+  assert.ok(!html.includes("<script>"));
+  assert.match(html, /&lt;script&gt;渲染&lt;\/script&gt;/);
+});
+
+test("钉卡横幅：空条目输出空串；非数组防御", () => {
+  assert.equal(prereadSlotHTML([]), "");
+  assert.equal(prereadSlotHTML(null), "");
 });

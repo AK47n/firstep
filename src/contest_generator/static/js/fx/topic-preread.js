@@ -55,6 +55,20 @@ export function prereadHTML(payload, stepTitles) {
   return out.join("");
 }
 
+// 钉到步骤卡的提醒横幅（工单 topic-preread/03）：每卡只显该卡相关条目，
+// 一条 = 提醒文本 + 题面引用小字（无引用省略）。样式见 index.html .preread-slot。
+export function prereadSlotHTML(items) {
+  const out = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    const text = String((item && item.text) || "");
+    if (!text) continue;
+    out.push(`<div class="preread-slot-line">${esc(text)}`
+      + (item && item.quote ? `<span class="preread-slot-quote">题面原文：${esc(String(item.quote))}</span>` : "")
+      + "</div>");
+  }
+  return out.join("");
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { prereadReminderGroups, prereadGroupLabel, prereadHTML, OTHER_GROUP_LABEL });
+  Object.assign(window, { prereadReminderGroups, prereadGroupLabel, prereadHTML, prereadSlotHTML, OTHER_GROUP_LABEL });
 }

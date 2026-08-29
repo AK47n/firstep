@@ -34,7 +34,7 @@ import {
 import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
 import { stepNavTitles, syncStep4 } from "/js/fx/draft.js";
-import { prereadHTML } from "/js/fx/topic-preread.js";
+import { prereadHTML, prereadSlotHTML, prereadReminderGroups } from "/js/fx/topic-preread.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
@@ -297,6 +297,21 @@ function clearTopicPreread() {
   unmarkSteps([2, 5, 6, 7, 8, 9, 10, 11, 12]);  // 题面变了：AI 产物与生成结果全部失效
 }
 
+// 钉卡分发（工单 topic-preread/03）：结果渲染到所有目标步骤卡槽位，
+// 每卡只显该卡相关条目；无相关条目的槽位保持隐藏（无提醒不占位）。
+// 注意：groups.find 只匹配数值步骤组——「其他限定」（step:null，尺寸/
+// 电源/时长等通用要求）有意不钉卡，只在步骤 2 卡分组展示。
+function renderPrereadSlots(reminders) {
+  const groups = prereadReminderGroups(reminders);
+  document.querySelectorAll("[data-preread-slot]").forEach((slot) => {
+    const step = parseInt(slot.dataset.step, 10);
+    const group = groups.find((g) => g.step === step);
+    if (!group || !group.items.length) { slot.innerHTML = ""; slot.classList.add("hidden"); return; }
+    slot.innerHTML = prereadSlotHTML(group.items);
+    slot.classList.remove("hidden");
+  });
+}
+
 $("btn-topic-preread").addEventListener("click", async () => {
   $("topic-preread-msg").textContent = "";
   const problem = $("problem").value.trim();
@@ -312,6 +327,7 @@ $("btn-topic-preread").addEventListener("click", async () => {
       topicPrereadStepTitles()
     );
     $("topic-preread-box").classList.remove("hidden");
+    renderPrereadSlots(prereadReminders);
     $("btn-topic-preread").innerHTML = "重新预读";
     markStepDone(2);  // 预读成功即视为完成（题面变更时 clearTopicPreread 会取消）
   } catch (e) {
