@@ -934,6 +934,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
+    # 一键清理本机浏览器旧记录页（运维便利页，无业务状态）：供用户重跑旧题
+    # 前清 localStorage 残留（任务勾选 / 题面草稿 / 评分核对 / 购买决策记忆）。
+    @app.get("/clear-cache.html")
+    def clear_cache_page() -> FileResponse:
+        return FileResponse(STATIC_DIR / "clear-cache.html")
+
     # 前端纯函数模块（工单 frontend-es-modules/01）：/js/fx/*.js 静态直挂，
     # 无构建步骤（浏览器原生 ESM）；STATIC_DIR/js 下有 package.json {"type":"module"}
     # 供 node 端测试按 ESM import
