@@ -39,6 +39,7 @@ import { prereadHTML, prereadSlotHTML, prereadReminderGroups } from "/js/fx/topi
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";
 
 export let chosenPlatform = null;
 export function setChosenPlatform(v) { chosenPlatform = v; }
@@ -319,6 +320,7 @@ $("btn-topic-preread").addEventListener("click", async () => {
   if (!problem) { $("topic-preread-msg").textContent = "请先填写赛题原文"; return; }
   $("btn-topic-preread").disabled = true;
   $("btn-topic-preread").innerHTML = '<span class="spinner"></span>AI 预读中…';
+  aiActionStart("赛题预读");  // 全局「AI 行动中」横幅（工单 ai-action-banner/01）
   try {
     const data = await apiPost("/api/topic/preread", { problem_text: problem });
     prereadOverviewText = String(data.overview || "");
@@ -334,6 +336,7 @@ $("btn-topic-preread").addEventListener("click", async () => {
   } catch (e) {
     $("topic-preread-msg").textContent = e.message;
   } finally {
+    aiActionStop();
     $("btn-topic-preread").disabled = false;
   }
 });

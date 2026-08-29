@@ -814,9 +814,25 @@
              border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
              vertical-align: -2px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* ---- 全局「AI 行动中」横幅（工单 ai-action-banner/01）：顶部粘性，滚动
+     任何位置可见；计数闸由 js/ui/ai-banner.js 驱动，纯观察者不占布局高度。
+     注意 display 走 :not(.hidden) 显式切换（先例 #pdf-zoom:812）——单类
+     .hidden{display:none} 在 :806，同为 0-1-0 特异性被本规则级联盖过，直接
+     display:flex 会压死隐藏（阻断级坑） ---- */
+  .ai-action-banner { position: sticky; top: var(--header-h); z-index: 90; display: none;
+                      align-items: center; gap: 10px; padding: 9px 18px; overflow: hidden;
+                      background: var(--info-dim); border-bottom: 1px solid var(--info-border);
+                      color: var(--info); font-size: 13.5px; font-weight: 600; }
+  .ai-action-banner:not(.hidden) { display: flex; }
+  .ai-action-banner::before { content: ""; position: absolute; top: 0; bottom: 0; left: -140px;
+                              width: 130px; background: linear-gradient(90deg, transparent,
+                              var(--info-border), transparent); animation: ai-flow 1.6s linear infinite; }
+  @keyframes ai-flow { to { left: 100%; } }
+  .ai-action-banner .spinner { width: 15px; height: 15px; border-color: var(--info-border);
+                               border-top-color: var(--info); }
   /* 动效降级（工单 ui-polish-5/03）：跟随系统「减少动态效果」偏好（须在 .spinner 定义之后，级联覆盖） */
   @media (prefers-reduced-motion: reduce) {
-    .spinner, .brand-breathe { animation: none; }
+    .spinner, .brand-breathe, .ai-action-banner::before { animation: none; }
   }
   /* ---- 提炼进度区（工单 03：stepper + 批进度 + 双计时器 + 补问徽标 + 可折叠日志） ---- */
   .distill-progress { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px;
@@ -1831,6 +1847,8 @@
   <button id="btn-theme" type="button" title="切换到亮色主题"
           style="margin-left:6px;padding:6px 9px;font-size:14px;border-radius:999px">🌙</button>
 </header>
+
+<div id="ai-action-banner" class="ai-action-banner hidden" role="status"><span class="spinner"></span><span id="ai-action-label"></span></div>
 
 <div id="gen-progress" class="hidden"><div class="gp-fill"></div><span class="gp-text"></span></div>
 
