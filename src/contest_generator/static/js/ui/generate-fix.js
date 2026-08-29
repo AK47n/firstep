@@ -27,6 +27,7 @@ import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
 import { reportRecentStatus } from "/js/ui/recent.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 // ---------------------------------------------------------------------------
 // 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
@@ -442,6 +443,7 @@ async function startFixCenter() {
   $("btn-fix-rollback").classList.add("hidden");
   $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
   fixCenterBusy(true);
+  aiActionStart("编译修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("fix-status").textContent = "自动编译中…";
   try {
     // 第 0 步：首次全量编译（生成后自动触发 / 手动"一键编译修复"同一入口）
@@ -471,6 +473,7 @@ async function startFixCenter() {
     $("fix-status").textContent = "";
     $("fix-errors-msg").textContent = e.message;
   } finally {
+    aiActionStop();
     fixLoop.running = false;
     fixLoop.round = 0;
     fixCenterBusy(false);
@@ -488,6 +491,7 @@ async function continueFixCenter() {
   $("btn-fix-continue").classList.add("hidden");   // 进入新批即隐藏（终态时按结果重判）
   fixLoop.running = true;
   fixCenterBusy(true);
+  aiActionStart("编译修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("fix-status").textContent = "";
   try {
     await fixRounds(resume.errorText, resume.lastSummary, resume.lastFixDone);
@@ -495,6 +499,7 @@ async function continueFixCenter() {
     $("fix-status").textContent = "";
     $("fix-errors-msg").textContent = e.message;
   } finally {
+    aiActionStop();
     fixLoop.running = false;
     fixLoop.round = 0;
     fixCenterBusy(false);
@@ -521,12 +526,14 @@ $("btn-fix-errors").addEventListener("click", async () => {
   $("btn-fix-rollback").classList.add("hidden");
   $("btn-fix-continue").classList.add("hidden");
   fixSetBusy(true);
+  aiActionStart("AI 修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("fix-status").textContent = "解析报错中…";
   try {
     await runFixOnce(errorText, outputDir);
   } catch (e) {
     $("fix-errors-msg-manual").textContent = e.message;
   } finally {
+    aiActionStop();
     fixSetBusy(false);
   }
 });

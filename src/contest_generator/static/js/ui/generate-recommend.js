@@ -39,7 +39,7 @@ import { prereadHTML, prereadSlotHTML, prereadReminderGroups } from "/js/fx/topi
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
-import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/01）
 
 export let chosenPlatform = null;
 export function setChosenPlatform(v) { chosenPlatform = v; }
@@ -414,6 +414,7 @@ async function sendDiscuss(wrap) {
   st.history.push({ role: "user", content: text });
   input.value = "";
   st.busy = true;
+  aiActionStart("选型讨论");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   renderRecommendResult(lastRecommend, false);
   try {
     const data = await apiPost("/api/buy/discuss", {
@@ -428,6 +429,7 @@ async function sendDiscuss(wrap) {
   } catch (err) {
     st.history.push({ role: "assistant", content: "（讨论失败：" + err.message + "）" });
   } finally {
+    aiActionStop();
     st.busy = false;
     renderRecommendResult(lastRecommend, false);
   }
@@ -608,6 +610,7 @@ function startRecProgress() {
 }
 
 function stopRecProgress() {   // 流未起 / 断线路径：停表 + 收起面板（终态路径由事件表 finish）
+  aiActionStop();
   recPanel.finish();
   $("rec-progress").classList.add("hidden");
 }
@@ -620,6 +623,7 @@ export async function startRecommend(problem) {
   $("btn-recommend").disabled = true;
   $("btn-recommend").innerHTML = '<span class="spinner"></span>AI 思考中…';
   $("rec-list").innerHTML = "";   // 旧结果清空，状态文本进进度面板
+  aiActionStart("AI 推荐");       // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   startRecProgress();
   let resp;
   try {
@@ -678,6 +682,7 @@ const recPanel = makeProgressPanel({
     },
     done: (ev) => {
       recPanel.finish();
+      aiActionStop();
       $("rec-progress").classList.add("hidden");
       renderRecommendResult(ev);
       $("btn-recommend").innerHTML = "重新推荐";
@@ -685,6 +690,7 @@ const recPanel = makeProgressPanel({
     },
     question: (ev) => {
       recPanel.finish();
+      aiActionStop();
       $("rec-progress").classList.add("hidden");
       $("btn-recommend").innerHTML = "让 AI 推荐";
       $("btn-recommend").disabled = false;
@@ -692,6 +698,7 @@ const recPanel = makeProgressPanel({
     },
     error: (ev) => {
       recPanel.finish();
+      aiActionStop();
       $("rec-progress").classList.add("hidden");
       showRecommendError(ev.message || "推荐失败");
     },

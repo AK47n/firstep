@@ -14,6 +14,7 @@ import { esc, fmtDuration } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML } from "/js/fx/master.js";
+import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 let scannedProjects = null;   // 扫描结果（含报告确认所需）
 let currentReport = null;
@@ -244,6 +245,7 @@ function startProgress() {
 }
 
 function finishProgress(report) {
+  aiActionStop();
   distPanel.finish();
   setStep(3, "done");
   $("prog-body").classList.add("hidden");   // 完成态折叠为一行
@@ -255,6 +257,7 @@ function finishProgress(report) {
 }
 
 function failProgress(message) {
+  aiActionStop();
   distPanel.finish();
   addLogLine("error", message);
   $("prog-log").classList.remove("hidden");   // 失败态：日志保留且展开，红行可见
@@ -265,6 +268,7 @@ function failProgress(message) {
 $("btn-distill").addEventListener("click", async () => {
   $("distill-msg").textContent = "";
   $("btn-distill").disabled = true;   // 进度区替代按钮静态转圈
+  aiActionStart("母版提炼");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   startProgress();
   try {
     const dirs = projectDirs();
