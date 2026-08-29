@@ -170,7 +170,7 @@ export function discussionAreaHTML(s, st) {
   }).join("");
   const disabled = state.busy || exhausted ? "disabled" : "";
   return `<div class="sugg-discuss">
-    <button type="button" class="sugg-discuss-toggle">💬 和 AI 商量</button>
+    <button type="button" class="sugg-discuss-toggle">和 AI 商量</button>
     <div class="sugg-discuss-box${state.open ? " open" : ""}">
       <div class="sugg-discuss-msgs">${msgs || '<div class="sugg-msg muted">与 AI 讨论选型：说你的情况 / 想法，AI 结合题面与方案校核可行性。</div>'}</div>
       <div class="sugg-discuss-row">

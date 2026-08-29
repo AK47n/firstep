@@ -419,32 +419,66 @@
   .badge.sugg-review-feasible { background: var(--ok-dim); color: var(--ok-bright); }
   .badge.sugg-review-risky { background: var(--warn-dim); color: var(--warn); }
   .badge.sugg-review-infeasible { background: var(--danger-dim); color: var(--danger); }
-  .sugg-discuss { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px; }
-  .sugg-discuss-toggle { font-size: 12.5px; }
-  .sugg-discuss-box { display: none; margin-top: 8px; }
+  /* ===== AI 对话区统一视觉（polish-chat/01）：气泡化 + 卡片容器 + 胶囊输入 =====
+     四区共用：任务卡商量 / 全局商量 / 参数速调咨询（.task-dialog-box）
+     与买件商量（.sugg-discuss-box）——零结构变更，纯视觉升级。 */
+  .sugg-discuss { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+  .sugg-discuss-toggle { font-size: 12.5px; border-radius: 999px; padding: 3px 12px;
+                         background: var(--accent-dim); border-color: var(--accent); }
+  .sugg-discuss-toggle:hover { background: var(--accent); color: var(--panel); }
+  .sugg-discuss-box { display: none; margin-top: 10px; border: 1px solid var(--border);
+                      background: var(--panel); border-radius: 12px; padding: 10px 12px; }
   .sugg-discuss-box.open { display: block; }
-  .sugg-discuss-msgs { max-height: 180px; overflow-y: auto; display: flex;
-                       flex-direction: column; gap: 6px; margin-bottom: 8px; }
-  .sugg-msg { font-size: 13px; line-height: 1.55; }
-  .sugg-msg.user { color: var(--text); }
-  .sugg-msg.ai { color: var(--muted); }
-  .sugg-msg-role { font-weight: 600; }
-  .sugg-msg.muted { color: var(--muted); }
-  .sugg-discuss-row { display: flex; gap: 8px; }
-  .sugg-discuss-input { flex: 1; }
-  .sugg-discuss-note { font-size: 11.5px; margin-top: 6px; }
+  .sugg-discuss-msgs { max-height: 200px; overflow-y: auto; display: flex;
+                       flex-direction: column; gap: 8px; margin-bottom: 8px;
+                       padding-right: 2px; scrollbar-width: thin;
+                       scrollbar-color: var(--border) transparent; }
+  .sugg-msg { font-size: 13px; line-height: 1.55; max-width: 88%;
+              padding: 7px 11px; border-radius: 12px; word-break: break-word; }
+  .sugg-msg.user { align-self: flex-end; background: var(--accent-dim);
+                   border: 1px solid var(--accent); color: var(--text);
+                   border-bottom-right-radius: 4px; }
+  .sugg-msg.ai { align-self: flex-start; background: var(--panel-2);
+                 border: 1px solid var(--border); color: var(--text);
+                 border-bottom-left-radius: 4px; }
+  .sugg-msg-role { font-size: 11px; font-weight: 700; letter-spacing: .03em;
+                   color: var(--accent); }
+  .sugg-msg.muted { max-width: none; align-self: stretch; background: none; border: none;
+                    padding: 2px 6px; color: var(--muted); font-size: 12.5px;
+                    text-align: center; }
+  .sugg-msg .muted { font-size: 10.5px; opacity: .75; margin-left: 4px; }
+  .sugg-discuss-row { display: flex; gap: 8px; align-items: center; }
+  .sugg-discuss-input { flex: 1; min-width: 0; border-radius: 999px; padding: 8px 14px; }
+  .sugg-discuss-note { font-size: 11.5px; margin-top: 8px; color: var(--muted); }
+  /* 忙态提示呼吸闪烁（仅「AI 回应中」note——买件商量常驻提示带 .muted，不闪） */
+  .sugg-discuss-note:not(.muted) { animation: chat-busy-pulse 1.4s ease-in-out infinite; }
+  @keyframes chat-busy-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .sugg-discuss-note:not(.muted) { animation: none; } }
   /* 任务卡「和 AI 商量」对话区（工单 task-chat/03）：面板样式复用
      .sugg-discuss-*（买件商量同一套），仅容器留白 + 采纳按钮小字 */
-  .task-dialog-box { margin-top: 8px; border-top: 1px dashed var(--border);
-                     padding-top: 8px; }
-  .task-dialog-box .sugg-discuss-msgs { max-height: 220px; }
+  .task-dialog-box { margin-top: 10px; border: 1px solid var(--border);
+                     background: var(--panel); border-radius: 12px;
+                     padding: 10px 12px; }
+  .task-dialog-box .sugg-discuss-msgs { max-height: 240px; }
   .btn-task-dialog-adopt, .btn-task-dialog-clear { font-size: 12px;
-                     padding: 1px 8px; margin-left: 6px; }
+                     padding: 1px 8px; margin-left: 6px; border-radius: 999px;
+                     background: var(--panel-2); }
   /* 全局商量按钮（工单 idea-suite/02）：AI 回复三按钮 + 发送 + 清除，
      与任务卡对话按钮同款小字（.sugg-discuss 面板共用——参数速调咨询按钮
      也并进本规则，工单 params-chat-ai/02 评审整改：去重复规则） */
   .btn-global-chat-action, .btn-global-chat-send, .btn-params-chat-send {
                      font-size: 12px; padding: 1px 8px; margin-left: 6px; }
+  .btn-global-chat-action { border-radius: 999px; }  /* 次要动作胶囊（底/边沿用 base button） */
+  /* 对话发送按钮统一为强调色胶囊（输入行；覆盖上方小字规则） */
+  .btn-task-dialog-send, .btn-global-chat-send, .btn-params-chat-send,
+  .sugg-discuss-send { border-radius: 999px; padding: 8px 18px; font-size: 13px;
+                       margin-left: 0; background: var(--accent);
+                       border-color: var(--accent); color: #04222b;
+                       white-space: nowrap; flex: 0 0 auto; }
+  .btn-task-dialog-send:hover, .btn-global-chat-send:hover, .btn-params-chat-send:hover,
+  .sugg-discuss-send:hover { background: var(--accent-dark); color: #04222b; }
+  .sugg-discuss-custom { border-radius: 999px; padding: 7px 14px; font-size: 12.5px;
+                         flex: 0 0 auto; }
   /* 参数速调 AI 咨询（工单 params-chat-ai/02）：AI 回复里的参数名 chip
      （accent 描边 pill，hover 提亮）+ 定位参数卡高亮动画；对话区本体复用
      .sugg-discuss-* / .task-dialog-box，零新容器样式 */
