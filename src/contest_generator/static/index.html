@@ -1476,6 +1476,29 @@
   .res-pin-conflict { animation: res-pin-pulse 1.6s ease-in-out infinite; }
   @keyframes res-pin-pulse { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .res-pin-conflict { animation: none; } }
+  /* 任务卡接线图（task-wiring-diagram/03+04）：板图 + 端子列 + 连线。本步
+     接线高亮（accent 色实线）、其余淡显、电源/地独立琥珀色（一眼辨供电），
+     图例与既有 .res-board-legend 同协议；「显示全部接线」开关行小字。 */
+  .wiring-diagram { margin: 2px 0 4px; }
+  .wiring-caption { font-size: 11px; font-weight: 600; margin-bottom: 2px; }
+  .wiring-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px;
+                   color: var(--muted); padding: 2px 0 4px; }
+  .wiring-legend .lg { display: inline-flex; align-items: center; gap: 4px; }
+  .wiring-legend .dot { width: 10px; height: 10px; border-radius: 50%;
+                        display: inline-block; }
+  .wiring-dot-hl { background: var(--accent); }
+  .wiring-dot-power { background: #f59e0b; }
+  .wiring-dot-dim { background: var(--border-strong); opacity: .4; }
+  .wiring-line { fill: none; stroke: var(--accent); stroke-width: 2;
+                 stroke-linecap: round; }
+  .wiring-line.wiring-dim { stroke: var(--border-strong); stroke-width: 1.2;
+                            opacity: .35; }
+  .wiring-line.wiring-power { stroke: #f59e0b; }
+  .wiring-term text { font-family: var(--mono); }
+  .wiring-toggle { display: inline-block; margin-top: 4px; font-size: 12px;
+                   color: var(--muted); cursor: pointer; user-select: none; }
+  .wiring-empty { font-size: 12px; padding: 4px 0; }
+  .wiring-fallback { margin-top: 2px; }
   /* 评分点覆盖总览（工单 score-coverage/02）：行流布局参照 .res-* 先例；
      无覆盖整行红（--danger 语义），未知引用黄色警示 */
   .score-point-table { border: 1px solid var(--border); border-radius: 8px;
@@ -2883,6 +2906,7 @@ import { paramsChatReset } from "/js/ui/params-chat.js";  // 参数速调 AI 咨
 import { deliveryOpen, deliveryCheck, deliveryPackage } from "/js/ui/delivery.js";  // 交付卡：同上
 import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签（工单 step11-tabs-ui/01）
 import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览列表/板图切换（resource-overview-polish/02）
+import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
@@ -3243,6 +3267,7 @@ initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM 已就绪，纯本地交互
 initResourceBoard();  // 资源总览视图切换（resource-overview-polish/02）：document 级委托
+initWiringToggle();  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）

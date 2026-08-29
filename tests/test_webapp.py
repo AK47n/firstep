@@ -60,6 +60,7 @@ from contest_generator.llm import (
     build_llm,
 )
 from contest_generator.pin_bindings import PinBindingError, resolve_bindings
+from contest_generator.wiring import build_wiring_snapshot, write_wiring_snapshot
 from contest_generator.library import ValidationResult
 from contest_generator.manifest import ManifestSummary
 from contest_generator.selection import (
@@ -6919,3 +6920,47 @@ def test_buy_discuss_endpoint_llm_error(client, context):
     })
     assert resp.status_code == 502
     assert "上游超时" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 接线快照只读端点（工单 task-wiring-diagram/04）：output_dir → {platform,
+# board, rows}；目录无快照 / 快照坏 JSON / 版本不符 → 200 空载荷（不 500）。
+# ---------------------------------------------------------------------------
+
+
+def test_api_wiring_snapshot_payload(client, context, tmp_path):
+    """正常：快照存在 → 200 + {platform, board（内嵌板定义）, rows 与落盘一致}。"""
+    board = board_for_platform(PLATFORM_STM32)
+    snapshot = build_wiring_snapshot(PLATFORM_STM32, board, [], (), {})
+    write_wiring_snapshot(tmp_path, snapshot)
+    resp = client.get("/api/wiring", params={"output_dir": str(tmp_path)})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["platform"] == PLATFORM_STM32
+    assert data["board"]["name"] == board.name
+    assert data["rows"] == snapshot["rows"]
+    assert "pins" in data["board"] and "fixed" in data["board"] and "landmarks" in data["board"]
+
+
+def test_api_wiring_empty_payload_on_missing_or_corrupt(client, tmp_path):
+    """目录无快照文件 / 快照坏 JSON → 200 + 空载荷（{platform:"", board:None,
+    rows:[]}）——退化路径，绝不 500（条目级容错与既有任务数据读取风格一致）。"""
+    empty = tmp_path / "no-snapshot"
+    empty.mkdir()
+    resp = client.get("/api/wiring", params={"output_dir": str(empty)})
+    assert resp.status_code == 200
+    assert resp.json() == {"platform": "", "board": None, "rows": []}
+    corrupt = tmp_path / "corrupt"
+    corrupt.mkdir()
+    (corrupt / ".contest_wiring.json").write_text("{ 这不是 JSON", encoding="utf-8")
+    resp = client.get("/api/wiring", params={"output_dir": str(corrupt)})
+    assert resp.status_code == 200
+    assert resp.json() == {"platform": "", "board": None, "rows": []}
+    # 目录不存在（read 容错）→ 同样空载荷
+    resp = client.get("/api/wiring", params={"output_dir": str(tmp_path / "nope")})
+    assert resp.status_code == 200
+    assert resp.json() == {"platform": "", "board": None, "rows": []}
+    # 缺参 → 空载荷（前端未知道目录时的安全默认）
+    resp = client.get("/api/wiring")
+    assert resp.status_code == 200
+    assert resp.json() == {"platform": "", "board": None, "rows": []}

@@ -32,6 +32,7 @@ import { reviseGetDir } from "./generate-revise.js";  // 已加载上下文（�
 import { mainDiffHTML } from "/js/fx/diff.js";        // 效果 diff 渲染（diff-restyle/01）
 import { resourcesToolbarHTML } from "/js/fx/resource-board.js";  // 资源总览工具栏（resource-overview-polish/02）
 import { resourceView, renderResourceSection } from "/js/ui/resource-board.js";  // 资源总览视图（resource-overview-polish/02）
+import { loadWiringAssets, wiringAssetsSync, wiringOptsFor, wireHosts } from "./wiring.js";  // 接线图装配（task-wiring-diagram/04）
 
 let tasks = {
   outputDir: "",      // 拆解 / 执行针对的输出目录
@@ -156,9 +157,31 @@ function setTaskStatusLocal(taskId, status) {
   tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? { ...t, status } : t);
 }
 
+/** 最近一次执行结果载荷（接线图装配就绪后的面板复插用）：{taskId, data,
+ * dir}——board 快照是目录级资产，就绪刷新只复插同目录的面板（防跨目录误插）。 */
+let lastWiringResult = null;
+
+/** 接线图装配就绪刷新（task-wiring-diagram/04）：快照拉取完成后，若目录仍是
+ * 当前目录 → 重渲卡片（tasksRender 会清掉结果面板，随后按 lastWiringResult
+ * 复插一次——同一数据源刷新，不多不重）；就绪后再次调用为 no-op（sync 有值）。 */
+function tasksWiringEnsure(dir) {
+  if (!dir) return;
+  if (wiringAssetsSync(dir)) return;   // 已就绪：无需刷新
+  loadWiringAssets(dir).then(() => {
+    if (tasks.outputDir !== dir) return;
+    tasksRender();
+    if (lastWiringResult && lastWiringResult.dir === dir) {
+      tasksRenderResult(lastWiringResult.taskId, lastWiringResult.data);
+    }
+  });
+}
+
 function tasksRender() {
   const plan = tasks.plan;
   const grid = $("tasks-grid");
+  // 接线图装配（task-wiring-diagram/04）：快照加载中 → 先按现况渲染（无资料 =
+  // 纯文字），就绪后 tasksWiringEnsure 重渲一次（卡片 + 结果面板单源刷新）
+  const wiringAssets = wiringAssetsSync(tasks.outputDir);
   // 结果面板随渲染清除（每次执行/拆解后重建，防陈旧结果残留；结果面板在
   // 网格容器内——beforeend 插入，innerHTML 清空即整体移除）
   if (!plan || !(plan.tasks || []).length) {
@@ -180,6 +203,9 @@ function tasksRender() {
       checklistState: (taskId, seq) => checklistRead(taskId, seq),
       // 编辑态（工单 idea-suite/04）：taskEditOpen 含该卡 id = 表单已展开
       editing: (taskId) => taskEditOpen.has(taskId),
+      // 接线图（task-wiring-diagram/04）：每任务装配（uid=card:<taskId>，
+      // 与结果面板 result:<taskId> 分开——两个 host 并存互不干扰）
+      wiringOpts: (task) => wiringOptsFor(task, wiringAssets, "card", plan),
       actions: (task) => {
         // 操作显隐单源 = fx/task.js taskCardActions（与后端转移表镜像，
         // 同一状态机一份 JS 编码——曾内联 if/else 与转移表分叉风险）
@@ -234,6 +260,8 @@ function tasksRender() {
       },
     });
     grid.classList.remove("hidden");
+    // 渲染后挂接线图 toggle 数据句柄（host 存在 ⟺ tier-1 接线图已渲染）
+    wireHosts(grid, plan, wiringAssets);
   }
   $("tasks-progress").textContent = tasksProgressText(plan);
   // 进度总览（工单 stepwise-deepen/02）：分段进度条 + 状态汇总；空清单隐藏
@@ -263,6 +291,8 @@ function tasksRender() {
   scoreBox.classList.toggle("hidden", !scoreHTML);
   $("btn-tasks-replan").classList.toggle("hidden", !(plan && (plan.tasks || []).length));
   updateTasksEmptyHint();
+  // 接线图装配（task-wiring-diagram/04）：未就绪 → 拉取，就绪后刷新一次
+  tasksWiringEnsure(tasks.outputDir);
   // 状态徽章（step11-tabs-ui/02）：渲染后广播任务推进状态快照（页签徽章就地刷新）
   window.dispatchEvent(new CustomEvent("step11-state-changed"));
 }
@@ -1028,9 +1058,13 @@ function tasksRenderResult(taskId, data) {
   const lastIter = iterations.length ? iterations[iterations.length - 1] : null;
   const checkKey = (task.id && lastIter && lastIter.seq !== undefined)
     ? task.id + "/" + lastIter.seq : "";
+  // 接线图（task-wiring-diagram/04）：与任务卡同装配（uid=result:<taskId>），
+  // 数据 = 同目录快照资产（不在会话里重复拉取）
+  const wiringAssets = wiringAssetsSync(tasks.outputDir);
   const stepReport = taskStepReportHTML(task, {
     checkKey,
     checkedMap: checkKey ? checklistRead(task.id, lastIter.seq) : {},
+    wiringOpts: (t) => wiringOptsFor(t, wiringAssets, "result", tasks.plan),
   });
   $("tasks-grid").insertAdjacentHTML("beforeend",
     '<div class="item" id="tasks-result" style="margin-top:10px">'
@@ -1045,6 +1079,9 @@ function tasksRenderResult(taskId, data) {
     + flashPanelHTML(dir)  // uid 缺省 "result"——结果面板烧录行；任务卡另有 task.id 容器（flash-step-button/01），并存互不干扰
     + mainDiffHTML(data.main_diff, "任务")
     + "</div>");
+  wireHosts($("tasks-grid"), tasks.plan, wiringAssets);
+  lastWiringResult = { taskId, data, dir };
+  tasksWiringEnsure(dir);
 }
 
 /** 烧录到板子（工单 flash-deploy/02 + flash-step-button/01）：结果面板一键

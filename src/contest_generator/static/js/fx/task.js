@@ -530,10 +530,11 @@ export function taskStepReportHTML(task, opts) {
   const last = lastIteration(task);
   if (!last) return "";
   const o = opts || {};
-  const wiring = wiringSectionHTML(task, o);
+  const perTask = wiringPer(task, o);
+  const wiring = wiringSectionHTML(task, o, perTask);
   return '<div class="task-step-report" style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px">'
     + '<div class="muted" style="margin-bottom:2px">步骤报告（AI 本步总结）</div>'
-    + (wiring ? '<div class="task-step-wiring" style="margin-top:6px">' + wiring + "</div>" : "")
+    + (wiring ? '<div class="task-step-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top:6px">' + wiring + "</div>" : "")
     + taskStepReportBlocksHTML(last.what_changed || "", last.user_action || "")
     + taskChecklistHTML(last, o.checkKey || "", o.checkedMap || {})
     + "</div>";
@@ -763,22 +764,35 @@ export function taskChecklistHTML(iteration, key, checkedMap) {
     + rows + "</div></details>";
 }
 
+/** wiringOpts 单源提取（wiringSectionHTML / 两个展示位共用）：wiringOpts
+ * 函数优先（每任务装配），缺省返回 null（回落 flat 字段——工单 03 契约）。
+ * 哨兵一律 null（{} 真值会令 ctx=undefined 而吞掉 flat 回退——评审整改）。 */
+function wiringPer(task, opts) {
+  const o = opts || {};
+  return (typeof o.wiringOpts === "function") ? (o.wiringOpts(task) || {}) : null;
+}
+
 /** 接线图区块（工单 task-wiring-diagram/03 + 04）：任务卡「下一步要做」与
  * 结果面板步骤报告共用同一装配（同一渲染函数、同一数据源——spec 决策）。
  *
  * 三级退化（任一情况不报错、不空白）：
  * ① 最新轮 wiring 引用非空且 board 可用 → 接线图（本步高亮；showAll 由
- *    opts.wiringShowAll 传入，缺省 false = 只画本步线）；
- * ② wiring 空 / 板定义缺失但任务有资源标注（opts.wiringFallbackHTML 非空，
+ *    wiringShowAll 传入，缺省 false = 只画本步线）；
+ * ② wiring 空 / 板定义缺失但任务有资源标注（wiringFallbackHTML 非空，
  *    胶水层按 resourceIsHardware 判据预渲染资源高亮板图）→ 资源高亮板图；
  * ③ 都没有 → 空串（纯文字现状行为，调用方照常渲染文字指引）。
- * wiringCtx = {board, rows}（快照 / /api/boards 同形板定义 + 接线行）；
- * wiring = 最新轮迭代的 wiring 引用（后端已查表校验，非法条目不存在）。
+ * 数据装配 = opts.wiringCtx {board, rows}（快照 / /api/boards 同形板定义 +
+ * 接线行；缺省 = 按退化路径）；工单 04 起胶水层经 opts.wiringOpts(task)
+ * 传**每任务**装配（卡片 / 结果面板同任务但 uid 不同——见 wiringUid）。
+ * perComputed = 调用方已取好的每任务装配（避免 wiringOpts(task) 执行两
+ * 次——评审整改），缺省自行提取（03 契约调用方不传）。
  */
-export function wiringSectionHTML(task, opts) {
+export function wiringSectionHTML(task, opts, perComputed) {
   const o = opts || {};
-  const ctx = o.wiringCtx;
-  if (!ctx) return "";
+  const perTask = perComputed !== undefined ? perComputed : wiringPer(task, o);
+  const ctx = perTask ? perTask.wiringCtx : o.wiringCtx;
+  const fallback = perTask ? perTask.wiringFallbackHTML : o.wiringFallbackHTML;
+  if (!ctx) return fallback || "";
   const last = lastIteration(task);
   const wiring = (last && last.wiring) || [];
   if (ctx.board && wiring.length) {
@@ -786,10 +800,10 @@ export function wiringSectionHTML(task, opts) {
       board: ctx.board,
       rows: ctx.rows || [],
       wiring,
-      showAll: !!o.wiringShowAll,
+      showAll: perTask ? !!perTask.wiringShowAll : !!o.wiringShowAll,
     });
   }
-  return o.wiringFallbackHTML || "";
+  return fallback || "";
 }
 
 /** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02 + 04 修正 +
@@ -806,11 +820,12 @@ export function taskNextActionHTML(task, opts) {
   const last = lastIteration(task);
   const action = (last && last.user_action) || "";
   if (!String(action).trim()) return "";
-  const wiring = wiringSectionHTML(task, opts);
+  const perTask = wiringPer(task, opts);
+  const wiring = wiringSectionHTML(task, opts, perTask);
   return '<div class="task-next-action" style="margin-top:6px;padding:4px 8px;'
     + 'border:1px solid var(--border);border-radius:8px;background:var(--panel-2)">'
     + '<span class="badge out">下一步要做</span>'
-    + (wiring ? '<div class="task-next-wiring" style="margin-top:6px">' + wiring + "</div>" : "")
+    + (wiring ? '<div class="task-next-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top:6px">' + wiring + "</div>" : "")
     + '<div style="margin-top:6px">' + esc(String(action)) + "</div></div>";
 }
 
