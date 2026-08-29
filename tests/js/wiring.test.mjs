@@ -244,3 +244,22 @@ test("布局（工单06）：分层——线在焊盘圆点/丝印标签之下�
   assert.ok(lineIdx < circleIdx, "焊盘圆点应画在线上层（线视觉从圆盘边缘起）");
   assert.ok(html.includes("paint-order=\"stroke\""));
 });
+
+test("布局（工单06）：引脚名可读性——本步接线引脚名强调色+粗体，其余提亮基线", () => {
+  const html = wiringDiagramHTML({
+    board, rows, wiring: [{ pin: "PB3", target: "KEY_START" }], showAll: false,
+  });
+  // PB3（命中本步）→ accent + 粗体
+  assert.ok(html.match(/<text[^>]*fill="var\(--accent\)"[^>]*font-weight="700"[^>]*>PB3<\/text>/),
+    "命中引脚名应强调色加粗");
+  // PA0 / 3V3 / GND（未命中）→ 提亮基线 var(--text) + 中粗体
+  assert.ok(html.match(/<text[^>]*fill="var\(--text\)"[^>]*font-weight="500"[^>]*>PA0<\/text>/),
+    "未命中引脚名应提亮基线");
+  assert.ok(html.match(/<text[^>]*fill="var\(--text\)"[^>]*font-weight="500"[^>]*>3V3<\/text>/));
+  // showAll：dim 线（PA0→LED_RED）的引脚仍为基线色，命中（PB3）仍强调
+  const allHtml = wiringDiagramHTML({
+    board, rows, wiring: [{ pin: "PB3", target: "KEY_START" }], showAll: true,
+  });
+  assert.ok(allHtml.match(/<text[^>]*fill="var\(--accent\)"[^>]*font-weight="700"[^>]*>PB3<\/text>/));
+  assert.ok(allHtml.match(/<text[^>]*fill="var\(--text\)"[^>]*font-weight="500"[^>]*>PA0<\/text>/));
+});

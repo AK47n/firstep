@@ -202,16 +202,20 @@ function boardBaseParts(board, rowsCount) {
 
 /** 全部焊盘 + 丝印名（画在连线之上——工单 06 分层：线从焊盘中心起笔，焊盘
  * 圆点盖线头使线视觉从圆盘边缘起；水平线穿过标签文字时有衬底描边，文字仍
- * 可读（paint-order:stroke 先描边后填充，stroke 用面板底色）。 */
-function boardPinParts(board) {
+ * 可读（paint-order:stroke 先描边后填充，stroke 用面板底色）。
+ * 引脚名可读性（用户反馈）：基线提亮 var(--text)（原 muted 太灰难看清）；
+ * 被本步接线引用的引脚名强调 var(--accent) + 700 粗体——线与引脚名同色，
+ * 一眼定位「线从哪根引脚出」。hlPins = 本步高亮线的引脚名集合。 */
+function boardPinParts(board, hlPins) {
   const parts = [];
   for (const pin of (board && board.pins) || []) {
     const p = pinXY(pin);
     const io = pin.kind === "io";
+    const hl = hlPins.has(pin.name);
     const labelX = p.side === "L" ? p.cx - PAD_R - 7 : p.cx + PAD_R + 7;
     const anchor = p.side === "L" ? "end" : "start";
     parts.push(`<circle cx="${p.cx}" cy="${p.cy}" r="${PAD_R}" fill="${io ? "var(--pin-pad)" : "var(--pin-fixed-pad)"}" stroke="var(--border-strong)" stroke-width="1.5"><title>${esc(String(pin.name || "") + (io ? "（空闲 IO）" : "（固定/电源）"))}</title></circle>`
-      + `<text x="${labelX}" y="${p.cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="${LABEL_FS}" fill="var(--muted)" stroke="var(--panel-2)" stroke-width="2.5" paint-order="stroke">${esc(String(pin.name || ""))}</text>`);
+      + `<text x="${labelX}" y="${p.cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="${LABEL_FS}" fill="${hl ? "var(--accent)" : "var(--text)"}" font-weight="${hl ? "700" : "500"}" stroke="var(--panel-2)" stroke-width="${hl ? "3" : "2.5"}" paint-order="stroke">${esc(String(pin.name || ""))}</text>`);
   }
   return parts;
 }
@@ -299,7 +303,7 @@ export function wiringDiagramHTML({ board, rows, wiring, showAll, inferred }) {
       + (l.line.power ? " wiring-power" : "");
     parts.push(`<path d="${l.path}" class="${cls}"/>`);
   }
-  parts.push(...boardPinParts(board));
+  parts.push(...boardPinParts(board, new Set(highlight.map((l) => l.pin))));
   for (const l of laid) {
     const line = l.line;
     parts.push(`<g class="wiring-term" transform="translate(${l.boxX} ${l.boxY})">`
