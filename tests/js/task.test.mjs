@@ -484,6 +484,85 @@ test("taskNextActionHTML: 未上板/编译通过待上板显示「下一步要�
   assert.equal(taskNextActionHTML({ id: "t1", status: "pending", iterations: [] }), "");
 });
 
+// —— task-wiring-diagram/04：任务卡 / 结果面板三输入域（wiring 合法 / wiring 空+
+// fallback / 都没有）的接线图装配（fx/task.js wiringSectionHTML 经
+// taskNextActionHTML 与 taskStepReportHTML 两个展示位共用同一装配）——
+test("taskNextActionHTML: 接线图三输入域（有 wiring → 图 + 原文并存；空 + fallback → 资源板图；都没有 → 纯文字）", () => {
+  const board = {
+    name: "测板", platform: "stm32", pcb_color: "", pins: [
+      { name: "PB3", kind: "io", x: 0, y: 0 },
+      { name: "PA0", kind: "io", x: 1, y: 1 },
+      { name: "3V3", kind: "power", x: 1, y: 2 },
+    ],
+    fixed: [], landmarks: [],
+  };
+  const rows = [
+    { slug: "key", role: "KEY_START（启动按键）", role_id: "KEY_START", role_label: "启动按键", pin: "PB3", remark: "gpio_in（必接）" },
+  ];
+  const wiringCtx = { board, rows };
+  const task = {
+    id: "t1", status: "unverified",
+    iterations: [{ seq: 1, kind: "execute", status: "unverified", user_action: "把 PB3 接到 KEY_START", wiring: [{ pin: "PB3", target: "KEY_START", note: "注意极性" }] }],
+  };
+  // ① wiring 合法 → 接线图（本步高亮）置于顶部 + 原文保留在下方（图文并存）
+  const withWiring = taskNextActionHTML(task, { wiringCtx });
+  assert.ok(withWiring.includes("task-next-wiring"));
+  assert.ok(withWiring.includes("wiring-hl"));
+  assert.ok(withWiring.includes("KEY_START"));
+  assert.ok(withWiring.includes("把 PB3 接到 KEY_START"));
+  assert.ok(withWiring.indexOf("task-next-wiring") < withWiring.indexOf("把 PB3 接到 KEY_START"));
+  // ② wiring 空 + fallback → 资源高亮板图（胶水层预渲染，原样插入）
+  const fallbackHTML = '<div class="resource-board" data-probe="fallback">资源高亮板图</div>';
+  const emptyWiring = taskNextActionHTML(
+    { ...task, iterations: [{ seq: 1, kind: "execute", status: "unverified", user_action: "烧录观察", wiring: [] }] },
+    { wiringCtx, wiringFallbackHTML: fallbackHTML },
+  );
+  assert.ok(emptyWiring.includes('data-probe="fallback"'));
+  assert.ok(emptyWiring.includes("烧录观察"));
+  // ③ 都没有 → 纯文字（现状行为）
+  const bare = taskNextActionHTML(
+    { ...task, iterations: [{ seq: 1, kind: "execute", status: "unverified", user_action: "烧录观察" }] },
+    { wiringCtx },
+  );
+  assert.ok(!bare.includes("wiring-hl") && !bare.includes("task-next-wiring"));
+  assert.ok(!bare.includes("svg"));
+  assert.ok(bare.includes("烧录观察"));
+});
+
+test("taskStepReportHTML: 结果面板步骤报告块内同一接线图装配（有 wiring 渲染 / 无 wiring 空串）", () => {
+  const board = {
+    name: "测板", platform: "stm32", pcb_color: "", pins: [
+      { name: "PB3", kind: "io", x: 0, y: 0 },
+    ],
+    fixed: [], landmarks: [],
+  };
+  const rows = [
+    { slug: "key", role: "KEY_START", role_id: "KEY_START", role_label: "", pin: "PB3", remark: "gpio_in" },
+  ];
+  const wiringCtx = { board, rows };
+  const report = {
+    what_changed: "实现了按键",
+    user_action: "把 PB3 接到 KEY_START",
+    wiring: [{ pin: "PB3", target: "KEY_START", note: "注意极性" }],
+  };
+  const task = { id: "t1", iterations: [{ seq: 1, kind: "execute", status: "unverified", ...report }] };
+  const html = taskStepReportHTML(task, { wiringCtx });
+  assert.ok(html.includes("task-step-wiring"));
+  assert.ok(html.includes("wiring-hl"));
+  assert.ok(html.includes("KEY_START"));
+  assert.ok(html.includes("实现了按键") && html.includes("把 PB3 接到 KEY_START"));
+  // 无 wiring（旧轮次 / 校验全丢 = 空数组）→ 不渲染图区块（纯文字现状）
+  const bare = taskStepReportHTML(
+    { ...task, iterations: [{ seq: 1, kind: "execute", status: "unverified", what_changed: "x", user_action: "y" }] },
+    { wiringCtx },
+  );
+  assert.ok(!bare.includes("task-step-wiring") && !bare.includes("wiring-hl"));
+  assert.ok(bare.includes("x") && bare.includes("y"));
+  // 无 wiringCtx（快照缺失、胶水层没装配）→ 也不渲染
+  const noCtx = taskStepReportHTML(task, {});
+  assert.ok(!noCtx.includes("task-step-wiring"));
+});
+
 test("taskCardHTML: 下一步要做摘要进卡（有则渲染，无则卡形不变）", () => {
   const base = taskCardHTML({
     id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],

@@ -3,6 +3,7 @@
 import { esc, truncate } from "./core.js";
 import { isMainCPath } from "./code.js";  // 错误行跳转可点判定（error-jump-task/02；code.js 无环）
 import { flashPanelHTML } from "./flash.js";  // 任务卡烧录控制行（flash-step-button/01；flash.js 仅依赖 core.js，无环）
+import { wiringDiagramHTML } from "./wiring.js";  // 接线图（task-wiring-diagram/03；wiring.js 仅依赖 core.js，无环）
 
 export function taskStatusLabel(status) {
   switch (status) {
@@ -232,7 +233,7 @@ export function taskCardHTML(task, index, opts) {
     + meta
     + taskIterationsHTML(task)
     + taskDialogAdoptHTML(task)
-    + taskNextActionHTML(task)
+    + taskNextActionHTML(task, o)
     // 上板自检清单常驻（工单 task-insight/02，spec 轴评审整改：结果面板只在
     // 执行时渲染一次，刷新后不重建——勾选态 localStorage 无处回显 = 故事 3
     // 「刷新勾选仍在」只写不可读。任务卡随 tasksRender 每次重建，最新轮
@@ -529,8 +530,10 @@ export function taskStepReportHTML(task, opts) {
   const last = lastIteration(task);
   if (!last) return "";
   const o = opts || {};
+  const wiring = wiringSectionHTML(task, o);
   return '<div class="task-step-report" style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px">'
     + '<div class="muted" style="margin-bottom:2px">步骤报告（AI 本步总结）</div>'
+    + (wiring ? '<div class="task-step-wiring" style="margin-top:6px">' + wiring + "</div>" : "")
     + taskStepReportBlocksHTML(last.what_changed || "", last.user_action || "")
     + taskChecklistHTML(last, o.checkKey || "", o.checkedMap || {})
     + "</div>";
@@ -760,22 +763,55 @@ export function taskChecklistHTML(iteration, key, checkedMap) {
     + rows + "</div></details>";
 }
 
-/** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02 + 04 修正）：最新一轮
- * 报告的 user_action 非空 → 显示；唯一隐藏条件 = 该步已真正闭环（doing 执行
- * 中旧指引过期；verify=manual 且 verified = 用户已上板人工确认）。**compile 任务
- * 的 verified 只代表编译通过，仍需烧录上板**——指引必须常驻到用户实测（实测
- * 不符会走「上板反馈」自动重开，指引随新轮次更新）。让用户随时知道当前卡在
- * 哪个物理动作（接线 / 烧录 / 观察）。 */
-export function taskNextActionHTML(task) {
+/** 接线图区块（工单 task-wiring-diagram/03 + 04）：任务卡「下一步要做」与
+ * 结果面板步骤报告共用同一装配（同一渲染函数、同一数据源——spec 决策）。
+ *
+ * 三级退化（任一情况不报错、不空白）：
+ * ① 最新轮 wiring 引用非空且 board 可用 → 接线图（本步高亮；showAll 由
+ *    opts.wiringShowAll 传入，缺省 false = 只画本步线）；
+ * ② wiring 空 / 板定义缺失但任务有资源标注（opts.wiringFallbackHTML 非空，
+ *    胶水层按 resourceIsHardware 判据预渲染资源高亮板图）→ 资源高亮板图；
+ * ③ 都没有 → 空串（纯文字现状行为，调用方照常渲染文字指引）。
+ * wiringCtx = {board, rows}（快照 / /api/boards 同形板定义 + 接线行）；
+ * wiring = 最新轮迭代的 wiring 引用（后端已查表校验，非法条目不存在）。
+ */
+export function wiringSectionHTML(task, opts) {
+  const o = opts || {};
+  const ctx = o.wiringCtx;
+  if (!ctx) return "";
+  const last = lastIteration(task);
+  const wiring = (last && last.wiring) || [];
+  if (ctx.board && wiring.length) {
+    return wiringDiagramHTML({
+      board: ctx.board,
+      rows: ctx.rows || [],
+      wiring,
+      showAll: !!o.wiringShowAll,
+    });
+  }
+  return o.wiringFallbackHTML || "";
+}
+
+/** 任务卡「下一步要做」粘性摘要（工单 stepwise-deepen/02 + 04 修正 +
+ * task-wiring-diagram/04）：最新一轮报告的 user_action 非空 → 显示；唯一
+ * 隐藏条件 = 该步已真正闭环（doing 执行中旧指引过期；verify=manual 且
+ * verified = 用户已上板人工确认）。**compile 任务的 verified 只代表编译
+ * 通过，仍需烧录上板**——指引必须常驻到用户实测（实测不符会走「上板反馈」
+ * 自动重开，指引随新轮次更新）。让用户随时知道当前卡在哪个物理动作（接线 /
+ * 烧录 / 观察）。opts.wiringCtx = 接线图数据装配（见 wiringSectionHTML）；
+ * 图文并存：接线图置于顶部，原 user_action 文字保留在图下方。 */
+export function taskNextActionHTML(task, opts) {
   if (!task || task.status === "doing") return "";
   if (task.verify === "manual" && task.status === "verified") return "";
   const last = lastIteration(task);
   const action = (last && last.user_action) || "";
   if (!String(action).trim()) return "";
+  const wiring = wiringSectionHTML(task, opts);
   return '<div class="task-next-action" style="margin-top:6px;padding:4px 8px;'
     + 'border:1px solid var(--border);border-radius:8px;background:var(--panel-2)">'
-    + '<span class="badge out">下一步要做</span> '
-    + esc(String(action)) + "</div>";
+    + '<span class="badge out">下一步要做</span>'
+    + (wiring ? '<div class="task-next-wiring" style="margin-top:6px">' + wiring + "</div>" : "")
+    + '<div style="margin-top:6px">' + esc(String(action)) + "</div></div>";
 }
 
 /** 上板自检清单勾选键单源（工单 task-insight/02）：localStorage key =
