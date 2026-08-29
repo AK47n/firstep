@@ -59,13 +59,13 @@ test("HTML 契约：每个子页签恰有一个按钮与一个面板，顺序与
     "子页签按钮在 index.html 中的顺序应与 GUIDE_TABS 一致");
 });
 
-test("GUIDE_CHAPTERS：准备 / 做题主线两章结构完备（title / intro / sections）", () => {
-  for (const key of ["prepare", "build"]) {
-    const ch = GUIDE_CHAPTERS[key];
-    assert.ok(ch, "缺章 '" + key + "'");
-    assert.ok(ch.title && ch.intro, "章 '" + key + "' 应有 title 与 intro");
+test("GUIDE_CHAPTERS：四章（准备 / 做题主线 / 编译与上板 / 交付与收尾）结构完备（title / intro / sections），键与 GUIDE_TABS 一一对应", () => {
+  for (const t of GUIDE_TABS) {
+    const ch = GUIDE_CHAPTERS[t.key];
+    assert.ok(ch, "缺章 '" + t.key + "'");
+    assert.ok(ch.title && ch.intro, "章 '" + t.key + "' 应有 title 与 intro");
     assert.ok(Array.isArray(ch.sections) && ch.sections.length >= 2,
-      "章 '" + key + "' 应有至少 2 个小节");
+      "章 '" + t.key + "' 应有至少 2 个小节");
     for (const s of ch.sections) {
       assert.ok(s.title, "小节缺标题：" + JSON.stringify(s));
       assert.ok(Array.isArray(s.blocks) && s.blocks.length >= 1, "小节缺块：" + s.title);
