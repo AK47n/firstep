@@ -49,7 +49,7 @@
 - 中文弹窗实现：`mshta`（vbscript MsgBox）无黑窗口弹窗，文本含中文；参数里的中文按 cmd 的 GBK 编码处理（与 .bat 文件编码一致，注意事项见测试决策）。**（实施修正 2026-08-29：改用 powershell WScript.Shell.Popup——mshta vbscript:Execute 语义不可靠：cmd 对 GUI 程序不等待、URL 引号/时序无法验证弹窗停留；powershell 全路径调用于所有 Win10/11 可用，理由详见工单 02 实施记录）**
 - 后端 `GET /api/health`：返回 `{"app": "contest-generator", "version": "<__version__>", "ok": true}`；不依赖配置（始终 200，即使未配 key）；接入 `create_app` 与既有路由注册区。
 - `stop-firstep.bat`：保持现有机制（kill 8000 进程），可顺带把进程识别改为"仅杀本应用启动的"（与 /api/health 探测共享思路，非本次核心，不扩scope，保持现状即可）。
-- 欢迎卡（`index.html` 生成页顶部 `gen-overview` 上方）+ 新前端模块（ui/fx 分层与现有约定一致）：内容 = ①一句话"这是什么" ②三步走（贴题→选平台→生成） ③两件事先做：「去配置 API key」（切到设置 tab 并聚焦 key 输入框）与「环境体检」（切到设置 tab 并触发一键体检）④「不再显示」。首见判定与显示条件做成 fx 纯函数（输入：是否已配置 key、是否有草稿、是否已选择不显示 → 输出：显示完整/精简/隐藏）；localStorage key 独立（如 `firstep.welcome-dismissed.v1`）。
+- 欢迎卡（`index.html` 生成页顶部 `gen-overview` 上方）+ 新前端模块（ui/fx 分层与现有约定一致）：内容 = ①一句话"这是什么" ②三步走（① 配置 AI：右上「设置」页粘贴 DeepSeek API key ② 检查环境：一键体检 + 补齐参考文件与模块库 ③ 粘贴赛题 → 生成 → 编译 → 上板；**语义修正 2026-08-29（clarify 用户确认）**：原「三步走（贴题→选平台→生成）」与「两件事先做（配 key/体检）」并列改为并入三步，以工单 03 决策#3 为准）③ 行动按钮：「去配置 API key」与「环境体检」共用共享跳转函数 `gotoSettings(tab, focusId?)`（前者 `gotoSettings("settings", "set-api-key")`，后者切页签后触发 `#btn-env-check`）④「不再显示」。首见判定与显示条件做成 fx 纯函数（输入：是否已配置 key、是否有草稿、是否已选择不显示 → 输出：显示完整/精简/隐藏）；localStorage key 独立（如 `firstep.welcome-dismissed.v1`）。
 - 无 key 横幅 `gen-banner`：追加「去设置」按钮（同欢迎卡的跳转逻辑，组件与行为复用，避免两套实现）。
 
 ### 边界
@@ -63,7 +63,7 @@
 - **后端接缝（既有最高接缝）**：`tests/test_webapp.py`（FastAPI TestClient 先例充分）。新增 `GET /api/health` 用例：状态 200、`ok=true`、`app="contest-generator"`、`version` 非空；未配置 key 时同样 200。
 - **bat 编排逻辑保持"薄"**：不做 Python 端单元测试（bat 无法进 pytest）；验收 = 人工按 4 种场景走查（无 Python / 版本低 / 未装依赖 / 端口占用）＋ 正常启动 1 次。测试决策中记录：任何需要判定的逻辑（如"探测响应是不是本应用"）都放后端可测端点，bat 只做编排与弹窗。
 - **文档守护**：新增轻量测试（沿用 `tests/test_repo_language.py` 的思路，pytest）：`README.md` 存在、非空、含关键节（Python 版本 + API key + 板子/IDE 条目）与中文；`install.bat` 存在。避免我写的"人话说明书"在后续提交中被悄悄删掉/改没。
-- **前端**：无 node 测试设施（static/js 无 test 脚本、无 *.test.js），欢迎卡/横幅按现有人工验收流程；判定逻辑集中到 fx 纯函数（便于未来接入测试）。
+- **前端**：纯函数接入 node:test（`tests/js/welcome.test.mjs`，welcomeMode 四态 + 卡片文案/按钮；仿 wiring.test.mjs 先例）+ fx-guard 单源导出护栏（DOMAINS 登记 welcome.js）；DOM 胶水（initWelcome / gotoSettings 跳转触发）无 DOM 测试设施，按现有人工验收流程（见工单 03 验收标准）。
 
 ## 范围外
 

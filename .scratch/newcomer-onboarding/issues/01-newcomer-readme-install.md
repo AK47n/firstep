@@ -39,3 +39,8 @@
 - install.bat：GBK(936) + CRLF；流程 = 检测 python（无→中文提示+官网链接）→ 版本 ≥3.13 → 建 .venv（已存在跳过）→ pip install -e . → 导入自检（fastapi/uvicorn/pypdf/PIL/fitz）；幂等；每步失败 pause + exit /b 1。
 - 验证：pip install -e . 实测可解析（无 [build-system]，pip 26.1.2 默认 setuptools 回退）；install.bat「无 Python」分支实测走到中文提示（GBK 解码正确）；全量 pytest 2824 无回归。
 - 教训：write 工具写的是 LF 行尾——cmd 批处理必须在转换编码时同时转 CRLF（LF-only 会让 `if ()` 块解析错乱，表现为命令被拆分报 'xxx is not recognized'）。
+
+## 评审记录（双轴，2026-08-29；整改已随 02/03 提交落地）
+
+- **Standards 轴**：无硬违规（README 中文/编码、install.bat 流程与幂等、守护测试均合约定）。判断项 3 条，裁定不修：bat 内探针/弹窗逻辑与 install.bat 重复（批处理无模块系统，保持显式）；Popup 五行子例程化（带参子例程引号不可靠）；_cjk_count 与 test_repo_language.py 重复定义（孤立测试文件可接受）。
+- **Spec 轴**：R3（欢迎卡）缺失——本 spec 分三期，R3 由工单 03 补齐并已实施；README「开发者」节超出 spec（README 面向人）——已删；README 常见问题缺编译工具链（uv4_path/gmake_path）——已补；spec 决策 49 mshta 弹窗方案实施后漂移——已修正为 powershell WScript.Shell.Popup（详见工单 02 实施记录）。

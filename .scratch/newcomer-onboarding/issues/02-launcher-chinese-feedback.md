@@ -38,3 +38,8 @@
 - start-app.bat 重写：GBK(936) + CRLF；流程 = 选 python（.venv 优先否则系统 python）→ 版本 ≥3.13 → 依赖检查 → netstat 8000 无监听则后台启动（日志同旧路径）→ 轮询 /api/health 20×1s → 成功开浏览器；失败分支全部中文弹窗（无 Python/版本旧/依赖缺/端口被占/启动超时含日志路径），exit /b 1。
 - **弹窗方案偏离 spec（mshta → powershell）**：mshta vbscript:Execute 模式实测不可靠（cmd 对 GUI 程序不等待、URL 引号语义复杂、时序无法证明弹窗停留）；改用 `"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "(New-Object -ComObject WScript.Shell).Popup(...,0,'firstep 启动失败',16)"`（Win10/11 必带 powershell.exe，全路径免 PATH 异常；COM Popup 实测弹窗并阻塞 2s 验证通过；消息内不用英文引号）。
 - 验证：no_python 分支实测（GBK 输出正确、exit 1、无解析错）；全量 pytest 2824 无回归；真机双态（正常启动 + 端口占用）由用户浏览器验收。
+
+## 评审记录（双轴，2026-08-29；整改已随 02/03 提交落地）
+
+- **Standards 轴**：无硬违规。/api/health 无 docstring 属一致性观察（既有路由函数均无，不修）。判断项：bat 内探测/弹窗与 install.bat 重复——保持显式，同 01 裁定。
+- **Spec 轴**：/api/health 契约（200 + `{"app","version","ok"}`、不依赖配置）与决策 1/2 一致；弹窗实现偏离 spec 决策 3（mshta→powershell）已在实施记录与 spec 决策 49 修正；启动流程（.venv 优先→版本→依赖→三态探测→轮询→成功/失败）与决策 4 一致。

@@ -43,3 +43,12 @@
 - index.html：`#welcome-card`（生成页顶部、gen-banner 之后）+ .welcome-card 样式（info 蓝系，同 banner 布局）+ host import 与 initWelcome() 调用（init() IIFE 内 restoreDraft 之后，state/草稿就绪）+ gen-banner 内嵌「去设置」按钮（#btn-banner-goto-settings）。
 - 测试：tests/js/welcome.test.mjs 7 用例（四态判定 + 卡片文案/按钮 + key 常量）+ fx-guard.test.mjs DOMAINS 登记 welcome.js；全量 js 751 passed。
 - 评审裁定（判断项不修）：bat 内探针/弹窗与 install.bat 重复、Popup 五行子例程化——批处理无模块系统且带参子例程引号不可靠，保持显式；_cjk_count 与 test_repo_language.py 重复定义——孤立测试文件可接受。
+
+## 评审记录（双轴，2026-08-29；整改已随评审整改提交落地）
+
+- **Standards 轴**：无硬违规（fx/welcome.js 纯函数 + esc + window 桥、ui 胶水 import 风格、index.html 时序与内联 style 先例均合既有约定；中文/测试/语言规范全过）。判断项 4 条：动态 selector（tab 恒为字面量 "settings" 无注入风险）、内联 style（文件既有先例）、magic string（局部小）、CHANGELOG 双条（自动短条 + 手动详条并存）——均为有意为之，接受；命名偏离（spec 决策 4 的 gotoSettings 实为 gotoKeyAction）——已按决策 4 重构（见 Spec c1）；spec.md:66 文档不一致（决策 6 仍写「前端无 node 测试设施」）——已修正。
+- **Spec 轴**：无实质缺失、无范围蔓延；4 项实现问题裁定：
+  - c1 共享函数签名不服工单（gotoKeyAction 无参 vs 决策 4 `gotoSettings(tab, focusId?)`，env-check 内联重写）→ **修复**：统一为 `gotoSettings(tab, focusId?)`，三条路径（去配置 key / banner 去设置 / 检查环境）全部复用，tab 切换归一。
+  - c2 spec 52 三步措辞与本工单决策 3 冲突 → spec 52 已按 clarify 确认语义修正（并入三步，以工单为准），spec.md:66 同步修正。
+  - c3 compact 一句话文案失实（指向不存在的「和 AI 商量」）→ **修复**：改为「贴赛题 → 生成 → 编译 → 上板；12 步向导会带你走每一步。」welcome.test.mjs 同步更新。
+  - c4 首访无 key 双重复按钮（gen-banner 去设置 + 欢迎卡去配置 API key，均 focus #set-api-key）→ **接受**：spec 52/53 均要求存在、clarify 用户确认；横幅为持久兜底（欢迎卡「不再显示」关闭后仍有入口）。
