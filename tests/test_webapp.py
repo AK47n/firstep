@@ -6316,7 +6316,7 @@ def test_app_context_llm_factory_default_is_build_llm():
 
 def test_local_routing_webapp_routes_method_groups(tmp_path):
     """注入 RoutingLLM（remote/local 两个记录型 fake）+ 本地配置：本地组端点
-    （赛题简介）走 local、远程组端点（编号提取）走 remote——路由全链路生效。"""
+    （赛题预读）走 local、远程组端点（编号提取）走 remote——路由全链路生效。"""
     library_dir = make_fake_module_library(tmp_path / "module_library")
     remote = RecordingLLM("remote")
     local = RecordingLLM("local")

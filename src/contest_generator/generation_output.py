@@ -23,7 +23,6 @@ WINDOWS_RESERVED_FILENAMES = frozenset(
 )
 _INVALID_FILENAME_CHARS_RE = re.compile(r'[<>:"/\\|?*]+')
 _FILENAME_WHITESPACE_RE = re.compile(r"\s+")
-_TOPIC_TITLE_PREFIX_RE = re.compile(r"^(?:题名|标题|赛题名称|赛题名)[:：]\s*")
 _TOPIC_LINE_MARKDOWN_RE = re.compile(r"^#{1,6}\s*")
 _TOPIC_LINE_PREFIX_RE = re.compile(r"^[A-Za-z0-9]+\s*题\s*[:：]\s*")
 _TOPIC_TRAILING_PAREN_RE = re.compile(r"（[^）]*(?:题|本科|高职|组)[^）]*）$")
@@ -47,20 +46,6 @@ TOPIC_EN_TITLES: dict[str, str] = {
     # 但格式不同（全角括号 + 空格 + 破折号后缀），单独登记避免 ASCII 兜底丢字
     "2026 年全国大学生电子设计竞赛赛区赛（TI 杯）—— 暨模拟电子系统设计专题赛选拔赛赛题": "2026_TI_Cup_Analog_Electronics_Selection",
 }
-
-
-def topic_title_from_summary(summary: str) -> str:
-    """赛题简介文本 → 适合目录名的题名候选。
-
-    现有 LLM 协议的 `summarize_topic` 首行是“这个赛题要做什么样的装置 / 系统”
-    的一句话总览；目录名只取首个非列表行，避免把后续功能要点整段塞进路径。
-    """
-    for raw_line in summary.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("- "):
-            continue
-        return _TOPIC_TITLE_PREFIX_RE.sub("", line).strip()
-    return summary.strip()
 
 
 def topic_short_title(problem_text: str) -> str:

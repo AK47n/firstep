@@ -57,7 +57,7 @@ test("detail 行：错误 / parse / http / attempts / budget_attempt / usage 全
   assert.equal(
     formatWorkflowCall({
       sequence: 2,
-      operation: "summarize_topic",
+      operation: "preread_topic",
       provider: "local",
       status: "error",
       error_kind: "network",
@@ -69,7 +69,7 @@ test("detail 行：错误 / parse / http / attempts / budget_attempt / usage 全
       duration_ms: 12,
       usage: { prompt_tokens: 1 },
     }),
-    "#2 · summarize_topic · local · error · error network · parse parse_error · http 502 · attempts 3 · budget_attempt 2 · request 25B · duration 12ms · usage(服务商上报) prompt_tokens=1"
+    "#2 · preread_topic · local · error · error network · parse parse_error · http 502 · attempts 3 · budget_attempt 2 · request 25B · duration 12ms · usage(服务商上报) prompt_tokens=1"
   );
 });
 

@@ -6,7 +6,7 @@ export function formatLLMTelemetry(data) {
   const toNumber = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
   // 中文标签表（operation / 解析状态 / 错误类型 / usage 键；未知回退原文）
   const opLabels = {
-    select_modules: "选模块", clarify: "澄清提问", summarize_topic: "赛题简介",
+    select_modules: "选模块", clarify: "澄清提问", preread_topic: "赛题预读",
     summarize_module: "模块简介", reference_summarize: "参考资料摘要",
     validate_module_description: "简介校验", reference_judge_archivable: "归档判定",
     generate_main_skeleton: "生成骨架", generate_smoke_main: "自检冒烟",

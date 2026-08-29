@@ -31,7 +31,7 @@ test("stepNavTitles 缺徽章 / 缺 h2 时兜底", () => {
 test("stepNavItemsHTML 生成胶囊结构：dot 数字 + label 标题", () => {
   const out = stepNavItemsHTML([
     { n: 1, title: "赛题原文" },
-    { n: 2, title: "赛题简介" },
+    { n: 2, title: "赛题预读" },
   ]);
   assert.equal(out.match(/class="step-dot"/g).length, 2);
   assert.ok(out.includes('data-step="1"'));
