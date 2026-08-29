@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=af9930f987097cb314289446ee42af54111a7a08 -->
+<!-- changelog-auto: last-commit=44ee8b9b52e668dbcbc0a2f076a2624be139197c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -24,6 +24,7 @@
 - 11:08 资源总览列表重构（resource-overview-polish/01）：分组四段（冲突置顶→引脚合并行→外设与中断→软资源折叠）+ aggregateResourceGroups 单源
 - 11:14 资源总览板图视角（resource-overview-polish/02）：列表/板图切换 + 引脚按任务着色 + 冲突黄描边呼吸 + 不在板资源 chips 行；板定义加载失败自动回落列表
 - 11:16 修复资源总览视图切换后选中高亮不移动（resource-overview-polish/02）：setResourceView 同步 refreshViewButtons
+- 11:37 任务卡接线图 01：生成接线快照落盘（.contest_wiring.json）——板定义内嵌 + 接线行与 README 引脚接线表同源（readme._pin_row_items 单一推导：slug/role_id/role_label/pin/remark），含多实例通道行；无接线模块也落盘（rows 空数组）；板数据缺失不写（退化路径）；快照纯新增文件，README 逐字节不变
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
