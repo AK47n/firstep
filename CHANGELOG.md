@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6d64ce7e7411cc80c44c60c66eafa95212f69b8c -->
+<!-- changelog-auto: last-commit=bb3a64618507c12a1e786015301e6e4e54109673 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -48,6 +48,7 @@
 - 19:13 功能：生成页步骤2 赛题预读后端契约（工单 topic-preread/01）——preread_topic 结构化 JSON {overview, reminders}（只提炼限定/约束/指定类事实）+ 新叶子模块 topic_preread 机械校验（steps 枚举/引用空白归一命中题面/长度条数上限）+ 路由改名 /api/topic/preread + LOCAL_LLM_METHODS 换员；评审整改：PrereadReminder 词形统一、parse_preread 公开、提示词数字 f-string 单源
 - 19:22 功能：生成页步骤2 赛题预读前端（工单 topic-preread/02）——卡片改名「赛题预读：关键信息与提醒」+ 按钮「预读题面」+ 新端点 /api/topic/preread 渲染一句话总览与按步骤分组提醒（组标题 DOM h2 单源读取、引用小字、其他限定组）+ 题面变更统一清空路径（含提醒槽位 data-preread-slot 钩子）+ 交接提示词总览适配；评审整改：prereadHTML 参数命名、NodeList 风格循先例
 - 19:26 功能：赛题预读提醒钉到对应步骤卡（工单 topic-preread/03）——目标步骤卡（3目标平台/5AI推荐/6模块清单/7引脚配置/8main.c骨架/11修订与深化）顶部 amber 提醒槽位（与 error 区分、无提醒不占位）+ 一次预读分发所有相关槽位（每卡只显该卡条目、一条影响多步则多卡同现）+ 题面变更与步骤2同一清空路径；评审整改：prereadBannerHTML 改名 prereadSlotHTML 术语统一、其他限定不钉卡注释
+- 19:32 清理：赛题预读改口收尾（工单 topic-preread/04）——删除无生产调用者的 topic_title_from_summary 与其 _TOPIC_TITLE_PREFIX_RE 正则（目录名走确定性 topic_short_title/TOPIC_EN_TITLES）+ 设置页本地路由文案改口（赛题预读并修计数：本地路由方法集实为 6 个调用）+ fx/llm.js 遥测标签 preread_topic + 测试旧术语样例/注释同步；评审整改：本地方法集计数、_desktop_cleanup 前缀注释历史化、spike 失效标注同步调用行
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
