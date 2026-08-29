@@ -198,6 +198,52 @@ def _pin_row_text(row: tuple[str, str, str, str]) -> str:
     return f"| {slug} | {role} | {pin} | {remark} |"
 
 
+def _row_role_text(role_id: str, role_label: str) -> str:
+    """角色列文本：label 非空附注（如 `KEY_START（启动按键）`），否则裸 id。
+
+    单一出处——README 接线表（_pin_rows）与接线快照行（wiring.wiring_rows）
+    共用，防两端角色文本漂移（工单 task-wiring-diagram/01）。
+    """
+    return f"{role_id}（{role_label}）" if role_label else role_id
+
+
+def _pin_row_items(
+    platform: str,
+    manifests: Sequence[ModuleManifest],
+    resolved_bindings: Sequence[ResolvedBinding] | None = None,
+    instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
+) -> list[tuple[str, str, str, str, str]]:
+    """引脚接线行结构化推导（slug / role_id / role_label / pin / remark）。
+
+    接线表与接线快照的**同源单一推导**（工单 task-wiring-diagram/01：图上
+    不会出现与 README 表格矛盾的线）：role_id = 声明 id（实例行 = 通道宏名）、
+    role_label = 声明 label（parse 侧已把 label==id 归一为空串；实例行空）、
+    pin = 绑定载荷覆盖值否则声明默认值（实例行 = 实例 pin）、remark = 类型 +
+    required 必接标记（实例行 = 模块首个声明类型，未声明 pins = 空串）。行序 =
+    manifest 顺序 × pins 声明顺序，确定性；多实例行追加在对应模块声明行之后；
+    未声明 pins 的模块不产生声明行（不硬猜）。
+    """
+    bindings: dict[tuple[str, str], str] = {}
+    if resolved_bindings:
+        bindings = {(b.slug, b.declaration.id): b.pin for b in resolved_bindings}
+    plans = instance_plans or {}
+
+    items: list[tuple[str, str, str, str, str]] = []
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue  # 无该平台版本条目由生成门禁先报，渲染侧跳过
+        for decl in entry.pins:
+            pin = bindings.get((manifest.slug, decl.id), decl.default)
+            items.append(
+                (manifest.slug, decl.id, decl.label, pin, _pin_remark(decl))
+            )
+        inst_remark = entry.pins[0].type if entry.pins else ""
+        for inst in plans.get(manifest.slug, ()):
+            items.append((manifest.slug, inst.macro, "", inst.pin, inst_remark))
+    return items
+
+
 def _pin_rows(
     platform: str,
     manifests: Sequence[ModuleManifest],
@@ -215,26 +261,14 @@ def _pin_rows(
     LED_1…）、引脚 = 实例 pin、说明 = 模块首个声明的类型（仅类型，不带必接
     标记——必接是角色声明属性，不随实例通道继承；未声明 pins 的模块 = 空串）
     ——追加在对应模块声明行之后。未声明 pins 的模块不产生声明行（不硬猜），
-    表尾尾注兜底。
+    表尾尾注兜底。行推导在 _pin_row_items（与接线快照同源）。
     """
-    bindings: dict[tuple[str, str], str] = {}
-    if resolved_bindings:
-        bindings = {(b.slug, b.declaration.id): b.pin for b in resolved_bindings}
-    plans = instance_plans or {}
-
-    rows: list[tuple[str, str, str, str]] = []
-    for manifest in manifests:
-        entry = manifest.platforms.get(platform)
-        if entry is None:
-            continue  # 无该平台版本条目由生成门禁先报，渲染侧跳过
-        for decl in entry.pins:
-            role = f"{decl.id}（{decl.label}）" if decl.label else decl.id
-            pin = bindings.get((manifest.slug, decl.id), decl.default)
-            rows.append((manifest.slug, role, pin, _pin_remark(decl)))
-        inst_remark = entry.pins[0].type if entry.pins else ""
-        for inst in plans.get(manifest.slug, ()):
-            rows.append((manifest.slug, inst.macro, inst.pin, inst_remark))
-    return rows
+    return [
+        (slug, _row_role_text(role_id, role_label), pin, remark)
+        for slug, role_id, role_label, pin, remark in _pin_row_items(
+            platform, manifests, resolved_bindings, instance_plans
+        )
+    ]
 
 
 def _pin_remark(decl: PinDeclaration) -> str:

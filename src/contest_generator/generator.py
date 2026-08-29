@@ -79,6 +79,7 @@ from .clex import (
 from .context_manifest import build_context_fields, write_context_manifest
 from .demo_script import DEMO_SCRIPT_FILENAME, render_demo_script
 from .report_draft import REPORT_DRAFT_FILENAME, render_report_draft
+from .wiring import build_wiring_snapshot, write_wiring_snapshot
 from .skeleton import (
     format_interface_blocks,
     is_header_path,
@@ -1013,9 +1014,12 @@ def generate(
     else:
         # 工程概览章板名（工单 project-readme/01）：README 总是生成、不吃板数据
         # ——板名取不到优雅降级为不显示（与绑定路径的 BoardError 500 相对，不
-        # 阻断生成）。
+        # 阻断生成）。板对象一并保留：接线快照（工单 task-wiring-diagram/01）
+        # 需要内嵌板定义，只在板数据存在时落盘（缺失 = 快照不写，前端退化）。
         try:
-            readme_board_name = board_for_platform(platform).name
+            loaded_board = board_for_platform(platform)
+            readme_board_name = loaded_board.name
+            board = loaded_board
         except BoardError:
             readme_board_name = None
 
@@ -1108,6 +1112,24 @@ def generate(
             ),
             encoding="utf-8",
         )
+
+        # 接线快照（工单 task-wiring-diagram/01）：README 同批数据（平台 / 模块
+        # 清单 / 已解析绑定 / 实例计划）+ 板定义内嵌 → 工程根 .contest_wiring.json
+        # ——纯新增文件，不触碰任何既有生成文件（逐字节契约不破）；行数据与
+        # README「引脚接线表」同源（readme._pin_row_items 单一推导），图上不
+        # 会出现与表格矛盾的线。板数据缺失（BoardError 已降级）= 快照不写，
+        # 任务推进按退化路径处理。写失败走既有 rmtree 兜底，生成原子性不破。
+        if board is not None:
+            write_wiring_snapshot(
+                output_dir,
+                build_wiring_snapshot(
+                    platform,
+                    board,
+                    manifests,
+                    resolved_bindings,
+                    instance_plans,
+                ),
+            )
 
         # 演示脚本（工单 report-draft-demo/01）：README 之后写工程根
         # 演示脚本.md——纯确定性渲染（评分点 / 功能需求 / 模块清单，零 LLM
