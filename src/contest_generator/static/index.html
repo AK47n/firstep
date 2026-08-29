@@ -1459,6 +1459,10 @@
   .card-details-body { padding: 9px 12px; background: var(--panel-2);
       border: 1px solid var(--border); border-radius: 8px;
       line-height: 1.65; color: var(--text); }
+  /* 步骤卡人话副标题（工单 newcomer-glossary/02）：h2 下一行「这步解决什么」，
+     弱化小字不喧宾夺主；间距与卡内既有 12.5px 行一致。 */
+  .card-purpose { font-size: 12.5px; color: var(--muted);
+      margin: 4px 0 10px; line-height: 1.6; }
   .card-group .card-details { margin-bottom: 4px; }
   /* 逐步深化进度总览（工单 stepwise-deepen/02）：分段进度条——已验证绿 /
      进行中青 / 待上板黄 / 失败红 / 待做灰 / 已跳过暗；汇总文案在 fx/task.js */
@@ -1921,6 +1925,7 @@
       <div class="gen-steps">
     <div class="card">
       <h2><span class="step-no">1</span>赛题原文</h2>
+      <p class="card-purpose">把赛题文字贴进来（或传 PDF / Word / 图片自动抽出），这是后面所有步骤的依据。</p>
       <details class="card-details">
         <summary>粘贴赛题原文，或上传 PDF / Word / 图片自动抽取文字。</summary>
         <div class="card-details-body">支持 .pdf / .docx / .txt / .md / 图片上传，纯本地解析；图片与 PDF 示意图经视觉通道识别（默认复用主 DeepSeek key，无需额外配置）——识别结果可编辑，示意图可点击放大。</div>
@@ -1961,6 +1966,7 @@
 
     <div class="card">
       <h2><span class="step-no">2</span>赛题预读：关键信息与提醒</h2>
+      <p class="card-purpose">让 AI 先读一遍题面，把关键信息、评分点和要提醒你的地方整理出来。</p>
       <div class="row">
         <button id="btn-topic-preread" class="primary" data-ico="doc">预读题面</button>
         <span class="muted">题面你会自己读，AI 只提炼「题面已经锁死了什么」——限定 / 约束 / 指定的硬事实（如限定 TI MSPM0 系列、指定器件、接口 / 尺寸 / 电源 / 时长），并标明要点将在哪一步用到（选平台 / 选模块 / 配引脚 / 写骨架…），走到那一步会再提醒你。</span>
@@ -1971,6 +1977,7 @@
 
     <div class="card">
       <h2><span class="step-no">3</span>目标平台</h2>
+      <p class="card-purpose">选你的板子（STM32 或 MSPM0），决定用哪套工程和工具链。</p>
       <div class="preread-slot hidden" data-preread-slot data-step="3"></div>
       <details class="card-details">
         <summary>选一条主控线：MSPM0G3507（CCS）或 STM32F103C8T6（Keil5），决定后续全部代码与工具链。</summary>
@@ -1982,6 +1989,7 @@
 
     <div class="card">
       <h2><span class="step-no">4</span>参考资料（可选）</h2>
+      <p class="card-purpose">从参考文件库选套件例程 / 说明书作学习素材，AI 生成时会读它们。</p>
       <div class="muted">勾选 = 手动指定作学习素材注入（全文直读）；赛题 / 套件自动关联的批次无需勾选也会注入。</div>
       <div class="row" style="margin-top:8px">
         <input type="search" id="ref-search" placeholder="搜索参考资料…" style="flex:1;max-width:300px">
@@ -1995,6 +2003,7 @@
 
     <div class="card">
       <h2><span class="step-no">5</span>AI 推荐模块</h2>
+      <p class="card-purpose">AI 对照题面推荐可复用的驱动模块，你可以勾选 / 调整。</p>
       <div class="preread-slot hidden" data-preread-slot data-step="5"></div>
       <details id="qa-material" style="margin-top:4px">
         <summary style="cursor:pointer;font-size:12px;color:var(--muted)">
@@ -2022,6 +2031,7 @@
 
     <div class="card">
       <h2><span class="step-no">6</span>模块清单与平台警告</h2>
+      <p class="card-purpose">确认最终要进工程的模块，并看清哪些模块在你板子上没验证过。</p>
       <div class="preread-slot hidden" data-preread-slot data-step="6"></div>
       <div class="row">
         <input type="search" id="module-search" placeholder="搜索模块以添加…" style="flex:1;max-width:300px">
@@ -2045,6 +2055,7 @@
 
     <div class="card" id="card-pin-config">
       <h2><span class="step-no">7</span>引脚配置（板图点选）</h2>
+      <p class="card-purpose">把模块需要的引脚绑到板子具体引脚上（不配就用默认，也能编译）。</p>
       <div class="preread-slot hidden" data-preread-slot data-step="7"></div>
       <details class="card-details">
         <summary>点引脚给接线角色改线；不配 = 按默认布线生成，打开就能编译。</summary>
@@ -2084,6 +2095,7 @@
 
     <div class="card">
       <h2><span class="step-no">8</span>main.c 骨架</h2>
+      <p class="card-purpose">让 AI 生成一份初始化好所有模块的 main.c 草稿。</p>
       <div class="preread-slot hidden" data-preread-slot data-step="8"></div>
       <details class="card-details">
         <summary>骨架 = 初始化序列 + TODO 预留区；自检骨架先验硬件再写逻辑。</summary>
@@ -2114,6 +2126,7 @@
 
     <div class="card">
       <h2><span class="step-no">9</span>输出目录并生成</h2>
+      <p class="card-purpose">选保存位置，生成完整可编译工程。</p>
       <label style="margin-bottom:8px"><input type="checkbox" id="desktop-topic-output" checked> 在桌面按 AI 赛题名创建文件夹（推荐）</label>
       <div class="muted" style="margin-bottom:10px">勾选后会忽略手动输出目录，生成到桌面/赛题名；同名目录自动加时间。</div>
       <label for="output-dir">手动输出目录（取消桌面选项时必填；必须不存在或为空）</label>
@@ -2186,6 +2199,7 @@
 
     <div class="card" id="card-fix-center">
       <h2><span class="step-no">10</span>修复中心</h2>
+      <p class="card-purpose">编译报错时在这里看错误、让 AI 自动修。</p>
       <details class="card-details">
         <summary>一键编译 → AI 修复 → 重编译验证，自动闭环；无工具链时可手动贴报错修复。</summary>
         <div class="card-details-body">生成 → 自动编译 → AI 修复 → 重编译验证：AI 对照编译输出逐条修复并直接写回工程文件（写回前自动备份，可一键回滚）；轮上限后可从续跑态继续一批 ≤3 轮；没有工具链时手动粘贴 Keil / CCS 编译报错，AI 逐条修复并直接写回（同样自动备份 + 回滚）。</div>
@@ -2220,6 +2234,7 @@
 
     <div class="card" id="card-revise">
       <h2><span class="step-no">11</span>修订与深化</h2>
+      <p class="card-purpose">生成后继续打磨——补答疑修订、任务推进写逻辑、参数速调、交付打包。</p>
       <div class="preread-slot hidden" data-preread-slot data-step="11"></div>
       <!-- 修订说明（工单 step11-tabs-ui/04 视觉统一）：长文案瘦身为一行，
            细节收进 details（不丢信息） -->
@@ -2407,6 +2422,7 @@
 
     <div class="card">
       <h2><span class="step-no">12</span>交接提示词</h2>
+      <p class="card-purpose">把这次生成上下文打包成一段话，方便复制给另一个 AI（可选）。</p>
       <details class="card-details">
         <summary>把整个工程上下文打包成一段提示词，粘贴给下一个 AI 继续精准打磨。</summary>
         <div class="card-details-body">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</div>
