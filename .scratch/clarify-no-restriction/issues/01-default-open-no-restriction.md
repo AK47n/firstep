@@ -10,23 +10,23 @@ SELECT_SYSTEM_PROMPT，消除「宁全勿漏」与「宁缺毋滥」的矛盾）
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 ## 验收标准
 
-- [ ] CLARIFY_SYSTEM_PROMPT 与 SELECT_SYSTEM_PROMPT 均含「就是没有限制 / 未提及 /
+- [x] CLARIFY_SYSTEM_PROMPT 与 SELECT_SYSTEM_PROMPT 均含「就是没有限制 / 未提及 /
       不为此提问 / 影响模块选择 / 绝不重复问」条款（契约测试断言）；「宁全勿漏、最多
       10 条」措辞全部移除；「一次性把所有疑问全部列出」「不要分批渐进追问」「宁缺毋滥」
       等既有条款保留。
-- [ ] `selection.MAX_QUESTIONS = 5` 单一出处：两提示词中「最多 N 条」由该常量 f-string
+- [x] `selection.MAX_QUESTIONS = 5` 单一出处：两提示词中「最多 N 条」由该常量 f-string
       插值（契约测试断言 `f"最多 {MAX_QUESTIONS} 条"` 同时在两提示词中）；`parse_clarify_questions`
       与 `_parse_questions` 解析时 `questions[:MAX_QUESTIONS]` 截尾兜底（喂 7 条 → 返回 5 条，
       测试实证）。
-- [ ] select 用户消息 JSON 契约示例同步收紧为「题面缺失且影响模块选择的关键补问」
+- [x] select 用户消息 JSON 契约示例同步收紧为「题面缺失且影响模块选择的关键补问」
       （双端漂移防重演，ticket 06 教训）。
-- [ ] 全量 pytest 绿 + mypy src 干净；重启服务（start-app.bat）后 2024H 不再问题面已明确/
+- [x] 全量 pytest 绿 + mypy src 干净；重启服务（start-app.bat）后 2024H 不再问题面已明确/
       未提及的细节。
-- [ ] 语言规范：spec / 工单 / 提交信息中文；CHANGELOG 由提交信息自动补录。
+- [x] 语言规范：spec / 工单 / 提交信息中文；CHANGELOG 由提交信息自动补录。
 
 ## 实施记录
 
@@ -66,4 +66,4 @@ SELECT_SYSTEM_PROMPT，消除「宁全勿漏」与「宁缺毋滥」的矛盾）
   - 范围外遵守：`_build_user_prompt` 未动（select/骨架题面预算不变）；不做启发式
     过滤；webapp / 前端 / 视觉问答零改动 ✓
 
-Status: resolved
+**备注（2026-xx-xx 收尾）：** 删除文件末尾非标准重复的「Status: resolved」行（模板状态字段仅顶部一处）；本工单完成后未及时标记，现统一改 resolved 并提交（实现提交 2b10ced）。
