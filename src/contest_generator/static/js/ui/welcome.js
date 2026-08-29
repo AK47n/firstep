@@ -3,25 +3,12 @@
 // 判定 → 渲染到 #welcome-card；行动按钮复用既有路径：切设置页签
 // （直接触发 nav 按钮点击 = 复用 tab 切换全部既有逻辑，避免重复实现）
 // 后聚焦 #set-api-key / 点 #btn-env-check；「不再显示」写 localStorage 即隐藏。
+// 跳转归一（工单 beginner-guide/02 评审整改）：gotoSettings 泛化为
+// ui/nav-jump.js 的 gotoNavTab，欢迎卡 / gen-banner / 新手指引共用。
 import { $, state } from "/js/app.js";
 import { draftLoad } from "/js/fx/draft.js";
 import { WELCOME_DISMISS_KEY, welcomeMode, welcomeCardHTML } from "/js/fx/welcome.js";
-
-// 共享跳转（工单 03 决策#4 gotoSettings(tab, focusId?)）：切到指定页签
-// （直接触发 nav 按钮点击 = 复用 tab 切换全部既有逻辑）+ 可选聚焦元素。
-// 欢迎卡「去配置 API key」、gen-banner「去设置」、「检查环境」三条路径
-// 都经此归一，不各自内联重写。
-function gotoSettings(tab, focusId) {
-  const btn = document.querySelector('nav button[data-tab="' + tab + '"]');
-  if (btn) btn.click();
-  if (focusId) {
-    const el = $(focusId);
-    if (el) {
-      el.focus();
-      el.scrollIntoView({ block: "center" });
-    }
-  }
-}
+import { gotoNavTab } from "./nav-jump.js";
 
 export function initWelcome() {
   const slot = $("welcome-card");
@@ -36,13 +23,13 @@ export function initWelcome() {
 
   // 欢迎卡行动按钮与 gen-banner「去设置」共用同一跳转逻辑（去配 key）
   $("btn-welcome-goto-key")?.addEventListener("click", () =>
-    gotoSettings("settings", "set-api-key")
+    gotoNavTab("settings", "set-api-key")
   );
   $("btn-banner-goto-settings")?.addEventListener("click", () =>
-    gotoSettings("settings", "set-api-key")
+    gotoNavTab("settings", "set-api-key")
   );
   $("btn-welcome-env-check")?.addEventListener("click", () => {
-    gotoSettings("settings");
+    gotoNavTab("settings");
     $("btn-env-check")?.click();
   });
   $("btn-welcome-dismiss")?.addEventListener("click", () => {
