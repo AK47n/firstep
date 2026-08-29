@@ -1,6 +1,9 @@
 # 05 旧工程读取兜底 + 退化路径按资源标定接线图
 
-Status: claimed
+Status: resolved
+
+已提交：0392ac0（实现）+ e348669（CHANGELOG）；ff4c135（评审整改：taskWiringRefs 单点收口 / _split_role 归一化 / board 守卫）+ ead2b91（CHANGELOG）。
+双轴评审通过：标准轴无硬违规（Duplicated Code 已整改）；规格轴无实质缺失（三点打磨：归一化 ✓ / 守卫 ✓ / 组合边缘记录为可接受）。
 
 ## 要做什么
 
