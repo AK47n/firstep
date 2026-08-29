@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=921a7199d2aa2a721368aa62577dd1854d27aaac -->
+<!-- changelog-auto: last-commit=af9930f987097cb314289446ee42af54111a7a08 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 10:55 前置任务温和引导（prereq-soft-guide/01）：«做这一步»前置未完成弹窗确认 + 卡上前置 chips 警告标记（skipped 视为完成，可取消可继续）
 - 11:08 资源总览列表重构（resource-overview-polish/01）：分组四段（冲突置顶→引脚合并行→外设与中断→软资源折叠）+ aggregateResourceGroups 单源
 - 11:14 资源总览板图视角（resource-overview-polish/02）：列表/板图切换 + 引脚按任务着色 + 冲突黄描边呼吸 + 不在板资源 chips 行；板定义加载失败自动回落列表
+- 11:16 修复资源总览视图切换后选中高亮不移动（resource-overview-polish/02）：setResourceView 同步 refreshViewButtons
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
