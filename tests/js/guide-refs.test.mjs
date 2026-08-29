@@ -13,7 +13,26 @@ const html = readFileSync(
   "utf8",
 );
 
+const flashPy = readFileSync(
+  new URL("../../src/contest_generator/flash.py", import.meta.url),
+  "utf8",
+);
+
+/** 从板卡 JSON 取出「SWD 调试」条目占用的引脚（守卫与 boards/*.json 同源，
+ * 教程正文与板定义漂移即失败——评审整改：由字面自检改为单源派生）。 */
+function swdPins(boardPath) {
+  const board = JSON.parse(readFileSync(new URL(boardPath, import.meta.url), "utf8"));
+  const pool = [...(board.fixed || []), ...(board.features || [])];
+  const swd = pool.find((f) => f.name === "SWD 调试");
+  assert.ok(swd, "板卡定义应含「SWD 调试」条目：" + boardPath);
+  return swd.occupies;
+}
+
 const NAV_TAB_KEYS = ["generate", "topic", "settings", "library", "reference", "pdf", "master", "changelog", "guide"];
+
+function sectionByTitle(chapter, titlePrefix) {
+  return chapter.sections.find((s) => s.title.indexOf(titlePrefix) === 0);
+}
 
 function allText(chapter) {
   return guideBlocksOf(chapter).map((b) => {
@@ -59,7 +78,8 @@ test("准备章：安装 / 配 key / 平台事实齐全", () => {
   for (const w of ["install.bat", "start-app.vbs", "127.0.0.1:8000", "Keil5", "CCS", "一键体检", "API key"]) {
     assert.ok(t.includes(w), "准备章应提到「" + w + "」");
   }
-  const platTable = GUIDE_CHAPTERS.prepare.sections[0].blocks.find((b) => b.type === "table");
+  const platTable = sectionByTitle(GUIDE_CHAPTERS.prepare, "开始前，四样东西")
+    .blocks.find((b) => b.type === "table");
   assert.ok(platTable && platTable.rows.length === 2, "平台表应有 2 行（stm32 / mspm0）");
 });
 
@@ -74,6 +94,37 @@ test("AI 边界口径：本地 Ollama 可离线 / 要 AI 标签 / 无 key 行为
   const t = allText(GUIDE_CHAPTERS.build);
   assert.ok(t.includes("本地 Ollama"), "应说明可配本地模型离线（llm.py LOCAL_LLM_METHODS 口径）");
   assert.ok(t.includes("没有 key"), "应说明无 key 时 AI 步骤会提示先配置");
+});
+
+test("编译与上板章：接线 / 烧录事实齐全且与单源一致（boards/*.json、flash.py）", () => {
+  const t = allText(GUIDE_CHAPTERS.compile);
+  for (const w of ["ST-Link", "SWDIO", "SWCLK", "3V3", "DSLite", "XDS110", "烧录到板子", "一键体检"]) {
+    assert.ok(t.includes(w), "编译与上板章应提到「" + w + "」");
+  }
+  // 烧录产物：教程与 flash.py 的 artifact 赋值行同源
+  const stm32Hex = "user/Objects/*.hex";
+  const mspm0Out = "Debug/*.out";
+  assert.ok(flashPy.includes('"' + stm32Hex + '" if platform == PLATFORM_STM32 else "' + mspm0Out + '"'),
+    "flash.py 的 artifact 赋值行应与教程一致（源已漂移？）");
+  assert.ok(t.includes(stm32Hex) && t.includes(mspm0Out), "教程应含双方产物路径（" + stm32Hex + " / " + mspm0Out + "）");
+  // 接线：SWD 引脚从板卡 JSON 派生（stm32 与 mspm0 两行）
+  const wireTable = sectionByTitle(GUIDE_CHAPTERS.compile, "第一次接线").blocks.find((b) => b.type === "table");
+  assert.ok(wireTable && wireTable.rows.length === 2, "接线表应有 2 行（stm32 / mspm0）");
+  const swdStm32 = swdPins("../../src/contest_generator/boards/stm32-min-system.json");
+  const swdMspm0 = swdPins("../../src/contest_generator/boards/mspm0-dimx.json");
+  const rowStm32 = wireTable.rows[0].join(" ");
+  const rowMspm0 = wireTable.rows[1].join(" ");
+  assert.ok(rowStm32.includes(swdStm32[0]) && rowStm32.includes(swdStm32[1]),
+    "stm32 行应含板卡 SWD 占用 " + swdStm32.join("/") + "（实际：" + rowStm32 + "）");
+  assert.ok(rowMspm0.includes(swdMspm0[0]) && rowMspm0.includes(swdMspm0[1]),
+    "mspm0 行应含板卡 SWD 占用 " + swdMspm0.join("/") + "（实际：" + rowMspm0 + "）");
+});
+
+test("交付与收尾章：交付物 / 交接提示词 / 收尾事实齐全", () => {
+  const t = allText(GUIDE_CHAPTERS.deliver);
+  for (const w of ["设计报告草稿", "演示脚本", "交付检查", "一键打包", "打开工程", "交接提示词", "stop-firstep.bat", "赛题库", "最近生成"]) {
+    assert.ok(t.includes(w), "交付与收尾章应提到「" + w + "」");
+  }
 });
 
 test("跳转按钮目标合法：tab ∈ 导航键、focus id 在 index.html 存在", () => {
