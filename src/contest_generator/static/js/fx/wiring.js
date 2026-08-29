@@ -1,6 +1,9 @@
 // fx/wiring.js — 任务卡接线图渲染纯件（task-wiring-diagram/03）。
-// 图 = 开发板俯视图 + 右侧模块端子列 + 引脚焊盘→端子盒连线（本步高亮彩色 /
+// 图 = 开发板俯视图 + 左右两侧模块端子列 + 引脚焊盘→端子盒连线（本步高亮彩色 /
 // 「显示全部接线」其余行淡显 / 电源·地独立配色）+ 图例 + 空态文案。
+// 布局（工单 06，两列布线）：板居中，左列焊盘线接左端子列、右列接右端子列——
+// 跨侧线被板隔离；端子盒纵向优先**对齐焊盘**（线水平、零交叉），同侧同 y 多线
+// （一焊盘多线，罕见）该侧改等距兜底（按焊盘 y 单调排布，同侧不交叉、盒不重叠）。
 // 数据纪律：形状 / 坐标 / 端子名全部由确定性数据渲染（board + rows + wiring
 // 引用），无任何 AI 生成几何——wiring 引用只是「选哪些行」的名字。
 // 几何与 fx/resource-board.js 的 resourceBoardSVG **同常量**（rowH=22、
@@ -11,8 +14,10 @@ import { esc } from "./core.js";
 // —— 几何常量：与 fx/resource-board.js / ui/generate-pins.js 交叉同步 ——
 const ROW_H = 22, TOP_PAD = 46, BOARD_W = 460, PAD_R = 7;
 const CHIP_X = 100, CHIP_W = 260, LABEL_FS = 11;
-const TERM_X = BOARD_W + 24;   // 端子列左缘（接线图右侧扩展列）
-const TERM_W = 208, TERM_BOX_H = 20;
+const TERM_W = 208, TERM_BOX_H = 20, TERM_GAP = 24;
+const BOARD_X = TERM_W + TERM_GAP;               // 板图左缘（=232，两列端子区对称、板居中）
+const TERM_L_X = 0;                              // 左端子盒左缘
+const TERM_R_X = BOARD_X + BOARD_W + TERM_GAP;   // 右端子盒左缘（=716）
 
 /** 电源 / 地 / 复位类引脚（board pin kind ∈ power|gnd|reset）→ 独立配色。
  * 电源线一眼可辨（供电部分与信号线区分开，spec 用户故事 5）。 */
@@ -45,16 +50,23 @@ function pinKind(pinName, board) {
   return null;
 }
 
-/** 引脚在板上的焊盘中心坐标（与 resourceBoardSVG 同换算：
- * x=0 左列 150 / x=1 右列 310，y = topPad + pin.y * rowH + rowH/2）。 */
+/** 引脚在板上的焊盘几何（与 resourceBoardSVG 同换算：x=0 左列 150 / x=1
+ * 右列 310，y = topPad + pin.y * rowH + rowH/2；板整体平移 BOARD_X——工单 06
+ * 两列布线）：side = 焊盘所在板侧（L/R）→ 端子分列。单一出处——padCenter
+ * 与 boardPinParts 共用（评审整改：坐标表达式抽共享，防两处漂移）。 */
+function pinXY(pin) {
+  const left = pin.x === 0;
+  return {
+    cx: BOARD_X + (left ? 150 : 310),
+    cy: TOP_PAD + ((pin.y || 0) * ROW_H) + ROW_H / 2,
+    side: left ? "L" : "R",
+  };
+}
+
 function padCenter(board, pinName) {
   const pins = (board && board.pins) || [];
   for (const p of pins) {
-    if (p && p.name === pinName) {
-      const cx = p.x === 0 ? 150 : 310;
-      const cy = TOP_PAD + ((p.y || 0) * ROW_H) + ROW_H / 2;
-      return { cx, cy };
-    }
+    if (p && p.name === pinName) return pinXY(p);
   }
   return null;
 }
@@ -145,54 +157,110 @@ export function wiringFromResources(resources, rows) {
   return out;
 }
 
-/** 板壳 + 芯片 + 地标 + 全部焊盘（丝印名）——与 resourceBoardSVG 同画法
- * （0° 视角、无点击/旋转；此处不画任务着色，接线图只求板形可认）。 */
-function boardSVGParts(board, rowsCount) {
+/** 板壳 + 芯片 + 地标（丝印，**不含焊盘**——焊盘与标签画在连线之上，见
+ * boardPinParts）——与 resourceBoardSVG 同画法（0° 视角、无点击/旋转；此处
+ * 不画任务着色，接线图只求板形可认）。工单 06：板整体平移 BOARD_X（两列
+ * 端子区对称、板居中），板内全部 x 坐标随动。 */
+function boardBaseParts(board, rowsCount) {
   const parts = [];
-  const pins = (board && board.pins) || [];
   const hasTop = (board.landmarks || []).some((l) => l.edge === "top");
   const hasBottom = (board.landmarks || []).some((l) => l.edge === "bottom");
   const extraBottom = hasBottom ? 40 : 14;
   const H = TOP_PAD + rowsCount * ROW_H + extraBottom;
   const pcbBottom = TOP_PAD - 10 + rowsCount * ROW_H + 18;
+  const cx0 = BOARD_X + 230;   // 板内原中心 230 平移
   const chip = (board.platform === "stm32") ? "STM32F103C8T6" : "MSPM0G3507";
-  parts.push(`<rect x="${CHIP_X}" y="${TOP_PAD - 10}" width="${CHIP_W}" height="${rowsCount * ROW_H + 18}" rx="8" fill="${esc(board.pcb_color || "var(--pin-pcb)")}" stroke="var(--border)" stroke-width="1.5"/>`);
-  parts.push(`<rect x="186" y="${H / 2 - 34}" width="88" height="68" rx="4" fill="var(--panel-2)" stroke="var(--border-strong)" stroke-width="1"/>`);
-  parts.push(`<text x="230" y="${H / 2 - 10}" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
-  parts.push(`<text x="230" y="${H / 2 + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
+  parts.push(`<rect x="${CHIP_X + BOARD_X}" y="${TOP_PAD - 10}" width="${CHIP_W}" height="${rowsCount * ROW_H + 18}" rx="8" fill="${esc(board.pcb_color || "var(--pin-pcb)")}" stroke="var(--border)" stroke-width="1.5"/>`);
+  parts.push(`<rect x="${186 + BOARD_X}" y="${H / 2 - 34}" width="88" height="68" rx="4" fill="var(--panel-2)" stroke="var(--border-strong)" stroke-width="1"/>`);
+  parts.push(`<text x="${cx0}" y="${H / 2 - 10}" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="var(--muted)">${esc(chip)}</text>`);
+  parts.push(`<text x="${cx0}" y="${H / 2 + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">2×20 排针</text>`);
   for (const lm of board.landmarks || []) {
     if (lm.kind === "header_4p" && lm.edge === "top") {
-      parts.push(`<rect x="192" y="${TOP_PAD - 14}" width="76" height="6" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
+      parts.push(`<rect x="${192 + BOARD_X}" y="${TOP_PAD - 14}" width="76" height="6" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
       for (let i = 0; i < 4; i++) {
-        parts.push(`<rect x="${198 + i * 16}" y="2" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
+        parts.push(`<rect x="${198 + i * 16 + BOARD_X}" y="2" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
       }
-      parts.push(`<text x="230" y="${TOP_PAD - 1}" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
+      parts.push(`<text x="${cx0}" y="${TOP_PAD - 1}" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
     } else if (lm.kind === "header_4p" && lm.edge === "bottom") {
-      parts.push(`<rect x="192" y="${pcbBottom - 4}" width="76" height="6" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
+      parts.push(`<rect x="${192 + BOARD_X}" y="${pcbBottom - 4}" width="76" height="6" rx="1" fill="#14161a" stroke="var(--border)" stroke-width="0.8"><title>${esc(lm.note || "")}</title></rect>`);
       for (let i = 0; i < 4; i++) {
-        parts.push(`<rect x="${198 + i * 16}" y="${pcbBottom - 2}" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
+        parts.push(`<rect x="${198 + i * 16 + BOARD_X}" y="${pcbBottom - 2}" width="4" height="30" fill="#c9a227" stroke="#8a6d1d" stroke-width="0.5"/>`);
       }
-      parts.push(`<text x="230" y="${pcbBottom - 12}" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
+      parts.push(`<text x="${cx0}" y="${pcbBottom - 12}" text-anchor="middle" font-size="7.5" fill="var(--muted)">${esc(lm.label || "4P 弯针")}</text>`);
     } else if (lm.kind === "usb_typec" && lm.edge === "bottom") {
-      parts.push(`<rect x="205" y="${pcbBottom - 30}" width="50" height="26" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
-      parts.push(`<rect x="213" y="${pcbBottom - 7}" width="34" height="3" rx="1" fill="var(--bg)"/>`);
-      parts.push(`<text x="230" y="${pcbBottom + 8}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
+      parts.push(`<rect x="${205 + BOARD_X}" y="${pcbBottom - 30}" width="50" height="26" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
+      parts.push(`<rect x="${213 + BOARD_X}" y="${pcbBottom - 7}" width="34" height="3" rx="1" fill="var(--bg)"/>`);
+      parts.push(`<text x="${cx0}" y="${pcbBottom + 8}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
     } else if (lm.kind === "usb_typec" && lm.edge === "top") {
-      parts.push(`<rect x="205" y="${TOP_PAD - 6}" width="50" height="26" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
-      parts.push(`<rect x="213" y="${TOP_PAD - 6}" width="34" height="3" rx="1" fill="var(--bg)"/>`);
-      parts.push(`<text x="230" y="${TOP_PAD - 18}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
+      parts.push(`<rect x="${205 + BOARD_X}" y="${TOP_PAD - 6}" width="50" height="26" rx="3" fill="#c9ced6" stroke="#7d848e" stroke-width="1"><title>${esc(lm.note || "USB Type-C 插口")}</title></rect>`);
+      parts.push(`<rect x="${213 + BOARD_X}" y="${TOP_PAD - 6}" width="34" height="3" rx="1" fill="var(--bg)"/>`);
+      parts.push(`<text x="${cx0}" y="${TOP_PAD - 18}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
     }
   }
-  for (const pin of pins) {
-    const cx = pin.x === 0 ? 150 : 310;
-    const cy = TOP_PAD + ((pin.y || 0) * ROW_H) + ROW_H / 2;
+  return parts;
+}
+
+/** 全部焊盘 + 丝印名（画在连线之上——工单 06 分层：线从焊盘中心起笔，焊盘
+ * 圆点盖线头使线视觉从圆盘边缘起；水平线穿过标签文字时有衬底描边，文字仍
+ * 可读（paint-order:stroke 先描边后填充，stroke 用面板底色）。 */
+function boardPinParts(board) {
+  const parts = [];
+  for (const pin of (board && board.pins) || []) {
+    const p = pinXY(pin);
     const io = pin.kind === "io";
-    const labelX = pin.x === 0 ? cx - PAD_R - 7 : cx + PAD_R + 7;
-    const anchor = pin.x === 0 ? "end" : "start";
-    parts.push(`<circle cx="${cx}" cy="${cy}" r="${PAD_R}" fill="${io ? "var(--pin-pad)" : "var(--pin-fixed-pad)"}" stroke="var(--border-strong)" stroke-width="1.5"><title>${esc(String(pin.name || "") + (io ? "（空闲 IO）" : "（固定/电源）"))}</title></circle>`
-      + `<text x="${labelX}" y="${cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="${LABEL_FS}" fill="var(--muted)">${esc(String(pin.name || ""))}</text>`);
+    const labelX = p.side === "L" ? p.cx - PAD_R - 7 : p.cx + PAD_R + 7;
+    const anchor = p.side === "L" ? "end" : "start";
+    parts.push(`<circle cx="${p.cx}" cy="${p.cy}" r="${PAD_R}" fill="${io ? "var(--pin-pad)" : "var(--pin-fixed-pad)"}" stroke="var(--border-strong)" stroke-width="1.5"><title>${esc(String(pin.name || "") + (io ? "（空闲 IO）" : "（固定/电源）"))}</title></circle>`
+      + `<text x="${labelX}" y="${p.cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="${LABEL_FS}" fill="var(--muted)" stroke="var(--panel-2)" stroke-width="2.5" paint-order="stroke">${esc(String(pin.name || ""))}</text>`);
   }
   return parts;
+}
+
+/** 接线图布局（工单 06 两列布线，纯函数）：lines → 每线的焊盘坐标 / 端子盒
+ * 坐标 / 连线 path。规则：
+ * 1. 分侧：焊盘 x=0（板左列）→ 左端子列（盒 [TERM_L_X, TERM_L_X+TERM_W]，
+ *    线终点 = 盒右缘）；x=1（右列）→ 右端子列（盒左缘 TERM_R_X，线终点 =
+ *    盒左缘）——跨侧线被板隔离；
+ * 2. y 对齐优先：端子盒 cy = 焊盘 cy → 线为水平线（同侧同行各占一行 →
+ *    零交叉）；
+ * 3. 冲突兜底：同侧 ≥2 根线的焊盘 y 相同（触发条件 = 同侧同 cy；真实场景 =
+ *    同一引脚在接线行出现多行，如 LED/LED_RED 双行同 pin；测试亦用等位焊盘
+ *    构造）→ 该侧改等距布局：按焊盘 cy 稳定排序，端子盒依次铺
+ *    TOP_PAD+ROW_H/2+k*ROW_H（侧内单调 → 不交叉、盒不重叠）。
+ * 输出 [{line, pad:{cx,cy,side}, boxX, boxY, boxCy, path}]。 */
+export function layoutWiring(board, lines) {
+  const groupBySide = { L: [], R: [] };
+  for (const line of lines) {
+    const pad = padCenter(board, line.pin);
+    if (!pad) continue;
+    groupBySide[pad.side].push({ line, pad });
+  }
+  // 侧配置：线终点 x（端子盒外缘中点）与盒子起点 x
+  const sideCfg = {
+    L: { edgeX: TERM_L_X + TERM_W, boxX: TERM_L_X },
+    R: { edgeX: TERM_R_X, boxX: TERM_R_X },
+  };
+  const out = [];
+  for (const side of ["L", "R"]) {
+    const group = groupBySide[side];
+    if (!group.length) continue;
+    const counts = new Map();
+    for (const g of group) counts.set(g.pad.cy, (counts.get(g.pad.cy) || 0) + 1);
+    const clash = [...counts.values()].some((n) => n > 1);
+    const ordered = clash ? group.slice().sort((a, b) => a.pad.cy - b.pad.cy) : group;
+    const cfg = sideCfg[side];
+    let k = 0;
+    for (const g of ordered) {
+      const boxCy = clash ? TOP_PAD + ROW_H / 2 + k * ROW_H : g.pad.cy;
+      k += 1;
+      out.push({
+        line: g.line, pad: g.pad,
+        boxX: cfg.boxX, boxY: boxCy - TERM_BOX_H / 2, boxCy,
+        path: "M " + g.pad.cx + " " + g.pad.cy + " L " + cfg.edgeX + " " + boxCy,
+      });
+    }
+  }
+  return out;
 }
 
 /** 接线图整块 HTML（纯函数，全部输出转义）：
@@ -221,19 +289,20 @@ export function wiringDiagramHTML({ board, rows, wiring, showAll, inferred }) {
   );
   const termRows = lines.length;
   const H = Math.max(TOP_PAD + boardRows * ROW_H + 40, TOP_PAD + termRows * ROW_H + 24);
-  const W = TERM_X + TERM_W + 12;
+  const W = TERM_R_X + TERM_W + 12;
   const parts = [];
-  parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:720px" role="img" aria-label="${esc(board.name || "开发板")}接线图">`);
-  parts.push(...boardSVGParts(board, boardRows));
-  lines.forEach((line, index) => {
-    const pad = padCenter(board, line.pin);
-    if (!pad) return;
-    const boxY = TOP_PAD + index * ROW_H;
-    const boxCy = boxY + ROW_H / 2;
-    const cls = "wiring-line" + (line.hl ? " wiring-hl" : " wiring-dim")
-      + (line.power ? " wiring-power" : "");
-    parts.push(`<path d="M ${pad.cx} ${pad.cy} L ${TERM_X} ${boxCy}" class="${cls}"/>`);
-    parts.push(`<g class="wiring-term" transform="translate(${TERM_X} ${boxY})">`
+  parts.push(`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:900px" role="img" aria-label="${esc(board.name || "开发板")}接线图">`);
+  parts.push(...boardBaseParts(board, boardRows));
+  const laid = layoutWiring(board, lines);
+  for (const l of laid) {
+    const cls = "wiring-line" + (l.line.hl ? " wiring-hl" : " wiring-dim")
+      + (l.line.power ? " wiring-power" : "");
+    parts.push(`<path d="${l.path}" class="${cls}"/>`);
+  }
+  parts.push(...boardPinParts(board));
+  for (const l of laid) {
+    const line = l.line;
+    parts.push(`<g class="wiring-term" transform="translate(${l.boxX} ${l.boxY})">`
       + `<rect x="0" y="0" width="${TERM_W}" height="${TERM_BOX_H}" rx="4" fill="var(--panel-2)" stroke="${line.hl ? "var(--accent)" : "var(--border)"}" stroke-width="${line.hl ? "1.5" : "1"}"/>`
       + `<text x="8" y="${13}" font-size="10" fill="${line.hl ? "var(--text)" : "var(--muted)"}">${esc(line.label)}</text>`
       + (line.remark || line.note
@@ -241,7 +310,7 @@ export function wiringDiagramHTML({ board, rows, wiring, showAll, inferred }) {
           + esc([line.remark, line.note].filter(Boolean).join(" · ")) + "</text>"
         : "")
       + "</g>");
-  });
+  }
   parts.push("</svg>");
   const legend = '<div class="wiring-legend">'
     + '<span class="lg"><span class="dot wiring-dot-hl"></span>本步接线</span>'

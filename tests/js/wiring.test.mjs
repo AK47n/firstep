@@ -188,3 +188,59 @@ test("wiringDiagramHTML: inferred 模式 caption 注明「按引脚资源标定�
   });
   assert.ok(normal.includes(" · 本步接线"));
 });
+
+test("布局（工单06）：板居中左右分列——左列焊盘线接左端子、右列接右端子，y 对齐全水平", () => {
+  const html = wiringDiagramHTML({
+    board, rows,
+    wiring: [{ pin: "PB3", target: "KEY_START" }, { pin: "PA0", target: "LED_RED" }],
+    showAll: false,
+  });
+  // viewBox 宽 = 2*(TERM_W+GAP)+BOARD_W+12 = 936；max-width 调至 900
+  assert.ok(html.includes('viewBox="0 0 936 '));
+  assert.ok(html.includes("max-width:900px"));
+  // PB3：x=1,y=1 → cx=BOARD_X+310=542、cy=46+22+11=79 → R 侧端子盒 translate(716 69)、水平线
+  assert.ok(html.includes('translate(716 69)'));
+  assert.ok(html.includes("M 542 79 L 716 79"));
+  // PA0：x=0,y=0 → cx=382、cy=57 → L 侧端子盒 translate(0 47)、线到盒右缘 x=208（水平）
+  assert.ok(html.includes("translate(0 47)"));
+  assert.ok(html.includes("M 382 57 L 208 57"));
+});
+
+test("布局（工单06）：同侧同 y 多线（一焊盘多线）→ 该侧等距兜底（盒不重叠、无交叉）", () => {
+  // 罕见：两个引脚同位（同侧同行）——焊盘坐标相同，各出一条线
+  const clashBoard = {
+    name: "clash", platform: "stm32", pcb_color: "rgba(0,0,0,0)",
+    pins: [
+      { name: "PA0", kind: "io", x: 0, y: 0 },
+      { name: "PB0", kind: "io", x: 0, y: 0 },
+    ],
+    landmarks: [], fixed: [],
+  };
+  const clashRows = [
+    { slug: "led", role: "LED", role_id: "LED", role_label: "", pin: "PA0", remark: "x" },
+    { slug: "led", role: "LED_R", role_id: "LED_R", role_label: "", pin: "PB0", remark: "x" },
+  ];
+  const html = wiringDiagramHTML({
+    board: clashBoard, rows: clashRows,
+    wiring: [{ pin: "PA0", target: "LED" }, { pin: "PB0", target: "LED_R" }],
+    showAll: false,
+  });
+  // 等距兜底：两盒 y 依次 47 / 69（TOP_PAD+ROW_H/2+k*ROW_H - 盒高一半）
+  assert.ok(html.includes("translate(0 47)"));
+  assert.ok(html.includes("translate(0 69)"));
+  // 首线盒 cy 与焊盘 cy 重合（水平），次线斜线——同侧盒不重叠（间距 22 ≥ 盒高 20）
+  assert.ok(html.includes("M 382 57 L 208 79"));
+});
+
+test("布局（工单06）：分层——线在焊盘圆点/丝印标签之下、标签带衬底描边", () => {
+  const html = wiringDiagramHTML({
+    board, rows, wiring: [{ pin: "PB3", target: "KEY_START" }], showAll: false,
+  });
+  const lineIdx = html.indexOf("class=\"wiring-line");
+  const padIdx = html.indexOf(">PB3<");
+  const circleIdx = html.indexOf("<circle");
+  assert.ok(lineIdx > -1 && padIdx > -1 && circleIdx > -1);
+  assert.ok(lineIdx < padIdx, "丝印标签应画在线上层（水平线穿字时文字仍可读）");
+  assert.ok(lineIdx < circleIdx, "焊盘圆点应画在线上层（线视觉从圆盘边缘起）");
+  assert.ok(html.includes("paint-order=\"stroke\""));
+});
