@@ -188,7 +188,9 @@ const DOMAINS = {
   },
   "guide.js": {
     GUIDE_TABS: "object",
+    GUIDE_CHAPTERS: "object",
     guidePanelFor: "fn", guideTabNext: "fn",
+    guideBlockHTML: "fn", guideChapterHTML: "fn", guideBlocksOf: "fn",
   },
 };
 

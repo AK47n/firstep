@@ -1473,6 +1473,26 @@
   .guide-empty-hint { padding: 10px 14px; border: 1px dashed var(--border);
       border-radius: 10px; color: var(--muted); font-size: 12.5px;
       background: var(--panel-2); margin: 0 0 12px; }
+  /* 新手指引正文（工单 beginner-guide/02）：章节标题 / 提醒框 / 表格 / 跳转按钮——
+     文本走 var 令牌，窄屏表格横向滚动 */
+  .guide-chapter-title { font-size: 16.5px; margin: 2px 0 6px; color: var(--text); }
+  .guide-chapter-intro { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.7; }
+  .guide-sec-title { font-size: 14px; margin: 16px 0 4px; color: var(--text); }
+  #tab-guide .guide-panel p, #tab-guide .guide-panel li { font-size: 13.5px; line-height: 1.75; }
+  #tab-guide .guide-panel p { margin: 6px 0; }
+  #tab-guide .guide-panel ul, #tab-guide .guide-panel ol { margin: 6px 0; padding-left: 22px; }
+  #tab-guide .guide-panel li { margin: 3px 0; }
+  .guide-note { padding: 8px 12px; border: 1px dashed var(--border);
+      border-left: 3px solid var(--accent); border-radius: 8px;
+      background: var(--panel-2); font-size: 12.5px; line-height: 1.7;
+      margin: 10px 0; color: var(--text); }
+  .guide-note strong { color: var(--accent); }
+  .guide-table-scroll { overflow-x: auto; margin: 8px 0; }
+  .guide-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .guide-table th { text-align: left; padding: 6px 10px; background: var(--panel-2);
+      border: 1px solid var(--border); font-weight: 600; color: var(--text); }
+  .guide-table td { padding: 6px 10px; border: 1px solid var(--border); color: var(--text); }
+  .guide-jump { font-size: 12.5px; padding: 4px 12px; margin: 8px 12px 8px 0; }
   /* 卡内说明折叠（工单 generate-ui-polish/01，由 .revise-details 通用化）：
      长文案瘦身为一行，细节收进 details——summary 主打一句摘要，展开看完整说明。
      全页 1-12 步统一说明形态。 */
