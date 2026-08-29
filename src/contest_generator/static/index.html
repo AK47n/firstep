@@ -1451,6 +1451,28 @@
   .revise-empty-hint { padding: 10px 14px; border: 1px dashed var(--border);
       border-radius: 10px; color: var(--muted); font-size: 12.5px;
       background: var(--panel-2); margin-top: 12px; }
+  /* 新手指引页（工单 beginner-guide/01）：页头 + 四子页签（同 .revise-tab 胶囊协议）
+      + 面板显隐；正文内容复用 .card / .card-details / .btn 令牌 */
+  .guide-head { margin: 4px 0 14px; }
+  .guide-head h2 { font-size: 20px; margin: 0 0 4px; }
+  .guide-tabs { display: flex; gap: 6px; margin: 0 0 14px; padding: 4px; }
+  @media (max-width: 900px) {
+    .guide-tabs { overflow-x: auto; scrollbar-width: thin; }
+  }
+  .guide-tab { display: inline-flex; align-items: center; gap: 6px;
+                padding: 5px 12px; border-radius: 999px; cursor: pointer; flex: none;
+                border: 1px solid var(--border); background: transparent;
+                color: var(--muted); font-size: 12.5px;
+                transition: all var(--dur-base) var(--ease-ui); user-select: none; }
+  .guide-tab:hover { border-color: var(--accent); color: var(--text); }
+  .guide-tab.active { border-color: rgba(0, 212, 255, .45); background: var(--accent-dim);
+                       color: var(--text); font-weight: 600; }
+  .guide-tab.active:hover { border-color: rgba(0, 212, 255, .45); }
+  .guide-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .guide-panel { margin-top: 4px; }
+  .guide-empty-hint { padding: 10px 14px; border: 1px dashed var(--border);
+      border-radius: 10px; color: var(--muted); font-size: 12.5px;
+      background: var(--panel-2); margin: 0 0 12px; }
   /* 卡内说明折叠（工单 generate-ui-polish/01，由 .revise-details 通用化）：
      长文案瘦身为一行，细节收进 details——summary 主打一句摘要，展开看完整说明。
      全页 1-12 步统一说明形态。 */
@@ -1893,6 +1915,10 @@
       <button data-tab="pdf" title="素材根目录全部 PDF 的浏览与整理（含疑似重复清理）；管理入口，做题用不到。">PDF 资料库</button>
       <button data-tab="master" title="stm32 / mspm0 两平台基础工程浏览与体检；管理入口，做题用不到。">母版</button>
       <button data-tab="changelog" title="本工具的更新日志（CHANGELOG）。">更新记录</button>
+    </div>
+    <div class="tab-group" role="group" aria-label="指南">
+      <span class="tab-group-label" aria-hidden="true">指南</span>
+      <button data-tab="guide" title="面向第一次使用的完整教程：准备、做题主线、编译上板到交付收尾。">新手指引</button>
     </div>
   </nav>
   <button id="btn-theme" type="button" title="切换到亮色主题"
@@ -2982,6 +3008,35 @@
       <div id="settings-msg" class="error"></div>
     </div>
   </section>
+
+  <!-- ============================ 新手指引 ============================ -->
+  <!-- 教程页（工单 beginner-guide/01）：页内四子页签壳 + 四个面板容器；
+       子页签切换由 ui/guide.js 接线；正文由 ui/guide.js 按 fx/guide.js 数据
+       渲染（02 准备/做题主线、03 编译与上板/交付与收尾） -->
+  <section id="tab-guide" class="page">
+    <div class="guide-head">
+      <h2>新手指引：从零到交付</h2>
+      <p class="muted">给第一次参加电赛 / 第一次使用本工具的你——按「准备 → 做题主线 → 编译与上板 → 交付与收尾」四章看完，就能独立做完一道赛题。</p>
+    </div>
+    <nav id="guide-tabs" class="guide-tabs" role="tablist" aria-label="新手指引章节">
+      <button type="button" class="guide-tab active" data-guide-tab="prepare" role="tab" aria-selected="true">准备</button>
+      <button type="button" class="guide-tab" data-guide-tab="build" role="tab" aria-selected="false">做题主线</button>
+      <button type="button" class="guide-tab" data-guide-tab="compile" role="tab" aria-selected="false">编译与上板</button>
+      <button type="button" class="guide-tab" data-guide-tab="deliver" role="tab" aria-selected="false">交付与收尾</button>
+    </nav>
+    <div id="guide-panel-prepare" class="guide-panel" role="tabpanel">
+      <p class="guide-empty-hint">「准备」章节正文将在工单 02 填充。</p>
+    </div>
+    <div id="guide-panel-build" class="guide-panel" role="tabpanel" hidden>
+      <p class="guide-empty-hint">「做题主线」章节正文将在工单 02 填充。</p>
+    </div>
+    <div id="guide-panel-compile" class="guide-panel" role="tabpanel" hidden>
+      <p class="guide-empty-hint">「编译与上板」章节正文将在工单 03 填充。</p>
+    </div>
+    <div id="guide-panel-deliver" class="guide-panel" role="tabpanel" hidden>
+      <p class="guide-empty-hint">「交付与收尾」章节正文将在工单 03 填充。</p>
+    </div>
+  </section>
 </main>
 
 <script type="module">
@@ -3029,6 +3084,7 @@ import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览�
 import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 import { initWelcome } from "/js/ui/welcome.js";  // 首次欢迎卡 + gen-banner 行动化（newcomer-onboarding/03）
 import { initGlossary } from "/js/ui/glossary.js";  // 生成页底部新手词表（newcomer-glossary/01）
+import { initGuide } from "/js/ui/guide.js";  // 新手指引页（beginner-guide/01）：四子页签切换
 import { initHandoffNote } from "/js/ui/handoff.js";  // 交接提示词说明 + 去任务推进（newcomer-glossary/03）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
@@ -3382,6 +3438,7 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
   restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
   initWelcome();  // 首次欢迎卡（newcomer-onboarding/03）：依赖 state / 草稿已就绪
   initGlossary();  // 新手词表（newcomer-glossary/01）：纯静态渲染，DOM 已就绪
+  initGuide();  // 新手指引子页签切换（beginner-guide/01）：DOM 已就绪，纯本地交互
   initHandoffNote();  // 交接提示词说明（newcomer-glossary/03）：按钮绑定依赖 DOM 已就绪
 })();
 

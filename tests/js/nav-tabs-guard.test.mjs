@@ -1,7 +1,8 @@
-// 顶部导航 tab 分组守卫（工单 tab-grouping/01/02）：读 index.html 静态标记锁定——
-// 组标签（做题 / 资料管理）各恰好一个、8 个 tab 键无多余/缺失、组归属与组内
-// 顺序精确、组标签不是按钮（防把分组拆掉或把组标签升级成可点击按钮）、
-// 8 个按钮均带非空中文 title（防占位半句话）。
+// 顶部导航 tab 分组守卫（工单 tab-grouping/01/02；工单 beginner-guide/01 增「指南」组）：
+// 读 index.html 静态标记锁定——组标签（做题 / 资料管理 / 指南）各恰好一个、
+// 9 个 tab 键无多余/缺失、组归属与组内顺序精确、组标签不是按钮（防把分组拆掉
+// 或把组标签升级成可点击按钮）、9 个按钮均带非空中文 title（防占位半句话）、
+// 每个 tab 键有对应 section 容器（防死按钮）。
 // 仿 tab-nav-guard.test.mjs 先例：静态标记的守卫测试直接读 HTML 断言。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -16,6 +17,7 @@ const html = readFileSync(
 const GROUPS = [
   { label: "做题", keys: ["generate", "topic", "settings"] },
   { label: "资料管理", keys: ["library", "reference", "pdf", "master", "changelog"] },
+  { label: "指南", keys: ["guide"] },
 ];
 const ALL_KEYS = GROUPS.flatMap((g) => g.keys);
 
@@ -41,7 +43,7 @@ function groupInnerHTML(label) {
   return m[1];
 }
 
-test("组容器与组标签：做题 / 资料管理 各恰好一个", () => {
+test("组容器与组标签：做题 / 资料管理 / 指南 各恰好一个", () => {
   for (const g of GROUPS) {
     const container = 'class="tab-group" role="group" aria-label="' + g.label + '"';
     assert.equal(countOccurrences(html, container), 1,
@@ -52,7 +54,7 @@ test("组容器与组标签：做题 / 资料管理 各恰好一个", () => {
   }
 });
 
-test("8 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
+test("9 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
   const nav = headerNavHTML();
   for (const key of ALL_KEYS) {
     assert.equal(countOccurrences(nav, 'data-tab="' + key + '"'), 1,
@@ -63,7 +65,7 @@ test("8 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => 
     "顶部导航应恰好 " + ALL_KEYS.length + " 个 tab 按钮（实际 " + total + "）");
 });
 
-test("组归属与组内顺序：做题 3 个、资料管理 5 个，无串组", () => {
+test("组归属与组内顺序：做题 3 个、资料管理 5 个、指南 1 个，无串组", () => {
   for (const g of GROUPS) {
     const inner = groupInnerHTML(g.label);
     const keys = [...inner.matchAll(/data-tab="([^"]+)"/g)].map((m) => m[1]);
@@ -84,14 +86,16 @@ test("组标签不可点击：span 而非 button，且不带 data-tab", () => {
   }
 });
 
-test("组先后顺序：做题组在资料管理组之前（主流程入口在左半区）", () => {
-  const first = html.indexOf('aria-label="做题"');
-  const second = html.indexOf('aria-label="资料管理"');
-  assert.ok(first >= 0 && second >= 0, "两个组容器都应存在");
-  assert.ok(first < second, "组顺序应为「做题」在「资料管理」之前（评审整改：补组序断言）");
+test("组先后顺序：做题组在资料管理组之前，指南组在最后（主流程入口在左半区）", () => {
+  const gen = html.indexOf('aria-label="做题"');
+  const lib = html.indexOf('aria-label="资料管理"');
+  const guide = html.indexOf('aria-label="指南"');
+  assert.ok(gen >= 0 && lib >= 0 && guide >= 0, "三组容器都应存在");
+  assert.ok(gen < lib, "组顺序应为「做题」在「资料管理」之前（评审整改：补组序断言）");
+  assert.ok(lib < guide, "组顺序应为「指南」在「资料管理」之后（工单 beginner-guide/01 契约）");
 });
 
-test("tab 按钮 title 覆盖：8 个均有非空中文 title（长度 ≥8）", () => {
+test("tab 按钮 title 覆盖：9 个均有非空中文 title（长度 ≥8）", () => {
   const nav = headerNavHTML();
   const CJK = /[\u4e00-\u9fff]/;
   for (const key of ALL_KEYS) {
@@ -105,5 +109,12 @@ test("tab 按钮 title 覆盖：8 个均有非空中文 title（长度 ≥8）",
     assert.ok(title.length >= 8,
       "tab '" + key + "' 的 title 长度应 ≥8（防占位半句话，实际 " + title.length + "）");
     assert.ok(CJK.test(title), "tab '" + key + "' 的 title 应为中文说明");
+  }
+});
+
+test("每个 tab 键有对应 section 容器（防死按钮，工单 beginner-guide/01 强化）", () => {
+  for (const key of ALL_KEYS) {
+    assert.equal(countOccurrences(html, '<section id="tab-' + key + '"'), 1,
+      "tab '" + key + "' 应有恰好一个 section 容器（无异步加载的 tab 由通用切换器驱动）");
   }
 });
