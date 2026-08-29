@@ -44,6 +44,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .events import EVENT_TASK_EXECUTING, EVENT_TASK_PLANNING, EVENT_TASK_REPORTING, ProgressEvent
+from .wiring import (
+    WiringEntry,
+    filter_wiring_entries,
+    parse_wiring_entries,
+    wiring_source,
+    wiring_summary_text,
+)
 
 if TYPE_CHECKING:
     from .llm import LLM  # 仅类型注解（llm 运行时依赖本层，反向禁止）
@@ -138,6 +145,7 @@ class TaskIteration:
     what_changed: str = ""
     user_action: str = ""
     checklist: tuple[str, ...] = ()
+    wiring: tuple[WiringEntry, ...] = ()  # 本步接线引用（工单 task-wiring-diagram/02）
     at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -151,6 +159,7 @@ class TaskIteration:
             "what_changed": self.what_changed,
             "user_action": self.user_action,
             "checklist": list(self.checklist),
+            "wiring": [entry.to_dict() for entry in self.wiring],
             "at": self.at,
         }
 
@@ -326,7 +335,8 @@ def _parse_iterations(raw: Any) -> tuple[TaskIteration, ...]:
     旧清单无该字段 / 非数组 → 空元组（向后兼容）；单条非 dict / 缺 seq /
     kind 词表外 → 忽略该条（历史记录是展示与回滚辅助，坏值不应让整份
     清单不可用——与 status 词表外修正为默认同哲学，宁丢一条不误伤全清单）。
-    其余字段非字符串 → 空串（to_dict 形状契约由本函数单源）。
+    其余字段非字符串 → 空串（to_dict 形状契约由本函数单源）；wiring 逐条
+    容错（parse_wiring_entries：坏条目丢弃、缺省 = 空元组——旧清单零改动）。
     """
     if not isinstance(raw, list):
         return ()
@@ -351,6 +361,7 @@ def _parse_iterations(raw: Any) -> tuple[TaskIteration, ...]:
                 what_changed=_iter_opt_str(item, "what_changed"),
                 user_action=_iter_opt_str(item, "user_action"),
                 checklist=_opt_str_list(item.get("checklist")),
+                wiring=parse_wiring_entries(item.get("wiring")),
                 at=_iter_opt_str(item, "at"),
             )
         )
@@ -994,12 +1005,15 @@ def run_task(
     # 报告是附加产物（主产物 = 代码 + 编译验证 + diff 已落盘），失败降级为
     # 空串不阻断——不因旁路汇报失败毁掉已达成的主结果（与无工具链降级同
     # 哲学：用户拿到结果，缺的只是说明文本）。
-    what_changed, user_action, checklist = _report_task_step(
+    what_changed, user_action, checklist, wiring = _report_task_step(
         llm=llm,
         task=task,
         verify_result=result,
         diff=diff,
         interfaces=interfaces,
+        output_dir=output_dir,
+        platform=platform,
+        manifests=manifests,
         emit=emit,
     )
 
@@ -1015,6 +1029,7 @@ def run_task(
         what_changed=what_changed,
         user_action=user_action,
         checklist=checklist,
+        wiring=wiring,
         at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     )
     updated_plan = _with_task_status(
@@ -1040,18 +1055,27 @@ def _report_task_step(
     verify_result: Mapping[str, Any],
     diff: Mapping[str, Any] | None,
     interfaces: Sequence[str],
+    output_dir: Path,
+    platform: str,
+    manifests: Sequence[Any],
     emit: SseEmitter,
-) -> tuple[str, str, tuple[str, ...]]:
-    """步骤报告调用（工单 stepwise-deepen/01 + task-insight/01）：编译验证后
-    让 LLM 总结本步。
+) -> tuple[str, str, tuple[str, ...], tuple[WiringEntry, ...]]:
+    """步骤报告调用（工单 stepwise-deepen/01 + task-insight/01 +
+    task-wiring-diagram/02）：编译验证后让 LLM 总结本步。
 
     输入 = 任务（含对话采纳结论 / 验收方式）+ 验证结果（status / message /
     compile / verify_cause）+ diff（截断在 prompt 层处理，无变化 = 空串）+
-    模块接口清单；
-    返回 (what_changed, user_action, checklist)。报告是附加产物（主产物 =
-    代码 + 编译验证 + diff 已落盘），任何失败（LLM 断线 / 输出坏 / 解析重试
-    耗尽）→ 降级 (空串, 空串, 空元组)，不阻断任务落盘终态——与无工具链
-    降级同哲学。
+    模块接口清单 + 输出目录（接线校验数据源：快照内嵌板定义优先，无快照回退
+    静态板定义 + manifests 声明——wiring_source）；
+    返回 (what_changed, user_action, checklist, wiring)。报告是附加产物（主
+    产物 = 代码 + 编译验证 + diff 已落盘），任何失败（LLM 断线 / 输出坏 /
+    解析重试耗尽）→ 降级 (空串, 空串, 空元组, 空元组)，不阻断任务落盘终态
+    ——与无工具链降级同哲学；wiring 数据源（无板定义 / 快照损坏）失败只清空
+    wiring 与引用白名单（主报告照常生成——附加字段不吞主产物）。wiring 处理
+    = LLM 输出 → 机械形状提取（parse_wiring_entries 在 llm 层）→ 查表校验
+    （filter_wiring_entries：pin ∈ 板引脚名、target ∈ 端子名 ∪ 固定资源 ∪
+    引脚名；逐条丢弃非法、全丢 = 空元组走退化路径）；校验通过的 wiring 才
+    写入迭代记录。
     """
     try:
         emit.progress(ProgressEvent(type=EVENT_TASK_REPORTING))
@@ -1063,15 +1087,26 @@ def _report_task_step(
             raw_text = diff.get("text", "")
             if isinstance(raw_text, str):
                 diff_text = raw_text
+        # wiring 数据源（快照 / 静态板定义）失败只清空 wiring 与引用白名单——
+        # 接线引用是附加增强字段，其数据源不可用不应吞掉主报告（评审整改：
+        # 主报告 what_changed / user_action / checklist 永远照常生成）
+        try:
+            board, rows, pins, targets = wiring_source(output_dir, platform, manifests)
+            wiring_summary = wiring_summary_text(rows, board)
+        except Exception:
+            board, pins, targets = None, frozenset(), frozenset()
+            wiring_summary = ""
         report = llm.report_task_step(
             task=task.to_dict(),
             verify_result=verify_result,
             diff_text=diff_text,
             module_interfaces=interfaces,
+            wiring_summary=wiring_summary,
         )
-        return report.what_changed, report.user_action, tuple(report.checklist)
+        wiring = filter_wiring_entries(report.wiring, pins, targets)
+        return report.what_changed, report.user_action, tuple(report.checklist), wiring
     except Exception:
-        return "", "", ()
+        return "", "", (), ()
 
 
 def run_direct_fix(
@@ -1163,12 +1198,15 @@ def run_direct_fix(
         title="直接修正",
         description=fix_summary or idea,
     )
-    what_changed, user_action, checklist = _report_task_step(
+    what_changed, user_action, checklist, wiring = _report_task_step(
         llm=llm,
         task=report_task,
         verify_result=result,
         diff=diff,
         interfaces=interfaces,
+        output_dir=output_dir,
+        platform=platform,
+        manifests=manifests,
         emit=emit,
     )
     return {
@@ -1177,6 +1215,7 @@ def run_direct_fix(
             "what_changed": what_changed,
             "user_action": user_action,
             "checklist": list(checklist),
+            "wiring": [entry.to_dict() for entry in wiring],
         },
     }
 

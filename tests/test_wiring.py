@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from contest_generator.boards import board_for_platform
 from contest_generator.generator import generate_project
 from contest_generator.manifest import ModuleManifest
@@ -22,8 +24,16 @@ from contest_generator.selection import ModuleInstance
 from contest_generator.wiring import (
     WIRING_SNAPSHOT_FILENAME,
     WIRING_SNAPSHOT_VERSION,
+    WiringEntry,
     build_wiring_snapshot,
+    filter_wiring_entries,
+    module_target_names,
+    parse_wiring_entries,
+    read_wiring_rows,
+    read_wiring_snapshot,
+    wiring_context,
     wiring_rows,
+    wiring_summary_text,
     write_wiring_snapshot,
 )
 from tests.fakes import (
@@ -311,5 +321,149 @@ def test_wiring_snapshot_write_file(tmp_path):
     text = path.read_text(encoding="utf-8")
     assert "STM32F103C8T6" in text
     assert text.endswith("\n")
-    # 往返一致（写盘内容可被 json 读回——读取契约见工单 02/04）
+    # 往返一致（写盘内容可被 json 读回——读取契约见下节）
     assert json.loads(text) == snapshot
+
+
+# ---------------------------------------------------------------------------
+# wiring 字段校验（工单 02）：形状提取 / 查表校验 / 校验数据源装配
+# ---------------------------------------------------------------------------
+
+
+def test_parse_wiring_entries_shape_only():
+    """形状提取：合法条目全收（note 可省）、pin/target 非空字符串、坏条目丢弃、
+    非 list / None → 空元组（字段缺省 = 本步无接线引用）。"""
+    raw = [
+        {"pin": "PA0", "target": "DIO", "note": "注意极性"},
+        {"pin": "PB3", "target": "KEY_START"},  # note 缺省
+        {"pin": "", "target": "X"},              # pin 空串 → 丢
+        {"pin": "PA0", "target": ""},            # target 空串 → 丢
+        {"pin": 123, "target": "X"},             # pin 非字符串 → 丢
+        "not-a-dict",                            # 非对象 → 丢
+        {"pin": "PA0", "target": "DIO", "note": 5},  # note 非字符串 → 空串
+    ]
+    entries = parse_wiring_entries(raw)
+    assert entries == (
+        WiringEntry(pin="PA0", target="DIO", note="注意极性"),
+        WiringEntry(pin="PB3", target="KEY_START", note=""),
+        WiringEntry(pin="PA0", target="DIO", note=""),
+    )
+    assert parse_wiring_entries(None) == ()
+    assert parse_wiring_entries("oops") == ()
+    assert parse_wiring_entries([{"pin": "PA0"}]) == ()  # 缺 target
+
+
+def test_filter_wiring_entries_keeps_valid_drops_invalid():
+    """逐条校验：合法全过 / 部分非法丢弃（保序）/ 全非法 → 空元组；
+    幻觉引脚名（PA99）/ 幻觉端子名拒绝。"""
+    pins = ["PA0", "PB3", "3V3", "GND"]
+    targets = ["DIO", "KEY_START", "板载 LED", "PA0"]
+    all_valid = [
+        WiringEntry(pin="PA0", target="DIO"),
+        WiringEntry(pin="3V3", target="板载 LED", note="供电"),
+        WiringEntry(pin="GND", target="PA0"),  # 板内直连（引脚名自身作 target）
+    ]
+    assert filter_wiring_entries(all_valid, pins, targets) == tuple(all_valid)
+    mixed = [
+        WiringEntry(pin="PA0", target="DIO"),
+        WiringEntry(pin="PA99", target="DIO"),      # 幻觉引脚 → 丢
+        WiringEntry(pin="PB3", target="KEY_START"),
+        WiringEntry(pin="PB3", target="PA99"),      # 幻觉端子 → 丢
+    ]
+    assert filter_wiring_entries(mixed, pins, targets) == (
+        WiringEntry(pin="PA0", target="DIO"),
+        WiringEntry(pin="PB3", target="KEY_START"),
+    )
+    assert filter_wiring_entries(mixed[:1], ["PA99"], targets) == ()
+    assert filter_wiring_entries([], pins, targets) == ()
+
+
+def test_module_target_names_ids_and_labels(fake_module_library):
+    """模块端子名集合 = 声明 id ∪ 非空 label（label 缺省 = 只有 id）。"""
+    _add_key_module(fake_module_library)
+    manifests = [ModuleManifest.load(fake_module_library / "key")]
+    names = module_target_names(manifests, PLATFORM_STM32)
+    assert "KEY_START" in names
+    assert "启动按键" in names
+
+
+def test_wiring_context_snapshot_preferred(tmp_path):
+    """校验数据源：快照内嵌板定义优先（rows 端子名 = role_id/label ∪ 固定 ∪
+    引脚名）；无快照回退静态板定义 + manifests 声明（不阻塞）。"""
+    board = board_for_platform(PLATFORM_STM32)
+    snapshot = build_wiring_snapshot(
+        PLATFORM_STM32,
+        board,
+        [],
+        (),
+        {},
+    )
+    snapshot["rows"] = [
+        {"slug": "k", "role": "K（键）", "role_id": "K", "role_label": "键",
+         "pin": "PA0", "remark": "gpio_out（必接）"}
+    ]
+    write_wiring_snapshot(tmp_path, snapshot)
+    ctx_board, pins, targets = wiring_context(tmp_path, PLATFORM_STM32, [])
+    assert ctx_board["name"] == board.name
+    assert "PA0" in pins and "GND" in pins
+    # rows 端子名（K / 键 / K（键）合成串——评审整改：展示值照抄也放行）
+    # + 板载固定资源名 + 引脚名
+    assert "K" in targets and "键" in targets and "K（键）" in targets
+    assert "板载 LED" in targets and "GND" in targets
+    # 评审整改回归：白名单收渲染合成串——AI 照抄 summary 角色列 / 端子标签
+    # 展示值进 wiring 也放行（旧实现只收 role_id/label 单独值，会误滤）
+    composed = WiringEntry(pin="PA0", target="K（键）")
+    assert filter_wiring_entries([composed], pins, targets) == (composed,)
+
+    # 无快照 → 静态板定义回退（不抛异常）
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    ctx_board2, pins2, targets2 = wiring_context(empty, PLATFORM_STM32, [])
+    assert ctx_board2["name"] == board.name
+    assert len(pins2) > 30
+
+
+def test_read_wiring_rows_snapshot_priority(fake_module_library):
+    """接线行读取：快照行优先（落盘值）；无快照 = manifests 现场推导。"""
+    _add_key_module(fake_module_library)
+    manifests = [ModuleManifest.load(fake_module_library / "key")]
+    derived = read_wiring_rows(fake_module_library / "not-a-dir", manifests, PLATFORM_STM32)
+    assert derived and derived[0]["pin"] == "PB3"
+
+
+def test_wiring_summary_text_lists_rows_and_power():
+    """prompt 白名单段：表行（与 README 同源文本）+ 板载供电/固定资源行；
+    rows 空 / board 缺失各自退化。"""
+    rows = [
+        {"slug": "key", "role": "KEY_START（启动按键）", "pin": "PB3",
+         "remark": "gpio_in（必接）"}
+    ]
+    board = board_for_platform(PLATFORM_STM32).to_dict()
+    text = wiring_summary_text(rows, board)
+    assert "| key | KEY_START（启动按键） | PB3 | gpio_in（必接） |" in text
+    assert "板载供电/固定资源（wiring 可引用）：" in text
+    assert "3V3" in text and "GND" in text and "板载 LED" in text
+    empty_text = wiring_summary_text([], board)
+    assert "接线表为空" in empty_text
+    bare = wiring_summary_text(rows, None)
+    assert "KEY_START" in bare and "板载供电" not in bare
+
+
+@pytest.mark.parametrize(
+    "setup",
+    ["missing", "bad_json", "non_object", "wrong_version"],
+)
+def test_read_wiring_snapshot_corruption_returns_none(tmp_path, setup):
+    """读取容错：无文件 / 坏 JSON / 非对象 / 版本不符 → None（不抛异常）。"""
+    if setup == "missing":
+        pass
+    elif setup == "bad_json":
+        (tmp_path / WIRING_SNAPSHOT_FILENAME).write_text("{oops", encoding="utf-8")
+    elif setup == "non_object":
+        (tmp_path / WIRING_SNAPSHOT_FILENAME).write_text("[1, 2]", encoding="utf-8")
+    else:
+        board = board_for_platform(PLATFORM_STM32)
+        snapshot = build_wiring_snapshot(PLATFORM_STM32, board, [], (), {})
+        snapshot["version"] = WIRING_SNAPSHOT_VERSION + 1
+        write_wiring_snapshot(tmp_path, snapshot)
+    assert read_wiring_snapshot(tmp_path) is None

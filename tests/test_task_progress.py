@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from contest_generator.platforms import PLATFORM_STM32
 from contest_generator.llm import IdeaAnalysis, LLMError, StepReport, TaskDiscussion
+from contest_generator.wiring import WiringEntry
 from contest_generator.params import ParamItem, ParamList, write_params
 from contest_generator.revision import revise_backup_root
 from contest_generator.task_progress import (
@@ -1766,13 +1767,14 @@ def test_run_task_records_first_iteration(tmp_path, monkeypatch):
         "烧录后应看到小车沿黑线行驶（约 0.5m/s）。",
         "若不沿线检查 PA0 与灰度模块 DIO 接线；若抖动检查阈值。",
     )
-    # 报告调用输入：任务 dict + 验证结果 + diff + 模块接口
+    # 报告调用输入：任务 dict + 验证结果 + diff + 模块接口 + 接线数据摘要
     assert len(llm.step_report_calls) == 1
-    report_task, verify_result, diff_text, interfaces = llm.step_report_calls[0]
+    report_task, verify_result, diff_text, interfaces, wiring_summary = llm.step_report_calls[0]
     assert report_task["id"] == "t1"
     assert verify_result["status"] == STATUS_VERIFIED
     assert "循迹已实现" in diff_text
     assert interfaces == ()
+    assert "本工程接线数据" in wiring_summary
     # 未执行任务不受影响
     assert saved.tasks[1].iterations == ()
 
@@ -1964,6 +1966,213 @@ def test_task_iteration_roundtrip_with_step_report():
         }
     )
     assert messy.tasks[0].iterations[0].checklist == ("正常项", "另一项")
+
+
+def test_task_iteration_roundtrip_with_wiring():
+    """迭代记录带 wiring 字段 roundtrip：合法条目读回（note 缺省空串）、坏条目
+    逐条丢弃；旧记录无该字段 → 空元组（向后兼容零改动）。"""
+    plan = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "iterations": [
+                        {
+                            "seq": 1,
+                            "kind": "execute",
+                            "status": "verified",
+                            "wiring": [
+                                {"pin": "PA0", "target": "DIO", "note": "注意极性"},
+                                {"pin": "PA0"},                       # 坏条目 → 丢
+                                {"pin": 9, "target": "DIO"},          # 坏条目 → 丢
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    iteration = plan.tasks[0].iterations[0]
+    assert iteration.wiring == (
+        WiringEntry(pin="PA0", target="DIO", note="注意极性"),
+    )
+    dumped = TaskPlan(tasks=plan.tasks).to_dict()
+    assert dumped["tasks"][0]["iterations"][0]["wiring"] == [
+        {"pin": "PA0", "target": "DIO", "note": "注意极性"}
+    ]
+    # 旧记录（无 wiring 字段）→ 空元组，不拒收
+    legacy = TaskPlan.from_dict(
+        {
+            "version": 1,
+            "generated_at": "",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "循迹",
+                    "description": "循迹决策",
+                    "iterations": [{"seq": 1, "kind": "execute", "status": "verified"}],
+                }
+            ],
+        }
+    )
+    assert legacy.tasks[0].iterations[0].wiring == ()
+
+
+def _task_env_wiring(tmp_path):
+    """假模块库（补 key 接线模块）+ 假母版 + 生成工程 + 拆好任务清单（t1）。"""
+    from contest_generator.generator import generate_project
+    from tests.fakes import _add_module
+
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_module(
+        library,
+        {
+            "slug": "key",
+            "description": "独立按键输入",
+            "dependencies": [],
+            "platforms": {
+                PLATFORM_STM32: {
+                    "files": ["key.c", "key.h"],
+                    "verified": True,
+                    "pins": [
+                        {
+                            "id": "KEY_START",
+                            "type": "gpio_in",
+                            "default": "PB3",
+                            "label": "启动按键",
+                            "required": True,
+                        }
+                    ],
+                },
+            },
+        },
+        {
+            "key.c": '#include "key.h"\nvoid key_init(void);\n',
+            "key.h": "#pragma once\nvoid key_init(void);\n",
+        },
+    )
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    output_dir = tmp_path / "out"
+    generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["key", "dht11"],
+        main_c_content="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+        problem_text="题面",
+    )
+    write_task_plan(
+        output_dir,
+        TaskPlan(
+            tasks=(
+                Task(id="t1", title="循迹", description="循迹决策"),
+            )
+        ),
+    )
+    return library, output_dir
+
+
+def _run_task_wiring(llm, tmp_path, output_dir, library):
+    """带接线模块环境的 run_task（照 test_run_task_* 先例的固定装配）。"""
+    return run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+
+
+def test_run_task_persists_validated_wiring(tmp_path, monkeypatch):
+    """wiring 随步骤报告落盘：合法条目保留（pin ∈ 板引脚、target ∈ 端子名），
+    幻觉 pin（PA99）/ 幻觉 target 逐条丢弃——迭代记录只存校验通过的线。"""
+    library, output_dir = _task_env_wiring(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(
+        executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n",
+        step_report=StepReport(
+            what_changed="在 main.c 实现循迹状态机，编译通过。",
+            user_action="把 PB3 接到按键模块启动按键，烧录后观察。",
+            wiring=(
+                WiringEntry(pin="PB3", target="KEY_START", note="注意极性"),
+                WiringEntry(pin="PA99", target="KEY_START"),   # 幻觉引脚 → 丢
+                WiringEntry(pin="PB3", target="PA99"),          # 幻觉端子 → 丢
+                WiringEntry(pin="3V3", target="板载 LED"),      # 板载电源→固定资源 → 保留
+            ),
+        ),
+    )
+    run_task(
+        llm=llm,
+        task_id="t1",
+        note="",
+        problem_text="题面",
+        qa_text="",
+        manifests=[],
+        platform=PLATFORM_STM32,
+        library_dir=library,
+        master_project_dir=tmp_path / "masters" / PLATFORM_STM32,
+        main_c="int main(void) { /* TODO */ while (1); }\n",
+        output_dir=output_dir,
+        work_root=tmp_path / "work",
+        emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+    )
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    iteration = saved.tasks[0].iterations[0]
+    assert iteration.wiring == (
+        WiringEntry(pin="PB3", target="KEY_START", note="注意极性"),
+        WiringEntry(pin="3V3", target="板载 LED", note=""),
+    )
+    assert iteration.what_changed  # 报告其它字段不受校验影响
+
+
+def test_run_task_all_wiring_invalid_degrades_to_empty(tmp_path, monkeypatch):
+    """全非法 wiring（全丢）→ 迭代 wiring 空元组（前端走退化路径）——
+    报告其它字段照常落盘，任务不阻断。"""
+    library, output_dir = _task_env_wiring(tmp_path)
+    monkeypatch.setattr(
+        "contest_generator.deepen.resolve_compile_toolchain",
+        lambda platform, uv4_override="", make_override="": (tmp_path / "UV4.exe", None),
+    )
+    monkeypatch.setattr(
+        "contest_generator.deepen.collect_build_log",
+        lambda platform, out_dir, uv4=None, make=None: _build(0),
+    )
+    llm = FakeLLM(
+        executed_main_c="int main(void) { /* 循迹已实现 */ while (1); }\n",
+        step_report=StepReport(
+            what_changed="在 main.c 实现循迹状态机，编译通过。",
+            user_action="把 PA0 接到灰度模块 DIO，烧录后观察沿线。",
+            wiring=(WiringEntry(pin="PA99", target="DIO"),),
+        ),
+    )
+    _run_task_wiring(llm, tmp_path, output_dir, library)
+    saved = read_task_plan(output_dir)
+    assert saved is not None
+    iteration = saved.tasks[0].iterations[0]
+    assert iteration.wiring == ()
+    assert iteration.user_action  # 文字指引照常（退化路径 = 纯文字）
+    assert iteration.status == STATUS_VERIFIED
 
 
 class _ReportBrokenLLM(FakeLLM):
