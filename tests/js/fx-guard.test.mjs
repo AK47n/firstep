@@ -134,7 +134,7 @@ const DOMAINS = {
     globalChatHTML: "fn", globalNoteBadgeHTML: "fn",
     taskEditFormHTML: "fn", taskMoreMenuHTML: "fn",
     ideaDraftListHTML: "fn",
-    taskResourcesHTML: "fn", resourceIsHardware: "fn", resourcesOverviewHTML: "fn",
+    taskResourcesHTML: "fn", resourceIsHardware: "fn", aggregateResourceGroups: "fn", resourcesOverviewHTML: "fn",
     scoreRefsOverviewHTML: "fn",
     taskChecklistHTML: "fn", checklistStateKey: "fn",
     taskErrorsHTML: "fn", tasksDoneCount: "fn",

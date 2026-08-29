@@ -536,17 +536,23 @@ export function taskStepReportHTML(task, opts) {
     + "</div>";
 }
 
-/** 资源名是否硬件实体（工单 task-insight/02 评审整改）：引脚（PA0/PB12）、
+/** 引脚名判据单源（resource-overview-polish/01 评审整改）：resourceIsHardware 与
+ * aggregateResourceGroups 共用——/^P[A-G]\d{1,2}$/i（MSPM0 PA/PB + STM32 PA-PG 兼容）。 */
+function isPinName(name) {
+  return /^P[A-G]\d{1,2}$/i.test(String(name == null ? "" : name).trim());
+}
+
+/** 资源名是否硬件实体（工单 task-insight/02 评审整改）：引脚（PA0/PB12，
+ * 判据单源 isPinName）、
  * 外设（TIM1/UART0/ADC0/GPIOA 等）、中断（*_IRQn）。模块名（xunji）、函数名、
  * 宏名（LED_BEEP）不是硬件——任务间复用模块是正常代码复用，不构成互斥冲突
  * 暗雷，总览里不该标黄（AI 偶将模块名填入 resources，前端兜底降噪）。
- * 词表式判定：引脚 /^P[A-G]\d{1,2}$/（MSPM0 PA/PB + STM32 PA-PG 兼容），
- * 外设白名单 = TIM|TIMA|TIMB|UART|USART|SPI|I2C|I2S|ADC|DAC|DMA|CAN|PWM|COMP|GPIO[x]，
+ * 词表式判定：外设白名单 = TIM|TIMA|TIMB|UART|USART|SPI|I2C|I2S|ADC|DAC|DMA|CAN|PWM|COMP|GPIO[x]，
  * 中断 = 以 _IRQn 结尾。其余（含大写宏名）一律非硬件。 */
 export function resourceIsHardware(name) {
   const s = String(name == null ? "" : name).trim();
   if (!s) return false;
-  if (/^P[A-G]\d{1,2}$/i.test(s)) return true;
+  if (isPinName(s)) return true;
   if (/^(TIM|TIMA|TIMB|UART|USART|SPI|I2C|I2S|ADC|DAC|DMA|CAN|PWM|COMP)[A-Z]{0,1}\d*$/i.test(s)) return true;
   if (/^GPIO[A-Z]$/i.test(s)) return true;
   if (/_IRQn$/i.test(s)) return true;
@@ -576,14 +582,14 @@ function taskResourceChipsHTML(task) {
   }).join(" ");
 }
 
-/** 资源总览表（工单 task-insight/02，纯前端聚合零后端）：从 plan.tasks[].resources
- * 聚合「资源名 → 用到的任务」。**同一硬件资源**（引脚/外设/中断，判据 =
- * resourceIsHardware）被 ≥2 任务占用 → .res-conflict 行标黄「⚠ 多任务使用，
- * 上板前确认」（重复不一定是错——可能是先后复用，提示学生联调前确认）；
- * 非硬件项（模块名/函数名/宏名，如 xunji）多任务复用 = 正常代码复用，不标黄
- * （.res-soft muted 样式，标题注「模块复用」降噪——AI 偶把模块名填入 resources，
- * 前端兜底不误导）。全部任务无资源标注 = 空串（容器隐藏）。 */
-export function resourcesOverviewHTML(plan) {
+/** 资源聚合单源（resource-overview-polish/01）：plan.tasks[].resources →
+ * 三组聚合——pins（引脚 /^P[A-G]\d{1,2}$/i，判据单源 isPinName）、other（外设/中断，
+ * resourceIsHardware 其余真值）、soft（模块名/宏名等非硬件）。每组元素
+ * {names, users, conflict}（soft 恒 conflict=false——非硬件不构成互斥冲突）：
+ * pins 组内**用户集合相同**的条目合并 names（同一任务独占十几个引脚只占一行）；
+ * names 保持首次出现顺序、组内冲突行先行；空聚合 → null。users [{id,title}]
+ * 与 list/板图两视图共用（板图按 names 逐脚查用户）。 */
+export function aggregateResourceGroups(plan) {
   const tasks = (plan || {}).tasks || [];
   const byResource = new Map();
   tasks.forEach((task, index) => {
@@ -594,18 +600,68 @@ export function resourcesOverviewHTML(plan) {
       byResource.get(name).push({ id: (task && task.id) || "t" + (index + 1), title: (task && task.title) || "" });
     });
   });
-  if (!byResource.size) return "";
-  const rows = Array.from(byResource.entries()).map(([name, users]) => {
+  if (!byResource.size) return null;
+  const isPin = (n) => /^P[A-G]\d{1,2}$/i.test(n);
+  const userKey = (users) => users.map((u) => u.id).join("|");
+  const pinRows = [];
+  const pinByKey = new Map();
+  const otherRows = [];
+  const softRows = [];
+  byResource.forEach((users, name) => {
     const hw = resourceIsHardware(name);
-    const conflict = hw && users.length >= 2;
-    const userText = users.map((u) => esc(u.id + "：" + (u.title || ""))).join(" · ");
-    return '<div class="res-row' + (conflict ? " res-conflict" : hw ? "" : " res-soft") + '">'
-      + '<span class="res-chip' + (hw ? "" : " res-soft") + '">' + esc(name) + "</span>"
+    const entry = { names: [name], users, conflict: hw && users.length >= 2 };
+    if (isPin(name)) {
+      const key = userKey(users);
+      const row = pinByKey.get(key);
+      if (row) row.names.push(name);
+      else { pinByKey.set(key, entry); pinRows.push(entry); }
+    } else if (hw) otherRows.push(entry);
+    else softRows.push(entry);
+  });
+  // 组内冲突先行（同用户集合差异与稳定性由首次出现顺序保证）
+  const sortRows = (rows) => rows.slice().sort((a, b) => Number(b.conflict) - Number(a.conflict));
+  return { pins: sortRows(pinRows), other: sortRows(otherRows), soft: softRows };
+}
+
+/** 资源总览表（工单 task-insight/02，纯前端聚合零后端；resource-overview-polish/01
+ * 重构为分组视图）：从 plan.tasks[].resources 聚合「资源名 → 用到的任务」。
+ * **同一硬件资源**（引脚/外设/中断，判据 = resourceIsHardware）被 ≥2 任务占用 →
+ * .res-conflict 行标黄「⚠ 多任务使用，上板前确认」（重复不一定是错——可能是先后
+ * 复用，提示学生联调前确认）；非硬件项（模块名/函数名/宏名，如 xunji）多任务复用
+ * = 正常代码复用，不标黄（.res-soft muted 样式，标题注「模块复用」降噪——AI 偶把
+ * 模块名填入 resources，前端兜底不误导）。布局四段：⚠ 冲突资源（置顶）→ 引脚占用
+ * （同任务独占合并 chips 行）→ 外设与中断 → 模块复用（details 默认收起）。全部任务
+ * 无资源标注 = 空串（容器隐藏）。 */
+export function resourcesOverviewHTML(plan) {
+  const groups = aggregateResourceGroups(plan);
+  if (!groups) return "";
+  const rowHTML = (entry, rowClass, chipClass, note) => {
+    const chips = entry.names.length > 1
+      ? '<span class="res-chip-group">' + entry.names.map((n) => '<span class="res-chip' + chipClass + '">' + esc(n) + "</span>").join("") + "</span>"
+      : '<span class="res-chip' + chipClass + '">' + esc(entry.names[0]) + "</span>";
+    const userText = entry.users.map((u) => esc(u.id + "：" + (u.title || ""))).join(" · ");
+    return '<div class="res-row' + rowClass + '">' + chips
       + '<span class="res-users">' + userText + "</span>"
-      + (conflict ? '<span class="res-conflict-note">⚠ 多任务使用，上板前确认</span>'
-        : hw ? "" : '<span class="res-soft-note">模块复用（非硬件，不算冲突）</span>')
-      + "</div>";
-  }).join("");
+      + (note ? note : "") + "</div>";
+  };
+  const conflictHRows = [...groups.pins, ...groups.other].filter((e) => e.conflict);
+  const conflictHTML = conflictHRows.map((e) =>
+    rowHTML(e, " res-conflict", "", '<span class="res-conflict-note">⚠ 多任务使用，上板前确认</span>')
+  ).join("");
+  const pinHTML = groups.pins.filter((e) => !e.conflict).map((e) => rowHTML(e, "", "", "")).join("");
+  const otherHTML = groups.other.filter((e) => !e.conflict).map((e) => rowHTML(e, "", "", "")).join("");
+  const softHTML = groups.soft.map((e) =>
+    rowHTML(e, " res-soft", " res-soft", '<span class="res-soft-note">模块复用（非硬件，不算冲突）</span>')
+  ).join("");
+  const group = (title, inner, cls) => inner
+    ? '<div class="res-group' + (cls ? " " + cls : "") + '"><div class="res-group-title">' + title + "</div>" + inner + "</div>"
+    : "";
+  const rows = group("⚠ 冲突资源（多任务硬件共享）", conflictHTML, "res-group-conflict")
+    + group("引脚占用", pinHTML)
+    + group("外设与中断", otherHTML)
+    + (softHTML
+      ? '<details class="res-soft-details"><summary class="res-group-title">模块复用（非硬件，不算冲突）</summary>' + softHTML + "</details>"
+      : "");
   return '<div class="muted" style="margin-bottom:2px">资源总览（同一资源被多个任务占用 = 联调冲突暗雷，标黄提示）</div>'
     + '<div class="res-table">' + rows + "</div>";
 }
@@ -986,7 +1042,7 @@ if (typeof window !== "undefined") {
     globalChatHTML, globalNoteBadgeHTML,
     taskEditFormHTML, taskMoreMenuHTML,
     ideaDraftListHTML,
-    taskResourcesHTML, resourceIsHardware, resourcesOverviewHTML,
+    taskResourcesHTML, resourceIsHardware, aggregateResourceGroups, resourcesOverviewHTML,
     scoreRefsOverviewHTML,
     checklistStateKey,
     taskErrorsHTML,
