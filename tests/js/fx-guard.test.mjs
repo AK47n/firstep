@@ -186,6 +186,10 @@ const DOMAINS = {
     GLOSSARY_TERMS: "object",
     glossaryHTML: "fn",
   },
+  "guide.js": {
+    GUIDE_TABS: "object",
+    guidePanelFor: "fn", guideTabNext: "fn",
+  },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
