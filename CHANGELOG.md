@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=bca22c3df29a56de2da25162c19b4dd35456705f -->
+<!-- changelog-auto: last-commit=76eedcc4382e6ce3de0b332db5381eac34bf393c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
+- 00:15 新手上手 Y2 02：8 个导航 tab 悬停中文 title + 文案守卫
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
