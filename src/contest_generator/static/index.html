@@ -144,6 +144,15 @@
                              height: 2px; border-radius: 2px;
                              background: linear-gradient(90deg, var(--accent), #8b5cf6);
                              box-shadow: 0 0 8px rgba(0, 212, 255, .55); }
+  /* 顶部导航 tab 分组（工单 tab-grouping/01）：组标签 = 不可点击的弱化小字
+     （aria-hidden，可访问名走组容器 role=group aria-label）；组间细分隔线；
+     窄屏组内换行不破（header 已 flex-wrap，nav 自身再兜底一层） */
+  header > nav { flex-wrap: wrap; }
+  .tab-group { display: flex; gap: 6px; align-items: center; }
+  .tab-group + .tab-group { margin-left: 10px; padding-left: 10px;
+                            border-left: 1px solid var(--border); }
+  .tab-group-label { font-size: 12px; color: var(--muted); font-weight: 500;
+                     white-space: nowrap; user-select: none; }  /* 极窄屏只留按钮 */
   main { max-width: 1400px; margin: 20px auto; padding: 0 24px; }
   /* 内容区加宽（工单 ui-polish-6/01）：生成页 12 步流程吃满 1400px；
      其它页（设置/赛题库/模块库等表格页）1280 居中，避免过宽空旷 */
@@ -1855,14 +1864,20 @@
   <h1><span class="brand-en"><span class="b1">first</span><span class="b2">ep</span><span class="cursor"></span></span><span class="brand-cn">电赛工程生成器</span></h1>
   <span class="sub">赛题原文<span class="arr">→</span>AI 推荐<span class="arr">→</span>引脚配置<span class="arr">→</span>骨架<span class="arr">→</span>生成<span class="arr">→</span>编译修复<span class="arr">→</span>交接提示词</span>
   <nav>
-    <button data-tab="generate" class="active">生成</button>
-    <button data-tab="library">模块库</button>
-    <button data-tab="reference">参考文件库</button>
-    <button data-tab="pdf">PDF 资料库</button>
-    <button data-tab="topic">赛题库</button>
-    <button data-tab="master">母版</button>
-    <button data-tab="changelog">更新记录</button>
-    <button data-tab="settings">设置</button>
+    <div class="tab-group" role="group" aria-label="做题">
+      <span class="tab-group-label" aria-hidden="true">做题</span>
+      <button data-tab="generate" class="active">生成</button>
+      <button data-tab="topic">赛题库</button>
+      <button data-tab="settings">设置</button>
+    </div>
+    <div class="tab-group" role="group" aria-label="资料管理">
+      <span class="tab-group-label" aria-hidden="true">资料管理</span>
+      <button data-tab="library">模块库</button>
+      <button data-tab="reference">参考文件库</button>
+      <button data-tab="pdf">PDF 资料库</button>
+      <button data-tab="master">母版</button>
+      <button data-tab="changelog">更新记录</button>
+    </div>
   </nav>
   <button id="btn-theme" type="button" title="切换到亮色主题"
           style="margin-left:6px;padding:6px 9px;font-size:14px;border-radius:999px">🌙</button>
