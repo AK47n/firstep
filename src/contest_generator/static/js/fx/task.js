@@ -181,22 +181,28 @@ export function taskCardHTML(task, index, opts) {
     // 建议重做徽章（工单 idea-fix/02）：灵活修正落地后受影响任务标记
     + taskNeedsRedoBadge(task);
   const refs = taskScoreRefsText(task.score_refs, o.scorePoints);
-  const deps = (task.depends_on || []).length
-    ? '<div class="muted" style="margin-top:4px">前置：' + esc(task.depends_on.join("、")) + "</div>"
-    : "";
-  const verifyNote = task.verify === "manual"
-    ? '<span class="muted"> · ' + taskVerifyLabel(task.verify) + "</span>"
-    : "";
-  return '<div class="item" data-task-id="' + esc(task.id) + '">'
+  // 元信息行（工单 task-card-polish/01）：资源 / 需上板 / 评分点 / 前置合并为
+  // 一行紧凑 chips（原先各占一条 muted 行，层级弱）；文案与顺序：资源 →
+  // 需上板 → 评分点 → 前置；全空 = 空串（不渲染）
+  const metaItems = [];
+  const resChips = taskResourceChipsHTML(task);
+  if (resChips) metaItems.push('<span class="task-meta-item">资源：' + resChips + "</span>");
+  if (task.verify === "manual") {
+    metaItems.push('<span class="task-meta-item task-meta-warn">'
+      + esc(taskVerifyLabel(task.verify)) + "</span>");
+  }
+  if (refs) metaItems.push('<span class="task-meta-item">评分点：' + esc(refs) + "</span>");
+  if ((task.depends_on || []).length) {
+    metaItems.push('<span class="task-meta-item">前置：'
+      + esc(task.depends_on.join("、")) + "</span>");
+  }
+  const meta = metaItems.length ? '<div class="task-meta">' + metaItems.join("") + "</div>" : "";
+  return '<div class="item task-card" data-task-id="' + esc(task.id) + '">'
     + '<div class="head"><span class="slug">' + taskOrderLabel(index) + " · " + task.id
     + " · " + esc(task.title) + "</span>"
     + " " + badge + "</div>"
     + '<div class="reason">' + esc(task.description) + "</div>"
-    // 资源徽标（工单 task-insight/02）：本任务占用的引脚/外设/中断（拆解时
-    // AI 标注，顶部资源总览据此发现联调冲突）——非空才渲染
-    + taskResourcesHTML(task)
-    + (refs ? '<div class="muted" style="margin-top:4px">评分点：' + esc(refs) + verifyNote + "</div>" : (verifyNote ? '<div class="muted" style="margin-top:4px">' + verifyNote + "</div>" : ""))
-    + deps
+    + meta
     + taskIterationsHTML(task)
     + taskDialogAdoptHTML(task)
     + taskNextActionHTML(task)
@@ -324,42 +330,46 @@ export function taskIterationLabel(kind) {
 }
 
 /** 轮次历史展开区（工单 task-feedback/03）：空历史 = 空串（不渲染）。
- * 每轮一行：轮次号 + 种类 + 反馈摘要（截断 40 字）+ 该轮终态徽章 +
- * 编译结果徽章（compile_summary，截断 40 字；颜色按该轮终态推断——
- * verified=绿 / failed=红 / 其余灰）+ 时间（at）+ 备份 + 「回到这轮之前」
- * 按钮（撤销语义——备份 = 该轮执行前快照，恢复后状态回该轮前终态）。
- * 无备份的轮次不给按钮（防御）。 */
+ * 每轮两行式（工单 task-card-polish/01 视觉重构，信息与契约不变）：
+ * 第一行 .task-iteration-line = 轮次号 + 种类 + 该轮终态徽章 + 编译结果徽章
+ * （compile_summary，截 40 字；颜色按该轮终态推断——verified=绿 /
+ * failed=红 / 其余灰）+「回到这轮之前」按钮（右对齐；撤销语义——备份 =
+ * 该轮执行前快照，恢复后状态回该轮前终态）；第二行 .task-iteration-detail
+ * = 反馈摘要（截 40 字）+「做了什么」摘要（截 40 字）+ 时间 + 备份。
+ * 无备份的轮次不给按钮（防御）；无备份/无摘要 = 不渲染第二行。 */
 export function taskIterationsHTML(task) {
   const iterations = (task && task.iterations) || [];
   if (!iterations.length) return "";
   const rows = iterations.map((it) => {
-    const feedback = it.feedback
-      ? '<span class="muted">「' + esc(truncate(it.feedback, 40)) + "」</span> "
-      : "";
     const compile = it.compile_summary
-      ? ' <span class="badge ' + iterationCompileBadgeClass(it.status) + '">编译：'
+      ? '<span class="badge ' + iterationCompileBadgeClass(it.status) + '">编译：'
         + esc(truncate(it.compile_summary, 40)) + "</span>"
       : "";
-    // 步骤报告摘要（工单 stepwise-deepen/02）：该轮「AI 做了什么」截 40 字；
-    // 报告调用降级（空串）= 不显示（历史行保持干净）
-    const changed = it.what_changed
-      ? ' <span class="muted">「' + esc(truncate(it.what_changed, 40)) + "」</span>"
-      : "";
-    const at = it.at ? ' <span class="muted">' + esc(String(it.at)) + "</span>" : "";
     const rollback = it.backup_id
-      ? '<button class="btn-task-iteration-rollback" data-task="' + esc(task.id || "")
+      ? '<button class="btn-mini btn-task-iteration-rollback" data-task="' + esc(task.id || "")
         + '" data-seq="' + esc(String(it.seq)) + '">回到这轮之前</button>'
       : "";
-    return '<div class="reason" style="margin-top:4px">第 ' + esc(String(it.seq))
-      + " 轮 · " + esc(taskIterationLabel(it.kind)) + " " + feedback
+    const details = [];
+    if (it.feedback) details.push('「' + esc(truncate(it.feedback, 40)) + "」");
+    if (it.what_changed) details.push('「' + esc(truncate(it.what_changed, 40)) + "」");
+    if (it.at) details.push(esc(String(it.at)));
+    if (it.backup_id) details.push('备份 <span class="slug">' + esc(String(it.backup_id)) + "</span>");
+    return '<div class="task-iteration">'
+      + '<div class="task-iteration-line">'
+      + '<span class="task-iteration-title">第 ' + esc(String(it.seq)) + " 轮 · "
+        + esc(taskIterationLabel(it.kind)) + "</span>"
       + '<span class="badge ' + taskStatusBadgeClass(it.status || "pending") + '">'
-      + taskStatusLabel(it.status || "pending") + "</span>"
-      + compile + changed + at
-      + (it.backup_id ? ' 备份 <span class="slug">' + esc(String(it.backup_id)) + "</span>" : "")
-      + " " + rollback + "</div>";
+        + taskStatusLabel(it.status || "pending") + "</span>"
+      + compile + rollback
+      + "</div>"
+      + (details.length
+        ? '<div class="task-iteration-detail muted">' + details.join(" · ") + "</div>"
+        : "")
+      + "</div>";
   }).join("");
-  return '<div class="muted" style="margin-top:8px">历史记录（共 ' + esc(String(iterations.length))
-    + " 轮）</div>" + rows;
+  return '<div class="muted task-iterations-title" style="margin-top:8px">历史记录（共 '
+    + esc(String(iterations.length)) + " 轮）</div>"
+    + '<div class="task-iterations">' + rows + "</div>";
 }
 
 /** 最新一轮迭代（评审整改：三处「取末轮」收敛单源）；无轮次 = null。 */
@@ -510,15 +520,22 @@ export function resourceIsHardware(name) {
  * （模块名/函数名/宏名——AI 偶发误标）以 .res-soft muted 样式降级展示：
  * 信息保留但不与硬件资源同权重刺眼。空 = 空串（旧清单无该字段 / 不新增占用）。 */
 export function taskResourcesHTML(task) {
+  const chips = taskResourceChipsHTML(task);
+  if (!chips) return "";
+  return '<div class="muted" style="margin-top:4px">资源：' + chips + "</div>";
+}
+
+/** 任务资源 chips 串（工单 task-card-polish/01 抽取）：只产 chips 内容，
+ * 供任务卡元信息行（.task-meta）与 taskResourcesHTML（既有出口）共用，
+ * 空 = 空串。 */
+function taskResourceChipsHTML(task) {
   const resources = (task && task.resources) || [];
   if (!resources.length) return "";
-  return '<div class="muted" style="margin-top:4px">资源：'
-    + resources.map((r) => {
-      const name = String(r);
-      return '<span class="res-chip' + (resourceIsHardware(name) ? "" : " res-soft") + '">'
-        + esc(name) + "</span>";
-    }).join(" ")
-    + "</div>";
+  return resources.map((r) => {
+    const name = String(r);
+    return '<span class="res-chip' + (resourceIsHardware(name) ? "" : " res-soft") + '">'
+      + esc(name) + "</span>";
+  }).join(" ");
 }
 
 /** 资源总览表（工单 task-insight/02，纯前端聚合零后端）：从 plan.tasks[].resources

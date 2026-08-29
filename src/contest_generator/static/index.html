@@ -1482,6 +1482,35 @@
     100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 0%, transparent), var(--shadow-card); }
   }
   @media (prefers-reduced-motion: reduce) { .task-card-highlight { animation: none; } }
+  /* 任务卡视觉重构（工单 task-card-polish/01）：元信息合并为一行紧凑 chips
+     （资源/需上板/评分点/前置，原先四条独立 muted 行；文案与顺序不变） */
+  .task-meta { display: flex; flex-wrap: wrap; align-items: center;
+               gap: 4px 14px; margin-top: 6px; font-size: 12px;
+               color: var(--muted); }
+  .task-meta-item { display: inline-flex; align-items: center; gap: 4px; }
+  .task-meta-warn { color: var(--warn); font-weight: 600; }
+  /* 轮次历史两行式（工单 task-card-polish/01）：第一行轮次+徽章+回退按钮
+     （右对齐），第二行 muted 摘要/时间/备份——替代原先一行平铺 */
+  .task-iterations { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
+  .task-iteration { border: 1px solid var(--border); border-radius: 6px;
+                    background: var(--panel); padding: 4px 8px; }
+  .task-iteration-line { display: flex; flex-wrap: wrap; align-items: center;
+                         gap: 6px; font-size: 12.5px; }
+  .task-iteration-title { font-weight: 600; }
+  .task-iteration-line .badge { margin-left: 0; }
+  .task-iteration-line .btn-task-iteration-rollback { margin-left: auto; }
+  .task-iteration-detail { margin-top: 2px; font-size: 12px; line-height: 1.5; }
+  /* 任务卡按钮层级（工单 task-card-polish/01）：主操作「做这一步」accent 实底；
+     物理动作「烧录到板子」与咨询「有不懂的？问这里」accent 描边；其余 base 统一 */
+  .task-card .row { gap: 8px; }
+  .task-card .btn-task-run { background: var(--accent); border-color: var(--accent);
+                             color: var(--on-accent); }
+  .task-card .btn-task-run:not(:disabled):hover { background: var(--accent-dark); color: var(--on-accent); }
+  .task-card .btn-task-flash, .task-card .btn-task-dialog {
+                             border-color: var(--accent); color: var(--accent); }
+  .task-card .btn-task-flash:not(:disabled):hover, .task-card .btn-task-dialog:not(:disabled):hover {
+                             background: var(--accent-dim); color: var(--accent); }
+  .task-card .btn-task-dialog:not(:disabled).active { background: var(--accent-dim); }
   /* 建议重做徽章（工单 idea-fix/02）：灵活修正落地后受影响步骤的警告徽标 */
   .task-redo-badge { background: var(--warn-dim); color: var(--warn); }
   /* 编译错误列表（工单 error-jump-task/02）：任务结果面板失败时逐条列出，
