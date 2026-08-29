@@ -119,8 +119,10 @@ export function resourcesToolbarHTML(view) {
 
 /** 板图整块 HTML：板名 + 图例（任务色点/冲突说明/空闲说明）+ SVG +
  * 「不在板上的资源」chips 行（外设/中断/软资源/未引出引脚不回丢）。
- * groups = aggregateResourceGroups(plan) 返回值；taskColors 可显式传入（缺省按 groups 分配）。 */
-export function resourceBoardHTML(board, groups, taskColors) {
+ * groups = aggregateResourceGroups(plan) 返回值；taskColors 可显式传入（缺省按 groups 分配）。
+ * opts.conflictLegend = false 时隐藏「⚠ 多任务共享」图例项（单任务视角——
+ * 如任务接线图退化图，groups 已过滤到单任务且无冲突，该图例会误导）。 */
+export function resourceBoardHTML(board, groups, taskColors, opts) {
   if (!board) {
     return '<div class="res-board-msg muted">板定义缺失——无法绘制资源占用板图。</div>';
   }
@@ -148,7 +150,10 @@ export function resourceBoardHTML(board, groups, taskColors) {
   const svg = resourceBoardSVG(board, pinAttr);
   const legend = [...colors.entries()].map(([id, color]) =>
     '<span class="lg"><span class="dot" style="background:' + esc(color) + '"></span>' + esc(id) + "</span>"
-  ).join("") + '<span class="lg"><span class="dot res-legend-conflict"></span>⚠ 多任务共享（联调冲突）</span>'
+  ).join("")
+    + (!(opts && opts.conflictLegend === false)
+      ? '<span class="lg"><span class="dot res-legend-conflict"></span>⚠ 多任务共享（联调冲突）</span>'
+      : "")
     + '<span class="lg"><span class="dot"></span>空闲 IO</span>';
   const missingHTML = missing.length
     ? '<div class="res-board-missing"><span class="muted">不在板上的资源（外设/中断/软资源）：</span>'

@@ -101,6 +101,11 @@ test("resourceBoardHTML: 板名/图例/SVG/不在板上资源 chips/空态", () 
   // 空态
   assert.ok(resourceBoardHTML(null, groups).includes("板定义缺失"));
   assert.ok(resourceBoardHTML(board, null).includes("尚无资源标注"));
+  // 单任务视角（task-wiring-diagram/04 评审整改）：conflictLegend=false 隐藏
+  // 「⚠ 多任务共享」图例项（单任务 groups 无冲突语义，图例会误导）
+  const single = resourceBoardHTML(board, groups, undefined, { conflictLegend: false });
+  assert.ok(!single.includes("⚠ 多任务共享（联调冲突）"));
+  assert.ok(single.includes("空闲 IO"));
 });
 
 test("resourceBoardHTML: 转义（板名/任务标题/资源名含特殊字符）", () => {

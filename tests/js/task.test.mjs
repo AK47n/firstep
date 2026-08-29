@@ -529,6 +529,39 @@ test("taskNextActionHTML: 接线图三输入域（有 wiring → 图 + 原文并
   assert.ok(bare.includes("烧录观察"));
 });
 
+test("taskNextActionHTML: wiringOpts 每任务装配（uid 分开 card/result，flat 缺省兼容）", () => {
+  const board = {
+    name: "测板", platform: "stm32", pcb_color: "", pins: [{ name: "PB3", kind: "io", x: 0, y: 0 }],
+    fixed: [], landmarks: [],
+  };
+  const rows = [{ slug: "key", role: "KEY_START", role_id: "KEY_START", role_label: "", pin: "PB3", remark: "gpio_in" }];
+  const task = {
+    id: "t1", status: "unverified",
+    iterations: [{ seq: 1, kind: "execute", status: "unverified", user_action: "接 KEY_START", wiring: [{ pin: "PB3", target: "KEY_START" }] }],
+  };
+  const opts = {
+    wiringOpts: (t) => ({
+      wiringCtx: { board, rows },
+      wiringUid: "card:" + t.id,
+    }),
+  };
+  const html = taskNextActionHTML(task, opts);
+  assert.ok(html.includes("wiring-hl"));
+  assert.ok(html.includes('data-wiring-uid="card:t1"'));
+  // 结果面板走同一装配 + 不同 uid（host 并存互不干扰）
+  const reportHTML = taskStepReportHTML(task, {
+    wiringOpts: (t) => ({
+      wiringCtx: { board, rows },
+      wiringUid: "result:" + t.id,
+    }),
+  });
+  assert.ok(reportHTML.includes("wiring-hl"));
+  assert.ok(reportHTML.includes('data-wiring-uid="result:t1"'));
+  // flat 缺省（03 契约）→ uid 空串属性存在但不报错
+  const flat = taskNextActionHTML(task, { wiringCtx: { board, rows } });
+  assert.ok(flat.includes("wiring-hl"));
+});
+
 test("taskStepReportHTML: 结果面板步骤报告块内同一接线图装配（有 wiring 渲染 / 无 wiring 空串）", () => {
   const board = {
     name: "测板", platform: "stm32", pcb_color: "", pins: [
