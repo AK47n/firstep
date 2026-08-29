@@ -1,10 +1,11 @@
-// ui/welcome.js — 首次欢迎卡胶水（工单 newcomer-onboarding/03）：
+// ui/welcome.js — 首次欢迎卡胶水（工单 newcomer-onboarding/03：
 // 读状态（api_configured / 草稿 / localStorage 标记）→ welcomeMode
 // 判定 → 渲染到 #welcome-card；行动按钮复用既有路径：切设置页签
 // （直接触发 nav 按钮点击 = 复用 tab 切换全部既有逻辑，避免重复实现）
 // 后聚焦 #set-api-key / 点 #btn-env-check；「不再显示」写 localStorage 即隐藏。
 // 跳转归一（工单 beginner-guide/02 评审整改）：gotoSettings 泛化为
 // ui/nav-jump.js 的 gotoNavTab，欢迎卡 / gen-banner / 新手指引共用。
+// 工单 beginner-guide/04：full 态新增「先看新手指引」按钮 → gotoNavTab("guide")。
 import { $, state } from "/js/app.js";
 import { draftLoad } from "/js/fx/draft.js";
 import { WELCOME_DISMISS_KEY, welcomeMode, welcomeCardHTML } from "/js/fx/welcome.js";
@@ -21,7 +22,9 @@ export function initWelcome() {
   slot.innerHTML = welcomeCardHTML(mode);
   slot.classList.toggle("hidden", mode === "hidden");
 
-  // 欢迎卡行动按钮与 gen-banner「去设置」共用同一跳转逻辑（去配 key）
+  // 欢迎卡行动按钮全部走同一条 gotoNavTab 路径：新增/变更按钮只需加一行
+  // （工单 04「先看新手指引」去 guide 页签；其余去配置 key / 体检 / 不再显示）
+  $("btn-welcome-guide")?.addEventListener("click", () => gotoNavTab("guide"));
   $("btn-welcome-goto-key")?.addEventListener("click", () =>
     gotoNavTab("settings", "set-api-key")
   );
