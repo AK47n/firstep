@@ -178,6 +178,10 @@ const DOMAINS = {
     revisePanelFor: "fn", reviseTabsHTML: "fn", reviseTabBadge: "fn",
     reviseTabNext: "fn",
   },
+  "welcome.js": {
+    WELCOME_DISMISS_KEY: "string",
+    welcomeMode: "fn", welcomeCardHTML: "fn",
+  },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

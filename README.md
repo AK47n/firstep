@@ -41,8 +41,5 @@
 - **双击 `start-app.vbs` 没反应 / 没开浏览器**：先运行 `install.bat` 装依赖；再不行看日志 `%USERPROFILE%\.contest_generator\webapp.log`。
 - **提示端口 8000 被占用**：关闭占用该端口的程序后重新双击 `start-app.vbs`（本工具不会自动换端口）。
 - **提示未配置 AI**：右上角「设置」填写 API key（key 存在 `%USERPROFILE%\.contest_generator\config.json`）。
+- **没装编译工具链 / 想自动编译**：「设置」页填 Keil 的 `uv4_path` 或 `gmake` 工具链路径（「检查环境」会直接提示缺哪一项）。
 - **想停掉服务**：双击 `stop-firstep.bat`。
-
-## 开发者
-
-开发流程与规范见 `CLAUDE.md` / `CONTEXT.md`；变更记录见 `CHANGELOG.md`。

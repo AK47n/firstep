@@ -199,6 +199,14 @@
   .env-detail { flex: 1; white-space: pre-wrap; word-break: break-all; }
   .banner { background: var(--warn-dim); border: 1px solid var(--warn-border); color: var(--warn);
             border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
+  .welcome-card { background: var(--info-dim); border: 1px solid var(--info-border); color: var(--info);
+                  border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; font-size: 14px; }
+  .welcome-card .welcome-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .welcome-card .welcome-sub { opacity: .92; margin-bottom: 10px; }
+  .welcome-card .welcome-steps { margin: 0 0 10px 18px; padding: 0; }
+  .welcome-card .welcome-steps li { margin: 3px 0; }
+  .welcome-card .welcome-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .welcome-card .welcome-line { opacity: .92; }
   .platform-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
                    cursor: pointer; flex: 1; min-width: 220px; background: var(--panel); }
   .platform-card:hover { border-color: var(--border-strong); }
@@ -1867,7 +1875,9 @@
 <main>
   <!-- ============================ 生成页 ============================ -->
   <section id="tab-generate" class="page active">
-    <div id="gen-banner" class="banner hidden">尚未配置 AI API：请先到「设置」页填写 API 后再使用 AI 功能。</div>
+    <div id="gen-banner" class="banner hidden">尚未配置 AI API：请先到「设置」页填写 API 后再使用 AI 功能。<button id="btn-banner-goto-settings" type="button" class="ghost" style="margin-left:8px;padding:2px 10px;font-size:12px">去设置</button></div>
+
+    <div id="welcome-card" class="welcome-card hidden" aria-label="新手引导"></div>
 
     <div id="draft-tip" class="hidden">
       <div style="display:flex;gap:10px;align-items:center;background:var(--info-dim);border:1px solid var(--info-border);color:var(--info);border-radius:8px;padding:8px 14px;margin-bottom:16px;font-size:13px">
@@ -2970,6 +2980,7 @@ import { deliveryOpen, deliveryCheck, deliveryPackage } from "/js/ui/delivery.js
 import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签（工单 step11-tabs-ui/01）
 import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览列表/板图切换（resource-overview-polish/02）
 import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
+import { initWelcome } from "/js/ui/welcome.js";  // 首次欢迎卡 + gen-banner 行动化（newcomer-onboarding/03）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
 import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
@@ -3320,6 +3331,7 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
   renderNewPlatformOptions(state.platforms);
   loadReferencePicker();
   restoreDraft();  // 草稿恢复放最后：依赖上面全部渲染（平台列表 / 模块池）
+  initWelcome();  // 首次欢迎卡（newcomer-onboarding/03）：依赖 state / 草稿已就绪
 })();
 
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）

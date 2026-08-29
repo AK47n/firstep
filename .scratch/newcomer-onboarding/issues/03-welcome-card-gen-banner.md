@@ -2,7 +2,10 @@
 
 **What to build:** 生成页顶部新增**首次欢迎卡**（一句话说明 + 三步走 + 两个行动按钮 + 「不再显示」），并给 **gen-banner（未配置 API key 横幅）加「去设置」按钮**，让「打开即知第一步做什么」并且**一键就能做**。
 
-**Status:** pending（Blocked by 无 — 纯前端，可与 01/02 并行）
+**Status:** resolved（2026-08-29 实施完成，评审记录见文末）
+
+> 更正：spec 与工单初稿写「前端无 node 测试设施」——实为判断错误，仓库有
+> tests/js/*.test.mjs（node:test）与 fx-guard 结构护栏，纯函数按先例直测。
 
 ## 决策记录（spec.md / clarify 2026-08-29，用户确认）
 
@@ -32,3 +35,11 @@
 
 - **改**：`src/contest_generator/static/index.html`、`src/contest_generator/static/js/*`（按现状就近）
 - **不动**：后端 / 设置页逻辑（只跳转复用）/ 生成流程
+
+## 实施记录（2026-08-29）
+
+- fx/welcome.js（纯函数）：WELCOME_DISMISS_KEY = "firstep.welcome-dismissed.v1"；welcomeMode({apiConfigured, hasDraft, dismissed}) 四态单源；welcomeCardHTML(mode)（full 三步 + 三按钮 / compact 一句话 / hidden 空串）；window 桥导出。
+- ui/welcome.js（胶水）：initWelcome 读 state.api_configured + draftLoad(localStorage) + dismissed → 渲染 #welcome-card；gotoKeyAction = 点 nav[data-tab=settings]（复用页签切换既有逻辑）+ 聚焦 #set-api-key——欢迎卡「去配置 API key」与 gen-banner「去设置」共用一个函数；env-check = 切设置页签 + 点 #btn-env-check；不再显示 = localStorage + 隐藏清空。
+- index.html：`#welcome-card`（生成页顶部、gen-banner 之后）+ .welcome-card 样式（info 蓝系，同 banner 布局）+ host import 与 initWelcome() 调用（init() IIFE 内 restoreDraft 之后，state/草稿就绪）+ gen-banner 内嵌「去设置」按钮（#btn-banner-goto-settings）。
+- 测试：tests/js/welcome.test.mjs 7 用例（四态判定 + 卡片文案/按钮 + key 常量）+ fx-guard.test.mjs DOMAINS 登记 welcome.js；全量 js 751 passed。
+- 评审裁定（判断项不修）：bat 内探针/弹窗与 install.bat 重复、Popup 五行子例程化——批处理无模块系统且带参子例程引号不可靠，保持显式；_cjk_count 与 test_repo_language.py 重复定义——孤立测试文件可接受。
