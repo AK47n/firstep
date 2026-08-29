@@ -413,10 +413,11 @@
                border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
   .sugg-note { margin-top: 2px; font-size: 12.5px; color: var(--text); }
   .sugg-suitable { margin-top: 2px; font-size: 12px; color: var(--muted); }
-  .badge.sugg-rec { background: var(--ok-dim); color: var(--ok-bright); }
+  /* 绿系 = 正面态（词表推荐 / 库内已有 / 已定方案；工单 wordlist-lib-modules/02） */
+  .badge.sugg-rec, .badge.sugg-lib, .badge.sugg-decided {
+    background: var(--ok-dim); color: var(--ok-bright); }
   .badge.sugg-ai { background: var(--info-dim); color: var(--info); }
   /* 已定方案 / AI 审核（工单 buy-discuss/04） */
-  .badge.sugg-decided { background: var(--ok-dim); color: var(--ok-bright); }
   .badge.sugg-review { font-size: 11px; }
   .badge.sugg-review-feasible { background: var(--ok-dim); color: var(--ok-bright); }
   .badge.sugg-review-risky { background: var(--warn-dim); color: var(--warn); }

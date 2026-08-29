@@ -3,16 +3,22 @@
 // 方案列表 + selected AI 建议高亮。模块约定见 fx/core.js 头部。
 // 载荷形状（selection.to_dict 契约）：suggestion =
 //   { name, examples[], degraded, solutions[{name, interface, price, note,
-//     suitable, recommended}], selected }
+//     suitable, recommended, lib_modules[]}], selected }
 import { esc } from "./core.js";
 
 // suggestionSolutionBadges(sol, selected)：单方案徽标。recommended = 词表
-// 推荐 →「推荐」；selected === sol.name = LLM 按题面建议 →「AI 建议」；
-// 可共存；都无 → ""。selected 空串（词表外/未选）不高亮。
+// 推荐 →「推荐」；lib_modules 非空 = 库内已有对应模块 →「库内已有：…」
+// （工单 wordlist-lib-modules/02：不用重复采购，可先看库内模块）；
+// selected === sol.name = LLM 按题面建议 →「AI 建议」；可共存；都无 → ""。
+// selected 空串（词表外/未选）不高亮。旧载荷无 lib_modules 键 → 无徽章。
 export function suggestionSolutionBadges(sol, selected) {
   let out = "";
   if (sol.recommended) {
     out += ' <span class="badge sugg-rec" title="词表推荐方案（价廉/易得/接线简单）">推荐</span>';
+  }
+  if (Array.isArray(sol.lib_modules) && sol.lib_modules.length) {
+    out += ' <span class="badge sugg-lib" title="库内已有对应模块（买件无需重复采购，可先看库内模块）">库内已有：'
+      + esc(sol.lib_modules.join(" · ")) + "</span>";
   }
   if (selected && sol.name === selected) {
     out += ' <span class="badge sugg-ai" title="AI 按赛题建议的方案">AI 建议</span>';
