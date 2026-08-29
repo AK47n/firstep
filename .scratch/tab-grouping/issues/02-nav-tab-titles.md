@@ -4,10 +4,21 @@
 
 **被谁阻塞：** 01（导航两段分组：标记结构守卫）——在分组容器就绪的导航上补 title 与守卫（也可并行，但按依赖顺序 01 先行）。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-08-30 实施完成，评审记录见文末）
 
 - [ ] 8 个按钮均带非空中文 `title`，文案与 spec「title 文案」一致（面向新人一句话：主流程 / 历年真题取题面 / 先来配 key 与体检 / 管理入口做题用不到 / 更新日志）。
 - [ ] title 挂在按钮上（悬停即显），不改变按钮文本与 `data-tab`。
 - [ ] `tests/js/nav-tabs-guard.test.mjs` 追加用例：`nav button[data-tab]` 每个均有非空 `title` 且长度 ≥ 8 个字符（防占位半句话）。
 - [ ] 既有用例（组标签 / 键完整性 / 组归属 / 组标签无 data-tab）与 `tab-nav-guard.test.mjs` 全部继续绿。
 - [ ] node:test 前端全套通过（`tests/js/`），pytest 全套无回归。
+
+## 实施记录（2026-08-30）
+
+- `src/contest_generator/static/index.html`：8 个 nav 按钮各加 `title` 属性，文案与 spec 第 46-53 行逐字一致（含 `→` / `——` / 全角标点）；按钮文本与 `data-tab` 未动。
+- `tests/js/nav-tabs-guard.test.mjs`：追加用例「tab 按钮 title 覆盖：8 个均有非空中文 title（长度 ≥8）」——先取按钮元素再抽 title（属性序无关），断言非空 / ≥8 / 含 CJK；文件头注释同步补充 title 关切。
+- 测试：`node --test "tests/js/**/*.test.mjs"` **757 pass / 0 fail**（含既有全部守卫用例）；本特性零后端改动。
+
+## 评审记录（双轴，2026-08-30；整改已随工单落地）
+
+- **Standards 轴**：无硬违规（中文文案 / node:test 风格 / 分层约束仅涉静态标记 / 防回归均过）。判断项 3 条：①reference/pdf/master 三处 title 尾部「管理入口，做题用不到。」内容级重复 → **接受**（面向用户的独立悬停语，各按钮自含可读性优先）；②`title.length >= 8` 手择阈值 → **接受**（spec 测试决策第 4 项明文要求 ≥8）；③title 提取正则要求 data-tab 先于 title（属性序耦合，虽大声失败）→ **修复**：改为按钮级匹配后抽 title，属性序无关。
+- **Spec 轴**：通过——8 条 title 逐字与 spec 第 46-53 行一致，无缺失、无做错；唯一轻微超出 = 追加 CJK 断言（spec 只要求非空+≥8）→ **接受**（spec 第 44 行「title 文案（中文）」与工单「非空中文 title」明文要求中文，属方向一致的加固）。
