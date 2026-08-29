@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a5eefc2f54e534bfca7593e897a0c1e91b5ca0ad -->
+<!-- changelog-auto: last-commit=4d1ef09b7bfe5d56d39a6d58b123a4c005f8f6c5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -34,6 +34,7 @@
 - 14:19 任务卡接线图：05 旧工程读取兜底 + 退化路径按资源标定接线——无快照时 /api/wiring 从 README「引脚接线表」同源解析恢复 rows（+ context platform + 静态板），前端资源 ∩ 接线行反推画接线图（用户实测反馈：退化图只高亮引脚、看不出接哪个端子）
 - 14:27 工单05评审整改：taskWiringRefs 单点收口 + _split_role 归一化 + 守卫补齐
 - 14:28 工单05标记 resolved（评审整改已提交，双轴通过）
+- 14:41 工单06：接线图两列布线——板居中 + 左右端子列按引脚位置动态生成
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
