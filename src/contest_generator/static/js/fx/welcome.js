@@ -39,6 +39,7 @@ export function welcomeCardHTML(mode) {
     + '<li>' + esc("粘贴赛题 → 生成 → 编译 → 上板（页面 12 步向导会一路带你走）") + "</li>"
     + "</ol>"
     + '<div class="welcome-actions">'
+    + '<button id="btn-welcome-guide" type="button" class="accent">先看新手指引</button>'  // 工单 beginner-guide/04：full 态新手指引入口（compact/hidden 不含）
     + '<button id="btn-welcome-goto-key" type="button" class="accent">去配置 API key</button>'
     + '<button id="btn-welcome-env-check" type="button">检查环境</button>'
     + '<button id="btn-welcome-dismiss" type="button" class="ghost">不再显示</button>'

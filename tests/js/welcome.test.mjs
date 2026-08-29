@@ -1,4 +1,5 @@
-// tests/js/welcome.test.mjs — 首次欢迎卡纯函数（newcomer-onboarding/03）：
+// tests/js/welcome.test.mjs — 首次欢迎卡纯函数（newcomer-onboarding/03；
+// 工单 beginner-guide/04 增「先看新手指引」按钮与断言）：
 // welcomeMode 四态判定（已选不再显示 > 未配 key > 有草稿 > 精简）、完整卡
 // 三步与按钮文案、精简卡一句话、隐藏空串、DOM 无依赖。仿 wiring.test.mjs
 // 先例（node:test + assert/strict）。
@@ -50,9 +51,11 @@ test("welcomeCardHTML：hidden 返回空串", () => {
   assert.equal(welcomeCardHTML("hidden"), "");
 });
 
-test("welcomeCardHTML：full 含三步引导与三个行动按钮", () => {
+test("welcomeCardHTML：full 含三步引导与四个行动按钮（含「先看新手指引」）", () => {
   const html = welcomeCardHTML("full");
   assert.match(html, /欢迎使用电赛工程生成器/);
+  assert.match(html, /先看新手指引/);
+  assert.match(html, /btn-welcome-guide/);
   assert.match(html, /去配置 API key/);
   assert.match(html, /btn-welcome-goto-key/);
   assert.match(html, /检查环境/);
