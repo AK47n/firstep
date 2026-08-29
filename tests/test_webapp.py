@@ -90,6 +90,7 @@ from contest_generator.topic_library import (
     TopicDraft,
     confirm_topics,
 )
+from contest_generator.topic_preread import PrereadResult
 from contest_generator.master import distill_master, main_c_template, scan_project
 from contest_generator.master_store import import_master
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -147,7 +148,7 @@ class RaisingLLM:
     ) -> tuple[str, ...]:
         raise LLMError("服务不可用")
 
-    def summarize_topic(self, problem_text: str) -> str:
+    def preread_topic(self, problem_text: str) -> PrereadResult:
         raise LLMError("服务不可用")
 
     def name_topic_english(self, problem_text: str) -> str:
@@ -1535,7 +1536,7 @@ def test_ai_endpoints_reject_with_hint_when_unconfigured(tmp_path):
     assert resp.status_code == 400
     assert "未配置 AI API" in resp.json()["detail"]
 
-    resp = client.post("/api/topic/summarize", json={"problem_text": "题目"})
+    resp = client.post("/api/topic/preread", json={"problem_text": "题目"})
 
     assert resp.status_code == 400
     assert "未配置 AI API" in resp.json()["detail"]
@@ -1847,28 +1848,33 @@ def test_extract_image_bmp_returns_400_with_guidance(client, context):
     assert "PNG" in detail or "JPEG" in detail  # 引导转存方向
 
 
-def test_topic_summarize_returns_summary(client, context):
-    """赛题简介：单次 LLM 调用返回一句话总览 + 功能要点（只展示，不进下游）。"""
+def test_topic_preread_returns_overview_and_reminders(client, context):
+    """赛题预读：单次 LLM 调用返回一句话总览 + 决策点提醒（只展示，不进下游）。"""
     resp = client.post(
-        "/api/topic/summarize", json={"problem_text": "温湿度采集并显示"}
+        "/api/topic/preread", json={"problem_text": "温湿度采集并显示"}
     )
 
     assert resp.status_code == 200
-    assert resp.json() == {"summary": "AI 生成的赛题简介"}
-    assert context[1]["llm"].topic_summarize_calls == [("温湿度采集并显示",)]
+    assert resp.json() == {
+        "overview": "AI 生成的赛题总览",
+        "reminders": [
+            {"steps": [3], "text": "AI 生成的赛题提醒", "quote": ""}
+        ],
+    }
+    assert context[1]["llm"].preread_calls == [("温湿度采集并显示",)]
 
 
-def test_topic_summarize_requires_problem_text(client):
-    resp = client.post("/api/topic/summarize", json={})
+def test_topic_preread_requires_problem_text(client):
+    resp = client.post("/api/topic/preread", json={})
 
     assert resp.status_code == 400
     assert "problem_text" in resp.json()["detail"]
 
 
-def test_topic_summarize_llm_failure_maps_to_502(client, context):
+def test_topic_preread_llm_failure_maps_to_502(client, context):
     context[1]["llm"] = RaisingLLM()
 
-    resp = client.post("/api/topic/summarize", json={"problem_text": "题"})
+    resp = client.post("/api/topic/preread", json={"problem_text": "题"})
 
     assert resp.status_code == 502
     assert resp.json()["detail"] == "AI 服务调用失败：服务不可用"
@@ -2326,7 +2332,9 @@ def test_generate_accepts_instances_for_dependency_brought_module(
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
     _add_fake_led_module(context[0].config.module_library_dir)
     _add_fake_led_beep_module(context[0].config.module_library_dir)
-    context[1]["llm"] = FakeLLM(topic_summary="智能声光报警\n- LED 闪烁\n- 蜂鸣器报警")
+    context[1]["llm"] = FakeLLM(
+        preread=PrereadResult(overview="智能声光报警", reminders=())
+    )
     output_dir = tmp_path / "out" / "demo"
     resp = client.post(
         "/api/generate",
@@ -2450,7 +2458,9 @@ def test_generate_respects_explicit_output_dir_when_desktop_output_disabled(
     client, context, tmp_path
 ):
     _import_stm32_master(context[0].config.masters_dir, tmp_path)
-    context[1]["llm"] = FakeLLM(topic_summary="不应调用")
+    context[1]["llm"] = FakeLLM(
+        preread=PrereadResult(overview="不应调用", reminders=())
+    )
     desktop_dir = tmp_path / "Desktop"
     context[0].desktop_dir = lambda: desktop_dir
     output_dir = tmp_path / "out" / "manual-demo"
@@ -2471,7 +2481,7 @@ def test_generate_respects_explicit_output_dir_when_desktop_output_disabled(
     assert resp.json()["output_dir"] == str(output_dir)
     assert (output_dir / "main.c").is_file()
     assert not desktop_dir.exists()
-    assert context[1]["llm"].topic_summarize_calls == []
+    assert context[1]["llm"].preread_calls == []
 
 
 def test_generate_desktop_output_reuses_cleaned_half_baked_dir(
@@ -6324,23 +6334,23 @@ def test_local_routing_webapp_routes_method_groups(tmp_path):
     )
     client = TestClient(create_app(ctx))
 
-    # 本地组端点：/api/topic/summarize → summarize_topic → local
-    resp = client.post("/api/topic/summarize", json={"problem_text": "题面"})
+    # 本地组端点：/api/topic/preread → preread_topic → local
+    resp = client.post("/api/topic/preread", json={"problem_text": "题面"})
     assert resp.status_code == 200
-    assert local.calls == ["summarize_topic"]
+    assert local.calls == ["preread_topic"]
     assert remote.calls == []
 
     # 远程组端点：/api/topics/extract-number → topic_extract_number → remote
     resp = client.post("/api/topics/extract-number", json={"text": "2026C"})
     assert resp.status_code == 200
     assert remote.calls == ["topic_extract_number"]
-    assert local.calls == ["summarize_topic"]  # 本地集不被远程调用触碰
+    assert local.calls == ["preread_topic"]  # 本地集不被远程调用触碰
 
 
 def test_local_routing_webapp_local_failure_is_loud(tmp_path):
     """本地失联在 webapp 层大声失败：502 + 可操作提示（错误映射表出口）。"""
     class _FailingLocal(RecordingLLM):
-        def summarize_topic(self, problem_text: str) -> str:
+        def preread_topic(self, problem_text: str) -> PrereadResult:
             raise LLMError("连接被拒绝", kind="network")
 
     library_dir = make_fake_module_library(tmp_path / "module_library")
@@ -6358,7 +6368,7 @@ def test_local_routing_webapp_local_failure_is_loud(tmp_path):
     )
     client = TestClient(create_app(ctx))
 
-    resp = client.post("/api/topic/summarize", json={"problem_text": "题面"})
+    resp = client.post("/api/topic/preread", json={"problem_text": "题面"})
     assert resp.status_code == 502
     assert LOCAL_LLM_UNAVAILABLE_MESSAGE in resp.json()["detail"]
 

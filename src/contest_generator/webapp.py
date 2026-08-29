@@ -1379,18 +1379,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             headers={"Content-Type": "text/event-stream"},
         )
 
-    @app.post("/api/topic/summarize")
+    @app.post("/api/topic/preread")
     @_map_errors
-    def topic_summarize(payload: dict) -> dict:
-        """赛题简介（赛题简介步骤，wait-what 效果）：AI 预读题面给一句话
-        总览 + 功能要点。
+    def topic_preread(payload: dict) -> dict:
+        """赛题预读（生成页步骤 2）：AI 预读题面给一句话总览 + 决策点提醒
+        列表（每条 = 影响步骤 + 提醒文本 + 题面原文引用）。
 
-        让用户在选平台 / 推荐模块之前对"这个赛题要实现什么"有简短认知；
-        只做展示、不进任何下游流程（推荐 / 骨架有自己的题面处理，这里不
-        注入）。文本模式单次 LLM 调用，失败走错误映射表（LLM 服务失败 →
-        502）。"""
+        让用户在选平台 / 推荐模块之前对「题面已经锁死了什么」有数——用户
+        自己会通读题面，这里不复述功能，只提炼限定/约束/指定类事实；只做
+        展示、不进任何下游流程（推荐 / 骨架有自己的题面处理，这里不注入）。
+        结构化 JSON 单次 LLM 调用 + 机械校验（topic_preread 域），失败走
+        错误映射表（LLM 服务失败 → 502）。"""
         problem_text = _require_str(payload, "problem_text")
-        return {"summary": _llm(context).summarize_topic(problem_text)}
+        return _llm(context).preread_topic(problem_text).to_dict()
 
     @app.post("/api/selection/expand")
     @_map_errors
