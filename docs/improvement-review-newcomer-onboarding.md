@@ -3,6 +3,8 @@
 > 评审日期：2026-08-29（工作区当前状态）
 > 性质：改进机会盘点存档，非 spec、非工单。后续选定方向时按 `docs/agents/workflow.md` 流程立项（clarify → spec → 工单）。
 > 评审角度：**假想一个纯新人（第一次参赛、第一次用本工具）**，从"拿到 firstep"到"做完一道赛题并交付"，逐环节看提示语是否清晰、会不会卡住。上一份评审（`improvement-review-student-experience.md`，2026-08-18）的 A1 评分点 / A2 报告草稿 / A3 演示脚本 / B1 adc·servo 模块 / C2 会话持久化+工程历史 / C3 工程问答（任务商量、参数速调 AI 咨询）均已落地，本文不再重复；沿用其 C1（断网/无 key 离线路径）、B2（题型决策骨架）、B3（可选配套）为已知遗留。
+>
+> **实施状态（2026-08-29 晚补）**：本文 R1 / R2 / R3 三项红色缺陷与 Y1 部分已按 `newcomer-onboarding` 立项落地（README + install.bat、启动器全流程中文反馈 + `/api/health`、首次欢迎卡 + gen-banner「去设置」；Y1 速查卡/常见问题补编译工具链入口），见 CHANGELOG 2026-08-29 23:35–23:58，spec/工单在 `.scratch/newcomer-onboarding/`。其余方向（Y2 tab 分组、Y3 词表、Y4 任务推进默认化、C1 离线兜底、B2 题型决策骨架等）尚未立项。
 
 ## 〇、结论先行
 
