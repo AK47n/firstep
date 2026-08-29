@@ -772,11 +772,27 @@ function wiringPer(task, opts) {
   return (typeof o.wiringOpts === "function") ? (o.wiringOpts(task) || {}) : null;
 }
 
+/** 本步接线引用单点（工单 05 评审整改：①b 分支与胶水层 attachWiringInputs
+ * 的「wiring 空 → resources ∩ 行反推 + inferred 判定」原为两处独立推导——
+ * 已见漂移后果：toggle 重渲 caption 回退）。返回值 = {wiring, inferred}：
+ * wiring = 最新轮引用（非空则用，inferred=false）或 resources 反推结果
+ * （inferred=true——按资源标定，非 AI 引用）；均无 → {[], true}（调用方
+ * 按空处理走退化）。数据纪律：线由 rows 决定，resources 只是选行名字。 */
+export function taskWiringRefs(task, rows) {
+  const last = lastIteration(task);
+  const wiring = (last && last.wiring) || [];
+  if (wiring.length) return { wiring, inferred: false };
+  return {
+    wiring: wiringFromResources((task && task.resources) || [], rows),
+    inferred: true,
+  };
+}
+
 /** 接线图区块（工单 task-wiring-diagram/03 + 04 + 05）：任务卡「下一步要做」与
  * 结果面板步骤报告共用同一装配（同一渲染函数、同一数据源——spec 决策）。
  *
  * 四级退化（任一情况不报错、不空白）：
- * ① 最新轮 wiring 引用非空且 board 可用 → 接线图（本步高亮；showAll 由
+ * ① wiring 引用非空且 board 可用 → 接线图（本步高亮；showAll 由
  *    wiringShowAll 传入，缺省 false = 只画本步线）；
  * ①b 无 wiring 引用但接线行可查（ctx.rows 非空，快照或 README 兜底）且
  *    本任务 resources ∩ 接线行非空 → 按资源标定接线图（inferred: true，
@@ -796,30 +812,15 @@ export function wiringSectionHTML(task, opts, perComputed) {
   const ctx = perTask ? perTask.wiringCtx : o.wiringCtx;
   const fallback = perTask ? perTask.wiringFallbackHTML : o.wiringFallbackHTML;
   if (!ctx) return fallback || "";
-  const last = lastIteration(task);
-  const wiring = (last && last.wiring) || [];
-  if (ctx.board && wiring.length) {
+  const refs = taskWiringRefs(task, ctx.rows || []);
+  if (ctx.board && refs.wiring.length) {
     return wiringDiagramHTML({
       board: ctx.board,
       rows: ctx.rows || [],
-      wiring,
+      wiring: refs.wiring,
       showAll: perTask ? !!perTask.wiringShowAll : !!o.wiringShowAll,
+      inferred: refs.inferred,
     });
-  }
-  // ①b（工单 05 退化增强）：无 wiring 引用但接线行可查（快照或 README 兜底）
-  // → 按本步 resources 反推「涉及的线」画接线图（确定性：线由 rows 决定，
-  // resources 只是选行名字；inferred 标注 caption 区分 AI 引用）。
-  if (ctx.board && (ctx.rows || []).length) {
-    const inferred = wiringFromResources((task && task.resources) || [], ctx.rows);
-    if (inferred.length) {
-      return wiringDiagramHTML({
-        board: ctx.board,
-        rows: ctx.rows,
-        wiring: inferred,
-        showAll: perTask ? !!perTask.wiringShowAll : !!o.wiringShowAll,
-        inferred: true,
-      });
-    }
   }
   return fallback || "";
 }
@@ -1102,6 +1103,7 @@ if (typeof window !== "undefined") {
     taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText,
     unresolvedPrereqs,
     tasksOverviewHTML, taskStepReportHTML, taskNextActionHTML,
+    taskWiringRefs,
     verifyStatusMarkup, taskCanFeedback, taskIterationLabel,
     taskIterationsHTML, taskLatestFeedbackNote,
     taskOrderLabel, taskDialogAdoptHTML, taskDialogButtonHTML, taskDialogAreaHTML,

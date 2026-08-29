@@ -351,10 +351,16 @@ def _is_separator_row(cells: list[str]) -> bool:
 
 def _split_role(role_text: str) -> tuple[str, str]:
     """角色列文本 → (role_id, role_label)：渲染侧 `id（label）` 合成（见
-    _row_role_text），无 label = 裸 id。"""
+    _row_role_text），无 label = 裸 id。
+
+    label==id（如 `LED（LED）`）归一为空串——与 manifest 解析侧同一规则
+    （标志性产物该形态理论不可达，解析侧防御兜底，保「非空 label 必为附注
+    形态」契约跨输入成立；评审打磨：工单 task-wiring-diagram/05）。
+    """
     m = re.fullmatch(r"(.+)（(.+)）", role_text)
     if m:
-        return m.group(1), m.group(2)
+        role_id, role_label = m.group(1), m.group(2)
+        return (role_id, "") if role_label == role_id else (role_id, role_label)
     return role_text, ""
 
 

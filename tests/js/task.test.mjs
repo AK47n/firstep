@@ -19,6 +19,7 @@ import {
   checklistStateKey,
   taskErrorsHTML,
   unresolvedPrereqs,
+  taskWiringRefs,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -648,6 +649,30 @@ test("taskNextActionHTML: 按资源标定接线图（resources 引脚/模块 slu
     { wiringCtx },
   );
   assert.ok(!bare.includes("svg") && !bare.includes("wiring-hl") && bare.includes("烧录观察"));
+});
+
+test("taskWiringRefs: 单点收口（最新轮引用优先 inferred=false；无引用 → 反推 inferred=true；都无 → 空）", () => {
+  const rows = [
+    { slug: "key", role: "KEY_START", role_id: "KEY_START", role_label: "", pin: "PB3", remark: "gpio_in" },
+  ];
+  // 最新轮 wiring 非空 → 原样 + inferred=false（视为 AI 引用）
+  const stated = taskWiringRefs(
+    { resources: ["PA99"], iterations: [{ seq: 1, kind: "execute", status: "unverified", wiring: [{ pin: "PB3", target: "KEY_START" }] }] },
+    rows,
+  );
+  assert.deepEqual(stated, { wiring: [{ pin: "PB3", target: "KEY_START" }], inferred: false });
+  // 最新轮无 wiring → resources ∩ rows 反推 + inferred=true（按资源标定）
+  const inferred = taskWiringRefs(
+    { resources: ["PB3", "key"], iterations: [{ seq: 1, kind: "execute", status: "unverified", wiring: [] }] },
+    rows,
+  );
+  assert.deepEqual(inferred, { wiring: [{ pin: "PB3", target: "KEY_START", note: "" }], inferred: true });
+  // 无 resources / 无匹配 → 空数组（调用方走退化）
+  const none = taskWiringRefs(
+    { resources: ["3V3"], iterations: [{ seq: 1, kind: "execute", status: "unverified", wiring: [] }] },
+    rows,
+  );
+  assert.deepEqual(none, { wiring: [], inferred: true });
 });
 
 test("taskCardHTML: 下一步要做摘要进卡（有则渲染，无则卡形不变）", () => {

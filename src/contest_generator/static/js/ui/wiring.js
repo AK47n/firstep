@@ -6,9 +6,9 @@
 // ④「显示全部接线」开关：在占位 host（data-wiring-uid）内原位重渲（fx 纯函数
 // 无副作用，本层只管数据句柄与 DOM 换血；开关状态不持久化——范围外）。
 import { apiGet } from "/js/app.js";
-import { aggregateResourceGroups } from "/js/fx/task.js";
+import { aggregateResourceGroups, taskWiringRefs } from "/js/fx/task.js";
 import { resourceBoardHTML, resourceTaskColorMap } from "/js/fx/resource-board.js";
-import { wiringDiagramHTML, wiringFromResources } from "/js/fx/wiring.js";
+import { wiringDiagramHTML } from "/js/fx/wiring.js";
 import { reviseGetPlatform } from "./generate-revise.js";
 
 /** 装配单飞缓存：dir → Promise<assets>（进行中）；assetsValue = 已就绪值。 */
@@ -118,8 +118,9 @@ function filterGroupsForTask(groups, taskId) {
 
 /** 渲染后把接线图数据句柄挂到 host（供「显示全部接线」原位重渲）：host 存在
  * ⟺ wiringSectionHTML 走了接线图（tier-1 或工单 05 按资源标定）——句柄只在
- * 此时需要；wiring 取最新轮迭代（与装配同源），无 wiring 引用时用
- * wiringFromResources 反推结果（与 fx 层同一推导，toggle 对推断图同样可用）。 */
+ * 此时需要。接线引用 = fx 单点 taskWiringRefs（最新轮引用 → 否则 resources
+ * 反推，inferred 标记同源——评审整改：与渲染分支分居两处曾致 toggle 重渲
+ * caption 漂移）；句柄带 inferred，重渲保持「按引脚资源标定」。 */
 export function attachWiringInputs(root, tasksById, assets) {
   if (!root) return;
   root.querySelectorAll("[data-wiring-uid]").forEach((host) => {
@@ -127,14 +128,15 @@ export function attachWiringInputs(root, tasksById, assets) {
     const sep = uid.indexOf(":");
     const taskId = sep >= 0 ? uid.slice(sep + 1) : "";
     const task = tasksById.get(taskId);
-    const last = task && task.iterations ? task.iterations[task.iterations.length - 1] : null;
-    const wiring = (last && last.wiring) || [];
-    if (!assets || !assets.ctx) return;
-    const effWiring = wiring.length
-      ? wiring
-      : wiringFromResources((task && task.resources) || [], assets.ctx.rows || []);
-    if (!effWiring.length) return;
-    host.__wiringInputs = { board: assets.ctx.board, rows: assets.ctx.rows || [], wiring: effWiring };
+    if (!assets || !assets.ctx || !assets.ctx.board) return;
+    const refs = taskWiringRefs(task, assets.ctx.rows || []);
+    if (!refs.wiring.length) return;
+    host.__wiringInputs = {
+      board: assets.ctx.board,
+      rows: assets.ctx.rows || [],
+      wiring: refs.wiring,
+      inferred: refs.inferred,
+    };
   });
 }
 
