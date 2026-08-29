@@ -941,6 +941,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # 供 node 端测试按 ESM import
     app.mount("/js", StaticFiles(directory=STATIC_DIR / "js"), name="js")
 
+    # 进程存活探针（工单 newcomer-onboarding/02）：启动器用它判定「端口 8000
+    # 上是不是本应用」——是本应用则直接开浏览器（已在运行），是别的东西则
+    # 提示端口被占。故意不依赖任何配置（未配 key 也 200），否则用户第一次
+    # 启动前探测就会失败。
+    @app.get("/api/health")
+    def health() -> dict:
+        return {"app": "contest-generator", "version": __version__, "ok": True}
+
     # 全局状态：平台可用性 / 配置状态 / 工作目录
     @app.get("/api/state")
     @_map_errors
