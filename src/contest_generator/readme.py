@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Mapping, Sequence
 
 # manifest 是轻量模型模块（先例：既有运行时依赖），PinDeclaration 随
@@ -47,6 +48,10 @@ PLATFORM_TITLES = {
 PIN_TABLE_FOOTNOTE = (
     "其余外设引脚以工程内 pin_config.h（stm32）/ mspm0.syscfg 为准"
 )
+
+# 引脚接线表章节标题（渲染与解析共同的定位锚点：parse_pin_table 用此锚恢复
+# 同源 rows——工单 task-wiring-diagram/05，单一出处防标题漂移）
+PIN_TABLE_HEADING = "## 引脚接线表"
 
 # 快速上手章：平台静态步骤文本（固定话术预写，不做逐模块拼装；纯静态文本，
 # 生成不依赖 ccs_tools 探测结果，与是否写 makefile 无关）。文案 = 工单逐字
@@ -128,7 +133,7 @@ def render_readme(
         lines.append(step)
     lines.append("")
 
-    lines.append("## 引脚接线表")
+    lines.append(PIN_TABLE_HEADING)
     lines.append("")
     _append_pin_table(lines, platform, manifests, resolved_bindings, instance_plans)
 
@@ -313,3 +318,94 @@ def _sentence_refs_text(refs: Sequence[int]) -> str:
     if not refs:
         return "未关联原文"
     return "句子 " + "、".join(str(ref) for ref in refs)
+
+
+# ---------------------------------------------------------------------------
+# 引脚接线表解析（工单 task-wiring-diagram/05：旧工程无接线快照时，从 README
+# 恢复 rows——README 表由 _pin_row_text 渲染（与快照同一推导 _pin_row_items），
+# 本函数是其文本逆操作：同源恢复，不做任何猜测）
+# ---------------------------------------------------------------------------
+
+_PIN_TABLE_HEADER_CELLS = ("模块", "角色", "引脚", "说明")
+
+
+def _table_cells(line: str) -> list[str]:
+    """表格行 → 列值（strip 首尾管道，按 | 拆分，去空格）；非 4 列表格行
+    由调用方按上下文丢弃。"""
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return []
+    return [c.strip() for c in stripped.strip("|").split("|")]
+
+
+def _is_header_row(cells: list[str]) -> bool:
+    return len(cells) == 4 and tuple(cells) == _PIN_TABLE_HEADER_CELLS
+
+
+def _is_separator_row(cells: list[str]) -> bool:
+    """markdown 分隔行（---|---|）：全列由 -/: 组成。"""
+    return len(cells) == 4 and all(
+        not c.replace("-", "").replace(":", "").strip() for c in cells
+    )
+
+
+def _split_role(role_text: str) -> tuple[str, str]:
+    """角色列文本 → (role_id, role_label)：渲染侧 `id（label）` 合成（见
+    _row_role_text），无 label = 裸 id。"""
+    m = re.fullmatch(r"(.+)（(.+)）", role_text)
+    if m:
+        return m.group(1), m.group(2)
+    return role_text, ""
+
+
+def parse_pin_table(text: str) -> list[dict] | None:
+    """README 引脚接线表 → rows（与接线快照行同形：slug/role/role_id/
+    role_label/pin/remark）。
+
+    只在 `{PIN_TABLE_HEADING}` 章节段内解析：先表头（模块/角色/引脚/说明），
+    后数据行（跳过 ---| 分隔行；列数不足 / slug 或 pin 空的坏行丢弃其余
+    保留）；段外同形表格（报告草稿「引脚分配表」等）不误收。**同源**：解析
+    即恢复生成时同一推导的输出（含多实例通道行与 label 附注），图上不会出现
+    表格之外的线。无表格段 / 表头缺失 / 无有效数据行 → None（调用方按空
+    处理，维持既有退化）。
+    """
+    rows: list[dict] = []
+    seen_heading = False
+    collecting = False
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            if collecting:
+                break  # 表格段结束（下一章标题）
+            seen_heading = stripped == PIN_TABLE_HEADING
+            continue
+        if not seen_heading:
+            continue
+        if collecting:
+            if stripped.startswith(">"):
+                break  # 尾注行（PIN_TABLE_FOOTNOTE）＝表段结束
+            cells = _table_cells(stripped)
+            if not cells:
+                continue
+            if _is_separator_row(cells):
+                continue
+            if len(cells) != 4:
+                continue
+            slug, role_text, pin, remark = cells
+            if not slug or not pin:
+                continue
+            role_id, role_label = _split_role(role_text)
+            rows.append(
+                {
+                    "slug": slug,
+                    "role": role_text,
+                    "role_id": role_id,
+                    "role_label": role_label,
+                    "pin": pin,
+                    "remark": remark,
+                }
+            )
+        else:
+            if _is_header_row(_table_cells(stripped)):
+                collecting = True
+    return rows if rows else None

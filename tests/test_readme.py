@@ -28,6 +28,7 @@ from contest_generator.readme import (
     PIN_TABLE_FOOTNOTE,
     README_FILENAME,
     PLATFORM_TITLES,
+    parse_pin_table,
     render_readme,
     sort_verification_order,
 )
@@ -822,3 +823,59 @@ def test_sort_verification_order_keeps_dependency_order():
         "delay",
         "led_beep",
     ]
+
+
+# ---------------------------------------------------------------------------
+# 引脚接线表解析（工单 05 旧工程兜底：README 表 = 快照 rows 的文本形态，
+# 解析即恢复——同源，不做任何猜测）
+# ---------------------------------------------------------------------------
+
+
+def test_parse_pin_table_roundtrip_matches_wiring_rows():
+    """render_readme 输出 → parse_pin_table → 与 wiring_rows 同输入结构化
+    逐行相等：label 拆解（`id（label）`）、空 label / 空说明列、多实例通道行、
+    行序一致（同源逆操作，图上不会出现表格之外的线）。"""
+    from contest_generator.wiring import wiring_rows
+
+    key = ModuleManifest(
+        slug="key",
+        description="独立按键输入",
+        platforms={PLATFORM_STM32: _entry((("KEY_START", "gpio_in", "PB3", "启动按键", True),))},
+    )
+    beep = ModuleManifest(
+        slug="beep",
+        description="有源蜂鸣器",
+        platforms={PLATFORM_STM32: _entry((("BEEP_OUT", "gpio_out", "PC14", "", False),))},
+    )
+    led = ModuleManifest(
+        slug="led",
+        description="状态指示灯",
+        platforms={PLATFORM_STM32: _entry(())},  # 无声明行 → 只有实例行
+    )
+    plans = {"led": (ExpandedInstance(slug="led", index=1, macro="LED_RED", pin="PC13"),)}
+    text = render_readme(PLATFORM_STM32, None, [key, beep, led], instance_plans=plans)
+    rows = parse_pin_table(text)
+    assert rows == wiring_rows(PLATFORM_STM32, [key, beep, led], None, plans)
+    assert [r["slug"] for r in rows] == ["key", "beep", "led"]
+
+
+def test_parse_pin_table_degrades_or_skips_bad_lines():
+    """无表格段 / 表头缺失 / 无数据行 → None；数据行坏（列数不足 / slug 或
+    pin 空）跳过其余保留；表格段之外的同形行不误收。"""
+    assert parse_pin_table("没有任何表格") is None
+    assert parse_pin_table("| 模块 | 角色 | 引脚 | 说明 |\n|---|---|---|---|\n") is None
+    body = "## 引脚接线表\n\n| 模块 | 角色 | 引脚 | 说明 |\n|---|---|---|---|\n"
+    assert parse_pin_table(body + "| 键 | 按键（组合键） | PB3@gpio_in（必接） |\n") is None
+    mixed = body + (
+        "| key | KEY_START | PB3 | gpio_in |\n"
+        "|   | 空 slug | PA0 | x |\n"
+        "| led | LED_RED | | 空 pin |\n"
+        "| led | LED_RED | PC13 |  |\n"
+    )
+    rows = parse_pin_table(mixed)
+    assert [(r["slug"], r["role"], r["pin"]) for r in rows] == [
+        ("key", "KEY_START", "PB3"),
+        ("led", "LED_RED", "PC13"),
+    ]
+    # 表外行（如报告草稿同形表）不误收：无「引脚接线表」标题 → None
+    assert parse_pin_table("其余章节\n| a | b | c | d |\n") is None

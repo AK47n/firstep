@@ -25,6 +25,9 @@ from contest_generator.config import (
     reference_library_dir,
     topic_library_dir,
 )
+from contest_generator.context_manifest import (
+    CONTEXT_MANIFEST_FILENAME as CONTEXT_FILENAME,
+)
 from contest_generator.events import (
     EVENT_APPLY_RESULT,
     EVENT_BATCH_DONE,
@@ -6963,4 +6966,56 @@ def test_api_wiring_empty_payload_on_missing_or_corrupt(client, tmp_path):
     # 缺参 → 空载荷（前端未知道目录时的安全默认）
     resp = client.get("/api/wiring")
     assert resp.status_code == 200
+    assert resp.json() == {"platform": "", "board": None, "rows": []}
+
+
+def test_api_wiring_readme_fallback_payload(client, tmp_path):
+    """工单 05：无快照但 README 引脚表 + context platform 可兜底 → 200 非空
+    {platform, board, rows}——旧工程数据恢复：rows 与 README 表同源解析，
+    board = 静态板定义（与 /api/boards 同平台板一致）。"""
+    from contest_generator.manifest import ModuleManifest, PinDeclaration, PlatformEntry
+    from contest_generator.readme import README_FILENAME, render_readme
+
+    manifests = [
+        ModuleManifest(
+            slug="key",
+            description="按键",
+            platforms={
+                PLATFORM_STM32: PlatformEntry(
+                    files=(),
+                    pins=(
+                        PinDeclaration(
+                            id="KEY_START", type="gpio_in", default="PB3",
+                            label="启动按键", required=True,
+                        ),
+                    ),
+                )
+            },
+        )
+    ]
+    (tmp_path / README_FILENAME).write_text(
+        render_readme(PLATFORM_STM32, None, manifests), encoding="utf-8"
+    )
+    (tmp_path / CONTEXT_FILENAME).write_text(
+        json.dumps({"platform": PLATFORM_STM32}), encoding="utf-8"
+    )
+    resp = client.get("/api/wiring", params={"output_dir": str(tmp_path)})
+    assert resp.status_code == 200
+    data = resp.json()
+    board = board_for_platform(PLATFORM_STM32)
+    assert data["platform"] == PLATFORM_STM32
+    assert data["board"]["board_id"] == board.board_id
+    assert data["rows"] == [
+        {
+            "slug": "key",
+            "role": "KEY_START（启动按键）",
+            "role_id": "KEY_START",
+            "role_label": "启动按键",
+            "pin": "PB3",
+            "remark": "gpio_in（必接）",
+        }
+    ]
+    # 兜底失败（无 README 可解析）→ 仍空载荷（既有退化不破）
+    (tmp_path / README_FILENAME).unlink()
+    resp = client.get("/api/wiring", params={"output_dir": str(tmp_path)})
     assert resp.json() == {"platform": "", "board": None, "rows": []}

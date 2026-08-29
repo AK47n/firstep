@@ -19,8 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from .boards import Board, board_for_platform
-from .readme import _pin_row_items, _row_role_text
+from .boards import Board, BoardError, board_for_platform
+from .context_manifest import CONTEXT_MANIFEST_FILENAME
+from .readme import README_FILENAME, _pin_row_items, _row_role_text, parse_pin_table
 
 # 接线快照输出文件名（生成写侧单源，generator 消费；任务推进读写同此）
 WIRING_SNAPSHOT_FILENAME = ".contest_wiring.json"
@@ -114,6 +115,43 @@ def read_wiring_snapshot(output_dir: Path | str) -> dict | None:
     if not isinstance(board, dict) or not isinstance(data.get("rows"), list):
         return None
     return data
+
+
+def read_wiring_snapshot_legacy(output_dir: Path | str) -> dict | None:
+    """旧工程接线数据兜底（工单 task-wiring-diagram/05）：无快照时从工程
+    产物恢复快照形 dict（version/platform/board_id/board/rows）。
+
+    数据源全部**同源**（不做任何猜测，数据纪律）：
+    - rows = README「引脚接线表」解析（readme.parse_pin_table：README 表与
+      快照 rows 由同一推导 _pin_row_items 渲染，解析即恢复生成时同一输出）；
+    - platform = .contest_context.json 的 platform 字段（工程上下文清单）；
+    - board = 静态板定义（board_for_platform，与生成时同源板文件）。
+    任一环节缺失 / 坏 JSON / 无接线表 / 未知平台 → None——调用方保持空载荷
+    退化（前端资源高亮/纯文字），绝不 500，绝不无依据返回数据。
+    """
+    try:
+        context = json.loads(
+            (Path(output_dir) / CONTEXT_MANIFEST_FILENAME).read_text(encoding="utf-8")
+        )
+        platform = context.get("platform", "")
+        if not isinstance(platform, str) or not platform:
+            return None
+        readme_text = (Path(output_dir) / README_FILENAME).read_text(
+            encoding="utf-8"
+        )
+        rows = parse_pin_table(readme_text)
+        if rows is None:
+            return None
+        board = board_for_platform(platform).to_dict()
+    except (OSError, ValueError, BoardError):
+        return None
+    return {
+        "version": WIRING_SNAPSHOT_VERSION,
+        "platform": platform,
+        "board_id": board["board_id"],
+        "board": board,
+        "rows": rows,
+    }
 
 
 # ---------------------------------------------------------------------------

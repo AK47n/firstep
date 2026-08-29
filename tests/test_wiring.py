@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from contest_generator.boards import board_for_platform
+from contest_generator.context_manifest import CONTEXT_MANIFEST_FILENAME as CONTEXT_FILENAME
 from contest_generator.generator import generate_project
 from contest_generator.manifest import ModuleManifest
 from contest_generator.patchers import PLATFORM_STM32
@@ -31,6 +32,7 @@ from contest_generator.wiring import (
     parse_wiring_entries,
     read_wiring_rows,
     read_wiring_snapshot,
+    read_wiring_snapshot_legacy,
     wiring_context,
     wiring_rows,
     wiring_summary_text,
@@ -467,3 +469,89 @@ def test_read_wiring_snapshot_corruption_returns_none(tmp_path, setup):
         snapshot["version"] = WIRING_SNAPSHOT_VERSION + 1
         write_wiring_snapshot(tmp_path, snapshot)
     assert read_wiring_snapshot(tmp_path) is None
+
+
+def test_read_wiring_snapshot_legacy_rebuilds_from_readme(
+    fake_module_library, tmp_path
+):
+    """工单 05：无快照目录（README + context platform）→ 兜底重建快照形
+    dict——rows 与生成口径逐行一致（README 表同源解析）、board = 静态板定义、
+    board_id / platform 与 context 同；快照文件本身缺失不阻断。"""
+    _add_key_module(fake_module_library)
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["key", "dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=fake_module_library,
+        masters_dir=masters_dir,
+    )
+    out = summary.output_dir
+    # 模拟旧工程：删掉快照（其余产物不动，README / context 仍在）
+    (out / WIRING_SNAPSHOT_FILENAME).unlink()
+
+    legacy = read_wiring_snapshot_legacy(out)
+    assert legacy is not None
+    assert legacy["version"] == WIRING_SNAPSHOT_VERSION
+    assert legacy["platform"] == PLATFORM_STM32
+    board = board_for_platform(PLATFORM_STM32)
+    assert legacy["board_id"] == board.board_id
+    assert legacy["board"] == board.to_dict()
+    manifests = _resolved(fake_module_library, "key", "dht11", "delay")
+    expected = wiring_rows(PLATFORM_STM32, manifests)
+    assert legacy["rows"] == expected
+    # 与快照存在时读到的内容一致（同源恢复，不是新数据）
+    write_wiring_snapshot(out, build_wiring_snapshot(PLATFORM_STM32, board, manifests, (), {}))
+    assert read_wiring_snapshot(out)["rows"] == expected
+
+
+def test_read_wiring_snapshot_legacy_degrades_to_none(tmp_path):
+    """兜底容错：缺 context / context 无 platform / 无 README / README 无表 /
+    坏 JSON / 未知平台 → None（调用方保持空载荷退化，不 500）。"""
+    from contest_generator.manifest import ModuleManifest, PinDeclaration, PlatformEntry
+
+    readme = render_readme(
+        PLATFORM_STM32,
+        None,
+        [
+            ModuleManifest(
+                slug="key",
+                description="按键",
+                platforms={
+                    PLATFORM_STM32: PlatformEntry(
+                        files=(),
+                        pins=(
+                            PinDeclaration(
+                                id="KEY_START", type="gpio_in", default="PB3",
+                                label="启动按键", required=True,
+                            ),
+                        ),
+                    )
+                },
+            )
+        ],
+    )
+    # 只有 README，无 context → None
+    (tmp_path / README_FILENAME).write_text(readme, encoding="utf-8")
+    assert read_wiring_snapshot_legacy(tmp_path) is None
+
+    # context 无 platform / 坏 JSON → None
+    (tmp_path / CONTEXT_FILENAME).write_text("{}", encoding="utf-8")
+    assert read_wiring_snapshot_legacy(tmp_path) is None
+    (tmp_path / CONTEXT_FILENAME).write_text("{oops", encoding="utf-8")
+    assert read_wiring_snapshot_legacy(tmp_path) is None
+
+    # platform + README 但无接线表 → None；未知平台 → None
+    (tmp_path / CONTEXT_FILENAME).write_text(
+        json.dumps({"platform": PLATFORM_STM32}), encoding="utf-8"
+    )
+    (tmp_path / README_FILENAME).write_text("## 无表格\n", encoding="utf-8")
+    assert read_wiring_snapshot_legacy(tmp_path) is None
+    (tmp_path / README_FILENAME).write_text(readme, encoding="utf-8")
+    (tmp_path / CONTEXT_FILENAME).write_text(
+        json.dumps({"platform": "unknown"}), encoding="utf-8"
+    )
+    assert read_wiring_snapshot_legacy(tmp_path) is None

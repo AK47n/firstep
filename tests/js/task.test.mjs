@@ -596,6 +596,60 @@ test("taskStepReportHTML: 结果面板步骤报告块内同一接线图装配（
   assert.ok(!noCtx.includes("task-step-wiring"));
 });
 
+// —— task-wiring-diagram/05：退化路径按资源标定接线图——wiring 空但接线行可查
+// （快照或 README 兜底）且 resources ∩ 接线行非空 → 接线图（inferred caption）；
+// 反推无行可命中 → fallback 资源高亮板图；再无 → 纯文字。
+test("taskNextActionHTML: 按资源标定接线图（resources 引脚/模块 slug 命中 → inferred 图；无匹配 → fallback）", () => {
+  const board = {
+    name: "测板", platform: "stm32", pcb_color: "", pins: [
+      { name: "PB3", kind: "io", x: 0, y: 0 },
+      { name: "PA0", kind: "io", x: 1, y: 1 },
+    ],
+    fixed: [], landmarks: [],
+  };
+  const rows = [
+    { slug: "key", role: "KEY_START（启动按键）", role_id: "KEY_START", role_label: "启动按键", pin: "PB3", remark: "gpio_in（必接）" },
+  ];
+  const wiringCtx = { board, rows };
+  const fallbackHTML = '<div class="resource-board" data-probe="fallback">资源高亮板图</div>';
+  const baseIter = { seq: 1, kind: "execute", status: "unverified", user_action: "烧录观察", wiring: [] };
+  // ① wiring 空 + resources 引脚命中 → inferred 接线图（数据纪律：线由 rows 决定）
+  const byPin = taskNextActionHTML(
+    { id: "t1", status: "unverified", resources: ["PB3"], iterations: [baseIter] },
+    { wiringCtx, wiringFallbackHTML: fallbackHTML },
+  );
+  assert.ok(!byPin.includes('data-probe="fallback"'));
+  assert.ok(byPin.includes("task-next-wiring"));
+  assert.ok(byPin.includes("wiring-hl"));
+  assert.ok(byPin.includes("按引脚资源标定的接线"));
+  assert.ok(byPin.includes("KEY_START（启动按键）"));
+  // ② wiring 空 + resources 为模块 slug → 该模块全部行命中
+  const bySlug = taskNextActionHTML(
+    { id: "t1", status: "unverified", resources: ["key"], iterations: [baseIter] },
+    { wiringCtx, wiringFallbackHTML: fallbackHTML },
+  );
+  assert.ok(bySlug.includes("wiring-hl"));
+  assert.ok(bySlug.includes("KEY_START"));
+  // ③ wiring 空 + resources 无行可命中（供电/外设名）→ 资源高亮板图保持
+  const byNomatch = taskNextActionHTML(
+    { id: "t1", status: "unverified", resources: ["3V3", "BEEP", "PA99"], iterations: [baseIter] },
+    { wiringCtx, wiringFallbackHTML: fallbackHTML },
+  );
+  assert.ok(byNomatch.includes('data-probe="fallback"'));
+  assert.ok(!byNomatch.includes("按引脚资源标定的接线"));
+  // ④ 无 resources 也无 wiring → fallback；连 fallback 也没有 → 纯文字
+  const noRes = taskNextActionHTML(
+    { id: "t1", status: "unverified", iterations: [baseIter] },
+    { wiringCtx, wiringFallbackHTML: fallbackHTML },
+  );
+  assert.ok(noRes.includes('data-probe="fallback"'));
+  const bare = taskNextActionHTML(
+    { id: "t1", status: "unverified", iterations: [baseIter] },
+    { wiringCtx },
+  );
+  assert.ok(!bare.includes("svg") && !bare.includes("wiring-hl") && bare.includes("烧录观察"));
+});
+
 test("taskCardHTML: 下一步要做摘要进卡（有则渲染，无则卡形不变）", () => {
   const base = taskCardHTML({
     id: "t1", title: "寻迹", description: "x", score_refs: [], depends_on: [],
