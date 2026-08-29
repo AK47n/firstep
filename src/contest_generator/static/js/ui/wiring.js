@@ -8,7 +8,7 @@
 import { apiGet } from "/js/app.js";
 import { aggregateResourceGroups } from "/js/fx/task.js";
 import { resourceBoardHTML, resourceTaskColorMap } from "/js/fx/resource-board.js";
-import { wiringDiagramHTML } from "/js/fx/wiring.js";
+import { wiringDiagramHTML, wiringFromResources } from "/js/fx/wiring.js";
 import { reviseGetPlatform } from "./generate-revise.js";
 
 /** 装配单飞缓存：dir → Promise<assets>（进行中）；assetsValue = 已就绪值。 */
@@ -117,8 +117,9 @@ function filterGroupsForTask(groups, taskId) {
 }
 
 /** 渲染后把接线图数据句柄挂到 host（供「显示全部接线」原位重渲）：host 存在
- * ⟺ wiringSectionHTML 走了 tier-1（board + wiring 非空）——句柄只此时需要；
- * wiring 取最新轮迭代（与装配同源）。 */
+ * ⟺ wiringSectionHTML 走了接线图（tier-1 或工单 05 按资源标定）——句柄只在
+ * 此时需要；wiring 取最新轮迭代（与装配同源），无 wiring 引用时用
+ * wiringFromResources 反推结果（与 fx 层同一推导，toggle 对推断图同样可用）。 */
 export function attachWiringInputs(root, tasksById, assets) {
   if (!root) return;
   root.querySelectorAll("[data-wiring-uid]").forEach((host) => {
@@ -128,8 +129,12 @@ export function attachWiringInputs(root, tasksById, assets) {
     const task = tasksById.get(taskId);
     const last = task && task.iterations ? task.iterations[task.iterations.length - 1] : null;
     const wiring = (last && last.wiring) || [];
-    if (!assets || !assets.ctx || !wiring.length) return;
-    host.__wiringInputs = { board: assets.ctx.board, rows: assets.ctx.rows || [], wiring };
+    if (!assets || !assets.ctx) return;
+    const effWiring = wiring.length
+      ? wiring
+      : wiringFromResources((task && task.resources) || [], assets.ctx.rows || []);
+    if (!effWiring.length) return;
+    host.__wiringInputs = { board: assets.ctx.board, rows: assets.ctx.rows || [], wiring: effWiring };
   });
 }
 

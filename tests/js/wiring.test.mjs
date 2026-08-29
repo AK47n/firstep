@@ -9,6 +9,7 @@ import {
   highlightWiringLines,
   wiringAllLines,
   wiringDiagramHTML,
+  wiringFromResources,
 } from "../../src/contest_generator/static/js/fx/wiring.js";
 
 const board = {
@@ -151,4 +152,39 @@ test("wiringDiagramHTML: 全部转义（板名/行内容/引用含特殊字符�
   assert.ok(html.includes("R&lt;1&gt;"));
   assert.ok(!html.includes("<i>极性</i>"));
   assert.ok(html.includes("&lt;i&gt;极性&lt;/i&gt;"));
+});
+
+test("wiringFromResources: 引脚名/模块 slug 命中接线行；多行同 pin 全收；无匹配跳过；去重保序", () => {
+  const multiRows = [
+    ...rows,
+    { slug: "led", role: "LED", role_id: "LED", role_label: "", pin: "PA0", remark: "gpio_out（必接）" },
+    { slug: "led", role: "LED_RED", role_id: "LED_RED", role_label: "", pin: "PA0", remark: "gpio_out" },
+  ];
+  // 引脚名命中（PA0 在 rows 首行即 LED_RED、补的 LED 行次之 → 两个 target 全收）
+  // + 模块 slug（key → 该模块行）+ 无匹配（供电/外设名跳过）
+  const entries = wiringFromResources(["PA0", "key", "3V3", "BEEP"], multiRows);
+  assert.deepEqual(entries, [
+    { pin: "PA0", target: "LED_RED", note: "" },
+    { pin: "PA0", target: "LED", note: "" },
+    { pin: "PB3", target: "KEY_START", note: "" },
+  ]);
+  // 去重（同一资源重复 / 同一 pin→target 不重画）
+  const dedup = wiringFromResources(["PB3", "key", "PB3"], rows);
+  assert.deepEqual(dedup, [{ pin: "PB3", target: "KEY_START", note: "" }]);
+  // 空 / 全无匹配 → 空数组
+  assert.deepEqual(wiringFromResources([], rows), []);
+  assert.deepEqual(wiringFromResources(["PA99", "3V3"], rows), []);
+  assert.deepEqual(wiringFromResources(["PB3"], null), []);
+});
+
+test("wiringDiagramHTML: inferred 模式 caption 注明「按引脚资源标定」", () => {
+  const inferred = wiringFromResources(["PB3"], rows);
+  const html = wiringDiagramHTML({ board, rows, wiring: inferred, showAll: false, inferred: true });
+  assert.ok(html.includes("按引脚资源标定的接线"));
+  assert.ok(!html.includes(" · 本步接线"));  // caption 不等同于 AI 引用模式（图例「本步接线」仍在）
+  // 缺省模式 caption 仍为「本步接线」
+  const normal = wiringDiagramHTML({
+    board, rows, wiring: [{ pin: "PB3", target: "KEY_START" }], showAll: false,
+  });
+  assert.ok(normal.includes(" · 本步接线"));
 });

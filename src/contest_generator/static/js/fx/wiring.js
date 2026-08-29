@@ -118,6 +118,33 @@ export function wiringAllLines(board, rows, highlight) {
   return lines;
 }
 
+/** 按任务 resources 反推「本步涉及的线」（tier-2 增强，工单 05）：
+ * resources = 任务拆解时 AI 标定的真实引脚名 / 模块 slug；接线行（与 README
+ * 同源——快照或 README 兜底）决定每根线接哪个端子。data 纪律：resources 只
+ * 作「选哪些行」的名字，线/端子名由确定数据决定——引脚名 → 同 pin 的接线行
+ * （多行同 pin 全收，如 LED 与 LED_RED 双行）；模块 slug → 该模块全部行；
+ * 无匹配（供电 / 板载资源 / 外设名等不在接线行内）→ 跳过（不幻觉线）。
+ * 保序去重（同 pin→target 只画一条），返回 wiring 引用形 [{pin, target, note}]。 */
+export function wiringFromResources(resources, rows) {
+  const allRows = Array.isArray(rows) ? rows : [];
+  const out = [];
+  const seen = new Set();
+  for (const r of resources || []) {
+    const name = String(r || "");
+    if (!name) continue;
+    for (const row of allRows) {
+      if (!row || (row.pin !== name && row.slug !== name)) continue;
+      const target = row.role_id || row.role || "";
+      if (!target) continue;
+      const key = row.pin + "→" + target;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ pin: row.pin, target, note: "" });
+    }
+  }
+  return out;
+}
+
 /** 板壳 + 芯片 + 地标 + 全部焊盘（丝印名）——与 resourceBoardSVG 同画法
  * （0° 视角、无点击/旋转；此处不画任务着色，接线图只求板形可认）。 */
 function boardSVGParts(board, rowsCount) {
@@ -169,13 +196,16 @@ function boardSVGParts(board, rowsCount) {
 }
 
 /** 接线图整块 HTML（纯函数，全部输出转义）：
- * 输入 {board, rows, wiring, showAll}——
+ * 输入 {board, rows, wiring, showAll, inferred}——
  * board = 板定义 dict（快照内嵌 / /api/boards 同形；null = 空态）；
  * rows = 接线行（快照 rows：slug/role/role_id/pin/remark…）；
- * wiring = 本步接线引用（迭代记录 wiring：[{pin, target, note}]）；
- * showAll = 是否展开「显示全部接线」（默认 false = 只画本步高亮线）。
+ * wiring = 本步接线引用（迭代记录 wiring：[{pin, target, note}]；tier-2
+ * 增强 = wiringFromResources 反推结果，inferred: true 标注 caption 区分）；
+ * showAll = 是否展开「显示全部接线」（默认 false = 只画本步高亮线）；
+ * inferred = 该 wiring 是否按资源标定（非 AI 引用——caption 注明，数据纪律：
+ * 两者都是同一渲染，仅来源标注不同）。
  * 空 rows / 板定义缺失 / 全非法输入 → 中文空态文案（不崩溃、不空白）。 */
-export function wiringDiagramHTML({ board, rows, wiring, showAll }) {
+export function wiringDiagramHTML({ board, rows, wiring, showAll, inferred }) {
   if (!board || !(board.pins || []).length) {
     return '<div class="wiring-empty muted">板定义缺失——无法绘制接线图（下方文字指引仍可用）。</div>';
   }
@@ -223,6 +253,8 @@ export function wiringDiagramHTML({ board, rows, wiring, showAll }) {
       + (showAll ? " checked" : "") + "> 显示全部接线</label>"
     : "";
   return '<div class="wiring-diagram">'
-    + '<div class="wiring-caption muted">' + esc(board.name || "开发板") + " · 本步接线</div>"
+    + '<div class="wiring-caption muted">' + esc(
+      (inferred ? board.name + " · 按引脚资源标定的接线" : board.name + " · 本步接线")
+    ) + "</div>"
     + legend + parts.join("") + toggle + "</div>";
 }

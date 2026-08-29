@@ -1068,21 +1068,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/wiring")
     @_map_errors
     def wiring_read(output_dir: str = "") -> dict:
-        """接线快照读取（只读端点，工单 task-wiring-diagram/04）：输出目录 →
-        {platform, board, rows}。
+        """接线快照读取（只读端点，工单 task-wiring-diagram/04 + 05）：输出
+        目录 → {platform, board, rows}。
 
         board = 快照内嵌板定义（与 /api/boards 同平台板一致：引脚坐标/丝印/
         固定资源）；rows = 接线行（与 README「引脚接线表」同源——生成时同一
-        推导函数落盘）。目录无快照文件 / 快照坏 JSON / 版本不符 → 空载荷
-        （platform 空串、board None、rows []）——前端走退化路径，绝不 500
-        （条目级容错与既有任务数据读取风格一致，见 read_wiring_snapshot）。
+        推导函数落盘）。快照缺失 → **旧工程兜底**（read_wiring_snapshot_legacy：
+        README「引脚接线表」同源解析 + context platform + 静态板定义——恢复
+        生成时同一数据，不做猜测）；兜底也失败（无 README / 无 context / 坏
+        JSON / 未知平台）→ 空载荷（platform 空串、board None、rows []）——
+        前端走退化路径，绝不 500（条目级容错与既有任务数据读取风格一致）。
         """
-        from .wiring import read_wiring_snapshot
+        from .wiring import read_wiring_snapshot, read_wiring_snapshot_legacy
 
         empty = {"platform": "", "board": None, "rows": []}
         if not output_dir:
             return empty
         snapshot = read_wiring_snapshot(output_dir)
+        if snapshot is None:
+            snapshot = read_wiring_snapshot_legacy(output_dir)
         if snapshot is None:
             return empty
         platform = snapshot.get("platform", "")

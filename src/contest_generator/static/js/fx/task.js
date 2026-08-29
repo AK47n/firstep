@@ -3,7 +3,7 @@
 import { esc, truncate } from "./core.js";
 import { isMainCPath } from "./code.js";  // 错误行跳转可点判定（error-jump-task/02；code.js 无环）
 import { flashPanelHTML } from "./flash.js";  // 任务卡烧录控制行（flash-step-button/01；flash.js 仅依赖 core.js，无环）
-import { wiringDiagramHTML } from "./wiring.js";  // 接线图（task-wiring-diagram/03；wiring.js 仅依赖 core.js，无环）
+import { wiringDiagramHTML, wiringFromResources } from "./wiring.js";  // 接线图（task-wiring-diagram/03+05；wiring.js 仅依赖 core.js，无环）
 
 export function taskStatusLabel(status) {
   switch (status) {
@@ -772,14 +772,17 @@ function wiringPer(task, opts) {
   return (typeof o.wiringOpts === "function") ? (o.wiringOpts(task) || {}) : null;
 }
 
-/** 接线图区块（工单 task-wiring-diagram/03 + 04）：任务卡「下一步要做」与
+/** 接线图区块（工单 task-wiring-diagram/03 + 04 + 05）：任务卡「下一步要做」与
  * 结果面板步骤报告共用同一装配（同一渲染函数、同一数据源——spec 决策）。
  *
- * 三级退化（任一情况不报错、不空白）：
+ * 四级退化（任一情况不报错、不空白）：
  * ① 最新轮 wiring 引用非空且 board 可用 → 接线图（本步高亮；showAll 由
  *    wiringShowAll 传入，缺省 false = 只画本步线）；
- * ② wiring 空 / 板定义缺失但任务有资源标注（wiringFallbackHTML 非空，
- *    胶水层按 resourceIsHardware 判据预渲染资源高亮板图）→ 资源高亮板图；
+ * ①b 无 wiring 引用但接线行可查（ctx.rows 非空，快照或 README 兜底）且
+ *    本任务 resources ∩ 接线行非空 → 按资源标定接线图（inferred: true，
+ *    caption 注明——工单 05：旧工程/校验全丢也能看到「引脚→端子」接线）；
+ * ② 上述失败但任务有资源标注（wiringFallbackHTML 非空，胶水层按
+ *    resourceIsHardware 判据预渲染资源高亮板图）→ 资源高亮板图；
  * ③ 都没有 → 空串（纯文字现状行为，调用方照常渲染文字指引）。
  * 数据装配 = opts.wiringCtx {board, rows}（快照 / /api/boards 同形板定义 +
  * 接线行；缺省 = 按退化路径）；工单 04 起胶水层经 opts.wiringOpts(task)
@@ -802,6 +805,21 @@ export function wiringSectionHTML(task, opts, perComputed) {
       wiring,
       showAll: perTask ? !!perTask.wiringShowAll : !!o.wiringShowAll,
     });
+  }
+  // ①b（工单 05 退化增强）：无 wiring 引用但接线行可查（快照或 README 兜底）
+  // → 按本步 resources 反推「涉及的线」画接线图（确定性：线由 rows 决定，
+  // resources 只是选行名字；inferred 标注 caption 区分 AI 引用）。
+  if (ctx.board && (ctx.rows || []).length) {
+    const inferred = wiringFromResources((task && task.resources) || [], ctx.rows);
+    if (inferred.length) {
+      return wiringDiagramHTML({
+        board: ctx.board,
+        rows: ctx.rows,
+        wiring: inferred,
+        showAll: perTask ? !!perTask.wiringShowAll : !!o.wiringShowAll,
+        inferred: true,
+      });
+    }
   }
   return fallback || "";
 }
