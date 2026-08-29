@@ -4614,6 +4614,8 @@ def _solutions_list_text(solutions: Sequence[SolutionOption]) -> str:
             head += f"｜价格：{solution.price}"
         if solution.recommended:
             head += "（词表推荐）"
+        if solution.lib_modules:
+            head += f"｜库内已有：{'、'.join(solution.lib_modules)}"
         lines.append(head)
         if solution.note:
             lines.append(f"  注意：{solution.note}")
