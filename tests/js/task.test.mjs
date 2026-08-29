@@ -225,6 +225,56 @@ test("taskCardHTML: 卡内渲染轮次历史（有记录追加，无记录不变
 });
 
 // ---------------------------------------------------------------------------
+// 任务卡视觉重构（工单 task-card-polish/01）：元信息 chips 行 + 轮次两行式
+// ---------------------------------------------------------------------------
+
+test("taskCardHTML: 卡根 task-card 类 + 元信息一行 chips（资源/需上板/评分点/前置）", () => {
+  const html = taskCardHTML({
+    id: "t1", title: "循迹决策", description: "根据灰度值控制电机",
+    score_refs: ["s1"], depends_on: ["t0"], verify: "manual", status: "verified",
+    resources: ["PA0", "xunji"],
+  }, 0, { scorePoints: [{ id: "s1", part: "basic", score: 20 }] });
+  assert.ok(html.includes('class="item task-card"'));
+  assert.ok(html.includes('class="task-meta"'));
+  assert.ok(html.includes('class="task-meta-item"'));
+  assert.ok(html.includes("资源："));
+  assert.ok(html.includes("需上板人工确认"));
+  assert.ok(html.includes("task-meta-warn"));
+  assert.ok(html.includes("评分点：s1（基础 20 分）"));
+  assert.ok(html.includes("前置：t0"));
+});
+
+test("taskCardHTML: 无任何元信息 → 不渲染 .task-meta 行", () => {
+  const html = taskCardHTML({
+    id: "t1", title: "A", description: "x",
+    score_refs: [], depends_on: [], verify: "compile", status: "pending",
+  }, 0, {});
+  assert.ok(!html.includes("task-meta"));
+});
+
+test("taskIterationsHTML: 两行式结构（line 徽章行 + detail 摘要行）+ 回滚按钮 btn-mini", () => {
+  const html = taskIterationsHTML({ id: "t1", iterations: [
+    { seq: 1, kind: "execute", feedback: "左轮不转", what_changed: "改了 PWM", status: "verified",
+      backup_id: "b1", at: "2026-08-27T10:00:00+0800", compile_summary: "ok" },
+  ] });
+  assert.ok(html.includes('class="task-iteration"'));
+  assert.ok(html.includes('class="task-iteration-line"'));
+  assert.ok(html.includes('class="task-iteration-detail muted"'));
+  assert.ok(html.includes("btn-mini btn-task-iteration-rollback"));
+  assert.ok(html.includes("历史记录（共 1 轮）"));
+  // 细节行以 · 分隔：反馈 / 做了什么 / 时间 / 备份
+  assert.ok(html.includes("「左轮不转」 · 「改了 PWM」 · 2026-08-27T10:00:00+0800 · 备份"));
+});
+
+test("taskIterationsHTML: 无摘要无备份 → 只渲染第一行（detail 行缺省）", () => {
+  const html = taskIterationsHTML({ id: "t1", iterations: [
+    { seq: 1, kind: "execute", status: "failed", compile_summary: "err" },
+  ] });
+  assert.ok(html.includes('class="task-iteration-line"'));
+  assert.ok(!html.includes('class="task-iteration-detail"'));
+});
+
+// ---------------------------------------------------------------------------
 // 任务序号 + 每卡对话区（工单 task-chat/03）
 // ---------------------------------------------------------------------------
 
