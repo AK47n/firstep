@@ -125,3 +125,19 @@ def delete_recent(fp: Path, entry_id: str) -> bool:
         return False
     _write(fp, kept)
     return True
+
+
+def clear_recent(fp: Path) -> int:
+    """清空最近记录（工单 reset-local-records/01）：返回清除条数。
+
+    换题重置语义：记录文件一并归零——有记录 → 写回空列表并返回条数；
+    无文件 → 不创建、返回 0；损坏 / 非列表 → 「读不出条目」返回 0，但
+    残缺文件仍被清掉（`_read` 容错读不到，文件存在 = 该清，避免下次
+    load 继续容忍坏文件）——计数只代表「读到的正常记录」，不代表文件
+    本身是否被处理。
+    """
+    count = len(_read(fp))
+    if fp.exists():
+        # 有记录（count>0）或残缺文件（count=0）：都归零；仅无文件时不动
+        _write(fp, [])
+    return count

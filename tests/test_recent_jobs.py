@@ -16,6 +16,7 @@ from contest_generator.recent_jobs import (
     STATUS_GENERATED,
     STATUS_OK,
     RecentStatusError,
+    clear_recent,
     delete_recent,
     load_recent,
     record_recent,
@@ -100,6 +101,25 @@ def test_delete_recent(tmp_path):
     assert load_recent(fp) == []
     # 删除后再删同样 id → False（已不存在）
     assert delete_recent(fp, entry["id"]) is False
+
+
+def test_clear_recent_counts_and_empties(tmp_path):
+    """清空（工单 reset-local-records/01）：返回清除条数，文件写回空列表。"""
+    fp = recent_file(tmp_path / "config.json")
+    record_recent(fp, output_dir="D:/contest/a", platform="stm32", slugs=["dht11"])
+    record_recent(fp, output_dir="D:/contest/b", platform="stm32", slugs=["led"])
+
+    assert clear_recent(fp) == 2
+    assert load_recent(fp) == []
+    assert clear_recent(fp) == 0  # 再清 → 0
+
+
+def test_clear_recent_tolerates_missing_and_corrupt(tmp_path):
+    fp = recent_file(tmp_path / "config.json")
+    assert clear_recent(fp) == 0  # 无文件：不抛、不建文件
+    fp.write_text("{ not json", encoding="utf-8")
+    assert clear_recent(fp) == 0  # 损坏：0 且不抛（顺带被覆盖为空列表）
+    assert load_recent(fp) == []
 
 
 def test_load_recent_tolerates_missing_and_corrupt(tmp_path):

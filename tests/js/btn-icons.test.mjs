@@ -10,9 +10,9 @@ const html = readFileSync(resolve(root, "src/contest_generator/static/index.html
 const appJs = readFileSync(resolve(root, "src/contest_generator/static/js/app.js"), "utf8");
 
 const NAMES = ["rocket", "code", "sparkles", "doc", "clipboard", "wrench",
-  "save", "copy", "check", "upload", "wand"];
+  "save", "copy", "check", "upload", "wand", "trash"];
 
-test("11 个图标名均返回 SVG 且为 btn-ico 类", () => {
+test("12 个图标名均返回 SVG 且为 btn-ico 类", () => {
   for (const n of NAMES) {
     const out = btnIcon(n);
     assert.ok(out.startsWith('<svg class="btn-ico"'), n + " 前缀错误: " + out.slice(0, 30));

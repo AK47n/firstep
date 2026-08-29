@@ -202,3 +202,27 @@ def parameter_warnings(
     ):
         warns.append("clarifications 内容与生成缓存时不同")
     return warns
+
+
+def clear_recommend_cache(cache_dir: Path | None = None) -> int:
+    """清空 AI 推荐缓存（工单 reset-local-records/01）：删除目录下全部
+    ``recommend_*.json``（按文件名枚举，不解析内容——坏缓存同样是缓存，
+    换题重置一并清），返回删除文件数。
+
+    目录解析与 :func:`recommend_cache_path` 同源（显式 > 环境变量 > 缺省
+    用户配置目录）；目录不存在 → 0；同目录其它文件不动；单个删除失败
+    跳过（尽力而为，清理绝不报错）。
+    """
+    base = cache_dir or Path(
+        os.environ.get("FIRSTEP_RECOMMEND_CACHE_DIR") or DEFAULT_CACHE_DIR
+    )
+    if not base.is_dir():
+        return 0
+    removed = 0
+    for path in base.glob("recommend_*.json"):
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed

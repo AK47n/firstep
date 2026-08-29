@@ -63,6 +63,8 @@ from contest_generator.llm import (
     build_llm,
 )
 from contest_generator.pin_bindings import PinBindingError, resolve_bindings
+from contest_generator.recent_jobs import load_recent, recent_file, record_recent
+from contest_generator.recommend_cache import cache_recommend, recommend_cache_path
 from contest_generator.wiring import build_wiring_snapshot, write_wiring_snapshot
 from contest_generator.library import ValidationResult
 from contest_generator.manifest import ManifestSummary
@@ -7093,3 +7095,42 @@ def test_api_wiring_readme_fallback_dedups_same_pin(client, context, tmp_path):
     (tmp_path / README_FILENAME).unlink()
     resp = client.get("/api/wiring", params={"output_dir": str(tmp_path)})
     assert resp.json() == {"platform": "", "board": None, "rows": []}
+
+
+# ---------------------------------------------------------------------------
+# 重置本地记录端点（工单 reset-local-records/01）：清服务端题相关记录——
+# recent.json + AI 推荐缓存（recommend_*.json）；config.json 与工程文件不动。
+# ---------------------------------------------------------------------------
+
+
+def test_api_reset_records_clears_server_records(client, context):
+    """正常：预置 recent 2 条 + 推荐缓存 1 个 + 假 config.json → POST 返回
+    {recent_entries:2, cache_files:1}；recent.json 清空、缓存文件删除、
+    config.json 原样保留。"""
+    config_path = context[0].config_path
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"api_key": "sk-test"}), encoding="utf-8")
+    fp = recent_file(config_path)
+    record_recent(fp, output_dir="D:/contest/a", platform=PLATFORM_STM32, slugs=["dht11"])
+    record_recent(fp, output_dir="D:/contest/b", platform=PLATFORM_STM32, slugs=["led"])
+    cache_recommend(
+        recommend_cache_path("2026C", cache_dir=config_path.parent / "cache"),
+        {"modules": []},
+        topic_key="2026C",
+        problem_text="赛题文本",
+        platform="stm32",
+    )
+    resp = client.post("/api/reset-records")
+    assert resp.status_code == 200
+    assert resp.json() == {"recent_entries": 2, "cache_files": 1}
+    assert load_recent(fp) == []
+    assert not (config_path.parent / "cache" / "recommend_2026C.json").exists()
+    assert config_path.read_text(encoding="utf-8") == json.dumps({"api_key": "sk-test"})
+
+
+def test_api_reset_records_empty_when_nothing(client, context):
+    """无记录：{0,0}；不创建任何文件（config_path 存在性不变）。"""
+    resp = client.post("/api/reset-records")
+    assert resp.status_code == 200
+    assert resp.json() == {"recent_entries": 0, "cache_files": 0}
+    assert not context[0].config_path.exists()
