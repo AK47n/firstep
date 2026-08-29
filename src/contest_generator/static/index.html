@@ -618,6 +618,12 @@
   .topic-preread .preread-item { border-left: 2px solid var(--info-border); padding-left: 10px;
                                  margin-top: 4px; }
   .topic-preread .preread-quote { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  /* 步骤卡顶部题面提醒横幅（工单 topic-preread/03）：amber 色调与 error 红色区分 */
+  .preread-slot { background: var(--warn-dim); border: 1px solid var(--warn-border);
+                  border-left: 3px solid var(--warn); border-radius: 8px; padding: 8px 12px;
+                  margin-top: 8px; font-size: 12.5px; line-height: 1.7; color: var(--text); }
+  .preread-slot-line + .preread-slot-line { margin-top: 4px; }
+  .preread-slot .preread-slot-quote { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
   .warn-box { border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; font-size: 14px; line-height: 1.7; }
   .warn-box.missing { background: var(--danger-dim); color: var(--danger); }
   .warn-box.unverified { background: var(--warn-dim); color: var(--warn); }
@@ -1903,6 +1909,7 @@
 
     <div class="card">
       <h2><span class="step-no">3</span>目标平台</h2>
+      <div class="preread-slot hidden" data-preread-slot data-step="3"></div>
       <details class="card-details">
         <summary>选一条主控线：MSPM0G3507（CCS）或 STM32F103C8T6（Keil5），决定后续全部代码与工具链。</summary>
         <div class="card-details-body">两条主控线二选一：MSPM0G3507（TI，CCS 工程）与 STM32F103C8T6（ST，Keil5 工程）。平台决定模块库可用集（依赖芯片外设）、引脚板图与编译工具链——选完并可更改，但切换平台会清空下游选择（模块 / 引脚 / 实例），已生成工程不受影响。</div>
@@ -1926,6 +1933,7 @@
 
     <div class="card">
       <h2><span class="step-no">5</span>AI 推荐模块</h2>
+      <div class="preread-slot hidden" data-preread-slot data-step="5"></div>
       <details id="qa-material" style="margin-top:4px">
         <summary style="cursor:pointer;font-size:12px;color:var(--muted)">
           赛题答疑 Q&amp;A（可选）——赛事组对题面的澄清问答，推荐会参考 <span class="muted" id="qa-has-content"></span>
@@ -1952,6 +1960,7 @@
 
     <div class="card">
       <h2><span class="step-no">6</span>模块清单与平台警告</h2>
+      <div class="preread-slot hidden" data-preread-slot data-step="6"></div>
       <div class="row">
         <input type="search" id="module-search" placeholder="搜索模块以添加…" style="flex:1;max-width:300px">
         <span class="muted" id="module-count"></span>
@@ -1974,6 +1983,7 @@
 
     <div class="card" id="card-pin-config">
       <h2><span class="step-no">7</span>引脚配置（板图点选）</h2>
+      <div class="preread-slot hidden" data-preread-slot data-step="7"></div>
       <details class="card-details">
         <summary>点引脚给接线角色改线；不配 = 按默认布线生成，打开就能编译。</summary>
         <div class="card-details-body">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
@@ -2012,6 +2022,7 @@
 
     <div class="card">
       <h2><span class="step-no">8</span>main.c 骨架</h2>
+      <div class="preread-slot hidden" data-preread-slot data-step="8"></div>
       <details class="card-details">
         <summary>骨架 = 初始化序列 + TODO 预留区；自检骨架先验硬件再写逻辑。</summary>
         <div class="card-details-body">骨架 = 初始化序列 + TODO 预留区；自检 = 逐模块初始化/读一次/打印结果（OLED 为主、串口为辅），先验硬件再写逻辑。</div>
@@ -2147,6 +2158,7 @@
 
     <div class="card" id="card-revise">
       <h2><span class="step-no">11</span>修订与深化</h2>
+      <div class="preread-slot hidden" data-preread-slot data-step="11"></div>
       <!-- 修订说明（工单 step11-tabs-ui/04 视觉统一）：长文案瘦身为一行，
            细节收进 details（不丢信息） -->
       <details class="card-details">
