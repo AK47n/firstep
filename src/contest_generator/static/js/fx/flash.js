@@ -49,9 +49,9 @@ export function flashResultHTML(data) {
  * 红黄边框一眼看出是「没就绪」而非「烧失败」；附「去设置页配置」按钮
  *（胶水层委托处理——切到设置 tab 填工具路径，spec 前端决策「设置页跳转」）。 */
 export function flashGuideHTML(message) {
-  return '<div class="reason" style="border:1px solid var(--warn, #e6a23c);'
+  return '<div class="reason" style="border:1px solid var(--warn);'
     + 'border-radius:8px;padding:8px 10px">'
-    + '<span style="color:var(--warn, #e6a23c);font-weight:600">烧录未就绪</span> '
+    + '<span style="color:var(--warn);font-weight:600">烧录未就绪</span> '
     + esc(message || "烧录前置条件未就绪，请查看提示")
     + ' <button class="btn-flash-goto-settings">去设置页配置</button>'
     + "</div>";

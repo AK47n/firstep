@@ -902,7 +902,7 @@ export function renderWarnings() {
     box.appendChild(div);
   }
   if (!warnings.length) {
-    if (expanded.length && !groupIssues.length) box.innerHTML = '<div class="warn-box ok" style="color:var(--ok);background:#d1fae5">所选模块在该平台均可直接用。</div>';
+    if (expanded.length && !groupIssues.length) box.innerHTML = '<div class="warn-box ok">所选模块在该平台均可直接用。</div>';
     return;
   }
   for (const w of warnings) {

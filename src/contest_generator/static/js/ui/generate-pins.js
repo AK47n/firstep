@@ -869,7 +869,7 @@ function showPinMenu(pinEl, pinName) {
     rows += `<li class="muted" style="font-weight:600">已占用（可直接替换：点下方角色即换绑，原占用角色红显未绑）</li>` +
       occupants.map((r) => {
         const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
-        return `<li><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${st[0]};margin-right:6px"></span>` +
+        return `<li><span class="dot" style="background:${st[0]}"></span>` +
           `<strong>${esc(r.decl.label || r.decl.id)}</strong> <span class="muted">${esc(r.slug)}</span>` +
           `<button class="pin-menu-unbind" data-key="${esc(r.key)}">解除</button></li>`;
       }).join("");

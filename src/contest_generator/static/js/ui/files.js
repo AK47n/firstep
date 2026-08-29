@@ -16,9 +16,9 @@ export function addFileRow(container, name, content) {
   row.className = "file-row";
   row.innerHTML = `
     <input type="text" placeholder="文件名（含相对路径）" value="${esc(name || "")}">
-    <div style="position:relative">
+    <div class="file-row-body">
       <textarea placeholder="文件内容（.c / .h / .txt / .md）">${esc(content || "")}</textarea>
-      <button style="position:absolute;right:4px;top:4px;font-size:11px;padding:2px 6px" class="danger">✕</button>
+      <button class="file-row-x danger">✕</button>
     </div>`;
   row.querySelector("button").addEventListener("click", () => row.remove());
   container.appendChild(row);
