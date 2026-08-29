@@ -27,10 +27,13 @@ function refreshViewButtons() {
   });
 }
 
-/** 切换视图并重渲染（按钮委托入口；非法值忽略）。 */
+/** 切换视图并重渲染（按钮委托入口；非法值忽略）。
+ * 工具栏（.res-toolbar）由 generate-tasks tasksRender 渲染，本簇只在 body 里
+ * 重渲染，所以切换后必须即时同步按钮高亮——否则选中光圈留在旧按钮上。 */
 export function setResourceView(v) {
   if (v !== "list" && v !== "board") return;
   view = v;
+  refreshViewButtons();
   renderResourceSection(lastPlan);
 }
 
