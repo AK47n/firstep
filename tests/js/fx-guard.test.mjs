@@ -153,6 +153,9 @@ const DOMAINS = {
   "params.js": {
     paramListHTML: "fn", paramResultHTML: "fn",
   },
+  "params-chat.js": {
+    paramsChatMessageHTML: "fn", paramsChatInputHTML: "fn", paramsChatHTML: "fn",
+  },
   "settings.js": {
     SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
     parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",
