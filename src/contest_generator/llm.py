@@ -77,6 +77,7 @@ from .selection import (
     parse_decision,
 )
 from .task_progress import TaskError, TaskPlan, build_task_plan
+from .wiring import WiringEntry, parse_wiring_entries
 from .params import ParamList, build_params
 from .topic_library import TopicDraft, validate_topic_key
 from .wordlist import (
@@ -324,17 +325,21 @@ TASK_DISCUSS_SYSTEM_PROMPT = (
     '只输出 JSON 对象：{"reply": "回复文本"}；reply 必须非空、用中文。'
 )
 
-# 步骤报告（工单 stepwise-deepen/01 + task-insight/01）：一步任务执行 + 编译
-# 验证刚完成，AI 用中文给学生写「我做了什么 + 接下来你要做什么」两步简报 +
-# 上板自检清单。立场 = 执行者汇报，不是顾问（执行已完成，不再讨论方案）；
-# 接线/上板指引必须落到模块接口清单里的真实引脚/接口名（user_action 是学生
-# 接下来唯一的物理动作清单——把接线、烧录、观察现象、确认动作一次说清，别
-# 让用户猜）；checklist 是 user_action 的结构化拆分（原子勾选项，供上板照
-# 单子逐条测）。只输出 JSON 契约。
+# 步骤报告（工单 stepwise-deepen/01 + task-insight/01 + task-wiring-diagram/02）：
+# 一步任务执行 + 编译验证刚完成，AI 用中文给学生写「我做了什么 + 接下来你要
+# 做什么」两步简报 + 上板自检清单 + 本步接线引用。立场 = 执行者汇报，不是
+# 顾问（执行已完成，不再讨论方案）；接线/上板指引必须落到模块接口清单里的
+# 真实引脚/接口名（user_action 是学生接下来唯一的物理动作清单——把接线、
+# 烧录、观察现象、确认动作一次说清，别让用户猜）；checklist 是 user_action
+# 的结构化拆分（原子勾选项，供上板照单子逐条测）。wiring = 本步接线引用
+# （工单 task-wiring-diagram/02）：**只给名字，图形由工程数据决定**——只能
+# 引用【本工程接线数据】段里出现的引脚名与端子名（表行 + 板载供电/固定
+# 资源行），严禁自造；每根线一条；本步无物理接线 = 不输出或空数组。只输出
+# JSON 契约。
 TASK_REPORT_SYSTEM_PROMPT = (
     "你是嵌入式 C 开发工程师。学生刚点「做这一步」并完成了某个实现任务，"
     "编译验证也已结束（赛题文本 / 模块接口过长可能被截断，见末尾标注，"
-    + TRUNCATION_NOTICE + "）。请用中文给学生写一份本步骤简报，分三段："
+    + TRUNCATION_NOTICE + "）。请用中文给学生写一份本步骤简报，分四段："
     "what_changed = 本步做了什么——引用具体函数 / 引脚 / 定时器名说明改动，"
     "并注明编译验证结果；如有降级（如无工具链未验证）或警告，一并说明。"
     "user_action = 学生接下来需要做的物理动作——按模块接口清单把具体接线"
@@ -342,9 +347,16 @@ TASK_REPORT_SYSTEM_PROMPT = (
     "一次说清；本步纯软件无物理动作时才可为空串，否则必须给出明确动作。"
     "checklist = 上板 / 验证检查清单（3-6 条，每条一句「应观察到什么；若不"
     "正常检查哪里」，原子可勾选——烧录后逐条测；本步纯软件无物理动作 = []）。"
+    "wiring = 本步需要学生接着接的线（数组；本步无物理接线 = 不输出或空数组）"
+    "——每条 {pin, target, note?}：pin = 板引脚丝印名（PA0 / PB6 / 3V3 / "
+    "GND / 5V…），target = 端子名（模块角色 id 或 label、板载资源名、或引脚"
+    "名自身），note = 简短中文说明（如极性注意），可省略。**只能引用"
+    "【本工程接线数据】段里出现的引脚名与端子名**，每根线一条；严禁自造或"
+    "幻想——查不到真实来源的名字会被后端直接丢弃，丢弃后本步就没有接线图。"
     '只输出 JSON 对象：{"what_changed": "做过的中文叙事", "user_action":'
-    ' "接下来的中文动作", "checklist": ["应观察到什么；若不正常查哪里"]}；'
-    "what_changed 必须非空，三段都用中文。"
+    ' "接下来的中文动作", "checklist": ["应观察到什么；若不正常查哪里"],'
+    ' "wiring": [{"pin": "PA0", "target": "DIO", "note": "注意极性"}]}；'
+    "what_changed 必须非空，四段都用中文。"
 )
 
 # 参数识别（工单 param-tune/01）：扫描 main.c 里的可调**数值**参数——学生
@@ -1311,7 +1323,8 @@ class TaskDiscussion:
 
 @dataclass(frozen=True)
 class StepReport:
-    """一步任务执行后的步骤报告（工单 stepwise-deepen/01 + task-insight/01）。
+    """一步任务执行后的步骤报告（工单 stepwise-deepen/01 + task-insight/01 +
+    task-wiring-diagram/02）。
 
     what_changed = AI 本步做了什么（改了什么逻辑/函数、编译验证结果、任何
     降级/警告），中文叙事；user_action = 用户接下来需要做的物理动作（烧录、
@@ -1319,11 +1332,16 @@ class StepReport:
     DIO」、观察什么现象、确认后如何操作）；纯软件无物理动作时可空串。
     checklist = 上板自检清单（3-6 条原子勾选项——「应观察到什么；若不正常
     检查哪里」，随轮次落盘渲染为可勾选备忘录；纯软件步无物理动作 = 空元组）。
+    wiring = 本步需要接的线（工单 task-wiring-diagram/02：结构化引用——
+    AI 只能给名字，图形由确定性数据决定）。形状提取在解析层（机械过滤），
+    查表合法性由 task_progress 层调用 wiring.filter_wiring_entries 判决
+    （本字段 = 引用清单，非法条目由下游丢弃，全丢 = 空元组走退化路径）。
     """
 
     what_changed: str
     user_action: str = ""
     checklist: tuple[str, ...] = ()
+    wiring: tuple[WiringEntry, ...] = ()
 
 
 # 新想法 / 问题分类词表（单源：解析层校验与前端消费共用）
@@ -1520,6 +1538,7 @@ class LLM(Protocol):
         verify_result: Mapping[str, Any],
         diff_text: str,
         module_interfaces: Sequence[str],
+        wiring_summary: str = "",
     ) -> StepReport: ...
 
     def analyze_idea(
@@ -2878,14 +2897,18 @@ class DeepSeekLLM:
         verify_result: Mapping[str, Any],
         diff_text: str,
         module_interfaces: Sequence[str],
+        wiring_summary: str = "",
     ) -> StepReport:
-        """步骤报告（工单 stepwise-deepen/01）：一步执行 + 编译验证完成后的
-        汇报简报。
+        """步骤报告（工单 stepwise-deepen/01 + task-wiring-diagram/02）：一步
+        执行 + 编译验证完成后的汇报简报。
 
         输入 = 任务描述 + 编译验证结果（status / message / compile）+ 代码
-        diff 摘要 + 模块接口清单；输出 JSON 由解析器校验：what_changed 空 /
+        diff 摘要 + 模块接口清单 + 本工程接线数据摘要（wiring_summary，工单
+        task-wiring-diagram/02：wiring 字段的引用白名单——AI 只准引用这里
+        出现的引脚名与端子名）；输出 JSON 由解析器校验：what_changed 空 /
         缺失 = 整次重问（_retry_parse——汇报里"做了什么"为空毫无价值）；
-        user_action 缺失 = 空串（纯软件步无物理动作，降级路径允许）。
+        user_action 缺失 = 空串（纯软件步无物理动作，降级路径允许）；wiring
+        缺失 / 形状坏 = 空元组（本步无接线引用；合法性由下游查表判决）。
         """
 
         def parse(content: str) -> StepReport:
@@ -2902,11 +2925,14 @@ class DeepSeekLLM:
                 what_changed=what_changed.strip(),
                 user_action=user_action.strip(),
                 checklist=checklist_items,
+                wiring=parse_wiring_entries(data.get("wiring")),
             )
 
         return self._retry_parse(
             system_prompt=TASK_REPORT_SYSTEM_PROMPT,
-            user_prompt=_task_report_user_prompt(task, verify_result, diff_text, module_interfaces),
+            user_prompt=_task_report_user_prompt(
+                task, verify_result, diff_text, module_interfaces, wiring_summary
+            ),
             parse=parse,
             label="步骤报告",
             operation="report_task_step",
@@ -3738,10 +3764,11 @@ class RoutingLLM:
         verify_result: Mapping[str, Any],
         diff_text: str,
         module_interfaces: Sequence[str],
+        wiring_summary: str = "",
     ) -> StepReport:
         # 步骤报告走 remote（汇报质量优先，不进本地方法集）
         return self._remote.report_task_step(
-            task, verify_result, diff_text, module_interfaces
+            task, verify_result, diff_text, module_interfaces, wiring_summary
         )
 
     def scan_params(
@@ -4340,10 +4367,13 @@ def _task_report_user_prompt(
     verify_result: Mapping[str, Any],
     diff_text: str,
     module_interfaces: Sequence[str],
+    wiring_summary: str = "",
 ) -> str:
-    """步骤报告的 user 消息（工单 stepwise-deepen/01）：任务描述 + 编译验证
-    结果 + 代码 diff 摘要 + 模块接口清单。各段截断带标注（_truncate_content
-    同款预算）；diff 空 = 无该段（写盘前 main.c 变化未知时按无变化处理）。
+    """步骤报告的 user 消息（工单 stepwise-deepen/01 + task-wiring-diagram/02）：
+    任务描述 + 编译验证结果 + 代码 diff 摘要 + 本工程接线数据 + 模块接口清单。
+    各段截断带标注（_truncate_content 同款预算）；diff 空 = 无该段（写盘前
+    main.c 变化未知时按无变化处理）；wiring_summary 空 = 无该段（无接线清单
+    / 无板数据——AI 按不输出 wiring 处理）；接口段空 = 无该段。
     任务类 prompt 分段与 _task_execute_user_prompt 同构（接口段文本一致）——
     改动时两处核对（漂移即分叉，见 SKELETON_INTERFACES_HEADING 双份教训）。
     """
@@ -4377,6 +4407,10 @@ def _task_report_user_prompt(
         lines.append(f"编译摘要：{_truncate_content(str(compile_summary))}")
     if diff_text.strip():
         lines += ["", "【代码变化（diff 摘要，可能被截断）】", _truncate_content(diff_text)]
+    if wiring_summary.strip():
+        # 本工程接线数据（工单 task-wiring-diagram/02）：wiring 字段的引用
+        # 白名单——表行与 README「引脚接线表」同源（wiring_summary_text）
+        lines += ["", str(wiring_summary)]
     if module_interfaces:
         lines += ["", SKELETON_INTERFACES_HEADING]
         lines.extend(_truncate_content(block) for block in module_interfaces)

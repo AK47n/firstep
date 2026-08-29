@@ -669,7 +669,7 @@ class FakeLLM:
             tuple[str, tuple, dict | None, tuple]
         ] = []
         self.step_report_calls: list[
-            tuple[dict[str, Any], dict[str, Any], str, tuple[str, ...]]
+            tuple[dict[str, Any], dict[str, Any], str, tuple[str, ...], str]
         ] = []
         self.scan_params_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
@@ -997,9 +997,16 @@ class FakeLLM:
         verify_result: Mapping[str, Any],
         diff_text: str,
         module_interfaces: Sequence[str],
+        wiring_summary: str = "",
     ) -> StepReport:
         self.step_report_calls.append(
-            (dict(task), dict(verify_result), diff_text, tuple(module_interfaces))
+            (
+                dict(task),
+                dict(verify_result),
+                diff_text,
+                tuple(module_interfaces),
+                wiring_summary,
+            )
         )
         return self._step_report
 
@@ -1279,6 +1286,7 @@ class RecordingLLM:
         verify_result: Mapping[str, Any],
         diff_text: str,
         module_interfaces: Sequence[str],
+        wiring_summary: str = "",
     ) -> StepReport:
         self._record("report_task_step")
         return StepReport(

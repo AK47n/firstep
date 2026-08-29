@@ -27,6 +27,7 @@ from contest_generator.events import (
 )
 from contest_generator.budget import wire_size
 from contest_generator.fix_errors import FixSuggestion, read_file_contexts
+from contest_generator.wiring import WiringEntry
 from contest_generator.llm import (
     CLARIFICATION_HISTORY_CAP,
     CLARIFY_SYSTEM_PROMPT,
@@ -4501,9 +4502,55 @@ def test_report_task_step_checklist_parsing():
     assert result.checklist == ()
 
 
+def test_report_task_step_wiring_parsing():
+    """wiring 形状解析（工单 task-wiring-diagram/02）：合法条目保留 / 坏条目
+    （缺 pin / 缺 target / 非字符串）丢弃；字段缺省 / 非数组 / 空数组 → ()。
+    本层只做形状提取，合法性校验在 task_progress 层（下游判据）。"""
+    transport = FakeTransport(
+        body=_api_response(
+            json.dumps(
+                {
+                    "what_changed": "实现了循迹状态机。",
+                    "user_action": "把 PA0 接到灰度模块 DIO。",
+                    "wiring": [
+                        {"pin": "PA0", "target": "DIO", "note": "注意极性"},
+                        {"pin": "PB3", "target": "KEY_START"},           # note 缺省
+                        {"pin": "", "target": "DIO"},                    # pin 空 → 丢
+                        {"pin": "PA0", "target": ""},                    # target 空 → 丢
+                        {"pin": 9, "target": "DIO"},                     # 非字符串 → 丢
+                        {"pin": "PA0", "target": "DIO", "note": 5},      # note 非字符串 → 空串
+                    ],
+                }
+            )
+        )
+    )
+    llm = _llm(transport)
+    result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+    assert result.wiring == (
+        WiringEntry(pin="PA0", target="DIO", note="注意极性"),
+        WiringEntry(pin="PB3", target="KEY_START", note=""),
+        WiringEntry(pin="PA0", target="DIO", note=""),
+    )
+    # 字段缺省（旧模型输出）→ 空元组（向后兼容）
+    transport = FakeTransport(
+        body=_api_response(json.dumps({"what_changed": "好", "user_action": "烧录"}))
+    )
+    llm = _llm(transport)
+    result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+    assert result.wiring == ()
+    # 非数组 / 空数组 → 空元组
+    for bad in ("不是数组", []):
+        transport = FakeTransport(
+            body=_api_response(json.dumps({"what_changed": "好", "wiring": bad}))
+        )
+        llm = _llm(transport)
+        result = llm.report_task_step({"id": "t1", "title": "循迹"}, {}, "", ())
+        assert result.wiring == ()
+
+
 def test_report_task_step_user_prompt_sections():
-    """步骤报告 prompt 契约：任务 / 编译验证结果 / diff / 模块接口分段；
-    超长 diff 截断带标注。"""
+    """步骤报告 prompt 契约：任务 / 编译验证结果 / diff / 本工程接线数据 /
+    模块接口分段；超长 diff 截断带标注。"""
     transport = FakeTransport(body=_api_response(json.dumps({"what_changed": "好"})))
     llm = _llm(transport)
     llm.report_task_step(
@@ -4516,6 +4563,8 @@ def test_report_task_step_user_prompt_sections():
         },
         "+10 行：xunji_read 调用",
         ("xunji.h 接口：uint16_t xunji_read(void);",),
+        wiring_summary="【本工程接线数据（wiring 字段只准引用这里的引脚名与端子名）】\n"
+        "| key | KEY_START（启动按键） | PB3 | gpio_in（必接） |",
     )
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "循迹" in user_message and "循迹决策" in user_message
@@ -4525,6 +4574,21 @@ def test_report_task_step_user_prompt_sections():
     # 采纳的对话结论并入报告输入（评审补：spec 输入契约）
     assert "用户沟通结论" in user_message
     assert "10ms 定时器采样" in user_message
+    # 本工程接线数据段（工单 task-wiring-diagram/02：wiring 引用白名单）
+    assert "本工程接线数据" in user_message
+    assert "KEY_START（启动按键）" in user_message
+
+    # wiring_summary 缺省 = 无该段（无接线清单 / 无板数据）
+    transport = FakeTransport(body=_api_response(json.dumps({"what_changed": "好"})))
+    llm = _llm(transport)
+    llm.report_task_step(
+        {"id": "t1", "title": "循迹"},
+        {"status": "verified", "message": "", "compile": {}},
+        "",
+        (),
+    )
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "本工程接线数据" not in user_message
 
     # 超长 diff → 截断标注
     transport = FakeTransport(body=_api_response(json.dumps({"what_changed": "好"})))
