@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=bb73101a2a2864917007dd68432476f6852bf8a8 -->
+<!-- changelog-auto: last-commit=797810a7f8c7e3561772b56b7e54cf08a8dd877e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -60,6 +60,7 @@
 - 23:35 新手上手 01（newcomer-onboarding/01）：README.md 人话说明书（这是什么/四样东西：Python 3.13+下载链接、DeepSeek key 获取、板子与 IDE 一句话/三步装好/30 秒上手/常见问题）+ install.bat 一键安装（检测 python→版本≥3.13→建 .venv→pip install -e .→导入自检，GBK 中文提示，幂等可重跑）+ tests/test_onboarding_docs.py 3 守护用例；全量 pytest 2824 无回归
 - 23:36 新手上手 02（newcomer-onboarding/02）：启动器全流程中文反馈——后端 GET /api/health（固定载荷、不依赖配置、未配 key 也 200，启动器据此判定端口归属）+ start-app.bat 重写（.venv 优先→版本/依赖检查→netstat+/api/health 判定：本应用直接开浏览器、他程序弹窗提示、无服务后台启动→20s 轮询就绪→超时弹窗含日志路径）+ 失败分支中文弹窗（powershell WScript.Shell.Popup，全路径免 PATH 异常；mshta 语义不可靠弃用）+ 守护用例 1 个；全量 pytest 2824 无回归
 - 23:36 新手上手 01：新手 README 与 install.bat（工单 newcomer-onboarding/01）
+- 23:37 新手上手 02：启动器全流程中文反馈（工单 newcomer-onboarding/02）
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
