@@ -182,6 +182,10 @@ const DOMAINS = {
     WELCOME_DISMISS_KEY: "string",
     welcomeMode: "fn", welcomeCardHTML: "fn",
   },
+  "glossary.js": {
+    GLOSSARY_TERMS: "object",
+    glossaryHTML: "fn",
+  },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
