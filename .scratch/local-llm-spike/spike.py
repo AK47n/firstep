@@ -1,9 +1,13 @@
 """本地模型零代码 drop-in 实测（spike）。
 
+[已失效标注（工单 topic-preread/04）] 步骤 2「赛题简介」已改造为「赛题预读」
+preread_topic（结构化 JSON 契约），本脚本第 1 项 summarize_topic 调用已不存在
+于 llm.py；如需复测本地模型请改调 preread_topic。
+
 走项目真实的 DeepSeekLLM + 真实提示词 + 真实严格解析器，只把 base_url
 指向本地 Ollama 的 OpenAI 兼容端点（http://localhost:11434/v1）。
 测四类代表性调用：
-  1. summarize_topic       —— 中文文本摘要（easy 组）
+  1. preread_topic       —— 结构化 JSON 预读（结构化组）
   2. clarify               —— JSON mode（探 response_format 是否被 Ollama 接收）
   3. summarize_module      —— C 代码 → 中文简介（easy 组）
   4. validate_module_description —— JSON 判断（中等，入库门禁）
@@ -95,7 +99,7 @@ def main() -> None:
             dt = time.time() - t0
             print(f"--- FAIL in {dt:.1f}s: {type(exc).__name__}: {exc}")
 
-    run("1 赛题简介 summarize_topic", llm.summarize_topic, problem_text=problem_text)
+    run("1 赛题预读 preread_topic (JSON mode)", llm.preread_topic, problem_text=problem_text)
     run("2 澄清 clarify (JSON mode)", llm.clarify, problem_text=problem_text, clarifications=[])
     run("3 模块简介 summarize_module", llm.summarize_module, code=SAMPLE_LED_C)
     run(
