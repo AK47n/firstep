@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=cabf1505934ca9e1873cb4bed63e46471eb0941d -->
+<!-- changelog-auto: last-commit=0392ac07a4ce0e693db50cbcb9a228393db52989 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -31,6 +31,7 @@
 - 13:53 任务卡接线图：补交 spec.md 文档（与其他 feature 的 112 份 spec 同址入库）；score-coverage/02 工单补提交（代码 f4ae6e9 已入库，工单状态/勾选/评审记录补落盘）
 - 13:57 工单状态收尾：5 个已完成但未标记的工单统一改 resolved 并勾选验收标准——step-next-guide/01（实现 d7aed37）、master-library-ui/01（95fa5ee）、clarify-no-restriction/01（2b10ced）、step11-tabs-ui/01（4c7e302）、ui-polish-7/01（dc25878）；master-library-ui 与 clarify 文件末尾重复状态行去重（模板状态字段仅顶部一处）
 - 13:59 工单状态收尾（旧格式）：clarify-dumb-questions/01（eb39cbd）、llm-select-runaway/01（9d0a1c5）、stuck-doing-recover/01（9a1c896）——实现均已入库，状态改 resolved，重复状态行去重
+- 14:19 任务卡接线图：05 旧工程读取兜底 + 退化路径按资源标定接线——无快照时 /api/wiring 从 README「引脚接线表」同源解析恢复 rows（+ context platform + 静态板），前端资源 ∩ 接线行反推画接线图（用户实测反馈：退化图只高亮引脚、看不出接哪个端子）
 
 ## 2026-08-28
 - 00:10 任务推进：资源总览非硬件项降噪（xunji/BEEP 等模块名/宏名被 AI 误填 resources——多任务复用模块是正常代码复用不是冲突暗雷；新增 `resourceIsHardware` 判据：引脚 P[A-G]\d+ / 外设白名单 / *_IRQn 才算硬件，模块名不标黄改 muted「模块复用（非硬件，不算冲突）」注，卡上徽标同步降级；拆解提示词 ⑧ 同步加禁止模块名/函数名/宏名约定）
