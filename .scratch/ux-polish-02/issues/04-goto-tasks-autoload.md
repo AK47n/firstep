@@ -4,7 +4,14 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**实现记录：** ui/goto-tasks.js goTaskProgress 增加自动加载：currentOutputDir()
+（#res-dir 优先 / #output-dir 兜底，与修订页同口径）在「无已加载上下文或目录
+不一致」时调用 reviseLoad（复用既有导出），加载失败不阻塞（reviseLoad 内部
+已处理并清目录）；同目录跳过（不重置面板）。CDP 冒烟 probe-t04.mjs 全 PASS
+（临时 .cproject 工程反推成功：自动加载→加载完成→任务页签激活；再点无新
+/api/revise/context 请求；面板状态保持）。
 
 - [ ] 「去任务推进」在未加载上下文时自动加载当前输出目录（#res-dir / #output-dir），加载完成事件自然激活「任务推进」页签（既有行为复用）
 - [ ] 已加载同目录时点击不重复加载、不重置面板（分析/结果/对话等状态保留）
