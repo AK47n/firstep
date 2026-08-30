@@ -65,12 +65,14 @@ function renderReadinessPanel() {
 // 纯静态预览（零 LLM 调用、不烧 token——粘题面无编号时后端回 needs_title，
 // 前端静默）。按载荷缓存防每次状态变化重复请求；请求失败静默降级（预览不
 // 阻断检查单——warn 只是提前告知，生成时覆盖/拒绝逻辑不变）。
+// 评审整改（06 轮 Standards 轴）：fetch 返回 / 缓存命中后**重新按 id 查槽**再
+// 写入——渲染重建（setOnStepChange 等）会换新槽节点，写进已分离的旧节点会
+// 整段丢弃（预警消失）。
 let _dirWarnCacheKey = null;
 let _dirWarnCache = null;
 async function refreshOutputDirWarn() {
   const box = $("readiness-check");
-  const slot = $("readiness-warn-slot");
-  if (!box || box.classList.contains("hidden") || !slot) {
+  if (!box || box.classList.contains("hidden")) {
     _dirWarnCacheKey = null;
     return;
   }
@@ -84,13 +86,16 @@ async function refreshOutputDirWarn() {
     output_dir: state.outputDir,
   };
   const key = JSON.stringify(payload);
-  if (key === _dirWarnCacheKey) return;
-  _dirWarnCacheKey = key;
-  try {
-    _dirWarnCache = await apiPost("/api/generate/preview-dir", payload);
-  } catch {
-    _dirWarnCache = null;  // 静默降级：预览失败不打断检查单
+  if (key !== _dirWarnCacheKey) {
+    _dirWarnCacheKey = key;
+    try {
+      _dirWarnCache = await apiPost("/api/generate/preview-dir", payload);
+    } catch {
+      _dirWarnCache = null;  // 静默降级：预览失败不打断检查单
+    }
   }
+  const slot = $("readiness-warn-slot");  // 重建后取当前槽，防陈旧节点
+  if (!slot) return;
   const warn = outputDirWarnRow(_dirWarnCache);
   slot.innerHTML = warn
     ? readinessRowsHTML([warn], { recommendEnabled: false })

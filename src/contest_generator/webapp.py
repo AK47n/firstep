@@ -878,9 +878,7 @@ def _open_in_explorer(directory: Path) -> None:
         pass  # 打不开资源管理器：生成已成功，静默（不因聚焦失败报 500）
 
 
-def _desktop_topic_title(
-    context: AppContext, problem_text: str | None, topic_id: str | None
-) -> str | None:
+def _desktop_topic_title(context: AppContext, topic_id: str | None) -> str | None:
     """桌面模式目录标题（历史赛题确定性；粘贴题面需 AI 短名 → None）。
 
     工单 beginner-gap-closure/06 抽取：生成路由与输出目录预览（preview-dir）
@@ -888,8 +886,7 @@ def _desktop_topic_title(
     2024H_Auto_Car，topic_dir_title + 内置字典，纯 ASCII）；粘贴题面（无
     topic_id）的英文短名由 LLM（name_topic_english）在生成时才产生，返回
     None 表示"调用方决定是否走 LLM"——预览端点不调用 LLM（零成本静默
-    检查），生成路由照旧调用。
-    """
+    检查），生成路由照旧调用。"""
     if not topic_id:
         return None
     config = _require_config(context)
@@ -928,7 +925,7 @@ def _resolve_generation_output_dir(
             f"未知平台 {platform!r}，已注册的平台：{', '.join(KNOWN_PLATFORMS)}"
         )
     if topic_id:
-        title = _desktop_topic_title(context, problem_text, topic_id)
+        title = _desktop_topic_title(context, topic_id)
     else:
         title = None
     if title is None:
@@ -1775,7 +1772,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise UnknownPlatformError(
                 f"未知平台 {platform!r}，已注册的平台：{', '.join(KNOWN_PLATFORMS)}"
             )
-        title = _desktop_topic_title(context, problem_text, topic_id)
+        title = _desktop_topic_title(context, topic_id)
         if title is None:
             return {"dir": None, "verdict": "needs_title"}
         candidate, verdict = desktop_topic_dir_verdict(
