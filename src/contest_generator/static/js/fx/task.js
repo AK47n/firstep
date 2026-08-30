@@ -332,15 +332,17 @@ export function tasksOverviewHTML(plan) {
  * 操作（执行中，退出终态由执行回填）；opts.recoverable（布尔，执行中断的
  * 僵尸卡恢复入口，工单 stuck-doing-recover/01）为 true 时 doing 显示
  * recover——前端在无活跃执行（!tasks.busy）时置 true；真实执行中的拦截
- * 由后端 _running_task_execs 注册表兜底（点击被 400 拒 + 提示）。 */
+ * 由后端 _running_task_execs 注册表兜底（点击被 400 拒 + 提示）。
+ * failed 无 mark（工单 ux-polish-02/05）：编译仍红的卡不能「确认通过」被
+ * 误标已验证——只有 unverified（待上板人工确认）才有 mark。 */
 export function taskCardActions(status, opts) {
   const recoverable = (opts && opts.recoverable) || false;
   switch (status) {
     case "pending": return ["run", "skip"];
     case "skipped": return ["revert"];
     case "verified": return ["revert"];
-    case "unverified":
-    case "failed": return ["run", "mark", "revert"];
+    case "unverified": return ["run", "mark", "revert"];
+    case "failed": return ["run", "revert"];
     case "doing": return recoverable ? ["recover"] : [];
     default: return [];
   }

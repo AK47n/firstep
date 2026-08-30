@@ -4,7 +4,14 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**实现记录：** fx/task.js taskCardActions failed → ["run","revert"]（去掉 mark；
+unverified 保留 mark＝上板人工确认）；generate-tasks.js skip 走 confirmModal（文案
+点名依赖连锁与恢复入口，cancel 不落盘）；revert/skip/mark/redo 按钮补 title 并统一
+措辞（skipped→「恢复此步」、其余→「重做」）；task.test.mjs failed 断言更新；
+handoff-note-guard.test.mjs 对 goto-tasks 守卫断言对齐 ux-polish-02/04（async +
+reviseLoad）。CDP 冒烟 probe-t05.mjs 全 PASS（每次运行前重置临时任务清单）。
 
 - [ ] failed 卡不再渲染「确认通过」按钮；unverified 卡保留「确认通过」（上板人工确认语义不变）；verified 卡行为不变
 - [ ] 「跳过」点击弹确认框：说明后续依赖该步的卡可能受影响、可随时恢复；确认文案「跳过」、取消「取消」

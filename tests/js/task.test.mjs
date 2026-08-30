@@ -124,9 +124,10 @@ test("taskCardActions: 显隐与后端转移表镜像", () => {
   // skipped → 恢复；verified → 重做
   assert.deepEqual(taskCardActions("skipped"), ["revert"]);
   assert.deepEqual(taskCardActions("verified"), ["revert"]);
-  // unverified / failed → 做 + 上板改标 + 重做
+  // unverified → 做 + 上板改标 + 重做；failed → 做 + 重做（无 mark——红卡禁止
+  // 「确认通过」，ux-polish-02/05）
   assert.deepEqual(taskCardActions("unverified"), ["run", "mark", "revert"]);
-  assert.deepEqual(taskCardActions("failed"), ["run", "mark", "revert"]);
+  assert.deepEqual(taskCardActions("failed"), ["run", "revert"]);
   // doing → 无操作（执行中）；recoverable = true（执行中断僵尸卡，工单
   // stuck-doing-recover/01）→ 恢复入口；recoverable 不影响其它状态
   assert.deepEqual(taskCardActions("doing"), []);

@@ -237,24 +237,28 @@ function tasksRender() {
             + '<button class="btn-task-run" data-task="' + esc(task.id) + '">做这一步</button>');
         }
         if (actions.includes("skip")) {
-          parts.push('<button class="btn-task-skip" data-task="' + esc(task.id) + '">跳过</button>');
+          parts.push('<button class="btn-task-skip" data-task="' + esc(task.id)
+            + '" title="跳过此步（不计入完成；依赖它的任务可能受影响——可随时点「恢复此步」改回待做）">跳过</button>');
         }
         if (actions.includes("revert")) {
           // needs_redo 卡不显示普通「重做 / 恢复」（评审整改：与「重做此步」
           // 重复且「重做」不清 needs_redo 标记——重做此步 = 重置 + 清标，
           // 语义超集，一个入口够）
           if (!task.needs_redo) {
-            parts.push('<button class="btn-task-revert" data-task="' + esc(task.id) + '">'
-              + (task.status === "skipped" ? "恢复" : "重做") + "</button>");
+            parts.push('<button class="btn-task-revert" data-task="' + esc(task.id)
+              + '" title="恢复为待做，可重新点「做这一步」">'
+              + (task.status === "skipped" ? "恢复此步" : "重做") + "</button>");
           }
         }
         if (actions.includes("mark")) {
-          parts.push('<button class="btn-task-mark" data-task="' + esc(task.id) + '">确认通过</button>');
+          parts.push('<button class="btn-task-mark" data-task="' + esc(task.id)
+            + '" title="上板实测通过后标记已验证">确认通过</button>');
         }
         // 建议重做（工单 idea-fix/02）：灵活修正落地后受影响的卡——一键重置
         // 为 pending + 清 needs_redo（随后可点「做这一步」走既有闭环）
         if (task.needs_redo) {
-          parts.push('<button class="btn-task-redo" data-task="' + esc(task.id) + '">重做此步</button>');
+          parts.push('<button class="btn-task-redo" data-task="' + esc(task.id)
+            + '" title="重置为待做并清除「建议重做」标记">重做此步</button>');
         }
         if (taskCanFeedback(task)) {
           parts.push('<button class="btn-task-feedback" data-task="' + esc(task.id) + '">上板反馈</button>'
@@ -1518,9 +1522,25 @@ $("tasks-grid").addEventListener("click", (event) => {
     tasksRecover(btn.dataset.task);
     return;
   }
-  const status = btn.classList.contains("btn-task-skip") ? "skipped"
-    : btn.classList.contains("btn-task-mark") ? "verified" : "pending";
-  tasksSetStatus(btn.dataset.task, status);
+  const taskId = btn.dataset.task;
+  // 跳过确认（工单 ux-polish-02/05）：前置/联动不明的破坏性操作——点名
+  // 依赖连锁与恢复入口，确认后才置 skipped
+  if (btn.classList.contains("btn-task-skip")) {
+    const task = ((tasks.plan && tasks.plan.tasks) || []).find((t) => t.id === taskId);
+    const title = task && task.title ? "「" + task.title + "」" : "这一步";
+    confirmModal({
+      title: "跳过这一步？",
+      message: "跳过 " + title + " 后，它不会被算作完成（进度计数不含它）；"
+        + "依赖它的任务可能无法正常运行（前置未完成会在卡上黄字提示）。"
+        + "随时可点「恢复此步」改回待做。",
+      danger: false,
+      confirmText: "跳过",
+      cancelText: "取消",
+    }).then((go) => { if (go) tasksSetStatus(taskId, "skipped", "已跳过——不计入完成，可随时恢复"); });
+    return;
+  }
+  const status = btn.classList.contains("btn-task-mark") ? "verified" : "pending";
+  tasksSetStatus(taskId, status);
 });
 // 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：菜单项
 // 点击先收起 details（open=false）再派发动作——动作成功后 tasksRender 重建
