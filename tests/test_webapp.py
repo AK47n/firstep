@@ -3727,6 +3727,7 @@ def test_masters_list_includes_platform_label_and_key_files(client, context, tmp
         "main.c",
         "pin_config.h",
         "led_instances.h",
+        "key_instances.h",
         "user/Project.uvprojx",
     ]
     main = entry["key_files"][0]
@@ -3757,7 +3758,11 @@ def test_masters_list_includes_health_and_stats(client, context, tmp_path):
 
     assert entry["health"] == {
         "ok": False,
-        "missing_key_files": ["led_instances.h", "user/Project.uvprojx"],
+        "missing_key_files": [
+            "led_instances.h",
+            "key_instances.h",
+            "user/Project.uvprojx",
+        ],
         "config_file_ok": True,
         "artifact_dirs": [],
     }
@@ -4023,6 +4028,7 @@ def test_master_confirm_user_moves_common_to_exclude(client, context, tmp_path):
         "main.c",
         "pin_config.h",
         "led_instances.h",
+        "key_instances.h",
         "user/Project.uvprojx",
     ]
 
