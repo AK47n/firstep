@@ -58,6 +58,17 @@ test("genOverviewSummaryHTML 摘要：已就绪计数 + 还差关键路径 + 建
   assert.ok(out.includes("·"));  // 段间分隔符
 });
 
+test("genOverviewSummaryHTML 含子步骤（6.5）时分母仍为 12（工单 ux-walkthrough-02/02）", () => {
+  const withSub = [
+    ...titles.slice(0, 6),
+    { n: 6.5, title: "多实例配置" },
+    ...titles.slice(6),
+  ];
+  const out = genOverviewSummaryHTML([1, 3, 6], withSub, [1, 3, 6, 9], [5, 8]);
+  assert.ok(out.includes("已就绪 3/12"));   // 6.5 不计入完成度分母
+  assert.ok(!out.includes("3/13"));
+});
+
 test("genOverviewSummaryHTML 关键路径齐了：提示可生成、无还差", () => {
   const out = genOverviewSummaryHTML(
     [1, 3, 6, 9],

@@ -1353,6 +1353,7 @@
              border: 1px solid var(--border); background: transparent;
              color: var(--muted); font-size: 12px;
              transition: all var(--dur-base) var(--ease-ui); user-select: none; }
+  .ov-chip.hidden { display: none; }  /* 6.5 子步骤 chip 随卡片显隐（工单 ux-walkthrough-02/02）；特异性高于 .hidden，防 display 级联失效 */
   .ov-chip:hover { border-color: var(--accent); color: var(--text); }
   .ov-chip .ov-dot { width: 18px; height: 18px; flex: none; border-radius: 50%;
              display: inline-flex; align-items: center; justify-content: center;
