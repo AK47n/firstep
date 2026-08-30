@@ -20,6 +20,26 @@
         "description": "find_rects 矩形定位：灰度二值化后检测矩形，输出最大矩形外接框 B 帧；适用于矩形/大矩形定位（如 2023E 类矩形题）",
         "template": "code/main_rect.py",
         "output": "main.py"
+      },
+      {
+        "id": "digit",
+        "name": "AI 数字识别",
+        "description": "AI 推理识别 1~8 数字（AnchorBaseDet 8 类模型，21F 真机方案，工单 k230-digit-vision/04）：随工程分发 mp_deployment_source 部署包（部署配置 + 模型，拷贝 SD 卡后运行期读配置）；主控侧由 digit_uart 解析 DIGIT 帧（模板级依赖覆盖——选 digit 自动挂 digit_uart 而非 coord_detect）",
+        "template": "code/main_digit.py",
+        "output": "main.py",
+        "dependencies": [
+          "digit_uart"
+        ],
+        "assets": [
+          {
+            "src": "assets/digit8_anchorbase_320.kmodel",
+            "dst": "mp_deployment_source/digit8_anchorbase_320.kmodel"
+          },
+          {
+            "src": "assets/deploy_config.json",
+            "dst": "mp_deployment_source/deploy_config.json"
+          }
+        ]
       }
     ]
   },

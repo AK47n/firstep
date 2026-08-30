@@ -995,10 +995,13 @@ K230_RECT_TEMPLATE = (
 
 
 def test_k230_manifest_multi_template_declared():
-    """真库 k230 manifest 升级为多模板：blob（默认）+ rect，依赖不变。"""
+    """真库 k230 manifest 为多模板：blob（默认）+ rect + digit（工单
+    k230-digit-vision/04），模块级依赖不变（digit 的 digit_uart 是模板级覆盖）。"""
     manifest = ModuleManifest.load(LIBRARY_MODULES / "k230")
     assert manifest.python_artifact is not None
-    assert [t.id for t in manifest.python_artifact.templates] == ["blob", "rect"]
+    assert [t.id for t in manifest.python_artifact.templates] == [
+        "blob", "rect", "digit",
+    ]
     assert manifest.python_artifact.default_id == "blob"
     assert manifest.dependencies == ("coord_detect",)
 
@@ -1022,7 +1025,9 @@ def test_k230_rect_template_renders_contract_placeholders():
 
 
 def test_generate_project_k230_rect_template_selected(tmp_path):
-    """生成接缝：k230 选 rect 模板 → main.py 为矩形识别内容（渲染后契约一致）。"""
+    """生成接缝：k230 选 rect 模板 → main.py 为矩形识别内容（渲染后契约一致）；
+    主控侧仍挂 coord_detect（rect 无模板级依赖覆盖）、无部署包（资产是 digit
+    模板专属）——旧行为基线不回归。"""
     summary = generate_project(
         platform=PLATFORM_STM32,
         slugs=["k230"],
@@ -1038,6 +1043,10 @@ def test_generate_project_k230_rect_template_selected(tmp_path):
     assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
         ("k230", "main.py", "rect")
     ]
+    # 旧行为基线：rect 继承模块级依赖 coord_detect（无 digit_uart）、无部署包
+    assert (summary.output_dir / "modules" / "coord_detect" / "code" / "coord_detect_stm32.c").is_file()
+    assert not (summary.output_dir / "modules" / "digit_uart").exists()
+    assert not (summary.output_dir / "mp_deployment_source").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -1552,3 +1561,177 @@ def _asset_probe_library(tmp_path: Path) -> Path:
     # 二进制假资产绕过 _add_module 的文本管道（write_text），直接写字节
     (library / "a_asset" / "code" / "model.kmodel").write_bytes(FAKE_KMODEL_BYTES)
     return library
+
+
+# ---------------------------------------------------------------------------
+# k230-digit-vision/04：数字识别模板落地（真库 k230 + digit）
+# ---------------------------------------------------------------------------
+
+K230_DIGIT_TEMPLATE = (
+    REPO_ROOT / "library" / "modules" / "k230" / "code" / "main_digit.py"
+)
+K230_DIGIT_KMODEL = (
+    REPO_ROOT / "library" / "modules" / "k230" / "assets" / "digit8_anchorbase_320.kmodel"
+)
+K230_DIGIT_DEPLOY = (
+    REPO_ROOT / "library" / "modules" / "k230" / "assets" / "deploy_config.json"
+)
+
+# 生成层 main.c：只调 digit_uart 的 API（digit 模板的模板级依赖自动挂 digit_uart）
+K230_MAIN_C_DIGIT_STM32 = (
+    '#include "headfile.h"\n'
+    '#include "digit_uart.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    digit_uart_init();\n"
+    "    while (1)\n"
+    "    {\n"
+    "        digit_uart_parse();\n"
+    "    }\n"
+    "}\n"
+)
+
+K230_MAIN_C_DIGIT_MSPM0 = (
+    '#include "ti_msp_dl_config.h"\n'
+    '#include "digit_uart_mspm0.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    /* SYSCFG_DL_init(); */\n"
+    "    digit_uart_init();\n"
+    "    while (1)\n"
+    "    {\n"
+    "        digit_uart_parse();\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "void DIGIT_UART_INST_IRQHandler(void)\n"
+    "{\n"
+    "    digit_uart_rx_handler();\n"
+    "}\n"
+)
+
+
+def test_k230_manifest_digit_template_declared():
+    """真库 k230 manifest：templates 含 digit——模板级依赖覆盖 digit_uart
+    （blob/rect 零改动：继承模块级 coord_detect）+ assets 部署包两件。"""
+    manifest = ModuleManifest.load(LIBRARY_MODULES / "k230")
+    specs = {t.id: t for t in manifest.python_artifact.templates}
+    assert set(specs) == {"blob", "rect", "digit"}
+    digit = specs["digit"]
+    assert digit.dependencies == ("digit_uart",)
+    assert digit.assets == (
+        AssetSpec(
+            src="assets/digit8_anchorbase_320.kmodel",
+            dst="mp_deployment_source/digit8_anchorbase_320.kmodel",
+        ),
+        AssetSpec(
+            src="assets/deploy_config.json",
+            dst="mp_deployment_source/deploy_config.json",
+        ),
+    )
+    # blob/rect 条目零改动：无模板级依赖（继承模块级）、无资产
+    assert specs["blob"].dependencies is None and specs["blob"].assets == ()
+    assert specs["rect"].dependencies is None and specs["rect"].assets == ()
+
+
+def test_k230_digit_template_renders_contract_placeholders():
+    """digit 模板渲染后 DIGIT 帧契约与主控解析一致（防漂移：改契约/C 侧
+    不同步即红）。模板只走占位符不重抄字面量。"""
+    template_text = K230_DIGIT_TEMPLATE.read_text(encoding="utf-8")
+    assert "{{digit_frame_header}}" in template_text
+    assert "{{digit_frame_line}}" in template_text
+    assert "{{uart_baudrate}}" in template_text
+    rendered = render_python_artifact(template_text)
+    assert DIGIT_FRAME_HEADER in rendered
+    assert DIGIT_FRAME_LINE_FORMAT in rendered
+    assert str(UART_BAUDRATE) in rendered
+    # 推理管线素材（21F 例程形态）
+    for marker in ("DetectionApp", "PipeLine", "read_json", "det_app.run"):
+        assert marker in template_text
+
+
+def test_generate_project_k230_digit_selected_stm32(tmp_path):
+    """生成接缝：k230 选 digit → main.py 渲染后契约一致 + mp_deployment_source
+    部署包（kmodel 字节大小 + 配置内容）+ 主控挂 digit_uart 不含 coord_detect
+    + 摘要 asset_paths + README 产物清单行。"""
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["k230"],
+        main_c_content=K230_MAIN_C_DIGIT_STM32,
+        output_dir=tmp_path / "out",
+        module_library_dir=LIBRARY_MODULES,
+        masters_dir=LIBRARY_MASTERS,
+        python_templates={"k230": "digit"},
+    )
+    out = summary.output_dir
+    # main.py = 渲染后模板（契约占位符已注入）
+    assert (out / "main.py").read_text(encoding="utf-8") == render_python_artifact(
+        K230_DIGIT_TEMPLATE.read_text(encoding="utf-8")
+    )
+    # 部署包：kmodel 逐字节一致（7,596,008 字节）+ 配置内容（kmodel_path 指向新名）
+    kmodel = out / "mp_deployment_source" / "digit8_anchorbase_320.kmodel"
+    assert kmodel.read_bytes() == K230_DIGIT_KMODEL.read_bytes()
+    assert kmodel.stat().st_size == 7_596_008
+    deploy = json.loads(
+        (out / "mp_deployment_source" / "deploy_config.json").read_text(encoding="utf-8")
+    )
+    assert deploy["kmodel_path"] == "digit8_anchorbase_320.kmodel"
+    assert deploy["categories"] == [str(i) for i in range(1, 9)]
+    assert deploy["confidence_threshold"] == 0.4
+    # 模板级依赖覆盖生效：digit_uart 挂上（stm32 版），coord_detect 不出现
+    assert (out / "modules" / "digit_uart" / "code" / "digit_uart.c").is_file()
+    assert (out / "modules" / "digit_uart" / "code" / "digit_uart.h").is_file()
+    assert not (out / "modules" / "coord_detect").exists()
+    # 摘要：模板回显 digit + 资产路径列表
+    assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
+        ("k230", "main.py", "digit")
+    ]
+    assert summary.python_artifacts[0].asset_paths == (
+        "mp_deployment_source/digit8_anchorbase_320.kmodel",
+        "mp_deployment_source/deploy_config.json",
+    )
+    # README 产物清单含部署包行
+    readme = (out / "README.md").read_text(encoding="utf-8")
+    assert "mp_deployment_source/" in readme
+
+
+def test_generate_project_k230_digit_selected_mspm0(tmp_path):
+    """mspm0 对端：digit_uart_mspm0 挂上 + DIGIT_UART 共享实例在 syscfg（与
+    coord_detect 同实例——digit 选中时由 digit_uart 提供）+ 部署包照复制。"""
+    summary = generate_project(
+        platform=PLATFORM_MSPM0,
+        slugs=["k230"],
+        main_c_content=K230_MAIN_C_DIGIT_MSPM0,
+        output_dir=tmp_path / "out",
+        module_library_dir=LIBRARY_MODULES,
+        masters_dir=LIBRARY_MASTERS,
+        python_templates={"k230": "digit"},
+    )
+    out = summary.output_dir
+    assert (out / "modules" / "digit_uart" / "code" / "digit_uart_mspm0.c").is_file()
+    assert not (out / "modules" / "coord_detect").exists()
+    syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
+    assert "const DIGIT_UART = UART.addInstance();" in syscfg
+    assert (out / "mp_deployment_source" / "digit8_anchorbase_320.kmodel").is_file()
+    assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
+        ("k230", "main.py", "digit")
+    ]
+
+
+def test_generate_project_k230_blob_has_no_deploy_package(tmp_path):
+    """缺省/选 blob → 无部署包（digit 模板专属 assets），与既有 blob 基线
+    逐字节一致（asset 分发不动无资产模板的产物形状）。"""
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["k230"],
+        main_c_content=K230_MAIN_C_STM32,
+        output_dir=tmp_path / "out",
+        module_library_dir=LIBRARY_MODULES,
+        masters_dir=LIBRARY_MASTERS,
+    )
+    out = summary.output_dir
+    assert not (out / "mp_deployment_source").exists()
+    assert (out / "modules" / "coord_detect" / "code" / "coord_detect_stm32.c").is_file()
+    assert summary.python_artifacts[0].asset_paths == ()

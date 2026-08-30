@@ -137,6 +137,7 @@ _GENERATED_COMMON: tuple[tuple[str, str], ...] = (
     ("演示脚本.md", "演示流程（按评分点 / 功能需求组织）——答辩演示前看它"),
     ("设计报告草稿.md", "设计报告草稿（可选：AI 方案论证 + 软件流程，供报告参考；未生成 = 正常）"),
     ("main.py", "K230 / 视觉副产物（可选：选了带 Python 副产物的模块时生成，拷入 SD 卡使用）"),
+    ("mp_deployment_source/", "K230 AI 模型部署包（可选：选了带 AI 模型的模板时生成——部署配置 + .kmodel，连同 main.py 一起拷入 SD 卡 /sdcard/）"),
     (".contest_context.json", "工具上下文清单（本次生成的输入快照——「修订与深化」回读用，勿手改）"),
     (".contest_wiring.json", "接线快照（工具绘制接线图用——勿手改）"),
 )
