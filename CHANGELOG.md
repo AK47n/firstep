@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ba8a2bd42d8767e02801aa086b3e84b67b013b23 -->
+<!-- changelog-auto: last-commit=40f1c61728ebfd4a3f09debd2b7d751841961358 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -116,6 +116,7 @@
 - 23:29 code-viewer/01-06 代码查看器：IDE 式只读工程浏览（文件树 + 行号 + 高亮 + 大纲 + 搜索）
 - 23:40 代码查看器后端（code-viewer/01-03）：新「代码」tab 的 IDE 式只读浏览数据食粮——codeview.py 三端点（POST /api/code/open 目录打开（treewalk 同噪音跳过 + 5000 条目上限）/ GET /api/code/file 文件读取（路径安全三约束照 read_master_tree_file 先例 + NUL 二进制 + 1MB 上限，返回 {path,size_bytes,content,outline}——outline 仅 .c/.h）/ GET /api/code/search 跨文件搜索（大小写不敏感子串 + 二进制/超限跳过 + 200 命中截断 truncated + 命中行窗口裁剪））；CodeViewError 登记 errors.py → 400 中文；大纲 = clex 新 top_level_functions 机械函数扫描（掩码切分 + 括号深度 0 处 ident ( … ) {，关键字排除、宏续行整行跳过）+ top_level_defines + 新 quoted_include_lines（行号精确、注释行伪装 include 不误收）；tests/test_codeview.py（17 用例）+ test_clex.py 扩展（8 用例）+ test_webapp.py 端点（10 用例）
 - 23:41 代码查看器前端 + 入口收尾（code-viewer/04-06）：导航「代码」tab + 三栏视图（左树 / 中只读行号+高亮 / 右侧栏 大纲+搜索）；fx/codeview.js 纯函数（buildCodeTree/codeTreeHTML 原生 details/codeLineNumbersHTML/codeViewHTML sticky gutter+pre 同 font/line-height/outlineHTML/outlineEmptyHTML/searchListHTML/fileFindFilter——高亮走 highlightText 单源，载荷不含 language 由 fx/languageOf 判定）+ ui/codeview.js（「选择文件夹」→ /api/pick-directory 服务端原生对话框；树点击懒加载 memo；大纲/搜索命中跳行 flash；Ctrl+F 拦截走文件内过滤）+ 最近记录卡「查看代码」按钮（recent-chip .recent-code-open，stopPropagation 不触发复制路径）；tests/js/codeview.test.mjs（10 用例）+ 导航守卫 3 文件同步（做题组 + code）；CDP 冒烟 smoke.mjs 落盘；全量 pytest 2989 绿 + 前端 928 绿
+- 23:42 code-viewer/07 评审整改：Ctrl+F 自动切搜索侧栏、跳行内容行同步 flash、搜索 NUL 改头 512 字节探测、路径谓词调 entry_store.is_unsafe_path 单源、spec 实现决策修正与偏差补录（双轴评审意见落地）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
