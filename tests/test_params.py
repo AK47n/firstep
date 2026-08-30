@@ -193,8 +193,8 @@ def test_build_params_accepts_suffixed_literal():
 
 
 def test_apply_param_change_rejects_substring_old_value():
-    """读回表数据被手改成子串 → apply 拒（锚失效文案）。"""
-    with pytest.raises(TaskError, match="锚已失效"):
+    """读回表数据被手改成子串 → apply 拒（位置已失效文案）。"""
+    with pytest.raises(TaskError, match="位置已失效"):
         apply_param_change(MAIN_WITH_PARAM, _item(old_value="80"), "900")
 
 
@@ -282,14 +282,14 @@ def test_apply_param_change_replaces_only_anchor():
 
 
 def test_apply_param_change_anchor_stale_raises():
-    with pytest.raises(TaskError, match="锚已失效"):
+    with pytest.raises(TaskError, match="位置已失效"):
         apply_param_change(
             "int main(void) { return 0; }\n", _item(), "900"
         )
 
 
 def test_apply_param_change_old_value_missing_in_anchor():
-    with pytest.raises(TaskError, match="锚已失效"):
+    with pytest.raises(TaskError, match="位置已失效"):
         apply_param_change(MAIN_WITH_PARAM, _item(old_value="999"), "900")
 
 
@@ -405,7 +405,7 @@ def test_run_param_apply_anchor_stale_raises_before_write(tmp_path):
     (tmp_path / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
     events: list[Any] = []
     emit = SimpleNamespace(progress=lambda event: events.append(event))
-    with pytest.raises(TaskError, match="锚已失效"):
+    with pytest.raises(TaskError, match="位置已失效"):
         run_param_apply(
             llm=FakeLLM(),
             param=_item(),

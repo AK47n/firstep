@@ -83,9 +83,16 @@ function renderIdeaResult(landedNote) {
     box.innerHTML = "";
     return;
   }
+  // 序号人话化（工单 beginner-gap-closure/03）：受影响任务/编辑表单依赖回填
+  // 用「第 N 步」——原始任务 id 不上界面（从当前清单推导）
+  const seqById = {};
+  if (tasks.plan && tasks.plan.tasks) {
+    tasks.plan.tasks.forEach((t, i) => { if (t && t.id) seqById[t.id] = i + 1; });
+  }
   box.innerHTML = ideaResultHTML(analysis, {
     idea: ideaState.ideaText,
     landedNote: landedNote || "",
+    seqById: seqById,
   });
   box.classList.remove("hidden");
 }
@@ -899,7 +906,7 @@ async function tasksPlan(force) {
   if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   if (force && !await confirmModal({
     title: "重新拆解？",
-    message: "将重新生成任务清单：旧清单会备档为 .contest_tasks.json.bak，当前任务进度（含已完成状态）随旧清单一起归档。",
+    message: "将重新生成任务清单：旧清单会自动备份到工程内（当前任务进度随旧清单一起归档）。",
     confirmText: "重新拆解",
   })) return;
   tasksSetBusy(true);
@@ -1013,7 +1020,7 @@ async function tasksExecute(taskId, feedback) {
       ? "任务失败（修复一轮后仍红）——可回滚或重试"
       : feedback
         ? "已按反馈修复——请再次上板验证，或确认通过进入下一卡"
-        : "任务完成——继续下一卡或人工改标";
+        : "任务完成——继续下一卡或手动调整状态";
   } catch (e) {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = e.message;
@@ -1147,7 +1154,7 @@ async function tasksReload() {
   }
 }
 
-/** 人工改标（工单 03）：跳过 / 恢复 / 重做 / 上板改标 → 落盘 + 单卡重渲染。
+/** 手动调整状态（工单 03）：跳过 / 恢复 / 重做 / 上板确认 → 落盘 + 单卡重渲染。
  * okMessage = 成功 toast 文案（缺省「状态已更新」；工单 stuck-doing-recover/01
  * 恢复入口传专属文案）。 */
 async function tasksSetStatus(taskId, status, okMessage = "状态已更新") {
@@ -1473,7 +1480,11 @@ $("tasks-grid").addEventListener("click", async (event) => {
   const task = ((tasks.plan && tasks.plan.tasks) || []).find((t) => t.id === taskId);
   const pend = unresolvedPrereqs(task, tasks.plan);
   if (pend.length) {
-    const names = pend.map((p) => "「" + p.id + " " + p.title + "」（"
+    const seqOf = (id) => {
+      const i = ((tasks.plan && tasks.plan.tasks) || []).findIndex((t) => t.id === id);
+      return i >= 0 ? "第 " + (i + 1) + " 步 " : "";
+    };
+    const names = pend.map((p) => "「" + seqOf(p.id) + p.title + "」（"
       + taskStatusLabel(p.status) + "）").join("、");
     const go = await confirmModal({
       title: "前置任务还未完成",
@@ -1495,7 +1506,7 @@ $("tasks-grid").addEventListener("click", (event) => {
   const send = event.target.closest(".btn-task-feedback-send");
   if (send) tasksFeedbackSend(send.dataset.task);
 });
-// 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板改标 / 执行中断恢复）
+// 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板确认 / 执行中断恢复）
 $("tasks-grid").addEventListener("click", (event) => {
   const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark, .btn-task-redo, .btn-task-recover");
   if (!btn) return;

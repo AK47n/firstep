@@ -92,7 +92,7 @@ function paramsRender() {
 }
 
 /** 恢复旧值（工单 step11-tabs-ui/03）：纯前端把输入框复位为识别时的原值，
- * 不触发 API / 不写盘——点「应用」才真正写入并验证。 */
+ * 不触发 API / 不保存——点「应用」才真正写入并验证。 */
 function paramsResetInput(name) {
   const item = (paramsState.plan || []).find((p) => String(p.name) === name);
   const input = item ? $("params-input-" + name) : null;
@@ -197,7 +197,7 @@ async function paramsApply(name) {
     const data = await tasksRunSSE("/api/tasks/params/apply", {
       output_dir: dir, name: name, value: value,
     }, {
-      param_applying: () => { paramsStatus("正在应用参数：备份 + 写盘 + 编译验证…"); },
+      param_applying: () => { paramsStatus("正在应用参数：备份 + 保存 + 编译验证…"); },
       compile_start: () => { paramsStatus("编译中…"); },
       fix_start: () => { paramsStatus("首轮编译未过，自动修复轮中…"); },
       verify_result: () => { paramsStatus("验证结果收集中…"); },

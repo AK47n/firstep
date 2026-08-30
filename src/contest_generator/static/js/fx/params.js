@@ -17,8 +17,8 @@ import { verifyStatusMarkup } from "./task.js";
  * 应用按钮）+ 卡脚（↺ 恢复旧值 + 建议范围提示）。
  * 每卡 = 名称（slug）+ 含义（label，截 24 字）+ 当前值输入框（默认值 =
  * old_value，输入框内 Enter 可直接应用——ui 层 keydown 委托）+ 建议范围提示；
- * valid=false 卡置灰 + 输入框禁用 + 「锚已失效」标记（main.c 已被改动，旧锚
- * 不再可靠——重新识别才有意义）；running = 一轮流程进行中（全部禁用）。
+ * valid=false 卡置灰 + 输入框禁用 + 「位置已变」标记（main.c 已被改动，旧的
+ * 参数位置不再可靠——重新识别才有意义）；running = 一轮流程进行中（全部禁用）。
  * 恢复旧值 = 纯前端复位输入框（不写盘不触发验证），常驻渲染、running/失效卡
  * 禁用（spec：每张卡都有恢复按钮）。
  * 空态两分支（opts.emptyScan，spec 轴评审整改）：未识别（false）→ 引导
@@ -74,7 +74,7 @@ export function paramListHTML(params, opts = {}) {
         ? '<button class="btn-params-apply" data-param-name="' + esc(name)
           + '" title="自动备份 + 编译验证，把输入框的值写入 main.c（可回滚）"'
           + (running ? " disabled" : "") + ">应用</button>"
-        : '<span class="badge param-stale-badge">锚已失效</span>')
+        : '<span class="badge param-stale-badge" title="main.c 已改动，该参数的位置可能已经变了——点「识别 main.c 参数」重新确认">位置已变</span>')
       + "</div>"
       + '<div class="param-card-foot">'
       + '<button class="btn-params-reset" data-param-name="' + esc(name)

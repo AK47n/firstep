@@ -24,11 +24,11 @@ const board = {
 
 const groups = {
   pins: [
-    { names: ["PA0"], users: [{ id: "t1", title: "循迹" }], conflict: false },
-    { names: ["PA12", "PB9"], users: [{ id: "t1", title: "循迹" }, { id: "t2", title: "显示" }], conflict: true },
+    { names: ["PA0"], users: [{ id: "t1", title: "循迹", order: 1 }], conflict: false },
+    { names: ["PA12", "PB9"], users: [{ id: "t1", title: "循迹", order: 1 }, { id: "t2", title: "显示", order: 2 }], conflict: true },
   ],
-  other: [{ names: ["TIMG0"], users: [{ id: "t2", title: "显示" }], conflict: false }],
-  soft: [{ names: ["xunji"], users: [{ id: "t2", title: "显示" }] }],
+  other: [{ names: ["TIMG0"], users: [{ id: "t2", title: "显示", order: 2 }], conflict: false }],
+  soft: [{ names: ["xunji"], users: [{ id: "t2", title: "显示", order: 2 }] }],
 };
 
 test("RESOURCE_TASK_COLORS: 12 色循环板（与配置引脚 MODULE_COLORS 同值）", () => {
@@ -67,14 +67,14 @@ test("resourcesToolbarHTML: 列表/板图按钮 + active 高亮 + aria-pressed",
 
 test("resourceBoardSVG: 占用引脚着色/冲突环/悬停 title、空闲灰显、无引脚空串", () => {
   const pinAttr = new Map([
-    ["PA0", { color: RESOURCE_TASK_COLORS[0], conflict: false, users: [{ id: "t1", title: "循迹" }] }],
-    ["PA12", { color: RESOURCE_TASK_COLORS[0], conflict: true, users: [{ id: "t1", title: "循迹" }, { id: "t2", title: "显示" }] }],
+    ["PA0", { color: RESOURCE_TASK_COLORS[0], conflict: false, users: [{ id: "t1", title: "循迹", order: 1 }] }],
+    ["PA12", { color: RESOURCE_TASK_COLORS[0], conflict: true, users: [{ id: "t1", title: "循迹", order: 1 }, { id: "t2", title: "显示", order: 2 }] }],
   ]);
   const svg = resourceBoardSVG(board, pinAttr);
   assert.ok(svg.startsWith("<svg viewBox=\"0 0 460 "));
   assert.ok(svg.includes("res-pin-used"));
-  assert.ok(svg.includes(">PA0 · t1：循迹<"));
-  assert.ok(svg.includes("PA12 · t1：循迹、t2：显示 · ⚠ 多任务共享"));
+  assert.ok(svg.includes(">PA0 · 第 1 步：循迹<"));
+  assert.ok(svg.includes("PA12 · 第 1 步：循迹、第 2 步：显示 · ⚠ 多任务共享"));
   assert.ok(svg.includes("res-pin-conflict"));
   // 空闲与固定/电源脚：未占用样式
   assert.ok(svg.includes('class="res-pin-idle"'));
@@ -88,16 +88,16 @@ test("resourceBoardSVG: 占用引脚着色/冲突环/悬停 title、空闲灰显
 test("resourceBoardHTML: 板名/图例/SVG/不在板上资源 chips/空态", () => {
   const html = resourceBoardHTML(board, groups);
   assert.ok(html.includes("地猛星 MSPM0G3507 · 引脚资源占用"));
-  assert.ok(html.includes(">t1<"));     // 图例
-  assert.ok(html.includes(">t2<"));
+  assert.ok(html.includes(">第 1 步<"));     // 图例（序号人话化，不露 t1）
+  assert.ok(html.includes(">第 2 步<"));
   assert.ok(html.includes("⚠ 多任务共享（联调冲突）"));
   assert.ok(html.includes("空闲 IO"));
   assert.ok(html.includes("<svg"));
   // 不在板上的资源：TIMG0（硬件 chip）+ xunji（soft chip）+ 悬停 title
   assert.ok(html.includes("不在板上的资源（外设/中断/软资源）："));
   assert.ok(html.includes(">TIMG0<"));
-  assert.ok(html.includes('class="res-chip res-soft" title="t2：显示">xunji<'));
-  assert.ok(html.includes('title="t2：显示">TIMG0<'));
+  assert.ok(html.includes('class="res-chip res-soft" title="第 2 步：显示">xunji<'));
+  assert.ok(html.includes('title="第 2 步：显示">TIMG0<'));
   // 空态
   assert.ok(resourceBoardHTML(null, groups).includes("板定义缺失"));
   assert.ok(resourceBoardHTML(board, null).includes("尚无资源标注"));

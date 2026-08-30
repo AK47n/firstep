@@ -325,12 +325,12 @@ def apply_param_change(main_c: str, param: ParamItem, new_value: str) -> str:
     anchor = param.anchor
     if anchor not in main_c:
         raise TaskError(
-            "参数锚已失效（main.c 可能被改动）——请重新识别参数"
+            "参数位置已失效（main.c 可能被改动）——请重新识别参数"
         )
     idx = main_c.index(anchor)
     if not _old_value_token_ok(anchor, param.old_value):
         raise TaskError(
-            "参数锚已失效（old_value 不在锚中或不是完整字面量）——请重新识别参数"
+            "参数位置已失效（原值与识别结果不一致）——请重新识别参数"
         )
     new_anchor = anchor.replace(param.old_value, new_value, 1)
     return main_c[:idx] + new_anchor + main_c[idx + len(anchor):]
