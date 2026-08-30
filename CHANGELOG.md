@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=412dacb3c1938f57bb10b0463e6602ab9ddc2b7d -->
+<!-- changelog-auto: last-commit=b42048ceda0bcf673be1d6db45a6fcc39c8834cf -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -36,6 +36,7 @@
 - 12:39 工单 04 标记 resolved（双轴评审整改全部落地）
 - 12:40 工单 06 标记 claimed（06-A/06-B 已实现，评审进行中）
 - 12:42 工单 06 评审整改：warn 槽防陈旧节点丢弃（缓存命中/异步返回后重新取槽）、_desktop_topic_title 去死参、补手动缺参 400 与桌面 clean 用例
+- 12:43 工单 06 标记 resolved（双轴评审整改全部落地）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
