@@ -9,6 +9,7 @@ import pytest
 from contest_generator.generation_output import (
     TOPIC_EN_TITLES,
     BackupRestoreError,
+    backup_exists,
     backup_project_dir,
     desktop_topic_dir_verdict,
     restore_project_backup,
@@ -280,3 +281,29 @@ def test_restore_project_backup_rejects_unsafe_names(tmp_path, bad):
     目标名不合法拒绝——与 is_unsafe_path 同为「盘访问前判定」安全立场。"""
     with pytest.raises(BackupRestoreError, match="目标名不合法"):
         restore_project_backup(tmp_path, bad)
+
+
+@pytest.mark.parametrize("reserved", ["CON", "COM1", "LPT9"])
+def test_restore_project_backup_rejects_windows_reserved(tmp_path, reserved):
+    """恢复（工单 ux-walkthrough-02/03 评审整改）：Windows 保留设备名
+    （backup_project_dir 同款校验）也在拒绝之列。"""
+    with pytest.raises(BackupRestoreError, match="目标名不合法"):
+        restore_project_backup(tmp_path, reserved)
+
+
+def test_backup_exists_true_for_bak_dir(tmp_path):
+    """备份存在性（工单 ux-walkthrough-02/03 评审整改）：目录型 .bak 算存在；
+    同名文件 / 缺失 → False（只读探测）。"""
+    desktop = tmp_path
+    bak = desktop / "Auto_Car_STM32.bak"
+    bak.mkdir()
+    assert backup_exists(desktop, "Auto_Car_STM32") is True
+    (desktop / "Other.bak").write_text("不是目录", encoding="utf-8")
+    assert backup_exists(desktop, "Other") is False
+    assert backup_exists(desktop, "Missing") is False
+
+
+def test_backup_exists_rejects_unsafe_names(tmp_path):
+    """备份存在性（工单 ux-walkthrough-02/03 评审整改）：目标名不合法同样拒绝。"""
+    with pytest.raises(BackupRestoreError, match="目标名不合法"):
+        backup_exists(tmp_path, "../x")

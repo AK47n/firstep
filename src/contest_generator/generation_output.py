@@ -220,19 +220,39 @@ class BackupRestoreError(Exception):
     目标已存在——message 为中文人话，经 errors.py 映射 400。"""
 
 
+def _assert_restore_name(name: str) -> None:
+    """恢复目标名校验（工单 ux-walkthrough-02/03）：只接受纯目录名——
+    is_unsafe_path / 路径分隔符 / .bak 后缀 / Windows 保留设备名一并拒绝
+    （与 backup_project_dir 的 `_is_windows_reserved_filename` 同族，盘访问前判定）。"""
+    if (
+        not name
+        or is_unsafe_path(name)
+        or "/" in name
+        or name.endswith(".bak")
+        or _is_windows_reserved_filename(name)
+    ):
+        raise BackupRestoreError(
+            "恢复目标名不合法：只需填目录名（如 Auto_Car_STM32），不要带路径或 .bak 后缀"
+        )
+
+
+def backup_exists(desktop_dir: Path, name: str) -> bool:
+    """备份存在性（工单 ux-walkthrough-02/03）：桌面是否存在 `<name>.bak`
+    目录（只读探测，无副作用）——结果区「恢复覆盖前备份」按钮的显示依据。"""
+    _assert_restore_name(name)
+    backup = desktop_dir / (name + ".bak")
+    return backup.is_dir() and not backup.is_symlink()
+
+
 def restore_project_backup(desktop_dir: Path, name: str) -> Path:
     """恢复覆盖前备份（工单 ux-walkthrough-02/03）：把桌面 `<name>.bak` 目录
     改名回 `<name>`（同目录原子、零复制），返回恢复后的路径。
 
-    与 backup_project_dir 同安全立场（在盘访问之前判定）：name 只接受纯目录名
-    ——is_unsafe_path（.. / 绝对 / 盘符 / 反斜杠 / 空段）不过、含路径分隔符
-    （"/"）或自带 .bak 后缀 → BackupRestoreError（400 中文）；备份缺失 /
-    目标已存在 → 同样 400 中文，绝不覆盖现有目录，不产生半状态。
+    与 backup_project_dir 同安全立场（在盘访问之前判定）：目标名不合法 /
+    备份缺失 / 目标已存在 → BackupRestoreError（400 中文），绝不覆盖现有
+    目录，不产生半状态。
     """
-    if not name or is_unsafe_path(name) or "/" in name or name.endswith(".bak"):
-        raise BackupRestoreError(
-            "恢复目标名不合法：只需填目录名（如 Auto_Car_STM32），不要带路径或 .bak 后缀"
-        )
+    _assert_restore_name(name)
     backup = desktop_dir / (name + ".bak")
     target = desktop_dir / name
     if not backup.exists() or not backup.is_dir() or backup.is_symlink():

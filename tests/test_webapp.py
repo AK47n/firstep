@@ -3092,6 +3092,34 @@ def test_restore_backup_endpoint_unsafe_name_rejected(client, context, tmp_path)
     assert "目标名不合法" in resp.json()["detail"]
 
 
+def test_backup_check_endpoint_reports_existence(client, context, tmp_path):
+    """工单 ux-walkthrough-02/03 评审整改：GET /api/generate/backup-check
+    只读探测 .bak 存在性（结果区恢复按钮显示依据）；目录型存在 → true，
+    缺失 → false，非法名 → 400。"""
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    bak = desktop_dir / "Auto_Car_STM32.bak"
+    bak.mkdir(parents=True)
+
+    exists_resp = client.get(
+        "/api/generate/backup-check", params={"name": "Auto_Car_STM32"}
+    )
+    assert exists_resp.status_code == 200
+    assert exists_resp.json()["exists"] is True
+
+    missing_resp = client.get(
+        "/api/generate/backup-check", params={"name": "Missing_Proj"}
+    )
+    assert missing_resp.status_code == 200
+    assert missing_resp.json()["exists"] is False
+
+    bad_resp = client.get(
+        "/api/generate/backup-check", params={"name": "../x"}
+    )
+    assert bad_resp.status_code == 400
+    assert "目标名不合法" in bad_resp.json()["detail"]
+
+
 def test_conflict_message_prefix_anchored_both_sides():
     """一致性护栏（工单 generate-overwrite/01）：冲突 400 文案前缀
     「桌面上已有同名工程」= 后端（webapp.py 生成）与前端（fx/generate.js

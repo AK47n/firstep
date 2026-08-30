@@ -20,6 +20,13 @@ export function conflictDirName(message) {
   return m ? m[1] : "";
 }
 
+// 输出目录路径 → 末段目录名（工单 ux-walkthrough-02/03）：恢复备份按钮的
+// 探测名（.bak 存在性按目录名查桌面）；空/异常路径 → ""。
+export function dirBasename(path) {
+  const parts = String(path || "").split(/[\\/]/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
 // 生成中阶段播报（工单 ui-polish-8/04）：子阶段文案轮播 + 等待计时。
 // genStageTexts / fmtWait 为自包含纯函数（tests/js 正则抽取）
 export function genStageTexts(i) {

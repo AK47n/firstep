@@ -87,7 +87,7 @@ const DOMAINS = {
   },
   "generate.js": {
     CONFLICT_MSG_PREFIX: "string",
-    isConflictError: "fn", conflictDirName: "fn", genStageTexts: "fn",
+    isConflictError: "fn", conflictDirName: "fn", dirBasename: "fn", genStageTexts: "fn",
     fmtWait: "fn", generationOutputDirPayload: "fn", collectBindings: "fn",
     formatResModules: "fn", attachCelebrate: "fn", collapseBtnLabel: "fn",
     syncCollapseBtn: "fn", collapseToggleAll: "fn", GEN_CARD_COLLAPSE_KEY: "string",
