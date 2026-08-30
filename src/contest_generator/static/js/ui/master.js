@@ -14,7 +14,7 @@ import { esc, fmtDuration } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { recordLLMUsage } from "/js/ui/usage.js";
-import { masterTableRowHTML, masterDeleteConfirmHTML, masterDeleteBodyHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML } from "/js/fx/master.js";
+import { masterTableRowHTML, masterDeleteBodyHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML } from "/js/fx/master.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 let scannedProjects = null;   // 扫描结果（含报告确认所需）

@@ -115,7 +115,7 @@ export function toast(kind, text, opts = {}) {
     : "";
   const actionBtn = opts.action && opts.action.onClick
     ? '<button type="button" class="toast-action" aria-label="' + (opts.action.label || "撤销") + '">'
-      + (opts.action.label || "撤销") + "</button>"
+      + (opts.action.label || "撤销").replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</button>"
     : "";
   el.innerHTML = '<span class="toast-ico">' + TOAST_ICON[kind] + '</span><span class="toast-text">'
     + String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
@@ -129,8 +129,13 @@ export function toast(kind, text, opts = {}) {
   });
   if (actionBtn) {
     el.querySelector(".toast-action").addEventListener("click", async () => {
-      try { await opts.action.onClick(); } catch (e) { /* 动作自身处理 */ }
-      if (el.isConnected) el.remove();
+      try {
+        await opts.action.onClick();
+        if (el.isConnected) el.remove();
+      } catch (e) {
+        toastError(e, "撤销失败");   // 撤销动作自身失败：另报错误（评审整改：不静默吞）
+        if (el.isConnected) el.remove();
+      }
     });
   }
   if (copyBtn) {

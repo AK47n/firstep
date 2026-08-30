@@ -47,11 +47,13 @@ let tasks = {
 
 const tasksWait = makeWaitClock("tasks-status");   // 长任务秒表（工单 ux-walkthrough-02/12）
 
-// 长任务取消（工单 ux-walkthrough-02/14）：拆解/执行/想法分析/全局商量共用
-// 一条中止器（互斥忙碌闸保证同时只跑一条）；取消 = 中止客户端等待
-const tasksAbort = makeAbortable();
+// 长任务取消（工单 ux-walkthrough-02/14）：任务簇各流程（拆解/执行/想法分析/
+// 全局商量/任务讨论）可并发（繁忙闸各自独立），共用单按钮 + 单「当前流程
+// 中止器槽」——begin/clear 各自登记，取消只作用于最新流程（评审整改：
+// 共享一个 abortable 会在并发时静默取消用户合法流程）
+let tasksAbortSlot = null;
 const tasksCancel = makeCancelButton("tasks-status");
-tasksCancel.onClick(() => tasksAbort.abort());
+tasksCancel.onClick(() => { if (tasksAbortSlot) tasksAbortSlot.abort(); });
 
 // 新想法 / 问题区状态（工单 idea-fix/02）：analysis = 最近一次 /api/tasks/idea/
 // analyze 的 done 载荷（{kind, reply, new_task, fix_summary, affected_task_ids}）；
@@ -362,7 +364,9 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
   $("tasks-idea-msg").textContent = "";
   $("tasks-status").textContent = "AI 分析想法中…";
   tasksWait.start();
-  const signal = tasksAbort.begin();
+  const flowAbort = makeAbortable();
+  tasksAbortSlot = flowAbort;
+  const signal = flowAbort.begin();
   tasksCancel.show();
   try {
     const data = await tasksRunSSE("/api/tasks/idea/analyze", { output_dir: dir, idea: text }, {
@@ -399,7 +403,7 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
   } finally {
     aiActionStop();
     tasksWait.stop();
-    tasksAbort.clear();
+    if (tasksAbortSlot === flowAbort) tasksAbortSlot = null;
     tasksCancel.hide();
     ideaSetBusy(false);
   }
@@ -665,7 +669,9 @@ async function tasksChatSend() {
   $("tasks-global-msg").textContent = "";
   $("tasks-status").textContent = "全局商量：AI 回应中…（分钟级调用，请等待）";
   tasksWait.start();
-  const signal = tasksAbort.begin();
+  const flowAbort = makeAbortable();
+  tasksAbortSlot = flowAbort;
+  const signal = flowAbort.begin();
   tasksCancel.show();
   tasksGlobalRender();
   try {
@@ -684,7 +690,7 @@ async function tasksChatSend() {
   } finally {
     aiActionStop();
     tasksWait.stop();
-    tasksAbort.clear();
+    if (tasksAbortSlot === flowAbort) tasksAbortSlot = null;
     tasksCancel.hide();
     chatState.pending = "";
     chatState.busy = false;
@@ -835,6 +841,7 @@ async function tasksDraftDelete(id) {
     draftState.drafts = data.drafts || [];
     tasksDraftsRender();
     toast("ok", "已删除草稿（可撤销）", {
+      ms: 8000,   // 撤销窗口 8s（评审整改：2.5s 太短易错过）
       action: {
         label: "撤销",
         onClick: async () => {
@@ -979,7 +986,9 @@ async function tasksPlan(force) {
   aiActionStart("任务规划");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-status").textContent = "请求中…";
   tasksWait.start();
-  const signal = tasksAbort.begin();
+  const flowAbort = makeAbortable();
+  tasksAbortSlot = flowAbort;
+  const signal = flowAbort.begin();
   tasksCancel.show();
   try {
     const body = { output_dir: dir };
@@ -1016,7 +1025,7 @@ async function tasksPlan(force) {
   } finally {
     aiActionStop();
     tasksWait.stop();
-    tasksAbort.clear();
+    if (tasksAbortSlot === flowAbort) tasksAbortSlot = null;
     tasksCancel.hide();
     tasksSetBusy(false);
   }
@@ -1072,7 +1081,9 @@ async function tasksExecute(taskId, feedback) {
   };
   setPhase("已开始执行：AI 实现本任务中…");
   tasksWait.start();
-  const signal = tasksAbort.begin();
+  const flowAbort = makeAbortable();
+  tasksAbortSlot = flowAbort;
+  const signal = flowAbort.begin();
   tasksCancel.show();
   try {
     const body = { output_dir: dir, task_id: taskId, note: note };
@@ -1119,7 +1130,7 @@ async function tasksExecute(taskId, feedback) {
   } finally {
     aiActionStop();
     tasksWait.stop();
-    tasksAbort.clear();
+    if (tasksAbortSlot === flowAbort) tasksAbortSlot = null;
     tasksCancel.hide();
     tasksSetBusy(false);
   }
@@ -1359,7 +1370,9 @@ async function tasksDialogSend(taskId) {
   $("tasks-msg").textContent = "";
   $("tasks-status").textContent = "任务讨论：AI 回应中…（分钟级调用，请等待）";
   tasksWait.start();
-  const signal = tasksAbort.begin();
+  const flowAbort = makeAbortable();
+  tasksAbortSlot = flowAbort;
+  const signal = flowAbort.begin();
   tasksCancel.show();
   tasksRender();
   try {
@@ -1384,7 +1397,7 @@ async function tasksDialogSend(taskId) {
   } finally {
     aiActionStop();
     tasksWait.stop();
-    tasksAbort.clear();
+    if (tasksAbortSlot === flowAbort) tasksAbortSlot = null;
     tasksCancel.hide();
     st.busy = false;
     tasksRender();

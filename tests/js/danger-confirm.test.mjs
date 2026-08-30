@@ -106,5 +106,7 @@ test("recentDeleteMessage：点名输出目录 + 磁盘不受影响 + 撤销", (
   assert.match(msg, /C:\\桌面\\Auto_Car/);
   assert.match(msg, /磁盘上的工程不受影响/);
   assert.match(msg, /撤销/);
-  assert.match(recentDeleteMessage(null), /该记录/);
+  const generic = recentDeleteMessage(null);
+  assert.match(generic, /这条最近生成记录/);
+  assert.ok(!generic.includes("撤销"));   // 无快照不承诺撤销（评审整改）
 });

@@ -58,9 +58,13 @@ export function draftDeleteMessage(text) {
 }
 
 /** 删除最近生成记录确认文案（工单 ux-walkthrough-02/15）：点名输出目录，
- * 明示「只移除历史记录，磁盘工程不受影响」+ 撤销入口。 */
+ * 明示「只移除历史记录，磁盘工程不受影响」+ 撤销入口。快照缺失（entry 空）
+ * 时不给「可撤销」承诺（评审整改：无快照则无从恢复）。 */
 export function recentDeleteMessage(entry) {
-  const dir = entry && entry.output_dir ? String(entry.output_dir) : "该记录";
+  if (!entry || !entry.output_dir) {
+    return "将删除这条最近生成记录？只会移除历史列表上的记录，磁盘上的工程不受影响。确认删除？";
+  }
+  const dir = String(entry.output_dir);
   return "将删除最近生成记录（" + dir + "）？只会移除历史列表上的记录，磁盘上的工程不受影响；确认后可点「撤销」恢复。";
 }
 
