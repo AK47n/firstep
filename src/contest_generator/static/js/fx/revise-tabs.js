@@ -4,9 +4,10 @@
 import { esc } from "./core.js";
 
 // 页签定义（key = data-tab / 面板后缀；label = 页签文案）。
+// 主路径「任务推进」居首（工单 beginner-gap-closure/01：与教程「任务推进（主路径）」定位一致）。
 export const REVISE_TABS = [
-  { key: "revise", label: "修订" },
   { key: "tasks", label: "任务推进" },
+  { key: "revise", label: "修订" },
   { key: "params", label: "参数速调" },
   { key: "delivery", label: "交付" },
 ];

@@ -1,5 +1,6 @@
 // ui/revise-tabs.js — 第11步「修订与深化」卡内页签 DOM 胶水（工单 step11-tabs-ui/01：
-// 点击 / 方向键切换 + 默认「修订」+ 上下文加载后（未手动切过页签）自动激活「任务推进」；
+// 点击 / 方向键切换 + 默认「任务推进」（工单 beginner-gap-closure/01 主路径居首）+ 上下文加载后
+// （未手动切过页签）自动激活「任务推进」；
 // 徽章就地刷新——01 为空快照，02 接入各簇只读 getter）。
 import { $ } from "/js/app.js";
 import { REVISE_TABS, reviseTabsHTML, revisePanelFor, reviseTabNext, reviseTabBadge } from "/js/fx/revise-tabs.js";
@@ -8,7 +9,7 @@ import { tasksSummary } from "./generate-tasks.js";
 import { paramsSummary } from "./params.js";
 import { deliverySummary } from "./delivery.js";
 
-const state = { active: "revise", userPicked: false };
+const state = { active: "tasks", userPicked: false };
 
 /** 各分区状态快照（工单 step11-tabs-ui/02）：只读 getter 单向 import
  *（revise-tabs → 各簇，无人 import revise-tabs，无模块环）。 */
