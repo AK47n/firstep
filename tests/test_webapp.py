@@ -2197,6 +2197,7 @@ def test_generate_with_k230_writes_py_and_summary_lists_it(client, context, tmp_
             "template_id": "default",
             "template_name": "",
             "template_description": "",
+            "asset_paths": [],
         }
     ]
     assert "main.py" in data["structure"]
