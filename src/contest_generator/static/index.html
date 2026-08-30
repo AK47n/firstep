@@ -2016,20 +2016,20 @@
 <header>
   <h1><span class="brand-en"><span class="b1">first</span><span class="b2">ep</span><span class="cursor"></span></span><span class="brand-cn">电赛工程生成器</span></h1>
   <nav>
-    <div class="tab-group" role="group" aria-label="做题">
-      <button data-tab="generate" class="active" title="主流程：粘贴赛题 → AI 推荐 → 引脚配置 → 生成工程 → 编译修复。">生成</button>
-      <button data-tab="topic" title="历年真题（题面 + 附带程序），点「取题面」可一键填入生成页。">赛题库</button>
-      <button data-tab="settings" title="配置 AI API key、环境体检、工具链路径与库设置——第一次使用先来这里。">设置</button>
+    <div class="tab-group" role="tablist" aria-label="做题">
+      <button data-tab="generate" class="active" role="tab" aria-selected="true" aria-controls="tab-generate" tabindex="0" title="主流程：粘贴赛题 → AI 推荐 → 引脚配置 → 生成工程 → 编译修复。">生成</button>
+      <button data-tab="topic" role="tab" aria-selected="false" aria-controls="tab-topic" tabindex="-1" title="历年真题（题面 + 附带程序），点「取题面」可一键填入生成页。">赛题库</button>
+      <button data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" title="配置 AI API key、环境体检、工具链路径与库设置——第一次使用先来这里。">设置</button>
     </div>
-    <div class="tab-group" role="group" aria-label="资料管理">
-      <button data-tab="library" title="管理可复用模块（查看 / 补录 / 编辑 / 删除）；做题时 AI 推荐自动匹配，一般不用手动操作。">模块库</button>
-      <button data-tab="reference" title="套件例程 / 说明书等配套资料，生成时作学习素材；管理入口，做题用不到。">参考文件库</button>
-      <button data-tab="pdf" title="素材根目录全部 PDF 的浏览与整理（含疑似重复清理）；管理入口，做题用不到。">PDF 资料库</button>
-      <button data-tab="master" title="stm32 / mspm0 两平台基础工程浏览与体检；管理入口，做题用不到。">母版</button>
-      <button data-tab="changelog" title="本工具的更新日志（CHANGELOG）。">更新记录</button>
+    <div class="tab-group" role="tablist" aria-label="资料管理">
+      <button data-tab="library" role="tab" aria-selected="false" aria-controls="tab-library" tabindex="0" title="管理可复用模块（查看 / 补录 / 编辑 / 删除）；做题时 AI 推荐自动匹配，一般不用手动操作。">模块库</button>
+      <button data-tab="reference" role="tab" aria-selected="false" aria-controls="tab-reference" tabindex="-1" title="套件例程 / 说明书等配套资料，生成时作学习素材；管理入口，做题用不到。">参考文件库</button>
+      <button data-tab="pdf" role="tab" aria-selected="false" aria-controls="tab-pdf" tabindex="-1" title="素材根目录全部 PDF 的浏览与整理（含疑似重复清理）；管理入口，做题用不到。">PDF 资料库</button>
+      <button data-tab="master" role="tab" aria-selected="false" aria-controls="tab-master" tabindex="-1" title="stm32 / mspm0 两平台基础工程浏览与体检；管理入口，做题用不到。">母版</button>
+      <button data-tab="changelog" role="tab" aria-selected="false" aria-controls="tab-changelog" tabindex="-1" title="本工具的更新日志（CHANGELOG）。">更新记录</button>
     </div>
-    <div class="tab-group" role="group" aria-label="指南">
-      <button data-tab="guide" title="面向第一次使用的完整教程：准备、做题主线、编译上板到交付收尾。">新手指引</button>
+    <div class="tab-group" role="tablist" aria-label="指南">
+      <button data-tab="guide" role="tab" aria-selected="false" aria-controls="tab-guide" tabindex="0" title="面向第一次使用的完整教程：准备、做题主线、编译上板到交付收尾。">新手指引</button>
     </div>
   </nav>
   <button id="btn-theme" type="button" title="切换到亮色主题">🌙</button>
@@ -2277,7 +2277,7 @@
       <h2><span class="step-no">9</span>输出目录并生成</h2>
       <p class="card-purpose">选保存位置，生成完整可编译工程。</p>
       <label style="margin-bottom:8px"><input type="checkbox" id="desktop-topic-output" checked> 在桌面按 AI 赛题名创建文件夹（推荐）</label>
-      <div class="muted" style="margin-bottom:10px">勾选后会忽略手动输出目录，生成到桌面/赛题名；同名完整工程会先备份为 .bak 再覆盖（可在结果区恢复旧工程），同题换平台则另建带平台后缀的新目录。</div>
+      <div class="muted" style="margin-bottom:10px">勾选后会忽略手动输出目录，生成到桌面/赛题名；同名完整工程会先弹确认，确认后备份为 .bak 再覆盖（可在结果区恢复旧工程），同题换平台则另建带平台后缀的新目录。</div>
       <label for="output-dir">手动输出目录（取消桌面选项时必填；必须不存在或为空）</label>
       <div class="row">
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
@@ -2408,7 +2408,7 @@
            细节收进 details（不丢信息） -->
       <details class="card-details">
         <summary>生成后官方发布的赛事答疑 Q&amp;A 也能补进流程：分析影响 → 确认修订 / 可选深化 → 编译验证。</summary>
-        <div class="card-details-body">AI 逐条分析影响 → 展示模块增删 diff → 确认后覆盖式重生成（修订前整树备份，可回滚）；可选深化 = AI 按功能需求填 main.c 的 TODO 并强制编译验证（绿 = 已验证；无工具链 = 降级提示）。</div>
+        <div class="card-details-body">AI 逐条分析影响 → 展示模块增删 diff → 确认后覆盖式重生成（修订前整树备份，可回滚）；可选深化 = AI 按功能需求填 main.c 的 TODO 并强制编译验证（绿 = 已通过编译验证；无工具链 = 降级提示）。</div>
       </details>
 
       <!-- 第11步卡内页签（工单 step11-tabs-ui/01）：修订 / 任务推进 / 参数速调 / 交付
@@ -3265,6 +3265,7 @@ import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
+import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
 "use strict";
 
 // 主题切换（工单 ui-polish-5/01）：currentTheme / applyTheme / initTheme 及
@@ -3284,8 +3285,15 @@ import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from 
 // #step-nav 里的 step-dot 泡泡 / 收起按钮一起绑进页签切换——点击泡泡时
 // btn.dataset.tab 为 undefined，section.page 全被剥掉 active → 整页黑屏）
 document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
+  btn.setAttribute("role", "tab");
+  btn.setAttribute("aria-controls", "tab-" + btn.dataset.tab);
   btn.addEventListener("click", () => {
-    document.querySelectorAll("nav button[data-tab]").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll("nav button[data-tab]").forEach((b) => {
+      const on = b === btn;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;   // roving tabindex（工单 ux-walkthrough-02/19）
+    });
     document.querySelectorAll("section.page").forEach((s) =>
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
     // 进度条只属于生成流程：切出隐藏，切回按完成数恢复显示
@@ -3298,6 +3306,25 @@ document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
     if (btn.dataset.tab === "settings") { loadSettings(); loadRecentWorkflows(); renderUsageStats(); }
+  });
+});
+// 顶栏页签键盘导航（工单 ux-walkthrough-02/19）：每个 tab-group 内
+// ←/→ 循环、Home/End 首尾（与页内 revise-tabs 行为一致）；激活后焦点
+// 跟随切换（点击式 activate——reload 页面即激活）
+document.querySelectorAll("nav .tab-group").forEach((group) => {
+  group.addEventListener("keydown", (e) => {
+    const tabs = Array.from(group.querySelectorAll("button[data-tab]"));
+    if (!tabs.length) return;
+    const cur = tabs.findIndex((t) => t.classList.contains("active"));
+    let next = -1;
+    if (e.key === "ArrowRight") next = (cur + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") next = (cur - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = tabs.length - 1;
+    else return;
+    e.preventDefault();
+    tabs[next].click();
+    tabs[next].focus();
   });
 });
 
@@ -3620,6 +3647,7 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
 })();
 
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）
+applyInputA11y();  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）：DOM 已就绪，幂等
 initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
 initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪，纯本地交互
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）

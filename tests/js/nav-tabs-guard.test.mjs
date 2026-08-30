@@ -35,23 +35,40 @@ function headerNavHTML() {
   return m[1];
 }
 
-/** 取一个分组块的内部 HTML（<div class="tab-group"...> 到第一个 </div>）。 */
+/** 取一个分组块的内部 HTML（<div class="tab-group" role="tablist"...> 到第一个 </div>）。 */
 function groupInnerHTML(label) {
   const re = new RegExp(
-    '<div class="tab-group" role="group" aria-label="' + label + '"[^>]*>([\\s\\S]*?)</div>');
+    '<div class="tab-group" role="tablist" aria-label="' + label + '"[^>]*>([\\s\\S]*?)</div>');
   const m = html.match(re);
   assert.ok(m, "分组容器 '" + label + "' 应存在");
   return m[1];
 }
 
-test("组容器：做题 / 资料管理 / 指南 各恰好一个，且无旧组标签残留", () => {
+test("组容器：做题 / 资料管理 / 指南 各恰好一个（ARIA tablist，工单 ux-walkthrough-02/19），无旧组标签残留", () => {
   for (const g of GROUPS) {
-    const container = 'class="tab-group" role="group" aria-label="' + g.label + '"';
+    const container = 'class="tab-group" role="tablist" aria-label="' + g.label + '"';
     assert.equal(countOccurrences(html, container), 1,
       "分组容器 '" + g.label + "' 应恰好出现一次");
   }
   assert.equal(countOccurrences(html, "tab-group-label"), 0,
     "旧组标签（tab-group-label）应已移除——胶囊导航重构后分组由 aria-label + 细分隔线表达");
+});
+
+test("tab 按钮 ARIA：role=tab + aria-selected + aria-controls + roving tabindex（工单 ux-walkthrough-02/19）", () => {
+  const nav = headerNavHTML();
+  for (const key of ALL_KEYS) {
+    const btn = nav.match(new RegExp('<button[^>]*data-tab="' + key + '"[^>]*>'));
+    assert.ok(btn, "tab '" + key + "' 按钮应存在");
+    assert.ok(/role="tab"/.test(btn[0]), "tab '" + key + "' 应带 role=tab");
+    assert.ok(/aria-selected="(true|false)"/.test(btn[0]),
+      "tab '" + key + "' 应带 aria-selected");
+    assert.ok(btn[0].includes('aria-controls="tab-' + key + '"'),
+      "tab '" + key + "' 应带 aria-controls=tab-" + key);
+    const active = /class="[^"]*active/.test(btn[0]);
+    const expectedTabIndex = active ? "0" : (key === "generate" || key === "library" || key === "guide" ? "0" : "-1");
+    assert.ok(btn[0].includes('tabindex="' + expectedTabIndex + '"'),
+      "tab '" + key + "' tabindex 应为 " + expectedTabIndex + "（roving：激活/组首 0，其余 -1）");
+  }
 });
 
 test("9 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
@@ -77,7 +94,7 @@ test("组归属与组内顺序：做题 3 个、资料管理 5 个、指南 1 �
 test("组容器不可点击且无标签按钮：容器无 data-tab，组内无 tab-group-label", () => {
   for (const g of GROUPS) {
     const containerMatch = html.match(new RegExp(
-      '<div class="tab-group" role="group" aria-label="' + g.label + '"[^>]*>'));
+      '<div class="tab-group" role="tablist" aria-label="' + g.label + '"[^>]*>'));
     assert.ok(containerMatch, "分组容器 '" + g.label + "' 应存在");
     assert.ok(!/data-tab/.test(containerMatch[0]),
       "组容器 '" + g.label + "' 不得携带 data-tab（容器进 [data-tab] 绑定会打断切换）");

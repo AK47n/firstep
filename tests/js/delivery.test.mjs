@@ -28,7 +28,7 @@ test("deliveryCheckHTML: 全部完成 → ✅ + 统计行", () => {
     message: "已完成 4/4——全部步骤完成，可以打包交付。",
   });
   assert.ok(html.includes("delivery-ok"));
-  assert.ok(html.includes("上板通过 3"));
+  assert.ok(html.includes("已通过 3"));
   assert.ok(html.includes("已跳过 1"));
   assert.ok(html.includes("未完成 0"));
   assert.ok(html.includes("全部步骤完成"));

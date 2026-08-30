@@ -28,7 +28,7 @@ export function deliveryCheckHTML(result) {
   const unfinished = (s.failed || 0) + (s.pending || 0)
     + (s.doing || 0) + (s.unverified || 0);
   const statRow = '<div class="delivery-stat-row">'
-    + '<span class="badge ok">上板通过 ' + (s.verified || 0) + "</span>"
+    + '<span class="badge ok">已通过 ' + (s.verified || 0) + "</span>"
     + '<span class="badge same">已跳过 ' + (s.skipped || 0) + "</span>"
     + '<span class="badge del">未完成 ' + unfinished + "</span>"
     + "</div>";

@@ -26,8 +26,9 @@ import {
 test("taskStatusLabel: 词表全覆盖", () => {
   assert.equal(taskStatusLabel("pending"), "待做");
   assert.equal(taskStatusLabel("doing"), "进行中");
-  assert.equal(taskStatusLabel("verified"), "上板通过");
-  assert.equal(taskStatusLabel("unverified"), "未验证");
+  assert.equal(taskStatusLabel("verified", "manual"), "上板通过");
+  assert.equal(taskStatusLabel("verified"), "编译通过");
+  assert.equal(taskStatusLabel("unverified"), "待上板");
   assert.equal(taskStatusLabel("failed"), "失败");
   assert.equal(taskStatusLabel("skipped"), "已跳过");
   assert.equal(taskStatusLabel("bogus"), "未知");
@@ -84,7 +85,7 @@ test("taskCardHTML: 前置依赖渲染", () => {
     score_refs: [], depends_on: ["t1"], verify: "compile", status: "verified",
   }, 1, { seqById: { t1: 1, t2: 2 } });
   assert.ok(html.includes("前置：第 1 步"));
-  assert.ok(html.includes("上板通过"));
+  assert.ok(html.includes("编译通过"), "compile 验证任务 = 编译通过（reviewer：不得宣称上板）");
 });
 
 test("tasksGridHTML: 空清单占位 + 多卡渲染", () => {
