@@ -6907,6 +6907,33 @@ def test_llm_selfcheck_llm_error_400_chinese(client, context, monkeypatch):
     assert "自检失败" in resp.json()["detail"]
 
 
+def test_llm_selfcheck_network_error_humanized(client, context, monkeypatch):
+    """文本自检网络失败（工单 05 评审整改）：400 中文人话 + 建议动作，
+    urlopen / URL 技术串不上界面——selfcheck 不再绕过错误映射层裸透 LLMError。"""
+    import contest_generator.webapp as webapp_mod
+    from contest_generator.llm import LLMError
+
+    class _NetLLM:
+        def __init__(self, config=None):
+            self.config = config
+
+        def _chat_once(self, messages, **kwargs):
+            raise LLMError(
+                "无法连接 LLM 服务 https://api.deepseek.com: "
+                "<urlopen error timed out>",
+                kind="network",
+            )
+
+    monkeypatch.setattr(webapp_mod, "DeepSeekLLM", _NetLLM)
+    resp = client.post("/api/llm/selfcheck")
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "文本通道自检失败：AI 服务连接失败" in detail
+    assert "检查网络连接" in detail
+    assert "api.deepseek.com" not in detail
+    assert "urlopen" not in detail
+
+
 def test_buy_discuss_endpoint_normal_flow(client, context):
     """买件方案商量端点（工单 buy-discuss/03）：正常流 → {reply, review}；
     词表建议名匹配 → LLM 收到该行 solutions；词表外 → 空方案（不编造）。"""

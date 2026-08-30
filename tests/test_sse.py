@@ -24,6 +24,7 @@ from contest_generator.events import (
     PHASE_SUMMARY,
     ProgressEvent,
 )
+from contest_generator.errors import INTERNAL_ERROR_HINT
 from contest_generator.sse import SseEmitter, run_sse
 
 
@@ -206,7 +207,9 @@ def test_runner_uses_injected_mapper_and_defaults_loud() -> None:
         _frame(EVENT_ERROR, {"message": "中文信息"})
     ]
     assert list(run_sse(run)) == [
-        _frame(EVENT_ERROR, {"message": "服务器内部错误（ValueError）：boom"})
+        _frame(EVENT_ERROR, {
+            "message": "服务器内部错误（ValueError）：boom" + INTERNAL_ERROR_HINT
+        })
     ]
 
 
@@ -217,7 +220,9 @@ def test_runner_emits_error_on_non_exception_death() -> None:
         raise KeyboardInterrupt
 
     frames = list(run_sse(run))
-    assert frames == [_frame(EVENT_ERROR, {"message": "服务器内部错误（KeyboardInterrupt）："})]
+    assert frames == [_frame(EVENT_ERROR, {
+        "message": "服务器内部错误（KeyboardInterrupt）：" + INTERNAL_ERROR_HINT
+    })]
 
 
 def test_unknown_terminal_kind_fails_loud_at_queue_boundary() -> None:
