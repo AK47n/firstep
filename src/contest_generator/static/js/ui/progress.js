@@ -80,8 +80,9 @@ export function makeWaitClock(target) {
 }
 
 /** 长任务「取消本次等待」按钮（工单 ux-walkthrough-02/14）：与 makeWaitClock
- * 同款目标解析（元素 / 选择器，容器重渲染后重挂）；show 显示 → hit 点击 →
- * markCancelled 置灰「已取消」→ hide 隐藏（流程 finally 调用）。 */
+ * 同款目标解析（元素 / 选择器，容器重渲染后重挂）；show 显示 → 点击触发
+ * onClick（中止请求）→ hide 隐藏（流程 finally 调用）。取消反馈文案由各
+ * 流水线在状态区给出（如「已取消等待：…」），按钮本身不置灰。 */
 export function makeCancelButton(target, opts = {}) {
   const btnEl = document.createElement("button");
   btnEl.type = "button";
@@ -98,11 +99,7 @@ export function makeCancelButton(target, opts = {}) {
     if (btnEl.parentNode !== el.parentNode) el.insertAdjacentElement("afterend", btnEl);
     return true;
   }
-  function show() { btnEl.disabled = false; btnEl.textContent = opts.label || "取消本次等待"; attach(); }
+  function show() { attach(); }
   function hide() { if (btnEl.parentNode) btnEl.remove(); }
-  function markCancelled() {
-    btnEl.disabled = true;
-    btnEl.textContent = opts.cancelledLabel || "已取消";
-  }
-  return { show, hide, markCancelled, onClick(fn) { handler = fn; } };
+  return { show, hide, onClick(fn) { handler = fn; } };
 }

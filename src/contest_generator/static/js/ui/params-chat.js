@@ -139,7 +139,7 @@ async function paramsChatSend() {
     paramsChatState.draft = message;   // 失败回填：历史不动（后端原子轮次）
     paramsChatStatus("");
     if (isAbortError(e)) {
-      paramsChatStatus("已取消：本轮咨询未保存，可安全重试");
+      paramsChatStatus("已取消等待：本轮咨询在后台可能继续（会话以后端为准）");
     } else if (msgEl) {
       msgEl.textContent = e.message;
     }

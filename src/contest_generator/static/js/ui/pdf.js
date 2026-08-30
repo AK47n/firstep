@@ -5,10 +5,11 @@
 // 行渲染/详情/回收 URL 等全量），本模块只做 DOM 转发与事件接线。
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
+import { confirmModal } from "/js/ui/confirm.js";
 import {
   pdfHealth, pdfBroken, pdfFilterEntries, pdfSortEntries,
   pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText,
-  pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML,
+  pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashBodyHTML,
   pdfFileUrl,
 } from "/js/fx/pdf.js";
 
@@ -100,31 +101,22 @@ function showPdfDetail(pdf) {
 // 删除 = 移入回收目录 sources/.trash-pdf/<日期>/<rel_path 镜像>（不真删：
 // git 忽略 + 可手动恢复 + git 历史双保险）；仅疑似重复组成员可删
 // （f.isDup 命中 / 详情弹窗 dup+group 标注），损坏与健康文件不可删。
-// pdfTrashUrl / pdfDupRemainText / pdfTrashConfirmHTML 在 fx/pdf.js。
-function openPdfTrashConfirm(pdf, group) {
-  const overlay = document.createElement("div");
-  overlay.className = "ref-files-overlay";
+// pdfTrashUrl / pdfDupRemainText / pdfTrashBodyHTML 在 fx/pdf.js。
+// 工单 ux-walkthrough-02/15：迁移到共享 confirmModal 工厂（与模块/赛题/参考一致）。
+async function openPdfTrashConfirm(pdf, group) {
   const mode = group ? "group" : "one";
   const hint = "sources/.trash-pdf/" + pdfTrashDate() + "/" + (pdf.rel_path || "");
-  overlay.innerHTML = `<div class="ref-files-modal">
-    <div class="ref-files-head"><strong>${mode === "group" ? esc(pdfDupRemainText(group)) : "删除此文件？"}</strong><button class="ref-files-close" title="关闭">×</button></div>
-    <div class="ref-detail-scroll">${pdfTrashConfirmHTML(pdf, mode, group, hint)}</div>
-  </div>`;
-  const close = () => overlay.remove();
-  overlay.querySelector(".ref-files-close").addEventListener("click", close);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
-  overlay.querySelector("[data-pdf-trash-cancel]").addEventListener("click", close);
-  // 确认：单文件删（pdf.rel_path）/ 组级删「其余成员」（保留 pdf——确认按钮
-  // 携带的是「此文件」标识，目标 = group.paths 中除 pdf 之外的全部成员）
-  overlay.querySelectorAll("[data-pdf-trash-confirm]").forEach((b) =>
-    b.addEventListener("click", () => {
-      if (group) confirmTrashGroup(pdf, group, close);
-      else confirmTrashPdf(b.dataset.pdfTrashConfirm, close);
-    }));
-  document.body.appendChild(overlay);
+  const ok = await confirmModal({
+    title: mode === "group" ? "保留一份删其余？" : "删除此文件？",
+    message: mode === "group"
+      ? "组内疑似重复：将删除除保留文件外的其余成员（移入回收目录）。"
+      : "该 PDF 将移入回收目录（不真删，可手动恢复）。",
+    extra: pdfTrashBodyHTML(pdf, mode, group, hint),
+    confirmText: mode === "group" ? "确认删除其余" : "确认删除",
+  });
+  if (!ok) return;
+  if (group) await confirmTrashGroup(pdf, group, () => {});
+  else await confirmTrashPdf(pdf.rel_path, () => {});
 }
 
 // pdfTrashDate()：本地日期 YYYY-MM-DD（回收去向提示文案——服务端按同规则

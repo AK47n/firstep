@@ -20,6 +20,7 @@ const DOMAINS = {
   "danger.js": {
     reviseApplyConfirmMessage: "fn", platformSwitchConfirmMessage: "fn",
     pinResetConfirmMessage: "fn", overwriteBakHint: "fn",
+    draftDeleteMessage: "fn", recentDeleteMessage: "fn",
   },
   "errors.js": {
     parseError: "fn", parseHttpError: "fn", isLongError: "fn",
@@ -50,6 +51,7 @@ const DOMAINS = {
     pdfStatsText: "fn", pdfChipRowHTML: "fn", pdfRowHTML: "fn",
     pdfPagesUrl: "fn", pdfPagesText: "fn", pdfDetailHTML: "fn",
     pdfTrashUrl: "fn", pdfDupRemainText: "fn", pdfTrashConfirmHTML: "fn",
+    pdfTrashBodyHTML: "fn",
     pdfFileUrl: "fn",
   },
   "reference.js": {
@@ -70,7 +72,7 @@ const DOMAINS = {
     topicCardHTML: "fn",
   },
   "master.js": {
-    masterTableRowHTML: "fn", masterDeleteConfirmHTML: "fn", masterFileURL: "fn",
+    masterTableRowHTML: "fn", masterDeleteConfirmHTML: "fn", masterDeleteBodyHTML: "fn", masterFileURL: "fn",
     masterKeyFileRowHTML: "fn", masterDetailHTML: "fn", decisionItem: "fn",
     archiveItem: "fn",
   },

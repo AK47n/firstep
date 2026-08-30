@@ -1858,6 +1858,11 @@
                 border-radius: 999px; border: 1px solid var(--border);
                 background: var(--panel); color: var(--accent); cursor: pointer; }
   .toast-copy:hover { border-color: var(--accent); }
+  /* 删除类操作「撤销」按钮（工单 ux-walkthrough-02/15）：点击执行并收起 */
+  .toast-action { flex: none; margin-left: 2px; padding: 2px 10px; font-size: 11px;
+                  border-radius: 999px; border: 1px solid var(--border);
+                  background: var(--panel); color: var(--ok); cursor: pointer; }
+  .toast-action:hover { border-color: var(--ok); }
   /* 长任务秒表（工单 ux-walkthrough-02/12）：状态行后「已等待 mm:ss」 */
   .wait-clock { display: inline-block; margin-left: 6px; font-size: 11px;
                 color: var(--muted); white-space: nowrap; }

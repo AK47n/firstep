@@ -136,6 +136,7 @@ from .recent_jobs import (
     load_recent,
     recent_file,
     record_recent,
+    restore_recent,
     update_recent_status,
 )
 from .impact import run_impact_analysis
@@ -1899,6 +1900,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if config is None or not delete_recent(recent_file(context.config_path), entry_id):
             raise HTTPException(404, "最近生成记录不存在")
         return {"ok": True}
+
+    @app.post("/api/recent/restore")
+    @_map_errors
+    def recent_restore(payload: dict) -> dict:
+        """撤销删除（工单 ux-walkthrough-02/15）：按删除前快照重插记录。
+        请求体 = {entry: {output_dir, platform, slugs, status, topic_id?}}；
+        形状校验失败 → 400 中文（RecentStatusError 经 errors.py 映射）。"""
+        entry = payload.get("entry")
+        config = _current_config(context)
+        if config is None:
+            raise HTTPException(400, "未配置，无法恢复最近记录")
+        restored = restore_recent(recent_file(context.config_path), entry or {})
+        return {"ok": True, "entry": restored}
 
     # ------------------------------------------------------------------
     # 修订与深化 · 上下文加载（工单 revise-deepen/01）：给一个输出目录，

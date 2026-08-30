@@ -8,6 +8,8 @@ import {
   platformSwitchConfirmMessage,
   pinResetConfirmMessage,
   overwriteBakHint,
+  draftDeleteMessage,
+  recentDeleteMessage,
 } from "../../src/contest_generator/static/js/fx/danger.js";
 
 test("reviseApplyConfirmMessage：有 diff 时展示新增/移除/不变计数", () => {
@@ -88,4 +90,21 @@ test("overwriteBakHint：无目录名时用通用描述", () => {
   const msg = overwriteBakHint();
   assert.match(msg, /同名 \.bak 备份/);
   assert.match(msg, /结果区一键恢复/);
+});
+
+test("draftDeleteMessage：点名草稿前 20 字（超长截断）+ 撤销入口", () => {
+  const msg = draftDeleteMessage("进弯道前先减速，然后保持中线行驶，再观察下一个路口");
+  assert.match(msg, /「进弯道前先减速，然后保持中线行驶，再观察…」/);
+  assert.match(msg, /撤销/);
+  const short = draftDeleteMessage("短草稿");
+  assert.match(short, /「短草稿」/);
+  assert.match(draftDeleteMessage(""), /未命名草稿/);
+});
+
+test("recentDeleteMessage：点名输出目录 + 磁盘不受影响 + 撤销", () => {
+  const msg = recentDeleteMessage({ output_dir: "C:\\桌面\\Auto_Car" });
+  assert.match(msg, /C:\\桌面\\Auto_Car/);
+  assert.match(msg, /磁盘上的工程不受影响/);
+  assert.match(msg, /撤销/);
+  assert.match(recentDeleteMessage(null), /该记录/);
 });

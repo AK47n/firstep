@@ -14,7 +14,7 @@ import { esc, fmtDuration } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { recordLLMUsage } from "/js/ui/usage.js";
-import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML } from "/js/fx/master.js";
+import { masterTableRowHTML, masterDeleteConfirmHTML, masterDeleteBodyHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML } from "/js/fx/master.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 
 let scannedProjects = null;   // 扫描结果（含报告确认所需）
@@ -387,40 +387,26 @@ $("btn-confirm").addEventListener("click", async () => {
 
 let masterCache = [];
 
-// openMasterDeleteConfirm(platform)：删除确认弹窗（对偶 pdf 轮 trash 确认：
-// 复用 .ref-files-overlay 遮罩 + Esc / × / 点遮罩关闭；确认 → 既有 DELETE
-// 端点 → toast + 重拉列表；失败 = 弹窗保留 + toast 错误，可重试或取消）。
-function openMasterDeleteConfirm(platform) {
+// openMasterDeleteConfirm(platform)：删除确认（工单 ux-walkthrough-02/15 迁移
+// 到共享 confirmModal 工厂，与模块/赛题/参考一致；元数据体 = fx 纯函数）→
+// 确认 → 既有 DELETE 端点 → toast + 重拉列表；失败 = toastError（可重试）。
+async function openMasterDeleteConfirm(platform) {
   const m = (masterCache || []).find((x) => x.platform === platform);
   if (!m) { toast("info", "未找到平台 " + platform + "（列表可能已刷新）"); return; }
-  document.querySelectorAll(".ref-files-overlay").forEach((o) => o.remove());
-  const overlay = document.createElement("div");
-  overlay.className = "ref-files-overlay";
-  overlay.innerHTML = `<div class="ref-files-modal">
-    <div class="ref-files-head"><strong>删除母版？</strong><button class="ref-files-close" title="关闭">×</button></div>
-    <div class="ref-detail-scroll">${masterDeleteConfirmHTML(m)}</div>
-  </div>`;
-  const close = () => overlay.remove();
-  overlay.querySelector(".ref-files-close").addEventListener("click", close);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
-  overlay.querySelector("[data-master-del-cancel]").addEventListener("click", close);
-  const confirmBtn = overlay.querySelector("[data-master-del-confirm]");
-  confirmBtn.addEventListener("click", async () => {
-    confirmBtn.disabled = true;
-    try {
-      await apiDelete(`/api/masters/${encodeURIComponent(m.platform)}`);
-      close();
-      toast("ok", "已删除平台 " + m.platform + " 的母版");
-      loadMasters();
-    } catch (e) {
-      toastError(e);   // 失败：弹窗保留，用户可重试或取消（长错误可复制）
-      confirmBtn.disabled = false;
-    }
+  const ok = await confirmModal({
+    title: "删除母版？",
+    message: "将删除该平台的母版工程（模板与元数据一并移除，不可恢复）。",
+    extra: masterDeleteBodyHTML(m),
+    confirmText: "确认删除",
   });
-  document.body.appendChild(overlay);
+  if (!ok) return;
+  try {
+    await apiDelete(`/api/masters/${encodeURIComponent(m.platform)}`);
+    toast("ok", "已删除平台 " + m.platform + " 的母版");
+    loadMasters();
+  } catch (e) {
+    toastError(e);   // 失败：toast 可复制重试（长错误常驻）
+  }
 }
 
 // ---------------------------------------------------------------------------

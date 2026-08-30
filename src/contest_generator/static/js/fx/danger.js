@@ -49,8 +49,24 @@ export function overwriteBakHint(dirName) {
   return "如需找回旧工程，把桌面上" + bak + "改名回" + target + "（生成后也可在结果区一键恢复）。";
 }
 
+/** 删除想法草稿确认文案（工单 ux-walkthrough-02/15）：点名草稿前 20 字，
+ * 并明示删除后可在提示里「撤销」恢复（toast 动作）。 */
+export function draftDeleteMessage(text) {
+  const s = String(text || "").trim();
+  const brief = s.length > 20 ? s.slice(0, 20) + "…" : s;
+  return "将删除「" + (brief || "未命名草稿") + "」这条想法草稿？删除后该条草稿不在列表；确认后可点「撤销」恢复。";
+}
+
+/** 删除最近生成记录确认文案（工单 ux-walkthrough-02/15）：点名输出目录，
+ * 明示「只移除历史记录，磁盘工程不受影响」+ 撤销入口。 */
+export function recentDeleteMessage(entry) {
+  const dir = entry && entry.output_dir ? String(entry.output_dir) : "该记录";
+  return "将删除最近生成记录（" + dir + "）？只会移除历史列表上的记录，磁盘上的工程不受影响；确认后可点「撤销」恢复。";
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
-    reviseApplyConfirmMessage, platformSwitchConfirmMessage, pinResetConfirmMessage, overwriteBakHint,
+    reviseApplyConfirmMessage, platformSwitchConfirmMessage, pinResetConfirmMessage,
+    overwriteBakHint, draftDeleteMessage, recentDeleteMessage,
   });
 }

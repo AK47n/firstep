@@ -340,6 +340,12 @@ const prereadAbort = makeAbortable();
 const prereadCancel = makeCancelButton("topic-preread-msg");
 prereadCancel.onClick(() => prereadAbort.abort());
 
+// 买件商量「取消本次等待」（工单 ux-walkthrough-02/14）：推荐区的建议卡会
+// 随渲染重建，取消按钮挂在稳定的推荐状态行（#recommend-msg）
+const discussAbort = makeAbortable();
+const discussCancel = makeCancelButton("recommend-msg");
+discussCancel.onClick(() => discussAbort.abort());
+
 $("btn-topic-preread").addEventListener("click", async () => {
   $("topic-preread-msg").textContent = "";
   const problem = $("problem").value.trim();
@@ -460,6 +466,9 @@ async function sendDiscuss(wrap) {
   input.value = "";
   st.busy = true;
   aiActionStart("选型讨论");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+  $("recommend-msg").textContent = "选型讨论：AI 回应中…（分钟级调用，请等待）";
+  discussCancel.show();
+  const signal = discussAbort.begin();
   renderRecommendResult(lastRecommend, false);
   try {
     const data = await apiPost("/api/buy/discuss", {
@@ -468,13 +477,20 @@ async function sendDiscuss(wrap) {
       platform: chosenPlatform || undefined,
       suggestion_name: s.name,
       history: st.history.map((m) => ({ role: m.role, content: m.content })),
-    });
+    }, { signal });
     st.history.push({ role: "assistant", content: data.reply || "（无回复）" });
     st.review = data.review || null;
   } catch (err) {
-    st.history.push({ role: "assistant", content: "（讨论失败：" + err.message + "）" });
+    if (isAbortError(err)) {
+      st.history.push({ role: "assistant", content: "（已取消等待：本轮讨论在后台可能继续，对话以后端为准）" });
+      $("recommend-msg").textContent = "已取消等待：本轮讨论在后台可能继续（对话以后端为准）";
+    } else {
+      st.history.push({ role: "assistant", content: "（讨论失败：" + err.message + "）" });
+    }
   } finally {
     aiActionStop();
+    discussAbort.clear();
+    discussCancel.hide();
     st.busy = false;
     renderRecommendResult(lastRecommend, false);
   }

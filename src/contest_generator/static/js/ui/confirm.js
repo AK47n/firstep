@@ -17,10 +17,16 @@ export function confirmModal({
   title,
   message,
   danger = true,
-  confirmText = "确认",
+  confirmText,
   cancelText = "取消",
   extra = "",
 } = {}) {
+  // 开发告警（工单 ux-walkthrough-02/15）：防漏传光秃秃的「确认」——动作
+  // 语义（确认删除 / 执行修订…）应由调用点给出；默认值仅兜底不静默
+  if (!confirmText) {
+    console.warn("confirmModal 未传 confirmText（默认「确认」）：请在调用点给足动作语义，如「确认删除」");
+    confirmText = "确认";
+  }
   return new Promise((resolve) => {
     if (activeCleanup) {
       const old = activeCleanup;
