@@ -183,7 +183,7 @@ export function initCardCollapse() {
   toggleBtn.type = "button";
   toggleBtn.id = "btn-collapse-done";
   toggleBtn.textContent = "收起已完成";
-  toggleBtn.style.cssText = "margin-top:6px;padding:2px 8px;font-size:10px;border-radius:999px;color:var(--muted);";
+  toggleBtn.style.cssText = "margin-top:6px;padding:2px 8px;font-size:10px;border-radius:var(--radius-full);color:var(--muted);";
   toggleBtn.addEventListener("click", () => {
     const doneCount = stepDoneSet ? stepDoneSet.size : 0;
     if (!doneCount) {   // 无完成步骤时点击无视觉变化 → 给明确反馈
