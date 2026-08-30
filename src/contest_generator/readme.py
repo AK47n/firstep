@@ -2,20 +2,28 @@
 
 工单 project-readme/01 + 02 + 03：生成工程时自动附带 README.md。render_readme
 是纯函数（platform / 板名 / 依赖展开后的 manifest 集 / 绑定解析结果 / 多实例
-计划 → 完整 README 文本），六章：工程概览 / 目录结构（含生成物骨架声明）/
-快速上手：编译 + 烧录 / 引脚接线表 / 模块清单与依赖 / 验证顺序清单。
+计划 / 评分点 → 完整 README 文本），章序：工程概览 / 目录结构（含生成物声明）/
+快速上手：编译 + 烧录 / 引脚接线表 / 模块清单与依赖 / 评分点验收清单（可选）/
+验证顺序清单 / 生成后怎么继续。
 utf-8、尾部换行、不含时间戳——同一输入两次调用产出逐字节一致。
 
 目录结构章（工单 beginner-gap-closure/04）：按平台列出实际关键目录/文件与
 用途（DIRECTORY_STRUCTURE，行目与母版模板由 test_directory_structure_syncs_
 with_master_templates 钉同步——modules/ 与 Debug/ 为生成时创建，例外跳过）；
 章首骨架声明（SKELETON_NOTICES）告知生成物 = 可编译骨架/模板，含占位逻辑，
-上板前需人工核对（与教程口径一致）。
+上板前需人工核对（与教程口径一致）。工单 readme-artifacts-guide/01 起在母版
+行后追加生成器新增产物行（GENERATED_ARTIFACT_STRUCTURE：README / 演示脚本 /
+报告草稿（可选）/ K230 副产物（可选）/ .contest_context.json /
+.contest_wiring.json）——母版中不存在，同一张表追加渲染，可选产物在行注标
+「（可选）」；该清单单源 = 母版同步守卫的豁免面 + 生成物必列的核对面。
 
 快速上手章 = 平台静态步骤文本（QUICK_START_STEPS 固定话术预写，不做逐模块
 拼装，生成不依赖 ccs_tools 探测结果）；验证顺序清单章 = 以 manifest 集顺序
 （resolve_dependencies DFS 后序）为基底做稳定分区排序（BRING_UP_SLUGS 前置、
-保持相互间依赖序，其余原序），渲染 checkbox 清单 + 固定引导语。
+保持相互间依赖序，其余原序），渲染 checkbox 清单 + 固定引导语。「生成后怎么
+继续」章（工单 readme-artifacts-guide/01）= 验证顺序清单之后的静态话术：第
+10/11/12 步主路径（修复中心 / 任务推进 / 参数速调 / 交付 / 交接提示词）与
+.contest_* 内部状态文件边界（工具自维护、勿手改、打包自动排除）。
 
 引脚接线章数据源 = 各模块该平台 manifest pins 声明：模块 / 角色（label 不同
 时附注）/ 生效引脚（工单 03 起 = 绑定载荷覆盖值，否则声明默认值；多实例计划
@@ -108,13 +116,56 @@ DIRECTORY_STRUCTURE: dict[str, tuple[tuple[str, str], ...]] = {
         ("modules/", "选中模块的驱动源码（每个模块一个子目录：.c/.h，已自动加入 CCS 工程与生成器的编译验证）"),
         ("main.c", "主程序骨架——赛题逻辑从这里开始（第 8 步骨架、第 11 步任务推进逐步写入）"),
         ("mspm0.syscfg", "SysConfig 外设布局（时钟 / 外设 / 引脚配置，第 7 步写入——与实际接线一一对应）"),
-        ("Debug/", "CCS 构建产物（*.out 可烧录固件与 makefile；点击构建后自动生成）"),
+        ("Debug/", "CCS 构建产物（makefile 由生成器写入——配置了 CCS 工具链时；*.out 可烧录固件，点击构建后生成）"),
         (".ccsproject", "CCS 工程文件——用 CCS：File → Open Project 选择工程目录导入"),
         (".cproject", "CCS 工程文件（与 .ccsproject 同套——无需单独处理）"),
         (".settings/", "CCS 辅助配置——无需改动"),
         ("targetConfigs/", "调试器目标配置——无需改动"),
     ),
 }
+
+# 生成时新增产物行（工单 readme-artifacts-guide/01）：生成器在母版基础上写入
+# 的新文件/目录——母版中不存在，目录结构章在母版行后追加同表渲染（行格式与
+# DIRECTORY_STRUCTURE 一致）。单源：此清单既是母版同步守卫的豁免面（方向一：
+# 生成物行不要求母版存在），也是生成物必列的核对面（守卫方向四 + 文件名常量
+# 同步测试）。文案口径：非每次生成都有的产物在行注标「（可选）」——报告草稿
+# 仅 LLM 文本可用时写、main.py 仅选中带 Python 副产物的模块时写、接线快照仅
+# 板数据存在时写；mspm0 的 makefile 集例外（在母版行 Debug/ 内说明：工具链
+# 配置时写入）。
+_GENERATED_COMMON: tuple[tuple[str, str], ...] = (
+    ("README.md", "本工程说明——目录 / 编译烧录 / 接线 / 验证顺序与「生成后怎么继续」"),
+    ("演示脚本.md", "演示流程（按评分点 / 功能需求组织）——答辩演示前看它"),
+    ("设计报告草稿.md", "设计报告草稿（可选：AI 方案论证 + 软件流程，供报告参考；未生成 = 正常）"),
+    ("main.py", "K230 / 视觉副产物（可选：选了带 Python 副产物的模块时生成，拷入 SD 卡使用）"),
+    (".contest_context.json", "工具上下文清单（本次生成的输入快照——「修订与深化」回读用，勿手改）"),
+    (".contest_wiring.json", "接线快照（工具绘制接线图用——勿手改）"),
+)
+
+GENERATED_ARTIFACT_STRUCTURE: dict[str, tuple[tuple[str, str], ...]] = {
+    "stm32": _GENERATED_COMMON,
+    "mspm0": _GENERATED_COMMON,
+}
+
+# 「生成后怎么继续」章（工单 readme-artifacts-guide/01）：验证顺序清单之后的
+# 静态话术——生成完回工具继续的主路径（第 10/11/12 步）与 .contest_* 内部
+# 状态文件边界。章节标题单源（测试定位锚 / 渲染共同消费）；正文与教程
+# （fx/guide.js）与生成页第 11 步页签口径一致。平台无关（两平台同款）。
+POST_GENERATE_HEADING = "## 生成后怎么继续"
+
+POST_GENERATE_LINES: tuple[str, ...] = (
+    "回到工具的生成页，按需继续：",
+    "",
+    "- 第 10 步「修复中心」：编译报错时看错误、让 AI 自动修复（工具内即可完成，不依赖外部 IDE）；",
+    "- 第 11 步「修订与深化」——赛题逻辑在这里写，主路径是**任务推进**：AI 按功能拆成有序任务卡，逐卡「做这一步」实现并立即编译验证，每步过后有 AI 的下一步指引（含接线 / 上板）；任务卡上可「和 AI 商量」、可「上板反馈」、可「烧录到板子」。同一页签还有：",
+    "  - **修订**：赛题答疑（Q&A）有增补时重新分析并覆盖式重生成（可回滚）；",
+    "  - **参数速调**：扫描可调参数（阈值 / 速度 / 频率…），改一个数即自动编译验证，可恢复旧值；",
+    "  - **交付**：检查未完成步骤、打包交付物（zip 自动排除 .contest_* 内部状态文件）；",
+    "  - **新想法 / 全局商量**：单个新想法直接修正落地，或与 AI 连续讨论整体方案（讨论可转任务 / 修正 / 采纳为全局结论）；",
+    "- 第 12 步「交接提示词」（可选）：把本次生成上下文打包成一段话，复制给外部 AI。",
+    "",
+    "`.contest_*` 开头的文件（如 .contest_context.json / .contest_wiring.json / .contest_tasks.json）是工具的内部状态，随生成与每次执行自动更新——请勿手动编辑。",
+)
+
 
 # 生成物性质声明（工单 beginner-gap-closure/04，章首固定话术）：告知新手
 # 生成物 = 可编译骨架/模板，含占位逻辑，需人工核对补全——与教程「生成完
@@ -156,13 +207,14 @@ def render_readme(
     instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
     score_points: Sequence[ScorePoint] | None = None,
 ) -> str:
-    """渲染工程 README 完整文本（六章，确定性模板）。
+    """渲染工程 README 完整文本（确定性模板；章序见模块 docstring）。
 
     manifests = 依赖展开后的 manifest 集（顺序 = resolve_dependencies DFS
     后序，依赖先于使用者——模块清单章按此顺序渲染；验证顺序清单章在其上做
     bring-up 前置的稳定分区）。板名取不到传 None = 工程概览章不显示板名行
     （生成方已优雅降级，不阻断生成）。快速上手章 = 平台静态步骤文本，不依赖
-    模块集。引脚接线章（工单 03 起）：
+    模块集。目录结构章 = 母版行（DIRECTORY_STRUCTURE）+ 生成物行
+    （GENERATED_ARTIFACT_STRUCTURE）同表追加渲染。引脚接线章（工单 03 起）：
     - 生效引脚 = resolved_bindings 覆盖值，否则声明默认值（两平台统一；未绑
       角色保持 decl.default，绑定只改 pin 值，不新增行、不改行序）；
     - instance_plans（dict[slug, ExpandedInstance…]）每实例追加一行：角色 =
@@ -181,13 +233,17 @@ def render_readme(
         lines.append(f"- 开发板：{board_name}")
     lines.append("")
 
-    # 目录结构章（工单 beginner-gap-closure/04）：关键目录/文件用途表 +
-    # 生成物骨架声明（新手打开工程文件夹即知各目录作用、该补什么代码）。
+    # 目录结构章（工单 beginner-gap-closure/04 + readme-artifacts-guide/01）：
+    # 关键目录/文件用途表（母版行 + 生成器新增产物行——生成物在母版中不存在，
+    # 追加渲染，可选产物行注标「（可选）」）+ 生成物骨架声明（新手打开工程
+    # 文件夹即知各目录作用、该补什么代码）。
     lines.append("## 目录结构")
     lines.append("")
     lines.append("| 目录/文件 | 用途 |")
     lines.append("|---|---|")
     for path, note in DIRECTORY_STRUCTURE.get(platform, ()):
+        lines.append(f"| `{path}` | {note} |")
+    for path, note in GENERATED_ARTIFACT_STRUCTURE.get(platform, ()):
         lines.append(f"| `{path}` | {note} |")
     lines.append("")
     _skeleton_notice = SKELETON_NOTICES.get(platform)
@@ -232,6 +288,14 @@ def render_readme(
     lines.append("")
     for manifest in sort_verification_order(manifests):
         lines.append(f"- [ ] {manifest.slug} — {manifest.description}")
+
+    # 「生成后怎么继续」章（工单 readme-artifacts-guide/01）：验证顺序清单之后
+    # 的静态话术——生成完回工具继续的主路径（第 10/11/12 步）与 .contest_*
+    # 内部状态文件边界（工具自维护、勿手改、打包自动排除）。
+    lines.append("")
+    lines.append(POST_GENERATE_HEADING)
+    lines.append("")
+    lines.extend(POST_GENERATE_LINES)
 
     # 恒以单个尾部换行收尾（幂等）：rstrip 去尾部空行再补一个 \n——空 manifest
     # 等尾段无内容时也不会留下多余空行，同输入两次调用逐字节一致。
