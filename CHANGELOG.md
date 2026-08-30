@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5d6364000ae4571c62a5015a40e9fbbb0fdb0680 -->
+<!-- changelog-auto: last-commit=11f20bf0e61be8911b844f04b003e7d3ee6a8404 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -85,6 +85,7 @@
 - 19:41 工单 10 评审整改：清除「带类型名」过时文档（类型名只进日志、用户见人话+引导）
 - 19:41 工单 11：前端错误可复制统一（parseError/parseHttpError 纯函数、toast 复制按钮≥6s、SSE 终态 6 处统一解析、toast-only 站点走长错误路径）
 - 19:45 工单 11 评审整改：长错误常驻可复制（ms=0 不自动消失+剪贴板守卫回退+reduced-motion）、handle 与流内 error 终态统一走 parseError、悬空冒号修复、isLongError 走 kind 单源
+- 19:50 工单 12：长任务秒表与阶段文案统一（fx/wait.js waitLabel 复用 fmtClock、makeWaitClock 六类等待接线——推荐/修订/参数/修复/商量/预读，无阶段显示通用行）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
