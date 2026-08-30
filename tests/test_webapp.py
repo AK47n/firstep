@@ -6920,7 +6920,7 @@ def test_llm_selfcheck_network_error_humanized(client, context, monkeypatch):
         def _chat_once(self, messages, **kwargs):
             raise LLMError(
                 "无法连接 LLM 服务 https://api.deepseek.com: "
-                "<urlopen error timed out>",
+                "<urlopen error connection refused>",
                 kind="network",
             )
 
