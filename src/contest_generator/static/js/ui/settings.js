@@ -395,16 +395,19 @@ function updateSettingsDirtyUI() {
 async function saveSettings() {
   if (settingsSaving) return false;
   // 模块库目录变更 → 派生目录联动确认（工单 ux-walkthrough-02/22）
+  // 派生目录与模块库目录同级（topics / references / sources/materials），
+  // 保存时只落配置、不预建目录——导入/上传时才按需创建（评审整改口径）
   const newLibDir = $("set-lib-dir").value.trim();
   if (newLibDir && savedLibDir && newLibDir !== savedLibDir) {
     const ok = await confirmModal({
       title: "修改模块库目录？",
       message: "模块库目录将从「" + savedLibDir + "」改为「" + newLibDir + "」。"
-        + "赛题库 / 参考文件库 / PDF 资料库目录随模块库目录联动（各自子目录名不变；不存在会自动创建）。继续保存？",
+        + "赛题库 / 参考文件库 / PDF 资料库目录与模块库目录同级（topics / references / sources/materials），随模块库目录联动；导入 / 上传时会按需创建。继续保存？",
       danger: false,
       confirmText: "确认修改并保存",
     });
-    if (!ok) return false;
+    // 取消（null）与失败（false）区分：调用方「保存并连接」不能把取消误报为失败
+    if (!ok) return null;
   }
   settingsSaving = true;
   const btn = $("btn-save-settings");
@@ -488,9 +491,14 @@ $("btn-save-connect").addEventListener("click", async () => {
   btn.disabled = true;
   msg.textContent = "正在保存并验证连接…";
   const saved = await saveSettings();
-  if (!saved) {
+  if (saved === false) {
     msg.textContent = "保存失败，请按上方提示修正后重试";
     msg.classList.add("error");
+    btn.disabled = false;
+    return;
+  }
+  if (!saved) {   // 用户取消了「修改模块库目录」确认（工单 22 评审整改：取消 ≠ 失败）
+    msg.textContent = "已取消：未保存任何修改";
     btn.disabled = false;
     return;
   }

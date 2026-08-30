@@ -511,12 +511,15 @@ export function taskDialogAdoptHTML(task) {
 /** 「有不懂的？问这里」按钮（工单 task-chat/03 + 06 文案澄清）：本步有什么
  * 没懂/想确认的，点开向 AI 询问——AI 先判断可行性再给影响与修正建议，采纳的
  * 结论会带进下一步执行。doing = 执行中不可操作（不显示）；st.open 时文案
- * 「收起讨论」。 */
+ * 「收起讨论」。工单 ux-walkthrough-02/23：按钮旁常显一句定位说明（本卡
+ * 对话只针对这一步，全局疑问去任务推进「全局商量」），与其余入口的
+ * 可见说明呼应——入口多而不混。 */
 export function taskDialogButtonHTML(task, st) {
   if (!task || task.status === "doing") return "";
   const open = !!(st && st.open);
   return '<button class="btn-task-dialog' + (open ? " active" : "") + '" data-task="'
-    + esc(task.id || "") + '">' + (open ? "收起讨论" : "有不懂的？问这里") + "</button>";
+    + esc(task.id || "") + '">' + (open ? "收起讨论" : "有不懂的？问这里") + "</button>"
+    + '<span class="muted task-dialog-scope">本卡只聊这一步；工程级疑问用「全局商量（工程级）」</span>';
 }
 
 /** 任务对话区（工单 task-chat/03 + 06 文案澄清）：每卡「有不懂的？问这里」的

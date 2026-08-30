@@ -62,7 +62,9 @@ test("④ 设置页库目录卡：5 目录（2 可编辑 + 3 只读派生 span +
   }
   assert.match(indexHtml, /改模块库目录会连带改变它们/, "联动说明文案");
   assert.match(settingsUi, /修改模块库目录？/, "settings.js 应弹确认");
-  assert.match(settingsUi, /赛题库 \/ 参考文件库 \/ PDF 资料库目录随模块库目录联动/,
-    "确认文案应点明联动");
+  assert.match(settingsUi, /赛题库 \/ 参考文件库 \/ PDF 资料库目录与模块库目录同级/,
+    "确认文案应点明联动且口径与推导一致（同级 topics/references/sources-materials，工单 22 评审整改）");
+  assert.match(settingsUi, /导入 \/ 上传时会按需创建/,
+    "确认文案不承诺「保存即创建」（保存只落配置，评审整改）");
   assert.match(settingsUi, /set-lib-dir-topic/, "探测回显应写三个派生 span");
 });

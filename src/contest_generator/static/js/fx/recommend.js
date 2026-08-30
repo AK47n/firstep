@@ -203,7 +203,7 @@ export function discussionAreaHTML(s, st) {
         <button type="button" class="sugg-discuss-custom" data-buy-self="1" ${disabled}>就用我提的</button>
       </div>
       <div class="sugg-discuss-note muted">${exhausted ? "已达 8 轮上限：请确定方案（或在输入框写你的想法后点「就用我提的」）。" : "最多 8 轮；你的自定想法会由 AI 校核可行性（顾问非裁判，最终你拍板）。"}</div>
-      <div class="muted" style="font-size:11px;margin-top:4px">本区只谈选型与买件；代码 / 赛题逻辑疑问请到第 11 步「任务推进」问 AI。</div>
+      <div class="muted" style="font-size:11px;margin-top:var(--space-1)">本区只谈选型与买件；代码 / 赛题逻辑疑问请用第 11 步任务推进的「全局商量（工程级）」。</div>
     </div>
   </div>`;
 }
