@@ -237,10 +237,13 @@
   button:disabled:hover { border-color: var(--border); color: var(--text); }   /* 禁用态不响应悬停 */
   textarea:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
   button .spinner { vertical-align: middle; }                                 /* 按钮内 spinner 垂直居中 */
-  /* 按钮三类（工单 ux-walkthrough-02/20）：.btn-pill--sm 小胶囊（= btn-mini
-     尺寸）、.btn-pill--md 标准胶囊（默认按钮 + 全圆）、.btn-icon 图标按钮
-     （紧凑方寸）；语义色类（.primary/.danger/.accent）与这三类自由组合 */
-  .btn-pill--sm { font-size: 12px; padding: 2px 10px; border-radius: var(--radius-full); }
+  /* 按钮三类（工单 ux-walkthrough-02/20）：.btn 基类（= 默认按钮外观）、
+     .btn-pill--sm 小胶囊（= btn-mini 尺寸）、.btn-pill--md 标准胶囊（默认
+     按钮 + 全圆）、.btn-icon 图标按钮（紧凑方寸）；语义色类
+     （.primary/.danger/.accent）与这三类自由组合 */
+  .btn { padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+         background: var(--panel-2); cursor: pointer; font: inherit; color: var(--text); }
+  .btn-pill--sm { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-full); }
   .btn-pill--md { border-radius: var(--radius-full); }
   .btn-icon { padding: 4px 8px; line-height: 1; border-radius: var(--radius-sm); }
   .muted { color: var(--muted); font-size: 12px; }
@@ -2295,9 +2298,9 @@
       <div id="framework-note" class="warn-box ok hidden" style="margin-top: var(--space-2)"></div>
       <div class="code-wrap" style="margin-top: var(--space-2)">
         <div class="code-zoom" title="代码字号">
-          <button id="btn-code-zoom-out" type="button" title="缩小">−</button>
+          <button id="btn-code-zoom-out" type="button" class="btn-icon" title="缩小">−</button>
           <span id="code-zoom-label">100%</span>
-          <button id="btn-code-zoom-in" type="button" title="放大">＋</button>
+          <button id="btn-code-zoom-in" type="button" class="btn-icon" title="放大">＋</button>
           <span class="sep" aria-hidden="true"></span>
           <button id="btn-main-c-copy" class="act" type="button" title="复制 main.c 内容">复制</button>
           <button id="btn-main-c-download" class="act" type="button" title="下载 main.c 文件">下载</button>
@@ -2322,7 +2325,7 @@
       </div>
       <div class="row" style="margin-top: var(--space-3)">
         <button id="btn-generate" class="primary breathe" data-ico="rocket">生成工程</button>
-        <button id="btn-readiness-check" data-ico="check">检查能否生成</button>
+        <button id="btn-readiness-check" class="btn-pill--md" data-ico="check">检查能否生成</button>
         <span id="gen-status"></span>
       </div>
       <div id="readiness-check" class="hidden" style="margin-top: var(--space-3)"></div>
@@ -3030,7 +3033,7 @@
         <label>API key（留空 / 掩码保持不变）</label>
         <div class="row" style="margin-top: var(--space-1)">
           <input type="password" id="set-api-key" placeholder="sk-…" autocomplete="off" style="flex:1">
-          <button type="button" id="btn-eye-api" class="btn-mini" style="flex:none" aria-pressed="false">显示</button>
+          <button type="button" id="btn-eye-api" class="btn-pill--sm" style="flex:none" aria-pressed="false">显示</button>
         </div>
       </div>
       <!-- 保存并连接（工单 ux-walkthrough-02/04）：保存当前设置后真实调用一次
@@ -3153,7 +3156,7 @@
         <label>视觉 API key（DeepSeek 模式留空 = 复用主 key；智谱模式填智谱 key）</label>
         <div class="row" style="margin-top: var(--space-1)">
           <input type="password" id="set-vision-api-key" placeholder="" autocomplete="off" style="flex:1">
-          <button type="button" id="btn-eye-vision" class="btn-mini" style="flex:none" aria-pressed="false">显示</button>
+          <button type="button" id="btn-eye-vision" class="btn-pill--sm" style="flex:none" aria-pressed="false">显示</button>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;margin-top: var(--space-3)">

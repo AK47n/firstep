@@ -217,7 +217,7 @@ function showTopicPdfViewer(data) {
     img.src = p.data_url;
     img.alt = "原题第 " + p.page_no + " 页";
     img.loading = "lazy";
-    img.style.cssText = "width:100%;max-width:640px;display:block;margin:0 auto 10px;border:1px solid var(--border,#ccc);border-radius:4px;cursor:zoom-in;background:#fff";
+    img.style.cssText = "width:100%;max-width:640px;display:block;margin:0 auto 10px;border:1px solid var(--border,#ccc);border-radius:var(--radius-xs);cursor:zoom-in;background:#fff";
     img.addEventListener("click", () => {
       $("pdf-zoom-img").src = p.data_url;
       $("pdf-zoom").classList.remove("hidden");

@@ -929,7 +929,7 @@ export function taskNextActionHTML(task, opts) {
   const perTask = wiringPer(task, opts);
   const wiring = wiringSectionHTML(task, opts, perTask);
   return '<div class="task-next-action" style="margin-top: var(--space-2);padding:4px 8px;'
-    + 'border:1px solid var(--border);border-radius:8px;background:var(--panel-2)">'
+    + 'border:1px solid var(--border);border-radius:var(--radius-md);background:var(--panel-2)">'
     + '<span class="badge out">下一步要做</span>'
     + (wiring ? '<div class="task-next-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top: var(--space-2)">' + wiring + "</div>" : "")
     + '<div style="margin-top: var(--space-2)">' + esc(String(action)) + "</div></div>";
