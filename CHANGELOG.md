@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=69bb4fce3a64f1ec518c745a668718a8fec4f6cc -->
+<!-- changelog-auto: last-commit=566c197b20babca74293a2b2103eeb3a9ba47eb5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -87,6 +87,7 @@
 - 19:45 工单 11 评审整改：长错误常驻可复制（ms=0 不自动消失+剪贴板守卫回退+reduced-motion）、handle 与流内 error 终态统一走 parseError、悬空冒号修复、isLongError 走 kind 单源
 - 19:50 工单 12：长任务秒表与阶段文案统一（fx/wait.js waitLabel 复用 fmtClock、makeWaitClock 六类等待接线——推荐/修订/参数/修复/商量/预读，无阶段显示通用行）
 - 19:54 工单 12 评审整改：移除 waitStatusText 死代码、stop 移除空 span 不留间隙、修复三处行级合并回归、wait.js 登记进 index.html 首部静态导入
+- 19:54 工单 13：推荐 start 事件 + 收敛态进度修正（EVENT_START 词表、路由首个进度事件带中文阶段标签、前端 recPanel 收 start、converged 85% + 正在出最终结果、done 才 100%）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
