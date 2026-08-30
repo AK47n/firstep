@@ -79,7 +79,7 @@ const DOMAINS = {
   "draft.js": {
     stepNavTitles: "fn", stepNavItemsHTML: "fn", stepNavCurrent: "fn",
     draftState: "fn", draftSave: "fn", draftLoad: "fn", draftRestoreMeta: "fn",
-    stepProgress: "fn", step7DoneState: "fn", syncStep4: "fn",
+    stepProgress: "fn", step7DoneState: "fn", step7WireMode: "fn", syncStep4: "fn",
   },
   "generate.js": {
     CONFLICT_MSG_PREFIX: "string",

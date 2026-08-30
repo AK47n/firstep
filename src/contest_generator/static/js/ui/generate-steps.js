@@ -22,7 +22,7 @@ import { draftState, draftSave, draftLoad, draftRestoreMeta, stepNavTitles } fro
 import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, hasWarnContent } from "/js/fx/overview.js";
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { readinessState, desktopTopicOutputEnabled, ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位；工单 07 总览输出目录预警共享请求
-import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone } from "/js/ui/step-state.js";
+import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone, step7WireGet } from "/js/ui/step-state.js";
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 
@@ -125,11 +125,15 @@ function refreshGenOverview() {
     const n = parseInt(chip.dataset.step, 10);
     const isDone = stepDoneSet.has(n);
     const warn = !isDone && genOverviewWarn(n);
+    // 步骤 7 默认布线（ux-polish-02/01）：完成但未手动配置 → 中性「▣ 默认布线」
+    // 标记，不显示绿 ✓（避免「已配置引脚」的误解）
+    const wire = n === 7 && isDone && step7WireGet() === "default";
     chip.classList.toggle("done", isDone);
+    chip.classList.toggle("wire", wire);
     chip.classList.toggle("warn", warn);
     chip.classList.toggle("current", n === current);
     const dot = chip.querySelector(".ov-dot");
-    if (dot) dot.textContent = isDone ? "✓" : n;
+    if (dot) dot.textContent = wire ? "▣" : (isDone ? "✓" : n);
   });
   // 左侧导航 dot 的 warn 同步（工单 ui-detail/01）：done/current 仍由
   // markStep* / initStepNav 维护，这里单向补 warn，互不覆盖
@@ -159,7 +163,10 @@ function refreshGenOverview() {
   genOverviewTitles.forEach((t) => {
     const badge = genOverviewBadges[t.n];
     if (!badge || !badge.isConnected) return;
-    if (stepDoneSet.has(t.n)) {
+    if (t.n === 7 && stepDoneSet.has(7) && step7WireGet() === "default") {
+      badge.className = "card-step-status wire";
+      badge.textContent = "▣ 默认布线";
+    } else if (stepDoneSet.has(t.n)) {
       badge.className = "card-step-status done";
       badge.textContent = "✓ 已就绪";
     } else if (genOverviewWarn(t.n)) {
@@ -254,6 +261,9 @@ function initGenOverview() {
   });
   document.addEventListener("scroll", () => refreshGenOverview(), { passive: true });
   window.addEventListener("resize", () => refreshGenOverview(), { passive: true });
+  // 步骤 7 布线模式变化（ux-polish-02/01）：生成成功路径 markStepDone(9) 先于
+  // syncStep7 落地 wire——独立事件补一次徽章刷新，避免「默认布线」滞后一拍
+  window.addEventListener("step7-wire-changed", () => refreshGenOverview());
   refreshGenOverview();
 }
 

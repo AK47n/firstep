@@ -4,7 +4,7 @@
 // 多实例已配引脚 / 已按默认布线生成成功。直接 import fx/draft.js。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { step7DoneState } from "../../src/contest_generator/static/js/fx/draft.js";
+import { step7DoneState, step7WireMode } from "../../src/contest_generator/static/js/fx/draft.js";
 
 const base = { chosenPlatform: "stm32", expandedCount: 2, roles: [], roleBound: false, instBound: false, generated: false };
 
@@ -38,4 +38,34 @@ test("多实例已配引脚（无角色绑定、未生成）：完成", () => {
 
 test("多实例未配引脚：维持未完成", () => {
   assert.equal(step7DoneState({ ...base, roles: [{}], instBound: false }), false);
+});
+
+// ---------------------------------------------------------------------------
+// step7WireMode（ux-polish-02/01）：完成态细分——「已配置」与「按默认布线生成」
+// 展示不同标记（完成计数不变，避免「已就绪」误导）
+// ---------------------------------------------------------------------------
+
+test("wireMode 未选平台/未展开模块：none（信息不足）", () => {
+  assert.equal(step7WireMode({ ...base, chosenPlatform: "" }), "none");
+  assert.equal(step7WireMode({ ...base, expandedCount: 0 }), "none");
+});
+
+test("wireMode 无角色需配置：configured（无需配置 = 已就绪）", () => {
+  assert.equal(step7WireMode(base), "configured");
+});
+
+test("wireMode 有角色未绑定未生成：none（未完成）", () => {
+  assert.equal(step7WireMode({ ...base, roles: [{}] }), "none");
+});
+
+test("wireMode 有角色已显式绑定：configured", () => {
+  assert.equal(step7WireMode({ ...base, roles: [{}], roleBound: true }), "configured");
+});
+
+test("wireMode 多实例已配引脚：configured", () => {
+  assert.equal(step7WireMode({ ...base, roles: [{}, {}], instBound: true }), "configured");
+});
+
+test("wireMode 有角色未绑定但已默认布线生成：default（非已就绪）", () => {
+  assert.equal(step7WireMode({ ...base, roles: [{}], generated: true }), "default");
 });

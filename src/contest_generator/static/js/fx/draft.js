@@ -102,6 +102,18 @@ export function step7DoneState(state) {
   return false;
 }
 
+// 步骤 7 布线模式（工单 ux-polish-02/01：区分「已配置引脚」与「按默认布线生
+// 成（隐式接受默认）」——后者完成但未手动配置，不能显示绿「✓ 已就绪」）。
+// 返回 'configured'（无角色需配 / 已显式绑定 / 多实例已配引脚）/ 'default'
+// （有角色未绑定但已按默认布线生成）/ 'none'（未完成 / 信息不足）。
+// 判据与 step7DoneState 同源（同一组输入），只做完成后的模式细分。
+export function step7WireMode(state) {
+  if (!state.chosenPlatform || !state.expandedCount) return "none";
+  if (!state.roles.length || state.roleBound || state.instBound) return "configured";
+  if (state.generated) return "default";
+  return "none";
+}
+
 // ---------------------------------------------------------------------------
 // 步骤 4（参考资料）完成判定：手动勾选或自动关联任一有值即视为完成（可选
 // 步骤，全空 = 未处理，不取消其它步骤）；勾选变更、AI 推荐自动关联后调用
@@ -114,5 +126,5 @@ export function syncStep4(selectedReferenceIds, autoReferenceIds, markStepDone, 
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { stepNavTitles, stepNavItemsHTML, stepNavCurrent, draftState, draftSave, draftLoad, draftRestoreMeta, stepProgress, step7DoneState, syncStep4 });
+  Object.assign(window, { stepNavTitles, stepNavItemsHTML, stepNavCurrent, draftState, draftSave, draftLoad, draftRestoreMeta, stepProgress, step7DoneState, step7WireMode, syncStep4 });
 }
