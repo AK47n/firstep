@@ -35,7 +35,7 @@ export function welcomeCardHTML(mode) {
     + "</div>"
     + '<ol class="welcome-steps">'
     + '<li>' + esc("配置 AI：右上「设置」页粘贴 DeepSeek API key") + "</li>"
-    + '<li>' + esc("检查环境：一键体检 + 补齐参考文件与模块库") + "</li>"
+    + '<li>' + esc("检查环境：一键体检，逐项列出未就绪项（模块库 / 母版库已自动指向随包 library）") + "</li>"
     + '<li>' + esc("粘贴赛题 → 生成 → 编译 → 上板（页面 12 步向导会一路带你走）") + "</li>"
     + "</ol>"
     + '<div class="welcome-actions">'

@@ -83,9 +83,40 @@ test("准备章：安装 / 配 key / 平台事实齐全", () => {
   assert.ok(platTable && platTable.rows.length === 2, "平台表应有 2 行（stm32 / mspm0）");
 });
 
+test("准备章：库目录自动指向 / 下载入口 / 浏览器 / 一键补齐口径", () => {
+  const t = allText(GUIDE_CHAPTERS.prepare);
+  for (const w of ["库目录自动指向", "设置 → 库目录", "library\\modules", "library\\masters", "只带路", "32KB", "Edge", "stsw-link009.html", "MSPM0-SDK"]) {
+    assert.ok(t.includes(w), "准备章应提到「" + w + "」");
+  }
+  // 一键补齐：只带路、不承诺下载（事实口径，偏差即失败）
+  const ovNote = GUIDE_CHAPTERS.prepare.sections
+    .flatMap((s) => s.blocks)
+    .find((b) => b.type === "note" && (b.label || "").includes("一键补齐"));
+  assert.ok(ovNote, "准备章应有「就绪总览与一键补齐」提醒");
+  assert.ok(
+    !ovNote.text.includes("下载参考文件与模块库"),
+    "一键补齐提醒不应声称能下载参考文件与模块库（实际：" + ovNote.text + "）",
+  );
+  // 下载表：4 行官方入口
+  const dlTable = sectionByTitle(GUIDE_CHAPTERS.prepare, "什么是 IDE")
+    .blocks.find((b) => b.type === "table");
+  assert.ok(dlTable && dlTable.rows.length === 4, "下载表应有 4 行（MDK / CCS / MSPM0 SDK / ST-Link 驱动）");
+  const joined = dlTable.rows.flat().join(" ");
+  for (const d of ["keil.com/download/product/", "keil.com/limits", "ti.com/tool/CCSTUDIO", "ti.com/tool/MSPM0-SDK", "https://www.st.com/en/development-tools/stsw-link009.html"]) {
+    assert.ok(joined.includes(d), "下载表应含官方入口「" + d + "」");
+  }
+});
+
 test("做题主线章：关键入口词在场（任务推进 / 和 AI 商量 / 新手词表 / 交接提示词 / 赛题库）", () => {
   const t = allText(GUIDE_CHAPTERS.build);
   for (const word of ["任务推进", "和 AI 商量", "新手词表", "交接提示词", "赛题库", "设置"]) {
+    assert.ok(t.includes(word), "做题主线章应提到「" + word + "」");
+  }
+});
+
+test("做题主线章：评分点与参数速调讲解在场", () => {
+  const t = allText(GUIDE_CHAPTERS.build);
+  for (const word of ["评分点覆盖总览", "评分点核对", "参数速调", "问 AI：我该调哪个参数", "恢复旧值"]) {
     assert.ok(t.includes(word), "做题主线章应提到「" + word + "」");
   }
 });
@@ -120,9 +151,21 @@ test("编译与上板章：接线 / 烧录事实齐全且与单源一致（board
     "mspm0 行应含板卡 SWD 占用 " + swdMspm0.join("/") + "（实际：" + rowMspm0 + "）");
 });
 
+test("编译与上板章：常见报错速查表在场且行目齐全", () => {
+  const sec = GUIDE_CHAPTERS.compile.sections.find((s) => s.title.indexOf("常见报错速查") === 0);
+  assert.ok(sec, "编译章应有「常见报错速查」小节");
+  const table = sec.blocks.find((b) => b.type === "table");
+  assert.ok(table && table.rows.length >= 5,
+    "速查表应至少 5 行（实际 " + (table ? table.rows.length : 0) + "）");
+  const joined = table.rows.flat().join(" ");
+  for (const w of ["180s", "DSLite", "OpenOCD", "st-flash", "母版未导入", "端口 8000", "未找到固件产物"]) {
+    assert.ok(joined.includes(w), "速查表应含「" + w + "」");
+  }
+});
+
 test("交付与收尾章：交付物 / 交接提示词 / 收尾事实齐全", () => {
   const t = allText(GUIDE_CHAPTERS.deliver);
-  for (const w of ["设计报告草稿", "演示脚本", "交付检查", "一键打包", "打开工程", "交接提示词", "stop-firstep.bat", "赛题库", "最近生成"]) {
+  for (const w of ["设计报告草稿", "演示脚本", "交付检查", "一键打包", "打开工程", "交接提示词", "stop-firstep.bat", "赛题库", "最近生成", "评分点核对"]) {
     assert.ok(t.includes(w), "交付与收尾章应提到「" + w + "」");
   }
 });

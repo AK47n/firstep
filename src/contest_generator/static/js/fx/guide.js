@@ -53,6 +53,10 @@ export const GUIDE_CHAPTERS = {
             ],
           },
           {
+            type: "p",
+            text: "浏览器：任意现代浏览器即可（Windows 自带 Edge 就行，用 Chrome 也可以）——本工具是本地网页，不需要任何插件或特殊设置。",
+          },
+          {
             type: "table",
             head: ["平台", "板子", "IDE", "怎么选"],
             rows: [
@@ -81,7 +85,14 @@ export const GUIDE_CHAPTERS = {
           {
             type: "note",
             label: "就绪总览与一键补齐",
-            text: "进生成页后顶部有「就绪总览」卡，列出各项是否就绪；里面的「一键补齐」能下载参考文件与模块库（首次建议点一次，可重复点）。",
+            text: "进生成页后顶部有「就绪总览」卡，列出各项是否就绪；里面的「一键补齐」会按顺序把你带到还没完成的步骤（题面 / 平台 / 模块清单 / 输出目录），只带路、不下载任何文件。库目录的事不用操心——见下面「库目录自动指向」。",
+          },
+          {
+            type: "ul",
+            items: [
+              "库目录自动指向：首次运行 install.bat 时，模块库 / 母版库已经自动指向工具包里的 library 文件夹（library\\modules、library\\masters）——正常情况不用手动设置。",
+              "体检仍提示「模块库 / 母版未就绪」？到「设置 → 库目录」核对两项：模块库目录 = 工具包根目录（含 install.bat 的那个文件夹）\\library\\modules；母版库目录 = 工具包根目录\\library\\masters。赛题库与参考文件库也随包在 library 里（与模块库目录同级）。",
+            ],
           },
           {
             type: "jump",
@@ -116,6 +127,21 @@ export const GUIDE_CHAPTERS = {
               "CCS（Code Composer Studio）：TI 官方 IDE，用于 MSPM0；配套 MSPM0 SDK 与 SysConfig（外设可视化配置）。",
               "工具链自动集成：在「设置」页填 IDE / 工具链路径后，「生成」第 10 步可一键自动编译；「一键体检」会提示当前缺哪一项。",
             ],
+          },
+          {
+            type: "table",
+            head: ["工具", "官方下载入口", "备注"],
+            rows: [
+              ["Keil5（MDK-ARM）", "https://www.keil.com/download/product/（下载中心选 MDK-ARM）", "评估版限 32KB 代码（限制明细见 https://www2.keil.com/limits）；学校 / 老师处通常有正版授权，先用评估版也行"],
+              ["CCS（Code Composer Studio）", "https://www.ti.com/tool/CCSTUDIO", "免费；装好后可继续装 MSPM0 SDK"],
+              ["MSPM0 SDK", "https://www.ti.com/tool/MSPM0-SDK", "免费；编译 MSPM0 工程需要（GitHub 镜像：TexasInstruments/mspm0-sdk）"],
+              ["ST-Link 驱动", "https://www.st.com/en/development-tools/stsw-link009.html", "免费；STM32 烧录用（OpenOCD / st-flash 共用此驱动）"],
+            ],
+          },
+          {
+            type: "note",
+            label: "下载以官网为准",
+            text: "以上都是官方产品页入口，页面若有调整按官网指引来；安装顺序建议：先装 IDE 与驱动，再打开工具做体检。",
           },
         ],
       },
@@ -192,6 +218,18 @@ export const GUIDE_CHAPTERS = {
               "完成一张卡后，卡上会出现「下一步 →」提示并高亮下一张，照着走即可。",
               "生成成功后结果区也有「下一步」指引（编译横幅 / 烧录按钮 / 任务卡列表）。",
             ],
+          },
+          {
+            type: "ul",
+            items: [
+              "「任务推进」区顶部有「评分点覆盖总览」：每个评分点对应哪些任务一目了然——某个评分点没有任何任务覆盖会标红，这就是丢分风险，点进去补任务。",
+              "「参数速调」页签：AI 扫描 main.c 里可调的数值（阈值 / 速度 / 频率…），每项给当前值、单位与建议范围；改完点「应用」即自动编译验证，想反悔可「恢复旧值」。页签内还有「问 AI：我该调哪个参数」——拿不准先问它。",
+            ],
+          },
+          {
+            type: "note",
+            label: "评分点核对清单",
+            text: "生成成功后，结果区还有一张「评分点核对」清单（按赛题评分点逐条可勾选）——相当于按评分标准自查一遍，交稿前记得过一遍。",
           },
           {
             type: "note",
@@ -282,8 +320,30 @@ export const GUIDE_CHAPTERS = {
           },
           {
             type: "note",
-            label: "常见报错对策",
-            text: "烧录超时（约 180s）→ 探针没接好或板子没电；找不到 DSLite → 装 CCS 或填 dslite_path；找不到 OpenOCD / st-flash → 装其一或填路径。结果区有「复制烧录命令」，可提出命令手动执行排查。",
+            label: "烧录报错先看速查表",
+            text: "超时 / 找不到烧录工具这类问题，先对照本节下方「常见报错速查」；结果区有「复制烧录命令」，可提出命令手动执行排查。",
+          },
+        ],
+      },
+      {
+        title: "常见报错速查",
+        blocks: [
+          {
+            type: "p",
+            text: "编译 / 烧录卡住时，先对照这张表——九成情况是下面几条之一。",
+          },
+          {
+            type: "table",
+            head: ["症状", "原因与对策"],
+            rows: [
+              ["生成 / 编译提示「未检测到工具链」，自动编译被跳过", "到「设置」点「一键体检」看缺哪项：STM32 装 Keil5（uv4_path 可留空自动探测）；MSPM0 装 CCS（gmake 工具链）；装完重跑体检再自动编译。"],
+              ["烧录超时（180s）", "探针没接好或板子没电：核对 SWD 四线（3V3 / GND / SWDIO / SWCLK）与供电后重新点烧录。"],
+              ["找不到 DSLite（MSPM0）", "DSLite 由 CCS 自带——装 CCS 即可；已装仍找不到，在设置页填 dslite_path。"],
+              ["找不到 OpenOCD / st-flash（STM32）", "先装 ST-Link 驱动（STSW-LINK009），再装 OpenOCD 或 st-flash 其一；设置页可填路径。"],
+              ["未找到固件产物", "还没编译成功：先完成编译（第 10 步修复中心 / 交付「打开工程」手动 Build）；产物 STM32 在 user/Objects/*.hex、MSPM0 在 Debug/*.out。"],
+              ["「母版未导入（生成前需导入）」", "母版库没就绪：到「设置 → 库目录」核对母版库目录 = 工具包根目录\\library\\masters（install.bat 已自动填好）；仍不行到「母版」页确认 stm32 / mspm0 母版已导入。"],
+              ["提示端口 8000 被占用", "关掉占用该端口的程序，重新双击 start-app.vbs（本工具不会自动换端口）；日志在 %USERPROFILE%\\.contest_generator\\webapp.log。"],
+            ],
           },
         ],
       },
@@ -343,6 +403,11 @@ export const GUIDE_CHAPTERS = {
               "一键打包：把工程打成 zip，演示前 / 上交前备一份；",
               "打开工程：STM32 直接拉起 Keil5；MSPM0 在资源管理器中打开工程文件夹（CCS 需要手动导入工程）。",
             ],
+          },
+          {
+            type: "note",
+            label: "交之前打个勾",
+            text: "回到结果区过一遍「评分点核对」清单（生成成功后就在结果区，逐条可勾选）——没勾完的评分点就是待验证项；任务推进里「评分点覆盖总览」标红的评分点，先补任务再交。",
           },
         ],
       },

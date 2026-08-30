@@ -48,6 +48,7 @@ from .config import (
     load_config,
     materials_dir,
     pdf_trash_dir,
+    raw_library_dirs,
     reference_library_dir,
     save_config,
     topic_library_dir,
@@ -3807,16 +3808,23 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _current_config(context)
         api_key = config.api_key if config is not None else ""
         defaults = AppConfig()
+        # 工单 beginner-guide-enrich/03：未配 key（config=None）时仍返回磁盘文件
+        # 里的库目录——install.bat 首次写入的引导配置不被首次保存设置覆盖
+        raw_mod, raw_mas = raw_library_dirs(context.config_path) if config is None else (None, None)
         return {
             "configured": config is not None,
             "base_url": (config.base_url if config is not None else ""),
             "model": (config.model if config is not None else ""),
             "api_key": _mask_api_key_display(api_key),
             "module_library_dir": str(
-                config.module_library_dir if config is not None else defaults.module_library_dir
+                config.module_library_dir
+                if config is not None
+                else (raw_mod or defaults.module_library_dir)
             ),
             "masters_dir": str(
-                config.masters_dir if config is not None else defaults.masters_dir
+                config.masters_dir
+                if config is not None
+                else (raw_mas or defaults.masters_dir)
             ),
             # 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
             "uv4_path": config.uv4_path if config is not None else "",

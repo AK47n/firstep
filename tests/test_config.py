@@ -325,3 +325,73 @@ def test_materials_dir_missing_everywhere_returns_sibling(tmp_path):
     """两处都没有 = 返回优先候选（文件服务端对缺失文件抛 ReferenceError → 400）。"""
     module_library_dir = tmp_path / "modules"
     assert materials_dir(module_library_dir) == tmp_path / "sources" / "materials"
+
+
+# ---------------------------------------------------------------------------
+# 引导配置（工单 beginner-guide-enrich/03）：install.bat 首次自动指向随包库
+# ---------------------------------------------------------------------------
+
+
+def test_write_bootstrap_config_writes_minimal_and_keeps_unconfigured(tmp_path):
+    from contest_generator.config import write_bootstrap_config
+
+    path = tmp_path / "cfg" / "config.json"
+    ok = write_bootstrap_config(
+        tmp_path / "repo" / "library" / "modules",
+        tmp_path / "repo" / "library" / "masters",
+        path,
+    )
+    assert ok is True
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["api_key"] == ""  # 空 key = 应用保持「未配置」引导态
+    assert data["module_library_dir"] == str(tmp_path / "repo" / "library" / "modules")
+    assert data["masters_dir"] == str(tmp_path / "repo" / "library" / "masters")
+    # 未配 key：load_config 仍拒绝（现有「请先到设置页配置」提示路径不变）
+    with pytest.raises(ConfigError, match="api_key"):
+        load_config(path)
+
+
+def test_write_bootstrap_config_never_overwrites_existing(tmp_path):
+    from contest_generator.config import write_bootstrap_config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"api_key": "sk-keep"}), encoding="utf-8")
+    assert write_bootstrap_config(tmp_path / "lib", tmp_path / "mas", path) is False
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["api_key"] == "sk-keep"  # 已有配置一律不动（幂等、尊重用户）
+    assert "module_library_dir" not in data
+
+
+def test_raw_library_dirs_reads_bootstrap_without_key(tmp_path):
+    from contest_generator.config import raw_library_dirs
+
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "api_key": "",
+                "module_library_dir": str(tmp_path / "lib" / "modules"),
+                "masters_dir": str(tmp_path / "lib" / "masters"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    mod, mas = raw_library_dirs(path)
+    assert mod == tmp_path / "lib" / "modules"
+    assert mas == tmp_path / "lib" / "masters"
+
+
+def test_raw_library_dirs_fallbacks(tmp_path):
+    from contest_generator.config import raw_library_dirs
+
+    # 文件不存在 → 双 None
+    assert raw_library_dirs(tmp_path / "nope" / "config.json") == (None, None)
+    # 损坏 JSON → 双 None
+    bad = tmp_path / "bad.json"
+    bad.write_text("{broken", encoding="utf-8")
+    assert raw_library_dirs(bad) == (None, None)
+    # 字段缺失 / 空串 / 非字符串 → 该项 None
+    partial = tmp_path / "partial.json"
+    partial.write_text(json.dumps({"api_key": "sk", "masters_dir": "  "}), encoding="utf-8")
+    mod, mas = raw_library_dirs(partial)
+    assert mod is None and mas is None

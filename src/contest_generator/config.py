@@ -268,6 +268,54 @@ def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
         pass
 
 
+def write_bootstrap_config(
+    module_library_dir: Path,
+    masters_dir: Path,
+    path: Path = DEFAULT_CONFIG_PATH,
+) -> bool:
+    """首次安装引导配置（工单 beginner-guide-enrich/03）：配置文件不存在时
+    写入最小配置——api_key 空串（应用保持「未配置」引导态，load_config 仍抛
+    ConfigError），模块库 / 母版库指向随包 library。已存在一律不动（幂等、
+    尊重用户已有配置）。返回 True=已写入；False=已存在跳过。写入失败抛
+    OSError，由调用方决定处理。"""
+    if path.exists():
+        return False
+    data = {
+        "api_key": "",
+        "module_library_dir": str(module_library_dir),
+        "masters_dir": str(masters_dir),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
+
+
+def raw_library_dirs(path: Path = DEFAULT_CONFIG_PATH) -> tuple[Path | None, Path | None]:
+    """从配置文件原始字段取模块库 / 母版目录（工单 beginner-guide-enrich/03）。
+
+    只解析原始 JSON（无 key 的引导配置也可读）；两字段都必须是 JSON 对象里
+    的非空字符串，缺一 / 非法 = 该项 None（调用方回退默认）。供设置读取接口
+    使用：配置存在但未配 key（load_config 抛 ConfigError）时仍返回磁盘目录，
+    避免首次保存设置把 install.bat 自动指向的库目录覆盖成默认值。
+    """
+    if not path.is_file():
+        return (None, None)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return (None, None)
+    if not isinstance(data, dict):
+        return (None, None)
+
+    def _dir(key: str) -> Path | None:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return Path(value)
+        return None
+
+    return (_dir("module_library_dir"), _dir("masters_dir"))
+
+
 def topic_library_dir(module_library_dir: Path) -> Path:
     """赛题库目录：模块库同级目录下的 topics/（工单 01 约定）。
 
