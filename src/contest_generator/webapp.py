@@ -4718,6 +4718,8 @@ def _generation_result(summary: GenerationSummary) -> dict:
                 "template_id": artifact.template_id,
                 "template_name": artifact.template_name,
                 "template_description": artifact.template_description,
+                # 静态资产（工单 k230-digit-vision/03）：随模板复制的目标路径
+                "asset_paths": list(artifact.asset_paths),
             }
             for artifact in summary.python_artifacts
         ],

@@ -142,6 +142,23 @@ class ExclusiveGroupSpec:
 
 
 @dataclass(frozen=True)
+class AssetSpec:
+    """模板静态资产复制对（工单 k230-digit-vision/03）。
+
+    src = 相对模块目录的资产文件（与模板同库）；dst = 相对工程根的目标
+    路径（可含子目录，如 mp_deployment_source/*.kmodel）。与 .py 副产物
+    同阶段写盘（shutil.copy2 逐字节）；src 缺失 / dst 跨模板互斥 /
+    dst 撞既有文件 → 大声失败不留半成品。
+    """
+
+    src: str
+    dst: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"src": self.src, "dst": self.dst}
+
+
+@dataclass(frozen=True)
 class PythonArtifactTemplate:
     """多模板中的一个模板条目（工单 k230-multi-template/01）。
 
@@ -151,6 +168,9 @@ class PythonArtifactTemplate:
     dependencies（工单 k230-digit-vision/02）= 模板级依赖覆盖：None = 继承
     模块级依赖（缺省）；非空 = 依赖展开时替换该模块的模块级依赖（覆盖语义，
     与模块级依赖同一套成环 / 未知 slug 报错）。
+    assets（工单 k230-digit-vision/03）= 模板静态资产复制对（{src, dst}，
+    随 .py 副产物同阶段复制，如 AI 模型 kmodel + deploy_config.json）；
+    缺省 = 无资产（旧 manifest 序列化逐字节不变）。
     """
 
     id: str
@@ -159,6 +179,7 @@ class PythonArtifactTemplate:
     template: str
     output: str
     dependencies: tuple[str, ...] | None = None
+    assets: tuple[AssetSpec, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         data = {
@@ -171,6 +192,9 @@ class PythonArtifactTemplate:
         # None = 继承模块级：不落键（旧 manifest 序列化逐字节不变）
         if self.dependencies is not None:
             data["dependencies"] = list(self.dependencies)
+        # 空 = 无资产：不落键（旧 manifest 序列化逐字节不变）
+        if self.assets:
+            data["assets"] = [asset.to_dict() for asset in self.assets]
         return data
 
 
@@ -212,8 +236,16 @@ class PythonArtifactSpec:
         return self.default_template.output
 
     def to_dict(self) -> dict[str, Any]:
-        # 单模板（id = default 且无展示信息）序列化回旧形状逐字节不变
-        if len(self.templates) == 1 and self.templates[0].id == "default":
+        # 单模板（id = default 且无展示信息）序列化回旧形状逐字节不变；
+        # 带增强字段（dependencies / assets，工单 k230-digit-vision/02/03）
+        # 的单模板不能用旧形状——旧形状只有 {template, output} 两键，会丢
+        # 增强字段，改走新形状（default + templates 数组）。
+        if (
+            len(self.templates) == 1
+            and self.templates[0].id == "default"
+            and self.templates[0].dependencies is None
+            and not self.templates[0].assets
+        ):
             template = self.templates[0]
             return {"template": template.template, "output": template.output}
         return {
@@ -493,6 +525,19 @@ def _parse_exclusive_group(data: dict[str, Any]) -> ExclusiveGroupSpec | None:
     return ExclusiveGroupSpec(id=group_id, label=label, role=role)
 
 
+def _require_asset_path(item: dict[str, Any], key: str, where: str) -> str:
+    """资产路径字段严格校验：非空字符串 + 单文件路径（拒绝 "."——is_unsafe_path
+    对 "." 返回 False，无意义路径与 template/output 同口径显式拦截）。"""
+    value = item.get(key)
+    if not isinstance(value, str) or not value:
+        raise ManifestError(f"{where} 的 {key} 必须是非空字符串")
+    if value == "." or is_unsafe_path(value):
+        raise ManifestError(
+            f"{where} 的 {key} 必须是相对且无 .. 的文件路径：{value!r}"
+        )
+    return value
+
+
 def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
     """解析模块级 python_artifact 能力块（缺省 / null = None，旧 manifest 兼容）。
 
@@ -566,10 +611,35 @@ def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
             dependencies = tuple(deps_raw)
         else:
             dependencies = None
+        # 模板静态资产（工单 k230-digit-vision/03）：缺省 / null / 空数组 =
+        # 无资产（空 = 与缺省语义等价，不落键）；src 相对模块目录、dst 相对
+        # 工程根，均不允许越界（..  / 绝对路径）。
+        assets: tuple[AssetSpec, ...]
+        assets_raw = item.get("assets")
+        if assets_raw:
+            if not isinstance(assets_raw, list):
+                raise ManifestError(
+                    f"python_artifact.templates[{index}] 的 assets 必须是"
+                    f" 非空数组"
+                )
+            parsed_assets: list[AssetSpec] = []
+            for asset_index, asset_item in enumerate(assets_raw):
+                if not isinstance(asset_item, dict):
+                    raise ManifestError(
+                        f"python_artifact.templates[{index}].assets[{asset_index}]"
+                        f" 必须是对象"
+                    )
+                where = f"python_artifact.templates[{index}].assets[{asset_index}]"
+                src = _require_asset_path(asset_item, "src", where)
+                dst = _require_asset_path(asset_item, "dst", where)
+                parsed_assets.append(AssetSpec(src=src, dst=dst))
+            assets = tuple(parsed_assets)
+        else:
+            assets = ()
         return PythonArtifactTemplate(
             id=tid, name=name, description=description,
             template=template, output=output,
-            dependencies=dependencies,
+            dependencies=dependencies, assets=assets,
         )
 
     if "templates" in raw:

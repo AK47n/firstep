@@ -27,6 +27,20 @@ test("done 载荷带模板名 → 副产物摘要回显模板", () => {
   );
 });
 
+test("done 载荷带 assets → 资产文件与副产物同列（工单 03）", () => {
+  assert.equal(
+    formatResModules(
+      [{ slug: "k230", files: [] }],
+      [{
+        slug: "k230",
+        output: "main.py",
+        asset_paths: ["mp_deployment_source/model.kmodel", "mp_deployment_source/deploy_config.json"],
+      }]
+    ),
+    "k230(副产物 main.py, 资产 mp_deployment_source/model.kmodel, 资产 mp_deployment_source/deploy_config.json)"
+  );
+});
+
 test("pythonArtifacts 缺省（undefined）不炸 → 只显示文件清单", () => {
   assert.equal(
     formatResModules([{ slug: "oled", files: ["oled.c"] }], undefined),

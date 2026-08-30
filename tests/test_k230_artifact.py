@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -48,7 +49,7 @@ from contest_generator.k230_render import (
     render_no_detect_frame,
     render_python_artifact,
 )
-from contest_generator.manifest import ManifestError, ModuleManifest
+from contest_generator.manifest import AssetSpec, ManifestError, ModuleManifest
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.selection import (
     DependencyCycleError,
@@ -1303,3 +1304,251 @@ def test_generate_project_rejects_non_mapping_templates(tmp_path):
             python_templates=["bad"],  # type: ignore[arg-type]
         )
     assert not (tmp_path / "out").exists()  # 校验失败在创建输出目录之前
+
+
+# ---------------------------------------------------------------------------
+# k230-digit-vision/03：静态资产分发（探针）
+# ---------------------------------------------------------------------------
+
+FAKE_KMODEL_BYTES = b"\x00\x01fake-kmodel-payload\xff\xfe"  # 二进制假资产
+ASSET_PROBE_MAIN = "# 资产探针模板（测试内构造，工单 03）\nASSET = 1\n"
+ASSET_PROBE_DEPLOY = '{"chip_type": "k230", "confidence_threshold": 0.4}\n'
+
+
+def _add_asset_probe_module(
+    library: Path,
+    slug: str,
+    assets: list[dict],
+    present: dict[str, str] | None = None,
+    output: str = "main.py",
+) -> None:
+    """资产探针模块：单模板 + assets 声明；present = 真实存在的资产文件。"""
+    _add_module(
+        library,
+        {
+            "slug": slug,
+            "description": f"{slug}（资产分发探针，测试内构造）",
+            "dependencies": [],
+            "python_artifact": {
+                "default": "default",
+                "templates": [
+                    {
+                        "id": "default",
+                        "name": "默认",
+                        "description": "资产探针模板",
+                        "template": "code/main.py",
+                        "output": output,
+                        "assets": assets,
+                    }
+                ],
+            },
+            "platforms": {
+                "stm32": {"files": [], "verified": True},
+                "mspm0": {"files": [], "verified": True},
+            },
+        },
+        {
+            "code/main.py": ASSET_PROBE_MAIN,
+            **(present or {}),
+        },
+    )
+
+
+def test_legacy_single_template_serialization_byte_identical(tmp_path):
+    """旧行为回归锁：无增强字段（dependencies/assets）的单模板序列化回
+    旧形状逐字节不变（{template, output}）——增强字段单模板走新形状（03
+    修复 to_dict 旧形状分支丢增强字段的潜伏洞）。"""
+    library = _probe_library(tmp_path)
+    manifest = ModuleManifest.load(library / "k230_probe")
+    assert manifest.python_artifact.to_dict() == {
+        "template": "code/k230_probe.py",
+        "output": "main.py",
+    }
+
+
+def test_template_assets_parse_and_serialize(tmp_path):
+    """模板 assets 解析：缺省 = 空；{src, dst} 对解析成 AssetSpec；序列化
+    落键 / 不落键（旧 manifest 逐字节不变）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_asset_probe_module(
+        library,
+        "a_asset",
+        [{"src": "code/model.kmodel", "dst": "mp_deployment_source/model.kmodel"}],
+        {"code/model.kmodel": "# fake\n"},
+    )
+    manifest = ModuleManifest.load(library / "a_asset")
+    template = manifest.python_artifact.templates[0]
+    assert template.assets == (
+        AssetSpec(
+            src="code/model.kmodel",
+            dst="mp_deployment_source/model.kmodel",
+        ),
+    )
+    data = manifest.python_artifact.to_dict()
+    assert data["templates"][0]["assets"] == [
+        {"src": "code/model.kmodel", "dst": "mp_deployment_source/model.kmodel"}
+    ]
+    # 无资产模板序列化不落键（_deps_probe_library 的 t_override）
+    deps_library = _deps_probe_library(tmp_path / "deps_modules")
+    deps_manifest = ModuleManifest.load(deps_library / "a_deps")
+    deps_data = deps_manifest.python_artifact.to_dict()
+    for item in deps_data["templates"]:
+        assert "assets" not in item
+
+
+@pytest.mark.parametrize(
+    ("assets", "match"),
+    [
+        ([{"src": "", "dst": "a.bin"}], "src 必须是非空字符串"),
+        ([{"src": "a.bin", "dst": ""}], "dst 必须是非空字符串"),
+        ([{"src": "../outside.bin", "dst": "a.bin"}], "相对且无 \\.\\."),
+        ([{"src": "a.bin", "dst": "../up.bin"}], "相对且无 \\.\\."),
+        ([{"src": ".", "dst": "a.bin"}], "相对且无 \\.\\."),
+        ([{"src": "a.bin", "dst": "."}], "相对且无 \\.\\."),
+        (["not-a-dict"], "必须是对象"),
+    ],
+)
+def test_template_assets_invalid_rejected(tmp_path, assets, match):
+    """资产声明非法（空 src/dst、越界 ..、非对象）→ ManifestError 大声失败。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_asset_probe_module(library, "bad_asset", assets, {"code/a.bin": "# x\n"})
+    with pytest.raises(ManifestError, match=match):
+        ModuleManifest.load(library / "bad_asset")
+
+
+def test_generate_template_assets_copied_byte_identical(tmp_path):
+    """生成接缝：模板 assets → 逐字节复制到工程根 dst（含子目录）；摘要
+    python_artifacts 列出资产路径。"""
+    library = _asset_probe_library(tmp_path)
+    master = make_fake_master_project(tmp_path / "master")
+    manifest = ModuleManifest.load(library / "a_asset")
+
+    out = generate(
+        platform=PLATFORM_STM32,
+        manifests=[manifest],
+        module_library_dir=library,
+        master_project_dir=master,
+        output_dir=tmp_path / "out",
+        main_c_content="int main(void) { while (1); }\n",
+    )[0]
+
+    kmodel = out / "mp_deployment_source" / "model.kmodel"
+    assert kmodel.read_bytes() == FAKE_KMODEL_BYTES  # 逐字节（含二进制）
+    deploy = out / "mp_deployment_source" / "deploy_config.json"
+    assert deploy.read_text(encoding="utf-8") == ASSET_PROBE_DEPLOY
+    assert (out / "main.py").is_file()
+    assert not (out / "modules" / "a_asset").exists()  # files 空 = 无 C 子树
+    # 摘要（generate 直调无 summary；断言走 generate 前的 Describe 请见
+    # generate_project 集成测试——此处直接验证产物字节）
+
+
+def test_generate_project_assets_in_summary(tmp_path):
+    """流程接缝：generate_project 摘要 python_artifacts 含资产 dst 列表。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    library = _asset_probe_library(tmp_path)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["a_asset"],
+        main_c_content="int main(void) { while (1); }\n",
+        output_dir=tmp_path / "out",
+        module_library_dir=library,
+        masters_dir=masters_dir,
+    )
+    assert [a.asset_paths for a in summary.python_artifacts] == [
+        (
+            "mp_deployment_source/model.kmodel",
+            "mp_deployment_source/deploy_config.json",
+        )
+    ]
+    assert not (summary.output_dir / "modules" / "a_asset").exists()
+
+
+def test_generate_template_asset_missing_fails_cleanly(tmp_path):
+    """声明了资产但文件缺失 → 大声失败点名模块与资产路径，输出目录被清。"""
+    library = _asset_probe_library(tmp_path)
+    master = make_fake_master_project(tmp_path / "master")
+    manifest = ModuleManifest.load(library / "a_asset")
+    # 移除资产源文件后重新生成
+    (library / "a_asset" / "code" / "model.kmodel").unlink()
+
+    with pytest.raises(PythonArtifactError, match="资产缺失"):
+        generate(
+            platform=PLATFORM_STM32,
+            manifests=[manifest],
+            module_library_dir=library,
+            master_project_dir=master,
+            output_dir=tmp_path / "out",
+            main_c_content="int main(void) { while (1); }\n",
+        )
+    assert not (tmp_path / "out").exists()  # 不留半成品
+
+
+def test_generate_template_asset_dst_clashes_project_file(tmp_path):
+    """资产 dst 撞工程既有文件（母版 main.c）→ 大声失败，不静默覆盖。"""
+    library = _asset_probe_library(tmp_path)
+    # 覆盖 manifest 的资产 dst 指向 main.c（母版既有文件）
+    manifest_path = library / "a_asset" / "manifest.json"
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["python_artifact"]["templates"][0]["assets"] = [
+        {"src": "code/model.kmodel", "dst": "main.c"}
+    ]
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    master = make_fake_master_project(tmp_path / "master")
+    manifest = ModuleManifest.load(library / "a_asset")
+
+    with pytest.raises(PythonArtifactError, match="与工程既有文件同名"):
+        generate(
+            platform=PLATFORM_STM32,
+            manifests=[manifest],
+            module_library_dir=library,
+            master_project_dir=master,
+            output_dir=tmp_path / "out",
+            main_c_content="int main(void) { while (1); }\n",
+        )
+    assert not (tmp_path / "out").exists()
+
+
+def test_generate_asset_dst_cross_module_conflict(tmp_path):
+    """跨模板同名资产 dst → 大声失败（同 output 检查同款语义）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    shared = [{"src": "code/model.kmodel", "dst": "mp_deployment_source/model.kmodel"}]
+    _add_asset_probe_module(
+        library, "asset_a", shared, {"code/model.kmodel": "# a\n"}
+    )
+    _add_asset_probe_module(
+        library, "asset_b", shared, {"code/model.kmodel": "# b\n"},
+        output="main_b.py",
+    )
+    master = make_fake_master_project(tmp_path / "master")
+    manifests = [
+        ModuleManifest.load(library / slug) for slug in ("asset_a", "asset_b")
+    ]
+
+    with pytest.raises(PythonArtifactError, match="资产同名"):
+        generate(
+            platform=PLATFORM_STM32,
+            manifests=manifests,
+            module_library_dir=library,
+            master_project_dir=master,
+            output_dir=tmp_path / "out",
+            main_c_content="int main(void) { while (1); }\n",
+        )
+    assert not (tmp_path / "out").exists()
+
+
+def _asset_probe_library(tmp_path: Path) -> Path:
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_asset_probe_module(
+        library,
+        "a_asset",
+        [
+            {"src": "code/model.kmodel", "dst": "mp_deployment_source/model.kmodel"},
+            {"src": "code/deploy.json", "dst": "mp_deployment_source/deploy_config.json"},
+        ],
+        {"code/deploy.json": ASSET_PROBE_DEPLOY},
+    )
+    # 二进制假资产绕过 _add_module 的文本管道（write_text），直接写字节
+    (library / "a_asset" / "code" / "model.kmodel").write_bytes(FAKE_KMODEL_BYTES)
+    return library

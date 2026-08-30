@@ -88,6 +88,11 @@ export function formatResModules(modules, pythonArtifacts) {
     if (artifact && artifact.output) {
       parts.push("副产物 " + artifact.output + pyTemplateName(m.slug, artifact));
     }
+    // 静态资产（工单 k230-digit-vision/03）：随模板复制的文件（如 AI 模型
+    // kmodel + deploy_config.json）同列显示——用户知道 SD 卡要拷什么。
+    for (const asset of (artifact && artifact.asset_paths) || []) {
+      parts.push("资产 " + asset);
+    }
     return m.slug + (parts.length ? "(" + parts.join(", ") + ")" : "");
   }).join("、");
 }

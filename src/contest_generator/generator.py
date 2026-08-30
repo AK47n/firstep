@@ -523,13 +523,19 @@ def _make_fulltext_reader(
 
 @dataclass(frozen=True)
 class PythonArtifactSummary:
-    """生成出的 Python 副产物摘要（含本次实际选择的模板，供 done 回显）。"""
+    """生成出的 Python 副产物摘要（含本次实际选择的模板，供 done 回显）。
+
+    asset_paths（工单 k230-digit-vision/03）= 随模板复制的静态资产**目标路径**
+    （相对工程根，保序；template.assets 的 dst 列表——展示层只需要路径，
+    不再携带 src）——前端摘要「模块文件」行与 .py 同列显示。
+    """
 
     slug: str
     output: str
     template_id: str
     template_name: str
     template_description: str
+    asset_paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -592,6 +598,7 @@ def describe_generation(
                 template_id=template.id,
                 template_name=template.name,
                 template_description=template.description,
+                asset_paths=tuple(asset.dst for asset in template.assets),
             )
         )
     return GenerationSummary(
@@ -1862,9 +1869,15 @@ def _write_python_artifacts(
     （母版文件如 main.c、project.uvprojx；写时存在性判定，顺带挡 Windows
     大小写不敏感的同名副产物）→ PythonArtifactError 大声失败（generate 的
     try 块 rmtree 兜底不留半成品，不静默覆盖）。.py 不注册进工程文件
-    （patcher 只吃 copied_files，不进 .uvprojx/.cproject 树）。"""
+    （patcher 只吃 copied_files，不进 .uvprojx/.cproject 树）。
+
+    静态资产（工单 k230-digit-vision/03）：模板声明的 assets 与 .py 同阶段
+    复制（shutil.copy2 逐字节，dst 可含子目录如 mp_deployment_source/*）；
+    跨模板 dst 同名互斥（同 output 检查同款语义）/ src 缺失 / dst 撞既有
+    文件（写时存在性判定）→ PythonArtifactError，同样不留半成品。"""
     specs: list[tuple[ModuleManifest, PythonArtifactTemplate]] = []
     seen_outputs: dict[str, str] = {}
+    seen_assets: dict[str, str] = {}
     for manifest in manifests:
         spec = manifest.python_artifact
         if spec is None:
@@ -1882,6 +1895,21 @@ def _write_python_artifacts(
                 f" 输出同名 {template.output}——请为其中一方改 output 文件名"
             )
         seen_outputs[template.output] = manifest.slug
+        for asset in template.assets:
+            asset_owner = seen_assets.get(asset.dst)
+            if asset_owner is not None:
+                if asset_owner == manifest.slug:
+                    # 同模块重复声明（manifest 内自冲突）
+                    raise PythonArtifactError(
+                        f"模块 {manifest.slug} 的 python_artifact 资产"
+                        f" 声明 dst 重复：{asset.dst}"
+                    )
+                raise PythonArtifactError(
+                    f"模块 {asset_owner} 与模块 {manifest.slug} 的"
+                    f" python_artifact 资产同名 {asset.dst}——请为其中一方"
+                    f" 改 assets 的 dst 路径"
+                )
+            seen_assets[asset.dst] = manifest.slug
         specs.append((manifest, template))
     for manifest, template in specs:
         # 写时存在性判定：母版树已复制、模块文件已复制，撞任何既有文件
@@ -1902,3 +1930,18 @@ def _write_python_artifacts(
             template_path.read_text(encoding="utf-8", errors="replace")
         )
         (output_dir / template.output).write_text(rendered, encoding="utf-8")
+        for asset in template.assets:
+            if (output_dir / asset.dst).exists():
+                raise PythonArtifactError(
+                    f"模块 {manifest.slug} 的 python_artifact 资产 {asset.dst}"
+                    f" 与工程既有文件同名——请改 assets 的 dst 路径"
+                )
+            asset_src = module_library_dir / manifest.slug / asset.src
+            if not asset_src.is_file():
+                raise PythonArtifactError(
+                    f"模块 {manifest.slug} 的 python_artifact 资产缺失："
+                    f"{asset.src}"
+                )
+            asset_dst = output_dir / asset.dst
+            asset_dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(asset_src, asset_dst)
