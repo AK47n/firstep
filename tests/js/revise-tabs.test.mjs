@@ -7,9 +7,9 @@ import {
   REVISE_TABS, reviseTabsHTML, revisePanelFor, reviseTabNext, reviseTabBadge,
 } from "../../src/contest_generator/static/js/fx/revise-tabs.js";
 
-test("REVISE_TABS：4 页签定义（key + label）", () => {
-  assert.deepEqual(REVISE_TABS.map((t) => t.key), ["revise", "tasks", "params", "delivery"]);
-  assert.deepEqual(REVISE_TABS.map((t) => t.label), ["修订", "任务推进", "参数速调", "交付"]);
+test("REVISE_TABS：4 页签定义（key + label）——主路径「任务推进」居首", () => {
+  assert.deepEqual(REVISE_TABS.map((t) => t.key), ["tasks", "revise", "params", "delivery"]);
+  assert.deepEqual(REVISE_TABS.map((t) => t.label), ["任务推进", "修订", "参数速调", "交付"]);
 });
 
 test("revisePanelFor：key → 面板 id 契约", () => {
