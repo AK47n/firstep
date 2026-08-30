@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5fbccb2f69c3796de51e63dbfc58f8cd02deccf6 -->
+<!-- changelog-auto: last-commit=fd73aa059223000e3c4c09c8003c9567c4009c0a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -91,6 +91,7 @@
 - 19:59 工单 13 评审整改（EVENT_START 单点声明+端点分叉文档、round 进度封顶 85% 防倒退）与工单 14：分钟级长任务「取消本次等待」（fx/abortable.js 中止器、makeCancelButton、六类流水线接线与取消语义文案、api 辅助支持 signal、SSE 运行器透传 signal 保留 AbortError）
 - 20:06 工单 14 评审整改（params 运行器接 signal 保留 AbortError、取消语义对准后端行为、begin 先取消旧实例、补任务卡商量/买件商量取消、移除 markCancelled 死 API）与工单 15：删除类确认与撤销补齐（最近记录/想法草稿确认+toast撤销、母版/PDF 迁移共享 confirmModal 工厂、工厂默认 confirmText 开发告警）
 - 20:11 工单 15 评审整改（撤销窗口 8s、无快照不承诺撤销、toast 动作失败另报+label 转义、任务簇中止器改单槽防并发静默取消、master 死 import 清理、restore slugs 拷贝）与工单 16：PDF 库任意健康文件可回收删除（行/详情删除入口放开、/refs 被引用查询 + 影响说明文案）
+- 20:14 工单 16 评审整改（影响措辞软化「若条目依赖」、group 不取 refs、查询失败中性文案）与工单 17：生成页状态按钮一致性（就绪面板绿色总结+忙碌态+可选项中性格、步骤8双按钮主次+说明、生成成功不抢滚屏、展开检查忙碌态、预读失败复位、上传抽取反馈）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
