@@ -21,8 +21,7 @@ import { $, state } from "/js/app.js";
 import { draftState, draftSave, draftLoad, draftRestoreMeta, stepNavTitles } from "/js/fx/draft.js";
 import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, hasWarnContent } from "/js/fx/overview.js";
 import { generateReadinessChecks } from "/js/fx/readiness.js";
-import { readinessState, desktopTopicOutputEnabled } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位
-import { ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached } from "/js/ui/generate-readiness.js";  // 工单 07：总览输出目录预警共享请求
+import { readinessState, desktopTopicOutputEnabled, ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位；工单 07 总览输出目录预警共享请求
 import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone } from "/js/ui/step-state.js";
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
