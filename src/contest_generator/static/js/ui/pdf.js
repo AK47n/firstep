@@ -9,7 +9,7 @@ import { confirmModal } from "/js/ui/confirm.js";
 import {
   pdfHealth, pdfBroken, pdfFilterEntries, pdfSortEntries,
   pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText,
-  pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashBodyHTML,
+  pdfDetailHTML, pdfTrashUrl, pdfRefsUrl, pdfTrashMessage, pdfDupRemainText, pdfTrashBodyHTML,
   pdfFileUrl,
 } from "/js/fx/pdf.js";
 
@@ -103,14 +103,21 @@ function showPdfDetail(pdf) {
 // （f.isDup 命中 / 详情弹窗 dup+group 标注），损坏与健康文件不可删。
 // pdfTrashUrl / pdfDupRemainText / pdfTrashBodyHTML 在 fx/pdf.js。
 // 工单 ux-walkthrough-02/15：迁移到共享 confirmModal 工厂（与模块/赛题/参考一致）。
+// 工单 ux-walkthrough-02/16：任意健康文件可删；确认前取「被参考条目」列表
+// 决定影响说明（被引用 → 条目无法打开；否则可恢复）。
 async function openPdfTrashConfirm(pdf, group) {
   const mode = group ? "group" : "one";
   const hint = "sources/.trash-pdf/" + pdfTrashDate() + "/" + (pdf.rel_path || "");
+  let refTitles = [];
+  try {
+    const refs = await apiGet(pdfRefsUrl(pdf.rel_path));
+    refTitles = Array.isArray(refs.titles) ? refs.titles : [];
+  } catch (e) { /* 引用查询失败不挡删除：通用「可恢复」文案（保守不误报） */ }
   const ok = await confirmModal({
     title: mode === "group" ? "保留一份删其余？" : "删除此文件？",
     message: mode === "group"
       ? "组内疑似重复：将删除除保留文件外的其余成员（移入回收目录）。"
-      : "该 PDF 将移入回收目录（不真删，可手动恢复）。",
+      : pdfTrashMessage(refTitles),
     extra: pdfTrashBodyHTML(pdf, mode, group, hint),
     confirmText: mode === "group" ? "确认删除其余" : "确认删除",
   });
@@ -129,6 +136,7 @@ function pdfTrashDate() {
 
 // confirmTrashPdf(relPath, close)：POST 回收端点 → 关确认弹窗 → toast →
 // 缓存失效 + 全量重拉（pdfPageCache 同步清该文件页数——已回收，详情不再命中）。
+// 工厂弹窗已由确认路径关闭（close 为兼容参数）；失败 = toastError（可复制重试）。
 async function confirmTrashPdf(relPath, close) {
   try {
     await apiPost(pdfTrashUrl(relPath));
@@ -136,7 +144,7 @@ async function confirmTrashPdf(relPath, close) {
     toast("ok", "已移入回收目录");
     pdfPageCache.delete(relPath);
     loadPdfs();
-  } catch (e) { toastError(e); } // 失败：弹窗保留，用户可重试或取消（长错误可复制，工单 ux-walkthrough-02/11）
+  } catch (e) { toastError(e); } // 失败：toast 长错误可复制（工单 ux-walkthrough-02/11）
 }
 
 // confirmTrashGroup(pdf, group, close)：组级「保留一份删其余」——循环 POST

@@ -218,6 +218,7 @@ from .reference_library import (
     list_entry_files,
     match_entry_files,
     module_kit_vocabulary,
+    pdf_referenced_by,
     resolve_entry_file,
     search_references,
     update_reference,
@@ -4406,6 +4407,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         return {
             "rel_path": rel_path,
             "to": trash_pdf(materials, rel_path, pdf_trash_dir(materials)),
+        }
+
+    @app.get("/api/pdfs/{rel_path:path}/refs")
+    @_map_errors
+    def pdf_refs(rel_path: str) -> dict:
+        """删除确认的影响说明（工单 ux-walkthrough-02/16）：引用同名文件的
+        参考条目标题列表——前端据此决定「条目将无法打开」或「可恢复」文案。"""
+        config = _require_config(context)
+        return {
+            "titles": pdf_referenced_by(
+                reference_library_dir(config.module_library_dir), rel_path,
+            ),
         }
 
     @app.get("/api/pdfs/{rel_path:path}")

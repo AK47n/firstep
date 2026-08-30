@@ -412,6 +412,21 @@ def match_entry_files(
     ]
 
 
+def pdf_referenced_by(reference_root: Path, rel_path: str) -> list[str]:
+    """删除素材 PDF 前的影响说明查询（工单 ux-walkthrough-02/16）：
+    返回引用同名文件的参考条目标题列表（basename 大小写不敏感——条目可能
+    存文本副本而非同一路径，精确全路径匹配会漏报；同名 = 保守提示，宁可
+    多提示不可漏）。空列表 = 未被引用（确认框给「可恢复」说明）。"""
+    name = Path(rel_path).name.lower()
+    if not name:
+        return []
+    titles: list[str] = []
+    for entry in search_references(reference_root):
+        if any(Path(rel).name.lower() == name for rel in _entry_file_records(reference_root, entry.id)):
+            titles.append(entry.title or entry.id)
+    return titles
+
+
 def resolve_entry_file(
     reference_root: Path,
     materials_root: Path,

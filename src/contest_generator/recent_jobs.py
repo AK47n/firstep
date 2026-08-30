@@ -152,7 +152,7 @@ def restore_recent(fp: Path, entry: dict[str, Any]) -> dict[str, Any]:
         "ts": f"{time.time():.3f}",
         "output_dir": entry["output_dir"].strip(),
         "platform": platform,
-        "slugs": slugs,
+        "slugs": list(slugs),   # 拷贝（评审整改：与 record_recent 一致，防调用方改）
         "status": status,
     }
     topic_id = entry.get("topic_id")

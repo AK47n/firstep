@@ -50,6 +50,7 @@ from contest_generator.reference_library import (
     list_references,
     match_entry_files,
     module_kit_vocabulary,
+    pdf_referenced_by,
     read_fulltext,
     resolve_entry_file,
     search_references,
@@ -325,6 +326,26 @@ def test_add_reference_topic_anchor_roundtrip(tmp_path):
     data = entry.to_dict()
     assert data["file_count"] == 2
     assert data["size_bytes"] == entry.size_bytes
+
+
+def test_pdf_referenced_by_matches_same_basename(tmp_path):
+    """删除影响说明（工单 ux-walkthrough-02/16）：条目文件与素材 PDF 同名
+    （跨目录）→ 命中并返回条目标题；无关名字 → 空列表；空路径 → 空列表。"""
+    root = _reference_root(tmp_path)
+    add_reference(
+        root,
+        title="2026C 赛题资料",
+        type="说明",
+        description="含传感器手册",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"规约.pdf": "pdf-bytes", "对应.pdf": "pdf-bytes"},
+        kit_vocabulary=(),
+    )
+    assert pdf_referenced_by(root, "批一/子/规约.pdf") == ["2026C 赛题资料"]
+    assert pdf_referenced_by(root, "批二/子/规约.PDF") == ["2026C 赛题资料"]  # 大小写不敏感
+    assert pdf_referenced_by(root, "批一/子/无关.pdf") == []
+    assert pdf_referenced_by(root, "") == []
 
 
 def test_reference_mtime_roundtrip(tmp_path):

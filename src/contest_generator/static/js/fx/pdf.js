@@ -151,7 +151,8 @@ export function pdfChipRowHTML(options, selected) {
 
 // pdfRowHTML(p, f)：行渲染（文件名链接 + 完整路径 tooltip、批次 chip、目录列、
 // 大小、修改时间、操作按钮）。f.isBroken / f.isDup 谓词（工单 04 注入）=
-// 行内 ⚠ 健康徽章；无谓词不标注。
+// 行内 ⚠ 健康徽章；无谓词不标注。工单 ux-walkthrough-02/16：非损坏文件
+// 均可删除（回收），不再只限疑似重复。
 export function pdfRowHTML(p, f) {
   const subdir = pdfSubdir(p.rel_path || "");
   const broken = !!(f && f.isBroken && f.isBroken(p));
@@ -163,7 +164,7 @@ export function pdfRowHTML(p, f) {
     <td class="muted" title="${esc(subdir || "批次根")}">${esc(subdir || "—")}</td>
     <td class="muted">${formatSize(p.size_bytes)}</td>
     <td class="muted">${formatMtime(p.mtime)}</td>
-    <td><button data-open-pdf="${esc(p.rel_path)}" title="新标签打开 PDF">打开</button> <button data-pdf-detail="${esc(p.rel_path)}" title="查看完整信息">详情</button>${dup ? ` <button class="danger" data-pdf-trash="${esc(p.rel_path)}" title="移入回收目录（疑似重复）">删除</button>` : ""}</td>
+    <td><button data-open-pdf="${esc(p.rel_path)}" title="新标签打开 PDF">打开</button> <button data-pdf-detail="${esc(p.rel_path)}" title="查看完整信息">详情</button>${broken ? "" : ` <button class="danger" data-pdf-trash="${esc(p.rel_path)}" title="移入回收目录（可恢复）">删除</button>`}</td>
   </tr>`;
 }
 
@@ -183,7 +184,8 @@ export function pdfPagesText(pages) {
 // pdfDetailHTML(pdf, pages, flags)：详情弹窗内容（元数据段 + 操作段）。
 // 页数懒取三态占位（data-pdf-pages 槽由 showPdfDetail 落盘）；
 // flags={broken, dup, group}（工单 04/06）= 标题旁 ⚠ 健康徽章 + 操作段删除
-// 按钮（dup 单删 / group 组级「保留一份删其余」），缺省不标注不渲染。
+// 按钮（非损坏均可单删（工单 ux-walkthrough-02/16）；dup 额外有组级「保留
+// 一份删其余」），缺省不标注不渲染。
 export function pdfDetailHTML(pdf, pages, flags = {}) {
   const subdir = pdfSubdir(pdf.rel_path || "");
   const tags = pdfBadgeTags(flags.broken, flags.dup);
@@ -199,7 +201,7 @@ export function pdfDetailHTML(pdf, pages, flags = {}) {
   <div class="pdf-detail-actions">
     <button type="button" class="primary" data-pdf-open="${esc(pdf.rel_path)}">打开 PDF</button>
     <button type="button" data-pdf-copy="${esc(pdf.rel_path)}">复制相对路径</button>
-    ${flags.dup ? `<button type="button" class="danger" data-pdf-delete="${esc(pdf.rel_path)}">删除此文件</button>` : ""}
+    ${flags.broken ? "" : `<button type="button" class="danger" data-pdf-delete="${esc(pdf.rel_path)}">删除此文件</button>`}
     ${flags.group ? `<button type="button" data-pdf-delete-group="${esc(pdf.rel_path)}" title="${esc(pdfDupRemainText(flags.group))}">${esc(pdfDupRemainText(flags.group))}</button>` : ""}
     <span class="pdf-detail-copy-msg muted"></span>
   </div>`;
@@ -209,6 +211,23 @@ export function pdfDetailHTML(pdf, pages, flags = {}) {
 // pdfTrashUrl(relPath)：回收端点 URL（对偶 pdfPagesUrl：逐段编码 + /trash）。
 export function pdfTrashUrl(relPath) {
   return "/api/pdfs/" + pdfEncodedPath(relPath) + "/trash";
+}
+
+// pdfRefsUrl(relPath)：被参考条目查询 URL（工单 ux-walkthrough-02/16）——
+// 删除确认框据此决定影响说明（被参考 → 条目将无法打开；否则可恢复）。
+export function pdfRefsUrl(relPath) {
+  return "/api/pdfs/" + pdfEncodedPath(relPath) + "/refs";
+}
+
+/** 删除确认消息（工单 ux-walkthrough-02/16）：titles = 引用该文件的参考
+ * 条目标题列表。被参考 → 点明影响；未引用 → 明示可恢复。纯文本。 */
+export function pdfTrashMessage(titles) {
+  const list = Array.isArray(titles) ? titles.filter(Boolean) : [];
+  if (list.length) {
+    return "该文件被参考条目「" + list.join("、") + "」引用：删除后条目文件将无法打开。"
+      + "确认移入回收目录？（可从 sources/.trash-pdf/ 手动恢复）";
+  }
+  return "该文件未被参考条目引用：删除 = 移入回收目录（不真删，可手动恢复）。确认删除？";
 }
 
 // pdfDupRemainText(group)：「保留一份删其余」文案（组级按钮 + 确认标题共用）。
@@ -240,5 +259,5 @@ export function pdfTrashConfirmHTML(pdf, mode, group, trashHint) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML, pdfTrashBodyHTML });
+  Object.assign(window, { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfRefsUrl, pdfTrashMessage, pdfDupRemainText, pdfTrashConfirmHTML, pdfTrashBodyHTML });
 }

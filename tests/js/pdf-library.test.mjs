@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { esc, formatSize } from "../../src/contest_generator/static/js/fx/core.js";
-import { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML } from "../../src/contest_generator/static/js/fx/pdf.js";
+import { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfRefsUrl, pdfTrashMessage, pdfDupRemainText, pdfTrashConfirmHTML } from "../../src/contest_generator/static/js/fx/pdf.js";
 
 // 样例：跨批次 + 批次内子目录 + 0 字节损坏（3/04 轮才警示，此处只当普通数据）
 const pdfs = [
@@ -337,14 +337,32 @@ test("pdfDetailHTML flags.group / flags.dup：删除按钮渲染；缺省不渲�
   assert.ok(d.includes('data-pdf-delete="批一/子/同一.pdf"'), "dup → 单删按钮");
   assert.ok(d.includes('data-pdf-delete-group="批一/子/同一.pdf"'), "group → 组级按钮");
   assert.ok(d.includes("保留此文件，删除其余 2 份"), "组级文案 = count-1");
-  assert.ok(!pdfDetailHTML(p, null).includes("data-pdf-delete"), "缺省 flags 无删除按钮（03 兼容）");
+  // 工单 ux-walkthrough-02/16：非损坏健康文件也有单删按钮（不再只限 dup）
+  const healthy = pdfDetailHTML(p, null, { broken: false, dup: false });
+  assert.ok(healthy.includes('data-pdf-delete="批一/子/同一.pdf"'), "健康文件 → 单删按钮（16）");
+  // 损坏文件不提供删除（读不了的内容不误删）
+  assert.ok(!pdfDetailHTML(p, null, { broken: true }).includes("data-pdf-delete"), "损坏文件无删除按钮");
+  // 缺省 flags = 视为健康（工单 16：健康文件可删）；03 兼容以 broken 门控
+  assert.ok(pdfDetailHTML(p, null).includes("data-pdf-delete"), "缺省 flags 视为健康 → 有删除按钮（16）");
 });
 
-test("pdfRowHTML 重复行渲染删除按钮（data-pdf-trash），非重复行不渲染", () => {
+test("pdfRowHTML 重复行渲染删除按钮（data-pdf-trash），健康非重复行也有（工单 16）", () => {
   const dupP = { name: "du.pdf", rel_path: "批/du.pdf", batch: "批", size_bytes: 9, mtime: 1 };
   const dupRow = pdfRowHTML(dupP, { isDup: (x) => x.rel_path === "批/du.pdf" });
   assert.ok(dupRow.includes('data-pdf-trash="批/du.pdf"'), "dup 行删除按钮");
   assert.ok(dupRow.includes(">删除</button>"), "删除按钮文案");
   const plain = pdfRowHTML(dupP, {});
-  assert.ok(!plain.includes("data-pdf-trash"), "非重复行无删除按钮");
+  assert.ok(plain.includes("data-pdf-trash"), "健康非重复行有删除按钮（16）");
+  const broken = pdfRowHTML(dupP, { isBroken: (x) => true });
+  assert.ok(!broken.includes("data-pdf-trash"), "损坏行无删除按钮");
+});
+
+test("pdfTrashMessage：被引用 → 点明条目影响；未引用 → 可恢复（工单 16）", () => {
+  const ref = pdfTrashMessage(["2026C 赛题资料", "传感器手册"]);
+  assert.match(ref, /「2026C 赛题资料、传感器手册」/);
+  assert.match(ref, /条目文件将无法打开/);
+  const free = pdfTrashMessage([]);
+  assert.match(free, /未被参考条目引用/);
+  assert.match(free, /可手动恢复/);
+  assert.match(pdfTrashMessage(null), /未被参考条目引用/);
 });
