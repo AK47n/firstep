@@ -40,7 +40,8 @@ import { stepNavTitles, syncStep4 } from "/js/fx/draft.js";
 import { prereadHTML, prereadSlotHTML, prereadReminderGroups } from "/js/fx/topic-preread.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { WAIT_GENERIC_LINE } from "/js/fx/wait.js";  // 无阶段场景通用等待行（工单 ux-walkthrough-02/12）
-import { makeProgressPanel, makeWaitClock } from "/js/ui/progress.js";
+import { makeProgressPanel, makeWaitClock, makeCancelButton } from "/js/ui/progress.js";
+import { makeAbortable, isAbortError } from "/js/fx/abortable.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/01）
@@ -334,6 +335,11 @@ function renderPrereadSlots(reminders) {
 // 赛题预读长任务秒表（工单 ux-walkthrough-02/12）：状态行旁「已等待 mm:ss」
 const prereadWait = makeWaitClock("topic-preread-msg");
 
+// 赛题预读取消（工单 ux-walkthrough-02/14）：分钟级同步调用可中止等待
+const prereadAbort = makeAbortable();
+const prereadCancel = makeCancelButton("topic-preread-msg");
+prereadCancel.onClick(() => prereadAbort.abort());
+
 $("btn-topic-preread").addEventListener("click", async () => {
   $("topic-preread-msg").textContent = "";
   const problem = $("problem").value.trim();
@@ -342,8 +348,10 @@ $("btn-topic-preread").addEventListener("click", async () => {
   $("btn-topic-preread").innerHTML = '<span class="spinner"></span>AI 预读中…';
   aiActionStart("赛题预读");  // 全局「AI 行动中」横幅（工单 ai-action-banner/01）
   prereadWait.start();
+  const signal = prereadAbort.begin();
+  prereadCancel.show();
   try {
-    const data = await apiPost("/api/topic/preread", { problem_text: problem });
+    const data = await apiPost("/api/topic/preread", { problem_text: problem }, { signal });
     prereadOverviewText = String(data.overview || "");
     prereadReminders = Array.isArray(data.reminders) ? data.reminders : [];
     $("topic-preread-box").innerHTML = prereadHTML(
@@ -355,10 +363,16 @@ $("btn-topic-preread").addEventListener("click", async () => {
     $("btn-topic-preread").innerHTML = "重新预读";
     markStepDone(2);  // 预读成功即视为完成（题面变更时 clearTopicPreread 会取消）
   } catch (e) {
-    $("topic-preread-msg").textContent = e.message;
+    if (isAbortError(e)) {
+      $("topic-preread-msg").textContent = "已取消：预读结果未保存，可安全重试";
+    } else {
+      $("topic-preread-msg").textContent = e.message;
+    }
   } finally {
     aiActionStop();
     prereadWait.stop();
+    prereadAbort.clear();
+    prereadCancel.hide();
     $("btn-topic-preread").disabled = false;
   }
 });
@@ -694,7 +708,8 @@ const recPanel = makeProgressPanel({
     round: (ev) => {
       $("rec-prog-text").textContent = "AI 收敛自检：第 " + ev.round + "/" + ev.round_total + " 轮…";
       $("rec-bar").classList.remove("hidden");
-      $("rec-bar-fill").style.width = (ev.round_total ? Math.min(100, ev.round * 100 / ev.round_total) : 100) + "%";
+      // 封顶 85%：收敛 ≠ 完成（后续 result 组装 + 缓存写入），防「满分→85%」倒退
+      $("rec-bar-fill").style.width = (ev.round_total ? Math.min(85, ev.round * 100 / ev.round_total) : 85) + "%";
     },
     converged: (ev) => {
       // 收敛 ≠ 完成：进度条约 85% 并注明「正在出最终结果…」——仅 done 到 100%

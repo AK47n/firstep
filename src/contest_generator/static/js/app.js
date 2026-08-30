@@ -53,21 +53,24 @@ export async function handle(resp) {
   }
   return data;
 }
-export async function apiGet(url) { return handle(await fetch(url)); }
-export async function apiPost(url, body) {
+export async function apiGet(url, opts) { return handle(await fetch(url, { signal: opts && opts.signal })); }
+export async function apiPost(url, body, opts) {
   return handle(await fetch(url, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    signal: opts && opts.signal,
   }));
 }
-export async function apiPut(url, body) {
+export async function apiPut(url, body, opts) {
   return handle(await fetch(url, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    signal: opts && opts.signal,
   }));
 }
-export async function apiDelete(url, body) {
+export async function apiDelete(url, body, opts) {
   return handle(await fetch(url, {
     method: "DELETE", headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: opts && opts.signal,
   }));
 }
 

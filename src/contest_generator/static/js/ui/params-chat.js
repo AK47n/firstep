@@ -16,7 +16,8 @@ import { reviseGetDir } from "./generate-revise.js";
 import { tasksIsBusy } from "./generate-tasks.js";
 import { paramsBusy, paramsPlan } from "./params.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
-import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
+import { makeWaitClock, makeCancelButton } from "/js/ui/progress.js";  // 长任务秒表/取消（工单 ux-walkthrough-02/12/14）
+import { makeAbortable, isAbortError } from "/js/fx/abortable.js";
 
 // 本簇状态（会话级；落盘真相 = .contest_params_chat.json）：chat = 后端
 // {messages} 全量（read/send 后替换）；pending = 发送中乐观展示的用户消息；
@@ -30,6 +31,11 @@ let paramsChatState = {
 };
 
 const chatWait = makeWaitClock("params-chat-status");   // 长任务秒表（工单 ux-walkthrough-02/12）
+
+// 长任务取消（工单 ux-walkthrough-02/14）：AI 咨询一轮 = 分钟级同步调用
+const chatAbort = makeAbortable();
+const chatCancel = makeCancelButton("params-chat-status");
+chatCancel.onClick(() => chatAbort.abort());
 
 function paramsChatDir() {
   return reviseGetDir();
@@ -121,19 +127,27 @@ async function paramsChatSend() {
   if (msgEl) msgEl.textContent = "";
   paramsChatStatus("AI 诊断中…（分钟级调用，请等待）");
   chatWait.start();
+  const signal = chatAbort.begin();
+  chatCancel.show();
   paramsChatRender();
   try {
-    const data = await apiPost("/api/params/chat/send", { output_dir: dir, history });
+    const data = await apiPost("/api/params/chat/send", { output_dir: dir, history }, { signal });
     paramsChatState.chat = data.chat || paramsChatState.chat;
     paramsChatStatus("");
     toast("ok", "AI 已回复——回复里的参数名可直接点击定位");
   } catch (e) {
     paramsChatState.draft = message;   // 失败回填：历史不动（后端原子轮次）
     paramsChatStatus("");
-    if (msgEl) msgEl.textContent = e.message;
+    if (isAbortError(e)) {
+      paramsChatStatus("已取消：本轮咨询未保存，可安全重试");
+    } else if (msgEl) {
+      msgEl.textContent = e.message;
+    }
   } finally {
     aiActionStop();
     chatWait.stop();
+    chatAbort.clear();
+    chatCancel.hide();
     paramsChatState.pending = "";
     paramsChatState.busy = false;
     paramsChatRender();

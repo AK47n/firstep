@@ -27,7 +27,8 @@ import { reviseApplyConfirmMessage } from "/js/fx/danger.js";  // 覆盖式重�
 import { verifyStatusMarkup } from "/js/fx/task.js";
 import { mainDiffHTML } from "/js/fx/diff.js";  // 效果 diff 渲染（diff-restyle/01）
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
+import { makeWaitClock, makeCancelButton } from "/js/ui/progress.js";  // 长任务秒表/取消（工单 ux-walkthrough-02/12/14）
+import { makeAbortable, isAbortError } from "/js/fx/abortable.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
@@ -56,6 +57,15 @@ let revise = {
 // 分钟级 SSE 流的状态行后显示「已等待 mm:ss」
 const analyzeWait = makeWaitClock("revise-analyze-status");
 const execWait = makeWaitClock("revise-exec-status");
+
+// 长任务取消（工单 ux-walkthrough-02/14）：分析 / 执行（应用+深化）各一条
+// 中止器（互斥 busy 闸保证不同时跑）；取消 = 中止客户端等待
+const analyzeAbort = makeAbortable();
+const execAbort = makeAbortable();
+const analyzeCancel = makeCancelButton("revise-analyze-status");
+const execCancel = makeCancelButton("revise-exec-status");
+analyzeCancel.onClick(() => analyzeAbort.abort());
+execCancel.onClick(() => execAbort.abort());
 
 function reviseCurrentDir() {
   return $("res-dir").textContent.trim() || $("output-dir").value.trim();
@@ -171,8 +181,9 @@ function reviseRenderContext() {
 }
 
 /** 修订 / 深化 SSE 流（runCompileOnce 先例）：done 载荷返回；error 终态 /
- * 断线 / HTTP 非 200 → throw（中文文案）。handlers = 进度事件词表分发。 */
-async function reviseRunSSE(url, body, handlers) {
+ * 断线 / HTTP 非 200 → throw（中文文案）。handlers = 进度事件词表分发；
+ * signal（可选）= AbortController.signal——取消等待（工单 ux-walkthrough-02/14）。 */
+async function reviseRunSSE(url, body, handlers, signal) {
   let finished = false;
   let done = null;
   let errorMsg = null;
@@ -180,8 +191,9 @@ async function reviseRunSSE(url, body, handlers) {
   try {
     resp = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      signal: signal || undefined,
     });
-  } catch (e) { throw new Error(e.message); }
+  } catch (e) { throw e; }
   if (!resp.body) throw new Error("服务响应无流");
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -293,22 +305,30 @@ async function reviseAnalyze() {
   $("revise-analyze-msg").textContent = "";
   $("revise-analyze-status").textContent = "请求中…";
   analyzeWait.start();
+  const signal = analyzeAbort.begin();
+  analyzeCancel.show();
   clearReviseTelemetry("analyze");
   try {
     const data = await reviseRunSSE("/api/revise/analyze", body, {
       impact_analyzing: () => { $("revise-analyze-status").textContent = "AI 影响分析中…（分钟级调用，请等待）"; },
       diff_ready: () => { $("revise-analyze-status").textContent = "diff 就绪，汇总中…"; },
       llm_telemetry: (d) => { renderReviseTelemetry("analyze", d); recordLLMUsage(d); },
-    });
+    }, signal);
     revise.analysis = data;
     reviseRenderAnalysis(data);
     $("revise-analyze-status").textContent = "分析完成——请核对影响结论与 diff，确认后执行修订";
   } catch (e) {
-    $("revise-analyze-status").textContent = "";
-    $("revise-analyze-msg").textContent = e.message;   // 后端中文（含缺题面提示）
+    if (isAbortError(e)) {
+      $("revise-analyze-status").textContent = "已取消：影响分析未保存，可安全重试";
+    } else {
+      $("revise-analyze-status").textContent = "";
+      $("revise-analyze-msg").textContent = e.message;   // 后端中文（含缺题面提示）
+    }
   } finally {
     aiActionStop();
     analyzeWait.stop();
+    analyzeAbort.clear();
+    analyzeCancel.hide();
     reviseSetBusy(false);
   }
 }
@@ -338,13 +358,15 @@ async function reviseApply() {
   $("revise-exec-msg").textContent = "";
   $("revise-exec-status").textContent = "请求中…";
   execWait.start();
+  const signal = execAbort.begin();
+  execCancel.show();
   clearReviseTelemetry("exec");
   try {
     const data = await reviseRunSSE("/api/revise/apply", body, {
       revision_backup: () => { $("revise-exec-status").textContent = "备份中…（整树备份到输出目录外）"; },
       revision_generating: () => { $("revise-exec-status").textContent = "重生成中…（覆盖式重建输出目录）"; },
       llm_telemetry: (d) => { renderReviseTelemetry("exec", d); recordLLMUsage(d); },
-    });
+    }, signal);
     revise.applyDone = data;
     markStepDone(11);
     toast("ok", "修订完成");
@@ -361,11 +383,17 @@ async function reviseApply() {
       $("revise-exec-status").textContent = "修订完成——可继续「直接深化」或回滚";
     }
   } catch (e) {
-    $("revise-exec-status").textContent = "";
-    $("revise-exec-msg").textContent = e.message;
+    if (isAbortError(e)) {
+      $("revise-exec-status").textContent = "已取消等待：本次修订/深化在后台可能继续（工程状态以后端为准），可稍后刷新查看";
+    } else {
+      $("revise-exec-status").textContent = "";
+      $("revise-exec-msg").textContent = e.message;
+    }
   } finally {
     aiActionStop();
     execWait.stop();
+    execAbort.clear();
+    execCancel.hide();
     reviseSetBusy(false);
   }
 }
@@ -414,6 +442,8 @@ async function reviseRunDeepen() {
   $("revise-exec-msg").textContent = "";
   $("revise-exec-status").textContent = "请求中…";
   execWait.start();
+  const signal = execAbort.begin();
+  execCancel.show();
   clearReviseTelemetry("exec");
   try {
     const body = { output_dir: revise.outputDir };
@@ -426,16 +456,22 @@ async function reviseRunDeepen() {
       fix_start: () => { $("revise-exec-status").textContent = "AI 修复中…（首轮编译未过，自动修复一轮）"; },
       verify_result: () => { $("revise-exec-status").textContent = "验证结果收集中…"; },
       llm_telemetry: (d) => { renderReviseTelemetry("exec", d); recordLLMUsage(d); },
-    });
+    }, signal);
     reviseRenderVerify(data);
     if (data.status !== "failed") { markStepDone(11); toast("ok", "深化完成"); }  // 验证通过 / 降级未验证都算闭环
     $("revise-exec-status").textContent = "深化完成";
   } catch (e) {
-    $("revise-exec-status").textContent = "";
-    $("revise-exec-msg").textContent = e.message;
+    if (isAbortError(e)) {
+      $("revise-exec-status").textContent = "已取消等待：本次修订/深化在后台可能继续（工程状态以后端为准），可稍后刷新查看";
+    } else {
+      $("revise-exec-status").textContent = "";
+      $("revise-exec-msg").textContent = e.message;
+    }
   } finally {
     aiActionStop();
     execWait.stop();
+    execAbort.clear();
+    execCancel.hide();
     reviseSetBusy(false);
   }
 }
