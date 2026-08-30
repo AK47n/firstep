@@ -327,6 +327,29 @@ def test_add_reference_topic_anchor_roundtrip(tmp_path):
     assert data["size_bytes"] == entry.size_bytes
 
 
+def test_reference_mtime_roundtrip(tmp_path):
+    """mtime（ux-polish-02/07）：入库/读回/更新/归档都带元数据 mtime——
+    「最近更新」排序数据源；该字段只进序列化响应，不写进 reference.json。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="mtime 测试条目",
+        type="说明",
+        description="带 mtime",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"note.txt": "hello"},
+        kit_vocabulary=(),
+    )
+    assert entry.mtime > 0
+    assert "mtime" not in entry.to_dict()   # 磁盘/域序列化不含 mtime（写盘兼容）
+    assert get_reference(root, entry.id).mtime == entry.mtime
+    assert list_references(root)[0].mtime == entry.mtime
+    # 元数据文件本身不含 mtime 键（写盘逐字节兼容）
+    meta = json.loads((root / entry.id / "reference.json").read_text(encoding="utf-8"))
+    assert "mtime" not in meta
+
+
 def test_add_reference_platform_roundtrip(tmp_path):
     """平台属性（工单 01）：入库带 platform → 元数据落盘、读盘回读、序列化带出。"""
     root = _reference_root(tmp_path)
@@ -1744,9 +1767,11 @@ def test_references_routes_end_to_end(tmp_path):
     assert added.status_code == 200
     entry_id = added.json()["id"]
     assert added.json()["anchor_value"] == "2026C"
+    assert added.json()["mtime"] > 0   # ux-polish-02/07：响应带 mtime（排序用）
 
     listed = client.get("/api/references")
     assert [e["title"] for e in listed.json()] == ["2026C 数字钥匙例程"]
+    assert listed.json()[0]["mtime"] == added.json()["mtime"]
     assert [e["title"] for e in client.get("/api/references?title=钥匙").json()] == [
         "2026C 数字钥匙例程"
     ]

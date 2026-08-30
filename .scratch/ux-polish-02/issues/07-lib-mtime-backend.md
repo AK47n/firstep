@@ -4,7 +4,17 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**实现记录：** 后端三库补 mtime（epoch 秒，仅进响应层，不写盘——manifest/
+元数据写盘逐字节兼容保持）：reference_library.py ReferenceEntry 加 mtime 字段 +
+entry_mtime 助手（get_reference / add_reference / archive_reference 读盘补全，
+to_dict 不含 mtime——域序列化与磁盘一致；webapp /api/references GET/POST/PUT
+响应合并 mtime）；topic_library.py TopicEntry 加 mtime + _entry_mtime（_load_entry
+读盘补全，to_dict 带出——confirm/update 走 resolve 重读）；library.py module_mtime
++ webapp /api/modules 合并键。单测 3 处新增：reference mtime 往返（含写盘无
+mtime 断言 + webapp 响应带 mtime）、topic mtime 往返、module_mtime（含不存在
+=0）。pytest 三套 375 全绿。
 
 - [ ] 模块库列表每条目带 `mtime`（模块目录 manifest.json 的 mtime）
 - [ ] 参考库列表每条目带 `mtime`（条目目录 reference.json 的 mtime）

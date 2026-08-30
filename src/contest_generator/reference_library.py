@@ -122,9 +122,11 @@ class ReferenceEntry:
     topic_type: str = ""  # 题型标记（词表 TOPIC_TYPES；空 = 未标记，向后兼容）
     file_count: int = 0  # 条目目录文件数（含 reference.json）
     size_bytes: int = 0  # 条目目录总体积（字节）
+    mtime: int = 0  # 元数据 mtime（epoch 秒，ux-polish-02/07「最近更新」排序用）
 
     def to_dict(self) -> dict[str, Any]:
-        """序列化为 JSON 兼容 dict。"""
+        """序列化为 JSON 兼容 dict（磁盘元数据形状——不含 mtime：mtime 是读盘
+        实况补出的浏览字段，只在 API 响应层由 webapp 合并，写盘逐字节兼容）。"""
         return {
             "id": self.id,
             "title": self.title,
@@ -259,6 +261,16 @@ def entry_stats(entry_dir: Path) -> tuple[int, int]:
     return count, total
 
 
+def entry_mtime(entry_dir: Path) -> int:
+    """条目元数据 mtime（reference.json 修改时间，epoch 秒）——浏览层
+    「最近更新」排序数据源（ux-polish-02/07）；不写入元数据文件本身
+    （manifest 写盘逐字节兼容保持）。目录/文件不可读 = 0（不报错）。"""
+    try:
+        return int((entry_dir / REFERENCE_META_FILENAME).stat().st_mtime)
+    except OSError:
+        return 0
+
+
 def get_reference(reference_root: Path, entry_id: str) -> ReferenceEntry:
     """读取单个条目；不存在或元数据损坏抛 ReferenceError。
 
@@ -288,7 +300,7 @@ def get_reference(reference_root: Path, entry_id: str) -> ReferenceEntry:
     except ReferenceError as exc:
         raise ReferenceError(f"参考文件条目 {entry_id!r} 的元数据不合法：{exc}") from exc
     file_count, size_bytes = entry_stats(entry_dir)
-    return replace(entry, file_count=file_count, size_bytes=size_bytes)
+    return replace(entry, file_count=file_count, size_bytes=size_bytes, mtime=entry_mtime(entry_dir))
 
 
 def search_references(
@@ -607,7 +619,7 @@ def add_reference(
         _write_files(entry_dir, files)
         write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
     file_count, size_bytes = entry_stats(reference_root / entry_id)
-    entry = replace(entry, file_count=file_count, size_bytes=size_bytes)
+    entry = replace(entry, file_count=file_count, size_bytes=size_bytes, mtime=entry_mtime(reference_root / entry_id))
     commit_after_write(reference_root, f"lib: add reference {entry_id}")
     return entry
 
@@ -764,7 +776,7 @@ def archive_reference(
         shutil.copy2(source, dst)
         write_json(entry_dir, REFERENCE_META_FILENAME, entry.to_dict())
     file_count, size_bytes = entry_stats(reference_root / entry_id)
-    return replace(entry, file_count=file_count, size_bytes=size_bytes)
+    return replace(entry, file_count=file_count, size_bytes=size_bytes, mtime=entry_mtime(reference_root / entry_id))
 
 
 # ---------------------------------------------------------------------------

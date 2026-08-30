@@ -156,6 +156,16 @@ def get_module(library_root: Path, slug: str) -> ModuleManifest:
         ) from exc
 
 
+def module_mtime(library_root: Path, slug: str) -> int:
+    """模块条目元数据 mtime（manifest.json 修改时间，epoch 秒）——浏览层
+    「最近更新」排序数据源（ux-polish-02/07）；不写入 manifest 文件
+    （写盘逐字节兼容保持）。目录/文件不可读 = 0（不报错，排序垫底）。"""
+    try:
+        return int((library_root / slug / MANIFEST_FILENAME).stat().st_mtime)
+    except OSError:
+        return 0
+
+
 def delete_module(library_root: Path, slug: str) -> None:
     """删除模块：整个目录移除（目录存在校验走 entry_store 原语）。"""
     _validate_slug(slug)
