@@ -2,9 +2,15 @@
 
 工单 project-readme/01 + 02 + 03：生成工程时自动附带 README.md。render_readme
 是纯函数（platform / 板名 / 依赖展开后的 manifest 集 / 绑定解析结果 / 多实例
-计划 → 完整 README 文本），五章：工程概览 / 快速上手：编译 + 烧录 / 引脚接线表 /
-模块清单与依赖 / 验证顺序清单。utf-8、尾部换行、不含时间戳——同一输入两次调用
-产出逐字节一致。
+计划 → 完整 README 文本），六章：工程概览 / 目录结构（含生成物骨架声明）/
+快速上手：编译 + 烧录 / 引脚接线表 / 模块清单与依赖 / 验证顺序清单。
+utf-8、尾部换行、不含时间戳——同一输入两次调用产出逐字节一致。
+
+目录结构章（工单 beginner-gap-closure/04）：按平台列出实际关键目录/文件与
+用途（DIRECTORY_STRUCTURE，行目与母版模板由 test_directory_structure_syncs_
+with_master_templates 钉同步——modules/ 与 Debug/ 为生成时创建，例外跳过）；
+章首骨架声明（SKELETON_NOTICES）告知生成物 = 可编译骨架/模板，含占位逻辑，
+上板前需人工核对（与教程口径一致）。
 
 快速上手章 = 平台静态步骤文本（QUICK_START_STEPS 固定话术预写，不做逐模块
 拼装，生成不依赖 ccs_tools 探测结果）；验证顺序清单章 = 以 manifest 集顺序
@@ -78,6 +84,50 @@ BRING_UP_SLUGS = ("delay", "debug_uart", "led", "led_beep")
 # 验证清单固定引导语（工单逐字规定）
 VERIFICATION_GUIDE = "按顺序逐个验证，前一个过了再接下一个"
 
+# 目录结构章（工单 beginner-gap-closure/04）：平台 → 实际关键目录/文件 →
+# 用途（新手打开工程文件夹即知各目录作用、该补什么代码）。行目与母版模板由
+# test_directory_structure_syncs_with_master_templates 钉同步（modules/ 与
+# Debug/ 为生成时创建——模块复制 / CCS 构建产物，例外跳过）。文案与教程
+# （fx/guide.js 编译与上板章）口径一致：模块源码在 modules/、Keil 工程在
+# user/（产物 user/Objects/）、CCS 产物 Debug/、引脚单源 pin_config.h /
+# mspm0.syscfg。
+DIRECTORY_STRUCTURE: dict[str, tuple[tuple[str, str], ...]] = {
+    "stm32": (
+        ("modules/", "选中模块的驱动源码（每个模块一个子目录：.c/.h，已自动加入 Keil 工程与生成器的编译验证）"),
+        ("user/", "Keil 工程：双击 Project.uvprojx 打开；编译产物在 user/Objects/（.hex 可烧录固件）"),
+        ("sys/", "内核与寄存器相关头文件（STM32 头文件 / CMSIS 内核定义）——无需改动"),
+        ("ml_libs/", "板级基础驱动库（延时 / GPIO / 串口 / ADC 等 ml_* 实现与头文件）——按需调用"),
+        ("key/", "启动文件（startup_*.s：复位入口与中断向量表）——无需改动"),
+        ("main.c", "主程序骨架——赛题逻辑从这里开始（第 8 步骨架、第 11 步任务推进逐步写入）"),
+        ("pin_config.h", "板级引脚配置（第 7 步「引脚配置」写入，与实际接线一一对应）"),
+    ),
+    "mspm0": (
+        ("modules/", "选中模块的驱动源码（每个模块一个子目录：.c/.h，已自动加入 CCS 工程与生成器的编译验证）"),
+        ("main.c", "主程序骨架——赛题逻辑从这里开始（第 8 步骨架、第 11 步任务推进逐步写入）"),
+        ("mspm0.syscfg", "SysConfig 外设布局（时钟 / 外设 / 引脚配置，第 7 步写入——与实际接线一一对应）"),
+        ("Debug/", "CCS 构建产物（*.out 可烧录固件与 makefile；点击构建后自动生成）"),
+        (".ccsproject", "CCS 工程文件——用 CCS：File → Open Project 选择工程目录导入"),
+        (".settings/", "CCS 辅助配置——无需改动"),
+        ("targetConfigs/", "调试器目标配置——无需改动"),
+    ),
+}
+
+# 生成物性质声明（工单 beginner-gap-closure/04，章首固定话术）：告知新手
+# 生成物 = 可编译骨架/模板，含占位逻辑，需人工核对补全——与教程「生成完
+# 去哪写代码」口径一致；引脚单源按平台区分。
+SKELETON_NOTICES: dict[str, str] = {
+    "stm32": (
+        "本工程由电赛工程生成器构建：main.c 是可编译的骨架/模板，含模块初始化与占位逻辑"
+        "（TODO 标记）。赛题的实现逻辑需要你核对、补全并上板调试；引脚一致性以 "
+        "pin_config.h 为准（与实际接线不一致先改这里）。"
+    ),
+    "mspm0": (
+        "本工程由电赛工程生成器构建：main.c 是可编译的骨架/模板，含模块初始化与占位逻辑"
+        "（TODO 标记）。赛题的实现逻辑需要你核对、补全并上板调试；引脚一致性以 "
+        "mspm0.syscfg 为准（与实际接线不一致先改这里）。"
+    ),
+}
+
 
 def sort_verification_order(
     manifests: Sequence[ModuleManifest],
@@ -125,6 +175,18 @@ def render_readme(
     lines.append(f"- 平台：{PLATFORM_TITLES.get(platform, platform)}")
     if board_name:
         lines.append(f"- 开发板：{board_name}")
+    lines.append("")
+
+    # 目录结构章（工单 beginner-gap-closure/04）：关键目录/文件用途表 +
+    # 生成物骨架声明（新手打开工程文件夹即知各目录作用、该补什么代码）。
+    lines.append("## 目录结构")
+    lines.append("")
+    lines.append("| 目录/文件 | 用途 |")
+    lines.append("|---|---|")
+    for path, note in DIRECTORY_STRUCTURE.get(platform, ()):
+        lines.append(f"| `{path}` | {note} |")
+    lines.append("")
+    lines.append(f"> {SKELETON_NOTICES.get(platform, '')}")
     lines.append("")
 
     lines.append("## 快速上手：编译 + 烧录")
