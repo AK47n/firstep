@@ -878,6 +878,25 @@ def _open_in_explorer(directory: Path) -> None:
         pass  # 打不开资源管理器：生成已成功，静默（不因聚焦失败报 500）
 
 
+def _desktop_topic_title(
+    context: AppContext, problem_text: str | None, topic_id: str | None
+) -> str | None:
+    """桌面模式目录标题（历史赛题确定性；粘贴题面需 AI 短名 → None）。
+
+    工单 beginner-gap-closure/06 抽取：生成路由与输出目录预览（preview-dir）
+    共用同一推导——历史赛题（topic_id 给定）取「编号 + 英文短名」（如
+    2024H_Auto_Car，topic_dir_title + 内置字典，纯 ASCII）；粘贴题面（无
+    topic_id）的英文短名由 LLM（name_topic_english）在生成时才产生，返回
+    None 表示"调用方决定是否走 LLM"——预览端点不调用 LLM（零成本静默
+    检查），生成路由照旧调用。
+    """
+    if not topic_id:
+        return None
+    config = _require_config(context)
+    entry = resolve_number(topic_library_dir(config.module_library_dir), topic_id)
+    return topic_dir_title(entry.key, entry.problem_text)
+
+
 def _resolve_generation_output_dir(
     context: AppContext,
     payload: dict,
@@ -909,12 +928,10 @@ def _resolve_generation_output_dir(
             f"未知平台 {platform!r}，已注册的平台：{', '.join(KNOWN_PLATFORMS)}"
         )
     if topic_id:
-        config = _require_config(context)
-        entry = resolve_number(
-            topic_library_dir(config.module_library_dir), topic_id
-        )
-        title = topic_dir_title(entry.key, entry.problem_text)
+        title = _desktop_topic_title(context, problem_text, topic_id)
     else:
+        title = None
+    if title is None:
         title = _llm(context).name_topic_english(problem_text)
     # 平台后缀（工单 desktop-platform-suffix/01）：同题双平台目录自动分流
     # （Auto_Car_STM32 / Auto_Car_MSPM0）；后缀在裁决前拼——desktop_topic_dir_verdict
@@ -1725,6 +1742,47 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         except OSError:
             pass
         return _generation_result(summary)
+
+    @app.post("/api/generate/preview-dir")
+    @_map_errors
+    def generate_preview_dir(payload: dict) -> dict:
+        """输出目录预览（工单 beginner-gap-closure/06）：就绪检查「目录已存在」
+        预警的数据源——生成前预判最终输出目录状态，**纯静态计算、不调用 LLM**
+        （粘题面无 topic_id 时 AI 短名生成时才产生 → needs_title，前端不打扰）。
+
+        契约：{create_desktop_topic_dir?, platform?, topic_id?, problem_text?,
+        output_dir?} → {dir: str|null, verdict: str}；verdict：
+        - 手动模式：absent（不存在）/ empty（存在且空）/ occupied（存在且非空，
+          生成会拒绝——generate_project 的非空检查）；
+        - 桌面模式：new / clean / exists（复用 desktop_topic_dir_verdict，与
+          /api/generate 同源裁决——exists = 已有同名完整工程，生成时弹覆盖确认）；
+        - needs_title（桌面 + 粘题面无编号）。
+        未知平台 400（与 _resolve_generation_output_dir 同款预热）。
+        """
+        if not _desktop_output_requested(payload):
+            output_dir = Path(_require_str(payload, "output_dir"))
+            if not output_dir.exists():
+                return {"dir": str(output_dir), "verdict": "absent"}
+            occupied = output_dir.is_dir() and any(output_dir.iterdir())
+            return {
+                "dir": str(output_dir),
+                "verdict": "occupied" if occupied else "empty",
+            }
+        problem_text = _optional_str(payload, "problem_text")
+        topic_id = _optional_str(payload, "topic_id")
+        platform = _require_str(payload, "platform")
+        if platform not in KNOWN_PLATFORMS:
+            raise UnknownPlatformError(
+                f"未知平台 {platform!r}，已注册的平台：{', '.join(KNOWN_PLATFORMS)}"
+            )
+        title = _desktop_topic_title(context, problem_text, topic_id)
+        if title is None:
+            return {"dir": None, "verdict": "needs_title"}
+        candidate, verdict = desktop_topic_dir_verdict(
+            context.desktop_dir(),
+            with_platform_suffix(title, platform),
+        )
+        return {"dir": str(candidate), "verdict": verdict}
 
     @app.get("/api/recent")
     @_map_errors

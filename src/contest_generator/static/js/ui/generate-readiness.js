@@ -14,8 +14,11 @@
 // 跨簇读方：generate-steps.js 经静态 import 调 readinessState（工单 18 的
 // setStepsDeps 接缝已由本票取代）；host 经顶部 import 调 readinessState（btn-generate
 // 监听器）/ refreshReadinessPanel（setOnStepChange 回调）/ initReadinessCheck（启动区）。
-import { $ } from "/js/app.js";
-import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
+import { $, apiPost } from "/js/app.js";
+import {
+  generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
+  readinessRowsHTML, outputDirWarnRow,
+} from "/js/fx/readiness.js";
 import { stepDoneSet, stepCard } from "/js/ui/step-state.js";
 import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend } from "/js/ui/generate-recommend.js";
 
@@ -54,10 +57,49 @@ function renderReadinessPanel() {
   const recommendEnabled = !!state.problem;
   box.innerHTML =
     readinessRowsHTML(generateReadinessChecks(state), { recommendEnabled })
-    + readinessRowsHTML(readinessSoftChecks(state), { recommendEnabled: false });
+    + readinessRowsHTML(readinessSoftChecks(state), { recommendEnabled: false })
+    + '<div id="readiness-warn-slot"></div>';
 }
+
+// 输出目录预警槽（工单 beginner-gap-closure/06）：/api/generate/preview-dir 是
+// 纯静态预览（零 LLM 调用、不烧 token——粘题面无编号时后端回 needs_title，
+// 前端静默）。按载荷缓存防每次状态变化重复请求；请求失败静默降级（预览不
+// 阻断检查单——warn 只是提前告知，生成时覆盖/拒绝逻辑不变）。
+let _dirWarnCacheKey = null;
+let _dirWarnCache = null;
+async function refreshOutputDirWarn() {
+  const box = $("readiness-check");
+  const slot = $("readiness-warn-slot");
+  if (!box || box.classList.contains("hidden") || !slot) {
+    _dirWarnCacheKey = null;
+    return;
+  }
+  const state = readinessState();
+  const topicInput = $("topic-id");
+  const payload = {
+    create_desktop_topic_dir: state.desktopOutput,
+    platform: state.chosenPlatform || "",
+    topic_id: topicInput ? topicInput.value.trim() : "",
+    problem_text: state.problem,
+    output_dir: state.outputDir,
+  };
+  const key = JSON.stringify(payload);
+  if (key === _dirWarnCacheKey) return;
+  _dirWarnCacheKey = key;
+  try {
+    _dirWarnCache = await apiPost("/api/generate/preview-dir", payload);
+  } catch {
+    _dirWarnCache = null;  // 静默降级：预览失败不打断检查单
+  }
+  const warn = outputDirWarnRow(_dirWarnCache);
+  slot.innerHTML = warn
+    ? readinessRowsHTML([warn], { recommendEnabled: false })
+    : "";
+}
+
 function refreshReadinessPanel() {
   renderReadinessPanel();
+  void refreshOutputDirWarn();
 }
 function initReadinessCheck() {
   const btn = $("btn-readiness-check");
@@ -65,7 +107,7 @@ function initReadinessCheck() {
   if (!btn || !box) return;
   btn.addEventListener("click", () => {
     box.classList.toggle("hidden");
-    if (!box.classList.contains("hidden")) renderReadinessPanel();
+    if (!box.classList.contains("hidden")) refreshReadinessPanel();
   });
   // 事件委托：定位按钮 / 一键跑推荐（与「让 AI 推荐」同一入口）
   box.addEventListener("click", (e) => {

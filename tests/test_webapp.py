@@ -2613,6 +2613,106 @@ def test_generate_desktop_cleans_partial_dir_on_failure(
     assert (desktop_dir / "Auto_Car_STM32").exists() is False
 
 
+# ---------------------------------------------------------------------------
+# 输出目录预览（工单 beginner-gap-closure/06：就绪检查「目录已存在」预警数据源）
+# ---------------------------------------------------------------------------
+
+
+def test_preview_dir_manual_verdicts(client, context, tmp_path):
+    """手动目录模式：不存在 → absent；存在且非空 → occupied；存在且空 → empty。
+    （零 LLM 调用——纯静态 stat。）"""
+    ctx, holder = context
+    out_root = tmp_path / "out"
+    resp = client.post("/api/generate/preview-dir", json={
+        "output_dir": str(out_root / "none"),
+    })
+    assert resp.status_code == 200
+    assert resp.json() == {"dir": str(out_root / "none"), "verdict": "absent"}
+
+    occupied = out_root / "occupied"
+    occupied.mkdir(parents=True)
+    (occupied / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
+    resp = client.post("/api/generate/preview-dir", json={
+        "output_dir": str(occupied),
+    })
+    assert resp.json() == {"dir": str(occupied), "verdict": "occupied"}
+
+    empty = out_root / "empty"
+    empty.mkdir(parents=True)
+    resp = client.post("/api/generate/preview-dir", json={
+        "output_dir": str(empty),
+    })
+    assert resp.json() == {"dir": str(empty), "verdict": "empty"}
+
+
+def test_preview_dir_desktop_needs_title_without_llm_call(
+    client, context, tmp_path
+):
+    """桌面模式 + 粘贴题面（无 topic_id）：AI 短名生成时才产生 → needs_title，
+    且**不调用 LLM**（预览是零成本静默检查，不烧 token）。"""
+    ctx, holder = context
+    ctx.desktop_dir = lambda: tmp_path / "Desktop"
+    resp = client.post("/api/generate/preview-dir", json={
+        "create_desktop_topic_dir": True,
+        "platform": PLATFORM_STM32,
+        "problem_text": "赛题：智能巡检小车",
+        "output_dir": str(tmp_path / "ignored"),
+    })
+    assert resp.status_code == 200
+    assert resp.json() == {"dir": None, "verdict": "needs_title"}
+    assert holder["llm"].topic_en_name_calls == []
+
+
+def test_preview_dir_desktop_topic_id_verdict(client, context, tmp_path):
+    """桌面模式 + 历史赛题编号：目录名确定性推导（编号 + 英文短名 + 平台后缀）
+    ——已存在完整工程 → exists；不存在 → new。与 /api/generate 同源裁决。"""
+    from contest_generator.generation_output import topic_dir_title
+    from contest_generator.platforms import PLATFORM_DIR_SUFFIXES
+
+    ctx, holder = context
+    _import_stm32_master(ctx.config.masters_dir, tmp_path)
+    make_fake_topic_library(topic_library_dir(ctx.config.module_library_dir))
+    desktop_dir = tmp_path / "Desktop"
+    ctx.desktop_dir = lambda: desktop_dir
+    title = topic_dir_title("2026C", TOPIC_PROBLEM_TEXT)
+    expected = desktop_dir / (title + PLATFORM_DIR_SUFFIXES[PLATFORM_STM32])
+
+    resp = client.post("/api/generate/preview-dir", json={
+        "create_desktop_topic_dir": True,
+        "platform": PLATFORM_STM32,
+        "topic_id": "2026C",
+        "problem_text": "",
+        "output_dir": str(tmp_path / "ignored"),
+    })
+    assert resp.status_code == 200
+    assert resp.json() == {"dir": str(expected), "verdict": "new"}
+
+    expected.mkdir(parents=True)
+    (expected / "main.c").write_text("int main(void) {}\n", encoding="utf-8")
+    resp = client.post("/api/generate/preview-dir", json={
+        "create_desktop_topic_dir": True,
+        "platform": PLATFORM_STM32,
+        "topic_id": "2026C",
+        "problem_text": "",
+        "output_dir": str(tmp_path / "ignored"),
+    })
+    assert resp.json() == {"dir": str(expected), "verdict": "exists"}
+
+
+def test_preview_dir_unknown_platform_400(client, context, tmp_path):
+    """未知平台（桌面模式）→ 400 中文带已注册平台清单——与生成路由同款。"""
+    ctx, _holder = context
+    ctx.desktop_dir = lambda: tmp_path / "Desktop"
+    resp = client.post("/api/generate/preview-dir", json={
+        "create_desktop_topic_dir": True,
+        "platform": "pic16",
+        "problem_text": "赛题：未知平台",
+        "output_dir": "",
+    })
+    assert resp.status_code == 400
+    assert "未知平台" in resp.json()["detail"]
+
+
 def test_generate_desktop_opens_explorer_on_success(
     client, context, tmp_path, monkeypatch
 ):

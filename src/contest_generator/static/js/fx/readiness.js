@@ -60,6 +60,40 @@ export function readinessRowsHTML(checks, opts) {
   return checks.map((c) => readinessRowHTML(c, opts)).join("");
 }
 
+/**
+ * 输出目录预警行（工单 beginner-gap-closure/06）：/api/generate/preview-dir
+ * 载荷（{dir, verdict}）→ 非阻塞 warn 行（soft，⚠ 不阻断生成）。适用
+ * verdict = exists（桌面已有同名完整工程——生成时备份 .bak 再覆盖）/
+ * occupied（手动目录已存在且非空——生成会被拒绝）才返回行对象，否则 null
+ * （调用方不渲染；needs_title = 预览拿不到目录名，静默）。软条件判据
+ * 与 readinessSoftChecks 同形（soft: true → ⚠ 展示，rowHTML 复用）。
+ */
+export function outputDirWarnRow(result) {
+  if (!result || !result.dir) return null;
+  if (result.verdict === "exists") {
+    return {
+      step: 9,
+      title: "输出目录",
+      reason: "桌面已有同名工程（生成时会把旧工程备份为 .bak 再覆盖；也可以先去删除旧工程）",
+      ok: false,
+      soft: true,
+    };
+  }
+  if (result.verdict === "occupied") {
+    return {
+      step: 9,
+      title: "输出目录",
+      reason: "目录已存在且非空——生成会被拒绝；建议先清空目录或换个位置",
+      ok: false,
+      soft: true,
+    };
+  }
+  return null;
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML });
+  Object.assign(window, {
+    generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
+    readinessRowsHTML, outputDirWarnRow,
+  });
 }
