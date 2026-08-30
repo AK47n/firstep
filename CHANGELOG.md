@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fd52e1bce0e9d3b5665aef6a8d00837227d1a958 -->
+<!-- changelog-auto: last-commit=02ce318ab5b2ab27c761a9a592f8dcdf12098aa4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -69,6 +69,7 @@
 - 19:10 工单 04：设置页保存体验（sticky 保存条 + 未保存提示 + toast + AI API 保存并连接）
 - 19:14 工单 03 评审整改：恢复按钮按 .bak 实际存在显示（backup-check 端点）+ Windows 保留名校验 + 响应去绝对路径
 - 19:14 工单 04 评审整改：保存并连接防连点禁用 + 连接反馈用真实字段（模型/耗时/reply）+ 保存成功后刷新不误报失败
+- 19:17 工单 05：后端体检扩展（CCS 三件套逐件状态 + topic/reference/pdf 库目录存在性与可写性）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
