@@ -2196,6 +2196,15 @@
         <!-- 编译结果横幅（工单 compile-experience-ui/01）：生成完成一眼确认
              自动编译发生了、结果如何；四态 running/success/fail/notool -->
         <div id="compile-banner" class="hidden"></div>
+        <!-- 主路径入口（工单 beginner-gap-closure/02）：生成成功即可直达
+             第 11 步「任务推进」写代码——与第 12 步交接卡按钮同一跳转实现 -->
+        <div class="res-block" style="margin-top:8px">
+          <div class="res-label">下一步</div>
+          <div class="res-value">
+            <button id="btn-goto-tasks-result" class="accent" type="button">去任务推进</button>
+            <span class="muted" style="margin-left:8px">生成后的主路径：逐卡实现 main.c 逻辑，即时编译验证。</span>
+          </div>
+        </div>
         <div class="res-grid">
           <div class="res-main">
             <div class="res-block">

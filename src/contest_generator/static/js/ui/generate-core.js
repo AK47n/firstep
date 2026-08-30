@@ -26,6 +26,7 @@ import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, frameworkNoteHTML } from "/js/fx/generate.js";
 import { flashRunShared } from "/js/ui/flash.js";
+import { goTaskProgress } from "/js/ui/goto-tasks.js";  // 结果区「去任务推进」入口（beginner-gap-closure/02，与第 12 步同源）
 import { expandSettingsCollapse } from "/js/ui/settings.js";  // 指引卡「去设置页配置」展开工具链卡（flash-guide-settings/03；settings.js 无环依赖本模块）
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
@@ -470,6 +471,8 @@ async function flashRun() {
   });
 }
 $("btn-flash").addEventListener("click", flashRun);
+// 结果区「去任务推进」（工单 beginner-gap-closure/02）：与第 12 步交接卡同源跳转
+$("btn-goto-tasks-result").addEventListener("click", goTaskProgress);
 // 「复制烧录命令」（工单 flash-deploy/02，spec 故事 4 一键复制）：document 级
 // 委托统一处理——生成结果面板与任务结果面板的复制按钮共用（任务结果在
 // tasks-grid 容器内，网格委托只处理动作按钮；命令复制与网格解耦，单点）。
