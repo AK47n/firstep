@@ -1524,6 +1524,23 @@ def run_recommendation(
 # ---------------------------------------------------------------------------
 
 
+def default_instances_for_multi(
+    multi_slugs: Sequence[str], platform: str
+) -> dict[str, tuple[ModuleInstance, ...]]:
+    """多实例 slug → 平台默认清单（default_instance_plan 单源，唯一决策点）。
+
+    空 platform / 无平台默认的 slug → 不落键（旧载荷不变）。
+    """
+    if not platform:
+        return {}
+    result: dict[str, tuple[ModuleInstance, ...]] = {}
+    for slug in multi_slugs:
+        defaults = default_instance_plan(slug, platform)
+        if defaults:
+            result[slug] = defaults
+    return result
+
+
 def _default_instances_for(
     modules: Sequence[str],
     summaries: Sequence[ManifestSummary],
@@ -1531,16 +1548,16 @@ def _default_instances_for(
 ) -> dict[str, tuple[ModuleInstance, ...]]:
     """AI 没猜实例时的平台默认清单（工单 instance-default-fallback/01）。
 
-    命中模块里带 multi_instance 能力的 slug → 平台默认清单（default_instance_
-    plan 单源）；空 platform / 无多实例命中 → 空 dict（不落键，旧载荷不变）。
+    命中模块里带 multi_instance 能力的 slug → 各自的平台默认清单
+    （default_instance_plan 单源）；空 platform / 无多实例命中 / 该 slug 无
+    平台默认 → 空 dict（不落键，旧载荷不变）。
     """
     if not platform:
         return {}
-    defaults = default_instance_plan(platform)
-    if not defaults:
-        return {}
     multi = {summary.slug for summary in summaries if summary.multi_instance is not None}
-    return {slug: defaults for slug in modules if slug in multi}
+    return default_instances_for_multi(
+        [slug for slug in modules if slug in multi], platform
+    )
 
 
 def parse_instances(
@@ -1647,11 +1664,23 @@ INSTANCE_POLICIES: Mapping[str, MultiInstancePolicy] = {
             "green": "LED_GREEN",
         },
         builtin_pins={
-            "stm32": {"red": "PC13", "yellow": "PC14", "green": "PC15"},
+            PLATFORM_STM32: {"red": "PC13", "yellow": "PC14", "green": "PC15"},
         },
-        first_pin={"mspm0": "PA15"},
+        first_pin={PLATFORM_MSPM0: "PA15"},
         pin_capability="gpio_out",
         macro_prefix="LED_",
+    ),
+    "key": MultiInstancePolicy(
+        builtin_macros={
+            "start": "KEY_START",
+            "stop": "KEY_STOP",
+            "mode": "KEY_MODE",
+            "set": "KEY_SET",
+        },
+        builtin_pins={},
+        first_pin={PLATFORM_STM32: "PB3", PLATFORM_MSPM0: "PA2"},
+        pin_capability="gpio_in",
+        macro_prefix="KEY_",
     ),
 }
 
@@ -1674,22 +1703,32 @@ class ExpandedInstance:
     pin: str
 
 
-def default_instance_plan(platform: str) -> tuple[ModuleInstance, ...]:
-    """多实例模块的平台默认实例（工单 instance-default-fallback/01，单源）。
+def default_instance_plan(
+    slug: str, platform: str
+) -> tuple[ModuleInstance, ...]:
+    """多实例模块的平台默认实例（工单 instance-default-fallback/01 单源 +
+    key-multi-instance/04 泛化）。
 
-    与「不配置 = 单默认实例」的生成结果等价（渲染零回归）：stm32 = 红黄绿
-    3 实例（对应母版默认 led_instances.h 三通道）；mspm0 = 单实例无颜色
-    （LED_1 通用编号 + 默认脚，对应库内默认单通道）；未知 / 空平台 = 空
-    （不兜底）。
+    与「不配置 = 单默认实例」的生成结果等价（渲染零回归）：led — stm32 =
+    红黄绿 3 实例（对应母版默认 led_instances.h 三通道）、mspm0 = 单实例无
+    颜色（LED_1 通用编号 + 默认脚，对应库内默认单通道）；key — 双平台各
+    1 实例（「按键」/ start，对应板载启动键 + 默认 key_instances.h 单通道）；
+    未知 slug / 空平台 = 空（不兜底）。
     """
-    if platform == PLATFORM_STM32:
-        return (
-            ModuleInstance(name="红灯", variant="red"),
-            ModuleInstance(name="黄灯", variant="yellow"),
-            ModuleInstance(name="绿灯", variant="green"),
-        )
-    if platform == PLATFORM_MSPM0:
-        return (ModuleInstance(name="LED", variant=""),)
+    if slug == "led":
+        if platform == PLATFORM_STM32:
+            return (
+                ModuleInstance(name="红灯", variant="red"),
+                ModuleInstance(name="黄灯", variant="yellow"),
+                ModuleInstance(name="绿灯", variant="green"),
+            )
+        if platform == PLATFORM_MSPM0:
+            return (ModuleInstance(name="LED", variant=""),)
+        return ()
+    if slug == "key":
+        if platform in (PLATFORM_STM32, PLATFORM_MSPM0):
+            return (ModuleInstance(name="按键", variant="start"),)
+        return ()
     return ()
 
 

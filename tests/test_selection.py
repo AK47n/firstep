@@ -2486,15 +2486,23 @@ def test_run_recommendation_default_instances_ai_guess_wins():
 
 
 def test_default_instance_plan_single_source():
-    """平台默认清单单源：stm32 红黄绿 / mspm0 单实例 / 未知空。"""
+    """平台默认清单单源（按 slug）：led stm32 红黄绿 / mspm0 单实例 / 未知空；
+    key（key-multi-instance/04）双平台各 1 实例（按键 / start）。"""
     from contest_generator.selection import default_instance_plan
 
-    assert [i.variant for i in default_instance_plan(PLATFORM_STM32)] == [
+    assert [i.variant for i in default_instance_plan("led", PLATFORM_STM32)] == [
         "red", "yellow", "green",
     ]
-    assert [i.variant for i in default_instance_plan(PLATFORM_MSPM0)] == [""]
-    assert default_instance_plan("") == ()
-    assert default_instance_plan("unknown") == ()
+    assert [i.variant for i in default_instance_plan("led", PLATFORM_MSPM0)] == [""]
+    assert default_instance_plan("led", "") == ()
+    assert default_instance_plan("led", "unknown") == ()
+
+    key_stm32 = default_instance_plan("key", PLATFORM_STM32)
+    assert len(key_stm32) == 1
+    assert key_stm32[0].name == "按键" and key_stm32[0].variant == "start"
+    assert key_stm32 == default_instance_plan("key", PLATFORM_MSPM0)
+    assert default_instance_plan("key", "") == ()
+    assert default_instance_plan("unknown", PLATFORM_STM32) == ()
 
 
 def test_run_recommendation_passes_qa_material_through():

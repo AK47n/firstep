@@ -54,6 +54,7 @@ MODULES = LIBRARY_ROOT / "modules"
 STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"
 BOARDS = {board.platform: board for board in load_boards(BOARDS_DIR)}
 LED = ModuleManifest.load(MODULES / "led")
+KEY = ModuleManifest.load(MODULES / "key")
 
 
 # ---------------------------------------------------------------------------
@@ -550,6 +551,116 @@ def test_expand_is_deterministic_and_frozen():
 
     assert first == second
     assert first[0] == ExpandedInstance(slug="led", index=1, macro="LED_RED", pin="PC13")
+
+
+# ---------------------------------------------------------------------------
+# key-multi-instance/04：key 展开策略行（语义变体宏 + 板载首脚 + gpio_in 扫描）
+# ---------------------------------------------------------------------------
+
+
+def _key_expand(instances, platform):
+    return expand_instances(KEY, tuple(instances), platform, BOARDS[platform])
+
+
+def test_expand_key_builtin_variants_semantic_macros_and_board_first_pin():
+    """key 内置变体 start/stop/mode/set → KEY_START/KEY_STOP/KEY_MODE/KEY_SET；
+    首实例 → 板载默认键脚（stm32 PB3 / mspm0 PA2，位置语义）；其余 board 顺序
+    首个可用 gpio_in 脚（跳过板载键脚 + 同模块已用）。"""
+    plan = _key_expand(
+        [
+            ModuleInstance(name="启动键", variant="start"),
+            ModuleInstance(name="停止键", variant="stop"),
+        ],
+        "stm32",
+    )
+    assert _macros(plan) == ["KEY_START", "KEY_STOP"]
+    assert _pins(plan) == ["PB3", "PC13"]  # 次键 = board 顺序首个可用 gpio_in（PC13，非指定脚）
+
+    plan = _key_expand(
+        [
+            ModuleInstance(name="启动键", variant="start"),
+            ModuleInstance(name="停止键", variant="stop"),
+        ],
+        "mspm0",
+    )
+    assert _macros(plan) == ["KEY_START", "KEY_STOP"]
+    assert _pins(plan) == ["PA2", "PA0"]
+
+
+def test_expand_key_non_builtin_numbered_and_duplicate_suffix():
+    """非内置/空变体 → KEY_1..n（创建顺序）；同变体第 2 次起 _2 后缀（对齐
+    led 内置色后缀先例）。"""
+    plan = _key_expand(
+        [
+            ModuleInstance(name="启动键", variant="start"),
+            ModuleInstance(name="按钮3"),
+            ModuleInstance(name="启动键2", variant="start"),
+        ],
+        "stm32",
+    )
+    assert _macros(plan) == ["KEY_START", "KEY_1", "KEY_START_2"]
+    assert len(set(_pins(plan))) == 3
+
+
+def test_expand_key_three_independent_buttons_2026f_shape():
+    """2026F「3 个独立启动按钮键」形状：3 个通用键 → KEY_1/KEY_2/KEY_3，
+    引脚两两互异（同模块去重）。"""
+    plan = _key_expand(
+        [ModuleInstance(name=f"按钮{i}") for i in range(1, 4)],
+        "mspm0",
+    )
+    assert _macros(plan) == ["KEY_1", "KEY_2", "KEY_3"]
+    assert len(set(_pins(plan))) == 3
+
+
+def test_expand_key_explicit_pin_overrides_default():
+    """显式 pin 覆盖：首实例绑 PA6 → PA6；后续自动分配不撞它。"""
+    plan = _key_expand(
+        [
+            ModuleInstance(name="启动键", variant="start", pin="PA6"),
+            ModuleInstance(name="停止键", variant="stop"),
+        ],
+        "stm32",
+    )
+    assert _pins(plan) == ["PA6", "PC13"]
+
+
+@pytest.mark.parametrize(
+    ("raw", "platform", "expected_macros"),
+    [
+        # 2026F：3 个独立启动按钮 → 3 通用键
+        (
+            [{"name": "按钮1"}, {"name": "按钮2"}, {"name": "按钮3"}],
+            "mspm0",
+            ["KEY_1", "KEY_2", "KEY_3"],
+        ),
+        # 2022C/2022H：启动按键 + 设置按键 → KEY_START + KEY_SET
+        (
+            [{"name": "启动", "variant": "start"}, {"name": "设置", "variant": "set"}],
+            "stm32",
+            ["KEY_START", "KEY_SET"],
+        ),
+        # 2026C：数字钥匙一键启动 → 1 个 start
+        (
+            [{"name": "启动", "variant": "start"}],
+            "mspm0",
+            ["KEY_START"],
+        ),
+    ],
+)
+def test_parse_and_expand_key_topic_shapes(raw, platform, expected_macros):
+    """三种题面形状的实例清单经 parse_instances（请求层严格校验）→ expand
+    （策略行）全链解析一致（key-multi-instance/04 验收 L19：2026F 三键 /
+    2022C·2022H 双键 / 2026C 一键）。"""
+    parsed = parse_instances({"key": raw}, known_slugs=("key",))
+    plan = expand_instances(KEY, parsed["key"], platform, BOARDS[platform])
+    assert _macros(plan) == expected_macros
+
+
+def test_expand_key_upper_bound_rejects_excess_instances():
+    """key 实例数 > max（8）大声失败（上限守卫自动覆盖，不单独实现）。"""
+    with pytest.raises(SelectionError, match="超过上限 8"):
+        _key_expand([ModuleInstance(name=f"键{i}") for i in range(9)], "stm32")
 
 
 # ---------------------------------------------------------------------------
