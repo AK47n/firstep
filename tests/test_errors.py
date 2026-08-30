@@ -178,7 +178,7 @@ def test_llm_error_network_humanized() -> None:
     status, message = error_entry(
         LLMError(
             "无法连接 LLM 服务 https://api.deepseek.com/chat/completions: "
-            "<urlopen error timed out>",
+            "<urlopen error connection reset by peer>",
             kind=ERROR_KIND_NETWORK,
         )
     )
@@ -188,6 +188,24 @@ def test_llm_error_network_humanized() -> None:
     assert "api.deepseek.com" not in message
     assert "urlopen" not in message
     assert "URLError" not in message
+
+
+def test_llm_error_network_signal_subclassification() -> None:
+    """网络信号细分（spec 实现决策「区分连接/超时/DNS/证书」）：按原始消息
+    特征选对应人话（超时 / DNS / 证书），技术串只作判别不透出。"""
+    cases = (
+        ("timeout", "<urlopen error timed out>", "超时"),
+        ("DNS", "getaddrinfo failed: Unknown host", "无法解析"),
+        ("证书", "CERTIFICATE_VERIFY_FAILED", "证书"),
+        ("通用", "connection reset by peer: 10054", "检查网络连接"),
+    )
+    for label, raw, expected in cases:
+        status, message = error_entry(
+            LLMError(f"无法连接 LLM 服务 https://x: {raw}", kind=ERROR_KIND_NETWORK)
+        )
+        assert status == 502, label
+        assert expected in message, f"{label}：{message}"
+        assert "urlopen" not in message and "https://" not in message, label
 
 
 def test_llm_error_rate_limit_and_client_humanized() -> None:
