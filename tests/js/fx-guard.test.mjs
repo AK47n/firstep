@@ -19,7 +19,7 @@ const DOMAINS = {
   },
   "danger.js": {
     reviseApplyConfirmMessage: "fn", platformSwitchConfirmMessage: "fn",
-    pinResetConfirmMessage: "fn",
+    pinResetConfirmMessage: "fn", overwriteBakHint: "fn",
   },
   "env.js": {
     ENV_BADGE_GLYPH: "object",

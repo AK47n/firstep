@@ -41,8 +41,16 @@ export function pinResetConfirmMessage(count) {
   return `将把全部 ${n} 处引脚绑定还原为默认（改动可重新配置），并清空当前高亮。确定继续？`;
 }
 
+/** 覆盖生成确认补语（工单 ux-walkthrough-02/03）：.bak 找回说明。
+ * dirName = 同名工程目录名（可空 → 通用描述）；返回单段纯文本。 */
+export function overwriteBakHint(dirName) {
+  const bak = dirName ? "「" + dirName + ".bak」" : "同名 .bak 备份";
+  const target = dirName ? "「" + dirName + "」" : "原名";
+  return "如需找回旧工程，把桌面上" + bak + "改名回" + target + "（生成后也可在结果区一键恢复）。";
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
-    reviseApplyConfirmMessage, platformSwitchConfirmMessage, pinResetConfirmMessage,
+    reviseApplyConfirmMessage, platformSwitchConfirmMessage, pinResetConfirmMessage, overwriteBakHint,
   });
 }

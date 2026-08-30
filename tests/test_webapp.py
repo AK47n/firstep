@@ -3021,6 +3021,77 @@ def test_generate_desktop_overwrite_ignored_when_new(client, context, tmp_path):
     assert not (desktop_dir / "Auto_Car_STM32.bak").exists()
 
 
+def test_restore_backup_endpoint_ok(client, context, tmp_path):
+    """工单 ux-walkthrough-02/03：/api/generate/restore-backup 正常恢复——
+    桌面 .bak 目录改名回原名（原子零复制），返回 message。"""
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    bak = desktop_dir / "Auto_Car_STM32.bak"
+    bak.mkdir(parents=True)
+    (bak / "OLD_MARKER.txt").write_text("第一代", encoding="utf-8")
+
+    resp = client.post(
+        "/api/generate/restore-backup", json={"name": "Auto_Car_STM32"}
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Auto_Car_STM32"
+    assert "已把覆盖前的备份恢复" in body["message"]
+    restored = desktop_dir / "Auto_Car_STM32"
+    assert (restored / "OLD_MARKER.txt").read_text(encoding="utf-8") == "第一代"
+    assert not bak.exists()
+
+
+def test_restore_backup_endpoint_target_exists_rejected(client, context, tmp_path):
+    """工单 ux-walkthrough-02/03：目标目录已存在 → 400 中文，备份与目标
+    均分毫未动（恢复绝不覆盖现有目录）。"""
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+    target = desktop_dir / "Auto_Car_STM32"
+    target.mkdir(parents=True)
+    (target / "main.c").write_text("新工程", encoding="utf-8")
+    bak = desktop_dir / "Auto_Car_STM32.bak"
+    bak.mkdir()
+    (bak / "OLD_MARKER.txt").write_text("第一代", encoding="utf-8")
+
+    resp = client.post(
+        "/api/generate/restore-backup", json={"name": "Auto_Car_STM32"}
+    )
+
+    assert resp.status_code == 400
+    assert "目标目录" in resp.json()["detail"]
+    assert (target / "main.c").read_text(encoding="utf-8") == "新工程"
+    assert (bak / "OLD_MARKER.txt").read_text(encoding="utf-8") == "第一代"
+
+
+def test_restore_backup_endpoint_missing_backup_friendly(client, context, tmp_path):
+    """工单 ux-walkthrough-02/03：无 .bak → 400 友好报错（不裸 500）。"""
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    resp = client.post(
+        "/api/generate/restore-backup", json={"name": "Auto_Car_STM32"}
+    )
+
+    assert resp.status_code == 400
+    assert "没有找到待恢复的备份" in resp.json()["detail"]
+
+
+def test_restore_backup_endpoint_unsafe_name_rejected(client, context, tmp_path):
+    """工单 ux-walkthrough-02/03：路径越界名 → 400 中文（is_unsafe_path 同款
+    安全立场，不碰盘）。"""
+    desktop_dir = tmp_path / "Desktop"
+    context[0].desktop_dir = lambda: desktop_dir
+
+    resp = client.post(
+        "/api/generate/restore-backup", json={"name": "../Auto_Car"}
+    )
+
+    assert resp.status_code == 400
+    assert "目标名不合法" in resp.json()["detail"]
+
+
 def test_conflict_message_prefix_anchored_both_sides():
     """一致性护栏（工单 generate-overwrite/01）：冲突 400 文案前缀
     「桌面上已有同名工程」= 后端（webapp.py 生成）与前端（fx/generate.js

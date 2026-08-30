@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from .context_manifest import CONTEXT_MANIFEST_FILENAME
+from .entry_store import is_unsafe_path
 from .platforms import PLATFORM_DIR_SUFFIXES
 
 WINDOWS_RESERVED_FILENAMES = frozenset(
@@ -212,6 +213,39 @@ def backup_project_dir(output_dir: Path) -> Path:
             backup.unlink()
     output_dir.rename(backup)
     return backup
+
+
+class BackupRestoreError(Exception):
+    """覆盖备份恢复失败（工单 ux-walkthrough-02/03）：目标名不合法 / 备份缺失 /
+    目标已存在——message 为中文人话，经 errors.py 映射 400。"""
+
+
+def restore_project_backup(desktop_dir: Path, name: str) -> Path:
+    """恢复覆盖前备份（工单 ux-walkthrough-02/03）：把桌面 `<name>.bak` 目录
+    改名回 `<name>`（同目录原子、零复制），返回恢复后的路径。
+
+    与 backup_project_dir 同安全立场（在盘访问之前判定）：name 只接受纯目录名
+    ——is_unsafe_path（.. / 绝对 / 盘符 / 反斜杠 / 空段）不过、含路径分隔符
+    （"/"）或自带 .bak 后缀 → BackupRestoreError（400 中文）；备份缺失 /
+    目标已存在 → 同样 400 中文，绝不覆盖现有目录，不产生半状态。
+    """
+    if not name or is_unsafe_path(name) or "/" in name or name.endswith(".bak"):
+        raise BackupRestoreError(
+            "恢复目标名不合法：只需填目录名（如 Auto_Car_STM32），不要带路径或 .bak 后缀"
+        )
+    backup = desktop_dir / (name + ".bak")
+    target = desktop_dir / name
+    if not backup.exists() or not backup.is_dir() or backup.is_symlink():
+        raise BackupRestoreError(
+            f"没有找到待恢复的备份「{name}.bak」——覆盖生成后才有备份，请确认它还在桌面"
+        )
+    if target.exists() or target.is_symlink():
+        raise BackupRestoreError(
+            f"目标目录「{name}」已存在：请先把当前工程移走或删除，再点恢复"
+            "（恢复会把备份改回原名，不会覆盖现有目录）"
+        )
+    backup.rename(target)
+    return target
 
 
 def _is_windows_reserved_filename(name: str) -> bool:

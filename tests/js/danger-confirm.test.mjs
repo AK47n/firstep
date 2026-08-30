@@ -7,6 +7,7 @@ import {
   reviseApplyConfirmMessage,
   platformSwitchConfirmMessage,
   pinResetConfirmMessage,
+  overwriteBakHint,
 } from "../../src/contest_generator/static/js/fx/danger.js";
 
 test("reviseApplyConfirmMessage：有 diff 时展示新增/移除/不变计数", () => {
@@ -74,4 +75,17 @@ test("pinResetConfirmMessage：0 / 空值 → 无需还原语义", () => {
   assert.match(pinResetConfirmMessage(0), /当前没有引脚绑定，无需还原/);
   assert.match(pinResetConfirmMessage(undefined), /当前没有引脚绑定，无需还原/);
   assert.match(pinResetConfirmMessage(NaN), /当前没有引脚绑定，无需还原/);
+});
+
+test("overwriteBakHint：带目录名时给出 .bak 改名找回说明", () => {
+  const msg = overwriteBakHint("Auto_Car_STM32");
+  assert.match(msg, /「Auto_Car_STM32\.bak」/);
+  assert.match(msg, /改名回「Auto_Car_STM32」/);
+  assert.match(msg, /结果区一键恢复/);
+});
+
+test("overwriteBakHint：无目录名时用通用描述", () => {
+  const msg = overwriteBakHint();
+  assert.match(msg, /同名 \.bak 备份/);
+  assert.match(msg, /结果区一键恢复/);
 });

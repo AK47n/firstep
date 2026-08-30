@@ -28,7 +28,7 @@ from .events import INTERNAL_ERROR_HINT
 from .extraction import ExtractionError
 from .fix_errors import FixError
 from .flash import FlashError
-from .generation_output import GenerationBusyError, GenerationConflictError
+from .generation_output import BackupRestoreError, GenerationBusyError, GenerationConflictError
 from .generator import (
     DuplicateFilePathError,
     ExtiLineConflictError,
@@ -198,6 +198,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             DeliveryError,  # 交付失败（工单 delivery-suite/01）：输出目录缺失 / 平台未知
             BuyError,  # 买件方案商量请求非法（工单 buy-discuss/03）：缺题面 / 历史形状 / 角色词表外
             GenerationConflictError,  # 桌面同名工程已存在（工单 generate-conflict-guard/01）：不静默换名/覆盖
+            BackupRestoreError,  # 覆盖备份恢复失败（工单 ux-walkthrough-02/03）：目标名不合法 / 备份缺失 / 目标已存在
             RecentStatusError,  # 最近生成状态非法（工单 recent-jobs/01）：前端上报未知状态值
         ),
         400,
