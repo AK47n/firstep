@@ -61,42 +61,75 @@ function renderReadinessPanel() {
     + '<div id="readiness-warn-slot"></div>';
 }
 
-// 输出目录预警槽（工单 beginner-gap-closure/06）：/api/generate/preview-dir 是
-// 纯静态预览（零 LLM 调用、不烧 token——粘题面无编号时后端回 needs_title，
-// 前端静默）。按载荷缓存防每次状态变化重复请求；请求失败静默降级（预览不
-// 阻断检查单——warn 只是提前告知，生成时覆盖/拒绝逻辑不变）。
-// 评审整改（06 轮 Standards 轴）：fetch 返回 / 缓存命中后**重新按 id 查槽**再
-// 写入——渲染重建（setOnStepChange 等）会换新槽节点，写进已分离的旧节点会
-// 整段丢弃（预警消失）。
+// 输出目录预警（工单 beginner-gap-closure/06 面板 / 07 总览共享）：/api/generate/
+// preview-dir 是纯静态预览（零 LLM 调用、不烧 token——粘题面无编号时后端回
+// needs_title，前端静默）。按载荷缓存防每次状态变化重复请求；请求失败静默
+// 降级（预览不阻断检查单——warn 只是提前告知，生成时覆盖/拒绝逻辑不变）。
+// 07 起总览（generate-steps）与面板共用同一份请求：ensureOutputDirWarn 按
+// 载荷 key 缓存 + 同 key 在途复用（并发不重复打）；getOutputDirWarnRow 同步
+// 读缓存；outputDirWarnCached 供总览判断「是否需要取一次」（取回后重刷，
+// 在途/已缓存不重复挂——防重刷循环）。
 let _dirWarnCacheKey = null;
 let _dirWarnCache = null;
-async function refreshOutputDirWarn() {
-  const box = $("readiness-check");
-  if (!box || box.classList.contains("hidden")) {
-    _dirWarnCacheKey = null;
-    return;
-  }
+let _dirWarnInflight = null;
+let _dirWarnSeq = 0;
+function outputDirWarnPayload() {
   const state = readinessState();
   const topicInput = $("topic-id");
-  const payload = {
+  return {
     create_desktop_topic_dir: state.desktopOutput,
     platform: state.chosenPlatform || "",
     topic_id: topicInput ? topicInput.value.trim() : "",
     problem_text: state.problem,
     output_dir: state.outputDir,
   };
+}
+export function outputDirWarnCached() {
+  const key = JSON.stringify(outputDirWarnPayload());
+  return key === _dirWarnCacheKey
+    || !!(_dirWarnInflight && _dirWarnInflight.key === key);
+}
+export async function ensureOutputDirWarn() {
+  const payload = outputDirWarnPayload();
   const key = JSON.stringify(payload);
-  if (key !== _dirWarnCacheKey) {
-    _dirWarnCacheKey = key;
+  if (key === _dirWarnCacheKey) return _dirWarnCache;
+  if (_dirWarnInflight && _dirWarnInflight.key === key) return _dirWarnInflight.promise;
+  const seq = ++_dirWarnSeq;
+  const promise = (async () => {
+    let row = null;
     try {
-      _dirWarnCache = await apiPost("/api/generate/preview-dir", payload);
+      row = await apiPost("/api/generate/preview-dir", payload);
     } catch {
-      _dirWarnCache = null;  // 静默降级：预览失败不打断检查单
+      row = null;  // 静默降级：预览失败不打断检查单/总览
     }
+    // 仅最新一次请求落缓存（防较快的旧请求后到覆盖新载荷结果）
+    if (seq === _dirWarnSeq) {
+      _dirWarnCache = row;
+      _dirWarnCacheKey = key;
+    }
+    return row;
+  })();
+  _dirWarnInflight = { key, promise };
+  return promise;
+}
+export function getOutputDirWarnRow() {
+  return outputDirWarnRow(_dirWarnCache);
+}
+
+// 检查能否生成面板 · 预警槽（工单 06）：薄封装——面板可见时经共享的
+// ensureOutputDirWarn 取数（缓存/静默/在途复用同上），写回槽。
+// 评审整改（06 轮 Standards 轴）：fetch 返回 / 缓存命中后**重新按 id 查槽**再
+// 写入——渲染重建（setOnStepChange 等）会换新槽节点，写进已分离的旧节点会
+// 整段丢弃（预警消失）。
+async function refreshOutputDirWarn() {
+  const box = $("readiness-check");
+  if (!box || box.classList.contains("hidden")) {
+    _dirWarnCacheKey = null;
+    return;
   }
+  const warn = outputDirWarnRow(await ensureOutputDirWarn());
   const slot = $("readiness-warn-slot");  // 重建后取当前槽，防陈旧节点
   if (!slot) return;
-  const warn = outputDirWarnRow(_dirWarnCache);
   slot.innerHTML = warn
     ? readinessRowsHTML([warn], { recommendEnabled: false })
     : "";

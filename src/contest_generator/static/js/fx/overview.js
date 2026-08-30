@@ -16,7 +16,7 @@ export function genOverviewChipsHTML(titles, doneSet, current) {
   }).join("");
 }
 
-export function genOverviewSummaryHTML(doneSet, titles, critical, recommended, navHint) {
+export function genOverviewSummaryHTML(doneSet, titles, critical, recommended, navHint, dirWarn) {
   const done = doneSet || [];
   const byN = {};
   for (const t of titles) byN[t.n] = t.title;
@@ -34,6 +34,13 @@ export function genOverviewSummaryHTML(doneSet, titles, critical, recommended, n
   if (advised.length) {
     parts.push('<span class="ov-missing">建议顺带完成：'
       + advised.map((n) => byN[n]).join("、") + "</span>");
+  }
+  // 输出目录预警（工单 beginner-gap-closure/07）：dirWarn = fx/readiness.js
+  // outputDirWarnRow 的行对象（{title, reason}）或 null；软警告与步骤就绪
+  // 无关（目录已存在 ≠ 生成不可执行——覆盖确认/拒绝逻辑保持不变）
+  if (dirWarn && dirWarn.reason) {
+    parts.push('<span class="ov-missing ov-dir-warn">⚠ '
+      + (dirWarn.title ? dirWarn.title + "：" : "") + dirWarn.reason + "</span>");
   }
   return parts.join('<span class="ov-sep">·</span>');
 }
