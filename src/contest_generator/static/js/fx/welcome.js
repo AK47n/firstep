@@ -25,8 +25,14 @@ export function welcomeMode({ apiConfigured, hasDraft, dismissed }) {
 export function welcomeCardHTML(mode) {
   if (mode === "hidden") return "";
   if (mode === "compact") {
+    // 工单 ux-walkthrough-02/24：compact 态补主行动入口（已配 key 无草稿 →
+    // 直接开始做题 / 看新手指引），与 full 态路径呼应
     return '<div class="welcome-line">'
       + esc("贴赛题 → 生成 → 编译 → 上板；12 步向导会带你走每一步。")
+      + "</div>"
+      + '<div class="welcome-actions">'
+      + '<button id="btn-welcome-compact-go" type="button" class="accent">开始做题</button>'
+      + '<button id="btn-welcome-guide" type="button" class="accent">打开新手指引</button>'
       + "</div>";
   }
   return '<div class="welcome-head">'
