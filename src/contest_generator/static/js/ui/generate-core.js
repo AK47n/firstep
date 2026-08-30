@@ -25,7 +25,7 @@
 import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { overwriteBakHint } from "/js/fx/danger.js";  // 覆盖确认 .bak 找回说明（工单 ux-walkthrough-02/03）
-import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, frameworkNoteHTML } from "/js/fx/generate.js";
+import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, dirBasename, frameworkNoteHTML } from "/js/fx/generate.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { goTaskProgress } from "/js/ui/goto-tasks.js";  // 结果区「去任务推进」入口（beginner-gap-closure/02，与第 12 步同源）
 import { expandSettingsCollapse } from "/js/ui/settings.js";  // 指引卡「去设置页配置」展开工具链卡（flash-guide-settings/03；settings.js 无环依赖本模块）
@@ -119,6 +119,12 @@ function renderGenerateSuccess(data) {
   $("res-structure").textContent = data.structure.join("\n");
   renderArtifacts(data.structure, data.output_dir);
   $("generate-result").classList.remove("hidden");
+  // 覆盖备份恢复入口（工单 ux-walkthrough-02/03）：任何一次生成成功后按输出
+  // 目录名探测桌面 .bak 是否存在——存在才显示按钮（刷新/非覆盖生成后同样
+  // 生效，不依赖「本会话恰好覆盖」事件）
+  const bakBox = $("res-backup-restore");
+  if (bakBox) { bakBox.classList.add("hidden"); bakRestoreName = null; }
+  void refreshBackupRestore(data.output_dir);
   $("gen-status").textContent = "";
   $("generate-msg").classList.add("ok");
   $("generate-msg").textContent = "生成完成！工程结构 / include path / main.c 已就位。";
@@ -143,6 +149,14 @@ function renderGenerateSuccess(data) {
 // 结果区按钮一键把备份改回原名（后端安全校验：目标已存在 / 备份缺失拒绝）。
 // ---------------------------------------------------------------------------
 let bakRestoreName = null;
+async function refreshBackupRestore(outputDir) {
+  const name = dirBasename(outputDir);
+  if (!name) return;
+  try {
+    const res = await apiGet("/api/generate/backup-check?name=" + encodeURIComponent(name));
+    if (res && res.exists) showBackupRestore(name);
+  } catch (e) { /* 探测失败静默：不打扰生成成功的主反馈 */ }
+}
 function showBackupRestore(dirName) {
   bakRestoreName = dirName || null;
   const box = $("res-backup-restore");
@@ -162,10 +176,10 @@ $("btn-restore-bak").addEventListener("click", async () => {
   btn.disabled = true;
   try {
     const data = await apiPost("/api/generate/restore-backup", { name: bakRestoreName });
-    msg.textContent = data.message || ("已把备份恢复为「" + bakRestoreName + "」");
+    msg.textContent = (data && data.message) || "恢复成功";
     msg.classList.add("ok");
     $("res-backup-restore").classList.add("hidden");  // 备份已恢复，按钮使命完成
-    toast("ok", data.message || "已恢复覆盖前备份");
+    toast("ok", (data && data.message) || "已恢复覆盖前备份");
   } catch (e) {
     msg.textContent = e.message;
     msg.classList.add("error");
@@ -663,8 +677,7 @@ $("btn-generate").addEventListener("click", async () => {
         try {
           const data = await apiPost("/api/generate", { ...payload, overwrite: true });
           stopStage();
-          renderGenerateSuccess(data);
-          showBackupRestore(dirName);   // 覆盖成功：结果区出现「恢复覆盖前备份」（工单 ux-walkthrough-02/03）
+          renderGenerateSuccess(data);   // 内部按 .bak 实际存在显示恢复按钮（工单 ux-walkthrough-02/03）
           toast("ok", "已覆盖生成（旧工程备份为 .bak，可在结果区一键恢复）");
           return;
         } catch (e2) {

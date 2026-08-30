@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isConflictError, conflictDirName, CONFLICT_MSG_PREFIX } from "../../src/contest_generator/static/js/fx/generate.js";
+import { isConflictError, conflictDirName, dirBasename, CONFLICT_MSG_PREFIX } from "../../src/contest_generator/static/js/fx/generate.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
@@ -36,6 +36,14 @@ test("conflictDirName：无「」/空/非字符串 → 空串（confirm 文案�
   assert.equal(conflictDirName(""), "");
   assert.equal(conflictDirName(null), "");
   assert.equal(conflictDirName("「只有开头没有闭合"), "");
+});
+
+test("dirBasename：取输出目录路径末段（正反斜杠都认，工单 ux-walkthrough-02/03）", () => {
+  assert.equal(dirBasename("C:\\Users\\a\\Desktop\\Auto_Car_STM32"), "Auto_Car_STM32");
+  assert.equal(dirBasename("/home/user/Desktop/Auto_Car_STM32/"), "Auto_Car_STM32");
+  assert.equal(dirBasename("Auto_Car_STM32"), "Auto_Car_STM32");
+  assert.equal(dirBasename(""), "");
+  assert.equal(dirBasename(null), "");
 });
 
 test("isConflictError 与 400 文案前缀一致性锚点（防前后端漂移）", () => {

@@ -121,6 +121,7 @@ from .generator import (
 from .generation_output import (
     GenerationBusyError,
     GenerationConflictError,
+    backup_exists,
     backup_project_dir,
     desktop_topic_dir_verdict,
     restore_project_backup,
@@ -1768,12 +1769,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         存在 → BackupRestoreError 400 中文（errors.py 统一映射）；纯文件操作，
         不触碰生成 / LLM 链路。"""
         name = _require_str(payload, "name")
-        restored = restore_project_backup(context.desktop_dir(), name)
+        restore_project_backup(context.desktop_dir(), name)
         return {
-            "restored": str(restored),
             "name": name,
             "message": f"已把覆盖前的备份恢复为「{name}」",
         }
+
+    @app.get("/api/generate/backup-check")
+    @_map_errors
+    def generate_backup_check(name: str = "") -> dict:
+        """备份存在性探测（工单 ux-walkthrough-02/03）：结果区「恢复覆盖前
+        备份」按钮的显示依据——桌面是否存在 `<name>.bak`；只读、无副作用，
+        目标名不合法 → 400 中文。"""
+        return {"name": name, "exists": backup_exists(context.desktop_dir(), name)}
 
     @app.post("/api/generate/preview-dir")
     @_map_errors
