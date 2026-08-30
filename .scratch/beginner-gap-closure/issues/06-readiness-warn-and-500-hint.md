@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed（06-B 已提交 0164567：errors/sse 同源 INTERNAL_ERROR_HINT；06-A 已提交 596ffbe：/api/generate/preview-dir + 就绪面板软预警；双轴评审进行中）
+**状态：** resolved（06-B：0164567 + CHANGELOG 27b6fc6（errors/sse 同源 INTERNAL_ERROR_HINT）；06-A：596ffbe + CHANGELOG 7578b6a；评审整改 412dacb + CHANGELOG fce40b2）
+
+**结论：** 双轴评审——Standards「无硬违规」+1 真实低危缺陷（warn-slot 陈旧节点丢弃：渲染重建后写进已分离旧槽，缓存命中提前 return 也不回填——已整改：缓存命中/异步返回后重新按 id 取槽）+ 观察项（_desktop_topic_title 死参——已删；缺 2 端点用例——已补手动缺参 400 与桌面 clean）；Spec「基本符合」+同缺陷 + 总览面观察项（warn 仅就绪检查面板——按验收「就绪检查/就绪总览」或然关系与用户故事 6 触发点判断满足；总览接入留作后续观察）。验收 3 条全落地：输出目录已存在 → 就绪面板非阻塞 ⚠ 软预警（exists=备份 .bak 覆盖口径与生成弹窗一致；occupied=生成会拒绝，与 generate_project 非空检查一致；零 LLM 调用静默预览）；500 类错误含「工具的内部问题/可反馈」引导（errors/sse 同源常量）；readiness-checks/errors 测试更新全绿（preview-dir 6 用例 + readiness 9 + 全量 816 JS / 2848 pytest）。
 
 - [ ] 输出目录已存在 → 就绪检查/总览给出非阻塞提醒（warn 级别），不阻止生成
 - [ ] 500 类内部错误用户可见文案含"工具内部问题/可反馈"类引导
