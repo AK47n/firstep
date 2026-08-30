@@ -98,8 +98,11 @@ DIRECTORY_STRUCTURE: dict[str, tuple[tuple[str, str], ...]] = {
         ("sys/", "内核与寄存器相关头文件（STM32 头文件 / CMSIS 内核定义）——无需改动"),
         ("ml_libs/", "板级基础驱动库（延时 / GPIO / 串口 / ADC 等 ml_* 实现与头文件）——按需调用"),
         ("key/", "启动文件（startup_*.s：复位入口与中断向量表）——无需改动"),
+        ("code/", "母版自带的预留目录（仅一个说明文件）——本工具生成的模块代码在 modules/、主程序在根目录 main.c，此目录不需要动"),
         ("main.c", "主程序骨架——赛题逻辑从这里开始（第 8 步骨架、第 11 步任务推进逐步写入）"),
         ("pin_config.h", "板级引脚配置（第 7 步「引脚配置」写入，与实际接线一一对应）"),
+        ("isr.c", "中断服务函数聚合文件（定时器 / 串口等中断逻辑——需要改中断处理时在这里）"),
+        ("led_instances.h", "LED 多实例定义（第 6 步多实例配置写入——改灯名 / 灯数在这里对应）"),
     ),
     "mspm0": (
         ("modules/", "选中模块的驱动源码（每个模块一个子目录：.c/.h，已自动加入 CCS 工程与生成器的编译验证）"),
@@ -107,6 +110,7 @@ DIRECTORY_STRUCTURE: dict[str, tuple[tuple[str, str], ...]] = {
         ("mspm0.syscfg", "SysConfig 外设布局（时钟 / 外设 / 引脚配置，第 7 步写入——与实际接线一一对应）"),
         ("Debug/", "CCS 构建产物（*.out 可烧录固件与 makefile；点击构建后自动生成）"),
         (".ccsproject", "CCS 工程文件——用 CCS：File → Open Project 选择工程目录导入"),
+        (".cproject", "CCS 工程文件（与 .ccsproject 同套——无需单独处理）"),
         (".settings/", "CCS 辅助配置——无需改动"),
         ("targetConfigs/", "调试器目标配置——无需改动"),
     ),
@@ -152,7 +156,7 @@ def render_readme(
     instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
     score_points: Sequence[ScorePoint] | None = None,
 ) -> str:
-    """渲染工程 README 完整文本（五章，确定性模板）。
+    """渲染工程 README 完整文本（六章，确定性模板）。
 
     manifests = 依赖展开后的 manifest 集（顺序 = resolve_dependencies DFS
     后序，依赖先于使用者——模块清单章按此顺序渲染；验证顺序清单章在其上做
@@ -186,8 +190,10 @@ def render_readme(
     for path, note in DIRECTORY_STRUCTURE.get(platform, ()):
         lines.append(f"| `{path}` | {note} |")
     lines.append("")
-    lines.append(f"> {SKELETON_NOTICES.get(platform, '')}")
-    lines.append("")
+    _skeleton_notice = SKELETON_NOTICES.get(platform)
+    if _skeleton_notice:
+        lines.append(f"> {_skeleton_notice}")
+        lines.append("")
 
     lines.append("## 快速上手：编译 + 烧录")
     lines.append("")

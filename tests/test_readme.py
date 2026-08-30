@@ -514,18 +514,21 @@ def test_generate_project_readme_omits_score_section_when_absent(
 
 
 def _pin_data_rows(text: str) -> list[str]:
-    """引脚表数据行（表头与分隔行剔除；只取「引脚接线表」章内——工单
-    beginner-gap-closure/04 起 README 含多张表，其它章表格不误收）。"""
+    """引脚表数据行（表头与分隔行剔除；只取「引脚接线表」章内、下一章标题
+    之前——工单 beginner-gap-closure/04 起 README 含多张表，其它章表格不误收；
+    评审整改：后边界截断，评分点验收清单等引脚表之后的表也不误收）。"""
     lines = text.splitlines()
     try:
-        lines = lines[lines.index(PIN_TABLE_HEADING):]
+        start = lines.index(PIN_TABLE_HEADING)
     except ValueError:
         return []
-    return [
-        ln
-        for ln in lines
-        if ln.startswith("| ") and not ln.startswith("| 模块") and not ln.startswith("|---")
-    ]
+    out: list[str] = []
+    for ln in lines[start + 1:]:
+        if ln.startswith("## "):
+            break
+        if ln.startswith("| ") and not ln.startswith("| 模块") and not ln.startswith("|---"):
+            out.append(ln)
+    return out
 
 
 def _entry(pins: tuple[tuple[str, str, str, str, bool], ...]) -> PlatformEntry:
@@ -608,21 +611,44 @@ def test_render_readme_directory_structure_and_skeleton_notice():
 
 
 def test_directory_structure_syncs_with_master_templates():
-    """目录结构行与母版模板同步维护（工单 beginner-gap-closure/04）：列出项
-    必须真实存在——母版目录/文件直接核对；modules/ 与 Debug/ 为生成时创建
-    （模块复制 / CCS 构建产物），跳过。改母版结构漏改 README 即红。"""
+    """目录结构行与母版模板双相同步维护（工单 beginner-gap-closure/04）：
+    - 列出项必须真实存在——母版目录/文件直接核对（modules/ 与 Debug/ 为生成时
+      创建：模块复制 / CCS 构建产物，跳过）；
+    - 母版顶层目录必须全部出现在 README（评审整改：stm32 code/ 先例——单向
+      守卫防不了「母版有而 README 漏」）；顶层关键文件按清单核对（.gitignore
+      等工具文件不入目录表，不算漏）。改母版结构漏改 README 即红。"""
     from contest_generator.readme import DIRECTORY_STRUCTURE
 
     master_root = Path(__file__).resolve().parents[1] / "library" / "masters"
+    # 顶层关键文件（须在目录结构章出现；工具/元数据文件除外）
+    key_root_files = {
+        PLATFORM_STM32: ("main.c", "pin_config.h", "isr.c", "led_instances.h"),
+        PLATFORM_MSPM0: ("main.c", "mspm0.syscfg", ".ccsproject", ".cproject"),
+    }
     for platform, rows in DIRECTORY_STRUCTURE.items():
         assert rows, f"{platform} 目录结构为空"
-        for path, _note in rows:
+        listed = {path for path, _note in rows}
+        # 方向一：列出项真实存在（modules/ / Debug/ 生成时创建，跳过）
+        for path in listed:
             name = path.rstrip("/").rsplit("/", 1)[-1]
             if name in ("modules", "Debug"):
-                continue  # 生成时创建
+                continue
             assert (master_root / platform / path).exists(), (
                 f"{platform}/{path} 不在母版模板中——目录结构章与模板不同步"
             )
+        # 方向二：母版顶层目录全覆盖（防漏列——评审先例 stm32 code/）
+        master_dirs = [
+            p.name + "/"
+            for p in (master_root / platform).iterdir()
+            if p.is_dir() and p.name not in (".git",)
+        ]
+        for d in master_dirs:
+            assert d in listed, (
+                f"{platform} 母版目录 {d} 未列入 README 目录结构"
+            )
+        # 方向三：顶层关键文件全覆盖
+        for f in key_root_files[platform]:
+            assert f in listed, f"{platform} 顶层文件 {f} 未列入 README 目录结构"
 
 
 def test_render_readme_board_name_optional():
