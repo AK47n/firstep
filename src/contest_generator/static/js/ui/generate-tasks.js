@@ -22,7 +22,8 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
-import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
+import { makeWaitClock, makeCancelButton } from "/js/ui/progress.js";  // 长任务秒表/取消（工单 ux-walkthrough-02/12/14）
+import { makeAbortable, isAbortError } from "/js/fx/abortable.js";
 import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashContainer } from "/js/fx/flash.js";
@@ -44,6 +45,12 @@ let tasks = {
 };
 
 const tasksWait = makeWaitClock("tasks-status");   // 长任务秒表（工单 ux-walkthrough-02/12）
+
+// 长任务取消（工单 ux-walkthrough-02/14）：拆解/执行/想法分析/全局商量共用
+// 一条中止器（互斥忙碌闸保证同时只跑一条）；取消 = 中止客户端等待
+const tasksAbort = makeAbortable();
+const tasksCancel = makeCancelButton("tasks-status");
+tasksCancel.onClick(() => tasksAbort.abort());
 
 // 新想法 / 问题区状态（工单 idea-fix/02）：analysis = 最近一次 /api/tasks/idea/
 // analyze 的 done 载荷（{kind, reply, new_task, fix_summary, affected_task_ids}）；
@@ -354,6 +361,8 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
   $("tasks-idea-msg").textContent = "";
   $("tasks-status").textContent = "AI 分析想法中…";
   tasksWait.start();
+  const signal = tasksAbort.begin();
+  tasksCancel.show();
   try {
     const data = await tasksRunSSE("/api/tasks/idea/analyze", { output_dir: dir, idea: text }, {
       idea_analyzing: () => { $("tasks-status").textContent = "AI 正在理解你的想法…（分钟级调用，请等待）"; },
@@ -364,7 +373,7 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
         tel.classList.remove("hidden");
         recordLLMUsage(d);
       },
-    });
+    }, signal);
     ideaState.analysis = data.analysis || null;
     ideaState.ideaText = text;
     renderIdeaResult();
@@ -379,12 +388,18 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
     }
     return true;   // 成功信号（工单 idea-suite/06：批量循环据此停止/继续）
   } catch (e) {
-    $("tasks-idea-msg").textContent = e.message;
-    $("tasks-status").textContent = "";
+    if (isAbortError(e)) {
+      $("tasks-status").textContent = "已取消：想法分析未保存，可安全重试";
+    } else {
+      $("tasks-idea-msg").textContent = e.message;
+      $("tasks-status").textContent = "";
+    }
     return false;
   } finally {
     aiActionStop();
     tasksWait.stop();
+    tasksAbort.clear();
+    tasksCancel.hide();
     ideaSetBusy(false);
   }
 }
@@ -649,19 +664,27 @@ async function tasksChatSend() {
   $("tasks-global-msg").textContent = "";
   $("tasks-status").textContent = "全局商量：AI 回应中…（分钟级调用，请等待）";
   tasksWait.start();
+  const signal = tasksAbort.begin();
+  tasksCancel.show();
   tasksGlobalRender();
   try {
-    const data = await apiPost("/api/tasks/idea/chat/send", { output_dir: dir, history });
+    const data = await apiPost("/api/tasks/idea/chat/send", { output_dir: dir, history }, { signal });
     chatState.chat = data.chat || chatState.chat;
     $("tasks-status").textContent = "";
     toast("ok", "已回应——可继续聊，或把回复转成任务/修正、采纳为全局结论");
   } catch (e) {
     chatState.draft = message;   // 失败回填：历史不动（后端原子轮次），重试免重打
-    $("tasks-status").textContent = "";
-    $("tasks-global-msg").textContent = e.message;
+    if (isAbortError(e)) {
+      $("tasks-status").textContent = "已取消：本轮商量未保存，可安全重试";
+    } else {
+      $("tasks-status").textContent = "";
+      $("tasks-global-msg").textContent = e.message;
+    }
   } finally {
     aiActionStop();
     tasksWait.stop();
+    tasksAbort.clear();
+    tasksCancel.hide();
     chatState.pending = "";
     chatState.busy = false;
     tasksGlobalRender();
@@ -888,8 +911,10 @@ function resetDraftsArea() {
   if (status) status.textContent = "";
 }
 
-/** SSE 流（reviseRunSSE 同款语义：done 载荷返回；error 终态 / 断线 throw）。 */
-async function tasksRunSSE(url, body, handlers) {
+/** SSE 流（reviseRunSSE 同款语义：done 载荷返回；error 终态 / 断线 throw）。
+ * signal（可选）= AbortController.signal——取消等待（工单 ux-walkthrough-02/14）；
+ * 中止错误原样上抛（不包 Error，isAbortError 靠名字识别）。 */
+async function tasksRunSSE(url, body, handlers, signal) {
   let finished = false;
   let done = null;
   let errorMsg = null;
@@ -897,8 +922,9 @@ async function tasksRunSSE(url, body, handlers) {
   try {
     resp = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      signal: signal || undefined,
     });
-  } catch (e) { throw new Error(e.message); }
+  } catch (e) { throw e; }
   if (!resp.body) throw new Error("服务响应无流");
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -931,6 +957,8 @@ async function tasksPlan(force) {
   aiActionStart("任务规划");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-status").textContent = "请求中…";
   tasksWait.start();
+  const signal = tasksAbort.begin();
+  tasksCancel.show();
   try {
     const body = { output_dir: dir };
     if (scorePoints && scorePoints.length) body.score_points = scorePoints;
@@ -943,7 +971,7 @@ async function tasksPlan(force) {
         tel.classList.remove("hidden");
         recordLLMUsage(d);
       },
-    });
+    }, signal);
     tasks.outputDir = dir;
     tasks.plan = data;
     taskEditOpen.clear();   // 新清单 = 新任务集：旧编辑态（按 id 记忆）全部作废
@@ -952,16 +980,22 @@ async function tasksPlan(force) {
     $("tasks-status").textContent = "拆解完成——逐卡点「做这一步」，每步编译验证";
     toast("ok", force ? "已重新拆解" : "任务清单已就绪");
   } catch (e) {
-    $("tasks-status").textContent = "";
-    $("tasks-msg").textContent = e.message;   // 后端中文（含缺题面 / 已有清单提示）
-    // 兜底：报错引导「重新拆解」时按钮必须可见（计划外路径——目录加载自动
-    // plan-read 失败 / 漏发事件——也不让用户死锁在一条必错的提示前）
-    if (e.message && e.message.includes("已有任务清单")) {
-      $("btn-tasks-replan").classList.remove("hidden");
+    if (isAbortError(e)) {
+      $("tasks-status").textContent = "已取消等待：任务拆解未回填，原清单未动，可稍后重试";
+    } else {
+      $("tasks-status").textContent = "";
+      $("tasks-msg").textContent = e.message;   // 后端中文（含缺题面 / 已有清单提示）
+      // 兜底：报错引导「重新拆解」时按钮必须可见（计划外路径——目录加载自动
+      // plan-read 失败 / 漏发事件——也不让用户死锁在一条必错的提示前）
+      if (e.message && e.message.includes("已有任务清单")) {
+        $("btn-tasks-replan").classList.remove("hidden");
+      }
     }
   } finally {
     aiActionStop();
     tasksWait.stop();
+    tasksAbort.clear();
+    tasksCancel.hide();
     tasksSetBusy(false);
   }
 }
@@ -1016,6 +1050,8 @@ async function tasksExecute(taskId, feedback) {
   };
   setPhase("已开始执行：AI 实现本任务中…");
   tasksWait.start();
+  const signal = tasksAbort.begin();
+  tasksCancel.show();
   try {
     const body = { output_dir: dir, task_id: taskId, note: note };
     if (feedback) body.feedback = feedback;
@@ -1031,7 +1067,7 @@ async function tasksExecute(taskId, feedback) {
         tel.classList.remove("hidden");
         recordLLMUsage(d);
       },
-    });
+    }, signal);
     // 状态回填：done 载荷的 task 是最新形状，替换清单里对应任务再重渲染
     if (tasks.plan && tasks.plan.tasks) {
       tasks.plan.tasks = tasks.plan.tasks.map((t) => t.id === taskId ? data.task : t);
@@ -1049,14 +1085,20 @@ async function tasksExecute(taskId, feedback) {
         ? "已按反馈修复——请再次上板验证，或确认通过进入下一卡"
         : "任务完成——继续下一卡或手动调整状态");
   } catch (e) {
-    $("tasks-status").textContent = "";
-    $("tasks-msg").textContent = e.message;
-    // 工单 05：失败路径后端会恢复 previous 状态落盘——重读磁盘刷新卡（乐观 doing
-    // 与磁盘不一致会误导用户）
-    await tasksReload();
+    if (isAbortError(e)) {
+      setPhase("已取消等待：任务在后台继续执行（工程状态以后端为准），完成后刷新页面可见");
+    } else {
+      $("tasks-status").textContent = "";
+      $("tasks-msg").textContent = e.message;
+      // 工单 05：失败路径后端会恢复 previous 状态落盘——重读磁盘刷新卡（乐观 doing
+      // 与磁盘不一致会误导用户）
+      await tasksReload();
+    }
   } finally {
     aiActionStop();
     tasksWait.stop();
+    tasksAbort.clear();
+    tasksCancel.hide();
     tasksSetBusy(false);
   }
 }

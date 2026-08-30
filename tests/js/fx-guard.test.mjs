@@ -28,6 +28,9 @@ const DOMAINS = {
   "wait.js": {
     waitLabel: "fn", WAIT_GENERIC_LINE: "string",
   },
+  "abortable.js": {
+    makeAbortable: "fn", isAbortError: "fn",
+  },
   "env.js": {
     ENV_BADGE_GLYPH: "object",
     envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",

@@ -18,7 +18,8 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
-import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
+import { makeWaitClock, makeCancelButton } from "/js/ui/progress.js";  // 长任务秒表/取消（工单 ux-walkthrough-02/12/14）
+import { makeAbortable, isAbortError } from "/js/fx/abortable.js";
 import { paramListHTML, paramResultHTML } from "/js/fx/params.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { reviseGetDir } from "./generate-revise.js";
@@ -35,6 +36,11 @@ let paramsState = {
 };
 
 const paramsWait = makeWaitClock("params-status");   // 长任务秒表（工单 ux-walkthrough-02/12）
+
+// 长任务取消（工单 ux-walkthrough-02/14）：扫描 / 应用共用一条中止器（busy 闸防并发）
+const paramsAbort = makeAbortable();
+const paramsCancel = makeCancelButton("params-status");
+paramsCancel.onClick(() => paramsAbort.abort());
 
 function paramsDir() {
   return reviseGetDir();
@@ -157,6 +163,8 @@ async function paramsScan() {
   paramsSetBusy(true);
   $("params-msg").textContent = "";
   paramsWait.start();
+  const signal = paramsAbort.begin();
+  paramsCancel.show();
   paramsRenderResult(null);
   try {
     const data = await tasksRunSSE("/api/tasks/params/scan", { output_dir: dir }, {
@@ -169,17 +177,23 @@ async function paramsScan() {
         }
         recordLLMUsage(d);
       },
-    });
+    }, signal);
     paramsState.plan = data.params || [];
     paramsState.scanned = true; // 识别过（空表也算——scan 无参数不落盘）
     paramsRender();
     paramsStatus("识别完成——改值 = 只替换那一个常量，点「应用」并验证");
     toast("ok", "参数识别完成");
   } catch (e) {
-    $("params-msg").textContent = e.message;
-    paramsStatus("");
+    if (isAbortError(e)) {
+      paramsStatus("已取消：本次识别未保存，可安全重试");
+    } else {
+      $("params-msg").textContent = e.message;
+      paramsStatus("");
+    }
   } finally {
     paramsWait.stop();
+    paramsAbort.clear();
+    paramsCancel.hide();
     paramsSetBusy(false);
   }
 }
@@ -200,6 +214,8 @@ async function paramsApply(name) {
   paramsSetBusy(true);
   $("params-msg").textContent = "";
   paramsWait.start();
+  const signal = paramsAbort.begin();
+  paramsCancel.show();
   try {
     const data = await tasksRunSSE("/api/tasks/params/apply", {
       output_dir: dir, name: name, value: value,
@@ -216,7 +232,7 @@ async function paramsApply(name) {
         }
         recordLLMUsage(d);
       },
-    });
+    }, signal);
     paramsRenderResult(data);
     await paramsReload();   // 刷 new old_value + valid 重验（其余参数可能受影响）
     if (data.status === "failed") {
@@ -230,10 +246,16 @@ async function paramsApply(name) {
       toast("ok", "参数已修改并通过编译验证");
     }
   } catch (e) {
-    $("params-msg").textContent = e.message;
-    paramsStatus("");
+    if (isAbortError(e)) {
+      paramsStatus("已取消等待：参数应用在后台可能继续（工程状态以后端为准），可稍后刷新查看");
+    } else {
+      $("params-msg").textContent = e.message;
+      paramsStatus("");
+    }
   } finally {
     paramsWait.stop();
+    paramsAbort.clear();
+    paramsCancel.hide();
     paramsSetBusy(false);
   }
 }

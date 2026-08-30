@@ -26,6 +26,9 @@ INTERNAL_ERROR_HINT = (
 PHASE_SUMMARY = "summary"  # 阶段 1：逐文件读全文出摘要
 PHASE_DECIDE = "decide"  # 阶段 2：基于摘要判定
 
+# 提炼与推荐端点共用 start 事件（字段子集按端点取：提炼 = judgment_count /
+# summary_batch_count / decide_batch_count；推荐（工单 ux-walkthrough-02/13）=
+# stage 中文阶段标签——首个分钟级 LLM 调用前先送一条，前端等待期即有内容）。
 EVENT_START = "start"
 EVENT_BATCH_START = "batch_start"
 EVENT_BATCH_DONE = "batch_done"
@@ -35,10 +38,7 @@ EVENT_PHASE_DONE = "phase_done"
 # 模块推荐收敛循环（工单 10）的事件类型：round = 一轮收敛自检开始（round =
 # 轮次、round_total = 上限）；converged = 功能需求层两轮一致（round = 收敛
 # 轮次）。补问（questions）是终端事件，由 sse 运行器发射（与 done / error 同款）。
-# 推荐 / 提炼端点事件（工单 10 推荐收敛循环）：start = 首个进度事件
-# （工单 ux-walkthrough-02/13）——首个分钟级 LLM 调用前先送一条带中文阶段
-# 标签的进度（stage 字段），前端本轮等待期间即有内容可显示。
-EVENT_START = "start"
+# 推荐端点的首个进度事件复用 EVENT_START（见上；stage 字段 = 中文阶段标签）。
 EVENT_ROUND = "round"
 EVENT_CONVERGED = "converged"
 
@@ -148,14 +148,16 @@ EVENT_QUESTION = "question"
 class ProgressEvent:
     """提炼进度事件（事件契约的代码形态，唯一出处）。
 
-    每个事件类型只用字段子集：start 用 judgment_count / summary_batch_count /
-    decide_batch_count（均由入口先算定）；batch_start 用 phase / batch_index
+    每个事件类型只用字段子集：start（提炼端点）用 judgment_count /
+    summary_batch_count / decide_batch_count（均由入口先算定）；start（推荐
+    端点）用 stage（工单 ux-walkthrough-02/13：首个进度事件的中文阶段标签）；
+    batch_start 用 phase / batch_index
     （批号，1 起）/ batch_count / paths（阶段 1 = 待判文件路径、阶段 2 = 摘要
     路径）；batch_done 用 phase / batch_index / processed_count（本阶段累计已
     处理文件数——前端直接显示"已读 X/115"，无需累加状态）；retry 用 phase /
     batch_index / retry_round（补问轮次，1 起——首次补问 = 1）/ missing_count
     （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）；
-    推荐收敛循环（工单 10）的 round 用 round / round_total、converged 用 round；start 用 stage（工单 ux-walkthrough-02/13：首个进度事件的中文阶段标签）；
+    推荐收敛循环（工单 10）的 round 用 round / round_total、converged 用 round；
     编译错误修复（工单 compile-error-fix/01）的 parse_done 用 error_count /
     file_count、apply_result 用 file / line / status / reason；LLM telemetry 用
     llm_* 聚合字段与 llm_calls 明细（均为脱敏数值 / 枚举 / id，不含内容）。
