@@ -971,6 +971,15 @@
     border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px;
     margin-right: 10px; cursor: pointer; }
   input[type=file]::file-selector-button:hover { border-color: var(--accent); color: var(--accent); }
+  /* 页面滚动条槽位恒定（工单 scrollbar-flicker/01）：资料库等 tab 异步加载前
+     内容不足一屏 → 无页面滚动条；数据到达后超出视口 → 滚动条（最右滑块）突然
+     出现，占 10px 宽把整页内容挤窄/平移（居中布局左右各位移 5px），产生切换
+     栏目时的闪烁。html { overflow-y: scroll } 让滚动条轨道常驻（此页滚动条
+     10px，轨道透明、内容不足时无拇指），内容宽度恒定，滑块出现/消失不再推动
+     布局。不用 scrollbar-gutter: stable——Chrome 在根元素（overflow 仍为
+     visible）不预留槽位，实测无效；内部滚动条不受影响（.code-wrap textarea
+     已有同手法先例）。 */
+  html { overflow-y: scroll; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px;
@@ -2020,7 +2029,7 @@
       <p class="card-purpose">让 AI 先读一遍题面，把关键信息、评分点和要提醒你的地方整理出来。</p>
       <div class="row">
         <button id="btn-topic-preread" class="primary" data-ico="doc">预读题面</button>
-        <span class="muted">题面你会自己读，AI 只提炼「题面已经锁死了什么」——限定 / 约束 / 指定的硬事实（如限定 TI MSPM0 系列、指定器件、接口 / 尺寸 / 电源 / 时长），并标明要点将在哪一步用到（选平台 / 选模块 / 配引脚 / 写骨架…），走到那一步会再提醒你。</span>
+        <span class="muted">题面你会自己读，AI 只提炼「题面已经锁死了什么」——限定 / 约束 / 指定的硬事实（如限定 TI MSPM0 系列、指定器件、接口 / 尺寸 / 电源 / 时长），并标明要点将在哪一步用到（选平台 / 选模块 / 配引脚 / 写骨架…），走到那一步会再提醒你。<br>快捷键：在题面输入框按 Ctrl+Enter 直接预读。</span>
       </div>
       <div id="topic-preread-box" class="topic-preread hidden" style="margin-top:8px"></div>
       <div id="topic-preread-msg" class="error"></div>
@@ -2277,7 +2286,7 @@
       <div id="fix-llm-telemetry" class="llm-telemetry hidden"></div>
       <div id="fix-errors-msg" class="error"></div>
       <div id="fix-results" style="margin-top:10px"></div>
-      <div class="card-group">
+      <div class="card-group hidden" id="fix-log-group">
         <div class="card-group-title">编译输出（自动采集）</div>
         <textarea id="fix-center-log" rows="10" readonly placeholder="编译输出原样展示（含 warnings 引用行）…"></textarea>
       </div>
@@ -2867,7 +2876,13 @@
         <div style="flex:1"><label>base_url</label><input type="text" id="set-base-url" placeholder="https://api.deepseek.com"></div>
         <div style="flex:1"><label>模型</label><input type="text" id="set-model" placeholder="deepseek-v4-flash"></div>
       </div>
-      <div style="flex:1"><label>API key（留空 / 掩码保持不变）</label><input type="text" id="set-api-key" placeholder="sk-…" autocomplete="off"></div>
+      <div style="flex:1">
+        <label>API key（留空 / 掩码保持不变）</label>
+        <div class="row" style="margin-top:4px">
+          <input type="password" id="set-api-key" placeholder="sk-…" autocomplete="off" style="flex:1">
+          <button type="button" id="btn-eye-api" class="btn-mini" style="flex:none" aria-pressed="false">显示</button>
+        </div>
+      </div>
       <div class="settings-section settings-collapse" data-collapse-id="ai-billing">
         <button type="button" class="settings-collapse-head">计费<span class="collapse-ico" aria-hidden="true">▾</span></button>
       <div class="row" style="margin-top:10px;align-items:center">
@@ -2973,7 +2988,13 @@
         <div style="flex:1"><label>视觉 base_url（跟随上方选择自动填，可手动改）</label><input type="text" id="set-vision-base-url" placeholder="https://api.deepseek.com"></div>
         <div style="flex:1"><label>视觉模型（跟随上方选择自动填，可手动改）</label><input type="text" id="set-vision-model" placeholder="deepseek-v4-flash-vision-exp"></div>
       </div>
-      <div style="flex:1"><label>视觉 API key（DeepSeek 模式留空 = 复用主 key；智谱模式填智谱 key）</label><input type="text" id="set-vision-api-key" placeholder="" autocomplete="off"></div>
+      <div style="flex:1">
+        <label>视觉 API key（DeepSeek 模式留空 = 复用主 key；智谱模式填智谱 key）</label>
+        <div class="row" style="margin-top:4px">
+          <input type="password" id="set-vision-api-key" placeholder="" autocomplete="off" style="flex:1">
+          <button type="button" id="btn-eye-vision" class="btn-mini" style="flex:none" aria-pressed="false">显示</button>
+        </div>
+      </div>
       <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
         <input type="checkbox" id="set-vision-detail-qa" style="margin:0">
         <label for="set-vision-detail-qa" style="margin:0;font-size:12px;color:var(--muted)">问答式精注记（默认开：每张图第一轮描述后追问一轮细节，型号/尺寸标注/引脚号更全；关闭 = 省一半视觉调用）</label>
@@ -3466,6 +3487,9 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
   initGlossary();  // 新手词表（newcomer-glossary/01）：纯静态渲染，DOM 已就绪
   initGuide();  // 新手指引子页签切换（beginner-guide/01）：DOM 已就绪，纯本地交互
   initHandoffNote();  // 交接提示词说明（newcomer-glossary/03）：按钮绑定依赖 DOM 已就绪
+  // 首次上手（工单 ux-polish/01）：赛题原文为空（草稿未回填）时自动聚焦，
+  // 打开页面即可直接粘贴赛题正文，少一次点击
+  if (!$("problem").value.trim()) $("problem").focus();
 })();
 
 initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav current 已就绪（const TDZ）

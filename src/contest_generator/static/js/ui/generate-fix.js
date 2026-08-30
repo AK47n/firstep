@@ -20,7 +20,7 @@
 // 本簇，避免 ui→ui 环；本簇单向 import A）。
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
-import { fmtSeconds } from "/js/fx/generate.js";
+import { fmtSeconds, fixLogGroupHidden } from "/js/fx/generate.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
@@ -54,6 +54,13 @@ function compileBanner(kind, text) {
   b.className = kind;   // 重置状态类（同时移除初始 hidden）
   b.textContent = text;
   if (kind === "success") { markStepDone(10); toast("ok", "编译通过"); }  // 修复中心闭环
+}
+
+/** 编译输出（自动采集）写入 + 分组显隐（工单 ux-polish/01）：无输出时整组隐藏，
+ * 避免 rows=10 的空 readonly 文本框常驻占位；有输出（含 warnings）即露出。 */
+function setFixCenterLog(text) {
+  $("fix-center-log").value = text || "";
+  $("fix-log-group").classList.toggle("hidden", fixLogGroupHidden(text));
 }
 
 function renderCompileBanner(done) {   // compile done 载荷 → 横幅终态文案
@@ -383,7 +390,7 @@ async function fixRounds(errorText, lastSummary, previousDone) {
     $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
       + " 轮：重编译验证中…";
     const compile = await runCompileOnce(outputDir);
-    $("fix-center-log").value = compile.error_text || "";
+    setFixCenterLog(compile.error_text);
     lastSummary = compile.summary || null;
     // 轮次条追加耗时（展示层工单 compile-experience-ui/01；compile 必有 duration）
     $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
@@ -438,7 +445,7 @@ async function startFixCenter() {
   $("fix-status").textContent = "";
   $("fix-results").innerHTML = "";
   $("fix-center-round").textContent = "";
-  $("fix-center-log").value = "";
+  setFixCenterLog("");
   clearFixLLMTelemetry();
   $("btn-fix-rollback").classList.add("hidden");
   $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
@@ -448,7 +455,7 @@ async function startFixCenter() {
   try {
     // 第 0 步：首次全量编译（生成后自动触发 / 手动"一键编译修复"同一入口）
     const initial = await runCompileOnce(outputDir);
-    $("fix-center-log").value = initial.error_text || "";
+    setFixCenterLog(initial.error_text);
     if (initial.timed_out) {
       $("fix-status").textContent = "编译超时（工具链 180s 未返回），已停止循环——"
         + "可在设置页检查工具链路径后重试";

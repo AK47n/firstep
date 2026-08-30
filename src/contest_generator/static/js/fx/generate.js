@@ -133,6 +133,10 @@ export function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
   return Number.isFinite(n) && n >= 0 ? n.toFixed(1) : "0.0";
 }
 
+export function fixLogGroupHidden(text) {   // 修复中心「编译输出」分组显隐：无输出即隐藏（避免空文本框占位）
+  return !String(text ?? "").trim();
+}
+
 // frameworkNoteHTML(data)：题型框架注入提示（工单 topic-framework/04）。
 // /api/skeleton 返回 topic_framework {injected, topic_type?, source?}；
 // injected=false / 数据缺失 → ""（不渲染提示行）。文案带题型与来源条目。
@@ -143,5 +147,5 @@ export function frameworkNoteHTML(data) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, fmtSeconds, frameworkNoteHTML });
+  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, fmtSeconds, frameworkNoteHTML, fixLogGroupHidden });
 }

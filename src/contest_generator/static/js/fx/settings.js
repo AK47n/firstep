@@ -53,11 +53,18 @@ export function applySettingsCollapseState(elm, collapsed) {
   if (btn) syncCollapseBtn(btn, collapsed);
 }
 
+// API key 显隐切换状态（工单 ux-polish/01）：当前为密码态 → 点击后变明文，
+// 按钮文案改「隐藏」；反之亦然。纯函数供胶水层与测试共用。
+export function secretEyeState(type) {
+  const show = type === "password";
+  return { nextType: show ? "text" : "password", label: show ? "隐藏" : "显示" };
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     SETTINGS_COLLAPSE_KEY, SETTINGS_DEFAULT_COLLAPSED,
     parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed,
     settingsMasterLabel, sectionCollapseLabel, settingsSectionHead,
-    applySettingsCollapseState,
+    applySettingsCollapseState, secretEyeState,
   });
 }
