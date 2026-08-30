@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=59bc1673b8d362c3b214cedaabdee57b9a6f2eac -->
+<!-- changelog-auto: last-commit=0164567f7c751313c2be8b4e1b7c196293d5fb0c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 12:01 工单 03 标记 resolved（含双轴评审整改记录）；工单 04 标记 claimed
 - 12:06 LLM 网络类错误人话化：按类别重写为中文建议动作，本地模型与 413 专属提示保留（工单 05）
 - 12:06 工单 04 评审整改：补 stm32 code/isr.c/led_instances.h 与 mspm0 .cproject 行，守卫双向化，_pin_data_rows 后边界截断
+- 12:33 工单 05 评审整改 + 06-B：LLM 自检走映射层人话化、修复连句号并补定位信号细分；500 兜底加工具内部问题反馈引导（errors/sse 同源常量）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
