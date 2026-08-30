@@ -48,8 +48,12 @@ from contest_generator.k230_render import (
     render_no_detect_frame,
     render_python_artifact,
 )
-from contest_generator.manifest import ModuleManifest
+from contest_generator.manifest import ManifestError, ModuleManifest
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
+from contest_generator.selection import (
+    DependencyCycleError,
+    resolve_selection,
+)
 from contest_generator.treewalk import iter_project_files
 from tests.fakes import (
     MAIN_SKELETON,
@@ -1033,3 +1037,269 @@ def test_generate_project_k230_rect_template_selected(tmp_path):
     assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
         ("k230", "main.py", "rect")
     ]
+
+
+# ---------------------------------------------------------------------------
+# k230-digit-vision/02：模板级依赖覆盖（探针）
+# ---------------------------------------------------------------------------
+
+DEP_INHERIT_TEMPLATE = "# 继承模块级依赖探针模板\n"
+DEP_OVERRIDE_TEMPLATE = "# 覆盖模板依赖探针模板\n"
+
+
+def _add_deps_probe_module(library: Path) -> None:
+    """模板级依赖覆盖探针：a_deps 模块级依赖 dep_base；t_inherit 模板不声明
+    dependencies（继承模块级）；t_override 模板声明 dependencies=[dep_alt]
+    （覆盖）。dep_base / dep_alt 为带真实文件的依赖模块（main.c 引用其 API，
+    生成层断言产物含覆盖后的模块文件）。"""
+    for slug, api in (("dep_base", "dep_base_use"), ("dep_alt", "dep_alt_use")):
+        _add_module(
+            library,
+            {
+                "slug": slug,
+                "description": f"{slug}（模板级依赖探针，测试内构造）",
+                "dependencies": [],
+                "platforms": {
+                    "stm32": {
+                        "files": [f"code/{slug}.c", f"code/{slug}.h"],
+                        "verified": True,
+                    },
+                    "mspm0": {"files": [], "verified": True},
+                },
+            },
+            {
+                f"code/{slug}.c": f'#include "{slug}.h"\nvoid {api}(void) {{}}\n',
+                f"code/{slug}.h": f"#pragma once\nvoid {api}(void);\n",
+            },
+        )
+    _add_module(
+        library,
+        {
+            "slug": "a_deps",
+            "description": "模板级依赖覆盖探针（测试内构造，工单 02）",
+            "dependencies": ["dep_base"],
+            "python_artifact": {
+                "default": "t_inherit",
+                "templates": [
+                    {
+                        "id": "t_inherit",
+                        "name": "继承依赖",
+                        "description": "不声明 dependencies = 继承模块级",
+                        "template": "code/dep_inherit.py",
+                        "output": "main.py",
+                    },
+                    {
+                        "id": "t_override",
+                        "name": "覆盖依赖",
+                        "description": "声明 dependencies = 覆盖模块级",
+                        "template": "code/dep_override.py",
+                        "output": "main.py",
+                        "dependencies": ["dep_alt"],
+                    },
+                ],
+            },
+            "platforms": {
+                "stm32": {"files": [], "verified": True},
+                "mspm0": {"files": [], "verified": True},
+            },
+        },
+        {
+            "code/dep_inherit.py": DEP_INHERIT_TEMPLATE,
+            "code/dep_override.py": DEP_OVERRIDE_TEMPLATE,
+        },
+    )
+
+
+def _deps_probe_library(tmp_path: Path) -> Path:
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_deps_probe_module(library)
+    return library
+
+
+def test_template_dependencies_parse_and_serialize(tmp_path):
+    """模板 dependencies 解析：缺省 = None（序列化不落键，旧形状逐字节不变）；
+    声明 = 元组；to_dict 往返键集合稳定。"""
+    library = _deps_probe_library(tmp_path)
+    manifest = ModuleManifest.load(library / "a_deps")
+    templates = {t.id: t for t in manifest.python_artifact.templates}
+    assert templates["t_inherit"].dependencies is None
+    assert templates["t_override"].dependencies == ("dep_alt",)
+    # 序列化：None 不落键 / 覆盖落键（默认模板 t_inherit 无键）
+    data = manifest.python_artifact.to_dict()
+    by_id = {item["id"]: item for item in data["templates"]}
+    assert "dependencies" not in by_id["t_inherit"]
+    assert by_id["t_override"]["dependencies"] == ["dep_alt"]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["dep_alt", 1, [], ["dep_alt", ""], [1]],
+)
+def test_template_dependencies_invalid_rejected(tmp_path, bad):
+    """模板 dependencies 类型非法（非字符串数组 / 空数组 / 含空串）→
+    ManifestError，不静默容忍——坏值会静默错位依赖展开，[] 会静默清空
+    模块依赖（语义黑洞）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_module(
+        library,
+        {
+            "slug": "bad_deps",
+            "description": "坏依赖模板（测试内构造）",
+            "dependencies": [],
+            "python_artifact": {
+                "default": "t",
+                "templates": [
+                    {
+                        "id": "t",
+                        "name": "坏",
+                        "description": "dependencies 非法",
+                        "template": "code/t.py",
+                        "output": "main.py",
+                        "dependencies": bad,
+                    }
+                ],
+            },
+            "platforms": {"stm32": {"files": [], "verified": True}},
+        },
+        {"code/t.py": "# bad\n"},
+    )
+    with pytest.raises(ManifestError, match="dependencies"):
+        ModuleManifest.load(library / "bad_deps")
+
+
+def test_resolve_selection_template_deps_override(tmp_path):
+    """选中不同模板 → 依赖展开按覆盖走：t_override → [dep_alt, a_deps]；
+    t_inherit / 缺省 → [dep_base, a_deps]（模块级保持不变）。"""
+    library = _deps_probe_library(tmp_path)
+
+    overridden = resolve_selection(
+        library, PLATFORM_STM32, ["a_deps"],
+        python_templates={"a_deps": "t_override"},
+    )
+    assert [m.slug for m in overridden.manifests] == ["dep_alt", "a_deps"]
+
+    inherited = resolve_selection(
+        library, PLATFORM_STM32, ["a_deps"],
+        python_templates={"a_deps": "t_inherit"},
+    )
+    assert [m.slug for m in inherited.manifests] == ["dep_base", "a_deps"]
+
+    default = resolve_selection(library, PLATFORM_STM32, ["a_deps"])
+    assert [m.slug for m in default.manifests] == ["dep_base", "a_deps"]
+
+
+def test_list_modules_rejects_phantom_template_dep(tmp_path):
+    """库级校验补漏（工单 02）：模板 dependencies 里悬空 slug 在库加载时
+    大声失败——生成期只校验选中模板，未选中模板的悬空依赖在加载层拦截
+    （与 collect_exclusive_groups 同风格的库错误）。"""
+    from contest_generator.library import LibraryError, list_modules
+
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_module(
+        library,
+        {
+            "slug": "a_bad",
+            "description": "未知依赖模板（测试内构造）",
+            "dependencies": [],
+            "python_artifact": {
+                "default": "t",
+                "templates": [
+                    {
+                        "id": "t",
+                        "name": "坏",
+                        "description": "依赖指向库外",
+                        "template": "code/t.py",
+                        "output": "main.py",
+                        "dependencies": ["ghost"],
+                    }
+                ],
+            },
+            "platforms": {"stm32": {"files": [], "verified": True}},
+        },
+        {"code/t.py": "# bad\n"},
+    )
+    with pytest.raises(LibraryError, match="ghost"):
+        list_modules(library)
+
+
+def test_resolve_selection_template_deps_cycle(tmp_path):
+    """模板覆盖依赖成环 → DependencyCycleError（覆盖表与模块级同一环检测）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    _add_module(
+        library,
+        {
+            "slug": "a_cycle",
+            "description": "成环模板（测试内构造）",
+            "dependencies": [],
+            "python_artifact": {
+                "default": "t",
+                "templates": [
+                    {
+                        "id": "t",
+                        "name": "坏",
+                        "description": "依赖指向自身",
+                        "template": "code/t.py",
+                        "output": "main.py",
+                        "dependencies": ["a_cycle"],
+                    }
+                ],
+            },
+            "platforms": {"stm32": {"files": [], "verified": True}},
+        },
+        {"code/t.py": "# bad\n"},
+    )
+    with pytest.raises(DependencyCycleError, match="成环"):
+        resolve_selection(
+            library, PLATFORM_STM32, ["a_cycle"],
+            python_templates={"a_cycle": "t"},
+        )
+
+
+def test_generate_project_template_deps_overrides_expansion(tmp_path):
+    """流程接缝：generate_project 的 python_templates 依赖覆盖进生成产物——
+    选中 t_override → 产物含 dep_alt 模块文件、无 dep_base（与 webapp 同缝）。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    library = _deps_probe_library(tmp_path)
+
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["a_deps"],
+        main_c_content=(
+            '#include "dep_alt.h"\n'
+            "int main(void) { dep_alt_use(); while (1); }\n"
+        ),
+        output_dir=tmp_path / "out",
+        module_library_dir=library,
+        masters_dir=masters_dir,
+        python_templates={"a_deps": "t_override"},
+    )
+    # 覆盖生效：产物含 dep_alt 模块文件、无 dep_base
+    assert (summary.output_dir / "modules" / "dep_alt" / "code" / "dep_alt.c").is_file()
+    assert (summary.output_dir / "modules" / "dep_alt" / "code" / "dep_alt.h").is_file()
+    assert not (summary.output_dir / "modules" / "dep_base").exists()
+    assert (summary.output_dir / "main.py").is_file()
+    assert [(a.slug, a.output, a.template_id) for a in summary.python_artifacts] == [
+        ("a_deps", "main.py", "t_override")
+    ]
+
+
+def test_generate_project_rejects_non_mapping_templates(tmp_path):
+    """生成层形状校验：python_templates 非 JSON 对象（列表）→
+    PythonArtifactError 400 中文——resolve_selection 防御不崩（无覆盖展开），
+    校验归 resolve_python_template_choices（不回归成 500 AttributeError）。"""
+    masters_dir = tmp_path / "masters"
+    make_fake_master_project(masters_dir / PLATFORM_STM32)
+    library = _deps_probe_library(tmp_path)
+
+    with pytest.raises(PythonArtifactError, match="必须是 JSON 对象"):
+        generate_project(
+            platform=PLATFORM_STM32,
+            slugs=["a_deps"],
+            main_c_content="int main(void) { while (1); }\n",
+            output_dir=tmp_path / "out",
+            module_library_dir=library,
+            masters_dir=masters_dir,
+            python_templates=["bad"],  # type: ignore[arg-type]
+        )
+    assert not (tmp_path / "out").exists()  # 校验失败在创建输出目录之前

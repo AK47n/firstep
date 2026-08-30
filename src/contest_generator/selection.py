@@ -131,6 +131,7 @@ def resolve_selection(
     platform: str,
     slugs: Sequence[str],
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
+    python_templates: Mapping[str, str] | None = None,
 ) -> ResolvedSelection:
     """加载模块库 → 展开依赖 → 平台警告 → 透传实例清单，一步到位。
 
@@ -138,9 +139,33 @@ def resolve_selection(
     解析成什么"只有一个答案来源，单独跑 expand 与生成前的结果必然一致。
     instances 缺省 = 空（单默认实例，旧行为）；传入则保序归一为元组透传，
     展开 / 默认脚分配（工单 02）在此之后消费。
+
+    python_templates（工单 k230-digit-vision/02）= 模板选择 {slug: template_id}；
+    带模板级 dependencies 的所选模板 → 依赖展开时覆盖该模块的模块级依赖
+    （模板未声明覆盖 = 继承模块级，缺省 None = 旧行为逐字节不变）。非
+    Mapping（列表/字符串等坏形状）视为无覆盖——形状校验归生成层
+    resolve_python_template_choices（PythonArtifactError 400 中文），展开 /
+    骨架端点的预览不受坏形状干扰；覆盖表里的未知依赖 slug / 成环在此自然
+    抛 UnknownModuleError / DependencyCycleError（与模块级依赖同一报错域）。
     """
+    if python_templates is not None and not isinstance(python_templates, Mapping):
+        python_templates = None  # 防御：坏形状不崩溃（校验归生成层）
     by_slug = {m.slug: m for m in list_modules(library_dir)}
-    manifests = resolve_dependencies(slugs, by_slug)
+    deps_override: dict[str, tuple[str, ...]] | None = None
+    if python_templates:
+        deps_override = {}
+        for slug, template_id in python_templates.items():
+            manifest = by_slug.get(slug)
+            if manifest is None or manifest.python_artifact is None:
+                continue  # 未知 slug / 未声明模板：语义校验归模板选择校验层
+            chosen = next(
+                (t for t in manifest.python_artifact.templates if t.id == template_id),
+                None,
+            )
+            if chosen is None or chosen.dependencies is None:
+                continue  # 未知模板 id 归校验层报错；未声明覆盖 = 继承模块级
+            deps_override[slug] = chosen.dependencies
+    manifests = resolve_dependencies(slugs, by_slug, deps_override)
     warnings = check_platform_warnings([m.slug for m in manifests], platform, by_slug)
     resolved_instances = {
         slug: tuple(insts) for slug, insts in (instances or {}).items()
@@ -153,13 +178,19 @@ def resolve_selection(
 
 
 def resolve_dependencies(
-    slugs: Sequence[str], by_slug: Mapping[str, ModuleManifest]
+    slugs: Sequence[str],
+    by_slug: Mapping[str, ModuleManifest],
+    deps_override: Mapping[str, Sequence[str]] | None = None,
 ) -> tuple[ModuleManifest, ...]:
     """按 manifest 递归展开依赖，返回去重后的完整 manifest 集。
 
     结果顺序：依赖先于使用者（DFS 后序），同层按出现顺序；相互独立的
     选择保持传入顺序。成环（含自依赖）抛 DependencyCycleError，库中
     不存在的 slug（选择或依赖）抛 UnknownModuleError。
+
+    deps_override（工单 k230-digit-vision/02）= 模板级依赖覆盖表
+    {slug: 依赖序列}——展开该 slug 时替换 manifest.dependencies（只对有
+    覆盖模板的 slug 生效）；缺省 None = 旧行为。
     """
     result: list[ModuleManifest] = []
     done: set[str] = set()
@@ -172,7 +203,8 @@ def resolve_dependencies(
             raise DependencyCycleError("依赖成环：" + " -> ".join([*visiting, slug]))
         visiting.append(slug)
         manifest = _get_manifest(by_slug, slug)
-        for dep in manifest.dependencies:
+        deps = deps_override.get(slug) if deps_override else None
+        for dep in deps if deps is not None else manifest.dependencies:
             visit(dep)
         visiting.pop()
         done.add(slug)

@@ -1477,7 +1477,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
-        resolved = resolve_selection(_library_dir(context), platform, slugs)
+        # 模板级依赖覆盖（工单 k230-digit-vision/02）：与生成同一答案来源
+        # （resolve_selection 消费；非 dict 形状防御在 resolve_selection——
+        # 展开是预览，形状校验归生成层 resolve_python_template_choices）。
+        python_templates = payload.get("python_templates")
+        resolved = resolve_selection(
+            _library_dir(context), platform, slugs,
+            python_templates=python_templates,
+        )
         modules = [m.to_dict() for m in resolved.manifests]
         multi_slugs = [
             manifest.slug
@@ -1534,6 +1541,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             payload.get("instances"),
             known_slugs=_instance_known_slugs(_library_dir(context), slugs),
         )
+        # 模板级依赖覆盖（工单 k230-digit-vision/02）：与展开 / 生成同一答案
+        # 来源——带覆盖模板的所选模块按覆盖展开依赖（骨架 prompt 的模块清单
+        # 与最终生成一致）；非 dict 形状防御在 resolve_selection（预览宽容，
+        # 形状校验归生成层 resolve_python_template_choices）。
+        python_templates = payload.get("python_templates")
         # main_mode 非法值 / 冒烟守卫的 400 归 run_skeleton（SkeletonError → 400
         # 中文），路由只做缺省回填（未提供 = skeleton）
         main_mode = (
@@ -1552,7 +1564,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 slugs=slugs,
             )
             resolved = resolve_selection(
-                _library_dir(context), platform, slugs, instances=instances
+                _library_dir(context), platform, slugs, instances=instances,
+                python_templates=python_templates,
             )
             # 题型框架（工单 topic-framework/04）：与参考全文同域装配（域函数
             # build_topic_framework_info——锚定 ∪ 手动、平台匹配、首个 topic_type
