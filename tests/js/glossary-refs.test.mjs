@@ -1,5 +1,5 @@
 // 结构护栏（工单 newcomer-glossary/01）：静态断言新手词表核心件存在
-// ——index.html 槽位 #glossary-card（位于第 12 步卡之后、生成页末尾）、
+// ——index.html 槽位 #glossary-card（位于左侧 .gen-sidebar 内、step-nav 之后）、
 // ui/glossary.js 导出 initGlossary、index.html 成对 import + 调用。
 // 防删防改名（对齐 ai-action-refs / step-done-refs 先例）。
 import { readFileSync } from "node:fs";
@@ -19,12 +19,15 @@ test("index.html 含 #glossary-card 容器（生成页底部槽位）", () => {
   assert.match(html, /id="glossary-card" class="glossary-card"/);
 });
 
-test("词表卡位置：第 12 步卡（handoff-text）之后、生成页 section 结束前", () => {
-  const afterHandoff = html.indexOf('id="handoff-text"');
+test("词表卡位置：左侧 .gen-sidebar 内、step-nav 之后（生成页内）", () => {
+  const afterNav = html.indexOf('id="step-nav"');
   const slotAt = html.indexOf('id="glossary-card"');
-  const genEnd = html.indexOf('id="tab-library"');
-  assert.ok(afterHandoff >= 0 && slotAt > afterHandoff, "词表卡不在第 12 步卡之后");
-  assert.ok(slotAt < genEnd, "词表卡不在生成页内");
+  const stepsEnd = html.indexOf('id="tab-library"');
+  assert.ok(
+    html.indexOf('class="gen-sidebar"') >= 0 && afterNav >= 0 && slotAt > afterNav,
+    "词表卡不在 .gen-sidebar / step-nav 之后"
+  );
+  assert.ok(slotAt < stepsEnd, "词表卡不在生成页内");
 });
 
 test("ui/glossary.js 导出 initGlossary", () => {
