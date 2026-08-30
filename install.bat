@@ -1,5 +1,5 @@
 @echo off
-rem firstep 一键安装：检测 Python → 创建虚拟环境 → 安装依赖 → 自检
+rem firstep 一键安装：检测 Python → 创建虚拟环境 → 安装依赖 → 自检 → 首次库目录
 chcp 936 >nul
 cd /d "%~dp0"
 
@@ -15,23 +15,30 @@ if errorlevel 1 goto :need_python
 python -c "import sys; sys.exit(0 if sys.version_info >= (3, 13) else 1)"
 if errorlevel 1 goto :old_python
 
-echo [1/3] Python 检查通过（需要 3.13 或更新版本）
+echo [1/4] Python 检查通过（需要 3.13 或更新版本）
 
 rem ---------- 第 2 步：虚拟环境 ----------
 if not exist ".venv\Scripts\python.exe" (
-    echo [2/3] 正在创建虚拟环境 .venv（第一次需要一点时间）...
+    echo [2/4] 正在创建虚拟环境 .venv（第一次需要一点时间）...
     python -m venv .venv
     if errorlevel 1 goto :venv_fail
 ) else (
-    echo [2/3] 虚拟环境已存在，跳过创建
+    echo [2/4] 虚拟环境已存在，跳过创建
 )
 if not exist ".venv\Scripts\python.exe" goto :venv_fail
 
 rem ---------- 第 3 步：安装依赖 ----------
-echo [3/3] 正在安装依赖（需要联网，约几分钟；可重复运行）...
+echo [3/4] 正在安装依赖（需要联网，约几分钟；可重复运行）...
 ".venv\Scripts\python.exe" -m pip install -e .
 if errorlevel 1 goto :pip_fail
 
+rem ---------- 第 4 步：首次运行自动指向随包 library（已存在配置则跳过） ----------
+".venv\Scripts\python.exe" -c "from contest_generator.config import write_bootstrap_config as _w; _w(r'%~dp0library\modules', r'%~dp0library\masters')"
+if errorlevel 1 (
+    echo [4/4] 自动配置库目录失败（不影响安装）；可稍后到「设置 → 库目录」手动填入
+) else (
+    echo [4/4] 库目录已就绪：首次安装自动指向随包 library（已有配置则未改动）
+)
 rem ---------- 自检 ----------
 ".venv\Scripts\python.exe" -c "import fastapi, uvicorn, pypdf, PIL, fitz"
 if errorlevel 1 goto :check_fail

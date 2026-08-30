@@ -4343,6 +4343,55 @@ def test_settings_requires_api_key_on_first_configuration(tmp_path):
     assert "API key" in resp.json()["detail"]
 
 
+def test_settings_get_reports_bootstrap_library_dirs_when_key_missing(tmp_path):
+    """工单 beginner-guide-enrich/03：引导配置（无 key 但有库目录）→ 设置读取
+    返回磁盘文件里的库目录，install.bat 自动指向不被首次保存设置覆盖。"""
+    config_path = tmp_path / "cfg" / "config.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "api_key": "",
+                "module_library_dir": str(tmp_path / "lib" / "modules"),
+                "masters_dir": str(tmp_path / "lib" / "masters"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    ctx = AppContext(config_path=config_path, config=None)
+    client = TestClient(create_app(ctx))
+
+    data = client.get("/api/settings").json()
+    assert data["configured"] is False  # 仍是未配置态（引导用户填 key）
+    assert data["module_library_dir"] == str(tmp_path / "lib" / "modules")
+    assert data["masters_dir"] == str(tmp_path / "lib" / "masters")
+
+    # 首次保存设置（填 key）：库目录沿用引导值，不被默认值覆盖
+    resp = client.put(
+        "/api/settings",
+        json={
+            "base_url": "https://api.deepseek.com",
+            "api_key": "sk-new-key",
+            "model": "deepseek-chat",
+            "module_library_dir": data["module_library_dir"],
+            "masters_dir": data["masters_dir"],
+        },
+    )
+    assert resp.status_code == 200
+    assert ctx.config.module_library_dir == tmp_path / "lib" / "modules"
+    assert ctx.config.masters_dir == tmp_path / "lib" / "masters"
+
+
+def test_settings_get_falls_back_to_defaults_when_no_config_file(tmp_path):
+    """无配置文件 → 默认目录（既有行为不变）。"""
+    ctx = AppContext(config_path=tmp_path / "cfg" / "config.json", config=None)
+    client = TestClient(create_app(ctx))
+    data = client.get("/api/settings").json()
+    assert data["configured"] is False
+    assert data["module_library_dir"] == str(AppConfig().module_library_dir)
+    assert data["masters_dir"] == str(AppConfig().masters_dir)
+
+
 def test_settings_toolchain_paths_roundtrip(client, context):
     """uv4_path / gmake_path（工单 autocompile-loop/01）读写透传，缺省空串。"""
     current = client.get("/api/settings").json()

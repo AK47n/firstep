@@ -63,6 +63,10 @@ test("welcomeCardHTML：full 含三步引导与四个行动按钮（含「先看
   assert.match(html, /不再显示/);
   assert.match(html, /btn-welcome-dismiss/);
   assert.match(html, /DeepSeek API key/);
+  // 事实口径（beginner-guide-enrich/02）：一键体检不声称下载，提库目录自动指向
+  assert.match(html, /一键体检/);
+  assert.match(html, /library/);
+  assert.doesNotMatch(html, /下载参考文件与模块库/);
 });
 
 test("welcomeCardHTML：compact 一句话，无按钮、不指向不存在元素", () => {
