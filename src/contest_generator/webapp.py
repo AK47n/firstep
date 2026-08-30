@@ -1036,9 +1036,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 lib_error = f"模块库加载失败：{e}"
         desktop = context.desktop_dir()
         ccs = ccs_tools_status(
-            config.ccs_sdk_dir if config else "",
-            config.ccs_compiler_dir if config else "",
-            config.ccs_sysconfig_cli if config else "",
+            dirs.ccs_sdk_dir,
+            dirs.ccs_compiler_dir,
+            dirs.ccs_sysconfig_cli,
         )
 
         def _dir_probe(path: Path) -> dict:
@@ -1075,15 +1075,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "ccs_tools": {
                 "sdk": {
                     **ccs["sdk"],
-                    "override": bool(config.ccs_sdk_dir if config else ""),
+                    "override": bool(dirs.ccs_sdk_dir),
                 },
                 "compiler": {
                     **ccs["compiler"],
-                    "override": bool(config.ccs_compiler_dir if config else ""),
+                    "override": bool(dirs.ccs_compiler_dir),
                 },
                 "sysconfig": {
                     **ccs["sysconfig"],
-                    "override": bool(config.ccs_sysconfig_cli if config else ""),
+                    "override": bool(dirs.ccs_sysconfig_cli),
                 },
             },
             "platforms": [
@@ -1111,11 +1111,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 "reference": _dir_probe(reference_library_dir(dirs.module_library_dir)),
                 "pdf": _dir_probe(materials_dir(dirs.module_library_dir)),
             },
-            "output_dir": {
-                "dir": str(desktop),
-                "exists": desktop.is_dir(),
-                "writable": os.access(desktop, os.W_OK) if desktop.is_dir() else False,
-            },
+            "output_dir": _dir_probe(desktop),
         }
 
     # 板定义（板图坐标/能力集单源，工单 pin-board-config/01）：前端板图
