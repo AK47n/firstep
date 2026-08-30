@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5b24e7e22dd6db172e98ddc66e3ceeec222bb39b -->
+<!-- changelog-auto: last-commit=cdc087adc60e5f45786dbc539d44a0b6c522607b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -44,6 +44,7 @@
 - 13:30 工单 02 resolved：演示脚本与报告草稿交叉引用校对（无漂移，零代码改动）
 - 15:14 工单 01 resolved：展开策略表下沉（led 行为钉死，key 多实例预工单）
 - 15:26 工单 02 resolved：key 模块多实例化（manifest + 泛型驱动 + 默认通道表）
+- 15:36 工单 04 resolved：key 展开策略行 + 默认回填
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
