@@ -27,6 +27,7 @@ import { reviseApplyConfirmMessage } from "/js/fx/danger.js";  // 覆盖式重�
 import { verifyStatusMarkup } from "/js/fx/task.js";
 import { mainDiffHTML } from "/js/fx/diff.js";  // 效果 diff 渲染（diff-restyle/01）
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
+import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
@@ -50,6 +51,11 @@ let revise = {
   backupId: null,     // 最近一次备份（修订 / 深化 done 回传），回滚入口
   busy: false,        // 任一流程运行中（按钮置灰，防双击并发）
 };
+
+// 长任务秒表（工单 ux-walkthrough-02/12）：影响分析 / 执行修订 / 深化三条
+// 分钟级 SSE 流的状态行后显示「已等待 mm:ss」
+const analyzeWait = makeWaitClock("revise-analyze-status");
+const execWait = makeWaitClock("revise-exec-status");
 
 function reviseCurrentDir() {
   return $("res-dir").textContent.trim() || $("output-dir").value.trim();
@@ -271,8 +277,7 @@ function reviseDiscard() {
 }
 
 async function reviseAnalyze() {
-  if (revise.busy) return;
-  const qa = $("revise-qa-new").value.trim();
+  if (revise.busy) return;  const qa = $("revise-qa-new").value.trim();
   if (!revise.outputDir) { $("revise-analyze-msg").textContent = "请先加载上下文（当前会话或历史目录）"; return; }
   if (!qa) { $("revise-analyze-msg").textContent = "请先粘贴新 Q&A 文本"; return; }
   const body = {
@@ -286,6 +291,7 @@ async function reviseAnalyze() {
   aiActionStart("修订分析");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-analyze-msg").textContent = "";
   $("revise-analyze-status").textContent = "请求中…";
+  analyzeWait.start();
   clearReviseTelemetry("analyze");
   try {
     const data = await reviseRunSSE("/api/revise/analyze", body, {
@@ -301,6 +307,7 @@ async function reviseAnalyze() {
     $("revise-analyze-msg").textContent = e.message;   // 后端中文（含缺题面提示）
   } finally {
     aiActionStop();
+    analyzeWait.stop();
     reviseSetBusy(false);
   }
 }
@@ -329,6 +336,7 @@ async function reviseApply() {
   aiActionStart("修订落地");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-exec-msg").textContent = "";
   $("revise-exec-status").textContent = "请求中…";
+  execWait.start();
   clearReviseTelemetry("exec");
   try {
     const data = await reviseRunSSE("/api/revise/apply", body, {
@@ -356,6 +364,7 @@ async function reviseApply() {
     $("revise-exec-msg").textContent = e.message;
   } finally {
     aiActionStop();
+    execWait.stop();
     reviseSetBusy(false);
   }
 }
@@ -403,6 +412,7 @@ async function reviseRunDeepen() {
   aiActionStart("深化");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-exec-msg").textContent = "";
   $("revise-exec-status").textContent = "请求中…";
+  execWait.start();
   clearReviseTelemetry("exec");
   try {
     const body = { output_dir: revise.outputDir };
@@ -424,6 +434,7 @@ async function reviseRunDeepen() {
     $("revise-exec-msg").textContent = e.message;
   } finally {
     aiActionStop();
+    execWait.stop();
     reviseSetBusy(false);
   }
 }

@@ -25,6 +25,9 @@ const DOMAINS = {
     parseError: "fn", parseHttpError: "fn", isLongError: "fn",
     ERROR_LONG_THRESHOLD: "number",
   },
+  "wait.js": {
+    waitLabel: "fn", waitStatusText: "fn", WAIT_GENERIC_LINE: "string",
+  },
   "env.js": {
     ENV_BADGE_GLYPH: "object",
     envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",

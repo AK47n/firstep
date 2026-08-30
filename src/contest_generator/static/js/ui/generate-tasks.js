@@ -22,6 +22,7 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
+import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashContainer } from "/js/fx/flash.js";
@@ -41,6 +42,8 @@ let tasks = {
   plan: null,         // /api/tasks/plan 的 done 载荷
   busy: false,        // 任一流程运行中（按钮置灰）
 };
+
+const tasksWait = makeWaitClock("tasks-status");   // 长任务秒表（工单 ux-walkthrough-02/12）
 
 // 新想法 / 问题区状态（工单 idea-fix/02）：analysis = 最近一次 /api/tasks/idea/
 // analyze 的 done 载荷（{kind, reply, new_task, fix_summary, affected_task_ids}）；
@@ -350,9 +353,9 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
   aiActionStart("想法分析");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-idea-msg").textContent = "";
   $("tasks-status").textContent = "AI 分析想法中…";
+  tasksWait.start();
   try {
-    const data = await tasksRunSSE("/api/tasks/idea/analyze", { output_dir: dir, idea: text }, {
-      idea_analyzing: () => { $("tasks-status").textContent = "AI 正在理解你的想法…（分钟级调用，请等待）"; },
+    const data = await tasksRunSSE("/api/tasks/idea/analyze", { output_dir: dir, idea: text }, {      idea_analyzing: () => { $("tasks-status").textContent = "AI 正在理解你的想法…（分钟级调用，请等待）"; },
       idea_result: () => { $("tasks-status").textContent = "分析完成——按结果卡选择落地方式"; },
       llm_telemetry: (d) => {
         const tel = $("tasks-llm-telemetry");
@@ -380,6 +383,7 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
     return false;
   } finally {
     aiActionStop();
+    tasksWait.stop();
     ideaSetBusy(false);
   }
 }
@@ -643,6 +647,7 @@ async function tasksChatSend() {
   aiActionStart("全局商量");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-global-msg").textContent = "";
   $("tasks-status").textContent = "全局商量：AI 回应中…（分钟级调用，请等待）";
+  tasksWait.start();
   tasksGlobalRender();
   try {
     const data = await apiPost("/api/tasks/idea/chat/send", { output_dir: dir, history });
@@ -655,6 +660,7 @@ async function tasksChatSend() {
     $("tasks-global-msg").textContent = e.message;
   } finally {
     aiActionStop();
+    tasksWait.stop();
     chatState.pending = "";
     chatState.busy = false;
     tasksGlobalRender();
@@ -923,6 +929,7 @@ async function tasksPlan(force) {
   tasksResetMessages();
   aiActionStart("任务规划");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-status").textContent = "请求中…";
+  tasksWait.start();
   try {
     const body = { output_dir: dir };
     if (scorePoints && scorePoints.length) body.score_points = scorePoints;
@@ -953,6 +960,7 @@ async function tasksPlan(force) {
     }
   } finally {
     aiActionStop();
+    tasksWait.stop();
     tasksSetBusy(false);
   }
 }
@@ -1006,6 +1014,7 @@ async function tasksExecute(taskId, feedback) {
     if (slot) slot.textContent = text;
   };
   setPhase("已开始执行：AI 实现本任务中…");
+  tasksWait.start();
   try {
     const body = { output_dir: dir, task_id: taskId, note: note };
     if (feedback) body.feedback = feedback;
@@ -1046,6 +1055,7 @@ async function tasksExecute(taskId, feedback) {
     await tasksReload();
   } finally {
     aiActionStop();
+    tasksWait.stop();
     tasksSetBusy(false);
   }
 }
