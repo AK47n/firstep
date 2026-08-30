@@ -1545,6 +1545,21 @@
   .tasks-overview-bar .seg-failed { background: var(--danger); }
   .tasks-overview-bar .seg-pending { background: rgba(139, 148, 158, .35); }
   .tasks-overview-bar .seg-skipped { background: rgba(139, 148, 158, .18); }
+  /* 执行中卡内阶段槽（工单 ux-polish-02/06）：spinner + 阶段文案——滚动到
+     任意卡都能看到当前进度，不必盯面板顶部状态行 */
+  .task-phase { display: flex; align-items: center; gap: 8px; margin-top: 6px;
+                padding: 5px 10px; border: 1px solid rgba(0, 212, 255, .35);
+                border-radius: 8px; background: var(--accent-dim);
+                color: var(--accent); font-size: 12.5px; }
+  .task-phase .task-spinner { width: 14px; height: 14px; flex: none;
+                border-radius: 50%; border: 2px solid rgba(0, 212, 255, .25);
+                border-top-color: var(--accent); animation: taskSpin .8s linear infinite; }
+  @keyframes taskSpin { to { transform: rotate(360deg); } }
+  .tasks-done-line { display: flex; align-items: center; gap: 10px; }
+  .tasks-done-line .btn-task-goto-delivery { padding: 3px 12px; border-radius: 999px;
+                font-size: 12px; border: 1px solid var(--ok); color: var(--ok);
+                background: var(--ok-dim); cursor: pointer; }
+  .tasks-done-line .btn-task-goto-delivery:hover { filter: brightness(1.1); }
   /* 资源总览 + 上板自检清单（工单 task-insight/02）：资源行（chip + 使用任务 +
      冲突提示标黄）+ 自检勾选列表（details 默认收起——清单 3-6 条展开太长，
      摘要行「N 项 · 已勾选 M」可见进度；变色/变量名零新硬编码） */

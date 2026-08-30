@@ -20,6 +20,7 @@ import {
   taskErrorsHTML,
   unresolvedPrereqs,
   taskWiringRefs,
+  taskPhaseHTML, taskDetailsSnapshot, taskDetailsRestore,
 } from "../../src/contest_generator/static/js/fx/task.js";
 
 test("taskStatusLabel: 词表全覆盖", () => {
@@ -1406,4 +1407,58 @@ test("taskErrorsHTML: 空/非数组/坏条目 → 空串（全空条目过滤，
   assert.ok(noLine.includes("main.c"));
   assert.ok(!noLine.includes("task-err-jump"));
   assert.equal(taskErrorsHTML([{ path: "main.c", line: 5, message: "合法" }]) !== "", true);
+});
+
+// ---------------------------------------------------------------------------
+// ux-polish-02/06：执行中阶段槽、全部完成引导、任务卡 details 展开态快照/恢复
+// ---------------------------------------------------------------------------
+
+test("taskPhaseHTML：doing 态渲染 spinner + 阶段文案（转义）", () => {
+  const html = taskPhaseHTML("t1", "编译中…");
+  assert.ok(html.includes('data-phase-task="t1"'));
+  assert.ok(html.includes("task-spinner"));
+  assert.ok(html.includes("编译中…"));
+  assert.ok(taskPhaseHTML("t1", '<b>编译中…</b>').includes("&lt;b&gt;"));
+  assert.ok(taskPhaseHTML("t1", "").includes("执行中…"));
+});
+
+test("tasksOverviewHTML：全部终态（verified/skipped）→「全部完成」+ 去交付按钮", () => {
+  const plan = { tasks: [
+    { id: "t1", status: "verified" },
+    { id: "t2", status: "skipped" },
+  ]};
+  const html = tasksOverviewHTML(plan);
+  assert.ok(html.includes("全部完成"));
+  assert.ok(html.includes("btn-task-goto-delivery"));
+  assert.ok(html.includes("去交付"));
+});
+
+test("tasksOverviewHTML：有 pending/failed/doing/unverified 不显示完成引导", () => {
+  for (const status of ["pending", "failed", "doing", "unverified"]) {
+    const html = tasksOverviewHTML({ tasks: [{ id: "t1", status: "verified" }, { id: "t2", status }] });
+    assert.ok(!html.includes("全部完成"), status + " 不应显示完成引导");
+  }
+});
+
+test("taskDetailsSnapshot/Restore：按任务 id 记录打开 details 类名并恢复", () => {
+  const mk = (id, openCls) => {
+    const els = openCls.map((cls) => ({ className: cls, open: false }));
+    return {
+      dataset: { taskId: id },
+      querySelectorAll: (sel) => {
+        if (sel === "details[open]") return els;
+        if (sel.startsWith("details.")) return els.filter((e) => e.className === sel.slice("details.".length));
+        return [];
+      },
+    };
+  };
+  const cards = [mk("t1", ["task-more-details", "task-check-details"]), mk("t2", [])];
+  const snap = taskDetailsSnapshot(cards);
+  assert.deepEqual(snap, { t1: ["task-more-details", "task-check-details"] });
+  taskDetailsRestore(cards, snap);
+  assert.equal(cards[0].querySelectorAll("details.task-more-details")[0].open, true);
+  assert.equal(cards[0].querySelectorAll("details.task-check-details")[0].open, true);
+  // 无快照/无匹配 = 不报错
+  taskDetailsRestore(cards, null);
+  taskDetailsRestore(cards, {});
 });

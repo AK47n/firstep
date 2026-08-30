@@ -21,7 +21,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";
@@ -189,6 +189,9 @@ function tasksWiringEnsure(dir) {
 function tasksRender() {
   const plan = tasks.plan;
   const grid = $("tasks-grid");
+  // details 展开态快照（工单 ux-polish-02/06）：重建 innerHTML 会复位卡上
+  // <details>（更多菜单 / 自检清单 / 本轮变化）——渲染前按任务 id 快照，渲染后恢复
+  const detailsSnap = grid ? taskDetailsSnapshot(Array.from(grid.querySelectorAll(".task-card"))) : null;
   // 接线图装配（task-wiring-diagram/04）：快照加载中 → 先按现况渲染（无资料 =
   // 纯文字），就绪后 tasksWiringEnsure 重渲一次（卡片 + 「本轮变化」区单源刷新）
   const wiringAssets = wiringAssetsSync(tasks.outputDir);
@@ -276,6 +279,8 @@ function tasksRender() {
       },
     });
     grid.classList.remove("hidden");
+    // 恢复 details 展开态（重建复位修复，见上快照）
+    taskDetailsRestore(Array.from(grid.querySelectorAll(".task-card")), detailsSnap);
     // 渲染后挂接线图 toggle 数据句柄（host 存在 ⟺ tier-1 接线图已渲染）
     wireHosts(grid, plan, wiringAssets);
   }
@@ -992,16 +997,23 @@ async function tasksExecute(taskId, feedback) {
   tasksRender();
   const noteEl = $("task-note-" + taskId);   // 重渲染会清掉补充框，回填已读取的内容
   if (noteEl && note) noteEl.value = note;
-  $("tasks-status").textContent = "已开始执行：AI 实现本任务中…";
+  // 阶段文案双通道（工单 ux-polish-02/06）：面板顶部状态行（汇总）+ 执行中
+  // 卡内阶段槽（滚动到别处也看得见）
+  const setPhase = (text) => {
+    $("tasks-status").textContent = text;
+    const slot = document.querySelector('.task-card[data-task-id="' + taskId + '"] .task-phase-text');
+    if (slot) slot.textContent = text;
+  };
+  setPhase("已开始执行：AI 实现本任务中…");
   try {
     const body = { output_dir: dir, task_id: taskId, note: note };
     if (feedback) body.feedback = feedback;
     const data = await tasksRunSSE("/api/tasks/execute", body, {
-      task_executing: () => { $("tasks-status").textContent = "AI 实现本任务中…（分钟级调用，请等待）"; },
-      compile_start: () => { $("tasks-status").textContent = "编译中…"; },
-      fix_start: () => { $("tasks-status").textContent = "AI 修复中…（首轮编译未过，自动修复一轮）"; },
-      verify_result: () => { $("tasks-status").textContent = "验证结果收集中…"; },
-      task_reporting: () => { $("tasks-status").textContent = "AI 正在总结本步（做了什么 / 接下来做什么）…"; },
+      task_executing: () => { setPhase("AI 实现本任务中…（分钟级调用，请等待）"); },
+      compile_start: () => { setPhase("编译中…"); },
+      fix_start: () => { setPhase("AI 修复中…（首轮编译未过，自动修复一轮）"); },
+      verify_result: () => { setPhase("验证结果收集中…"); },
+      task_reporting: () => { setPhase("AI 正在总结本步（做了什么 / 接下来做什么）…"); },
       llm_telemetry: (d) => {
         const tel = $("tasks-llm-telemetry");
         tel.textContent = formatLLMTelemetry(d);
@@ -1020,11 +1032,11 @@ async function tasksExecute(taskId, feedback) {
     if (data.status !== "failed") guideNextTask(taskId);
     if (data.status !== "failed") { markStepDone(11); }
     toast("ok", feedback ? "已按反馈修复" : "任务已完成");
-    $("tasks-status").textContent = data.status === "failed"
+    setPhase(data.status === "failed"
       ? "任务失败（修复一轮后仍红）——可回滚或重试"
       : feedback
         ? "已按反馈修复——请再次上板验证，或确认通过进入下一卡"
-        : "任务完成——继续下一卡或手动调整状态";
+        : "任务完成——继续下一卡或手动调整状态");
   } catch (e) {
     $("tasks-status").textContent = "";
     $("tasks-msg").textContent = e.message;
@@ -1565,6 +1577,14 @@ document.addEventListener("click", (event) => {
   wins.forEach((d) => {
     if (!d.contains(event.target)) d.open = false;
   });
+});
+// 全部完成 →「去交付」（工单 ux-polish-02/06）：切到交付页签（直接点
+// revise-tabs 的交付按钮 = 复用既有页签切换与 user:true 语义，零模块耦合）
+$("tasks-overview").addEventListener("click", (event) => {
+  const btn = event.target.closest(".btn-task-goto-delivery");
+  if (!btn) return;
+  const tab = document.querySelector('#revise-tabs .revise-tab[data-tab="delivery"]');
+  if (tab) tab.click();
 });
 // 「本轮变化」区 / 直接修正面板「回滚到本任务执行前」（同备份族，复用
 // /api/revise/rollback——域委托覆盖网格内后代：变化区注入在任务卡内）

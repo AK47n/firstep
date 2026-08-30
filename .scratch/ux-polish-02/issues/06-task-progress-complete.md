@@ -4,7 +4,17 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**实现记录：** fx/task.js 新增 taskPhaseHTML（doing 卡 spinner+阶段槽）、
+tasksOverviewHTML 完成态「全部完成 🎉 + 去交付」按钮、taskDetailsSnapshot/
+taskDetailsRestore（details 展开态快照/恢复纯函数）；generate-tasks.js：
+tasksExecute 阶段文案双通道（顶部状态行 + 卡内槽）、tasksRender 渲染前后
+快照/恢复、tasks-overview 委托点交付页签（直接点 revise-tabs 交付按钮，零
+模块耦合）；index.html 补 .task-phase spinner 动画与完成行样式；task.test.mjs
++4 组单测、fx-guard 登记。CDP 冒烟 probe-t06.mjs 全 PASS（全部完成→去交付
+切页签；doing 卡阶段槽；跳过重建后自检清单展开态保留——「更多菜单」会被
+既有「点外部收起」委托收起，属预期行为，恢复价值在清单/本轮变化类 details）。
 
 - [ ] doing 态任务卡渲染 spinner + 阶段文案槽，执行中阶段切换（task_executing/compile_start/fix_start/task_reporting 等）实时更新该槽
 - [ ] 面板顶部单条状态行保留（汇总语义），执行结束后卡内槽清理

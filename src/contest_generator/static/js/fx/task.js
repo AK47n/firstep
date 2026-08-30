@@ -238,6 +238,9 @@ export function taskCardHTML(task, index, opts) {
     // 在任务执行完成后把「本轮变化」区插入锚点之后；无注入 = 零占位（空 span）。
     + '<span class="task-changes-anchor" data-changes-anchor></span>'
     + taskDialogAdoptHTML(task)
+    // 执行中阶段槽（工单 ux-polish-02/06）：doing 态渲染 spinner + 阶段文案，
+    // 胶水层随 SSE 事件就地更新（面板顶部状态行保留为汇总）
+    + (task.status === "doing" ? taskPhaseHTML(task.id, "执行中…") : "")
     + taskNextActionHTML(task, o)
     // 上板自检清单常驻（工单 task-insight/02，spec 轴评审整改：结果面板只在
     // 执行时渲染一次，刷新后不重建——勾选态 localStorage 无处回显 = 故事 3
@@ -323,7 +326,59 @@ export function tasksOverviewHTML(plan) {
     + (failed ? " · 失败 " + failed : "")
     + (pending ? " · 待做 " + pending : "")
     + (skipped ? " · <span class=\"muted\">已跳过 " + skipped + "（不计入完成）</span>" : "");
-  return bar + '<div class="muted" style="margin-top:3px">' + summary + "</div>";
+  // 全部完成引导（工单 ux-polish-02/06）：无 pending/failed/doing/unverified
+  // = 全部任务已闭环（verified/skipped）→「去交付」按钮（切交付页签，胶水层委托）
+  const allDone = !["pending", "failed", "doing", "unverified"].some(
+    (s) => tasks.some((t) => t.status === s));
+  const doneLine = allDone
+    ? '<div class="tasks-done-line" style="margin-top:6px"><span class="muted" style="color:var(--ok-bright)">全部完成 🎉</span>'
+      + ' <button type="button" class="btn-task-goto-delivery" data-action="goto-delivery">去交付</button></div>'
+    : "";
+  return bar + '<div class="muted" style="margin-top:3px">' + summary + "</div>" + doneLine;
+}
+
+/** 执行中任务卡的阶段槽（工单 ux-polish-02/06）：doing 态渲染 spinner + 阶段
+ * 文案（胶水层随 SSE 事件更新 .task-phase-text）；非 doing 不渲染。 */
+export function taskPhaseHTML(taskId, text) {
+  return '<div class="task-phase" data-phase-task="' + esc(taskId || "") + '">'
+    + '<span class="task-spinner" aria-hidden="true"></span>'
+    + '<span class="task-phase-text">' + esc(text || "执行中…") + "</span></div>";
+}
+
+/** 任务卡 details 展开态快照（工单 ux-polish-02/06）：grid innerHTML 重建会
+ * 复位卡上 <details>（更多菜单 / 自检清单 / 本轮变化）——渲染前快照按任务 id
+ * 记录打开的 details 类名，渲染后恢复。纯函数（接收含 dataset/querySelectorAll
+ * 的 DOM 类对象，与 attachCelebrate 同模式），无 DOM 全局依赖。 */
+export function taskDetailsSnapshot(cards) {
+  const out = {};
+  for (const c of cards || []) {
+    const id = c && c.dataset && c.dataset.taskId;
+    if (!id) continue;
+    const open = [];
+    const list = c.querySelectorAll ? c.querySelectorAll("details[open]") : [];
+    for (const d of list) {
+      for (const cls of String(d.className || "").split(/\s+/)) {
+        if (cls && cls !== "task-card" && cls.indexOf("task-") === 0) open.push(cls);
+      }
+    }
+    if (open.length) out[id] = open;
+  }
+  return out;
+}
+
+/** 恢复任务卡 details 展开态：snap = taskDetailsSnapshot 输出；类名缺失/无
+ * 匹配元素 = 跳过（重建后结构变化不报错）。 */
+export function taskDetailsRestore(cards, snap) {
+  if (!snap) return;
+  for (const c of cards || []) {
+    const id = c && c.dataset && c.dataset.taskId;
+    const open = id && snap[id];
+    if (!open || !open.length) continue;
+    for (const cls of open) {
+      const list = c.querySelectorAll ? c.querySelectorAll("details." + cls) : [];
+      for (const d of list) d.open = true;
+    }
+  }
 }
 
 /** 任务卡操作显隐（单源，与后端 ALLOWED_STATUS_TRANSITIONS 镜像）：
@@ -1179,5 +1234,8 @@ if (typeof window !== "undefined") {
     checklistStateKey,
     taskErrorsHTML,
     taskChangesHTML,
+    taskPhaseHTML,        // ux-polish-02/06：执行中阶段槽
+    taskDetailsSnapshot,  // ux-polish-02/06：details 展开态快照/恢复
+    taskDetailsRestore,
   });
 }
