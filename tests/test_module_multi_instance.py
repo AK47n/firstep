@@ -666,6 +666,25 @@ def test_expand_key_upper_bound_rejects_excess_instances():
         _key_expand([ModuleInstance(name=f"键{i}") for i in range(9)], "stm32")
 
 
+def test_multi_instance_variants_projection():
+    """变体下拉选项投影（key-multi-instance/06：前端变体选项单源）：led =
+    红/黄/绿、key = 启动/停止/模式/设置（token 序）；未登记 slug = 空。"""
+    from contest_generator.selection import multi_instance_variants
+
+    assert multi_instance_variants("led") == (
+        ("red", "红"),
+        ("yellow", "黄"),
+        ("green", "绿"),
+    )
+    assert multi_instance_variants("key") == (
+        ("start", "启动"),
+        ("stop", "停止"),
+        ("mode", "模式"),
+        ("set", "设置"),
+    )
+    assert multi_instance_variants("unknown") == ()
+
+
 # ---------------------------------------------------------------------------
 # module-multi-instance/03：渲染（led hook）+ 骨架注入
 #

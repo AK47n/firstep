@@ -1645,7 +1645,9 @@ class MultiInstancePolicy:
     pin_capability = 自动分配的可用脚能力（gpio_out / gpio_in …，照角色类型）；
     macro_prefix = 非内置回退宏前缀（LED_ / KEY_ …）；
     variant_label = 变体中文标签（提示词可见文案；led = 颜色、key = 功能——
-        词表与标签同源在策略行，改名只改这一处）。
+        词表与标签同源在策略行，改名只改这一处）；
+    builtin_labels = 变体 token → 中文标签（前端变体下拉选项；red → 红、
+        start → 启动——与 builtin_macros 同键同序，词表单源）。
     """
 
     builtin_macros: Mapping[str, str]
@@ -1654,6 +1656,7 @@ class MultiInstancePolicy:
     pin_capability: str
     macro_prefix: str
     variant_label: str
+    builtin_labels: Mapping[str, str]
 
 
 # 字面量单源：宏名映射 / 指定脚 / 首实例脚 / 变体标签只写在这里（改词表只改
@@ -1673,6 +1676,7 @@ INSTANCE_POLICIES: Mapping[str, MultiInstancePolicy] = {
         pin_capability="gpio_out",
         macro_prefix="LED_",
         variant_label="颜色",
+        builtin_labels={"red": "红", "yellow": "黄", "green": "绿"},
     ),
     "key": MultiInstancePolicy(
         builtin_macros={
@@ -1686,6 +1690,12 @@ INSTANCE_POLICIES: Mapping[str, MultiInstancePolicy] = {
         pin_capability="gpio_in",
         macro_prefix="KEY_",
         variant_label="功能",
+        builtin_labels={
+            "start": "启动",
+            "stop": "停止",
+            "mode": "模式",
+            "set": "设置",
+        },
     ),
 }
 
@@ -1710,6 +1720,32 @@ def multi_instance_labels() -> Mapping[str, str]:
     return {
         slug: policy.variant_label for slug, policy in INSTANCE_POLICIES.items()
     }
+
+
+def multi_instance_variants(slug: str) -> tuple[tuple[str, str], ...]:
+    """多实例模块的变体可选值 (token, 中文标签)（策略表投影，token 序）。
+
+    前端实例卡的变体下拉选项单源（led = 红/黄/绿、key = 启动/停止/模式/设置）；
+    未登记 slug = 空元组（调用方自行降级）。
+    """
+    policy = INSTANCE_POLICIES.get(slug)
+    if policy is None:
+        return ()
+    return tuple(
+        (token, policy.builtin_labels[token]) for token in policy.builtin_macros
+    )
+
+
+def multi_instance_pin_capability(slug: str) -> str:
+    """多实例模块的选脚可用能力（策略表投影：led = gpio_out、key = gpio_in）。
+
+    前端板图选脚候选与后端展开策略同源（key-multi-instance/06——不再由前端按
+    引脚角色重推导）；未登记 slug = gpio_out（调用方降级兜底）。
+    """
+    policy = INSTANCE_POLICIES.get(slug)
+    if policy is None:
+        return "gpio_out"
+    return policy.pin_capability
 
 
 @dataclass(frozen=True)
