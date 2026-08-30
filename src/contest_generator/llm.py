@@ -66,7 +66,6 @@ from .report import (
 )
 from .selection import (
     BUY_VERDICTS,
-    LED_COLOR_MACROS,
     MAX_QUESTIONS,
     FunctionRequirement,
     ModuleSelection,
@@ -75,6 +74,8 @@ from .selection import (
     ReferenceSuggestion,
     SelectionError,
     build_module_selection,
+    multi_instance_labels,
+    multi_instance_vocab,
     parse_decision,
 )
 from .task_progress import TaskError, TaskPlan, build_task_plan
@@ -4939,19 +4940,36 @@ def _selection_user_prompt(
         prompt += "\n".join(lines)
     if hardware_words:
         prompt += "\n\n" + _wordlist_prompt_segment(hardware_words)
-    # 多实例猜测规则段（工单 module-multi-instance/06）：库内有多实例模块才出段
-    # （与参考/澄清段同款条件段先例——最坏情形请求预算零成本，旧库提示词逐字节
-    # 不变）；内置变体 token 词表单源 = selection.LED_COLOR_MACROS（提示词可见
-    # 契约与解析校验同源，改词表只改那一处）
+    # 多实例猜测规则段（工单 module-multi-instance/06，key 泛化 key-multi-instance/05）：
+    # 库内有多实例模块才出段（与参考/澄清段同款条件段先例——最坏情形请求预算零成本，
+    # 旧库提示词逐字节不变）；内置变体 token 词表与中文标签单源 = selection 策略表
+    # 投影（multi_instance_vocab / multi_instance_labels：提示词可见契约与解析校验
+    # 同源，改词表/标签只改策略行）
     has_multi = any(summary.multi_instance for summary in manifest_summaries)
     if has_multi:
+        vocab = multi_instance_vocab()
+        labels = multi_instance_labels()
+        multi_slugs = {
+            summary.slug
+            for summary in manifest_summaries
+            if summary.multi_instance is not None
+        }
+        per_module = [
+            f"{slug} 变体 = {labels[slug]}，内置 {'/'.join(tokens)}，其余空串"
+            for slug, tokens in vocab.items()  # 策略登记序（led → key），确定性
+            if slug in multi_slugs
+        ]
+        all_tokens = [
+            token for slug in vocab if slug in multi_slugs for token in vocab[slug]
+        ]
         prompt += (
             "\n\n多实例规则（硬约束）：instances 字段**只允许**出现在清单带"
             "「多实例」标注的模块条目上——**未标注的模块输出 instances 会被系统"
             "直接拒绝整轮结果**（模块 digit_uart 曾因此整轮失败）。其余模块条目"
             "绝不输出 instances 字段。多实例模块按题面数量输出 instances 数组："
-            "每条 {\"name\": 显示名, \"variant\": 变体}（led 变体 = 颜色，"
-            f"内置 {'/'.join(LED_COLOR_MACROS)}，其余空串）；数量不超过清单标注"
+            "每条 {\"name\": 显示名, \"variant\": 变体}（"
+            + "；".join(per_module)
+            + "）；数量不超过清单标注"
             "上限；题面未明确数量时省略；引脚自动分配，不输出 pin；不为非多实例"
             "模块输出 instances。"
         )
@@ -4999,7 +5017,7 @@ def _selection_user_prompt(
             '"sentence": 1（整数——对应题面句子编号，第 3 句就是 3；必须是整数，'
             '不是字符串"1"）, "modules": [{"slug": "库内命中模块", '
             '"reason": "为何满足该需求", "instances": [{"name": "显示名", '
-            f'"variant": "{"/".join(LED_COLOR_MACROS)} 或空串（仅多实例模块，'
+            f'"variant": "{"/".join(all_tokens)} 或空串（仅多实例模块，'
             '按题面数量）"}]}], "suggestions": [{"name": "硬件词表内的'
             '类别或型号名", "category": "词表外型号必填的所属类别名", "examples": '
             '["常识举例"]}]}], "questions": ["题面缺失且影响模块选择的关键补问，可省略"]'

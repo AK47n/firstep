@@ -1643,7 +1643,9 @@ class MultiInstancePolicy:
     first_pin = 平台 → 首实例默认脚（位置语义：led mspm0 PA15；key 双平台
         PB3/PA2——首个实例 = 板载默认键脚）；
     pin_capability = 自动分配的可用脚能力（gpio_out / gpio_in …，照角色类型）；
-    macro_prefix = 非内置回退宏前缀（LED_ / KEY_ …）。
+    macro_prefix = 非内置回退宏前缀（LED_ / KEY_ …）；
+    variant_label = 变体中文标签（提示词可见文案；led = 颜色、key = 功能——
+        词表与标签同源在策略行，改名只改这一处）。
     """
 
     builtin_macros: Mapping[str, str]
@@ -1651,11 +1653,12 @@ class MultiInstancePolicy:
     first_pin: Mapping[str, str]
     pin_capability: str
     macro_prefix: str
+    variant_label: str
 
 
-# 字面量单源：宏名映射 / 指定脚 / 首实例脚只写在这里（改词表只改这一处）；
-# 声明了 multi_instance 但未登记 slug = 大声失败（防半吊子 manifest，见
-# expand_instances）。
+# 字面量单源：宏名映射 / 指定脚 / 首实例脚 / 变体标签只写在这里（改词表只改
+# 这一处）；声明了 multi_instance 但未登记 slug = 大声失败（防半吊子 manifest，
+# 见 expand_instances）。
 INSTANCE_POLICIES: Mapping[str, MultiInstancePolicy] = {
     "led": MultiInstancePolicy(
         builtin_macros={
@@ -1669,6 +1672,7 @@ INSTANCE_POLICIES: Mapping[str, MultiInstancePolicy] = {
         first_pin={PLATFORM_MSPM0: "PA15"},
         pin_capability="gpio_out",
         macro_prefix="LED_",
+        variant_label="颜色",
     ),
     "key": MultiInstancePolicy(
         builtin_macros={
@@ -1681,11 +1685,31 @@ INSTANCE_POLICIES: Mapping[str, MultiInstancePolicy] = {
         first_pin={PLATFORM_STM32: "PB3", PLATFORM_MSPM0: "PA2"},
         pin_capability="gpio_in",
         macro_prefix="KEY_",
+        variant_label="功能",
     ),
 }
 
-# 兼容别名（llm 词表消费；key-multi-instance/05 泛化为按 slug 投影后移除）
-LED_COLOR_MACROS = INSTANCE_POLICIES["led"].builtin_macros
+
+def multi_instance_vocab() -> Mapping[str, tuple[str, ...]]:
+    """多实例模块的内置变体 token 词表（策略表投影，按策略登记序）。
+
+    提示词可见契约与解析校验同源消费：改词表只改 INSTANCE_POLICIES 一行
+    （key-multi-instance/05 泛化替代了 led 单表时代的 LED_COLOR_MACROS）。
+    """
+    return {
+        slug: tuple(policy.builtin_macros)
+        for slug, policy in INSTANCE_POLICIES.items()
+    }
+
+
+def multi_instance_labels() -> Mapping[str, str]:
+    """多实例模块的变体中文标签（策略表投影：led → 颜色、key → 功能）。
+
+    提示词可见文案与词表同源在策略行（标签与 token 一起改，无第二处真源）。
+    """
+    return {
+        slug: policy.variant_label for slug, policy in INSTANCE_POLICIES.items()
+    }
 
 
 @dataclass(frozen=True)
