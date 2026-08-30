@@ -277,7 +277,7 @@ export const GUIDE_CHAPTERS = {
           {
             type: "note",
             label: "自动编译的前提",
-            text: "STM32 装 Keil5（设置页 uv4_path 可留空自动探测）；MSPM0 装 CCS（gmake 工具链）。「一键体检」会逐一列出缺哪一项。",
+            text: "STM32 装 Keil5（设置页 uv4_path 可留空自动探测）；MSPM0 装 CCS（CCS + MSPM0 SDK，gmake 工具链）。「一键体检」会逐一列出缺哪一项。",
           },
         ],
       },
@@ -336,7 +336,7 @@ export const GUIDE_CHAPTERS = {
             type: "table",
             head: ["症状", "原因与对策"],
             rows: [
-              ["生成 / 编译提示「未检测到工具链」，自动编译被跳过", "到「设置」点「一键体检」看缺哪项：STM32 装 Keil5（uv4_path 可留空自动探测）；MSPM0 装 CCS（gmake 工具链）；装完重跑体检再自动编译。"],
+              ["生成 / 编译提示「未检测到工具链」，自动编译被跳过", "到「设置」点「一键体检」看缺哪项：STM32 装 Keil5（uv4_path 可留空自动探测）；MSPM0 装 CCS（CCS + MSPM0 SDK，gmake 工具链）；装完重跑体检再自动编译。"],
               ["烧录超时（180s）", "探针没接好或板子没电：核对 SWD 四线（3V3 / GND / SWDIO / SWCLK）与供电后重新点烧录。"],
               ["找不到 DSLite（MSPM0）", "DSLite 由 CCS 自带——装 CCS 即可；已装仍找不到，在设置页填 dslite_path。"],
               ["找不到 OpenOCD / st-flash（STM32）", "先装 ST-Link 驱动（STSW-LINK009），再装 OpenOCD 或 st-flash 其一；设置页可填路径。"],

@@ -4,11 +4,15 @@ import { esc } from "./core.js";
 
 export const ENV_BADGE_GLYPH = { "env-ok": "✓", "env-warn": "!", "env-err": "✕" };
 
-export function envRowHTML(key, badgeCls, name, detail) {
+export function envRowHTML(key, badgeCls, name, detail, jump) {
+  const btn = jump
+    ? ' <button type="button" class="env-jump" data-env-jump="' + esc(jump.focus) + '"'
+      + (jump.collapse ? ' data-env-collapse="' + esc(jump.collapse) + '"' : "") + '>去设置填</button>'
+    : "";
   return '<div class="env-row" data-env-row="' + key + '">'
     + '<span class="env-badge ' + badgeCls + '">' + ENV_BADGE_GLYPH[badgeCls] + '</span>'
     + '<span class="env-name">' + name + '</span>'
-    + '<span class="env-detail">' + detail + '</span></div>';
+    + '<span class="env-detail">' + detail + btn + '</span></div>';
 }
 
 export function envChannelHTML(key, name, ch) {
@@ -31,8 +35,7 @@ export function envChannelHTML(key, name, ch) {
   return envRowHTML(key, badge, name, detail);
 }
 
-export function envCheckStatusHTML(status, textCh, visionCh) {
-  if (!status) return "";
+export function envCheckStatusHTML(status, textCh, visionCh) {  if (!status) return "";
   const rows = [];
   if (status.api_configured === true) {
     const llm = status.llm || {};
@@ -47,8 +50,8 @@ export function envCheckStatusHTML(status, textCh, visionCh) {
   rows.push(envChannelHTML("llm-vision", "视觉通道", visionCh));
   const tc = status.toolchains || {};
   const tcMeta = {
-    stm32: { name: "Keil UV4（stm32）", miss: "未找到 UV4（可在设置页填 uv4_path 覆盖）" },
-    mspm0: { name: "gmake（mspm0）", miss: "未找到 gmake（可在设置页填 gmake_path 覆盖）" },
+    stm32: { name: "Keil UV4（stm32）", miss: "未找到 UV4（可在设置页填 uv4_path 覆盖）", jump: { focus: "set-uv4-path", collapse: "toolchain" } },
+    mspm0: { name: "CCS + MSPM0 SDK（mspm0）", miss: "未找到 gmake / CCS 工具链（可在设置页填 gmake_path 或 CCS 三件套）", jump: { focus: "set-gmake-path", collapse: "toolchain" } },
   };
   for (const [plat, meta] of Object.entries(tcMeta)) {
     const entry = tc[plat];
@@ -57,7 +60,42 @@ export function envCheckStatusHTML(status, textCh, visionCh) {
       rows.push(envRowHTML("toolchain-" + plat, "env-ok", meta.name,
         esc(entry.path || "") + (entry.override ? "（设置页路径覆盖）" : "")));
     } else {
-      rows.push(envRowHTML("toolchain-" + plat, "env-err", meta.name, meta.miss));
+      rows.push(envRowHTML("toolchain-" + plat, "env-err", meta.name, meta.miss + "。", meta.jump));
+    }
+  }
+  // CCS 三件套逐件（工单 ux-walkthrough-02/05-06）：SDK / 编译器 / SysConfig
+  const ccs = status.ccs_tools || {};
+  const ccsMeta = {
+    sdk: { name: "CCS SDK（mspm0）", miss: "未设置（可在设置页填 ccs_sdk_dir）", jump: { focus: "set-ccs-sdk-dir", collapse: "toolchain" } },
+    compiler: { name: "CCS 编译器（mspm0）", miss: "未设置（可在设置页填 ccs_compiler_dir）", jump: { focus: "set-ccs-compiler-dir", collapse: "toolchain" } },
+    sysconfig: { name: "SysConfig CLI（mspm0）", miss: "未设置（可在设置页填 ccs_sysconfig_cli）", jump: { focus: "set-ccs-sysconfig-cli", collapse: "toolchain" } },
+  };
+  for (const [piece, meta] of Object.entries(ccsMeta)) {
+    const entry = ccs[piece];
+    if (!entry) continue;
+    if (entry.found) {
+      rows.push(envRowHTML("ccs-" + piece, "env-ok", meta.name,
+        esc(entry.path || "") + (entry.override ? "（设置页路径覆盖）" : "")));
+    } else {
+      rows.push(envRowHTML("ccs-" + piece, "env-err", meta.name, meta.miss + "。", meta.jump));
+    }
+  }
+  // 派生库目录（工单 ux-walkthrough-02/05-06）：赛题 / 参考 / PDF
+  const libDirs = status.library_dirs || {};
+  const libMeta = {
+    topic: { name: "赛题库目录" },
+    reference: { name: "参考文件库目录" },
+    pdf: { name: "PDF 资料库目录" },
+  };
+  for (const [key, meta] of Object.entries(libMeta)) {
+    const entry = libDirs[key];
+    if (!entry) continue;
+    if (entry.exists && entry.writable) {
+      rows.push(envRowHTML("lib-dir-" + key, "env-ok", meta.name, esc(entry.dir || "") + "（可写）"));
+    } else if (!entry.exists) {
+      rows.push(envRowHTML("lib-dir-" + key, "env-warn", meta.name, "目录不存在：" + esc(entry.dir || "")));
+    } else {
+      rows.push(envRowHTML("lib-dir-" + key, "env-warn", meta.name, "目录不可写：" + esc(entry.dir || "")));
     }
   }
   for (const p of status.platforms || []) {
@@ -98,6 +136,16 @@ export function envCheckStatusHTML(status, textCh, visionCh) {
   return rows.join("");
 }
 
+// 工具链内联探测文案（工单 ux-walkthrough-02/06）：设置页「已配置值旁显示
+// 探测结果」——entry = /api/env/status 的单件 {found, path, override}。
+export function toolchainProbeText(entry) {
+  if (!entry) return "";
+  if (entry.override && entry.found) return "已配置：探测命中 " + (entry.path || "");
+  if (entry.override && !entry.found) return "✕ 已填路径未找到（请确认路径正确，或留空自动探测）";
+  if (!entry.override && entry.found) return "✓ 自动探测到：" + (entry.path || "") + "（留空 = 自动）";
+  return "未探测到（留空 = 自动扫描；也可填路径覆盖）";
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { envRowHTML, envChannelHTML, envCheckStatusHTML, ENV_BADGE_GLYPH });
+  Object.assign(window, { envRowHTML, envChannelHTML, envCheckStatusHTML, toolchainProbeText, ENV_BADGE_GLYPH });
 }

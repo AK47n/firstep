@@ -24,6 +24,7 @@ const DOMAINS = {
   "env.js": {
     ENV_BADGE_GLYPH: "object",
     envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",
+    toolchainProbeText: "fn",
   },
   "btn-icon.js": { btnIcon: "fn" },
   "platform.js": { platformClickAction: "fn" },
