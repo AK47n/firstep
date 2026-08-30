@@ -226,7 +226,7 @@ export function editModule(slug) {
     + '<label>购买链接（留空 = 保留原值）</label><input class="lib-mod-url" placeholder="https://…">'
     + '<h3>平台文件</h3><ul class="lib-mod-files"></ul>'
     + '<div class="lib-mod-newfiles"></div>'
-    + '<div class="row" style="margin-top:4px"><button class="lib-mod-addrow">+ 文件</button>'
+    + '<div class="row" style="margin-top: var(--space-1)"><button class="lib-mod-addrow">+ 文件</button>'
     + '<button class="lib-mod-pick">选择文件…</button>'
     + '<input type="file" class="lib-mod-pick-input" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.inc,.s,.asm" style="display:none"></div>'
     + '<div class="lib-mod-msg"></div></div>'

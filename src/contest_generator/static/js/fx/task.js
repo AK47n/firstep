@@ -102,7 +102,7 @@ export function ideaResultHTML(analysis, opts) {
   const kind = ["new_task", "direct_fix", "discussion"].includes(a.kind)
     ? a.kind : "discussion";
   const o = opts || {};
-  let html = '<div class="item idea-result" style="margin-top:8px">'
+  let html = '<div class="item idea-result" style="margin-top: var(--space-2)">'
     + '<div class="head"><span class="slug">💡 想法分析</span> '
     + '<span class="badge ' + ideaKindBadgeClass(kind) + '">' + ideaKindLabel(kind)
     + "</span></div>"
@@ -129,7 +129,7 @@ export function ideaResultHTML(analysis, opts) {
       + "或把 AI 的建议直接落地：</div>";
   }
   if (o.landedNote) {
-    html += '<div class="reason muted" style="margin-top:6px">' + esc(String(o.landedNote)) + "</div>";
+    html += '<div class="reason muted" style="margin-top: var(--space-2)">' + esc(String(o.landedNote)) + "</div>";
   } else {
     const buttons = kind === "new_task"
       ? ideaActionButtonHTML("btn-idea-insert", "生成任务", kind)
@@ -137,7 +137,7 @@ export function ideaResultHTML(analysis, opts) {
         ? ideaActionButtonHTML("btn-idea-fix", "改动预览并执行", kind)
         : ideaActionButtonHTML("btn-idea-to-task", "把建议变成任务", kind)
           + ideaActionButtonHTML("btn-idea-to-fix", "把建议变成修正", kind);
-    html += '<div class="row" style="margin-top:8px">' + buttons + "</div>";
+    html += '<div class="row" style="margin-top: var(--space-2)">' + buttons + "</div>";
   }
   return html + "</div>";
 }
@@ -255,7 +255,7 @@ export function taskCardHTML(task, index, opts) {
     // 微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：低频微调
     // 收进小字 details 菜单（编辑任务信息 / 上移 / 下移）+ 编辑态表单
     // （opts.editing(task.id) 为真 = 胶水层已展开该卡编辑表单）
-    + '<div class="row" style="margin-top:6px;gap:6px">'
+    + '<div class="row" style="margin-top: var(--space-2);gap:6px">'
     + taskMoreMenuHTML(task, index, Number(o.total) || 0, !!(o.editing && o.editing(task.id)))
     + "</div>"
     + (o.editing && o.editing(task.id) ? taskEditFormHTML(task, o) : "")
@@ -266,7 +266,7 @@ export function taskCardHTML(task, index, opts) {
     // task.id 假值不渲染（评审整改：裸 id 传空 → flashContainer 缺省降成
     // "result" 撞结果面板容器；真实 id 由后端生成非空，此处防御）
     + (o.outputDir && task.id && taskCanFeedback(task) ? flashPanelHTML(o.outputDir, task.id) : "")
-    + (o.actions ? '<div class="row" style="margin-top:8px">' + o.actions(task, index) + "</div>" : "")
+    + (o.actions ? '<div class="row" style="margin-top: var(--space-2)">' + o.actions(task, index) + "</div>" : "")
     + "</div>";
 }
 
@@ -335,10 +335,10 @@ export function tasksOverviewHTML(plan) {
   const allDone = !["pending", "failed", "doing", "unverified"].some(
     (s) => tasks.some((t) => t.status === s));
   const doneLine = allDone
-    ? '<div class="tasks-done-line" style="margin-top:6px"><span class="muted" style="color:var(--ok-bright)">全部完成 🎉</span>'
+    ? '<div class="tasks-done-line" style="margin-top: var(--space-2)"><span class="muted" style="color:var(--ok-bright)">全部完成 🎉</span>'
       + ' <button type="button" class="btn-task-goto-delivery" data-action="goto-delivery">去交付</button></div>'
     : "";
-  return bar + '<div class="muted" style="margin-top:3px">' + summary + "</div>" + doneLine;
+  return bar + '<div class="muted" style="margin-top: var(--space-1)">' + summary + "</div>" + doneLine;
 }
 
 /** 执行中任务卡的阶段槽（工单 ux-polish-02/06）：doing 态渲染 spinner + 阶段
@@ -472,7 +472,7 @@ export function taskIterationsHTML(task) {
         : "")
       + "</div>";
   }).join("");
-  return '<div class="muted task-iterations-title" style="margin-top:8px">历史记录（共 '
+  return '<div class="muted task-iterations-title" style="margin-top: var(--space-2)">历史记录（共 '
     + esc(String(iterations.length)) + " 轮）</div>"
     + '<div class="task-iterations">' + rows + "</div>";
 }
@@ -501,7 +501,7 @@ export function taskDialogAdoptHTML(task) {
   const note = task && task.dialog_note;
   if (!note || !String(note).trim()) return "";
   const text = String(note).trim();
-  return '<div class="muted" style="margin-top:4px">'
+  return '<div class="muted" style="margin-top: var(--space-1)">'
     + '<span class="badge ok">已采纳对话结论</span> '
     + esc(text.length > 30 ? text.slice(0, 30) + "…" : text)  // 摘要截 30 字 = spec「前 30 字」定数
     + ' <button class="btn-task-dialog-clear" data-task="' + esc(task.id || "") + '">取消采纳</button>'
@@ -598,9 +598,9 @@ export function taskStepReportHTML(task, opts) {
   const o = opts || {};
   const perTask = wiringPer(task, o);
   const wiring = wiringSectionHTML(task, o, perTask);
-  return '<div class="task-step-report" style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px">'
+  return '<div class="task-step-report" style="margin-top: var(--space-2);border-top:1px dashed var(--border);padding-top:6px">'
     + '<div class="muted" style="margin-bottom:2px">步骤报告（AI 本步总结）</div>'
-    + (wiring ? '<div class="task-step-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top:6px">' + wiring + "</div>" : "")
+    + (wiring ? '<div class="task-step-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top: var(--space-2)">' + wiring + "</div>" : "")
     + taskStepReportBlocksHTML(last.what_changed || "", last.user_action || "")
     + taskChecklistHTML(last, o.checkKey || "", o.checkedMap || {})
     + "</div>";
@@ -636,7 +636,7 @@ export function resourceIsHardware(name) {
 export function taskResourcesHTML(task) {
   const chips = taskResourceChipsHTML(task);
   if (!chips) return "";
-  return '<div class="muted" style="margin-top:4px">资源：' + chips + "</div>";
+  return '<div class="muted" style="margin-top: var(--space-1)">资源：' + chips + "</div>";
 }
 
 /** 任务资源 chips 串（工单 task-card-polish/01 抽取）：只产 chips 内容，
@@ -843,10 +843,10 @@ export function taskChecklistHTML(iteration, key, checkedMap) {
       + ' data-check-key="' + esc(String(key || "")) + '" data-check-idx="' + esc(String(index)) + '"'
       + (isChecked ? " checked" : "") + "> " + esc(String(item)) + "</label>";
   }).join("");
-  return '<details class="task-check-details" style="margin-top:6px">'
+  return '<details class="task-check-details" style="margin-top: var(--space-2)">'
     + '<summary class="task-check-summary">上板自检清单（' + String(items.length) + " 项"
     + (checkedCount ? " · 已勾选 " + String(checkedCount) : "") + "）</summary>"
-    + '<div class="task-check-list" style="margin-top:6px">'
+    + '<div class="task-check-list" style="margin-top: var(--space-2)">'
     + '<div class="muted" style="margin-bottom:2px">勾选为个人备忘，不改变任务状态</div>'
     + rows + "</div></details>";
 }
@@ -928,11 +928,11 @@ export function taskNextActionHTML(task, opts) {
   if (!String(action).trim()) return "";
   const perTask = wiringPer(task, opts);
   const wiring = wiringSectionHTML(task, opts, perTask);
-  return '<div class="task-next-action" style="margin-top:6px;padding:4px 8px;'
+  return '<div class="task-next-action" style="margin-top: var(--space-2);padding:4px 8px;'
     + 'border:1px solid var(--border);border-radius:8px;background:var(--panel-2)">'
     + '<span class="badge out">下一步要做</span>'
-    + (wiring ? '<div class="task-next-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top:6px">' + wiring + "</div>" : "")
-    + '<div style="margin-top:6px">' + esc(String(action)) + "</div></div>";
+    + (wiring ? '<div class="task-next-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top: var(--space-2)">' + wiring + "</div>" : "")
+    + '<div style="margin-top: var(--space-2)">' + esc(String(action)) + "</div></div>";
 }
 
 /** 上板自检清单勾选键单源（工单 task-insight/02）：localStorage key =
@@ -1117,7 +1117,7 @@ export function globalChatHTML(st) {
 export function globalNoteBadgeHTML(note) {
   if (!note || !String(note).trim()) return "";
   const text = String(note).trim();
-  return '<div class="muted" style="margin-top:4px">'
+  return '<div class="muted" style="margin-top: var(--space-1)">'
     + '<span class="badge ok">工程级全局结论</span> '
     + '<span title="' + esc(text) + '">' + esc(truncate(text, 30)) + "</span>"
     + ' <button class="btn-global-chat-action" data-global-action="clear">清除</button>'
@@ -1160,7 +1160,7 @@ export function taskEditFormHTML(task, opts) {
     .map((id) => (seqById[id] !== undefined ? String(seqById[id]) : id))
     .join(", ");
   const refsText = (task.score_refs || []).join(", ");
-  return '<div class="task-edit-form" style="margin-top:6px">'
+  return '<div class="task-edit-form" style="margin-top: var(--space-2)">'
     + '<label class="muted">标题</label>'
     + '<input type="text" id="task-edit-title-' + esc(taskId) + '" value="'
     + esc(task.title || "") + '">'
@@ -1179,7 +1179,7 @@ export function taskEditFormHTML(task, opts) {
     + '<label class="muted">评分点（逗号分隔，可空）</label>'
     + '<input type="text" id="task-edit-refs-' + esc(taskId) + '" value="'
     + esc(refsText) + '">'
-    + '<div class="row" style="margin-top:6px">'
+    + '<div class="row" style="margin-top: var(--space-2)">'
     + '<button class="btn-task-edit-save primary" data-task-action="edit-save" data-task="'
     + esc(taskId) + '">保存</button>'
     + '<button class="btn-task-edit-cancel" data-task-action="edit-cancel" data-task="'
@@ -1213,7 +1213,7 @@ export function ideaDraftListHTML(drafts, opts) {
   }).join("");
   return '<div class="muted" style="margin-bottom:4px">草稿（' + esc(String(list.length))
     + " 条）</div>" + items
-    + '<div class="row" style="margin-top:6px"><button class="btn-draft-all"'
+    + '<div class="row" style="margin-top: var(--space-2)"><button class="btn-draft-all"'
     + ' data-draft-action="all"' + disabled + ">全部逐条分析</button></div>";
 }
 

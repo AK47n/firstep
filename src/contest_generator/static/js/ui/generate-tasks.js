@@ -533,7 +533,7 @@ function renderIdeaFixResult(data) {
   const sr = data.step_report || {};
   const backupId = data.backup_id || "";
   $("tasks-grid").insertAdjacentHTML("beforeend",
-    '<div class="item" id="tasks-result" style="margin-top:10px">'
+    '<div class="item" id="tasks-result" style="margin-top: var(--space-3)">'
     + '<div class="head"><span class="slug">💡 直接修正结果</span> ' + markup.badge + "</div>"
     // 步骤报告：任务结果面板与直接修正结果面板共用同一纯函数（防两处各抄
     // 一份措辞漂移——评审整改 taskStepReportBlocksHTML 单源）

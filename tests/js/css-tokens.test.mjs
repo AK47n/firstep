@@ -47,3 +47,19 @@ test("按钮三类 .btn-pill--sm/--md 与 .btn-icon 已定义", () => {
     assert.ok(html.includes(cls + " {"), "应定义按钮类 " + cls);
   }
 });
+
+test("主题裸色已令牌化：绿完成族 / 渐变端 / 深字 / 紫端 / 电源 / tok 全族无裸值", () => {
+  for (const bare of ["#34d399", "#059669", "#33dcff", "#00b8de", "#001018",
+    "#04170c", "#8b5cf6", "#f59e0b"]) {
+    assert.ok(!html.includes(bare), "裸色应迁移：" + bare);
+  }
+  assert.ok(!/rgba\(0, 212, 255/.test(html), "accent 青 rgba 应走 var(--accent-rgb)");
+  assert.ok(!/rgba\(0, 150, 199/.test(html), "亮色 accent rgba 应走 var(--accent-rgb)");
+  assert.ok(!/\.tok-(com|str|pre|kw|num|tag|attr|val) \{ color: #[0-9a-f]{6}/.test(html),
+    ".tok-* 应走 var(--tok-*) 令牌");
+});
+
+test("间距魔法值收敛：margin-top 无 2/3/5/7/9/10/14px 裸值（1px 发丝线例外）", () => {
+  const m = [...html.matchAll(/margin-top:\s*(\d+)px/g)].map((x) => x[1]);
+  assert.deepEqual(m, ["1", "1"], "margin-top 仅保留 1px 发丝线（实际 " + m.join(",") + "）");
+});

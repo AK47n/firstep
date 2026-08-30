@@ -245,7 +245,7 @@ export async function editReference(entryId) {
     + '<h3>素材文件 <span class="muted">（勾选 = 删除；同名文件将用新增内容直接替换，一次保存完成）</span></h3>'
     + '<ul class="lib-mod-files ref-edit-files"></ul>'
     + '<div class="ref-edit-newfiles"></div>'
-    + '<div class="row" style="margin-top:4px"><button class="ref-edit-addrow">+ 文件</button>'
+    + '<div class="row" style="margin-top: var(--space-1)"><button class="ref-edit-addrow">+ 文件</button>'
     + '<button class="ref-edit-pick">选择文件…</button>'
     + '<button class="ref-edit-pickdir">选择文件夹…</button>'
     + '<input type="file" class="ref-edit-pick-input" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">'

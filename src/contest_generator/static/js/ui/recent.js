@@ -60,7 +60,8 @@ export function initRecent() {
       if (!ok) return;
       try {
         await apiDelete("/api/recent/" + encodeURIComponent(id));
-        toast("ok", "已删除最近记录（可撤销）", {
+        toast("ok", entry ? "已删除最近记录（可撤销）" : "已删除最近记录", {
+          ms: entry ? 8000 : 2500,   // 撤销窗口：8s（评审整改：2.5s 太短易错过）
           action: entry ? {
             label: "撤销",
             onClick: async () => {

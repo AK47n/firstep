@@ -29,7 +29,7 @@ export function pythonArtifactSummary(m) {
   const templates = pa.templates.map((t) =>
     `<div><strong>${esc(t.name || t.id)}</strong>${t.description ? "：" + esc(t.description) : ""}</div>`
   ).join("");
-  return `<div class="muted" style="margin-top:4px">副产物模板：${templates}</div>`;
+  return `<div class="muted" style="margin-top: var(--space-1)">副产物模板：${templates}</div>`;
 }
 
 // ---------------------------------------------------------------------------
