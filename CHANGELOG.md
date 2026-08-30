@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fcd9d6bf4519909f5d2e26471acaa27534a7bcfd -->
+<!-- changelog-auto: last-commit=cc63837245449f47da105ceab398afbfb0213f1a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -25,6 +25,7 @@
 - 11:59 工单 03 评审整改：修复修订结果备份文案的字符串拼接回归，守卫钉住正确拼接防止再发生
 - 12:01 工单 03 评审整改（二）：补解析型守卫——改动 ui 模块经 vm.SourceTextModule 解析防语法回归
 - 12:01 工程 README 补目录结构章与生成物骨架声明（工单 04）
+- 12:01 工单 03 标记 resolved（含双轴评审整改记录）；工单 04 标记 claimed
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
