@@ -23,7 +23,7 @@
 // 顶层监听（set-vision-provider / set-vision-base-url / set-vision-model /
 // btn-vision-selfcheck / btn-env-check / price-period 收音机 / set-local-llm-model /
 // btn-save-settings / btn-refresh-recent-wf）在 import 时绑定。
-import { $, apiGet, apiPut, apiPost, setState, state } from "/js/app.js";
+import { $, apiGet, apiPut, apiPost, setState, state, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { envCheckStatusHTML } from "/js/fx/env.js";
 import { SETTINGS_COLLAPSE_KEY, parseSettingsCollapse, effectiveCollapsed, settingsMasterLabel, settingsSectionHead, applySettingsCollapseState, secretEyeState } from "/js/fx/settings.js";
@@ -333,10 +333,27 @@ function collectLlmPrices() {
   return llmPrices;
 }
 
-$("btn-save-settings").addEventListener("click", async () => {
+// ---------------------------------------------------------------------------
+// 保存：sticky 保存条 + 底部按钮共用（工单 ux-walkthrough-02/04）——
+// 成功后 toast（任意位置可见）+ 原有页内绿字保留；保存中禁用双按钮防连点；
+// 任意字段改动 → 顶部「有未保存的修改」提示。
+// ---------------------------------------------------------------------------
+let settingsSaving = false;
+let settingsDirty = false;
+function updateSettingsDirtyUI() {
+  const hint = $("settings-dirty-hint");
+  if (hint) hint.classList.toggle("hidden", !settingsDirty);
+}
+async function saveSettings() {
+  if (settingsSaving) return false;
+  settingsSaving = true;
+  const btn = $("btn-save-settings");
+  const sticky = $("btn-save-settings-sticky");
+  if (btn) btn.disabled = true;
+  if (sticky) sticky.disabled = true;
   $("settings-msg").textContent = "";
   try {
-    const data = await apiPut("/api/settings", {
+    await apiPut("/api/settings", {
       base_url: $("set-base-url").value.trim(),
       api_key: $("set-api-key").value.trim(),
       model: $("set-model").value.trim(),
@@ -363,11 +380,61 @@ $("btn-save-settings").addEventListener("click", async () => {
     });
     $("settings-msg").classList.add("ok");
     $("settings-msg").textContent = "已保存，立即生效。";
+    toast("ok", "设置已保存，立即生效。");
+    settingsDirty = false;
+    updateSettingsDirtyUI();
     await refreshState();
     loadSettings();
+    return true;
   } catch (e) {
     $("settings-msg").classList.remove("ok");
     $("settings-msg").textContent = e.message;
+    toast("error", "设置保存失败：" + e.message);
+    return false;
+  } finally {
+    settingsSaving = false;
+    if (btn) btn.disabled = false;
+    if (sticky) sticky.disabled = false;
+  }
+}
+$("btn-save-settings").addEventListener("click", () => saveSettings());
+if ($("btn-save-settings-sticky")) {
+  $("btn-save-settings-sticky").addEventListener("click", () => saveSettings());
+}
+// 设置表单任意改动 → 未保存提示（loadSettings 程序赋值不触发 input/change）
+$("tab-settings").addEventListener("input", () => { settingsDirty = true; updateSettingsDirtyUI(); });
+$("tab-settings").addEventListener("change", () => { settingsDirty = true; updateSettingsDirtyUI(); });
+
+// 保存并连接（工单 ux-walkthrough-02/04）：保存当前设置 → 真实调用校验连接；
+// key 未填给明确提示（不调后端保存，避免把空 key 覆盖掉已有配置）。
+$("btn-save-connect").addEventListener("click", async () => {
+  const msg = $("save-connect-msg");
+  const key = $("set-api-key").value.trim();
+  msg.classList.remove("ok", "error");
+  if (!key) {
+    msg.textContent = "请先填写 API key（留空 = 保持已保存的 key 不变，不会覆盖）";
+    msg.classList.add("error");
+    toast("error", "请先填写 API key");
+    $("set-api-key").focus();
+    return;
+  }
+  msg.textContent = "正在保存并验证连接…";
+  const saved = await saveSettings();
+  if (!saved) {
+    msg.textContent = "保存失败，请按上方提示修正后重试";
+    msg.classList.add("error");
+    return;
+  }
+  msg.textContent = "已保存，正在验证连接…";
+  try {
+    const data = await apiPost("/api/llm/selfcheck");
+    msg.textContent = "✓ " + (data.message || "连接成功，AI 功能可用");
+    msg.classList.add("ok");
+    toast("ok", "AI API 连接成功");
+  } catch (e) {
+    msg.textContent = "✕ 连接失败：" + e.message;
+    msg.classList.add("error");
+    toast("error", "AI API 连接失败：" + e.message);
   }
 });
 
