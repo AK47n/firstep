@@ -4,12 +4,28 @@
 // ④工具类 .mt-2/4/6/8/.flex-1 已定义。静态标记守卫，直接读 index.html。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8",
 );
+
+function jsSources() {
+  const dir = fileURLToPath(new URL("../../src/contest_generator/static/js/", import.meta.url));
+  const out = [];
+  const walk = (d) => {
+    for (const f of readdirSync(d)) {
+      const p = join(d, f);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (f.endsWith(".js")) out.push(readFileSync(p, "utf8"));
+    }
+  };
+  walk(dir);
+  return out.join("\n");
+}
 
 test(":root 含令牌 --radius-xs/sm/md/lg/full 与 --space-1..6", () => {
   for (const t of ["--radius-xs", "--radius-sm", "--radius-md", "--radius-lg", "--radius-full",
@@ -27,13 +43,18 @@ test("可见字号无 13.5 / 10.5 / 10px 裸值（12.5/11/11.5 保留）", () =>
 test("border-radius 全走令牌：无裸 3/4/6/8/10/12/99/999px（50% 与 0 保留）", () => {
   const radii = [...html.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => m[1].trim());
   assert.ok(radii.length > 50, "应有足量圆角声明（实际 " + radii.length + "）");
-  const bad = radii.filter((v) => /^\d+p x$/.test(v) || /^(3|4|6|8|10|12|99|999)px$/.test(v));
+  const bad = radii.filter((v) => /^\d+px$/.test(v) || /^(3|4|6|8|10|12|99|999)px$/.test(v));
   assert.deepEqual(bad, [], "裸圆角值残留：" + bad.join("; "));
   // 其余只允许 var(--radius-*) / 50% / 0
   for (const v of radii) {
     if (v === "50%" || v === "0") continue;
     assert.ok(v.startsWith("var(--radius-"), "未知圆角值：" + v);
   }
+  // JS 内联样式模板同样不放过（评审整改：flash/task/generate-recommend/step-state 曾漏网）
+  const js = jsSources();
+  const jsBad = [...js.matchAll(/border-radius:\s*(3|4|6|8|10|12|99|999)px/g)].map((m) => m[0]);
+  assert.deepEqual(jsBad, [], "JS 内联裸圆角值残留：" + jsBad.join("; "));
+  assert.ok(!/\bfont-size:\s*10px\b/.test(js), "JS 内联字号 10px 应归 11px（评审整改）");
 });
 
 test("工具类 .mt-2/4/6/8 与 .flex-1 已定义", () => {
@@ -42,9 +63,14 @@ test("工具类 .mt-2/4/6/8 与 .flex-1 已定义", () => {
   }
 });
 
-test("按钮三类 .btn-pill--sm/--md 与 .btn-icon 已定义", () => {
-  for (const cls of [".btn-pill--sm", ".btn-pill--md", ".btn-icon"]) {
+test("按钮四类（.btn 基类 + 三类形态）已定义且有实际使用", () => {
+  for (const cls of [".btn", ".btn-pill--sm", ".btn-pill--md", ".btn-icon"]) {
     assert.ok(html.includes(cls + " {"), "应定义按钮类 " + cls);
+  }
+  // 三类形态至少各有一个实际元素使用（评审整改：防定义未用 = 死类）
+  for (const cls of ["btn-pill--sm", "btn-pill--md", "btn-icon"]) {
+    assert.ok(new RegExp('class="[^"]*' + cls).test(html),
+      "按钮类 " + cls + " 应至少被一个元素使用");
   }
 });
 
