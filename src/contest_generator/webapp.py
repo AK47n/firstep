@@ -141,6 +141,7 @@ from .library import (
     delete_module,
     draft_description,
     list_modules,
+    module_mtime,
     remove_platform_files,
     update_module_description,
     update_platform_identity,
@@ -3562,8 +3563,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/modules")
     @_map_errors
     def modules() -> list[dict]:
-        """浏览模块库（磁盘目录即数据库，实时读盘）。"""
-        return [m.to_dict() for m in list_modules(_library_dir(context))]
+        """浏览模块库（磁盘目录即数据库，实时读盘）；每条附 mtime（manifest
+        修改时间，ux-polish-02/07「最近更新」排序用——只进响应，不落盘）。"""
+        module_root = _library_dir(context)
+        return [
+            {**m.to_dict(), "mtime": module_mtime(module_root, m.slug)}
+            for m in list_modules(module_root)
+        ]
 
     @app.post("/api/modules")
     @_map_errors
@@ -4155,6 +4161,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             filename=filename,
         ):
             data = entry.to_dict()
+            data["mtime"] = entry.mtime   # ux-polish-02/07：浏览层「最近更新」排序（只进响应）
             if filename.strip():
                 data["matched_files"] = match_entry_files(
                     reference_root, entry.id, filename
@@ -4207,7 +4214,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 由 add_reference 大声失败（400）
             topic_type=_optional_str(payload, "topic_type") or "",
         )
-        return entry.to_dict()
+        return {**entry.to_dict(), "mtime": entry.mtime}   # ux-polish-02/07：浏览层排序字段
 
     @app.delete("/api/references/{entry_id}")
     @_map_errors
@@ -4260,7 +4267,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 同语义）；词表外值由 update_reference 大声失败（400）
             topic_type=_optional_str(payload, "topic_type") or "",
         )
-        return entry.to_dict()
+        return {**entry.to_dict(), "mtime": entry.mtime}   # ux-polish-02/07：浏览层排序字段
 
     @app.get("/api/references/{entry_id}/files")
     @_map_errors

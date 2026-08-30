@@ -147,6 +147,7 @@ class TopicEntry:
     hint_module_groups: tuple[str, ...] = ()  # 功能组 hint（工单 recommend-
     # exclusive-groups/02）：赛题疑似需要但 AI 未命中时出兜底选择卡（组 id
     # 清单，缺省空；id 库内无对应组时推荐链路静默忽略）
+    mtime: int = 0  # manifest mtime（epoch 秒，ux-polish-02/07「最近更新」排序用）
 
     @property
     def key(self) -> str:
@@ -163,6 +164,7 @@ class TopicEntry:
             "original_pdf": self.original_pdf,
             "programs": list(self.programs),
             "hint_module_groups": list(self.hint_module_groups),
+            "mtime": self.mtime,
         }
 
 
@@ -739,7 +741,17 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
         original_pdf=original_pdf,
         programs=tuple(raw_programs),
         hint_module_groups=tuple(raw_hint),
+        mtime=_entry_mtime(entry_dir),
     )
+
+
+def _entry_mtime(entry_dir: Path) -> int:
+    """条目 manifest mtime（epoch 秒）——浏览层「最近更新」排序数据源
+    （ux-polish-02/07）；不写入 manifest 文件（写盘逐字节兼容保持）。"""
+    try:
+        return int((entry_dir / MANIFEST_FILENAME).stat().st_mtime)
+    except OSError:
+        return 0
 
 
 def _require_str(data: Mapping[str, Any], key: str, entry_dir: Path) -> str:

@@ -16,6 +16,7 @@ from contest_generator.library import (
     draft_description,
     get_module,
     list_modules,
+    module_mtime,
     remove_platform_files,
     save_manifest,
     update_module_description,
@@ -69,6 +70,19 @@ def test_list_modules_loads_manifest_fields(fake_module_library):
     assert dht11.dependencies == ("delay",)
     assert dht11.platforms["stm32"].files == ("stm32/src/dht11.c", "inc/dht11.h")
     assert dht11.platforms["stm32"].verified is True
+
+
+def test_module_mtime_returns_manifest_timestamp(fake_module_library):
+    """mtime（ux-polish-02/07）：模块条目元数据 mtime（「最近更新」排序用），
+    只进浏览响应层（webapp /api/modules 补键），不写回 manifest。"""
+    for slug in ("broken", "delay", "dht11", "oled"):
+        mtime = module_mtime(fake_module_library, slug)
+        assert mtime > 0
+        assert mtime == int(
+            (fake_module_library / slug / MANIFEST_FILENAME).stat().st_mtime
+        )
+    # 不存在 / 目录被删 = 0（排序垫底不报错）
+    assert module_mtime(fake_module_library, "nope") == 0
 
 
 def test_list_modules_ignores_stray_files_at_library_root(fake_module_library):

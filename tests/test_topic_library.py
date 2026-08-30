@@ -315,6 +315,23 @@ def test_confirm_topics_creates_entry_dirs_with_md_manifest_and_pdf(
     assert (topic_root / KEY_2026D / TOPIC_MD_FILENAME).exists()
 
 
+def test_topic_mtime_roundtrip(topic_root, pdf):
+    """mtime（ux-polish-02/07）：确认入库/读回/列表都带 manifest mtime——
+    「最近更新」排序数据源；该字段只进序列化响应，不写进 manifest。"""
+    entries = confirm_topics(topic_root, pdf, DRAFTS, pdf_filename="真题.pdf")
+    for entry in entries:
+        assert entry.mtime > 0
+        assert entry.to_dict()["mtime"] == entry.mtime
+    assert [e.key for e in list_topics(topic_root)] == [
+        KEY_2026C, KEY_2026D,
+    ]
+    assert all(e.mtime > 0 for e in list_topics(topic_root))
+    manifest = json.loads(
+        (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert "mtime" not in manifest
+
+
 def test_confirm_topics_keeps_original_pdf_inside_each_entry(topic_root, pdf):
     confirm_topics(topic_root, pdf, DRAFTS, pdf_filename="原题.pdf")
 
