@@ -3169,7 +3169,7 @@ import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
 import { addFileRow, collectFiles, readPickedText, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
 import { renderPlatforms, renderModulePool, renderSelected, renderWarnings, renderRecommendResult, startRecommend, loadReferencePicker, chosenPlatform, selectedSlugs, expanded, lastRecommend, currentTopicId, selectedReferenceIds, autoReferenceIds, pythonTemplates, scorePoints, setChosenPlatform, setSelectedSlugs, setCurrentTopicId, setRecommendClarifications, setClusterDeps } from "/js/ui/generate-recommend.js";
 import { stepCard, markStepDone, markStepUndone, syncStep7, stepDoneSet, STEP_NAV_CARD_SELECTOR, initCardCollapse, setOnStepChange } from "/js/ui/step-state.js";
-import { instances, pinBindings, pinUnbound, pinRoles, renderInstanceConfig, renderPinCard, loadPinBoard, resetPinState, resetInstances, clearInstanceTarget, backfillInstances } from "/js/ui/generate-pins.js";
+import { instances, pinBindings, pinUnbound, pinRoles, renderInstanceConfig, renderPinCard, loadPinBoard, resetPinState, resetInstances, clearInstanceTarget, backfillInstances, pinChangeCount, configuredInstanceCount } from "/js/ui/generate-pins.js";
 import { initMainCTools, syncMainCHighlight, currentCodeZoomPct, applyCodeZoom } from "/js/ui/generate-mainc.js";
 import { initScoreChecklist } from "/js/ui/generate-core.js";
 import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } from "/js/ui/generate-fix.js";
@@ -3507,6 +3507,8 @@ setClusterDeps({
   renderInstanceConfig,
   loadPinBoard,
   backfillInstances,
+  pinChangeCount,
+  configuredInstanceCount,
 });
 setOnStepChange(() => { refreshGenOverview(); refreshReadinessPanel(); });
 setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainStatus(); } });

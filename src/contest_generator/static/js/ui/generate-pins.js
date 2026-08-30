@@ -816,7 +816,7 @@ function renderPinRoles(roles, fam) {
 
 $("btn-pin-reset").addEventListener("click", async () => {
   // 清空全部绑定前确认（工单 ux-walkthrough-02/01）：误点清零是第三处数据丢失风险
-  const count = Object.keys(pinBindings).length;
+  const count = Object.keys(pinBindings).length + pinUnbound.size;
   const ok = await confirmModal({
     title: "还原默认？",
     message: pinResetConfirmMessage(count),
@@ -825,7 +825,7 @@ $("btn-pin-reset").addEventListener("click", async () => {
   if (!ok) return;
   pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
   renderPinCard();
-  if (count) toast("ok", `已将 ${count} 处引脚绑定还原为默认`);
+  if (count) toast("ok", `已将 ${count} 处引脚改动还原为默认`);
 });
 
 $("btn-pin-rotate").addEventListener("click", () => {
@@ -981,6 +981,14 @@ function showPinMenu(pinEl, pinName) {
 
 // ---- 跨簇接缝函数（原 index.html 启动区 setClusterDeps 薄胶水迁入本体；工单 12
 // 接缝 → 13 静态化；推荐簇 A 经 setClusterDeps 注册调用） ----
+export function pinChangeCount() {
+  // 用户改过的引脚处数（绑定 + 显式解除）——平台切换确认 / 还原默认确认的计数口径
+  return Object.keys(pinBindings).length + pinUnbound.size;
+}
+export function configuredInstanceCount() {
+  // 已配置实例总数（跨模块求和）——平台切换确认的计数口径
+  return Object.values(instances).reduce((s, a) => s + ((a && a.length) || 0), 0);
+}
 export function resetPinState() {
   pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
 }
