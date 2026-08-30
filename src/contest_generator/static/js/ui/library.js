@@ -231,8 +231,8 @@ export function editModule(slug) {
     + '<input type="file" class="lib-mod-pick-input" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.inc,.s,.asm" style="display:none"></div>'
     + '<div class="lib-mod-msg"></div></div>'
     + '<div class="lib-edit-foot"><button class="lib-mod-cancel">取消</button>'
-    + '<button class="primary lib-mod-save">保存身份</button>'
-    + '<button class="primary lib-mod-push">推送新文件</button></div>';
+    + '<span class="lib-mod-pending muted hidden"></span>'
+    + '<button class="primary lib-mod-save">保存</button></div>';
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   modal.querySelector(".lib-edit-slug").textContent = module.slug;
@@ -244,7 +244,7 @@ export function editModule(slug) {
   const newfilesBox = modal.querySelector(".lib-mod-newfiles");
   const msgEl = modal.querySelector(".lib-mod-msg");
   const saveBtn = modal.querySelector(".lib-mod-save");
-  const pushBtn = modal.querySelector(".lib-mod-push");
+  const pendingBadge = modal.querySelector(".lib-mod-pending");
   const kitList = modal.querySelector("#lib-mod-kit-list");
   const close = () => overlay.remove();
   const setMsg = (text, ok) => {
@@ -296,14 +296,19 @@ export function editModule(slug) {
     Object.assign(module, data);
     renderLibraryTable();
   };
-  const doSaveIdentity = async () => {
+  const doSave = async () => {
+    // 单「保存」按钮（工单 ux-walkthrough-02/09）：顺序提交身份 → 推送新文件，
+    // 失败提示是哪一步；保存中禁用防连点；全部成功后一次反馈。
+    if (!curPlatform) { setMsg("该模块暂无平台版本（先到「添加模块」录入源文件）"); return; }
+    saveBtn.disabled = true; saveBtn.textContent = "保存中…";
     const kit = kitEl.value.trim();
     const url = urlEl.value.trim();
     if (url && !libIsValidHttpUrl(url)) {
-      setMsg("购买链接格式不正确（须 http/https 开头）"); return;
+      setMsg("购买链接格式不正确（须 http/https 开头）");
+      saveBtn.disabled = false; saveBtn.textContent = "保存";
+      return;
     }
-    if (!curPlatform) { setMsg("该模块暂无平台版本"); return; }
-    saveBtn.disabled = true; saveBtn.textContent = "保存中…";
+    // ① 身份（kit / 链接）
     try {
       const data = await apiPut(`/api/modules/${encodeURIComponent(module.slug)}/platform-identity`, {
         platform: curPlatform,
@@ -313,41 +318,58 @@ export function editModule(slug) {
       refresh(data);   // 数据始终更新（后端已写库）
       if (!overlay.isConnected) return;
       renderPlat();
-      setMsg("身份已保存");
     } catch (e) {
       if (!overlay.isConnected) return;
-      setMsg(e.message);
-    } finally {
-      saveBtn.disabled = false; saveBtn.textContent = "保存身份";
+      setMsg("身份保存失败：" + (e.message || String(e)));
+      saveBtn.disabled = false; saveBtn.textContent = "保存";
+      return;
     }
-  };
-  const doPushFiles = async () => {
+    // ② 推送新文件（无待推送 = 跳过）
     const files = collectFiles(newfilesBox);
-    if (files === null) return;
+    if (files === null) { saveBtn.disabled = false; saveBtn.textContent = "保存"; return; }
     const names = Object.keys(files);
-    if (!names.length) { setMsg("没有待推送的文件（先填文件名 + 内容或选择文件）"); return; }
-    if (!curPlatform) { setMsg("该模块暂无平台版本"); return; }
-    pushBtn.disabled = true; pushBtn.textContent = "推送中…";
-    try {
-      const data = await apiPost(`/api/modules/${encodeURIComponent(module.slug)}/platform-files`, {
-        platform: curPlatform,
-        files,
-        hardware_bound: !!curEntry().hardware_bound,
-        kit: curEntry().kit || undefined,
-        source_url: curEntry().source_url || undefined,
-      });
-      refresh(data);
-      if (!overlay.isConnected) return;
-      newfilesBox.innerHTML = "";
-      renderPlat();
-      setMsg("已推送 " + names.length + " 个文件");
-    } catch (e) {
-      if (!overlay.isConnected) return;
-      setMsg(e.message);
-    } finally {
-      pushBtn.disabled = false; pushBtn.textContent = "推送新文件";
+    if (names.length) {
+      try {
+        const data = await apiPost(`/api/modules/${encodeURIComponent(module.slug)}/platform-files`, {
+          platform: curPlatform,
+          files,
+          hardware_bound: !!curEntry().hardware_bound,
+          kit: curEntry().kit || undefined,
+          source_url: curEntry().source_url || undefined,
+        });
+        refresh(data);
+        if (!overlay.isConnected) return;
+        newfilesBox.innerHTML = "";
+        renderPlat();
+      } catch (e) {
+        if (!overlay.isConnected) return;
+        setMsg("文件推送失败：" + (e.message || String(e)));
+        saveBtn.disabled = false; saveBtn.textContent = "保存";
+        return;
+      }
     }
+    setMsg(names.length ? "已保存（含 " + names.length + " 个新文件推送）" : "已保存");
+    updatePendingBadge();
+    saveBtn.disabled = false; saveBtn.textContent = "保存";
   };
+  // 未推送文件计数角标（工单 ux-walkthrough-02/09）：新增行有文件名即计入，
+  // 保存前不误以为已推送；推送成功后角标消失
+  const pendingFileCount = () => {
+    let n = 0;
+    for (const row of newfilesBox.children) {
+      const name = row.querySelector("input").value.trim();
+      if (name) n++;
+    }
+    return n;
+  };
+  const updatePendingBadge = () => {
+    const n = pendingFileCount();
+    pendingBadge.textContent = n ? n + " 个文件未推送" : "";
+    pendingBadge.classList.toggle("hidden", !n);
+  };
+  newfilesBox.addEventListener("input", updatePendingBadge);
+  new MutationObserver(updatePendingBadge).observe(newfilesBox, { childList: true });
+  updatePendingBadge();
   const doRemoveFile = async (fname) => {
     if (!await confirmModal({
       title: "移除平台文件？",
@@ -369,8 +391,7 @@ export function editModule(slug) {
       setMsg(e.message);
     }
   };
-  saveBtn.addEventListener("click", doSaveIdentity);
-  pushBtn.addEventListener("click", doPushFiles);
+  saveBtn.addEventListener("click", doSave);
   modal.querySelector(".lib-mod-cancel").addEventListener("click", close);
   modal.querySelector(".ref-files-close").addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
