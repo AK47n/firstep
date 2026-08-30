@@ -51,7 +51,7 @@ export function envCheckStatusHTML(status, textCh, visionCh) {  if (!status) ret
   const tc = status.toolchains || {};
   const tcMeta = {
     stm32: { name: "Keil UV4（stm32）", miss: "未找到 UV4（可在设置页填 uv4_path 覆盖）", jump: { focus: "set-uv4-path", collapse: "toolchain" } },
-    mspm0: { name: "CCS + MSPM0 SDK（mspm0）", miss: "未找到 gmake / CCS 工具链（可在设置页填 gmake_path 或 CCS 三件套）", jump: { focus: "set-gmake-path", collapse: "toolchain" } },
+    mspm0: { name: "CCS + MSPM0 SDK（mspm0）· gmake", miss: "未找到 gmake / CCS 工具链（可在设置页填 gmake_path 或 CCS 三件套）", jump: { focus: "set-gmake-path", collapse: "toolchain" } },
   };
   for (const [plat, meta] of Object.entries(tcMeta)) {
     const entry = tc[plat];
