@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a3f4a3432802100d6b10011cab45a6bf66d2fe36 -->
+<!-- changelog-auto: last-commit=f3306820c18c97b64e8ca7ed15c9c97b17bcc5d4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 01:28 新手指引 03：教程内容「编译与上板」+「交付与收尾」两章 + 守护扩展——fx/guide.js 增后两章（编译三种方式/SWD 四线接线表/烧录与常见报错/上板自检；报告与演示草稿/交付三动作/交接提示词三步/工程在哪/停服务/下一题）；守护改单源派生（SWD 引脚读 boards/*.json、产物与 flash.py artifact 行核对）+ title 定位替代下标魔法——双轴评审整改；探针 11 项 PASS，tests/js 798 + pytest 2827 全绿
 - 01:32 新手指引 04：欢迎卡「先看新手指引」入口 + README 提示 + 浏览器验收——full 态新增 btn-welcome-guide（fx 单源 + ui 接线 gotoNavTab 去 guide 页签，compact/hidden 不含）+ welcome.test.mjs 更新 + README「30 秒上手」补入口一句；验收探针 probe-04（route 模拟全新手 /api/state）10 项全 PASS——导航三组/四章/跳转/亮暗主题/零 JS 错误；tests/js 798 + pytest 2827 全绿；新手指引 01-04 全部完成
 - 01:41 顶部导航胶囊化重构：去掉流程链小字与组标签（做题/资料管理/指南），tab 按钮改圆角胶囊（闲置浅底描边、hover 淡青底、激活青→紫渐变深字），主题钮并入胶囊同风格；nav-tabs-guard 守卫随新契约更新（组容器无 data-tab、无 tab-group-label 残留）；tests/js 798 全绿
+- 11:24 新手指南补全（beginner-guide-enrich 01-05）：教程/README/欢迎卡/词表修正与丰富——①「一键补齐下载库」三处改事实口径（只带路不下载）；②教程准备章补库目录自动指向+手动核对、IDE 官方下载表（MDK 评估版 32KB/CCS/MSPM0 SDK/ST-Link 驱动直链）+浏览器一行；③做题主线/交付章补「评分点核对」「评分点覆盖总览」「参数速调」讲解，词表增 2 词至 12 词；④编译章新增「常见报错速查」表（7 行症状→对策，与 flash.py/env.js 事实核对，原烧录报错 note 改为指向速查表）；⑤install.bat 第 4 步首次写最小引导配置（api_key 空+库目录指向随包 library，GBK 保真、已有配置不动、置于自检前）；config.py 增 write_bootstrap_config/raw_library_dirs（非法回退默认），settings GET 未配 key 时返回磁盘库目录（防首次保存设置覆盖）；守卫扩展：guide-refs 三新测试（库目录/下载表/速查表）、welcome 口径断言、glossary 12 词；tests/js 801 + pytest（config/webapp 305）全绿
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
