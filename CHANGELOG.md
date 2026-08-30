@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ce49d9c0035f826c48fac30424ba90dd4f4eca8a -->
+<!-- changelog-auto: last-commit=616b2bf562fe5091a0e3c5b9e76c4c41b06bbdbd -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -50,6 +50,7 @@
 - 16:03 工单 06 resolved：前端实例选脚按模块首 pin 类型（gpio_in）
 - 16:10 工单 07 resolved：编译矩阵 + 全库回归验收
 - 16:40 体验优化：首屏自动聚焦赛题原文、题面 Ctrl+Enter 快捷预读、修复中心编译输出空时隐藏、设置页 key 密码态显隐（含 2 个纯函数与单测）
+- 17:03 体验优化：步骤完成态修复（空推荐不标完成、默认布线显示「▣ 默认布线」而非已就绪）——ux-polish-02/01
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
