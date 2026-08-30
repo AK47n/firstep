@@ -165,6 +165,31 @@ CCS_NOT_FOUND_HINT = (
 )
 
 
+def ccs_tools_status(
+    sdk_override: str = "",
+    compiler_override: str = "",
+    sysconfig_override: str = "",
+) -> dict:
+    """CCS 三件套逐件探测（工单 ux-walkthrough-02/05）：与 find_ccs_tools
+    同规则（覆盖优先、非空但不存在 = 未找到、自动扫描取目录名排序最大），
+    返回逐件 {found, path}——环境体检要求「逐行返回每件状态」，整体
+    find_ccs_tools 的 None 不够细。纯只读探测，无副作用。"""
+    pieces = {
+        "sdk": _piece(sdk_override, _sdk_candidates, kind="dir"),
+        "compiler": _piece(compiler_override, _compiler_candidates, kind="dir"),
+        "sysconfig": _piece(
+            sysconfig_override, _sysconfig_candidates, kind="file", by_parent=True
+        ),
+    }
+    return {
+        key: {
+            "found": p is not None,
+            "path": str(p) if p is not None else None,
+        }
+        for key, p in pieces.items()
+    }
+
+
 def find_ccs_tools(
     sdk_override: str = "",
     compiler_override: str = "",
@@ -179,14 +204,14 @@ def find_ccs_tools(
     makefile 生成 + build_hint 提示，不阻断生成）。覆盖值非空但指向不存在
     路径 = 该件未找到（与 find_uv4 同规，不静默）。
     """
-    sdk = _piece(sdk_override, _sdk_candidates, kind="dir")
-    compiler = _piece(compiler_override, _compiler_candidates, kind="dir")
-    sysconfig = _piece(
-        sysconfig_override, _sysconfig_candidates, kind="file", by_parent=True
-    )
-    if sdk is None or compiler is None or sysconfig is None:
+    status = ccs_tools_status(sdk_override, compiler_override, sysconfig_override)
+    if not all(status[key]["found"] for key in ("sdk", "compiler", "sysconfig")):
         return None
-    return CcsTools(sdk_dir=sdk, compiler_dir=compiler, sysconfig_cli=sysconfig)
+    return CcsTools(
+        sdk_dir=Path(status["sdk"]["path"]),
+        compiler_dir=Path(status["compiler"]["path"]),
+        sysconfig_cli=Path(status["sysconfig"]["path"]),
+    )
 
 
 def _piece(

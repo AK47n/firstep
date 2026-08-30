@@ -20,10 +20,10 @@ from contest_generator.compile_runner import (
     BuildLog,
     CcsTools,
     CompileRunnerError,
+    ccs_tools_status,
     compile_passed,
     collect_build_log,
-    find_ccs_tools,
-    find_make,
+    find_ccs_tools,    find_make,
     find_uv4,
     resolve_compile_toolchain,
     run_compile,
@@ -269,6 +269,36 @@ def test_find_ccs_tools_invalid_override_returns_none(monkeypatch, tmp_path):
 def test_find_ccs_tools_empty_scan_root_returns_none(monkeypatch, tmp_path):
     _scan_root(monkeypatch, tmp_path)
     assert find_ccs_tools() is None
+
+
+def test_ccs_tools_status_reports_each_piece(monkeypatch, tmp_path):
+    """逐件状态（工单 ux-walkthrough-02/05）：三件齐 → 逐件 found+path；
+    缺一件 → 该件 found False 其余照常（整体层 find_ccs_tools 仍 None）。"""
+    _ccs_tree(tmp_path, "ccs2050", compiler="")
+    _scan_root(monkeypatch, tmp_path)
+
+    st = ccs_tools_status()
+
+    assert st["sdk"]["found"] is True
+    assert st["sdk"]["path"]
+    assert st["compiler"]["found"] is False
+    assert st["compiler"]["path"] is None
+    assert st["sysconfig"]["found"] is True
+    assert find_ccs_tools() is None  # 同源：缺件 → 整体 None
+
+
+def test_ccs_tools_status_override_priority(monkeypatch, tmp_path):
+    """逐件状态（工单 ux-walkthrough-02/05）：覆盖优先、非空但不存在 = 未找到。"""
+    _ccs_tree(tmp_path, "ccs2050")
+    _scan_root(monkeypatch, tmp_path)
+    sdk = tmp_path / "custom_sdk"
+    sdk.mkdir()
+
+    st = ccs_tools_status(str(sdk), "", "")
+
+    assert st["sdk"]["found"] is True
+    assert st["sdk"]["path"] == str(sdk)
+    assert ccs_tools_status(str(tmp_path / "gone"), "", "")["sdk"]["found"] is False
 
 
 # ---------------------------------------------------------------------------
