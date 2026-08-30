@@ -1,0 +1,12 @@
+# 04 — 前端：代码 tab 骨架 + 文件树 + 只读代码视图
+
+**要做什么：** 学生打开「代码」标签页 → 点「选择文件夹」（服务端原生对话框）→ 左侧出现可收起文件树（目录在前、码点序、噪音目录不出现）→ 点树内文本文件，中间出现带行号 + 语法高亮的只读视图。端到端可手动验证，无 minimap。
+
+**被谁阻塞：** 01。
+
+**状态：** ready-for-agent
+
+- [x] index.html：导航 `<button data-tab="code">`（「代码」+ title 一句话）+ tab-code 区（顶栏：选择文件夹按钮 / 当前目录路径；三栏容器：左树 / 中视图 / 右侧栏占位）+ 宿主 module script import ui/codeview.js 并 initCodeViewer()。
+- [x] fx/codeview.js：`buildCodeTree(files)`（扁平清单 → 嵌套节点，目录在前同级码点序）/ `codeTreeHTML(nodes)`（原生 details/summary，不 import fx/master.js——同构新写避免母版语义耦合）/ `codeLineNumbersHTML(count)` / `codeViewHTML(content, lang)`（gutter 行号 + pre white-space:pre 不换行、同一 font/line-height 保证行对齐；高亮走 fx/highlight.js highlightText 单源）；末尾 Object.assign(window, …) 兼容。
+- [x] ui/codeview.js：`initCodeViewer()`（选择文件夹 → apiPost /api/pick-directory（取消静默）→ `openCodeViewer(path)`；树点击委托：文件 → apiGet /api/code/file → 渲染 + memo（key = dir+path）；目录 → 原生展开收起；加载三态 + 中文错误 toast）+ 导出 `openCodeViewer(dir)`（先存 dir 再切到 tab-code 并加载）。
+- [x] tests/js/codeview.test.mjs（buildCodeTree 排序与嵌套 / codeLineNumbersHTML / codeViewHTML 行数一致与高亮分发与转义）；既有 tests/js 全绿、pytest 全绿。

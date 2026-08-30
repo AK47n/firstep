@@ -1,8 +1,9 @@
-// 顶部导航 tab 分组守卫（工单 tab-grouping/01/02；工单 beginner-guide/01 增「指南」组）：
+// 顶部导航 tab 分组守卫（工单 tab-grouping/01/02；工单 beginner-guide/01 增「指南」组；
+// 工单 code-viewer/04 增「代码」组内按钮）：
 // 读 index.html 静态标记锁定——组容器（做题 / 资料管理 / 指南）各恰好一个、
-// 9 个 tab 键无多余/缺失、组归属与组内顺序精确、组容器不可点击且无旧组标签
+// 10 个 tab 键无多余/缺失、组归属与组内顺序精确、组容器不可点击且无旧组标签
 // （tab-group-label 随胶囊导航重构移除，防把分组拆掉或把标签升级成按钮）、
-// 9 个按钮均带非空中文 title（防占位半句话）、每个 tab 键有对应 section 容器
+// 10 个按钮均带非空中文 title（防占位半句话）、每个 tab 键有对应 section 容器
 // （防死按钮）。
 // 仿 tab-nav-guard.test.mjs 先例：静态标记的守卫测试直接读 HTML 断言。
 import test from "node:test";
@@ -16,7 +17,7 @@ const html = readFileSync(
 
 // 分组定义（与 index.html 顶部导航的标记契约）：组内顺序 = 组内按钮出现顺序。
 const GROUPS = [
-  { label: "做题", keys: ["generate", "topic", "settings"] },
+  { label: "做题", keys: ["generate", "topic", "code", "settings"] },
   { label: "资料管理", keys: ["library", "reference", "pdf", "master", "changelog"] },
   { label: "指南", keys: ["guide"] },
 ];
@@ -71,7 +72,7 @@ test("tab 按钮 ARIA：role=tab + aria-selected + aria-controls + roving tabind
   }
 });
 
-test("9 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
+test("10 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
   const nav = headerNavHTML();
   for (const key of ALL_KEYS) {
     assert.equal(countOccurrences(nav, 'data-tab="' + key + '"'), 1,
@@ -113,7 +114,7 @@ test("组先后顺序：做题组在资料管理组之前，指南组在最后�
   assert.ok(lib < guide, "组顺序应为「指南」在「资料管理」之后（工单 beginner-guide/01 契约）");
 });
 
-test("tab 按钮 title 覆盖：9 个均有非空中文 title（长度 ≥8）", () => {
+test("tab 按钮 title 覆盖：10 个均有非空中文 title（长度 ≥8）", () => {
   const nav = headerNavHTML();
   const CJK = /[\u4e00-\u9fff]/;
   for (const key of ALL_KEYS) {

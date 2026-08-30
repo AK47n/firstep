@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
+from .codeview import list_code_tree, read_code_file, search_code_files
 from .compile_runner import (
     CompileRunnerError,
     ccs_tools_status,
@@ -3954,6 +3955,43 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         与关键文件端点同文案惯例）。
         """
         return read_master_tree_file(_masters_dir(context), platform, path)
+
+    @app.post("/api/code/open")
+    @_map_errors
+    def code_open(payload: dict) -> dict:
+        """代码查看器：打开目录（工单 code-viewer/01）。
+
+        dir = 服务器本地绝对路径（与 /api/masters/import 同风险面——本机
+        工具语义；来源为最近记录 output_dir 或原生文件夹对话框
+        /api/pick-directory）。返回 {root, files: [{path, size_bytes}]}：
+        统一噪音跳过的扁平清单（构建产物目录 / .git 不计入），条目超限
+        400 中文。只读浏览，零写侧、零落盘。
+        """
+        dir_str = _require_str(payload, "dir")
+        return {"root": dir_str, "files": list_code_tree(Path(dir_str))}
+
+    @app.get("/api/code/file")
+    @_map_errors
+    def code_file(dir: str, path: str) -> dict:
+        """代码查看器：目录内文件内容（只读预览，工单 code-viewer/01）。
+
+        路径安全 / NUL 二进制 / 超 1MB 三类均 400 中文（与母版树端点同
+        安全约束，判定在盘访问之前）；成功返回 {path, size_bytes, content,
+        outline}（utf-8 errors=\"replace\" 读取 + 换行归一化，与
+        read_master_tree_file 同读法）。
+        """
+        return read_code_file(Path(dir), path)
+
+    @app.get("/api/code/search")
+    @_map_errors
+    def code_search(dir: str, q: str) -> dict:
+        """代码查看器：跨文件搜索（工单 code-viewer/02）。
+
+        大小写不敏感子串匹配（中文不受影响）；跳过噪音 / NUL 二进制 /
+        超 1MB 文件；命中上限 CODE_SEARCH_MAX_HITS=200，到达即截断
+        （truncated: true）。空 q 或目录不存在 → 400 中文；只读、零写侧。
+        """
+        return search_code_files(Path(dir), q)
 
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）

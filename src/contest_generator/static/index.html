@@ -1308,6 +1308,71 @@
     line-height: 1.7; max-height: min(52vh, 560px); overflow-y: auto; padding: 12px 14px;
     margin: 6px 0 0; background: var(--bg); border: 1px solid var(--border);
     border-radius: var(--radius-md); font-family: var(--mono); }
+  /* 代码查看器（工单 code-viewer/04-05）：三栏布局 / 树 / 行号 gutter / 只读视图 */
+  .code-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .code-toolbar h2 { margin: 0; }
+  .code-dir-label { font-family: var(--mono); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+  .code-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr) 300px;
+    gap: 10px; margin-top: var(--space-3); height: min(70vh, 640px); min-height: 420px; }
+  .code-pane { display: flex; flex-direction: column; min-width: 0; background: var(--panel);
+    border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; }
+  .code-pane-title { font-weight: 600; font-size: 12.5px; color: var(--muted);
+    padding: 2px 4px 6px; }
+  .code-tree-box { flex: 1; overflow: auto; min-height: 0; }
+  .code-file-path { font-size: 12px; color: var(--muted); padding: 2px 4px 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .code-view { flex: 1; overflow: auto; min-height: 0; display: flex;
+    align-items: flex-start; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); }
+  .code-gutter { position: sticky; left: 0; flex: none; background: var(--panel-2);
+    border-right: 1px solid var(--border); padding: 8px 0; user-select: none; }
+  .code-gutter-line { display: block; font-family: var(--mono); font-size: 13px;
+    line-height: 1.55; padding: 0 8px; text-align: right; color: var(--muted); }
+  .code-gutter-line.flash { background: var(--accent-dim); color: var(--accent); }
+  .code-pre { margin: 0; padding: 8px 12px; background: none; border: 0;
+    font-family: var(--mono); font-size: 13px; line-height: 1.55; white-space: pre; }
+  .code-tree { list-style: none; margin: 6px 0 0; padding: 0 0 0 14px; }
+  .code-tree .code-tree { border-left: 1px solid var(--border); padding-left: 8px; }
+  .code-tree-dir summary { cursor: pointer; font-weight: 600; padding: 2px 4px;
+    font-size: 12.5px; border-radius: var(--radius-xs); }
+  .code-tree-dir summary:hover { background: var(--panel-2); }
+  .code-tree-file button { width: 100%; text-align: left; display: flex;
+    justify-content: space-between; align-items: center; gap: 8px; padding: 3px 8px;
+    background: none; color: var(--text); border: 0; border-radius: var(--radius-sm);
+    cursor: pointer; font-size: 12.5px; }
+  .code-tree-file button:hover { background: var(--panel-2); }
+  .code-tree-file button.on { background: var(--accent-dim); color: var(--accent); }
+  .code-tree-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .code-side-tabs { display: flex; gap: 4px; margin-bottom: var(--space-1); }
+  .code-side-tabs button { padding: 3px 12px; font-size: 12.5px; border-radius: var(--radius-sm); }
+  .code-side-tabs button.on { background: var(--accent-dim); color: var(--accent); }
+  .code-side-panel { flex: 1; overflow: auto; min-height: 0; }
+  .code-outline { list-style: none; margin: 0; padding: 0; }
+  .code-outline-item { width: 100%; text-align: left; display: flex; gap: 6px;
+    align-items: center; padding: 3px 8px; background: none; color: var(--text);
+    border: 0; border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; }
+  .code-outline-item:hover { background: var(--panel-2); }
+  .code-outline-kind { font-family: var(--mono); font-size: 11px; width: 18px;
+    text-align: center; color: var(--muted); flex: none; }
+  .code-outline-kind.k-function { color: var(--accent); }
+  .code-outline-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .code-side-empty { padding: 6px 8px; font-size: 12.5px; }
+  .code-search-row, .code-find-row { display: flex; gap: 6px; margin-bottom: var(--space-1); }
+  .code-search-row input, .code-find-row input { flex: 1; min-width: 0; }
+  .code-search-results, .code-find-results { font-size: 12.5px; }
+  .code-side-summary { list-style: none; margin: 0 0 4px; padding: 0 4px; }
+  .code-search-list, .code-find-list { list-style: none; margin: 0; padding: 0; }
+  .code-search-hit, .code-find-item { width: 100%; text-align: left; display: flex;
+    flex-direction: column; gap: 1px; padding: 4px 8px; background: none; color: var(--text);
+    border: 0; border-radius: var(--radius-sm); cursor: pointer; }
+  .code-search-hit:hover, .code-find-item:hover { background: var(--panel-2); }
+  .code-search-hit.on { background: var(--accent-dim); color: var(--accent); }
+  .code-search-path { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .code-search-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%; }
   /* 编辑弹窗（工单 topic-library-ui/05）：表单字段 / 功能组勾选 */
   .topic-edit-field { margin-top: var(--space-3); }
   .topic-edit-field label { font-size: 12px; font-weight: 600; display: block; margin-bottom: var(--space-1); }
@@ -2070,6 +2135,7 @@
     <div class="tab-group" role="tablist" aria-label="做题">
       <button data-tab="generate" class="active" role="tab" aria-selected="true" aria-controls="tab-generate" tabindex="0" title="主流程：粘贴赛题 → AI 推荐 → 引脚配置 → 生成工程 → 编译修复。">生成</button>
       <button data-tab="topic" role="tab" aria-selected="false" aria-controls="tab-topic" tabindex="-1" title="历年真题（题面 + 附带程序），点「取题面」可一键填入生成页。">赛题库</button>
+      <button data-tab="code" role="tab" aria-selected="false" aria-controls="tab-code" tabindex="-1" title="IDE 式只读代码查看：文件树 + 行号 + 语法高亮 + 大纲 + 搜索（改代码仍走「生成」或 IDE）。">代码</button>
       <button data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" title="配置 AI API key、环境体检、工具链路径与库设置——第一次使用先来这里。">设置</button>
     </div>
     <div class="tab-group" role="tablist" aria-label="资料管理">
@@ -2991,6 +3057,47 @@
     </div>
   </section>
 
+  <!-- ============================ 代码查看器（工单 code-viewer/04-05） ============================ -->
+  <section id="tab-code" class="page">
+    <div class="card">
+      <div class="code-toolbar">
+        <h2>代码查看器（只读）</h2>
+        <button id="btn-code-pick-dir" data-ico="code">选择文件夹…</button>
+        <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
+      </div>
+      <div class="code-layout">
+        <div class="code-pane code-pane-tree">
+          <div class="code-pane-title">文件</div>
+          <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
+        </div>
+        <div class="code-pane code-pane-main">
+          <div class="code-file-path mono" id="code-current-path"></div>
+          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件查看内容（只读）</span></div>
+        </div>
+        <div class="code-pane code-pane-side">
+          <div class="code-side-tabs">
+            <button type="button" data-code-side="outline" class="on">大纲</button>
+            <button type="button" data-code-side="search">搜索</button>
+          </div>
+          <div data-code-side-panel="outline" class="code-side-panel">
+            <div id="code-outline" class="code-outline-box"><span class="muted">打开 .c/.h 文件后显示函数 / 宏 / include</span></div>
+          </div>
+          <div data-code-side-panel="search" class="code-side-panel hidden">
+            <div class="code-search-row">
+              <input type="text" id="code-search-input" placeholder="在工程中搜索关键词…" aria-label="在工程中搜索关键词">
+              <button type="button" id="btn-code-search">搜索</button>
+            </div>
+            <div class="code-find-row">
+              <input type="text" id="code-find-input" placeholder="当前文件内查找（Ctrl+F）" aria-label="当前文件内查找">
+            </div>
+            <div id="code-search-results" class="code-search-results"></div>
+            <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============================ 更新记录页 ============================ -->
   <section id="tab-changelog" class="page">
     <div class="card">
@@ -3291,6 +3398,7 @@ import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, draftState, draftSave,
 import { waitLabel, WAIT_GENERIC_LINE } from "/js/fx/wait.js";
 import { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll } from "/js/fx/generate.js";
 import { recentStatusMeta, recentTimeLabel, recentPlatformLabel, recentChipHTML, recentListHTML, recentStatusNow } from "/js/fx/recent.js";
+import { buildCodeTree, codeTreeHTML, codeLineNumbersHTML, codeViewHTML, outlineHTML, outlineEmptyHTML, searchListHTML, fileFindFilter } from "/js/fx/codeview.js";
 import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
 import { formatLLMTelemetry, parseSSE, usageDelta, usageAccumulate, llmCostEstimate, usageDisplay } from "/js/fx/llm.js";
 import { formatScorePoints, renderScorePointPanel, scoreChecklistPartLabel, scoreChecklistScoreText, scoreChecklistRefsText, scoreChecklistId, scoreChecklistChecked, scoreChecklistLineText, scoreChecklistKey, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistExportText, scoreChecklistParse, scoreChecklistLoad, scoreChecklistSave } from "/js/fx/score.js";
@@ -3328,6 +3436,7 @@ import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
+import { initCodeViewer } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
 "use strict";
 
@@ -3722,6 +3831,7 @@ applyInputA11y();  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19�
 initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
 initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪，纯本地交互
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
+initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM 已就绪，纯本地交互

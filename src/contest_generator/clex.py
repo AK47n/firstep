@@ -1,27 +1,53 @@
 """C 源码词法层 —— 机械切分文本，不判语义。
 
 围栏剥离 / 注释与字符串切分（iter_c_regions）/ 括号配对（match_bracket）/
-空白注释跳读（next_significant）/ 引号 include 提取 / 顶层 #define 扫描的
-唯一出处。接口全部是"字符串进、字符串出（或元组列表出）"，不碰盘上文件——
-骨架自检与生成门禁共用同一份实现，杜绝逐字重复（判例：围栏正则曾两处定义、
-注释剥离器两义并存，改一处忘另一处即分叉；skeleton 曾手写第二套注释/字符串
-切分与括号配对，工单 C 深化吸收）。
+空白注释跳读（next_significant）/ 引号 include 提取 / 顶层 #define 扫描 /
+顶层函数定义形态扫描（top_level_functions）的唯一出处。接口全部是"字符串进、
+字符串出（或元组列表出）"，不碰盘上文件——骨架自检与生成门禁共用同一份实现，
+杜绝逐字重复（判例：围栏正则曾两处定义、注释剥离器两义并存，改一处忘另一处
+即分叉；skeleton 曾手写第二套注释/字符串切分与括号配对，工单 C 深化吸收）。
 
 不做的事：调用形态识别（"名字后跟 ( 是不是函数调用"）是骨架自检的语义
-判断，归 skeleton.py（_DECL_OR_DEF_RE 等）；这里只做任何 C 源文本都需要
-的机械切分。
+判断，归 skeleton.py（_DECL_OR_DEF_RE 等）；top_level_functions 也只判
+"定义形态"（ident ( … ) { 括号深度 0），不判语义（返回类型 / 参数表校验
+一概不看）。
 """
 
 from __future__ import annotations
 
 import re
-from typing import Iterator, Literal
+from typing import Any, Iterator, Literal
 
 # Markdown 代码围栏行（``` / ~~~，可带语言标注）：LLM 输出最常见的传输层包裹
 _FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[a-zA-Z0-9_-]*\s*$")
 
 # 引号 include 提取（对 strip_comments(keep_preprocessor=True) 后的文本匹配）
 _INCLUDE_QUOTED_RE = re.compile(r'#\s*include\s*"([^"]+)"')
+
+# C 标识符（ASCII 词法惯例，不放开 unicode）
+_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+# 顶层函数形态扫描排除的关键字/宏：这些 ident 后跟 ( … ) 是控制流 / 运算符，
+# 不是函数定义（top_level_functions 单处引用）
+_FUNCTION_KEYWORDS = frozenset(
+    {
+        "if",
+        "for",
+        "while",
+        "switch",
+        "case",
+        "default",
+        "return",
+        "sizeof",
+        "do",
+        "else",
+        "goto",
+        "break",
+        "continue",
+        "static_assert",
+        "_Static_assert",
+    }
+)
 
 
 def strip_code_fences(code: str) -> str:
@@ -279,3 +305,145 @@ def top_level_defines(code: str) -> dict[str, tuple[str, int]]:
                     defines[name] = (value, lineno)
         i += 1
     return defines
+
+
+def quoted_include_lines(code: str) -> list[tuple[str, int]]:
+    """引号 include 的 (头文件名, 行号) 清单（对**原始** C 文本用）。
+
+    直接走 iter_c_regions(preprocessor=True) 的预处理行区域：行号 = 该 # 行
+    在原文的 1 基行号——注释行里的伪装 include（`// #include "no.h"`）与
+    字符串里的都不算；与 extract_quoted_includes（对 stripped 文本用）同一
+    正则单源（_INCLUDE_QUOTED_RE）。
+    """
+    starts = _line_starts(code)
+    hits: list[tuple[str, int]] = []
+    for kind, start, end in iter_c_regions(code, preprocessor=True):
+        if kind != "preprocessor":
+            continue
+        m = _INCLUDE_QUOTED_RE.search(code[start:end])
+        if m:
+            hits.append((m.group(1), _pos_line(starts, start)))
+    return hits
+
+
+def _line_starts(code: str) -> list[int]:
+    """每行起始偏移表（首元素 0；第 k 行起点 = starts[k-1]）。"""
+    starts = [0]
+    for j, ch in enumerate(code):
+        if ch == "\n":
+            starts.append(j + 1)
+    return starts
+
+
+def _pos_line(starts: list[int], pos: int) -> int:
+    """偏移 → 1 基行号（起点 ≤ pos 的行数；等价二分）。"""
+    lo, hi = 0, len(starts)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if starts[mid] <= pos:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
+def top_level_functions(code: str) -> list[dict[str, Any]]:
+    r"""C 源顶层函数定义清单（机械法 best-effort，工单 code-viewer/03）：
+    [{name, line}]（line 为 1 基源行号，取函数名所在行）。
+
+    实现 = 掩码切分 + 单遍形态扫描：iter_c_regions(preprocessor=True) 的
+    非 code 区域（注释 / 字符串 / 字符字面量 / 行首 # 预处理行）就地替换为
+    空白（保留换行与字符数），得到与原文行列对齐的代码掩码；再在掩码上扫描
+    花括号深度 0 处 `ident ( … ) {` 形态——ident 排除控制流关键字
+    （_FUNCTION_KEYWORDS），(… ) 用 match_bracket 配平，跳过空白后仍是
+    `{` 即函数定义（此时括号深度须为 0，防声明体内误收）。
+
+    best-effort 边界（宁可放过、不可误杀）：
+    - 多行宏的续行在掩码里仍是可读文本（如 `#define INIT() \` 后一行
+      `static void init(void) { \` 会被收成函数）——按「前一行为反斜杠结尾」
+      的续行标记整行跳过；续行不含 `\` 结尾（断续宏体）是已知误收风险，
+      对「打开即看」场景可接受，以点击行为准。
+    - 属性 / 限定符夹在 `)` 与 `{` 之间（如 __attribute__）与 K&R 旧式定义
+      不识别；函数指针声明（`int (*p)(void)`）不匹配（ident 后是 `)`）。
+    """
+    n = len(code)
+    mask = list(code)
+    for kind, start, end in iter_c_regions(code, preprocessor=True):
+        if kind != "code":
+            for j in range(start, end):
+                if code[j] != "\n":
+                    mask[j] = " "
+    masked = "".join(mask)
+
+    # 行起始偏移表：line_of(pos) = 起点 ≤ pos 的行数（即 1 基行号）
+    line_starts = _line_starts(code)
+
+    def line_of(pos: int) -> int:
+        return _pos_line(line_starts, pos)
+
+    raw_lines = code.split("\n")
+
+    def is_continuation(pos: int) -> bool:
+        """本行是否为宏续行（前一行为反斜杠结尾，含 CRLF 的 \r 残留）。"""
+        idx = line_of(pos) - 2  # 0 基前一行的行号
+        if idx < 0:
+            return False
+        return raw_lines[idx].rstrip("\r").endswith("\\")
+
+    funcs: list[dict[str, Any]] = []
+    brace_depth = 0
+    paren_depth = 0
+    i = 0
+    while i < n:
+        ch = masked[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == "(":
+            paren_depth += 1
+            i += 1
+            continue
+        if ch == ")":
+            paren_depth = max(0, paren_depth - 1)
+            i += 1
+            continue
+        if ch == "{":
+            brace_depth += 1
+            i += 1
+            continue
+        if ch == "}":
+            brace_depth = max(0, brace_depth - 1)
+            i += 1
+            continue
+        if ("a" <= ch <= "z") or ("A" <= ch <= "Z") or ch == "_":
+            if is_continuation(i):
+                eol = code.find("\n", i)
+                i = n if eol == -1 else eol  # 宏续行整行跳过（防 do{ / 宏体误收）
+                continue
+            m = _IDENT_RE.match(masked, i)
+            if m is None:
+                i += 1
+                continue
+            word = m.group(0)
+            name_start = i
+            i = m.end()
+            j = i
+            while j < n and masked[j].isspace():
+                j += 1
+            if (
+                j < n
+                and masked[j] == "("
+                and word not in _FUNCTION_KEYWORDS
+                and brace_depth == 0
+                and paren_depth == 0
+            ):
+                close = match_bracket(masked, j, "(", ")")
+                if close != -1:
+                    k = close + 1
+                    while k < n and masked[k].isspace():
+                        k += 1
+                    if k < n and masked[k] == "{" and brace_depth == 0:
+                        funcs.append({"name": word, "line": line_of(name_start)})
+            continue
+        i += 1
+    return funcs

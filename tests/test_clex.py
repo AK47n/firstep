@@ -12,10 +12,12 @@ from contest_generator.clex import (
     iter_c_regions,
     match_bracket,
     next_significant,
+    quoted_include_lines,
     strip_all_code_fences,
     strip_code_fences,
     strip_comments,
     top_level_defines,
+    top_level_functions,
 )
 
 
@@ -262,3 +264,107 @@ def test_next_significant_skips_whitespace_and_comments():
     # 字符串是有效内容，不跳
     code2 = '  "str" x'
     assert code2[next_significant(code2, 0)] == '"'
+
+
+# ---------------------------------------------------------------------------
+# quoted_include_lines：引号 include 的 (名称, 行号)（工单 code-viewer/03）
+# ---------------------------------------------------------------------------
+
+
+def test_quoted_include_lines_returns_names_with_line_numbers():
+    code = '#include "headfile.h"\n// #include "no.h"\n#  include  "spaced.h"\nint x;\n'
+
+    assert quoted_include_lines(code) == [
+        ("headfile.h", 1),  # 行号 = # 行在原文的位置（注释行不挤占行数）
+        ("spaced.h", 3),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# top_level_functions：顶层函数定义形态扫描（工单 code-viewer/03，机械法
+# best-effort：ident ( … ) { @ 括号深度 0；关键字 / 字符串 / 注释 / 宏续行排除）
+# ---------------------------------------------------------------------------
+
+
+def test_top_level_functions_returns_name_and_line():
+    code = (
+        "#include <stdint.h>\n"
+        "\n"
+        "static uint32_t\n"
+        "init_uart(uint32_t baud)\n"
+        "{\n"
+        "    return baud;\n"
+        "}\n"
+        "\n"
+        "void *get_buffer(void) {\n"
+        "    return 0;\n"
+        "}\n"
+        "\n"
+        "int main(void) {\n"
+        "    while (1) {\n"
+        "        delay_ms(10);\n"
+        "    }\n"
+        "}\n"
+    )
+
+    assert top_level_functions(code) == [
+        {"name": "init_uart", "line": 4},  # 返回类型分行：函数名所在行
+        {"name": "get_buffer", "line": 9},  # 指针返回类型
+        {"name": "main", "line": 13},
+    ]
+
+
+def test_top_level_functions_skips_keywords_calls_and_prototypes():
+    code = (
+        "void setup(void);\n"  # 原型（; 结尾）不收
+        "int main(void) {\n"
+        "    if (x) { y(); }\n"
+        "    for (;;) { break; }\n"
+        "    do { i++; } while (i < 10);\n"
+        "    switch (k) { case 1: break; }\n"
+        "    return 0;\n"
+        "}\n"
+        "static inline int clamp(int v) { return v; }\n"
+    )
+
+    assert top_level_functions(code) == [
+        {"name": "main", "line": 2},
+        {"name": "clamp", "line": 9},
+    ]
+
+
+def test_top_level_functions_skips_comments_and_strings():
+    code = (
+        "// void commented(void) { }\n"
+        'const char *s = "void in_string(void) {";\n'
+        "void real(void) { }\n"
+    )
+
+    assert top_level_functions(code) == [{"name": "real", "line": 3}]
+
+
+def test_top_level_functions_skips_macro_continuation_lines():
+    # 宏续行（前一行为反斜杠结尾）里的 `static void name##_init(void) {` 形态
+    # 是已知误收风险——整行跳过；宏外第一个函数不受影响
+    code = (
+        "#define DECL(name) \\\n"
+        "    static void name##_init(void) { \\\n"
+        "        x++; \\\n"
+        "    }\n"
+        "void after(void) { }\n"
+    )
+
+    assert top_level_functions(code) == [{"name": "after", "line": 5}]
+
+
+def test_top_level_functions_skips_typedef_and_function_pointer():
+    code = (
+        "typedef struct {\n"
+        "    int x;\n"
+        "} Point;\n"
+        "int (*handler)(void);\n"
+        "int main(void) {\n"
+        "}\n"
+    )
+
+    assert top_level_functions(code) == [{"name": "main", "line": 5}]
