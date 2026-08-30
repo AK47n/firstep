@@ -2620,7 +2620,12 @@
             <div style="flex:1"><label>平台</label><select id="new-platform"></select></div>
           </div>
           <div class="row">
-            <div style="flex:1"><label>功能简介（留空则让 AI 先出草稿）</label><input type="text" id="new-desc" placeholder="例如 超声波测距模块，返回厘米距离"></div>
+            <div style="flex:1"><label>功能简介（留空则让 AI 先出草稿）</label>
+              <div class="row" style="margin-top:4px;align-items:center">
+                <input type="text" id="new-desc" placeholder="例如 超声波测距模块，返回厘米距离" style="flex:1">
+                <button id="btn-draft-desc" type="button">AI 出简介草稿</button>
+              </div>
+            </div>
             <div style="flex:1"><label>依赖模块（逗号分隔）</label><input type="text" id="new-deps" placeholder="例如 delay"></div>
           </div>
         </div>
@@ -2643,7 +2648,7 @@
       </div>
       <div class="add-section collapsed" id="add-sec-adv">
         <button type="button" class="add-section-head" aria-expanded="false">
-          <span class="add-section-arrow" aria-hidden="true">▾</span>③ 进阶能力（硬件绑定 / 已验证 / 备注 / AI 草稿）
+          <span class="add-section-arrow" aria-hidden="true">▾</span>③ 进阶能力（硬件绑定 / 已验证 / 备注 / 入库）
         </button>
         <div class="add-section-body">
           <div class="row">
@@ -2652,12 +2657,9 @@
             <label style="margin-top:10px">备注 <input type="text" id="new-notes" style="width:260px" placeholder="例如 接 PA1"></label>
           </div>
           <div class="row" style="margin-top:8px">
-            <button id="btn-draft-desc">AI 出简介草稿</button>
+            <button id="btn-add-module-submit" class="primary" style="margin-left:auto">校验并入库</button>
           </div>
         </div>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button id="btn-add-module-submit" class="primary">校验并入库</button>
       </div>
       <div id="add-msg" class="error"></div>
     </div>
@@ -2704,8 +2706,8 @@
           </div>
         </div>
       </div>
-      <div class="add-section collapsed" id="add-sec-ref-material">
-        <button type="button" class="add-section-head" aria-expanded="false">
+      <div class="add-section" id="add-sec-ref-material">
+        <button type="button" class="add-section-head" aria-expanded="true">
           <span class="add-section-arrow" aria-hidden="true">▾</span>② 素材与锚定（锚定 / 简介草稿 / 素材文件）
         </button>
         <div class="add-section-body">
@@ -2722,7 +2724,13 @@
                 <select id="ref-anchor-kit" class="hidden" style="flex:1;max-width:280px"></select>
               </div>
             </div>
-            <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label><textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…"></textarea></div>
+            <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label>
+              <div class="row" style="margin-top:4px;align-items:flex-start">
+                <textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…" style="flex:1"></textarea>
+                <button id="btn-ref-draft-desc" type="button" style="margin-top:2px">AI 生成简介草稿</button>
+              </div>
+              <div id="ref-draft-msg" class="error" style="margin-top:4px"></div>
+            </div>
           </div>
           <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库；可点「选择文件 / 选择文件夹」直接载入，二进制自动跳过）</h3>
           <div id="ref-files"></div>
@@ -2732,13 +2740,11 @@
             <button id="btn-ref-pick-dir">选择文件夹…</button>
             <input type="file" id="ref-pick-files" multiple accept=".c,.h,.cpp,.hpp,.txt,.md,.py,.s,.asm,.inc,.json,.xml,.yml,.yaml,.ini,.cfg,.lua,.sh,.bat,.csv,.html,.js,.ts,.v,.sv,.f" style="display:none">
             <input type="file" id="ref-pick-dir" webkitdirectory multiple style="display:none">
-            <button id="btn-ref-draft-desc">AI 生成简介草稿</button>
           </div>
-          <div id="ref-draft-msg" class="error"></div>
         </div>
       </div>
-      <div class="add-section collapsed" id="add-sec-ref-platform">
-        <button type="button" class="add-section-head" aria-expanded="false">
+      <div class="add-section" id="add-sec-ref-platform">
+        <button type="button" class="add-section-head" aria-expanded="true">
           <span class="add-section-arrow" aria-hidden="true">▾</span>③ 平台属性与入库（平台 / 入库）
         </button>
         <div class="add-section-body">
