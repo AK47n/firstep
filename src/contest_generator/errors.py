@@ -4,7 +4,8 @@ error_to_http 表唯一出处 = 本模块。webapp 不定义任何映射，只�
 （_error_message → SSE 流内 error 事件）与包装（_error_response → 同步端点
 HTTPException）——同一张表两端共用，未登记政策一致。
 
-**未登记的异常 = 真 bug，兜底 500 大声失败（带类型名）**——旧实现兜底 400
+**未登记的异常 = 真 bug，兜底 500 大声失败（类型名只进日志，用户只见
+人话 + 反馈引导，工单 ux-walkthrough-02/10）**——旧实现兜底 400
 会把真 bug 吞成业务失败（测试 raise_server_exceptions=False 时静默通过）。
 新异常类型必须在此登记；登记遗漏由结构测试（tests/test_errors.py）反射枚举
 包内全部异常类兜住——漏登从此是测试红，不是线上 500。刻意按 500 暴露的
@@ -259,7 +260,8 @@ def error_entry(exc: Exception) -> tuple[int, str]:
     """error_to_http 表（唯一实现）：核心异常 → (HTTP 状态, 中文 message)。
 
     已知异常：业务失败 → 400（message 原样带出）、LLM 服务失败 → 502、
-    文件系统失败 → 400；**未登记的异常 = 真 bug，兜底 500 带类型名**——
+    文件系统失败 → 400；**未登记的异常 = 真 bug，兜底 500 去类型名（类型名
+    只进日志，用户只见人话 + 反馈引导）**——
     同步端点取状态码转 HTTPException、SSE 端点只取 message（HTTP 保持 200
     起流）——同一张表两端共用，未登记政策一致，改动只在此一处。
     """

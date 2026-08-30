@@ -10,8 +10,8 @@ webapp 依赖本模块，反向禁止。
 错（或线程以任何方式死亡）时由运行器补发 error 终态——"每条流都以
 done / question / error 结束"不依赖调用方闭包写 try/except（闭包只交
 "活"，不交"收尾"）。错误文案经 error_message 注入（webapp 传错误映射表
-取值），不注入时默认未登记政策同款（带类型名大声失败）——sse 是叶子，
-不依赖错误映射表。
+取值），不注入时默认未登记政策同款（类型名只进日志，用户只见人话 + 引导，
+工单 ux-walkthrough-02/10）——sse 是叶子，不依赖错误映射表。
 
 线格式契约（工单 02 起，与工单 03 并行开发，精确一致不得单方面改动）：
 HTTP 200，Content-Type: text/event-stream，无自动重连（断线 = 放弃本次）。
@@ -68,7 +68,7 @@ def _unexpected_error_message(exc: BaseException) -> str:
     """兜底文案：未注入映射器 / 线程内任何死亡（含 KeyboardInterrupt 等非
     Exception）时的错误信息——与错误映射表"未登记异常大声失败"政策同款
     （类型名只进日志，用户界面只见人话 + 引导，工单 ux-walkthrough-02/10），
-    sse 是叶子模块不依赖该表（仅常量 INTERNAL_ERROR_HINT 自 errors.py——
+    sse 是叶子模块不依赖该表（仅常量 INTERNAL_ERROR_HINT 自 events.py——
     工单 beginner-gap-closure/06 两处兜底文案单一出处，防漂移）。"""
     _LOG.error("SSE 线程未登记异常：%r", exc)
     return "服务器内部错误：" + INTERNAL_ERROR_HINT
@@ -136,7 +136,8 @@ def run_sse(
     run 在 daemon 线程执行（阻塞的核心调用不占事件循环）；返回的生成器
     逐帧消费队列——进度事件直接成帧，终态（done / question / error）成帧
     后停流。**终态保证归运行器**：run 抛错（或线程以任何方式死亡）时运行器
-    补发 error 终态；文案经 error_message 注入（默认 = 带类型名大声失败）。
+    补发 error 终态；文案经 error_message 注入（默认 = 去类型名：类型名只进
+    日志、用户见人话 + 引导）。
     队列容量与终端超时的默认值即契约数值（不得改动）；测试注入小值覆盖
     断线两条路径（队列满丢进度 / 终端超时丢）。
     """

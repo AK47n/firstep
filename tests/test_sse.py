@@ -198,8 +198,9 @@ def test_runner_emits_error_when_run_raises() -> None:
 
 
 def test_runner_uses_injected_mapper_and_defaults_loud() -> None:
-    """错误文案：注入的映射器生效；不注入时默认带类型名大声失败（与错误
-    映射表"未登记异常大声失败"政策同款，sse 是叶子不依赖该表）。"""
+    """错误文案：注入的映射器生效；不注入时默认去类型名大声失败（类型名只进
+    日志，用户见人话 + 引导——与错误映射表"未登记异常"政策同款，sse 是叶子
+    不依赖该表）。"""
     def run(emit: SseEmitter) -> None:
         raise ValueError("boom")
 
