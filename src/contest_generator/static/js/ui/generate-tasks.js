@@ -355,7 +355,8 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
   $("tasks-status").textContent = "AI 分析想法中…";
   tasksWait.start();
   try {
-    const data = await tasksRunSSE("/api/tasks/idea/analyze", { output_dir: dir, idea: text }, {      idea_analyzing: () => { $("tasks-status").textContent = "AI 正在理解你的想法…（分钟级调用，请等待）"; },
+    const data = await tasksRunSSE("/api/tasks/idea/analyze", { output_dir: dir, idea: text }, {
+      idea_analyzing: () => { $("tasks-status").textContent = "AI 正在理解你的想法…（分钟级调用，请等待）"; },
       idea_result: () => { $("tasks-status").textContent = "分析完成——按结果卡选择落地方式"; },
       llm_telemetry: (d) => {
         const tel = $("tasks-llm-telemetry");

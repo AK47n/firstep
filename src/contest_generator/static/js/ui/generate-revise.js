@@ -277,7 +277,8 @@ function reviseDiscard() {
 }
 
 async function reviseAnalyze() {
-  if (revise.busy) return;  const qa = $("revise-qa-new").value.trim();
+  if (revise.busy) return;
+  const qa = $("revise-qa-new").value.trim();
   if (!revise.outputDir) { $("revise-analyze-msg").textContent = "请先加载上下文（当前会话或历史目录）"; return; }
   if (!qa) { $("revise-analyze-msg").textContent = "请先粘贴新 Q&A 文本"; return; }
   const body = {

@@ -74,7 +74,7 @@ export function makeWaitClock(target) {
   }
   function stop() {
     if (timerId) { clearInterval(timerId); timerId = null; }
-    clockEl.textContent = "";
+    if (clockEl.parentNode) clockEl.remove();   // 移除空 span，不留 6px 间隙（评审整改）
   }
   return { start, stop };
 }
