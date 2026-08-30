@@ -78,7 +78,7 @@ def test_backup_tree_empty_output_raises(tmp_path):
 def test_restore_revision_unsafe_backup_id_raises(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
-    with pytest.raises(RevisionError, match="非法的备份编号"):
+    with pytest.raises(RevisionError, match="备份编号不合法"):
         restore_revision(tmp_path / "work", "../evil", out)
 
 

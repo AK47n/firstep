@@ -29,6 +29,7 @@ data = {"questions": [...]}（模型拿不准向用户补问）；error 的 data
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from dataclasses import asdict
 from queue import Full, Queue
@@ -49,6 +50,8 @@ from .events import (
 _SSE_QUEUE_MAXSIZE = 100
 _SSE_TERMINAL_TIMEOUT = 10  # 秒
 
+_LOG = logging.getLogger(__name__)
+
 # 终端事件词表（运行器发射收尾；越界 = 程序错误，入队即大声失败，不静默进流）
 _TERMINAL_KINDS = frozenset({EVENT_DONE, EVENT_ERROR, EVENT_QUESTION})
 
@@ -64,10 +67,11 @@ def _sse_frame(event_type: str, data: dict[str, Any]) -> str:
 def _unexpected_error_message(exc: BaseException) -> str:
     """兜底文案：未注入映射器 / 线程内任何死亡（含 KeyboardInterrupt 等非
     Exception）时的错误信息——与错误映射表"未登记异常大声失败"政策同款
-    （带类型名方便排查），sse 是叶子模块不依赖该表（仅常量
-    INTERNAL_ERROR_HINT 自 errors.py——工单 beginner-gap-closure/06 两处
-    兜底文案单一出处，防漂移）。"""
-    return f"服务器内部错误（{type(exc).__name__}）：{exc}" + INTERNAL_ERROR_HINT
+    （类型名只进日志，用户界面只见人话 + 引导，工单 ux-walkthrough-02/10），
+    sse 是叶子模块不依赖该表（仅常量 INTERNAL_ERROR_HINT 自 errors.py——
+    工单 beginner-gap-closure/06 两处兜底文案单一出处，防漂移）。"""
+    _LOG.error("SSE 线程未登记异常：%r", exc)
+    return "服务器内部错误：" + INTERNAL_ERROR_HINT
 
 
 # 事件队列条目：进度事件原样入队；终端条目 = (kind, data)，kind ∈ done/error/

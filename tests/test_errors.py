@@ -162,14 +162,49 @@ def test_duplicate_file_path_error_registered_as_400() -> None:
 def test_error_entry_contract_unchanged() -> None:
     """行为契约抽查：既有映射的状态码 / 文案逐字不变（表平移不改变行为）。"""
     assert error_entry(LLMError("boom")) == (502, "AI 服务调用失败：boom")
-    assert error_entry(OSError("磁盘满")) == (400, "文件操作失败：磁盘满")
+    # 工单 ux-walkthrough-02/10：OSError 不再裸透系统串——磁盘满（errno 28）走
+    # 专属人话；无 errno 的裸 OSError 走一般性说明
+    status, message = error_entry(OSError(28, "No space left on device"))
+    assert status == 400
+    assert "磁盘空间不足" in message
+    assert "磁盘满" not in message
+    assert error_entry(OSError("磁盘满")) == (400,
+        "文件操作失败：系统返回了未识别的文件系统错误。请检查磁盘与文件状态（占用 / 权限 / 空间）后重试；问题持续请反馈。")
     assert error_entry(SelectionError("缺依赖")) == (400, "缺依赖")
     status, message = error_entry(RuntimeError("内部损坏"))
     assert status == 500
-    # 工单 beginner-gap-closure/06：500 兜底文案含「工具内部问题 / 反馈」引导
-    assert message.startswith("服务器内部错误（RuntimeError）：内部损坏")
+    # 工单 ux-walkthrough-02/10：500 兜底去掉异常类型名（类型名只进日志），
+    # 用户界面只见「服务器内部错误」+ 反馈引导
+    assert message.startswith("服务器内部错误：")
+    assert "RuntimeError" not in message
+    assert "内部损坏" not in message
     assert "工具的内部问题" in message
     assert "反馈" in message
+
+
+def test_os_error_dispatch_humanized() -> None:
+    """文件系统错误分派（工单 ux-walkthrough-02/10）：winerror 32 占用 /
+    errno 28 磁盘满 / PermissionError 权限 各有中文 + 修复步骤；未映射给一般性说明。"""
+    locked = OSError(32, "The process cannot access the file because it is being used")
+    locked.winerror = 32  # type: ignore[attr-defined]
+    status, message = error_entry(locked)
+    assert status == 400
+    assert "被其它程序占用" in message
+    assert "Keil / CCS" in message
+
+    status, message = error_entry(PermissionError(13, "Permission denied"))
+    assert status == 400
+    assert "没有写入权限" in message
+
+    status, message = error_entry(OSError(28, "No space left on device"))
+    assert status == 400
+    assert "磁盘空间不足" in message
+    assert "清理磁盘空间" in message
+
+    status, message = error_entry(OSError("未映射的系统错误"))
+    assert status == 400
+    assert message.startswith("文件操作失败：")
+    assert "未映射的系统错误" not in message  # 不再裸透系统串
 
 
 def test_llm_error_network_humanized() -> None:

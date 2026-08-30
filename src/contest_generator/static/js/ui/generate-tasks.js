@@ -513,9 +513,9 @@ function renderIdeaFixResult(data) {
     // 一份措辞漂移——评审整改 taskStepReportBlocksHTML 单源）
     + taskStepReportBlocksHTML(sr.what_changed || "", sr.user_action || "")
     + '<div class="reason">' + markup.detail + "</div>"
-    + '<div class="reason">备份：<span class="slug">' + esc(backupId || "—") + "</span>"
-    + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '">回滚本次修正</button>' : "")
-    + "</div>"
+    + '<div class="reason">' + (backupId
+      ? '已备份（可回滚） · <button class="btn-task-rollback danger" data-backup="' + esc(backupId) + '">回滚本次修正</button>'
+      : "未产生备份（本次没有改动被应用）") + "</div>"
     + mainDiffHTML(data.main_diff, "修正")
     + "</div>");
 }

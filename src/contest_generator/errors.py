@@ -13,6 +13,7 @@ HTTPException）——同一张表两端共用，未登记政策一致。
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from dataclasses import dataclass
@@ -67,6 +68,42 @@ class _ErrorEntry:
     exc_types: tuple[type[Exception], ...]
     status: int
     message: Callable[[Exception], str]
+
+
+_LOG = logging.getLogger(__name__)
+
+# 文件系统错误人话化（工单 ux-walkthrough-02/10）：OSError 按 winerror / errno
+# 分派中文文案与修复步骤——不再把裸系统串（WinError 32 等）透给用户。
+OS_ERROR_LOCKED_MESSAGE = (
+    "文件操作失败：文件正被其它程序占用（常见：Keil / CCS 正打开着工程文件）。"
+    "请关闭占用程序后重试；如仍失败，请重启电脑后再操作。"
+)
+OS_ERROR_DISK_FULL_MESSAGE = (
+    "文件操作失败：磁盘空间不足。请清理磁盘空间（或换到更大分区）后重试。"
+)
+OS_ERROR_PERMISSION_MESSAGE = (
+    "文件操作失败：没有写入权限（文件可能只读，或所在目录受保护）。"
+    "请检查文件 / 目录权限后重试。"
+)
+OS_ERROR_GENERIC_MESSAGE = (
+    "文件操作失败：系统返回了未识别的文件系统错误。"
+    "请检查磁盘与文件状态（占用 / 权限 / 空间）后重试；问题持续请反馈。"
+)
+
+
+def os_error_message(exc: OSError) -> str:
+    """OSError → 中文人话（工单 ux-walkthrough-02/10）：winerror 32（共用冲突 /
+    文件被占用）、errno 28（磁盘满）、PermissionError / winerror 5（无权限）
+    各有专属文案；未映射的给一般性说明（不再裸 str(exc)）。"""
+    win = getattr(exc, "winerror", None)
+    errno_ = getattr(exc, "errno", None)
+    if win == 32:
+        return OS_ERROR_LOCKED_MESSAGE
+    if isinstance(exc, PermissionError) or win == 5:
+        return OS_ERROR_PERMISSION_MESSAGE
+    if errno_ == 28:
+        return OS_ERROR_DISK_FULL_MESSAGE
+    return OS_ERROR_GENERIC_MESSAGE
 
 
 # LLM 失败人话化（工单 beginner-gap-closure/05）：error_to_http 表 502 行不再把
@@ -163,8 +200,9 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
     # 工程文件（.uvprojx / .cproject）缺失、重复或不是合法 XML：业务失败
     # （旧工程 / AI 整合产物有问题），带中文 message，不裸 500
     _ErrorEntry((KeilProjectError, CcsProjectError), 400, str),
-    # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，带说明
-    _ErrorEntry((OSError,), 400, lambda exc: f"文件操作失败：{exc}"),
+    # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
+    # 按 errno/winerror 分派中文人话（工单 ux-walkthrough-02/10），不裸透系统串
+    _ErrorEntry((OSError,), 400, os_error_message),
     # 业务失败：message 原样带出（用户可按提示修正重试）
     _ErrorEntry(
         (
@@ -228,6 +266,8 @@ def error_entry(exc: Exception) -> tuple[int, str]:
     for entry in _ERROR_TABLE:
         if isinstance(exc, entry.exc_types):
             return entry.status, entry.message(exc)
-    # 兜底：未登记异常 = 真 bug，500 大声失败（带类型名方便排查）+ 反馈引导
-    # （工单 beginner-gap-closure/06：新手知道这是工具问题、能把信息反馈回来）
-    return 500, f"服务器内部错误（{type(exc).__name__}）：{exc}" + INTERNAL_ERROR_HINT
+    # 兜底：未登记异常 = 真 bug，500 大声失败——类型名只进日志（排查可溯源），
+    # 用户界面只见「服务器内部错误」+ 反馈引导（工单 ux-walkthrough-02/10：
+    # 类型名是工程黑话，对用户无用）
+    _LOG.error("未登记异常（用户可见 500 兜底）：%r", exc)
+    return 500, "服务器内部错误：" + INTERNAL_ERROR_HINT
