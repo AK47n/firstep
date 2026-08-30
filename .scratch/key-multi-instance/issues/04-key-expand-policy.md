@@ -8,15 +8,24 @@ start），实例上限守卫与解析校验自动覆盖 key。
 
 **被谁阻塞：** 01（策略表接缝）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 策略表 key 行生效：给定实例清单 → 宏名 / 默认脚计划与 spec 一致（内置变体
+**评审结论（2026-08-31 双轴评审）：** Standards 无硬违规（判断项：default_instance_plan
+散文脚位与策略表字面量并存——生成路径只读策略表，记录在案；slug→platform 两级
+分派与「内置变体名须与政策表同步」为单源设计固有耦合）。整改已落地：① webapp
+expand 端点与 _default_instances_for 的重复决策逻辑收敛为 selection.default_instances_for_multi
+单决策点（评审指出的 Shotgun Surgery）；② 策略表平台键改用 PLATFORM_* 常量。
+Spec 轴补验证：三题面形状（2026F 三键 / 2022C·2022H 双键 start+set / 2026C 一键
+start）经 parse_instances → expand 全链参数化测试；key >8 上限守卫测试。
+810 passed（multi-instance/selection/webapp/llm 聚焦）。
+
+- [x] 策略表 key 行生效：给定实例清单 → 宏名 / 默认脚计划与 spec 一致（内置变体
       语义宏、同名后缀、KEY_N 回退、首实例平台键脚、board 顺序 gpio_in）。
-- [ ] key 实例数 > 8 → 中文可读 400（上限守卫自动生效，不单独实现）。
-- [ ] 平台默认清单按 slug 泛化：led 现行为保持（stm32 红黄绿 3 实例 / mspm0 单实例），
+- [x] key 实例数 > 8 → 中文可读 400（上限守卫自动生效，不单独实现）。
+- [x] 平台默认清单按 slug 泛化：led 现行为保持（stm32 红黄绿 3 实例 / mspm0 单实例），
       key = 双平台各 1 实例（显示名「按键」、变体 start）；既有
       default_instance_plan 断言更新为按 slug 调用且 led 结果不变。
-- [ ] 推荐链路职责需求条目不齐 / 同名并集合并等机制对 key 自动生效（验证给
+- [x] 推荐链路职责需求条目不齐 / 同名并集合并等机制对 key 自动生效（验证给
       2026F 三键、2022C 双键、2026C 一键三种形状的实例清单解析）。
 
 **验收标准备注：** 展开与回填均为纯函数，单测验收；AI 猜实例链路（提示词侧）

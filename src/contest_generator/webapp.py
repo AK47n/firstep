@@ -218,7 +218,7 @@ from .reference_library import (
 )
 from .revision import restore_revision, revise_backup_root, run_revision
 from .selection import (
-    default_instance_plan,
+    default_instances_for_multi,
     parse_instances,
     parse_score_points,
     resolve_dependencies,
@@ -1430,11 +1430,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         slugs = _require_str_list(payload, "slugs")
         resolved = resolve_selection(_library_dir(context), platform, slugs)
         modules = [m.to_dict() for m in resolved.manifests]
-        defaults = default_instance_plan(platform)
-        if defaults:
-            for manifest, module in zip(resolved.manifests, modules):
-                if manifest.multi_instance is not None:
-                    module["default_instances"] = [inst.to_dict() for inst in defaults]
+        multi_slugs = [
+            manifest.slug
+            for manifest in resolved.manifests
+            if manifest.multi_instance is not None
+        ]
+        defaults = default_instances_for_multi(multi_slugs, platform)
+        for module in modules:
+            if module["slug"] in defaults:
+                module["default_instances"] = [
+                    inst.to_dict() for inst in defaults[module["slug"]]
+                ]
         return {
             "modules": modules,
             "warnings": [
