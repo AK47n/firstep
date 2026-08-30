@@ -269,7 +269,7 @@ function tasksRender() {
         }
         if (actions.includes("mark")) {
           parts.push('<button class="btn-task-mark" data-task="' + esc(task.id)
-            + '" title="上板实测通过后标记已验证">确认通过</button>');
+            + '" title="上板实测通过后点这里确认状态">确认通过</button>');
         }
         // 建议重做（工单 idea-fix/02）：灵活修正落地后受影响的卡——一键重置
         // 为 pending + 清 needs_redo（随后可点「做这一步」走既有闭环）

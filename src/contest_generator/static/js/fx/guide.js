@@ -79,7 +79,7 @@ export const GUIDE_CHAPTERS = {
             items: [
               "双击 install.bat：自动创建虚拟环境并安装依赖（需要联网，约几分钟；脚本可重复运行，重复安装不会出错）。",
               "双击 start-app.vbs：后台启动服务，浏览器自动打开 http://127.0.0.1:8000 。",
-              "网页右上角「设置」→ 粘贴 DeepSeek API key → 点「一键体检」：体检卡会逐个检查 Python、API key、IDE 工具链、母版与模块库是否就绪。",
+              "网页顶部导航「设置」→ 粘贴 DeepSeek API key → 点「一键体检」：体检卡会逐个检查 Python、API key、IDE 工具链、母版与模块库是否就绪。",
             ],
           },
           {

@@ -10,7 +10,7 @@ export function taskStatusLabel(status) {
   switch (status) {
     case "pending": return "待做";
     case "doing": return "进行中";
-    case "verified": return "已验证";
+    case "verified": return "上板通过";   // 工单 ux-walkthrough-02/18：任务状态「已验证」→「上板通过」
     case "unverified": return "未验证";
     case "failed": return "失败";
     case "skipped": return "已跳过";
@@ -316,7 +316,7 @@ export function tasksOverviewHTML(plan) {
       + 'title="' + esc(label) + "：" + n + '"></div>'
     : "";
   const bar = '<div class="tasks-overview-bar">'
-    + seg(verified, "seg-ok", "已验证") + seg(doing, "seg-doing", "进行中")
+    + seg(verified, "seg-ok", "上板通过") + seg(doing, "seg-doing", "进行中")
     + seg(unverified, "seg-unverified", "待上板") + seg(failed, "seg-failed", "失败")
     + seg(pending, "seg-pending", "待做") + seg(skipped, "seg-skipped", "已跳过")
     + "</div>";
@@ -990,7 +990,7 @@ export function verifyStatusMarkup(data, fallbacks) {
   const fb = fallbacks || {};
   if (data && data.status === "verified") {
     return {
-      badge: '<span class="ok" style="font-weight:600">✓ 已验证（编译通过）</span>',
+      badge: '<span class="ok" style="font-weight:600">✓ 已通过编译验证</span>',
       detail: esc("编译通过 · exit "
         + (compile.exit_code === null || compile.exit_code === undefined ? "—" : compile.exit_code)
         + (compile.summary ? " · " + compile.summary : "")),
@@ -1004,7 +1004,7 @@ export function verifyStatusMarkup(data, fallbacks) {
         : '<span style="color:var(--warn);font-weight:600">⚠ 未验证（无工具链降级）</span>',
       detail: esc((data && data.message) || (manual ? fb.manual
         : fb.unverified)
-        || "未检测到编译工具链：结果已写入 main.c，但未经编译验证——请配置工具链后手动编译（上板类任务可直接人工标记为已验证）。"),
+        || "未检测到编译工具链：结果已写入 main.c，但未经编译验证——请配置工具链后手动编译（上板类任务可直接人工标记为上板通过）。"),
     };
   }
   return {
@@ -1028,7 +1028,7 @@ export function taskChangesHTML(task, data, opts) {
   const o = opts || {};
   const t = task || {};
   const markup = verifyStatusMarkup(data, {
-    unverified: "未检测到编译工具链：任务结果已写入 main.c，但未经编译验证——请配置工具链后手动编译，或上板后人工标记为已验证。",
+    unverified: "未检测到编译工具链：任务结果已写入 main.c，但未经编译验证——请配置工具链后手动编译，或上板后人工标记为上板通过。",
     failed: "编译验证未通过，任务结果已写入 main.c（已备份，可回滚）。",
   });
   const backupId = data.backup_id || "";
