@@ -22,6 +22,7 @@ import { draftState, draftSave, draftLoad, draftRestoreMeta, stepNavTitles } fro
 import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, hasWarnContent } from "/js/fx/overview.js";
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { readinessState, desktopTopicOutputEnabled } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位
+import { ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached } from "/js/ui/generate-readiness.js";  // 工单 07：总览输出目录预警共享请求
 import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone } from "/js/ui/step-state.js";
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
@@ -112,7 +113,8 @@ let genOverviewTitles = [];
 let genOverviewBadges = {};
 function genOverviewWarn(stepNo) {
   return (stepNo === 6 && hasWarnContent($("warnings")))
-      || (stepNo === 7 && hasWarnContent($("pin-warn-list")));
+      || (stepNo === 7 && hasWarnContent($("pin-warn-list")))
+      || (stepNo === 9 && getOutputDirWarnRow() != null);
 }
 function refreshGenOverview() {
   const box = $("gen-overview");
@@ -142,8 +144,17 @@ function refreshGenOverview() {
     // 摘要提示语跟随，避免指向不可见的导航
     const navHint = window.matchMedia("(max-width: 1179px)").matches
       ? "（点上方步骤条直达）" : "（点左侧步骤条直达）";
+    // 输出目录预警（工单 07）：与「检查能否生成」面板同源（preview-dir 缓存）；
+    // 只在缓存未命中时取一次，取回后重刷摘要（在途/已缓存不重复挂）
+    const dirWarn = getOutputDirWarnRow();
     summary.innerHTML = genOverviewSummaryHTML(doneArr, genOverviewTitles,
-      GEN_CRITICAL_STEPS, GEN_RECOMMENDED_STEPS, navHint);
+      GEN_CRITICAL_STEPS, GEN_RECOMMENDED_STEPS, navHint, dirWarn);
+    if (!outputDirWarnCached()) {
+      void ensureOutputDirWarn().then(() => {
+        const b = $("gen-overview");
+        if (b) refreshGenOverview();
+      });
+    }
   }
   // 卡片标题状态徽章（A2）：已就绪 / 有警告 / 当前，其余隐藏
   genOverviewTitles.forEach((t) => {

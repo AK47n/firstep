@@ -117,3 +117,32 @@ test("hasWarnContent：空 / null / 全 ok 盒不算警告，有非 ok 子元素
   const plain = { children: [{ classList: null }] };
   assert.equal(hasWarnContent(plain), true);
 });
+
+test("genOverviewSummaryHTML 输出目录预警：传 dirWarn 追加 ⚠ 段，缺省不渲染（工单 07）", () => {
+  const out = genOverviewSummaryHTML(
+    [1, 3, 6, 9, 5, 8],
+    titles,
+    [1, 3, 6, 9],
+    [5, 8],
+    "",
+    { title: "输出目录", reason: "桌面已有同名工程（生成时会把旧工程备份为 .bak 再覆盖；也可以先去删除旧工程）" }
+  );
+  assert.ok(out.includes('class="ov-missing ov-dir-warn"'), "缺 ov-dir-warn 段");
+  assert.ok(out.includes("⚠ 输出目录：桌面已有同名工程"), "缺 ⚠ 标题前缀与原因");
+  const plain = genOverviewSummaryHTML([1, 3, 6, 9, 5, 8], titles, [1, 3, 6, 9], [5, 8]);
+  assert.ok(!plain.includes("ov-dir-warn"), "不传时不应渲染");
+  assert.ok(!plain.includes("⚠"), "不传时摘要不应出现 ⚠");
+});
+
+test("genOverviewSummaryHTML 输出目录预警：第 9 步已就绪也照常显示（软警告与就绪无关）", () => {
+  const out = genOverviewSummaryHTML(
+    [1, 3, 6, 9],
+    titles,
+    [1, 3, 6, 9],
+    [5, 8],
+    "",
+    { title: "输出目录", reason: "目录已存在且非空——生成会被拒绝；建议先清空目录或换个位置" }
+  );
+  assert.ok(out.includes("关键步骤齐了，可以点「生成工程」"), "就绪文案不应被预警替代");
+  assert.ok(out.includes("⚠ 输出目录：目录已存在且非空"), "已就绪也应显示软预警");
+});
