@@ -256,13 +256,17 @@ export async function loadPdfs() {
     renderPdfs();
     $("pdf-msg").textContent = "";
   } catch (e) {
-    // 失败：清空加载占位、同位置显示错误（工单 ux-walkthrough-02/22）——与
-    // 模块库一致；点「刷新」可重试
+    // 失败：清空加载占位、同位置显示错误（工单 ux-walkthrough-02/22）——模块
+    // 库/参考库走 *-msg 旧例、赛题/PDF 走就地错误空态（更近报错位置），
+    // 注释按实际分叉口径描述；统计条 / 批次 chips 一并清掉（与赛题库对偶），
+    // 否则刷新成功→失败时旧统计残留于错误空态上方（评审整改）
     $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state">'
       + '<div class="es-icon">⚠️</div><div class="es-title">PDF 资料库读取失败</div>'
       + '<div class="es-hint">' + esc(e.message) + '；可在设置页检查库目录，或点「刷新」重试。</div>'
       + '</div></td></tr>';
     $("pdf-msg").textContent = "";
+    if ($("pdf-stats")) $("pdf-stats").innerHTML = "";
+    if ($("pdf-batch-chips")) $("pdf-batch-chips").innerHTML = "";
   }
 }
 
@@ -276,13 +280,14 @@ export function initPdfToolbar() {
     pdfUI.sortBy = e.target.value;
     if (e.target.value === "mtime") {   // 最近更新默认降序（最新在前，ux-polish-02/08）
       pdfUI.sortDir = "desc";
-      $("pdf-sort-dir").textContent = "↓ 降序";
+      $("pdf-sort-dir").textContent = "↓ 降序（默认）";   // 默认态常驻标注（工单 22 评审整改）
     }
     renderPdfs();
   });
   $("pdf-sort-dir").addEventListener("click", () => {
     pdfUI.sortDir = pdfUI.sortDir === "asc" ? "desc" : "asc";
-    $("pdf-sort-dir").textContent = pdfUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
+    $("pdf-sort-dir").textContent = pdfUI.sortDir === "asc" ? "↑ 升序"
+      : (pdfUI.sortBy === "mtime" ? "↓ 降序（默认）" : "↓ 降序");
     renderPdfs();
   });
   $("pdf-filter-clear").addEventListener("click", clearPdfFilter);

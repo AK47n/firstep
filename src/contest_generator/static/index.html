@@ -1549,12 +1549,12 @@
     .guide-tabs { overflow-x: auto; scrollbar-width: thin; }
   }
   /* 基础窄屏响应式（工单 ux-walkthrough-02/24）：≤900px 顶栏分组换行、
-     卡片/生成卡收紧内边距、工具栏间距收窄、内容边距减小——最小改动，
-     不重排整页布局，只防横向溢出与按钮挤压 */
+     生成卡收紧内边距、工具栏间距收窄、内容边距减小——最小改动，
+     不重排整页布局，只防横向溢出与按钮挤压；全站卡片不统一改
+     （各页既有密度已可接受，避免越界到「生成区」之外） */
   @media (max-width: 900px) {
     header { gap: 10px; }
     .tab-group { flex-wrap: wrap; }
-    .card { padding: 12px 14px; }
     #tab-generate .gen-steps > .card { padding: 14px 16px; }
     .lib-toolbar { gap: 6px; }
     main { padding: 0 12px; }
@@ -2651,7 +2651,7 @@
         <summary>把整个工程上下文打包成一段提示词，粘贴给下一个 AI 继续精准打磨。</summary>
         <div class="card-details-body">把赛题 / 平台 / 模块 / main.c / 输出目录打包成一段提示词，粘贴给下一个 AI 继续精准打磨——本工具负责搭基础，精打磨在下一个会话完成。</div>
       </details>
-      <p class="handoff-note">小提示：工具内已能「和 AI 商量」（第 11 步任务推进）与「参数速调 AI 咨询」，一般不需要再找外部 AI——想直接继续写代码，点「去任务推进」。</p>
+      <p class="handoff-note">小提示：工具内已能「全局商量（工程级）」（第 11 步任务推进）与「参数速调 AI 咨询」，一般不需要再找外部 AI——想直接继续写代码，点「去任务推进」。</p>
       <div class="row">
         <button id="btn-goto-tasks" class="accent">去任务推进</button>
         <button id="btn-handoff" class="primary" data-ico="clipboard">生成交接提示词</button>
@@ -3106,7 +3106,7 @@
         <div>赛题库：<span id="set-lib-dir-topic" class="slug">…</span></div>
         <div>参考文件库：<span id="set-lib-dir-reference" class="slug">…</span></div>
         <div>PDF 资料库：<span id="set-lib-dir-pdf" class="slug">…</span></div>
-        <div style="margin-top: var(--space-1)">以上三项是「模块库目录」下的 topic / reference / pdf 子目录：改模块库目录会连带改变它们（保存时确认；子目录不存在会自动创建）。</div>
+        <div style="margin-top: var(--space-1)">以上三项与「模块库目录」同级（topics / references / sources/materials）：改模块库目录会连带改变它们（保存时确认；导入 / 上传时会按需创建）。</div>
       </div>
     </div>
 

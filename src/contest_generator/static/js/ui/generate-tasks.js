@@ -1805,14 +1805,22 @@ window.addEventListener("tasks-invalidated", (event) => {
 });
 
 // 「有问题？去问 AI」直达（工单 ux-walkthrough-02/23）：母版提炼 / 编译修复 /
-// 修订深化长跑时随时可问——切到任务推进页签 + 展开全局商量 + 滚动定位。
-// 页签切换经 .revise-tab 按钮 click（revise-tabs 委托 → user 语义），
-// 与本模块零 import 环（反向依赖已存在于 revise-tabs → tasksSummary）。
+// 修订深化长跑时随时可问——切到生成页（母版页直达必须先回顶层页签）+ 任务
+// 推进子页签 + 展开全局商量 + 滚动定位。页签切换经顶层 nav 按钮与 .revise-tab
+// 按钮 click（revise-tabs 委托 → user 语义），与本模块零 import 环（反向依赖
+// 已存在于 revise-tabs → tasksSummary；goto-tasks → revise-tabs 同理有环，
+// 故不复用 goTaskProgress——评审 H1 整改：母版页不能只切隐藏子页签）。
 document.addEventListener("click", (e) => {
   if (!e.target.closest("[data-goto-global-chat]")) return;
+  const topBtn = document.querySelector('nav button[data-tab="generate"]');
+  if (topBtn) topBtn.click();   // 顶层页签（已激活 = 幂等：tab 处理器无 generate 分支）
   const tabBtn = document.querySelector('.revise-tab[data-tab="tasks"]');
   if (tabBtn) tabBtn.click();
-  if (!tasks.outputDir
+  // 评审整改：修订页签已加载目录但工程尚未拆解时 tasks.outputDir 为空而
+  // reviseGetDir() 有值——全局商量（tasksChatToggle 用 outputDir || reviseGetDir）
+  // 仍可用，守卫须按同一口径判断，否则长跑屏直达被误拦
+  const dirReady = tasks.outputDir || reviseGetDir();
+  if (!dirReady
       && $("tasks-empty-hint") && !$("tasks-empty-hint").classList.contains("hidden")) {
     toast("info", "请先在「修订」页签加载输出目录，再使用全局商量");
     return;

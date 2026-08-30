@@ -103,13 +103,14 @@ export function initReferenceToolbar() {
     refUI.sortBy = e.target.value;
     if (e.target.value === "mtime") {   // 最近更新默认降序（最新在前，ux-polish-02/08）
       refUI.sortDir = "desc";
-      $("ref-sort-dir").textContent = "↓ 降序";
+      $("ref-sort-dir").textContent = "↓ 降序（默认）";   // 默认态常驻标注（工单 22 评审整改）
     }
     renderReferences();
   });
   $("ref-sort-dir").addEventListener("click", () => {
     refUI.sortDir = refUI.sortDir === "asc" ? "desc" : "asc";
-    $("ref-sort-dir").textContent = refUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
+    $("ref-sort-dir").textContent = refUI.sortDir === "asc" ? "↑ 升序"
+      : (refUI.sortBy === "mtime" ? "↓ 降序（默认）" : "↓ 降序");
     renderReferences();
   });
   $("ref-filter-clear").addEventListener("click", clearReferenceFilter);
