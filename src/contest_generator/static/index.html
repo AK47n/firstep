@@ -1266,15 +1266,21 @@
   .topic-actions { display: flex; gap: 8px; margin-top: auto; }
   /* 步骤导航（工单 ui-polish/02）：宽屏左侧 sticky 圆点 + 完成变绿 ✓；
      窄屏隐藏（不挤占表单区）；卡片徽章与圆点同色联动 */
-  .gen-layout { display: block; }
+  .gen-layout { display: flex; flex-direction: column; }
   .gen-steps { min-width: 0; }
   /* 生成页卡片加宽后微调 padding（工单 ui-polish-6/01）：避免内容贴边 */
   #tab-generate .gen-steps > .card { padding: 18px 24px; }
   @media (min-width: 1180px) {
-    .gen-layout { display: flex; gap: 18px; align-items: flex-start; }
-    .step-nav { position: sticky; top: calc(var(--header-h) + 14px); width: 158px; flex: none;
-                display: flex; flex-direction: column; gap: 4px;
-                padding: 4px 0; }
+    .gen-layout { display: flex; flex-direction: row; gap: 18px; align-items: flex-start; }
+    /* 左栏（工单 glossary-sidebar）：step-nav + 新手词表整条 sticky，
+       词表不用翻到页底即达（词表展开体限高内滚，防 sticky 撑出视口） */
+    .gen-sidebar { width: 158px; flex: none; position: sticky;
+                top: calc(var(--header-h) + 14px); align-self: flex-start; }
+    .step-nav { display: flex; flex-direction: column; gap: 4px;
+                padding: 4px 0; width: 100%; }
+    .gen-sidebar .glossary-card { margin-top: 12px; }
+    .gen-sidebar .glossary-card .card-details-body {
+                max-height: max(120px, min(calc(100vh - 640px), 460px)); overflow: auto; }
     .step-nav .step-dot { display: flex; align-items: center; gap: 8px;
                 width: 100%; padding: 3px 8px 3px 4px;
                 border: 1px solid transparent; border-radius: 999px;
@@ -1312,7 +1318,12 @@
     .step-nav .step-dot.warn .dot { color: var(--warn); border-color: var(--warn); }
     .step-nav .step-dot.warn .label { color: var(--warn); }
   }
-  @media (max-width: 1179px) { .step-nav { display: none; } }
+  @media (max-width: 1179px) {
+    .step-nav { display: none; }
+    /* 窄屏无左栏：词表仍跟在步骤列表之后（避免被提到最前） */
+    .gen-steps { order: 1; }
+    .gen-sidebar { order: 2; }
+  }
   .card.done .step-no { background: linear-gradient(135deg, #34d399, #059669);
              box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 0 10px rgba(52, 211, 153, .35); }
   /* 生成页就绪总览条（工单 gen-overview/01）：顶部步骤 chips + 摘要；状态与
@@ -2007,7 +2018,10 @@
 </div>
 
     <div class="gen-layout">
-      <nav id="step-nav" class="step-nav" aria-label="生成步骤向导"></nav>
+      <div class="gen-sidebar">
+        <nav id="step-nav" class="step-nav" aria-label="生成步骤向导"></nav>
+        <div id="glossary-card" class="glossary-card"></div>
+      </div>
       <div class="gen-steps">
     <div class="card">
       <h2><span class="step-no">1</span>赛题原文</h2>
@@ -2531,8 +2545,6 @@
       <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
       <div id="handoff-msg" class="error"></div>
     </div>
-
-    <div id="glossary-card" class="glossary-card"></div>
       </div><!-- /.gen-steps -->
     </div><!-- /.gen-layout -->
   </section>
