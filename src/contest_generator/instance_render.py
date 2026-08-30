@@ -1,12 +1,13 @@
-"""多实例渲染层（module-multi-instance/03）：按 slug 注册的渲染 hook + led 首例。
+"""多实例渲染层（module-multi-instance/03）：按 slug 注册的渲染 hook。
 
 照 patchers.PatcherRegistry 先例：通用层只认识 slug，led 的「通道宏命名 +
-引脚渲染」具体语义全在 led hook 里（beep/key/motor 以后挂各自的渲染 hook，
-不动这套机制——spec User Story 11）。渲染输入 = selection.expand_instances 的
-计划（02 纯函数，同输入同输出），渲染输出 = 生成工程里的 led_instances.h
-（stm32 工程根 / mspm0 modules/led/code/）+ mspm0 syscfg 新实例。骨架侧经
-instance_interface_blocks 把同一份渲染文本喂进接口块——LLM 见到的通道宏清单
-= 工程里实际生成的宏，静态自检不误占位。
+引脚渲染」具体语义全在 led hook 里，key 的按键通道宏 + syscfg 输入实例在
+key hook（key-multi-instance/03——beep/motor 以后挂各自的渲染 hook，不动这套
+机制——spec User Story 11）。渲染输入 = selection.expand_instances 的计划
+（02 纯函数，同输入同输出），渲染输出 = 生成工程里的 led_instances.h /
+key_instances.h（stm32 工程根 / mspm0 模块 code 目录）+ mspm0 syscfg 新实例。
+骨架侧经 instance_interface_blocks 把同一份渲染文本喂进接口块——LLM 见到的
+通道宏清单 = 工程里实际生成的宏，静态自检不误占位。
 
 单实例（空计划）零写侧变化：stm32 母版默认 led_instances.h 随 copytree 就位、
 mspm0 库内默认随模块复制就位——渲染层不写。默认文本与盘上默认文件的逐字节
@@ -31,10 +32,16 @@ from .selection import ExpandedInstance, ModuleInstance, expand_instances
 
 LED_SLUG = "led"
 LED_INSTANCES_HEADER = "led_instances.h"
+KEY_SLUG = "key"
+KEY_INSTANCES_HEADER = "key_instances.h"
 
 # stm32 落工程根（与 pin_config.h 同级，ml_libs 经 IncludePath 解析到）；mspm0
 # 落 led.c 同目录（引号 include 自目录优先，零 include path 改动）
 MSPM0_LED_HEADER_REL = "modules/led/code/led_instances.h"
+
+# key 同构双落点（key-multi-instance/02/03）：stm32 工程根（母版默认随母版复制，
+# 渲染按计划覆写）；mspm0 模块 code 目录（默认随模块复制，渲染按计划覆写）
+MSPM0_KEY_HEADER_REL = "modules/key/code/key_instances.h"
 
 # 单实例默认 led_instances.h 全文（与盘上默认文件逐字节一致——stm32 母版根 /
 # mspm0 库内 modules/led/code/，测试钉死）。stm32 默认引脚取 pin_config.h 宏
@@ -110,10 +117,72 @@ MSPM0_DEFAULT_LED_INSTANCES = """/* led_instances.h —— LED 通道宏 + 每�
 #endif
 """
 
+STM32_DEFAULT_KEY_INSTANCES = """/* key_instances.h —— 按键通道宏 + 每通道 (port, pin) 表（生成器多实例渲染产物，
+ * key-multi-instance/03）。选中 key 且带实例清单时生成器按实例计划覆写本文件
+ * （工程根、与 pin_config.h 同级）；本文件 = 单实例默认：1 通道，引脚取
+ * pin_config.h（接线单源——改板载按键引脚只改 pin_config.h）。 */
+#ifndef _key_instances_h_
+#define _key_instances_h_
+
+#define KEY_CHANNEL_COUNT 1
+
+// 通道索引（get_key_state 的 channel 实参；两平台一致：KEY_START=0 /
+// KEY_STOP=1 / KEY_MODE=2 / KEY_SET=3 / KEY_1=4 …；越界自动钳回首通道——
+// 单实例默认下 STOP/MODE/SET/KEY_1 均与首通道同脚，行为与 led 单通道别名一致）
+#define KEY_START 0
+#define KEY_STOP  1
+#define KEY_MODE  2
+#define KEY_SET   3
+#define KEY_1     4
+
+// 每通道 (port, pin)：key_stm32.c 读 KEY_PIN_TABLE 建表（KEY_GPIO / KEY_PIN
+// 由 pin_config.h 定义）
+#define KEY_CHANNEL_0_PORT KEY_GPIO
+#define KEY_CHANNEL_0_PIN  KEY_PIN
+
+#define KEY_PIN_TABLE { {KEY_CHANNEL_0_PORT, KEY_CHANNEL_0_PIN} }
+
+#endif
+"""
+
+MSPM0_DEFAULT_KEY_INSTANCES = """/* key_instances.h —— 按键通道宏 + 每通道 (port, pin) 表（生成器多实例渲染产物，
+ * key-multi-instance/03）。选中 key 且带实例清单时生成器按实例计划覆写本文件
+ * （key.c 同目录，随模块复制进工程）；本文件 = 单实例默认：地猛星板载键
+ * （PA2，KEY 组——改引脚改 syscfg 不改这里）。 */
+#ifndef _key_instances_h_
+#define _key_instances_h_
+
+#define KEY_CHANNEL_COUNT 1
+
+// 通道索引（get_key_state 的 channel 实参；两平台一致：KEY_START=0 /
+// KEY_STOP=1 / KEY_MODE=2 / KEY_SET=3 / KEY_1=4 …；越界自动钳回首通道——
+// 单实例默认下 STOP/MODE/SET/KEY_1 均与首通道同脚，行为与 led 单通道别名一致）
+#define KEY_START 0
+#define KEY_STOP  1
+#define KEY_MODE  2
+#define KEY_SET   3
+#define KEY_1     4
+
+// 每通道 (port, pin)：key.c 读 KEY_PIN_TABLE 建表（KEY_PORT / KEY_START_PIN
+// 由 SysConfig 按 mspm0.syscfg 生成——实例名 KEY、引脚名 START）
+#define KEY_CHANNEL_0_PORT KEY_PORT
+#define KEY_CHANNEL_0_PIN  KEY_START_PIN
+
+#define KEY_PIN_TABLE { {KEY_CHANNEL_0_PORT, KEY_CHANNEL_0_PIN} }
+
+#endif
+"""
+
 # syscfg $assign 行形态（syscfg_model._SYSCFG_ASSIGN_RE 同款，只服务于 LED_BEEP
 # 通道 0 落点行——path 前置检查后逐组还原，head/tail/eol 原样保留）
 _LED_BEEP_ASSIGN_RE = re.compile(
     r'^(?P<head>\s*(?P<path>LED_BEEP\.associatedPins\[0\]\.pin)\.\$assign\s*=\s*)'
+    r'"(?P<pin>[A-Za-z0-9]+)"(?P<tail>.*?)(?P<eol>\r?\n)?$'
+)
+
+# key 通道 0 落点行（母版 KEY 输入实例，key-multi-instance/03；同款还原规则）
+_KEY_ASSIGN_RE = re.compile(
+    r'^(?P<head>\s*(?P<path>KEY\.associatedPins\[0\]\.pin)\.\$assign\s*=\s*)'
     r'"(?P<pin>[A-Za-z0-9]+)"(?P<tail>.*?)(?P<eol>\r?\n)?$'
 )
 
@@ -215,10 +284,65 @@ class LedInstanceRenderer:
         ]
 
 
+class KeyInstanceRenderer:
+    """key 渲染 hook（variant=function，key-multi-instance/03）：通道宏 + 引脚表。
+
+    stm32：工程根 key_instances.h 覆写为计划内容（多实例实例脚是权威）；mspm0：
+    通道 0 复用母版 KEY 输入实例（计划脚 ≠ 现值时改写 $assign）、其余通道新
+    GPIO 输入实例 KEY_<实例号>（关联 pin $name KEY<实例号>——SysConfig pin 名
+    全局唯一判例，方向 INPUT，不配内部电阻——沿母版全部输入实例外置偏置先例）。
+    空计划 = 单实例默认：不写任何文件（默认已随模块/母版复制就位）。
+    """
+
+    @property
+    def managed_headers(self) -> frozenset[str]:
+        """mspm0 侧 key_instances.h 是库内默认（随模块复制）+ 渲染覆写的双态
+        文件——接口块剔除基线文本，只注入渲染计划/默认通道宏块。"""
+        return frozenset({"code/key_instances.h"})
+
+    def render(
+        self,
+        project_dir: Path,
+        plan: Sequence[ExpandedInstance],
+        platform: str,
+    ) -> None:
+        if not plan:
+            return  # 单实例默认：零写侧变化（默认文件已就位）
+        if platform == PLATFORM_STM32:
+            path = project_dir / KEY_INSTANCES_HEADER
+        elif platform == PLATFORM_MSPM0:
+            path = project_dir / MSPM0_KEY_HEADER_REL
+        else:
+            raise UnknownPlatformError(
+                f"未知平台 {platform!r}，已注册的平台："
+                f"{PLATFORM_STM32}, {PLATFORM_MSPM0}"
+            )
+        path.write_text(
+            render_key_instances_text(plan, platform), encoding="utf-8"
+        )
+        if platform == PLATFORM_MSPM0:
+            _write_syscfg_for_key_plan(project_dir, plan)
+
+    def inject_blocks(
+        self, plan: Sequence[ExpandedInstance], platform: str
+    ) -> list[str]:
+        """骨架 / 冒烟接口块：喂给 LLM 的通道宏清单 = 工程里实际生成的文件全文
+        + key_init/get_key_state 使用提示（静态自检只认函数名）。"""
+        text = render_key_instances_text(plan, platform)
+        return [
+            f"### 模块 key 通道宏（{KEY_INSTANCES_HEADER} 生成内容）\n{text}\n"
+            "（每个通道宏对应一个已配好引脚的按键实例，请在初始化开头调用 "
+            "key_init()，并在逻辑中逐个 get_key_state(<通道宏>) 读取——按下返回 "
+            "1，松开返回 0）\n"
+        ]
+
+
 def default_render_registry() -> InstanceRenderRegistry:
-    """默认注册表：led 是首个多实例模块（spec 首例），新模块多实例 = 这里加一条。"""
+    """默认注册表：led 是首个多实例模块（spec 首例），key 第二个；新模块
+    多实例 = 这里加一条。"""
     registry = InstanceRenderRegistry()
     registry.register(LED_SLUG, LedInstanceRenderer())
+    registry.register(KEY_SLUG, KeyInstanceRenderer())
     return registry
 
 
@@ -482,5 +606,170 @@ def _write_syscfg_for_plan(
     assert path.is_file(), f"mspm0 输出树缺 {MSPM0_SYSCFG_FILENAME}（母版漂移）"
     original = path.read_text(encoding="utf-8", newline="")
     rendered = rewrite_syscfg_for_led_instances(original, plan)
+    if rendered != original:
+        path.write_text(rendered, encoding="utf-8", newline="")
+
+
+# ---------------------------------------------------------------------------
+# key 渲染（key-multi-instance/03）：与 led 同构的纯函数出口 + syscfg 改写。
+# ---------------------------------------------------------------------------
+
+
+def render_key_instances_text(
+    plan: Sequence[ExpandedInstance], platform: str
+) -> str:
+    """实例计划 → key_instances.h 全文（纯函数，字符串进字符串出）。
+
+    空计划 = 单实例默认（与盘上默认文件逐字节一致，测试钉死）；多实例 = 全
+    通道按计划序：stm32 具体 (GPIO_x, Pin_y) 对、mspm0 通道 0 KEY 实例宏 +
+    其余 KEY_<实例号> 实例宏。通道索引两平台一致（KEY_START=0 / KEY_STOP=1 /
+    KEY_MODE=2 / KEY_SET=3 / KEY_1=4 …，key 展开策略命名产出）。
+    """
+    if platform == PLATFORM_STM32:
+        return STM32_DEFAULT_KEY_INSTANCES if not plan else _render_multi_key_stm32(plan)
+    if platform == PLATFORM_MSPM0:
+        return MSPM0_DEFAULT_KEY_INSTANCES if not plan else _render_multi_key_mspm0(plan)
+    raise UnknownPlatformError(
+        f"未知平台 {platform!r}，已注册的平台：{PLATFORM_STM32}, {PLATFORM_MSPM0}"
+    )
+
+
+def _render_multi_key_stm32(plan: Sequence[ExpandedInstance]) -> str:
+    """多实例 stm32 全文：全通道具体 (GPIO_x, Pin_y) 对（实例计划脚是权威——
+    pin_config.h 单实例绑定只服务默认）。"""
+    channel_lines = "".join(
+        f"#define KEY_CHANNEL_{i}_PORT {_stm32_port(entry.pin)}\n"
+        f"#define KEY_CHANNEL_{i}_PIN  {_stm32_pin(entry.pin)}\n"
+        for i, entry in enumerate(plan)
+    )
+    return _render_multi_key_text(plan, channel_lines)
+
+
+def _render_multi_key_mspm0(plan: Sequence[ExpandedInstance]) -> str:
+    """多实例 mspm0 全文：通道 0 复用 KEY 实例宏、通道 k≥1 引用新 syscfg 实例
+    KEY_<实例号> 的 <INSTANCE>_PORT / <INSTANCE>_KEY<实例号>_PIN 宏。"""
+    channel_lines = "".join(
+        f"#define KEY_CHANNEL_{i}_PORT {_mspm0_key_port_macro(entry)}\n"
+        f"#define KEY_CHANNEL_{i}_PIN  {_mspm0_key_pin_macro(entry)}\n"
+        for i, entry in enumerate(plan)
+    )
+    return _render_multi_key_text(plan, channel_lines)
+
+
+def _mspm0_key_port_macro(entry: ExpandedInstance) -> str:
+    if entry.index == 1:
+        return "KEY_PORT"
+    return f"KEY_{entry.index}_PORT"
+
+
+def _mspm0_key_pin_macro(entry: ExpandedInstance) -> str:
+    if entry.index == 1:
+        return "KEY_START_PIN"
+    # 新实例的关联 pin $name = "KEY<实例号>"（SysConfig 要求全局唯一）→ 生成宏
+    # KEY_2_KEY2_PIN 形态（实例名 KEY_2 + pin 名 KEY2）
+    return f"KEY_{entry.index}_KEY{entry.index}_PIN"
+
+
+def _render_multi_key_text(
+    plan: Sequence[ExpandedInstance], channel_lines: str
+) -> str:
+    """多实例全文骨架（双平台共用）：COUNT + 通道索引 + 每通道对表。"""
+    count = len(plan)
+    entries = ", ".join(
+        f"{{KEY_CHANNEL_{i}_PORT, KEY_CHANNEL_{i}_PIN}}" for i in range(count)
+    )
+    return (
+        "/* key_instances.h —— 生成器多实例渲染产物（key-multi-instance/03）："
+        "按键通道宏 + 每通道 (port, pin) 表。改接线改这里（stm32：直接改"
+        " GPIO_x/Pin_y 对；mspm0：改 syscfg 的 $assign）。 */\n"
+        "#ifndef _key_instances_h_\n"
+        "#define _key_instances_h_\n"
+        "\n"
+        f"#define KEY_CHANNEL_COUNT {count}\n"
+        "\n"
+        "// 通道索引（get_key_state 的 channel 实参；两平台一致：KEY_START=0 /\n"
+        "// KEY_STOP=1 / KEY_MODE=2 / KEY_SET=3 / KEY_1=4 …；越界自动钳回首通道）\n"
+        + "".join(f"#define {entry.macro:<13}{i}\n" for i, entry in enumerate(plan))
+        + "\n"
+        "// 每通道 (port, pin)：驱动读 KEY_PIN_TABLE 建表\n"
+        + channel_lines
+        + "\n"
+        f"#define KEY_PIN_TABLE {{ {entries} }}\n"
+        "\n"
+        "#endif\n"
+    )
+
+
+def rewrite_syscfg_for_key_instances(
+    text: str, plan: Sequence[ExpandedInstance]
+) -> str:
+    """mspm0 多实例 syscfg 改写（纯函数）：通道 0 计划脚 ≠ 现值 → 改写
+    KEY.associatedPins[0].pin.$assign；通道 1+ 追加 KEY_<实例号> GPIO 输入
+    实例块（关联 pin $name KEY<实例号> → SysConfig 生成 KEY_<n>_PORT /
+    KEY_<n>_KEY<n>_PIN）。空计划原样返回（单实例零写侧变化）。其余行逐字节
+    保留（行尾 CRLF 原样接回）。
+    """
+    if not plan:
+        return text
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        if "KEY.associatedPins[0].pin.$assign" not in line:
+            continue
+        m = _KEY_ASSIGN_RE.match(line)
+        assert m is not None, "母版 mspm0.syscfg 的 KEY 落点行形态漂移"
+        if m.group("pin") != plan[0].pin:
+            lines[i] = (
+                f'{m.group("head")}"{plan[0].pin}"'
+                f'{m.group("tail")}{m.group("eol") or ""}'
+            )
+        break
+    else:
+        raise AssertionError(
+            "母版 mspm0.syscfg 缺 KEY.associatedPins[0].pin.$assign 落点"
+            "（母版漂移）"
+        )
+
+    eol = "\r\n" if "\r\n" in text else "\n"
+    additions = [
+        "// 按键多实例通道（key-multi-instance/03 渲染产物：实例名 "
+        "KEY_<实例号>，改引脚只改 $assign）" + eol
+    ]
+    for entry in plan[1:]:
+        additions.append(
+            _syscfg_key_instance_block(
+                f"KEY_{entry.index}", f"KEY{entry.index}", entry.pin, eol
+            )
+        )
+    # 原文缺尾换行时补一个（追加块不与末行粘连——判例：追加文本粘尾行）
+    separator = "" if text.endswith(("\n", "\r")) else eol
+    return "".join(lines) + separator + "".join(additions)
+
+
+def _syscfg_key_instance_block(
+    instance: str, pin_name: str, pin_assign: str, eol: str
+) -> str:
+    """单个 GPIO 输入实例块（与母版 KEY 同款配置：INPUT，无内部电阻——
+    沿母版全部输入实例外置偏置/板载先例）。
+
+    pin_name = associatedPins[0].$name，全局唯一（SysConfig 判例）——KEY2
+    形态，与实例名 KEY_2 对应；pin_assign = 引脚名（$assign 引号值）。"""
+    return (
+        f"const {instance} = GPIO.addInstance();" + eol
+        + f'{instance}.$name = "{instance}";' + eol
+        + f"{instance}.associatedPins.create(1);" + eol
+        + f'{instance}.associatedPins[0].$name        = "{pin_name}";' + eol
+        + f'{instance}.associatedPins[0].direction    = "INPUT";' + eol
+        + f'{instance}.associatedPins[0].pin.$assign  = "{pin_assign}";' + eol
+    )
+
+
+def _write_syscfg_for_key_plan(
+    project_dir: Path, plan: Sequence[ExpandedInstance]
+) -> None:
+    """生成挂钩：读输出目录 syscfg、改写、文本有变化才落盘（不变不写）。"""
+    path = project_dir / MSPM0_SYSCFG_FILENAME
+    assert path.is_file(), f"mspm0 输出树缺 {MSPM0_SYSCFG_FILENAME}（母版漂移）"
+    original = path.read_text(encoding="utf-8", newline="")
+    rendered = rewrite_syscfg_for_key_instances(original, plan)
     if rendered != original:
         path.write_text(rendered, encoding="utf-8", newline="")

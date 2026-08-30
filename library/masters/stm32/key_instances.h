@@ -18,9 +18,9 @@
 
 // 每通道 (port, pin)：key_stm32.c 读 KEY_PIN_TABLE 建表（KEY_GPIO / KEY_PIN
 // 由 pin_config.h 定义）
-#define KEY_CHANNEL_0_GPIO KEY_GPIO
+#define KEY_CHANNEL_0_PORT KEY_GPIO
 #define KEY_CHANNEL_0_PIN  KEY_PIN
 
-#define KEY_PIN_TABLE { {KEY_CHANNEL_0_GPIO, KEY_CHANNEL_0_PIN} }
+#define KEY_PIN_TABLE { {KEY_CHANNEL_0_PORT, KEY_CHANNEL_0_PIN} }
 
 #endif

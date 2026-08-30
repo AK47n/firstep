@@ -36,6 +36,8 @@ from contest_generator.selection import (
 from contest_generator.instance_render import (
     expand_instance_plans,
     render_led_instances_text,
+    render_key_instances_text,
+    rewrite_syscfg_for_key_instances,
     rewrite_syscfg_for_led_instances,
 )
 from contest_generator.skeleton import (
@@ -44,6 +46,7 @@ from contest_generator.skeleton import (
     generate_smoke_main,
 )
 from tests.fakes import (
+    FAKE_STM32_ML_UVPROJX,
     FakeLLM,
     make_fake_ccs_master_project,
     make_fake_master_project,
@@ -1145,3 +1148,357 @@ def test_generate_smoke_main_matrix_4_light_all_channels_preserved():
     assert intercepted == ()
     for macro in ("LED_RED", "LED_RED_2", "LED_GREEN", "LED_1"):
         assert f"led_init({macro});" in main_c
+
+
+# ---------------------------------------------------------------------------
+# key-multi-instance/03：渲染（key hook）+ 骨架注入
+# ---------------------------------------------------------------------------
+
+FAKE_KEY_PIN_CONFIG = (
+    "#ifndef _pin_config_h_\n#define _pin_config_h_\n"
+    "#define KEY_GPIO        GPIO_B\n#define KEY_PIN         Pin_3\n"
+    "#endif\n"
+)
+FAKE_KEY_HEADFILE_H = (
+    '#ifndef __HEADFILE_H\n#define __HEADFILE_H\n#include "ml_gpio.h"\n#endif\n'
+)
+FAKE_KEY_ML_GPIO_H = (
+    "#ifndef _ml_gpio_h_\n#define _ml_gpio_h_\n#include \"headfile.h\"\n"
+    "typedef enum { GPIO_A = 0, GPIO_B = 1, GPIO_C = 2 } GPIOn_enum;\n"
+    "typedef enum { Pin_0 = 0, Pin_3 = 3, Pin_13 = 13 } Pinx_enum;\n"
+    "typedef enum { OUT_PP = 0, IU = 1 } GPIO_MODE_enum;\n"
+    "void gpio_init(GPIOn_enum GPIOn, Pinx_enum Pinx, GPIO_MODE_enum mode);\n"
+    "uint8_t gpio_get(GPIOn_enum GPIOn, Pinx_enum Pinx);\n"
+    "#endif\n"
+)
+FAKE_DEFAULT_KEY_INSTANCES = (
+    "#ifndef _key_instances_h_\n#define _key_instances_h_\n"
+    "#define KEY_CHANNEL_COUNT 1\n"
+    "#define KEY_START 0\n"
+    "#define KEY_CHANNEL_0_PORT KEY_GPIO\n#define KEY_CHANNEL_0_PIN KEY_PIN\n"
+    "#define KEY_PIN_TABLE { {KEY_CHANNEL_0_PORT, KEY_CHANNEL_0_PIN} }\n"
+    "#endif\n"
+)
+FAKE_KEY_SYSCFG = (
+    "/* fake syscfg */\n"
+    'const GPIO = scripting.addModule("/ti/driverlib/GPIO", {}, false);\n'
+    "const KEY = GPIO.addInstance();\n"
+    'KEY.$name = "KEY";\n'
+    "KEY.associatedPins.create(1);\n"
+    'KEY.associatedPins[0].$name        = "START";\n'
+    'KEY.associatedPins[0].direction    = "INPUT";\n'
+    'KEY.associatedPins[0].pin.$assign  = "PA2";\n'
+)
+
+KEY_MAIN_C = "int main(void) { key_init(); while (1); }\n"
+
+
+def _fake_stm32_key_master(tmp_path: Path) -> Path:
+    """最小 Keil 母版 + key 接线文件（pin_config.h / key_instances.h 默认 +
+    ml_libs 的 headfile.h/ml_gpio.h + user/Project.uvprojx——IncludePath 含
+    工程根，key_stm32.c 的 include 落点；根级 project.uvprojx 必须删除，否则
+    include_search_dirs 读到它（inc/src 相对路径）而非 user/ 下的真布局）。"""
+    master = make_fake_master_project(tmp_path / "master")
+    (master / "project.uvprojx").unlink()
+    (master / "pin_config.h").write_text(FAKE_KEY_PIN_CONFIG, encoding="utf-8")
+    (master / "key_instances.h").write_text(
+        FAKE_DEFAULT_KEY_INSTANCES, encoding="utf-8"
+    )
+    (master / "ml_libs").mkdir()
+    (master / "ml_libs" / "headfile.h").write_text(
+        FAKE_KEY_HEADFILE_H, encoding="utf-8"
+    )
+    (master / "ml_libs" / "ml_gpio.h").write_text(
+        FAKE_KEY_ML_GPIO_H, encoding="utf-8"
+    )
+    (master / "user").mkdir()
+    (master / "user" / "Project.uvprojx").write_text(
+        FAKE_STM32_ML_UVPROJX, encoding="utf-8"
+    )
+    return master
+
+
+def _fake_mspm0_key_master(tmp_path: Path) -> Path:
+    """最小 CCS 母版 + KEY 输入实例 syscfg（渲染/改写的落点）。"""
+    master = make_fake_ccs_master_project(tmp_path / "ccs_master")
+    (master / "mspm0.syscfg").write_text(FAKE_KEY_SYSCFG, encoding="utf-8", newline="")
+    return master
+
+
+def test_render_key_default_text_matches_checked_in_files():
+    """空计划（单实例默认）的渲染文本 = 盘上默认文件（行尾归一后逐字节）：
+    stm32 母版根 key_instances.h（1 通道 KEY_GPIO/KEY_PIN）、mspm0 库内
+    code/key_instances.h（1 通道 KEY_PORT/KEY_START_PIN）。"""
+    stm32_default = (STM32_MASTER / "key_instances.h").read_text(
+        encoding="utf-8", errors="replace"
+    ).replace("\r\n", "\n")
+    mspm0_default = (MODULES / "key" / "code" / "key_instances.h").read_text(
+        encoding="utf-8", errors="replace"
+    ).replace("\r\n", "\n")
+
+    assert render_key_instances_text((), "stm32") == stm32_default
+    assert render_key_instances_text((), "mspm0") == mspm0_default
+
+    assert "#define KEY_CHANNEL_COUNT 1" in stm32_default
+    assert "#define KEY_CHANNEL_COUNT 1" in mspm0_default
+    assert "#define KEY_START 0" in stm32_default
+
+
+def test_render_key_stm32_multi_plan_concrete_pins():
+    """stm32 多实例：COUNT=N、通道索引按计划序（KEY_START=0 / KEY_1=1）、
+    每通道具体 (GPIO_x, Pin_y) 对（PB3 → GPIO_B/Pin_3、PC13 → GPIO_C/Pin_13）。"""
+    plan = _key_expand(
+        [
+            ModuleInstance(name="启动键", variant="start"),
+            ModuleInstance(name="按钮2"),
+        ],
+        "stm32",
+    )
+
+    text = render_key_instances_text(plan, "stm32")
+
+    assert "#define KEY_CHANNEL_COUNT 2" in text
+    for macro, index in (("KEY_START", 0), ("KEY_1", 1)):
+        assert re.search(rf"#define\s+{macro}\s+{index}\b", text), macro
+    assert "#define KEY_CHANNEL_0_PORT GPIO_B" in text
+    assert "#define KEY_CHANNEL_0_PIN  Pin_3" in text
+    assert "#define KEY_CHANNEL_1_PORT GPIO_C" in text
+    assert "#define KEY_CHANNEL_1_PIN  Pin_13" in text
+    assert "{KEY_CHANNEL_1_PORT, KEY_CHANNEL_1_PIN}" in text
+
+
+def test_render_key_mspm0_multi_plan_instance_macros():
+    """mspm0 多实例：通道 0 复用 KEY 实例宏（KEY_PORT/KEY_START_PIN）、
+    通道 1 引用新 syscfg 实例 KEY_2 的 KEY_2_PORT / KEY_2_KEY2_PIN。"""
+    plan = _key_expand(
+        [
+            ModuleInstance(name="启动键", variant="start"),
+            ModuleInstance(name="停止键", variant="stop"),
+        ],
+        "mspm0",
+    )
+
+    text = render_key_instances_text(plan, "mspm0")
+
+    assert "#define KEY_CHANNEL_COUNT 2" in text
+    assert "#define KEY_CHANNEL_0_PORT KEY_PORT" in text
+    assert "#define KEY_CHANNEL_0_PIN  KEY_START_PIN" in text
+    assert "#define KEY_CHANNEL_1_PORT KEY_2_PORT" in text
+    assert "#define KEY_CHANNEL_1_PIN  KEY_2_KEY2_PIN" in text
+
+
+def test_rewrite_syscfg_for_key_instances():
+    """mspm0 多实例 syscfg：通道 0 计划脚 ≠ PA2 → 改写 KEY $assign；通道 1+
+    追加 KEY_2 GPIO 输入实例（$name KEY_2、pin $name KEY2、方向 INPUT）。
+    空计划 → 文本原样（单实例零写侧变化）。"""
+    plan = _key_expand(
+        [
+            ModuleInstance(name="启动键", variant="start", pin="PA5"),
+            ModuleInstance(name="停止键", variant="stop"),
+        ],
+        "mspm0",
+    )  # PA5 / PA0
+
+    rewritten = rewrite_syscfg_for_key_instances(FAKE_KEY_SYSCFG, plan)
+
+    assert 'KEY.associatedPins[0].pin.$assign  = "PA5";' in rewritten
+    assert "const KEY_2 = GPIO.addInstance();" in rewritten
+    assert 'KEY_2.$name = "KEY_2";' in rewritten
+    assert 'KEY_2.associatedPins[0].$name        = "KEY2";' in rewritten
+    assert 'KEY_2.associatedPins[0].direction    = "INPUT";' in rewritten
+    assert 'KEY_2.associatedPins[0].pin.$assign  = "PA0";' in rewritten
+    # 原文行除改写行外逐字保留
+    assert rewritten.startswith("/* fake syscfg */\n")
+
+    assert rewrite_syscfg_for_key_instances(FAKE_KEY_SYSCFG, ()) == FAKE_KEY_SYSCFG
+
+
+def test_generate_stm32_single_key_no_write_side_changes(tmp_path):
+    """stm32 单实例：key_instances.h = 母版默认（逐字节）、pin_config.h 逐字节
+    不写——单实例路径零写侧变化。"""
+    master = _fake_stm32_key_master(tmp_path)
+    output = tmp_path / "out"
+
+    generate(
+        platform="stm32",
+        manifests=[KEY],
+        module_library_dir=MODULES,
+        master_project_dir=master,
+        output_dir=output,
+        main_c_content=KEY_MAIN_C,
+    )
+
+    assert (output / "key_instances.h").read_text(
+        encoding="utf-8", errors="replace"
+    ) == FAKE_DEFAULT_KEY_INSTANCES
+    assert (output / "pin_config.h").read_text(
+        encoding="utf-8", errors="replace"
+    ) == FAKE_KEY_PIN_CONFIG
+
+
+def test_generate_stm32_multi_key_writes_channels(tmp_path):
+    """stm32 多实例：工程根 key_instances.h 含 2 通道宏 + 具体引脚对。"""
+    master = _fake_stm32_key_master(tmp_path)
+    output = tmp_path / "out"
+
+    generate(
+        platform="stm32",
+        manifests=[KEY],
+        module_library_dir=MODULES,
+        master_project_dir=master,
+        output_dir=output,
+        main_c_content=KEY_MAIN_C,
+        instances={
+            "key": (
+                ModuleInstance(name="启动键", variant="start"),
+                ModuleInstance(name="按钮2"),
+            )
+        },
+    )
+
+    text = (output / "key_instances.h").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    assert "#define KEY_CHANNEL_COUNT 2" in text
+    for macro, index in (("KEY_START", 0), ("KEY_1", 1)):
+        assert re.search(rf"#define\s+{macro}\s+{index}\b", text), macro
+    assert "#define KEY_CHANNEL_0_PORT GPIO_B" in text
+    assert (output / "pin_config.h").read_text(
+        encoding="utf-8", errors="replace"
+    ) == FAKE_KEY_PIN_CONFIG
+
+
+def test_generate_mspm0_single_key_default_and_no_syscfg_write(tmp_path):
+    """mspm0 单实例：modules/key/code/key_instances.h = 库内默认（逐字节）；
+    syscfg 逐字节不写。"""
+    master = _fake_mspm0_key_master(tmp_path)
+    output = tmp_path / "out"
+
+    generate(
+        platform="mspm0",
+        manifests=[KEY],
+        module_library_dir=MODULES,
+        master_project_dir=master,
+        output_dir=output,
+        main_c_content=KEY_MAIN_C,
+    )
+
+    header = output / "modules" / "key" / "code" / "key_instances.h"
+    assert header.read_text(encoding="utf-8", errors="replace") == (
+        MODULES / "key" / "code" / "key_instances.h"
+    ).read_text(encoding="utf-8", errors="replace")
+    assert (output / "mspm0.syscfg").read_text(encoding="utf-8", newline="") == (
+        FAKE_KEY_SYSCFG
+    )
+
+
+def test_generate_mspm0_multi_key_appends_syscfg_instances(tmp_path):
+    """mspm0 多实例（start@PA2 不动 + stop@PA0）：syscfg 追加 KEY_2 输入实例；
+    key_instances.h 引用新实例宏。"""
+    master = _fake_mspm0_key_master(tmp_path)
+    output = tmp_path / "out"
+
+    generate(
+        platform="mspm0",
+        manifests=[KEY],
+        module_library_dir=MODULES,
+        master_project_dir=master,
+        output_dir=output,
+        main_c_content=KEY_MAIN_C,
+        instances={
+            "key": (
+                ModuleInstance(name="启动键", variant="start"),
+                ModuleInstance(name="停止键", variant="stop"),
+            )
+        },
+    )
+
+    syscfg = (output / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
+    assert 'KEY.associatedPins[0].pin.$assign  = "PA2";' in syscfg
+    assert "const KEY_2 = GPIO.addInstance();" in syscfg
+    assert 'KEY_2.associatedPins[0].pin.$assign  = "PA0";' in syscfg
+
+    header = (output / "modules" / "key" / "code" / "key_instances.h").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    assert "#define KEY_CHANNEL_COUNT 2" in header
+    assert "#define KEY_CHANNEL_1_PORT KEY_2_PORT" in header
+    assert "#define KEY_CHANNEL_1_PIN  KEY_2_KEY2_PIN" in header
+
+
+def test_build_skeleton_interfaces_injects_key_channel_macros():
+    """build_skeleton_interfaces 把 key_instances.h 的通道宏清单喂给 LLM：
+    空计划 = 默认单通道（KEY_START），多实例计划 = 含 KEY_1。"""
+    interfaces = build_skeleton_interfaces(
+        [KEY], "stm32", MODULES, instance_plans={"key": ()}
+    )
+    # 模块接口块（key_stm32.h 含 #include "key_instances.h"）+ 通道宏块
+    # 都提到 key_instances.h——按注入标题精确取通道宏块
+    channel_blocks = [b for b in interfaces if "### 模块 key 通道宏" in b]
+    assert len(channel_blocks) == 1
+    block = channel_blocks[0]
+    assert "#define KEY_CHANNEL_COUNT 1" in block
+    assert "#define KEY_START 0" in block
+    assert "key_init()" in block and "get_key_state(" in block
+
+    interfaces = build_skeleton_interfaces(
+        [KEY],
+        "mspm0",
+        MODULES,
+        instance_plans={
+            "key": _key_expand(
+                [
+                    ModuleInstance(name="启动键", variant="start"),
+                    ModuleInstance(name="按钮2"),
+                ],
+                "mspm0",
+            )
+        },
+    )
+    block = next(b for b in interfaces if "#define KEY_CHANNEL_COUNT" in b)
+    assert "#define KEY_CHANNEL_COUNT 2" in block
+    assert "#define KEY_1" in block
+
+
+def test_generate_skeleton_with_key_instances_feeds_macros_to_llm():
+    """generate_skeleton 带 key instances → LLM 收到的接口块含展开后的通道宏。"""
+    llm = FakeLLM()
+    generate_skeleton(
+        llm,
+        "题面",
+        [KEY],
+        "mspm0",
+        MODULES,
+        instances={
+            "key": (
+                ModuleInstance(name="启动键", variant="start"),
+                ModuleInstance(name="按钮2"),
+            )
+        },
+    )
+    _problem_text, interfaces = llm.skeleton_calls[0]
+    assert any("#define KEY_1" in block for block in interfaces)
+
+
+def test_generate_smoke_main_key_calls_not_placeholder_rewritten():
+    """冒烟 main.c key_init() + get_key_state(<通道宏>) 静态自检不误占位。
+    （stm32 侧在假母版下编译接口以模块文件为准。）"""
+    llm = FakeLLM(
+        smoke_skeleton=(
+            "int main(void) { key_init();"
+            " uint8_t k = get_key_state(KEY_START); (void)k; while (1); }\n"
+        )
+    )
+    main_c, intercepted = generate_smoke_main(
+        llm,
+        "题面",
+        [KEY],
+        "stm32",
+        MODULES,
+        master_project_dir=None,
+        instances={"key": ()},
+    )
+
+    assert intercepted == ()
+    assert "key_init();" in main_c
+    assert "get_key_state(KEY_START);" in main_c
