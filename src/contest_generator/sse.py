@@ -38,6 +38,7 @@ from .events import (
     EVENT_DONE,
     EVENT_ERROR,
     EVENT_QUESTION,
+    INTERNAL_ERROR_HINT,
     ProgressEmitter,
     ProgressEvent,
 )
@@ -63,8 +64,10 @@ def _sse_frame(event_type: str, data: dict[str, Any]) -> str:
 def _unexpected_error_message(exc: BaseException) -> str:
     """兜底文案：未注入映射器 / 线程内任何死亡（含 KeyboardInterrupt 等非
     Exception）时的错误信息——与错误映射表"未登记异常大声失败"政策同款
-    （带类型名方便排查），sse 是叶子模块不依赖该表。"""
-    return f"服务器内部错误（{type(exc).__name__}）：{exc}"
+    （带类型名方便排查），sse 是叶子模块不依赖该表（仅常量
+    INTERNAL_ERROR_HINT 自 errors.py——工单 beginner-gap-closure/06 两处
+    兜底文案单一出处，防漂移）。"""
+    return f"服务器内部错误（{type(exc).__name__}）：{exc}" + INTERNAL_ERROR_HINT
 
 
 # 事件队列条目：进度事件原样入队；终端条目 = (kind, data)，kind ∈ done/error/

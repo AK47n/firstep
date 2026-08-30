@@ -74,7 +74,7 @@ from .task_progress import (
     run_task_planning,
     write_task_plan,
 )
-from .errors import error_entry
+from .errors import error_entry, llm_error_message
 from .events import (
     EVENT_CACHE_HIT,
     EVENT_IDEA_ANALYZING,
@@ -4045,7 +4045,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 thinking_disabled=True,
             )
         except LLMError as e:
-            raise HTTPException(400, f"文本通道自检失败：{e}")
+            # 错误映射层人话化（工单 05 评审整改）：网络/限流/客户端类不再裸透
+            # urlopen/URL 技术串（自检结果直接展示给用户）；状态保持 400——
+            # 与 vision_selfcheck「未配置先于链路问题」的契约同构
+            raise HTTPException(400, f"文本通道自检失败：{llm_error_message(e)}")
         elapsed_ms = int((time.monotonic() - started_at) * 1000)
         return {
             "ok": True,

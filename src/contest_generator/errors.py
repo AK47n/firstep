@@ -24,6 +24,7 @@ from .config import ConfigError
 from .context_manifest import ContextError
 from .deepen import DeepenError
 from .delivery import DeliveryError
+from .events import INTERNAL_ERROR_HINT
 from .extraction import ExtractionError
 from .fix_errors import FixError
 from .flash import FlashError
@@ -113,7 +114,7 @@ def llm_error_message(exc: Exception) -> str:
             ),
             None,
         )
-        return LLM_NETWORK_MESSAGE + ("。另：" + hint if hint else "")
+        return LLM_NETWORK_MESSAGE + ("另：" + hint if hint else "")
     if kind == "rate_limit":
         retry = exc.retry_after if isinstance(exc, LLMError) else None
         suffix = f"（约 {math.ceil(retry)} 秒后）" if retry else ""
@@ -186,6 +187,10 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
 )
 
 
+# 500 兜底反馈引导（工单 beginner-gap-closure/06）：常量单一出处 = events.py
+# （叶子契约模块，errors 与 sse 双向可依赖防漂移），本模块顶部已导入。
+
+
 def error_entry(exc: Exception) -> tuple[int, str]:
     """error_to_http 表（唯一实现）：核心异常 → (HTTP 状态, 中文 message)。
 
@@ -197,5 +202,6 @@ def error_entry(exc: Exception) -> tuple[int, str]:
     for entry in _ERROR_TABLE:
         if isinstance(exc, entry.exc_types):
             return entry.status, entry.message(exc)
-    # 兜底：未登记异常 = 真 bug，500 大声失败（带类型名方便排查）
-    return 500, f"服务器内部错误（{type(exc).__name__}）：{exc}"
+    # 兜底：未登记异常 = 真 bug，500 大声失败（带类型名方便排查）+ 反馈引导
+    # （工单 beginner-gap-closure/06：新手知道这是工具问题、能把信息反馈回来）
+    return 500, f"服务器内部错误（{type(exc).__name__}）：{exc}" + INTERNAL_ERROR_HINT

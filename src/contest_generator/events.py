@@ -12,6 +12,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+# 500 兜底反馈引导（工单 beginner-gap-closure/06，单一出处）：errors.py 与
+# sse.py 两处「未登记异常大声失败」兜底文案共享——放在事件契约叶子模块
+#（两端都依赖、无环——sse 是叶子不能再 import errors，本模块不依赖任何
+# 其它模块）。把「内部错误 = 工具 bug」的定性告诉新手（不是操作错误），
+# 并给可反馈出口；具体错误与类型名仍保留在消息头，复制即可反馈。
+INTERNAL_ERROR_HINT = (
+    "（这是工具的内部问题，不是你的操作错误——请把这段错误信息复制反馈给我们，"
+    "我们会尽快修复）"
+)
+
 # 阶段名与事件类型（sse 运行器 / 前端按这些键消费，改动须同步测试契约）
 PHASE_SUMMARY = "summary"  # 阶段 1：逐文件读全文出摘要
 PHASE_DECIDE = "decide"  # 阶段 2：基于摘要判定

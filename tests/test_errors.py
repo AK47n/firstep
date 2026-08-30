@@ -164,10 +164,12 @@ def test_error_entry_contract_unchanged() -> None:
     assert error_entry(LLMError("boom")) == (502, "AI 服务调用失败：boom")
     assert error_entry(OSError("磁盘满")) == (400, "文件操作失败：磁盘满")
     assert error_entry(SelectionError("缺依赖")) == (400, "缺依赖")
-    assert error_entry(RuntimeError("内部损坏")) == (
-        500,
-        "服务器内部错误（RuntimeError）：内部损坏",
-    )
+    status, message = error_entry(RuntimeError("内部损坏"))
+    assert status == 500
+    # 工单 beginner-gap-closure/06：500 兜底文案含「工具内部问题 / 反馈」引导
+    assert message.startswith("服务器内部错误（RuntimeError）：内部损坏")
+    assert "工具的内部问题" in message
+    assert "反馈" in message
 
 
 def test_llm_error_network_humanized() -> None:
@@ -228,6 +230,7 @@ def test_llm_error_local_hint_preserved() -> None:
     assert "检查网络连接" in message
     assert LOCAL_LLM_UNAVAILABLE_MESSAGE in message
     assert "ConnectionRefusedError" not in message
+    assert "。。" not in message  # 评审整改：网络文案与本地提示拼接无连句号
 
 
 def test_llm_error_413_keeps_oversize_hint() -> None:
