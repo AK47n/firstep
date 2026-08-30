@@ -31,20 +31,11 @@ const Eval = async (expr) => {
   if (r.result?.exceptionDetails) throw new Error("eval 失败: " + (r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)));
   return r.result?.result?.value;
 };
-const waitReady = async () => {
-  for (let i = 0; i < 120; i++) {
-    try {
-      const ok = await Eval(`document.readyState === 'complete' && !!document.getElementById('gen-overview')`);
-      if (ok) return true;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  return false;
-};
 
 await cdp("Runtime.enable");
 await cdp("Page.enable");
 await cdp("Network.setCacheDisabled", { cacheDisabled: true });
+await cdp("Network.clearBrowserCache");   // 模块缓存会残留旧版：先清缓存再导航
 
 let failed = 0;
 const check = (name, ok, extra) => {
@@ -52,11 +43,23 @@ const check = (name, ok, extra) => {
   if (!ok) failed++;
 };
 const collapsedCards = () => Eval(`Array.from(document.querySelectorAll('#tab-generate .gen-steps > .card.collapsed')).map((c) => c.querySelector('.step-no') ? c.querySelector('.step-no').textContent.trim() : 'x').join(',')`);
+// 等待新文档提交：href 命中 token 才继续（旧文档也有 gen-overview）
+const navigateNew = async () => {
+  const token = "np=" + Date.now();
+  await cdp("Page.navigate", { url: pageUrl + "?" + token });
+  for (let i = 0; i < 120; i++) {
+    try {
+      const st = await Eval(`({ href: location.href, rs: document.readyState, ov: !!document.getElementById('gen-overview') })`);
+      if (st.href.includes(token) && st.rs === "complete" && st.ov) return true;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+};
 
 // 清理折叠记忆键后重载（起点干净）
 await Eval(`localStorage.removeItem(${JSON.stringify(KEY)})`);
-await cdp("Page.navigate", { url: pageUrl + "?np=" + Date.now() });
-if (!(await waitReady())) { console.error("页面未就绪"); process.exit(1); }
+if (!(await navigateNew())) { console.error("页面未就绪"); process.exit(1); }
 
 check("无记忆 + 无完成步骤 → 初始无折叠卡", (await collapsedCards()) === "");
 
@@ -73,14 +76,12 @@ const stored1 = await Eval(`localStorage.getItem(${JSON.stringify(KEY)})`);
 check("折叠写入 localStorage 记忆", stored1 && stored1.includes('"3":true'), String(stored1));
 
 // 刷新后保持
-await cdp("Page.navigate", { url: pageUrl + "?np=" + Date.now() });
-if (!(await waitReady())) { console.error("刷新未就绪"); process.exit(1); }
+if (!(await navigateNew())) { console.error("刷新未就绪"); process.exit(1); }
 check("刷新后卡 3 仍折叠（记忆生效）", (await collapsedCards()).split(",").includes("3"));
 
 // 清理：移除记忆键后重载 → 全展开
 await Eval(`localStorage.removeItem(${JSON.stringify(KEY)})`);
-await cdp("Page.navigate", { url: pageUrl + "?np=" + Date.now() });
-if (!(await waitReady())) { console.error("清理重载未就绪"); process.exit(1); }
+if (!(await navigateNew())) { console.error("清理重载未就绪"); process.exit(1); }
 check("清除记忆后恢复全展开", (await collapsedCards()) === "");
 
 check("无未捕获 JS 异常", jsErrors.length === 0, jsErrors.join(" | ").slice(0, 300));

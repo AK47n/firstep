@@ -34,12 +34,13 @@ const Eval = async (expr) => {
 await cdp("Runtime.enable");
 await cdp("Page.enable");
 await cdp("Network.setCacheDisabled", { cacheDisabled: true });
+await cdp("Network.clearBrowserCache");   // 模块缓存会残留旧版（t02/t03 教训）
 await cdp("Page.navigate", { url: pageUrl + "?np=" + Date.now() });
 
 let ready = false;
 for (let i = 0; i < 120 && !ready; i++) {
   try {
-    ready = await Eval(`document.readyState === 'complete' && !!document.getElementById('platforms') && document.getElementById('platforms').children.length > 0`);
+    ready = await Eval(`location.href.includes('np=') && document.readyState === 'complete' && !!document.getElementById('platforms') && document.getElementById('platforms').children.length > 0`);
   } catch {}
   if (!ready) await new Promise((r) => setTimeout(r, 300));
 }
