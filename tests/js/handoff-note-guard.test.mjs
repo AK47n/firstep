@@ -58,13 +58,14 @@ test("ui/revise-tabs.js 仍导出 switchReviseTab（既有事实，防改名）"
   assert.match(reviseTabs, /export function switchReviseTab\(key, opts\)/);
 });
 
-test("ui/goto-tasks.js 单源定义 goTaskProgress（滚动第 11 步 + 复用 switchReviseTab）", () => {
+test("ui/goto-tasks.js 单源定义 goTaskProgress（滚动第 11 步 + 复用 switchReviseTab + 自动加载上下文）", () => {
   const g = gotoTasksSrc();
-  assert.match(g, /export function goTaskProgress\(\)/);
+  assert.match(g, /export async function goTaskProgress\(\)/);
   assert.match(g, /import \{ \$ \} from "\/js\/app\.js"/);
   assert.match(g, /import \{ switchReviseTab \} from "\/js\/ui\/revise-tabs\.js"/);
   assert.match(g, /switchReviseTab\("tasks", \{ user: true \}\)/);
   assert.match(g, /card-revise/);
+  assert.match(g, /reviseLoad/);   // ux-polish-02/04：自动加载上下文（主路径断点修复）
 });
 
 test("生成结果区「去任务推进」入口：按钮存在（compile-banner 之后）且文案一致", () => {
