@@ -378,14 +378,6 @@ async function saveSettings() {
       recommend_cache_enabled: $("set-recommend-cache").checked,
       recommend_max_rounds: parseInt($("set-recommend-rounds").value, 10) || 4,
     });
-    $("settings-msg").classList.add("ok");
-    $("settings-msg").textContent = "已保存，立即生效。";
-    toast("ok", "设置已保存，立即生效。");
-    settingsDirty = false;
-    updateSettingsDirtyUI();
-    await refreshState();
-    loadSettings();
-    return true;
   } catch (e) {
     $("settings-msg").classList.remove("ok");
     $("settings-msg").textContent = e.message;
@@ -396,6 +388,18 @@ async function saveSettings() {
     if (btn) btn.disabled = false;
     if (sticky) sticky.disabled = false;
   }
+  // 保存已成功：刷新放在错误路径之外——刷新失败（状态可能滞后）不误报
+  // 「保存失败」，保存本身已生效（工单 ux-walkthrough-02/04 评审整改）
+  $("settings-msg").classList.add("ok");
+  $("settings-msg").textContent = "已保存，立即生效。";
+  toast("ok", "设置已保存，立即生效。");
+  settingsDirty = false;
+  updateSettingsDirtyUI();
+  try {
+    await refreshState();
+    loadSettings();
+  } catch (e) { /* 刷新失败静默：下轮操作会重新取状态 */ }
+  return true;
 }
 $("btn-save-settings").addEventListener("click", () => saveSettings());
 if ($("btn-save-settings-sticky")) {
@@ -407,8 +411,10 @@ $("tab-settings").addEventListener("change", () => { settingsDirty = true; updat
 
 // 保存并连接（工单 ux-walkthrough-02/04）：保存当前设置 → 真实调用校验连接；
 // key 未填给明确提示（不调后端保存，避免把空 key 覆盖掉已有配置）。
+// 保存中禁用自身按钮防连点（工单 04 验收「保存中禁用按钮」对两处按钮一致）。
 $("btn-save-connect").addEventListener("click", async () => {
   const msg = $("save-connect-msg");
+  const btn = $("btn-save-connect");
   const key = $("set-api-key").value.trim();
   msg.classList.remove("ok", "error");
   if (!key) {
@@ -418,23 +424,33 @@ $("btn-save-connect").addEventListener("click", async () => {
     $("set-api-key").focus();
     return;
   }
+  if (settingsSaving) return;  // 首个保存仍在途：静默忽略连点（防误导性「保存失败」）
+  btn.disabled = true;
   msg.textContent = "正在保存并验证连接…";
   const saved = await saveSettings();
   if (!saved) {
     msg.textContent = "保存失败，请按上方提示修正后重试";
     msg.classList.add("error");
+    btn.disabled = false;
     return;
   }
   msg.textContent = "已保存，正在验证连接…";
   try {
     const data = await apiPost("/api/llm/selfcheck");
-    msg.textContent = "✓ " + (data.message || "连接成功，AI 功能可用");
+    // 后端回 {ok, model, elapsed_ms, reply}——真实字段回显（工单 04 评审整改）
+    const detail = [];
+    if (data && data.model) detail.push("模型 " + data.model);
+    if (data && data.elapsed_ms != null) detail.push("耗时 " + data.elapsed_ms + "ms");
+    const tail = data && data.reply ? "：" + data.reply : "";
+    msg.textContent = "✓ " + (detail.length ? "连接成功（" + detail.join("，") + "）" : "连接成功，AI 功能可用") + tail;
     msg.classList.add("ok");
     toast("ok", "AI API 连接成功");
   } catch (e) {
     msg.textContent = "✕ 连接失败：" + e.message;
     msg.classList.add("error");
     toast("error", "AI API 连接失败：" + e.message);
+  } finally {
+    btn.disabled = false;
   }
 });
 
