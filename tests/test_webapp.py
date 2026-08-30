@@ -2713,6 +2713,40 @@ def test_preview_dir_unknown_platform_400(client, context, tmp_path):
     assert "未知平台" in resp.json()["detail"]
 
 
+def test_preview_dir_manual_missing_output_dir_400(client, context):
+    """手动模式缺 output_dir → 400 中文（评审整改：补齐端点输入校验用例）。"""
+    resp = client.post("/api/generate/preview-dir", json={})
+    assert resp.status_code == 400
+    assert "output_dir" in resp.json()["detail"]
+
+
+def test_preview_dir_desktop_clean_verdict(client, context, tmp_path):
+    """桌面模式：目录存在但无完整工程标记（上次生成失败的残渣）→ clean
+    （生成时清理后重建；前端对 clean 不预警——只 warn exists/occupied）。
+    评审整改：补桌面 clean 三分支用例。"""
+    from contest_generator.generation_output import topic_dir_title
+    from contest_generator.platforms import PLATFORM_DIR_SUFFIXES
+
+    ctx, _holder = context
+    make_fake_topic_library(topic_library_dir(ctx.config.module_library_dir))
+    desktop_dir = tmp_path / "Desktop"
+    ctx.desktop_dir = lambda: desktop_dir
+    title = topic_dir_title("2026C", TOPIC_PROBLEM_TEXT)
+    expected = desktop_dir / (title + PLATFORM_DIR_SUFFIXES[PLATFORM_STM32])
+    expected.mkdir(parents=True)
+    (expected / "残渣.bin").write_bytes(b"partial")
+
+    resp = client.post("/api/generate/preview-dir", json={
+        "create_desktop_topic_dir": True,
+        "platform": PLATFORM_STM32,
+        "topic_id": "2026C",
+        "problem_text": "",
+        "output_dir": str(tmp_path / "ignored"),
+    })
+    assert resp.status_code == 200
+    assert resp.json() == {"dir": str(expected), "verdict": "clean"}
+
+
 def test_generate_desktop_opens_explorer_on_success(
     client, context, tmp_path, monkeypatch
 ):
