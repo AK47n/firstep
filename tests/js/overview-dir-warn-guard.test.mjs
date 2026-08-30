@@ -29,10 +29,10 @@ test("面板路径行为不变：refreshOutputDirWarn 写 #readiness-warn-slot�
   assert.match(readinessSrc, /readiness-warn-slot/);
 });
 
-test("总览接线：generate-steps.js 导入共享三件套", () => {
+test("总览接线：generate-steps.js 导入共享三件套（单条 import）", () => {
   assert.match(
     stepsSrc,
-    /import \{ ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached \} from "\/js\/ui\/generate-readiness\.js";/
+    /import \{ readinessState, desktopTopicOutputEnabled, ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached \} from "\/js\/ui\/generate-readiness\.js";/
   );
 });
 

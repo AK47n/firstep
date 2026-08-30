@@ -129,9 +129,14 @@ test("genOverviewSummaryHTML 输出目录预警：传 dirWarn 追加 ⚠ 段，�
   );
   assert.ok(out.includes('class="ov-missing ov-dir-warn"'), "缺 ov-dir-warn 段");
   assert.ok(out.includes("⚠ 输出目录：桌面已有同名工程"), "缺 ⚠ 标题前缀与原因");
+  // 不传 / 传 null / 传 undefined 均不渲染（工单 07 验收：缺省即无警示）
   const plain = genOverviewSummaryHTML([1, 3, 6, 9, 5, 8], titles, [1, 3, 6, 9], [5, 8]);
   assert.ok(!plain.includes("ov-dir-warn"), "不传时不应渲染");
   assert.ok(!plain.includes("⚠"), "不传时摘要不应出现 ⚠");
+  const nulled = genOverviewSummaryHTML([1, 3, 6, 9, 5, 8], titles, [1, 3, 6, 9], [5, 8], "", null);
+  assert.ok(!nulled.includes("ov-dir-warn"), "传 null 不应渲染");
+  const undef = genOverviewSummaryHTML([1, 3, 6, 9, 5, 8], titles, [1, 3, 6, 9], [5, 8], "", undefined);
+  assert.ok(!undef.includes("ov-dir-warn"), "传 undefined 不应渲染");
 });
 
 test("genOverviewSummaryHTML 输出目录预警：第 9 步已就绪也照常显示（软警告与就绪无关）", () => {
