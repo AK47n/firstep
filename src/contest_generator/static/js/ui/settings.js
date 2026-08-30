@@ -23,7 +23,7 @@
 // 顶层监听（set-vision-provider / set-vision-base-url / set-vision-model /
 // btn-vision-selfcheck / btn-env-check / price-period 收音机 / set-local-llm-model /
 // btn-save-settings / btn-refresh-recent-wf）在 import 时绑定。
-import { $, apiGet, apiPut, apiPost, setState, state, toast } from "/js/app.js";
+import { $, apiGet, apiPut, apiPost, setState, state, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { envCheckStatusHTML, toolchainProbeText } from "/js/fx/env.js";
 import { SETTINGS_COLLAPSE_KEY, parseSettingsCollapse, effectiveCollapsed, settingsMasterLabel, settingsSectionHead, applySettingsCollapseState, secretEyeState } from "/js/fx/settings.js";
@@ -415,7 +415,7 @@ async function saveSettings() {
   } catch (e) {
     $("settings-msg").classList.remove("ok");
     $("settings-msg").textContent = e.message;
-    toast("error", "设置保存失败：" + e.message);
+    toastError(e, "设置保存失败");   // 长错误可复制（工单 ux-walkthrough-02/11）
     return false;
   } finally {
     settingsSaving = false;
@@ -482,7 +482,7 @@ $("btn-save-connect").addEventListener("click", async () => {
   } catch (e) {
     msg.textContent = "✕ 连接失败：" + e.message;
     msg.classList.add("error");
-    toast("error", "AI API 连接失败：" + e.message);
+    toastError(e, "AI API 连接失败");
   } finally {
     btn.disabled = false;
   }

@@ -52,12 +52,14 @@ test("parseHttpError：状态码 + 错误体归一（SSE 内联共用路径）",
   const f500 = parseHttpError(500, { detail: "服务器内部错误" });
   assert.equal(f500.kind, "server");
   assert.equal(parseHttpError("abc", {}).status, null);  // 非法状态兜底 null
+  // json 解析失败（空错误体）：不留悬空冒号（评审整改）
+  assert.equal(parseHttpError(400, {}).text, "请求失败（HTTP 400）");
 });
 
-test("isLongError：5xx 或超阈值 → true；短业务错误 → false", () => {
-  assert.equal(isLongError({ status: 500, text: "x" }), true);
-  assert.equal(isLongError({ status: 400, text: "短" }), false);
-  assert.equal(isLongError({ status: null, text: "短" }), false);
-  assert.equal(isLongError({ status: null, text: "长".repeat(ERROR_LONG_THRESHOLD + 1) }), true);
+test("isLongError：5xx（kind 单源）或超阈值 → true；短业务错误 → false", () => {
+  assert.equal(isLongError({ kind: "server", status: 500, text: "x" }), true);
+  assert.equal(isLongError({ kind: "error", status: 400, text: "短" }), false);
+  assert.equal(isLongError({ kind: "unknown", status: null, text: "短" }), false);
+  assert.equal(isLongError({ kind: "error", status: null, text: "长".repeat(ERROR_LONG_THRESHOLD + 1) }), true);
   assert.equal(isLongError(null), false);
 });

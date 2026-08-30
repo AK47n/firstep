@@ -24,15 +24,17 @@ export function parseError(err, fallback) {
   else if (typeof err.message === "string" && err.message) text = err.message;
   if (status && !text.startsWith("请求失败（HTTP")) {
     text = "请求失败（HTTP " + status + "）：" + text;
+    if (text.endsWith("：")) text = text.slice(0, -1);   // 无 detail 时不留悬空冒号
   }
   return { text: text || fb, status, kind: status && status >= 500 ? "server" : "error" };
 }
 
-/** 长错误 / 5xx 判定：超阈值或服务器错误 → 常驻可复制（toastError 用）。 */
+/** 长错误 / 5xx 判定：服务器错误或超阈值 → 常驻可复制（toastError 用）。
+ * 5xx 判定走 parseError 的 kind（单一出处，防两处分叉）。 */
 export const ERROR_LONG_THRESHOLD = 120;
 export function isLongError(parsed) {
   if (!parsed) return false;
-  if (parsed.status !== null && parsed.status >= 500) return true;
+  if (parsed.kind === "server") return true;
   return String(parsed.text || "").length > ERROR_LONG_THRESHOLD;
 }
 
