@@ -341,7 +341,7 @@ def test_delete_master_missing_raises(fake_masters_dir):
 
 def _make_stm32_master_with_key_files(masters_dir: Path) -> None:
     """手工搭一个与真实母版同布局的关键文件目录（stm32：根级 main.c /
-    pin_config.h / led_instances.h + user/Project.uvprojx）。
+    pin_config.h / led_instances.h / key_instances.h + user/Project.uvprojx）。
 
     不经 import_master：假 .uvprojx 的源码引用是根级相对路径（.\main.c 等），
     真实布局下用户子目录会触发结构校验的引用缺失——白名单目录函数只吃目录
@@ -352,6 +352,7 @@ def _make_stm32_master_with_key_files(masters_dir: Path) -> None:
     (master / "main.c").write_text("/* master's old main */\n", encoding="utf-8")
     (master / "pin_config.h").write_text("/* board pins */\n", encoding="utf-8")
     (master / "led_instances.h").write_text("/* led channels */\n", encoding="utf-8")
+    (master / "key_instances.h").write_text("/* key channels */\n", encoding="utf-8")
     (master / "user" / "Project.uvprojx").write_text("/* keil */\n", encoding="utf-8")
 
 
@@ -364,12 +365,14 @@ def test_master_key_files_stm32_catalog_with_exists_and_size(fake_masters_dir, t
         "main.c",
         "pin_config.h",
         "led_instances.h",
+        "key_instances.h",
         "user/Project.uvprojx",
     ]
     assert [i.label for i in infos] == [
         "模板 main.c",
         "板级引脚宏",
         "LED 多实例通道宏",
+        "按键多实例通道宏",
         "Keil 工程配置",
     ]
     assert all(i.exists for i in infos)
@@ -561,10 +564,16 @@ def test_master_stats_counts_files_and_bytes(fake_masters_dir):
 
     expected = sum(
         (fake_masters_dir / "stm32" / p).stat().st_size
-        for p in ("main.c", "pin_config.h", "led_instances.h", "user/Project.uvprojx")
+        for p in (
+            "main.c",
+            "pin_config.h",
+            "led_instances.h",
+            "key_instances.h",
+            "user/Project.uvprojx",
+        )
     )
     assert stats.total_size_bytes == expected
-    assert stats.file_count == 4
+    assert stats.file_count == 5
     assert stats.big_files == ()
 
 
@@ -576,7 +585,7 @@ def test_master_stats_skips_artifact_dirs(fake_masters_dir):
 
     stats = master_stats(fake_masters_dir, PLATFORM_STM32)
 
-    assert stats.file_count == 4
+    assert stats.file_count == 5
 
 
 def test_master_stats_big_files_threshold_and_top10(fake_masters_dir):
@@ -637,6 +646,7 @@ def test_master_tree_files_lists_all_with_noise_skip(fake_masters_dir):
         "main.c",
         "pin_config.h",
         "led_instances.h",
+        "key_instances.h",
         "user/Project.uvprojx",
         "user/main.c",
     }

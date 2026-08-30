@@ -110,15 +110,17 @@ def test_led_manifest_declares_multi_instance():
     assert led.multi_instance == MultiInstanceSpec(max=8, variant="color")
 
 
-def test_all_library_manifests_load_and_only_led_declares_multi_instance():
-    """全库 manifest 加载不破；multi_instance 声明只落在 led（首例）。"""
+def test_all_library_manifests_load_and_unique_multi_instance_declarations():
+    """全库 manifest 加载不破；multi_instance 声明只落在 led 与 key
+    （key-multi-instance/02——机制验证以实际声明模块为准）。"""
     manifests = list_modules(MODULES)
     by_slug = {m.slug: m for m in manifests}
 
     assert "led" in by_slug
     assert by_slug["led"].multi_instance == MultiInstanceSpec(max=8, variant="color")
+    assert by_slug["key"].multi_instance == MultiInstanceSpec(max=8, variant="function")
     for slug, manifest in by_slug.items():
-        if slug != "led":
+        if slug not in ("led", "key"):
             assert manifest.multi_instance is None, slug
 
 

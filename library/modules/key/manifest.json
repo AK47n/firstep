@@ -1,16 +1,21 @@
 {
   "slug": "key",
-  "description": "按键读取（双平台）：get_key_state 读取按键（上拉低电平按下）；stm32 默认 PB3（JTDO 复位后可用），mspm0 默认 PA2。",
+  "description": "按键读取（双平台）：get_key_state(channel) 按通道读取（上拉低电平按下）；多实例 = 多路独立按键（内置变体 start/stop/mode/set）；stm32 默认 PB3（JTDO 复位后可用），mspm0 默认 PA2。",
   "dependencies": [],
+  "multi_instance": {
+    "max": 8,
+    "variant": "function"
+  },
   "platforms": {
     "mspm0": {
       "files": [
         "code/key.c",
-        "code/key.h"
+        "code/key.h",
+        "code/key_instances.h"
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "SysConfig 默认布局：GPIO 输入 KEY（KEY_START=PA2，上拉低电平按下）。编码器计数已迁至 motor 模块（GROUP1_IRQHandler + counter_1_A/counter_2_A）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
+      "notes": "SysConfig 默认布局：GPIO 输入 KEY（KEY_START=PA2，上拉低电平按下；板载 100k 偏置到地）。编码器计数已迁至 motor 模块（GROUP1_IRQHandler + counter_1_A/counter_2_A）。\nkey_instances.h = 生成器多实例渲染产物（key-multi-instance/03）：本条目默认 = 单实例 1 通道 PA2，多实例时按计划覆写 + syscfg 增 KEY_<实例号> GPIO 输入实例（direction INPUT，不配内部电阻——沿母版输入实例外置偏置先例）。\nkey_init() 为空实现（syscfg 已配输入，SYSCFG_DL_init 生效）。\n编译矩阵：key-multi-instance/07 复核（代码泛型化后）。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -29,7 +34,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "蓝药丸无板载按键，默认 PB3（JTDO，SWD 调试用不到，复位后即普通 GPIO）——实际接线自选，经引脚绑定改 KEY_GPIO/KEY_PIN。上拉低电平按下。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
+      "notes": "蓝药丸无板载按键，默认 PB3（JTDO，SWD 调试用不到，复位后即普通 GPIO）——实际接线自选，经引脚绑定改 KEY_GPIO/KEY_PIN（接线单源 pin_config.h）。key_init() 逐通道 gpio_init(.., IU) 内部上拉输入，上拉低电平按下。\n默认通道表 key_instances.h 在母版根（1 通道 KEY_GPIO/KEY_PIN，随母版复制）；多实例时生成器按计划覆写（key-multi-instance/03）。\n编译矩阵：key-multi-instance/07 复核（代码泛型化后）。",
       "kit": "",
       "source_url": "",
       "pins": [

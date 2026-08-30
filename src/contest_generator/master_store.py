@@ -85,6 +85,7 @@ MASTER_KEY_FILES: dict[str, tuple[tuple[str, str], ...]] = {
         ("main.c", "模板 main.c"),
         ("pin_config.h", "板级引脚宏"),
         ("led_instances.h", "LED 多实例通道宏"),
+        ("key_instances.h", "按键多实例通道宏"),
         ("user/Project.uvprojx", "Keil 工程配置"),
     ),
     PLATFORM_MSPM0: (
