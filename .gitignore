@@ -27,3 +27,6 @@ sources/.trash-pdf/
 
 # 电赛资料库（含超过 100MB 大文件，GitHub 拒收；随完整包分发，不入库）
 sources/materials/
+
+# key-multi-instance 编译矩阵产物（真机编译日志，不入库）
+.scratch/key-multi-instance/matrix/
