@@ -66,5 +66,8 @@ test("fx/task.js：备份展示不再输出原始 backup_id（迭代 meta 与变
 
 test("修订结果：备份不露 backup_id（已备份 · 修订时间）", () => {
   assert.ok(!reviseUi.includes('备份：<span class="slug">'));
-  assert.ok(reviseUi.includes("已备份 · 修订时间"));
+  // 评审整改（02 轮 Standards 轴）：钉住正确拼接——错误写法「修订时间：\" + esc(…」
+  // 把代码当文案仍会满足上方断言，故额外钉：正确闭合引号 + 错误字面量形式缺席
+  assert.ok(reviseUi.includes("已备份 · 修订时间：'"));
+  assert.ok(!reviseUi.includes('修订时间：" + esc'));
 });
