@@ -148,6 +148,9 @@ class PythonArtifactTemplate:
     id = 模板唯一标识（生成请求 python_templates 的取值键）；name /
     description = 前端下拉与（将来的）AI 推荐消费的展示信息；template /
     output 语义与单模板形状一致（相对模块目录 / 纯文件名）。
+    dependencies（工单 k230-digit-vision/02）= 模板级依赖覆盖：None = 继承
+    模块级依赖（缺省）；非空 = 依赖展开时替换该模块的模块级依赖（覆盖语义，
+    与模块级依赖同一套成环 / 未知 slug 报错）。
     """
 
     id: str
@@ -155,15 +158,20 @@ class PythonArtifactTemplate:
     description: str
     template: str
     output: str
+    dependencies: tuple[str, ...] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
             "template": self.template,
             "output": self.output,
         }
+        # None = 继承模块级：不落键（旧 manifest 序列化逐字节不变）
+        if self.dependencies is not None:
+            data["dependencies"] = list(self.dependencies)
+        return data
 
 
 @dataclass(frozen=True)
@@ -541,9 +549,27 @@ def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
             raise ManifestError(
                 f"python_artifact.templates[{index}] 的 description 必须是字符串"
             )
+        # 模板级依赖覆盖（工单 k230-digit-vision/02）：缺省 / null = None（继承
+        # 模块级）；非空数组 = 覆盖（替换）模块级依赖。空数组显式拒绝——[] 会
+        # 静默清空模块依赖（既非继承也非有效覆盖，语义黑洞）；类型非法大声
+        # 失败——坏值会静默错位依赖展开。
+        dependencies: tuple[str, ...] | None
+        deps_raw = item.get("dependencies")
+        if deps_raw is not None:
+            if not isinstance(deps_raw, list) or not deps_raw or not all(
+                isinstance(dep, str) and dep for dep in deps_raw
+            ):
+                raise ManifestError(
+                    f"python_artifact.templates[{index}] 的 dependencies 必须是"
+                    f" 非空字符串数组（或省略 = 继承模块级依赖）"
+                )
+            dependencies = tuple(deps_raw)
+        else:
+            dependencies = None
         return PythonArtifactTemplate(
             id=tid, name=name, description=description,
             template=template, output=output,
+            dependencies=dependencies,
         )
 
     if "templates" in raw:
@@ -593,6 +619,29 @@ def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
         ),
         default_id="default",
     )
+
+
+def validate_template_dep_slugs(manifests: Sequence[ModuleManifest]) -> None:
+    """库级校验（模板级依赖覆盖，工单 k230-digit-vision/02）：所有模板声明的
+    dependencies slug 必须库内存在。
+
+    生成期 resolve_dependencies 只校验"选中"模板的覆盖依赖——未选中模板里
+    的悬空 slug 会静默通过（同模块级依赖的惰性语义），此处补漏：库错误
+    大声失败（与 collect_exclusive_groups 同风格，library.list_modules
+    调用）。
+    """
+    known = {m.slug for m in manifests}
+    for manifest in manifests:
+        spec = manifest.python_artifact
+        if spec is None:
+            continue
+        for template in spec.templates:
+            for dep in template.dependencies or ():
+                if dep not in known:
+                    raise ManifestError(
+                        f"模板 {manifest.slug}:{template.id} 的依赖 {dep!r}"
+                        f" 不在模块库内"
+                    )
 
 
 def collect_kits(manifests: Sequence[ModuleManifest]) -> list[str]:

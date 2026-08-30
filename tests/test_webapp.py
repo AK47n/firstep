@@ -104,6 +104,7 @@ from tests.fakes import (
     FakeLLM,
     FakeTransport,
     RecordingLLM,
+    _add_module,
     make_fake_ccs_master_project,
     make_fake_master_project,
     make_fake_module_library,
@@ -2041,6 +2042,80 @@ def test_expand_k230_brings_coord_detect_pins_generically(client, context):
     ]
     kinds = {w["kind"] for w in data["warnings"]}
     assert {"unverified", "hardware_bound"} <= kinds  # k230 未上板 + 硬件绑定
+
+
+def test_expand_passes_python_template_deps_override(client, context):
+    """工单 k230-digit-vision/02：展开端点透传 python_templates——所选模板带
+    模板级依赖覆盖 → 依赖展开按覆盖走（与生成同一答案来源，前端预览即真值）。"""
+    library = context[0].config.module_library_dir
+    for slug in ("dep_base", "dep_alt"):
+        _add_module(
+            library,
+            {
+                "slug": slug,
+                "description": f"{slug}（模板级依赖探针）",
+                "dependencies": [],
+                "platforms": {
+                    "stm32": {"files": [], "verified": True},
+                    "mspm0": {"files": [], "verified": True},
+                },
+            },
+            {},
+        )
+    _add_module(
+        library,
+        {
+            "slug": "a_deps",
+            "description": "模板级依赖覆盖探针",
+            "dependencies": ["dep_base"],
+            "python_artifact": {
+                "default": "t_inherit",
+                "templates": [
+                    {
+                        "id": "t_inherit",
+                        "name": "继承依赖",
+                        "description": "不声明 = 继承模块级",
+                        "template": "code/a.py",
+                        "output": "main.py",
+                    },
+                    {
+                        "id": "t_override",
+                        "name": "覆盖依赖",
+                        "description": "声明 dependencies = 覆盖模块级",
+                        "template": "code/a.py",
+                        "output": "main.py",
+                        "dependencies": ["dep_alt"],
+                    },
+                ],
+            },
+            "platforms": {
+                "stm32": {"files": [], "verified": True},
+                "mspm0": {"files": [], "verified": True},
+            },
+        },
+        {"code/a.py": "# a\n"},
+    )
+
+    resp = client.post(
+        "/api/selection/expand",
+        json={
+            "slugs": ["a_deps"],
+            "platform": PLATFORM_STM32,
+            "python_templates": {"a_deps": "t_override"},
+        },
+    )
+    assert resp.status_code == 200
+    assert [m["slug"] for m in resp.json()["modules"]] == ["dep_alt", "a_deps"]
+
+    resp_default = client.post(
+        "/api/selection/expand",
+        json={"slugs": ["a_deps"], "platform": PLATFORM_STM32},
+    )
+    assert resp_default.status_code == 200
+    assert [m["slug"] for m in resp_default.json()["modules"]] == [
+        "dep_base",
+        "a_deps",
+    ]
 
 
 def test_expand_carries_default_instances_for_multi_module(client, context):

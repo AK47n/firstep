@@ -658,9 +658,13 @@ def generate_project(
     {slug: template_id}（manifest python_artifact 多模板时用）；校验在
     resolve_python_template_choices（非法 slug / 非法 id / 未声明副产物的
     模块带选择 → PythonArtifactError 400 中文）；缺省 / 空 = 全默认模板
-    （旧行为逐字节不变）。
+    （旧行为逐字节不变）。模板级依赖覆盖（工单 k230-digit-vision/02）：
+    resolve_selection 消费同参——所选模板声明 dependencies 时依赖展开按
+    覆盖走（与展开端点同一答案来源）。
     """
-    resolved = resolve_selection(module_library_dir, platform, slugs)
+    resolved = resolve_selection(
+        module_library_dir, platform, slugs, python_templates=python_templates
+    )
     template_choices = resolve_python_template_choices(
         resolved.manifests, python_templates
     )

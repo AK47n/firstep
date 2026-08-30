@@ -37,6 +37,7 @@ from .manifest import (
     ModuleManifest,
     PlatformEntry,
     collect_exclusive_groups,
+    validate_template_dep_slugs,
 )
 
 if TYPE_CHECKING:
@@ -139,6 +140,10 @@ def list_modules(library_root: Path) -> list[ModuleManifest]:
         collect_exclusive_groups(manifests)
     except ManifestError as exc:
         raise LibraryError(f"模块库功能组不一致：{exc}") from exc
+    try:
+        validate_template_dep_slugs(manifests)
+    except ManifestError as exc:
+        raise LibraryError(f"模块库模板依赖不一致：{exc}") from exc
     return manifests
 
 
