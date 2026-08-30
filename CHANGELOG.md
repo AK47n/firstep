@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=70a0c3e34893b4065c18cb21670f7962d87c31d5 -->
+<!-- changelog-auto: last-commit=5e3252ec0cb65a6777cae201bd2eff27f391c12a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -74,6 +74,7 @@
 - 19:23 工单 05 评审整改：output_dir 复用 _dir_probe + ccs 覆盖统一用 dirs + 导入格式修正
 - 19:23 工单 06 评审整改：跳转原语抽为 ui/goto-nav.js（settings 与 nav-jump 共用、消除回边与重复）
 - 19:24 工单 07：录入/编辑绕路（模块与参考草稿按钮同线、参考 3 区默认展开、提交随区常驻）
+- 19:26 工单 08：参考条目「改文件内容」同名即覆盖（一次 PUT，后端 add_files upsert + 前端计划语义 + 弹窗文案）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
