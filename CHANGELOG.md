@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=56216e91ddd49a808a52f37bc1ba8d806aad7462 -->
+<!-- changelog-auto: last-commit=ba8a2bd42d8767e02801aa086b3e84b67b013b23 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -113,6 +113,7 @@
 - 22:22 k230-digit-vision/03 静态资产分发：PythonArtifactTemplate 加 assets（AssetSpec {src,dst}，src 模块目录内/dst 工程根内，越界与 '.' 拒绝）；_write_python_artifacts 同阶段 shutil.copy2 复制（跨模块 dst 互斥/写时撞既有文件/src 缺失 → PythonArtifactError 不留半成品）；摘要 asset_paths + webapp 载荷 + 前端「资产」行；顺带修 to_dict 旧形状分支丢增强字段的潜伏洞（单模板带 deps/assets 走新形状）
 - 22:28 k230-digit-vision/04 数字识别模板落地：k230 新增 digit 模板（main_digit.py = 21F 推理管线 + DIGIT 契约占位符，0 目标也发帧头）+ assets 部署包（digit8_anchorbase_320.kmodel 7,596,008 字节与 21F 逐字节一致 + deploy_config.json kmodel_path 指向新名）；manifest 模板级依赖 digit_uart（blob/rect 零改动）；README 产物清单加 mp_deployment_source 行；跨平台集成测试 + rect/blob 基线不回归
 - 22:30 k230-digit-vision/05 收尾：CONTEXT.md 同步 Python 副产物域条目（模板级依赖覆盖 + 静态资产分发 + DIGIT 帧契约单源 + digit 模板落地，第二批完成）；全量回归 2946 绿 + 前端 918 绿；CHANGELOG 核定 01-04 条目齐备
+- 23:29 code-viewer/01-06 代码查看器：IDE 式只读工程浏览（文件树 + 行号 + 高亮 + 大纲 + 搜索）
 - 23:40 代码查看器后端（code-viewer/01-03）：新「代码」tab 的 IDE 式只读浏览数据食粮——codeview.py 三端点（POST /api/code/open 目录打开（treewalk 同噪音跳过 + 5000 条目上限）/ GET /api/code/file 文件读取（路径安全三约束照 read_master_tree_file 先例 + NUL 二进制 + 1MB 上限，返回 {path,size_bytes,content,outline}——outline 仅 .c/.h）/ GET /api/code/search 跨文件搜索（大小写不敏感子串 + 二进制/超限跳过 + 200 命中截断 truncated + 命中行窗口裁剪））；CodeViewError 登记 errors.py → 400 中文；大纲 = clex 新 top_level_functions 机械函数扫描（掩码切分 + 括号深度 0 处 ident ( … ) {，关键字排除、宏续行整行跳过）+ top_level_defines + 新 quoted_include_lines（行号精确、注释行伪装 include 不误收）；tests/test_codeview.py（17 用例）+ test_clex.py 扩展（8 用例）+ test_webapp.py 端点（10 用例）
 - 23:41 代码查看器前端 + 入口收尾（code-viewer/04-06）：导航「代码」tab + 三栏视图（左树 / 中只读行号+高亮 / 右侧栏 大纲+搜索）；fx/codeview.js 纯函数（buildCodeTree/codeTreeHTML 原生 details/codeLineNumbersHTML/codeViewHTML sticky gutter+pre 同 font/line-height/outlineHTML/outlineEmptyHTML/searchListHTML/fileFindFilter——高亮走 highlightText 单源，载荷不含 language 由 fx/languageOf 判定）+ ui/codeview.js（「选择文件夹」→ /api/pick-directory 服务端原生对话框；树点击懒加载 memo；大纲/搜索命中跳行 flash；Ctrl+F 拦截走文件内过滤）+ 最近记录卡「查看代码」按钮（recent-chip .recent-code-open，stopPropagation 不触发复制路径）；tests/js/codeview.test.mjs（10 用例）+ 导航守卫 3 文件同步（做题组 + code）；CDP 冒烟 smoke.mjs 落盘；全量 pytest 2989 绿 + 前端 928 绿
 
