@@ -278,19 +278,17 @@ test("refEditValidate 校验：标题 / 类型 / 简介非空（strip 后）；t
   assert.equal(refEditValidate({ ...base, anchor_kind: "kit", anchor_value: "ALX 套件" }).ok, true);
 });
 
-test("refEditFilePlan 文件计划：增删透传（加保序、删保列表）；全空返回空容器；重叠与已存在同名的替换拒绝", () => {
+test("refEditFilePlan 文件计划：增删透传；同名新增 = 覆盖（一次保存）；同名且勾删 = 覆盖优先剔除删除", () => {
   const plan = refEditFilePlan(["a.c", "b.c"], ["a.c"], { "c.c": "int x;", "d.c": "int y;" });
   assert.deepEqual(plan, { ok: true, add_files: { "c.c": "int x;", "d.c": "int y;" }, remove_files: ["a.c"] });
   assert.deepEqual(refEditFilePlan(["a.c"], [], {}), { ok: true, add_files: {}, remove_files: [] });
   assert.deepEqual(refEditFilePlan([], [], {}), { ok: true, add_files: {}, remove_files: [] });
-  // 同名既删又增：与后端一致拒绝（一句话提示替换路径）
-  const dup = refEditFilePlan(["a.c"], ["a.c"], { "a.c": "int z;" });
-  assert.equal(dup.ok, false);
-  assert.ok(dup.message.includes("a.c"));
-  // 同名新增但未勾删：后端拒绝"文件已存在"，前端先拦（提示先删后加）
-  const exists = refEditFilePlan(["a.c"], [], { "a.c": "new" });
-  assert.equal(exists.ok, false);
-  assert.ok(exists.message.includes("a.c"));
+  // 同名新增（未勾删）→ ok，add_files 含同名（后端 upsert 覆盖内容，工单 ux-walkthrough-02/08）
+  const overwrite = refEditFilePlan(["a.c"], [], { "a.c": "new" });
+  assert.deepEqual(overwrite, { ok: true, add_files: { "a.c": "new" }, remove_files: [] });
+  // 同名既勾删又新增 → 覆盖优先：删除清单剔除同名，add 保留
+  const both = refEditFilePlan(["a.c"], ["a.c"], { "a.c": "new" });
+  assert.deepEqual(both, { ok: true, add_files: { "a.c": "new" }, remove_files: [] });
   // 勾删的路径不在既有清单（外部删除）：透传，存在性由后端裁决
   const stale = refEditFilePlan(["a.c"], ["gone.c"], {});
   assert.deepEqual(stale, { ok: true, add_files: {}, remove_files: ["gone.c"] });

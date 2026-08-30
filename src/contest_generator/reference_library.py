@@ -645,11 +645,12 @@ def update_reference(
     校验全部在第一次落盘前完成（与录入同源：标题 / 类型 / 简介非空、锚定合法、
     平台词表、文件路径安全），任何**校验**失败抛 ReferenceError 且磁盘零变化；
     成功后自动 git 提交。编辑不改条目 id / 目录名（目录名 = 身份不变量，标题
-    只是元数据）。文件管理范围：add_files 新增（UTF-8 文本），remove_files 删除
-    （含清单外散文件——磁盘目录即数据库，与浏览 / 统计同口径）；同名文件已
-    存在拒绝（不支持修改内容，先删后加）；add / remove 重叠拒绝。写入期失败
-    （新增文件 / 元数据）会清理已写的新增文件并保持元数据原值；删除实体失败
-    只留清单外散文件（与浏览 / 统计的磁盘实况容忍语义一致）。
+    只是元数据）。文件管理范围：add_files 新增（UTF-8 文本，同名已存在 =
+    覆盖该文件内容——一次提交完成替换，工单 ux-walkthrough-02/08），
+    remove_files 删除（含清单外散文件——磁盘目录即数据库，与浏览 / 统计同口径）；
+    add / remove 重叠拒绝。写入期失败（新增文件 / 元数据）会清理已写的新增文件
+    并保持元数据原值；删除实体失败只留清单外散文件（与浏览 / 统计的磁盘实况
+    容忍语义一致）。
     """
     entry = get_reference(reference_root, entry_id)  # 条目不存在大声失败
     title = title.strip()
@@ -680,11 +681,8 @@ def update_reference(
     overlap = set(add_files) & set(remove_files)
     if overlap:
         raise ReferenceError(f"同一文件既添加又删除：{sorted(overlap)[0]!r}")
-    for name in add_files:
-        if (entry_dir / name).exists():
-            raise ReferenceError(
-                f"文件已存在：{name!r}（不支持修改内容，请先删除再添加）"
-            )
+    # 同名已存在不再拒绝（工单 ux-walkthrough-02/08）：add_files = upsert——
+    # write_text 直接覆盖内容，new_files 按名去重保持单条目，一次提交完成替换
     for name in remove_files:
         if not (entry_dir / name).is_file():
             raise ReferenceError(f"文件不存在：{name!r}")

@@ -242,7 +242,7 @@ export async function editReference(entryId) {
     + '<label style="cursor:pointer"><input type="radio" name="ref-edit-platform" value="stm32"> stm32</label>'
     + '<label style="cursor:pointer"><input type="radio" name="ref-edit-platform" value="mspm0"> mspm0</label></div>'
     + '<label>简介</label><textarea class="ref-edit-desc" rows="3"></textarea>'
-    + '<h3>素材文件 <span class="muted">（勾选 = 删除；支持增，不支持改内容——替换请先勾删保存，再回来添加）</span></h3>'
+    + '<h3>素材文件 <span class="muted">（勾选 = 删除；同名文件将用新增内容直接替换，一次保存完成）</span></h3>'
     + '<ul class="lib-mod-files ref-edit-files"></ul>'
     + '<div class="ref-edit-newfiles"></div>'
     + '<div class="row" style="margin-top:4px"><button class="ref-edit-addrow">+ 文件</button>'
