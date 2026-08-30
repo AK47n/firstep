@@ -17,6 +17,10 @@ const DOMAINS = {
   "core.js": {
     esc: "fn", formatSize: "fn", fmtClock: "fn", fmtDuration: "fn", truncate: "fn",
   },
+  "danger.js": {
+    reviseApplyConfirmMessage: "fn", platformSwitchConfirmMessage: "fn",
+    pinResetConfirmMessage: "fn",
+  },
   "env.js": {
     ENV_BADGE_GLYPH: "object",
     envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",

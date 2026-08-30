@@ -21,8 +21,10 @@
 //   本票迁入本体，见 index.html 启动区）。
 // 顶层 addEventListener（Esc 取消选脚 / btn-pin-reset / btn-pin-rotate /
 // btn-pin-overview / btn-pin-auto）在 import 时绑定（module 脚本延迟执行，DOM 已就绪）。
-import { $, apiGet, apiPost } from "/js/app.js";
+import { $, apiGet, apiPost, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
+import { confirmModal } from "/js/ui/confirm.js";
+import { pinResetConfirmMessage } from "/js/fx/danger.js";  // 还原默认确认文案（工单 ux-walkthrough-02/01）
 import { multiInstanceModules, ensureDefaultInstances } from "/js/fx/module.js";
 import { collectBindings } from "/js/fx/generate.js";
 import { syncStep7 } from "/js/ui/step-state.js";
@@ -812,9 +814,18 @@ function renderPinRoles(roles, fam) {
   if (hideOptBtn) hideOptBtn.addEventListener("click", () => { pinShowOptional = false; renderPinCard(); });
 }
 
-$("btn-pin-reset").addEventListener("click", () => {
+$("btn-pin-reset").addEventListener("click", async () => {
+  // 清空全部绑定前确认（工单 ux-walkthrough-02/01）：误点清零是第三处数据丢失风险
+  const count = Object.keys(pinBindings).length;
+  const ok = await confirmModal({
+    title: "还原默认？",
+    message: pinResetConfirmMessage(count),
+    confirmText: "还原",
+  });
+  if (!ok) return;
   pinBindings = {}; pinUnbound = new Set(); pinHighlight = null; pinHint("");
   renderPinCard();
+  if (count) toast("ok", `已将 ${count} 处引脚绑定还原为默认`);
 });
 
 $("btn-pin-rotate").addEventListener("click", () => {
