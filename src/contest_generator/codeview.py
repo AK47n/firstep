@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .clex import quoted_include_lines, top_level_defines, top_level_functions
+from .entry_store import is_unsafe_path
 from .treewalk import iter_project_files
 
 # 目录打开条目上限：防病态目录（如整盘 / 大仓库）把树渲染与往返压垮
@@ -59,25 +60,20 @@ def list_code_tree(root: Path) -> list[dict[str, Any]]:
 
 def read_code_file(root: Path, rel_path: str) -> dict[str, Any]:
     """根目录内文件全文（只读预览）：三重约束与母版树 read_master_tree_file
-    同安全立场（判定在盘访问之前）——路径安全（与 entry_store.is_unsafe_path
-    同拒绝面：首字符 `/`、`:`（NTFS ADS）、`\\`、任意层级 `..` 与空段
-    `a//b`，另有 resolve 后必须在 root 内的兜底判定）、NUL 字节二进制拒绝、
+    同安全立场（判定在盘访问之前）——路径安全（**调用 entry_store.is_unsafe_path
+    单源**：首字符 `/`、`:`（NTFS ADS）、`\\`、任意层级 `..` 与空段 `a//b`，
+    另有 resolve 后必须在 root 内的兜底判定）、NUL 字节二进制拒绝、
     超 CODE_FILE_MAX_BYTES 拒绝——三类均 400 中文 CodeViewError；文件缺失
     单独报错。读取沿用仓库惯例 utf-8 errors="replace" + 换行归一化
-    （与 read_master_tree_file 同读法）。
+    （与 read_master_tree_file 同读法；二进制判定这边对预览全量检——预览
+    正确性优先，与搜索侧的头 512 字节探测口径见 search_code_files）。
 
     返回 {path, size_bytes, content, outline}；outline 仅 .c/.h 有值
     （工单 code-viewer/03：函数 / 顶层宏 / include 清单，非 C 文件为 null）。
     """
     if not root.is_dir():
         raise CodeViewError(f"目录不存在：{root}")
-    parts = rel_path.split("/")
-    if (
-        rel_path.startswith("/")
-        or ":" in rel_path
-        or "\\" in rel_path
-        or any(seg in ("", "..") for seg in parts)
-    ):
+    if is_unsafe_path(rel_path):
         raise CodeViewError(f"非法路径：{rel_path}")
     candidate = (root / rel_path).resolve()
     try:
@@ -129,8 +125,10 @@ def _outline_for(content: str) -> list[dict[str, Any]]:
 def search_code_files(root: Path, query: str) -> dict[str, Any]:
     """跨文件子串搜索（工单 code-viewer/02）：大小写不敏感（中文 / 全角不受
     lower 影响），逐文件逐行匹配；跳过噪音（treewalk 同口径）/ NUL 字节
-    二进制（≤1MB 全读，判定与 read_code_file 一致）/ 超 CODE_FILE_MAX_BYTES
-    文件；命中到 CODE_SEARCH_MAX_HITS 即截断返回 truncated: true。
+    二进制（**读文件头 512 字节探测**——spec 决策，多文件扫描不整读二进制
+    文件；read_code_file 预览侧对 ≤1MB 单文件仍全量检，两侧口径按需取舍）/
+    超 CODE_FILE_MAX_BYTES 文件；命中到 CODE_SEARCH_MAX_HITS 即截断返回
+    truncated: true。
 
     返回 {hits: [{path, line, text}], truncated, files_scanned}——path 为
     相对 root 的正斜杠、line 为 1 基行号、text 为空白压缩后以命中点为中心的
@@ -149,10 +147,11 @@ def search_code_files(root: Path, query: str) -> dict[str, Any]:
         scanned += 1
         if path.stat().st_size > CODE_FILE_MAX_BYTES:
             continue
-        data = path.read_bytes()
-        if b"\x00" in data:
-            continue
-        text = data.decode("utf-8", errors="replace")
+        with path.open("rb") as fh:
+            head = fh.read(512)
+        if b"\x00" in head:
+            continue  # 二进制：头 512 字节 NUL 探测（spec 决策，读头即可）
+        text = path.read_bytes().decode("utf-8", errors="replace")
         for lineno, line in enumerate(text.splitlines(), start=1):
             if needle in line.lower():
                 hits.append(

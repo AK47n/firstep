@@ -69,15 +69,61 @@ export function codeLineNumbersHTML(count) {
   return out;
 }
 
+// highlightCodeLines(content, lang)：整段高亮 → 逐行 HTML 数组（评审整改：
+// .code-pre-line 独立可寻址，供跳行内容行 flash——spec.md:127-128）。跨行
+// token（块注释 / 续行字符串）在行界闭合并按同 class 重开，视觉与整段
+// 渲染一致——cHighlight 产出的 span 可跨行，单纯按 \n 切会断色。行尾 \n
+// 被消费为分隔符；空内容 / 尾 \n 的空行各得一个空串元素（与行号 gutter
+// 逐行对齐）。
+export function highlightCodeLines(content, lang) {
+  const html = highlightText(content, lang);
+  const lines = [];
+  let line = "";
+  let stack = [];            // 当前跨行打开的 tok 类别（最近在后）
+  let i = 0;
+  const n = html.length;
+  while (i < n) {
+    const ch = html[i];
+    if (ch === "\n") {
+      lines.push(line + stack.map(() => "</span>").join(""));
+      line = stack.map((cls) => `<span class="${cls}">`).join("");
+      i++;
+      continue;
+    }
+    if (ch === "<" && html.startsWith("</span>", i)) {
+      if (stack.length) stack.pop();
+      line += "</span>";
+      i += 7;
+      continue;
+    }
+    if (ch === "<" && html.startsWith("<span class=", i)) {
+      const end = html.indexOf(">", i);
+      if (end > 0) {
+        const m = /class="([^"]*)"/.exec(html.slice(i, end + 1));
+        if (m) stack.push(m[1]);
+        line += html.slice(i, end + 1);
+        i = end + 1;
+        continue;
+      }
+    }
+    line += ch;
+    i++;
+  }
+  lines.push(line);
+  return lines;
+}
+
 // codeViewHTML(content, lang)：只读代码视图纯件——gutter（sticky 左栏，
 // 同一滚动容器内不随横向滚动跑）+ pre（white-space:pre 不换行，行号与
-// 代码同一行高）；高亮走 highlightText 单源（超 128KB 或 plain 自动回退
+// 代码同一行高；每行独立 .code-pre-line[data-code-line]，与 gutter 同
+// 索引对齐）；高亮走 highlightText 单源（超 128KB 或 plain 自动回退
 // 纯文本）。调用方把返回体放进 .code-view 滚动容器。
 export function codeViewHTML(content, lang) {
   const src = String(content == null ? "" : content);
-  const count = src.length ? src.split("\n").length : 1;
-  return '<div class="code-gutter" aria-hidden="true">' + codeLineNumbersHTML(count) + "</div>"
-    + '<pre class="code-pre">' + highlightText(src, lang) + "</pre>";
+  const lines = highlightCodeLines(src, lang);
+  return '<div class="code-gutter" aria-hidden="true">' + codeLineNumbersHTML(lines.length) + "</div>"
+    + '<pre class="code-pre">' + lines.map((h, idx) =>
+        `<span class="code-pre-line" data-code-line="${idx + 1}">${h}</span>`).join("") + "</pre>";
 }
 
 // outlineKindBadge(kind)：大纲条目类型徽标（function=ƒ / define=# /
@@ -138,6 +184,7 @@ if (typeof window !== "undefined") {
     buildCodeTree,
     codeTreeHTML,
     codeLineNumbersHTML,
+    highlightCodeLines,
     codeViewHTML,
     outlineHTML,
     outlineEmptyHTML,
