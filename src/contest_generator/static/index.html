@@ -1818,6 +1818,10 @@
   #readiness-check { border: 1px solid var(--border); border-radius: 10px;
                      background: var(--panel-2); padding: 8px 12px;
                      box-shadow: var(--shadow-card); }
+  .rc-summary { padding: 6px 10px; border-radius: 8px; margin-bottom: 6px;
+    font-weight: 600; background: rgba(0, 0, 0, .18); border: 1px solid var(--border); }
+  .rc-summary.ok { color: var(--ok); border-color: rgba(63, 185, 80, .35);
+    background: rgba(63, 185, 80, .08); }
   .rc-row { display: flex; align-items: center; gap: 8px; padding: 6px 2px;
             font-size: 13px; min-width: 0; }
   .rc-row + .rc-row { border-top: 1px dashed var(--border); }
