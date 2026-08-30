@@ -65,13 +65,14 @@
   `CODE_TREE_MAX_ENTRIES = 5000`（超限 400 中文「目录文件过多」——防病态
   目录拖垮前端渲染）。
 - `read_code_file(root, rel_path) -> dict`：路径安全三约束与
-  read_master_tree_file 同拒绝面（entry_store.is_unsafe_path 同款——首字符
-  `/`、`:`（NTFS ADS）、`\`、任意层级 `..` 与空段；resolve 后必须落在
-  root 内兜底；NUL 二进制拒绝；`CODE_FILE_MAX_BYTES = 1024*1024` 超限拒绝；
-  读取 utf-8 errors="replace" + 换行归一化 \r\n→\n）。返回 `{path, size_bytes,
-  content, language, outline}`；language 由扩展名判定（.c/.h→c、
-  .syscfg/.uvprojx/.cproject/.xml→xml、其余 plain）；outline 仅 .c/.h 提供，
-  形状 `[{kind: function|define|include, name, line}]`（line = 1 基源行号）。
+  read_master_tree_file 同拒绝面（**谓词直接调用 entry_store.is_unsafe_path
+  单源**——首字符 `/`、`:`（NTFS ADS）、`\`、任意层级 `..` 与空段；resolve
+  后必须落在 root 内兜底；NUL 二进制拒绝；`CODE_FILE_MAX_BYTES = 1024*1024`
+  超限拒绝；读取 utf-8 errors="replace" + 换行归一化 \r\n→\n）。返回
+  `{path, size_bytes, content, outline}`——**不含 language 字段**（见补充说明
+  ①：前端用 fx/highlight.js 的 languageOf(path) 单源判定渲染语言，后端不
+  重复映射）；outline 仅 .c/.h 提供，形状
+  `[{kind: function|define|include, name, line}]`（line = 1 基源行号）。
 - `search_code_files(root, q) -> dict`：q 必须非空字符串（空 → 400 中文）；
   扫描 root 下全部文件（iter_project_files 同噪音跳过），逐文件跳过 = 二进制
   （NUL 探测，读 512 字节即可）+ 超过 1MB；匹配 = 大小写不敏感子串（中文
@@ -197,5 +198,15 @@
   「name 保底」更强，且注释行伪装 include 不误收）；③ 宏续行假阳性未复现
   （top_level_functions 按「前一行为反斜杠结尾」整行跳过宏续行，防范于前）；
   「查看代码」入口按钮最终 class 为 .recent-code-open（spec 拟名
-  .code-open-btn，实现期随 chip 既有命名约定）。
+  .code-open-btn，实现期随 chip 既有命名约定）；④ 高亮回退：复用
+  fx/highlight.js 的 HIGHLIGHT_MAX_BYTES=128KB——超过该值的 .c/.h 打开为
+  纯文本无高亮（全局单源上限，不为代码 tab 单独提额；128KB–1MB 文本仍可
+  完整渲染）；⑤ 树节点附 formatSize 大小（spec 节点结构仅定义 path/name，
+  展示为增强）；⑥ /api/code/open 响应含 root 字段（当前根目录绝对路径，
+  前端展示 / 记录用）。
+- 实现期评审整改（code-review 双轴意见，ba8a2bd4 后提交）：Ctrl+F 截获后
+  自动切到「搜索」侧栏（否则聚焦隐藏输入框无界面反馈，用户故事 6 落空）；
+  跳行内容行独立 .code-pre-line[data-code-line] 与 gutter 同 data 键并同步
+  flash；openCodeFile 死参 btn 删除；搜索二进制 NUL 探测按 spec 读头 512
+  字节；路径谓词改调 entry_store.is_unsafe_path 单源。
 - 所有文案中文；spec / 工单 / 提交信息 / CHANGELOG 遵循仓库语言规范。

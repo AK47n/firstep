@@ -98,9 +98,9 @@ async function loadCodeFileState(path) {
   }
 }
 
-// openCodeFile(path, btn)：点树文件 → 三态（加载中 / 成功只读视图 / 失败中文
+// openCodeFile(path)：点树文件 → 三态（加载中 / 成功只读视图 / 失败中文
 // 原因可重试），仅成功行高亮；当前文件变化 → 大纲 / 文件内过滤面板联动。
-async function openCodeFile(path, btn) {
+async function openCodeFile(path) {
   const box = $("code-viewer");
   if (!codeFileCache.has(codeDir + "\u0000" + path)) {
     box.innerHTML = '<span class="muted">加载中…</span>';
@@ -131,15 +131,28 @@ async function openCodeFile(path, btn) {
 }
 
 // jumpToLine(line)：大纲 / 搜索结果跳行——gutter 行元素 scrollIntoView
-// （同一滚动容器，横向不跑）+ flash 高亮 1.2s 后还原。
+// （同一滚动容器，横向不跑）+ 主行号与内容行同 data 键对齐闪 flash 1.2s
+// 后还原（spec.md:127-128；内容行独立 .code-pre-line[data-code-line]）。
 function jumpToLine(line) {
   const box = $("code-viewer");
   if (!box) return;
-  const el = box.querySelectorAll(".code-gutter-line")[line - 1];
-  if (!el) return;
-  el.scrollIntoView({ block: "center" });
-  el.classList.add("flash");
-  setTimeout(() => el.classList.remove("flash"), 1200);
+  const gut = box.querySelectorAll(".code-gutter-line")[line - 1];
+  const pre = box.querySelectorAll(".code-pre-line")[line - 1];
+  if (!gut && !pre) return;
+  (gut || pre).scrollIntoView({ block: "center" });
+  const targets = [gut, pre].filter(Boolean);
+  targets.forEach((el) => el.classList.add("flash"));
+  setTimeout(() => targets.forEach((el) => el.classList.remove("flash")), 1200);
+}
+
+// setCodeSide(side)：右侧栏切换（outline / search）——侧栏按钮与 Ctrl+F
+// 共用同一生效路径（评审整改：Ctrl+F 必须可见地切到「搜索」栏，否则聚焦
+// 隐藏输入框、用户故事 6 落空）。
+function setCodeSide(side) {
+  document.querySelectorAll("[data-code-side]").forEach((x) =>
+    x.classList.toggle("on", x.dataset.codeSide === side));
+  document.querySelectorAll("[data-code-side-panel]").forEach((p) =>
+    p.classList.toggle("hidden", p.dataset.codeSidePanel !== side));
 }
 
 // ===== 右侧栏：大纲 =====
@@ -206,17 +219,12 @@ export function initCodeViewer() {
   if (tree) tree.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-code-file]");
     if (!btn) return;
-    openCodeFile(btn.dataset.codeFile, btn);
+    openCodeFile(btn.dataset.codeFile);
   });
 
   // 侧栏切换（大纲 / 搜索）
   document.querySelectorAll("[data-code-side]").forEach((b) =>
-    b.addEventListener("click", () => {
-      document.querySelectorAll("[data-code-side]").forEach((x) =>
-        x.classList.toggle("on", x === b));
-      document.querySelectorAll("[data-code-side-panel]").forEach((p) =>
-        p.classList.toggle("hidden", p.getAttribute("data-code-side-panel") !== b.dataset.codeSide));
-    }));
+    b.addEventListener("click", () => setCodeSide(b.dataset.codeSide)));
 
   // 大纲点击跳行（delegation：渲染后条目存在）
   const outline = $("code-outline");
@@ -234,7 +242,9 @@ export function initCodeViewer() {
     if (e.key === "Enter") { e.preventDefault(); runProjectSearch(searchInput.value); }
   });
 
-  // 当前文件 Ctrl+F：截获浏览器查找框（仅「代码」tab 内）→ 面板即时过滤
+  // 当前文件 Ctrl+F：截获浏览器查找框（仅「代码」tab 内）→ 切到「搜索」
+  // 侧栏（查找输入 / 命中列表所在，评审整改：不切则聚焦隐藏框无界面反馈）
+  // → 聚焦输入面板即时过滤。
   const findInput = $("code-find-input");
   if (findInput) findInput.addEventListener("input", () =>
     renderFindPanel(findInput.value, fileFindFilter(currentContent.split("\n"), findInput.value)));
@@ -242,6 +252,7 @@ export function initCodeViewer() {
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "f") return;
     if (!codeTabActive() || !findInput) return;
     e.preventDefault();
+    setCodeSide("search");
     findInput.focus();
     findInput.select();
   });
@@ -258,8 +269,7 @@ export function initCodeViewer() {
     if (!btn) return;
     const path = btn.dataset.searchPath;
     const line = parseInt(btn.dataset.searchLine, 10);
-    const treeBtn = document.querySelector('[data-code-file="' + CSS.escape(path) + '"]');
-    await openCodeFile(path, treeBtn);
+    await openCodeFile(path);
     jumpToLine(line);
   });
 }

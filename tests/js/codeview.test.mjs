@@ -7,6 +7,7 @@ import {
   buildCodeTree,
   codeTreeHTML,
   codeLineNumbersHTML,
+  highlightCodeLines,
   codeViewHTML,
   outlineHTML,
   outlineEmptyHTML,
@@ -65,6 +66,8 @@ test("codeViewHTML：gutter 行数 = pre 渲染行数（尾 \n 计空行），C 
   assert.equal((html.match(/class="code-gutter-line"/g) || []).length, 3);
   assert.match(html, /<pre class="code-pre">/);
   assert.match(html, /<span class="tok-kw">int<\/span>/);
+  assert.equal((html.match(/class="code-pre-line"/g) || []).length, 3);
+  assert.match(html, /data-code-line="1"/);
 });
 
 test("codeViewHTML：注入样本转义（纯文本不加高亮 span）", () => {
@@ -72,6 +75,27 @@ test("codeViewHTML：注入样本转义（纯文本不加高亮 span）", () => 
   assert.ok(!evil.includes("<script>"));
   assert.ok(evil.includes("&lt;script&gt;"));
   assert.ok(!evil.includes("tok-"));
+});
+
+test("highlightCodeLines：跨行块注释在行界闭合并按同 class 重开（视觉不变）", () => {
+  const lines = highlightCodeLines("/* a\nb */\nint x;", "c");
+  assert.equal(lines.length, 3);
+  assert.equal((lines[0].match(/class="tok-com"/g) || []).length, 1);
+  assert.equal((lines[1].match(/class="tok-com"/g) || []).length, 1);
+  assert.ok(lines[0].startsWith('<span class="tok-com">'));
+  assert.ok(lines[0].endsWith("</span>"));
+  assert.ok(lines[1].startsWith('<span class="tok-com">'));
+  assert.ok(lines[2].includes("tok-kw"));
+  assert.ok(!lines[2].includes("tok-com"));
+});
+
+test("highlightCodeLines：尾 \\n 空行 / 空内容各得独立元素（与 gutter 对齐）", () => {
+  assert.deepEqual(highlightCodeLines("", "c"), [""]);
+  const lines = highlightCodeLines("a\n", "plain");
+  assert.equal(lines.length, 2);
+  assert.equal(lines[1], "");
+  // 转义样本：高亮输出不回引原文
+  assert.deepEqual(highlightCodeLines("<script>", "plain"), ["&lt;script&gt;"]);
 });
 
 test("outlineHTML：kind 徽标 + name + 行号；空 → 空串", () => {

@@ -1332,6 +1332,14 @@
   .code-gutter-line.flash { background: var(--accent-dim); color: var(--accent); }
   .code-pre { margin: 0; padding: 8px 12px; background: none; border: 0;
     font-family: var(--mono); font-size: 13px; line-height: 1.55; white-space: pre; }
+  /* 代码逐行元素：block 保证行高 = gutter 行高（同一 font/line-height）；
+     :empty 空行（文件尾 \n / 连续空行）设 min-height = 1.55em（与
+     .code-pre / .code-gutter-line 的 line-height 同源数值，空 block 无行盒
+     会塌成 0 高、与 gutter 错位——content:"" 的 ::before 不产行盒，实测
+     无效）；flash = 跳行内容行高亮（整行宽，与 gutter 同排）。 */
+  .code-pre-line { display: block; }
+  .code-pre-line:empty { min-height: 1.55em; }
+  .code-pre-line.flash { background: var(--accent-dim); }
   .code-tree { list-style: none; margin: 6px 0 0; padding: 0 0 0 14px; }
   .code-tree .code-tree { border-left: 1px solid var(--border); padding-left: 8px; }
   .code-tree-dir summary { cursor: pointer; font-weight: 600; padding: 2px 4px;

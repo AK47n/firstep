@@ -108,11 +108,13 @@ check("三栏容器就位（树 / 视图 / 侧栏）", await Eval(`
 
 // ================= 打开样本目录（openCodeViewer 桥 = 最近卡同路径） =================
 await Eval(`import('/js/ui/codeview.js').then((m) => m.openCodeViewer(${JSON.stringify(SAMPLE)}))`);
-check("目录打开：树加载 + 文件行按钮 + 噪声目录不出现", await waitFor(`
+check("目录打开：树加载（4 文件）+ 噪声目录不出现", await waitFor(`
   (() => {
     const btns = document.querySelectorAll('#code-tree [data-code-file]');
-    const paths = [...btns].map((b) => b.dataset.codeFile);
-    return btns.length === 5 && !paths.some((p) => p.startsWith('Debug') || p.includes('.obj'));
+    const paths = [...btns].map((b) => b.dataset.codeFile).sort();
+    return paths.length === 4
+      && JSON.stringify(paths) === JSON.stringify(['app.h', 'main.c', 'readme.md', 'src/digit.c'])
+      && !paths.some((p) => p.startsWith('Debug'));
   })()`));
 check("目录路径显示在顶栏", await Eval(`
   (document.getElementById('code-dir-label').textContent || '').includes('sample-proj')`));
@@ -125,6 +127,13 @@ check("main.c 加载：行号 gutter + pre + C 高亮", await waitFor(`
     return !!box.querySelector('.code-gutter') && !!box.querySelector('.code-pre')
       && box.querySelectorAll('.code-gutter-line').length === 14
       && box.querySelectorAll('.code-pre [class*="tok-"]').length > 0;
+  })()`));
+check("内容行逐行元素就位（14 行，行高非 0，与 gutter 对齐）", await Eval(`
+  (() => {
+    const box = document.getElementById('code-viewer');
+    const pre = [...box.querySelectorAll('.code-pre-line')];
+    return pre.length === 14 && pre.every((el) => el.offsetHeight > 0)
+      && pre.every((el, i) => el.dataset.codeLine === String(i + 1));
   })()`));
 check("点选文件行高亮（.on）", await Eval(`
   document.querySelector('#code-tree [data-code-file="main.c"]').classList.contains('on')`));
@@ -141,10 +150,11 @@ check("大纲条目就位（include / define / function 三类，按行序）", 
       && items[2].dataset.outlineKind === 'function';
   })()`));
 await Eval(`document.querySelector('#code-outline [data-outline-line="8"]')?.click()`);
-check("大纲点击 → 跳行（gutter flash + 滚动）", await waitFor(`
+check("大纲点击 → 跳行（gutter + 内容行同 data 键 flash）", await waitFor(`
   (() => {
     const view = document.getElementById('code-viewer');
-    const flash = !!view.querySelector('.code-gutter-line.flash');
+    const flash = !!view.querySelector('.code-gutter-line.flash')
+      && !!view.querySelector('.code-pre-line.flash');
     return flash || view.scrollTop > 0;
   })()`));
 
@@ -167,9 +177,16 @@ check("搜索结果点击 → 跳文件 + 跳行（当前路径更新 + jump）"
   })()`));
 
 // ================= 当前文件 Ctrl+F =================
-await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true }))`);
-check("Ctrl+F 截获 → 文件内查找输入聚焦", await waitFor(`
-  document.activeElement === document.getElementById('code-find-input')`));
+await Eval(`(() => {  // 先切回「大纲」侧栏，证明 Ctrl+F 自己会切到「搜索」栏
+  document.querySelector('[data-code-side="outline"]')?.click();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true }));
+})()`);
+check("Ctrl+F 截获 → 切「搜索」侧栏（可见）→ 查找输入聚焦", await waitFor(`
+  (() => {
+    const panel = document.querySelector('[data-code-side-panel="search"]');
+    return panel && !panel.classList.contains('hidden')
+      && document.activeElement === document.getElementById('code-find-input');
+  })()`));
 await Eval(`(() => {
   const inp = document.getElementById('code-find-input');
   inp.value = 'STDIO';
