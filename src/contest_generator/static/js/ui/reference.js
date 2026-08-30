@@ -28,7 +28,7 @@ import { addFileRow, collectFiles, pickFilesInto, bindFilePicker } from "/js/ui/
 // —— 参考库工具栏状态与渲染（工单 02）：过滤条件集中于此，事件层只转发 ——
 // （工单 04 增 dangling 维度 = 只看悬空条目；refFilterContext 组装过滤上下文：
 // 用户条件 + 悬空判定词表——行渲染与统计渲染共用同一定义，防两处漂移）
-const refUI = { q: "", platform: "", anchorKind: "", sortBy: "title", sortDir: "asc", dangling: false };
+const refUI = { q: "", platform: "", anchorKind: "", sortBy: "mtime", sortDir: "desc", dangling: false };   // 默认最近更新降序（工单 ux-walkthrough-02/22）
 const refFilterContext = () => ({ ...refUI, topicKeys: refTopicKeys, kitVocab: kitVocabulary });
 let refSearchTimer = null;
 

@@ -74,10 +74,14 @@ test("按钮四类（.btn 基类 + 三类形态）已定义且有实际使用", 
   }
 });
 
-test("主题裸色已令牌化：绿完成族 / 渐变端 / 深字 / 紫端 / 电源 / tok 全族无裸值", () => {
+test("主题裸色已令牌化：绿完成族 / 渐变端 / 深字 / 紫端 / 电源 / tok 全族无裸值（仅允许出现在令牌定义行）", () => {
   for (const bare of ["#34d399", "#059669", "#33dcff", "#00b8de", "#001018",
     "#04170c", "#8b5cf6", "#f59e0b"]) {
-    assert.ok(!html.includes(bare), "裸色应迁移：" + bare);
+    const total = (html.split(bare).length - 1);
+    const defs = html.match(new RegExp("--[a-z0-9-]+:\\s*" + bare.replace("#", "\\#") + "(?=;)", "g"));
+    const defCount = defs ? defs.length : 0;
+    assert.equal(total, defCount,
+      "裸色 " + bare + " 应只出现在令牌定义（实际 " + total + " 处，定义 " + defCount + " 处）");
   }
   assert.ok(!/rgba\(0, 212, 255/.test(html), "accent 青 rgba 应走 var(--accent-rgb)");
   assert.ok(!/rgba\(0, 150, 199/.test(html), "亮色 accent rgba 应走 var(--accent-rgb)");
@@ -85,7 +89,21 @@ test("主题裸色已令牌化：绿完成族 / 渐变端 / 深字 / 紫端 / �
     ".tok-* 应走 var(--tok-*) 令牌");
 });
 
-test("间距魔法值收敛：margin-top 无 2/3/5/7/9/10/14px 裸值（1px 发丝线例外）", () => {
+test("令牌无自引用循环（评审整改：--accent-hi 等曾被脚本写成 var(自身) → 计算值失效）", () => {
+  const tokenLines = [...html.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)];
+  for (const m of tokenLines) {
+    const name = m[1];
+    const value = m[2].trim();
+    assert.ok(!value.includes("var(" + name + ")"),
+      "令牌 " + name + " 自引用：" + value);
+  }
+});
+
+test("间距魔法值收敛：margin-top / margin-bottom 无 2/3/5/7/9/10/14px 裸值（1px 发丝线例外）", () => {
   const m = [...html.matchAll(/margin-top:\s*(\d+)px/g)].map((x) => x[1]);
   assert.deepEqual(m, ["1", "1"], "margin-top 仅保留 1px 发丝线（实际 " + m.join(",") + "）");
+  const mb = [...html.matchAll(/margin-bottom:\s*(\d+)px/g)].map((x) => x[1]);
+  assert.deepEqual(mb, [], "margin-bottom 无裸值残留（实际 " + mb.join(",") + "）");
+  const js = jsSources();
+  assert.ok(!/\bmargin-bottom:\s*\d+px\b/.test(js), "JS 内联 margin-bottom 应走令牌");
 });

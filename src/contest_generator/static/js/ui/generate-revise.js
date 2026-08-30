@@ -233,12 +233,12 @@ function reviseRenderAnalysis(data) {
   const parts = [];
   const impacts = data.impacts || [];
   if (impacts.length) {
-    parts.push('<h4 style="margin-bottom:8px">逐条影响结论</h4>');
+    parts.push('<h4 style="margin-bottom: var(--space-2)">逐条影响结论</h4>');
     parts.push(impacts.map((im) => {
       const add = (im.add || []).map((s) => '<span class="chip add">+ ' + esc(s) + "</span>").join("");
       const remove = (im.remove || []).map((s) => '<span class="chip del">− ' + esc(s) + "</span>").join("");
       const refs = (im.requirement_refs || []).map((r) => '<span class="chip out">' + esc(r) + "</span>").join("");
-      return '<div class="item" style="margin-bottom:8px">'
+      return '<div class="item" style="margin-bottom: var(--space-2)">'
         + '<div class="head"><span class="slug">Q&A #' + esc(im.qa_index) + "</span>"
         + (refs ? '<span class="muted">影响需求：' + refs + "</span>" : "")
         + "</div>"
@@ -247,16 +247,16 @@ function reviseRenderAnalysis(data) {
         + "</div>";
     }).join(""));
   }
-  parts.push('<h4 style="margin-bottom:8px">模块集 diff（确定性集合差）</h4>');
+  parts.push('<h4 style="margin-bottom: var(--space-2)">模块集 diff（确定性集合差）</h4>');
   parts.push('<div class="item">' + reviseRenderDiff(data.diff) + "</div>");
   const warns = data.warnings || [];
-  parts.push('<h4 style="margin-top: var(--space-4);margin-bottom:8px">平台警告（按建议模块集重算）</h4>');
+  parts.push('<h4 style="margin-top: var(--space-4);margin-bottom: var(--space-2)">平台警告（按建议模块集重算）</h4>');
   parts.push(warns.length
-    ? warns.map((w) => '<div class="warn-box unverified" style="margin-bottom:6px"><span class="slug">'
+    ? warns.map((w) => '<div class="warn-box unverified" style="margin-bottom: var(--space-2)"><span class="slug">'
         + esc(w.slug) + "</span>：" + esc(w.message) + "</div>").join("")
     : '<div class="muted">无平台警告（建议模块集在该平台全部可用）。</div>');
   const suggested = data.suggested_slugs || [];
-  parts.push('<h4 style="margin-top: var(--space-4);margin-bottom:8px">建议模块集</h4>');
+  parts.push('<h4 style="margin-top: var(--space-4);margin-bottom: var(--space-2)">建议模块集</h4>');
   parts.push('<div class="row">' + (suggested.length
     ? suggested.map((s) => '<span class="chip out">' + esc(s) + "</span>").join(" ")
     : '<span class="muted">（空）</span>') + "</div>");
@@ -404,7 +404,7 @@ async function reviseApply() {
 function reviseRenderApplyDone(data) {
   if (data.backup_id) revise.backupId = data.backup_id;
   const box = $("revise-result");
-  const parts = ['<h4 style="margin-bottom:8px">修订 diff 记录</h4>', '<div class="item">'];
+  const parts = ['<h4 style="margin-bottom: var(--space-2)">修订 diff 记录</h4>', '<div class="item">'];
   if (data.regenerated === false) {
     parts.push('<div class="ok" style="font-weight:600">无需重生成：模块集无变化，main.c 手工编辑保留；新 Q&A 已并入上下文清单。</div>');
   } else {

@@ -291,17 +291,32 @@ export async function loadTopicGroupVocabulary() {
   if (topicEntries.length) renderTopics();  // 词表到达后重渲染（⚠ 收敛）
 }
 
+let topicLoadTimer = null;   // 加载态延迟（工单 ux-walkthrough-02/22：本地快响应不闪占位）
+
 export async function loadTopics() {
   loadTopicArchiveLink();
   try {
     topicLoading = true;
-    renderTopics();  // 加载态（本地 API 快，瞬时闪过）
+    // 占位延迟 150ms：本地 API 快（<150ms）时用户无感；慢才显示「加载中…」
+    clearTimeout(topicLoadTimer);
+    topicLoadTimer = setTimeout(() => { if (topicLoading) renderTopics(); }, 150);
     topicEntries = await apiGet("/api/topics");
+    clearTimeout(topicLoadTimer);
     topicLoading = false;
     renderTopics();
   } catch (e) {
+    clearTimeout(topicLoadTimer);
     topicLoading = false;
-    $("topic-browse-msg").textContent = e.message;
+    // 失败：清空加载占位，同位置显示错误（工单 ux-walkthrough-02/22：
+    // 与模块库一致「占位清空 + 错误就地」）
+    $("topic-grid").innerHTML = '<div class="empty-state" style="grid-column:1/-1">'
+      + '<div class="es-icon">⚠️</div>'
+      + '<div class="es-title">赛题库读取失败</div>'
+      + '<div class="es-hint">' + esc(e.message)
+      + '；可在设置页检查库目录，或重新点击「赛题库」页签重试。</div></div>';
+    $("topic-stats").textContent = "";
+    $("topic-year-chips").innerHTML = "";
+    $("topic-browse-msg").textContent = "";
   }
 }
 

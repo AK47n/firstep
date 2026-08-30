@@ -860,7 +860,7 @@ function renderRefSelected() {
     selected.push({ id, title: e ? e.title : id, source: "自动" });
   }
   box.innerHTML = selected.length
-    ? '<div class="muted" style="margin-bottom:4px">已选中（将注入 AI 上下文）：</div>'
+    ? '<div class="muted" style="margin-bottom: var(--space-1)">已选中（将注入 AI 上下文）：</div>'
       + selected.map((s) =>
           `<span class="chip out" title="${esc(s.id)}">✔ ${esc(s.title)} · ${s.source}</span>`).join(" ")
     : '<div class="muted">尚未选中参考资料（AI 推荐后会自动关联赛题 / 套件资料）。</div>';
