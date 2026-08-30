@@ -424,6 +424,7 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
     "library": {
         "list_modules": ("read", ""),
         "get_module": ("read", ""),
+        "module_mtime": ("read", ""),   # ux-polish-02/07：浏览层「最近更新」mtime（只读不落盘）
         "delete_module": ("commit", "lib: delete module"),
         "save_manifest": ("delegated", ""),
         "update_platform_identity": ("commit", "lib: update platform identity"),
@@ -449,6 +450,7 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 在途工单（体量字段 file_count/size_bytes）新增的读函数：预先入表，
         # 两支先后合入 main 都不红
         "entry_stats": ("read", ""),
+        "entry_mtime": ("read", ""),   # ux-polish-02/07：浏览层「最近更新」mtime（只读不落盘）
         "get_reference": ("read", ""),
         "search_references": ("read", ""),
         "delete_reference": ("commit", "lib: delete reference"),
