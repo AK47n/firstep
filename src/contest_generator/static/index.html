@@ -1015,6 +1015,13 @@
   /* 设置页折叠总开关（工单 settings-infoarch/03）：页首工具栏两端对齐 */
   .settings-toolbar { display: flex; align-items: center; justify-content: space-between;
                       gap: 12px; margin-bottom: 14px; }
+  /* 设置页 sticky 保存条（工单 ux-walkthrough-02/04）：任意滚动位置可见；
+     top 在吸顶栏 + AI 行动横幅之下，不遮挡内容 */
+  .settings-stickybar { position: sticky; top: calc(var(--header-h) + 8px); z-index: 60;
+                        display: flex; align-items: center; gap: 10px;
+                        background: var(--panel); border: 1px solid var(--border);
+                        border-radius: 10px; padding: 8px 12px; margin-bottom: 14px;
+                        box-shadow: var(--shadow-card); }
   /* 按钮内联图标（工单 ui-polish-9/04） */
   button .btn-ico { display: inline-block; width: 15px; height: 15px;
                     vertical-align: -2px; margin-right: 6px; }
@@ -2904,6 +2911,10 @@
       <span class="muted">点击卡片标题可折叠/展开，状态自动保存。</span>
       <button id="btn-settings-collapse-all" type="button">全部收起</button>
     </div>
+    <div class="settings-stickybar" id="settings-stickybar">
+      <button id="btn-save-settings-sticky" class="primary breathe" type="button" data-ico="save">保存设置</button>
+      <span id="settings-dirty-hint" class="muted hidden">有未保存的修改</span>
+    </div>
     <div class="card" data-collapse-id="app">
       <h2>应用设置</h2>
       <div class="muted" style="margin-bottom:10px">保存后即时生效，无需重启。</div>
@@ -2946,6 +2957,12 @@
           <input type="password" id="set-api-key" placeholder="sk-…" autocomplete="off" style="flex:1">
           <button type="button" id="btn-eye-api" class="btn-mini" style="flex:none" aria-pressed="false">显示</button>
         </div>
+      </div>
+      <!-- 保存并连接（工单 ux-walkthrough-02/04）：保存当前设置后真实调用一次
+           校验连接；key 未填时给出明确提示 -->
+      <div class="row" style="margin-top:8px;align-items:center">
+        <button type="button" id="btn-save-connect" class="primary" data-ico="check">保存并连接</button>
+        <span id="save-connect-msg" class="muted" style="flex:1"></span>
       </div>
       <div class="settings-section settings-collapse" data-collapse-id="ai-billing">
         <button type="button" class="settings-collapse-head">计费<span class="collapse-ico" aria-hidden="true">▾</span></button>
