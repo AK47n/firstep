@@ -157,8 +157,18 @@
   #btn-theme:hover { background: var(--accent-dim); }
   main { max-width: 1400px; margin: 20px auto; padding: 0 24px; }
   /* 内容区加宽（工单 ui-polish-6/01）：生成页 12 步流程吃满 1400px；
-     其它页（设置/赛题库/模块库等表格页）1280 居中，避免过宽空旷 */
+     其它页（设置/赛题库/模块库等表格页）1280 居中，避免过宽空旷。
+     大屏分档放宽（工单 layout-wide）：≥1600 提至 1640、≥2000 提至 1800，
+     1920 屏左右留白从 ~510px 减半；仍居中不无限拉伸 */
   main > section.page:not(#tab-generate) { max-width: 1280px; margin: 0 auto; }
+  @media (min-width: 1600px) {
+    main { max-width: 1640px; }
+    main > section.page:not(#tab-generate) { max-width: 1400px; }
+  }
+  @media (min-width: 2000px) {
+    main { max-width: 1800px; }
+    main > section.page:not(#tab-generate) { max-width: 1520px; }
+  }
   section.page { display: none; }
   section.page.active { display: block; }
   .card { background-color: var(--panel);
@@ -1274,7 +1284,7 @@
     .gen-layout { display: flex; flex-direction: row; gap: 18px; align-items: flex-start; }
     /* 左栏（工单 glossary-sidebar）：step-nav + 新手词表整条 sticky，
        词表不用翻到页底即达（词表展开体限高内滚，防 sticky 撑出视口） */
-    .gen-sidebar { width: 158px; flex: none; position: sticky;
+    .gen-sidebar { width: 208px; flex: none; position: sticky;
                 top: calc(var(--header-h) + 14px); align-self: flex-start; }
     .step-nav { display: flex; flex-direction: column; gap: 4px;
                 padding: 4px 0; width: 100%; }

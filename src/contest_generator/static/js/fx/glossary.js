@@ -28,7 +28,7 @@ export function glossaryHTML(terms = GLOSSARY_TERMS) {
       '<div class="glossary-item"><b>' + esc(t.term) + "</b>：" + esc(t.plain) + "</div>"
     )
     .join("");
-  return '<details class="card-details"><summary>新手词表（' + terms.length + ' 个高频词 → 一句人话）</summary>'
+  return '<details class="card-details"><summary>新手词表 · ' + terms.length + ' 词一句人话</summary>'
     + '<div class="card-details-body">' + items + "</div></details>";
 }
 
