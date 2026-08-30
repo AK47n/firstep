@@ -27,6 +27,18 @@ test("reviseApplyConfirmMessage：diff 为空时用 slugCount 兜底", () => {
   assert.ok(!msg.includes("模块集变更"));
 });
 
+test("reviseApplyConfirmMessage：全新增时只列新增", () => {
+  const msg = reviseApplyConfirmMessage({ added: ["a", "b"], removed: [], unchanged: [] }, 2);
+  assert.match(msg, /模块集变更：新增 2 · 移除 0 · 不变 0/);
+  assert.match(msg, /覆盖重建/);
+});
+
+test("reviseApplyConfirmMessage：全移除时只列移除", () => {
+  const msg = reviseApplyConfirmMessage({ added: [], removed: ["c", "d"], unchanged: [] }, 0);
+  assert.match(msg, /模块集变更：新增 0 · 移除 2 · 不变 0/);
+  assert.match(msg, /覆盖重建/);
+});
+
 test("reviseApplyConfirmMessage：diff 为空且无计数时展示 0（不炸）", () => {
   assert.match(reviseApplyConfirmMessage(undefined, undefined), /（0 个模块）/);
 });

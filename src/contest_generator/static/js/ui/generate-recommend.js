@@ -91,7 +91,11 @@ export function renderPlatforms() {
           // 换平台 = 清空下游（已选模块/实例/引脚）——先确认再执行（工单 ux-walkthrough-02/01）
           const ok = await confirmModal({
             title: "切换平台？",
-            message: platformSwitchConfirmMessage({ moduleCount: selectedSlugs.length }),
+            message: platformSwitchConfirmMessage({
+              moduleCount: selectedSlugs.length,
+              pinCount: (clusterDeps.pinChangeCount && clusterDeps.pinChangeCount()) || 0,
+              instanceCount: (clusterDeps.configuredInstanceCount && clusterDeps.configuredInstanceCount()) || 0,
+            }),
             confirmText: "切换",
           });
           if (!ok) return;
