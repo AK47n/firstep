@@ -329,6 +329,18 @@ export function ensureDefaultInstances(expanded, instances) {
   }
 }
 
+// 实例缺口（工单 ux-walkthrough-02/02）：多实例模块中当前没有任何实例配置的
+// 个数（列表存在且非空即不算缺口）。6.5 卡「还差 N 个实例」徽章与导航点
+// 完成态的唯一计数口径；expanded 未展开（空）→ 0（无模块可数）。
+export function instanceGapCount(expanded, instances) {
+  const inst = instances || {};
+  return (expanded || []).filter((m) => {
+    if (!m.multi_instance) return false;
+    const list = inst[m.slug];
+    return !list || !list.length;
+  }).length;
+}
+
 // ---------------------------------------------------------------------------
 // 模块库页 —— 工具栏纯函数（library-toolbar/02）：过滤 / 排序 / 统计 / chips
 // 均为顶层纯函数（tests/js 可注入）；DOM 层只做转发，交互逻辑不散落事件里。
@@ -497,5 +509,5 @@ export function libPlatformKits(modules) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, multiInstanceModules, instancePayload, ensureDefaultInstances, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
+  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
 }

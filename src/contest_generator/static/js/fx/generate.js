@@ -117,8 +117,16 @@ export function syncCollapseBtn(btn, collapsed) {
 export function collapseToggleAll(cards, doneSet, collapse) {
   const done = new Set(doneSet || []);
   return Array.from(cards).map((c) => {
+    // 步骤号（工单 ux-walkthrough-02/02）：data-step 优先（6.5 子步骤显式标注），
+    // 子步骤不参与折叠/记忆（无折叠按钮，防 parseInt 撞号污染整数步记忆）
     const no = c.querySelector(".step-no");
-    const n = no ? parseInt(no.textContent, 10) : NaN;
+    let n = NaN;
+    if (no) {
+      const raw = no.dataset && no.dataset.step !== undefined ? no.dataset.step : no.textContent;
+      const v = Number(raw);
+      if (Number.isFinite(v)) n = v;
+    }
+    if (!Number.isInteger(n)) return { n: NaN, collapsed: false };
     const isDone = done.has(n);
     const shouldCollapse = collapse ? isDone : false;
     c.classList.toggle("collapsed", shouldCollapse);

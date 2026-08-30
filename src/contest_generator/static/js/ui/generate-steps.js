@@ -119,10 +119,11 @@ function refreshGenOverview() {
   const box = $("gen-overview");
   if (!box) return;
   const curEl = document.querySelector(".step-nav .step-dot.current");
-  const current = curEl ? parseInt(curEl.dataset.step, 10) : NaN;
+  const current = curEl ? Number(curEl.dataset.step) : NaN;
   const doneArr = Array.from(stepDoneSet);
   box.querySelectorAll(".ov-chip").forEach((chip) => {
-    const n = parseInt(chip.dataset.step, 10);
+    const n = Number(chip.dataset.step);
+    if (!Number.isInteger(n)) return;  // 6.5 子步骤 chip 由 markSubStep 单独维护（工单 ux-walkthrough-02/02）
     const isDone = stepDoneSet.has(n);
     const warn = !isDone && genOverviewWarn(n);
     // 步骤 7 默认布线（ux-polish-02/01）：完成但未手动配置 → 中性「▣ 默认布线」
@@ -138,7 +139,8 @@ function refreshGenOverview() {
   // 左侧导航 dot 的 warn 同步（工单 ui-detail/01）：done/current 仍由
   // markStep* / initStepNav 维护，这里单向补 warn，互不覆盖
   document.querySelectorAll(".step-nav .step-dot").forEach((dot) => {
-    const n = parseInt(dot.dataset.step, 10);
+    const n = Number(dot.dataset.step);
+    if (!Number.isInteger(n)) return;  // 6.5 子步骤无 stepDoneSet 归属，不叠加 warn
     dot.classList.toggle("warn", !stepDoneSet.has(n) && genOverviewWarn(n));
   });
   const summary = box.querySelector(".ov-summary");
@@ -245,20 +247,27 @@ function initGenOverview() {
     }
     const chip = e.target.closest(".ov-chip");
     if (!chip) return;
-    const card = stepCard(parseInt(chip.dataset.step, 10));
+    const card = stepCard(Number(chip.dataset.step));
     if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
   });
-  // 卡片标题状态徽章（A2）：插在折叠按钮前（initCardCollapse 在其后追加折叠钮）
+  // 卡片标题状态徽章（A2）：插在折叠按钮前（initCardCollapse 在其后追加折叠钮）；
+  // 只给整数步骤卡建徽章（6.5 子步骤无状态语义，防 parseInt 撞号覆盖步骤 6）
   cards.forEach((c) => {
     const no = c.querySelector(".step-no");
-    const n = no ? parseInt(no.textContent, 10) : NaN;
+    const raw = no && no.dataset && no.dataset.step !== undefined ? no.dataset.step : (no ? no.textContent : "");
+    const n = Number(raw);
     const h2 = c.querySelector("h2");
-    if (!Number.isFinite(n) || !h2) return;
+    if (!Number.isInteger(n) || !h2) return;
     const badge = document.createElement("span");
     badge.className = "card-step-status";
     h2.appendChild(badge);
     genOverviewBadges[n] = badge;
   });
+  // 6.5 子步骤 chip 初始随卡片隐藏（工单 ux-walkthrough-02/02：无多实例模块
+  // 时不出现在总览；renderInstanceConfig 显隐切换时由 syncInstanceGap 同步）
+  const subCard = document.getElementById("card-instance-config");
+  const subChip = box.querySelector('.ov-chip[data-step="6.5"]');
+  if (subChip && subCard) subChip.classList.toggle("hidden", subCard.classList.contains("hidden"));
   document.addEventListener("scroll", () => refreshGenOverview(), { passive: true });
   window.addEventListener("resize", () => refreshGenOverview(), { passive: true });
   // 步骤 7 布线模式变化（ux-polish-02/01）：生成成功路径 markStepDone(9) 先于
