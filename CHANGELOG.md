@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=628f9ceba229a1d8c2ca4e5eccbf3969e3a39470 -->
+<!-- changelog-auto: last-commit=8bdb75cea7319dd2b9fb4ff04d4f919359b30923 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -100,6 +100,7 @@
 - 20:32 工单 21：CSS 令牌化收尾（margin-top 全站收敛 --space-*（CSS/内联/JS 12 文件）；主题裸色令牌化：--accent-rgb 分通道 rgba、--accent-hi/lo 渐变端、--on-accent-deep/--on-ok-deep 深字、--purple-grad、--power、--ok-glow、.tok-* 全族 var(--tok-*)（暗/亮各一套）；扫描件白底加注释；css-tokens 守卫扩展）
 - 20:34 工单 20 评审整改（.btn 基类补上并让三类形态实际落地：btn-pill--sm=眼睛按钮×2、btn-icon=代码缩放钮×2、btn-pill--md=检查能否生成；JS 内联裸圆角/字号全迁令牌（flash/task/generate-recommend/step-state）；css-tokens 守卫扩展扫 static/js 全部文件 + 死类检测 + 正则笔误修正）
 - 20:38 工单 21 评审整改（修复令牌自引用循环：--accent-hi/lo、--on-accent-deep/--on-ok-deep、--purple-grad、--power 暗亮两套补回真值——脚本替换时误把令牌定义值也换成 var(自身) 导致计算值失效、步骤圆点/导航渐变/电源线丢失；margin-bottom 全站收敛 --space-*；css-tokens 守卫补自引用检测与色值仅限令牌定义行断言）
+- 20:38 工单 22：库页面小修测试（参考/PDF 默认最近更新降序、赛题/PDF 读取失败清占位同位置错误、赛题库加载占位延迟 150ms、库目录卡 5 目录+派生只读 span+改模块库目录确认联动——实现随 21 评审整改同一批文件落地）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
