@@ -10,6 +10,7 @@
 // 表是 JS 侧单点声明，改词表须同步这里与后端契约测试。
 import { $ } from "/js/app.js";
 import { fmtClock } from "/js/fx/core.js";
+import { waitLabel } from "/js/fx/wait.js";
 
 export function makeProgressPanel(spec) {
   const p = { startedAt: 0, lastEventAt: 0, timerId: null, finished: false };
@@ -41,4 +42,39 @@ export function makeProgressPanel(spec) {
     if (handler) handler(data);   // 预留事件类型（token 级流式等）——忽略
   }
   return { p, start, finish, handleEvent, tick };
+}
+
+/** 长任务秒表（工单 ux-walkthrough-02/12）：在状态元素后插入
+ * `.wait-clock` span 显示「已等待 mm:ss」（每秒跳）。target 传元素或
+ * 选择器字符串——选择器模式每帧重查元素并重挂 span，兼容容器被
+ * innerHTML 重渲染的场景（如参数咨询面板）。流水线 start() → stop()；
+ * 复用 fx/wait.js waitLabel（与 fmtClock 同源不漂移）。 */
+export function makeWaitClock(target) {
+  const clockEl = document.createElement("span");
+  clockEl.className = "wait-clock";
+  let timerId = null;
+  let startedAt = 0;
+  function currentEl() {
+    return typeof target === "string" ? $(target) : target;
+  }
+  function render() {
+    const el = currentEl();
+    if (!el) { stop(); return; }
+    if (!el.parentNode) { stop(); return; }       // 元素已离树（容器被换）：停表
+    if (clockEl.parentNode !== el.parentNode) {
+      el.insertAdjacentElement("afterend", clockEl);   // 容器重渲染后重挂
+    }
+    clockEl.textContent = waitLabel((Date.now() - startedAt) / 1000);
+  }
+  function start() {
+    startedAt = Date.now();
+    if (timerId) clearInterval(timerId);
+    timerId = setInterval(render, 1000);
+    render();
+  }
+  function stop() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    clockEl.textContent = "";
+  }
+  return { start, stop };
 }

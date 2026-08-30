@@ -18,6 +18,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
+import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { paramListHTML, paramResultHTML } from "/js/fx/params.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { reviseGetDir } from "./generate-revise.js";
@@ -32,6 +33,8 @@ let paramsState = {
   scanned: false,
   busy: false,
 };
+
+const paramsWait = makeWaitClock("params-status");   // 长任务秒表（工单 ux-walkthrough-02/12）
 
 function paramsDir() {
   return reviseGetDir();
@@ -153,6 +156,7 @@ async function paramsScan() {
   if (!dir) { $("params-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
   paramsSetBusy(true);
   $("params-msg").textContent = "";
+  paramsWait.start();
   paramsRenderResult(null);
   try {
     const data = await tasksRunSSE("/api/tasks/params/scan", { output_dir: dir }, {
@@ -175,6 +179,7 @@ async function paramsScan() {
     $("params-msg").textContent = e.message;
     paramsStatus("");
   } finally {
+    paramsWait.stop();
     paramsSetBusy(false);
   }
 }
@@ -194,6 +199,7 @@ async function paramsApply(name) {
   if (!value.trim()) { $("params-msg").textContent = "新值不能为空（请输入数值后再应用）"; return; }
   paramsSetBusy(true);
   $("params-msg").textContent = "";
+  paramsWait.start();
   try {
     const data = await tasksRunSSE("/api/tasks/params/apply", {
       output_dir: dir, name: name, value: value,
@@ -227,6 +233,7 @@ async function paramsApply(name) {
     $("params-msg").textContent = e.message;
     paramsStatus("");
   } finally {
+    paramsWait.stop();
     paramsSetBusy(false);
   }
 }

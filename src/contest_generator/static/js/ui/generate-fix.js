@@ -24,6 +24,7 @@ import { fmtSeconds, fixLogGroupHidden } from "/js/fx/generate.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
 import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
+import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
 import { reportRecentStatus } from "/js/ui/recent.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -48,6 +49,8 @@ let fixLoop = { running: false, round: 0, batch: 1, resume: null };
 // 注「继续批次」）；resume = 轮上限终态保存的续跑态快照 {errorText, lastSummary,
 // lastFixDone}（工单 fix-loop-continue/01：「继续修复」消费它，不重跑编译、回喂不丢）
 let fixSourceCache = {};                          // 源码行缓存（key = 归一化 path:line；列表重建时清空）
+
+const fixWait = makeWaitClock("fix-status");      // 长任务秒表（工单 ux-walkthrough-02/12）
 
 /** 编译结果横幅四态（工单 compile-experience-ui/01）：running/success/fail/notool。 */
 function compileBanner(kind, text) {
@@ -453,6 +456,7 @@ async function startFixCenter() {
   fixCenterBusy(true);
   aiActionStart("编译修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("fix-status").textContent = "自动编译中…";
+  fixWait.start();
   try {
     // 第 0 步：首次全量编译（生成后自动触发 / 手动"一键编译修复"同一入口）
     const initial = await runCompileOnce(outputDir);
@@ -482,6 +486,7 @@ async function startFixCenter() {
     $("fix-errors-msg").textContent = e.message;
   } finally {
     aiActionStop();
+    fixWait.stop();
     fixLoop.running = false;
     fixLoop.round = 0;
     fixCenterBusy(false);
@@ -501,6 +506,7 @@ async function continueFixCenter() {
   fixCenterBusy(true);
   aiActionStart("编译修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("fix-status").textContent = "";
+  fixWait.start();
   try {
     await fixRounds(resume.errorText, resume.lastSummary, resume.lastFixDone);
   } catch (e) {
@@ -508,6 +514,7 @@ async function continueFixCenter() {
     $("fix-errors-msg").textContent = e.message;
   } finally {
     aiActionStop();
+    fixWait.stop();
     fixLoop.running = false;
     fixLoop.round = 0;
     fixCenterBusy(false);
@@ -536,12 +543,14 @@ $("btn-fix-errors").addEventListener("click", async () => {
   fixSetBusy(true);
   aiActionStart("AI 修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("fix-status").textContent = "解析报错中…";
+  fixWait.start();
   try {
     await runFixOnce(errorText, outputDir);
   } catch (e) {
     $("fix-errors-msg-manual").textContent = e.message;
   } finally {
     aiActionStop();
+    fixWait.stop();
     fixSetBusy(false);
   }
 });

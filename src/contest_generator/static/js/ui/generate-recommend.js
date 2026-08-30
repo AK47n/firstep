@@ -39,7 +39,8 @@ import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
 import { stepNavTitles, syncStep4 } from "/js/fx/draft.js";
 import { prereadHTML, prereadSlotHTML, prereadReminderGroups } from "/js/fx/topic-preread.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
-import { makeProgressPanel } from "/js/ui/progress.js";
+import { WAIT_GENERIC_LINE } from "/js/fx/wait.js";  // 无阶段场景通用等待行（工单 ux-walkthrough-02/12）
+import { makeProgressPanel, makeWaitClock } from "/js/ui/progress.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/01）
@@ -315,8 +316,7 @@ function clearTopicPreread() {
   unmarkSteps([2, 5, 6, 7, 8, 9, 10, 11, 12]);  // 题面变了：AI 产物与生成结果全部失效
 }
 
-// 钉卡分发（工单 topic-preread/03）：结果渲染到所有目标步骤卡槽位，
-// 每卡只显该卡相关条目；无相关条目的槽位保持隐藏（无提醒不占位）。
+// 钉卡分发（工单 topic-preread/03）：结果渲染到所有目标步骤卡槽位，// 每卡只显该卡相关条目；无相关条目的槽位保持隐藏（无提醒不占位）。
 // 注意：groups.find 只匹配数值步骤组——「其他限定」（step:null，尺寸/
 // 电源/时长等通用要求）有意不钉卡，只在步骤 2 卡分组展示。
 function renderPrereadSlots(reminders) {
@@ -330,6 +330,9 @@ function renderPrereadSlots(reminders) {
   });
 }
 
+// 赛题预读长任务秒表（工单 ux-walkthrough-02/12）：状态行旁「已等待 mm:ss」
+const prereadWait = makeWaitClock("topic-preread-msg");
+
 $("btn-topic-preread").addEventListener("click", async () => {
   $("topic-preread-msg").textContent = "";
   const problem = $("problem").value.trim();
@@ -337,6 +340,7 @@ $("btn-topic-preread").addEventListener("click", async () => {
   $("btn-topic-preread").disabled = true;
   $("btn-topic-preread").innerHTML = '<span class="spinner"></span>AI 预读中…';
   aiActionStart("赛题预读");  // 全局「AI 行动中」横幅（工单 ai-action-banner/01）
+  prereadWait.start();
   try {
     const data = await apiPost("/api/topic/preread", { problem_text: problem });
     prereadOverviewText = String(data.overview || "");
@@ -353,6 +357,7 @@ $("btn-topic-preread").addEventListener("click", async () => {
     $("topic-preread-msg").textContent = e.message;
   } finally {
     aiActionStop();
+    prereadWait.stop();
     $("btn-topic-preread").disabled = false;
   }
 });
@@ -627,7 +632,7 @@ function showRecommendQuestions(problem, questions) {
 function startRecProgress() {
   recPanel.start();
   $("rec-progress").classList.remove("hidden");
-  $("rec-prog-text").textContent = "";        // 新生命周期：旧进度文本 / telemetry 清掉
+  $("rec-prog-text").textContent = WAIT_GENERIC_LINE;   // 首条事件前通用阶段行（工单 ux-walkthrough-02/12）
   const telemetryEl = $("rec-llm-telemetry");
   telemetryEl.classList.add("hidden");
   telemetryEl.textContent = "";
