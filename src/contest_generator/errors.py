@@ -13,6 +13,8 @@ HTTPException）——同一张表两端共用，未登记政策一致。
 
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -38,7 +40,11 @@ from .generator import (
 from .impact import ImpactError
 from .keil import KeilProjectError
 from .library import LibraryError
-from .llm import LLMError
+from .llm import (
+    LLMError,
+    LOCAL_LLM_LOAD_FAILED_MESSAGE,
+    LOCAL_LLM_UNAVAILABLE_MESSAGE,
+)
 from .master_store import MasterError
 from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError
@@ -62,9 +68,72 @@ class _ErrorEntry:
     message: Callable[[Exception], str]
 
 
+# LLM 失败人话化（工单 beginner-gap-closure/05）：error_to_http 表 502 行不再把
+# 原始异常串（urlopen / URL / 响应体原文）透给用户——按错误类别重写为中文人话
+# + 建议动作；原始消息保留在异常链（服务端日志 / 回滚排查可溯源），用户界面
+# 只见人话。类别来源 = llm.LLMError.kind（network / rate_limit / client /
+# parse，缺省 parse=业务解析失败）。
+LLM_NETWORK_MESSAGE = (
+    "AI 服务连接失败（网络不通 / 连接超时 / 服务暂时不可用）。"
+    "请检查网络连接后重试；若多次失败，请稍后再试。"
+)
+LLM_RATE_LIMIT_MESSAGE = "AI 服务请求过于频繁——请等待片刻后重试"
+LLM_CLIENT_MESSAGE = (
+    "AI 服务拒绝了本次请求（可能是 API key 无效、账户余额不足或请求内容不被接受）。"
+    "请在设置页核对 API key 与账户余额后重试。"
+)
+
+
+def _scrub_urls(text: str) -> str:
+    """URL 去技术化（映射层兜底）：用户可见消息不再原样出现服务地址。"""
+    return re.sub(r"https?://\S+", "<服务地址>", text)
+
+
+def llm_error_message(exc: Exception) -> str:
+    """LLM 失败 → 中文人话（按类别重写 + 建议动作）。
+
+    network（连接失败 / 超时 / DNS / 网关 5xx）→ 检查网络建议；若为本地模型
+    失联（RoutingLLM 包装附 LOCAL_LLM_* 提示），本地专属建议一并给出（别被
+    通用网络建议覆盖——用户需知道「启动 Ollama / 清空本地模型配置」）。
+    rate_limit（429）→ 等待建议（附 retry_after 秒数）；
+    client（4xx）→ 核对 key 与余额建议；413（请求体过大）保留专属提示
+    （检查赛题文本 / 文件数量——通用 key 建议对它是误导）；
+    parse 及其它（含缺省 kind，AI 输出非法 / 业务失败）→ message 原样带出
+    （保留「AI 服务调用失败：」前缀——存量文案契约不变，测试
+    test_error_entry_contract_unchanged 钉住）。
+    """
+    message = str(exc)
+    kind = exc.kind if isinstance(exc, LLMError) else "parse"
+    if kind == "network":
+        hint = next(
+            (
+                h for h in
+                (LOCAL_LLM_UNAVAILABLE_MESSAGE, LOCAL_LLM_LOAD_FAILED_MESSAGE)
+                if h in message
+            ),
+            None,
+        )
+        return LLM_NETWORK_MESSAGE + ("。另：" + hint if hint else "")
+    if kind == "rate_limit":
+        retry = exc.retry_after if isinstance(exc, LLMError) else None
+        suffix = f"（约 {math.ceil(retry)} 秒后）" if retry else ""
+        return LLM_RATE_LIMIT_MESSAGE + suffix
+    if kind == "client":
+        if "413" in message:
+            return (
+                "AI 服务拒绝了本次请求：请求体过大——请检查赛题文本是否异常巨大，"
+                "或减少导入工程的文件数量与单文件大小。"
+            )
+        return LLM_CLIENT_MESSAGE
+    return "AI 服务调用失败：" + _scrub_urls(message)
+
+
 _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
-    # AI 服务失败：上游 LLM 不可用 / 超时 / 响应非法 → 502，message 带原因
-    _ErrorEntry((LLMError,), 502, lambda exc: f"AI 服务调用失败：{exc}"),
+    # AI 服务失败：上游 LLM 不可用 / 超时 / 响应非法 → 502。message 按错误
+    # 类别人话化（工单 beginner-gap-closure/05）：网络 / 限流 / 客户端类重写为
+    # 中文人话 + 建议动作，原始技术串（urlopen、URL、响应体）不再上界面；
+    # 解析类（AI 输出非法）保留中文业务说明（「AI 服务调用失败：」前缀契约）。
+    _ErrorEntry((LLMError,), 502, llm_error_message),
     # 工程文件（.uvprojx / .cproject）缺失、重复或不是合法 XML：业务失败
     # （旧工程 / AI 整合产物有问题），带中文 message，不裸 500
     _ErrorEntry((KeilProjectError, CcsProjectError), 400, str),
