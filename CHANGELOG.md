@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a4705e1bc442f36d76e170ca5ffaee0ca2edeef9 -->
+<!-- changelog-auto: last-commit=70a0c3e34893b4065c18cb21670f7962d87c31d5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -73,6 +73,7 @@
 - 19:21 工单 06：前端体检对齐（CCS 三件套/派生库目录行 + 工具链叫法统一 + 缺失项跳转 + 工具链内联探测回显）
 - 19:23 工单 05 评审整改：output_dir 复用 _dir_probe + ccs 覆盖统一用 dirs + 导入格式修正
 - 19:23 工单 06 评审整改：跳转原语抽为 ui/goto-nav.js（settings 与 nav-jump 共用、消除回边与重复）
+- 19:24 工单 07：录入/编辑绕路（模块与参考草稿按钮同线、参考 3 区默认展开、提交随区常驻）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
