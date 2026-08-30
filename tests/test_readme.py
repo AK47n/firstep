@@ -20,20 +20,26 @@ from typing import Mapping
 import pytest
 
 from contest_generator.boards import Board
+from contest_generator.context_manifest import CONTEXT_MANIFEST_FILENAME
+from contest_generator.demo_script import DEMO_SCRIPT_FILENAME
 from contest_generator.generator import generate_project
 from contest_generator.manifest import ModuleManifest, PinDeclaration, PlatformEntry
 from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.pin_bindings import ResolvedBinding
 from contest_generator.readme import (
+    GENERATED_ARTIFACT_STRUCTURE,
     PIN_TABLE_FOOTNOTE,
     PIN_TABLE_HEADING,
+    POST_GENERATE_HEADING,
     README_FILENAME,
     PLATFORM_TITLES,
     parse_pin_table,
     render_readme,
     sort_verification_order,
 )
+from contest_generator.report_draft import REPORT_DRAFT_FILENAME
 from contest_generator.selection import ExpandedInstance, ModuleInstance, ScorePoint
+from contest_generator.wiring import WIRING_SNAPSHOT_FILENAME
 from tests.fakes import (
     MAIN_SKELETON,
     _add_module,
@@ -42,7 +48,8 @@ from tests.fakes import (
 )
 
 # 章节标题（spec 章节顺序：概览 → 目录结构 → 快速上手 → 引脚表 → 模块清单 →
-# 验证清单；工单 beginner-gap-closure/04 增「目录结构」）
+# 验证清单 → 生成后怎么继续；工单 beginner-gap-closure/04 增「目录结构」、
+# readme-artifacts-guide/01 增「生成后怎么继续」）
 CHAPTER_HEADINGS = (
     "## 工程概览",
     "## 目录结构",
@@ -50,6 +57,7 @@ CHAPTER_HEADINGS = (
     "## 引脚接线表",
     "## 模块清单与依赖",
     "## 验证顺序清单",
+    POST_GENERATE_HEADING,
 )
 
 
@@ -264,6 +272,8 @@ def test_generate_project_writes_readme(
     # 本工单三章标题
     for heading in CHAPTER_HEADINGS:
         assert heading in readme
+    # 目录结构章含工具上下文清单行（生成物行，工单 readme-artifacts-guide/01）
+    assert ".contest_context.json" in readme
     # 平台/主控中文名 + 板名（board_for_platform 取到即显示）
     assert PLATFORM_TITLES[platform] in readme
     assert board_chip in readme
@@ -589,17 +599,24 @@ def test_render_readme_trailing_newline():
 
 
 def test_render_readme_directory_structure_and_skeleton_notice():
-    """目录结构章 + 骨架声明（工单 beginner-gap-closure/04）：两平台各列出
-    实际关键目录/文件，含「骨架/占位/核对」声明——新手打开文件夹知道各目录
-    作用、知道该补什么代码。"""
+    """目录结构章 + 骨架声明（工单 beginner-gap-closure/04 +
+    readme-artifacts-guide/01）：两平台各列出实际关键目录/文件与生成时新增产物
+    （README 自身 / 演示脚本 / .contest_* 等），含「骨架/占位/核对」声明——
+    新手打开文件夹知道各目录作用、知道该补什么代码。"""
     for platform, keys in (
         (
             PLATFORM_STM32,
-            ("modules/", "user/", "sys/", "ml_libs/", "key/", "main.c", "pin_config.h"),
+            (
+                "modules/", "user/", "sys/", "ml_libs/", "key/", "main.c",
+                "pin_config.h", "README.md", "演示脚本.md", ".contest_context.json",
+            ),
         ),
         (
             PLATFORM_MSPM0,
-            ("modules/", "main.c", "mspm0.syscfg", "Debug/", ".ccsproject"),
+            (
+                "modules/", "main.c", "mspm0.syscfg", "Debug/", ".ccsproject",
+                "README.md", "演示脚本.md", ".contest_context.json",
+            ),
         ),
     ):
         text = render_readme(platform, None, [])
@@ -608,15 +625,24 @@ def test_render_readme_directory_structure_and_skeleton_notice():
             assert key in text, f"{platform} 目录结构缺 {key}"
         for phrase in ("骨架", "占位", "核对"):
             assert phrase in text, f"{platform} 骨架声明缺「{phrase}」"
+        for optional_phrase in ("（可选）", "勿手改"):
+            assert optional_phrase in text, f"{platform} 生成物行注缺「{optional_phrase}」"
 
 
 def test_directory_structure_syncs_with_master_templates():
-    """目录结构行与母版模板双相同步维护（工单 beginner-gap-closure/04）：
-    - 列出项必须真实存在——母版目录/文件直接核对（modules/ 与 Debug/ 为生成时
-      创建：模块复制 / CCS 构建产物，跳过）；
+    """目录结构行与母版模板双相同步维护（工单 beginner-gap-closure/04 +
+    readme-artifacts-guide/01）：
+    - 母版行列出项必须真实存在——母版目录/文件直接核对（modules/ 与 Debug/ 为
+      生成时创建（模块复制 / CCS 构建产物）跳过；生成器新增产物行按
+      GENERATED_ARTIFACT_STRUCTURE 白名单豁免——母版中不存在，属于生成物）；
     - 母版顶层目录必须全部出现在 README（评审整改：stm32 code/ 先例——单向
       守卫防不了「母版有而 README 漏」）；顶层关键文件按清单核对（.gitignore
-      等工具文件不入目录表，不算漏）。改母版结构漏改 README 即红。"""
+      等工具文件不入目录表，不算漏）。改母版结构漏改 README 即红；
+    - 生成物白名单每项必须出现在 README 目录结构表中（防漏列——母版同步
+      守卫的镜像，防「生成器新增产物而 README 不列」；渲染侧由
+      test_render_readme_generated_rows_all_rendered 实测目录表逐行核对，
+      本守卫只保证白名单与渲染循环同源不漂移——成员集
+      GENERATED_ARTIFACT_STRUCTURE 同时是渲染数据源与豁免面）。"""
     from contest_generator.readme import DIRECTORY_STRUCTURE
 
     master_root = Path(__file__).resolve().parents[1] / "library" / "masters"
@@ -627,9 +653,10 @@ def test_directory_structure_syncs_with_master_templates():
     }
     for platform, rows in DIRECTORY_STRUCTURE.items():
         assert rows, f"{platform} 目录结构为空"
-        listed = {path for path, _note in rows}
-        # 方向一：列出项真实存在（modules/ / Debug/ 生成时创建，跳过）
-        for path in listed:
+        generated = {path for path, _note in GENERATED_ARTIFACT_STRUCTURE[platform]}
+        listed = {path for path, _note in rows} | generated
+        # 方向一：母版行真实存在（modules/ / Debug/ 生成时创建，跳过）
+        for path, _note in rows:
             name = path.rstrip("/").rsplit("/", 1)[-1]
             if name in ("modules", "Debug"):
                 continue
@@ -649,6 +676,57 @@ def test_directory_structure_syncs_with_master_templates():
         # 方向三：顶层关键文件全覆盖
         for f in key_root_files[platform]:
             assert f in listed, f"{platform} 顶层文件 {f} 未列入 README 目录结构"
+
+
+def test_generated_artifact_rows_sync_with_filename_constants():
+    """生成物行与生产文件名常量同步（防只改常量不改目录表）：每平台必含
+    README / 演示脚本 / 设计报告草稿（可选）/ K230 副产物 main.py /
+    .contest_context.json / .contest_wiring.json。"""
+    for platform, rows in GENERATED_ARTIFACT_STRUCTURE.items():
+        paths = {path for path, _note in rows}
+        for name in (
+            README_FILENAME,
+            DEMO_SCRIPT_FILENAME,
+            REPORT_DRAFT_FILENAME,
+            "main.py",
+            CONTEXT_MANIFEST_FILENAME,
+            WIRING_SNAPSHOT_FILENAME,
+        ):
+            assert name in paths, f"{platform} 生成物行缺 {name}"
+
+
+def test_render_readme_generated_rows_all_rendered():
+    """生成物行全部渲染（防漏渲染）：两平台目录结构表都含白名单每一行——
+    与常量同步测试叠加 = 白名单（必须列出）+ 渲染（必须出现）双守卫。"""
+    for platform in (PLATFORM_STM32, PLATFORM_MSPM0):
+        text = render_readme(platform, None, [])
+        for path, note in GENERATED_ARTIFACT_STRUCTURE[platform]:
+            assert f"| `{path}` | {note} |" in text, (
+                f"{platform} 目录结构缺生成物行 {path}"
+            )
+
+
+def test_render_readme_post_generate_guide_section():
+    """「生成后怎么继续」章（验证顺序清单之后，两平台同款静态话术）：第
+    10/11/12 步主路径（修复中心 / 任务推进 / 参数速调 / 交付 / 交接提示词）+
+    .contest_* 内部状态文件边界（工具自维护、勿手改、打包自动排除）；不混入
+    验证清单 checkbox 行。"""
+    text = render_readme("stm32", None, [])
+    assert POST_GENERATE_HEADING in text
+    assert text.index("## 验证顺序清单") < text.index(POST_GENERATE_HEADING)
+    for phrase in (
+        "修复中心",
+        "任务推进",
+        "参数速调",
+        "交付",
+        "交接提示词",
+        ".contest_tasks.json",
+        "请勿手动编辑",
+        "自动排除",
+    ):
+        assert phrase in text, f"生成后继续章缺「{phrase}」"
+    tail = text.split(POST_GENERATE_HEADING)[1]
+    assert not any(line.startswith("- [ ] ") for line in tail.splitlines())
 
 
 def test_render_readme_board_name_optional():
