@@ -210,6 +210,40 @@ export function initCardCollapse() {
 //（保留 initCardCollapse 追加的「收起已完成」按钮）并恢复整数步完成态。
 let stepCards = [];
 let stepNavUpdate = null;
+// 点击导航后待定的步骤（工单 step-nav-clamp/01）：短卡（如步骤 11）贴页尾时
+// scrollIntoView 的目标会被底部 clamp 在 maxScroll、页面停在原地，而位置高亮
+// 又因「滚到底→强制末步」漂到 12——记录点击步骤并保持高亮，直到用户手动滚动。
+let pickedStep = NaN;
+const stepHeaderH = () =>
+  parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h")) || 0;
+
+// 点击步骤泡泡 / 总览 chip 的统一滚动（工单 step-nav-clamp/01）：
+// 1) 目标先扣吸顶栏高度（--header-h），卡片顶不被吸顶栏遮挡；
+// 2) 卡片顶已越过最大滚动位置的短卡（start 目标必被 clamp 原地不动），
+//    改按卡片居中落点 clamp 到 [0, maxScroll]，保证被点的卡片真正进入视口。
+export function scrollToStep(n) {
+  const card = stepCard(n);
+  if (!card) return;
+  pickedStep = n;
+  const vh = window.innerHeight;
+  const max = Math.max(0, document.documentElement.scrollHeight - vh);
+  const rect = card.getBoundingClientRect();
+  const cardTop = rect.top + window.scrollY;
+  const start = cardTop - stepHeaderH() - 8;
+  const target = start <= max
+    ? Math.max(0, start)
+    : Math.min(Math.max(cardTop + rect.height / 2 - vh / 2, 0), max);
+  window.scrollTo({ top: target, behavior: "smooth" });
+  if (stepNavUpdate) stepNavUpdate();
+}
+// 用户手动滚动（滚轮 / 触摸 / 方向键）视为放弃点击目标，恢复位置驱动高亮
+window.addEventListener("wheel", () => { pickedStep = NaN; }, { passive: true });
+window.addEventListener("touchmove", () => { pickedStep = NaN; }, { passive: true });
+window.addEventListener("keydown", (e) => {
+  if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(e.key)) {
+    pickedStep = NaN;
+  }
+}, { passive: true });
 
 function buildStepNav() {
   const nav = $("step-nav");
@@ -241,17 +275,30 @@ export function refreshStepNav() {
   nav.addEventListener("click", (e) => {
     const dot = e.target.closest(".step-dot");
     if (!dot) return;
-    const card = stepCard(Number(dot.dataset.step));
-    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToStep(Number(dot.dataset.step));
   });
   let ticking = false;
   const update = () => {
     ticking = false;
     const entries = stepCards.map((c) => ({ n: stepNoOf(c), top: c.getBoundingClientRect().top }));
     let cur = stepNavCurrent(entries, 120);
-    // 滚到底仍够不到阈值时（末卡较短）直接定位最后一步
-    if (entries.length && window.innerHeight + window.scrollY
+    // 点击优先（工单 step-nav-clamp/01）：点击的卡片仍在视口内时保持点击结果，
+    // 防止底部 clamp 场景下高亮被下方「滚到底→末步」规则掰到 12；
+    // 点击目标已滚出视口 / 失效则放弃，回到位置驱动。
+    let pickVisible = false;
+    if (Number.isFinite(pickedStep)) {
+      const pc = stepCards.find((c) => stepNoOf(c) === pickedStep);
+      if (pc) {
+        const r = pc.getBoundingClientRect();
+        pickVisible = r.bottom > stepHeaderH() && r.top < window.innerHeight;
+      }
+      if (!pickVisible) pickedStep = NaN;
+    }
+    if (pickVisible) {
+      cur = pickedStep;
+    } else if (entries.length && window.innerHeight + window.scrollY
         >= document.documentElement.scrollHeight - 80) {
+      // 滚到底仍够不到阈值时（末卡较短）直接定位最后一步
       cur = entries[entries.length - 1].n;
     }
     nav.querySelectorAll(".step-dot").forEach((d) => {

@@ -22,7 +22,7 @@ import { draftState, draftSave, draftLoad, draftRestoreMeta, stepNavTitles } fro
 import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, hasWarnContent } from "/js/fx/overview.js";
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { readinessState, desktopTopicOutputEnabled, ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位；工单 07 总览输出目录预警共享请求
-import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone, step7WireGet } from "/js/ui/step-state.js";
+import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone, step7WireGet, scrollToStep } from "/js/ui/step-state.js";
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 
@@ -247,8 +247,7 @@ function initGenOverview() {
     }
     const chip = e.target.closest(".ov-chip");
     if (!chip) return;
-    const card = stepCard(Number(chip.dataset.step));
-    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToStep(Number(chip.dataset.step));
   });
   // 卡片标题状态徽章（A2）：插在折叠按钮前（initCardCollapse 在其后追加折叠钮）；
   // 只给整数步骤卡建徽章（6.5 子步骤无状态语义，防 parseInt 撞号覆盖步骤 6）
