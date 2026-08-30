@@ -4,7 +4,16 @@
 
 **被谁阻塞：** 07（mtime 排序数据源）。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**实现记录：** 三库排序加「最近更新」（fx/module.js libSortModules、fx/reference.js
+refSortEntries、fx/topic.js topicSortEntries 支持 mtime 键，缺失=0 垫底）+ index.html
+三个下拉加选项；glue 层选 mtime 自动切降序（最新在前）+ 方向按钮同步；PDF 库
+工具栏加「刷新」按钮（重拉 /api/pdfs，保留过滤/排序，toast）并更新空态提示；
+母版库 loadMasters 空表渲染 empty-state 引导；四库统计条问题计数出现时附
+「（点击可筛选）」可见提示（lib-stats-hint 样式）；单测：三库 mtime 排序
+5 组新用例（含缺失垫底）。CDP 冒烟 probe-t08.mjs 全 PASS（后端重启后验证
+/api/modules 带 mtime—注意：跑旧 webapp 进程时后端改动不生效，需重启）。
 
 - [ ] 三库排序下拉含「最近更新」项，选后按 mtime 倒序/升序渲染（与 dir 切换按钮联动）
 - [ ] mtime 缺失条目（0）排在最后，不报错

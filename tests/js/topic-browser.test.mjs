@@ -69,6 +69,16 @@ test("topicSortEntries：稳定排序，同键保序（不改原数组）", () =
   assert.equal(dup[0].key, "2026C"); // 原数组不动
 });
 
+test("topicSortEntries mtime（最近更新）：数值排序、缺失垫底、降序最新在前", () => {
+  const refs = [
+    { key: "2024H", year: "2024", problem_text: "a", programs: [], hint_module_groups: [], health: {}, mtime: 10 },
+    { key: "2026C", year: "2026", problem_text: "a", programs: [], hint_module_groups: [], health: {}, mtime: 30 },
+    { key: "2026D", year: "2026", problem_text: "a", programs: [], hint_module_groups: [], health: {} },
+  ];
+  assert.deepEqual(topicSortEntries(refs, { by: "mtime", dir: "asc" }).map((t) => t.key), ["2026D", "2024H", "2026C"]);
+  assert.deepEqual(topicSortEntries(refs, { by: "mtime", dir: "desc" }).map((t) => t.key), ["2026C", "2024H", "2026D"]);
+});
+
 test("topicStats：总数 / 含程序 / 含图注 / 题面合计字数 / 问题条目数", () => {
   const stats = topicStats(ENTRIES, Object.keys(VOCAB));
   assert.equal(stats.total, 3);

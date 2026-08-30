@@ -75,13 +75,14 @@ export function topicFilterEntries(entries, f) {
   });
 }
 
-// topicSortEntries(entries, s)：s={by:'key'|'chars', dir:'asc'|'desc'}；
+// topicSortEntries(entries, s)：s={by:'key'|'chars'|'mtime', dir:'asc'|'desc'}；
 // 返回新数组（不改原数组）；Array.sort 稳定 → 同键保持全量序。
 export function topicSortEntries(entries, s) {
   const by = (s && s.by) || "key";
   const dir = (s && s.dir) === "desc" ? -1 : 1;
   const key = (t) => {
     if (by === "chars") return Number((t.problem_text || "").length);
+    if (by === "mtime") return Number(t.mtime || 0);   // 最近更新（ux-polish-02/08）
     return String(t.key || "");
   };
   const out = (entries || []).slice();

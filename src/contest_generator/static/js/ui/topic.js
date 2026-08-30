@@ -74,6 +74,7 @@ function renderTopicStats() {
   const stats = topicStats(filtered, f.groupIds);
   $("topic-stats").innerHTML = esc(topicStatsText(stats)) + (stats.issues
     ? ` <span class="lib-stats-red${topicUI.health ? " on" : ""}" data-topic-health title="原 PDF 缺失 / 附带程序悬空 / 功能组悬空的条目；点击只看问题条目，再点取消">数据问题 ${stats.issues}</span>`
+    + ' <span class="lib-stats-hint">（点击可筛选）</span>'   // ux-polish-02/08 可见提示
     : "");
 }
 
@@ -252,7 +253,14 @@ export function initTopicToolbar() {
     topicSearchTimer = setTimeout(() => { topicUI.q = $("topic-filter").value; renderTopics(); }, 150);
   });
   $("topic-filter").addEventListener("keydown", (e) => { if (e.key === "Escape") clearTopicFilter(); });
-  $("topic-sort").addEventListener("change", (e) => { topicUI.sortBy = e.target.value; renderTopics(); });
+  $("topic-sort").addEventListener("change", (e) => {
+    topicUI.sortBy = e.target.value;
+    if (e.target.value === "mtime") {   // 最近更新默认降序（最新在前，ux-polish-02/08）
+      topicUI.sortDir = "desc";
+      $("topic-sort-dir").textContent = "↓ 降序";
+    }
+    renderTopics();
+  });
   $("topic-sort-dir").addEventListener("click", () => {
     topicUI.sortDir = topicUI.sortDir === "asc" ? "desc" : "asc";
     $("topic-sort-dir").textContent = topicUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";

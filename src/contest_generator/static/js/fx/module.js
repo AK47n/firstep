@@ -360,13 +360,15 @@ export function libFilterModules(modules, f) {
   });
 }
 
-// libSortModules(modules, s)：s={by:'slug'|'platforms'|'deps', dir:'asc'|'desc'}；
+// libSortModules(modules, s)：s={by:'slug'|'platforms'|'deps'|'mtime', dir:'asc'|'desc'}；
 // 返回新数组（不改原数组）；Array.sort 稳定 → 同键保持入库序。
 export function libSortModules(modules, s) {
   const by = (s && s.by) || "slug";
   const dir = (s && s.dir) === "desc" ? -1 : 1;
   const count = (m) => by === "platforms" ? Object.keys(m.platforms || {}).length
-    : by === "deps" ? (m.dependencies || []).length : 0;
+    : by === "deps" ? (m.dependencies || []).length
+    : by === "mtime" ? Number(m.mtime || 0)   // 最近更新（ux-polish-02/08）
+    : 0;
   const out = (modules || []).slice();
   out.sort((a, b) => {
     const cmp = by === "slug"
