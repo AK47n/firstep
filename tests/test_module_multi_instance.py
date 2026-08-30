@@ -522,6 +522,21 @@ def test_expand_non_multi_instance_manifest_rejects_instances():
     assert expand_instances(manifest, (), "stm32", BOARDS["stm32"]) == ()
 
 
+def test_expand_multi_manifest_unregistered_policy_rejects():
+    """声明了 multi_instance 但展开策略表未登记的 slug = 大声失败（防半吊子
+    manifest：宏名/默认脚语义必须显式登记到策略表，不静默走通用猜测——
+    key-multi-instance/01）。"""
+    manifest = ModuleManifest(
+        slug="beep",
+        description="蜂鸣器驱动",
+        multi_instance=MultiInstanceSpec(max=8, variant="tone"),
+    )
+    with pytest.raises(SelectionError, match="未登记展开策略"):
+        expand_instances(
+            manifest, (ModuleInstance(name="蜂鸣器"),), "stm32", BOARDS["stm32"]
+        )
+
+
 def test_expand_is_deterministic_and_frozen():
     """同输入同输出（纯函数）；计划条目是冻结数据类（ExpandedInstance 可比较）。"""
     instances = [
