@@ -78,6 +78,17 @@ LLM_NETWORK_MESSAGE = (
     "AI 服务连接失败（网络不通 / 连接超时 / 服务暂时不可用）。"
     "请检查网络连接后重试；若多次失败，请稍后再试。"
 )
+LLM_NETWORK_TIMEOUT_MESSAGE = (
+    "AI 服务连接超时（网络延迟高或服务响应慢）——请检查网络后重试；"
+    "若网络正常，可能是服务繁忙，请稍后再试。"
+)
+LLM_NETWORK_DNS_MESSAGE = (
+    "AI 服务地址无法解析（DNS 失败）——请检查网络连接与 DNS 配置后重试。"
+)
+LLM_NETWORK_TLS_MESSAGE = (
+    "AI 服务证书校验失败——请检查系统时间是否准确、网络环境（代理/安全软件）"
+    "是否拦截后重试。"
+)
 LLM_RATE_LIMIT_MESSAGE = "AI 服务请求过于频繁——请等待片刻后重试"
 LLM_CLIENT_MESSAGE = (
     "AI 服务拒绝了本次请求（可能是 API key 无效、账户余额不足或请求内容不被接受）。"
@@ -88,6 +99,20 @@ LLM_CLIENT_MESSAGE = (
 def _scrub_urls(text: str) -> str:
     """URL 去技术化（映射层兜底）：用户可见消息不再原样出现服务地址。"""
     return re.sub(r"https?://\S+", "<服务地址>", text)
+
+
+def _llm_network_message(exc: Exception) -> str:
+    """网络类信号细分（spec 实现决策「区分连接 / 超时 / DNS / 证书」）：按
+    原始消息特征选对应人话——技术串（urlopen / gaierror / CERTIFICATE_…
+    等）只作判别依据，绝不透出；识别不出 → 通用连接失败文案。"""
+    raw = str(exc)
+    if re.search(r"timed?\s*out|timeout|超时", raw, re.IGNORECASE):
+        return LLM_NETWORK_TIMEOUT_MESSAGE
+    if re.search(r"gaierror|getaddrinfo|unknown host|dns|无法解析", raw, re.IGNORECASE):
+        return LLM_NETWORK_DNS_MESSAGE
+    if re.search(r"certificate|certif|ssl|tls", raw, re.IGNORECASE):
+        return LLM_NETWORK_TLS_MESSAGE
+    return LLM_NETWORK_MESSAGE
 
 
 def llm_error_message(exc: Exception) -> str:
@@ -114,7 +139,7 @@ def llm_error_message(exc: Exception) -> str:
             ),
             None,
         )
-        return LLM_NETWORK_MESSAGE + ("另：" + hint if hint else "")
+        return _llm_network_message(exc) + ("另：" + hint if hint else "")
     if kind == "rate_limit":
         retry = exc.retry_after if isinstance(exc, LLMError) else None
         suffix = f"（约 {math.ceil(retry)} 秒后）" if retry else ""
