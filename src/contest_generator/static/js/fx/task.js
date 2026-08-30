@@ -6,12 +6,16 @@ import { flashPanelHTML } from "./flash.js";  // 任务卡烧录控制行（flas
 import { wiringDiagramHTML, wiringFromResources } from "./wiring.js";  // 接线图（task-wiring-diagram/03+05；wiring.js 仅依赖 core.js，无环）
 import { mainDiffHTML } from "./diff.js";  // 任务「本轮变化」diff（task-changes-inline/01；diff.js 仅依赖 core.js，无环）
 
-export function taskStatusLabel(status) {
+export function taskStatusLabel(status, verify) {
   switch (status) {
     case "pending": return "待做";
     case "doing": return "进行中";
-    case "verified": return "上板通过";   // 工单 ux-walkthrough-02/18：任务状态「已验证」→「上板通过」
-    case "unverified": return "未验证";
+    case "verified":
+      // 工单 ux-walkthrough-02/18：任务状态「已验证」改人话——按验证方式分
+      // 口径：manual = 上板实测通过 →「上板通过」；compile = 编译绿即
+      // verified（从未上板）→「编译通过」（评审整改：防止过度声明）
+      return verify === "manual" ? "上板通过" : "编译通过";
+    case "unverified": return "待上板";   // 契约：任务=上板通过/待上板（工单 ux-walkthrough-02/18）
     case "failed": return "失败";
     case "skipped": return "已跳过";
     default: return "未知";
@@ -196,7 +200,7 @@ export function unresolvedPrereqs(task, plan) {
 export function taskCardHTML(task, index, opts) {
   const o = opts || {};
   const badge = '<span class="badge ' + taskStatusBadgeClass(task.status) + '">'
-    + taskStatusLabel(task.status) + "</span>"
+    + taskStatusLabel(task.status, task.verify) + "</span>"
     // 待上板标注（工单 stepwise-deepen/02，spec「在总览与卡片上明确标注
     // 待上板」）：unverified = 结果已写入但未经编译验证 / 或需上板人工确认，
     // 下一步物理动作 = 上板（烧录观察）→ 卡上明示，与总览口径一致
@@ -316,7 +320,7 @@ export function tasksOverviewHTML(plan) {
       + 'title="' + esc(label) + "：" + n + '"></div>'
     : "";
   const bar = '<div class="tasks-overview-bar">'
-    + seg(verified, "seg-ok", "上板通过") + seg(doing, "seg-doing", "进行中")
+    + seg(verified, "seg-ok", "已通过") + seg(doing, "seg-doing", "进行中")
     + seg(unverified, "seg-unverified", "待上板") + seg(failed, "seg-failed", "失败")
     + seg(pending, "seg-pending", "待做") + seg(skipped, "seg-skipped", "已跳过")
     + "</div>";
@@ -456,7 +460,7 @@ export function taskIterationsHTML(task) {
       + '<span class="task-iteration-title">第 ' + esc(String(it.seq)) + " 轮 · "
         + esc(taskIterationLabel(it.kind)) + "</span>"
       + '<span class="badge ' + taskStatusBadgeClass(it.status || "pending") + '">'
-        + taskStatusLabel(it.status || "pending") + "</span>"
+        + taskStatusLabel(it.status || "pending", it.verify) + "</span>"
       + compile + rollback
       + "</div>"
       + (detail.length || meta.length

@@ -34,12 +34,28 @@ export function confirmModal({
       old();
     }
     document.querySelectorAll(".ref-files-overlay").forEach((o) => o.remove());
+    // 焦点管理（工单 ux-walkthrough-02/19）：记录打开时的触发元素——关闭后还焦
+    const opener = typeof document !== "undefined" && document.activeElement
+      ? document.activeElement : null;
     const overlay = document.createElement("div");
     overlay.className = "ref-files-overlay";
     overlay.innerHTML = overlayConfirmHTML({
       title, message, danger, confirmText, cancelText, extra,
     });
-    const onKey = (e) => { if (e.key === "Escape") finish(false); };
+    const onKey = (e) => {
+      if (e.key === "Escape") { finish(false); return; }
+      // Tab 焦点陷阱：限制在弹窗内（首尾循环）
+      if (e.key === "Tab") {
+        const focusables = Array.from(
+          overlay.querySelectorAll("button, input, select, textarea, [href], [tabindex]:not([tabindex='-1'])")
+        ).filter((el) => !el.disabled && el.offsetParent !== null);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
     let settled = false;
     const finish = (value) => {
       if (settled) return;
@@ -47,6 +63,8 @@ export function confirmModal({
       document.removeEventListener("keydown", onKey);
       overlay.remove();
       activeCleanup = null;
+      // 关闭后把焦点还给触发元素（评审 19：Esc / 取消 / 确认 / 遮罩点击一致）
+      if (opener && typeof opener.focus === "function" && opener.isConnected) opener.focus();
       resolve(value);
     };
     activeCleanup = () => finish(false);
@@ -59,5 +77,9 @@ export function confirmModal({
     });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(overlay);
+    // 打开即聚焦：危险确认默认给「取消」防误触 Enter；普通确认给「确认」
+    const focusTarget = overlay.querySelector(
+      danger ? "[data-confirm-cancel]" : "[data-confirm-ok]");
+    if (focusTarget) focusTarget.focus();
   });
 }
