@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8bff1319c553a348b001f0faa147cbd97db77f37 -->
+<!-- changelog-auto: last-commit=62c9a3a9201286bb57e659dffaf8cb67fb6b4de6 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 11:38 工单 beginner-gap-closure/01：第11步页签主路径化——「任务推进」提前并默认为激活页签（REVISE_TABS 顺序 tasks 居首 + 默认激活 tasks；revise-tabs.test.mjs 断言同步；相关守卫 63 项全绿）
 - 11:41 工单 beginner-gap-closure/01 评审整改：补空态指路与默认激活守卫 + 自动切换加显式条件（Spec 审查③①②落实——空态文案钉住、glue 层默认 active=tasks 钉住、revise-context-loaded 幂等守卫）
 - 11:42 工单 beginner-gap-closure/02：生成结果区「去任务推进」入口 + 教程文案与界面事实对齐——跳转单源迁 ui/goto-tasks.js（第 9 步结果区与第 12 步交接卡共用）；结果区加「去任务推进」按钮；教程 12 步表/页签顺序/「和 AI 商量」措辞/结果区描述 5 处修正；守卫 handoff-note-guard 扩展+guide-refs 同步；tests/js 805 全绿
+- 11:47 教程文案对齐：补全「问 AI：我该调哪个参数？」全角问号（工单 02 评审整改）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
