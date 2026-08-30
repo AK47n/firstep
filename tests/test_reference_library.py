@@ -2772,6 +2772,43 @@ def test_update_reference_overwrites_existing_add_path(tmp_path):
     assert updated.anchor_kind == ANCHOR_KIND_NONE
 
 
+def test_update_reference_overwrite_restores_old_on_write_failure(tmp_path, monkeypatch):
+    """覆盖语义的写入期失败（工单 ux-walkthrough-02/08 评审整改）：已覆盖的
+    既有文件恢复旧内容、真正新建的文件清理——磁盘零变化（topic_library 同款
+    恢复范式），不因回滚误删用户正在编辑的文件。"""
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    entry_dir = root / entry.id
+    old = (entry_dir / "example.c").read_text(encoding="utf-8")
+    real_write = Path.write_text
+    calls = {"n": 0}
+
+    def boom(self, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:  # 第一个文件（覆盖 example.c）已写，第二个（新建）写入时失败
+            raise OSError("模拟写入失败")
+        return real_write(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", boom)
+
+    with pytest.raises(OSError):
+        update_reference(
+            root,
+            entry.id,
+            title=entry.title,
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={"example.c": "/* 新内容 */\n", "second.c": "/* 新建 */\n"},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+
+    assert (entry_dir / "example.c").read_text(encoding="utf-8") == old  # 旧内容恢复
+    assert not (entry_dir / "second.c").exists()  # 新建文件已清理
+
+
 def test_update_reference_rejects_add_remove_overlap_still(tmp_path):
     """同名覆盖语义下，add 与 remove 同一文件仍拒绝（工单 ux-walkthrough-02/08：
     前端覆盖优先会从删除清单剔除，后端兜底拒绝「既添加又删除」）。"""

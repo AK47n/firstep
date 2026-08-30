@@ -648,9 +648,9 @@ def update_reference(
     只是元数据）。文件管理范围：add_files 新增（UTF-8 文本，同名已存在 =
     覆盖该文件内容——一次提交完成替换，工单 ux-walkthrough-02/08），
     remove_files 删除（含清单外散文件——磁盘目录即数据库，与浏览 / 统计同口径）；
-    add / remove 重叠拒绝。写入期失败（新增文件 / 元数据）会清理已写的新增文件
-    并保持元数据原值；删除实体失败只留清单外散文件（与浏览 / 统计的磁盘实况
-    容忍语义一致）。
+    add / remove 重叠拒绝。写入期失败（新增文件 / 元数据）会清理已写的新增文件、
+    恢复被覆盖文件的旧内容并保持元数据原值；删除实体失败只留清单外散文件（与
+    浏览 / 统计的磁盘实况容忍语义一致）。
     """
     entry = get_reference(reference_root, entry_id)  # 条目不存在大声失败
     title = title.strip()
@@ -701,20 +701,28 @@ def update_reference(
         platform=platform,
         topic_type=topic_type,
     )
-    # 落盘顺序：先写新增文件 + 元数据（失败清理已写文件并保持元数据原值）→
-    # 删实体（先改引用再删实体：元数据写失败不丢已删除的文件；删除失败只留
-    # 清单外散文件——与浏览/统计「磁盘目录即数据库」容忍语义一致）
+    # 落盘顺序：先写新增/覆盖文件 + 元数据（失败清理已写的新增文件并**恢复
+    # 被覆盖文件的旧内容**——upsert 语义下旧内容属于用户数据，删除即破坏
+    # 「磁盘零变化」契约，参照 topic_library 的同款恢复范式）→ 删实体（先改
+    # 引用再删实体：元数据写失败不丢已删除的文件；删除失败只留清单外散文件
+    # ——与浏览/统计「磁盘目录即数据库」容忍语义一致）
     written: list[Path] = []
+    overwritten: dict[Path, str] = {}
     try:
         for name, content in add_files.items():
             path = entry_dir / name
             path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists():
+                overwritten[path] = path.read_text(encoding="utf-8")
+            else:
+                written.append(path)
             path.write_text(content, encoding="utf-8")
-            written.append(path)
         write_json(entry_dir, REFERENCE_META_FILENAME, new_entry.to_dict())
     except Exception:
         for path in written:
             path.unlink(missing_ok=True)
+        for path, old in overwritten.items():
+            path.write_text(old, encoding="utf-8")
         raise
     for name in remove_files:
         (entry_dir / name).unlink(missing_ok=True)
