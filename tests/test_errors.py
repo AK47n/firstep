@@ -23,7 +23,13 @@ from contest_generator.entry_store import (
 )
 from contest_generator.errors import _ERROR_TABLE, error_entry
 from contest_generator.generator import DuplicateFilePathError
-from contest_generator.llm import LLMError
+from contest_generator.llm import (
+    ERROR_KIND_CLIENT,
+    ERROR_KIND_NETWORK,
+    ERROR_KIND_RATE_LIMIT,
+    LOCAL_LLM_UNAVAILABLE_MESSAGE,
+    LLMError,
+)
 from contest_generator.boards import BoardError
 from contest_generator.manifest import ManifestError
 from contest_generator.patchers import UnknownPlatformError
@@ -162,3 +168,76 @@ def test_error_entry_contract_unchanged() -> None:
         500,
         "服务器内部错误（RuntimeError）：内部损坏",
     )
+
+
+def test_llm_error_network_humanized() -> None:
+    """网络类 LLM 失败（工单 beginner-gap-closure/05）：中文人话 + 建议动作；
+    原始消息里的 URL / urlopen 等英文技术串不再上界面（映射层去技术化）。"""
+    status, message = error_entry(
+        LLMError(
+            "无法连接 LLM 服务 https://api.deepseek.com/chat/completions: "
+            "<urlopen error timed out>",
+            kind=ERROR_KIND_NETWORK,
+        )
+    )
+    assert status == 502
+    assert "检查网络连接" in message
+    assert "重试" in message
+    assert "api.deepseek.com" not in message
+    assert "urlopen" not in message
+    assert "URLError" not in message
+
+
+def test_llm_error_rate_limit_and_client_humanized() -> None:
+    """429 限流 → 等待建议（带 retry 秒数）；4xx 客户端类 → 核对 key / 余额
+    建议（工单 beginner-gap-closure/05）。"""
+    status, message = error_entry(
+        LLMError("DeepSeek API 返回 429：请求过于频繁",
+                 kind=ERROR_KIND_RATE_LIMIT, retry_after=30.0)
+    )
+    assert status == 502
+    assert "等待片刻" in message
+    assert "30 秒" in message
+    status, message = error_entry(
+        LLMError("DeepSeek API 返回 401：unauthorized", kind=ERROR_KIND_CLIENT)
+    )
+    assert status == 502
+    assert "API key" in message
+    assert "unauthorized" not in message
+
+
+def test_llm_error_parse_keeps_chinese_message() -> None:
+    """解析类 LLM 失败：中文 message 原样带出（保留「AI 服务调用失败：」前缀
+    ——存量文案契约不变；工单 05 只人话化网络/限流/客户端类）。"""
+    assert error_entry(LLMError("骨架 main.c 生成返回空内容")) == (
+        502,
+        "AI 服务调用失败：骨架 main.c 生成返回空内容",
+    )
+
+
+def test_llm_error_local_hint_preserved() -> None:
+    """本地模型失联（RoutingLLM 包装，kind=network）：通用网络建议 + 本地专属
+    提示（启动 Ollama / 清空本地模型配置）一并给出，原始技术串不上界面。"""
+    status, message = error_entry(
+        LLMError(
+            f"{LOCAL_LLM_UNAVAILABLE_MESSAGE}（<ConnectionRefusedError…>）",
+            kind=ERROR_KIND_NETWORK,
+        )
+    )
+    assert status == 502
+    assert "检查网络连接" in message
+    assert LOCAL_LLM_UNAVAILABLE_MESSAGE in message
+    assert "ConnectionRefusedError" not in message
+
+
+def test_llm_error_413_keeps_oversize_hint() -> None:
+    """413（请求体过大，kind=client）：保留「检查赛题文本/文件数量」专属建议，
+    不被通用 key/余额建议覆盖（工单 05 人话化不吞可操作提示）。"""
+    status, message = error_entry(
+        LLMError(
+            "DeepSeek API 返回 413：请求体过大。", kind=ERROR_KIND_CLIENT
+        )
+    )
+    assert status == 502
+    assert "请求体过大" in message
+    assert "赛题文本" in message
