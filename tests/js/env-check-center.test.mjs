@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { esc } from "../../src/contest_generator/static/js/fx/core.js";
-import { ENV_BADGE_GLYPH, envRowHTML, envChannelHTML, envCheckStatusHTML } from "../../src/contest_generator/static/js/fx/env.js";
+import { ENV_BADGE_GLYPH, envRowHTML, envChannelHTML, envCheckStatusHTML, toolchainProbeText } from "../../src/contest_generator/static/js/fx/env.js";
 
 // fixture：全字段形状（字段名与 /api/env/status 契约一致）
 const status = {
@@ -13,6 +13,16 @@ const status = {
   toolchains: {
     stm32: { found: true, path: "C:\\Keil5\\Core\\UV4\\UV4.exe", override: true },
     mspm0: { found: false, path: null, override: false },
+  },
+  ccs_tools: {
+    sdk: { found: true, path: "C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04", override: false },
+    compiler: { found: false, path: null, override: false },
+    sysconfig: { found: true, path: "C:\\ti\\ccs2051\\sysconfig_1.26.2\\sysconfig_cli.bat", override: true },
+  },
+  library_dirs: {
+    topic: { dir: "C:\\libs\\topics", exists: true, writable: true },
+    reference: { dir: "C:\\libs\\references", exists: false, writable: false },
+    pdf: { dir: "C:\\sources\\materials", exists: true, writable: true },
   },
   platforms: [
     { id: "stm32", name: "STM32F103C8T6", status: "ready" },
@@ -79,10 +89,61 @@ test("工具链：找到+覆盖标注 env-ok / 未找到 env-err；缺 platform 
   assert.ok(out.includes("设置页路径覆盖"));
   assert.ok(out.includes('data-env-row="toolchain-mspm0"'));
   assert.ok(out.includes("未找到 gmake"));
+  // 叫法统一（工单 ux-walkthrough-02/06）：mspm0 行 = CCS + MSPM0 SDK
+  assert.ok(out.includes("CCS + MSPM0 SDK（mspm0）"));
+  // 缺失项带「去设置填」跳转
+  assert.ok(out.includes('data-env-jump="set-gmake-path"'));
+  assert.ok(!out.includes('data-env-jump="set-uv4-path"'));  // stm32 命中态无跳转
+  const stmMissing = envCheckStatusHTML(
+    { ...status, toolchains: { ...status.toolchains, stm32: { found: false, path: null, override: false } } },
+    null, null);
+  assert.ok(stmMissing.includes('data-env-jump="set-uv4-path"'));
 
   const sparse = envCheckStatusHTML({ ...status, toolchains: {} }, null, null);
   assert.ok(!sparse.includes("toolchain-stm32"));
   assert.ok(!sparse.includes("toolchain-mspm0"));
+});
+
+test("CCS 三件套逐行：命中 env-ok + 路径 / 未设置 env-err + 跳转；缺键不渲染", () => {
+  const out = envCheckStatusHTML(status, null, null);
+  assert.ok(out.includes('data-env-row="ccs-sdk"'));
+  assert.ok(out.includes("CCS SDK（mspm0）"));
+  assert.ok(out.includes("C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04"));
+  assert.ok(out.includes('data-env-row="ccs-compiler"'));
+  assert.ok(out.includes("未设置（可在设置页填 ccs_compiler_dir）"));
+  assert.ok(out.includes('data-env-jump="set-ccs-compiler-dir"'));
+  assert.ok(out.includes('data-env-collapse="toolchain"'));
+  assert.ok(out.includes('data-env-row="ccs-sysconfig"'));
+  assert.ok(out.includes("设置页路径覆盖"));
+
+  const sparse = envCheckStatusHTML({ ...status, ccs_tools: {} }, null, null);
+  assert.ok(!sparse.includes('data-env-row="ccs-'));
+});
+
+test("派生库目录行：可写 env-ok / 缺失 env-warn；缺键不渲染", () => {
+  const out = envCheckStatusHTML(status, null, null);
+  assert.ok(out.includes('data-env-row="lib-dir-topic"'));
+  assert.ok(out.includes("赛题库目录"));
+  assert.ok(out.includes("C:\\libs\\topics"));
+  assert.ok(out.includes("可写"));
+  assert.ok(out.includes('data-env-row="lib-dir-reference"'));
+  assert.ok(out.includes("目录不存在：C:\\libs\\references"));
+  assert.ok(out.includes("env-warn"));
+  const ro = envCheckStatusHTML(
+    { ...status, library_dirs: { ...status.library_dirs, pdf: { dir: "C:\\sources\\materials", exists: true, writable: false } } },
+    null, null);
+  assert.ok(ro.includes("目录不可写：C:\\sources\\materials"));
+
+  const sparse = envCheckStatusHTML({ ...status, library_dirs: {} }, null, null);
+  assert.ok(!sparse.includes("lib-dir-"));
+});
+
+test("toolchainProbeText：四态文案（覆盖命中/覆盖未找到/自动命中/未探测到）", () => {
+  assert.match(toolchainProbeText({ found: true, path: "C:\\Keil5\\UV4.exe", override: true }), /已配置：探测命中/);
+  assert.match(toolchainProbeText({ found: false, path: null, override: true }), /已填路径未找到/);
+  assert.match(toolchainProbeText({ found: true, path: "C:\\ti\\gmake.exe", override: false }), /自动探测到/);
+  assert.match(toolchainProbeText({ found: false, path: null, override: false }), /未探测到/);
+  assert.equal(toolchainProbeText(undefined), "");
 });
 
 test("平台母版：ready env-ok / no-master env-warn", () => {
@@ -151,13 +212,15 @@ test("转义：路径/错误文本中的 HTML 字符不直出", () => {
   assert.ok(out.includes("&lt;x&gt;"));
 });
 
-test("缺省字段不渲染行：module_library/masters_dir/output_dir/api 键缺失 → 无对应行", () => {
-  const { module_library, masters_dir, output_dir, api_configured, ...sparse } = status;
+test("缺省字段不渲染行：module_library/masters_dir/output_dir/api/ccs_tools/library_dirs 键缺失 → 无对应行", () => {
+  const { module_library, masters_dir, output_dir, api_configured, ccs_tools, library_dirs, ...sparse } = status;
   const out = envCheckStatusHTML(sparse, null, null);
   assert.ok(!out.includes('data-env-row="module-library"'));
   assert.ok(!out.includes('data-env-row="masters-dir"'));
   assert.ok(!out.includes('data-env-row="output-dir"'));
   assert.ok(!out.includes('data-env-row="api"'));
+  assert.ok(!out.includes('data-env-row="ccs-'));
+  assert.ok(!out.includes("lib-dir-"));
 });
 
 test("status 为 null/空 → 空串", () => {

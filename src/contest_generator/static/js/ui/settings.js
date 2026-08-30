@@ -25,7 +25,7 @@
 // btn-save-settings / btn-refresh-recent-wf）在 import 时绑定。
 import { $, apiGet, apiPut, apiPost, setState, state, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
-import { envCheckStatusHTML } from "/js/fx/env.js";
+import { envCheckStatusHTML, toolchainProbeText } from "/js/fx/env.js";
 import { SETTINGS_COLLAPSE_KEY, parseSettingsCollapse, effectiveCollapsed, settingsMasterLabel, settingsSectionHead, applySettingsCollapseState, secretEyeState } from "/js/fx/settings.js";
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
 import { collectResettableKeys } from "/js/fx/reset.js";
@@ -133,7 +133,44 @@ $("set-vision-detail-qa").checked = s.vision_detail_qa !== false;
     $("set-recommend-rounds").value = String(s.recommend_max_rounds ?? 4);
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
+    void refreshToolchainProbes();  // 已保存配置的探测回显（工单 ux-walkthrough-02/06）
   } catch (e) { $("settings-msg").textContent = e.message; }
+}
+
+// 工具链内联探测回显（工单 ux-walkthrough-02/06）：E1 探测结果逐字段显示
+// 「已配置/自动探测到/未找到」；只读探测失败静默（不打扰设置页）。
+async function refreshToolchainProbes() {
+  try {
+    const st = await apiGet("/api/env/status");
+    const map = [
+      ["set-uv4-probe", (st.toolchains || {}).stm32],
+      ["set-gmake-probe", (st.toolchains || {}).mspm0],
+      ["set-ccs-sdk-probe", (st.ccs_tools || {}).sdk],
+      ["set-ccs-compiler-probe", (st.ccs_tools || {}).compiler],
+      ["set-ccs-sysconfig-probe", (st.ccs_tools || {}).sysconfig],
+    ];
+    for (const [spanId, entry] of map) {
+      const el = $(spanId);
+      if (el) el.textContent = toolchainProbeText(entry);
+    }
+  } catch (e) { /* 探测失败静默 */ }
+}
+
+// 体检行「去设置填」跳转（工单 ux-walkthrough-02/06）：展开对应折叠区 →
+// 切设置页签 → 聚焦输入框（与 nav-jump.js 同路径；settings 不 import 它，
+// 保持「无回边」约定——跳转原语在此单点）。
+function bindEnvJumps(box) {
+  box.querySelectorAll(".env-jump").forEach((b) =>
+    b.addEventListener("click", () => {
+      const focus = b.dataset.envJump;
+      if (b.dataset.envCollapse) expandSettingsCollapse(b.dataset.envCollapse);
+      const navBtn = document.querySelector('nav button[data-tab="settings"]');
+      if (navBtn) navBtn.click();
+      if (focus) {
+        const el = $(focus);
+        if (el) { el.focus(); el.scrollIntoView({ block: "center" }); }
+      }
+    }));
 }
 
 // 视觉服务下拉（工单 vision-provider-switch/01）：一键切换 DeepSeek / 智谱
@@ -236,6 +273,7 @@ async function envCheckRun() {
     return;
   }
   box.innerHTML = envCheckStatusHTML(status, "pending", "pending");
+  bindEnvJumps(box);
   const [textRes, visionRes] = await Promise.allSettled([
     apiPost("/api/llm/selfcheck"),
     apiPost("/api/vision/selfcheck"),
@@ -244,6 +282,7 @@ async function envCheckRun() {
     ? { ok: true, data: r.value }
     : { ok: false, msg: (r.reason && r.reason.message) || "请求失败" };
   box.innerHTML = envCheckStatusHTML(status, settleCh(textRes), settleCh(visionRes));
+  bindEnvJumps(box);
   btn.disabled = false;
   btn.textContent = "一键体检";
 }

@@ -222,6 +222,11 @@
   .env-badge.env-err { background: var(--danger); }
   .env-name { flex: 0 0 118px; color: var(--muted); }
   .env-detail { flex: 1; white-space: pre-wrap; word-break: break-all; }
+  /* 体检行「去设置填」跳转按钮（工单 ux-walkthrough-02/06）：缺失项一键跳转 */
+  .env-jump { margin-left: 8px; padding: 2px 10px; font-size: 11px;
+              border-radius: 999px; border: 1px solid var(--border);
+              background: var(--panel); color: var(--accent); cursor: pointer; }
+  .env-jump:hover { border-color: var(--accent); }
   .banner { background: var(--warn-dim); border: 1px solid var(--warn-border); color: var(--warn);
             border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
   .welcome-card { background: var(--info-dim); border: 1px solid var(--info-border); color: var(--info);
@@ -3011,19 +3016,24 @@
 
     <div class="card" data-collapse-id="toolchain">
       <h2>工具链</h2>
-      <div class="settings-section">Keil / gmake</div>
+      <div class="settings-section">Keil UV4（stm32）/ gmake（mspm0）</div>
       <div class="row">
         <div style="flex:1"><label>Keil UV4 路径（留空自动探测）</label><input type="text" id="set-uv4-path" placeholder="C:\Keil5\Core\UV4\UV4.exe"></div>
         <div style="flex:1"><label>gmake 路径（留空走 PATH）</label><input type="text" id="set-gmake-path" placeholder="gmake / make"></div>
       </div>
-      <div class="settings-section">CCS 三件套</div>
+      <div class="muted" id="set-uv4-probe" style="font-size:12px"></div>
+      <div class="muted" id="set-gmake-probe" style="font-size:12px"></div>
+      <div class="settings-section">CCS + MSPM0 SDK（mspm0）</div>
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>CCS SDK 目录（留空自动探测 C:/ti/ccs*）</label><input type="text" id="set-ccs-sdk-dir" placeholder="C:/ti/ccs2051/mspm0_sdk_2_10_00_04"></div>
         <div style="flex:1"><label>CCS 编译器目录（留空自动探测）</label><input type="text" id="set-ccs-compiler-dir" placeholder="C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"></div>
       </div>
+      <div class="muted" id="set-ccs-sdk-probe" style="font-size:12px"></div>
+      <div class="muted" id="set-ccs-compiler-probe" style="font-size:12px"></div>
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>SysConfig CLI 路径（留空自动探测）</label><input type="text" id="set-ccs-sysconfig-cli" placeholder="C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"></div>
       </div>
+      <div class="muted" id="set-ccs-sysconfig-probe" style="font-size:12px"></div>
       <div class="settings-section">烧录工具（工单 flash-deploy/02：留空 = 自动探测）</div>
       <div class="row" style="margin-top:10px">
         <div style="flex:1"><label>OpenOCD 路径（STM32，留空走 PATH）</label><input type="text" id="set-openocd-path" placeholder="openocd / C:\OpenOCD\bin\openocd.exe"></div>
