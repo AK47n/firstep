@@ -13,7 +13,7 @@
 // host 经顶部 import：读 stepDoneSet / STEP_NAV_CARD_SELECTOR，调 markStep* /
 // syncStep7 / stepCard / initCardCollapse（启动区）。
 import { $, toast } from "/js/app.js";
-import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, stepProgress, step7DoneState } from "/js/fx/draft.js";
+import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, stepProgress, step7DoneState, step7WireMode } from "/js/fx/draft.js";
 import { attachCelebrate, syncCollapseBtn, collapseToggleAll } from "/js/fx/generate.js";
 
 export const STEP_NAV_CARD_SELECTOR = "#tab-generate .gen-steps > .card";
@@ -21,6 +21,12 @@ export const STEP_TOTAL = 12;
 export const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
 
 export const stepDoneSet = new Set();
+
+// 步骤 7 布线模式（工单 ux-polish-02/01）：'none' | 'configured' | 'default'。
+// syncStep7 每次重算并广播（step7-wire-changed），总览/卡徽章据此区分
+// 「已配置引脚」与「按默认布线生成（未手动配置）」——完成计数不变，展示不误导。
+let step7Wire = "none";
+export function step7WireGet() { return step7Wire; }
 
 // 跨簇联动接缝：host 启动区注册（总览 / 就绪面板刷新）；18/19 迁出后可继续
 // 用注册模式（避免 generate-steps → step-state 环）。
@@ -61,6 +67,7 @@ export function unmarkSteps(steps) {
 }
 export function syncStep7(env) {
   const roles = env.roles;
+  const generated = stepDoneSet.has(9);
   const done = step7DoneState({
     chosenPlatform: env.platform,
     expandedCount: env.expanded.length,
@@ -68,8 +75,24 @@ export function syncStep7(env) {
     roleBound: roles.some((r) => env.bindings[r.key]),
     instBound: Object.values(env.instances || {}).some((arr) =>
       (arr || []).some((i) => i && i.pin)),
-    generated: stepDoneSet.has(9),
+    generated: generated,
   });
+  const wire = step7WireMode({
+    chosenPlatform: env.platform,
+    expandedCount: env.expanded.length,
+    roles: roles,
+    roleBound: roles.some((r) => env.bindings[r.key]),
+    instBound: Object.values(env.instances || {}).some((arr) =>
+      (arr || []).some((i) => i && i.pin)),
+    generated: generated,
+  });
+  if (wire !== step7Wire) {
+    step7Wire = wire;
+    // 总览/卡徽章区分「已就绪」与「默认布线」（工单 ux-polish-02/01）：
+    // 生成成功路径先 markStepDone(9)（触发 onStepChange 刷新）再 syncStep7，
+    // 故 wire 变化需独立广播才能让徽章拿到最新模式
+    window.dispatchEvent(new CustomEvent("step7-wire-changed"));
+  }
   if (done) markStepDone(7);
   else markStepUndone(7);
 }

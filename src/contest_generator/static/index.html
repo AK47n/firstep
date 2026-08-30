@@ -1350,6 +1350,13 @@
              background: linear-gradient(135deg, #34d399, #059669);
              box-shadow: 0 0 8px rgba(52, 211, 153, .35); }
   .ov-chip.done .ov-label { color: var(--ok); }
+  /* 步骤 7 默认布线（ux-polish-02/01）：完成但未手动配置引脚 → 中性青色标记，
+     区别于绿「已就绪」，避免误导（仅 .done 之上叠加 .wire） */
+  .ov-chip.done.wire { border-color: rgba(0, 212, 255, .35); background: var(--accent-dim); }
+  .ov-chip.done.wire .ov-dot { color: #001018; border-color: transparent;
+             background: linear-gradient(135deg, #33dcff, #00b8de);
+             box-shadow: 0 0 8px rgba(0, 212, 255, .35); }
+  .ov-chip.done.wire .ov-label { color: var(--accent); }
   .ov-chip.warn { border-color: var(--warn-border); background: var(--warn-dim); }
   .ov-chip.warn .ov-dot { color: var(--warn); border-color: var(--warn); }
   .ov-chip.warn .ov-label { color: var(--warn); }
@@ -1418,6 +1425,8 @@
                                   border-color var(--dur-base) var(--ease-ui); }
   .card-step-status.done { color: var(--ok); border-color: rgba(52, 211, 153, .4);
                            background: var(--ok-dim); }
+  .card-step-status.wire { color: var(--accent); border-color: rgba(0, 212, 255, .4);
+                           background: var(--accent-dim); }
   .card-step-status.warn { color: var(--warn); border-color: var(--warn-border);
                            background: var(--warn-dim); }
   .card-step-status.current { color: var(--accent); border-color: rgba(0, 212, 255, .45);

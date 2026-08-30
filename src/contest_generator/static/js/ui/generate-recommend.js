@@ -504,7 +504,6 @@ document.addEventListener("click", (e) => {
 });
 
 export function renderRecommendResult(data, autoAdd = true) {
-  markStepDone(5);  // AI 推荐成功返回即视为完成（含"未推荐到模块"的空结果）
   if (data.topic_id) { currentTopicId = data.topic_id; }  // 粘贴题面被 AI 识别出编号时回填
   renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
   hydrateDecisions(data);  // 已定结论恢复（localStorage → suggestion.decision，工单 buy-discuss/05）
@@ -535,9 +534,11 @@ export function renderRecommendResult(data, autoAdd = true) {
   // requirements[].modules 引用（:528 找 reason 同源），故「模块空 + 某需求
   // 命中」的病态组合不可达；早退后无库外建议也不显示覆盖提示（互斥设计）。
   if (!data.modules.length && !requirements.some((r) => (r.suggestions || []).length) && !groups.length) {
+    markStepUndone(5);  // 空结果不标完成（ux-polish-02/01）：无可用命中 = 步骤 5 未完成
     box.innerHTML = scorePanel + '<div class="muted">AI 没有推荐任何模块——可到「模块库」页添加模块后重试。</div>';
     return;
   }
+  markStepDone(5);  // AI 推荐有可用命中（模块/需求建议/组卡任一非空）即视为完成
   box.innerHTML = scorePanel + groupPanel + requirements.map((r) => `
     <div class="item">
       <div class="head"><span class="slug">句子${r.sentence} · ${esc(r.requirement)}</span></div>
