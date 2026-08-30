@@ -25,7 +25,7 @@ test("taskChangesHTML: 渲染 details + 本轮变化 + 验证徽章", () => {
   const html = taskChangesHTML({ id: "t1" }, verifiedData, { open: true });
   assert.ok(html.startsWith('<details class="task-changes" open>'));
   assert.ok(html.includes("本轮变化"));
-  assert.ok(html.includes("✓ 已验证（编译通过）"));
+  assert.ok(html.includes("✓ 已通过编译验证"));
 });
 
 test("taskChangesHTML: open 缺省 = 不展开（details 无 open 属性）", () => {

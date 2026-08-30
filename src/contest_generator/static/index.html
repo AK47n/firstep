@@ -2273,7 +2273,7 @@
       <h2><span class="step-no">9</span>输出目录并生成</h2>
       <p class="card-purpose">选保存位置，生成完整可编译工程。</p>
       <label style="margin-bottom:8px"><input type="checkbox" id="desktop-topic-output" checked> 在桌面按 AI 赛题名创建文件夹（推荐）</label>
-      <div class="muted" style="margin-bottom:10px">勾选后会忽略手动输出目录，生成到桌面/赛题名；同名目录自动加时间。</div>
+      <div class="muted" style="margin-bottom:10px">勾选后会忽略手动输出目录，生成到桌面/赛题名；同名完整工程会先备份为 .bak 再覆盖（可在结果区恢复旧工程），同题换平台则另建带平台后缀的新目录。</div>
       <label for="output-dir">手动输出目录（取消桌面选项时必填；必须不存在或为空）</label>
       <div class="row">
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
@@ -2489,6 +2489,7 @@
            指引）→ 上板反馈。上下文复用「修订」页签上下文入口的加载结果。 -->
       <div id="tasks-box" class="card-group hidden" style="margin-top:12px">
         <div class="card-group-title">逐步深化（任务推进）</div>
+        <div class="muted" style="margin-bottom:6px">两种深化怎么选：「逐步深化」= 逐任务执行 + 步骤报告（推荐，出了问题好定位）；「直接深化」= 修订页「直接深化（快速兜底）」按钮，一次填完并编译验证（快，但无步骤报告）。</div>
         <details class="card-details">
           <summary>AI 按题面拆成有序任务清单，逐任务执行 + 自动编译验证；每步有步骤报告与上板指引。</summary>
           <div class="card-details-body">每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（「修订」页签的按钮）为快速兜底。</div>

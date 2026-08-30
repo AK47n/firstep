@@ -26,7 +26,7 @@ import {
 test("taskStatusLabel: 词表全覆盖", () => {
   assert.equal(taskStatusLabel("pending"), "待做");
   assert.equal(taskStatusLabel("doing"), "进行中");
-  assert.equal(taskStatusLabel("verified"), "已验证");
+  assert.equal(taskStatusLabel("verified"), "上板通过");
   assert.equal(taskStatusLabel("unverified"), "未验证");
   assert.equal(taskStatusLabel("failed"), "失败");
   assert.equal(taskStatusLabel("skipped"), "已跳过");
@@ -84,7 +84,7 @@ test("taskCardHTML: 前置依赖渲染", () => {
     score_refs: [], depends_on: ["t1"], verify: "compile", status: "verified",
   }, 1, { seqById: { t1: 1, t2: 2 } });
   assert.ok(html.includes("前置：第 1 步"));
-  assert.ok(html.includes("已验证"));
+  assert.ok(html.includes("上板通过"));
 });
 
 test("tasksGridHTML: 空清单占位 + 多卡渲染", () => {
@@ -106,7 +106,7 @@ test("tasksProgressText: verified + skipped 计入完成", () => {
 
 test("verifyStatusMarkup: 三态徽章 + 摘要（深化/任务面板共用单源）", () => {
   const verified = verifyStatusMarkup({ status: "verified", compile: { exit_code: 0, summary: "0 errors" } }, {});
-  assert.ok(verified.badge.includes("已验证"));
+  assert.ok(verified.badge.includes("已通过编译验证"));
   assert.ok(verified.detail.includes("exit 0"));
   const unverified = verifyStatusMarkup({ status: "unverified", compile: {} }, { unverified: "任务自定义降级文案" });
   assert.ok(unverified.badge.includes("未验证"));
