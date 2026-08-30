@@ -651,9 +651,9 @@ function showRecommendQuestions(problem, questions) {
   const box = $("rec-list");
   box.innerHTML = '<div class="warn-box" style="border:1px solid var(--border)">'
     + '<div class="muted">AI 拿不准，需要你确认（回答只用于澄清，不改写题面）：</div>'
-    + questions.map((q, i) => '<div class="item" style="margin-top:6px">' + esc(q)
-      + '<input id="recommend-answer-' + i + '" style="margin-top:4px;width:100%" placeholder="补充说明（可选）"></div>').join("")
-    + '<div class="row" style="margin-top:8px"><button id="btn-recommend-answer" class="primary">补充回答并继续</button></div></div>';
+    + questions.map((q, i) => '<div class="item" style="margin-top: var(--space-2)">' + esc(q)
+      + '<input id="recommend-answer-' + i + '" style="margin-top: var(--space-1);width:100%" placeholder="补充说明（可选）"></div>').join("")
+    + '<div class="row" style="margin-top: var(--space-2)"><button id="btn-recommend-answer" class="primary">补充回答并继续</button></div></div>';
   $("btn-recommend-answer").addEventListener("click", () => {
     // 回答进澄清历史（随请求体发送），题面保持原文——收敛判定依赖题面句子
     // 编号稳定，拼进题面会污染"两轮一致"对照（工单 01）

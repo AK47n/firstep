@@ -99,7 +99,7 @@ export function paramResultHTML(result, dir) {
     failed: "编译验证未通过，参数已写入 main.c（已备份，可回滚）。",
   });
   const backupId = result.backup_id || "";
-  return '<div class="item" style="margin-top:4px">'
+  return '<div class="item" style="margin-top: var(--space-1)">'
     + '<div class="head"><span class="slug">⚙️ 参数修改结果</span> ' + markup.badge + "</div>"
     + '<div class="reason">' + markup.detail + "</div>"
     + (backupId

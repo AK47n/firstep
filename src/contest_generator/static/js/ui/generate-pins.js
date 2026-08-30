@@ -953,7 +953,7 @@ function showPinMenu(pinEl, pinName) {
   if (defaulters.length) {
     rows += `<li class="muted">另有 ${defaulters.length} 个角色默认使用此脚（未绑定，按默认生成）：${defaulters.map((r) => esc(r.decl.label || r.decl.id)).join("、")}——同脚接线请自行确认。</li>`;
   }
-  rows += `<li class="muted" style="font-weight:600;border-top:1px dashed var(--border);margin-top:4px;padding-top:8px">绑定角色到此脚（点条目即绑定）：</li>`;
+  rows += `<li class="muted" style="font-weight:600;border-top:1px dashed var(--border);margin-top: var(--space-1);padding-top:8px">绑定角色到此脚（点条目即绑定）：</li>`;
   rows += roles.filter((r) => pinListsType(pin, r.decl.type)).map((r) => {
     const can = pinCanHost(pin, r.decl);
     const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];

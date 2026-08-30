@@ -41,7 +41,7 @@ test("直接修正面板 renderIdeaFixResult 保留（不绑任务卡，网格�
 });
 
 test("index.html 含 .task-changes 样式（details 容器 + 背景 + summary 指针）", () => {
-  assert.match(html, /\.task-changes \{ margin-top: 8px; border: 1px solid var\(--border\);/);
+  assert.match(html, /\.task-changes \{ margin-top: var\(--space-2\); border: 1px solid var\(--border\);/);
   assert.match(html, /\.task-changes > summary \{ cursor: pointer;/);
   assert.match(html, /\.task-changes-body \{/);
 });

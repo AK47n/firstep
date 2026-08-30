@@ -29,7 +29,7 @@ export function flashResultHTML(data) {
       + esc(data.message || "烧录成功")
       + duration
       + ' <span class="muted">工具：' + esc((data.tool || {}).display || "") + "</span>"
-      + '<div class="muted" style="margin-top:2px">固件：<span class="slug">'
+      + '<div class="muted" style="margin-top: var(--space-1)">固件：<span class="slug">'
       + esc(data.firmware || "") + "</span></div>"
       + flashOutputHTML(data.output)
       + flashCommandHTML(data.command_text)
@@ -61,7 +61,7 @@ export function flashGuideHTML(message) {
  * 空输出 = 空串（不渲染空折叠框）。 */
 export function flashOutputHTML(output) {
   if (!output) return "";
-  return '<details style="margin-top:6px"><summary class="muted">'
+  return '<details style="margin-top: var(--space-2)"><summary class="muted">'
     + "查看烧录输出（尾 40 行）</summary>"
     + '<pre class="result" style="max-height:240px;overflow:auto">'
     + esc(output) + "</pre></details>";
@@ -71,7 +71,7 @@ export function flashOutputHTML(output) {
  * 复制按钮 data-cmd 携带全文（胶水层 document 级委托统一处理）。 */
 export function flashCommandHTML(commandText) {
   if (!commandText) return "";
-  return '<div class="muted" style="margin-top:4px">命令：<span class="slug">'
+  return '<div class="muted" style="margin-top: var(--space-1)">命令：<span class="slug">'
     + esc(commandText) + "</span>"
     + ' <button class="btn-flash-copy-cmd" data-cmd="' + esc(commandText)
     + '">复制</button></div>';
@@ -99,11 +99,11 @@ export function flashContainer(uid) {
 export function flashPanelHTML(dir, uid) {
   if (!dir) return "";
   const c = flashContainer(uid);
-  return '<div class="row" style="margin-top:6px">'
+  return '<div class="row" style="margin-top: var(--space-2)">'
     + '<button class="btn-task-flash" data-task-flash="' + esc(c.uid) + '" data-dir="' + esc(dir) + '">烧录到板子</button>'
     + '<span id="' + esc(c.statusId) + '" class="muted" style="margin-left:8px"></span>'
     + "</div>"
-    + '<div id="' + esc(c.resultId) + '" style="margin-top:6px"></div>';
+    + '<div id="' + esc(c.resultId) + '" style="margin-top: var(--space-2)"></div>';
 }
 
 if (typeof window !== "undefined") {

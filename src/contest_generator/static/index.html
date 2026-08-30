@@ -33,7 +33,7 @@
     --border: #30363d; --border-strong: #3d444d;
     --input-bg: #0d1117; --code-bg: #0a0e14; --code-text: #e2e8f0;
     --text: #e6edf3; --muted: #8b949e;
-    --accent: #00d4ff; --accent-dark: #00a8cc; --accent-dim: rgba(0, 212, 255, .12);
+    --accent: #00d4ff; --accent-dark: #00a8cc; --accent-dim: rgba(var(--accent-rgb), .12);
     --on-accent: #04222b;  /* accent 底上的文字色（button.primary 协议，polish-v2/02 令牌化） */
     --danger: #f85149; --danger-dim: rgba(248, 81, 73, .15);
     --warn: #e3a341; --warn-dim: rgba(227, 163, 65, .12); --warn-border: rgba(227, 163, 65, .35);
@@ -50,7 +50,7 @@
     --shadow-summary: 0 2px 10px rgba(0, 0, 0, .2);
     --shadow-toast: 0 4px 16px rgba(0, 0, 0, .4);
     /* 氛围光/面板高光（工单 ui-polish-11/02）：装饰色令牌化，暗/亮各一套 */
-    --ambient-glow: rgba(0, 212, 255, .07);
+    --ambient-glow: rgba(var(--accent-rgb), .07);
     --card-sheen: rgba(255, 255, 255, .02);
     /* 动效令牌（工单 ui-detail/02）：时长/缓动统一——快=微交互、中=常规、
        慢=面板级过渡；特色动画（呼吸/庆祝/高亮脉冲）不走此表 */
@@ -60,6 +60,18 @@
        胶囊全圆；间距四档（与 .mt-* 工具类对应） */
     --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-full: 999px;
     --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
+    /* 主题相关裸色令牌（工单 ux-walkthrough-02/21）：accent 青 rgba 分通道
+       （rgba(var(--accent-rgb), a) 双主题自动切换）、渐变亮/暗端、青/绿底
+       深色文字、紫渐变端、电源琥珀、ok 光晕、语法高亮 .tok-* 全族 */
+    --accent-rgb: 0, 212, 255;
+    --accent-hi: var(--accent-hi); --accent-lo: var(--accent-lo);
+    --on-accent-deep: var(--on-accent-deep); --on-ok-deep: var(--on-ok-deep);
+    --purple-grad: var(--purple-grad);
+    --power: var(--power);
+    --ok-glow: rgba(126, 231, 135, .25);
+    --tok-com: #3fb950; --tok-str: #d29922; --tok-pre: #8b949e;
+    --tok-kw: #00d4ff; --tok-num: #bc8cff; --tok-tag: #00d4ff;
+    --tok-attr: #bc8cff; --tok-val: #d29922;
   }
   /* 亮色主题（工单 ui-polish-5/01）：GitHub 亮色系，强调色加深保证浅底对比 */
   html[data-theme="light"] {
@@ -68,7 +80,7 @@
     --border: #d0d7de; --border-strong: #afb8c1;
     --input-bg: #ffffff; --code-bg: #f6f8fa; --code-text: #1f2328;
     --text: #1f2328; --muted: #59636e;
-    --accent: #0096c7; --accent-dark: #007ea8; --accent-dim: rgba(0, 150, 199, .12);
+    --accent: #0096c7; --accent-dark: #007ea8; --accent-dim: rgba(var(--accent-rgb), .12);
     --on-accent: #04222b;
     --danger: #cf222e; --danger-dim: rgba(207, 34, 46, .12);
     --warn: #9a6700; --warn-dim: rgba(154, 103, 0, .12); --warn-border: rgba(154, 103, 0, .35);
@@ -84,8 +96,18 @@
     --shadow-item: 0 2px 8px rgba(31, 35, 40, .08);
     --shadow-summary: 0 2px 8px rgba(31, 35, 40, .08);
     --shadow-toast: 0 4px 12px rgba(31, 35, 40, .12);
-    --ambient-glow: rgba(0, 150, 199, .06);
+    --ambient-glow: rgba(var(--accent-rgb), .06);
     --card-sheen: rgba(31, 35, 40, .015);
+    /* 主题相关裸色令牌（亮色配套，工单 ux-walkthrough-02/21） */
+    --accent-rgb: 0, 150, 199;
+    --accent-hi: var(--accent-hi); --accent-lo: var(--accent-lo);   /* 渐变亮/暗端沿用（深底对比换 accent 主色） */
+    --on-accent-deep: var(--on-accent-deep); --on-ok-deep: var(--on-ok-deep);
+    --purple-grad: #8250df;
+    --power: #d97706;
+    --ok-glow: rgba(45, 164, 78, .18);
+    --tok-com: #1a7f37; --tok-str: #9a6700; --tok-pre: #59636e;
+    --tok-kw: #0096c7; --tok-num: #8250df; --tok-tag: #0096c7;
+    --tok-attr: #8250df; --tok-val: #9a6700;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -106,8 +128,8 @@
   /* main.c 错误行定位选区（工单 compile-error-jump/01）：持续高亮——选区即
      定位状态（点其他错误行切换、页面别处点击由浏览器自然清选）。textarea
      内选区与全局规则有跨浏览器差异，此规则显式兜底并更醒目 */
-  #main-c::selection { background: rgba(0, 212, 255, .28); color: #fff; }
-  html[data-theme="light"] #main-c::selection { background: rgba(0, 150, 199, .25); color: inherit; }
+  #main-c::selection { background: rgba(var(--accent-rgb), .28); color: #fff; }
+  html[data-theme="light"] #main-c::selection { background: rgba(var(--accent-rgb), .25); color: inherit; }
   header { background: var(--panel); border-bottom: 1px solid var(--border);
            padding: 6px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
            position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow-header); }
@@ -115,9 +137,9 @@
   header h1 .brand-en { font-family: var(--mono); font-weight: 700; letter-spacing: 1px;
                         display: inline-flex; align-items: baseline; }
   header h1 .brand-en .b1 { color: var(--text); }
-  header h1 .brand-en .b2 { color: var(--accent); text-shadow: 0 0 18px rgba(0, 212, 255, .55); }
+  header h1 .brand-en .b2 { color: var(--accent); text-shadow: 0 0 18px rgba(var(--accent-rgb), .55); }
   header h1 .brand-en .cursor { display: inline-block; width: .6em; height: 1.05em; margin-left: 6px;
-                                background: var(--accent); box-shadow: 0 0 12px rgba(0, 212, 255, .5);
+                                background: var(--accent); box-shadow: 0 0 12px rgba(var(--accent-rgb), .5);
                                 animation: brand-blink 1.1s steps(2, start) infinite; }
   @keyframes brand-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
   header h1 .brand-cn { color: var(--muted); font-size: 11px; font-weight: 500;
@@ -142,12 +164,12 @@
                    background-color var(--dur-base) var(--ease-ui),
                    border-color var(--dur-base) var(--ease-ui); }
   header nav button:hover { color: var(--text); background: var(--accent-dim);
-               border-color: rgba(0, 212, 255, .35); }
-  html[data-theme="light"] header nav button:hover { border-color: rgba(0, 150, 199, .35); }
+               border-color: rgba(var(--accent-rgb), .35); }
+  html[data-theme="light"] header nav button:hover { border-color: rgba(var(--accent-rgb), .35); }
   header nav button.active { color: var(--on-accent); font-weight: 600; border-color: transparent;
-                       background: linear-gradient(90deg, var(--accent), #8b5cf6);
-                       box-shadow: 0 2px 10px rgba(0, 212, 255, .25); }
-  html[data-theme="light"] header nav button.active { box-shadow: 0 1px 6px rgba(0, 150, 199, .25); }
+                       background: linear-gradient(90deg, var(--accent), var(--purple-grad));
+                       box-shadow: 0 2px 10px rgba(var(--accent-rgb), .25); }
+  html[data-theme="light"] header nav button.active { box-shadow: 0 1px 6px rgba(var(--accent-rgb), .25); }
   /* 顶部导航 tab 分组：组容器只保留 aria-label（可访问名），无可见标签文字；
      组间细分隔线；窄屏组内换行不破（header 已 flex-wrap，nav 自身再兜底一层） */
   header > nav { flex-wrap: wrap; }
@@ -222,7 +244,7 @@
   .btn-pill--md { border-radius: var(--radius-full); }
   .btn-icon { padding: 4px 8px; line-height: 1; border-radius: var(--radius-sm); }
   .muted { color: var(--muted); font-size: 12px; }
-  .error { color: var(--danger); font-size: 14px; margin-top: 8px; white-space: pre-wrap; }
+  .error { color: var(--danger); font-size: 14px; margin-top: var(--space-2); white-space: pre-wrap; }
   .ok { color: var(--ok); }
   .env-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .env-row:last-child { border-bottom: none; }
@@ -249,8 +271,8 @@
   .welcome-card .welcome-line { opacity: .92; }
   /* 生成页底部新手词表（工单 newcomer-glossary/01）：复用 .card-details
      折叠样式，容器只负责与步骤列对齐；词条间距在 .glossary-item 上。 */
-  .glossary-card { margin-top: 16px; }
-  .glossary-card .glossary-item { margin-top: 6px; line-height: 1.65; }
+  .glossary-card { margin-top: var(--space-5); }
+  .glossary-card .glossary-item { margin-top: var(--space-2); line-height: 1.65; }
   .platform-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px;
                    cursor: pointer; flex: 1; min-width: 220px; background: var(--panel); }
   .platform-card:hover { border-color: var(--border-strong); }
@@ -271,7 +293,7 @@
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), var(--shadow-item); }
   .item .head { display: flex; gap: 8px; align-items: center; }
   .item .slug { font-weight: 600; font-family: var(--mono); }
-  .item .reason { color: var(--muted); font-size: 14px; margin-top: 6px; line-height: 1.7; }
+  .item .reason { color: var(--muted); font-size: 14px; margin-top: var(--space-2); line-height: 1.7; }
   /* 步骤 6 紧凑清单（工单 step6-ui）：滚动 + 两行布局 + 搜索 */
   .selected-scroll { max-height: 240px; overflow-y: auto; overflow-x: hidden;
                      border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -282,7 +304,7 @@
   .selected-scroll .item .head { flex-wrap: wrap; gap: 6px; min-width: 0; }
   .selected-scroll .desc { display: block; max-width: 100%; overflow: hidden;
                            text-overflow: ellipsis; white-space: nowrap;
-                           color: var(--muted); font-size: 12px; margin-top: 2px; }
+                           color: var(--muted); font-size: 12px; margin-top: var(--space-1); }
   /* 模块选择网格（工单 module-grid/01）：卡片网格 + 平台不兼容置灰 */
   .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
                  gap: 10px; }
@@ -299,10 +321,10 @@
   .module-card .mc-offtag { flex: none; font-size: 11px; padding: 1px 6px; border-radius: var(--radius-full);
                             background: var(--warn-dim); color: var(--warn);
                             border: 1px solid var(--warn-border); }
-  .module-card .mc-desc { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.5;
+  .module-card .mc-desc { margin-top: var(--space-2); color: var(--muted); font-size: 12px; line-height: 1.5;
                           min-height: 36px; display: -webkit-box; -webkit-line-clamp: 2;
                           -webkit-box-orient: vertical; overflow: hidden; }
-  .module-card .mc-meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .module-card .mc-meta { margin-top: var(--space-2); display: flex; flex-wrap: wrap; gap: 6px; }
   .module-card .mc-plat { font-size: 11px; padding: 1px 6px; border-radius: var(--radius-full); white-space: nowrap; }
   .module-card .mc-plat.ok { background: var(--ok-dim); color: var(--ok-bright); }
   .module-card .mc-plat.hw { background: var(--info-dim); color: var(--info); }
@@ -332,16 +354,16 @@
   .module-info-scroll { overflow-y: auto; }
   .module-info-body { padding: 12px 14px; font-size: 13px; }
   .module-info-title .slug { font-family: var(--mono); font-weight: 600; font-size: 14px; }
-  .module-info-title .desc { margin-top: 4px; color: var(--text); line-height: 1.5;
+  .module-info-title .desc { margin-top: var(--space-1); color: var(--text); line-height: 1.5;
                              word-break: break-all; }
-  .module-info-off { margin-top: 8px; padding: 5px 10px; border-radius: var(--radius-sm);
+  .module-info-off { margin-top: var(--space-2); padding: 5px 10px; border-radius: var(--radius-sm);
                      background: var(--warn-dim); color: var(--warn);
                      border: 1px solid var(--warn-border); font-size: 12px; }
   .module-info-rows { list-style: none; margin: 10px 0 0; padding: 0; }
   .module-info-rows .mi-row { display: flex; gap: 10px; padding: 3px 0; font-size: 12px;
                               color: var(--muted); }
   .module-info-rows .mi-k { flex: none; color: var(--text); }
-  .module-info-platforms { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .module-info-platforms { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 10px; }
   .mi-plat { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px;
              background: var(--panel-2); }
   .mi-plat h4 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
@@ -354,7 +376,7 @@
   .mi-files li { padding: 1px 0; word-break: break-all; }
   .mi-note { font-size: 12px; color: var(--muted); margin: 2px 0; }
   .mi-note a { color: var(--accent); text-decoration: none; }
-  .mi-pins { margin-top: 6px; border-collapse: collapse; width: 100%; font-size: 12px; }
+  .mi-pins { margin-top: var(--space-2); border-collapse: collapse; width: 100%; font-size: 12px; }
   .mi-pins th, .mi-pins td { border: 1px solid var(--border); padding: 3px 8px;
                              text-align: left; }
   .mi-pins th { background: var(--panel); color: var(--muted); font-weight: 600; }
@@ -375,7 +397,7 @@
                   background: var(--panel-2); color: var(--muted); font-size: 13px;
                   line-height: 1.5; word-break: break-all; margin-bottom: 10px; }
   .lib-edit-body textarea { width: 100%; min-height: 96px; resize: vertical; }
-  .lib-edit-msg { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; }
+  .lib-edit-msg { color: var(--danger); font-size: 12.5px; margin-top: var(--space-2); min-height: 1em; }
   .lib-edit-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px;
                    border-top: 1px solid var(--border); flex: none; }
   /* 编辑弹窗（library-edit-dialog/06）：复用 .lib-edit-* 模态骨架，内部 .lib-mod-* 字段区 */
@@ -387,7 +409,7 @@
   .lib-mod-files .fname { word-break: break-all; }
   .lib-mod-files .file-del { font-size: 11px; padding: 1px 6px; flex: none; }
   .lib-mod-files .muted { font-family: inherit; }
-  .lib-mod-msg { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; }
+  .lib-mod-msg { color: var(--danger); font-size: 12.5px; margin-top: var(--space-2); min-height: 1em; }
   .lib-mod-msg.ok { color: var(--ok); }
   /* 添加模块分区折叠（library-add-collapse/07）：折叠视觉与设置页整卡折叠同一语言
      （分区块头常驻 + ▾ 旋转 + 内容区 display:none——不销毁 DOM，收起不丢状态） */
@@ -429,13 +451,13 @@
   .fix-row .fix-file { font-family: var(--mono); font-weight: 600; }
   .fix-row .fix-msg { color: var(--muted); flex: 1 1 260px; word-break: break-all; }
   .fix-row .fix-source { flex-basis: 100%; font-family: var(--mono); font-size: 12px;
-                         border-top: 1px dashed var(--border); margin-top: 6px;
+                         border-top: 1px dashed var(--border); margin-top: var(--space-2);
                          padding-top: 6px; color: var(--text); white-space: pre-wrap; }
   .fix-row .fix-source-err { color: var(--danger); }
   /* 推荐卡片（工单 10）：库内命中 chips 可勾选/移除；库外建议灰色 + 需自备 */
-  .rec-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+  .rec-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-3); align-items: center; }
   /* 零库外建议主动提示（工单 recommend-covered-note/01）：信息性说明，不引警示色 */
-  .rec-covered-note { margin-top: 12px; font-size: 12.5px; }
+  .rec-covered-note { margin-top: var(--space-4); font-size: 12.5px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
           border-radius: var(--radius-lg); font-size: 13px; font-family: var(--mono);
           border: 1px solid var(--border); }
@@ -455,7 +477,7 @@
   .sugg-count { font-size: 11px; opacity: .85; border: 1px solid var(--border);
                 border-radius: var(--radius-md); padding: 0 6px; margin-left: 2px; }
   .sugg-panel { display: none; flex-basis: 100%; border: 1px dashed var(--border);
-                border-radius: var(--radius-md); padding: 8px 12px; margin-top: 6px;
+                border-radius: var(--radius-md); padding: 8px 12px; margin-top: var(--space-2);
                 background: var(--panel-2); }
   .sugg-wrap.active .sugg-panel { display: block; }
   .sugg-panel-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
@@ -465,8 +487,8 @@
   .sugg-name { font-weight: 600; font-family: var(--mono); }
   .sugg-meta { font-family: var(--mono); font-size: 12px; color: var(--muted);
                border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 6px; }
-  .sugg-note { margin-top: 2px; font-size: 12.5px; color: var(--text); }
-  .sugg-suitable { margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .sugg-note { margin-top: var(--space-1); font-size: 12.5px; color: var(--text); }
+  .sugg-suitable { margin-top: var(--space-1); font-size: 12px; color: var(--muted); }
   /* 绿系 = 正面态（词表推荐 / 库内已有 / 已定方案；工单 wordlist-lib-modules/02） */
   .badge.sugg-rec, .badge.sugg-lib, .badge.sugg-decided {
     background: var(--ok-dim); color: var(--ok-bright); }
@@ -479,11 +501,11 @@
   /* ===== AI 对话区统一视觉（polish-chat/01）：气泡化 + 卡片容器 + 胶囊输入 =====
      四区共用：任务卡商量 / 全局商量 / 参数速调咨询（.task-dialog-box）
      与买件商量（.sugg-discuss-box）——零结构变更，纯视觉升级。 */
-  .sugg-discuss { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+  .sugg-discuss { margin-top: var(--space-3); border-top: 1px dashed var(--border); padding-top: 10px; }
   .sugg-discuss-toggle { font-size: 12.5px; border-radius: var(--radius-full); padding: 3px 12px;
                          background: var(--accent-dim); border-color: var(--accent); }
   .sugg-discuss-toggle:hover { background: var(--accent); color: var(--panel); }
-  .sugg-discuss-box { display: none; margin-top: 10px; border: 1px solid var(--border);
+  .sugg-discuss-box { display: none; margin-top: var(--space-3); border: 1px solid var(--border);
                       background: var(--panel); border-radius: var(--radius-lg); padding: 10px 12px; }
   .sugg-discuss-box.open { display: block; }
   .sugg-discuss-msgs { max-height: 200px; overflow-y: auto; display: flex;
@@ -506,14 +528,14 @@
   .sugg-msg .muted { font-size: 11px; opacity: .75; margin-left: 4px; }
   .sugg-discuss-row { display: flex; gap: 8px; align-items: center; }
   .sugg-discuss-input { flex: 1; min-width: 0; border-radius: var(--radius-full); padding: 8px 14px; }
-  .sugg-discuss-note { font-size: 11.5px; margin-top: 8px; color: var(--muted); }
+  .sugg-discuss-note { font-size: 11.5px; margin-top: var(--space-2); color: var(--muted); }
   /* 忙态提示呼吸闪烁（仅「AI 回应中」note——买件商量常驻提示带 .muted，不闪） */
   .sugg-discuss-note:not(.muted) { animation: chat-busy-pulse 1.4s ease-in-out infinite; }
   @keyframes chat-busy-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .sugg-discuss-note:not(.muted) { animation: none; } }
   /* 任务卡「和 AI 商量」对话区（工单 task-chat/03）：面板样式复用
      .sugg-discuss-*（买件商量同一套），仅容器留白 + 采纳按钮小字 */
-  .task-dialog-box { margin-top: 10px; border: 1px solid var(--border);
+  .task-dialog-box { margin-top: var(--space-3); border: 1px solid var(--border);
                      background: var(--panel); border-radius: var(--radius-lg);
                      padding: 10px 12px; }
   .task-dialog-box .sugg-discuss-msgs { max-height: 240px; }
@@ -556,9 +578,9 @@
      （z-index 高于相邻卡，超界不裁——.item 无 overflow:hidden） */
   .task-edit-form { padding: 8px; border: 1px solid var(--border);
                      border-radius: var(--radius-md); background: var(--panel-2); }
-  .task-edit-form label { display: block; margin-top: 6px; font-size: 12px; }
+  .task-edit-form label { display: block; margin-top: var(--space-2); font-size: 12px; }
   .task-edit-form input, .task-edit-form textarea, .task-edit-form select {
-                     width: 100%; margin-top: 2px; }
+                     width: 100%; margin-top: var(--space-1); }
   .task-edit-form .row { justify-content: flex-start; }
   .btn-task-edit-save, .btn-task-edit-cancel { font-size: 12px; padding: 1px 8px; }
   .task-more-details { position: relative; }
@@ -671,13 +693,13 @@
   .topic-preread .preread-group-title { font-size: 12.5px; font-weight: 600; color: var(--info);
                                         margin: 8px 0 2px; }
   .topic-preread .preread-item { border-left: 2px solid var(--info-border); padding-left: 10px;
-                                 margin-top: 4px; }
+                                 margin-top: var(--space-1); }
   .topic-preread .preread-quote { font-size: 12px; color: var(--muted); margin-top: 1px; }
   /* 步骤卡顶部题面提醒横幅（工单 topic-preread/03）：amber 色调与 error 红色区分 */
   .preread-slot { background: var(--warn-dim); border: 1px solid var(--warn-border);
                   border-left: 3px solid var(--warn); border-radius: var(--radius-md); padding: 8px 12px;
-                  margin-top: 8px; font-size: 12.5px; line-height: 1.7; color: var(--text); }
-  .preread-slot-line + .preread-slot-line { margin-top: 4px; }
+                  margin-top: var(--space-2); font-size: 12.5px; line-height: 1.7; color: var(--text); }
+  .preread-slot-line + .preread-slot-line { margin-top: var(--space-1); }
   .preread-slot .preread-slot-quote { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
   .warn-box { border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 6px; font-size: 14px; line-height: 1.7; }
   .warn-box.missing { background: var(--danger-dim); color: var(--danger); }
@@ -822,7 +844,7 @@
              border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; }
   .sp-item:hover { background: var(--panel); border-color: var(--border); }
   .sp-item.done { background: var(--ok-dim); border-color: rgba(63, 185, 80, .25); }
-  .sp-item input[type="checkbox"] { margin-top: 3px; accent-color: var(--ok); flex: none; }
+  .sp-item input[type="checkbox"] { margin-top: var(--space-1); accent-color: var(--ok); flex: none; }
   .sp-line { font-size: 12.5px; line-height: 1.6; color: var(--text);
              overflow-wrap: break-word; min-width: 0; }
   .sp-item.done .sp-line { color: var(--muted); }
@@ -852,7 +874,7 @@
   .decision { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px;
               margin-bottom: 6px; font-size: 14px; background: var(--panel-2); }
   .decision .path { font-family: var(--mono); font-weight: 600; }
-  .decision .reason { color: var(--muted); margin-top: 2px; }
+  .decision .reason { color: var(--muted); margin-top: var(--space-1); }
   .decision select { width: auto; margin-left: 8px; padding: 2px 6px 2px 18px; font-size: 12px;
                      background-position: right 5px center; }
   .hidden { display: none; }
@@ -887,7 +909,7 @@
     .spinner, .brand-breathe, .ai-action-banner::before { animation: none; }
   }
   /* ---- 提炼进度区（工单 03：stepper + 批进度 + 双计时器 + 补问徽标 + 可折叠日志） ---- */
-  .distill-progress { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  .distill-progress { margin-top: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md);
                       padding: 10px 14px; background: var(--panel-2); }
   .stepper { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
   .stepper .step { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
@@ -910,10 +932,10 @@
   .prog-badge { display: inline-block; background: var(--warn-dim); color: var(--warn);
                 border: 1px solid var(--warn-border); border-radius: var(--radius-md); font-size: 11px;
                 padding: 0 8px; }
-  .prog-log-head { display: flex; gap: 6px; align-items: center; margin-top: 6px; cursor: pointer;
+  .prog-log-head { display: flex; gap: 6px; align-items: center; margin-top: var(--space-2); cursor: pointer;
                    user-select: none; font-size: 12px; color: var(--muted); }
   .prog-log-head:hover { color: var(--accent); }
-  .prog-log { margin-top: 6px; max-height: 220px; overflow-y: auto; font-size: 12px;
+  .prog-log { margin-top: var(--space-2); max-height: 220px; overflow-y: auto; font-size: 12px;
               font-family: var(--mono); border-top: 1px dashed var(--border);
               padding-top: 6px; }
   .prog-log .line { padding: 2px 0; color: var(--text); word-break: break-all; }
@@ -924,7 +946,7 @@
   .prog-log .file-list { margin: 0 0 4px 22px; color: var(--muted); white-space: pre-wrap;
                          word-break: break-all; }
   .prog-done { font-size: 13px; color: var(--ok); font-weight: 600; }
-  .llm-telemetry { margin-top: 8px; font-size: 12px; color: var(--muted);
+  .llm-telemetry { margin-top: var(--space-2); font-size: 12px; color: var(--muted);
                    font-family: var(--mono); line-height: 1.6; }
   /* ---- 最近 LLM 工作流（llm-observability-dashboard/03）：设置页只读仪表盘 ---- */
   .recent-wf-list { display: flex; flex-direction: column; gap: 8px; }
@@ -958,7 +980,7 @@
   .ref-files-viewer pre { margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto;
                           font-size: 12px; font-family: var(--mono); background: var(--code-bg);
                           white-space: pre-wrap; word-break: break-all; }
-  .ref-matched { margin-top: 4px; font-size: 12px; font-family: var(--mono);
+  .ref-matched { margin-top: var(--space-1); font-size: 12px; font-family: var(--mono);
                  line-height: 1.7; }
   .ref-matched a { color: var(--accent); text-decoration: none; cursor: pointer;
                    display: block; word-break: break-all; }
@@ -1013,7 +1035,7 @@
   ::-webkit-scrollbar-corner { background: transparent; }
   * { scrollbar-width: thin; scrollbar-color: var(--border-strong) var(--bg); }
   /* 设置页卡内小节（工单 ui-polish-9/03）：muted 小标题 + 虚线分隔 */
-  .settings-section { margin-top: 14px; padding-top: 10px;
+  .settings-section { margin-top: var(--space-4); padding-top: 10px;
                       border-top: 1px dashed var(--border);
                       font-size: 12px; font-weight: 600; color: var(--muted); }
   /* 设置页计费小节折叠（工单 settings-infoarch/02）：头部按钮即包装块标题；
@@ -1067,16 +1089,16 @@
   .pin-role:hover { border-color: var(--accent); }
   .pin-role.bound { border-left: 3px solid var(--accent); }
   .pin-role.unbound { border-color: var(--danger); background: var(--danger-dim); }
-  .pin-role .role-status { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .pin-role .role-status { font-size: 12px; color: var(--muted); margin-top: var(--space-1); }
   .pin-role .role-status button { padding: 1px 8px; font-size: 12px; margin-left: 6px; }
-  .pin-toggle-optional { margin-top: 8px; padding: 3px 10px; font-size: 12px; }
+  .pin-toggle-optional { margin-top: var(--space-2); padding: 3px 10px; font-size: 12px; }
   .role-type { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: var(--radius-xs);
                font-family: var(--mono); margin-right: 6px; }
-  .pin-fixed-list { margin-top: 10px; max-width: 460px; }
+  .pin-fixed-list { margin-top: var(--space-3); max-width: 460px; }
   .pin-fixed-list .fx { display: inline-block; margin: 2px 8px 2px 0; padding: 1px 8px;
                         border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
                         font-size: 12px; color: var(--muted); }
-  .pin-warn-list { margin-top: 4px; max-width: 460px; }
+  .pin-warn-list { margin-top: var(--space-1); max-width: 460px; }
   .pin-warn-list .wx { display: inline-block; margin: 2px 8px 2px 0; padding: 1px 8px;
                        border: 1px solid var(--warn); border-radius: var(--radius-md);
                        font-size: 12px; color: var(--warn); }
@@ -1101,7 +1123,7 @@
   .pin-default-cand { stroke: var(--danger); stroke-width: 3; }
   .pin-default-dot { fill: var(--danger); filter: drop-shadow(0 0 3px var(--danger)); }
   .pin-board-caption { fill: var(--muted); font-size: 11px; }
-  #pin-board-caption { text-align: center; color: var(--muted); font-size: 12px; margin-top: 4px; }
+  #pin-board-caption { text-align: center; color: var(--muted); font-size: 12px; margin-top: var(--space-1); }
   /* 引脚锚定浮层菜单（复用 .ref-files-overlay 模式：全屏遮罩 + 弹层 + Esc 关闭） */
   .pin-menu-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); z-index: 150; }
   .pin-menu { position: absolute; background: var(--panel); border: 1px solid var(--border);
@@ -1118,7 +1140,7 @@
   .pin-menu-list li.can:hover { background: var(--panel-2); }
   .pin-menu-list li.cant { opacity: .5; }
   .pin-menu-list li .why, .pin-menu-list li .fam { display: block; font-size: 11px;
-                                                   margin-top: 2px; }
+                                                   margin-top: var(--space-1); }
   .pin-menu-list li .why { color: var(--muted); }
   .pin-menu-list li .fam { color: var(--warn); }
   .pin-menu-list .pin-menu-unbind { float: right; padding: 1px 8px; font-size: 12px; }
@@ -1136,7 +1158,7 @@
   .instance-row select { width: auto; padding: 5px 8px; }
   .instance-row .instance-pin { display: inline-flex; gap: 4px; align-items: center; }
   .instance-row .instance-pin input[type=text] { width: 74px; flex: none; font-family: var(--mono); }
-  .instance-actions { margin-top: 8px; display: flex; gap: 10px; align-items: center; }
+  .instance-actions { margin-top: var(--space-2); display: flex; gap: 10px; align-items: center; }
   .instance-picking { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
   /* ---- UI 打磨（工单 ui-polish/01）：过渡 / 渐变 / 微光 / 空状态 ---- */
   button, input, textarea, select, .card, .item, .platform-card, .chip, .fix-row,
@@ -1153,40 +1175,40 @@
   button.primary {
     background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
     border-color: transparent;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 10px rgba(0, 212, 255, .16); }
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 10px rgba(var(--accent-rgb), .16); }
   button.primary:hover {
-    background: linear-gradient(135deg, #33dcff 0%, #00b8de 100%);
-    box-shadow: 0 0 18px rgba(0, 212, 255, .45), 0 2px 10px rgba(0, 212, 255, .22);
+    background: linear-gradient(135deg, var(--accent-hi) 0%, var(--accent-lo) 100%);
+    box-shadow: 0 0 18px rgba(var(--accent-rgb), .45), 0 2px 10px rgba(var(--accent-rgb), .22);
     transform: translateY(-1px); }
-  button.primary:active { transform: translateY(0); box-shadow: 0 0 8px rgba(0, 212, 255, .3); }
+  button.primary:active { transform: translateY(0); box-shadow: 0 0 8px rgba(var(--accent-rgb), .3); }
   /* 主按钮呼吸微光（工单 ui-polish-9/01；ui-polish-11/04 收敛为关键 CTA 专属）：
      只有 .primary.breathe（生成工程/让 AI 推荐/一键编译修复/确认入库/保存设置）
      常态青色外光循环，disabled 无光，hover 暂停让增强阴影生效；只动 box-shadow
      不碰 transform（避免与 hover 上浮 / active 下压冲突） */
   @keyframes btn-breathe {
-    0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 10px rgba(0, 212, 255, .16); }
-    50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 0 18px rgba(0, 212, 255, .42); }
+    0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 10px rgba(var(--accent-rgb), .16); }
+    50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 0 18px rgba(var(--accent-rgb), .42); }
   }
   button.primary.breathe:not(:disabled) { animation: btn-breathe 2.8s ease-in-out infinite; }
   button.primary.breathe:hover { animation-play-state: paused; }
   @media (prefers-reduced-motion: reduce) { button.primary.breathe:not(:disabled) { animation: none; } }
   .step-no { background: linear-gradient(135deg, #00d4ff, #0094b5);
-             box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 0 10px rgba(0, 212, 255, .3); }
+             box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 0 10px rgba(var(--accent-rgb), .3); }
   .brand-en .b2 { animation: brand-breathe 3.2s ease-in-out infinite; }
   @keyframes brand-breathe {
-    0%, 100% { text-shadow: 0 0 10px rgba(0, 212, 255, .35); }
-    50% { text-shadow: 0 0 24px rgba(0, 212, 255, .85); } }
+    0%, 100% { text-shadow: 0 0 10px rgba(var(--accent-rgb), .35); }
+    50% { text-shadow: 0 0 24px rgba(var(--accent-rgb), .85); } }
   /* 空状态（表格行 / 独立区块两用） */
   .empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px;
                  padding: 30px 16px; text-align: center; color: var(--muted); }
   .empty-state .es-icon { font-size: 30px; line-height: 1; opacity: .8;
-                          filter: drop-shadow(0 0 10px rgba(0, 212, 255, .3)); }
+                          filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), .3)); }
   .empty-state .es-title { font-size: 13px; font-weight: 600; color: var(--text); }
   .empty-state .es-hint { font-size: 12px; line-height: 1.8; max-width: 400px; }
   table td.empty-td { padding: 0; border-bottom: none; }
   /* 赛题库卡片网格（工单 ui-polish-9/02）：编号徽章 + 年份 chip + 题面预览 */
   .topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                gap: 12px; margin-top: 12px; }
+                gap: 12px; margin-top: var(--space-4); }
   .topic-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px;
                 background: var(--panel); display: flex; flex-direction: column; gap: 8px;
                 transition: border-color var(--dur-base) var(--ease-ui),
@@ -1227,12 +1249,12 @@
     flex-shrink: 0; }
   .topic-detail-problem.expanded { max-height: none; }
   .topic-detail-prog { display: block; font-size: 12px; line-height: 1.6; }
-  .topic-detail-actions { display: flex; gap: 8px; margin-top: 12px; }
-  .topic-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px;
+  .topic-detail-actions { display: flex; gap: 8px; margin-top: var(--space-4); }
+  .topic-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: var(--space-2);
     flex-shrink: 0; }
   .topic-page { margin: 0; }
   .topic-page img { max-width: 300px; border: 1px solid var(--border);
-    border-radius: var(--radius-sm); background: #fff; box-shadow: var(--shadow-item); }
+    border-radius: var(--radius-sm); background: #fff; box-shadow: var(--shadow-item); }  /* 扫描件白底：纸面图片有意保留白底（不随主题） */
   .topic-page figcaption { font-size: 11px; color: var(--muted); text-align: center; }
   /* 母版详情弹窗（工单 master-library-ui/04）：关键文件清单行 + 内容 pre-wrap */
   .master-modal { max-width: 860px; }
@@ -1267,14 +1289,14 @@
   .master-tree-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
   /* 内容箱复制条（工单 master-library-ui-2/03）：预留在 pre 上方，右对齐 */
-  .master-content-bar { display: flex; justify-content: flex-end; margin-top: 6px; }
+  .master-content-bar { display: flex; justify-content: flex-end; margin-top: var(--space-2); }
   .master-copy-btn { padding: 3px 12px; font-size: 12px; }
   /* 母版库工具栏 + 导入确认弹窗（工单 master-library-ui-2/04） */
   .master-lib-toolbar { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px; }
   .confirm-modal { max-width: 460px; }
   .confirm-message { font-size: 13px; line-height: 1.7; white-space: pre-wrap;
                      padding: 10px 14px; }
-  .import-platform-field { margin-top: 10px; }
+  .import-platform-field { margin-top: var(--space-3); }
   .import-platform-field label { font-size: 12px; font-weight: 600; display: block;
     margin-bottom: 4px; }
   .import-platform-field select { width: 100%; box-sizing: border-box; }
@@ -1284,14 +1306,14 @@
     margin: 6px 0 0; background: var(--bg); border: 1px solid var(--border);
     border-radius: var(--radius-md); font-family: var(--mono); }
   /* 编辑弹窗（工单 topic-library-ui/05）：表单字段 / 功能组勾选 */
-  .topic-edit-field { margin-top: 10px; }
+  .topic-edit-field { margin-top: var(--space-3); }
   .topic-edit-field label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
   .topic-edit-field textarea { width: 100%; box-sizing: border-box; margin: 0;
     font-family: var(--mono); font-size: 12px; line-height: 1.6; }
   .topic-edit-groups { display: flex; flex-direction: column; gap: 4px; }
   .topic-edit-group { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
-  .topic-edit-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-  .topic-edit-msg { margin-top: 8px; }
+  .topic-edit-foot { display: flex; align-items: center; gap: 8px; margin-top: var(--space-4); }
+  .topic-edit-msg { margin-top: var(--space-2); }
   .topic-preview { font-size: 13px; color: var(--muted); line-height: 1.55;
                    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
                    overflow: hidden; }
@@ -1310,7 +1332,7 @@
                 top: calc(var(--header-h) + 14px); align-self: flex-start; }
     .step-nav { display: flex; flex-direction: column; gap: 4px;
                 padding: 4px 0; width: 100%; }
-    .gen-sidebar .glossary-card { margin-top: 12px; }
+    .gen-sidebar .glossary-card { margin-top: var(--space-4); }
     .gen-sidebar .glossary-card .card-details-body {
                 max-height: max(120px, min(calc(100vh - 640px), 460px)); overflow: auto; }
     .step-nav .step-dot { display: flex; align-items: center; gap: 8px;
@@ -1329,22 +1351,22 @@
                 transition: color var(--dur-slow) var(--ease-ui); }
     .step-nav .step-dot:hover { border-color: var(--border-strong); }
     .step-nav .step-dot:hover .dot { color: var(--text); border-color: var(--accent);
-                box-shadow: 0 0 8px rgba(0, 212, 255, .35); }
+                box-shadow: 0 0 8px rgba(var(--accent-rgb), .35); }
     .step-nav .step-dot:hover .label { color: var(--text); }
     .step-nav .step-dot.current { background: var(--accent-dim);
-                border-color: rgba(0, 212, 255, .45); }
-    .step-nav .step-dot.current .dot { color: #001018; border-color: transparent;
-                background: linear-gradient(135deg, #33dcff, #00b8de);
-                box-shadow: 0 0 12px rgba(0, 212, 255, .5); }
+                border-color: rgba(var(--accent-rgb), .45); }
+    .step-nav .step-dot.current .dot { color: var(--on-accent-deep); border-color: transparent;
+                background: linear-gradient(135deg, var(--accent-hi), var(--accent-lo));
+                box-shadow: 0 0 12px rgba(var(--accent-rgb), .5); }
     .step-nav .step-dot.current .label { color: var(--text); font-weight: 600; }
-    .step-nav .step-dot.done .dot { color: #04170c; border-color: transparent;
-                background: linear-gradient(135deg, #34d399, #059669);
-                box-shadow: 0 0 10px rgba(52, 211, 153, .4); }
+    .step-nav .step-dot.done .dot { color: var(--on-ok-deep); border-color: transparent;
+                background: linear-gradient(135deg, var(--ok-bright), var(--ok));
+                box-shadow: 0 0 10px var(--ok-glow); }
     .step-nav .step-dot.done .label { color: var(--ok); }
     /* warn 态（工单 ui-detail/01）：与顶部总览 chips / 卡片徽章三处同构——
        黄 dot + warn-dim 底色 + 黄 label；done 补容器底色（ok-dim）对齐另两处 */
     .step-nav .step-dot.done { background: var(--ok-dim);
-                border-color: rgba(52, 211, 153, .35); }
+                border-color: var(--ok-glow); }
     .step-nav .step-dot.warn { background: var(--warn-dim);
                 border-color: var(--warn-border); }
     .step-nav .step-dot.warn .dot { color: var(--warn); border-color: var(--warn); }
@@ -1356,8 +1378,8 @@
     .gen-steps { order: 1; }
     .gen-sidebar { order: 2; }
   }
-  .card.done .step-no { background: linear-gradient(135deg, #34d399, #059669);
-             box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 0 10px rgba(52, 211, 153, .35); }
+  .card.done .step-no { background: linear-gradient(135deg, var(--ok-bright), var(--ok));
+             box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 0 10px var(--ok-glow); }
   /* 生成页就绪总览条（工单 gen-overview/01）：顶部步骤 chips + 摘要；状态与
      左侧 step-nav / stepDoneSet 同源（done ✓ 绿 / current 青 / warn ⚠ 黄），
      窄屏（step-nav 隐藏）时兼作唯一步骤导航。
@@ -1384,27 +1406,27 @@
              transition: all var(--dur-base) var(--ease-ui); }
   .ov-chip .ov-label { max-width: 7.5em; overflow: hidden; text-overflow: ellipsis;
              white-space: nowrap; }
-  .ov-chip.current { border-color: rgba(0, 212, 255, .45); background: var(--accent-dim); }
+  .ov-chip.current { border-color: rgba(var(--accent-rgb), .45); background: var(--accent-dim); }
   .ov-chip.current .ov-label { color: var(--text); font-weight: 600; }
-  .ov-chip.current .ov-dot { color: #001018; border-color: transparent;
-             background: linear-gradient(135deg, #33dcff, #00b8de);
-             box-shadow: 0 0 10px rgba(0, 212, 255, .45); }
-  .ov-chip.done { border-color: rgba(52, 211, 153, .35); background: var(--ok-dim); }
-  .ov-chip.done .ov-dot { color: #04170c; border-color: transparent;
-             background: linear-gradient(135deg, #34d399, #059669);
-             box-shadow: 0 0 8px rgba(52, 211, 153, .35); }
+  .ov-chip.current .ov-dot { color: var(--on-accent-deep); border-color: transparent;
+             background: linear-gradient(135deg, var(--accent-hi), var(--accent-lo));
+             box-shadow: 0 0 10px rgba(var(--accent-rgb), .45); }
+  .ov-chip.done { border-color: var(--ok-glow); background: var(--ok-dim); }
+  .ov-chip.done .ov-dot { color: var(--on-ok-deep); border-color: transparent;
+             background: linear-gradient(135deg, var(--ok-bright), var(--ok));
+             box-shadow: 0 0 8px var(--ok-glow); }
   .ov-chip.done .ov-label { color: var(--ok); }
   /* 步骤 7 默认布线（ux-polish-02/01）：完成但未手动配置引脚 → 中性青色标记，
      区别于绿「已就绪」，避免误导（仅 .done 之上叠加 .wire） */
-  .ov-chip.done.wire { border-color: rgba(0, 212, 255, .35); background: var(--accent-dim); }
-  .ov-chip.done.wire .ov-dot { color: #001018; border-color: transparent;
-             background: linear-gradient(135deg, #33dcff, #00b8de);
-             box-shadow: 0 0 8px rgba(0, 212, 255, .35); }
+  .ov-chip.done.wire { border-color: rgba(var(--accent-rgb), .35); background: var(--accent-dim); }
+  .ov-chip.done.wire .ov-dot { color: var(--on-accent-deep); border-color: transparent;
+             background: linear-gradient(135deg, var(--accent-hi), var(--accent-lo));
+             box-shadow: 0 0 8px rgba(var(--accent-rgb), .35); }
   .ov-chip.done.wire .ov-label { color: var(--accent); }
   .ov-chip.warn { border-color: var(--warn-border); background: var(--warn-dim); }
   .ov-chip.warn .ov-dot { color: var(--warn); border-color: var(--warn); }
   .ov-chip.warn .ov-label { color: var(--warn); }
-  .ov-summary { width: 100%; margin-top: 4px; padding-top: 6px;
+  .ov-summary { width: 100%; margin-top: var(--space-1); padding-top: 6px;
                 border-top: 1px dashed var(--border); font-size: 12.5px;
                 color: var(--muted); line-height: 1.7; }
   .ov-summary .ov-ready { color: var(--ok); font-weight: 600; }
@@ -1413,7 +1435,7 @@
   .ov-summary .ov-sep { margin: 0 8px; color: var(--border-strong); }
   /* 行动区（工单 gen-overview-act/01）：一键补齐 + 就绪生成按钮 + 补齐全程
      临时高亮（1.6s 自清，见 runOverviewFill setTimeout 移除） */
-  .ov-actions { width: 100%; margin-top: 10px; display: flex; gap: 8px;
+  .ov-actions { width: 100%; margin-top: var(--space-3); display: flex; gap: 8px;
                 align-items: center; flex-wrap: wrap; }
   .ov-actions .ov-fill { padding: 5px 14px; border-radius: var(--radius-full); font-size: 12.5px;
                          border: 1px solid var(--border-strong);
@@ -1429,7 +1451,7 @@
   }
   /* 最近生成（工单 recent-jobs/01）：生成成功自动落盘 recent.json 的历史
      条目条——时间 / 平台徽章 / 模块数 / 状态点 / 目录名；点击复制路径 */
-  .gen-recent { margin-top: 10px; margin-bottom: 18px; padding: 10px 14px; background: var(--panel);
+  .gen-recent { margin-top: var(--space-3); margin-bottom: 18px; padding: 10px 14px; background: var(--panel);
                 border: 1px solid var(--border); border-radius: var(--radius-lg);
                 box-shadow: var(--shadow-card); }
   .gen-recent-head { display: flex; align-items: center; gap: 8px; }
@@ -1438,7 +1460,7 @@
                         font-size: 12px; border: 1px solid var(--border-strong);
                         background: var(--panel-2); color: var(--text); cursor: pointer; }
   #btn-recent-refresh:hover { border-color: var(--accent); color: var(--accent); }
-  .gen-recent-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .gen-recent-list { margin-top: var(--space-2); display: flex; flex-direction: column; gap: 6px; }
   .recent-chip { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
                  background: var(--panel-2); border: 1px solid var(--border);
                  border-radius: var(--radius-md); cursor: pointer; font-size: 12.5px; }
@@ -1467,20 +1489,20 @@
                       transition: color var(--dur-base) var(--ease-ui),
                                   background-color var(--dur-base) var(--ease-ui),
                                   border-color var(--dur-base) var(--ease-ui); }
-  .card-step-status.done { color: var(--ok); border-color: rgba(52, 211, 153, .4);
+  .card-step-status.done { color: var(--ok); border-color: var(--ok-glow);
                            background: var(--ok-dim); }
-  .card-step-status.wire { color: var(--accent); border-color: rgba(0, 212, 255, .4);
+  .card-step-status.wire { color: var(--accent); border-color: rgba(var(--accent-rgb), .4);
                            background: var(--accent-dim); }
   .card-step-status.warn { color: var(--warn); border-color: var(--warn-border);
                            background: var(--warn-dim); }
-  .card-step-status.current { color: var(--accent); border-color: rgba(0, 212, 255, .45);
+  .card-step-status.current { color: var(--accent); border-color: rgba(var(--accent-rgb), .45);
                               background: var(--accent-dim); }
   /* 卡内分组（工单 ui-detail/03）：修复中心 / 修订深化的内容分区——
      组容器 panel-2 底 + 组标题小字 + 虚线分隔（与 .res-block 同令牌体系） */
   .card-group { background: var(--panel-2); border: 1px solid var(--border);
-                border-radius: var(--radius-md); padding: 12px 14px; margin-top: 12px;
+                border-radius: var(--radius-md); padding: 12px 14px; margin-top: var(--space-4);
                 box-shadow: var(--shadow-item); }
-  .card-group + .card-group { margin-top: 10px; }
+  .card-group + .card-group { margin-top: var(--space-3); }
   .card-group > .card-group-title { font-size: 11px; font-weight: 600;
                 color: var(--muted); letter-spacing: .04em; margin: 0 0 8px;
                 padding-bottom: 6px; border-bottom: 1px dashed var(--border);
@@ -1498,23 +1520,23 @@
                 color: var(--muted); font-size: 12.5px;
                 transition: all var(--dur-base) var(--ease-ui); user-select: none; }
   .revise-tab:hover { border-color: var(--accent); color: var(--text); }
-  .revise-tab.active { border-color: rgba(0, 212, 255, .45); background: var(--accent-dim);
+  .revise-tab.active { border-color: rgba(var(--accent-rgb), .45); background: var(--accent-dim);
                        color: var(--text); font-weight: 600; }
-  .revise-tab.active:hover { border-color: rgba(0, 212, 255, .45); }
+  .revise-tab.active:hover { border-color: rgba(var(--accent-rgb), .45); }
   .revise-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .revise-tab-badge { padding: 1px 7px; border-radius: var(--radius-full); font-size: 11px;
                       font-weight: 700; background: var(--panel-2);
                       border: 1px solid var(--border); color: var(--muted);
                       line-height: 1.6; }
   .revise-tab.active .revise-tab-badge { color: var(--accent);
-                      border-color: rgba(0, 212, 255, .45); }
+                      border-color: rgba(var(--accent-rgb), .45); }
   .revise-tab-badge.hidden { display: none; }
-  .revise-panel { margin-top: 10px; }
+  .revise-panel { margin-top: var(--space-3); }
   /* 第11步页签面板空态引导（工单 step11-tabs-ui/02 评审整改）：未加载上下文时
      提示先去「修订」页签加载目录；加载后由各簇 JS 隐藏。 */
   .revise-empty-hint { padding: 10px 14px; border: 1px dashed var(--border);
       border-radius: var(--radius-md); color: var(--muted); font-size: 12.5px;
-      background: var(--panel-2); margin-top: 12px; }
+      background: var(--panel-2); margin-top: var(--space-4); }
   /* 新手指引页（工单 beginner-guide/01）：页头 + 四子页签（同 .revise-tab 胶囊协议）
       + 面板显隐；正文内容复用 .card / .card-details / .btn 令牌 */
   .guide-head { margin: 4px 0 14px; }
@@ -1529,11 +1551,11 @@
                 color: var(--muted); font-size: 12.5px;
                 transition: all var(--dur-base) var(--ease-ui); user-select: none; }
   .guide-tab:hover { border-color: var(--accent); color: var(--text); }
-  .guide-tab.active { border-color: rgba(0, 212, 255, .45); background: var(--accent-dim);
+  .guide-tab.active { border-color: rgba(var(--accent-rgb), .45); background: var(--accent-dim);
                        color: var(--text); font-weight: 600; }
-  .guide-tab.active:hover { border-color: rgba(0, 212, 255, .45); }
+  .guide-tab.active:hover { border-color: rgba(var(--accent-rgb), .45); }
   .guide-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .guide-panel { margin-top: 4px; }
+  .guide-panel { margin-top: var(--space-1); }
   .guide-empty-hint { padding: 10px 14px; border: 1px dashed var(--border);
       border-radius: var(--radius-md); color: var(--muted); font-size: 12.5px;
       background: var(--panel-2); margin: 0 0 12px; }
@@ -1591,12 +1613,12 @@
   .tasks-overview-bar .seg-skipped { background: rgba(139, 148, 158, .18); }
   /* 执行中卡内阶段槽（工单 ux-polish-02/06）：spinner + 阶段文案——滚动到
      任意卡都能看到当前进度，不必盯面板顶部状态行 */
-  .task-phase { display: flex; align-items: center; gap: 8px; margin-top: 6px;
-                padding: 5px 10px; border: 1px solid rgba(0, 212, 255, .35);
+  .task-phase { display: flex; align-items: center; gap: 8px; margin-top: var(--space-2);
+                padding: 5px 10px; border: 1px solid rgba(var(--accent-rgb), .35);
                 border-radius: var(--radius-md); background: var(--accent-dim);
                 color: var(--accent); font-size: 12.5px; }
   .task-phase .task-spinner { width: 14px; height: 14px; flex: none;
-                border-radius: 50%; border: 2px solid rgba(0, 212, 255, .25);
+                border-radius: 50%; border: 2px solid rgba(var(--accent-rgb), .25);
                 border-top-color: var(--accent); animation: taskSpin .8s linear infinite; }
   @keyframes taskSpin { to { transform: rotate(360deg); } }
   .tasks-done-line { display: flex; align-items: center; gap: 10px; }
@@ -1644,7 +1666,7 @@
   .res-group-conflict .res-group-title { color: var(--warn); }
   .res-chip-group { display: flex; flex-wrap: wrap; gap: 2px; }
   .res-chip-group .res-chip { white-space: nowrap; }
-  .res-soft-details { margin-top: 4px; }
+  .res-soft-details { margin-top: var(--space-1); }
   .res-soft-details summary { cursor: pointer; }
   .res-soft-details[open] summary { margin-bottom: 2px; }
   /* 板图视角（resource-overview-polish/02）：复用 /api/boards 板定义渲染；
@@ -1659,7 +1681,7 @@
                            background: var(--pin-pad); border: 1px solid var(--border-strong); }
   .res-board-legend .res-legend-conflict { background: transparent;
                                            border: 1px dashed var(--warn); border-radius: 50%; }
-  .res-board-missing { font-size: 12px; margin-top: 6px; line-height: 1.8; }
+  .res-board-missing { font-size: 12px; margin-top: var(--space-2); line-height: 1.8; }
   .res-board-msg { padding: 8px 0; font-size: 12px; }
   .res-board-msg.error { color: var(--danger); }
   .res-pin-conflict { animation: res-pin-pulse 1.6s ease-in-out infinite; }
@@ -1676,18 +1698,18 @@
   .wiring-legend .dot { width: 10px; height: 10px; border-radius: 50%;
                         display: inline-block; }
   .wiring-dot-hl { background: var(--accent); }
-  .wiring-dot-power { background: #f59e0b; }
+  .wiring-dot-power { background: var(--power); }
   .wiring-dot-dim { background: var(--border-strong); opacity: .4; }
   .wiring-line { fill: none; stroke: var(--accent); stroke-width: 2;
                  stroke-linecap: round; }
   .wiring-line.wiring-dim { stroke: var(--border-strong); stroke-width: 1.2;
                             opacity: .35; }
-  .wiring-line.wiring-power { stroke: #f59e0b; }
+  .wiring-line.wiring-power { stroke: var(--power); }
   .wiring-term text { font-family: var(--mono); }
-  .wiring-toggle { display: inline-block; margin-top: 4px; font-size: 12px;
+  .wiring-toggle { display: inline-block; margin-top: var(--space-1); font-size: 12px;
                    color: var(--muted); cursor: pointer; user-select: none; }
   .wiring-empty { font-size: 12px; padding: 4px 0; }
-  .wiring-fallback { margin-top: 2px; }
+  .wiring-fallback { margin-top: var(--space-1); }
   /* 评分点覆盖总览（工单 score-coverage/02）：行流布局参照 .res-* 先例；
      无覆盖整行红（--danger 语义），未知引用黄色警示 */
   .score-point-table { border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -1723,7 +1745,7 @@
   .task-check-input { accent-color: var(--accent); }
   /* 下一步引导（工单 step-next-guide/01）：当前卡内提示行 + 下一张待执行卡
      高亮脉冲（做完一步自动定位；瞬态，不落盘） */
-  .task-next-hint { margin-top: 8px; padding: 6px 10px; border-radius: var(--radius-md);
+  .task-next-hint { margin-top: var(--space-2); padding: 6px 10px; border-radius: var(--radius-md);
                     font-size: 12px; color: var(--accent);
                     background: var(--accent-dim);
                     border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
@@ -1737,14 +1759,14 @@
   /* 任务卡视觉重构（工单 task-card-polish/01）：元信息合并为一行紧凑 chips
      （资源/需上板/评分点/前置，原先四条独立 muted 行；文案与顺序不变） */
   .task-meta { display: flex; flex-wrap: wrap; align-items: center;
-               gap: 4px 14px; margin-top: 6px; font-size: 12px;
+               gap: 4px 14px; margin-top: var(--space-2); font-size: 12px;
                color: var(--muted); }
   .task-meta-item { display: inline-flex; align-items: center; gap: 4px; }
   .task-meta-warn { color: var(--warn); font-weight: 600; }
   /* 轮次历史两行式（工单 task-card-polish/01 + 用户反馈补漏）：第一行
      轮次+徽章+回退按钮（右对齐），第二行带标签详情（上板反馈/做了什么/
      需要你做什么，完整原文）+ 时间·备份小字行——替代原先一行平铺 */
-  .task-iterations { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
+  .task-iterations { margin-top: var(--space-1); display: flex; flex-direction: column; gap: 4px; }
   .task-iteration { border: 1px solid var(--border); border-radius: var(--radius-sm);
                     background: var(--panel); padding: 4px 8px; }
   .task-iteration-line { display: flex; flex-wrap: wrap; align-items: center;
@@ -1752,10 +1774,10 @@
   .task-iteration-title { font-weight: 600; }
   .task-iteration-line .badge { margin-left: 0; }
   .task-iteration-line .btn-task-iteration-rollback { margin-left: auto; }
-  .task-iteration-detail { margin-top: 2px; display: flex; flex-direction: column;
+  .task-iteration-detail { margin-top: var(--space-1); display: flex; flex-direction: column;
                           gap: 2px; font-size: 12px; line-height: 1.5; }
   .task-iteration-detail-row b { color: var(--muted); font-weight: 600; }
-  .task-iteration-detail-meta { font-size: 11px; margin-top: 2px; }
+  .task-iteration-detail-meta { font-size: 11px; margin-top: var(--space-1); }
   /* 任务卡按钮层级（工单 task-card-polish/01）：主操作「做这一步」accent 实底；
      物理动作「烧录到板子」与咨询「有不懂的？问这里」accent 描边；其余 base 统一 */
   .task-card .row { gap: 8px; }
@@ -1771,7 +1793,7 @@
   .task-redo-badge { background: var(--warn-dim); color: var(--warn); }
   /* 编译错误列表（工单 error-jump-task/02）：任务结果面板失败时逐条列出，
      main.c 错误行可点击跳转（.task-err-jump）——跳转单源 fx/code.js */
-  .task-err-list { margin-top: 6px; display: flex; flex-direction: column;
+  .task-err-list { margin-top: var(--space-2); display: flex; flex-direction: column;
                    gap: 2px; font-family: var(--mono); font-size: 12px; }
   .task-err-row { padding: 2px 0; color: var(--text); word-break: break-all; }
   .task-err-jump { cursor: pointer; color: var(--accent); text-decoration: underline;
@@ -1779,7 +1801,7 @@
   /* 任务执行结果「本轮变化」区（工单 task-changes-inline/02）：执行结果并入
      刚完成的任务卡——完整 diff / 编译详情 / 错误行跳转 / 备份回滚原地可见
      （替代网格末尾结果面板，无需滚动）；无注入 = 零占位（details 不渲染） */
-  .task-changes { margin-top: 8px; border: 1px solid var(--border);
+  .task-changes { margin-top: var(--space-2); border: 1px solid var(--border);
                   border-radius: var(--radius-md); background: var(--panel-2); }
   .task-changes > summary { cursor: pointer; padding: 6px 8px;
                   font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
@@ -1789,21 +1811,21 @@
   .task-changes-detail { font-size: 12.5px; }
   .task-changes-backup { font-size: 12.5px; }
   /* 交付卡（工单 delivery-suite/02）：检查结果 / 打包结果行 */
-  .delivery-ok { margin-top: 6px; color: var(--ok); font-weight: 600; }
-  .delivery-warn { margin-top: 6px; color: var(--warn); font-weight: 600; }
-  .delivery-stat-row { margin-top: 6px; display: flex; gap: 6px; }
-  .delivery-incomplete { margin-top: 4px; font-size: 13px; color: var(--text); }
-  .delivery-zip { margin-top: 6px; font-family: var(--mono); font-size: 12px;
+  .delivery-ok { margin-top: var(--space-2); color: var(--ok); font-weight: 600; }
+  .delivery-warn { margin-top: var(--space-2); color: var(--warn); font-weight: 600; }
+  .delivery-stat-row { margin-top: var(--space-2); display: flex; gap: 6px; }
+  .delivery-incomplete { margin-top: var(--space-1); font-size: 13px; color: var(--text); }
+  .delivery-zip { margin-top: var(--space-2); font-family: var(--mono); font-size: 12px;
                   color: var(--text); word-break: break-all; }
   /* 想法结果卡（工单 idea-fix/02）：复用 .item/.badge/.row 既有样式，
      无新视觉——落地按钮与任务卡操作行同款；分类徽章用既有 badge 色 */
   .idea-result .row { gap: 6px; }
   /* 效果 diff（工单 diff-restyle/01）：主题化行级视图——统计行 + hunk 折叠块
      （行 = 符号列 + 内容；新增绿 / 删除红 / 上下文灰，全用主题变量） */
-  .diff-stats.reason { margin-top: 8px; }
+  .diff-stats.reason { margin-top: var(--space-2); }
   .diff-count.add { color: var(--ok); font-weight: 600; }
   .diff-count.del { color: var(--danger); font-weight: 600; }
-  .diff-hunk { margin-top: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  .diff-hunk { margin-top: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
                background: var(--panel); overflow: hidden; }
   .diff-hunk > summary { cursor: pointer; padding: 6px 10px; background: var(--panel-2);
                          color: var(--text); font-size: 12.5px; font-weight: 600;
@@ -1850,13 +1872,13 @@
   .rc-row .rc-actions { display: inline-flex; gap: 6px; flex: none; }
   .rc-row .rc-go, .rc-row .rc-recommend { padding: 2px 10px; font-size: 12px;
             border-radius: var(--radius-full); }
-  .rc-row .rc-recommend { color: var(--accent); border-color: rgba(0, 212, 255, .4); }
+  .rc-row .rc-recommend { color: var(--accent); border-color: rgba(var(--accent-rgb), .4); }
   /* 顶部流程进度条（工单 ui-polish-3/02）：header 下 3px 细条 + 完成计数 */
   #gen-progress { position: relative; height: 3px; background: var(--border);
                   transition: opacity var(--dur-slow) var(--ease-ui); }
   #gen-progress .gp-fill { height: 100%; width: 0%;
                   background: linear-gradient(90deg, #00a8cc, #00d4ff);
-                  box-shadow: 0 0 8px rgba(0, 212, 255, .5);
+                  box-shadow: 0 0 8px rgba(var(--accent-rgb), .5);
                   transition: width var(--dur-slow) var(--ease-ui); }
   #gen-progress .gp-text { position: absolute; right: 10px; top: 6px;
                   font-size: 11px; color: var(--muted); white-space: nowrap; }
@@ -1996,19 +2018,19 @@
   .code-zoom button:hover { color: var(--text); background: var(--border); }
   .code-zoom span { min-width: 38px; text-align: center; font-size: 12px;
                     color: var(--muted); user-select: none; }
-  .tok-com { color: #3fb950; }  .tok-str { color: #d29922; }
-  .tok-pre { color: #8b949e; }  .tok-kw { color: #00d4ff; }
-  .tok-num { color: #bc8cff; }
+  .tok-com { color: var(--tok-com); }  .tok-str { color: var(--tok-str); }
+  .tok-pre { color: var(--tok-pre); }  .tok-kw { color: var(--tok-kw); }
+  .tok-num { color: var(--tok-num); }
   /* XML 令牌（工单 master-library-ui-2/03：.syscfg/.uvprojx/.cproject 高亮） */
-  .tok-tag { color: #00d4ff; }  .tok-attr { color: #bc8cff; }  .tok-val { color: #d29922; }
-  html[data-theme="light"] .tok-tag { color: #0096c7; }
-  html[data-theme="light"] .tok-attr { color: #8250df; }
-  html[data-theme="light"] .tok-val { color: #9a6700; }
-  html[data-theme="light"] .tok-com { color: #1a7f37; }
-  html[data-theme="light"] .tok-str { color: #9a6700; }
-  html[data-theme="light"] .tok-pre { color: #59636e; }
-  html[data-theme="light"] .tok-kw { color: #0096c7; }
-  html[data-theme="light"] .tok-num { color: #8250df; }
+  .tok-tag { color: var(--tok-tag); }  .tok-attr { color: var(--tok-attr); }  .tok-val { color: var(--tok-val); }
+  html[data-theme="light"] .tok-tag { color: var(--tok-tag); }
+  html[data-theme="light"] .tok-attr { color: var(--tok-attr); }
+  html[data-theme="light"] .tok-val { color: var(--tok-val); }
+  html[data-theme="light"] .tok-com { color: var(--tok-com); }
+  html[data-theme="light"] .tok-str { color: var(--tok-str); }
+  html[data-theme="light"] .tok-pre { color: var(--tok-pre); }
+  html[data-theme="light"] .tok-kw { color: var(--tok-kw); }
+  html[data-theme="light"] .tok-num { color: var(--tok-num); }
   /* 步骤完成庆祝动画（工单 ui-polish-8/02）：徽章弹跳 + 顶部青光扫过 */
   @keyframes step-pop { 0% { transform: scale(1); }
                         40% { transform: scale(1.28); }
@@ -2093,7 +2115,7 @@
         <div class="card-details-body">支持 .pdf / .docx / .txt / .md / 图片上传，纯本地解析；图片与 PDF 示意图经视觉通道识别（默认复用主 DeepSeek key，无需额外配置）——识别结果可编辑，示意图可点击放大。</div>
       </details>
       <textarea id="problem" rows="7" placeholder="把赛题原文粘贴到这里，或上传 PDF / Word 文件…"></textarea>
-      <div id="topic-pdf-box" class="hidden" style="margin-top:8px">
+      <div id="topic-pdf-box" class="hidden" style="margin-top: var(--space-2)">
         <div class="row" style="margin-bottom:6px">
           <button id="btn-topic-pdf-text">显示文字版（可编辑）</button>
           <span class="muted">原题 PDF 页面（点击图片放大）</span>
@@ -2102,23 +2124,23 @@
       </div>
       <!-- 图片上传原图展示（工单 upload-image-preview/02）：视觉描述之外直接
            显示原图（点击放大走 #pdf-zoom 通用遮罩），文字版可切换 -->
-      <div id="topic-image-box" class="hidden" style="margin-top:8px">
+      <div id="topic-image-box" class="hidden" style="margin-top: var(--space-2)">
         <div class="row" style="margin-bottom:6px">
           <button id="btn-topic-image-text">显示文字版（可编辑）</button>
           <span class="muted">上传原图（点击图片放大）</span>
         </div>
         <img id="topic-image-view" alt="上传原图"
-             style="width:100%;max-width:640px;display:block;margin:0 auto 10px;border:1px solid var(--border,#ccc);border-radius: var(--radius-xs);cursor:zoom-in;background:#fff">
+             style="width:100%;max-width:640px;display:block;margin:0 auto 10px;border:1px solid var(--border,#ccc);border-radius: var(--radius-xs);cursor:zoom-in;background:#fff"><!-- 扫描件白底：纸面图片有意保留白底（不随主题） -->
       </div>
       <div id="pdf-zoom" class="hidden">
         <img id="pdf-zoom-img" alt="题面页放大" style="max-width:96vw;max-height:96vh;object-fit:contain">
       </div>
-      <div class="row" style="margin-top:8px">
+      <div class="row" style="margin-top: var(--space-2)">
         <input type="file" id="problem-file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp">
         <button id="btn-upload">上传并抽取文字</button>
         <span class="muted">支持 .pdf / .docx / .txt / .md / 图片，纯本地解析；图片与 PDF 示意图经视觉通道识别（默认复用主 DeepSeek key，无需额外配置）</span>
       </div>
-      <div class="row" style="margin-top:8px">
+      <div class="row" style="margin-top: var(--space-2)">
         <input type="text" id="topic-id" placeholder="历史赛题编号，如 2026C" style="flex:1;max-width:220px">
         <button id="btn-topic-load">取题面</button>
         <span id="topic-msg" class="muted"></span>
@@ -2133,7 +2155,7 @@
         <button id="btn-topic-preread" class="primary" data-ico="doc">预读题面</button>
         <span class="muted">题面你会自己读，AI 只提炼「题面已经锁死了什么」——限定 / 约束 / 指定的硬事实（如限定 TI MSPM0 系列、指定器件、接口 / 尺寸 / 电源 / 时长），并标明要点将在哪一步用到（选平台 / 选模块 / 配引脚 / 写骨架…），走到那一步会再提醒你。<br>快捷键：在题面输入框按 Ctrl+Enter 直接预读。</span>
       </div>
-      <div id="topic-preread-box" class="topic-preread hidden" style="margin-top:8px"></div>
+      <div id="topic-preread-box" class="topic-preread hidden" style="margin-top: var(--space-2)"></div>
       <div id="topic-preread-msg" class="error"></div>
     </div>
 
@@ -2153,13 +2175,13 @@
       <h2><span class="step-no">4</span>参考资料（可选）</h2>
       <p class="card-purpose">从参考文件库选套件例程 / 说明书作学习素材，AI 生成时会读它们。</p>
       <div class="muted">勾选 = 手动指定作学习素材注入（全文直读）；赛题 / 套件自动关联的批次无需勾选也会注入。</div>
-      <div class="row" style="margin-top:8px">
+      <div class="row" style="margin-top: var(--space-2)">
         <input type="search" id="ref-search" placeholder="搜索参考资料…" style="flex:1;max-width:300px">
         <span class="muted" id="ref-count"></span>
       </div>
       <!-- 动态容器（ui/reference.js JS 填充，勿删）：选中列表 + 可勾选参考表 -->
-      <div id="ref-selected" style="margin-top:8px"></div>
-      <div id="ref-picker" class="ref-scroll" style="margin-top:8px"></div>
+      <div id="ref-selected" style="margin-top: var(--space-2)"></div>
+      <div id="ref-picker" class="ref-scroll" style="margin-top: var(--space-2)"></div>
       <div id="ref-picker-msg" class="error"></div>
     </div>
 
@@ -2167,18 +2189,18 @@
       <h2><span class="step-no">5</span>AI 推荐模块</h2>
       <p class="card-purpose">AI 对照题面推荐可复用的驱动模块，你可以勾选 / 调整。</p>
       <div class="preread-slot hidden" data-preread-slot data-step="5"></div>
-      <details id="qa-material" style="margin-top:4px">
+      <details id="qa-material" style="margin-top: var(--space-1)">
         <summary style="cursor:pointer;font-size:12px;color:var(--muted)">
           赛题答疑 Q&amp;A（可选）——赛事组对题面的澄清问答，推荐会参考 <span class="muted" id="qa-has-content"></span>
         </summary>
-        <textarea id="qa-text" rows="6" style="margin-top:8px" placeholder="例：&#10;问：小车尺寸限制？答：不超过 30cm×20cm×15cm。&#10;问：循迹线是什么颜色？答：黑色赛道、白色背景。"></textarea>
-        <div class="muted" style="margin-top:4px">赛事组发布的答疑（学生问 / 赛事组答）粘贴到这里（可输入任意多行，超出自动滚动）：AI 推荐把它作为权威澄清参考，题面有歧义处以 Q&amp;A 为准；Q&amp;A 修改后重推会重新分析（不命中旧缓存）；留空不影响。</div>
+        <textarea id="qa-text" rows="6" style="margin-top: var(--space-2)" placeholder="例：&#10;问：小车尺寸限制？答：不超过 30cm×20cm×15cm。&#10;问：循迹线是什么颜色？答：黑色赛道、白色背景。"></textarea>
+        <div class="muted" style="margin-top: var(--space-1)">赛事组发布的答疑（学生问 / 赛事组答）粘贴到这里（可输入任意多行，超出自动滚动）：AI 推荐把它作为权威澄清参考，题面有歧义处以 Q&amp;A 为准；Q&amp;A 修改后重推会重新分析（不命中旧缓存）；留空不影响。</div>
       </details>
-      <div class="row" style="margin-top:8px">
+      <div class="row" style="margin-top: var(--space-2)">
         <button id="btn-recommend" class="primary breathe" data-ico="sparkles">让 AI 推荐</button>
         <span class="muted">AI 按题面逐句对照出功能需求，库内命中可勾选；库外建议需自备（不进工程）。</span>
       </div>
-      <div id="rec-progress" class="distill-progress hidden" style="margin-top:10px">
+      <div id="rec-progress" class="distill-progress hidden" style="margin-top: var(--space-3)">
         <div id="rec-prog-text" style="margin-bottom:6px"></div>
         <div id="rec-llm-telemetry" class="llm-telemetry hidden" style="margin-bottom:6px"></div>
         <div class="prog-bar hidden" id="rec-bar"><div id="rec-bar-fill"></div></div>
@@ -2188,7 +2210,7 @@
         </div>
       </div>
       <div id="recommend-msg" class="error"></div>
-      <div id="rec-list" style="margin-top:10px"></div>
+      <div id="rec-list" style="margin-top: var(--space-3)"></div>
     </div>
 
     <div class="card">
@@ -2202,18 +2224,18 @@
         <button id="btn-expand" class="primary">展开依赖并检查平台</button>
       </div>
       <!-- 动态容器（generate-recommend.js / module-grid JS 填充，勿删） -->
-      <div id="module-grid" class="module-grid" style="margin-top:8px"></div>
-      <div id="warnings" style="margin-top:10px"></div>
-      <div class="muted" id="selected-count" style="margin-top:8px"></div>
-      <div id="selected-list" class="selected-scroll" style="margin-top:8px"></div>
+      <div id="module-grid" class="module-grid" style="margin-top: var(--space-2)"></div>
+      <div id="warnings" style="margin-top: var(--space-3)"></div>
+      <div class="muted" id="selected-count" style="margin-top: var(--space-2)"></div>
+      <div id="selected-list" class="selected-scroll" style="margin-top: var(--space-2)"></div>
       <div id="expand-msg" class="error"></div>
     </div>
 
     <div class="card hidden" id="card-instance-config">
       <h2><span class="step-no step-sub" data-step="6.5">6.5</span>多实例配置</h2>
       <div class="pin-intro">未配置实例 = 默认单实例（led：stm32 红/黄/绿三通道 PC13/14/15，mspm0 单通道 PA15）。点「添加实例」后按实例清单生成通道宏，每个实例可改显示名、选颜色（红/黄/绿可重复，重复内置色加 _2/_3 后缀；「无颜色」= LED_1/LED_2 通用编号）、绑引脚（空 = 自动分配）。</div>
-      <div id="instance-pin-hint" class="banner hidden" style="margin-top:8px"></div>
-      <div id="instance-config" style="margin-top:8px"></div>
+      <div id="instance-pin-hint" class="banner hidden" style="margin-top: var(--space-2)"></div>
+      <div id="instance-config" style="margin-top: var(--space-2)"></div>
     </div>
 
     <div class="card" id="card-pin-config">
@@ -2224,11 +2246,11 @@
         <summary>点引脚给接线角色改线；不配 = 按默认布线生成，打开就能编译。</summary>
         <div class="card-details-body">选好模块并「展开依赖并检查平台」后，这里出现板图与接线角色清单：点引脚给角色改线（不配 = 按默认布线生成，打开就能编译）。绑定只随本次生成请求走，不持久化。</div>
       </details>
-      <div id="pin-config-msg" class="banner hidden" style="margin-top:8px"></div>
-      <div id="pin-config-empty" class="muted" style="margin-top:8px"></div>
+      <div id="pin-config-msg" class="banner hidden" style="margin-top: var(--space-2)"></div>
+      <div id="pin-config-empty" class="muted" style="margin-top: var(--space-2)"></div>
       <div id="pin-config-body" class="hidden">
-        <div id="pin-highlight-msg" class="muted" style="margin-top:10px"></div>
-        <div class="pin-layout" style="margin-top:8px">
+        <div id="pin-highlight-msg" class="muted" style="margin-top: var(--space-3)"></div>
+        <div class="pin-layout" style="margin-top: var(--space-2)">
           <div class="pin-board-wrap">
             <div class="pin-toolbar">
               <button id="btn-pin-overview">总览</button>
@@ -2268,10 +2290,10 @@
         <button id="btn-skeleton" class="primary" data-ico="code">生成骨架</button>
         <button id="btn-smoke" data-ico="code">生成自检骨架</button>
       </div>
-      <div class="muted" style="margin-top:4px;font-size:11px">「生成骨架」= 初始化序列 + TODO 预留区（快，推荐先做）；「生成自检骨架」= 先自检硬件读写再写逻辑（更慢，适合首次验证硬件）。</div>
-      <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
-      <div id="framework-note" class="warn-box ok hidden" style="margin-top:8px"></div>
-      <div class="code-wrap" style="margin-top:8px">
+      <div class="muted" style="margin-top: var(--space-1);font-size:11px">「生成骨架」= 初始化序列 + TODO 预留区（快，推荐先做）；「生成自检骨架」= 先自检硬件读写再写逻辑（更慢，适合首次验证硬件）。</div>
+      <div id="intercepted" class="warn-box unverified hidden" style="margin-top: var(--space-2)"></div>
+      <div id="framework-note" class="warn-box ok hidden" style="margin-top: var(--space-2)"></div>
+      <div class="code-wrap" style="margin-top: var(--space-2)">
         <div class="code-zoom" title="代码字号">
           <button id="btn-code-zoom-out" type="button" title="缩小">−</button>
           <span id="code-zoom-label">100%</span>
@@ -2298,20 +2320,20 @@
         <input type="text" id="output-dir" placeholder="例如 D:\contest\demo" style="flex:1">
         <button id="btn-pick-output-dir">选择文件夹…</button>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <button id="btn-generate" class="primary breathe" data-ico="rocket">生成工程</button>
         <button id="btn-readiness-check" data-ico="check">检查能否生成</button>
         <span id="gen-status"></span>
       </div>
-      <div id="readiness-check" class="hidden" style="margin-top:10px"></div>
+      <div id="readiness-check" class="hidden" style="margin-top: var(--space-3)"></div>
       <div id="generate-msg" class="error"></div>
-      <div id="generate-result" class="hidden" style="margin-top:12px">
+      <div id="generate-result" class="hidden" style="margin-top: var(--space-4)">
         <!-- 编译结果横幅（工单 compile-experience-ui/01）：生成完成一眼确认
              自动编译发生了、结果如何；四态 running/success/fail/notool -->
         <div id="compile-banner" class="hidden"></div>
         <!-- 主路径入口（工单 beginner-gap-closure/02）：生成成功即可直达
              第 11 步「任务推进」写代码——与第 12 步交接卡按钮同一跳转实现 -->
-        <div class="res-block" style="margin-top:8px">
+        <div class="res-block" style="margin-top: var(--space-2)">
           <div class="res-label">下一步</div>
           <div class="res-value">
             <button id="btn-goto-tasks-result" class="accent" type="button">去任务推进</button>
@@ -2333,7 +2355,7 @@
                 <button id="btn-restore-bak" class="danger" type="button">恢复覆盖前备份</button>
                 <span class="muted" style="margin-left:8px">旧工程备份为 <span id="res-bak-name" class="slug"></span>；恢复前需先把当前同名目录移走或删除。</span>
               </div>
-              <div id="res-bak-msg" style="margin-top:6px"></div>
+              <div id="res-bak-msg" style="margin-top: var(--space-2)"></div>
             </div>
             <!-- 自动附带产物（工单 report-draft-demo/04）：设计报告草稿 + 演示脚本
                  随生成自动落盘工程根——badge 标注 + 点击复制文件路径入口（打开 =
@@ -2367,7 +2389,7 @@
                 <button id="btn-flash" data-ico="upload">烧录到板子</button>
                 <span id="flash-status" class="muted" style="margin-left:8px"></span>
               </div>
-              <div id="flash-result" style="margin-top:6px"></div>
+              <div id="flash-result" style="margin-top: var(--space-2)"></div>
             </div>
           </div>
           <div class="res-side">
@@ -2395,11 +2417,11 @@
         <button id="btn-fix-continue" class="hidden">继续修复</button>
         <span id="fix-center-toolchain" class="muted"></span>
       </div>
-      <div id="fix-center-round" class="muted" style="margin-top:8px"></div>
-      <div id="fix-status" class="muted" style="margin-top:8px"></div>
+      <div id="fix-center-round" class="muted" style="margin-top: var(--space-2)"></div>
+      <div id="fix-status" class="muted" style="margin-top: var(--space-2)"></div>
       <div id="fix-llm-telemetry" class="llm-telemetry hidden"></div>
       <div id="fix-errors-msg" class="error"></div>
-      <div id="fix-results" style="margin-top:10px"></div>
+      <div id="fix-results" style="margin-top: var(--space-3)"></div>
       <div class="card-group hidden" id="fix-log-group">
         <div class="card-group-title">编译输出（自动采集）</div>
         <textarea id="fix-center-log" rows="10" readonly placeholder="编译输出原样展示（含 warnings 引用行）…"></textarea>
@@ -2410,7 +2432,7 @@
           <button id="btn-fix-errors" class="primary">开始修复（贴文本）</button>
           <span class="muted">没有工具链时手动粘贴 Keil / CCS 编译报错，AI 逐条修复并直接写回工程文件；写回前自动备份到输出目录外，可一键回滚。</span>
         </div>
-        <textarea id="fix-errors-text" rows="8" style="margin-top:8px" placeholder="粘贴编译报错全文（UV4：..\out\code\main.c(123): error #20: …；CCS / armclang：code/sub/mod.c:45: error: …）…"></textarea>
+        <textarea id="fix-errors-text" rows="8" style="margin-top: var(--space-2)" placeholder="粘贴编译报错全文（UV4：..\out\code\main.c(123): error #20: …；CCS / armclang：code/sub/mod.c:45: error: …）…"></textarea>
         <div id="fix-errors-msg-manual" class="error"></div>
       </div>
     </div>
@@ -2439,7 +2461,7 @@
           <span class="muted">直接取当前生成会话的上下文（输出目录 / 平台 / 模块 / 题面 / Q&A）。</span>
         </div>
         <!-- 入口 2：历史目录 -->
-        <div class="row" style="margin-top:8px">
+        <div class="row" style="margin-top: var(--space-2)">
           <input type="text" id="revise-dir-input" placeholder="历史输出目录，例如 D:\contest\demo" style="flex:1">
           <button id="btn-revise-load-dir">加载目录</button>
           <span id="revise-load-status" class="muted"></span>
@@ -2448,53 +2470,53 @@
       </div>
 
       <!-- 加载后的上下文 -->
-      <div id="revise-context" class="card-group hidden" style="margin-top:12px">
+      <div id="revise-context" class="card-group hidden" style="margin-top: var(--space-4)">
         <div class="card-group-title">已加载上下文 <span id="revise-context-source" class="muted"></span></div>
         <div class="item">
           <div class="head">
             <span>平台：<span id="revise-platform" class="slug"></span></span>
             <span>模块：<span id="revise-slugs"></span></span>
           </div>
-          <div id="revise-missing-warn" class="warn-box unverified hidden" style="margin-top:8px"></div>
-          <div id="revise-problem-fill" class="hidden" style="margin-top:8px">
+          <div id="revise-missing-warn" class="warn-box unverified hidden" style="margin-top: var(--space-2)"></div>
+          <div id="revise-problem-fill" class="hidden" style="margin-top: var(--space-2)">
             <div class="muted" style="margin-bottom:4px">该目录无法反推题面（历史工程无上下文清单）——修订分析需要题面证据：请在下方粘贴赛题原文后重试。</div>
             <textarea id="revise-problem-text" rows="5" placeholder="粘贴赛题原文…"></textarea>
           </div>
-          <div class="reason" style="margin-top:8px"><strong>题面：</strong><span id="revise-problem"></span></div>
+          <div class="reason" style="margin-top: var(--space-2)"><strong>题面：</strong><span id="revise-problem"></span></div>
           <div class="reason"><strong>Q&A：</strong><span id="revise-qa"></span></div>
         </div>
       </div>
 
       <!-- 影响分析 -->
-      <div id="revise-analyze-box" class="card-group hidden" style="margin-top:12px">
+      <div id="revise-analyze-box" class="card-group hidden" style="margin-top: var(--space-4)">
         <div class="card-group-title">影响分析</div>
         <div class="muted" style="margin-bottom:6px">粘贴新发布的赛事答疑 Q&A（按连续空行分段 = 条数），AI 逐条判断对模块推荐的影响。</div>
         <textarea id="revise-qa-new" rows="6" placeholder="例：&#10;问：小车尺寸限制？答：不超过 30cm×20cm×15cm。&#10;&#10;问：循迹线颜色？答：黑色赛道、白色背景。"></textarea>
-        <div class="row" style="margin-top:8px">
+        <div class="row" style="margin-top: var(--space-2)">
           <button id="btn-revise-analyze" class="primary">分析影响</button>
           <button id="btn-revise-discard" class="hidden">放弃</button>
           <span id="revise-analyze-status" class="muted"></span>
         </div>
         <div id="revise-llm-telemetry" class="llm-telemetry hidden"></div>
-        <div id="revise-analysis" class="hidden" style="margin-top:10px"></div>
+        <div id="revise-analysis" class="hidden" style="margin-top: var(--space-3)"></div>
         <div id="revise-analyze-msg" class="error"></div>
       </div>
 
       <!-- 执行 -->
-      <div id="revise-exec-box" class="card-group hidden" style="margin-top:12px">
+      <div id="revise-exec-box" class="card-group hidden" style="margin-top: var(--space-4)">
         <div class="card-group-title">确认并执行</div>
         <label style="display:block;margin-bottom:6px">确认模块集（逗号分隔，可编辑——分析完成后自动预填建议集）</label>
         <input type="text" id="revise-confirmed-slugs" placeholder="例如 delay, dht11, oled">
-        <label style="margin-top:10px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="revise-deepen-check"> 执行后深化：AI 按功能需求填 main.c 的 TODO 并强制编译验证（模块集无变化时也自动进入深化）</label>
-        <div class="row" style="margin-top:10px">
+        <label style="margin-top: var(--space-3);display:flex;align-items:center;gap:6px"><input type="checkbox" id="revise-deepen-check"> 执行后深化：AI 按功能需求填 main.c 的 TODO 并强制编译验证（模块集无变化时也自动进入深化）</label>
+        <div class="row" style="margin-top: var(--space-3)">
           <button id="btn-revise-apply" class="primary">确认并执行修订</button>
           <button id="btn-revise-deepen" title="快速兜底：一次填完所有 TODO 并编译验证，不逐步执行、无步骤报告">直接深化（快速兜底）</button>
           <button id="btn-revise-rollback" class="hidden danger">回滚本次修订 / 深化</button>
           <span id="revise-exec-status" class="muted"></span>
         </div>
         <div id="revise-deepen-telemetry" class="llm-telemetry hidden"></div>
-        <div id="revise-rollback-status" class="muted" style="margin-top:8px"></div>
-        <div id="revise-result" class="hidden" style="margin-top:10px"></div>
+        <div id="revise-rollback-status" class="muted" style="margin-top: var(--space-2)"></div>
+        <div id="revise-result" class="hidden" style="margin-top: var(--space-3)"></div>
         <div id="revise-exec-msg" class="error"></div>
       </div>
       </section>
@@ -2506,14 +2528,14 @@
       <!-- 逐步深化（工单 stepwise-deepen/01-03）：AI 拆解任务清单 → 逐任务执行
            → 每步编译验证 → 步骤报告（AI 做了什么 + 接下来你要做什么，含接线/上板
            指引）→ 上板反馈。上下文复用「修订」页签上下文入口的加载结果。 -->
-      <div id="tasks-box" class="card-group hidden" style="margin-top:12px">
+      <div id="tasks-box" class="card-group hidden" style="margin-top: var(--space-4)">
         <div class="card-group-title">逐步深化（任务推进）</div>
         <div class="muted" style="margin-bottom:6px">两种深化怎么选：「逐步深化」= 逐任务执行 + 步骤报告（推荐，出了问题好定位）；「直接深化」= 修订页「直接深化（快速兜底）」按钮，一次填完并编译验证（快，但无步骤报告）。</div>
         <details class="card-details">
           <summary>AI 按题面拆成有序任务清单，逐任务执行 + 自动编译验证；每步有步骤报告与上板指引。</summary>
           <div class="card-details-body">每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（「修订」页签的按钮）为快速兜底。</div>
         </details>
-        <div class="card-group" style="margin-top:6px">
+        <div class="card-group" style="margin-top: var(--space-2)">
           <div class="card-group-title">新想法 / 发现的问题（不绑定任务卡）</div>
           <div class="row">
             <textarea id="tasks-idea-input" rows="2" placeholder="想改一个具体的点，就写在这里（如：进弯道前先减速；循迹阈值太高；再加个急停功能）…" style="flex:1;min-height:44px"></textarea>
@@ -2524,13 +2546,13 @@
             <summary>「我具体想改什么」→ 写在这里：AI 判断它是新功能 / 直接修正 / 建议先聊聊。</summary>
             <div class="card-details-body">已经有明确的一个点（改参数、加功能、修 bug、调策略），AI 判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿自动保存到工程内，回头逐条分析或全部逐条分析。如果只是想先讨论、还没有具体改法 → 用下面的「全局商量」。</div>
           </details>
-          <div id="tasks-idea-result" class="hidden" style="margin-top:8px"></div>
+          <div id="tasks-idea-result" class="hidden" style="margin-top: var(--space-2)"></div>
           <div id="tasks-idea-msg" class="error"></div>
-          <div id="tasks-drafts" style="margin-top:8px"></div>
-          <div id="tasks-drafts-status" class="muted" style="margin-top:4px"></div>
+          <div id="tasks-drafts" style="margin-top: var(--space-2)"></div>
+          <div id="tasks-drafts-status" class="muted" style="margin-top: var(--space-1)"></div>
           <div id="tasks-drafts-msg" class="error"></div>
         </div>
-        <div class="card-group" style="margin-top:6px">
+        <div class="card-group" style="margin-top: var(--space-2)">
           <div class="card-group-title">全局商量（工程级，不绑任务卡）</div>
           <div class="row">
             <button id="btn-tasks-global-chat" class="primary">全局商量（工程级）</button>
@@ -2540,7 +2562,7 @@
             <summary>「想先讨论、还没想好具体改什么」→ 工程级连续问答，结论可落地。</summary>
             <div class="card-details-body">对整体方案有疑惑（架构取舍 / 赛道策略 / 方案对不对），AI 结合题面、需求、任务清单现状与当前 main.c 连续回答问题，越问越清楚；每步可「转成任务 / 转成修正」落地，或「采纳为全局结论」（之后每一步任务执行与直接修正都会带上它）；历史自动保存到工程内，刷新不丢。已有明确要改的一个点 → 直接用上面的「新想法」。</div>
           </details>
-          <div id="tasks-global-chat" class="hidden" style="margin-top:8px"></div>
+          <div id="tasks-global-chat" class="hidden" style="margin-top: var(--space-2)"></div>
           <div id="tasks-global-msg" class="error"></div>
         </div>
         <!-- ⚙️ 参数速调、🚀 交付已迁出任务推进面板（工单 step11-tabs-ui/01）：
@@ -2551,18 +2573,18 @@
           <span id="tasks-progress" class="muted"></span>
           <span id="tasks-status" class="muted"></span>
         </div>
-        <div id="tasks-overview" class="hidden" style="margin-top:8px"></div>
-        <div id="tasks-resources" class="hidden" style="margin-top:8px"></div>
-        <div id="tasks-scorepoints" class="hidden" style="margin-top:8px"></div>
+        <div id="tasks-overview" class="hidden" style="margin-top: var(--space-2)"></div>
+        <div id="tasks-resources" class="hidden" style="margin-top: var(--space-2)"></div>
+        <div id="tasks-scorepoints" class="hidden" style="margin-top: var(--space-2)"></div>
         <div id="tasks-llm-telemetry" class="llm-telemetry hidden"></div>
-        <div id="tasks-grid" class="hidden" style="margin-top:10px"></div>
+        <div id="tasks-grid" class="hidden" style="margin-top: var(--space-3)"></div>
         <div id="tasks-msg" class="error"></div>
       </div>
       </section>
 
       <section id="revise-panel-params" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-params">
         <div id="params-empty-hint" class="revise-empty-hint">尚未加载输出目录——请先在「修订」页签加载当前会话或历史目录，再识别参数。</div>
-        <div class="card-group" style="margin-top:12px">
+        <div class="card-group" style="margin-top: var(--space-4)">
           <div class="card-group-title">参数速调（改一个数，不用重跑整步）</div>
           <div class="row">
             <button id="btn-params-scan" class="primary">识别 main.c 参数</button>
@@ -2572,33 +2594,33 @@
             <summary>识别 main.c 可调数值 → 改值 = 只替换那一个常量 → 自动备份 + 编译验证。</summary>
             <div class="card-details-body">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表自动保存到工程内。</div>
           </details>
-          <div id="params-grid" class="hidden" style="margin-top:8px"></div>
-          <div id="params-result" style="margin-top:8px"></div>
+          <div id="params-grid" class="hidden" style="margin-top: var(--space-2)"></div>
+          <div id="params-result" style="margin-top: var(--space-2)"></div>
           <div id="params-msg" class="error"></div>
         </div>
         <!-- 问 AI 该调哪个参数（工单 params-chat-ai/02）：诊断对话 →
              AI 回复里的参数名可点击定位到上方参数卡 -->
-        <div class="card-group" style="margin-top:12px">
+        <div class="card-group" style="margin-top: var(--space-4)">
           <div class="card-group-title">问 AI 该调哪个参数（诊断 → 推荐 → 定位改值）</div>
           <div class="row">
             <button id="btn-params-chat">问 AI：我该调哪个参数？</button>
             <span id="params-chat-status" class="muted"></span>
           </div>
-          <div id="params-chat" class="hidden" style="margin-top:8px"></div>
+          <div id="params-chat" class="hidden" style="margin-top: var(--space-2)"></div>
           <div id="params-chat-msg" class="error"></div>
         </div>
       </section>
 
       <section id="revise-panel-delivery" class="revise-panel hidden" role="tabpanel" aria-labelledby="revise-tab-delivery">
         <div id="delivery-empty-hint" class="revise-empty-hint">尚未加载输出目录——请先在「修订」页签加载当前会话或历史目录，再打开工程 / 检查 / 打包。</div>
-        <div class="card-group" style="margin-top:12px">
+        <div class="card-group" style="margin-top: var(--space-4)">
           <div class="card-group-title">交付（打开工程 / 检查 / 打包）</div>
           <div class="row" id="delivery-actions"></div>
           <details class="card-details">
             <summary>打开工程 / 交付检查（完成度汇总，未完成逐条列出）/ 一键打包 zip。</summary>
             <div class="card-details-body">打开发送前最后一公里：交付检查 = 任务清单完成度汇总（未完成逐条列出，失败一眼可见）；打包 = 工程目录 zip（排除 .contest_* 内部状态文件，时间戳命名不覆盖旧包，输出到工程目录隔壁）。</div>
           </details>
-          <div id="delivery-result" style="margin-top:8px"></div>
+          <div id="delivery-result" style="margin-top: var(--space-2)"></div>
           <div id="delivery-msg" class="error"></div>
         </div>
       </section>
@@ -2617,7 +2639,7 @@
         <button id="btn-handoff" class="primary" data-ico="clipboard">生成交接提示词</button>
         <button id="btn-handoff-copy" class="hidden" data-ico="copy">复制</button>
       </div>
-      <textarea id="handoff-text" rows="18" style="margin-top:8px" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
+      <textarea id="handoff-text" rows="18" style="margin-top: var(--space-2)" placeholder="点击「生成交接提示词」后这里会出现可复制的提示词…"></textarea>
       <div id="handoff-msg" class="error"></div>
     </div>
       </div><!-- /.gen-steps -->
@@ -2662,11 +2684,11 @@
           </div>
           <div class="row">
             <div style="flex:1"><label>功能简介（留空则让 AI 先出草稿）</label>
-              <div class="row" style="margin-top:4px;align-items:center">
+              <div class="row" style="margin-top: var(--space-1);align-items:center">
                 <input type="text" id="new-desc" placeholder="例如 超声波测距模块，返回厘米距离" style="flex:1">
                 <button id="btn-draft-desc" type="button">AI 出简介草稿</button>
               </div>
-              <span id="new-desc-msg" class="muted" style="margin-top:4px"></span>
+              <span id="new-desc-msg" class="muted" style="margin-top: var(--space-1)"></span>
             </div>
             <div style="flex:1"><label>依赖模块（逗号分隔）</label><input type="text" id="new-deps" placeholder="例如 delay"></div>
           </div>
@@ -2679,7 +2701,7 @@
         <div class="add-section-body">
           <h3>源文件（.c / .h）</h3>
           <div id="new-files"></div>
-          <div class="row" style="margin-top:8px">
+          <div class="row" style="margin-top: var(--space-2)">
             <button id="btn-add-file-row">+ 文件</button>
             <button id="btn-pick-mod-files">选择文件…</button>
             <button id="btn-pick-mod-dir">选择文件夹…</button>
@@ -2694,11 +2716,11 @@
         </button>
         <div class="add-section-body">
           <div class="row">
-            <label style="margin-top:10px"><input type="checkbox" id="new-hw"> 硬件绑定（换平台需移植）</label>
-            <label style="margin-top:10px"><input type="checkbox" id="new-verified"> 已在该平台验证过</label>
-            <label style="margin-top:10px">备注 <input type="text" id="new-notes" style="width:260px" placeholder="例如 接 PA1"></label>
+            <label style="margin-top: var(--space-3)"><input type="checkbox" id="new-hw"> 硬件绑定（换平台需移植）</label>
+            <label style="margin-top: var(--space-3)"><input type="checkbox" id="new-verified"> 已在该平台验证过</label>
+            <label style="margin-top: var(--space-3)">备注 <input type="text" id="new-notes" style="width:260px" placeholder="例如 接 PA1"></label>
           </div>
-          <div class="row" style="margin-top:8px">
+          <div class="row" style="margin-top: var(--space-2)">
             <button id="btn-add-module-submit" class="primary" style="margin-left:auto">校验并入库</button>
           </div>
         </div>
@@ -2727,7 +2749,7 @@
       <div class="lib-chips-row"><span class="muted">平台</span><span id="ref-platform-chips"></span></div>
       <div class="lib-chips-row"><span class="muted">锚定</span><span id="ref-anchor-chips"></span></div>
       <div id="ref-stats" class="lib-stats"></div>
-      <table class="lib-table" style="margin-top:10px">
+      <table class="lib-table" style="margin-top: var(--space-3)">
         <thead><tr><th>标题</th><th>类型</th><th>题型</th><th>锚定</th><th>简介</th><th>体量</th><th>操作</th></tr></thead>
         <tbody id="ref-rows"></tbody>
       </table>
@@ -2767,16 +2789,16 @@
               </div>
             </div>
             <div style="flex:1.8"><label>简介（留空则让 AI 先出草稿）</label>
-              <div class="row" style="margin-top:4px;align-items:flex-start">
+              <div class="row" style="margin-top: var(--space-1);align-items:flex-start">
                 <textarea id="ref-desc" rows="3" placeholder="这份资料是什么、覆盖哪些用法…" style="flex:1"></textarea>
-                <button id="btn-ref-draft-desc" type="button" style="margin-top:2px">AI 生成简介草稿</button>
+                <button id="btn-ref-draft-desc" type="button" style="margin-top: var(--space-1)">AI 生成简介草稿</button>
               </div>
-              <div id="ref-draft-msg" class="error" style="margin-top:4px"></div>
+              <div id="ref-draft-msg" class="error" style="margin-top: var(--space-1)"></div>
             </div>
           </div>
           <h3>素材文件（{文件名: 内容}；参考文件库存文本内容，PDF 等二进制文件无法入库；可点「选择文件 / 选择文件夹」直接载入，二进制自动跳过）</h3>
           <div id="ref-files"></div>
-          <div class="row" style="margin-top:8px">
+          <div class="row" style="margin-top: var(--space-2)">
             <button id="btn-ref-add-file-row">+ 文件</button>
             <button id="btn-ref-pick-files">选择文件…</button>
             <button id="btn-ref-pick-dir">选择文件夹…</button>
@@ -2800,7 +2822,7 @@
               </div>
             </div>
           </div>
-          <div class="row" style="margin-top:8px">
+          <div class="row" style="margin-top: var(--space-2)">
             <button id="btn-ref-add" class="primary">入库</button>
           </div>
           <div id="ref-add-msg" class="error"></div>
@@ -2828,7 +2850,7 @@
       </div>
       <div class="lib-chips-row"><span class="muted">批次</span><span id="pdf-batch-chips"></span></div>
       <div id="pdf-stats" class="lib-stats"></div>
-      <table class="lib-table" style="margin-top:10px">
+      <table class="lib-table" style="margin-top: var(--space-3)">
         <thead><tr><th>文件名</th><th>批次</th><th>目录</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead>
         <tbody id="pdf-rows"></tbody>
       </table>
@@ -2865,10 +2887,10 @@
         <span class="muted">长 PDF 自动走确定性分块（年份章节 + 题目标记），无需手动处理</span>
       </div>
       <div id="topic-split-msg" class="error"></div>
-      <div id="topic-proofread" class="hidden" style="margin-top:10px">
+      <div id="topic-proofread" class="hidden" style="margin-top: var(--space-3)">
         <h3>校对（年份 / 题号 / 题面可改，条目可删；确认前不落盘）</h3>
         <div id="topic-proofread-rows"></div>
-        <div class="row" style="margin-top:8px">
+        <div class="row" style="margin-top: var(--space-2)">
           <button id="btn-topic-confirm" class="primary breathe" data-ico="check">确认入库</button>
           <span class="muted">确认失败（编号重复 / 已存在 / 格式非法）会原样显示原因，不会留下半成品</span>
         </div>
@@ -2883,17 +2905,17 @@
       <h2>母版提炼（导入旧工程 → AI 判定 → 确认入库）</h2>
       <label for="project-dirs">旧工程目录（可直接输入每行一个，或点下方「选择文件夹」整夹导入；必须同一平台，含 .uvprojx 判定为 Keil 工程，含 .cproject 判定为 CCS 工程）</label>
       <textarea id="project-dirs" rows="4" placeholder="D:\old\proj-2024&#10;D:\old\proj-2025"></textarea>
-      <div class="row" style="margin-top:8px">
+      <div class="row" style="margin-top: var(--space-2)">
         <button id="btn-pick-dirs">选择文件夹…</button>
         <input type="file" id="pick-dirs" webkitdirectory multiple style="display:none">
         <span class="muted">点开后直接选旧工程文件夹（自动整夹上传，无需手打路径）；选中的文件夹追加进上方列表</span>
       </div>
-      <div id="staged-dirs" style="margin-top:8px"></div>
-      <div class="row" style="margin-top:10px">
+      <div id="staged-dirs" style="margin-top: var(--space-2)"></div>
+      <div class="row" style="margin-top: var(--space-3)">
         <button id="btn-scan">扫描工程</button>
         <button id="btn-distill" class="primary" disabled data-ico="wand">AI 提炼报告</button>
       </div>
-      <div id="distill-progress" class="distill-progress hidden" style="margin-top:10px">
+      <div id="distill-progress" class="distill-progress hidden" style="margin-top: var(--space-3)">
         <div id="prog-body">
           <div class="stepper" id="prog-stepper">
             <span class="step" data-i="0"><span class="dot">1</span>开始</span>
@@ -2909,7 +2931,7 @@
             <span id="prog-badge" class="prog-badge hidden"></span>
           </div>
           <div class="prog-bar hidden" id="prog-bar"><div id="prog-bar-fill"></div></div>
-          <div id="prog-llm-telemetry" class="llm-telemetry hidden" style="margin-top:6px"></div>
+          <div id="prog-llm-telemetry" class="llm-telemetry hidden" style="margin-top: var(--space-2)"></div>
           <div class="prog-timers">
             <span id="prog-timer-total">总用时 00:00</span>
             <span id="prog-timer-call">当前调用已等待 00:00</span>
@@ -2922,12 +2944,12 @@
         <div id="prog-done" class="prog-done hidden"></div>
       </div>
       <div id="scan-msg" class="error"></div>
-      <div id="scan-result" style="margin-top:10px"></div>
+      <div id="scan-result" style="margin-top: var(--space-3)"></div>
       <div id="distill-msg" class="error"></div>
-      <div id="report" class="hidden" style="margin-top:10px">
+      <div id="report" class="hidden" style="margin-top: var(--space-3)">
         <h3>提炼报告（确认后入库；merge 条目可换来源工程）</h3>
         <div id="report-body"></div>
-        <div class="row" style="margin-top:10px">
+        <div class="row" style="margin-top: var(--space-3)">
           <button id="btn-confirm" class="primary" data-ico="check">确认并入库</button>
           <span id="confirm-status"></span>
         </div>
@@ -2954,7 +2976,7 @@
   <section id="tab-changelog" class="page">
     <div class="card">
       <h2>更新记录 <span class="muted">（按天回看工具改进，数据源 CHANGELOG.md 由提交后自动补录）</span></h2>
-      <div id="changelog-list" style="margin-top:8px"></div>
+      <div id="changelog-list" style="margin-top: var(--space-2)"></div>
     </div>
   </section>
 
@@ -2972,7 +2994,7 @@
       <h2>应用设置</h2>
       <div class="muted" style="margin-bottom:10px">保存后即时生效，无需重启。</div>
       <div id="settings-banner" class="banner hidden">尚未配置：请填写 API key 后保存。<button id="btn-settings-banner-goto" type="button" class="ghost" style="margin-left:8px;padding:2px 10px;font-size:12px">去填写</button></div>
-      <div class="row" style="margin-top:12px;align-items:center">
+      <div class="row" style="margin-top: var(--space-4);align-items:center">
         <span style="font-size:12px;color:var(--muted)">生成页草稿（题面 / 平台 / 模块 / 骨架 / Q&A）自动保存于本机浏览器，刷新不丢。</span>
         <button id="btn-clear-draft" class="danger" style="margin-left:auto">清除草稿</button>
       </div>
@@ -2991,7 +3013,7 @@
           <div id="usage-total" style="font-size:13px;line-height:1.8">—</div>
         </div>
       </div>
-      <div class="row" style="margin-top:10px;align-items:center">
+      <div class="row" style="margin-top: var(--space-3);align-items:center">
         <button id="btn-usage-reset" class="danger" style="padding:4px 12px;font-size:12px">重置统计</button>
         <span id="usage-reset-msg" class="muted"></span>
       </div>
@@ -3006,50 +3028,50 @@
       </div>
       <div style="flex:1">
         <label>API key（留空 / 掩码保持不变）</label>
-        <div class="row" style="margin-top:4px">
+        <div class="row" style="margin-top: var(--space-1)">
           <input type="password" id="set-api-key" placeholder="sk-…" autocomplete="off" style="flex:1">
           <button type="button" id="btn-eye-api" class="btn-mini" style="flex:none" aria-pressed="false">显示</button>
         </div>
       </div>
       <!-- 保存并连接（工单 ux-walkthrough-02/04）：保存当前设置后真实调用一次
            校验连接；key 未填时给出明确提示 -->
-      <div class="row" style="margin-top:8px;align-items:center">
+      <div class="row" style="margin-top: var(--space-2);align-items:center">
         <button type="button" id="btn-save-connect" class="primary" data-ico="check">保存并连接</button>
         <span id="save-connect-msg" class="muted" style="flex:1"></span>
       </div>
       <div class="settings-section settings-collapse" data-collapse-id="ai-billing">
         <button type="button" class="settings-collapse-head">计费<span class="collapse-ico" aria-hidden="true">▾</span></button>
-      <div class="row" style="margin-top:10px;align-items:center">
+      <div class="row" style="margin-top: var(--space-3);align-items:center">
         <span style="font-size:12px;color:var(--muted)">计费时段</span>
         <label style="margin:0 12px 0 8px;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="peak" id="period-peak"> 高峰期</label>
         <label style="margin:0;font-size:12px;display:flex;align-items:center;gap:4px"><input type="radio" name="price-period" value="off_peak" id="period-off-peak"> 空闲期</label>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <div style="flex:1"><label>DeepSeek 输入单价·缓存命中（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in-hit" placeholder="0.10"></div>
         <div style="flex:1"><label>DeepSeek 输入单价·缓存未命中（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-in" placeholder="3.0"></div>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <div style="flex:1"><label>DeepSeek 输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-ds-out" placeholder="9.0"></div>
       </div>
-      <div class="muted" style="margin-top:6px">输入框留空 = 按所选时段的官方价计费（placeholder 即该时段价）；填值 = 自定义覆盖，覆盖优先于时段。</div>
-      <details id="price-reference" style="margin-top:8px">
+      <div class="muted" style="margin-top: var(--space-2)">输入框留空 = 按所选时段的官方价计费（placeholder 即该时段价）；填值 = 自定义覆盖，覆盖优先于时段。</div>
+      <details id="price-reference" style="margin-top: var(--space-2)">
         <summary style="cursor:pointer;font-size:12px;color:var(--muted)">DeepSeek Flash 官方价格参考（点击展开）</summary>
-        <div style="margin-top:8px;font-size:12px;line-height:1.7">
+        <div style="margin-top: var(--space-2);font-size:12px;line-height:1.7">
           <table style="border-collapse:collapse;width:100%;max-width:520px">
             <thead>
               <tr style="text-align:left"><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">计费项</th><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">空闲时段（元/百万 token）</th><th style="padding:4px 8px;border-bottom:1px solid var(--border,#333)">高峰时段（元/百万 token）</th></tr>
             </thead>
             <tbody id="price-ref-rows"></tbody>
           </table>
-          <div style="margin-top:6px" class="muted" id="price-ref-foot"></div>
-          <div class="muted" style="margin-top:6px">上方是官方参考价（用于费用估算展示）；可在输入框按实际时段覆盖默认值。</div>
+          <div style="margin-top: var(--space-2)" class="muted" id="price-ref-foot"></div>
+          <div class="muted" style="margin-top: var(--space-2)">上方是官方参考价（用于费用估算展示）；可在输入框按实际时段覆盖默认值。</div>
         </div>
       </details>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <div style="flex:1"><label>本地模型输入单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-in" placeholder="默认 0（本机免费）"></div>
         <div style="flex:1"><label>本地模型输出单价（元/百万 token）</label><input type="number" min="0" step="0.01" id="set-local-out" placeholder="默认 0（本机免费）"></div>
       </div>
-      <div class="muted" style="margin-top:6px">仅用于「最近 LLM 工作流」费用估算（官方价格会调整，此处的值是参考；留空 = 维持当前）。</div>
+      <div class="muted" style="margin-top: var(--space-2)">仅用于「最近 LLM 工作流」费用估算（官方价格会调整，此处的值是参考；留空 = 维持当前）。</div>
       </div>
     </div>
 
@@ -3072,24 +3094,24 @@
       <div class="muted" id="set-uv4-probe" style="font-size:12px"></div>
       <div class="muted" id="set-gmake-probe" style="font-size:12px"></div>
       <div class="settings-section">CCS + MSPM0 SDK（mspm0）</div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <div style="flex:1"><label>CCS SDK 目录（留空自动探测 C:/ti/ccs*）</label><input type="text" id="set-ccs-sdk-dir" placeholder="C:/ti/ccs2051/mspm0_sdk_2_10_00_04"></div>
         <div style="flex:1"><label>CCS 编译器目录（留空自动探测）</label><input type="text" id="set-ccs-compiler-dir" placeholder="C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS"></div>
       </div>
       <div class="muted" id="set-ccs-sdk-probe" style="font-size:12px"></div>
       <div class="muted" id="set-ccs-compiler-probe" style="font-size:12px"></div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <div style="flex:1"><label>SysConfig CLI 路径（留空自动探测）</label><input type="text" id="set-ccs-sysconfig-cli" placeholder="C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat"></div>
       </div>
       <div class="muted" id="set-ccs-sysconfig-probe" style="font-size:12px"></div>
       <div class="settings-section">烧录工具（工单 flash-deploy/02：留空 = 自动探测）</div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <div style="flex:1"><label>OpenOCD 路径（STM32，留空走 PATH）</label><input type="text" id="set-openocd-path" placeholder="openocd / C:\OpenOCD\bin\openocd.exe"></div>
         <div style="flex:1"><label>st-flash 路径（STM32 备选，留空走 PATH）</label><input type="text" id="set-stflash-path" placeholder="st-flash / C:\ST\st-flash\st-flash.exe"></div>
       </div>
       <div class="muted" id="set-openocd-status" style="font-size:12px"></div>
       <div class="muted" id="set-stflash-status" style="font-size:12px"></div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top: var(--space-3)">
         <div style="flex:1"><label>DSLite 路径（MSPM0/XDS110，留空自动探测 C:/ti/ccs*）</label><input type="text" id="set-dslite-path" placeholder="C:/ti/ccs2050/ccs/ccs_base/DebugServer/bin/DSLite.exe"></div>
       </div>
       <div class="muted" id="set-dslite-status" style="font-size:12px"></div>
@@ -3129,16 +3151,16 @@
       </div>
       <div style="flex:1">
         <label>视觉 API key（DeepSeek 模式留空 = 复用主 key；智谱模式填智谱 key）</label>
-        <div class="row" style="margin-top:4px">
+        <div class="row" style="margin-top: var(--space-1)">
           <input type="password" id="set-vision-api-key" placeholder="" autocomplete="off" style="flex:1">
           <button type="button" id="btn-eye-vision" class="btn-mini" style="flex:none" aria-pressed="false">显示</button>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-top: var(--space-3)">
         <input type="checkbox" id="set-vision-detail-qa" style="margin:0">
         <label for="set-vision-detail-qa" style="margin:0;font-size:12px;color:var(--muted)">问答式精注记（默认开：每张图第一轮描述后追问一轮细节，型号/尺寸标注/引脚号更全；关闭 = 省一半视觉调用）</label>
       </div>
-      <div class="row" style="margin-top:10px;align-items:center">
+      <div class="row" style="margin-top: var(--space-3);align-items:center">
         <button id="btn-vision-selfcheck" type="button" data-ico="check">自检视觉通道</button>
         <span id="vision-selfcheck-status" class="muted" style="flex:1"></span>
       </div>
@@ -3173,7 +3195,7 @@
       <div class="muted" style="margin:10px 0">已完成运行的只读摘要：本地 / DeepSeek 调用数、总耗时、请求字节、状态、每次调用明细与估算费用。仅保存在内存，重启即清空，不写配置。</div>
       <div class="muted" style="margin:0 0 8px">推荐缓存：同题重跑推荐直出上次结果（省最贵的推荐段 LLM 调用）；题面 / 平台变化自动失效，参考 / 澄清变化会提示差异。收敛轮数：核验轮模型自报一致即提前停（通常 2 轮内），上限兜底。</div>
       <div id="recent-workflows" class="recent-wf-list"></div>
-      <div class="muted" style="margin-top:8px">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
+      <div class="muted" style="margin-top: var(--space-2)">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
     </div>
 
     <div class="card" data-collapse-id="reset-records">
@@ -3182,7 +3204,7 @@
         <button id="btn-reset-records" type="button" data-ico="trash">清空本地记录</button>
         <span class="muted" style="flex:1">换题前一键清空 firstep 留下的全部题相关记录与缓存（任务自检勾选 / 题面草稿 / 评分核对 / 购买决策 / 最近工程列表 / AI 推荐缓存），恢复到第一次打开的状态。API 配置、主题等界面偏好与磁盘上的工程文件不受影响。</span>
       </div>
-      <div class="muted" style="margin-top:8px">适合每道题做完后、开新题之前按一下；清理不可撤销。</div>
+      <div class="muted" style="margin-top: var(--space-2)">适合每道题做完后、开新题之前按一下；清理不可撤销。</div>
       <div id="reset-records-msg" class="muted"></div>
     </div>
 

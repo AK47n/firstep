@@ -218,12 +218,12 @@ function reviseRenderDiff(diff, opts) {
   const chips = (arr, cls, sign) => (arr || []).length
     ? (arr || []).map((s) => '<span class="chip ' + cls + '">' + sign + esc(s) + "</span>").join(" ")
     : '<span class="muted">无</span>';
-  const rows = '<div class="head"><span class="slug">新增</span></div><div class="row" style="margin-top:4px">'
+  const rows = '<div class="head"><span class="slug">新增</span></div><div class="row" style="margin-top: var(--space-1)">'
     + chips(d.added, "add", "+ ") + "</div>"
-    + '<div class="head" style="margin-top:8px"><span class="slug">移除</span></div><div class="row" style="margin-top:4px">'
+    + '<div class="head" style="margin-top: var(--space-2)"><span class="slug">移除</span></div><div class="row" style="margin-top: var(--space-1)">'
     + chips(d.removed, "del", "− ") + "</div>";
   return opts && opts.summary ? rows
-    : rows + '<div class="head" style="margin-top:8px"><span class="slug">不变</span></div><div class="row" style="margin-top:4px">'
+    : rows + '<div class="head" style="margin-top: var(--space-2)"><span class="slug">不变</span></div><div class="row" style="margin-top: var(--space-1)">'
       + chips(d.unchanged, "same", "") + "</div>";
 }
 
@@ -243,20 +243,20 @@ function reviseRenderAnalysis(data) {
         + (refs ? '<span class="muted">影响需求：' + refs + "</span>" : "")
         + "</div>"
         + '<div class="reason">' + esc(im.reason || "（无理由）") + "</div>"
-        + (add || remove ? '<div class="row" style="margin-top:6px">' + add + remove + "</div>" : "")
+        + (add || remove ? '<div class="row" style="margin-top: var(--space-2)">' + add + remove + "</div>" : "")
         + "</div>";
     }).join(""));
   }
   parts.push('<h4 style="margin-bottom:8px">模块集 diff（确定性集合差）</h4>');
   parts.push('<div class="item">' + reviseRenderDiff(data.diff) + "</div>");
   const warns = data.warnings || [];
-  parts.push('<h4 style="margin-top:12px;margin-bottom:8px">平台警告（按建议模块集重算）</h4>');
+  parts.push('<h4 style="margin-top: var(--space-4);margin-bottom:8px">平台警告（按建议模块集重算）</h4>');
   parts.push(warns.length
     ? warns.map((w) => '<div class="warn-box unverified" style="margin-bottom:6px"><span class="slug">'
         + esc(w.slug) + "</span>：" + esc(w.message) + "</div>").join("")
     : '<div class="muted">无平台警告（建议模块集在该平台全部可用）。</div>');
   const suggested = data.suggested_slugs || [];
-  parts.push('<h4 style="margin-top:12px;margin-bottom:8px">建议模块集</h4>');
+  parts.push('<h4 style="margin-top: var(--space-4);margin-bottom:8px">建议模块集</h4>');
   parts.push('<div class="row">' + (suggested.length
     ? suggested.map((s) => '<span class="chip out">' + esc(s) + "</span>").join(" ")
     : '<span class="muted">（空）</span>') + "</div>");
@@ -411,13 +411,13 @@ function reviseRenderApplyDone(data) {
     parts.push(reviseRenderDiff(data.diff, { summary: true }));
   }
   if (data.tasks_invalidated) {
-    parts.push('<div class="warn-box unverified" style="margin-top:8px">⚠ 任务清单已作废（模块集变化 → 重生成）：原清单的推进进度 / 备注已与新工程无关。请到下方「逐步深化」重新拆解任务。</div>');
+    parts.push('<div class="warn-box unverified" style="margin-top: var(--space-2)">⚠ 任务清单已作废（模块集变化 → 重生成）：原清单的推进进度 / 备注已与新工程无关。请到下方「逐步深化」重新拆解任务。</div>');
   }
-  parts.push('<div class="reason" style="margin-top:8px">已备份 · 修订时间：'
+  parts.push('<div class="reason" style="margin-top: var(--space-2)">已备份 · 修订时间：'
     + esc(data.generated_at || "—") + "</div>");
   // 用户故事 10：diff 记录含 Q&A 原文——展示本次并入的 Q&A 全文（esc 转义 + pre-wrap 保留换行）
   if (data.qa_text) {
-    parts.push('<div class="reason" style="margin-top:8px;white-space:pre-wrap"><strong>本次并入 Q&A：</strong>'
+    parts.push('<div class="reason" style="margin-top: var(--space-2);white-space:pre-wrap"><strong>本次并入 Q&A：</strong>'
       + esc(data.qa_text) + "</div>");
   }
   parts.push("</div>");
@@ -488,7 +488,7 @@ function reviseRenderVerify(data) {
   });
   const box = $("revise-result");
   box.innerHTML = box.innerHTML
-    + '<div class="item" style="margin-top:10px"><div class="head"><span class="slug">深化验证</span> ' + markup.badge + "</div>"
+    + '<div class="item" style="margin-top: var(--space-3)"><div class="head"><span class="slug">深化验证</span> ' + markup.badge + "</div>"
     + '<div class="reason">' + markup.detail + "</div>"
     + '<div class="reason">已备份（可回滚）</div>'
     + mainDiffHTML(data.main_diff)

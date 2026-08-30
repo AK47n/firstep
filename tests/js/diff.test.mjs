@@ -62,7 +62,7 @@ test("mainDiffHTML: hunk 标题缺省回退「第 N 行附近」", () => {
 
 test("mainDiffHTML: null / undefined / 空 hunks → 占位或空串", () => {
   assert.equal(mainDiffHTML(null, "深化"),
-    '<div class="muted" style="margin-top:8px">深化未改动 main.c（无差异）。</div>');
+    '<div class="muted" style="margin-top: var(--space-2)">深化未改动 main.c（无差异）。</div>');
   assert.ok(mainDiffHTML(undefined, "深化") === "");
   assert.ok(mainDiffHTML({ stats: {}, hunks: [] }, "任务").includes("任务未改动 main.c（无差异）。"));
 });
