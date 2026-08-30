@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e9db5b05a1387c7f86553d4bba539dc7d8054aa1 -->
+<!-- changelog-auto: last-commit=a37efc134ba7777c04ade1d60357a93784b97ed5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -107,6 +107,7 @@
 - 20:50 工单 16 补登记：reference_library.pdf_referenced_by 加入 autocommit 写函数注册表（read 类，只读不落盘）——修复 test_write_function_classification_registry 失败（工单 16 实现时漏跑该测试）
 - 21:26 工单 22-24 验收框补勾：库页修复/PDF 失败清占位、AI 入口直达、欢迎页响应式——ux-walkthrough-02 走查对账修正（实现已落地、验收未勾）
 - 21:26 修复生成页步骤导航点播跳转：短卡贴页尾时点击（如步骤 11）被滚动底部 clamp 停在原地、高亮漂到末步（点 11 显 12）——统一 scrollToStep 按吸顶栏让位、贴尾卡改居中落点，点击优先高亮至手动滚动
+- 21:31 ux-walkthrough-02 走查归档：spec / 01-21 工单 / 验收报告与发现汇总（报告「走查产物」5 个一并入库；探针与截图过程产物不入库）——走查验收通过、无需补票
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
