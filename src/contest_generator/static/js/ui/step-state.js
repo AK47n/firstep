@@ -14,7 +14,7 @@
 // syncStep7 / stepCard / initCardCollapse（启动区）。
 import { $, toast } from "/js/app.js";
 import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, stepProgress, step7DoneState, step7WireMode } from "/js/fx/draft.js";
-import { attachCelebrate, syncCollapseBtn, collapseToggleAll } from "/js/fx/generate.js";
+import { attachCelebrate, syncCollapseBtn, collapseToggleAll, GEN_CARD_COLLAPSE_KEY, parseGenCardCollapse, genCardInitialCollapsed, saveGenCardCollapse } from "/js/fx/generate.js";
 
 export const STEP_NAV_CARD_SELECTOR = "#tab-generate .gen-steps > .card";
 export const STEP_TOTAL = 12;
@@ -111,23 +111,45 @@ export function renderStepProgress() {
 }
 export function initCardCollapse() {
   const cards = Array.from(document.querySelectorAll(CARD_COLLAPSE_SELECTOR));
+  // 折叠记忆（工单 ux-polish-02/02）：单键 JSON {步骤号: bool}；用户选择优先。
+  // 初始默认 = 已完成且非当前步折叠（首屏更清爽）；无步骤号卡（6.5 实例卡）
+  // 不参与自动折叠与记忆。读取失败降级 {}，写入失败静默（沿草稿先例）。
+  const stored = parseGenCardCollapse(localStorage.getItem(GEN_CARD_COLLAPSE_KEY));
+  const persist = () => { saveGenCardCollapse(localStorage, stored); };
+  const curEl = document.querySelector(".step-nav .step-dot.current");
+  const currentNo = curEl ? parseInt(curEl.dataset.step, 10) : NaN;
   for (const c of cards) {
     const h2 = c.querySelector("h2");
     if (!h2) continue;
+    const no = c.querySelector(".step-no");
+    const n = no ? parseInt(no.textContent, 10) : NaN;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "card-collapse";
-    syncCollapseBtn(btn, false);
+    const initial = genCardInitialCollapsed({
+      no: n, done: stepDoneSet.has(n), current: n === currentNo, stored,
+    });
+    syncCollapseBtn(btn, initial);
     btn.textContent = "▾";
+    const toggleCard = () => {
+      const collapsed = c.classList.toggle("collapsed");
+      syncCollapseBtn(btn, collapsed);
+      if (Number.isFinite(n)) {
+        stored[n] = collapsed;
+        persist();
+      }
+    };
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      syncCollapseBtn(btn, c.classList.toggle("collapsed"));
+      toggleCard();
     });
     h2.appendChild(btn);
     h2.addEventListener("click", (e) => {
       if (e.target.closest(".card-collapse")) return;
-      syncCollapseBtn(btn, c.classList.toggle("collapsed"));
+      toggleCard();
     });
+    // 默认规则落地 = 折叠状态类 + 按钮同步（记忆优先在初始判定内完成）
+    if (initial) c.classList.add("collapsed");
   }
   const nav = $("step-nav");
   if (!nav) return;
@@ -143,7 +165,14 @@ export function initCardCollapse() {
       return;
     }
     const collapsing = !toggleBtn.classList.contains("on");
-    collapseToggleAll(cards, stepDoneSet, collapsing);
+    const out = collapseToggleAll(cards, stepDoneSet, collapsing);
+    // 记忆与最终视觉态一致（工单 02：展开/收起都落盘，刷新后保持）
+    for (const o of out) {
+      if (Number.isFinite(o.n)) {
+        stored[o.n] = o.collapsed;
+        persist();
+      }
+    }
     toggleBtn.classList.toggle("on", collapsing);
     toggleBtn.textContent = collapsing ? "全部展开" : "收起已完成";
   });

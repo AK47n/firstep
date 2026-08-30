@@ -128,6 +128,35 @@ export function collapseToggleAll(cards, doneSet, collapse) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// 生成页卡片折叠初始态与记忆（工单 ux-polish-02/02）：默认「已完成且非当前步」
+// 折叠（首屏更清爽），用户手动调整按步骤号持久化（localStorage 单键 JSON）。
+// 纯函数三件 + 常量供胶水层取用：解析 / 初始判定 / 写入（异常静默降级）。
+// ---------------------------------------------------------------------------
+export const GEN_CARD_COLLAPSE_KEY = "firstep.genCardCollapse.v1";
+
+export function parseGenCardCollapse(raw) {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch { return {}; }
+}
+
+/** 单卡初始折叠判定：state = {no, done, current, stored}；无步骤号恒展开；
+ * 记忆优先（用户选择覆盖默认规则）；无记忆 = 已完成且非当前步折叠。 */
+export function genCardInitialCollapsed(state) {
+  if (state.no == null || Number.isNaN(state.no)) return false;
+  const stored = state.stored || {};
+  if (state.no in stored) return !!stored[state.no];
+  return !!(state.done && !state.current);
+}
+
+export function saveGenCardCollapse(storage, state) {
+  try { storage.setItem(GEN_CARD_COLLAPSE_KEY, JSON.stringify(state)); return true; }
+  catch (e) { return false; }
+}
+
 export function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
   const n = Number(s);
   return Number.isFinite(n) && n >= 0 ? n.toFixed(1) : "0.0";
@@ -147,5 +176,5 @@ export function frameworkNoteHTML(data) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, fmtSeconds, frameworkNoteHTML, fixLogGroupHidden });
+  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, GEN_CARD_COLLAPSE_KEY, parseGenCardCollapse, genCardInitialCollapsed, saveGenCardCollapse, fmtSeconds, frameworkNoteHTML, fixLogGroupHidden });
 }

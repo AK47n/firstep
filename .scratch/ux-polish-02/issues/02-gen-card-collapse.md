@@ -4,7 +4,14 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**实现记录：** fx/generate.js 新增 GEN_CARD_COLLAPSE_KEY / parseGenCardCollapse /
+genCardInitialCollapsed / saveGenCardCollapse 纯函数；ui/step-state.js initCardCollapse
+按「记忆优先 → 默认已完成且非当前步折叠」落地初始态，手动 toggle 与「收起已完成」
+总开关都写入记忆；无步骤号卡（6.5 实例卡）不参与；card-collapse.test.mjs 增 5 例
+（常量/解析降级/初始判定/记忆优先/写入与异常静默）+ fx-guard 登记；CDP 冒烟
+probe-t02.mjs 全 PASS（注意：验证前必须禁缓存导航，旧页面的模块缓存会掩盖新代码）。
 
 - [ ] 首次打开：已完成步骤卡折叠，未完成与当前步展开（无任何完成时全展开，行为同现状）
 - [ ] 手动折叠/展开某卡后刷新，状态保持（localStorage 持久化）
