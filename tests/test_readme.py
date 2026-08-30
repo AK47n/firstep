@@ -26,6 +26,7 @@ from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.pin_bindings import ResolvedBinding
 from contest_generator.readme import (
     PIN_TABLE_FOOTNOTE,
+    PIN_TABLE_HEADING,
     README_FILENAME,
     PLATFORM_TITLES,
     parse_pin_table,
@@ -40,9 +41,11 @@ from tests.fakes import (
     make_fake_master_project,
 )
 
-# 五章标题（spec 章节顺序：概览 → 快速上手 → 引脚表 → 模块清单 → 验证清单）
+# 章节标题（spec 章节顺序：概览 → 目录结构 → 快速上手 → 引脚表 → 模块清单 →
+# 验证清单；工单 beginner-gap-closure/04 增「目录结构」）
 CHAPTER_HEADINGS = (
     "## 工程概览",
+    "## 目录结构",
     "## 快速上手：编译 + 烧录",
     "## 引脚接线表",
     "## 模块清单与依赖",
@@ -511,10 +514,16 @@ def test_generate_project_readme_omits_score_section_when_absent(
 
 
 def _pin_data_rows(text: str) -> list[str]:
-    """引脚表数据行（剔除表头 `| 模块 |` 与分隔行 `|---|`）。"""
+    """引脚表数据行（表头与分隔行剔除；只取「引脚接线表」章内——工单
+    beginner-gap-closure/04 起 README 含多张表，其它章表格不误收）。"""
+    lines = text.splitlines()
+    try:
+        lines = lines[lines.index(PIN_TABLE_HEADING):]
+    except ValueError:
+        return []
     return [
         ln
-        for ln in text.splitlines()
+        for ln in lines
         if ln.startswith("| ") and not ln.startswith("| 模块") and not ln.startswith("|---")
     ]
 
@@ -574,6 +583,46 @@ def test_render_readme_trailing_newline():
     """尾部换行幂等：返回文本恒以单个 \\n 收尾。"""
     assert render_readme("stm32", None, []).endswith("\n")
     assert not render_readme("stm32", None, []).endswith("\n\n")
+
+
+def test_render_readme_directory_structure_and_skeleton_notice():
+    """目录结构章 + 骨架声明（工单 beginner-gap-closure/04）：两平台各列出
+    实际关键目录/文件，含「骨架/占位/核对」声明——新手打开文件夹知道各目录
+    作用、知道该补什么代码。"""
+    for platform, keys in (
+        (
+            PLATFORM_STM32,
+            ("modules/", "user/", "sys/", "ml_libs/", "key/", "main.c", "pin_config.h"),
+        ),
+        (
+            PLATFORM_MSPM0,
+            ("modules/", "main.c", "mspm0.syscfg", "Debug/", ".ccsproject"),
+        ),
+    ):
+        text = render_readme(platform, None, [])
+        assert "## 目录结构" in text, f"{platform} 缺目录结构章"
+        for key in keys:
+            assert key in text, f"{platform} 目录结构缺 {key}"
+        for phrase in ("骨架", "占位", "核对"):
+            assert phrase in text, f"{platform} 骨架声明缺「{phrase}」"
+
+
+def test_directory_structure_syncs_with_master_templates():
+    """目录结构行与母版模板同步维护（工单 beginner-gap-closure/04）：列出项
+    必须真实存在——母版目录/文件直接核对；modules/ 与 Debug/ 为生成时创建
+    （模块复制 / CCS 构建产物），跳过。改母版结构漏改 README 即红。"""
+    from contest_generator.readme import DIRECTORY_STRUCTURE
+
+    master_root = Path(__file__).resolve().parents[1] / "library" / "masters"
+    for platform, rows in DIRECTORY_STRUCTURE.items():
+        assert rows, f"{platform} 目录结构为空"
+        for path, _note in rows:
+            name = path.rstrip("/").rsplit("/", 1)[-1]
+            if name in ("modules", "Debug"):
+                continue  # 生成时创建
+            assert (master_root / platform / path).exists(), (
+                f"{platform}/{path} 不在母版模板中——目录结构章与模板不同步"
+            )
 
 
 def test_render_readme_board_name_optional():
