@@ -24,6 +24,7 @@
 // btn-generate 覆盖重发监听器（工单 20 补迁——readinessState 随工单 19 迁出后
 import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
+import { overwriteBakHint } from "/js/fx/danger.js";  // 覆盖确认 .bak 找回说明（工单 ux-walkthrough-02/03）
 import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, frameworkNoteHTML } from "/js/fx/generate.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { goTaskProgress } from "/js/ui/goto-tasks.js";  // 结果区「去任务推进」入口（beginner-gap-closure/02，与第 12 步同源）
@@ -136,6 +137,42 @@ function renderGenerateSuccess(data) {
     compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
   }
 }
+
+// ---------------------------------------------------------------------------
+// 覆盖备份应用内恢复（工单 ux-walkthrough-02/03）：覆盖生成后旧工程在 .bak，
+// 结果区按钮一键把备份改回原名（后端安全校验：目标已存在 / 备份缺失拒绝）。
+// ---------------------------------------------------------------------------
+let bakRestoreName = null;
+function showBackupRestore(dirName) {
+  bakRestoreName = dirName || null;
+  const box = $("res-backup-restore");
+  if (!box || !bakRestoreName) return;
+  $("res-bak-name").textContent = bakRestoreName + ".bak";
+  const msg = $("res-bak-msg");
+  msg.textContent = "";
+  msg.classList.remove("ok", "error");
+  box.classList.remove("hidden");
+}
+$("btn-restore-bak").addEventListener("click", async () => {
+  const msg = $("res-bak-msg");
+  msg.textContent = "";
+  msg.classList.remove("ok", "error");
+  if (!bakRestoreName) return;
+  const btn = $("btn-restore-bak");
+  btn.disabled = true;
+  try {
+    const data = await apiPost("/api/generate/restore-backup", { name: bakRestoreName });
+    msg.textContent = data.message || ("已把备份恢复为「" + bakRestoreName + "」");
+    msg.classList.add("ok");
+    $("res-backup-restore").classList.add("hidden");  // 备份已恢复，按钮使命完成
+    toast("ok", data.message || "已恢复覆盖前备份");
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.classList.add("error");
+  } finally {
+    btn.disabled = false;
+  }
+});
 // 已迁至 static/js/fx/generate.js（工单 08）：genStageTexts / fmtWait。
 
 // 已迁至 static/js/fx/generate.js（工单 08）：generationOutputDirPayload。
@@ -616,7 +653,7 @@ $("btn-generate").addEventListener("click", async () => {
         title: "覆盖生成？",
         message: "桌面上已有同名工程"
           + (dirName ? "「" + dirName + "」" : "")
-          + "：" + hint + "。确定覆盖并重新生成？",
+          + "：" + hint + "。" + overwriteBakHint(dirName) + "确定覆盖并重新生成？",
         danger: true,
         confirmText: "确定覆盖",
       })) {
@@ -627,7 +664,8 @@ $("btn-generate").addEventListener("click", async () => {
           const data = await apiPost("/api/generate", { ...payload, overwrite: true });
           stopStage();
           renderGenerateSuccess(data);
-          toast("ok", "已覆盖生成（旧工程备份为 .bak）");
+          showBackupRestore(dirName);   // 覆盖成功：结果区出现「恢复覆盖前备份」（工单 ux-walkthrough-02/03）
+          toast("ok", "已覆盖生成（旧工程备份为 .bak，可在结果区一键恢复）");
           return;
         } catch (e2) {
           $("generate-msg").textContent = e2.message;

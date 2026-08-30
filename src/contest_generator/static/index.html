@@ -2273,6 +2273,16 @@
               <div class="res-value"><span id="res-dir" class="slug"></span>
                 <button id="btn-copy-dir" class="hidden" style="margin-left:8px;padding:2px 10px;font-size:12px" data-ico="copy">复制路径</button></div>
             </div>
+            <!-- 覆盖备份恢复（工单 ux-walkthrough-02/03）：覆盖生成后旧工程在
+                 .bak，应用内一键改回原名（目标目录已存在时后端拒绝并提示） -->
+            <div class="res-block hidden" id="res-backup-restore">
+              <div class="res-label">覆盖备份</div>
+              <div class="res-value">
+                <button id="btn-restore-bak" class="danger" type="button">恢复覆盖前备份</button>
+                <span class="muted" style="margin-left:8px">旧工程备份为 <span id="res-bak-name" class="slug"></span>；恢复前需先把当前同名目录移走或删除。</span>
+              </div>
+              <div id="res-bak-msg" style="margin-top:6px"></div>
+            </div>
             <!-- 自动附带产物（工单 report-draft-demo/04）：设计报告草稿 + 演示脚本
                  随生成自动落盘工程根——badge 标注 + 点击复制文件路径入口（打开 =
                  复制后在资源管理器 / 编辑器打开，本地应用不引后端打开接口） -->

@@ -123,6 +123,7 @@ from .generation_output import (
     GenerationConflictError,
     backup_project_dir,
     desktop_topic_dir_verdict,
+    restore_project_backup,
     topic_dir_title,
     with_platform_suffix,
 )
@@ -1758,6 +1759,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         except OSError:
             pass
         return _generation_result(summary)
+
+    @app.post("/api/generate/restore-backup")
+    @_map_errors
+    def generate_restore_backup(payload: dict) -> dict:
+        """恢复覆盖前备份（工单 ux-walkthrough-02/03）：把桌面 `<name>.bak`
+        目录改名回 `<name>`（原子、零复制）。目标名不合法 / 备份缺失 / 目标已
+        存在 → BackupRestoreError 400 中文（errors.py 统一映射）；纯文件操作，
+        不触碰生成 / LLM 链路。"""
+        name = _require_str(payload, "name")
+        restored = restore_project_backup(context.desktop_dir(), name)
+        return {
+            "restored": str(restored),
+            "name": name,
+            "message": f"已把覆盖前的备份恢复为「{name}」",
+        }
 
     @app.post("/api/generate/preview-dir")
     @_map_errors

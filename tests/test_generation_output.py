@@ -8,8 +8,10 @@ import pytest
 
 from contest_generator.generation_output import (
     TOPIC_EN_TITLES,
+    BackupRestoreError,
     backup_project_dir,
     desktop_topic_dir_verdict,
+    restore_project_backup,
     topic_dir_title,
     topic_en_title,
     topic_short_title,
@@ -227,3 +229,54 @@ def test_backup_project_dir_rename_failure_leaves_original(tmp_path, monkeypatch
     assert (project / "main.c").read_text(encoding="utf-8") == "旧工程"
     assert (project / ".contest_context.json").read_text(encoding="utf-8") == '{"旧": true}'
     assert not (tmp_path / "Auto_Car_STM32.bak").exists()
+
+
+def test_restore_project_backup_renames_bak_back(tmp_path):
+    """恢复覆盖前备份（工单 ux-walkthrough-02/03）：把 <name>.bak 目录改名回
+    <name>（同目录原子、零复制），内容原样、备份消失。"""
+    desktop = tmp_path
+    backup = desktop / "Auto_Car_STM32.bak"
+    backup.mkdir()
+    (backup / "OLD_MARKER.txt").write_text("第一代", encoding="utf-8")
+
+    restored = restore_project_backup(desktop, "Auto_Car_STM32")
+
+    assert restored == desktop / "Auto_Car_STM32"
+    assert (restored / "OLD_MARKER.txt").read_text(encoding="utf-8") == "第一代"
+    assert not backup.exists()
+
+
+def test_restore_project_backup_rejects_when_target_exists(tmp_path):
+    """恢复（工单 ux-walkthrough-02/03）：目标目录已存在 → 拒绝（400 中文），
+    备份与目标均分毫未动。"""
+    desktop = tmp_path
+    target = desktop / "Auto_Car_STM32"
+    target.mkdir()
+    (target / "main.c").write_text("新工程", encoding="utf-8")
+    backup = desktop / "Auto_Car_STM32.bak"
+    backup.mkdir()
+    (backup / "OLD_MARKER.txt").write_text("第一代", encoding="utf-8")
+
+    with pytest.raises(BackupRestoreError, match="目标目录"):
+        restore_project_backup(desktop, "Auto_Car_STM32")
+
+    assert (target / "main.c").read_text(encoding="utf-8") == "新工程"
+    assert (backup / "OLD_MARKER.txt").read_text(encoding="utf-8") == "第一代"
+
+
+def test_restore_project_backup_rejects_missing_backup(tmp_path):
+    """恢复（工单 ux-walkthrough-02/03）：无 .bak → 友好报错（400 中文），
+    桌面不产生任何变化。"""
+    with pytest.raises(BackupRestoreError, match="没有找到待恢复的备份"):
+        restore_project_backup(tmp_path, "Auto_Car_STM32")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["../Auto_Car", "a/b", "C:x", "Auto_Car.bak", "Auto\\Car", "/abs"],
+)
+def test_restore_project_backup_rejects_unsafe_names(tmp_path, bad):
+    """恢复（工单 ux-walkthrough-02/03）：路径越界 / 自带 .bak 后缀 →
+    目标名不合法拒绝——与 is_unsafe_path 同为「盘访问前判定」安全立场。"""
+    with pytest.raises(BackupRestoreError, match="目标名不合法"):
+        restore_project_backup(tmp_path, bad)
