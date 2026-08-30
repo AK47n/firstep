@@ -86,7 +86,9 @@ const DOMAINS = {
     isConflictError: "fn", conflictDirName: "fn", genStageTexts: "fn",
     fmtWait: "fn", generationOutputDirPayload: "fn", collectBindings: "fn",
     formatResModules: "fn", attachCelebrate: "fn", collapseBtnLabel: "fn",
-    syncCollapseBtn: "fn", collapseToggleAll: "fn", fmtSeconds: "fn",
+    syncCollapseBtn: "fn", collapseToggleAll: "fn", GEN_CARD_COLLAPSE_KEY: "string",
+    parseGenCardCollapse: "fn", genCardInitialCollapsed: "fn", saveGenCardCollapse: "fn",
+    fmtSeconds: "fn",
     frameworkNoteHTML: "fn", fixLogGroupHidden: "fn",
   },
   "recommend.js": {

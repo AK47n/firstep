@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   collapseBtnLabel, collapseToggleAll,
+  GEN_CARD_COLLAPSE_KEY, parseGenCardCollapse, genCardInitialCollapsed, saveGenCardCollapse,
 } from "../../src/contest_generator/static/js/fx/generate.js";
 
 // 假卡片：只实现 .step-no 查询、classList.toggle、.card-collapse title/aria-label 回写
@@ -68,4 +69,47 @@ test("无 .step-no 的卡（如实例卡）永不折叠", () => {
   const out = collapseToggleAll([noBadge], [1, 2], true);  // NaN 不在完成集合
   assert.ok(Number.isNaN(out[0].n));
   assert.equal(out[0].collapsed, false);
+});
+
+// ---------------------------------------------------------------------------
+// 初始折叠判定与记忆（工单 ux-polish-02/02）：默认「已完成且非当前步」折叠，
+// 用户选择优先（localStorage 单键 JSON）
+// ---------------------------------------------------------------------------
+
+test("常量与解析：单键名；空/损坏 JSON 降级 {}", () => {
+  assert.equal(GEN_CARD_COLLAPSE_KEY, "firstep.genCardCollapse.v1");
+  assert.deepEqual(parseGenCardCollapse(null), {});
+  assert.deepEqual(parseGenCardCollapse(""), {});
+  assert.deepEqual(parseGenCardCollapse("not json"), {});
+  assert.deepEqual(parseGenCardCollapse('{"1":true}'), { 1: true });
+  assert.deepEqual(parseGenCardCollapse("[1,2]"), {});
+});
+
+test("初始判定：无步骤号恒展开", () => {
+  assert.equal(genCardInitialCollapsed({ no: NaN, done: true, current: false, stored: {} }), false);
+  assert.equal(genCardInitialCollapsed({ no: null, done: true, current: false, stored: {} }), false);
+});
+
+test("初始判定：无记忆时已完成且非当前步折叠，其余展开", () => {
+  assert.equal(genCardInitialCollapsed({ no: 7, done: true, current: false, stored: {} }), true);
+  assert.equal(genCardInitialCollapsed({ no: 7, done: true, current: true, stored: {} }), false);
+  assert.equal(genCardInitialCollapsed({ no: 5, done: false, current: false, stored: {} }), false);
+  assert.equal(genCardInitialCollapsed({ no: 5, done: false, current: true, stored: {} }), false);
+});
+
+test("初始判定：记忆优先（用户选择覆盖默认规则）", () => {
+  const stored = { 7: false, 5: true };
+  assert.equal(genCardInitialCollapsed({ no: 7, done: true, current: false, stored }), false);
+  assert.equal(genCardInitialCollapsed({ no: 5, done: false, current: false, stored }), true);
+});
+
+test("saveGenCardCollapse：写 localStorage 返回 true；异常静默 false", () => {
+  const mem = new Map();
+  const storage = {
+    setItem: (k, v) => { mem.set(k, v); },
+  };
+  assert.equal(saveGenCardCollapse(storage, { 7: true }), true);
+  assert.equal(mem.get(GEN_CARD_COLLAPSE_KEY), '{"7":true}');
+  const bad = { setItem: () => { throw new Error("quota"); } };
+  assert.equal(saveGenCardCollapse(bad, { 7: true }), false);
 });
