@@ -18,9 +18,10 @@ HTTP 200，Content-Type: text/event-stream，无自动重连（断线 = 放弃�
 每个事件 = "event: <type>\\n" + "data: <JSON>\\n" + "\\n"（空行分隔）。
 提炼端点 type ∈ start / batch_start / batch_done / retry / phase_done /
 done / error（前五者由 llm 层发射器产生，done / error 由运行器发射收尾）；
-推荐端点（工单 10）type ∈ round / converged / question / done / error
-（round / converged 由收敛循环发射器产生，question / done / error 由运行
-器发射收尾）。进度事件 data = ProgressEvent 字段 JSON；done 的 data =
+推荐端点（工单 10）type ∈ start / round / converged / question / done / error
+（start 为工单 ux-walkthrough-02/13 新增：首个分钟级 LLM 调用前先送一条带
+中文阶段标签（stage 字段）的进度；round / converged 由收敛循环发射器产生，
+question / done / error 由运行器发射收尾）。进度事件 data = ProgressEvent 字段 JSON；done 的 data =
 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；question 的
 data = {"questions": [...]}（模型拿不准向用户补问）；error 的 data =
 {"message": 中文错误信息}；done / question / error 后流结束。

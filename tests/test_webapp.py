@@ -5135,11 +5135,12 @@ def test_recommend_streams_rounds_and_converged_events(client):
     """SSE 契约：round（轮次 / 上限）→ … → converged（收敛轮）→ done（推荐结果）。"""
     events = _recommend_stream(client, {"problem_text": "温湿度采集并显示"})
 
-    assert [kind for kind, _ in events] == ["round", "round", "converged", "done"]
-    assert events[0][1]["round"] == 1 and events[0][1]["round_total"] == 4
-    assert events[1][1]["round"] == 2
-    assert events[2][1]["round"] == 2  # converged 事件携带收敛轮次
-    assert "modules" in events[3][1]
+    assert [kind for kind, _ in events] == ["start", "round", "round", "converged", "done"]
+    assert events[0][1]["stage"]  # start 事件带中文阶段标签（工单 ux-walkthrough-02/13）
+    assert events[1][1]["round"] == 1 and events[1][1]["round_total"] == 4
+    assert events[2][1]["round"] == 2
+    assert events[3][1]["round"] == 2  # converged 事件携带收敛轮次
+    assert "modules" in events[4][1]
 
 
 def test_recommend_question_ends_stream_with_question_event(client, context):
@@ -5156,7 +5157,7 @@ def test_recommend_question_ends_stream_with_question_event(client, context):
 
     events = _recommend_stream(client, {"problem_text": "识别数字的送药小车"})
 
-    assert [kind for kind, _ in events] == ["round", EVENT_QUESTION]
+    assert [kind for kind, _ in events] == ["start", "round", EVENT_QUESTION]
     assert events[-1][1]["questions"] == [
         "题面没有说明识别方式，用摄像头还是传感器？"
     ]
@@ -5231,7 +5232,7 @@ def test_recommend_vision_qa_not_injected_without_figure_pdf(client, context, mo
 
     events = _recommend_stream(client, {"problem_text": "粘贴的陌生题面"})
 
-    assert [kind for kind, _ in events] == [EVENT_QUESTION]
+    assert [kind for kind, _ in events] == ["start", EVENT_QUESTION]
     assert not called
 
 
@@ -5246,7 +5247,7 @@ def test_recommend_clarify_questions_end_stream_with_question_event(client, cont
         client, {"problem_text": "识别数字的送药小车"}
     )
 
-    assert [kind for kind, _ in events] == [EVENT_QUESTION]
+    assert [kind for kind, _ in events] == ["start", EVENT_QUESTION]
     assert events[-1][1]["questions"] == ["具体要识别什么数字？"]
     assert llm.clarify_calls == [("识别数字的送药小车", ())]
 
@@ -5271,6 +5272,7 @@ def test_recommend_clarify_empty_with_history_goes_straight_to_convergence(
     )
 
     assert [kind for kind, _ in events] == [
+        "start",
         "round",
         "round",
         "converged",
@@ -5291,7 +5293,7 @@ def test_recommend_convergence_ask_answers_carried_into_retry(client, context):
     holder["llm"] = llm
 
     first = _recommend_stream(client, {"problem_text": "温湿度采集并显示"})
-    assert [kind for kind, _ in first] == ["round", EVENT_QUESTION]
+    assert [kind for kind, _ in first] == ["start", "round", EVENT_QUESTION]
     question = first[-1][1]["questions"][0]
 
     second = _recommend_stream(
@@ -5302,6 +5304,7 @@ def test_recommend_convergence_ask_answers_carried_into_retry(client, context):
         },
     )
     assert [kind for kind, _ in second] == [
+        "start",
         "round",
         "round",
         "converged",
