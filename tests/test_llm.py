@@ -5167,6 +5167,31 @@ def test_select_prompt_marks_multi_instance_and_contract_includes_instances():
     assert "不输出 pin" in user_message
 
 
+def test_select_prompt_multi_instance_vocab_per_module_and_union():
+    """多实例词表按模块（key-multi-instance/05）：规则段逐模块列举变体
+    （led 变体 = 颜色，内置 red/yellow/green；key 变体 = 功能，内置
+    start/stop/mode/set），输出契约的 variant 可选值 = 库内多实例模块
+    token 并集（策略登记序，led → key）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    led_summary = ManifestSummary(
+        "led", "指示灯", multi_instance=MultiInstanceSpec(max=8, variant="color")
+    )
+    key_summary = ManifestSummary(
+        "key", "按键", multi_instance=MultiInstanceSpec(max=8, variant="function")
+    )
+
+    llm.select_modules(
+        "作品需要 2 键启动 + 4 个指示灯",
+        [led_summary, key_summary, ManifestSummary("dht11", "温湿度")],
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "led 变体 = 颜色，内置 red/yellow/green，其余空串" in user_message
+    assert "key 变体 = 功能，内置 start/stop/mode/set，其余空串" in user_message
+    assert "red/yellow/green/start/stop/mode/set 或空串" in user_message
+
+
 def test_select_prompt_without_multi_instance_module_keeps_old_shape():
     """库内没有多实例模块（旧库形状）：提示词与既有形态一致——无多实例规则
     段、输出契约也不含 instances 形状（验收②：旧推荐无 instances 现行为不变，
