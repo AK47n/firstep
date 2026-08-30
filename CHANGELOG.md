@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e6890765c8b1375503a344d7a65041f051189e9c -->
+<!-- changelog-auto: last-commit=74d90a1dcccc19dcc75364bbcda973324cfdd702 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -47,6 +47,7 @@
 - 15:36 工单 04 resolved：key 展开策略行 + 默认回填
 - 15:46 工单 03 resolved：KeyInstanceRenderer 渲染 hook
 - 15:55 工单 05 resolved：llm 变体词表泛化（提示词 + 输出契约）
+- 16:03 工单 06 resolved：前端实例选脚按模块首 pin 类型（gpio_in）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
