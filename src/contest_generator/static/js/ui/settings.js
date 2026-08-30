@@ -30,6 +30,7 @@ import { SETTINGS_COLLAPSE_KEY, parseSettingsCollapse, effectiveCollapsed, setti
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
 import { collectResettableKeys } from "/js/fx/reset.js";
 import { confirmModal } from "/js/ui/confirm.js";
+import { gotoNavTab } from "/js/ui/goto-nav.js";  // 跳转原语（无回边：goto-nav 不 import settings）
 import { llmPricesDefaults, setLlmPricesDefaults } from "/js/ui/usage.js";
 import { renderPlatforms, renderModulePool } from "/js/ui/generate-recommend.js";
 
@@ -157,19 +158,13 @@ async function refreshToolchainProbes() {
 }
 
 // 体检行「去设置填」跳转（工单 ux-walkthrough-02/06）：展开对应折叠区 →
-// 切设置页签 → 聚焦输入框（与 nav-jump.js 同路径；settings 不 import 它，
-// 保持「无回边」约定——跳转原语在此单点）。
+// 切设置页签 → 聚焦输入框；切页签原语经 goto-nav.js（与 nav-jump 同源，
+// 无「settings 不 import 本模块」的回边问题）。
 function bindEnvJumps(box) {
   box.querySelectorAll(".env-jump").forEach((b) =>
     b.addEventListener("click", () => {
-      const focus = b.dataset.envJump;
       if (b.dataset.envCollapse) expandSettingsCollapse(b.dataset.envCollapse);
-      const navBtn = document.querySelector('nav button[data-tab="settings"]');
-      if (navBtn) navBtn.click();
-      if (focus) {
-        const el = $(focus);
-        if (el) { el.focus(); el.scrollIntoView({ block: "center" }); }
-      }
+      gotoNavTab("settings", b.dataset.envJump);
     }));
 }
 
