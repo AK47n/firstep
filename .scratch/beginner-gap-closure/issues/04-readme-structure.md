@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved（提交 fcd9d6b + CHANGELOG 7245273/e7c9e73；评审整改 59bc167 + CHANGELOG 0668539）
+
+**结论：** 双轴评审——Standards「无硬违规」+3 观察项（render_readme docstring 五章、_pin_data_rows 后边界、未知平台裸块引——已全部整改）；Spec「基本符合」+1 实质缺口（stm32 目录表漏 code/、isr.c、led_instances.h——母版真实内容；同步守卫单向防漏不防缺——已整改：补 3 行 + mspm0 .cproject 行，守卫双向化（母版顶层目录与关键文件全覆盖），_pin_data_rows 按「引脚表 → 下一标题」截断）。验收 3 条全落地：目录结构章覆盖平台实际关键目录（母版同步守卫钉住）、骨架声明含「骨架/占位/核对」、pytest 36 全绿（含新守卫）。
 
 - [ ] 生成工程 README 含「目录结构」章节，覆盖该平台实际关键目录（如 Keil 工程目录 / user & Objects / Debug 产物 / include 等，按平台单源或同步维护）
 - [ ] README 含「本工程由生成器构建，含模板与占位实现，上板前请核对注释与未实现逻辑」类声明
