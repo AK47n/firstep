@@ -1548,6 +1548,17 @@
   @media (max-width: 900px) {
     .guide-tabs { overflow-x: auto; scrollbar-width: thin; }
   }
+  /* 基础窄屏响应式（工单 ux-walkthrough-02/24）：≤900px 顶栏分组换行、
+     卡片/生成卡收紧内边距、工具栏间距收窄、内容边距减小——最小改动，
+     不重排整页布局，只防横向溢出与按钮挤压 */
+  @media (max-width: 900px) {
+    header { gap: 10px; }
+    .tab-group { flex-wrap: wrap; }
+    .card { padding: 12px 14px; }
+    #tab-generate .gen-steps > .card { padding: 14px 16px; }
+    .lib-toolbar { gap: 6px; }
+    main { padding: 0 12px; }
+  }
   .guide-tab { display: inline-flex; align-items: center; gap: 6px;
                 padding: 5px 12px; border-radius: var(--radius-full); cursor: pointer; flex: none;
                 border: 1px solid var(--border); background: transparent;

@@ -69,11 +69,17 @@ test("welcomeCardHTML：full 含三步引导与四个行动按钮（含「先看
   assert.doesNotMatch(html, /下载参考文件与模块库/);
 });
 
-test("welcomeCardHTML：compact 一句话，无按钮、不指向不存在元素", () => {
+test("welcomeCardHTML：compact 一句话 + 主行动入口（开始做题 / 打开新手指引，工单 ux-walkthrough-02/24）", () => {
   const html = welcomeCardHTML("compact");
   assert.match(html, /12 步向导/);
+  assert.match(html, /btn-welcome-compact-go/);
+  assert.match(html, /开始做题/);
+  assert.match(html, /btn-welcome-guide/);
+  assert.match(html, /打开新手指引/);
+  // compact 不引导配 key / 体检（已配 key 状态）
+  assert.doesNotMatch(html, /btn-welcome-goto-key/);
+  assert.doesNotMatch(html, /btn-welcome-env-check/);
   assert.doesNotMatch(html, /和 AI 商量/);
-  assert.doesNotMatch(html, /btn-welcome-/);
 });
 
 test("WELCOME_DISMISS_KEY 与 spec 一致", () => {
