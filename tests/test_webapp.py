@@ -1184,7 +1184,7 @@ def test_fix_errors_rollback_rejects_unsafe_backup_id(client, tmp_path):
         json={"output_dir": str(out), "backup_id": "../evil"},
     )
     assert resp.status_code == 400
-    assert "非法的备份编号" in resp.json()["detail"]
+    assert "备份编号不合法" in resp.json()["detail"]
 
 
 def test_fix_errors_rollback_missing_backup_raises(client, tmp_path):
@@ -4503,10 +4503,12 @@ def test_unknown_exception_ends_stream_with_error(context, tmp_path):
 
     events = _distill_stream(client, [str(proj_a), str(proj_b)])
 
-    # start / batch_start 先由 llm 层发射器产生，异常后以 error 收尾（流终止）
+    # start / batch_start 先由 llm 层发射器产生，异常后以 error 收尾（流终止）；
+    # 工单 ux-walkthrough-02/10：兜底文案去类型名（类型名只进日志）
     assert events[-1][0] == EVENT_ERROR
-    assert "服务器内部错误（RuntimeError）" in events[-1][1]["message"]
-    assert "内部损坏" in events[-1][1]["message"]
+    assert events[-1][1]["message"].startswith("服务器内部错误：")
+    assert "RuntimeError" not in events[-1][1]["message"]
+    assert "内部损坏" not in events[-1][1]["message"]
 
 
 # ---------------------------------------------------------------------------

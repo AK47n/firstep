@@ -208,7 +208,7 @@ def test_runner_uses_injected_mapper_and_defaults_loud() -> None:
     ]
     assert list(run_sse(run)) == [
         _frame(EVENT_ERROR, {
-            "message": "服务器内部错误（ValueError）：boom" + INTERNAL_ERROR_HINT
+            "message": "服务器内部错误：" + INTERNAL_ERROR_HINT
         })
     ]
 
@@ -221,7 +221,7 @@ def test_runner_emits_error_on_non_exception_death() -> None:
 
     frames = list(run_sse(run))
     assert frames == [_frame(EVENT_ERROR, {
-        "message": "服务器内部错误（KeyboardInterrupt）：" + INTERNAL_ERROR_HINT
+        "message": "服务器内部错误：" + INTERNAL_ERROR_HINT
     })]
 
 

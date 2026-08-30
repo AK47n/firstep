@@ -657,10 +657,16 @@ def restore_backup(backup_root: Path, backup_id: str, output_dir: Path) -> tuple
     相对路径（POSIX）。
     """
     if is_unsafe_path(backup_id):
-        raise FixError(f"非法的备份编号：{backup_id}")
+        raise FixError(
+            f"备份编号不合法（{backup_id}）：请从任务结果里重新点击「回滚」获取"
+            "有效编号，不要手改编号。"
+        )
     backup_dir = backup_root / backup_id
     if not backup_dir.is_dir():
-        raise FixError(f"备份不存在：{backup_id}")
+        raise FixError(
+            f"备份不存在（{backup_id}）：备份可能已被清理或任务已完成——"
+            "如需撤销，请重新生成后再回滚。"
+        )
     if not output_dir.is_dir():
         raise FixError(f"输出目录不存在：{output_dir}")
     root = output_dir.resolve()

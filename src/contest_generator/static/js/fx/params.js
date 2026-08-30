@@ -103,8 +103,7 @@ export function paramResultHTML(result, dir) {
     + '<div class="head"><span class="slug">⚙️ 参数修改结果</span> ' + markup.badge + "</div>"
     + '<div class="reason">' + markup.detail + "</div>"
     + (backupId
-      ? '<div class="reason">备份：<span class="slug">' + esc(backupId)
-        + '</span> · <button class="btn-params-rollback danger" data-backup="'
+      ? '<div class="reason">已备份（可回滚） · <button class="btn-params-rollback danger" data-backup="'
         + esc(backupId) + '">回滚本次参数修改</button></div>'
       : "")
     + flashPanelHTML(dir, "params")

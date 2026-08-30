@@ -67,6 +67,13 @@ test("fx/task.js：备份展示不再输出原始 backup_id（迭代 meta 与变
   assert.ok(taskFx.includes("已备份"));
 });
 
+test("参数速调 / 直接修正结果：备份不露 backup_id（工单 ux-walkthrough-02/10）", () => {
+  assert.ok(!paramsFx.includes('备份：<span class="slug">'));
+  assert.ok(paramsFx.includes("已备份（可回滚）"));
+  assert.ok(!tasksUi.includes('备份：<span class="slug">'));
+  assert.ok(tasksUi.includes("已备份（可回滚）"));
+});
+
 test("修订结果：备份不露 backup_id（已备份 · 修订时间）", () => {
   assert.ok(!reviseUi.includes('备份：<span class="slug">'));
   // 评审整改（02 轮 Standards 轴）：钉住正确拼接——错误写法「修订时间：\" + esc(…」

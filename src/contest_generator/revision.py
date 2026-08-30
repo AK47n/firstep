@@ -93,10 +93,16 @@ def restore_revision(
     文件相对路径（POSIX）排序返回。
     """
     if is_unsafe_path(backup_id):
-        raise RevisionError(f"非法的备份编号：{backup_id}")
+        raise RevisionError(
+            f"备份编号不合法（{backup_id}）：请从「修订与深化」的结果区重新"
+            "发起回滚，不要手改编号。"
+        )
     backup_dir = backup_root / backup_id
     if not backup_dir.is_dir():
-        raise RevisionError(f"备份不存在：{backup_id}")
+        raise RevisionError(
+            f"备份不存在（{backup_id}）：该修订的备份可能已被清理或替换——"
+            "当前工程仍是最新状态，可继续编辑或重新生成。"
+        )
     if not output_dir.is_dir():
         raise RevisionError(f"输出目录不存在：{output_dir}")
     # 恢复前整树路径安全校验（备份内容不可信）：任一相对路径不安全 →
