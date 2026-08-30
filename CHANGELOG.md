@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=11d1fac18918ea6a0b434016849e2cb1e141ff93 -->
+<!-- changelog-auto: last-commit=6d29dd9edfac8f764b4d4434c1561237be42b31a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -95,6 +95,7 @@
 - 20:17 工单 18：术语与文案对齐（桌面输出文案对齐真实行为、术语表补 自备/词表/重推/选型/补问、深化两途径说明、任务「已验证」改「上板通过」、新手指引「右上角」改「顶部导航」）
 - 20:18 工单 17 评审整改（就绪面板行内容先同步渲染不被网络门控、增 .rc-summary 绿总结样式盒）
 - 20:24 工单 18 评审整改（任务状态按验证方式分口径：manual=上板通过/compile=编译通过、unverified=待上板，后端 message 同步、深化卡「已验证」改「已通过编译验证」、词表术语去括号后缀、桌面文案补确认步骤）与工单 19：键盘与可达性（顶栏页签 ARIA tablist+roving tabindex+方向键、裸输入 aria-label 补齐表 a11y.js、确认弹窗焦点陷阱+还焦触发钮）
+- 20:26 工单 20：CSS 令牌化（--radius-xs/sm/md/lg/full 与 --space-1..6 定义；border-radius 全部走令牌无裸值；可见字号 13.5/10.5/10 归并 13/11；按钮三类 .btn-pill--sm/--md/.btn-icon；间距工具类 .mt-2/4/6/8/.flex-1；新增 css-tokens 守卫测试）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
