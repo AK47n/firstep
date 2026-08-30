@@ -166,7 +166,7 @@ async function confirmTrashGroup(pdf, group, close) {
 }
 
 // —— 工具栏状态与渲染（对偶 ref 系列）：过滤条件集中于此，事件层只转发 ——
-const pdfUI = { q: "", batch: "", sortBy: "name", sortDir: "asc", health: "" }; // health: "" | "dup" | "broken"
+const pdfUI = { q: "", batch: "", sortBy: "mtime", sortDir: "desc", health: "" }; // health: "" | "dup" | "broken"；默认最近更新降序（工单 ux-walkthrough-02/22）
 const pdfFilterContext = () => ({ ...pdfUI });
 let pdfCache = [];        // 全量（GET /api/pdfs 无参，客户端即时过滤排序统计）
 let pdfSearchTimer = null;
@@ -255,7 +255,15 @@ export async function loadPdfs() {
     pdfCache = await apiGet("/api/pdfs");
     renderPdfs();
     $("pdf-msg").textContent = "";
-  } catch (e) { $("pdf-msg").textContent = e.message; }
+  } catch (e) {
+    // 失败：清空加载占位、同位置显示错误（工单 ux-walkthrough-02/22）——与
+    // 模块库一致；点「刷新」可重试
+    $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state">'
+      + '<div class="es-icon">⚠️</div><div class="es-title">PDF 资料库读取失败</div>'
+      + '<div class="es-hint">' + esc(e.message) + '；可在设置页检查库目录，或点「刷新」重试。</div>'
+      + '</div></td></tr>';
+    $("pdf-msg").textContent = "";
+  }
 }
 
 export function initPdfToolbar() {

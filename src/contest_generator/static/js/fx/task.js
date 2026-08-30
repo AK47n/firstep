@@ -278,7 +278,7 @@ export function tasksGridHTML(plan, opts) {
   // 不强制——用户可跳着做（depends_on 只作展示，后端无强制闸）
   const seqById = {};
   tasks.forEach((t, i) => { if (t && t.id) seqById[t.id] = i + 1; });
-  return '<div class="muted" style="margin-bottom:6px">'
+  return '<div class="muted" style="margin-bottom: var(--space-2)">'
     + "建议按序号从上往下做（AI 按方便实现的顺序排）——不强制，可跳着做</div>"
     + tasks.map((task, i) => taskCardHTML(task, i, {
       ...(opts || {}),
@@ -599,7 +599,7 @@ export function taskStepReportHTML(task, opts) {
   const perTask = wiringPer(task, o);
   const wiring = wiringSectionHTML(task, o, perTask);
   return '<div class="task-step-report" style="margin-top: var(--space-2);border-top:1px dashed var(--border);padding-top:6px">'
-    + '<div class="muted" style="margin-bottom:2px">步骤报告（AI 本步总结）</div>'
+    + '<div class="muted" style="margin-bottom: var(--space-1)">步骤报告（AI 本步总结）</div>'
     + (wiring ? '<div class="task-step-wiring" data-wiring-uid="' + esc(String(perTask && perTask.wiringUid || "")) + '" style="margin-top: var(--space-2)">' + wiring + "</div>" : "")
     + taskStepReportBlocksHTML(last.what_changed || "", last.user_action || "")
     + taskChecklistHTML(last, o.checkKey || "", o.checkedMap || {})
@@ -732,7 +732,7 @@ export function resourcesOverviewHTML(plan) {
     + (softHTML
       ? '<details class="res-soft-details"><summary class="res-group-title">模块复用（非硬件，不算冲突）</summary>' + softHTML + "</details>"
       : "");
-  return '<div class="muted" style="margin-bottom:2px">资源总览（同一资源被多个任务占用 = 联调冲突暗雷，标黄提示）</div>'
+  return '<div class="muted" style="margin-bottom: var(--space-1)">资源总览（同一资源被多个任务占用 = 联调冲突暗雷，标黄提示）</div>'
     + '<div class="res-table">' + rows + "</div>";
 }
 
@@ -821,7 +821,7 @@ export function scoreRefsOverviewHTML(plan) {
       + '<span class="score-unknown-note">未识别引用（不在评分点清单内）</span>'
       + "</div>";
   }).join("");
-  return '<div class="muted" style="margin-bottom:2px">评分点覆盖总览（每个评分点对应哪些任务；无覆盖 = 丢分风险，标红提示）</div>'
+  return '<div class="muted" style="margin-bottom: var(--space-1)">评分点覆盖总览（每个评分点对应哪些任务；无覆盖 = 丢分风险，标红提示）</div>'
     + '<div class="score-point-table">' + rows + unknownRows + "</div>";
 }
 
@@ -847,7 +847,7 @@ export function taskChecklistHTML(iteration, key, checkedMap) {
     + '<summary class="task-check-summary">上板自检清单（' + String(items.length) + " 项"
     + (checkedCount ? " · 已勾选 " + String(checkedCount) : "") + "）</summary>"
     + '<div class="task-check-list" style="margin-top: var(--space-2)">'
-    + '<div class="muted" style="margin-bottom:2px">勾选为个人备忘，不改变任务状态</div>'
+    + '<div class="muted" style="margin-bottom: var(--space-1)">勾选为个人备忘，不改变任务状态</div>'
     + rows + "</div></details>";
 }
 
@@ -1211,7 +1211,7 @@ export function ideaDraftListHTML(drafts, opts) {
       + ' data-draft-id="' + esc(d.id || "") + '"' + disabled + ">删除</button>"
       + "</div>";
   }).join("");
-  return '<div class="muted" style="margin-bottom:4px">草稿（' + esc(String(list.length))
+  return '<div class="muted" style="margin-bottom: var(--space-1)">草稿（' + esc(String(list.length))
     + " 条）</div>" + items
     + '<div class="row" style="margin-top: var(--space-2)"><button class="btn-draft-all"'
     + ' data-draft-action="all"' + disabled + ">全部逐条分析</button></div>";

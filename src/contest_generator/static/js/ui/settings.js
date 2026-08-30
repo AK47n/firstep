@@ -69,6 +69,7 @@ export async function loadSettings() {
     // key 只回掩码（前 4 位 + 与真实长度一致的圆点），直接填入文本框
     $("set-api-key").value = s.api_key;
     $("set-lib-dir").value = s.module_library_dir;
+    savedLibDir = s.module_library_dir || "";   // 保存时的模块库目录（工单 22：改目录确认联动）
     $("set-masters-dir").value = s.masters_dir;
     // 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
     $("set-uv4-path").value = s.uv4_path || "";
@@ -153,6 +154,18 @@ async function refreshToolchainProbes() {
     for (const [spanId, entry] of map) {
       const el = $(spanId);
       if (el) el.textContent = toolchainProbeText(entry);
+    }
+    // 派生库目录只读回显（工单 ux-walkthrough-02/22）：赛题 / 参考 / PDF
+    const libDirs = st.library_dirs || {};
+    for (const [spanId, key] of [
+      ["set-lib-dir-topic", "topic"],
+      ["set-lib-dir-reference", "reference"],
+      ["set-lib-dir-pdf", "pdf"],
+    ]) {
+      const el = $(spanId);
+      if (el && libDirs[key]) {
+        el.textContent = (libDirs[key].dir || "—") + (libDirs[key].exists ? "" : "（未创建，保存后自动创建）");
+      }
     }
   } catch (e) { /* 探测失败静默 */ }
 }
@@ -374,12 +387,25 @@ function collectLlmPrices() {
 // ---------------------------------------------------------------------------
 let settingsSaving = false;
 let settingsDirty = false;
+let savedLibDir = "";   // 最近一次已保存的模块库目录（loadSettings 写入）
 function updateSettingsDirtyUI() {
   const hint = $("settings-dirty-hint");
   if (hint) hint.classList.toggle("hidden", !settingsDirty);
 }
 async function saveSettings() {
   if (settingsSaving) return false;
+  // 模块库目录变更 → 派生目录联动确认（工单 ux-walkthrough-02/22）
+  const newLibDir = $("set-lib-dir").value.trim();
+  if (newLibDir && savedLibDir && newLibDir !== savedLibDir) {
+    const ok = await confirmModal({
+      title: "修改模块库目录？",
+      message: "模块库目录将从「" + savedLibDir + "」改为「" + newLibDir + "」。"
+        + "赛题库 / 参考文件库 / PDF 资料库目录随模块库目录联动（各自子目录名不变；不存在会自动创建）。继续保存？",
+      danger: false,
+      confirmText: "确认修改并保存",
+    });
+    if (!ok) return false;
+  }
   settingsSaving = true;
   const btn = $("btn-save-settings");
   const sticky = $("btn-save-settings-sticky");

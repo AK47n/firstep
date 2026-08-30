@@ -684,10 +684,10 @@ export async function loadChangelog() {
       return;
     }
     box.innerHTML = groups.map((g) => `
-      <div style="margin-bottom:14px">
+      <div style="margin-bottom: var(--space-4)">
         <h3 style="color:var(--accent);margin:0 0 6px">${esc(g.date)}</h3>
         <ul style="margin:0;padding-left:22px">
-          ${g.items.map((i) => `<li style="margin-bottom:4px">${
+          ${g.items.map((i) => `<li style="margin-bottom: var(--space-1)">${
             i.time ? `<span class="slug" style="margin-right:8px">${esc(i.time)}</span>` : ""
           }${esc(i.text)}</li>`).join("")}
         </ul>
