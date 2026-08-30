@@ -2419,6 +2419,7 @@
              再来一批 ≤3 轮（不重跑初始编译、previous_fixes 回喂不丢） -->
         <button id="btn-fix-continue" class="hidden">继续修复</button>
         <span id="fix-center-toolchain" class="muted"></span>
+        <button type="button" class="btn-pill--sm" data-goto-global-chat>有问题？去问 AI</button>
       </div>
       <div id="fix-center-round" class="muted" style="margin-top: var(--space-2)"></div>
       <div id="fix-status" class="muted" style="margin-top: var(--space-2)"></div>
@@ -2516,6 +2517,7 @@
           <button id="btn-revise-deepen" title="快速兜底：一次填完所有 TODO 并编译验证，不逐步执行、无步骤报告">直接深化（快速兜底）</button>
           <button id="btn-revise-rollback" class="hidden danger">回滚本次修订 / 深化</button>
           <span id="revise-exec-status" class="muted"></span>
+          <button type="button" class="btn-pill--sm" data-goto-global-chat>有问题？去问 AI</button>
         </div>
         <div id="revise-deepen-telemetry" class="llm-telemetry hidden"></div>
         <div id="revise-rollback-status" class="muted" style="margin-top: var(--space-2)"></div>
@@ -2557,6 +2559,7 @@
         </div>
         <div class="card-group" style="margin-top: var(--space-2)">
           <div class="card-group-title">全局商量（工程级，不绑任务卡）</div>
+          <div class="muted" style="margin-top: var(--space-1);font-size:12px">针对整个工程：架构取舍 / 赛道策略 / 方案对不对——不绑某张任务卡；买件选型请用推荐结果区的「和 AI 商量」。</div>
           <div class="row">
             <button id="btn-tasks-global-chat" class="primary">全局商量（工程级）</button>
             <div id="tasks-global-note" class="hidden" style="flex:1"></div>
@@ -2605,7 +2608,8 @@
              AI 回复里的参数名可点击定位到上方参数卡 -->
         <div class="card-group" style="margin-top: var(--space-4)">
           <div class="card-group-title">问 AI 该调哪个参数（诊断 → 推荐 → 定位改值）</div>
-          <div class="row">
+          <div class="muted" style="margin-top: var(--space-1);font-size:12px">针对 main.c 里的具体数值（阈值 / 速度 / 频率…）拿不准时用；架构级疑问用上面的「全局商量」。</div>
+          <div class="row" style="margin-top: var(--space-2)">
             <button id="btn-params-chat">问 AI：我该调哪个参数？</button>
             <span id="params-chat-status" class="muted"></span>
           </div>
@@ -2917,6 +2921,7 @@
       <div class="row" style="margin-top: var(--space-3)">
         <button id="btn-scan">扫描工程</button>
         <button id="btn-distill" class="primary" disabled data-ico="wand">AI 提炼报告</button>
+        <button type="button" class="btn-pill--sm" data-goto-global-chat>有问题？去问 AI</button>
       </div>
       <div id="distill-progress" class="distill-progress hidden" style="margin-top: var(--space-3)">
         <div id="prog-body">

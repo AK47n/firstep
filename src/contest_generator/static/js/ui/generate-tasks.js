@@ -1804,4 +1804,23 @@ window.addEventListener("tasks-invalidated", (event) => {
   resetDraftsArea();
 });
 
+// 「有问题？去问 AI」直达（工单 ux-walkthrough-02/23）：母版提炼 / 编译修复 /
+// 修订深化长跑时随时可问——切到任务推进页签 + 展开全局商量 + 滚动定位。
+// 页签切换经 .revise-tab 按钮 click（revise-tabs 委托 → user 语义），
+// 与本模块零 import 环（反向依赖已存在于 revise-tabs → tasksSummary）。
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-goto-global-chat]")) return;
+  const tabBtn = document.querySelector('.revise-tab[data-tab="tasks"]');
+  if (tabBtn) tabBtn.click();
+  if (!tasks.outputDir
+      && $("tasks-empty-hint") && !$("tasks-empty-hint").classList.contains("hidden")) {
+    toast("info", "请先在「修订」页签加载输出目录，再使用全局商量");
+    return;
+  }
+  const area = $("tasks-global-chat");
+  if (area && area.classList.contains("hidden")) void tasksChatToggle();
+  const target = $("btn-tasks-global-chat");
+  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
 export { tasksPlan, tasksRender, tasksResetMessages, tasksIsBusy, tasksSetBusy };
