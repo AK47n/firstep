@@ -219,6 +219,8 @@ from .reference_library import (
 from .revision import restore_revision, revise_backup_root, run_revision
 from .selection import (
     default_instances_for_multi,
+    multi_instance_pin_capability,
+    multi_instance_variants,
     parse_instances,
     parse_score_points,
     resolve_dependencies,
@@ -1436,10 +1438,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             if manifest.multi_instance is not None
         ]
         defaults = default_instances_for_multi(multi_slugs, platform)
-        for module in modules:
-            if module["slug"] in defaults:
+        for manifest, module in zip(resolved.manifests, modules):
+            if manifest.multi_instance is None:
+                continue
+            variants = multi_instance_variants(manifest.slug)
+            if variants:
+                module["multi_instance"]["variants"] = [
+                    {"value": value, "label": label} for value, label in variants
+                ]
+                module["multi_instance"]["pin_capability"] = (
+                    multi_instance_pin_capability(manifest.slug)
+                )
+            if manifest.slug in defaults:
                 module["default_instances"] = [
-                    inst.to_dict() for inst in defaults[module["slug"]]
+                    inst.to_dict() for inst in defaults[manifest.slug]
                 ]
         return {
             "modules": modules,

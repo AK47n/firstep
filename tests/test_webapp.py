@@ -2060,6 +2060,13 @@ def test_expand_carries_default_instances_for_multi_module(client, context):
     led = next(m for m in data["modules"] if m["slug"] == "led")
     # mspm0 平台默认 = 单实例 LED（无颜色 = 通用编号 + 默认脚）
     assert led["default_instances"] == [{"name": "LED", "variant": "", "pin": ""}]
+    # 变体下拉选项 + 选脚能力（key-multi-instance/06：策略表投影单源）
+    assert led["multi_instance"]["variants"] == [
+        {"value": "red", "label": "红"},
+        {"value": "yellow", "label": "黄"},
+        {"value": "green", "label": "绿"},
+    ]
+    assert led["multi_instance"]["pin_capability"] == "gpio_out"
     for m in data["modules"]:
         if m["slug"] != "led":
             assert "default_instances" not in m

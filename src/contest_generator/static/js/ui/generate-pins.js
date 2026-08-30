@@ -43,6 +43,28 @@ export let instancePinTarget = null;     // 正在从板图选引脚的实例 { 
 
 export const LED_COLORS = [["red", "红"], ["yellow", "黄"], ["green", "绿"], ["", "无颜色（通用编号）"]];
 
+// 多实例变体下拉选项（工单 key-multi-instance/06）：后端 expand 端点按策略表
+// 投影带 variants（[{value, label}]，token 序单源）——led = 红/黄/绿、
+// key = 启动/停止/模式/设置；旧数据（无 variants 字段）回退 LED_COLORS。
+function variantOptionsOf(slug) {
+  const m = expanded.find((x) => x.slug === slug);
+  const variants = m && m.multi_instance && m.multi_instance.variants;
+  if (variants && variants.length) return variants;
+  return LED_COLORS.map(([value, label]) => ({ value, label }));
+}
+
+// 多实例选脚的可用能力（工单 key-multi-instance/06）：优先消费后端 expand 端点
+// 透传的 multi_instance.pin_capability（展开策略表权威投影）；旧数据回退按模块
+// 首 pin 角色类型推导（led = gpio_out、key = gpio_in），再缺省 gpio_out 兜底。
+function instancePinCapability(slug) {
+  const m = expanded.find((x) => x.slug === slug);
+  const cap = m && m.multi_instance && m.multi_instance.pin_capability;
+  if (cap) return cap;
+  const pins = m && m.platforms && m.platforms[chosenPlatform] && m.platforms[chosenPlatform].pins;
+  const type = pins && pins[0] && pins[0].type;
+  return type === "gpio_in" ? "gpio_in" : "gpio_out";
+}
+
 // 已迁至 static/js/fx/module.js（工单 06）：multiInstanceModules（迁入后参数化 = expanded）。
 
 function instList(slug) {
@@ -76,7 +98,8 @@ function renderInstanceConfig() {
   const hint = $("instance-pin-hint");
   if (instancePinTarget) {
     const targetInst = instances[instancePinTarget.slug][instancePinTarget.index];
-    hint.textContent = "正在为「" + (targetInst && targetInst.name ? targetInst.name : "未命名实例") + "」选引脚：点击板图上的 IO 引脚绑定（gpio_out 能力）；再次点「选引脚」或按 Esc 取消。";
+    const cap = instancePinCapability(instancePinTarget.slug);
+    hint.textContent = "正在为「" + (targetInst && targetInst.name ? targetInst.name : "未命名实例") + "」选引脚：点击板图上的 IO 引脚绑定（" + (cap === "gpio_in" ? "gpio_in 输入" : "gpio_out 输出") + " 能力）；再次点「选引脚」或按 Esc 取消。";
     hint.classList.remove("hidden");
   } else {
     hint.classList.add("hidden");
@@ -123,8 +146,20 @@ function instanceBlock(m) {
 
 function instanceRow(slug, i, inst) {
   const picking = instancePinTarget && instancePinTarget.slug === slug && instancePinTarget.index === i;
-  const colors = LED_COLORS.map(([v, zh]) =>
-    `<option value="${v}" ${inst.variant === v ? "selected" : ""}>${zh}</option>`).join("");
+  const m = expanded.find((x) => x.slug === slug);
+  const variants = m && m.multi_instance && m.multi_instance.variants;
+  // 变体 = 自由文本 + 建议（工单 06 验收「自由文本」）：<input list> 组合框；
+  // 建议 = 后端策略表投影（led = 红/黄/绿、key = 启动/停止/模式/设置）；
+  // 旧数据（无 variants）回退 LED_COLORS（已含空选项，不再追加）
+  const opts = variants && variants.length
+    ? variants
+    : LED_COLORS.map(([value, label]) => ({ value, label }));
+  const listId = "variant-opts-" + esc(slug);
+  const datalistItems = opts.map((v) =>
+    `<option value="${esc(v.value)}">${esc(v.label)}</option>`).join("")
+    + (opts.some((v) => v.value === "") ? "" : '<option value="">通用编号</option>');
+  const colors = `<input list="${listId}" data-field="variant" data-slug="${esc(slug)}" data-index="${i}" value="${esc(inst.variant)}" placeholder="内置变体或留空">`
+    + `<datalist id="${listId}">${datalistItems}</datalist>`;
   const pinShow = inst.pin
     ? `<span style="font-family:var(--mono);color:var(--accent)">${esc(inst.pin)}</span>`
     : '<span class="muted">自动分配</span>';
@@ -147,7 +182,12 @@ function addInstance(slug) {
   if (!m || !m.multi_instance) return;
   const list = instList(slug);
   if (list.length >= m.multi_instance.max) return;  // 按钮已禁用，双保险
-  list.push({ name: "灯 " + (list.length + 1), variant: "red", pin: "" });
+  // 默认名与变体按模块（工单 key-multi-instance/06）：led = 灯 N / 内置色，
+  // key = 键 N / 首个内置变体（start）；无 variants 时回退空变体 + LED_COLORS 旧行为
+  const defaultName = slug === "key" ? "键 " + (list.length + 1) : "灯 " + (list.length + 1);
+  const opts = variantOptionsOf(slug);
+  const firstVariant = (opts[0] && opts[0].value) || "red";
+  list.push({ name: defaultName, variant: firstVariant, pin: "" });
   renderInstanceConfig();
 }
 
@@ -574,10 +614,11 @@ function renderPinBoard() {
   box.innerHTML = parts.join("");
   box.querySelectorAll("circle[data-pin]").forEach((c) => {
     c.addEventListener("click", () => {
-      // 多实例选脚模式（工单 04）：点板图 IO 脚直接绑到目标实例；否则走角色菜单
+      // 多实例选脚模式（工单 04 + key-multi-instance/06）：按模块首 pin 能力
+      // 过滤候选（led = gpio_out、key = gpio_in），点即绑
       if (instancePinTarget) {
         const p = pinIndex()[c.dataset.pin];
-        if (p && p.kind === "io" && (p.capabilities || []).includes("gpio_out")) {
+        if (p && p.kind === "io" && (p.capabilities || []).includes(instancePinCapability(instancePinTarget.slug))) {
           assignInstancePin(c.dataset.pin);
         }
       } else {
@@ -635,11 +676,11 @@ function svgPin(pin, roles, idx, rotated180) {
       else if (io) cls = ' class="pin-dim"';
     }
   }
-  // 多实例选脚模式（工单 04）：gpio_out 能力脚 = 候选（点即绑），已绑脚红圈
+  // 多实例选脚模式（工单 04 + key-multi-instance/06）：按模块首 pin 能力候选
   if (instancePinTarget && io) {
     const assigned = (instances[instancePinTarget.slug] || [])[instancePinTarget.index]
       && instances[instancePinTarget.slug][instancePinTarget.index].pin === pin.name;
-    if ((pin.capabilities || []).includes("gpio_out")) {
+    if ((pin.capabilities || []).includes(instancePinCapability(instancePinTarget.slug))) {
       cls = ' class="pin-cand"';
       if (assigned) extra += `<circle cx="${cx}" cy="${cy}" r="13" fill="none" class="pin-default-cand"/>`;
     } else {
