@@ -1560,6 +1560,8 @@
                 font-size: 12px; border: 1px solid var(--ok); color: var(--ok);
                 background: var(--ok-dim); cursor: pointer; }
   .tasks-done-line .btn-task-goto-delivery:hover { filter: brightness(1.1); }
+  /* 库页统计条可点击提示（工单 ux-polish-02/08）：问题计数可点击筛选的可见提示 */
+  .lib-stats .lib-stats-hint { color: var(--muted); font-size: 12px; }
   /* 资源总览 + 上板自检清单（工单 task-insight/02）：资源行（chip + 使用任务 +
      冲突提示标黄）+ 自检勾选列表（details 默认收起——清单 3-6 条展开太长，
      摘要行「N 项 · 已勾选 M」可见进度；变色/变量名零新硬编码） */
@@ -2545,6 +2547,7 @@
           <option value="slug">排序：模块名</option>
           <option value="platforms">排序：平台数</option>
           <option value="deps">排序：依赖数</option>
+          <option value="mtime">排序：最近更新</option>
         </select>
         <button id="lib-sort-dir">↑ 升序</button>
         <button id="lib-filter-clear">清空过滤</button>
@@ -2626,6 +2629,7 @@
           <option value="size">按体量</option>
           <option value="files">按文件数</option>
           <option value="platform">按平台</option>
+          <option value="mtime">按最近更新</option>
         </select>
         <button id="ref-sort-dir">↑ 升序</button>
         <button id="ref-filter-clear">清空过滤</button>
@@ -2725,6 +2729,7 @@
           <option value="mtime">按修改时间</option>
         </select>
         <button id="pdf-sort-dir">↑ 升序</button>
+        <button id="pdf-refresh">刷新</button>
         <button id="pdf-filter-clear">清空过滤</button>
       </div>
       <div class="lib-chips-row"><span class="muted">批次</span><span id="pdf-batch-chips"></span></div>
@@ -2747,6 +2752,7 @@
         <select id="topic-sort" title="排序字段">
           <option value="key">排序：编号</option>
           <option value="chars">排序：题面字数</option>
+          <option value="mtime">排序：最近更新</option>
         </select>
         <button id="topic-sort-dir">↑ 升序</button>
         <button id="topic-filter-clear">清空过滤</button>

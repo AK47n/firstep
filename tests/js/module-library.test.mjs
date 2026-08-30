@@ -157,6 +157,14 @@ test("libSortModules slug 升/降序；平台数、依赖数排序保持稳定",
   assert.deepEqual(libSortModules(libMods, { by: "platforms", dir: "asc" }).map((m) => m.slug), ["oled", "delay", "servo", "ultrasonic"]);
   // deps 数：delay/oled 0、ultrasonic/servo 1；同 0 保持 delay 在 oled 前、同 1 保持 ultrasonic 在 servo 前
   assert.deepEqual(libSortModules(libMods, { by: "deps", dir: "asc" }).map((m) => m.slug), ["delay", "oled", "ultrasonic", "servo"]);
+  // mtime（ux-polish-02/08 最近更新）：数值排序，缺失 = 0 垫底；降序最新在前
+  const modsMtime = libMods.map((m, i) => ({ ...m, mtime: i }));
+  assert.deepEqual(libSortModules(modsMtime, { by: "mtime", dir: "asc" }).map((m) => m.slug),
+    ["ultrasonic", "delay", "servo", "oled"]);   // = 原相对序（mtime 升序即保原序）
+  assert.deepEqual(libSortModules(modsMtime, { by: "mtime", dir: "desc" }).map((m) => m.slug),
+    ["oled", "servo", "delay", "ultrasonic"]);
+  assert.deepEqual(libSortModules([{ slug: "a" }, { slug: "b", mtime: 5 }], { by: "mtime", dir: "desc" }).map((m) => m.slug),
+    ["b", "a"]);   // 缺失 mtime 的 a 垫底
 });
 
 test("libStats 统计：总数 / 平台计数 / 模块级已验证 / 硬件绑定 / 互斥组去重", () => {

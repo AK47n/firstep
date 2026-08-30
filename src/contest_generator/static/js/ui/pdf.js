@@ -194,6 +194,10 @@ function renderPdfStats() {
   if (h.broken.size) {
     parts.push(`<span class="lib-stats-red${pdfUI.health === "broken" ? " on" : ""}" data-pdf-health="broken" title="0 字节损坏文件（全量口径）">损坏 ${h.broken.size} 份</span>`);
   }
+  // 可点击筛选的可见提示（ux-polish-02/08）：不再靠 title 猜
+  if (h.dupGroups.length || h.broken.size) {
+    parts.push('<span class="lib-stats-hint">（点击可筛选）</span>');
+  }
   $("pdf-stats").innerHTML = parts.join(" · ");
 }
 
@@ -204,7 +208,7 @@ function renderPdfs() {
   const rows = pdfSortEntries(pdfFilterEntries(pdfCache, f),
     { by: pdfUI.sortBy, dir: pdfUI.sortDir });
   if (!pdfCache.length) {
-    $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📄</div><div class="es-title">素材库中暂无 PDF</div><div class="es-hint">把赛题配套 PDF 放进资料库目录后刷新，这里会按批次列出。</div></div></td></tr>';
+    $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">📄</div><div class="es-title">素材库中暂无 PDF</div><div class="es-hint">把赛题配套 PDF 放进资料库目录后点「刷新」，这里会按批次列出。</div></div></td></tr>';
   } else if (!rows.length) {
     // 过滤后的空结果 ≠ 库为空：提示「清空过滤」而不是「暂无 PDF」
     $("pdf-rows").innerHTML = '<tr><td colspan="6" class="empty-td"><div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">没有匹配的 PDF 文件</div><div class="es-hint">换一个关键词，或点击「清空过滤」恢复全量。</div></div></td></tr>';
@@ -257,13 +261,27 @@ export function initPdfToolbar() {
     pdfSearchTimer = setTimeout(() => { pdfUI.q = e.target.value; renderPdfs(); }, 150);
   });
   $("pdf-filter").addEventListener("keydown", (e) => { if (e.key === "Escape") clearPdfFilter(); });
-  $("pdf-sort").addEventListener("change", (e) => { pdfUI.sortBy = e.target.value; renderPdfs(); });
+  $("pdf-sort").addEventListener("change", (e) => {
+    pdfUI.sortBy = e.target.value;
+    if (e.target.value === "mtime") {   // 最近更新默认降序（最新在前，ux-polish-02/08）
+      pdfUI.sortDir = "desc";
+      $("pdf-sort-dir").textContent = "↓ 降序";
+    }
+    renderPdfs();
+  });
   $("pdf-sort-dir").addEventListener("click", () => {
     pdfUI.sortDir = pdfUI.sortDir === "asc" ? "desc" : "asc";
     $("pdf-sort-dir").textContent = pdfUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
     renderPdfs();
   });
   $("pdf-filter-clear").addEventListener("click", clearPdfFilter);
+  // 刷新（工单 ux-polish-02/08）：新 PDF 放进素材库目录后一键重拉，保留过滤/排序
+  $("pdf-refresh").addEventListener("click", async () => {
+    try {
+      await loadPdfs();
+      toast("ok", "已刷新 PDF 列表");
+    } catch (e) { /* loadPdfs 内部已展示错误 */ }
+  });
   // 批次 chips 事件委托（行内动态渲染）；再点已选中项 = 取消该维度过滤
   $("pdf-batch-chips").addEventListener("click", (e) => {
     const b = e.target.closest("[data-pdf-chip]"); if (!b) return;

@@ -70,7 +70,7 @@ export function refDanglingAnchors(entries, topicKeys, kitVocab) {
   });
 }
 
-// refSortEntries(entries, s)：s={by:'title'|'type'|'size'|'files'|'platform',
+// refSortEntries(entries, s)：s={by:'title'|'type'|'size'|'files'|'platform'|'mtime',
 // dir:'asc'|'desc'}；返回新数组（不改原数组）；Array.sort 稳定 → 同键保持入库序。
 // by 分派集中在 key() 一处（数值键按数值、文本键按 localeCompare）。
 export function refSortEntries(entries, s) {
@@ -79,6 +79,7 @@ export function refSortEntries(entries, s) {
   const key = (e) => {
     if (by === "size") return Number(e.size_bytes || 0);
     if (by === "files") return Number(e.file_count != null ? e.file_count : (e.files || []).length);
+    if (by === "mtime") return Number(e.mtime || 0);   // 最近更新（ux-polish-02/08）
     if (by === "type") return String(e.type || "");
     if (by === "platform") return String(e.platform || "");
     return String(e.title || "");

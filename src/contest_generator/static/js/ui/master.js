@@ -666,7 +666,10 @@ export async function loadMasters() {
     const masters = await apiGet("/api/masters");
     masterCache = masters;
     masterTreeCache.clear();   // 库变了树不旧：新列表成功拉取即失效树清单
-    $("master-rows").innerHTML = masters.map(masterTableRowHTML).join("");
+    // 空态（工单 ux-polish-02/08）：空表头没有开始路径——提示从「母版提炼」开始
+    $("master-rows").innerHTML = masters.length
+      ? masters.map(masterTableRowHTML).join("")
+      : '<tr><td colspan="5" class="empty-td"><div class="empty-state"><div class="es-icon">🧩</div><div class="es-title">母版库还是空的</div><div class="es-hint">在上方「母版提炼」输入目录并扫描→提炼→确认，或点「直接导入替换」整夹导入；每个平台一个母版，生成时自动选用。</div></div></td></tr>';
     $("master-rows").querySelectorAll("[data-master-detail]").forEach((b) =>
       b.addEventListener("click", () => openMasterDetail(b.dataset.masterDetail)));
     $("master-rows").querySelectorAll("[data-master-del]").forEach((b) =>

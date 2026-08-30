@@ -46,7 +46,9 @@ function renderLibraryChips() {
 function renderLibraryStats() {
   const stats = libStats(state.modules || []);
   $("lib-stats").innerHTML = esc(libStatsText(stats))
-    + (stats.dangling ? ' <span class="lib-dangling-count" title="依赖未入库的模块，点击详情确认">悬空依赖 ' + stats.dangling + "</span>" : "");
+    + (stats.dangling ? ' <span class="lib-dangling-count" title="依赖未入库的模块，点击详情确认">悬空依赖 ' + stats.dangling + "</span>" : "")
+    // 可点击筛选的可见提示（ux-polish-02/08）：问题计数能点，不再靠 title 猜
+    + (stats.dangling ? ' <span class="lib-stats-hint">（点击可筛选）</span>' : "");
 }
 
 function renderLibraryTable() {
@@ -99,7 +101,14 @@ export function initAddSections() {
 export function initLibraryToolbar() {
   $("lib-search").addEventListener("input", (e) => { libUI.q = e.target.value; renderLibraryTable(); });
   $("lib-search").addEventListener("keydown", (e) => { if (e.key === "Escape") clearLibraryFilter(); });
-  $("lib-sort").addEventListener("change", (e) => { libUI.sortBy = e.target.value; renderLibraryTable(); });
+  $("lib-sort").addEventListener("change", (e) => {
+    libUI.sortBy = e.target.value;
+    if (e.target.value === "mtime") {   // 最近更新默认降序（最新在前，ux-polish-02/08）
+      libUI.sortDir = "desc";
+      $("lib-sort-dir").textContent = "↓ 降序";
+    }
+    renderLibraryTable();
+  });
   $("lib-sort-dir").addEventListener("click", () => {
     libUI.sortDir = libUI.sortDir === "asc" ? "desc" : "asc";
     $("lib-sort-dir").textContent = libUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";

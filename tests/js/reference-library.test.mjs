@@ -87,6 +87,16 @@ test("refSortEntries 缺省按标题升序；空数组返回空", () => {
   assert.deepEqual(refSortEntries([], { by: "title", dir: "asc" }), []);
 });
 
+test("refSortEntries mtime（最近更新）：数值排序、缺失垫底、降序最新在前", () => {
+  const refs = [
+    { id: "x", title: "x", mtime: 10 },
+    { id: "y", title: "y", mtime: 30 },
+    { id: "z", title: "z" },
+  ];
+  assert.deepEqual(refSortEntries(refs, { by: "mtime", dir: "asc" }).map((e) => e.id), ["z", "x", "y"]);
+  assert.deepEqual(refSortEntries(refs, { by: "mtime", dir: "desc" }).map((e) => e.id), ["y", "x", "z"]);
+});
+
 // ================= 统计：refStats / refStatsText =================
 test("refStats 全量统计：总数 / 三平台恒显 / 三锚定类型恒显 / 未锚定数 / 总体积", () => {
   assert.deepEqual(refStats(refs), {

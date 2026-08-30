@@ -56,6 +56,7 @@ function renderReferenceStats() {
   // 悬空计数红段（工单 04）：0 时不渲染红色形态；点击 = 只看悬空（再点取消）
   $("ref-stats").innerHTML = esc(refStatsText(stats)) + (stats.dangling
     ? ` <span class="ref-dangling-count" data-ref-dangling title="锚定值不命中任何库内赛题 / 套件，生成时不会自动关联；点击只看悬空条目，再点取消">悬空 ${stats.dangling}</span>`
+    + ' <span class="lib-stats-hint">（点击可筛选）</span>'   // ux-polish-02/08 可见提示
     : "");
 }
 
@@ -98,7 +99,14 @@ export function initReferenceToolbar() {
     refSearchTimer = setTimeout(() => { refUI.q = e.target.value; renderReferences(); }, 150);
   });
   $("ref-filter").addEventListener("keydown", (e) => { if (e.key === "Escape") clearReferenceFilter(); });
-  $("ref-sort").addEventListener("change", (e) => { refUI.sortBy = e.target.value; renderReferences(); });
+  $("ref-sort").addEventListener("change", (e) => {
+    refUI.sortBy = e.target.value;
+    if (e.target.value === "mtime") {   // 最近更新默认降序（最新在前，ux-polish-02/08）
+      refUI.sortDir = "desc";
+      $("ref-sort-dir").textContent = "↓ 降序";
+    }
+    renderReferences();
+  });
   $("ref-sort-dir").addEventListener("click", () => {
     refUI.sortDir = refUI.sortDir === "asc" ? "desc" : "asc";
     $("ref-sort-dir").textContent = refUI.sortDir === "asc" ? "↑ 升序" : "↓ 降序";
