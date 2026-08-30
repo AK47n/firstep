@@ -299,13 +299,18 @@ export function editModule(slug) {
   const doSave = async () => {
     // 单「保存」按钮（工单 ux-walkthrough-02/09）：顺序提交身份 → 推送新文件，
     // 失败提示是哪一步；保存中禁用防连点；全部成功后一次反馈。
+    const resetSaveBtn = () => {
+      saveBtn.disabled = false; saveBtn.textContent = "保存";
+      platSel.disabled = false;   // 保存中禁平台下拉：防止切换后渲染误导（评审整改）
+    };
     if (!curPlatform) { setMsg("该模块暂无平台版本（先到「添加模块」录入源文件）"); return; }
     saveBtn.disabled = true; saveBtn.textContent = "保存中…";
+    platSel.disabled = true;
     const kit = kitEl.value.trim();
     const url = urlEl.value.trim();
     if (url && !libIsValidHttpUrl(url)) {
       setMsg("购买链接格式不正确（须 http/https 开头）");
-      saveBtn.disabled = false; saveBtn.textContent = "保存";
+      resetSaveBtn();
       return;
     }
     // ① 身份（kit / 链接）
@@ -321,12 +326,12 @@ export function editModule(slug) {
     } catch (e) {
       if (!overlay.isConnected) return;
       setMsg("身份保存失败：" + (e.message || String(e)));
-      saveBtn.disabled = false; saveBtn.textContent = "保存";
+      resetSaveBtn();
       return;
     }
     // ② 推送新文件（无待推送 = 跳过）
     const files = collectFiles(newfilesBox);
-    if (files === null) { saveBtn.disabled = false; saveBtn.textContent = "保存"; return; }
+    if (files === null) { resetSaveBtn(); return; }
     const names = Object.keys(files);
     if (names.length) {
       try {
@@ -344,16 +349,16 @@ export function editModule(slug) {
       } catch (e) {
         if (!overlay.isConnected) return;
         setMsg("文件推送失败：" + (e.message || String(e)));
-        saveBtn.disabled = false; saveBtn.textContent = "保存";
+        resetSaveBtn();
         return;
       }
     }
     setMsg(names.length ? "已保存（含 " + names.length + " 个新文件推送）" : "已保存");
     updatePendingBadge();
-    saveBtn.disabled = false; saveBtn.textContent = "保存";
+    resetSaveBtn();
   };
-  // 未推送文件计数角标（工单 ux-walkthrough-02/09）：新增行有文件名即计入，
-  // 保存前不误以为已推送；推送成功后角标消失
+  // 未推送文件计数角标（工单 ux-walkthrough-02/09）：按「有文件名的行」计数
+  // （近似值——同名行会由保存时的 collectFiles 拦截并提示；推送成功后角标消失）
   const pendingFileCount = () => {
     let n = 0;
     for (const row of newfilesBox.children) {
