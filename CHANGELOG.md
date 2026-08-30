@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=596ffbea7de2e42ace25ef48c6ce757537708e97 -->
+<!-- changelog-auto: last-commit=f15f74fb2ed1b8ef3e42896ddf388d841c88ece8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -33,6 +33,7 @@
 - 12:34 工单 05 补充：自检人话化测试的信号样例改为通用连接失败（超时信号已细分走专属文案）
 - 12:34 工单 05 标记 resolved（双轴评审整改全部落地）
 - 12:38 输出目录已存在提前预警：新增 /api/generate/preview-dir 静态预览端点（零 LLM），就绪检查面板软预警行（工单 06-A）
+- 12:39 工单 04 标记 resolved（双轴评审整改全部落地）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
