@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
-  readinessRowsHTML,
+  readinessRowsHTML, outputDirWarnRow,
 } from "../../src/contest_generator/static/js/fx/readiness.js";
 
 test("generateReadinessChecks 全空（桌面模式默认）：3/6/1 ❌，输出目录 ✅", () => {
@@ -131,4 +131,26 @@ test("readinessRowsHTML：多项 join，每项一个 rc-row", () => {
   const out = readinessRowsHTML(items, { recommendEnabled: false });
   assert.equal((out.match(/class="rc-row /g) || []).length, 4);
   assert.ok(out.indexOf('data-step="3"') < out.indexOf('data-step="1"'));
+});
+
+test("outputDirWarnRow：exists/occupied 给软预警行，其它 verdict 返回 null（工单 06）", () => {
+  const exists = outputDirWarnRow({ dir: "C:\\Desktop\\Auto_Car_STM32", verdict: "exists" });
+  assert.equal(exists.step, 9);
+  assert.equal(exists.soft, true);
+  assert.equal(exists.ok, false);
+  assert.ok(exists.reason.includes("备份为 .bak"));
+  const occupied = outputDirWarnRow({ dir: "C:\\out\\occupied", verdict: "occupied" });
+  assert.ok(occupied.reason.includes("非空"));
+  // 不预警的情形：new/clean/absent/empty（无冲突或目录不存在）/ needs_title（拿不到名）
+  assert.equal(outputDirWarnRow({ dir: "C:\\Desktop\\x", verdict: "new" }), null);
+  assert.equal(outputDirWarnRow({ dir: "C:\\Desktop\\x", verdict: "clean" }), null);
+  assert.equal(outputDirWarnRow({ dir: "C:\\out\\a", verdict: "absent" }), null);
+  assert.equal(outputDirWarnRow({ dir: "C:\\out\\e", verdict: "empty" }), null);
+  assert.equal(outputDirWarnRow({ dir: null, verdict: "needs_title" }), null);
+  assert.equal(outputDirWarnRow(null), null);
+  // 预警行走既有软行渲染：⚠ 展示 + 去第 9 步按钮
+  const html = readinessRowHTML(outputDirWarnRow({ dir: "D:\\p", verdict: "exists" }), {});
+  assert.ok(html.includes("rc-row soft"));
+  assert.ok(html.includes("⚠"));
+  assert.ok(html.includes('class="rc-go" data-step="9"'));
 });
