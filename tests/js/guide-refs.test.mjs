@@ -28,7 +28,7 @@ function swdPins(boardPath) {
   return swd.occupies;
 }
 
-const NAV_TAB_KEYS = ["generate", "topic", "settings", "library", "reference", "pdf", "master", "changelog", "guide"];
+const NAV_TAB_KEYS = ["generate", "topic", "code", "settings", "library", "reference", "pdf", "master", "changelog", "guide"];
 
 function sectionByTitle(chapter, titlePrefix) {
   return chapter.sections.find((s) => s.title.indexOf(titlePrefix) === 0);

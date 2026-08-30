@@ -47,6 +47,8 @@ export function recentChipHTML(entry) {
     + '<span class="recent-platform">' + esc(recentPlatformLabel(entry.platform)) + "</span>"
     + '<span class="recent-mods">' + mods + " 个模块</span>"
     + '<span class="recent-dir" title="' + esc(base) + '">' + esc(base) + "</span>"
+    + '<button type="button" class="recent-code-open" data-code-dir="' + esc(dir)
+    + '" title="在「代码」页只读查看该工程（文件树 + 行号 + 高亮 + 大纲 + 搜索）">查看代码</button>'
     + '<button type="button" class="recent-del" data-id="' + esc(entry.id)
     + '" title="删除这条记录" aria-label="删除">✕</button>'
     + "</div>";

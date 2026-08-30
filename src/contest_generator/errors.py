@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .ccs import CcsProjectError
+from .codeview import CodeViewError
 from .compile_runner import CompileRunnerError
 from .config import ConfigError
 from .context_manifest import ContextError
@@ -239,6 +240,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             GenerationConflictError,  # 桌面同名工程已存在（工单 generate-conflict-guard/01）：不静默换名/覆盖
             BackupRestoreError,  # 覆盖备份恢复失败（工单 ux-walkthrough-02/03）：目标名不合法 / 备份缺失 / 目标已存在
             RecentStatusError,  # 最近生成状态非法（工单 recent-jobs/01）：前端上报未知状态值
+            CodeViewError,  # 代码查看器失败（工单 code-viewer/01-02）：目录不存在 / 路径穿越 / 二进制 / 超限
         ),
         400,
         str,

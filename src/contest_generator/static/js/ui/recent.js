@@ -12,6 +12,7 @@ import { $, apiGet, apiPost, apiDelete, toast, toastError } from "/js/app.js";
 import { recentListHTML, recentStatusNow } from "/js/fx/recent.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { recentDeleteMessage } from "/js/fx/danger.js";
+import { openCodeViewer } from "/js/ui/codeview.js";  // 「查看代码」桥（工单 code-viewer/06）：切 tab + 加载该 output_dir
 
 // 最近记录快照缓存（工单 ux-walkthrough-02/15：删除确认点名 + 撤销恢复用）
 let recentEntries = [];
@@ -46,6 +47,12 @@ export function initRecent() {
   const list = $("gen-recent-list");
   if (!list) return;
   list.addEventListener("click", async (e) => {
+    const codeBtn = e.target.closest(".recent-code-open");
+    if (codeBtn) {
+      e.stopPropagation();  // 不触发整卡复制路径行为
+      openCodeViewer(codeBtn.dataset.codeDir || "");
+      return;
+    }
     const del = e.target.closest(".recent-del");
     if (del) {
       e.stopPropagation();

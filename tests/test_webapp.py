@@ -7616,3 +7616,123 @@ def test_api_health_ok_without_config(tmp_path):
     resp = client.get("/api/health")
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# 代码查看器（工单 code-viewer/01）：目录打开与文件读取端点
+# ---------------------------------------------------------------------------
+
+
+def test_code_open_returns_flat_file_list(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_bytes(b"int main(void){}\n")
+    (root / "Debug").mkdir()
+    (root / "Debug" / "main.obj").write_bytes(b"\x00")
+
+    resp = client.post("/api/code/open", json={"dir": str(root)})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["root"] == str(root)
+    assert data["files"] == [{"path": "main.c", "size_bytes": 17}]
+
+
+def test_code_open_missing_dir_400_chinese(client, tmp_path):
+    resp = client.post("/api/code/open", json={"dir": str(tmp_path / "nope")})
+
+    assert resp.status_code == 400
+    assert "目录不存在" in resp.json()["detail"]
+
+
+def test_code_open_requires_dir(client):
+    resp = client.post("/api/code/open", json={})
+
+    assert resp.status_code == 400
+    assert "缺少必填字段：dir" in resp.json()["detail"]
+
+
+def test_code_file_returns_content_and_outline(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_bytes(b"int main(void){\r\n}\r\n")
+
+    resp = client.get("/api/code/file", params={"dir": str(root), "path": "main.c"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["path"] == "main.c"
+    assert data["content"] == "int main(void){\n}\n"
+    assert data["outline"] == [{"kind": "function", "name": "main", "line": 1}]
+
+
+def test_code_file_rejects_traversal_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.get(
+        "/api/code/file", params={"dir": str(root), "path": "../x.c"}
+    )
+
+    assert resp.status_code == 400
+    assert "非法路径" in resp.json()["detail"]
+
+
+def test_code_file_missing_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.get(
+        "/api/code/file", params={"dir": str(root), "path": "nope.c"}
+    )
+
+    assert resp.status_code == 400
+    assert "文件不存在" in resp.json()["detail"]
+
+
+def test_code_file_rejects_binary_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "blob.bin").write_bytes(b"\x00\x01")
+
+    resp = client.get(
+        "/api/code/file", params={"dir": str(root), "path": "blob.bin"}
+    )
+
+    assert resp.status_code == 400
+    assert "二进制文件不可预览" in resp.json()["detail"]
+
+
+def test_code_search_returns_hits(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_bytes(b"int main(void){}\nvoid helper(void){}\n")
+
+    resp = client.get("/api/code/search", params={"dir": str(root), "q": "helper"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["hits"] == [
+        {"path": "main.c", "line": 2, "text": "void helper(void){}"}
+    ]
+    assert data["truncated"] is False
+    assert data["files_scanned"] == 1
+
+
+def test_code_search_empty_query_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.get("/api/code/search", params={"dir": str(root), "q": "  "})
+
+    assert resp.status_code == 400
+    assert "搜索关键词不能为空" in resp.json()["detail"]
+
+
+def test_code_search_missing_dir_400_chinese(client, tmp_path):
+    resp = client.get(
+        "/api/code/search", params={"dir": str(tmp_path / "nope"), "q": "x"}
+    )
+
+    assert resp.status_code == 400
+    assert "目录不存在" in resp.json()["detail"]

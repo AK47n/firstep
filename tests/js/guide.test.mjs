@@ -17,7 +17,7 @@ const html = readFileSync(
   "utf8",
 );
 
-const NAV_TAB_KEYS = ["generate", "topic", "settings", "library", "reference", "pdf", "master", "changelog", "guide"];
+const NAV_TAB_KEYS = ["generate", "topic", "code", "settings", "library", "reference", "pdf", "master", "changelog", "guide"];
 
 function countOccurrences(text, needle) {
   return text.split(needle).length - 1;
