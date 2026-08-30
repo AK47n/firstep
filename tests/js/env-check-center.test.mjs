@@ -120,6 +120,32 @@ test("CCS 三件套逐行：命中 env-ok + 路径 / 未设置 env-err + 跳转�
   assert.ok(!sparse.includes('data-env-row="ccs-'));
 });
 
+test("全就绪：工具链 + CCS 三件套 + 派生库目录全部 env-ok（工单 ux-walkthrough-02/06）", () => {
+  const all = {
+    ...status,
+    toolchains: {
+      stm32: { found: true, path: "C:\\Keil5\\UV4.exe", override: false },
+      mspm0: { found: true, path: "C:\\ti\\gmake.exe", override: false },
+    },
+    ccs_tools: {
+      sdk: { found: true, path: "C:\\ti\\sdk", override: false },
+      compiler: { found: true, path: "C:\\ti\\compiler", override: false },
+      sysconfig: { found: true, path: "C:\\ti\\sysconfig_cli.bat", override: false },
+    },
+    library_dirs: {
+      topic: { dir: "C:\\libs\\topics", exists: true, writable: true },
+      reference: { dir: "C:\\libs\\references", exists: true, writable: true },
+      pdf: { dir: "C:\\sources\\materials", exists: true, writable: true },
+    },
+  };
+  const out = envCheckStatusHTML(all, null, null);
+  for (const key of ["toolchain-stm32", "toolchain-mspm0", "ccs-sdk", "ccs-compiler", "ccs-sysconfig", "lib-dir-topic", "lib-dir-reference", "lib-dir-pdf"]) {
+    const row = out.slice(out.indexOf('data-env-row="' + key + '"'), out.indexOf('data-env-row="' + key + '"') + 400);
+    assert.ok(row.includes("env-ok"), key + " 应为 env-ok");
+    assert.ok(!row.includes("去设置填"), key + " 就绪态不应有跳转按钮");
+  }
+});
+
 test("派生库目录行：可写 env-ok / 缺失 env-warn；缺键不渲染", () => {
   const out = envCheckStatusHTML(status, null, null);
   assert.ok(out.includes('data-env-row="lib-dir-topic"'));
