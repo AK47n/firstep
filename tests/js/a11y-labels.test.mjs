@@ -29,9 +29,10 @@ test("每个 id 都真实存在于 index.html（input/textarea/select），防�
 });
 
 test("已有关联 label（for= 或包裹）的输入不在补齐表重复声明（表只放裸输入）", () => {
-  // 手工抽查两个有关联输入的 id 不在表中：output-dir（label for）、
-  // set-vision-detail-qa（label for）——有 label 关联就不需要 aria-label
-  for (const id of ["output-dir", "set-vision-detail-qa"]) {
+  // 手工抽查有关联输入的 id 不在表中：output-dir（label for）、
+  // set-vision-detail-qa（label for）、project-dirs（label for——
+  // 评审整改：曾误入表且文案 ≠ 可见 label，会覆盖关联名）
+  for (const id of ["output-dir", "set-vision-detail-qa", "project-dirs"]) {
     assert.ok(!(id in INPUT_A11Y_LABELS),
       "#" + id + " 已有 label for 关联，不应重复进补齐表（aria-label 会覆盖可见文本）");
   }

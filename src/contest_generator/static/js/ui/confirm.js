@@ -28,15 +28,16 @@ export function confirmModal({
     confirmText = "确认";
   }
   return new Promise((resolve) => {
+    // 焦点管理（工单 ux-walkthrough-02/19）：在旧弹窗级联清理**前**记录
+    // 触发元素——旧 finish 会把焦点还给旧触发钮，后读会错记为旧钮（评审整改）
+    const opener = typeof document !== "undefined" && document.activeElement
+      ? document.activeElement : null;
     if (activeCleanup) {
       const old = activeCleanup;
       activeCleanup = null;
       old();
     }
     document.querySelectorAll(".ref-files-overlay").forEach((o) => o.remove());
-    // 焦点管理（工单 ux-walkthrough-02/19）：记录打开时的触发元素——关闭后还焦
-    const opener = typeof document !== "undefined" && document.activeElement
-      ? document.activeElement : null;
     const overlay = document.createElement("div");
     overlay.className = "ref-files-overlay";
     overlay.innerHTML = overlayConfirmHTML({
@@ -63,8 +64,10 @@ export function confirmModal({
       document.removeEventListener("keydown", onKey);
       overlay.remove();
       activeCleanup = null;
-      // 关闭后把焦点还给触发元素（评审 19：Esc / 取消 / 确认 / 遮罩点击一致）
-      if (opener && typeof opener.focus === "function" && opener.isConnected) opener.focus();
+      // 关闭后把焦点还给触发元素（评审 19：Esc / 取消 / 确认 / 遮罩点击一致；
+      // disabled 触发钮 focus 为 no-op，跳过）
+      if (opener && !opener.disabled && typeof opener.focus === "function"
+          && opener.isConnected) opener.focus();
       resolve(value);
     };
     activeCleanup = () => finish(false);
