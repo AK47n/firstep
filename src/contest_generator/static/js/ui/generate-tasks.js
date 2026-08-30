@@ -17,10 +17,11 @@
 //（parseSSE / formatLLMTelemetry）+ fx/task.js + fx/diff.js（效果 diff 渲染）
 // + ui/usage.js（recordLLMUsage）
 // + ui/step-state.js（markStepDone）+ ui/confirm.js（confirmModal）。
-import { $, apiPost, toast } from "/js/app.js";
+import { $, apiPost, toast, toastError } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
+import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashContainer } from "/js/fx/flash.js";
@@ -894,7 +895,7 @@ async function tasksRunSSE(url, body, handlers) {
   if (!resp.body) throw new Error("服务响应无流");
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+    throw new Error(parseHttpError(resp.status, err).text);
   }
   await parseSSE(resp, (type, raw) => {
     let data = {};
@@ -1193,7 +1194,7 @@ async function tasksSetStatus(taskId, status, okMessage = "状态已更新") {
     // 双通道；tasksReload 回填磁盘真相（恢复失败时磁盘状态才是权威——防
     // 客户端内存态与磁盘分叉，spec 轴评审整改：恢复失败路径同回填）
     $("tasks-msg").textContent = e.message;
-    toast("error", e.message);
+    toastError(e);
     await tasksReload();
   } finally {
     tasksSetBusy(false);

@@ -1853,6 +1853,11 @@
            box-shadow: var(--shadow-toast);
            animation: toast-in var(--dur-slow) var(--ease-ui),
                       toast-out var(--dur-slow) var(--ease-ui) 2.2s forwards; }
+  /* 长错误 toast 的「复制」按钮（工单 ux-walkthrough-02/11）：点击写入剪贴板 */
+  .toast-copy { flex: none; margin-left: 2px; padding: 2px 10px; font-size: 11px;
+                border-radius: 999px; border: 1px solid var(--border);
+                background: var(--panel); color: var(--accent); cursor: pointer; }
+  .toast-copy:hover { border-color: var(--accent); }
   /* 类型左边框 + 背景微染（工单 ui-polish-8/03）：ok 绿 / error 红 / info 青 */
   .toast.ok { border-left: 3px solid var(--ok); background: var(--ok-dim); }
   .toast.ok .toast-ico { color: var(--ok); }

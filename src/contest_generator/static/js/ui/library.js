@@ -17,7 +17,7 @@
 // 收尾工单核对使用面）。顶层监听（btn-add-file-row / 模块库两个 bindFilePicker /
 // btn-draft-desc / btn-add-module-submit）在 import 时绑定（module 延迟执行，
 // DOM 已就绪）。
-import { $, apiGet, apiPost, apiPut, apiDelete, toast, state } from "/js/app.js";
+import { $, apiGet, apiPost, apiPut, apiDelete, toast, toastError, state } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { libStats, libStatsText, libChipRowHTML, libSortModules, libFilterModules, moduleRowHTML, danglingDependencies, editDescStatus, libIsValidHttpUrl, libPlatformKits } from "/js/fx/module.js";
@@ -425,7 +425,7 @@ export async function deleteModule(slug) {
   try {
     await apiDelete(`/api/modules/${encodeURIComponent(slug)}`);
     loadLibrary();
-  } catch (e) { toast("error", e.message); }
+  } catch (e) { toastError(e); }
 }
 
 // 动态文件行（模块库 / 参考文件库共用）已迁至 static/js/ui/files.js（阶段 2 工单 06）；

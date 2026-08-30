@@ -3,7 +3,7 @@
 // 同步端点（flash 端点同构）；busy 闸共享 tasks.busy（tasksSetBusy 全局闸——
 // 与任务执行 / 参数流程互斥，防弹窗与写盘竞争）；目录取 reviseGetDir
 //（「修订与深化」卡已加载上下文，主写簇归 generate-revise.js）。
-import { $, apiPost, toast } from "/js/app.js";
+import { $, apiPost, toast, toastError } from "/js/app.js";
 import { deliveryActionsHTML, deliveryCheckHTML, deliveryPackageHTML } from "/js/fx/delivery.js";
 import { reviseGetDir } from "./generate-revise.js";
 import { tasksSetBusy, tasksIsBusy } from "./generate-tasks.js";
@@ -49,7 +49,7 @@ async function deliveryRun(action, render, okText) {
     render(data);
     toast("ok", okText(data));
   } catch (e) {
-    toast("error", e.message);
+    toastError(e);   // 长错误 / 5xx → 可复制 toast（工单 ux-walkthrough-02/11）
   } finally {
     deliverySetBusy(false);
   }

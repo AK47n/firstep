@@ -17,6 +17,7 @@
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
+import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { paramListHTML, paramResultHTML } from "/js/fx/params.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { reviseGetDir } from "./generate-revise.js";
@@ -272,7 +273,7 @@ async function tasksRunSSE(url, body, handlers) {
   if (!resp.body) throw new Error("服务响应无流");
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+    throw new Error(parseHttpError(resp.status, err).text);
   }
   await parseSSE(resp, (type, raw) => {
     let data = {};

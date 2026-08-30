@@ -21,6 +21,10 @@ const DOMAINS = {
     reviseApplyConfirmMessage: "fn", platformSwitchConfirmMessage: "fn",
     pinResetConfirmMessage: "fn", overwriteBakHint: "fn",
   },
+  "errors.js": {
+    parseError: "fn", parseHttpError: "fn", isLongError: "fn",
+    ERROR_LONG_THRESHOLD: "number",
+  },
   "env.js": {
     ENV_BADGE_GLYPH: "object",
     envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",

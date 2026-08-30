@@ -12,7 +12,7 @@
 // topicPageCache（页图 memo Map）。无跨簇 mutable 状态。
 // host 页签分发器经顶部 import 调 loadTopics / loadTopicGroupVocabulary；
 // initTopicToolbar 在模块顶部调用（import 时绑定，DOM 已就绪）。
-import { $, apiGet, apiPut, apiDelete, toast, handle } from "/js/app.js";
+import { $, apiGet, apiPut, apiDelete, toast, toastError, handle } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { pdfFileUrl } from "/js/fx/pdf.js";
@@ -315,7 +315,7 @@ export async function deleteTopic(key) {
   try {
     await apiDelete(`/api/topics/${encodeURIComponent(key)}`);
     loadTopics();
-  } catch (e) { toast("error", e.message); }
+  } catch (e) { toastError(e); }
 }
 
 export function renderProofreadRows() {
