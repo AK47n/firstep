@@ -23,6 +23,7 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { fmtSeconds, fixLogGroupHidden } from "/js/fx/generate.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
+import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
 import { reportRecentStatus } from "/js/ui/recent.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
@@ -294,7 +295,7 @@ async function runCompileOnce(outputDir) {
   if (!resp.body) { compileBanner("fail", "服务响应无流"); throw new Error("服务响应无流"); }
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    const msg = err.detail || ("请求失败（HTTP " + resp.status + "）");
+    const msg = parseHttpError(resp.status, err).text;
     compileBanner("fail", "编译失败：" + msg);
     throw new Error(msg);
   }
@@ -337,7 +338,7 @@ async function runFixOnce(errorText, outputDir, previousDone) {
   if (!resp.body) throw new Error("服务响应无流");
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+    throw new Error(parseHttpError(resp.status, err).text);
   }
   await parseSSE(resp, (type, raw) => {
     if (type === "done" || type === "error") finished = true;

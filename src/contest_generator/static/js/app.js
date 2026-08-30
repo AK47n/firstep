@@ -8,6 +8,7 @@
 // 3. 不挂 window 桥（探针按需 import 或 DOM 实况；fx 纯件桥不受影响）。
 // 4. 新共享件（多个 ui 模块共用、无 DOM 域归属的）优先落本文件。
 import { btnIcon } from "/js/fx/btn-icon.js";
+import { parseError, isLongError } from "/js/fx/errors.js";
 
 export const $ = (id) => document.getElementById(id);
 
@@ -96,15 +97,20 @@ export function setState(v) { state = v; }
 // 2.5s 自动消失，最多同屏 3 条；行内提示保留（toast 只做显眼补充）
 // ---------------------------------------------------------------------------
 const TOAST_ICON = { ok: "✓", error: "✕", info: "ℹ" };
-export function toast(kind, text) {
+/** toast 轻通知：opts = {copy: bool, ms: number}——长错误（500/超阈值）场景
+ * 由 toastError 传 copy + ≥6s（工单 ux-walkthrough-02/11），短错误维持 2.5s。 */
+export function toast(kind, text, opts = {}) {
   const root = $("toast-root");
   if (!root) return;
   while (root.children.length >= 3) root.removeChild(root.firstChild);
   const el = document.createElement("div");
   el.className = "toast " + kind;
+  const copyBtn = opts.copy
+    ? '<button type="button" class="toast-copy" aria-label="复制错误内容">复制</button>'
+    : "";
   el.innerHTML = '<span class="toast-ico">' + TOAST_ICON[kind] + '</span><span class="toast-text">'
     + String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
-    + '</span><button type="button" class="toast-close" aria-label="关闭">×</button>';
+    + '</span>' + copyBtn + '<button type="button" class="toast-close" aria-label="关闭">×</button>';
   el.querySelector(".toast-close").addEventListener("click", () => {
     // 点击关闭走离场动画（工单 ui-polish-8/03）：重触发 toast-out 后移除
     el.style.animation = "none";
@@ -112,8 +118,40 @@ export function toast(kind, text) {
     el.style.animation = "toast-out .3s ease forwards";
     setTimeout(() => el.remove(), 300);
   });
+  if (copyBtn) {
+    el.querySelector(".toast-copy").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(String(text));
+        el.querySelector(".toast-copy").textContent = "已复制";
+        setTimeout(() => { if (el.isConnected) el.querySelector(".toast-copy").textContent = "复制"; }, 1200);
+      } catch (e) {
+        el.querySelector(".toast-copy").textContent = "复制失败";
+      }
+    });
+  }
   root.appendChild(el);
-  setTimeout(() => { if (el.isConnected) el.remove(); }, 2500);
+  const ms = opts.ms || (opts.copy ? 6000 : 2500);
+  if (opts.copy || ms > 2500) {
+    // 长停留 toast：关掉 .toast 的 2.2s 自动淡出动画（否则视觉仍 2.2s 消失）
+    el.style.animation = "toast-in var(--dur-slow) var(--ease-ui)";
+  }
+  setTimeout(() => { if (el.isConnected) el.remove(); }, ms);
+}
+
+/** 错误统一出口（工单 ux-walkthrough-02/11）：parseError 归一后按长度/状态
+ * 分派——长错误 / 5xx → 可复制 toast（≥6s）；短错误 → 常规 toast。
+ * prefix 可选：调用方上下文前缀（如「删除失败：」）——不改变功能语义。 */
+export function toastError(err, prefix) {
+  const parsed = parseError(err);
+  if (prefix && String(prefix).trim() && !parsed.text.startsWith(String(prefix).trim())) {
+    parsed.text = String(prefix).trim() + "：" + parsed.text;
+  }
+  if (isLongError(parsed)) {
+    toast("error", parsed.text, { copy: true, ms: 6000 });
+  } else {
+    toast("error", parsed.text);
+  }
+  return parsed;
 }
 
 // ---------------------------------------------------------------------------

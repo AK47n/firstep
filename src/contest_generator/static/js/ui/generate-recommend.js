@@ -38,6 +38,7 @@ import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
 import { stepNavTitles, syncStep4 } from "/js/fx/draft.js";
 import { prereadHTML, prereadSlotHTML, prereadReminderGroups } from "/js/fx/topic-preread.js";
+import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
@@ -661,7 +662,7 @@ export async function startRecommend(problem) {
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     stopRecProgress();
-    showRecommendError(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+    showRecommendError(parseHttpError(resp.status, err).text);
     return;
   }
   try {

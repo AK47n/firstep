@@ -19,7 +19,7 @@
 // 顶层监听（ref-anchor-kind / btn-ref-add-file-row+初始行 / btn-ref-draft-desc /
 // btn-ref-add / 两个 bindFilePicker）在 import 时绑定（module 延迟执行，
 // DOM 已就绪）。
-import { $, apiGet, apiPost, apiPut, apiDelete, toast } from "/js/app.js";
+import { $, apiGet, apiPost, apiPut, apiDelete, toast, toastError } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, formatSize } from "/js/fx/core.js";
 import { refStats, refStatsText, refChipRowHTML, refFilterEntries, refSortEntries, refRowHTML, refDetailHTML, refEditValidate, refEditFilePlan, refEditPayload, refEditState } from "/js/fx/reference.js";
@@ -209,7 +209,7 @@ export async function deleteReference(entryId) {
   try {
     await apiDelete(`/api/references/${encodeURIComponent(entryId)}`);
     loadReferences();
-  } catch (e) { toast("error", e.message); }
+  } catch (e) { toastError(e); }
 }
 
 // ===== 参考库编辑弹窗（工单 03）：改元数据 + 文件增删，一次 PUT 落盘 =====
@@ -395,7 +395,7 @@ export async function openReferenceFile(entryId, path, viewer, viewerPre) {
       if (!resp.ok) throw new Error(await resp.text().catch(() => "HTTP " + resp.status));
       viewerPre.textContent = `${path}\n\n${await resp.text()}`;
       viewer.classList.remove("hidden");
-    } catch (err) { toast("error", err.message); }
+    } catch (err) { toastError(err); }
     return;
   }
   window.open(url, "_blank"); // 其余类型：服务端按扩展名给 Content-Type，浏览器转下载
@@ -408,7 +408,7 @@ export function viewReferenceDetail(entryId) {
   if (!entry) { toast("info", "未找到条目 " + entryId); return; }
   apiGet(`/api/references/${encodeURIComponent(entryId)}/files`).then((files) => {
     showReferenceDetail(entry, files);
-  }).catch((e) => toast("error", e.message));
+  }).catch((e) => toastError(e));
 }
 
 function showReferenceDetail(entry, files) {

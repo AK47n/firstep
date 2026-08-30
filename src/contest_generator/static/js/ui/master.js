@@ -7,11 +7,12 @@
 // 顶层 addEventListener（btn-pick-dirs / pick-dirs / btn-scan / prog-log-head /
 // btn-distill / btn-confirm / btn-usage-reset）在 import 时绑定——module
 // 脚本延迟执行，DOM 已就绪（与 stage 1 桥接约定同理）。
-import { $, handle, apiGet, apiPost, apiDelete, toast } from "/js/app.js";
+import { $, handle, apiGet, apiPost, apiDelete, toast, toastError } from "/js/app.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, fmtDuration } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
+import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterDetailHTML, decisionItem, archiveItem, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML } from "/js/fx/master.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
@@ -279,7 +280,7 @@ $("btn-distill").addEventListener("click", async () => {
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || ("请求失败（HTTP " + resp.status + "）"));
+      throw new Error(parseHttpError(resp.status, err).text);
     }
     await parseSSE(resp, distPanel.handleEvent);
     if (!distPanel.p.finished) {   // 流结束但没等到 done / error = 断线：放弃本次，刷新安全重试
@@ -415,7 +416,7 @@ function openMasterDeleteConfirm(platform) {
       toast("ok", "已删除平台 " + m.platform + " 的母版");
       loadMasters();
     } catch (e) {
-      toast("error", e.message);   // 失败：弹窗保留，用户可重试或取消
+      toastError(e);   // 失败：弹窗保留，用户可重试或取消（长错误可复制）
       confirmBtn.disabled = false;
     }
   });
@@ -617,7 +618,7 @@ $("import-pick-dirs").addEventListener("change", async () => {
     const data = await handle(await fetch("/api/masters/stage", { method: "POST", body: form }));
     staged = data.staged[0];
   } catch (e) {
-    toast("error", "暂存失败：" + e.message);
+    toastError(e, "暂存失败");
     return;
   }
   if (!staged) {

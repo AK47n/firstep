@@ -3,7 +3,7 @@
 // 素材库全量 PDF 浏览 / 客户端即时检索 / 排序 / 统计 / 直开预览 / 详情弹窗 /
 // 疑似重复回收删除（对偶参考文件库）。纯件在 fx/pdf.js（过滤/排序/统计/健康/
 // 行渲染/详情/回收 URL 等全量），本模块只做 DOM 转发与事件接线。
-import { $, apiGet, apiPost, toast } from "/js/app.js";
+import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import {
   pdfHealth, pdfBroken, pdfFilterEntries, pdfSortEntries,
@@ -144,7 +144,7 @@ async function confirmTrashPdf(relPath, close) {
     toast("ok", "已移入回收目录");
     pdfPageCache.delete(relPath);
     loadPdfs();
-  } catch (e) { toast("error", e.message); } // 失败：弹窗保留，用户可重试或取消
+  } catch (e) { toastError(e); } // 失败：弹窗保留，用户可重试或取消（长错误可复制，工单 ux-walkthrough-02/11）
 }
 
 // confirmTrashGroup(pdf, group, close)：组级「保留一份删其余」——循环 POST
@@ -159,7 +159,7 @@ async function confirmTrashGroup(pdf, group, close) {
     toast("ok", `已移入回收目录（${others.length} 份）`);
     others.forEach((rp) => pdfPageCache.delete(rp));
     loadPdfs();
-  } catch (e) { toast("error", e.message); }
+  } catch (e) { toastError(e); }
 }
 
 // —— 工具栏状态与渲染（对偶 ref 系列）：过滤条件集中于此，事件层只转发 ——

@@ -8,7 +8,7 @@
 // 跨簇调用方（调用方 import 本模块）：renderGenerateSuccess（生成成功 →
 // refreshRecent）、fixHandleEvent（编译结束 → reportRecentStatus）；host 启动
 // 区经 import 调 initRecent。无模块态。
-import { $, apiGet, apiPost, apiDelete, toast } from "/js/app.js";
+import { $, apiGet, apiPost, apiDelete, toast, toastError } from "/js/app.js";
 import { recentListHTML, recentStatusNow } from "/js/fx/recent.js";
 
 export function renderRecentList(entries) {
@@ -23,7 +23,7 @@ export async function refreshRecent() {
   if (!box) return;
   let entries = [];
   try { entries = await apiGet("/api/recent"); }
-  catch (e) { toast("error", "最近生成加载失败：" + e.message); }
+  catch (e) { toastError(e, "最近生成加载失败"); }
   renderRecentList(entries || []);
 }
 // 编译完成上报（fire-and-forget：失败不打断编译循环，静默）+ 刷新列表
@@ -45,7 +45,7 @@ export function initRecent() {
       e.stopPropagation();
       try {
         await apiDelete("/api/recent/" + encodeURIComponent(del.dataset.id || ""));
-      } catch (err) { toast("error", "删除失败：" + err.message); }
+      } catch (err) { toastError(err, "删除失败"); }
       refreshRecent();
       return;
     }
@@ -62,7 +62,7 @@ export function initRecent() {
         ta.select();
         if (document.execCommand && document.execCommand("copy")) { toast("ok", "已复制路径"); return; }
         toast("error", "复制失败：请手动复制");
-      } catch (err) { toast("error", "复制失败：" + err.message); }
+      } catch (err) { toastError(err, "复制失败"); }
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(dir).then(done).catch(fallback);
