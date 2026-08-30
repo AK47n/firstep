@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=12b409dc731e555a6fceddaa21d10ee50268bb6c -->
+<!-- changelog-auto: last-commit=1615f8e78e05e83f20e758a406c329e6dd203b9c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -111,6 +111,7 @@
 - 21:59 k230-digit-vision/01 数字帧契约单源扩展：k230_render.py 新增 DIGIT_FRAME_HEADER / DIGIT_FRAME_LINE_FIELDS（格式由字段序派生，confidence {:.2f} 特殊化）/ 消费槽位 / 无检测帧常量与占位符 + 帧头渲染函数；防漂移机械比对锁定 digit_uart 双平台 get_field 序 (0,1,6,7)、帧头 --- 前缀、无检测语义（count=0 重置→空行帧尾→best_count>0 最佳帧）
 - 22:12 k230-digit-vision/02 模板级依赖覆盖：PythonArtifactTemplate 加可选 dependencies（None=继承模块级，非空=覆盖，[] 拒绝——语义黑洞）；resolve_selection 加 python_templates 构造覆盖表（非 Mapping 防御不崩）；库级校验 validate_template_dep_slugs 在 list_modules 拦截悬空依赖；展开/骨架/生成三端点同一答案来源；未知 slug/成环复用 UnknownModuleError/DependencyCycleError
 - 22:22 k230-digit-vision/03 静态资产分发：PythonArtifactTemplate 加 assets（AssetSpec {src,dst}，src 模块目录内/dst 工程根内，越界与 '.' 拒绝）；_write_python_artifacts 同阶段 shutil.copy2 复制（跨模块 dst 互斥/写时撞既有文件/src 缺失 → PythonArtifactError 不留半成品）；摘要 asset_paths + webapp 载荷 + 前端「资产」行；顺带修 to_dict 旧形状分支丢增强字段的潜伏洞（单模板带 deps/assets 走新形状）
+- 22:28 k230-digit-vision/04 数字识别模板落地：k230 新增 digit 模板（main_digit.py = 21F 推理管线 + DIGIT 契约占位符，0 目标也发帧头）+ assets 部署包（digit8_anchorbase_320.kmodel 7,596,008 字节与 21F 逐字节一致 + deploy_config.json kmodel_path 指向新名）；manifest 模板级依赖 digit_uart（blob/rect 零改动）；README 产物清单加 mp_deployment_source 行；跨平台集成测试 + rect/blob 基线不回归
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
