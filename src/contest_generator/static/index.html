@@ -2398,7 +2398,7 @@
           </div>
           <details class="card-details">
             <summary>「我具体想改什么」→ 写在这里：AI 判断它是新功能 / 直接修正 / 建议先聊聊。</summary>
-            <div class="card-details-body">已经有明确的一个点（改参数、加功能、修 bug、调策略），AI 判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿落盘（.contest_ideas.json），回头逐条分析或全部逐条分析。如果只是想先讨论、还没有具体改法 → 用下面的「全局商量」。</div>
+            <div class="card-details-body">已经有明确的一个点（改参数、加功能、修 bug、调策略），AI 判断它是新功能（生成任务卡）、直接修正（改动预览并执行，可回滚）还是建议先聊聊；直接修正落地后，受影响的步骤会标「⚠ 建议重做」。现场连冒多个念头可先「存入草稿」——草稿自动保存到工程内，回头逐条分析或全部逐条分析。如果只是想先讨论、还没有具体改法 → 用下面的「全局商量」。</div>
           </details>
           <div id="tasks-idea-result" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-idea-msg" class="error"></div>
@@ -2414,7 +2414,7 @@
           </div>
           <details class="card-details">
             <summary>「想先讨论、还没想好具体改什么」→ 工程级连续问答，结论可落地。</summary>
-            <div class="card-details-body">对整体方案有疑惑（架构取舍 / 赛道策略 / 方案对不对），AI 结合题面、需求、任务清单现状与当前 main.c 连续回答问题，越问越清楚；每步可「转成任务 / 转成修正」落地，或「采纳为全局结论」（之后每一步任务执行与直接修正都会带上它）；历史落盘（.contest_idea_chat.json），刷新不丢。已有明确要改的一个点 → 直接用上面的「新想法」。</div>
+            <div class="card-details-body">对整体方案有疑惑（架构取舍 / 赛道策略 / 方案对不对），AI 结合题面、需求、任务清单现状与当前 main.c 连续回答问题，越问越清楚；每步可「转成任务 / 转成修正」落地，或「采纳为全局结论」（之后每一步任务执行与直接修正都会带上它）；历史自动保存到工程内，刷新不丢。已有明确要改的一个点 → 直接用上面的「新想法」。</div>
           </details>
           <div id="tasks-global-chat" class="hidden" style="margin-top:8px"></div>
           <div id="tasks-global-msg" class="error"></div>
@@ -2446,7 +2446,7 @@
           </div>
           <details class="card-details">
             <summary>识别 main.c 可调数值 → 改值 = 只替换那一个常量 → 自动备份 + 编译验证。</summary>
-            <div class="card-details-body">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表落盘（.contest_params.json）。</div>
+            <div class="card-details-body">AI 扫描 main.c 里的可调数值（阈值 / 速度 / PID 系数 / 延时 / 占空比…）：改值 = 只替换声明处那一个常量（不动逻辑、零 LLM 二次调用）→ 自动备份 + 编译验证 → 可回滚 / 可烧录；与任务清单独立，参数表自动保存到工程内。</div>
           </details>
           <div id="params-grid" class="hidden" style="margin-top:8px"></div>
           <div id="params-result" style="margin-top:8px"></div>

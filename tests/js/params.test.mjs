@@ -32,13 +32,13 @@ test("paramListHTML: 行渲染（名称 / 含义 / 默认值 / 建议范围 / �
   assert.ok(html.includes('value="1.2f"'));
 });
 
-test("paramListHTML: 失效行禁用 + 「锚已失效」标记（恢复按钮常驻但禁用）", () => {
+test("paramListHTML: 失效行禁用 + 「位置已变」标记（恢复按钮常驻但禁用）", () => {
   const html = paramListHTML([
     { name: "STALE", label: "失效参数", old_value: "10", anchor: "x", valid: false },
   ]);
   assert.ok(html.includes("param-stale"));
   assert.ok(html.includes("disabled"));
-  assert.ok(html.includes("锚已失效"));
+  assert.ok(html.includes("位置已变"));
   assert.ok(!html.includes(">应用</button>"));
   assert.ok(html.includes("↺ 恢复旧值"));  // 常驻（spec：每张卡都有恢复按钮）
   assert.ok(/class="btn-params-reset"[^>]*disabled/.test(html));

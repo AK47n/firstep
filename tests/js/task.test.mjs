@@ -69,7 +69,7 @@ test("taskCardHTML: 标题/描述/状态徽章/评分点/前置依赖/验收方�
     verify: "manual",
     status: "pending",
   }, 0, { scorePoints: [{ id: "s1", part: "basic", score: 20 }], actions: () => "<button>x</button>" });
-  assert.ok(html.includes("t1 · 循迹决策"));
+  assert.ok(html.includes("第 1 步（建议顺序） · 循迹决策"));
   assert.ok(html.includes("待做"));
   assert.ok(html.includes("循迹决策"));
   assert.ok(html.includes("s1（基础 20 分）"));
@@ -81,8 +81,8 @@ test("taskCardHTML: 前置依赖渲染", () => {
   const html = taskCardHTML({
     id: "t2", title: "显示", description: "显示结果",
     score_refs: [], depends_on: ["t1"], verify: "compile", status: "verified",
-  }, 1, {});
-  assert.ok(html.includes("前置：t1"));
+  }, 1, { seqById: { t1: 1, t2: 2 } });
+  assert.ok(html.includes("前置：第 1 步"));
   assert.ok(html.includes("已验证"));
 });
 
@@ -92,7 +92,7 @@ test("tasksGridHTML: 空清单占位 + 多卡渲染", () => {
     { id: "t1", title: "A", description: "x", score_refs: [], depends_on: [], verify: "compile", status: "pending" },
     { id: "t2", title: "B", description: "y", score_refs: [], depends_on: ["t1"], verify: "compile", status: "skipped" },
   ] }, {});
-  assert.ok(html.includes("t1 · A"));
+  assert.ok(html.includes("第 1 步（建议顺序） · A"));
   assert.ok(html.includes("已跳过"));
 });
 
@@ -330,7 +330,7 @@ test("taskIterationsHTML: 两行式结构（line 徽章行 + 带标签 detail �
   assert.ok(html.includes("<b>上板反馈：</b>左轮不转"));
   assert.ok(html.includes("<b>做了什么：</b>改了 PWM"));
   assert.ok(html.includes("<b>需要你做什么：</b>调大 PID 的 P 再试"));
-  assert.ok(html.includes("2026-08-27T10:00:00+0800 · 备份"));
+  assert.ok(html.includes("2026-08-27T10:00:00+0800 · 已备份"));
   assert.ok(html.includes("task-iteration-detail-meta"));
 });
 
@@ -351,12 +351,13 @@ test("taskOrderLabel: index 0 起 → 「第 N 步（建议顺序）」", () => 
   assert.equal(taskOrderLabel(2), "第 3 步（建议顺序）");
 });
 
-test("taskCardHTML: 序号进标题行（第 N 步（建议顺序）· t1 · 标题）", () => {
+test("taskCardHTML: 序号进标题行（第 N 步（建议顺序）· 标题，不露原始 id）", () => {
   const html = taskCardHTML({
     id: "t1", title: "循迹决策", description: "根据灰度值控制电机",
     score_refs: [], depends_on: [], verify: "compile", status: "pending",
   }, 0, {});
-  assert.ok(html.includes("第 1 步（建议顺序） · t1 · 循迹决策"));
+  assert.ok(html.includes("第 1 步（建议顺序） · 循迹决策"));
+  assert.ok(!html.includes(" · t1 · "));
 });
 
 test("tasksGridHTML: 建议顺序声明行（不强制，可跳着做）", () => {
@@ -795,7 +796,8 @@ test("taskNextHintHTML: 下一步提示行（转义 + 序号 + 空串）", () =>
   ] };
   const html = taskNextHintHTML(plan, "t1");
   assert.ok(html.includes("task-next-hint"));
-  assert.ok(html.includes("下一步 → t4："));
+  assert.ok(html.includes("下一步 → 第 2 步："));  // 序号人话（工单 beginner-gap-closure/03，不露 t4）
+  assert.ok(!html.includes("t4"));
   assert.ok(html.includes("A到B &lt;直线&gt; &amp; 停车"));  // esc 转义
   assert.ok(!html.includes("<直线>"));
   // 无下一步 → 空串
@@ -819,18 +821,19 @@ test("ideaResultHTML: 三种分类结果卡（徽章 + 落地按钮区）", () =
   assert.ok(nt.includes("btn-idea-insert"));
   assert.ok(nt.includes("生成任务"));
   assert.ok(!nt.includes("btn-idea-fix"));
-  // direct_fix → 「改动预览并执行」按钮 + 修正建议 + 受影响任务
+  // direct_fix → 「改动预览并执行」按钮 + 修正建议 + 受影响任务（序号人话，不露 t1/t2）
   const df = ideaResultHTML({
     kind: "direct_fix",
     reply: "阈值太高，直接改。",
     new_task: null,
     fix_summary: "把阈值从 500 降到 350",
     affected_task_ids: ["t1", "t2"],
-  }, {});
+  }, { seqById: { t1: 1, t2: 2, t3: 3 } });
   assert.ok(df.includes("改现有代码"));
   assert.ok(df.includes("把阈值从 500 降到 350"));
   assert.ok(df.includes("受影响任务"));
-  assert.ok(df.includes("t1、t2"));
+  assert.ok(df.includes("受影响任务（落地后建议重做）：第 1 步、第 2 步"));
+  assert.ok(!df.includes("t1、t2"));
   assert.ok(df.includes("btn-idea-fix"));
   assert.ok(df.includes("改动预览并执行"));
   assert.ok(!df.includes("btn-idea-insert"));
@@ -1134,8 +1137,8 @@ test("resourcesOverviewHTML: 聚合 + 硬件冲突标黄 + 非硬件不标黄 + 
   // PA0 被 t1/t2 共用 → 硬件冲突行标黄
   assert.ok(html.includes("res-conflict"));
   assert.ok(html.includes("⚠ 多任务使用，上板前确认"));
-  assert.ok(html.includes("t1：循迹"));
-  assert.ok(html.includes("t2：显示"));
+  assert.ok(html.includes("第 1 步：循迹"));
+  assert.ok(html.includes("第 2 步：显示"));
   // 单任务硬件资源不标冲突
   assert.ok(html.includes(">TIM1<"));
   const timRow = html.split("res-row").find((s) => s.includes("TIM1"));
@@ -1202,7 +1205,7 @@ test("resourcesOverviewHTML: 分组四段（冲突置顶/合并行/软资源 det
   assert.ok(mergedHT.includes('class="res-chip-group"'));
   assert.ok(mergedHT.includes(">PA12<"));
   assert.ok(mergedHT.includes(">PB9<"));
-  assert.equal((mergedHT.match(/t1：电机/g) || []).length, 1);
+  assert.equal((mergedHT.match(/第 1 步：电机/g) || []).length, 1);
   // 冲突行在冲突组而非引脚组：引脚组（引脚占用..外设与中断 之间）不含 PA12
   const pinGroup = html.slice(html.indexOf("引脚占用"), html.indexOf("外设与中断"));
   assert.ok(!pinGroup.includes(">PA12<"));
@@ -1239,14 +1242,14 @@ test("scoreRefsOverviewHTML: 覆盖行 + 未覆盖标红 + 未知引用 + 转义
   assert.ok(s1Row.includes(">s1<"));
   assert.ok(s1Row.includes("基础"));
   assert.ok(s1Row.includes("3 分"));
-  assert.ok(s1Row.includes("t1：循迹"));
+  assert.ok(s1Row.includes("第 1 步：循迹"));
   assert.ok(!s1Row.includes("score-point-miss"));
   // s2 被 t1/t2 覆盖：发挥 5 分，两个任务都列出
   const s2Row = html.split("score-point-row").find((s) => s.includes("s2"));
   assert.ok(s2Row.includes("发挥"));
   assert.ok(s2Row.includes("5 分"));
-  assert.ok(s2Row.includes("t1：循迹"));
-  assert.ok(s2Row.includes("t2：显示"));
+  assert.ok(s2Row.includes("第 1 步：循迹"));
+  assert.ok(s2Row.includes("第 2 步：显示"));
   // s3 无覆盖：标红 + 警示
   const s3Row = html.split("score-point-row").find((s) => s.includes("s3"));
   assert.ok(s3Row.includes("score-point-miss"));
@@ -1262,7 +1265,7 @@ test("scoreRefsOverviewHTML: 覆盖行 + 未覆盖标红 + 未知引用 + 转义
   assert.ok(refs.includes("s9"));
   assert.ok(refs.includes("score-point-unknown"));
   assert.ok(refs.includes("未识别引用"));
-  assert.ok(refs.includes("t1：循迹"));
+  assert.ok(refs.includes("第 1 步：循迹"));
   // 空评分点 / 空清单 / null → 空串
   assert.equal(scoreRefsOverviewHTML({ tasks: [{ id: "t1", title: "x" }] }), "");
   assert.equal(scoreRefsOverviewHTML({ tasks: [], score_points: [] }), "");

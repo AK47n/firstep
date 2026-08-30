@@ -365,8 +365,7 @@ function reviseRenderApplyDone(data) {
   if (data.tasks_invalidated) {
     parts.push('<div class="warn-box unverified" style="margin-top:8px">⚠ 任务清单已作废（模块集变化 → 重生成）：原清单的推进进度 / 备注已与新工程无关。请到下方「逐步深化」重新拆解任务。</div>');
   }
-  parts.push('<div class="reason" style="margin-top:8px">备份：<span class="slug">' + esc(data.backup_id || "—")
-    + "</span> · 修订时间：" + esc(data.generated_at || "—") + "</div>");
+  parts.push('<div class="reason" style="margin-top:8px">已备份 · 修订时间：" + esc(data.generated_at || "—") + "</div>");
   // 用户故事 10：diff 记录含 Q&A 原文——展示本次并入的 Q&A 全文（esc 转义 + pre-wrap 保留换行）
   if (data.qa_text) {
     parts.push('<div class="reason" style="margin-top:8px;white-space:pre-wrap"><strong>本次并入 Q&A：</strong>'
@@ -432,7 +431,7 @@ function reviseRenderVerify(data) {
   box.innerHTML = box.innerHTML
     + '<div class="item" style="margin-top:10px"><div class="head"><span class="slug">深化验证</span> ' + markup.badge + "</div>"
     + '<div class="reason">' + markup.detail + "</div>"
-    + '<div class="reason">备份：<span class="slug">' + esc(data.backup_id || "—") + "</span></div>"
+    + '<div class="reason">已备份（可回滚）</div>'
     + mainDiffHTML(data.main_diff)
     + "</div>";
   box.classList.remove("hidden");

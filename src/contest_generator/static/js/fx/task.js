@@ -118,7 +118,7 @@ export function ideaResultHTML(analysis, opts) {
     }
     if ((a.affected_task_ids || []).length) {
       html += '<div class="reason muted">受影响任务（落地后建议重做）：'
-        + esc(a.affected_task_ids.join("、")) + "</div>";
+        + esc(a.affected_task_ids.map((id) => seqRef(id, o.seqById)).join("、")) + "</div>";
     }
   } else {
     html += '<div class="reason muted">这是先讨论的建议——可以继续补充想法，'
@@ -163,13 +163,14 @@ export function nextTaskHint(plan, currentId) {
   return null;
 }
 
-/** 当前卡内的「下一步 → tN：标题」提示行（工单 step-next-guide/01）：
- * 纯 HTML 串（title 经 esc 防注入）；无下一步 → 空串（调用方不渲染）。 */
+/** 当前卡内的「下一步 → 第 N 步：标题」提示行（工单 step-next-guide/01）：
+ * 纯 HTML 串（title 经 esc 防注入；序号人话化，工单 beginner-gap-closure/03）；
+ * 无下一步 → 空串（调用方不渲染）。 */
 export function taskNextHintHTML(plan, currentId) {
   const next = nextTaskHint(plan, currentId);
   if (!next) return "";
-  return '<div class="task-next-hint">下一步 → ' + esc(next.id) + "："
-    + esc(next.title) + "</div>";
+  return '<div class="task-next-hint">下一步 → 第 ' + esc(String((next.orderIndex ?? 0) + 1))
+    + " 步：" + esc(next.title) + "</div>";
 }
 
 /** 未完成的前置任务（工单 prereq-soft-guide/01，温和引导）：任务 depends_on
@@ -220,14 +221,14 @@ export function taskCardHTML(task, index, opts) {
     const pend = unresolvedPrereqs(task, o.plan);
     const warnCls = pend.length ? " task-meta-warn" : "";
     const title = pend.length
-      ? ' title="前置未完成：' + esc(pend.map((p) => p.id).join("、")) + '"'
+      ? ' title="前置未完成：' + esc(pend.map((p) => seqRef(p.id, o.seqById)).join("、")) + '"'
       : "";
     metaItems.push('<span class="task-meta-item' + warnCls + '"' + title + '>前置：'
-      + esc(task.depends_on.join("、")) + "</span>");
+      + esc(task.depends_on.map((d) => seqRef(d, o.seqById)).join("、")) + "</span>");
   }
   const meta = metaItems.length ? '<div class="task-meta">' + metaItems.join("") + "</div>" : "";
   return '<div class="item task-card" data-task-id="' + esc(task.id) + '">'
-    + '<div class="head"><span class="slug">' + taskOrderLabel(index) + " · " + task.id
+    + '<div class="head"><span class="slug">' + taskOrderLabel(index)
     + " · " + esc(task.title) + "</span>"
     + " " + badge + "</div>"
     + '<div class="reason">' + esc(task.description) + "</div>"
@@ -392,7 +393,7 @@ export function taskIterationsHTML(task) {
       + esc(String(it.user_action)) + "</div>");
     const meta = [];
     if (it.at) meta.push(esc(String(it.at)));
-    if (it.backup_id) meta.push('备份 <span class="slug">' + esc(String(it.backup_id)) + "</span>");
+    if (it.backup_id) meta.push("已备份");
     return '<div class="task-iteration">'
       + '<div class="task-iteration-line">'
       + '<span class="task-iteration-title">第 ' + esc(String(it.seq)) + " 轮 · "
@@ -605,7 +606,7 @@ export function aggregateResourceGroups(plan) {
     resources.forEach((r) => {
       const name = String(r);
       if (!byResource.has(name)) byResource.set(name, []);
-      byResource.get(name).push({ id: (task && task.id) || "t" + (index + 1), title: (task && task.title) || "" });
+      byResource.get(name).push({ id: (task && task.id) || "t" + (index + 1), title: (task && task.title) || "", order: index + 1 });
     });
   });
   if (!byResource.size) return null;
@@ -647,7 +648,7 @@ export function resourcesOverviewHTML(plan) {
     const chips = entry.names.length > 1
       ? '<span class="res-chip-group">' + entry.names.map((n) => '<span class="res-chip' + chipClass + '">' + esc(n) + "</span>").join("") + "</span>"
       : '<span class="res-chip' + chipClass + '">' + esc(entry.names[0]) + "</span>";
-    const userText = entry.users.map((u) => esc(u.id + "：" + (u.title || ""))).join(" · ");
+    const userText = taskRefText(entry.users, 0);
     return '<div class="res-row' + rowClass + '">' + chips
       + '<span class="res-users">' + userText + "</span>"
       + (note ? note : "") + "</div>";
@@ -681,16 +682,37 @@ function scorePartLabel(part) {
   return part === "basic" ? "基础" : part === "development" ? "发挥" : "其他";
 }
 
-/** 任务引用行文本（「tN：标题」串联，工单 score-coverage/02 抽取）：
- * users = [{id, title}]；titleLimit 非零时标题截断（覆盖总览 24 字）——与
- * resourcesOverviewHTML 同形但总览要求标题截断，故带可选参数；全部 esc。 */
+/** 任务 id → 用户可见「第 N 步」（工单 beginner-gap-closure/03）：序号人话化，
+ * 原始 id 不再上界面。seqById 缺省 {}；找不到 → 原样返回 id（防御：清单外的
+ * 依赖/引用，避免丢信息）。 */
+function seqRef(id, seqById) {
+  const s = (seqById || {})[String(id == null ? "" : id)];
+  return s != null ? "第 " + s + " 步" : String(id == null ? "" : id);
+}
+
+/** 用户可见任务引用（工单 beginner-gap-closure/03，自 score-coverage/02 抽取
+ * 增长）：users 元素 {id, title, order?} → 「第 N 步：标题」（order 有则用，
+ * 防御无 order 的旧聚合回退「id：标题」）。titleLimit 非零时标题截断
+ * （覆盖总览 24 字）；返回原始串，调用方 esc。 */
+export function taskUserLabel(u, titleLimit) {
+  const title = titleLimit
+    ? truncate((u && u.title) || "", titleLimit)
+    : (u && u.title) || "";
+  if (u && u.order != null) return "第 " + u.order + " 步：" + title;
+  return String((u && u.id == null) ? "" : u.id) + "：" + title;
+}
+
+/** 任务引用行文本（「第 N 步：标题」串联，工单 score-coverage/02 抽取）：
+ * users = [{id, title, order?}]；titleLimit 非零时标题截断（覆盖总览 24 字）——
+ * 与 resourcesOverviewHTML 同形但总览要求标题截断，故带可选参数；全部 esc。 */
 function taskRefText(users, titleLimit) {
-  return users.map((u) => esc(u.id + "：" + (titleLimit ? truncate(u.title || "", titleLimit) : (u.title || "")))).join(" · ");
+  return users.map((u) => esc(taskUserLabel(u, titleLimit))).join(" · ");
 }
 
 /** 评分点覆盖总览（工单 score-coverage/02，纯前端聚合零后端）：题面每个
  * 评分点一行——id + 分类标签（基础/发挥/其他，与 taskScoreRefsText 同判据）
- * + 分值 + 描述截断（title 悬停全文）+ 覆盖它的任务（tN：标题）；**没有
+ * + 分值 + 描述截断（title 悬停全文）+ 覆盖它的任务（第 N 步：标题；原始
+ * 任务 id 不上界面，工单 beginner-gap-closure/03）；**没有
  * 任何任务覆盖的评分点整行标红**（.score-point-miss + 「⚠ 无任务覆盖」）——
  * 交付前一眼可见丢分风险。任务引用了评分点清单之外的 id（AI 编造 / 清单
  * 外部改动）→ 每 id 一行「未识别引用」黄色警示（.score-point-unknown）。
@@ -708,7 +730,7 @@ export function scoreRefsOverviewHTML(plan) {
     refs.forEach((id) => {
       if (typeof id !== "string") return;
       if (!cover[id]) cover[id] = [];
-      cover[id].push({ id: (task && task.id) || "t" + (index + 1), title: (task && task.title) || "" });
+      cover[id].push({ id: (task && task.id) || "t" + (index + 1), title: (task && task.title) || "", order: index + 1 });
     });
   });
   const rows = points.map((p) => {
@@ -957,9 +979,8 @@ export function taskChangesHTML(task, data, opts) {
   const diffHTML = data.main_diff !== undefined ? mainDiffHTML(data.main_diff, "任务") : "";
   const parts = ['<div class="task-changes-detail">' + markup.detail + "</div>"];
   if (errorsHTML) parts.push(errorsHTML);
-  parts.push('<div class="task-changes-backup">备份：<span class="slug">'
-    + esc(String(backupId || "—")) + "</span>"
-    + (backupId ? ' · <button class="btn-task-rollback danger" data-backup="'
+  parts.push('<div class="task-changes-backup">' + (backupId
+    ? '已备份 · <button class="btn-task-rollback danger" data-backup="'
       + esc(String(backupId)) + '" data-task="' + esc(String(t.id || ""))
       + '">回滚到本任务执行前</button>' : "")
     + "</div>");

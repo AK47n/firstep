@@ -70,12 +70,12 @@ test("taskChangesHTML: 错误行跳转段（有错才渲染）", () => {
 
 test("taskChangesHTML: 备份行 + 回滚按钮（backup 空 = 无按钮）", () => {
   const html = taskChangesHTML({ id: "t1" }, verifiedData, { open: true });
-  assert.ok(html.includes("备份：<span class=\"slug\">bak-1</span>"));
-  assert.ok(html.includes('class="btn-task-rollback danger" data-backup="bak-1" data-task="t1"'));
+  assert.ok(html.includes('已备份 · <button class="btn-task-rollback danger" data-backup="bak-1" data-task="t1"'));
   assert.ok(html.includes("回滚到本任务执行前"));
+  assert.ok(!html.includes("备份：<span"));  // 原始备份 id 不上界面（工单 03）
   const noBackup = taskChangesHTML({ id: "t1" },
     { ...verifiedData, backup_id: "" }, { open: true });
-  assert.ok(noBackup.includes("备份：<span class=\"slug\">—</span>"));
+  assert.ok(!noBackup.includes("已备份"));
   assert.ok(!noBackup.includes("btn-task-rollback"));
 });
 

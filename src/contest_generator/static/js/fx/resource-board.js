@@ -5,7 +5,7 @@
 // 两处改动必须同步（后续抽取共享渲染器为范围外）。本视图 0° 视角、无点击/旋转/饼图，
 // 职责 = 引脚按任务着色 + 冲突黄描边 + 悬停(title) 显示占用任务。
 import { esc } from "./core.js";
-import { aggregateResourceGroups } from "./task.js";
+import { aggregateResourceGroups, taskUserLabel } from "./task.js";
 
 /** 任务配色（与 ui/generate-pins.js MODULE_COLORS 同值保持全站一致；两处常量，
  * 后续可抽 fx/color.js 单源——范围外）。按任务在资源聚合中的出现顺序循环分配。 */
@@ -90,7 +90,7 @@ export function resourceBoardSVG(board, pinAttr) {
     const labelFill = attr ? attr.color : "var(--muted)";
     const users = (attr && attr.users) || [];
     const ttl = attr
-      ? pin.name + " · " + users.map((u) => u.id + "：" + (u.title || "")).join("、") + (attr.conflict ? " · ⚠ 多任务共享" : "")
+      ? pin.name + " · " + users.map((u) => taskUserLabel(u)).join("、") + (attr.conflict ? " · ⚠ 多任务共享" : "")
       : pin.name + (io ? "（空闲 IO）" : "（固定/电源）");
     const labelX = pin.x === 0 ? cx - 14 : cx + 14;
     const anchor = pin.x === 0 ? "end" : "start";
@@ -148,8 +148,16 @@ export function resourceBoardHTML(board, groups, taskColors, opts) {
   collect(groups.other, false);
   collect(groups.soft, true);
   const svg = resourceBoardSVG(board, pinAttr);
+  // 序号人话化（工单 beginner-gap-closure/03）：图例色点标签用「第 N 步」，
+  // 原始任务 id 不上界面（seqById 由 groups users 的 order 反查）
+  const seqById = {};
+  [...(groups.pins || []), ...(groups.other || []), ...(groups.soft || [])]
+    .forEach((e) => (e.users || []).forEach((u) => {
+      if (u && u.id && u.order != null) seqById[u.id] = u.order;
+    }));
   const legend = [...colors.entries()].map(([id, color]) =>
-    '<span class="lg"><span class="dot" style="background:' + esc(color) + '"></span>' + esc(id) + "</span>"
+    '<span class="lg"><span class="dot" style="background:' + esc(color) + '"></span>'
+    + esc(seqById[id] != null ? "第 " + seqById[id] + " 步" : id) + "</span>"
   ).join("")
     + (!(opts && opts.conflictLegend === false)
       ? '<span class="lg"><span class="dot res-legend-conflict"></span>⚠ 多任务共享（联调冲突）</span>'
@@ -158,7 +166,7 @@ export function resourceBoardHTML(board, groups, taskColors, opts) {
   const missingHTML = missing.length
     ? '<div class="res-board-missing"><span class="muted">不在板上的资源（外设/中断/软资源）：</span>'
       + missing.map((m) => {
-        const ttl = m.users.map((u) => esc(u.id + "：" + (u.title || ""))).join("、");
+        const ttl = m.users.map((u) => esc(taskUserLabel(u))).join("、");
         return '<span class="res-chip' + (m.soft ? " res-soft" : "") + '" title="' + ttl + '">' + esc(m.name) + "</span>";
       }).join(" ") + "</div>"
     : "";
