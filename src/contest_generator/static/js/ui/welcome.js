@@ -9,7 +9,7 @@
 import { $, state } from "/js/app.js";
 import { draftLoad } from "/js/fx/draft.js";
 import { WELCOME_DISMISS_KEY, welcomeMode, welcomeCardHTML } from "/js/fx/welcome.js";
-import { gotoNavTab } from "./nav-jump.js";
+import { gotoNavTab, gotoSettingsKey } from "./nav-jump.js";
 
 export function initWelcome() {
   const slot = $("welcome-card");
@@ -25,12 +25,11 @@ export function initWelcome() {
   // 欢迎卡行动按钮全部走同一条 gotoNavTab 路径：新增/变更按钮只需加一行
   // （工单 04「先看新手指引」去 guide 页签；其余去配置 key / 体检 / 不再显示）
   $("btn-welcome-guide")?.addEventListener("click", () => gotoNavTab("guide"));
-  $("btn-welcome-goto-key")?.addEventListener("click", () =>
-    gotoNavTab("settings", "set-api-key")
-  );
-  $("btn-banner-goto-settings")?.addEventListener("click", () =>
-    gotoNavTab("settings", "set-api-key")
-  );
+  $("btn-welcome-goto-key")?.addEventListener("click", () => gotoSettingsKey());
+  // 生成页「尚未配置 AI API」横幅：去设置也要保证 AI API 卡展开（否则聚焦落空）
+  $("btn-banner-goto-settings")?.addEventListener("click", () => gotoSettingsKey());
+  // 设置页「尚未配置」横幅（应用设置卡内）：「去填写」走同一条路径
+  $("btn-settings-banner-goto")?.addEventListener("click", () => gotoSettingsKey());
   $("btn-welcome-env-check")?.addEventListener("click", () => {
     gotoNavTab("settings");
     $("btn-env-check")?.click();

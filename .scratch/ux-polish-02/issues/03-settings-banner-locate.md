@@ -4,7 +4,13 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**实现记录：** ui/nav-jump.js 新增 gotoSettingsKey（先 expandSettingsCollapse("llm-api")
+再 gotoNavTab("settings","set-api-key")，无回边依赖）；welcome.js 三入口统一走
+gotoSettingsKey（gen-banner / settings-banner 新按钮 / 欢迎卡 full 态）；index.html
+settings-banner 加「去填写」按钮；CDP 冒烟 probe-t03.mjs 全 PASS（前置先折叠
+AI API 卡验证展开+聚焦；探针启用 clearBrowserCache 防旧模块缓存）。
 
 - [ ] 新增共享跳转助手：先展开 AI API 卡（复用既有设置折叠展开原语），再切页签并聚焦 #set-api-key；卡已展开时无副作用
 - [ ] 生成页 gen-banner「去设置」按钮改用该助手（现状只切页签+聚焦，折叠时无效）
