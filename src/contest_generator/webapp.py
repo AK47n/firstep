@@ -4289,8 +4289,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         body 契约：{title, type, description, anchor_kind, anchor_value, platform,
         add_files?: {文件名: 内容}, remove_files?: [相对路径, ...]}；元数据全量
         必填（PUT 是替换语义——platform 缺省兜底 any 会把存量条目平台静默降级，
-        故强制提供）；add_files / remove_files 缺省 = 不增不减。编辑不改条目
-        id / 目录名。
+        故强制提供）；add_files / remove_files 缺省 = 不增不减；add_files 内
+        文件名与既有文件同名 = 用新内容覆盖（工单 ux-walkthrough-02/08，一次
+        提交完成替换）；add 与 remove 重叠仍拒绝。编辑不改条目 id / 目录名。
         """
         add_files = payload.get("add_files")
         if add_files is None:
