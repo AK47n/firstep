@@ -7088,6 +7088,45 @@ def test_env_status_aggregates_static_facts(client, context):
     assert data["masters_dir"]["exists"] is True
     assert data["output_dir"]["exists"] is True
     assert data["output_dir"]["writable"] is True
+    # 工单 ux-walkthrough-02/05：CCS 三件套逐件 + 派生库目录存在性/可写性
+    assert set(data["ccs_tools"]) == {"sdk", "compiler", "sysconfig"}
+    for entry in data["ccs_tools"].values():
+        assert set(entry) == {"found", "path", "override"}
+        assert (entry["path"] is not None) == entry["found"]
+        assert isinstance(entry["override"], bool)
+    assert set(data["library_dirs"]) == {"topic", "reference", "pdf"}
+    for entry in data["library_dirs"].values():
+        assert set(entry) == {"dir", "exists", "writable"}
+
+
+def test_env_status_library_dirs_derived_and_writable(client, context, tmp_path):
+    """工单 ux-walkthrough-02/05：topic/reference/pdf 目录派生自模块库目录
+    （平级/素材实况判定）；存在 → 可写 True，缺失 → exists/writable 均 False
+    （报问题不报错）。"""
+    from dataclasses import replace
+
+    ctx, holder = context
+    lib = tmp_path / "lib" / "modules"
+    lib.mkdir(parents=True)
+    (lib.parent / "topics").mkdir()
+    (lib.parent / "references").mkdir()
+    (lib.parent / "sources" / "materials").mkdir(parents=True)
+    ctx.config = replace(ctx.config, module_library_dir=lib)
+
+    data = client.get("/api/env/status").json()
+
+    for key in ("topic", "reference", "pdf"):
+        entry = data["library_dirs"][key]
+        assert entry["exists"] is True
+        assert entry["writable"] is True
+        assert entry["dir"]
+    # 移除 topic 目录 → 缺失态（不 500）
+    import shutil as _shutil
+
+    _shutil.rmtree(lib.parent / "topics")
+    missing = client.get("/api/env/status").json()
+    assert missing["library_dirs"]["topic"]["exists"] is False
+    assert missing["library_dirs"]["topic"]["writable"] is False
 
 
 def test_env_status_module_library_error_reported_not_500(client, context, tmp_path):
@@ -7118,6 +7157,13 @@ def test_env_status_unconfigured_shape(client, context):
     assert data["llm"] is None
     assert data["toolchains"]["stm32"]["found"] in (True, False)
     assert "count" in data["module_library"]
+    # 工单 ux-walkthrough-02/05：未配置时 CCS 三件套默认扫描（override=False），
+    # 字段形状仍完整不报错（未配置 ≠ 500）
+    assert set(data["ccs_tools"]) == {"sdk", "compiler", "sysconfig"}
+    for entry in data["ccs_tools"].values():
+        assert set(entry) == {"found", "path", "override"}
+        assert entry["override"] is False
+    assert set(data["library_dirs"]) == {"topic", "reference", "pdf"}
 
 
 def test_llm_selfcheck_ok_returns_reply_elapsed_model(client, context, monkeypatch):

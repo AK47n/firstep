@@ -35,6 +35,7 @@ from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
 from .compile_runner import (
     CompileRunnerError,
+    ccs_tools_status,
     find_ccs_tools,
     find_make,
     find_uv4,
@@ -1034,6 +1035,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             except Exception as e:  # 畸形 manifest 等：报问题，不打断体检
                 lib_error = f"模块库加载失败：{e}"
         desktop = context.desktop_dir()
+        ccs = ccs_tools_status(
+            config.ccs_sdk_dir if config else "",
+            config.ccs_compiler_dir if config else "",
+            config.ccs_sysconfig_cli if config else "",
+        )
+
+        def _dir_probe(path: Path) -> dict:
+            ok = path.is_dir()
+            return {
+                "dir": str(path),
+                "exists": ok,
+                "writable": os.access(path, os.W_OK) if ok else False,
+            }
+
         return {
             "api_configured": config is not None,
             "llm": (
@@ -1057,6 +1072,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     "override": bool(config.gmake_path if config else ""),
                 },
             },
+            "ccs_tools": {
+                "sdk": {
+                    **ccs["sdk"],
+                    "override": bool(config.ccs_sdk_dir if config else ""),
+                },
+                "compiler": {
+                    **ccs["compiler"],
+                    "override": bool(config.ccs_compiler_dir if config else ""),
+                },
+                "sysconfig": {
+                    **ccs["sysconfig"],
+                    "override": bool(config.ccs_sysconfig_cli if config else ""),
+                },
+            },
             "platforms": [
                 {
                     "id": platform,
@@ -1076,6 +1105,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "masters_dir": {
                 "dir": str(dirs.masters_dir),
                 "exists": dirs.masters_dir.is_dir(),
+            },
+            "library_dirs": {
+                "topic": _dir_probe(topic_library_dir(dirs.module_library_dir)),
+                "reference": _dir_probe(reference_library_dir(dirs.module_library_dir)),
+                "pdf": _dir_probe(materials_dir(dirs.module_library_dir)),
             },
             "output_dir": {
                 "dir": str(desktop),
