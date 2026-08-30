@@ -95,10 +95,11 @@ export function initReviseTabs() {
     const btn = nav.querySelector('.revise-tab[data-tab="' + keys[next] + '"]');
     if (btn) btn.focus();
   });
-  // 上下文加载完成：用户还没手动选过页签 → 自动切到「任务推进」（加载的下一步
-  // 几乎总是拆解任务）；手动切过一次后不再打扰。
+  // 上下文加载完成：用户还没手动选过页签且当前不在主路径 → 自动切到「任务推进」
+  //（加载的下一步几乎总是拆解任务）；默认已激活任务推进时为幂等守卫，
+  // 防止未来默认态调整后反跳（工单 beginner-gap-closure/01）。
   window.addEventListener("revise-context-loaded", () => {
-    if (!state.userPicked) switchReviseTab("tasks", {});
+    if (!state.userPicked && state.active !== "tasks") switchReviseTab("tasks", {});
   });
   // 状态徽章（step11-tabs-ui/02）：各簇状态变化广播 → 就地刷新徽章
   window.addEventListener("step11-state-changed", refreshReviseBadges);

@@ -1,8 +1,11 @@
 // revise-tabs.test.mjs — fx/revise-tabs.js 第11步页签纯函数单测
 // （工单 step11-tabs-ui/01）：页签定义 / 条标记（激活态 / aria / 徽章槽位）/
 // 徽章文案规则 / 方向键循环 / 面板映射。直接 import fx 模块（不再字符串提取）。
+// 工单 beginner-gap-closure/01 扩展：ui/generate-tasks.js 空态指路文案、
+// ui/revise-tabs.js 默认激活与自动切换条件（glue 层无法 import，按守卫先例静态钉住）。
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   REVISE_TABS, reviseTabsHTML, revisePanelFor, reviseTabNext, reviseTabBadge,
 } from "../../src/contest_generator/static/js/fx/revise-tabs.js";
@@ -81,4 +84,22 @@ test("reviseTabNext：左右循环 + 回绕", () => {
 test("reviseTabNext：非数字 index 兜底为 0", () => {
   assert.equal(reviseTabNext(NaN, 1, 4), 1);
   assert.equal(reviseTabNext(undefined, -1, 4), 3);
+});
+
+test("任务推进空态仍指路「修订」页签（ui 文案守卫）", () => {
+  const tasks = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/generate-tasks.js", import.meta.url),
+    "utf8"
+  );
+  assert.ok(tasks.includes("请先在「修订」页签加载当前会话或历史目录"),
+    "任务推进空态应指路到「修订」页签加载上下文");
+});
+
+test("ui/revise-tabs.js：默认激活「任务推进」+ 自动切换带显式条件（glue 源守卫）", () => {
+  const uiSrc = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/revise-tabs.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(uiSrc, /const state = \{ active: "tasks"/);
+  assert.match(uiSrc, /if \(!state\.userPicked && state\.active !== "tasks"\)/);
 });
