@@ -26,16 +26,15 @@ test("makeAbortable：重复取消幂等（第二次 false），clear 后无操�
   assert.equal(a.abort(), false);      // 无进行中请求 = 无操作
 });
 
-test("makeAbortable：begin 重启 = 新一轮（旧实例作废）", () => {
+test("makeAbortable：begin 重启 = 新一轮（旧实例先取消）", () => {
   const a = makeAbortable();
   const s1 = a.begin();
   const s2 = a.begin();
   assert.notEqual(s1, s2);
   assert.equal(s2.aborted, false);
-  assert.equal(s1.aborted, false);     // 旧实例未被新 begin 取消
+  assert.equal(s1.aborted, true);      // 旧实例被新 begin 取消（不静默丢弃）
   assert.equal(a.abort(), true);       // 只取消当前轮
   assert.equal(s2.aborted, true);
-  assert.equal(s1.aborted, false);
 });
 
 test("isAbortError：AbortError 识别；普通错误/网络错误不误报", () => {

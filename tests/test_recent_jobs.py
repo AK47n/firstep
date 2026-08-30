@@ -21,12 +21,46 @@ from contest_generator.recent_jobs import (
     load_recent,
     record_recent,
     recent_file,
+    restore_recent,
     update_recent_status,
 )
 
 
 def test_recent_file_sits_next_to_config(tmp_path):
     assert recent_file(tmp_path / "cfg" / "config.json") == tmp_path / "cfg" / "recent.json"
+
+
+def test_restore_recent_roundtrip_after_delete(tmp_path):
+    """撤销删除（工单 ux-walkthrough-02/15）：记录 → 删除 → 按快照恢复 →
+    列表回到同目录一条（新 id / 字段保留），同目录去重。"""
+    fp = recent_file(tmp_path / "config.json")
+    entry = record_recent(
+        fp, output_dir="D:/contest/demo", platform="stm32", slugs=["dht11", "oled"]
+    )
+    snapshot = {k: entry[k] for k in ("output_dir", "platform", "slugs", "status")}
+    assert delete_recent(fp, entry["id"])
+    assert load_recent(fp) == []
+
+    restored = restore_recent(fp, snapshot)
+    assert restored["output_dir"] == "D:/contest/demo"
+    assert restored["platform"] == "stm32"
+    assert restored["slugs"] == ["dht11", "oled"]
+    assert restored["status"] == STATUS_GENERATED
+    assert restored["id"] != entry["id"]  # 新 id（不复活幽灵引用）
+    loaded = load_recent(fp)
+    assert len(loaded) == 1
+
+
+def test_restore_recent_rejects_bad_shape(tmp_path):
+    """形状校验：缺 output_dir / 非法 status / slugs 非字符串列表 → 400 中文。"""
+    fp = recent_file(tmp_path / "config.json")
+    with pytest.raises(RecentStatusError, match="output_dir"):
+        restore_recent(fp, {"platform": "stm32", "status": STATUS_GENERATED, "slugs": []})
+    with pytest.raises(RecentStatusError, match="未知状态"):
+        restore_recent(fp, {"output_dir": "D:/x", "status": "weird", "slugs": []})
+    with pytest.raises(RecentStatusError, match="slugs"):
+        restore_recent(fp, {"output_dir": "D:/x", "status": STATUS_GENERATED, "slugs": [1]})
+    assert load_recent(fp) == []  # 失败不写盘
 
 
 def test_record_recent_creates_entry(tmp_path):

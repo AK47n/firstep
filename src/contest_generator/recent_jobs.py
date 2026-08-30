@@ -127,6 +127,43 @@ def delete_recent(fp: Path, entry_id: str) -> bool:
     return True
 
 
+def restore_recent(fp: Path, entry: dict[str, Any]) -> dict[str, Any]:
+    """撤销删除（工单 ux-walkthrough-02/15）：按删除前快照重插记录。
+
+    形状校验（output_dir 非空字符串 / status 白名单 / platform 字符串 /
+    slugs 字符串列表；topic_id 可选字符串）——不校验 = 脏数据进列表。
+    同 output_dir 已有记录 → 更新移到头部（与 record_recent 同款去重）；
+    返回新记录（重新生成 id / ts；删除前的 id 不复活，避免幽灵引用）。
+    """
+    if not isinstance(entry, dict) or not isinstance(entry.get("output_dir"), str) \
+            or not entry["output_dir"].strip():
+        raise RecentStatusError("恢复记录缺少合法 output_dir")
+    status = entry.get("status", "")
+    if status not in RECENT_STATUSES:
+        raise RecentStatusError(f"未知状态：{status}")
+    platform = entry.get("platform", "")
+    if not isinstance(platform, str):
+        raise RecentStatusError("恢复记录 platform 必须是字符串")
+    slugs = entry.get("slugs", [])
+    if not isinstance(slugs, list) or not all(isinstance(s, str) for s in slugs):
+        raise RecentStatusError("恢复记录 slugs 必须是字符串列表")
+    restored: dict[str, Any] = {
+        "id": uuid.uuid4().hex,
+        "ts": f"{time.time():.3f}",
+        "output_dir": entry["output_dir"].strip(),
+        "platform": platform,
+        "slugs": slugs,
+        "status": status,
+    }
+    topic_id = entry.get("topic_id")
+    if isinstance(topic_id, str) and topic_id:
+        restored["topic_id"] = topic_id
+    entries = [e for e in _read(fp) if e.get("output_dir") != restored["output_dir"]]
+    entries.insert(0, restored)
+    _write(fp, entries[:MAX_RECENT])
+    return restored
+
+
 def clear_recent(fp: Path) -> int:
     """清空最近记录（工单 reset-local-records/01）：返回清除条数。
 

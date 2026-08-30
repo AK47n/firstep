@@ -101,8 +101,9 @@ export function setState(v) { state = v; }
 // 2.5s 自动消失，最多同屏 3 条；行内提示保留（toast 只做显眼补充）
 // ---------------------------------------------------------------------------
 const TOAST_ICON = { ok: "✓", error: "✕", info: "ℹ" };
-/** toast 轻通知：opts = {copy: bool, ms: number}——长错误（500/超阈值）场景
- * 由 toastError 传 copy + ≥6s（工单 ux-walkthrough-02/11），短错误维持 2.5s。 */
+/** toast 轻通知：opts = {copy: bool, ms: number, action: {label, onClick}}——
+ * 长错误（500/超阈值）场景由 toastError 传 copy + 常驻；删除类操作的
+ * 「撤销」用 action（工单 ux-walkthrough-02/15），点击执行后 toast 关闭。 */
 export function toast(kind, text, opts = {}) {
   const root = $("toast-root");
   if (!root) return;
@@ -112,9 +113,13 @@ export function toast(kind, text, opts = {}) {
   const copyBtn = opts.copy
     ? '<button type="button" class="toast-copy" aria-label="复制错误内容">复制</button>'
     : "";
+  const actionBtn = opts.action && opts.action.onClick
+    ? '<button type="button" class="toast-action" aria-label="' + (opts.action.label || "撤销") + '">'
+      + (opts.action.label || "撤销") + "</button>"
+    : "";
   el.innerHTML = '<span class="toast-ico">' + TOAST_ICON[kind] + '</span><span class="toast-text">'
     + String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")
-    + '</span>' + copyBtn + '<button type="button" class="toast-close" aria-label="关闭">×</button>';
+    + '</span>' + actionBtn + copyBtn + '<button type="button" class="toast-close" aria-label="关闭">×</button>';
   el.querySelector(".toast-close").addEventListener("click", () => {
     // 点击关闭走离场动画（工单 ui-polish-8/03）：重触发 toast-out 后移除
     el.style.animation = "none";
@@ -122,6 +127,12 @@ export function toast(kind, text, opts = {}) {
     el.style.animation = "toast-out .3s ease forwards";
     setTimeout(() => el.remove(), 300);
   });
+  if (actionBtn) {
+    el.querySelector(".toast-action").addEventListener("click", async () => {
+      try { await opts.action.onClick(); } catch (e) { /* 动作自身处理 */ }
+      if (el.isConnected) el.remove();
+    });
+  }
   if (copyBtn) {
     el.querySelector(".toast-copy").addEventListener("click", async () => {
       // 剪贴板守卫 + execCommand 回退（沿 recent.js 先例）：非安全上下文不

@@ -185,7 +185,7 @@ async function paramsScan() {
     toast("ok", "参数识别完成");
   } catch (e) {
     if (isAbortError(e)) {
-      paramsStatus("已取消：本次识别未保存，可安全重试");
+      paramsStatus("已取消等待：参数识别在后台继续，结果未回填，可稍后重试");
     } else {
       $("params-msg").textContent = e.message;
       paramsStatus("");
@@ -289,7 +289,8 @@ async function paramsRollback(backupId) {
 // SSE 流（tasksRunSSE 同款语义：done 载荷返回；error 终态 / 断线 throw）——
 // 不 import generate-tasks 的私有运行器（SSE 运行器保持簇私有；本簇只 import
 // 其导出的 tasksIsBusy/tasksSetBusy 共享闸，两侧无运行器耦合），本簇自持一份。
-async function tasksRunSSE(url, body, handlers) {
+// signal（工单 ux-walkthrough-02/14）：取消等待；中止错误原样上抛（保留名字）。
+async function tasksRunSSE(url, body, handlers, signal) {
   let finished = false;
   let done = null;
   let errorMsg = null;
@@ -297,8 +298,9 @@ async function tasksRunSSE(url, body, handlers) {
   try {
     resp = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      signal: signal || undefined,
     });
-  } catch (e) { throw new Error(e.message); }
+  } catch (e) { throw e; }
   if (!resp.body) throw new Error("服务响应无流");
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));

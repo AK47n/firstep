@@ -319,7 +319,7 @@ async function reviseAnalyze() {
     $("revise-analyze-status").textContent = "分析完成——请核对影响结论与 diff，确认后执行修订";
   } catch (e) {
     if (isAbortError(e)) {
-      $("revise-analyze-status").textContent = "已取消：影响分析未保存，可安全重试";
+      $("revise-analyze-status").textContent = "已取消等待：影响分析在后台继续，结果未回填，可稍后重试";
     } else {
       $("revise-analyze-status").textContent = "";
       $("revise-analyze-msg").textContent = e.message;   // 后端中文（含缺题面提示）

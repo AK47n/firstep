@@ -106,9 +106,10 @@ export function masterTableRowHTML(m) {
   </tr>`;
 }
 
-// masterDeleteConfirmHTML(m)：删除确认弹窗内容纯函数——平台展示名 + 元数据
-// （平台标识 / 提炼来源 / 关键文件数）+ 不可恢复警告 + 确认/取消双钮。
-export function masterDeleteConfirmHTML(m) {
+// masterDeleteBodyHTML(m)：删除确认弹窗元数据体（不含按钮——按钮由共享
+// confirmModal 工厂渲染）；masterDeleteConfirmHTML = 体 + 双钮（旧手搓弹窗
+// 用，测试对偶保留；工单 ux-walkthrough-02/15 迁移后 UI 走工厂用体）。
+export function masterDeleteBodyHTML(m) {
   const files = (m.key_files || []).length;
   return `<div class="ref-detail-meta">
     <div class="ref-detail-title">${esc(m.platform_label || m.platform)}</div>
@@ -116,8 +117,11 @@ export function masterDeleteConfirmHTML(m) {
     <div class="ref-detail-row"><span class="ref-detail-k">提炼来源</span><span>${esc(m.sources.join("、") || "—")}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">关键文件</span><span>${files} 项预览清单</span></div>
     <div class="ref-detail-note">删除后该平台母版目录与元数据一并移除，<strong>不可恢复</strong>——该平台的生成将找不到母版。确认删除？</div>
-  </div>
-  <div class="pdf-detail-actions">
+  </div>`;
+}
+
+export function masterDeleteConfirmHTML(m) {
+  return masterDeleteBodyHTML(m) + `<div class="pdf-detail-actions">
     <button type="button" class="danger" data-master-del-confirm>确认删除</button>
     <button type="button" data-master-del-cancel>取消</button>
   </div>`;
@@ -222,5 +226,5 @@ export function archiveItem(a) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem, masterHealthBadgeHTML, masterStatsHTML, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML });
+  Object.assign(window, { masterTableRowHTML, masterDeleteConfirmHTML, masterDeleteBodyHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML, decisionItem, archiveItem, masterHealthBadgeHTML, masterStatsHTML, masterTreeFileURL, buildMasterTree, masterTreeNodeHTML, masterContentHTML });
 }

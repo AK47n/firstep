@@ -12,6 +12,7 @@ export function makeAbortable() {
   let ctl = null;
   return {
     begin() {
+      if (ctl && !ctl.signal.aborted) ctl.abort();   // 上一轮 in-flight 先取消（评审整改：不静默丢弃）
       ctl = new AbortController();
       return ctl.signal;
     },

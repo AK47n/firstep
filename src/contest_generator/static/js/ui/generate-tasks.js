@@ -24,6 +24,7 @@ import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { makeWaitClock, makeCancelButton } from "/js/ui/progress.js";  // 长任务秒表/取消（工单 ux-walkthrough-02/12/14）
 import { makeAbortable, isAbortError } from "/js/fx/abortable.js";
+import { draftDeleteMessage } from "/js/fx/danger.js";  // 草稿删除确认文案（工单 ux-walkthrough-02/15）
 import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashContainer } from "/js/fx/flash.js";
@@ -389,7 +390,7 @@ async function tasksIdeaAnalyze(sourceText, autoLand) {
     return true;   // 成功信号（工单 idea-suite/06：批量循环据此停止/继续）
   } catch (e) {
     if (isAbortError(e)) {
-      $("tasks-status").textContent = "已取消：想法分析未保存，可安全重试";
+      $("tasks-status").textContent = "已取消等待：分析在后台继续，结果未回填，可稍后重试";
     } else {
       $("tasks-idea-msg").textContent = e.message;
       $("tasks-status").textContent = "";
@@ -675,7 +676,7 @@ async function tasksChatSend() {
   } catch (e) {
     chatState.draft = message;   // 失败回填：历史不动（后端原子轮次），重试免重打
     if (isAbortError(e)) {
-      $("tasks-status").textContent = "已取消：本轮商量未保存，可安全重试";
+      $("tasks-status").textContent = "已取消等待：本轮商量在后台可能继续（会话以后端为准）";
     } else {
       $("tasks-status").textContent = "";
       $("tasks-global-msg").textContent = e.message;
@@ -810,11 +811,20 @@ async function tasksDraftAdd() {
   }
 }
 
-/** 删除一条草稿（后端未知 id 幂等；删除后即时刷新列表）。 */
+/** 删除一条草稿（后端未知 id 幂等；删除后即时刷新列表）。
+ * 工单 ux-walkthrough-02/15：确认弹窗点名草稿 + toast「撤销」恢复。 */
 async function tasksDraftDelete(id) {
   if (draftState.busy || tasks.busy) return;
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-drafts-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
+  const draft = (draftState.drafts || []).find((d) => d.id === id);
+  if (!draft) return;
+  const ok = await confirmModal({
+    title: "删除这条草稿？",
+    message: draftDeleteMessage(draft.text),
+    confirmText: "确认删除",
+  });
+  if (!ok) return;
   draftState.busy = true;
   tasksDraftsRender();
   tasksSetBusy(true);   // 与想法分析共用 tasks.busy 闸（删除进行中禁并发分析）
@@ -824,7 +834,19 @@ async function tasksDraftDelete(id) {
     });
     draftState.drafts = data.drafts || [];
     tasksDraftsRender();
-    toast("ok", "已删除草稿");
+    toast("ok", "已删除草稿（可撤销）", {
+      action: {
+        label: "撤销",
+        onClick: async () => {
+          const restored = await apiPost("/api/tasks/idea/drafts/add", {
+            output_dir: dir, text: draft.text,
+          });
+          draftState.drafts = restored.drafts || [];
+          tasksDraftsRender();
+          toast("ok", "已恢复草稿");
+        },
+      },
+    });
   } catch (e) {
     $("tasks-drafts-msg").textContent = e.message;
   } finally {
@@ -981,7 +1003,7 @@ async function tasksPlan(force) {
     toast("ok", force ? "已重新拆解" : "任务清单已就绪");
   } catch (e) {
     if (isAbortError(e)) {
-      $("tasks-status").textContent = "已取消等待：任务拆解未回填，原清单未动，可稍后重试";
+      $("tasks-status").textContent = "已取消等待：任务拆解在后台继续执行（清单以后端为准），完成后刷新页面可见";
     } else {
       $("tasks-status").textContent = "";
       $("tasks-msg").textContent = e.message;   // 后端中文（含缺题面 / 已有清单提示）
@@ -1335,23 +1357,35 @@ async function tasksDialogSend(taskId) {
   st.busy = true;
   aiActionStart("任务讨论");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("tasks-msg").textContent = "";
+  $("tasks-status").textContent = "任务讨论：AI 回应中…（分钟级调用，请等待）";
+  tasksWait.start();
+  const signal = tasksAbort.begin();
+  tasksCancel.show();
   tasksRender();
   try {
     const data = await apiPost("/api/tasks/discuss", {
       output_dir: dir,
       task_id: taskId,
       history: st.history.map((m) => ({ role: m.role, content: m.content })),
-    });
+    }, { signal });
     st.history.push({ role: "assistant", content: data.reply || "" });
     $("tasks-status").textContent = "";
     toast("ok", "已回应——可继续聊，或点「采纳这条结论」");
   } catch (e) {
     // 失败：用户消息撤出历史（本轮未成功对话，留一条孤消息误导后续轮次）
-    st.history.pop();
-    $("tasks-status").textContent = "";
-    $("tasks-msg").textContent = e.message;
+    if (isAbortError(e)) {
+      st.history.push({ role: "assistant", content: "（已取消等待：本轮讨论在后台可能继续，对话以后端为准）" });
+      $("tasks-status").textContent = "已取消等待：本轮讨论在后台可能继续（对话以后端为准）";
+    } else {
+      st.history.pop();
+      $("tasks-status").textContent = "";
+      $("tasks-msg").textContent = e.message;
+    }
   } finally {
     aiActionStop();
+    tasksWait.stop();
+    tasksAbort.clear();
+    tasksCancel.hide();
     st.busy = false;
     tasksRender();
   }

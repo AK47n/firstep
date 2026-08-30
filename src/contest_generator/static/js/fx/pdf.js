@@ -217,11 +217,10 @@ export function pdfDupRemainText(group) {
   return "保留此文件，删除其余 " + n + " 份";
 }
 
-// pdfTrashConfirmHTML(pdf, mode, group, trashHint)：确认弹窗内容纯函数。
-// mode = "one" 单文件 / "group" 组级；group（04 的 pdfDupGroups 组形如
-// {name,size,count,paths}）组级时列出组内成员（删除对象与保留对象一目了然）；
-// trashHint = 回收去向展示文案（不含仓库根——提示性，服务端实际路径为准）。
-export function pdfTrashConfirmHTML(pdf, mode, group, trashHint) {
+// pdfTrashBodyHTML(pdf, mode, group, trashHint)：回收确认弹窗元数据体（不含
+// 按钮——按钮由共享 confirmModal 工厂渲染；工单 ux-walkthrough-02/15 迁移）；
+// pdfTrashConfirmHTML = 体 + 双钮（旧手搓弹窗用，测试对偶保留）。
+export function pdfTrashBodyHTML(pdf, mode, group, trashHint) {
   const members = (mode === "group" && group && group.paths) ? group.paths : [];
   return `<div class="ref-detail-meta">
     <div class="ref-detail-title">${esc(pdf.name)}${pdfBadgeTags(false, true)}</div>
@@ -230,13 +229,16 @@ export function pdfTrashConfirmHTML(pdf, mode, group, trashHint) {
     ${members.length ? `<div class="ref-detail-row"><span class="ref-detail-k">组内成员</span><ul class="pdf-trash-members">${members.map((rp) => `<li class="mono">${esc(rp)}</li>`).join("")}</ul></div>` : ""}
     <div class="ref-detail-row"><span class="ref-detail-k">回收去向</span><span class="mono">${esc(trashHint)}</span></div>
     <div class="ref-detail-note">删除 = 移入回收目录（不真删）：文件出现在 <code>sources/.trash-pdf/‹日期›/</code>，git 已忽略、可手动恢复；若该文件被参考库条目引用，删除后条目文件将无法打开。</div>
-  </div>
-  <div class="pdf-detail-actions">
+  </div>`;
+}
+
+export function pdfTrashConfirmHTML(pdf, mode, group, trashHint) {
+  return pdfTrashBodyHTML(pdf, mode, group, trashHint) + `<div class="pdf-detail-actions">
     <button type="button" class="danger" data-pdf-trash-confirm="${esc(pdf.rel_path)}">确认${mode === "group" ? "删除其余" : "删除"}</button>
     <button type="button" data-pdf-trash-cancel>取消</button>
   </div>`;
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML });
+  Object.assign(window, { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML, pdfTrashBodyHTML });
 }
