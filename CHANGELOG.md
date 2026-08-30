@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a305ef0fc71777b81739bb533bd08d30c2c2a01e -->
+<!-- changelog-auto: last-commit=8bff1319c553a348b001f0faa147cbd97db77f37 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 11:24 新手指南补全（beginner-guide-enrich 01-05）：教程/README/欢迎卡/词表修正与丰富——①「一键补齐下载库」三处改事实口径（只带路不下载）；②教程准备章补库目录自动指向+手动核对、IDE 官方下载表（MDK 评估版 32KB/CCS/MSPM0 SDK/ST-Link 驱动直链）+浏览器一行；③做题主线/交付章补「评分点核对」「评分点覆盖总览」「参数速调」讲解，词表增 2 词至 12 词；④编译章新增「常见报错速查」表（7 行症状→对策，与 flash.py/env.js 事实核对，原烧录报错 note 改为指向速查表）；⑤install.bat 第 4 步首次写最小引导配置（api_key 空+库目录指向随包 library，GBK 保真、已有配置不动、置于自检前）；config.py 增 write_bootstrap_config/raw_library_dirs（非法回退默认），settings GET 未配 key 时返回磁盘库目录（防首次保存设置覆盖）；守卫扩展：guide-refs 三新测试（库目录/下载表/速查表）、welcome 口径断言、glossary 12 词；tests/js 801 + pytest（config/webapp 305）全绿
 - 11:38 工单 beginner-gap-closure/01：第11步页签主路径化——「任务推进」提前并默认为激活页签（REVISE_TABS 顺序 tasks 居首 + 默认激活 tasks；revise-tabs.test.mjs 断言同步；相关守卫 63 项全绿）
 - 11:41 工单 beginner-gap-closure/01 评审整改：补空态指路与默认激活守卫 + 自动切换加显式条件（Spec 审查③①②落实——空态文案钉住、glue 层默认 active=tasks 钉住、revise-context-loaded 幂等守卫）
+- 11:42 工单 beginner-gap-closure/02：生成结果区「去任务推进」入口 + 教程文案与界面事实对齐——跳转单源迁 ui/goto-tasks.js（第 9 步结果区与第 12 步交接卡共用）；结果区加「去任务推进」按钮；教程 12 步表/页签顺序/「和 AI 商量」措辞/结果区描述 5 处修正；守卫 handoff-note-guard 扩展+guide-refs 同步；tests/js 805 全绿
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
