@@ -17,7 +17,7 @@
 import { $, apiPost } from "/js/app.js";
 import {
   generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
-  readinessRowsHTML, outputDirWarnRow,
+  readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
 } from "/js/fx/readiness.js";
 import { stepDoneSet, stepCard } from "/js/ui/step-state.js";
 import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend } from "/js/ui/generate-recommend.js";
@@ -55,8 +55,10 @@ function renderReadinessPanel() {
   const state = readinessState();
   // 一键跑推荐需要题面：题面缺时不给自动按钮（引导先去第 1 步）
   const recommendEnabled = !!state.problem;
+  const hard = generateReadinessChecks(state);
   box.innerHTML =
-    readinessRowsHTML(generateReadinessChecks(state), { recommendEnabled })
+    readinessSummaryHTML(hard.every((c) => c.ok))   // 顶部总结（工单 ux-walkthrough-02/17）
+    + readinessRowsHTML(hard, { recommendEnabled })
     + readinessRowsHTML(readinessSoftChecks(state), { recommendEnabled: false })
     + '<div id="readiness-warn-slot"></div>';
 }
@@ -143,9 +145,21 @@ function initReadinessCheck() {
   const btn = $("btn-readiness-check");
   const box = $("readiness-check");
   if (!btn || !box) return;
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     box.classList.toggle("hidden");
-    if (!box.classList.contains("hidden")) refreshReadinessPanel();
+    if (box.classList.contains("hidden")) return;
+    // 忙碌态（工单 ux-walkthrough-02/17）：拉取目录预警期间禁用 + 转圈，
+    // 完成后恢复（缓存命中 = 瞬时，无感）
+    const oldLabel = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>检查中…';
+    try {
+      await ensureOutputDirWarn();
+      refreshReadinessPanel();
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = oldLabel;
+    }
   });
   // 事件委托：定位按钮 / 一键跑推荐（与「让 AI 推荐」同一入口）
   box.addEventListener("click", (e) => {

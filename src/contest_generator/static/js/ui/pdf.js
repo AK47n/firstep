@@ -109,15 +109,18 @@ async function openPdfTrashConfirm(pdf, group) {
   const mode = group ? "group" : "one";
   const hint = "sources/.trash-pdf/" + pdfTrashDate() + "/" + (pdf.rel_path || "");
   let refTitles = [];
-  try {
-    const refs = await apiGet(pdfRefsUrl(pdf.rel_path));
-    refTitles = Array.isArray(refs.titles) ? refs.titles : [];
-  } catch (e) { /* 引用查询失败不挡删除：通用「可恢复」文案（保守不误报） */ }
+  let refKnown = true;
+  if (!group) {   // 组级文案固定（组内疑似重复），无需引用查询（评审整改）
+    try {
+      const refs = await apiGet(pdfRefsUrl(pdf.rel_path));
+      refTitles = Array.isArray(refs.titles) ? refs.titles : [];
+    } catch (e) { refKnown = false; }   // 查询失败：中性提示，不断言「未被引用」（spec 轴评审整改）
+  }
   const ok = await confirmModal({
     title: mode === "group" ? "保留一份删其余？" : "删除此文件？",
     message: mode === "group"
       ? "组内疑似重复：将删除除保留文件外的其余成员（移入回收目录）。"
-      : pdfTrashMessage(refTitles),
+      : pdfTrashMessage(refTitles, refKnown),
     extra: pdfTrashBodyHTML(pdf, mode, group, hint),
     confirmText: mode === "group" ? "确认删除其余" : "确认删除",
   });

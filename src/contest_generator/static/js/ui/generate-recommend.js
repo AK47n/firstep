@@ -139,6 +139,9 @@ $("btn-upload").addEventListener("click", async () => {
   const file = $("problem-file").files[0];
   $("upload-msg").textContent = "";
   if (!file) { $("upload-msg").textContent = "请先选择文件"; return; }
+  const btn = $("btn-upload");
+  btn.disabled = true;                       // 加载反馈（工单 ux-walkthrough-02/17）
+  btn.innerHTML = '<span class="spinner"></span>抽取中…';
   const form = new FormData();
   form.append("upload", file);
   try {
@@ -170,6 +173,9 @@ $("btn-upload").addEventListener("click", async () => {
     $("upload-msg").classList.remove("ok");
     $("upload-msg").textContent = e.message;
     toast("error", "题面抽取失败");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "上传并抽取文字";
   }
 });
 
@@ -374,6 +380,7 @@ $("btn-topic-preread").addEventListener("click", async () => {
     } else {
       $("topic-preread-msg").textContent = e.message;
     }
+    $("btn-topic-preread").innerHTML = "预读题面";   // 失败复位（工单 ux-walkthrough-02/17：可再点）
   } finally {
     aiActionStop();
     prereadWait.stop();
@@ -928,10 +935,18 @@ function addModule(slug) {
   runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
 }
 
+let expandBusy = false;   // 展开检查进行中（工单 ux-walkthrough-02/17：禁防连点）
+
 async function runExpand() {
+  if (expandBusy) return;   // 进行中禁防连点（工单 ux-walkthrough-02/17）
   $("expand-msg").textContent = "";
   if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
   if (!selectedSlugs.length) { $("expand-msg").textContent = "请先选择至少一个模块"; return; }
+  const btn = $("btn-expand");
+  const oldLabel = btn.innerHTML;
+  expandBusy = true;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>展开检查中…';
   try {
     const data = await apiPost("/api/selection/expand", { slugs: selectedSlugs, platform: chosenPlatform });
     expanded = data.modules;
@@ -940,6 +955,11 @@ async function runExpand() {
     clusterDeps.renderPinCard();  // 引脚配置卡（工单 03）：角色清单随展开结果重算
     clusterDeps.renderInstanceConfig();  // 多实例配置卡（工单 04）：随展开结果重算
   } catch (e) { $("expand-msg").textContent = e.message; }
+  finally {
+    expandBusy = false;
+    btn.disabled = false;
+    btn.innerHTML = oldLabel;
+  }
 }
 
 $("btn-expand").addEventListener("click", runExpand);

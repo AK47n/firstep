@@ -2247,8 +2247,9 @@
       </details>
       <div class="row">
         <button id="btn-skeleton" class="primary" data-ico="code">生成骨架</button>
-        <button id="btn-smoke" class="primary" data-ico="code">生成自检骨架</button>
+        <button id="btn-smoke" data-ico="code">生成自检骨架</button>
       </div>
+      <div class="muted" style="margin-top:4px;font-size:11px">「生成骨架」= 初始化序列 + TODO 预留区（快，推荐先做）；「生成自检骨架」= 先自检硬件读写再写逻辑（更慢，适合首次验证硬件）。</div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top:8px"></div>
       <div id="framework-note" class="warn-box ok hidden" style="margin-top:8px"></div>
       <div class="code-wrap" style="margin-top:8px">

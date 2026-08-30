@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
-  readinessRowsHTML, outputDirWarnRow,
+  readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
 } from "../../src/contest_generator/static/js/fx/readiness.js";
 
 test("generateReadinessChecks 全空（桌面模式默认）：3/6/1 ❌，输出目录 ✅", () => {
@@ -54,14 +54,15 @@ test("generateReadinessChecks 全齐：4 项全 ok；桌面模式忽略输出目
   assert.equal(d[3].ok, true);
 });
 
-test("readinessSoftChecks：推荐未跑 / 骨架未生成 → ⚠；空模块不重复提示推荐", () => {
+test("readinessSoftChecks：推荐未跑 / 骨架未生成 → ⚠（中性可选项措辞）；空模块不重复提示推荐", () => {
   const both = readinessSoftChecks({
     selectedSlugs: ["led"], recommended: false, hasMainC: false,
   });
   assert.deepEqual(both.map((c) => c.step), [5, 8]);
   assert.equal(both[0].ok, false);
-  assert.ok(both[0].reason.includes("可选"));
+  assert.ok(both[0].reason.includes("可选项"));
   assert.equal(both[1].ok, false);
+  assert.ok(both[1].reason.includes("可选项"));
 
   const recDone = readinessSoftChecks({
     selectedSlugs: ["led"], recommended: true, hasMainC: false,
@@ -109,6 +110,17 @@ test("readinessRowHTML：模块 ❌ 时 recommendEnabled 控制「一键跑推�
   // ok=true 即使 autoFixable 也不出自动按钮
   const okM = { step: 6, title: "模块清单与平台警告", reason: "请先选择模块", ok: true, autoFixable: true };
   assert.ok(!readinessRowHTML(okM, { recommendEnabled: true }).includes("一键跑推荐"));
+});
+
+test("readinessSummaryHTML：硬判据全就绪 → 绿色「点生成工程」总结；否则中性引导", () => {
+  const ok = readinessSummaryHTML(true);
+  assert.ok(ok.includes("硬判据全部就绪"));
+  assert.ok(ok.includes("点「生成工程」即可"));
+  assert.ok(ok.includes("rc-summary ok"));
+  const notOk = readinessSummaryHTML(false);
+  assert.ok(notOk.includes("还有未就绪项"));
+  assert.ok(notOk.includes("去第 N 步"));
+  assert.ok(!notOk.includes("rc-summary ok"));
 });
 
 test("readinessRowHTML：软行 ⚠ + 定位按钮，无自动按钮；标题引号转义", () => {

@@ -122,6 +122,7 @@ const DOMAINS = {
   "readiness.js": {
     generateReadinessChecks: "fn", readinessSoftChecks: "fn",
     readinessRowHTML: "fn", readinessRowsHTML: "fn",
+    readinessSummaryHTML: "fn",
   },
   "llm.js": {
     formatLLMTelemetry: "fn", parseSSE: "fn", usageDelta: "fn",
