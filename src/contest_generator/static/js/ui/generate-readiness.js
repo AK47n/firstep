@@ -19,7 +19,7 @@ import {
   generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
   readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
 } from "/js/fx/readiness.js";
-import { stepDoneSet, stepCard } from "/js/ui/step-state.js";
+import { stepDoneSet, scrollToStep } from "/js/ui/step-state.js";
 import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend } from "/js/ui/generate-recommend.js";
 
 // ---------------------------------------------------------------------------
@@ -165,16 +165,14 @@ function initReadinessCheck() {
   box.addEventListener("click", (e) => {
     const go = e.target.closest(".rc-go");
     if (go) {
-      const card = stepCard(parseInt(go.dataset.step, 10));
-      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollToStep(parseInt(go.dataset.step, 10));
       return;
     }
     const rec = e.target.closest(".rc-recommend");
     if (rec) {
       const problem = $("problem").value.trim();
       if (!problem) {
-        const card = stepCard(1);
-        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollToStep(1);
         return;
       }
       setRecommendClarifications([]);
