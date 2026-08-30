@@ -137,7 +137,8 @@ function renderGenerateSuccess(data) {
   // compile-experience-ui/01：无工具链也要显眼，不再静默跳过）
   if ((toolchains || {})[chosenPlatform]) {
     $("generate-msg").textContent += "已自动触发编译修复（见第 10 栏）…";
-    $("card-fix-center").scrollIntoView({ block: "nearest" });
+    // 工单 ux-walkthrough-02/17：不再抢滚屏——结果面板停在步骤 9，修复中心
+    // 仅横幅提示自动编译中（用户自己切过去看）
     setTimeout(() => startFixCenter(), 100);   // 等结果字段渲染完成再起流
   } else {
     compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");

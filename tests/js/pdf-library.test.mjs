@@ -357,12 +357,16 @@ test("pdfRowHTML 重复行渲染删除按钮（data-pdf-trash），健康非重�
   assert.ok(!broken.includes("data-pdf-trash"), "损坏行无删除按钮");
 });
 
-test("pdfTrashMessage：被引用 → 点明条目影响；未引用 → 可恢复（工单 16）", () => {
+test("pdfTrashMessage：被引用 → 点明可能影响；未引用 → 可恢复；查询失败 → 中性（工单 16）", () => {
   const ref = pdfTrashMessage(["2026C 赛题资料", "传感器手册"]);
   assert.match(ref, /「2026C 赛题资料、传感器手册」/);
-  assert.match(ref, /条目文件将无法打开/);
+  assert.match(ref, /若条目依赖此文件/);
+  assert.match(ref, /将无法打开/);
   const free = pdfTrashMessage([]);
   assert.match(free, /未被参考条目引用/);
   assert.match(free, /可手动恢复/);
   assert.match(pdfTrashMessage(null), /未被参考条目引用/);
+  const unknown = pdfTrashMessage([], false);
+  assert.match(unknown, /未能确认/);
+  assert.ok(!unknown.includes("未被参考条目引用"));
 });

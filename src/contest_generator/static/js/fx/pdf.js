@@ -220,12 +220,17 @@ export function pdfRefsUrl(relPath) {
 }
 
 /** 删除确认消息（工单 ux-walkthrough-02/16）：titles = 引用该文件的参考
- * 条目标题列表。被参考 → 点明影响；未引用 → 明示可恢复。纯文本。 */
-export function pdfTrashMessage(titles) {
+ * 条目标题列表。被参考 → 点明可能影响（若条目依赖此文件将无法打开——
+ * 同名不同内容属保守命中，不写死断言）；未引用 → 明示可恢复；known=false =
+ * 引用查询失败（中性提示，spec/standards 轴评审整改）。 */
+export function pdfTrashMessage(titles, known) {
   const list = Array.isArray(titles) ? titles.filter(Boolean) : [];
   if (list.length) {
-    return "该文件被参考条目「" + list.join("、") + "」引用：删除后条目文件将无法打开。"
+    return "该文件被参考条目「" + list.join("、") + "」引用：若条目依赖此文件，删除后相关文件将无法打开。"
       + "确认移入回收目录？（可从 sources/.trash-pdf/ 手动恢复）";
+  }
+  if (known === false) {
+    return "未能确认该文件是否被参考条目引用：如删除后发现条目文件失效，可从回收目录手动恢复。确认删除？";
   }
   return "该文件未被参考条目引用：删除 = 移入回收目录（不真删，可手动恢复）。确认删除？";
 }

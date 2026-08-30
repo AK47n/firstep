@@ -21,14 +21,22 @@ export function readinessSoftChecks(state) {
   // 软条件：不阻断生成，⚠ 展示。5 仅在模块非空时出现（空模块由硬检查 6 覆盖）
   const out = [];
   if ((state.selectedSlugs || []).length && !state.recommended) {
-    out.push({ step: 5, title: "AI 推荐模块", reason: "建议跑一次 AI 推荐（可选）",
+    out.push({ step: 5, title: "AI 推荐模块", reason: "未跑 AI 推荐（可选项）",
       ok: false, soft: true });
   }
   if (!state.hasMainC) {
-    out.push({ step: 8, title: "main.c 骨架", reason: "骨架未生成（可选，生成时可留空）",
+    out.push({ step: 8, title: "main.c 骨架", reason: "骨架未生成（可选项，生成时可留空）",
       ok: false, soft: true });
   }
   return out;
+}
+
+/** 检查单顶部总结（工单 ux-walkthrough-02/17）：硬判据全就绪 → 绿色
+ * 「点生成工程即可」总结；否则中性「还有未就绪项」引导。纯文本 HTML。 */
+export function readinessSummaryHTML(hardOk) {
+  return hardOk
+    ? '<div class="rc-summary ok">✅ 硬判据全部就绪——直接点「生成工程」即可</div>'
+    : '<div class="rc-summary">还有未就绪项：按每行「去第 N 步」补齐后即可生成</div>';
 }
 
 export function readinessRowHTML(check, opts) {
@@ -94,6 +102,6 @@ export function outputDirWarnRow(result) {
 if (typeof window !== "undefined") {
   Object.assign(window, {
     generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
-    readinessRowsHTML, outputDirWarnRow,
+    readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
   });
 }
