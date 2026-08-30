@@ -2,6 +2,15 @@
 
 贴一段赛题原文，自动生成一个**打开就能编译、直接开写**的完整工程（MSPM0G3507 / CCS 与 STM32F103C8T6 / Keil5 双平台）。
 
+## 获取方式（二选一）
+
+| 方式 | 内容包括 | 备注 |
+| --- | --- | --- |
+| **GitHub 克隆**（轻量，约 270 MB） | 生成器代码 + 模块库/母版库（`library/`）、文档 | `git clone https://github.com/AK47n/firstep.git` |
+| **完整包**（开箱即用，约 6 GB） | 上述全部 + `sources/materials` 电赛参考资料库（CCS 安装包、开发板手册、K230/视觉资料、真题、参考例程） | 从 [GitHub Releases](https://github.com/AK47n/firstep/releases) 下载 `firstep-full.7z.001~004` 四个分卷，全部下载后解压 `.001` 即可；需 [7-Zip](https://www.7-zip.org/) 或 Bandizip |
+
+> `sources/materials` 资料库内有大量超过 100 MB 的第三方安装包/固件镜像（GitHub 单文件上限 100 MB），**不入 git 仓库**，随完整包（Releases 附件）分发。只想跑工具本身（不用资料库）的话，克隆 GitHub 仓库即可。
+
 ## 这是什么
 
 - 一个**本地网页工具**：双击启动，浏览器里操作，数据全部留在本机（`%USERPROFILE%\.contest_generator\`）。
