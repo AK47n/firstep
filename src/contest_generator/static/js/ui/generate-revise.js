@@ -27,7 +27,7 @@ import { reviseApplyConfirmMessage } from "/js/fx/danger.js";  // 覆盖式重�
 import { verifyStatusMarkup } from "/js/fx/task.js";
 import { mainDiffHTML } from "/js/fx/diff.js";  // 效果 diff 渲染（diff-restyle/01）
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
+import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
@@ -185,7 +185,7 @@ async function reviseRunSSE(url, body, handlers) {
     let data = {};
     try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
     if (type === "done") { done = data; finished = true; }
-    else if (type === "error") { errorMsg = data.message || "请求失败"; finished = true; }
+    else if (type === "error") { errorMsg = parseError(data).text || "请求失败"; finished = true; }
     else if (handlers[type]) handlers[type](data);
   });
   if (errorMsg) throw new Error(errorMsg);

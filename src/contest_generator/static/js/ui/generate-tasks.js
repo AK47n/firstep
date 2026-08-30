@@ -21,7 +21,7 @@ import { $, apiPost, toast, toastError } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, truncate } from "/js/fx/core.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
+import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashContainer } from "/js/fx/flash.js";
@@ -901,7 +901,7 @@ async function tasksRunSSE(url, body, handlers) {
     let data = {};
     try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
     if (type === "done") { done = data; finished = true; }
-    else if (type === "error") { errorMsg = data.message || "请求失败"; finished = true; }
+    else if (type === "error") { errorMsg = parseError(data).text || "请求失败"; finished = true; }
     else if (handlers[type]) handlers[type](data);
   });
   if (errorMsg) throw new Error(errorMsg);

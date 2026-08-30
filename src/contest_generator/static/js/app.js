@@ -8,7 +8,7 @@
 // 3. 不挂 window 桥（探针按需 import 或 DOM 实况；fx 纯件桥不受影响）。
 // 4. 新共享件（多个 ui 模块共用、无 DOM 域归属的）优先落本文件。
 import { btnIcon } from "/js/fx/btn-icon.js";
-import { parseError, isLongError } from "/js/fx/errors.js";
+import { parseError, parseHttpError, isLongError } from "/js/fx/errors.js";
 
 export const $ = (id) => document.getElementById(id);
 
@@ -46,7 +46,8 @@ initTheme();
 export async function handle(resp) {
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    const err = new Error(data.detail || ("请求失败（HTTP " + resp.status + "）"));
+    // 统一错误解析（工单 ux-walkthrough-02/11）：与 SSE 终态同一路径
+    const err = new Error(parseHttpError(resp.status, data).text);
     err.status = resp.status; // 调用方按状态码区分错误面（如页数端点 400 = 文件损坏）
     throw err;
   }
@@ -120,22 +121,45 @@ export function toast(kind, text, opts = {}) {
   });
   if (copyBtn) {
     el.querySelector(".toast-copy").addEventListener("click", async () => {
+      // 剪贴板守卫 + execCommand 回退（沿 recent.js 先例）：非安全上下文不
+      // 直接抛错，回退选中文本让用户 Ctrl+C（长错误场景）
+      const copyBtnEl = el.querySelector(".toast-copy");
       try {
-        await navigator.clipboard.writeText(String(text));
-        el.querySelector(".toast-copy").textContent = "已复制";
-        setTimeout(() => { if (el.isConnected) el.querySelector(".toast-copy").textContent = "复制"; }, 1200);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(String(text));
+          copyBtnEl.textContent = "已复制";
+          setTimeout(() => { if (el.isConnected) copyBtnEl.textContent = "复制"; }, 1200);
+          return;
+        }
+        throw new Error("clipboard 不可用");
       } catch (e) {
-        el.querySelector(".toast-copy").textContent = "复制失败";
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = String(text);
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          if (document.execCommand && document.execCommand("copy")) {
+            copyBtnEl.textContent = "已复制";
+            setTimeout(() => { if (el.isConnected) copyBtnEl.textContent = "复制"; }, 1200);
+          } else {
+            copyBtnEl.textContent = "复制失败";
+          }
+          ta.remove();
+        } catch (e2) { copyBtnEl.textContent = "复制失败"; }
       }
     });
   }
   root.appendChild(el);
-  const ms = opts.ms || (opts.copy ? 6000 : 2500);
-  if (opts.copy || ms > 2500) {
-    // 长停留 toast：关掉 .toast 的 2.2s 自动淡出动画（否则视觉仍 2.2s 消失）
+  const ms = opts.ms !== undefined ? opts.ms : (opts.copy ? 6000 : 2500);
+  if ((opts.copy || ms > 2500)
+      && !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+    // 长停留 / 常驻 toast：关掉 .toast 的 2.2s 自动淡出动画（否则视觉仍 2.2s 消失）；
+    // reduced-motion 用户保留 CSS 的 animation:none（无障碍不回归）
     el.style.animation = "toast-in var(--dur-slow) var(--ease-ui)";
   }
-  setTimeout(() => { if (el.isConnected) el.remove(); }, ms);
+  if (ms > 0) setTimeout(() => { if (el.isConnected) el.remove(); }, ms);
 }
 
 /** 错误统一出口（工单 ux-walkthrough-02/11）：parseError 归一后按长度/状态
@@ -147,7 +171,9 @@ export function toastError(err, prefix) {
     parsed.text = String(prefix).trim() + "：" + parsed.text;
   }
   if (isLongError(parsed)) {
-    toast("error", parsed.text, { copy: true, ms: 6000 });
+    // 长错误 / 5xx：常驻可复制（ms=0 不自动消失，点 ✕ 关闭）——满足「长错误
+    // 常驻内联可复制」验收（工单 ux-walkthrough-02/11）
+    toast("error", parsed.text, { copy: true, ms: 0 });
   } else {
     toast("error", parsed.text);
   }

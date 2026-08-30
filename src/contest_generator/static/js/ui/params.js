@@ -17,7 +17,7 @@
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
-import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
+import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { paramListHTML, paramResultHTML } from "/js/fx/params.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { reviseGetDir } from "./generate-revise.js";
@@ -279,7 +279,7 @@ async function tasksRunSSE(url, body, handlers) {
     let data = {};
     try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
     if (type === "done") { done = data; finished = true; }
-    else if (type === "error") { errorMsg = data.message || "请求失败"; finished = true; }
+    else if (type === "error") { errorMsg = parseError(data).text || "请求失败"; finished = true; }
     else if (handlers[type]) handlers[type](data);
   });
   if (errorMsg) throw new Error(errorMsg);

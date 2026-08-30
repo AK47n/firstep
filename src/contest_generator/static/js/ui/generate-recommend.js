@@ -38,7 +38,7 @@ import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
 import { stepNavTitles, syncStep4 } from "/js/fx/draft.js";
 import { prereadHTML, prereadSlotHTML, prereadReminderGroups } from "/js/fx/topic-preread.js";
-import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
+import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone, markStepUndone, unmarkSteps, STEP_NAV_CARD_SELECTOR } from "/js/ui/step-state.js";
@@ -726,7 +726,7 @@ const recPanel = makeProgressPanel({
       recPanel.finish();
       aiActionStop();
       $("rec-progress").classList.add("hidden");
-      showRecommendError(ev.message || "推荐失败");
+      showRecommendError(parseError(ev).text || "推荐失败");
     },
   },
 });
