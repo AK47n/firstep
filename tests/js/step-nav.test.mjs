@@ -28,6 +28,11 @@ test("stepNavTitles 缺徽章 / 缺 h2 时兜底", () => {
   assert.deepEqual(stepNavTitles(cards), [{ n: NaN, title: "" }]);
 });
 
+test("stepNavTitles 支持非整数子步骤（6.5 多实例卡）", () => {
+  const cards = [card("6.5", "6.5多实例配置")];
+  assert.deepEqual(stepNavTitles(cards), [{ n: 6.5, title: "多实例配置" }]);
+});
+
 test("stepNavItemsHTML 生成胶囊结构：dot 数字 + label 标题", () => {
   const out = stepNavItemsHTML([
     { n: 1, title: "赛题原文" },

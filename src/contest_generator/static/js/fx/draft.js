@@ -14,9 +14,17 @@ export function stepNavTitles(cards) {
   return Array.from(cards).map((c) => {
     const no = c.querySelector(".step-no");
     const h2 = c.querySelector("h2");
+    // 步骤号（工单 ux-walkthrough-02/02）：接受非整数子步骤——data-step 优先
+    //（6.5 多实例卡显式标注），否则读徽章文本；解析失败 → NaN。
+    let n = NaN;
+    if (no) {
+      const raw = no.dataset && no.dataset.step !== undefined ? no.dataset.step : no.textContent;
+      const v = Number(raw);
+      if (Number.isFinite(v)) n = v;
+    }
     return {
-      n: no ? parseInt(no.textContent, 10) : NaN,
-      title: h2 ? h2.textContent.replace(/^\d+/, "").trim() : "",
+      n,
+      title: h2 ? h2.textContent.replace(/^\d+(\.\d+)?/, "").trim() : "",
     };
   });
 }

@@ -25,9 +25,9 @@ import { $, apiGet, apiPost, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { pinResetConfirmMessage } from "/js/fx/danger.js";  // 还原默认确认文案（工单 ux-walkthrough-02/01）
-import { multiInstanceModules, ensureDefaultInstances } from "/js/fx/module.js";
+import { multiInstanceModules, ensureDefaultInstances, instanceGapCount } from "/js/fx/module.js";
 import { collectBindings } from "/js/fx/generate.js";
-import { syncStep7 } from "/js/ui/step-state.js";
+import { syncStep7, markSubStep, refreshStepNav } from "/js/ui/step-state.js";
 import { chosenPlatform, expanded, selectedSlugs } from "/js/ui/generate-recommend.js";
 
 // ---- 全局状态：多实例 + 引脚板图（随簇；host 经 import 活绑定读） ----
@@ -77,6 +77,27 @@ function instList(slug) {
 
 // 已迁至 static/js/fx/module.js（工单 06）：ensureDefaultInstances（迁入后参数化 = expanded, instances）。
 
+// 6.5 多实例卡与步骤系统联动（工单 ux-walkthrough-02/02）：步骤 6 卡顶部
+// 「还差 N 个实例」徽章 + 导航 6.5 点完成态；导航按卡片可见性重建。
+function syncInstanceGap() {
+  const mods = multiInstanceModules(expanded);
+  const gap = instanceGapCount(expanded, instances);
+  const badge = $("instance-gap-badge");
+  if (badge) {
+    if (mods.length && gap > 0) {
+      badge.textContent = "还差 " + gap + " 个实例";
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+  refreshStepNav();
+  markSubStep("6.5", mods.length > 0 && gap === 0);
+  // 总览 6.5 chip 随卡片显隐（无多实例模块时不出现在总览条）
+  const chip = document.querySelector('.ov-chip[data-step="6.5"]');
+  if (chip) chip.classList.toggle("hidden", !mods.length);
+}
+
 function renderInstanceConfig() {
   const card = $("card-instance-config");
   // 清掉已不在最终工程集内模块的实例清单（模块被移除后不残留；expanded
@@ -94,7 +115,7 @@ function renderInstanceConfig() {
     }
   }
   const mods = multiInstanceModules(expanded);
-  if (!mods.length) { card.classList.add("hidden"); return; }
+  if (!mods.length) { card.classList.add("hidden"); syncInstanceGap(); return; }
   card.classList.remove("hidden");
 
   const hint = $("instance-pin-hint");
@@ -123,6 +144,7 @@ function renderInstanceConfig() {
     b.addEventListener("click", () => delInstance(b.dataset.slug, +b.dataset.index)));
   box.querySelectorAll("[data-add]").forEach((b) =>
     b.addEventListener("click", () => addInstance(b.dataset.add)));
+  syncInstanceGap();
 }
 
 function instanceBlock(m) {
@@ -198,14 +220,14 @@ function delInstance(slug, index) {
   list.splice(index, 1);
   if (instancePinTarget && instancePinTarget.slug === slug) instancePinTarget = null;
   renderInstanceConfig();
-  renderPinBoard();
+  renderPinCard();  // 实例清单变化 → 步骤 7 就绪判定重算（工单 ux-walkthrough-02/02）
 }
 
 function pickInstancePin(slug, index) {
   const same = instancePinTarget && instancePinTarget.slug === slug && instancePinTarget.index === index;
   instancePinTarget = same ? null : { slug, index };
   renderInstanceConfig();
-  renderPinBoard();
+  renderPinCard();
 }
 
 function clearInstancePin(slug, index) {
@@ -214,7 +236,7 @@ function clearInstancePin(slug, index) {
     instancePinTarget = null;
   }
   renderInstanceConfig();
-  renderPinBoard();
+  renderPinCard();
 }
 
 function assignInstancePin(pinName) {
@@ -223,14 +245,14 @@ function assignInstancePin(pinName) {
   t.pin = pinName;
   instancePinTarget = null;
   renderInstanceConfig();
-  renderPinBoard();
+  renderPinCard();
 }
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && instancePinTarget) {
     instancePinTarget = null;
     renderInstanceConfig();
-    renderPinBoard();
+    renderPinCard();
   }
 });
 

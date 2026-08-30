@@ -2142,6 +2142,7 @@
     <div class="card">
       <h2><span class="step-no">6</span>模块清单与平台警告</h2>
       <p class="card-purpose">确认最终要进工程的模块，并看清哪些模块在你板子上没验证过。</p>
+      <span id="instance-gap-badge" class="badge unverified hidden" style="margin-left:0;margin-bottom:8px"></span>
       <div class="preread-slot hidden" data-preread-slot data-step="6"></div>
       <div class="row">
         <input type="search" id="module-search" placeholder="搜索模块以添加…" style="flex:1;max-width:300px">
@@ -2157,7 +2158,7 @@
     </div>
 
     <div class="card hidden" id="card-instance-config">
-      <h2>多实例配置<span class="muted" style="font-weight:400;font-size:12px;margin-left:8px">支持多实例的模块（如 led）：一次选多个实例，各带显示名 / 颜色 / 引脚</span></h2>
+      <h2><span class="step-no step-sub" data-step="6.5">6.5</span>多实例配置</h2>
       <div class="pin-intro">未配置实例 = 默认单实例（led：stm32 红/黄/绿三通道 PC13/14/15，mspm0 单通道 PA15）。点「添加实例」后按实例清单生成通道宏，每个实例可改显示名、选颜色（红/黄/绿可重复，重复内置色加 _2/_3 后缀；「无颜色」= LED_1/LED_2 通用编号）、绑引脚（空 = 自动分配）。</div>
       <div id="instance-pin-hint" class="banner hidden" style="margin-top:8px"></div>
       <div id="instance-config" style="margin-top:8px"></div>

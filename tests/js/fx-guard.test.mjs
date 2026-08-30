@@ -70,7 +70,7 @@ const DOMAINS = {
     moduleGridPlatformLabel: "fn", moduleGridStatusText: "fn",
     moduleGridBadgeClass: "fn", moduleGridFilter: "fn", moduleGridCountText: "fn",
     moduleGridHTML: "fn", moduleInfoHTML: "fn", multiInstanceModules: "fn",
-    instancePayload: "fn", ensureDefaultInstances: "fn",
+    instancePayload: "fn", ensureDefaultInstances: "fn", instanceGapCount: "fn",
     libFilterModules: "fn", libSortModules: "fn", danglingDependencies: "fn",
     libStats: "fn", libStatsText: "fn", libChipRowHTML: "fn",
     moduleRowHTML: "fn", editDescStatus: "fn", libIsValidHttpUrl: "fn",

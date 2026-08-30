@@ -33,34 +33,60 @@ export function step7WireGet() { return step7Wire; }
 let onStepChange = null;
 export function setOnStepChange(fn) { onStepChange = fn; }
 
+// 步骤号解析（工单 ux-walkthrough-02/02）：接受非整数子步骤（6.5 多实例卡）。
+// data-step 优先（6.5 显式标注），否则读徽章文本；解析失败 → NaN。
+function stepNoOf(c) {
+  const no = c.querySelector(".step-no");
+  if (!no) return NaN;
+  const raw = no.dataset && no.dataset.step !== undefined ? no.dataset.step : no.textContent;
+  const v = Number(raw);
+  return Number.isFinite(v) ? v : NaN;
+}
+
 export function stepCard(n) {
   const cards = document.querySelectorAll(STEP_NAV_CARD_SELECTOR);
-  return Array.from(cards).find((c) => {
-    const no = c.querySelector(".step-no");
-    return no && parseInt(no.textContent, 10) === n;
-  }) || null;
+  return Array.from(cards).find((c) => stepNoOf(c) === n) || null;
 }
 export function markStepDone(n) {
-  syncStepDone(n, true);
-  const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
+  // 子步骤（非整数，如 6.5）不进 stepDoneSet——12 步总数与进度条不变；
+  // 其完成态由 markSubStep 单独维护（工单 ux-walkthrough-02/02）
+  const k = Number.isFinite(Number(n)) ? Number(n) : n;
+  if (Number.isInteger(k)) syncStepDone(k, true);
+  const item = document.querySelector('.step-nav .step-dot[data-step="' + k + '"]');
   if (item) {
     item.classList.add("done");
     const dot = item.querySelector(".dot");
     if (dot) dot.textContent = "✓";
   }
-  const card = stepCard(n);
+  const card = stepCard(k);
   if (card) { card.classList.add("done"); attachCelebrate(card); }
 }
 export function markStepUndone(n) {
-  syncStepDone(n, false);
-  const item = document.querySelector('.step-nav .step-dot[data-step="' + n + '"]');
+  const k = Number.isFinite(Number(n)) ? Number(n) : n;
+  if (Number.isInteger(k)) syncStepDone(k, false);
+  const item = document.querySelector('.step-nav .step-dot[data-step="' + k + '"]');
   if (item) {
     item.classList.remove("done");
     const dot = item.querySelector(".dot");
-    if (dot) dot.textContent = String(n);
+    if (dot) dot.textContent = String(k);
   }
-  const card = stepCard(n);
+  const card = stepCard(k);
   if (card) card.classList.remove("done", "celebrate");
+}
+export function markSubStep(id, done) {
+  // 非整数子步骤（6.5 多实例卡）完成态：只动 nav dot 与总览 chip，不进 stepDoneSet
+  const item = document.querySelector('.step-nav .step-dot[data-step="' + id + '"]');
+  if (item) {
+    item.classList.toggle("done", done);
+    const dot = item.querySelector(".dot");
+    if (dot) dot.textContent = done ? "✓" : String(id);
+  }
+  const chip = document.querySelector('.ov-chip[data-step="' + id + '"]');
+  if (chip) {
+    chip.classList.toggle("done", done);
+    const d = chip.querySelector(".ov-dot");
+    if (d) d.textContent = done ? "✓" : String(id);
+  }
 }
 export function unmarkSteps(steps) {
   for (const n of steps) markStepUndone(n);
@@ -117,12 +143,12 @@ export function initCardCollapse() {
   const stored = parseGenCardCollapse(localStorage.getItem(GEN_CARD_COLLAPSE_KEY));
   const persist = () => { saveGenCardCollapse(localStorage, stored); };
   const curEl = document.querySelector(".step-nav .step-dot.current");
-  const currentNo = curEl ? parseInt(curEl.dataset.step, 10) : NaN;
+  const currentNo = curEl ? Number(curEl.dataset.step) : NaN;
   for (const c of cards) {
     const h2 = c.querySelector("h2");
     if (!h2) continue;
-    const no = c.querySelector(".step-no");
-    const n = no ? parseInt(no.textContent, 10) : NaN;
+    const n = stepNoOf(c);
+    if (!Number.isInteger(n)) continue;  // 子步骤卡（6.5）不参与折叠记忆（既有设计）
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "card-collapse";
@@ -179,28 +205,49 @@ export function initCardCollapse() {
   nav.appendChild(toggleBtn);
 }
 
+// 步骤导航构建（工单 ux-walkthrough-02/02 重构）：卡片可见性随展开/清空变化
+//（6.5 多实例卡），导航项需在显隐切换后重建——buildStepNav 只重装 .step-dot
+//（保留 initCardCollapse 追加的「收起已完成」按钮）并恢复整数步完成态。
+let stepCards = [];
+let stepNavUpdate = null;
+
+function buildStepNav() {
+  const nav = $("step-nav");
+  if (!nav) return;
+  stepCards = Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR))
+    .filter((c) => c.querySelector(".step-no") && !c.classList.contains("hidden"));
+  nav.querySelectorAll(".step-dot").forEach((d) => d.remove());
+  nav.insertAdjacentHTML("beforeend", stepNavItemsHTML(stepNavTitles(stepCards)));
+  // 重建后恢复整数步完成态（stepDoneSet 是唯一权威；子步 6.5 由 markSubStep 恢复）
+  for (const n of stepDoneSet) {
+    const item = nav.querySelector('.step-dot[data-step="' + n + '"]');
+    if (item) {
+      item.classList.add("done");
+      const dot = item.querySelector(".dot");
+      if (dot) dot.textContent = "✓";
+    }
+  }
+}
+
+export function refreshStepNav() {
+  buildStepNav();
+  if (stepNavUpdate) stepNavUpdate();
+}
+
 (function initStepNav() {
   const nav = $("step-nav");
   if (!nav) return;
-  // 只收带 .step-no 徽章的步骤卡（6.5 多实例配置卡无徽章，不进导航）
-  const cards = Array.from(document.querySelectorAll(STEP_NAV_CARD_SELECTOR))
-    .filter((c) => c.querySelector(".step-no"));
-  if (!cards.length) return;
-  nav.innerHTML = stepNavItemsHTML(stepNavTitles(cards));
+  buildStepNav();
   nav.addEventListener("click", (e) => {
     const dot = e.target.closest(".step-dot");
     if (!dot) return;
-    const card = stepCard(parseInt(dot.dataset.step, 10));
+    const card = stepCard(Number(dot.dataset.step));
     if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   let ticking = false;
   const update = () => {
     ticking = false;
-    const entries = cards.map((c) => {
-      const no = c.querySelector(".step-no");
-      const r = c.getBoundingClientRect();
-      return { n: no ? parseInt(no.textContent, 10) : NaN, top: r.top };
-    });
+    const entries = stepCards.map((c) => ({ n: stepNoOf(c), top: c.getBoundingClientRect().top }));
     let cur = stepNavCurrent(entries, 120);
     // 滚到底仍够不到阈值时（末卡较短）直接定位最后一步
     if (entries.length && window.innerHeight + window.scrollY
@@ -208,12 +255,13 @@ export function initCardCollapse() {
       cur = entries[entries.length - 1].n;
     }
     nav.querySelectorAll(".step-dot").forEach((d) => {
-      d.classList.toggle("current", parseInt(d.dataset.step, 10) === cur);
+      d.classList.toggle("current", Number(d.dataset.step) === cur);
     });
   };
-  const onScroll = () => {
+  stepNavUpdate = update;
+  function onScroll() {
     if (!ticking) { ticking = true; requestAnimationFrame(update); }
-  };
+  }
   // 吸顶栏高度实时写入 CSS 变量（header 窄屏会换行变高，写死会挡住/留白）
   const syncHeaderH = () => {
     const h = document.querySelector("header");

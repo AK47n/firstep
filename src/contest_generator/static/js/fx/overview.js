@@ -20,8 +20,11 @@ export function genOverviewSummaryHTML(doneSet, titles, critical, recommended, n
   const done = doneSet || [];
   const byN = {};
   for (const t of titles) byN[t.n] = t.title;
-  const total = titles.length;
-  const doneCount = titles.filter((t) => done.indexOf(t.n) !== -1).length;
+  // 分母只数整数步骤（工单 ux-walkthrough-02/02）：6.5 多实例子步骤进总览
+  // chips 识别，但不计入 12 步完成度（stepDoneSet 也不含它）
+  const intTitles = titles.filter((t) => Number.isInteger(t.n));
+  const total = intTitles.length;
+  const doneCount = intTitles.filter((t) => done.indexOf(t.n) !== -1).length;
   const missing = (critical || []).filter((n) => done.indexOf(n) === -1 && byN[n]);
   const advised = (recommended || []).filter((n) => done.indexOf(n) === -1 && byN[n]);
   const parts = ['<span class="ov-ready">已就绪 ' + doneCount + "/" + total + "</span>"];

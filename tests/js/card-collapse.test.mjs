@@ -71,6 +71,17 @@ test("无 .step-no 的卡（如实例卡）永不折叠", () => {
   assert.equal(out[0].collapsed, false);
 });
 
+test("子步骤卡（6.5）永不折叠且 n 为 NaN（工单 ux-walkthrough-02/02）", () => {
+  const sub = {
+    querySelector: (sel) => sel === ".step-no" ? { textContent: "6.5" } : null,
+    classList: { toggle: (k, v) => { sub._c = v; } }, _c: false,
+  };
+  const out = collapseToggleAll([sub], [6, 7], true);
+  assert.ok(Number.isNaN(out[0].n));
+  assert.equal(out[0].collapsed, false);
+  assert.equal(sub._c, false);
+});
+
 // ---------------------------------------------------------------------------
 // 初始折叠判定与记忆（工单 ux-polish-02/02）：默认「已完成且非当前步」折叠，
 // 用户选择优先（localStorage 单键 JSON）
