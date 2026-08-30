@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f885d96b736f8b2423254636fe3760fda3a1b237 -->
+<!-- changelog-auto: last-commit=e9db5b05a1387c7f86553d4bba539dc7d8054aa1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -106,6 +106,7 @@
 - 20:48 工单 22/23/24 评审整改：①22 派生目录文案改同级口径（topics/references/sources-materials，不再承诺保存即创建）+ 保存取消与失败区分（取消不再误报保存失败）+ PDF 失败清统计条/批次 chips + 排序钮「默认」标注常驻；②23 直达入口先切顶层生成页（母版页可跳转，H1）+ 守卫按 outputDir||reviseGetDir 同口径 + 每卡「问这里」常显一句定位说明 + 全局商量同名术语统一；③24 修复 welcome.js goto-key 绑定被注释吞掉的回归 + 窄屏媒体块去掉全站 .card 改（不越界）+ 死变量清理；对应守卫测试同步（library-polish/ai-entries/welcome-responsive）
 - 20:50 工单 16 补登记：reference_library.pdf_referenced_by 加入 autocommit 写函数注册表（read 类，只读不落盘）——修复 test_write_function_classification_registry 失败（工单 16 实现时漏跑该测试）
 - 21:26 工单 22-24 验收框补勾：库页修复/PDF 失败清占位、AI 入口直达、欢迎页响应式——ux-walkthrough-02 走查对账修正（实现已落地、验收未勾）
+- 21:26 修复生成页步骤导航点播跳转：短卡贴页尾时点击（如步骤 11）被滚动底部 clamp 停在原地、高亮漂到末步（点 11 显 12）——统一 scrollToStep 按吸顶栏让位、贴尾卡改居中落点，点击优先高亮至手动滚动
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
