@@ -316,7 +316,8 @@ function clearTopicPreread() {
   unmarkSteps([2, 5, 6, 7, 8, 9, 10, 11, 12]);  // 题面变了：AI 产物与生成结果全部失效
 }
 
-// 钉卡分发（工单 topic-preread/03）：结果渲染到所有目标步骤卡槽位，// 每卡只显该卡相关条目；无相关条目的槽位保持隐藏（无提醒不占位）。
+// 钉卡分发（工单 topic-preread/03）：结果渲染到所有目标步骤卡槽位，
+// 每卡只显该卡相关条目；无相关条目的槽位保持隐藏（无提醒不占位）。
 // 注意：groups.find 只匹配数值步骤组——「其他限定」（step:null，尺寸/
 // 电源/时长等通用要求）有意不钉卡，只在步骤 2 卡分组展示。
 function renderPrereadSlots(reminders) {
@@ -627,8 +628,8 @@ function showRecommendQuestions(problem, questions) {
 }
 
 // 推荐进度面板实例（共享模块 makeProgressPanel）。生命周期 = 一次点击到
-// done / question / error / 断线；词表镜像 events.py：round / converged /
-// done / question / error（JS 侧单点声明，改词表须同步）。
+// done / question / error / 断线；词表镜像 events.py：start / round /
+// converged / done / question / error（JS 侧单点声明，改词表须同步）。
 function startRecProgress() {
   recPanel.start();
   $("rec-progress").classList.remove("hidden");
@@ -685,15 +686,22 @@ const recPanel = makeProgressPanel({
   totalLabel: "总用时 ",
   callLabel: "当前轮已等待 ",
   events: {
+    start: (ev) => {
+      // 首个进度事件（工单 ux-walkthrough-02/13）：首个分钟级 LLM 调用前
+      // 后端先送中文阶段标签——面板立即有内容；无 stage 时前端通用行兜底
+      $("rec-prog-text").textContent = ev.stage || WAIT_GENERIC_LINE;
+    },
     round: (ev) => {
       $("rec-prog-text").textContent = "AI 收敛自检：第 " + ev.round + "/" + ev.round_total + " 轮…";
       $("rec-bar").classList.remove("hidden");
       $("rec-bar-fill").style.width = (ev.round_total ? Math.min(100, ev.round * 100 / ev.round_total) : 100) + "%";
     },
     converged: (ev) => {
-      $("rec-prog-text").textContent = "功能需求层已收敛（第 " + ev.round + " 轮）…";
+      // 收敛 ≠ 完成：进度条约 85% 并注明「正在出最终结果…」——仅 done 到 100%
+      //（工单 ux-walkthrough-02/13：收敛后还有 result 组装与缓存写入）
+      $("rec-prog-text").textContent = "功能需求层已收敛（第 " + ev.round + " 轮）… 正在出最终结果…";
       $("rec-bar").classList.remove("hidden");
-      $("rec-bar-fill").style.width = "100%";   // round_total 是上限非保证：提前收敛就跳满
+      $("rec-bar-fill").style.width = "85%";
     },
     cache_hit: (ev) => {
       // 推荐缓存命中（工单 llm-cost-control/02）：直出上次结果，不调 LLM
@@ -714,6 +722,7 @@ const recPanel = makeProgressPanel({
     done: (ev) => {
       recPanel.finish();
       aiActionStop();
+      $("rec-bar-fill").style.width = "100%";   // 仅 done 终态到 100%（工单 ux-walkthrough-02/13）
       $("rec-progress").classList.add("hidden");
       renderRecommendResult(ev);
       $("btn-recommend").innerHTML = "重新推荐";

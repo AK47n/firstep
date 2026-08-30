@@ -81,6 +81,7 @@ from .events import (
     EVENT_IDEA_ANALYZING,
     EVENT_IDEA_RESULT,
     EVENT_PARAM_RESULT,
+    EVENT_START,
     ProgressEvent,
 )
 from .extraction import (
@@ -265,6 +266,10 @@ PLATFORM_DISPLAY_NAMES = {
 
 # API key 掩码特征：GET 只回掩码，PUT 收到掩码说明用户没改 key
 _API_KEY_MASK_MARKER = "…"
+
+# 推荐 start 事件的中文阶段标签（工单 ux-walkthrough-02/13）：首个进度事件；
+# 前端 rec-prog-text 直接展示，前端另有 WAIT_GENERIC_LINE 兜底（无 start 旧流）
+RECOMMEND_START_STAGE = "AI 正在读题并选模块…（可能要几分钟）"
 
 
 # ---------------------------------------------------------------------------
@@ -1417,6 +1422,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                             _emit_cached_recommend(emit, cached, warns)
                             return
                 with bind_llm_telemetry(collector, emit.progress):
+                    # 首个进度事件（工单 ux-walkthrough-02/13）：首个分钟级 LLM
+                    # 调用前先送中文阶段标签，前端等待期间即有内容——不含任何
+                    # 业务数据（stage 为 UI 文案，词表与事件契约见 events.py）
+                    emit.progress(ProgressEvent(
+                        type=EVENT_START,
+                        stage=RECOMMEND_START_STAGE,
+                    ))
                     run_recommendation(
                         topic,
                         _llm(context, budget, collector),
