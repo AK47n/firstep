@@ -1,7 +1,10 @@
 // tests/js/clear-jargon-guard.test.mjs — 行话人话化守卫（工单 beginner-gap-closure/03）：
 // 用户可见界面不再直接出现 .contest_*.json 原始文件名、「写盘」「锚已失效」「人工改标」
 // 等工程行话，人话文案在场（静态读源断言，防退化回工程话——对齐 glossary-refs 先例）。
+// 另含解析型守卫（评审整改）：本轮改动的 ui 模块逐一 node --check——静态 includes
+// 断言防不住「改文案时顺坏拼接」这类语法回归（77ecfeb 评审实例）。
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -70,4 +73,25 @@ test("修订结果：备份不露 backup_id（已备份 · 修订时间）", () 
   // 把代码当文案仍会满足上方断言，故额外钉：正确闭合引号 + 错误字面量形式缺席
   assert.ok(reviseUi.includes("已备份 · 修订时间：'"));
   assert.ok(!reviseUi.includes('修订时间：" + esc'));
+});
+
+test("解析型守卫：本轮改动的 ui 模块均可解析（防语法回归）", () => {
+  // 评审整改（77ecfeb 两轴评审）：includes 类静态断言防不住「改文案顺坏拼接」，
+  // 模块级语法错误会让整个 ES 模块图加载失败——改动的 ui 文件逐一用
+  // vm.SourceTextModule 解析（单进程多文件；node --check 会把 ESM 当 CJS 误报）。
+  const files = [
+    "src/contest_generator/static/js/ui/generate-revise.js",
+    "src/contest_generator/static/js/ui/generate-tasks.js",
+    "src/contest_generator/static/js/ui/params.js",
+  ];
+  const script = [
+    'const fs=require("fs"),vm=require("vm");',
+    "for(const f of process.argv.slice(1)){",
+    '  new vm.SourceTextModule(fs.readFileSync(f,"utf8"),{identifier:f});',
+    "}",
+  ].join("");
+  const r = spawnSync(process.execPath,
+    ["--no-warnings", "--experimental-vm-modules", "-e", script, ...files],
+    { cwd: new URL("../..", import.meta.url), encoding: "utf8" });
+  assert.equal(r.status, 0, `模块解析失败：${r.stderr || r.stdout}`);
 });
