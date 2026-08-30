@@ -12,6 +12,15 @@
 工单 03 追加真实 k230 模块（真库 + 真母版）：manifest 形状 / 真实模板契约
 渲染（帧格式与契约常量逐字一致，模板只走占位符不重抄字面量）/ 生成层依赖
 展开（选中 k230 → coord_detect 自动挂上 + main.py 副产物，双平台对端可配）。
+
+工单 k230-digit-vision/01 追加 DIGIT 数字识别帧契约（AI 检测）：
+- k230_render 新增 DIGIT_FRAME_HEADER / DIGIT_FRAME_LINE_FIELDS（格式由
+  字段序派生，confidence {:.2f} 特殊化）/ 消费槽位 / 无检测帧常量，
+  + {{digit_frame_header}} / {{digit_frame_line}} 占位符与帧头渲染函数；
+- 防漂移：与 digit_uart 双平台（stm32 digit_uart.c / mspm0 digit_uart_mspm0.c）
+  parse_digit_line 的 get_field 序机械比对（解析端只消费槽位 0/1/6/7 =
+  label/confidence/cx/cy，其余为契约占位）+ 帧头 "---" 守卫 + 无检测帧
+  语义（count=0 重置 → 空行帧尾 → best_count>0 最佳帧替换）比对。
 """
 
 from __future__ import annotations
@@ -27,9 +36,15 @@ from contest_generator.k230_render import (
     COORD_FRAME_FIELDS,
     COORD_FRAME_FORMAT,
     COORD_FRAME_PREFIX,
+    DIGIT_FRAME_CONSUMED_INDICES,
+    DIGIT_FRAME_HEADER,
+    DIGIT_FRAME_LINE_FIELDS,
+    DIGIT_FRAME_LINE_FORMAT,
+    DIGIT_FRAME_NO_DETECT_COUNT,
     NO_DETECT_FRAME,
     UART_BAUDRATE,
     render_coord_frame,
+    render_digit_frame_header,
     render_no_detect_frame,
     render_python_artifact,
 )
@@ -56,6 +71,16 @@ MSPM0_SYSCFG = REPO_ROOT / "library" / "masters" / "mspm0" / "mspm0.syscfg"
 
 # 双平台 parse_coord_line 源（防漂移锁定同吃一份契约，工单 03 扩 mspm0）
 COORD_DETECT_C_SOURCES = (COORD_DETECT_STM32_C, COORD_DETECT_MSPM0_C)
+
+DIGIT_UART_STM32_C = (
+    REPO_ROOT / "library" / "modules" / "digit_uart" / "code" / "digit_uart.c"
+)
+DIGIT_UART_MSPM0_C = (
+    REPO_ROOT / "library" / "modules" / "digit_uart" / "code" / "digit_uart_mspm0.c"
+)
+
+# 双平台 parse_digit_line 源（工单 k230-digit-vision/01 防漂移锁定）
+DIGIT_UART_C_SOURCES = (DIGIT_UART_STM32_C, DIGIT_UART_MSPM0_C)
 
 # ---------------------------------------------------------------------------
 # 契约单测（k230_render 纯函数）
@@ -102,6 +127,63 @@ def test_render_python_artifact_passthrough_without_placeholders():
     assert render_python_artifact(plain) == plain
 
 
+def test_digit_frame_header_contract_value():
+    """DIGIT 帧头单源：`--- frame N | M targets ---`，解析端 line_buf[0..2]
+    为 '-' 判帧界（防漂移见 C 侧守卫比对）。"""
+    assert DIGIT_FRAME_HEADER == "--- frame {n} | {m} targets ---"
+    assert DIGIT_FRAME_HEADER.startswith("---")
+
+
+def test_digit_frame_line_shape_contract():
+    """数据行 10 字段（label,confidence,x1,y1,x2,y2,cx,cy,w,h），格式由
+    字段序派生（COORD 同模式）：占位符序列 == 字段序列（位置↔字段名映射
+    逐位一致——改字段序不同步格式即 CSV 列错位，解析端按逗号位置消费）；
+    confidence 两位小数特殊化 {:.2f}；解析端只消费槽位 0/1/6/7。"""
+    assert len(DIGIT_FRAME_LINE_FIELDS) == 10
+    assert DIGIT_FRAME_LINE_FIELDS[0] == "label"
+    assert DIGIT_FRAME_LINE_FIELDS[1] == "confidence"
+    assert DIGIT_FRAME_LINE_FIELDS[6] == "cx"
+    assert DIGIT_FRAME_LINE_FIELDS[7] == "cy"
+    # 占位符序列（字段名）与字段序列逐位一致
+    placeholders = re.findall(r"\{([a-z0-9_]+)", DIGIT_FRAME_LINE_FORMAT)
+    assert placeholders == list(DIGIT_FRAME_LINE_FIELDS)
+    assert DIGIT_FRAME_LINE_FORMAT == (
+        "{label},{confidence:.2f},{x1},{y1},{x2},{y2},{cx},{cy},{w},{h}"
+    )
+    assert DIGIT_FRAME_CONSUMED_INDICES == (0, 1, 6, 7)
+
+
+def test_render_digit_frame_header_and_no_detect():
+    """DIGIT 帧头渲染单源：n = 帧序号自增占位，count = 目标数；
+    无检测帧 = count = DIGIT_FRAME_NO_DETECT_COUNT（0）。"""
+    assert render_digit_frame_header(5, 2) == "--- frame 5 | 2 targets ---"
+    assert (
+        render_digit_frame_header(7, DIGIT_FRAME_NO_DETECT_COUNT)
+        == "--- frame 7 | 0 targets ---"
+    )
+    assert DIGIT_FRAME_NO_DETECT_COUNT == 0
+
+
+def test_render_python_artifact_substitutes_digit_vars():
+    """{{digit_frame_header}} / {{digit_frame_line}} ← 契约值（字符串替换，
+    帧头/行格式的花括号不被二次解释，模板里 .format 自行消费 {n}/{m} 与
+    字段名前缀）。"""
+    template = (
+        "HDR = '{{digit_frame_header}}'\n"
+        "LINE = '{{digit_frame_line}}'\n"
+        "uart.write(HDR.format(n=5, m=2) + '\\n')\n"
+        "uart.write(LINE.format(label=3, confidence=0.85, x1=10, y1=20, "
+        "x2=30, y2=40, cx=50, cy=60, w=70, h=80) + '\\n')\n"
+    )
+    assert render_python_artifact(template) == (
+        "HDR = '--- frame {n} | {m} targets ---'\n"
+        "LINE = '{label},{confidence:.2f},{x1},{y1},{x2},{y2},{cx},{cy},{w},{h}'\n"
+        "uart.write(HDR.format(n=5, m=2) + '\\n')\n"
+        "uart.write(LINE.format(label=3, confidence=0.85, x1=10, y1=20, "
+        "x2=30, y2=40, cx=50, cy=60, w=70, h=80) + '\\n')\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 防漂移：契约与主控侧 C 解析的机械比对（C 侧零改动）
 # ---------------------------------------------------------------------------
@@ -115,9 +197,9 @@ _C_FIELD_ASSIGN_RE = re.compile(
 )
 
 
-def _parse_coord_line_body(source: str) -> str:
-    """parse_coord_line 函数体：从函数签名到下一节横幅。"""
-    start = source.index("static void parse_coord_line(const char *line)")
+def _parse_fn_body(source: str, signature: str) -> str:
+    """函数体切片：从函数签名到下一节横幅（机械提取防漂移用）。"""
+    start = source.index(signature)
     end = source.index("// ====", start)
     return source[start:end]
 
@@ -135,7 +217,7 @@ def test_c_parse_coord_line_field_order_locked_to_contract(source_path):
     COORD_FRAME_FIELDS 严格一致——改 C 字段序 / 改名不同步本契约即红。
     双平台 C 源同锁（stm32 coord_detect_stm32.c + mspm0 coord_detect.c）。"""
     source = source_path.read_text(encoding="utf-8")
-    pairs = _c_field_order(_parse_coord_line_body(source))
+    pairs = _c_field_order(_parse_fn_body(source, "static void parse_coord_line(const char *line)"))
 
     assert [index for index, _ in pairs] == list(range(1, 8))  # 逐字段顺序解析
     assert [name for _, name in pairs] == list(COORD_FRAME_FIELDS)
@@ -148,7 +230,7 @@ def test_c_frame_prefix_and_delimiter_locked_to_contract(source_path):
     """帧前缀与分隔符两侧一致：C 侧守卫 line[0] != 'B' || line[1] != ','
     由契约常量推导比对（改契约前缀 / 分隔符不同步 C 即红）。"""
     source = source_path.read_text(encoding="utf-8")
-    body = _parse_coord_line_body(source)
+    body = _parse_fn_body(source, "static void parse_coord_line(const char *line)")
     assert f"line[0] != '{COORD_FRAME_PREFIX}' || line[1] != ','" in body
 
 
@@ -158,8 +240,86 @@ def test_c_frame_prefix_and_delimiter_locked_to_contract(source_path):
 def test_c_no_detect_frame_locked_to_contract(source_path):
     """无检测帧两侧一致：C 侧首字符判 'N'，契约 NO_DETECT_FRAME == "N"。"""
     source = source_path.read_text(encoding="utf-8")
-    assert "line[0] == 'N'" in _parse_coord_line_body(source)
+    assert "line[0] == 'N'" in _parse_fn_body(source, "static void parse_coord_line(const char *line)")
     assert NO_DETECT_FRAME == "N"
+
+
+# ---------------------------------------------------------------------------
+# 防漂移：DIGIT 数字识别帧契约与 digit_uart 双平台 parse_digit_line 的
+# 机械比对（工单 k230-digit-vision/01，C 侧零改动）
+# ---------------------------------------------------------------------------
+
+# parse_digit_line 的字段提取形态：if (get_field(line, N, buf, sizeof(buf))
+# == NULL) return; 后跟 d-><name> 赋值（label 为花括号块内 d->label[i++] 拷贝，
+# confidence/cx/cy 为 d-><name> = my_atof/my_atoi(buf);）——按调用切段，每段
+# 第一个 d-> 字段名即该 get_field 的消费目标（不看注释，防注释漂移）
+_DIGIT_FIELD_SPLIT_RE = re.compile(
+    r"get_field\(line,\s*(\d+),\s*buf,\s*sizeof\(buf\)\)\s*==\s*NULL\)\s*return;"
+)
+
+
+def _digit_field_order(body: str) -> list[tuple[int, str]]:
+    """从 C 源机械提取字段序：(get_field 索引, d-> 字段名) 列表。"""
+    parts = _DIGIT_FIELD_SPLIT_RE.split(body)
+    order: list[tuple[int, str]] = []
+    for i in range(1, len(parts), 2):
+        segment = parts[i + 1]
+        match = re.search(r"d->([a-z0-9_]+)", segment)
+        if match:
+            order.append((int(parts[i]), match.group(1)))
+    return order
+
+
+@pytest.mark.parametrize(
+    "source_path", DIGIT_UART_C_SOURCES, ids=["stm32", "mspm0"]
+)
+def test_c_digit_field_order_locked_to_contract(source_path):
+    """防漂移主锁：C 侧 parse_digit_line 的 get_field 序与契约消费槽位
+    （DIGIT_FRAME_CONSUMED_INDICES = 0/1/6/7 = label/confidence/cx/cy）
+    一一对应，其余字段为契约占位不消费——改 C 字段序 / 契约槽位不同步即红。
+    双平台 C 源同锁。"""
+    source = source_path.read_text(encoding="utf-8")
+    pairs = _digit_field_order(
+        _parse_fn_body(source, "static void parse_digit_line(char *line, int idx)")
+    )
+
+    expected = [
+        (index, DIGIT_FRAME_LINE_FIELDS[index])
+        for index in DIGIT_FRAME_CONSUMED_INDICES
+    ]
+    assert pairs == expected
+
+
+@pytest.mark.parametrize(
+    "source_path", DIGIT_UART_C_SOURCES, ids=["stm32", "mspm0"]
+)
+def test_c_digit_frame_header_locked_to_contract(source_path):
+    """帧头前缀两侧一致：C 侧 line_buf[0..2] 全 '-' 判帧界，契约帧头以
+    "---" 开头（改帧头前缀不同步 C 即红）。"""
+    source = source_path.read_text(encoding="utf-8")
+    assert (
+        "line_buf[0] == '-' && line_buf[1] == '-' && line_buf[2] == '-'"
+        in source
+    )
+    assert DIGIT_FRAME_HEADER.startswith("---")
+
+
+@pytest.mark.parametrize(
+    "source_path", DIGIT_UART_C_SOURCES, ids=["stm32", "mspm0"]
+)
+def test_c_digit_no_detect_locked_to_contract(source_path):
+    """无检测帧语义两侧一致：帧头新帧重置 count=0（m=0 = 无检测）→ 空行
+    帧尾结束帧（count=0 不置 updated）→ 批量最佳帧只替换 count>0 的帧
+    （best_count > 0），无检测帧永不污染对端结果。"""
+    source = source_path.read_text(encoding="utf-8")
+    # 帧头分支重置 count=0（无检测 = 帧头 m=0 + 空行帧尾）
+    assert "digit_result.count = 0" in source
+    # 空行 = 帧尾
+    assert "line_buf[0] == '\\0' || line_buf[0] == '\\r'" in source
+    assert "in_frame = 0" in source
+    # 最佳帧：count=0 不参与 → 无检测帧不替换
+    assert "if (best_count > 0)" in source
+    assert DIGIT_FRAME_NO_DETECT_COUNT == 0
 
 
 def test_mspm0_syscfg_digit_uart_baudrate_locked_to_contract():
