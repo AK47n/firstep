@@ -141,6 +141,7 @@ const DOMAINS = {
     taskChecklistHTML: "fn", checklistStateKey: "fn",
     taskErrorsHTML: "fn", tasksDoneCount: "fn",
     unresolvedPrereqs: "fn",
+    taskPhaseHTML: "fn", taskDetailsSnapshot: "fn", taskDetailsRestore: "fn",
   },
   "flash.js": {
     flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",
