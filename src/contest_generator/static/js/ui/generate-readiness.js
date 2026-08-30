@@ -148,14 +148,14 @@ function initReadinessCheck() {
   btn.addEventListener("click", async () => {
     box.classList.toggle("hidden");
     if (box.classList.contains("hidden")) return;
-    // 忙碌态（工单 ux-walkthrough-02/17）：拉取目录预警期间禁用 + 转圈，
-    // 完成后恢复（缓存命中 = 瞬时，无感）
+    // 行内容先同步渲染（不 gate 在网络往返上——评审整改：防止面板空白关不掉）；
+    // 忙碌态只包住目录预警数据取回
+    refreshReadinessPanel();
     const oldLabel = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>检查中…';
     try {
-      await ensureOutputDirWarn();
-      refreshReadinessPanel();
+      await refreshOutputDirWarn();
     } finally {
       btn.disabled = false;
       btn.innerHTML = oldLabel;
