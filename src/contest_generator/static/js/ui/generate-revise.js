@@ -23,6 +23,7 @@
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
+import { reviseApplyConfirmMessage } from "/js/fx/danger.js";  // 覆盖式重生成确认文案（工单 ux-walkthrough-02/01）
 import { verifyStatusMarkup } from "/js/fx/task.js";
 import { mainDiffHTML } from "/js/fx/diff.js";  // 效果 diff 渲染（diff-restyle/01）
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
@@ -315,6 +316,14 @@ async function reviseApply() {
   const fill = $("revise-problem-text").value.trim();
   if (fill) body.problem_text = fill;
   if (revise.analysis && (revise.analysis.impacts || []).length) body.impacts = revise.analysis.impacts;
+  // 覆盖式重生成确认（工单 ux-walkthrough-02/01）：整树重建输出目录前必须先
+  // 明示影响（模块集变更摘要 + 覆盖重建 + 整树备份可回滚）；取消则不动任何状态。
+  const ok = await confirmModal({
+    title: "确认执行修订？",
+    message: reviseApplyConfirmMessage(revise.analysis && revise.analysis.diff, slugs.length),
+    confirmText: "执行修订",
+  });
+  if (!ok) return;
   reviseSetBusy(true);
   aiActionStart("修订落地");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-exec-msg").textContent = "";

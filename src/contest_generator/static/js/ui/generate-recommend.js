@@ -25,6 +25,8 @@
 import { $, handle, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { platformClickAction } from "/js/fx/platform.js";
+import { platformSwitchConfirmMessage } from "/js/fx/danger.js";  // 切平台清空下游确认文案（工单 ux-walkthrough-02/01）
+import { confirmModal } from "/js/ui/confirm.js";
 import { moduleBadges, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
@@ -82,9 +84,18 @@ export function renderPlatforms() {
       : '<span class="badge no-master">暂不可用：尚未导入母版</span>';
     card.innerHTML = `<div class="name">${esc(p.name)}</div>${badge}`;
     if (p.status === "ready") {
-      card.addEventListener("click", () => {
+      card.addEventListener("click", async () => {
         const action = platformClickAction(chosenPlatform, p.id);
         if (action === "same") return;  // 重复点击已选平台：无操作（防误触丢选择）
+        if (action === "switch") {
+          // 换平台 = 清空下游（已选模块/实例/引脚）——先确认再执行（工单 ux-walkthrough-02/01）
+          const ok = await confirmModal({
+            title: "切换平台？",
+            message: platformSwitchConfirmMessage({ moduleCount: selectedSlugs.length }),
+            confirmText: "切换",
+          });
+          if (!ok) return;
+        }
         chosenPlatform = p.id;
         markStepDone(3);
         unmarkSteps(action === "switch" ? [5, 6, 7, 8, 9, 10, 11, 12] : [6, 7, 8, 9, 10, 11, 12]);  // 首次选平台保留推荐（步骤 5 不退）
