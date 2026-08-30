@@ -228,20 +228,17 @@ export function refEditValidate(fields) {
 
 // refEditFilePlan(existing, removeChecked, added)：文件增减计划。
 // existing = 磁盘实况路径清单；removeChecked = 用户勾选删除的既有路径；
-// added = 新增行 {文件名: 内容}。规则与后端（工单 01）一致：
-// ① 同名既删又增 = 拒绝（后端「同一文件既添加又删除」——不支持替换内容）；
-// ② 新增名已存在于既有清单且未勾删 = 拒绝（后端「文件已存在…请先删除再添加」）；
-// ③ 勾删的路径不在既有清单（外部已删）也透传，存在性由后端裁决。
-// 返回 {ok, add_files, remove_files} 或 {ok:false, message}。
+// added = 新增行 {文件名: 内容}。规则（工单 ux-walkthrough-02/08）：
+// ① 新增名已存在于既有清单 = 覆盖该文件内容（后端 add_files upsert 语义，
+//    一次提交完成替换）；若同时勾选了同名删除 → 覆盖优先，从删除清单剔除；
+// ② 勾删的路径不在既有清单（外部已删）也透传，存在性由后端裁决。
+// 返回 {ok, add_files, remove_files}（不再有拒绝路径——同名即覆盖）。
 export function refEditFilePlan(existing, removeChecked, added) {
   const addNames = Object.keys(added || {});
-  const remove = (removeChecked || []).slice();
+  let remove = (removeChecked || []).slice();
   for (const name of addNames) {
-    if (remove.includes(name)) {
-      return { ok: false, message: "文件 " + name + " 既勾选了删除又新增同名：不支持修改内容，请取消勾选或改新增文件名" };
-    }
     if ((existing || []).includes(name)) {
-      return { ok: false, message: "文件 " + name + " 已存在：不支持修改内容，请先勾选删除（保存一次）后再添加新文件" };
+      remove = remove.filter((r) => r !== name);
     }
   }
   return { ok: true, add_files: { ...(added || {}) }, remove_files: remove };

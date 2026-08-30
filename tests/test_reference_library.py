@@ -2745,21 +2745,50 @@ def test_update_reference_accepts_or_rejects_add_paths(tmp_path, add_files):
             )
 
 
-def test_update_reference_rejects_add_existing_path(tmp_path):
-    """同名文件已存在 = 内容修改语义：拒绝（本轮不支持改内容，先删后加）。"""
+def test_update_reference_overwrites_existing_add_path(tmp_path):
+    """同名新增 = 覆盖内容（工单 ux-walkthrough-02/08）：一次提交替换文件内容，
+    文件清单不重复、条目元数据（标题/锚定）不变——不再要求先删后加两步。"""
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    entry_dir = root / entry.id
+    assert (entry_dir / "example.c").read_text(encoding="utf-8") != "/* 覆盖后的新内容 */\n"
+
+    updated = update_reference(
+        root,
+        entry.id,
+        title=entry.title,
+        type=entry.type,
+        description=entry.description,
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        add_files={"example.c": "/* 覆盖后的新内容 */\n"},
+        remove_files=(),
+        kit_vocabulary=(),
+    )
+
+    assert updated.files.count("example.c") == 1
+    assert (entry_dir / "example.c").read_text(encoding="utf-8") == "/* 覆盖后的新内容 */\n"
+    assert updated.title == entry.title  # 元数据未动
+    assert updated.anchor_kind == ANCHOR_KIND_NONE
+
+
+def test_update_reference_rejects_add_remove_overlap_still(tmp_path):
+    """同名覆盖语义下，add 与 remove 同一文件仍拒绝（工单 ux-walkthrough-02/08：
+    前端覆盖优先会从删除清单剔除，后端兜底拒绝「既添加又删除」）。"""
+    root = _reference_root(tmp_path)
     entry = _edit_sample_entry(tmp_path)
 
-    with pytest.raises(ReferenceError, match="已存在"):
+    with pytest.raises(ReferenceError, match="既添加又删除"):
         update_reference(
-            _reference_root(tmp_path),
+            root,
             entry.id,
             title=entry.title,
             type=entry.type,
             description=entry.description,
             anchor_kind=ANCHOR_KIND_NONE,
             anchor_value="",
-            add_files={"example.c": "/* 覆盖 */\n"},
-            remove_files=(),
+            add_files={"example.c": "x"},
+            remove_files=("example.c",),
             kit_vocabulary=(),
         )
 
