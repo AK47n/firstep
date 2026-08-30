@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=566c197b20babca74293a2b2103eeb3a9ba47eb5 -->
+<!-- changelog-auto: last-commit=9c019bdc0f7f011a1e9cf79bb6732e4390aa2d65 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -88,6 +88,7 @@
 - 19:50 工单 12：长任务秒表与阶段文案统一（fx/wait.js waitLabel 复用 fmtClock、makeWaitClock 六类等待接线——推荐/修订/参数/修复/商量/预读，无阶段显示通用行）
 - 19:54 工单 12 评审整改：移除 waitStatusText 死代码、stop 移除空 span 不留间隙、修复三处行级合并回归、wait.js 登记进 index.html 首部静态导入
 - 19:54 工单 13：推荐 start 事件 + 收敛态进度修正（EVENT_START 词表、路由首个进度事件带中文阶段标签、前端 recPanel 收 start、converged 85% + 正在出最终结果、done 才 100%）
+- 19:59 工单 13 评审整改（EVENT_START 单点声明+端点分叉文档、round 进度封顶 85% 防倒退）与工单 14：分钟级长任务「取消本次等待」（fx/abortable.js 中止器、makeCancelButton、六类流水线接线与取消语义文案、api 辅助支持 signal、SSE 运行器透传 signal 保留 AbortError）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
