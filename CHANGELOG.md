@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b4f168131b9420a87b3146f4bbaccf132f983b7f -->
+<!-- changelog-auto: last-commit=976bcfd0aa24dabbb98be241d8a9fbd2c2727234 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -97,6 +97,7 @@
 - 20:24 工单 18 评审整改（任务状态按验证方式分口径：manual=上板通过/compile=编译通过、unverified=待上板，后端 message 同步、深化卡「已验证」改「已通过编译验证」、词表术语去括号后缀、桌面文案补确认步骤）与工单 19：键盘与可达性（顶栏页签 ARIA tablist+roving tabindex+方向键、裸输入 aria-label 补齐表 a11y.js、确认弹窗焦点陷阱+还焦触发钮）
 - 20:26 工单 20：CSS 令牌化（--radius-xs/sm/md/lg/full 与 --space-1..6 定义；border-radius 全部走令牌无裸值；可见字号 13.5/10.5/10 归并 13/11；按钮三类 .btn-pill--sm/--md/.btn-icon；间距工具类 .mt-2/4/6/8/.flex-1；新增 css-tokens 守卫测试）
 - 20:28 工单 19 评审整改（roving tabindex 改按组内更新防其它组键盘不可达、组内无激活时方向键从首/尾进入、confirm opener 在级联清理前捕获 + disabled 触发钮跳过、project-dirs 移出补齐表（已有 label for 关联）+ 守卫补断言）
+- 20:32 工单 21：CSS 令牌化收尾（margin-top 全站收敛 --space-*（CSS/内联/JS 12 文件）；主题裸色令牌化：--accent-rgb 分通道 rgba、--accent-hi/lo 渐变端、--on-accent-deep/--on-ok-deep 深字、--purple-grad、--power、--ok-glow、.tok-* 全族 var(--tok-*)（暗/亮各一套）；扫描件白底加注释；css-tokens 守卫扩展）
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
