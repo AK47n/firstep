@@ -3307,8 +3307,15 @@ document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
       const on = b === btn;
       b.classList.toggle("active", on);
       b.setAttribute("aria-selected", on ? "true" : "false");
-      b.tabIndex = on ? 0 : -1;   // roving tabindex（工单 ux-walkthrough-02/19）
     });
+    // roving tabindex 只在按钮所属组内生效（评审整改：全局置 -1 会让其它组
+    // Tab 不可达——每个角色 tablist 各自持有一个 tabindex=0）
+    const group = btn.closest(".tab-group");
+    if (group) {
+      group.querySelectorAll("button[data-tab]").forEach((b) => {
+        b.tabIndex = b === btn ? 0 : -1;
+      });
+    }
     document.querySelectorAll("section.page").forEach((s) =>
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
     // 进度条只属于生成流程：切出隐藏，切回按完成数恢复显示
@@ -3338,6 +3345,7 @@ document.querySelectorAll("nav .tab-group").forEach((group) => {
     else if (e.key === "End") next = tabs.length - 1;
     else return;
     e.preventDefault();
+    if (cur === -1) next = (e.key === "ArrowLeft" || e.key === "End") ? tabs.length - 1 : 0;  // 组内无激活：方向键从首/尾进入
     tabs[next].click();
     tabs[next].focus();
   });

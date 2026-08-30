@@ -34,7 +34,6 @@ export const INPUT_A11Y_LABELS = {
   "pdf-filter": "搜索 PDF 资料库",
   "topic-filter": "搜索赛题库",
   "topic-pdf": "选择赛题 PDF 文件",
-  "project-dirs": "历史工程目录列表",
   "set-base-url": "DeepSeek 接口地址（base_url）",
   "set-model": "模型",
   "set-api-key": "API key（留空 / 掩码保持不变）",
