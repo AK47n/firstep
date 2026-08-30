@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c2813a161c7b4891b13292d4fbf68dfa3ca01732 -->
+<!-- changelog-auto: last-commit=6d20d3374aee5b8b77c65ace5f97947980048104 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -109,6 +109,7 @@
 - 21:26 修复生成页步骤导航点播跳转：短卡贴页尾时点击（如步骤 11）被滚动底部 clamp 停在原地、高亮漂到末步（点 11 显 12）——统一 scrollToStep 按吸顶栏让位、贴尾卡改居中落点，点击优先高亮至手动滚动
 - 21:31 ux-walkthrough-02 走查归档：spec / 01-21 工单 / 验收报告与发现汇总（报告「走查产物」5 个一并入库；探针与截图过程产物不入库）——走查验收通过、无需补票
 - 21:59 k230-digit-vision/01 数字帧契约单源扩展：k230_render.py 新增 DIGIT_FRAME_HEADER / DIGIT_FRAME_LINE_FIELDS（格式由字段序派生，confidence {:.2f} 特殊化）/ 消费槽位 / 无检测帧常量与占位符 + 帧头渲染函数；防漂移机械比对锁定 digit_uart 双平台 get_field 序 (0,1,6,7)、帧头 --- 前缀、无检测语义（count=0 重置→空行帧尾→best_count>0 最佳帧）
+- 22:12 k230-digit-vision/02 模板级依赖覆盖：PythonArtifactTemplate 加可选 dependencies（None=继承模块级，非空=覆盖，[] 拒绝——语义黑洞）；resolve_selection 加 python_templates 构造覆盖表（非 Mapping 防御不崩）；库级校验 validate_template_dep_slugs 在 list_modules 拦截悬空依赖；展开/骨架/生成三端点同一答案来源；未知 slug/成环复用 UnknownModuleError/DependencyCycleError
 
 ## 2026-08-29
 - 00:03 评分点覆盖总览/01：评分点定义随任务清单落盘（TaskPlan.score_points 字段 + 读回宽松容错，拆解落盘/派生构造点透传）
