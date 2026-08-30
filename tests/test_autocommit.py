@@ -470,6 +470,9 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 工单 topic-framework/02：题型框架段读取（framework/main.c）——只读
         # 不落盘，不触发提交；框架文件随条目入库的兄弟动作，本函数无写面
         "build_topic_framework": ("read", ""),
+        # 工单 ux-walkthrough-02/16（PDF 任意删除）：被引用查询——按 basename
+        # 扫条目文件实况，只读不落盘，不触发提交
+        "pdf_referenced_by": ("read", ""),
     },
     "topic_library": {
         "validate_topic_key": ("read", ""),
