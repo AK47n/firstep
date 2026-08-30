@@ -430,18 +430,25 @@ export function newModulePayload() {
 }
 
 $("btn-draft-desc").addEventListener("click", async () => {
-  $("add-msg").textContent = "";
+  // 草稿反馈内联到简介框旁（工单 ux-walkthrough-02/07 评审整改）：不再散落
+  // 到卡片底部 #add-msg——结果与反馈都在同区同线
+  const box = $("new-desc-msg");
+  if (box) { box.textContent = ""; box.classList.remove("ok", "error"); }
   const payload = newModulePayload();
   if (!payload) return;
-  if (!$("new-slug").value.trim()) { $("add-msg").textContent = "请先填写模块 slug"; return; }
+  if (!$("new-slug").value.trim()) {
+    if (box) { box.textContent = "请先填写模块 slug"; box.classList.add("error"); }
+    return;
+  }
   try {
     const data = await apiPost("/api/modules", { ...payload, description: "" });
     $("new-desc").value = data.draft;
-    $("add-msg").classList.add("ok");
-    $("add-msg").textContent = "AI 简介草稿已填入，可修改后点击「校验并入库」。";
+    if (box) {
+      box.textContent = "AI 简介草稿已填入，可修改后点击「校验并入库」。";
+      box.classList.add("ok");
+    }
   } catch (e) {
-    $("add-msg").classList.remove("ok");
-    $("add-msg").textContent = e.message;
+    if (box) { box.textContent = e.message; box.classList.add("error"); }
   }
 });
 
