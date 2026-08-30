@@ -26,7 +26,7 @@
 import { $, apiGet, apiPut, apiPost, setState, state } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { envCheckStatusHTML } from "/js/fx/env.js";
-import { SETTINGS_COLLAPSE_KEY, parseSettingsCollapse, effectiveCollapsed, settingsMasterLabel, settingsSectionHead, applySettingsCollapseState } from "/js/fx/settings.js";
+import { SETTINGS_COLLAPSE_KEY, parseSettingsCollapse, effectiveCollapsed, settingsMasterLabel, settingsSectionHead, applySettingsCollapseState, secretEyeState } from "/js/fx/settings.js";
 import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
 import { collectResettableKeys } from "/js/fx/reset.js";
 import { confirmModal } from "/js/ui/confirm.js";
@@ -36,6 +36,18 @@ import { renderPlatforms, renderModulePool } from "/js/ui/generate-recommend.js"
 // ---- 跨簇接缝（host 启动区 setSettingsDeps 注册；16 迁出后改静态 import）----
 const settingsDeps = {};
 export function setSettingsDeps(deps) { Object.assign(settingsDeps, deps); }
+
+// API key / 视觉 key 显隐切换（工单 ux-polish/01）：默认密码态（掩码值与新粘贴
+// 的明文 key 都不外露），点「显示」才看明文；文案与 aria-pressed 随状态走。
+for (const [btnId, inputId] of [["btn-eye-api", "set-api-key"], ["btn-eye-vision", "set-vision-api-key"]]) {
+  $(btnId).addEventListener("click", () => {
+    const input = $(inputId);
+    const next = secretEyeState(input.type);
+    input.type = next.nextType;
+    $(btnId).textContent = next.label;
+    $(btnId).setAttribute("aria-pressed", String(next.nextType === "text"));
+  });
+}
 
 /** 烧录工具的「已自动找到」状态行（工单 flash-deploy/02）：覆盖为空且自动
  * 探测命中 → muted 提示（display + exe 短路径）；否则清空。kind 限定用于

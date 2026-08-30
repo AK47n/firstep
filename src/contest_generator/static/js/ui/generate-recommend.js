@@ -341,6 +341,15 @@ $("btn-topic-preread").addEventListener("click", async () => {
   }
 });
 
+// 快捷预读（工单 ux-polish/01）：题面输入框 Ctrl/Cmd+Enter 直接触发「预读题面」——
+// 复用按钮点击路径（题面为空 / 调用中/调用失败均按按钮自身逻辑处理，不复制校验）
+$("problem").addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    $("btn-topic-preread").click();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 生成页：3. AI 推荐
 // ---------------------------------------------------------------------------

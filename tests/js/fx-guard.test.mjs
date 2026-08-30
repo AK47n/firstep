@@ -87,7 +87,7 @@ const DOMAINS = {
     fmtWait: "fn", generationOutputDirPayload: "fn", collectBindings: "fn",
     formatResModules: "fn", attachCelebrate: "fn", collapseBtnLabel: "fn",
     syncCollapseBtn: "fn", collapseToggleAll: "fn", fmtSeconds: "fn",
-    frameworkNoteHTML: "fn",
+    frameworkNoteHTML: "fn", fixLogGroupHidden: "fn",
   },
   "recommend.js": {
     suggestionSolutionBadges: "fn", suggestionOptionRowHTML: "fn",
@@ -167,7 +167,7 @@ const DOMAINS = {
     parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",
     effectiveCollapsed: "fn", settingsMasterLabel: "fn",
     sectionCollapseLabel: "fn", settingsSectionHead: "fn",
-    applySettingsCollapseState: "fn",
+    applySettingsCollapseState: "fn", secretEyeState: "fn",
   },
   "workflow.js": {
     wfNum: "fn", formatWorkflowUsage: "fn", formatWorkflowCost: "fn",
