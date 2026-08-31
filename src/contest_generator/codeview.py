@@ -27,6 +27,20 @@ CODE_SEARCH_MAX_HITS = 200
 # 命中行文本裁剪：空白压缩后以命中点为中心取至多约 120 字符（两侧各约 60）
 _CODE_SEARCH_SNIPPET_CHARS = 120
 _CODE_SEARCH_SNIPPET_WING = 60
+# 图片 raw 端点（工单 code-viewer-md-preview/02）：md 预览本地图片——
+# 扩展名白名单 + 8MB 上限 + media_type 手写映射（不依赖 mimetypes 平台差异）
+CODE_RAW_MAX_MB = 8
+CODE_RAW_MAX_BYTES = CODE_RAW_MAX_MB * 1024 * 1024
+CODE_RAW_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".ico": "image/x-icon",
+    ".svg": "image/svg+xml",
+}
 
 
 class CodeViewError(ValueError):
@@ -58,6 +72,26 @@ def list_code_tree(root: Path) -> list[dict[str, Any]]:
     return entries
 
 
+def _resolve_in_root(root: Path, rel_path: str) -> Path:
+    """安全前置（read_code_file / read_code_file_bytes 共用，工单
+    code-viewer-md-preview/02 评审整改：消除 7 行同构）：root 必须是目录、
+    rel_path 过 is_unsafe_path 单源（首字符 `/`、`:`、`\`、任意层级 `..` 与
+    空段）、resolve 后必须落在 root 内——任一不满足抛 CodeViewError
+    （400 中文）。返回已 resolve 的候选路径（调用方再验 is_file / 大小 / 内容）；
+    判定全部在盘访问之前，安全策略只此一处。
+    """
+    if not root.is_dir():
+        raise CodeViewError(f"目录不存在：{root}")
+    if is_unsafe_path(rel_path):
+        raise CodeViewError(f"非法路径：{rel_path}")
+    candidate = (root / rel_path).resolve()
+    try:
+        candidate.relative_to(root.resolve())  # 父解析必须是根目录内
+    except ValueError:
+        raise CodeViewError(f"非法路径：{rel_path}") from None
+    return candidate
+
+
 def read_code_file(root: Path, rel_path: str) -> dict[str, Any]:
     """根目录内文件全文（只读预览）：三重约束与母版树 read_master_tree_file
     同安全立场（判定在盘访问之前）——路径安全（**调用 entry_store.is_unsafe_path
@@ -71,15 +105,7 @@ def read_code_file(root: Path, rel_path: str) -> dict[str, Any]:
     返回 {path, size_bytes, content, outline}；outline 仅 .c/.h 有值
     （工单 code-viewer/03：函数 / 顶层宏 / include 清单，非 C 文件为 null）。
     """
-    if not root.is_dir():
-        raise CodeViewError(f"目录不存在：{root}")
-    if is_unsafe_path(rel_path):
-        raise CodeViewError(f"非法路径：{rel_path}")
-    candidate = (root / rel_path).resolve()
-    try:
-        candidate.relative_to(root.resolve())  # 父解析必须是根目录内
-    except ValueError:
-        raise CodeViewError(f"非法路径：{rel_path}") from None
+    candidate = _resolve_in_root(root, rel_path)
     if not candidate.is_file():
         raise CodeViewError(f"文件不存在：{rel_path}")
     size = candidate.stat().st_size
@@ -102,6 +128,38 @@ def _is_c_source(rel_path: str) -> bool:
     """是否 C 源码 / 头文件（大纲只在 .c/.h 提供；大小写宽容如 .H）。"""
     lower = rel_path.lower()
     return lower.endswith(".c") or lower.endswith(".h")
+
+
+def code_raw_media_type(rel_path: str) -> str:
+    """图片 media_type（md 预览 raw 端点，工单 code-viewer-md-preview/02）——
+    扩展名手写映射（小写宽容，不依赖 mimetypes 的平台差异）；白名单外 →
+    400 中文（CodeViewError）。"""
+    ext = Path(rel_path).suffix.lower()
+    media = CODE_RAW_MEDIA_TYPES.get(ext)
+    if media is None:
+        raise CodeViewError(
+            f"不支持的图片类型：{rel_path}（仅支持 png/jpg/jpeg/gif/webp/bmp/ico/svg）"
+        )
+    return media
+
+
+def read_code_file_bytes(root: Path, rel_path: str) -> bytes:
+    """目录内图片字节（md 预览 raw 端点，工单 code-viewer-md-preview/02）。
+
+    安全判定与 read_code_file 同一组（_resolve_in_root 单源：is_unsafe_path
+    + resolve 在 root 内 + is_file）；扩展名白名单在**读盘之前**（非图片不打开
+    文件）；超 CODE_RAW_MAX_BYTES → 400 中文。图片本身是二进制，不做 NUL
+    拒绝（与 read_code_file 的文本预览口径不同）。返回原始字节，media_type
+    由 code_raw_media_type 单源提供。
+    """
+    candidate = _resolve_in_root(root, rel_path)
+    code_raw_media_type(rel_path)              # 白名单先行：非图片不读盘
+    if not candidate.is_file():
+        raise CodeViewError(f"文件不存在：{rel_path}")
+    size = candidate.stat().st_size
+    if size > CODE_RAW_MAX_BYTES:
+        raise CodeViewError(f"图片超过预览上限（{CODE_RAW_MAX_MB}MB）：{rel_path}")
+    return candidate.read_bytes()
 
 
 def _outline_for(content: str) -> list[dict[str, Any]]:

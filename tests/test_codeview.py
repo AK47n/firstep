@@ -8,11 +8,14 @@ import pytest
 
 from contest_generator.codeview import (
     CODE_FILE_MAX_BYTES,
+    CODE_RAW_MAX_BYTES,
     CODE_SEARCH_MAX_HITS,
     CODE_TREE_MAX_ENTRIES,
     CodeViewError,
+    code_raw_media_type,
     list_code_tree,
     read_code_file,
+    read_code_file_bytes,
     search_code_files,
 )
 
@@ -265,4 +268,88 @@ def test_search_empty_query_is_400_error(tmp_path):
 def test_search_missing_dir_is_400_error(tmp_path):
     with pytest.raises(CodeViewError, match="目录不存在"):
         search_code_files(tmp_path / "nope", "x")
+
+
+# ---------------------------------------------------------------------------
+# read_code_file_bytes / code_raw_media_type：md 预览图片字节（工单 code-viewer-md-preview/02）
+# ---------------------------------------------------------------------------
+
+
+def test_read_code_file_bytes_returns_image_and_media_type(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    (root / "images").mkdir()
+    png = b"\x89PNG\r\n\x1a\n" + b"payload"
+    (root / "images" / "a.png").write_bytes(png)
+
+    assert read_code_file_bytes(root, "images/a.png") == png
+    assert code_raw_media_type("a.png") == "image/png"
+    assert code_raw_media_type("b.jpg") == "image/jpeg"
+    assert code_raw_media_type("c.JPEG") == "image/jpeg"      # 大小写宽容
+    assert code_raw_media_type("d.gif") == "image/gif"
+    assert code_raw_media_type("e.webp") == "image/webp"
+    assert code_raw_media_type("f.bmp") == "image/bmp"
+    assert code_raw_media_type("g.ico") == "image/x-icon"
+    assert code_raw_media_type("h.svg") == "image/svg+xml"
+
+
+def test_code_raw_media_type_rejects_non_image(tmp_path):
+    with pytest.raises(CodeViewError, match="不支持的图片类型"):
+        code_raw_media_type("main.c")
+    with pytest.raises(CodeViewError, match="不支持的图片类型"):
+        code_raw_media_type("no-ext")
+
+
+def test_read_code_file_bytes_rejects_non_image_file(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    (root / "code.c").write_bytes(b"int x;")
+
+    with pytest.raises(CodeViewError, match="不支持的图片类型"):
+        read_code_file_bytes(root, "code.c")
+
+
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        "../outside.png",
+        "images/../../outside.png",
+        "/etc/passwd",
+        "C:/x.png",
+        "images\\a.png",
+        "a//b.png",
+    ],
+)
+def test_read_code_file_bytes_rejects_unsafe_paths(tmp_path, rel_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="非法路径"):
+        read_code_file_bytes(root, rel_path)
+
+
+def test_read_code_file_bytes_missing_file_is_400_error(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="文件不存在：nope.png"):
+        read_code_file_bytes(root, "nope.png")
+
+
+def test_read_code_file_bytes_root_missing_is_400_error(tmp_path):
+    with pytest.raises(CodeViewError, match="目录不存在"):
+        read_code_file_bytes(tmp_path / "nope", "a.png")
+
+
+def test_read_code_file_bytes_allows_nul_inside_image(tmp_path):
+    # 图片 = 二进制语义：文件内 NUL 不拒绝（与 read_code_file 文本预览口径不同）
+    root = _make_tree(tmp_path / "proj")
+    (root / "n.png").write_bytes(b"\x89PNG\x00\x00123")
+
+    assert read_code_file_bytes(root, "n.png") == b"\x89PNG\x00\x00123"
+
+
+def test_read_code_file_bytes_rejects_oversize(tmp_path, monkeypatch):
+    monkeypatch.setattr("contest_generator.codeview.CODE_RAW_MAX_BYTES", 16)
+    root = _make_tree(tmp_path / "proj")
+    (root / "big.png").write_bytes(b"x" * 17)
+
+    with pytest.raises(CodeViewError, match="图片超过预览上限（8MB）"):
+        read_code_file_bytes(root, "big.png")
 

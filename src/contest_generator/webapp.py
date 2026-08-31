@@ -27,13 +27,19 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
-from .codeview import list_code_tree, read_code_file, search_code_files
+from .codeview import (
+    code_raw_media_type,
+    list_code_tree,
+    read_code_file,
+    read_code_file_bytes,
+    search_code_files,
+)
 from .compile_runner import (
     CompileRunnerError,
     ccs_tools_status,
@@ -3981,6 +3987,23 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         read_master_tree_file 同读法）。
         """
         return read_code_file(Path(dir), path)
+
+    @app.get("/api/code/raw")
+    @_map_errors
+    def code_raw(dir: str, path: str) -> Response:
+        """代码查看器：目录内图片字节（.md 预览本地图片，工单
+        code-viewer-md-preview/02）。路径安全 / 扩展名白名单（png/jpg/jpeg/
+        gif/webp/bmp/ico/svg）/ 8MB 上限均 400 中文（CodeViewError 复用）；
+        返回 bytes + Cache-Control private max-age=3600（只读目录、
+        生成物不变，减少重复读盘）。media_type 手写映射单源
+        （codeview.code_raw_media_type，不依赖 mimetypes）。
+        """
+        data = read_code_file_bytes(Path(dir), path)
+        return Response(
+            content=data,
+            media_type=code_raw_media_type(path),
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
 
     @app.get("/api/code/search")
     @_map_errors
