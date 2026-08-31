@@ -21,21 +21,26 @@ function stateBox() { return $("mainc-disk-state"); }
 
 function renderDiskState() {
   const box = stateBox();
-  if (!box) return;
-  if (!diskDir || diskState === "none") {
-    box.classList.add("hidden");
-    box.innerHTML = "";
-    return;
+  if (box) {
+    if (!diskDir || diskState === "none") {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+    } else {
+      box.innerHTML = maincDiskStateHTML(diskState, diskDir);
+      box.classList.remove("hidden");
+    }
   }
-  box.innerHTML = maincDiskStateHTML(diskState, diskDir);
-  box.classList.remove("hidden");
+  // 双向跳转桥（mainc-codeview-bridge/03）：步骤 8 工具栏「查看工程」随生成
+  // 上下文显隐——无上下文时隐藏（点了也没有可打开的工程）。
+  const gotoBtn = $("btn-goto-code-mainc");
+  if (gotoBtn) gotoBtn.classList.toggle("hidden", !diskDir);
 }
 
 // getMainCDiskDir()：当前生成上下文目录（草稿持久化 / 双向跳转消费）。
 export function getMainCDiskDir() { return diskDir; }
 
 // setMainCDiskContext(dir)：生成成功 / 草稿恢复后记录上下文。
-// 生成成功时编辑框 = 写盘快照（同内容），状态 = written；
+// 生成成功时编辑框 = 写入磁盘快照（同内容），状态 = written；
 // 草稿恢复调用方应再 refreshMainCDiskState() 校验磁盘现状。
 export function setMainCDiskContext(dir) {
   diskDir = String(dir || "");

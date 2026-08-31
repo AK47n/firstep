@@ -2522,6 +2522,7 @@
           <button id="btn-main-c-copy" class="act" type="button" title="复制 main.c 内容">复制</button>
           <button id="btn-main-c-download" class="act" type="button" title="下载 main.c 文件">下载</button>
           <button id="btn-main-c-fullscreen" class="act" type="button" title="全屏编辑">全屏</button>
+          <button id="btn-goto-code-mainc" class="act" type="button" title="在「代码」tab 打开整个工程（文件树 + 大纲 + 搜索，只读）">查看工程</button>
         </div>
         <div id="main-c-nums" class="line-nums" aria-hidden="true"></div>
         <pre id="main-c-hl" class="hl-layer" aria-hidden="true"></pre>
@@ -2557,6 +2558,7 @@
           <div class="res-label">下一步</div>
           <div class="res-value">
             <button id="btn-goto-tasks-result" class="accent" type="button">去任务推进</button>
+            <button id="btn-goto-code-result" class="accent" type="button" title="在「代码」tab 打开整个工程（文件树 + 大纲 + 搜索，只读）">在代码查看器中打开工程</button>
             <span class="muted" style="margin-left:8px">生成后的主路径：逐卡实现 main.c 逻辑，即时编译验证。</span>
           </div>
         </div>
@@ -3486,6 +3488,7 @@
       <div class="code-toolbar">
         <h2>代码查看器（只读）</h2>
         <button id="btn-code-pick-dir" data-ico="code">选择文件夹…</button>
+        <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
         <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
       </div>
       <div class="code-layout">
