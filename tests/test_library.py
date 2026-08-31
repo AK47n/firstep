@@ -17,6 +17,7 @@ from contest_generator.library import (
     get_module,
     list_modules,
     module_mtime,
+    read_module_file,
     remove_platform_files,
     save_manifest,
     update_module_description,
@@ -1194,3 +1195,64 @@ def test_update_platform_identity_missing_platform_entry_raises(fake_module_libr
 def test_update_platform_identity_missing_module_raises(fake_module_library):
     with pytest.raises(LibraryError, match="不存在"):
         update_platform_identity(fake_module_library, "wifi", "stm32", kit=KIT_STM32)
+
+
+# ---------------------------------------------------------------------------
+# 模块源码只读预览（工单 mainc-codeview-bridge/05）：read_module_file 的安全
+# 拒绝面与母版树 / 代码查看器同口径（.. 任意层级 / 空段 / 首字符 / / 反斜杠 /
+# 冒号 + resolve 后必须落在模块目录内 / NUL 二进制 / 1MB 上限），中文报错。
+# ---------------------------------------------------------------------------
+
+
+def test_read_module_file_returns_content(fake_module_library):
+    result = read_module_file(fake_module_library, "delay", "delay.c")
+    assert result["path"] == "delay.c"
+    assert result["size_bytes"] == (fake_module_library / "delay" / "delay.c").stat().st_size
+    assert result["content"].startswith('#include "delay.h"')
+
+
+def test_read_module_file_accepts_subdir(fake_module_library):
+    result = read_module_file(fake_module_library, "dht11", "mspm0/src/dht11.c")
+    assert result["path"] == "mspm0/src/dht11.c"
+    assert result["content"].startswith('#include "dht11.h"')
+    assert "MSPM0" in result["content"]
+
+
+def test_read_module_file_rejects_traversal_and_unsafe_paths(fake_module_library):
+    for path in (
+        "../delay.c",
+        "mspm0/../../delay.c",
+        "a//b.c",
+        "..\\windir.c",
+        "/abs.c",
+        "a:b.c",
+    ):
+        with pytest.raises(LibraryError, match="非法路径"):
+            read_module_file(fake_module_library, "delay", path)
+
+
+def test_read_module_file_missing_module_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="不存在"):
+        read_module_file(fake_module_library, "nope", "delay.c")
+
+
+def test_read_module_file_rejects_traversal_slug(fake_module_library):
+    with pytest.raises(LibraryError, match="非法"):
+        read_module_file(fake_module_library, "../evil", "x.c")
+
+
+def test_read_module_file_missing_file_raises(fake_module_library):
+    with pytest.raises(LibraryError, match="文件不存在"):
+        read_module_file(fake_module_library, "delay", "nope.c")
+
+
+def test_read_module_file_rejects_binary(fake_module_library):
+    (fake_module_library / "delay" / "blob.bin").write_bytes(b"ab\x00cd")
+    with pytest.raises(LibraryError, match="二进制"):
+        read_module_file(fake_module_library, "delay", "blob.bin")
+
+
+def test_read_module_file_rejects_oversize(fake_module_library):
+    (fake_module_library / "delay" / "big.c").write_bytes(b" " * (1024 * 1024 + 1))
+    with pytest.raises(LibraryError, match="预览上限"):
+        read_module_file(fake_module_library, "delay", "big.c")

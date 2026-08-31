@@ -3520,6 +3520,34 @@ def test_modules_list_returns_all(client):
     assert dht11["platforms"][PLATFORM_STM32]["source_url"] == ""
 
 
+def test_module_file_endpoint_returns_content(client):
+    resp = client.get("/api/modules/delay/files/delay.c")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"] == "delay.c"
+    assert body["size_bytes"] > 0
+    assert body["content"].startswith('#include "delay.h"')
+
+
+def test_module_file_endpoint_rejects_unsafe_paths(client):
+    # 穿越 / 非法形态经服务端拒绝面（httpx 客户端会归一化裸 .. 段，故穿越用
+    # 编码形态 %2e%2e 送达服务端解码后再判——与真实浏览器请求同路径）
+    for path in ("..\\windir.c", "a:b.c", "%2e%2e%2fsecret.c", "a%2f%2fb.c"):
+        resp = client.get("/api/modules/delay/files/" + path)
+        assert resp.status_code == 400
+        assert "非法路径" in resp.json()["detail"]
+
+
+def test_module_file_endpoint_missing_module_and_file_400(client):
+    resp = client.get("/api/modules/nope/files/x.c")
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
+    resp = client.get("/api/modules/delay/files/nope.c")
+    assert resp.status_code == 400
+    assert "文件不存在" in resp.json()["detail"]
+
+
 def test_add_module_validates_then_stores(client):
     resp = client.post(
         "/api/modules",
