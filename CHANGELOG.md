@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=47ddd3fcbf2b0ccb2b55758571e043ad825c0ad6 -->
+<!-- changelog-auto: last-commit=45d36e624efb8cd1e105245f9295164380558c43 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 13:35 code-viewer-md-preview/01 代码查看器 .md 渲染纯件：fx/markdown.js（块解析+预览+大纲投影，行内/URL 白名单/图片回调安全）+ languageOf 增 md 路由 + tab 徽标 MD；node --test 958 项全绿；双轴评审整改（块起点单一口径、data-md-line 全覆盖、../ 与绝对路径纯件拒绝、嵌套有序 start、注释同步）
 - 13:45 code-viewer-md-preview/02 后端图片二进制端点：GET /api/code/raw + read_code_file_bytes（白名单 8 型/8MB/media_type 手写映射/Cache-Control private 3600）；_resolve_in_root 安全前置单源；pytest 3007 全绿；双轴评审整改（NUL 放行补测、7 行同构抽取）
 - 13:51 code-viewer-md-preview/03 前端接线：.md 默认 VSCode 式渲染预览（markdownPreviewHTML + /api/code/raw 图片归一）+ 临时源码态（搜索命中/Ctrl+F 自动切、返回预览按钮、点树回预览）+ 大纲标题 H 徽标预览内滚动；.code-md-preview 排版 CSS 随 --code-zoom 联动；CDP 冒烟 17 项；双轴评审整改（hasScheme 单源、flashEl/resetMdView 归拢、遗留过滤清理、侧栏直输切源码）
+- 18:14 mainc-codeview-bridge/01 生成后 main.c 磁盘同步状态行：步骤 8 常驻「已写入磁盘 <dir>」+ 从磁盘重新加载（事件驱动差异检测机制，工单 02 消费）；上下文目录入草稿持久化 + 无草稿回退最近生成记录；fx/mainc-sync 纯函数 + ui/generate-mainc-sync 胶水 + draft 契约扩展（outputDir）；node --test 963 全绿 + CDP 冒烟 12 项；双轴评审整改（生成成功即持久化、diskText 删除、window 桥补齐）
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
