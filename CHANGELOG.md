@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=68d2663ec6be24c50f95d9a6e9b72f5198138777 -->
+<!-- changelog-auto: last-commit=c3701948096c98b771b3fa36f38e370ba48b8b5b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -30,6 +30,7 @@
 - 21:10 code-viewer-editor/07 右侧栏收起：大纲/搜索贴右缘 40px 竖向轨道（展开态点活动页签收起 / 点轨道条目展开并切换 / Ctrl+F 强制展开）——布局单源 .code-layout grid 第三列 var(--code-side-w)（300↔40）+ .side-collapsed 类，编辑区自动吃满零 JS 宽度计算，与树调宽先例同族；localStorage firstep.codeSideCollapsed 持久化（1=收起）；rail 按钮竖排 writing-mode、on 高亮跟随活动页签；三分支点击语义、撤除 rail 独立监听消除双重绑定（评审自查）；spec 补充说明同步；node tests/js 996 全绿 + pytest 3044 全绿，smoke-06 14 项全过（smoke-02/03/04/05 回归共 66 项全过）
 - 21:18 code-viewer-editor/07b 侧栏收起显式入口：用户反馈「这个收起方式没有任何提示，搞这么神秘」——tab 条右端常驻「收起 »」按钮（点击即收起，title 说明收起后右缘出现竖排大纲/搜索按钮）；「点活动页签收起」降级为快捷方式保留（VS Code 惯例）；rail 竖排按钮 title 提示已有（展开大纲/展开搜索）；CSS 增量 .code-side-collapse（margin-left auto 推右缘）、JS 单点绑定独立于 [data-code-side] 三分支（收起按钮不含该属性语义不混）；smoke-06 追加 4 项共 18 项全过，node tests/js 996 全绿
 - 21:24 code-viewer-editor/07c 信息条空态折叠：用户反馈「代码第一行上面有一行啥也没有的空行，这行有什么意义吗」——根因 .code-file-path 信息条空态仍占 30px（普通 .c 未编辑时编辑源码/返回预览/保存三按钮全隐藏）；改为空态折叠 .empty（display:none），判定与按钮可见性同源同步于 onActiveTabChanged 回调（openEditorFile/setMdMode/applySavedState/closeTab 均经 notifyActive 汇聚，单点唯一，不引入 :has() 无先例）；smoke-07 8 项全过 + smoke-02/03/04/05/06 回归 70 项全过，node tests/js 996 全绿
+- 21:33 code-viewer-editor/07d 栏显示隔离修复：用户反馈「所有栏底部都能看到代码编辑器」——根因 #tab-code{display:flex}（工单 code-viewer/04-05 以来的 id 级规则）优先级压过 section.page{display:none}，代码栏从未被页签切换隐藏（旧 CSS 下激活任意栏双栏同现、滚动到底必见编辑器）；修复=基础规则删 display、#tab-code.active{display:flex} 显式约束；排查其余 #tab-* id 级规则仅此一处；护栏 smoke-08 13 项（10 栏激活逐一断言唯一可见 section=目标+往返）+ 既有 02-07 冒烟 78 项回归全绿
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
