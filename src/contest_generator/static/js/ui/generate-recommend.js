@@ -28,6 +28,7 @@ import { platformClickAction } from "/js/fx/platform.js";
 import { platformSwitchConfirmMessage } from "/js/fx/danger.js";  // 切平台清空下游确认文案（工单 ux-walkthrough-02/01）
 import { confirmModal } from "/js/ui/confirm.js";
 import { moduleBadges, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
+import { bindModuleSource } from "/js/ui/module-source.js";  // 模块源码区（mainc-codeview-bridge/05）：弹窗文件行懒加载
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
   suggestionChipHTML, decisionPayload, suggestionKey,
@@ -900,6 +901,7 @@ export function openModuleInfo(slug, platform = chosenPlatform) {
     + '<div class="module-info-scroll">' + moduleInfoHTML(module, platform) + "</div>";
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+  bindModuleSource(modal, slug);  // 源码区（工单 mainc-codeview-bridge/05）：文件行点击懒加载
   const close = () => overlay.remove();
   modal.querySelector(".ref-files-close").addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });

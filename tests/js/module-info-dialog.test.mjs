@@ -100,6 +100,16 @@ test("空 files = 内嵌母版文案；空 pins 不渲染表", () => {
   assert.ok(out2.includes("f.c"));
 });
 
+test("文件行可点击（data-mi-file）+ 源码区槽位含隐藏初始态（mainc-codeview-bridge/05）", () => {
+  const out = moduleInfoHTML(full, "stm32");
+  assert.ok(out.includes('data-mi-file="src/color.c"'));
+  assert.ok(out.includes('data-mi-file="include/color.h"'));
+  assert.ok(out.includes('data-module-source hidden'));
+  // 无文件平台 = 内嵌母版文案，不渲染伪文件行
+  const mspm0 = moduleInfoHTML(full, null);
+  assert.ok(!mspm0.includes('data-mi-file=""'));
+});
+
 test("副产物两形状：旧 template/output 与新 default/templates", () => {
   const old = moduleInfoHTML({ slug: "a", description: "d", python_artifact: { template: "t.py", output: "main.py" }, platforms: {} }, null);
   assert.ok(old.includes("main.py"));

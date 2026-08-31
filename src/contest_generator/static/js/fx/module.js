@@ -253,7 +253,8 @@ export function moduleInfoHTML(module, platform) {
     const status = moduleGridStatusText(e);
     const cls = moduleGridBadgeClass(e);
     const files = (e.files && e.files.length)
-      ? e.files.map((f) => "<li>" + escHtml(f) + "</li>").join("")
+      ? e.files.map((f) => '<li><button type="button" class="mi-file" data-mi-file="'
+        + escHtml(f) + '" title="查看源码（只读）">' + escHtml(f) + "</button></li>").join("")
       : '<li class="muted">实现内嵌母版（随母版进工程，不复制文件、不重复）</li>';
     const notes = e.notes ? '<div class="mi-note">备注：' + escHtml(e.notes) + "</div>" : "";
     const kit = e.kit ? '<div class="mi-note">套件：' + escHtml(e.kit) + "</div>" : "";
@@ -282,7 +283,10 @@ export function moduleInfoHTML(module, platform) {
     + (off ? '<div class="module-info-off">当前平台 ' + escHtml(moduleGridPlatformLabel(platform))
       + " 无此模块版本</div>" : "")
     + (rows.length ? '<ul class="module-info-rows">' + rows.join("") + "</ul>" : "")
-    + '<div class="module-info-platforms">' + platHtml + "</div></div>";
+    + '<div class="module-info-platforms">' + platHtml + "</div>"
+    // 源码查看区（工单 mainc-codeview-bridge/05）：点击文件行懒加载（隐藏态，
+    // module-source 胶水层填充；弹窗主体仍零写侧只读）
+    + '<div class="module-info-source" data-module-source hidden></div></div>';
 }
 
 // ---------------------------------------------------------------------------

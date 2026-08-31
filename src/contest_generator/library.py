@@ -17,7 +17,7 @@ import json
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 from urllib.parse import urlparse
 
 from .autocommit import commit_after_write
@@ -169,6 +169,51 @@ def module_mtime(library_root: Path, slug: str) -> int:
         return int((library_root / slug / MANIFEST_FILENAME).stat().st_mtime)
     except OSError:
         return 0
+
+
+# 模块源码预览上限：与母版树 / 代码查看器同量级（1MB，大文件不读全文）
+MODULE_FILE_MAX_PREVIEW_BYTES = 1024 * 1024
+
+
+def read_module_file(library_root: Path, slug: str, rel_path: str) -> dict[str, Any]:
+    """模块源码只读预览（工单 mainc-codeview-bridge/05，详情弹窗源码区用）。
+
+    模块目录内任意文本文件读面，三重约束收窄（与 read_master_tree_file 同
+    安全立场，判定在盘访问之前）：路径安全（与 entry_store.is_unsafe_path
+    同拒绝面——首字符 `/`、`:`（NTFS ADS）、`\\`、任意层级 `..` 与空段
+    `a//b`，另有 resolve 后必须在模块目录内的兜底判定）、二进制拒绝（NUL
+    字节）、超 MODULE_FILE_MAX_PREVIEW_BYTES 拒绝——中文 LibraryError；
+    模块/文件缺失单独报错。读取沿用仓库惯例 utf-8 errors="replace" + 换行
+    归一化（与母版树同读法）。返回 {path, size_bytes, content}。
+    """
+    _validate_slug(slug)
+    module_dir = (library_root / slug).resolve()
+    if not module_dir.is_dir():
+        raise LibraryError(f"模块 {slug!r} 不存在")
+    parts = rel_path.split("/")
+    if (
+        rel_path.startswith("/")
+        or ":" in rel_path
+        or "\\" in rel_path
+        or any(seg in ("", "..") for seg in parts)
+    ):
+        raise LibraryError(f"非法路径：{rel_path}")
+    candidate = (module_dir / rel_path).resolve()
+    try:
+        candidate.relative_to(module_dir)  # 父解析必须是模块目录内
+    except ValueError:
+        raise LibraryError(f"非法路径：{rel_path}") from None
+    if not candidate.is_file():
+        raise LibraryError(f"文件不存在：{rel_path}")
+    size = candidate.stat().st_size
+    if size > MODULE_FILE_MAX_PREVIEW_BYTES:
+        limit_mb = MODULE_FILE_MAX_PREVIEW_BYTES // (1024 * 1024)
+        raise LibraryError(f"文件超过预览上限（{limit_mb}MB）：{rel_path}")
+    data = candidate.read_bytes()
+    if b"\x00" in data:
+        raise LibraryError(f"二进制文件不可预览：{rel_path}")
+    content = data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    return {"path": rel_path, "size_bytes": size, "content": content}
 
 
 def delete_module(library_root: Path, slug: str) -> None:

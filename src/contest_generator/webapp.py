@@ -154,6 +154,7 @@ from .library import (
     draft_description,
     list_modules,
     module_mtime,
+    read_module_file,
     remove_platform_files,
     update_module_description,
     update_platform_identity,
@@ -3671,6 +3672,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             {**m.to_dict(), "mtime": module_mtime(module_root, m.slug)}
             for m in list_modules(module_root)
         ]
+
+    @app.get("/api/modules/{slug}/files/{path:path}")
+    @_map_errors
+    def module_file(slug: str, path: str) -> dict:
+        """模块源码只读预览（工单 mainc-codeview-bridge/05）：模块目录内任意
+        文本文件——路径安全 / 二进制 / 超 1MB 三类均 400 中文；成功返回
+        {path, size_bytes, content}（utf-8 errors="replace" 读取 + 换行归一化，
+        与母版树 / 代码查看器同拒绝面与文案惯例）。
+        """
+        return read_module_file(_library_dir(context), slug, path)
 
     @app.post("/api/modules")
     @_map_errors
