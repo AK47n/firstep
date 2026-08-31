@@ -283,6 +283,14 @@
      折叠样式，容器只负责与步骤列对齐；词条间距在 .glossary-item 上。 */
   .glossary-card { margin-top: var(--space-5); }
   .glossary-card .glossary-item { margin-top: var(--space-2); line-height: 1.65; }
+  /* 跳转目标高亮（工单 guide-jump-flash/01）：gotoNavTab 聚焦目标（卡片等
+     非交互元素无默认焦点样式）后加 .jump-flash——accent 描边 + 脉冲微光，
+     CSS 动画驱动，JS 1.8s 后移除类（见 ui/goto-nav.js）。 */
+  .jump-flash { outline: 2px solid var(--accent); outline-offset: 2px;
+                animation: jump-flash-pulse .5s ease-in-out 1; }
+  @keyframes jump-flash-pulse {
+    0% { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .55); }
+    100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); } }
   .platform-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px;
                    cursor: pointer; flex: 1; min-width: 220px; background: var(--panel); }
   .platform-card:hover { border-color: var(--border-strong); }
