@@ -1553,6 +1553,13 @@
     font-size: 12px; line-height: 1; border-radius: var(--radius-xs); }
   .code-side-rail-btn:hover { background: var(--panel-2); color: var(--text); }
   .code-side-rail-btn.on { color: var(--accent); background: var(--panel-2); }
+  /* 侧栏 tab 条右端「收起」按钮（工单 code-viewer-editor/07b：显式入口，
+     不再依赖「点活动页签收起」的隐藏捷径——用户反馈该交互无提示太神秘）。
+     展开态常驻；收起后由 rail 竖排按钮接替（title 提示）。 */
+  .code-side-collapse { margin-left: auto; padding: 6px 8px; color: var(--muted);
+    border-radius: var(--radius-xs); flex: none;
+    display: inline-flex; align-items: center; gap: 2px; }
+  .code-side-collapse:hover { color: var(--text); background: var(--panel-2); }
   .code-outline { list-style: none; margin: 0; padding: 0; }
   .code-outline-item { width: 100%; text-align: left; display: flex; gap: 6px;
     align-items: center; padding: 3px 8px; background: none; color: var(--text);
@@ -3631,6 +3638,8 @@
           <div class="code-side-tabs">
             <button type="button" data-code-side="outline" class="on">大纲</button>
             <button type="button" data-code-side="search">搜索</button>
+            <button type="button" class="code-side-collapse" title="收起侧栏（点击展开后右缘会出现竖排的大纲/搜索按钮）"
+              aria-label="收起侧栏">收起 »</button>
           </div>
           <div class="code-side-rail" role="tablist" aria-label="侧栏（收起态）">
             <button type="button" class="code-side-rail-btn on" data-code-side="outline"
