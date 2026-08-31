@@ -8,6 +8,7 @@ import {
   codeTabStripHTML,
   codeEditorHTML,
   editorLineRange,
+  isTabSavable,
   caretLineOf,
   indentOnEnter,
   indentLines,
@@ -139,6 +140,14 @@ test("indentLines：多行选区 = 每行前置 4 空格（触及行全缩进）
   assert.equal(r.value, "    int a;\n    int b;\n    int c;\n");
   // 选区扩展为整段
   assert.equal(r.value.slice(r.start, r.end), "    int a;\n    int b;\n    int c;");
+});
+
+test("isTabSavable：保存判据单源（脏 + 非只读）", () => {
+  const base = { content: "a", savedContent: "a", readonly: false };
+  assert.equal(isTabSavable(null), false);
+  assert.equal(isTabSavable({ ...base }), false);                       // 无差异
+  assert.equal(isTabSavable({ ...base, content: "b" }), true);          // 脏
+  assert.equal(isTabSavable({ ...base, content: "b", readonly: true }), false);  // 只读
 });
 
 test("EDITOR_TABS_MAX：上限常量存在且合理", () => {

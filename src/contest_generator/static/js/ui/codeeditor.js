@@ -9,7 +9,7 @@
 // 纯件在 fx/codeeditor.js；ui/codeview.js 只保留树 / 侧栏 / 工具栏，经
 // 本模块导出面联动（openEditorFile / getActiveTab / editJumpToLine /
 // setMdMode / onActiveTabChanged）。
-import { $, apiGet, toast, toastError } from "/js/app.js";
+import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { languageOf } from "/js/fx/highlight.js";
 import { codeLineNumbersHTML, codeViewHTML } from "/js/fx/codeview.js";
 import {
@@ -17,6 +17,7 @@ import {
   codeEditorHTML,
   codeEditorHighlight,
   editorLineRange,
+  isTabSavable,
   caretLineOf,
   indentOnEnter,
   indentLines,
@@ -58,9 +59,18 @@ export function getActiveTab() {
 // 随活动文件联动）。
 export function onActiveTabChanged(cb) { activeListeners.add(cb); }
 
+// onFileSaved(cb)：保存成功监听（codeview 注册：树节点大小刷新；main.c
+// 步骤 8 状态行刷新 = 工单 05）。
+const savedListeners = new Set();
+export function onFileSaved(cb) { savedListeners.add(cb); }
+
 function notifyActive() {
   const tab = getActiveTab();
   activeListeners.forEach((cb) => { try { cb(tab); } catch (e) { /* 监听器异常不阻断 */ } });
+}
+
+function notifySaved(tab, resp) {
+  savedListeners.forEach((cb) => { try { cb(tab, resp); } catch (e) { /* 同上 */ } });
 }
 
 function tabOf(path) { return tabs.find((t) => t.path === path) || null; }
@@ -322,6 +332,59 @@ export async function editJumpToFile(path, line) {
   editJumpToLine(line);
 }
 
+// ===== 保存写盘（工单 code-viewer-editor/03）：Ctrl+S / 按钮 →
+// POST /api/code/save（后端 = 工单 01：路径安全单源 + 原子写 + 冲突 409） =====
+let saving = false;
+
+// saveActiveTab()：保存当前活动标签——非脏 / 只读（非 UTF-8）拦截中文提示；
+// 保存中禁用按钮 + 文本「保存中…」（重复触发合并）；成功 = toast + 脏点
+// 清除 + 大纲刷新（服务端重算响应直用）+ mtime_ns 基准更新 + 通知
+// （onFileSaved：树大小刷新）；失败 = 中文 toast（400 业务 / 网络可重试，
+// 脏点保留）；409 冲突占位 = 中文 message 直出（完整模态 = 工单 04）。
+export async function saveActiveTab() {
+  const tab = getActiveTab();
+  if (!tab) { toast("info", "没有打开的文件"); return; }
+  if (tab.readonly) {
+    toast("error", "只读：文件不是 UTF-8 编码，为免损坏请用外部编辑器保存");
+    return;
+  }
+  if (tab.content === tab.savedContent) { toast("info", "没有需要保存的修改"); return; }
+  if (saving) return;
+  saving = true;
+  const btn = $("btn-code-save");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "保存中…";
+  }
+  try {
+    const resp = await apiPost("/api/code/save", {
+      dir: codeDir,
+      path: tab.path,
+      content: tab.content,
+      base_mtime_ns: tab.mtime_ns,
+    });
+    tab.savedContent = tab.content;
+    tab.mtime_ns = resp.mtime_ns;
+    tab.outline = resp.outline;
+    toast("ok", "已保存 " + tab.path);
+    renderTabs();
+    notifyActive();
+    notifySaved(tab, resp);
+  } catch (e) {
+    if (e.status === 409) {
+      toast("error", e.message || "保存冲突：磁盘上的文件已被外部修改");
+    } else {
+      toastError(e, "保存失败");
+    }
+  } finally {
+    saving = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "保存";
+    }
+  }
+}
+
 // ===== 编辑器键盘行为：Tab 缩进 / Enter 自动缩进 / 光标行高亮 =====
 // IME 组合输入保护（评审整改）：composition 期间绝不 setSelectionRange 重置
 // 选区——会打断中文候选窗（input 逐键触达 sync，只做重渲染不动光标）。
@@ -377,6 +440,18 @@ export function initCodeEditor() {
     if (btn) activateTab(btn.dataset.tabPath);
   });
 
+  // Ctrl/Cmd+S：tab-code 活动时全局截获（与 Ctrl+F 同口径——焦点在树/侧栏
+  // 也生效）；浏览器「保存网页」对话框不出现。
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
+    const sec = $("tab-code");
+    if (!sec || !sec.classList.contains("active")) return;
+    e.preventDefault();
+    saveActiveTab();
+  });
+  const saveBtn = $("btn-code-save");
+  if (saveBtn) saveBtn.addEventListener("click", () => saveActiveTab());
+
   const box = paneBox();
   if (box) {
     // 组合输入保护：compositionend 后补一次同步（内容一次性落定）
@@ -402,10 +477,6 @@ export function initCodeEditor() {
         e.preventDefault();
         const r = indentOnEnter(ta.value, ta.selectionStart, ta.selectionEnd);
         applyEdit(r.value, r.start, r.end);
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        // Ctrl+S 占位（工单 code-viewer-editor/02：保存链路 = 工单 03）
-        e.preventDefault();
-        toast("info", "已拦截保存——保存到磁盘将在下一步版本接通");
       }
     });
     // 光标行高亮跟随（selection 变化：键盘 / 鼠标共同覆盖——select + keyup

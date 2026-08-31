@@ -14,6 +14,13 @@ import { maincLineOffsetRange } from "./code.js";
 // 防病态大目录 / 大文件把内存与渲染压垮（每个 ≤1MB，10 个封顶）。
 export const EDITOR_TABS_MAX = 10;
 
+// isTabSavable(tab)：标签是否可保存——**单源判据**（ui 保存守卫与「保存」
+// 按钮可见性共用，防两处漂移）：标签存在、非只读（非 UTF-8 禁存）、且
+// 内容与磁盘快照有差异。
+export function isTabSavable(tab) {
+  return !!tab && !tab.readonly && tab.content !== tab.savedContent;
+}
+
 // editorLineRange(text, line)：跳行选段纯函数——**委托 fx/code.js
 // maincLineOffsetRange 单源**（spec 决策：不复制实现，改名叫法避免 main.c
 // 语义耦合；越界/非法行 → null）。
@@ -149,6 +156,7 @@ if (typeof window !== "undefined") {
     codeEditorHighlight,
     codeEditorHTML,
     editorLineRange,
+    isTabSavable,
     caretLineOf,
     indentOnEnter,
     indentLines,

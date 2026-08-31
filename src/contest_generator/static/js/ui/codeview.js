@@ -10,6 +10,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { codeZoomClamp, parseZoomStored } from "/js/fx/code.js";
+import { isTabSavable } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）
 import { getMainCDiskDir, loadDiskMainC } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03）：目录匹配 + 跳回生成页编辑
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import {
@@ -33,6 +34,7 @@ import {
   setMdMode,
   isMdPreviewActive,
   onActiveTabChanged,
+  onFileSaved,
 } from "/js/ui/codeeditor.js";
 
 // 模块态：当前目录 / 扁平清单（中栏状态在 codeeditor.js）
@@ -333,7 +335,7 @@ export function initCodeViewer() {
     b.addEventListener("click", () => setCodeSide(b.dataset.codeSide)));
 
   // 活动标签/内容变化 → 大纲（仅路径变化时重渲——逐键输入不重画大纲）/
-  // 文件内查找 / 「返回预览」可见性联动
+  // 文件内查找 / 「返回预览」/「保存」按钮可见性联动
   let lastOutlinePath = null;
   onActiveTabChanged(() => {
     const tab = getActiveTab();
@@ -346,6 +348,17 @@ export function initCodeViewer() {
     if (btn) {
       btn.classList.toggle("hidden", !(tab && tab.lang === "md" && !isMdPreviewActive()));
     }
+    const save = $("btn-code-save");
+    if (save) save.classList.toggle("hidden", !isTabSavable(tab));
+  });
+
+  // 保存成功 → 树节点大小刷新 + 大纲重渲（服务端重算 outline 直用——
+  // 路径未变，「路径去重」不会自动重画大纲，此处显式刷新）+ 重渲染树
+  onFileSaved((tab, resp) => {
+    const hit = codeFiles.find((f) => f.path === tab.path);
+    if (hit && resp && typeof resp.size_bytes === "number") hit.size_bytes = resp.size_bytes;
+    renderCodeTree();
+    renderOutline();
   });
 
   // 大纲点击跳行（delegation）：.md 预览 / 编辑器/只读源码由 codeeditor 统一
