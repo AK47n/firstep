@@ -10,6 +10,7 @@ import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { languageOf } from "/js/fx/highlight.js";
 import { codeZoomClamp, parseZoomStored } from "/js/fx/code.js";
+import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
 import {
   buildCodeTree,
   codeFileTabHTML,
@@ -33,6 +34,12 @@ let currentPath = "";
 let currentContent = "";
 let currentOutline = null;
 let currentLang = "plain";
+// .md 两态（工单 code-viewer-md-preview/03）：默认预览；搜索结果跳行 / Ctrl+F
+// 自动临时切源码（行语义）；「返回预览」按钮回预览；点树内文件也回预览。
+let codeViewMode = "preview";
+let currentMdBlocks = [];
+// 跳行/缩放浮标共用闪烁时延（评审整改：1200 三处归拢）
+const CODE_FLASH_MS = 1200;
 
 // 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：宽度持久化键——
 // localStorage 只进胶水层（fx 无副作用约定，同 firstep.mainc.zoom 先例）。
@@ -63,8 +70,10 @@ async function loadCodeDir(dir) {
   currentPath = "";
   currentContent = "";
   currentOutline = null;
+  resetMdView();
   $("code-dir-label").textContent = dir;
   $("code-current-path").textContent = "";
+  updateCodeBackPreview();
   $("code-viewer").innerHTML = '<span class="muted">加载中…</span>';
   $("code-tree").innerHTML = '<span class="muted">加载中…</span>';
   try {
@@ -109,9 +118,11 @@ async function loadCodeFileState(path) {
   }
 }
 
-// openCodeFile(path)：点树文件 → 三态（加载中 / 成功只读视图 / 失败中文
+// openCodeFile(path, mode)：点树文件 → 三态（加载中 / 成功只读视图 / 失败中文
 // 原因可重试），仅成功行高亮；当前文件变化 → 大纲 / 文件内过滤面板联动。
-async function openCodeFile(path) {
+// mode（仅 .md 有意义）：缺省 "preview"（VSCode 式渲染预览），"source" =
+// 临时源码视图（搜索结果跳行 / Ctrl+F 的行语义入口，工单 code-viewer-md-preview/03）。
+async function openCodeFile(path, mode) {
   const box = $("code-viewer");
   if (!codeFileCache.has(codeDir + "\u0000" + path)) {
     box.innerHTML = '<span class="muted">加载中…</span>';
@@ -121,7 +132,9 @@ async function openCodeFile(path) {
     currentPath = "";
     currentContent = "";
     currentOutline = null;
+    resetMdView();
     $("code-current-path").textContent = "";
+    updateCodeBackPreview();
     box.innerHTML = '<div class="error">加载失败：' + esc(cached.message)
       + '</div><span class="muted">点击左侧文件可重试。</span>';
     renderOutline();
@@ -131,14 +144,112 @@ async function openCodeFile(path) {
   const data = cached.data;
   currentPath = path;
   currentContent = data.content || "";
-  currentOutline = data.outline || null;
   currentLang = languageOf(path);
+  if (currentLang === "md") {
+    currentMdBlocks = parseMarkdownBlocks(currentContent);
+    currentOutline = markdownOutline(currentMdBlocks);
+  } else {
+    currentMdBlocks = [];
+    currentOutline = data.outline || null;
+  }
   $("code-current-path").innerHTML = codeFileTabHTML(path, currentLang);
-  box.innerHTML = codeViewHTML(currentContent, currentLang);
+  const findInput = $("code-find-input");
+  // .md 默认预览：清掉上一个文件遗留的文件内过滤（预览无行语义，遗留命中
+  // 点击会静默落空；「点树回预览」用户故事优先，评审整改）。
+  if (currentLang === "md" && mode !== "source" && findInput && findInput.value) {
+    findInput.value = "";
+  }
+  if (currentLang === "md" && mode !== "source") renderMdPreview();
+  else renderCodeSource();
   document.querySelectorAll("[data-code-file]").forEach((b) =>
     b.classList.toggle("on", b.dataset.codeFile === path));
   renderOutline();
   renderFindPanel($("code-find-input").value || "", fileFindFilter(currentContent.split("\n"), $("code-find-input").value || ""));
+}
+
+// ===== .md 两态视图（工单 code-viewer-md-preview/03）=====
+
+// codeImageUrl(src)：.md 预览图片寻址回调（纯件不感知目录与端点，胶水层
+// 负责归一）——相对路径以 .md 所在目录为基准（VSCode 语义），归一后
+// ../ 跨出打开根 / 绝对路径 / 非 http(s) 协议 → null（渲染占位不请求）；
+// http(s) 直通（spec 测试决策）。渲染器自身还有 isSafeImageSrc 先行防御，
+// 这里再归一一次（../ 在子目录场景可被消化）。
+function codeImageUrl(src) {
+  if (hasScheme(src)) {
+    return /^https?:/i.test(src) ? src : null;
+  }
+  if (src.startsWith("/")) return null;                     // 绝对路径
+  const base = currentPath.includes("/")
+    ? currentPath.slice(0, currentPath.lastIndexOf("/"))
+    : "";
+  const norm = normalizeRelPath((base ? base + "/" : "") + src);
+  if (norm === null) return null;                           // ../ 跨出打开根
+  return "/api/code/raw?dir=" + encodeURIComponent(codeDir)
+    + "&path=" + encodeURIComponent(norm);
+}
+
+// normalizeRelPath(p)：相对路径段归一（./ 与空段消去、.. 消前段）；越出根
+// 返回 null（标记占位）。
+function normalizeRelPath(p) {
+  const segs = [];
+  for (const seg of String(p == null ? "" : p).split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      if (!segs.length) return null;
+      segs.pop();
+    } else {
+      segs.push(seg);
+    }
+  }
+  return segs.join("/");
+}
+
+function renderMdPreview() {
+  const box = $("code-viewer");
+  box.innerHTML = markdownPreviewHTML(currentMdBlocks, { imageUrl: codeImageUrl });
+  codeViewMode = "preview";
+  updateCodeBackPreview();
+}
+
+function renderCodeSource() {
+  const box = $("code-viewer");
+  box.innerHTML = codeViewHTML(currentContent, currentLang);
+  codeViewMode = "source";
+  updateCodeBackPreview();
+}
+
+// updateCodeBackPreview()：「返回预览」按钮仅 .md 临时源码态可见（顶栏文件
+// 标签旁）；预览态 / 非 .md 隐藏。
+function updateCodeBackPreview() {
+  const btn = $("code-back-preview");
+  if (!btn) return;
+  btn.classList.toggle("hidden", !(currentLang === "md" && codeViewMode === "source"));
+}
+
+// resetMdView()：.md 两态复位（预览向 + 块缓存清空）——loadCodeDir 与
+// openCodeFile 失败支共用（评审整改：防第三态漂移）。
+function resetMdView() {
+  codeViewMode = "preview";
+  currentMdBlocks = [];
+}
+
+// flashEl(el)：跳行/大纲定位共用闪烁（加 flash → CODE_FLASH_MS 后还原；
+// 评审整改：jumpToLine / jumpToMdLine / 缩放浮标三处 1200 归拢）。
+function flashEl(el) {
+  if (!el) return;
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), CODE_FLASH_MS);
+}
+
+// jumpToMdLine(line)：大纲标题点击 → 预览内块级元素（data-md-line）
+// scrollIntoView（复用 1 基行号寻址，与源码态 jumpToLine 同轴）+ flash 1.2s。
+function jumpToMdLine(line) {
+  const box = $("code-viewer");
+  if (!box) return;
+  const el = box.querySelector('[data-md-line="' + line + '"]');
+  if (!el) return;
+  el.scrollIntoView({ block: "center" });
+  flashEl(el);
 }
 
 // setActiveLine(line)：当前行高亮（工单 code-viewer-polish/02）——内容行与
@@ -166,9 +277,7 @@ function jumpToLine(line) {
   if (!gut && !pre) return;
   (gut || pre).scrollIntoView({ block: "center" });
   setActiveLine(line);
-  const targets = [gut, pre].filter(Boolean);
-  targets.forEach((el) => el.classList.add("flash"));
-  setTimeout(() => targets.forEach((el) => el.classList.remove("flash")), 1200);
+  [gut, pre].filter(Boolean).forEach(flashEl);
 }
 
 // setCodeSide(side)：右侧栏切换（outline / search）——侧栏按钮与 Ctrl+F
@@ -270,7 +379,7 @@ function initCodeTreeResize() {
 function renderOutline() {
   const box = $("code-outline");
   if (!currentPath) {
-    box.innerHTML = '<span class="muted">打开 .c/.h 文件后显示函数 / 宏 / include</span>';
+    box.innerHTML = '<span class="muted">打开 .c/.h / .md 文件后显示函数 / 宏 / include（.md 为标题）</span>';
     return;
   }
   box.innerHTML = currentOutline && currentOutline.length
@@ -351,7 +460,7 @@ function showCodeZoomBadge(pct) {
   codeZoomBadge.textContent = pct + "%";
   codeZoomBadge.classList.add("show");
   clearTimeout(codeZoomBadgeTimer);
-  codeZoomBadgeTimer = setTimeout(() => codeZoomBadge.classList.remove("show"), 1200);
+  codeZoomBadgeTimer = setTimeout(() => codeZoomBadge.classList.remove("show"), CODE_FLASH_MS);
 }
 
 // applyCodeZoom(pct)：单一路径——clamp → 写 --code-zoom → 持久化 → 浮标。
@@ -415,11 +524,16 @@ export function initCodeViewer() {
   document.querySelectorAll("[data-code-side]").forEach((b) =>
     b.addEventListener("click", () => setCodeSide(b.dataset.codeSide)));
 
-  // 大纲点击跳行（delegation：渲染后条目存在）
+  // 大纲点击跳行（delegation：渲染后条目存在）；.md 预览态走块级元素
+  // data-md-line 滚动定位（工单 code-viewer-md-preview/03），源码态与
+  // 非 .md 走既有 gutter 跳行（flash + 当前行移动）。
   const outline = $("code-outline");
   if (outline) outline.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-outline-line]");
-    if (btn) jumpToLine(parseInt(btn.dataset.outlineLine, 10));
+    if (!btn) return;
+    const line = parseInt(btn.dataset.outlineLine, 10);
+    if (currentLang === "md" && codeViewMode === "preview") jumpToMdLine(line);
+    else jumpToLine(line);
   });
 
   // 跨文件搜索：按钮 + Enter 提交
@@ -435,12 +549,18 @@ export function initCodeViewer() {
   // 侧栏（查找输入 / 命中列表所在，评审整改：不切则聚焦隐藏框无界面反馈）
   // → 聚焦输入面板即时过滤。
   const findInput = $("code-find-input");
-  if (findInput) findInput.addEventListener("input", () =>
-    renderFindPanel(findInput.value, fileFindFilter(currentContent.split("\n"), findInput.value)));
+  if (findInput) findInput.addEventListener("input", () => {
+    // .md 预览态经侧栏「搜索」tab 直输（非 Ctrl+F）时同样先切源码——
+    // 行语义需要行号（评审整改：预览态点命中无 gutter 会静默落空）。
+    if (currentLang === "md" && codeViewMode === "preview") renderCodeSource();
+    renderFindPanel(findInput.value, fileFindFilter(currentContent.split("\n"), findInput.value));
+  });
   document.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "f") return;
     if (!codeTabActive() || !findInput) return;
     e.preventDefault();
+    // .md 预览态先切临时源码（行语义需要行号，工单 code-viewer-md-preview/03）
+    if (currentLang === "md" && codeViewMode === "preview") renderCodeSource();
     setCodeSide("search");
     findInput.focus();
     findInput.select();
@@ -451,15 +571,23 @@ export function initCodeViewer() {
     const btn = e.target.closest("[data-find-line]");
     if (btn) jumpToLine(parseInt(btn.dataset.findLine, 10));
   });
-  // 搜索结果点击跳文件 + 行（delegation）
+  // 搜索结果点击跳文件 + 行（delegation）；命中 .md → 临时源码视图定位
+  // （行语义，工单 code-viewer-md-preview/03），非 .md 行为不变。
   const results = $("code-search-results");
   if (results) results.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-search-path]");
     if (!btn) return;
     const path = btn.dataset.searchPath;
     const line = parseInt(btn.dataset.searchLine, 10);
-    await openCodeFile(path);
+    await openCodeFile(path, "source");
     jumpToLine(line);
+  });
+
+  // 「返回预览」（.md 临时源码态）：只读视图回预览排版；重新点树内文件也
+  // 回预览（openCodeFile 缺省 mode=preview）。
+  const backPreview = $("code-back-preview");
+  if (backPreview) backPreview.addEventListener("click", () => {
+    if (currentLang === "md") renderMdPreview();
   });
 
   // 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：绑定手柄 + 恢复

@@ -153,11 +153,14 @@ test("outlineHTML：kind 徽标 + name + 行号；空 → 空串", () => {
     { kind: "function", name: "main", line: 3 },
     { kind: "define", name: "LED", line: 1 },
     { kind: "include", name: "app.h", line: 1 },
+    { kind: "heading", name: "方案", line: 2 },   // .md 标题（工单 code-viewer-md-preview/01）
   ]);
   assert.match(html, /data-outline-line="3"/);
   assert.match(html, /k-function/);
   assert.match(html, />main</);
   assert.match(html, />LED</);
+  assert.match(html, /k-heading/);
+  assert.match(html, />H</);
   assert.equal(outlineHTML([]), "");
   assert.equal(outlineHTML(null), "");
 });

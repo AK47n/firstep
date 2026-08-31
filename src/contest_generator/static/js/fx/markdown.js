@@ -309,12 +309,19 @@ function imageFallback(alt) {
   return '<span class="md-img-fallback">[图片：' + renderInline(alt) + "]</span>";
 }
 
+// hasScheme(s)：是否带 URL 协议前缀（scheme:，如 http:/https:/mailto:/javascript:/
+// C:/）——isSafeUrl / isSafeImageSrc 与胶水层 codeImageUrl 共用同一判定单源
+// （评审整改：三处正则去重）。
+export function hasScheme(s) {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(String(s == null ? "" : s).trim());
+}
+
 // isSafeUrl(url)：协议白名单——http/https/mailto/# 与相对路径放行；
 // javascript:/data:/vbscript:/file: 与协议相对（//）拒绝。
 function isSafeUrl(url) {
   const s = String(url == null ? "" : url).trim();
   if (!s) return false;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+  if (hasScheme(s)) {
     return /^(https?|mailto):/i.test(s);
   }
   return !s.startsWith("//");
@@ -328,7 +335,7 @@ function isSafeUrl(url) {
 function isSafeImageSrc(raw) {
   const s = String(raw == null ? "" : raw).trim();
   if (!s || s.startsWith("/")) return false;                  // 空 / 绝对路径（含 // 协议相对）
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) return /^https?:/i.test(s);
+  if (hasScheme(s)) return /^https?:/i.test(s);
   if (/(^|\/)\.\.(\/|$)/.test(s)) return false;
   return true;
 }
@@ -406,5 +413,5 @@ function splitTableRow(line) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline });
+  Object.assign(window, { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme });
 }
