@@ -49,7 +49,7 @@ export function stepNavCurrent(entries, threshold) {
 // 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
 // 只存表单态，恢复不触发任何后端请求
 // ---------------------------------------------------------------------------
-export function draftState(problem, topicId, platform, slugs, mainC, qa) {
+export function draftState(problem, topicId, platform, slugs, mainC, qa, outputDir) {
   return {
     problem: String(problem || ""),
     topicId: String(topicId || ""),
@@ -57,6 +57,7 @@ export function draftState(problem, topicId, platform, slugs, mainC, qa) {
     slugs: Array.isArray(slugs) ? slugs.filter((s) => typeof s === "string") : [],
     mainC: String(mainC || ""),
     qa: String(qa || ""),
+    outputDir: String(outputDir || ""),
   };
 }
 
@@ -79,7 +80,7 @@ export function draftLoad(storage) {
 export function draftRestoreMeta(json) {
   if (!json || typeof json !== "object" || Array.isArray(json)) return null;
   const out = {};
-  for (const f of ["problem", "topicId", "platform", "slugs", "mainC", "qa"]) {
+  for (const f of ["problem", "topicId", "platform", "slugs", "mainC", "qa", "outputDir"]) {
     const v = json[f];
     if (f === "slugs") out[f] = Array.isArray(v) ? v.filter((s) => typeof s === "string") : [];
     else out[f] = typeof v === "string" ? v : "";
