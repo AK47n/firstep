@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=dc605327dc5c3aa9c10593b0d1e8bbfb37ab21c6 -->
+<!-- changelog-auto: last-commit=c137701e24a08556048c5029eaa5fd1a3acba43d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 18:22 mainc-codeview-bridge/04 骨架引用模块锚定：步骤 8 编辑框下方「骨架引用的模块」chips——fx/skeleton-refs 状态机提取（注释/字符串剥离 + ident 调用形态，=== slug 或 slug+_ 前缀，C 关键字排除，去重保序）→ 点击开推荐卡同款模块详情弹窗；触发 = 骨架生成成功/草稿恢复显式 + input 200ms 防抖；无命中整区隐藏（宁少标不错标）；单测 6 项 + smoke-04 8 项，node --test 969 全绿
 - 18:30 mainc-codeview-bridge/05 模块源码速查：GET /api/modules/{slug}/files/{path:path}（拒绝面与母版树同口径，中文 400）+ 模块详情弹窗文件行点击懒加载源码（codeViewHTML 行号+高亮同观感，memo 三态，元数据区零改动）；library.py read_module_file 单源 + openModuleInfo 单入口自动接线；Python 11 项 + smoke-05 9 项，node --test 970 全绿；踩坑：webapp 需重启加载新端点
 - 18:31 mainc-codeview-bridge/05 补登记：library.read_module_file 入写库函数分类注册表（read 类，只读不落盘）——全量 pytest 结构化守卫兜底
+- 19:19 code-viewer-ide-restyle/01 查看器 IDE 一体化 Chrome（对照 CCS Dark+）：#tab-code 全贴边满高、.card 去卡片 chrome；三栏无缝 1px 分隔（gap 10px→0）；tab 条与编辑器接线（活动 tab 同编辑面底 + 顶 2px accent、bottom:-1px 压线）；编辑面 --code-bg、行号同底；当前行整行 rgba(accent,.07)+inset 2px 竖线；树/大纲活动行 flat+左 accent；section 头与 Theia 式侧栏视图 tab；全部 token 化；冒烟 30 项 + css-tokens 守卫全绿，深/亮截图存档
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
