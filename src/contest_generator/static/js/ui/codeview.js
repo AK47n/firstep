@@ -11,6 +11,7 @@ import { esc } from "/js/fx/core.js";
 import { languageOf } from "/js/fx/highlight.js";
 import {
   buildCodeTree,
+  codeFileTabHTML,
   codeTreeHTML,
   codeViewHTML,
   outlineHTML,
@@ -122,7 +123,7 @@ async function openCodeFile(path) {
   currentContent = data.content || "";
   currentOutline = data.outline || null;
   currentLang = languageOf(path);
-  $("code-current-path").textContent = path;
+  $("code-current-path").innerHTML = codeFileTabHTML(path, currentLang);
   box.innerHTML = codeViewHTML(currentContent, currentLang);
   document.querySelectorAll("[data-code-file]").forEach((b) =>
     b.classList.toggle("on", b.dataset.codeFile === path));
@@ -130,9 +131,23 @@ async function openCodeFile(path) {
   renderFindPanel($("code-find-input").value || "", fileFindFilter(currentContent.split("\n"), $("code-find-input").value || ""));
 }
 
+// setActiveLine(line)：当前行高亮（工单 code-viewer-polish/02）——内容行与
+// 行号同 data 键对齐：清旧 active → 设新 active（点击 / 跳行共用同一路径，
+// 避免两套状态漂移）。行不存在则不动。
+function setActiveLine(line) {
+  const box = $("code-viewer");
+  if (!box) return;
+  const gut = box.querySelectorAll(".code-gutter-line")[line - 1];
+  const pre = box.querySelectorAll(".code-pre-line")[line - 1];
+  if (!gut && !pre) return;
+  box.querySelectorAll(".code-pre-line.active, .code-gutter-line.active").forEach(
+    (el) => el.classList.remove("active"));
+  [gut, pre].forEach((el) => el && el.classList.add("active"));
+}
+
 // jumpToLine(line)：大纲 / 搜索结果跳行——gutter 行元素 scrollIntoView
 // （同一滚动容器，横向不跑）+ 主行号与内容行同 data 键对齐闪 flash 1.2s
-// 后还原（spec.md:127-128；内容行独立 .code-pre-line[data-code-line]）。
+// 后还原（spec.md:127-128）；当前行持续高亮随跳行移动（setActiveLine）。
 function jumpToLine(line) {
   const box = $("code-viewer");
   if (!box) return;
@@ -140,6 +155,7 @@ function jumpToLine(line) {
   const pre = box.querySelectorAll(".code-pre-line")[line - 1];
   if (!gut && !pre) return;
   (gut || pre).scrollIntoView({ block: "center" });
+  setActiveLine(line);
   const targets = [gut, pre].filter(Boolean);
   targets.forEach((el) => el.classList.add("flash"));
   setTimeout(() => targets.forEach((el) => el.classList.remove("flash")), 1200);
@@ -220,6 +236,14 @@ export function initCodeViewer() {
     const btn = e.target.closest("[data-code-file]");
     if (!btn) return;
     openCodeFile(btn.dataset.codeFile);
+  });
+
+  // 当前行：点击代码行 → 持续淡色高亮（delegation，渲染后无需重绑）
+  const view = $("code-viewer");
+  if (view) view.addEventListener("click", (e) => {
+    const el = e.target.closest(".code-pre-line");
+    if (!el) return;
+    setActiveLine(parseInt(el.dataset.codeLine, 10));
   });
 
   // 侧栏切换（大纲 / 搜索）

@@ -1322,14 +1322,29 @@
   .code-tree-box { flex: 1; overflow: auto; min-height: 0; }
   .code-file-path { font-size: 12px; color: var(--muted); padding: 2px 4px 6px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 顶栏当前文件标签（工单 code-viewer-polish/01）：CCS 式 c main.c 观感——
+     语言徽标 + 文件名，底边 accent 线，纯展示（单文件，不多开 tab）。 */
+  .code-file-tab { display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 12px; background: var(--panel-2); border: 1px solid var(--border);
+    border-bottom: 2px solid var(--accent); border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    max-width: 100%; vertical-align: bottom; }
+  .code-file-tab-badge { font-size: 11px; line-height: 1; padding: 2px 6px;
+    border-radius: var(--radius-xs); background: var(--accent-dim); color: var(--accent); }
+  .code-file-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .code-view { flex: 1; overflow: auto; min-height: 0; display: flex;
     align-items: flex-start; background: var(--bg); border: 1px solid var(--border);
     border-radius: var(--radius-sm); }
   .code-gutter { position: sticky; left: 0; flex: none; background: var(--panel-2);
     border-right: 1px solid var(--border); padding: 8px 0; user-select: none; }
   .code-gutter-line { display: block; font-family: var(--mono); font-size: 13px;
-    line-height: 1.55; padding: 0 8px; text-align: right; color: var(--muted); }
+    line-height: 1.55; padding: 0 8px; text-align: right; color: var(--muted);
+    min-width: 3ch; box-sizing: border-box; }
   .code-gutter-line.flash { background: var(--accent-dim); color: var(--accent); }
+  /* 当前行（工单 code-viewer-polish/02）：内容行 + 行号同 data 键 active——
+     active = 持续淡色（rgba accent .07 双主题自适应），flash = 瞬态略强
+     （--accent-dim .12）；不新造颜色值（:root 允许 rgba(var(--accent-rgb), a)）。 */
+  .code-gutter-line.active { color: var(--accent); font-weight: 600; }
   .code-pre { margin: 0; padding: 8px 12px; background: none; border: 0;
     font-family: var(--mono); font-size: 13px; line-height: 1.55; white-space: pre; }
   /* 代码逐行元素：block 保证行高 = gutter 行高（同一 font/line-height）；
@@ -1340,11 +1355,19 @@
   .code-pre-line { display: block; }
   .code-pre-line:empty { min-height: 1.55em; }
   .code-pre-line.flash { background: var(--accent-dim); }
+  .code-pre-line.active { background: rgba(var(--accent-rgb), .07); }
   .code-tree { list-style: none; margin: 6px 0 0; padding: 0 0 0 14px; }
   .code-tree .code-tree { border-left: 1px solid var(--border); padding-left: 8px; }
+  /* 树节点图标（工单 code-viewer-polish/01）：15px stroke SVG，muted 色，
+     目录行 flex 对齐；文件行图标紧随按钮内容流。 */
+  .code-tree-icon { flex: none; display: inline-flex; align-items: center;
+    width: 15px; height: 15px; color: var(--muted); }
+  .code-tree-icon svg { display: block; }
   .code-tree-dir summary { cursor: pointer; font-weight: 600; padding: 2px 4px;
-    font-size: 12.5px; border-radius: var(--radius-xs); }
+    font-size: 12.5px; border-radius: var(--radius-xs); display: flex;
+    align-items: center; gap: 6px; }
   .code-tree-dir summary:hover { background: var(--panel-2); }
+  .code-tree-dir-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .code-tree-file button { width: 100%; text-align: left; display: flex;
     justify-content: space-between; align-items: center; gap: 8px; padding: 3px 8px;
     background: none; color: var(--text); border: 0; border-radius: var(--radius-sm);
@@ -1352,7 +1375,7 @@
   .code-tree-file button:hover { background: var(--panel-2); }
   .code-tree-file button.on { background: var(--accent-dim); color: var(--accent); }
   .code-tree-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; }
+    text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
   .code-side-tabs { display: flex; gap: 4px; margin-bottom: var(--space-1); }
   .code-side-tabs button { padding: 3px 12px; font-size: 12.5px; border-radius: var(--radius-sm); }
   .code-side-tabs button.on { background: var(--accent-dim); color: var(--accent); }
