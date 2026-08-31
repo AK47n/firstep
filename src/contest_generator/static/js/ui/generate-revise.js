@@ -33,6 +33,7 @@ import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+import { refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/02）：修订/深化写入磁盘后回步骤 8 差异提示
 
 // ---------------------------------------------------------------------------
 // 修订与深化阶段卡（工单 revise-deepen/05）：两条入口（当前会话 / 历史目录）
@@ -371,6 +372,7 @@ async function reviseApply() {
     markStepDone(11);
     toast("ok", "修订完成");
     reviseRenderApplyDone(data);
+    void refreshMainCDiskState();  // main.c 磁盘同步（工单 02）：修订重生成/保留编辑后回步骤 8 校验
     // 任务清单作废通知（工单 task-progress/03：重生成后旧清单已被后端删除，
     // 前端任务的清单缓存必须清空——广播时机归 revise 簇，消费归任务簇）
     if (data.tasks_invalidated) {
@@ -459,6 +461,7 @@ async function reviseRunDeepen() {
     }, signal);
     reviseRenderVerify(data);
     if (data.status !== "failed") { markStepDone(11); toast("ok", "深化完成"); }  // 验证通过 / 降级未验证都算闭环
+    void refreshMainCDiskState();  // main.c 磁盘同步（工单 02）：深化写盘后回步骤 8 校验（失败轮也可能改过磁盘）
     $("revise-exec-status").textContent = "深化完成";
   } catch (e) {
     if (isAbortError(e)) {

@@ -38,6 +38,7 @@ import { resourcesToolbarHTML } from "/js/fx/resource-board.js";  // 资源总�
 import { resourceView, renderResourceSection } from "/js/ui/resource-board.js";  // 资源总览视图（resource-overview-polish/02）
 import { loadWiringAssets, wiringAssetsSync, wiringOptsFor, wireHosts } from "./wiring.js";  // 接线图装配（task-wiring-diagram/04）
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+import { refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/02）：任务写入磁盘后回步骤 8 差异提示
 
 let tasks = {
   outputDir: "",      // 拆解 / 执行针对的输出目录
@@ -1110,7 +1111,7 @@ async function tasksExecute(taskId, feedback) {
     // 下一步引导（工单 step-next-guide/01）：做完一步 → 当前卡提示「下一步 →
     // tN：标题」+ 滚动高亮下一张待执行卡（瞬态；失败轮不引导——还在本卡）
     if (data.status !== "failed") guideNextTask(taskId);
-    if (data.status !== "failed") { markStepDone(11); }
+    if (data.status !== "failed") { markStepDone(11); void refreshMainCDiskState(); }  // main.c 磁盘同步（工单 02）：步骤 8 显示「磁盘已更新 → 加载」
     toast("ok", feedback ? "已按反馈修复" : "任务已完成");
     setPhase(data.status === "failed"
       ? "任务失败（修复一轮后仍红）——可回滚或重试"

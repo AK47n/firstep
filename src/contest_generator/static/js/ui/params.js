@@ -24,6 +24,7 @@ import { paramListHTML, paramResultHTML } from "/js/fx/params.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { reviseGetDir } from "./generate-revise.js";
 import { tasksIsBusy, tasksSetBusy } from "./generate-tasks.js";
+import { refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/02）：参数改值/回滚写入磁盘后回步骤 8 差异提示
 
 // 本簇状态（会话级；落盘真相 = .contest_params.json）：plan = 最近一次
 // read/scan 的参数数组（含 valid），scanned = 是否识别过（无表 = 未识别，
@@ -235,6 +236,7 @@ async function paramsApply(name) {
     }, signal);
     paramsRenderResult(data);
     await paramsReload();   // 刷 new old_value + valid 重验（其余参数可能受影响）
+    void refreshMainCDiskState();  // main.c 磁盘同步（工单 02）：改值写入磁盘（含失败轮）后回步骤 8 校验
     if (data.status === "failed") {
       paramsStatus("参数修改失败（编译仍红）——结果已写入 main.c，可回滚或重试");
       toast("error", "编译未通过——已备份，可回滚或重试");
@@ -277,6 +279,7 @@ async function paramsRollback(backupId) {
     await apiPost("/api/revise/rollback", { output_dir: dir, backup_id: backupId });
     paramsRenderResult(null);
     await paramsReload();
+    void refreshMainCDiskState();  // main.c 磁盘同步（工单 02）：回滚恢复磁盘后回步骤 8 校验
     toast("ok", "已回滚本次参数修改");
   } catch (e) {
     paramsStatus("");
