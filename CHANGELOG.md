@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8590a06bd3761bdbf4501d8b4cfbd4184f4d706d -->
+<!-- changelog-auto: last-commit=dd98984a0cff70778ed3b90f1c2769d32f92f5f6 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 18:17 mainc-codeview-bridge/02 任务/深化/修订/参数写入磁盘后的差异提示：done 终态后同一 refreshMainCDiskState 路径——一致静默；差异步骤 8 警示「加载为编辑内容」，绝不自动覆盖手动编辑；smoke-02 7 项 + node --test 963 全绿；踩坑：clear-jargon-guard 静态断言源码含「写盘」即红，注释改「写入磁盘」
 - 18:20 mainc-codeview-bridge/03 生成页与代码查看器双向跳转桥：结果区「下一步」+ 步骤 8 工具栏「查看工程」→ openCodeViewer(生成上下文)；代码 tab 目录===上下文 → 顶栏「去生成页编辑 main.c」（切回 + scrollToStep(8) + 同源加载），非匹配隐藏；工具栏按钮随磁盘语境显隐；只读契约零新增写侧；smoke-03 12 项 + node --test 963 全绿
 - 18:22 mainc-codeview-bridge/04 骨架引用模块锚定：步骤 8 编辑框下方「骨架引用的模块」chips——fx/skeleton-refs 状态机提取（注释/字符串剥离 + ident 调用形态，=== slug 或 slug+_ 前缀，C 关键字排除，去重保序）→ 点击开推荐卡同款模块详情弹窗；触发 = 骨架生成成功/草稿恢复显式 + input 200ms 防抖；无命中整区隐藏（宁少标不错标）；单测 6 项 + smoke-04 8 项，node --test 969 全绿
+- 18:30 mainc-codeview-bridge/05 模块源码速查：GET /api/modules/{slug}/files/{path:path}（拒绝面与母版树同口径，中文 400）+ 模块详情弹窗文件行点击懒加载源码（codeViewHTML 行号+高亮同观感，memo 三态，元数据区零改动）；library.py read_module_file 单源 + openModuleInfo 单入口自动接线；Python 11 项 + smoke-05 9 项，node --test 970 全绿；踩坑：webapp 需重启加载新端点
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
