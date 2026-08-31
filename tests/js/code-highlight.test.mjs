@@ -73,6 +73,51 @@ test("混合真实代码行：token 齐全且顺序不串", () => {
   assert.ok(out.indexOf("GPIO_setConfig") > out.indexOf("tok-com"));
 });
 
+test("函数调用 → tok-fn（关键字后 ( 仍 tok-kw）", () => {
+  const out = cHighlight("GPIO_setConfig(GPIO_PORT, GPIO_PIN_0);\nif (x) { helper(); }");
+  assert.match(out, /<span class="tok-fn">GPIO_setConfig<\/span>\(/);
+  assert.match(out, /<span class="tok-fn">helper<\/span>\(/);
+  assert.match(out, /<span class="tok-kw">if<\/span> \(x\)/);
+  assert.doesNotMatch(out, /<span class="tok-fn">if<\/span>/);
+});
+
+test("函数声明的形参列表 → tok-fn", () => {
+  const out = cHighlight("void printNumber(int n) { }");
+  assert.match(out, /<span class="tok-fn">printNumber<\/span>\(<span class="tok-kw">int<\/span> n\)/);
+});
+
+test("全大写宏常量（含下划线）→ tok-const", () => {
+  const out = cHighlight("x = LED_GPIO; y = GPIO_PIN_0;");
+  assert.match(out, /<span class="tok-const">LED_GPIO<\/span>/);
+  assert.match(out, /<span class="tok-const">GPIO_PIN_0<\/span>/);
+});
+
+test("无下划线全大写短词不染为常量（如 A）", () => {
+  const out = cHighlight("x = A; y = B + O;");
+  assert.doesNotMatch(out, /tok-const/);
+});
+
+test("函数名与 ( 之间有空白 → 仍 tok-fn", () => {
+  const out = cHighlight("GPIO_setConfig (GPIO_PORT);");
+  assert.match(out, /<span class="tok-fn">GPIO_setConfig<\/span> \(/);
+});
+
+test("非函数标识符（空格后非 (）不着 tok-fn", () => {
+  const out = cHighlight("a + (b);\nx = y;");
+  assert.doesNotMatch(out, /tok-fn/);
+});
+
+test("#define NAME → NAME tok-const、其余 tok-pre", () => {
+  const out = cHighlight("#define LED_GPIO 2\nint x;");
+  assert.match(out, /<span class="tok-pre">#define <\/span><span class="tok-const">LED_GPIO<\/span><span class="tok-pre"> 2<\/span>/);
+});
+
+test("#include 行仍整行 tok-pre（不误拆）", () => {
+  const out = cHighlight("#include <ti/devices/msp/msp.h>");
+  assert.match(out, /<span class="tok-pre">#include &lt;ti\/devices\/msp\/msp.h&gt;<\/span>/);
+  assert.doesNotMatch(out, /tok-const/);
+});
+
 test("cLineCount：空串 → 1 行", () => {
   assert.equal(cLineCount(""), "1");
 });
