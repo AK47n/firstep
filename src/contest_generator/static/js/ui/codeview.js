@@ -339,6 +339,19 @@ function setCodeSide(side) {
     p.classList.toggle("hidden", p.dataset.codeSidePanel !== side));
 }
 
+// syncInfoBar()：信息条空态折叠单源——三动作按钮（返回预览/编辑源码/保存）
+// 全隐藏 → .empty（display:none，不占 30px 空带）。按钮可见性所有路径
+// （openEditorFile/setMdMode/applySavedState/closeTab）均经 notifyActive 汇聚
+// onActiveTabChanged 回调调用本函数；**初始空态（未打开目录/无活动 tab）回调
+// 从未触发——init 显式调用一次**（用户反馈「中间那行黑的空隙」= 空态信息条）。
+function syncInfoBar() {
+  const pathBar = document.querySelector(".code-file-path");
+  if (!pathBar) return;
+  const anyShown = [$("code-back-preview"), $("code-edit-md"), $("btn-code-save")]
+    .some((b) => b && !b.classList.contains("hidden"));
+  pathBar.classList.toggle("empty", !anyShown);
+}
+
 // ===== initCodeViewer：入口绑定（host 启动区调用） =====
 export function initCodeViewer() {
   const pick = $("btn-code-pick-dir");
@@ -415,11 +428,7 @@ export function initCodeViewer() {
     // .empty 不占位（用户反馈「代码第一行上面有一行啥也没有的空行」=
     // 空态信息条占位 30px）。同步点唯一 = 本回调（所有按钮可见性路径
     // openEditorFile/setMdMode/applySavedState 均经 notifyActive 汇聚）。
-    const pathBar = document.querySelector(".code-file-path");
-    if (pathBar) {
-      const anyShown = [btn, editMd, save].some((b) => b && !b.classList.contains("hidden"));
-      pathBar.classList.toggle("empty", !anyShown);
-    }
+    syncInfoBar();
   });
 
   // 保存成功 → 树节点大小刷新 + 大纲重渲（服务端重算 outline 直用——
@@ -505,6 +514,11 @@ export function initCodeViewer() {
 
   // 侧栏收起态恢复（工单 code-viewer-editor/07）：localStorage 持久化
   restoreCodeSideCollapsed();
+
+  // 信息条空态初始折叠（工单 code-viewer-editor/07e）：初始空态（未打开
+  // 目录/无活动 tab）onActiveTabChanged 从未触发——显式同步一次，防 30px
+  // 黑色空带残留（用户反馈「中间那行黑的空隙不需要留，直接顶满」）。
+  syncInfoBar();
 
   // 代码字号缩放（工单 code-viewer-zoom/01）
   initCodeViewZoom();
