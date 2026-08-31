@@ -72,6 +72,7 @@
     --tok-com: #3fb950; --tok-str: #d29922; --tok-pre: #8b949e;
     --tok-kw: #00d4ff; --tok-num: #bc8cff; --tok-tag: #00d4ff;
     --tok-attr: #bc8cff; --tok-val: #d29922;
+    --tok-fn: #dcdcaa; --tok-const: #c586c0;
   }
   /* 亮色主题（工单 ui-polish-5/01）：GitHub 亮色系，强调色加深保证浅底对比 */
   html[data-theme="light"] {
@@ -108,6 +109,7 @@
     --tok-com: #1a7f37; --tok-str: #9a6700; --tok-pre: #59636e;
     --tok-kw: #0096c7; --tok-num: #8250df; --tok-tag: #0096c7;
     --tok-attr: #8250df; --tok-val: #9a6700;
+    --tok-fn: #953800; --tok-const: #6639ba;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -1328,34 +1330,39 @@
     line-height: 1.7; max-height: min(52vh, 560px); overflow-y: auto; padding: 12px 14px;
     margin: 6px 0 0; background: var(--bg); border: 1px solid var(--border);
     border-radius: var(--radius-md); font-family: var(--mono); }
-  /* 代码查看器（工单 code-viewer/04-05）：三栏布局 / 树 / 行号 gutter / 只读视图。
+  /* 代码查看器（工单 code-viewer/04-05，IDE 化改版 code-viewer-ide-restyle/01）：
+     三栏布局 / 树 / 行号 gutter / 只读视图。
      #tab-code 是 body 直子（已跳出 main 的 max-width——对照 CCS 全宽占用），
-     不再受 main > section.page 的 1280px 上限约束；两侧仅各 16px 贴边。
-     高度方向同样撑满：flex 列 + calc(100vh - header - 边距)，代码区直达视口
-     底部（IDE 观感，页面无滚动）。注：顶部间隔为 20px 而非 16——main 空块
-     的 margin 与 section 塌陷取大（max(20,16)），故 -32 = 20(顶) + 12(底)。 */
-  #tab-code { margin: 16px 16px 12px; height: calc(100vh - var(--header-h) - 32px);
+     IDE 化后全贴边：margin 0、高度直达视口底部（calc(100vh - header)），
+     外层卡片 chrome 整个去掉（.card 仅作 flex 容器），工具栏成页面工具条。 */
+  #tab-code { margin: 0; height: calc(100vh - var(--header-h));
     min-height: 420px; display: flex; flex-direction: column; }
   #tab-code .card { flex: 1 1 auto; min-height: 0; margin-bottom: 0;
-    display: flex; flex-direction: column; }
-  .code-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    display: flex; flex-direction: column; background: none; border: 0;
+    border-radius: 0; padding: 0; box-shadow: none; }
+  .code-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); }
   .code-toolbar h2 { margin: 0; }
   .code-dir-label { font-family: var(--mono); font-size: 12px; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+    text-overflow: ellipsis; white-space: nowrap; max-width: 46vw;
+    margin-left: auto; text-align: right; }
   .code-layout { display: grid; grid-template-columns: var(--code-tree-w, 240px) minmax(0, 1fr) 300px;
-    gap: 10px; margin-top: var(--space-3); flex: 1 1 auto; min-height: 300px; }
-  .code-pane { display: flex; flex-direction: column; min-width: 0; background: var(--panel);
-    border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; }
-  .code-pane-title { font-weight: 600; font-size: 12.5px; color: var(--muted);
-    padding: 2px 4px 6px; }
+    gap: 0; margin-top: 0; flex: 1 1 auto; min-height: 300px; }
+  .code-pane { display: flex; flex-direction: column; min-width: 0;
+    background: var(--panel); }
+  /* 面板标题（IDE 化改版）：section 头观感——小字 muted、panel-2 底、
+     底部 1px 分隔；位于滚动容器之外天然常驻（无需 sticky）。 */
+  .code-pane-title { font-weight: 650; font-size: 11px; letter-spacing: .05em;
+    color: var(--muted); padding: 7px 10px; background: var(--panel-2);
+    border-bottom: 1px solid var(--border); flex: none; }
   .code-tree-box { flex: 1; overflow: auto; min-height: 0; }
   /* 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：树宽由 --code-tree-w
      驱动（默认 240，localStorage 持久化）；手柄悬于面板右缘与中缝之间
      （grid gap 10px 内，right:-5px），不盖树内容与滚动条；拖拽中
      body.code-resizing 禁文本选中；accent 线 hover/聚焦/拖拽中可见。
      焦点轮廓照 rev/guide/res 标签先例（outline 2px accent + offset 2px）。 */
-  .code-pane-tree { position: relative; }
-  .code-tree-resize-handle { position: absolute; top: 0; bottom: 0; right: -5px;
+  .code-pane-tree { position: relative; border-right: 1px solid var(--border); }
+  .code-tree-resize-handle { position: absolute; top: 0; bottom: 0; right: 0;
     width: 8px; cursor: col-resize; z-index: 3; touch-action: none; }
   .code-tree-resize-handle::before { content: ""; position: absolute; left: 3px;
     top: 0; bottom: 0; width: 2px; background: transparent;
@@ -1366,17 +1373,24 @@
   .code-tree-resize-handle:focus-visible { outline: 2px solid var(--accent);
     outline-offset: 2px; }
   body.code-resizing { user-select: none; cursor: col-resize; }
-  .code-file-path { font-size: 12px; color: var(--muted); padding: 2px 4px 6px;
-    display: flex; align-items: center; gap: 8px; min-width: 0; }
+  /* 标签条（IDE 化改版）：编辑器顶部通讯 tab 条——panel-2 底 + 底 1px 分隔，
+     活动 tab 与编辑器同底（--code-bg）上下无断缝；路径文本右侧 omit。 */
+  .code-file-path { font-size: 12px; color: var(--muted); min-width: 0;
+    display: flex; align-items: flex-end; gap: 8px; padding: 0 10px 0 0;
+    background: var(--panel-2); border-bottom: 1px solid var(--border);
+    min-height: 33px; flex: none; }
   .code-file-path > span#code-current-path { overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  /* 顶栏当前文件标签（工单 code-viewer-polish/01）：CCS 式 c main.c 观感——
-     语言徽标 + 文件名，底边 accent 线，纯展示（单文件，不多开 tab）。 */
+    text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
+    display: flex; align-items: flex-end; }
+  /* 顶栏当前文件标签（重设计）：CCS/VSCode 式「接线 tab」——底色与编辑器一致、
+     顶边 2px accent、上圆角下直边、无底边；relative bottom:-1px 压过 tab 条
+     底分隔线与编辑器无缝（不用 margin 负值——css-tokens 守卫 margin-bottom）。 */
   .code-file-tab { display: inline-flex; align-items: center; gap: 7px;
-    padding: 4px 12px; background: var(--panel-2); border: 1px solid var(--border);
-    border-bottom: 2px solid var(--accent); border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    padding: 5px 14px; background: var(--code-bg); border: 1px solid var(--border);
+    border-top: 2px solid var(--accent); border-bottom: 0;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
     font-family: var(--mono); font-size: 12px; color: var(--text);
-    max-width: 100%; vertical-align: bottom; }
+    max-width: 100%; position: relative; bottom: -1px; }
   .code-file-tab-badge { font-size: 11px; line-height: 1; padding: 2px 6px;
     border-radius: var(--radius-xs); background: var(--accent-dim); color: var(--accent); }
   .code-file-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1392,11 +1406,10 @@
      unitless、空行 min-height 1.55em、gutter min-width 3ch 均随 em/倍数
      自动联动，行号与代码永不错位；域 80%–200% 由 codeZoomClamp 单源保证。 */
   .code-view { flex: 1; overflow: auto; min-height: 0; display: flex;
-    align-items: flex-start; background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    align-items: flex-start; background: var(--code-bg);
     --code-font-size: calc(13px * var(--code-zoom, 1)); }
-  .code-gutter { position: sticky; left: 0; flex: none; background: var(--panel-2);
-    border-right: 1px solid var(--border); padding: 8px 0; user-select: none; }
+  .code-gutter { position: sticky; left: 0; flex: none; padding: 8px 0;
+    user-select: none; }
   .code-gutter-line { display: block; font-family: var(--mono);
     font-size: var(--code-font-size); line-height: 1.55; padding: 0 8px;
     text-align: right; color: var(--muted); min-width: 3ch; box-sizing: border-box; }
@@ -1405,9 +1418,9 @@
      active = 持续淡色（rgba accent .07 双主题自适应），flash = 瞬态略强
      （--accent-dim .12）；不新造颜色值（:root 允许 rgba(var(--accent-rgb), a)）。 */
   .code-gutter-line.active { color: var(--accent); font-weight: 600; }
-  .code-pre { margin: 0; padding: 8px 12px; background: none; border: 0;
-    font-family: var(--mono); font-size: var(--code-font-size);
-    line-height: 1.55; white-space: pre; }
+  .code-pre { margin: 0; padding: 8px 12px; color: var(--code-text);
+    background: none; border: 0; font-family: var(--mono);
+    font-size: var(--code-font-size); line-height: 1.55; white-space: pre; }
   /* 代码逐行元素：block 保证行高 = gutter 行高（同一 font/line-height）；
      :empty 空行（文件尾 \n / 连续空行）设 min-height = 1.55em（与
      .code-pre / .code-gutter-line 的 line-height 同源数值，空 block 无行盒
@@ -1416,11 +1429,14 @@
   .code-pre-line { display: block; }
   .code-pre-line:empty { min-height: 1.55em; }
   .code-pre-line.flash { background: var(--accent-dim); }
-  .code-pre-line.active { background: rgba(var(--accent-rgb), .07); }
+  /* 当前行（重设计）：整行淡 accent 底 + 左侧 2px accent 竖线（VSCode
+     active line 观感）；行号 accent 加粗（.code-gutter-line.active 同行）。 */
+  .code-pre-line.active { background: rgba(var(--accent-rgb), .07);
+    box-shadow: inset 2px 0 0 var(--accent); }
   /* 缩放百分比浮标（工单 code-viewer-zoom/01）：Ctrl+滚轮缩放时右上角短暂
      显示当前档位（1.2s 后淡出，重复缩放重置）；挂 .code-pane-main 锚定——
      不随 .code-view 内容滚动；pointer-events:none 不挡滚动/点击；既有 token。 */
-  .code-pane-main { position: relative; }
+  .code-pane-main { position: relative; background: var(--panel-2); }
   .code-zoom-badge { position: absolute; top: 8px; right: 12px; z-index: 5;
     font-family: var(--mono); font-size: 11px; line-height: 1; padding: 4px 8px;
     background: var(--panel-2); border: 1px solid var(--border); color: var(--accent);
@@ -1441,20 +1457,31 @@
   .code-tree-dir-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .code-tree-file button { width: 100%; text-align: left; display: flex;
     justify-content: space-between; align-items: center; gap: 8px; padding: 3px 8px;
-    background: none; color: var(--text); border: 0; border-radius: var(--radius-sm);
+    background: none; color: var(--text); border: 0; border-radius: 0;
     cursor: pointer; font-size: 12.5px; }
   .code-tree-file button:hover { background: var(--panel-2); }
-  .code-tree-file button.on { background: var(--accent-dim); color: var(--accent); }
+  /* 活动文件（重设计）：flat 高亮——淡 accent 底 + 左 2px accent 竖线 + accent
+     文字（VS Code explorer 选中观感，取代原圆角 pill）。 */
+  .code-tree-file button.on { background: var(--accent-dim); color: var(--accent);
+    box-shadow: inset 2px 0 0 var(--accent); }
   .code-tree-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-  .code-side-tabs { display: flex; gap: 4px; margin-bottom: var(--space-1); }
-  .code-side-tabs button { padding: 3px 12px; font-size: 12.5px; border-radius: var(--radius-sm); }
-  .code-side-tabs button.on { background: var(--accent-dim); color: var(--accent); }
+  /* 侧栏视图 tabs（重设计）：Theia 式视图 tab——无底色按钮行，on = 下划
+     2px accent + accent 文字；行底 1px 分隔。 */
+  .code-pane-side { border-left: 1px solid var(--border); }
+  .code-side-tabs { display: flex; gap: 2px; background: var(--panel-2);
+    border-bottom: 1px solid var(--border); padding: 0 4px; flex: none; }
+  .code-side-tabs button { padding: 6px 10px; font-size: 12px; border-radius: 0;
+    border: 0; background: none; color: var(--muted);
+    border-bottom: 2px solid transparent; }
+  .code-side-tabs button:hover { color: var(--text); border-color: transparent; }
+  .code-side-tabs button.on { background: none; color: var(--accent);
+    border-bottom-color: var(--accent); }
   .code-side-panel { flex: 1; overflow: auto; min-height: 0; }
   .code-outline { list-style: none; margin: 0; padding: 0; }
   .code-outline-item { width: 100%; text-align: left; display: flex; gap: 6px;
     align-items: center; padding: 3px 8px; background: none; color: var(--text);
-    border: 0; border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; }
+    border: 0; border-radius: 0; cursor: pointer; font-size: 12.5px; }
   .code-outline-item:hover { background: var(--panel-2); }
   .code-outline-kind { font-family: var(--mono); font-size: 11px; width: 18px;
     text-align: center; color: var(--muted); flex: none; }
@@ -1469,9 +1496,10 @@
   .code-search-list, .code-find-list { list-style: none; margin: 0; padding: 0; }
   .code-search-hit, .code-find-item { width: 100%; text-align: left; display: flex;
     flex-direction: column; gap: 1px; padding: 4px 8px; background: none; color: var(--text);
-    border: 0; border-radius: var(--radius-sm); cursor: pointer; }
+    border: 0; border-radius: 0; cursor: pointer; }
   .code-search-hit:hover, .code-find-item:hover { background: var(--panel-2); }
-  .code-search-hit.on { background: var(--accent-dim); color: var(--accent); }
+  .code-search-hit.on { background: var(--accent-dim); color: var(--accent);
+    box-shadow: inset 2px 0 0 var(--accent); }
   .code-search-path { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
   .code-search-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     max-width: 100%; }
@@ -2247,6 +2275,8 @@
   .tok-com { color: var(--tok-com); }  .tok-str { color: var(--tok-str); }
   .tok-pre { color: var(--tok-pre); }  .tok-kw { color: var(--tok-kw); }
   .tok-num { color: var(--tok-num); }
+  /* C 高亮细类（工单 code-viewer-ide-restyle/02）：函数名/宏常量，Dark+ 成族 */
+  .tok-fn { color: var(--tok-fn); }  .tok-const { color: var(--tok-const); }
   /* XML 令牌（工单 master-library-ui-2/03：.syscfg/.uvprojx/.cproject 高亮） */
   .tok-tag { color: var(--tok-tag); }  .tok-attr { color: var(--tok-attr); }  .tok-val { color: var(--tok-val); }
   html[data-theme="light"] .tok-tag { color: var(--tok-tag); }
@@ -2257,6 +2287,8 @@
   html[data-theme="light"] .tok-pre { color: var(--tok-pre); }
   html[data-theme="light"] .tok-kw { color: var(--tok-kw); }
   html[data-theme="light"] .tok-num { color: var(--tok-num); }
+  html[data-theme="light"] .tok-fn { color: var(--tok-fn); }
+  html[data-theme="light"] .tok-const { color: var(--tok-const); }
   /* 步骤完成庆祝动画（工单 ui-polish-8/02）：徽章弹跳 + 顶部青光扫过 */
   @keyframes step-pop { 0% { transform: scale(1); }
                         40% { transform: scale(1.28); }
