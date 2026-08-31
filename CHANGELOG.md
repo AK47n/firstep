@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=46ed761477d6b5b440e418d218157cd3c6ad0260 -->
+<!-- changelog-auto: last-commit=8e054db69d10fc9721358b5989572cddf4227066 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 12:52 code-viewer-tree-resize/01 文件树面板拖拽调宽+持久化：手柄拖拽[160,min(720,layoutW-480)]、firstep.codeTreeWidth 记忆、双击复位、键盘微调；fx treeWidthClamp/parseTreeWidthStored 纯函数+单测+fx-guard 全域登记；CDP 冒烟 23 项全绿；双轴评审整改（currentTreeWidth/步进常量/隐藏态防御）
 - 13:10 code-viewer-zoom/01 代码查看器 Ctrl/Cmd+滚轮缩放：80%-200% 每档 10%、firstep.codeViewZoom 持久化、浮层百分比指示、累积器防触控板抖动；复用 codeZoomClamp/parseZoomStored 零新导出；CDP 冒烟 30 项全绿；双轴评审整改（--code-font-size 收口、spec 归一）
 - 13:35 code-viewer-md-preview/01 代码查看器 .md 渲染纯件：fx/markdown.js（块解析+预览+大纲投影，行内/URL 白名单/图片回调安全）+ languageOf 增 md 路由 + tab 徽标 MD；node --test 958 项全绿；双轴评审整改（块起点单一口径、data-md-line 全覆盖、../ 与绝对路径纯件拒绝、嵌套有序 start、注释同步）
+- 13:45 code-viewer-md-preview/02 后端图片二进制端点：GET /api/code/raw + read_code_file_bytes（白名单 8 型/8MB/media_type 手写映射/Cache-Control private 3600）；_resolve_in_root 安全前置单源；pytest 3007 全绿；双轴评审整改（NUL 放行补测、7 行同构抽取）
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
