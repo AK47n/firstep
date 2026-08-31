@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=cd120daedd6c45d43c6a0e146dd3038b77c6752b -->
+<!-- changelog-auto: last-commit=c6e6aad5477b7ff2d18ca31ef18939dab9e8c6c0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -37,6 +37,7 @@
 - 21:58 code-viewer-editor/07g 修复导航激活态宽度漂移：用户反馈「点 pdf 这个栏泡泡变宽一点，把左边栏目挤到更左，不点又变窄回来」——根因 header nav button.active{font-weight:600} 相对默认 500 加粗，文字更宽而按钮宽度自适应内容，激活瞬间整排左移、取消激活回位（与 PDF 页内容无关，纯导航胶囊渲染）；修复=激活态去掉 font-weight 覆盖（维持 500，激活区分靠渐变底+深色字+阴影，视觉足够）；diag-nav-width 实测激活前后 PDF 按钮宽 100.8 恒定、左邻 reference left 874 不变；smoke-10 新增宽度断言扩至 8 项全绿 + smoke-08 13 项回归全绿
 - 22:03 新手指引更新：补「代码」tab 教程条目 + 修正过时/缺失描述——①顶部导航「做题」组补代码栏（IDE 式代码编辑器：打开生成工程直接看/改代码，多标签 + Ctrl+S 保存）；②build 章新增「代码栏：IDE 式代码编辑器」小节（文件树选目录/多标签与脏点/Ctrl+S 写盘/只读保护范围（.md 预览、GBK、超 1MB）/大纲与搜索/侧栏收起/保存冲突三选/与第 8 步 main.c 编辑框联动（编辑源码↔加载为编辑内容））+「打开代码栏逛逛」跳转按钮；③「生成完去哪写代码」前言与 12 步速览第 8 行补编辑/加载说明；核对 start-app.vbs / stop-firstep.bat 与 README、guide-refs 单源一致（.vbs 仅为包装层未改动）；guide.test.mjs 9 项与全量 node 996 全绿 + smoke-11 新增 6 项全绿
 - 22:07 新手指引跳转目标高亮：用户反馈「打开新手词表只跳转过去但没有任何光标提示，用户很难看到在哪里」——根因 gotoNavTab 只 focus()+scrollIntoView()，而 glossary-card 等卡片/容器类非交互元素没有默认焦点样式，跳转后无可见落点；修复=①ui/goto-nav.js 新增 flashJumpTarget（聚焦后加 .jump-flash 类，强制 reflow 重启动画，clearTimeout+setTimeout 1.8s 后移除，连续跳转同目标重置计时），②index.html 新增 .jump-flash 样式（accent 2px 描边 outline-offset 2px + @keyframes jump-flash-pulse 脉冲微光 0.5s）——统一作用于全部 jump 目标（新手词表/去设置配 key/去环境体检/去任务推进），卡片/输入框均获可见落点；node 996 全绿 + smoke-12 新增 6 项全绿（跳转居中/高亮类出现/1.8s 移除/连续跳转重置），截图确认词表卡 accent 描边
+- 22:34 工单 code-tab-compile/01：/api/compile 平台自动推断（platform 可省略，缺省/空白走 context_manifest._infer_platform 单源，与 /api/flash 同判据）+ 5 项 pytest（stm32/mspm0 推断、空白、双配置/无配置 400）
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
