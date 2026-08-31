@@ -1358,21 +1358,28 @@
   .code-file-tab-badge { font-size: 11px; line-height: 1; padding: 2px 6px;
     border-radius: var(--radius-xs); background: var(--accent-dim); color: var(--accent); }
   .code-file-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 代码字号缩放（工单 code-viewer-zoom/01）：gutter 与代码字体同源
+     --code-font-size = calc(13px * var(--code-zoom, 1))——单条自定义属性
+     挂在 .code-view（两处 font-size 均引它，13px 基础只写一次）；行高
+     unitless、空行 min-height 1.55em、gutter min-width 3ch 均随 em/倍数
+     自动联动，行号与代码永不错位；域 80%–200% 由 codeZoomClamp 单源保证。 */
   .code-view { flex: 1; overflow: auto; min-height: 0; display: flex;
     align-items: flex-start; background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); }
+    border-radius: var(--radius-sm);
+    --code-font-size: calc(13px * var(--code-zoom, 1)); }
   .code-gutter { position: sticky; left: 0; flex: none; background: var(--panel-2);
     border-right: 1px solid var(--border); padding: 8px 0; user-select: none; }
-  .code-gutter-line { display: block; font-family: var(--mono); font-size: 13px;
-    line-height: 1.55; padding: 0 8px; text-align: right; color: var(--muted);
-    min-width: 3ch; box-sizing: border-box; }
+  .code-gutter-line { display: block; font-family: var(--mono);
+    font-size: var(--code-font-size); line-height: 1.55; padding: 0 8px;
+    text-align: right; color: var(--muted); min-width: 3ch; box-sizing: border-box; }
   .code-gutter-line.flash { background: var(--accent-dim); color: var(--accent); }
   /* 当前行（工单 code-viewer-polish/02）：内容行 + 行号同 data 键 active——
      active = 持续淡色（rgba accent .07 双主题自适应），flash = 瞬态略强
      （--accent-dim .12）；不新造颜色值（:root 允许 rgba(var(--accent-rgb), a)）。 */
   .code-gutter-line.active { color: var(--accent); font-weight: 600; }
   .code-pre { margin: 0; padding: 8px 12px; background: none; border: 0;
-    font-family: var(--mono); font-size: 13px; line-height: 1.55; white-space: pre; }
+    font-family: var(--mono); font-size: var(--code-font-size);
+    line-height: 1.55; white-space: pre; }
   /* 代码逐行元素：block 保证行高 = gutter 行高（同一 font/line-height）；
      :empty 空行（文件尾 \n / 连续空行）设 min-height = 1.55em（与
      .code-pre / .code-gutter-line 的 line-height 同源数值，空 block 无行盒
@@ -1382,6 +1389,16 @@
   .code-pre-line:empty { min-height: 1.55em; }
   .code-pre-line.flash { background: var(--accent-dim); }
   .code-pre-line.active { background: rgba(var(--accent-rgb), .07); }
+  /* 缩放百分比浮标（工单 code-viewer-zoom/01）：Ctrl+滚轮缩放时右上角短暂
+     显示当前档位（1.2s 后淡出，重复缩放重置）；挂 .code-pane-main 锚定——
+     不随 .code-view 内容滚动；pointer-events:none 不挡滚动/点击；既有 token。 */
+  .code-pane-main { position: relative; }
+  .code-zoom-badge { position: absolute; top: 8px; right: 12px; z-index: 5;
+    font-family: var(--mono); font-size: 11px; line-height: 1; padding: 4px 8px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--accent);
+    border-radius: var(--radius-sm); opacity: 0; pointer-events: none;
+    transition: opacity .15s; }
+  .code-zoom-badge.show { opacity: 1; }
   .code-tree { list-style: none; margin: 6px 0 0; padding: 0 0 0 14px; }
   .code-tree .code-tree { border-left: 1px solid var(--border); padding-left: 8px; }
   /* 树节点图标（工单 code-viewer-polish/01）：15px stroke SVG，muted 色，
