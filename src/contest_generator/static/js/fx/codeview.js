@@ -46,26 +46,100 @@ function sortCodeTree(nodes) {
     : a.isDir ? -1 : 1));
 }
 
+// ---- 文件树类型图标（工单 code-viewer-polish/01）：内联 stroke SVG 16px，
+// 风格照 fx/btn-icon.js 单源约定（fill none / stroke currentColor / 1.5）；
+// 按钮图标（btn）与文件树图标（file）语义不同，各自独立不 import 耦合。
+const CODE_ICO_ATTRS = ' fill="none" stroke="currentColor" stroke-width="1.5"'
+  + ' stroke-linecap="round" stroke-linejoin="round"';
+// 文档底形（文件类图标共用）
+const CODE_ICO_DOC = '<path d="M4.5 1.5 H10 L12.5 4.2 V14.5 H4.5 Z"/>'
+  + '<path d="M10 1.5 V4.2 H12.5"/>';
+// 扩展名 → 文档内标记（区分类型；无标记 = 通用文档）
+const CODE_ICO_MARKS = {
+  c: '<path d="M6.6 7 L5.2 8.6 L6.6 10.2 M9.4 7 L10.8 8.6 L9.4 10.2"/>',
+  h: '<path d="M6.2 5.8 V10.6 M6.2 8.4 H9.8 V10.6"/>',
+  md: '<path d="M6.3 6.9 L8 8.6 L9.7 6.9 V10.4"/>',
+  cfg: '<path d="M6.9 5.8 L5.6 6.8 V9.9 L6.9 10.9 M9.1 5.8 L10.4 6.8 V9.9 L9.1 10.9"/>',
+  asm: '<path d="M6.4 10.4 L8 6.4 L9.6 10.4 M7 9.1 H9"/>',
+  bin: '<circle cx="6.8" cy="7.5" r="0.9"/><circle cx="9.3" cy="8.9" r="0.9"/>'
+    + '<circle cx="9.3" cy="6.6" r="0.9"/>',
+  txt: '<path d="M6.2 7.2 H9.8 M6.2 9.4 H9.3"/>',
+};
+const CODE_ICO_FOLDER = '<path d="M1.5 4 H6.5 L8.2 5.8 H14.5 V12.5 H1.5 Z"/>';
+
+function codeIco(kind, marks) {
+  return '<svg class="code-ico" viewBox="0 0 16 16" width="15" height="15"'
+    + CODE_ICO_ATTRS + ">" + kind + (marks || "") + "</svg>";
+}
+
+// fileIconHTML(path, isDir)：文件树节点图标——文件夹 / C / 头文件 / 文档 /
+// 配置（json/syscfg/uvprojx/cproject/xml）/ 汇编 / 产物（o/obj/out/map/hex）/
+// 其余通用文档；未知扩展名兜底通用图标。纯展示 aria-hidden。
+export function fileIconHTML(path, isDir) {
+  const name = String(path == null ? "" : path).toLowerCase();
+  if (isDir) return codeIco(CODE_ICO_FOLDER);
+  const ext = name.split(".").pop() || "";
+  if (ext === "c") return codeIco(CODE_ICO_DOC, CODE_ICO_MARKS.c);
+  if (ext === "h" || ext === "hpp" || ext === "hxx") {
+    return codeIco(CODE_ICO_DOC, CODE_ICO_MARKS.h);
+  }
+  if (ext === "md" || ext === "markdown") return codeIco(CODE_ICO_DOC, CODE_ICO_MARKS.md);
+  if (ext === "s" || ext === "asm") return codeIco(CODE_ICO_DOC, CODE_ICO_MARKS.asm);
+  if (ext === "o" || ext === "obj" || ext === "out" || ext === "map"
+    || ext === "hex" || ext === "bin") {
+    return codeIco(CODE_ICO_DOC, CODE_ICO_MARKS.bin);
+  }
+  if (ext === "json" || ext === "xml" || ext === "syscfg" || ext === "uvprojx"
+    || ext === "cproject" || ext === "ioc") {
+    return codeIco(CODE_ICO_DOC, CODE_ICO_MARKS.cfg);
+  }
+  if (ext === "txt" || ext === "log" || ext === "csv") {
+    return codeIco(CODE_ICO_DOC, CODE_ICO_MARKS.txt);
+  }
+  return codeIco(CODE_ICO_DOC);
+}
+
+// codeFileTabHTML(path, lang)：顶栏「当前文件标签」（工单 code-viewer-polish/01）
+// ——语言徽标（C / XML / TXT，lang 来自 fx/highlight.js languageOf 单源）+
+// 文件名 + data-tab-path（事件层备用）；纯展示：当前只有一个文件，不多开
+// tab。title 带完整相对路径供悬停查全貌。
+export function codeFileTabHTML(path, lang) {
+  const full = String(path == null ? "" : path);
+  const badge = lang === "c" ? "C" : lang === "xml" ? "XML" : "TXT";
+  const name = full.split("/").pop() || full;
+  return '<span class="code-file-tab" data-tab-path="' + esc(full) + '" title="' + esc(full) + '">'
+    + '<span class="code-file-tab-badge">' + badge + "</span>"
+    + '<span class="code-file-tab-name">' + esc(name) + "</span></span>";
+}
+
 // codeTreeHTML(nodes)：递归树 HTML——目录 = 原生 <details open>/<summary>
-// （零 JS 收起），文件 = 行按钮（data-code-file = 相对路径，交事件层；
-// 末尾附 formatSize 大小）。根 <ul class="code-tree"> 由调用方包裹。
+// （零 JS 收起，含文件夹图标），文件 = 行按钮（data-code-file = 相对路径，
+// 交事件层；含类型图标 + 末尾 formatSize 大小）。根 <ul class="code-tree">
+// 由调用方包裹。
 export function codeTreeHTML(nodes) {
   return (nodes || []).map((n) => n.isDir
-    ? `<li class="code-tree-dir"><details open><summary>${esc(n.name)}</summary>
-        <ul>${codeTreeHTML(n.children)}</ul></details></li>`
+    ? `<li class="code-tree-dir"><details open><summary>`
+      + `<span class="code-tree-icon" aria-hidden="true">${fileIconHTML(n.path, true)}</span>`
+      + `<span class="code-tree-dir-name">${esc(n.name)}</span></summary>`
+      + `<ul>${codeTreeHTML(n.children)}</ul></details></li>`
     : `<li class="code-tree-file">
         <button type="button" class="code-tree-btn" data-code-file="${esc(n.path)}">
+          <span class="code-tree-icon" aria-hidden="true">${fileIconHTML(n.path, false)}</span>
           <span class="code-tree-name">${esc(n.name)}</span>
           <span class="muted">${formatSize(n.size_bytes)}</span></button></li>`
   ).join("");
 }
 
 // codeLineNumbersHTML(count)：行号 gutter 纯件——1..count 逐行 span
-// （与代码行同一 font/line-height 由 CSS 保证对齐；count 下限 1）。
+// （与代码行同一 font/line-height 由 CSS 保证对齐；count 下限 1；
+// data-code-line 与内容行 .code-pre-line 同 data 键——spec.md:127-128
+// 主行号与内容行同键，跳行 / 当前行高亮按索引统一寻址）。
 export function codeLineNumbersHTML(count) {
   const n = Math.max(1, Math.floor(count) || 1);
   let out = "";
-  for (let i = 1; i <= n; i++) out += '<span class="code-gutter-line">' + i + "</span>";
+  for (let i = 1; i <= n; i++) {
+    out += '<span class="code-gutter-line" data-code-line="' + i + '">' + i + "</span>";
+  }
   return out;
 }
 
@@ -182,6 +256,8 @@ export function fileFindFilter(lineTexts, q) {
 if (typeof window !== "undefined") {
   Object.assign(window, {
     buildCodeTree,
+    fileIconHTML,
+    codeFileTabHTML,
     codeTreeHTML,
     codeLineNumbersHTML,
     highlightCodeLines,

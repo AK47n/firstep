@@ -116,6 +116,13 @@ check("目录打开：树加载（4 文件）+ 噪声目录不出现", await wai
       && JSON.stringify(paths) === JSON.stringify(['app.h', 'main.c', 'readme.md', 'src/digit.c'])
       && !paths.some((p) => p.startsWith('Debug'));
   })()`));
+check("树节点类型图标（文件 + 文件夹，树打磨 01）", await Eval(`
+  (() => {
+    const icons = document.querySelectorAll('#code-tree .code-tree-icon svg');
+    return icons.length >= 5
+      && !!document.querySelector('#code-tree .code-tree-dir summary .code-tree-icon svg')
+      && document.querySelectorAll('#code-tree .code-tree-file .code-tree-icon svg').length >= 3;
+  })()`));
 check("目录路径显示在顶栏", await Eval(`
   (document.getElementById('code-dir-label').textContent || '').includes('sample-proj')`));
 
@@ -137,8 +144,22 @@ check("内容行逐行元素就位（14 行，行高非 0，与 gutter 对齐）
   })()`));
 check("点选文件行高亮（.on）", await Eval(`
   document.querySelector('#code-tree [data-code-file="main.c"]').classList.contains('on')`));
-check("当前文件路径显示", await Eval(`
-  document.getElementById('code-current-path').textContent === 'main.c'`));
+check("顶栏文件标签（C main.c 观感，树打磨 01）", await Eval(`
+  (() => {
+    const tab = document.querySelector('#code-current-path .code-file-tab');
+    return !!tab
+      && tab.querySelector('.code-file-tab-badge').textContent === 'C'
+      && tab.querySelector('.code-file-tab-name').textContent === 'main.c';
+  })()`));
+check("点击第 3 行 → 当前行高亮（内容 + 行号同索引，树打磨 02）", await Eval(`
+  (() => {
+    const pre = document.querySelectorAll('#code-viewer .code-pre-line')[2];
+    if (!pre) return false;
+    pre.click();
+    const act = document.querySelector('#code-viewer .code-pre-line.active');
+    const gut = document.querySelector('#code-viewer .code-gutter-line.active');
+    return !!act && act.dataset.codeLine === '3' && !!gut && gut.textContent === '3';
+  })()`));
 
 // ================= 工单 03/05：大纲 =================
 check("大纲条目就位（include / define / function 三类，按行序）", await waitFor(`
@@ -150,12 +171,14 @@ check("大纲条目就位（include / define / function 三类，按行序）", 
       && items[2].dataset.outlineKind === 'function';
   })()`));
 await Eval(`document.querySelector('#code-outline [data-outline-line="8"]')?.click()`);
-check("大纲点击 → 跳行（gutter + 内容行同 data 键 flash）", await waitFor(`
+check("大纲点击 → 跳行（flash + 当前行移到目标行，树打磨 02）", await waitFor(`
   (() => {
     const view = document.getElementById('code-viewer');
     const flash = !!view.querySelector('.code-gutter-line.flash')
       && !!view.querySelector('.code-pre-line.flash');
-    return flash || view.scrollTop > 0;
+    const moved = !!view.querySelector('.code-pre-line.active[data-code-line="8"]')
+      && !!view.querySelector('.code-gutter-line.active[data-code-line="8"]');
+    return (flash || view.scrollTop > 0) && !!moved;
   })()`));
 
 // ================= 工单 02/05：跨文件搜索 =================
@@ -170,10 +193,11 @@ check("搜索命中列表（main.c:4 定义 + main.c:9 调用）", await waitFor
     return hits.length === 2 && hits.some((h) => h.dataset.searchLine === '4');
   })()`));
 await Eval(`document.querySelector('#code-search-results [data-search-line="9"]')?.click()`);
-check("搜索结果点击 → 跳文件 + 跳行（当前路径更新 + jump）", await waitFor(`
+check("搜索结果点击 → 跳文件 + 跳行（标签更新 + jump）", await waitFor(`
   (() => {
-    const path = document.getElementById('code-current-path').textContent;
-    return path === 'main.c' && !!document.getElementById('code-viewer').querySelector('.code-gutter-line.flash');
+    const name = document.querySelector('#code-current-path .code-file-tab-name');
+    return !!name && name.textContent === 'main.c'
+      && !!document.getElementById('code-viewer').querySelector('.code-gutter-line.flash');
   })()`));
 
 // ================= 当前文件 Ctrl+F =================

@@ -5,6 +5,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildCodeTree,
+  fileIconHTML,
+  codeFileTabHTML,
   codeTreeHTML,
   codeLineNumbersHTML,
   highlightCodeLines,
@@ -47,18 +49,59 @@ test("codeTreeHTML：目录 details/summary，文件行按钮带 data 与转义"
     { path: "a<b.c", size_bytes: 3 },
   ]);
   const html = codeTreeHTML(nodes);
-  assert.match(html, /<details open><summary>dir<\/summary>/);
+  assert.match(html, /<details open><summary>/);
+  assert.match(html, /<span class="code-tree-dir-name">dir<\/span>/);
   assert.match(html, /data-code-file="a&lt;b\.c"/);
   assert.ok(!html.includes("a<b.c"));
 });
 
-test("codeLineNumbersHTML：1..n 逐行 span，下限 1", () => {
+test("codeTreeHTML：节点含类型图标（目录文件夹 + 文件类型，树打磨 01）", () => {
+  const nodes = buildCodeTree([
+    { path: "src/digit.c", size_bytes: 1 },
+    { path: "main.c", size_bytes: 3 },
+    { path: "readme.md", size_bytes: 2 },
+  ]);
+  const html = codeTreeHTML(nodes);
+  assert.ok(html.includes('class="code-tree-icon"'));
+  assert.equal((html.match(/class="code-ico"/g) || []).length, 4);  // 目录 + 3 文件
+  assert.match(html, /<summary><span class="code-tree-icon"/);
+});
+
+test("fileIconHTML：扩展名映射 + 未知兜底 + 文件夹（树打磨 01）", () => {
+  assert.match(fileIconHTML("main.c", false), /^<svg class="code-ico"/);
+  assert.match(fileIconHTML("main.C", false), /^<svg class="code-ico"/);   // 大小写宽容
+  assert.match(fileIconHTML("main.c", false), /M6\.6 7/);                  // C <> 标记
+  assert.match(fileIconHTML("app.h", false), /M6\.2 5\.8/);                // h 标记
+  assert.match(fileIconHTML("notes.md", false), /M6\.3 6\.9/);             // md M 标记
+  assert.match(fileIconHTML("board.syscfg", false), /M6\.9 5\.8/);         // 配置 {} 标记
+  assert.match(fileIconHTML("blob.bin", false), /<circle/);                // 产物圆点
+  assert.match(fileIconHTML("unknown.xyz", false), /^<svg class="code-ico"/);
+  assert.ok(!fileIconHTML("unknown.xyz", false).includes("M6.6 7"));       // 未知无标记
+  assert.match(fileIconHTML("some/dir", true), /M1\.5 4/);                 // 文件夹
+});
+
+test("codeFileTabHTML：徽标 C/XML/TXT + data-tab-path + 转义 + 基名（树打磨 01）", () => {
+  const c = codeFileTabHTML("src/main.c", "c");
+  assert.match(c, /class="code-file-tab"/);
+  assert.match(c, />C<\/span>/);
+  assert.match(c, /data-tab-path="src\/main\.c"/);
+  assert.match(c, />main\.c<\/span>/);
+  assert.match(c, /title="src\/main\.c"/);
+  assert.match(codeFileTabHTML("tivaware.syscfg", "xml"), />XML</);
+  assert.match(codeFileTabHTML("readme.md", "plain"), />TXT</);
+  const evil = codeFileTabHTML("a<b.c", "c");
+  assert.ok(!evil.includes("a<b.c"));
+  assert.ok(evil.includes("a&lt;b.c"));
+});
+
+test("codeLineNumbersHTML：1..n 逐行 span（带 data-code-line 同 data 键），下限 1", () => {
   assert.equal(
     codeLineNumbersHTML(3),
-    '<span class="code-gutter-line">1</span><span class="code-gutter-line">2</span>'
-      + '<span class="code-gutter-line">3</span>'
+    '<span class="code-gutter-line" data-code-line="1">1</span>'
+      + '<span class="code-gutter-line" data-code-line="2">2</span>'
+      + '<span class="code-gutter-line" data-code-line="3">3</span>'
   );
-  assert.equal(codeLineNumbersHTML(0), '<span class="code-gutter-line">1</span>');
+  assert.equal(codeLineNumbersHTML(0), '<span class="code-gutter-line" data-code-line="1">1</span>');
 });
 
 test("codeViewHTML：gutter 行数 = pre 渲染行数（尾 \n 计空行），C 高亮走单源", () => {
