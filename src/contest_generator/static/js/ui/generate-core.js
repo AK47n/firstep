@@ -39,6 +39,7 @@ import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 import { setMainCDiskContext } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：生成成功记录上下文目录
 import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";  // 双向跳转桥（mainc-codeview-bridge/03）：打开工程目录 = 生成上下文
 import { openCodeViewer } from "/js/ui/codeview.js";  // 双向跳转桥（mainc-codeview-bridge/03）：切「代码」tab + 加载目录
+import { renderSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：骨架生成成功即渲染 chips（编程赋值不走 input）
 import { scheduleDraftSave } from "/js/ui/generate-steps.js";  // 草稿持久化（mainc-codeview-bridge/01）：生成成功即把上下文目录写入草稿（输入防抖之外显式触发）
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { refreshRecent } from "/js/ui/recent.js";
@@ -79,6 +80,7 @@ async function generateMain(mode) {
     $("main-c").value = data.main_c;
     syncMainCHighlight();
     markStepDone(8);
+    renderSkeletonRefs();  // 骨架引用模块锚定（工单 04）：生成后即显示引用 chips
     const box = $("intercepted");
     if (data.intercepted.length) {
       box.classList.remove("hidden");

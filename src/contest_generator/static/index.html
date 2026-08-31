@@ -2528,6 +2528,9 @@
         <pre id="main-c-hl" class="hl-layer" aria-hidden="true"></pre>
         <textarea id="main-c" rows="16" placeholder="点击「生成骨架」后这里会出现 main.c 内容，可手动编辑…"></textarea>
       </div>
+      <!-- 骨架引用模块锚定（工单 mainc-codeview-bridge/04）：静态提取骨架里的
+           模块风格调用 → chips 点击开模块详情；无命中整区隐藏 -->
+      <div id="skeleton-module-refs" class="skeleton-refs hidden" aria-label="骨架引用的模块" style="margin-top: var(--space-2)"></div>
       <div id="skeleton-msg" class="error"></div>
     </div>
 
@@ -3589,6 +3592,7 @@ import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceRef
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import
 import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
+import { initSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：编辑框下方 chips 委托
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
 "use strict";
 
@@ -3983,6 +3987,7 @@ applyInputA11y();  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19�
 initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
 initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪，纯本地交互
 initMainCDiskSync();  // main.c 磁盘同步状态行（mainc-codeview-bridge/01）：加载按钮委托（DOM 已就绪）
+initSkeletonRefs();  // 骨架引用模块锚定（mainc-codeview-bridge/04）：input 防抖 + chips 委托 + 首帧渲染
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
 initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
