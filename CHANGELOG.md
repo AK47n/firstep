@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5844b6d664358902302dbd7d6c76fa29a5428018 -->
+<!-- changelog-auto: last-commit=170ad7540482b336ef39aafc55d751824fe404a7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -7,6 +7,7 @@
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
 - 12:26 code-viewer-polish/03 代码 tab 全宽化：section 提为 body 直子跳出 main 的 max-width，左右 16px 贴边（对照 CCS 整窗编辑器）
+- 12:29 code-viewer-polish/03 代码 tab 纵向撑满：flex 列全高，底部贴视口 12px（对照 CCS 整窗编辑器）
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
