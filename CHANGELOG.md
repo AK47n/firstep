@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9a1774ba40e3ca398be5bd226588cf2f70a090ce -->
+<!-- changelog-auto: last-commit=801f65cefe17dda99cdd154cca282a2e51edbe4f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 20:37 code-viewer-editor/03 保存写盘链路：Ctrl+S（tab-code 截获）/顶栏保存按钮（isTabSavable 单源判据）→ POST /api/code/save——成功 toast+脏点清除+大纲（服务端重算直用）+树大小刷新+mtime_ns 基准更新；失败中文 toast 可重试、409 占位不弹模态；只读（非 UTF-8）保存拦截；node 17 项 + pytest 3044 全绿，smoke-03 11 项全过
 - 20:47 code-viewer-editor/04 保存冲突处理：409 → 冲突模态（磁盘版 vs 我的编辑双列前 10 行对比 + 覆盖写盘/放弃重载/取消）——覆盖=重读磁盘新 mtime 基准再存（零后端改动）；竞态/僵尸引用/缓存陈旧三处评审整改；焦点管理对齐 confirmModal 先例；node 18 项 + pytest 3044 全绿，smoke-04 8 项全过
 - 20:53 code-viewer-editor/05 .md 编辑态 + main.c 联动 + 收尾：「编辑源码」切可编辑可保存（未开 md 经搜索命中以 edit 态初始化）、md 保存后标题大纲前端重算（resp.outline 为 null 不清空）、main.c 保存→步骤 8 状态行差异提示（isMainCDiskDir 单源谓词）、文案代码编辑器；评审整改 4 项；node 18 项 + pytest 3044 全绿，smoke-02/03/04/05 共 51 项全过
+- 20:58 code-viewer-editor/06 布局调整：移除「代码」tab 顶部工具栏（标题+选择文件夹+目录提示压低了代码视觉）——选择文件夹并入左侧树面板头（.code-pane-action）、保存按钮移到标签条下信息条（右侧）、目录路径与「去生成页编辑 main.c」下沉为底部状态条（.code-statusbar，CCS 状态栏式）；代码区自顶开始，三栏全高清空；id 不变零 JS 改动；node + smokes 全绿（smoke-05 定位断言同步更新）
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
