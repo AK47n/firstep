@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1959d5ffa31a6a51178016ddc5ca7740900f6ca9 -->
+<!-- changelog-auto: last-commit=2413a7ce95f634600e88e6960b666c70fa596299 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -42,6 +42,7 @@
 - 22:34 工单 code-tab-compile/03：代码栏编译按钮 + 底部可折叠错误面板 + 错误行跳转（file 预检 → source-line 归一兜底链）；文案单源 compileSummaryText（生成页横幅/代码栏面板共用）；isMainCDiskDir 导出单源
 - 22:34 工单 code-tab-compile/04：CDP 冒烟（17 项：编译面板/点行选区/兜底链两跳）+ 新手指引补「代码栏编译」一条 + spec/工单入库
 - 22:58 工单 code-write-guard/01：写盘守卫模块——判定/文案纯件 + 两键弹窗守卫 + 脏计数导出
+- 22:58 工单 code-write-guard/02：5 个写盘入口 + 复用路径接线（评审整改）+ CDP 冒烟
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
