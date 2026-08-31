@@ -1334,9 +1334,14 @@
      三栏布局 / 树 / 行号 gutter / 只读视图。
      #tab-code 是 body 直子（已跳出 main 的 max-width——对照 CCS 全宽占用），
      IDE 化后全贴边：margin 0、高度直达视口底部（calc(100vh - header)），
-     外层卡片 chrome 整个去掉（.card 仅作 flex 容器），工具栏成页面工具条。 */
+     外层卡片 chrome 整个去掉（.card 仅作 flex 容器），工具栏成页面工具条。
+     ⚠ display 必须挂 .active 约束（bug 修复 07d：原基础规则 display:flex 是
+     id 级，压过 section.page{display:none}——代码栏在所有栏底部常驻可见，
+     用户反馈「所有栏底部都能看到代码编辑器」；基础规则不含 display，
+     未激活时回落 section.page{display:none}）。 */
   #tab-code { margin: 0; height: calc(100vh - var(--header-h));
-    min-height: 420px; display: flex; flex-direction: column; }
+    min-height: 420px; flex-direction: column; }
+  #tab-code.active { display: flex; }
   #tab-code .card { flex: 1 1 auto; min-height: 0; margin-bottom: 0;
     display: flex; flex-direction: column; background: none; border: 0;
     border-radius: 0; padding: 0; box-shadow: none; }
