@@ -389,6 +389,11 @@ export function initCodeViewer() {
       setCodeSide(b.dataset.codeSide);
     }));
 
+  // 显式「收起」按钮（工单 code-viewer-editor/07b）：tab 条右端常驻入口，
+  // 不依赖「点活动页签收起」的隐藏捷径（用户反馈无提示太神秘）。
+  document.querySelectorAll(".code-side-collapse").forEach((b) =>
+    b.addEventListener("click", () => setCodeSideCollapsed(true, true)));
+
   // 活动标签/内容变化 → 大纲（仅路径变化时重渲——逐键输入不重画大纲）/
   // 文件内查找 / 「返回预览」/「编辑源码」/「保存」按钮可见性联动
   let lastOutlinePath = null;
