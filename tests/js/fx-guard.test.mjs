@@ -62,6 +62,10 @@ const DOMAINS = {
   "code-compile.js": {
     compileStatusText: "fn", compileStatusClass: "fn", compileErrorRowsHTML: "fn",
   },
+  "write-guard.js": {
+    writeGuardNeeded: "fn", writeGuardTitle: "fn", writeGuardMessage: "fn",
+    WRITE_GUARD_ACTIONS: "object",
+  },
   "pdf.js": {
     pdfEncodedPath: "fn", pdfSubdir: "fn", formatMtime: "fn", pdfBroken: "fn",
     pdfBadgeTags: "fn", pdfDupGroups: "fn", pdfHealth: "fn",

@@ -423,6 +423,12 @@ export async function saveAllDirtyTabs() {
   return { ok: true, canceled: false };
 }
 
+// dirtySavableTabCount()：脏且非只读标签数（工单 code-write-guard/01——写盘
+// 守卫的提示计数；判据与 saveAllDirtyTabs 同源 = dirtySavableTabs 单源）。
+export function dirtySavableTabCount() {
+  return dirtySavableTabs(tabs).length;
+}
+
 // ===== 保存冲突模态（工单 code-viewer-editor/04）：覆盖 / 重载 / 取消 =====
 // 409 后先无缓存重读磁盘（/api/code/file，拿磁盘内容 + 新 mtime_ns 基准），
 // 弹「磁盘版 vs 我的编辑」双列对比（conflictHTML 纯件）+ 三动作：
