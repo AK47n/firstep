@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5ba9727e9063729dfe656b1789a47d6ad6c85ec8 -->
+<!-- changelog-auto: last-commit=8833bc556e64bd77bff909908f5613e19f70e854 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 18:31 mainc-codeview-bridge/05 补登记：library.read_module_file 入写库函数分类注册表（read 类，只读不落盘）——全量 pytest 结构化守卫兜底
 - 19:19 code-viewer-ide-restyle/01 查看器 IDE 一体化 Chrome（对照 CCS Dark+）：#tab-code 全贴边满高、.card 去卡片 chrome；三栏无缝 1px 分隔（gap 10px→0）；tab 条与编辑器接线（活动 tab 同编辑面底 + 顶 2px accent、bottom:-1px 压线）；编辑面 --code-bg、行号同底；当前行整行 rgba(accent,.07)+inset 2px 竖线；树/大纲活动行 flat+左 accent；section 头与 Theia 式侧栏视图 tab；全部 token 化；冒烟 30 项 + css-tokens 守卫全绿，深/亮截图存档
 - 19:19 code-viewer-ide-restyle/02 C 高亮补函数名与宏常量细类：标识符后 ,( 允许空白) → .tok-fn（关键字后 ( 仍 tok-kw）；全大写含下划线 → .tok-const（无下划线短词 A 不误染）；#define NAME 行 NAME 拆 tok-const 其余 tok-pre，#include 仍整行；--tok-fn(#dcdcaa/#953800) --tok-const(#c586c0/#6639ba) 入 :root/light 令牌族；单测 8 项新增，node --test 978 全绿，双主题计算色验证
+- 20:14 code-viewer-editor/01 后端保存链路：save_code_file + mtime_ns(字符串)/utf8 字段 + POST /api/code/save——路径安全单源/原子写/冲突 409 中文/非 UTF-8 拒绝；CodeViewConflictError 登记 409 表项置于 400 大元组之前（isinstance 顺序即语义）；测试域 19 项 + webapp 4 项，pytest 393 项全绿
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
