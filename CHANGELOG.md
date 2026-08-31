@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=2e7aa56bbc21d811d365ad779ac92b6899fca924 -->
+<!-- changelog-auto: last-commit=d788ae35263cd18813b59c0c1f400db294d40b46 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -32,6 +32,7 @@
 - 21:24 code-viewer-editor/07c 信息条空态折叠：用户反馈「代码第一行上面有一行啥也没有的空行，这行有什么意义吗」——根因 .code-file-path 信息条空态仍占 30px（普通 .c 未编辑时编辑源码/返回预览/保存三按钮全隐藏）；改为空态折叠 .empty（display:none），判定与按钮可见性同源同步于 onActiveTabChanged 回调（openEditorFile/setMdMode/applySavedState/closeTab 均经 notifyActive 汇聚，单点唯一，不引入 :has() 无先例）；smoke-07 8 项全过 + smoke-02/03/04/05/06 回归 70 项全过，node tests/js 996 全绿
 - 21:33 code-viewer-editor/07d 栏显示隔离修复：用户反馈「所有栏底部都能看到代码编辑器」——根因 #tab-code{display:flex}（工单 code-viewer/04-05 以来的 id 级规则）优先级压过 section.page{display:none}，代码栏从未被页签切换隐藏（旧 CSS 下激活任意栏双栏同现、滚动到底必见编辑器）；修复=基础规则删 display、#tab-code.active{display:flex} 显式约束；排查其余 #tab-* id 级规则仅此一处；护栏 smoke-08 13 项（10 栏激活逐一断言唯一可见 section=目标+往返）+ 既有 02-07 冒烟 78 项回归全绿
 - 21:37 code-viewer-editor/07e 信息条初始空态折叠：用户反馈「中间那行黑的空隙不需要留，直接顶满」——未打开目录/无活动 tab 时 .code-file-path 空态 30px 黑带残留（07c 空态同步在 onActiveTabChanged 回调内，初始从未触发）；修复=抽 syncInfoBar() 单源 + initCodeViewer 尾部显式调用一次；smoke-09 6 项全过（初始折叠/gap<4/开目录仍折叠/编辑出现）+ smoke-07/08 回归全绿，node tests/js 996 全绿
+- 21:45 code-viewer-editor/07f 代码栏视口锁定：用户反馈「这个代码栏不要下拉到底，点开看就能看到，你下拉到底就看不到了」——根因代码栏在 main 之后，main{margin:20px auto} 在代码栏激活（main 空置高度0）时塌缩成 20px 空隙推下代码栏，其 height 按 48px 顶部算导致底部溢出 20px、body 可滚、下拉到底代码栏滚出视口；修复=①DOM 移动 #tab-code 到 </header> 之后（header 直连空隙归零，top48/bottom=视口底/不可滚，全部 id+类选择器零顺序依赖）②#tab-code.active ~ main{margin:0 auto} 兄弟选择器消 html 塌缩余高（非激活时 main 边距不变）；smoke-02~09 共 97 项全回归全绿 + node tests/js 996 全绿
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
