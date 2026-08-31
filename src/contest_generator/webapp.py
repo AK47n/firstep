@@ -3500,11 +3500,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """自动编译（SSE 流，工单 autocompile-loop/01）：compile_start → done
         （exit_code / error_text / passed / timed_out）或 error → 流结束。
 
-        请求体契约：platform（stm32 / mspm0，必填）；output_dir（必填，生成
-        结果目录，必须已存在）。工具链缺失在起流前判定 → 400 中文（登记
-        errors.py，前端据此置灰按钮回退贴文本模式）；工程结构异常（没有
-        .uvprojx / Debug/makefile）发生在流内 → error 事件如实报告（文案
-        写具体，不沿用泛化文案——工单观察记录 2）。超时 → done 携带
+        请求体契约：platform（stm32 / mspm0，**可省略**——工单 code-tab-compile/01：
+        缺省 / 空白时由 context_manifest._infer_platform 从工程文件自动推断，
+        与 /api/flash 同判据，两者都有 / 都没有 → ContextError 400 中文）；
+        output_dir（必填，生成结果目录，必须已存在）。工具链缺失在起流前判定
+        → 400 中文（登记 errors.py，前端据此置灰按钮回退贴文本模式）；工程
+        结构异常（没有 .uvprojx / Debug/makefile）发生在流内 → error 事件如实
+        报告（文案写具体，不沿用泛化文案——工单观察记录 2）。超时 → done 携带
         timed_out=True（如实报告不静默）。
 
         done 的 data：platform / output_dir / exit_code（超时为 null）/
@@ -3523,10 +3525,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         工具链探测（起流前 400）与流内编排（compile_start → collect → parse
         → done 11 字段）在 compile_runner（resolve_compile_toolchain /
         run_compile），本路由只取参 + 转调 + SSE 包装。"""
-        platform = _require_str(payload, "platform")
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
             raise CompileRunnerError(f"输出目录不存在：{output_dir}")
+        platform = payload.get("platform")
+        if not isinstance(platform, str) or not platform.strip():
+            # 平台可省略（工单 code-tab-compile/01）：缺省 / 空白 → 工程文件自动推断，
+            # 与 /api/flash 同判据；两者都有 / 都没有 → ContextError 400 中文
+            #（errors.py 已登记，前端面板状态行直出中文提示）。
+            platform = _infer_platform(output_dir)
+        platform = platform.strip()
         # 编译不调 LLM，不要求 AI 配置（工单 compile-verdict-align/01）：未配置
         # 时 uv4_path / gmake_path 覆盖为空，走自动探测（find_uv4/find_make
         # 空覆盖语义 = 常见路径 + PATH）

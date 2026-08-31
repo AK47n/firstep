@@ -1469,6 +1469,78 @@ def test_compile_mspm0_gmake_end_to_end(client, context, tmp_path, monkeypatch):
     assert "-B" in done["command"]  # 全量重建（决策记录 4）
 
 
+def test_compile_platform_omitted_infers_stm32(tmp_path, monkeypatch):
+    """平台可省略（工单 code-tab-compile/01）：缺省 → 从工程文件自动推断
+    stm32（.uvprojx，与 /api/flash 同判据），done.platform 为推断值。"""
+    ctx = AppContext(config_path=tmp_path / "cfg" / "config.json", config=None)
+    client = TestClient(create_app(ctx))
+    out = _stm32_project(tmp_path)
+    fake_uv4 = _fake_uv4_bat(
+        tmp_path, 0,
+        ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."],
+    )
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
+    events = _compile_stream(client, {"output_dir": str(out)})
+    assert [kind for kind, _ in events] == [EVENT_COMPILE_START, EVENT_DONE]
+    done = events[1][1]
+    assert done["platform"] == PLATFORM_STM32
+    assert done["passed"] is True
+
+
+def test_compile_platform_blank_infers_stm32(tmp_path, monkeypatch):
+    """空白 platform 同缺省：推断 stm32（不再 400「缺少必填字段」）。"""
+    ctx = AppContext(config_path=tmp_path / "cfg" / "config.json", config=None)
+    client = TestClient(create_app(ctx))
+    out = _stm32_project(tmp_path)
+    fake_uv4 = _fake_uv4_bat(
+        tmp_path, 0,
+        ["Build started: Project: fake", "0 Error(s) 0 Warning(s)."],
+    )
+    monkeypatch.setattr("contest_generator.compile_runner.find_uv4", lambda override: fake_uv4)
+    events = _compile_stream(client, {"platform": "", "output_dir": str(out)})
+    assert events[-1][1]["platform"] == PLATFORM_STM32
+
+
+def test_compile_platform_omitted_infers_mspm0(client, context, tmp_path, monkeypatch):
+    """平台可省略：缺省 → mspm0（.cproject），沿用 gmake 通路。"""
+    out = tmp_path / "project"
+    (out / "Debug").mkdir(parents=True)
+    (out / ".cproject").write_text("<cproject/>", encoding="utf-8")
+    (out / "Debug" / "makefile").write_text("all:\n", encoding="utf-8")
+    fake_make = tmp_path / "gmake.bat"
+    fake_make.write_text(
+        "@echo off\r\n"
+        "echo gmake: Entering directory Debug\r\n"
+        "echo code/main.c:45: error: use of undeclared identifier 'y'\r\n"
+        "exit /b 2\r\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("contest_generator.compile_runner.find_make", lambda override: fake_make)
+    done = _compile_stream(client, {"output_dir": str(out)})[-1][1]
+    assert done["platform"] == PLATFORM_MSPM0
+    assert done["passed"] is False
+
+
+def test_compile_platform_infer_both_configs_400(client, context, tmp_path):
+    """两个平台配置文件都在 → ContextError 400 中文（不猜测平台）。"""
+    out = tmp_path / "project"
+    out.mkdir(parents=True)
+    (out / "Project.uvprojx").write_text("<Project/>", encoding="utf-8")
+    (out / ".cproject").write_text("<cproject/>", encoding="utf-8")
+    resp = client.post("/api/compile", json={"output_dir": str(out)})
+    assert resp.status_code == 400
+    assert "同时含" in resp.json()["detail"]
+
+
+def test_compile_platform_infer_no_config_400(client, context, tmp_path):
+    """没有工程配置文件 → ContextError 400 中文（前端面板状态行直出提示）。"""
+    out = tmp_path / "project"
+    out.mkdir(parents=True)
+    resp = client.post("/api/compile", json={"output_dir": str(out)})
+    assert resp.status_code == 400
+    assert "没有工程配置文件" in resp.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # 全局状态：平台可用性（验收项 5：未落地平台显示"暂不可用"而非报错）
 # ---------------------------------------------------------------------------
