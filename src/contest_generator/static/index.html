@@ -1308,7 +1308,10 @@
     line-height: 1.7; max-height: min(52vh, 560px); overflow-y: auto; padding: 12px 14px;
     margin: 6px 0 0; background: var(--bg); border: 1px solid var(--border);
     border-radius: var(--radius-md); font-family: var(--mono); }
-  /* 代码查看器（工单 code-viewer/04-05）：三栏布局 / 树 / 行号 gutter / 只读视图 */
+  /* 代码查看器（工单 code-viewer/04-05）：三栏布局 / 树 / 行号 gutter / 只读视图。
+     #tab-code 是 body 直子（已跳出 main 的 max-width——对照 CCS 全宽占用），
+     不再受 main > section.page 的 1280px 上限约束；两侧仅各 16px 贴边。 */
+  #tab-code { margin: 20px 16px; }
   .code-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .code-toolbar h2 { margin: 0; }
   .code-dir-label { font-family: var(--mono); font-size: 12px; overflow: hidden;
@@ -3088,47 +3091,6 @@
     </div>
   </section>
 
-  <!-- ============================ 代码查看器（工单 code-viewer/04-05） ============================ -->
-  <section id="tab-code" class="page">
-    <div class="card">
-      <div class="code-toolbar">
-        <h2>代码查看器（只读）</h2>
-        <button id="btn-code-pick-dir" data-ico="code">选择文件夹…</button>
-        <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
-      </div>
-      <div class="code-layout">
-        <div class="code-pane code-pane-tree">
-          <div class="code-pane-title">文件</div>
-          <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
-        </div>
-        <div class="code-pane code-pane-main">
-          <div class="code-file-path mono" id="code-current-path"></div>
-          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件查看内容（只读）</span></div>
-        </div>
-        <div class="code-pane code-pane-side">
-          <div class="code-side-tabs">
-            <button type="button" data-code-side="outline" class="on">大纲</button>
-            <button type="button" data-code-side="search">搜索</button>
-          </div>
-          <div data-code-side-panel="outline" class="code-side-panel">
-            <div id="code-outline" class="code-outline-box"><span class="muted">打开 .c/.h 文件后显示函数 / 宏 / include</span></div>
-          </div>
-          <div data-code-side-panel="search" class="code-side-panel hidden">
-            <div class="code-search-row">
-              <input type="text" id="code-search-input" placeholder="在工程中搜索关键词…" aria-label="在工程中搜索关键词">
-              <button type="button" id="btn-code-search">搜索</button>
-            </div>
-            <div class="code-find-row">
-              <input type="text" id="code-find-input" placeholder="当前文件内查找（Ctrl+F）" aria-label="当前文件内查找">
-            </div>
-            <div id="code-search-results" class="code-search-results"></div>
-            <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ============================ 更新记录页 ============================ -->
   <section id="tab-changelog" class="page">
     <div class="card">
@@ -3410,6 +3372,48 @@
     </div>
   </section>
 </main>
+
+<!-- ============================ 代码查看器（工单 code-viewer/04-05） ============================
+     body 直子（跳出 main 的 max-width）：IDE 式全宽占用，两侧仅 16px 边距（对照 CCS）。 -->
+<section id="tab-code" class="page">
+    <div class="card">
+      <div class="code-toolbar">
+        <h2>代码查看器（只读）</h2>
+        <button id="btn-code-pick-dir" data-ico="code">选择文件夹…</button>
+        <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
+      </div>
+      <div class="code-layout">
+        <div class="code-pane code-pane-tree">
+          <div class="code-pane-title">文件</div>
+          <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
+        </div>
+        <div class="code-pane code-pane-main">
+          <div class="code-file-path mono" id="code-current-path"></div>
+          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件查看内容（只读）</span></div>
+        </div>
+        <div class="code-pane code-pane-side">
+          <div class="code-side-tabs">
+            <button type="button" data-code-side="outline" class="on">大纲</button>
+            <button type="button" data-code-side="search">搜索</button>
+          </div>
+          <div data-code-side-panel="outline" class="code-side-panel">
+            <div id="code-outline" class="code-outline-box"><span class="muted">打开 .c/.h 文件后显示函数 / 宏 / include</span></div>
+          </div>
+          <div data-code-side-panel="search" class="code-side-panel hidden">
+            <div class="code-search-row">
+              <input type="text" id="code-search-input" placeholder="在工程中搜索关键词…" aria-label="在工程中搜索关键词">
+              <button type="button" id="btn-code-search">搜索</button>
+            </div>
+            <div class="code-find-row">
+              <input type="text" id="code-find-input" placeholder="当前文件内查找（Ctrl+F）" aria-label="当前文件内查找">
+            </div>
+            <div id="code-search-results" class="code-search-results"></div>
+            <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
 <script type="module">
 // 前端纯函数模块（工单 frontend-es-modules/01）：静态 import 保证本模块执行前
