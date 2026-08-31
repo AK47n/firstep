@@ -7736,3 +7736,68 @@ def test_code_search_missing_dir_400_chinese(client, tmp_path):
 
     assert resp.status_code == 400
     assert "目录不存在" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# /api/code/raw：md 预览本地图片字节（工单 code-viewer-md-preview/02）
+# ---------------------------------------------------------------------------
+
+
+def test_code_raw_returns_image_bytes_with_media_type_and_cache(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "images").mkdir()
+    png = b"\x89PNG\r\n\x1a\n" + b"payload"
+    (root / "images" / "a.png").write_bytes(png)
+
+    resp = client.get("/api/code/raw", params={"dir": str(root), "path": "images/a.png"})
+
+    assert resp.status_code == 200
+    assert resp.content == png
+    assert resp.headers["content-type"] == "image/png"
+    assert resp.headers["cache-control"] == "private, max-age=3600"
+
+
+def test_code_raw_traversal_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.get(
+        "/api/code/raw", params={"dir": str(root), "path": "../x.png"}
+    )
+
+    assert resp.status_code == 400
+    assert "非法路径" in resp.json()["detail"]
+
+
+def test_code_raw_missing_file_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.get(
+        "/api/code/raw", params={"dir": str(root), "path": "nope.png"}
+    )
+
+    assert resp.status_code == 400
+    assert "文件不存在" in resp.json()["detail"]
+
+
+def test_code_raw_non_image_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_bytes(b"int x;")
+
+    resp = client.get(
+        "/api/code/raw", params={"dir": str(root), "path": "main.c"}
+    )
+
+    assert resp.status_code == 400
+    assert "不支持的图片类型" in resp.json()["detail"]
+
+
+def test_code_raw_missing_params_422(client, tmp_path):
+    # 与 /api/code/file 同口径：缺 dir/path 是 FastAPI 必填校验（422），
+    # 提供但非法才是业务 400。
+    resp = client.get("/api/code/raw", params={"dir": str(tmp_path)})
+
+    assert resp.status_code == 422
