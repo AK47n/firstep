@@ -1340,21 +1340,28 @@
   #tab-code .card { flex: 1 1 auto; min-height: 0; margin-bottom: 0;
     display: flex; flex-direction: column; background: none; border: 0;
     border-radius: 0; padding: 0; box-shadow: none; }
-  .code-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    padding: 10px 16px; border-bottom: 1px solid var(--border); }
-  .code-toolbar h2 { margin: 0; }
-  .code-dir-label { font-family: var(--mono); font-size: 12px; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; max-width: 46vw;
-    margin-left: auto; text-align: right; }
+  /* 底部状态条（工单 code-viewer-editor/06：顶栏移除后下沉——目录路径 +
+     生成上下文桥按钮，不占编辑器视觉高度，CCS 状态栏式）。 */
+  .code-statusbar { display: flex; align-items: center; gap: 10px; flex: none;
+    padding: 5px 14px; border-top: 1px solid var(--border);
+    background: var(--panel-2); font-size: 12px; min-height: 28px; }
+  .code-statusbar .code-dir-label { font-family: var(--mono); flex: 1 1 auto;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .code-layout { display: grid; grid-template-columns: var(--code-tree-w, 240px) minmax(0, 1fr) 300px;
     gap: 0; margin-top: 0; flex: 1 1 auto; min-height: 300px; }
   .code-pane { display: flex; flex-direction: column; min-width: 0;
     background: var(--panel); }
-  /* 面板标题（IDE 化改版）：section 头观感——小字 muted、panel-2 底、
-     底部 1px 分隔；位于滚动容器之外天然常驻（无需 sticky）。 */
+  /* 面板标题（IDE 化改版 + 65 改版）：section 头观感——小字 muted、panel-2 底、
+     底部 1px 分隔；位于滚动容器之外天然常驻（无需 sticky）；右侧容纳
+     「选择文件夹」动作（树面板头部，工单 code-viewer-editor/06）。 */
   .code-pane-title { font-weight: 650; font-size: 11px; letter-spacing: .05em;
     color: var(--muted); padding: 7px 10px; background: var(--panel-2);
-    border-bottom: 1px solid var(--border); flex: none; }
+    border-bottom: 1px solid var(--border); flex: none;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .code-pane-action { flex: none; font-size: 11.5px; line-height: 1; padding: 3px 8px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--panel); color: var(--accent); cursor: pointer; }
+  .code-pane-action:hover { border-color: var(--accent); background: var(--accent-dim); }
   .code-tree-box { flex: 1; overflow: auto; min-height: 0; }
   /* 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：树宽由 --code-tree-w
      驱动（默认 240，localStorage 持久化）；手柄悬于面板右缘与中缝之间
@@ -3583,16 +3590,12 @@
      body 直子（跳出 main 的 max-width）：IDE 式全宽占用，两侧仅 16px 边距（对照 CCS）。 -->
 <section id="tab-code" class="page">
     <div class="card">
-      <div class="code-toolbar">
-        <h2>代码编辑器</h2>
-        <button id="btn-code-pick-dir" data-ico="code">选择文件夹…</button>
-        <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
-        <button id="btn-code-save" class="hidden" type="button" title="保存当前文件到磁盘（Ctrl+S）">保存</button>
-        <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
-      </div>
       <div class="code-layout">
         <div class="code-pane code-pane-tree">
-          <div class="code-pane-title">文件</div>
+          <div class="code-pane-title">
+            <span>文件</span>
+            <button id="btn-code-pick-dir" class="code-pane-action" title="选择要浏览/编辑的本地目录">选择文件夹…</button>
+          </div>
           <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
           <div class="code-tree-resize-handle" id="code-tree-resize" role="separator"
             aria-orientation="vertical" aria-label="调整文件树面板宽度"
@@ -3605,6 +3608,7 @@
               title="切到源码编辑态（可修改并保存，Ctrl+S）">编辑源码</button>
             <button type="button" id="code-back-preview" class="code-back-preview hidden"
               title="回到 .md 渲染预览（编辑态内容保留）">返回预览</button>
+            <button id="btn-code-save" class="hidden" type="button" title="保存当前文件到磁盘（Ctrl+S）">保存</button>
           </div>
           <div id="code-viewer" class="code-view"><span class="muted">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span></div>
         </div>
@@ -3628,6 +3632,10 @@
             <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>
           </div>
         </div>
+      </div>
+      <div class="code-statusbar">
+        <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
+        <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
       </div>
     </div>
   </section>
