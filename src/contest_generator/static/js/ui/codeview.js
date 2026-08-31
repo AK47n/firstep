@@ -85,8 +85,9 @@ async function loadCodeDir(dir) {
 }
 
 // isMainCDiskDir()：当前打开目录 === 生成上下文目录（单源谓词——「去生成页
-// 编辑 main.c」可见性与 main.c 保存联动共用，防两处漂移）。
-function isMainCDiskDir() {
+// 编辑 main.c」可见性、main.c 保存联动与代码栏编译引导共用，防多处漂移；
+// code-tab-compile/03 起 export：ui/code-compile.js 直接 import 同一实现）。
+export function isMainCDiskDir() {
   return !!codeDir && codeDir === getMainCDiskDir();
 }
 

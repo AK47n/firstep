@@ -1370,6 +1370,34 @@
     background: var(--panel-2); font-size: 12px; min-height: 28px; }
   .code-statusbar .code-dir-label { font-family: var(--mono); flex: 1 1 auto;
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 编译结果面板（工单 code-tab-compile/03）：编辑器下方、状态栏上方的可折叠
+     底部面板——头部常驻（状态行 + 动作按钮），错误列表滚动；.collapsed 只收
+     列表（头部状态行始终可见），清空 = 整面板隐藏。 */
+  #code-compile-panel { flex: none; border-top: 1px solid var(--border);
+    background: var(--panel-2); font-size: 12px; }
+  .code-compile-head { display: flex; align-items: center; gap: 10px;
+    padding: 4px 10px; min-height: 26px; }
+  .code-compile-head strong { font-weight: 650; color: var(--muted);
+    font-size: 11px; letter-spacing: .05em; }
+  .code-compile-status { flex: 1 1 auto; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .code-compile-status.ok { color: var(--ok); }
+  .code-compile-status.err { color: var(--danger); }
+  .code-compile-head button { font-size: 11.5px; line-height: 1; padding: 3px 8px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--panel); color: var(--accent); cursor: pointer; flex: none; }
+  .code-compile-head button:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .code-compile-errors { max-height: 160px; overflow: auto; padding: 0 0 4px 10px;
+    display: flex; flex-direction: column; gap: 2px; }
+  #code-compile-panel.collapsed .code-compile-errors { display: none; }
+  .code-compile-error { display: flex; gap: 8px; text-align: left; padding: 3px 8px;
+    border: 0; background: transparent; color: var(--text); font-size: 12px;
+    font-family: var(--mono); cursor: pointer; border-radius: var(--radius-sm); }
+  .code-compile-error:hover { background: var(--accent-dim); color: var(--accent); }
+  .code-compile-error .code-compile-path { flex: none; color: var(--muted); }
+  .code-compile-error:hover .code-compile-path { color: var(--accent); }
+  .code-compile-error .code-compile-msg { min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
   .code-layout { display: grid; grid-template-columns: var(--code-tree-w, 240px) minmax(0, 1fr) var(--code-side-w, 300px);
     gap: 0; margin-top: 0; flex: 1 1 auto; min-height: 300px; }
   .code-pane { display: flex; flex-direction: column; min-width: 0;
@@ -2500,8 +2528,22 @@
           </div>
         </div>
       </div>
+      <div id="code-compile-panel" class="code-compile-panel hidden" aria-label="编译结果">
+        <div class="code-compile-head">
+          <strong>编译</strong>
+          <span id="code-compile-status" class="code-compile-status"></span>
+          <button type="button" id="btn-code-compile-goto" class="hidden"
+            title="此目录 = 生成上下文：去生成页修复中心做 AI 一键编译修复">去生成页一键编译修复</button>
+          <button type="button" id="btn-code-compile-collapse" title="收起/展开错误列表"
+            aria-label="收起或展开错误列表">收起</button>
+          <button type="button" id="btn-code-compile-clear" title="清空编译结果"
+            aria-label="清空编译结果">清空</button>
+        </div>
+        <div id="code-compile-errors" class="code-compile-errors"></div>
+      </div>
       <div class="code-statusbar">
         <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
+        <button id="btn-code-compile" type="button" title="保存全部未保存文件并编译当前工程（平台自动识别；不调 AI）">编译</button>
         <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
       </div>
     </div>
@@ -3760,6 +3802,7 @@ import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceRef
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import
 import { initCodeEditor } from "/js/ui/codeeditor.js";  // 代码编辑器（code-viewer-editor/02）：多标签 + 可编辑三明治 + 保存（/03）/冲突（/04）
+import { initCodeCompile } from "/js/ui/code-compile.js";  // 代码栏编译（code-tab-compile/03）：编译按钮 + 底部错误面板 + 错误行跳转
 import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
 import { initSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：编辑框下方 chips 委托
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
@@ -4164,6 +4207,7 @@ initSkeletonRefs();  // 骨架引用模块锚定（mainc-codeview-bridge/04）�
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
 initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
 initCodeEditor();  // 代码编辑器（工单 code-viewer-editor/02）：多标签条 / 编辑三明治 / 跳行 / 关闭确认接线
+initCodeCompile();  // 代码栏编译（工单 code-tab-compile/03）：编译按钮 / 底部错误面板 / 错误行跳转接线
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM 已就绪，纯本地交互

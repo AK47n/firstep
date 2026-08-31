@@ -20,7 +20,7 @@
 // 本簇，避免 ui→ui 环；本簇单向 import A）。
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
-import { fmtSeconds, fixLogGroupHidden } from "/js/fx/generate.js";
+import { fmtSeconds, fixLogGroupHidden, compileSummaryText } from "/js/fx/generate.js";
 import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
 import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
@@ -68,16 +68,8 @@ function setFixCenterLog(text) {
 }
 
 function renderCompileBanner(done) {   // compile done 载荷 → 横幅终态文案
-  const dur = fmtSeconds(done.duration);
-  const sum = done.summary || { errors: 0, warnings: 0 };
-  if (done.timed_out) {
-    compileBanner("fail", "编译超时（工具链 180s 未返回）");
-  } else if (done.passed) {
-    compileBanner("success", "编译成功 · " + (sum.errors || 0) + " Error "
-      + (sum.warnings || 0) + " Warning · 耗时 " + dur + "s");
-  } else {
-    compileBanner("fail", "编译失败 · " + (sum.errors || 0) + " 个错误 · 耗时 " + dur + "s");
-  }
+  const text = compileSummaryText(done);   // 文案单源（code-tab-compile/03 评审整改）
+  compileBanner(done.timed_out ? "fail" : done.passed ? "success" : "fail", text);
 }
 
 // 错误条目 key（工单 compile-experience-ui/01）：path 归一 POSIX；精确匹配
