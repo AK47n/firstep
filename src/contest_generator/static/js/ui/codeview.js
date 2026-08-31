@@ -18,6 +18,10 @@ import {
   outlineEmptyHTML,
   searchListHTML,
   fileFindFilter,
+  treeWidthClamp,
+  parseTreeWidthStored,
+  CODE_TREE_WIDTH_MAX,
+  CODE_TREE_WIDTH_DEFAULT,
 } from "/js/fx/codeview.js";
 
 // 模块态：当前目录 / 扁平清单 / 文件内容 memo / 当前文件与大纲
@@ -28,6 +32,11 @@ let currentPath = "";
 let currentContent = "";
 let currentOutline = null;
 let currentLang = "plain";
+
+// 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：宽度持久化键——
+// localStorage 只进胶水层（fx 无副作用约定，同 firstep.mainc.zoom 先例）。
+const CODE_TREE_W_KEY = "firstep.codeTreeWidth";
+const CODE_TREE_WIDTH_STEP = 16;  // 键盘 ←/→ 步进（spec：16px 微调）
 
 function codeFileURL(dir, path) {
   return "/api/code/file?dir=" + encodeURIComponent(dir)
@@ -171,6 +180,91 @@ function setCodeSide(side) {
     p.classList.toggle("hidden", p.dataset.codeSidePanel !== side));
 }
 
+// ===== 树面板拖拽调宽（工单 code-viewer-tree-resize/01）=====
+function codeLayoutEl() {
+  return document.querySelector(".code-layout");
+}
+
+// applyTreeWidth(px, persist)：单一路径——纯函数收敛（clamp 到
+// [160, min(720, layoutW-480)]）→ 写 CSS 变量（.code-layout 网格列宽
+// 随之变化）→ persist 时落 localStorage（try/catch：隐私模式静默）。
+function applyTreeWidth(px, persist) {
+  const layout = codeLayoutEl();
+  if (!layout) return;
+  const w = treeWidthClamp(px, layout.getBoundingClientRect().width);
+  layout.style.setProperty("--code-tree-w", w + "px");
+  if (persist) {
+    try { localStorage.setItem(CODE_TREE_W_KEY, String(w)); } catch { /* 静默 */ }
+  }
+}
+
+// restoreTreeWidth()：init 恢复——读存储（try/catch）→ parse 收敛 →
+// 同一 apply 路径；persist=false（值与存储一致，不重复写）。
+function restoreTreeWidth() {
+  const layout = codeLayoutEl();
+  if (!layout) return;
+  let raw = null;
+  try { raw = localStorage.getItem(CODE_TREE_W_KEY); } catch { raw = null; }
+  applyTreeWidth(parseTreeWidthStored(raw, layout.getBoundingClientRect().width), false);
+}
+
+// currentTreeWidth(layout)：当前生效树宽（px；未设/非法 → 默认 240）——
+// endDrag 落盘与键盘微调共用同一读取（评审整改：去重复 parseInt || 兜底）。
+function currentTreeWidth(layout) {
+  return parseInt(layout.style.getPropertyValue("--code-tree-w"), 10)
+    || CODE_TREE_WIDTH_DEFAULT;
+}
+
+function initCodeTreeResize() {
+  const handle = $("code-tree-resize");
+  const layout = codeLayoutEl();
+  if (!handle || !layout) return;
+  let dragging = false;
+
+  // 拖拽：pointer capture（移出窗口/松手外仍收到 move）→ clientX 相对
+  // 布局左缘即目标树宽；body.code-resizing 禁文本选中。pointercancel 与
+  // pointerup 同路径（落盘当前值）。
+  handle.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    // setPointerCapture 对合成事件（PointerEvent 无活动指针）会抛
+    // NotFoundError——捕获失败不阻断拖拽（move/up 仍绑在 handle 上），
+    // 仅作防御性包装（真指针事件正常生效）。
+    try { handle.setPointerCapture(e.pointerId); } catch { /* 合成事件：忽略 */ }
+    document.body.classList.add("code-resizing");
+  });
+  handle.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    applyTreeWidth(e.clientX - layout.getBoundingClientRect().left, false);
+  });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("code-resizing");
+    const cur = layout.style.getPropertyValue("--code-tree-w");
+    applyTreeWidth(parseInt(cur, 10) || CODE_TREE_WIDTH_DEFAULT, true);
+  };
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+  // 双击复位默认 240 并持久化
+  handle.addEventListener("dblclick", () => applyTreeWidth(CODE_TREE_WIDTH_DEFAULT, true));
+  // 键盘（role=separator 焦点可达）：←/→ 16px 步进、Home 默认、End 上限，
+  // 与拖拽同一 applyTreeWidth 路径（含持久化）。
+  handle.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const cur = layout.style.getPropertyValue("--code-tree-w") || "240px";
+      applyTreeWidth((parseInt(cur, 10) || CODE_TREE_WIDTH_DEFAULT)
+        + (e.key === "ArrowLeft" ? -16 : 16), true);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      applyTreeWidth(CODE_TREE_WIDTH_DEFAULT, true);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      applyTreeWidth(CODE_TREE_WIDTH_MAX, true);
+    }
+  });
+}
+
 // ===== 右侧栏：大纲 =====
 function renderOutline() {
   const box = $("code-outline");
@@ -296,4 +390,9 @@ export function initCodeViewer() {
     await openCodeFile(path);
     jumpToLine(line);
   });
+
+  // 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：绑定手柄 + 恢复
+  // localStorage 宽度（DOM 已就绪；无布局/手柄时静默跳过——不阻断其他绑定）。
+  initCodeTreeResize();
+  restoreTreeWidth();
 }

@@ -44,6 +44,15 @@ const DOMAINS = {
     maincLineOffsetRange: "fn", isMainCPath: "fn", maincContentEmpty: "fn",
     maincFullscreenLabel: "fn", maincScrollToRange: "fn", maincJumpToLine: "fn",
   },
+  "codeview.js": {
+    buildCodeTree: "fn", fileIconHTML: "fn", codeFileTabHTML: "fn",
+    codeTreeHTML: "fn", codeLineNumbersHTML: "fn", highlightCodeLines: "fn",
+    codeViewHTML: "fn", outlineHTML: "fn", outlineEmptyHTML: "fn",
+    searchListHTML: "fn", fileFindFilter: "fn",
+    treeWidthClamp: "fn", parseTreeWidthStored: "fn",
+    CODE_TREE_WIDTH_MIN: "number", CODE_TREE_WIDTH_MAX: "number",
+    CODE_TREE_WIDTH_DEFAULT: "number",
+  },
   "pdf.js": {
     pdfEncodedPath: "fn", pdfSubdir: "fn", formatMtime: "fn", pdfBroken: "fn",
     pdfBadgeTags: "fn", pdfDupGroups: "fn", pdfHealth: "fn",

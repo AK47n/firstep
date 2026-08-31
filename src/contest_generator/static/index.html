@@ -1322,13 +1322,30 @@
   .code-toolbar h2 { margin: 0; }
   .code-dir-label { font-family: var(--mono); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
-  .code-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr) 300px;
+  .code-layout { display: grid; grid-template-columns: var(--code-tree-w, 240px) minmax(0, 1fr) 300px;
     gap: 10px; margin-top: var(--space-3); flex: 1 1 auto; min-height: 300px; }
   .code-pane { display: flex; flex-direction: column; min-width: 0; background: var(--panel);
     border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; }
   .code-pane-title { font-weight: 600; font-size: 12.5px; color: var(--muted);
     padding: 2px 4px 6px; }
   .code-tree-box { flex: 1; overflow: auto; min-height: 0; }
+  /* 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：树宽由 --code-tree-w
+     驱动（默认 240，localStorage 持久化）；手柄悬于面板右缘与中缝之间
+     （grid gap 10px 内，right:-5px），不盖树内容与滚动条；拖拽中
+     body.code-resizing 禁文本选中；accent 线 hover/聚焦/拖拽中可见。
+     焦点轮廓照 rev/guide/res 标签先例（outline 2px accent + offset 2px）。 */
+  .code-pane-tree { position: relative; }
+  .code-tree-resize-handle { position: absolute; top: 0; bottom: 0; right: -5px;
+    width: 8px; cursor: col-resize; z-index: 3; touch-action: none; }
+  .code-tree-resize-handle::before { content: ""; position: absolute; left: 3px;
+    top: 0; bottom: 0; width: 2px; background: transparent;
+    transition: background .12s; }
+  .code-tree-resize-handle:hover::before,
+  .code-tree-resize-handle:focus-visible::before,
+  body.code-resizing .code-tree-resize-handle::before { background: var(--accent); }
+  .code-tree-resize-handle:focus-visible { outline: 2px solid var(--accent);
+    outline-offset: 2px; }
+  body.code-resizing { user-select: none; cursor: col-resize; }
   .code-file-path { font-size: 12px; color: var(--muted); padding: 2px 4px 6px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 顶栏当前文件标签（工单 code-viewer-polish/01）：CCS 式 c main.c 观感——
@@ -3392,6 +3409,9 @@
         <div class="code-pane code-pane-tree">
           <div class="code-pane-title">文件</div>
           <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
+          <div class="code-tree-resize-handle" id="code-tree-resize" role="separator"
+            aria-orientation="vertical" aria-label="调整文件树面板宽度"
+            title="拖拽调整宽度（双击复位 / 方向键微调）" tabindex="0"></div>
         </div>
         <div class="code-pane code-pane-main">
           <div class="code-file-path mono" id="code-current-path"></div>

@@ -77,6 +77,8 @@ const waitFor = async (expr, ms = 8000) => {
 };
 
 await Eval(`window.__smokeMarker = 1`);
+// 树宽持久化（工单 code-viewer-tree-resize/01）：清键保证「初始 240px」确定性
+await Eval(`try { localStorage.removeItem('firstep.codeTreeWidth'); } catch {}`);
 await cdp("Page.reload", { ignoreCache: true });
 let ready = false;
 for (let i = 0; i < 100 && !ready; i++) {
@@ -125,6 +127,64 @@ check("树节点类型图标（文件 + 文件夹，树打磨 01）", await Eval
   })()`));
 check("目录路径显示在顶栏", await Eval(`
   (document.getElementById('code-dir-label').textContent || '').includes('sample-proj')`));
+
+// ================= 工单 code-viewer-tree-resize/01：树面板拖拽调宽 =================
+// 事件走合成 dispatch（与既有冒烟 el.click() / KeyboardEvent 同一风格——
+// CDP Input.dispatchMouseEvent 在 reload 后 press 偶发被丢弃，不可靠）；
+// 断言全部 DOM 可观察事实。
+check("手柄就位（role=separator / aria-orientation=vertical / tabindex=0）", await Eval(`
+  (() => {
+    const h = document.getElementById('code-tree-resize');
+    return !!h && h.getAttribute('role') === 'separator'
+      && h.getAttribute('aria-orientation') === 'vertical'
+      && h.getAttribute('tabindex') === '0';
+  })()`));
+check("初始树宽 240px（--code-tree-w 默认 + 存储已清）", await Eval(`
+  document.querySelector('.code-layout').style.getPropertyValue('--code-tree-w') === '240px'`));
+// 拖拽：pointerdown → pointermove(+120) → pointerup 合成序列
+await Eval(`(() => {
+  const h = document.getElementById('code-tree-resize');
+  const r = h.getBoundingClientRect();
+  const x = Math.round(r.x + r.width / 2), y = Math.round(r.y + r.height / 2);
+  h.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  h.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: x + 120, clientY: y, bubbles: true, cancelable: true }));
+  h.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: x + 120, clientY: y, bubbles: true, cancelable: true }));
+  return true;
+})()`);
+check("拖拽 +120px → 树宽变化（≠240）+ localStorage 落盘同值", await waitFor(`
+  (() => {
+    const layout = document.querySelector('.code-layout');
+    const w = layout.style.getPropertyValue('--code-tree-w');
+    const stored = (() => { try { return localStorage.getItem('firstep.codeTreeWidth'); } catch { return null; } })();
+    return /^\\d+px$/.test(w) && parseInt(w, 10) !== 240 && stored === String(parseInt(w, 10));
+  })()`));
+// 双击复位
+await Eval(`document.getElementById('code-tree-resize')
+  .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+check("双击手柄 → 复位 240 并落盘", await waitFor(`
+  (() => {
+    const layout = document.querySelector('.code-layout');
+    const stored = (() => { try { return localStorage.getItem('firstep.codeTreeWidth'); } catch { return null; } })();
+    return layout.style.getPropertyValue('--code-tree-w') === '240px' && stored === '240';
+  })()`));
+// 键盘微调：聚焦手柄 → ArrowRight 16px 步进（240→256）
+await Eval(`(() => {
+  const h = document.getElementById('code-tree-resize');
+  h.focus();
+  h.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  return true;
+})()`);
+check("键盘 ArrowRight → 256px 并落盘", await waitFor(`
+  (() => {
+    const layout = document.querySelector('.code-layout');
+    const stored = (() => { try { return localStorage.getItem('firstep.codeTreeWidth'); } catch { return null; } })();
+    return layout.style.getPropertyValue('--code-tree-w') === '256px' && stored === '256';
+  })()`));
+// 收尾复位 240（下一轮冒烟从确定性状态开始；截图默认宽度）
+await Eval(`document.getElementById('code-tree-resize')
+  .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+check("收尾复位 240px（供截图/下轮冒烟确定性）", await waitFor(`
+  document.querySelector('.code-layout').style.getPropertyValue('--code-tree-w') === '240px'`));
 
 // ================= 点文件加载只读视图 =================
 await Eval(`document.querySelector('#code-tree [data-code-file="main.c"]')?.click()`);
