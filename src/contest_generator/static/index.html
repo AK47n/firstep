@@ -1373,29 +1373,40 @@
   .code-tree-resize-handle:focus-visible { outline: 2px solid var(--accent);
     outline-offset: 2px; }
   body.code-resizing { user-select: none; cursor: col-resize; }
-  /* 标签条（IDE 化改版）：编辑器顶部通讯 tab 条——panel-2 底 + 底 1px 分隔，
-     活动 tab 与编辑器同底（--code-bg）上下无断缝；路径文本右侧 omit。 */
-  .code-file-path { font-size: 12px; color: var(--muted); min-width: 0;
-    display: flex; align-items: flex-end; gap: 8px; padding: 0 10px 0 0;
-    background: var(--panel-2); border-bottom: 1px solid var(--border);
-    min-height: 33px; flex: none; }
-  .code-file-path > span#code-current-path { overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
-    display: flex; align-items: flex-end; }
-  /* 顶栏当前文件标签（重设计）：CCS/VSCode 式「接线 tab」——底色与编辑器一致、
-     顶边 2px accent、上圆角下直边、无底边；relative bottom:-1px 压过 tab 条
-     底分隔线与编辑器无缝（不用 margin 负值——css-tokens 守卫 margin-bottom）。 */
-  .code-file-tab { display: inline-flex; align-items: center; gap: 7px;
-    padding: 5px 14px; background: var(--code-bg); border: 1px solid var(--border);
-    border-top: 2px solid var(--accent); border-bottom: 0;
+  /* 标签条（工单 code-viewer-editor/02，CCS/VS Code 式多文件标签）：editor
+     顶部通讯 tab 条——panel-2 底 + 底 1px 分隔，活动 tab 与编辑器同底
+     （--code-bg）上下无断缝；横向溢出滚动（多标签不换行）。 */
+  .code-tabs { display: flex; align-items: flex-end; gap: 2px; flex: none;
+    min-height: 33px; padding: 4px 8px 0; background: var(--panel-2);
+    border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; }
+  .code-tabs .muted { align-self: center; font-size: 12px; padding: 0 4px 2px; }
+  .code-tab { display: inline-flex; align-items: center; gap: 7px; flex: none;
+    padding: 5px 8px 5px 10px; background: transparent; border: 1px solid transparent;
+    border-top: 2px solid transparent; border-bottom: 0;
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    font-family: var(--mono); font-size: 12px; color: var(--text);
-    max-width: 100%; position: relative; bottom: -1px; }
-  .code-file-tab-badge { font-size: 11px; line-height: 1; padding: 2px 6px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    max-width: 220px; cursor: pointer; position: relative; bottom: -1px; }
+  .code-tab:hover { background: var(--panel); color: var(--text); }
+  .code-tab.on { background: var(--code-bg); border-color: var(--border);
+    border-top-color: var(--accent); color: var(--text); }
+  .code-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .code-tab-badge { font-size: 11px; line-height: 1; padding: 2px 6px;
     border-radius: var(--radius-xs); background: var(--accent-dim); color: var(--accent); }
-  .code-file-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* 「返回预览」按钮（工单 code-viewer-md-preview/03）：.md 临时源码态顶栏
-     文件标签旁的小按钮——回渲染预览；隐藏态 display:none（.hidden 全局）。 */
+  .code-tab-ro { flex: none; font-size: 11px; line-height: 1; padding: 2px 6px;
+    border-radius: var(--radius-xs); background: var(--panel); border: 1px solid var(--border);
+    color: var(--muted); }
+  .code-tab-dirty { color: var(--accent); font-size: 11px; line-height: 1; }
+  .code-tab-close { flex: none; color: var(--muted); font-size: 14px; line-height: 1;
+    padding: 2px 4px; border-radius: var(--radius-xs); margin-left: 2px; }
+  .code-tab-close:hover { background: var(--accent-dim); color: var(--accent); }
+  .code-tab.ro .code-tab-name { text-decoration: line-through; opacity: .8; }
+  /* 标签条下方的信息条（.md「返回预览」等动作右侧常驻） */
+  .code-file-path { font-size: 12px; color: var(--muted); min-width: 0;
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 2px 10px; background: var(--panel-2);
+    border-bottom: 1px solid var(--border); min-height: 30px; flex: none; }
+  /* 「返回预览」按钮（工单 code-viewer-md-preview/03 → code-viewer-editor/02）：
+     .md 源码态顶栏小按钮——回渲染预览；隐藏态 display:none（.hidden 全局）。 */
   .code-back-preview { flex: none; font-size: 11.5px; line-height: 1; padding: 5px 10px;
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--panel-2); color: var(--accent); cursor: pointer; }
@@ -1406,7 +1417,7 @@
      unitless、空行 min-height 1.55em、gutter min-width 3ch 均随 em/倍数
      自动联动，行号与代码永不错位；域 80%–200% 由 codeZoomClamp 单源保证。 */
   .code-view { flex: 1; overflow: auto; min-height: 0; display: flex;
-    align-items: flex-start; background: var(--code-bg);
+    align-items: flex-start; background: var(--code-bg); position: relative;
     --code-font-size: calc(13px * var(--code-zoom, 1)); }
   .code-gutter { position: sticky; left: 0; flex: none; padding: 8px 0;
     user-select: none; }
@@ -1433,6 +1444,34 @@
      active line 观感）；行号 accent 加粗（.code-gutter-line.active 同行）。 */
   .code-pre-line.active { background: rgba(var(--accent-rgb), .07);
     box-shadow: inset 2px 0 0 var(--accent); }
+  /* 可编辑三明治（工单 code-viewer-editor/02）：pre.code-hl 静态流内自带量宽
+     量高（.code-edit width:max-content 随最长行、高度随行数——容器 .code-view
+     滚动，无内部滚动条、零滚动同步），textarea absolute inset:0 同盒覆盖
+     （透明文字 + accent 光标 + 选区 accent）；同 font/line-height/padding/
+     tab-size，逐行 1:1 对齐；.code-hl-line 兼具只读视图 .code-pre-line 的
+     跳行/当前行语义（data-code-line 同键）。 */
+  .code-edit { position: relative; width: max-content; min-width: 100%; flex: none; }
+  .code-hl { display: block; margin: 0; padding: 8px 12px; border: 0; background: none;
+    font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.55;
+    white-space: pre; tab-size: 4; color: var(--code-text); }
+  .code-hl-line { display: block; }
+  .code-hl-line:empty { min-height: 1.55em; }
+  .code-hl-line.flash { background: var(--accent-dim); }
+  .code-hl-line.active { background: rgba(var(--accent-rgb), .07);
+    box-shadow: inset 2px 0 0 var(--accent); }
+  .code-ta { position: absolute; inset: 0; z-index: 1; display: block; width: 100%;
+    height: 100%; padding: 8px 12px; border: 0; margin: 0; background: transparent;
+    color: transparent; caret-color: var(--accent); font-family: var(--mono);
+    font-size: var(--code-font-size); line-height: 1.55; white-space: pre; tab-size: 4;
+    overflow: hidden; resize: none; box-sizing: border-box; }
+  .code-ta:focus { outline: none; }
+  .code-ta::selection { background: rgba(var(--accent-rgb), .28); color: transparent; }
+  /* 只读标注（工单 code-viewer-editor/02）：非 UTF-8 文件编辑器右上方提示
+     （.code-view 已 position:relative 锚定，不随内容滚动）。 */
+  .code-ro-note { position: absolute; top: 6px; right: 12px; z-index: 5;
+    padding: 4px 9px; font-size: 11.5px; line-height: 1; border-radius: var(--radius-xs);
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    pointer-events: none; }
   /* 缩放百分比浮标（工单 code-viewer-zoom/01）：Ctrl+滚轮缩放时右上角短暂
      显示当前档位（1.2s 后淡出，重复缩放重置）；挂 .code-pane-main 锚定——
      不随 .code-view 内容滚动；pointer-events:none 不挡滚动/点击；既有 token。 */
@@ -3545,12 +3584,12 @@
             title="拖拽调整宽度（双击复位 / 方向键微调）" tabindex="0"></div>
         </div>
         <div class="code-pane code-pane-main">
+          <div class="code-tabs" id="code-tabs" role="tablist"><span class="muted">打开文件后显示标签</span></div>
           <div class="code-file-path mono">
-            <span id="code-current-path"></span>
             <button type="button" id="code-back-preview" class="code-back-preview hidden"
-              title="回到 .md 渲染预览（临时源码态）">返回预览</button>
+              title="回到 .md 渲染预览（源码态）">返回预览</button>
           </div>
-          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件查看内容（只读）</span></div>
+          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span></div>
         </div>
         <div class="code-pane code-pane-side">
           <div class="code-side-tabs">
@@ -3633,6 +3672,7 @@ import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import
+import { initCodeEditor } from "/js/ui/codeeditor.js";  // 代码编辑器（code-viewer-editor/02）：多标签 + 可编辑三明治 + 保存（/03）/冲突（/04）
 import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
 import { initSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：编辑框下方 chips 委托
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
@@ -4032,6 +4072,7 @@ initMainCDiskSync();  // main.c 磁盘同步状态行（mainc-codeview-bridge/01
 initSkeletonRefs();  // 骨架引用模块锚定（mainc-codeview-bridge/04）：input 防抖 + chips 委托 + 首帧渲染
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
 initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
+initCodeEditor();  // 代码编辑器（工单 code-viewer-editor/02）：多标签条 / 编辑三明治 / 跳行 / 关闭确认接线
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM 已就绪，纯本地交互

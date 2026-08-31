@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import {
   buildCodeTree,
   fileIconHTML,
-  codeFileTabHTML,
   codeTreeHTML,
   codeLineNumbersHTML,
   highlightCodeLines,
@@ -83,22 +82,6 @@ test("fileIconHTML：扩展名映射 + 未知兜底 + 文件夹（树打磨 01�
   assert.match(fileIconHTML("unknown.xyz", false), /^<svg class="code-ico"/);
   assert.ok(!fileIconHTML("unknown.xyz", false).includes("M6.6 7"));       // 未知无标记
   assert.match(fileIconHTML("some/dir", true), /M1\.5 4/);                 // 文件夹
-});
-
-test("codeFileTabHTML：徽标 C/XML/TXT + data-tab-path + 转义 + 基名（树打磨 01）", () => {
-  const c = codeFileTabHTML("src/main.c", "c");
-  assert.match(c, /class="code-file-tab"/);
-  assert.match(c, />C<\/span>/);
-  assert.match(c, /data-tab-path="src\/main\.c"/);
-  assert.match(c, />main\.c<\/span>/);
-  assert.match(c, /title="src\/main\.c"/);
-  assert.match(codeFileTabHTML("tivaware.syscfg", "xml"), />XML</);
-  assert.match(codeFileTabHTML("readme.md", "plain"), />TXT</);
-  assert.match(codeFileTabHTML("readme.md", "md"), />MD</);   // md 徽标（工单 code-viewer-md-preview/01）
-  assert.match(codeFileTabHTML("方案.markdown", "md"), />MD</);
-  const evil = codeFileTabHTML("a<b.c", "c");
-  assert.ok(!evil.includes("a<b.c"));
-  assert.ok(evil.includes("a&lt;b.c"));
 });
 
 test("codeLineNumbersHTML：1..n 逐行 span（带 data-code-line 同 data 键），下限 1", () => {

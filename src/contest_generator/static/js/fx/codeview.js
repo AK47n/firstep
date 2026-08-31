@@ -99,19 +99,6 @@ export function fileIconHTML(path, isDir) {
   return codeIco(CODE_ICO_DOC);
 }
 
-// codeFileTabHTML(path, lang)：顶栏「当前文件标签」（工单 code-viewer-polish/01）
-// ——语言徽标（C / XML / MD / TXT，lang 来自 fx/highlight.js languageOf 单源）+
-// 文件名 + data-tab-path（事件层备用）；纯展示：当前只有一个文件，不多开
-// tab。title 带完整相对路径供悬停查全貌。
-export function codeFileTabHTML(path, lang) {
-  const full = String(path == null ? "" : path);
-  const badge = lang === "c" ? "C" : lang === "xml" ? "XML" : lang === "md" ? "MD" : "TXT";
-  const name = full.split("/").pop() || full;
-  return '<span class="code-file-tab" data-tab-path="' + esc(full) + '" title="' + esc(full) + '">'
-    + '<span class="code-file-tab-badge">' + badge + "</span>"
-    + '<span class="code-file-tab-name">' + esc(name) + "</span></span>";
-}
-
 // codeTreeHTML(nodes)：递归树 HTML——目录 = 原生 <details open>/<summary>
 // （零 JS 收起，含文件夹图标），文件 = 行按钮（data-code-file = 相对路径，
 // 交事件层；含类型图标 + 末尾 formatSize 大小）。根 <ul class="code-tree">
@@ -289,7 +276,6 @@ if (typeof window !== "undefined") {
   Object.assign(window, {
     buildCodeTree,
     fileIconHTML,
-    codeFileTabHTML,
     codeTreeHTML,
     codeLineNumbersHTML,
     highlightCodeLines,
