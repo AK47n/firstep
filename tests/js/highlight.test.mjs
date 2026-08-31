@@ -20,6 +20,10 @@ test("languageOf：.c/.h → c；.syscfg/.uvprojx/.cproject/.xml → xml；其�
   assert.equal(languageOf("readme.txt"), "plain");
   assert.equal(languageOf("no-ext"), "plain");
   assert.equal(languageOf(""), "plain");
+  // .md/.markdown → md（工单 code-viewer-md-preview/01：预览路由单源）
+  assert.equal(languageOf("README.md"), "md");
+  assert.equal(languageOf("方案.markdown"), "md");
+  assert.equal(languageOf("x.MD"), "md"); // 大小写不敏感
 });
 
 test("highlightXml：注释/声明/PI/标签/属性/引号值分类", () => {
@@ -54,6 +58,10 @@ test("highlightText：C 分发到 cHighlight（tok-kw），plain 纯转义无高
   assert.ok(!plain.includes("tok-"));
   const xml = highlightText("<a b='1'>", "xml");
   assert.match(xml, /<span class="tok-tag">&lt;a<\/span>/);
+  // md 语言不回退到语法高亮（预览路由专用，源码态=纯文本行号视图）
+  const md = highlightText("a < b", "md");
+  assert.ok(md.includes("&lt;"));
+  assert.ok(!md.includes("tok-"));
 });
 
 test("highlightText：超过 HIGHLIGHT_MAX_BYTES 回退纯文本（无高亮 span）", () => {

@@ -100,12 +100,12 @@ export function fileIconHTML(path, isDir) {
 }
 
 // codeFileTabHTML(path, lang)：顶栏「当前文件标签」（工单 code-viewer-polish/01）
-// ——语言徽标（C / XML / TXT，lang 来自 fx/highlight.js languageOf 单源）+
+// ——语言徽标（C / XML / MD / TXT，lang 来自 fx/highlight.js languageOf 单源）+
 // 文件名 + data-tab-path（事件层备用）；纯展示：当前只有一个文件，不多开
 // tab。title 带完整相对路径供悬停查全貌。
 export function codeFileTabHTML(path, lang) {
   const full = String(path == null ? "" : path);
-  const badge = lang === "c" ? "C" : lang === "xml" ? "XML" : "TXT";
+  const badge = lang === "c" ? "C" : lang === "xml" ? "XML" : lang === "md" ? "MD" : "TXT";
   const name = full.split("/").pop() || full;
   return '<span class="code-file-tab" data-tab-path="' + esc(full) + '" title="' + esc(full) + '">'
     + '<span class="code-file-tab-badge">' + badge + "</span>"
