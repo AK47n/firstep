@@ -1,0 +1,206 @@
+// ui/code-compile.js — 代码栏编译胶水（工单 code-tab-compile/03）
+//
+// 状态栏「编译」按钮 + 底部可折叠错误面板 + 错误行跳转：点击编译 →
+// 自动保存全部脏标签（saveAllDirtyTabs，取消则中止）→ POST /api/compile
+// （只带 output_dir，平台后端自动推断）→ SSE done → 面板状态行 + 结构化
+// 错误列表（点击 = source-line 归一路径 → editJumpToFile 打开定位）。
+// 纯件在 fx/code-compile.js；SSE 解析走 fx/llm.js parseSSE 单源；失败时
+// 「去生成页一键编译修复」判据与「去生成页编辑 main.c」同源（目录 = 生成
+// 上下文）。编译不调 LLM（无 aiAction 横幅）；AI 修复仍归生成页修复中心。
+import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
+import { parseHttpError } from "/js/fx/errors.js";
+import { parseSSE } from "/js/fx/llm.js";
+import {
+  compileStatusText,
+  compileStatusClass,
+  compileErrorRowsHTML,
+} from "/js/fx/code-compile.js";
+import {
+  getCodeDir,
+  saveAllDirtyTabs,
+  editJumpToFile,
+} from "/js/ui/codeeditor.js";
+import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";
+import { isMainCDiskDir } from "/js/ui/codeview.js";  // 单源谓词（评审整改：本模块不再重复实现）
+import { scrollToStep } from "/js/ui/step-state.js";
+
+let compileBusy = false;
+
+function panel() { return $("code-compile-panel"); }
+function statusEl() { return $("code-compile-status"); }
+function errorsEl() { return $("code-compile-errors"); }
+
+// setStatus(text, cls)：状态行（cls = ok / err / ""）。
+function setStatus(text, cls) {
+  const el = statusEl();
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "code-compile-status" + (cls ? " " + cls : "");
+}
+
+function setErrors(html) {
+  const el = errorsEl();
+  if (el) el.innerHTML = html || "";
+}
+
+// setGotoVisible(visible)：「去生成页一键编译修复」仅当目录 = 生成上下文且
+// 编译失败时可见（生成页修复中心才有 AI 修复上下文）。
+function setGotoVisible(visible) {
+  const btn = $("btn-code-compile-goto");
+  if (btn) btn.classList.toggle("hidden", !visible);
+}
+
+function openPanel() {
+  const p = panel();
+  if (p) p.classList.remove("hidden");
+}
+
+// renderDone(done)：done 载荷 → 状态行 + 错误列表 + 失败自动展开列表。
+function renderDone(done) {
+  openPanel();
+  setStatus(compileStatusText(done), compileStatusClass(done));
+  const errs = done.parsed_errors || [];
+  setErrors(compileErrorRowsHTML(errs));
+  setGotoVisible(!done.passed && !done.timed_out && isMainCDiskDir());
+  if (errs.length) {
+    const p = panel();
+    if (p) p.classList.remove("collapsed");   // 失败自动展开（用户可再收起）
+  }
+}
+
+// runCompileOnceForCode(dir)：SSE 单次编译（/api/compile 只带 output_dir，
+// 平台自动推断=工单 01）→ done；HTTP 非 2xx / SSE error / 断线 → throw 中文。
+async function runCompileOnceForCode(dir) {
+  let done = null;
+  let errMsg = null;
+  let finished = false;
+  let resp;
+  try {
+    resp = await fetch("/api/compile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ output_dir: dir }),
+    });
+  } catch (e) {
+    throw new Error("编译未能启动：" + e.message);
+  }
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(parseHttpError(resp.status, err).text);
+  }
+  await parseSSE(resp, (type, raw) => {
+    let data = {};
+    try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
+    if (type === "done") { done = data; finished = true; }
+    else if (type === "error") { errMsg = data.message || "编译失败"; finished = true; }
+  });
+  if (errMsg) throw new Error(errMsg);
+  if (!done) throw new Error(finished ? "编译未返回结果" : "连接中断：本次编译未完成，可安全重试");
+  return done;
+}
+
+// runCodeCompile()：编译入口——自动保存全部（取消 → 中止）→ SSE 编译 → 面板。
+// 重入保护从点击起生效（含自动保存阶段——保存期间再点不会并发两套保存）。
+export async function runCodeCompile() {
+  const dir = getCodeDir();
+  if (!dir) { toast("info", "请先打开工程目录（选择文件夹或最近生成记录「查看代码」）"); return; }
+  if (compileBusy) return;
+  compileBusy = true;
+  const btn = $("btn-code-compile");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "编译中…";
+  }
+  openPanel();
+  setStatus("编译中…", "");
+  setErrors("");
+  setGotoVisible(false);
+  try {
+    const saved = await saveAllDirtyTabs();
+    if (!saved.ok) {
+      toast("info", "有未保存修改未落盘，已中止编译（可先保存或处理冲突后再试）");
+      return;
+    }
+    renderDone(await runCompileOnceForCode(dir));
+  } catch (e) {
+    openPanel();
+    setStatus(e.message, "err");
+    setErrors("");
+    setGotoVisible(false);
+    toastError(e, "编译失败");
+  } finally {
+    compileBusy = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "编译";
+    }
+  }
+}
+
+// jumpToCompileError(path, line)：错误行点击 → 兜底链（spec 决策）：
+// ①先试原始 path 打开（GET /api/code/file 预检——memo/直读语义，失败 =
+// 400 非法路径，如 UV4 `..\` 形态 / 工程文件基准目录路径）；
+// ②失败 → POST /api/compile/source-line 取 path_resolved 归一；
+// ③打开文件并定位（editJumpToFile 复用：未开 tab 打开 + 选区跳行 +
+// 行高亮 + flash）。有效路径只花一次文件预检，不为每条错误多发 source-line。
+async function jumpToCompileError(path, line) {
+  const dir = getCodeDir();
+  if (!dir || !path) return;
+  const lineNo = Number(line) || 1;
+  let resolved = path;
+  try {
+    await apiGet("/api/code/file?dir=" + encodeURIComponent(dir)
+      + "&path=" + encodeURIComponent(path));
+  } catch (e) {
+    try {
+      const data = await apiPost("/api/compile/source-line", {
+        output_dir: dir,
+        path,
+        line: lineNo,
+      });
+      resolved = data.path_resolved;
+    } catch (e2) {
+      toastError(e2, "跳转到错误行失败");
+      return;
+    }
+  }
+  await editJumpToFile(resolved, lineNo);
+}
+
+// initCodeCompile()：入口绑定（host 启动区调用；DOM 已就绪）。
+export function initCodeCompile() {
+  const btn = $("btn-code-compile");
+  if (btn) btn.addEventListener("click", () => runCodeCompile());
+
+  const errors = errorsEl();
+  if (errors) errors.addEventListener("click", (e) => {
+    const row = e.target.closest("[data-compile-path]");
+    if (!row) return;
+    jumpToCompileError(row.dataset.compilePath, row.dataset.compileLine);
+  });
+
+  const clear = $("btn-code-compile-clear");
+  if (clear) clear.addEventListener("click", () => {
+    const p = panel();
+    if (p) p.classList.add("hidden");
+    setStatus("", "");
+    setErrors("");
+    setGotoVisible(false);
+  });
+
+  const collapse = $("btn-code-compile-collapse");
+  if (collapse) collapse.addEventListener("click", () => {
+    const p = panel();
+    if (!p) return;
+    const collapsed = p.classList.toggle("collapsed");
+    collapse.textContent = collapsed ? "展开" : "收起";
+    collapse.title = collapsed ? "展开错误列表" : "收起错误列表";
+  });
+
+  const goto = $("btn-code-compile-goto");
+  if (goto) goto.addEventListener("click", () => {
+    const tab = document.querySelector('nav button[data-tab="generate"]');
+    if (tab) tab.click();
+    scrollToStep(10);   // 修复中心（生成页步骤 10）
+  });
+}

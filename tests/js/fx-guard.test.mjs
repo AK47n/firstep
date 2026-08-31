@@ -56,8 +56,11 @@ const DOMAINS = {
   "codeeditor.js": {
     codeTabBadge: "fn", codeTabStripHTML: "fn", codeEditorHighlight: "fn",
     codeEditorHTML: "fn", conflictHTML: "fn", editorLineRange: "fn",
-    isTabSavable: "fn", caretLineOf: "fn", indentOnEnter: "fn",
-    indentLines: "fn", EDITOR_TABS_MAX: "number",
+    isTabSavable: "fn", dirtySavableTabs: "fn", caretLineOf: "fn",
+    indentOnEnter: "fn", indentLines: "fn", EDITOR_TABS_MAX: "number",
+  },
+  "code-compile.js": {
+    compileStatusText: "fn", compileStatusClass: "fn", compileErrorRowsHTML: "fn",
   },
   "pdf.js": {
     pdfEncodedPath: "fn", pdfSubdir: "fn", formatMtime: "fn", pdfBroken: "fn",
@@ -122,6 +125,7 @@ const DOMAINS = {
     parseGenCardCollapse: "fn", genCardInitialCollapsed: "fn", saveGenCardCollapse: "fn",
     fmtSeconds: "fn",
     frameworkNoteHTML: "fn", fixLogGroupHidden: "fn",
+    compileSummaryText: "fn",
   },
   "recommend.js": {
     suggestionSolutionBadges: "fn", suggestionOptionRowHTML: "fn",

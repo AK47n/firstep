@@ -182,6 +182,23 @@ export function fmtSeconds(s) {   // 耗时展示：1 位小数（如 12.3）
   return Number.isFinite(n) && n >= 0 ? n.toFixed(1) : "0.0";
 }
 
+// compileSummaryText(done)：编译 done 载荷 → 终态文案**单源**（工单
+// code-tab-compile/03 评审整改——生成页修复中心横幅与代码栏编译面板原先各写
+// 一份「同口径」文案，实际措辞分叉）。timed_out / passed / summary /
+// duration 均按 events.py done 契约字段；done 为空 → 空串（运行中状态由
+// 调用方填）。
+export function compileSummaryText(done) {
+  if (!done) return "";
+  const dur = fmtSeconds(typeof done.duration === "number" ? done.duration : 0);
+  const sum = done.summary || { errors: 0, warnings: 0 };
+  if (done.timed_out) return "编译超时（工具链 180s 未返回）";
+  if (done.passed) {
+    return "编译成功 · " + (sum.errors || 0) + " Error "
+      + (sum.warnings || 0) + " Warning · 耗时 " + dur + "s";
+  }
+  return "编译失败 · " + (sum.errors || 0) + " 个错误 · 耗时 " + dur + "s";
+}
+
 export function fixLogGroupHidden(text) {   // 修复中心「编译输出」分组显隐：无输出即隐藏（避免空文本框占位）
   return !String(text ?? "").trim();
 }
