@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=624622792f8038d0892b7d70b765202400fd5290 -->
+<!-- changelog-auto: last-commit=b2c84a29d7d8b31fcd91f3f4d4c29eba07748367 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 19:19 code-viewer-ide-restyle/02 C 高亮补函数名与宏常量细类：标识符后 ,( 允许空白) → .tok-fn（关键字后 ( 仍 tok-kw）；全大写含下划线 → .tok-const（无下划线短词 A 不误染）；#define NAME 行 NAME 拆 tok-const 其余 tok-pre，#include 仍整行；--tok-fn(#dcdcaa/#953800) --tok-const(#c586c0/#6639ba) 入 :root/light 令牌族；单测 8 项新增，node --test 978 全绿，双主题计算色验证
 - 20:14 code-viewer-editor/01 后端保存链路：save_code_file + mtime_ns(字符串)/utf8 字段 + POST /api/code/save——路径安全单源/原子写/冲突 409 中文/非 UTF-8 拒绝；CodeViewConflictError 登记 409 表项置于 400 大元组之前（isinstance 顺序即语义）；测试域 19 项 + webapp 4 项，pytest 393 项全绿
 - 20:32 code-viewer-editor/02 多标签页 + 可编辑（内存级）：CCS 式标签条（脏点/关闭钮/上限 10/只读小标）+ 无换行三明治编辑器（textarea 同盒覆盖高亮层，逐行 gutter/跳行/当前行语义保留）+ Tab 缩进 4 空格/Enter 自动缩进/光标行高亮 + 关闭脏 tab confirmModal + .md 两态 + IME 组合保护 + Ctrl+S 占位；codeview.js 轻化只留树/侧栏/工具栏；node 1001 + pytest 3044 全绿，smoke-02 20 项全过
+- 20:37 code-viewer-editor/03 保存写盘链路：Ctrl+S（tab-code 截获）/顶栏保存按钮（isTabSavable 单源判据）→ POST /api/code/save——成功 toast+脏点清除+大纲（服务端重算直用）+树大小刷新+mtime_ns 基准更新；失败中文 toast 可重试、409 占位不弹模态；只读（非 UTF-8）保存拦截；node 17 项 + pytest 3044 全绿，smoke-03 11 项全过
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
