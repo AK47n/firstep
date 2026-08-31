@@ -33,6 +33,8 @@ import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+import { guardCodeTabWrite } from "/js/ui/code-write-guard.js";  // 生成侧覆盖保护（工单 code-write-guard/02）：写盘前保存代码栏未保存编辑
+import { WRITE_GUARD_ACTIONS as WG } from "/js/fx/write-guard.js";  // 动作名单源（评审整改）
 import { refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/02）：修订/深化写入磁盘后回步骤 8 差异提示
 
 // ---------------------------------------------------------------------------
@@ -346,6 +348,9 @@ async function reviseApply() {
   const fill = $("revise-problem-text").value.trim();
   if (fill) body.problem_text = fill;
   if (revise.analysis && (revise.analysis.impacts || []).length) body.impacts = revise.analysis.impacts;
+  // 生成侧覆盖保护（工单 code-write-guard/02）：先查代码栏未保存编辑（取消 →
+  // 中止，不弹第二个确认），再问「确认执行修订」——两个模态不倒序。
+  if (!await guardCodeTabWrite(WG.revise)) return;
   // 覆盖式重生成确认（工单 ux-walkthrough-02/01）：整树重建输出目录前必须先
   // 明示影响（模块集变更摘要 + 覆盖重建 + 整树备份可回滚）；取消则不动任何状态。
   const ok = await confirmModal({
@@ -439,6 +444,9 @@ async function reviseDeepen() {
  * 无工具链降级 = 未验证 / 修一轮仍红 = 失败）。 */
 async function reviseRunDeepen() {
   if (!revise.outputDir) { $("revise-exec-msg").textContent = "请先加载上下文（当前会话或历史目录）"; return; }
+  // 生成侧覆盖保护（工单 code-write-guard/02）：深化写盘（AI 填 TODO + 备份 +
+  // 编译验证）——与修订同拦截（取消 → 中止，编辑保留）。
+  if (!await guardCodeTabWrite(WG.deepen)) return;
   reviseSetBusy(true);
   aiActionStart("深化");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
   $("revise-exec-msg").textContent = "";
