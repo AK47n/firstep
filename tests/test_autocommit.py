@@ -425,6 +425,7 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         "list_modules": ("read", ""),
         "get_module": ("read", ""),
         "module_mtime": ("read", ""),   # ux-polish-02/07：浏览层「最近更新」mtime（只读不落盘）
+        "read_module_file": ("read", ""),   # mainc-codeview-bridge/05：模块源码只读预览（读盘不落盘）
         "delete_module": ("commit", "lib: delete module"),
         "save_manifest": ("delegated", ""),
         "update_platform_identity": ("commit", "lib: update platform identity"),
