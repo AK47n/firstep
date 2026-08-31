@@ -16,6 +16,7 @@ import {
   codeTabStripHTML,
   codeEditorHTML,
   codeEditorHighlight,
+  conflictHTML,
   editorLineRange,
   isTabSavable,
   caretLineOf,
@@ -363,16 +364,10 @@ export async function saveActiveTab() {
       content: tab.content,
       base_mtime_ns: tab.mtime_ns,
     });
-    tab.savedContent = tab.content;
-    tab.mtime_ns = resp.mtime_ns;
-    tab.outline = resp.outline;
-    toast("ok", "已保存 " + tab.path);
-    renderTabs();
-    notifyActive();
-    notifySaved(tab, resp);
+    applySavedState(tab, resp);
   } catch (e) {
     if (e.status === 409) {
-      toast("error", e.message || "保存冲突：磁盘上的文件已被外部修改");
+      showConflictModal(tab);
     } else {
       toastError(e, "保存失败");
     }
@@ -383,6 +378,164 @@ export async function saveActiveTab() {
       btn.textContent = "保存";
     }
   }
+}
+
+// ===== 保存冲突模态（工单 code-viewer-editor/04）：覆盖 / 重载 / 取消 =====
+// 409 后先无缓存重读磁盘（/api/code/file，拿磁盘内容 + 新 mtime_ns 基准），
+// 弹「磁盘版 vs 我的编辑」双列对比（conflictHTML 纯件）+ 三动作：
+// 覆盖写盘（用新基准重存——若隙间再被改会再弹）、放弃并重新加载（tab 取
+// 磁盘版，脏点清除）、取消（脏点保留可再存）。模态 shell 复用 confirmModal
+// 同款 overlay 类（.ref-files-modal），焦点默认给「取消」防误触。
+let conflictActive = false;
+let conflictOnKey = null;
+
+async function readDiskState(path) {
+  // 直读磁盘（绕过 memo 缓存——冲突路径必须拿磁盘现状）
+  return await apiGet(fileURL(path));
+}
+
+function closeConflict() {
+  conflictActive = false;
+  document.querySelectorAll(".code-conflict-overlay").forEach((o) => o.remove());
+  if (conflictOnKey) {
+    document.removeEventListener("keydown", conflictOnKey);
+    conflictOnKey = null;
+  }
+}
+
+async function showConflictModal(tab) {
+  // 评审整改：①先清旧态（confirmModal 级联清理会 remove 本模态 overlay 而
+  // 不重置标志——残留 true 会让下次冲突静默不弹）；②conflictActive 在
+  // await 读盘**前**置位——否则等待窗口内再 Ctrl+S 会二度 409 再叠一个
+  // 模态（双模态竞态）。
+  closeConflict();
+  const dirAtOpen = codeDir;
+  conflictActive = true;
+  const opener = document.activeElement;
+  let disk;
+  try {
+    disk = await readDiskState(tab.path);
+  } catch (e) {
+    conflictActive = false;
+    toastError(e, "读取磁盘版本失败");
+    return;
+  }
+  // 评审整改：读盘窗口内 tab 可能被关 / 目录可能切换——僵尸引用写盘会落
+  // 错位置、toast 误导。失效 → 关闭模态并提示（编辑保留在已关的 tab 上
+  // 无从落地，用户重开后处理）。
+  if (tabOf(tab.path) !== tab || codeDir !== dirAtOpen) {
+    conflictActive = false;
+    toast("info", "文件已关闭或目录已切换：冲突处理已取消");
+    return;
+  }
+  const overlayEl = document.createElement("div");
+  overlayEl.className = "ref-files-overlay code-conflict-overlay";
+  overlayEl.innerHTML = '<div class="ref-files-modal confirm-modal code-conflict-modal">'
+    + '<div class="ref-files-head"><strong>保存冲突</strong>'
+    + '<button class="ref-files-close" title="关闭">×</button></div>'
+    + '<div class="ref-detail-scroll">'
+    + conflictHTML(disk.content || "", tab.content)
+    + "</div>"
+    + '<div class="pdf-detail-actions">'
+    + '<button type="button" class="danger" data-conflict-action="overwrite">覆盖写盘</button>'
+    + '<button type="button" data-conflict-action="reload">放弃我的修改并重新加载</button>'
+    + '<button type="button" data-confirm-cancel data-conflict-action="cancel">取消</button>'
+    + "</div></div>";
+  const settle = () => {
+    closeConflict();
+    // 关闭后把焦点还给触发元素（对齐 confirmModal 先例 ux-walkthrough-02/19）
+    if (opener && !opener.disabled && typeof opener.focus === "function"
+        && opener.isConnected) opener.focus();
+  };
+  // Tab 焦点陷阱：限制在弹窗内（首尾循环，对齐 confirmModal 先例）
+  const onKey = (e) => {
+    if (e.key === "Escape") { closeConflict(); return; }
+    if (e.key === "Tab") {
+      const focusables = Array.from(
+        overlayEl.querySelectorAll("button, input, select, textarea, [href], [tabindex]:not([tabindex='-1'])")
+      ).filter((el) => !el.disabled && el.offsetParent !== null);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  };
+  overlayEl.querySelector(".ref-files-close").addEventListener("click", settle);
+  overlayEl.addEventListener("click", (e) => { if (e.target === overlayEl) settle(); });
+  overlayEl.querySelector('[data-conflict-action="cancel"]').addEventListener("click", settle);
+  overlayEl.querySelector('[data-conflict-action="overwrite"]').addEventListener("click", async () => {
+    settle();
+    try {
+      const resp = await apiPost("/api/code/save", {
+        dir: codeDir,
+        path: tab.path,
+        content: tab.content,
+        base_mtime_ns: disk.mtime_ns,   // 新基准 = 磁盘现状
+      });
+      applySavedState(tab, resp, "已保存 " + tab.path + "（覆盖了外部修改）");
+    } catch (e2) {
+      if (e2.status === 409) {
+        // 覆盖时隙间又被改：旧模态已关，重新弹（冲突再演，用户再定夺）
+        await showConflictModal(tab);
+      } else {
+        toastError(e2, "保存失败");
+      }
+    }
+  });
+  overlayEl.querySelector('[data-conflict-action="reload"]').addEventListener("click", () => {
+    settle();
+    applyDiskState(tab, disk);
+    toast("info", "已重新加载磁盘版本，本地修改已放弃");
+  });
+  conflictOnKey = onKey;
+  document.addEventListener("keydown", conflictOnKey);
+  document.body.appendChild(overlayEl);
+  const cancelBtn = overlayEl.querySelector(".code-conflict-overlay [data-confirm-cancel]");
+  if (cancelBtn) cancelBtn.focus();
+}
+
+// applySavedState(tab, resp, msg)：保存成功状态落地（成功路径与覆盖路径
+// 共用）——脏点清除 / 基准更新 / 大纲刷新 / toast 与通知；memo 缓存同步
+// （评审整改 t04：否则关 tab 再开读到保存前的旧缓存内容）。
+function applySavedState(tab, resp, msg) {
+  tab.savedContent = tab.content;
+  tab.mtime_ns = resp.mtime_ns;
+  tab.outline = resp.outline;
+  fileCache.set(codeDir + "\u0000" + tab.path, {
+    ok: true,
+    data: {
+      path: tab.path,
+      size_bytes: resp.size_bytes,
+      content: tab.content,
+      outline: resp.outline,
+      mtime_ns: resp.mtime_ns,
+      utf8: tab.utf8,
+    },
+  });
+  toast("ok", msg || ("已保存 " + tab.path));
+  renderTabs();
+  notifyActive();
+  notifySaved(tab, resp);
+}
+
+// applyDiskState(tab, disk)：重新加载磁盘版（冲突「放弃」路径）——内容/
+// 基准/大纲/只读标志全量对齐，脏点清除；memo 缓存同步（同上，防旧缓存）。
+function applyDiskState(tab, disk) {
+  const lang = tab.lang;
+  tab.content = disk.content || "";
+  tab.savedContent = tab.content;
+  tab.mtime_ns = disk.mtime_ns || "";
+  tab.outline = lang === "md"
+    ? markdownOutline(parseMarkdownBlocks(tab.content))
+    : disk.outline || null;
+  tab.readonly = disk.utf8 === false;
+  tab.utf8 = disk.utf8 !== false;
+  fileCache.set(codeDir + "\u0000" + tab.path, { ok: true, data: disk });
+  renderTabs();
+  renderPane();
+  notifyActive();
+  notifySaved(tab, disk);
 }
 
 // ===== 编辑器键盘行为：Tab 缩进 / Enter 自动缩进 / 光标行高亮 =====
