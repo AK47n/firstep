@@ -26,6 +26,7 @@ import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone, step7WireG
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 import { getMainCDiskDir, setMainCDiskContext, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：恢复草稿时回填上下文目录并校验磁盘现状
+import { renderSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：草稿恢复 mainC 后渲染引用 chips
 
 // ---------------------------------------------------------------------------
 // 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
@@ -61,7 +62,7 @@ function restoreDraft() {
     markStepDone(3);
   }
   if (d.slugs.length) { setSelectedSlugs(d.slugs); markStepDone(6); }
-  if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); syncMainCHighlight(); }
+  if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); syncMainCHighlight(); renderSkeletonRefs(); }
   if (d.qa) { $("qa-text").value = d.qa; }
   if (d.outputDir) { setMainCDiskContext(d.outputDir); void refreshMainCDiskState(); }
   if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); }
