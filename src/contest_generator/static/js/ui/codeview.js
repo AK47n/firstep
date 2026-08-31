@@ -297,9 +297,42 @@ function initCodeTreeResize() {
   });
 }
 
+// ===== 侧栏收起/展开（工单 code-viewer-editor/07）：右侧栏贴右缘 40px
+// 竖向轨道（收起）↔ 300px 面板（展开）——点活动页签收起、点轨道条目展开、
+// Ctrl+F 强制展开；localStorage 持久化（只进胶水层，fx 无副作用约定同
+// firstep.codeTreeWidth 先例）。 =====
+const CODE_SIDE_COLLAPSE_KEY = "firstep.codeSideCollapsed";  // "1" = 收起
+
+let activeSide = "outline";
+
+function codeSideLayout() {
+  return document.querySelector(".code-layout");
+}
+
+// setCodeSideCollapsed(collapsed, persist)：单一路径——.side-collapsed 类
+// 驱动 grid 列（--code-side-w 300 ↔ 40），轨道的 on 高亮跟随活动页。
+function setCodeSideCollapsed(collapsed, persist) {
+  const layout = codeSideLayout();
+  if (!layout) return;
+  layout.classList.toggle("side-collapsed", !!collapsed);
+  document.querySelectorAll(".code-side-rail-btn").forEach((b) =>
+    b.classList.toggle("on", b.dataset.codeSide === activeSide));
+  if (persist) {
+    try { localStorage.setItem(CODE_SIDE_COLLAPSE_KEY, collapsed ? "1" : "0"); } catch (e) { /* 静默 */ }
+  }
+}
+
+function restoreCodeSideCollapsed() {
+  let raw = null;
+  try { raw = localStorage.getItem(CODE_SIDE_COLLAPSE_KEY); } catch (e) { raw = null; }
+  setCodeSideCollapsed(raw === "1", false);
+}
+
 // ===== 侧栏切换（大纲 / 搜索）：按钮与 Ctrl+F 共用同一生效路径
-// （评审整改：Ctrl+F 必须可见地切到「搜索」栏，否则聚焦隐藏输入框）。 =====
+// （评审整改：Ctrl+F 必须可见地切到「搜索」栏，否则聚焦隐藏输入框）。
+// 收起态点轨道条目 = 先展开再切换；展开态点活动页签 = 收起。 =====
 function setCodeSide(side) {
+  activeSide = side;
   document.querySelectorAll("[data-code-side]").forEach((x) =>
     x.classList.toggle("on", x.dataset.codeSide === side));
   document.querySelectorAll("[data-code-side-panel]").forEach((p) =>
@@ -336,9 +369,25 @@ export function initCodeViewer() {
     openEditorFile(btn.dataset.codeFile);
   });
 
-  // 侧栏切换（大纲 / 搜索）
+  // 侧栏切换（大纲 / 搜索）：收起态点轨道条目 = 展开并切换；展开态点活动
+  // 页签 = 收起（工单 code-viewer-editor/07）。rail 按钮也带 data-code-side
+  // 属性，天然命中同一分支（收起态 = 展开并切换）——不另绑独立监听
+  // （评审：避免双重绑定 / 展开态程序化点击先收起再展开的抖动路径）。
   document.querySelectorAll("[data-code-side]").forEach((b) =>
-    b.addEventListener("click", () => setCodeSide(b.dataset.codeSide)));
+    b.addEventListener("click", () => {
+      const layout = codeSideLayout();
+      const collapsed = !!(layout && layout.classList.contains("side-collapsed"));
+      if (collapsed) {
+        setCodeSide(b.dataset.codeSide);
+        setCodeSideCollapsed(false, true);
+        return;
+      }
+      if (b.dataset.codeSide === activeSide) {
+        setCodeSideCollapsed(true, true);
+        return;
+      }
+      setCodeSide(b.dataset.codeSide);
+    }));
 
   // 活动标签/内容变化 → 大纲（仅路径变化时重渲——逐键输入不重画大纲）/
   // 文件内查找 / 「返回预览」/「编辑源码」/「保存」按钮可见性联动
@@ -404,6 +453,7 @@ export function initCodeViewer() {
     const tab = getActiveTab();
     if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");
     setCodeSide("search");
+    setCodeSideCollapsed(false, true);   // 收起态必须展开（否则聚焦隐藏输入框）
     findInput.focus();
     findInput.select();
   });
@@ -438,6 +488,9 @@ export function initCodeViewer() {
   // 树面板拖拽调宽（工单 code-viewer-tree-resize/01）
   initCodeTreeResize();
   restoreTreeWidth();
+
+  // 侧栏收起态恢复（工单 code-viewer-editor/07）：localStorage 持久化
+  restoreCodeSideCollapsed();
 
   // 代码字号缩放（工单 code-viewer-zoom/01）
   initCodeViewZoom();
