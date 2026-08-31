@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fd1b24eba5e776ac6cb020edbf881949894f5c01 -->
+<!-- changelog-auto: last-commit=04f4c02e8757751dfc875708691645f8cacfcb77 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 20:53 code-viewer-editor/05 .md 编辑态 + main.c 联动 + 收尾：「编辑源码」切可编辑可保存（未开 md 经搜索命中以 edit 态初始化）、md 保存后标题大纲前端重算（resp.outline 为 null 不清空）、main.c 保存→步骤 8 状态行差异提示（isMainCDiskDir 单源谓词）、文案代码编辑器；评审整改 4 项；node 18 项 + pytest 3044 全绿，smoke-02/03/04/05 共 51 项全过
 - 20:58 code-viewer-editor/06 布局调整：移除「代码」tab 顶部工具栏（标题+选择文件夹+目录提示压低了代码视觉）——选择文件夹并入左侧树面板头（.code-pane-action）、保存按钮移到标签条下信息条（右侧）、目录路径与「去生成页编辑 main.c」下沉为底部状态条（.code-statusbar，CCS 状态栏式）；代码区自顶开始，三栏全高清空；id 不变零 JS 改动；node + smokes 全绿（smoke-05 定位断言同步更新）
 - 21:10 code-viewer-editor/07 右侧栏收起：大纲/搜索贴右缘 40px 竖向轨道（展开态点活动页签收起 / 点轨道条目展开并切换 / Ctrl+F 强制展开）——布局单源 .code-layout grid 第三列 var(--code-side-w)（300↔40）+ .side-collapsed 类，编辑区自动吃满零 JS 宽度计算，与树调宽先例同族；localStorage firstep.codeSideCollapsed 持久化（1=收起）；rail 按钮竖排 writing-mode、on 高亮跟随活动页签；三分支点击语义、撤除 rail 独立监听消除双重绑定（评审自查）；spec 补充说明同步；node tests/js 996 全绿 + pytest 3044 全绿，smoke-06 14 项全过（smoke-02/03/04/05 回归共 66 项全过）
+- 21:18 code-viewer-editor/07b 侧栏收起显式入口：用户反馈「这个收起方式没有任何提示，搞这么神秘」——tab 条右端常驻「收起 »」按钮（点击即收起，title 说明收起后右缘出现竖排大纲/搜索按钮）；「点活动页签收起」降级为快捷方式保留（VS Code 惯例）；rail 竖排按钮 title 提示已有（展开大纲/展开搜索）；CSS 增量 .code-side-collapse（margin-left auto 推右缘）、JS 单点绑定独立于 [data-code-side] 三分支（收起按钮不含该属性语义不混）；smoke-06 追加 4 项共 18 项全过，node tests/js 996 全绿
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
