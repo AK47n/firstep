@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=84096b4b3405cdd11ad2c140840da130ff726378 -->
+<!-- changelog-auto: last-commit=46ed761477d6b5b440e418d218157cd3c6ad0260 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 12:29 code-viewer-polish/03 代码 tab 纵向撑满：flex 列全高，底部贴视口 12px（对照 CCS 整窗编辑器）
 - 12:52 code-viewer-tree-resize/01 文件树面板拖拽调宽+持久化：手柄拖拽[160,min(720,layoutW-480)]、firstep.codeTreeWidth 记忆、双击复位、键盘微调；fx treeWidthClamp/parseTreeWidthStored 纯函数+单测+fx-guard 全域登记；CDP 冒烟 23 项全绿；双轴评审整改（currentTreeWidth/步进常量/隐藏态防御）
 - 13:10 code-viewer-zoom/01 代码查看器 Ctrl/Cmd+滚轮缩放：80%-200% 每档 10%、firstep.codeViewZoom 持久化、浮层百分比指示、累积器防触控板抖动；复用 codeZoomClamp/parseZoomStored 零新导出；CDP 冒烟 30 项全绿；双轴评审整改（--code-font-size 收口、spec 归一）
+- 13:35 code-viewer-md-preview/01 代码查看器 .md 渲染纯件：fx/markdown.js（块解析+预览+大纲投影，行内/URL 白名单/图片回调安全）+ languageOf 增 md 路由 + tab 徽标 MD；node --test 958 项全绿；双轴评审整改（块起点单一口径、data-md-line 全覆盖、../ 与绝对路径纯件拒绝、嵌套有序 start、注释同步）
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
