@@ -1231,6 +1231,11 @@
   /* 空状态（表格行 / 独立区块两用） */
   .empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px;
                  padding: 30px 16px; text-align: center; color: var(--muted); }
+  /* PDF 资料库空态撑高（工单 pdf-layout-flicker/01）：加载/空态不足一屏 →
+     页面滚动条拇指消失→内容达到再出现（PDF 页是唯一空态不满屏的栏），
+     视口内「内容变大→左栏被挤→闪一下」（用户反馈）；占位撑高接近视口，
+     拇指常驻、空态与满表高度差不再触发滚动条切换。 */
+  #pdf-rows .empty-state { min-height: calc(100vh - var(--header-h) - 210px); }
   .empty-state .es-icon { font-size: 30px; line-height: 1; opacity: .8;
                           filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), .3)); }
   .empty-state .es-title { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -3787,6 +3792,10 @@ document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
     }
     document.querySelectorAll("section.page").forEach((s) =>
       s.classList.toggle("active", s.id === "tab-" + btn.dataset.tab));
+    // 切页回顶（工单 pdf-layout-flicker/01）：从深滚动位置切到短页时浏览器
+    // 会把 scrollY 钳到 0（内容瞬时不足一屏），若内容随后撑高页面视觉就会
+    // 「跳一下」；显式回顶消除中间帧差异（IDE 式页签切换惯例）。
+    window.scrollTo({ top: 0, behavior: "instant" });
     // 进度条只属于生成流程：切出隐藏，切回按完成数恢复显示
     const gp = $("gen-progress");
     if (gp) gp.classList.toggle("hidden", btn.dataset.tab !== "generate" || stepDoneSet.size === 0);
