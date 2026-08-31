@@ -18,14 +18,14 @@ function fakeStorage(seed, { throwOnGet = false } = {}) {
   };
 }
 
-test("draftState 组装六字段；slugs 非数组 / 含非字符串被裁剪", () => {
-  const s = draftState("题面", "2026C", "mspm0", ["led", 42, "beep", null], "int main(){}", "问：x 答：y");
+test("draftState 组装七字段；slugs 非数组 / 含非字符串被裁剪；outputDir 兜底空串", () => {
+  const s = draftState("题面", "2026C", "mspm0", ["led", 42, "beep", null], "int main(){}", "问：x 答：y", "D:\\proj");
   assert.deepEqual(s, {
     problem: "题面", topicId: "2026C", platform: "mspm0",
-    slugs: ["led", "beep"], mainC: "int main(){}", qa: "问：x 答：y",
+    slugs: ["led", "beep"], mainC: "int main(){}", qa: "问：x 答：y", outputDir: "D:\\proj",
   });
-  const empty = draftState(undefined, null, "", null, undefined, "");
-  assert.deepEqual(empty, { problem: "", topicId: "", platform: "", slugs: [], mainC: "", qa: "" });
+  const empty = draftState(undefined, null, "", null, undefined, "", undefined);
+  assert.deepEqual(empty, { problem: "", topicId: "", platform: "", slugs: [], mainC: "", qa: "", outputDir: "" });
 });
 
 test("draftSave + draftLoad 往返一致", () => {
@@ -49,14 +49,18 @@ test("draftLoad storage 抛错（隐私模式禁用）返回 null", () => {
   assert.equal(draftLoad(st), null);
 });
 
-test("draftRestoreMeta 非法字段裁剪：数字→空串、slugs 过滤非字符串", () => {
+test("draftRestoreMeta 非法字段裁剪：数字→空串、slugs 过滤非字符串、outputDir 白名单", () => {
   const out = draftRestoreMeta({
     problem: 123, topicId: "2026C", platform: "mspm0",
-    slugs: ["led", 42, "beep", null], mainC: 3.14, qa: "x", extra: "丢弃",
+    slugs: ["led", 42, "beep", null], mainC: 3.14, qa: "x", outputDir: 99, extra: "丢弃",
   });
   assert.deepEqual(out, {
     problem: "", topicId: "2026C", platform: "mspm0",
-    slugs: ["led", "beep"], mainC: "", qa: "x",
+    slugs: ["led", "beep"], mainC: "", qa: "x", outputDir: "",
+  });
+  const ok = draftRestoreMeta({ mainC: "int main(){}", outputDir: "D:\\proj" });
+  assert.deepEqual(ok, {
+    problem: "", topicId: "", platform: "", slugs: [], mainC: "int main(){}", qa: "", outputDir: "D:\\proj",
   });
 });
 

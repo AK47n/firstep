@@ -36,6 +36,8 @@ import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selecte
 import { instances, pinBindings, pinUnbound, pinRoles } from "/js/ui/generate-pins.js";
 import { markStepDone, markStepUndone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
+import { setMainCDiskContext } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：生成成功记录上下文目录
+import { scheduleDraftSave } from "/js/ui/generate-steps.js";  // 草稿持久化（mainc-codeview-bridge/01）：生成成功即把上下文目录写入草稿（输入防抖之外显式触发）
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { refreshRecent } from "/js/ui/recent.js";
 import { readinessState, desktopTopicOutputEnabled } from "/js/ui/generate-readiness.js";
@@ -108,6 +110,8 @@ $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
 // 生成成功渲染（工单 generate-overwrite/01 抽取，供主路径与覆盖重发共用）
 function renderGenerateSuccess(data) {
   $("res-dir").textContent = data.output_dir;
+  setMainCDiskContext(data.output_dir);  // main.c 磁盘同步（mainc-codeview-bridge/01）：编辑框 = 写盘快照，状态 = written
+  scheduleDraftSave();  // 上下文目录即刻入草稿（评审整改：生成成功不触发输入防抖，无后续编辑则输出目录持久化缺失）
   $("btn-copy-dir").classList.remove("hidden");
   $("res-includes").textContent = data.include_dirs.join("；");
   $("res-modules").textContent = formatResModules(data.modules, data.python_artifacts);

@@ -711,6 +711,16 @@
   .warn-box.group { background: var(--warn-dim); color: var(--warn); }
   /* renderWarnings 「全绿 OK」框（polish-v2/02：JS 内联浅绿已清除，规则去掉 !important） */
   .warn-box.ok { background: var(--ok-dim); color: var(--ok-bright); }
+  /* main.c 磁盘同步状态行（工单 mainc-codeview-bridge/01）：步骤 8 常驻——
+     生成后显示「已写入磁盘」，任务/深化/修订改过磁盘后警示 + 加载按钮 */
+  .mainc-disk-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    border-radius: var(--radius-md); padding: 6px 12px; margin-top: var(--space-2);
+    background: var(--panel-2); border: 1px solid var(--border); font-size: 12.5px; }
+  .mainc-disk-state .mainc-disk-label.ok { color: var(--ok-bright); }
+  .mainc-disk-state .mainc-disk-label.warn { color: var(--warn); }
+  .mainc-disk-state .mainc-disk-dir { font-family: var(--mono); font-size: 11.5px;
+    color: var(--muted); word-break: break-all; }
+  .mainc-disk-state .mainc-disk-reload { margin-left: auto; padding: 2px 10px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   /* 表格行 hover 高亮（工单 ui-polish-11/03）：长表格定位当前行 */
   tbody tr:hover { background: var(--panel-2); }
@@ -2500,6 +2510,9 @@
       <div class="muted" style="margin-top: var(--space-1);font-size:11px">「生成骨架」= 初始化序列 + TODO 预留区（快，推荐先做）；「生成自检骨架」= 先自检硬件读写再写逻辑（更慢，适合首次验证硬件）。</div>
       <div id="intercepted" class="warn-box unverified hidden" style="margin-top: var(--space-2)"></div>
       <div id="framework-note" class="warn-box ok hidden" style="margin-top: var(--space-2)"></div>
+      <!-- main.c 磁盘同步状态行（工单 mainc-codeview-bridge/01）：生成成功后常驻，
+           任务/深化/修订改过磁盘后警示 + 「加载为编辑内容」（事件驱动，绝不自动覆盖） -->
+      <div id="mainc-disk-state" class="mainc-disk-state hidden" aria-live="polite"></div>
       <div class="code-wrap" style="margin-top: var(--space-2)">
         <div class="code-zoom" title="代码字号">
           <button id="btn-code-zoom-out" type="button" class="btn-icon" title="缩小">−</button>
@@ -3572,6 +3585,7 @@ import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import
+import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
 "use strict";
 
@@ -3965,6 +3979,7 @@ initGenOverview();  // 生成页就绪总览：依赖 stepDoneSet / step-nav cur
 applyInputA11y();  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）：DOM 已就绪，幂等
 initReadinessCheck();  // 检查能否生成：按钮 + 检查单面板（事件委托）
 initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪，纯本地交互
+initMainCDiskSync();  // main.c 磁盘同步状态行（mainc-codeview-bridge/01）：加载按钮委托（DOM 已就绪）
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
 initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）

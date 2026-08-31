@@ -13,6 +13,7 @@ import { recentListHTML, recentStatusNow } from "/js/fx/recent.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { recentDeleteMessage } from "/js/fx/danger.js";
 import { openCodeViewer } from "/js/ui/codeview.js";  // 「查看代码」桥（工单 code-viewer/06）：切 tab + 加载该 output_dir
+import { getMainCDiskDir, setMainCDiskContext, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：无草稿上下文时按最近记录回退补位
 
 // 最近记录快照缓存（工单 ux-walkthrough-02/15：删除确认点名 + 撤销恢复用）
 let recentEntries = [];
@@ -32,6 +33,13 @@ export async function refreshRecent() {
   try { entries = await apiGet("/api/recent"); }
   catch (e) { toastError(e, "最近生成加载失败"); }
   renderRecentList(entries || []);
+  // main.c 磁盘同步（工单 mainc-codeview-bridge/01，验收 #4）：刷新页面后若
+  // 草稿未带生成上下文目录（新会话 / 草稿已清），用最近一条记录补位——
+  // 状态行能显示此前生成的目录；草稿已恢复上下文时不覆盖（宁少不错）。
+  if (!getMainCDiskDir()) {
+    const latest = (entries || []).find((e) => e.output_dir);
+    if (latest) { setMainCDiskContext(String(latest.output_dir)); void refreshMainCDiskState(); }
+  }
 }
 // 编译完成上报（fire-and-forget：失败不打断编译循环，静默）+ 刷新列表
 export async function reportRecentStatus(outputDir, done) {

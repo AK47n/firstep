@@ -25,19 +25,21 @@ import { readinessState, desktopTopicOutputEnabled, ensureOutputDirWarn, getOutp
 import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone, step7WireGet, scrollToStep } from "/js/ui/step-state.js";
 import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
+import { getMainCDiskDir, setMainCDiskContext, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：恢复草稿时回填上下文目录并校验磁盘现状
 
 // ---------------------------------------------------------------------------
 // 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
 // 只存表单态，恢复不触发任何后端请求
 // ---------------------------------------------------------------------------
 const DRAFT_KEY = "firstep.draft.v1";
-const DRAFT_FIELDS = ["problem", "topicId", "platform", "slugs", "mainC", "qa"];
+const DRAFT_FIELDS = ["problem", "topicId", "platform", "slugs", "mainC", "qa", "outputDir"];
 // 已迁至 static/js/fx/draft.js（工单 07）：draftState / draftSave / draftLoad / draftRestoreMeta。
 function collectDraftState() {
   return draftState(
     $("problem").value, $("topic-id").value,
     chosenPlatform || "", selectedSlugs,
-    $("main-c").value, $("qa-text").value
+    $("main-c").value, $("qa-text").value,
+    getMainCDiskDir()
   );
 }
 let draftTimer = null;
@@ -61,6 +63,7 @@ function restoreDraft() {
   if (d.slugs.length) { setSelectedSlugs(d.slugs); markStepDone(6); }
   if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); syncMainCHighlight(); }
   if (d.qa) { $("qa-text").value = d.qa; }
+  if (d.outputDir) { setMainCDiskContext(d.outputDir); void refreshMainCDiskState(); }
   if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); }
   $("draft-tip").classList.remove("hidden");
 }
