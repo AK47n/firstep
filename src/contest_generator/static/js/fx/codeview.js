@@ -201,8 +201,9 @@ export function codeViewHTML(content, lang) {
 }
 
 // outlineKindBadge(kind)：大纲条目类型徽标（function=ƒ / define=# /
-// include=<>——纯展示文案，其余 ·）。
-const OUTLINE_KIND_BADGE = { function: "ƒ", define: "#", include: "<>" };
+// include=<> / heading=H——.md 标题清单，工单 code-viewer-md-preview/01；
+// 纯展示文案，其余 ·）。
+const OUTLINE_KIND_BADGE = { function: "ƒ", define: "#", include: "<>", heading: "H" };
 
 // outlineHTML(outline)：大纲列表纯件——[{kind, name, line}]（/api/code/file
 // 的 outline 字段直出）；条目 = 按钮（data-outline-line 交事件层跳行）。
@@ -217,9 +218,10 @@ export function outlineHTML(outline) {
     + "</ul>" : "";
 }
 
-// outlineEmptyHTML()：非 C 文件 / 无条目的大纲空态（「当前文件无大纲」）。
+// outlineEmptyHTML()：无条目的大纲空态（「当前文件无大纲」——.c/.h 提供
+// 函数 / 顶层宏 / include 清单；.md 提供标题清单，工单 code-viewer-md-preview/03）。
 export function outlineEmptyHTML() {
-  return '<div class="muted code-side-empty">当前文件无大纲（仅 .c/.h 提供函数 / 顶层宏 / include 清单）</div>';
+  return '<div class="muted code-side-empty">当前文件无大纲（.c/.h 提供函数 / 顶层宏 / include 清单；.md 提供标题）</div>';
 }
 
 // searchListHTML(hits, activeFile)：跨文件搜索结果列表纯件——

@@ -9,6 +9,7 @@ import {
   parseMarkdownBlocks,
   markdownPreviewHTML,
   markdownOutline,
+  hasScheme,
 } from "../../src/contest_generator/static/js/fx/markdown.js";
 
 test("parseMarkdownBlocks：ATX 标题各层级 + 闭井号剥离 + 1 基行号", () => {
@@ -163,6 +164,21 @@ test("markdownPreviewHTML：无回调时 ../ 与绝对/盘符路径 → 占位�
   assert.ok(!html.includes("src=\"/abs"));
   assert.ok(!html.includes("src=\"C:"));
   assert.ok(!html.includes("src=\"//"));
+});
+
+test("hasScheme：协议前缀判定（isSafeUrl / isSafeImageSrc / 胶水 codeImageUrl 共用单源）", () => {
+  assert.equal(hasScheme("http://a/b"), true);
+  assert.equal(hasScheme("https://a/b"), true);
+  assert.equal(hasScheme("mailto:a@b.c"), true);
+  assert.equal(hasScheme("javascript:bad"), true);
+  assert.equal(hasScheme("C:/win.png"), true);
+  assert.equal(hasScheme("data:image/png;base64,x"), true);
+  assert.equal(hasScheme("a/b.png"), false);
+  assert.equal(hasScheme("../x.png"), false);
+  assert.equal(hasScheme("//host/x.png"), false);
+  assert.equal(hasScheme("/abs.png"), false);
+  assert.equal(hasScheme(""), false);
+  assert.equal(hasScheme("  http://a/b  "), true);   // trim 后判定
 });
 
 test("markdownPreviewHTML：全部块级元素带 data-md-line（预览内滚动寻址）", () => {
