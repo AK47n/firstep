@@ -25,6 +25,8 @@ import { recordLLMUsage } from "/js/ui/usage.js";
 import { reviseGetDir } from "./generate-revise.js";
 import { tasksIsBusy, tasksSetBusy } from "./generate-tasks.js";
 import { refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/02）：参数改值/回滚写入磁盘后回步骤 8 差异提示
+import { guardCodeTabWrite } from "/js/ui/code-write-guard.js";  // 生成侧覆盖保护（工单 code-write-guard/02）：改值前保存代码栏未保存编辑
+import { WRITE_GUARD_ACTIONS as WG } from "/js/fx/write-guard.js";  // 动作名单源（评审整改）
 
 // 本簇状态（会话级；落盘真相 = .contest_params.json）：plan = 最近一次
 // read/scan 的参数数组（含 valid），scanned = 是否识别过（无表 = 未识别，
@@ -212,6 +214,9 @@ async function paramsApply(name) {
   const input = $("params-input-" + name);
   const value = input && input.value || "";
   if (!value.trim()) { $("params-msg").textContent = "新值不能为空（请输入数值后再应用）"; return; }
+  // 生成侧覆盖保护（工单 code-write-guard/02）：代码栏同目录有未保存编辑 → 先
+  // 保存全部再改值（取消 → 中止，编辑保留）。
+  if (!await guardCodeTabWrite(WG.params)) return;
   paramsSetBusy(true);
   $("params-msg").textContent = "";
   paramsWait.start();

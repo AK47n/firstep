@@ -30,6 +30,8 @@ import { reportRecentStatus } from "/js/ui/recent.js";
 import { recordLLMUsage } from "/js/ui/usage.js";
 import { markStepDone } from "/js/ui/step-state.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+import { guardCodeTabWrite } from "/js/ui/code-write-guard.js";  // 生成侧覆盖保护（工单 code-write-guard/02）：写盘前保存代码栏未保存编辑
+import { WRITE_GUARD_ACTIONS as WG } from "/js/fx/write-guard.js";  // 动作名单源（评审整改）
 
 // ---------------------------------------------------------------------------
 // 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
@@ -432,6 +434,10 @@ async function startFixCenter() {
     compileBanner("notool", "未检测到工具链，跳过自动编译（可在设置页填 uv4_path / gmake_path）");
     return;
   }
+  // 生成侧覆盖保护（工单 code-write-guard/02）：代码栏同目录有未保存编辑 →
+  // 先保存全部再编译修复（取消 → 中止，编辑保留）。放校验之后——无输出目录/
+  // 无工具链时不打扰。
+  if (!await guardCodeTabWrite(WG.fix)) return;
   fixLoop.running = true;
   fixLoop.round = 0;
   fixLoop.batch = 1;                 // 新生命周期：轮次条不带「继续批次」前缀
@@ -489,6 +495,9 @@ async function startFixCenter() {
  * 一批 ≤3 轮——不重跑初始编译，previous_fixes 回喂上下文不丢。 */
 async function continueFixCenter() {
   if (fixLoop.running) return;   // 批内防重复触发
+  // 生成侧覆盖保护（工单 code-write-guard/02）：继续修复同样写盘（fix-errors
+  // 回喂轮），复用路径与主入口一致拦截（评审整改补齐）。
+  if (!await guardCodeTabWrite(WG.continueFix)) return;
   const resume = fixLoop.resume;
   if (!resume) return;           // 无续跑态（非轮上限终态）不动作
   fixLoop.resume = null;

@@ -39,6 +39,8 @@ import { resourceView, renderResourceSection } from "/js/ui/resource-board.js"; 
 import { loadWiringAssets, wiringAssetsSync, wiringOptsFor, wireHosts } from "./wiring.js";  // 接线图装配（task-wiring-diagram/04）
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 import { refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/02）：任务写入磁盘后回步骤 8 差异提示
+import { guardCodeTabWrite } from "/js/ui/code-write-guard.js";  // 生成侧覆盖保护（工单 code-write-guard/02）：任务执行写盘前保存代码栏未保存编辑
+import { WRITE_GUARD_ACTIONS as WG } from "/js/fx/write-guard.js";  // 动作名单源（评审整改）
 
 let tasks = {
   outputDir: "",      // 拆解 / 执行针对的输出目录
@@ -1064,6 +1066,10 @@ async function tasksExecute(taskId, feedback) {
   }
   const dir = tasks.outputDir || reviseGetDir();
   if (!dir) { $("tasks-msg").textContent = "请先在「修订」页签加载当前会话或历史目录"; return; }
+  // 生成侧覆盖保护（工单 code-write-guard/02）：任务执行写盘（做这一步 / 上板
+  // 反馈复用同一条执行路径，重做只改状态不写盘不拦）——feedback 非空 = 按反馈
+  // 修复，否则 = 做这一步；动作名从写盘动作名单源取（评审整改）。
+  if (!await guardCodeTabWrite(feedback ? WG.taskFeedback : WG.task)) return;
   const note = ($("task-note-" + taskId) || {}).value || "";
   tasksSetBusy(true);
   tasksResetMessages();
