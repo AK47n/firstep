@@ -10,12 +10,14 @@ import { cHighlight } from "./code.js";
 // 高亮回退上限：超过即整段纯文本（esc）——大文件不浪费着色与转义
 export const HIGHLIGHT_MAX_BYTES = 128 * 1024;
 
-// languageOf(path)：按扩展名判定语言——.c/.h → C；.syscfg/.uvprojx/
-// .cproject/.xml → XML；其余 plain。扩展名取最后一段（小写比较，
-// 大小写不敏感）；无扩展名 / 空路径 → plain。
+// languageOf(path)：按扩展名判定语言——.c/.h → C；.md/.markdown → md
+// （工单 code-viewer-md-preview/01：预览路由）；.syscfg/.uvprojx/.cproject/
+// .xml → XML；其余 plain。扩展名取最后一段（小写比较，大小写不敏感）；
+// 无扩展名 / 空路径 → plain。
 export function languageOf(path) {
   const ext = String(path == null ? "" : path).toLowerCase().split(".").pop();
   if (ext === "c" || ext === "h") return "c";
+  if (ext === "md" || ext === "markdown") return "md";   // 工单 code-viewer-md-preview/01：预览路由
   if (ext === "syscfg" || ext === "uvprojx" || ext === "cproject" || ext === "xml") {
     return "xml";
   }

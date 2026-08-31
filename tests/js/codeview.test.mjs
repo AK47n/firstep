@@ -94,6 +94,8 @@ test("codeFileTabHTML：徽标 C/XML/TXT + data-tab-path + 转义 + 基名（树
   assert.match(c, /title="src\/main\.c"/);
   assert.match(codeFileTabHTML("tivaware.syscfg", "xml"), />XML</);
   assert.match(codeFileTabHTML("readme.md", "plain"), />TXT</);
+  assert.match(codeFileTabHTML("readme.md", "md"), />MD</);   // md 徽标（工单 code-viewer-md-preview/01）
+  assert.match(codeFileTabHTML("方案.markdown", "md"), />MD</);
   const evil = codeFileTabHTML("a<b.c", "c");
   assert.ok(!evil.includes("a<b.c"));
   assert.ok(evil.includes("a&lt;b.c"));
