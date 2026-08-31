@@ -7829,3 +7829,80 @@ def test_code_raw_missing_params_422(client, tmp_path):
     resp = client.get("/api/code/raw", params={"dir": str(tmp_path)})
 
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# /api/code/save：代码编辑器保存（工单 code-viewer-editor/01）
+# ---------------------------------------------------------------------------
+
+
+def test_code_save_writes_and_returns_meta(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("int x = 1;\n", encoding="utf-8")
+    base = (root / "main.c").stat().st_mtime_ns
+    # 首尾空白/空行必须逐字节保留（防 _require_str 的 strip 吞内容回归）
+    content = "\n\n  int helper(void) {\r\n\treturn 1;\r\n}\r\n\r\n"
+
+    resp = client.post(
+        "/api/code/save",
+        json={"dir": str(root), "path": "main.c", "content": content, "base_mtime_ns": base},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert (root / "main.c").read_bytes() == b"\n\n  int helper(void) {\n\treturn 1;\n}\n\n"
+    assert data["path"] == "main.c"
+    assert data["size_bytes"] == len(b"\n\n  int helper(void) {\n\treturn 1;\n}\n\n")
+    assert data["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
+    assert data["outline"] == [{"kind": "function", "name": "helper", "line": 3}]
+
+
+def test_code_save_conflict_409_chinese(client, tmp_path, monkeypatch):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("int x = 1;\n", encoding="utf-8")
+    base = (root / "main.c").stat().st_mtime_ns
+    # 外部写盘：mtime 拨快，模拟任务 / 深化 / 外部编辑器修改
+    import os
+    st = (root / "main.c").stat()
+    os.utime(root / "main.c", ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+
+    resp = client.post(
+        "/api/code/save",
+        json={"dir": str(root), "path": "main.c", "content": "mine\n", "base_mtime_ns": base},
+    )
+
+    assert resp.status_code == 409
+    assert "已被外部修改" in resp.json()["detail"]
+
+
+def test_code_save_requires_fields(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("x\n", encoding="utf-8")
+
+    resp = client.post("/api/code/save", json={"dir": str(root), "path": "main.c"})
+
+    assert resp.status_code == 400
+    assert "缺少必填字段：content" in resp.json()["detail"]
+
+    resp2 = client.post(
+        "/api/code/save",
+        json={"dir": str(root), "path": "main.c", "content": "x\n"},
+    )
+    assert resp2.status_code == 400
+    assert "缺少文件修改时间" in resp2.json()["detail"]
+
+
+def test_code_save_missing_file_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.post(
+        "/api/code/save",
+        json={"dir": str(root), "path": "nope.c", "content": "x\n", "base_mtime_ns": 1},
+    )
+
+    assert resp.status_code == 400
+    assert "文件不存在" in resp.json()["detail"]
