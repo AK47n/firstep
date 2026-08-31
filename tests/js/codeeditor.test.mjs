@@ -10,6 +10,7 @@ import {
   conflictHTML,
   editorLineRange,
   isTabSavable,
+  dirtySavableTabs,
   caretLineOf,
   indentOnEnter,
   indentLines,
@@ -149,6 +150,22 @@ test("isTabSavable：保存判据单源（脏 + 非只读）", () => {
   assert.equal(isTabSavable({ ...base }), false);                       // 无差异
   assert.equal(isTabSavable({ ...base, content: "b" }), true);          // 脏
   assert.equal(isTabSavable({ ...base, content: "b", readonly: true }), false);  // 只读
+});
+
+test("dirtySavableTabs：保存全部的前置筛选（脏非只读；顺序保持）", () => {
+  const mk = (path, dirty, ro) => ({
+    path,
+    content: dirty ? "b" : "a",
+    savedContent: "a",
+    readonly: ro,
+  });
+  assert.deepEqual(dirtySavableTabs([]), []);                            // 空清单
+  assert.deepEqual(dirtySavableTabs([mk("a.c", false, false)]), []);     // 非脏
+  assert.deepEqual(dirtySavableTabs([mk("a.c", true, true)]), []);       // 只读
+  assert.deepEqual(
+    dirtySavableTabs([mk("a.c", true, false), mk("b.c", false, false), mk("c.c", true, true)]),
+    [mk("a.c", true, false)],
+  );
 });
 
 test("conflictHTML：双列对比各前 10 行 + 转义 + 越界省略提示", () => {

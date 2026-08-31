@@ -19,6 +19,7 @@ import {
   conflictHTML,
   editorLineRange,
   isTabSavable,
+  dirtySavableTabs,
   caretLineOf,
   indentOnEnter,
   indentLines,
@@ -342,6 +343,18 @@ let saving = false;
 // 清除 + 大纲刷新（服务端重算响应直用）+ mtime_ns 基准更新 + 通知
 // （onFileSaved：树大小刷新）；失败 = 中文 toast（400 业务 / 网络可重试，
 // 脏点保留）；409 冲突占位 = 中文 message 直出（完整模态 = 工单 04）。
+// postSave(tab)：保存载荷单源（工单 code-tab-compile/03 评审整改——saveActiveTab
+// 与 saveTabSettled 原来各写一份 {dir, path, content, base_mtime_ns} 四字段载荷）。
+// 冲突覆盖路径的 base_mtime_ns 用磁盘现状（不同基准），不经过本函数。
+function postSave(tab) {
+  return apiPost("/api/code/save", {
+    dir: codeDir,
+    path: tab.path,
+    content: tab.content,
+    base_mtime_ns: tab.mtime_ns,
+  });
+}
+
 export async function saveActiveTab() {
   const tab = getActiveTab();
   if (!tab) { toast("info", "没有打开的文件"); return; }
@@ -358,12 +371,7 @@ export async function saveActiveTab() {
     btn.textContent = "保存中…";
   }
   try {
-    const resp = await apiPost("/api/code/save", {
-      dir: codeDir,
-      path: tab.path,
-      content: tab.content,
-      base_mtime_ns: tab.mtime_ns,
-    });
+    const resp = await postSave(tab);
     applySavedState(tab, resp);
   } catch (e) {
     if (e.status === 409) {
@@ -380,12 +388,51 @@ export async function saveActiveTab() {
   }
 }
 
+// ===== 保存全部脏标签（工单 code-tab-compile/02）：编译前自动落盘 =====
+// saveTabSettled(tab)：保存单标签并**等待**冲突处理落定——返回
+// "saved"（写盘成功，含覆盖路径）/ "reload"（放弃并重新加载了磁盘版，后续
+// 编译可用磁盘版内容）/ "cancel"（取消 / 关闭 × / Esc / 点遮罩 / 保存失败）。
+// 与 saveActiveTab 同写盘路径（applySavedState），差异只在 409 后等待用户。
+async function saveTabSettled(tab) {
+  try {
+    const resp = await postSave(tab);
+    applySavedState(tab, resp);
+    return "saved";
+  } catch (e) {
+    if (e.status === 409) {
+      const outcome = await showConflictModal(tab);
+      return outcome === "overwrite" ? "saved" : outcome;
+    }
+    toastError(e, "保存失败");
+    return "cancel";
+  }
+}
+
+// saveAllDirtyTabs()：编译前置——保存全部脏且非只读标签（只读 / 非脏跳过，
+// 零请求）；任一取消（冲突取消 / 保存失败）→ 立即返回
+// {ok:false, canceled:true} 并停止（不再保存其余标签，编译应中止）；
+// 全部落定 → {ok:true, canceled:false}。目录切换保护：保存期间目录变了 →
+// 中止（防写错位置——与冲突模态失效处理同因）。
+export async function saveAllDirtyTabs() {
+  const baseDir = codeDir;
+  for (const tab of dirtySavableTabs(tabs)) {
+    if (codeDir !== baseDir) return { ok: false, canceled: true };
+    const outcome = await saveTabSettled(tab);
+    if (outcome === "cancel") return { ok: false, canceled: true };
+  }
+  return { ok: true, canceled: false };
+}
+
 // ===== 保存冲突模态（工单 code-viewer-editor/04）：覆盖 / 重载 / 取消 =====
 // 409 后先无缓存重读磁盘（/api/code/file，拿磁盘内容 + 新 mtime_ns 基准），
 // 弹「磁盘版 vs 我的编辑」双列对比（conflictHTML 纯件）+ 三动作：
 // 覆盖写盘（用新基准重存——若隙间再被改会再弹）、放弃并重新加载（tab 取
 // 磁盘版，脏点清除）、取消（脏点保留可再存）。模态 shell 复用 confirmModal
 // 同款 overlay 类（.ref-files-modal），焦点默认给「取消」防误触。
+// 工单 code-tab-compile/02 改造：返回 Promise<"overwrite"|"reload"|"cancel">，
+// 供 saveAllDirtyTabs **等待**用户落定（覆盖=写盘成功后 / 重载=加载磁盘后 /
+// 取消·关闭×·Esc·点遮罩·保存失败 = cancel）；单文件 Ctrl+S 路径不 await
+// 即行为不变（该 Promise 永不 reject）。
 let conflictActive = false;
 let conflictOnKey = null;
 
@@ -403,96 +450,111 @@ function closeConflict() {
   }
 }
 
-async function showConflictModal(tab) {
-  // 评审整改：①先清旧态（confirmModal 级联清理会 remove 本模态 overlay 而
-  // 不重置标志——残留 true 会让下次冲突静默不弹）；②conflictActive 在
-  // await 读盘**前**置位——否则等待窗口内再 Ctrl+S 会二度 409 再叠一个
-  // 模态（双模态竞态）。
-  closeConflict();
-  const dirAtOpen = codeDir;
-  conflictActive = true;
-  const opener = document.activeElement;
-  let disk;
-  try {
-    disk = await readDiskState(tab.path);
-  } catch (e) {
-    conflictActive = false;
-    toastError(e, "读取磁盘版本失败");
-    return;
-  }
-  // 评审整改：读盘窗口内 tab 可能被关 / 目录可能切换——僵尸引用写盘会落
-  // 错位置、toast 误导。失效 → 关闭模态并提示（编辑保留在已关的 tab 上
-  // 无从落地，用户重开后处理）。
-  if (tabOf(tab.path) !== tab || codeDir !== dirAtOpen) {
-    conflictActive = false;
-    toast("info", "文件已关闭或目录已切换：冲突处理已取消");
-    return;
-  }
-  const overlayEl = document.createElement("div");
-  overlayEl.className = "ref-files-overlay code-conflict-overlay";
-  overlayEl.innerHTML = '<div class="ref-files-modal confirm-modal code-conflict-modal">'
-    + '<div class="ref-files-head"><strong>保存冲突</strong>'
-    + '<button class="ref-files-close" title="关闭">×</button></div>'
-    + '<div class="ref-detail-scroll">'
-    + conflictHTML(disk.content || "", tab.content)
-    + "</div>"
-    + '<div class="pdf-detail-actions">'
-    + '<button type="button" class="danger" data-conflict-action="overwrite">覆盖写盘</button>'
-    + '<button type="button" data-conflict-action="reload">放弃我的修改并重新加载</button>'
-    + '<button type="button" data-confirm-cancel data-conflict-action="cancel">取消</button>'
-    + "</div></div>";
-  const settle = () => {
-    closeConflict();
-    // 关闭后把焦点还给触发元素（对齐 confirmModal 先例 ux-walkthrough-02/19）
-    if (opener && !opener.disabled && typeof opener.focus === "function"
-        && opener.isConnected) opener.focus();
-  };
-  // Tab 焦点陷阱：限制在弹窗内（首尾循环，对齐 confirmModal 先例）
-  const onKey = (e) => {
-    if (e.key === "Escape") { closeConflict(); return; }
-    if (e.key === "Tab") {
-      const focusables = Array.from(
-        overlayEl.querySelectorAll("button, input, select, textarea, [href], [tabindex]:not([tabindex='-1'])")
-      ).filter((el) => !el.disabled && el.offsetParent !== null);
-      if (!focusables.length) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    }
-  };
-  overlayEl.querySelector(".ref-files-close").addEventListener("click", settle);
-  overlayEl.addEventListener("click", (e) => { if (e.target === overlayEl) settle(); });
-  overlayEl.querySelector('[data-conflict-action="cancel"]').addEventListener("click", settle);
-  overlayEl.querySelector('[data-conflict-action="overwrite"]').addEventListener("click", async () => {
-    settle();
-    try {
-      const resp = await apiPost("/api/code/save", {
-        dir: codeDir,
-        path: tab.path,
-        content: tab.content,
-        base_mtime_ns: disk.mtime_ns,   // 新基准 = 磁盘现状
-      });
-      applySavedState(tab, resp, "已保存 " + tab.path + "（覆盖了外部修改）");
-    } catch (e2) {
-      if (e2.status === 409) {
-        // 覆盖时隙间又被改：旧模态已关，重新弹（冲突再演，用户再定夺）
-        await showConflictModal(tab);
-      } else {
-        toastError(e2, "保存失败");
+function showConflictModal(tab) {
+  return new Promise((resolve) => {
+    (async () => {
+      try {
+        // 评审整改：①先清旧态（confirmModal 级联清理会 remove 本模态 overlay 而
+        // 不重置标志——残留 true 会让下次冲突静默不弹）；②conflictActive 在
+        // await 读盘**前**置位——否则等待窗口内再 Ctrl+S 会二度 409 再叠一个
+        // 模态（双模态竞态）。
+        closeConflict();
+        const dirAtOpen = codeDir;
+        conflictActive = true;
+        const opener = document.activeElement;
+        let disk;
+        try {
+          disk = await readDiskState(tab.path);
+        } catch (e) {
+          conflictActive = false;
+          toastError(e, "读取磁盘版本失败");
+          resolve("cancel");
+          return;
+        }
+        // 评审整改：读盘窗口内 tab 可能被关 / 目录可能切换——僵尸引用写盘会落
+        // 错位置、toast 误导。失效 → 关闭模态并提示（编辑保留在已关的 tab 上
+        // 无从落地，用户重开后处理）。
+        if (tabOf(tab.path) !== tab || codeDir !== dirAtOpen) {
+          conflictActive = false;
+          toast("info", "文件已关闭或目录已切换：冲突处理已取消");
+          resolve("cancel");
+          return;
+        }
+        const overlayEl = document.createElement("div");
+        overlayEl.className = "ref-files-overlay code-conflict-overlay";
+        overlayEl.innerHTML = '<div class="ref-files-modal confirm-modal code-conflict-modal">'
+          + '<div class="ref-files-head"><strong>保存冲突</strong>'
+          + '<button class="ref-files-close" title="关闭">×</button></div>'
+          + '<div class="ref-detail-scroll">'
+          + conflictHTML(disk.content || "", tab.content)
+          + "</div>"
+          + '<div class="pdf-detail-actions">'
+          + '<button type="button" class="danger" data-conflict-action="overwrite">覆盖写盘</button>'
+          + '<button type="button" data-conflict-action="reload">放弃我的修改并重新加载</button>'
+          + '<button type="button" data-confirm-cancel data-conflict-action="cancel">取消</button>'
+          + "</div></div>";
+        const finish = () => {
+          closeConflict();
+          // 关闭后把焦点还给触发元素（对齐 confirmModal 先例 ux-walkthrough-02/19）
+          if (opener && !opener.disabled && typeof opener.focus === "function"
+              && opener.isConnected) opener.focus();
+        };
+        const settleCancel = () => { finish(); resolve("cancel"); };
+        // Tab 焦点陷阱：限制在弹窗内（首尾循环，对齐 confirmModal 先例）
+        const onKey = (e) => {
+          if (e.key === "Escape") { settleCancel(); return; }
+          if (e.key === "Tab") {
+            const focusables = Array.from(
+              overlayEl.querySelectorAll("button, input, select, textarea, [href], [tabindex]:not([tabindex='-1'])")
+            ).filter((el) => !el.disabled && el.offsetParent !== null);
+            if (!focusables.length) return;
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+          }
+        };
+        overlayEl.querySelector(".ref-files-close").addEventListener("click", settleCancel);
+        overlayEl.addEventListener("click", (e) => { if (e.target === overlayEl) settleCancel(); });
+        overlayEl.querySelector('[data-conflict-action="cancel"]').addEventListener("click", settleCancel);
+        overlayEl.querySelector('[data-conflict-action="overwrite"]').addEventListener("click", async () => {
+          finish();
+          try {
+            const resp = await apiPost("/api/code/save", {
+              dir: codeDir,
+              path: tab.path,
+              content: tab.content,
+              base_mtime_ns: disk.mtime_ns,   // 新基准 = 磁盘现状
+            });
+            applySavedState(tab, resp, "已保存 " + tab.path + "（覆盖了外部修改）");
+            resolve("overwrite");
+          } catch (e2) {
+            if (e2.status === 409) {
+              // 覆盖时隙间又被改：旧模态已关，重新弹（冲突再演，用户再定夺）
+              resolve(await showConflictModal(tab));
+            } else {
+              toastError(e2, "保存失败");
+              resolve("cancel");
+            }
+          }
+        });
+        overlayEl.querySelector('[data-conflict-action="reload"]').addEventListener("click", () => {
+          finish();
+          applyDiskState(tab, disk);
+          toast("info", "已重新加载磁盘版本，本地修改已放弃");
+          resolve("reload");
+        });
+        conflictOnKey = onKey;
+        document.addEventListener("keydown", conflictOnKey);
+        document.body.appendChild(overlayEl);
+        const cancelBtn = overlayEl.querySelector(".code-conflict-overlay [data-confirm-cancel]");
+        if (cancelBtn) cancelBtn.focus();
+      } catch (err) {
+        conflictActive = false;
+        resolve("cancel");
       }
-    }
+    })();
   });
-  overlayEl.querySelector('[data-conflict-action="reload"]').addEventListener("click", () => {
-    settle();
-    applyDiskState(tab, disk);
-    toast("info", "已重新加载磁盘版本，本地修改已放弃");
-  });
-  conflictOnKey = onKey;
-  document.addEventListener("keydown", conflictOnKey);
-  document.body.appendChild(overlayEl);
-  const cancelBtn = overlayEl.querySelector(".code-conflict-overlay [data-confirm-cancel]");
-  if (cancelBtn) cancelBtn.focus();
 }
 
 // applySavedState(tab, resp, msg)：保存成功状态落地（成功路径与覆盖路径

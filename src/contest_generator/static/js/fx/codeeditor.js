@@ -46,6 +46,12 @@ export function isTabSavable(tab) {
   return !!tab && !tab.readonly && tab.content !== tab.savedContent;
 }
 
+// dirtySavableTabs(tabs)：需要保存的标签清单（工单 code-tab-compile/02——
+// saveAllDirtyTabs 的纯决策：脏且非只读；只读/非脏跳过，零请求）。
+export function dirtySavableTabs(tabs) {
+  return (tabs || []).filter(isTabSavable);
+}
+
 // editorLineRange(text, line)：跳行选段纯函数——**委托 fx/code.js
 // maincLineOffsetRange 单源**（spec 决策：不复制实现，改名叫法避免 main.c
 // 语义耦合；越界/非法行 → null）。
@@ -183,6 +189,7 @@ if (typeof window !== "undefined") {
     conflictHTML,
     editorLineRange,
     isTabSavable,
+    dirtySavableTabs,
     caretLineOf,
     indentOnEnter,
     indentLines,
