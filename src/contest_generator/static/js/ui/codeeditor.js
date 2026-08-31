@@ -3,7 +3,7 @@
 // 「代码」tab 中栏全部交互：多文件标签条（打开/切换/关闭/脏点/上限 10）+
 // 可编辑三明治（textarea + 高亮层，无换行 + 容器滚动——逐行 span 保留跳行/
 // 当前行语义）+ Tab 缩进 / Enter 自动缩进 + 光标行高亮 + 跳行（大纲/搜索/
-// 文件内查找共用 setSelectionRange 路径）+ .md 两态（预览 / 源码）与关闭脏
+// 文件内查找共用 setSelectionRange 路径）+ .md 两态（预览 / 编辑）与关闭脏
 // tab 确认（confirmModal 单源）。文件内容 memo（dir+path）与目录上下文
 // setCodeDir 由本模块持有；保存（t03）与冲突（t04）在同一状态之上扩展。
 // 纯件在 fx/codeeditor.js；ui/codeview.js 只保留树 / 侧栏 / 工具栏，经
@@ -11,7 +11,7 @@
 // setMdMode / onActiveTabChanged）。
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { languageOf } from "/js/fx/highlight.js";
-import { codeLineNumbersHTML, codeViewHTML } from "/js/fx/codeview.js";
+import { codeLineNumbersHTML } from "/js/fx/codeview.js";
 import {
   codeTabStripHTML,
   codeEditorHTML,
@@ -130,18 +130,13 @@ function renderPane() {
     box.innerHTML = markdownPreviewHTML(parseMarkdownBlocks(tab.content), { imageUrl: mdImageUrl });
     return;
   }
-  if (tab.lang === "md") {  // 源码态（t02 只读视图；「编辑源码」= t05）
-    box.innerHTML = codeViewHTML(tab.content, tab.lang);
-    return;
-  }
+  // 编辑态（含 .md「编辑源码」态——工单 05；预览态已提前 return）：
+  // 同一三明治渲染，md 与普通文件共用（评审整改：去双分支重复）。
   const lines = tab.content.split("\n").length;
   box.innerHTML = '<div class="code-gutter" aria-hidden="true">'
     + codeLineNumbersHTML(lines) + "</div>"
     + codeEditorHTML(tab.content, tab.lang, { readonly: tab.readonly });
-  const ta = box.querySelector(".code-ta");
-  if (ta && tab.readonly) {
-    renderReadonlyNote(box);
-  }
+  if (tab.readonly) renderReadonlyNote(box);
 }
 
 function renderReadonlyNote(box) {
@@ -222,15 +217,18 @@ export async function openEditorFile(path, mode) {
       : data.outline || null,
     mtime_ns: data.mtime_ns || "",
     utf8: data.utf8 !== false,
-    mdMode: lang === "md" ? "preview" : "edit",
+    // 新建 .md tab 尊重 mode（评审整改：搜索命中【未开过的 md】也要落编辑态，
+    // 否则 editJumpToFile 的跳行落在预览内滚动、无选区——a1 缺口）
+    mdMode: lang === "md" ? (mode === "edit" ? "edit" : "preview") : "edit",
     readonly: data.utf8 === false,
   };
   tabs.push(tab);
   activateTab(path);
 }
 
-// setMdMode(path, mode)：.md 两态切换（preview ↔ source；t05 起 source =
-// 可编辑）——切换后重渲染并通知（大纲不变，查找面板内容随态重算）。
+// setMdMode(path, mode)：.md 两态切换（preview ↔ edit——工单 05 起 edit =
+// 可编辑可保存；跳行/查找自动切 edit）——切换后重渲染并通知（大纲不变，
+// 查找面板内容随态重算）。
 export function setMdMode(path, mode) {
   const tab = tabOf(path);
   if (!tab || tab.lang !== "md" || tab.mdMode === mode) return;
@@ -324,12 +322,14 @@ export function editJumpToLine(line) {
   }
 }
 
-// editJumpToFile(path, line)：跨文件跳转（搜索命中）——打开（.md 预览态
-// 先切源码——行语义需要行号）→ 跳行。
+// editJumpToFile(path, line)：跨文件跳转（搜索命中）——.md 一律切编辑态
+// （行语义需要行号；已开 tab 先 setMdMode，未开 tab 经 mode="edit" 初始化
+// ——评审整改 a1：不能再落预览态）→ 跳行。
 export async function editJumpToFile(path, line) {
   const tab = tabOf(path);
-  if (tab && tab.lang === "md" && tab.mdMode === "preview") setMdMode(path, "source");
-  await openEditorFile(path, tab && tab.lang === "md" ? "source" : undefined);
+  const isMd = tab ? tab.lang === "md" : languageOf(path) === "md";
+  if (tab && isMd && tab.mdMode === "preview") setMdMode(path, "edit");
+  await openEditorFile(path, isMd ? "edit" : undefined);
   editJumpToLine(line);
 }
 
@@ -501,7 +501,11 @@ async function showConflictModal(tab) {
 function applySavedState(tab, resp, msg) {
   tab.savedContent = tab.content;
   tab.mtime_ns = resp.mtime_ns;
-  tab.outline = resp.outline;
+  // .md 的大纲是前端算的标题清单（后端 resp.outline 只给 .c/.h 且为
+  // null——直接用会把标题大纲清空，工单 05 评审预防）
+  tab.outline = tab.lang === "md"
+    ? markdownOutline(parseMarkdownBlocks(tab.content))
+    : resp.outline;
   fileCache.set(codeDir + "\u0000" + tab.path, {
     ok: true,
     data: {
