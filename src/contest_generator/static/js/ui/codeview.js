@@ -11,6 +11,8 @@ import { esc } from "/js/fx/core.js";
 import { languageOf } from "/js/fx/highlight.js";
 import { codeZoomClamp, parseZoomStored } from "/js/fx/code.js";
 import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
+import { getMainCDiskDir, loadDiskMainC } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03）：目录匹配 + 跳回生成页编辑
+import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import {
   buildCodeTree,
   codeFileTabHTML,
@@ -74,6 +76,7 @@ async function loadCodeDir(dir) {
   $("code-dir-label").textContent = dir;
   $("code-current-path").textContent = "";
   updateCodeBackPreview();
+  updateGotoGenerateVisibility();
   $("code-viewer").innerHTML = '<span class="muted">加载中…</span>';
   $("code-tree").innerHTML = '<span class="muted">加载中…</span>';
   try {
@@ -91,6 +94,15 @@ async function loadCodeDir(dir) {
     $("code-viewer").innerHTML = "";
     toastError(e, "打开目录失败");
   }
+}
+
+// updateGotoGenerateVisibility()：当前打开目录 === 生成上下文目录 → 顶栏
+// 「去生成页编辑 main.c」可见（mainc-codeview-bridge/03 双向跳转桥——代码
+// 查看器保持只读，编辑唯一入口仍在步骤 8，此按钮是入口桥不是编辑能力）。
+function updateGotoGenerateVisibility() {
+  const btn = $("btn-code-goto-generate");
+  if (!btn) return;
+  btn.classList.toggle("hidden", !(codeDir && codeDir === getMainCDiskDir()));
 }
 
 function renderCodeTree() {
@@ -503,6 +515,17 @@ export function initCodeViewer() {
     } catch (e) {
       toastError(e, "选择文件夹失败");
     }
+  });
+
+  // 双向跳转桥（mainc-codeview-bridge/03）：此目录 = 生成上下文 → 回生成页
+  // 步骤 8 编辑磁盘版本 main.c（点击 = 显式意图，加载动作与「从磁盘重新
+  // 加载」同源；滚动用 step-nav 统一 scrollToStep(8)）。
+  const gotoGen = $("btn-code-goto-generate");
+  if (gotoGen) gotoGen.addEventListener("click", async () => {
+    const tab = document.querySelector('nav button[data-tab="generate"]');
+    if (tab) tab.click();
+    scrollToStep(8);
+    await loadDiskMainC();
   });
 
   const tree = $("code-tree");

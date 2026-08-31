@@ -37,6 +37,8 @@ import { instances, pinBindings, pinUnbound, pinRoles } from "/js/ui/generate-pi
 import { markStepDone, markStepUndone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 import { setMainCDiskContext } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：生成成功记录上下文目录
+import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";  // 双向跳转桥（mainc-codeview-bridge/03）：打开工程目录 = 生成上下文
+import { openCodeViewer } from "/js/ui/codeview.js";  // 双向跳转桥（mainc-codeview-bridge/03）：切「代码」tab + 加载目录
 import { scheduleDraftSave } from "/js/ui/generate-steps.js";  // 草稿持久化（mainc-codeview-bridge/01）：生成成功即把上下文目录写入草稿（输入防抖之外显式触发）
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { refreshRecent } from "/js/ui/recent.js";
@@ -529,6 +531,10 @@ async function flashRun() {
 $("btn-flash").addEventListener("click", flashRun);
 // 结果区「去任务推进」（工单 beginner-gap-closure/02）：与第 12 步交接卡同源跳转
 $("btn-goto-tasks-result").addEventListener("click", goTaskProgress);
+// 双向跳转桥（mainc-codeview-bridge/03）：在代码查看器中打开工程——结果区与
+// 步骤 8 工具栏同一入口（openCodeViewer 切 tab + 加载目录；目录 = 生成上下文）
+$("btn-goto-code-result").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
+$("btn-goto-code-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
 // 「复制烧录命令」（工单 flash-deploy/02，spec 故事 4 一键复制）：document 级
 // 委托统一处理——生成结果面板与任务结果面板的复制按钮共用（任务结果在
 // tasks-grid 容器内，网格委托只处理动作按钮；命令复制与网格解耦，单点）。
