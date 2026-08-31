@@ -9,9 +9,9 @@
 // fx/codeeditor.js。
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
-import { codeZoomClamp, parseZoomStored } from "/js/fx/code.js";
+import { codeZoomClamp, parseZoomStored, isMainCPath } from "/js/fx/code.js";
 import { isTabSavable } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）
-import { getMainCDiskDir, loadDiskMainC } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03）：目录匹配 + 跳回生成页编辑
+import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import {
   buildCodeTree,
@@ -84,13 +84,19 @@ async function loadCodeDir(dir) {
   }
 }
 
+// isMainCDiskDir()：当前打开目录 === 生成上下文目录（单源谓词——「去生成页
+// 编辑 main.c」可见性与 main.c 保存联动共用，防两处漂移）。
+function isMainCDiskDir() {
+  return !!codeDir && codeDir === getMainCDiskDir();
+}
+
 // updateGotoGenerateVisibility()：当前打开目录 === 生成上下文目录 → 顶栏
 // 「去生成页编辑 main.c」可见（mainc-codeview-bridge/03 双向跳转桥——生成页
 // 步骤 8 仍是 main.c 编辑入口之一，编辑器与步骤 8 双入口共存）。
 function updateGotoGenerateVisibility() {
   const btn = $("btn-code-goto-generate");
   if (!btn) return;
-  btn.classList.toggle("hidden", !(codeDir && codeDir === getMainCDiskDir()));
+  btn.classList.toggle("hidden", !isMainCDiskDir());
 }
 
 function renderCodeTree() {
@@ -335,7 +341,7 @@ export function initCodeViewer() {
     b.addEventListener("click", () => setCodeSide(b.dataset.codeSide)));
 
   // 活动标签/内容变化 → 大纲（仅路径变化时重渲——逐键输入不重画大纲）/
-  // 文件内查找 / 「返回预览」/「保存」按钮可见性联动
+  // 文件内查找 / 「返回预览」/「编辑源码」/「保存」按钮可见性联动
   let lastOutlinePath = null;
   onActiveTabChanged(() => {
     const tab = getActiveTab();
@@ -344,21 +350,26 @@ export function initCodeViewer() {
       renderOutline();
     }
     refreshFindPanel();
+    const isMd = !!(tab && tab.lang === "md");
     const btn = $("code-back-preview");
-    if (btn) {
-      btn.classList.toggle("hidden", !(tab && tab.lang === "md" && !isMdPreviewActive()));
-    }
+    if (btn) btn.classList.toggle("hidden", !(isMd && tab.mdMode !== "preview"));
+    const editMd = $("code-edit-md");
+    if (editMd) editMd.classList.toggle("hidden", !(isMd && tab.mdMode === "preview"));
     const save = $("btn-code-save");
     if (save) save.classList.toggle("hidden", !isTabSavable(tab));
   });
 
   // 保存成功 → 树节点大小刷新 + 大纲重渲（服务端重算 outline 直用——
-  // 路径未变，「路径去重」不会自动重画大纲，此处显式刷新）+ 重渲染树
+  // 路径未变，「路径去重」不会自动重画大纲，此处显式刷新）+ main.c 步骤 8
+  // 联动（工单 05：此目录 = 生成上下文 → 状态行差异提示立即可见）
   onFileSaved((tab, resp) => {
     const hit = codeFiles.find((f) => f.path === tab.path);
     if (hit && resp && typeof resp.size_bytes === "number") hit.size_bytes = resp.size_bytes;
     renderCodeTree();
     renderOutline();
+    if (isMainCPath(tab.path) && isMainCDiskDir()) {
+      refreshMainCDiskState();
+    }
   });
 
   // 大纲点击跳行（delegation）：.md 预览 / 编辑器/只读源码由 codeeditor 统一
@@ -383,7 +394,7 @@ export function initCodeViewer() {
   const findInput = $("code-find-input");
   if (findInput) findInput.addEventListener("input", () => {
     const tab = getActiveTab();
-    if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "source");
+    if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");
     refreshFindPanel();
   });
   document.addEventListener("keydown", (e) => {
@@ -391,7 +402,7 @@ export function initCodeViewer() {
     if (!codeTabActive() || !findInput) return;
     e.preventDefault();
     const tab = getActiveTab();
-    if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "source");
+    if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");
     setCodeSide("search");
     findInput.focus();
     findInput.select();
@@ -410,7 +421,14 @@ export function initCodeViewer() {
     editJumpToFile(btn.dataset.searchPath, parseInt(btn.dataset.searchLine, 10));
   });
 
-  // 「返回预览」：.md 源码态（临时/编辑）回渲染预览
+  // 「编辑源码」：.md 预览态 → 编辑态（可修改可保存，工单 05）
+  const editMd = $("code-edit-md");
+  if (editMd) editMd.addEventListener("click", () => {
+    const tab = getActiveTab();
+    if (tab && tab.lang === "md") setMdMode(tab.path, "edit");
+  });
+
+  // 「返回预览」：.md 编辑态回渲染预览（脏点保留——内容不回滚）
   const backPreview = $("code-back-preview");
   if (backPreview) backPreview.addEventListener("click", () => {
     const tab = getActiveTab();

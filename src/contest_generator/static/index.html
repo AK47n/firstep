@@ -1405,12 +1405,14 @@
     display: flex; align-items: center; justify-content: flex-end; gap: 8px;
     padding: 2px 10px; background: var(--panel-2);
     border-bottom: 1px solid var(--border); min-height: 30px; flex: none; }
-  /* 「返回预览」按钮（工单 code-viewer-md-preview/03 → code-viewer-editor/02）：
-     .md 源码态顶栏小按钮——回渲染预览；隐藏态 display:none（.hidden 全局）。 */
-  .code-back-preview { flex: none; font-size: 11.5px; line-height: 1; padding: 5px 10px;
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
+  /* 信息条小按钮（工单 code-viewer-editor/02、/05）：「返回预览」与「编辑
+     源码」共用观感（不同功能不共用语义类名——评审整改拆开，样式并列）；*
+     隐藏态 display:none（.hidden 全局）。 */
+  .code-back-preview, .code-md-edit { flex: none; font-size: 11.5px; line-height: 1;
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--panel-2); color: var(--accent); cursor: pointer; }
-  .code-back-preview:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .code-back-preview:hover, .code-md-edit:hover { border-color: var(--accent);
+    background: var(--accent-dim); }
   /* 代码字号缩放（工单 code-viewer-zoom/01）：gutter 与代码字体同源
      --code-font-size = calc(13px * var(--code-zoom, 1))——单条自定义属性
      挂在 .code-view（两处 font-size 均引它，13px 基础只写一次）；行高
@@ -2365,7 +2367,7 @@
     <div class="tab-group" role="tablist" aria-label="做题">
       <button data-tab="generate" class="active" role="tab" aria-selected="true" aria-controls="tab-generate" tabindex="0" title="主流程：粘贴赛题 → AI 推荐 → 引脚配置 → 生成工程 → 编译修复。">生成</button>
       <button data-tab="topic" role="tab" aria-selected="false" aria-controls="tab-topic" tabindex="-1" title="历年真题（题面 + 附带程序），点「取题面」可一键填入生成页。">赛题库</button>
-      <button data-tab="code" role="tab" aria-selected="false" aria-controls="tab-code" tabindex="-1" title="IDE 式只读代码查看：文件树 + 行号 + 语法高亮 + 大纲 + 搜索（改代码仍走「生成」或 IDE）。">代码</button>
+      <button data-tab="code" role="tab" aria-selected="false" aria-controls="tab-code" tabindex="-1" title="IDE 式代码编辑器：文件树 + 多标签编辑 + 保存（Ctrl+S）+ 大纲 + 搜索。">代码</button>
       <button data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" title="配置 AI API key、环境体检、工具链路径与库设置——第一次使用先来这里。">设置</button>
     </div>
     <div class="tab-group" role="tablist" aria-label="资料管理">
@@ -3582,7 +3584,7 @@
 <section id="tab-code" class="page">
     <div class="card">
       <div class="code-toolbar">
-        <h2>代码查看器（只读）</h2>
+        <h2>代码编辑器</h2>
         <button id="btn-code-pick-dir" data-ico="code">选择文件夹…</button>
         <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
         <button id="btn-code-save" class="hidden" type="button" title="保存当前文件到磁盘（Ctrl+S）">保存</button>
@@ -3599,8 +3601,10 @@
         <div class="code-pane code-pane-main">
           <div class="code-tabs" id="code-tabs" role="tablist"><span class="muted">打开文件后显示标签</span></div>
           <div class="code-file-path mono">
+            <button type="button" id="code-edit-md" class="code-md-edit hidden"
+              title="切到源码编辑态（可修改并保存，Ctrl+S）">编辑源码</button>
             <button type="button" id="code-back-preview" class="code-back-preview hidden"
-              title="回到 .md 渲染预览（源码态）">返回预览</button>
+              title="回到 .md 渲染预览（编辑态内容保留）">返回预览</button>
           </div>
           <div id="code-viewer" class="code-view"><span class="muted">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span></div>
         </div>
