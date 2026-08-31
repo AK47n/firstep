@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5a11648fff8b255d8a099f12ecee2344bf08a8e7 -->
+<!-- changelog-auto: last-commit=43d6ff822896d4f8dbe5ccf8298f579acbfba06d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -40,6 +40,7 @@
 - 22:34 工单 code-tab-compile/01：/api/compile 平台自动推断（platform 可省略，缺省/空白走 context_manifest._infer_platform 单源，与 /api/flash 同判据）+ 5 项 pytest（stm32/mspm0 推断、空白、双配置/无配置 400）
 - 22:34 工单 code-tab-compile/02：saveAllDirtyTabs 编译前自动保存全部脏标签（取消即中止）+ 保存冲突模态 Promise 化（覆盖/重载/取消可等待）+ postSave 载荷单源 + dirtySavableTabs 纯件
 - 22:34 工单 code-tab-compile/03：代码栏编译按钮 + 底部可折叠错误面板 + 错误行跳转（file 预检 → source-line 归一兜底链）；文案单源 compileSummaryText（生成页横幅/代码栏面板共用）；isMainCDiskDir 导出单源
+- 22:34 工单 code-tab-compile/04：CDP 冒烟（17 项：编译面板/点行选区/兜底链两跳）+ 新手指引补「代码栏编译」一条 + spec/工单入库
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
