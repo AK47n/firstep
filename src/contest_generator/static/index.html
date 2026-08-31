@@ -1347,7 +1347,7 @@
     background: var(--panel-2); font-size: 12px; min-height: 28px; }
   .code-statusbar .code-dir-label { font-family: var(--mono); flex: 1 1 auto;
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .code-layout { display: grid; grid-template-columns: var(--code-tree-w, 240px) minmax(0, 1fr) 300px;
+  .code-layout { display: grid; grid-template-columns: var(--code-tree-w, 240px) minmax(0, 1fr) var(--code-side-w, 300px);
     gap: 0; margin-top: 0; flex: 1 1 auto; min-height: 300px; }
   .code-pane { display: flex; flex-direction: column; min-width: 0;
     background: var(--panel); }
@@ -1538,6 +1538,21 @@
   .code-side-tabs button.on { background: none; color: var(--accent);
     border-bottom-color: var(--accent); }
   .code-side-panel { flex: 1; overflow: auto; min-height: 0; }
+  /* 右侧栏收起（工单 code-viewer-editor/07）：--code-side-w 驱动（默认 300，
+     收起 = 40px 竖向 tab 轨道贴右缘——见上方 .code-layout 的 grid 列引用）；
+     收起时隐藏 tab 条与面板、只留 rail；rail 按钮竖排（writing-mode），
+     on = accent。 */
+  .code-layout.side-collapsed { --code-side-w: 40px; }
+  .code-side-rail { display: none; flex: 1; flex-direction: column; gap: 2px;
+    padding: 6px 4px; min-height: 0; overflow-y: auto; }
+  .code-layout.side-collapsed .code-side-rail { display: flex; }
+  .code-layout.side-collapsed .code-side-tabs,
+  .code-layout.side-collapsed [data-code-side-panel] { display: none; }
+  .code-side-rail-btn { border: 0; background: none; color: var(--muted); cursor: pointer;
+    padding: 10px 0; writing-mode: vertical-rl; letter-spacing: .08em;
+    font-size: 12px; line-height: 1; border-radius: var(--radius-xs); }
+  .code-side-rail-btn:hover { background: var(--panel-2); color: var(--text); }
+  .code-side-rail-btn.on { color: var(--accent); background: var(--panel-2); }
   .code-outline { list-style: none; margin: 0; padding: 0; }
   .code-outline-item { width: 100%; text-align: left; display: flex; gap: 6px;
     align-items: center; padding: 3px 8px; background: none; color: var(--text);
@@ -3616,6 +3631,12 @@
           <div class="code-side-tabs">
             <button type="button" data-code-side="outline" class="on">大纲</button>
             <button type="button" data-code-side="search">搜索</button>
+          </div>
+          <div class="code-side-rail" role="tablist" aria-label="侧栏（收起态）">
+            <button type="button" class="code-side-rail-btn on" data-code-side="outline"
+              title="展开大纲">大纲</button>
+            <button type="button" class="code-side-rail-btn" data-code-side="search"
+              title="展开搜索">搜索</button>
           </div>
           <div data-code-side-panel="outline" class="code-side-panel">
             <div id="code-outline" class="code-outline-box"><span class="muted">打开 .c/.h / .md 文件后显示函数 / 宏 / include（.md 为标题）</span></div>
