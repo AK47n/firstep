@@ -184,6 +184,11 @@
                transition: background-color var(--dur-base) var(--ease-ui); }
   #btn-theme:hover { background: var(--accent-dim); }
   main { max-width: 1400px; margin: 20px auto; padding: 0 24px; }
+  /* 代码栏激活时 main 空置（内置 9 个 section 全 display:none），其 margin
+     塌缩会把页面撑高 20px（html 可滚、代码栏底部漏缝）——工单
+     code-viewer-editor/07f：代码栏已移到 main 之前（兄弟选择器可及），
+     激活时把 main 边距归零。 */
+  #tab-code.active ~ main { margin: 0 auto; }
   /* 内容区加宽（工单 ui-polish-6/01）：生成页 12 步流程吃满 1400px；
      其它页（设置/赛题库/模块库等表格页）1280 居中，避免过宽空旷。
      大屏分档放宽（工单 layout-wide）：≥1600 提至 1640、≥2000 提至 1800，
@@ -2422,6 +2427,73 @@
   <button id="btn-theme" type="button" title="切换到亮色主题">🌙</button>
 </header>
 
+<!-- ============================ 代码查看器（工单 code-viewer/04-05） ============================
+     body 直子（跳出 main 的 max-width）：IDE 式全宽占用，两侧仅 16px 边距（对照 CCS）。
+     ⚠ 位于 header 之后、main 之前（工单 code-viewer-editor/07f 移动）：原在 main
+     之后时 main{margin:20px auto} 在代码栏激活（main 内容全 hidden、高度 0）时塌缩
+     成 20px 空隙把代码栏推下，而高度按 --header-h 计算 → 底部溢出 20px、body 可滚
+     ——用户反馈「向下滚到底就看不到代码栏」。移到 header 后直连：空隙归零、
+     height:calc(100vh - var(--header-h)) 精确一屏、页面不可滚。 -->
+<section id="tab-code" class="page">
+    <div class="card">
+      <div class="code-layout">
+        <div class="code-pane code-pane-tree">
+          <div class="code-pane-title">
+            <span>文件</span>
+            <button id="btn-code-pick-dir" class="code-pane-action" title="选择要浏览/编辑的本地目录">选择文件夹…</button>
+          </div>
+          <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
+          <div class="code-tree-resize-handle" id="code-tree-resize" role="separator"
+            aria-orientation="vertical" aria-label="调整文件树面板宽度"
+            title="拖拽调整宽度（双击复位 / 方向键微调）" tabindex="0"></div>
+        </div>
+        <div class="code-pane code-pane-main">
+          <div class="code-tabs" id="code-tabs" role="tablist"><span class="muted">打开文件后显示标签</span></div>
+          <div class="code-file-path mono">
+            <button type="button" id="code-edit-md" class="code-md-edit hidden"
+              title="切到源码编辑态（可修改并保存，Ctrl+S）">编辑源码</button>
+            <button type="button" id="code-back-preview" class="code-back-preview hidden"
+              title="回到 .md 渲染预览（编辑态内容保留）">返回预览</button>
+            <button id="btn-code-save" class="hidden" type="button" title="保存当前文件到磁盘（Ctrl+S）">保存</button>
+          </div>
+          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span></div>
+        </div>
+        <div class="code-pane code-pane-side">
+          <div class="code-side-tabs">
+            <button type="button" data-code-side="outline" class="on">大纲</button>
+            <button type="button" data-code-side="search">搜索</button>
+            <button type="button" class="code-side-collapse" title="收起侧栏（点击展开后右缘会出现竖排的大纲/搜索按钮）"
+              aria-label="收起侧栏">收起 »</button>
+          </div>
+          <div class="code-side-rail" role="tablist" aria-label="侧栏（收起态）">
+            <button type="button" class="code-side-rail-btn on" data-code-side="outline"
+              title="展开大纲">大纲</button>
+            <button type="button" class="code-side-rail-btn" data-code-side="search"
+              title="展开搜索">搜索</button>
+          </div>
+          <div data-code-side-panel="outline" class="code-side-panel">
+            <div id="code-outline" class="code-outline-box"><span class="muted">打开 .c/.h / .md 文件后显示函数 / 宏 / include（.md 为标题）</span></div>
+          </div>
+          <div data-code-side-panel="search" class="code-side-panel hidden">
+            <div class="code-search-row">
+              <input type="text" id="code-search-input" placeholder="在工程中搜索关键词…" aria-label="在工程中搜索关键词">
+              <button type="button" id="btn-code-search">搜索</button>
+            </div>
+            <div class="code-find-row">
+              <input type="text" id="code-find-input" placeholder="当前文件内查找（Ctrl+F）" aria-label="当前文件内查找">
+            </div>
+            <div id="code-search-results" class="code-search-results"></div>
+            <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="code-statusbar">
+        <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
+        <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
+      </div>
+    </div>
+  </section>
+
 <div id="ai-action-banner" class="ai-action-banner hidden" role="status"><span class="spinner"></span><span id="ai-action-label"></span></div>
 
 <div id="gen-progress" class="hidden"><div class="gp-fill"></div><span class="gp-text"></span></div>
@@ -3616,68 +3688,6 @@
     </div>
   </section>
 </main>
-
-<!-- ============================ 代码查看器（工单 code-viewer/04-05） ============================
-     body 直子（跳出 main 的 max-width）：IDE 式全宽占用，两侧仅 16px 边距（对照 CCS）。 -->
-<section id="tab-code" class="page">
-    <div class="card">
-      <div class="code-layout">
-        <div class="code-pane code-pane-tree">
-          <div class="code-pane-title">
-            <span>文件</span>
-            <button id="btn-code-pick-dir" class="code-pane-action" title="选择要浏览/编辑的本地目录">选择文件夹…</button>
-          </div>
-          <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
-          <div class="code-tree-resize-handle" id="code-tree-resize" role="separator"
-            aria-orientation="vertical" aria-label="调整文件树面板宽度"
-            title="拖拽调整宽度（双击复位 / 方向键微调）" tabindex="0"></div>
-        </div>
-        <div class="code-pane code-pane-main">
-          <div class="code-tabs" id="code-tabs" role="tablist"><span class="muted">打开文件后显示标签</span></div>
-          <div class="code-file-path mono">
-            <button type="button" id="code-edit-md" class="code-md-edit hidden"
-              title="切到源码编辑态（可修改并保存，Ctrl+S）">编辑源码</button>
-            <button type="button" id="code-back-preview" class="code-back-preview hidden"
-              title="回到 .md 渲染预览（编辑态内容保留）">返回预览</button>
-            <button id="btn-code-save" class="hidden" type="button" title="保存当前文件到磁盘（Ctrl+S）">保存</button>
-          </div>
-          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span></div>
-        </div>
-        <div class="code-pane code-pane-side">
-          <div class="code-side-tabs">
-            <button type="button" data-code-side="outline" class="on">大纲</button>
-            <button type="button" data-code-side="search">搜索</button>
-            <button type="button" class="code-side-collapse" title="收起侧栏（点击展开后右缘会出现竖排的大纲/搜索按钮）"
-              aria-label="收起侧栏">收起 »</button>
-          </div>
-          <div class="code-side-rail" role="tablist" aria-label="侧栏（收起态）">
-            <button type="button" class="code-side-rail-btn on" data-code-side="outline"
-              title="展开大纲">大纲</button>
-            <button type="button" class="code-side-rail-btn" data-code-side="search"
-              title="展开搜索">搜索</button>
-          </div>
-          <div data-code-side-panel="outline" class="code-side-panel">
-            <div id="code-outline" class="code-outline-box"><span class="muted">打开 .c/.h / .md 文件后显示函数 / 宏 / include（.md 为标题）</span></div>
-          </div>
-          <div data-code-side-panel="search" class="code-side-panel hidden">
-            <div class="code-search-row">
-              <input type="text" id="code-search-input" placeholder="在工程中搜索关键词…" aria-label="在工程中搜索关键词">
-              <button type="button" id="btn-code-search">搜索</button>
-            </div>
-            <div class="code-find-row">
-              <input type="text" id="code-find-input" placeholder="当前文件内查找（Ctrl+F）" aria-label="当前文件内查找">
-            </div>
-            <div id="code-search-results" class="code-search-results"></div>
-            <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>
-          </div>
-        </div>
-      </div>
-      <div class="code-statusbar">
-        <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
-        <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
-      </div>
-    </div>
-  </section>
 
 <script type="module">
 // 前端纯函数模块（工单 frontend-es-modules/01）：静态 import 保证本模块执行前
