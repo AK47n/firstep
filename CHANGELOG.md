@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=59681695801e92299c4d80306bf7f6d34e135b8c -->
+<!-- changelog-auto: last-commit=5a11648fff8b255d8a099f12ecee2344bf08a8e7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -39,6 +39,7 @@
 - 22:07 新手指引跳转目标高亮：用户反馈「打开新手词表只跳转过去但没有任何光标提示，用户很难看到在哪里」——根因 gotoNavTab 只 focus()+scrollIntoView()，而 glossary-card 等卡片/容器类非交互元素没有默认焦点样式，跳转后无可见落点；修复=①ui/goto-nav.js 新增 flashJumpTarget（聚焦后加 .jump-flash 类，强制 reflow 重启动画，clearTimeout+setTimeout 1.8s 后移除，连续跳转同目标重置计时），②index.html 新增 .jump-flash 样式（accent 2px 描边 outline-offset 2px + @keyframes jump-flash-pulse 脉冲微光 0.5s）——统一作用于全部 jump 目标（新手词表/去设置配 key/去环境体检/去任务推进），卡片/输入框均获可见落点；node 996 全绿 + smoke-12 新增 6 项全绿（跳转居中/高亮类出现/1.8s 移除/连续跳转重置），截图确认词表卡 accent 描边
 - 22:34 工单 code-tab-compile/01：/api/compile 平台自动推断（platform 可省略，缺省/空白走 context_manifest._infer_platform 单源，与 /api/flash 同判据）+ 5 项 pytest（stm32/mspm0 推断、空白、双配置/无配置 400）
 - 22:34 工单 code-tab-compile/02：saveAllDirtyTabs 编译前自动保存全部脏标签（取消即中止）+ 保存冲突模态 Promise 化（覆盖/重载/取消可等待）+ postSave 载荷单源 + dirtySavableTabs 纯件
+- 22:34 工单 code-tab-compile/03：代码栏编译按钮 + 底部可折叠错误面板 + 错误行跳转（file 预检 → source-line 归一兜底链）；文案单源 compileSummaryText（生成页横幅/代码栏面板共用）；isMainCDiskDir 导出单源
 
 ## 2026-08-30
 - 00:09 新手上手 Y2 01：顶部导航两段分组（做题|资料管理）+ 结构守卫
