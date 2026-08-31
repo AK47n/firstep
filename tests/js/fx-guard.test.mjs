@@ -55,9 +55,9 @@ const DOMAINS = {
   },
   "codeeditor.js": {
     codeTabBadge: "fn", codeTabStripHTML: "fn", codeEditorHighlight: "fn",
-    codeEditorHTML: "fn", editorLineRange: "fn", isTabSavable: "fn",
-    caretLineOf: "fn", indentOnEnter: "fn", indentLines: "fn",
-    EDITOR_TABS_MAX: "number",
+    codeEditorHTML: "fn", conflictHTML: "fn", editorLineRange: "fn",
+    isTabSavable: "fn", caretLineOf: "fn", indentOnEnter: "fn",
+    indentLines: "fn", EDITOR_TABS_MAX: "number",
   },
   "pdf.js": {
     pdfEncodedPath: "fn", pdfSubdir: "fn", formatMtime: "fn", pdfBroken: "fn",

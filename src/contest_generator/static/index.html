@@ -1472,6 +1472,18 @@
     padding: 4px 9px; font-size: 11.5px; line-height: 1; border-radius: var(--radius-xs);
     background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
     pointer-events: none; }
+  /* 保存冲突模态（工单 code-viewer-editor/04）：shell 复用 .ref-files-modal
+     （max-width 760px 足够双列）；对比列等宽 pre（各自滚动，40vh 封顶）。 */
+  .code-conflict p { margin: 4px 0 8px; font-size: 12px; }
+  .code-conflict-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .code-conflict-col { min-width: 0; display: flex; flex-direction: column; }
+  .code-conflict-col-title { font-size: 11.5px; font-weight: 650; color: var(--muted);
+    padding: 4px 8px; background: var(--panel-2); border: 1px solid var(--border);
+    border-bottom: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .code-conflict-pre { margin: 0; padding: 8px; font-family: var(--mono); font-size: 12px;
+    line-height: 1.5; white-space: pre; overflow: auto; max-height: 40vh;
+    background: var(--code-bg); color: var(--code-text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); }
   /* 缩放百分比浮标（工单 code-viewer-zoom/01）：Ctrl+滚轮缩放时右上角短暂
      显示当前档位（1.2s 后淡出，重复缩放重置）；挂 .code-pane-main 锚定——
      不随 .code-view 内容滚动；pointer-events:none 不挡滚动/点击；既有 token。 */

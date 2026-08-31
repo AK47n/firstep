@@ -7,6 +7,7 @@ import {
   codeTabBadge,
   codeTabStripHTML,
   codeEditorHTML,
+  conflictHTML,
   editorLineRange,
   isTabSavable,
   caretLineOf,
@@ -148,6 +149,24 @@ test("isTabSavable：保存判据单源（脏 + 非只读）", () => {
   assert.equal(isTabSavable({ ...base }), false);                       // 无差异
   assert.equal(isTabSavable({ ...base, content: "b" }), true);          // 脏
   assert.equal(isTabSavable({ ...base, content: "b", readonly: true }), false);  // 只读
+});
+
+test("conflictHTML：双列对比各前 10 行 + 转义 + 越界省略提示", () => {
+  const disk = "#include <app.h>\n" + "x".repeat(20) + "\n";  // 3 行
+  const edit = "<script>alert(1)</script>\n";
+  const html = conflictHTML(disk, edit);
+  assert.match(html, /class="code-conflict-cols"/);
+  assert.match(html, /磁盘版（外部修改）/);
+  assert.match(html, /我的编辑（未保存）/);
+  assert.match(html, /&lt;script&gt;/);          // 转义
+  assert.ok(!html.includes("<script>"));
+  assert.ok(!html.includes("共 "));               // ≤10 行不显示省略提示
+  // 超 10 行 → 截断提示
+  const big = Array.from({ length: 12 }, (_, i) => "line" + i).join("\n");
+  const html2 = conflictHTML(big, "");
+  assert.match(html2, /仅展示前 10 行/);
+  assert.match(html2, /line0/);
+  assert.ok(!html2.includes("line10"));
 });
 
 test("EDITOR_TABS_MAX：上限常量存在且合理", () => {

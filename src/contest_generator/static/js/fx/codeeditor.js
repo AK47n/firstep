@@ -14,6 +14,31 @@ import { maincLineOffsetRange } from "./code.js";
 // 防病态大目录 / 大文件把内存与渲染压垮（每个 ≤1MB，10 个封顶）。
 export const EDITOR_TABS_MAX = 10;
 
+// conflictHTML(diskText, editText)：保存冲突模态内容纯件（工单
+// code-viewer-editor/04）——双列等宽 pre 并排：磁盘版（外部修改）vs 我的
+// 编辑，各取前 _CONFLICT_REVIEW_LINES 行 + 越界省略提示；内容 esc（调用方
+// 保证传入原文，本纯件转义）。动作按钮由胶水层（模态 shell）提供。
+const CONFLICT_REVIEW_LINES = 10;
+
+export function conflictHTML(diskText, editText) {
+  const clip = (t) => {
+    const lines = String(t == null ? "" : t).split("\n");
+    const head = lines.slice(0, CONFLICT_REVIEW_LINES);
+    const shown = head.join("\n");
+    return esc(shown) + (lines.length > CONFLICT_REVIEW_LINES
+      ? "\n…（共 " + lines.length + " 行，仅展示前 " + CONFLICT_REVIEW_LINES + " 行）"
+      : "");
+  };
+  return '<div class="code-conflict">'
+    + '<p class="muted">磁盘上的文件已被外部修改（任务 / 深化写盘或外部编辑器）。请对比后选择动作：</p>'
+    + '<div class="code-conflict-cols">'
+    + '<div class="code-conflict-col"><div class="code-conflict-col-title">磁盘版（外部修改）</div>'
+    + '<pre class="code-conflict-pre">' + clip(diskText) + "</pre></div>"
+    + '<div class="code-conflict-col"><div class="code-conflict-col-title">我的编辑（未保存）</div>'
+    + '<pre class="code-conflict-pre">' + clip(editText) + "</pre></div>"
+    + "</div></div>";
+}
+
 // isTabSavable(tab)：标签是否可保存——**单源判据**（ui 保存守卫与「保存」
 // 按钮可见性共用，防两处漂移）：标签存在、非只读（非 UTF-8 禁存）、且
 // 内容与磁盘快照有差异。
@@ -155,6 +180,7 @@ if (typeof window !== "undefined") {
     codeTabStripHTML,
     codeEditorHighlight,
     codeEditorHTML,
+    conflictHTML,
     editorLineRange,
     isTabSavable,
     caretLineOf,
