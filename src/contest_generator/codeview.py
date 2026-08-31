@@ -1,15 +1,19 @@
-"""代码查看器域模块（工单 code-viewer/01-03）：任意本地目录的只读浏览与搜索。
+"""代码查看器 / 编辑器域模块（工单 code-viewer/01-03 + code-viewer-editor/01）：
+任意本地目录的浏览、搜索与文本保存。
 
 设计立场（与母版树端点同一安全收窄模式，见 read_master_tree_file 先例）：
 打开的根目录只来自最近生成记录 output_dir 或服务端原生文件夹对话框
 （/api/pick-directory）——本模块不重复校验该来源，但 API 以「显式根 +
-相对路径安全判定」收窄，绝不放开任意文件系统访问。零写侧、零落盘，
-错误统一 CodeViewError → 400 中文（errors.py 登记；未登记异常 = 真 bug
-→ 500 的仓库不变量不变）。
+相对路径安全判定」收窄，绝不放开任意文件系统访问。读面孔隙（浏览/搜索）
+零写侧；唯一写面 = save_code_file（工单 code-viewer-editor/01：编辑器
+保存，路径安全同源 + 冲突检测 409，不静默覆盖外部修改）。业务错误统一
+CodeViewError → 400 中文、CodeViewConflictError → 409 中文（errors.py
+登记；未登记异常 = 真 bug → 500 的仓库不变量不变）。
 """
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -47,6 +51,16 @@ class CodeViewError(ValueError):
     """代码查看器业务失败：目录 / 路径 / 文件问题，→ 400 中文。"""
 
 
+class CodeViewConflictError(CodeViewError):
+    """保存冲突（工单 code-viewer-editor/01）：磁盘文件已被外部修改，
+    base_mtime_ns 与磁盘不一致 → 409 中文。
+
+    继承 CodeViewError 但登记表项**置于 400 大元组之前**（errors.py）：
+    error_entry 按序 isinstance 匹配，若 409 表项排后会被含 CodeViewError
+    的 400 元组先吞成 400——顺序即语义，注释说明在登记处。
+    """
+
+
 def list_code_tree(root: Path) -> list[dict[str, Any]]:
     """根目录扁平文件清单（工单 code-viewer/01）：统一噪音跳过后每条
     {path, size_bytes}（path 为相对 root 的正斜杠，与母版树同口径）。
@@ -73,7 +87,7 @@ def list_code_tree(root: Path) -> list[dict[str, Any]]:
 
 
 def _resolve_in_root(root: Path, rel_path: str) -> Path:
-    """安全前置（read_code_file / read_code_file_bytes 共用，工单
+    r"""安全前置（read_code_file / read_code_file_bytes 共用，工单
     code-viewer-md-preview/02 评审整改：消除 7 行同构）：root 必须是目录、
     rel_path 过 is_unsafe_path 单源（首字符 `/`、`:`、`\`、任意层级 `..` 与
     空段）、resolve 后必须落在 root 内——任一不满足抛 CodeViewError
@@ -102,26 +116,45 @@ def read_code_file(root: Path, rel_path: str) -> dict[str, Any]:
     （与 read_master_tree_file 同读法；二进制判定这边对预览全量检——预览
     正确性优先，与搜索侧的头 512 字节探测口径见 search_code_files）。
 
-    返回 {path, size_bytes, content, outline}；outline 仅 .c/.h 有值
-    （工单 code-viewer/03：函数 / 顶层宏 / include 清单，非 C 文件为 null）。
+    返回 {path, size_bytes, content, outline, mtime_ns, utf8}；outline 仅
+    .c/.h 有值（工单 code-viewer/03：函数 / 顶层宏 / include 清单，非 C 文件
+    为 null）；mtime_ns = st_mtime_ns **以字符串返回**（工单
+    code-viewer-editor/01：ns 值 ≈1.7e18 超过 JS Number.MAX_SAFE_INTEGER
+    ≈9e15，JSON number 往返丢精度——字符串精确传输，前端原样回传）；
+    utf8 = 严格解码成功与否（非 UTF-8 文本前端标只读，防止保存损坏——
+    二进制已在 NUL 检查前拒绝，此处只判文本编码）。
     """
     candidate = _resolve_in_root(root, rel_path)
     if not candidate.is_file():
         raise CodeViewError(f"文件不存在：{rel_path}")
     size = candidate.stat().st_size
     if size > CODE_FILE_MAX_BYTES:
-        limit_mb = CODE_FILE_MAX_BYTES // (1024 * 1024)
-        raise CodeViewError(f"文件超过预览上限（{limit_mb}MB）：{rel_path}")
+        _raise_oversize(rel_path)
     data = candidate.read_bytes()
     if b"\x00" in data:
         raise CodeViewError(f"二进制文件不可预览：{rel_path}")
-    content = data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    try:
+        content = data.decode("utf-8")
+        is_utf8 = True
+    except UnicodeDecodeError:
+        content = data.decode("utf-8", errors="replace")
+        is_utf8 = False
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
     return {
         "path": rel_path,
         "size_bytes": size,
         "content": content,
         "outline": _outline_for(content) if _is_c_source(rel_path) else None,
+        "mtime_ns": str(candidate.stat().st_mtime_ns),
+        "utf8": is_utf8,
     }
+
+
+def _raise_oversize(rel_path: str) -> None:
+    """超限 400 中文单源（read_code_file / save_code_file 共用，工单
+    code-viewer-editor/01 评审整改：消除 7 行同构的 limit_mb 计算）。"""
+    limit_mb = CODE_FILE_MAX_BYTES // (1024 * 1024)
+    raise CodeViewError(f"文件超过预览上限（{limit_mb}MB）：{rel_path}")
 
 
 def _is_c_source(rel_path: str) -> bool:
@@ -243,3 +276,74 @@ def _snippet(line: str, needle: str) -> str:
         + flat[start:end]
         + ("…" if end < len(flat) else "")
     )
+
+
+def save_code_file(root: Path, rel_path: str, content: str, base_mtime_ns: int | str) -> dict[str, Any]:
+    """根目录内文本文件写盘（工单 code-viewer-editor/01——「代码」tab 编辑器
+    直接保存的唯一写面）。
+
+    安全判定与 read_code_file 同源（_resolve_in_root 单源：is_unsafe_path +
+    resolve 在 root 内；文件必须已存在——不新建文件，树操作不在本轮）。
+    写前约束（按序）：content 必须是 str（否则 400）→ **磁盘原文件必须是
+    UTF-8**（非 UTF-8 拒绝——errors=replace 已丢码点，覆盖 = 静默损坏）→
+    UTF-8 编码后不得超 CODE_FILE_MAX_BYTES（与预览上限同口径；先于冲突判
+    定——spec 顺序 超限 → 冲突）→ **冲突检测**：磁盘现行 st_mtime_ns 必须
+    等于 base_mtime_ns（打开时的读取值——外部工具 / 任务写盘 / 深化修改
+    都会改变它），不一致 → CodeViewConflictError（409 中文，不静默覆盖
+    别人的写入）。base_mtime_ns 接受 int 或数字字符串（JSON 传输精度：
+    ns 值超 JS 安全整数，前端按字符串回传；非数字 → 400）。写入 = 同目录
+    临时文件 + os.replace 原子替换（UTF-8、换行统一 \\n，与读取归一化口径
+    一致）；OSError（权限 / 磁盘满 / 占用）由 errors.py 既有 400
+    os_error_message 表项接住。
+
+    返回 {path, size_bytes, mtime_ns, outline}——outline 服务端重算
+    （.c/.h；前端保存后大纲刷新用，省一次 GET）；mtime_ns = 写盘后新值
+    （**字符串**，前端更新基准，下次保存带它）。
+    """
+    if not isinstance(content, str):
+        raise CodeViewError("保存内容必须是文本")
+    if isinstance(base_mtime_ns, str):
+        try:
+            base_mtime_ns = int(base_mtime_ns)
+        except ValueError:
+            raise CodeViewError("缺少文件修改时间（base_mtime_ns）") from None
+    if not isinstance(base_mtime_ns, int):
+        raise CodeViewError("缺少文件修改时间（base_mtime_ns）")
+    candidate = _resolve_in_root(root, rel_path)
+    if not candidate.is_file():
+        raise CodeViewError(f"文件不存在：{rel_path}")
+    # 非 UTF-8 守卫（工单 code-viewer-editor/01 评审整改）：前端 utf8 标志的
+    # 后端兜底——原文严格解码失败的文件若以 UTF-8 覆盖，errors=replace 已丢
+    # 码点、字节编码被改写 = 静默损坏；保存统一 UTF-8，非 UTF-8 一律拒绝。
+    try:
+        candidate.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise CodeViewError(
+            f"{rel_path} 不是 UTF-8 编码，为免损坏请用外部编辑器保存"
+        ) from None
+    content_norm = content.replace("\r\n", "\n").replace("\r", "\n")
+    encoded = content_norm.encode("utf-8")
+    if len(encoded) > CODE_FILE_MAX_BYTES:
+        _raise_oversize(rel_path)
+    if candidate.stat().st_mtime_ns != base_mtime_ns:
+        raise CodeViewConflictError(
+            f"磁盘上的 {rel_path} 已被外部修改（任务 / 深化写盘或外部编辑器），"
+            "为免覆盖请选择覆盖写盘或重新加载"
+        )
+    tmp = candidate.with_name(candidate.name + f".tmp-{os.getpid()}")
+    try:
+        tmp.write_bytes(encoded)  # 明确字节写入：\n 原样落盘（与读取归一化同口径）
+        os.replace(tmp, candidate)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    mtime_ns = candidate.stat().st_mtime_ns
+    return {
+        "path": rel_path,
+        "size_bytes": candidate.stat().st_size,
+        "mtime_ns": str(mtime_ns),
+        "outline": _outline_for(content_norm) if _is_c_source(rel_path) else None,
+    }

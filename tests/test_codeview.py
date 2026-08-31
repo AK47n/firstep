@@ -11,11 +11,13 @@ from contest_generator.codeview import (
     CODE_RAW_MAX_BYTES,
     CODE_SEARCH_MAX_HITS,
     CODE_TREE_MAX_ENTRIES,
+    CodeViewConflictError,
     CodeViewError,
     code_raw_media_type,
     list_code_tree,
     read_code_file,
     read_code_file_bytes,
+    save_code_file,
     search_code_files,
 )
 
@@ -352,4 +354,175 @@ def test_read_code_file_bytes_rejects_oversize(tmp_path, monkeypatch):
 
     with pytest.raises(CodeViewError, match="图片超过预览上限（8MB）"):
         read_code_file_bytes(root, "big.png")
+
+
+# ---------------------------------------------------------------------------
+# read_code_file 新字段：mtime_ns / utf8（工单 code-viewer-editor/01——
+# 前端保存冲突检测与非 UTF-8 只读的依据）
+# ---------------------------------------------------------------------------
+
+
+def test_read_code_file_reports_mtime_ns_as_string(tmp_path):
+    # 字符串契约（工单 code-viewer-editor/01）：ns ≈1.7e18 超 JS 安全整数，
+    # JSON number 往返丢精度——必须字符串传输，前端原样回传
+    root = _make_tree(tmp_path / "proj")
+
+    info = read_code_file(root, "main.c")
+
+    assert info["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
+    assert isinstance(info["mtime_ns"], str)
+
+
+def test_read_code_file_utf8_flag_true_for_utf8(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    assert read_code_file(root, "readme.md")["utf8"] is True
+
+
+def test_read_code_file_utf8_flag_false_for_gbk(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    (root / "gbk.c").write_bytes("// 中文注释\n".encode("gbk"))
+
+    info = read_code_file(root, "gbk.c")
+
+    assert info["utf8"] is False
+    assert "\ufffd" in info["content"]  # errors=replace 展示口径：原码点不可复原
+
+
+# ---------------------------------------------------------------------------
+# save_code_file：写盘 roundtrip / 归一 / 冲突 409 / 拒绝面（工单 code-viewer-editor/01）
+# ---------------------------------------------------------------------------
+
+
+def test_save_code_file_writes_content_normalized(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    base = int(read_code_file(root, "main.c")["mtime_ns"])
+
+    info = save_code_file(root, "main.c", "int helper(void) {\r\n\treturn 1;\r\n}\r\n", base)
+
+    assert (root / "main.c").read_bytes() == b"int helper(void) {\n\treturn 1;\n}\n"
+    assert info["path"] == "main.c"
+    assert info["size_bytes"] == len(b"int helper(void) {\n\treturn 1;\n}\n")
+    assert info["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
+    assert info["outline"] == [{"kind": "function", "name": "helper", "line": 1}]
+
+
+def test_save_code_file_accepts_string_base_mtime(tmp_path):
+    # 前端按字符串回传（JSON 精度契约），int 与数字字符串同接受
+    root = _make_tree(tmp_path / "proj")
+    base = read_code_file(root, "main.c")["mtime_ns"]
+    assert isinstance(base, str)
+
+    info = save_code_file(root, "main.c", "int a = 1;\n", base)
+
+    assert (root / "main.c").read_bytes() == b"int a = 1;\n"
+    assert info["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
+
+
+def test_save_code_file_rejects_non_numeric_base(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="缺少文件修改时间"):
+        save_code_file(root, "main.c", "x\n", "abc")
+
+
+def test_save_code_file_outline_null_for_non_c(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    base = read_code_file(root, "readme.md")["mtime_ns"]
+
+    info = save_code_file(root, "readme.md", "# 新标题\n", base)
+
+    assert info["outline"] is None
+
+
+def test_save_code_file_conflict_when_disk_modified(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    base = read_code_file(root, "main.c")["mtime_ns"]
+    target = root / "main.c"
+    # 外部修改：显式把 mtime 拨快 1 秒（绕开文件系统时间戳分辨率抖动）
+    st = target.stat()
+    import os
+    os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+
+    with pytest.raises(CodeViewConflictError, match="已被外部修改"):
+        save_code_file(root, "main.c", "mine\n", base)
+
+
+def test_save_code_file_accepts_fresh_base_after_rewrite(tmp_path):
+    # 同一 mtime 基准保存两次：第二次先重读（模拟前端保存后刷新基准）
+    root = _make_tree(tmp_path / "proj")
+    base = read_code_file(root, "main.c")["mtime_ns"]
+    save_code_file(root, "main.c", "int a = 1;\n", base)
+    base2 = read_code_file(root, "main.c")["mtime_ns"]
+
+    info = save_code_file(root, "main.c", "int a = 2;\n", base2)
+
+    assert (root / "main.c").read_bytes() == b"int a = 2;\n"
+    assert info["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
+
+
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        "../outside.c",
+        "src/../../outside.c",
+        "a//b.c",
+        "src/",
+        "/etc/passwd",
+        "C:/x.c",
+        "src\\app.h",
+    ],
+)
+def test_save_code_file_rejects_unsafe_paths(tmp_path, rel_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="非法路径"):
+        save_code_file(root, rel_path, "x\n", 1)
+
+
+def test_save_code_file_missing_file_is_400_error(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="文件不存在：nope.c"):
+        save_code_file(root, "nope.c", "x\n", 1)
+
+
+def test_save_code_file_rejects_oversize(tmp_path, monkeypatch):
+    monkeypatch.setattr("contest_generator.codeview.CODE_FILE_MAX_BYTES", 16)
+    root = _make_tree(tmp_path / "proj")
+    base = (root / "main.c").stat().st_mtime_ns
+
+    with pytest.raises(CodeViewError, match="文件超过预览上限（0MB）"):
+        save_code_file(root, "main.c", "x" * 17, base)
+
+
+def test_save_code_file_root_missing_is_400_error(tmp_path):
+    with pytest.raises(CodeViewError, match="目录不存在"):
+        save_code_file(tmp_path / "nope", "main.c", "x\n", 1)
+
+
+def test_save_code_file_requires_text_content(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    base = read_code_file(root, "main.c")["mtime_ns"]
+
+    with pytest.raises(CodeViewError, match="保存内容必须是文本"):
+        save_code_file(root, "main.c", None, base)
+
+
+def test_save_code_file_requires_base_mtime(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="缺少文件修改时间"):
+        save_code_file(root, "main.c", "x\n", None)
+
+
+def test_save_code_file_rejects_non_utf8_source_file(tmp_path):
+    # 非 UTF-8（GBK）原文件拒绝保存：errors=replace 已丢码点，UTF-8 覆盖 =
+    # 字节编码被改写 = 静默损坏（前端 utf8 标志的后端兜底）
+    root = _make_tree(tmp_path / "proj")
+    (root / "gbk.c").write_bytes("// 中文注释\n".encode("gbk"))
+    base = (root / "gbk.c").stat().st_mtime_ns
+
+    with pytest.raises(CodeViewError, match="不是 UTF-8 编码"):
+        save_code_file(root, "gbk.c", "// 换我了\n", base)
 

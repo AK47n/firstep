@@ -38,6 +38,7 @@ from .codeview import (
     list_code_tree,
     read_code_file,
     read_code_file_bytes,
+    save_code_file,
     search_code_files,
 )
 from .compile_runner import (
@@ -3994,8 +3995,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         路径安全 / NUL 二进制 / 超 1MB 三类均 400 中文（与母版树端点同
         安全约束，判定在盘访问之前）；成功返回 {path, size_bytes, content,
-        outline}（utf-8 errors=\"replace\" 读取 + 换行归一化，与
-        read_master_tree_file 同读法）。
+        outline, mtime_ns, utf8}（utf-8 errors=\"replace\" 读取 + 换行归一化；
+        mtime_ns / utf8 为工单 code-viewer-editor/01 新增：前者是编辑器
+        保存冲突检测基准、后者是非 UTF-8 只读标记）。
         """
         return read_code_file(Path(dir), path)
 
@@ -4026,6 +4028,30 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         （truncated: true）。空 q 或目录不存在 → 400 中文；只读、零写侧。
         """
         return search_code_files(Path(dir), q)
+
+    @app.post("/api/code/save")
+    @_map_errors
+    def code_save(payload: dict) -> dict:
+        """代码编辑器：保存文件（工单 code-viewer-editor/01）。
+
+        {dir, path, content, base_mtime_ns}——dir/path 必填字符串
+        （_require_str 400 中文）；content 只做类型闸（**不走 _require_str
+        的 strip**，首尾空白/空行逐字节保留，空串合法）；base_mtime_ns
+        必填整数（打开时 /api/code/file 的 mtime_ns；与磁盘不一致 → 409
+        中文 CodeViewConflictError，不静默覆盖外部修改）。写盘 = 原子替换
+        （UTF-8、换行统一 \\n）；成功返回 {path, size_bytes, mtime_ns,
+        outline}。安全判定与读面同源（_resolve_in_root 单源）；不新建文件；
+        非 UTF-8 原文件拒绝（400 中文，防 errors=replace 静默损坏）。
+        """
+        dir_str = _require_str(payload, "dir")
+        path = _require_str(payload, "path")
+        # content 不能走 _require_str（它返回 value.strip()——裁剪会吞掉代码
+        # 首尾空白/空行）；只做类型闸，空串合法（清空文件）。
+        content = payload.get("content")
+        if not isinstance(content, str):
+            raise HTTPException(400, "缺少必填字段：content")
+        base_mtime_ns = payload.get("base_mtime_ns")
+        return save_code_file(Path(dir_str), path, content, base_mtime_ns)
 
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）

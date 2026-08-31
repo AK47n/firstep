@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .ccs import CcsProjectError
-from .codeview import CodeViewError
+from .codeview import CodeViewConflictError, CodeViewError
 from .compile_runner import CompileRunnerError
 from .config import ConfigError
 from .context_manifest import ContextError
@@ -205,6 +205,12 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
     # 文件系统失败（文件占用 / 权限 / 磁盘满）：本地工具场景用户可处理，
     # 按 errno/winerror 分派中文人话（工单 ux-walkthrough-02/10），不裸透系统串
     _ErrorEntry((OSError,), 400, os_error_message),
+    # 代码编辑器保存冲突（工单 code-viewer-editor/01）：磁盘文件被外部修改
+    # （任务 / 深化写盘 / 外部 IDE），base_mtime_ns 与磁盘不一致——不静默
+    # 覆盖别人的写入，前端弹「覆盖 / 重载 / 取消」模态。**必须排在 400 大
+    # 元组之前**：CodeViewConflictError 继承 CodeViewError，error_entry 按序
+    # isinstance 匹配，排后会被 CodeViewError 的 400 表项先吞成 400。
+    _ErrorEntry((CodeViewConflictError,), 409, str),
     # 业务失败：message 原样带出（用户可按提示修正重试）
     _ErrorEntry(
         (
