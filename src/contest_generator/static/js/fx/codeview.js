@@ -253,6 +253,36 @@ export function fileFindFilter(lineTexts, q) {
   return hits;
 }
 
+// ---- 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：纯函数与常量。
+// 宽度区间 [MIN, min(MAX, layoutW-480)]——保右侧大纲栏 300px + 中缝 + 主
+// 视图最少 180px 不被挤没；layoutW 非有限或 ≤0（保守防御：tab 未来若走
+// display:none，init 取宽为 0）时不收缩上限，待真实布局后再收敛。
+// localStorage 只进胶水层（fx 无副作用约定，同 fx/code.js codeZoomClamp
+// 先例：clamp / parse 分离 → parse 收敛后交 clamp）。
+export const CODE_TREE_WIDTH_MIN = 160;
+export const CODE_TREE_WIDTH_MAX = 720;
+export const CODE_TREE_WIDTH_DEFAULT = 240;
+
+// treeWidthClamp(px, layoutW)：任意输入 → 合法树宽（非数值 → 默认 240；
+// 四舍五入后夹在 [MIN, cap]；cap = min(MAX, round(layoutW)-480)，layoutW
+// 非有限或 ≤0 时 cap=MAX——隐藏态恢复不塌到下限）。
+export function treeWidthClamp(px, layoutW) {
+  const cap = Number.isFinite(layoutW) && layoutW > 0
+    ? Math.min(CODE_TREE_WIDTH_MAX, Math.max(CODE_TREE_WIDTH_MIN, Math.round(layoutW) - 480))
+    : CODE_TREE_WIDTH_MAX;
+  const n = Number(px);
+  if (!Number.isFinite(n)) return CODE_TREE_WIDTH_DEFAULT;
+  return Math.min(cap, Math.max(CODE_TREE_WIDTH_MIN, Math.round(n)));
+}
+
+// parseTreeWidthStored(raw, layoutW)：localStorage 恢复——parseInt 容忍
+// 后缀（"320px"），非法/空 → 默认 240，之后走同一 clamp 收敛。
+export function parseTreeWidthStored(raw, layoutW) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return CODE_TREE_WIDTH_DEFAULT;
+  return treeWidthClamp(n, layoutW);
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     buildCodeTree,
@@ -266,5 +296,10 @@ if (typeof window !== "undefined") {
     outlineEmptyHTML,
     searchListHTML,
     fileFindFilter,
+    treeWidthClamp,
+    parseTreeWidthStored,
+    CODE_TREE_WIDTH_MIN,
+    CODE_TREE_WIDTH_MAX,
+    CODE_TREE_WIDTH_DEFAULT,
   });
 }

@@ -15,6 +15,11 @@ import {
   outlineEmptyHTML,
   searchListHTML,
   fileFindFilter,
+  treeWidthClamp,
+  parseTreeWidthStored,
+  CODE_TREE_WIDTH_MIN,
+  CODE_TREE_WIDTH_MAX,
+  CODE_TREE_WIDTH_DEFAULT,
 } from "../../src/contest_generator/static/js/fx/codeview.js";
 
 test("buildCodeTree：目录在前、同级码点序，路径逐层聚合", () => {
@@ -179,4 +184,40 @@ test("fileFindFilter：大小写不敏感子串，返回 1 基行号；空 q →
   assert.deepEqual(fileFindFilter(lines, "STDIO"), [1, 4]);
   assert.deepEqual(fileFindFilter(lines, "  "), []);
   assert.deepEqual(fileFindFilter(lines, "nope"), []);
+});
+
+// ===== 树面板拖拽调宽纯函数（工单 code-viewer-tree-resize/01）=====
+
+test("CODE_TREE_WIDTH_* 常量：160 / 720 / 240", () => {
+  assert.equal(CODE_TREE_WIDTH_MIN, 160);
+  assert.equal(CODE_TREE_WIDTH_MAX, 720);
+  assert.equal(CODE_TREE_WIDTH_DEFAULT, 240);
+});
+
+test("treeWidthClamp：非数值 → 默认 240；下限 160；上限 min(720, layoutW-480)", () => {
+  assert.equal(treeWidthClamp(NaN, 1000), 240);
+  assert.equal(treeWidthClamp(undefined, 1000), 240);
+  assert.equal(treeWidthClamp("x", 1000), 240);
+  assert.equal(treeWidthClamp(50, 1000), 160);          // 下限
+  assert.equal(treeWidthClamp(300, 1000), 300);          // 中段原样
+  assert.equal(treeWidthClamp(299.6, 1000), 300);        // 四舍五入
+  assert.equal(treeWidthClamp(5000, 1000), 520);         // cap = 1000-480
+  assert.equal(treeWidthClamp(720, 2000), 720);          // 上限 720
+  assert.equal(treeWidthClamp(300, 400), 160);           // 窄布局 cap 回落下限
+  assert.equal(treeWidthClamp(300, 640), 160);           // 640-480=160 → 仅下限
+  assert.equal(treeWidthClamp(300, NaN), 300);           // layoutW 非有限 → 不收缩
+  assert.equal(treeWidthClamp(350, 0), 350);             // 隐藏态（display:none 取宽 0）→ 保留
+});
+
+test("parseTreeWidthStored：非法/空 → 240；parseInt 后收敛同 clamp", () => {
+  assert.equal(parseTreeWidthStored(null, 1000), 240);
+  assert.equal(parseTreeWidthStored("", 1000), 240);
+  assert.equal(parseTreeWidthStored("abc", 1000), 240);
+  assert.equal(parseTreeWidthStored("320", 1000), 320);
+  assert.equal(parseTreeWidthStored("320px", 1000), 320);   // parseInt 容忍后缀
+  assert.equal(parseTreeWidthStored("314.9", 1000), 314);   // parseInt 截断小数
+  assert.equal(parseTreeWidthStored("50", 1000), 160);      // 下限收敛
+  assert.equal(parseTreeWidthStored("5000", 1000), 520);    // 上限收敛
+  assert.equal(parseTreeWidthStored("300", 400), 160);      // 窄布局收敛
+  assert.equal(parseTreeWidthStored("350", 0), 350);        // 隐藏态恢复不塌到 160
 });
