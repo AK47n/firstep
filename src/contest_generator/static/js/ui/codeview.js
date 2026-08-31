@@ -411,6 +411,15 @@ export function initCodeViewer() {
     if (editMd) editMd.classList.toggle("hidden", !(isMd && tab.mdMode === "preview"));
     const save = $("btn-code-save");
     if (save) save.classList.toggle("hidden", !isTabSavable(tab));
+    // 信息条空态折叠（工单 code-viewer-editor/07c）：三动作按钮全隐藏 →
+    // .empty 不占位（用户反馈「代码第一行上面有一行啥也没有的空行」=
+    // 空态信息条占位 30px）。同步点唯一 = 本回调（所有按钮可见性路径
+    // openEditorFile/setMdMode/applySavedState 均经 notifyActive 汇聚）。
+    const pathBar = document.querySelector(".code-file-path");
+    if (pathBar) {
+      const anyShown = [btn, editMd, save].some((b) => b && !b.classList.contains("hidden"));
+      pathBar.classList.toggle("empty", !anyShown);
+    }
   });
 
   // 保存成功 → 树节点大小刷新 + 大纲重渲（服务端重算 outline 直用——
