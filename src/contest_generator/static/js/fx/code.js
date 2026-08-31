@@ -12,6 +12,12 @@
 import { esc } from "./core.js";
 import { syncCollapseBtn } from "./generate.js";
 
+// 全大写宏常量判定（工单 code-viewer-ide-restyle/02）：含下划线的全大写
+// 标识符（GPIO_PIN_0 / LED_GPIO）；无下划线全大写短词（如 A）不误染。
+function isMacroConst(w) {
+  return /^[A-Z0-9_]+$/.test(w) && /[A-Z]/.test(w) && w.includes("_");
+}
+
 export function cHighlight(code) {
   const src = String(code == null ? "" : code);
   const kw = {};
@@ -45,11 +51,33 @@ export function cHighlight(code) {
       let j = i;
       while (j < n && /[A-Za-z0-9_]/.test(src[j])) j++;
       const word = src.slice(i, j);
-      html += kw[word] ? '<span class="tok-kw">' + word + "</span>" : esc(word);
+      if (kw[word]) {
+        html += '<span class="tok-kw">' + word + "</span>";
+      } else {
+        let k = j;
+        while (k < n && (src[k] === " " || src[k] === "\t")) k++;
+        if (k < n && src[k] === "(") {              // 函数名/调用（Dark+ 式淡黄）
+          html += '<span class="tok-fn">' + esc(word) + "</span>";
+        } else if (isMacroConst(word)) {            // 宏常量（Dark+ 式紫）
+          html += '<span class="tok-const">' + esc(word) + "</span>";
+        } else {
+          html += esc(word);
+        }
+      }
       i = j;
     } else if (ch === "#" && (i === 0 || src[i - 1] === "\n")) {  // 预处理行
       let j = src.indexOf("\n", i); if (j < 0) j = n;
-      html += '<span class="tok-pre">' + esc(src.slice(i, j)) + "</span>";
+      const line = src.slice(i, j);
+      const m = line.match(/^#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)/);
+      if (m && isMacroConst(m[1])) {                  // #define NAME → NAME 拆出 tok-const
+        const prefix = line.slice(0, m[0].length - m[1].length);
+        const rest = line.slice(prefix.length + m[1].length);
+        html += '<span class="tok-pre">' + esc(prefix) + "</span>"
+              + '<span class="tok-const">' + esc(m[1]) + "</span>"
+              + '<span class="tok-pre">' + esc(rest) + "</span>";
+      } else {
+        html += '<span class="tok-pre">' + esc(line) + "</span>";
+      }
       i = j;
     } else {
       html += esc(ch);
