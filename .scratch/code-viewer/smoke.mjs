@@ -282,6 +282,84 @@ check("文件内过滤命中（main.c:13 注释行）", await waitFor(`
     return items.some((b) => b.dataset.findLine === '13');
   })()`));
 
+// ================= 工单 code-viewer-zoom/01：Ctrl+滚轮缩放 =================
+// 合成 WheelEvent（ctrlKey + deltaY）驱动——与既有冒烟同风格（不依赖 CDP
+// Input 真实输入，reload 后 press 丢失不可靠）；断言 DOM 可观察事实
+// （--code-zoom 变量 / gutter 与 pre 计算字号同步 / badge / localStorage）。
+await Eval(`(() => {
+  try { localStorage.removeItem('firstep.codeViewZoom'); } catch {}
+  document.getElementById('code-viewer').dispatchEvent(
+    new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, bubbles: true, cancelable: true }));
+  return true;
+})()`);
+check("Ctrl+滚轮上滚：preventDefault + 放大到 110%（gutter/pre 字号同步）", await waitFor(`
+  (() => {
+    const view = document.getElementById('code-viewer');
+    if (view.style.getPropertyValue('--code-zoom') !== '1.1') return false;
+    const g = parseFloat(getComputedStyle(view.querySelector('.code-gutter-line')).fontSize);
+    const p = parseFloat(getComputedStyle(view.querySelector('.code-pre')).fontSize);
+    return g > 13 && p > 13 && Math.abs(g - p) < 0.01;
+  })()`));
+check("缩放浮标显示 110%（.code-zoom-badge.show，挂主面板）", await Eval(`
+  (() => {
+    const b = document.querySelector('.code-pane-main > .code-zoom-badge');
+    return !!b && b.classList.contains('show') && b.textContent === '110%';
+  })()`));
+check("持久化 firstep.codeViewZoom=110", await Eval(`
+  (() => { try { return localStorage.getItem('firstep.codeViewZoom') === '110'; } catch { return false; } })()`));
+check("Ctrl+滚轮 dispatchEvent 返回 false（preventDefault 已调用）", await Eval(`
+  document.getElementById('code-viewer').dispatchEvent(
+    new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, bubbles: true, cancelable: true })) === false`));
+// 连续下滚 15 档 → clamp 到下限 80%（badge 同步 80%）
+await Eval(`(() => {
+  const view = document.getElementById('code-viewer');
+  for (let i = 0; i < 15; i++) {
+    view.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: 100, bubbles: true, cancelable: true }));
+  }
+  return true;
+})()`);
+check("连续下滚 15 档 → clamp 80%（变量 0.8 + 存储 80 + badge 80%）", await waitFor(`
+  (() => {
+    const view = document.getElementById('code-viewer');
+    const stored = (() => { try { return localStorage.getItem('firstep.codeViewZoom'); } catch { return null; } })();
+    const b = document.querySelector('.code-pane-main > .code-zoom-badge');
+    return view.style.getPropertyValue('--code-zoom') === '0.8' && stored === '80' && !!b && b.textContent === '80%';
+  })()`));
+// reload 恢复：清 marker → 刷新 → 等新页 → 断言容器变量 + 存储同值
+await Eval(`window.__smokeMarker = 1`);
+await cdp("Page.reload", { ignoreCache: true });
+{
+  let zready = false;
+  for (let i = 0; i < 100 && !zready; i++) {
+    try {
+      zready = await Eval(`document.readyState === 'complete' && !window.__smokeMarker
+        && !!document.getElementById('code-viewer')`);
+    } catch {}
+    if (!zready) await new Promise((r) => setTimeout(r, 300));
+  }
+  if (!zready) { console.error("缩放 reload 后页面未就绪"); process.exit(1); }
+}
+check("reload 恢复 80%（容器 --code-zoom + 存储同值，静默不弹浮标）", await Eval(`
+  (() => {
+    const view = document.getElementById('code-viewer');
+    const stored = (() => { try { return localStorage.getItem('firstep.codeViewZoom'); } catch { return null; } })();
+    return view.style.getPropertyValue('--code-zoom') === '0.8' && stored === '80'
+      && !document.querySelector('.code-zoom-badge.show');
+  })()`));
+// 收尾放大回 100%（下一轮冒烟/截图从确定性状态开始）
+await Eval(`(() => {
+  const view = document.getElementById('code-viewer');
+  view.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, bubbles: true, cancelable: true }));
+  view.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, bubbles: true, cancelable: true }));
+  return true;
+})()`);
+check("收尾放大回 100%（--code-zoom=1 + 存储 100）", await waitFor(`
+  (() => {
+    const view = document.getElementById('code-viewer');
+    const stored = (() => { try { return localStorage.getItem('firstep.codeViewZoom'); } catch { return null; } })();
+    return view.style.getPropertyValue('--code-zoom') === '1' && stored === '100';
+  })()`));
+
 // ================= 工单 06：最近记录卡「查看代码」按钮 =================
 check("recentChipHTML 含「查看代码」按钮（data-code-dir + 不破坏删除钮）", await Eval(`
   (() => {

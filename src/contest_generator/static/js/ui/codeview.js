@@ -9,6 +9,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { languageOf } from "/js/fx/highlight.js";
+import { codeZoomClamp, parseZoomStored } from "/js/fx/code.js";
 import {
   buildCodeTree,
   codeFileTabHTML,
@@ -313,6 +314,76 @@ function renderFindPanel(q, lineHits) {
     .join("") + "</ul>";
 }
 
+// ===== 代码字号缩放（工单 code-viewer-zoom/01） =====
+// Ctrl/Cmd+滚轮缩放只读代码字体：上滚放大 / 下滚缩小，80%–200%、每档 10%
+// （codeZoomClamp / parseZoomStored 复用 fx/code.js 单源，不新增重复实现）。
+// 机制 = .code-gutter-line 与 .code-pre 的 font-size 均 `calc(13px * var(--code-zoom, 1))`
+// （index.html 单源），本层只写 #code-viewer 容器 inline 变量——openCodeFile
+// 的 innerHTML 重渲染不影响容器自身 style（缩放跟会话不跟文件）；值持久化
+// 到 firstep.codeViewZoom；缩放时右上角浮出当前百分比（1.2s 淡出）。
+const CODE_VIEW_ZOOM_KEY = "firstep.codeViewZoom";
+const CODE_VIEW_ZOOM_STEP = 10;
+const CODE_VIEW_ZOOM_ACC = 40;   // 滚轮累积阈值：高 DPI 鼠标/触控板多事件档
+let codeZoomBadge = null;
+let codeZoomBadgeTimer = 0;
+let codeZoomAcc = 0;
+
+// currentCodeZoomPct()：反算当前档位（读 container inline --code-zoom，
+// 非法/未设 → 100）。
+function currentCodeZoomPct() {
+  const view = $("code-viewer");
+  const raw = parseFloat(view ? view.style.getPropertyValue("--code-zoom") : "");
+  return raw > 0 ? Math.round(raw * 100) : 100;
+}
+
+// showCodeZoomBadge(pct)：右上角浮标（首次懒建，挂 .code-pane-main——
+// 不随 .code-view 内容滚动；重复缩放重置 1.2s 淡出计时）。
+function showCodeZoomBadge(pct) {
+  if (!codeZoomBadge) {
+    const view = $("code-viewer");
+    const pane = view && view.closest(".code-pane-main");
+    if (!pane) return;
+    codeZoomBadge = document.createElement("div");
+    codeZoomBadge.className = "code-zoom-badge";
+    codeZoomBadge.setAttribute("aria-hidden", "true");
+    pane.appendChild(codeZoomBadge);
+  }
+  codeZoomBadge.textContent = pct + "%";
+  codeZoomBadge.classList.add("show");
+  clearTimeout(codeZoomBadgeTimer);
+  codeZoomBadgeTimer = setTimeout(() => codeZoomBadge.classList.remove("show"), 1200);
+}
+
+// applyCodeZoom(pct)：单一路径——clamp → 写 --code-zoom → 持久化 → 浮标。
+function applyCodeZoom(pct) {
+  const view = $("code-viewer");
+  if (!view) return;
+  pct = codeZoomClamp(pct);
+  view.style.setProperty("--code-zoom", String(pct / 100));
+  try { localStorage.setItem(CODE_VIEW_ZOOM_KEY, String(pct)); } catch (e) {}
+  showCodeZoomBadge(pct);
+}
+
+// initCodeViewZoom()：恢复持久化档位（静默，不弹浮标）+ wheel 监听
+// （passive:false 才可 preventDefault；仅 Ctrl/Cmd 接管——普通滚动交还原生；
+// 累积 |Δ| ≥ 40 才触发一步）。
+function initCodeViewZoom() {
+  const view = $("code-viewer");
+  if (!view) return;
+  let pct = 100;
+  try { pct = parseZoomStored(localStorage.getItem(CODE_VIEW_ZOOM_KEY)); } catch (e) {}
+  view.style.setProperty("--code-zoom", String(pct / 100));
+  view.addEventListener("wheel", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    codeZoomAcc += e.deltaY;
+    if (Math.abs(codeZoomAcc) < CODE_VIEW_ZOOM_ACC) return;
+    const dir = codeZoomAcc < 0 ? CODE_VIEW_ZOOM_STEP : -CODE_VIEW_ZOOM_STEP;  // 上滚放大
+    codeZoomAcc = 0;
+    applyCodeZoom(currentCodeZoomPct() + dir);
+  }, { passive: false });
+}
+
 // ===== initCodeViewer：入口绑定（host 启动区调用） =====
 export function initCodeViewer() {
   const pick = $("btn-code-pick-dir");
@@ -395,4 +466,7 @@ export function initCodeViewer() {
   // localStorage 宽度（DOM 已就绪；无布局/手柄时静默跳过——不阻断其他绑定）。
   initCodeTreeResize();
   restoreTreeWidth();
+
+  // 代码字号缩放（工单 code-viewer-zoom/01）：恢复持久化档位 + Ctrl/Cmd+滚轮。
+  initCodeViewZoom();
 }
