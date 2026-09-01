@@ -166,4 +166,19 @@
   （fx/task.js globalChatMessageHTML）暂不抽共享件（task 版带三操作按钮、
   语义不同）。
 
-（s2/s3 继续补记）
+**s4（工单 04 双轴评审后）**：
+- 守卫范围扩为 anyDir：AI diff 应用在 IDE 内发起（不限于生成上下文目录），
+  脏标签都该先确认——guardCodeTabWrite 加 opts.anyDir（smoke 实测样本目录
+  非上下文时原语义直通、验收 3 无法满足，规范语义实为「任何目录」）。
+- 409 优先顺序：apply_code_diff 写模式 base_mtime_ns 校验提前到 hunk 应用
+  之前——外部改盘后 hunk 通常也不再匹配，报 409「已被外部修改」（与
+  save_code_file 同口径）而非 400「未匹配」（用户无法区分谁改了什么）；
+  preview 无需 mtime 不变。
+- 成功 toast 用 kind "ok"（全仓库 ok/error/info 约定；"success" 渲染
+  .toast.success 无图标——踩坑记录）。
+- 守卫经动态 import 破静态环（code-write-guard→codeview→code-ai-chat）。
+- DIFF 剥离占位 = aiChatMessageHTML assistant 分支（stripDiffBlock 私有）；
+  按钮注入在 ui 层（renderPanel 后 attachDiffButtons，parseAiDiff 单源）。
+- 评审子代理超时中断（60+ 分钟无产出）→ 自查收尾（读全部改动文件 +
+  git diff 核对 + 全量测试复核），判断项：setSendEnabled 复用
+  （input 监听处原重复判定，已修）。

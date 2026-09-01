@@ -43,16 +43,29 @@ export function quoteRefParts(text) {
   };
 }
 
-/** 单条消息气泡（私有）：assistant → 纯文本；user → 引用消息卡片化。 */
+/** 单条消息气泡（私有）：assistant → 纯文本（<DIFF> 结构化块剥离显示——
+ * 原始 JSON 无阅读价值，正文挂「预览改动」按钮由 ui 层注入，见工单 04）；
+ * user → 引用消息卡片化。 */
 function aiChatMessageHTML(msg) {
   if (!msg || typeof msg.content !== "string") return "";
   const isAi = msg.role === "assistant";
   const body = String(msg.content);
   const at = msg.at ? ' <span class="muted">' + esc(String(msg.at)) + "</span>" : "";
-  const inner = isAi ? esc(body) : userMessageHTML(body);
+  const inner = isAi ? esc(stripDiffBlock(body)) : userMessageHTML(body);
   return '<div class="sugg-msg ' + (isAi ? "ai" : "user") + '">'
     + '<span class="sugg-msg-role">' + (isAi ? "AI" : "我") + "</span>："
     + inner + at + "</div>";
+}
+
+// stripDiffBlock(text)：含 <DIFF>...</DIFF> 块（含 ```json 围栏变体）→ 剥离
+// 为占位提示文本（解析/按钮逻辑不在纯件——ui 层 parseAiDiff 单源）；无块
+// → 原样返回。
+function stripDiffBlock(text) {
+  if (!/<DIFF>[\s\S]*?<\/DIFF>/i.test(text)) return text;
+  const shown = text.replace(/<DIFF>[\s\S]*?<\/DIFF>/gi, "").trim();
+  return shown
+    ? shown + "\n〘此处含 AI 建议的代码改动，点「预览改动」查看〙"
+    : "〘AI 建议了一处代码改动，点「预览改动」查看〙";
 }
 
 /** user 消息内容：引用消息 → details 折叠卡片（summary = 路径与行区间，

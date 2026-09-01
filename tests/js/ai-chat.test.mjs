@@ -78,6 +78,16 @@ test("aiChatMessagesHTML：pending 引用消息同样卡片化", () => {
   assert.ok(html.includes('class="sugg-msg user"'), "pending user 气泡");
 });
 
+test("aiChatMessagesHTML：assistant 含 DIFF 块 → 剥离为占位提示（无块原样）", () => {
+  const withDiff = "改好了：\n<DIFF>{\"path\":\"main.c\",\"hunks\":[]}</DIFF>";
+  const html = aiChatMessagesHTML([{ role: "assistant", content: withDiff }], "");
+  assert.ok(!html.includes("<DIFF>"), "DIFF 块剥离");
+  assert.ok(html.includes("预览改动"), "占位提示含按钮指引");
+  const plain = aiChatMessagesHTML([{ role: "assistant", content: "正常回答" }], "");
+  assert.ok(plain.includes("正常回答"), "无块原样");
+  assert.ok(!plain.includes("预览改动"), "无块无提示");
+});
+
 test("aiChatMessagesHTML：多消息与 pending 分页顺序稳定", () => {
   const msgs = [
     { role: "user", content: "a" },

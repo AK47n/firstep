@@ -493,6 +493,24 @@ def apply_code_diff(
     # 行尾差异干扰。
     content = raw.replace("\r\n", "\n").replace("\r", "\n")
     lines = content.split("\n")
+    # **写模式 base 校验先于 hunk 应用**（评审 s1 整改）：外部改盘后 hunk
+    # 通常也不再匹配（旧行已被他人改走）——先验 base 给出 409「已被外部
+    # 修改，请重新加载后再应用」（与 save_code_file 同口径、语义可操作），
+    # 而不是 400「未匹配」（用户无法区分谁改了什么）。preview 无需 mtime。
+    if not preview:
+        base = base_mtime_ns
+        if isinstance(base, str):
+            try:
+                base = int(base)
+            except ValueError:
+                base = None
+        if not isinstance(base, int):
+            raise CodeViewError("缺少文件修改时间（base_mtime_ns）")
+        if candidate.stat().st_mtime_ns != base:
+            raise CodeViewConflictError(
+                f"磁盘上的 {rel_path} 已被外部修改（任务 / 深化写盘或外部编辑器），"
+                "为免覆盖请重新加载后再应用"
+            )
     new_lines = _apply_hunks_to_lines(lines, norm_hunks)
     new_content = "\n".join(new_lines)
     stats = {
@@ -509,19 +527,6 @@ def apply_code_diff(
     encoded = new_content.encode("utf-8")
     if len(encoded) > CODE_FILE_MAX_BYTES:
         _raise_oversize(rel_path)
-    base = base_mtime_ns
-    if isinstance(base, str):
-        try:
-            base = int(base)
-        except ValueError:
-            base = None
-    if not isinstance(base, int):
-        raise CodeViewError("缺少文件修改时间（base_mtime_ns）")
-    if candidate.stat().st_mtime_ns != base:
-        raise CodeViewConflictError(
-            f"磁盘上的 {rel_path} 已被外部修改（任务 / 深化写盘或外部编辑器），"
-            "为免覆盖请重新加载后再应用"
-        )
     tmp = candidate.with_name(candidate.name + f".tmp-{os.getpid()}")
     try:
         tmp.write_bytes(encoded)
