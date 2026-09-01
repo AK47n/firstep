@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1c552d34a87b47cf40a8a77278d01e3f4852a0c6 -->
+<!-- changelog-auto: last-commit=3f82ad0fd12a212357f96923e23528d6f2f6f1f3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
+- 12:19 工单 code-tree-ops/02：树 UI——新建/重命名/删除 + tab 联动 + 脏保护 + 纯件单测（保存全部实现随文件一并落地）
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
