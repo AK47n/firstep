@@ -34,6 +34,7 @@ from . import __version__  # 工具版本（上下文清单 tool_version 字段�
 from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
 from .codeview import (
+    apply_code_diff,
     code_raw_media_type,
     create_code_entry,
     delete_code_entry,
@@ -4040,6 +4041,30 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         （truncated: true）。空 q 或目录不存在 → 400 中文；只读、零写侧。
         """
         return search_code_files(Path(dir), q)
+
+    @app.post("/api/code/apply-diff")
+    @_map_errors
+    def code_apply_diff(payload: dict) -> dict:
+        """代码编辑器：AI diff 应用（工单 code-ide-ai/02）。
+
+        {dir, path, hunks, base_mtime_ns?, preview?}——hunks 为结构化 diff
+        （契约见 fx/ai-diff.js / codeview.apply_code_diff，LINE 展示语义 +
+        old 段整行精确匹配锚点）；preview=true 只算不写返回 {new_content,
+        stats}（base_mtime_ns 非必填）；写模式必填 base_mtime_ns（与磁盘
+        不一致 → 409 中文 CodeViewConflictError，与 /api/code/save 同口径），
+        返回 {saved, size_bytes, mtime_ns, stats}。安全判定与读面同源
+        （_resolve_in_root 单源）；文件须存在；非 UTF-8 拒绝；写完感知
+        走既有磁盘基线对比（前端），此处不碰。
+        """
+        dir_str = _require_str(payload, "dir")
+        path = _require_str(payload, "path")
+        hunks = payload.get("hunks")
+        preview = bool(payload.get("preview"))
+        base_mtime_ns = payload.get("base_mtime_ns")
+        return apply_code_diff(
+            Path(dir_str), path, hunks, base_mtime_ns=base_mtime_ns,
+            preview=preview,
+        )
 
     @app.post("/api/code/save")
     @_map_errors

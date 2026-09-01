@@ -8178,3 +8178,98 @@ def test_code_tree_delete_traversal_400_chinese(client, tmp_path):
 
     assert resp.status_code == 400
     assert "非法路径" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# /api/code/apply-diff（工单 code-ide-ai/02）：preview 只算不写 / 写模式 /
+# 409 与 save 同口径——路由薄层集成（域算法在 tests/test_apply_diff.py 钉死）
+# ---------------------------------------------------------------------------
+
+
+def _apply_hunk(line, *rows):
+    return {"line": line, "title": "", "lines": [
+        {"kind": k, "text": t} for k, t in rows
+    ]}
+
+
+def test_code_apply_diff_preview_no_write(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text(
+        "int main(void) {\n  // TODO: x\n  init();\n  return 0;\n}\n",
+        encoding="utf-8",
+    )
+    mtime = (root / "main.c").stat().st_mtime_ns
+
+    resp = client.post("/api/code/apply-diff", json={
+        "dir": str(root),
+        "path": "main.c",
+        "preview": True,
+        "hunks": [_apply_hunk(1,
+            ("ctx", "int main(void) {"),
+            ("del", "  // TODO: x"),
+            ("add", "  x_init();"),
+            ("ctx", "  init();"),
+        )],
+    })
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["new_content"] == (
+        "int main(void) {\n  x_init();\n  init();\n  return 0;\n}\n"
+    )
+    assert body["stats"] == {"additions": 1, "deletions": 1, "hunks": 1}
+    # 只算不写：磁盘原样（含 mtime）
+    assert (root / "main.c").stat().st_mtime_ns == mtime
+    assert (root / "main.c").read_text(encoding="utf-8").startswith(
+        "int main(void) {\n  // TODO: x")
+
+
+def test_code_apply_diff_write_success(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("int main(void) {\n  return 0;\n}\n",
+                                 encoding="utf-8")
+    base = (root / "main.c").stat().st_mtime_ns
+
+    resp = client.post("/api/code/apply-diff", json={
+        "dir": str(root),
+        "path": "main.c",
+        "base_mtime_ns": str(base),
+        "hunks": [_apply_hunk(2,
+            ("ctx", "int main(void) {"),
+            ("del", "  return 0;"),
+            ("add", "  return 1;"),
+            ("ctx", "}"),
+        )],
+    })
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["saved"] is True
+    assert body["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
+    assert (root / "main.c").read_text(encoding="utf-8") == (
+        "int main(void) {\n  return 1;\n}\n"
+    )
+
+
+def test_code_apply_diff_conflict_409(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("int main(void) {\n  return 0;\n}\n",
+                                 encoding="utf-8")
+
+    resp = client.post("/api/code/apply-diff", json={
+        "dir": str(root),
+        "path": "main.c",
+        "base_mtime_ns": 1,
+        "hunks": [_apply_hunk(2,
+            ("ctx", "int main(void) {"),
+            ("del", "  return 0;"),
+            ("add", "  return 1;"),
+            ("ctx", "}"),
+        )],
+    })
+
+    assert resp.status_code == 409
+    assert "已被外部修改" in resp.json()["detail"]
