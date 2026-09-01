@@ -231,3 +231,26 @@
 - fx/fix-rows.js 补 window 同名桥（fx/*.js 模块约定兼容层——H2 整改）。
 - index.html #code-fix-panel 去掉无 CSS 引用的死 class `code-fix-panel`
   （样式走 #id——J6 整改）。
+
+**s7（工单 07 双轴评审后）**：
+- Standards：0 硬违规；4 判断项整改——①**快照清单域删除改派生**：持有快照
+  的文件 = files 条目 content 非空（推进时枚举 Object.keys(snap) 且
+  typeof content === "string"）——issue 07 字面「快照文件清单域」记录偏离
+  （派生消除「content 与清单两形表达同一概念」的平行索引漂移）；②
+  renderChangePanel 的 isMainCPath 行级特判 = 已知接缝，转工单 08 泛化；
+  ③setSnapshot 改名 setSnapshotContent（清单删除后名实相符）；④mtimeEq
+  抽 fx/disk-baseline.js（baselineDiff / onFileLoaded /
+  reloadTabFromDisk 三处 String(x||"") 比较归一——409 同口径单源）。
+- Spec：验收 1-5 达标；**主发现「删除/改名文件推进崩溃」**（旧结构
+  snapshotFiles 清单枚举无 snap 守卫）在 Standards 整改的派生 +
+  Object.keys(snap) 守卫下已消灭——smoke-08 补 S9（已打开文件被外部删除 →
+  removed 感知 → 清空推进不崩溃 + 面板收敛）验证。carry-over 循环职责
+  澄清：从旧 files 搬 content = 「打开过的文件」识别（新结构无独立清单，
+  判定只能靠 content 迁移），随后 re-fetch 覆盖为当前内容——成功→新确认
+  内容 / 失败·超限·已删 → null 保底（issue 07 L10 字面），二者不矛盾。
+- smoke-08 判断项整改：裸 setTimeout 全删（await openEditorFile（同步
+  notifyLoaded 在返回前执行）+ waitFor 条件化）；S7 步名改（迁移正确性由
+  fx 单测覆盖，冒烟验证「旧格式可读 + 落盘统一结构 + 特例键删」）；S7
+  依赖 S6 磁盘态为场景顺序性，记录不改。
+- node 1082 全绿；smoke-08 15 项全 PASS；回归 smoke-02/03/04/05/06/07
+  全 PASS。

@@ -16,7 +16,10 @@ import {
   baselineDiff,
   baselineHasChanges,
   baselineEvict,
-} from "/js/fx/disk-baseline.js";  // 磁盘基线对比纯件（code-ide-flow/01——事实源不依赖事件载荷）
+  snapshotOf,
+  migrateBaselineStore,
+  mtimeEq,
+} from "/js/fx/disk-baseline.js";  // 磁盘基线对比纯件（code-ide-flow/01——事实源不依赖事件载荷）；内容快照（code-ide-ai/07）；mtimeEq（mtime 守卫单源）
 import { changesPanelHTML, changeSummaryText } from "/js/fx/change-panel.js";  // 「磁盘变更」面板条目渲染（code-ide-flow/03）
 import { maincDiffCompute } from "/js/fx/mainc-diff.js";  // main.c 行级 diff 计算（code-ide-flow/03——面板行级展示）
 import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
@@ -47,6 +50,7 @@ import {
   isMdPreviewActive,
   onActiveTabChanged,
   onFileSaved,
+  onFileLoaded,
   openTabPaths,
   dirtyTabPaths,
   setDiskChanged,
@@ -78,26 +82,22 @@ function changesOf(diff) {
   };
 }
 
-// maincSnap(content)：main.c 内容快照判空单源（超限 → null = 面板占位；
-// codeview.js 内两处推进函数共用同一 cap 语义，评审整改：改上限不落一处）。
-function maincSnap(content) {
-  return typeof content === "string" && content.length <= MAINc_SNAP_MAX
-    ? content : null;
-}
-
-// ===== 磁盘基线（工单 code-ide-flow/02）=====
+// ===== 磁盘基线（工单 code-ide-flow/02 + code-ide-ai/07）=====
 // 事实源 = 磁盘基线对比（spec：不消费 fix/task/deepen 事件载荷——那些只有
 // main.c diff 或刷新即丢）。localStorage 只进胶水层（fx 无副作用约定，同
 // firstep.codeTreeWidth 先例）；store = {dir → {ts, files}}，files 为
 // baselineSnapshot 规范化快照；目录隔离 + evict（fx/disk-baseline.js）。
+// code-ide-ai/07：files 条目可选项 content = 内容快照（cap 见 fx
+// snapshotOf——「打开过的文件」才持有，行级 diff 数据源；maincContent
+// 每目录特例已统一入字段，旧数据 migrateBaselineStore 兼容）。
 const CODE_BASELINE_KEY = "firstep.codeBaseline";
 const CODE_BASELINE_MAX_DIRS = 8;  // LRU 上限（存过多目录的旧基线无意义）
-const MAINc_SNAP_MAX = 256 * 1024;  // main.c 内容快照上限（超出 = 不存 → 面板占位）
 
 function baselineStoreLoad() {
   try {
     const v = JSON.parse(localStorage.getItem(CODE_BASELINE_KEY) || "{}");
-    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    return migrateBaselineStore(v);   // 旧 maincContent 字段 → files.main.c.content（幂等）
   } catch (e) { return {}; }
 }
 
@@ -105,18 +105,12 @@ function baselineStoreSave(store) {
   try { localStorage.setItem(CODE_BASELINE_KEY, JSON.stringify(store)); } catch (e) { /* 静默 */ }
 }
 
-// baselineStoreCommit(store, dir, snap)：目录条目落盘（ts 刷新 + evict）。
-function baselineStoreCommit(store, dir, snap) {
-  store[dir] = { ts: Date.now(), files: snap };
-  baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
-}
-
-// fetchMaincContent(dir)：读磁盘顶层 main.c（/api/code/file 直出）→ 内容
-// 字符串；不存在 / 失败 → null（面板行级 diff 占位）。
-async function fetchMaincContent(dir) {
+// fetchCodeFile(dir, path)：读磁盘文件（/api/code/file 直出）→ 内容字符串；
+// 不存在 / 失败 → null（快照与「当前磁盘内容」读取共用单实现）。
+async function fetchCodeFile(dir, path) {
   try {
     const data = await apiGet("/api/code/file?dir=" + encodeURIComponent(dir)
-      + "&path=main.c");
+      + "&path=" + encodeURIComponent(path));
     return data && typeof data.content === "string" ? data.content : null;
   } catch (e) { return null; }
 }
@@ -133,28 +127,47 @@ function baselineDiffDisk(dir, files) {
 }
 
 // baselineCommitDisk(dir, files)：确认点整体推进——基线 = 当前磁盘快照
-// （首次打开 / 树操作 / 「清空并确认已看」）；顺带存顶层 main.c 内容快照
-// （行级 diff 数据源——基线只记 mtime/size 无法做行级对比；超限/失败 →
-// null，面板显示占位）。async：main.c 内容需一次 /api/code/file。
+// （首次打开 / 树操作 / 「清空并确认已看」）。code-ide-ai/07：快照 = files
+// 条目 content 字段（**派生**——平行清单域已删，评审整改：两形表达同概念
+// 有漂移风险）；旧 content 先搬入新快照（防推进把快照丢弃），随后对持有
+// content 的文件逐文件 re-fetch 当前内容覆盖（新确认内容 = 行级 diff 基准；
+// 文件已不存在 / 读取失败 / 超限 → content=null 保底——无内容无从行级）。
+// async：内容需逐文件 /api/code/file。
 async function baselineCommitDisk(dir, files) {
   const store = baselineStoreLoad();
   const snap = baselineSnapshot(files);
-  baselineStoreCommit(store, dir, snap);
-  const entry = store[dir];
-  // main.c 内容快照（行级 diff 数据源；超限/失败 → null → 面板占位）。
-  // 无论有无 main.c 都 write（无 main.c → maincContent=null 覆盖旧残值——
-  // 评审整改：else 分支此前只改内存不落盘，旧快照残留）。
-  entry.maincContent = Object.prototype.hasOwnProperty.call(snap, "main.c")
-    ? maincSnap(await fetchMaincContent(dir))
-    : null;
+  const old = store[dir] || {};
+  const oldFiles = old.files || {};
+  for (const p of Object.keys(oldFiles)) {
+    if (Object.prototype.hasOwnProperty.call(snap, p)
+      && typeof oldFiles[p].content === "string") {
+      snap[p].content = oldFiles[p].content;
+    }
+  }
+  store[dir] = { ts: Date.now(), files: snap };
+  for (const p of Object.keys(snap)) {
+    if (typeof snap[p].content === "string") {
+      snap[p].content = snapshotOf(await fetchCodeFile(dir, p));   // null = 保底
+    }
+  }
   baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
 }
 
-// baselineUpdateFile(dir, path, mtimeNs, sizeBytes)：保存 / 重载后基线单
-// 条目对齐（下次对比不再把本文件报为「修改」——写盘方 = 本 IDE 自己）。
-// maincContent：保存 main.c 时用户确认版内容（同步推进内容快照——新基线
-// 与面板 diff 都以最新确认版为参照）。
-function baselineUpdateFile(dir, path, mtimeNs, sizeBytes, maincContent) {
+// setSnapshotContent(entry, path, snap)：写入文件条目的 content 快照（唯一
+// 写点——onFileLoaded 建快照 / baselineUpdateFile 保存推进共用；「持有快照
+// 的文件」由 files 派生，无独立清单）。
+function setSnapshotContent(entry, path, snap) {
+  const files = entry.files || {};
+  files[path] = files[path] || {};
+  files[path].content = snap;
+}
+
+// baselineUpdateFile(dir, path, mtimeNs, sizeBytes, content)：保存 / 重载后
+// 基线单条目对齐（下次对比不再把本文件报为「修改」——写盘方 = 本 IDE 自己）。
+// content = 用户确认版内容（保存动作的标签内容）——任意文件推进行级快照
+// （打开过 = 持有快照的语义下保存必打开过；超限 → null 保底）。旧版本的
+// main.c 特例参数已统一为通用字段（code-ide-ai/07 字段统一化）。
+function baselineUpdateFile(dir, path, mtimeNs, sizeBytes, content) {
   const store = baselineStoreLoad();
   const entry = store[dir];
   if (!entry || !entry.files) return;
@@ -163,12 +176,25 @@ function baselineUpdateFile(dir, path, mtimeNs, sizeBytes, maincContent) {
   }
   entry.files[path].mtime_ns = String(mtimeNs == null ? "" : mtimeNs);
   entry.files[path].size_bytes = sizeBytes == null ? "" : sizeBytes;
-  if (path === "main.c" && typeof maincContent === "string") {
-    entry.maincContent = maincSnap(maincContent);   // 用户确认版（超限 → null 占位）
-  }
+  setSnapshotContent(entry, path, snapshotOf(content));
   entry.ts = Date.now();
   baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
 }
+
+// onFileLoaded（code-ide-ai/07 快照建立）：打开 = 读盘成功 → 基线建内容
+// 快照——「打开过的文件」才有行级 diff 数据源。mtime == 基线 mtime（磁盘
+// = 用户确认版）→ 快照 = 读盘内容（零额外读盘——读盘载荷复用）；mtime 不
+// 等（外部已改未处理）→ 不动旧快照（保留 diff 基准 = 用户确认版）。从未
+// 打开/无基线条目 → 不落快照域。
+onFileLoaded((path, content, mtimeNs) => {
+  const store = baselineStoreLoad();
+  const entry = store[codeDir];
+  const bl = entry && entry.files && entry.files[path];
+  if (!bl) return;
+  if (!mtimeEq(bl.mtime_ns, mtimeNs)) return;
+  setSnapshotContent(entry, path, snapshotOf(content));
+  baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
+});
 
 // applyDiskChanges(diff)：基线对比命中 → 联动（spec 1）——干净标签自动
 // 重载（计数 → toast）；脏标签置「磁盘已变更」徽章（点徽章弹既有三选，绝不
@@ -282,14 +308,17 @@ async function renderChangePanel() {
     if (summaryEl) summaryEl.textContent = "";
     return;
   }
-  // main.c 修改条目 → 行级 diff（基线快照 = 用户最后确认版；main.c 内容
-  // 快照与当前磁盘任一缺失 → 纯件占位文案）
+  // main.c 修改条目 → 行级 diff（基线快照 = 用户最后确认版；代码
+  // code-ide-ai/07 起快照统一在 files[path].content 字段——main.c 与其它
+  // 打开过的文件同构，工单 08 再泛化到任意文件）；基线快照或当前磁盘任一
+  // 缺失 → 纯件占位文案）
   const mc = entries.find((e) => e.status === "modified" && isMainCPath(e.path));
   if (mc) {
     const store = baselineStoreLoad();
     const entry = store[codeDir] || {};
-    const oldContent = entry.maincContent;
-    const curContent = await fetchMaincContent(codeDir);
+    const oldEntry = (entry.files || {})["main.c"] || {};
+    const oldContent = oldEntry.content;
+    const curContent = await fetchCodeFile(codeDir, "main.c");
     if (typeof oldContent === "string" && typeof curContent === "string") {
       mc.mainDiff = maincDiffCompute(oldContent, curContent);   // null = 无差异/超限 → 占位
     }

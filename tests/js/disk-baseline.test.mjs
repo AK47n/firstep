@@ -8,6 +8,9 @@ import {
   baselineDiff,
   baselineHasChanges,
   baselineEvict,
+  snapshotOf,
+  migrateBaselineStore,
+  mtimeEq,
 } from "../../src/contest_generator/static/js/fx/disk-baseline.js";
 
 test("baselineSnapshot：文件条目规范化，目录条目排除，空路径跳过", () => {
@@ -112,4 +115,63 @@ test("baselineEvict：maxDirs 非法 / 条目数不超限 → 原样返回", () 
   assert.deepEqual(baselineEvict(store, 5), store);
   assert.deepEqual(baselineEvict(store, -1), store);
   assert.deepEqual(baselineEvict(store, NaN), store);
+});
+
+// ---------------------------------------------------------------------------
+// 工单 code-ide-ai/07：内容快照（打开过的文件才有行级 diff 数据源）
+test("snapshotOf：字符串保留；空串保留；非字符串 / 超限 → null", () => {
+  assert.equal(snapshotOf("abc"), "abc");
+  assert.equal(snapshotOf(""), "");
+  assert.equal(snapshotOf(null), null);
+  assert.equal(snapshotOf(undefined), null);
+  assert.equal(snapshotOf(123), null);
+  const big = "x".repeat(256 * 1024);
+  assert.equal(snapshotOf(big).length, 256 * 1024);   // 恰上限保留
+  assert.equal(snapshotOf(big + "x"), null);          // 超限 → null（无行级）
+});
+
+test("migrateBaselineStore：旧 maincContent 统一为 files.main.c.content（删除特例字段）", () => {
+  const store = {
+    "D:/proj": { ts: 1, files: { "main.c": { mtime_ns: "10" }, "app.c": { mtime_ns: "11" } }, maincContent: "OLD" },
+    "D:/other": { ts: 2, files: { "a.c": { mtime_ns: "12" } }, maincContent: "X" },   // 无 main.c → 旧残值丢弃
+    "D:/noold": { ts: 3, files: { "b.c": { mtime_ns: "13" } } },                       // 无旧字段 → 不动
+  };
+  const out = migrateBaselineStore(store);
+  assert.equal(out["D:/proj"].files["main.c"].content, "OLD");
+  assert.ok(!("maincContent" in out["D:/proj"]), "旧特例字段删除");
+  assert.ok(!("content" in out["D:/other"].files["a.c"]), "无 main.c 的旧快照丢弃");
+  assert.ok(!("maincContent" in out["D:/other"]));
+  assert.equal(out["D:/noold"].files["b.c"].content, undefined);
+  // 不修改入参
+  assert.ok("maincContent" in store["D:/proj"]);
+  assert.equal(store["D:/proj"].files["main.c"].content, undefined);
+});
+
+test("migrateBaselineStore：已有 content 不覆盖（新结构优先）+ 幂等", () => {
+  const store = { "D:/p": { ts: 1, files: { "main.c": { mtime_ns: "1", content: "NEW" } }, maincContent: "OLD" } };
+  assert.equal(migrateBaselineStore(store)["D:/p"].files["main.c"].content, "NEW");
+  const again = migrateBaselineStore(migrateBaselineStore(store));
+  assert.equal(again["D:/p"].files["main.c"].content, "NEW");
+  assert.ok(!("maincContent" in again["D:/p"]));
+});
+
+test("migrateBaselineStore：null / 非对象入参原样返回", () => {
+  assert.equal(migrateBaselineStore(null), null);
+  assert.deepEqual(migrateBaselineStore(42), 42);
+});
+
+test("mtimeEq：字符串比较 + null/undefined 视为空串（409 口径）", () => {
+  assert.equal(mtimeEq("100", "100"), true);
+  assert.equal(mtimeEq(100, "100"), true);      // 数字输入兼容
+  assert.equal(mtimeEq("100", "101"), false);
+  assert.equal(mtimeEq(null, ""), true);
+  assert.equal(mtimeEq(undefined, ""), true);
+  assert.equal(mtimeEq("", null), true);
+  assert.equal(mtimeEq("100", null), false);
+});
+
+test("baselineDiff：mtime 同为空串不算修改（mtimeEq 口径）", () => {
+  const prev = baselineSnapshot([{ path: "a.c", mtime_ns: "", size_bytes: 1 }]);
+  const now = baselineSnapshot([{ path: "a.c", mtime_ns: "", size_bytes: 2 }]);
+  assert.deepEqual(baselineDiff(prev, now).modified, []);
 });
