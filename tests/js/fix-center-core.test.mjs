@@ -6,6 +6,7 @@ import {
   startFixCenterCore,
   continueFixCenterCore,
   runFixOnceCore,
+  subscribeFixCenter,
   isFixRunning,
   fixLoopSnapshot,
   FIX_MAX_ROUNDS,
@@ -286,6 +287,46 @@ test("降级模式：parse_done 无 file_count → 状态文案含「降级模�
   await startFixCenterCore({ ...BASE, callbacks: cbs });
   globalThis.fetch = orig;
   assert.ok(events.some((e) => e[0] === "state" && e[1].includes("未定位到可读取的源码文件（降级模式")));
+});
+
+// ---------------------------------------------------------------------------
+// 订阅制广播（工单 code-ide-ai/06 铺垫）：长驻订阅（IDE 面板/生成页壳层
+// subscribe 一次）即使不作为 input.callbacks 也收到事件；同一回调组同时为
+// 触发方临时订阅与长驻订阅 → Set 去重只收一次（H1 整改回归钉：触发组 cbs
+// 与长驻同对象时 onState 只收 2 次——原 withCbs 包装新对象导致双发）。
+// ---------------------------------------------------------------------------
+test("订阅制广播：长驻订阅收到事件（双面板同步）+ 同组去重", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/api/compile")) return sseResponse([
+      ["done", { passed: true, error_text: "", summary: { errors: 0, warnings: 0 }, parsed_errors: [] }],
+    ]);
+    throw new Error("未预置：" + u);
+  };
+  const { cbs, events } = collectCbs();
+  const panel = { events: [] };
+  for (const k of ["onState", "onRound", "onApply", "onList", "onDone", "onReset", "onBusy", "onResume", "onCompiled", "onError", "onLog", "onBanner", "onTelemetry"]) {
+    panel[k] = (...a) => panel.events.push([k, ...a]);
+  }
+  const unsubPanel = subscribeFixCenter(panel);
+  const unsubCbs = subscribeFixCenter(cbs);   // 模拟壳层「既长驻订阅又当触发方」
+  try {
+    await startFixCenterCore({ ...BASE, callbacks: cbs });
+    assert.ok(panel.events.some((e) => e[0] === "onState" && e[1].includes("编译通过 ✅ 0 错 0 警")),
+      "长驻订阅应收到终态：" + JSON.stringify(panel.events));
+    const stateCount = panel.events.filter((e) => e[0] === "onState").length;
+    assert.equal(stateCount, 2, "同组只收一次（自动编译中… + 终态）实际 " + stateCount);
+    // H1 回归钉：触发方自身也单发（修复前 4 次）；banner 不双发（running + success）
+    const triggerState = events.filter((e) => e[0] === "state").length;
+    assert.equal(triggerState, 2, "触发方同组只收一次，实际 " + triggerState);
+    const triggerBanner = events.filter((e) => e[0] === "banner").length;
+    assert.equal(triggerBanner, 2, "触发方 onBanner 不双发（running + success）实际 " + triggerBanner);
+  } finally {
+    unsubPanel();
+    unsubCbs();
+    globalThis.fetch = orig;
+  }
 });
 
 // ---------------------------------------------------------------------------

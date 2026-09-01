@@ -23,6 +23,7 @@ import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { fixLogGroupHidden } from "/js/fx/generate.js";
 import { formatLLMTelemetry } from "/js/fx/llm.js";
+import { fixRowHTML } from "/js/fx/fix-rows.js";  // 修复结果行共享（工单 code-ide-ai/06）
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
 import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
@@ -38,6 +39,7 @@ import {
   runFixOnceCore,
   runCompileOnceCore,
   fixRoundsCore,
+  subscribeFixCenter,
   isFixRunning,
   FIX_MAX_ROUNDS,
 } from "/js/ui/fix-center-core.js";  // 流程核心（工单 code-ide-ai/05——无 DOM 状态机）
@@ -130,12 +132,15 @@ async function fixToggleSource(row) {
 /** 结构化错误列表渲染（工单 compile-experience-ui/01）：[状态标签] path:line 消息。
  * parsed = 解析出的错误（[{path,line,message}]）；fixes = 修复结果
  * （[{file,line,status,reason}]）；round ≤ 1 无对应 fix 标「待修复」、后续轮「新增」；
- * 无法匹配 parsed 的 fixes 单独列出。列表重建时清空源码行缓存（新一轮取修复后内容）。 */
-function fixRenderResults(parsed, fixes, round) {
+ * 无法匹配 parsed 的 fixes 单独列出。列表重建时清空源码行缓存（新一轮取修复后内容）。
+ * listEl / onRowClick 可选（工单 code-ide-ai/06：IDE 修复面板复用——listEl=
+ * 面板结果容器，onRowClick=IDE 行点击跳转编辑器；缺省 = 生成页容器 +
+ * fixToggleSource）。 */
+function fixRenderResults(parsed, fixes, round, listEl, onRowClick) {
   parsed = parsed || [];
   fixes = fixes || [];
   fixSourceCache = {};
-  const list = $("fix-results");
+  const list = listEl || $("fix-results");
   list.innerHTML = "";
   const exact = new Map(), fuzzy = new Map();
   for (const f of fixes) {
@@ -159,7 +164,7 @@ function fixRenderResults(parsed, fixes, round) {
     msg.textContent = extra || entry.message || "";
     row.appendChild(msg);
     row._source = { path: entry.path || entry.file, line: entry.line };
-    row.addEventListener("click", () => fixToggleSource(row));
+    row.addEventListener("click", () => (onRowClick || fixToggleSource)(row));
     list.appendChild(row);
   };
   for (const p of parsed) {
@@ -220,66 +225,62 @@ function updateFixCenterAvailability() {
 }
 
 // ---------------------------------------------------------------------------
-// 壳层输入 + 回调（工单 code-ide-ai/05）：core 回调 → 本模块 DOM 渲染。
-// fixInput() 每次流程启动时取（problem/main-c/平台可能已被用户改过）。
+// 壳层输入 + 长驻回调（工单 code-ide-ai/05-06）：core 事件广播 → 本模块 DOM
+// 渲染。fixCb 为模块级长驻订阅组（subscribeFixCenter 注册——单实例循环无论
+// 从生成页还是 IDE 面板触发，本页 DOM 都能同步；index.html 全 DOM 常驻，
+// 回调元素恒在，无需按面板显隐守卫）。fixInput() 每次流程启动时取
+// （problem/main-c/平台可能已被用户改过——outputDir 同理取当下值）。
 // ---------------------------------------------------------------------------
+const fixCb = {
+  onState: (t) => { $("fix-status").textContent = t; },
+  onError: (t) => { $("fix-errors-msg").textContent = t; },
+  onRound: (t) => { $("fix-center-round").textContent = t; },
+  onApply: (item) => {
+    $("fix-status").textContent = "";
+    const list = $("fix-results");
+    list.insertAdjacentHTML("beforeend", fixRowHTML(item));
+    const row = list.lastElementChild;
+    if (row) {
+      row._source = { path: item.file, line: item.line };
+      row.addEventListener("click", () => fixToggleSource(row));
+    }
+  },
+  onLog: (t) => setFixCenterLog(t),
+  onBanner: (kind, text) => compileBanner(kind, text),
+  onList: (parsed, fixes, round) => fixRenderResults(parsed, fixes, round),
+  onTelemetry: (data) => { renderFixLLMTelemetry(data); recordLLMUsage(data); },
+  onDone: (data, outputDir) => {
+    lastFix = data && data.backup_id
+      ? { output_dir: outputDir, backup_id: data.backup_id } : null;
+    $("btn-fix-rollback").classList.toggle("hidden", !lastFix);
+  },
+  onReset: () => {
+    $("fix-errors-msg").textContent = "";
+    $("fix-status").textContent = "";
+    $("fix-results").innerHTML = "";
+    $("fix-center-round").textContent = "";
+    setFixCenterLog("");
+    clearFixLLMTelemetry();
+    lastFix = null;
+    $("btn-fix-rollback").classList.add("hidden");
+    $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
+  },
+  onBusy: (b) => fixCenterBusy(b),
+  onResume: (resume) => {
+    $("btn-fix-continue").classList.toggle("hidden", !resume);
+  },
+  onCompiled: (done, outputDir) => reportRecentStatus(outputDir, done),
+};
+subscribeFixCenter(fixCb);   // 长驻订阅（工单 06：IDE 面板触发的循环本页同步）
+
 function fixInput() {
-  const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
   return {
-    outputDir,
+    outputDir: $("res-dir").textContent.trim() || $("output-dir").value.trim(),
     platform: chosenPlatform,
     problemText: $("problem").value.trim(),
     mainC: $("main-c").value.trim(),
     slugs: selectedSlugs,
-    callbacks: {
-      onState: (t) => { $("fix-status").textContent = t; },
-      onError: (t) => { $("fix-errors-msg").textContent = t; },
-      onRound: (t) => { $("fix-center-round").textContent = t; },
-      onApply: (item) => {
-        $("fix-status").textContent = "";
-        const applied = item.status === "applied";
-        const row = document.createElement("div");
-        row.className = "fix-row";
-        const tag = document.createElement("span");
-        tag.className = "fix-tag " + (applied ? "fixed" : "skipped");
-        tag.textContent = applied ? "已修复" : "跳过";
-        const file = document.createElement("span");
-        file.className = "fix-file";
-        file.textContent = (item.file || "?") + (item.line ? ":" + item.line : "");
-        const msg = document.createElement("span");
-        msg.className = "fix-msg";
-        msg.textContent = item.reason || "";
-        row.appendChild(tag); row.appendChild(file); row.appendChild(msg);
-        row._source = { path: item.file, line: item.line };
-        row.addEventListener("click", () => fixToggleSource(row));
-        $("fix-results").appendChild(row);
-      },
-      onLog: (t) => setFixCenterLog(t),
-      onBanner: (kind, text) => compileBanner(kind, text),
-      onList: (parsed, fixes, round) => fixRenderResults(parsed, fixes, round),
-      onTelemetry: (data) => { renderFixLLMTelemetry(data); recordLLMUsage(data); },
-      onDone: (data) => {
-        lastFix = data && data.backup_id
-          ? { output_dir: outputDir, backup_id: data.backup_id } : null;
-        $("btn-fix-rollback").classList.toggle("hidden", !lastFix);
-      },
-      onReset: () => {
-        $("fix-errors-msg").textContent = "";
-        $("fix-status").textContent = "";
-        $("fix-results").innerHTML = "";
-        $("fix-center-round").textContent = "";
-        setFixCenterLog("");
-        clearFixLLMTelemetry();
-        lastFix = null;
-        $("btn-fix-rollback").classList.add("hidden");
-        $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
-      },
-      onBusy: (b) => fixCenterBusy(b),
-      onResume: (resume) => {
-        $("btn-fix-continue").classList.toggle("hidden", !resume);
-      },
-      onCompiled: (done, outputDir) => reportRecentStatus(outputDir, done),
-    },
+    callbacks: fixCb,   // 触发方临时订阅（与长驻为同一组——无重复分发）
   };
 }
 
@@ -414,5 +415,5 @@ $("btn-fix-rollback").addEventListener("click", async () => {
 //（fixLoop.resume 结构钉在 tests/test_generate_check_contract.py；FIX_MAX_ROUNDS
 // 与 fixLoop 自工单 code-ide-ai/05 起 re-export 自 fix-center-core.js）。
 export { startFixCenter, continueFixCenter, runCompileOnce, runFixOnce, fixRounds,
-  renderToolchainStatus, updateFixCenterAvailability,
+  renderToolchainStatus, updateFixCenterAvailability, fixRenderResults,
   toolchains, setToolchains, compileBanner };

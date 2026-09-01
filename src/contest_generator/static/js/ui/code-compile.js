@@ -44,11 +44,15 @@ function setErrors(html) {
   if (el) el.innerHTML = html || "";
 }
 
-// setGotoVisible(visible)：「去生成页一键编译修复」仅当目录 = 生成上下文且
-// 编译失败时可见（生成页修复中心才有 AI 修复上下文）。
-function setGotoVisible(visible) {
+// setGotoVisible(failVisible)：「在此修复」（工单 code-ide-ai/06：IDE 内跑
+// 修复循环——与生成页同 /api/compile + /api/fix-errors 端口，任意打开目录
+// 可跑，问题文本为空时降级）仅当编译失败且非超时可见；「去生成页一键编译
+// 修复」多一个生成上下文限制（去生成页修复中心才有赛题/AI 修复上下文）。
+function setGotoVisible(failVisible) {
+  const here = $("btn-code-compile-fix-here");
+  if (here) here.classList.toggle("hidden", !failVisible);
   const btn = $("btn-code-compile-goto");
-  if (btn) btn.classList.toggle("hidden", !visible);
+  if (btn) btn.classList.toggle("hidden", !(failVisible && isMainCDiskDir()));
 }
 
 function openPanel() {
@@ -62,7 +66,7 @@ function renderDone(done) {
   setStatus(compileStatusText(done), compileStatusClass(done));
   const errs = done.parsed_errors || [];
   setErrors(compileErrorRowsHTML(errs));
-  setGotoVisible(!done.passed && !done.timed_out && isMainCDiskDir());
+  setGotoVisible(!done.passed && !done.timed_out);   // 「在此修复」任意目录；「去生成页」内部再叠加 isMainCDiskDir
   if (errs.length) {
     const p = panel();
     if (p) p.classList.remove("collapsed");   // 失败自动展开（用户可再收起）

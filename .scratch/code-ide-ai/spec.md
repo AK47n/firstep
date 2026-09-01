@@ -201,3 +201,33 @@
   onApply 与 fixRenderResults 重复建行（既有基线）；fixLoopSnapshot 现仅
   测试用（06 将用）；核心经 onState 组合用户态文案（Feature Envy 轻——按
   工单决策核心管状态+文案）。
+
+**s6（工单 06 双轴评审后）**：
+- 核心广播改**订阅制**（spec 二期「双面板同时打开时状态同步」落地方式）：
+  subscribeFixCenter(cb)+退订；事件全走 emitAll。**H1 整改（双轴评审一致
+  找出）**：触发方 input.callbacks 经 subscribeTrigger **原始对象**临时订阅
+  （fixSubs.has 去重 + 仅本次新增才退订）——原 withCbs 包装新对象使「长驻 +
+  触发方」双引用并存 → 事件双发（onApply 重复行 / recordLLMUsage 双计 /
+  生成页双 toast）；修复后同对象 Set 天然去重（单测「同组去重」补触发组
+  单发断言 + onBanner 不双发回归钉）。
+- **J5 语义修正（评审后）**：「在此修复」显隐 = 编译失败且非超时（**任意
+  打开目录**均可——与 startFixHere 空 problemText 降级、guardCodeTabWrite
+  anyDir 语义一致）；「去生成页一键编译修复」= 编译失败且非超时 **且
+  isMainCDiskDir()**（去生成页修复中心需要赛题/AI 上下文）。smoke-07 S1 改
+  为非上下文场景（fix-here 现 / goto 藏）+ S1.5 上下文场景（goto 现）。
+- 入口双按钮实现为**并列双按钮**（issue 06 措辞「替代为二选/旁」选旁）。
+- fix-here/continue 守卫用 **anyDir:true**（与工单 04 AI apply 同语义——
+  IDE 内发起任意目录防脏标签覆盖；生成页入口保持上下文目录语义）。
+- fixRenderResults 参数化（listEl/onRowClick）供 IDE 复用——生成页行点击
+  fixToggleSource、IDE 行点击 openEditorFile+editJumpToLine（语义不同，
+  共享重建逻辑而非点击行为）；J2 记录不整改（fixRenderResults 仍
+  createElement 建行——待修复/新增与已修复/跳过标签语义不同，强行合并需
+  额外参数——部分整改记录）。
+- IDE 面板 onLog/onBanner/onTelemetry 空实现（渲染属生成页上下文）——
+  记录偏离（banner 文案在两端点已由核心 onBanner 广播，仅 IDE 侧不渲染）。
+- 单实例锁的烟测边界：smoke-07 S5 验证生成页入口存在与拦截文案；循环中
+  再触发被忽略由核心单测（fix-center-core.test.mjs「单实例：running 中
+  第二次触发被忽略」）覆盖——双层验证，未在 smoke 复现竞态。
+- fx/fix-rows.js 补 window 同名桥（fx/*.js 模块约定兼容层——H2 整改）。
+- index.html #code-fix-panel 去掉无 CSS 引用的死 class `code-fix-panel`
+  （样式走 #id——J6 整改）。
