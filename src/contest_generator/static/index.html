@@ -1375,7 +1375,7 @@
      列表（头部状态行始终可见），清空 = 整面板隐藏。
      「磁盘变更」面板（code-ide-flow/03）与编译面板同型并列：同一 head 观感 +
      同一 .collapsed 语义（标题行不在折叠范围——两面板可分别收起/展开）。 */
-  #code-compile-panel, #code-change-panel { flex: none; border-top: 1px solid var(--border);
+  #code-compile-panel, #code-change-panel, #code-ai-chat-panel { flex: none; border-top: 1px solid var(--border);
     background: var(--panel-2); font-size: 12px; }
   .code-compile-head { display: flex; align-items: center; gap: 10px;
     padding: 4px 10px; min-height: 26px; }
@@ -1392,7 +1392,43 @@
   .code-compile-errors { max-height: 160px; overflow: auto; padding: 0 0 4px 10px;
     display: flex; flex-direction: column; gap: 2px; }
   #code-compile-panel.collapsed .code-compile-errors,
-  #code-change-panel.collapsed .code-change-list { display: none; }
+  #code-change-panel.collapsed .code-change-list,
+  #code-ai-chat-panel.collapsed .code-ai-chat-body,
+  #code-ai-chat-panel.collapsed .code-ai-chat-input-row { display: none; }
+  /* AI 对话面板（工单 code-ide-ai/03）：消息区滚动 + 输入行 + 选区浮动按钮。
+     面板与编译/变更面板同型并列；气泡复用生成页全局商量 .sugg-msg 系列。 */
+  .code-ai-chat-body { max-height: 220px; overflow: auto; padding: 8px 12px;
+    display: flex; flex-direction: column; gap: var(--space-1); }
+  .code-ai-chat-empty { font-size: 12px; padding: 2px 0; }
+  /* 引用卡片（工单 code-ide-ai/03 评审整改）：user 消息里「选中代码问 AI」的
+     引用 → details 可折叠卡（summary = 路径与行区间；pre = 代码片段），
+     围栏后的问题文本平铺卡片下方。 */
+  .code-ai-ref summary { cursor: pointer; font-family: var(--mono); font-size: 11.5px;
+    color: var(--accent); padding: 1px 0; }
+  .code-ai-ref-code { margin: var(--space-1) 0; padding: 6px 8px; max-height: 120px; overflow: auto;
+    background: var(--code-bg); color: var(--code-text); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12px; }
+  .code-ai-ref code { background: none; padding: 0; }
+  .code-ai-ref-rest { margin-top: var(--space-1); }
+  .code-ai-chat-input-row { display: flex; gap: 8px; padding: 8px 12px;
+    border-top: 1px solid var(--border); align-items: flex-end; }
+  .code-ai-chat-input { flex: 1; resize: none; min-height: 30px; font-family: var(--mono);
+    font-size: 12px; line-height: 1.5; background: var(--code-bg); color: var(--code-text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 8px;
+    box-sizing: border-box; }
+  .code-ai-chat-input:focus { outline: none; border-color: var(--accent); }
+  #btn-code-ai-send { font-size: 11.5px; line-height: 1; padding: 6px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--accent); color: #fff; cursor: pointer; flex: none; }
+  #btn-code-ai-send:disabled { opacity: .5; cursor: default; }
+  /* 选区浮动按钮：挂 .code-edit 内容坐标系（absolute 随滚动天然跟随选区行）
+     ——z-index 高于 textarea（.code-ta z-index 1）；定位由 ui/code-ai-chat.js
+     以选区末行 .code-hl-line rect 计算。 */
+  .code-ai-selection-btn { position: absolute; z-index: 2; font-size: 11.5px;
+    line-height: 1; padding: 4px 9px; border-radius: var(--radius-xs);
+    background: var(--accent); color: #fff; border: 0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .35); cursor: pointer; white-space: nowrap; }
+  .code-ai-selection-btn:hover { filter: brightness(1.12); }
   /* 「磁盘变更」条目（code-ide-flow/03）：行 = 状态徽章 + 路径 + 元数据；
      added/modified 为按钮（hover 高亮，点击打开文件），removed 为 span 置灰
      不可点；main.c 修改条目下的行级 diff 区（details 默认折叠）。 */
@@ -2612,6 +2648,20 @@
             aria-label="收起或展开变更条目">收起</button>
         </div>
         <div id="code-change-list" class="code-change-list"></div>
+      </div>
+      <div id="code-ai-chat-panel" class="code-ai-chat-panel hidden" aria-label="AI 对话">
+        <div class="code-compile-head">
+          <strong>AI 对话</strong>
+          <span id="code-ai-chat-status" class="code-compile-status"></span>
+          <button type="button" id="btn-code-ai-collapse" title="收起/展开对话区"
+            aria-label="收起或展开对话区">收起</button>
+        </div>
+        <div id="code-ai-chat-body" class="code-ai-chat-body"></div>
+        <div class="code-ai-chat-input-row">
+          <textarea id="code-ai-chat-input" rows="2"
+            placeholder="选中代码后点「问 AI」，或直接提问（Enter 发送，Shift+Enter 换行）"></textarea>
+          <button type="button" id="btn-code-ai-send" disabled>发送</button>
+        </div>
       </div>
       <div class="code-statusbar">
         <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
@@ -3874,6 +3924,7 @@ import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer, checkCodeDiskChanges } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import；checkCodeDiskChanges = 磁盘基线感知（code-ide-flow/02）
+import { initCodeAiChat } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03）：选中代码问 AI + 对话历史
 import { initCodeEditor } from "/js/ui/codeeditor.js";  // 代码编辑器（code-viewer-editor/02）：多标签 + 可编辑三明治 + 保存（/03）/冲突（/04）
 import { initCodeCompile } from "/js/ui/code-compile.js";  // 代码栏编译（code-tab-compile/03）：编译按钮 + 底部错误面板 + 错误行跳转
 import { initCodeTreeOps, initCodeSaveAll } from "/js/ui/code-tree-ops.js";  // 代码树操作（code-tree-ops/02-03）：新建/重命名/删除 + 保存全部
@@ -4281,6 +4332,7 @@ initMainCDiskSync();  // main.c 磁盘同步状态行（mainc-codeview-bridge/01
 initSkeletonRefs();  // 骨架引用模块锚定（mainc-codeview-bridge/04）：input 防抖 + chips 委托 + 首帧渲染
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
 initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
+initCodeAiChat();  // AI 对话面板（工单 code-ide-ai/03）：选中代码问 AI + 对话收发接线
 initCodeEditor();  // 代码编辑器（工单 code-viewer-editor/02）：多标签条 / 编辑三明治 / 跳行 / 关闭确认接线
 initCodeCompile();  // 代码栏编译（工单 code-tab-compile/03）：编译按钮 / 底部错误面板 / 错误行跳转接线
 initCodeTreeOps();  // 代码树操作（工单 code-tree-ops/02）：新建/重命名/删除按钮与树内委托接线
