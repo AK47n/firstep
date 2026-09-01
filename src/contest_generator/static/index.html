@@ -1484,8 +1484,14 @@
     text-overflow: ellipsis; white-space: nowrap; }
   /* 三栏 grid（bug 修复）：中栏 minmax(150px, 1fr) 硬保底——树/侧栏固定宽在
      窄视口（如 565px）下曾把中栏挤到 15px（编辑器几乎不可见）；现改为空间
-     不足时树/侧栏对称收缩、中栏至少 150px，宽视口布局不变。 */
+     不足时树/侧栏对称收缩、中栏至少 150px，宽视口布局不变。
+     grid-template-rows: minmax(0, 1fr)（bug 修复）：行轨道显式 1fr——此前
+     隐式 auto 行高 = 内容 max-content，真实工程树内容（实测 1739px）把行
+     撑爆、溢出 .code-layout（flex 只给 ~300px），body 多出 1400px 滚动空间，
+     用户滚到中部看到树/编辑器黑底与底部面板（收起/发送/编译）互相穿插的
+     「右下角错位」；1fr 后行高=容器高，树/编辑器/大纲各自内部滚动。 */
   .code-layout { display: grid; grid-template-columns: minmax(0, var(--code-tree-w, 240px)) minmax(150px, 1fr) minmax(0, var(--code-side-w, 300px));
+    grid-template-rows: minmax(0, 1fr);
     gap: 0; margin-top: 0; flex: 1 1 auto; min-height: 300px; }
   .code-pane { display: flex; flex-direction: column; min-width: 0;
     background: var(--panel); }
