@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9502bf6de01966670bb9feea439fdba24897222d -->
+<!-- changelog-auto: last-commit=9f94b38cb9b78854c680571246c1f84c764eba7f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 13:04 工单 code-ide-flow/04：一键修复直达——IDE 编译失败跳生成页自动开始修复循环
 - 13:18 工单 code-ide-ai/01：AI diff 契约解析与校验（parseAiDiff + selectionContextText fx 纯件，双轴评审整改）
 - 13:24 工单 code-ide-ai/02：/api/code/apply-diff 端点（hunk 应用单套算法 + preview 只算不写 + base_mtime_ns 409 同口径）
+- 13:32 工单 code-ide-ai/03：IDE AI 对话面板（选中代码问 AI + 引用卡片 + 对话历史收发，双轴评审整改）
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
