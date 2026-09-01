@@ -5,6 +5,45 @@
 // 断言「空字段兜底不抛错」，照搬不合并）。模块约定见 fx/core.js 头部。
 import { esc } from "./core.js";
 
+// 分类中文标签（工单 topics-control-2023-2025/01）：词表值 → 中文显示名。
+// 词表集合本身单源 = GET /api/topics/categories（后端校验同源）；这里只是
+// 显示层润色：词表新增分类无映射时显示原值（可扩展，不阻新分类）。
+const TOPIC_CATEGORY_LABELS = { control: "控制题", other: "其他" };
+
+// topicCategoryChip(entry)：分类徽标（照 referenceTopicTypeChip 先例）——
+// 空 = 未标记不标注；非空显示中文标签（无映射的词表外值显示原值）。
+export function topicCategoryChip(entry) {
+  const cat = String((entry && entry.category) || "");
+  if (!cat) return "";
+  const label = TOPIC_CATEGORY_LABELS[cat] || cat;
+  return ' <span class="chip" title="分类：' + esc(label) + '">' + esc(label) + '</span>';
+}
+
+// topicCategoryFilterOptionsHTML(categories)：筛选下拉选项（全部 + 词表值，
+// 中文标签）——筛选用；未标记条目在「全部」里，不单列选项。
+export function topicCategoryFilterOptionsHTML(categories) {
+  const cats = Array.isArray(categories) ? categories : [];
+  return '<option value="">全部</option>'
+    + cats.map((c) => '<option value="' + esc(c) + '">'
+      + esc(TOPIC_CATEGORY_LABELS[c] || c) + '</option>').join("");
+}
+
+// topicCategoryOptionsHTML(categories, current)：分类下拉选项（拆条确认 /
+// 编辑表单共用）。选项 =（未标记）+ 词表值；词表外当前值兜底标注「保存时
+// 后端拒绝」（照 reference.js 编辑弹窗 topic_type 兜底先例）。
+export function topicCategoryOptionsHTML(categories, current) {
+  const cats = Array.isArray(categories) ? categories : [];
+  let out = '<option value="">（未标记）</option>'
+    + cats.map((c) =>
+      '<option value="' + esc(c) + '"' + (c === current ? " selected" : "") + '>'
+      + esc(TOPIC_CATEGORY_LABELS[c] || c) + '</option>').join("");
+  if (current && !cats.includes(current)) {
+    out += '<option value="' + esc(current) + '" selected>'
+      + esc(TOPIC_CATEGORY_LABELS[current] || current) + '（词表外，保存时后端拒绝）</option>';
+  }
+  return out;
+}
+
 // topicHasNotes(text)：题面是否已含图注段（[示意图N：…] / [图N 标注] /
 // [图N 标注：…]——与后端 enrich 幂等判定同前缀，前端仅作展示徽章）。
 export function topicHasNotes(text) {
@@ -52,19 +91,21 @@ export function topicHealthText(entry, vocab) {
   return out;
 }
 
-// topicFilterEntries(entries, f)：f={q, year, health, groupIds}——关键字
-// （编号 / 年份 / 题面全文，大小写不敏感）× 年份 × 健康状态正交过滤；
-// 空条件 = 全量（对偶 refFilterEntries）。
+// topicFilterEntries(entries, f)：f={q, year, health, groupIds, category}——
+// 关键字（编号 / 年份 / 题面全文，大小写不敏感）× 年份 × 健康 × 分类正交
+// 过滤；空条件 = 全量（对偶 refFilterEntries）。分类空串 = 不过滤。
 export function topicFilterEntries(entries, f) {
   const q = String((f && f.q) || "").trim().toLowerCase();
   const year = (f && f.year) || "";
   const groupIds = (f && f.groupIds) || [];
+  const category = (f && f.category) || "";
   return (entries || []).filter((t) => {
     if (q) {
       const hay = [t.key, t.year, t.problem_text];
       if (!hay.some((s) => String(s == null ? "" : s).toLowerCase().includes(q))) return false;
     }
     if (year && t.year !== year) return false;
+    if (category && (t.category || "") !== category) return false;
     if (f && f.health) {
       const health = t.health || {};
       const dangling = topicDanglingGroups(t, groupIds);
@@ -168,6 +209,7 @@ export function topicDetailHTML(entry, vocab) {
   return '<div class="ref-detail-meta topic-detail-meta">'
     + row('编号', '<span class="mono">' + esc((entry && entry.key) || '') + '</span>')
     + row('年份', esc((entry && entry.year) || ''))
+    + row('分类', topicCategoryChip(entry) || '<span class="muted">未标记</span>')
     + row('题面字数', String(String((entry && entry.problem_text) || '').length) + ' 字')
     + row('原 PDF', pdfLine)
     + row('附带程序', programs || '<span class="muted">无</span>')
@@ -212,9 +254,11 @@ export function topicPagesErrorHTML(message) {
 // （topicEditHTML / topicEditValidate / topicEditPayload），DOM 只转发。
 // ===========================================================================
 
-// topicEditHTML(entry, vocab)：编辑表单渲染。功能组选项 = 词表组 + 词表外
-// 当前值兜底（标注「库内无此组」——勾选保留或取消，不静默丢弃）。
-export function topicEditHTML(entry, vocab) {
+// topicEditHTML(entry, vocab, categories)：编辑表单渲染。功能组选项 = 词表组
+// + 词表外当前值兜底（标注「库内无此组」——勾选保留或取消，不静默丢弃）。
+// 分类下拉选项单源 = 调用方传入的词表（GET /api/topics/categories；拆条确认
+// 表单与编辑表单共用 topicCategoryOptionsHTML）。
+export function topicEditHTML(entry, vocab, categories) {
   const current = ((entry && entry.hint_module_groups) || []);
   const groupIds = vocab ? Object.keys(vocab) : [];
   const groupOptions = groupIds.map((id) => ({ id, label: vocab[id], dangling: false }));
@@ -236,6 +280,10 @@ export function topicEditHTML(entry, vocab) {
     + '<div class="ref-detail-row"><span class="ref-detail-k">年份</span>'
     + '<span>' + esc((entry && entry.year) || '') + '</span></div>'
     + '</div>'
+    + '<div class="topic-edit-field"><label>分类（控制题专项：控制题 / 其他；空 = 未标记）</label>'
+    + '<select class="topic-edit-category">'
+    + topicCategoryOptionsHTML(categories, ((entry && entry.category) || ""))
+    + '</select></div>'
     + '<div class="topic-edit-field"><label>题面全文（可改，含图注段原样可编辑）</label>'
     + '<textarea class="topic-edit-problem" rows="12">' + esc((entry && entry.problem_text) || '') + '</textarea></div>'
     + '<div class="topic-edit-field"><label>附带程序目录（每行一个绝对路径，留空 = 无）</label>'
@@ -257,8 +305,8 @@ export function topicEditValidate(fields) {
   return { ok: true, message: "" };
 }
 
-// topicEditPayload(fields)：组装 PUT body（全量三字段）。programs 逐行拆分
-// （空行忽略 + 逐行 trim）；hint_module_groups = 勾选值清单。
+// topicEditPayload(fields)：组装 PUT body（全量四字段）。programs 逐行拆分
+// （空行忽略 + 逐行 trim）；hint_module_groups = 勾选值清单；category = 下拉值。
 export function topicEditPayload(fields) {
   const programs = String((fields && fields.programs) || "").split("\n")
     .map((s) => s.trim()).filter((s) => s.length > 0);
@@ -266,6 +314,7 @@ export function topicEditPayload(fields) {
     problem_text: String((fields && fields.problem_text) || ""),
     programs,
     hint_module_groups: ((fields && fields.hint_module_groups) || []).slice(),
+    category: String((fields && fields.category) || ""),
   };
 }
 
@@ -292,7 +341,9 @@ export function topicCardHTML(t, vocab) {
   const problems = topicHealthText(t, vocab);
   return '<div class="topic-card">'
     + '<div class="topic-head"><span class="topic-key">' + key + '</span>'
-    + '<span class="topic-year">' + year + '</span></div>'
+    + '<span class="topic-year">' + year + '</span>'
+    + topicCategoryChip(t)
+    + '</div>'
     + '<div class="topic-meta"><span class="topic-meta-item">' + chars + ' 字</span>'
     + '<span class="topic-meta-item">程序 ' + programs + '</span>'
     + (notes ? '<span class="badge ok">图注 ✓</span>' : "")
@@ -308,5 +359,5 @@ export function topicCardHTML(t, vocab) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { topicHasNotes, topicGroupVocabulary, topicDanglingGroups, topicHealthText, topicFilterEntries, topicSortEntries, topicStats, topicStatsText, topicChipRowHTML, topicDetailHTML, topicPagesHTML, topicPagesErrorHTML, topicEditHTML, topicEditValidate, topicEditPayload, topicCardHTML });
+  Object.assign(window, { topicHasNotes, topicGroupVocabulary, topicDanglingGroups, topicHealthText, topicFilterEntries, topicSortEntries, topicStats, topicStatsText, topicChipRowHTML, topicDetailHTML, topicPagesHTML, topicPagesErrorHTML, topicEditHTML, topicEditValidate, topicEditPayload, topicCardHTML, topicCategoryChip, topicCategoryOptionsHTML, topicCategoryFilterOptionsHTML });
 }

@@ -20,17 +20,19 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-**验收：** 全部 ✓（词表 / validate_topic_category / TopicEntry / to_dict / manifest 读写 / confirm / update / PUT / categories 端点 / 前端筛选+标签+表单，全部实现并测试；pytest test_topic_library.py 新增全绿、js 测试全绿、仓库语言检查通过）。
+**验收：** 全部 ✓（词表 / validate_topic_category / TopicEntry / to_dict / manifest 读写 / confirm / update / PUT / categories 端点 / 前端筛选+标签+表单，全部实现并测试；pytest test_topic_library.py 新增 16 条全绿、js 新增 11 条全绿、仓库语言检查通过；双轴 code-review：Standards 无硬违反（4 条判断性建议已整改 3 条、保留 2 条既有先例背书）、Spec 无破坏性缺陷（整改 3 项，核心实现无改动）。
 
-- [ ] `TOPIC_CATEGORIES` 常量 + `validate_topic_category`（空串合法；词表外 TopicError 中文；照 validate_topic_type 测试三态）
-- [ ] `TopicEntry.category` 字段 + `to_dict` 带出 + `_load_entry` 读取（缺省 ""、词表外大声失败）
-- [ ] `TopicDraft.category` + `parse_confirm_entries` 解析校验（缺省 ""）
-- [ ] `confirm_topics` manifest 写入「category」（含事务与 git 提交不变）
-- [ ] `update_topic` 加 category 参数（可编辑第四字段；身份键不可改；`{**data, ...}` 保留既有字段；写失败回滚契约保持）
-- [ ] webapp PUT body 加 category（词表外 400）+ confirm entries 加可选 category + 新增 GET /api/topics/categories（路由在 /api/topics/{key} 之前）
-- [ ] 前端：筛选下拉（单源端点）+ 条目标签 + 拆条确认/编辑表单下拉（默认 control）
-- [ ] 测试：pytest（词表三态 / manifest 读写 / to_dict / update 权限 / confirm 落盘 category / categories 端点）+ js（筛选 / chip / 表单）全绿
+- [x] `TOPIC_CATEGORIES` 常量 + `validate_topic_category`（空串合法；词表外 TopicError 中文；照 validate_topic_type 测试三态）
+- [x] `TopicEntry.category` 字段 + `to_dict` 带出 + `_load_entry` 读取（缺省 ""、词表外大声失败）
+- [x] `TopicDraft.category` + `parse_confirm_entries` 解析校验（缺省 ""）
+- [x] `confirm_topics` manifest 写入「category」（含事务与 git 提交不变）
+- [x] `update_topic` 加 category 参数（可编辑第四字段；身份键不可改；`{**data, ...}` 保留既有字段；写失败回滚契约保持）
+- [x] webapp PUT body 加 category（词表外 400）+ confirm entries 加可选 category + 新增 GET /api/topics/categories（路由在 /api/topics/{key} 之前）
+- [x] 前端：筛选下拉（单源端点）+ 条目标签 + 拆条确认/编辑表单下拉（默认 control）
+- [x] 测试：pytest（词表三态 / manifest 读写 / to_dict / update 权限 / confirm 落盘 category / categories 端点 / 端点透出断言）+ js（筛选 / chip / 表单）全绿
+
+**评审整改记录：** (1) 补 GET /api/topics 与 GET /api/topics/{key} 端到端透出断言（test_topics_get_and_list_endpoints_expose_category）；(2) chip 词表外 ⚠ 标注删除改显示原值（照 reference.js chip 先例）；(3) 编辑表单 label 改「分类（控制题专项：控制题 / 其他；空 = 未标记）」；(4) fx/topic.js 标签映射注释诚实化为显示层映射（词表集合单源端点）。保留决策：categories 端点形状 {categories:[...]}（工单原文明确）/ options 词表外兜底（reference.js 先例）/ PUT 漏传 category 清空=文档化设计取舍（references 先例同语义）。
 
 **参考：** `.scratch/topic-framework/issues/01-topic-type-label.md`（题型标记先例：词表/校验/from_dict/to_dict/add/update/webapp 全链）。

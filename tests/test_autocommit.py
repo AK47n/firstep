@@ -477,6 +477,8 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
     },
     "topic_library": {
         "validate_topic_key": ("read", ""),
+        # 工单 topics-control-2023-2025/01：分类词表校验——纯校验不落盘
+        "validate_topic_category": ("read", ""),
         "confirm_topics": ("commit", "lib: confirm topics"),
         "resolve_number": ("read", ""),
         "list_topics": ("read", ""),

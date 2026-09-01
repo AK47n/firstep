@@ -106,6 +106,28 @@ def validate_topic_key(key: str) -> str | None:
     return None
 
 
+# 条目标注分类词表（工单 topics-control-2023-2025/01）：控制题 / 其他——前端
+# 筛选与 chip 的单源（照参考库 topic_type 先例：词表常量 + 校验 + 词表端点，
+# 前端不硬编码）。加新分类 = 加常量 + 词表元组。非空即标注；空 = 未标记
+# （向后兼容）。
+TOPIC_CATEGORY_CONTROL = "control"  # 控制题（巡线 / 追踪 / 瞄准类控制专项）
+TOPIC_CATEGORY_OTHER = "other"  # 其他（非控制类：电源 / 信号 / 综合等）
+TOPIC_CATEGORIES = (TOPIC_CATEGORY_CONTROL, TOPIC_CATEGORY_OTHER)
+
+
+def validate_topic_category(category: str) -> None:
+    """分类词表校验（工单 topics-control-2023-2025/01）：空串 = 未标记（合法）；
+    词表外值 = 元数据损坏 / 录入非法，大声失败（照 validate_topic_type 同款）。
+
+    非法文案提示合法取值（如"应为 control、other"），词表单源 =
+    TOPIC_CATEGORIES。
+    """
+    if category and category not in TOPIC_CATEGORIES:
+        raise TopicError(
+            f"非法分类：{category!r}（应为 " + "、".join(TOPIC_CATEGORIES) + "）"
+        )
+
+
 @dataclass(frozen=True)
 class TopicDraft:
     """AI 拆条产物：一道赛题的年份 / 题号 / 题面全文（用户确认前的草稿）。
@@ -116,6 +138,7 @@ class TopicDraft:
     year: str
     number: str
     problem_text: str
+    category: str = ""  # 分类标记（词表 TOPIC_CATEGORIES；空 = 未标记，向后兼容）
 
     @property
     def key(self) -> str:
@@ -127,6 +150,7 @@ class TopicDraft:
             "year": self.year,
             "number": self.number,
             "problem_text": self.problem_text,
+            "category": self.category,
         }
 
 
@@ -147,6 +171,7 @@ class TopicEntry:
     hint_module_groups: tuple[str, ...] = ()  # 功能组 hint（工单 recommend-
     # exclusive-groups/02）：赛题疑似需要但 AI 未命中时出兜底选择卡（组 id
     # 清单，缺省空；id 库内无对应组时推荐链路静默忽略）
+    category: str = ""  # 分类标记（词表 TOPIC_CATEGORIES；空 = 未标记，向后兼容）
     mtime: int = 0  # manifest mtime（epoch 秒，ux-polish-02/07「最近更新」排序用）
 
     @property
@@ -164,6 +189,7 @@ class TopicEntry:
             "original_pdf": self.original_pdf,
             "programs": list(self.programs),
             "hint_module_groups": list(self.hint_module_groups),
+            "category": self.category,
             "mtime": self.mtime,
         }
 
@@ -209,6 +235,7 @@ def confirm_topics(
                     "problem_md": TOPIC_MD_FILENAME,
                     "original_pdf": pdf_name,
                     "programs": list(normalized_programs),
+                    "category": draft.category,
                 },
             )
     commit_after_write(topic_library_root, "lib: confirm topics")
@@ -429,16 +456,19 @@ def update_topic(
     problem_text: str,
     programs: Sequence[str],
     hint_module_groups: Sequence[str],
+    category: str = "",
 ) -> TopicEntry:
-    """编辑赛题条目（工单 topic-library-ui/02）：题面全文 / 附带程序 / 功能组
-    一次保存，全部校验在首次落盘前，成功自动 git 提交并返回更新后条目。
+    """编辑赛题条目（工单 topic-library-ui/02 + topics-control-2023-2025/01）：
+    题面全文 / 附带程序 / 功能组 / 分类一次保存，全部校验在首次落盘前，成功
+    自动 git 提交并返回更新后条目。
 
     身份不变量：year / number（目录名 = 编号身份）与 original_pdf /
-    problem_md（文件引用）不可改——本函数只接收三个可编辑字段（题面 /
-    附带程序 / 功能组），调用方提交的其余键一概忽略。校验与确认入库
+    problem_md（文件引用）不可改——本函数只接收四个可编辑字段（题面 /
+    附带程序 / 功能组 / 分类），调用方提交的其余键一概忽略。校验与确认入库
     同口径：题面非空、程序目录必须存在（悬空引用要移除就在清单里删掉，
-    不允许写入）、hint 组非空字符串。写题面文件（沿用条目 problem_md
-    文件名）+ 更新 manifest（既有字段原样保留）。
+    不允许写入）、hint 组非空字符串、分类在词表内（空 = 未标记合法）。
+    写题面文件（沿用条目 problem_md 文件名）+ 更新 manifest（既有字段原样
+    保留）。
     """
     entry = resolve_number(topic_library_root, key)  # 格式 + 查无此条（同文案）
     if not problem_text.strip():
@@ -457,6 +487,9 @@ def update_topic(
             raise TopicError(
                 f"赛题 {key} 的 hint_module_groups 必须是非空字符串列表"
             )
+    if not isinstance(category, str):
+        raise TopicError(f"赛题 {key} 的 category 必须是字符串")
+    validate_topic_category(category)
     entry_dir = _entry_dir(topic_library_root, key)
     # 落盘：先写题面再写 manifest；写盘失败恢复题面旧值（manifest 保持原值）
     # ——对偶 update_reference「写入期失败清理已写内容」契约（本函数无新增
@@ -472,6 +505,7 @@ def update_topic(
                 **data,
                 "programs": list(normalized_programs),
                 "hint_module_groups": list(hint_module_groups),
+                "category": category,
             },
         )
     except Exception:
@@ -520,11 +554,16 @@ def parse_confirm_entries(data: Mapping[str, Any]) -> tuple[TopicDraft, ...]:
             raise TopicError(f"entries[{index}] 缺少必填字段：number")
         if not isinstance(problem_text, str) or not problem_text.strip():
             raise TopicError(f"entries[{index}] 缺少必填字段：problem_text")
+        category = item.get("category", "")
+        if not isinstance(category, str):
+            raise TopicError(f"entries[{index}] 的 category 必须是字符串")
+        validate_topic_category(category)
         drafts.append(
             TopicDraft(
                 year=year.strip(),
                 number=number.strip(),
                 problem_text=problem_text,
+                category=category,
             )
         )
     _validate_entries(drafts)
@@ -727,6 +766,12 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
         raise TopicError(
             f"赛题条目 {entry_dir.name} 的 hint_module_groups 必须是非空字符串列表"
         )
+    category = data.get("category", "")
+    if not isinstance(category, str):
+        raise TopicError(
+            f"赛题条目 {entry_dir.name} 的 category 必须是字符串"
+        )
+    validate_topic_category(category)  # 词表外 = 元数据损坏（照 platform 同款大声失败）
     try:
         problem_text = (entry_dir / problem_md).read_text(encoding="utf-8")
     except OSError as exc:
@@ -741,6 +786,7 @@ def _load_entry(entry_dir: Path) -> TopicEntry:
         original_pdf=original_pdf,
         programs=tuple(raw_programs),
         hint_module_groups=tuple(raw_hint),
+        category=category,
         mtime=_entry_mtime(entry_dir),
     )
 

@@ -251,7 +251,8 @@ from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
 from .topic_library import (
-
+    TOPIC_CATEGORIES,
+    TOPIC_CATEGORY_CONTROL,
     confirm_topics,
     delete_topic,
     enrich_topic_image_notes,
@@ -4661,6 +4662,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             for entry in list_topics(topics_dir)
         ]
 
+    @app.get("/api/topics/categories")
+    @_map_errors
+    def topic_categories() -> dict[str, list[str]]:
+        """分类词表（工单 topics-control-2023-2025/01）：前端筛选下拉与分类
+        选项的单源（词表常量经 webapp 一次带出——前端不硬编码，后端校验同源；
+        照 reference_topic_types 先例）。
+
+        路由顺序陷阱：必须注册在 GET /api/topics/{key} 之前，否则
+        categories 会被当编号 key 解析（查无此条 400）。
+        """
+        return {"categories": list(TOPIC_CATEGORIES)}
+
     @app.post("/api/topics/split")
     @_map_errors
     async def topics_split(upload: UploadFile = File(...)) -> dict:
@@ -4704,7 +4717,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 drafts = split_topics_document(text)
         finally:
             tmp_path.unlink(missing_ok=True)
-        return {"topics": [draft.to_dict() for draft in drafts]}
+        return {
+            "topics": [
+                {
+                    **draft.to_dict(),
+                    # 新建默认 control（工单 topics-control-2023-2025/01：
+                    # 控制题专项定位——拆出即标控制题，用户可在校对表单改）；
+                    # 不改 draft 本身（confirm 提交值由解析层校验）
+                    "category": draft.category or TOPIC_CATEGORY_CONTROL,
+                }
+                for draft in drafts
+            ]
+        }
 
     @app.post("/api/topics/confirm")
     @_map_errors
@@ -4752,11 +4776,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.put("/api/topics/{key}")
     @_map_errors
     def topic_update(key: str, payload: dict) -> dict:
-        """编辑赛题条目（工单 topic-library-ui/02）：题面全文 / 附带程序 /
-        功能组全量一次保存；校验与确认入库同口径，失败磁盘零变化。
+        """编辑赛题条目（工单 topic-library-ui/02 + topics-control-2023-2025/01）：
+        题面全文 / 附带程序 / 功能组 / 分类全量一次保存；校验与确认入库同口径，
+        失败磁盘零变化。
 
         body 契约：{problem_text, programs: [绝对路径...], hint_module_groups:
-        [组 id...]}——三字段全量必填（表单总是提交完整值）；其余键一概忽略
+        [组 id...], category: "control"|"other"|""}——四字段全量必填（表单总是
+        提交完整值；category 缺省 = 未标记 ""，旧前端兼容）；其余键一概忽略
         （身份键不可改：year / number / original_pdf / problem_md 由后端
         保持，前端表单只读展示）。
         """
@@ -4770,6 +4796,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             isinstance(item, str) for item in hint_module_groups
         ):
             raise HTTPException(400, "hint_module_groups 必须是字符串列表")
+        category = payload.get("category", "")
+        if not isinstance(category, str):
+            raise HTTPException(400, "category 必须是字符串")
         config = _require_config(context)
         entry = update_topic(
             topic_library_dir(config.module_library_dir),
@@ -4777,6 +4806,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             problem_text=_require_str(payload, "problem_text"),
             programs=tuple(programs),
             hint_module_groups=tuple(hint_module_groups),
+            category=category,
         )
         return entry.to_dict()
 
