@@ -6,12 +6,19 @@
 // 通道（旧 → 新，末条 user = 本轮；服务端原子轮——LLM 失败不落半轮且报错，
 // 前端失败后回填输入框可重发）。chat = 落盘真相 {messages:[{role,content,at}],
 // note}；pendingText = 发送中乐观气泡。渲染纯件 = fx/ai-chat.js。
-import { $, apiPost, toastError } from "/js/app.js";
+import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { aiChatMessagesHTML } from "/js/fx/ai-chat.js";
-import { selectionContextText } from "/js/fx/ai-diff.js";
+import { parseAiDiff, selectionContextText } from "/js/fx/ai-diff.js";
 import { caretLineOf } from "/js/fx/codeeditor.js";
+import { maincDiffCompute } from "/js/fx/mainc-diff.js";
+import { mainDiffHTML } from "/js/fx/diff.js";
+import { WRITE_GUARD_ACTIONS } from "/js/fx/write-guard.js";
 import { getActiveTab, getCodeDir, onActiveTabChanged } from "/js/ui/codeeditor.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（ai-action-banner/02 同 crate 先例）
+// 写盘守卫为动态 import：code-write-guard 静态 import codeview（isMainCDiskDir），
+// 而 codeview → code-ai-chat —— 静态链路成环（codeview → code-ai-chat →
+// code-write-guard → codeview）；previewDiff 内运行时加载打破静态环。
+import { confirmModal } from "/js/ui/confirm.js";
 
 // ---- 模块态 ----
 let chat = { messages: [], note: "" };   // 后端落盘形状（read/send 响应）
@@ -28,6 +35,7 @@ function renderPanel() {
   const body = $("code-ai-chat-body");
   if (body) {
     body.innerHTML = aiChatMessagesHTML(chat.messages, pendingText);
+    attachDiffButtons();
     body.scrollTop = body.scrollHeight;
   }
   const status = $("code-ai-chat-status");
@@ -152,6 +160,105 @@ async function sendMessage() {
   }
 }
 
+// ===== C2 应用闭环（工单 code-ide-ai/04）：<DIFF> → 预览 → 确认 → 写盘 → 感知 =====
+// attachDiffButtons()：renderPanel 后调用——assistant 消息含有效 <DIFF> 块
+// → 气泡尾部挂「预览改动」按钮（parseAiDiff 单源；无块不挂）。按钮
+// data-ai-preview = assistant 序号（第 N 条 assistant 消息，0 起）。
+function attachDiffButtons() {
+  const body = $("code-ai-chat-body");
+  if (!body) return;
+  const ais = body.querySelectorAll(".sugg-msg.ai");
+  let aiIdx = 0;
+  for (const msg of chat.messages) {
+    if (!msg || msg.role !== "assistant") continue;
+    const el = ais[aiIdx];
+    aiIdx += 1;
+    if (!el || el.querySelector("[data-ai-preview]")) continue;
+    if (!parseAiDiff(String(msg.content || ""))) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "code-ai-preview-btn";
+    btn.dataset.aiPreview = String(aiIdx - 1);
+    btn.textContent = "预览改动";
+    el.appendChild(btn);
+  }
+}
+
+// previewDiff(aiIdx)：预览第 N 条 assistant 消息的 diff——读盘 →
+// preview（只算不写）→ 生成行级 diff（maincDiffCompute 磁盘 vs new_content，
+// 与服务端 main_diff 同构——diff 超限/无差异 → 占位文案但可确认）→
+// confirmModal（复用 mainDiffHTML 渲染）→ 写盘守卫 → apply（写模式携带
+// base_mtime_ns = 读盘值）→ 成功 toast + 感知钩子；409 → 提示重预览。
+async function previewDiff(aiIdx) {
+  const ais = chat.messages.filter((m) => m && m.role === "assistant");
+  const msg = ais[aiIdx];
+  if (!msg) return;
+  const d = parseAiDiff(String(msg.content || ""));
+  if (!d) return;
+  const dir = getCodeDir();
+  if (!dir) { toastError(new Error("未打开目录"), "无法预览"); return; }
+  let file;
+  try {
+    file = await apiGet("/api/code/file?dir=" + encodeURIComponent(dir)
+      + "&path=" + encodeURIComponent(d.path));
+  } catch (e) {
+    toastError(e, "读取文件失败");
+    return;
+  }
+  let preview;
+  try {
+    preview = await apiPost("/api/code/apply-diff", {
+      dir, path: d.path, hunks: d.hunks, preview: true,
+    });
+  } catch (e) {
+    toastError(e, "计算改动失败");
+    return;
+  }
+  const diffObj = maincDiffCompute(String(file.content || ""), String(preview.new_content || ""));
+  const inner = diffObj
+    ? mainDiffHTML(diffObj, "AI 改动")
+    : '<div class="muted">内容差异明细不可用（无变化或差异过大）。'
+      + "确认后将按 AI 建议直接应用。</div>"
+      + '<div class="diff-stats reason"><strong>AI 改动：</strong>新增 <span class="diff-count add">+'
+      + (preview.stats.additions || 0) + "</span> 行 · 删除 <span class=\"diff-count del\">−"
+      + (preview.stats.deletions || 0) + "</span> 行 · " + (preview.stats.hunks || 0) + " 处改动</div>";
+  const yes = await confirmModal({
+    title: "预览 AI 改动 · " + d.path,
+    message: "",
+    danger: false,
+    confirmText: "应用改动",
+    cancelText: "取消",
+    extra: '<div class="code-ai-preview-body">' + inner + "</div>",
+  });
+  if (!yes) return;
+  const guard = await import("/js/ui/code-write-guard.js");   // 动态 import 破静态环（见头部注释）
+  const allowed = await guard.guardCodeTabWrite(
+    WRITE_GUARD_ACTIONS.codeAiApply, { anyDir: true });   // 任意目录：脏标签都先确认（IDE 内写盘语义）
+  if (!allowed) return;   // 守卫取消：中止（不写盘）
+  try {
+    const result = await apiPost("/api/code/apply-diff", {
+      dir, path: d.path, hunks: d.hunks, base_mtime_ns: file.mtime_ns,
+    });
+    toast("ok", "已应用 AI 改动：" + result.path);
+    notifyApplied(result.path);
+  } catch (e) {
+    if (e && e.status === 409) {
+      toastError(e, "磁盘内容已变化，请重新预览后再应用");
+    } else {
+      toastError(e, "应用 AI 改动失败");
+    }
+  }
+}
+
+// 感知钩子（工单 04）：apply 成功 → codeview 注册的 checkCodeDiskChanges
+// 立即执行（变更面板自动出现；干净标签自动重载版本文——用户见证 AI 落盘）。
+// code-ai-chat 不 import codeview（避免环），经注册回调解耦。
+const appliedListeners = new Set();
+export function onCodeAiApplied(cb) { appliedListeners.add(cb); }
+function notifyApplied(path) {
+  appliedListeners.forEach((cb) => { try { cb(path); } catch (e) { /* 监听器异常不阻断 */ } });
+}
+
 // setCodeAiDir(dir)：目录打开钩子（codeview.loadCodeDir 调用）——隐藏/显示
 // 面板 + 拉取该目录聊天历史。非生成上下文目录读不到 = 空聊天（不报错）。
 export async function setCodeAiDir(dir) {
@@ -183,10 +290,7 @@ export function initCodeAiChat() {
       e.preventDefault();
       sendMessage();
     });
-    input.addEventListener("input", () => {
-      const s = $("btn-code-ai-send");
-      if (s) s.disabled = busy || !input.value.trim();
-    });
+    input.addEventListener("input", () => setSendEnabled());
   }
 
   const collapse = $("btn-code-ai-collapse");
@@ -196,6 +300,14 @@ export function initCodeAiChat() {
     const collapsed = panel.classList.toggle("collapsed");
     collapse.textContent = collapsed ? "展开" : "收起";
     collapse.title = collapsed ? "展开对话区" : "收起对话区";
+  });
+
+  // 「预览改动」按钮委托（工单 04）：按钮动态注入（attachDiffButtons），
+  // 容器静态——body 委托零重绑。
+  const chBody = $("code-ai-chat-body");
+  if (chBody) chBody.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-ai-preview]");
+    if (btn) previewDiff(parseInt(btn.dataset.aiPreview, 10));
   });
 
   // 选区 → 浮动按钮：textarea 事件委托（textarea 由 codeeditor 动态渲染，

@@ -29,6 +29,7 @@ export const WRITE_GUARD_ACTIONS = Object.freeze({
   task: "做这一步",
   taskFeedback: "按反馈修复",
   params: "改值并编译",
+  codeAiApply: "应用 AI 改动",
 });
 
 // writeGuardMessage(actionLabel, dirtyCount)：模态正文——动作名 + 未保存文件数

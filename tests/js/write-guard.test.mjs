@@ -37,7 +37,7 @@ test("writeGuardMessage：动作名 + N 个文件 + 引导；空动作名兜底�
 
 test("WRITE_GUARD_ACTIONS：写盘动作名单源冻结（评审整改——防散落裸串改名漏改）", () => {
   assert.deepEqual(Object.keys(WRITE_GUARD_ACTIONS).sort(), [
-    "continueFix", "deepen", "fix", "params", "revise", "task", "taskFeedback",
+    "codeAiApply", "continueFix", "deepen", "fix", "params", "revise", "task", "taskFeedback",
   ]);
   assert.equal(WRITE_GUARD_ACTIONS.fix, "一键编译修复");
   assert.equal(WRITE_GUARD_ACTIONS.continueFix, "继续修复");
@@ -46,5 +46,6 @@ test("WRITE_GUARD_ACTIONS：写盘动作名单源冻结（评审整改——防�
   assert.equal(WRITE_GUARD_ACTIONS.task, "做这一步");
   assert.equal(WRITE_GUARD_ACTIONS.taskFeedback, "按反馈修复");
   assert.equal(WRITE_GUARD_ACTIONS.params, "改值并编译");
+  assert.equal(WRITE_GUARD_ACTIONS.codeAiApply, "应用 AI 改动");
   assert.ok(Object.isFrozen(WRITE_GUARD_ACTIONS));
 });

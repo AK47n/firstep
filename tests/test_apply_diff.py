@@ -94,6 +94,20 @@ def test_apply_diff_base_mtime_mismatch_is_409(tmp_path):
         )], base_mtime_ns=1)
 
 
+def test_apply_diff_conflict_409_priority_over_hunk_mismatch(tmp_path):
+    """外部改盘后 hunk 通常也不再匹配——base 校验先于 hunk 应用（评审 s1
+    整改）：语义应是 409「已被外部修改」而非 400「未匹配」——即 hunk 与磁盘
+    内容不符 + base 过期，必须报 409。"""
+    root = _proj(tmp_path)
+    (root / "main.c").write_text("int main(void) {\n  // external edit\n}\n", encoding="utf-8")
+
+    with pytest.raises(CodeViewConflictError, match="已被外部修改"):
+        apply_code_diff(root, "main.c", [_hunk(2,
+            ("del", "  // TODO: init sensor"),
+            ("add", "  sensor_init();"),
+        )], base_mtime_ns=1)
+
+
 def test_apply_diff_preview_accepts_no_base_mtime(tmp_path):
     root = _proj(tmp_path)
     out = apply_code_diff(root, "main.c", [_hunk(1,

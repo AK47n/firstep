@@ -15,11 +15,17 @@ import {
 import { dirtySavableTabCount, saveAllDirtyTabs } from "/js/ui/codeeditor.js";
 import { isMainCDiskDir } from "/js/ui/codeview.js";
 
-// guardCodeTabWrite(actionLabel)：返回 Promise<boolean>——true = 可以继续
-// 写盘动作；false = 用户取消 / 保存未落盘，调用方应中止动作。
-export async function guardCodeTabWrite(actionLabel) {
+// guardCodeTabWrite(actionLabel, opts)：返回 Promise<boolean>——true = 可以
+// 继续写盘动作；false = 用户取消 / 保存未落盘，调用方应中止动作。
+// opts.anyDir = true（工单 code-ide-ai/04）：**忽略目录限定**——AI diff 应用
+// 在 IDE 内发起（任意目录都代表用户意图内写盘，脏标签都该先确认），而既有
+// 生成页动作仅当目录 = 生成上下文才需要提示（writeGuardNeeded 语义）。
+export async function guardCodeTabWrite(actionLabel, opts = {}) {
   const dirtyCount = dirtySavableTabCount();
-  if (!writeGuardNeeded(isMainCDiskDir(), dirtyCount)) return true;
+  const need = opts.anyDir
+    ? dirtyCount > 0
+    : writeGuardNeeded(isMainCDiskDir(), dirtyCount);
+  if (!need) return true;
   const proceed = await confirmModal({
     title: writeGuardTitle(),
     message: writeGuardMessage(actionLabel, dirtyCount),

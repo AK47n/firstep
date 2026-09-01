@@ -1410,6 +1410,13 @@
     border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12px; }
   .code-ai-ref code { background: none; padding: 0; }
   .code-ai-ref-rest { margin-top: var(--space-1); }
+  /* 「预览改动」按钮（工单 code-ide-ai/04）：AI 回复气泡尾部的 diff 入口；
+     正文按钮样式与 .code-ai-preview-body（预览模态内容滚动区）。 */
+  .code-ai-preview-btn { font-size: 11.5px; line-height: 1; padding: 3px 9px;
+    margin-left: 8px; border: 1px solid var(--accent); border-radius: var(--radius-sm);
+    background: var(--accent-dim); color: var(--accent); cursor: pointer; vertical-align: 1px; }
+  .code-ai-preview-btn:hover { filter: brightness(1.1); }
+  .code-ai-preview-body { max-height: 45vh; overflow: auto; }
   .code-ai-chat-input-row { display: flex; gap: 8px; padding: 8px 12px;
     border-top: 1px solid var(--border); align-items: flex-end; }
   .code-ai-chat-input { flex: 1; resize: none; min-height: 30px; font-family: var(--mono);
