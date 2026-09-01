@@ -1,11 +1,10 @@
-<!-- changelog-auto: last-commit=70c0bffbf1b0634694b958c92eed99a0520a6b32 -->
+<!-- changelog-auto: last-commit=da16fa8d08b657ed7937421a99c36efe1ac89c3f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
 
 ## 2026-09-01
-- 19:34 修复：代码编辑器状态栏按钮窄视口竖排 + 窄视口三栏中栏塌缩（用户反馈右下角「编」「译」拆行错位）——①状态栏「保存全部」「编译」被 .code-dir-label（flex:1 1 auto、长路径）按比例挤压成两行竖排；修复=.code-statusbar button{flex:none;white-space:nowrap}；②三栏 grid 树/侧栏固定宽在 565px 视口把中栏挤到 15px（编辑器几乎不可见）；修复=中栏改 minmax(150px,1fr) 硬保底、空间不足时树/侧栏对称收缩（1440 宽视口布局回归不变）；③顺带修 AI 对话输入框 textarea 缺 class（.code-ai-chat-input 样式从未命中，输入区偏高 63→48px）；565/1440 CDP 实测回归
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
 - 12:19 工单 code-tree-ops/02：树 UI——新建/重命名/删除 + tab 联动 + 脏保护 + 纯件单测（保存全部实现随文件一并落地）
 - 12:19 工单 code-tree-ops/03：保存全部冒烟（24 项全 PASS：树操作全链路 + Ctrl+Shift+S 落盘）+ 工单收尾
@@ -21,6 +20,8 @@
 - 18:44 工单 code-ide-ai/06：IDE 修复面板（B 全配双出口）——共享状态机订阅制广播（H1 双发整改）、「在此修复」任意目录入口、回滚/继续/感知联动
 - 18:57 工单 code-ide-ai/07：内容快照泛化——基线文件条目 content 快照（打开过的文件才有行级 diff）、maincContent 特例字段统一化迁移、推进 re-fetch 保持新鲜、双轴评审整改（清单派生/mtimeEq 单源/删除场景加固）
 - 19:10 工单 code-ide-ai/08：行级 diff 泛化（三期收口）——mainc-diff 改名 line-diff（任意文件）、change-panel hasLineDiffSource 判定无路径特判、getBaselineContent 单源、双轴评审整改（占位泛化/BOM/文案矛盾/循环外 load）
+- 19:34 修复：代码编辑器状态栏按钮窄视口竖排 + 窄视口三栏中栏塌缩（用户反馈右下角「编」「译」拆行错位）——①状态栏「保存全部」「编译」被 .code-dir-label（flex:1 1 auto、长路径）按比例挤压成两行竖排；修复=.code-statusbar button{flex:none;white-space:nowrap}；②三栏 grid 树/侧栏固定宽在 565px 视口把中栏挤到 15px（编辑器几乎不可见）；修复=中栏改 minmax(150px,1fr) 硬保底、空间不足时树/侧栏对称收缩（1440 宽视口布局回归不变）；③顺带修 AI 对话输入框 textarea 缺 class（.code-ai-chat-input 样式从未命中，输入区偏高 63→48px）；565/1440 CDP 实测回归
+- 19:34 修复:代码编辑器状态栏按钮窄视口竖排+三栏中栏塌缩(用户反馈「编」「译」拆行)——状态栏按钮 flex:none+nowrap、中栏 minmax(150px,1fr) 保底、AI 对话输入框补 class
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
