@@ -26,13 +26,20 @@ import {
   EDITOR_TABS_MAX,
 } from "/js/fx/codeeditor.js";
 import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
+import { treeRenamedPath, treeOpAffected } from "/js/fx/code-tree-ops.js";  // 重命名路径映射纯件（工单 code-tree-ops/02）
 import { confirmModal } from "/js/ui/confirm.js";
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
 let codeDir = "";
 let tabs = [];           // {path, lang, content, savedContent, outline, mtime_ns, utf8, mdMode, readonly}
 let activePath = "";
-const fileCache = new Map();  // key = dir + "\u0000" + path → {ok:true, data} | {ok:false, message}
+const fileCache = new Map();  // key = fileCacheKey(path) → {ok:true, data} | {ok:false, message}
+
+// fileCacheKey(path)：文件缓存键单源（dir + NUL 分隔可避免路径拼接歧义）——
+// 读取 / 失效 / 保存后更新共用同一构造，防止键拼法漂移。
+function fileCacheKey(path) {
+  return codeDir + "\u0000" + path;
+}
 const activeListeners = new Set();
 
 const CODE_FLASH_MS = 1200;  // 跳行闪烁（与查看器同值：评审整改 1200 归拢）
@@ -94,7 +101,7 @@ function fileURL(path) {
 }
 
 async function loadFileState(path) {
-  const key = codeDir + "\u0000" + path;
+  const key = fileCacheKey(path);
   if (fileCache.has(key)) return fileCache.get(key);
   try {
     const data = await apiGet(fileURL(path));
@@ -246,13 +253,15 @@ export function isMdPreviewActive() {
   return !!(tab && tab.lang === "md" && tab.mdMode === "preview");
 }
 
-// closeTab(path, {force})：关闭标签——脏 tab 弹 confirmModal（确认丢弃 /
+// closeTab(path, opts = {})：关闭标签——脏 tab 弹 confirmModal（确认丢弃 /
 // 取消保留；不误丢修改）；关活动标签 → 激活右邻（无则左邻，再无一无）。
-export async function closeTab(path) {
+// opts.force = true 跳过脏确认（工单 code-tree-ops/02：树删除前已由
+// guardTreeOpWrite 统一提示过，逐 tab 不再重复弹）。
+export async function closeTab(path, opts = {}) {
   const idx = tabs.findIndex((t) => t.path === path);
   if (idx < 0) return;
   const tab = tabs[idx];
-  if (tab.content !== tab.savedContent) {
+  if (!opts.force && tab.content !== tab.savedContent) {
     const ok = await confirmModal({
       title: "关闭未保存的标签",
       message: "「" + esc(path) + "」有未保存的修改，关闭将丢弃这些修改。",
@@ -269,6 +278,47 @@ export async function closeTab(path) {
   renderTabs();
   renderPane();
   notifyActive();
+}
+
+// remapOpenTabPaths(oldPath, newPath, isDir)：树重命名后的 tab 路径映射
+// （工单 code-tree-ops/02）——受影响 tab 的 path 改为新值（前缀替换），
+// 活动路径同步；内容 / 脏点 / mtime 基准不变（rename 不改内容与磁盘 mtime，
+// 保存语义延续）。目录改名 → 其下所有打开 tab 一并映射。
+export function remapOpenTabPaths(oldPath, newPath, isDir) {
+  let changed = false;
+  for (const t of tabs) {
+    if (!treeOpAffected(t.path, oldPath, isDir)) continue;
+    t.path = treeRenamedPath(t.path, oldPath, newPath);
+    changed = true;
+  }
+  if (!changed) return;
+  if (treeOpAffected(activePath, oldPath, isDir)) {
+    activePath = treeRenamedPath(activePath, oldPath, newPath);
+  }
+  renderTabs();
+  renderPane();
+  notifyActive();
+}
+
+// invalidateFileCache(path)：失效该文件的加载缓存（工单 code-tree-ops/02）——
+// 新建前文件不存在时缓存过 {ok:false}，create 成功后再 open 会命中陈旧
+// 失败缓存；重命名后旧路径缓存同理失效（新路径从未缓存过，天然干净）。
+export function invalidateFileCache(path) {
+  fileCache.delete(fileCacheKey(path));
+}
+
+// dirtyTabPaths()：当前有未保存修改且可保存的 tab 路径（工单
+// code-tree-ops/02：树操作脏保护按「受影响 tab」判断，与 saveAllDirtyTabs
+// 同判据单源）。
+export function dirtyTabPaths() {
+  return tabs.filter((t) => t.content !== t.savedContent && !t.readonly)
+    .map((t) => t.path);
+}
+
+// openTabPaths()：当前全部打开 tab 的路径（工单 code-tree-ops/02：树删除
+// 后关闭受影响 tab——用全量路径而非仅脏 tab）。
+export function openTabPaths() {
+  return tabs.map((t) => t.path);
 }
 
 function closeActiveTab() { closeTab(activePath); }
@@ -574,7 +624,7 @@ function applySavedState(tab, resp, msg) {
   tab.outline = tab.lang === "md"
     ? markdownOutline(parseMarkdownBlocks(tab.content))
     : resp.outline;
-  fileCache.set(codeDir + "\u0000" + tab.path, {
+  fileCache.set(fileCacheKey(tab.path), {
     ok: true,
     data: {
       path: tab.path,
@@ -603,7 +653,7 @@ function applyDiskState(tab, disk) {
     : disk.outline || null;
   tab.readonly = disk.utf8 === false;
   tab.utf8 = disk.utf8 !== false;
-  fileCache.set(codeDir + "\u0000" + tab.path, { ok: true, data: disk });
+  fileCache.set(fileCacheKey(tab.path), { ok: true, data: disk });
   renderTabs();
   renderPane();
   notifyActive();
@@ -669,6 +719,7 @@ export function initCodeEditor() {
   // 也生效）；浏览器「保存网页」对话框不出现。
   document.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
+    if (e.shiftKey) return;  // Ctrl+Shift+S 交给保存全部（initCodeSaveAll，code-tree-ops/03）
     const sec = $("tab-code");
     if (!sec || !sec.classList.contains("active")) return;
     e.preventDefault();

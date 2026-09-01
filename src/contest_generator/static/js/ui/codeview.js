@@ -108,6 +108,25 @@ function renderCodeTree() {
     : '<span class="muted">（没有文件）</span>';
 }
 
+// refreshCodeTreeOnly()：仅重拉清单 + 重渲染树（工单 code-tree-ops/02）——
+// 树操作（新建/重命名/删除）成功后刷新用；**不**碰中栏标签/内容（相对
+// loadCodeDir：后者会 setCodeDir 清全部标签，树操作不能丢编辑态）。
+export async function refreshCodeTreeOnly() {
+  if (!codeDir) return;
+  try {
+    const data = await apiPost("/api/code/open", { dir: codeDir });
+    codeFiles = data.files || [];
+    renderCodeTree();
+  } catch (e) {
+    toastError(e, "刷新文件树失败");
+  }
+}
+
+// getCodeTreeDir() / getCodeTreeFiles()：当前目录与清单只读出口（工单
+// code-tree-ops/02：树操作判定 is_dir / 组装请求 payload）。
+export function getCodeTreeDir() { return codeDir; }
+export function getCodeTreeFiles() { return codeFiles; }
+
 // ===== 右侧栏：大纲（活动标签来自 codeeditor） =====
 function renderOutline() {
   const box = $("code-outline");

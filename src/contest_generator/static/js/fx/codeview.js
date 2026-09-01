@@ -8,8 +8,9 @@
 import { esc, formatSize } from "./core.js";
 import { languageOf, highlightText } from "./highlight.js";
 
-// buildCodeTree(files)：扁平文件清单 → 嵌套节点树（按路径逐层聚合）。
-// files = [{path, size_bytes}]（/api/code/open 直出，顺序无关）；节点 =
+// buildCodeTree(files)：扁平清单 → 嵌套节点树（按路径逐层聚合）。
+// files = [{path, size_bytes} | {path, is_dir: True}]（/api/code/open 直出，
+// 顺序无关；is_dir 条目 = 目录（含空目录，工单 code-tree-ops/01））；节点 =
 // {name, path, isDir, children?, size_bytes?}。兄弟排序：目录在前、同级内
 // 按名字码点序（确定性；localeCompare 依 locale 漂移，不用）。
 export function buildCodeTree(files) {
@@ -21,7 +22,7 @@ export function buildCodeTree(files) {
     for (let i = 0; i < parts.length; i++) {
       const name = parts[i];
       prefix.push(name);
-      const isFile = i === parts.length - 1;
+      const isFile = !f.is_dir && i === parts.length - 1;
       let child = node.children.find((c) => c.name === name);
       if (!child) {
         child = {
@@ -99,21 +100,38 @@ export function fileIconHTML(path, isDir) {
   return codeIco(CODE_ICO_DOC);
 }
 
+// treeActionButtonsHTML(n)：行操作按钮（工单 code-tree-ops/02）——✎/🗑
+// 悬浮显示（hover 由 CSS 控制），data-tree-op/data-tree-path/data-tree-kind
+// 交事件层；文件与目录行都有（目录删除仅空目录可删，后端 400 兜底）。
+function treeActionButtonsHTML(n) {
+  const kind = n.isDir ? "dir" : "file";
+  return `<span class="code-tree-actions">
+    <button type="button" class="code-tree-act" data-tree-op="rename"
+      data-tree-path="${esc(n.path)}" data-tree-kind="${kind}"
+      title="重命名" aria-label="重命名 ${esc(n.name)}">✎</button>
+    <button type="button" class="code-tree-act code-tree-act-del" data-tree-op="delete"
+      data-tree-path="${esc(n.path)}" data-tree-kind="${kind}"
+      title="删除" aria-label="删除 ${esc(n.name)}">🗑</button>
+  </span>`;
+}
+
 // codeTreeHTML(nodes)：递归树 HTML——目录 = 原生 <details open>/<summary>
 // （零 JS 收起，含文件夹图标），文件 = 行按钮（data-code-file = 相对路径，
 // 交事件层；含类型图标 + 末尾 formatSize 大小）。根 <ul class="code-tree">
-// 由调用方包裹。
+// 由调用方包裹；每行右侧 ✎/🗑 操作按钮（treeActionButtonsHTML）。
 export function codeTreeHTML(nodes) {
   return (nodes || []).map((n) => n.isDir
     ? `<li class="code-tree-dir"><details open><summary>`
       + `<span class="code-tree-icon" aria-hidden="true">${fileIconHTML(n.path, true)}</span>`
       + `<span class="code-tree-dir-name">${esc(n.name)}</span></summary>`
-      + `<ul>${codeTreeHTML(n.children)}</ul></details></li>`
+      + `<ul>${codeTreeHTML(n.children)}</ul></details>`
+      + treeActionButtonsHTML(n) + `</li>`
     : `<li class="code-tree-file">
         <button type="button" class="code-tree-btn" data-code-file="${esc(n.path)}">
           <span class="code-tree-icon" aria-hidden="true">${fileIconHTML(n.path, false)}</span>
           <span class="code-tree-name">${esc(n.name)}</span>
-          <span class="muted">${formatSize(n.size_bytes)}</span></button></li>`
+          <span class="muted">${formatSize(n.size_bytes)}</span></button>`
+      + treeActionButtonsHTML(n) + `</li>`
   ).join("");
 }
 

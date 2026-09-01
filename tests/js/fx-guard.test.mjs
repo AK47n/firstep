@@ -62,6 +62,12 @@ const DOMAINS = {
   "code-compile.js": {
     compileStatusText: "fn", compileStatusClass: "fn", compileErrorRowsHTML: "fn",
   },
+  "code-tree-ops.js": {
+    treeNameValidate: "fn", treeOpAffected: "fn", treeRenamedPath: "fn",
+    treeOpIsDir: "fn", treeOpTitle: "fn", createPromptMessage: "fn",
+    renamePromptMessage: "fn", treeOpConfirmMessage: "fn", treeNamePromptHTML: "fn",
+    CODE_TREE_NAME_ILLEGAL: "string", CODE_TREE_NAME_MAX: "number",
+  },
   "write-guard.js": {
     writeGuardNeeded: "fn", writeGuardTitle: "fn", writeGuardMessage: "fn",
     WRITE_GUARD_ACTIONS: "object",
