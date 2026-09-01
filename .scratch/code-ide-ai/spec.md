@@ -182,3 +182,22 @@
 - 评审子代理超时中断（60+ 分钟无产出）→ 自查收尾（读全部改动文件 +
   git diff 核对 + 全量测试复核），判断项：setSendEnabled 复用
   （input 监听处原重复判定，已修）。
+
+**s5（工单 05 双轴评审后）**：
+- 回调集实现为 13 个（issue 列的 onErrors(list)/onRollback 有出入）：
+  onErrors(list) 语义分拆 onError(text)+onList(parsed,fixes,round)（事件
+  触达粒度不同）；onRollback 未入核心——回滚=壳层交互+API 调用，非状态机
+  事件（onDone 的 backup_id 驱动回滚按钮态）——两处均记录为可接受偏离。
+- 手动贴文本模式（runFixOnceCore）单实例化（Standards 整改）：原基线手动/
+  自动循环可并发（互相清空共享态 fixLoop.resume/lastFixDone）；改后运行中
+  触发抛「修复循环进行中」——写工程文件的动作为何不能并发（同 fixLoop.
+  running 语义）。
+- check_contract 3 结构钉（FIX_MAX_ROUNDS regex / 轮上限文案 / resume 快照）
+  指向核心模块 fix-center-core.js（issue「导出面保持」的钉迁移）。
+- 核心用相对路径 import fx 纯件（区别于 ui 簇 /js/ 绝对路径）：node 直测
+  需要；浏览器相对 URL 解析等价（fx 内部同先例）。
+- 判断项记录不整改：Middle Man（*Core 转发壳——导出面保持）：
+  Speculative Generality（*Core 三件套 + 回调为 06 预留——issue 字面）；
+  onApply 与 fixRenderResults 重复建行（既有基线）；fixLoopSnapshot 现仅
+  测试用（06 将用）；核心经 onState 组合用户态文案（Feature Envy 轻——按
+  工单决策核心管状态+文案）。

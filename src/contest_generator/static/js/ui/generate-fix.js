@@ -2,16 +2,17 @@
 // 全家桶：单次编译 / 修复循环 ≤3 轮 / 批继续 / 横幅四态 / 结果表 / telemetry /
 // 就绪度）DOM 胶水（阶段 2 工单 16，源自 index.html 生成页：10. 修复中心节）。
 //
-// 簇体全量迁入：FIX_MAX_ROUNDS / toolchains（主写簇：export let + setToolchains
-// setter——host init 与设置页重算经 setter 写，其余读方 import）/ fixLoop /
-// lastFix* / fixSourceCache + compileBanner / renderCompileBanner / fmtSeconds
-//（纯函数→已迁 fx/generate.js，本模块 import）/ fixKeyOf / fixKeyBasename /
-// fixToggleSource / fixRenderResults /
-// fixSetBusy / fixCenterBusy / renderToolchainStatus / renderFixLLMTelemetry /
-// clearFixLLMTelemetry / updateFixCenterAvailability / fixHandleEvent /
-// runCompileOnce / runFixOnce / fixRounds / startFixCenter / continueFixCenter +
-// 顶层监听器（btn-fix-center / btn-fix-continue / btn-fix-errors /
-// btn-fix-rollback + continue 文案——import 时绑定：module 脚本延迟执行，DOM 已就绪）。
+// 工单 code-ide-ai/05（二期 B 全配第一步）：流程状态机已抽 ui/fix-center-core.js
+//（无 DOM 纯流程 + 事件回调广播）；本模块 = 生成页**壳层**——校验/守卫 +
+// 回调绑定现有 DOM 渲染（第 10 步修复中心行为零变化）；IDE 修复面板（工单
+// 06）绑同回调双出口（单实例 fixLoop.running 跨出口天然共享）。
+//
+// 簇体保留：compileBanner / setFixCenterLog / fixKeyOf / fixKeyBasename /
+// fixToggleSource / fixRenderResults / fixSetBusy / fixCenterBusy /
+// renderToolchainStatus / renderFixLLMTelemetry / clearFixLLMTelemetry /
+// updateFixCenterAvailability + 顶层监听器（btn-fix-center /
+// btn-fix-continue / btn-fix-errors / btn-fix-rollback + continue 文案——
+// import 时绑定：module 脚本延迟执行，DOM 已就绪）。
 // 纯件在 fx/*.js（generate / llm / code）；状态读 A 簇（generate-recommend）
 // chosenPlatform / selectedSlugs（活绑定只读——本簇是 toolchains 主写簇）。
 // 跨簇：recordLLMUsage（usage）/ reportRecentStatus（recent）/ markStepDone
@@ -20,10 +21,9 @@
 // 本簇，避免 ui→ui 环；本簇单向 import A）。
 import { $, apiPost, toast } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
-import { fmtSeconds, fixLogGroupHidden, compileSummaryText } from "/js/fx/generate.js";
-import { parseSSE, formatLLMTelemetry } from "/js/fx/llm.js";
+import { fixLogGroupHidden } from "/js/fx/generate.js";
+import { formatLLMTelemetry } from "/js/fx/llm.js";
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
-import { parseHttpError } from "/js/fx/errors.js";  // SSE 终态错误统一解析（工单 ux-walkthrough-02/11）
 import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
 import { reportRecentStatus } from "/js/ui/recent.js";
@@ -32,6 +32,16 @@ import { markStepDone } from "/js/ui/step-state.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
 import { guardCodeTabWrite } from "/js/ui/code-write-guard.js";  // 生成侧覆盖保护（工单 code-write-guard/02）：写盘前保存代码栏未保存编辑
 import { WRITE_GUARD_ACTIONS as WG } from "/js/fx/write-guard.js";  // 动作名单源（评审整改）
+import {
+  startFixCenterCore,
+  continueFixCenterCore,
+  runFixOnceCore,
+  runCompileOnceCore,
+  fixRoundsCore,
+  isFixRunning,
+  FIX_MAX_ROUNDS,
+} from "/js/ui/fix-center-core.js";  // 流程核心（工单 code-ide-ai/05——无 DOM 状态机）
+export { FIX_MAX_ROUNDS, fixLoop } from "/js/ui/fix-center-core.js";  // 导出面保持（check_contract / generate-core 活引用）
 
 // ---------------------------------------------------------------------------
 // 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
@@ -41,15 +51,9 @@ import { WRITE_GUARD_ACTIONS as WG } from "/js/fx/write-guard.js";  // 动作名
 // error（retry 是蒸馏层事件，修复流不发；实现发事件时再加回）。循环状态机
 // 在前端（服务端只做单次编译），轮次可见"第 N/3 轮"。
 // ---------------------------------------------------------------------------
-const FIX_MAX_ROUNDS = 3;
 let lastFix = null;          // {output_dir, backup_id}：回滚按钮的入口（done 终态后置位）
-let lastFixDone = null;      // 最近一次 fix-errors 的 done 载荷（循环判"有无应用"）
 let toolchains = { stm32: false, mspm0: false };  // /api/state 装载：平台 → 工具链可用
 function setToolchains(v) { toolchains = v; }  // 写入经 setter（host init / 设置页工具链重算）
-let fixLoop = { running: false, round: 0, batch: 1, resume: null };
-// 循环状态机：单实例（防双击并发）；batch = 批次号（「继续修复」+1，轮次条标
-// 注「继续批次」）；resume = 轮上限终态保存的续跑态快照 {errorText, lastSummary,
-// lastFixDone}（工单 fix-loop-continue/01：「继续修复」消费它，不重跑编译、回喂不丢）
 let fixSourceCache = {};                          // 源码行缓存（key = 归一化 path:line；列表重建时清空）
 
 const fixWait = makeWaitClock("fix-status");      // 长任务秒表（工单 ux-walkthrough-02/12）
@@ -67,11 +71,6 @@ function compileBanner(kind, text) {
 function setFixCenterLog(text) {
   $("fix-center-log").value = text || "";
   $("fix-log-group").classList.toggle("hidden", fixLogGroupHidden(text));
-}
-
-function renderCompileBanner(done) {   // compile done 载荷 → 横幅终态文案
-  const text = compileSummaryText(done);   // 文案单源（code-tab-compile/03 评审整改）
-  compileBanner(done.timed_out ? "fail" : done.passed ? "success" : "fail", text);
 }
 
 // 错误条目 key（工单 compile-experience-ui/01）：path 归一 POSIX；精确匹配
@@ -201,8 +200,6 @@ function renderToolchainStatus() {
     + "（缺失时一键按钮置灰，用下方贴文本模式；可在设置页配置路径）";
 }
 
-// 已迁至 static/js/fx/llm.js（工单 09）：formatLLMTelemetry。
-
 function renderFixLLMTelemetry(data) {
   const el = $("fix-llm-telemetry");
   el.textContent = formatLLMTelemetry(data);
@@ -217,215 +214,99 @@ function clearFixLLMTelemetry() {
 
 function updateFixCenterAvailability() {
   const ok = !!chosenPlatform && !!(toolchains || {})[chosenPlatform];
-  $("btn-fix-center").disabled = !ok || fixLoop.running;
+  $("btn-fix-center").disabled = !ok || isFixRunning();
   $("btn-fix-center").title = !chosenPlatform ? "请先选择目标平台"
     : ok ? "" : "未检测到该平台工具链（可在设置页配置路径），请用贴文本模式";
 }
 
-function fixHandleEvent(type, raw, outputDir) {
-  let data = {};
-  try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
-  if (type === "parse_done") {
-    const degraded = !data.file_count;
-    $("fix-status").textContent = "已解析 " + (data.error_count || 0) + " 条报错"
-      + (degraded ? "，未定位到可读取的源码文件（降级模式，只按报错全文修复）"
-          : "，定位 " + data.file_count + " 个文件") + "，AI 修复中…";
-  } else if (type === "fix_start") {
-    $("fix-status").textContent = "AI 正在逐条修复（分钟级调用，请等待）…";
-  } else if (type === "apply_result") {
-    $("fix-status").textContent = "";
-    const applied = data.status === "applied";
-    const row = document.createElement("div");
-    row.className = "fix-row";
-    const tag = document.createElement("span");
-    tag.className = "fix-tag " + (applied ? "fixed" : "skipped");
-    tag.textContent = applied ? "已修复" : "跳过";
-    const file = document.createElement("span");
-    file.className = "fix-file";
-    file.textContent = (data.file || "?") + (data.line ? ":" + data.line : "");
-    const msg = document.createElement("span");
-    msg.className = "fix-msg";
-    msg.textContent = data.reason || "";
-    row.appendChild(tag); row.appendChild(file); row.appendChild(msg);
-    row._source = { path: data.file, line: data.line };
-    row.addEventListener("click", () => fixToggleSource(row));
-    $("fix-results").appendChild(row);
-  } else if (type === "llm_telemetry") {
-    renderFixLLMTelemetry(data);
-    recordLLMUsage(data);
-  } else if (type === "done") {
-    lastFixDone = data;
-    const fixes = data.fixes || [];
-    const applied = fixes.filter((f) => f.status === "applied").length;
-    const skipped = fixes.length - applied;
-    lastFix = data.backup_id ? { output_dir: outputDir, backup_id: data.backup_id } : null;
-    $("fix-status").textContent = "修复完成：应用 " + applied + " 处"
-      + (skipped ? "，跳过 " + skipped + " 处" : "")
-      + (lastFix ? "；已自动备份，可点「回滚本次修复」" : "");
-    $("btn-fix-rollback").classList.toggle("hidden", !lastFix);
-    // 展示层（工单 compile-experience-ui/01）：按 parsed + fixes 重建可点击列表
-    // （streaming 期间逐条追加的行在此合并为最终状态）
-    fixRenderResults(data.parsed || [], fixes, fixLoop.round);
-  } else if (type === "error") {
-    lastFixDone = null;
-    $("fix-status").textContent = "";
-    $("fix-errors-msg").textContent = data.message || "修复失败";
-  }
-}
-
-/** 单次编译（SSE /api/compile）→ done 载荷；error 终态 / 断线 → throw（中文文案）。
- * 展示层（工单 compile-experience-ui/01）：起流前横幅「编译中（第 N/3 轮）」，
- * done / error 后横幅终态（成功 / 失败 / 超时）——只更新展示，不改循环控制流。 */
-async function runCompileOnce(outputDir) {
-  let finished = false;
-  let done = null;
-  let errorMsg = null;
-  let resp;
-  compileBanner("running", "编译中…"
-    + (fixLoop.round > 0 ? "（第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS + " 轮）" : ""));
-  try {
-    resp = await fetch("/api/compile", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform: chosenPlatform, output_dir: outputDir }),
-    });
-  } catch (e) { compileBanner("fail", "编译未能启动：" + e.message); throw new Error(e.message); }
-  if (!resp.body) { compileBanner("fail", "服务响应无流"); throw new Error("服务响应无流"); }
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    const msg = parseHttpError(resp.status, err).text;
-    compileBanner("fail", "编译失败：" + msg);
-    throw new Error(msg);
-  }
-  await parseSSE(resp, (type, raw) => {
-    let data = {};
-    try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
-    if (type === "compile_start") {   // 事件有人消费（词表真实化）：文案与 fetch 前写死的一致
-      compileBanner("running", "编译中…"
-        + (fixLoop.round > 0 ? "（第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS + " 轮）" : ""));
-    } else if (type === "done") { done = data; finished = true; }
-    else if (type === "error") { errorMsg = data.message || "编译失败"; finished = true; }
-  });
-  if (errorMsg) { compileBanner("fail", "编译失败：" + errorMsg); throw new Error(errorMsg); }
-  if (!done) throw new Error(finished ? "编译未返回结果" : "连接中断：本次编译未完成，可安全重试");
-  renderCompileBanner(done);
-  reportRecentStatus(outputDir, done);  // 编译结果上报最近生成列表（工单 recent-jobs/01）
-  return done;
-}
-
-/** 单次修复（SSE /api/fix-errors，复用既有管线）→ done 载荷；error / 断线 → throw。
- * previousDone = 上一轮 done 载荷：其 fixes 数组作为 previous_fixes 回喂下一轮
- * （工单 fix-loop-progress/01）；贴文本模式不传（undefined → 请求体不带该字段）。 */
-async function runFixOnce(errorText, outputDir, previousDone) {
-  let finished = false;
-  let resp;
-  try {
-    resp = await fetch("/api/fix-errors", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        output_dir: outputDir,
-        error_text: errorText,
-        previous_fixes: previousDone && previousDone.fixes ? previousDone.fixes : undefined,
-        problem_text: $("problem").value.trim(),
-        platform: chosenPlatform || undefined,
-        slugs: selectedSlugs,
-        main_c: $("main-c").value.trim(),
-      }),
-    });
-  } catch (e) { throw new Error(e.message); }
-  if (!resp.body) throw new Error("服务响应无流");
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(parseHttpError(resp.status, err).text);
-  }
-  await parseSSE(resp, (type, raw) => {
-    if (type === "done" || type === "error") finished = true;
-    fixHandleEvent(type, raw, outputDir);
-  });
-  if (!finished) throw new Error("连接中断：本次修复未完成，可安全重试");
-  if (!lastFixDone) throw new Error("修复失败（见上方提示）");
-  return lastFixDone;
-}
-
-/** 修复轮批（工单 fix-loop-continue/01 拆分复用）：报错 / 告警 → 修复 →
- * 重编译验证 ≤FIX_MAX_ROUNDS 轮。previousDone = 批首轮回喂的上一批 done
- * 载荷——「一键编译修复」= null（新生命周期）；「继续修复」= 上一批末轮载荷
- * （回喂上下文不丢）。批内后续轮由 fixHandleEvent 更新模块级 lastFixDone 回喂。
- * 轮上限终态保存续跑态快照并亮「继续修复」按钮。 */
-async function fixRounds(errorText, lastSummary, previousDone) {
+// ---------------------------------------------------------------------------
+// 壳层输入 + 回调（工单 code-ide-ai/05）：core 回调 → 本模块 DOM 渲染。
+// fixInput() 每次流程启动时取（problem/main-c/平台可能已被用户改过）。
+// ---------------------------------------------------------------------------
+function fixInput() {
   const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
-  if (!outputDir) throw new Error("请先生成工程（或填写输出目录）");
-  lastFixDone = previousDone;
-  const batchPrefix = fixLoop.batch > 1 ? "继续批次 " : "";
-  // 报错 / 告警 → 修复 → 重编译验证，≤3 轮（错误+告警共池，停条件 = 0 错
-  // 0 警，工单 fix-loop-warnings/01）；本轮 0 applied 即停（停滞检测，工单
-  // fix-loop-progress/01 决策 1——文件没变，重编译输出必与上轮相同，不再白跑）；
-  // 第 3 轮后如实报告剩余错误/警告（不无限循环）
-  // 轮次文案错误/警告数：判读单源 summary（工单 compile-verdict-align/01，
-  // 删 fixErrorCount 正则——fix_errors.py 明令禁止调用方另写正则）；lastSummary
-  // 与 errorText 同步更新，批首即上一批末轮的 summary
-  for (fixLoop.round = 1; fixLoop.round <= FIX_MAX_ROUNDS; fixLoop.round++) {
-    const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
-    const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
-    const headLabel = (n === null || n > 0) ? "编译有错" : "编译有警";
-    const headDetail = (n !== null && n > 0)
-      ? (n + " 条 Error" + (w !== null && w > 0 ? " / " + w + " 条 Warning" : ""))
-      : (w !== null && w > 0 ? w + " 条 Warning" : (headLabel === "编译有错" ? "多条报错" : "多条警告"));
-    $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-      + " 轮：" + headLabel + "（" + headDetail + "）→ AI 修复…";
-    const done = await runFixOnce(errorText, outputDir, lastFixDone);   // 上轮载荷回喂（决策 2）
-    const applied = (done.fixes || []).filter((f) => f.status === "applied").length;
-    if (applied === 0) {   // 空修复 / 全 skipped / 降级无上下文：立即停，文案写具体
-      $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-        + " 轮：未应用任何修复，停止循环";
-      // 告警轮无建议：文案带剩余警数（工单 fix-loop-warnings/01，0-applied
-      // 即停对告警轮同样生效——不再空转 3 轮）
-      const rest = (lastSummary && lastSummary.errors === 0 && lastSummary.warnings > 0)
-        ? "（剩余 " + lastSummary.warnings + " 条 Warning 见上方编译输出）" : "";
-      $("fix-status").textContent = "本轮未应用任何修复（全部 skipped / 无修复建议），停止循环"
-        + rest + "——可贴文本手动修复或改工程后重试";
-      return;
-    }
-    $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-      + " 轮：重编译验证中…";
-    const compile = await runCompileOnce(outputDir);
-    setFixCenterLog(compile.error_text);
-    lastSummary = compile.summary || null;
-    // 轮次条追加耗时（展示层工单 compile-experience-ui/01；compile 必有 duration）
-    $("fix-center-round").textContent = batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
-      + " 轮 · 耗时 " + fmtSeconds(compile.duration) + "s";
-    if (compile.timed_out) {
-      $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译超时，已停止循环——"
-        + "可修改工程后点「一键编译修复」重新来过";
-      return;
-    }
-    if (compile.passed) {
-      if (((compile.summary || {}).warnings || 0) === 0) {
-        $("fix-status").textContent = "第 " + fixLoop.round + " 轮重编译通过 ✅ 0 错 0 警";
-        return;
-      }
-      // 仍有警 → 下一轮继续告警轮（工单 fix-loop-warnings/01：停条件 =
-      // 0 错 0 警，仅 passed 即停的旧形态已废）
-    }
-    errorText = compile.error_text;   // 仍错或有警 → 下一轮喂最新编译输出
-  }
-  // 第 3 轮后仍错 / 仍有警：如实报告剩余清单（决策记录 2 + 工单
-  // fix-loop-warnings/01）；轮上限终态保存续跑态并亮「继续修复」（工单
-  // fix-loop-continue/01——按钮消费快照，不重跑初始编译、回喂不丢）
-  const n = (lastSummary && Number.isFinite(lastSummary.errors)) ? lastSummary.errors : null;
-  const w = (lastSummary && Number.isFinite(lastSummary.warnings)) ? lastSummary.warnings : null;
-  const restParts = [];
-  if (n === null || n > 0) restParts.push(n !== null ? n + " 条 Error" : "多条报错");
-  if (w !== null && w > 0) restParts.push(w + " 条 Warning");
-  fixLoop.resume = { errorText, lastSummary, lastFixDone };
-  $("btn-fix-continue").classList.remove("hidden");
-  $("fix-status").textContent = "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余 "
-    + (restParts.join(" / ") || "问题") + " 见上方编译输出——可点「继续修复」再来 "
-    + FIX_MAX_ROUNDS + " 轮（保留回喂上下文），或贴文本修复，或改工程后重试";
+  return {
+    outputDir,
+    platform: chosenPlatform,
+    problemText: $("problem").value.trim(),
+    mainC: $("main-c").value.trim(),
+    slugs: selectedSlugs,
+    callbacks: {
+      onState: (t) => { $("fix-status").textContent = t; },
+      onError: (t) => { $("fix-errors-msg").textContent = t; },
+      onRound: (t) => { $("fix-center-round").textContent = t; },
+      onApply: (item) => {
+        $("fix-status").textContent = "";
+        const applied = item.status === "applied";
+        const row = document.createElement("div");
+        row.className = "fix-row";
+        const tag = document.createElement("span");
+        tag.className = "fix-tag " + (applied ? "fixed" : "skipped");
+        tag.textContent = applied ? "已修复" : "跳过";
+        const file = document.createElement("span");
+        file.className = "fix-file";
+        file.textContent = (item.file || "?") + (item.line ? ":" + item.line : "");
+        const msg = document.createElement("span");
+        msg.className = "fix-msg";
+        msg.textContent = item.reason || "";
+        row.appendChild(tag); row.appendChild(file); row.appendChild(msg);
+        row._source = { path: item.file, line: item.line };
+        row.addEventListener("click", () => fixToggleSource(row));
+        $("fix-results").appendChild(row);
+      },
+      onLog: (t) => setFixCenterLog(t),
+      onBanner: (kind, text) => compileBanner(kind, text),
+      onList: (parsed, fixes, round) => fixRenderResults(parsed, fixes, round),
+      onTelemetry: (data) => { renderFixLLMTelemetry(data); recordLLMUsage(data); },
+      onDone: (data) => {
+        lastFix = data && data.backup_id
+          ? { output_dir: outputDir, backup_id: data.backup_id } : null;
+        $("btn-fix-rollback").classList.toggle("hidden", !lastFix);
+      },
+      onReset: () => {
+        $("fix-errors-msg").textContent = "";
+        $("fix-status").textContent = "";
+        $("fix-results").innerHTML = "";
+        $("fix-center-round").textContent = "";
+        setFixCenterLog("");
+        clearFixLLMTelemetry();
+        lastFix = null;
+        $("btn-fix-rollback").classList.add("hidden");
+        $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
+      },
+      onBusy: (b) => fixCenterBusy(b),
+      onResume: (resume) => {
+        $("btn-fix-continue").classList.toggle("hidden", !resume);
+      },
+      onCompiled: (done, outputDir) => reportRecentStatus(outputDir, done),
+    },
+  };
 }
 
-/** 修复中心主循环（决策记录 2/3）：编译 → 报错自动喂修复 → 重编译验证 ≤3 轮。 */
+/** 单次编译（导出面保持——检查表 import 用）：fixInput 组好调核心。 */
+async function runCompileOnce(outputDir) {
+  const input = fixInput();
+  if (outputDir) input.outputDir = outputDir;
+  return runCompileOnceCore(input);
+}
+
+/** 单次修复（导出面保持）：手动贴文本模式经 runFixOnceCore（新生命周期）。 */
+async function runFixOnce(errorText, outputDir) {
+  const input = fixInput();
+  if (outputDir) input.outputDir = outputDir;
+  return runFixOnceCore(input, errorText);
+}
+
+/** 修复轮批（导出面保持）。 */
+async function fixRounds(errorText, lastSummary, previousDone) {
+  const input = fixInput();
+  return fixRoundsCore(input, errorText, lastSummary, previousDone);
+}
+
+/** 修复中心主入口（薄壳）：校验 + 写盘守卫在壳层（工单 code-ide-ai/05 决策），
+ * 流程在核心（startFixCenterCore——内部 onReset/onBusy/onState 已清场）。 */
 async function startFixCenter() {
-  if (fixLoop.running) return;   // 单实例：循环中忽略重复触发
+  if (isFixRunning()) return;   // 单实例：循环中忽略重复触发
   const outputDir = $("res-dir").textContent.trim() || $("output-dir").value.trim();
   if (!outputDir) { $("fix-errors-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
   if (!chosenPlatform) { $("fix-errors-msg").textContent = "请先选择目标平台"; return; }
@@ -438,87 +319,33 @@ async function startFixCenter() {
   // 先保存全部再编译修复（取消 → 中止，编辑保留）。放校验之后——无输出目录/
   // 无工具链时不打扰。
   if (!await guardCodeTabWrite(WG.fix)) return;
-  fixLoop.running = true;
-  fixLoop.round = 0;
-  fixLoop.batch = 1;                 // 新生命周期：轮次条不带「继续批次」前缀
-  fixLoop.resume = null;
-  lastFix = null; lastFixDone = null;
-  $("fix-errors-msg").textContent = "";
-  $("fix-status").textContent = "";
-  $("fix-results").innerHTML = "";
-  $("fix-center-round").textContent = "";
-  setFixCenterLog("");
-  clearFixLLMTelemetry();
-  $("btn-fix-rollback").classList.add("hidden");
-  $("btn-fix-continue").classList.add("hidden");   // 新循环开始即隐藏（工单 fix-loop-continue/01）
-  fixCenterBusy(true);
   aiActionStart("编译修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
-  $("fix-status").textContent = "自动编译中…";
   fixWait.start();
   try {
-    // 第 0 步：首次全量编译（生成后自动触发 / 手动"一键编译修复"同一入口）
-    const initial = await runCompileOnce(outputDir);
-    setFixCenterLog(initial.error_text);
-    if (initial.timed_out) {
-      $("fix-status").textContent = "编译超时（工具链 180s 未返回），已停止循环——"
-        + "可在设置页检查工具链路径后重试";
-      return;
-    }
-    if (initial.passed) {
-      const iw = (initial.summary && initial.summary.warnings) || 0;
-      if (iw === 0) {
-        $("fix-status").textContent = "编译通过 ✅ 0 错 0 警";
-        return;
-      }
-      // 0 错 N 警 → 进告警轮（工单 fix-loop-warnings/01：不满足「0 错 0 警」
-      // 验收标准，warning 行随完整编译输出回喂修复）
-    }
-    // 首编有错 / 有警 → 立即渲染结构化错误列表（全部「待修复」），修复轮
-    // 结束后按 fixes 重渲染最终状态（展示层工单 compile-experience-ui/01）
-    fixRenderResults(initial.parsed_errors || [], [], 0);
-    // 一键编译修复 = 初始编译 + 一轮批（工单 fix-loop-continue/01：轮批拆出
-    // 复用，「继续修复」直进 fixRounds 不重跑编译）
-    await fixRounds(initial.error_text, initial.summary || null, null);
-  } catch (e) {
-    $("fix-status").textContent = "";
-    $("fix-errors-msg").textContent = e.message;
+    await startFixCenterCore(fixInput());
   } finally {
     aiActionStop();
     fixWait.stop();
-    fixLoop.running = false;
-    fixLoop.round = 0;
-    fixCenterBusy(false);
   }
 }
 
 /** 「继续修复」（工单 fix-loop-continue/01）：从轮上限终态保存的续跑态再来
  * 一批 ≤3 轮——不重跑初始编译，previous_fixes 回喂上下文不丢。 */
 async function continueFixCenter() {
-  if (fixLoop.running) return;   // 批内防重复触发
+  if (isFixRunning()) return;   // 批内防重复触发
   // 生成侧覆盖保护（工单 code-write-guard/02）：继续修复同样写盘（fix-errors
   // 回喂轮），复用路径与主入口一致拦截（评审整改补齐）。
   if (!await guardCodeTabWrite(WG.continueFix)) return;
-  const resume = fixLoop.resume;
-  if (!resume) return;           // 无续跑态（非轮上限终态）不动作
-  fixLoop.resume = null;
-  fixLoop.batch += 1;            // 批次号 +1：轮次条标注「继续批次 第 N/3 轮」
-  $("btn-fix-continue").classList.add("hidden");   // 进入新批即隐藏（终态时按结果重判）
-  fixLoop.running = true;
-  fixCenterBusy(true);
+  if (!$("btn-fix-continue").classList.contains("hidden")) {
+    $("btn-fix-continue").classList.add("hidden");   // 进入新批即隐藏（终态时按结果重判）
+  }
   aiActionStart("编译修复");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
-  $("fix-status").textContent = "";
   fixWait.start();
   try {
-    await fixRounds(resume.errorText, resume.lastSummary, resume.lastFixDone);
-  } catch (e) {
-    $("fix-status").textContent = "";
-    $("fix-errors-msg").textContent = e.message;
+    await continueFixCenterCore(fixInput());
   } finally {
     aiActionStop();
     fixWait.stop();
-    fixLoop.running = false;
-    fixLoop.round = 0;
-    fixCenterBusy(false);
   }
 }
 
@@ -536,9 +363,6 @@ $("btn-fix-errors").addEventListener("click", async () => {
   $("fix-results").innerHTML = "";   // 新生命周期：旧结果清空
   clearFixLLMTelemetry();
   lastFix = null;
-  lastFixDone = null;
-  fixLoop.resume = null;             // 续跑态随之失效（工单 fix-loop-continue/01）
-  fixLoop.batch = 1;
   $("btn-fix-rollback").classList.add("hidden");
   $("btn-fix-continue").classList.add("hidden");
   fixSetBusy(true);
@@ -587,7 +411,8 @@ $("btn-fix-rollback").addEventListener("click", async () => {
 // 导入 startFixCenter / compileBanner / toolchains（工单 15 的 setGenerateCoreDeps
 // 接缝已由静态 import 取代）。runCompileOnce / runFixOnce / fixRounds /
 // continueFixCenter / FIX_MAX_ROUNDS / fixLoop 经检查表导出为模块 API
-//（fixLoop.resume 结构钉在 tests/test_generate_check_contract.py）。
+//（fixLoop.resume 结构钉在 tests/test_generate_check_contract.py；FIX_MAX_ROUNDS
+// 与 fixLoop 自工单 code-ide-ai/05 起 re-export 自 fix-center-core.js）。
 export { startFixCenter, continueFixCenter, runCompileOnce, runFixOnce, fixRounds,
-  renderToolchainStatus, updateFixCenterAvailability, FIX_MAX_ROUNDS, fixLoop,
+  renderToolchainStatus, updateFixCenterAvailability,
   toolchains, setToolchains, compileBanner };
