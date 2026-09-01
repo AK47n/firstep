@@ -377,6 +377,172 @@ def save_code_file(root: Path, rel_path: str, content: str, base_mtime_ns: int |
 
 
 # ---------------------------------------------------------------------------
+# AI diff 应用（工单 code-ide-ai/02）：/api/code/apply-diff——预览（只算不写）
+# 与写模式（409 冲突语义与 save 同口径）。hunk 契约见 fx/ai-diff.js（AI 输出
+# 结构化 diff，与 main_diff 同构：{line, title, lines:[{kind:"ctx"|"del"|"add",
+# text}]}）。
+# ---------------------------------------------------------------------------
+
+_AI_DIFF_KINDS = ("ctx", "del", "add")
+
+
+def _validate_ai_hunks(hunks: object) -> list[dict[str, Any]]:
+    """AI diff hunk 结构校验（对齐前端 parseAiDiff 契约；后端二次校验——
+    LLM 输出不可信，结构/枚举/锚点任一不符 → CodeViewError 400 中文）。
+    返回归一化 hunks（line 展示语义保留；应用匹配以 old 段为准）。"""
+    if not isinstance(hunks, list) or not hunks:
+        raise CodeViewError("缺少结构化的 hunk 列表（AI 输出不含改动或无缝隙）")
+    norm: list[dict[str, Any]] = []
+    for i, h in enumerate(hunks):
+        if not isinstance(h, dict):
+            raise CodeViewError(f"第 {i + 1} 个 hunk 不是对象")
+        line = h.get("line")
+        if not isinstance(line, int) or line < 1:
+            raise CodeViewError(f"第 {i + 1} 个 hunk 行号非法")
+        title = h.get("title") or ""
+        if not isinstance(title, str):
+            raise CodeViewError(f"第 {i + 1} 个 hunk 标题非法")
+        lines = h.get("lines")
+        if not isinstance(lines, list) or not lines:
+            raise CodeViewError(f"第 {i + 1} 个 hunk 缺少行清单")
+        norm_lines: list[dict[str, str]] = []
+        has_anchor = False
+        for ln in lines:
+            if not isinstance(ln, dict):
+                raise CodeViewError(f"第 {i + 1} 个 hunk 的行不是对象")
+            kind = ln.get("kind")
+            text = ln.get("text")
+            if kind not in _AI_DIFF_KINDS or not isinstance(text, str):
+                raise CodeViewError(f"第 {i + 1} 个 hunk 的行结构非法")
+            if kind != "add":
+                has_anchor = True
+            norm_lines.append({"kind": kind, "text": text})
+        if not has_anchor:
+            raise CodeViewError(
+                f"第 {i + 1} 个 hunk 缺少匹配锚点行（需要 ctx/del 行）"
+            )
+        norm.append({"line": line, "title": title, "lines": norm_lines})
+    return norm
+
+
+def _find_hunk_line(lines: list[str], old: list[str], from_idx: int) -> int | None:
+    """在 lines[from_idx:] 顺序精确匹配 old 段（hunk 的 ctx+del 行序列）；
+    命中返回起始下标，未命中 None。匹配原语 = 整行相等（不做归一化——用户
+    确认路径应显式失败提示重预览，不静默魔改）。"""
+    n = len(old)
+    if n == 0:
+        return None
+    limit = len(lines) - n + 1
+    for i in range(from_idx, limit):
+        if lines[i : i + n] == old:
+            return i
+    return None
+
+
+def _apply_hunks_to_lines(lines: list[str], hunks: list[dict[str, Any]]) -> list[str]:
+    """hunks（升序）顺序应用：每 hunk 先在 from_idx 后精确匹配 old 段
+    （ctx+del），命中 → 保留 hunk 前磁盘行 + 输出非 del 行（ctx 原样 + add
+    插入）；未命中 → CodeViewError 400（磁盘已变或与基线不一致）。"""
+    out: list[str] = []
+    from_idx = 0
+    for i, h in enumerate(hunks):
+        old = [ln["text"] for ln in h["lines"] if ln["kind"] != "add"]
+        pos = _find_hunk_line(lines, old, from_idx)
+        if pos is None:
+            raise CodeViewError(
+                f"第 {i + 1} 个 hunk 在磁盘文件中未匹配（文件已被修改或 AI 输出"
+                "与基线不一致）——请重新预览后再应用"
+            )
+        out.extend(lines[from_idx:pos])
+        out.extend(ln["text"] for ln in h["lines"] if ln["kind"] != "del")
+        from_idx = pos + len(old)
+    out.extend(lines[from_idx:])
+    return out
+
+
+def apply_code_diff(
+    root: Path,
+    rel_path: str,
+    hunks: object,
+    base_mtime_ns: int | str | None = None,
+    preview: bool = False,
+) -> dict[str, Any]:
+    """AI diff 应用（工单 code-ide-ai/02）：{hunks} 应用 → 预览只算不写 /
+    写盘（409 与 save_code_file 同口径）。
+
+    安全判定与读面同源（_resolve_in_root 单源）；写前约束对齐 save_code_file：
+    文件须存在、UTF-8 守卫、超限拒绝、base_mtime_ns 冲突 409（仅供写模式——
+    preview 无需 mtime，只算不写）。应用以 old 段（ctx+del）整行精确匹配为
+    锚点（AI 行号 line 仅展示语义，不参与匹配——LLM 行号经常不准，old 段
+    匹配免疫该失败面）。写入 = 同目录临时文件 + os.replace 原子替换。
+
+    preview=True 返回 {new_content, stats:{additions, deletions, hunks}}；
+    写模式返回 {saved: true, path, size_bytes, mtime_ns, stats}。
+    """
+    norm_hunks = _validate_ai_hunks(hunks)
+    candidate = _resolve_in_root(root, rel_path)
+    if not candidate.is_file():
+        raise CodeViewError(f"文件不存在：{rel_path}")
+    try:
+        raw = candidate.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise CodeViewError(
+            f"{rel_path} 不是 UTF-8 编码，为免损坏请用外部编辑器保存"
+        ) from None
+    # 读取归一化与 save 写口径一致（CRLF/CR → LF），确保 old 段匹配不受
+    # 行尾差异干扰。
+    content = raw.replace("\r\n", "\n").replace("\r", "\n")
+    lines = content.split("\n")
+    new_lines = _apply_hunks_to_lines(lines, norm_hunks)
+    new_content = "\n".join(new_lines)
+    stats = {
+        "additions": sum(
+            1 for h in norm_hunks for ln in h["lines"] if ln["kind"] == "add"
+        ),
+        "deletions": sum(
+            1 for h in norm_hunks for ln in h["lines"] if ln["kind"] == "del"
+        ),
+        "hunks": len(norm_hunks),
+    }
+    if preview:
+        return {"new_content": new_content, "stats": stats}
+    encoded = new_content.encode("utf-8")
+    if len(encoded) > CODE_FILE_MAX_BYTES:
+        _raise_oversize(rel_path)
+    base = base_mtime_ns
+    if isinstance(base, str):
+        try:
+            base = int(base)
+        except ValueError:
+            base = None
+    if not isinstance(base, int):
+        raise CodeViewError("缺少文件修改时间（base_mtime_ns）")
+    if candidate.stat().st_mtime_ns != base:
+        raise CodeViewConflictError(
+            f"磁盘上的 {rel_path} 已被外部修改（任务 / 深化写盘或外部编辑器），"
+            "为免覆盖请重新加载后再应用"
+        )
+    tmp = candidate.with_name(candidate.name + f".tmp-{os.getpid()}")
+    try:
+        tmp.write_bytes(encoded)
+        os.replace(tmp, candidate)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    mtime_ns = candidate.stat().st_mtime_ns
+    return {
+        "saved": True,
+        "path": rel_path,
+        "size_bytes": candidate.stat().st_size,
+        "mtime_ns": str(mtime_ns),
+        "stats": stats,
+    }
+
+
+# ---------------------------------------------------------------------------
 # 树操作（工单 code-tree-ops/01）：新建文件/目录、重命名、删除——最小增删改
 # 闭环。全部复用 _resolve_in_root 单源（is_unsafe_path + resolve 在 root 内，
 # 判定在盘操作之前）；业务失败统一 CodeViewError → 400 中文（errors.py 既有
