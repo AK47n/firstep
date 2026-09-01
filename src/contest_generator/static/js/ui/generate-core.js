@@ -229,10 +229,11 @@ $("btn-pick-output-dir").addEventListener("click", async () => {
 // 修复状态一起装进提示词再交给下一个会话。
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// 自动附带产物（工单 report-draft-demo/04）：设计报告草稿.md / 演示脚本.md
-// 随生成自动落盘工程根——structure 含文件名 = 已生成；badge 标注 + 点击复制
-// 文件路径（打开 = 复制后在资源管理器 / 编辑器打开，本地应用不引后端打开
-// 接口——安全面最小）。演示脚本恒在（模块兜底），报告仅在 LLM 文本非空时在。
+// 自动附带产物（工单 report-draft-demo/04，code-editor-utilize/01 改版）：
+// 设计报告草稿.md / 演示脚本.md 随生成自动落盘工程根——structure 含文件名
+// = 已生成；badge 标注 + 点击在「代码」tab 打开该文件（md 默认预览态可切
+// 编辑；「本地应用不引后端打开接口」的旧限制已被内置代码编辑器取代——
+// 打开即达，路径在编辑器内可见，无需再复制）。
 // ---------------------------------------------------------------------------
 function renderArtifacts(structure, outputDir) {
   const box = $("res-artifacts");
@@ -252,17 +253,8 @@ function renderArtifacts(structure, outputDir) {
     chip.className = "badge";
     chip.style.cssText = "margin-left:6px;padding:2px 8px;font-size:12px;cursor:pointer";
     chip.textContent = f;
-    chip.title = "点击复制文件路径（在资源管理器 / 编辑器中打开）";
-    chip.setAttribute("data-ico", "copy");
-    chip.addEventListener("click", async () => {
-      const full = outputDir.replace(/\\/g, "/") + "/" + f;
-      try {
-        await navigator.clipboard.writeText(full);
-        toast("ok", "已复制文件路径：" + full);
-      } catch {
-        toast("error", "复制失败");
-      }
-    });
+    chip.title = "点击在「代码」tab 打开此文件（可预览 / 编辑）";
+    chip.addEventListener("click", () => openCodeViewer(outputDir, f));
     box.appendChild(chip);
   });
 }
@@ -533,10 +525,12 @@ async function flashRun() {
 $("btn-flash").addEventListener("click", flashRun);
 // 结果区「去任务推进」（工单 beginner-gap-closure/02）：与第 12 步交接卡同源跳转
 $("btn-goto-tasks-result").addEventListener("click", goTaskProgress);
-// 双向跳转桥（mainc-codeview-bridge/03）：在代码查看器中打开工程——结果区与
-// 步骤 8 工具栏同一入口（openCodeViewer 切 tab + 加载目录；目录 = 生成上下文）
+// 双向跳转桥（mainc-codeview-bridge/03，code-editor-utilize/02 增补）：在代码
+// 查看器中打开工程——结果区与步骤 8 工具栏同一入口（openCodeViewer 切 tab +
+// 加载目录；目录 = 生成上下文）；「编辑 main.c」精确入口直接打开 main.c
 $("btn-goto-code-result").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
 $("btn-goto-code-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
+$("btn-edit-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir(), "main.c"));
 // 「复制烧录命令」（工单 flash-deploy/02，spec 故事 4 一键复制）：document 级
 // 委托统一处理——生成结果面板与任务结果面板的复制按钮共用（任务结果在
 // tasks-grid 容器内，网格委托只处理动作按钮；命令复制与网格解耦，单点）。

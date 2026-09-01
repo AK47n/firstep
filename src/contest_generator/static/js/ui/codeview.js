@@ -56,6 +56,7 @@ import {
   setDiskChanged,
   clearDiskChanged,
   reloadTabFromDisk,
+  replaceAllInActiveFile,
 } from "/js/ui/codeeditor.js";
 
 // 模块态：当前目录 / 扁平清单（中栏状态在 codeeditor.js）
@@ -368,15 +369,17 @@ function codeTabActive() {
   return !!(sec && sec.classList.contains("active"));
 }
 
-// openCodeViewer(dir)：外部桥（最近记录卡「查看代码」/ 探针）——先切到
-// 「代码」tab 再加载目录；dir 为空 → toast 中文。
-export function openCodeViewer(dir) {
+// openCodeViewer(dir, filePath?)：外部桥（最近记录卡「查看代码」/ 生成页
+// 结果区 chips / 步骤 8「编辑 main.c」）——先切到「代码」tab 再加载目录；
+// filePath 非空时目录加载完成后直接打开该文件（复用 openEditorFile，md 走
+// 默认态）；dir 为空 → toast 中文。
+export function openCodeViewer(dir, filePath) {
   const btn = document.querySelector('nav button[data-tab="code"]');
   if (btn) btn.click();
-  loadCodeDir(dir || "");
+  loadCodeDir(dir || "", filePath || "");
 }
 
-async function loadCodeDir(dir) {
+async function loadCodeDir(dir, filePath) {
   if (!dir) { toast("error", "目录为空：无法打开（请从最近记录或「选择文件夹」进入）"); return; }
   codeDir = dir;
   setCodeDir(dir);  // 编辑器上下文切换：清标签/缓存/活动态（code-viewer-editor/02）
@@ -402,6 +405,7 @@ async function loadCodeDir(dir) {
       renderCodeTree();
       renderChangePanel();
     }
+    if (filePath) await openEditorFile(filePath);   // 外部桥指定文件：目录就位后直接打开（工单 code-editor-utilize/01）
   } catch (e) {
     codeFiles = [];
     $("code-tree").innerHTML = '<div class="error">加载失败：' + esc(e.message) + "</div>";
@@ -838,16 +842,46 @@ export function initCodeViewer() {
     if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");
     refreshFindPanel();
   });
-  document.addEventListener("keydown", (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "f") return;
-    if (!codeTabActive() || !findInput) return;
-    e.preventDefault();
+  // focusFindPanel(el)：Ctrl+F / Ctrl+H / 替换按钮共用的侧栏唤起——
+  // .md 预览先切源码（行语义需要行号）、展开「搜索」侧栏并聚焦目标输入。
+  function focusFindPanel(el) {
     const tab = getActiveTab();
     if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");
     setCodeSide("search");
     setCodeSideCollapsed(false, true);   // 收起态必须展开（否则聚焦隐藏输入框）
-    findInput.focus();
-    findInput.select();
+    el.focus();
+    el.select();
+  }
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "f") return;
+    if (!codeTabActive() || !findInput) return;
+    e.preventDefault();
+    focusFindPanel(findInput);
+  });
+  // 全部替换（工单 code-editor-utilize/03）：查找行下「全部替换」按钮 +
+  // Ctrl+H 同口径唤起（仅「代码」tab、.md 预览先切源码、展开侧栏聚焦替换
+  // 输入）。替换走编辑器模拟手输路径（脏点出现，Ctrl+S 落盘），不自动写盘。
+  const replaceInput = $("code-replace-input");
+  const replaceBtn = $("btn-code-replace-all");
+  if (replaceBtn) replaceBtn.addEventListener("click", () => {
+    const tab = getActiveTab();
+    if (!tab) { toast("info", "请先打开一个文件再替换"); return; }
+    const needle = findInput.value;
+    if (!needle) { toast("info", "请先在「当前文件内查找」输入查找内容"); return; }
+    if (tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");   // 与 Ctrl+F/H 同口径：预览态先切源码
+    const count = replaceAllInActiveFile(needle, replaceInput ? replaceInput.value : "");
+    if (count > 0) {
+      toast("ok", "已替换 " + count + " 处（Ctrl+S 保存写盘）");
+      refreshFindPanel();
+    } else {
+      toast("info", tab.readonly ? "只读文件不允许替换" : "当前文件没有匹配");
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "h") return;
+    if (!codeTabActive() || !replaceInput) return;
+    e.preventDefault();
+    focusFindPanel(replaceInput);
   });
   const findBox = $("code-find-results");
   if (findBox) findBox.addEventListener("click", (e) => {
