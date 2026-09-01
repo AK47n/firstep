@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ee875a13e51a133817721193a17d7d17bcb3c8e6 -->
+<!-- changelog-auto: last-commit=9be7506a92d76bcb27c5cd299bc7dc8098b0bf57 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 12:34 工单 code-ide-flow/01：磁盘基线对比纯件——快照规范化 + mtime 字符串比较 diff 三分类 + LRU 裁剪 + 8 用例单测全绿（全量 1024 无回归）
 - 12:50 工单 code-ide-flow/02：磁盘基线感知——后端树清单补 mtime_ns（spec 零后端改动例外）+ 切回自动重载/脏标签磁盘徽章三选/树新变徽章 + smoke 11 PASS（双轴评审整改+spec 偏差文档化）
 - 13:01 工单 code-ide-flow/03：磁盘变更面板（基线快照行级 diff + 三类条目与清空确认）
+- 13:04 工单 code-ide-flow/04：一键修复直达——IDE 编译失败跳生成页自动开始修复循环
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
