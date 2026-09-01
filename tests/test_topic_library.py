@@ -25,6 +25,7 @@ from contest_generator.llm import (
 from contest_generator.manifest import MANIFEST_FILENAME
 from contest_generator.extraction import locate_topic_pages_full
 from contest_generator.topic_library import (
+    TOPIC_CATEGORIES,
     TOPIC_MD_FILENAME,
     TopicDraft,
     TopicEntry,
@@ -1966,6 +1967,29 @@ def test_real_topic_files_free_of_cross_topic_pollution():
             if sig in text:
                 foreign.append(f"{topic.name}: 疑似乱码 {sig}")
     assert not foreign, "赛题题面异常：\n" + "\n".join(foreign)
+
+
+def test_real_topic_library_all_entries_have_category():
+    """真库不变量：全部赛题条目 category 非空且 ∈ 词表（补标后锁定防回退，
+    工单 topics-control-2023-2025/02）。
+
+    历史：15 条老条目分类补标（2018C-2024H 控制题 + 2026D/E/H 控制题、
+    2026A/B/C/F/G 其他题）；拆条新建默认 control。任何条目 category 空串
+    = 新题入库漏标 / 补标回退；词表外 = 元数据损坏（_load_entry 已拒，兜底）。
+    """
+    assert TOPICS_ROOT.is_dir(), f"真库缺失：{TOPICS_ROOT}"
+    entries = list_topics(TOPICS_ROOT)
+    assert entries, "真库没有任何赛题条目"
+    unmarked = [entry.key for entry in entries if not entry.category]
+    assert not unmarked, (
+        f"存在未标记 category 的条目（{len(unmarked)} 条）：{unmarked}"
+    )
+    invalid = [
+        entry.key
+        for entry in entries
+        if entry.category and entry.category not in TOPIC_CATEGORIES
+    ]
+    assert not invalid, f"category 词表外的条目：{invalid}"
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@
 - 21:46 声明控制题专项定位并记录下一步方向决策
 - 22:11 2023/2025 控制题拆条与题库分类标记的 spec 与工单
 - 23:05 工单 topics-control-2023-2025/01：题库分类标记机制——TOPIC_CATEGORIES 词表 + validate_topic_category（空串=未标记）+ TopicEntry/TopicDraft.category + manifest 读写 + update_topic 第四可编辑字段 + PUT 契约 + GET /api/topics/categories（注册在 /api/topics/{key} 前，测试锁定路由陷阱）+ 前端筛选下拉/条目徽标/拆条确认与编辑表单下拉（新建默认 control）；pytest 16 条 + js 11 条新增全绿、双轴 code-review 整改通过
+- 23:08 工单 topics-control-2023-2025/02：15 条老条目分类补标——一次性脚本 read_json → {**data,"category"} → write_json（不走 update_topic；幂等防覆盖），control 10 条（2018C/2019A/2020C/2021F/2022C/2022H/2024H/2026D/2026E/2026H）+ other 5 条（2026A/B/C/F/G）；git diff 仅 15 个 manifest.json（题面/PDF 逐字节保留）；新增全库分类不变量测试（list_topics 全库 category 非空∈词表），pytest 176 全绿
 - 23:05 工单 topics-control-2023-2025/01：题库分类标记机制（category 词表+透出+前端筛选）
 
 ## 2026-08-31

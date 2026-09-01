@@ -8,5 +8,6 @@
   ],
   "hint_module_groups": [
     "attitude-hold"
-  ]
+  ],
+  "category": "control"
 }
