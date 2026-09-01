@@ -7978,3 +7978,197 @@ def test_code_save_missing_file_400_chinese(client, tmp_path):
 
     assert resp.status_code == 400
     assert "文件不存在" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# /api/code/tree/*：文件树操作（工单 code-tree-ops/01）
+# ---------------------------------------------------------------------------
+
+
+def test_code_tree_create_file_via_endpoint(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("x\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/code/tree/create",
+        json={"dir": str(root), "type": "file", "path": "sensor.c"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {
+        "path": "sensor.c",
+        "size_bytes": 0,
+        "mtime_ns": str((root / "sensor.c").stat().st_mtime_ns),
+    }
+    assert (root / "sensor.c").read_bytes() == b""
+
+
+def test_code_tree_create_existing_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("x\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/code/tree/create",
+        json={"dir": str(root), "type": "file", "path": "main.c"},
+    )
+
+    assert resp.status_code == 400
+    assert "已存在" in resp.json()["detail"]
+
+
+def test_code_tree_create_dir_via_endpoint(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.post(
+        "/api/code/tree/create",
+        json={"dir": str(root), "type": "dir", "path": "include"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"path": "include"}
+    assert (root / "include").is_dir()
+
+
+def test_code_tree_create_bad_kind_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.post(
+        "/api/code/tree/create",
+        json={"dir": str(root), "type": "link", "path": "x.c"},
+    )
+
+    assert resp.status_code == 400
+    assert "新建类型必须是 file 或 dir" in resp.json()["detail"]
+
+
+def test_code_tree_create_requires_fields(client):
+    resp = client.post("/api/code/tree/create", json={})
+
+    assert resp.status_code == 400
+    assert "缺少必填字段" in resp.json()["detail"]
+
+
+def test_code_tree_rename_via_endpoint(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("x\n", encoding="utf-8")
+    old_mtime = (root / "main.c").stat().st_mtime_ns
+
+    resp = client.post(
+        "/api/code/tree/rename",
+        json={"dir": str(root), "path": "main.c", "new_name": "app.c"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["path"] == "app.c"
+    assert data["mtime_ns"] == str(old_mtime)
+    assert not (root / "main.c").exists()
+
+
+def test_code_tree_rename_target_exists_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("x\n", encoding="utf-8")
+    (root / "readme.md").write_text("r\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/code/tree/rename",
+        json={"dir": str(root), "path": "main.c", "new_name": "readme.md"},
+    )
+
+    assert resp.status_code == 400
+    assert "已存在" in resp.json()["detail"]
+
+
+def test_code_tree_rename_bad_name_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "main.c").write_text("x\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/code/tree/rename",
+        json={"dir": str(root), "path": "main.c", "new_name": "a/b.c"},
+    )
+
+    assert resp.status_code == 400
+    assert "名称不合法" in resp.json()["detail"]
+
+
+def test_code_tree_rename_dir_via_endpoint(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "src").mkdir()
+    (root / "src" / "app.h").write_text("x\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/code/tree/rename",
+        json={"dir": str(root), "path": "src", "new_name": "drivers"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"path": "drivers"}
+    assert (root / "drivers" / "app.h").is_file()
+
+
+def test_code_tree_delete_file_via_endpoint(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "old.c").write_text("x\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/code/tree/delete",
+        json={"dir": str(root), "path": "old.c"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"removed": True}
+    assert not (root / "old.c").exists()
+
+
+def test_code_tree_delete_empty_dir_via_endpoint(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "empty").mkdir()
+
+    resp = client.post(
+        "/api/code/tree/delete",
+        json={"dir": str(root), "path": "empty"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"removed": True}
+    assert not (root / "empty").exists()
+
+
+def test_code_tree_delete_nonempty_dir_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "src").mkdir()
+    (root / "src" / "app.h").write_text("x\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/code/tree/delete",
+        json={"dir": str(root), "path": "src"},
+    )
+
+    assert resp.status_code == 400
+    assert "目录非空" in resp.json()["detail"]
+
+
+def test_code_tree_delete_traversal_400_chinese(client, tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.post(
+        "/api/code/tree/delete",
+        json={"dir": str(root), "path": "../escape.txt"},
+    )
+
+    assert resp.status_code == 400
+    assert "非法路径" in resp.json()["detail"]

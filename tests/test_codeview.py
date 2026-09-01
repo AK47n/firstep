@@ -14,9 +14,12 @@ from contest_generator.codeview import (
     CodeViewConflictError,
     CodeViewError,
     code_raw_media_type,
+    create_code_entry,
+    delete_code_entry,
     list_code_tree,
     read_code_file,
     read_code_file_bytes,
+    rename_code_entry,
     save_code_file,
     search_code_files,
 )
@@ -46,12 +49,23 @@ def test_list_code_tree_returns_flat_sorted_entries(tmp_path):
 
     entries = list_code_tree(root)
 
-    assert [e["path"] for e in entries] == [
-        "main.c",
-        "readme.md",
-        "src/app.h",
-    ]  # 噪音目录（.git/Debug/Objects/Listings）一律不计入；全路径排序确定性
-    assert entries[0] == {"path": "main.c", "size_bytes": 26}
+    # 噪音目录（.git/Debug/Objects/Listings）一律不计入；全路径排序确定性；
+    # 目录条目（is_dir: True，工单 code-tree-ops/01 起含空目录展示/删除）
+    dirs = [e["path"] for e in entries if e.get("is_dir")]
+    files = [e["path"] for e in entries if "size_bytes" in e]
+    assert dirs == ["src"]
+    assert files == ["main.c", "readme.md", "src/app.h"]
+    assert {"path": "main.c", "size_bytes": 26} in entries
+    assert {"path": "src", "is_dir": True} in entries
+
+
+def test_list_code_tree_includes_empty_dirs(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    (root / "include").mkdir()  # 空目录：纯文件清单看不到，树操作需要
+
+    entries = list_code_tree(root)
+
+    assert {"path": "include", "is_dir": True} in entries
 
 
 def test_list_code_tree_missing_dir_is_400_error(tmp_path):
@@ -525,4 +539,177 @@ def test_save_code_file_rejects_non_utf8_source_file(tmp_path):
 
     with pytest.raises(CodeViewError, match="不是 UTF-8 编码"):
         save_code_file(root, "gbk.c", "// 换我了\n", base)
+
+
+# ---------------------------------------------------------------------------
+# 树操作（工单 code-tree-ops/01）：create / rename / delete 核心函数
+# ---------------------------------------------------------------------------
+
+
+def test_create_code_file_creates_empty_and_returns_baseline(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    info = create_code_entry(root, "file", "sensor.c")
+
+    assert info["path"] == "sensor.c"
+    assert info["size_bytes"] == 0
+    assert info["mtime_ns"] == str((root / "sensor.c").stat().st_mtime_ns)
+    assert (root / "sensor.c").read_bytes() == b""
+    # 创建后立即可读（打开 tab 的 /api/code/file 流程衔接顺畅）
+    assert read_code_file(root, "sensor.c")["content"] == ""
+
+
+def test_create_code_file_nested_parents_created(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    info = create_code_entry(root, "file", "src/drivers/uart.c")
+
+    assert (root / "src" / "drivers" / "uart.c").is_file()
+    assert info["path"] == "src/drivers/uart.c"
+
+
+def test_create_code_file_existing_is_400(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="已存在"):
+        create_code_entry(root, "file", "main.c")
+
+
+def test_create_code_dir_creates_and_rejects_existing(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    assert create_code_entry(root, "dir", "include") == {"path": "include"}
+    assert (root / "include").is_dir()
+    with pytest.raises(CodeViewError, match="已存在"):
+        create_code_entry(root, "dir", "include")
+    with pytest.raises(CodeViewError, match="已存在"):
+        create_code_entry(root, "dir", "src")
+
+
+def test_create_code_entry_rejects_bad_kind(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="新建类型必须是 file 或 dir"):
+        create_code_entry(root, "link", "x.c")
+
+
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        "../outside.c",
+        "src/../../outside.c",
+        "a//b.c",
+        "src/",
+        "/etc/passwd",
+        "C:/x.c",
+        "src\\app.h",
+    ],
+)
+def test_create_code_entry_rejects_unsafe_path(tmp_path, rel_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="非法路径"):
+        create_code_entry(root, "file", rel_path)
+
+
+def test_rename_code_file_moves_and_returns_meta(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    old_mtime = (root / "main.c").stat().st_mtime_ns
+
+    info = rename_code_entry(root, "main.c", "app.c")
+
+    assert info["path"] == "app.c"
+    assert info["mtime_ns"] == str(old_mtime)  # rename 不改 mtime
+    assert not (root / "main.c").exists()
+    assert (root / "app.c").is_file()
+
+
+def test_rename_code_dir_moves_subtree(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    info = rename_code_entry(root, "src", "drivers")
+
+    assert info == {"path": "drivers"}
+    assert not (root / "src").exists()
+    assert (root / "drivers" / "app.h").is_file()
+
+
+def test_rename_code_idempotent_same_name(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    old_mtime = (root / "main.c").stat().st_mtime_ns
+
+    info = rename_code_entry(root, "main.c", "main.c")
+
+    assert info["path"] == "main.c"
+    assert info["mtime_ns"] == str(old_mtime)
+
+
+def test_rename_code_rejects_missing_source(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="不存在"):
+        rename_code_entry(root, "nope.c", "x.c")
+
+
+def test_rename_code_rejects_existing_target(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="已存在"):
+        rename_code_entry(root, "main.c", "readme.md")
+
+
+@pytest.mark.parametrize("bad_name", ["", "  ", "a/b", "a\\b", "a:b", ".", "..", "x" * 121, -1, None])
+def test_rename_code_rejects_bad_name(tmp_path, bad_name):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="名称不合法"):
+        rename_code_entry(root, "main.c", bad_name)
+
+
+def test_delete_code_file_removes(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    assert delete_code_entry(root, "readme.md") == {"removed": True}
+    assert not (root / "readme.md").exists()
+
+
+def test_delete_code_empty_dir_removes(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+    (root / "empty").mkdir()
+
+    assert delete_code_entry(root, "empty") == {"removed": True}
+    assert not (root / "empty").exists()
+
+
+def test_delete_code_nonempty_dir_is_400(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="目录非空"):
+        delete_code_entry(root, "src")
+
+
+def test_delete_code_missing_is_400(tmp_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="不存在"):
+        delete_code_entry(root, "nope.c")
+
+
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        "../outside.c",
+        "src/../../outside.c",
+        "a//b.c",
+        "src/",
+        "/etc/passwd",
+        "C:/x.c",
+        "src\\app.h",
+    ],
+)
+def test_delete_code_rejects_unsafe_path(tmp_path, rel_path):
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="非法路径"):
+        delete_code_entry(root, rel_path)
 
