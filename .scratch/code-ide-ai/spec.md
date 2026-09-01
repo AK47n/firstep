@@ -82,8 +82,11 @@
   成本与「打开过的文件才有行级」等价。
 - 渲染：change-panel 行级 diff 区从「仅 main.c」泛化为「任何 modified 且
   有 content 快照的文件」——fx/change-panel.js 与 ui/codeview.js 的
-  isMainCPath 限制移除（判定改为 entry.snapshotAvailable）；
-  mainc-diff.js 无需改（LCS 通用）。main.c 特例语义（快照必然存在）保持。
+  isMainCPath 限制移除（判定改为条目字段 hasLineDiffSource = 基线有快照，
+  implementation 采纳；spec 早期草稿的 snapshotAvailable 名称已被
+  hasLineDiffSource 取代）；line-diff.js（泛化前为 fx/mainc-diff.js——
+  工单 08 随泛化改名并全仓同步，LCS 实现本身无需改）通用。main.c 特例
+  语义保持为「打开过必有快照」（实操：改 main.c 必经 IDE/步骤 8 打开）。
 - 成本：基线 store 每目录仅多存「打开过的 ≤256KB 文件内容」——上界
   8 目录 × 开过的文件数，实际远低于配额；evict 整目录连带（沿用）。
 
@@ -254,3 +257,28 @@
   依赖 S6 磁盘态为场景顺序性，记录不改。
 - node 1082 全绿；smoke-08 15 项全 PASS；回归 smoke-02/03/04/05/06/07
   全 PASS。
+
+**s8（工单 08 双轴评审后——三期收口）**：
+- Standards：0 硬违规；3 判断项整改——①hasLineDiff 改名
+  **hasLineDiffSource**（实义「基线有快照 → 可试渲染」，非「真有 diff」）
+  ②fx/diff.js:41-43 占位硬编码「未改动 main.c」泛化为「未改动文件」
+  （mainDiffHTML 本就通用——与该域「无路径特判」目标对齐；tests/
+  diff.test.mjs 2 断言 + tests/task-changes.test.mjs 1 断言同步）③
+  tests/js/line-diff.test.mjs 首字节 BOM 剔除（PowerShell 改名代换误写
+  BOM——教训：WriteAllText 用 UTF8Encoding($false)；全仓 .js 惯例无 BOM，
+  workflow.md 仅 .ps1 强制 BOM）。Message Chain（getBaselineContent 三层
+  守卫导航）记录不改（评审：比旧内联更优）。
+- Spec：验收 1/3 达标；**验收 2 边角确认**：main.c 从未打开被外部改 →
+  无行级区（快照语义 = 打开过才有——包括 main.c；issue 08 L52-55 已记录；
+  实操中生成上下文目录的 main.c 必经 IDE/步骤 8 打开，可见行为一致——
+  smoke-03 原 14 项含 main.c 行级区场景全 PASS）。spec 三期段 L83-86
+  「mainc-diff.js 无需改」与工单 08 改名矛盾 → spec 已改（line-diff.js
+  表述 + hasLineDiffSource 字段名统一——spec 草稿 snapshotAvailable
+  名废弃）。change-panel 占位文案「无旧版本快照」与 hasLineDiffSource=true
+  状态矛盾 → 文案改「内容未变化、当前内容读取失败或差异过大」。
+  getBaselineContent 循环内逐条目重调 baselineStoreLoad → 加可选 loaded
+  参数（渲染循环外 load 一次——消除 O(n) 重复 JSON.parse）。
+- 范围蔓延确认：library/references/2026_07_电赛带练真题资料/* 变化 = 工作
+  区既有噪音，未纳入本工单提交。
+- 最终测试：node 1083 全绿；smoke-03（含 08 泛化 2 场景）全 PASS；
+  smoke-02/04/05/06/07/08 回归全 PASS。

@@ -21,7 +21,7 @@ import {
   mtimeEq,
 } from "/js/fx/disk-baseline.js";  // 磁盘基线对比纯件（code-ide-flow/01——事实源不依赖事件载荷）；内容快照（code-ide-ai/07）；mtimeEq（mtime 守卫单源）
 import { changesPanelHTML, changeSummaryText } from "/js/fx/change-panel.js";  // 「磁盘变更」面板条目渲染（code-ide-flow/03）
-import { maincDiffCompute } from "/js/fx/mainc-diff.js";  // main.c 行级 diff 计算（code-ide-flow/03——面板行级展示）
+import { lineDiffCompute } from "/js/fx/line-diff.js";  // 行级 diff 计算（code-ide-flow/03 main.c 起步；code-ide-ai/08 泛化——面板行级展示任意打开过的文件）
 import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import { setCodeAiDir, onCodeAiApplied } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03-04）：目录打开 → 面板可见性 + 历史；apply 成功 → 立即感知
@@ -293,8 +293,21 @@ function buildChangeEntries() {
     .concat(codeDiskChanges.removed.map((p) => makeEntry("removed", p)));
 }
 
-// renderChangePanel()：面板渲染（条目 HTML + 摘要 + 显隐）——main.c 修改
-// 条目补行级 diff（基线内容快照 vs 当前磁盘；无快照/超限 → 纯件占位）。
+// getBaselineContent(dir, path, loaded)：基线条目的 content 快照（用户确认
+// 版）——行级 diff 的旧内容；无快照 / 超限 → null（打开过的 ≤cap 文件才
+// 有）。loaded 可选（渲染循环外 load 一次复用——评审整改：逐条目重解析
+// localStorage 属 O(n) 重复）。
+function getBaselineContent(dir, path, loaded) {
+  const store = loaded || baselineStoreLoad();
+  const entry = store[dir] || {};
+  const bl = (entry.files || {})[path] || {};
+  return typeof bl.content === "string" ? bl.content : null;
+}
+
+// renderChangePanel()：面板渲染（条目 HTML + 摘要 + 显隐）——行级 diff 区
+// 泛化（工单 code-ide-ai/08）：任何 modified 且基线有 content 快照的条目
+// （打开过的文件）补行级 diff（基线快照 vs 当前磁盘；main.c 与其它文件同
+// 一渲染——isMainCPath 限制移除）；快照/当前内容任一缺失 → 纯件占位。
 // 无变更 → 面板隐藏。空态由面板自身收起（列表空 + hidden）。
 async function renderChangePanel() {
   const panelEl = $("code-change-panel");
@@ -308,19 +321,18 @@ async function renderChangePanel() {
     if (summaryEl) summaryEl.textContent = "";
     return;
   }
-  // main.c 修改条目 → 行级 diff（基线快照 = 用户最后确认版；代码
-  // code-ide-ai/07 起快照统一在 files[path].content 字段——main.c 与其它
-  // 打开过的文件同构，工单 08 再泛化到任意文件）；基线快照或当前磁盘任一
-  // 缺失 → 纯件占位文案）
-  const mc = entries.find((e) => e.status === "modified" && isMainCPath(e.path));
-  if (mc) {
-    const store = baselineStoreLoad();
-    const entry = store[codeDir] || {};
-    const oldEntry = (entry.files || {})["main.c"] || {};
-    const oldContent = oldEntry.content;
-    const curContent = await fetchCodeFile(codeDir, "main.c");
-    if (typeof oldContent === "string" && typeof curContent === "string") {
-      mc.mainDiff = maincDiffCompute(oldContent, curContent);   // null = 无差异/超限 → 占位
+  // 行级 diff 数据源（hasLineDiffSource = modified 且基线有旧版快照——打开
+  // 过的文件）：旧快照（getBaselineContent）vs 当前磁盘 → lineDiffCompute；
+  // 任一缺失 → 仅置源标志（纯件占位文案）。
+  const store = baselineStoreLoad();
+  for (const e of entries) {
+    if (e.status !== "modified") continue;
+    const oldContent = getBaselineContent(codeDir, e.path, store);
+    if (oldContent === null) continue;
+    e.hasLineDiffSource = true;
+    const curContent = await fetchCodeFile(codeDir, e.path);
+    if (typeof curContent === "string") {
+      e.mainDiff = lineDiffCompute(oldContent, curContent);   // null = 无差异/超限 → 占位
     }
   }
   listEl.innerHTML = changesPanelHTML(entries);

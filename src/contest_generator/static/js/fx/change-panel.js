@@ -3,12 +3,13 @@
 // IDE 底部面板（与编译面板并列）：基线 vs 磁盘的未确认变更集 → 文件级条目
 // HTML——状态徽章（新 / 变 / 消失）+ 相对路径 + 修改时间/大小；added/modified
 // 条目为跳转按钮（data-change-path 交事件层），removed 置灰不可点；
-// main.c 的 modified 条目带行级 diff 区（details 默认折叠，复用
-// fx/diff.js mainDiffHTML 单源渲染——同一主题化行级展示）。
+// modified 条目带行级 diff 区（details 默认折叠，复用 fx/diff.js
+// mainDiffHTML 单源渲染——同一主题化行级展示）。行级区显隐由条目字段
+// hasLineDiffSource 决定（调用方 = ui/codeview.js 计算：modified 且基线有
+// 内容快照——code-ide-ai/08 泛化：任意打开过的文件，无路径特判）。
 // 纯函数：无 DOM / 网络 / localStorage（模块约定见 fx/core.js 头部）。
 import { esc, formatSize } from "./core.js";
 import { mainDiffHTML } from "./diff.js";
-import { isMainCPath } from "./code.js";
 
 // 状态徽章（文案单源——面板与摘要共用同一状态词映射）
 const STATUS_BADGE = {
@@ -44,8 +45,10 @@ export function changeSummaryText(entries) {
 }
 
 // changeEntryHTML(entry)：单条目 HTML——按钮（added/modified，data-change-
-// path + data-change-status 交事件层跳转）/ span（removed 置灰）；main.c
-// modified 条目带行级 diff 区（details 折叠；无 mainDiff 数据 → 占位文案）。
+// path + data-change-status 交事件层跳转）/ span（removed 置灰）；modified
+// 且 hasLineDiffSource（调用方计算：基线有 content 快照——可试渲染行级区）
+// 条目带行级 diff 区（details 折叠；无 mainDiff 数据 → 占位文案——路径泛
+// 化，code-ide-ai/08 起不限 main.c）。
 function changeEntryHTML(e) {
   const st = STATUS_BADGE[e.status] ? e.status : "modified";
   const badge = STATUS_BADGE[st];
@@ -63,11 +66,12 @@ function changeEntryHTML(e) {
     out = '<button type="button" class="code-change-item" data-change-path="'
       + esc(e.path || "") + '" data-change-status="' + st + '">' + core + "</button>";
   }
-  if (st === "modified" && isMainCPath(e.path)) {
+  if (st === "modified" && e.hasLineDiffSource) {
+    const p = esc(e.path == null ? "" : e.path);
     const diffBlock = e.mainDiff
       ? mainDiffHTML(e.mainDiff, "磁盘")
-      : '<div class="muted">main.c 行级差异不可用（内容未变化、无旧版本快照或差异过大）。</div>';
-    out += '<details class="code-change-diff"><summary>行级改动（main.c）</summary>'
+      : '<div class="muted">' + p + ' 行级差异不可用（内容未变化、当前内容读取失败或差异过大）。</div>';
+    out += '<details class="code-change-diff"><summary>行级改动（' + p + "）</summary>"
       + '<div class="code-change-diff-body">' + diffBlock + "</div></details>";
   }
   return '<li>' + out + "</li>";

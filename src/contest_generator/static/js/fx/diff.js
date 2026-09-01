@@ -40,7 +40,7 @@ export function mainDiffHTML(diff, entity) {
   if (diff === undefined) return "";
   const hunks = (diff && diff.hunks) || [];
   if (!hunks.length) return '<div class="muted" style="margin-top: var(--space-2)">'
-    + esc(name) + "未改动 main.c（无差异）。</div>";
+    + esc(name) + "未改动文件（无差异）。</div>";
   return diffStatsLineHTML(diff.stats, name) + diffHunksHTML(hunks);
 }
 

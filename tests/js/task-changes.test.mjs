@@ -49,7 +49,7 @@ test("taskChangesHTML: diff 段 = 统计行 + hunk", () => {
 test("taskChangesHTML: main_diff 为 null（空 hunks）= 占位提示，undefined = 无 diff 段", () => {
   const nullDiff = taskChangesHTML({ id: "t1" },
     { ...verifiedData, main_diff: null }, { open: true });
-  assert.ok(nullDiff.includes("任务未改动 main.c（无差异）。"));
+  assert.ok(nullDiff.includes("任务未改动文件（无差异）。"));
   const noDiff = taskChangesHTML({ id: "t1" },
     { ...verifiedData, main_diff: undefined }, { open: true });
   assert.ok(!noDiff.includes("diff-stats"));
