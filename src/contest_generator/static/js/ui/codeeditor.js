@@ -90,6 +90,7 @@ function tabShape(t) {
     lang: t.lang,
     dirty: t.content !== t.savedContent,
     readonly: t.readonly,
+    diskChanged: !!t.diskChanged,
   };
 }
 
@@ -319,6 +320,66 @@ export function dirtyTabPaths() {
 // 后关闭受影响 tab——用全量路径而非仅脏 tab）。
 export function openTabPaths() {
   return tabs.map((t) => t.path);
+}
+
+// ===== 磁盘变更感知（工单 code-ide-flow/02）=====
+// 外部/AI 写盘感知的标签侧接口：codeview 基线对比得出变更后经这些入口
+// 落标签态——干净标签自动重载、脏标签置「磁盘已变更」徽章（点徽章弹既有
+// 三选：覆盖/加载磁盘版/取消），绝不静默重载（spec：脏标签永不静默）。
+
+// isTabDirty(path)：标签是否含未保存编辑（与 dirtyTabPaths 同判据单源——
+// 只读标签不可编辑不会脏，但沿用同一比较式防多判据漂移）。
+function isTabDirty(tab) {
+  return !!tab && tab.content !== tab.savedContent;
+}
+
+// setDiskChanged(paths)：给路径命中且已打开的**脏**标签置「磁盘已变更」
+// 标志（仅脏标签由调用方决定置位；未打开路径无标签自然跳过）。只重渲标签
+// 条（标志是标签条的展示态——内容/大纲不受影响，评审整改：不同粒度只刷
+// 必要面）。
+export function setDiskChanged(paths) {
+  let any = false;
+  for (const path of paths || []) {
+    const tab = tabOf(path);
+    if (tab && isTabDirty(tab)) { tab.diskChanged = true; any = true; }
+  }
+  if (!any) return;
+  renderTabs();
+}
+
+// clearDiskChanged(path)：保存 / 重载 / 「清空已看」后取消标志（磁盘态已
+// 对齐或用户已确认知晓——未保存编辑仍由脏点 ● 表达，不丢信息）。
+export function clearDiskChanged(path) {
+  const tab = tabOf(path);
+  if (!tab || !tab.diskChanged) return;
+  tab.diskChanged = false;
+  renderTabs();
+}
+
+// reloadTabFromDisk(path)：干净标签 → 直读磁盘（绕过 memo）/api/code/file
+// → applyDiskState 全量对齐（内容/基准/大纲/只读），返回 "reloaded"；磁盘
+// mtime 与标签基准相同（上次已同步）→ 零动作返回 "already"（避免重复渲染
+// 与重复 toast 计数——基线是「用户确认点」而非「探测点」，外部改动的 diff
+// 会持续存在直到「清空并确认已看」）；脏标签 → 拒绝（返回 false，调用方
+// 走徽章路径）；磁盘文件已不存在 / 读取失败 → 抛错（调用方保留旧内容不
+// 打断——验收 4：删除文件的可继续查看旧内容）。
+export async function reloadTabFromDisk(path) {
+  const tab = tabOf(path);
+  if (!tab) return false;
+  if (isTabDirty(tab)) return false;
+  const disk = await readDiskState(path);
+  if (String(disk.mtime_ns || "") === String(tab.mtime_ns || "")) return "already";
+  applyDiskState(tab, disk);
+  return "reloaded";
+}
+
+// openDiskConflict(path)：徽章点击入口——复用既有保存冲突三选模态
+// （覆盖我的修改 / 加载磁盘版 / 取消；Promise 落定路径与 saveAllDirtyTabs
+// 同一来源，不新造模态）。tab 不存在（已关闭）→ 静默。
+export function openDiskConflict(path) {
+  const tab = tabOf(path);
+  if (!tab) return;
+  showConflictModal(tab);
 }
 
 function closeActiveTab() { closeTab(activePath); }
@@ -619,6 +680,7 @@ function showConflictModal(tab) {
 function applySavedState(tab, resp, msg) {
   tab.savedContent = tab.content;
   tab.mtime_ns = resp.mtime_ns;
+  tab.diskChanged = false;   // code-ide-flow/02：保存后磁盘 = 我的内容
   // .md 的大纲是前端算的标题清单（后端 resp.outline 只给 .c/.h 且为
   // null——直接用会把标题大纲清空，工单 05 评审预防）
   tab.outline = tab.lang === "md"
@@ -648,6 +710,7 @@ function applyDiskState(tab, disk) {
   tab.content = disk.content || "";
   tab.savedContent = tab.content;
   tab.mtime_ns = disk.mtime_ns || "";
+  tab.diskChanged = false;   // code-ide-flow/02：磁盘态已对齐，徽章取消
   tab.outline = lang === "md"
     ? markdownOutline(parseMarkdownBlocks(tab.content))
     : disk.outline || null;
@@ -709,6 +772,15 @@ export function initCodeEditor() {
     if (close) {
       e.stopPropagation();
       closeTab(close.closest("[data-tab-path]").dataset.tabPath);
+      return;
+    }
+    // 「磁盘已变更」徽章（code-ide-flow/02）：点击弹既有三选，**不**触发
+    // 普通点击的激活 tab（激活会连带内容切换，掩盖用户的冲突决策意图）
+    const diskBadge = e.target.closest("[data-tab-disk]");
+    if (diskBadge) {
+      e.stopPropagation();
+      const holder = diskBadge.closest("[data-tab-path]");
+      if (holder) openDiskConflict(holder.dataset.tabPath);
       return;
     }
     const btn = e.target.closest("[data-tab-path]");

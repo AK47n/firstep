@@ -8,12 +8,21 @@
 import { esc, formatSize } from "./core.js";
 import { languageOf, highlightText } from "./highlight.js";
 
-// buildCodeTree(files)：扁平清单 → 嵌套节点树（按路径逐层聚合）。
-// files = [{path, size_bytes} | {path, is_dir: True}]（/api/code/open 直出，
-// 顺序无关；is_dir 条目 = 目录（含空目录，工单 code-tree-ops/01））；节点 =
-// {name, path, isDir, children?, size_bytes?}。兄弟排序：目录在前、同级内
-// 按名字码点序（确定性；localeCompare 依 locale 漂移，不用）。
-export function buildCodeTree(files) {
+// 树徽章变更类型（code-ide-flow/02 磁盘基线感知）：changes 映射的值单源——
+// fx 渲染层与 ui 胶水层共用同一常量（评审整改：裸字符串 "new"/"modified"
+// 散落两层易漂移）。
+export const TREE_CHANGE_NEW = "new";
+export const TREE_CHANGE_MODIFIED = "modified";
+
+// buildCodeTree(files, changes)：扁平清单 → 嵌套节点树（按路径逐层聚合）。
+// files = [{path, size_bytes, mtime_ns?} | {path, is_dir: True}]（/api/code/open
+// 直出，顺序无关；is_dir 条目 = 目录（含空目录，工单 code-tree-ops/01））；
+// 节点 = {name, path, isDir, children?, size_bytes?, change?}。兄弟排序：
+// 目录在前、同级内按名字码点序（确定性；localeCompare 依 locale 漂移，不用）。
+// changes 可选（code-ide-flow/02 磁盘基线对比结果）：{path → TREE_CHANGE_NEW |
+// TREE_CHANGE_MODIFIED}，命中文件节点的 change 字段供 codeTreeHTML 渲染
+// 「新/变」徽章；缺省无徽章（与旧行为完全一致）。
+export function buildCodeTree(files, changes) {
   const root = { name: "", path: "", isDir: true, children: [] };
   for (const f of files || []) {
     const parts = String(f.path || "").split("/");
@@ -33,6 +42,9 @@ export function buildCodeTree(files) {
           size_bytes: isFile ? f.size_bytes : undefined,
         };
         node.children.push(child);
+      }
+      if (isFile && changes && Object.prototype.hasOwnProperty.call(changes, child.path)) {
+        child.change = changes[child.path];
       }
       node = child;
     }
@@ -119,6 +131,9 @@ function treeActionButtonsHTML(n) {
 // （零 JS 收起，含文件夹图标），文件 = 行按钮（data-code-file = 相对路径，
 // 交事件层；含类型图标 + 末尾 formatSize 大小）。根 <ul class="code-tree">
 // 由调用方包裹；每行右侧 ✎/🗑 操作按钮（treeActionButtonsHTML）。
+// 节点 change（code-ide-flow/02）：TREE_CHANGE_NEW → 「新」徽章、
+// TREE_CHANGE_MODIFIED → 「变」徽章（文件名旁，纯展示——标在文件行，目录
+// 自身不标）。
 export function codeTreeHTML(nodes) {
   return (nodes || []).map((n) => n.isDir
     ? `<li class="code-tree-dir"><details open><summary>`
@@ -129,8 +144,13 @@ export function codeTreeHTML(nodes) {
     : `<li class="code-tree-file">
         <button type="button" class="code-tree-btn" data-code-file="${esc(n.path)}">
           <span class="code-tree-icon" aria-hidden="true">${fileIconHTML(n.path, false)}</span>
-          <span class="code-tree-name">${esc(n.name)}</span>
-          <span class="muted">${formatSize(n.size_bytes)}</span></button>`
+          <span class="code-tree-name">${esc(n.name)}</span>`
+      + (n.change === TREE_CHANGE_NEW
+        ? '<span class="code-tree-badge b-new" title="新增文件" aria-label="新增文件">新</span>'
+        : n.change === TREE_CHANGE_MODIFIED
+          ? '<span class="code-tree-badge b-mod" title="已修改" aria-label="已修改">变</span>'
+          : "")
+      + `<span class="muted">${formatSize(n.size_bytes)}</span></button>`
       + treeActionButtonsHTML(n) + `</li>`
   ).join("");
 }
@@ -307,5 +327,7 @@ if (typeof window !== "undefined") {
     CODE_TREE_WIDTH_MIN,
     CODE_TREE_WIDTH_MAX,
     CODE_TREE_WIDTH_DEFAULT,
+    TREE_CHANGE_NEW,
+    TREE_CHANGE_MODIFIED,
   });
 }

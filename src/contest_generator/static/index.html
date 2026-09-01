@@ -1454,6 +1454,12 @@
     border-radius: var(--radius-xs); background: var(--panel); border: 1px solid var(--border);
     color: var(--muted); }
   .code-tab-dirty { color: var(--accent); font-size: 11px; line-height: 1; }
+  /* 「磁盘已变更」徽章（code-ide-flow/02）：磁盘被外部/AI 改写但标签有未保存
+     编辑——警示底色的「!」小标（可点击：事件层弹三选，不触发切 tab）。 */
+  .code-tab-disk { flex: none; font-size: 11px; line-height: 1; padding: 1px 6px;
+    border-radius: var(--radius-xs); background: var(--danger-dim);
+    color: var(--danger); font-weight: 700; cursor: pointer; }
+  .code-tab-disk:hover { filter: brightness(.95); }
   .code-tab-close { flex: none; color: var(--muted); font-size: 14px; line-height: 1;
     padding: 2px 4px; border-radius: var(--radius-xs); margin-left: 2px; }
   .code-tab-close:hover { background: var(--accent-dim); color: var(--accent); }
@@ -1581,6 +1587,12 @@
     box-shadow: inset 2px 0 0 var(--accent); }
   .code-tree-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  /* 「新/变」徽章（code-ide-flow/02 磁盘基线感知）：文件名旁小 pill——
+     新增 = accent 色、「修改」= 警示黄，纯展示非交互。 */
+  .code-tree-badge { flex: none; font-size: 11px; line-height: 1; padding: 2px 5px;
+    border-radius: var(--radius-xs); font-weight: 700; letter-spacing: .02em; }
+  .code-tree-badge.b-new { background: var(--accent-dim); color: var(--accent); }
+  .code-tree-badge.b-mod { background: var(--warn-dim); color: var(--warn); }
   /* 行操作按钮（工单 code-tree-ops/02）：每行右侧 ✎/🗑，hover 行显示；
      目录行 / 文件行 li 均为相对定位容器，右侧按钮绝对定位不参与布局。 */
   .code-tree-dir, .code-tree-file { position: relative; }
@@ -3824,7 +3836,7 @@ import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
-import { initCodeViewer } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import
+import { initCodeViewer, checkCodeDiskChanges } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import；checkCodeDiskChanges = 磁盘基线感知（code-ide-flow/02）
 import { initCodeEditor } from "/js/ui/codeeditor.js";  // 代码编辑器（code-viewer-editor/02）：多标签 + 可编辑三明治 + 保存（/03）/冲突（/04）
 import { initCodeCompile } from "/js/ui/code-compile.js";  // 代码栏编译（code-tab-compile/03）：编译按钮 + 底部错误面板 + 错误行跳转
 import { initCodeTreeOps, initCodeSaveAll } from "/js/ui/code-tree-ops.js";  // 代码树操作（code-tree-ops/02-03）：新建/重命名/删除 + 保存全部
@@ -3882,6 +3894,7 @@ document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
     if (btn.dataset.tab === "settings") { loadSettings(); loadRecentWorkflows(); renderUsageStats(); }
+    if (btn.dataset.tab === "code") checkCodeDiskChanges();  // 磁盘基线感知（code-ide-flow/02）：切回代码 tab 重扫磁盘对比基线（干净标签自动重载/脏标签徽章/树徽章）
   });
 });
 // 顶栏页签键盘导航（工单 ux-walkthrough-02/19）：每个 tab-group 内

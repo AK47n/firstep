@@ -55,8 +55,14 @@ def test_list_code_tree_returns_flat_sorted_entries(tmp_path):
     files = [e["path"] for e in entries if "size_bytes" in e]
     assert dirs == ["src"]
     assert files == ["main.c", "readme.md", "src/app.h"]
-    assert {"path": "main.c", "size_bytes": 26} in entries
+    # 文件条目带 mtime_ns（code-ide-flow/02 磁盘基线对比事实源；字符串，
+    # 与 /api/code/file·save 同口径——JSON 大整数精度）
     assert {"path": "src", "is_dir": True} in entries
+    main_entry = next(e for e in entries if e["path"] == "main.c")
+    assert main_entry["size_bytes"] == 26
+    assert isinstance(main_entry["mtime_ns"], str)
+    assert main_entry["mtime_ns"].isdigit()
+    assert main_entry["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
 
 
 def test_list_code_tree_includes_empty_dirs(tmp_path):
