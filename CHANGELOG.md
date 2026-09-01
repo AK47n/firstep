@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d7cd094b5edf31aba6d1c3ef185b46e4ca09b164 -->
+<!-- changelog-auto: last-commit=cab05a6a1d64df25e62f2a84d96f48eb0390d0c0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 21:46 声明控制题专项定位并记录下一步方向决策
 - 22:11 2023/2025 控制题拆条与题库分类标记的 spec 与工单
 - 23:05 工单 topics-control-2023-2025/01：题库分类标记机制——TOPIC_CATEGORIES 词表 + validate_topic_category（空串=未标记）+ TopicEntry/TopicDraft.category + manifest 读写 + update_topic 第四可编辑字段 + PUT 契约 + GET /api/topics/categories（注册在 /api/topics/{key} 前，测试锁定路由陷阱）+ 前端筛选下拉/条目徽标/拆条确认与编辑表单下拉（新建默认 control）；pytest 16 条 + js 11 条新增全绿、双轴 code-review 整改通过
+- 23:05 工单 topics-control-2023-2025/01：题库分类标记机制（category 词表+透出+前端筛选）
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
