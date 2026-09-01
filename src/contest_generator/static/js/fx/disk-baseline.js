@@ -27,11 +27,18 @@ export function baselineSnapshot(files) {
   return out;
 }
 
+// mtimeEq(a, b)：mtime 值相等比较——字符串化 + null/undefined 视为 ""
+// （与后端 409 base_mtime_ns 字符串口径一致）。基线 diff、标签重载守卫、
+// 快照建库守卫共用（评审整改：三处 String(x||"") 比较归一单源）。
+export function mtimeEq(a, b) {
+  return String(a == null ? "" : a) === String(b == null ? "" : b);
+}
+
 // baselineDiff(prev, now)：基线快照 vs 当前快照 → {added[], modified[], removed[]}
 // （均为相对路径数组，插入序 = 输入序）。added = 现快照有基线无；removed = 基线
-// 有现快照无；modified = 都有但 mtime_ns 字符串不同。mtime 相同（含同为
-// 空串/同数字）不算修改——内容未变，与 /api/code/save 的 409 检测同口径。
-// prev / now 传 null/undefined 按空快照处理（幂等防调用方分支）。
+// 有现快照无；modified = 都有但 mtime_ns 不同（mtimeEq 比较）。mtime 相同
+// （含同为空串/同数字）不算修改——内容未变，与 /api/code/save 的 409 检测
+// 同口径。prev / now 传 null/undefined 按空快照处理（幂等防调用方分支）。
 export function baselineDiff(prev, now) {
   const p = prev || {};
   const n = now || {};
@@ -41,7 +48,7 @@ export function baselineDiff(prev, now) {
   for (const path of Object.keys(n)) {
     if (!Object.prototype.hasOwnProperty.call(p, path)) {
       added.push(path);
-    } else if (String(p[path].mtime_ns) !== String(n[path].mtime_ns)) {
+    } else if (!mtimeEq(p[path].mtime_ns, n[path].mtime_ns)) {
       modified.push(path);
     }
   }
@@ -58,6 +65,49 @@ export function baselineDiff(prev, now) {
 export function baselineHasChanges(diff) {
   return !!(diff && (diff.added.length > 0 || diff.modified.length > 0
     || diff.removed.length > 0));
+}
+
+// ===== 内容快照（工单 code-ide-ai/07）：打开过的文件才有行级 diff 数据源 =====
+// 基线条目可选项 content = 文件内容快照（cap 256KB/文件，超限不存 = 无行级，
+// 文件级照常）。**只进基线 store**（目录隔离 + evict 预算沿用）；快照维护
+// （建/推进）在 ui 胶水层（fx 无副作用约定）。
+
+// SNAPSHOT_MAX：快照上限（字节 = JS 字符串 length——UTF-16 码元，与后端
+// 256KB 预算同口径的近似，超限 → null）。
+export const SNAPSHOT_MAX = 256 * 1024;
+
+// snapshotOf(content)：内容 → 快照（合法字符串且 ≤ 上限 → 内容本身；否则
+// null = 无行级）。main.c 特例与通用文件统一用这一个（旧 maincSnap 单源化）。
+export function snapshotOf(content) {
+  return typeof content === "string" && content.length <= SNAPSHOT_MAX
+    ? content : null;
+}
+
+// migrateBaselineStore(store)：旧数据兼容（字段统一化，删除 maincContent
+// 特例——旧版本每目录级 maincContent → files["main.c"].content）。
+// - 旧 maincContent 存在且 files 含 main.c 且 content 缺失 → 迁移；
+// - 无 main.c（磁盘上该文件已不在）→ 旧残值丢弃（基线 = 磁盘快照）；
+// - 新结构 content 已有 → 不覆盖（新结构优先）；
+// - 返回**新对象**，不修改入参；null/非对象 → 原样返回。迁移幂等。
+export function migrateBaselineStore(store) {
+  if (!store || typeof store !== "object") return store;
+  const out = {};
+  for (const dir of Object.keys(store)) {
+    const entry = store[dir];
+    if (!entry || typeof entry !== "object"
+      || !Object.prototype.hasOwnProperty.call(entry, "maincContent")) {
+      out[dir] = entry;   // 无旧字段：引用共享（未修改过，无拷贝必要）
+      continue;
+    }
+    const files = { ...(entry.files || {}) };
+    const mc = files["main.c"];
+    if (mc && typeof mc.content !== "string" && typeof entry.maincContent === "string") {
+      files["main.c"] = { ...mc, content: entry.maincContent };
+    }
+    out[dir] = { ...entry, files };
+    delete out[dir].maincContent;
+  }
+  return out;
 }
 
 // baselineEvict(store, maxDirs)：多目录基线 store 裁剪（LRU 上限）——
@@ -87,5 +137,8 @@ if (typeof window !== "undefined") {
     baselineDiff,
     baselineHasChanges,
     baselineEvict,
+    snapshotOf,
+    migrateBaselineStore,
+    mtimeEq,
   });
 }

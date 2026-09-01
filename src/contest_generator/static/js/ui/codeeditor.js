@@ -26,6 +26,7 @@ import {
   EDITOR_TABS_MAX,
 } from "/js/fx/codeeditor.js";
 import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
+import { mtimeEq } from "/js/fx/disk-baseline.js";  // mtime 相等守卫单源（工单 07 评审整改：与基线 diff/快照守卫同口径）
 import { treeRenamedPath, treeOpAffected } from "/js/fx/code-tree-ops.js";  // 重命名路径映射纯件（工单 code-tree-ops/02）
 import { confirmModal } from "/js/ui/confirm.js";
 
@@ -73,6 +74,12 @@ export function onActiveTabChanged(cb) { activeListeners.add(cb); }
 const savedListeners = new Set();
 export function onFileSaved(cb) { savedListeners.add(cb); }
 
+// onFileLoaded(cb)：文件读盘成功打开监听（工单 code-ide-ai/07：codeview
+// 在基线建立内容快照——「打开过的文件」才有行级 diff 数据源；仅 openEditorFile
+// 新建标签的读盘路径触发——激活既有标签不走读盘，快照维持不变）。
+const loadedListeners = new Set();
+export function onFileLoaded(cb) { loadedListeners.add(cb); }
+
 function notifyActive() {
   const tab = getActiveTab();
   activeListeners.forEach((cb) => { try { cb(tab); } catch (e) { /* 监听器异常不阻断 */ } });
@@ -80,6 +87,10 @@ function notifyActive() {
 
 function notifySaved(tab, resp) {
   savedListeners.forEach((cb) => { try { cb(tab, resp); } catch (e) { /* 同上 */ } });
+}
+
+function notifyLoaded(path, content, mtimeNs) {
+  loadedListeners.forEach((cb) => { try { cb(path, content, mtimeNs); } catch (e) { /* 同上 */ } });
 }
 
 function tabOf(path) { return tabs.find((t) => t.path === path) || null; }
@@ -233,6 +244,7 @@ export async function openEditorFile(path, mode) {
   };
   tabs.push(tab);
   activateTab(path);
+  notifyLoaded(path, tab.content, tab.mtime_ns);
 }
 
 // setMdMode(path, mode)：.md 两态切换（preview ↔ edit——工单 05 起 edit =
@@ -368,7 +380,7 @@ export async function reloadTabFromDisk(path) {
   if (!tab) return false;
   if (isTabDirty(tab)) return false;
   const disk = await readDiskState(path);
-  if (String(disk.mtime_ns || "") === String(tab.mtime_ns || "")) return "already";
+  if (mtimeEq(disk.mtime_ns, tab.mtime_ns)) return "already";
   applyDiskState(tab, disk);
   return "reloaded";
 }
