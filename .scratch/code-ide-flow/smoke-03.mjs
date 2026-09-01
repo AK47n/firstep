@@ -156,6 +156,29 @@ check("清空后外部再改：重新感知（面板再现 + main.c 变徽章）
   !document.getElementById('code-change-panel').classList.contains('hidden')
   && !!document.querySelector('#code-tree .code-tree-badge.b-mod')`));
 
+// ===== 工单 code-ide-ai/08：行级 diff 泛化 =====
+// 打开 src/app.h（建快照）→ 外部改 app.h → 感知 → 面板 app.h 条目带行级
+// diff 区（非 main.c 文件与 main.c 同一渲染——hasLineDiff 泛化）
+await waitFor(`!!document.querySelector('#code-tree [data-code-file="src/app.h"]')`);
+await Eval(`import('/js/ui/codeeditor.js').then((m) => m.openEditorFile('src/app.h'))`);
+await waitFor(`!!document.querySelector('.code-ta')`);
+writeFileSync(join(SAMPLE, "src", "app.h"),
+  "#ifndef APP_H\n#define APP_H\nint app(void);\n#endif\n", "utf8");
+await Eval(`import('/js/ui/codeview.js').then((m) => m.checkCodeDiskChanges().then(() => 'done'))`);
+await waitFor(`!!document.querySelector('#code-change-list [data-change-path="src/app.h"]')`);
+check("08 泛化：app.h 条目带行级 diff 区（summary=行级改动（src/app.h））", await waitFor(`
+  (() => {
+    const ds = [...document.querySelectorAll('#code-change-list details.code-change-diff')];
+    return ds.some((d) => d.querySelector('summary')
+      && d.querySelector('summary').textContent.includes('行级改动（src/app.h）'));
+  })()`));
+check("08 泛化：app.h 行级 diff hunk 渲染（diff-hunk + stats 行）", await Eval(`
+  (() => {
+    const ds = [...document.querySelectorAll('#code-change-list details.code-change-diff')];
+    const d = ds.find((x) => x.querySelector('summary').textContent.includes('src/app.h'));
+    return !!d && !!d.querySelector('.diff-stats') && !!d.querySelector('.diff-hunk');
+  })()`));
+
 rmSync(SAMPLE, { recursive: true, force: true });
 console.log(failed === 0 ? "SMOKE-03 全 PASS" : `SMOKE-03 失败 ${failed} 项`);
 process.exit(failed === 0 ? 0 : 1);

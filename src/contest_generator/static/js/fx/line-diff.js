@@ -1,7 +1,9 @@
-// fx/mainc-diff.js — main.c 行级确定性 diff 计算纯函数（工单 code-ide-flow/03）
+// fx/line-diff.js — 文件行级确定性 diff 计算纯函数（工单 code-ide-flow/03
+// 自 main.c 起步；code-ide-ai/08 泛化——任意打开过的文件，模块/函数命名随
+// 语义去 main.c 特化）
 //
-// 供「磁盘变更」面板的 main.c 行级展示：基线内容快照 vs 当前磁盘 main.c，
-// 输出与后端 deepen.py main_diff 同语义的结构（stats + hunks[{line, title,
+// 供「磁盘变更」面板行级展示：基线内容快照 vs 当前磁盘文件内容，输出与
+// 后端 deepen.py main_diff 同语义的结构（stats + hunks[{line, title,
 // lines[{kind: add|del|ctx, text}]}]）——渲染层直接复用 fx/diff.js
 // mainDiffHTML 单源（同一主题化行级展示）。算法 = 行级 LCS（DP 回溯）+
 // hunk 分组（difflib.unified_diff n=2 语义：变更块两侧各 2 行上下文，
@@ -9,11 +11,11 @@
 // 退化注释行，再退化空串——与 deepen.py _hunk_title / _comment_text /
 // _strip_todo_prefix 逐条对齐，防两套标题观感漂移）。
 // 纯函数：无 DOM / 网络 / localStorage（模块约定见 fx/core.js 头部）。
-// 超限（行数积 > MAINc_DIFF_MAX_CELLS）返回 null——面板显示占位文案。
+// 超限（行数积 > LINE_DIFF_MAX_CELLS）返回 null——面板显示占位文案。
 
-// 行级 DP 单元格上限（约 2000×2000 行：main.c 实际远小于此；超限不做——
+// 行级 DP 单元格上限（约 2000×2000 行：实际文件远小于此；超限不做——
 // O(n·m) 内存与循环在超大输入下不可控，退化占位并保提示可查可改）。
-export const MAINc_DIFF_MAX_CELLS = 4_000_000;
+export const LINE_DIFF_MAX_CELLS = 4_000_000;
 
 const TODO_RE = /TODO|FIXME|XXX/i;
 const TODO_PREFIX_RE = /^(TODO|FIXME|XXX)\s*([:：-]|$)/i;
@@ -81,16 +83,17 @@ function hunkTitle(lines) {
   return "";
 }
 
-// maincDiffCompute(before, after)：main.c 旧内容 vs 新内容 → {stats, hunks}
+// lineDiffCompute(before, after)：旧内容 vs 新内容 → {stats, hunks}
 // （无差异 / 超限 → null）。hunks[].line = 新文件起始行号（diff 段内第一个
 // 非删除行的 b 侧行号；全删除段取删除位置——对齐 _hunk_new_start 语义）。
-export function maincDiffCompute(before, after) {
+// 任意文本文件通用（行级 LCS 与语言无关；code-ide-ai/08 起跨 main.c 泛化）。
+export function lineDiffCompute(before, after) {
   const a = splitlines(before);
   const b = splitlines(after);
   if (a.length === b.length && a.every((x, i) => x === b[i])) return null;
   const n = a.length;
   const m = b.length;
-  if (n * m > MAINc_DIFF_MAX_CELLS) return null;
+  if (n * m > LINE_DIFF_MAX_CELLS) return null;
 
   // LCS 长度矩阵（行级；n.m 有限——上限已 guard）
   const W = m + 1;
@@ -174,5 +177,5 @@ export function maincDiffCompute(before, after) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { maincDiffCompute, MAINc_DIFF_MAX_CELLS });
+  Object.assign(window, { lineDiffCompute, LINE_DIFF_MAX_CELLS });
 }

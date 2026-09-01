@@ -10,7 +10,7 @@ import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { aiChatMessagesHTML } from "/js/fx/ai-chat.js";
 import { parseAiDiff, selectionContextText } from "/js/fx/ai-diff.js";
 import { caretLineOf } from "/js/fx/codeeditor.js";
-import { maincDiffCompute } from "/js/fx/mainc-diff.js";
+import { lineDiffCompute } from "/js/fx/line-diff.js";
 import { mainDiffHTML } from "/js/fx/diff.js";
 import { WRITE_GUARD_ACTIONS } from "/js/fx/write-guard.js";
 import { getActiveTab, getCodeDir, onActiveTabChanged } from "/js/ui/codeeditor.js";
@@ -185,7 +185,7 @@ function attachDiffButtons() {
 }
 
 // previewDiff(aiIdx)：预览第 N 条 assistant 消息的 diff——读盘 →
-// preview（只算不写）→ 生成行级 diff（maincDiffCompute 磁盘 vs new_content，
+// preview（只算不写）→ 生成行级 diff（lineDiffCompute 磁盘 vs new_content，
 // 与服务端 main_diff 同构——diff 超限/无差异 → 占位文案但可确认）→
 // confirmModal（复用 mainDiffHTML 渲染）→ 写盘守卫 → apply（写模式携带
 // base_mtime_ns = 读盘值）→ 成功 toast + 感知钩子；409 → 提示重预览。
@@ -214,7 +214,7 @@ async function previewDiff(aiIdx) {
     toastError(e, "计算改动失败");
     return;
   }
-  const diffObj = maincDiffCompute(String(file.content || ""), String(preview.new_content || ""));
+  const diffObj = lineDiffCompute(String(file.content || ""), String(preview.new_content || ""));
   const inner = diffObj
     ? mainDiffHTML(diffObj, "AI 改动")
     : '<div class="muted">内容差异明细不可用（无变化或差异过大）。'
