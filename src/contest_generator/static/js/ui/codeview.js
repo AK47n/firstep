@@ -21,6 +21,7 @@ import { changesPanelHTML, changeSummaryText } from "/js/fx/change-panel.js";  /
 import { maincDiffCompute } from "/js/fx/mainc-diff.js";  // main.c 行级 diff 计算（code-ide-flow/03——面板行级展示）
 import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
+import { setCodeAiDir } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03）：目录打开 → 面板可见性 + 历史拉取
 import {
   buildCodeTree,
   codeTreeHTML,
@@ -338,6 +339,7 @@ async function loadCodeDir(dir) {
   codeDir = dir;
   setCodeDir(dir);  // 编辑器上下文切换：清标签/缓存/活动态（code-viewer-editor/02）
   $("code-dir-label").textContent = dir;
+  setCodeAiDir(dir);  // AI 对话面板（code-ide-ai/03）：跟随目录显示 + 拉历史
   updateGotoGenerateVisibility();
   $("code-tree").innerHTML = '<span class="muted">加载中…</span>';
   try {
