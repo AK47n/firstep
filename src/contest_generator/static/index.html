@@ -1370,6 +1370,10 @@
     background: var(--panel-2); font-size: 12px; min-height: 28px; }
   .code-statusbar .code-dir-label { font-family: var(--mono); flex: 1 1 auto;
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 状态栏按钮（bug 修复）：flex: none + nowrap——目录 label（flex:1 1 auto）
+     收缩时不再按比例挤压按钮；窄视口/长路径下「保存全部」「编译」被压窄成
+     竖排（「编」「译」拆行,用户反馈右下角错位）的根治。 */
+  .code-statusbar button { flex: none; white-space: nowrap; }
   /* 编译结果面板（工单 code-tab-compile/03）：编辑器下方、状态栏上方的可折叠
      底部面板——头部常驻（状态行 + 动作按钮），错误列表滚动；.collapsed 只收
      列表（头部状态行始终可见），清空 = 整面板隐藏。
@@ -1478,7 +1482,10 @@
   .code-compile-error:hover .code-compile-path { color: var(--accent); }
   .code-compile-error .code-compile-msg { min-width: 0; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
-  .code-layout { display: grid; grid-template-columns: var(--code-tree-w, 240px) minmax(0, 1fr) var(--code-side-w, 300px);
+  /* 三栏 grid（bug 修复）：中栏 minmax(150px, 1fr) 硬保底——树/侧栏固定宽在
+     窄视口（如 565px）下曾把中栏挤到 15px（编辑器几乎不可见）；现改为空间
+     不足时树/侧栏对称收缩、中栏至少 150px，宽视口布局不变。 */
+  .code-layout { display: grid; grid-template-columns: minmax(0, var(--code-tree-w, 240px)) minmax(150px, 1fr) minmax(0, var(--code-side-w, 300px));
     gap: 0; margin-top: 0; flex: 1 1 auto; min-height: 300px; }
   .code-pane { display: flex; flex-direction: column; min-width: 0;
     background: var(--panel); }
@@ -2677,7 +2684,7 @@
         </div>
         <div id="code-ai-chat-body" class="code-ai-chat-body"></div>
         <div class="code-ai-chat-input-row">
-          <textarea id="code-ai-chat-input" rows="2"
+          <textarea id="code-ai-chat-input" class="code-ai-chat-input" rows="2"
             placeholder="选中代码后点「问 AI」，或直接提问（Enter 发送，Shift+Enter 换行）"></textarea>
           <button type="button" id="btn-code-ai-send" disabled>发送</button>
         </div>
