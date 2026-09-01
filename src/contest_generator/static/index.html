@@ -1581,6 +1581,27 @@
     box-shadow: inset 2px 0 0 var(--accent); }
   .code-tree-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  /* 行操作按钮（工单 code-tree-ops/02）：每行右侧 ✎/🗑，hover 行显示；
+     目录行 / 文件行 li 均为相对定位容器，右侧按钮绝对定位不参与布局。 */
+  .code-tree-dir, .code-tree-file { position: relative; }
+  /* 行右预留给操作按钮 44px（按钮内容不压在 ✎/🗑 下） */
+  .code-tree-dir summary { padding-right: 46px; }
+  .code-tree-file button { padding-right: 46px; }
+  .code-tree-actions { position: absolute; top: 2px; right: 0; display: none;
+    gap: 2px; z-index: 2; background: var(--panel-2); border-radius: var(--radius-xs); }
+  .code-tree-dir:hover .code-tree-actions,
+  .code-tree-file:hover .code-tree-actions { display: inline-flex; }
+  .code-tree-act { border: 0; background: none; color: var(--muted);
+    cursor: pointer; padding: 1px 5px; font-size: 12.5px; line-height: 1.4;
+    border-radius: var(--radius-xs); }
+  .code-tree-act:hover { background: var(--accent-dim); color: var(--accent); }
+  .code-tree-act-del:hover { background: var(--danger-dim, rgba(220,53,69,.15));
+    color: var(--danger, #dc3545); }
+  /* 树操作输入模态（工单 code-tree-ops/02）：新建/重命名单行文本框 */
+  .code-tree-name-input { width: 100%; box-sizing: border-box; margin-top: var(--space-2);
+    padding: 6px 10px; font-family: var(--mono); font-size: 13px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--panel-2); color: var(--text); }
   /* 侧栏视图 tabs（重设计）：Theia 式视图 tab——无底色按钮行，on = 下划
      2px accent + accent 文字；行底 1px 分隔。 */
   .code-pane-side { border-left: 1px solid var(--border); }
@@ -2481,6 +2502,8 @@
         <div class="code-pane code-pane-tree">
           <div class="code-pane-title">
             <span>文件</span>
+            <button id="btn-code-tree-new-file" class="code-pane-action" title="在工程根目录新建文件（创建后自动打开编辑）">新建文件</button>
+            <button id="btn-code-tree-new-dir" class="code-pane-action" title="在工程根目录新建文件夹">新建文件夹</button>
             <button id="btn-code-pick-dir" class="code-pane-action" title="选择要浏览/编辑的本地目录">选择文件夹…</button>
           </div>
           <div id="code-tree" class="code-tree-box"><span class="muted">（空）</span></div>
@@ -2543,6 +2566,7 @@
       </div>
       <div class="code-statusbar">
         <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
+        <button id="btn-code-save-all" type="button" title="保存代码栏全部未保存文件（Ctrl+Shift+S）">保存全部</button>
         <button id="btn-code-compile" type="button" title="保存全部未保存文件并编译当前工程（平台自动识别；不调 AI）">编译</button>
         <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
       </div>
@@ -3803,6 +3827,7 @@ import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from 
 import { initCodeViewer } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import
 import { initCodeEditor } from "/js/ui/codeeditor.js";  // 代码编辑器（code-viewer-editor/02）：多标签 + 可编辑三明治 + 保存（/03）/冲突（/04）
 import { initCodeCompile } from "/js/ui/code-compile.js";  // 代码栏编译（code-tab-compile/03）：编译按钮 + 底部错误面板 + 错误行跳转
+import { initCodeTreeOps, initCodeSaveAll } from "/js/ui/code-tree-ops.js";  // 代码树操作（code-tree-ops/02-03）：新建/重命名/删除 + 保存全部
 import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
 import { initSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：编辑框下方 chips 委托
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
@@ -4208,6 +4233,8 @@ initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路�
 initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
 initCodeEditor();  // 代码编辑器（工单 code-viewer-editor/02）：多标签条 / 编辑三明治 / 跳行 / 关闭确认接线
 initCodeCompile();  // 代码栏编译（工单 code-tab-compile/03）：编译按钮 / 底部错误面板 / 错误行跳转接线
+initCodeTreeOps();  // 代码树操作（工单 code-tree-ops/02）：新建/重命名/删除按钮与树内委托接线
+initCodeSaveAll();  // 保存全部（工单 code-tree-ops/03）：状态栏按钮 + Ctrl+Shift+S
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM 已就绪，纯本地交互
