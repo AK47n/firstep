@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7aa0460f74a9f248c234756a2bc6eb65dcc4b18d -->
+<!-- changelog-auto: last-commit=3dc5cff7fa0ea7e43bb56f0aa373dd3805aa1746 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 13:24 工单 code-ide-ai/02：/api/code/apply-diff 端点（hunk 应用单套算法 + preview 只算不写 + base_mtime_ns 409 同口径）
 - 13:32 工单 code-ide-ai/03：IDE AI 对话面板（选中代码问 AI + 引用卡片 + 对话历史收发，双轴评审整改）
 - 13:48 工单 code-ide-ai/04：C2 应用闭环（DIFF 预览确认 → 写盘守卫 → apply → toast + 立即感知；409 校验前移 + anyDir 守卫 + DIFF 剥离，双轴评审整改）
+- 18:23 工单 code-ide-ai/05：fixLoop 状态机抽共享 ui/fix-center-core.js（无 DOM 流程 + 事件回调广播，生成页壳层变薄绑 DOM，双轴评审整改）
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
