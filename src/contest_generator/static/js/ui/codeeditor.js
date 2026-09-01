@@ -23,6 +23,7 @@ import {
   caretLineOf,
   indentOnEnter,
   indentLines,
+  replaceAllText,
   EDITOR_TABS_MAX,
 } from "/js/fx/codeeditor.js";
 import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
@@ -774,6 +775,20 @@ function syncEditorAfterInput() {
   }
   renderTabs();   // 脏点随输入即时刷新（标签条内联渲染，事件委托不失效）
   notifyActive();
+}
+
+// ===== 查找替换（工单 code-editor-utilize/03）：当前文件「全部替换」 =====
+// replaceAllInActiveFile(needle, replacement)：活动标签全部替换——空针 /
+// 无活动标签 / 只读标签 / 无匹配 → 0 且不改；有效时走 applyEdit 同手输路径
+// （textarea 值 + 高亮/行号/脏点/标签条同步），光标置于文件尾，不自动写盘
+// （用户 Ctrl+S 落盘，与手输同语义）。返回替换次数。
+export function replaceAllInActiveFile(needle, replacement) {
+  const tab = getActiveTab();
+  if (!tab || tab.readonly) return 0;
+  const r = replaceAllText(tab.content, needle, replacement);
+  if (!r.count) return 0;
+  applyEdit(r.value, r.value.length, r.value.length);
+  return r.count;
 }
 
 // ===== initCodeEditor：入口绑定（host 启动区调用；DOM 已就绪）=====

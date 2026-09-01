@@ -14,6 +14,7 @@ import {
   caretLineOf,
   indentOnEnter,
   indentLines,
+  replaceAllText,
   EDITOR_TABS_MAX,
 } from "../../src/contest_generator/static/js/fx/codeeditor.js";
 
@@ -203,4 +204,21 @@ test("conflictHTML：双列对比各前 10 行 + 转义 + 越界省略提示", (
 
 test("EDITOR_TABS_MAX：上限常量存在且合理", () => {
   assert.equal(EDITOR_TABS_MAX, 10);
+});
+
+// replaceAllText：查找替换全部纯件（工单 code-editor-utilize/03）——空针不
+// 改、无匹配 count 0、替换含特殊字符（$ 需防 replace 模式串语义）、空替换。
+test("replaceAllText：空针/无匹配 → count 0 且原样返回", () => {
+  assert.deepEqual(replaceAllText("abc", "", "x"), { count: 0, value: "abc" });
+  assert.deepEqual(replaceAllText("abc", "z", "x"), { count: 0, value: "abc" });
+  assert.deepEqual(replaceAllText(null, "a", "x"), { count: 0, value: "" });   // 防御
+});
+
+test("replaceAllText：单处/多处/空替换/特殊字符（split-join 语义无模式串）", () => {
+  assert.deepEqual(replaceAllText("aXb", "X", "Y"), { count: 1, value: "aYb" });
+  assert.deepEqual(replaceAllText("XaXbX", "X", "Y"), { count: 3, value: "YaYbY" });
+  assert.deepEqual(replaceAllText("abc", "b", ""), { count: 1, value: "ac" });
+  // $& / $1 等替换串必须按字面处理（split-join 天然规避 replace 模式串陷阱）
+  assert.deepEqual(replaceAllText("a1a", "a", "$&"), { count: 2, value: "$&1$&" });
+  assert.deepEqual(replaceAllText("a.b", ".", "-"), { count: 1, value: "a-b" });   // 正则元字符按字面
 });

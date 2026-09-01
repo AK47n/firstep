@@ -61,6 +61,8 @@ function openPanel() {
 }
 
 // renderDone(done)：done 载荷 → 状态行 + 错误列表 + 失败自动展开列表。
+// 编译通过 → toast 提示可烧录（工单 code-editor-utilize/04：「改-编译-烧录」
+// 闭环衔接——不自动烧录，用户手动确认）。
 function renderDone(done) {
   openPanel();
   setStatus(compileStatusText(done), compileStatusClass(done));
@@ -71,6 +73,7 @@ function renderDone(done) {
     const p = panel();
     if (p) p.classList.remove("collapsed");   // 失败自动展开（用户可再收起）
   }
+  if (done.passed) toast("ok", "编译通过——可点状态栏「烧录到板子」写入板子");
 }
 
 // runCompileOnceForCode(dir)：SSE 单次编译（/api/compile 只带 output_dir，

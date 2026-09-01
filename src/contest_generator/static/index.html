@@ -1379,7 +1379,8 @@
      列表（头部状态行始终可见），清空 = 整面板隐藏。
      「磁盘变更」面板（code-ide-flow/03）与编译面板同型并列：同一 head 观感 +
      同一 .collapsed 语义（标题行不在折叠范围——两面板可分别收起/展开）。 */
-  #code-compile-panel, #code-change-panel, #code-ai-chat-panel, #code-fix-panel { flex: none; border-top: 1px solid var(--border);
+  #code-compile-panel, #code-change-panel, #code-ai-chat-panel, #code-fix-panel,
+  #code-flash-panel { flex: none; border-top: 1px solid var(--border);
     background: var(--panel-2); font-size: 12px; }
   .code-compile-head { display: flex; align-items: center; gap: 10px;
     padding: 4px 10px; min-height: 26px; }
@@ -1401,7 +1402,11 @@
   #code-ai-chat-panel.collapsed .code-ai-chat-input-row,
   #code-fix-panel.collapsed .code-fix-round,
   #code-fix-panel.collapsed .code-fix-errors-msg,
-  #code-fix-panel.collapsed .code-fix-results { display: none; }
+  #code-fix-panel.collapsed .code-fix-results,
+  #code-flash-panel.collapsed .code-flash-result { display: none; }
+  /* 烧录结果面板（工单 code-editor-utilize/04）：与编译面板同型并列——头部
+     状态行 + 可折叠结果（flashResultHTML / flashGuideHTML 输出渲染于此）。 */
+  .code-flash-result { max-height: 200px; overflow: auto; padding: 4px 10px 8px; }
   /* AI 对话面板（工单 code-ide-ai/03）：消息区滚动 + 输入行 + 选区浮动按钮。
      面板与编译/变更面板同型并列；气泡复用生成页全局商量 .sugg-msg 系列。 */
   .code-ai-chat-body { max-height: 220px; overflow: auto; padding: 8px 12px;
@@ -1752,8 +1757,8 @@
   .code-outline-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
   .code-side-empty { padding: 6px 8px; font-size: 12.5px; }
-  .code-search-row, .code-find-row { display: flex; gap: 6px; margin-bottom: var(--space-1); }
-  .code-search-row input, .code-find-row input { flex: 1; min-width: 0; }
+  .code-search-row, .code-find-row, .code-replace-row { display: flex; gap: 6px; margin-bottom: var(--space-1); }
+  .code-search-row input, .code-find-row input, .code-replace-row input { flex: 1; min-width: 0; }
   .code-search-results, .code-find-results { font-size: 12.5px; }
   .code-side-summary { list-style: none; margin: 0 0 4px; padding: 0 4px; }
   .code-search-list, .code-find-list { list-style: none; margin: 0; padding: 0; }
@@ -2651,6 +2656,11 @@
             <div class="code-find-row">
               <input type="text" id="code-find-input" placeholder="当前文件内查找（Ctrl+F）" aria-label="当前文件内查找">
             </div>
+            <div class="code-replace-row">
+              <input type="text" id="code-replace-input" placeholder="替换为（Ctrl+H）…" aria-label="替换为（Ctrl+H 唤起）">
+              <button type="button" id="btn-code-replace-all"
+                title="全部替换当前文件内匹配项（改动进编辑缓冲，Ctrl+S 保存）">全部替换</button>
+            </div>
             <div id="code-search-results" class="code-search-results"></div>
             <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>
           </div>
@@ -2710,10 +2720,20 @@
         <div id="code-fix-errors-msg" class="code-fix-errors-msg"></div>
         <div id="code-fix-results" class="code-fix-results"></div>
       </div>
+      <div id="code-flash-panel" class="code-compile-panel hidden" aria-label="烧录结果">
+        <div class="code-compile-head">
+          <strong>烧录</strong>
+          <span id="code-flash-status" class="code-compile-status"></span>
+          <button type="button" id="btn-code-flash-collapse" title="收起/展开结果"
+            aria-label="收起或展开结果">收起</button>
+        </div>
+        <div id="code-flash-result" class="code-flash-result"></div>
+      </div>
       <div class="code-statusbar">
         <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
         <button id="btn-code-save-all" type="button" title="保存代码栏全部未保存文件（Ctrl+Shift+S）">保存全部</button>
         <button id="btn-code-compile" type="button" title="保存全部未保存文件并编译当前工程（平台自动识别；不调 AI）">编译</button>
+        <button id="btn-code-flash" type="button" title="保存全部未保存文件并烧录当前工程（平台自动识别；不调 AI）">烧录到板子</button>
         <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
       </div>
     </div>
@@ -2952,6 +2972,7 @@
           <button id="btn-main-c-copy" class="act" type="button" title="复制 main.c 内容">复制</button>
           <button id="btn-main-c-download" class="act" type="button" title="下载 main.c 文件">下载</button>
           <button id="btn-main-c-fullscreen" class="act" type="button" title="全屏编辑">全屏</button>
+          <button id="btn-edit-mainc" class="act" type="button" title="在「代码」tab 打开 main.c 编辑（与步骤 8 编辑框互通，保存后互相同步）">编辑 main.c</button>
           <button id="btn-goto-code-mainc" class="act" type="button" title="在「代码」tab 打开整个工程（文件树 + 大纲 + 搜索，只读）">查看工程</button>
         </div>
         <div id="main-c-nums" class="line-nums" aria-hidden="true"></div>
@@ -3975,6 +3996,7 @@ import { initCodeAiChat } from "/js/ui/code-ai-chat.js";  // AI 对话面板（c
 import { initCodeFixPanel } from "/js/ui/code-fix-panel.js";  // 修复面板（code-ide-ai/06）：IDE 内跑修复循环（共享状态机双出口）
 import { initCodeEditor } from "/js/ui/codeeditor.js";  // 代码编辑器（code-viewer-editor/02）：多标签 + 可编辑三明治 + 保存（/03）/冲突（/04）
 import { initCodeCompile } from "/js/ui/code-compile.js";  // 代码栏编译（code-tab-compile/03）：编译按钮 + 底部错误面板 + 错误行跳转
+import { initCodeFlash } from "/js/ui/code-flash.js";  // 代码栏烧录（code-editor-utilize/04）：状态栏烧录按钮 + 底部结果面板
 import { initCodeTreeOps, initCodeSaveAll } from "/js/ui/code-tree-ops.js";  // 代码树操作（code-tree-ops/02-03）：新建/重命名/删除 + 保存全部
 import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
 import { initSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：编辑框下方 chips 委托
@@ -4384,6 +4406,7 @@ initCodeAiChat();  // AI 对话面板（工单 code-ide-ai/03）：选中代码�
 initCodeFixPanel();  // 修复面板（工单 code-ide-ai/06）：「在此修复」入口 + 回滚/继续/收起接线
 initCodeEditor();  // 代码编辑器（工单 code-viewer-editor/02）：多标签条 / 编辑三明治 / 跳行 / 关闭确认接线
 initCodeCompile();  // 代码栏编译（工单 code-tab-compile/03）：编译按钮 / 底部错误面板 / 错误行跳转接线
+initCodeFlash();  // 代码栏烧录（工单 code-editor-utilize/04）：烧录按钮 / 底部结果面板接线
 initCodeTreeOps();  // 代码树操作（工单 code-tree-ops/02）：新建/重命名/删除按钮与树内委托接线
 initCodeSaveAll();  // 保存全部（工单 code-tree-ops/03）：状态栏按钮 + Ctrl+Shift+S
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）

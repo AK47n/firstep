@@ -57,7 +57,8 @@ const DOMAINS = {
     codeTabBadge: "fn", codeTabStripHTML: "fn", codeEditorHighlight: "fn",
     codeEditorHTML: "fn", conflictHTML: "fn", editorLineRange: "fn",
     isTabSavable: "fn", dirtySavableTabs: "fn", caretLineOf: "fn",
-    indentOnEnter: "fn", indentLines: "fn", EDITOR_TABS_MAX: "number",
+    indentOnEnter: "fn", indentLines: "fn", replaceAllText: "fn",
+    EDITOR_TABS_MAX: "number",
   },
   "code-compile.js": {
     compileStatusText: "fn", compileStatusClass: "fn", compileErrorRowsHTML: "fn",

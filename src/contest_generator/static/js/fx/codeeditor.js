@@ -187,6 +187,20 @@ export function indentLines(value, selStart, selEnd) {
   return { value: text, start: pos, end: pos };
 }
 
+// replaceAllText(src, needle, replacement)：当前文件「全部替换」纯件（工单
+// code-editor-utilize/03）——split/join 字面语义（替换串 $& / $1 等不解释为
+// 模式组，规避 String.replace 陷阱），无匹配/空针 → count 0 且原样返回。
+// 返回 {count, value}；src 非字符串防御为 ""。
+export function replaceAllText(src, needle, replacement) {
+  const v = String(src == null ? "" : src);
+  const n = String(needle == null ? "" : needle);
+  if (!n) return { count: 0, value: v };
+  const count = v.split(n).length - 1;
+  return count
+    ? { count, value: v.split(n).join(String(replacement == null ? "" : replacement)) }
+    : { count: 0, value: v };
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     codeTabBadge,
@@ -200,6 +214,7 @@ if (typeof window !== "undefined") {
     caretLineOf,
     indentOnEnter,
     indentLines,
+    replaceAllText,
     EDITOR_TABS_MAX,
   });
 }
