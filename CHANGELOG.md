@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=076b1627a0809b1d0638a930a329a6446c98eb4c -->
+<!-- changelog-auto: last-commit=e49586c0cc0e49689b1616845cfb3a498457a0b4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -24,6 +24,7 @@
 - 19:34 修复:代码编辑器状态栏按钮窄视口竖排+三栏中栏塌缩(用户反馈「编」「译」拆行)——状态栏按钮 flex:none+nowrap、中栏 minmax(150px,1fr) 保底、AI 对话输入框补 class
 - 19:45 修复:代码栏三栏 grid 行高被树内容撑爆——真实工程树 1739px 撑开隐式 auto 行并溢出 flex 容器(约 300px),body 多出 1400px 滚动空间,滚到中部即见树/编辑器黑底与底部面板(AI 收起/发送、状态栏编译)穿插的右下角错位(用户反馈;sample-proj 树矮未复现);修复=grid-template-rows:minmax(0,1fr) 行高=容器高,树/编辑器/大纲各自内部滚动;CDP 三视口回归 1105 sh 1874→578、884x462 用户 125% 缩放场景正常、565 中栏 150 不变
 - 20:37 工单 code-editor-utilize/01-04：代码编辑器利用优化四条线收口——①结果区产物 chips 点击直开「代码」tab（openCodeViewer 桥加 filePath 参数，md 默认预览态）；②步骤 8 新增「编辑 main.c」精确入口 + guide 联动文案修正（原「编辑源码」描述与实现不符）；③文件内查找补「全部替换」（fx replaceAllText 纯件字面替换语义 + 替换行 UI + Ctrl+H 唤起，改动进编辑缓冲 Ctrl+S 落盘，md 预览先切源码、只读拒绝）；④代码栏状态栏「烧录到板子」按钮 + 底部烧录面板（复用 flashRunShared，烧录前自动保存脏标签，无产物 400 指引卡），编译通过 toast 提示可烧录闭环；node --test 1085 全绿 + CDP 冒烟 01-04 25 项 + 565 窄视口状态栏回归全绿
+- 21:21 新手指南补 code-editor-utilize 四条线：代码栏状态栏「烧录到板子」（自动保存后烧录、指引卡兜底）、文件内查找 Ctrl+F / 替换 Ctrl+H（全部替换进编辑缓冲 Ctrl+S 落盘）、「第一次烧录」按钮位置补代码栏、结果区草稿 chips 点击即在代码栏打开（默认预览可切编辑）；node --test 1085 全绿
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
