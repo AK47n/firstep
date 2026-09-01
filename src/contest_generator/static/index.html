@@ -1372,8 +1372,10 @@
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 编译结果面板（工单 code-tab-compile/03）：编辑器下方、状态栏上方的可折叠
      底部面板——头部常驻（状态行 + 动作按钮），错误列表滚动；.collapsed 只收
-     列表（头部状态行始终可见），清空 = 整面板隐藏。 */
-  #code-compile-panel { flex: none; border-top: 1px solid var(--border);
+     列表（头部状态行始终可见），清空 = 整面板隐藏。
+     「磁盘变更」面板（code-ide-flow/03）与编译面板同型并列：同一 head 观感 +
+     同一 .collapsed 语义（标题行不在折叠范围——两面板可分别收起/展开）。 */
+  #code-compile-panel, #code-change-panel { flex: none; border-top: 1px solid var(--border);
     background: var(--panel-2); font-size: 12px; }
   .code-compile-head { display: flex; align-items: center; gap: 10px;
     padding: 4px 10px; min-height: 26px; }
@@ -1389,7 +1391,32 @@
   .code-compile-head button:hover { border-color: var(--accent); background: var(--accent-dim); }
   .code-compile-errors { max-height: 160px; overflow: auto; padding: 0 0 4px 10px;
     display: flex; flex-direction: column; gap: 2px; }
-  #code-compile-panel.collapsed .code-compile-errors { display: none; }
+  #code-compile-panel.collapsed .code-compile-errors,
+  #code-change-panel.collapsed .code-change-list { display: none; }
+  /* 「磁盘变更」条目（code-ide-flow/03）：行 = 状态徽章 + 路径 + 元数据；
+     added/modified 为按钮（hover 高亮，点击打开文件），removed 为 span 置灰
+     不可点；main.c 修改条目下的行级 diff 区（details 默认折叠）。 */
+  .code-change-list { max-height: 160px; overflow: auto; padding: 0 0 4px 10px;
+    display: flex; flex-direction: column; gap: 2px; margin: 0; list-style: none; }
+  .code-change-item { display: flex; align-items: baseline; gap: 8px;
+    text-align: left; padding: 3px 8px; width: 100%; box-sizing: border-box; }
+  button.code-change-item { border: 0; background: transparent; color: var(--text);
+    font-size: 12px; cursor: pointer; }
+  button.code-change-item:hover { background: var(--accent-dim); color: var(--accent); }
+  .code-change-item.disabled { color: var(--muted); opacity: .65; cursor: default; }
+  .code-change-badge { flex: none; font-size: 11px; line-height: 1; padding: 2px 6px;
+    border-radius: var(--radius-xs); font-weight: 650; }
+  .code-change-badge.b-added { background: var(--accent-dim); color: var(--accent); }
+  .code-change-badge.b-modified { background: var(--warn-dim); color: var(--warn); }
+  .code-change-badge.b-removed { background: var(--panel); border: 1px solid var(--border);
+    color: var(--muted); }
+  .code-change-path { min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+  .code-change-path code { font-family: var(--mono); font-size: 12px; }
+  .code-change-meta { flex: none; font-size: 11.5px; }
+  .code-change-diff { margin: 2px 0 4px 14px; }
+  .code-change-diff summary { font-size: 11.5px; color: var(--muted); cursor: pointer; }
+  .code-change-diff-body { padding-left: 8px; }
   .code-compile-error { display: flex; gap: 8px; text-align: left; padding: 3px 8px;
     border: 0; background: transparent; color: var(--text); font-size: 12px;
     font-family: var(--mono); cursor: pointer; border-radius: var(--radius-sm); }
@@ -2575,6 +2602,16 @@
             aria-label="清空编译结果">清空</button>
         </div>
         <div id="code-compile-errors" class="code-compile-errors"></div>
+      </div>
+      <div id="code-change-panel" class="code-change-panel hidden" aria-label="磁盘变更">
+        <div class="code-compile-head">
+          <strong>磁盘变更</strong>
+          <span id="code-change-summary" class="code-compile-status"></span>
+          <button type="button" id="btn-code-change-clear" title="基线更新为当前磁盘快照，清空待看清单（后续真实变更会重新感知）">清空并确认已看</button>
+          <button type="button" id="btn-code-change-collapse" title="收起/展开变更条目"
+            aria-label="收起或展开变更条目">收起</button>
+        </div>
+        <div id="code-change-list" class="code-change-list"></div>
       </div>
       <div class="code-statusbar">
         <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
