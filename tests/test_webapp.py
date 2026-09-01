@@ -7735,7 +7735,13 @@ def test_code_open_returns_flat_file_list(client, tmp_path):
     assert resp.status_code == 200
     data = resp.json()
     assert data["root"] == str(root)
-    assert data["files"] == [{"path": "main.c", "size_bytes": 17}]
+    # 文件条目带 mtime_ns（code-ide-flow/02 磁盘基线对比事实源，字符串）
+    assert len(data["files"]) == 1
+    f = data["files"][0]
+    assert f["path"] == "main.c"
+    assert f["size_bytes"] == 17
+    assert isinstance(f["mtime_ns"], str)
+    assert f["mtime_ns"] == str((root / "main.c").stat().st_mtime_ns)
 
 
 def test_code_open_missing_dir_400_chinese(client, tmp_path):

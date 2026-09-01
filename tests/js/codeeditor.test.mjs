@@ -43,6 +43,21 @@ test("codeTabStripHTML：活动 tab、脏点、只读标记、关闭钮、转义
   assert.ok(!html.includes("a<b.c"));
 });
 
+test("codeTabStripHTML：「磁盘已变更」徽章（code-ide-flow/02）——diskChanged 渲染、无标志不渲染", () => {
+  const html = codeTabStripHTML(
+    [{ path: "main.c", lang: "c", dirty: true, readonly: false, diskChanged: true }],
+    "main.c",
+  );
+  assert.match(html, /class="code-tab-disk"/);
+  assert.match(html, /data-tab-disk/);              // 事件层入口（弹三选）
+  assert.match(html, /aria-label="磁盘已变更/);
+  const plain = codeTabStripHTML(
+    [{ path: "a.c", lang: "c", dirty: false, readonly: false }],
+    "a.c",
+  );
+  assert.ok(!plain.includes("code-tab-disk"));     // 无标志前进化零
+});
+
 test("codeTabStripHTML：活动 tab 非只读时 class 组合正确", () => {
   const html = codeTabStripHTML(
     [{ path: "main.c", lang: "c", dirty: false, readonly: false }],

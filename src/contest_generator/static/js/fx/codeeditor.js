@@ -64,11 +64,13 @@ export function codeTabBadge(lang) {
 }
 
 // codeTabStripHTML(tabs, activePath)：多文件标签条纯件——
-// tabs = [{path, lang, dirty, readonly}]；活动 tab .on（data-tab-path 交
-// 事件层）；脏点 .code-tab-dirty（aria-label 未保存）；只读 .ro + 可见
-// 「只读」小标 .code-tab-ro + title；关闭钮 data-tab-close（事件层
-// stopPropagation——点 × 不切 tab）。返回字符串；空 tabs → 空串（空态由
-// 调用区放置）。
+// tabs = [{path, lang, dirty, readonly, diskChanged?}]；活动 tab .on
+// （data-tab-path 交事件层）；脏点 .code-tab-dirty（aria-label 未保存）；
+// 只读 .ro + 可见「只读」小标 .code-tab-ro + title；diskChanged（code-ide-
+// flow/02：磁盘被外部/AI 改写但标签有未保存编辑）→「磁盘已变更」徽章
+// .code-tab-disk（data-tab-disk 交事件层弹三选，不触发切 tab）；关闭钮
+// data-tab-close（事件层 stopPropagation——点 × 不切 tab）。返回字符串；
+// 空 tabs → 空串（空态由调用区放置）。
 export function codeTabStripHTML(tabs, activePath) {
   return (tabs || []).map((t) => {
     const path = String(t.path == null ? "" : t.path);
@@ -82,6 +84,11 @@ export function codeTabStripHTML(tabs, activePath) {
       + '<span class="code-tab-badge">' + codeTabBadge(t.lang) + "</span>"
       + '<span class="code-tab-name">' + esc(name) + "</span>"
       + (t.readonly ? '<span class="code-tab-ro">只读</span>' : "")
+      + (t.diskChanged
+        ? '<span class="code-tab-disk" data-tab-disk role="button"'
+          + ' aria-label="磁盘已变更：点击选择保留我的编辑或加载磁盘版"'
+          + ' title="磁盘已变更：点击查看">!</span>'
+        : "")
       + (t.dirty
         ? '<span class="code-tab-dirty" aria-label="未保存" title="未保存">●</span>'
         : "")

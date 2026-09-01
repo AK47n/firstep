@@ -11,6 +11,12 @@ import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { codeZoomClamp, parseZoomStored, isMainCPath } from "/js/fx/code.js";
 import { isTabSavable } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）
+import {
+  baselineSnapshot,
+  baselineDiff,
+  baselineHasChanges,
+  baselineEvict,
+} from "/js/fx/disk-baseline.js";  // 磁盘基线对比纯件（code-ide-flow/01——事实源不依赖事件载荷）
 import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import {
@@ -24,6 +30,8 @@ import {
   parseTreeWidthStored,
   CODE_TREE_WIDTH_MAX,
   CODE_TREE_WIDTH_DEFAULT,
+  TREE_CHANGE_NEW,
+  TREE_CHANGE_MODIFIED,
 } from "/js/fx/codeview.js";
 import {
   setCodeDir,
@@ -35,11 +43,149 @@ import {
   isMdPreviewActive,
   onActiveTabChanged,
   onFileSaved,
+  openTabPaths,
+  dirtyTabPaths,
+  setDiskChanged,
+  clearDiskChanged,
+  reloadTabFromDisk,
 } from "/js/ui/codeeditor.js";
 
 // 模块态：当前目录 / 扁平清单（中栏状态在 codeeditor.js）
 let codeDir = "";
 let codeFiles = [];
+// 树徽章（code-ide-flow/02）：磁盘基线对比结果 {path → "new"|"modified"}，
+// renderCodeTree 交 buildCodeTree/codeTreeHTML 渲染「新/变」徽章。
+let codeTreeChanges = {};
+
+// ===== 磁盘基线（工单 code-ide-flow/02）=====
+// 事实源 = 磁盘基线对比（spec：不消费 fix/task/deepen 事件载荷——那些只有
+// main.c diff 或刷新即丢）。localStorage 只进胶水层（fx 无副作用约定，同
+// firstep.codeTreeWidth 先例）；store = {dir → {ts, files}}，files 为
+// baselineSnapshot 规范化快照；目录隔离 + evict（fx/disk-baseline.js）。
+const CODE_BASELINE_KEY = "firstep.codeBaseline";
+const CODE_BASELINE_MAX_DIRS = 8;  // LRU 上限（存过多目录的旧基线无意义）
+
+function baselineStoreLoad() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CODE_BASELINE_KEY) || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch (e) { return {}; }
+}
+
+function baselineStoreSave(store) {
+  try { localStorage.setItem(CODE_BASELINE_KEY, JSON.stringify(store)); } catch (e) { /* 静默 */ }
+}
+
+// baselineStoreCommit(store, dir, snap)：目录条目落盘（ts 刷新 + evict）。
+function baselineStoreCommit(store, dir, snap) {
+  store[dir] = { ts: Date.now(), files: snap };
+  baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
+}
+
+// baselineDiffDisk(dir, files)：当前磁盘清单 vs 已有基线 → diff（**纯计算
+// 不推进基线**——基线 = 用户最后确认点，对比只探测；推进只在：首次打开
+// 目录建立 / 保存·重载单文件 / 「清空并确认已看」/ 树操作整体对齐）。无
+// 基线（首次打开此目录）→ null（调用方建立基线，不感知）。
+function baselineDiffDisk(dir, files) {
+  const store = baselineStoreLoad();
+  const prev = store[dir];
+  if (!prev || !prev.files) return null;
+  return baselineDiff(prev.files, baselineSnapshot(files));
+}
+
+// baselineCommitDisk(dir, files)：确认点整体推进——基线 = 当前磁盘快照
+// （首次打开 / 树操作 / 「清空并确认已看」）。
+function baselineCommitDisk(dir, files) {
+  const store = baselineStoreLoad();
+  baselineStoreCommit(store, dir, baselineSnapshot(files));
+}
+
+// baselineUpdateFile(dir, path, mtimeNs, sizeBytes)：保存 / 重载后基线单
+// 条目对齐（下次对比不再把本文件报为「修改」——写盘方 = 本 IDE 自己）。
+function baselineUpdateFile(dir, path, mtimeNs, sizeBytes) {
+  const store = baselineStoreLoad();
+  const entry = store[dir];
+  if (!entry || !entry.files) return;
+  if (!Object.prototype.hasOwnProperty.call(entry.files, path)) {
+    entry.files[path] = {};
+  }
+  entry.files[path].mtime_ns = String(mtimeNs == null ? "" : mtimeNs);
+  entry.files[path].size_bytes = sizeBytes == null ? "" : sizeBytes;
+  entry.ts = Date.now();
+  baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
+}
+
+// applyDiskChanges(diff)：基线对比命中 → 联动（spec 1）——干净标签自动
+// 重载（计数 → toast）；脏标签置「磁盘已变更」徽章（点徽章弹既有三选，绝不
+// 静默——脏标签永不推进，留待用户定夺）；未打开的变更文件留树徽章。树徽章
+// = 磁盘改动集合（新增「新」/ 修改「变」），**不因自动重载而消失**——重载
+// 只是标签跟上磁盘，用户尚未整体审视（spec 用户故事 2）；「清空并确认已
+// 看」（工单 03）/保存/树操作才推进基线让集合收敛。removed 文件标签保留旧
+// 内容可继续查看（保存时后端既有错误文案兜底；树重拉后条目自然消失）。
+async function applyDiskChanges(diff) {
+  const changed = diff.added.concat(diff.modified);
+  const dirty = new Set(dirtyTabPaths());
+  const open = new Set(openTabPaths());
+  let reloaded = 0;
+  for (const path of changed) {
+    if (!open.has(path)) continue;
+    if (dirty.has(path)) {
+      setDiskChanged([path]);
+      continue;
+    }
+    try {
+      if ((await reloadTabFromDisk(path)) === "reloaded") reloaded++;
+    } catch (e) {
+      // 磁盘文件已不存在 / 读取失败：保留标签旧内容（验收 4），不打断
+    }
+  }
+  const next = {};
+  for (const p of diff.modified) next[p] = TREE_CHANGE_MODIFIED;
+  for (const p of diff.added) next[p] = TREE_CHANGE_NEW;
+  codeTreeChanges = next;
+  renderCodeTree();
+  // main.c 被外部/AI 改写（含子目录）→ 步骤 8 状态行联动（既有路径）
+  if ((diff.modified.concat(diff.added)).some(isMainCPath) && isMainCDiskDir()) {
+    refreshMainCDiskState();
+  }
+  if (reloaded > 0) {
+    toast("ok", reloaded + " 个文件已被外部更新，已自动重载");
+  }
+}
+
+// probeDiskBaseline(dir)：重拉清单 + 基线探测（纯计算不推进基线；无基线先
+// 建立）——loadCodeDir 与 checkCodeDiskChanges 共用同一探测序（评审整改：
+// 两处同序易漂移）。无基线 → 徽章集合清空（跨目录/首次不残留旧目录徽章——
+// spec：目录隔离不串台）。**不渲染**——渲染由调用方统一（无变更一次 /
+// 有变更 applyDiskChanges 内一次，评审整改：消灭双次渲染）。
+async function probeDiskBaseline(dir) {
+  const data = await apiPost("/api/code/open", { dir });
+  codeFiles = data.files || [];
+  const diff = baselineDiffDisk(dir, codeFiles);
+  if (diff === null) {
+    baselineCommitDisk(dir, codeFiles);
+    codeTreeChanges = {};
+  }
+  return diff;
+}
+
+// checkCodeDiskChanges()：切回「代码」tab / 显式刷新入口——重扫磁盘对比
+// 基线，命中 → applyDiskChanges（loadCodeDir 成功与 refreshCodeTreeOnly
+// 之外的第三触发点；与 index.html tab 切换钩子接线）。
+export async function checkCodeDiskChanges() {
+  if (!codeDir) return;
+  try {
+    const diff = await probeDiskBaseline(codeDir);
+    if (diff && baselineHasChanges(diff)) {
+      await applyDiskChanges(diff);
+    } else {
+      codeTreeChanges = {};   // 变更已收敛（无 diff）：不残留旧徽章
+      renderCodeTree();
+    }
+  } catch (e) {
+    toastError(e, "刷新文件变化失败");
+  }
+}
 
 // 跳行/缩放浮标共用闪烁时延（评审整改（工单 code-viewer/09）：1200 三处归拢）
 const CODE_FLASH_MS = 1200;
@@ -70,13 +216,21 @@ async function loadCodeDir(dir) {
   updateGotoGenerateVisibility();
   $("code-tree").innerHTML = '<span class="muted">加载中…</span>';
   try {
-    const data = await apiPost("/api/code/open", { dir });
-    codeFiles = data.files || [];
-    renderCodeTree();
+    // code-ide-flow/02：基线探测——首次打开建基线（无感知）；已打开过 →
+    // 对比旧基线感知（上次会话/外部编辑器改过）→ 联动（干净重载 / 脏标签
+    // 徽章 / 树徽章）。基线**不**随打开推进——diff 是待审视变更集，用户
+    // 点「清空并确认已看」（工单 03）才整体确认（spec 用户故事 2）。
+    const diff = await probeDiskBaseline(codeDir);
     renderOutline();
     renderSearchResults([]);
     $("code-find-input").value = "";
     $("code-find-results").innerHTML = '<span class="muted">在当前文件内查找</span>';
+    if (diff && baselineHasChanges(diff)) {
+      await applyDiskChanges(diff);   // 内部渲染树（带「新/变」徽章）
+    } else {
+      codeTreeChanges = {};           // 跨目录/无变更：不残留上一目录徽章
+      renderCodeTree();
+    }
   } catch (e) {
     codeFiles = [];
     $("code-tree").innerHTML = '<div class="error">加载失败：' + esc(e.message) + "</div>";
@@ -102,7 +256,7 @@ function updateGotoGenerateVisibility() {
 
 function renderCodeTree() {
   const box = $("code-tree");
-  const nodes = buildCodeTree(codeFiles);
+  const nodes = buildCodeTree(codeFiles, codeTreeChanges);
   box.innerHTML = nodes.length
     ? '<ul class="code-tree">' + codeTreeHTML(nodes) + "</ul>"
     : '<span class="muted">（没有文件）</span>';
@@ -111,11 +265,15 @@ function renderCodeTree() {
 // refreshCodeTreeOnly()：仅重拉清单 + 重渲染树（工单 code-tree-ops/02）——
 // 树操作（新建/重命名/删除）成功后刷新用；**不**碰中栏标签/内容（相对
 // loadCodeDir：后者会 setCodeDir 清全部标签，树操作不能丢编辑态）。
+// code-ide-flow/02：树操作是用户在本 IDE 内主动改盘——基线整体对齐为当前
+// 快照（不视为外部变更，徽章清空），避免下次对比把自己改的报「修改」。
 export async function refreshCodeTreeOnly() {
   if (!codeDir) return;
   try {
     const data = await apiPost("/api/code/open", { dir: codeDir });
     codeFiles = data.files || [];
+    baselineCommitDisk(codeDir, codeFiles);
+    codeTreeChanges = {};
     renderCodeTree();
   } catch (e) {
     toastError(e, "刷新文件树失败");
@@ -454,11 +612,22 @@ export function initCodeViewer() {
   // 保存成功 → 树节点大小刷新 + 大纲重渲（服务端重算 outline 直用——
   // 路径未变，「路径去重」不会自动重画大纲，此处显式刷新）+ main.c 步骤 8
   // 联动（工单 05：此目录 = 生成上下文 → 状态行差异提示立即可见）
+  // code-ide-flow/02：**仅保存**推进基线（用户动作 = 确认点；resp 无
+  // content——自动重载的 disk 载荷含 content，不推进——变更集保留至
+  // 「清空并确认已看」）+ 取消标签徽章（保存后磁盘 = 我的内容，冲突已决）。
   onFileSaved((tab, resp) => {
     const hit = codeFiles.find((f) => f.path === tab.path);
     if (hit && resp && typeof resp.size_bytes === "number") hit.size_bytes = resp.size_bytes;
     renderCodeTree();
     renderOutline();
+    if (resp && !("content" in resp)) {
+      baselineUpdateFile(codeDir, tab.path, resp.mtime_ns, resp.size_bytes);
+      clearDiskChanged(tab.path);
+      if (codeTreeChanges[tab.path]) {
+        delete codeTreeChanges[tab.path];
+        renderCodeTree();
+      }
+    }
     if (isMainCPath(tab.path) && isMainCDiskDir()) {
       refreshMainCDiskState();
     }

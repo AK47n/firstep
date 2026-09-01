@@ -209,3 +209,27 @@ test("parseTreeWidthStored：非法/空 → 240；parseInt 后收敛同 clamp", 
   assert.equal(parseTreeWidthStored("300", 400), 160);      // 窄布局收敛
   assert.equal(parseTreeWidthStored("350", 0), 350);        // 隐藏态恢复不塌到 160
 });
+
+test("buildCodeTree/codeTreeHTML：changes 参数标「新/变」徽章（code-ide-flow/02）", () => {
+  const nodes = buildCodeTree([
+    { path: "main.c", size_bytes: 10 },
+    { path: "new/oled.c", size_bytes: 5 },
+    { path: "readme.md", size_bytes: 2 },
+  ], { "main.c": "modified", "new/oled.c": "new" });
+  const html = codeTreeHTML(nodes);
+  assert.match(html, /class="code-tree-badge b-mod"/);           // 修改 → 变
+  assert.match(html, /class="code-tree-badge b-new"/);           // 新增 → 新
+  assert.match(html, /title="新增文件"/);
+  assert.match(html, /title="已修改"/);
+  // 未命中 changes 的文件无徽章；节点带 change 字段（纯件契约）
+  const mainNode = buildCodeTree([{ path: "main.c", size_bytes: 1 }],
+    { "main.c": "modified" })[0];
+  assert.equal(mainNode.change, "modified");
+  // 无 changes → 行为与旧版一致（零徽章）
+  const plain = codeTreeHTML(buildCodeTree([{ path: "main.c", size_bytes: 1 }]));
+  assert.ok(!plain.includes("code-tree-badge"));
+  // changes 命中目录路径不标（徽章只挂在文件行）
+  const dirHtml = codeTreeHTML(buildCodeTree(
+    [{ path: "src", is_dir: true }], { src: "new" }));
+  assert.ok(!dirHtml.includes("code-tree-badge"));
+});

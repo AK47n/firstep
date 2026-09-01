@@ -79,14 +79,16 @@ def _iter_project_dirs(root: Path) -> Iterator[Path]:
 
 
 def list_code_tree(root: Path) -> list[dict[str, Any]]:
-    """根目录文件 + 目录清单（工单 code-viewer/01 + code-tree-ops/01）：
-    统一噪音跳过后每条文件 {path, size_bytes}、每条目录 {path, is_dir: True}
-    （path 为相对 root 的正斜杠，与母版树同口径）。
+    """根目录文件 + 目录清单（工单 code-viewer/01 + code-tree-ops/01 +
+    code-ide-flow/02）：统一噪音跳过后每条文件 {path, size_bytes, mtime_ns}、
+    每条目录 {path, is_dir: True}（path 为相对 root 的正斜杠，与母版树同口径）。
 
     目录条目 = 非噪音目录（含空目录——树 UI 需展示/删除空目录，
     code-tree-ops/01）；与文件条目合并后按 path 排序。目录不存在 / 不是
     目录 → 400 中文；条目（文件+目录）超过 CODE_TREE_MAX_ENTRIES → 400
-    中文（防病态目录）。
+    中文（防病态目录）。mtime_ns = st_mtime_ns **以字符串返回**（JSON 传输
+    精度，与 /api/code/file、/api/code/save 同口径——供 code-ide-flow/02
+    磁盘基线对比判定外部/AI 写盘）。
     """
     if not root.is_dir():
         raise CodeViewError(f"目录不存在：{root}")
@@ -94,13 +96,15 @@ def list_code_tree(root: Path) -> list[dict[str, Any]]:
         {"path": d.relative_to(root).as_posix(), "is_dir": True}
         for d in _iter_project_dirs(root)
     ]
-    entries.extend(
-        {
-            "path": path.relative_to(root).as_posix(),
-            "size_bytes": path.stat().st_size,
-        }
-        for path in iter_project_files(root)
-    )
+    for path in iter_project_files(root):
+        st = path.stat()  # 一次 stat 同时喂 size 与 mtime（避免两次系统调用）
+        entries.append(
+            {
+                "path": path.relative_to(root).as_posix(),
+                "size_bytes": st.st_size,
+                "mtime_ns": str(st.st_mtime_ns),
+            }
+        )
     entries.sort(key=lambda e: e["path"])
     if len(entries) > CODE_TREE_MAX_ENTRIES:
         raise CodeViewError(
