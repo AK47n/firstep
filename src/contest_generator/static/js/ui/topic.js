@@ -16,10 +16,10 @@ import { $, apiGet, apiPut, apiDelete, toast, toastError, handle } from "/js/app
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
 import { pdfFileUrl } from "/js/fx/pdf.js";
-import { topicChipRowHTML, topicFilterEntries, topicSortEntries, topicStats, topicStatsText, topicCardHTML, topicDetailHTML, topicPagesHTML, topicPagesErrorHTML, topicEditHTML, topicEditValidate, topicEditPayload, topicGroupVocabulary } from "/js/fx/topic.js";
+import { topicChipRowHTML, topicFilterEntries, topicSortEntries, topicStats, topicStatsText, topicCardHTML, topicDetailHTML, topicPagesHTML, topicPagesErrorHTML, topicEditHTML, topicEditValidate, topicEditPayload, topicGroupVocabulary, topicCategoryOptionsHTML, topicCategoryFilterOptionsHTML } from "/js/fx/topic.js";
 import { useTopic } from "/js/ui/generate-recommend.js";
 
-let topicRows = [];      // 校对表草稿：[{year, number, problem_text}]
+let topicRows = [];      // 校对表草稿：[{year, number, problem_text, category}]
 let topicPdfFile = null; // 待确认的原 PDF（确认时随 multipart 重新上传，AI 拆错可查原文）
 
 // 历年真题汇总长 PDF（2017-2025）置顶链接：素材库同名定位（批次目录变动
@@ -43,9 +43,10 @@ async function loadTopicArchiveLink() {
 
 // —— 赛题库工具栏状态与渲染（工单 topic-library-ui/03）：过滤条件集中于此，
 // 事件层只转发；loadTopics 只负责拉数据入缓存，rendering 全走 renderTopics。
-let topicUI = { q: "", year: "", sortBy: "key", sortDir: "asc", health: false };
+let topicUI = { q: "", year: "", sortBy: "key", sortDir: "asc", health: false, category: "" };
 let topicEntries = [];      // /api/topics 全量缓存（含 health 字段）
 let topicGroupVocab = {};   // 功能组词表（/api/modules 派生，空 = hint 悬空降级）
+let topicCategories = [];   // 分类词表（/api/topics/categories，空 = 降级不筛选）
 let topicSearchTimer = null;
 let topicLoading = false;   // 列表拉取中（加载态）
 
@@ -55,6 +56,7 @@ function topicFilterContext() {
     year: topicUI.year,
     health: topicUI.health,
     groupIds: Object.keys(topicGroupVocab),
+    category: topicUI.category,
   };
 }
 
@@ -196,7 +198,7 @@ export async function viewTopicEdit(key) {
         <strong>编辑赛题 · ${esc(key)}</strong>
         <button class="ref-files-close" title="关闭">×</button>
       </div>
-      <div class="ref-detail-scroll">${topicEditHTML(entry, topicGroupVocab)}</div>
+      <div class="ref-detail-scroll">${topicEditHTML(entry, topicGroupVocab, topicCategories)}</div>
       <div class="error topic-edit-msg"></div>
     </div>`;
   const close = () => overlay.remove();
@@ -208,6 +210,7 @@ export async function viewTopicEdit(key) {
   document.body.appendChild(overlay);
   const problemEl = overlay.querySelector(".topic-edit-problem");
   const programsEl = overlay.querySelector(".topic-edit-programs");
+  const categoryEl = overlay.querySelector(".topic-edit-category");
   const saveBtn = overlay.querySelector("[data-topic-save]");
   const msgBox = overlay.querySelector(".topic-edit-msg");
   saveBtn.addEventListener("click", async () => {
@@ -221,6 +224,7 @@ export async function viewTopicEdit(key) {
       programs: programsEl.value,
       hint_module_groups: [...overlay.querySelectorAll("[data-topic-group]:checked")]
         .map((c) => c.dataset.topicGroup),
+      category: categoryEl ? categoryEl.value : "",
     });
     saveBtn.disabled = true;
     saveBtn.textContent = "保存中…";
@@ -241,8 +245,9 @@ export async function viewTopicEdit(key) {
 }
 
 function clearTopicFilter() {
-  topicUI.q = ""; topicUI.year = ""; topicUI.health = false;
+  topicUI.q = ""; topicUI.year = ""; topicUI.health = false; topicUI.category = "";
   $("topic-filter").value = "";
+  $("topic-category").value = "";
   renderTopics();
 }
 
@@ -253,6 +258,10 @@ export function initTopicToolbar() {
     topicSearchTimer = setTimeout(() => { topicUI.q = $("topic-filter").value; renderTopics(); }, 150);
   });
   $("topic-filter").addEventListener("keydown", (e) => { if (e.key === "Escape") clearTopicFilter(); });
+  $("topic-category").addEventListener("change", (e) => {
+    topicUI.category = e.target.value;
+    renderTopics();
+  });
   $("topic-sort").addEventListener("change", (e) => {
     topicUI.sortBy = e.target.value;
     if (e.target.value === "mtime") {   // 最近更新默认降序（最新在前，ux-polish-02/08）
@@ -291,10 +300,24 @@ export async function loadTopicGroupVocabulary() {
   if (topicEntries.length) renderTopics();  // 词表到达后重渲染（⚠ 收敛）
 }
 
+// 分类词表（工单 topics-control-2023-2025/01）：选项单源 = GET
+// /api/topics/categories（与后端校验同源——前端不硬编码词表）；失败降级 =
+// 空数组（筛选下拉只剩「全部」，编辑/校对下拉只剩「（未标记）」，后端校验
+// 兜底 400 中文）。
+export async function loadTopicCategories() {
+  try {
+    const data = await apiGet("/api/topics/categories");
+    topicCategories = (data && Array.isArray(data.categories)) ? data.categories : [];
+  } catch (e) { topicCategories = []; }
+  $("topic-category").innerHTML = topicCategoryFilterOptionsHTML(topicCategories);
+  if (topicEntries.length) renderTopics();  // 词表到达后重渲染（⚠ 收敛）
+}
+
 let topicLoadTimer = null;   // 加载态延迟（工单 ux-walkthrough-02/22：本地快响应不闪占位）
 
 export async function loadTopics() {
   loadTopicArchiveLink();
+  loadTopicCategories();
   try {
     topicLoading = true;
     // 占位延迟 150ms：本地 API 快（<150ms）时用户无感；慢才显示「加载中…」
@@ -346,12 +369,14 @@ export function renderProofreadRows() {
     div.innerHTML = `
       <input type="text" placeholder="年份" title="年份（4 位）" value="${esc(t.year)}">
       <input type="text" placeholder="题号" title="题号（如 C）" value="${esc(t.number)}">
+      <select class="proofread-category" title="分类（新建默认控制题）">${topicCategoryOptionsHTML(topicCategories, t.category)}</select>
       <textarea placeholder="题面全文（可修剪尾部杂项 / 评分汇总）">${esc(t.problem_text)}</textarea>
       <button class="btn-mini danger" title="删除该条草稿">✕</button>`;
     const inputs = div.querySelectorAll("input, textarea");
     inputs[0].addEventListener("input", (e) => (topicRows[i].year = e.target.value.trim()));
     inputs[1].addEventListener("input", (e) => (topicRows[i].number = e.target.value.trim()));
     inputs[2].addEventListener("input", (e) => (topicRows[i].problem_text = e.target.value));
+    div.querySelector("select").addEventListener("change", (e) => (topicRows[i].category = e.target.value));
     div.querySelector("button").addEventListener("click", () => {
       topicRows.splice(i, 1);
       renderProofreadRows();
@@ -373,7 +398,10 @@ $("btn-topic-split").addEventListener("click", async () => {
     form.append("upload", file);
     const data = await handle(await fetch("/api/topics/split", { method: "POST", body: form }));
     topicPdfFile = file;
-    topicRows = data.topics.map((t) => ({ year: t.year, number: t.number, problem_text: t.problem_text }));
+    topicRows = data.topics.map((t) => ({
+      year: t.year, number: t.number, problem_text: t.problem_text,
+      category: t.category || "control",  // 新建默认控制题（后端同样默认，双保险）
+    }));
     renderProofreadRows();
     $("topic-proofread").classList.remove("hidden");
     $("topic-split-msg").classList.add("ok");

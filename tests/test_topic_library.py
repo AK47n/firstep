@@ -1269,6 +1269,9 @@ def test_topics_split_endpoint_returns_drafts(topic_context, tmp_path):
     assert response.status_code == 200
     assert [t["key"] for t in response.json()["topics"]] == [KEY_2026C, KEY_2026D]
     assert response.json()["topics"][0]["problem_text"] == DRAFTS[0].problem_text
+    # 新建默认 control（工单 topics-control-2023-2025/01：控制题专项定位，
+    # 校对表单默认选中；confirm 提交值以用户改动为准）
+    assert response.json()["topics"][0]["category"] == "control"
     assert holder["llm"].split_calls  # 拆条确实调了 LLM
 
 
@@ -2074,3 +2077,279 @@ def test_enrich_skips_meaningless_render_vision_text(topic_root, pdf, monkeypatc
     )
     assert "[图" not in entry.problem_text  # 无实质 → 原样返回
     assert entry.problem_text == "系统功能如图1所示。"
+
+
+# ---------------------------------------------------------------------------
+# 分类标记（工单 topics-control-2023-2025/01）：词表 / 校验 / manifest 读写 /
+# update / confirm / webapp PUT+confirm+词表端点
+# ---------------------------------------------------------------------------
+
+
+def test_validate_topic_category_accepts_vocab_and_empty():
+    """词表三态：control / other / 空串（未标记）全部合法。"""
+    from contest_generator.topic_library import (
+        validate_topic_category,
+    )
+
+    validate_topic_category("control")
+    validate_topic_category("other")
+    validate_topic_category("")
+
+
+def test_validate_topic_category_rejects_unknown():
+    """词表外分类大声失败（照 validate_topic_type 同款严格）。"""
+    from contest_generator.topic_library import (
+        TOPIC_CATEGORIES,
+        TopicError,
+        validate_topic_category,
+    )
+
+    assert TOPIC_CATEGORIES == ("control", "other")
+    with pytest.raises(TopicError, match="非法分类"):
+        validate_topic_category("mystery")
+    with pytest.raises(TopicError, match="control、other"):
+        validate_topic_category("mystery")
+
+
+def test_confirm_topics_writes_category_to_manifest(topic_root, pdf):
+    """confirm_topics 带 category → manifest 落盘「category」字段 + 回读。"""
+    (entry,) = confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2023", number="E", problem_text="2023E 题面", category="control"),),
+    )
+    assert entry.category == "control"
+    manifest = json.loads(
+        (topic_root / "2023E" / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["category"] == "control"
+    assert resolve_number(topic_root, "2023E").category == "control"
+
+
+def test_confirm_topics_category_defaults_empty(topic_root, pdf):
+    """不带 category = 未标记（""）——既有确认流程行为不变。"""
+    confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2023", number="E", problem_text="2023E 题面"),),
+    )
+    manifest = json.loads(
+        (topic_root / "2023E" / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["category"] == ""
+    assert resolve_number(topic_root, "2023E").category == ""
+
+
+def test_parse_confirm_entries_reads_category():
+    """确认解析（工单 topics-control-2023-2025/01）：category 缺省 ""、合法值透传。"""
+    (draft,) = parse_confirm_entries(
+        {
+            "entries": [
+                {"year": "2026", "number": "C", "problem_text": "题面", "category": "other"}
+            ]
+        }
+    )
+    assert draft.category == "other"
+    (draft2,) = parse_confirm_entries(
+        {
+            "entries": [
+                {"year": "2026", "number": "C", "problem_text": "题面"}
+            ]
+        }
+    )
+    assert draft2.category == ""
+
+
+def test_parse_confirm_entries_rejects_bad_category():
+    """词表外分类 = 用户提交值非法，解析层就地拒绝（与编号格式同款）。"""
+    with pytest.raises(TopicError, match="非法分类"):
+        parse_confirm_entries(
+            {
+                "entries": [
+                    {"year": "2026", "number": "C", "problem_text": "题面", "category": "mystery"}
+                ]
+            }
+        )
+
+
+def test_load_entry_category_defaults_empty_for_old_manifest(topic_root, pdf):
+    """旧条目（manifest 无 category）：读盘缺省 ""，向后兼容。"""
+    confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2023", number="E", problem_text="2023E 题面"),),
+    )
+    manifest_path = topic_root / "2023E" / MANIFEST_FILENAME
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data.pop("category")
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    assert resolve_number(topic_root, "2023E").category == ""
+
+
+def test_load_entry_rejects_out_of_vocab_category(topic_root, pdf):
+    """词表外 category = 元数据损坏：浏览时大声失败，不把坏数据带进列表。"""
+    confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2023", number="E", problem_text="2023E 题面"),),
+    )
+    manifest_path = topic_root / "2023E" / MANIFEST_FILENAME
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["category"] = "mystery"
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(TopicError, match="非法分类"):
+        resolve_number(topic_root, "2023E")
+    with pytest.raises(TopicError, match="非法分类"):
+        list_topics(topic_root)
+
+
+def test_topic_entry_to_dict_contains_category():
+    """to_dict 带出 category（浏览列表 / 单条取题面经它自动透出）。"""
+    entry = TopicEntry(year="2023", number="E", problem_text="题面", category="control")
+    assert entry.to_dict()["category"] == "control"
+    assert TopicEntry(year="2023", number="E", problem_text="题面").to_dict()["category"] == ""
+
+
+def test_update_topic_edits_category(topic_root, pdf, tmp_path):
+    """edit 分类（工单 topics-control-2023-2025/01）：category 是第四可编辑字段。"""
+    confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2026", number="C", problem_text="2026C 题面"),),
+    )
+    updated = update_topic(
+        topic_root,
+        "2026C",
+        problem_text="2026C 题面",
+        programs=(),
+        hint_module_groups=(),
+        category="control",
+    )
+    assert updated.category == "control"
+    manifest = json.loads(
+        (topic_root / "2026C" / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["category"] == "control"
+    assert resolve_number(topic_root, "2026C").category == "control"
+
+
+def test_update_topic_category_defaults_empty(topic_root, pdf):
+    """update 不带 category = 未标记（""）——既有调用（测试 / 前端旧表单）兼容。"""
+    confirm_topics(
+        topic_root,
+        pdf,
+        (TopicDraft(year="2026", number="C", problem_text="2026C 题面", category="other"),),
+    )
+    updated = update_topic(
+        topic_root,
+        "2026C",
+        problem_text="2026C 题面",
+        programs=(),
+        hint_module_groups=(),
+    )
+    assert updated.category == ""
+    manifest = json.loads(
+        (topic_root / "2026C" / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["category"] == ""
+
+
+def test_topics_categories_endpoint(topic_context):
+    """词表端点（工单 topics-control-2023-2025/01）：GET /api/topics/categories——
+    路由必须注册在 GET /api/topics/{key} 之前，否则 categories 被当 key 解析。"""
+    ctx, _, _ = topic_context
+    with _client(ctx) as client:
+        response = client.get("/api/topics/categories")
+
+    assert response.status_code == 200
+    assert response.json() == {"categories": ["control", "other"]}
+
+
+def test_topics_confirm_endpoint_accepts_category(topic_context, tmp_path):
+    """confirm 路由：entries 项带 category 落盘；缺省 = ""。"""
+    ctx, _, topics_dir = topic_context
+    pdf_path = tmp_path / "真题.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    with _client(ctx) as client:
+        with pdf_path.open("rb") as file:
+            response = client.post(
+                "/api/topics/confirm",
+                files={"pdf": ("真题.pdf", file, "application/pdf")},
+                data={
+                    "payload": json.dumps(
+                        {
+                            "entries": [
+                                {
+                                    "year": "2023",
+                                    "number": "E",
+                                    "problem_text": "2023E 题面",
+                                    "category": "control",
+                                }
+                            ],
+                            "program_dirs": [],
+                        }
+                    )
+                },
+            )
+    assert response.status_code == 200
+    assert response.json()["topics"][0]["category"] == "control"
+    manifest = json.loads(
+        (topics_dir / "2023E" / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["category"] == "control"
+
+
+def test_topics_get_and_list_endpoints_expose_category(topic_context, tmp_path):
+    """透出契约（review 整改）：GET /api/topics/{key} 与 GET /api/topics
+    都经 to_dict 带出 category（浏览列表 + 生成入口素材两路都可见）。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])  # 无 category → ""
+    manifest_path = topics_dir / KEY_2026C / MANIFEST_FILENAME
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["category"] = "control"
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with _client(ctx) as client:
+        single = client.get(f"/api/topics/{KEY_2026C}")
+        listed = client.get("/api/topics")
+
+    assert single.status_code == 200
+    assert single.json()["category"] == "control"
+    assert listed.status_code == 200
+    assert {t["key"]: t["category"] for t in listed.json()}[KEY_2026C] == "control"
+
+
+def test_topics_put_endpoint_category_contract(topic_context, tmp_path):
+    """PUT 编辑路由：body 带 category 落盘回读；词表外 400 中文。"""
+    ctx, _, topics_dir = topic_context
+    _confirm_draft(ctx, topics_dir, tmp_path, DRAFTS[0])
+
+    with _client(ctx) as client:
+        response = client.put(
+            f"/api/topics/{KEY_2026C}",
+            json={
+                "problem_text": "2026C 编辑后题面",
+                "programs": [],
+                "hint_module_groups": [],
+                "category": "control",
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["category"] == "control"
+    manifest = json.loads(
+        (topics_dir / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert manifest["category"] == "control"
+
+    with _client(ctx) as client:
+        bad = client.put(
+            f"/api/topics/{KEY_2026C}",
+            json={
+                "problem_text": "2026C 编辑后题面",
+                "programs": [],
+                "hint_module_groups": [],
+                "category": "mystery",
+            },
+        )
+    assert bad.status_code == 400
+    assert "非法分类" in bad.json()["detail"]

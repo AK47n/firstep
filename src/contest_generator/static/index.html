@@ -897,9 +897,11 @@
                 padding: 2px 6px; border-radius: var(--radius-sm); }
   /* 通用小按钮（polish-v2/01）：列表内「移除/删除 ✕」类小动作，统一迷你胶囊 */
   .btn-mini { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-full); }
-  /* ---- 赛题库拆条校对表（工单 05）：年份 / 题号 / 题面三字段 + 删条目 ---- */
+  /* ---- 赛题库拆条校对表（工单 05 + topics-control-2023-2025/01）：年份 /
+  题号 / 分类 / 题面四字段 + 删条目 ---- */
   .proofread-row { display: flex; gap: 8px; margin-bottom: var(--space-2); align-items: flex-start; }
   .proofread-row input { width: 90px; flex: none; }
+  .proofread-row select { width: 110px; flex: none; }
   .proofread-row textarea { flex: 1; min-height: 110px; }
   .report-group { margin-bottom: var(--space-3); }
   .report-group .title { font-weight: 600; margin-bottom: var(--space-2); }
@@ -3545,6 +3547,9 @@
       <div id="topic-archive-link" style="margin:6px 0"></div>
       <div class="lib-toolbar">
         <input type="search" id="topic-filter" placeholder="搜索编号 / 年份 / 题面全文…">
+        <select id="topic-category" title="分类筛选">
+          <option value="">分类：全部</option>
+        </select>
         <select id="topic-sort" title="排序字段">
           <option value="key">排序：编号</option>
           <option value="chars">排序：题面字数</option>

@@ -33,6 +33,7 @@ export const INPUT_A11Y_LABELS = {
   "ref-desc": "参考条目简介",
   "pdf-filter": "搜索 PDF 资料库",
   "topic-filter": "搜索赛题库",
+  "topic-category": "分类筛选",
   "topic-pdf": "选择赛题 PDF 文件",
   "set-base-url": "DeepSeek 接口地址（base_url）",
   "set-model": "模型",
