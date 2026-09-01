@@ -575,7 +575,7 @@ def test_cli_fix_event_wordtable_matches_events_py() -> None:
 
 
 def test_cli_fix_max_rounds_matches_frontend() -> None:
-    """CLI FIX_MAX_ROUNDS == 前端 ui/generate-fix.js FIX_MAX_ROUNDS（改动须两处同步）。"""
+    """CLI FIX_MAX_ROUNDS == 前端 ui/fix-center-core.js FIX_MAX_ROUNDS（改动须两处同步）。"""
     m = re.search(r"const FIX_MAX_ROUNDS = (\d+);", _fix_src())
     assert m is not None, "ui/generate-fix.js 找不到 const FIX_MAX_ROUNDS"
     assert gen.FIX_MAX_ROUNDS == int(m.group(1))
@@ -595,7 +595,8 @@ def _index_html() -> str:
 
 
 def _fix_src() -> str:
-    """修复中心簇源码（阶段 2 工单 16 迁 ui/generate-fix.js——结构钉重指向）。"""
+    """修复中心簇源码（阶段 2 工单 16 迁 ui/generate-fix.js——结构钉重指向；
+    工单 code-ide-ai/05 流程抽 ui/fix-center-core.js——钉再指向核心模块）。"""
     return (
         REPO_ROOT
         / "src"
@@ -603,7 +604,7 @@ def _fix_src() -> str:
         / "static"
         / "js"
         / "ui"
-        / "generate-fix.js"
+        / "fix-center-core.js"
     ).read_text(encoding="utf-8")
 
 
@@ -619,7 +620,7 @@ def test_index_html_round_cap_text_mentions_fix_continue() -> None:
     """结构钉：轮上限终态文案含「继续修复」指引——改回旧文案（只能贴文本 /
     改工程）即红（工单 fix-loop-continue/01；阶段 2 工单 16 重指向 generate-fix.js）。"""
     assert "可点「继续修复」再来" in _fix_src(), (
-        "ui/generate-fix.js 轮上限终态文案未指引「继续修复」按钮"
+        "ui/fix-center-core.js 轮上限终态文案未指引「继续修复」按钮"
     )
 
 
@@ -630,7 +631,7 @@ def test_index_html_has_fix_continue_resume_snapshot() -> None:
     assert re.search(
         r"fixLoop\.resume\s*=\s*\{\s*errorText,\s*lastSummary,\s*lastFixDone\s*\}",
         _fix_src(),
-    ), "ui/generate-fix.js 找不到 fixLoop.resume 续跑态快照"
+    ), "ui/fix-center-core.js 找不到 fixLoop.resume 续跑态快照"
 
 
 # ---------- 修复循环告警收敛钉（工单 fix-loop-warnings/01） ----------
