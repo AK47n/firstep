@@ -19,4 +19,46 @@
   变更（集成不回归）。
 - [ ] 验收 5：CDP 冒烟覆盖主路径；全量回归绿。
 
-**结论：** （实现后补）
+**结论：** 已落地（纯接线，无新前端状态）。
+
+改动仅 ui/code-compile.js 两处：①import 增 `startFixCenter`
+（/js/ui/generate-fix.js——与 code-compile.js 无循环依赖：generate-fix
+不 import code-compile）；②`btn-code-compile-goto` 点击处理在
+`tab.click()` + `scrollToStep(10)` 后追加 `startFixCenter()`（fire-and-
+forget——startFixCenter 内部 try/catch/finally 自兜，防重入
+`fixLoop.running` 单实例）。
+
+**零重复原则**：startFixCenter 自带全部前置校验（输出目录 → 平台 → 工具链）
+与写盘守卫（`guardCodeTabWrite(WG.fix)`——未保存编辑应先保存全部，取消
+则中止）——工单验收 2/3 复用既有逻辑，IDE 侧不再重复 saveAllDirtyTabs /
+平台判据（评审：不引入第二次实现）。守卫放校验之后（无输出目录/无工具链
+不打扰）与手动入口语义一致。
+
+**边界**：循环运行中（fixLoop.running）点按钮 → 跳转照常（用户可看现场），
+startFixCenter 防重入静默返回（与手动按钮行为一致）。
+
+**冒烟（smoke-04.mjs，9 项全 PASS）**：S1 无输出目录 → 跳转后
+fix-errors-msg「请先生成工程（或填写输出目录）」（自动开始到前置校验即证明
+调用链）；S2 伪造平台/工具链 + main.c 脏 → 守卫弹窗「保存全部并继续」→
+取消 → 弹窗关、循环未开始（fix-status 未变「自动编译中…」）；S3 reload 后
+干净标签 + 全套伪造 → 点按钮 → fix-status「自动编译中…」+ AI 行动横幅
+（MutationObserver 捕获显示瞬间——循环秒级收敛，直接断言会错过）+ 循环
+收敛（终态=「工程里没有 .uvprojx，无法编译」——样本目录非生成产物，预期）；
+S4 感知回归：外部写盘 main.c → 切回代码 tab → 磁盘变更面板出现（main.c
+修改条目）。
+
+**测试**：node 全量 1038 全绿；smoke-02/03 回归全 PASS；无新增 node 用例
+（纯接线，验收 1-4 由冒烟覆盖）。验收 3 无真实工具链环境以「to 前置校验提示」
+为证（notool/无平台行为与手动入口同判据——startFixCenter 未改一行）。
+
+- [x] 验收 1：点按钮 → 切生成页修复中心 → 自动进入循环（fix-status
+  「自动编译中…」+ aiAction 横幅 + 事件流转；冒烟 S3 以伪造平台/工具链
+  走通，终态收敛）。
+- [x] 验收 2：脏标签 → 守卫弹窗（保存全部并继续/取消）；取消 → 不开始
+  （冒烟 S2）。
+- [x] 验收 3：无输出目录 → 前置校验提示（冒烟 S1）；无工具链/无平台与
+  手动入口同判据——startFixCenter 未改，不引入新状态。
+- [x] 验收 4：修复循环写盘后 IDE 感知——smoke-02/03 回归 + 冒烟 S4
+  外部写盘面板复现（集成不回归）。
+- [x] 验收 5：CDP 冒烟 smoke-04 9 项全 PASS；全量回归（node 1038 +
+  smoke-02/03）全绿。

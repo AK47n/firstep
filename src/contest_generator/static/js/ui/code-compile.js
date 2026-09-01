@@ -23,6 +23,7 @@ import {
 import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";
 import { isMainCDiskDir } from "/js/ui/codeview.js";  // 单源谓词（评审整改：本模块不再重复实现）
 import { scrollToStep } from "/js/ui/step-state.js";
+import { startFixCenter } from "/js/ui/generate-fix.js";  // 一键编译修复入口（工单 code-ide-flow/04：跳转后自动开始）
 
 let compileBusy = false;
 
@@ -197,10 +198,14 @@ export function initCodeCompile() {
     collapse.title = collapsed ? "展开错误列表" : "收起错误列表";
   });
 
+  // 「去生成页一键编译修复」→ 跳转并自动开始修复循环（工单 code-ide-flow/04）：
+  // startFixCenter 自带全部前置校验（输出目录/平台/工具链）与写盘守卫
+  // （未保存编辑 → 保存全部或取消中止），无需本侧重复；循环运行中防重入。
   const goto = $("btn-code-compile-goto");
   if (goto) goto.addEventListener("click", () => {
     const tab = document.querySelector('nav button[data-tab="generate"]');
     if (tab) tab.click();
     scrollToStep(10);   // 修复中心（生成页步骤 10）
+    startFixCenter();
   });
 }
