@@ -45,56 +45,77 @@ export function fixLoopSnapshot() {
 }
 
 // input 形状（壳层组装）：{outputDir, platform, problemText, mainC, slugs,
-// callbacks}；callbacks 见头部注释。
-function noop() {}
-function withCbs(input) {
-  const c = input.callbacks || {};
-  const cb = {};
-  for (const k of ["onState", "onError", "onRound", "onApply", "onLog", "onBanner",
-    "onList", "onTelemetry", "onDone", "onReset", "onBusy", "onResume", "onCompiled"]) {
-    cb[k] = typeof c[k] === "function" ? c[k] : noop;
+// callbacks}；callbacks 见头部注释。emitAll 对缺失键安全跳过（无 noop 填充
+// ——回调组可只订阅关心的事件）。
+
+// ---- 订阅制广播（工单 code-ide-ai/06）：事件发往全部订阅回调组（Set 去重
+// 同一对象）。双面板（生成页修复中心 / IDE 修复面板）各自 subscribe 长驻组 →
+// 单实例循环的状态天然广播到两处 DOM（spec 二期「双面板同时打开时状态同
+// 步」）；触发方 input.callbacks 由 subscribeTrigger 临时订阅（**原始对象**
+// ——若与长驻组同一对象则 Set 天然去重只收一次——Standards 评审整改 H1：
+// 原 withCbs 包装新对象使「长驻 + 触发方」两个引用并存导致事件双发，
+// fixRowHTML 重复追加 + LLM 用量重复计数）。单个监听器异常不阻断其他订阅。 ----
+const fixSubs = new Set();
+export function subscribeFixCenter(cb) {
+  fixSubs.add(cb);
+  return () => fixSubs.delete(cb);   // 退订（长驻面板忽略返回值；测试隔离用）
+}
+function emitAll(name, ...args) {
+  for (const cb of fixSubs) {
+    const f = cb && cb[name];
+    if (typeof f === "function") {
+      try { f(...args); } catch (e) { /* 监听器异常不阻断其他订阅 */ }
+    }
   }
-  return cb;
+}
+/** 触发方临时订阅：原始 callbacks 对象进 fixSubs（已是成员则不加——同对象
+ * 去重防双发）；返回退订函数（仅本次新增时才真删——不误删长驻组）。 */
+function subscribeTrigger(input) {
+  const cb = input && input.callbacks;
+  if (!cb || typeof cb !== "object") return () => {};
+  let added = false;
+  if (!fixSubs.has(cb)) { fixSubs.add(cb); added = true; }
+  return () => { if (added) fixSubs.delete(cb); };
 }
 
 // ---------------------------------------------------------------------------
 // 单次编译（SSE /api/compile）→ done 载荷；error 终态 / 断线 → throw（中文文案）。
 // 横幅（running/终态）经 onBanner——文案与 fx/generate.compileSummaryText 单源。
 // ---------------------------------------------------------------------------
-async function runCompileOnce(input, cb) {
+async function runCompileOnce(input) {
   let finished = false;
   let done = null;
   let errorMsg = null;
   let resp;
   const runningText = () => "编译中…"
     + (fixLoop.round > 0 ? "（第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS + " 轮）" : "");
-  cb.onBanner("running", runningText());
+  emitAll("onBanner", "running", runningText());
   try {
     resp = await fetch("/api/compile", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ platform: input.platform, output_dir: input.outputDir }),
     });
-  } catch (e) { cb.onBanner("fail", "编译未能启动：" + e.message); throw new Error(e.message); }
-  if (!resp.body) { cb.onBanner("fail", "服务响应无流"); throw new Error("服务响应无流"); }
+  } catch (e) { emitAll("onBanner", "fail", "编译未能启动：" + e.message); throw new Error(e.message); }
+  if (!resp.body) { emitAll("onBanner", "fail", "服务响应无流"); throw new Error("服务响应无流"); }
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     const msg = parseHttpError(resp.status, err).text;
-    cb.onBanner("fail", "编译失败：" + msg);
+    emitAll("onBanner", "fail", "编译失败：" + msg);
     throw new Error(msg);
   }
   await parseSSE(resp, (type, raw) => {
     let data = {};
     try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
     if (type === "compile_start") {
-      cb.onBanner("running", runningText());
+      emitAll("onBanner", "running", runningText());
     } else if (type === "done") { done = data; finished = true; }
     else if (type === "error") { errorMsg = data.message || "编译失败"; finished = true; }
   });
-  if (errorMsg) { cb.onBanner("fail", "编译失败：" + errorMsg); throw new Error(errorMsg); }
+  if (errorMsg) { emitAll("onBanner", "fail", "编译失败：" + errorMsg); throw new Error(errorMsg); }
   if (!done) throw new Error(finished ? "编译未返回结果" : "连接中断：本次编译未完成，可安全重试");
   const text = compileSummaryText(done);   // 文案单源（compileSummaryText，与 IDE 编译横幅同源）
-  cb.onBanner(done.timed_out ? "fail" : done.passed ? "success" : "fail", text);
-  cb.onCompiled(done, input.outputDir);
+  emitAll("onBanner", done.timed_out ? "fail" : done.passed ? "success" : "fail", text);
+  emitAll("onCompiled", done, input.outputDir);
   return done;
 }
 
@@ -103,38 +124,38 @@ async function runCompileOnce(input, cb) {
 // apply_result/llm_telemetry/done/error）。核心只记回喂态 lastFixDone；
 // done 的备份信息（backup_id）经 onDone 交壳层（回滚按钮态）。
 // ---------------------------------------------------------------------------
-function fixHandleEvent(type, raw, outputDir, cb) {
+function fixHandleEvent(type, raw, outputDir) {
   let data = {};
   try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
   if (type === "parse_done") {
     const degraded = !data.file_count;
-    cb.onState("已解析 " + (data.error_count || 0) + " 条报错"
+    emitAll("onState", "已解析 " + (data.error_count || 0) + " 条报错"
       + (degraded ? "，未定位到可读取的源码文件（降级模式，只按报错全文修复）"
         : "，定位 " + data.file_count + " 个文件") + "，AI 修复中…");
   } else if (type === "fix_start") {
-    cb.onState("AI 正在逐条修复（分钟级调用，请等待）…");
+    emitAll("onState", "AI 正在逐条修复（分钟级调用，请等待）…");
   } else if (type === "apply_result") {
-    cb.onState("");
-    cb.onApply({
+    emitAll("onState", "");
+    emitAll("onApply", {
       file: data.file, line: data.line, status: data.status, reason: data.reason,
     });
   } else if (type === "llm_telemetry") {
-    cb.onTelemetry(data);
+    emitAll("onTelemetry", data);
   } else if (type === "done") {
     lastFixDone = data;
     const fixes = data.fixes || [];
     const applied = fixes.filter((f) => f.status === "applied").length;
     const skipped = fixes.length - applied;
-    cb.onState("修复完成：应用 " + applied + " 处"
+    emitAll("onState", "修复完成：应用 " + applied + " 处"
       + (skipped ? "，跳过 " + skipped + " 处" : "")
       + (data.backup_id ? "；已自动备份，可点「回滚本次修复」" : ""));
-    cb.onDone(data);
+    emitAll("onDone", data, outputDir);
     // 列表重建（streaming 期逐条追加的行合并为最终状态）
-    cb.onList(data.parsed || [], fixes, fixLoop.round);
+    emitAll("onList", data.parsed || [], fixes, fixLoop.round);
   } else if (type === "error") {
     lastFixDone = null;
-    cb.onState("");
-    cb.onError(data.message || "修复失败");
+    emitAll("onState", "");
+    emitAll("onError", data.message || "修复失败");
   }
 }
 
@@ -142,7 +163,7 @@ function fixHandleEvent(type, raw, outputDir, cb) {
 // 单次修复（SSE /api/fix-errors）→ done 载荷；error / 断线 → throw。
 // previousDone = 上一轮 done 载荷：fixes 回喂下一轮（previous_fixes）。
 // ---------------------------------------------------------------------------
-async function runFixOnce(input, cb, errorText, previousDone) {
+async function runFixOnce(input, errorText, previousDone) {
   let finished = false;
   let resp;
   try {
@@ -166,7 +187,7 @@ async function runFixOnce(input, cb, errorText, previousDone) {
   }
   await parseSSE(resp, (type, raw) => {
     if (type === "done" || type === "error") finished = true;
-    fixHandleEvent(type, raw, input.outputDir, cb);
+    fixHandleEvent(type, raw, input.outputDir);
   });
   if (!finished) throw new Error("连接中断：本次修复未完成，可安全重试");
   if (!lastFixDone) throw new Error("修复失败（见上方提示）");
@@ -178,7 +199,7 @@ async function runFixOnce(input, cb, errorText, previousDone) {
 // 池，停条件 = 0 错 0 警）；本轮 0 applied 即停（停滞检测——文件没变重编译
 // 输出必同，不再白跑）；轮上限终态保存续跑态快照 + onResume 亮「继续修复」。
 // ---------------------------------------------------------------------------
-async function fixRounds(input, cb, errorText, lastSummary, previousDone) {
+async function fixRounds(input, errorText, lastSummary, previousDone) {
   if (!input.outputDir) throw new Error("请先生成工程（或填写输出目录）");
   lastFixDone = previousDone;
   const batchPrefix = fixLoop.batch > 1 ? "继续批次 " : "";
@@ -189,34 +210,34 @@ async function fixRounds(input, cb, errorText, lastSummary, previousDone) {
     const headDetail = (n !== null && n > 0)
       ? (n + " 条 Error" + (w !== null && w > 0 ? " / " + w + " 条 Warning" : ""))
       : (w !== null && w > 0 ? w + " 条 Warning" : (headLabel === "编译有错" ? "多条报错" : "多条警告"));
-    cb.onRound(batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+    emitAll("onRound", batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
       + " 轮：" + headLabel + "（" + headDetail + "）→ AI 修复…");
-    const done = await runFixOnce(input, cb, errorText, lastFixDone);
+    const done = await runFixOnce(input, errorText, lastFixDone);
     const applied = (done.fixes || []).filter((f) => f.status === "applied").length;
     if (applied === 0) {
-      cb.onRound(batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+      emitAll("onRound", batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
         + " 轮：未应用任何修复，停止循环");
       const rest = (lastSummary && lastSummary.errors === 0 && lastSummary.warnings > 0)
         ? "（剩余 " + lastSummary.warnings + " 条 Warning 见上方编译输出）" : "";
-      cb.onState("本轮未应用任何修复（全部 skipped / 无修复建议），停止循环"
+      emitAll("onState", "本轮未应用任何修复（全部 skipped / 无修复建议），停止循环"
         + rest + "——可贴文本手动修复或改工程后重试");
       return;
     }
-    cb.onRound(batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+    emitAll("onRound", batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
       + " 轮：重编译验证中…");
-    const compile = await runCompileOnce(input, cb);
-    cb.onLog(compile.error_text);
+    const compile = await runCompileOnce(input);
+    emitAll("onLog", compile.error_text);
     lastSummary = compile.summary || null;
-    cb.onRound(batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
+    emitAll("onRound", batchPrefix + "第 " + fixLoop.round + "/" + FIX_MAX_ROUNDS
       + " 轮 · 耗时 " + fmtSeconds(compile.duration) + "s");
     if (compile.timed_out) {
-      cb.onState("第 " + fixLoop.round + " 轮重编译超时，已停止循环——"
+      emitAll("onState", "第 " + fixLoop.round + " 轮重编译超时，已停止循环——"
         + "可修改工程后点「一键编译修复」重新来过");
       return;
     }
     if (compile.passed) {
       if (((compile.summary || {}).warnings || 0) === 0) {
-        cb.onState("第 " + fixLoop.round + " 轮重编译通过 ✅ 0 错 0 警");
+        emitAll("onState", "第 " + fixLoop.round + " 轮重编译通过 ✅ 0 错 0 警");
         return;
       }
       // 仍有警 → 下一轮继续告警轮（停条件 = 0 错 0 警）
@@ -230,8 +251,8 @@ async function fixRounds(input, cb, errorText, lastSummary, previousDone) {
   if (n === null || n > 0) restParts.push(n !== null ? n + " 条 Error" : "多条报错");
   if (w !== null && w > 0) restParts.push(w + " 条 Warning");
   fixLoop.resume = { errorText, lastSummary, lastFixDone };
-  cb.onResume(fixLoop.resume);
-  cb.onState("已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余 "
+  emitAll("onResume", fixLoop.resume);
+  emitAll("onState", "已达 " + FIX_MAX_ROUNDS + " 轮上限，剩余 "
     + (restParts.join(" / ") || "问题") + " 见上方编译输出——可点「继续修复」再来 "
     + FIX_MAX_ROUNDS + " 轮（保留回喂上下文），或贴文本修复，或改工程后重试");
 }
@@ -243,40 +264,41 @@ async function fixRounds(input, cb, errorText, lastSummary, previousDone) {
 // ---------------------------------------------------------------------------
 export async function startFixCenterCore(input) {
   if (fixLoop.running) return;   // 单实例：循环中忽略重复触发
-  const cb = withCbs(input);
+  const unsub = subscribeTrigger(input);   // 触发方原始对象临时订阅（与长驻同对象 → Set 去重）
   fixLoop.running = true;
   fixLoop.round = 0;
   fixLoop.batch = 1;
   fixLoop.resume = null;
   lastFixDone = null;
-  cb.onReset();
-  cb.onBusy(true);
-  cb.onState("自动编译中…");
+  emitAll("onReset");
+  emitAll("onBusy", true);
+  emitAll("onState", "自动编译中…");
   try {
-    const initial = await runCompileOnce(input, cb);
-    cb.onLog(initial.error_text);
+    const initial = await runCompileOnce(input);
+    emitAll("onLog", initial.error_text);
     if (initial.timed_out) {
-      cb.onState("编译超时（工具链 180s 未返回），已停止循环——"
+      emitAll("onState", "编译超时（工具链 180s 未返回），已停止循环——"
         + "可在设置页检查工具链路径后重试");
       return;
     }
     if (initial.passed) {
       const iw = (initial.summary && initial.summary.warnings) || 0;
       if (iw === 0) {
-        cb.onState("编译通过 ✅ 0 错 0 警");
+        emitAll("onState", "编译通过 ✅ 0 错 0 警");
         return;
       }
       // 0 错 N 警 → 进告警轮（验收标准 = 0 错 0 警）
     }
-    cb.onList(initial.parsed_errors || [], [], 0);
-    await fixRounds(input, cb, initial.error_text, initial.summary || null, null);
+    emitAll("onList", initial.parsed_errors || [], [], 0);
+    await fixRounds(input, initial.error_text, initial.summary || null, null);
   } catch (e) {
-    cb.onState("");
-    cb.onError(e.message);
+    emitAll("onState", "");
+    emitAll("onError", e.message);
   } finally {
-    cb.onBusy(false);
+    emitAll("onBusy", false);
     fixLoop.running = false;
     fixLoop.round = 0;
+    unsub();
   }
 }
 
@@ -286,21 +308,22 @@ export async function continueFixCenterCore(input) {
   if (fixLoop.running) return;   // 批内防重复触发
   const resume = fixLoop.resume;
   if (!resume) return;           // 无续跑态（非轮上限终态）不动作
-  const cb = withCbs(input);
+  const unsub = subscribeTrigger(input);
   fixLoop.resume = null;
   fixLoop.batch += 1;            // 批次号 +1：轮次条标注「继续批次 第 N/3 轮」
   fixLoop.running = true;
-  cb.onBusy(true);
-  cb.onState("");
+  emitAll("onBusy", true);
+  emitAll("onState", "");
   try {
-    await fixRounds(input, cb, resume.errorText, resume.lastSummary, resume.lastFixDone);
+    await fixRounds(input, resume.errorText, resume.lastSummary, resume.lastFixDone);
   } catch (e) {
-    cb.onState("");
-    cb.onError(e.message);
+    emitAll("onState", "");
+    emitAll("onError", e.message);
   } finally {
-    cb.onBusy(false);
+    emitAll("onBusy", false);
     fixLoop.running = false;
     fixLoop.round = 0;
+    unsub();
   }
 }
 
@@ -312,30 +335,39 @@ export async function continueFixCenterCore(input) {
  * 循环都写工程文件，并发会互相清空共享态（原 generate-fix.js 基线可并发，
  * 抽取后暴露为共享态风险）；运行中再触发 → 抛错交壳层显示。 */
 export async function runFixOnceCore(input, errorText) {
-  const cb = withCbs(input);
+  const unsub = subscribeTrigger(input);
   if (fixLoop.running) throw new Error("修复循环进行中，请等待完成后再试");
   fixLoop.resume = null;
   fixLoop.batch = 1;
   lastFixDone = null;
   fixLoop.running = true;
   try {
-    return await runFixOnce(input, cb, errorText, undefined);
+    return await runFixOnce(input, errorText, undefined);
   } finally {
     fixLoop.running = false;
     fixLoop.round = 0;
+    unsub();
   }
 }
 
 /** 单次编译（导出面）：供壳层/外部按需跑一遍编译（输入 outputDir 由 input
  * 携带）；banner 经回调。 */
 export async function runCompileOnceCore(input) {
-  const cb = withCbs(input);
-  return runCompileOnce(input, cb);
+  const unsub = subscribeTrigger(input);
+  try {
+    return await runCompileOnce(input);
+  } finally {
+    unsub();
+  }
 }
 
 /** 修复轮批（导出面）：批入口（「继续修复」前批次由 continueFixCenterCore
  * 调度；本导出供壳层/外部直跑一批）。 */
 export async function fixRoundsCore(input, errorText, lastSummary, previousDone) {
-  const cb = withCbs(input);
-  return fixRounds(input, cb, errorText, lastSummary, previousDone);
+  const unsub = subscribeTrigger(input);
+  try {
+    return await fixRounds(input, errorText, lastSummary, previousDone);
+  } finally {
+    unsub();
+  }
 }
