@@ -17,6 +17,8 @@ import {
   baselineHasChanges,
   baselineEvict,
 } from "/js/fx/disk-baseline.js";  // 磁盘基线对比纯件（code-ide-flow/01——事实源不依赖事件载荷）
+import { changesPanelHTML, changeSummaryText } from "/js/fx/change-panel.js";  // 「磁盘变更」面板条目渲染（code-ide-flow/03）
+import { maincDiffCompute } from "/js/fx/mainc-diff.js";  // main.c 行级 diff 计算（code-ide-flow/03——面板行级展示）
 import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import {
@@ -56,6 +58,30 @@ let codeFiles = [];
 // 树徽章（code-ide-flow/02）：磁盘基线对比结果 {path → "new"|"modified"}，
 // renderCodeTree 交 buildCodeTree/codeTreeHTML 渲染「新/变」徽章。
 let codeTreeChanges = {};
+// 「磁盘变更」面板数据源（code-ide-flow/03）：待审视变更集（未确认——
+// 「清空并确认已看」前保持），面板渲染的单一事实。
+let codeDiskChanges = { added: [], modified: [], removed: [] };
+
+function emptyChanges() {
+  return { added: [], modified: [], removed: [] };
+}
+
+// changesOf(diff)：diff → 变更集（added/modified/removed 快照单源构造——
+// 面板数据源与树徽章共用同一形状，评审整改：免三处手工重建漂移）。
+function changesOf(diff) {
+  return {
+    added: diff.added.slice(),
+    modified: diff.modified.slice(),
+    removed: diff.removed.slice(),
+  };
+}
+
+// maincSnap(content)：main.c 内容快照判空单源（超限 → null = 面板占位；
+// codeview.js 内两处推进函数共用同一 cap 语义，评审整改：改上限不落一处）。
+function maincSnap(content) {
+  return typeof content === "string" && content.length <= MAINc_SNAP_MAX
+    ? content : null;
+}
 
 // ===== 磁盘基线（工单 code-ide-flow/02）=====
 // 事实源 = 磁盘基线对比（spec：不消费 fix/task/deepen 事件载荷——那些只有
@@ -64,6 +90,7 @@ let codeTreeChanges = {};
 // baselineSnapshot 规范化快照；目录隔离 + evict（fx/disk-baseline.js）。
 const CODE_BASELINE_KEY = "firstep.codeBaseline";
 const CODE_BASELINE_MAX_DIRS = 8;  // LRU 上限（存过多目录的旧基线无意义）
+const MAINc_SNAP_MAX = 256 * 1024;  // main.c 内容快照上限（超出 = 不存 → 面板占位）
 
 function baselineStoreLoad() {
   try {
@@ -82,6 +109,16 @@ function baselineStoreCommit(store, dir, snap) {
   baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
 }
 
+// fetchMaincContent(dir)：读磁盘顶层 main.c（/api/code/file 直出）→ 内容
+// 字符串；不存在 / 失败 → null（面板行级 diff 占位）。
+async function fetchMaincContent(dir) {
+  try {
+    const data = await apiGet("/api/code/file?dir=" + encodeURIComponent(dir)
+      + "&path=main.c");
+    return data && typeof data.content === "string" ? data.content : null;
+  } catch (e) { return null; }
+}
+
 // baselineDiffDisk(dir, files)：当前磁盘清单 vs 已有基线 → diff（**纯计算
 // 不推进基线**——基线 = 用户最后确认点，对比只探测；推进只在：首次打开
 // 目录建立 / 保存·重载单文件 / 「清空并确认已看」/ 树操作整体对齐）。无
@@ -94,15 +131,28 @@ function baselineDiffDisk(dir, files) {
 }
 
 // baselineCommitDisk(dir, files)：确认点整体推进——基线 = 当前磁盘快照
-// （首次打开 / 树操作 / 「清空并确认已看」）。
-function baselineCommitDisk(dir, files) {
+// （首次打开 / 树操作 / 「清空并确认已看」）；顺带存顶层 main.c 内容快照
+// （行级 diff 数据源——基线只记 mtime/size 无法做行级对比；超限/失败 →
+// null，面板显示占位）。async：main.c 内容需一次 /api/code/file。
+async function baselineCommitDisk(dir, files) {
   const store = baselineStoreLoad();
-  baselineStoreCommit(store, dir, baselineSnapshot(files));
+  const snap = baselineSnapshot(files);
+  baselineStoreCommit(store, dir, snap);
+  const entry = store[dir];
+  // main.c 内容快照（行级 diff 数据源；超限/失败 → null → 面板占位）。
+  // 无论有无 main.c 都 write（无 main.c → maincContent=null 覆盖旧残值——
+  // 评审整改：else 分支此前只改内存不落盘，旧快照残留）。
+  entry.maincContent = Object.prototype.hasOwnProperty.call(snap, "main.c")
+    ? maincSnap(await fetchMaincContent(dir))
+    : null;
+  baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
 }
 
 // baselineUpdateFile(dir, path, mtimeNs, sizeBytes)：保存 / 重载后基线单
 // 条目对齐（下次对比不再把本文件报为「修改」——写盘方 = 本 IDE 自己）。
-function baselineUpdateFile(dir, path, mtimeNs, sizeBytes) {
+// maincContent：保存 main.c 时用户确认版内容（同步推进内容快照——新基线
+// 与面板 diff 都以最新确认版为参照）。
+function baselineUpdateFile(dir, path, mtimeNs, sizeBytes, maincContent) {
   const store = baselineStoreLoad();
   const entry = store[dir];
   if (!entry || !entry.files) return;
@@ -111,6 +161,9 @@ function baselineUpdateFile(dir, path, mtimeNs, sizeBytes) {
   }
   entry.files[path].mtime_ns = String(mtimeNs == null ? "" : mtimeNs);
   entry.files[path].size_bytes = sizeBytes == null ? "" : sizeBytes;
+  if (path === "main.c" && typeof maincContent === "string") {
+    entry.maincContent = maincSnap(maincContent);   // 用户确认版（超限 → null 占位）
+  }
   entry.ts = Date.now();
   baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
 }
@@ -143,11 +196,13 @@ async function applyDiskChanges(diff) {
   for (const p of diff.modified) next[p] = TREE_CHANGE_MODIFIED;
   for (const p of diff.added) next[p] = TREE_CHANGE_NEW;
   codeTreeChanges = next;
+  codeDiskChanges = changesOf(diff);
   renderCodeTree();
   // main.c 被外部/AI 改写（含子目录）→ 步骤 8 状态行联动（既有路径）
   if ((diff.modified.concat(diff.added)).some(isMainCPath) && isMainCDiskDir()) {
     refreshMainCDiskState();
   }
+  renderChangePanel();   // fire-and-forget（内部 fetch 已各自兜错）
   if (reloaded > 0) {
     toast("ok", reloaded + " 个文件已被外部更新，已自动重载");
   }
@@ -163,8 +218,9 @@ async function probeDiskBaseline(dir) {
   codeFiles = data.files || [];
   const diff = baselineDiffDisk(dir, codeFiles);
   if (diff === null) {
-    baselineCommitDisk(dir, codeFiles);
+    await baselineCommitDisk(dir, codeFiles);
     codeTreeChanges = {};
+    codeDiskChanges = emptyChanges();
   }
   return diff;
 }
@@ -180,11 +236,80 @@ export async function checkCodeDiskChanges() {
       await applyDiskChanges(diff);
     } else {
       codeTreeChanges = {};   // 变更已收敛（无 diff）：不残留旧徽章
+      codeDiskChanges = emptyChanges();
       renderCodeTree();
+      renderChangePanel();
     }
   } catch (e) {
     toastError(e, "刷新文件变化失败");
   }
+}
+
+// ===== 「磁盘变更」面板（工单 code-ide-flow/03）=====
+// buildChangeEntries()：待审视变更集 → 面板条目（status/path/mtime/size；
+// 元数据取自当前清单 codeFiles——removed 条目清单里没有，只剩 path）。
+function buildChangeEntries() {
+  const byPath = {};
+  for (const f of codeFiles) byPath[f.path] = f;
+  const makeEntry = (status, path) => {
+    const f = byPath[path] || {};
+    return {
+      status,
+      path,
+      mtime_ns: f.mtime_ns == null ? "" : String(f.mtime_ns),
+      size_bytes: f.size_bytes == null ? "" : f.size_bytes,
+    };
+  };
+  return codeDiskChanges.added.map((p) => makeEntry("added", p))
+    .concat(codeDiskChanges.modified.map((p) => makeEntry("modified", p)))
+    .concat(codeDiskChanges.removed.map((p) => makeEntry("removed", p)));
+}
+
+// renderChangePanel()：面板渲染（条目 HTML + 摘要 + 显隐）——main.c 修改
+// 条目补行级 diff（基线内容快照 vs 当前磁盘；无快照/超限 → 纯件占位）。
+// 无变更 → 面板隐藏。空态由面板自身收起（列表空 + hidden）。
+async function renderChangePanel() {
+  const panelEl = $("code-change-panel");
+  const listEl = $("code-change-list");
+  const summaryEl = $("code-change-summary");
+  if (!panelEl || !listEl) return;
+  const entries = buildChangeEntries();
+  if (!entries.length) {
+    panelEl.classList.add("hidden");
+    listEl.innerHTML = "";
+    if (summaryEl) summaryEl.textContent = "";
+    return;
+  }
+  // main.c 修改条目 → 行级 diff（基线快照 = 用户最后确认版；main.c 内容
+  // 快照与当前磁盘任一缺失 → 纯件占位文案）
+  const mc = entries.find((e) => e.status === "modified" && isMainCPath(e.path));
+  if (mc) {
+    const store = baselineStoreLoad();
+    const entry = store[codeDir] || {};
+    const oldContent = entry.maincContent;
+    const curContent = await fetchMaincContent(codeDir);
+    if (typeof oldContent === "string" && typeof curContent === "string") {
+      mc.mainDiff = maincDiffCompute(oldContent, curContent);   // null = 无差异/超限 → 占位
+    }
+  }
+  listEl.innerHTML = changesPanelHTML(entries);
+  if (summaryEl) summaryEl.textContent = changeSummaryText(entries);
+  panelEl.classList.remove("hidden");
+}
+
+// clearCodeDiskChanges()：「清空并确认已看」——基线推进为当前磁盘快照
+// （含 main.c 内容快照），待看清单/树徽章/标签「磁盘已变更」徽章全部清空；
+// 此后同类外部变更不再报（无变化）；外部再改 → 重新感知。
+export async function clearCodeDiskChanges() {
+  if (!codeDir) return;
+  const stalePaths = Object.keys(codeTreeChanges);
+  codeTreeChanges = {};
+  codeDiskChanges = emptyChanges();
+  for (const p of stalePaths) clearDiskChanged(p);
+  await baselineCommitDisk(codeDir, codeFiles);
+  renderCodeTree();
+  await renderChangePanel();
+  toast("ok", "已确认磁盘变更：待看清单已清空");
 }
 
 // 跳行/缩放浮标共用闪烁时延（评审整改（工单 code-viewer/09）：1200 三处归拢）
@@ -226,10 +351,12 @@ async function loadCodeDir(dir) {
     $("code-find-input").value = "";
     $("code-find-results").innerHTML = '<span class="muted">在当前文件内查找</span>';
     if (diff && baselineHasChanges(diff)) {
-      await applyDiskChanges(diff);   // 内部渲染树（带「新/变」徽章）
+      await applyDiskChanges(diff);   // 内部渲染树（带「新/变」徽章）+ 变更面板
     } else {
       codeTreeChanges = {};           // 跨目录/无变更：不残留上一目录徽章
+      codeDiskChanges = emptyChanges();
       renderCodeTree();
+      renderChangePanel();
     }
   } catch (e) {
     codeFiles = [];
@@ -272,9 +399,11 @@ export async function refreshCodeTreeOnly() {
   try {
     const data = await apiPost("/api/code/open", { dir: codeDir });
     codeFiles = data.files || [];
-    baselineCommitDisk(codeDir, codeFiles);
+    await baselineCommitDisk(codeDir, codeFiles);
     codeTreeChanges = {};
+    codeDiskChanges = emptyChanges();
     renderCodeTree();
+    renderChangePanel();
   } catch (e) {
     toastError(e, "刷新文件树失败");
   }
@@ -621,12 +750,19 @@ export function initCodeViewer() {
     renderCodeTree();
     renderOutline();
     if (resp && !("content" in resp)) {
-      baselineUpdateFile(codeDir, tab.path, resp.mtime_ns, resp.size_bytes);
+      // 仅保存（用户动作）推进：基线单条目 + 待看清单移除该文件（未打开过
+      // 的 added 文件被保存 = 也确认）+ main.c 内容快照（用户确认版）
+      baselineUpdateFile(codeDir, tab.path, resp.mtime_ns, resp.size_bytes, tab.content);
       clearDiskChanged(tab.path);
       if (codeTreeChanges[tab.path]) {
         delete codeTreeChanges[tab.path];
         renderCodeTree();
       }
+      const had = codeDiskChanges.added.indexOf(tab.path) >= 0
+        || codeDiskChanges.modified.indexOf(tab.path) >= 0;
+      codeDiskChanges.added = codeDiskChanges.added.filter((p) => p !== tab.path);
+      codeDiskChanges.modified = codeDiskChanges.modified.filter((p) => p !== tab.path);
+      if (had) renderChangePanel();
     }
     if (isMainCPath(tab.path) && isMainCDiskDir()) {
       refreshMainCDiskState();
@@ -700,6 +836,25 @@ export function initCodeViewer() {
   // 树面板拖拽调宽（工单 code-viewer-tree-resize/01）
   initCodeTreeResize();
   restoreTreeWidth();
+
+  // 「磁盘变更」面板（工单 code-ide-flow/03）：条目点击跳转打开（removed 为
+  // span 置灰天然不可点——委托只认 button[data-change-path]）；「清空并确认
+  // 已看」→ 基线推进 + 清单清空；「收起/展开」独立于编译面板。
+  const changeList = $("code-change-list");
+  if (changeList) changeList.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-change-path]");
+    if (btn) openEditorFile(btn.dataset.changePath);
+  });
+  const changeClear = $("btn-code-change-clear");
+  if (changeClear) changeClear.addEventListener("click", () => clearCodeDiskChanges());
+  const changeCollapse = $("btn-code-change-collapse");
+  if (changeCollapse) changeCollapse.addEventListener("click", () => {
+    const p = $("code-change-panel");
+    if (!p) return;
+    const collapsed = p.classList.toggle("collapsed");
+    changeCollapse.textContent = collapsed ? "展开" : "收起";
+    changeCollapse.title = collapsed ? "展开变更条目" : "收起变更条目";
+  });
 
   // 侧栏收起态恢复（工单 code-viewer-editor/07）：localStorage 持久化
   restoreCodeSideCollapsed();
