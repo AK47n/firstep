@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6c3d0f11925d88c6472969fc34ec57126d83a83c -->
+<!-- changelog-auto: last-commit=b5c7ad8ca7f64eb7fd566cb3217764dc08b18337 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 18:23 工单 code-ide-ai/05：fixLoop 状态机抽共享 ui/fix-center-core.js（无 DOM 流程 + 事件回调广播，生成页壳层变薄绑 DOM，双轴评审整改）
 - 18:44 工单 code-ide-ai/06：IDE 修复面板（B 全配双出口）——共享状态机订阅制广播（H1 双发整改）、「在此修复」任意目录入口、回滚/继续/感知联动
 - 18:57 工单 code-ide-ai/07：内容快照泛化——基线文件条目 content 快照（打开过的文件才有行级 diff）、maincContent 特例字段统一化迁移、推进 re-fetch 保持新鲜、双轴评审整改（清单派生/mtimeEq 单源/删除场景加固）
+- 19:10 工单 code-ide-ai/08：行级 diff 泛化（三期收口）——mainc-diff 改名 line-diff（任意文件）、change-panel hasLineDiffSource 判定无路径特判、getBaselineContent 单源、双轴评审整改（占位泛化/BOM/文案矛盾/循环外 load）
 
 ## 2026-08-31
 - 12:20 code-viewer-polish/01-02 代码查看器 UI 打磨：文件树类型图标（C/头文件/文档/配置/产物）、顶栏 C main.c 文件标签、当前行高亮与行号联动、gutter 同 data 键（对照 CCS 观感）
