@@ -16,11 +16,11 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .clex import quoted_include_lines, top_level_defines, top_level_functions
 from .entry_store import is_unsafe_path
-from .treewalk import iter_project_files
+from .treewalk import iter_project_files, skip_project_noise
 
 # 目录打开条目上限：防病态目录（如整盘 / 大仓库）把树渲染与往返压垮
 CODE_TREE_MAX_ENTRIES = 5000
@@ -61,28 +61,51 @@ class CodeViewConflictError(CodeViewError):
     """
 
 
-def list_code_tree(root: Path) -> list[dict[str, Any]]:
-    """根目录扁平文件清单（工单 code-viewer/01）：统一噪音跳过后每条
-    {path, size_bytes}（path 为相对 root 的正斜杠，与母版树同口径）。
+def _iter_project_dirs(root: Path) -> Iterator[Path]:
+    """遍历工程目录下的**目录**（绝对路径、按路径排序，确定性），跳过统一噪音。
 
-    目录不存在 / 不是目录 → 400 中文；条目超过 CODE_TREE_MAX_ENTRIES →
-    400 中文（防病态目录）；排序确定性 = treewalk iter_project_files 的
-    全路径排序（sorted rglob）。
+    与 iter_project_files 同规则（skip_project_noise 单源，原地剪枝不下钻
+    噪音目录）；含**空目录**——树操作（工单 code-tree-ops/01）需要展示与
+    删除空目录，而纯文件清单（iter_project_files）看不到它们。
+    """
+    for dirpath, dirnames, _ in os.walk(root):
+        top = Path(dirpath)
+        dirnames[:] = [
+            d for d in sorted(dirnames)
+            if not skip_project_noise((top / d).relative_to(root).as_posix())
+        ]
+        if top != root:
+            yield top
+
+
+def list_code_tree(root: Path) -> list[dict[str, Any]]:
+    """根目录文件 + 目录清单（工单 code-viewer/01 + code-tree-ops/01）：
+    统一噪音跳过后每条文件 {path, size_bytes}、每条目录 {path, is_dir: True}
+    （path 为相对 root 的正斜杠，与母版树同口径）。
+
+    目录条目 = 非噪音目录（含空目录——树 UI 需展示/删除空目录，
+    code-tree-ops/01）；与文件条目合并后按 path 排序。目录不存在 / 不是
+    目录 → 400 中文；条目（文件+目录）超过 CODE_TREE_MAX_ENTRIES → 400
+    中文（防病态目录）。
     """
     if not root.is_dir():
         raise CodeViewError(f"目录不存在：{root}")
-    entries: list[dict[str, Any]] = []
-    for path in iter_project_files(root):
-        entries.append(
-            {
-                "path": path.relative_to(root).as_posix(),
-                "size_bytes": path.stat().st_size,
-            }
+    entries: list[dict[str, Any]] = [
+        {"path": d.relative_to(root).as_posix(), "is_dir": True}
+        for d in _iter_project_dirs(root)
+    ]
+    entries.extend(
+        {
+            "path": path.relative_to(root).as_posix(),
+            "size_bytes": path.stat().st_size,
+        }
+        for path in iter_project_files(root)
+    )
+    entries.sort(key=lambda e: e["path"])
+    if len(entries) > CODE_TREE_MAX_ENTRIES:
+        raise CodeViewError(
+            f"目录文件过多（超过 {CODE_TREE_MAX_ENTRIES} 个）：{root}"
         )
-        if len(entries) > CODE_TREE_MAX_ENTRIES:
-            raise CodeViewError(
-                f"目录文件过多（超过 {CODE_TREE_MAX_ENTRIES} 个）：{root}"
-            )
     return entries
 
 
@@ -347,3 +370,129 @@ def save_code_file(root: Path, rel_path: str, content: str, base_mtime_ns: int |
         "mtime_ns": str(mtime_ns),
         "outline": _outline_for(content_norm) if _is_c_source(rel_path) else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# 树操作（工单 code-tree-ops/01）：新建文件/目录、重命名、删除——最小增删改
+# 闭环。全部复用 _resolve_in_root 单源（is_unsafe_path + resolve 在 root 内，
+# 判定在盘操作之前）；业务失败统一 CodeViewError → 400 中文（errors.py 既有
+# 表项），OSError（权限 / 占用 / 磁盘满）由 errors.py os_error_message 接住。
+# ---------------------------------------------------------------------------
+
+# 单段名称非法字符（Windows 保留集；路径分隔符靠 is_unsafe_path 拦，这里
+# 防「多段名」绕过 rename 语义——new_name 只允许单段，不做跨目录移动）。
+_CODE_NAME_ILLEGAL = set('/\\:*?"<>|')
+
+
+def _validate_entry_name(name: str) -> None:
+    """单段条目名称校验（tree 操作共用单源）：非空、非纯空白、首尾无空白、
+    ≤120 字符、不为 `.` / `..`、不含 Windows 保留字符 → 违规 400 中文。"""
+    if (
+        not isinstance(name, str)
+        or not name
+        or name.strip() != name
+        or len(name) > 120
+        or name in (".", "..")
+        or (_CODE_NAME_ILLEGAL & set(name))
+    ):
+        raise CodeViewError(
+            "名称不合法（非空、首尾无空格、≤120 字符、不能是 . 或 ..、不含 / \\ : * ? \" < > |）"
+        )
+
+
+def create_code_entry(root: Path, kind: str, rel_path: str) -> dict[str, Any]:
+    """根目录内新建空文件 / 目录（工单 code-tree-ops/01）。
+
+    安全判定与 read_code_file 同源（_resolve_in_root：is_unsafe_path +
+    resolve 在 root 内，前置在盘操作之前）。kind ∈ {"file", "dir"}——其余
+    400 中文；目标已存在 → 400 中文「已存在」（**不覆盖**，杜绝误操作）；
+    父级目录随 mkdirs 一次建出（前端「当前目录 + 名称」拼相对路径，可含
+    子目录，如 src/drivers/）。file = O_EXCL 原子创建空文件（open
+    O_CREAT|O_EXCL，不存在才成功——无「判后覆盖隙间同名」TOCTOU 窗，
+    隙间同名 → 400「已存在」；空文件即终态，无半成品）；成功返回 {path,
+    size_bytes: 0, mtime_ns: 字符串}——mtime 即打开 tab 的保存基准（创建后
+    立即编辑、Ctrl+S 保存，基准一致无 409）；dir = os.mkdir（父级已
+    mkdirs），成功返回 {path}。
+    """
+    if kind not in ("file", "dir"):
+        raise CodeViewError("新建类型必须是 file 或 dir")
+    candidate = _resolve_in_root(root, rel_path)
+    if candidate.exists():
+        raise CodeViewError(f"已存在：{rel_path}")
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "file":
+        # O_EXCL 原子创建（评审整改）：不存在才创建成功，杜绝「exists() 判后
+        # os.replace(tmp, candidate) 可覆盖隙间新建同名文件」的 TOCTOU 窗；
+        # 空文件落盘即终态，无需 tmp 中转。隙间同名 → FileExistsError → 400。
+        try:
+            fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+        except FileExistsError:
+            raise CodeViewError(f"已存在：{rel_path}") from None
+        return {
+            "path": rel_path,
+            "size_bytes": candidate.stat().st_size,
+            "mtime_ns": str(candidate.stat().st_mtime_ns),
+        }
+    try:
+        candidate.mkdir()
+    except FileExistsError:  # 理论不达（上面已判 exists），并发兜底
+        raise CodeViewError(f"已存在：{rel_path}") from None
+    return {"path": rel_path}
+
+
+def rename_code_entry(root: Path, rel_path: str, new_name: str) -> dict[str, Any]:
+    """根目录内文件 / 目录改名（工单 code-tree-ops/01）。
+
+    new_name 必须**单段**（_validate_entry_name 单源：非空 / 非纯空白 /
+    首尾无空白 / ≤120 / 非 `.` `..` / 无 Windows 保留字符）——不支持跨目录
+    移动（移动 = 删除 + 新建，用户自行）。安全判定与读面同源
+    （_resolve_in_root × 2：源与目标都在 root 内，目标天然 = 源父目录 +
+    new_name）；源不存在 / 目标已存在 → 400 中文；改名回自身名 = 幂等
+    成功（返回现状，不报「已存在」）。os.rename 原子（目录可改，子树随之
+    移动；rename 不改 mtime）。文件返回 {path: 新相对路径, mtime_ns: 字符串
+    （= 改名后现值，作为打开 tab 的保存基准）}；目录返回 {path}。
+    """
+    _validate_entry_name(new_name)
+    src = _resolve_in_root(root, rel_path)
+    if not src.exists():
+        raise CodeViewError(f"不存在：{rel_path}")
+    dst = _resolve_in_root(
+        root, (src.relative_to(root).parent / new_name).as_posix()
+    )
+    if src == dst:
+        is_file = src.is_file()
+        return {
+            "path": rel_path,
+            **({"mtime_ns": str(src.stat().st_mtime_ns)} if is_file else {}),
+        }
+    if dst.exists():
+        raise CodeViewError(f"已存在：{dst.relative_to(root).as_posix()}")
+    was_file = src.is_file()  # rename 后原路径即不存在，文件/目录判定必须前置
+    os.rename(src, dst)
+    new_rel = dst.relative_to(root).as_posix()
+    if was_file:
+        return {"path": new_rel, "mtime_ns": str(dst.stat().st_mtime_ns)}
+    return {"path": new_rel}
+
+
+def delete_code_entry(root: Path, rel_path: str) -> dict[str, Any]:
+    """根目录内文件 / 空目录删除（工单 code-tree-ops/01）。
+
+    安全判定与读面同源（_resolve_in_root）；不存在 → 400 中文；文件 →
+    os.unlink；目录 → 仅空目录可删（os.rmdir），非空 → 400 中文
+    「目录非空，请先清空（或删除其中文件）」——显式 any(iterdir) 判定，
+    避免把权限类 OSError 误翻成「非空」。成功返回 {removed: True}。
+    """
+    target = _resolve_in_root(root, rel_path)
+    if not target.exists():
+        raise CodeViewError(f"不存在：{rel_path}")
+    if target.is_dir():
+        if any(target.iterdir()):
+            raise CodeViewError(
+                f"目录非空，请先清空（或删除其中文件）：{rel_path}"
+            )
+        target.rmdir()
+    else:
+        target.unlink()
+    return {"removed": True}

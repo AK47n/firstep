@@ -35,9 +35,12 @@ from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .changelog import load_changelog
 from .codeview import (
     code_raw_media_type,
+    create_code_entry,
+    delete_code_entry,
     list_code_tree,
     read_code_file,
     read_code_file_bytes,
+    rename_code_entry,
     save_code_file,
     search_code_files,
 )
@@ -3989,9 +3992,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         dir = 服务器本地绝对路径（与 /api/masters/import 同风险面——本机
         工具语义；来源为最近记录 output_dir 或原生文件夹对话框
-        /api/pick-directory）。返回 {root, files: [{path, size_bytes}]}：
-        统一噪音跳过的扁平清单（构建产物目录 / .git 不计入），条目超限
-        400 中文。只读浏览，零写侧、零落盘。
+        /api/pick-directory）。返回 {root, files: [{path, size_bytes} |
+        {path, is_dir: True}]}：统一噪音跳过的扁平清单（构建产物目录 /
+        .git 不计入；目录条目含空目录——树操作需要展示/删除，工单
+        code-tree-ops/01），条目超限 400 中文。只读浏览，零写侧、零落盘。
         """
         dir_str = _require_str(payload, "dir")
         return {"root": dir_str, "files": list_code_tree(Path(dir_str))}
@@ -4060,6 +4064,51 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise HTTPException(400, "缺少必填字段：content")
         base_mtime_ns = payload.get("base_mtime_ns")
         return save_code_file(Path(dir_str), path, content, base_mtime_ns)
+
+    @app.post("/api/code/tree/create")
+    @_map_errors
+    def code_tree_create(payload: dict) -> dict:
+        """代码查看器：新建文件 / 目录（工单 code-tree-ops/01）。
+
+        {dir, type: "file"|"dir", path}——path 为相对 dir 的 POSIX 路径
+        （可含子目录，前端由「当前展开目录 + 名称」拼接）；安全判定与
+        读面同源（_resolve_in_root，路径越界 / 穿透 400 中文）；已存在 →
+        400 中文（不覆盖）；非法 type → 400 中文。file 返回 {path,
+        size_bytes: 0, mtime_ns: 字符串}（创建即得保存基准，前端直接打开
+        编辑）；dir 返回 {path}。
+        """
+        dir_str = _require_str(payload, "dir")
+        path = _require_str(payload, "path")
+        kind = payload.get("type")
+        return create_code_entry(Path(dir_str), kind, path)
+
+    @app.post("/api/code/tree/rename")
+    @_map_errors
+    def code_tree_rename(payload: dict) -> dict:
+        """代码查看器：文件 / 目录改名（工单 code-tree-ops/01）。
+
+        {dir, path, new_name}——new_name 单段（非空 / 首尾无空白 / ≤120 /
+        非 . .. / 无 Windows 保留字符），跨目录移动不支持（400 中文）；
+        源不存在 / 目标已存在 → 400 中文；改名回自身名 = 幂等成功。
+        文件返回 {path: 新相对路径, mtime_ns: 字符串}；目录返回 {path}。
+        """
+        dir_str = _require_str(payload, "dir")
+        path = _require_str(payload, "path")
+        new_name = payload.get("new_name")
+        return rename_code_entry(Path(dir_str), path, new_name)
+
+    @app.post("/api/code/tree/delete")
+    @_map_errors
+    def code_tree_delete(payload: dict) -> dict:
+        """代码查看器：文件 / 空目录删除（工单 code-tree-ops/01）。
+
+        {dir, path}——安全判定与读面同源（_resolve_in_root）；不存在 →
+        400 中文；目录仅空可删（非空 → 400 中文「目录非空，请先清空」）；
+        成功返回 {removed: true}。
+        """
+        dir_str = _require_str(payload, "dir")
+        path = _require_str(payload, "path")
+        return delete_code_entry(Path(dir_str), path)
 
     # ------------------------------------------------------------------
     # 设置：读写配置，写入后即时生效（后续请求即用新配置）
