@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5fff0eb9aa80cc0a8ef32c99c0f5cd547cbd7649 -->
+<!-- changelog-auto: last-commit=97641decb126ae7abbd2e7805173646e6448682c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -44,6 +44,7 @@
 - 22:53 feat：未保存退出保护——切目录三选确认（保存全部并切换/放弃修改并切换/取消）+ beforeunload 脏标签提醒；脏判据复用 dirtySavableTabs 单源、保存复用 saveAllDirtyTabs，模态 HTML 纯件 fx/exit-guard.js 可单测（工单 code-editor-refine/01）
 - 23:00 feat：快捷键补位 Ctrl+W 关标签 / Ctrl+B 侧栏开合——Ctrl+W 全局拦截先吞键防浏览器原生关页（模态开启不并发截获；脏标签复用 closeTab 确认）、Ctrl+B 复用 setCodeSideCollapsed（仅豁免侧栏/面板输入框，编辑区可触发）；帮助数据 SHORTCUT_GROUPS 单源同步（工单 code-editor-refine/02）
 - 23:08 feat：大纲符号过滤 + Ctrl+Shift+O 符号速达——纯件 symbolFilter（函数优先→名称命中质量→行号；name/kind 大小写不敏感子串；空 query 原序副本），过滤框逐键重渲 + 当前选中态（↑/↓ 循环移动、Enter 跳选中、点击同步选中跳行、Esc 清空恢复），Ctrl+Shift+O 展开侧栏+切大纲+聚焦全选（全局拉焦点为有意取舍），无匹配空态；单测 5 组 + 冒烟 12 项（工单 code-editor-refine/03）
+- 23:16 feat：括号彩虹色（嵌套深度 8 色环）——fx 纯件 _bracketPairScan 单次扫描同时产出配对/深度/行列（bracketPairAt 配对表与 bracketDepthMarks 共用，假括号跳过规则单源）；bracketDepthMarks 只输出真正配成对的开闭字符（字符串/注释内不误着色、未配对不输出），kind=bracket-depth-N（N=深度%8）；标记层 currentMarks 追加（按 tab.content 引用缓存，光标移动零重算），门控可编辑 c/xml/md（验收 md/plain 口径）；CSS --bracket-rainbow-0..7 深浅主题各一套，当前对描边优先（bracket 优先级高于默认 0 的彩虹层）；单测 4 组 + 冒烟 9 项（工单 code-editor-refine/04）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
