@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9eb6ba357f953c91d08b99745bc81128fbf7fd6a -->
+<!-- changelog-auto: last-commit=433d61f20c450543882276047dc9f3e4c80dc89b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 13:44 工单 02 相关候选自动扩容：题面/模块相关未锚定条目进推荐候选清单（related 来源标注 + 点名回读 + 清单段 wire 兜底）
 - 14:09 工单 03 骨架自动全文注入：选中模块相关例程 top-4 进骨架参考段（related 来源标注 + 既有 40KB 均分通道，generate 不注入）
 - 18:03 工单 03 审查收尾：骨架端到端断言 id/标题两域解耦（related 严格子集按 add_reference 实际 id 断言，不依赖 _sanitize_id 恒等）
+- 19:14 工单 code-editor-vscode-polish/01：底部状态栏 VS Code 化——Ln/Col/语言/编码/缩进/缩放随光标实时联动（空态占位、onCursorChanged 监听、codeStatusHTML 与 caretColOf 纯件、窄视口折叠）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
