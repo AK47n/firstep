@@ -58,6 +58,8 @@ import {
   clearDiskChanged,
   reloadTabFromDisk,
   replaceAllInActiveFile,
+  setEditorFind,
+  editorFindStep,
 } from "/js/ui/codeeditor.js";
 
 // 模块态：当前目录 / 扁平清单（中栏状态在 codeeditor.js）
@@ -521,6 +523,40 @@ function refreshFindPanel() {
     tab ? fileFindFilter(tab.content.split("\n"), input ? input.value || "" : "") : []);
 }
 
+// updateFindCount(status, q)：计数文案——无查询隐藏；有查询无命中显示
+// 「无匹配」（评审整改 04：不隐藏，让用户知道查了但没中）；有命中
+// 「第 N / 共 M 处」。
+function updateFindCount(status, q) {
+  const el = $("code-find-count");
+  if (!el) return;
+  if (!q) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  el.textContent = status.total
+    ? "第 " + (status.current + 1) + " / 共 " + status.total + " 处"
+    : "无匹配";
+}
+
+// applyEditorFind(q)：查询值 → 编辑器标记层 + 查找计数 + 替换计数
+// （「将替换 N 处」）单入口（输入 / 标签切换 / 替换后刷新共用）。
+function applyEditorFind(q) {
+  const status = setEditorFind(q || "");
+  updateFindCount(status, q || "");
+  const rc = $("code-replace-count");
+  if (rc) {
+    if (q && status.total) {
+      rc.classList.remove("hidden");
+      rc.textContent = "将替换 " + status.total + " 处";
+    } else {
+      rc.classList.add("hidden");
+      rc.textContent = "";
+    }
+  }
+}
+
 // ===== 代码字号缩放（工单 code-viewer-zoom/01） =====
 // Ctrl/Cmd+滚轮缩放（只读视图与编辑器同容器）：上滚放大 / 下滚缩小，
 // 80%–200%、每档 10%（codeZoomClamp / parseZoomStored 复用 fx/code.js
@@ -818,6 +854,7 @@ export function initCodeViewer() {
     // openEditorFile/setMdMode/applySavedState 均经 notifyActive 汇聚）。
     syncInfoBar();
     refreshCodeStatus();   // 状态栏信息区随活动标签变化刷新（工单 01）
+    applyEditorFind(findInput ? findInput.value || "" : "");   // 标记层随标签/内容变化重算（工单 04）
   });
 
   // 保存成功 → 树节点大小刷新 + 大纲重渲（服务端重算 outline 直用——
@@ -875,6 +912,22 @@ export function initCodeViewer() {
     const tab = getActiveTab();
     if (tab && tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");
     refreshFindPanel();
+    applyEditorFind(findInput.value);
+  });
+  // 查找计数循环（工单 04）：Enter / Shift+Enter 上/下一个命中（索引循环 +
+  // 当前命中高亮 + 跳转选区）；Esc 清空查询（编辑器标记层同步清除）。
+  if (findInput) findInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const st = editorFindStep(e.shiftKey ? -1 : 1);
+      if (st) updateFindCount(st, findInput.value);
+      return;
+    }
+    if (e.key === "Escape") {
+      findInput.value = "";
+      refreshFindPanel();
+      applyEditorFind("");
+    }
   });
   // focusFindPanel(el)：Ctrl+F / Ctrl+H / 替换按钮共用的侧栏唤起——
   // .md 预览先切源码（行语义需要行号）、展开「搜索」侧栏并聚焦目标输入。
@@ -907,6 +960,7 @@ export function initCodeViewer() {
     if (count > 0) {
       toast("ok", "已替换 " + count + " 处（Ctrl+S 保存写盘）");
       refreshFindPanel();
+      applyEditorFind(needle);   // 替换后标记层按新内容重算（计数可能变，工单 04）
     } else {
       toast("info", tab.readonly ? "只读文件不允许替换" : "当前文件没有匹配");
     }

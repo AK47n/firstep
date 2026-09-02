@@ -1667,6 +1667,24 @@
     font-size: var(--code-font-size); line-height: 1.55; white-space: pre; tab-size: 4;
     overflow: hidden; resize: none; box-sizing: border-box; }
   .code-ta:focus { outline: none; }
+  /* 标记层（工单 code-editor-vscode-polish/04-06）：高亮层之上、textarea 之
+     下的仅背景层——absolute inset:0 同盒、同 font/line-height/padding 与
+     .code-hl 逐行 1:1 对齐；整层 color:transparent（文字由高亮层绘制，只
+     显示背景）+ pointer-events:none（不挡 textarea 编辑）；z-index 0 位于
+     .code-ta(1) 之下、.code-hl 静态流之上。标记族：查找命中（淡）< 当前命中
+     （强）、选中词（更淡）、括号配对（下划线——与填充类区分）。 */
+  .code-marks { position: absolute; inset: 0; z-index: 0; margin: 0;
+    padding: 8px 24px 8px 12px; border: 0; background: none;
+    font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.55;
+    white-space: pre; tab-size: 4; color: transparent; overflow: hidden;
+    pointer-events: none; }
+  .code-marks-line { display: block; }
+  .code-marks-line:empty { min-height: 1.55em; }
+  .code-mark-hit { background: rgba(var(--accent-rgb), .18); }
+  .code-mark-current { background: rgba(var(--accent-rgb), .38);
+    box-shadow: inset 2px 0 0 var(--accent); }
+  .code-mark-word { background: rgba(var(--accent-rgb), .12); }
+  .code-mark-bracket { box-shadow: inset 0 -2px 0 var(--accent); }
   /* 选区（工单 code-editor-vscode-polish/02）：alpha .28 → .32——深浅主题下
      选区更可辨（VSCode 选区观感）；文字仍透明（文字由高亮层绘制）。 */
   .code-ta::selection { background: rgba(var(--accent-rgb), .32); color: transparent; }
@@ -1796,6 +1814,10 @@
   .code-side-empty { padding: 6px 8px; font-size: 12.5px; }
   .code-search-row, .code-find-row, .code-replace-row { display: flex; gap: 6px; margin-bottom: var(--space-1); }
   .code-search-row input, .code-find-row input, .code-replace-row input { flex: 1; min-width: 0; }
+  /* 查找计数（工单 code-editor-vscode-polish/04）：输入框旁「第 N / 共 M 处」
+     ——等宽小字 muted 右对齐；无命中时隐藏（.hidden 全局）。 */
+  .code-find-count { flex: none; font-family: var(--mono); font-size: 11.5px;
+    color: var(--muted); align-self: center; white-space: nowrap; }
   .code-search-results, .code-find-results { font-size: 12.5px; }
   .code-side-summary { list-style: none; margin: 0 0 4px; padding: 0 4px; }
   .code-search-list, .code-find-list { list-style: none; margin: 0; padding: 0; }
@@ -2692,11 +2714,13 @@
             </div>
             <div class="code-find-row">
               <input type="text" id="code-find-input" placeholder="当前文件内查找（Ctrl+F）" aria-label="当前文件内查找">
+              <span id="code-find-count" class="code-find-count hidden" aria-live="polite"></span>
             </div>
             <div class="code-replace-row">
               <input type="text" id="code-replace-input" placeholder="替换为（Ctrl+H）…" aria-label="替换为（Ctrl+H 唤起）">
               <button type="button" id="btn-code-replace-all"
                 title="全部替换当前文件内匹配项（改动进编辑缓冲，Ctrl+S 保存）">全部替换</button>
+              <span id="code-replace-count" class="code-find-count hidden" aria-live="polite"></span>
             </div>
             <div id="code-search-results" class="code-search-results"></div>
             <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>

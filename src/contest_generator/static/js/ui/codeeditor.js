@@ -12,6 +12,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { languageOf } from "/js/fx/highlight.js";
 import { codeLineNumbersHTML } from "/js/fx/codeview.js";
+import { codeFindRanges, codeMarksHTML } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用）
 import {
   codeTabStripHTML,
   codeEditorHTML,
@@ -139,6 +140,86 @@ async function loadFileState(path) {
   }
 }
 
+// ===== 标记层：文件内查找高亮（工单 code-editor-vscode-polish/04）=====
+// 状态挂编辑器（活动标签内容为数据源；codeview 只持查询输入与计数文案）：
+// 查询 → codeFindRanges 纯件算命中区段，索引循环（Enter/Shift+Enter）→
+// current 高亮 + 跳转选区。05 选中词 / 06 括号配对经 currentMarks() 追加
+// 各自区段（kind 不同），一次渲染多类标记。
+let editorFind = { query: "", ranges: [], index: 0 };
+
+// currentMarks()：当前应渲染的标记清单（查找命中 + 当前命中；05/06 追加点）。
+export function currentMarks() {
+  const out = [];
+  if (editorFind.query && editorFind.ranges.length) {
+    editorFind.ranges.forEach((r, i) => {
+      out.push({ line: r.line, start: r.start, end: r.end,
+        kind: i === editorFind.index ? "current" : "hit" });
+    });
+  }
+  return out;
+}
+
+// renderEditorMarks()：标记层重算 + 重画单入口（评审整改 04：编辑内容后高亮
+// 必须按新内容重算命中——不在输入路径留旧 ranges 错列）——query 非空时按
+// 活动标签当前内容重算 codeFindRanges 并钳索引（编辑后命中数变化不越界），
+// 空查询清空；.code-marks 不存在（md 预览/未开文件）静默。只重画 innerHTML
+// （不重建 textarea，与 syncEditorAfterInput 同粒度）。
+function renderEditorMarks() {
+  const box = paneBox();
+  const el = box && box.querySelector(".code-marks");
+  const tab = getActiveTab();
+  if (!el || !tab) return;
+  if (editorFind.query) {
+    editorFind.ranges = codeFindRanges(tab.content, editorFind.query);
+    if (!editorFind.ranges.length) editorFind.index = -1;
+    else if (editorFind.index < 0 || editorFind.index >= editorFind.ranges.length) {
+      editorFind.index = 0;
+    }
+  } else {
+    editorFind.ranges = [];
+    editorFind.index = -1;
+  }
+  el.innerHTML = codeMarksHTML(tab.content, currentMarks());
+}
+
+// setEditorFind(query)：查找输入变化 → 存查询、重算命中区段并渲染标记层——
+// 返回 {total, current}（current = 当前索引 0 基；无命中 → {total:0, current:-1}）。
+// 编辑器未打开时只存状态（渲染在 renderPane/sync 时落地）。
+export function setEditorFind(query) {
+  editorFind.query = String(query == null ? "" : query);
+  editorFind.index = 0;
+  renderEditorMarks();
+  return { total: editorFind.ranges.length, current: editorFind.index };
+}
+
+// editorFindStep(delta)：循环上/下一命中——更新 current 索引、重渲染、滚动
+// 到命中（editJumpToLine 滚动 + 选区覆盖为命中区间）。无命中 → null。
+export function editorFindStep(delta) {
+  const total = editorFind.ranges.length;
+  if (!total) return null;
+  editorFind.index = (editorFind.index + delta + total) % total;
+  renderEditorMarks();
+  focusFindRange(editorFind.ranges[editorFind.index]);
+  return { total, current: editorFind.index };
+}
+
+// focusFindRange(range)：跳转到命中区段——先 editJumpToLine（滚动居中 +
+// flash + 当前行），再把选区缩为命中区间（VSCode 当前命中选址观感）。
+function focusFindRange(range) {
+  const tab = getActiveTab();
+  if (!tab) return;
+  editJumpToLine(range.line);
+  const box = paneBox();
+  const ta = box && box.querySelector(".code-ta");
+  if (!ta || ta.readOnly) return;
+  const lineStart = editorLineRange(tab.content, range.line);
+  if (!lineStart) return;
+  const pos = lineStart.start + range.start;
+  const end = pos + (range.end - range.start);
+  ta.focus();
+  ta.setSelectionRange(pos, end);
+}
+
 // ===== 渲染：标签条 / 中栏 =====
 function renderTabs() {
   const box = $("code-tabs");
@@ -167,7 +248,7 @@ function renderPane() {
   const lines = tab.content.split("\n").length;
   box.innerHTML = '<div class="code-gutter" aria-hidden="true">'
     + codeLineNumbersHTML(lines) + "</div>"
-    + codeEditorHTML(tab.content, tab.lang, { readonly: tab.readonly });
+    + codeEditorHTML(tab.content, tab.lang, { readonly: tab.readonly, marks: currentMarks() });
   if (tab.readonly) renderReadonlyNote(box);
 }
 
@@ -788,6 +869,7 @@ function syncEditorAfterInput() {
   // 调整，容器滚动不变；textarea 本体不重建——焦点/选区零抖动）
   gutter.innerHTML = codeLineNumbersHTML(tab.content.split("\n").length);
   hl.innerHTML = codeEditorHighlight(tab.content, tab.lang);
+  renderEditorMarks();   // 标记层随输入重算（查找命中/选中词偏移变化，工单 04）
   setActiveLine(caretLineOf(tab.content, selStart));
   box.scrollTop = scrollTop;
   box.scrollLeft = scrollLeft;
