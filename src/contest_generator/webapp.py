@@ -32,6 +32,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
+from .budget import RELATED_CANDIDATES_LIMIT
 from .changelog import load_changelog
 from .codeview import (
     apply_code_diff,
@@ -527,6 +528,7 @@ def _assemble_topic_context(
     reference_ids: Sequence[str] = (),
     platform: str = "",
     slugs: Sequence[str] = (),
+    related_limit: int = 0,
 ) -> TopicContext:
     """生成流程的历史赛题入口素材装配（单一 helper，三路由共用）。
 
@@ -542,6 +544,10 @@ def _assemble_topic_context(
     不注入参考文件，传缺省）。slugs（修订）= 套件锚定只收选中模块的 kit：
     骨架路由传（选了这套件给配套例程）；推荐 / 生成不传（推荐无选中集，
     生成不注入参考）。
+    related_limit（工单 02 相关候选自动扩容）= 未锚定相关条目候选上限：
+    推荐路由传 15（RELATED_CANDIDATES_LIMIT，清单段 wire 预算兜底）；骨架
+    路由在工单 03 起传 4（全文注入受 SKELETON_REFERENCE_TOTAL_BYTES 预算，
+    当前未传 = 缺省 0 = 关闭）；生成不传（缺省 0 = 关闭，零增量向后兼容）。
     """
     config = _require_config(context)
     return resolve_topic_context(
@@ -554,6 +560,7 @@ def _assemble_topic_context(
         reference_ids=reference_ids,
         platform=platform,
         slugs=slugs,
+        related_limit=related_limit,
     )
 
 
@@ -1347,7 +1354,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 清单段 / 全文回读 / 模块库摘要行都由它携带，路由只消费（key 空 =
         # 未识别到历史赛题，no-topic 形同样携带全模块摘要）；手动选参考资料
         # 的准入 / 全文直读同样在装配点完成。platform（工单 01）= 锚定命中
-        # 按生成平台过滤（手动选不过滤），缺省 / 空 = 现状不过滤
+        # 按生成平台过滤（手动选不过滤），缺省 / 空 = 现状不过滤。
+        # related（工单 02 相关候选自动扩容）= 未锚定相关条目按题面外设词
+        # 列为候选（上限 RELATED_CANDIDATES_LIMIT，清单段 wire 预算兜底；
+        # 两级照旧——清单 → 点名 → 回读，不直读）
         budget = RetryBudget()
         collector = create_llm_observation_collector("recommend")
         topic = _assemble_topic_context(
@@ -1357,6 +1367,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             _llm(context, budget, collector),
             reference_ids,
             platform,
+            related_limit=RELATED_CANDIDATES_LIMIT,
         )
         # 推荐缓存（工单 llm-cost-control/02）：同题重跑命中直出 done 载荷，
         # 省最贵的推荐段 LLM 调用；缓存目录 = 配置目录同级 cache/（与 CLI

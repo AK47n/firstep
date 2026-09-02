@@ -57,9 +57,11 @@ from .reference_library import (
     ReferenceError,
     build_topic_framework,
     read_fulltext,
+    related_references,
 )
 from .selection import (
     REFERENCE_SOURCE_MANUAL,
+    REFERENCE_SOURCE_RELATED,
     ModuleInstance,
     ReferenceSuggestion,
     ScorePoint,
@@ -256,6 +258,7 @@ def resolve_topic_context(
     reference_ids: Sequence[str] = (),
     platform: str = "",
     slugs: Sequence[str] = (),
+    related_limit: int = 0,
 ) -> TopicContext:
     """生成入口素材装配：显式编号或粘贴题面中的编号（AI 理解）→ 完整赛题上下文。
 
@@ -285,6 +288,14 @@ def resolve_topic_context(
     的推荐都注入全库套件素材（如 2024H 推荐里出现 UWB ALX 套件参考，UI
     显示为"自动勾选"很蹊跷且会带偏推荐），模块摘要行已带套件名，AI 无需
     靠全库套件参考发现模块。skeleton 传 slugs；recommend / summarize 不传。
+
+    related_limit（工单 02 相关候选自动扩容）：>0 时按题面 / 选中模块把
+    未锚定的相关条目（标题命中外设词表）列为候选（来源标注 related，两级
+    照旧——清单 → 点名 → 回读，不直读，成本可控）；候选 = 锚定 ∪ 手动 ∪
+    相关（并集：related 与锚定 / 手动重合的条目只出现一次，保留原标注）。
+    匹配源 = 库内题面全文 ∪ 粘贴片段（用户粘贴的重点条目也是题面信号）。
+    缺省 0 = 关闭（向后兼容：generate 等不启用相关候选的调用方零增量）。
+    recommend 传 15（每轮成本增量上限）；skeleton / generate 不传。
     """
     manual_entries = (
         manual_reference_admission(reference_library_dir, reference_ids)
@@ -309,6 +320,8 @@ def resolve_topic_context(
                 manual_entries,
                 manual_fulltexts,
                 platform,
+                slugs,
+                related_limit,
             )  # 自动识别尽力而为：AI 提取失败不阻断粘贴题面流程
         if not extracted:
             return _no_topic_context(
@@ -318,6 +331,8 @@ def resolve_topic_context(
                 manual_entries,
                 manual_fulltexts,
                 platform,
+                slugs,
+                related_limit,
             )
         try:
             entry = _resolve_topic_entry(topic_library_dir, extracted)
@@ -329,6 +344,8 @@ def resolve_topic_context(
                 manual_entries,
                 manual_fulltexts,
                 platform,
+                slugs,
+                related_limit,
             )  # 库中没有该题：自动识别查无此条静默降级（不猜测编造）
     else:
         return _no_topic_context(
@@ -338,6 +355,8 @@ def resolve_topic_context(
             manual_entries,
             manual_fulltexts,
             platform,
+            slugs,
+            related_limit,
         )
 
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
@@ -364,26 +383,46 @@ def resolve_topic_context(
     # 模块需求走库外建议（suggestions）。空串 = 不过滤（骨架 / 生成传缺省，
     # 现状保持；未知平台在 generate 入口经 patcher_registry.get 失败）。
     candidates = list(filter_manifests_by_platform(candidates, platform))
-    # 并集去重：锚定命中照旧自动进；手动条目若同时被锚定命中，清单只出现
-    # 一次（标注 manual——全文已直读，模型无需点名），全文仍直读（manual_fulltexts 全量）
+    # 并集去重（工单 01/02）：锚定命中照旧自动进；手动条目若同时被锚定命中，
+    # 清单只出现一次（标注 manual——全文已直读，模型无需点名），全文仍直读
+    # （manual_fulltexts 全量）；相关条目（related_limit > 0 时）同样并入，
+    # 与锚定 / 手动重合的只出现一次（保留原标注），清单尾部追加（既有头部
+    # 不变）。references = 锚定 ∪ 相关（手动只挂 manual_references 字段）。
     anchored_ids = {ref.id for ref in references}
     manual_ids = {ref.id for ref in manual_entries}
+    related_extra = _related_admission(
+        reference_library_dir,
+        topic_text="\n".join(t for t in (entry.problem_text, problem_text) if t),
+        slugs=slugs,
+        platform=platform,
+        related_limit=related_limit,
+        excluded_ids=anchored_ids | manual_ids,
+    )
     anchored_only = [ref for ref in references if ref.id not in manual_ids]
     manual_flagged = [ref for ref in references if ref.id in manual_ids]
     manual_extra = [ref for ref in manual_entries if ref.id not in anchored_ids]
-    suggestions = [
+    # 既有头部（锚定 auto → 手动 manual）不动，related 尾部追加
+    base_suggestions = [
         *reference_suggestions(anchored_only),
         *reference_suggestions(
             [*manual_flagged, *manual_extra], source=REFERENCE_SOURCE_MANUAL
         ),
     ]
+    suggestions = [
+        *base_suggestions,
+        *reference_suggestions(related_extra, source=REFERENCE_SOURCE_RELATED),
+    ]
     return TopicContext(
         key=entry.key,
         problem_text=entry.problem_text,
-        references=references,
+        references=(*references, *related_extra),
         manifest_summaries=tuple(build_manifest_summaries(candidates)),
         suggestions=tuple(suggestions),
-        read_fulltext=_make_fulltext_reader(reference_library_dir, references),
+        # 回读器键覆盖锚定 ∪ 相关（两级注入第二级：相关候选照旧「清单 →
+        # 点名 → 回读」，点名 related id 必须可回读——清单外 id 才大声失败）
+        read_fulltext=_make_fulltext_reader(
+            reference_library_dir, (*references, *related_extra)
+        ),
         manual_references=manual_entries,
         manual_fulltexts=manual_fulltexts,
         figure_pdf=_entry_figure_pdf(topic_library_dir, entry),
@@ -452,30 +491,51 @@ def _no_topic_context(
     manual_entries: Sequence[ReferenceEntry] = (),
     manual_fulltexts: Mapping[str, str] | None = None,
     platform: str = "",
+    slugs: Sequence[str] = (),
+    related_limit: int = 0,
 ) -> TopicContext:
     """no-topic 形上下文（key="" 哨兵 = 未识别到历史赛题，路由零 fallback）。
 
     题面原样 + 空关联 / 建议 + 全模块摘要（无该题时候选清单就是全模块库，
     与显式路径同一次扫库）+ 空集回读器（任何 id 抛 ReferenceError——
     suggestions 恒空所以永不被调，诚实 no-op）。手动选参考资料是 no-topic
-    唯一准入：suggestions = 手动条目（来源标注 manual），全文直读
+    唯一准入（工单 01）：suggestions = 手动条目（来源标注 manual），全文直读
     （manual_fulltexts）；未选 = 现行为（零参考）。回读器对手动条目 id 可
     回读（模型若点名已全文的条目也不崩，读回同一全文无害），其它 id 仍抛。
     platform（工单 ref-platform-filter 模块侧对偶）与显式路径同款：候选模块
     按平台过滤，空串 = 不过滤（缺省，现状保持）。
+
+    相关候选（工单 02）：related_limit > 0 时粘贴题面原文作匹配源（no-topic
+    无库内题面），未锚定相关条目进 references（供回读器覆盖）+ 候选清单
+    （来源标注 related）——它与手动条目是 no-topic 的唯二准入（都非全量
+    自动，成本可控）。slugs 同显式路径（选中模块词表激活，skeleton 用）。
     """
     candidates = list_modules(module_library_dir) if module_library_dir.is_dir() else []
     # 功能组 = 全平台视图（与显式路径同构：平台成员过滤归推荐链路
     # build_exclusive_groups，组定义不随 platform 重复汇总）
     exclusive_groups = tuple(collect_exclusive_groups(candidates))
     candidates = list(filter_manifests_by_platform(candidates, platform))
+    manual_ids = {ref.id for ref in manual_entries}
+    related_entries = _related_admission(
+        reference_library_dir,
+        topic_text=problem_text,
+        slugs=slugs,
+        platform=platform,
+        related_limit=related_limit,
+        excluded_ids=manual_ids,
+    )
     return TopicContext(
         key="",
         problem_text=problem_text,
-        references=(),
+        references=related_entries,
         manifest_summaries=tuple(build_manifest_summaries(candidates)),
-        suggestions=reference_suggestions(manual_entries, source=REFERENCE_SOURCE_MANUAL),
-        read_fulltext=_make_fulltext_reader(reference_library_dir, (), manual_entries),
+        suggestions=(
+            *reference_suggestions(manual_entries, source=REFERENCE_SOURCE_MANUAL),
+            *reference_suggestions(related_entries, source=REFERENCE_SOURCE_RELATED),
+        ),
+        read_fulltext=_make_fulltext_reader(
+            reference_library_dir, related_entries, manual_entries
+        ),
         manual_references=tuple(manual_entries),
         manual_fulltexts=manual_fulltexts,
         exclusive_groups=exclusive_groups,
@@ -485,6 +545,33 @@ def _no_topic_context(
 def _resolve_topic_entry(topic_library_dir: Path, topic_key: str) -> TopicEntry:
     """历史赛题条目（唯一解析点：查库，不猜测编造）。"""
     return resolve_number(topic_library_dir, topic_key)
+
+
+def _related_admission(
+    reference_library_dir: Path,
+    *,
+    topic_text: str,
+    slugs: Sequence[str],
+    platform: str,
+    related_limit: int,
+    excluded_ids: set[str],
+) -> tuple[ReferenceEntry, ...]:
+    """相关候选准入（工单 02，显式 / no-topic 两路径共用的单点）。
+
+    related_limit <= 0 = 关闭（空——向后兼容）；否则按题面 / 模块匹配得出
+    相关条目，并排除已准入的 id（锚定 / 手动——「候选 = 锚定 ∪ 手动 ∪ 相关，
+    重叠只出现一次、保留原标注」的并集去重口径，两路径一致，不再各自手写）。
+    """
+    if related_limit <= 0:
+        return ()
+    entries = related_references(
+        reference_library_dir,
+        topic_text=topic_text,
+        slugs=slugs,
+        platform=platform,
+        limit=related_limit,
+    )
+    return tuple(entry for entry in entries if entry.id not in excluded_ids)
 
 
 def _entry_figure_pdf(topic_library_dir: Path, entry: TopicEntry) -> Path | None:

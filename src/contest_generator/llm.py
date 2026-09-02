@@ -34,6 +34,7 @@ from typing import Any, Callable, Mapping, NoReturn, Protocol, Sequence, TypeVar
 from .budget import (
     FIX_PREVIOUS_FIXES_CAP,
     REFERENCE_FULLTEXT_BYTES,
+    REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES,
     SKELETON_REFERENCE_TOTAL_BYTES,
     fit_wire_budget,
     wire_size,
@@ -71,6 +72,7 @@ from .selection import (
     ModuleSelection,
     OutOfLibrarySuggestion,
     REFERENCE_SOURCE_MANUAL,
+    REFERENCE_SOURCE_RELATED,
     ReferenceSuggestion,
     SelectionError,
     build_module_selection,
@@ -782,17 +784,20 @@ def _clean_str_list(raw: Any) -> tuple[str, ...]:
     )
 
 
-def _fit_fulltext_wire(
+def _fit_segment_wire(
     fulltext: str, budget: int = REFERENCE_FULLTEXT_BYTES
 ) -> str:
-    """全文注入的 wire 字节预算截断（工单 budget-wire-unification/01）：弃用
+    """整段注入的 wire 字节预算截断（工单 budget-wire-unification/01；工单 02
+    起段语义泛化——参考全文段 / 候选清单段 / Q&A 段等任何整段注入共用）：弃用
     字符 cap（REFERENCE_FULLTEXT_CAP「×3 字节」估算假口径——真实线
     json.dumps ensure_ascii=True 中文实发 6 字节/字符，全中文最坏形态必炸
     128KB 网关），改 wire 字节预算取最长前缀（budget.fit_wire_budget）+ 截头
-    标注（TRUNCATION_NOTICE 文案沿用）——标注自身的 wire 字节计入预算（对齐
-    fix 侧 read_file_contexts 既有做法：标注非免费，推导余量已含）。预算内
-    原样返回（逐文件截断标注归 read_fulltext，此处零增删）。budget 参数供
-    骨架参考段等多篇注入按篇数均分（skeleton-smoke-refs/02）。
+    标注（TRUNCATION_NOTICE 文案沿用，各段共用——截了要明说，不静默）——
+    标注自身的 wire 字节计入预算（对齐 fix 侧 read_file_contexts 既有做法：
+    标注非免费，推导余量已含）。预算内原样返回（逐文件截断标注归 read_fulltext，
+    此处零增删）。budget 参数供骨架参考段等多篇注入按篇数均分
+    （skeleton-smoke-refs/02）；候选清单段等其它段用段级预算常量
+    （REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES）。
     """
     fitted = fit_wire_budget(fulltext, budget)
     if fitted != fulltext:
@@ -4294,11 +4299,11 @@ def _deepen_user_prompt(
     qa_text: str,
 ) -> str:
     """深化的 user 消息（工单 revise-deepen/04）：题面 + 需求清单 + 接口 +
-    Q&A + 现有 main.c。各段截断带标注（_truncate_content / _fit_fulltext_wire
+    Q&A + 现有 main.c。各段截断带标注（_truncate_content / _fit_segment_wire
     同款预算）。"""
     lines = ["赛题：", _truncate_content(problem_text)]
     if qa_text:
-        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_segment_wire(qa_text)]
     if requirements:
         lines += _requirement_lines(
             requirements, "功能需求清单（逐条填充，不要遗漏、不要题外发挥）："
@@ -4319,10 +4324,10 @@ def _task_plan_user_prompt(
 ) -> str:
     """任务拆解的 user 消息（工单 task-progress/01）：题面 + Q&A + 功能需求
     清单 + 评分点清单 + 接口 + 现有 main.c。各段截断带标注（_truncate_content
-    / _fit_fulltext_wire 同款预算）。"""
+    / _fit_segment_wire 同款预算）。"""
     lines = ["赛题：", _truncate_content(problem_text)]
     if qa_text:
-        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_segment_wire(qa_text)]
     if requirements:
         lines += _requirement_lines(
             requirements, "功能需求清单（任务必须逐条覆盖，不遗漏、不题外发挥）："
@@ -4393,7 +4398,7 @@ def _task_execute_user_prompt(
         ]
     lines += ["", "赛题：", _truncate_content(problem_text)]
     if qa_text:
-        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_segment_wire(qa_text)]
     lines += ["", SKELETON_INTERFACES_HEADING]
     lines.extend(_truncate_content(block) for block in module_interfaces)
     lines += [
@@ -4522,12 +4527,12 @@ def _idea_user_prompt(
 ) -> str:
     """想法分析的 user 消息（工单 idea-fix/01）：想法 + 题面 + Q&A + 功能需求
     + 评分点 + 清单状态 + 接口 + 现有 main.c。各段截断带标注（_truncate_content
-    / _fit_fulltext_wire 同款预算）；想法段靠前（它是本调用要分析的主体）。
+    / _fit_segment_wire 同款预算）；想法段靠前（它是本调用要分析的主体）。
     """
     lines = ["【用户的新想法 / 发现的问题】", _truncate_content(idea)]
     lines += ["", "赛题：", _truncate_content(problem_text)]
     if qa_text:
-        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_segment_wire(qa_text)]
     if requirements:
         lines += _requirement_lines(
             requirements, "功能需求清单（任务必须逐条覆盖，不遗漏、不题外发挥）："
@@ -4589,7 +4594,7 @@ def _idea_fix_user_prompt(
         ]
     lines += ["", "赛题：", _truncate_content(problem_text)]
     if qa_text:
-        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_segment_wire(qa_text)]
     lines += ["", SKELETON_INTERFACES_HEADING]
     lines.extend(_truncate_content(block) for block in module_interfaces)
     lines += [
@@ -4702,7 +4707,7 @@ def _task_discuss_user_prompt(
         lines.append(f"描述：{task.get('description', '')}")
     lines += ["", "【赛题】", _truncate_content(problem_text)]
     if qa_text:
-        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_segment_wire(qa_text)]
     requirement_lines = _requirement_lines(requirements, "【功能需求层】")
     if requirement_lines:
         lines += ["", requirement_lines[0]]
@@ -4731,7 +4736,7 @@ def _global_idea_user_prompt(
     """全局商量的 user 消息（工单 idea-suite/01）：题面 + Q&A + 功能需求 +
     评分点 + 清单现状 + 接口 + 当前 main.c + 已采纳全局结论 + 讨论历史（旧 →
     新，逐条字符帽）+ 用户最新一轮消息。各段截断带标注（_truncate_content /
-    _fit_fulltext_wire / _requirement_lines / _idea_plan_summary /
+    _fit_segment_wire / _requirement_lines / _idea_plan_summary /
     _discuss_history_segment 先例）。
 
     历史为单通道：最后一条 user = 本轮消息（无独立 message 参数——与任务
@@ -4740,7 +4745,7 @@ def _global_idea_user_prompt(
     """
     lines = ["【赛题】", _truncate_content(problem_text)]
     if qa_text:
-        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_fulltext_wire(qa_text)]
+        lines += ["", "赛题答疑（赛事组 Q&A，权威澄清）：", _fit_segment_wire(qa_text)]
     if requirements:
         lines += _requirement_lines(
             requirements, "功能需求清单（工程必须逐条覆盖，不遗漏、不题外发挥）："
@@ -4851,7 +4856,7 @@ def _impact_user_prompt(
     prompt += "\n".join(lines)
     prompt += (
         "\n\n【新增赛题答疑 Q&A（赛事组权威澄清，逐条核对影响）】\n"
-        + _fit_fulltext_wire(new_qa_text)
+        + _fit_segment_wire(new_qa_text)
         + "\n\n只返回 json 格式的 JSON 对象："
         '{"impacts": [{"qa_index": 1, "requirement_refs": ["受影响的'
         '功能需求原文"], "add": ["新增模块 slug"], "remove": ["移除模块 '
@@ -4876,19 +4881,27 @@ def _selection_user_prompt(
         problem_text, "模块库可用模块：", [s.to_line() for s in manifest_summaries]
     )
     if references:
+        # 清单行来源标注（单点查表：source → 标注；锚定 auto = 无标注尾巴）
+        source_notes: dict[str, str] = {
+            REFERENCE_SOURCE_MANUAL: "（用户手动指定，全文已直接给出，无需点名）",
+            REFERENCE_SOURCE_RELATED: "（与题面 / 模块相关，自动列出）",
+        }
         lines = [
             "",
             "关联参考文件（标题 + 一句话简介；如需阅读全文，在输出的 references "
             "数组里列出想读的 id，系统随后给出全文）：",
         ]
         for ref in references:
-            note = (
-                "（用户手动指定，全文已直接给出，无需点名）"
-                if ref.source == REFERENCE_SOURCE_MANUAL
-                else ""
+            lines.append(
+                f"- {ref.id}: {ref.title} —— {ref.description}"
+                + source_notes.get(ref.source, "")
             )
-            lines.append(f"- {ref.id}: {ref.title} —— {ref.description}{note}")
-        prompt += "\n".join(lines)
+        # 清单段 wire 预算兜底（工单 02 相关候选自动扩容）：related 候选按上限
+        # 入场后清单段现实形态 ≈4.7KB（真实库简介 194-348 字/条），join 后整段
+        # 截断（_fit_segment_wire 单条标注——截了要明说，不静默）
+        prompt += _fit_segment_wire(
+            "\n".join(lines), REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES
+        )
     if reference_fulltexts:
         lines = ["", "以下是你要求阅读全文的参考文件："]
         for ref in references:
@@ -4898,17 +4911,17 @@ def _selection_user_prompt(
                 # 它点名的文件没给，与"读到什么就是什么"的截断契约一致。
                 # 截断两级（工单 03 + budget-wire-unification/01）：read_fulltext
                 # 逐文件截断（每文件 REFERENCE_FILE_CAP 带标注），此处只做
-                # wire 字节预算兜底（_fit_fulltext_wire——旧 4000 总截断吞掉
+                # wire 字节预算兜底（_fit_segment_wire——旧 4000 总截断吞掉
                 # 尾部文件；旧字符 cap 3B 估算假口径已弃）
                 lines.append(
                     f"- {ref.id}: {ref.title}：\n```\n"
-                    f"{_fit_fulltext_wire(fulltext)}\n```"
+                    f"{_fit_segment_wire(fulltext)}\n```"
                 )
         prompt += "\n".join(lines)
     if manual_fulltexts:
         # 手动选参考资料（工单 01）：全文直读强制（read_fulltext 已带 file_label
         # 文件名标注 + 逐文件截断标注，此处只做 wire 字节预算兜底
-        # （_fit_fulltext_wire——工单 03 放宽旧 4000 总截断吞掉尾部文件；
+        # （_fit_segment_wire——工单 03 放宽旧 4000 总截断吞掉尾部文件；
         # budget-wire-unification/01 弃字符 cap 改 wire 记账）
         lines = ["", "以下为你手动指定的参考文件全文（用户显式选择，直接作学习素材）："]
         for ref in references:
@@ -4916,18 +4929,18 @@ def _selection_user_prompt(
             if fulltext is not None:
                 lines.append(
                     f"- {ref.id}: {ref.title}：\n```\n"
-                    f"{_fit_fulltext_wire(fulltext)}\n```"
+                    f"{_fit_segment_wire(fulltext)}\n```"
                 )
         prompt += "\n".join(lines)
     if qa_material:
         # 赛题答疑 Q&A（工单 qa-material/01）：赛事组对题面的澄清问答，权威
         # 材料——题面/参考段之后、用户澄清之前的独立段（原文直引，不并入题面
         # 不影响逐句编号；收敛判定的对照句编号保持稳定）。空材料不出段（缺省
-        # = 旧行为逐字节）。wire 预算兜底照 _fit_fulltext_wire（长 Q&A 截断带
+        # = 旧行为逐字节）。wire 预算兜底照 _fit_segment_wire（长 Q&A 截断带
         # 标注，模型知道材料不完整）。
         prompt += (
             "\n\n【赛题答疑（赛事组 Q&A，权威澄清，题面有歧义处以这里为准）】\n"
-            + _fit_fulltext_wire(qa_material)
+            + _fit_segment_wire(qa_material)
         )
     if clarifications:
         # 澄清问答历史（工单 clarify-history-in-convergence）：题面 / 参考段之后
@@ -5260,7 +5273,7 @@ def _skeleton_user_prompt(
         ref_parts = ["参考资料（可作实现草稿，不要整段照抄）："]
         for ref_id, fulltext in reference_fulltexts.items():
             ref_parts.append(
-                f"### 参考资料 {ref_id}\n{_fit_fulltext_wire(fulltext, per_ref_budget)}"
+                f"### 参考资料 {ref_id}\n{_fit_segment_wire(fulltext, per_ref_budget)}"
             )
         prompt += "\n\n" + "\n\n".join(ref_parts)
         prompt += (
