@@ -1401,6 +1401,26 @@
   @media (max-width: 900px) {
     #code-statusbar-lang, #code-statusbar-enc, #code-statusbar-indent { display: none; }
   }
+  /* 快捷键帮助弹窗（工单 code-editor-shortcut-help/01）：状态栏「快捷键」按钮
+     → 居中浮层——壳体复用 .ref-files-modal（遮罩/圆角/阴影/80vh 上限），
+     .code-shortcuts-body 单独滚动；分组标题 + 键帽列表（键帽 min-width 定宽
+     让右侧说明纵向对齐，VSCode 观感）；键帽 .code-kbd 衬底/描边用既有 token
+     （--panel-2/--border/--radius-xs/--mono）。 */
+  .code-shortcuts-modal { max-width: 560px; }
+  .code-shortcuts-body { overflow-y: auto; min-height: 0; }
+  .code-shortcuts { padding: 4px 0 10px; }
+  .code-shortcuts-group { margin: var(--space-2) 14px var(--space-1); font-size: 12px;
+    font-weight: 600; color: var(--muted); }
+  .code-shortcuts-list { list-style: none; margin: 0; padding: 0; }
+  .code-shortcuts-list li { display: flex; align-items: baseline; gap: 10px;
+    padding: var(--space-1) 14px; font-size: 12px; line-height: 1.6; }
+  .code-shortcuts-list li:hover { background: var(--panel-2); }
+  .code-shortcuts-keys { flex: none; min-width: 170px; font-family: var(--mono); }
+  .code-shortcuts-or { color: var(--muted); padding: 0 5px; }
+  .code-shortcuts-label { color: var(--text); }
+  .code-kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--border);
+    border-radius: var(--radius-xs); background: var(--panel-2); color: var(--text);
+    font-size: 11px; font-family: var(--mono); line-height: 1.5; white-space: nowrap; }
   /* 编译结果面板（工单 code-tab-compile/03）：编辑器下方、状态栏上方的可折叠
      底部面板——头部常驻（状态行 + 动作按钮），错误列表滚动；.collapsed 只收
      列表（头部状态行始终可见），清空 = 整面板隐藏。
@@ -2851,6 +2871,7 @@
         <button id="btn-code-compile" type="button" title="保存全部未保存文件并编译当前工程（平台自动识别；不调 AI）">编译</button>
         <button id="btn-code-flash" type="button" title="保存全部未保存文件并烧录当前工程（平台自动识别；不调 AI）">烧录到板子</button>
         <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
+        <button id="btn-code-shortcuts" type="button" title="键盘快捷键（Esc 关闭）">快捷键</button>
       </div>
     </div>
   </section>
