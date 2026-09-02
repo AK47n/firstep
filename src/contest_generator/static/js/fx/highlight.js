@@ -7,8 +7,10 @@
 import { esc } from "./core.js";
 import { cHighlight } from "./code.js";
 
-// 高亮回退上限：超过即整段纯文本（esc）——大文件不浪费着色与转义
-export const HIGHLIGHT_MAX_BYTES = 128 * 1024;
+// 高亮回退上限：超过即整段纯文本（esc）。工单 code-page-vscode-overhaul/09：
+// 滚动窗口化（08）后高亮只按窗口行渲染、整段 highlightText 是 O(n) 线性
+// （实测 267KB ≈ 0.3ms），阈值从 128KB 放宽到 1MB——5000 行 .c 保持真彩色。
+export const HIGHLIGHT_MAX_BYTES = 1024 * 1024;
 
 // languageOf(path)：按扩展名判定语言——.c/.h → C；.md/.markdown → md
 // （工单 code-viewer-md-preview/01：预览路由）；.syscfg/.uvprojx/.cproject/
