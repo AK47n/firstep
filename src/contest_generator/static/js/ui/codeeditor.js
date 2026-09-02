@@ -474,10 +474,22 @@ function paneBox() { return $("code-viewer"); }
 // （选区、光标、横滚度量基础）。高亮逐行数组在内容变化时整段算一次
 // （highlightCodeLines 跨行 token 在行界闭合/重开，行间独立），滚动只切片。
 const WIN_OVERSCAN = 20;
-let winCache = null;   // { hl: string[], gutter: string[], lineCount, probeText }
+let winCache = null;   // { hl: string[], gutter: string[], lineCount, probeText, probeCols }
 let winLineH = 20;     // 实测行高 px（随 --code-font-size/行高变化重测）
 let winLast = null;    // { start, end, lineCount }——窗口未变 → 零 DOM
+let winSize = null;    // { lineCount, lineH, cols, chW }——尺寸缓存（工单 09：行数/行高/
+                       // 最长列数不变则不碰样式；列数增长按 ch 宽估算，零强制布局）
+let winView = { scrollTop: 0, viewportH: 0 };  // 滚动/视口缓存（工单 09：输入同步路径
+                                               // 绝不读 scrollTop/clientHeight——值变更后
+                                               // 首次布局读实测 50ms/次）
 let winFrame = 0;      // rAF 节流
+
+// winReadView()：滚动/尺寸变化事件里刷新缓存（事件发生时布局已一致，读便宜）。
+function winReadView() {
+  const box = paneBox();
+  if (!box) return;
+  winView = { scrollTop: box.scrollTop, viewportH: box.clientHeight };
+}
 
 function winLineHeight() {
   const box = paneBox();
@@ -506,9 +518,9 @@ function winBuild(viewText, lang) {
     const col = lines[i].replace(/\t/g, "    ").length;
     if (col > probeCols) { probeCols = col; probeText = lines[i]; }
   }
-  winCache = { hl, gutter, lineCount: hl.length, probeText };
+  winCache = { hl, gutter, lineCount: hl.length, probeText, probeCols };
   winLast = null;
-  winLineH = winLineHeight();
+  if (!winLineH) winLineH = winLineHeight();   // 行高仅首次 / codeWindowRefresh 重测（09：避免逐键 getComputedStyle）
 }
 
 function winSpacer(px) {
@@ -516,9 +528,8 @@ function winSpacer(px) {
 }
 
 function winWindow() {
-  const box = paneBox();
-  if (!box || !winCache) return { start: 0, end: 0 };
-  return codeWindowRange(box.scrollTop, box.clientHeight, winLineH,
+  if (!winCache) return { start: 0, end: 0 };
+  return codeWindowRange(winView.scrollTop, winView.viewportH, winLineH,
     winCache.lineCount, WIN_OVERSCAN);
 }
 
@@ -546,18 +557,41 @@ function winRenderMarks() {
 
 // winApplySize()：.code-edit 显式尺寸 = 全量内容（行高*行数 + 上下 padding
 // 16px；宽度 = 最长行实测宽 + 左右 padding 36px——mono 精确、CJK 兜底）。
+// 工单 09 缓存：行数/行高/最长列数未变 → 不写样式不测量；列数增长按上次
+// 实测 ch 宽估算（无 DOM 读）；仅首次 build 探针实测一次——大文件逐键输入
+// 零强制布局（实测一次强制布局 ≈ 50-60ms）。
 function winApplySize() {
   const box = paneBox();
   const edit = box && box.querySelector(".code-edit");
   if (!edit || !winCache) return;
-  edit.style.height = Math.ceil(16 + winCache.lineCount * winLineH) + "px";
-  const probe = box.querySelector(".code-window-probe");
-  let w = 0;
-  if (probe) {
-    probe.textContent = winCache.probeText || "";
-    w = probe.getBoundingClientRect().width;
+  if (!winSize || winSize.lineCount !== winCache.lineCount
+    || winSize.lineH !== winLineH) {
+    edit.style.height = Math.ceil(16 + winCache.lineCount * winLineH) + "px";
+    winSize = { lineCount: winCache.lineCount, lineH: winLineH, cols: -1, chW: 8 };
   }
-  if (w > 0) edit.style.width = Math.ceil(w + 36) + "px";
+  if (winSize.cols < 0) {
+    // 首次：探针实测一次（布局可接受——打开/换行/缩放时）
+    const probe = box.querySelector(".code-window-probe");
+    let w = 0;
+    let chW = winSize.chW;
+    if (probe) {
+      probe.textContent = winCache.probeText || "";
+      const r = probe.getBoundingClientRect();
+      w = r.width;
+      if (w > 0) {
+        chW = Math.max(1, w / Math.max(1, winCache.probeCols));
+        edit.style.width = Math.ceil(w + 36) + "px";
+      }
+    }
+    winSize = { ...winSize, cols: winCache.probeCols, chW };
+    return;
+  }
+  if (winCache.probeCols > winSize.cols) {
+    // 列数增长：按 ch 宽估算加宽（无 DOM 读——避免强制布局）
+    const dw = (winCache.probeCols - winSize.cols) * winSize.chW;
+    edit.style.width = Math.ceil(parseFloat(edit.style.width || "0") + dw) + "px";
+    winSize = { ...winSize, cols: winCache.probeCols };
+  }
 }
 
 // winRender()：按当前滚动窗口重画三层（窗口未变 → 零 DOM 直接返回；跨窗口
@@ -586,8 +620,11 @@ function winRender() {
 // codeWindowRefresh()：缩放/布局变化后强制重测行高并重画窗口（codeview 的
 // applyCodeZoom 调用）。
 export function codeWindowRefresh() {
+  winLineH = 0;      // 行高失效 → winBuild 重测
   winLineH = winLineHeight();
   winLast = null;
+  winSize = null;    // 尺寸缓存失效（缩放后重测宽度）
+  winReadView();
   winApplySize();
   winRender();
 }
@@ -624,6 +661,7 @@ function renderPane() {
     })
     + '<span class="code-window-probe" aria-hidden="true"></span>';
   winBuild(src, tab.lang);
+  winReadView();
   winApplySize();
   winRender();
   if (tab.readonly) renderReadonlyNote(box);
@@ -944,6 +982,7 @@ export function editJumpToLine(line) {
     // 窗口，再定位元素（后续 scroll 事件同窗跳过，flash 不被重建冲掉）。
     box.scrollTop = Math.max(0, (target - 1) * winLineH
       - Math.floor(box.clientHeight / 2));
+    winReadView();
     winRender();
     el = box.querySelector('.code-hl-line[data-code-line="' + target + '"]')
       || box.querySelector('.code-pre-line[data-code-line="' + target + '"]');
@@ -1374,8 +1413,18 @@ function syncEditorAfterInput() {
   }
   const selStart = ta.selectionStart;
   const selEnd = ta.selectionEnd;
-  const scrollTop = box.scrollTop;
-  const scrollLeft = box.scrollLeft;
+  // 工单 09：scrollTop/Left 只在「行数变化」（内容高度变化）时读写——大
+  // textarea 场景读/写滚动位置会强制布局（实测 60-150ms/次）；行数不变时
+  // .code-edit 显式高度不变，窗口 innerHTML 重建不改变滚动，容器自动保持。
+  const prevCount = winCache ? winCache.lineCount : 0;
+  const needScrollRestore = (viewModel ? viewModel.lines.length
+    : tab.content.split("\n").length) !== prevCount;
+  let scrollTop = 0;
+  let scrollLeft = 0;
+  if (needScrollRestore) {
+    scrollTop = box.scrollTop;
+    scrollLeft = box.scrollLeft;
+  }
   // 只重绘窗口行（滚动窗口化 08）：内容变化 → 重建逐行缓存 + 重测尺寸 +
   // 画当前滚动窗口（textarea 本体不重建——焦点/选区零抖动）
   const viewText = viewModel ? viewModel.text : tab.content;
@@ -1389,11 +1438,18 @@ function syncEditorAfterInput() {
   updateBracketMarks();
   renderEditorMarks();
   setActiveLine(caretLineOf(viewText, selStart));
-  box.scrollTop = scrollTop;
-  box.scrollLeft = scrollLeft;
+  // 只写不读（需要时）：行数变化才恢复滚动
+  if (needScrollRestore) {
+    box.scrollTop = scrollTop;
+    box.scrollLeft = scrollLeft;
+  }
   if (!composing) {
-    ta.focus();
-    ta.setSelectionRange(selStart, selEnd);
+    // 工单 09：已聚焦不重复 focus / 选区未变不 setSelectionRange——大
+    // textarea 下这两者是强制布局 / 光标重排的重触发点（实测占比大头）
+    if (document.activeElement !== ta) ta.focus();
+    if (ta.selectionStart !== selStart || ta.selectionEnd !== selEnd) {
+      ta.setSelectionRange(selStart, selEnd);
+    }
   }
   renderTabs();   // 脏点随输入即时刷新（标签条内联渲染，事件委托不失效）
   notifyActive();   // 状态栏信息区随内容/光标刷新（onActiveTabChanged → refreshCodeStatus；不再单独 notifyCursor——避免每击键双刷）
@@ -1488,11 +1544,12 @@ export function initCodeEditor() {
   const viewBox = paneBox();
   if (viewBox) {
     viewBox.addEventListener("scroll", () => {
+      winReadView();
       if (winFrame) return;
       winFrame = requestAnimationFrame(() => { winFrame = 0; winRender(); });
     });
     if (typeof ResizeObserver === "function") {
-      new ResizeObserver(() => winRender()).observe(viewBox);
+      new ResizeObserver(() => { winReadView(); winRender(); }).observe(viewBox);
     }
   }
   const strip = $("code-tabs");
