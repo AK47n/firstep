@@ -1696,7 +1696,7 @@
   .code-gutter { position: sticky; left: 0; flex: none; padding: 8px 0;
     user-select: none; }
   .code-gutter-line { display: block; font-family: var(--mono);
-    font-size: var(--code-font-size); line-height: 1.55; padding: 0 12px;
+    font-size: var(--code-font-size); line-height: 1.6; padding: 0 12px;
     text-align: right; color: var(--muted); min-width: 3ch; box-sizing: border-box; }
   /* 折叠箭头与占位行（工单 code-editor-vscode-polish/07）：箭头 = gutter 行内
      小三角（muted、hover accent；open = ▾ 展开态、无 open = ▸ 折叠态）；占位
@@ -1714,14 +1714,14 @@
   .code-gutter-line.active { color: var(--accent); font-weight: 600; }
   .code-pre { margin: 0; padding: 8px 24px 8px 12px; color: var(--code-text);
     background: none; border: 0; font-family: var(--mono);
-    font-size: var(--code-font-size); line-height: 1.55; white-space: pre; }
+    font-size: var(--code-font-size); line-height: 1.6; white-space: pre; }
   /* 代码逐行元素：block 保证行高 = gutter 行高（同一 font/line-height）；
      :empty 空行（文件尾 \n / 连续空行）设 min-height = 1.55em（与
      .code-pre / .code-gutter-line 的 line-height 同源数值，空 block 无行盒
      会塌成 0 高、与 gutter 错位——content:"" 的 ::before 不产行盒，实测
      无效）；flash = 跳行内容行高亮（整行宽，与 gutter 同排）。 */
   .code-pre-line { display: block; }
-  .code-pre-line:empty { min-height: 1.55em; }
+  .code-pre-line:empty { min-height: 1.6em; }
   .code-pre-line.flash { background: var(--accent-dim); }
   /* 当前行（重设计）：整行淡 accent 底 + 左侧 2px accent 竖线（VSCode
      active line 观感）；行号 accent 加粗（.code-gutter-line.active 同行）。 */
@@ -1744,17 +1744,17 @@
      .code-hl / .code-ta 三处同步，保证覆盖层 1:1 对齐。 */
   .code-edit { position: relative; width: max-content; min-width: 100%; flex: none; }
   .code-hl { display: block; margin: 0; padding: 8px 24px 8px 12px; border: 0; background: none;
-    font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.55;
+    font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.6;
     white-space: pre; tab-size: 4; color: var(--code-text); }
   .code-hl-line { display: block; }
-  .code-hl-line:empty { min-height: 1.55em; }
+  .code-hl-line:empty { min-height: 1.6em; }
   .code-hl-line.flash { background: var(--accent-dim); }
   .code-hl-line.active { background: rgba(var(--accent-rgb), .07);
     box-shadow: inset 2px 0 0 var(--accent); }
   .code-ta { position: absolute; inset: 0; z-index: 1; display: block; width: 100%;
     height: 100%; padding: 8px 24px 8px 12px; border: 0; margin: 0; background: transparent;
     color: transparent; caret-color: var(--accent); font-family: var(--mono);
-    font-size: var(--code-font-size); line-height: 1.55; white-space: pre; tab-size: 4;
+    font-size: var(--code-font-size); line-height: 1.6; white-space: pre; tab-size: 4;
     overflow: hidden; resize: none; box-sizing: border-box; }
   .code-ta:focus { outline: none; }
   /* 标记层（工单 code-editor-vscode-polish/04-06）：高亮层之上、textarea 之
@@ -1765,16 +1765,33 @@
      （强）、选中词（更淡）、括号配对（下划线——与填充类区分）。 */
   .code-marks { position: absolute; inset: 0; z-index: 0; margin: 0;
     padding: 8px 24px 8px 12px; border: 0; background: none;
-    font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.55;
+    font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.6;
     white-space: pre; tab-size: 4; color: transparent; overflow: hidden;
     pointer-events: none; }
   .code-marks-line { display: block; }
-  .code-marks-line:empty { min-height: 1.55em; }
+  .code-marks-line:empty { min-height: 1.6em; }
   .code-mark-hit { background: rgba(var(--accent-rgb), .18); }
   .code-mark-current { background: rgba(var(--accent-rgb), .38);
     box-shadow: inset 2px 0 0 var(--accent); }
   .code-mark-word { background: rgba(var(--accent-rgb), .12); }
-  .code-mark-bracket { box-shadow: inset 0 -2px 0 var(--accent); }
+  /* 括号配对（工单 code-page-vscode-overhaul/07）：下划线 → VSCode 式描边框
+     （1.5px 内描边 + 2px 圆角 + 6% 淡底），双主题随 --accent 自适应。 */
+  .code-mark-bracket { box-shadow: inset 0 0 0 1.5px var(--accent);
+    border-radius: var(--radius-xs); background: rgba(var(--accent-rgb), .06); }
+  /* 缩进引导线（工单 07）：1ch 宽 span 内渐变画 1.5px 居中竖线（对齐 4ch
+     列位、只画行首空白区不覆盖文字）；alpha .32 双主题自适应。 */
+  .code-mark-guide { background: linear-gradient(90deg, transparent 0,
+    transparent calc(50% - 1px), rgba(var(--accent-rgb), .32)
+    calc(50% - 1px), rgba(var(--accent-rgb), .32) calc(50% + 1px),
+    transparent calc(50% + 1px)); }
+  /* 滚动条（工单 07）：VSCode 式细滚动条——thumb accent 半透明圆角、轨道
+     透明、角透明；hover 加深。 */
+  .code-view::-webkit-scrollbar { width: 12px; height: 12px; }
+  .code-view::-webkit-scrollbar-track { background: transparent; }
+  .code-view::-webkit-scrollbar-thumb { background: rgba(var(--accent-rgb), .22);
+    border-radius: var(--radius-sm); border: 3px solid transparent; background-clip: padding-box; }
+  .code-view::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-rgb), .38); }
+  .code-view::-webkit-scrollbar-corner { background: transparent; }
   /* 选区（工单 code-editor-vscode-polish/02）：alpha .28 → .32——深浅主题下
      选区更可辨（VSCode 选区观感）；文字仍透明（文字由高亮层绘制）。 */
   .code-ta::selection { background: rgba(var(--accent-rgb), .32); color: transparent; }

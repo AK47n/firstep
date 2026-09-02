@@ -88,6 +88,27 @@ export function codeFindRanges(text, needle) {
   return out;
 }
 
+// codeIndentGuideMarks(text)：缩进引导线标记纯件（工单 code-page-vscode-overhaul/07）
+// ——逐行按前导空白在 4 列对齐（tab-size 4）位置画竖线：第 k 级引导线画在
+// 边界左侧最后一个空白字符上（span [4k-1, 4k)，1ch 宽，CSS 渐变画 1.5px
+// 居中竖线——4 空格单级缩进也可见，与 VSCode 观感一致）；只画行首空白区
+// （不覆盖文字）。纯空格缩进 = 标准 4 列对齐；tab 混入时按字符近似（本编辑
+// 器缩进走空格，主路径精确）。kind 与标记层同族（"guide"）。
+export function codeIndentGuideMarks(text) {
+  const src = String(text == null ? "" : text);
+  const out = [];
+  const lines = src.split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    let run = 0;
+    while (run < line.length && (line[run] === " " || line[run] === "\t")) run++;
+    for (let c = 4; c <= run; c += 4) {
+      out.push({ line: li + 1, start: c - 1, end: c, kind: "guide" });
+    }
+  }
+  return out;
+}
+
 // codeMarksHTML(text, marks)：标记层内部 HTML 单源——逐行
 // span.code-mark-line[data-code-line]（与高亮层 .code-hl-line 同 data 键，
 // 跳行/当前行语义可寻址）；行内按标记边界切段，重叠段取最高优先级类；
