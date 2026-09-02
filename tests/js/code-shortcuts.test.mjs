@@ -20,7 +20,8 @@ test("SHORTCUT_GROUPS：三组（编辑/查找/视图）且每项键位数组与
 test("SHORTCUT_GROUPS：覆盖全部常用快捷键（关键条目）", () => {
   const all = SHORTCUT_GROUPS.flatMap((g) => g.items).flatMap((it) => it.keys).join("|");
   for (const k of ["Ctrl+S", "Ctrl+F", "Ctrl+H", "Esc", "Backspace",
-    "Ctrl+Shift+[", "Ctrl+Shift+]", "Ctrl+滚轮", "Tab", "Enter", "Shift+Enter"]) {
+    "Ctrl+Shift+[", "Ctrl+Shift+]", "Ctrl+滚轮", "Tab", "Enter", "Shift+Enter",
+    "Ctrl+W", "Ctrl+B"]) {
     assert.ok(all.includes(k), "缺少快捷键条目: " + k);
   }
   // 鼠标手势也在册

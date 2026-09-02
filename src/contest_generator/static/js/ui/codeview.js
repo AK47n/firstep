@@ -48,6 +48,7 @@ import {
   setCodeDir,
   openEditorFile,
   getActiveTab,
+  closeTab,
   editJumpToLine,
   editJumpToFile,
   setMdMode,
@@ -1019,6 +1020,37 @@ export function initCodeViewer() {
     if (!codeTabActive() || !replaceInput) return;
     e.preventDefault();
     focusFindPanel(replaceInput);
+  });
+  // 快捷键补位（工单 code-editor-refine/02）：Ctrl+W 关标签 / Ctrl+B 侧栏开合。
+  // Ctrl+W 全局拦截（输入框聚焦也生效——否则浏览器按原生关页，数据丢失面更大；
+  // VSCode 同义）；脏标签由 closeTab 内 confirmModal 处理；模态开启（.ref-files-
+  // overlay）时不并发截获（防与确认弹窗冲突）。Ctrl+B 输入框聚焦不抢键（Tab
+  // 陷阱先例：焦点在查找/过滤框内不打断输入）。
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const key = e.key.toLowerCase();
+    if (key === "w") {
+      if (!codeTabActive()) return;
+      e.preventDefault();   // 先防浏览器原生关页，再决定行为（模态开启也吞键）
+      if (document.querySelector(".ref-files-overlay")) return;
+      const activeTab = getActiveTab();
+      if (activeTab) closeTab(activeTab.path);
+      return;
+    }
+    if (key === "b") {
+      if (!codeTabActive()) return;
+      // 输入框豁免 = 侧栏/面板输入框（查找/过滤/替换等 INPUT 与非编辑区
+      // 文本域）；编辑器主区 .code-ta 不算豁免（VSCode 同义：编辑中
+      // Ctrl+B 也能切侧栏）。
+      const target = e.target;
+      const inPanelField = target && (target.tagName === "INPUT"
+        || (target.tagName === "TEXTAREA" && !target.classList.contains("code-ta")));
+      if (inPanelField) return;
+      const layout = codeSideLayout();
+      if (!layout) return;
+      e.preventDefault();
+      setCodeSideCollapsed(!layout.classList.contains("side-collapsed"), true);
+    }
   });
   // 替换单个命中 / 替换并跳下一处（工单 code-page-vscode-overhaul/03）：
   // 模型层替换（折叠安全）+ 计数联动；「替换并下一处」聚焦下一命中选区。

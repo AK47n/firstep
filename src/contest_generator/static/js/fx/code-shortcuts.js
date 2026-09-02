@@ -15,6 +15,7 @@ export const SHORTCUT_GROUPS = [
     title: "编辑",
     items: [
       { keys: ["Ctrl+S"], label: "保存当前文件" },
+      { keys: ["Ctrl+W"], label: "关闭当前标签（脏标签先确认）" },
       { keys: ["Tab"], label: "缩进选中行（4 空格）" },
       { keys: ["Shift+Tab"], label: "反缩进选中行" },
       { keys: ["Enter"], label: "换行并自动缩进" },
@@ -44,6 +45,7 @@ export const SHORTCUT_GROUPS = [
       { keys: ["Ctrl+Shift+["], label: "折叠光标所在代码块" },
       { keys: ["Ctrl+Shift+]"], label: "展开光标所在代码块" },
       { keys: ["Ctrl+滚轮"], label: "缩放代码字号" },
+      { keys: ["Ctrl+B"], label: "收起 / 展开右侧栏" },
     ],
   },
 ];
