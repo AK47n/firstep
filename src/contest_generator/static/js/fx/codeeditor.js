@@ -164,13 +164,19 @@ export function caretLineOf(value, pos) {
 }
 
 // caretColOf(value, pos)：光标列号（1 基）——pos 所在行行首偏移
-// （lastIndexOf("\n", pos-1)+1）到 pos 的字符数 +1；pos 越界钳到行尾列；
+// （lastIndexOf("\n", pos-1)+1）到 pos 的字符数 +1，并按行尾长度钳制
+// （pos 恰在换行符上 = 行尾列，与浏览器光标视觉一致）；pos 越界钳到行尾列；
 // 空串 → 1。与 caretLineOf 同族成对（评审整改 code-editor-vscode-polish/01：
-// 列号不再在 ui 层手写 lastIndexOf 表达式——行/列同一 fx 单源）。
+// 行列计算同一 fx 单源——ui 层不再手写 lastIndexOf/indexOf 算式）。
 export function caretColOf(value, pos) {
   const v = String(value == null ? "" : value);
   const p = Math.max(0, Math.min(v.length, pos | 0));
-  return p - (v.lastIndexOf("\n", p - 1) + 1) + 1;
+  const lineStart = v.lastIndexOf("\n", p - 1) + 1;
+  const lineEnd = (() => {
+    const nl = v.indexOf("\n", lineStart);
+    return nl === -1 ? v.length : nl;
+  })();
+  return Math.min(p - lineStart + 1, lineEnd - lineStart + 1);
 }
 
 // _lineStart(value, pos)：pos 所在行行首偏移（lastIndexOf("\n", pos-1)+1）。
