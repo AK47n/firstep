@@ -84,6 +84,21 @@ function notifyCursor() {
   cursorListeners.forEach((cb) => { try { cb(); } catch (e) { /* 监听器异常不阻断 */ } });
 }
 
+// scheduleCursorWork()：光标联动「只做必做、其余顺延一帧」调度（性能整改）——
+// 点击/按键的同一事件回调里，setActiveLine 立即上类；选中词全文扫描 /
+// 括号配对扫描 / 标记层重绘 / 状态栏更新这些**同步重活**会阻塞浏览器绘制
+// （实测点击后高亮被拖到 ~100ms 才上屏——用户反馈「延时感」根因）。改为
+// requestAnimationFrame 合并调度：高亮先画、重活下一帧做；连续事件只排一次
+// （raf id 去重）。
+let cursorRafId = 0;
+function scheduleCursorWork() {
+  if (cursorRafId) return;
+  cursorRafId = requestAnimationFrame(() => {
+    cursorRafId = 0;
+    notifyCursor();
+  });
+}
+
 const CODE_FLASH_MS = 1200;  // 跳行闪烁（与查看器同值：评审整改 1200 归拢）
 
 // ===== 目录上下文 =====
@@ -325,6 +340,7 @@ function resetFoldState() {
 // 状态：光标处词 + 全文同词区段（大小写精确 + 词边界）；随光标变化重算
 // （notifyCursor 前置钩子），内容变化也重算（词未变但偏移会变——签名比较）。
 let editorWord = { word: "", ranges: [] };
+let editorWordContent = null;   // 上次重算时的 tab.content 引用（性能整改：内容引用短路）
 
 // updateWordMarks()：光标/内容变化后重算选中词标记——词变了或区段签名变了
 // 返回 true（**不渲染**——渲染由调用方统一做，防 find/word/bracket 三态
@@ -336,16 +352,23 @@ function updateWordMarks() {
   if (!tab || !ta) {
     if (editorWord.word || editorWord.ranges.length) {
       editorWord = { word: "", ranges: [] };
+      editorWordContent = null;
       return true;
     }
     return false;
   }
+  const content = tab.content;
   const pos = foldCaretModelPos();   // 折叠态：选区（视图）→ 模型偏移（工单 07）
-  const word = codeWordAt(tab.content, pos);
-  const ranges = word ? codeWordRanges(tab.content, word) : [];
+  const word = codeWordAt(content, pos);
+  // 性能整改（光标延时）：内容引用未变且词未变 → 同词区段必同（ranges 是
+  // (content, word) 的纯函数；位置变了但词一样 = 仍在同一词内移动/词外空
+  // 白，区段不变）——直接跳过 codeWordRanges 全文扫描，单词内移动零扫描。
+  if (editorWordContent === content && word === editorWord.word) return false;
+  const ranges = word ? codeWordRanges(content, word) : [];
   const changed = word !== editorWord.word
     || JSON.stringify(ranges) !== JSON.stringify(editorWord.ranges);
   if (changed) editorWord = { word, ranges };
+  editorWordContent = content;
   return changed;
 }
 
@@ -780,7 +803,7 @@ export function editJumpToLine(line) {
       ta.setSelectionRange(start, start + (range.end - range.start));
     }
   }
-  notifyCursor();   // 状态栏 Ln/Col 随跳行刷新（工单 01）
+  scheduleCursorWork();   // 状态栏 Ln/Col 随跳行刷新（工单 01；顺延一帧，性能整改）
 }
 
 // editJumpToFile(path, line)：跨文件跳转（搜索命中）——.md 一律切编辑态
@@ -1322,7 +1345,7 @@ export function initCodeEditor() {
       const ta = e.target;
       if (ta && ta.classList && ta.classList.contains("code-ta")) {
         setActiveLine(caretLineOf(ta.value, ta.selectionStart));
-        notifyCursor();
+        scheduleCursorWork();   // 重活顺延一帧：高亮先上屏（性能整改）
       }
     });
     // 折叠交互（工单 07）：gutter 箭头（data-fold）与占位行
@@ -1374,6 +1397,14 @@ export function initCodeEditor() {
     box.addEventListener("keydown", (e) => {
       const ta = e.target;
       if (!ta || !ta.classList || !ta.classList.contains("code-ta") || ta.readOnly) return;
+      // 光标行高亮即时跟随（性能整改）：keydown 就更新——浏览器在 keydown
+      // 处理时已按本次按键移动了光标，等 keyup 会滞后一次按键节拍（肉眼
+      // 感觉 ~0.1s 延时）。setActiveLine 纯 DOM class 切换（同步、立即上
+      // 屏）；选中词/括号/状态栏等重活经 scheduleCursorWork 顺延一帧，不
+      // 阻塞本帧绘制。Tab/Enter/括号分支随后 applyEdit → syncEditorAfterInput
+      // 会再按新选区校正一次（幂等）。
+      setActiveLine(caretLineOf(ta.value, ta.selectionStart));
+      scheduleCursorWork();
       if (e.key === "Tab") {
         e.preventDefault();
         const r = indentLines(ta.value, ta.selectionStart, ta.selectionEnd);
@@ -1412,13 +1443,13 @@ export function initCodeEditor() {
     box.addEventListener("select", () => {
       const ta = box.querySelector(".code-ta");
       if (ta) setActiveLine(caretLineOf(ta.value, ta.selectionStart));
-      notifyCursor();   // 状态栏 Ln/Col 随选区变化刷新（工单 01）
+      scheduleCursorWork();   // 状态栏 Ln/Col 随选区变化刷新（工单 01；顺延一帧，性能整改）
     });
     box.addEventListener("keyup", (e) => {
       const ta = e.target;
       if (ta && ta.classList && ta.classList.contains("code-ta")) {
         setActiveLine(caretLineOf(ta.value, ta.selectionStart));
-        notifyCursor();
+        scheduleCursorWork();
       }
     });
   }
