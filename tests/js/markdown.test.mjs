@@ -22,6 +22,27 @@ test("parseMarkdownBlocks：ATX 标题各层级 + 闭井号剥离 + 1 基行号"
   ]);
 });
 
+// markdownPreviewHTML foldPreview（工单 code-editor-vscode-polish/07）：
+// 标题折叠——details/summary 分组（标题起组、任意下一标题截止、首个标题前
+// 引言不折）；未开 foldPreview 时零改变。
+test("markdownPreviewHTML：foldPreview 打开 → 标题组 details/summary", () => {
+  const blocks = parseMarkdownBlocks("引言\n# A\n正文1\n## B\n正文2");
+  const html = markdownPreviewHTML(blocks, { foldPreview: true });
+  assert.match(html, /<details class="code-md-fold" open/);
+  assert.match(html, /<summary data-md-line="2">/);   // A 标题入 summary（行号保留）
+  assert.match(html, />引言<\/p>/);                    // 首个标题前引言不折
+  assert.equal((html.match(/<details/g) || []).length, 2);   // 两个标题 = 两组
+  assert.ok(html.indexOf("正文1") < html.indexOf("</details>"));
+  assert.ok(html.indexOf("正文2") > html.lastIndexOf("<summary"));
+});
+
+test("markdownPreviewHTML：未开 foldPreview → 无 details（零改变）", () => {
+  const blocks = parseMarkdownBlocks("# A\n正文");
+  const html = markdownPreviewHTML(blocks);
+  assert.ok(!html.includes("<details"));
+  assert.ok(!html.includes("<summary"));
+});
+
 test("parseMarkdownBlocks：段落软换行合并为空格（块内物理行保留在 text）", () => {
   const blocks = parseMarkdownBlocks("第一行\n第二行");
   assert.deepEqual(blocks, [{ type: "paragraph", text: "第一行 第二行", line: 1 }]);
