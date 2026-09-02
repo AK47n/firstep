@@ -1605,14 +1605,14 @@
   .code-gutter { position: sticky; left: 0; flex: none; padding: 8px 0;
     user-select: none; }
   .code-gutter-line { display: block; font-family: var(--mono);
-    font-size: var(--code-font-size); line-height: 1.55; padding: 0 8px;
+    font-size: var(--code-font-size); line-height: 1.55; padding: 0 12px;
     text-align: right; color: var(--muted); min-width: 3ch; box-sizing: border-box; }
   .code-gutter-line.flash { background: var(--accent-dim); color: var(--accent); }
   /* 当前行（工单 code-viewer-polish/02）：内容行 + 行号同 data 键 active——
      active = 持续淡色（rgba accent .07 双主题自适应），flash = 瞬态略强
      （--accent-dim .12）；不新造颜色值（:root 允许 rgba(var(--accent-rgb), a)）。 */
   .code-gutter-line.active { color: var(--accent); font-weight: 600; }
-  .code-pre { margin: 0; padding: 8px 12px; color: var(--code-text);
+  .code-pre { margin: 0; padding: 8px 24px 8px 12px; color: var(--code-text);
     background: none; border: 0; font-family: var(--mono);
     font-size: var(--code-font-size); line-height: 1.55; white-space: pre; }
   /* 代码逐行元素：block 保证行高 = gutter 行高（同一 font/line-height）；
@@ -1627,14 +1627,23 @@
      active line 观感）；行号 accent 加粗（.code-gutter-line.active 同行）。 */
   .code-pre-line.active { background: rgba(var(--accent-rgb), .07);
     box-shadow: inset 2px 0 0 var(--accent); }
+  /* 空态（工单 code-editor-vscode-polish/02）：编辑器空态文本在滚动容器内
+     居中——.code-view 是 flex 滚动容器，唯一子元素 margin:auto 双向居中；
+     muted 小字 + 留白，观感贴近 VSCode 欢迎页（保持轻量，不引入图标）。 */
+  .code-empty { margin: auto; padding: 24px 28px; text-align: center;
+    color: var(--muted); font-size: 13px; line-height: 1.6;
+    display: flex; flex-direction: column; gap: 8px; }
+  .code-empty .error { font-size: 13px; margin-bottom: 0; }
   /* 可编辑三明治（工单 code-viewer-editor/02）：pre.code-hl 静态流内自带量宽
      量高（.code-edit width:max-content 随最长行、高度随行数——容器 .code-view
      滚动，无内部滚动条、零滚动同步），textarea absolute inset:0 同盒覆盖
      （透明文字 + accent 光标 + 选区 accent）；同 font/line-height/padding/
      tab-size，逐行 1:1 对齐；.code-hl-line 兼具只读视图 .code-pre-line 的
-     跳行/当前行语义（data-code-line 同键）。 */
+     跳行/当前行语义（data-code-line 同键）。右 padding 24px（工单
+     code-editor-vscode-polish/02）：横滚到行尾时留呼吸空白；.code-pre /
+     .code-hl / .code-ta 三处同步，保证覆盖层 1:1 对齐。 */
   .code-edit { position: relative; width: max-content; min-width: 100%; flex: none; }
-  .code-hl { display: block; margin: 0; padding: 8px 12px; border: 0; background: none;
+  .code-hl { display: block; margin: 0; padding: 8px 24px 8px 12px; border: 0; background: none;
     font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.55;
     white-space: pre; tab-size: 4; color: var(--code-text); }
   .code-hl-line { display: block; }
@@ -1643,16 +1652,19 @@
   .code-hl-line.active { background: rgba(var(--accent-rgb), .07);
     box-shadow: inset 2px 0 0 var(--accent); }
   .code-ta { position: absolute; inset: 0; z-index: 1; display: block; width: 100%;
-    height: 100%; padding: 8px 12px; border: 0; margin: 0; background: transparent;
+    height: 100%; padding: 8px 24px 8px 12px; border: 0; margin: 0; background: transparent;
     color: transparent; caret-color: var(--accent); font-family: var(--mono);
     font-size: var(--code-font-size); line-height: 1.55; white-space: pre; tab-size: 4;
     overflow: hidden; resize: none; box-sizing: border-box; }
   .code-ta:focus { outline: none; }
-  .code-ta::selection { background: rgba(var(--accent-rgb), .28); color: transparent; }
+  /* 选区（工单 code-editor-vscode-polish/02）：alpha .28 → .32——深浅主题下
+     选区更可辨（VSCode 选区观感）；文字仍透明（文字由高亮层绘制）。 */
+  .code-ta::selection { background: rgba(var(--accent-rgb), .32); color: transparent; }
   /* 只读标注（工单 code-viewer-editor/02）：非 UTF-8 文件编辑器右上方提示
-     （.code-view 已 position:relative 锚定，不随内容滚动）。 */
+     （.code-view 已 position:relative 锚定，不随内容滚动）；观感与信息条小
+     按钮统一（工单 code-editor-vscode-polish/02：radius-sm、panel-2 底）。 */
   .code-ro-note { position: absolute; top: 6px; right: 12px; z-index: 5;
-    padding: 4px 9px; font-size: 11.5px; line-height: 1; border-radius: var(--radius-xs);
+    padding: 4px 10px; font-size: 11.5px; line-height: 1; border-radius: var(--radius-sm);
     background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
     pointer-events: none; }
   /* 保存冲突模态（工单 code-viewer-editor/04）：shell 复用 .ref-files-modal
@@ -2645,7 +2657,7 @@
               title="回到 .md 渲染预览（编辑态内容保留）">返回预览</button>
             <button id="btn-code-save" class="hidden" type="button" title="保存当前文件到磁盘（Ctrl+S）">保存</button>
           </div>
-          <div id="code-viewer" class="code-view"><span class="muted">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span></div>
+          <div id="code-viewer" class="code-view"><span class="code-empty">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span></div>
         </div>
         <div class="code-pane code-pane-side">
           <div class="code-side-tabs">
