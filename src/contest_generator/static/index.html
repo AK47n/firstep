@@ -1376,6 +1376,18 @@
      收缩时不再按比例挤压按钮；窄视口/长路径下「保存全部」「编译」被压窄成
      竖排（「编」「译」拆行,用户反馈右下角错位）的根治。 */
   .code-statusbar button { flex: none; white-space: nowrap; }
+  /* 状态栏按钮（工单 code-editor-vscode-polish/08）：与信息条钮/面板头动作
+     同一观感——panel 底 + 1px 边框 + radius-sm + hover accent（原先为纯文本
+     按钮，无边框无圆角）。底样式与 hover 与 .code-pane-action /
+     .code-compile-head button 合并为共享规则（评审整改 08：防三份逐字节拷贝
+     漂移）。 */
+  .code-pane-action, .code-compile-head button, .code-statusbar button {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--panel); color: var(--accent); }
+  .code-pane-action:hover, .code-compile-head button:hover, .code-statusbar button:hover {
+    border-color: var(--accent); background: var(--accent-dim); }
+  .code-statusbar button { padding: 3px 10px; }
+  .code-statusbar button:disabled { opacity: .55; cursor: default; }
   /* 状态栏信息区（工单 code-editor-vscode-polish/01）：VSCode 式右侧动态信息
      段——光标行列 / 语言徽标 / 编码 / 缩进 / 缩放；等宽小字 muted，行列值
      text 色突出；空态（无活动文件）内容为空串、容器天然零宽不占位；窄视口
@@ -1406,9 +1418,7 @@
   .code-compile-status.ok { color: var(--ok); }
   .code-compile-status.err { color: var(--danger); }
   .code-compile-head button { font-size: 11.5px; line-height: 1; padding: 3px 8px;
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--panel); color: var(--accent); cursor: pointer; flex: none; }
-  .code-compile-head button:hover { border-color: var(--accent); background: var(--accent-dim); }
+    cursor: pointer; flex: none; }
   .code-compile-errors { max-height: 160px; overflow: auto; padding: 0 0 4px 10px;
     display: flex; flex-direction: column; gap: 2px; }
   #code-compile-panel.collapsed .code-compile-errors,
@@ -1523,10 +1533,27 @@
     border-bottom: 1px solid var(--border); flex: none;
     display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .code-pane-action { flex: none; font-size: 11.5px; line-height: 1; padding: 3px 8px;
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--panel); color: var(--accent); cursor: pointer; }
-  .code-pane-action:hover { border-color: var(--accent); background: var(--accent-dim); }
+    cursor: pointer; }
+  /* 焦点环统一（工单 code-editor-vscode-polish/08）：代码页全部可交互元素
+     focus-visible = 2px accent outline + 2px offset（沿用既有
+     .code-tree-resize-handle 先例；键盘导航可辨、鼠标点击无环）。 */
+  .code-pane-action:focus-visible, .code-pane-title button:focus-visible,
+  .code-side-tabs button:focus-visible, .code-side-rail-btn:focus-visible,
+  .code-side-collapse:focus-visible, .code-outline-item:focus-visible,
+  .code-search-hit:focus-visible, .code-find-item:focus-visible,
+  .code-compile-error:focus-visible, .code-tab:focus-visible,
+  .code-compile-head button:focus-visible, .code-statusbar button:focus-visible,
+  .code-md-edit:focus-visible, .code-back-preview:focus-visible,
+  .code-tree-btn:focus-visible, .code-tree-act:focus-visible,
+  #btn-code-save:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
   .code-tree-box { flex: 1; overflow: auto; min-height: 0; }
+  /* 树/侧栏空态（工单 code-editor-vscode-polish/08）：与编辑器 .code-empty
+     同类观感——muted 小字、行内留白（块级占位；侧栏结果/查找空态在更深一层
+     ——.code-search-results/.code-find-results 直子，评审整改 08：修正死选择器）。 */
+  .code-tree-box > .muted, .code-outline-box > .muted,
+  .code-search-results > .muted, .code-find-results > .muted { display: block;
+    padding: 8px 10px; font-size: 12.5px; line-height: 1.6; }
   /* 树面板拖拽调宽（工单 code-viewer-tree-resize/01）：树宽由 --code-tree-w
      驱动（默认 240，localStorage 持久化）；手柄悬于面板右缘与中缝之间
      （grid gap 10px 内，right:-5px），不盖树内容与滚动条；拖拽中
