@@ -11,6 +11,7 @@ import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { codeZoomClamp, parseZoomStored, isMainCPath } from "/js/fx/code.js";
 import { isTabSavable, codeStatusHTML } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）+ 状态栏信息纯件（code-editor-vscode-polish/01）
+import { shortcutHelpHTML } from "/js/fx/code-shortcuts.js";  // 快捷键帮助数据+浮层内容纯件（code-editor-shortcut-help/01）
 import {
   baselineSnapshot,
   baselineDiff,
@@ -1041,4 +1042,54 @@ export function initCodeViewer() {
   // 一次（占位「未打开文件」，与 syncInfoBar 初始化同因）。
   onCursorChanged(refreshCodeStatus);
   refreshCodeStatus();
+
+  // 快捷键帮助（工单 code-editor-shortcut-help/01）：状态栏「快捷键」按钮 →
+  // 居中浮层，内容来自 fx/code-shortcuts.js 单源；关闭三路（× / 遮罩 / Esc）、
+  // Tab 焦点循环、关闭后焦点还按钮——交互纪律对齐冲突弹窗（code-viewer-editor/04）。
+  // 评审整改（Spec 轴 c）：scKeyHandler 模块级持有当前 onKey——重复打开先
+  // detach 旧监听再 remove 旧浮层（直接 remove 会泄漏 Escape 处理器：finish
+  // 因 !isConnected 提前 return，旧 onKey 永不卸载）。
+  const scBtn = $("btn-code-shortcuts");
+  let scKeyHandler = null;
+  if (scBtn) scBtn.addEventListener("click", () => {
+    if (scKeyHandler) {
+      document.removeEventListener("keydown", scKeyHandler);
+      scKeyHandler = null;
+    }
+    document.querySelectorAll(".code-shortcuts-overlay").forEach((o) => o.remove());
+    const overlayEl = document.createElement("div");
+    overlayEl.className = "ref-files-overlay code-shortcuts-overlay";
+    overlayEl.innerHTML = '<div class="ref-files-modal confirm-modal code-shortcuts-modal">'
+      + '<div class="ref-files-head"><strong>键盘快捷键</strong>'
+      + '<button type="button" class="ref-files-close code-shortcuts-close"'
+      + ' title="关闭" aria-label="关闭快捷键帮助">×</button></div>'
+      + '<div class="code-shortcuts-body">' + shortcutHelpHTML() + "</div></div>";
+    const onKey = (e) => {
+      if (e.key === "Escape") { finish(); return; }
+      if (e.key === "Tab") {
+        const focusables = Array.from(
+          overlayEl.querySelectorAll("button, [href], [tabindex]:not([tabindex='-1'])")
+        ).filter((el) => !el.disabled && el.offsetParent !== null);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    const finish = () => {
+      if (!overlayEl.isConnected) return;
+      document.removeEventListener("keydown", onKey);
+      if (scKeyHandler === onKey) scKeyHandler = null;
+      overlayEl.remove();
+      if (scBtn.isConnected && typeof scBtn.focus === "function") scBtn.focus();
+    };
+    overlayEl.querySelector(".code-shortcuts-close").addEventListener("click", finish);
+    overlayEl.addEventListener("click", (e) => { if (e.target === overlayEl) finish(); });
+    scKeyHandler = onKey;
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlayEl);
+    const closeBtn = overlayEl.querySelector(".code-shortcuts-close");
+    if (closeBtn) closeBtn.focus();
+  });
 }
