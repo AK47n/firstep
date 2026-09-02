@@ -18,6 +18,7 @@ import { checkCodeDiskChanges } from "/js/ui/codeview.js";  // 感知联动（ch
 import { fixRenderResults } from "/js/ui/generate-fix.js";  // 最终列表重建共享（工单 06——行点击跳 IDE 编辑器）
 import { getCodeDir, openEditorFile, editJumpToLine } from "/js/ui/codeeditor.js";
 import { chosenPlatform } from "/js/ui/generate-recommend.js";  // 修复循环平台上下文（生成页所选项；null → 核心降级不传）
+import { showPanel } from "/js/ui/code-bottom-panels.js";  // 底部面板 tab 化（工单 06）
 import {
   startFixCenterCore,
   continueFixCenterCore,
@@ -46,7 +47,7 @@ function openPanel() {
     const btn = $("btn-code-fix-collapse");
     if (btn) { btn.textContent = "收起"; btn.title = "收起修复状态"; }
   }
-  panel.classList.remove("hidden");
+  showPanel("fix");
   panel.scrollIntoView({ block: "nearest" });
 }
 

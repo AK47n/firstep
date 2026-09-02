@@ -22,6 +22,8 @@ import { confirmModal } from "/js/ui/confirm.js";
 
 // ---- 模块态 ----
 let chat = { messages: [], note: "" };   // 后端落盘形状（read/send 响应）
+import { showPanel, hidePanel } from "/js/ui/code-bottom-panels.js";  // 底部面板 tab 化（工单 06）
+
 let pendingText = "";                   // 发送中未确认的用户消息（乐观气泡）
 let busy = false;
 
@@ -58,7 +60,7 @@ function openPanel() {
     const btn = $("btn-code-ai-collapse");
     if (btn) { btn.textContent = "收起"; btn.title = "收起对话区"; }
   }
-  panel.classList.remove("hidden");
+  showPanel("ai");
   focusInput();
 }
 
@@ -264,8 +266,8 @@ function notifyApplied(path) {
 export async function setCodeAiDir(dir) {
   const panel = panelBox();
   if (!panel) return;
-  if (!dir) { panel.classList.add("hidden"); return; }
-  panel.classList.remove("hidden");
+  if (!dir) { hidePanel("ai"); return; }
+  showPanel("ai");
   chat = { messages: [], note: "" };
   pendingText = "";
   renderPanel();

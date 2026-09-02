@@ -24,6 +24,7 @@ import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";
 import { isMainCDiskDir } from "/js/ui/codeview.js";  // 单源谓词（评审整改：本模块不再重复实现）
 import { scrollToStep } from "/js/ui/step-state.js";
 import { startFixCenter } from "/js/ui/generate-fix.js";  // 一键编译修复入口（工单 code-ide-flow/04：跳转后自动开始）
+import { showPanel, hidePanel } from "/js/ui/code-bottom-panels.js";  // 底部面板 tab 化（工单 06）
 
 let compileBusy = false;
 
@@ -56,8 +57,7 @@ function setGotoVisible(failVisible) {
 }
 
 function openPanel() {
-  const p = panel();
-  if (p) p.classList.remove("hidden");
+  showPanel("compile");
 }
 
 // renderDone(done)：done 载荷 → 状态行 + 错误列表 + 失败自动展开列表。
@@ -189,8 +189,7 @@ export function initCodeCompile() {
 
   const clear = $("btn-code-compile-clear");
   if (clear) clear.addEventListener("click", () => {
-    const p = panel();
-    if (p) p.classList.add("hidden");
+    hidePanel("compile");
     setStatus("", "");
     setErrors("");
     setGotoVisible(false);

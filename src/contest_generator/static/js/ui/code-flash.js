@@ -9,6 +9,7 @@
 import { $, toast, toastError } from "/js/app.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { getCodeDir, saveAllDirtyTabs } from "/js/ui/codeeditor.js";
+import { showPanel } from "/js/ui/code-bottom-panels.js";  // 底部面板 tab 化（工单 06）
 
 let flashBusy = false;
 
@@ -17,8 +18,7 @@ function statusEl() { return $("code-flash-status"); }
 function resultEl() { return $("code-flash-result"); }
 
 function openPanel() {
-  const p = panel();
-  if (p) p.classList.remove("hidden");
+  showPanel("flash");
 }
 
 // runCodeFlash()：烧录入口——无目录提示；自动保存全部（取消 → 中止）→
