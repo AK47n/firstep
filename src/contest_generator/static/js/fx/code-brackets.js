@@ -137,9 +137,12 @@ function _offsetToLineCol(text, offset) {
 export function bracketPairAt(text, pos) {
   const src = String(text == null ? "" : text);
   const p = Math.max(0, Math.min(src.length, pos | 0));
-  // 前置短路（评审整改 06）：光标不在括号上/紧邻 → 免全文档配对表扫描
-  const near = src[p] || (p > 0 ? src[p - 1] : "");
-  if (!BRACKET_OPEN[near] && !BRACKET_CLOSE[near]) return null;
+  // 前置短路（评审整改 06）：光标不在括号上/紧邻（p 与 p-1 都不是括号）→
+  // 免全文档配对表扫描。两处都要查——p 上是普通字符时不得吞掉 p-1 检查。
+  const here = src[p] || "";
+  const prev = p > 0 ? src[p - 1] : "";
+  if (!BRACKET_OPEN[here] && !BRACKET_CLOSE[here]
+    && !BRACKET_OPEN[prev] && !BRACKET_CLOSE[prev]) return null;
   const pairs = _bracketPairsOf(src);
   const entry = pairs.get(p) || (p > 0 ? pairs.get(p - 1) : null);
   if (!entry) return null;
