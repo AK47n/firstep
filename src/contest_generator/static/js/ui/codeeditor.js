@@ -1121,9 +1121,76 @@ function applyDiskState(tab, disk) {
 // 选区——会打断中文候选窗（input 逐键触达 sync，只做重渲染不动光标）。
 let composing = false;
 
+// ---- 程序化编辑撤销栈（工单 code-page-vscode-overhaul/04）----
+// 浏览器原生撤销栈优先：execCommand("insertText")（Chrome 支持、一次一步
+// 撤销；旧行为 ta.value= 直赋值会打断原生撤销栈）。execCommand 不可用/失败
+// （Firefox/Safari 对 textarea 的 insertText 支持差）→ 降级直赋值 + 快照式
+// 自定义撤销栈（覆盖程序化编辑段；nativeUndo 关闭时 Ctrl+Z/Y 拦截走快照）。
+let nativeUndo = typeof document.execCommand === "function";
+const undoStack = [];   // [{value, selStart, selEnd}] 程序化编辑前快照（限 200 条）
+const redoStack = [];
+
+function pushEditSnapshot() {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return;
+  undoStack.push({ value: ta.value, selStart: ta.selectionStart, selEnd: ta.selectionEnd });
+  if (undoStack.length > 200) undoStack.shift();
+  redoStack.length = 0;
+}
+
+function snapshotUndo(redo) {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return false;
+  const from = redo ? redoStack : undoStack;
+  const to = redo ? undoStack : redoStack;
+  const snap = from.pop();
+  if (!snap) return false;
+  to.push({ value: ta.value, selStart: ta.selectionStart, selEnd: ta.selectionEnd });
+  ta.value = snap.value;
+  ta.setSelectionRange(snap.selStart, snap.selEnd);
+  syncEditorAfterInput();
+  return true;
+}
+
 function applyEdit(text, start, end) {
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!ta) return;
+  if (ta.value === text) {
+    ta.setSelectionRange(start, end);
+    return;
+  }
+  const oldText = ta.value;
+  if (nativeUndo) {
+    // 公共前后缀 diff → 最小替换区间 → execCommand 走浏览器原生撤销栈；
+    // execCommand 会同步触发 input（既有 input 监听同步模型/高亮），随后
+    // 只做选区最终落位 + 当前行/状态轻量刷新（不重复全量渲染）。
+    let p = 0;
+    const minLen = Math.min(oldText.length, text.length);
+    while (p < minLen && oldText[p] === text[p]) p++;
+    let s = 0;
+    while (s < oldText.length - p && s < text.length - p
+      && oldText[oldText.length - 1 - s] === text[text.length - 1 - s]) s++;
+    const ins = text.slice(p, text.length - s);
+    try {
+      ta.focus();
+      ta.setSelectionRange(p, oldText.length - s);
+      if (document.execCommand("insertText", false, ins)) {
+        if (ta.value === text) {
+          ta.setSelectionRange(start, end);
+          setActiveLine(caretLineOf(ta.value, ta.selectionStart));
+          scheduleCursorWork();
+          return;
+        }
+        // execCommand 成功但内容与预期不符（罕见）：走全量同步兜底
+        syncEditorAfterInput();
+        return;
+      }
+    } catch (err) { /* execCommand 异常 → 降级 */ }
+    nativeUndo = false;
+  }
+  // 降级：直赋值（现状行为）+ 快照栈接管撤销/重做
+  pushEditSnapshot();
+  ta.focus();
   ta.value = text;
   ta.setSelectionRange(start, end);
   syncEditorAfterInput();
@@ -1470,6 +1537,20 @@ export function initCodeEditor() {
       // 会再按新选区校正一次（幂等）。
       setActiveLine(caretLineOf(ta.value, ta.selectionStart));
       scheduleCursorWork();
+      if (!nativeUndo && (e.ctrlKey || e.metaKey) && !e.altKey) {
+        // 快照降级（工单 04）：原生撤销栈不可用时 Ctrl+Z/Y 走自定义栈
+        const k = e.key.toLowerCase();
+        if (!e.shiftKey && (k === "z" || k === "y")) {
+          e.preventDefault();
+          snapshotUndo(k === "y");
+          return;
+        }
+        if (e.shiftKey && k === "z") {
+          e.preventDefault();
+          snapshotUndo(true);
+          return;
+        }
+      }
       if (e.key === "Tab" && e.shiftKey) {
         e.preventDefault();
         const r = shiftTab(ta.value, ta.selectionStart, ta.selectionEnd);
