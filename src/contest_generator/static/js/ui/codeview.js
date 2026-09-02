@@ -391,8 +391,12 @@ export function openCodeViewer(dir, filePath) {
 
 async function loadCodeDir(dir, filePath) {
   if (!dir) { toast("error", "目录为空：无法打开（请从最近记录或「选择文件夹」进入）"); return; }
+  // 未保存退出保护（工单 code-editor-refine/01）：setCodeDir 内有脏标签 →
+  // 三选确认（保存全部并切换 / 放弃修改并切换 / 取消）；取消或保存未落盘 →
+  // 返回 false，不切换目录（编辑保留）。网络请求放确认之后——避免白拉树。
+  const switched = await setCodeDir(dir);
+  if (!switched) return;
   codeDir = dir;
-  setCodeDir(dir);  // 编辑器上下文切换：清标签/缓存/活动态（code-viewer-editor/02）
   $("code-dir-label").textContent = dir;
   setCodeAiDir(dir);  // AI 对话面板（code-ide-ai/03）：跟随目录显示 + 拉历史
   updateGotoGenerateVisibility();
