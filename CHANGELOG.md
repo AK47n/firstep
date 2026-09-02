@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d3c693c18d8724057194be41718376b142fb4fc1 -->
+<!-- changelog-auto: last-commit=7b628a6178c6c5f74a79aa681b5bdf4605c4a79e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -35,6 +35,7 @@
 - 20:58 feat：文件内查找替换增强——替换单个命中 / 替换并跳下一处（fx replaceOneAt 与标记层同语义）· 计数联动 · 折叠态替换与命中跳转视图映射（工单 code-page-vscode-overhaul/03）
 - 21:01 fix：程序化编辑不打断撤销栈——applyEdit 走 execCommand(insertText) 保留浏览器原生 Ctrl+Z/Y（前后缀 diff 最小替换区间），不可用时降级快照栈（工单 code-page-vscode-overhaul/04）
 - 21:05 feat：代码页面包屑——路径分段随标签刷新、目录段点击逐级展开定位文件树（data-dir-path + 滚动高亮）、文件段可点击（fx 纯件可单测；工单 code-page-vscode-overhaul/05）
+- 21:08 feat：底部面板 tab 化——编译/磁盘变更/AI 对话/修复/烧录合一容器 + 页签条，有内容页签才显示、新消息自动切换、各面板收起态独立（业务显隐改接 showPanel/hidePanel；工单 code-page-vscode-overhaul/06）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
