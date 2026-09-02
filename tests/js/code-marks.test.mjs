@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   codeFindRanges,
   codeMarksHTML,
+  codeIndentGuideMarks,
 } from "../../src/contest_generator/static/js/fx/code-marks.js";
 
 test("codeFindRanges：大小写不敏感、多行、1 基行号与 0 基列偏移", () => {
@@ -71,4 +72,34 @@ test("codeMarksHTML：选中词 / 括号配对类渲染（透明层仅背景）"
     { line: 1, start: 13, end: 15, kind: "word" },
   ]);
   assert.match(html, /code-mark-word/);
+});
+
+// ---- 缩进引导线（工单 code-page-vscode-overhaul/07）----
+
+test("codeIndentGuideMarks：4 空格单级缩进 → 1 条引导线（边界左侧空白）", () => {
+  assert.deepEqual(codeIndentGuideMarks("    int x;\n"), [
+    { line: 1, start: 3, end: 4, kind: "guide" },
+  ]);
+});
+
+test("codeIndentGuideMarks：8 空格两级缩进 → 2 条引导线", () => {
+  assert.deepEqual(codeIndentGuideMarks("        int x;\n"), [
+    { line: 1, start: 3, end: 4, kind: "guide" },
+    { line: 1, start: 7, end: 8, kind: "guide" },
+  ]);
+});
+
+test("codeIndentGuideMarks：无缩进 / 短缩进不画线", () => {
+  assert.deepEqual(codeIndentGuideMarks("int x;\n"), []);
+  assert.deepEqual(codeIndentGuideMarks("   x;\n"), []);   // 3 空格不足一级
+});
+
+test("codeIndentGuideMarks：多行 + 空白行（空白行同级也画）", () => {
+  const r = codeIndentGuideMarks("a\n    \n        b\n");
+  assert.deepEqual(r, [
+    { line: 2, start: 3, end: 4, kind: "guide" },
+    { line: 3, start: 3, end: 4, kind: "guide" },
+    { line: 3, start: 7, end: 8, kind: "guide" },
+  ]);
+  assert.deepEqual(codeIndentGuideMarks(""), []);
 });

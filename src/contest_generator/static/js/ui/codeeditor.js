@@ -12,7 +12,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { languageOf } from "/js/fx/highlight.js";
 import { codeLineNumbersHTML } from "/js/fx/codeview.js";
-import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用）
+import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges, codeIndentGuideMarks } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用；07 缩进引导线）
 import {
   BRACKET_OPEN,
   BRACKET_CLOSE,
@@ -203,10 +203,13 @@ async function loadFileState(path) {
 // 各自区段（kind 不同），一次渲染多类标记。
 let editorFind = { query: "", ranges: [], index: 0 };
 
-// currentMarks()：当前应渲染的标记清单（查找命中 + 当前命中 + 选中词；
-// 06 括号配对继续追加）。
+// currentMarks()：当前应渲染的标记清单（缩进引导线 + 查找命中 + 当前命中 +
+// 选中词 + 括号配对；07 引导线按模型文本逐行计算，折叠视图经 marksForView
+// 映射——占位行被折叠的引导线自动丢弃）。
 export function currentMarks() {
   const out = [];
+  const tab = getActiveTab();
+  if (tab) out.push(...codeIndentGuideMarks(tab.content));
   if (editorFind.query && editorFind.ranges.length) {
     editorFind.ranges.forEach((r, i) => {
       out.push({ line: r.line, start: r.start, end: r.end,
