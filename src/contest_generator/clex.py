@@ -221,21 +221,47 @@ def strip_comments(code: str, *, keep_preprocessor: bool = False) -> str:
 def match_bracket(code: str, open_pos: int, open_ch: str, close_ch: str) -> int:
     """从 open_pos 的 open_ch 起找配平的 close_ch 下标；不配平返回 -1。
 
-    括号内注释 / 字符串 / 预处理行不计数（iter_c_regions 同源切分）——
+    括号内注释 / 字符串 / 预处理行不计数（与 iter_c_regions 同源切分）——
     main.c 骨架的 while(1){...} 块闭合与调用实参截断共用（skeleton 的
     _match_paren / _match_brace 第二套词法唯一替代）。
+
+    性能注记（工单 code-page-vscode-overhaul/08 前置修复）：旧实现经
+    iter_c_regions(code, start=open_pos) 重新词法切分——其对 code 区域一次性
+    扫到文件尾才 yield，逐候选调用合计 O(n²)（实测 5000 函数 84s，打开即卡）。
+    现改为早停扫描：从 open_pos 逐字符前进，遇注释 / 字符串 / 字符字面量 /
+    行首预处理行用同一组跳读原语跳过（语义与 iter_c_regions 一致），配平
+    立即返回；复杂度 O(到闭合的跨度)。
     """
+    n = len(code)
+    if open_pos >= n:
+        return -1
+    i = open_pos
     depth = 0
-    for kind, start, end in iter_c_regions(code, start=open_pos):
-        if kind != "code":
+    while i < n:
+        ch = code[i]
+        nxt = code[i + 1] if i + 1 < n else ""
+        if ch == "/" and nxt == "/":  # 行注释（到行尾）
+            end = code.find("\n", i)
+            i = n if end == -1 else end + 1
             continue
-        for j in range(start, end):
-            if code[j] == open_ch:
-                depth += 1
-            elif code[j] == close_ch:
-                depth -= 1
-                if depth == 0:
-                    return j
+        if ch == "/" and nxt == "*":  # 块注释（到 */）
+            end = code.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        if ch in ('"', "'"):  # 字符串 / 字符字面量（含转义）
+            i = _skip_literal(code, i)
+            continue
+        if ch == "#" and _at_preprocessor_line_start(code, i, False):
+            end = code.find("\n", i)
+            i = n if end == -1 else end + 1
+            continue
+        if ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
     return -1
 
 
