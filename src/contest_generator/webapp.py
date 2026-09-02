@@ -32,7 +32,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
-from .budget import RELATED_CANDIDATES_LIMIT
+from .budget import RELATED_CANDIDATES_LIMIT, SKELETON_RELATED_LIMIT
 from .changelog import load_changelog
 from .codeview import (
     apply_code_diff,
@@ -129,6 +129,7 @@ from .generator import (
     GenerationSummary,
     TopicContext,
     build_reference_fulltexts,
+    build_reference_sources,
     build_topic_framework_info,
     generate_project,
     resolve_topic_context,
@@ -1587,6 +1588,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 reference_ids=reference_ids,
                 platform=platform,
                 slugs=slugs,
+                related_limit=SKELETON_RELATED_LIMIT,
             )
             resolved = resolve_selection(
                 _library_dir(context), platform, slugs, instances=instances,
@@ -1615,6 +1617,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 ),
                 instances=instances,
                 reference_fulltexts=build_reference_fulltexts(topic),
+                reference_sources=build_reference_sources(topic),
                 main_mode=main_mode,
                 topic_framework=framework if main_mode == "skeleton" else None,
             )

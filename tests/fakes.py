@@ -684,6 +684,7 @@ class FakeLLM:
         self.scan_params_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_calls: list[tuple[str, tuple[str, ...]]] = []
         self.skeleton_ref_calls: list[dict[str, str]] = []
+        self.skeleton_source_calls: list[dict[str, str] | None] = []
         self.skeleton_framework_calls: list[object | None] = []
         self.smoke_calls: list[tuple[str, tuple[str, ...]]] = []
         self.summary_calls: list[tuple[str, ...]] = []
@@ -765,9 +766,11 @@ class FakeLLM:
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
         topic_framework: object | None = None,
+        reference_sources: Mapping[str, str] | None = None,
     ) -> str:
         self.skeleton_calls.append((problem_text, tuple(module_interfaces)))
         self.skeleton_ref_calls.append(dict(reference_fulltexts or {}))
+        self.skeleton_source_calls.append(dict(reference_sources or {}))
         self.skeleton_framework_calls.append(topic_framework)
         return self._main_skeleton
 

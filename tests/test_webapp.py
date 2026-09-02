@@ -62,6 +62,7 @@ from contest_generator.llm import (
     RoutingLLM,
     build_llm,
 )
+from contest_generator.budget import SKELETON_RELATED_LIMIT
 from contest_generator.pin_bindings import PinBindingError, resolve_bindings
 from contest_generator.recent_jobs import load_recent, recent_file, record_recent
 from contest_generator.recommend_cache import cache_recommend, recommend_cache_path
@@ -5879,6 +5880,100 @@ def test_skeleton_with_topic_id_uses_full_text(client, context):
     assert not any("lock_control.h" in text for text in llm.skeleton_calls[0][1])
 
 
+# 工单 03：骨架自动全文注入（related_limit=4）端到端 —— 追加假件不碰共享库
+RELATED_ADC_TITLES = (
+    "ADC12-单通道采样例程",
+    "ADC12-多通道扫描例程",
+    "ADC12-连续采样例程",
+    "ADC12-定时器触发采样例程",
+    "ADC12-DMA触发采集例程",
+)  # 5 条都命中「adc」词（选中 adc 模块的 slug 映射激活）——top-4 截断的候选池
+CONTROL_GPIO_TITLE = "GPIO-点亮LED例程"  # 0 分对照组（无 adc 词，不该进）
+
+
+def _wire_mspm0_adc_module(context) -> None:
+    """追加 mspm0 平台 adc 假模块（工单 03 端到端：选中 adc 模块 → slug 词表
+    映射激活「adc」词项）。不碰共享假件（基础假库 dht11/oled/delay 照旧）。"""
+    ctx = context[0]
+    module_dir = ctx.config.module_library_dir / "adc"
+    (module_dir / "mspm0/src").mkdir(parents=True)
+    (module_dir / "inc").mkdir(parents=True)
+    (module_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "adc",
+                "description": "ADC 采样驱动",
+                "dependencies": [],
+                "platforms": {
+                    "mspm0": {
+                        "files": ["mspm0/src/adc.c", "inc/adc.h"],
+                        "verified": True,
+                        "hardware_bound": False,
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (module_dir / "mspm0/src/adc.c").write_text(
+        '#include "adc.h"\n/* adc */\nvoid adc_init(void);\n', encoding="utf-8"
+    )
+    (module_dir / "inc/adc.h").write_text(
+        "#pragma once\nvoid adc_init(void);\n", encoding="utf-8"
+    )
+
+
+def _wire_related_adc_entries(context) -> None:
+    """追加 5 条未锚定 ADC 系例程 + 1 条无关 GPIO 对照（相关候选池）。"""
+    root = reference_library_dir(context[0].config.module_library_dir)
+    for index, title in enumerate((*RELATED_ADC_TITLES, CONTROL_GPIO_TITLE)):
+        add_reference(
+            root,
+            title=title,
+            type="例程代码",
+            description=f"TI 官方例程 {index}",
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            files={f"example_{index}.c": f"/* {title} */\nvoid demo_{index}(void);\n"},
+            kit_vocabulary=(),
+        )
+
+
+def test_skeleton_related_references_auto_injected(client, context):
+    """工单 03 端到端：骨架路由传 related_limit=4 → 与选中模块相关的未锚定
+    TI 例程（slug 词表映射命中）经 build_reference_fulltexts 自动注入骨架参考段
+    （top-4 截断 + related 来源标注），0 分对照条目不进；锚定条目照旧并入。"""
+    _wire_material_libraries(context)
+    _wire_mspm0_adc_module(context)
+    _wire_related_adc_entries(context)
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(extracted_key=None)
+
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "用户粘贴的片段",  # 无外设词——命中靠选中 adc 模块
+            "platform": PLATFORM_MSPM0,
+            "slugs": ["adc"],
+            "topic_id": "2026C",
+            "reference_ids": [],
+        },
+    )
+
+    assert resp.status_code == 200
+    refs = holder["llm"].skeleton_ref_calls[0]
+    sources = holder["llm"].skeleton_source_calls[0]
+    related = {rid for rid, src in sources.items() if src == REFERENCE_SOURCE_RELATED}
+    assert len(related) == SKELETON_RELATED_LIMIT  # top-4 截断（5 条候选只进 4）
+    assert related < set(RELATED_ADC_TITLES)  # 严格子集：恰好被截 1 条
+    assert CONTROL_GPIO_TITLE not in refs  # 0 分对照不进
+    for rid in related:
+        assert f"/* {rid} */" in refs[rid]  # 全文注入（既有 40KB 均分通道）
+    assert TOPIC_REFERENCE_ID in refs  # 锚定条目照旧并入（锚定 ∪ 相关）
+    assert sources[TOPIC_REFERENCE_ID] == "auto"
+
+
 def test_generate_with_topic_id_keeps_selected_modules_only(client, context, tmp_path):
     """生成请求带 topic_id：编号经装配点校验（查无此条 400）；模块集 = 用户
     选择原样展开，不再自动并入"题专用模块"（生成物与手选等价）。"""
@@ -5900,6 +5995,9 @@ def test_generate_with_topic_id_keeps_selected_modules_only(client, context, tmp
     assert resp.status_code == 200
     assert (output_dir / "modules" / "dht11" / "stm32" / "src" / "dht11.c").is_file()
     assert not (output_dir / "modules" / "lock_control" / "lock_control.c").is_file()
+    # 生成阶段回归（工单 03 验收点 5）：main.c 自请求带入，不注入参考全文——
+    # generate_main_skeleton 零调用（骨架参考注入通道唯一消费点在 /api/skeleton）
+    assert context[1]["llm"].skeleton_ref_calls == []
 
 
 def test_generate_with_unknown_topic_id_returns_400(client, context, tmp_path):
