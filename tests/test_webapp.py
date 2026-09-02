@@ -5924,11 +5924,16 @@ def _wire_mspm0_adc_module(context) -> None:
     )
 
 
-def _wire_related_adc_entries(context) -> None:
-    """追加 5 条未锚定 ADC 系例程 + 1 条无关 GPIO 对照（相关候选池）。"""
+def _wire_related_adc_entries(context) -> dict[str, str]:
+    """追加 5 条未锚定 ADC 系例程 + 1 条无关 GPIO 对照（相关候选池）。
+
+    返回 id→标题 映射（id 由 add_reference 按标题派生）——端到端断言必须按
+    id 域说话，别拿标题集与 id 集混比（解耦 _sanitize_id 的实现耦合）。
+    """
     root = reference_library_dir(context[0].config.module_library_dir)
+    id_to_title: dict[str, str] = {}
     for index, title in enumerate((*RELATED_ADC_TITLES, CONTROL_GPIO_TITLE)):
-        add_reference(
+        entry = add_reference(
             root,
             title=title,
             type="例程代码",
@@ -5938,6 +5943,8 @@ def _wire_related_adc_entries(context) -> None:
             files={f"example_{index}.c": f"/* {title} */\nvoid demo_{index}(void);\n"},
             kit_vocabulary=(),
         )
+        id_to_title[entry.id] = title
+    return id_to_title
 
 
 def test_skeleton_related_references_auto_injected(client, context):
@@ -5946,7 +5953,13 @@ def test_skeleton_related_references_auto_injected(client, context):
     （top-4 截断 + related 来源标注），0 分对照条目不进；锚定条目照旧并入。"""
     _wire_material_libraries(context)
     _wire_mspm0_adc_module(context)
-    _wire_related_adc_entries(context)
+    entry_titles = _wire_related_adc_entries(context)
+    adc_pool = {
+        rid for rid, title in entry_titles.items() if title in RELATED_ADC_TITLES
+    }
+    gpio_ids = {
+        rid for rid, title in entry_titles.items() if title == CONTROL_GPIO_TITLE
+    }
     holder = context[1]
     holder["llm"] = TopicAwareLLM(extracted_key=None)
 
@@ -5966,10 +5979,11 @@ def test_skeleton_related_references_auto_injected(client, context):
     sources = holder["llm"].skeleton_source_calls[0]
     related = {rid for rid, src in sources.items() if src == REFERENCE_SOURCE_RELATED}
     assert len(related) == SKELETON_RELATED_LIMIT  # top-4 截断（5 条候选只进 4）
-    assert related < set(RELATED_ADC_TITLES)  # 严格子集：恰好被截 1 条
-    assert CONTROL_GPIO_TITLE not in refs  # 0 分对照不进
+    assert related < adc_pool  # 严格子集：全部出自 ADC 候选池且被截至少 1 条
+    assert not related & gpio_ids  # 0 分对照不进相关集
+    assert not gpio_ids & set(refs)  # 0 分对照全文未注入
     for rid in related:
-        assert f"/* {rid} */" in refs[rid]  # 全文注入（既有 40KB 均分通道）
+        assert f"/* {entry_titles[rid]} */" in refs[rid]  # 全文注入（既有 40KB 均分通道）
     assert TOPIC_REFERENCE_ID in refs  # 锚定条目照旧并入（锚定 ∪ 相关）
     assert sources[TOPIC_REFERENCE_ID] == "auto"
 
