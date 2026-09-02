@@ -22,6 +22,7 @@ export const SHORTCUT_GROUPS = [
       { keys: ["Alt+↑", "Alt+↓"], label: "上移 / 下移当前行" },
       { keys: ["Shift+Alt+↑", "Shift+Alt+↓"], label: "向上 / 向下复制当前行" },
       { keys: ["Ctrl+L"], label: "选中整行（重复按扩展）" },
+      { keys: ["Ctrl+/"], label: "切换注释（C 行注释/块注释、XML）" },
       { keys: ["(", "[", "{"], label: "输入开括号自动补上闭合括号（C/XML/Markdown）" },
       { keys: ["Backspace"], label: "删除配对的空括号" },
       { keys: ["中键"], label: "点击标签关闭" },

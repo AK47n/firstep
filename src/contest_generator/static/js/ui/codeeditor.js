@@ -44,6 +44,10 @@ import {
   copyLine,
   lineRangeOf,
 } from "/js/fx/code-lineops.js";  // 行操作纯件（工单 code-page-vscode-overhaul/01）
+import {
+  toggleLineComment,
+  toggleBlockComment,
+} from "/js/fx/code-comment.js";  // 注释切换纯件（工单 code-page-vscode-overhaul/02）
 import { mtimeEq } from "/js/fx/disk-baseline.js";  // mtime 相等守卫单源（工单 07 评审整改：与基线 diff/快照守卫同口径）
 import { treeRenamedPath, treeOpAffected } from "/js/fx/code-tree-ops.js";  // 重命名路径映射纯件（工单 code-tree-ops/02）
 import {
@@ -1448,6 +1452,23 @@ export function initCodeEditor() {
         ta.setSelectionRange(r.start, r.end);
         setActiveLine(caretLineOf(ta.value, ta.selectionStart));
         scheduleCursorWork();
+      } else if (!e.isComposing && !composing && (e.ctrlKey || e.metaKey)
+        && !e.shiftKey && !e.altKey && e.key === "/") {
+        // 注释切换（工单 code-page-vscode-overhaul/02）：.c/.h 逐行 //、
+        // 选中含 /* */ 切块注释；XML 逐行 <!-- -->（仅 c/xml 编辑态）
+        const tab = getActiveTab();
+        if (!tab || (tab.lang !== "c" && tab.lang !== "xml")) return;
+        e.preventDefault();
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+        const r = tab.lang === "xml"
+          ? toggleLineComment(ta.value, ta.selectionStart, ta.selectionEnd,
+            { open: "<!--", close: "-->" })
+          : (sel.includes("/*")
+            ? toggleBlockComment(ta.value, ta.selectionStart, ta.selectionEnd,
+              { open: "/*", close: "*/" })
+            : toggleLineComment(ta.value, ta.selectionStart, ta.selectionEnd,
+              { open: "//" }));
+        applyEdit(r.value, r.start, r.end);
       } else if (!e.isComposing && !composing && (BRACKET_OPEN[e.key] || BRACKET_CLOSE[e.key] || e.key === "Backspace")) {
         // 括号行为（工单 06）：仅 c/xml/md 编辑态启用（spec：plain 走浏览器
         // 默认插入——评审整改 06b）；IME 组合输入中不拦截（评审整改 06a）。
