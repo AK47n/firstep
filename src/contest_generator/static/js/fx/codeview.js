@@ -136,7 +136,7 @@ function treeActionButtonsHTML(n) {
 // 自身不标）。
 export function codeTreeHTML(nodes) {
   return (nodes || []).map((n) => n.isDir
-    ? `<li class="code-tree-dir"><details open><summary>`
+    ? `<li class="code-tree-dir"><details open data-dir-path="${esc(n.path)}"><summary>`
       + `<span class="code-tree-icon" aria-hidden="true">${fileIconHTML(n.path, true)}</span>`
       + `<span class="code-tree-dir-name">${esc(n.name)}</span></summary>`
       + `<ul>${codeTreeHTML(n.children)}</ul></details>`
@@ -152,6 +152,44 @@ export function codeTreeHTML(nodes) {
           : "")
       + `<span class="muted">${formatSize(n.size_bytes)}</span></button>`
       + treeActionButtonsHTML(n) + `</li>`
+  ).join("");
+}
+
+// ---- 面包屑（工单 code-page-vscode-overhaul/05）----
+
+// breadcrumbSegments(relPath)：相对路径 → 面包屑分段——每段
+// {name, path, isDir}（path = 到该段的累积相对路径；最后一段 isDir=false，
+// 其余为目录段）。空路径 / null → []（无面包屑）。
+export function breadcrumbSegments(relPath) {
+  const p = String(relPath == null ? "" : relPath);
+  if (!p) return [];
+  const parts = p.split("/").filter((s) => s.length);
+  const out = [];
+  let acc = "";
+  for (let i = 0; i < parts.length; i++) {
+    acc = acc ? acc + "/" + parts[i] : parts[i];
+    out.push({ name: parts[i], path: acc, isDir: i < parts.length - 1 });
+  }
+  return out;
+}
+
+// breadcrumbHTML(segments)：面包屑 HTML 单源——目录段按钮
+// data-breadcrumb-dir=path（点击定位文件树），文件段按钮
+// data-breadcrumb-file=path（点击打开）；段间分隔符 ›；name 超长截断
+// （>24 字符 → 前 21 + …，title 保留全量路径）；全部 esc 转义。
+export function breadcrumbHTML(segments) {
+  if (!segments || !segments.length) return "";
+  const seg = (s, last) => {
+    const name = s.name.length > 24 ? s.name.slice(0, 21) + "…" : s.name;
+    const attr = last
+      ? `data-breadcrumb-file="${esc(s.path)}"`
+      : `data-breadcrumb-dir="${esc(s.path)}"`;
+    return `<button type="button" class="code-crumb${last ? " code-crumb-last" : ""}" `
+      + attr + ` title="${esc(s.path)}">${esc(name)}</button>`;
+  };
+  return segments.map((s, i) =>
+    (i ? '<span class="code-crumb-sep" aria-hidden="true">›</span>' : "")
+    + seg(s, i === segments.length - 1)
   ).join("");
 }
 

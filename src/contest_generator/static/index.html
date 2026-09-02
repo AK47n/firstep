@@ -1598,6 +1598,28 @@
     min-height: 33px; padding: 4px 8px 0; background: var(--panel-2);
     border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; }
   .code-tabs .muted { align-self: center; font-size: 12px; padding: 0 4px 2px; }
+  /* 面包屑（工单 code-page-vscode-overhaul/05）：标签条下独立行——目录段可点
+     （定位文件树逐级展开+滚动高亮），文件段可点（打开）；name 超长纯件截断，
+     行内省略由按钮 ellipsis 兜底（极窄布局）。 */
+  .code-breadcrumb { display: flex; align-items: center; flex-wrap: wrap;
+    gap: 1px 3px; flex: none; padding: 3px 8px; min-height: 25px;
+    background: var(--panel-2); border-bottom: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px; }
+  .code-breadcrumb.hidden { display: none; }
+  .code-crumb { display: inline-flex; align-items: center; max-width: 240px;
+    padding: 1px 4px; border: 0; border-radius: var(--radius-xs);
+    background: transparent; color: var(--muted); font: inherit; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .code-crumb:hover { background: var(--panel); color: var(--text); }
+  .code-crumb-last { color: var(--text); cursor: default; }
+  .code-crumb-last:hover { background: transparent; color: var(--text); }
+  .code-crumb-sep { color: var(--muted); opacity: .55; padding: 0 1px;
+    user-select: none; }
+  .code-tree-reveal { background: var(--accent-dim); border-radius: var(--radius-sm);
+    animation: code-tree-reveal-flash 1.1s ease-out; }
+  @keyframes code-tree-reveal-flash {
+    0%, 55% { background: var(--accent-dim); }
+    100% { background: transparent; } }
   .code-tab { display: inline-flex; align-items: center; gap: 7px; flex: none;
     padding: 5px 8px 5px 10px; background: transparent; border: 1px solid transparent;
     border-top: 2px solid transparent; border-bottom: 0;
@@ -2756,6 +2778,7 @@
         </div>
         <div class="code-pane code-pane-main">
           <div class="code-tabs" id="code-tabs" role="tablist"><span class="muted">打开文件后显示标签</span></div>
+          <nav id="code-breadcrumb" class="code-breadcrumb hidden" aria-label="当前文件路径"></nav>
           <div class="code-file-path mono">
             <button type="button" id="code-edit-md" class="code-md-edit hidden"
               title="切到源码编辑态（可修改并保存，Ctrl+S）">编辑源码</button>

@@ -7,6 +7,8 @@ import {
   buildCodeTree,
   fileIconHTML,
   codeTreeHTML,
+  breadcrumbSegments,
+  breadcrumbHTML,
   codeLineNumbersHTML,
   highlightCodeLines,
   codeViewHTML,
@@ -53,7 +55,8 @@ test("codeTreeHTML：目录 details/summary，文件行按钮带 data 与转义"
     { path: "a<b.c", size_bytes: 3 },
   ]);
   const html = codeTreeHTML(nodes);
-  assert.match(html, /<details open><summary>/);
+  assert.match(html, /<details open[^>]*><summary>/);
+  assert.match(html, /data-dir-path="dir"/);   // 面包屑定位（工单 05）
   assert.match(html, /<span class="code-tree-dir-name">dir<\/span>/);
   assert.match(html, /data-code-file="a&lt;b\.c"/);
   assert.ok(!html.includes("a<b.c"));
@@ -232,4 +235,42 @@ test("buildCodeTree/codeTreeHTML：changes 参数标「新/变」徽章（code-i
   const dirHtml = codeTreeHTML(buildCodeTree(
     [{ path: "src", is_dir: true }], { src: "new" }));
   assert.ok(!dirHtml.includes("code-tree-badge"));
+});
+
+// ---- 面包屑（工单 code-page-vscode-overhaul/05）----
+
+test("breadcrumbSegments：相对路径逐段累积（目录/文件标记）", () => {
+  assert.deepEqual(breadcrumbSegments("src/ui/main.c"), [
+    { name: "src", path: "src", isDir: true },
+    { name: "ui", path: "src/ui", isDir: true },
+    { name: "main.c", path: "src/ui/main.c", isDir: false },
+  ]);
+  assert.deepEqual(breadcrumbSegments("main.c"), [
+    { name: "main.c", path: "main.c", isDir: false },
+  ]);
+  assert.deepEqual(breadcrumbSegments(""), []);
+  assert.deepEqual(breadcrumbSegments(null), []);
+});
+
+test("breadcrumbHTML：目录段按钮 data-breadcrumb-dir + 转义，文件段 data-breadcrumb-file，分隔符 ›", () => {
+  const html = breadcrumbHTML(breadcrumbSegments("src/a<b/main.c"));
+  assert.ok(html.includes('data-breadcrumb-dir="src"'));
+  assert.ok(html.includes('data-breadcrumb-dir="src/a&lt;b"'));
+  assert.ok(html.includes('data-breadcrumb-file="src/a&lt;b/main.c"'));
+  assert.ok(html.includes("›"));
+  assert.ok(!html.includes("a<b"));
+  assert.ok(!html.includes('class="code-crumb-dir" data-breadcrumb-dir="src/a&lt;b/main.c"'));
+});
+
+test("breadcrumbHTML：超长段截断（…）并保留 title 全量路径", () => {
+  const long = "very-long-directory-name-abcdefghijklmnopqrstuvwxyz-123";
+  const html = breadcrumbHTML(breadcrumbSegments(long + "/x.c"));
+  assert.ok(html.includes("…"));
+  assert.ok(html.includes('title="' + long + '"'));
+  assert.ok(!html.includes(long + ">"));   // 全名不出现在按钮文本
+});
+
+test("breadcrumbHTML：空分段 → 空串", () => {
+  assert.equal(breadcrumbHTML([]), "");
+  assert.equal(breadcrumbHTML(null), "");
 });
