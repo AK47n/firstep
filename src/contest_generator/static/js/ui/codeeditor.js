@@ -12,7 +12,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { languageOf } from "/js/fx/highlight.js";
 import { codeLineNumbersHTML } from "/js/fx/codeview.js";
-import { codeFindRanges, codeMarksHTML } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用）
+import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用）
 import {
   codeTabStripHTML,
   codeEditorHTML,
@@ -53,6 +53,7 @@ const cursorListeners = new Set();
 export function onCursorChanged(cb) { cursorListeners.add(cb); }
 
 function notifyCursor() {
+  updateWordMarks();   // 选中词标记随光标变化重算（工单 05；词/区段未变零重画）
   cursorListeners.forEach((cb) => { try { cb(); } catch (e) { /* 监听器异常不阻断 */ } });
 }
 
@@ -147,7 +148,8 @@ async function loadFileState(path) {
 // 各自区段（kind 不同），一次渲染多类标记。
 let editorFind = { query: "", ranges: [], index: 0 };
 
-// currentMarks()：当前应渲染的标记清单（查找命中 + 当前命中；05/06 追加点）。
+// currentMarks()：当前应渲染的标记清单（查找命中 + 当前命中 + 选中词；
+// 06 括号配对继续追加）。
 export function currentMarks() {
   const out = [];
   if (editorFind.query && editorFind.ranges.length) {
@@ -156,7 +158,46 @@ export function currentMarks() {
         kind: i === editorFind.index ? "current" : "hit" });
     });
   }
+  if (editorWord.word && editorWord.ranges.length) {
+    editorWord.ranges.forEach((r) => {
+      out.push({ line: r.line, start: r.start, end: r.end, kind: "word" });
+    });
+  }
   return out;
+}
+
+// ---- 选中词高亮（工单 code-editor-vscode-polish/05）----
+// 状态：光标处词 + 全文同词区段（大小写精确 + 词边界）；随光标变化重算
+// （notifyCursor 前置钩子），内容变化也重算（词未变但偏移会变——签名比较）。
+let editorWord = { word: "", ranges: [] };
+
+// updateWordMarks()：光标/内容变化后重算选中词标记——词变了或区段签名变了
+// 才重画（其余光标移动零渲染）；无 textarea（.md 预览/未开文件）清空。
+// 返回是否重画过（true = 已渲染标记层；调用方据此决定是否补画查找标记——
+// 单次渲染纪律，评审整改 05：IME/粘贴/替换等不经 keyup/select 的输入路径
+// 由 syncEditorAfterInput 首位调用本函数兜底）。
+function updateWordMarks() {
+  const tab = getActiveTab();
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!tab || !ta) {
+    if (editorWord.word || editorWord.ranges.length) {
+      editorWord = { word: "", ranges: [] };
+      renderEditorMarks();
+      return true;
+    }
+    return false;
+  }
+  const pos = Math.max(0, ta.selectionStart | 0);
+  const word = codeWordAt(tab.content, pos);
+  const ranges = word ? codeWordRanges(tab.content, word) : [];
+  const changed = word !== editorWord.word
+    || JSON.stringify(ranges) !== JSON.stringify(editorWord.ranges);
+  if (changed) {
+    editorWord = { word, ranges };
+    renderEditorMarks();
+    return true;
+  }
+  return false;
 }
 
 // renderEditorMarks()：标记层重算 + 重画单入口（评审整改 04：编辑内容后高亮
@@ -237,10 +278,12 @@ function renderPane() {
   const tab = getActiveTab();
   if (!tab) {
     box.innerHTML = '<span class="code-empty">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span>';
+    updateWordMarks();   // 无 textarea：清空选中词标记（评审整改 05：磁盘重载/切目录/关标签统一路径）
     return;
   }
   if (tab.lang === "md" && tab.mdMode === "preview") {
     box.innerHTML = markdownPreviewHTML(parseMarkdownBlocks(tab.content), { imageUrl: mdImageUrl });
+    updateWordMarks();
     return;
   }
   // 编辑态（含 .md「编辑源码」态——工单 05；预览态已提前 return）：
@@ -250,6 +293,7 @@ function renderPane() {
     + codeLineNumbersHTML(lines) + "</div>"
     + codeEditorHTML(tab.content, tab.lang, { readonly: tab.readonly, marks: currentMarks() });
   if (tab.readonly) renderReadonlyNote(box);
+  updateWordMarks();   // 选中词标记统一兜底（activateTab/applySavedState/applyDiskState/closeTab/remap 全经本函数，评审整改 05）
 }
 
 function renderReadonlyNote(box) {
@@ -869,7 +913,10 @@ function syncEditorAfterInput() {
   // 调整，容器滚动不变；textarea 本体不重建——焦点/选区零抖动）
   gutter.innerHTML = codeLineNumbersHTML(tab.content.split("\n").length);
   hl.innerHTML = codeEditorHighlight(tab.content, tab.lang);
-  renderEditorMarks();   // 标记层随输入重算（查找命中/选中词偏移变化，工单 04）
+  // 标记层随输入重算（评审整改 05）：先重算选中词（IME/粘贴/替换等路径
+  // 不经 keyup/select——此处兜底；重画过则不再补画，防双渲染），再补查找
+  // 标记（04：编辑后命中数可能变化）。
+  if (!updateWordMarks()) renderEditorMarks();
   setActiveLine(caretLineOf(tab.content, selStart));
   box.scrollTop = scrollTop;
   box.scrollLeft = scrollLeft;

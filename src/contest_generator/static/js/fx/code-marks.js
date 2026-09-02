@@ -12,6 +12,57 @@ import { esc } from "./core.js";
 // 标记优先级（codeMarksHTML 分割重叠区段用）：当前命中最醒目。
 export const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1 };
 
+// 词字符（工单 05）：字母 / 数字 / 下划线连续段（VSCode 语义——中文与符号
+// 不构成标识符词；数字也是词字符，光标在数字上同样高亮同数字）。
+const WORD_CHAR = /[A-Za-z0-9_]/;
+function isWordChar(ch) {
+  return ch !== undefined && ch !== "" && WORD_CHAR.test(ch);
+}
+
+// codeWordAt(text, pos)：光标处取词（工单 05）——pos 指在词内（含紧邻词尾
+// 后 / 词首前）时返回该词；光标在空白 / 符号 / 汉字上 → ""（不误亮）。
+// pos 越界钳到文本边界。
+export function codeWordAt(text, pos) {
+  const src = String(text == null ? "" : text);
+  const p = Math.max(0, Math.min(src.length, pos | 0));
+  let i = -1;
+  if (p > 0 && isWordChar(src[p - 1])) i = p - 1;
+  else if (p < src.length && isWordChar(src[p])) i = p;
+  if (i < 0) return "";
+  let start = i;
+  while (start > 0 && isWordChar(src[start - 1])) start--;
+  let end = i + 1;
+  while (end < src.length && isWordChar(src[end])) end++;
+  return src.slice(start, end);
+}
+
+// codeWordRanges(text, word)：同词全文区段（工单 05）——大小写**精确**匹配
+// （与查找的大小写不敏感区分）+ 词边界（前后非词字符——"main_c" 不算
+// "main" 的命中）；非重叠推进；空词 → []。返回 {line,start,end}（与
+// codeFindRanges 同形状，供标记层渲染）。
+export function codeWordRanges(text, word) {
+  const src = String(text == null ? "" : text);
+  const w = String(word == null ? "" : word);
+  if (!w) return [];
+  const out = [];
+  const lines = src.split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    let i = 0;
+    for (;;) {
+      const at = line.indexOf(w, i);
+      if (at < 0) break;
+      const prev = at > 0 ? line[at - 1] : "";
+      const next = at + w.length < line.length ? line[at + w.length] : "";
+      if (!isWordChar(prev) && !isWordChar(next)) {
+        out.push({ line: li + 1, start: at, end: at + w.length });
+      }
+      i = at + w.length;
+    }
+  }
+  return out;
+}
+
 // codeFindRanges(text, needle)：文件内查找命中区段纯件——大小写不敏感
 // （与 fx/codeview.js fileFindFilter 同语义轴：查询 trim 后匹配——两处一致，
 // 评审整改 04：列表与标记层结果不得背离）、按行边界切分（不跨行匹配，与
@@ -95,6 +146,8 @@ if (typeof window !== "undefined") {
   Object.assign(window, {
     codeFindRanges,
     codeMarksHTML,
+    codeWordAt,
+    codeWordRanges,
     MARK_PRIORITY,
   });
 }
