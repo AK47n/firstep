@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7090dbde86a8b523cb9634f8ffd219e3285e3910 -->
+<!-- changelog-auto: last-commit=b1617f704fd17ca70f9593685b27638b5e7f3a03 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 12:30 工单 topics-control-2023-2025/04：2025 控制题拆条（E/H 两题入库）
 - 12:45 工单 topics-control-2023-2025/05：全库验收——后端断言 20 条 category 非空合法（control 15/other 5）+ 5 新题结构四段/manifest/小题 PDF<1MB/resolve_number/图注全过（verify_05.py）；CDP 冒烟 17 项（筛选控制题 15 卡含 5 新题无 other、2023E 详情题面+页图+分类行、编辑表单分类下拉、保存后 chip「控制题」与端点透出）；发现并修正 03 结论：webapp 视觉通道可用（GET /api/topics/{key} 触发 enrich）→ 2023E/G/I 自动补视觉图注（b09968cd/29227009/b918e297）；2023E 同值保存顺带规范化 hint_module_groups 字段（93e07447）；js 1096 + pytest 全绿；五工单（01-05）全部完成
 - 12:46 工单 topics-control-2023-2025/05：全库验收（五工单收官）
+- 12:52 补全 CHANGELOG 写库机器提交过滤模板（update topic/update reference/archive reference/赛题条目补图注）——根治英文自动条目触发中文检查；测试断言锁定 + 清除已产生的 4 条噪音条目（工单 topics-control-2023-2025/05 机制缺陷收尾）
 - 13:02 修复：CHANGELOG 自动补录漏过滤 4 个写库机器提交模板——`changelog.py::_ROUTINE_LIB_RE` 漏「update topic / update reference / archive reference / 赛题条目补图注」→ 英文/机器条目混入更新记录触发中文检查红；补全模板 + 测试断言锁定 + 清除已产生的 4 条噪音条目（库管理动作不进更新记录，机制本意恢复）
 
 ## 2026-09-01
