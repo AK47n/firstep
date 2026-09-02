@@ -14,6 +14,14 @@ import { languageOf } from "/js/fx/highlight.js";
 import { codeLineNumbersHTML } from "/js/fx/codeview.js";
 import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用）
 import {
+  BRACKET_OPEN,
+  BRACKET_CLOSE,
+  bracketOpen,
+  bracketClose,
+  bracketBackspace,
+  bracketPairAt,
+} from "/js/fx/code-brackets.js";  // 括号配对与自动闭合纯件（工单 code-editor-vscode-polish/06）
+import {
   codeTabStripHTML,
   codeEditorHTML,
   codeEditorHighlight,
@@ -53,7 +61,7 @@ const cursorListeners = new Set();
 export function onCursorChanged(cb) { cursorListeners.add(cb); }
 
 function notifyCursor() {
-  updateWordMarks();   // 选中词标记随光标变化重算（工单 05；词/区段未变零重画）
+  refreshMarkSetters();   // 选中词 + 括号配对标记随光标变化重算（工单 05/06；未变零渲染）
   cursorListeners.forEach((cb) => { try { cb(); } catch (e) { /* 监听器异常不阻断 */ } });
 }
 
@@ -163,7 +171,47 @@ export function currentMarks() {
       out.push({ line: r.line, start: r.start, end: r.end, kind: "word" });
     });
   }
+  if (editorBracket) {
+    out.push({ line: editorBracket.open.line, start: editorBracket.open.start,
+      end: editorBracket.open.end, kind: "bracket" });
+    out.push({ line: editorBracket.close.line, start: editorBracket.close.start,
+      end: editorBracket.close.end, kind: "bracket" });
+  }
   return out;
+}
+
+// ---- 括号配对高亮（工单 code-editor-vscode-polish/06）----
+// 光标在括号上/紧邻 → 配对括号两段标记（kind: "bracket"，下划线类样式）；
+// 仅 .c/.h 与 xml 启用（spec：.md 编辑源码态只自动闭合不配对高亮）。
+let editorBracket = null;
+
+// updateBracketMarks()：光标/内容变化后重算配对高亮——配对位置变了返回 true
+// （不渲染，同 updateWordMarks 纪律）；仅 .c/.h 与 xml 启用（spec：.md 编辑
+// 源码态只自动闭合不配对高亮）。
+function updateBracketMarks() {
+  const tab = getActiveTab();
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!tab || !ta || tab.readonly || (tab.lang !== "c" && tab.lang !== "xml")) {
+    // 只读标签不启用任何（评审整改 06c）；仅 .c/.h 与 xml 启用配对高亮
+    if (editorBracket) {
+      editorBracket = null;
+      return true;
+    }
+    return false;
+  }
+  const pos = Math.max(0, ta.selectionStart | 0);
+  const pair = bracketPairAt(tab.content, pos);
+  const changed = JSON.stringify(pair) !== JSON.stringify(editorBracket);
+  if (changed) editorBracket = pair;
+  return changed;
+}
+
+// refreshMarkSetters()：选中词 + 配对高亮状态重算，变了才渲染标记层一次
+// （notifyCursor / renderPane 各出口统一调用；渲染单点 = renderEditorMarks）。
+function refreshMarkSetters() {
+  const wc = updateWordMarks();
+  const bc = updateBracketMarks();
+  if (wc || bc) renderEditorMarks();
 }
 
 // ---- 选中词高亮（工单 code-editor-vscode-polish/05）----
@@ -172,17 +220,15 @@ export function currentMarks() {
 let editorWord = { word: "", ranges: [] };
 
 // updateWordMarks()：光标/内容变化后重算选中词标记——词变了或区段签名变了
-// 才重画（其余光标移动零渲染）；无 textarea（.md 预览/未开文件）清空。
-// 返回是否重画过（true = 已渲染标记层；调用方据此决定是否补画查找标记——
-// 单次渲染纪律，评审整改 05：IME/粘贴/替换等不经 keyup/select 的输入路径
-// 由 syncEditorAfterInput 首位调用本函数兜底）。
+// 返回 true（**不渲染**——渲染由调用方统一做，防 find/word/bracket 三态
+// 各自渲染的错帧与双渲染，评审整改 05/06）；无 textarea（.md 预览/未开
+// 文件）清空（重置也返回 true 供调用方渲染清除）。
 function updateWordMarks() {
   const tab = getActiveTab();
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!tab || !ta) {
     if (editorWord.word || editorWord.ranges.length) {
       editorWord = { word: "", ranges: [] };
-      renderEditorMarks();
       return true;
     }
     return false;
@@ -192,12 +238,8 @@ function updateWordMarks() {
   const ranges = word ? codeWordRanges(tab.content, word) : [];
   const changed = word !== editorWord.word
     || JSON.stringify(ranges) !== JSON.stringify(editorWord.ranges);
-  if (changed) {
-    editorWord = { word, ranges };
-    renderEditorMarks();
-    return true;
-  }
-  return false;
+  if (changed) editorWord = { word, ranges };
+  return changed;
 }
 
 // renderEditorMarks()：标记层重算 + 重画单入口（评审整改 04：编辑内容后高亮
@@ -278,12 +320,12 @@ function renderPane() {
   const tab = getActiveTab();
   if (!tab) {
     box.innerHTML = '<span class="code-empty">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span>';
-    updateWordMarks();   // 无 textarea：清空选中词标记（评审整改 05：磁盘重载/切目录/关标签统一路径）
+    refreshMarkSetters();   // 无 textarea：清空选中词/括号标记（评审整改 05：磁盘重载/切目录/关标签统一路径）
     return;
   }
   if (tab.lang === "md" && tab.mdMode === "preview") {
     box.innerHTML = markdownPreviewHTML(parseMarkdownBlocks(tab.content), { imageUrl: mdImageUrl });
-    updateWordMarks();
+    refreshMarkSetters();
     return;
   }
   // 编辑态（含 .md「编辑源码」态——工单 05；预览态已提前 return）：
@@ -293,7 +335,7 @@ function renderPane() {
     + codeLineNumbersHTML(lines) + "</div>"
     + codeEditorHTML(tab.content, tab.lang, { readonly: tab.readonly, marks: currentMarks() });
   if (tab.readonly) renderReadonlyNote(box);
-  updateWordMarks();   // 选中词标记统一兜底（activateTab/applySavedState/applyDiskState/closeTab/remap 全经本函数，评审整改 05）
+  refreshMarkSetters();   // 选中词/括号标记统一兜底（activateTab/applySavedState/applyDiskState/closeTab/remap 全经本函数，评审整改 05/06）
 }
 
 function renderReadonlyNote(box) {
@@ -913,10 +955,12 @@ function syncEditorAfterInput() {
   // 调整，容器滚动不变；textarea 本体不重建——焦点/选区零抖动）
   gutter.innerHTML = codeLineNumbersHTML(tab.content.split("\n").length);
   hl.innerHTML = codeEditorHighlight(tab.content, tab.lang);
-  // 标记层随输入重算（评审整改 05）：先重算选中词（IME/粘贴/替换等路径
-  // 不经 keyup/select——此处兜底；重画过则不再补画，防双渲染），再补查找
-  // 标记（04：编辑后命中数可能变化）。
-  if (!updateWordMarks()) renderEditorMarks();
+  // 标记层随输入重算（评审整改 05/06）：updateWordMarks/updateBracketMarks
+  // 只重算状态不渲染——内容已变，无论词/括号是否变了都必须重画（查找命中
+  // 偏移同样变了），此处无条件 renderEditorMarks（单次渲染，无双渲染）。
+  updateWordMarks();
+  updateBracketMarks();
+  renderEditorMarks();
   setActiveLine(caretLineOf(tab.content, selStart));
   box.scrollTop = scrollTop;
   box.scrollLeft = scrollLeft;
@@ -1087,6 +1131,29 @@ export function initCodeEditor() {
         e.preventDefault();
         const r = indentOnEnter(ta.value, ta.selectionStart, ta.selectionEnd);
         applyEdit(r.value, r.start, r.end);
+      } else if (!e.isComposing && !composing && (BRACKET_OPEN[e.key] || BRACKET_CLOSE[e.key] || e.key === "Backspace")) {
+        // 括号行为（工单 06）：仅 c/xml/md 编辑态启用（spec：plain 走浏览器
+        // 默认插入——评审整改 06b）；IME 组合输入中不拦截（评审整改 06a）。
+        const tab = getActiveTab();
+        const langOk = !!tab && (tab.lang === "c" || tab.lang === "xml" || tab.lang === "md");
+        if (!langOk) return;
+        if (BRACKET_OPEN[e.key]) {
+          e.preventDefault();
+          const r = bracketOpen(ta.value, ta.selectionStart, ta.selectionEnd, e.key);
+          applyEdit(r.value, r.start, r.end);
+        } else if (BRACKET_CLOSE[e.key]) {
+          const r = bracketClose(ta.value, ta.selectionStart, ta.selectionEnd, e.key);
+          if (r) {
+            e.preventDefault();
+            applyEdit(r.value, r.start, r.end);
+          }
+        } else if (e.key === "Backspace") {
+          const r = bracketBackspace(ta.value, ta.selectionStart, ta.selectionEnd);
+          if (r) {
+            e.preventDefault();
+            applyEdit(r.value, r.start, r.end);
+          }
+        }
       }
     });
     // 光标行高亮跟随（selection 变化：键盘 / 鼠标共同覆盖——select + keyup
