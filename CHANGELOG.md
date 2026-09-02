@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=aadab0d25db9deb3d9156650b72ccba96ba9de80 -->
+<!-- changelog-auto: last-commit=fad87d4c525163f9694d7a6bb97e985ccb1ffc5c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 19:18 工单 code-editor-vscode-polish/02（评审整改）：caretColOf 内部钳制行尾列、refreshCodeStatus 行列计算全走 fx 单源、状态栏注释与占位实现对齐
 - 19:24 工单 code-editor-vscode-polish/03：标签条增强——中键关闭（活动不关/徽章与关闭钮保持显式语义）、拖拽排序（插入位指示线 + 空白区追加末尾 + moveTab 纯件）、激活自动滚入视野、关闭钮与徽章样式统一
 - 19:30 工单 code-editor-vscode-polish/04：文件内查找高亮与计数——标记层基础设施（fx/code-marks 纯件 + .code-marks 三明治层）、当前命中高亮与描边、第 N/共 M 处与无匹配文案、Enter/Shift+Enter 循环、将替换 N 处、编辑后重算
+- 19:36 工单 code-editor-vscode-polish/05：选中词高亮——光标处词全文同词标记（大小写精确 + 词边界、codeWordAt/codeWordRanges 纯件）、与查找标记分层共存、输入路径重算兜底（IME/粘贴/替换）、md 预览自动排除
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
