@@ -544,9 +544,9 @@ function currentCodeZoomPct() {
 
 // refreshCodeStatus()：底部状态栏信息区刷新（工单 code-editor-vscode-polish/01）
 // ——活动标签的 Ln/Col（读 textarea 选区，readonly 同样可取）/ 语言 / 编码 /
-// 缩进 / 缩放；无活动文件 → 清空（容器零宽不占位）。触发点：活动标签变化
+// 缩进 / 缩放；无活动文件 → 显示「未打开文件」占位。触发点：活动标签变化
 // （onActiveTabChanged）、光标/选区变化（onCursorChanged）、缩放（applyCodeZoom）、
-// 初始化。
+// 初始化。行列计算全部走 fx 单源（caretLineOf / caretColOf）。
 function refreshCodeStatus() {
   const bar = $("code-statusbar-info");
   if (!bar) return;
@@ -561,12 +561,7 @@ function refreshCodeStatus() {
   if (ta) {
     const pos = Math.max(0, ta.selectionStart | 0);
     line = caretLineOf(ta.value, pos);
-    const lineStart = ta.value.lastIndexOf("\n", pos - 1) + 1;
-    const lineEnd = (() => {
-      const nl = ta.value.indexOf("\n", lineStart);
-      return nl === -1 ? ta.value.length : nl;
-    })();
-    col = Math.min(caretColOf(ta.value, pos), lineEnd - lineStart + 1);
+    col = caretColOf(ta.value, pos);
   }
   bar.innerHTML = codeStatusHTML({
     line,
@@ -986,7 +981,7 @@ export function initCodeViewer() {
 
   // 状态栏信息区（工单 code-editor-vscode-polish/01）：光标/选区变化 → 刷新；
   // 初始空态（未打开目录/无活动 tab）onActiveTabChanged 未触发过——显式刷
-  // 一次（空内容零宽不占位，与 syncInfoBar 初始化同因）。
+  // 一次（占位「未打开文件」，与 syncInfoBar 初始化同因）。
   onCursorChanged(refreshCodeStatus);
   refreshCodeStatus();
 }
