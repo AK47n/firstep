@@ -2792,6 +2792,10 @@
             </div>
             <div class="code-replace-row">
               <input type="text" id="code-replace-input" placeholder="替换为（Ctrl+H）…" aria-label="替换为（Ctrl+H 唤起）">
+              <button type="button" id="btn-code-replace-one"
+                title="替换当前命中（替换后停在替换处）">替换</button>
+              <button type="button" id="btn-code-replace-next"
+                title="替换当前命中并跳转到下一命中">替换并下一处</button>
               <button type="button" id="btn-code-replace-all"
                 title="全部替换当前文件内匹配项（改动进编辑缓冲，Ctrl+S 保存）">全部替换</button>
               <span id="code-replace-count" class="code-find-count hidden" aria-live="polite"></span>

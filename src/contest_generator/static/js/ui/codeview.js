@@ -59,6 +59,7 @@ import {
   clearDiskChanged,
   reloadTabFromDisk,
   replaceAllInActiveFile,
+  replaceOneInActiveFile,
   setEditorFind,
   editorFindStep,
   editorCaretModelPos,
@@ -975,6 +976,39 @@ export function initCodeViewer() {
     e.preventDefault();
     focusFindPanel(replaceInput);
   });
+  // 替换单个命中 / 替换并跳下一处（工单 code-page-vscode-overhaul/03）：
+  // 模型层替换（折叠安全）+ 计数联动；「替换并下一处」聚焦下一命中选区。
+  const replaceOneBtn = $("btn-code-replace-one");
+  const replaceNextBtn = $("btn-code-replace-next");
+  if (replaceOneBtn || replaceNextBtn) {
+    const doReplaceOne = (jump) => {
+      const tab = getActiveTab();
+      if (!tab) { toast("info", "请先打开一个文件再替换"); return; }
+      const needle = findInput.value;
+      if (!needle) { toast("info", "请先在「当前文件内查找」输入查找内容"); return; }
+      if (tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");   // 与 Ctrl+F/H 同口径：预览态先切源码
+      const st = replaceOneInActiveFile(replaceInput ? replaceInput.value : "", jump);
+      if (!st.replaced) {
+        toast("info", tab.readonly ? "只读文件不允许替换" : "当前文件没有匹配");
+        return;
+      }
+      toast("ok", "已替换 1 处（Ctrl+S 保存写盘）");
+      // 计数联动：替换后命中数 / 当前索引重算（不重置选区）
+      updateFindCount({ total: st.total, current: st.current }, needle);
+      const rc = $("code-replace-count");
+      if (rc) {
+        if (needle && st.total) {
+          rc.classList.remove("hidden");
+          rc.textContent = "将替换 " + st.total + " 处";
+        } else {
+          rc.classList.add("hidden");
+          rc.textContent = "";
+        }
+      }
+    };
+    if (replaceOneBtn) replaceOneBtn.addEventListener("click", () => doReplaceOne(false));
+    if (replaceNextBtn) replaceNextBtn.addEventListener("click", () => doReplaceOne(true));
+  }
   const findBox = $("code-find-results");
   if (findBox) findBox.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-find-line]");

@@ -9,7 +9,7 @@
 import { esc } from "./core.js";
 import { highlightCodeLines } from "./codeview.js";
 import { maincLineOffsetRange } from "./code.js";
-import { codeMarksHTML } from "./code-marks.js";
+import { codeMarksHTML, codeFindRanges } from "./code-marks.js";
 
 // 多文件标签上限（工单 code-viewer-editor/02）：超出 toast 中文提示——
 // 防病态大目录 / 大文件把内存与渲染压垮（每个 ≤1MB，10 个封顶）。
@@ -272,6 +272,39 @@ export function replaceAllText(src, needle, replacement) {
     : { count: 0, value: v };
 }
 
+// replaceOneAt(src, needle, replacement, hitIndex)：替换当前命中的纯件（工单
+// code-page-vscode-overhaul/03）——与 codeFindRanges 同语义找命中（大小写
+// 不敏感、非重叠、不跨行、查询 trim），替换第 hitIndex（0 基）个命中；返回
+// {value, replaced, total, next}：total = 替换后新文本命中数；next = 替换点
+// 之后首个命中的 {line,start,end}（无 → null，不环绕）。调用方保证 hitIndex
+// 与当前标记层命中索引一致（越界 → replaced false）。
+export function replaceOneAt(src, needle, replacement, hitIndex) {
+  const v = String(src == null ? "" : src);
+  const n = String(needle == null ? "" : needle).trim();
+  const idx = Math.max(0, hitIndex | 0);
+  if (!n) return { value: v, replaced: false, total: 0, next: null };
+  const ranges = codeFindRanges(v, n);
+  if (idx >= ranges.length) return { value: v, replaced: false, total: ranges.length, next: null };
+  const r = ranges[idx];
+  const lines = v.split("\n");
+  let pos = 0;
+  for (let k = 0; k < r.line - 1; k++) pos += lines[k].length + 1;
+  pos += r.start;
+  const end = pos + n.length;
+  const repl = String(replacement == null ? "" : replacement);
+  const value = v.slice(0, pos) + repl + v.slice(end);
+  const after = pos + repl.length;
+  const nextLines = value.split("\n");
+  let next = null;
+  for (const nr of codeFindRanges(value, n)) {
+    let p = 0;
+    for (let k = 0; k < nr.line - 1; k++) p += nextLines[k].length + 1;
+    p += nr.start;
+    if (p >= after) { next = nr; break; }
+  }
+  return { value, replaced: true, total: codeFindRanges(value, n).length, next, at: pos };
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     codeTabBadge,
@@ -289,6 +322,7 @@ if (typeof window !== "undefined") {
     indentOnEnter,
     indentLines,
     replaceAllText,
+    replaceOneAt,
     EDITOR_TABS_MAX,
   });
 }

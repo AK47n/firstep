@@ -34,6 +34,7 @@ import {
   indentOnEnter,
   indentLines,
   replaceAllText,
+  replaceOneAt,
   EDITOR_TABS_MAX,
 } from "/js/fx/codeeditor.js";
 import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
@@ -432,6 +433,8 @@ export function editorFindStep(delta) {
 
 // focusFindRange(range)：跳转到命中区段——先 editJumpToLine（滚动居中 +
 // flash + 当前行），再把选区缩为命中区间（VSCode 当前命中选址观感）。
+// 折叠态（工单 code-page-vscode-overhaul/03）：range 为模型行/列，选区按
+// 视图偏移落位（模型 → 视图映射）。
 function focusFindRange(range) {
   const tab = getActiveTab();
   if (!tab) return;
@@ -443,8 +446,14 @@ function focusFindRange(range) {
   if (!lineStart) return;
   const pos = lineStart.start + range.start;
   const end = pos + (range.end - range.start);
+  let vPos = pos;
+  let vEnd = end;
+  if (viewModel) {
+    vPos = codeFoldModelToView(viewModel.segs, pos);
+    vEnd = codeFoldModelToView(viewModel.segs, end);
+  }
   ta.focus();
-  ta.setSelectionRange(pos, end);
+  ta.setSelectionRange(vPos, vEnd);
 }
 
 // ===== 渲染：标签条 / 中栏 =====
@@ -1186,7 +1195,34 @@ function syncEditorAfterInput() {
   notifyActive();   // 状态栏信息区随内容/光标刷新（onActiveTabChanged → refreshCodeStatus；不再单独 notifyCursor——避免每击键双刷）
 }
 
-// ===== 查找替换（工单 code-editor-utilize/03）：当前文件「全部替换」 =====
+// ===== 查找替换（工单 code-editor-utilize/03 + code-page-vscode-overhaul/03）=====
+// rebaseModelContent(newContent, caret)：模型内容整体替换后的折叠重算 + 视图
+// 重建 + 光标落位——折叠态 textarea 须持视图文本，不能经 applyEdit 直写模型
+// （会把模型当视图喂 mapEdit → 占位误判整块替换丢内容）；caret = 模型偏移
+// （null → 文件尾，与既有「替换后光标置文件尾」语义一致）。
+function rebaseModelContent(newContent, caret) {
+  const tab = getActiveTab();
+  if (!tab) return;
+  tab.content = newContent;
+  const oldFolds = folds;
+  folds = codeFoldRanges(tab.content, tab.lang);
+  foldedSet = codeFoldMerge(oldFolds, foldedSet, folds);
+  viewModel = (folds.length && foldedSet.size)
+    ? codeFoldVisible(tab.content, folds, foldedSet)
+    : null;
+  renderPane();
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return;
+  const caretM = caret == null
+    ? tab.content.length
+    : Math.max(0, Math.min(tab.content.length, caret));
+  const vo = viewModel
+    ? codeFoldModelToView(viewModel.segs, caretM)
+    : caretM;
+  ta.focus();
+  ta.setSelectionRange(vo, vo);
+}
+
 // replaceAllInActiveFile(needle, replacement)：活动标签全部替换——空针 /
 // 无活动标签 / 只读标签 / 无匹配 → 0 且不改；有效时走 applyEdit 同手输路径
 // （textarea 值 + 高亮/行号/脏点/标签条同步），光标置于文件尾，不自动写盘
@@ -1197,30 +1233,48 @@ export function replaceAllInActiveFile(needle, replacement) {
   const r = replaceAllText(tab.content, needle, replacement);
   if (!r.count) return 0;
   if (viewModel) {
-    // 折叠态（评审整改 07）：replace 结果 = **模型**文本——折叠态 textarea 须
-    // 持视图文本，不能经 applyEdit 直写（会把模型当视图喂 mapEdit → 占位误判
-    // 整块替换丢内容）。改为：模型整体替换 → 折叠区按签名保留 → 重建视图 →
+    // 折叠态（评审整改 07）：模型整体替换 → 折叠区按签名保留 → 重建视图 →
     // 光标落模型末尾（与既有「替换后光标置文件尾」语义一致）。
-    tab.content = r.value;
-    const oldFolds = folds;
-    folds = codeFoldRanges(tab.content, tab.lang);
-    foldedSet = codeFoldMerge(oldFolds, foldedSet, folds);
-    viewModel = (folds.length && foldedSet.size)
-      ? codeFoldVisible(tab.content, folds, foldedSet)
-      : null;
-    renderPane();
-    const ta = paneBox() && paneBox().querySelector(".code-ta");
-    if (ta) {
-      const vo = viewModel
-        ? codeFoldModelToView(viewModel.segs, tab.content.length)
-        : tab.content.length;
-      ta.focus();
-      ta.setSelectionRange(vo, vo);
-    }
+    rebaseModelContent(r.value, null);
     return r.count;
   }
   applyEdit(r.value, r.value.length, r.value.length);
   return r.count;
+}
+
+// replaceOneInActiveFile(replacement, jumpToNext)：替换当前命中（工单
+// code-page-vscode-overhaul/03）——模型层替换（折叠安全），随后重算命中并
+// 更新标记层；jumpToNext 且存在下一命中 → 聚焦选区（模型→视图映射）。
+// 返回 {replaced, nextFound, total, current} 供计数联动；无活动标签 / 只读 /
+// 空针 / 无命中 → replaced false 且不改动。
+export function replaceOneInActiveFile(replacement, jumpToNext) {
+  const tab = getActiveTab();
+  if (!tab || tab.readonly) return { replaced: false, nextFound: false, total: 0, current: -1 };
+  const needle = editorFind.query;
+  if (!needle || !editorFind.ranges.length) {
+    return { replaced: false, nextFound: false, total: editorFind.ranges.length, current: -1 };
+  }
+  const idx = editorFind.index < 0 ? 0 : editorFind.index;
+  const r = replaceOneAt(tab.content, needle, replacement, idx);
+  if (!r.replaced) return { replaced: false, nextFound: false, total: r.total, current: -1 };
+  const repl = String(replacement == null ? "" : replacement);
+  const caret = r.at + repl.length;
+  if (viewModel) rebaseModelContent(r.value, caret);
+  else applyEdit(r.value, caret, caret);
+  // 重算命中（标记层按新内容），随后按 next 聚焦
+  const total = setEditorFind(needle).total;
+  let nextFound = false;
+  if (jumpToNext && r.next) {
+    const ni = editorFind.ranges.findIndex((g) =>
+      g.line === r.next.line && g.start === r.next.start && g.end === r.next.end);
+    if (ni >= 0) {
+      editorFind.index = ni;
+      renderEditorMarks();
+      focusFindRange(editorFind.ranges[ni]);
+      nextFound = true;
+    }
+  }
+  return { replaced: true, nextFound, total, current: editorFind.index };
 }
 
 // ===== initCodeEditor：入口绑定（host 启动区调用；DOM 已就绪）=====
