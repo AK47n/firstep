@@ -278,12 +278,14 @@ export function codeFoldMapEdit(model, segs, oldView, newView) {
   };
 }
 
-// codeFoldGutterHTML(lines)：行号 gutter HTML（可见行）——每行
-// span.code-gutter-line[data-code-line = 模型行号]；折叠区开行内嵌折叠箭头
-// （span.code-fold-arrow[data-fold]，未折叠 = ▾、已折叠 = ▸）；占位行
-// span.code-gutter-ph[data-fold-expand]（点开 = 展开，title 提示）。内容全为
-// 数字 / 固定字符，无用户文本（无需 esc）。
-export function codeFoldGutterHTML(lines) {
+// codeFoldGutterLines(lines)：行号 gutter 逐行字符串数组（工单
+// code-page-vscode-overhaul/08 窗口化——滑动窗口切片用；与
+// codeFoldGutterHTML 单源）。每行 span.code-gutter-line[data-code-line =
+// 模型行号]；折叠区开行内嵌折叠箭头（span.code-fold-arrow[data-fold]，
+// 未折叠 = ▾、已折叠 = ▸）；占位行 span.code-gutter-ph[data-fold-expand]
+// （点开 = 展开，title 提示）。内容全为数字 / 固定字符，无用户文本（无需
+// esc）。
+export function codeFoldGutterLines(lines) {
   return (lines || []).map((l) => {
     if (l.placeholder) {
       return '<span class="code-gutter-line code-gutter-ph" data-code-line="' + l.no + '"'
@@ -298,7 +300,13 @@ export function codeFoldGutterHTML(lines) {
       : "";
     return '<span class="code-gutter-line" data-code-line="' + l.no + '">'
       + arrow + l.no + "</span>";
-  }).join("");
+  });
+}
+
+// codeFoldGutterHTML(lines)：行号 gutter HTML（可见行）——codeFoldGutterLines
+// 拼接（保持既有调用面）。
+export function codeFoldGutterHTML(lines) {
+  return codeFoldGutterLines(lines).join("");
 }
 
 // codeFoldMerge(oldFolds, oldSet, newFolds)：内容变化后保留仍存在的折叠态——
@@ -324,6 +332,7 @@ if (typeof window !== "undefined") {
     codeFoldViewToModel,
     codeFoldModelToView,
     codeFoldMapEdit,
+    codeFoldGutterLines,
     codeFoldGutterHTML,
     codeFoldMerge,
     codeFoldPlaceholderText,

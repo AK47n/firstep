@@ -65,6 +65,7 @@ import {
   replaceOneInActiveFile,
   setEditorFind,
   editorFindStep,
+  codeWindowRefresh,
   editorCaretModelPos,
 } from "/js/ui/codeeditor.js";
 
@@ -640,6 +641,7 @@ function applyCodeZoom(pct) {
   view.style.setProperty("--code-zoom", String(pct / 100));
   try { localStorage.setItem(CODE_VIEW_ZOOM_KEY, String(pct)); } catch (e) {}
   showCodeZoomBadge(pct);
+  codeWindowRefresh();   // 行高变化 → 重测并重画窗口（工单 08 滚动窗口化）
   refreshCodeStatus();   // 状态栏缩放百分比实时刷新（工单 01）
 }
 

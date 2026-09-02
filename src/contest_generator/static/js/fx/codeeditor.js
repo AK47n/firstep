@@ -159,6 +159,23 @@ export function codeEditorHighlight(content, lang) {
     .join("");
 }
 
+// codeWindowRange(scrollTop, viewportH, lineH, lineCount, overscan)：滚动窗口
+// 化纯件（工单 code-page-vscode-overhaul/08）——由滚动偏移/视口高/行高算出
+// 当前应渲染的视图行窗口 [start, end)（0 基，上下各扩 overscan，钳制
+// [0, lineCount]；至少 1 行；空文档 → {0,0}）。层顶 padding 8px 计入
+// （内容区 [8, 8 + lineCount*lineH)）。
+export function codeWindowRange(scrollTop, viewportH, lineH, lineCount, overscan) {
+  const n = Math.max(0, lineCount | 0);
+  if (!n) return { start: 0, end: 0 };
+  const lh = Math.max(1, lineH || 1);
+  const vh = Math.max(1, viewportH | 0);
+  const ov = Math.max(0, overscan | 0);
+  const top = Math.max(0, scrollTop | 0);
+  const start = Math.max(0, Math.min(n - 1, Math.floor((top - 8) / lh) - ov));
+  const end = Math.max(start + 1, Math.min(n, Math.ceil((top + vh - 8) / lh) + ov));
+  return { start, end };
+}
+
 // codeEditorHTML(content, lang, opts)：可编辑三明治纯件——
 // pre.code-hl（静态流内：`.code-edit` width:max-content 以它量宽、高度以它
 // 定量——容器 .code-view 负责滚动，无内部滚动条、零滚动同步）+ pre.code-marks
@@ -170,14 +187,17 @@ export function codeEditorHighlight(content, lang) {
 // 文件禁改）。三者同一 font / line-height / padding / tab-size，逐行 1:1
 // 对齐；高亮走 highlightCodeLines 单源（超 128KB 或 plain 自动回退纯文本）；
 // 内容转义（esc——textarea 内 </textarea> 等全部 &lt; 化）。
+// opts.windowed（工单 08）：hl/marks 层留空壳（内容由胶水层窗口化渲染——大
+// 文件不整段 innerHTML），textarea 仍全量（选区/光标/滚动度量依赖）。
 export function codeEditorHTML(content, lang, opts = {}) {
   const src = String(content == null ? "" : content);
   const ro = opts.readonly ? " ro" : "";
   const roAttr = opts.readonly ? " readonly" : "";
+  const hl = opts.windowed ? "" : codeEditorHighlight(src, lang);
+  const marks = opts.windowed ? "" : codeMarksHTML(src, opts.marks);
   return '<div class="code-edit' + ro + '">'
-    + '<pre class="code-hl" aria-hidden="true">' + codeEditorHighlight(src, lang) + "</pre>"
-    + '<pre class="code-marks" aria-hidden="true">'
-    + codeMarksHTML(src, opts.marks) + "</pre>"
+    + '<pre class="code-hl" aria-hidden="true">' + hl + "</pre>"
+    + '<pre class="code-marks" aria-hidden="true">' + marks + "</pre>"
     + '<textarea class="code-ta" spellcheck="false" wrap="off"'
     + ' aria-label="代码编辑器"' + roAttr + ">" + esc(src) + "</textarea>"
     + "</div>";
@@ -323,6 +343,7 @@ if (typeof window !== "undefined") {
     indentLines,
     replaceAllText,
     replaceOneAt,
+    codeWindowRange,
     EDITOR_TABS_MAX,
   });
 }
