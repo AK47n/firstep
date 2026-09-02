@@ -267,9 +267,12 @@ def _get_manifest(by_slug: Mapping[str, ModuleManifest], slug: str) -> ModuleMan
 # ---------------------------------------------------------------------------
 
 # 清单段条目的来源标注（工单 01 手动选参考资料）：auto = 锚定命中自动进清单
-# （两级：清单 → 点名 → 回读）；manual = 用户手动指定（全文直读，无需点名）。
+# （两级：清单 → 点名 → 回读）；manual = 用户手动指定（全文直读，无需点名）；
+# related（工单 02 相关候选自动扩容）= 题面 / 模块相关自动列出（未锚定，
+# 两级照旧：清单 → 点名 → 回读——不直读，成本可控）。
 REFERENCE_SOURCE_AUTO = "auto"
 REFERENCE_SOURCE_MANUAL = "manual"
+REFERENCE_SOURCE_RELATED = "related"
 
 
 def associated_references(
@@ -1499,17 +1502,21 @@ def run_recommendation(
             }
     if topic.key:
         result["topic_id"] = topic.key
-    # 最终参考清单（透明闭环）：锚定命中 = auto，手动选 = manual；
-    # 同一条目既锚定又手动只出现一次（手动优先标注——用户显式选择）；
-    # platform（工单 01）随条目带出，前端按它显示平台标注
-    manual_ids = {ref.id for ref in topic.manual_references}
+    # 最终参考清单（透明闭环，与候选清单同源同序同标注）：锚定命中 = auto，
+    # 手动选 = manual（同一条目既锚定又手动只出现一次、手动优先标注——用户
+    # 显式选择），相关候选（工单 02）= related（题面 / 模块相关自动列出）。
+    # platform（工单 01）随条目带出，前端按它显示平台标注。
+    platforms: dict[str, str] = {}
+    for ref in (*topic.references, *topic.manual_references):
+        platforms[ref.id] = ref.platform
     result["references"] = [
-        {"id": ref.id, "title": ref.title, "source": "auto", "platform": ref.platform}
-        for ref in topic.references
-        if ref.id not in manual_ids
-    ] + [
-        {"id": ref.id, "title": ref.title, "source": "manual", "platform": ref.platform}
-        for ref in topic.manual_references
+        {
+            "id": suggestion.id,
+            "title": suggestion.title,
+            "source": suggestion.source,
+            "platform": platforms.get(suggestion.id, ""),
+        }
+        for suggestion in topic.suggestions
     ]
     # 功能组选择卡（工单 recommend-exclusive-groups/02）：命中组 / hint 组
     # 机器侧派生（AI 输出契约不变——组不新增模型字段）；无组库或全空 →

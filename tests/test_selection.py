@@ -2139,14 +2139,20 @@ def _topic(
     manual_references: Sequence[ReferenceEntry] = (),
     exclusive_groups: Sequence[ExclusiveGroup] = (),
     hint_module_groups: Sequence[str] = (),
+    suggestions: Sequence[ReferenceSuggestion] = (),
 ) -> TopicContext:
-    """最小装配素材：收敛与载荷组装够用的字段，其余取安全缺省。"""
+    """最小装配素材：收敛与载荷组装够用的字段，其余取安全缺省。
+
+    suggestions（工单 02）：done 参考清单改由候选清单单源构造（透明闭环——
+    模型看到的候选 = 最终回显，来源标注同源）；缺省空 = 旧字段驱动测试的
+    兼容形态（references / manual_references 语义不变）。
+    """
     return TopicContext(
         key=key,
         problem_text="送药小车。识别数字。",
         references=tuple(references),
         manifest_summaries=(),
-        suggestions=(),
+        suggestions=tuple(suggestions),
         read_fulltext=lambda entry_id: "",
         manual_references=tuple(manual_references),
         exclusive_groups=tuple(exclusive_groups),
@@ -2255,6 +2261,28 @@ def test_run_recommendation_done_payload_verbatim():
             key="2021F",
             references=(auto, overlap),
             manual_references=(manual, overlap),  # ref-both 既锚定又手动
+            # 候选清单（工单 02 起 done 参考清单单源）：锚定 auto 在前、手动
+            # 手动优先（overlap 只出现一次、标 manual）
+            suggestions=(
+                ReferenceSuggestion(
+                    id="ref-auto",
+                    title="锚定参考",
+                    description="",
+                    source=REFERENCE_SOURCE_AUTO,
+                ),
+                ReferenceSuggestion(
+                    id="ref-manual",
+                    title="手动参考",
+                    description="",
+                    source=REFERENCE_SOURCE_MANUAL,
+                ),
+                ReferenceSuggestion(
+                    id="ref-both",
+                    title="双重参考",
+                    description="",
+                    source=REFERENCE_SOURCE_MANUAL,
+                ),
+            ),
         ),
         llm,
     )

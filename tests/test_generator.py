@@ -56,10 +56,17 @@ from contest_generator.patchers import (
     external_headers,
     include_search_dirs,
 )
-from contest_generator.reference_library import ReferenceError, add_reference
+from contest_generator.reference_library import (
+    ANCHOR_KIND_NONE,
+    ANCHOR_KIND_TOPIC,
+    ReferenceError,
+    add_reference,
+)
 from contest_generator.selection import (
     ManualReferenceError,
+    REFERENCE_SOURCE_AUTO,
     REFERENCE_SOURCE_MANUAL,
+    REFERENCE_SOURCE_RELATED,
     ScorePoint,
 )
 from contest_generator.topic_library import TopicError
@@ -2269,6 +2276,180 @@ def test_resolve_topic_context_manual_unknown_id_raises(tmp_path):
             reference_library_dir=references,
             reference_ids=["幻觉 id"],
         )
+
+
+# ---------------------------------------------------------------------------
+# 工单 02：相关候选自动扩容（related_limit > 0 → 未锚定但题面相关的条目进
+# 候选清单与 references（供点名回读）；缺省 0 = 关闭，向后兼容）
+# ---------------------------------------------------------------------------
+
+
+def _wired_related_dirs(tmp_path, problem_text):
+    """工单 02 相关候选装配夹具：赛题库（题面可参数化——related 词命中依赖
+    题面词）+ 参考库（锚定 2026C 两条 + 相关未锚定两条 + 无关两条）。
+    make_fake_reference_library 的既有条目标题均不激活词表项（锚定/套件
+    指涉词不在 PERIPHERAL_TERMS），零基线稳定。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    make_topic_specific_module(library)
+    make_kit_candidate_module(library)
+    topics = make_fake_topic_library(tmp_path / "topics", problem_text=problem_text)
+    references = make_fake_reference_library(tmp_path / "references")
+    add_reference(
+        references,
+        title="UART-串口打印例程",
+        type="例程工程",
+        description="TI 官方 UART 串口打印例程",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"uart_example.c": "/* UART 串口打印例程 */\nvoid uart_print(void);\n"},
+        kit_vocabulary=(),
+    )
+    add_reference(
+        references,
+        title="ADC-12位采样例程",
+        type="例程工程",
+        description="ADC 采样采集例程",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"adc_example.c": "/* ADC 采样例程 */\n"},
+        kit_vocabulary=(),
+    )
+    add_reference(
+        references,
+        title="OLED 显示例程",
+        type="例程工程",
+        description="屏幕显示配套例程",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"oled_example.c": "/* OLED 显示例程 */\n"},
+        kit_vocabulary=(),
+    )
+    return library, topics, references
+
+
+def test_resolve_topic_context_related_appended_when_enabled(tmp_path):
+    """related_limit>0：未锚定但题面相关的条目进 references（锚定之后）+ 候选
+    清单（来源标注 related，排在既有条目之后）；无关条目不进。匹配源 = 库内
+    题面全文 ∪ 粘贴片段（用户粘贴的重点也是题面信号）。"""
+    library, topics, references = _wired_related_dirs(
+        tmp_path, "2026C 数字钥匙：UART 串口通信与 ADC 采样"
+    )
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="用户粘贴的 UART 片段",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        related_limit=5,
+    )
+
+    refs = [e.id for e in ctx.references]
+    # 锚定优先（既有头部不变），related 尾部追加、得分降序（UART 2 分 > ADC 1 分）
+    assert refs[:2] == [TOPIC_REFERENCE_ID, KIT_REFERENCE_ID]
+    assert refs[2:] == ["UART-串口打印例程", "ADC-12位采样例程"]
+    assert "OLED 显示例程" not in refs  # 题面无 oled 词 → 无关不入
+    assert "无关套件资料" not in refs
+    # 清单来源标注：锚定照旧 auto，related 条目标注 related
+    assert [s.source for s in ctx.suggestions if s.id in refs[:2]] == [
+        REFERENCE_SOURCE_AUTO,
+        REFERENCE_SOURCE_AUTO,
+    ]
+    related_ids = [s.id for s in ctx.suggestions if s.source == REFERENCE_SOURCE_RELATED]
+    assert related_ids == ["UART-串口打印例程", "ADC-12位采样例程"]
+    # 两级注入第二级（点名 → 回读）：related 条目可回读全文（清单外 id 才大声失败）
+    assert "UART 串口打印例程" in ctx.read_fulltext("UART-串口打印例程")
+    assert "ADC 采样例程" in ctx.read_fulltext("ADC-12位采样例程")
+
+
+def test_resolve_topic_context_related_overlapping_anchor_deduped(tmp_path):
+    """并集去重：同一条目既锚定命中又被题面相关命中，只出现一次（保留锚定
+    标注 auto，related 不重复）；锚定靠相关词 + 题号双命中。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    make_topic_specific_module(library)
+    topics = make_fake_topic_library(tmp_path / "topics", problem_text="2026C UART 串口")
+    references = tmp_path / "references"
+    references.mkdir()
+    add_reference(
+        references,
+        title="UART-串口打印例程",
+        type="例程工程",
+        description="2026C 配套串口例程",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2026C",
+        files={"uart_example.c": "/* UART 串口打印例程 */\n"},
+        kit_vocabulary=(),
+    )
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        related_limit=5,
+    )
+
+    ids = [e.id for e in ctx.references]
+    assert ids.count("UART-串口打印例程") == 1
+    sugs = [s for s in ctx.suggestions if s.id == "UART-串口打印例程"]
+    assert len(sugs) == 1
+    assert sugs[0].source == REFERENCE_SOURCE_AUTO  # 锚定标注，related 不重复
+
+
+def test_resolve_topic_context_related_off_by_default(tmp_path):
+    """related_limit 缺省 = 0：不传即无相关条目（相关候选关闭，旧行为逐字节）。
+    向后兼容锚点——既有调用方（生成路由）零增量。"""
+    library, topics, references = _wired_related_dirs(tmp_path, "2026C UART 串口")
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="2026C",
+        problem_text="",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+    )
+
+    assert [e.id for e in ctx.references] == [TOPIC_REFERENCE_ID, KIT_REFERENCE_ID]
+    assert all(s.source != REFERENCE_SOURCE_RELATED for s in ctx.suggestions)
+
+
+def test_resolve_topic_context_no_topic_related_admitted(tmp_path):
+    """no-topic：粘贴题面原文作匹配源——相关条目进 references + 候选清单
+    （related 标注），且回读器可读（模型点名 → 全文）；无关条目不进。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    make_kit_candidate_module(library)
+    topics = make_fake_topic_library(tmp_path / "topics")
+    references = make_fake_reference_library(tmp_path / "references")
+    add_reference(
+        references,
+        title="UART-串口打印例程",
+        type="例程工程",
+        description="TI 官方 UART 串口打印例程",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"uart_example.c": "/* UART 串口打印例程 */\nvoid uart_print(void);\n"},
+        kit_vocabulary=(),
+    )
+
+    ctx = resolve_topic_context(
+        llm=None,
+        topic_key="",
+        problem_text="UART 串口通信",
+        module_library_dir=library,
+        topic_library_dir=topics,
+        reference_library_dir=references,
+        related_limit=3,
+    )
+
+    assert ctx.key == ""
+    assert [e.id for e in ctx.references] == ["UART-串口打印例程"]
+    assert [s.id for s in ctx.suggestions] == ["UART-串口打印例程"]
+    assert ctx.suggestions[0].source == REFERENCE_SOURCE_RELATED
+    assert "UART 串口打印例程" in ctx.read_fulltext("UART-串口打印例程")  # 回读器可读
 
 
 # ---------------------------------------------------------------------------

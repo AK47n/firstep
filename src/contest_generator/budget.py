@@ -113,3 +113,19 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # ≈1.9KB；改大即红，见 tests/test_llm.py::test_selection_prompt_worst_case_fits_request_budget）。
 # 超出的截头带标注（TRUNCATION_NOTICE 文案沿用），不静默丢内容。
 REFERENCE_FULLTEXT_BYTES = 64000
+
+# 相关候选清单段合计 wire 字节预算（工单 02 相关候选自动扩容）：recommend
+# 启 15 条相关候选后，清单段现实形态 ≈4.7KB（真实库简介 194-348 字/条，
+# 远超 80 字/条的乐观估算——实测脚本 .scratch/ref-related-autoload/
+# measure_suggestions_wire.py）。清单段 join 后整段截断（_fit_segment_wire，
+# 标注用通用 TRUNCATION_NOTICE 文案「内容过长，已截断：仅展示前 N wire 字节」）
+# ——最坏新形态 ≈128.2KB，距 MAX_REQUEST_BYTES（131072）余约 2.8KB、距
+# 2KB 边界（129024，worst-case 结构测试断言）余约 830B；断言相应从 −6KB
+# 收紧为 −2KB（红证先行校准，见 tests/test_llm.py::test_selection_prompt_worst_case_fits_request_budget）。
+REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES = 4096
+
+# 相关候选条数上限（工单 02）：recommend 阶段候选清单扩容的条数上限——
+# 题面外设词命中 → 得分降序截断，每轮成本增量 ~2-5K token（清单段 + 点名
+# 后全文，全部受 REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES / REFERENCE_FULLTEXT_BYTES
+# 兜底）；相关候选两级照旧（清单 → 点名 → 回读），不直读。
+RELATED_CANDIDATES_LIMIT = 15

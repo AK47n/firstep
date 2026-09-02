@@ -25,7 +25,10 @@ from contest_generator.events import (
     EVENT_ROUND,
     ProgressEvent,
 )
-from contest_generator.budget import wire_size
+from contest_generator.budget import (
+    REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES,
+    wire_size,
+)
 from contest_generator.fix_errors import FixSuggestion, read_file_contexts
 from contest_generator.wiring import WiringEntry
 from contest_generator.llm import (
@@ -96,6 +99,7 @@ from contest_generator.llm import (
 from contest_generator.selection import (
     MAX_QUESTIONS,
     REFERENCE_SOURCE_MANUAL,
+    REFERENCE_SOURCE_RELATED,
     ModuleInstance,
     ModuleSelection,
     ReferenceSuggestion,
@@ -3514,6 +3518,67 @@ def test_select_prompt_includes_reference_list_when_given():
     assert '"references"' in user_message  # 输出契约带 references 数组
 
 
+def test_select_prompt_annotates_related_reference_sources():
+    """工单 02：相关候选（related）清单行带来源标注——「与题面 / 模块相关，
+    自动列出」提示模型可点名读全文（两级照旧）；手动 / 锚定标注不变。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "2026C 数字钥匙题",
+        [ManifestSummary("dht11", "温湿度传感器驱动")],
+        references=[
+            _suggestion("anchored-example", "锚定例程", "锚定简介"),
+            _suggestion("manual-example", "手动例程", "手动简介", source=REFERENCE_SOURCE_MANUAL),
+            _suggestion("related-example", "UART 串口例程", "串口相关简介", source=REFERENCE_SOURCE_RELATED),
+        ],
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert "（与题面 / 模块相关，自动列出）" in user_message
+    assert "（用户手动指定，全文已直接给出，无需点名）" in user_message
+    # 锚定条目无标注尾巴（既有行为不变）
+    assert "- anchored-example: 锚定例程 —— 锚定简介\n" in user_message
+
+
+def test_select_prompt_truncates_reference_candidates_at_wire_budget():
+    """工单 02：候选清单段 wire 预算兜底——15 条相关候选现实形态（真实库简介
+    194-348 字）超 REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES 时整段截断且带标注
+    （截了要明说，不静默丢条目）；预算内清单逐字不变。"""
+    transport = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm = _llm(transport)
+    oversized = [
+        _suggestion(
+            f"关联例程{i:02d}",
+            f"TI 外设例程 {i:02d}",
+            "TI MSPM0 SDK 官方例程，演示外设初始化与中断配置流程" * 8,
+            source=REFERENCE_SOURCE_RELATED,
+        )
+        for i in range(15)
+    ]
+
+    llm.select_modules(
+        "赛题",
+        [ManifestSummary("dht11", "温湿度")],
+        references=oversized,
+    )
+
+    user_message = transport.calls[0][2]["messages"][1]["content"]
+    assert f"仅展示前 {REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES} wire 字节" in user_message
+    assert "关联例程00" in user_message  # 截头（保留头部）
+    # 预算内清单（1 条正常形态）不截断
+    transport2 = FakeTransport(body=_api_response(SELECTION_JSON))
+    llm2 = _llm(transport2)
+    llm2.select_modules(
+        "赛题",
+        [ManifestSummary("dht11", "温湿度")],
+        references=[_suggestion("one", "一个例程", "一段简介")],
+    )
+    content2 = transport2.calls[0][2]["messages"][1]["content"]
+    assert "- one: 一个例程 —— 一段简介" in content2
+    assert "wire 字节" not in content2
+
+
 def test_select_prompt_embeds_requested_fulltexts():
     """两级注入第二级：模型要求阅读全文的参考文件以全文形态嵌入——总预算
     放宽为 REFERENCE_FULLTEXT_BYTES wire 字节（工单 03 放宽旧 4000 总截断吞
@@ -5350,7 +5415,17 @@ def test_selection_prompt_worst_case_fits_request_budget():
      两组都出的形态；真实 stm32 线仅 2 条带组，此为安全上界），最坏形态实测
      124143 字节、余量 6929B ≈ 6.7KB；网关/响应开销为 KB 级，6.7KB 仍远超
      充分距离。触发点：MAX_REQUEST_BYTES 改用 6KB 边界（124928），距实测仍
-     余 785B，新增段再加即红。"""
+     余 785B，新增段再加即红。
+     余量 6KB → 2KB（2026-08 修订 4，工单 02 相关候选自动扩容）：候选清单段
+     涨到 15 条相关候选（RELATED_CANDIDATES_LIMIT）的现实形态——真实库简介
+     194-348 字/条（实测 .scratch/ref-related-autoload/measure_suggestions_wire.py
+     ≈4.7-5.1KB），超出 REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES=4096 段级预算后
+     整段截断（仍 ~4.1KB 进上下文——远大于旧 1 条 ~105B）；全文段 / 历史段照旧
+     上限，最坏形态实测 ≈128.2KB，距 2KB 边界（129024）余 ~830B，仍低于
+     MAX_REQUEST_BYTES（128KB 网关）。10KB 备量已是历史（多次修订累计被
+     真实段消耗），现按「距 MAX_REQUEST_BYTES 保持 ≥2KB 充分距离 + 新增段
+     再加即红」校准——2KB 是网关 / 响应开销的紧凑但充分的距离，预算再涨
+     必须先红证实测再动常数。"""
     problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（推导最坏形态 4000 中文）
     summaries = [
         ManifestSummary(
@@ -5373,11 +5448,22 @@ def test_selection_prompt_worst_case_fits_request_budget():
     clarifications = tuple(
         (f"第{i}问：" + "疑" * 200, "答" * 5000) for i in range(20)
     )
+    # 相关候选（工单 02）最坏形态：15 条上限全量 + 真实库简介体量（194-348 字）；
+    # 再挂一条被点名点读的条目（全文段 64KB 上限，与清单段同出）
+    references = [
+        _suggestion(
+            f"关联例程{i:02d}",
+            f"TI 外设例程 {i:02d}",
+            "TI MSPM0 SDK 官方例程，演示外设初始化与中断配置流程" * 8,
+            source=REFERENCE_SOURCE_RELATED,
+        )
+        for i in range(15)
+    ] + [_suggestion("big-ref", "大参考文件", "巨型参考")]
 
     prompt = _selection_user_prompt(
         problem,
         summaries,
-        references=[_suggestion("big-ref", "大参考文件", "巨型参考")],
+        references=references,
         reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_BYTES},
         clarifications=clarifications,
         hardware_words=DEFAULT_WORDLIST,
@@ -5392,10 +5478,13 @@ def test_selection_prompt_worst_case_fits_request_budget():
         "response_format": {"type": "json_object"},
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 6 * 1024
+    assert total <= MAX_REQUEST_BYTES - 2 * 1024
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
     assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in prompt  # 全文 wire 预算截断带标注
+    assert (
+        f"仅展示前 {REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES} wire 字节" in prompt
+    )  # 候选清单段段级截断带标注（15 条现实形态超 4096，截断契约可见）
 
 
 def test_skeleton_prompt_worst_case_with_references_fits_request_budget():

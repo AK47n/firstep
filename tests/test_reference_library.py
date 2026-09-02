@@ -38,6 +38,7 @@ from contest_generator.reference_library import (
     ANCHOR_KIND_TOPIC,
     ARCHIVE_ENTRY_TYPE,
     MODULE_PERIPHERAL_TERMS,
+    PERIPHERAL_SYNONYM_GROUPS,
     PERIPHERAL_TERMS,
     REFERENCE_FILE_CAP,
     ReferenceError,
@@ -3341,12 +3342,57 @@ def test_related_references_defaults_and_edge_cases(tmp_path):
 
 def test_related_references_vocabulary_single_source(tmp_path):
     """词表单源：PERIPHERAL_TERMS 覆盖库内例程关键外设词（英文边界项 + 中文子串项），
-    MODULE_PERIPHERAL_TERMS 的 slug 映射值都在词表内。"""
+    MODULE_PERIPHERAL_TERMS 的 slug 映射值都在词表内；同义词组内词同样在词表内。"""
     for term in ("adc", "uart", "spi", "i2c", "can", "gpio", "dma", "flash", "rtc",
                  "nvic", "systick", "timer", "pwm", "串口", "定时器", "比较器",
-                 "运放", "低功耗", "循迹", "摄像头", "视觉"):
+                 "运放", "低功耗", "循迹", "巡线", "摄像头", "视觉"):
         assert term in PERIPHERAL_TERMS
     for terms in MODULE_PERIPHERAL_TERMS.values():
         assert all(term in PERIPHERAL_TERMS for term in terms)
     assert MODULE_PERIPHERAL_TERMS["adc"] == ("adc",)
     assert "uart" not in MODULE_PERIPHERAL_TERMS["adc"]
+    for group in PERIPHERAL_SYNONYM_GROUPS:
+        assert all(term in PERIPHERAL_TERMS for term in group)
+
+
+def test_related_references_synonym_group_bridges_problem_and_title(tmp_path):
+    """同义词组桥接（工单 02 巡检补）：题面命中「循迹」→ 条目标题「巡线」也
+    命中（组内任一词命中 token 计 1 分，同义词不重复计分——标题同时含两词
+    仍 1 分）；反向（题面「巡线」→ 条目「循迹」）同样桥接。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="20XX-巡线送药决策例程")
+    _demo_reference(root, title="循迹模板-基础版")
+    _demo_reference(root, title="UART-串口打印例程")
+
+    hits = related_references(root, topic_text="循迹小车", limit=5)
+    assert [e.title for e in hits] == [
+        "20XX-巡线送药决策例程",  # 题面「循迹」→ 标题「巡线」（同义桥接）
+        "循迹模板-基础版",
+    ]
+    hits = related_references(root, topic_text="巡线小车", limit=5)
+    assert [e.title for e in hits] == [
+        "20XX-巡线送药决策例程",
+        "循迹模板-基础版",  # 反向桥接
+    ]
+    # 同义词不重复计分：标题「循迹-巡线双词例程」在题面「循迹」下仍 1 分
+    # （若按词计分会得 2 分排首位；按组计分与其它 1 分条目同组、id 序第 2）
+    _demo_reference(root, title="循迹-巡线双词例程")
+    hits = related_references(root, topic_text="循迹", limit=5)
+    dual = next(e for e in hits if e.title == "循迹-巡线双词例程")
+    assert hits.index(dual) == 1
+
+
+def test_related_references_ascii_term_with_cjk_tail_in_title(tmp_path):
+    """英文词项粘连中文尾巴（工单 02 巡检补）：标题「ESP32-CAM开发板资料」
+    （token 拆分后 cam 后是「开」——非纯数字尾巴）题面含摄像头 → cam 以
+    字母数字边界独立出现命中（跨语言同义组）；canmv 内 can 仍不命中
+    （can 后是字母 m，粘连规则不误报）。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="C7-3-4L ESP32-CAM开发板资料")
+    _demo_reference(root, title="canmv-k230 开发板资料")
+
+    hits = related_references(root, topic_text="摄像头视觉识别", limit=5)
+    assert [e.title for e in hits] == ["C7-3-4L ESP32-CAM开发板资料"]
+    # canmv 条目在「can（CAN 总线）」题面下也不因 canmv 中缀 miss 边界——不命中
+    hits = related_references(root, topic_text="CAN 总线通信", limit=5)
+    assert "canmv-k230 开发板资料" not in [e.title for e in hits]

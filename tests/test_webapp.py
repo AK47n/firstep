@@ -69,6 +69,7 @@ from contest_generator.wiring import build_wiring_snapshot, write_wiring_snapsho
 from contest_generator.library import ValidationResult
 from contest_generator.manifest import ManifestSummary
 from contest_generator.selection import (
+    REFERENCE_SOURCE_RELATED,
     FunctionRequirement,
     ModuleSelection,
     OutOfLibrarySuggestion,
@@ -77,7 +78,7 @@ from contest_generator.selection import (
     resolve_selection,
 )
 from contest_generator.task_progress import TaskPlan
-from contest_generator.reference_library import add_reference
+from contest_generator.reference_library import ANCHOR_KIND_NONE, add_reference
 from contest_generator.report import (
     ACTION_EXCLUDE,
     ACTION_KEEP,
@@ -6196,6 +6197,41 @@ def test_recommend_no_topic_manual_reference_is_only_admission(client, context):
     assert "topic_id" not in data
     assert [ref["id"] for ref in data["references"]] == [OTHER_REFERENCE_ID]
     assert data["references"][0]["source"] == "manual"
+
+
+def test_recommend_related_candidates_carried_and_visible(client, context):
+    """工单 02 端到端：recommend 传 related_limit=15 → 题面相关未锚定条目进
+    候选清单（来源 related，AI 可见可点名——两级照旧不直读）+ done 最终清单
+    标注；无关条目不出现；既有锚定条目照旧。匹配源 = 库内题面全文 ∪ 请求
+    粘贴片段（用户粘贴的重点也是题面信号）。"""
+    _wire_material_libraries(context)
+    add_reference(
+        reference_library_dir(context[0].config.module_library_dir),
+        title="UART-串口打印例程",
+        type="例程工程",
+        description="TI 官方 UART 串口打印例程",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"uart_example.c": "/* UART 串口打印例程 */\nvoid uart_print(void);\n"},
+        kit_vocabulary=(),
+    )
+    holder = context[1]
+    holder["llm"] = TopicAwareLLM(selection=SELECTION, extracted_key=None)
+
+    data = _recommend_done(
+        client, {"problem_text": "用户粘贴的 UART 串口片段", "topic_id": "2026C"}
+    )
+
+    llm = holder["llm"]
+    # 候选清单（第一轮）含 related 条目——模型可见、可点名
+    assert "UART-串口打印例程" in llm.reference_ids[0]
+    # 最终清单标注 related（related 条目不直读——第二级点名才回读）
+    sources = {ref["id"]: ref["source"] for ref in data["references"]}
+    assert sources["UART-串口打印例程"] == REFERENCE_SOURCE_RELATED
+    assert sources[TOPIC_REFERENCE_ID] == "auto"
+    assert "无关套件资料" not in sources
+    # related 未直读：fulltexts 为空（两级契约，成本可控）——只有手动准入直读
+    assert all(not fulltexts for fulltexts in llm.fulltexts)
 
 
 def test_recommend_without_reference_ids_keeps_old_behavior(client, context):

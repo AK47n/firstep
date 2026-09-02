@@ -390,10 +390,12 @@ PERIPHERAL_TERMS: tuple[str, ...] = (
     "adc", "uart", "usart", "spi", "i2c", "iic", "can", "gpio", "dma",
     "flash", "rtc", "nvic", "systick", "timer", "pwm", "comp", "cmp",
     "opamp", "oled", "lcd", "key", "button", "led", "beep", "buzzer",
-    "servo", "motor", "step", "camera", "esp32", "k230", "zigbee", "wifi",
-    # 中文外设词（题目常见表述）
+    "servo", "motor", "step", "camera", "cam", "esp32", "k230", "zigbee", "wifi",
+    # 中文外设词（题目常见表述；「巡线」与「循迹」同义——库内例程标题用
+    # 「巡线」（21F 巡线送药 / 26H 滚球巡线 / car 1.1 巡线模板），题面多写
+    # 「循迹」，两词都收）
     "串口", "定时器", "比较器", "运放", "按键", "蜂鸣器", "舵机", "电机",
-    "步进", "循迹", "摄像头", "视觉", "显示屏", "数码管", "时钟", "中断",
+    "步进", "循迹", "巡线", "摄像头", "视觉", "显示屏", "数码管", "时钟", "中断",
     "低功耗", "温湿度", "超声波", "蓝牙", "无线", "塔克",
 )
 
@@ -418,9 +420,34 @@ MODULE_PERIPHERAL_TERMS: dict[str, tuple[str, ...]] = {
     "servo": ("servo",),
     "motor": ("motor",),
     "step_motor": ("step", "motor"),
-    "xunji": ("循迹",),
+    "xunji": ("循迹", "巡线"),
     "k230": ("k230",),
 }
+
+# 同义词组（单源）：组内任一词命中（题面侧）→ 整组激活 → 条目侧组内任一
+# 词命中 token 即计 1 分（得分按「语义组」计，同义词不重复计分）。题面常见
+# 表述 → 条目标题惯用名桥接（如题面「循迹」+ 条目标题「巡线」）。组内词必须
+# 都在 PERIPHERAL_TERMS（词表单源，tests/test_reference_library.py 断言）。
+PERIPHERAL_SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("循迹", "巡线"),
+    # 跨语言组：题面常见「摄像头」↔ 条目标题惯用英文名（ESP32-CAM / camera）
+    ("摄像头", "camera", "cam"),
+)
+
+
+def _synonym_group(term: str) -> tuple[str, ...]:
+    """词项所属同义词组（无组 = 自身单组）。"""
+    for group in PERIPHERAL_SYNONYM_GROUPS:
+        if term in group:
+            return group
+    return (term,)
+
+
+def _synonym_representative(term: str) -> str:
+    """词项的同义词组代表（组首；激活集按代表去重——组内任一词命中只激活
+    一次，同义词不重复计分）。"""
+    return _synonym_group(term)[0]
+
 
 # 词表项形态判定 / 条目标题拆分惯例（匹配规则的单点）
 _ASCII_TERM = re.compile(r"^[a-z0-9]+$")
@@ -476,14 +503,16 @@ def related_references(
 
 
 def _activated_terms(topic_text: str, slugs: Sequence[str]) -> frozenset[str]:
-    """激活词表项集合：题面命中 ∪ 模块 slug 映射（并集，确定性，无序集合）。"""
+    """激活词表项集合：题面命中 ∪ 模块 slug 映射（并集，确定性，无序集合）。
+    命中词展开为同义词组代表（组首）——条目侧按组匹配（同义词不重复计分）。"""
     activated: set[str] = set()
     text_lower = topic_text.lower()
     for term in PERIPHERAL_TERMS:
         if _text_has_term(text_lower, term):
-            activated.add(term)
+            activated.add(_synonym_representative(term))
     for slug in slugs:
-        activated.update(MODULE_PERIPHERAL_TERMS.get(slug, ()))
+        for term in MODULE_PERIPHERAL_TERMS.get(slug, ()):
+            activated.add(_synonym_representative(term))
     return frozenset(activated)
 
 
@@ -499,23 +528,33 @@ def _text_has_term(text_lower: str, term: str) -> bool:
 
 
 def _entry_score(entry: ReferenceEntry, activated: frozenset[str]) -> int:
-    """条目标题命中激活集的词表项数（标题小写，按 [-_\\s()（）] 拆 token）。"""
+    """条目标题命中激活集的语义组数（标题小写，按 [-_\\s()（）] 拆 token；
+    组内任一词命中 token 计 1 分——同义词不重复计分）。"""
     tokens = [
         token for token in _TITLE_TOKEN_SPLIT.split(entry.title.lower()) if token
     ]
     return sum(
         1
         for term in activated
-        if any(_term_matches_token(term, token) for token in tokens)
+        if any(
+            _term_matches_token(synonym, token)
+            for synonym in _synonym_group(term)
+            for token in tokens
+        )
     )
 
 
 def _term_matches_token(term: str, token: str) -> bool:
     """词表项命中标题 token：英文项 = 精确 或 前缀 + 纯数字尾巴（adc → adc12，
-    不误 candy）；中文项 = 子串（步进电机 → 电机；串口打印 → 串口）。"""
+    不误 candy）或 token 内独立出现（字母数字边界——英文项粘连中文尾巴
+    （esp32-cam开发板资料 → cam 后是「开」）时仍命中，且 canmv 内 can 仍不
+    命中）；中文项 = 子串（步进电机 → 电机；串口打印 → 串口）。"""
     if _is_ascii_term(term):
-        return token == term or (
-            token.startswith(term) and token[len(term):].isdigit()
+        return (
+            token == term
+            or (token.startswith(term) and token[len(term):].isdigit())
+            or re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", token)
+            is not None
         )
     return term in token
 

@@ -474,6 +474,12 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 工单 ux-walkthrough-02/16（PDF 任意删除）：被引用查询——按 basename
         # 扫条目文件实况，只读不落盘，不触发提交
         "pdf_referenced_by": ("read", ""),
+        # 工单 01（平台过滤单址化）：platform_matches 从 selection 迁入本模块——
+        # 纯谓词不落盘，只读面登记
+        "platform_matches": ("read", ""),
+        # 工单 02（相关候选自动扩容）：题面/模块 → 相关条目——纯读取 + 计分，
+        # 不落盘；related_references 同族
+        "related_references": ("read", ""),
     },
     "topic_library": {
         "validate_topic_key": ("read", ""),
