@@ -37,6 +37,13 @@ import {
   EDITOR_TABS_MAX,
 } from "/js/fx/codeeditor.js";
 import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
+import {
+  shiftTab,
+  deleteLine,
+  moveLine,
+  copyLine,
+  lineRangeOf,
+} from "/js/fx/code-lineops.js";  // 行操作纯件（工单 code-page-vscode-overhaul/01）
 import { mtimeEq } from "/js/fx/disk-baseline.js";  // mtime 相等守卫单源（工单 07 评审整改：与基线 diff/快照守卫同口径）
 import { treeRenamedPath, treeOpAffected } from "/js/fx/code-tree-ops.js";  // 重命名路径映射纯件（工单 code-tree-ops/02）
 import {
@@ -1405,7 +1412,11 @@ export function initCodeEditor() {
       // 会再按新选区校正一次（幂等）。
       setActiveLine(caretLineOf(ta.value, ta.selectionStart));
       scheduleCursorWork();
-      if (e.key === "Tab") {
+      if (e.key === "Tab" && e.shiftKey) {
+        e.preventDefault();
+        const r = shiftTab(ta.value, ta.selectionStart, ta.selectionEnd);
+        applyEdit(r.value, r.start, r.end);
+      } else if (e.key === "Tab") {
         e.preventDefault();
         const r = indentLines(ta.value, ta.selectionStart, ta.selectionEnd);
         applyEdit(r.value, r.start, r.end);
@@ -1413,6 +1424,30 @@ export function initCodeEditor() {
         e.preventDefault();
         const r = indentOnEnter(ta.value, ta.selectionStart, ta.selectionEnd);
         applyEdit(r.value, r.start, r.end);
+      } else if (!e.isComposing && !composing
+        && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "k") {
+        // 行操作（工单 code-page-vscode-overhaul/01）：Ctrl+Shift+K 删除行
+        e.preventDefault();
+        const r = deleteLine(ta.value, ta.selectionStart, ta.selectionEnd);
+        applyEdit(r.value, r.start, r.end);
+      } else if (!e.isComposing && !composing && e.altKey && !e.ctrlKey && !e.metaKey
+        && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        // 行操作（工单 code-page-vscode-overhaul/01）：Alt+↑↓ 移动行 /
+        // Shift+Alt+↑↓ 复制行
+        e.preventDefault();
+        const dir = e.key === "ArrowUp" ? "up" : "down";
+        const r = e.shiftKey
+          ? copyLine(ta.value, ta.selectionStart, ta.selectionEnd, dir)
+          : moveLine(ta.value, ta.selectionStart, ta.selectionEnd, dir);
+        applyEdit(r.value, r.start, r.end);
+      } else if (!e.isComposing && !composing && (e.ctrlKey || e.metaKey)
+        && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "l") {
+        // 行操作（工单 code-page-vscode-overhaul/01）：Ctrl+L 选整行
+        e.preventDefault();
+        const r = lineRangeOf(ta.value, ta.selectionStart, ta.selectionEnd);
+        ta.setSelectionRange(r.start, r.end);
+        setActiveLine(caretLineOf(ta.value, ta.selectionStart));
+        scheduleCursorWork();
       } else if (!e.isComposing && !composing && (BRACKET_OPEN[e.key] || BRACKET_CLOSE[e.key] || e.key === "Backspace")) {
         // 括号行为（工单 06）：仅 c/xml/md 编辑态启用（spec：plain 走浏览器
         // 默认插入——评审整改 06b）；IME 组合输入中不拦截（评审整改 06a）。
