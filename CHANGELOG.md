@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=2b081ecc1411f23c56652ac8f6ec6a27e4614682 -->
+<!-- changelog-auto: last-commit=9e9344e5c4c592da11b900a7f74d172bc6160f62 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -27,6 +27,7 @@
 - 20:00 工单 code-editor-vscode-polish/07：代码折叠——.c/.h 花括号与 .md 标题折叠（fx/code-fold 纯件：区域/可见行映射/偏移映射编辑回写）、gutter 箭头 + 占位行 + Ctrl+Shift+[/] 、跳行自动展开、.md 预览 details/summary 标题折叠、折叠态标记/状态栏模型坐标、评审整改（语言门控/caretColOf 导入/replaceAll 折叠路径/关标签残留）
 - 20:00 fix（工单 code-editor-vscode-polish/06 评审整改）：bracketPairAt 前置短路同时检查 p 与 p-1——原实现 src[p] 真值短路吞掉 p-1 检查，光标在括号后一字符（如 'x'）时误判非括号直接返回 null
 - 20:05 工单 code-editor-vscode-polish/08：整套代码页视觉统一——按钮体系统一（共享底样式 + hover 公共规则）、focus-visible 焦点环、树/侧栏/搜索/查找空态块级化、状态栏按钮 disabled 态（评审整改：死选择器修正、重复规则合并）
+- 20:13 fix：代码编辑器点击行即时高亮当前行——select/keyup 双保险不覆盖「鼠标点击纯光标定位」（Chrome 对点击 textarea 定位光标不派发 select），补 click 委托走同一 setActiveLine 路径（折叠态视图坐标对齐）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
