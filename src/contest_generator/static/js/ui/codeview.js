@@ -26,6 +26,7 @@ import { lineDiffCompute } from "/js/fx/line-diff.js";  // 行级 diff 计算（
 import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import { setCodeAiDir, onCodeAiApplied } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03-04）：目录打开 → 面板可见性 + 历史；apply 成功 → 立即感知
+import { showPanel, hidePanel, initCodeBottomPanels } from "/js/ui/code-bottom-panels.js";  // 底部面板 tab 化（工单 06）
 onCodeAiApplied(() => checkCodeDiskChanges());  // C2 应用闭环（工单 04）：AI 写盘后立即感知（变更面板自动出现）
 import {
   buildCodeTree,
@@ -325,7 +326,7 @@ async function renderChangePanel() {
   if (!panelEl || !listEl) return;
   const entries = buildChangeEntries();
   if (!entries.length) {
-    panelEl.classList.add("hidden");
+    hidePanel("change");
     listEl.innerHTML = "";
     if (summaryEl) summaryEl.textContent = "";
     return;
@@ -346,7 +347,7 @@ async function renderChangePanel() {
   }
   listEl.innerHTML = changesPanelHTML(entries);
   if (summaryEl) summaryEl.textContent = changeSummaryText(entries);
-  panelEl.classList.remove("hidden");
+  showPanel("change");
 }
 
 // clearCodeDiskChanges()：「清空并确认已看」——基线推进为当前磁盘快照
@@ -1116,6 +1117,9 @@ export function initCodeViewer() {
 
   // 代码字号缩放（工单 code-viewer-zoom/01）
   initCodeViewZoom();
+
+  // 底部面板页签条（工单 code-page-vscode-overhaul/06）：单容器+页签切换
+  initCodeBottomPanels();
 
   // 状态栏信息区（工单 code-editor-vscode-polish/01）：光标/选区变化 → 刷新；
   // 初始空态（未打开目录/无活动 tab）onActiveTabChanged 未触发过——显式刷
