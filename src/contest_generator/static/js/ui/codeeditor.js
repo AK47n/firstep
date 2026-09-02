@@ -1311,6 +1311,20 @@ export function initCodeEditor() {
 
   const box = paneBox();
   if (box) {
+    // 点击定位光标 → 当前行即时高亮（bug 修复：select（选区变化）与 keyup
+    // 双保险不覆盖「鼠标点击纯光标定位」——Chrome 对点击 textarea 定位光标
+    // 不派发 select，导致点完一行只见闪烁光标、无行高亮，直到下次输入才补
+    // 上。与 select/keyup 同一 setActiveLine 路径（幂等，重复触发无害）；
+    // notifyCursor 联动选中词/括号/状态栏）。折叠态：ta.value 为视图文本、
+    // selectionStart 为视图偏移——setActiveLine 按视图行索引，与视图行号
+    // 列对齐。
+    box.addEventListener("click", (e) => {
+      const ta = e.target;
+      if (ta && ta.classList && ta.classList.contains("code-ta")) {
+        setActiveLine(caretLineOf(ta.value, ta.selectionStart));
+        notifyCursor();
+      }
+    });
     // 折叠交互（工单 07）：gutter 箭头（data-fold）与占位行
     // （data-fold-expand）点击切换——委托在容器（渲染重建后无需重绑）。
     box.addEventListener("click", (e) => {
