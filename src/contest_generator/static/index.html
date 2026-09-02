@@ -73,6 +73,12 @@
     --tok-kw: #00d4ff; --tok-num: #bc8cff; --tok-tag: #00d4ff;
     --tok-attr: #bc8cff; --tok-val: #d29922;
     --tok-fn: #dcdcaa; --tok-const: #c586c0;
+    /* 括号彩虹（工单 code-editor-refine/04）：--bracket-rainbow-0..7 八色环深色套
+       ——衬托 #0a0e14 代码底，alpha .33 淡底；亮色套由 html[data-theme="light"] 覆盖 */
+    --bracket-rainbow-0: rgba(248, 81, 73, .33);  --bracket-rainbow-1: rgba(255, 166, 87, .33);
+    --bracket-rainbow-2: rgba(227, 179, 65, .33); --bracket-rainbow-3: rgba(63, 185, 80, .33);
+    --bracket-rainbow-4: rgba(57, 197, 207, .33); --bracket-rainbow-5: rgba(88, 166, 255, .33);
+    --bracket-rainbow-6: rgba(188, 140, 255, .33); --bracket-rainbow-7: rgba(247, 120, 186, .33);
   }
   /* 亮色主题（工单 ui-polish-5/01）：GitHub 亮色系，强调色加深保证浅底对比 */
   html[data-theme="light"] {
@@ -110,6 +116,11 @@
     --tok-kw: #0096c7; --tok-num: #8250df; --tok-tag: #0096c7;
     --tok-attr: #8250df; --tok-val: #9a6700;
     --tok-fn: #953800; --tok-const: #6639ba;
+    /* 括号彩虹亮色套：GitHub 亮系深色相，alpha .30 浅底可见 */
+    --bracket-rainbow-0: rgba(207, 34, 46, .30);  --bracket-rainbow-1: rgba(188, 76, 0, .30);
+    --bracket-rainbow-2: rgba(154, 103, 0, .30);  --bracket-rainbow-3: rgba(26, 127, 55, .30);
+    --bracket-rainbow-4: rgba(27, 124, 131, .30); --bracket-rainbow-5: rgba(9, 105, 218, .30);
+    --bracket-rainbow-6: rgba(130, 80, 223, .30); --bracket-rainbow-7: rgba(191, 57, 137, .30);
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -1785,6 +1796,18 @@
      （1.5px 内描边 + 2px 圆角 + 6% 淡底），双主题随 --accent 自适应。 */
   .code-mark-bracket { box-shadow: inset 0 0 0 1.5px var(--accent);
     border-radius: var(--radius-xs); background: rgba(var(--accent-rgb), .06); }
+  /* 括号彩虹（工单 code-editor-refine/04）：kind bracket-depth-N 直出 class，
+     N = 深度 % 8，8 色环随深度循环（var(--bracket-rainbow-0..7)，深浅主题各
+     一套）；当前对描边 .code-mark-bracket 优先级更高（标记层重叠取高优先
+     类），未被光标对覆盖的括号按深度着色。 */
+  .code-mark-bracket-depth-0 { background: var(--bracket-rainbow-0); }
+  .code-mark-bracket-depth-1 { background: var(--bracket-rainbow-1); }
+  .code-mark-bracket-depth-2 { background: var(--bracket-rainbow-2); }
+  .code-mark-bracket-depth-3 { background: var(--bracket-rainbow-3); }
+  .code-mark-bracket-depth-4 { background: var(--bracket-rainbow-4); }
+  .code-mark-bracket-depth-5 { background: var(--bracket-rainbow-5); }
+  .code-mark-bracket-depth-6 { background: var(--bracket-rainbow-6); }
+  .code-mark-bracket-depth-7 { background: var(--bracket-rainbow-7); }
   /* 缩进引导线（工单 07）：1ch 宽 span 内渐变画 1.5px 居中竖线（对齐 4ch
      列位、只画行首空白区不覆盖文字）；alpha .32 双主题自适应。 */
   .code-mark-guide { background: linear-gradient(90deg, transparent 0,

@@ -93,31 +93,71 @@ function _skipComment(text, i) {
   return e < 0 ? text.length : e + 2;
 }
 
-// _bracketPairsOf(text)：正向前建立配对表——Map<pos, {openPos, closePos,
-// openChar, closeChar}>（开/闭两个 pos 都指向同一 entry）；跳过字符串/字符/
-// 行注释/块注释内的假括号；栈只压同型开括号，碰到同型闭括号时配最近开括号
-// （嵌套深度自然正确）。只用 ( ) [ ] { } 三类。
-function _bracketPairsOf(text) {
-  const pairs = new Map();
+// _bracketPairScan(text)：单次正向扫描建配对清单——[{openPos, closePos,
+// openChar, closeChar, depth, openLine, openStart, closeLine, closeStart}]
+// （配对/深度/行列一次算齐；depth 0 基 = 最外层 0；行号 1 基、列 0 基）；
+// 跳过字符串/字符/行注释/块注释内的假括号；栈只压同型开括号，碰到同型闭
+// 括号时配最近开括号。配对表（_bracketPairsOf）与彩虹深度标记
+// （bracketDepthMarks）共用本扫描——假括号跳过规则只维护一处。
+function _bracketPairScan(text) {
+  const out = [];
   const stack = [];
+  let line = 1, lineStart = 0;
+  const advance = (from, to) => {   // 跨过跳过段时同步行号/行首（总进度单调，O(n)）
+    for (let k = from; k < to; k++) {
+      if (text[k] === "\n") { line++; lineStart = k + 1; }
+    }
+  };
   let i = 0;
   while (i < text.length) {
     const ch = text[i];
-    if (ch === '"' || ch === "'") { i = _skipQuote(text, i); continue; }
+    if (ch === '"' || ch === "'") {
+      const j = _skipQuote(text, i);
+      advance(i, j);
+      i = j;
+      continue;
+    }
     if (ch === "/" && (text[i + 1] === "/" || text[i + 1] === "*")) {
-      i = _skipComment(text, i);
+      const j = _skipComment(text, i);
+      advance(i, j);
+      i = j;
       continue;
     }
     if (BRACKET_OPEN[ch]) {
-      stack.push({ pos: i, ch });
-    } else if (BRACKET_CLOSE[ch] && stack.length
+      stack.push({ ch, pos: i, depth: stack.length, line, start: i - lineStart });
+      i++;
+      continue;
+    }
+    if (BRACKET_CLOSE[ch] && stack.length
       && stack[stack.length - 1].ch === BRACKET_CLOSE[ch]) {
       const o = stack.pop();
-      const entry = { openPos: o.pos, closePos: i, openChar: o.ch, closeChar: ch };
-      pairs.set(o.pos, entry);
-      pairs.set(i, entry);
+      out.push({
+        openPos: o.pos, closePos: i, openChar: o.ch, closeChar: ch,
+        depth: o.depth,
+        openLine: o.line, openStart: o.start,
+        closeLine: line, closeStart: i - lineStart,
+      });
+      i++;
+      continue;
     }
+    if (ch === "\n") { line++; lineStart = i + 1; }
     i++;
+  }
+  return out;
+}
+
+// _bracketPairsOf(text)：配对表——Map<pos, {openPos, closePos, openChar,
+// closeChar}>（开/闭两个 pos 都指向同一 entry）；由 _bracketPairScan 派生
+// （扫描与假括号跳过只维护一处）。
+function _bracketPairsOf(text) {
+  const pairs = new Map();
+  for (const e of _bracketPairScan(text)) {
+    const entry = {
+      openPos: e.openPos, closePos: e.closePos,
+      openChar: e.openChar, closeChar: e.closeChar,
+    };
+    pairs.set(e.openPos, entry);
+    pairs.set(e.closePos, entry);
   }
   return pairs;
 }
@@ -154,6 +194,24 @@ export function bracketPairAt(text, pos) {
   };
 }
 
+// bracketDepthMarks(text)：括号彩虹深度标记纯件（工单 code-editor-refine/04）——
+// 由 _bracketPairScan 派生（与 bracketPairAt 共用同一次扫描与假括号跳过规则）：
+// 栈深 = 嵌套深度（最外层 0），开/闭两个字符都输出单字符标记
+// {line,start,end,kind:"bracket-depth-N"}，N = 深度 % 8（8 色环颜色索引）；
+// 只有真正配成的对才输出（未配对 / 字符串 / 注释内括号不误着色）；
+// 行号 1 基、列 0 基。供标记层（currentMarks 追加 → codeMarksHTML 按 kind
+// 出 class）按深度着色。
+export function bracketDepthMarks(text) {
+  const src = String(text == null ? "" : text);
+  const out = [];
+  for (const e of _bracketPairScan(src)) {
+    const kind = "bracket-depth-" + (e.depth % 8);
+    out.push({ line: e.openLine, start: e.openStart, end: e.openStart + 1, kind });
+    out.push({ line: e.closeLine, start: e.closeStart, end: e.closeStart + 1, kind });
+  }
+  return out;
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     BRACKET_OPEN,
@@ -162,5 +220,6 @@ if (typeof window !== "undefined") {
     bracketClose,
     bracketBackspace,
     bracketPairAt,
+    bracketDepthMarks,
   });
 }

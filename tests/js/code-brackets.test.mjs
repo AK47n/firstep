@@ -10,6 +10,7 @@ import {
   bracketClose,
   bracketBackspace,
   bracketPairAt,
+  bracketDepthMarks,
 } from "../../src/contest_generator/static/js/fx/code-brackets.js";
 
 test("bracketOpen：空光标插入括号对、光标居中", () => {
@@ -114,4 +115,61 @@ test("bracketPairAt：嵌套括号按深度配对", () => {
   const inner = bracketPairAt(text, h);
   assert.equal(inner.open.start, h);
   assert.equal(inner.close.start, h + 2);   // "(h)" 的 ')'（h 后两字符）
+});
+
+// ===== 括号彩虹深度标记（工单 code-editor-refine/04）=====
+
+test("bracketDepthMarks：嵌套深度 0 基编号，开闭同深度；kind 带色环号", () => {
+  const text = "f(g(h))";
+  const simplified = bracketDepthMarks(text)
+    .map((m) => [m.start, m.end, m.kind])
+    .sort((a, b) => a[0] - b[0]);   // 渲染层按位置排序，断言不锁实现序
+  assert.deepEqual(simplified, [
+    [1, 2, "bracket-depth-0"],   // f( 开
+    [3, 4, "bracket-depth-1"],   // g( 开
+    [5, 6, "bracket-depth-1"],   // g( 闭
+    [6, 7, "bracket-depth-0"],   // f( 闭
+  ]);
+  bracketDepthMarks(text).forEach((m) => {
+    assert.equal(m.line, 1);
+    assert.equal(m.end, m.start + 1);   // 单字符段
+  });
+});
+
+test("bracketDepthMarks：字符串/注释内假括号不输出；跨行行号正确", () => {
+  const text = 'printf("("); // (\nif (a) {}\n';
+  const marks = bracketDepthMarks(text);
+  const starts = new Set(marks.map((m) => m.line + ":" + m.start));
+  assert.ok(starts.has("1:6"));     // printf( 真 '('
+  assert.ok(starts.has("1:10"));    // 其 ')' 
+  assert.ok(starts.has("2:3"));     // if (a) 的 '('
+  assert.ok(starts.has("2:5"));     // 其 ')'
+  assert.ok(starts.has("2:7"));     // { 
+  assert.ok(starts.has("2:8"));     // }
+  assert.ok(!starts.has("1:8"));    // 字符串内 '('
+  assert.ok(!starts.has("1:16"));   // 注释内 '('
+  assert.equal(marks.length, 6);
+});
+
+test("bracketDepthMarks：未配对开/闭括号不输出", () => {
+  assert.deepEqual(bracketDepthMarks("("), []);
+  assert.deepEqual(bracketDepthMarks(")"), []);
+  assert.deepEqual(bracketDepthMarks("(x"), []);
+  assert.deepEqual(bracketDepthMarks(")(("), []);        // 无配对
+  assert.deepEqual(bracketDepthMarks("(a)("), [          // 仅第一对
+    { line: 1, start: 0, end: 1, kind: "bracket-depth-0" },
+    { line: 1, start: 2, end: 3, kind: "bracket-depth-0" },
+  ]);
+});
+
+test("bracketDepthMarks：深嵌套按 8 色环取模（深度 8 → 同 0）", () => {
+  const text = "{".repeat(9) + "}".repeat(9);
+  const marks = bracketDepthMarks(text);
+  assert.equal(marks.length, 18);
+  assert.equal(marks[0].kind, "bracket-depth-0");   // 最内层（深度 8 → 0）
+  assert.equal(marks[1].kind, "bracket-depth-0");
+  assert.equal(marks[2].kind, "bracket-depth-7");
+  assert.equal(marks[3].kind, "bracket-depth-7");
+  assert.equal(marks[16].kind, "bracket-depth-0");  // 最外层（深度 0）
+  assert.equal(marks[17].kind, "bracket-depth-0");
 });
