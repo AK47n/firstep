@@ -354,6 +354,173 @@ def delete_reference(reference_root: Path, entry_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 条目平台属性谓词（公开单址）：any 全进；platform 空串 = 不过滤（向后兼容）；
+# 否则条目平台必须与生成平台一致——associated_references /
+# build_topic_framework_info / filter_manifests_by_platform / related_references
+# 共用，防分叉（selection 层 re-export 同名，generator 等调用方无感）
+# ---------------------------------------------------------------------------
+
+
+def platform_matches(reference: ReferenceEntry, platform: str) -> bool:
+    """条目平台属性匹配：any 全进；platform 空串 = 不过滤（向后兼容）；
+    否则条目平台必须与生成平台一致。单一判据（src 内唯一实现，selection
+    层 re-export 同名——旧 import 路径 selection.platform_matches 仍可用）。"""
+    return (
+        not platform
+        or reference.platform == PLATFORM_ANY
+        or reference.platform == platform
+    )
+
+
+# ---------------------------------------------------------------------------
+# 相关性匹配（工单 ref-related-autoload）：题面 / 选中模块 slug → 条目标题
+# 的确定性词表匹配——两级注入第一级的候选扩容（候选 = 锚定 ∪ 相关，装配点
+# 按 id 去重）。纯函数、词表单源、确定性排序；词表不命中 = 零增量（旧库
+# 提示词逐字节不变）。
+# ---------------------------------------------------------------------------
+
+# 相关性词表（单源）：题面 / 模块 → 条目标题的匹配词项。两类词项匹配规则
+# 不同（_term_matches_token）：
+# - 英文/数字词项（恒全小写）：题面侧必须独立出现（字母数字边界，防 canmv
+#   命中 can）；条目侧 = token 精确相等 或 前缀 + 纯数字尾巴（adc → adc12）。
+# - 中文词项：题面 / 条目侧都子串命中（步进电机 → 电机；串口打印 → 串口）。
+# 词表覆盖库内 TI 例程与外设资料名称面；加词 = 元组加项，装配零改动。
+PERIPHERAL_TERMS: tuple[str, ...] = (
+    # 英文外设名 / 缩写（与库内 TI 例程标题同形）
+    "adc", "uart", "usart", "spi", "i2c", "iic", "can", "gpio", "dma",
+    "flash", "rtc", "nvic", "systick", "timer", "pwm", "comp", "cmp",
+    "opamp", "oled", "lcd", "key", "button", "led", "beep", "buzzer",
+    "servo", "motor", "step", "camera", "esp32", "k230", "zigbee", "wifi",
+    # 中文外设词（题目常见表述）
+    "串口", "定时器", "比较器", "运放", "按键", "蜂鸣器", "舵机", "电机",
+    "步进", "循迹", "摄像头", "视觉", "显示屏", "数码管", "时钟", "中断",
+    "低功耗", "温湿度", "超声波", "蓝牙", "无线", "塔克",
+)
+
+# 模块 slug → 相关性词项（骨架阶段按选中模块自动关联的依据；只收「模块名 ↔
+# 例程」天然对应的模块——无 slug 的外设（spi / i2c / can / gpio / dma /
+# 比较器 / 运放等，模块库至今无对应模块目录）由题面词命中。值内词项必须都
+# 在 PERIPHERAL_TERMS（词表单源，tests/test_reference_library.py 断言）。
+MODULE_PERIPHERAL_TERMS: dict[str, tuple[str, ...]] = {
+    "adc": ("adc",),
+    "uart": ("uart",),
+    "debug_uart": ("uart",),
+    "digit_uart": ("uart",),
+    "imu_uart": ("uart",),
+    "uwb_uart": ("uart",),
+    "zigbee_uart": ("uart",),
+    "zigbee_uart_key": ("uart", "key"),
+    "key": ("key",),
+    "led": ("led",),
+    "beep": ("beep",),
+    "led_beep": ("led", "beep"),
+    "oled": ("oled",),
+    "servo": ("servo",),
+    "motor": ("motor",),
+    "step_motor": ("step", "motor"),
+    "xunji": ("循迹",),
+    "k230": ("k230",),
+}
+
+# 词表项形态判定 / 条目标题拆分惯例（匹配规则的单点）
+_ASCII_TERM = re.compile(r"^[a-z0-9]+$")
+_TITLE_TOKEN_SPLIT = re.compile(r"[-_\s()（）]+")
+
+
+def _is_ascii_term(term: str) -> bool:
+    """词表项是否为英文/数字形态（对应题面边界规则与条目 token 精确/前缀规则；
+    非 ascii = 中文词项，两侧子串规则）。"""
+    return _ASCII_TERM.fullmatch(term) is not None
+
+
+def related_references(
+    reference_root: Path,
+    *,
+    topic_text: str,
+    slugs: Sequence[str] = (),
+    platform: str = "",
+    limit: int = 0,
+) -> tuple[ReferenceEntry, ...]:
+    """题面 / 选中模块 → 相关参考条目（得分降序、limit 截断、确定性排序）。
+
+    题面命中 + 模块 slug 映射并集为激活词表项集；条目标题 token 化后与激活
+    集匹配，得分 = 命中的词表项数（> 0 才入选）。排序：得分降序 → 平台精确
+    匹配优先（同分时 exact 平台条目排在 any 前；platform 空串 = 无差异）→
+    id 字典序。平台不匹配直接出局（硬过滤先行）。limit <= 0 = 关闭（返回空
+    ——向后兼容：generate 等不启用的调用方传缺省）。
+
+    锚定命中不在此排除（与锚定候选可能重叠，装配点按 id 去重、锚定优先，
+    见 spec「候选 = 锚定 ∪ 相关」）。匹配只认条目**标题**（简介是 AI 草稿
+    自由文本不可靠；标题是用户录入的规范名）。库目录不存在 = 空。
+    """
+    if limit <= 0 or not reference_root.is_dir():
+        return ()
+    activated = _activated_terms(topic_text, slugs)
+    if not activated:
+        return ()
+    scored: list[tuple[int, ReferenceEntry]] = []
+    for entry in list_references(reference_root):
+        if not platform_matches(entry, platform):
+            continue
+        score = _entry_score(entry, activated)
+        if score > 0:
+            scored.append((score, entry))
+    scored.sort(
+        key=lambda item: (
+            -item[0],
+            0 if item[1].platform == platform else 1,
+            item[1].id,
+        )
+    )
+    return tuple(entry for _, entry in scored[:limit])
+
+
+def _activated_terms(topic_text: str, slugs: Sequence[str]) -> frozenset[str]:
+    """激活词表项集合：题面命中 ∪ 模块 slug 映射（并集，确定性，无序集合）。"""
+    activated: set[str] = set()
+    text_lower = topic_text.lower()
+    for term in PERIPHERAL_TERMS:
+        if _text_has_term(text_lower, term):
+            activated.add(term)
+    for slug in slugs:
+        activated.update(MODULE_PERIPHERAL_TERMS.get(slug, ()))
+    return frozenset(activated)
+
+
+def _text_has_term(text_lower: str, term: str) -> bool:
+    """题面小写文本命中词表项：英文/数字项独立出现（前后字母数字边界）；
+    中文项子串即命中（中文无粘连误报问题，子串召回是期望行为）。"""
+    if _is_ascii_term(term):
+        return (
+            re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text_lower)
+            is not None
+        )
+    return term in text_lower
+
+
+def _entry_score(entry: ReferenceEntry, activated: frozenset[str]) -> int:
+    """条目标题命中激活集的词表项数（标题小写，按 [-_\\s()（）] 拆 token）。"""
+    tokens = [
+        token for token in _TITLE_TOKEN_SPLIT.split(entry.title.lower()) if token
+    ]
+    return sum(
+        1
+        for term in activated
+        if any(_term_matches_token(term, token) for token in tokens)
+    )
+
+
+def _term_matches_token(term: str, token: str) -> bool:
+    """词表项命中标题 token：英文项 = 精确 或 前缀 + 纯数字尾巴（adc → adc12，
+    不误 candy）；中文项 = 子串（步进电机 → 电机；串口打印 → 串口）。"""
+    if _is_ascii_term(term):
+        return token == term or (
+            token.startswith(term) and token[len(term):].isdigit()
+        )
+    return term in token
+
+
+# ---------------------------------------------------------------------------
 # 文件名搜索 / 文件清单与定位（文件名搜索 + 文件打开工单）：素材清单.txt 是
 # 二进制素材（PDF / zip 等本体在 sources/materials 镜像）的索引，清单记录
 # + 条目目录实际文件 = 可服务文件全集；写读对偶同模块（build_material_manifest

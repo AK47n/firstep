@@ -37,6 +37,8 @@ from contest_generator.reference_library import (
     ANCHOR_KIND_NONE,
     ANCHOR_KIND_TOPIC,
     ARCHIVE_ENTRY_TYPE,
+    MODULE_PERIPHERAL_TERMS,
+    PERIPHERAL_TERMS,
     REFERENCE_FILE_CAP,
     ReferenceError,
     add_reference,
@@ -51,7 +53,9 @@ from contest_generator.reference_library import (
     match_entry_files,
     module_kit_vocabulary,
     pdf_referenced_by,
+    platform_matches,
     read_fulltext,
+    related_references,
     resolve_entry_file,
     search_references,
     update_reference,
@@ -3208,3 +3212,141 @@ def test_references_anchor_value_empty_allowed_for_none(tmp_path):
         ).status_code
         == 400
     )
+
+
+# ---------------------------------------------------------------------------
+# 相关性匹配（工单 ref-related-autoload）：题面文本 / 选中模块 slug → 参考条目
+# 标题 的确定性词表匹配纯函数——两级注入第一级的候选扩容（候选 = 锚定 ∪ 相关）
+# ---------------------------------------------------------------------------
+
+
+def _demo_reference(
+    root: Path,
+    *,
+    title: str,
+    description: str = "示例简介",
+    platform: str = "any",
+) -> Path:
+    """相关性测试用条目：未锚定、单文件（与真实例程同形状）。"""
+    return add_reference(
+        root,
+        title=title,
+        type="例程工程",
+        description=description,
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files={"main.c": "/* demo */\n"},
+        kit_vocabulary=(),
+        platform=platform,
+    ).id
+
+
+def test_related_references_matches_peripheral_terms(tmp_path):
+    """题面外设词 → 条目标题命中：UART/串口与定时器条目进候选，无关条目不进。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="UART-串口打印例程")
+    _demo_reference(root, title="定时器-基本例程")
+    _demo_reference(root, title="OLED 显示例程")
+    hits = related_references(root, topic_text="用串口打印，定时器中断采集", limit=10)
+    assert [e.id for e in hits] == ["UART-串口打印例程", "定时器-基本例程"]
+
+
+def test_related_references_ascii_term_boundary_avoids_substring(tmp_path):
+    """题面英文词表项必须独立出现：canmv 不激活 can（防子串伪命中）。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="CAN-总线例程")
+    assert related_references(root, topic_text="使用 canmv 视觉识别", limit=5) == ()
+    hits = related_references(root, topic_text="can 总线与 canmv 视觉", limit=5)
+    assert [e.id for e in hits] == ["CAN-总线例程"]
+
+
+def test_related_references_ascii_term_matches_token_with_digits(tmp_path):
+    """英文词表项命中条目标题 token 的前缀+数字形态：adc → adc12。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="ADC12-单通道采样例程")
+    hits = related_references(root, topic_text="adc 采样", limit=5)
+    assert [e.id for e in hits] == ["ADC12-单通道采样例程"]
+
+
+def test_related_references_chinese_term_substring(tmp_path):
+    """中文词表项在标题 token 内子串命中：串口 → USART-串口打印例程。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="USART-串口打印例程")
+    hits = related_references(root, topic_text="串口通信", limit=5)
+    assert [e.id for e in hits] == ["USART-串口打印例程"]
+
+
+def test_related_references_slug_mapping_activates_terms(tmp_path):
+    """选中模块 slug 经 MODULE_PERIPHERAL_TERMS 激活词表项：adc slug → adc 例程
+    （题面不含外设词也能命中——骨架阶段按选中模块自动关联的依据）。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="ADC12-单通道采样例程")
+    hits = related_references(root, topic_text="采集电压并显示", slugs=("adc",), limit=5)
+    assert [e.id for e in hits] == ["ADC12-单通道采样例程"]
+
+
+def test_related_references_scores_desc_and_limit(tmp_path):
+    """得分 = 命中的激活词表项数，降序截断：双词命中排在单词命中前。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="UART-串口例程")  # uart + 串口 = 2 分
+    _demo_reference(root, title="定时器-基本例程")  # 定时器 = 1 分
+    _demo_reference(root, title="OLED 显示例程")  # 0 分
+    hits = related_references(root, topic_text="UART 串口中断，定时器采集", limit=1)
+    assert [e.id for e in hits] == ["UART-串口例程"]
+
+
+def test_related_references_platform_filter(tmp_path):
+    """平台过滤沿用既有判据：非 any 平台只收匹配/any 条目。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="UART-串口例程", platform="mspm0")
+    _demo_reference(root, title="串口调试助手说明", platform="any")
+    hits = related_references(root, topic_text="串口", platform="stm32", limit=5)
+    assert [e.id for e in hits] == ["串口调试助手说明"]
+
+
+def test_related_references_tie_break_platform_exact_first(tmp_path):
+    """同分平局键：平台精确匹配条目排在 any 条目前（平台非空时）；空串无差异。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="串口例程甲", platform="any")
+    _demo_reference(root, title="串口例程乙", platform="mspm0")
+    hits = related_references(root, topic_text="串口", platform="mspm0", limit=5)
+    assert [e.id for e in hits] == ["串口例程乙", "串口例程甲"]
+    hits_any = related_references(root, topic_text="串口", limit=5)
+    assert [e.id for e in hits_any] == sorted(["串口例程甲", "串口例程乙"])
+
+
+def test_related_references_tie_breaks_by_id(tmp_path):
+    """同分稳定序 = 条目标题生成的 id 字典序（确定性，不随磁盘序漂移）。"""
+    root = _reference_root(tmp_path)
+    first = _demo_reference(root, title="串口例程甲")
+    second = _demo_reference(root, title="串口例程乙")
+    hits = related_references(root, topic_text="串口", limit=5)
+    assert [e.id for e in hits] == sorted([first, second])
+
+
+def test_related_references_defaults_and_edge_cases(tmp_path):
+    """缺省行为与零增量边界：limit=0 缺省关闭；空题面/空 slugs 无激活；
+    词表不命中 = 空；库目录不存在 = 空。"""
+    root = _reference_root(tmp_path)
+    _demo_reference(root, title="UART-串口打印例程")
+    assert related_references(root, topic_text="串口") == ()  # limit=0 缺省关闭
+    assert len(related_references(root, topic_text="串口", limit=3)) == 1
+    assert len(related_references(root, topic_text="", slugs=("uart",), limit=3)) == 1
+    assert related_references(root, topic_text="完全无关词汇", limit=3) == ()
+    assert related_references(
+        root / "不存在的库", topic_text="串口", limit=3
+    ) == ()
+    assert len(related_references(root, topic_text="串口", limit=3, platform="mspm0")) == 1
+
+
+def test_related_references_vocabulary_single_source(tmp_path):
+    """词表单源：PERIPHERAL_TERMS 覆盖库内例程关键外设词（英文边界项 + 中文子串项），
+    MODULE_PERIPHERAL_TERMS 的 slug 映射值都在词表内。"""
+    for term in ("adc", "uart", "spi", "i2c", "can", "gpio", "dma", "flash", "rtc",
+                 "nvic", "systick", "timer", "pwm", "串口", "定时器", "比较器",
+                 "运放", "低功耗", "循迹", "摄像头", "视觉"):
+        assert term in PERIPHERAL_TERMS
+    for terms in MODULE_PERIPHERAL_TERMS.values():
+        assert all(term in PERIPHERAL_TERMS for term in terms)
+    assert MODULE_PERIPHERAL_TERMS["adc"] == ("adc",)
+    assert "uart" not in MODULE_PERIPHERAL_TERMS["adc"]
