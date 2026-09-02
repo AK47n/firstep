@@ -33,8 +33,8 @@ _ASCII_KEEP_WORDS_RE = re.compile(r"[^A-Za-z0-9]+")
 
 # 中文短题名 → 英文目录名单词（工单 ascii-project-name/01）：历史赛题目录名
 # 确定性来源——键 = topic_short_title 的提取结果（题面首行短题名），值 = 英文
-# 短名（下划线连接单词，无空格无中文）。覆盖现题库全部 9 题；未收录题走
-# ASCII 兜底（topic_en_title）。
+# 短名（下划线连接单词，无空格无中文）。覆盖现题库全部短名形态（题名短名 +
+# 年份标题整行 key）；未收录题走 ASCII 兜底（topic_en_title）。
 TOPIC_EN_TITLES: dict[str, str] = {
     "自动行驶小车": "Auto_Car",
     "智能送药小车": "Smart_Medicine_Car",
@@ -46,6 +46,10 @@ TOPIC_EN_TITLES: dict[str, str] = {
     # 2026H（赛区赛暨模拟电子系统设计专题赛选拔赛）：题面首行与 2026C 同源
     # 但格式不同（全角括号 + 空格 + 破折号后缀），单独登记避免 ASCII 兜底丢字
     "2026 年全国大学生电子设计竞赛赛区赛（TI 杯）—— 暨模拟电子系统设计专题赛选拔赛赛题": "2026_TI_Cup_Analog_Electronics_Selection",
+    # 2023/2025 控制题拆条（topics-control-2023-2025/03-04）：题面首行 =
+    # 年份标题（照 2026 系结构先例），短题名 = 整行年份标题，单独登记
+    "2023 年全国大学生电子设计竞赛试题": "2023_National_Contest",
+    "2025 年全国大学生电子设计竞赛试题": "2025_National_Contest",
 }
 
 
