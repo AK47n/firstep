@@ -257,6 +257,36 @@ def test_match_bracket_unbalanced_returns_minus_one():
     assert match_bracket("while(1) { if (x) {", 8, "{", "}") == -1
 
 
+def test_match_bracket_skips_preprocessor_line_with_parens():
+    # 行首 # 预处理行的括号不计数（与 iter_c_regions 切分同语义）
+    code = '#define F(x) x\nfoo(a, b)\n'
+    open_at = code.index("foo") + 3
+    close = match_bracket(code, open_at, "(", ")")
+    assert code[close] == ")"
+    assert code[: close + 1] == "#define F(x) x\nfoo(a, b)"
+
+
+def test_match_bracket_early_stop_does_not_scan_past_close():
+    # 早停修复（工单 code-page-vscode-overhaul/08）：闭合后的大量内容不参与
+    # 扫描——配平位置紧邻括号（旧实现经 iter_c_regions 会扫到文件尾）
+    code = "f(a)" + " " * 100000
+    assert match_bracket(code, code.index("("), "(", ")") == 3
+
+
+def test_top_level_functions_5000_functions_fast():
+    # 性能回归（工单 code-page-vscode-overhaul/08 前置）：5000 函数合成文件
+    # 旧实现 84s（match_bracket 逐候选 O(剩余文件)）；早停后毫秒级。8s 界线
+    # 宽容（防 CI 抖动），回归数倍以上仍能拦住。
+    import time
+
+    src = "\n".join(f"int fn_{i}(int x) {{ return x + {i}; }}  // line {i}" for i in range(5000))
+    t0 = time.time()
+    funcs = top_level_functions(src)
+    elapsed = time.time() - t0
+    assert len(funcs) == 5000
+    assert elapsed < 8, f"top_level_functions 5000 函数耗时 {elapsed:.2f}s（早停修复前约 84s）"
+
+
 def test_next_significant_skips_whitespace_and_comments():
     code = "while(1) { }   /* 注释 */  \n // 行注释\n return 0;"
     pos = next_significant(code, 12)
