@@ -10,7 +10,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { codeZoomClamp, parseZoomStored, isMainCPath } from "/js/fx/code.js";
-import { isTabSavable, codeStatusHTML, caretLineOf, caretColOf } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）+ 状态栏信息纯件/光标行列（code-editor-vscode-polish/01）
+import { isTabSavable, codeStatusHTML } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）+ 状态栏信息纯件（code-editor-vscode-polish/01）
 import {
   baselineSnapshot,
   baselineDiff,
@@ -60,6 +60,7 @@ import {
   replaceAllInActiveFile,
   setEditorFind,
   editorFindStep,
+  editorCaretModelPos,
 } from "/js/ui/codeeditor.js";
 
 // 模块态：当前目录 / 扁平清单（中栏状态在 codeeditor.js）
@@ -582,7 +583,7 @@ function currentCodeZoomPct() {
 // ——活动标签的 Ln/Col（读 textarea 选区，readonly 同样可取）/ 语言 / 编码 /
 // 缩进 / 缩放；无活动文件 → 显示「未打开文件」占位。触发点：活动标签变化
 // （onActiveTabChanged）、光标/选区变化（onCursorChanged）、缩放（applyCodeZoom）、
-// 初始化。行列计算全部走 fx 单源（caretLineOf / caretColOf）。
+// 初始化。行列计算走 editorCaretModelPos 单源（codeeditor 换算，折叠态为模型行/列）。
 function refreshCodeStatus() {
   const bar = $("code-statusbar-info");
   if (!bar) return;
@@ -595,9 +596,11 @@ function refreshCodeStatus() {
   let line = 1;
   let col = 1;
   if (ta) {
-    const pos = Math.max(0, ta.selectionStart | 0);
-    line = caretLineOf(ta.value, pos);
-    col = caretColOf(ta.value, pos);
+    // 折叠态（工单 07）：状态栏显示模型行/列（视图行号与模型行号不同）——
+    // editorCaretModelPos 由 codeeditor 统一换算（视图偏移 → 模型偏移）。
+    const p = editorCaretModelPos();
+    line = p.line;
+    col = p.col;
   }
   bar.innerHTML = codeStatusHTML({
     line,

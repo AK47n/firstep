@@ -144,9 +144,32 @@ export function parseMarkdownBlocks(text) {
 // <div class="code-md-preview">，块级元素带 data-md-line 供预览内滚动）。
 // opts.imageUrl(原始src) → 最终 url 或 null/空串（图片占位）；省略回调时
 // 相对路径原样透出（仍过协议白名单）。所有原文先 esc，不透传原始 HTML。
+// opts.foldPreview（工单 code-editor-vscode-polish/07）：标题折叠——标题块
+// 起分组（details open + summary = 标题），组内 = 到下一标题（任意层级）前
+// 的块；首个标题前的引言不折叠；折叠钮 = summary（CSS 提供 ▸/▾ 指示）。
 export function markdownPreviewHTML(blocks, opts) {
   const imageUrl = opts && typeof opts.imageUrl === "function" ? opts.imageUrl : null;
-  const body = (blocks || []).map((b) => renderBlock(b, imageUrl)).join("");
+  const fold = !!(opts && opts.foldPreview);
+  const list = blocks || [];
+  let body;
+  if (fold) {
+    body = "";
+    let openDetails = false;
+    for (const b of list) {
+      if (b.type === "heading") {
+        if (openDetails) body += "</details>";
+        body += '<details class="code-md-fold" open data-md-line="' + b.line + '"'
+          + '><summary data-md-line="' + b.line + '">'
+          + renderBlock(b, imageUrl) + "</summary>";
+        openDetails = true;
+      } else {
+        body += renderBlock(b, imageUrl);
+      }
+    }
+    if (openDetails) body += "</details>";
+  } else {
+    body = list.map((b) => renderBlock(b, imageUrl)).join("");
+  }
   return '<div class="code-md-preview">' + body + "</div>";
 }
 

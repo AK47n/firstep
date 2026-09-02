@@ -1617,6 +1617,15 @@
   .code-gutter-line { display: block; font-family: var(--mono);
     font-size: var(--code-font-size); line-height: 1.55; padding: 0 12px;
     text-align: right; color: var(--muted); min-width: 3ch; box-sizing: border-box; }
+  /* 折叠箭头与占位行（工单 code-editor-vscode-polish/07）：箭头 = gutter 行内
+     小三角（muted、hover accent；open = ▾ 展开态、无 open = ▸ 折叠态）；占位
+     行（.code-gutter-ph）显示隐藏行数（muted 弱化 + hover accent 提示展开）。 */
+  .code-gutter-line .code-fold-arrow { display: inline-block; width: 12px;
+    margin-right: 2px; color: var(--muted); cursor: pointer; font-size: 11px;
+    vertical-align: 1px; user-select: none; }
+  .code-gutter-line .code-fold-arrow:hover { color: var(--accent); }
+  .code-gutter-ph { color: var(--accent-dim); cursor: pointer; }
+  .code-gutter-ph:hover { color: var(--accent); }
   .code-gutter-line.flash { background: var(--accent-dim); color: var(--accent); }
   /* 当前行（工单 code-viewer-polish/02）：内容行 + 行号同 data 键 active——
      active = 持续淡色（rgba accent .07 双主题自适应），flash = 瞬态略强
@@ -1870,6 +1879,24 @@
     border-radius: var(--radius-sm); margin: .5em 0; }
   .code-md-preview a { color: var(--accent); }
   .code-md-preview a:hover { text-decoration: underline; }
+  /* .md 预览标题折叠（工单 code-editor-vscode-polish/07）：details/summary
+     分组——summary 隐藏原生 marker、左侧 ▸/▾ 指示（VSCode 观感）；标题元素
+     在 summary 内行内化（不独占一行；h1 底边线折叠进 summary 后去除）；组内
+     内容随 open 展开/收起（details 原生交互零 JS）。 */
+  .code-md-preview details.code-md-fold { margin: .8em 0; }
+  .code-md-preview details.code-md-fold > summary { list-style: none; cursor: pointer;
+    margin: 1.2em 0 .3em; }
+  .code-md-preview details.code-md-fold > summary::-webkit-details-marker { display: none; }
+  .code-md-preview details.code-md-fold > summary::before { content: "▸";
+    display: inline-block; width: 1.1em; color: var(--muted); margin-right: .2em; }
+  .code-md-preview details.code-md-fold[open] > summary::before { content: "▾"; }
+  .code-md-preview details.code-md-fold > summary h1,
+  .code-md-preview details.code-md-fold > summary h2,
+  .code-md-preview details.code-md-fold > summary h3,
+  .code-md-preview details.code-md-fold > summary h4,
+  .code-md-preview details.code-md-fold > summary h5,
+  .code-md-preview details.code-md-fold > summary h6 { display: inline; margin: 0; }
+  .code-md-preview details.code-md-fold > summary h1 { border-bottom: 0; padding-bottom: 0; }
   .code-md-preview .md-img-fallback { color: var(--muted); font-style: italic;
     background: var(--panel-2); padding: 2px 8px; border-radius: var(--radius-sm); }
   .code-md-preview [data-md-line] { scroll-margin-top: var(--space-2); }

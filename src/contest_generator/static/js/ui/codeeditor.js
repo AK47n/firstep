@@ -30,6 +30,7 @@ import {
   isTabSavable,
   dirtySavableTabs,
   caretLineOf,
+  caretColOf,
   indentOnEnter,
   indentLines,
   replaceAllText,
@@ -38,6 +39,15 @@ import {
 import { parseMarkdownBlocks, markdownPreviewHTML, markdownOutline, hasScheme } from "/js/fx/markdown.js";
 import { mtimeEq } from "/js/fx/disk-baseline.js";  // mtime 相等守卫单源（工单 07 评审整改：与基线 diff/快照守卫同口径）
 import { treeRenamedPath, treeOpAffected } from "/js/fx/code-tree-ops.js";  // 重命名路径映射纯件（工单 code-tree-ops/02）
+import {
+  codeFoldRanges,
+  codeFoldVisible,
+  codeFoldViewToModel,
+  codeFoldModelToView,
+  codeFoldMapEdit,
+  codeFoldGutterHTML,
+  codeFoldMerge,
+} from "/js/fx/code-fold.js";  // 代码折叠纯件（工单 code-editor-vscode-polish/07）
 import { confirmModal } from "/js/ui/confirm.js";
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
@@ -45,6 +55,15 @@ let codeDir = "";
 let tabs = [];           // {path, lang, content, savedContent, outline, mtime_ns, utf8, mdMode, readonly}
 let activePath = "";
 const fileCache = new Map();  // key = fileCacheKey(path) → {ok:true, data} | {ok:false, message}
+
+// ---- 折叠态（工单 code-editor-vscode-polish/07）----
+// 模型 = tab.content 全量基线；有折叠时 textarea/高亮/行号/标记全部按
+// 视图态渲染（viewModel = codeFoldVisible 输出：可见行 + 占位行 + 偏移映射
+// segs），编辑经 codeFoldMapEdit 写回模型。无折叠（folds 空或全展开）时
+// viewModel = null——走既有全量路径，零行为回归。
+let folds = [];
+let foldedSet = new Set();
+let viewModel = null;
 
 // fileCacheKey(path)：文件缓存键单源（dir + NUL 分隔可避免路径拼接歧义）——
 // 读取 / 失效 / 保存后更新共用同一构造，防止键拼法漂移。
@@ -77,6 +96,7 @@ export function setCodeDir(dir) {
   tabs = [];
   activePath = "";
   fileCache.clear();
+  resetFoldState();
   renderTabs();
   renderPane();
   notifyActive();
@@ -199,7 +219,7 @@ function updateBracketMarks() {
     }
     return false;
   }
-  const pos = Math.max(0, ta.selectionStart | 0);
+  const pos = foldCaretModelPos();   // 折叠态：选区（视图）→ 模型偏移（工单 07）
   const pair = bracketPairAt(tab.content, pos);
   const changed = JSON.stringify(pair) !== JSON.stringify(editorBracket);
   if (changed) editorBracket = pair;
@@ -212,6 +232,93 @@ function refreshMarkSetters() {
   const wc = updateWordMarks();
   const bc = updateBracketMarks();
   if (wc || bc) renderEditorMarks();
+}
+
+// ===== 折叠视图助手（工单 code-editor-vscode-polish/07）=====
+// marksForView()：把模型行号的标记清单映射到视图行（占位行丢弃——被折叠的
+// 命中/词/括号不显示；行内偏移不变）。
+function marksForView() {
+  const map = new Map();
+  viewModel.lines.forEach((l, i) => { if (!l.placeholder) map.set(l.no, i + 1); });
+  return currentMarks()
+    .filter((m) => map.has(m.line))
+    .map((m) => ({ line: map.get(m.line), start: m.start, end: m.end, kind: m.kind }));
+}
+
+// foldCaretModelPos()：当前光标 → 模型偏移（无折叠时 = 选区偏移）。
+function foldCaretModelPos() {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return 0;
+  const viewPos = Math.max(0, ta.selectionStart | 0);
+  return viewModel ? codeFoldViewToModel(viewModel.segs, viewPos) : viewPos;
+}
+
+// editorCaretModelPos()：状态栏 Ln/Col 数据源（模型行/列——折叠态下视图行号
+// 与模型行号不同；导出供 codeview 状态栏刷新）。
+export function editorCaretModelPos() {
+  const tab = getActiveTab();
+  if (!tab) return { line: 1, col: 1 };
+  const modelPos = foldCaretModelPos();
+  return { line: caretLineOf(tab.content, modelPos), col: caretColOf(tab.content, modelPos) };
+}
+
+// viewLineIndexOf(modelLine)：模型行号 → 视图行号（1 基）；不可见（占位/
+// 越界）→ 0。
+function viewLineIndexOf(modelLine) {
+  if (!viewModel) return modelLine;
+  const idx = viewModel.lines.findIndex((l) => !l.placeholder && l.no === modelLine);
+  return idx < 0 ? 0 : idx + 1;
+}
+
+// refreshFoldView()：折叠态变更后重建视图模型并重渲染（保留光标：模型偏移
+// → 新视图偏移）；全部展开 → viewModel = null 回全量路径。
+function refreshFoldView() {
+  const tab = getActiveTab();
+  if (!tab) return;
+  const box = paneBox();
+  const oldTa = box && box.querySelector(".code-ta");
+  const oldSegs = viewModel ? viewModel.segs : null;
+  const caretModel = oldTa ? (oldSegs ? codeFoldViewToModel(oldSegs, oldTa.selectionStart) : oldTa.selectionStart) : 0;
+  viewModel = (folds.length && foldedSet.size)
+    ? codeFoldVisible(tab.content, folds, foldedSet)
+    : null;
+  renderPane();
+  const ta = box && box.querySelector(".code-ta");
+  if (ta && !ta.readOnly) {
+    const vo = viewModel ? codeFoldModelToView(viewModel.segs, caretModel) : caretModel;
+    ta.focus();
+    ta.setSelectionRange(vo, vo);
+  }
+}
+
+// toggleFold(idx)：折叠/展开单个折叠区（gutter 箭头 / 占位行点击共用）。
+function toggleFold(idx) {
+  if (idx < 0 || idx >= folds.length) return;
+  if (foldedSet.has(idx)) foldedSet.delete(idx); else foldedSet.add(idx);
+  refreshFoldView();
+}
+
+// foldAtLine(modelLine)：包含模型行的折叠区（最内层 = 区间最短）；无 → null。
+function foldAtLine(modelLine) {
+  let best = null;
+  folds.forEach((f, i) => {
+    if (f.startLine <= modelLine && modelLine <= f.endLine) {
+      if (!best || (f.endLine - f.startLine) < (best.f.endLine - best.f.startLine)) {
+        best = { f, i };
+      }
+    }
+  });
+  return best ? best.i : null;
+}
+
+// resetFoldState()：切目录/切文件/关标签/磁盘重载后重算折叠态——折叠集清空
+// （会话内不跨文件保持；spec：切目录/换文件重算或清空），folds 按当前活动
+// 文件重算（快捷键/箭头需要折叠区清单；活动 tab 为空 → 空清单）。
+function resetFoldState() {
+  const tab = getActiveTab();
+  folds = tab ? codeFoldRanges(tab.content, tab.lang) : [];
+  foldedSet = new Set();
+  viewModel = null;
 }
 
 // ---- 选中词高亮（工单 code-editor-vscode-polish/05）----
@@ -233,7 +340,7 @@ function updateWordMarks() {
     }
     return false;
   }
-  const pos = Math.max(0, ta.selectionStart | 0);
+  const pos = foldCaretModelPos();   // 折叠态：选区（视图）→ 模型偏移（工单 07）
   const word = codeWordAt(tab.content, pos);
   const ranges = word ? codeWordRanges(tab.content, word) : [];
   const changed = word !== editorWord.word
@@ -262,7 +369,10 @@ function renderEditorMarks() {
     editorFind.ranges = [];
     editorFind.index = -1;
   }
-  el.innerHTML = codeMarksHTML(tab.content, currentMarks());
+  el.innerHTML = codeMarksHTML(
+    viewModel ? viewModel.text : tab.content,
+    viewModel ? marksForView() : currentMarks(),
+  );
 }
 
 // setEditorFind(query)：查找输入变化 → 存查询、重算命中区段并渲染标记层——
@@ -324,16 +434,26 @@ function renderPane() {
     return;
   }
   if (tab.lang === "md" && tab.mdMode === "preview") {
-    box.innerHTML = markdownPreviewHTML(parseMarkdownBlocks(tab.content), { imageUrl: mdImageUrl });
+    box.innerHTML = markdownPreviewHTML(parseMarkdownBlocks(tab.content), {
+      imageUrl: mdImageUrl,
+      foldPreview: true,   // 标题折叠（工单 07）：details/summary 分组，点标题收起
+    });
     refreshMarkSetters();
     return;
   }
   // 编辑态（含 .md「编辑源码」态——工单 05；预览态已提前 return）：
-  // 同一三明治渲染，md 与普通文件共用（评审整改：去双分支重复）。
-  const lines = tab.content.split("\n").length;
-  box.innerHTML = '<div class="code-gutter" aria-hidden="true">'
-    + codeLineNumbersHTML(lines) + "</div>"
-    + codeEditorHTML(tab.content, tab.lang, { readonly: tab.readonly, marks: currentMarks() });
+  // 同一三明治渲染，md 与普通文件共用（评审整改：去双分支重复）。折叠态
+  // （工单 07）：行号列用视图行（模型真实行号 + 折叠箭头/占位行），编辑器
+  // 内容 = 视图文本，标记经 marksForView 映射到视图行。
+  const src = viewModel ? viewModel.text : tab.content;
+  const gutter = viewModel
+    ? codeFoldGutterHTML(viewModel.lines)
+    : codeLineNumbersHTML(tab.content.split("\n").length);
+  box.innerHTML = '<div class="code-gutter" aria-hidden="true">' + gutter + "</div>"
+    + codeEditorHTML(src, tab.lang, {
+      readonly: tab.readonly,
+      marks: viewModel ? marksForView() : currentMarks(),
+    });
   if (tab.readonly) renderReadonlyNote(box);
   refreshMarkSetters();   // 选中词/括号标记统一兜底（activateTab/applySavedState/applyDiskState/closeTab/remap 全经本函数，评审整改 05/06）
 }
@@ -387,6 +507,7 @@ function activateTab(path) {
       .find((t) => t.dataset.tabPath === path);
     if (el) el.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
+  resetFoldState();   // 切文件清空折叠态（会话内不跨文件保持，工单 07）
   renderPane();
   notifyActive();
 }
@@ -477,6 +598,7 @@ export async function closeTab(path, opts = {}) {
     const next = tabs[Math.min(idx, tabs.length - 1)];
     activePath = next ? next.path : "";
   }
+  resetFoldState();   // 关标签后重算折叠态（评审整改 07c：防旧 viewModel 残留污染新活动文件）
   renderTabs();
   renderPane();
   notifyActive();
@@ -497,6 +619,7 @@ export function remapOpenTabPaths(oldPath, newPath, isDir) {
   if (treeOpAffected(activePath, oldPath, isDir)) {
     activePath = treeRenamedPath(activePath, oldPath, newPath);
   }
+  resetFoldState();   // 路径映射后重算折叠态（评审整改 07c：防旧 viewModel 污染）
   renderTabs();
   renderPane();
   notifyActive();
@@ -606,7 +729,8 @@ function setActiveLine(line) {
 
 // editJumpToLine(line)：活动 tab 内跳行——.md 预览态滚块级元素
 // （data-md-line）；其余 = 行元素 scrollIntoView + 编辑器 setSelectionRange
-// （选区即持续高亮）+ flash。
+// （选区即持续高亮）+ flash。折叠态（工单 07）：目标行在折叠区内 → 先自动
+// 展开再定位；行号/偏移经视图映射（视图行号真实 = 模型行号顺序索引）。
 export function editJumpToLine(line) {
   const box = paneBox();
   if (!box) return;
@@ -619,18 +743,41 @@ export function editJumpToLine(line) {
     flashEl(el);
     return;
   }
-  const el = box.querySelector('.code-hl-line[data-code-line="' + line + '"]')
-    || box.querySelector('.code-pre-line[data-code-line="' + line + '"]');
+  let target = line;
+  if (viewModel) {
+    // 展开包含目标行的折叠区（spec：跳行落在折叠区内自动展开）
+    let expanded = false;
+    folds.forEach((f, i) => {
+      if (foldedSet.has(i) && f.startLine < line && line <= f.endLine) {
+        foldedSet.delete(i);
+        expanded = true;
+      }
+    });
+    if (expanded) {
+      viewModel = (folds.length && foldedSet.size)
+        ? codeFoldVisible(tab.content, folds, foldedSet)
+        : null;
+      renderPane();
+    }
+    if (viewModel) {
+      const vi = viewLineIndexOf(line);
+      if (!vi) return;
+      target = vi;
+    }
+  }
+  const el = box.querySelectorAll(".code-hl-line")[target - 1]
+    || box.querySelectorAll(".code-pre-line")[target - 1];
   if (!el) return;
   el.scrollIntoView({ block: "center" });
-  setActiveLine(line);
+  setActiveLine(target);
   flashEl(el);
   const ta = box.querySelector(".code-ta");
   if (ta && !ta.readOnly) {
     const range = editorLineRange(tab.content, line);
     if (range) {
+      const start = viewModel ? codeFoldModelToView(viewModel.segs, range.start) : range.start;
       ta.focus();
-      ta.setSelectionRange(range.start, range.end);
+      ta.setSelectionRange(start, start + (range.end - range.start));
     }
   }
   notifyCursor();   // 状态栏 Ln/Col 随跳行刷新（工单 01）
@@ -918,6 +1065,7 @@ function applyDiskState(tab, disk) {
     : disk.outline || null;
   tab.readonly = disk.utf8 === false;
   tab.utf8 = disk.utf8 !== false;
+  resetFoldState();   // 内容整体更换：折叠区重算（工单 07）
   fileCache.set(fileCacheKey(tab.path), { ok: true, data: disk });
   renderTabs();
   renderPane();
@@ -946,22 +1094,54 @@ function syncEditorAfterInput() {
   if (!box || !ta || !hl || !gutter) return;
   const tab = getActiveTab();
   if (!tab) return;
-  tab.content = ta.value;
+  if (viewModel) {
+    // 折叠态（工单 07）：视图文本编辑 → 偏移映射写回模型；触碰占位 → 展开
+    // + 重设视图文本与光标（模型偏移 → 新视图偏移）；折叠区随内容重算并
+    // 按签名保留既有折叠态（codeFoldMerge）。
+    const r = codeFoldMapEdit(tab.content, viewModel.segs, viewModel.text, ta.value);
+    tab.content = r.model;
+    r.expand.forEach((i) => foldedSet.delete(i));
+    const oldFolds = folds;
+    folds = codeFoldRanges(tab.content, tab.lang);
+    foldedSet = codeFoldMerge(oldFolds, foldedSet, folds);
+    const textChanged = viewModel.text !== ta.value;
+    viewModel = (folds.length && foldedSet.size)
+      ? codeFoldVisible(tab.content, folds, foldedSet)
+      : null;
+    if (textChanged) {
+      if (viewModel) {
+        ta.value = viewModel.text;
+        const vo = codeFoldModelToView(viewModel.segs, r.caret);
+        ta.setSelectionRange(vo, vo);
+      } else {
+        // 占位触碰后全部展开（评审整改 07c）：视图回全量文本、光标落插入点
+        ta.value = tab.content;
+        ta.setSelectionRange(r.caret, r.caret);
+      }
+    }
+  } else {
+    tab.content = ta.value;
+    // 无折叠态也随输入重算折叠区清单（工单 07：快捷键/箭头基于最新内容）
+    folds = codeFoldRanges(tab.content, tab.lang);
+  }
   const selStart = ta.selectionStart;
   const selEnd = ta.selectionEnd;
   const scrollTop = box.scrollTop;
   const scrollLeft = box.scrollLeft;
   // 只重绘高亮层与行号列（.code-edit 的 max-content 宽度/高度随 pre 自动
   // 调整，容器滚动不变；textarea 本体不重建——焦点/选区零抖动）
-  gutter.innerHTML = codeLineNumbersHTML(tab.content.split("\n").length);
-  hl.innerHTML = codeEditorHighlight(tab.content, tab.lang);
+  const viewText = viewModel ? viewModel.text : tab.content;
+  gutter.innerHTML = viewModel
+    ? codeFoldGutterHTML(viewModel.lines)
+    : codeLineNumbersHTML(tab.content.split("\n").length);
+  hl.innerHTML = codeEditorHighlight(viewText, tab.lang);
   // 标记层随输入重算（评审整改 05/06）：updateWordMarks/updateBracketMarks
   // 只重算状态不渲染——内容已变，无论词/括号是否变了都必须重画（查找命中
   // 偏移同样变了），此处无条件 renderEditorMarks（单次渲染，无双渲染）。
   updateWordMarks();
   updateBracketMarks();
   renderEditorMarks();
-  setActiveLine(caretLineOf(tab.content, selStart));
+  setActiveLine(caretLineOf(viewText, selStart));
   box.scrollTop = scrollTop;
   box.scrollLeft = scrollLeft;
   if (!composing) {
@@ -982,6 +1162,29 @@ export function replaceAllInActiveFile(needle, replacement) {
   if (!tab || tab.readonly) return 0;
   const r = replaceAllText(tab.content, needle, replacement);
   if (!r.count) return 0;
+  if (viewModel) {
+    // 折叠态（评审整改 07）：replace 结果 = **模型**文本——折叠态 textarea 须
+    // 持视图文本，不能经 applyEdit 直写（会把模型当视图喂 mapEdit → 占位误判
+    // 整块替换丢内容）。改为：模型整体替换 → 折叠区按签名保留 → 重建视图 →
+    // 光标落模型末尾（与既有「替换后光标置文件尾」语义一致）。
+    tab.content = r.value;
+    const oldFolds = folds;
+    folds = codeFoldRanges(tab.content, tab.lang);
+    foldedSet = codeFoldMerge(oldFolds, foldedSet, folds);
+    viewModel = (folds.length && foldedSet.size)
+      ? codeFoldVisible(tab.content, folds, foldedSet)
+      : null;
+    renderPane();
+    const ta = paneBox() && paneBox().querySelector(".code-ta");
+    if (ta) {
+      const vo = viewModel
+        ? codeFoldModelToView(viewModel.segs, tab.content.length)
+        : tab.content.length;
+      ta.focus();
+      ta.setSelectionRange(vo, vo);
+    }
+    return r.count;
+  }
   applyEdit(r.value, r.value.length, r.value.length);
   return r.count;
 }
@@ -1108,6 +1311,40 @@ export function initCodeEditor() {
 
   const box = paneBox();
   if (box) {
+    // 折叠交互（工单 07）：gutter 箭头（data-fold）与占位行
+    // （data-fold-expand）点击切换——委托在容器（渲染重建后无需重绑）。
+    box.addEventListener("click", (e) => {
+      const arrow = e.target.closest("[data-fold]");
+      if (arrow) {
+        e.stopPropagation();
+        toggleFold(parseInt(arrow.dataset.fold, 10));
+        return;
+      }
+      const ph = e.target.closest("[data-fold-expand]");
+      if (ph) {
+        e.stopPropagation();
+        toggleFold(parseInt(ph.dataset.foldExpand, 10));
+      }
+    });
+    // 折叠快捷键（工单 07）：Ctrl+Shift+[ 折叠 / Ctrl+Shift+] 展开光标所在
+    // 折叠区（最内层）；无折叠区 → 静默。仅「代码」tab 生效。
+    document.addEventListener("keydown", (e) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
+      if (e.key !== "[" && e.key !== "]") return;
+      const sec = $("tab-code");
+      if (!sec || !sec.classList.contains("active")) return;
+      const tab = getActiveTab();
+      if (!tab || !folds.length) return;
+      e.preventDefault();
+      const line = caretLineOf(tab.content, foldCaretModelPos());
+      const fi = foldAtLine(line);
+      if (fi === null) return;
+      if (e.key === "[") {
+        if (!foldedSet.has(fi)) toggleFold(fi);
+      } else if (foldedSet.has(fi)) {
+        toggleFold(fi);
+      }
+    });
     // 组合输入保护：compositionend 后补一次同步（内容一次性落定）
     box.addEventListener("compositionstart", () => { composing = true; });
     box.addEventListener("compositionend", () => {
