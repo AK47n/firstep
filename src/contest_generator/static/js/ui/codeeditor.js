@@ -534,7 +534,10 @@ function winWindow() {
 }
 
 // winRenderMarks()：标记层窗口化重画（查找命中/选中词/括号/缩进引导线按
-// 窗口行过滤重基准——行内偏移不变）。
+// 窗口行过滤重基准——行内偏移不变）。上下 spacer 与 hl/gutter 层同高度
+// ——标记层绝对定位在 .code-edit 顶部，缺 spacer 时滚动后整层y 向错位
+// （引导线压到错误行/穿过代码文字，用户反馈错位的根因；scrollTop=0 时
+// 恰好对齐，此前冒烟只测顶部窗口未暴露）。
 function winRenderMarks() {
   const box = paneBox();
   const marksEl = box && box.querySelector(".code-marks");
@@ -552,7 +555,9 @@ function winRenderMarks() {
       windowMarks.push({ line: li - r.start + 1, start: m.start, end: m.end, kind: m.kind });
     }
   }
-  marksEl.innerHTML = codeMarksHTML(windowText, windowMarks);
+  const topH = Math.round(r.start * winLineH * 100) / 100;
+  const bottomH = Math.round((winCache.lineCount - r.end) * winLineH * 100) / 100;
+  marksEl.innerHTML = winSpacer(topH) + codeMarksHTML(windowText, windowMarks) + winSpacer(bottomH);
 }
 
 // winApplySize()：.code-edit 显式尺寸 = 全量内容（行高*行数 + 上下 padding
