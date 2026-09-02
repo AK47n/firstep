@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3dc34595d517c647dc3092e0984abd26b3c9f8b5 -->
+<!-- changelog-auto: last-commit=2580c19d916cda527783eb00ed4520f5cd409a3c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -30,6 +30,7 @@
 - 20:13 fix：代码编辑器点击行即时高亮当前行——select/keyup 双保险不覆盖「鼠标点击纯光标定位」（Chrome 对点击 textarea 定位光标不派发 select），补 click 委托走同一 setActiveLine 路径（折叠态视图坐标对齐）
 - 20:18 fix：光标联动重活顺延一帧——点击/按键不再拖后当前行高亮（rAF 合并调度 + 选中词内容引用短路 + keydown 即时更新）
 - 20:28 feat：代码页状态栏「快捷键」按钮 + 帮助弹窗——集中展示全部快捷键/鼠标手势（fx 数据单源 · 键帽列表 · Esc/×/遮罩关闭；评审整改：重开防 keydown 泄漏、键位数组化、测试断言收窄）
+- 20:50 feat：代码编辑器 VSCode 式行操作——Shift+Tab 反缩进 / Ctrl+Shift+K 删行 / Alt+↑↓ 移动行 / Shift+Alt+↑↓ 复制行 / Ctrl+L 选整行（fx 纯件 code-lineops 可单测 · keydown 管线注册 · 快捷键帮助数据单源同步；工单 code-page-vscode-overhaul/01）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
