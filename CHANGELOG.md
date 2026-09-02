@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f242af047e3585865f58670286bf7d7b100db7d7 -->
+<!-- changelog-auto: last-commit=53e66d0017bc3a1d566d349c02cc7241ce060721 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -37,6 +37,7 @@
 - 21:05 feat：代码页面包屑——路径分段随标签刷新、目录段点击逐级展开定位文件树（data-dir-path + 滚动高亮）、文件段可点击（fx 纯件可单测；工单 code-page-vscode-overhaul/05）
 - 21:08 feat：底部面板 tab 化——编译/磁盘变更/AI 对话/修复/烧录合一容器 + 页签条，有内容页签才显示、新消息自动切换、各面板收起态独立（业务显隐改接 showPanel/hidePanel；工单 code-page-vscode-overhaul/06）
 - 21:12 feat：代码区视觉细节——缩进引导线（4 列对齐纯件标记、双主题自适应）、括号配对 VSCode 式描边框、细滚动条、行高 1.6 微调（三明治全链同步；工单 code-page-vscode-overhaul/07）
+- 21:29 fix：clex.match_bracket 早停扫描——旧实现逐候选经 iter_c_regions 重新词法切分（code 区域扫到文件尾才 yield）合计 O(n²)，5000 函数实测 84s 打开即卡；早停后 O(闭合跨度) 毫秒级，遍历注释/字符串/预处理行跳读语义不变（工单 code-page-vscode-overhaul/08 前置）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
