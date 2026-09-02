@@ -7,11 +7,13 @@ import {
   codeTabBadge,
   codeTabStripHTML,
   codeEditorHTML,
+  codeStatusHTML,
   conflictHTML,
   editorLineRange,
   isTabSavable,
   dirtySavableTabs,
   caretLineOf,
+  caretColOf,
   indentOnEnter,
   indentLines,
   replaceAllText,
@@ -104,6 +106,18 @@ test("caretLineOf：光标行号（1 基，含中英混排）", () => {
   assert.equal(caretLineOf(v, 8), 3);      // 第三行首字符
   assert.equal(caretLineOf(v, 999), 4);    // 越界钳末：尾 \n 后有第 4 空行
   assert.equal(caretLineOf("", 0), 1);     // 空串
+});
+
+test("caretColOf：光标列号（1 基，与 caretLineOf 同族成对）", () => {
+  const v = "ab\ncd中文\nef\n";
+  assert.equal(caretColOf(v, 0), 1);       // 首字符
+  assert.equal(caretColOf(v, 1), 2);       // 行中
+  assert.equal(caretColOf(v, 2), 3);       // \n 上 = 行尾后（浏览器光标语义）
+  assert.equal(caretColOf(v, 3), 1);       // 新行首
+  assert.equal(caretColOf(v, 5), 3);       // 中文按码元计数
+  assert.equal(caretColOf(v, 7), 5);       // 行尾 \n 上
+  assert.equal(caretColOf(v, 999), 1);     // 越界钳末行（尾 \n 后 = 空行首）
+  assert.equal(caretColOf("", 0), 1);      // 空串
 });
 
 test("indentOnEnter：单行光标 = 换行 + 拷贝前导空白", () => {
@@ -221,4 +235,42 @@ test("replaceAllText：单处/多处/空替换/特殊字符（split-join 语义�
   // $& / $1 等替换串必须按字面处理（split-join 天然规避 replace 模式串陷阱）
   assert.deepEqual(replaceAllText("a1a", "a", "$&"), { count: 2, value: "$&1$&" });
   assert.deepEqual(replaceAllText("a.b", ".", "-"), { count: 1, value: "a-b" });   // 正则元字符按字面
+});
+
+// codeStatusHTML：状态栏信息区纯件（工单 code-editor-vscode-polish/01）——
+// 完整信息 / 非 UTF-8 / 自定义缩进缩放 / 语言徽标 / 空态（无活动文件 → 空串）。
+test("codeStatusHTML：完整信息渲染（行/列/语言/编码/缩进/缩放）", () => {
+  const html = codeStatusHTML({ line: 3, col: 5, lang: "c", utf8: true, indent: 4, zoomPct: 100 });
+  assert.match(html, /Ln 3, Col 5/);
+  assert.match(html, /class="code-statusbar-pos"/);   // 行列高亮段
+  assert.match(html, />C</);                            // 语言徽标（复用 codeTabBadge）
+  assert.match(html, /UTF-8/);
+  assert.match(html, /空格: 4/);
+  assert.match(html, /100%/);
+});
+
+test("codeStatusHTML：非 UTF-8 标注 / 自定义缩进 / 缩放百分比", () => {
+  const html = codeStatusHTML({ line: 1, col: 1, lang: "md", utf8: false, indent: 2, zoomPct: 120 });
+  assert.match(html, /非 UTF-8（只读）/);
+  assert.match(html, /空格: 2/);
+  assert.match(html, /120%/);
+  assert.match(html, />MD</);   // md 语言徽标
+});
+
+test("codeStatusHTML：xml 语言徽标与空态（无 lang → 空串）", () => {
+  const xml = codeStatusHTML({ line: 1, col: 1, lang: "xml", utf8: true, indent: 4, zoomPct: 100 });
+  assert.match(xml, />XML</);
+  assert.equal(codeStatusHTML({}), "");                // 无活动文件
+  assert.equal(codeStatusHTML(null), "");
+  assert.equal(codeStatusHTML({ lang: "" }), "");
+});
+
+test("codeStatusHTML：边界钳制（0/负行、列 → 1；缩放 0 → 默认 100%）", () => {
+  const html = codeStatusHTML({ line: 0, col: 0, lang: "c", utf8: true, indent: 4, zoomPct: 0 });
+  assert.match(html, /Ln 1, Col 1/);
+  assert.match(html, /100%/);
+  const neg = codeStatusHTML({ line: -3, col: -9, lang: "c" });
+  assert.match(neg, /Ln 1, Col 1/);
+  const noUtf8 = codeStatusHTML({ line: 2, col: 3, lang: "c" });
+  assert.match(noUtf8, /UTF-8/);   // utf8 缺省按 UTF-8 展示
 });

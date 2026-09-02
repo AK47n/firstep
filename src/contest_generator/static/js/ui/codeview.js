@@ -10,7 +10,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { codeZoomClamp, parseZoomStored, isMainCPath } from "/js/fx/code.js";
-import { isTabSavable } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）
+import { isTabSavable, codeStatusHTML, caretLineOf, caretColOf } from "/js/fx/codeeditor.js";  // 保存判据单源（code-viewer-editor/03）+ 状态栏信息纯件/光标行列（code-editor-vscode-polish/01）
 import {
   baselineSnapshot,
   baselineDiff,
@@ -49,6 +49,7 @@ import {
   setMdMode,
   isMdPreviewActive,
   onActiveTabChanged,
+  onCursorChanged,
   onFileSaved,
   onFileLoaded,
   openTabPaths,
@@ -541,6 +542,42 @@ function currentCodeZoomPct() {
   return raw > 0 ? Math.round(raw * 100) : 100;
 }
 
+// refreshCodeStatus()：底部状态栏信息区刷新（工单 code-editor-vscode-polish/01）
+// ——活动标签的 Ln/Col（读 textarea 选区，readonly 同样可取）/ 语言 / 编码 /
+// 缩进 / 缩放；无活动文件 → 清空（容器零宽不占位）。触发点：活动标签变化
+// （onActiveTabChanged）、光标/选区变化（onCursorChanged）、缩放（applyCodeZoom）、
+// 初始化。
+function refreshCodeStatus() {
+  const bar = $("code-statusbar-info");
+  if (!bar) return;
+  const tab = getActiveTab();
+  if (!tab) {
+    bar.innerHTML = '<span class="code-statusbar-empty">未打开文件</span>';
+    return;
+  }
+  const ta = document.querySelector("#code-viewer .code-ta");
+  let line = 1;
+  let col = 1;
+  if (ta) {
+    const pos = Math.max(0, ta.selectionStart | 0);
+    line = caretLineOf(ta.value, pos);
+    const lineStart = ta.value.lastIndexOf("\n", pos - 1) + 1;
+    const lineEnd = (() => {
+      const nl = ta.value.indexOf("\n", lineStart);
+      return nl === -1 ? ta.value.length : nl;
+    })();
+    col = Math.min(caretColOf(ta.value, pos), lineEnd - lineStart + 1);
+  }
+  bar.innerHTML = codeStatusHTML({
+    line,
+    col,
+    lang: tab.lang,
+    utf8: tab.utf8,
+    indent: 4,
+    zoomPct: currentCodeZoomPct(),
+  });
+}
+
 function showCodeZoomBadge(pct) {
   if (!codeZoomBadge) {
     const view = $("code-viewer");
@@ -564,6 +601,7 @@ function applyCodeZoom(pct) {
   view.style.setProperty("--code-zoom", String(pct / 100));
   try { localStorage.setItem(CODE_VIEW_ZOOM_KEY, String(pct)); } catch (e) {}
   showCodeZoomBadge(pct);
+  refreshCodeStatus();   // 状态栏缩放百分比实时刷新（工单 01）
 }
 
 function initCodeViewZoom() {
@@ -784,6 +822,7 @@ export function initCodeViewer() {
     // 空态信息条占位 30px）。同步点唯一 = 本回调（所有按钮可见性路径
     // openEditorFile/setMdMode/applySavedState 均经 notifyActive 汇聚）。
     syncInfoBar();
+    refreshCodeStatus();   // 状态栏信息区随活动标签变化刷新（工单 01）
   });
 
   // 保存成功 → 树节点大小刷新 + 大纲重渲（服务端重算 outline 直用——
@@ -944,4 +983,10 @@ export function initCodeViewer() {
 
   // 代码字号缩放（工单 code-viewer-zoom/01）
   initCodeViewZoom();
+
+  // 状态栏信息区（工单 code-editor-vscode-polish/01）：光标/选区变化 → 刷新；
+  // 初始空态（未打开目录/无活动 tab）onActiveTabChanged 未触发过——显式刷
+  // 一次（空内容零宽不占位，与 syncInfoBar 初始化同因）。
+  onCursorChanged(refreshCodeStatus);
+  refreshCodeStatus();
 }
