@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1f82f4b76d27e3ef225f2ddd543a65327839cc6f -->
+<!-- changelog-auto: last-commit=f41c5d5243e20bee7c52c37bd105ae352663f048 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -25,6 +25,7 @@
 - 19:36 工单 code-editor-vscode-polish/05：选中词高亮——光标处词全文同词标记（大小写精确 + 词边界、codeWordAt/codeWordRanges 纯件）、与查找标记分层共存、输入路径重算兜底（IME/粘贴/替换）、md 预览自动排除
 - 19:42 工单 code-editor-vscode-polish/06：括号配对与自动闭合——自动闭合/选区包裹/右括号跳过与整对替换/退格删对（fx/code-brackets 纯件）、配对高亮（跳过字符串注释假括号、仅 c/xml 且非只读）、IME 组合保护与 plain 语言门控（评审整改）
 - 20:00 工单 code-editor-vscode-polish/07：代码折叠——.c/.h 花括号与 .md 标题折叠（fx/code-fold 纯件：区域/可见行映射/偏移映射编辑回写）、gutter 箭头 + 占位行 + Ctrl+Shift+[/] 、跳行自动展开、.md 预览 details/summary 标题折叠、折叠态标记/状态栏模型坐标、评审整改（语言门控/caretColOf 导入/replaceAll 折叠路径/关标签残留）
+- 20:00 fix（工单 code-editor-vscode-polish/06 评审整改）：bracketPairAt 前置短路同时检查 p 与 p-1——原实现 src[p] 真值短路吞掉 p-1 检查，光标在括号后一字符（如 'x'）时误判非括号直接返回 null
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
