@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-27T23:53:44+0800",
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "系统初始化与自检",
+      "description": "在 main() 的 TODO 初始化处完成所有外设初始化：调用 beep_init()、motor_init()、encoder_init()、led_init(LED_RED)、led_init(LED_YELLOW)、led_init(LED_GREEN)，并关闭全部 LED；调用 OLED_Init()、OLED_Clear()、OLED_ShowString(0,0,\"System Ready\")；调用 systick_init()；上电提示 beep_beep(1,50,50)。确认主循环已包含 decision_dispatch() 和 delay_ms(10)。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [],
+      "verify": "compile",
+      "status": "doing",
+      "note": "",
+      "iterations": []
+    },
+    {
+      "id": "t2",
+      "title": "灰度采集与偏差计算",
+      "description": "在 decision_dispatch() 的 CROSS_NORMAL 分支 TODO 处添加灰度读取代码：调用 adc_init(ADC_1, ADC_Channel_0) 等初始化左右灰度传感器（具体通道根据硬件接线），读取 adc_get(ADC_1, ADC_Channel_0) 和 adc_get(ADC_1, ADC_Channel_1) 等，计算偏差并存入局部变量。同时在 TODO 参数区填写巡线 PID 基础参数：base_speed、turn_duty、pid_kp、pid_ki、pid_kd。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t1"
+      ],
+      "verify": "compile",
+      "status": "pending",
+      "note": "",
+      "iterations": []
+    },
+    {
+      "id": "t3",
+      "title": "巡线 PID 控制",
+      "description": "在 CROSS_NORMAL 分支根据偏差调用 motor_set_duty 和 motor_set_direction 执行差速 PID 控制，使小车沿红线行驶。使用 motor_set_duty(MOTOR_A, duty_left) 和 motor_set_duty(MOTOR_B, duty_right) 设置左右轮占空比，使用 motor_set_direction 设置方向。实现比例项（可选积分/微分）计算左右轮输出。同时维护巡线状态。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t2"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "iterations": []
+    },
+    {
+      "id": "t4",
+      "title": "十字路口检测与转向",
+      "description": "实现 CROSS_STRAIGHT、CROSS_TURN、CROSS_COOLDOWN 状态：检测到路口特征（如灰度值全部为白）后进入 CROSS_STRAIGHT，保持直行一段时间（使用 delay_ms 或 get_time_stamp_ms 计时），随后按路由表转向（左/右/直），调用电机接口完成转向（如 motor_set_direction 和 motor_set_duty 实现原地转向或差速转向），转向完成后进入 CROSS_COOLDOWN 并复位为 CROSS_NORMAL。在 TODO 参数区填写路口判定消抖帧数和转向安全超时。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t3"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "iterations": []
+    },
+    {
+      "id": "t5",
+      "title": "药房送达与返程状态机",
+      "description": "实现 PHARMACY_WAIT_LIFT、PHARMACY_TURN180、PHARMACY_COOLDOWN、PHARMACY_DONE 状态：使用 get_key_state() 模拟药品装载完成信号，触发掉头（调用电机接口完成 180° 转向），掉头完成进入冷却，冷却后进入 PHARMACY_DONE；随后实现 RETURN_NONE、RETURN_TURN、RETURN_COOLDOWN 状态，使用 get_key_state() 模拟返程信号，触发返程转向并继续巡线。调用 beep_on/beep_off 配合指示。",
+      "score_refs": [
+        "s1"
+      ],
+      "depends_on": [
+        "t4"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "iterations": []
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-28T21:56:25+0800",
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "修正启动条件与自动启动",
+      "description": "在 main.c 的 xunji_dispatch 函数 XUNJI_STOP 分支中，将启动条件从'gray != 0'（白区）修正为正确检测黑线，例如 gray == 0，确保小车在 A 点放置后自动启动，并保留启动声光提示（led_beep_alarm）。",
+      "score_refs": [],
+      "depends_on": [],
+      "verify": "manual",
+      "status": "doing",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PA15"
+      ],
+      "iterations": []
+    },
+    {
+      "id": "t2",
+      "title": "实现 A→B 单段停车模式",
+      "description": "在 main.c 的路径状态机 PHASE_AB 分支中，增加单段模式判断：当模式为单段且平均里程达到 AB_DISTANCE_MM 时，设置 xunji_state = XUNJI_STOP，调用 xunji_set_speed(0,0) 停车，并调用 led_beep_alarm(1,100,100) 声光提示到达 B 点。",
+      "score_refs": [],
+      "depends_on": [
+        "t1"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PA9",
+        "PA18",
+        "PA12",
+        "PA16",
+        "PA17",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PB19",
+        "PB20",
+        "PA15"
+      ],
+      "iterations": []
+    },
+    {
+      "id": "t3",
+      "title": "完善停车保持与等待确认",
+      "description": "在 main.c 的 xunji_dispatch 函数 XUNJI_WAIT_LINE 分支中，实现停车保持（调用 xunji_set_speed(0,0)），并在超时（state_timeout_ms > STATE_TIMEOUT_MS）后返回 XUNJI_STOP 状态，完成等待确认。",
+      "score_refs": [],
+      "depends_on": [
+        "t2"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PA9",
+        "PA18",
+        "PA12",
+        "PA16",
+        "PA17",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PB19",
+        "PB20"
+      ],
+      "iterations": []
+    },
+    {
+      "id": "t4",
+      "title": "完善 10ms 调度周期",
+      "description": "在 main.c 的 main 函数 for(;;) 循环中，保持 delay_ms(10) 调用以实现 10ms 调度周期，确保 xunji_dispatch 被稳定周期调用，并可注释说明 10ms 节拍。",
+      "score_refs": [],
+      "depends_on": [
+        "t1"
+      ],
+      "verify": "compile",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [],
+      "iterations": []
+    },
+    {
+      "id": "t5",
+      "title": "添加安全超时保护",
+      "description": "检查 main.c 中 state_timeout_ms 累加和比较逻辑，确保超时后强制停车（xunji_set_speed(0,0)）并复位超时计数，防止失控。",
+      "score_refs": [],
+      "depends_on": [
+        "t2",
+        "t3"
+      ],
+      "verify": "compile",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PA9",
+        "PA18",
+        "PA12",
+        "PA16",
+        "PA17",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PB19",
+        "PB20"
+      ],
+      "iterations": []
+    }
+  ]
+}

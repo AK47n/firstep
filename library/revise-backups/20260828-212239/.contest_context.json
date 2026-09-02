@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "platform": "mspm0",
+  "slugs": [
+    "motor",
+    "xunji",
+    "led",
+    "beep",
+    "delay",
+    "led_beep",
+    "ml_mpu6050"
+  ],
+  "main_c": "/*\n * 巡线小车决策框架 —— 题型：line_follow（car 1.1 巡线模板 mspm0 提炼）\n *\n * 本文件是「题型确定性框架段」（参考条目 framework/main.c）：骨架生成时\n * 原样注入 main.c 生成 prompt，作为**必须保留的结构**。类型 = 通用巡线\n * 小车主循环：灰度传感器读线 → PID 差速控制 → 主循环调度（10ms 节拍）。\n * 平台 / 接口中立：所有硬件调用一律写成注释占位\n *   // TODO: <角色> 由接口块替换\n * 由 AI 按当前所选模块接口实现（接口块里真实存在的函数）。\n *\n * 框架约定：\n * 1. 枚举 / 调度循环 / 框架函数名保持原样，改动只出现在 TODO 位；\n * 2. 控制分层：每周期「读线 → 计算偏差 → 设置电机」三步，不做题外逻辑；\n * 3. 所有持续运行逻辑挂在 10ms 调度周期上（isr 每 10ms 调一次\n *    xunji_dispatch），单次调度内不阻塞；\n * 4. 安全兜底：任何状态转换都有超时转移，不许死等；\n * 5. 不在框架里写死参数（速度 / 偏差增益 / 死区全部经 TODO 参数区注入）。\n */\n\n#include \"xunji.h\"\n#include \"led.h\"\n#include \"beep.h\"\n#include \"led_beep.h\"\n#include \"delay.h\"\n\n// ===== 巡线状态机 =====\ntypedef enum {\n    XUNJI_STOP,        /* 等待启动（按键 / 上电复位） */\n    XUNJI_FOLLOW,      /* 正常巡线中 */\n    XUNJI_WAIT_LINE    /* 等待特定线型（如停车区） */\n} xunji_state_t;\n\nstatic xunji_state_t xunji_state = XUNJI_STOP;\n\n// ===== TODO 参数区（按题面 / 实际底盘标定值填写）=====\n// 基础速度（百分比制，0~100）\n#define BASE_SPEED       45\n// 巡线偏差增益（值越大转向越激进）\n#define LINE_GAIN        4.0f\n// 停车区判定连续帧数（按 10ms 调度周期换算）\n#define STOP_LINE_FRAMES 3\n// 状态转换安全超时（ms）\n#define STATE_TIMEOUT_MS 3000\n// 10ms 调度周期节拍（用于超时计数）\n#define TIMEOUT_PERIOD_MS 10\n\n/* 状态切换时重置超时计数 */\nstatic xunji_state_t last_state = XUNJI_STOP;\nstatic uint32_t state_timeout_ms = 0;\n\n/*\n * 10ms 调度周期入口（isr 或定时器回调调用）。\n * 读线 → 算偏差 → 差速控制；状态机只做最小化转移。\n */\nstatic void xunji_dispatch(void) {\n    // 状态切换时重置超时计数\n    if (xunji_state != last_state) {\n        last_state = xunji_state;\n        state_timeout_ms = 0;\n    }\n    state_timeout_ms += TIMEOUT_PERIOD_MS;\n\n    // 读灰度线：返回 8 路位图，1 = 白区\n    uint8_t gray = xunji_read_gray();\n\n    switch (xunji_state) {\n        case XUNJI_STOP:\n            // TODO: 启动条件（检测到黑线自动启动；如有按键改用按键输入）\n            if (gray != 0) {\n                xunji_state = XUNJI_FOLLOW;\n                led_beep_alarm(1, 100, 100);   // 启动声光提示\n            }\n            break;\n\n        case XUNJI_FOLLOW:\n        {\n            // 巡线控制：加权质心偏航 → 差速输出\n            float bias = xunji_centroid(LINE_GAIN);\n            int left =  (int)(BASE_SPEED + bias);\n            int right = (int)(BASE_SPEED - bias);\n\n            // TODO: 速度限幅（可根据实际电机能力调整）\n            if (left > 100)  left = 100;\n            if (left < -100) left = -100;\n            if (right > 100)  right = 100;\n            if (right < -100) right = -100;\n            xunji_set_speed(left, right);\n\n            // TODO: 停车区特征判定需按实际赛道标定，此处暂按全白（0xFF）作为示例\n            static uint8_t stop_frames = 0;\n            if (gray == 0xFFu) {\n                stop_frames++;\n                if (stop_frames >= STOP_LINE_FRAMES) {\n                    stop_frames = 0;\n                    state_timeout_ms = 0;\n                    xunji_state = XUNJI_WAIT_LINE;\n                    xunji_set_speed(0, 0);\n                    led_beep_alarm(1, 200, 200); // 到达停车区声光提示\n                    break;\n                }\n            } else {\n                stop_frames = 0;\n            }\n\n            // 安全兜底：巡线超时强制停止\n            if (state_timeout_ms > STATE_TIMEOUT_MS) {\n                state_timeout_ms = 0;\n                xunji_state = XUNJI_STOP;\n                xunji_set_speed(0, 0);\n            }\n            break;\n        }\n\n        case XUNJI_WAIT_LINE:\n            // TODO: 停车保持 / 等待确认（按键复位或超时收车）\n            xunji_set_speed(0, 0);\n            if (state_timeout_ms > STATE_TIMEOUT_MS) {\n                state_timeout_ms = 0;\n                xunji_state = XUNJI_STOP;\n            }\n            break;\n    }\n}\n\n/*\n * main() 骨架：初始化 → 调度循环（while(1) 内只调 xunji_dispatch）。\n */\nint main(void) {\n    // 模块初始化：LED → 蜂鸣器 → 组合模块 → 循迹/电机/编码器\n    led_init(LED_RED);\n    beep_init();\n    led_beep_init();\n    xunji_init();\n\n    // TODO: 10ms 定时器启动（此处为循环内轮询节拍，使用 delay_ms(10)）\n    led_beep_alarm(1, 100, 100); // 上电声光提示\n\n    for (;;) {\n        xunji_dispatch();\n        delay_ms(10);\n    }\n}\n",
+  "problem_text": "自动行驶小车（H 题） \n【本科组/高职高专组】 \n一、 任务 \n设计一个采用 TI MSPM0 系列 MCU 控制的自动行驶小车，能在指定路径\n上自动行驶， 行驶场地示意如图1 所示。 场地面积不小于220cm×120cm。 图中\n两个对称半圆弧线的半径为 40cm，弧线为黑色，线宽 1.8cm 左右，弧线的四个\n顶点分别定义为 A、B、C 和 D 点。建议场地采用白色哑光喷绘布制作。场地除\n两个半圆弧外，不得添加任何标记。 \n40cm 40cm\n100cm\n220cm\n120cm\nA B\nCD\n60cm\n60cm\n \n图 1 小车行驶场地示意图 \n\nH - 2 / 3 \n \n二、 要求 \n（1）将小车放在位置 A 点，小车能自动行驶到 B 点停车，停车时有声光提\n示。用时不大于 15 秒。 （20 分）。 \n（2）将小车放在位置 A 点，小车能自动行驶到 B 点后，沿半弧线行驶到 C\n点， 再由C 点自动行驶到 D 点，最后沿半弧线行驶到 A 点停车， 每经过一个点，\n声光提示一次。完成一圈用时不大于 30 秒。 （20 分） \n（3）将小车放在位置 A 点，小车能自动行驶到 C 点后，沿半弧线行驶到 B\n点， 再由B 点自动行驶到 D 点，最后沿半弧线行驶到 A 点停车。 每经过一个点，\n声光提示一次。完成一圈用时不大于 40 秒。 （30 分） \n（4）按要求 3 的路径自动行驶 4 圈停车，用时越少越好（30 分） \n（5）设计报告。（20 分） \n \n三、 说明 \n（1）作品中的小车尺寸不大于 25cm（长）×15cm（宽）× 15cm（高） 。\n小车尺寸包括小车以及小车所安装的传感器等总体的轮廓尺寸大小。 小车采用轮\n式小车，不得采用履带和麦氏轮。小车行驶时只能前进，不得后退。必须采用\nTI MSPM0 系列 MCU 控制小车的状态，不得采用其他型号的 MCU。小车控制\n板安装时需暴露其 TI MSPM0 芯片，便于测试时查验。小车上不得安装摄像头。\n不符合规定的小车不进行测试。 \n（2）行驶场地水平铺设于平整的地面，除题目要求的圆弧之外，行驶场地\n上不得有其他任何指示标记（包括 ABCD 四个字符） 。不得对测试场地外环境有\n任何要求。为了适应测试场地，允许测试前小车试跑。 \n（3）小车不得借助周围环境物品导航。场地内外不得架设任何其他装置设\n备。正式测试时，小车行驶过程中不得人为干涉、遥控小车运动。测试时，应允\n许相关人员在场地外围走动。 \n（4）本题目所有小车在起始点的摆放方向自定。要求的小车停车动作及行\n驶经过 A、B、C、D 点时， 必须有声光提示。 启动、 停车及行驶经过A、B、C、\nD 点时， 小车的地面投影必须覆盖圆弧顶点； 小车所有在圆弧上的行驶过程， 其\n投影必须在弧线上，投影脱离圆弧即认为此次测试失败，此项目不得分。 \n（5） 所有测试项目如果完成时间超过规定时间一倍以上时， 此项目不得分。 \n（6）小车采用车载电池供电。进入测试环节，中途不得更换电池。 \n \n  \nH - 3 / 3 \n \n四、 评分标准 \n 项 目 主要内容 满分 \n设计报告 \n系统方案 小车自动行驶的设计方案 3 \n理论分析 小车自动行驶误差分析 \n小车轨迹控制 5 \n电路与程序设计 控制电路及程序流程 5 \n测试方案与测试结果 测试数据完成性 \n测试结果分析 4 \n设计报告结构及规范性 \n摘要 \n设计报告正文的结构 \n图标的规范性 \n3 \n合计 20 \n要求 \n完成第（1）项 20 \n完成第（2）项 20 \n完成第（3）项 30 \n完成第（4）项 30 \n合计 100 \n总 分 120 \n\n[图1 标注：图1 小车行驶场地示意图：\n\n- **布局**：一个由两段水平直线和两端半圆弧组成的封闭跑道形场地。四个顶点分别为 A（左上）、B（右上）、C（右下）、D（左下）。\n- **尺寸标注**：\n  - 顶部水平边（A-B）长度：1000mm。\n  - 底部水平边（D-C）长度：2200mm。\n  - 左右两侧垂直距离（A-D 和 B-C）：1200mm。\n  - 两个对称半圆弧的半径：40cm（约400mm）。\n  - 内部垂直标注线长度：600mm（位于两半圆弧圆心之间）。\n- **线型**：黑色实线。]",
+  "topic_id": "2024H",
+  "qa_text": "",
+  "requirements": [
+    {
+      "requirement": "自动行驶至B点停车，有声光提示",
+      "sentence": 24,
+      "modules": [
+        "xunji",
+        "led_beep",
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "行驶经过各点声光提示一次",
+      "sentence": 29,
+      "modules": [
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿黑色轨迹线自动行驶",
+      "sentence": 5,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "按路径行驶，需电机驱动",
+      "sentence": 5,
+      "modules": [
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "直行段保持航向，需姿态传感器",
+      "sentence": 5,
+      "modules": [
+        "ml_mpu6050",
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿半弧线行驶，需巡线功能",
+      "sentence": 28,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "按指定路径行驶4圈停车",
+      "sentence": 39,
+      "modules": [
+        "xunji",
+        "motor"
+      ],
+      "suggestions": []
+    }
+  ],
+  "references": [],
+  "bindings": {},
+  "instances": {
+    "led": [
+      {
+        "name": "LED",
+        "variant": "red",
+        "pin": ""
+      }
+    ]
+  },
+  "python_templates": {},
+  "generated_at": "2026-08-28T12:52:00+0800",
+  "tool_version": "0.1.0"
+}

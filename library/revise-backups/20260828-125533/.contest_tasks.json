@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-28T12:54:35+0800",
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "基础巡线与初始化",
+      "description": "在 main.c 的 main() 中完成 led/beep/led_beep/xunji 初始化和上电声光提示；在 xunji_dispatch() 的 XUNJI_STOP 分支实现检测到黑线自动启动（gray != 0 时切到 XUNJI_FOLLOW 并调用 led_beep_alarm(1,100,100)）；保留现有巡线决策代码，确保能编译通过。",
+      "score_refs": [],
+      "depends_on": [],
+      "verify": "compile",
+      "status": "doing",
+      "note": "",
+      "dialog_note": "",
+      "iterations": []
+    },
+    {
+      "id": "t2",
+      "title": "编码器里程与速度控制",
+      "description": "在 xunji_dispatch() 中每周期调用 xunji_encoder_read() 读取左右编码器，计算 10ms 内增量、累积里程和速度。加入速度 PI 控制，通过 xunji_set_speed() 输出，使左右轮速度稳定。将累积里程存到全局变量，供后续路径点判断。",
+      "score_refs": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "depends_on": [
+        "t1"
+      ],
+      "verify": "compile",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "iterations": []
+    },
+    {
+      "id": "t3",
+      "title": "声光提示系统",
+      "description": "实现一个函数 check_point_and_alert()，根据累积里程与预置的 A/B/C/D 点里程阈值比较，若越过某点则调用 led_beep_alarm(1,100,100) 提示，并记录已提示标志。在 XUNJI_FOLLOW 状态中调用该函数。同时保持启动、停车时的声光提示。",
+      "score_refs": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "depends_on": [
+        "t2"
+      ],
+      "verify": "compile",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "iterations": []
+    },
+    {
+      "id": "t4",
+      "title": "A 到 B 直线行驶与停车",
+      "description": "在 xunji_dispatch() 中增加里程判断：当累积里程达到 AB 段长度时，切换为停车状态，调用 xunji_set_speed(0,0) 并 led_beep_alarm(1,200,200) 提示，完成要求(1)。需根据实际底盘标定 AB 长度和编码器参数。",
+      "score_refs": [
+        "1"
+      ],
+      "depends_on": [
+        "t3"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "iterations": []
+    },
+    {
+      "id": "t5",
+      "title": "完整一圈行驶",
+      "description": "在 xunji_dispatch() 中实现路径状态机：AB 直线 → B 点后切换为圆弧巡线（B→C）→ C 点后直线（C→D）→ D 点后圆弧（D→A）→ 回到 A 停车。每段用里程阈值判断切换，经过每个点均声光提示。完成要求(2)的一圈行驶。",
+      "score_refs": [
+        "2"
+      ],
+      "depends_on": [
+        "t4"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "iterations": []
+    },
+    {
+      "id": "t6",
+      "title": "交叉路径行驶",
+      "description": "在状态机中增加替代路径模式：A→C（通过直线+圆弧组合）、C→B 圆弧、B→D 直线、D→A 圆弧。根据题面要求(3)配置各段顺序，每经过一个点声光提示，完成一圈。",
+      "score_refs": [
+        "3"
+      ],
+      "depends_on": [
+        "t5"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "iterations": []
+    },
+    {
+      "id": "t7",
+      "title": "多圈自动行驶",
+      "description": "在状态机中增加圈数计数，完成一圈后圈数加一，继续进入下一圈；当圈数达到 4 时进入停止状态，调用 led_beep_alarm(1,200,200) 提示并停车。完成要求(4)。",
+      "score_refs": [
+        "4"
+      ],
+      "depends_on": [
+        "t6"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "iterations": []
+    }
+  ]
+}
