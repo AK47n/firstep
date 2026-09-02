@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=29227009489568ee6f808bf3e6ed435e25618614 -->
+<!-- changelog-auto: last-commit=b918e29747eab4052eed504be6d818512a538a26 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 12:35 update topic 2023E
 - 12:36 赛题条目补图注
 - 12:39 赛题条目补图注
+- 12:40 赛题条目补图注
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
