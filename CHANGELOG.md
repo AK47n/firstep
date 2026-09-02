@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=cbc9ac044d906a88a53a6d4588c7e397b1267b34 -->
+<!-- changelog-auto: last-commit=f6f2c23eb3cc8c03f8f7033935754300631b8a46 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -32,6 +32,7 @@
 - 20:28 feat：代码页状态栏「快捷键」按钮 + 帮助弹窗——集中展示全部快捷键/鼠标手势（fx 数据单源 · 键帽列表 · Esc/×/遮罩关闭；评审整改：重开防 keydown 泄漏、键位数组化、测试断言收窄）
 - 20:50 feat：代码编辑器 VSCode 式行操作——Shift+Tab 反缩进 / Ctrl+Shift+K 删行 / Alt+↑↓ 移动行 / Shift+Alt+↑↓ 复制行 / Ctrl+L 选整行（fx 纯件 code-lineops 可单测 · keydown 管线注册 · 快捷键帮助数据单源同步；工单 code-page-vscode-overhaul/01）
 - 20:54 feat：代码编辑器 Ctrl+/ 注释切换——.c/.h 逐行 //、选中含块注释切块 /* */、XML 逐行 <!-- -->（fx 纯件 code-comment 可单测 · keydown 注册 · 帮助数据同步；工单 code-page-vscode-overhaul/02）
+- 20:58 feat：文件内查找替换增强——替换单个命中 / 替换并跳下一处（fx replaceOneAt 与标记层同语义）· 计数联动 · 折叠态替换与命中跳转视图映射（工单 code-page-vscode-overhaul/03）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
