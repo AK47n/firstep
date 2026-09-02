@@ -61,6 +61,7 @@ import {
   codeFoldMerge,
 } from "/js/fx/code-fold.js";  // 代码折叠纯件（工单 code-editor-vscode-polish/07；08 行号窗口化）
 import { confirmModal } from "/js/ui/confirm.js";
+import { unsavedSwitchModalHTML } from "/js/fx/exit-guard.js";  // 未保存退出保护纯件（工单 code-editor-refine/01）
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
 let codeDir = "";
@@ -116,9 +117,77 @@ const CODE_FLASH_MS = 1200;  // 跳行闪烁（与查看器同值：评审整改
 // ===== 目录上下文 =====
 export function getCodeDir() { return codeDir; }
 
-// setCodeDir(dir)：目录切换（codeview.loadCodeDir 调用）——清标签/缓存/
-// 活动态（目录变了旧文件无意义，防跨目录悬空引用）。
-export function setCodeDir(dir) {
+// 未保存退出保护（工单 code-editor-refine/01）：任一脏标签 → 刷新/关闭页面
+// 触发浏览器原生离开确认（文案由浏览器决定，无法定制）；判据动态求值——
+// 保存/重载/关闭标签后自动正确，无需维护拦截状态。
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (e) => {
+    if (!dirtySavableTabs(tabs).length) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+}
+
+// showUnsavedSwitchModal(dir)：目录切换三选模态——「保存全部并切换 / 放弃
+// 修改并切换 / 取消」→ Promise<"save" | "discard" | "cancel">。HTML 纯件
+// fx/exit-guard.js；接线对齐 conflictModal 先例（Esc / × / 点遮罩 = 取消、
+// Tab 焦点陷阱、关闭后焦点归还触发元素；默认焦点给「取消」防误触）。
+function showUnsavedSwitchModal(dir) {
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const overlayEl = document.createElement("div");
+    overlayEl.className = "ref-files-overlay";
+    overlayEl.innerHTML = unsavedSwitchModalHTML({ dir, dirtyTabs: dirtySavableTabs(tabs) });
+    const onKey = (e) => {
+      if (e.key === "Escape") { finish("cancel"); return; }
+      if (e.key === "Tab") {
+        const focusables = Array.from(
+          overlayEl.querySelectorAll("button, input, select, textarea, [href], [tabindex]:not([tabindex='-1'])")
+        ).filter((el) => !el.disabled && el.offsetParent !== null);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    let settled = false;
+    const finish = (action) => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", onKey);
+      overlayEl.remove();
+      // 关闭后把焦点还给触发元素（对齐 confirmModal 先例 ux-walkthrough-02/19）
+      if (opener && !opener.disabled && typeof opener.focus === "function"
+          && opener.isConnected) opener.focus();
+      resolve(action);
+    };
+    overlayEl.querySelector(".ref-files-close").addEventListener("click", () => finish("cancel"));
+    overlayEl.addEventListener("click", (e) => { if (e.target === overlayEl) finish("cancel"); });
+    overlayEl.querySelector('[data-unsaved-action="cancel"]').addEventListener("click", () => finish("cancel"));
+    overlayEl.querySelector('[data-unsaved-action="save"]').addEventListener("click", () => finish("save"));
+    overlayEl.querySelector('[data-unsaved-action="discard"]').addEventListener("click", () => finish("discard"));
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlayEl);
+    const cancelBtn = overlayEl.querySelector('[data-unsaved-action="cancel"]');
+    if (cancelBtn) cancelBtn.focus();
+  });
+}
+
+// setCodeDir(dir)：目录切换（codeview.loadCodeDir 唯一调用方）——清标签/缓存/
+// 活动态（目录变了旧文件无意义，防跨目录悬空引用）。未保存保护：存在脏标签
+// 时先弹三选（保存全部并切换 / 放弃修改并切换 / 取消）；取消或保存未落盘 →
+// 返回 false（不切换，编辑保留）；成功切换返回 true。
+export async function setCodeDir(dir) {
+  if (dirtySavableTabs(tabs).length > 0) {
+    const action = await showUnsavedSwitchModal(dir);
+    if (action === "cancel") return false;
+    if (action === "save") {
+      const saved = await saveAllDirtyTabs();
+      if (!saved.ok) return false;   // 任一保存取消/冲突未落定：中止切换
+    }
+    // action === "discard"：继续清空（丢弃）
+  }
   codeDir = dir;
   tabs = [];
   activePath = "";
@@ -127,6 +196,7 @@ export function setCodeDir(dir) {
   renderTabs();
   renderPane();
   notifyActive();
+  return true;
 }
 
 // ===== 标签访问 =====
