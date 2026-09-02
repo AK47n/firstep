@@ -9,6 +9,7 @@
 import { esc } from "./core.js";
 import { highlightCodeLines } from "./codeview.js";
 import { maincLineOffsetRange } from "./code.js";
+import { codeMarksHTML } from "./code-marks.js";
 
 // 多文件标签上限（工单 code-viewer-editor/02）：超出 toast 中文提示——
 // 防病态大目录 / 大文件把内存与渲染压垮（每个 ≤1MB，10 个封顶）。
@@ -160,18 +161,23 @@ export function codeEditorHighlight(content, lang) {
 
 // codeEditorHTML(content, lang, opts)：可编辑三明治纯件——
 // pre.code-hl（静态流内：`.code-edit` width:max-content 以它量宽、高度以它
-// 定量——容器 .code-view 负责滚动，无内部滚动条、零滚动同步）+ textarea
-// .code-ta（absolute inset:0 覆盖同盒：透明文字 + accent 光标，white-space:
-// pre 无换行，readonly 由 opts.readonly 决定——非 UTF-8 / 只读文件禁改）。
-// 三者同一 font / line-height / padding / tab-size，逐行 1:1 对齐；高亮走
-// highlightCodeLines 单源（超 128KB 或 plain 自动回退纯文本）；内容转义
-// （esc——textarea 内 </textarea> 等全部 &lt; 化）。
+// 定量——容器 .code-view 负责滚动，无内部滚动条、零滚动同步）+ pre.code-marks
+// （仅背景标记层，工单 code-editor-vscode-polish/04-06：查找命中/选中词/括号
+// 配对共用；absolute inset:0 同盒、文字透明、pointer-events:none——opts.marks
+// = [{line,start,end,kind}]，内容经 fx/code-marks.js codeMarksHTML 转义）+
+// textarea .code-ta（absolute inset:0 覆盖同盒：透明文字 + accent 光标，
+// white-space: pre 无换行，readonly 由 opts.readonly 决定——非 UTF-8 / 只读
+// 文件禁改）。三者同一 font / line-height / padding / tab-size，逐行 1:1
+// 对齐；高亮走 highlightCodeLines 单源（超 128KB 或 plain 自动回退纯文本）；
+// 内容转义（esc——textarea 内 </textarea> 等全部 &lt; 化）。
 export function codeEditorHTML(content, lang, opts = {}) {
   const src = String(content == null ? "" : content);
   const ro = opts.readonly ? " ro" : "";
   const roAttr = opts.readonly ? " readonly" : "";
   return '<div class="code-edit' + ro + '">'
     + '<pre class="code-hl" aria-hidden="true">' + codeEditorHighlight(src, lang) + "</pre>"
+    + '<pre class="code-marks" aria-hidden="true">'
+    + codeMarksHTML(src, opts.marks) + "</pre>"
     + '<textarea class="code-ta" spellcheck="false" wrap="off"'
     + ' aria-label="代码编辑器"' + roAttr + ">" + esc(src) + "</textarea>"
     + "</div>";
