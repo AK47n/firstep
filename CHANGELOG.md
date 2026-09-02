@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=159eaafd57b70a6a4fe310f613140c2bcc7d2013 -->
+<!-- changelog-auto: last-commit=ece79e367fdbde41a414bf8eb5f68ab4bb641aeb -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -40,6 +40,7 @@
 - 21:29 fix：clex.match_bracket 早停扫描——旧实现逐候选经 iter_c_regions 重新词法切分（code 区域扫到文件尾才 yield）合计 O(n²)，5000 函数实测 84s 打开即卡；早停后 O(闭合跨度) 毫秒级，遍历注释/字符串/预处理行跳读语义不变（工单 code-page-vscode-overhaul/08 前置）
 - 21:29 feat：滚动窗口化渲染——高亮/标记/行号三层只画视口窗口行（上下 spacer 撑全高，窗口内滚动零 DOM 变更，跨窗口 rAF 节流），textarea 全量、codeWindowRange 纯件可测；5000 行 .c 打开/滚动流畅（工单 code-page-vscode-overhaul/08）
 - 21:38 perf：输入窗口化零强制布局——尺寸/滚动视口缓存（修 scrollTop/clientHeight 值变更后读 = 50-60ms 布局）、列数增长按 ch 宽估算、行高仅在缩放重测；高亮回退阈值 128KB→1MB（5000 行 .c 保持真彩色）；逐键同步 150-220ms → 均值 37ms（工单 code-page-vscode-overhaul/09）
+- 22:02 fix 代码编辑器滚动后缩进引导线错位：标记层补上下 spacer（与高亮层同高）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
