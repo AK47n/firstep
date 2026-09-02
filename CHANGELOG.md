@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b1617f704fd17ca70f9593685b27638b5e7f3a03 -->
+<!-- changelog-auto: last-commit=6542b40df50cf88e0458c1d59b71467ac2d73dff -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 12:46 工单 topics-control-2023-2025/05：全库验收（五工单收官）
 - 12:52 补全 CHANGELOG 写库机器提交过滤模板（update topic/update reference/archive reference/赛题条目补图注）——根治英文自动条目触发中文检查；测试断言锁定 + 清除已产生的 4 条噪音条目（工单 topics-control-2023-2025/05 机制缺陷收尾）
 - 13:02 修复：CHANGELOG 自动补录漏过滤 4 个写库机器提交模板——`changelog.py::_ROUTINE_LIB_RE` 漏「update topic / update reference / archive reference / 赛题条目补图注」→ 英文/机器条目混入更新记录触发中文检查红；补全模板 + 测试断言锁定 + 清除已产生的 4 条噪音条目（库管理动作不进更新记录，机制本意恢复）
+- 13:17 工单 01 相关性匹配纯函数：题面/模块 slug → 参考条目标题词表匹配
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
