@@ -4,5 +4,6 @@
   "problem_md": "topic.md",
   "original_pdf": "2023E.pdf",
   "programs": [],
-  "category": "control"
+  "category": "control",
+  "hint_module_groups": []
 }
