@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b09968cd44b135c3285cf73b34ea9ee35f55f704 -->
+<!-- changelog-auto: last-commit=29227009489568ee6f808bf3e6ed435e25618614 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 12:30 工单 topics-control-2023-2025/04：2025 控制题拆条（E/H 两题入库）
 - 12:35 update topic 2023E
 - 12:36 赛题条目补图注
+- 12:39 赛题条目补图注
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
