@@ -14,6 +14,7 @@ import {
   codeViewHTML,
   outlineHTML,
   outlineEmptyHTML,
+  symbolFilter,
   searchListHTML,
   fileFindFilter,
   treeWidthClamp,
@@ -153,6 +154,67 @@ test("outlineHTML：kind 徽标 + name + 行号；空 → 空串", () => {
 
 test("outlineEmptyHTML：中文空态文案", () => {
   assert.match(outlineEmptyHTML(), /当前文件无大纲/);
+});
+
+// ===== 大纲符号过滤（工单 code-editor-refine/03：Ctrl+Shift+O 符号速达）=====
+
+test("symbolFilter：空 query 返回原序副本；null/undefined 安全", () => {
+  const outline = [
+    { kind: "function", name: "main", line: 10 },
+    { kind: "define", name: "LED_PIN", line: 2 },
+  ];
+  assert.deepEqual(symbolFilter(outline, ""), outline);
+  assert.deepEqual(symbolFilter(outline, "   "), outline);
+  assert.deepEqual(symbolFilter(outline, null), outline);
+  assert.deepEqual(symbolFilter(null, "x"), []);
+  assert.notEqual(symbolFilter(outline, ""), outline);   // 副本，不共享引用
+});
+
+test("symbolFilter：大小写不敏感 name 子串", () => {
+  const outline = [
+    { kind: "function", name: "main", line: 10 },
+    { kind: "define", name: "LED_PIN", line: 2 },
+    { kind: "define", name: "led_delay", line: 30 },
+  ];
+  assert.deepEqual(symbolFilter(outline, "led"),
+    [outline[1], outline[2]]);   // 两个前缀命中按 line 稳定
+  assert.deepEqual(symbolFilter(outline, "LED"),
+    [outline[1], outline[2]]);
+  assert.deepEqual(symbolFilter(outline, "MAIN"), [outline[0]]);
+});
+
+test("symbolFilter：函数优先 > 名称前缀，同级按行号", () => {
+  const outline = [
+    { kind: "function", name: "setup_timer", line: 40 },
+    { kind: "function", name: "setup", line: 70 },
+    { kind: "define", name: "setup_led", line: 5 },     // define 前缀命中，但函数优先
+    { kind: "function", name: "teardown_setup", line: 20 },
+  ];
+  assert.deepEqual(symbolFilter(outline, "setup"),
+    [outline[1], outline[0], outline[3], outline[2]]);
+  // 函数组内：精确 setup > 前缀 setup_timer > 普通子串 teardown_setup；define 最后
+});
+
+test("symbolFilter：kind 匹配（define/include/function/heading）", () => {
+  const outline = [
+    { kind: "function", name: "main", line: 10 },
+    { kind: "define", name: "LED", line: 2 },
+    { kind: "define", name: "BAUD", line: 7 },
+    { kind: "include", name: "app.h", line: 1 },
+    { kind: "heading", name: "方案设计", line: 4 },
+  ];
+  assert.deepEqual(symbolFilter(outline, "define"), [outline[1], outline[2]]);   // 按行号
+  assert.deepEqual(symbolFilter(outline, "include"), [outline[3]]);
+  assert.deepEqual(symbolFilter(outline, "function"), [outline[0]]);
+  assert.deepEqual(symbolFilter(outline, "heading"), [outline[4]]);
+});
+
+test("symbolFilter：无匹配 → []", () => {
+  const outline = [
+    { kind: "function", name: "main", line: 10 },
+    { kind: "define", name: "LED", line: 2 },
+  ];
+  assert.deepEqual(symbolFilter(outline, "zzz"), []);
 });
 
 test("searchListHTML：命中行 + active 高亮 + 转义；空态", () => {

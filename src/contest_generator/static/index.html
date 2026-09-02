@@ -1920,14 +1920,16 @@
     align-items: center; padding: 3px 8px; background: none; color: var(--text);
     border: 0; border-radius: 0; cursor: pointer; font-size: 12.5px; }
   .code-outline-item:hover { background: var(--panel-2); }
+  .code-outline-item.on { background: var(--accent-dim); color: var(--accent);
+    box-shadow: inset 2px 0 0 var(--accent); }
   .code-outline-kind { font-family: var(--mono); font-size: 11px; width: 18px;
     text-align: center; color: var(--muted); flex: none; }
   .code-outline-kind.k-function { color: var(--accent); }
   .code-outline-name { font-family: var(--mono); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
   .code-side-empty { padding: 6px 8px; font-size: 12.5px; }
-  .code-search-row, .code-find-row, .code-replace-row { display: flex; gap: 6px; margin-bottom: var(--space-1); }
-  .code-search-row input, .code-find-row input, .code-replace-row input { flex: 1; min-width: 0; }
+  .code-search-row, .code-find-row, .code-replace-row, .code-outline-row { display: flex; gap: 6px; margin-bottom: var(--space-1); }
+  .code-search-row input, .code-find-row input, .code-replace-row input, .code-outline-row input { flex: 1; min-width: 0; }
   /* 查找计数（工单 code-editor-vscode-polish/04）：输入框旁「第 N / 共 M 处」
      ——等宽小字 muted 右对齐；无命中时隐藏（.hidden 全局）。 */
   .code-find-count { flex: none; font-family: var(--mono); font-size: 11.5px;
@@ -2838,6 +2840,10 @@
               title="展开搜索">搜索</button>
           </div>
           <div data-code-side-panel="outline" class="code-side-panel">
+            <div class="code-outline-row">
+              <input type="text" id="code-outline-filter" placeholder="过滤符号（Ctrl+Shift+O）"
+                aria-label="过滤符号（Ctrl+Shift+O）">
+            </div>
             <div id="code-outline" class="code-outline-box"><span class="muted">打开 .c/.h / .md 文件后显示函数 / 宏 / include（.md 为标题）</span></div>
           </div>
           <div data-code-side-panel="search" class="code-side-panel hidden">

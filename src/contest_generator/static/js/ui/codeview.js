@@ -35,6 +35,7 @@ import {
   breadcrumbHTML,
   outlineHTML,
   outlineEmptyHTML,
+  symbolFilter,
   searchListHTML,
   fileFindFilter,
   treeWidthClamp,
@@ -478,6 +479,16 @@ export function getCodeTreeDir() { return codeDir; }
 export function getCodeTreeFiles() { return codeFiles; }
 
 // ===== 右侧栏：大纲（活动标签来自 codeeditor） =====
+// outlineSelIdx：过滤态「当前选中」符号索引（Enter 跳它；↑/↓ 移动，循环）。
+let outlineSelIdx = 0;
+
+function applyOutlineSel() {
+  const btns = document.querySelectorAll("#code-outline .code-outline-item");
+  btns.forEach((b, i) => b.classList.toggle("on", i === outlineSelIdx));
+  const cur = btns[outlineSelIdx];
+  if (cur) cur.scrollIntoView({ block: "nearest" });
+}
+
 function renderOutline() {
   const box = $("code-outline");
   const tab = getActiveTab();
@@ -485,6 +496,21 @@ function renderOutline() {
     box.innerHTML = '<span class="muted">打开 .c/.h / .md 文件后显示函数 / 宏 / include（.md 为标题）</span>';
     return;
   }
+  const filter = $("code-outline-filter");
+  const q = filter ? (filter.value || "") : "";
+  if (q) {
+    const hits = symbolFilter(tab.outline, q);
+    if (!hits.length) {
+      outlineSelIdx = 0;
+      box.innerHTML = '<div class="muted code-side-empty">无匹配符号</div>';
+      return;
+    }
+    if (outlineSelIdx >= hits.length) outlineSelIdx = 0;
+    box.innerHTML = outlineHTML(hits);
+    applyOutlineSel();
+    return;
+  }
+  outlineSelIdx = 0;
   box.innerHTML = tab.outline && tab.outline.length
     ? outlineHTML(tab.outline)
     : outlineEmptyHTML();
@@ -938,13 +964,49 @@ export function initCodeViewer() {
     }
   });
 
-  // 大纲点击跳行（delegation）：.md 预览 / 编辑器/只读源码由 codeeditor 统一
+  // 大纲点击跳行（delegation）：.md 预览 / 编辑器/只读源码由 codeeditor 统一；
+  // 点击同时把「当前选中」同步到被点条目（后续 Enter 再跳它）。
   const outline = $("code-outline");
   if (outline) outline.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-outline-line]");
     if (!btn) return;
+    const items = Array.from(outline.querySelectorAll(".code-outline-item"));
+    const i = items.indexOf(btn);
+    if (i >= 0) outlineSelIdx = i;
     editJumpToLine(parseInt(btn.dataset.outlineLine, 10));
   });
+
+  // 大纲过滤（工单 code-editor-refine/03）：输入即时重渲（选中回 0）；
+  // ↑/↓ 移动「当前选中」（循环）；Enter 跳当前选中行；Esc 清空恢复全量
+  // （焦点保持在过滤框，便于连续扫符号）。
+  const outlineFilter = $("code-outline-filter");
+  if (outlineFilter) {
+    outlineFilter.addEventListener("input", () => {
+      outlineSelIdx = 0;
+      renderOutline();
+    });
+    outlineFilter.addEventListener("keydown", (e) => {
+      const btns = () => document.querySelectorAll("#code-outline .code-outline-item");
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const list = btns();
+        const btn = list[outlineSelIdx] || list[0];
+        if (btn) editJumpToLine(parseInt(btn.dataset.outlineLine, 10));
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        const list = btns();
+        if (!list.length) return;
+        e.preventDefault();
+        outlineSelIdx = e.key === "ArrowDown"
+          ? (outlineSelIdx + 1) % list.length
+          : (outlineSelIdx - 1 + list.length) % list.length;
+        applyOutlineSel();
+      } else if (e.key === "Escape") {
+        outlineFilter.value = "";
+        outlineSelIdx = 0;
+        renderOutline();
+      }
+    });
+  }
 
   // 跨文件搜索：按钮 + Enter 提交
   const btnSearch = $("btn-code-search");
@@ -1050,6 +1112,19 @@ export function initCodeViewer() {
       if (!layout) return;
       e.preventDefault();
       setCodeSideCollapsed(!layout.classList.contains("side-collapsed"), true);
+      return;
+    }
+    if (key === "o" && e.shiftKey) {
+      // 符号速达（工单 code-editor-refine/03）：展开侧栏 → 切大纲 → 聚焦
+      // 过滤框全选（再打字即过滤；Ctrl+Shift+O 在过滤框内同样可重按）。
+      // 不沿用 Ctrl+B 的「输入框豁免」——符号速达需要任意焦点（含查找
+      // 输入框）下都能拉起到过滤框，为有意取舍（VSCode 同义）。
+      if (!codeTabActive()) return;
+      e.preventDefault();
+      setCodeSideCollapsed(false, true);
+      setCodeSide("outline");
+      const f = $("code-outline-filter");
+      if (f) { f.focus(); f.select(); }
     }
   });
   // 替换单个命中 / 替换并跳下一处（工单 code-page-vscode-overhaul/03）：

@@ -293,6 +293,30 @@ export function outlineEmptyHTML() {
   return '<div class="muted code-side-empty">当前文件无大纲（.c/.h 提供函数 / 顶层宏 / include 清单；.md 提供标题）</div>';
 }
 
+// symbolFilter(entries, query)：大纲符号过滤+排序纯件（工单 code-editor-refine/03）
+// ——大小写不敏感，name 与 kind 均参与子串匹配；排序键为字典序元组
+// （函数优先 → 名称命中质量：精确 > 前缀 > 其余 → 行号升序），稳定不改原数组；
+// 空 query → 原序副本。
+export function symbolFilter(entries, query) {
+  const needle = String(query == null ? "" : query).trim().toLowerCase();
+  const items = entries || [];
+  if (!needle) return items.slice();
+  const nameOf = (o) => String(o.name == null ? "" : o.name).toLowerCase();
+  const rank = (o) => {
+    const group = o.kind === "function" ? 0 : 1;
+    const name = nameOf(o);
+    const quality = name === needle ? 0 : (name.startsWith(needle) ? 1 : 2);
+    return group * 4 + quality;
+  };
+  return items
+    .filter((o) => {
+      const name = nameOf(o);
+      const kind = String(o.kind == null ? "" : o.kind).toLowerCase();
+      return name.includes(needle) || kind.includes(needle);
+    })
+    .sort((a, b) => rank(a) - rank(b) || a.line - b.line);
+}
+
 // searchListHTML(hits, activeFile)：跨文件搜索结果列表纯件——
 // hits = [{path, line, text}]（/api/code/search 直出）；条目 = 按钮
 // （data-search-path / data-search-line 交事件层跳转）；activeFile 命中行加
@@ -365,6 +389,7 @@ if (typeof window !== "undefined") {
     codeViewHTML,
     outlineHTML,
     outlineEmptyHTML,
+    symbolFilter,
     searchListHTML,
     fileFindFilter,
     treeWidthClamp,
