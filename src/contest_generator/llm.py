@@ -230,6 +230,11 @@ SKELETON_FRAMEWORK_RULE = (
     "占位，保证可编译）。框架段之外的赛题功能按需补充。"
 )
 
+# 骨架参考段自动关联标注（工单 03）：related 来源条目标题行后缀。与推荐清单
+# 段 note（source_notes 的「自动列出」）语境界定不同（清单候选提示 vs 全文
+# 已注入说明），两处各自单点维护（本常量 / source_notes），不互相引用。
+SKELETON_RELATED_ANNOTATION = "（与题面 / 模块相关，自动关联）"
+
 # 深化系统提示词（工单 revise-deepen/04）：按功能需求清单逐条填充 main.c 的
 # TODO 预留区——输出与需求清单对应（逐条可追踪，不做题外发挥）；只调真实
 # 接口；保证可编译。深化不设自动循环，用户可重复触发。
@@ -1930,6 +1935,7 @@ class DeepSeekLLM:
         module_interfaces: Sequence[str],
         reference_fulltexts: Mapping[str, str] | None = None,
         topic_framework: TopicFramework | None = None,
+        reference_sources: Mapping[str, str] | None = None,
     ) -> str:
         def parse(content: str) -> str:
             if not content.strip():
@@ -1943,6 +1949,7 @@ class DeepSeekLLM:
                 module_interfaces,
                 reference_fulltexts,
                 topic_framework,
+                reference_sources,
             ),
             parse=parse,
             label="骨架 main.c 生成",
@@ -5242,6 +5249,7 @@ def _skeleton_user_prompt(
     module_interfaces: Sequence[str],
     reference_fulltexts: Mapping[str, str] | None = None,
     topic_framework: TopicFramework | None = None,
+    reference_sources: Mapping[str, str] | None = None,
 ) -> str:
     """main.c 骨架生成的 user 消息：赛题 + 接口块 + 可选题型框架段 + 可选参考段。
 
@@ -5252,7 +5260,9 @@ def _skeleton_user_prompt(
     代码段走确定性注入、学习说明走 LLM 段」（决策点 3）。None / 空 = 现行为逐
     字节不变。reference_fulltexts 非空时在输出指令前插参考段（每条 id 标注 +
     截断全文），并加改写约束：参考资料里有的功能 → 适配当前所选模块接口的
-    草稿实现；没有的 → 保持 TODO。
+    草稿实现；没有的 → 保持 TODO。reference_sources（工单 03）= id → 来源标注：
+    related 条目标题行带「与题面 / 模块相关，自动关联」（自动关联例程与手动 /
+    锚定在参考段可见区分）；None / 空 / 非 related = 现有文案逐字节不变。
     """
     prompt = _build_user_prompt(
         problem_text,
@@ -5272,8 +5282,15 @@ def _skeleton_user_prompt(
         )
         ref_parts = ["参考资料（可作实现草稿，不要整段照抄）："]
         for ref_id, fulltext in reference_fulltexts.items():
+            suffix = (
+                SKELETON_RELATED_ANNOTATION
+                if reference_sources
+                and reference_sources.get(ref_id) == REFERENCE_SOURCE_RELATED
+                else ""
+            )
             ref_parts.append(
-                f"### 参考资料 {ref_id}\n{_fit_segment_wire(fulltext, per_ref_budget)}"
+                f"### 参考资料 {ref_id}{suffix}\n"
+                f"{_fit_segment_wire(fulltext, per_ref_budget)}"
             )
         prompt += "\n\n" + "\n\n".join(ref_parts)
         prompt += (

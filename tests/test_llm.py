@@ -27,6 +27,7 @@ from contest_generator.events import (
 )
 from contest_generator.budget import (
     REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES,
+    SKELETON_RELATED_LIMIT,
     wire_size,
 )
 from contest_generator.fix_errors import FixSuggestion, read_file_contexts
@@ -1298,6 +1299,27 @@ def test_skeleton_prompt_with_references_adds_section_and_rewrite_rule():
     assert _skeleton_user_prompt("赛题", ("x.h",), {}) == base
 
 
+def test_skeleton_prompt_annotates_related_reference_sources():
+    """自动关联例程标注（工单 03）：reference_sources 中 source=related 的条目
+    参考段标题行带「（与题面 / 模块相关，自动关联）」；非 related（auto /
+    manual）与 None / 空 = 现有文案逐字节不变（不标注、零回归）。"""
+    refs = {"ref-1": "ADC12 单通道采样全文", "ref-2": "UART 串口打印全文"}
+    plain = _skeleton_user_prompt("赛题", ("x.h",), refs)
+    annotated = _skeleton_user_prompt(
+        "赛题",
+        ("x.h",),
+        refs,
+        None,
+        {"ref-1": REFERENCE_SOURCE_RELATED, "ref-2": "auto"},
+    )
+
+    assert "### 参考资料 ref-1（与题面 / 模块相关，自动关联）" in annotated
+    assert "### 参考资料 ref-2\n" in annotated  # 非 related 不标注
+    assert "（与题面 / 模块相关，自动关联）" in annotated
+    assert plain == _skeleton_user_prompt("赛题", ("x.h",), refs, None, None)
+    assert plain == _skeleton_user_prompt("赛题", ("x.h",), refs, None, {})
+
+
 def test_skeleton_prompt_with_topic_framework_injects_strong_section():
     """题型框架段（工单 topic-framework/03）：非空 → 框架段在参考段**之前**，
     None = 零回归。"""
@@ -1335,6 +1357,22 @@ def test_generate_main_skeleton_forwards_topic_framework():
     user_message = payload["messages"][1]["content"]
     assert "题型框架" in user_message
     assert framework.code in user_message
+
+
+def test_generate_main_skeleton_forwards_reference_sources():
+    """DeepSeekLLM.generate_main_skeleton 把 reference_sources 透传进 user 消息
+    （工单 03：related 来源标注进骨架参考段）。"""
+    transport = FakeTransport(body=_api_response("int main(void) { /* TODO */ }"))
+    llm = _llm(transport)
+    sources = {"ref-1": REFERENCE_SOURCE_RELATED}
+
+    llm.generate_main_skeleton(
+        "赛题", ["x.h"], {"ref-1": "ADC12 采样全文"}, None, sources
+    )
+
+    _, _, payload, _ = transport.calls[0]
+    user_message = payload["messages"][1]["content"]
+    assert "### 参考资料 ref-1（与题面 / 模块相关，自动关联）" in user_message
 
 
 def test_generate_smoke_main_routes_to_smoke_prompts():
@@ -5488,16 +5526,23 @@ def test_selection_prompt_worst_case_fits_request_budget():
 
 
 def test_skeleton_prompt_worst_case_with_references_fits_request_budget():
-    """结构测试（skeleton-smoke-refs/02 真机验收补）：锚定 ∪ 手动多篇全文按
-    SKELETON_REFERENCE_TOTAL_BYTES 均分截断——完整 payload json.dumps 序列化
-    ≤ MAX_REQUEST_BYTES 且余量 ≥ 10KB（真机 2021F 两篇曾 195232 字节 502）。"""
+    """结构测试（skeleton-smoke-refs/02 真机验收补；工单 03 改自动关联 4 篇
+    形态）：锚定 ∪ 手动 ∪ related 最多 4 篇全文按 SKELETON_REFERENCE_TOTAL_BYTES
+    均分截断——完整 payload json.dumps 序列化 ≤ MAX_REQUEST_BYTES 且余量 ≥ 10KB
+    （真机 2021F 两篇曾 195232 字节 502）。related 条目来源标注行进参考段标题，
+    per_ref 预算随篇数联动（4 篇均分）。"""
     problem = "设" * EMBEDDED_CONTENT_CAP
     interfaces = ["### 模块 m（h）\nvoid init(void);"] * 3
     refs = {
-        f"ref-{i}": "中" * REFERENCE_FULLTEXT_BYTES for i in range(3)
+        f"ref-{i}": "中" * REFERENCE_FULLTEXT_BYTES
+        for i in range(SKELETON_RELATED_LIMIT)
+    }
+    sources = {
+        f"ref-{i}": REFERENCE_SOURCE_RELATED
+        for i in range(SKELETON_RELATED_LIMIT)
     }
 
-    prompt = _skeleton_user_prompt(problem, interfaces, refs)
+    prompt = _skeleton_user_prompt(problem, interfaces, refs, None, sources)
 
     payload = {
         "model": "deepseek-chat",
@@ -5508,9 +5553,10 @@ def test_skeleton_prompt_worst_case_with_references_fits_request_budget():
     }
     total = len(json.dumps(payload).encode("utf-8"))
     assert total <= MAX_REQUEST_BYTES - 10 * 1024
-    per_ref = SKELETON_REFERENCE_TOTAL_BYTES // 3
+    per_ref = SKELETON_REFERENCE_TOTAL_BYTES // SKELETON_RELATED_LIMIT
     assert f"仅展示前 {per_ref} wire 字节" in prompt
     assert "内容过长，已截断" in prompt
+    assert prompt.count("（与题面 / 模块相关，自动关联）") == SKELETON_RELATED_LIMIT
 
 
 def test_clarify_prompt_worst_case_fits_request_budget():

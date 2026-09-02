@@ -129,3 +129,9 @@ REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES = 4096
 # 后全文，全部受 REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES / REFERENCE_FULLTEXT_BYTES
 # 兜底）；相关候选两级照旧（清单 → 点名 → 回读），不直读。
 RELATED_CANDIDATES_LIMIT = 15
+
+# 骨架自动关联例程条数上限（工单 03）：骨架阶段按选中模块 / 题面把未锚定
+# 相关例程全文注入参考段（与手动选参考同一通道），top-4 截断——全文经
+# SKELETON_REFERENCE_TOTAL_BYTES 按篇均分兜底（4 篇 ≈10KB/篇，与既有骨架
+# 最坏 3 篇形态同量级，worst-case 结构测试余量 ≥10KB 保持）。
+SKELETON_RELATED_LIMIT = 4

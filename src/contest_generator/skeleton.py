@@ -418,6 +418,7 @@ def generate_skeleton(
     reference_fulltexts: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     topic_framework: TopicFramework | None = None,
+    reference_sources: Mapping[str, str] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """LLM 出稿 → 静态自检：返回（可写入工程的 main.c, 被拦截的调用名）。
 
@@ -427,10 +428,11 @@ def generate_skeleton(
     的 ml_* API 不再被占位改写）。reference_fulltexts 非空时注入骨架
     prompt（参考实现草稿），None / 空 = 现行为。topic_framework（工单
     topic-framework/03）非空时注入题型框架段（确定性强约束：保留框架
-    结构只填 TODO），None = 现行为。instances（工单
-    module-multi-instance/03）= 多实例清单 {slug: [{name, variant, pin}]}，
-    展开计划注入接口块（通道宏清单）；缺省 / 空 = 现行为（多实例模块仍注入
-    单实例默认通道宏）。
+    结构只填 TODO），None = 现行为。reference_sources（工单 03）= id →
+    来源标注（related 条目在参考段带「自动关联」标注），None = 现行为。
+    instances（工单 module-multi-instance/03）= 多实例清单
+    {slug: [{name, variant, pin}]}，展开计划注入接口块（通道宏清单）；
+    缺省 / 空 = 现行为（多实例模块仍注入单实例默认通道宏）。
     """
     return _generate_main_c(
         llm,
@@ -443,6 +445,7 @@ def generate_skeleton(
         reference_fulltexts,
         instances,
         topic_framework,
+        reference_sources,
     )
 
 
@@ -489,6 +492,7 @@ def run_skeleton(
     reference_fulltexts: Mapping[str, str] | None = None,
     main_mode: str = "skeleton",
     topic_framework: TopicFramework | None = None,
+    reference_sources: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """/api/skeleton 的域编排（工单 route-orchestration-homing/01）：main_mode
     分支 + 冒烟守卫 + generate_skeleton / generate_smoke_main 分派。
@@ -497,7 +501,9 @@ def run_skeleton(
     SkeletonError（登记 errors.py → 400 中文），不再在路由抛 HTTPException。
     返回结果 dict（形状的家在此：{main_c, intercepted}），webapp docstring
     只指向本函数。slugs = 用户选择集（冒烟守卫判输出通道用，manifests 是
-    依赖展开后的全集，两者不同源）。
+    依赖展开后的全集，两者不同源）。reference_sources（工单 03）= 参考
+    条目来源标注（related 自动关联 → 骨架参考段可见区分），冒烟不注入
+    参考故不传。
     """
     if main_mode not in ("skeleton", "smoke"):
         raise SkeletonError("main_mode 必须是 skeleton 或 smoke")
@@ -524,6 +530,7 @@ def run_skeleton(
             reference_fulltexts=reference_fulltexts,
             instances=instances,
             topic_framework=topic_framework,
+            reference_sources=reference_sources,
         )
     return {"main_c": main_c, "intercepted": list(intercepted)}
 
@@ -539,27 +546,32 @@ def _generate_main_c(
     reference_fulltexts: Mapping[str, str] | None = None,
     instances: Mapping[str, Sequence[ModuleInstance]] | None = None,
     topic_framework: TopicFramework | None = None,
+    reference_sources: Mapping[str, str] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。
 
-    reference_fulltexts 只对骨架路径有意义（冒烟不写题逻辑不传）——非 None
-    时按三参调用 generate（协议方法带 reference_fulltexts），None 时按两参
-    调用（冒烟方法 / 旧骨架零回归）。topic_framework（工单 topic-framework/03）
-    一样只对骨架路径有意义：非 None 时按四参调用（协议方法带 topic_framework），
-    None = 现行为。instances 经 expand_instance_plans 展开
-    后注入接口块（与生成侧渲染同源——LLM 见到的通道宏 = 工程实际生成的宏；
-    board 缺省时展开层现加载板定义）。
+    reference_fulltexts / topic_framework / reference_sources 都只对骨架路径
+    有意义（冒烟不写题逻辑不传，走两参调用）。零注入形态（三者全 None）按
+    两参调用（冒烟方法 / 旧骨架零回归，签名兼容）；任一非 None 按五参调用
+    （协议方法全部收五参——业务层成对传注入参数，全程五参无分派梯队，
+    避免逐参加分支）。instances 经 expand_instance_plans 展开后注入接口块
+    （与生成侧渲染同源——LLM 见到的通道宏 = 工程实际生成的宏；board 缺省
+    时展开层现加载板定义）。
     """
     plans = expand_instance_plans(manifests, instances, platform)
     interfaces = build_skeleton_interfaces(
         manifests, platform, library_dir, master_project_dir, instance_plans=plans
     )
-    if reference_fulltexts is None and topic_framework is None:
+    if (
+        reference_fulltexts is None
+        and topic_framework is None
+        and reference_sources is None
+    ):
         raw = generate(problem_text, interfaces)
-    elif topic_framework is not None:
-        raw = generate(problem_text, interfaces, reference_fulltexts, topic_framework)
     else:
-        raw = generate(problem_text, interfaces, reference_fulltexts)
+        raw = generate(
+            problem_text, interfaces, reference_fulltexts, topic_framework, reference_sources
+        )
     raw = strip_code_fences(raw)  # 首尾包裹形态先剥（契约见 clex）
     raw = strip_all_code_fences(raw)  # 残留围栏行全剥（LLM 偶发多重围栏，判例见 clex）
     return sanitize_skeleton(raw, extract_header_functions(interfaces))

@@ -431,6 +431,18 @@ def resolve_topic_context(
     )
 
 
+def _reference_entry_ids(topic: TopicContext) -> set[str]:
+    """参考相关 id 覆盖集（build_reference_fulltexts / build_reference_sources
+    的同覆盖单点）：references（锚定 ∪ 相关）∪ manual——两函数引用的参考
+    条目永远一致（防御锁步漂移；顺序语义各自保留：全文 manual 优先插入序、
+    来源映射排序序）。
+    """
+    ids = {ref.id for ref in topic.references}
+    if topic.manual_fulltexts:
+        ids |= set(topic.manual_fulltexts)
+    return ids
+
+
 def build_reference_fulltexts(topic: TopicContext) -> dict[str, str] | None:
     """参考全文合并（id → 全文）：手动直读 ∪ 锚定回读；空 → None。
 
@@ -438,15 +450,32 @@ def build_reference_fulltexts(topic: TopicContext) -> dict[str, str] | None:
     手动条目装配时已直读（topic.manual_fulltexts），锚定条目经上下文
     回读器（topic.read_fulltext 覆盖锚定 ∪ 手动，清单外 id 大声失败）。
     空上下文（no-topic 且零手动）→ None——调用方走零参考现行为（两参
-    调用，逐字节不变）。
+    调用，逐字节不变）。覆盖键集与 build_reference_sources 同源
+    （_reference_entry_ids）。
     """
     fulltexts: dict[str, str] = {}
+    if not _reference_entry_ids(topic):
+        return None
     if topic.manual_fulltexts:
         fulltexts.update(topic.manual_fulltexts)
     for ref in topic.references:
         if ref.id not in fulltexts:
             fulltexts[ref.id] = topic.read_fulltext(ref.id)
     return fulltexts or None
+
+
+def build_reference_sources(topic: TopicContext) -> dict[str, str] | None:
+    """参考来源映射（id → source）：与 build_reference_fulltexts 同覆盖
+    （_reference_entry_ids），来源查 suggestions 标注（auto / manual / related）。
+
+    骨架调用方把本映射与参考全文一并喂给提示词层——related 条目在骨架参考
+    段标题行带「自动关联」标注；无参考 → None（调用方零标注现行为）。
+    """
+    ids = _reference_entry_ids(topic)
+    if not ids:
+        return None
+    sources = {suggestion.id: suggestion.source for suggestion in topic.suggestions}
+    return {ref_id: sources[ref_id] for ref_id in sorted(ids) if ref_id in sources} or None
 
 
 def build_topic_framework_info(
