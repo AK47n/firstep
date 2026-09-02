@@ -20,7 +20,8 @@ import {
   bracketClose,
   bracketBackspace,
   bracketPairAt,
-} from "/js/fx/code-brackets.js";  // 括号配对与自动闭合纯件（工单 code-editor-vscode-polish/06）
+  bracketDepthMarks,
+} from "/js/fx/code-brackets.js";  // 括号配对与自动闭合纯件（工单 code-editor-vscode-polish/06）+ 彩虹深度标记（code-editor-refine/04）
 import {
   codeTabStripHTML,
   codeEditorHTML,
@@ -273,13 +274,14 @@ async function loadFileState(path) {
 // 各自区段（kind 不同），一次渲染多类标记。
 let editorFind = { query: "", ranges: [], index: 0 };
 
-// currentMarks()：当前应渲染的标记清单（缩进引导线 + 查找命中 + 当前命中 +
-// 选中词 + 括号配对；07 引导线按模型文本逐行计算，折叠视图经 marksForView
-// 映射——占位行被折叠的引导线自动丢弃）。
+// currentMarks()：当前应渲染的标记清单（缩进引导线 + 括号彩虹 + 查找命中 +
+// 当前命中 + 选中词 + 括号配对；07 引导线按模型文本逐行计算，折叠视图经
+// marksForView 映射——占位行被折叠的引导线自动丢弃）。
 export function currentMarks() {
   const out = [];
   const tab = getActiveTab();
   if (tab) out.push(...codeIndentGuideMarks(tab.content));
+  if (tab && bracketRainbowLang(tab)) out.push(...bracketRainbowMarks(tab));
   if (editorFind.query && editorFind.ranges.length) {
     editorFind.ranges.forEach((r, i) => {
       out.push({ line: r.line, start: r.start, end: r.end,
@@ -304,6 +306,25 @@ export function currentMarks() {
 // 光标在括号上/紧邻 → 配对括号两段标记（kind: "bracket"，下划线类样式）；
 // 仅 .c/.h 与 xml 启用（spec：.md 编辑源码态只自动闭合不配对高亮）。
 let editorBracket = null;
+
+// ---- 括号彩虹（工单 code-editor-refine/04）----
+// 全文档配对括号按嵌套深度染色（8 色环）；只随内容变化，故按 tab.content
+// 引用缓存（编辑产生新字符串——引用比较即版本比较，光标移动零重算）。
+// 门控 = 可编辑的 c/xml/md（工单验收：xml/md 生效、plain/txt 不生效；与既有
+// 光标对描边门控 c/xml 不同——彩虹为全文档静态着色，md 源码态一并启用）。
+let bracketRainbowCache = { content: null, marks: [] };
+
+function bracketRainbowLang(tab) {
+  return !!tab && !tab.readonly
+    && (tab.lang === "c" || tab.lang === "xml" || tab.lang === "md");
+}
+
+function bracketRainbowMarks(tab) {
+  if (bracketRainbowCache.content !== tab.content) {
+    bracketRainbowCache = { content: tab.content, marks: bracketDepthMarks(tab.content) };
+  }
+  return bracketRainbowCache.marks;
+}
 
 // updateBracketMarks()：光标/内容变化后重算配对高亮——配对位置变了返回 true
 // （不渲染，同 updateWordMarks 纪律）；仅 .c/.h 与 xml 启用（spec：.md 编辑

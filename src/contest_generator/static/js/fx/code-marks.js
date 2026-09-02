@@ -9,7 +9,9 @@
 // 头部。
 import { esc } from "./core.js";
 
-// 标记优先级（codeMarksHTML 分割重叠区段用）：当前命中最醒目。
+// 标记优先级（codeMarksHTML 分割重叠区段用）：当前命中最醒目；bracket-depth-*
+// 未登记 = 默认 0（最低——彩虹为底色，被当前对描边 bracket / 选中词 word /
+// 查找 hit 覆盖时让位，见工单 code-editor-refine/04）。
 export const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1 };
 
 // 词字符（工单 05）：字母 / 数字 / 下划线连续段（VSCode 语义——中文与符号
