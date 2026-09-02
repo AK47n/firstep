@@ -155,7 +155,7 @@ function renderPane() {
   if (!box) return;
   const tab = getActiveTab();
   if (!tab) {
-    box.innerHTML = '<span class="muted">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span>';
+    box.innerHTML = '<span class="code-empty">点左侧文件在编辑器中打开（可修改，Ctrl+S 保存）</span>';
     return;
   }
   if (tab.lang === "md" && tab.mdMode === "preview") {
@@ -229,11 +229,12 @@ export async function openEditorFile(path, mode) {
     toast("error", "已打开 " + EDITOR_TABS_MAX + " 个文件标签：请先关闭不需要的");
     return;
   }
-  paneBox().innerHTML = '<span class="muted">加载中…</span>';
+  paneBox().innerHTML = '<span class="code-empty">加载中…</span>';
   const cached = await loadFileState(path);
   if (!cached.ok) {
-    paneBox().innerHTML = '<div class="error">加载失败：' + cached.message
-      + '</div><span class="muted">点击左侧文件可重试。</span>';
+    paneBox().innerHTML = '<div class="code-empty"><div class="error">加载失败：'
+      + cached.message
+      + '</div><span class="muted">点击左侧文件可重试。</span></div>';
     toastError({ message: cached.message }, "打开文件失败");
     return;
   }
@@ -786,8 +787,7 @@ function syncEditorAfterInput() {
     ta.setSelectionRange(selStart, selEnd);
   }
   renderTabs();   // 脏点随输入即时刷新（标签条内联渲染，事件委托不失效）
-  notifyActive();
-  notifyCursor();   // 状态栏 Ln/Col 随输入即时刷新（工单 01）
+  notifyActive();   // 状态栏信息区随内容/光标刷新（onActiveTabChanged → refreshCodeStatus；不再单独 notifyCursor——避免每击键双刷）
 }
 
 // ===== 查找替换（工单 code-editor-utilize/03）：当前文件「全部替换」 =====
