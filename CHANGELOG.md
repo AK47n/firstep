@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=93e07447facbcc03d28a825a85d024c9dfa898c0 -->
+<!-- changelog-auto: last-commit=b09968cd44b135c3285cf73b34ea9ee35f55f704 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 12:29 工单 topics-control-2023-2025/04：2025 控制题拆条（E/H 两题入库）——定位 E=p249-252/H=p258-261（题标记+页眉核实）；小题 PDF 提取（insert_pdf 原样 2.2/2.7MB 超 1MB → garbage+deflate+subset_fonts 压缩至 348/699KB，子集化前后文本层逐字一致）；split_topics_document 零 LLM 拆条两题均恰 1 条（2046/2568 chars）；结构补全照 2026H；8 页渲染视觉核对——2025E 图 1 图题与标注在文本层但内容流位于年份标题前被章节切片排除、50cm 标注为矢量缺失 → 人工补录（blockquote 插图段前）；2025H 图 1 网格标注散行插进正文句中 → 顺序修复迁移至图题行后；入库 category=control programs=[]；图注 enrich 有产出（小题 PDF 坐标还原正常：+151/+241 chars）但收窗混入正文短行 → 人工校订为纯标注（对齐 2026C 先例），幂等标记已入；断言 2/2 + 真库污染黑名单删「野生动物」（2025H 题名正词）；pytest 161 全绿
 - 12:30 工单 topics-control-2023-2025/04：2025 控制题拆条（E/H 两题入库）
 - 12:35 update topic 2023E
+- 12:36 赛题条目补图注
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
