@@ -70,11 +70,14 @@
   2. `test_changelog_entries_are_chinese`——CHANGELOG 自动条目「update topic 2023E」
      为英文。根因：`topic_library.py` 机器提交信息 `lib: update topic {key}` 为英文
      （commit-msg 有 lib:* 机器提交豁免设计），post-commit 钩子（changelog-auto）
-     将其写入 CHANGELOG → 中文检查红。**处理**：CHANGELOG 条目人工中文化
-     （「12:35 更新赛题 2023E（保存时补写 manifest 缺省字段，自动提交）」）；
-     根治（改库提交信息为中文）涉及 test_autocommit/test_topic_library 既有
-     断言批量改动 + 机器提交豁免设计，**记录为机制缺陷留待后续**（本轮缓解即可，
-     下一次 autocommit 英文提交会产生同样的英文条目，需同样人工处理或修 changelog.py）。
+     将其写入 CHANGELOG → 中文检查红。本轮已**根治**（2026-09-02 后续提交，见工单记录）：
+     根因在 `changelog.py::_ROUTINE_LIB_RE`（写库机器提交固定模板过滤）漏了
+     `update topic ` / `update reference ` / `archive reference ` / `赛题条目补图注`
+     四个模板 → 补全模板 + `test_changelog.py` 新增 4 条断言锁定
+     （`_is_displayable` 对四类模板均为 False）+ CHANGELOG 清除已产生的
+     4 条英文/机器噪音条目（12:35 更新赛题 2023E、12:36/12:39/12:40 赛题条目补图注）。
+     库提交信息本身与 commit-msg lib:* 豁免均未改（changelog 过滤是机制本意：
+     库管理动作不是工具改进，不进更新记录）。
 - **重跑**：全量 pytest 预期 3133 全绿（本轮修复后重跑，见提交时结果）；js 全量
   1096 passed（后台 pwsh-5）；语言/generation 套件 44 passed。
 - `tests/test_repo_language.py`（含于 pytest 全量）。

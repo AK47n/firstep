@@ -46,9 +46,10 @@ _ROUTINE_LIB_RE = re.compile(
     r"^lib: (?:"
     r"add module |update module description |delete module |"
     r"update platform identity |add platform files |remove platform files |"
-    r"add reference |delete reference |"
+    r"add reference |delete reference |update reference |archive reference |"
     r"import master |delete master |"
-    r"confirm topics|delete topic "
+    r"confirm topics|delete topic |update topic |"
+    r"赛题条目补图注"
     r")"
 )
 

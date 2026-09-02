@@ -9,12 +9,9 @@
 - 12:18 工单 topics-control-2023-2025/03：2023 控制题拆条（E/G/I 三题入库）
 - 12:29 工单 topics-control-2023-2025/04：2025 控制题拆条（E/H 两题入库）——定位 E=p249-252/H=p258-261（题标记+页眉核实）；小题 PDF 提取（insert_pdf 原样 2.2/2.7MB 超 1MB → garbage+deflate+subset_fonts 压缩至 348/699KB，子集化前后文本层逐字一致）；split_topics_document 零 LLM 拆条两题均恰 1 条（2046/2568 chars）；结构补全照 2026H；8 页渲染视觉核对——2025E 图 1 图题与标注在文本层但内容流位于年份标题前被章节切片排除、50cm 标注为矢量缺失 → 人工补录（blockquote 插图段前）；2025H 图 1 网格标注散行插进正文句中 → 顺序修复迁移至图题行后；入库 category=control programs=[]；图注 enrich 有产出（小题 PDF 坐标还原正常：+151/+241 chars）但收窗混入正文短行 → 人工校订为纯标注（对齐 2026C 先例），幂等标记已入；断言 2/2 + 真库污染黑名单删「野生动物」（2025H 题名正词）；pytest 161 全绿
 - 12:30 工单 topics-control-2023-2025/04：2025 控制题拆条（E/H 两题入库）
-- 12:35 更新赛题 2023E（保存时补写 manifest 缺省字段，自动提交）
-- 12:36 赛题条目补图注
-- 12:39 赛题条目补图注
-- 12:40 赛题条目补图注
 - 12:45 工单 topics-control-2023-2025/05：全库验收——后端断言 20 条 category 非空合法（control 15/other 5）+ 5 新题结构四段/manifest/小题 PDF<1MB/resolve_number/图注全过（verify_05.py）；CDP 冒烟 17 项（筛选控制题 15 卡含 5 新题无 other、2023E 详情题面+页图+分类行、编辑表单分类下拉、保存后 chip「控制题」与端点透出）；发现并修正 03 结论：webapp 视觉通道可用（GET /api/topics/{key} 触发 enrich）→ 2023E/G/I 自动补视觉图注（b09968cd/29227009/b918e297）；2023E 同值保存顺带规范化 hint_module_groups 字段（93e07447）；js 1096 + pytest 全绿；五工单（01-05）全部完成
 - 12:46 工单 topics-control-2023-2025/05：全库验收（五工单收官）
+- 13:02 修复：CHANGELOG 自动补录漏过滤 4 个写库机器提交模板——`changelog.py::_ROUTINE_LIB_RE` 漏「update topic / update reference / archive reference / 赛题条目补图注」→ 英文/机器条目混入更新记录触发中文检查红；补全模板 + 测试断言锁定 + 清除已产生的 4 条噪音条目（库管理动作不进更新记录，机制本意恢复）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest

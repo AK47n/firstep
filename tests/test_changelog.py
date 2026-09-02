@@ -164,6 +164,10 @@ def test_is_displayable_skips_merge_docs_chore_test_and_routine_lib():
     assert _is_displayable("test: 补结构钉") is False
     assert _is_displayable("lib: update module description filter") is False
     assert _is_displayable("lib: add reference 塔克R3两驱小车底盘资料") is False
+    assert _is_displayable("lib: update topic 2023E") is False
+    assert _is_displayable("lib: update reference 塔克R3两驱小车底盘资料") is False
+    assert _is_displayable("lib: archive reference library/references/xxx") is False
+    assert _is_displayable("lib: 赛题条目补图注") is False
     assert _is_displayable("feat: 板图加旋转按钮 (#92)") is True
     assert _is_displayable("fix: 推荐模块移除不再回加 (#91)") is True
     assert _is_displayable("软 I2C 参数化 + 共享端口宏异值门禁（工单 pin-unlock-stm32/02） (#77)") is True
