@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=33f4869fcd3a8f19489d5a75378d0d7ece30ae29 -->
+<!-- changelog-auto: last-commit=e5fc404891a6c263d404f9054a4164f7b89a3d51 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 18:03 工单 03 审查收尾：骨架端到端断言 id/标题两域解耦（related 严格子集按 add_reference 实际 id 断言，不依赖 _sanitize_id 恒等）
 - 19:14 工单 code-editor-vscode-polish/01：底部状态栏 VS Code 化——Ln/Col/语言/编码/缩进/缩放随光标实时联动（空态占位、onCursorChanged 监听、codeStatusHTML 与 caretColOf 纯件、窄视口折叠）
 - 19:18 工单 code-editor-vscode-polish/02：编辑器视觉精修——空态居中（未打开/加载中/加载失败三态）、右留白 24px 三明治同步、选区增强、只读标注统一、gutter 行号对齐
+- 19:18 工单 code-editor-vscode-polish/02（评审整改）：caretColOf 内部钳制行尾列、refreshCodeStatus 行列计算全走 fx 单源、状态栏注释与占位实现对齐
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
