@@ -44,6 +44,17 @@ function fileCacheKey(path) {
 }
 const activeListeners = new Set();
 
+// 光标/选区变化监听（工单 code-editor-vscode-polish/01）：codeview 注册刷新
+// 状态栏 Ln/Col——与 onActiveTabChanged 同模式（监听器异常不阻断）；光标
+// 移动只刷状态栏，不重渲编辑器。
+const cursorListeners = new Set();
+
+export function onCursorChanged(cb) { cursorListeners.add(cb); }
+
+function notifyCursor() {
+  cursorListeners.forEach((cb) => { try { cb(); } catch (e) { /* 监听器异常不阻断 */ } });
+}
+
 const CODE_FLASH_MS = 1200;  // 跳行闪烁（与查看器同值：评审整改 1200 归拢）
 
 // ===== 目录上下文 =====
@@ -445,6 +456,7 @@ export function editJumpToLine(line) {
       ta.setSelectionRange(range.start, range.end);
     }
   }
+  notifyCursor();   // 状态栏 Ln/Col 随跳行刷新（工单 01）
 }
 
 // editJumpToFile(path, line)：跨文件跳转（搜索命中）——.md 一律切编辑态
@@ -775,6 +787,7 @@ function syncEditorAfterInput() {
   }
   renderTabs();   // 脏点随输入即时刷新（标签条内联渲染，事件委托不失效）
   notifyActive();
+  notifyCursor();   // 状态栏 Ln/Col 随输入即时刷新（工单 01）
 }
 
 // ===== 查找替换（工单 code-editor-utilize/03）：当前文件「全部替换」 =====
@@ -859,11 +872,14 @@ export function initCodeEditor() {
     box.addEventListener("select", () => {
       const ta = box.querySelector(".code-ta");
       if (ta) setActiveLine(caretLineOf(ta.value, ta.selectionStart));
+      notifyCursor();   // 状态栏 Ln/Col 随选区变化刷新（工单 01）
     });
     box.addEventListener("keyup", (e) => {
       const ta = e.target;
-      if (ta && ta.classList && ta.classList.contains("code-ta"))
+      if (ta && ta.classList && ta.classList.contains("code-ta")) {
         setActiveLine(caretLineOf(ta.value, ta.selectionStart));
+        notifyCursor();
+      }
     });
   }
 }

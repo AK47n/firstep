@@ -1376,6 +1376,19 @@
      收缩时不再按比例挤压按钮；窄视口/长路径下「保存全部」「编译」被压窄成
      竖排（「编」「译」拆行,用户反馈右下角错位）的根治。 */
   .code-statusbar button { flex: none; white-space: nowrap; }
+  /* 状态栏信息区（工单 code-editor-vscode-polish/01）：VSCode 式右侧动态信息
+     段——光标行列 / 语言徽标 / 编码 / 缩进 / 缩放；等宽小字 muted，行列值
+     text 色突出；空态（无活动文件）内容为空串、容器天然零宽不占位；窄视口
+     只留行列与缩放（媒体查询隐藏中段，不挤占右侧按钮）。 */
+  .code-statusbar-info { display: flex; align-items: center; gap: 10px;
+    flex: none; font-family: var(--mono); font-size: 12px; color: var(--muted);
+    white-space: nowrap; }
+  .code-statusbar-info .code-statusbar-pos { color: var(--accent); }
+  .code-statusbar-empty { color: var(--muted); }
+  .code-statusbar-info .code-statusbar-seg { flex: none; }
+  @media (max-width: 900px) {
+    #code-statusbar-lang, #code-statusbar-enc, #code-statusbar-indent { display: none; }
+  }
   /* 编译结果面板（工单 code-tab-compile/03）：编辑器下方、状态栏上方的可折叠
      底部面板——头部常驻（状态行 + 动作按钮），错误列表滚动；.collapsed 只收
      列表（头部状态行始终可见），清空 = 整面板隐藏。
@@ -2733,6 +2746,7 @@
       </div>
       <div class="code-statusbar">
         <span class="muted code-dir-label" id="code-dir-label">未打开目录——点「选择文件夹」，或从最近生成记录点「查看代码」</span>
+        <span class="code-statusbar-info" id="code-statusbar-info"></span>
         <button id="btn-code-save-all" type="button" title="保存代码栏全部未保存文件（Ctrl+Shift+S）">保存全部</button>
         <button id="btn-code-compile" type="button" title="保存全部未保存文件并编译当前工程（平台自动识别；不调 AI）">编译</button>
         <button id="btn-code-flash" type="button" title="保存全部未保存文件并烧录当前工程（平台自动识别；不调 AI）">烧录到板子</button>

@@ -63,6 +63,30 @@ export function codeTabBadge(lang) {
   return lang === "c" ? "C" : lang === "xml" ? "XML" : lang === "md" ? "MD" : "TXT";
 }
 
+// codeStatusHTML(info)：状态栏信息区纯件（工单 code-editor-vscode-polish/01）
+// —— VSCode 式右侧信息段：光标行列（Lnn, Colm）+ 语言徽标 + 编码（UTF-8 /
+// 非 UTF-8（只读））+ 缩进（空格: N）+ 缩放百分比；info = {line, col, lang,
+// utf8, indent, zoomPct}。lang 缺省/空 = 无活动文件 → 返回空串（调用方隐藏
+// 整段）；文本一律 esc（语言徽标来自 codeTabBadge 固定映射，其余用户可见
+// 数字经 esc 兜底——防未来字段接入原文）。
+export function codeStatusHTML(info) {
+  const i = info || {};
+  const lang = String(i.lang == null ? "" : i.lang);
+  if (!lang) return "";
+  const line = Math.max(1, i.line | 0);
+  const col = Math.max(1, i.col | 0);
+  const indent = Math.max(0, i.indent | 0) || 4;
+  const zoomPct = Math.max(0, i.zoomPct | 0) || 100;
+  const seg = (id, text) =>
+    '<span class="code-statusbar-seg" id="code-statusbar-' + id + '">'
+    + esc(text) + "</span>";
+  return '<span class="code-statusbar-pos">Ln ' + line + ", Col " + col + "</span>"
+    + seg("lang", codeTabBadge(lang))
+    + seg("enc", i.utf8 === false ? "非 UTF-8（只读）" : "UTF-8")
+    + seg("indent", "空格: " + indent)
+    + seg("zoom", zoomPct + "%");
+}
+
 // codeTabStripHTML(tabs, activePath)：多文件标签条纯件——
 // tabs = [{path, lang, dirty, readonly, diskChanged?}]；活动 tab .on
 // （data-tab-path 交事件层）；脏点 .code-tab-dirty（aria-label 未保存）；
@@ -139,6 +163,16 @@ export function caretLineOf(value, pos) {
   return Math.max(1, count + 1);
 }
 
+// caretColOf(value, pos)：光标列号（1 基）——pos 所在行行首偏移
+// （lastIndexOf("\n", pos-1)+1）到 pos 的字符数 +1；pos 越界钳到行尾列；
+// 空串 → 1。与 caretLineOf 同族成对（评审整改 code-editor-vscode-polish/01：
+// 列号不再在 ui 层手写 lastIndexOf 表达式——行/列同一 fx 单源）。
+export function caretColOf(value, pos) {
+  const v = String(value == null ? "" : value);
+  const p = Math.max(0, Math.min(v.length, pos | 0));
+  return p - (v.lastIndexOf("\n", p - 1) + 1) + 1;
+}
+
 // _lineStart(value, pos)：pos 所在行行首偏移（lastIndexOf("\n", pos-1)+1）。
 function _lineStart(value, pos) {
   return value.lastIndexOf("\n", pos - 1) + 1;
@@ -204,6 +238,7 @@ export function replaceAllText(src, needle, replacement) {
 if (typeof window !== "undefined") {
   Object.assign(window, {
     codeTabBadge,
+    codeStatusHTML,
     codeTabStripHTML,
     codeEditorHighlight,
     codeEditorHTML,
@@ -212,6 +247,7 @@ if (typeof window !== "undefined") {
     isTabSavable,
     dirtySavableTabs,
     caretLineOf,
+    caretColOf,
     indentOnEnter,
     indentLines,
     replaceAllText,
