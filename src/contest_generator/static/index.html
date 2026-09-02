@@ -1743,6 +1743,13 @@
      code-editor-vscode-polish/02）：横滚到行尾时留呼吸空白；.code-pre /
      .code-hl / .code-ta 三处同步，保证覆盖层 1:1 对齐。 */
   .code-edit { position: relative; width: max-content; min-width: 100%; flex: none; }
+  /* 滚动窗口化（工单 08）：.code-window-spacer 撑起全高（高度 = 窗口外行数 *
+     行高，样式值内联）；.code-window-probe 度量最长行宽（absolute 隐藏、
+     mono 同源字体——宽度 = 最长行实测宽，CJK 双宽也精确）。 */
+  .code-window-spacer { height: 0; }
+  .code-window-probe { position: absolute; top: 0; left: 0; visibility: hidden;
+    white-space: pre; font-family: var(--mono); font-size: var(--code-font-size);
+    line-height: 1.6; pointer-events: none; }
   .code-hl { display: block; margin: 0; padding: 8px 24px 8px 12px; border: 0; background: none;
     font-family: var(--mono); font-size: var(--code-font-size); line-height: 1.6;
     white-space: pre; tab-size: 4; color: var(--code-text); }

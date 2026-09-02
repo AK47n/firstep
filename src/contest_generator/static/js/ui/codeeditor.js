@@ -11,7 +11,7 @@
 // setMdMode / onActiveTabChanged）。
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { languageOf } from "/js/fx/highlight.js";
-import { codeLineNumbersHTML } from "/js/fx/codeview.js";
+import { codeGutterLineHTML, highlightCodeLines } from "/js/fx/codeview.js";
 import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges, codeIndentGuideMarks } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用；07 缩进引导线）
 import {
   BRACKET_OPEN,
@@ -24,7 +24,7 @@ import {
 import {
   codeTabStripHTML,
   codeEditorHTML,
-  codeEditorHighlight,
+  codeWindowRange,
   conflictHTML,
   editorLineRange,
   isTabSavable,
@@ -57,9 +57,9 @@ import {
   codeFoldViewToModel,
   codeFoldModelToView,
   codeFoldMapEdit,
-  codeFoldGutterHTML,
+  codeFoldGutterLines,
   codeFoldMerge,
-} from "/js/fx/code-fold.js";  // 代码折叠纯件（工单 code-editor-vscode-polish/07）
+} from "/js/fx/code-fold.js";  // 代码折叠纯件（工单 code-editor-vscode-polish/07；08 行号窗口化）
 import { confirmModal } from "/js/ui/confirm.js";
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
@@ -407,10 +407,7 @@ function renderEditorMarks() {
     editorFind.ranges = [];
     editorFind.index = -1;
   }
-  el.innerHTML = codeMarksHTML(
-    viewModel ? viewModel.text : tab.content,
-    viewModel ? marksForView() : currentMarks(),
-  );
+  winRenderMarks();
 }
 
 // setEditorFind(query)：查找输入变化 → 存查询、重算命中区段并渲染标记层——
@@ -470,6 +467,131 @@ function renderTabs() {
 
 function paneBox() { return $("code-viewer"); }
 
+// ===== 滚动窗口化渲染（工单 code-page-vscode-overhaul/08）=====
+// 三层（高亮 .code-hl / 标记 .code-marks / 行号 .code-gutter）只渲染视口窗口
+// 行（上下各 WIN_OVERSCAN 行），上下 spacer 撑起全高——窗口内的滚动是纯
+// CSS 位移（零 DOM 变更），跨窗口才重建；textarea / .code-edit 尺寸保持全量
+// （选区、光标、横滚度量基础）。高亮逐行数组在内容变化时整段算一次
+// （highlightCodeLines 跨行 token 在行界闭合/重开，行间独立），滚动只切片。
+const WIN_OVERSCAN = 20;
+let winCache = null;   // { hl: string[], gutter: string[], lineCount, probeText }
+let winLineH = 20;     // 实测行高 px（随 --code-font-size/行高变化重测）
+let winLast = null;    // { start, end, lineCount }——窗口未变 → 零 DOM
+let winFrame = 0;      // rAF 节流
+
+function winLineHeight() {
+  const box = paneBox();
+  const el = box && box.querySelector(".code-hl-line");
+  if (el) {
+    const lh = parseFloat(getComputedStyle(el).lineHeight);
+    if (lh > 0) return lh;
+  }
+  const fs = parseFloat(getComputedStyle(box).fontSize) || 13;
+  return fs * 1.6;
+}
+
+// winBuild(viewText, lang)：内容变化后重建逐行缓存（高亮数组 / gutter 数组 /
+// 最长行探针文本 / 行数与行高）。
+function winBuild(viewText, lang) {
+  const hlParts = highlightCodeLines(viewText, lang);
+  const hl = hlParts.map((h, i) =>
+    `<span class="code-hl-line" data-code-line="${i + 1}">${h}</span>`);
+  const lines = viewText.split("\n");
+  const gutter = viewModel
+    ? codeFoldGutterLines(viewModel.lines)
+    : lines.map((_, i) => codeGutterLineHTML(i + 1));
+  let probeText = "";
+  let probeCols = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const col = lines[i].replace(/\t/g, "    ").length;
+    if (col > probeCols) { probeCols = col; probeText = lines[i]; }
+  }
+  winCache = { hl, gutter, lineCount: hl.length, probeText };
+  winLast = null;
+  winLineH = winLineHeight();
+}
+
+function winSpacer(px) {
+  return px > 0 ? `<div class="code-window-spacer" style="height:${px}px"></div>` : "";
+}
+
+function winWindow() {
+  const box = paneBox();
+  if (!box || !winCache) return { start: 0, end: 0 };
+  return codeWindowRange(box.scrollTop, box.clientHeight, winLineH,
+    winCache.lineCount, WIN_OVERSCAN);
+}
+
+// winRenderMarks()：标记层窗口化重画（查找命中/选中词/括号/缩进引导线按
+// 窗口行过滤重基准——行内偏移不变）。
+function winRenderMarks() {
+  const box = paneBox();
+  const marksEl = box && box.querySelector(".code-marks");
+  if (!marksEl || !winCache) return;
+  const tab = getActiveTab();
+  const r = winLast || winWindow();
+  const viewText = viewModel ? viewModel.text : (tab ? tab.content : "");
+  const marks = viewModel ? marksForView() : currentMarks();
+  const lines = viewText.split("\n");
+  const windowText = lines.slice(r.start, r.end).join("\n");
+  const windowMarks = [];
+  for (const m of marks) {
+    const li = m.line - 1;
+    if (li >= r.start && li < r.end) {
+      windowMarks.push({ line: li - r.start + 1, start: m.start, end: m.end, kind: m.kind });
+    }
+  }
+  marksEl.innerHTML = codeMarksHTML(windowText, windowMarks);
+}
+
+// winApplySize()：.code-edit 显式尺寸 = 全量内容（行高*行数 + 上下 padding
+// 16px；宽度 = 最长行实测宽 + 左右 padding 36px——mono 精确、CJK 兜底）。
+function winApplySize() {
+  const box = paneBox();
+  const edit = box && box.querySelector(".code-edit");
+  if (!edit || !winCache) return;
+  edit.style.height = Math.ceil(16 + winCache.lineCount * winLineH) + "px";
+  const probe = box.querySelector(".code-window-probe");
+  let w = 0;
+  if (probe) {
+    probe.textContent = winCache.probeText || "";
+    w = probe.getBoundingClientRect().width;
+  }
+  if (w > 0) edit.style.width = Math.ceil(w + 36) + "px";
+}
+
+// winRender()：按当前滚动窗口重画三层（窗口未变 → 零 DOM 直接返回；跨窗口
+// 才切片重建），最后重挂当前行高亮（元素已重建）。
+function winRender() {
+  const box = paneBox();
+  if (!box || !winCache) return;
+  const hl = box.querySelector(".code-hl");
+  const gutter = box.querySelector(".code-gutter");
+  if (!hl || !gutter) return;
+  const r = winWindow();
+  if (winLast && winLast.start === r.start && winLast.end === r.end
+    && winLast.lineCount === winCache.lineCount) return;
+  winLast = { start: r.start, end: r.end, lineCount: winCache.lineCount };
+  const topH = Math.round(r.start * winLineH * 100) / 100;
+  const bottomH = Math.round((winCache.lineCount - r.end) * winLineH * 100) / 100;
+  const top = winSpacer(topH);
+  const bottom = winSpacer(bottomH);
+  hl.innerHTML = top + winCache.hl.slice(r.start, r.end).join("") + bottom;
+  gutter.innerHTML = top + winCache.gutter.slice(r.start, r.end).join("") + bottom;
+  winRenderMarks();
+  const ta = box.querySelector(".code-ta");
+  if (ta) setActiveLine(caretLineOf(ta.value, ta.selectionStart));
+}
+
+// codeWindowRefresh()：缩放/布局变化后强制重测行高并重画窗口（codeview 的
+// applyCodeZoom 调用）。
+export function codeWindowRefresh() {
+  winLineH = winLineHeight();
+  winLast = null;
+  winApplySize();
+  winRender();
+}
+
 function renderPane() {
   const box = paneBox();
   if (!box) return;
@@ -491,15 +613,19 @@ function renderPane() {
   // 同一三明治渲染，md 与普通文件共用（评审整改：去双分支重复）。折叠态
   // （工单 07）：行号列用视图行（模型真实行号 + 折叠箭头/占位行），编辑器
   // 内容 = 视图文本，标记经 marksForView 映射到视图行。
+  // 滚动窗口化（工单 08）：hl/marks 留空壳（windowed），内容经 winBuild +
+  // winApplySize + winRender 只画窗口行；.code-edit 尺寸显式 = 全量。
   const src = viewModel ? viewModel.text : tab.content;
-  const gutter = viewModel
-    ? codeFoldGutterHTML(viewModel.lines)
-    : codeLineNumbersHTML(tab.content.split("\n").length);
-  box.innerHTML = '<div class="code-gutter" aria-hidden="true">' + gutter + "</div>"
+  box.innerHTML = '<div class="code-gutter" aria-hidden="true"></div>'
     + codeEditorHTML(src, tab.lang, {
       readonly: tab.readonly,
       marks: viewModel ? marksForView() : currentMarks(),
-    });
+      windowed: true,
+    })
+    + '<span class="code-window-probe" aria-hidden="true"></span>';
+  winBuild(src, tab.lang);
+  winApplySize();
+  winRender();
   if (tab.readonly) renderReadonlyNote(box);
   refreshMarkSetters();   // 选中词/括号标记统一兜底（activateTab/applySavedState/applyDiskState/closeTab/remap 全经本函数，评审整改 05/06）
 }
@@ -764,9 +890,9 @@ function flashEl(el) {
 function setActiveLine(line) {
   const box = paneBox();
   if (!box) return;
-  const gut = box.querySelectorAll(".code-gutter-line")[line - 1];
-  const hl = box.querySelectorAll(".code-hl-line")[line - 1];
-  const pre = box.querySelectorAll(".code-pre-line")[line - 1];
+  const gut = box.querySelector('.code-gutter-line[data-code-line="' + line + '"]');
+  const hl = box.querySelector('.code-hl-line[data-code-line="' + line + '"]');
+  const pre = box.querySelector('.code-pre-line[data-code-line="' + line + '"]');
   if (!gut && !hl && !pre) return;
   box.querySelectorAll(".code-pre-line.active, .code-gutter-line.active, .code-hl-line.active")
     .forEach((el) => el.classList.remove("active"));
@@ -811,8 +937,17 @@ export function editJumpToLine(line) {
       target = vi;
     }
   }
-  const el = box.querySelectorAll(".code-hl-line")[target - 1]
-    || box.querySelectorAll(".code-pre-line")[target - 1];
+  let el = box.querySelector('.code-hl-line[data-code-line="' + target + '"]')
+    || box.querySelector('.code-pre-line[data-code-line="' + target + '"]');
+  if (!el && winCache) {
+    // 滚动窗口化（工单 08）：目标行不在窗口内 → 先滚到目标附近并同步渲染
+    // 窗口，再定位元素（后续 scroll 事件同窗跳过，flash 不被重建冲掉）。
+    box.scrollTop = Math.max(0, (target - 1) * winLineH
+      - Math.floor(box.clientHeight / 2));
+    winRender();
+    el = box.querySelector('.code-hl-line[data-code-line="' + target + '"]')
+      || box.querySelector('.code-pre-line[data-code-line="' + target + '"]');
+  }
   if (!el) return;
   el.scrollIntoView({ block: "center" });
   setActiveLine(target);
@@ -1241,13 +1376,12 @@ function syncEditorAfterInput() {
   const selEnd = ta.selectionEnd;
   const scrollTop = box.scrollTop;
   const scrollLeft = box.scrollLeft;
-  // 只重绘高亮层与行号列（.code-edit 的 max-content 宽度/高度随 pre 自动
-  // 调整，容器滚动不变；textarea 本体不重建——焦点/选区零抖动）
+  // 只重绘窗口行（滚动窗口化 08）：内容变化 → 重建逐行缓存 + 重测尺寸 +
+  // 画当前滚动窗口（textarea 本体不重建——焦点/选区零抖动）
   const viewText = viewModel ? viewModel.text : tab.content;
-  gutter.innerHTML = viewModel
-    ? codeFoldGutterHTML(viewModel.lines)
-    : codeLineNumbersHTML(tab.content.split("\n").length);
-  hl.innerHTML = codeEditorHighlight(viewText, tab.lang);
+  winBuild(viewText, tab.lang);
+  winApplySize();
+  winRender();
   // 标记层随输入重算（评审整改 05/06）：updateWordMarks/updateBracketMarks
   // 只重算状态不渲染——内容已变，无论词/括号是否变了都必须重画（查找命中
   // 偏移同样变了），此处无条件 renderEditorMarks（单次渲染，无双渲染）。
@@ -1349,6 +1483,18 @@ export function replaceOneInActiveFile(replacement, jumpToNext) {
 
 // ===== initCodeEditor：入口绑定（host 启动区调用；DOM 已就绪）=====
 export function initCodeEditor() {
+  // 滚动窗口化（工单 08）：窗口内滚动零 DOM（winRender 同窗跳过），跨窗口
+  // rAF 节流重建；视口尺寸变化（布局/面板高度）经 ResizeObserver 重画。
+  const viewBox = paneBox();
+  if (viewBox) {
+    viewBox.addEventListener("scroll", () => {
+      if (winFrame) return;
+      winFrame = requestAnimationFrame(() => { winFrame = 0; winRender(); });
+    });
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(() => winRender()).observe(viewBox);
+    }
+  }
   const strip = $("code-tabs");
   if (strip) strip.addEventListener("click", (e) => {
     const close = e.target.closest("[data-tab-close]");
@@ -1356,8 +1502,7 @@ export function initCodeEditor() {
       e.stopPropagation();
       closeTab(close.closest("[data-tab-path]").dataset.tabPath);
       return;
-    }
-    // 「磁盘已变更」徽章（code-ide-flow/02）：点击弹既有三选，**不**触发
+    }    // 「磁盘已变更」徽章（code-ide-flow/02）：点击弹既有三选，**不**触发
     // 普通点击的激活 tab（激活会连带内容切换，掩盖用户的冲突决策意图）
     const diskBadge = e.target.closest("[data-tab-disk]");
     if (diskBadge) {

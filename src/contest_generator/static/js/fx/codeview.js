@@ -193,6 +193,12 @@ export function breadcrumbHTML(segments) {
   ).join("");
 }
 
+// codeGutterLineHTML(n)：单行行号 gutter 纯件（工单 code-page-vscode-overhaul/08
+// 窗口化——行号列逐行滑动窗口复用，与 codeLineNumbersHTML 单源）。
+export function codeGutterLineHTML(n) {
+  return '<span class="code-gutter-line" data-code-line="' + n + '">' + n + "</span>";
+}
+
 // codeLineNumbersHTML(count)：行号 gutter 纯件——1..count 逐行 span
 // （与代码行同一 font/line-height 由 CSS 保证对齐；count 下限 1；
 // data-code-line 与内容行 .code-pre-line 同 data 键——spec.md:127-128
@@ -201,7 +207,7 @@ export function codeLineNumbersHTML(count) {
   const n = Math.max(1, Math.floor(count) || 1);
   let out = "";
   for (let i = 1; i <= n; i++) {
-    out += '<span class="code-gutter-line" data-code-line="' + i + '">' + i + "</span>";
+    out += codeGutterLineHTML(i);
   }
   return out;
 }
@@ -353,6 +359,7 @@ if (typeof window !== "undefined") {
     buildCodeTree,
     fileIconHTML,
     codeTreeHTML,
+    codeGutterLineHTML,
     codeLineNumbersHTML,
     highlightCodeLines,
     codeViewHTML,
