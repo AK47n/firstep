@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7b628a6178c6c5f74a79aa681b5bdf4605c4a79e -->
+<!-- changelog-auto: last-commit=f242af047e3585865f58670286bf7d7b100db7d7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -36,6 +36,7 @@
 - 21:01 fix：程序化编辑不打断撤销栈——applyEdit 走 execCommand(insertText) 保留浏览器原生 Ctrl+Z/Y（前后缀 diff 最小替换区间），不可用时降级快照栈（工单 code-page-vscode-overhaul/04）
 - 21:05 feat：代码页面包屑——路径分段随标签刷新、目录段点击逐级展开定位文件树（data-dir-path + 滚动高亮）、文件段可点击（fx 纯件可单测；工单 code-page-vscode-overhaul/05）
 - 21:08 feat：底部面板 tab 化——编译/磁盘变更/AI 对话/修复/烧录合一容器 + 页签条，有内容页签才显示、新消息自动切换、各面板收起态独立（业务显隐改接 showPanel/hidePanel；工单 code-page-vscode-overhaul/06）
+- 21:12 feat：代码区视觉细节——缩进引导线（4 列对齐纯件标记、双主题自适应）、括号配对 VSCode 式描边框、细滚动条、行高 1.6 微调（三明治全链同步；工单 code-page-vscode-overhaul/07）
 
 ## 2026-09-01
 - 12:19 工单 code-tree-ops/01：后端三端点（create/rename/delete）+ 树目录条目 + O_EXCL 原子创建防 TOCTOU + pytest
