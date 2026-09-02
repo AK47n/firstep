@@ -211,6 +211,15 @@ function activateTab(path) {
   const box = paneBox();
   if (box) box.scrollTop = 0;
   renderTabs();
+  // 活动标签滚入视野（工单 code-editor-vscode-polish/03）：标签横向溢出被
+  // 截断时自动滚到活动标签（inline nearest 不纵向跳动；renderTabs 重建 DOM
+  // 后按 path 现查元素）。
+  const strip = $("code-tabs");
+  if (strip) {
+    const el = Array.from(strip.querySelectorAll(".code-tab"))
+      .find((t) => t.dataset.tabPath === path);
+    if (el) el.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }
   renderPane();
   notifyActive();
 }
@@ -826,6 +835,90 @@ export function initCodeEditor() {
     const btn = e.target.closest("[data-tab-path]");
     if (btn) activateTab(btn.dataset.tabPath);
   });
+
+  // 中键关闭（工单 code-editor-vscode-polish/03）：VSCode 行为——中键点击
+  // 非活动标签直接关闭（脏标签仍走 closeTab 的确认弹窗）；活动标签中键不
+  // 关；磁盘徽章 / 关闭钮保持显式语义（中键不绕过冲突决策与 × 入口）。
+  if (strip) strip.addEventListener("auxclick", (e) => {
+    if (e.button !== 1) return;
+    const t = e.target.closest("[data-tab-path]");
+    if (!t || t.dataset.tabPath === activePath) return;
+    if (e.target.closest("[data-tab-disk]") || e.target.closest("[data-tab-close]")) return;
+    e.preventDefault();
+    closeTab(t.dataset.tabPath);
+  });
+
+  // 拖拽排序（工单 code-editor-vscode-polish/03）：HTML5 DnD——dragstart 记
+  // 路径（dataTransfer 携带，跨标签实例），dragover 按命中 tab 中线计算插入
+  // 位（before/after 用 drop-before/drop-after 指示线），drop 调 moveTab 纯件
+  // 重排 + renderTabs（内容/脏点/活动态不动）；空白区拖放 = 追加末尾。
+  // 合成事件（CDP 冒烟）与真实拖拽同一路径；dragend 兜底清理标记。
+  if (strip) {
+    let dragPath = "";
+    let dropTargetPath = "";
+    let dropPlace = "after";
+    let dropAtEnd = false;   // 拖到空白区（无命中 tab）= 追加末尾（与 dragover 命中逻辑分开，防「空路径 = 无操作」歧义）
+    const clearDropMarks = () => {
+      strip.querySelectorAll(".code-tab.drop-before, .code-tab.drop-after")
+        .forEach((el) => el.classList.remove("drop-before", "drop-after"));
+    };
+    const endDrag = () => {
+      dragPath = "";
+      dropTargetPath = "";
+      dropAtEnd = false;
+      clearDropMarks();
+      strip.querySelectorAll(".code-tab.dragging")
+        .forEach((el) => el.classList.remove("dragging"));
+    };
+    strip.addEventListener("dragstart", (e) => {
+      const tab = e.target.closest("[data-tab-path]");
+      if (!tab) return;
+      // 从关闭钮 / 磁盘徽章按下不启动拖动（评审整改 03：显式控件保持原语义）
+      if (e.target.closest("[data-tab-close]") || e.target.closest("[data-tab-disk]")) return;
+      dragPath = tab.dataset.tabPath;
+      try {
+        e.dataTransfer.setData("text/plain", dragPath);
+        e.dataTransfer.effectAllowed = "move";
+      } catch (err) { /* 合成事件无 DataTransfer：容错 */ }
+      tab.classList.add("dragging");
+    });
+    strip.addEventListener("dragover", (e) => {
+      if (!dragPath) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "move"; } catch (err) { /* 同上 */ }
+      clearDropMarks();
+      const target = e.target.closest("[data-tab-path]");
+      dropAtEnd = false;
+      if (!target) {
+        // 空白区：追加末尾（无插入位指示线）
+        dropTargetPath = "";
+        dropAtEnd = true;
+        return;
+      }
+      if (target.dataset.tabPath === dragPath) {
+        dropTargetPath = "";   // 拖回自身 = 无操作
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      dropTargetPath = target.dataset.tabPath;
+      dropPlace = before ? "before" : "after";
+      target.classList.add(before ? "drop-before" : "drop-after");
+    });
+    strip.addEventListener("drop", (e) => {
+      if (!dragPath) return;
+      e.preventDefault();
+      if (dropTargetPath && dropTargetPath !== dragPath) {
+        tabs = moveTab(tabs, dragPath, dropTargetPath, dropPlace);
+        renderTabs();
+      } else if (dropAtEnd && dropTargetPath !== dragPath) {
+        tabs = moveTab(tabs, dragPath, "", "after");
+        renderTabs();
+      }
+      endDrag();
+    });
+    strip.addEventListener("dragend", endDrag);
+  }
 
   // Ctrl/Cmd+S：tab-code 活动时全局截获（与 Ctrl+F 同口径——焦点在树/侧栏
   // 也生效）；浏览器「保存网页」对话框不出现。

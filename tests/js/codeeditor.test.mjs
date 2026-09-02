@@ -8,6 +8,7 @@ import {
   codeTabStripHTML,
   codeEditorHTML,
   codeStatusHTML,
+  moveTab,
   conflictHTML,
   editorLineRange,
   isTabSavable,
@@ -273,4 +274,31 @@ test("codeStatusHTML：边界钳制（0/负行、列 → 1；缩放 0 → 默认
   assert.match(neg, /Ln 1, Col 1/);
   const noUtf8 = codeStatusHTML({ line: 2, col: 3, lang: "c" });
   assert.match(noUtf8, /UTF-8/);   // utf8 缺省按 UTF-8 展示
+});
+
+// moveTab：标签拖拽排序纯件（工单 code-editor-vscode-polish/03）——
+// 前/后插入、拖到末尾、拖回原位（恒等）、未知路径（不变量保持）。
+test("moveTab：目标前/后插入（中段）", () => {
+  const t = [{ path: "a" }, { path: "b" }, { path: "c" }, { path: "d" }];
+  assert.deepEqual(moveTab(t, "a", "c", "before").map((x) => x.path),
+    ["b", "a", "c", "d"]);
+  assert.deepEqual(moveTab(t, "a", "c", "after").map((x) => x.path),
+    ["b", "c", "a", "d"]);
+});
+
+test("moveTab：拖到末尾（toPath 空）与拖回原位（恒等）", () => {
+  const t = [{ path: "a" }, { path: "b" }, { path: "c" }];
+  assert.deepEqual(moveTab(t, "a", null, "after").map((x) => x.path),
+    ["b", "c", "a"]);
+  assert.deepEqual(moveTab(t, "a", "", "before").map((x) => x.path),
+    ["b", "c", "a"]);
+  assert.equal(moveTab(t, "b", "b", "before"), t);   // 恒等（同引用）
+});
+
+test("moveTab：未知 from / 未知 to（还原原位 / 不变量保持）", () => {
+  const t = [{ path: "a" }, { path: "b" }, { path: "c" }];
+  assert.equal(moveTab(t, "x", "c", "before"), t);            // from 不存在
+  assert.deepEqual(moveTab(t, "b", "x", "before").map((x) => x.path),
+    ["a", "b", "c"]);                                          // 目标不存在 → 还原原位
+  assert.deepEqual(moveTab([], "a", "b", "before"), []);       // 空清单
 });

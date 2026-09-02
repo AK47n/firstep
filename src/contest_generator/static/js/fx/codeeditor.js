@@ -87,6 +87,31 @@ export function codeStatusHTML(info) {
     + seg("zoom", zoomPct + "%");
 }
 
+// moveTab(tabs, fromPath, toPath, place)：标签拖拽排序纯件（工单
+// code-editor-vscode-polish/03）——返回**新数组**（不改入参；fromPath 移到
+// toPath 前/后，place = "before" | "after"；toPath 空/null = 追加到末尾；
+// toPath === fromPath → 原样返回；fromPath 不存在 → 原样返回；toPath 不存
+// 在（拖动中目标已重排）→ 还原原位）。重排路径返回新引用、无操作路径返回
+// 原引用——无副作用语义靠「不改入参」保证，调用方不依赖引用身份。只重排
+// tab 对象引用，内容 / 脏点 / 活动态一律不动（排序纯展示态，激活与保存
+// 语义延续）。
+export function moveTab(tabs, fromPath, toPath, place) {
+  const src = tabs || [];
+  const from = src.findIndex((t) => t.path === fromPath);
+  if (from < 0) return src;
+  if (toPath === fromPath) return src;
+  const arr = src.slice();
+  const [item] = arr.splice(from, 1);
+  let insertAt = arr.length;
+  if (toPath != null && toPath !== "") {
+    const to = arr.findIndex((t) => t.path === toPath);
+    if (to < 0) { arr.splice(from, 0, item); return arr; }
+    insertAt = place === "after" ? to + 1 : to;
+  }
+  arr.splice(insertAt, 0, item);
+  return arr;
+}
+
 // codeTabStripHTML(tabs, activePath)：多文件标签条纯件——
 // tabs = [{path, lang, dirty, readonly, diskChanged?}]；活动 tab .on
 // （data-tab-path 交事件层）；脏点 .code-tab-dirty（aria-label 未保存）；
@@ -102,7 +127,7 @@ export function codeTabStripHTML(tabs, activePath) {
     const active = path === activePath;
     const ro = t.readonly ? " ro" : "";
     return '<button type="button" class="code-tab' + (active ? " on" : "") + ro
-      + '" data-tab-path="' + esc(path) + '" role="tab"'
+      + '" data-tab-path="' + esc(path) + '" role="tab" draggable="true"'
       + ' aria-selected="' + (active ? "true" : "false") + '"'
       + ' title="' + esc(path) + (t.readonly ? "（只读：非 UTF-8，禁止保存）" : "") + '">'
       + '<span class="code-tab-badge">' + codeTabBadge(t.lang) + "</span>"
@@ -246,6 +271,7 @@ if (typeof window !== "undefined") {
     codeTabBadge,
     codeStatusHTML,
     codeTabStripHTML,
+    moveTab,
     codeEditorHighlight,
     codeEditorHTML,
     conflictHTML,

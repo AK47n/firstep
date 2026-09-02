@@ -1574,9 +1574,19 @@
     color: var(--danger); font-weight: 700; cursor: pointer; }
   .code-tab-disk:hover { filter: brightness(.95); }
   .code-tab-close { flex: none; color: var(--muted); font-size: 14px; line-height: 1;
-    padding: 2px 4px; border-radius: var(--radius-xs); margin-left: 2px; }
+    padding: 3px 6px; border-radius: var(--radius-xs); margin-left: 2px; }
   .code-tab-close:hover { background: var(--accent-dim); color: var(--accent); }
   .code-tab.ro .code-tab-name { text-decoration: line-through; opacity: .8; }
+  /* 拖拽排序（工单 code-editor-vscode-polish/03）：标签可拖（grab 光标）、
+     拖动中半透明、插入位 = 左侧/右侧 2px accent 竖线（VSCode 拖放指示线
+     观感；与当前行/树选中同族 accent 竖线视觉语言）。 */
+  .code-tab[draggable="true"] { cursor: grab; }
+  .code-tab.dragging { opacity: .55; }
+  .code-tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+  .code-tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
+  /* 徽章间距统一（工单 code-editor-vscode-polish/03）：磁盘变更「!」与只读
+     标同 padding 节奏（2px 6px / radius-xs），与关闭钮 hover 区（加大
+     padding）观感一致。 */
   /* 标签条下方的信息条（.md「返回预览」等动作右侧常驻）——空态（动作
      按钮全部隐藏）折叠不占位：用户反馈「代码第一行上面有一行啥也没有的
      空行」= 空态信息条 30px 占位；.empty 由 ui/codeview.js 按钮可见性
