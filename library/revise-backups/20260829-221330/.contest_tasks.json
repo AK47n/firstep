@@ -1,0 +1,394 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-29T21:09:35+0800",
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "基础巡线闭环驱动",
+      "description": "在 main.c 的 xunji_dispatch() 的 XUNJI_FOLLOW 分支中替换 TODO：读取 motor_encoder_read() 更新 motorA.now/motorB.now，调用 pid_cal(&motorA)/pid_cal(&motorB)，再按限幅输出设置电机。将 xunji_state 初始值改为 XUNJI_FOLLOW 实现上电自动巡线。main() 保留已有初始化并循环 delay_ms(10)。",
+      "score_refs": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "depends_on": [],
+      "verify": "compile",
+      "status": "verified",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PA15",
+        "PA31",
+        "PA28",
+        "UART0",
+        "PB9",
+        "PA18",
+        "PA12",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PA16",
+        "PA17",
+        "PB19",
+        "PB20"
+      ],
+      "iterations": [
+        {
+          "seq": 1,
+          "kind": "execute",
+          "feedback": "",
+          "status": "verified",
+          "backup_id": "20260829-211102",
+          "compile_summary": "{'errors': 0, 'warnings': 0}",
+          "what_changed": "本步在 main.c 的 xunji_dispatch() 的 XUNJI_FOLLOW 分支中替换 TODO：调用 motor_encoder_read() 读取左右轮编码器脉冲计数并清零，更新 motorA.now / motorB.now，然后调用 pid_cal(&motorA) / pid_cal(&motorB) 完成速度闭环 PID 计算，并按限幅输出设置电机。同时将 xunji_state 初始值由 XUNJI_STOP 改为 XUNJI_FOLLOW，实现上电自动进入巡线状态。main() 保留已有初始化，循环中 delay_ms(10) 维持 10ms 采样周期。编译验证通过（0 错误 0 警告）。",
+          "user_action": "请按接线表将电机驱动模块和灰度模块连接至主板：将 PA12 接 PWMAB_C0、PA13 接 PWMAB_C1，PB9 接 AIN1、PA18 接 AIN2，PB18 接 BIN1、PA7 接 BIN2；编码器 PA16 接 AA、PA17 接 AB、PB19 接 BA、PB20 接 BB；灰度模块 PA22~PA27、PB6、PB7 依次接 GRAY_D1~GRAY_D8，并确保所有模块共地（GND 相连）、电机驱动 VM 接 7.4V 电源。检查无误后通过 SWD 烧录程序，上电后观察电机是否自动跟随黑线：若电机不转，检查 PWM/方向引脚是否接反；若走线偏差大，调整 PID 参数或灰度阈值。",
+          "checklist": [
+            "上电后电机应保持静止或缓慢启动，且跟随黑线运动；若不运动，检查电机驱动供电及 PWM/方向接线。",
+            "灰度模块 8 个通道应能正确读取地面灰度；若识别异常，检查灰度模块供电及 DIO 接线是否接触良好。",
+            "左右轮编码器脉冲应随电机转动而变化；若读数为 0，检查编码器 A/B 相接线是否接反或接触不良。",
+            "巡线时应能自动纠正偏差；若走线发飘，检查 PID 参数或编码器线数配置。",
+            "按下复位后应自动进入巡线状态，无需手动触发；若未进入，检查 xunji_state 初始化是否为 XUNJI_FOLLOW。"
+          ],
+          "wiring": [
+            {
+              "pin": "PA12",
+              "target": "PWMAB_C0",
+              "note": "左电机 PWM"
+            },
+            {
+              "pin": "PA13",
+              "target": "PWMAB_C1",
+              "note": "右电机 PWM"
+            },
+            {
+              "pin": "PB9",
+              "target": "AIN1",
+              "note": "左电机方向1"
+            },
+            {
+              "pin": "PA18",
+              "target": "AIN2",
+              "note": "左电机方向2"
+            },
+            {
+              "pin": "PB18",
+              "target": "BIN1",
+              "note": "右电机方向1"
+            },
+            {
+              "pin": "PA7",
+              "target": "BIN2",
+              "note": "右电机方向2"
+            },
+            {
+              "pin": "PA16",
+              "target": "AA",
+              "note": "左编码器 A"
+            },
+            {
+              "pin": "PA17",
+              "target": "AB",
+              "note": "左编码器 B"
+            },
+            {
+              "pin": "PB19",
+              "target": "BA",
+              "note": "右编码器 A"
+            },
+            {
+              "pin": "PB20",
+              "target": "BB",
+              "note": "右编码器 B"
+            },
+            {
+              "pin": "PA22",
+              "target": "GRAY_D1",
+              "note": "灰度1"
+            },
+            {
+              "pin": "PA23",
+              "target": "GRAY_D2",
+              "note": "灰度2"
+            },
+            {
+              "pin": "PA24",
+              "target": "GRAY_D3",
+              "note": "灰度3"
+            },
+            {
+              "pin": "PA25",
+              "target": "GRAY_D4",
+              "note": "灰度4"
+            },
+            {
+              "pin": "PA26",
+              "target": "GRAY_D5",
+              "note": "灰度5"
+            },
+            {
+              "pin": "PA27",
+              "target": "GRAY_D6",
+              "note": "灰度6"
+            },
+            {
+              "pin": "PB6",
+              "target": "GRAY_D7",
+              "note": "灰度7"
+            },
+            {
+              "pin": "PB7",
+              "target": "GRAY_D8",
+              "note": "灰度8"
+            }
+          ],
+          "at": "2026-08-29T21:11:40+0800"
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "title": "前向约束与超时保护",
+      "description": "修改 xunji_dispatch() 的 FOLLOW 分支：电机输出方向恒为前进（direction=0），负占空比截为 0，满足『只能前进』要求；添加静态超时计数器，在 FOLLOW 状态连续运行超过预设超时（如 15s）未转入 WAIT_LINE 时，强制停车并切换至 STOP。在 TODO 参数区配置超时时间。",
+      "score_refs": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "depends_on": [
+        "t1"
+      ],
+      "verify": "compile",
+      "status": "verified",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PB9",
+        "PA18",
+        "PA12",
+        "PA13",
+        "PA7",
+        "PB18"
+      ],
+      "iterations": [
+        {
+          "seq": 1,
+          "kind": "execute",
+          "feedback": "",
+          "status": "verified",
+          "backup_id": "20260829-215523",
+          "compile_summary": "{'errors': 0, 'warnings': 0}",
+          "what_changed": "在 xunji_dispatch() 的 FOLLOW 分支中，电机输出方向恒为前进（direction=0），并将负占空比截为 0，满足『只能前进』要求；同时添加静态超时计数器 follow_timeout_ms，按 10ms 调度周期累加，当连续运行超过预设超时 XUNJI_FOLLOW_TIMEOUT_MS（15s）未转入 WAIT_LINE 时，强制调用 motor_set_duty(0,0) 和 motor_set_duty(1,0) 停车并切换至 XUNJI_STOP。编译验证通过，0 错误 0 警告。",
+          "user_action": "烧录程序到地猛星开发板，上电后让小车进入 FOLLOW 状态（如放在黑线上），观察小车是否只前进不后退；持续 15 秒未检测到停车区应强制停车并进入 STOP 状态。确认现象后按复位键重新测试超时保护是否重置。",
+          "checklist": [
+            "烧录后小车在 FOLLOW 状态下应只前进，不应出现后退；若不正常检查电机方向引脚 AIN1/AIN2/BIN1/BIN2 接线。",
+            "在 FOLLOW 状态持续约 15 秒（无停车区特征）应强制停车并切换到 STOP；若不正常检查 XUNJI_FOLLOW_TIMEOUT_MS 宏是否生效及调度周期是否为 10ms。",
+            "按下复位重新运行后超时计数器应清零，可再次进入 FOLLOW 状态；若不正常检查 follow_timeout_ms 是否在状态切换时清零。"
+          ],
+          "wiring": [],
+          "at": "2026-08-29T21:55:56+0800"
+        }
+      ]
+    },
+    {
+      "id": "t3",
+      "title": "A到B自动停车提示",
+      "description": "在 xunji_dispatch() 增加累计里程变量，用 motor_encoder_read() 累加平均脉冲换算距离，当从 A 点行驶到 B 点（按图 1 长度约 100cm）达到阈值时，将 xunji_state 置为 XUNJI_WAIT_LINE；在 XUNJI_WAIT_LINE 分支中调用 motor_set_duty(0,0)/motor_set_duty(1,0) 停车，并用 led_beep_alarm(3,200,100) 声光提示，随后保持在 STOP。实现要求（1）自动行驶到 B 点停车并有声光提示。",
+      "score_refs": [
+        "1"
+      ],
+      "depends_on": [
+        "t1",
+        "t2"
+      ],
+      "verify": "manual",
+      "status": "doing",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PB9",
+        "PA18",
+        "PA12",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PA16",
+        "PA17",
+        "PB19",
+        "PB20",
+        "PA15"
+      ],
+      "iterations": []
+    },
+    {
+      "id": "t4",
+      "title": "闭环一圈路径与点提示",
+      "description": "将 xunji_dispatch() 扩展为多阶段路径状态机 SEG_AB、SEG_BC、SEG_CD、SEG_DA。每阶段保持巡线（line_pid_track + PID），使用 IMU 航向与编码器里程判断到达下一顶点（B、C、D、A），到达时先停车，调用 led_beep_alarm 声光提示，再切换下一阶段。完成一圈后回到 STOP。实现要求（2）A→B→C→D→A 一圈，每点提示。",
+      "score_refs": [
+        "2"
+      ],
+      "depends_on": [
+        "t3"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "PB9",
+        "PA18",
+        "PA12",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PA16",
+        "PA17",
+        "PB19",
+        "PB20",
+        "PA15",
+        "PA31",
+        "PA28",
+        "UART0"
+      ],
+      "iterations": []
+    },
+    {
+      "id": "t5",
+      "title": "对角线直线导航模式",
+      "description": "在状态机中加入盲走直线导航：使用 current_attitude.yaw 作为目标航向，PID 输出左右轮差速，保持车辆沿直线从 A 到 C、B 到 D；到达目标点后切换为巡线模式沿半弧线行驶（C→B、D→A）。在 main.c 中定义 TASK_MODE 宏，本任务默认设为 3 以实现要求（3）A→C→B→D→A 路径，每点声光提示。",
+      "score_refs": [
+        "3"
+      ],
+      "depends_on": [
+        "t4"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "UART0",
+        "PA31",
+        "PA28",
+        "PB9",
+        "PA18",
+        "PA12",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PA16",
+        "PA17",
+        "PB19",
+        "PB20",
+        "PA15"
+      ],
+      "iterations": []
+    },
+    {
+      "id": "t6",
+      "title": "四圈自动循环停车",
+      "description": "在任务 5 的主路径基础上增加循环计数变量 loop_count，每完成一圈递增并提示，当 loop_count >= 4 时最后停车，否则重新开始下一圈。默认 TASK_MODE=3，实现要求（4）按要求 3 路径自动行驶 4 圈停车，用时尽量短。",
+      "score_refs": [
+        "4"
+      ],
+      "depends_on": [
+        "t5"
+      ],
+      "verify": "manual",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [
+        "UART0",
+        "PA31",
+        "PA28",
+        "PB9",
+        "PA18",
+        "PA12",
+        "PA13",
+        "PA7",
+        "PB18",
+        "PA16",
+        "PA17",
+        "PB19",
+        "PB20",
+        "PA15"
+      ],
+      "iterations": []
+    },
+    {
+      "id": "t7",
+      "title": "设计报告参数与注释",
+      "description": "在 main.c 的 TODO 参数区填写实际使用的参数：基础速度、PID 增益（如 motorA/B p=0.9，line_pid p=3.4）、停车距离阈值、状态转换超时、TASK_MODE 定义，并添加简短注释说明系统方案、误差分析与测试参数，为设计报告提供代码依据。",
+      "score_refs": [
+        "5"
+      ],
+      "depends_on": [
+        "t6"
+      ],
+      "verify": "compile",
+      "status": "pending",
+      "note": "",
+      "dialog_note": "",
+      "needs_redo": false,
+      "resources": [],
+      "iterations": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "basic",
+      "description": "完成第（1）项",
+      "score": 20.0,
+      "sentence_refs": [
+        24
+      ]
+    },
+    {
+      "id": "2",
+      "part": "basic",
+      "description": "完成第（2）项",
+      "score": 20.0,
+      "sentence_refs": [
+        28,
+        29
+      ]
+    },
+    {
+      "id": "3",
+      "part": "development",
+      "description": "完成第（3）项",
+      "score": 30.0,
+      "sentence_refs": [
+        33,
+        34
+      ]
+    },
+    {
+      "id": "4",
+      "part": "development",
+      "description": "完成第（4）项",
+      "score": 30.0,
+      "sentence_refs": [
+        39
+      ]
+    },
+    {
+      "id": "5",
+      "part": "unknown",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        40
+      ]
+    }
+  ]
+}

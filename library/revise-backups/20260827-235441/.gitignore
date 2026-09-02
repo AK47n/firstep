@@ -1,0 +1,21 @@
+# Keil MDK 编译产物
+user/Objects/
+user/Listings/
+
+# Keil 个人 GUI 配置
+*.uvguix.*
+
+# 临时文件
+*.bak*
+*.dep
+*.crf
+*.d
+*.o
+*.lst
+
+# 竞赛题目PDF（不上传）
+2021F_智能送药小车.pdf
+
+# IDE 辅助文件
+.vscode/
+DebugConfig/
