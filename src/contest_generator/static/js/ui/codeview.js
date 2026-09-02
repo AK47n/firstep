@@ -30,6 +30,8 @@ onCodeAiApplied(() => checkCodeDiskChanges());  // C2 应用闭环（工单 04�
 import {
   buildCodeTree,
   codeTreeHTML,
+  breadcrumbSegments,
+  breadcrumbHTML,
   outlineHTML,
   outlineEmptyHTML,
   searchListHTML,
@@ -781,6 +783,40 @@ function syncInfoBar() {
   pathBar.classList.toggle("empty", !anyShown);
 }
 
+// ===== 面包屑（工单 code-page-vscode-overhaul/05）=====
+// 活动标签路径 → 分段纯件渲染；无活动标签隐藏（不占位）。目录段点击 →
+// revealTreePath 定位文件树；文件段点击 → 打开文件。
+function renderBreadcrumb() {
+  const nav = $("code-breadcrumb");
+  if (!nav) return;
+  const tab = getActiveTab();
+  const segs = tab ? breadcrumbSegments(tab.path) : [];
+  nav.classList.toggle("hidden", !segs.length);
+  nav.innerHTML = segs.length ? breadcrumbHTML(segs) : "";
+}
+
+// revealTreePath(dirPath)：逐级展开目录 details（data-dir-path，工单 05 新增）
+// → 滚动到目标并临时高亮（.code-tree-reveal 动画后自动清除）。
+function revealTreePath(dirPath) {
+  const box = $("code-tree");
+  if (!box || !dirPath) return;
+  const parts = String(dirPath).split("/").filter(Boolean);
+  let acc = "";
+  for (const d of parts) {
+    acc = acc ? acc + "/" + d : d;
+    const el = box.querySelector(`details[data-dir-path="${CSS.escape(acc)}"]`);
+    if (el) el.open = true;
+  }
+  const target = box.querySelector(`details[data-dir-path="${CSS.escape(dirPath)}"]`)
+    || box.querySelector(`[data-code-file="${CSS.escape(dirPath)}"]`);
+  if (!target) return;
+  target.scrollIntoView({ block: "center" });
+  target.classList.add("code-tree-reveal");
+  setTimeout(() => {
+    box.querySelectorAll(".code-tree-reveal").forEach((el) => el.classList.remove("code-tree-reveal"));
+  }, 1200);
+}
+
 // ===== initCodeViewer：入口绑定（host 启动区调用） =====
 export function initCodeViewer() {
   const pick = $("btn-code-pick-dir");
@@ -858,6 +894,7 @@ export function initCodeViewer() {
     // 空态信息条占位 30px）。同步点唯一 = 本回调（所有按钮可见性路径
     // openEditorFile/setMdMode/applySavedState 均经 notifyActive 汇聚）。
     syncInfoBar();
+    renderBreadcrumb();   // 面包屑随活动标签/路径变化刷新（工单 05）
     refreshCodeStatus();   // 状态栏信息区随活动标签变化刷新（工单 01）
     applyEditorFind(findInput ? findInput.value || "" : "");   // 标记层随标签/内容变化重算（工单 04）
   });
@@ -1021,6 +1058,15 @@ export function initCodeViewer() {
     const btn = e.target.closest("[data-search-path]");
     if (!btn) return;
     editJumpToFile(btn.dataset.searchPath, parseInt(btn.dataset.searchLine, 10));
+  });
+
+  // 面包屑点击（delegation，工单 05）：目录段 → 定位树；文件段 → 打开。
+  const crumb = $("code-breadcrumb");
+  if (crumb) crumb.addEventListener("click", (e) => {
+    const dirBtn = e.target.closest("[data-breadcrumb-dir]");
+    if (dirBtn) { revealTreePath(dirBtn.dataset.breadcrumbDir); return; }
+    const fileBtn = e.target.closest("[data-breadcrumb-file]");
+    if (fileBtn) openEditorFile(fileBtn.dataset.breadcrumbFile);
   });
 
   // 「编辑源码」：.md 预览态 → 编辑态（可修改可保存，工单 05）
