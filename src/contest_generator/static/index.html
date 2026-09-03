@@ -1925,6 +1925,33 @@
   .code-ctx-item:hover { background: var(--panel-2); color: var(--accent); }
   .code-ctx-item-danger { color: var(--danger); }
   .code-ctx-item-danger:hover { background: var(--danger-dim); color: var(--danger); }
+  /* Ctrl+P 快速打开（工单 code-editor-refine/09）：全屏轻遮罩 + 顶部输入 +
+     结果列表——overlay token（--panel/--border/--shadow-pop，深浅主题自适应）；
+     ↑/↓/Enter/Esc/点击遮罩由 ui/quick-open.js 处理；mark 命中高亮随主题。 */
+  .quick-open-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .5);
+    z-index: 160; padding: 12vh 16px 16px; display: flex;
+    justify-content: center; align-items: flex-start; }
+  .quick-open-box { width: min(560px, 92vw); background: var(--panel);
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-pop); overflow: hidden; }
+  .quick-open-head { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+  .quick-open-input { flex: 1; min-width: 0; box-sizing: border-box; padding: 12px 14px;
+    border: 0; background: none; color: var(--text); font-size: 14px;
+    font-family: var(--mono); outline: none; }
+  .quick-open-close { border: 0; background: none; color: var(--muted);
+    font-size: 18px; line-height: 1; padding: 8px 12px; cursor: pointer; }
+  .quick-open-close:hover { color: var(--text); }
+  .quick-open-list { max-height: 46vh; overflow-y: auto; padding: 4px; }
+  .quick-open-item { padding: 6px 10px; font-size: 13px; font-family: var(--mono);
+    cursor: pointer; border-radius: var(--radius-sm); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; color: var(--text);
+    display: flex; align-items: center; gap: 8px; }
+  .quick-open-item:hover { background: var(--panel-2); }
+  .quick-open-item.on { background: var(--accent-dim); color: var(--accent); }
+  .quick-open-ico { flex: none; font-size: 12px; }
+  .quick-open-text { overflow: hidden; text-overflow: ellipsis; }
+  .quick-open-item mark { background: rgba(var(--accent-rgb), .25); color: inherit; }
+  .quick-open-empty { padding: 14px; text-align: center; font-size: 13px; }
   /* 树操作输入模态（工单 code-tree-ops/02）：新建/重命名单行文本框 */
   .code-tree-name-input { width: 100%; box-sizing: border-box; margin-top: var(--space-2);
     padding: 6px 10px; font-family: var(--mono); font-size: 13px;
@@ -4259,6 +4286,7 @@ import { initCodeEditor } from "/js/ui/codeeditor.js";  // 代码编辑器（cod
 import { initCodeCompile } from "/js/ui/code-compile.js";  // 代码栏编译（code-tab-compile/03）：编译按钮 + 底部错误面板 + 错误行跳转
 import { initCodeFlash } from "/js/ui/code-flash.js";  // 代码栏烧录（code-editor-utilize/04）：状态栏烧录按钮 + 底部结果面板
 import { initCodeTreeOps, initCodeSaveAll } from "/js/ui/code-tree-ops.js";  // 代码树操作（code-tree-ops/02-03）：新建/重命名/删除 + 保存全部
+import { initQuickOpen } from "/js/ui/quick-open.js";  // Ctrl+P 快速打开（code-editor-refine/09）：浮层 + 树清单索引
 import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
 import { initSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：编辑框下方 chips 委托
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
@@ -4670,6 +4698,7 @@ initCodeCompile();  // 代码栏编译（工单 code-tab-compile/03）：编译�
 initCodeFlash();  // 代码栏烧录（工单 code-editor-utilize/04）：烧录按钮 / 底部结果面板接线
 initCodeTreeOps();  // 代码树操作（工单 code-tree-ops/02）：新建/重命名/删除按钮与树内委托接线
 initCodeSaveAll();  // 保存全部（工单 code-tree-ops/03）：状态栏按钮 + Ctrl+Shift+S
+initQuickOpen();  // Ctrl+P 快速打开（工单 code-editor-refine/09）：浮层 + 树清单索引
 initScoreChecklist();  // 评分点核对清单：勾选持久化 + 复制核对表（事件委托）
 initCardCollapse();  // 放末尾：依赖 CARD_COLLAPSE_SELECTOR / stepDoneSet 已初始化（const TDZ）
 initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM 已就绪，纯本地交互

@@ -17,6 +17,8 @@ import {
   symbolFilter,
   searchListHTML,
   fileFindFilter,
+  quickOpenMatch,
+  quickOpenHighlightParts,
   treeWidthClamp,
   parseTreeWidthStored,
   CODE_TREE_WIDTH_MIN,
@@ -335,4 +337,50 @@ test("breadcrumbHTML：超长段截断（…）并保留 title 全量路径", ()
 test("breadcrumbHTML：空分段 → 空串", () => {
   assert.equal(breadcrumbHTML([]), "");
   assert.equal(breadcrumbHTML(null), "");
+});
+
+// ---- 快速打开（工单 code-editor-refine/09）----
+
+test("quickOpenMatch：basename 子串优先（大小写不敏感）→ 路径子串 → 模糊；空 query []", () => {
+  const files = ["src/main.c", "main.h", "main/x.c", "docs/readme.md", "src/utils.c"];
+  const r = quickOpenMatch(files, "main");
+  assert.deepEqual(r.map((x) => x.path), ["main.h", "src/main.c", "main/x.c"]);
+  assert.deepEqual(r.map((x) => x.rank), [0, 0, 1]);   // main/x.c 的 basename = x.c → 路径子串
+  const docs = quickOpenMatch(files, "docs");
+  assert.deepEqual(docs.map((x) => [x.path, x.rank]), [["docs/readme.md", 1]]);
+  const fuzzy = quickOpenMatch(files, "mnc");
+  assert.deepEqual(fuzzy.map((x) => [x.path, x.rank]), [["src/main.c", 2]]);   // main.h 无 c 不命中
+  assert.deepEqual(quickOpenMatch(files, ""), []);
+  assert.deepEqual(quickOpenMatch(files, "  "), []);
+});
+
+test("quickOpenMatch：中文/空格路径 + 截断 50 条 + 无匹配 []", () => {
+  const zh = quickOpenMatch([{ path: "驱动/main.c" }, { path: "src/心 得.txt" }], "心得");
+  assert.deepEqual(zh.map((x) => x.path), ["src/心 得.txt"]);
+  const many = Array.from({ length: 60 }, (_, i) => "f" + i + ".c");
+  assert.equal(quickOpenMatch(many, "f").length, 50);
+  assert.deepEqual(quickOpenMatch(["a.c", "b.c"], "z"), []);
+});
+
+test("quickOpenMatch：大小写不敏感（大写 query 命中小写路径）+ 中文子串 rank0", () => {
+  const up = quickOpenMatch(["src/MAIN.c", "other.c"], "main");
+  assert.deepEqual(up.map((x) => [x.path, x.rank]), [["src/MAIN.c", 0]]);
+  const zh = quickOpenMatch(["src/心 得.txt", "other.txt"], "心 得");
+  assert.deepEqual(zh.map((x) => [x.path, x.rank]), [["src/心 得.txt", 0]]);
+});
+
+test("quickOpenHighlightParts：rank0 basename 段 / rank1 路径段 / 模糊与非法 → null", () => {
+  const base = quickOpenMatch(["src/main.c"], "main")[0];
+  assert.deepEqual(
+    quickOpenHighlightParts(base.path, base.rank, base.idx, "main"),
+    { before: "src/", mark: "main", after: ".c" }
+  );
+  const pathHit = quickOpenMatch(["docs/readme.md"], "docs")[0];
+  assert.deepEqual(
+    quickOpenHighlightParts(pathHit.path, pathHit.rank, pathHit.idx, "docs"),
+    { before: "", mark: "docs", after: "/readme.md" }
+  );
+  assert.equal(quickOpenHighlightParts("a.c", 2, 0, "a"), null);        // 模糊不高亮
+  assert.equal(quickOpenHighlightParts("a.c", 0, -1, "a"), null);       // idx 非法
+  assert.equal(quickOpenHighlightParts("a.c", 0, 0, ""), null);         // 空 query
 });
