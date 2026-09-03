@@ -54,6 +54,16 @@ await Eval(`import('/js/ui/codeview.js').then((m) => m.openCodeViewer(${JSON.str
 await waitFor(`!!document.querySelector('#code-tree [data-code-file="big.c"]')`);
 await Eval(`document.querySelector('#code-tree [data-code-file="big.c"]').click(); true`);
 await waitFor(`!!document.querySelector('#code-viewer .code-ta')`);
+// 真实场景：光标移到文末、视口滚到底（文末输入 = 常见逐键路径）
+await Eval(`(() => {
+  const ta = document.querySelector('#code-viewer .code-ta');
+  const view = document.getElementById('code-viewer');
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  view.scrollTop = view.scrollHeight;
+  return true;
+})()`);
+await new Promise((r) => setTimeout(r, 300));
 
 // 预热一次输入（结构/缓存已就位）
 await Eval(`(() => {

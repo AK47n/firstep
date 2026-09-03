@@ -8,8 +8,10 @@ import {
   editChangeSpan,
   marksPatch,
   marksPartition,
+  wordRangesPatch,
 } from "../../src/contest_generator/static/js/fx/edit-patch.js";
 import { codeIndentGuideMarks } from "../../src/contest_generator/static/js/fx/code-marks.js";
+import { codeWordRanges } from "../../src/contest_generator/static/js/fx/code-marks.js";
 import { bracketDepthMarks } from "../../src/contest_generator/static/js/fx/code-brackets.js";
 
 // ---- editChangeSpan ----
@@ -191,4 +193,29 @@ test("marksPartition 与 marksPatch 组合：修补后分区 = 全量重算分�
   const fresh = marksPartition(all(newText));
   assert.deepEqual(p.guides, fresh.guides);
   assert.deepEqual(p.rainbow, fresh.rainbow);
+});
+
+// ---- wordRangesPatch：选中词区段增量（工单 code-editor-opt/02）----
+
+test("wordRangesPatch：与 codeWordRanges 全量重算一致（多重场景）", () => {
+  const cases = [
+    ["空格插入（词边界稳定）", "int aaa = 1;\nint aaa = 2;", "int aaa  = 1;\nint aaa = 2;"],
+    ["字母插入改变词边界（aaa→xaaa 不再命中 aaa）", "int aaa = 1;\nint aaa = 2;", "int xaaa = 1;\nint aaa = 2;"],
+    ["字母插入扩展词（aaa→aaax 不再命中 aaa）", "int aaa = 1;\nint aaa = 2;", "int aaax = 1;\nint aaa = 2;"],
+    ["其它行插入（本行词区段不动）", "int aaa = 1;\nint aaa = 2;", "int aaa = 1;\nint aaax = 2;"],
+    ["删除（回退）", "int aaa  = 1;\nint aaa = 2;", "int aaa = 1;\nint aaa = 2;"],
+  ];
+  for (const [name, oldText, newText] of cases) {
+    const word = "aaa";
+    const s = editChangeSpan(oldText, newText);
+    assert.equal(s.structural, false, name + " 应是非结构");
+    const patched = wordRangesPatch(codeWordRanges(oldText, word), word, oldText, newText, s);
+    assert.deepEqual(patched, codeWordRanges(newText, word), name);
+  }
+});
+
+test("wordRangesPatch：空词/空清单防御", () => {
+  const s = editChangeSpan("a", "ab");
+  assert.deepEqual(wordRangesPatch([], "", "a", "ab", s), []);
+  assert.deepEqual(wordRangesPatch([{ line: 1, start: 0, end: 1 }], "", "a", "ab", s), [{ line: 1, start: 0, end: 1 }]);
 });

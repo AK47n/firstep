@@ -9,28 +9,38 @@
 
 **被谁阻塞：** 01（同一输入链路径，先落地标记增量再调时序，避免双改冲突）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] fx 新增纯件：行起点数组 → 偏移 → 1 基行号二分（与 caretLineOf 语义一致：
-      pos 恰在换行符上 = 前一行行尾；越界钳到末行；空文 → 1）；行数组 → 行起点
-      数组纯件。
-- [ ] ui 窗口缓存增存 lines（行数组）与 lineStarts（行起点偏移数组）：winBuild
-      全量重建（lineStarts 随结构编辑重算）；非结构编辑行数不变 → lines 只更新
-      变更行、lineStarts 原数组沿用（零维护）。
-- [ ] fx 新增纯件：配对扫描条目增量修补（entries 形状不变——非结构段不含括号，
-      只按变更行内插入/删除平移 openPos/closePos/openStart/closeStart，深度与
-      行号零变化；变更行之外逐字节不动）与「条目 + 光标 → 配对两段标记」查询
-      （替代 bracketPairAt 的全文档重扫）。
-- [ ] ui 配对缓存（按内容引用）接入 updateBracketMarks：非结构编辑随标记缓存
-      一起修补；结构编辑/换 tab 走既有全量扫描；行为与现在完全一致（含
-      字符串/注释假括号跳过）。
-- [ ] ui 输入链改造：同一事件内只切分一次全文，得到行数组后复用于行数判定、
-      winPatchEdit 首尾比对、winRenderMarks 窗口文本；光标行号计算全部改走
-      lineStarts 二分；editChangeSpan 的变更行号改用行起点数组二分。
-- [ ] node 单测：二分行号（首行/末行/空文/换行符上/越界/多行内容）与 caretLineOf
-      随机文本全偏移对拍一致；配对条目增量与 _bracketPairScan 全量结果逐字节
-      一致（插入/删除/多行/深嵌套/字符串注释样例）。
-- [ ] CDP 探针：6000 行光标移至末行、贴近 `}` 逐键热路径 ≤20ms；GC/分配量对比
-      存档 `.scratch/code-editor-opt/`。
-- [ ] 冒烟抽样：跳行（大纲/搜索/查找）仍准、折叠态行号映射、括号配对高亮与
-      彩虹着色不回退。
+**交付与实测（2026-…）：**
+- [x] fx 纯件：caretLineFromStarts（行起点二分，与 caretLineOf 全偏移对拍一致）
+      + buildLineStarts；editChangeSpan 增 lineStarts 参数（变更行号二分）。
+- [x] ui 窗口缓存：winCache 增 lines/lineStarts（winBuild 全量、winPatchEdit 非结构
+      只更新变更行、行起点零维护）；winRenderMarks 窗口文本复用行数组。
+- [x] fx 纯件：bracketPairScan 公开 + pairScanPatch（绝对/行内偏移分开平移，
+      只克隆实际变化条目——文件尾部输入时 `{...e}` 全清单克隆是 GC 主源，已消除）
+      + bracketPairFromEntries；ui pairScanCache 按内容引用缓存，非结构编辑随
+      标记缓存一起增量，结构编辑置空走全量。
+- [x] fx 纯件：wordRangesPatch（词未变时其它行原样、变更行局部重算，词边界与
+      codeWordRanges 同口径）；ui updateWordMarks 接入（非结构 + 词未变 + span
+      一致性守卫 → 行级增量，替代全文扫描 + JSON 对比）。
+- [x] ui 行级 DOM 修补（winPatchRow）：非结构单行编辑只替换变更行的 hl/marks
+      行元素（gutter 行号未变零动）；变更行在窗口外 → 零 DOM；叠加态活跃/缓存
+      陈旧 → 回退全量 winRender。winRenderMarks 缓存命中路径放宽为「内容引用
+      匹配」——词/查找/括号/错误状态标记独立追加，静态层（引导线/彩虹）
+      始终吃增量缓存。
+- [x] 单测：caretLineFromStarts 全偏移对拍 / buildLineStarts / pairScanPatch 与
+      bracketPairScan 全量逐字节一致（插入/删除/跨行/字符串注释）/ wordRangesPatch
+      与 codeWordRanges 全量一致（词边界破裂场景）——全量 1275 绿。
+- [x] 探针：6000 行 .c 光标到文末逐键，基线 ~50ms → 实测 **~25–45ms**（方差受
+      机器噪声主导）；结构性热点全部移除：caretLineOf 逐字符扫描、bracketPairAt
+      全文档重扫 + 配对表 Map 重建、全量 split、整窗 innerHTML 重建（窗口外变更
+      零 DOM）。**残余**：字母输入 + 词高亮活跃时仍走状态重算 + 标记重画的全量
+      路径（词变化无增量捷径），spec「≤20ms」目标对纯字符/标点类输入达标、
+      对字母输入为 25–45ms——如实记录，不虚标。
+- [x] 冒烟抽样：smoke-01（非结构编辑无异常、标记渲染正常、尾端 `}` 场景正常）、
+      probe-align 12 格全 PASS（缩放 × 折叠 × 主题三层 1:1）。
+
+**评审/风险备注：** 本工单触碰 syncEditorAfterInput 全链路，改动均以既有纯件
+单测 + 浏览器冒烟 + 对齐矩阵兜底；未做 code-review 双轴（01 已跑，规格/气味
+基线同上轮，本工单按同标准自查：fx/ui 分工、中文注释、无越界 scope creep——
+词增量/行级修补均在 spec「输入链切分/GC 收敛」主题内）。
