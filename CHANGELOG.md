@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6fd53b283b17c94ddd7051a95a6985b61b264423 -->
+<!-- changelog-auto: last-commit=c047e8afdd31a6c8e635deb78f570191ba8e68a2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -24,6 +24,7 @@
 - 20:29 perf：代码编辑器静态标记缓存修补与 markClean 解耦（工单 code-editor-opt/05 补）
 - 20:33 feat：代码编辑器大文件打开惰性高亮（工单 code-editor-opt/06）
 - 20:33 docs：code-editor-opt spec 补记工单 05/06 实施结果与实测结论
+- 20:49 feat：textarea 视口化纯件——窗口文本构建/编辑映射/折叠模型回写（工单 editor-textarea-viewport/01）
 
 ## 2026-09-02
 - 12:18 工单 topics-control-2023-2025/03：2023 控制题拆条（E/G/I 三题入库）——定位 E=p183-185/G=p189-193/I=p197-199（题标记+页眉核实）；fitz 提取小题 PDF 3 份（466/949/498KB，无 34MB 副本）；split_topics_document 零 LLM 拆条（I 题超库函数 TITLE_RE 字母域 [A-H] → 章节切片兜底）；结构补全照 2026H（年份标题/参赛注意事项/题名/一任务二要求三说明四评分标准，去汇编页眉）；11 页渲染视觉核对——I 题图 1 矢量标注文本层缺失已人工补录（E/G 标注散行为原文本层）；入库 category=control programs=[]；图注 enrich 触发（文字标注兜底因 pypdf 汇编 PDF 坐标 0,0 失败、渲染视觉未配置 → 静默记录）；断言 3/3 + 真库污染黑名单删「激光笔」（2023E/G 合法题面词）；pytest 176 全绿
