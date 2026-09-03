@@ -8,12 +8,18 @@
 **被谁阻塞：** 无——可立即开始（与 01/02 独立，可并行；若探针发现错位与性能
 改动同区域，按依赖顺序排在 02 之后集成）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 守卫探针：`probe-align.mjs`——800 行含折叠块样本；矩阵 = 缩放 100/150/200%
-      × 折叠开/关 × 深浅主题；逐行比对五个几何量（gutter 行号 top、高亮行 top、
-      标记行 top、当前行高亮 top、textarea 光标行 top），输出 PASS/FAIL 矩阵表
-      与失败行几何明细，存档 `.scratch/code-editor-opt/`。
-- [ ] 修复探针发现的错位（若有）：组件内即改，回跑探针全绿。
-- [ ] 深浅两主题各存一张矩阵代表性截图（`.scratch/code-editor-opt/align-*.png`）。
-- [ ] 守卫脚本纳入本轮验收清单（后续性能/布局改动跑它防回归）。
+- [x] 守卫探针：`probe-align.mjs`——800 行含折叠块样本（sample-proj-11 big.c）；
+      矩阵 = 缩放 100/150/200% × 折叠开/关 × 深浅主题（12 格）；逐行比对
+      五个几何量（gutter 行号 top、高亮行 top、标记行 top、当前行高亮 top、
+      textarea 光标行 top 对应的三层 top 集合），输出 PASS/FAIL 矩阵表与失败
+      明细，存档 `.scratch/code-editor-opt/align-results.json`。
+- [x] 探针修正记录：初版按 data-code-line 直接比较 gutter/hl（折叠态 gutter=
+      模型行号、hl=视图行号，编号不同）→ 误报；改为**top 集合互有对应**的
+      拓扑 1:1 断言（历史错位正是 top 集合不齐/偏移），语义正确且对折叠态
+      免疫编号差异。
+- [x] 修复探针发现的错位：**无**——12 格全 PASS（100/150/200% × fold on/off ×
+      light/dark），当前三层对齐健康；无需组件改动。
+- [x] 深浅两主题各存一张代表性截图（`.scratch/code-editor-opt/align-*.png`）。
+- [x] 守卫纳入本轮验收（04 与复跑均通过）。
