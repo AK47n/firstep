@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e055c5b2bdb6a7193e858d6e67697b74710e216d -->
+<!-- changelog-auto: last-commit=688a938c3703e828a3a922669514abddadf223ff -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 19:04 fix：代码编辑器窗口化层错位/行号截止（用户现场：gutter 到第 24 行截止、下方无行号且无法点击）——winBuild/winRender 自愈守卫：gutter 与 hl 必须 1:1（折叠视图态与内容不同源时以平铺行号补齐，行号/高亮/textarea 三层层序恢复对齐）；editJumpToLine scrollIntoView 居中修正后补 winReadView+winRender（程序化跳转不再用陈旧窗口）；单测+smoke-06/08 全绿（code-editor-refine 现场修复）
 - 19:09 fix：光标与当前行高亮错位（用户现场：高亮 24 光标在 25）——setActiveLine 折叠态视图→模型行号映射（textarea/高亮=视图行号、gutter=模型行号，叠折叠 N 行错位 N 行的根因）；点击 textarea 兜底立即刷当前行高亮（部分浏览器点击不触发 select/keyup，高亮落后一行）；renderPane 打开/切换即算折叠区（无结构输入前 Ctrl+Shift+[/] 与折叠箭头不可用）；单测+smoke-06/08/09 全绿（code-editor-refine 现场修复）
 - 19:13 feat：代码编辑器现场诊断面板 Ctrl+Alt+D（用户现场排障：滚动盒/edit/ta/hl/gutter 几何 + 每行命中目标实时显示，屏幕截图即可定位错位层；正常使用零影响）
+- 19:13 fix：诊断面板内联 border-radius 走令牌（--radius-md）——修复样式令牌守卫
 
 ## 2026-09-02
 - 12:18 工单 topics-control-2023-2025/03：2023 控制题拆条（E/G/I 三题入库）——定位 E=p183-185/G=p189-193/I=p197-199（题标记+页眉核实）；fitz 提取小题 PDF 3 份（466/949/498KB，无 34MB 副本）；split_topics_document 零 LLM 拆条（I 题超库函数 TITLE_RE 字母域 [A-H] → 章节切片兜底）；结构补全照 2026H（年份标题/参赛注意事项/题名/一任务二要求三说明四评分标准，去汇编页眉）；11 页渲染视觉核对——I 题图 1 矢量标注文本层缺失已人工补录（E/G 标注散行为原文本层）；入库 category=control programs=[]；图注 enrich 触发（文字标注兜底因 pypdf 汇编 PDF 坐标 0,0 失败、渲染视觉未配置 → 静默记录）；断言 3/3 + 真库污染黑名单删「激光笔」（2023E/G 合法题面词）；pytest 176 全绿
