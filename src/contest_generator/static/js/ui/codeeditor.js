@@ -646,7 +646,9 @@ function winLineHeight() {
 
 // winBuild(viewText, lang)：内容变化后重建逐行缓存（高亮数组 / gutter 数组 /
 // 最长行探针文本 / 行数与行高）。工单 11 增存 text 与 probeIndex（增量 patch
-// 判定用——逐键不再全量重建）。
+// 判定用——逐键不再全量重建）。自愈守卫：gutter 必须与 hl 行数 1:1——折叠视图
+// 态与内容不同源（用户现场：行 26-34 无行号、框截止）时以平铺行号补齐，保证
+// 行号/高亮逐行对齐（窗口化渲染切片才能同步）。
 function winBuild(viewText, lang) {
   const hlParts = highlightCodeLines(viewText, lang);
   const hl = hlParts.map((h, i) =>
@@ -655,6 +657,15 @@ function winBuild(viewText, lang) {
   const gutter = viewModel
     ? codeFoldGutterLines(viewModel.lines)
     : lines.map((_, i) => codeGutterLineHTML(i + 1));
+  if (gutter.length !== lines.length) {
+    // 自愈：gutter 来源行数 ≠ 当前内容行数（旧折叠视图态残留/跨文件混合）——
+    // 补齐成平铺行号（不替换已有折叠箭头行，只补缺），行号与高亮恢复 1:1。
+    const plain = lines.map((_, i) => codeGutterLineHTML(i + 1));
+    for (let i = 0; i < lines.length; i++) {
+      if (gutter[i] == null) gutter[i] = plain[i];
+    }
+    gutter.length = lines.length;
+  }
   let probeText = "";
   let probeCols = 0;
   let probeIndex = -1;
@@ -838,6 +849,15 @@ function winRender() {
   const hl = box.querySelector(".code-hl");
   const gutter = box.querySelector(".code-gutter");
   if (!hl || !gutter) return;
+  // 自愈（用户现场修复）：gutter 与 hl 行数不一致 → 渲染前补齐平铺行号，
+  // 保证切片后行号/高亮 1:1（窗口端错位/无行号段落彻底消除）。
+  if (winCache.gutter.length !== winCache.lineCount) {
+    const plain = winCache.text.split("\n").map((_, i) => codeGutterLineHTML(i + 1));
+    for (let i = 0; i < winCache.lineCount; i++) {
+      if (winCache.gutter[i] == null) winCache.gutter[i] = plain[i];
+    }
+    winCache.gutter.length = winCache.lineCount;
+  }
   const r = winWindow();
   if (winLast && winLast.start === r.start && winLast.end === r.end
     && winLast.lineCount === winCache.lineCount) return;
@@ -1226,6 +1246,9 @@ export function editJumpToLine(line) {
   }
   if (!el) return;
   el.scrollIntoView({ block: "center" });
+  winReadView();   // 跳转后按真实滚动回读（scrollIntoView 的居中修正不会触发
+                    // 同步滚动事件——不补读会在下次渲染用陈旧窗口造成层错位）
+  winRender();
   setActiveLine(target);
   flashEl(el);
   const ta = box.querySelector(".code-ta");
