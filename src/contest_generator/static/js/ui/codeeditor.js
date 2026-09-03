@@ -741,14 +741,15 @@ function winLineHeight() {
 
 // winBuild(viewText, lang)：内容变化后重建逐行缓存（高亮数组 / gutter 数组 /
 // 最长行探针文本 / 行数与行高）。工单 11 增存 text 与 probeIndex（增量 patch
-// 判定用——逐键不再全量重建）。自愈守卫：gutter 必须与 hl 行数 1:1——折叠视图
+// 判定用——逐键不再全量重建）。工单 code-editor-opt/06：hl 数组**惰性占位**
+// （null = 未算，渲染取用前单行现算回填）——打开 6000 行文件不再全量 tokenize
+// （实测打开 227ms 的主要成本，窗口化只画 ~56 行），打开成本降到 O(窗口)；
+// 滚动即补、命中缓存零成本。自愈守卫：gutter 必须与 hl 行数 1:1——折叠视图
 // 态与内容不同源（用户现场：行 26-34 无行号、框截止）时以平铺行号补齐，保证
 // 行号/高亮逐行对齐（窗口化渲染切片才能同步）。
 function winBuild(viewText, lang) {
-  const hlParts = highlightCodeLines(viewText, lang);
-  const hl = hlParts.map((h, i) =>
-    `<span class="code-hl-line" data-code-line="${i + 1}">${h}</span>`);
   const lines = viewText.split("\n");
+  const hl = new Array(lines.length).fill(null);
   const gutter = viewModel
     ? codeFoldGutterLines(viewModel.lines)
     : lines.map((_, i) => codeGutterLineHTML(i + 1));
@@ -772,10 +773,25 @@ function winBuild(viewText, lang) {
     hl, gutter, lineCount: hl.length,
     lines,                    // 行数组（工单 code-editor-opt/02：窗口切片/标记窗口文本复用，免每次 split）
     lineStarts: buildLineStarts(lines),   // 行起点数组（caretLineFast 二分）
+    lang,                     // 惰性高亮语言（工单 code-editor-opt/06）
     probeText, probeCols, probeIndex, text: viewText,
   };
   winLast = null;
   if (!winLineH) winLineH = winLineHeight();   // 行高仅首次 / codeWindowRefresh 重测（09：避免逐键 getComputedStyle）
+}
+
+// hlLineHtml(idx)：窗口行高亮（惰性——工单 code-editor-opt/06）——hl[idx] 为
+// null（未算过）时按 winCache.lines[idx] 单行现算并回填；命中缓存零成本。
+function hlLineHtml(idx) {
+  let h = winCache.hl[idx];
+  if (h == null) {
+    const line = winCache.lines ? winCache.lines[idx] : "";
+    const parts = highlightCodeLines(line, winCache.lang || "text");
+    h = '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
+      + (parts[0] || "") + "</span>";
+    winCache.hl[idx] = h;
+  }
+  return h;
 }
 
 // winPatchEdit(viewText, lang, span?)：逐行缓存增量修补（工单 11 性能整改——
@@ -901,7 +917,7 @@ function winPatchRow(span) {
   const marksRow = marksEl.querySelector('.code-marks-line[data-code-line="' + lineNo + '"]');
   const gutRow = gutter ? gutter.querySelector('.code-gutter-line[data-code-line="' + lineNo + '"]') : null;
   if (!hlRow || !marksRow || !gutRow) return false;
-  hlRow.innerHTML = winCache.hl[idx];
+  hlRow.innerHTML = hlLineHtml(idx);
   // 标记行：marksCache（+ editorBracket 两段）按变更行过滤、行号重基准为 1
   const allMarks = marksCache.marks || [];
   const lineMarks = [];
@@ -1045,14 +1061,26 @@ function winApplySize() {
     winSize = { lineCount: winCache.lineCount, lineH: winLineH, cols: -1, chW: 8 };
   }
   if (winSize.cols < 0) {
-    // 首次：探针实测一次（布局可接受——打开/换行/缩放时）
-    const probe = box.querySelector(".code-window-probe");
+    // 首次：探测最长行实测宽（工单 code-editor-opt/06：测量元素脱离文档流
+    // 固定定位——在 6000 行高的滚动容器里 getBoundingClientRect 会触发整树
+    // 深布局（实测打开延迟大头之一）；固定单行 span 的测量只排版它自己，
+    // 字体/字号/字重从 .code-hl 计算样式拷贝（等宽 mono，宽度精确））
+    const hlEl = box.querySelector(".code-hl");
+    const cs = hlEl ? getComputedStyle(hlEl) : null;
+    const font = cs
+      ? cs.fontFamily + ";" + cs.fontSize + ";" + cs.fontWeight
+      : 'monospace;13px;400';
     let w = 0;
     let chW = winSize.chW;
-    if (probe) {
-      probe.textContent = winCache.probeText || "";
-      const r = probe.getBoundingClientRect();
-      w = r.width;
+    const probeText = winCache.probeText || "";
+    if (probeText) {
+      const m = document.createElement("span");
+      m.style.cssText = "position:fixed;left:-9999px;top:0;visibility:hidden;white-space:pre;"
+        + "font:" + font;
+      document.body.appendChild(m);
+      m.textContent = probeText;
+      w = m.getBoundingClientRect().width;
+      m.remove();
       if (w > 0) {
         chW = Math.max(1, w / Math.max(1, winCache.probeCols));
         edit.style.width = Math.ceil(w + 36) + "px";
@@ -1094,7 +1122,8 @@ function winRender() {
   const bottomH = Math.round((winCache.lineCount - r.end) * winLineH * 100) / 100;
   const top = winSpacer(topH);
   const bottom = winSpacer(bottomH);
-  hl.innerHTML = top + winCache.hl.slice(r.start, r.end).join("") + bottom;
+  hl.innerHTML = top + winCache.hl.slice(r.start, r.end)
+    .map((_, i) => hlLineHtml(r.start + i)).join("") + bottom;
   gutter.innerHTML = top + winCache.gutter.slice(r.start, r.end).join("") + bottom;
   winRenderMarks();
   const ta = box.querySelector(".code-ta");
@@ -1141,7 +1170,11 @@ function renderPane() {
   box.innerHTML = '<div class="code-gutter" aria-hidden="true"></div>'
     + codeEditorHTML(src, tab.lang, {
       readonly: tab.readonly,
-      marks: viewModel ? marksForView() : currentMarks(),
+      // 工单 code-editor-opt/06：windowed 模式 codeEditorHTML 不消费 marks
+      // （hl/marks 留空壳，由 winRender 窗口化渲染）——不再预计算
+      // currentMarks/marksForView（6000 行打开时白扫一次全库标记，实测占
+      // 打开延迟大头之一；marksCache 由随后 winRenderMarks 正常构建）
+      marks: [],
       windowed: true,
     })
     + '<span class="code-window-probe" aria-hidden="true"></span>';
