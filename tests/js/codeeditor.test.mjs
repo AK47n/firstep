@@ -100,6 +100,17 @@ test("codeEditorHTML：readonly 标志（非 UTF-8 / 只读文件）", () => {
   assert.match(html, /class="code-edit ro"/);
 });
 
+test("codeEditorHTML：opts.taValue 覆盖 textarea 内容（窗口化：不内嵌全文）", () => {
+  const src = "line one\nline two\nline three";
+  const html = codeEditorHTML(src, "c", { windowed: true, taValue: "line two" });
+  // textarea 只装窗口文本（真实换行转义）；默认情形仍是全文
+  assert.match(html, />line two<\/textarea>/);
+  assert.ok(!html.includes(">line one\nline two\nline three</textarea>"));
+  assert.ok(!html.includes("line three</textarea>"));
+  const def = codeEditorHTML(src, "c", { windowed: true });
+  assert.match(def, />line one\nline two\nline three<\/textarea>/);
+});
+
 test("caretLineOf：光标行号（1 基，含中英混排）", () => {
   const v = "ab\ncd中文\nef\n";
   assert.equal(caretLineOf(v, 0), 1);      // 首字符

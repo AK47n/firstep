@@ -1,0 +1,58 @@
+{
+  "open": {
+    "fetchMs": 86.5,
+    "renderMs": 18.5,
+    "openMs": 130.7,
+    "chars": 176669,
+    "taChars": 1385
+  },
+  "geo": {
+    "taTop": 113.1875,
+    "boxTop": 113.1875,
+    "taBottom": 901.1875,
+    "boxBottom": 901.640625,
+    "scrollTop": 0,
+    "topPx": 0,
+    "h": 788,
+    "clientH": 788,
+    "taText": "int var_0 = 0;  // 0\nint var_1 = 1;  // 1\nint var_2 = 2;  // 2\nint var_3 = 3;  // 3\nint var_4 = 4;  // 4\nint var_5 = 5;  // 5\nint var_6 = 6;  // 6\nint var_7 = 7;  // 7\nint var_8 = 8;  // 8\nint var_9 = 9;  // 9\nint var_10 = 10;  // 10\nint var_11 = 11;  // 11\nint var_12 = 12;  // 12\nint var_13 = 13;  // 13\nint var_14 = 14;  // 14\nint var_15 = 15;  // 15\nint var_16 = 16;  // 16\nint var_17 = 17;  // 17\nint var_18 = 18;  // 18\nint var_19 = 19;  // 19\nint var_20 = 20;  // 20\nint var_21 = 21;  // 21\nint var_22 = 22;  // 22\nint var_23 = 23;  // 23\nint var_24 = 24;  // 24\nint var_25 = 25;  // 25\nint var_26 = 26;  // 26\nint var_27 = 27;  // 27\nint var_28 = 28;  // 28\nint var_29 = 29;  // 29\nint var_30 = 30;  // 30\nint var_31 = 31;  // 31\nint var_32 = 32;  // 32\nint var_33 = 33;  // 33\nint var_34 = 34;  // 34\nint var_35 = 35;  // 35\nint var_36 = 36;  // 36\nint var_37 = 37;  // 37\nint var_38 = 38;  // 38\nint var_39 = 39;  // 39\nint var_40 = 40;  // 40\nint var_41 = 41;  // 41\nint var_42 = 42;  // 42\nint var_43 = 43;  // 43\nint var_44 = 44;  // 44\nint var_45 = 45;  // 45\nint var_46 = 46;  // 46\nint var_47 = 47;  // 47\nint var_48 = 48;  // 48\nint var_49 = 49;  // 49\nint var_50 = 50;  // 50\nint var_51 = 51;  // 51\nint var_52 = 52;  // 52\nint var_53 = 53;  // 53\nint var_54 = 54;  // 54\nint var_55 = 55;  // 55\nint var_56 = 56;  // 56\nint var_57 = 57;  // 57\nint var_58 = 58;  // 58",
+    "hlLines": 59
+  },
+  "typed": {
+    "dirty": true,
+    "modelOk": true,
+    "ms": 8,
+    "sel": 1,
+    "taLen": 1386
+  },
+  "enter": {
+    "grewLine": true,
+    "taHasNewline": true,
+    "sel": 11,
+    "modelLen": 176671,
+    "winLen": 1363,
+    "caretLine": 2
+  },
+  "scroll": {
+    "match": true,
+    "winLen": 2369,
+    "topPx": 59620,
+    "spTop": 59620,
+    "coverTop": true,
+    "coverBottom": true,
+    "scrollTop": 60041,
+    "viewportH": 748
+  },
+  "jump": {
+    "found": true,
+    "line3000": "int var_2998 = 2998;  // 2998",
+    "selLine": 39,
+    "modelCaretOk": true
+  },
+  "find": {
+    "total": 1,
+    "markRows": 78
+  },
+  "passed": 18,
+  "failed": 0
+}

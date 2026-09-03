@@ -189,8 +189,12 @@ export function codeWindowRange(scrollTop, viewportH, lineH, lineCount, overscan
 // 内容转义（esc——textarea 内 </textarea> 等全部 &lt; 化）。
 // opts.windowed（工单 08）：hl/marks 层留空壳（内容由胶水层窗口化渲染——大
 // 文件不整段 innerHTML），textarea 仍全量（选区/光标/滚动度量依赖）。
+// opts.taValue（工单 editor-textarea-viewport/02）：textarea 内容覆盖——默认 =
+// content（全量现状）；窗口化打开时传窗口文本（或空串由胶水层填充），避免
+// 把 6000 行全文内嵌进标记（打开渲染大头之一）。
 export function codeEditorHTML(content, lang, opts = {}) {
   const src = String(content == null ? "" : content);
+  const taValue = opts.taValue === undefined ? src : String(opts.taValue == null ? "" : opts.taValue);
   const ro = opts.readonly ? " ro" : "";
   const roAttr = opts.readonly ? " readonly" : "";
   const hl = opts.windowed ? "" : codeEditorHighlight(src, lang);
@@ -199,7 +203,7 @@ export function codeEditorHTML(content, lang, opts = {}) {
     + '<pre class="code-hl" aria-hidden="true">' + hl + "</pre>"
     + '<pre class="code-marks" aria-hidden="true">' + marks + "</pre>"
     + '<textarea class="code-ta" spellcheck="false" wrap="off"'
-    + ' aria-label="代码编辑器"' + roAttr + ">" + esc(src) + "</textarea>"
+    + ' aria-label="代码编辑器"' + roAttr + ">" + esc(taValue) + "</textarea>"
     + "</div>";
 }
 

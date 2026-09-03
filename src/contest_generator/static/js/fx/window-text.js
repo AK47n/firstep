@@ -93,6 +93,26 @@ export function windowEditToModel(model, segs, oldViewText, winInfo, viewLineSta
   return { model: newView, expand: [], caret: v.p + mid.length };
 }
 
+// windowPosFromView(winInfo, viewPos)：视图绝对偏移 → 窗口内偏移（光标/选区
+// 窗口内定位）。winInfo = windowTextBuild 输出。窗口文本就是视图文本在
+// [absStart, absStart+text.length) 的逐字符切片，故窗口偏移 = viewPos - absStart。
+// 越界（viewPos 不在窗口区间内）→ **null**——调用方先切换窗口再定位，不静默
+// 钳制错位（与 windowEditToView 同纪律）。
+export function windowPosFromView(winInfo, viewPos) {
+  if (!winInfo || winInfo.absStart == null || winInfo.text == null) return null;
+  const rel = (viewPos | 0) - winInfo.absStart;
+  if (rel < 0 || rel > winInfo.text.length) return null;
+  return rel;
+}
+
+// windowPosToView(winInfo, winPos)：窗口内偏移 → 视图绝对偏移（windowPosFromView
+// 的逆映射；winPos 钳制 ≥0——输入越界向上不钳制，由调用方保证窗口包含区间，
+// 与 FromView 越界返回 null 的「不静默错位」语义互补）。winInfo 非法 → null。
+export function windowPosToView(winInfo, winPos) {
+  if (!winInfo || winInfo.absStart == null) return null;
+  return winInfo.absStart + Math.max(0, winPos | 0);
+}
+
 // windowTextMatches(viewLines, start, end, text)：一致性校验（视图层）——
 // 由视图行数组重建窗口文本，与实际比对（失配 = textarea 内容被外部改动/
 // 粘贴异常等，调用方以模型为准重建窗口文本）。
@@ -115,6 +135,8 @@ if (typeof window !== "undefined") {
     windowTextBuild,
     windowEditToView,
     windowEditToModel,
+    windowPosFromView,
+    windowPosToView,
     windowTextMatches,
     windowTextMatchesModel,
   });
