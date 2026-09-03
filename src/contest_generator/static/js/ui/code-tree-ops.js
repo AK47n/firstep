@@ -19,9 +19,8 @@ import {
   treeOpConfirmMessage,
   treeNamePromptHTML,
   treeCtxItems,
-  treeCtxMenuHTML,
-  treeCtxClamp,
 } from "/js/fx/code-tree-ops.js";
+import { openContextMenu, closeContextMenu } from "/js/ui/context-menu.js";  // 共享浮层菜单（工单 06 创建 / 07 复用）
 import {
   refreshCodeTreeOnly,
   getCodeTreeFiles,
@@ -162,40 +161,9 @@ async function treeDelete(path, isDir) {
   }
 }
 
-// ===== 文件树右键菜单（工单 code-editor-refine/06）=====
-// 菜单浮层 = 模块内私有组件（样式 token 与 confirmModal 浮层同族；若后续其它
-// 右键菜单需要复用 openCtxMenu/closeCtxMenu，再把导出面扩大）。关闭三通道：
-// 外部 mousedown（含右键——下一次 contextmenu 自然重开并跟随新目标）/ 任意
-// 滚动（capture——树内滚动也关）/ Esc；定位经 fx treeCtxClamp 防视口溢出。
-let ctxMenuEl = null;
-
-function closeCtxMenu() {
-  if (ctxMenuEl) {
-    ctxMenuEl.remove();
-    ctxMenuEl = null;
-  }
-}
-
-function openCtxMenu(items, x, y) {
-  closeCtxMenu();
-  const el = document.createElement("div");
-  el.className = "code-ctx-menu";
-  el.innerHTML = treeCtxMenuHTML(items);
-  document.body.appendChild(el);
-  const r = el.getBoundingClientRect();
-  const pos = treeCtxClamp(x, y, r.width, r.height, window.innerWidth, window.innerHeight);
-  el.style.left = pos.left + "px";
-  el.style.top = pos.top + "px";
-  ctxMenuEl = el;
-  el.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-ctx-action]");
-    if (!btn) return;
-    const item = items.find((it) => it.action === btn.dataset.ctxAction);
-    closeCtxMenu();   // 先关再执行（动作内部可能再开模态/刷新树）
-    if (item && item.run) Promise.resolve(item.run()).catch(() => { /* 被调方已自吞中文 toast；防未处理拒绝 */ });
-  });
-  el.addEventListener("contextmenu", (e) => e.preventDefault());   // 菜单上右键不再叠浏览器原生菜单（评审整改）
-}
+// ===== 文件树右键菜单（工单 code-editor-refine/06；07 复用共享组件）=====
+// 菜单浮层/关闭通道 = ui/context-menu.js 共享组件（工单 07 起第二个消费者：
+// 选中代码动作菜单同用）；本模块只做树行命中 → 动作分发。
 
 // copyTreePath(path)：复制相对路径——机制 = app.js copyText 单源
 // （clipboard 优先 → execCommand 保底）；成功与否的提示文案本处定。
@@ -228,12 +196,12 @@ async function runCtxAction(action, path, isDir, row) {
 }
 
 // bindTreeCtxMenu()：树容器 contextmenu 委托——命中行（目录/文件）→ 阻止
-// 浏览器默认菜单并打开自定义菜单（连续右键 = 关闭旧 -> 跟随新光标重开）；
-// 空白处右键不拦（浏览器菜单保留），但已开的菜单关闭。
+// 浏览器默认菜单并打开自定义菜单（连续右键 = 关闭旧 -> 跟随新光标重开；
+// 关闭/滚动/Esc 由共享组件处理）；空白处右键不拦（浏览器菜单保留）。
 function bindTreeCtxMenu(tree) {
   tree.addEventListener("contextmenu", (e) => {
     const row = e.target.closest(".code-tree-dir, .code-tree-file");
-    if (!row) { closeCtxMenu(); return; }
+    if (!row) { closeContextMenu(); return; }
     e.preventDefault();
     const isDir = row.classList.contains("code-tree-dir");
     const el = isDir
@@ -242,18 +210,12 @@ function bindTreeCtxMenu(tree) {
     const path = el ? (el.dataset.dirPath || el.dataset.codeFile || "") : "";
     if (!path) return;
     const items = treeCtxItems(isDir).map((it) => ({
-      ...it,
+      label: it.label,
+      danger: it.danger,
       run: () => runCtxAction(it.action, path, isDir, row),
     }));
-    openCtxMenu(items, e.clientX, e.clientY);
+    openContextMenu(items, e.clientX, e.clientY);
   });
-  document.addEventListener("mousedown", (e) => {
-    if (ctxMenuEl && !ctxMenuEl.contains(e.target)) closeCtxMenu();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && ctxMenuEl) { e.preventDefault(); closeCtxMenu(); }
-  });
-  document.addEventListener("scroll", () => { if (ctxMenuEl) closeCtxMenu(); }, true);
 }
 
 // initCodeTreeOps()：入口绑定——树头部新建按钮 + 树内 ✎/🗑 事件委托

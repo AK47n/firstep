@@ -9,6 +9,7 @@
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { aiChatMessagesHTML } from "/js/fx/ai-chat.js";
 import { parseAiDiff, selectionContextText } from "/js/fx/ai-diff.js";
+import { AI_SELECTION_ACTIONS, AI_ASK_ACTION_ID, buildActionPrompt } from "/js/fx/ai-actions.js";  // 选中代码快捷动作模板（工单 code-editor-refine/07）
 import { caretLineOf } from "/js/fx/codeeditor.js";
 import { lineDiffCompute } from "/js/fx/line-diff.js";
 import { mainDiffHTML } from "/js/fx/diff.js";
@@ -19,6 +20,7 @@ import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「
 // 而 codeview → code-ai-chat —— 静态链路成环（codeview → code-ai-chat →
 // code-write-guard → codeview）；previewDiff 内运行时加载打破静态环。
 import { confirmModal } from "/js/ui/confirm.js";
+import { openContextMenu, closeContextMenu } from "/js/ui/context-menu.js";  // 共享浮层菜单（工单 07：动作菜单与树右键同组件）
 
 // ---- 模块态 ----
 let chat = { messages: [], note: "" };   // 后端落盘形状（read/send 响应）
@@ -79,8 +81,8 @@ function ensureSelectionBtn(edit) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "code-ai-selection-btn hidden";
-  btn.title = "把选中片段作为上下文提问（引用会插入输入框）";
-  btn.textContent = "问 AI";
+  btn.title = "把选中片段作为上下文提问（解释 / 加中文注释 / 重构 / 问 AI）";
+  btn.textContent = "问 AI ▾";
   edit.appendChild(btn);
   return btn;
 }
@@ -94,9 +96,24 @@ function selectionState() {
   return { ta, tab };
 }
 
+// selectionSnapshot()：选区上下文快照（{path, lang, startLine, endLine, code}）
+// ——浮动按钮菜单打开时捕获一次（点菜单项时选区可能已失焦/变化，快照保证
+// 动作作用于用户右键当时的选区）；无选区/无编辑器 → null。
+function selectionSnapshot() {
+  const sel = selectionState();
+  if (!sel) return null;
+  const code = sel.ta.value.slice(sel.ta.selectionStart, sel.ta.selectionEnd);
+  const startLine = caretLineOf(sel.ta.value, sel.ta.selectionStart);
+  // 选区止于换行（selectionEnd 落在下一行行首）→ 末行号 -1（评审 s1 整改）
+  const endRaw = caretLineOf(sel.ta.value, sel.ta.selectionEnd)
+    - (sel.ta.value.slice(0, sel.ta.selectionEnd).endsWith("\n") ? 1 : 0);
+  return { path: sel.tab.path, lang: sel.tab.lang, startLine, endLine: endRaw, code };
+}
+
 // updateSelectionButton()：刷新浮动按钮（有选区 → 定位到选区末行右端显示；
-// 无选区/非编辑态 → 隐藏）。选区变化事件（textarea keyup/mouseup/click/
-// input 委托）+ 活动 tab 变化时调用；.md 预览态或无内容文件无 .code-ta。
+// 无选区/非编辑态 → 隐藏 + 关闭动作菜单）。选区变化事件（textarea keyup/
+// mouseup/click/input 委托）+ 活动 tab 变化时调用；.md 预览态或无内容文件无
+// .code-ta。
 function updateSelectionButton() {
   const edit = document.querySelector(".code-edit");
   if (!edit) return;
@@ -104,6 +121,7 @@ function updateSelectionButton() {
   const sel = selectionState();
   if (!sel) {
     btn.classList.add("hidden");
+    closeContextMenu();   // 选择清空 → 动作菜单关闭（工单 07 验收）
     return;
   }
   const lineNo = caretLineOf(sel.ta.value, sel.ta.selectionEnd);
@@ -116,33 +134,49 @@ function updateSelectionButton() {
   btn.style.top = (r.top - e.top + 2) + "px";
 }
 
-// askSelection()：浮动按钮点击——选区引用插入输入框（追加，已有草稿保留）
-// + 展开面板聚焦。mousedown 时 preventDefault 防 textarea 失焦清选区。
-function askSelection() {
-  const sel = selectionState();
-  if (!sel) return;
-  const code = sel.ta.value.slice(sel.ta.selectionStart, sel.ta.selectionEnd);
-  const startLine = caretLineOf(sel.ta.value, sel.ta.selectionStart);
-  // 选区止于换行（selectionEnd 落在下一行行首）→ 末行号 -1（评审 s1 整改）
-  const endRaw = caretLineOf(sel.ta.value, sel.ta.selectionEnd)
-    - (sel.ta.value.slice(0, sel.ta.selectionEnd).endsWith("\n") ? 1 : 0);
-  const ref = selectionContextText(sel.tab.path, sel.tab.lang, startLine, endRaw, code);
+// askSelection(snapshot?)：问 AI 动作（原行为不变）——选区引用插入输入框
+// （追加，已有草稿保留）+ 展开面板聚焦。mousedown 时 preventDefault 防
+// textarea 失焦清选区（按钮处已处理）。
+function askSelection(snapshot) {
+  const snap = snapshot || selectionSnapshot();
+  if (!snap) return;
+  const ref = selectionContextText(snap.path, snap.lang, snap.startLine, snap.endLine, snap.code);
   const input = $("code-ai-chat-input");
   if (!input) return;
   input.value = (input.value.trim() ? input.value.trimEnd() + "\n\n" : "") + ref;
   openPanel();
 }
 
+// openSelectionMenu()：浮动按钮点击 → 动作菜单（解释 / 加中文注释 / 重构 /
+// 问 AI）——前三者 = buildActionPrompt 直发（sendAiText）+ 自动切 AI 面板；
+// 「问 AI」= 原插入引用行为。快照在打开菜单时捕获。
+function openSelectionMenu() {
+  const snap = selectionSnapshot();
+  if (!snap) return;
+  const items = AI_SELECTION_ACTIONS.map((a) => ({
+    label: a.label,
+    run: () => runSelectionAction(a.id, snap),
+  }));
+  const btn = document.querySelector(".code-ai-selection-btn");
+  const r = btn ? btn.getBoundingClientRect() : { left: 0, bottom: 0 };
+  openContextMenu(items, r.left, r.bottom + 2);
+}
+
+async function runSelectionAction(id, snap) {
+  if (id === AI_ASK_ACTION_ID) { askSelection(snap); return; }   // 问 AI id 单源（fx/ai-actions）
+  if (busy) { toast("info", "AI 回应中，请稍候再试"); return; }   // 与输入框发送同口径门控（评审整改）
+  openPanel();                       // 自动切到 AI 面板（工单 07 验收）
+  await sendAiText(buildActionPrompt(id, snap));
+}
+
 // ===== 发送 / 读盘 =====
-async function sendMessage() {
-  const input = $("code-ai-chat-input");
-  if (!input || busy) return;
-  const text = input.value.trim();
-  if (!text) return;
+// sendAiText(text)：发送一条用户消息（输入框发送与快捷动作直发共用；失败
+// 回填输入框可重发——服务端原子轮，未落盘可安全重发）。
+async function sendAiText(text) {
+  if (busy) return;   // 防御门控（调用方 sendMessage/runSelectionAction 已查过；防未来直调并发）
   const dir = getCodeDir();
   if (!dir) { toastError(new Error("未打开目录"), "无法发送"); return; }
   pendingText = text;
-  input.value = "";
   busy = true;
   renderPanel();
   aiActionStart("AI 对话");   // 全局「AI 行动中」横幅（与生成页各 AI 动作同 crate）
@@ -153,13 +187,26 @@ async function sendMessage() {
     if (data && data.chat) chat = data.chat;   // 服务端落盘真相替换乐观态
   } catch (e) {
     toastError(e, "AI 回应失败");
-    input.value = text;   // 失败回填：该轮未落盘（服务端原子轮），改后可重发
+    // 失败回填：仅输入框发送路径（已清空输入）才回填 prompt——快捷动作直发
+    // 不清输入框，用户的草稿保持不动（评审整改：成功/失败对称）。
+    const input = $("code-ai-chat-input");
+    if (input && !input.value.trim()) input.value = text;
   } finally {
     aiActionStop();
     busy = false;
     pendingText = "";
     renderPanel();
   }
+}
+
+async function sendMessage() {
+  const input = $("code-ai-chat-input");
+  if (!input || busy) return;
+  const text = input.value.trim();
+  if (!text) return;
+  if (!getCodeDir()) { toastError(new Error("未打开目录"), "无法发送"); return; }   // 先守卫再清空（评审整改：dir 缺失时草稿保留）
+  input.value = "";
+  await sendAiText(text);
 }
 
 // ===== C2 应用闭环（工单 code-ide-ai/04）：<DIFF> → 预览 → 确认 → 写盘 → 感知 =====
@@ -324,9 +371,11 @@ export function initCodeAiChat() {
   for (const evt of ["mouseup", "click", "input"]) {
     document.addEventListener(evt, onTaEvent);
   }
-  // 点击别处（非按钮/非 textarea）→ 隐藏；按钮 mousedown preventDefault 保选区
+  // 点击别处（非按钮/非 textarea/非动作菜单）→ 隐藏；按钮 mousedown
+  // preventDefault 保选区；动作菜单点击不隐藏按钮（选区仍在，评审整改）
   document.addEventListener("click", (e) => {
     if (e.target && e.target.closest && e.target.closest(".code-ai-selection-btn")) return;
+    if (e.target && e.target.closest && e.target.closest(".code-ctx-menu")) return;
     if (e.target && e.target.classList && e.target.classList.contains("code-ta")) return;
     const edit = document.querySelector(".code-edit");
     const btn = edit && edit.querySelector(".code-ai-selection-btn");
@@ -339,7 +388,7 @@ export function initCodeAiChat() {
   }, true);
   document.addEventListener("click", (e) => {
     if (e.target && e.target.closest && e.target.closest(".code-ai-selection-btn")) {
-      askSelection();
+      openSelectionMenu();   // 工单 07：按钮 → 动作菜单（解释/注释/重构/问 AI）
     }
   });
 

@@ -27,6 +27,19 @@ export function overlayConfirmHTML({
   </div>`;
 }
 
+// menuClamp(x, y, w, h, vw, vh)：浮层菜单定位防视口溢出（共享组件
+// ui/context-menu.js 与文件树菜单共用；原随 06 树菜单落位 code-tree-ops，
+// 07 泛化后归浮层纯件族本模块）——fixed 坐标 {left, top} 钳到 [8px 边距,
+// 视口尺寸 - 菜单尺寸 - 8px]；菜单比视口大时贴 8px 边（配合 CSS
+// max-height + overflow-y 兜底，见 index.html）。返回纯坐标，无副作用。
+export function menuClamp(x, y, w, h, vw, vh) {
+  const pad = 8;
+  return {
+    left: Math.max(pad, Math.min(x, vw - w - pad)),
+    top: Math.max(pad, Math.min(y, vh - h - pad)),
+  };
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { overlayConfirmHTML });
+  Object.assign(window, { overlayConfirmHTML, menuClamp });
 }

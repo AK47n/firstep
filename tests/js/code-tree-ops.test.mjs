@@ -14,8 +14,6 @@ import {
   treeOpConfirmMessage,
   treeNamePromptHTML,
   treeCtxItems,
-  treeCtxMenuHTML,
-  treeCtxClamp,
   CODE_TREE_NAME_ILLEGAL,
   CODE_TREE_NAME_MAX,
 } from "../../src/contest_generator/static/js/fx/code-tree-ops.js";
@@ -115,24 +113,4 @@ test("treeCtxItems：四项（打开/复制相对路径/重命名/删除），�
   assert.equal(file[1].label, "复制相对路径");
   assert.equal(file[3].danger, true);
   assert.equal(treeCtxItems(true)[0].label, "展开 / 收起");
-});
-
-test("treeCtxMenuHTML：data-ctx-action + danger 类 + 标签转义", () => {
-  const html = treeCtxMenuHTML([
-    { action: "open", label: "打开 <>&" },
-    { action: "delete", label: "删除", danger: true },
-  ]);
-  assert.ok(html.includes('data-ctx-action="open"'));
-  assert.ok(html.includes('data-ctx-action="delete"'));
-  assert.ok(html.includes("code-ctx-item-danger"));
-  assert.ok(html.includes("打开 &lt;&gt;&amp;"));
-  assert.ok(!html.includes("打开 <>&"));
-});
-
-test("treeCtxClamp：视口内原样 / 右/下溢出钳到贴边（8px 边距）", () => {
-  assert.deepEqual(treeCtxClamp(100, 120, 160, 180, 800, 600), { left: 100, top: 120 });
-  assert.deepEqual(treeCtxClamp(700, 500, 160, 180, 800, 600), { left: 632, top: 412 });
-  assert.deepEqual(treeCtxClamp(-20, -20, 160, 180, 800, 600), { left: 8, top: 8 });
-  // 菜单比视口大 → 贴 8px 边（不产生负坐标）
-  assert.deepEqual(treeCtxClamp(50, 50, 1200, 900, 800, 600), { left: 8, top: 8 });
 });
