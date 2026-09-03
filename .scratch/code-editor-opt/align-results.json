@@ -1,0 +1,122 @@
+[
+  {
+    "theme": "light",
+    "pct": "100%",
+    "fold": "off",
+    "ok": true,
+    "gutterCount": 53,
+    "hlCount": 53,
+    "marksCount": 53,
+    "bad": []
+  },
+  {
+    "theme": "light",
+    "pct": "100%",
+    "fold": "on",
+    "ok": true,
+    "gutterCount": 51,
+    "hlCount": 51,
+    "marksCount": 51,
+    "bad": []
+  },
+  {
+    "theme": "light",
+    "pct": "150%",
+    "fold": "off",
+    "ok": true,
+    "gutterCount": 41,
+    "hlCount": 41,
+    "marksCount": 41,
+    "bad": []
+  },
+  {
+    "theme": "light",
+    "pct": "150%",
+    "fold": "on",
+    "ok": true,
+    "gutterCount": 41,
+    "hlCount": 41,
+    "marksCount": 41,
+    "bad": []
+  },
+  {
+    "theme": "light",
+    "pct": "200%",
+    "fold": "off",
+    "ok": true,
+    "gutterCount": 36,
+    "hlCount": 36,
+    "marksCount": 36,
+    "bad": []
+  },
+  {
+    "theme": "light",
+    "pct": "200%",
+    "fold": "on",
+    "ok": true,
+    "gutterCount": 36,
+    "hlCount": 36,
+    "marksCount": 36,
+    "bad": []
+  },
+  {
+    "theme": "dark",
+    "pct": "100%",
+    "fold": "off",
+    "ok": true,
+    "gutterCount": 51,
+    "hlCount": 51,
+    "marksCount": 51,
+    "bad": []
+  },
+  {
+    "theme": "dark",
+    "pct": "100%",
+    "fold": "on",
+    "ok": true,
+    "gutterCount": 51,
+    "hlCount": 51,
+    "marksCount": 51,
+    "bad": []
+  },
+  {
+    "theme": "dark",
+    "pct": "150%",
+    "fold": "off",
+    "ok": true,
+    "gutterCount": 41,
+    "hlCount": 41,
+    "marksCount": 41,
+    "bad": []
+  },
+  {
+    "theme": "dark",
+    "pct": "150%",
+    "fold": "on",
+    "ok": true,
+    "gutterCount": 41,
+    "hlCount": 41,
+    "marksCount": 41,
+    "bad": []
+  },
+  {
+    "theme": "dark",
+    "pct": "200%",
+    "fold": "off",
+    "ok": true,
+    "gutterCount": 36,
+    "hlCount": 36,
+    "marksCount": 36,
+    "bad": []
+  },
+  {
+    "theme": "dark",
+    "pct": "200%",
+    "fold": "on",
+    "ok": true,
+    "gutterCount": 36,
+    "hlCount": 36,
+    "marksCount": 36,
+    "bad": []
+  }
+]
