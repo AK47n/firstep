@@ -46,6 +46,7 @@ export const SHORTCUT_GROUPS = [
       { keys: ["Ctrl+Shift+]"], label: "展开光标所在代码块" },
       { keys: ["Ctrl+滚轮"], label: "缩放代码字号" },
       { keys: ["Ctrl+B"], label: "收起 / 展开右侧栏" },
+      { keys: ["Ctrl+P"], label: "快速打开文件（文件名 / 路径 / 模糊）" },   // 工单 code-editor-refine/09
     ],
   },
 ];

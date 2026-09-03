@@ -378,6 +378,59 @@ export function parseTreeWidthStored(raw, layoutW) {
   return treeWidthClamp(n, layoutW);
 }
 
+// ---- 快速打开（工单 code-editor-refine/09）----
+
+// quickOpenMatch(files, query)：Ctrl+P 快速打开匹配（纯函数）——files =
+// /api/code/open 扁平清单（{path,...} 或字符串）；query 小写 trim 后按
+// basename 子串（大小写不敏感）优先 → 路径子串 → 字符序模糊；返回截断
+// 50 条 [{path, rank, idx}]（rank 0/1/2 = 命中层级，idx = 子串命中位置
+// 供高亮，模糊 = -1）；空 query → []（UI 显示提示态）。
+export function quickOpenMatch(files, query) {
+  const q = String(query == null ? "" : query).trim().toLowerCase();
+  if (!q) return [];
+  const out = [];
+  for (const f of files || []) {
+    const raw = typeof f === "string" ? f : (f && f.path);
+    const path = String(raw == null ? "" : raw);
+    if (!path) continue;
+    const p = path.toLowerCase();
+    const base = p.split("/").pop() || p;
+    const bi = base.indexOf(q);
+    const pi = p.indexOf(q);
+    if (bi >= 0) out.push({ path, rank: 0, idx: bi });
+    else if (pi >= 0) out.push({ path, rank: 1, idx: pi });
+    else if (fuzzySeq(q, base)) out.push({ path, rank: 2, idx: -1 });
+  }
+  out.sort((a, b) => (a.rank - b.rank) || (a.idx - b.idx) || a.path.localeCompare(b.path));
+  return out.slice(0, 50);
+}
+
+// fuzzySeq(q, s)：字符序模糊——q 各字符按序出现在 s（子序列匹配）。
+function fuzzySeq(q, s) {
+  let i = 0;
+  for (const ch of s) {
+    if (ch === q[i]) i += 1;
+    if (i === q.length) return true;
+  }
+  return i === q.length;
+}
+
+// quickOpenHighlightParts(path, rank, idx, query)：命中高亮分段（纯函数）——
+// rank 0/1 = quickOpenMatch 的 basename/路径子串命中（idx = 该次匹配的命中
+// 位），返回 {before, mark, after}（原路径按命中位切三段；转义由渲染层做）；
+// rank 2（模糊）/idx 非法/query 空 → null（不高亮）。
+export function quickOpenHighlightParts(path, rank, idx, query) {
+  if (rank == null || rank < 0 || rank > 1) return null;
+  const q = String(query == null ? "" : query);
+  if (!q || typeof idx !== "number" || idx < 0) return null;
+  const p = String(path == null ? "" : path);
+  const baseLen = rank === 0 ? (p.split("/").pop() || p).length : -1;
+  const start = rank === 0 ? (p.length - baseLen) + idx : idx;
+  const end = start + q.length;
+  if (start < 0 || end > p.length) return null;
+  return { before: p.slice(0, start), mark: p.slice(start, end), after: p.slice(end) };
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     buildCodeTree,
@@ -392,6 +445,8 @@ if (typeof window !== "undefined") {
     symbolFilter,
     searchListHTML,
     fileFindFilter,
+    quickOpenMatch,
+    quickOpenHighlightParts,
     treeWidthClamp,
     parseTreeWidthStored,
     CODE_TREE_WIDTH_MIN,

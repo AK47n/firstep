@@ -376,7 +376,7 @@ const CODE_FLASH_MS = 1200;
 const CODE_TREE_W_KEY = "firstep.codeTreeWidth";
 const CODE_TREE_WIDTH_STEP = 16;  // 键盘 ←/→ 步进（spec：16px 微调）
 
-function codeTabActive() {
+export function codeTabActive() {
   const sec = $("tab-code");
   return !!(sec && sec.classList.contains("active"));
 }
