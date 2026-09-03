@@ -13,8 +13,9 @@
 //
 // 标记形状 = {line(1 基), start(列 0 基), end, kind, title?}，与
 // fx/code-marks.js 同族。
+import { caretLineFromStarts } from "./codeeditor.js";
 
-// editChangeSpan(oldText, newText)：变更段判定——返回
+// editChangeSpan(oldText, newText, lineStarts?)：变更段判定——返回
 // { identical, structural, p, oldSegLen, newSegLen, line }
 //   identical   旧新文本相同（调用方另有短路）
 //   structural  结构变更（换行/括号/引号/井号/tab 或行首空白变化 → 标记与折叠
@@ -24,8 +25,9 @@
 //   newSegLen   新文本替换段长（插入 = 新段长 > 0，纯删除 = 0）
 //   line        变更起始行（1 基，按旧文本算：p 前换行数 + 1）
 // 口径与 ui/codeeditor.js 旧 textEditIsStructural 完全一致（spec 决策：纯逻辑
-// 进 fx 可单测，ui 不再手写第二套）。
-export function editChangeSpan(oldText, newText) {
+// 进 fx 可单测，ui 不再手写第二套）。lineStarts 可选（工单 code-editor-opt/02）：
+// 窗口缓存的行起点数组 → 变更行号二分 O(log n)，避免对全文再数一遍换行。
+export function editChangeSpan(oldText, newText, lineStarts) {
   const oldT = String(oldText == null ? "" : oldText);
   const newT = String(newText == null ? "" : newText);
   if (oldT === newT) {
@@ -57,8 +59,14 @@ export function editChangeSpan(oldText, newText) {
       afterLineEnd < 0 ? newT.length : afterLineEnd).match(/^[ \t]*/)[0];
     structural = oldLead !== newLead;
   }
-  let line = 1;
-  for (let i = 0; i < p; i++) if (oldT.charCodeAt(i) === 10) line++;
+  let line;
+  if (lineStarts && lineStarts.length) {
+    // 行起点数组二分（工单 code-editor-opt/02：6000 行逐键不再 O(n) 数换行）
+    line = caretLineFromStarts(lineStarts, p);
+  } else {
+    line = 1;
+    for (let i = 0; i < p; i++) if (oldT.charCodeAt(i) === 10) line++;
+  }
   return { identical: false, structural, p, oldSegLen, newSegLen, line };
 }
 
@@ -119,10 +127,57 @@ export function marksPartition(marks) {
   return { all, guides, rainbow, others };
 }
 
+// wordRangesPatch(ranges, word, oldText, newText, span)：选中词区段清单增量修补
+// （工单 code-editor-opt/02——逐键 codeWordRanges 全文扫描 + JSON 对比是输入链
+// 残余热点之一）。只适用于「非结构编辑且词未变」：词未变 ⇒ 其它行的文本与词
+// 边界逐字节不变（区段原样保留），只有变更行可能变化（词边界在变更段附近被
+// 改动——如 'x' 插入到 "abc" 前使其不再是 "abc" 的命中）→ 该行局部重算，
+// 词边界判据与 fx/code-marks.js codeWordRanges 完全一致。输出按行序自然序
+// 合并（区段形状 {line,start,end} 同族）。
+export function wordRangesPatch(ranges, word, oldText, newText, span) {
+  const ws = String(word == null ? "" : word);
+  const oldT = String(oldText == null ? "" : oldText);
+  const newT = String(newText == null ? "" : newText);
+  const list = ranges || [];
+  if (!ws) return list.slice();
+  if (!list.length) return [];
+  // 变更行局部重算（与 codeWordRanges 同口径：词边界 = 前后非词字符）
+  const lineStart = oldT.lastIndexOf("\n", span.p - 1) + 1;
+  const nl = newT.indexOf("\n", lineStart);
+  const lineEnd = nl === -1 ? newT.length : nl;
+  const lineText = newT.slice(lineStart, lineEnd);
+  const isWordChar = (ch) => ch !== undefined && ch !== "" && /[A-Za-z0-9_]/.test(ch);
+  const parts = [];
+  for (let i = 0;;) {
+    const at = lineText.indexOf(ws, i);
+    if (at < 0) break;
+    const prev = at > 0 ? lineText[at - 1] : "";
+    const next = at + ws.length < lineText.length ? lineText[at + ws.length] : "";
+    if (!isWordChar(prev) && !isWordChar(next)) {
+      parts.push({ line: span.line, start: at, end: at + ws.length });
+    }
+    i = at + ws.length;
+  }
+  // 其它行原样；变更行条目在行序位置插入（保持 codeWordRanges 的自然序）
+  const out = [];
+  let inserted = false;
+  for (const r of list) {
+    if (r.line === span.line) continue;
+    if (!inserted && r.line > span.line) {
+      out.push(...parts);
+      inserted = true;
+    }
+    out.push(r);
+  }
+  if (!inserted) out.push(...parts);
+  return out;
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     editChangeSpan,
     marksPatch,
     marksPartition,
+    wordRangesPatch,
   });
 }

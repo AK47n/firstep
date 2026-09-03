@@ -93,13 +93,14 @@ function _skipComment(text, i) {
   return e < 0 ? text.length : e + 2;
 }
 
-// _bracketPairScan(text)：单次正向扫描建配对清单——[{openPos, closePos,
+// bracketPairScan(text)：单次正向扫描建配对清单——[{openPos, closePos,
 // openChar, closeChar, depth, openLine, openStart, closeLine, closeStart}]
 // （配对/深度/行列一次算齐；depth 0 基 = 最外层 0；行号 1 基、列 0 基）；
 // 跳过字符串/字符/行注释/块注释内的假括号；栈只压同型开括号，碰到同型闭
 // 括号时配最近开括号。配对表（_bracketPairsOf）与彩虹深度标记
-// （bracketDepthMarks）共用本扫描——假括号跳过规则只维护一处。
-function _bracketPairScan(text) {
+// （bracketDepthMarks）与 ui 配对缓存（工单 code-editor-opt/02——按内容引用
+// 缓存 + pairScanPatch 增量修补）共用本扫描——假括号跳过规则只维护一处。
+export function bracketPairScan(text) {
   const out = [];
   const stack = [];
   let line = 1, lineStart = 0;
@@ -151,7 +152,7 @@ function _bracketPairScan(text) {
 // （扫描与假括号跳过只维护一处）。
 function _bracketPairsOf(text) {
   const pairs = new Map();
-  for (const e of _bracketPairScan(text)) {
+  for (const e of bracketPairScan(text)) {
     const entry = {
       openPos: e.openPos, closePos: e.closePos,
       openChar: e.openChar, closeChar: e.closeChar,
@@ -204,12 +205,68 @@ export function bracketPairAt(text, pos) {
 export function bracketDepthMarks(text) {
   const src = String(text == null ? "" : text);
   const out = [];
-  for (const e of _bracketPairScan(src)) {
+  for (const e of bracketPairScan(src)) {
     const kind = "bracket-depth-" + (e.depth % 8);
     out.push({ line: e.openLine, start: e.openStart, end: e.openStart + 1, kind });
     out.push({ line: e.closeLine, start: e.closeStart, end: e.closeStart + 1, kind });
   }
   return out;
+}
+
+// pairScanPatch(entries, oldText, newText, span)：配对清单增量修补
+// （工单 code-editor-opt/02——bracketPairAt 逐键全文档重扫 + 重建 Map 是输入链
+// 剩余热点之一：光标贴 `}`/`{` 时每次 input 都触发）。只适用于非结构编辑
+// （span.structural === false）：变更段不含换行与括号 → 括号集合与配对关系、
+// 深度、行号全部不变，只有「变更行内位于变更段之后」的括号绝对/行内偏移
+// 平移 delta；其余条目逐字节不动（引用保留）。输出新数组（旧数组不动）。
+export function pairScanPatch(entries, oldText, newText, span) {
+  const oldT = String(oldText == null ? "" : oldText);
+  if (!entries || !entries.length) return [];
+  if (span.identical || span.structural || span.oldSegLen === span.newSegLen) {
+    return entries.slice();
+  }
+  const lineStart = oldT.lastIndexOf("\n", span.p - 1) + 1;
+  const segStart = span.p - lineStart;          // 变更段在变更行内的 0 基列
+  const segEnd = segStart + span.oldSegLen;
+  const absSegEnd = span.p + span.oldSegLen;    // 变更段结束的绝对偏移
+  const delta = span.newSegLen - span.oldSegLen;
+  const out = [];
+  for (const e of entries) {
+    // 只克隆实际变化的条目（文件尾部输入时绝大多数条目不变——避免 6000 行
+    // 文件逐键克隆整个配对清单产生的 GC，工单 code-editor-opt/02 实测热点）
+    const openPos = e.openPos >= absSegEnd ? e.openPos + delta : e.openPos;
+    const closePos = e.closePos >= absSegEnd ? e.closePos + delta : e.closePos;
+    const openStart = (e.openLine === span.line && e.openStart >= segEnd)
+      ? e.openStart + delta : e.openStart;
+    const closeStart = (e.closeLine === span.line && e.closeStart >= segEnd)
+      ? e.closeStart + delta : e.closeStart;
+    if (openPos !== e.openPos || closePos !== e.closePos
+      || openStart !== e.openStart || closeStart !== e.closeStart) {
+      out.push({ ...e, openPos, closePos, openStart, closeStart });
+    } else {
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+// bracketPairFromEntries(entries, pos)：配对清单 → 光标处配对两段标记
+// （与 bracketPairAt 同语义：pos 或 pos-1 命中任一开/闭位；无 → null）。
+// 供 ui 配对缓存路径使用（避免逐键 bracketPairAt 全文档重扫）。
+export function bracketPairFromEntries(entries, pos) {
+  const list = entries || [];
+  const p = Math.max(0, pos | 0);
+  for (const e of list) {
+    if (e.openPos === p || e.closePos === p || e.openPos === p - 1 || e.closePos === p - 1) {
+      return {
+        open: { line: e.openLine, start: e.openStart, end: e.openStart + 1 },
+        close: { line: e.closeLine, start: e.closeStart, end: e.closeStart + 1 },
+        openChar: e.openChar,
+        closeChar: e.closeChar,
+      };
+    }
+  }
+  return null;
 }
 
 if (typeof window !== "undefined") {
@@ -221,5 +278,8 @@ if (typeof window !== "undefined") {
     bracketBackspace,
     bracketPairAt,
     bracketDepthMarks,
+    bracketPairScan,
+    pairScanPatch,
+    bracketPairFromEntries,
   });
 }

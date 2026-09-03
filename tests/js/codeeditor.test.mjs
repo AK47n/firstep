@@ -15,6 +15,8 @@ import {
   dirtySavableTabs,
   caretLineOf,
   caretColOf,
+  caretLineFromStarts,
+  buildLineStarts,
   indentOnEnter,
   indentLines,
   replaceAllText,
@@ -301,4 +303,40 @@ test("moveTab：未知 from / 未知 to（还原原位 / 不变量保持）", ()
   assert.deepEqual(moveTab(t, "b", "x", "before").map((x) => x.path),
     ["a", "b", "c"]);                                          // 目标不存在 → 还原原位
   assert.deepEqual(moveTab([], "a", "b", "before"), []);       // 空清单
+});
+
+// ---- 行起点数组 + 二分行号（工单 code-editor-opt/02：O(log n) 替代 O(n) 扫）----
+
+test("buildLineStarts：行数组 → 每行行首绝对偏移", () => {
+  assert.deepEqual(buildLineStarts(["a", "b", "c"]), [0, 2, 4]);
+  assert.deepEqual(buildLineStarts([""]), [0]);
+  assert.deepEqual(buildLineStarts([]), []);
+});
+
+test("caretLineFromStarts：与 caretLineOf 语义一致（换行符上 = 前一行行尾）", () => {
+  const text = "a\nb\n\nc";
+  const ls = buildLineStarts(text.split("\n"));
+  for (let p = 0; p <= text.length + 1; p++) {
+    assert.equal(caretLineFromStarts(ls, p), caretLineOf(text, p), "pos=" + p);
+  }
+});
+
+test("caretLineFromStarts：边界（空文/负值/越界/多行内容）", () => {
+  assert.equal(caretLineFromStarts([], 5), 1);
+  assert.equal(caretLineFromStarts([0], -3), 1);
+  assert.equal(caretLineFromStarts([0], 0), 1);
+  const ls = buildLineStarts(["x", "", "y"]);
+  assert.equal(caretLineFromStarts(ls, 999), 3);   // 越界钳到末行
+  assert.equal(caretLineFromStarts(ls, 0), 1);
+  assert.equal(caretLineFromStarts(ls, 2), 2);     // 空第二行行首
+  assert.equal(caretLineFromStarts(ls, 3), 3);     // 第三行行首
+});
+
+test("caretLineFromStarts：随机文本全偏移与 caretLineOf 对拍一致", () => {
+  const lines = ["abc", "", "def ghi", "x"];
+  const text = lines.join("\n");
+  const ls = buildLineStarts(lines);
+  for (let p = 0; p <= text.length; p++) {
+    assert.equal(caretLineFromStarts(ls, p), caretLineOf(text, p), "pos=" + p);
+  }
 });

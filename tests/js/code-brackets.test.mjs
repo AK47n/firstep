@@ -11,7 +11,11 @@ import {
   bracketBackspace,
   bracketPairAt,
   bracketDepthMarks,
+  bracketPairScan,
+  pairScanPatch,
+  bracketPairFromEntries,
 } from "../../src/contest_generator/static/js/fx/code-brackets.js";
+import { editChangeSpan } from "../../src/contest_generator/static/js/fx/edit-patch.js";
 
 test("bracketOpen：空光标插入括号对、光标居中", () => {
   assert.deepEqual(bracketOpen("int x", 5, 5, "("),
@@ -172,4 +176,54 @@ test("bracketDepthMarks：深嵌套按 8 色环取模（深度 8 → 同 0）", 
   assert.equal(marks[3].kind, "bracket-depth-7");
   assert.equal(marks[16].kind, "bracket-depth-0");  // 最外层（深度 0）
   assert.equal(marks[17].kind, "bracket-depth-0");
+});
+
+// ---- 配对扫描缓存（工单 code-editor-opt/02：光标贴括号不再逐键全文档重扫）----
+
+test("bracketPairScan：与 bracketPairAt 同源（配对/深度/行列一次算齐）", () => {
+  const text = "f() {\n    { (x); } // { 假\n}";
+  const entries = bracketPairScan(text);
+  assert.ok(entries.length > 0);
+  for (let p = 0; p <= text.length; p++) {
+    assert.deepEqual(bracketPairFromEntries(entries, p), bracketPairAt(text, p), "pos=" + p);
+  }
+});
+
+test("pairScanPatch：非结构插入后与全量重扫逐字节一致（含跨行/嵌套/字符串注释）", () => {
+  const cases = [
+    ["行中插入", "if (a) { return (x); }\n}", "if (a) { return (xy); }\n}", 0, 10],
+    ["行尾插入后括号仍配对", "f() {\n    { (x); }\n}", "f() {\n    { (xy); }\n}", 0, 9],
+    ["字符串/注释内插入", 'char s[] = "{ 假";\n// { 注\nint a = (1);', 'char s[] = "{ 假";\n// { 注\nint a = (1x);', 0, 9],
+  ];
+  for (const [name, oldText, newText] of cases) {
+    const s = editChangeSpan(oldText, newText);
+    assert.equal(s.structural, false, name + " 应是非结构");
+    const patched = pairScanPatch(bracketPairScan(oldText), oldText, newText, s);
+    assert.deepEqual(patched, bracketPairScan(newText), name);
+  }
+});
+
+test("pairScanPatch：非结构删除后与全量重扫一致", () => {
+  const oldText = "if (a) { return (x); }\n}";
+  const newText = "if (a) { return (); }\n}";   // 删普通字符 x（非结构）
+  const s = editChangeSpan(oldText, newText);
+  assert.equal(s.structural, false);
+  assert.deepEqual(
+    pairScanPatch(bracketPairScan(oldText), oldText, newText, s),
+    bracketPairScan(newText),
+  );
+});
+
+test("pairScanPatch：变更行之外条目零改动（引用保序）", () => {
+  const oldText = "a\nif (a) { return (1); }\nb";
+  const newText = "a\nif (a) { return (1x); }\nb";   // 第 2 行插入
+  const s = editChangeSpan(oldText, newText);
+  assert.equal(s.structural, false);
+  const out = pairScanPatch(bracketPairScan(oldText), oldText, newText, s);
+  assert.deepEqual(out, bracketPairScan(newText));
+});
+
+test("bracketPairFromEntries：无配对位置 → null（与 bracketPairAt 短路语义一致）", () => {
+  assert.equal(bracketPairFromEntries([], 0), null);
+  assert.equal(bracketPairFromEntries(bracketPairScan("abc"), 1), null);
 });
