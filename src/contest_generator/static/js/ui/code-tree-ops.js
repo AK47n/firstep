@@ -8,7 +8,7 @@
 // （refreshCodeTreeOnly / getCodeTreeDir / getCodeTreeFiles / isMainCDiskDir）
 // 与 codeeditor.js（openEditorFile / closeTab / remapOpenTabPaths /
 // invalidateFileCache / dirtyTabPaths / openTabPaths / saveAllDirtyTabs）。
-import { $, apiPost, toast, toastError } from "/js/app.js";
+import { $, apiPost, toast, toastError, copyText } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import {
   treeNameValidate,
@@ -18,6 +18,9 @@ import {
   renamePromptMessage,
   treeOpConfirmMessage,
   treeNamePromptHTML,
+  treeCtxItems,
+  treeCtxMenuHTML,
+  treeCtxClamp,
 } from "/js/fx/code-tree-ops.js";
 import {
   refreshCodeTreeOnly,
@@ -97,11 +100,14 @@ async function treeCreate(kind) {
   }
 }
 
-// treeRename(path, isDir)：重命名文件 / 目录——输入模态（默认值 = 当前
-// 名称）；成功后刷新树 + 已打开 tab 路径映射（内容 / 脏点 / mtime 不变）。
+// treeRename(path, isDir)：重命名文件 / 目录——脏保护（工单 06 评审整改：
+// 与删除同口径——重命名同样影响已打开 tab 路径，涉脏先存/取消）+ 输入模态
+// （默认值 = 当前名称）；成功后刷新树 + 已打开 tab 路径映射（内容 / 脏点 /
+// mtime 不变）。
 async function treeRename(path, isDir) {
   const dir = getCodeTreeDir();
   if (!dir) { toast("error", "请先打开目录"); return; }
+  if (!await guardTreeOpWrite(path, isDir, "重命名")) return;
   const currentName = path.split("/").pop() || path;
   const res = await confirmModal({
     title: treeOpTitle("rename"),
@@ -156,9 +162,103 @@ async function treeDelete(path, isDir) {
   }
 }
 
+// ===== 文件树右键菜单（工单 code-editor-refine/06）=====
+// 菜单浮层 = 模块内私有组件（样式 token 与 confirmModal 浮层同族；若后续其它
+// 右键菜单需要复用 openCtxMenu/closeCtxMenu，再把导出面扩大）。关闭三通道：
+// 外部 mousedown（含右键——下一次 contextmenu 自然重开并跟随新目标）/ 任意
+// 滚动（capture——树内滚动也关）/ Esc；定位经 fx treeCtxClamp 防视口溢出。
+let ctxMenuEl = null;
+
+function closeCtxMenu() {
+  if (ctxMenuEl) {
+    ctxMenuEl.remove();
+    ctxMenuEl = null;
+  }
+}
+
+function openCtxMenu(items, x, y) {
+  closeCtxMenu();
+  const el = document.createElement("div");
+  el.className = "code-ctx-menu";
+  el.innerHTML = treeCtxMenuHTML(items);
+  document.body.appendChild(el);
+  const r = el.getBoundingClientRect();
+  const pos = treeCtxClamp(x, y, r.width, r.height, window.innerWidth, window.innerHeight);
+  el.style.left = pos.left + "px";
+  el.style.top = pos.top + "px";
+  ctxMenuEl = el;
+  el.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-ctx-action]");
+    if (!btn) return;
+    const item = items.find((it) => it.action === btn.dataset.ctxAction);
+    closeCtxMenu();   // 先关再执行（动作内部可能再开模态/刷新树）
+    if (item && item.run) Promise.resolve(item.run()).catch(() => { /* 被调方已自吞中文 toast；防未处理拒绝 */ });
+  });
+  el.addEventListener("contextmenu", (e) => e.preventDefault());   // 菜单上右键不再叠浏览器原生菜单（评审整改）
+}
+
+// copyTreePath(path)：复制相对路径——机制 = app.js copyText 单源
+// （clipboard 优先 → execCommand 保底）；成功与否的提示文案本处定。
+async function copyTreePath(path) {
+  const ok = await copyText(path);
+  if (ok) toast("ok", "已复制相对路径 " + path);
+  else toast("error", "复制失败：请手动复制（路径：" + path + "）");
+}
+
+// runCtxAction(action, path, isDir, row)：右键菜单动作分发——打开（文件开
+// tab / 目录展开收起 + 定位）、复制、重命名、删除（后两者与悬浮按钮共用
+// TREE_OP_DISPATCH 同一函数路径：模态/脏保护/tab 联动全一致）。
+const TREE_OP_DISPATCH = { rename: treeRename, delete: treeDelete };
+
+async function runCtxAction(action, path, isDir, row) {
+  if (action === "open") {
+    if (isDir) {
+      const d = row.querySelector("details[data-dir-path]");
+      if (d) d.open = !d.open;
+      row.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    await openEditorFile(path);
+  } else if (action === "copy") {
+    await copyTreePath(path);
+  } else {
+    const fn = TREE_OP_DISPATCH[action];
+    if (fn) await fn(path, isDir);
+  }
+}
+
+// bindTreeCtxMenu()：树容器 contextmenu 委托——命中行（目录/文件）→ 阻止
+// 浏览器默认菜单并打开自定义菜单（连续右键 = 关闭旧 -> 跟随新光标重开）；
+// 空白处右键不拦（浏览器菜单保留），但已开的菜单关闭。
+function bindTreeCtxMenu(tree) {
+  tree.addEventListener("contextmenu", (e) => {
+    const row = e.target.closest(".code-tree-dir, .code-tree-file");
+    if (!row) { closeCtxMenu(); return; }
+    e.preventDefault();
+    const isDir = row.classList.contains("code-tree-dir");
+    const el = isDir
+      ? row.querySelector("details[data-dir-path]")
+      : row.querySelector("[data-code-file]");
+    const path = el ? (el.dataset.dirPath || el.dataset.codeFile || "") : "";
+    if (!path) return;
+    const items = treeCtxItems(isDir).map((it) => ({
+      ...it,
+      run: () => runCtxAction(it.action, path, isDir, row),
+    }));
+    openCtxMenu(items, e.clientX, e.clientY);
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (ctxMenuEl && !ctxMenuEl.contains(e.target)) closeCtxMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && ctxMenuEl) { e.preventDefault(); closeCtxMenu(); }
+  });
+  document.addEventListener("scroll", () => { if (ctxMenuEl) closeCtxMenu(); }, true);
+}
+
 // initCodeTreeOps()：入口绑定——树头部新建按钮 + 树内 ✎/🗑 事件委托
 // （委托挂在 #code-tree，与 codeview 的 [data-code-file] 监听并存互不冲突：
-// 操作按钮不在文件按钮内部，各自 closest 只命中自己）。
+// 操作按钮不在文件按钮内部，各自 closest 只命中自己）+ 右键菜单。
 export function initCodeTreeOps() {
   const tree = $("code-tree");
   if (tree) tree.addEventListener("click", async (e) => {
@@ -171,6 +271,7 @@ export function initCodeTreeOps() {
     if (task === "rename") await treeRename(path, isDir);
     else if (task === "delete") await treeDelete(path, isDir);
   });
+  if (tree) bindTreeCtxMenu(tree);
   const newFile = $("btn-code-tree-new-file");
   if (newFile) newFile.addEventListener("click", async () => {
     if (!getCodeTreeDir()) { toast("error", "请先打开目录（选择文件夹或从最近记录进入）"); return; }

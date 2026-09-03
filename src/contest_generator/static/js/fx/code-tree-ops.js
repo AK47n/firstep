@@ -104,6 +104,41 @@ export function treeNamePromptHTML(kind, value) {
     autocomplete="off" spellcheck="false">`;
 }
 
+// ---- 文件树右键菜单（工单 code-editor-refine/06）----
+
+// treeCtxItems(isDir)：右键菜单项（打开 / 复制相对路径 / 重命名 / 删除）——
+// 与悬浮 ✎/🗑 同动作语义（复用 treeRename/treeDelete 与脏保护）；「打开」
+// 文件开 tab、目录展开/收起 + 定位（label 按形态区分）。
+export function treeCtxItems(isDir) {
+  return [
+    { action: "open", label: isDir ? "展开 / 收起" : "打开" },
+    { action: "copy", label: "复制相对路径" },
+    { action: "rename", label: "重命名…" },
+    { action: "delete", label: "删除…", danger: true },
+  ];
+}
+
+// treeCtxMenuHTML(items)：右键菜单 HTML——data-ctx-action 交事件层；
+// label 一律 esc（防节点名注入）; danger 项挂 code-ctx-item-danger 类。
+export function treeCtxMenuHTML(items) {
+  return (items || []).map((it) => '<button type="button" class="code-ctx-item'
+    + (it.danger ? " code-ctx-item-danger" : "")
+    + '" data-ctx-action="' + esc(it.action) + '">'
+    + esc(it.label) + "</button>").join("");
+}
+
+// treeCtxClamp(x, y, w, h, vw, vh)：菜单定位防视口溢出——fixed 坐标
+// {left, top} 钳到 [8px 边距, 视口尺寸 - 菜单尺寸 - 8px]；菜单比视口大时贴
+// 8px 边（配合 CSS max-height + overflow-y 兜底，见 index.html）。返回纯坐标，
+// 无副作用。
+export function treeCtxClamp(x, y, w, h, vw, vh) {
+  const pad = 8;
+  return {
+    left: Math.max(pad, Math.min(x, vw - w - pad)),
+    top: Math.max(pad, Math.min(y, vh - h - pad)),
+  };
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     treeNameValidate,
@@ -115,6 +150,9 @@ if (typeof window !== "undefined") {
     renamePromptMessage,
     treeOpConfirmMessage,
     treeNamePromptHTML,
+    treeCtxItems,
+    treeCtxMenuHTML,
+    treeCtxClamp,
     CODE_TREE_NAME_ILLEGAL,
     CODE_TREE_NAME_MAX,
   });

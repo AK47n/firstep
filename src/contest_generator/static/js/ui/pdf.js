@@ -3,7 +3,7 @@
 // 素材库全量 PDF 浏览 / 客户端即时检索 / 排序 / 统计 / 直开预览 / 详情弹窗 /
 // 疑似重复回收删除（对偶参考文件库）。纯件在 fx/pdf.js（过滤/排序/统计/健康/
 // 行渲染/详情/回收 URL 等全量），本模块只做 DOM 转发与事件接线。
-import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
+import { $, apiGet, apiPost, toast, toastError, copyText } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import {
@@ -40,9 +40,10 @@ function loadPdfPages(relPath) {
   return pdfPageCache.get(relPath);
 }
 
-// copyPdfPath(text)：复制相对路径（clipboard API；失败降级由调用方提示）。
+// copyPdfPath(text)：复制相对路径（机制 = app.js copyText 单源——clipboard →
+// execCommand 兜底，工单 06 评审整改；失败降级由调用方提示）。
 async function copyPdfPath(text) {
-  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+  return copyText(text);
 }
 
 // showPdfDetail(pdf)：轻量详情弹窗（对偶 showReferenceDetail：遮罩 + × /

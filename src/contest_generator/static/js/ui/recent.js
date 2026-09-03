@@ -8,7 +8,7 @@
 // 跨簇调用方（调用方 import 本模块）：renderGenerateSuccess（生成成功 →
 // refreshRecent）、fixHandleEvent（编译结束 → reportRecentStatus）；host 启动
 // 区经 import 调 initRecent。无模块态。
-import { $, apiGet, apiPost, apiDelete, toast, toastError } from "/js/app.js";
+import { $, apiGet, apiPost, apiDelete, toast, toastError, copyText } from "/js/app.js";
 import { recentListHTML, recentStatusNow } from "/js/fx/recent.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { recentDeleteMessage } from "/js/fx/danger.js";
@@ -93,21 +93,11 @@ export function initRecent() {
     const chip = e.target.closest(".recent-chip");
     if (!chip) return;
     const dir = chip.dataset.dir || "";
-    // 复制路径（与 btn-copy-dir / main.c 工具栏同款：clipboard 失败 → execCommand 兜底）
-    const done = () => toast("ok", "已复制路径");
-    const fallback = () => {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = dir;
-        document.body.appendChild(ta);
-        ta.select();
-        if (document.execCommand && document.execCommand("copy")) { toast("ok", "已复制路径"); return; }
-        toast("error", "复制失败：请手动复制");
-      } catch (err) { toastError(err, "复制失败"); }
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(dir).then(done).catch(fallback);
-    } else fallback();
+    // 复制路径——机制 = app.js copyText 单源（工单 06 评审整改：clipboard →
+    // execCommand 兜底原在 7 处同型实现，已收敛）；提示文案保持本处中文。
+    const ok = await copyText(dir);
+    if (ok) toast("ok", "已复制路径");
+    else toast("error", "复制失败：请手动复制");
   });
   refreshRecent();
 }
