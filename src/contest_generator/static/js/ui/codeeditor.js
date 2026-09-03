@@ -78,6 +78,7 @@ import {
   windowPosToView,
   windowTextMatchesModel,
 } from "/js/fx/window-text.js";  // 视口化窗口文本纯件（工单 editor-textarea-viewport/01）：窗口构建 / 编辑映射 / 光标偏移换算 / 一致性校验
+import { undoPush, undoStep, redoStep } from "/js/fx/undo-stack.js";  // 模型级快照撤销栈纯件（工单 editor-textarea-viewport/03）：push/undo/redo 状态机（上限 200，新编辑清空 redo）
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
 let codeDir = "";
@@ -230,6 +231,7 @@ export async function setCodeDir(dir) {
   activePath = "";
   fileCache.clear();
   resetFoldState();
+  resetUndoStack();   // 03：目录切换 → 撤销栈清空（防跨目录错撤）
   renderTabs();
   renderPane();
   notifyActive();
@@ -1439,6 +1441,7 @@ function activateTab(path) {
     if (el) el.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
   resetFoldState();   // 切文件清空折叠态（会话内不跨文件保持，工单 07）
+  resetUndoStack();   // 03：换 tab → 撤销栈清空（快照模型级，跨 tab 必错）
   renderPane();
   notifyActive();
 }
@@ -1530,6 +1533,7 @@ export async function closeTab(path, opts = {}) {
     activePath = next ? next.path : "";
   }
   resetFoldState();   // 关标签后重算折叠态（评审整改 07c：防旧 viewModel 残留污染新活动文件）
+  resetUndoStack();   // 03：关标签 → 撤销栈清空（防错撤到新活动 tab）
   renderTabs();
   renderPane();
   notifyActive();
@@ -2023,6 +2027,7 @@ function applyDiskState(tab, disk) {
   tab.readonly = disk.utf8 === false;
   tab.utf8 = disk.utf8 !== false;
   resetFoldState();   // 内容整体更换：折叠区重算（工单 07）
+  resetUndoStack();   // 03：磁盘版整体替换 → 撤销栈清空（非用户编辑）
   fileCache.set(fileCacheKey(tab.path), { ok: true, data: disk });
   renderTabs();
   renderPane();
@@ -2035,35 +2040,117 @@ function applyDiskState(tab, disk) {
 // 选区——会打断中文候选窗（input 逐键触达 sync，只做重渲染不动光标）。
 let composing = false;
 
-// ---- 程序化编辑撤销栈（工单 code-page-vscode-overhaul/04）----
-// 浏览器原生撤销栈优先：execCommand("insertText")（Chrome 支持、一次一步
-// 撤销；旧行为 ta.value= 直赋值会打断原生撤销栈）。execCommand 不可用/失败
-// （Firefox/Safari 对 textarea 的 insertText 支持差）→ 降级直赋值 + 快照式
-// 自定义撤销栈（覆盖程序化编辑段；nativeUndo 关闭时 Ctrl+Z/Y 拦截走快照）。
-let nativeUndo = typeof document.execCommand === "function";
-const undoStack = [];   // [{value, selStart, selEnd}] 程序化编辑前快照（限 200 条）
-const redoStack = [];
+// ---- 撤销栈全域化（工单 editor-textarea-viewport/03）----
+// 视口化后 textarea 只装窗口文本，浏览器原生撤销栈只认「textarea=全量文本」
+// 的旧世界（窗口内撤销必错乱、跨窗口无意义）——明确放弃原生栈，快照栈全域
+// 接管（spec：大文档直赋值 + 快照栈既有先例，风险已知可控）。快照 = 模型级
+// {value, selStart, selEnd}（模型全文 + 模型选区偏移）——与窗口文本无关，
+// 跨窗口/折叠态语义由「模型为唯一事实源」保证。栈状态机 = fx/undo-stack 纯件
+// （上限 200、新编辑清空 redo）；本侧只做快照捕获与模型恢复。
+let undoStack = [];
+let redoStack = [];
+let pendingSnapshot = null;    // beforeinput/compositionstart 捕获的「编辑前快照」
+let compositionPushed = false; // 组合输入已入栈（一次组合 = 一步撤销）
 
-function pushEditSnapshot() {
-  const ta = paneBox() && paneBox().querySelector(".code-ta");
-  if (!ta) return;
-  undoStack.push({ value: ta.value, selStart: ta.selectionStart, selEnd: ta.selectionEnd });
-  if (undoStack.length > 200) undoStack.shift();
-  redoStack.length = 0;
+// captureModelSnapshot()：当前模型状态快照（模型全文 + 模型选区）——textarea
+// 只装窗口文本，选区经 editorSelectionModel 单源换算为模型偏移；无选区时取
+// 光标模型偏移。无活动标签 → null。
+function captureModelSnapshot() {
+  const tab = getActiveTab();
+  if (!tab) return null;
+  const sel = editorSelectionModel();
+  const s = sel ? sel.start : foldCaretModelPos();
+  const e = sel ? sel.end : s;
+  return { value: tab.content, selStart: s, selEnd: e };
 }
 
+// pushEditSnapshot(snap?)：快照入栈（栈状态机 = fx/undo-stack）——新编辑清空
+// redo、上限 200。snap 缺省 = 当前模型状态捕获；编辑前调用即「编辑前快照」。
+function pushEditSnapshot(snap) {
+  const s = snap || captureModelSnapshot();
+  if (!s) return;
+  const r = undoPush(undoStack, redoStack, s);
+  undoStack = r.undo;
+  redoStack = r.redo;
+}
+
+// clearTypingSnapshot()：丢弃已捕获但未入栈的编辑前快照态（输入未产生真实
+// 变更时调用——不产生撤销步；resetUndoStack 亦走此清空）。
+function clearTypingSnapshot() {
+  pendingSnapshot = null;
+  compositionPushed = false;
+}
+
+// pushTypingSnapshot()：手打输入（input 事件）的入栈入口——必须在真实模型
+// 变更**前**调用（此时 tab.content 仍是旧模型 = 编辑前状态）。beforeinput 已
+// 捕获编辑前快照 → 直接入栈；组合输入：只认 compositionstart 那次快照（一次
+// 组合 = 一步撤销，组合中中间态不单列入栈）；compositionend 收尾变更并入同一
+// 撤销步；无 beforeinput 的合成输入兜底 = 当前状态捕获（不影响模型正确性）。
+function pushTypingSnapshot() {
+  if (composing) {
+    if (pendingSnapshot) {
+      pushEditSnapshot(pendingSnapshot);
+      pendingSnapshot = null;
+      compositionPushed = true;
+    }
+    return;
+  }
+  if (compositionPushed) {
+    // compositionend 收尾变更：并入组合撤销步，不另开一步
+    compositionPushed = false;
+    return;
+  }
+  const snap = pendingSnapshot || captureModelSnapshot();
+  pendingSnapshot = null;
+  if (snap) pushEditSnapshot(snap);
+}
+
+// snapshotUndo(redo)：撤销/重做一步——fx 状态机弹栈并把当前状态推入对侧，
+// 然后 rebaseModelContent 以模型快照重建（含折叠态：折叠区按签名保留、视图/
+// 窗口重装、光标按模型落位），并按快照恢复**模型选区**（selStart..selEnd——
+// 与既有「撤销恢复选区」语义一致，非只回光标）；随后刷新标签条脏点、状态栏
+// 与查找/词/括号标记。返回是否成步（空栈 / 只读 / 无活动标签 → false）。
 function snapshotUndo(redo) {
-  const ta = paneBox() && paneBox().querySelector(".code-ta");
-  if (!ta) return false;
-  const from = redo ? redoStack : undoStack;
-  const to = redo ? undoStack : redoStack;
-  const snap = from.pop();
-  if (!snap) return false;
-  to.push({ value: ta.value, selStart: ta.selectionStart, selEnd: ta.selectionEnd });
-  ta.value = snap.value;
-  ta.setSelectionRange(snap.selStart, snap.selEnd);
-  syncEditorAfterInput();
+  const tab = getActiveTab();
+  if (!tab || tab.readonly) return false;
+  const cur = captureModelSnapshot();
+  if (!cur) return false;
+  const r = redo ? redoStep(undoStack, redoStack, cur)
+    : undoStep(undoStack, redoStack, cur);
+  if (!r) return false;
+  undoStack = r.undo;
+  redoStack = r.redo;
+  const ml = tab.content.length;
+  const ms = Math.max(0, Math.min(ml, r.snap.selStart | 0));
+  const me = Math.max(ms, Math.min(ml, r.snap.selEnd | 0));
+  rebaseModelContent(r.snap.value, ms);
+  // 恢复快照的模型选区（折叠态经视图映射回窗口落位；taSetRange 单源换算）
+  const box = paneBox();
+  const ta = box && box.querySelector(".code-ta");
+  if (ta && !ta.readOnly) {
+    ta.focus();
+    let vs = ms;
+    let ve = me;
+    if (viewModel) {
+      vs = codeFoldModelToView(viewModel.segs, ms);
+      ve = codeFoldModelToView(viewModel.segs, me);
+    }
+    taSetRange(vs, ve);
+  }
+  renderTabs();            // 脏点随内容变化刷新（rebase 不经 syncTail）
+  notifyActive();          // 状态栏信息区随内容/光标刷新
+  renderEditorMarks();     // 查找/词/括号随模型内容刷新（rebase 不经 syncTail）
+  scheduleCursorWork();    // 选中词/括号/状态栏按恢复后的光标重算
   return true;
+}
+
+// resetUndoStack()：内容上下文整体切换（换 tab/关 tab/切目录/磁盘重载）后清空
+// 撤销栈——快照是模型级，跨「同一 textarea 复用不同 tab」语义必错；与原生栈
+// 随 textarea 重建而清空的既有行为对齐。
+function resetUndoStack() {
+  undoStack = [];
+  redoStack = [];
+  clearTypingSnapshot();
 }
 
 // applyCachePatches(oldText, newText, span)：模型内容变更后的折叠清单与静态
@@ -2212,13 +2299,14 @@ function syncTail(caretModel, follow = true) {
   notifyActive();   // 状态栏信息区随内容/光标刷新（onActiveTabChanged → refreshCodeStatus；不再单独 notifyCursor——避免每击键双刷）
 }
 
-// applyEdit(text, start, end)：程序化编辑（含手输同步路径）落库。
-// 窗口化态（非折叠，02）：text/start/end = **模型**偏移——textarea 只装窗口
-// 文本，execCommand 的原生撤销栈只认全量文本（跨窗口必错乱），统一「写模型 +
-// 窗口重装 + 快照栈」（快照全域化 = 03 工单，本切片先按窗口级快照过渡）。
-// 折叠态（textarea = 视图全量，02 保持现状）与全量态走既有
-// execCommand/直赋值路径。
-const EDIT_BIG_DOC = 200000;
+// applyEdit(text, start, end)：程序化编辑（Tab/Enter/行操作/注释/括号/AI 插入/
+// 查找替换共用）落库。统一「模型为唯一事实源」：
+//   - 窗口化（非折叠，02）：text/start/end = **模型**偏移——写模型 + 窗口重装 +
+//     模型级快照（03 全域化）；不再走 execCommand（原生撤销栈只认「textarea=
+//     全量文本」旧语义，视口化后窗口内/跨窗口必错乱——03 明确放弃）。
+//   - 折叠态（textarea = 视图全量，02 保持现状）与全量兜底：text/start/end =
+//     视图坐标——直赋值 + syncEditorAfterInput 折叠映射回写模型（既有语义
+//     不变）；快照模型级捕获于赋值前，sync 的变更入口统一入栈（不重复入栈）。
 function applyEdit(text, start, end) {
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!ta) return;
@@ -2244,38 +2332,9 @@ function applyEdit(text, start, end) {
     ta.setSelectionRange(start, end);
     return;
   }
-  const oldText = ta.value;
-  const bigDoc = oldText.length > EDIT_BIG_DOC;
-  if (nativeUndo && !bigDoc) {
-    // 公共前后缀 diff → 最小替换区间 → execCommand 走浏览器原生撤销栈；
-    // execCommand 会同步触发 input（既有 input 监听同步模型/高亮），随后
-    // 只做选区最终落位 + 当前行/状态轻量刷新（不重复全量渲染）。
-    let p = 0;
-    const minLen = Math.min(oldText.length, text.length);
-    while (p < minLen && oldText[p] === text[p]) p++;
-    let s = 0;
-    while (s < oldText.length - p && s < text.length - p
-      && oldText[oldText.length - 1 - s] === text[text.length - 1 - s]) s++;
-    const ins = text.slice(p, text.length - s);
-    try {
-      ta.focus();
-      ta.setSelectionRange(p, oldText.length - s);
-      if (document.execCommand("insertText", false, ins)) {
-        if (ta.value === text) {
-          ta.setSelectionRange(start, end);
-          setActiveLine(caretLineFast(taCaretViewPos()));
-          scheduleCursorWork();
-          return;
-        }
-        // execCommand 成功但内容与预期不符（罕见）：走全量同步兜底
-        syncEditorAfterInput();
-        return;
-      }
-    } catch (err) { /* execCommand 异常 → 降级 */ }
-    nativeUndo = false;
-  }
-  // 降级：直赋值（现状行为）+ 快照栈接管撤销/重做
-  pushEditSnapshot();
+  // 折叠/全量兜底：直赋值（现状行为）+ 快照栈接管——编辑前模型状态经
+  // syncEditorAfterInput 的变更入口统一入栈（pendingSnapshot 携带，防双入）。
+  pendingSnapshot = captureModelSnapshot();
   ta.focus();
   ta.value = text;
   ta.setSelectionRange(start, end);
@@ -2295,13 +2354,14 @@ function syncEditorAfterInput() {
     // 折叠态（工单 07）：视图文本编辑 → 偏移映射写回模型；触碰占位 → 展开
     // + 重设视图文本与光标（模型偏移 → 新视图偏移）；折叠区随内容重算并
     // 按签名保留既有折叠态（codeFoldMerge）。
+    const textChanged = viewModel.text !== ta.value;
+    if (textChanged) pushTypingSnapshot();   // 03：真实变更 → 编辑前快照入栈（此时 tab.content 仍是旧模型）
     const r = codeFoldMapEdit(tab.content, viewModel.segs, viewModel.text, ta.value);
     tab.content = r.model;
     r.expand.forEach((i) => foldedSet.delete(i));
     const oldFolds = folds;
     folds = codeFoldRanges(tab.content, tab.lang);
     foldedSet = codeFoldMerge(oldFolds, foldedSet, folds);
-    const textChanged = viewModel.text !== ta.value;
     viewModel = (folds.length && foldedSet.size)
       ? codeFoldVisible(tab.content, folds, foldedSet)
       : null;
@@ -2315,6 +2375,8 @@ function syncEditorAfterInput() {
         ta.value = tab.content;
         ta.setSelectionRange(r.caret, r.caret);
       }
+    } else {
+      clearTypingSnapshot();   // 无真实变更：不产生撤销步，丢弃已捕获快照
     }
     syncTail(null);
     return;
@@ -2326,6 +2388,7 @@ function syncEditorAfterInput() {
     const oldWin = taWinInfo.text;
     const newWin = String(ta.value == null ? "" : ta.value);
     if (oldWin === newWin) {
+      clearTypingSnapshot();   // 无真实变更：不产生撤销步
       // 内容未变（IME compositionend 等）：先经 01 一致性校验——窗口文本与
       // 模型推导不符（外部漂移/罕见路径）→ 以模型重建，不静默错位。
       if (!windowTextMatchesModel(tab.content, viewModel, taWinInfo.start, taWinInfo.end, newWin)) {
@@ -2354,6 +2417,7 @@ function syncEditorAfterInput() {
       taWindowApply(cur);
       return;
     }
+    pushTypingSnapshot();   // 03：真实变更 → 编辑前快照入栈（此时 tab.content 仍是旧模型）
     const editSpan = {
       structural: span.structural,
       p: v.p,
@@ -2373,6 +2437,8 @@ function syncEditorAfterInput() {
       winCache ? winCache.lineStarts : null);
     curEditSpan = span;   // 非结构编辑：供 updateWordMarks 词区段增量（结构变更下方置 null 由行首重置兜底——此处直接设）
     if (span.structural) curEditSpan = null;
+    if (!span.identical) pushTypingSnapshot();   // 03：真实变更 → 编辑前快照入栈
+    else clearTypingSnapshot();
     tab.content = ta.value;
     markClean = false;   // 默认标记失效；纯字符编辑才保持
     applyCachePatches(winCache ? winCache.text : null, tab.content, span);
@@ -2436,7 +2502,7 @@ export function insertIntoActiveFile(text) {
   } else { start = ta.selectionStart; end = ta.selectionEnd; }
   const r = insertAtPosition(tab.content, text, { start, end });
   if (viewModel) {
-    pushEditSnapshot();   // 折叠态走 rebase 无 execCommand 原生撤销——快照栈补撤销（评审整改；replaceAll 沿袭缺口记录）
+    pushEditSnapshot();   // 折叠态走 rebase 不经 input 事件——快照栈补撤销（03 全域化：与窗口化同一模型级快照）
     rebaseModelContent(r.value, r.selStart);
   } else {
     applyEdit(r.value, r.selStart, r.selEnd);
@@ -2456,6 +2522,7 @@ export function replaceAllInActiveFile(needle, replacement) {
   if (viewModel) {
     // 折叠态（评审整改 07）：模型整体替换 → 折叠区按签名保留 → 重建视图 →
     // 光标落模型末尾（与既有「替换后光标置文件尾」语义一致）。
+    pushEditSnapshot();   // 03 全域化：折叠态 replaceAll 走 rebase 不经 input——快照栈补撤销
     rebaseModelContent(r.value, null);
     return r.count;
   }
@@ -2480,8 +2547,10 @@ export function replaceOneInActiveFile(replacement, jumpToNext) {
   if (!r.replaced) return { replaced: false, nextFound: false, total: r.total, current: -1 };
   const repl = String(replacement == null ? "" : replacement);
   const caret = r.at + repl.length;
-  if (viewModel) rebaseModelContent(r.value, caret);
-  else applyEdit(r.value, caret, caret);
+  if (viewModel) {
+    pushEditSnapshot();   // 03 全域化：折叠态 replaceOne 走 rebase 不经 input——快照栈补撤销
+    rebaseModelContent(r.value, caret);
+  } else applyEdit(r.value, caret, caret);
   // 重算命中（标记层按新内容），随后按 next 聚焦
   const total = setEditorFind(needle).total;
   let nextFound = false;
@@ -2729,11 +2798,24 @@ export function initCodeEditor() {
         toggleFold(fi);
       }
     });
-    // 组合输入保护：compositionend 后补一次同步（内容一次性落定）
-    box.addEventListener("compositionstart", () => { composing = true; });
+    // 组合输入保护：compositionend 后补一次同步（内容一次性落定）。
+    // 03 撤销全域化：compositionstart 捕获「编辑前快照」——一次组合 = 一步
+    // 撤销（组合中 beforeinput 不覆盖，输入中间态不单列入栈）。
+    box.addEventListener("compositionstart", () => {
+      composing = true;
+      pendingSnapshot = captureModelSnapshot();
+    });
     box.addEventListener("compositionend", () => {
       composing = false;
       syncEditorAfterInput();
+    });
+    // beforeinput：手打/粘贴/剪切等真实输入前，textarea 值与选区仍是编辑前
+    // 状态——捕获模型级「编辑前快照」；input 事件在真实变更入口统一入栈。
+    box.addEventListener("beforeinput", (e) => {
+      const ta = e.target;
+      if (!ta || !ta.classList || !ta.classList.contains("code-ta") || ta.readOnly) return;
+      if (composing) return;   // 组合中：保留 compositionstart 捕获的快照
+      pendingSnapshot = captureModelSnapshot();
     });
     // input：草稿同步 + 高亮/行号/尺寸刷新
     box.addEventListener("input", (e) => {
@@ -2752,8 +2834,10 @@ export function initCodeEditor() {
       // 会再按新选区校正一次（幂等）。
       setActiveLine(caretLineFast(taCaretViewPos()));
       scheduleCursorWork();
-      if (!nativeUndo && (e.ctrlKey || e.metaKey) && !e.altKey) {
-        // 快照降级（工单 04）：原生撤销栈不可用时 Ctrl+Z/Y 走自定义栈
+      // 撤销/重做全域接管（工单 03）：textarea 只装窗口文本，浏览器原生撤销
+      // 栈语义错乱（窗口内/跨窗口）——Ctrl+Z/Y/Shift+Z 一律拦截走模型级快照
+      // 栈（焦点在编辑器内即编辑器优先，与既有语义一致）。
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         const k = e.key.toLowerCase();
         if (!e.shiftKey && (k === "z" || k === "y")) {
           e.preventDefault();
@@ -2821,9 +2905,12 @@ export function initCodeEditor() {
             : toggleLineComment(eb.text, eb.selStart, eb.selEnd,
               { open: "//" }));
         applyEdit(r.value, r.start, r.end);
-      } else if (!e.isComposing && !composing && (BRACKET_OPEN[e.key] || BRACKET_CLOSE[e.key] || e.key === "Backspace")) {
+      } else if (!e.isComposing && !composing && !e.ctrlKey && !e.metaKey && !e.altKey
+        && (BRACKET_OPEN[e.key] || BRACKET_CLOSE[e.key] || e.key === "Backspace")) {
         // 括号行为（工单 06）：仅 c/xml/md 编辑态启用（spec：plain 走浏览器
         // 默认插入——评审整改 06b）；IME 组合输入中不拦截（评审整改 06a）。
+        // 03/04 整改：修饰键组合不拦截——Ctrl+Shift+[/] 是折叠快捷键，不能被
+        // 括号自动闭合劫持（此前 Ctrl+Shift+[ 会在光标处插入 "[]"）。
         const tab = getActiveTab();
         const langOk = !!tab && (tab.lang === "c" || tab.lang === "xml" || tab.lang === "md");
         if (!langOk) return;
