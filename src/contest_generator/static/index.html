@@ -1398,6 +1398,8 @@
   .code-pane-action:hover, .code-compile-head button:hover, .code-statusbar button:hover {
     border-color: var(--accent); background: var(--accent-dim); }
   .code-statusbar button { padding: 3px 10px; }
+  .code-statusbar button.on { color: var(--accent); border-color: var(--accent);
+    background: var(--accent-dim); }
   .code-statusbar button:disabled { opacity: .55; cursor: default; }
   /* 状态栏信息区（工单 code-editor-vscode-polish/01）：VSCode 式右侧动态信息
      段——光标行列 / 语言徽标 / 编码 / 缩进 / 缩放；等宽小字 muted，行列值
@@ -3017,6 +3019,7 @@
         <span class="code-statusbar-info" id="code-statusbar-info"></span>
         <button id="btn-code-save-all" type="button" title="保存代码栏全部未保存文件（Ctrl+Shift+S）">保存全部</button>
         <button id="btn-code-compile" type="button" title="保存全部未保存文件并编译当前工程（平台自动识别；不调 AI）">编译</button>
+        <button id="btn-code-auto-compile" type="button" title="保存成功后自动触发编译（默认关，点此切换）">自动编译：关</button>
         <button id="btn-code-flash" type="button" title="保存全部未保存文件并烧录当前工程（平台自动识别；不调 AI）">烧录到板子</button>
         <button id="btn-code-goto-generate" class="hidden" type="button" title="此目录 = 最近生成上下文：回生成页编辑磁盘版本 main.c">去生成页编辑 main.c</button>
         <button id="btn-code-shortcuts" type="button" title="键盘快捷键（Esc 关闭）">快捷键</button>

@@ -8,6 +8,11 @@
 import { esc } from "./core.js";
 import { compileSummaryText } from "./generate.js";
 
+// AUTO_COMPILE_KEY：保存自动编译开关的 localStorage 键（工单
+// code-editor-refine/10）——单源常量：状态栏 toggle 与读取判断共用（默认关
+// = 无键/非 "1"）；键名沿既有 firstep.* 命名域（评审整改）。
+export const AUTO_COMPILE_KEY = "firstep.autoCompileOnSave";
+
 // compileStatusText(done)：/api/compile done 载荷 → 面板状态行（单源别名——
 // 实现 = compileSummaryText，见模块头注释）；done 为空 → 空串。
 export const compileStatusText = compileSummaryText;
@@ -91,5 +96,6 @@ if (typeof window !== "undefined") {
     compileErrorLinesForFile,
     compileErrorPathNorm,
     compileErrorPathBase,
+    AUTO_COMPILE_KEY,
   });
 }

@@ -251,7 +251,7 @@ export function initCodeTreeOps() {
 // 反馈（避免「点了没反应」）；409 冲突既有三键模态兜底。
 async function saveAllFromBar() {
   const before = dirtySavableTabCount();
-  const res = await saveAllDirtyTabs();
+  const res = await saveAllDirtyTabs(true);   // 手工保存全部（工单 10：自动编译判据——用户显式动作）
   if (!res.ok) return;  // 取消/失败：冲突模态或 toast 已提示
   toast("ok", before ? "已保存全部 " + before + " 个文件" : "没有未保存的修改");
 }

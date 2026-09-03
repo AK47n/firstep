@@ -232,7 +232,10 @@ export function getActiveTab() {
 export function onActiveTabChanged(cb) { activeListeners.add(cb); }
 
 // onFileSaved(cb)：保存成功监听（codeview 注册：树节点大小刷新；main.c
-// 步骤 8 状态行刷新 = 工单 05）。
+// 步骤 8 状态行刷新 = 工单 05；code-compile 注册自动编译钩子 = 工单 10）——
+// 回调 (tab, resp, manual)：manual = 本次为用户显式保存（Ctrl+S/保存按钮/
+// 「保存全部」/冲突「覆盖写盘」确认），false = 程序化自动落盘（编译前
+// saveAllDirtyTabs / 守卫保存 / 磁盘重载通知）——自动编译只认手工。
 const savedListeners = new Set();
 export function onFileSaved(cb) { savedListeners.add(cb); }
 
@@ -247,8 +250,8 @@ function notifyActive() {
   activeListeners.forEach((cb) => { try { cb(tab); } catch (e) { /* 监听器异常不阻断 */ } });
 }
 
-function notifySaved(tab, resp) {
-  savedListeners.forEach((cb) => { try { cb(tab, resp); } catch (e) { /* 同上 */ } });
+function notifySaved(tab, resp, manual) {
+  savedListeners.forEach((cb) => { try { cb(tab, resp, manual); } catch (e) { /* 同上 */ } });
 }
 
 function notifyLoaded(path, content, mtimeNs) {
@@ -1215,10 +1218,10 @@ export async function saveActiveTab() {
   }
   try {
     const resp = await postSave(tab);
-    applySavedState(tab, resp);
+    applySavedState(tab, resp, undefined, true);   // 手工保存（Ctrl+S/保存按钮；工单 10 自动编译判据）
   } catch (e) {
     if (e.status === 409) {
-      showConflictModal(tab);
+      showConflictModal(tab, true);   // 冲突「覆盖写盘」= 用户显式确认的保存（工单 10 判据；评审整改）
     } else {
       toastError(e, "保存失败");
     }
@@ -1236,14 +1239,14 @@ export async function saveActiveTab() {
 // "saved"（写盘成功，含覆盖路径）/ "reload"（放弃并重新加载了磁盘版，后续
 // 编译可用磁盘版内容）/ "cancel"（取消 / 关闭 × / Esc / 点遮罩 / 保存失败）。
 // 与 saveActiveTab 同写盘路径（applySavedState），差异只在 409 后等待用户。
-async function saveTabSettled(tab) {
+async function saveTabSettled(tab, manual) {
   try {
     const resp = await postSave(tab);
-    applySavedState(tab, resp);
+    applySavedState(tab, resp, undefined, manual);
     return "saved";
   } catch (e) {
     if (e.status === 409) {
-      const outcome = await showConflictModal(tab);
+      const outcome = await showConflictModal(tab, manual);
       return outcome === "overwrite" ? "saved" : outcome;
     }
     toastError(e, "保存失败");
@@ -1251,16 +1254,18 @@ async function saveTabSettled(tab) {
   }
 }
 
-// saveAllDirtyTabs()：编译前置——保存全部脏且非只读标签（只读 / 非脏跳过，
+// saveAllDirtyTabs(manual?)：保存全部脏且非只读标签（只读 / 非脏跳过，
 // 零请求）；任一取消（冲突取消 / 保存失败）→ 立即返回
 // {ok:false, canceled:true} 并停止（不再保存其余标签，编译应中止）；
 // 全部落定 → {ok:true, canceled:false}。目录切换保护：保存期间目录变了 →
-// 中止（防写错位置——与冲突模态失效处理同因）。
-export async function saveAllDirtyTabs() {
+// 中止（防写错位置——与冲突模态失效处理同因）。manual = 用户显式保存（「保存
+// 全部」按钮/Ctrl+Shift+S 传 true；编译前自动落盘/守卫保存缺省 false——工单
+// 10 自动编译只认手工，见 onFileSaved 注释）。
+export async function saveAllDirtyTabs(manual) {
   const baseDir = codeDir;
   for (const tab of dirtySavableTabs(tabs)) {
     if (codeDir !== baseDir) return { ok: false, canceled: true };
-    const outcome = await saveTabSettled(tab);
+    const outcome = await saveTabSettled(tab, manual);
     if (outcome === "cancel") return { ok: false, canceled: true };
   }
   return { ok: true, canceled: false };
@@ -1299,7 +1304,7 @@ function closeConflict() {
   }
 }
 
-function showConflictModal(tab) {
+function showConflictModal(tab, manual) {
   return new Promise((resolve) => {
     (async () => {
       try {
@@ -1375,12 +1380,12 @@ function showConflictModal(tab) {
               content: tab.content,
               base_mtime_ns: disk.mtime_ns,   // 新基准 = 磁盘现状
             });
-            applySavedState(tab, resp, "已保存 " + tab.path + "（覆盖了外部修改）");
+            applySavedState(tab, resp, "已保存 " + tab.path + "（覆盖了外部修改）", manual);
             resolve("overwrite");
           } catch (e2) {
             if (e2.status === 409) {
               // 覆盖时隙间又被改：旧模态已关，重新弹（冲突再演，用户再定夺）
-              resolve(await showConflictModal(tab));
+              resolve(await showConflictModal(tab, manual));
             } else {
               toastError(e2, "保存失败");
               resolve("cancel");
@@ -1409,7 +1414,7 @@ function showConflictModal(tab) {
 // applySavedState(tab, resp, msg)：保存成功状态落地（成功路径与覆盖路径
 // 共用）——脏点清除 / 基准更新 / 大纲刷新 / toast 与通知；memo 缓存同步
 // （评审整改 t04：否则关 tab 再开读到保存前的旧缓存内容）。
-function applySavedState(tab, resp, msg) {
+function applySavedState(tab, resp, msg, manual) {
   tab.savedContent = tab.content;
   tab.mtime_ns = resp.mtime_ns;
   tab.diskChanged = false;   // code-ide-flow/02：保存后磁盘 = 我的内容
@@ -1432,7 +1437,7 @@ function applySavedState(tab, resp, msg) {
   toast("ok", msg || ("已保存 " + tab.path));
   renderTabs();
   notifyActive();
-  notifySaved(tab, resp);
+  notifySaved(tab, resp, manual);   // manual = 手工保存标记（工单 10：自动编译只认手工）
 }
 
 // applyDiskState(tab, disk)：重新加载磁盘版（冲突「放弃」路径）——内容/
