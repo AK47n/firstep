@@ -4,11 +4,25 @@
 // 直接 import，子串断言防脆。运行：node --test tests/js/*.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { lineDiffCompute, LINE_DIFF_MAX_CELLS } from "../../src/contest_generator/static/js/fx/line-diff.js";
+import { lineDiffCompute, lineDiffFirstChangedLine, LINE_DIFF_MAX_CELLS } from "../../src/contest_generator/static/js/fx/line-diff.js";
 
 test("lineDiffCompute：无差异 → null", () => {
   assert.equal(lineDiffCompute("a\nb\nc\n", "a\nb\nc\n"), null);
   assert.equal(lineDiffCompute("", ""), null);
+});
+
+// ---- 首改行（工单 code-editor-refine/08：应用后跳转）----
+
+test("lineDiffFirstChangedLine：首个 del/add 行（ctx 步进）；无改动 → null", () => {
+  const d = lineDiffCompute(
+    "l1\nl2\nold\nl4\nl5\n",
+    "l1\nl2\nnew\nl4\nl5\n",
+  );
+  assert.equal(lineDiffFirstChangedLine(d), 3);   // ctx l1/l2 步进后首改 = 第 3 行
+  assert.equal(lineDiffFirstChangedLine(null), null);
+  assert.equal(lineDiffFirstChangedLine({ hunks: [] }), null);
+  const addOnly = lineDiffCompute("a\nb\n", "a\nb\nc\nd\n");
+  assert.equal(lineDiffFirstChangedLine(addOnly), 3);
 });
 
 test("lineDiffCompute：单行替换——一个 hunk，line = hunk 起点（ctx 行，1 基）", () => {

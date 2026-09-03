@@ -10,11 +10,12 @@ import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { aiChatMessagesHTML } from "/js/fx/ai-chat.js";
 import { parseAiDiff, selectionContextText } from "/js/fx/ai-diff.js";
 import { AI_SELECTION_ACTIONS, AI_ASK_ACTION_ID, buildActionPrompt } from "/js/fx/ai-actions.js";  // 选中代码快捷动作模板（工单 code-editor-refine/07）
+import { aiFirstCodeBlock, aiCodeFenceCount } from "/js/fx/ai-insert.js";  // 代码块提取（工单 code-editor-refine/08：插入到光标/选区）
 import { caretLineOf } from "/js/fx/codeeditor.js";
-import { lineDiffCompute } from "/js/fx/line-diff.js";
+import { lineDiffCompute, lineDiffFirstChangedLine } from "/js/fx/line-diff.js";
 import { mainDiffHTML } from "/js/fx/diff.js";
 import { WRITE_GUARD_ACTIONS } from "/js/fx/write-guard.js";
-import { getActiveTab, getCodeDir, onActiveTabChanged } from "/js/ui/codeeditor.js";
+import { getActiveTab, getCodeDir, onActiveTabChanged, editJumpToFile, insertIntoActiveFile } from "/js/ui/codeeditor.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（ai-action-banner/02 同 crate 先例）
 // 写盘守卫为动态 import：code-write-guard 静态 import codeview（isMainCDiskDir），
 // 而 codeview → code-ai-chat —— 静态链路成环（codeview → code-ai-chat →
@@ -39,7 +40,7 @@ function renderPanel() {
   const body = $("code-ai-chat-body");
   if (body) {
     body.innerHTML = aiChatMessagesHTML(chat.messages, pendingText);
-    attachDiffButtons();
+    attachMessageButtons();   // 工单 04 预览改动 + 08 插入到光标/选区（统一注入）
     body.scrollTop = body.scrollHeight;
   }
   const status = $("code-ai-chat-status");
@@ -210,10 +211,12 @@ async function sendMessage() {
 }
 
 // ===== C2 应用闭环（工单 code-ide-ai/04）：<DIFF> → 预览 → 确认 → 写盘 → 感知 =====
-// attachDiffButtons()：renderPanel 后调用——assistant 消息含有效 <DIFF> 块
-// → 气泡尾部挂「预览改动」按钮（parseAiDiff 单源；无块不挂）。按钮
-// data-ai-preview = assistant 序号（第 N 条 assistant 消息，0 起）。
-function attachDiffButtons() {
+// attachMessageButtons()：renderPanel 后调用——assistant 消息按需挂按钮
+// （合并注入单循环，工单 08 评审整改）：含有效 <DIFF> 块 → 「预览改动」
+// （parseAiDiff 单源；无块不挂）；含 ```fence 代码块 → 「插入到光标/选区」
+// （aiFirstCodeBlock 单源；多块只取第一块——点击时提示）。两钮 data 键 =
+// assistant 序号（第 N 条 assistant，0 起）。
+function attachMessageButtons() {
   const body = $("code-ai-chat-body");
   if (!body) return;
   const ais = body.querySelectorAll(".sugg-msg.ai");
@@ -221,16 +224,44 @@ function attachDiffButtons() {
   for (const msg of chat.messages) {
     if (!msg || msg.role !== "assistant") continue;
     const el = ais[aiIdx];
+    const idx = aiIdx;
     aiIdx += 1;
-    if (!el || el.querySelector("[data-ai-preview]")) continue;
-    if (!parseAiDiff(String(msg.content || ""))) continue;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "code-ai-preview-btn";
-    btn.dataset.aiPreview = String(aiIdx - 1);
-    btn.textContent = "预览改动";
-    el.appendChild(btn);
+    if (!el) continue;
+    const content = String(msg.content || "");
+    if (!el.querySelector("[data-ai-preview]") && parseAiDiff(content)) {
+      addMsgButton(el, "aiPreview", idx, "预览改动");
+    }
+    if (!el.querySelector("[data-ai-insert]") && content.trim()) {
+      addMsgButton(el, "aiInsert", idx, "插入到光标/选区");   // 无 fence 整段（工单 L13）
+    }
   }
+}
+
+function addMsgButton(el, dataKey, idx, label) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "code-ai-preview-btn";
+  btn.dataset[dataKey] = String(idx);
+  btn.textContent = label;
+  el.appendChild(btn);
+}
+
+// insertAiCodeBlock(aiIdx)：消息首个 ```fence 块 → 插入/替换活动标签光标/选区
+//（纯件 insertAtPosition → codeeditor applyEdit/rebase 路径：脏 + 撤销 + 折叠
+// 映射）；多块只插第一块并提示；无活动标签/只读 → 中文提示不动。
+function insertAiCodeBlock(aiIdx) {
+  const ais = chat.messages.filter((m) => m && m.role === "assistant");
+  const msg = ais[aiIdx];
+  if (!msg) return;
+  const content = String(msg.content || "");
+  // 无 fence → 整段（工单 L13 字面：首个 fence 块，无 fence 则整段——DIFF-only
+  // 消息会插 JSON，属用户主动行为，验收以「无标点/中文内容插入正常」为准）。
+  const block = aiFirstCodeBlock(content) || { code: content.trim() };
+  if (!block.code) { toast("info", "该消息没有可插入的内容"); return; }
+  const ok = insertIntoActiveFile(block.code);
+  if (!ok) { toast("info", "请先打开一个可编辑文件（只读文件不可插入）"); return; }
+  toast("ok", "已插入" + (aiCodeFenceCount(content) > 2
+    ? "（消息含多个代码块，仅插入第一块）" : "") + "，Ctrl+S 保存");
 }
 
 // previewDiff(aiIdx)：预览第 N 条 assistant 消息的 diff——读盘 →
@@ -289,6 +320,12 @@ async function previewDiff(aiIdx) {
       dir, path: d.path, hunks: d.hunks, base_mtime_ns: file.mtime_ns,
     });
     toast("ok", "已应用 AI 改动：" + result.path);
+    // 工单 08：跳转首改动行——hunk.line 是锚点（可含 ctx 行），用
+    // lineDiffFirstChangedLine 精算首个 del/add 行；diffObj 不可用回退 hunk.line。
+    // 先跳转、后 notifyApplied 感知（评审整改：跳转先落地，磁盘重载随后）。
+    const firstLine = lineDiffFirstChangedLine(diffObj)
+      || ((d.hunks[0] && d.hunks[0].line) || 1);
+    await editJumpToFile(d.path, firstLine);
     notifyApplied(result.path);
   } catch (e) {
     if (e && e.status === 409) {
@@ -351,12 +388,14 @@ export function initCodeAiChat() {
     collapse.title = collapsed ? "展开对话区" : "收起对话区";
   });
 
-  // 「预览改动」按钮委托（工单 04）：按钮动态注入（attachDiffButtons），
-  // 容器静态——body 委托零重绑。
+  // 「预览改动」/「插入到光标/选区」按钮委托（工单 04/08）：按钮动态注入
+  // （attachMessageButtons），容器静态——body 委托零重绑。
   const chBody = $("code-ai-chat-body");
   if (chBody) chBody.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-ai-preview]");
-    if (btn) previewDiff(parseInt(btn.dataset.aiPreview, 10));
+    const pv = e.target.closest("[data-ai-preview]");
+    if (pv) { previewDiff(parseInt(pv.dataset.aiPreview, 10)); return; }
+    const ins = e.target.closest("[data-ai-insert]");
+    if (ins) insertAiCodeBlock(parseInt(ins.dataset.aiInsert, 10));
   });
 
   // 选区 → 浮动按钮：textarea 事件委托（textarea 由 codeeditor 动态渲染，
