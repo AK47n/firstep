@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0573aa3a5fce68a98673574678118ae8f6d42cb5 -->
+<!-- changelog-auto: last-commit=8e9095f18314eb786f0c5823c9179978a2937d98 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 13:31 feat：选中代码快捷动作（解释/加中文注释/重构/问 AI）——fx 纯件 ai-actions.js（AI_SELECTION_ACTIONS 动作清单 + AI_ACTION_TEMPLATES 三模板 + buildActionPrompt 拼装选区引用，DIFF 契约 DIFF_FORMAT_HINT 注释/重构共用，AI_ASK_ACTION_ID 分发 id 单源，空选区归一不落 undefined）；菜单组件共享化：06 树右键浮层抽为 ui/context-menu.js（open/close + 三通道关闭 + 菜单内右键拦截），treeCtxMenuHTML 移除、treeCtxClamp 泛化移入 fx/overlay.js menuClamp；浮动按钮 → 动作菜单，前三者直发 /api/tasks/idea/chat/send（sendAiText 拆分，busy 门控与输入框同口径、失败回填仅空输入框、dir 守卫在清空前），问 AI 保原插入引用行为；DIFF 回复走既有预览/应用闭环、无 DIFF 纯文本回退；文档 click 排除 .code-ctx-menu 防动作后误隐藏按钮；单测 8 组 + 全量 1232 pass + smoke-07 13/13（工单 code-editor-refine/07）
 - 13:54 feat：AI diff 应用后跳转 + 「插入到光标/选区」——fx 纯件 ai-insert.js（aiFirstCodeBlock 首个 fence/无 fence 整段、aiCodeFenceCount 多块判定、insertAtPosition 插入/替换/边界钳制）+ line-diff.js lineDiffFirstChangedLine（首个 del/add 行精算，hunk 锚点仅兜底）；codeeditor 新导出 insertIntoActiveFile（非折叠 applyEdit 手输路径/脏/原生撤销；折叠 rebase + pushEditSnapshot 快照补撤销；md 预览无 .code-ta 返 false 不假成功）；code-ai-chat 预览确认应用成功后先 editJumpToFile 跳首改行再 notifyApplied（感知后置），assistant 消息统一 attachMessageButtons 注入「预览改动 / 插入到光标/选区」（同索引约定、合成按钮工厂）；插入 toast 多块提示；单测 8 组 + 全量 pass + smoke-08 10/10（工单 code-editor-refine/08）
 - 18:10 feat：Ctrl+P 快速打开（文件图标 + 路径 + 命中高亮）——fx 纯件 quickOpenMatch（basename 子串优先→路径子串→字符序模糊，大小写不敏感，截断 50，中文/空格路径）/ quickOpenHighlightParts（命中分段高亮单源，UI 只转义不再重算）；ui/quick-open.js 浮层（↑↓选择/Enter 打开复用 openEditorFile 已开激活+tab 上限/md 两态、Esc/遮罩/×关闭、关闭焦点回归、Tab 焦点陷阱、Ctrl+Shift+P 豁免、modal 优先不叠开于确认弹窗、浮层期间吞其余 Ctrl 快捷键）；codeTabActive 导出单源；帮助数据 SHORTCUT_GROUPS 新增 Ctrl+P；单测 5 组 + 全量 pass + smoke-09 12/12（工单 code-editor-refine/09）
+- 18:21 feat：保存自动编译开关（默认关，状态栏 toggle）——fx AUTO_COMPILE_KEY 单源（firstep.autoCompileOnSave 既有命名域）；manual 判据线程化：onFileSaved 回调第三参（Ctrl+S/保存按钮/保存全部/冲突覆盖写盘 = 手工 true；编译前自动落盘/守卫/烧录前置/磁盘重载 = 程序化 false，saveAllDirtyTabs(manual?) 参数化、saveTabSettled/showConflictModal 透传）；开关开启时手工保存成功 → runCodeCompile（compileBusy 双保险防编译中重复触发、存储写失败提示未生效、toast 状态与实态一致）；CSS .on = accent-dim token 深浅主题自适应；smoke-10 9/9（工单 code-editor-refine/10）
 
 ## 2026-09-02
 - 12:18 工单 topics-control-2023-2025/03：2023 控制题拆条（E/G/I 三题入库）——定位 E=p183-185/G=p189-193/I=p197-199（题标记+页眉核实）；fitz 提取小题 PDF 3 份（466/949/498KB，无 34MB 副本）；split_topics_document 零 LLM 拆条（I 题超库函数 TITLE_RE 字母域 [A-H] → 章节切片兜底）；结构补全照 2026H（年份标题/参赛注意事项/题名/一任务二要求三说明四评分标准，去汇编页眉）；11 页渲染视觉核对——I 题图 1 矢量标注文本层缺失已人工补录（E/G 标注散行为原文本层）；入库 category=control programs=[]；图注 enrich 触发（文字标注兜底因 pypdf 汇编 PDF 坐标 0,0 失败、渲染视觉未配置 → 静默记录）；断言 3/3 + 真库污染黑名单删「激光笔」（2023E/G 合法题面词）；pytest 176 全绿
