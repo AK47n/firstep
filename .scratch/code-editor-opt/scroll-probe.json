@@ -1,0 +1,25 @@
+{
+  "wall": 29341,
+  "rows": [
+    {
+      "fn": "(idle) @ ",
+      "ms": "29145.94",
+      "samples": 19183
+    },
+    {
+      "fn": "(program) @ ",
+      "ms": "125.46",
+      "samples": 73
+    },
+    {
+      "fn": "(garbage collector) @ ",
+      "ms": "83.21",
+      "samples": 55
+    },
+    {
+      "fn": "(anonymous) @ ",
+      "ms": "1.82",
+      "samples": 1
+    }
+  ]
+}

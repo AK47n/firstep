@@ -1937,20 +1937,20 @@ function syncEditorAfterInput() {
       markClean = !editorFind.query && !editorWord.word
         && !getCompileErrors().length;
       const oldText = winCache ? winCache.text : null;
-      if (markClean && oldText !== null && marksCache.content === oldText
+      // 工单 code-editor-opt/05：静态缓存（引导线/彩虹）修补**不**依赖
+      // markClean——词/查找/错误活跃时同样增量（它们只关行级修补是否可用）；
+      // 否则回删/词活跃的每次输入都会触发全库 bracketDepthMarks 扫描
+      if (oldText !== null && marksCache.content === oldText
         && bracketRainbowCache.content === oldText
         && indentGuideCache.content === oldText) {
-        // 工单 code-editor-opt/01：非结构编辑 → 三个模型级缓存一起做行级
-        // 增量修补（变更行之外标记逐字节不变，变更行内按插入/删除平移），
-        // 替代 currentMarks 全量重扫（缩进引导线 + 括号深度 = 逐键热点）。
         const patched = marksPatch(marksCache.marks, oldText, tab.content, span);
         const parts = marksPartition(patched);
         marksCache = { content: tab.content, marks: parts.all };
         bracketRainbowCache = { content: tab.content, marks: parts.rainbow };
         indentGuideCache = { content: tab.content, marks: parts.guides };
       } else {
-        // 缓存缺失/陈旧（内容引用对不上）或叠加态活跃：保守走全量
-        // （renderEditorMarks → winRenderMarks 会重建 marksCache）
+        // 缓存缺失/陈旧（内容引用对不上）：保守走全量
+        // （winRenderMarks → currentMarks 会重建 marksCache）
         markClean = false;
       }
       // 工单 code-editor-opt/02：配对扫描清单总是增量（非结构不碰括号，条目按
