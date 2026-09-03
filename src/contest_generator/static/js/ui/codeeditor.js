@@ -1921,7 +1921,7 @@ export function initCodeEditor() {
     const d = document.createElement("div");
     d.id = "code-diag-box";
     d.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:99999;background:#111;color:#eee;"
-      + "border:1px solid #888;border-radius:8px;padding:10px 14px;font:12px/1.7 monospace;"
+      + "border:1px solid #888;border-radius:var(--radius-md);padding:10px 14px;font:12px/1.7 monospace;"
       + "max-width:640px;white-space:pre-wrap;";
     d.textContent = [
       "滚动盒: " + r(box) + " 高" + Math.round(br.height),
