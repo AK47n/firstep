@@ -1723,6 +1723,12 @@
      active = 持续淡色（rgba accent .07 双主题自适应），flash = 瞬态略强
      （--accent-dim .12）；不新造颜色值（:root 允许 rgba(var(--accent-rgb), a)）。 */
   .code-gutter-line.active { color: var(--accent); font-weight: 600; }
+  /* 编译错误行号（工单 code-editor-refine/05）：红字加粗 + ● 色点（::after
+     拼在行号文本后，right 对齐不换行）；title=错误消息由 JS 设（winRenderGutterErrors），
+     占位行不标；点击 → 错误行跳转（code-compile 委托）。 */
+  .code-gutter-line.code-err-line { color: var(--danger); font-weight: 600; }
+  .code-gutter-line.code-err-line::after { content: "●"; display: inline-block;
+    margin-left: 4px; font-size: 8px; color: var(--danger); vertical-align: 2px; }
   .code-pre { margin: 0; padding: 8px 24px 8px 12px; color: var(--code-text);
     background: none; border: 0; font-family: var(--mono);
     font-size: var(--code-font-size); line-height: 1.6; white-space: pre; }
@@ -1796,6 +1802,12 @@
      （1.5px 内描边 + 2px 圆角 + 6% 淡底），双主题随 --accent 自适应。 */
   .code-mark-bracket { box-shadow: inset 0 0 0 1.5px var(--accent);
     border-radius: var(--radius-xs); background: rgba(var(--accent-rgb), .06); }
+  /* 编译错误行（工单 code-editor-refine/05）：全行淡红底 + 红色波浪下划线
+     （text-decoration-color 独立于透明文字色，可见）；title=错误消息由 JS 设
+     （codeMarksHTML 转义）；优先级最高（MARK_PRIORITY.error=4），与查找/当前
+     命中重叠时以错误行展示为准。 */
+  .code-mark-error { background: var(--danger-dim);
+    text-decoration: underline wavy var(--danger); text-underline-offset: 3px; }
   /* 括号彩虹（工单 code-editor-refine/04）：kind bracket-depth-N 直出 class，
      N = 深度 % 8，8 色环随深度循环（var(--bracket-rainbow-0..7)，深浅主题各
      一套）；当前对描边 .code-mark-bracket 优先级更高（标记层重叠取高优先

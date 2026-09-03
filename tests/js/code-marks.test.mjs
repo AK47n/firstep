@@ -74,6 +74,18 @@ test("codeMarksHTML：选中词 / 括号配对类渲染（透明层仅背景）"
   assert.match(html, /code-mark-word/);
 });
 
+// ---- 编译错误行标记（工单 code-editor-refine/05）----
+
+test("codeMarksHTML：error kind 带 title（转义）且优先级最高（4 > current 3）", () => {
+  const html = codeMarksHTML("int x = y;", [
+    { line: 1, start: 0, end: 10, kind: "current" },
+    { line: 1, start: 0, end: 10, kind: "error", title: "use of undeclared identifier 'y' <&>\"" },
+  ]);
+  assert.match(html, /code-mark-error/);
+  assert.ok(!html.includes("code-mark-current"));        // error 4 覆盖 current 3
+  assert.ok(html.includes('title="use of undeclared identifier &#39;y&#39; &lt;&amp;&gt;&quot;"'));
+});
+
 // ---- 缩进引导线（工单 code-page-vscode-overhaul/07）----
 
 test("codeIndentGuideMarks：4 空格单级缩进 → 1 条引导线（边界左侧空白）", () => {

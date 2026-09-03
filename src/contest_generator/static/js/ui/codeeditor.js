@@ -63,11 +63,32 @@ import {
 } from "/js/fx/code-fold.js";  // 代码折叠纯件（工单 code-editor-vscode-polish/07；08 行号窗口化）
 import { confirmModal } from "/js/ui/confirm.js";
 import { unsavedSwitchModalHTML } from "/js/fx/exit-guard.js";  // 未保存退出保护纯件（工单 code-editor-refine/01）
+import { compileErrorLinesForFile } from "/js/fx/code-compile.js";  // 编译错误→行映射纯件（工单 code-editor-refine/05）
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
 let codeDir = "";
 let tabs = [];           // {path, lang, content, savedContent, outline, mtime_ns, utf8, mdMode, readonly}
 let activePath = "";
+// 编译错误（工单 code-editor-refine/05）：结构错误列表（done.parsed_errors 同型）
+// 的编辑器侧显示态——状态归本模块（ui 单向依赖约定：code-compile → codeeditor，
+// 反向 import 会成环、撞 ui-cycle 守卫）；写方 = code-compile 经 setCompileErrors
+// （编译开始/失败/完成/清除时驱动重画），读方 = 本模块标记层/行号色点与外部
+// getCompileErrors。code-compile 不 import 本模块反向边。
+let compileErrors = [];
+
+// setCompileErrors(errs)：编译错误列表更新（写方 = ui/code-compile）→ 重画
+// 标记层 + 行号色点（renderEditorMarks 早退安全：无标记层/未开文件静默，打开
+// 后 renderPane → winRender 自然取新状态）。
+export function setCompileErrors(errs) {
+  compileErrors = Array.isArray(errs) ? errs : [];
+  renderEditorMarks();
+}
+
+// getCompileErrors()：读方访问器（与 setCompileErrors 成对导出——工单 05 接口
+// 对称；当前读方 = 本模块 currentMarks/winRenderMarks，外部可扩展）。
+export function getCompileErrors() {
+  return compileErrors;
+}
 const fileCache = new Map();  // key = fileCacheKey(path) → {ok:true, data} | {ok:false, message}
 
 // ---- 折叠态（工单 code-editor-vscode-polish/07）----
@@ -274,10 +295,12 @@ async function loadFileState(path) {
 // 各自区段（kind 不同），一次渲染多类标记。
 let editorFind = { query: "", ranges: [], index: 0 };
 
-// currentMarks()：当前应渲染的标记清单（缩进引导线 + 括号彩虹 + 查找命中 +
-// 当前命中 + 选中词 + 括号配对；07 引导线按模型文本逐行计算，折叠视图经
-// marksForView 映射——占位行被折叠的引导线自动丢弃）。
-export function currentMarks() {
+// currentMarks(errLines?)：当前应渲染的标记清单（缩进引导线 + 括号彩虹 + 查找
+// 命中 + 当前命中 + 选中词 + 括号配对 + 编译错误行；07 引导线按模型文本逐行
+// 计算，折叠视图经 marksForView 映射——占位行被折叠的引导线自动丢弃）。
+// errLines 可选：由 winRenderMarks 预计算的当前文件错误行（评审整改：渲染
+// 路径避免 currentMarks 与 winRenderGutterErrors 各算一遍映射），缺省自算。
+export function currentMarks(errLines) {
   const out = [];
   const tab = getActiveTab();
   if (tab) out.push(...codeIndentGuideMarks(tab.content));
@@ -298,6 +321,19 @@ export function currentMarks() {
       end: editorBracket.open.end, kind: "bracket" });
     out.push({ line: editorBracket.close.line, start: editorBracket.close.start,
       end: editorBracket.close.end, kind: "bracket" });
+  }
+  // 编译错误行（工单 code-editor-refine/05）：全行标记（kind error 最高优先
+  // 4，压过查找/当前/词/括号）——title = 消息（codeMarksHTML 转义后悬停）；
+  // 数据源 = 编译面板结构错误列表经纯件按当前文件路径映射。空行无法经 span
+  // 切割出下划线（seg 需 b>a），行号色点 + gutter title 兜底该边缘。
+  if (tab) {
+    const lines = tab.content.split("\n");
+    const errs = errLines || compileErrorLinesForFile(getCompileErrors(), tab.path);
+    for (const er of errs) {
+      if (er.line < 1 || er.line > lines.length) continue;   // 越界行号钳制（评审整改）
+      const ln = (lines[er.line - 1] || "").length;
+      out.push({ line: er.line, start: 0, end: ln, kind: "error", title: er.message });
+    }
   }
   return out;
 }
@@ -358,12 +394,12 @@ function refreshMarkSetters() {
 // ===== 折叠视图助手（工单 code-editor-vscode-polish/07）=====
 // marksForView()：把模型行号的标记清单映射到视图行（占位行丢弃——被折叠的
 // 命中/词/括号不显示；行内偏移不变）。
-function marksForView() {
+function marksForView(errLines) {
   const map = new Map();
   viewModel.lines.forEach((l, i) => { if (!l.placeholder) map.set(l.no, i + 1); });
-  return currentMarks()
+  return currentMarks(errLines)
     .filter((m) => map.has(m.line))
-    .map((m) => ({ line: map.get(m.line), start: m.start, end: m.end, kind: m.kind }));
+    .map((m) => ({ line: map.get(m.line), start: m.start, end: m.end, kind: m.kind, title: m.title }));
 }
 
 // foldCaretModelPos()：当前光标 → 模型偏移（无折叠时 = 选区偏移）。
@@ -636,19 +672,49 @@ function winRenderMarks() {
   const tab = getActiveTab();
   const r = winLast || winWindow();
   const viewText = viewModel ? viewModel.text : (tab ? tab.content : "");
-  const marks = viewModel ? marksForView() : currentMarks();
+  const errLines = tab ? compileErrorLinesForFile(getCompileErrors(), tab.path) : [];  // 一次映射，标记层与 gutter 共用（评审整改）
+  const marks = viewModel ? marksForView(errLines) : currentMarks(errLines);
   const lines = viewText.split("\n");
   const windowText = lines.slice(r.start, r.end).join("\n");
   const windowMarks = [];
   for (const m of marks) {
     const li = m.line - 1;
     if (li >= r.start && li < r.end) {
-      windowMarks.push({ line: li - r.start + 1, start: m.start, end: m.end, kind: m.kind });
+      windowMarks.push({ line: li - r.start + 1, start: m.start, end: m.end, kind: m.kind, title: m.title });
     }
   }
   const topH = Math.round(r.start * winLineH * 100) / 100;
   const bottomH = Math.round((winCache.lineCount - r.end) * winLineH * 100) / 100;
   marksEl.innerHTML = winSpacer(topH) + codeMarksHTML(windowText, windowMarks) + winSpacer(bottomH);
+  winRenderGutterErrors(errLines);   // 行号色点与标记层同一次窗口化重画（工单 05）
+}
+
+// winRenderGutterErrors(errLines)：编译错误行号色点（工单 code-editor-refine/05）
+// ——errLines = winRenderMarks 预计算的当前文件错误行（[{line,message}]），按
+// 模型行号 toggle .code-err-line（红字 + ● 点 + title=消息；dataset.errTitle
+// 守卫：只清自己设过的 title，不动折叠行的「展开/折叠」提示）；占位行
+// （.code-gutter-ph）不标（无真实行语意）。
+function winRenderGutterErrors(errLines) {
+  const box = paneBox();
+  const gutter = box && box.querySelector(".code-gutter");
+  if (!gutter) return;
+  const msgByLine = new Map((errLines || []).map((e) => [e.line, e.message]));
+  gutter.querySelectorAll(".code-gutter-line").forEach((el) => {
+    if (el.classList.contains("code-gutter-ph")) return;
+    const n = Number(el.dataset.codeLine);
+    const msg = msgByLine.get(n);
+    if (msg) {
+      el.classList.add("code-err-line");
+      el.title = msg;
+      el.dataset.errTitle = "1";
+    } else if (el.classList.contains("code-err-line")) {
+      el.classList.remove("code-err-line");
+      if (el.dataset.errTitle) {
+        el.removeAttribute("title");
+        delete el.dataset.errTitle;
+      }
+    }
+  });
 }
 
 // winApplySize()：.code-edit 显式尺寸 = 全量内容（行高*行数 + 上下 padding

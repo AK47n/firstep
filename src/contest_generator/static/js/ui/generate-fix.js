@@ -25,6 +25,7 @@ import { fixLogGroupHidden } from "/js/fx/generate.js";
 import { formatLLMTelemetry } from "/js/fx/llm.js";
 import { fixRowHTML } from "/js/fx/fix-rows.js";  // 修复结果行共享（工单 code-ide-ai/06）
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
+import { compileErrorPathNorm, compileErrorPathBase } from "/js/fx/code-compile.js";  // 编译错误 path 归一单源（工单 05 评审整改：fixKeyOf/fixKeyBasename 收敛到 fx 纯件）
 import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
 import { reportRecentStatus } from "/js/ui/recent.js";
@@ -76,13 +77,13 @@ function setFixCenterLog(text) {
 }
 
 // 错误条目 key（工单 compile-experience-ui/01）：path 归一 POSIX；精确匹配
-// 未命中时 basename 兜底（fix-errors 的 file 可能是短名形态）
+// 未命中时 basename 兜底（fix-errors 的 file 可能是短名形态）——归一实现 =
+// fx/code-compile.js compileErrorPathNorm/Base 单源（工单 05 评审整改）。
 function fixKeyOf(path, line) {
-  return ((path || "").replace(/\\/g, "/").replace(/^\.\/+/, "")) + ":" + (line || 0);
+  return compileErrorPathNorm(path) + ":" + (line || 0);
 }
 function fixKeyBasename(path, line) {
-  const parts = ((path || "").replace(/\\/g, "/")).split("/");
-  return "~" + (parts[parts.length - 1] || "") + ":" + (line || 0);
+  return "~" + compileErrorPathBase(path) + ":" + (line || 0);
 }
 
 // ---------------------------------------------------------------------------

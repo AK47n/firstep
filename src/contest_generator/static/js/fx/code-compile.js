@@ -41,10 +41,55 @@ export function compileErrorRowsHTML(errors) {
   }).join("");
 }
 
+// compileErrorPathNorm(path)：编译错误 path 归一（POSIX 分隔、去 . 段、保留 ..
+// 段）——编辑器错误行映射与生成页修复中心 fixKeyOf/fixKeyBasename 共用
+// （工单 05 评审整改单源化：原 generate-fix 私有归一收敛到本模块；跨簇同域
+// 逻辑不各写一份）。空/undefined → ""。
+export function compileErrorPathNorm(path) {
+  return String(path == null ? "" : path).replace(/\\/g, "/")
+    .split("/").filter((s) => s && s !== ".").join("/");
+}
+
+// compileErrorPathBase(path)：归一路径的 basename（末段；空路径 → ""）——
+// compileErrorLinesForFile 文件名兜底与修复中心 fixKeyBasename 共用。
+export function compileErrorPathBase(path) {
+  return compileErrorPathNorm(path).split("/").pop() || "";
+}
+
+// compileErrorLinesForFile(errors, filePath)：parsed_errors 同型列表 → 当前文件
+// （tab.path，如 "Core/Src/main.c"）应标记的错误行 [{line,message}] 按 line 升序
+// ——错误行标记（行号色点 + 全行下划线/底色 + title 悬停）的数据源（工单
+// code-editor-refine/05）。path 用 compileErrorPathNorm/Base 归一；匹配顺序 =
+// 归一全等 → 前缀 ../ 后缀 → 文件名兜底（basename 相同即算——跨目录同名罕见，
+// 胜过漏标）；line 0 / 非法跳过（无行号信息不可定位）；同行多条 message 以
+// 换行合并（title 多行悬停）。
+export function compileErrorLinesForFile(errors, filePath) {
+  const list = Array.isArray(errors) ? errors : [];
+  const target = compileErrorPathNorm(filePath);
+  const targetBase = compileErrorPathBase(filePath);
+  const byLine = new Map();
+  for (const er of list) {
+    const p = compileErrorPathNorm(er && er.path);
+    if (!p) continue;
+    const base = compileErrorPathBase(p);
+    if (p !== target && !p.endsWith("/" + target) && base !== targetBase) continue;
+    const line = Number(er.line);
+    if (!Number.isFinite(line) || line <= 0) continue;
+    const msg = String(er.message == null ? "" : er.message);
+    if (byLine.has(line)) byLine.set(line, byLine.get(line) + "\n" + msg);
+    else byLine.set(line, msg);
+  }
+  return [...byLine.entries()].map(([line, message]) => ({ line, message }))
+    .sort((a, b) => a.line - b.line);
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     compileStatusText,
     compileStatusClass,
     compileErrorRowsHTML,
+    compileErrorLinesForFile,
+    compileErrorPathNorm,
+    compileErrorPathBase,
   });
 }

@@ -17,8 +17,10 @@ import {
 } from "/js/fx/code-compile.js";
 import {
   getCodeDir,
+  getActiveTab,
   saveAllDirtyTabs,
   editJumpToFile,
+  setCompileErrors,   // 编辑器侧错误显示态（工单 code-editor-refine/05：状态归 codeeditor——UI 单向依赖约定，见其模块态注释）
 } from "/js/ui/codeeditor.js";
 import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";
 import { isMainCDiskDir } from "/js/ui/codeview.js";  // 单源谓词（评审整改：本模块不再重复实现）
@@ -67,6 +69,7 @@ function renderDone(done) {
   openPanel();
   setStatus(compileStatusText(done), compileStatusClass(done));
   const errs = done.parsed_errors || [];
+  setCompileErrors(errs);
   setErrors(compileErrorRowsHTML(errs));
   setGotoVisible(!done.passed && !done.timed_out);   // 「在此修复」任意目录；「去生成页」内部再叠加 isMainCDiskDir
   if (errs.length) {
@@ -122,6 +125,7 @@ export async function runCodeCompile() {
   openPanel();
   setStatus("编译中…", "");
   setErrors("");
+  setCompileErrors([]);        // 重编开始即清旧错误（工单 05：成功清除/重试无线索残留）
   setGotoVisible(false);
   try {
     const saved = await saveAllDirtyTabs();
@@ -134,6 +138,7 @@ export async function runCodeCompile() {
     openPanel();
     setStatus(e.message, "err");
     setErrors("");
+    setCompileErrors([]);
     setGotoVisible(false);
     toastError(e, "编译失败");
   } finally {
@@ -187,11 +192,25 @@ export function initCodeCompile() {
     jumpToCompileError(row.dataset.compilePath, row.dataset.compileLine);
   });
 
+  // 行号色点点击（工单 code-editor-refine/05）：错误行 gutter 点 → 复用兜底链
+  // 跳转（jumpToCompileError 已有原始 path 预检 + source-line 归一）。折叠箭头
+  // 不拦截（展开/折叠优先）；占位行无色点类。
+  const viewer = $("code-viewer");
+  if (viewer) viewer.addEventListener("click", (e) => {
+    if (e.target.closest(".code-fold-arrow")) return;
+    const gn = e.target.closest(".code-gutter-line.code-err-line");
+    if (!gn) return;
+    const tab = getActiveTab();
+    if (!tab) return;
+    jumpToCompileError(tab.path, Number(gn.dataset.codeLine) || 1);
+  });
+
   const clear = $("btn-code-compile-clear");
   if (clear) clear.addEventListener("click", () => {
     hidePanel("compile");
     setStatus("", "");
     setErrors("");
+    setCompileErrors([]);
     setGotoVisible(false);
   });
 
