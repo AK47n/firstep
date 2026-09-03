@@ -2,17 +2,21 @@
 //
 // 三明治「高亮层之上、textarea 之下」的仅背景标记层（.code-marks）：查找命中
 // （含当前命中）/ 选中词 / 括号配对共用同一渲染入口——标记 span 文本透明
-// （层 color: transparent，文字由高亮层绘制），只显示背景；文本一律 esc 防
-// 注入（fx/core.js 单源）。区段表达 = 1 基行号 + 0 基列偏移
-// {line, start, end, kind}，kind ∈ hit | current | word | bracket（优先级
-// current > hit > word = bracket——重叠时取高优先类）。模块约定见 fx/core.js
+// （层 color: transparent，文字由高亮层绘制），只显示背景；error（工单 05）
+// 例外：全行淡红底 + 波浪下划线（text-decoration-color 独立于透明文字色，
+// 可见）并可带 title（悬停消息）——kind 之间表现差异以 CSS 为准，本模块只
+// 负责切分与类名。文本一律 esc 防注入（fx/core.js 单源）。区段表达 = 1 基行号
+// + 0 基列偏移 {line, start, end, kind, title?}，kind ∈ hit | current | word |
+// bracket | error | bracket-depth-N（优先级 error > current > hit > word =
+// bracket > bracket-depth-* 默认 0——重叠时取高优先类）。模块约定见 fx/core.js
 // 头部。
 import { esc } from "./core.js";
 
-// 标记优先级（codeMarksHTML 分割重叠区段用）：当前命中最醒目；bracket-depth-*
-// 未登记 = 默认 0（最低——彩虹为底色，被当前对描边 bracket / 选中词 word /
-// 查找 hit 覆盖时让位，见工单 code-editor-refine/04）。
-export const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1 };
+// 标记优先级（codeMarksHTML 分割重叠区段用）：错误行（工单 code-editor-refine/05）
+// 最高（4）——压过当前命中 current(3)/查找 hit(2)/词 word(1)/括号 bracket(1)；
+// bracket-depth-* 未登记 = 默认 0（最低——彩虹为底色，被当前对描边 bracket /
+// 选中词 word / 查找 hit 覆盖时让位，见工单 code-editor-refine/04）。
+export const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1, error: 4 };
 
 // 词字符（工单 05）：字母 / 数字 / 下划线连续段（VSCode 语义——中文与符号
 // 不构成标识符词；数字也是词字符，光标在数字上同样高亮同数字）。
@@ -115,7 +119,8 @@ export function codeIndentGuideMarks(text) {
 // span.code-mark-line[data-code-line]（与高亮层 .code-hl-line 同 data 键，
 // 跳行/当前行语义可寻址）；行内按标记边界切段，重叠段取最高优先级类；
 // 无标记行 = 全行纯文本（保宽度度量，文字透明不显示）；尾 \n 空行同样渲染
-// （与 .code-hl-line:empty 同行齐）。marks = [{line,start,end,kind}]。
+// （与 .code-hl-line:empty 同行齐）。marks = [{line,start,end,kind,title?}]，
+// title 可选（错误行悬停消息，工单 05——按最高优先段输出并转义）。
 export function codeMarksHTML(text, marks) {
   const src = String(text == null ? "" : text);
   const lines = src.split("\n");
@@ -148,12 +153,14 @@ export function codeMarksHTML(text, marks) {
           const re = Math.max(0, Math.min(line.length, r.end | 0));
           if (rs <= a && re >= b) {
             const pri = MARK_PRIORITY[r.kind] || 0;
-            if (!best || pri > best.pri) best = { kind: r.kind, pri };
+            if (!best || pri > best.pri) best = { kind: r.kind, pri, title: r.title };
           }
         }
         const seg = line.slice(a, b);
         html += best
-          ? '<span class="code-mark code-mark-' + esc(best.kind) + '">' + esc(seg) + "</span>"
+          ? '<span class="code-mark code-mark-' + esc(best.kind) + '"'
+            + (best.title ? ' title="' + esc(best.title) + '"' : "")
+            + ">" + esc(seg) + "</span>"
           : esc(seg);
       }
     } else {

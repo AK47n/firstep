@@ -6,6 +6,9 @@ import {
   compileStatusText,
   compileStatusClass,
   compileErrorRowsHTML,
+  compileErrorLinesForFile,
+  compileErrorPathNorm,
+  compileErrorPathBase,
 } from "../../src/contest_generator/static/js/fx/code-compile.js";
 
 test("compileStatusText：成功/失败/超时状态行（单源 = fx/generate.js 同文案）", () => {
@@ -47,4 +50,56 @@ test("compileErrorRowsHTML：路径+行号+消息 + 转义 + 空态", () => {
   assert.ok(html.includes("use of undeclared"));
   const empty = compileErrorRowsHTML([]);
   assert.match(empty, /无结构化错误信息/);
+});
+
+// ---- 错误行映射（工单 code-editor-refine/05：行号色点 + 错误行标记）----
+
+test("compileErrorPathNorm/Base：POSIX 归一（\\→/、去 . 段、保 ..）+ basename", () => {
+  assert.equal(compileErrorPathNorm("..\\Core\\Src\\main.c"), "../Core/Src/main.c");
+  assert.equal(compileErrorPathNorm("./Core/Src/main.c"), "Core/Src/main.c");
+  assert.equal(compileErrorPathNorm("a/./b/"), "a/b");
+  assert.equal(compileErrorPathNorm(""), "");
+  assert.equal(compileErrorPathBase("Core\\Src\\main.c"), "main.c");
+  assert.equal(compileErrorPathBase(""), "");
+});
+
+const ERR = [
+  { path: "Core/Src/main.c", line: 7, message: "未声明标识符 'x'" },
+  { path: "..\\Core\\Src\\main.c", line: 7, message: "第二处错误（反斜杠 + ..\\ 前缀归一）" },
+  { path: "./Core/Src/main.c", line: 12, message: "./ 前缀归一" },
+  { path: "Core/Inc/led.h", line: 3, message: "无符号比较" },
+  { path: "Core/Src/main.c", line: 0, message: "无行号错误（line 0 跳过）" },
+  { path: "Core/Src/main.c", line: 19, message: "" },
+];
+
+test("compileErrorLinesForFile：path 归一（\\→/、去 ./、全等→basename 兜底）+ 按 line 排序", () => {
+  assert.deepEqual(compileErrorLinesForFile(ERR, "Core/Src/main.c"), [
+    { line: 7, message: "未声明标识符 'x'\n第二处错误（反斜杠 + ..\\ 前缀归一）" },
+    { line: 12, message: "./ 前缀归一" },
+    { line: 19, message: "" },
+  ]);
+  assert.deepEqual(compileErrorLinesForFile(ERR, "Core\\Src\\main.c"), [
+    { line: 7, message: "未声明标识符 'x'\n第二处错误（反斜杠 + ..\\ 前缀归一）" },
+    { line: 12, message: "./ 前缀归一" },
+    { line: 19, message: "" },
+  ]);
+});
+
+test("compileErrorLinesForFile：basename 兜底（路径不匹配但文件名一致）", () => {
+  assert.deepEqual(compileErrorLinesForFile(
+    [{ path: "build/dir/Core/Src/main.c", line: 42, message: "basename 命中" }],
+    "Core/Src/main.c"
+  ), [{ line: 42, message: "basename 命中" }]);
+});
+
+test("compileErrorLinesForFile：无匹配文件 / 空输入 → []；line 0 与非法行跳过", () => {
+  assert.deepEqual(compileErrorLinesForFile(ERR, "Other/file.c"), []);
+  assert.deepEqual(compileErrorLinesForFile([], "Core/Src/main.c"), []);
+  assert.deepEqual(compileErrorLinesForFile(null, "Core/Src/main.c"), []);
+  assert.deepEqual(compileErrorLinesForFile(
+    [{ path: "Core/Src/main.c", line: 0, message: "skip" },
+      { path: "Core/Src/main.c", line: -3, message: "skip" },
+      { path: "Core/Src/main.c", line: "abc", message: "skip" }],
+    "Core/Src/main.c"
+  ), []);
 });
