@@ -921,6 +921,9 @@ function renderPane() {
   winReadView();
   winApplySize();
   winRender();
+  // 打开/切换即算折叠区（工单 11 后补：无结构输入前 folds=[] 会导致
+  // Ctrl+Shift+[/] 与折叠箭头不可用；渲染层不需要，快捷键/箭头语义需要）
+  if (!viewModel) folds = codeFoldRanges(tab.content, tab.lang);
   if (tab.readonly) renderReadonlyNote(box);
   refreshMarkSetters();   // 选中词/括号标记统一兜底（activateTab/applySavedState/applyDiskState/closeTab/remap 全经本函数，评审整改 05/06）
 }
@@ -1185,7 +1188,16 @@ function flashEl(el) {
 function setActiveLine(line) {
   const box = paneBox();
   if (!box) return;
-  const gut = box.querySelector('.code-gutter-line[data-code-line="' + line + '"]');
+  // 折叠态（用户现场修复）：textarea/高亮层用视图行号，gutter 用模型行号——
+  // 直接拿视图号查 gutter 会把 active 挂到模型号恰等于视图号的行（折叠 N 行
+  // 即错位 N 行，「光标与高亮行错位」根因）。此处做视图 → 模型映射：
+  // hl/pre 用视图号；gutter 用对应真实行的模型行号（占位行不高亮）。
+  let gutLine = line;
+  if (viewModel && line >= 1 && line <= (viewModel.lines || []).length) {
+    const v = viewModel.lines[line - 1];
+    if (v && !v.placeholder) gutLine = v.no;
+  }
+  const gut = box.querySelector('.code-gutter-line[data-code-line="' + gutLine + '"]');
   const hl = box.querySelector('.code-hl-line[data-code-line="' + line + '"]');
   const pre = box.querySelector('.code-pre-line[data-code-line="' + line + '"]');
   if (!gut && !hl && !pre) return;
@@ -2181,6 +2193,12 @@ export function initCodeEditor() {
       const ta = box.querySelector(".code-ta");
       if (ta) setActiveLine(caretLineOf(ta.value, ta.selectionStart));
       scheduleCursorWork();   // 状态栏 Ln/Col 随选区变化刷新（工单 01；顺延一帧，性能整改）
+    });
+    // 点击也立即刷当前行高亮（用户现场修复：部分浏览器 textarea 点击不触发
+    // select/keyup——高亮行落后光标一行；click 兜底，幂等）
+    box.addEventListener("click", () => {
+      const ta = box.querySelector(".code-ta");
+      if (ta) setActiveLine(caretLineOf(ta.value, ta.selectionStart));
     });
     box.addEventListener("keyup", (e) => {
       const ta = e.target;
