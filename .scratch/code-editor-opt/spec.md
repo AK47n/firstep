@@ -114,5 +114,11 @@
 - 04 回归：node 1275 绿 + pytest 3159 绿 + 冒烟 5/5 + 双主题截图。
 - 05 字母输入 + 词高亮路径收敛（追加工单）：渲染单点化（撤销 sync 尾部
   renderEditorMarks 二次全量重画）、winRenderMarks 状态标记单次拼接、
-  updateWordMarks 省略 JSON 对比——6000 行文末字母输入复测 ~29.8ms
-  （从 ~38.9–45.8ms，≤30ms 达标；纯字符/标点路径与对齐矩阵不回退）。
+  updateWordMarks 省略 JSON 对比、静态缓存修补与 markClean 解耦——6000 行
+  文末字母输入复测 **21.2–24.7ms**（从 ~38.9–45.8ms；纯字符/标点路径与对齐
+  矩阵不回退）。
+- 06 大文件打开惰性高亮（追加工单）：hl 惰性占位 + 单行现算回填、windowed
+  不再预计算 currentMarks、宽度探针脱离文档流——精确拆解 fetch ~58ms +
+  渲染 ~195ms ≈ 253ms；剩余大头 = 108KB textarea 全量 + 12.6 万 px 巨盒
+  布局（架构固有，需 textarea 视口化，大改不在本轮）；滚动实测每事件
+  ~4-6ms + GC ~3ms（无需优化）。≤80ms 未达标，如实记录。
