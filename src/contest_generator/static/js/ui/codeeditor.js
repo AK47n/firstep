@@ -65,6 +65,7 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { unsavedSwitchModalHTML } from "/js/fx/exit-guard.js";  // 未保存退出保护纯件（工单 code-editor-refine/01）
 import { compileErrorLinesForFile } from "/js/fx/code-compile.js";  // 编译错误→行映射纯件（工单 code-editor-refine/05）
 import { insertAtPosition } from "/js/fx/ai-insert.js";  // AI 代码块插入位置纯件（工单 code-editor-refine/08）
+import { editChangeSpan, marksPatch, marksPartition } from "/js/fx/edit-patch.js";  // 变更段判定 + 标记增量修补/分区（工单 code-editor-opt/01）
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
 let codeDir = "";
@@ -313,7 +314,7 @@ let marksCache = { content: null, marks: [] };   // 模型级标记缓存（窗�
 export function currentMarks(errLines) {
   const out = [];
   const tab = getActiveTab();
-  if (tab) out.push(...codeIndentGuideMarks(tab.content));
+  if (tab) out.push(...indentGuideMarksCached(tab.content));
   if (tab && bracketRainbowLang(tab)) out.push(...bracketRainbowMarks(tab));
   if (editorFind.query && editorFind.ranges.length) {
     editorFind.ranges.forEach((r, i) => {
@@ -370,6 +371,19 @@ function bracketRainbowMarks(tab) {
     bracketRainbowCache = { content: tab.content, marks: bracketDepthMarks(tab.content) };
   }
   return bracketRainbowCache.marks;
+}
+
+// 缩进引导线缓存（工单 code-editor-opt/01）：与括号彩虹同款「按内容引用缓存」；
+// 非结构编辑时由 syncEditorAfterInput 与彩虹/合并缓存一起做行级增量修补，
+// 避免 currentMarks 逐键全量重扫（6000 行文件引导线扫描 + 括号扫描 = 输入链
+// 主要 CPU 热点，见 spec 实测）。
+let indentGuideCache = { content: null, marks: [] };
+
+function indentGuideMarksCached(content) {
+  if (indentGuideCache.content !== content) {
+    indentGuideCache = { content, marks: codeIndentGuideMarks(content) };
+  }
+  return indentGuideCache.marks;
 }
 
 // updateBracketMarks()：光标/内容变化后重算配对高亮——配对位置变了返回 true
@@ -1654,33 +1668,6 @@ function applyEdit(text, start, end) {
   syncEditorAfterInput();
 }
 
-// textEditIsStructural(oldText, newText)：本次编辑是否「结构变更」——纯字符
-// 增删替（不含换行/括号/引号/井号/tab 且未改行首空白）→ false（折叠清单、
-// 括号深度、缩进引导线、行号映射全部不变，可跳过全量重算——工单 11 门控）。
-function textEditIsStructural(oldText, newText) {
-  const oldT = String(oldText == null ? "" : oldText);
-  const newT = String(newText == null ? "" : newText);
-  if (oldT === newT) return true;   // 未变（调用方另有短路）
-  let p = 0;
-  const min = Math.min(oldT.length, newT.length);
-  while (p < min && oldT[p] === newT[p]) p++;
-  let s = 0;
-  while (s < oldT.length - p && s < newT.length - p
-    && oldT[oldT.length - 1 - s] === newT[newT.length - 1 - s]) s++;
-  const seg = newT.slice(p, newT.length - s);
-  if (/[\n{}()[\]"'#\t]/.test(seg)) return true;
-  // 变更段所在行的行首空白变化（缩进引导线依赖）→ structural
-  const beforeLineStart = oldT.lastIndexOf("\n", p - 1) + 1;
-  const afterLineStart = newT.lastIndexOf("\n", p - 1) + 1;
-  const beforeLineEnd = oldT.indexOf("\n", p);
-  const afterLineEnd = newT.indexOf("\n", p);
-  const oldLead = oldT.slice(beforeLineStart,
-    beforeLineEnd < 0 ? oldT.length : beforeLineEnd).match(/^[ \t]*/)[0];
-  const newLead = newT.slice(afterLineStart,
-    afterLineEnd < 0 ? newT.length : afterLineEnd).match(/^[ \t]*/)[0];
-  return oldLead !== newLead;
-}
-
 function syncEditorAfterInput() {
   const box = paneBox();
   const ta = box && box.querySelector(".code-ta");
@@ -1715,10 +1702,10 @@ function syncEditorAfterInput() {
       }
     }
   } else {
-    const structural = textEditIsStructural(winCache ? winCache.text : "", ta.value);
+    const span = editChangeSpan(winCache ? winCache.text : "", ta.value);
     tab.content = ta.value;
     markClean = false;   // 默认标记失效；纯字符编辑才保持
-    if (structural) {
+    if (span.structural) {
       // 结构变更（换行/括号/引号/#/tab/行首空白）：折叠清单须重算
       // （无折叠态也随输入重算折叠区清单——工单 07：快捷键/箭头基于最新内容）
       folds = codeFoldRanges(tab.content, tab.lang);
@@ -1727,6 +1714,25 @@ function syncEditorAfterInput() {
       // 且无查找/词/括号/错误叠加态时标记层可整体沿用（markClean）
       markClean = !editorFind.query && !editorWord.word
         && !editorBracket && !getCompileErrors().length;
+      if (markClean) {
+        // 工单 code-editor-opt/01：非结构编辑 → 三个模型级缓存一起做行级
+        // 增量修补（变更行之外标记逐字节不变，变更行内按插入/删除平移），
+        // 替代 currentMarks 全量重扫（缩进引导线 + 括号深度 = 逐键热点）。
+        const oldText = winCache ? winCache.text : null;
+        if (oldText !== null && marksCache.content === oldText
+          && bracketRainbowCache.content === oldText
+          && indentGuideCache.content === oldText) {
+          const patched = marksPatch(marksCache.marks, oldText, tab.content, span);
+          const parts = marksPartition(patched);
+          marksCache = { content: tab.content, marks: parts.all };
+          bracketRainbowCache = { content: tab.content, marks: parts.rainbow };
+          indentGuideCache = { content: tab.content, marks: parts.guides };
+        } else {
+          // 缓存缺失/陈旧（内容引用对不上）：保守走全量（renderEditorMarks
+          // → winRenderMarks 会重建 marksCache）
+          markClean = false;
+        }
+      }
     }
   }
   const selStart = ta.selectionStart;

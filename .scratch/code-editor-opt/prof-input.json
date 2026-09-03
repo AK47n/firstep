@@ -1,0 +1,85 @@
+{
+  "timing": 52.29999999701977,
+  "rows": [
+    {
+      "fn": "(program) @ ",
+      "ms": "223.53",
+      "samples": 120
+    },
+    {
+      "fn": "(garbage collector) @ ",
+      "ms": "32.64",
+      "samples": 21
+    },
+    {
+      "fn": "(anonymous) @ ",
+      "ms": "28.57",
+      "samples": 18
+    },
+    {
+      "fn": "caretLineOf @ codeeditor.js",
+      "ms": "7.58",
+      "samples": 5
+    },
+    {
+      "fn": "editChangeSpan @ edit-patch.js",
+      "ms": "6.31",
+      "samples": 4
+    },
+    {
+      "fn": "winRenderMarks @ codeeditor.js",
+      "ms": "4.48",
+      "samples": 4
+    },
+    {
+      "fn": "syncEditorAfterInput @ codeeditor.js",
+      "ms": "4.71",
+      "samples": 3
+    },
+    {
+      "fn": "_bracketPairScan @ code-brackets.js",
+      "ms": "4.70",
+      "samples": 3
+    },
+    {
+      "fn": "(anonymous) @ codeeditor.js",
+      "ms": "2.26",
+      "samples": 2
+    },
+    {
+      "fn": "winPatchEdit @ codeeditor.js",
+      "ms": "2.93",
+      "samples": 2
+    },
+    {
+      "fn": "winRender @ codeeditor.js",
+      "ms": "3.21",
+      "samples": 2
+    },
+    {
+      "fn": "(anonymous) @ code-marks.js",
+      "ms": "1.23",
+      "samples": 1
+    },
+    {
+      "fn": "getElementById @ ",
+      "ms": "1.61",
+      "samples": 1
+    },
+    {
+      "fn": "codeMarksHTML @ code-marks.js",
+      "ms": "1.81",
+      "samples": 1
+    },
+    {
+      "fn": "selectionState @ code-ai-chat.js",
+      "ms": "1.10",
+      "samples": 1
+    },
+    {
+      "fn": "contains @ ",
+      "ms": "1.58",
+      "samples": 1
+    }
+  ]
+}
