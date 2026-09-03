@@ -1911,6 +1911,20 @@
   .code-tree-act:hover { background: var(--accent-dim); color: var(--accent); }
   .code-tree-act-del:hover { background: var(--danger-dim, rgba(220,53,69,.15));
     color: var(--danger, #dc3545); }
+  /* 文件树右键菜单（工单 code-editor-refine/06）：fixed 浮层——样式 token 与
+     confirmModal 浮层同族（--panel 底 / --border / --shadow-pop，深浅主题自
+     适应）；防视口溢出由 JS 布局（fx treeCtxClamp）负责；关闭三通道：外部
+     mousedown / 任意滚动（capture）/ Esc。 */
+  .code-ctx-menu { position: fixed; z-index: 180; min-width: 168px; padding: 4px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-pop);
+    max-height: calc(100vh - 16px); overflow-y: auto; }
+  .code-ctx-item { display: block; width: 100%; text-align: left; padding: 6px 10px;
+    border: 0; background: none; color: var(--text); font-size: 13px;
+    border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; }
+  .code-ctx-item:hover { background: var(--panel-2); color: var(--accent); }
+  .code-ctx-item-danger { color: var(--danger); }
+  .code-ctx-item-danger:hover { background: var(--danger-dim); color: var(--danger); }
   /* 树操作输入模态（工单 code-tree-ops/02）：新建/重命名单行文本框 */
   .code-tree-name-input { width: 100%; box-sizing: border-box; margin-top: var(--space-2);
     padding: 6px 10px; font-family: var(--mono); font-size: 13px;

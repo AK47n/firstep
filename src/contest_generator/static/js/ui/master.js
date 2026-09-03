@@ -7,7 +7,7 @@
 // 顶层 addEventListener（btn-pick-dirs / pick-dirs / btn-scan / prog-log-head /
 // btn-distill / btn-confirm / btn-usage-reset）在 import 时绑定——module
 // 脚本延迟执行，DOM 已就绪（与 stage 1 桥接约定同理）。
-import { $, handle, apiGet, apiPost, apiDelete, toast, toastError } from "/js/app.js";
+import { $, handle, apiGet, apiPost, apiDelete, toast, toastError, copyText } from "/js/app.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, fmtDuration } from "/js/fx/core.js";
@@ -457,23 +457,8 @@ async function copyMasterContent(content, btn) {
 }
 
 async function writeClipboard(text) {
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch { /* 授权拒绝 / 非安全上下文 → 回退 execCommand */ }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    ta.remove();
-    return ok;
-  } catch { return false; }
+  // 机制 = app.js copyText 单源（工单 06 评审整改：原 7 处同型执行收敛）
+  return copyText(text);
 }
 
 // openMasterPath(platform, path, url, box, btn)：点文件行 → 三态（加载中 /

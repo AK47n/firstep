@@ -22,7 +22,7 @@
 // 跨簇服务（修复中心）静态 import 自 ui/generate-fix.js（工单 16 迁出后由
 // 工单 15 的接缝改为静态 import）；host 侧不再注册。
 // btn-generate 覆盖重发监听器（工单 20 补迁——readinessState 随工单 19 迁出后
-import { $, apiGet, apiPost, state, KIND_TEXT, toast } from "/js/app.js";
+import { $, apiGet, apiPost, state, KIND_TEXT, toast, copyText } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { overwriteBakHint } from "/js/fx/danger.js";  // 覆盖确认 .bak 找回说明（工单 ux-walkthrough-02/03）
 import { formatResModules, collectBindings, generationOutputDirPayload, genStageTexts, fmtWait, isConflictError, conflictDirName, dirBasename, frameworkNoteHTML } from "/js/fx/generate.js";
@@ -316,23 +316,13 @@ function initScoreChecklist() {
   });
   const btn = $("btn-score-export");
   if (!btn) return;
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     const text = scoreChecklistExportNow(box);
     if (!text) { toast("info", "还没有评分点可复制"); return; }
-    const done = () => toast("ok", "核对表已复制");
-    const fallback = () => {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        if (document.execCommand && document.execCommand("copy")) { toast("ok", "核对表已复制"); return; }
-        toast("error", "复制失败：请手动复制");
-      } catch (err) { toast("error", "复制失败：" + err.message); }
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done).catch(fallback);
-    } else fallback();
+    // 机制 = app.js copyText 单源（工单 06 评审整改：clipboard → execCommand 兜底收敛）
+    const ok = await copyText(text);
+    if (ok) toast("ok", "核对表已复制");
+    else toast("error", "复制失败：请手动复制");
   });
 }
 
@@ -482,28 +472,25 @@ $("btn-handoff").addEventListener("click", async () => {
 });
 
 $("btn-handoff-copy").addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText($("handoff-text").value);
+  // 机制 = app.js copyText 单源（工单 06 评审整改）；失败也提示（原实现失败静默）
+  const ok = await copyText($("handoff-text").value);
+  if (ok) {
     const btn = $("btn-handoff-copy");
     btn.textContent = "已复制";
     toast("ok", "已复制到剪贴板");
     setTimeout(() => { btn.textContent = "复制"; }, 1500);
-  } catch {
-    $("handoff-text").select();
-    document.execCommand("copy");
-    $("handoff-text").blur();
+  } else {
+    toast("error", "复制失败：请手动复制");
   }
 });
 
 $("btn-copy-dir").addEventListener("click", async () => {
   const dir = $("res-dir").textContent.trim();
   if (!dir) return;
-  try {
-    await navigator.clipboard.writeText(dir);
-    toast("ok", "已复制输出路径");
-  } catch (e) {
-    toast("error", "复制失败");
-  }
+  // copyText 单源（原实现仅 clipboard 无兜底；工单 06 评审整改补 execCommand 保底）
+  const ok = await copyText(dir);
+  if (ok) toast("ok", "已复制输出路径");
+  else toast("error", "复制失败：请手动复制");
 });
 
 /** 烧录到板子（工单 flash-deploy/02）：生成结果面板一键烧录——执行体共享
@@ -534,19 +521,15 @@ $("btn-edit-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskD
 // 「复制烧录命令」（工单 flash-deploy/02，spec 故事 4 一键复制）：document 级
 // 委托统一处理——生成结果面板与任务结果面板的复制按钮共用（任务结果在
 // tasks-grid 容器内，网格委托只处理动作按钮；命令复制与网格解耦，单点）。
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const btn = event.target.closest(".btn-flash-copy-cmd");
   if (btn) {
     const cmd = btn.dataset.cmd || "";
     if (!cmd) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(cmd).then(
-        () => toast("ok", "烧录命令已复制"),
-        () => toast("error", "复制失败：请手动复制")
-      );
-    } else {
-      toast("error", "复制失败：当前环境不支持剪贴板");
-    }
+    // 机制 = app.js copyText 单源（工单 06 评审整改：原 clipboard-only 补 execCommand 兜底）
+    const ok = await copyText(cmd);
+    if (ok) toast("ok", "烧录命令已复制");
+    else toast("error", "复制失败：请手动复制");
     return;
   }
   // 指引卡「去设置页配置」（spec 前端决策）：切到设置 tab（工具链卡的烧录

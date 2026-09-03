@@ -13,7 +13,7 @@
 // initMainCTools（启动区初始化））。
 // IIFE（initMainCHighlight / initCodeZoom）在 import 时自执行（module 脚本延迟
 // 执行，DOM 已就绪）；顶层 addEventListener 随 IIFE 绑定。
-import { $, toast } from "/js/app.js";
+import { $, toast, copyText } from "/js/app.js";
 import { cHighlight, cLineCount, codeZoomClamp, parseZoomStored, maincContentEmpty, maincFullscreenLabel } from "/js/fx/code.js";
 
 // ---------------------------------------------------------------------------
@@ -94,19 +94,12 @@ function initMainCTools() {
     return false;
   };
   const errText = (what, e) => what + "失败：" + (e && e.message || "未知错误");
-  function copyValue() {
+  async function copyValue() {
     if (guardEmpty()) return;
-    const done = () => toast("ok", "main.c 已复制");
-    const fallback = () => {
-      try {
-        ta.select();
-        if (document.execCommand && document.execCommand("copy")) { toast("ok", "main.c 已复制"); return; }
-        toast("error", "复制失败：请手动全选复制");
-      } catch (e) { toast("error", errText("复制", e)); }
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(ta.value).then(done).catch(fallback);
-    } else fallback();
+    // 机制 = app.js copyText 单源（工单 06 评审整改：clipboard → execCommand 兜底收敛）
+    const ok = await copyText(ta.value);
+    if (ok) toast("ok", "main.c 已复制");
+    else toast("error", "复制失败：请手动全选复制");
   }
   function downloadValue() {
     if (guardEmpty()) return;

@@ -10,6 +10,38 @@
 import { btnIcon } from "/js/fx/btn-icon.js";
 import { parseError, parseHttpError, isLongError } from "/js/fx/errors.js";
 
+// copyText(text)：剪贴板复制单源（工单 code-editor-refine/06 评审整改——
+// 全仓库第 7 份同型实现收敛；app.js 规则 4「新共享件优先落本文件」+ 规则 1
+// 「不 import ui/*」故不入 ui 模块）。navigator.clipboard 优先（localhost 安全
+// 上下文；writeText 拒绝 = 授权拒绝/非安全上下文），失败/不可用 → 隐藏
+// textarea + execCommand 保底；返回是否成功（成功与否的提示文案由调用方定
+// ——各处消息不同，不强行统一）。
+export async function copyText(text) {
+  const value = String(text == null ? "" : text);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch (e) { /* 授权拒绝 / 非安全上下文 → 回退 execCommand */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = !!document.execCommand && document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 export const $ = (id) => document.getElementById(id);
 
 // ---------------------------------------------------------------------------
@@ -140,34 +172,13 @@ export function toast(kind, text, opts = {}) {
   }
   if (copyBtn) {
     el.querySelector(".toast-copy").addEventListener("click", async () => {
-      // 剪贴板守卫 + execCommand 回退（沿 recent.js 先例）：非安全上下文不
-      // 直接抛错，回退选中文本让用户 Ctrl+C（长错误场景）
+      // 剪贴板守卫 + execCommand 回退——机制 = copyText 单源（工单 06 评审
+      // 整改：原内联实现与 recent/main.c/核对表/母版等 7 处同型，已收敛）；
+      // 按钮文案反馈保持本处特有（「已复制」1.2s 还原 / 「复制失败」）。
       const copyBtnEl = el.querySelector(".toast-copy");
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(String(text));
-          copyBtnEl.textContent = "已复制";
-          setTimeout(() => { if (el.isConnected) copyBtnEl.textContent = "复制"; }, 1200);
-          return;
-        }
-        throw new Error("clipboard 不可用");
-      } catch (e) {
-        try {
-          const ta = document.createElement("textarea");
-          ta.value = String(text);
-          ta.style.position = "fixed";
-          ta.style.opacity = "0";
-          document.body.appendChild(ta);
-          ta.select();
-          if (document.execCommand && document.execCommand("copy")) {
-            copyBtnEl.textContent = "已复制";
-            setTimeout(() => { if (el.isConnected) copyBtnEl.textContent = "复制"; }, 1200);
-          } else {
-            copyBtnEl.textContent = "复制失败";
-          }
-          ta.remove();
-        } catch (e2) { copyBtnEl.textContent = "复制失败"; }
-      }
+      const ok = await copyText(text);
+      copyBtnEl.textContent = ok ? "已复制" : "复制失败";
+      if (ok) setTimeout(() => { if (el.isConnected) copyBtnEl.textContent = "复制"; }, 1200);
     });
   }
   root.appendChild(el);
