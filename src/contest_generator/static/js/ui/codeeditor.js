@@ -70,6 +70,14 @@ import { unsavedSwitchModalHTML } from "/js/fx/exit-guard.js";  // 未保存退�
 import { compileErrorLinesForFile } from "/js/fx/code-compile.js";  // 编译错误→行映射纯件（工单 code-editor-refine/05）
 import { insertAtPosition } from "/js/fx/ai-insert.js";  // AI 代码块插入位置纯件（工单 code-editor-refine/08）
 import { editChangeSpan, marksPatch, marksPartition, wordRangesPatch } from "/js/fx/edit-patch.js";  // 变更段判定 + 标记增量修补/分区/词区段增量（工单 code-editor-opt/01+02）
+import {
+  windowTextBuild,
+  windowEditToView,
+  windowEditToModel,
+  windowPosFromView,
+  windowPosToView,
+  windowTextMatchesModel,
+} from "/js/fx/window-text.js";  // 视口化窗口文本纯件（工单 editor-textarea-viewport/01）：窗口构建 / 编辑映射 / 光标偏移换算 / 一致性校验
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
 let codeDir = "";
@@ -486,11 +494,12 @@ function marksForView(errLines) {
     .map((m) => ({ line: map.get(m.line), start: m.start, end: m.end, kind: m.kind, title: m.title }));
 }
 
-// foldCaretModelPos()：当前光标 → 模型偏移（无折叠时 = 选区偏移）。
+// foldCaretModelPos()：当前光标 → 模型偏移（无折叠时 = 视图/模型偏移；
+// 窗口化态 ta.selectionStart 是窗口内偏移，经 taCaretViewPos 换算）。
 function foldCaretModelPos() {
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!ta) return 0;
-  const viewPos = Math.max(0, ta.selectionStart | 0);
+  const viewPos = taCaretViewPos();
   return viewModel ? codeFoldViewToModel(viewModel.segs, viewPos) : viewPos;
 }
 
@@ -506,6 +515,42 @@ export function editorCaretModelPos() {
     ? caretLineFromStarts(winCache.lineStarts, modelPos)
     : caretLineOf(tab.content, modelPos);
   return { line, col: caretColOf(tab.content, modelPos) };
+}
+
+// editorSelectionView()：当前 textarea 选区的**视图**坐标（{start,end}；无选区
+// → null）——窗口化态把窗口内偏移换算回视图偏移（非折叠视图=模型）；折叠态
+// 选区本身即视图偏移（数据源 = 高亮层 data-code-line 同口径）。
+export function editorSelectionView() {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta || ta.selectionEnd <= ta.selectionStart) return null;
+  const s = Math.max(0, ta.selectionStart | 0);
+  const e = Math.max(0, ta.selectionEnd | 0);
+  return taWinInfo
+    ? { start: windowPosToView(taWinInfo, s), end: windowPosToView(taWinInfo, e) }
+    : { start: s, end: e };
+}
+
+// editorSelectionModel()：当前选区的**模型**坐标（{start,end}；无选区 → null）
+// ——折叠态视图→模型映射；窗口化/全量态视图=模型。供 code-ai-chat 选区上下文
+// 等外部模块取模型级片段（textarea 窗口文本不能直接 slice）。
+export function editorSelectionModel() {
+  const v = editorSelectionView();
+  if (!v) return null;
+  if (viewModel) {
+    return {
+      start: codeFoldViewToModel(viewModel.segs, v.start),
+      end: codeFoldViewToModel(viewModel.segs, v.end),
+    };
+  }
+  return v;
+}
+
+// editorViewText()：当前视图文本（窗口化 = 模型全文；折叠 = viewModel.text）——
+// 外部模块按视图行号定位高亮层时的文本源（与 .code-hl-line data-code-line 同
+// 口径）。
+export function editorViewText() {
+  const tab = getActiveTab();
+  return viewModel ? viewModel.text : (tab ? tab.content : "");
 }
 
 // viewLineIndexOf(modelLine)：模型行号 → 视图行号（1 基）；不可见（占位/
@@ -531,9 +576,14 @@ function refreshFoldView() {
   renderPane();
   const ta = box && box.querySelector(".code-ta");
   if (ta && !ta.readOnly) {
-    const vo = viewModel ? codeFoldModelToView(viewModel.segs, caretModel) : caretModel;
     ta.focus();
-    ta.setSelectionRange(vo, vo);
+    if (!viewModel && taWinInfo) {
+      // 展开后回窗口化（02）：光标按模型偏移落位（taWindowApply 确保窗口含光标）
+      taWindowApply(caretModel);
+    } else {
+      const vo = viewModel ? codeFoldModelToView(viewModel.segs, caretModel) : caretModel;
+      ta.setSelectionRange(vo, vo);
+    }
   }
 }
 
@@ -690,7 +740,7 @@ function focusFindRange(range) {
     vEnd = codeFoldModelToView(viewModel.segs, end);
   }
   ta.focus();
-  ta.setSelectionRange(vPos, vEnd);
+  taSetRange(vPos, vEnd);
 }
 
 // ===== 渲染：标签条 / 中栏 =====
@@ -719,7 +769,10 @@ let winSize = null;    // { lineCount, lineH, cols, chW }——尺寸缓存（�
 let winView = { scrollTop: 0, viewportH: 0 };  // 滚动/视口缓存（工单 09：输入同步路径
                                                // 绝不读 scrollTop/clientHeight——值变更后
                                                // 首次布局读实测 50ms/次）
-let winFrame = 0;      // rAF 节流
+let taWinInfo = null;  // 当前 textarea 窗口（windowTextBuild 输出；非折叠窗口化态非空，
+                       // 窗口编辑回写/光标映射/滚动同步共用——textarea 只装窗口文本）
+let taWinDirty = false; // IME 组合中窗口文本随 raw 值漂移：组合中不重装，
+                        // compositionend 后 sync 一次性重装（防打断候选窗）
 
 // winReadView()：滚动/尺寸变化事件里刷新缓存（事件发生时布局已一致，读便宜）。
 function winReadView() {
@@ -949,6 +1002,146 @@ function winWindow() {
     winCache.lineCount, WIN_OVERSCAN);
 }
 
+// ===== textarea 窗口化（工单 editor-textarea-viewport/02）=====
+// textarea 只装当前窗口 [start,end) 文本（01 纯件构建），盒高 = 视口高并
+// 贴内容坐标（top = start*行高；向下延伸覆盖全视口——textarea 必须盖满
+// 视口，否则点击/选区在 overscan 不覆盖区落空）。taWinInfo 记录当前窗口
+// 对象（窗口编辑回写/光标映射共用）。折叠态（viewModel 非空）保持
+// 「textarea = 视图文本全量」现状，本组函数一律早退（04 打通三层）。
+
+// taCaretViewPos()：当前 textarea 选区 → 视图绝对偏移（窗口化 = 窗口起点 +
+// 窗口内偏移——windowPosToView 单源；折叠/全量 = 原偏移）。
+function taCaretViewPos() {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return 0;
+  const sel = Math.max(0, ta.selectionStart | 0);
+  return taWinInfo ? windowPosToView(taWinInfo, sel) : sel;
+}
+
+// taApplyWindowStyle(wi)：按窗口对象（仅用 start）贴内容坐标（top = 窗口
+// 起点 * 行高）+ 向下延伸盖满视口（overscan 上缘随 scrollTop 连续变化）——
+// taFillWindow 与 taWindowSync 同窗分支共用（02 评审整改：几何写一次）。
+function taApplyWindowStyle(wi) {
+  const box = paneBox();
+  const ta = box && box.querySelector(".code-ta");
+  if (!ta) return;
+  const topPx = Math.round(wi.start * winLineH * 100) / 100;
+  const cover = Math.max(0, (winView.scrollTop | 0) - topPx);   // overscan 上缘
+  ta.style.top = topPx + "px";
+  ta.style.height = Math.ceil((box ? box.clientHeight : 0) + cover) + "px";
+}
+
+// taFillWindow(wi, rel)：窗口对象 + 窗口内选区偏移 → 装进 textarea（值/
+// 几何/选区一次落位；taWinInfo 同步）。
+function taFillWindow(wi, rel) {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return;
+  ta.value = wi.text;
+  taWinInfo = wi;
+  taWinDirty = false;
+  taApplyWindowStyle(wi);
+  ta.setSelectionRange(Math.max(0, Math.min(wi.text.length, rel | 0)),
+    Math.max(0, Math.min(wi.text.length, rel | 0)));
+  setActiveLine(caretLineFast(taCaretViewPos()));
+}
+
+// taWindowApply(caretModel, follow?)：把 textarea 重装为「含模型光标」的窗口
+// 文本——打开/输入回写/跳转/重载后调用。光标在窗口外 → 先滚动使其可见
+// （居中）再重算窗口（跳转语义：光标始终在窗口内，后续输入不落不可见处）。
+// follow=false（IME compositionend 场景）：不滚动回光标——组合期间用户可能
+// 已滚动，光标按窗口边缘钳制（视口不被强行拉回）。
+function taWindowApply(caretModel, follow = true) {
+  const box = paneBox();
+  const ta = box && box.querySelector(".code-ta");
+  if (!box || !ta || !winCache || viewModel) return;
+  const m = Math.max(0, caretModel == null ? 0 : caretModel | 0);
+  let r = winLast || winWindow();
+  let wi = windowTextBuild(winCache.lines, r.start, r.end, winCache.lineStarts);
+  let rel = windowPosFromView(wi, m);
+  if (rel == null && follow) {
+    const line = Math.max(1, caretLineFromStarts(winCache.lineStarts, m));
+    box.scrollTop = Math.max(0, (line - 1) * winLineH - Math.floor((box.clientHeight || 0) / 2));
+    winReadView();
+    winRender();
+    r = winLast || winWindow();
+    wi = windowTextBuild(winCache.lines, r.start, r.end, winCache.lineStarts);
+    rel = windowPosFromView(wi, m);
+  }
+  if (rel == null) {
+    // 防御钳制（follow=true 时理论不可达——已按光标行重算窗口；follow=false
+    // 时即「光标随视口走」的窗口边缘语义）
+    rel = m < wi.absStart ? 0 : wi.text.length;
+  }
+  taFillWindow(wi, rel);
+}
+
+// taWindowSync()：滚动/尺寸变化后的窗口同步——仅窗口行区间变化时重装文本
+// （滚动监听同步调用；同窗只更新 top/height 覆盖全视口，顶部 overscan 随滚动
+// 连续增减）；窗口变化时选区按旧窗口文档位置换算（滚出窗口 = 钳到窗口
+// 边缘——光标随视口走，输入永不静默落在不可见处）。IME 组合中不重装
+// （打断候选窗），由 taWinDirty 标记、compositionend 后补。
+function taWindowSync() {
+  const box = paneBox();
+  const ta = box && box.querySelector(".code-ta");
+  if (!box || !ta || !winCache || viewModel) return;
+  const r = winLast || winWindow();
+  const changed = !taWinInfo || taWinInfo.start !== r.start || taWinInfo.end !== r.end;
+  if (changed && !composing && !taWinDirty) {
+    const wi = windowTextBuild(winCache.lines, r.start, r.end, winCache.lineStarts);
+    const oldSel = taWinInfo ? Math.max(0, ta.selectionStart | 0) : 0;
+    const oldView = taWinInfo ? windowPosToView(taWinInfo, oldSel) : 0;
+    let rel = windowPosFromView(wi, oldView);
+    if (rel == null) rel = oldView < wi.absStart ? 0 : wi.text.length;
+    taFillWindow(wi, rel);
+  } else {
+    taApplyWindowStyle(r);
+  }
+}
+
+// taSetRange(viewStart, viewEnd)：按视图（非折叠 = 模型）绝对偏移设置
+// textarea 选区——窗口化时先确保窗口包含区间（taWindowApply 以起点重装），
+// 再换算窗口偏移；折叠/全量态直接 setSelectionRange。
+function taSetRange(viewStart, viewEnd) {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return;
+  const s = Math.max(0, viewStart | 0);
+  const e = Math.max(s, viewEnd | 0);
+  if (taWinInfo) {
+    let ws = windowPosFromView(taWinInfo, s);
+    let we = windowPosFromView(taWinInfo, e);
+    if (ws == null || we == null) {
+      taWindowApply(s);
+      ws = windowPosFromView(taWinInfo, s);
+      we = windowPosFromView(taWinInfo, e);
+    }
+    if (ws == null || we == null) return;   // 防御：重装后仍越界 → 不静默设错
+    ta.setSelectionRange(ws, Math.max(ws, Math.min(we, taWinInfo.text.length)));
+    return;
+  }
+  ta.setSelectionRange(s, e);
+}
+
+// editSource()：程序化编辑（Tab/Enter/行操作/注释/括号）的数据源——窗口化态
+// = 模型全文 + 模型选区（textarea 只装窗口文本，纯件必须基于模型算，选区经
+// windowPosToView 单源换算）；折叠/全量态 = textarea 视图文本 + 视图选区
+// （既有语义不变）。返回 {text, selStart, selEnd}。
+function editSource() {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  const tab = getActiveTab();
+  if (ta && taWinInfo && tab) {
+    return {
+      text: tab.content,
+      selStart: windowPosToView(taWinInfo, ta.selectionStart),
+      selEnd: windowPosToView(taWinInfo, ta.selectionEnd),
+    };
+  }
+  return {
+    text: ta ? ta.value : "",
+    selStart: ta ? Math.max(0, ta.selectionStart | 0) : 0,
+    selEnd: ta ? Math.max(0, ta.selectionEnd | 0) : 0,
+  };
+}
+
 // winRenderMarks()：标记层窗口化重画（查找命中/选中词/括号/缩进引导线按
 // 窗口行过滤重基准——行内偏移不变）。上下 spacer 与 hl/gutter 层同高度
 // ——标记层绝对定位在 .code-edit 顶部，缺 spacer 时滚动后整层y 向错位
@@ -1127,7 +1320,7 @@ function winRender() {
   gutter.innerHTML = top + winCache.gutter.slice(r.start, r.end).join("") + bottom;
   winRenderMarks();
   const ta = box.querySelector(".code-ta");
-  if (ta) setActiveLine(caretLineFast(ta.selectionStart));
+  if (ta) setActiveLine(caretLineFast(taCaretViewPos()));
 }
 
 // codeWindowRefresh()：缩放/布局变化后强制重测行高并重画窗口（codeview 的
@@ -1140,6 +1333,7 @@ export function codeWindowRefresh() {
   winReadView();
   winApplySize();
   winRender();
+  taWindowSync();    // 视口/行高变化 → textarea 窗口与覆盖高度同步
 }
 
 function renderPane() {
@@ -1176,12 +1370,18 @@ function renderPane() {
       // 打开延迟大头之一；marksCache 由随后 winRenderMarks 正常构建）
       marks: [],
       windowed: true,
+      // 工单 editor-textarea-viewport/02：非折叠窗口化——textarea 不内嵌全文
+      // （6000 行 108KB 标记是打开渲染大头），由下方 taWindowApply 装窗口文本；
+      // 折叠态保持「textarea = 视图文本全量」现状（04 打通三层组合）。
+      taValue: viewModel ? undefined : "",
     })
     + '<span class="code-window-probe" aria-hidden="true"></span>';
   winBuild(src, tab.lang);
   winReadView();
   winApplySize();
   winRender();
+  taWinInfo = null;      // 重建后旧窗口对象失效（winCache 引用已换）
+  taWindowApply(0);      // 打开/切换：窗口 [0,*) + 光标文档头
   // 打开/切换即算折叠区（工单 11 后补：无结构输入前 folds=[] 会导致
   // Ctrl+Shift+[/] 与折叠箭头不可用；渲染层不需要，快捷键/箭头语义需要）
   if (!viewModel) folds = codeFoldRanges(tab.content, tab.lang);
@@ -1522,6 +1722,7 @@ export function editJumpToLine(line) {
   winReadView();   // 跳转后按真实滚动回读（scrollIntoView 的居中修正不会触发
                     // 同步滚动事件——不补读会在下次渲染用陈旧窗口造成层错位）
   winRender();
+  taWindowSync();  // 窗口行区间变化 → textarea 窗口文本/覆盖高度同步（02）
   setActiveLine(target);
   flashEl(el);
   const ta = box.querySelector(".code-ta");
@@ -1529,8 +1730,9 @@ export function editJumpToLine(line) {
     const range = editorLineRange(tab.content, line);
     if (range) {
       const start = viewModel ? codeFoldModelToView(viewModel.segs, range.start) : range.start;
+      const end = viewModel ? codeFoldModelToView(viewModel.segs, range.end) : range.end;
       ta.focus();
-      ta.setSelectionRange(start, start + (range.end - range.start));
+      taSetRange(start, end);
     }
   }
   scheduleCursorWork();   // 状态栏 Ln/Col 随跳行刷新（工单 01；顺延一帧，性能整改）
@@ -1864,15 +2066,180 @@ function snapshotUndo(redo) {
   return true;
 }
 
-// applyEdit(text, start, end)：程序化编辑（含手输同步路径）落 textarea。
-// 原生撤销优先（execCommand insertText）——但大文档（工单 11：5000 行/200KB+
-// 场景实测 execCommand 对巨型 textarea 的原生撤销快照每击 ~90ms）切换直赋值
-// + 快照栈（snapshot 存字符串引用，v8 rope 无拷贝；撤销语义等价——nativeUndo
-// 关闭时 Ctrl+Z/Y 已走快照栈，见 snapshotUndo）。
+// applyCachePatches(oldText, newText, span)：模型内容变更后的折叠清单与静态
+// 标记缓存增量修补（非折叠共用段——手输 sync 窗口化路径与程序化 applyEdit
+// 同口径：结构变更 → 折叠清单重算 + 配对清单失效；非结构 → 引导线/彩虹/配对
+// 清单按变更段平移，markClean 按叠加态判定）。
+function applyCachePatches(oldText, newText, span) {
+  if (span && span.identical) return;
+  if (span.structural) {
+    // 结构变更（换行/括号/引号/#/tab/行首空白）：折叠清单须重算
+    // （无折叠态也随输入重算折叠区清单——工单 07：快捷键/箭头基于最新内容）
+    const tab = getActiveTab();
+    folds = codeFoldRanges(tab ? tab.content : newText, tab ? tab.lang : "");
+    pairScanCache = { content: null, entries: [] };   // 配对清单失效（下次全量重扫）
+    return;
+  }
+  // 工单 11：纯字符编辑 → 折叠清单（行号/括号位未变）与标记集不变；
+  // 无查找/词/错误叠加态时标记层可整体沿用（markClean——括号对状态经
+  // editorBracket 增量修补并随缓存渲染，不再把「配对高亮活跃」排除在外）
+  markClean = !editorFind.query && !editorWord.word
+    && !getCompileErrors().length;
+  // 工单 code-editor-opt/05：静态缓存（引导线/彩虹）修补**不**依赖
+  // markClean——词/查找/错误活跃时同样增量（它们只关行级修补是否可用）；
+  // 否则回删/词活跃的每次输入都会触发全库 bracketDepthMarks 扫描
+  if (oldText !== null && marksCache.content === oldText
+    && bracketRainbowCache.content === oldText
+    && indentGuideCache.content === oldText) {
+    const patched = marksPatch(marksCache.marks, oldText, newText, span);
+    const parts = marksPartition(patched);
+    marksCache = { content: newText, marks: parts.all };
+    bracketRainbowCache = { content: newText, marks: parts.rainbow };
+    indentGuideCache = { content: newText, marks: parts.guides };
+  } else {
+    // 缓存缺失/陈旧（内容引用对不上）：保守走全量
+    // （winRenderMarks → currentMarks 会重建 marksCache）
+    markClean = false;
+  }
+  // 工单 code-editor-opt/02：配对扫描清单总是增量（非结构不碰括号，条目按
+  // 绝对/行内偏移平移；内容引用失配 → 置空，updateBracketMarks 全量重扫一次）
+  if (oldText !== null && pairScanCache.content === oldText) {
+    pairScanCache = {
+      content: newText,
+      entries: pairScanPatch(pairScanCache.entries, oldText, newText, span),
+    };
+  } else {
+    pairScanCache = { content: null, entries: [] };
+  }
+  // 括号对高亮状态增量修补（行号不变，列偏移按插入/删除平移）
+  patchEditorBracket(span);
+}
+
+// syncTail(caretModel, follow?)：syncEditorAfterInput / applyEdit 的共享尾段——
+// 标记状态先行 → 逐行缓存重建/窗口渲染 → 尺寸 → 光标与窗口重装 → 脏点与状态栏。
+// 窗口化态传 caretModel（模型光标，taWindowApply 重装窗口并落位）；follow 透传
+// （false = compositionend 不把视口拉回光标——用户组合期间可能已滚动）。其余态
+// 读 textarea 当前选区（IME 组合中不做选区回写）。
+function syncTail(caretModel, follow = true) {
+  const box = paneBox();
+  const ta = box && box.querySelector(".code-ta");
+  const tab = getActiveTab();
+  if (!box || !ta || !winCache) return;
+  const selStart = ta.selectionStart;
+  const selEnd = ta.selectionEnd;
+  // 标记状态先算：行级修补/窗口重画要用最终的 editorBracket/editorWord
+  //（词/括号状态随内容/光标变化，先算后渲染——与 refreshMarkSetters 的
+  // 「状态先行」纪律一致）；随后复核 markClean：词/查找/错误叠加态出现 →
+  // 行级修补不可用（其渲染不含词/查找/错误标记），走全量窗口重画
+  updateWordMarks();
+  updateBracketMarks();
+  if (editorWord.word || editorFind.query || getCompileErrors().length) {
+    markClean = false;
+  }
+  // 工单 code-editor-opt/05：查找命中区段在窗口渲染**前**重算（渲染单点化——
+  // 此前渲染后 renderEditorMarks 再全量重画一次；现在 winRenderMarks 直接用
+  // 最新区段，同步尾不再二次渲染）
+  if (editorFind.query) {
+    editorFind.ranges = codeFindRanges(tab.content, editorFind.query);
+    if (!editorFind.ranges.length) editorFind.index = -1;
+    else if (editorFind.index < 0 || editorFind.index >= editorFind.ranges.length) {
+      editorFind.index = 0;
+    }
+  }
+  // 工单 09：scrollTop/Left 只在「行数变化」（内容高度变化）时读写——大
+  // textarea 场景读/写滚动位置会强制布局（实测 60-150ms/次）；行数不变时
+  // .code-edit 显式高度不变，窗口 innerHTML 重建不改变滚动，容器自动保持。
+  const prevCount = winCache.lineCount;
+  // 只重绘窗口行（滚动窗口化 08）：内容变化 → 重建逐行缓存 + 重测尺寸 +
+  // 画当前滚动窗口（textarea 本体不重建——焦点/选区零抖动）。工单 11：内容
+  // 未变零重建；非折叠态行数不变 → 增量 patch 只重算变更行；折叠态/行数变化
+  // → 全量 winBuild。
+  const viewText = viewModel ? viewModel.text : tab.content;
+  if (winCache.text === viewText) {
+    // 内容未变（选区/状态类输入）：零重建，尺寸/窗口均不动
+  } else if (!viewModel
+    && (curEditSpan && !curEditSpan.structural
+      ? true   // 非结构编辑：无换行增删 → 行数必不变，免一次全量 split
+      : viewText.split("\n").length === winCache.lineCount)) {
+    winPatchEdit(viewText, tab.lang, curEditSpan);
+    if (!(curEditSpan && !curEditSpan.structural && winPatchRow(curEditSpan))) {
+      winRender();   // 行级修补失败（窗口外/元素缺失）→ 全量窗口重画
+    }
+  } else {
+    winBuild(viewText, tab.lang);
+    winRender();
+  }
+  const needScrollRestore = winCache.lineCount !== prevCount;
+  let scrollTop = 0;
+  let scrollLeft = 0;
+  if (needScrollRestore) {
+    scrollTop = box.scrollTop;
+    scrollLeft = box.scrollLeft;
+  }
+  winApplySize();
+  // 只写不读（需要时）：行数变化才恢复滚动（先恢复再窗口重装——taWindowApply
+  // 在光标出窗时以光标为准滚动，覆盖恢复值，语义正确）
+  if (needScrollRestore) {
+    box.scrollTop = scrollTop;
+    box.scrollLeft = scrollLeft;
+  }
+  // 标记层渲染单点（工单 code-editor-opt/05）：窗口渲染（winRender →
+  // winRenderMarks，或 winPatchRow 行级修补）已用「状态先行」的最新
+  // editorWord/editorBracket/editorFind/错误 渲染一次即终——不再调用
+  // renderEditorMarks 二次全量重画（其仅保留给查找输入/命中跳转等外部入口）。
+  if (taWinInfo) {
+    // 窗口化（02）：窗口文本已随模型漂移——重装窗口 + 模型光标落位；
+    // IME 组合中不重装（打断候选窗），raw 值留窗、compositionend 后补。
+    if (composing) {
+      taWinDirty = true;
+      taWinInfo = { ...taWinInfo, text: ta.value };
+    } else {
+      taWindowApply(caretModel == null ? 0 : caretModel, follow);
+    }
+    setActiveLine(caretLineFast(taCaretViewPos()));
+  } else {
+    setActiveLine(caretLineFast(taCaretViewPos()));
+    if (!composing) {
+      // 工单 09：已聚焦不重复 focus / 选区未变不 setSelectionRange——大
+      // textarea 下这两者是强制布局 / 光标重排的重触发点（实测占比大头）
+      if (document.activeElement !== ta) ta.focus();
+      if (ta.selectionStart !== selStart || ta.selectionEnd !== selEnd) {
+        ta.setSelectionRange(selStart, selEnd);
+      }
+    }
+  }
+  renderTabs();   // 脏点随输入即时刷新（标签条内联渲染，事件委托不失效）
+  notifyActive();   // 状态栏信息区随内容/光标刷新（onActiveTabChanged → refreshCodeStatus；不再单独 notifyCursor——避免每击键双刷）
+}
+
+// applyEdit(text, start, end)：程序化编辑（含手输同步路径）落库。
+// 窗口化态（非折叠，02）：text/start/end = **模型**偏移——textarea 只装窗口
+// 文本，execCommand 的原生撤销栈只认全量文本（跨窗口必错乱），统一「写模型 +
+// 窗口重装 + 快照栈」（快照全域化 = 03 工单，本切片先按窗口级快照过渡）。
+// 折叠态（textarea = 视图全量，02 保持现状）与全量态走既有
+// execCommand/直赋值路径。
 const EDIT_BIG_DOC = 200000;
 function applyEdit(text, start, end) {
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!ta) return;
+  if (taWinInfo) {
+    const tab = getActiveTab();
+    if (!tab || tab.readonly) return;
+    if (tab.content === text) {
+      ta.focus();
+      taSetRange(start, end);
+      return;
+    }
+    pushEditSnapshot();
+    const oldText = tab.content;
+    const span = editChangeSpan(oldText, text);
+    curEditSpan = span.structural ? null : span;
+    tab.content = text;
+    applyCachePatches(oldText, text, span);
+    syncTail(Math.max(0, end | 0));
+    scheduleCursorWork();
+    return;
+  }
   if (ta.value === text) {
     ta.setSelectionRange(start, end);
     return;
@@ -1896,7 +2263,7 @@ function applyEdit(text, start, end) {
       if (document.execCommand("insertText", false, ins)) {
         if (ta.value === text) {
           ta.setSelectionRange(start, end);
-          setActiveLine(caretLineFast(ta.selectionStart));
+          setActiveLine(caretLineFast(taCaretViewPos()));
           scheduleCursorWork();
           return;
         }
@@ -1923,7 +2290,6 @@ function syncEditorAfterInput() {
   if (!box || !ta || !hl || !gutter) return;
   const tab = getActiveTab();
   if (!tab) return;
-  let editSpan = null;   // 变更段（非折叠路径设置；折叠路径 maps 由 codeFoldMapEdit 处理）
   curEditSpan = null;    // 本次输入未定/结构变更时置 null（防 updateWordMarks 误用陈旧 span）
   if (viewModel) {
     // 折叠态（工单 07）：视图文本编辑 → 偏移映射写回模型；触碰占位 → 展开
@@ -1950,128 +2316,68 @@ function syncEditorAfterInput() {
         ta.setSelectionRange(r.caret, r.caret);
       }
     }
-  } else {
+    syncTail(null);
+    return;
+  }
+  if (taWinInfo) {
+    // ===== 窗口化路径（工单 editor-textarea-viewport/02）=====
+    // 窗口文本变更 → 01 映射 → 模型全文；映射失败（窗口/行起点表不同步）→
+    // 以模型为准重建窗口文本（宁可重装，不可错位）。
+    const oldWin = taWinInfo.text;
+    const newWin = String(ta.value == null ? "" : ta.value);
+    if (oldWin === newWin) {
+      // 内容未变（IME compositionend 等）：先经 01 一致性校验——窗口文本与
+      // 模型推导不符（外部漂移/罕见路径）→ 以模型重建，不静默错位。
+      if (!windowTextMatchesModel(tab.content, viewModel, taWinInfo.start, taWinInfo.end, newWin)) {
+        const cur = windowPosToView(taWinInfo, ta.selectionStart);
+        taWinInfo = null;
+        taWindowApply(cur);
+        return;
+      }
+      // 仅重装/状态刷新，光标留在原选区；follow=false：组合期间用户可能已
+      // 滚动，不把视口拉回光标
+      const cur = windowPosToView(taWinInfo, ta.selectionStart);
+      syncTail(cur, false);
+      taWinDirty = false;
+      return;
+    }
+    const lineStarts = winCache ? winCache.lineStarts : null;
+    const span = editChangeSpan(oldWin, newWin);
+    const v = windowEditToView(span, taWinInfo, lineStarts);
+    const r = v == null ? null
+      : windowEditToModel(tab.content, null, winCache ? winCache.text : tab.content,
+          taWinInfo, lineStarts, newWin);
+    if (v == null || r == null) {
+      // 失配（窗口与行起点表不同步等）：以模型重建窗口文本
+      const cur = windowPosToView(taWinInfo, ta.selectionStart);
+      taWinInfo = null;
+      taWindowApply(cur);
+      return;
+    }
+    const editSpan = {
+      structural: span.structural,
+      p: v.p,
+      oldSegLen: v.oldSegLen,
+      newSegLen: v.newSegLen,
+      line: caretLineFromStarts(lineStarts || [], v.p),
+    };
+    curEditSpan = editSpan.structural ? null : editSpan;
+    tab.content = r.model;
+    applyCachePatches(winCache ? winCache.text : null, tab.content, editSpan);
+    syncTail(r.caret);
+    return;
+  }
+  // ===== 非窗口化非折叠（兜底/兼容既有全量路径）=====
+  {
     const span = editChangeSpan(winCache ? winCache.text : "", ta.value,
       winCache ? winCache.lineStarts : null);
-    editSpan = span;
     curEditSpan = span;   // 非结构编辑：供 updateWordMarks 词区段增量（结构变更下方置 null 由行首重置兜底——此处直接设）
     if (span.structural) curEditSpan = null;
     tab.content = ta.value;
     markClean = false;   // 默认标记失效；纯字符编辑才保持
-    if (span.structural) {
-      // 结构变更（换行/括号/引号/#/tab/行首空白）：折叠清单须重算
-      // （无折叠态也随输入重算折叠区清单——工单 07：快捷键/箭头基于最新内容）
-      folds = codeFoldRanges(tab.content, tab.lang);
-      pairScanCache = { content: null, entries: [] };   // 配对清单失效（下次全量重扫）
-    } else {
-      // 工单 11：纯字符编辑 → 折叠清单（行号/括号位未变）与标记集不变；
-      // 无查找/词/错误叠加态时标记层可整体沿用（markClean——括号对状态经
-      // editorBracket 增量修补并随缓存渲染，不再把「配对高亮活跃」排除在外）
-      markClean = !editorFind.query && !editorWord.word
-        && !getCompileErrors().length;
-      const oldText = winCache ? winCache.text : null;
-      // 工单 code-editor-opt/05：静态缓存（引导线/彩虹）修补**不**依赖
-      // markClean——词/查找/错误活跃时同样增量（它们只关行级修补是否可用）；
-      // 否则回删/词活跃的每次输入都会触发全库 bracketDepthMarks 扫描
-      if (oldText !== null && marksCache.content === oldText
-        && bracketRainbowCache.content === oldText
-        && indentGuideCache.content === oldText) {
-        const patched = marksPatch(marksCache.marks, oldText, tab.content, span);
-        const parts = marksPartition(patched);
-        marksCache = { content: tab.content, marks: parts.all };
-        bracketRainbowCache = { content: tab.content, marks: parts.rainbow };
-        indentGuideCache = { content: tab.content, marks: parts.guides };
-      } else {
-        // 缓存缺失/陈旧（内容引用对不上）：保守走全量
-        // （winRenderMarks → currentMarks 会重建 marksCache）
-        markClean = false;
-      }
-      // 工单 code-editor-opt/02：配对扫描清单总是增量（非结构不碰括号，条目按
-      // 绝对/行内偏移平移；内容引用失配 → 置空，updateBracketMarks 全量重扫一次）
-      if (oldText !== null && pairScanCache.content === oldText) {
-        pairScanCache = {
-          content: tab.content,
-          entries: pairScanPatch(pairScanCache.entries, oldText, tab.content, span),
-        };
-      } else {
-        pairScanCache = { content: null, entries: [] };
-      }
-      // 括号对高亮状态增量修补（行号不变，列偏移按插入/删除平移）
-      patchEditorBracket(span);
-    }
+    applyCachePatches(winCache ? winCache.text : null, tab.content, span);
+    syncTail(null);
   }
-  const selStart = ta.selectionStart;
-  const selEnd = ta.selectionEnd;
-  // 标记状态先算：行级修补/窗口重画要用最终的 editorBracket/editorWord
-  // （词/括号状态随内容/光标变化，先算后渲染——与 refreshMarkSetters 的
-  // 「状态先行」纪律一致）；随后复核 markClean：词/查找/错误叠加态出现 →
-  // 行级修补不可用（其渲染不含词/查找/错误标记），走全量窗口重画
-  updateWordMarks();
-  updateBracketMarks();
-  if (editorWord.word || editorFind.query || getCompileErrors().length) {
-    markClean = false;
-  }
-  // 工单 code-editor-opt/05：查找命中区段在窗口渲染**前**重算（渲染单点化——
-  // 此前渲染后 renderEditorMarks 再全量重画一次；现在 winRenderMarks 直接用
-  // 最新区段，同步尾不再二次渲染）
-  if (editorFind.query) {
-    editorFind.ranges = codeFindRanges(tab.content, editorFind.query);
-    if (!editorFind.ranges.length) editorFind.index = -1;
-    else if (editorFind.index < 0 || editorFind.index >= editorFind.ranges.length) {
-      editorFind.index = 0;
-    }
-  }
-  // 工单 09：scrollTop/Left 只在「行数变化」（内容高度变化）时读写——大
-  // textarea 场景读/写滚动位置会强制布局（实测 60-150ms/次）；行数不变时
-  // .code-edit 显式高度不变，窗口 innerHTML 重建不改变滚动，容器自动保持。
-  const prevCount = winCache ? winCache.lineCount : 0;
-  // 只重绘窗口行（滚动窗口化 08）：内容变化 → 重建逐行缓存 + 重测尺寸 +
-  // 画当前滚动窗口（textarea 本体不重建——焦点/选区零抖动）。工单 11：内容
-  // 未变零重建；非折叠态行数不变 → 增量 patch 只重算变更行；折叠态/行数变化
-  // → 全量 winBuild。
-  const viewText = viewModel ? viewModel.text : tab.content;
-  if (winCache && winCache.text === viewText) {
-    // 内容未变（选区/状态类输入）：零重建，尺寸/窗口均不动
-  } else if (winCache && !viewModel
-    && (editSpan && !editSpan.structural
-      ? true   // 非结构编辑：无换行增删 → 行数必不变，免一次全量 split
-      : viewText.split("\n").length === winCache.lineCount)) {
-    winPatchEdit(viewText, tab.lang, editSpan);
-    if (!(editSpan && !editSpan.structural && winPatchRow(editSpan))) {
-      winRender();   // 行级修补失败（窗口外/元素缺失）→ 全量窗口重画
-    }
-  } else {
-    winBuild(viewText, tab.lang);
-    winRender();
-  }
-  const needScrollRestore = (winCache ? winCache.lineCount : 0) !== prevCount;
-  let scrollTop = 0;
-  let scrollLeft = 0;
-  if (needScrollRestore) {
-    scrollTop = box.scrollTop;
-    scrollLeft = box.scrollLeft;
-  }
-  winApplySize();
-  // 标记层渲染单点（工单 code-editor-opt/05）：窗口渲染（winRender → 
-  // winRenderMarks，或 winPatchRow 行级修补）已用「状态先行」的最新
-  // editorWord/editorBracket/editorFind/错误 渲染一次即终——不再调用
-  // renderEditorMarks 二次全量重画（其仅保留给查找输入/命中跳转等外部入口）。
-  setActiveLine(caretLineFast(selStart));
-  // 只写不读（需要时）：行数变化才恢复滚动
-  if (needScrollRestore) {
-    box.scrollTop = scrollTop;
-    box.scrollLeft = scrollLeft;
-  }
-  if (!composing) {
-    // 工单 09：已聚焦不重复 focus / 选区未变不 setSelectionRange——大
-    // textarea 下这两者是强制布局 / 光标重排的重触发点（实测占比大头）
-    if (document.activeElement !== ta) ta.focus();
-    if (ta.selectionStart !== selStart || ta.selectionEnd !== selEnd) {
-      ta.setSelectionRange(selStart, selEnd);
-    }
-  }
-  renderTabs();   // 脏点随输入即时刷新（标签条内联渲染，事件委托不失效）
-  notifyActive();   // 状态栏信息区随内容/光标刷新（onActiveTabChanged → refreshCodeStatus；不再单独 notifyCursor——避免每击键双刷）
 }
 
 // ===== 查找替换（工单 code-editor-utilize/03 + code-page-vscode-overhaul/03）=====
@@ -2095,11 +2401,16 @@ function rebaseModelContent(newContent, caret) {
   const caretM = caret == null
     ? tab.content.length
     : Math.max(0, Math.min(tab.content.length, caret));
-  const vo = viewModel
-    ? codeFoldModelToView(viewModel.segs, caretM)
-    : caretM;
   ta.focus();
-  ta.setSelectionRange(vo, vo);
+  if (!viewModel && taWinInfo) {
+    // 窗口化（02）：renderPane 后 textarea 已装新窗口文本，光标按模型落位
+    taWindowApply(caretM);
+  } else {
+    const vo = viewModel
+      ? codeFoldModelToView(viewModel.segs, caretM)
+      : caretM;
+    ta.setSelectionRange(vo, vo);
+  }
 }
 
 // insertIntoActiveFile(text)：把文本插入活动标签当前光标/选区（工单
@@ -2118,6 +2429,10 @@ export function insertIntoActiveFile(text) {
   if (viewModel) {
     start = codeFoldViewToModel(viewModel.segs, ta.selectionStart);
     end = codeFoldViewToModel(viewModel.segs, ta.selectionEnd);
+  } else if (taWinInfo) {
+    // 窗口化（02）：textarea 选区是窗口内偏移 → 模型偏移（windowPosToView 单源）
+    start = windowPosToView(taWinInfo, ta.selectionStart);
+    end = windowPosToView(taWinInfo, ta.selectionEnd);
   } else { start = ta.selectionStart; end = ta.selectionEnd; }
   const r = insertAtPosition(tab.content, text, { start, end });
   if (viewModel) {
@@ -2230,16 +2545,21 @@ export function initCodeEditor() {
     document.body.appendChild(d);
   });
   // 滚动窗口化（工单 08）：窗口内滚动零 DOM（winRender 同窗跳过），跨窗口
-  // rAF 节流重建；视口尺寸变化（布局/面板高度）经 ResizeObserver 重画。
+  // 同步重建（本切片 02 未接 rAF 节流——04 工单「滚动同步」细化；视口尺寸
+  // 变化（布局/面板高度）经 ResizeObserver 重画。
+  // 工单 02：滚动后同步 textarea 窗口（行区间变化才重装文本；同窗只挪覆盖
+  // 高度——overscan 上缘随 scrollTop 连续变化，textarea 须盖满视口）。
   const viewBox = paneBox();
   if (viewBox) {
     viewBox.addEventListener("scroll", () => {
       winReadView();
-      if (winFrame) return;
-      winFrame = requestAnimationFrame(() => { winFrame = 0; winRender(); });
+      // 工单 02：滚动即窗口切换（同步——窗口行区间变化才重装文本，winRender
+      // 同窗早退零 DOM；rAF 节流属 04 工单「滚动同步」细化，本切片先打通）。
+      winRender();
+      taWindowSync();
     });
     if (typeof ResizeObserver === "function") {
-      new ResizeObserver(() => { winReadView(); winRender(); }).observe(viewBox);
+      new ResizeObserver(() => { winReadView(); winRender(); taWindowSync(); }).observe(viewBox);
     }
   }
   const strip = $("code-tabs");
@@ -2371,7 +2691,7 @@ export function initCodeEditor() {
     box.addEventListener("click", (e) => {
       const ta = e.target;
       if (ta && ta.classList && ta.classList.contains("code-ta")) {
-        setActiveLine(caretLineFast(ta.selectionStart));
+        setActiveLine(caretLineFast(taCaretViewPos()));
         scheduleCursorWork();   // 重活顺延一帧：高亮先上屏（性能整改）
       }
     });
@@ -2430,7 +2750,7 @@ export function initCodeEditor() {
       // 屏）；选中词/括号/状态栏等重活经 scheduleCursorWork 顺延一帧，不
       // 阻塞本帧绘制。Tab/Enter/括号分支随后 applyEdit → syncEditorAfterInput
       // 会再按新选区校正一次（幂等）。
-      setActiveLine(caretLineFast(ta.selectionStart));
+      setActiveLine(caretLineFast(taCaretViewPos()));
       scheduleCursorWork();
       if (!nativeUndo && (e.ctrlKey || e.metaKey) && !e.altKey) {
         // 快照降级（工单 04）：原生撤销栈不可用时 Ctrl+Z/Y 走自定义栈
@@ -2446,23 +2766,24 @@ export function initCodeEditor() {
           return;
         }
       }
+      const eb = editSource();   // 窗口化 = 模型全文+模型选区；折叠/全量 = 视图
       if (e.key === "Tab" && e.shiftKey) {
         e.preventDefault();
-        const r = shiftTab(ta.value, ta.selectionStart, ta.selectionEnd);
+        const r = shiftTab(eb.text, eb.selStart, eb.selEnd);
         applyEdit(r.value, r.start, r.end);
       } else if (e.key === "Tab") {
         e.preventDefault();
-        const r = indentLines(ta.value, ta.selectionStart, ta.selectionEnd);
+        const r = indentLines(eb.text, eb.selStart, eb.selEnd);
         applyEdit(r.value, r.start, r.end);
       } else if (e.key === "Enter") {
         e.preventDefault();
-        const r = indentOnEnter(ta.value, ta.selectionStart, ta.selectionEnd);
+        const r = indentOnEnter(eb.text, eb.selStart, eb.selEnd);
         applyEdit(r.value, r.start, r.end);
       } else if (!e.isComposing && !composing
         && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "k") {
         // 行操作（工单 code-page-vscode-overhaul/01）：Ctrl+Shift+K 删除行
         e.preventDefault();
-        const r = deleteLine(ta.value, ta.selectionStart, ta.selectionEnd);
+        const r = deleteLine(eb.text, eb.selStart, eb.selEnd);
         applyEdit(r.value, r.start, r.end);
       } else if (!e.isComposing && !composing && e.altKey && !e.ctrlKey && !e.metaKey
         && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
@@ -2471,16 +2792,17 @@ export function initCodeEditor() {
         e.preventDefault();
         const dir = e.key === "ArrowUp" ? "up" : "down";
         const r = e.shiftKey
-          ? copyLine(ta.value, ta.selectionStart, ta.selectionEnd, dir)
-          : moveLine(ta.value, ta.selectionStart, ta.selectionEnd, dir);
+          ? copyLine(eb.text, eb.selStart, eb.selEnd, dir)
+          : moveLine(eb.text, eb.selStart, eb.selEnd, dir);
         applyEdit(r.value, r.start, r.end);
       } else if (!e.isComposing && !composing && (e.ctrlKey || e.metaKey)
         && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "l") {
         // 行操作（工单 code-page-vscode-overhaul/01）：Ctrl+L 选整行
         e.preventDefault();
-        const r = lineRangeOf(ta.value, ta.selectionStart, ta.selectionEnd);
-        ta.setSelectionRange(r.start, r.end);
-        setActiveLine(caretLineFast(ta.selectionStart));
+        const r = lineRangeOf(eb.text, eb.selStart, eb.selEnd);
+        if (taWinInfo) taSetRange(r.start, r.end);
+        else ta.setSelectionRange(r.start, r.end);
+        setActiveLine(caretLineFast(taCaretViewPos()));
         scheduleCursorWork();
       } else if (!e.isComposing && !composing && (e.ctrlKey || e.metaKey)
         && !e.shiftKey && !e.altKey && e.key === "/") {
@@ -2489,14 +2811,14 @@ export function initCodeEditor() {
         const tab = getActiveTab();
         if (!tab || (tab.lang !== "c" && tab.lang !== "xml")) return;
         e.preventDefault();
-        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+        const sel = eb.text.slice(eb.selStart, eb.selEnd);
         const r = tab.lang === "xml"
-          ? toggleLineComment(ta.value, ta.selectionStart, ta.selectionEnd,
+          ? toggleLineComment(eb.text, eb.selStart, eb.selEnd,
             { open: "<!--", close: "-->" })
           : (sel.includes("/*")
-            ? toggleBlockComment(ta.value, ta.selectionStart, ta.selectionEnd,
+            ? toggleBlockComment(eb.text, eb.selStart, eb.selEnd,
               { open: "/*", close: "*/" })
-            : toggleLineComment(ta.value, ta.selectionStart, ta.selectionEnd,
+            : toggleLineComment(eb.text, eb.selStart, eb.selEnd,
               { open: "//" }));
         applyEdit(r.value, r.start, r.end);
       } else if (!e.isComposing && !composing && (BRACKET_OPEN[e.key] || BRACKET_CLOSE[e.key] || e.key === "Backspace")) {
@@ -2507,16 +2829,16 @@ export function initCodeEditor() {
         if (!langOk) return;
         if (BRACKET_OPEN[e.key]) {
           e.preventDefault();
-          const r = bracketOpen(ta.value, ta.selectionStart, ta.selectionEnd, e.key);
+          const r = bracketOpen(eb.text, eb.selStart, eb.selEnd, e.key);
           applyEdit(r.value, r.start, r.end);
         } else if (BRACKET_CLOSE[e.key]) {
-          const r = bracketClose(ta.value, ta.selectionStart, ta.selectionEnd, e.key);
+          const r = bracketClose(eb.text, eb.selStart, eb.selEnd, e.key);
           if (r) {
             e.preventDefault();
             applyEdit(r.value, r.start, r.end);
           }
         } else if (e.key === "Backspace") {
-          const r = bracketBackspace(ta.value, ta.selectionStart, ta.selectionEnd);
+          const r = bracketBackspace(eb.text, eb.selStart, eb.selEnd);
           if (r) {
             e.preventDefault();
             applyEdit(r.value, r.start, r.end);
@@ -2528,19 +2850,19 @@ export function initCodeEditor() {
     // 双保险；不逐按键重算，评审整改归并 keydown/click/keyup 三处）
     box.addEventListener("select", () => {
       const ta = box.querySelector(".code-ta");
-      if (ta) setActiveLine(caretLineFast(ta.selectionStart));
+      if (ta) setActiveLine(caretLineFast(taCaretViewPos()));
       scheduleCursorWork();   // 状态栏 Ln/Col 随选区变化刷新（工单 01；顺延一帧，性能整改）
     });
     // 点击也立即刷当前行高亮（用户现场修复：部分浏览器 textarea 点击不触发
     // select/keyup——高亮行落后光标一行；click 兜底，幂等）
     box.addEventListener("click", () => {
       const ta = box.querySelector(".code-ta");
-      if (ta) setActiveLine(caretLineFast(ta.selectionStart));
+      if (ta) setActiveLine(caretLineFast(taCaretViewPos()));
     });
     box.addEventListener("keyup", (e) => {
       const ta = e.target;
       if (ta && ta.classList && ta.classList.contains("code-ta")) {
-        setActiveLine(caretLineFast(ta.selectionStart));
+        setActiveLine(caretLineFast(taCaretViewPos()));
         scheduleCursorWork();
       }
     });

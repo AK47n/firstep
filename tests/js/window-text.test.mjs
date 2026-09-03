@@ -9,6 +9,8 @@ import {
   windowEditToModel,
   windowTextMatches,
   windowTextMatchesModel,
+  windowPosFromView,
+  windowPosToView,
 } from "../../src/contest_generator/static/js/fx/window-text.js";
 import { editChangeSpan } from "../../src/contest_generator/static/js/fx/edit-patch.js";
 import { buildLineStarts } from "../../src/contest_generator/static/js/fx/codeeditor.js";
@@ -216,4 +218,28 @@ test("windowEditToView：随机微小编辑与全量对拍一致", () => {
     const actual = viewText.slice(0, m.p) + winNew.slice(span.p, span.p + span.newSegLen) + viewText.slice(m.p + m.oldSegLen);
     assert.equal(actual, direct, "seed " + li);
   }
+});
+
+test("windowPosFromView：窗口内视图偏移 → 窗口偏移（首/中/末）；越界 → null", () => {
+  const lines = ["aaa", "bbb", "ccc", "ddd"];
+  const abs = lineStartsOf(lines);
+  const w = windowTextBuild(lines, 1, 3, abs);   // 窗口 "bbb\nccc"，absStart = 4
+  assert.equal(w.text, "bbb\nccc");
+  assert.equal(windowPosFromView(w, abs[1]), 0);           // 窗口首行行首
+  assert.equal(windowPosFromView(w, abs[1] + 1), 1);       // 行中
+  assert.equal(windowPosFromView(w, abs[2] + 3), w.text.length);  // 窗口末（ccc 行尾）
+  assert.equal(windowPosFromView(w, abs[1] - 1), null);    // 窗口上方（aaa 内）
+  assert.equal(windowPosFromView(w, abs[3]), null);        // 窗口下方（ddd 行首）
+  assert.equal(windowPosFromView(w, 0), null);             // 文档首（窗口起点前）
+});
+
+test("windowPosToView：窗口偏移 → 视图绝对偏移；非法 winInfo → null", () => {
+  const lines = ["aaa", "bbb", "ccc", "ddd"];
+  const abs = lineStartsOf(lines);
+  const w = windowTextBuild(lines, 1, 3, abs);
+  assert.equal(windowPosToView(w, 0), abs[1]);
+  assert.equal(windowPosToView(w, 4), abs[1] + 4);        // "bbb\nccc" 中段
+  assert.equal(windowPosToView(w, w.text.length), abs[2] + 3);
+  assert.equal(windowPosToView(null, 0), null);           // 防御
+  assert.equal(windowPosToView({}, 0), null);
 });

@@ -15,7 +15,16 @@ import { caretLineOf } from "/js/fx/codeeditor.js";
 import { lineDiffCompute, lineDiffFirstChangedLine } from "/js/fx/line-diff.js";
 import { mainDiffHTML } from "/js/fx/diff.js";
 import { WRITE_GUARD_ACTIONS } from "/js/fx/write-guard.js";
-import { getActiveTab, getCodeDir, onActiveTabChanged, editJumpToFile, insertIntoActiveFile } from "/js/ui/codeeditor.js";
+import {
+  getActiveTab,
+  getCodeDir,
+  onActiveTabChanged,
+  editJumpToFile,
+  insertIntoActiveFile,
+  editorSelectionModel,
+  editorSelectionView,
+  editorViewText,
+} from "/js/ui/codeeditor.js";
 import { aiActionStart, aiActionStop } from "/js/ui/ai-banner.js";  // 全局「AI 行动中」横幅（ai-action-banner/02 同 crate 先例）
 // 写盘守卫为动态 import：code-write-guard 静态 import codeview（isMainCDiskDir），
 // 而 codeview → code-ai-chat —— 静态链路成环（codeview → code-ai-chat →
@@ -103,11 +112,15 @@ function selectionState() {
 function selectionSnapshot() {
   const sel = selectionState();
   if (!sel) return null;
-  const code = sel.ta.value.slice(sel.ta.selectionStart, sel.ta.selectionEnd);
-  const startLine = caretLineOf(sel.ta.value, sel.ta.selectionStart);
+  // 窗口化（textarea 只装窗口文本）/折叠态：选区经 codeeditor 单源换算为模型
+  // 坐标——不能直接 slice ta.value（窗口文本 ≠ 模型文本）。
+  const m = editorSelectionModel();
+  if (!m) return null;
+  const code = sel.tab.content.slice(m.start, m.end);
+  const startLine = caretLineOf(sel.tab.content, m.start);
   // 选区止于换行（selectionEnd 落在下一行行首）→ 末行号 -1（评审 s1 整改）
-  const endRaw = caretLineOf(sel.ta.value, sel.ta.selectionEnd)
-    - (sel.ta.value.slice(0, sel.ta.selectionEnd).endsWith("\n") ? 1 : 0);
+  const endRaw = caretLineOf(sel.tab.content, m.end)
+    - (sel.tab.content.slice(0, m.end).endsWith("\n") ? 1 : 0);
   return { path: sel.tab.path, lang: sel.tab.lang, startLine, endLine: endRaw, code };
 }
 
@@ -119,13 +132,13 @@ function updateSelectionButton() {
   const edit = document.querySelector(".code-edit");
   if (!edit) return;
   const btn = ensureSelectionBtn(edit);
-  const sel = selectionState();
-  if (!sel) {
+  const v = editorSelectionView();
+  if (!v) {
     btn.classList.add("hidden");
     closeContextMenu();   // 选择清空 → 动作菜单关闭（工单 07 验收）
     return;
   }
-  const lineNo = caretLineOf(sel.ta.value, sel.ta.selectionEnd);
+  const lineNo = caretLineOf(editorViewText(), v.end);   // 视图行号（高亮层 data-code-line 同口径）
   const lineEl = edit.querySelector('.code-hl-line[data-code-line="' + lineNo + '"]');
   if (!lineEl) { btn.classList.add("hidden"); return; }
   const r = lineEl.getBoundingClientRect();
