@@ -604,15 +604,19 @@ function updateWordMarks() {
   if (curEditSpan && !curEditSpan.structural && word === editorWord.word
     && editorWordContent !== null && editorWordContent === (winCache ? winCache.text : null)
     && word) {
+    // 工单 code-editor-opt/05：内容已变 → 区段位置必变（无需 JSON.stringify
+    // 对比 2000+ 条——changed=true 触发重渲即可，语义与刷新路径一致）
     const ranges = wordRangesPatch(editorWord.ranges, word, editorWordContent, content, curEditSpan);
-    const changed = JSON.stringify(ranges) !== JSON.stringify(editorWord.ranges);
     editorWord = { word, ranges };
     editorWordContent = content;
-    return changed;
+    return true;
   }
   const ranges = word ? codeWordRanges(content, word) : [];
+  // 工单 code-editor-opt/05：词变了 → 必变（常见热路径，省 2000+ 条 JSON 对比）；
+  // 词未变但走到这里 = 内容变更未经增量（缓存失配等）→ 对比判定
   const changed = word !== editorWord.word
-    || JSON.stringify(ranges) !== JSON.stringify(editorWord.ranges);
+    ? true
+    : JSON.stringify(ranges) !== JSON.stringify(editorWord.ranges);
   if (changed) editorWord = { word, ranges };
   editorWordContent = content;
   return changed;
@@ -949,29 +953,34 @@ function winRenderMarks() {
     // 工单 code-editor-opt/02：静态层缓存（引导线/彩虹）已按内容引用增量修补
     // → 无论 markClean 与否都复用（词/查找/错误等状态标记独立于缓存、随状态
     // 追加）；markClean 仅决定行级修补是否可用（其渲染含括号对两段）。
-    marks = marksCache.marks;
+    // 工单 code-editor-opt/05：状态标记单次拼接——不再逐类 concat 复制整份
+    // 2000+ 条静态清单（4 次 concat = 4 次全量复制 + 临时数组，GC 主源）。
+    const extra = [];
     if (editorBracket) {
-      marks = marks.concat([
+      extra.push(
         { line: editorBracket.open.line, start: editorBracket.open.start,
           end: editorBracket.open.end, kind: "bracket" },
         { line: editorBracket.close.line, start: editorBracket.close.start,
           end: editorBracket.close.end, kind: "bracket" },
-      ]);
+      );
     }
     if (editorWord.word && editorWord.ranges.length) {
-      marks = marks.concat(editorWord.ranges.map((r) => ({ ...r, kind: "word" })));
+      for (const w of editorWord.ranges) {
+        extra.push({ line: w.line, start: w.start, end: w.end, kind: "word" });
+      }
     }
     if (editorFind.query && editorFind.ranges.length) {
-      marks = marks.concat(editorFind.ranges.map((r, i) => ({
-        line: r.line, start: r.start, end: r.end,
-        kind: i === editorFind.index ? "current" : "hit",
-      })));
+      editorFind.ranges.forEach((x, i) => {
+        extra.push({ line: x.line, start: x.start, end: x.end,
+          kind: i === editorFind.index ? "current" : "hit" });
+      });
     }
     for (const er of errLines || []) {
       const ln = (winCache.lines && winCache.lines[er.line - 1] != null
         ? winCache.lines[er.line - 1].length : 0);
-      marks = marks.concat([{ line: er.line, start: 0, end: ln, kind: "error", title: er.message }]);
+      extra.push({ line: er.line, start: 0, end: ln, kind: "error", title: er.message });
     }
+    marks = extra.length ? marksCache.marks.concat(extra) : marksCache.marks;
   } else if (viewModel) {
     marks = marksForView(errLines);
   } else {
@@ -1969,6 +1978,16 @@ function syncEditorAfterInput() {
   if (editorWord.word || editorFind.query || getCompileErrors().length) {
     markClean = false;
   }
+  // 工单 code-editor-opt/05：查找命中区段在窗口渲染**前**重算（渲染单点化——
+  // 此前渲染后 renderEditorMarks 再全量重画一次；现在 winRenderMarks 直接用
+  // 最新区段，同步尾不再二次渲染）
+  if (editorFind.query) {
+    editorFind.ranges = codeFindRanges(tab.content, editorFind.query);
+    if (!editorFind.ranges.length) editorFind.index = -1;
+    else if (editorFind.index < 0 || editorFind.index >= editorFind.ranges.length) {
+      editorFind.index = 0;
+    }
+  }
   // 工单 09：scrollTop/Left 只在「行数变化」（内容高度变化）时读写——大
   // textarea 场景读/写滚动位置会强制布局（实测 60-150ms/次）；行数不变时
   // .code-edit 显式高度不变，窗口 innerHTML 重建不改变滚动，容器自动保持。
@@ -2000,11 +2019,10 @@ function syncEditorAfterInput() {
     scrollLeft = box.scrollLeft;
   }
   winApplySize();
-  // 标记层随输入重算（评审整改 05/06）：updateWordMarks/updateBracketMarks
-  // 已先行（状态单源），此处只做渲染——markClean 路径行级修补/窗口渲染已画
-  // 好标记层，renderEditorMarks 早退；叠加态活跃时走全量重算渲染（单次渲染，
-  // 无双渲染；窗口重画已在各分支完成——行级修补或 winRender，此处不再重复）。
-  renderEditorMarks();
+  // 标记层渲染单点（工单 code-editor-opt/05）：窗口渲染（winRender → 
+  // winRenderMarks，或 winPatchRow 行级修补）已用「状态先行」的最新
+  // editorWord/editorBracket/editorFind/错误 渲染一次即终——不再调用
+  // renderEditorMarks 二次全量重画（其仅保留给查找输入/命中跳转等外部入口）。
   setActiveLine(caretLineFast(selStart));
   // 只写不读（需要时）：行数变化才恢复滚动
   if (needScrollRestore) {

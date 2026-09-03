@@ -1,104 +1,74 @@
 {
-  "timing": 45.80000000074506,
+  "timing": 29.800000000745058,
   "rows": [
     {
       "fn": "(program) @ ",
-      "ms": "180.12",
-      "samples": 106
-    },
-    {
-      "fn": "(garbage collector) @ ",
-      "ms": "29.49",
-      "samples": 19
+      "ms": "190.99",
+      "samples": 99
     },
     {
       "fn": "(anonymous) @ ",
-      "ms": "17.48",
-      "samples": 11
+      "ms": "22.40",
+      "samples": 14
     },
     {
-      "fn": "bracketPairScan @ code-brackets.js",
-      "ms": "11.32",
-      "samples": 7
-    },
-    {
-      "fn": "winRenderMarks @ codeeditor.js",
-      "ms": "11.29",
-      "samples": 7
-    },
-    {
-      "fn": "lineStartsOf @ code-fold.js",
-      "ms": "6.25",
-      "samples": 4
+      "fn": "(garbage collector) @ ",
+      "ms": "14.04",
+      "samples": 9
     },
     {
       "fn": "syncEditorAfterInput @ codeeditor.js",
-      "ms": "4.01",
+      "ms": "6.96",
+      "samples": 5
+    },
+    {
+      "fn": "winRenderMarks @ codeeditor.js",
+      "ms": "4.75",
       "samples": 3
     },
     {
-      "fn": "cFoldRanges @ code-fold.js",
-      "ms": "3.18",
+      "fn": "codeMarksHTML @ code-marks.js",
+      "ms": "3.72",
+      "samples": 3
+    },
+    {
+      "fn": "refreshFindPanel @ codeview.js",
+      "ms": "3.19",
       "samples": 2
     },
     {
-      "fn": "(idle) @ ",
-      "ms": "1.61",
+      "fn": "bracketPairScan @ code-brackets.js",
+      "ms": "3.15",
+      "samples": 2
+    },
+    {
+      "fn": "marksPatch @ edit-patch.js",
+      "ms": "1.82",
+      "samples": 1
+    },
+    {
+      "fn": "pairScanPatch @ code-brackets.js",
+      "ms": "1.05",
+      "samples": 1
+    },
+    {
+      "fn": "updateBracketMarks @ codeeditor.js",
+      "ms": "1.57",
       "samples": 1
     },
     {
       "fn": "editChangeSpan @ edit-patch.js",
-      "ms": "1.57",
-      "samples": 1
-    },
-    {
-      "fn": "bracketPairFromEntries @ code-brackets.js",
-      "ms": "1.58",
-      "samples": 1
-    },
-    {
-      "fn": "winPatchEdit @ codeeditor.js",
-      "ms": "1.57",
-      "samples": 1
-    },
-    {
-      "fn": "winRender @ codeeditor.js",
-      "ms": "1.22",
-      "samples": 1
-    },
-    {
-      "fn": "bracketDepthMarks @ code-brackets.js",
-      "ms": "1.75",
-      "samples": 1
-    },
-    {
-      "fn": "renderEditorMarks @ codeeditor.js",
-      "ms": "1.61",
-      "samples": 1
-    },
-    {
-      "fn": "codeMarksHTML @ code-marks.js",
-      "ms": "0.79",
-      "samples": 1
-    },
-    {
-      "fn": "codeFoldRanges @ code-fold.js",
       "ms": "1.60",
       "samples": 1
     },
     {
-      "fn": "skipComment @ code-fold.js",
-      "ms": "1.63",
+      "fn": "bracketDepthMarks @ code-brackets.js",
+      "ms": "1.56",
       "samples": 1
     },
     {
-      "fn": "pairScanEntriesCached @ codeeditor.js",
-      "ms": "1.59",
-      "samples": 1
-    },
-    {
-      "fn": "codeIndentGuideMarks @ code-marks.js",
-      "ms": "1.61",
+      "fn": "selectionState @ code-ai-chat.js",
+      "ms": "1.27",
       "samples": 1
     }
   ]
