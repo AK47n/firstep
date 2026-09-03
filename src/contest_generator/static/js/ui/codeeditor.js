@@ -64,6 +64,7 @@ import {
 import { confirmModal } from "/js/ui/confirm.js";
 import { unsavedSwitchModalHTML } from "/js/fx/exit-guard.js";  // 未保存退出保护纯件（工单 code-editor-refine/01）
 import { compileErrorLinesForFile } from "/js/fx/code-compile.js";  // 编译错误→行映射纯件（工单 code-editor-refine/05）
+import { insertAtPosition } from "/js/fx/ai-insert.js";  // AI 代码块插入位置纯件（工单 code-editor-refine/08）
 
 // ---- 模块态：目录 / 标签 / 活动文件 / 内容 memo / 监听器 ----
 let codeDir = "";
@@ -1643,6 +1644,33 @@ function rebaseModelContent(newContent, caret) {
     : caretM;
   ta.focus();
   ta.setSelectionRange(vo, vo);
+}
+
+// insertIntoActiveFile(text)：把文本插入活动标签当前光标/选区（工单
+// code-editor-refine/08）——无选区 = 光标处插入；有选区 = 替换选区；折叠态
+// 经 codeFoldViewToModel 映射到模型偏移后 rebaseModelContent（模型级重写 +
+// 折叠按签名保留）；非折叠走 applyEdit 同手输路径（textarea + 高亮/行号/脏点/
+// 撤销同步）。插入后光标 = 插入末尾；只读 / 无活动标签 → false 不改动；
+// 不自动落盘（用户 Ctrl+S 既有保存冲突/写盘守卫）。
+export function insertIntoActiveFile(text) {
+  const tab = getActiveTab();
+  if (!tab || tab.readonly) return false;
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  if (!ta) return false;   // .md 预览态/未渲染：无可编辑缓冲——不做尾部追加假成功（评审整改）
+  let start;
+  let end;
+  if (viewModel) {
+    start = codeFoldViewToModel(viewModel.segs, ta.selectionStart);
+    end = codeFoldViewToModel(viewModel.segs, ta.selectionEnd);
+  } else { start = ta.selectionStart; end = ta.selectionEnd; }
+  const r = insertAtPosition(tab.content, text, { start, end });
+  if (viewModel) {
+    pushEditSnapshot();   // 折叠态走 rebase 无 execCommand 原生撤销——快照栈补撤销（评审整改；replaceAll 沿袭缺口记录）
+    rebaseModelContent(r.value, r.selStart);
+  } else {
+    applyEdit(r.value, r.selStart, r.selEnd);
+  }
+  return true;
 }
 
 // replaceAllInActiveFile(needle, replacement)：活动标签全部替换——空针 /

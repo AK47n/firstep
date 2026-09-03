@@ -176,6 +176,22 @@ export function lineDiffCompute(before, after) {
   };
 }
 
+// lineDiffFirstChangedLine(diffObj)：lineDiffCompute 结果 → 首个改动行号
+//（首个 del/add 所在的行，按 hunk 顺序 + ctx 步进；锚点行 = hunk 起始）——
+// 工单 code-editor-refine/08「应用后跳转首处改动行」用（hunk.line 是锚点
+// 可含 ctx，非精确首改行）；无改动/空结果 → null。
+export function lineDiffFirstChangedLine(diffObj) {
+  if (!diffObj || !Array.isArray(diffObj.hunks)) return null;
+  for (const h of diffObj.hunks) {
+    let line = h.line;
+    for (const ln of h.lines || []) {
+      if (ln.kind === "ctx") { line += 1; continue; }
+      return line;
+    }
+  }
+  return null;
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { lineDiffCompute, LINE_DIFF_MAX_CELLS });
+  Object.assign(window, { lineDiffCompute, lineDiffFirstChangedLine, LINE_DIFF_MAX_CELLS });
 }
