@@ -14,6 +14,7 @@ import {
   compileStatusText,
   compileStatusClass,
   compileErrorRowsHTML,
+  AUTO_COMPILE_KEY,
 } from "/js/fx/code-compile.js";
 import {
   getCodeDir,
@@ -21,6 +22,7 @@ import {
   saveAllDirtyTabs,
   editJumpToFile,
   setCompileErrors,   // 编辑器侧错误显示态（工单 code-editor-refine/05：状态归 codeeditor——UI 单向依赖约定，见其模块态注释）
+  onFileSaved,        // 保存成功监听（工单 10：自动编译只认手工保存）
 } from "/js/ui/codeeditor.js";
 import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";
 import { isMainCDiskDir } from "/js/ui/codeview.js";  // 单源谓词（评审整改：本模块不再重复实现）
@@ -180,10 +182,58 @@ async function jumpToCompileError(path, line) {
   await editJumpToFile(resolved, lineNo);
 }
 
+// ===== 保存自动编译开关（工单 code-editor-refine/10）=====
+// 状态栏 toggle（默认关）：localStorage（AUTO_COMPILE_KEY 单源）；开启后
+// 手工保存成功（onFileSaved manual=true——程序化保存如编译前自动落盘不触发）
+// → runCodeCompile（内部已含自动保存全部 + 防重入 compileBusy）。手动点
+// 「编译」不受开关影响；编译失败只进错误面板（不弹额外提示，既有行为）。
+function autoCompileEnabled() {
+  try { return localStorage.getItem(AUTO_COMPILE_KEY) === "1"; } catch { return false; }
+}
+
+function setAutoCompileBtn(btn) {
+  if (!btn) return;
+  const on = autoCompileEnabled();
+  btn.classList.toggle("on", on);
+  btn.textContent = on ? "自动编译：开" : "自动编译：关";
+  btn.title = on
+    ? "已开启：保存成功自动触发编译（点此关闭）"
+    : "保存成功后自动触发编译（默认关，点此开启）";
+}
+
+function initAutoCompileToggle() {
+  const btn = $("btn-code-auto-compile");
+  if (btn) btn.addEventListener("click", () => {
+    const on = !autoCompileEnabled();
+    try {
+      localStorage.setItem(AUTO_COMPILE_KEY, on ? "1" : "0");
+    } catch {
+      // 隐私模式/禁用存储：写不进去——提示未生效，按钮回读真实态（评审整改）
+      setAutoCompileBtn(btn);
+      toast("info", "无法写入设置（浏览器存储不可用），本次操作未生效");
+      return;
+    }
+    setAutoCompileBtn(btn);
+    toast("info", on ? "已开启保存自动编译（保存成功即触发）" : "已关闭保存自动编译");
+  });
+  setAutoCompileBtn(btn);
+  // 手工保存成功钩子：开关开 + 非编译中 → runCodeCompile（自身含防重入与
+  // 自动保存全部）。编译失败沿用 runCodeCompile 既有 catch（toastError + 面板
+  // err 态——与手动编译同路径，工单「不弹额外提示」= 无新增提示，按此理解）。
+  // manual = 用户显式保存（Ctrl+S/保存按钮/保存全部/冲突覆盖确认）+ 程序化
+  // 自动落盘（编译前 saveAllDirtyTabs/守卫/磁盘重载）不触发。
+  onFileSaved((tab, resp, manual) => {
+    if (!manual || !autoCompileEnabled()) return;
+    if (compileBusy) return;   // 编译中连续保存不重复触发（工单 10 验收；runCodeCompile 内另有防重入）
+    runCodeCompile();
+  });
+}
+
 // initCodeCompile()：入口绑定（host 启动区调用；DOM 已就绪）。
 export function initCodeCompile() {
   const btn = $("btn-code-compile");
   if (btn) btn.addEventListener("click", () => runCodeCompile());
+  initAutoCompileToggle();
 
   const errors = errorsEl();
   if (errors) errors.addEventListener("click", (e) => {
