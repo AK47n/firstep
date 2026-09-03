@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=837fec2124a766b3067e5e84b48356dc5d8c84e2 -->
+<!-- changelog-auto: last-commit=d0780ef76dba62e8630793afa54d2bb048c8dbc0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 19:13 fix：诊断面板内联 border-radius 走令牌（--radius-md）——修复样式令牌守卫
 - 19:51 feat：代码编辑器非结构编辑标记缓存增量修补（工单 code-editor-opt/01）
 - 20:08 feat：代码编辑器输入链 O(log n) 行号 + 配对扫描缓存 + 行级 DOM 修补（工单 code-editor-opt/02）
+- 20:12 chore：代码编辑器优化第三轮收尾——对齐守卫/回归冒烟/工单结案（工单 code-editor-opt/03+04）
 
 ## 2026-09-02
 - 12:18 工单 topics-control-2023-2025/03：2023 控制题拆条（E/G/I 三题入库）——定位 E=p183-185/G=p189-193/I=p197-199（题标记+页眉核实）；fitz 提取小题 PDF 3 份（466/949/498KB，无 34MB 副本）；split_topics_document 零 LLM 拆条（I 题超库函数 TITLE_RE 字母域 [A-H] → 章节切片兜底）；结构补全照 2026H（年份标题/参赛注意事项/题名/一任务二要求三说明四评分标准，去汇编页眉）；11 页渲染视觉核对——I 题图 1 矢量标注文本层缺失已人工补录（E/G 标注散行为原文本层）；入库 category=control programs=[]；图注 enrich 触发（文字标注兜底因 pypdf 汇编 PDF 坐标 0,0 失败、渲染视觉未配置 → 静默记录）；断言 3/3 + 真库污染黑名单删「激光笔」（2023E/G 合法题面词）；pytest 176 全绿
