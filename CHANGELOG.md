@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=74a4e693de05c9f93cbc6fcf60f6a5712e0feb63 -->
+<!-- changelog-auto: last-commit=79829763130efc334249f7dcfc11045315d81b40 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-03
 - 13:00 feat：编译错误行内标记（行号色点 + 错误行底色/波浪线 + title 悬停 + 点击跳转）——fx 纯件 compileErrorLinesForFile（path 归一 \\→/、去 . 段、../ 后缀与 basename 兜底、同行消息合并、line 0 跳过）与 compileErrorPathNorm/Base（与生成页修复中心 fixKeyOf/fixKeyBasename 单源化）；ui 错误态 setCompileErrors/getCompileErrors 成对导出（ui 单向依赖：状态归 codeeditor，写方=code-compile，免 ui-cycle 环）；winRenderMarks 一次映射共用标记层与行号色点（评审整改：currentMarks 可选 errLines、越界钳制、split 移出循环）；MARK_PRIORITY 加 error:4（压过 current/hit/word/bracket）+ codeMarksHTML 可选 title（esc 后悬停）；gutter 色点点击复用 jumpToCompileError 兜底链（折叠箭头不拦截）；单测 5 组 + 全量 1224 pass + smoke-05 11/11（工单 code-editor-refine/05）
+- 13:16 feat：文件树右键菜单（打开/复制相对路径/重命名/删除）——fx 纯件 treeCtxItems/treeCtxMenuHTML/treeCtxClamp（菜单项/HTML 转义/视口溢出钳制 8px + CSS max-height 兜底）；ui/code-tree-ops.js 菜单浮层（#code-tree contextmenu 委托、Esc/外部 mousedown/任意滚动三通道关闭、连续右键跟随新目标、菜单内右键不叠原生菜单）；打开=文件开 tab / 目录展开收起定位；复制路径=相对工程根、纯前端；重命名/删除与悬浮 ✎/🗑 共用 TREE_OP_DISPATCH 同一函数路径（含 tab 联动；treeRename 补 guardTreeOpWrite 脏保护——与删除同口径，工单 06 评审整改）；复制机制单源化：app.js 新增 copyText(text)（clipboard 优先 → 隐藏 textarea + execCommand 兜底），迁移全仓库 7 处同型实现（toast/最近/核对表/手稿/输出目录/烧录命令/main.c/母版/PDF），各点提示文案保留；CSS .code-ctx-menu 浮层 token 深浅主题自适应；单测 3 组 + 全量 1227 pass + smoke-06 19/19（工单 code-editor-refine/06）
 
 ## 2026-09-02
 - 12:18 工单 topics-control-2023-2025/03：2023 控制题拆条（E/G/I 三题入库）——定位 E=p183-185/G=p189-193/I=p197-199（题标记+页眉核实）；fitz 提取小题 PDF 3 份（466/949/498KB，无 34MB 副本）；split_topics_document 零 LLM 拆条（I 题超库函数 TITLE_RE 字母域 [A-H] → 章节切片兜底）；结构补全照 2026H（年份标题/参赛注意事项/题名/一任务二要求三说明四评分标准，去汇编页眉）；11 页渲染视觉核对——I 题图 1 矢量标注文本层缺失已人工补录（E/G 标注散行为原文本层）；入库 category=control programs=[]；图注 enrich 触发（文字标注兜底因 pypdf 汇编 PDF 坐标 0,0 失败、渲染视觉未配置 → 静默记录）；断言 3/3 + 真库污染黑名单删「激光笔」（2023E/G 合法题面词）；pytest 176 全绿
