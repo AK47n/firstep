@@ -9,6 +9,7 @@ import {
   codeFoldVisible,
   codeFoldViewToModel,
   codeFoldMapEdit,
+  codeFoldMerge,
   codeFoldPlaceholderText,
 } from "../../src/contest_generator/static/js/fx/code-fold.js";
 
@@ -105,4 +106,18 @@ test("codeFoldMapEdit：粘贴/删除跨占位 → 整块替换", () => {
   const r = codeFoldMapEdit(content, v.segs, "aa\n… 2 行\ncc\n", "aa\nNEW\ncc\n");
   assert.deepEqual(r.expand, [0]);
   assert.equal(r.model, "aa\nNEW\ncc\n");    // 隐藏整块被替换
+});
+
+// ---- codeFoldMerge（工单 11 性能整改：O(n) 键集实现，语义 = 签名配对保留）----
+
+test("codeFoldMerge：签名相同保留折叠态；漂移/未折叠不保留；O(n) 大输入正确", () => {
+  const folds = [{ startLine: 1, endLine: 3 }, { startLine: 5, endLine: 7 }];
+  assert.deepEqual([...codeFoldMerge(folds, new Set([0]), folds)], [0]);
+  assert.deepEqual([...codeFoldMerge(folds, new Set(), folds)], []);
+  // 漂移后：仅 5-7 保留
+  const next = [{ startLine: 1, endLine: 4 }, { startLine: 5, endLine: 7 }];
+  assert.deepEqual([...codeFoldMerge(folds, new Set([0, 1]), next)], [1]);
+  // 大输入（3000 折叠无折叠态）——与旧实现的语义一致（空集）
+  const many = Array.from({ length: 3000 }, (_, i) => ({ startLine: i * 2 + 1, endLine: i * 2 + 2 }));
+  assert.equal(codeFoldMerge(many, new Set(), many).size, 0);
 });

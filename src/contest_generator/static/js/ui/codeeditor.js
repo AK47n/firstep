@@ -82,6 +82,7 @@ let compileErrors = [];
 // 后 renderPane → winRender 自然取新状态）。
 export function setCompileErrors(errs) {
   compileErrors = Array.isArray(errs) ? errs : [];
+  markClean = false;   // 工单 11：错误集变化 → 标记/色点重算
   renderEditorMarks();
 }
 
@@ -298,6 +299,11 @@ async function loadFileState(path) {
 // current 高亮 + 跳转选区。05 选中词 / 06 括号配对经 currentMarks() 追加
 // 各自区段（kind 不同），一次渲染多类标记。
 let editorFind = { query: "", ranges: [], index: 0 };
+// 工单 11 性能整改：结构性门控——纯字符编辑（无换行/括号/引号/#/tab/行首
+// 空白变化）时折叠清单与标记集不变，跳过全量重算（5000 行逐键 GC/扫描主
+// 热点）；任何结构变更/状态变化（查找/词/括号/错误/换 tab）置 false。
+let markClean = false;
+let marksCache = { content: null, marks: [] };   // 模型级标记缓存（窗口过滤每次切片）
 
 // currentMarks(errLines?)：当前应渲染的标记清单（缩进引导线 + 括号彩虹 + 查找
 // 命中 + 当前命中 + 选中词 + 括号配对 + 编译错误行；07 引导线按模型文本逐行
@@ -392,7 +398,10 @@ function updateBracketMarks() {
 function refreshMarkSetters() {
   const wc = updateWordMarks();
   const bc = updateBracketMarks();
-  if (wc || bc) renderEditorMarks();
+  if (wc || bc) {
+    markClean = false;   // 工单 11：词/括号状态变化 → 标记需重算
+    renderEditorMarks();
+  }
 }
 
 // ===== 折叠视图助手（工单 code-editor-vscode-polish/07）=====
@@ -528,6 +537,7 @@ function renderEditorMarks() {
   const el = box && box.querySelector(".code-marks");
   const tab = getActiveTab();
   if (!el || !tab) return;
+  if (markClean) return;   // 工单 11：纯字符编辑且无命中/词/括号/错误态 → 标记层沿用
   if (editorFind.query) {
     editorFind.ranges = codeFindRanges(tab.content, editorFind.query);
     if (!editorFind.ranges.length) editorFind.index = -1;
@@ -547,6 +557,7 @@ function renderEditorMarks() {
 export function setEditorFind(query) {
   editorFind.query = String(query == null ? "" : query);
   editorFind.index = 0;
+  markClean = false;   // 工单 11：查询态变化 → 标记需重算
   renderEditorMarks();
   return { total: editorFind.ranges.length, current: editorFind.index };
 }
@@ -634,7 +645,8 @@ function winLineHeight() {
 }
 
 // winBuild(viewText, lang)：内容变化后重建逐行缓存（高亮数组 / gutter 数组 /
-// 最长行探针文本 / 行数与行高）。
+// 最长行探针文本 / 行数与行高）。工单 11 增存 text 与 probeIndex（增量 patch
+// 判定用——逐键不再全量重建）。
 function winBuild(viewText, lang) {
   const hlParts = highlightCodeLines(viewText, lang);
   const hl = hlParts.map((h, i) =>
@@ -645,13 +657,61 @@ function winBuild(viewText, lang) {
     : lines.map((_, i) => codeGutterLineHTML(i + 1));
   let probeText = "";
   let probeCols = 0;
+  let probeIndex = -1;
   for (let i = 0; i < lines.length; i++) {
     const col = lines[i].replace(/\t/g, "    ").length;
-    if (col > probeCols) { probeCols = col; probeText = lines[i]; }
+    if (col > probeCols) { probeCols = col; probeText = lines[i]; probeIndex = i; }
   }
-  winCache = { hl, gutter, lineCount: hl.length, probeText, probeCols };
+  winCache = { hl, gutter, lineCount: hl.length, probeText, probeCols, probeIndex, text: viewText };
   winLast = null;
   if (!winLineH) winLineH = winLineHeight();   // 行高仅首次 / codeWindowRefresh 重测（09：避免逐键 getComputedStyle）
+}
+
+// winPatchEdit(viewText, lang)：逐行缓存增量修补（工单 11 性能整改——5000 行
+// 文件逐键全量重高亮 + 全量 GC 是输入链主热点；窗口化只画窗口，但缓存此前
+// 每次输入整体重建）。适用：非折叠态且行数不变（普通字符增删/替换不增删
+// 行）。首尾比对找出变更行区间 → 只重算这些行的高亮与探针最长行；旧探针行
+// 被改掉且新行没有更长 → 全量重扫探针（罕见路径）。折叠态（gutter 模型行号
+// 整体漂移）与行数变化仍走 winBuild 全量。
+function winPatchEdit(viewText, lang) {
+  const oldLines = winCache.text.split("\n");
+  const newLines = viewText.split("\n");
+  const n = newLines.length;
+  let a = 0;
+  while (a < n && oldLines[a] === newLines[a]) a++;
+  let b = 0;
+  while (b < n - a && oldLines[oldLines.length - 1 - b] === newLines[n - 1 - b]) b++;
+  const start = a;
+  const end = n - b;   // [start, end) 变更行
+  if (start < end) {
+    const parts = highlightCodeLines(newLines.slice(start, end).join("\n"), lang);
+    for (let i = 0; i < parts.length; i++) {
+      const idx = start + i;
+      winCache.hl[idx] = '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
+        + parts[i] + "</span>";
+    }
+    let probeCols = winCache.probeCols;
+    let probeText = winCache.probeText;
+    let probeIndex = winCache.probeIndex;
+    const probeTouched = probeIndex >= start && probeIndex < end;
+    for (let i = start; i < end; i++) {
+      const col = newLines[i].replace(/\t/g, "    ").length;
+      if (col > probeCols) { probeCols = col; probeText = newLines[i]; probeIndex = i; }
+    }
+    if (probeTouched && probeText === winCache.probeText && probeCols === winCache.probeCols) {
+      // 旧最长行被改掉且无人超越：全量重扫（罕见——普通输入不触发）
+      probeCols = 0; probeText = ""; probeIndex = -1;
+      for (let i = 0; i < n; i++) {
+        const col = newLines[i].replace(/\t/g, "    ").length;
+        if (col > probeCols) { probeCols = col; probeText = newLines[i]; probeIndex = i; }
+      }
+    }
+    winCache.probeCols = probeCols;
+    winCache.probeText = probeText;
+    winCache.probeIndex = probeIndex;
+  }
+  winCache.text = viewText;
+  winLast = null;   // 内容已变：强制窗口重画（winRender 同窗早退保护）
 }
 
 function winSpacer(px) {
@@ -677,7 +737,17 @@ function winRenderMarks() {
   const r = winLast || winWindow();
   const viewText = viewModel ? viewModel.text : (tab ? tab.content : "");
   const errLines = tab ? compileErrorLinesForFile(getCompileErrors(), tab.path) : [];  // 一次映射，标记层与 gutter 共用（评审整改）
-  const marks = viewModel ? marksForView(errLines) : currentMarks(errLines);
+  // 工单 11：纯字符编辑（markClean）且非折叠态 → 模型级标记缓存直接复用
+  //（currentMarks 全量重算 = 缩进引导线 + 括号深度扫描，逐键热点之一）。
+  let marks;
+  if (!viewModel && markClean && marksCache.content === viewText) {
+    marks = marksCache.marks;
+  } else if (viewModel) {
+    marks = marksForView(errLines);
+  } else {
+    marks = currentMarks(errLines);
+    marksCache = { content: viewText, marks };
+  }
   const lines = viewText.split("\n");
   const windowText = lines.slice(r.start, r.end).join("\n");
   const windowMarks = [];
@@ -796,6 +866,7 @@ export function codeWindowRefresh() {
 }
 
 function renderPane() {
+  markClean = false;   // 工单 11：换 tab/重渲染 → 标记缓存失效
   const box = paneBox();
   if (!box) return;
   const tab = getActiveTab();
@@ -1497,6 +1568,12 @@ function snapshotUndo(redo) {
   return true;
 }
 
+// applyEdit(text, start, end)：程序化编辑（含手输同步路径）落 textarea。
+// 原生撤销优先（execCommand insertText）——但大文档（工单 11：5000 行/200KB+
+// 场景实测 execCommand 对巨型 textarea 的原生撤销快照每击 ~90ms）切换直赋值
+// + 快照栈（snapshot 存字符串引用，v8 rope 无拷贝；撤销语义等价——nativeUndo
+// 关闭时 Ctrl+Z/Y 已走快照栈，见 snapshotUndo）。
+const EDIT_BIG_DOC = 200000;
 function applyEdit(text, start, end) {
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!ta) return;
@@ -1505,7 +1582,8 @@ function applyEdit(text, start, end) {
     return;
   }
   const oldText = ta.value;
-  if (nativeUndo) {
+  const bigDoc = oldText.length > EDIT_BIG_DOC;
+  if (nativeUndo && !bigDoc) {
     // 公共前后缀 diff → 最小替换区间 → execCommand 走浏览器原生撤销栈；
     // execCommand 会同步触发 input（既有 input 监听同步模型/高亮），随后
     // 只做选区最终落位 + 当前行/状态轻量刷新（不重复全量渲染）。
@@ -1539,6 +1617,33 @@ function applyEdit(text, start, end) {
   ta.value = text;
   ta.setSelectionRange(start, end);
   syncEditorAfterInput();
+}
+
+// textEditIsStructural(oldText, newText)：本次编辑是否「结构变更」——纯字符
+// 增删替（不含换行/括号/引号/井号/tab 且未改行首空白）→ false（折叠清单、
+// 括号深度、缩进引导线、行号映射全部不变，可跳过全量重算——工单 11 门控）。
+function textEditIsStructural(oldText, newText) {
+  const oldT = String(oldText == null ? "" : oldText);
+  const newT = String(newText == null ? "" : newText);
+  if (oldT === newT) return true;   // 未变（调用方另有短路）
+  let p = 0;
+  const min = Math.min(oldT.length, newT.length);
+  while (p < min && oldT[p] === newT[p]) p++;
+  let s = 0;
+  while (s < oldT.length - p && s < newT.length - p
+    && oldT[oldT.length - 1 - s] === newT[newT.length - 1 - s]) s++;
+  const seg = newT.slice(p, newT.length - s);
+  if (/[\n{}()[\]"'#\t]/.test(seg)) return true;
+  // 变更段所在行的行首空白变化（缩进引导线依赖）→ structural
+  const beforeLineStart = oldT.lastIndexOf("\n", p - 1) + 1;
+  const afterLineStart = newT.lastIndexOf("\n", p - 1) + 1;
+  const beforeLineEnd = oldT.indexOf("\n", p);
+  const afterLineEnd = newT.indexOf("\n", p);
+  const oldLead = oldT.slice(beforeLineStart,
+    beforeLineEnd < 0 ? oldT.length : beforeLineEnd).match(/^[ \t]*/)[0];
+  const newLead = newT.slice(afterLineStart,
+    afterLineEnd < 0 ? newT.length : afterLineEnd).match(/^[ \t]*/)[0];
+  return oldLead !== newLead;
 }
 
 function syncEditorAfterInput() {
@@ -1575,9 +1680,19 @@ function syncEditorAfterInput() {
       }
     }
   } else {
+    const structural = textEditIsStructural(winCache ? winCache.text : "", ta.value);
     tab.content = ta.value;
-    // 无折叠态也随输入重算折叠区清单（工单 07：快捷键/箭头基于最新内容）
-    folds = codeFoldRanges(tab.content, tab.lang);
+    markClean = false;   // 默认标记失效；纯字符编辑才保持
+    if (structural) {
+      // 结构变更（换行/括号/引号/#/tab/行首空白）：折叠清单须重算
+      // （无折叠态也随输入重算折叠区清单——工单 07：快捷键/箭头基于最新内容）
+      folds = codeFoldRanges(tab.content, tab.lang);
+    } else {
+      // 工单 11：纯字符编辑 → 折叠清单（行号/括号位未变）与标记集不变，
+      // 且无查找/词/括号/错误叠加态时标记层可整体沿用（markClean）
+      markClean = !editorFind.query && !editorWord.word
+        && !editorBracket && !getCompileErrors().length;
+    }
   }
   const selStart = ta.selectionStart;
   const selEnd = ta.selectionEnd;
@@ -1594,9 +1709,17 @@ function syncEditorAfterInput() {
     scrollLeft = box.scrollLeft;
   }
   // 只重绘窗口行（滚动窗口化 08）：内容变化 → 重建逐行缓存 + 重测尺寸 +
-  // 画当前滚动窗口（textarea 本体不重建——焦点/选区零抖动）
+  // 画当前滚动窗口（textarea 本体不重建——焦点/选区零抖动）。工单 11：内容
+  // 未变零重建；非折叠态行数不变 → 增量 patch 只重算变更行；折叠态/行数变化
+  // → 全量 winBuild。
   const viewText = viewModel ? viewModel.text : tab.content;
-  winBuild(viewText, tab.lang);
+  if (winCache && winCache.text === viewText) {
+    // 内容未变（选区/状态类输入）：零重建，尺寸/窗口均不动
+  } else if (winCache && !viewModel && winCache.lineCount === viewText.split("\n").length) {
+    winPatchEdit(viewText, tab.lang);
+  } else {
+    winBuild(viewText, tab.lang);
+  }
   winApplySize();
   winRender();
   // 标记层随输入重算（评审整改 05/06）：updateWordMarks/updateBracketMarks
