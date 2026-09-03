@@ -1892,6 +1892,50 @@ export function replaceOneInActiveFile(replacement, jumpToNext) {
 
 // ===== initCodeEditor：入口绑定（host 启动区调用；DOM 已就绪）=====
 export function initCodeEditor() {
+  // 现场诊断面板（Ctrl+Alt+D，用户现场排障用——显示各层几何与命中目标，
+  // 屏幕直接可读；无副作用，正常使用不触发）
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.key.toLowerCase() !== "d") return;
+    e.preventDefault();
+    let old = document.getElementById("code-diag-box");
+    if (old) { old.remove(); return; }
+    const box = paneBox();
+    if (!box) return;
+    const edit = box.querySelector(".code-edit");
+    const ta = box.querySelector(".code-ta");
+    const hl = box.querySelector(".code-hl");
+    const gutter = box.querySelector(".code-gutter");
+    const r = (el) => el ? Math.round(el.getBoundingClientRect().top) + ".." + Math.round(el.getBoundingClientRect().bottom) : "无";
+    const br = box.getBoundingClientRect();
+    const hitLines = [];
+    if (hl) {
+      for (const ln of Array.from(hl.querySelectorAll(".code-hl-line"))) {
+        const lr = ln.getBoundingClientRect();
+        if (lr.top >= br.top - 1 && lr.top < br.bottom + 1) {
+          const el = document.elementFromPoint(br.right - 30, lr.top + lr.height / 2);
+          hitLines.push("行" + ln.dataset.codeLine + "→" + (el ? (el.className || el.tagName) : "无"));
+        }
+      }
+      hitLines.sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10));
+    }
+    const d = document.createElement("div");
+    d.id = "code-diag-box";
+    d.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:99999;background:#111;color:#eee;"
+      + "border:1px solid #888;border-radius:8px;padding:10px 14px;font:12px/1.7 monospace;"
+      + "max-width:640px;white-space:pre-wrap;";
+    d.textContent = [
+      "滚动盒: " + r(box) + " 高" + Math.round(br.height),
+      "edit: " + r(edit) + " 行高?" + (edit ? edit.style.height : ""),
+      "ta:   " + r(ta) + " 视图行数=" + (ta ? ta.value.split("\n").length : 0),
+      "hl:   " + r(hl) + " 行元素=" + (hl ? hl.querySelectorAll(".code-hl-line").length : 0),
+      "gutter:" + r(gutter) + " 行元素=" + (gutter ? gutter.querySelectorAll(".code-gutter-line").length : 0),
+      "scrollTop=" + Math.round(box.scrollTop),
+      "textarea 命中采样(右缘): " + (hitLines.slice(0, 6).concat(hitLines.slice(-6)).join(" | ") || "无"),
+      "全部命中: " + (hitLines.length ? hitLines.join(" | ") : "无"),
+      "(Ctrl+Alt+D 关闭)",
+    ].join("\n");
+    document.body.appendChild(d);
+  });
   // 滚动窗口化（工单 08）：窗口内滚动零 DOM（winRender 同窗跳过），跨窗口
   // rAF 节流重建；视口尺寸变化（布局/面板高度）经 ResizeObserver 重画。
   const viewBox = paneBox();
