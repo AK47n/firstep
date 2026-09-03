@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=97641decb126ae7abbd2e7805173646e6448682c -->
+<!-- changelog-auto: last-commit=74a4e693de05c9f93cbc6fcf60f6a5712e0feb63 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-03
+- 13:00 feat：编译错误行内标记（行号色点 + 错误行底色/波浪线 + title 悬停 + 点击跳转）——fx 纯件 compileErrorLinesForFile（path 归一 \\→/、去 . 段、../ 后缀与 basename 兜底、同行消息合并、line 0 跳过）与 compileErrorPathNorm/Base（与生成页修复中心 fixKeyOf/fixKeyBasename 单源化）；ui 错误态 setCompileErrors/getCompileErrors 成对导出（ui 单向依赖：状态归 codeeditor，写方=code-compile，免 ui-cycle 环）；winRenderMarks 一次映射共用标记层与行号色点（评审整改：currentMarks 可选 errLines、越界钳制、split 移出循环）；MARK_PRIORITY 加 error:4（压过 current/hit/word/bracket）+ codeMarksHTML 可选 title（esc 后悬停）；gutter 色点点击复用 jumpToCompileError 兜底链（折叠箭头不拦截）；单测 5 组 + 全量 1224 pass + smoke-05 11/11（工单 code-editor-refine/05）
 
 ## 2026-09-02
 - 12:18 工单 topics-control-2023-2025/03：2023 控制题拆条（E/G/I 三题入库）——定位 E=p183-185/G=p189-193/I=p197-199（题标记+页眉核实）；fitz 提取小题 PDF 3 份（466/949/498KB，无 34MB 副本）；split_topics_document 零 LLM 拆条（I 题超库函数 TITLE_RE 字母域 [A-H] → 章节切片兜底）；结构补全照 2026H（年份标题/参赛注意事项/题名/一任务二要求三说明四评分标准，去汇编页眉）；11 页渲染视觉核对——I 题图 1 矢量标注文本层缺失已人工补录（E/G 标注散行为原文本层）；入库 category=control programs=[]；图注 enrich 触发（文字标注兜底因 pypdf 汇编 PDF 坐标 0,0 失败、渲染视觉未配置 → 静默记录）；断言 3/3 + 真库污染黑名单删「激光笔」（2023E/G 合法题面词）；pytest 176 全绿
