@@ -311,16 +311,18 @@ export function codeFoldGutterHTML(lines) {
 
 // codeFoldMerge(oldFolds, oldSet, newFolds)：内容变化后保留仍存在的折叠态——
 // 签名（startLine,endLine）相同即保留索引（折叠区随内容漂移后自然放弃，
-// 用户重新折叠即可；不追复杂映射）。
+// 用户重新折叠即可；不追复杂映射）。O(n) 键集实现（工单 11 性能整改：原
+// 逐对 some 扫描在 3000+ 折叠下每次击键 ~52ms——大文件逐键卡顿主因之一）。
 export function codeFoldMerge(oldFolds, oldSet, newFolds) {
   const old = oldFolds || [];
   const oldFolded = oldSet || new Set();
+  const keySet = new Set();
+  old.forEach((of, oi) => {
+    if (oldFolded.has(oi)) keySet.add(of.startLine + ":" + of.endLine);
+  });
   const newSet = new Set();
   (newFolds || []).forEach((f, i) => {
-    if (old.some((of, oi) => oldFolded.has(oi)
-      && of.startLine === f.startLine && of.endLine === f.endLine)) {
-      newSet.add(i);
-    }
+    if (keySet.has(f.startLine + ":" + f.endLine)) newSet.add(i);
   });
   return newSet;
 }
