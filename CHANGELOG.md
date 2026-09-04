@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ac3d11394ac42c954983d6e05ff9213e74645d09 -->
+<!-- changelog-auto: last-commit=283f1d5cd6cabc8093501db69dd9ce03190bc332 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -7,6 +7,7 @@
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
 - 00:29 通用 Zigbee 数据链路模块 zigbee_link（双平台驱动 + 库级测试）（工单 zigbee-link/01）
+- 00:38 zigbee_uart 与 zigbee_link 互斥组 + 生成硬互斥门禁（工单 zigbee-link/02）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
