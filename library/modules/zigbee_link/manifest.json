@@ -1,0 +1,69 @@
+{
+  "slug": "zigbee_link",
+  "description": "Zigbee DL-20 串口透传无线链路驱动（双平台）：长度前缀帧协议（同步头 + 长度 + 负载 + 校验和）任意字节收发，zigbee_link_send / zigbee_link_recv 轮询接口 + 接收帧队列；适用于双机/双车无线数据通信、遥控指令、遥测上报等需要无线传数据的赛题功能。",
+  "dependencies": [
+    "config"
+  ],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/zigbee_link.c",
+        "code/zigbee_link.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "通用 Zigbee 数据链路（DL-20 串口透传，115200 点对点）：与 zigbee_uart（固定 ID 帧）/ zigbee_uart_key（ID 发送）共享 ZIGBEE_UART = USART3（PB10 TX / PB11 RX, 115200）。接收走母版 USART3_IRQ_CALLS → zigbee_rx_handler（本模块定义）；zigbee_link_init 已含 uart_pin_init_ex（开 RX 中断）。与 zigbee_uart 同选会重复定义 zigbee_rx_handler（由互斥组/门禁拦截）。本帧格式是 zigbee_link 私有约定，与库内固定 DIP-4 ID 帧协议互不兼容——双端必须同为 zigbee_link（混用两侧会静默不通）。未验证未上板（无工具链环境）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "ZIGBEE_UART_TX",
+          "type": "uart_tx",
+          "default": "PB10",
+          "required": true,
+          "macros": [
+            "ZIGBEE_UART",
+            "ZIGBEE_UART_INST",
+            "ZIGBEE_UART_TX_GPIO",
+            "ZIGBEE_UART_TX_Pin"
+          ]
+        },
+        {
+          "id": "ZIGBEE_UART_RX",
+          "type": "uart_rx",
+          "default": "PB11",
+          "required": true,
+          "macros": [
+            "ZIGBEE_UART_RX_GPIO",
+            "ZIGBEE_UART_RX_Pin"
+          ]
+        }
+      ]
+    },
+    "mspm0": {
+      "files": [
+        "code/zigbee_link_mspm0.c",
+        "code/zigbee_link_mspm0.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "与 zigbee_uart / zigbee_uart_key 共享母版 syscfg ZIGBEE_UART 实例（UART3, PA26(TX)/PA25(RX), 115200, RX 中断）；SYSCFG_DL_init() 后调 zigbee_link_init() 开 NVIC；ZIGBEE_UART_INST_IRQHandler（UART3_IRQHandler）在本模块 .c 内定义，main.c 无需再定义。发送走 DL_UART_transmitDataBlocking。与 zigbee_uart 同选会重复定义 ZIGBEE_UART_INST_IRQHandler（由互斥组/门禁拦截）。本帧格式是 zigbee_link 私有约定，与库内固定 DIP-4 ID 帧协议互不兼容——双端必须同为 zigbee_link（混用两侧会静默不通）。未验证未上板（无工具链环境）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "ZIGBEE_UART_TX",
+          "type": "uart_tx",
+          "default": "PA26",
+          "required": true
+        },
+        {
+          "id": "ZIGBEE_UART_RX",
+          "type": "uart_rx",
+          "default": "PA25",
+          "required": true
+        }
+      ]
+    }
+  }
+}

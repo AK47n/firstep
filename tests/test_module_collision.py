@@ -142,3 +142,41 @@ def test_zigbee_single_select_regression(tmp_path, slug):
         else "code/zigbee_uart.c"
     )
     assert (out / "modules" / slug / rel).is_file()
+
+
+def test_zigbee_link_single_select_generation(tmp_path):
+    """zigbee_link 单选生成（真实库 + 真实母版）：全静态门禁通过、模块文件按
+    manifest 落盘、uvprojx 注册 zigbee_link.c；send/recv API 进 main 不误报。"""
+    main_c = (
+        '#include "headfile.h"\n'
+        '#include "zigbee_link.h"\n'
+        "\n"
+        "int main(void)\n"
+        "{\n"
+        "    uint8_t tx = 0x01;\n"
+        "    uint8_t rx[ZIGBEE_LINK_MAX_PAYLOAD];\n"
+        "    zigbee_link_init();\n"
+        "    zigbee_link_send(&tx, 1);\n"
+        "    (void)zigbee_link_recv(rx, sizeof(rx));\n"
+        "    (void)zigbee_link_available();\n"
+        "    while (1)\n"
+        "    {\n"
+        "    }\n"
+        "}\n"
+    )
+    out, _, _ = generate(
+        platform=PLATFORM_STM32,
+        manifests=_load_manifests(("config", "zigbee_link")),
+        module_library_dir=LIBRARY_MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=tmp_path / "out",
+        main_c_content=main_c,
+    )
+    assert (out / "modules/zigbee_link/code/zigbee_link.c").is_file()
+    assert (out / "modules/zigbee_link/code/zigbee_link.h").is_file()
+    uvprojx = next(out.rglob("*.uvprojx"))
+    root = ET.parse(uvprojx).getroot()
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
+    assert any("zigbee_link.c" in p for p in paths)

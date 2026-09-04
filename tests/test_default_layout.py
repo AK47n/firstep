@@ -53,10 +53,12 @@ WHITELIST = {
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",
         "zigbee_uart_key.ZIGBEE_UART_TX",
+        "zigbee_link.ZIGBEE_UART_TX",
     },
     "PB11": {
         "zigbee_uart.ZIGBEE_UART_RX",
         "zigbee_uart_key.ZIGBEE_UART_RX",
+        "zigbee_link.ZIGBEE_UART_RX",
     },
     "PB12": {"pid.GRAY_D1", "config.DIP0"},
     "PB13": {"pid.GRAY_D2", "config.DIP1"},
@@ -109,8 +111,10 @@ def test_default_layout_conflict_groups_resolved():
     assert grouped["PB10"] == {
         "zigbee_uart.ZIGBEE_UART_TX",
         "zigbee_uart_key.ZIGBEE_UART_TX",
+        "zigbee_link.ZIGBEE_UART_TX",
     }
     assert grouped["PB11"] == {
         "zigbee_uart.ZIGBEE_UART_RX",
         "zigbee_uart_key.ZIGBEE_UART_RX",
+        "zigbee_link.ZIGBEE_UART_RX",
     }
