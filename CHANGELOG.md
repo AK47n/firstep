@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7b041597194a09b24a1baf1add6c761b5461d950 -->
+<!-- changelog-auto: last-commit=779f97a96d3162deeb05a9e9630bd4fb25029c60 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 00:38 zigbee_uart 与 zigbee_link 互斥组 + 生成硬互斥门禁（工单 zigbee-link/02）
 - 00:42 词表「无线通信模块」补 Zigbee 方案并挂库内 zigbee_link（工单 zigbee-link/03）
 - 00:55 多实例配置变体控件去掉残留 select 空壳（工单 key-multi-instance/06 回归）
+- 01:08 草稿恢复后重驱动 展开 + 板定义，刷新不再卡在引脚配置占位（工单 refresh-restore-downstream）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
