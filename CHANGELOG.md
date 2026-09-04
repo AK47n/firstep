@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3f89f4a30e83f7b6402a2742a70517e7eff7a1e7 -->
+<!-- changelog-auto: last-commit=19620da93aca8ed104464e1638fbb2010a4e3092 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
+- 21:38 fix：窗口化编辑器现场修复批次（行起点表增量修补 / 花括号展开 / 多行注释承接行着色 / 替换按钮行布局 / 前端资源协商缓存）
 
 ## 2026-09-03
 - 13:00 feat：编译错误行内标记（行号色点 + 错误行底色/波浪线 + title 悬停 + 点击跳转）——fx 纯件 compileErrorLinesForFile（path 归一 \\→/、去 . 段、../ 后缀与 basename 兜底、同行消息合并、line 0 跳过）与 compileErrorPathNorm/Base（与生成页修复中心 fixKeyOf/fixKeyBasename 单源化）；ui 错误态 setCompileErrors/getCompileErrors 成对导出（ui 单向依赖：状态归 codeeditor，写方=code-compile，免 ui-cycle 环）；winRenderMarks 一次映射共用标记层与行号色点（评审整改：currentMarks 可选 errLines、越界钳制、split 移出循环）；MARK_PRIORITY 加 error:4（压过 current/hit/word/bracket）+ codeMarksHTML 可选 title（esc 后悬停）；gutter 色点点击复用 jumpToCompileError 兜底链（折叠箭头不拦截）；单测 5 组 + 全量 1224 pass + smoke-05 11/11（工单 code-editor-refine/05）
