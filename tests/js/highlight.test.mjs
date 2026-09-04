@@ -6,8 +6,11 @@ import {
   languageOf,
   highlightXml,
   highlightText,
+  highlightLineHTML,
+  lineStatesOf,
   HIGHLIGHT_MAX_BYTES,
 } from "../../src/contest_generator/static/js/fx/highlight.js";
+import { highlightCodeLines } from "../../src/contest_generator/static/js/fx/codeview.js";
 
 test("languageOf：.c/.h → c；.syscfg/.uvprojx/.cproject/.xml → xml；其余 plain", () => {
   assert.equal(languageOf("main.c"), "c");
@@ -70,4 +73,70 @@ test("highlightText：超过 HIGHLIGHT_MAX_BYTES 回退纯文本（无高亮 spa
   const out = highlightText(big, "c");
   assert.ok(!out.includes("tok-"));
   assert.ok(out.includes("0123456789abcdef"));
+});
+
+// ---- 行级跨行态（fix：窗口化编辑器逐行惰性高亮的多行注释/字符串）----
+
+test("highlightLineHTML：多行块注释承接行仍 tok-com（用户现场）", () => {
+  const text = "/* 蜂鸣器驱动（MSPM0 占位实现）。\n"
+    + " * 接线后按 stm32 侧同款实现。\n"
+    + " * 保留本模块是为了两平台 API 统一。 */\n"
+    + "void beep_on(void);";
+  const lines = text.split("\n");
+  const states = lineStatesOf(lines, "c");
+  const html = lines.map((l, i) => highlightLineHTML(l, states[i], "c"));
+  assert.match(html[0], /tok-com/);
+  assert.match(html[1], /tok-com/);   // 此前漏：承接行被当普通代码
+  assert.match(html[2], /tok-com/);
+  assert.ok(!html[2].includes("tok-kw"));   // 注释内 API 不着关键字
+  assert.match(html[3], /tok-fn/);          // 注释结束后正常着色
+});
+
+test("行级高亮与整段 highlightCodeLines 逐行严格一致（跨行注释/字符串，C）", () => {
+  const samples = [
+    "/* a\nb */\nint x;",
+    "/* a\nb\nc */\nint y;",
+    '/** doc\n * @param x\n */\nvoid f();',
+    'char *s = "a\nb";\nint z;',
+    'int a = "x\\\ny";',              // 反斜杠续行字符串
+    "/* 开\n/* 内层 */\n尾 */\nint w;",
+    '/* "引号" 注释内 */\nint q;',
+    "a /* b */ c",
+    '// "a"\nint k;',
+    "/* 未闭合\n仍在注释",
+  ];
+  for (const text of samples) {
+    const full = highlightCodeLines(text, "c");
+    const lines = text.split("\n");
+    const states = lineStatesOf(lines, "c");
+    const per = lines.map((ln, i) => highlightLineHTML(ln, states[i], "c"));
+    assert.deepEqual(per, full, "样本不一致: " + JSON.stringify(text));
+  }
+});
+
+test("行级高亮与整段 highlightCodeLines 逐行严格一致（XML 注释/CDATA/PI/DOCTYPE）", () => {
+  const samples = [
+    "<!-- a\nb -->\n<x y=\"1\"/>",
+    "<r>\n<![CDATA[\nraw <b>\n]]>\n</r>",
+    "<?xml\nversion=\"1.0\"?>\n<r/>",
+    "<!DOCTYPE root [\n<!ELEMENT root EMPTY>\n]>\n<root/>",
+  ];
+  for (const text of samples) {
+    const full = highlightCodeLines(text, "xml");
+    const lines = text.split("\n");
+    const states = lineStatesOf(lines, "xml");
+    const per = lines.map((ln, i) => highlightLineHTML(ln, states[i], "xml"));
+    assert.deepEqual(per, full, "XML 样本不一致: " + JSON.stringify(text));
+  }
+});
+
+test("lineStatesOf：逐行起始态（注释开合 / 字符串跨越 / plain 恒 null）", () => {
+  const lines = ["int a; /* 开", "中", "*/ int b;", '"s', 't"'];
+  const states = lineStatesOf(lines, "c");
+  assert.equal(states[0], null);                                   // 首行起始恒无跨行态
+  assert.deepEqual(states[1], { comment: true, quote: null });
+  assert.deepEqual(states[2], { comment: true, quote: null });
+  assert.deepEqual(states[3], { comment: false, quote: null });
+  assert.deepEqual(states[4], { comment: false, quote: '"' });
+  assert.deepEqual(lineStatesOf(["a", "b"], "plain"), [null, null]);
 });

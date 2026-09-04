@@ -2008,6 +2008,12 @@
   .code-side-empty { padding: 6px 8px; font-size: 12.5px; }
   .code-search-row, .code-find-row, .code-replace-row, .code-outline-row { display: flex; gap: 6px; margin-bottom: var(--space-1); }
   .code-search-row input, .code-find-row input, .code-replace-row input, .code-outline-row input { flex: 1; min-width: 0; }
+  /* 替换按钮行（布局优化）：替换输入框独占一行（右侧只与计数共享），三个
+     动作按钮挪到第二行等宽排布——原先输入框与三按钮同排，300px 侧栏下最左
+     「替换为」框被挤压成 0 宽（用户反馈「最左边那个框挤没了」）。紧凑
+     padding + 12px 字号，面板过窄时按钮自动换行不溢出。 */
+  .code-replace-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-1); }
+  .code-replace-btns button { flex: 1 1 0; min-width: 0; padding: 5px 6px; font-size: 12px; white-space: nowrap; }
   /* 查找计数（工单 code-editor-vscode-polish/04）：输入框旁「第 N / 共 M 处」
      ——等宽小字 muted 右对齐；无命中时隐藏（.hidden 全局）。 */
   .code-find-count { flex: none; font-family: var(--mono); font-size: 11.5px;
@@ -2935,13 +2941,15 @@
             </div>
             <div class="code-replace-row">
               <input type="text" id="code-replace-input" placeholder="替换为（Ctrl+H）…" aria-label="替换为（Ctrl+H 唤起）">
+              <span id="code-replace-count" class="code-find-count hidden" aria-live="polite"></span>
+            </div>
+            <div class="code-replace-btns">
               <button type="button" id="btn-code-replace-one"
                 title="替换当前命中（替换后停在替换处）">替换</button>
               <button type="button" id="btn-code-replace-next"
                 title="替换当前命中并跳转到下一命中">替换并下一处</button>
               <button type="button" id="btn-code-replace-all"
                 title="全部替换当前文件内匹配项（改动进编辑缓冲，Ctrl+S 保存）">全部替换</button>
-              <span id="code-replace-count" class="code-find-count hidden" aria-live="polite"></span>
             </div>
             <div id="code-search-results" class="code-search-results"></div>
             <div id="code-find-results" class="code-find-results"><span class="muted">在当前文件内查找</span></div>

@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -980,6 +980,25 @@ def _resolve_generation_output_dir(
 def create_app(ctx: AppContext | None = None) -> FastAPI:
     context = ctx or AppContext()
     app = FastAPI(title="电赛工程生成器")
+
+    # 前端资源强制「每次协商/不落缓存」（Cache-Control: no-cache / no-store +
+    # 文档 Clear-Site-Data）——本地迭代频繁改代码，浏览器启发式新鲜度会让部分
+    # 模块继续命中旧缓存、部分重新拉取，形成新旧混装的模块图：ESM 导入名不匹配
+    # → 整图静默失败（页面像卡住：平台卡空、页签无响应、无错误横幅，F5 全量
+    # 协商后才恢复；用户现场「从桌面打开要 F5 才能用」即此根因）。no-cache 让
+    # 每次导航对首页与全部 /js 模块做条件请求（304 快速回退），模块图恒与磁盘
+    # 当前版本一致；文档另发 Clear-Site-Data 清掉旧版本残留缓存，首次修复即刻
+    # 生效（不必等各文件启发式过期）。
+    @app.middleware("http")
+    async def _no_cache_frontend(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path.startswith("/js/"):
+            response.headers["Cache-Control"] = "no-store"
+        elif path == "/":
+            response.headers["Cache-Control"] = "no-cache"
+            response.headers["Clear-Site-Data"] = '"cache"'
+        return response
 
     # 生成流程页（单页应用）
     @app.get("/")
