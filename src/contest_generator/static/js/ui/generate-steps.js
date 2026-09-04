@@ -23,7 +23,8 @@ import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overvie
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { readinessState, desktopTopicOutputEnabled, ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位；工单 07 总览输出目录预警共享请求
 import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone, step7WireGet, scrollToStep } from "/js/ui/step-state.js";
-import { setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
+import { runExpand, renderModulePool, setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
+import { loadPinBoard } from "/js/ui/generate-pins.js";  // 草稿恢复下游（工单 20）：平台恢复后重取板定义
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 import { getMainCDiskDir, setMainCDiskContext, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：恢复草稿时回填上下文目录并校验磁盘现状
 import { renderSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：草稿恢复 mainC 后渲染引用 chips
@@ -65,7 +66,12 @@ function restoreDraft() {
   if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); syncMainCHighlight(); renderSkeletonRefs(); }
   if (d.qa) { $("qa-text").value = d.qa; }
   if (d.outputDir) { setMainCDiskContext(d.outputDir); void refreshMainCDiskState(); }
-  if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); }
+  if (d.platform || d.slugs.length) { renderPlatforms(); renderSelected(); renderWarnings(); renderModulePool(); }
+  // 下游恢复（刷新即现 bug）：平台/模块恢复后必须重驱动 展开 + 板定义——否则
+  // 引脚配置卡停在初始占位文案、板定义永不加载（重复点已选平台卡片也是 no-op，
+  // 用户无解）。与平台卡片点击 / addModule 的恢复路径同构。
+  if (d.platform) loadPinBoard();
+  if (d.platform && d.slugs.length) runExpand();
   $("draft-tip").classList.remove("hidden");
 }
 function bindClearDraftButton(btnId) {
