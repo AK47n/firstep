@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from contest_generator.generator import generate
+from contest_generator.generator import ExclusivePairConflictError, generate
 from contest_generator.library import list_modules
 from contest_generator.manifest import ModuleManifest
 from contest_generator.patchers import PLATFORM_STM32
@@ -180,3 +180,56 @@ def test_zigbee_link_single_select_generation(tmp_path):
     modules = next(g for g in groups if g.findtext("GroupName") == "modules")
     paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
     assert any("zigbee_link.c" in p for p in paths)
+
+
+def test_zigbee_uart_link_dual_select_rejected_by_gate(tmp_path):
+    """zigbee_uart + zigbee_link 同选 → 硬互斥门禁 400 中文（同一路 ZIGBEE_UART
+    RX 只能一个消费者；manifest 互斥组管推荐/UI，本门禁兜底 API 直选）。"""
+    with pytest.raises(ExclusivePairConflictError) as excinfo:
+        generate(
+            platform=PLATFORM_STM32,
+            manifests=_load_manifests(("config", "zigbee_uart", "zigbee_link")),
+            module_library_dir=LIBRARY_MODULES,
+            master_project_dir=STM32_MASTER,
+            output_dir=tmp_path / "out",
+            main_c_content=_zigbee_main_c(
+                ("zigbee_uart.h", "zigbee_link.h"),
+                ("zigbee_uart_init", "zigbee_link_init"),
+            ),
+        )
+    message = str(excinfo.value)
+    assert "zigbee_uart" in message and "zigbee_link" in message
+    assert "二选一" in message
+
+
+def test_zigbee_link_key_dual_select_passes_gate(tmp_path):
+    """zigbee_link + zigbee_uart_key（通用收发 + ID 发送，各管一路）同选 → 放行。"""
+    main_c = (
+        '#include "headfile.h"\n'
+        '#include "zigbee_link.h"\n'
+        '#include "zigbee_uart_key.h"\n'
+        "\n"
+        "int main(void)\n"
+        "{\n"
+        "    uint8_t tx = 0x01;\n"
+        "    uint8_t rx[ZIGBEE_LINK_MAX_PAYLOAD];\n"
+        "    zigbee_link_init();\n"
+        "    zigbee_uart_key_init();\n"
+        "    zigbee_link_send(&tx, 1);\n"
+        "    (void)zigbee_link_recv(rx, sizeof(rx));\n"
+        "    (void)zigbee_link_available();\n"
+        "    while (1)\n"
+        "    {\n"
+        "    }\n"
+        "}\n"
+    )
+    out, _, _ = generate(
+        platform=PLATFORM_STM32,
+        manifests=_load_manifests(("config", "zigbee_link", "zigbee_uart_key")),
+        module_library_dir=LIBRARY_MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=tmp_path / "out",
+        main_c_content=main_c,
+    )
+    assert (out / "modules/zigbee_link/code/zigbee_link.c").is_file()
+    assert (out / "modules/zigbee_uart_key/code/zigbee_uart_key.c").is_file()

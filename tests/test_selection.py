@@ -2617,6 +2617,26 @@ def test_build_exclusive_groups_derives_hit_cards():
     ]
 
 
+def test_build_exclusive_groups_real_library_zigbee_rx_card():
+    """真库 zigbee-rx 组（工单 zigbee-link/02）：双平台完整，命中任一成员出
+    卡且 recommended 只含命中 slug；stm32 视图同为双成员（两模块双平台）。"""
+    from pathlib import Path
+
+    from contest_generator.library import list_modules
+    from contest_generator.manifest import collect_exclusive_groups
+
+    modules = Path(__file__).resolve().parents[1] / "library" / "modules"
+    groups = collect_exclusive_groups(list_modules(modules))
+    zigbee_rx = next(g for g in groups if g.id == "zigbee-rx")
+
+    for platform in ("mspm0", "stm32"):
+        card = build_exclusive_groups(("zigbee_link",), (zigbee_rx,), platform)[0]
+        assert card["id"] == "zigbee-rx"
+        assert card["hint"] is False
+        assert [m["slug"] for m in card["members"]] == ["zigbee_link", "zigbee_uart"]
+        assert card["recommended"] == ["zigbee_link"]
+
+
 def test_build_exclusive_groups_filters_members_by_platform():
     """平台成员过滤：只留该平台有条目的成员（跨平台成员保留）；推荐集里
     异平台模块不计命中（xunji stm32-only 在 mspm0 视图不出现、不算命中）。"""

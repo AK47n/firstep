@@ -166,6 +166,13 @@ class UartInstanceConflictError(GeneratorError):
     聚合，编译绿运行坏，生成前拦截；工单 pin-full-unlock/02，ADR 0012）。"""
 
 
+class ExclusivePairConflictError(GeneratorError):
+    """硬互斥对同选：同一路外设只能选一个消费者模块（如 ZIGBEE_UART 接收侧
+    zigbee_uart 与 zigbee_link——两者都定义 zigbee_rx_handler /
+    ZIGBEE_UART_INST_IRQHandler，同选 = UV4 L6200E multiply defined；
+    工单 zigbee-link/02）。manifest 互斥组管推荐/UI 单选，本门禁兜底 API 直选。"""
+
+
 class UsartHandlerInMainError(GeneratorError):
     """main.c 定义了 USART1/2/3_IRQHandler——UART 中断聚合归母版 isr.c
     （USARTx_IRQ_CALLS 按绑定实例分组），main.c 写死 handler 会与 isr.c 强
@@ -1831,18 +1838,46 @@ class GateContext:
     board: Board | None = None
 
 
+# 硬互斥对（manifest 互斥组之外的生成兜底）：同一路外设只能一个消费者——
+# 两模块同选会重复定义中断处理符号（UV4 L6200E multiply defined 判例），
+# 组卡/推荐侧选不中门禁不拦（合法单选），API 绕过 UI 直选时由本表拦。
+# 三元组 (left, right, reason)：reason 为同选拦截消息的中文根因描述。
+HARD_EXCLUSIVE_PAIRS: tuple[tuple[str, str, str], ...] = (
+    (
+        "zigbee_uart",
+        "zigbee_link",
+        "同一路 ZIGBEE_UART 接收只能选一个驱动（固定 ID 帧与通用帧收发）",
+    ),
+)
+
+
+def _check_exclusive_pair_conflicts(manifests: Sequence[ModuleManifest]) -> None:
+    """硬互斥对同选拦截：选中集含任一硬对双方 → 400 中文（防 L6200E 重演）。
+
+    manifest exclusive_group 是推荐/UI 语义（软单选），本门禁是生成侧强硬
+    兜底——两模块同选必然重复定义同一中断入口（zigbee_rx_handler 与
+    ZIGBEE_UART_INST_IRQHandler），没有任何合法形态可共存。
+    """
+    selected = {manifest.slug for manifest in manifests}
+    for left, right, reason in HARD_EXCLUSIVE_PAIRS:
+        if left in selected and right in selected:
+            raise ExclusivePairConflictError(
+                f"模块 {left} 与 {right} 互斥：{reason}，请二选一。"
+            )
+
+
 # 门禁表。顺序即 generate 的校验顺序（现状调用顺序，结构测试钉死）；顺序有
 # 语义：file_path_conflicts 跳过无该平台版本条目（由 module_files 先报），
 # 必须先跑 module_files；timer_instance_conflicts / exti_line_conflicts /
 # uart_instance_conflicts 依赖 pin_bindings 先校验载荷（resolve 才能成功）。
 # 新增门禁 = 表加一条 + 谓词（照 categories.RULE_CATEGORIES 先例）——顺序 /
 # 输入依赖 / 门禁全貌只此一处可见。5 道吃 corpus（纯谓词，内存直构可测）；
-# file_path_conflicts 吃 manifests + platform（manifest 声明，不读盘）；
-# 工单 02 新两条 + 工单 pin-unlock-stm32/01 一条 + 工单 pin-full-unlock/01
-# 两条吃 context（bindings + board——绑定校验 / 骨架引脚字面量 / 骨架定时器
-# 冲突 / EXTI 线冲突 / UART 实例冲突）+ 工单 pin-full-unlock/02 两条吃
-# corpus（骨架引脚字面量 / 骨架 USARTx_IRQHandler 禁定义）。签名统一 4 参，
-# 存量谓词忽略第 4 参。
+# file_path_conflicts 吃 manifests + platform、exclusive_pair_conflicts 吃
+# manifests（均为 manifest 声明，不读盘）；工单 02 新两条 + 工单 pin-unlock-stm32/01 一条 + 工单
+# pin-full-unlock/01 两条吃 context（bindings + board——绑定校验 / 骨架引脚
+# 字面量 / 骨架定时器冲突 / EXTI 线冲突 / UART 实例冲突）+ 工单
+# pin-full-unlock/02 两条吃 corpus（骨架引脚字面量 / 骨架 USARTx_IRQHandler
+# 禁定义）。签名统一 4 参，存量谓词忽略第 4 参。
 GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "module_files",
@@ -1852,6 +1887,12 @@ GENERATION_GATES: tuple[GenerationGate, ...] = (
         "file_path_conflicts",
         lambda corpus, manifests, platform, context: _check_file_path_conflicts(
             manifests, platform
+        ),
+    ),
+    GenerationGate(
+        "exclusive_pair_conflicts",
+        lambda corpus, manifests, platform, context: _check_exclusive_pair_conflicts(
+            manifests
         ),
     ),
     GenerationGate(
