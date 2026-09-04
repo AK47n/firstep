@@ -161,6 +161,14 @@
         "price": "￥30-60/对",
         "note": "超远距离 1-3km、低速率 2.7kbps；丢包重传自写；占 SPI",
         "suitable": "远距双机通信/大场地"
+      },
+      {
+        "name": "Zigbee 模块（DL-20 串口透传）",
+        "interface": "UART 串口透传（115200 点对点）",
+        "price": "￥10-20/个",
+        "note": "库内 zigbee_link 已打通任意字节收发（长度前缀帧协议，无需重复采购）；模块需预先配置 115200 + 点对点模式，程序不需发 AT 指令；双端须同为 zigbee_link",
+        "suitable": "双机/双车无线数据通信、遥控指令、遥测上报",
+        "lib_modules": ["zigbee_link"]
       }
     ]
   },
