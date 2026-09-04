@@ -1,0 +1,49 @@
+{
+  "slug": "ir_beam",
+  "description": "红外对射传感器读取（双平台）：ir_beam_init / ir_beam_read 按光束遮挡返回 0/1——1=遮挡（有物体挡住对射光束），0=无遮挡；三线制接线（VCC/GND/OUT），仅 OUT 占 GPIO——默认 PA8（mspm0/stm32 同脚）；适用于物体经过检测、出入口遮挡检测、防夹、载物在位等赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/ir_beam.c",
+        "code/ir_beam.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "三线制红外对射传感器（VCC/GND/OUT）：OUT → IR_BEAM_GPIO/IR_BEAM_PIN（pin_config.h 单源，默认 PA8——与 pid GRAY_D5 默认重叠，同选时经引脚绑定消解）。极性：内部上拉输入（IU）——无遮挡 = 低电平（接收管导通拉低）、遮挡 = 高电平（上拉内测，与 21F 药位检测同法）；实际模块极性相反时改 ir_beam.c 的 IR_BEAM_BLOCKED_LEVEL。ir_beam_init() 逐脚 gpio_init(.., IU)。21F 移植源：sources/contest/2021F/21F/user/main.c（PB5 药位检测，gpio_init(GPIO_B, Pin_5, IU)，放药=高电平/取药=低电平）。\nir-beam-module/01 编译矩阵（2026-09-05）：UV4 0 error、0 module warning；未上板。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "IR_BEAM_OUT",
+          "type": "gpio_in",
+          "default": "PA8",
+          "required": true,
+          "macros": [
+            "IR_BEAM_GPIO",
+            "IR_BEAM_PIN"
+          ]
+        }
+      ]
+    },
+    "mspm0": {
+      "files": [
+        "code/ir_beam_mspm0.c",
+        "code/ir_beam_mspm0.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 输入实例 IR_BEAM（实例宏 IR_BEAM_PORT / 引脚宏 IR_BEAM_OUT_PIN；默认 PA8——仅与 DIGIT_UART（K230 视觉串口）默认重叠，同选时经引脚绑定消解）。极性：内部上拉输入（syscfg internalResistor = PULL_UP，与 stm32 侧 IU 对等）——无遮挡 = 低电平、遮挡 = 高电平；实际模块极性相反时改 ir_beam_mspm0.c 的 IR_BEAM_BLOCKED_LEVEL。ir_beam_init() 为空实现（SYSCFG_DL_init 生效）。\nir-beam-module/01 编译矩阵（2026-09-05）：gmake 0 error、0 module warning；未上板。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "IR_BEAM_OUT",
+          "type": "gpio_in",
+          "default": "PA8",
+          "required": true
+        }
+      ]
+    }
+  }
+}
