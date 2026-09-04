@@ -673,7 +673,7 @@ export async function loadChangelog() {
     if (!releases.length) {
       box.innerHTML = '<div class="empty-state"><div class="es-icon">📦</div>'
         + '<div class="es-title">还没有正式版本</div>'
-        + '<div class="es-hint">每次发布新版本时，这里会归纳对用户重要的要点（新增 / 改进 / 修复）。</div></div>';
+        + '<div class="es-hint">每次发布新版本时，这里会归纳对用户重要的要点（新增 / 改进 / 修复 / 性能）。</div></div>';
       return;
     }
     box.innerHTML = releases.map((r, idx) => releaseCardHTML(r, idx === 0)).join("");
