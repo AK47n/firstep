@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=35afef40714c83d05f663041c5577652b895949c -->
+<!-- changelog-auto: last-commit=ac73da7f2d36d044de5e74f8cd86b295a2207b04 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
 - 21:38 fix：窗口化编辑器现场修复批次（行起点表增量修补 / 花括号展开 / 多行注释承接行着色 / 替换按钮行布局 / 前端资源协商缓存）
 - 21:38 perf：编辑器逐行跨行态刷新早停（工单 editor-line-state-opt/01）
+- 23:15 现场修复批次：关标签改 Ctrl+Alt+W（Chrome 保留键收不到 Ctrl+W）/ 标签指针拖拽替代原生 DnD（沿 X 平移 + Esc 取消）/ 窗口化行高实测兜底 + 行号列横滚遮盖 + 当前行高亮去首竖线
 
 ## 2026-09-03
 - 13:00 feat：编译错误行内标记（行号色点 + 错误行底色/波浪线 + title 悬停 + 点击跳转）——fx 纯件 compileErrorLinesForFile（path 归一 \\→/、去 . 段、../ 后缀与 basename 兜底、同行消息合并、line 0 跳过）与 compileErrorPathNorm/Base（与生成页修复中心 fixKeyOf/fixKeyBasename 单源化）；ui 错误态 setCompileErrors/getCompileErrors 成对导出（ui 单向依赖：状态归 codeeditor，写方=code-compile，免 ui-cycle 环）；winRenderMarks 一次映射共用标记层与行号色点（评审整改：currentMarks 可选 errLines、越界钳制、split 移出循环）；MARK_PRIORITY 加 error:4（压过 current/hit/word/bracket）+ codeMarksHTML 可选 title（esc 后悬停）；gutter 色点点击复用 jumpToCompileError 兜底链（折叠箭头不拦截）；单测 5 组 + 全量 1224 pass + smoke-05 11/11（工单 code-editor-refine/05）
