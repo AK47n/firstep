@@ -826,8 +826,9 @@ def _auto(platform: str, bindings: dict[str, str]):
     return auto_assign_bindings(ALL_MANIFESTS, platform, BOARDS[platform], bindings)
 
 
-def test_auto_assign_keeps_legal_sharing_with_annotation():
-    """合法共享（同脚多角色，ADR 0010）→ 不拆，返回空增量 + shared 标注。"""
+def test_auto_assign_marks_unrelated_same_pin_as_conflict():
+    """分属不同外设的同脚两角色（工单 pin-share-rule/01）：电机方向输出与
+    按键输入同脚 = 物理不通 → 标注 kind=conflict（旧行为误标「合法共享」）。"""
     result = _auto("stm32", {
         "motor.MOTOR_A_DIR": "PB6",
         "key.KEY_START": "PB6",
@@ -838,7 +839,86 @@ def test_auto_assign_keeps_legal_sharing_with_annotation():
     group = next((s for s in result.shared if s["pin"] == "PB6"), None)
     assert group is not None
     assert {"motor.MOTOR_A_DIR", "key.KEY_START"} <= set(group["roles"])
-    assert "共享" in str(group["reason"])
+    assert group["kind"] == "conflict"
+    assert "外设" in str(group["reason"])
+    assert "共享" not in str(group["reason"])
+
+
+def test_shared_groups_classifies_uart_family_share():
+    """同一 UART 实例（zigbee 家族共 ZIGBEE_UART/UART_3）→ 合法共享。"""
+    result = _auto("stm32", {})
+
+    group = next(
+        (s for s in result.shared
+         if {"zigbee_uart.ZIGBEE_UART_TX", "zigbee_uart_key.ZIGBEE_UART_TX"}
+         <= set(s["roles"])),
+        None,
+    )
+    assert group is not None
+    assert group["kind"] == "share"
+    assert "串口链路" in str(group["reason"])
+
+
+def test_shared_groups_classifies_i2c_bus_share():
+    """I2C 总线多挂（MPU6050 + 磁力计/OLED 同挂 SCL/SDA）→ 合法共享。"""
+    result = _auto("mspm0", {
+        "ml_mpu6050.I2C_0_SCL": "PA1",
+        "ml_mpu6050.I2C_0_SDA": "PA0",
+        "oled.OLED_SCL": "PA1",
+        "oled.OLED_SDA": "PA0",
+    })
+
+    group = next(
+        (s for s in result.shared
+         if {"ml_mpu6050.I2C_0_SCL", "oled.OLED_SCL"} <= set(s["roles"])),
+        None,
+    )
+    assert group is not None
+    assert group["kind"] == "share"
+    assert "I2C 总线共享" in str(group["reason"])
+
+
+def test_shared_groups_marks_gpio_default_overlap_conflict():
+    """同型同默认脚但分属不同外设（DIP 拨码 × 灰度同 PB12）→ conflict
+    （旧行为同型同脚静默通过，判为合法共用——实际物理不通）。"""
+    result = _auto("stm32", {})
+
+    group = next(
+        (s for s in result.shared
+         if {"config.DIP0", "pid.GRAY_D1"} <= set(s["roles"])),
+        None,
+    )
+    assert group is not None
+    assert group["kind"] == "conflict"
+
+
+def test_shared_groups_marks_same_sensor_instance_share():
+    """同一器件实例（HUIDU 灰度 8 路：huidu/pid/xunji 同脚读数）→ 合法共享
+    （纯灰度组 PA27；PA22 等混入 UART/ADC 的同脚组 = 冲突，见下一条）。"""
+    result = _auto("mspm0", {})
+
+    group = next(
+        (s for s in result.shared
+         if {"huidu.R2", "pid.GRAY_D6"} <= set(s["roles"])),
+        None,
+    )
+    assert group is not None
+    assert group["kind"] == "share"
+
+
+def test_shared_groups_marks_mixed_resource_same_pin_conflict():
+    """同脚混入不同外设（灰度 × UART RX 同脚 PA22）→ 冲突（旧行为整组标
+    「合法共享」——实际 UART 线与灰度线不能同接一脚）。"""
+    result = _auto("mspm0", {})
+
+    group = next(
+        (s for s in result.shared
+         if {"huidu.L1", "pid.GRAY_D1", "debug_uart.DEBUG_UART_RX"}
+         <= set(s["roles"])),
+        None,
+    )
+    assert group is not None
+    assert group["kind"] == "conflict"
 
 
 def test_auto_assign_relocates_capability_conflict():

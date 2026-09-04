@@ -61,6 +61,57 @@ export function collectBindings(selectedSlugs, bindings, instanceMap) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// 同脚多角色 共享/冲突 判据（工单 pin-share-rule/01）：与后端
+// pin_bindings._role_resource_keys / _shared_groups 同口径——同一 I2C 总线、
+// 同一 UART 实例、同一 syscfg 器件实例 = 合法共享；其余同脚 = 物理冲突。
+// 数据源：pinBoard.pins[].capabilities（uart/i2c 实例 token）+ state.module_instances
+// （gpio 的 syscfg 实例映射，来自 /api/state）。前端镜像此规则，判定结论与
+// /api/bindings/auto 的 shared[].kind 保持一致。
+// ---------------------------------------------------------------------------
+
+/** 角色在指定引脚上的「物理资源键」集（无键 = 无法与任何角色合法共用）。 */
+export function pinRoleResourceKeys(role, pinName, pinBoard, instanceMap) {
+  const t = role && role.decl && role.decl.type;
+  if (!t) return [];
+  if (["uart_tx", "uart_rx", "i2c_scl", "i2c_sda"].includes(t)) {
+    const pin = (pinBoard && pinBoard.pins || []).find((p) => p.name === pinName);
+    if (!pin) return [];
+    const prefix = t + ":";
+    return (pin.capabilities || [])
+      .filter((c) => c.startsWith(prefix))
+      .map((c) => c.slice(prefix.length));
+  }
+  if (t === "gpio_out" || t === "gpio_in") {
+    return (instanceMap && instanceMap[role.slug]) || [];
+  }
+  return [];  // pwm / enc / adc / spi …：同脚即冲突（两路输出/两通道不可并）
+}
+
+/** 同脚多角色组分类：{kind: "share"|"conflict"|"none", reason}。 */
+export function pinShareClass(roles, pinName, pinBoard, instanceMap) {
+  const list = (roles || []).filter(Boolean);
+  if (list.length < 2) return { kind: "none", reason: "" };
+  const types = list.map((r) => r.decl.type);
+  if (types.every((t) => t === "i2c_scl" || t === "i2c_sda")) {
+    return {
+      kind: "share",
+      reason: "I2C 总线共享（HMC5883L / MPU6050 等可同挂 SCL/SDA，协议允许）",
+    };
+  }
+  const keysets = list.map((r) => pinRoleResourceKeys(r, pinName, pinBoard, instanceMap));
+  const common = keysets.length
+    ? keysets.reduce((acc, s) => acc.filter((k) => s.includes(k)))
+    : [];
+  if (common.length) {
+    if (types.some((t) => t === "uart_tx" || t === "uart_rx")) {
+      return { kind: "share", reason: "同一串口链路共享（共用同一 UART 实例）" };
+    }
+    return { kind: "share", reason: "共用同一器件/总线（同一实例，共享合法）" };
+  }
+  return { kind: "conflict", reason: "同引脚但分属不同外设（物理不通）——请改线" };
+}
+
 export function formatResModules(modules, pythonArtifacts) {
   // 产物摘要「模块文件」行（工单 k230-vision-copilot/04 抽纯函数，node:test
   // 直测）：C 模块文件 + Python 副产物同列——k230 这类纯副产物模块（files
@@ -213,5 +264,5 @@ export function frameworkNoteHTML(data) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, GEN_CARD_COLLAPSE_KEY, parseGenCardCollapse, genCardInitialCollapsed, saveGenCardCollapse, fmtSeconds, frameworkNoteHTML, fixLogGroupHidden });
+  Object.assign(window, { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, pinRoleResourceKeys, pinShareClass, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll, GEN_CARD_COLLAPSE_KEY, parseGenCardCollapse, genCardInitialCollapsed, saveGenCardCollapse, fmtSeconds, frameworkNoteHTML, fixLogGroupHidden });
 }

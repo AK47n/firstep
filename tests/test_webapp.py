@@ -1559,6 +1559,10 @@ def test_state_lists_platforms_with_availability(client, context, tmp_path):
     # 有母版 → ready；无母版 → no-master（界面显示"暂不可用"，不报错）
     assert platforms[PLATFORM_STM32]["status"] == "ready"
     assert platforms[PLATFORM_MSPM0]["status"] == "no-master"
+    # 同脚多角色判据（工单 pin-share-rule/01）：模块 syscfg 实例映射随 state 下发
+    assert "module_instances" in state
+    assert "HUIDU" in state["module_instances"]["pid"]
+    assert "ZIGBEE_UART" in state["module_instances"]["zigbee_link"]
 
 
 def test_state_reports_unconfigured_api(tmp_path):

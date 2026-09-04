@@ -21,12 +21,12 @@
 //   本票迁入本体，见 index.html 启动区）。
 // 顶层 addEventListener（Esc 取消选脚 / btn-pin-reset / btn-pin-rotate /
 // btn-pin-overview / btn-pin-auto）在 import 时绑定（module 脚本延迟执行，DOM 已就绪）。
-import { $, apiGet, apiPost, toast } from "/js/app.js";
+import { $, apiGet, apiPost, toast, state } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { pinResetConfirmMessage } from "/js/fx/danger.js";  // 还原默认确认文案（工单 ux-walkthrough-02/01）
 import { multiInstanceModules, ensureDefaultInstances, instanceGapCount } from "/js/fx/module.js";
-import { collectBindings } from "/js/fx/generate.js";
+import { collectBindings, pinShareClass } from "/js/fx/generate.js";  // pinShareClass = 同脚多角色 共享/冲突 判据（工单 pin-share-rule/01，与后端 _shared_groups 同口径）
 import { syncStep7, markSubStep, refreshStepNav } from "/js/ui/step-state.js";
 import { chosenPlatform, expanded, selectedSlugs } from "/js/ui/generate-recommend.js";
 
@@ -749,15 +749,22 @@ function renderPinRoles(roles, fam) {
     return;
   }
   const idx = pinIndex();
-  const typeClashByPin = new Map();
+  // 同脚多角色 共享/冲突 判据（工单 pin-share-rule/01）：默认脚重叠的角色对按
+  // 物理资源键分类——同一 I2C 总线 / UART 实例 / syscfg 器件实例 = 合法共享
+  // （灰度 8 路 / zigbee 家族 / UART1 三件套）；其余同脚 = 冲突（DIP×灰度、
+  // 电机×按键、灰度×UART 等默认布局残留——旧行为同型同脚静默通过）。
+  const instanceMap = (state && state.module_instances) || {};
+  const defaultOverlap = new Map();
   for (const r of roles) {
     if (!idx[r.decl.default]) continue;
-    for (const o of roles) {
-      if (o.key !== r.key && o.decl.default === r.decl.default && o.decl.type !== r.decl.type) {
-        typeClashByPin.set(r.key, o.key);
-        break;
-      }
-    }
+    const others = roles.filter((o) => o.key !== r.key && o.decl.default === r.decl.default);
+    if (!others.length) continue;
+    const cls = pinShareClass([r, ...others], r.decl.default, pinBoard, instanceMap);
+    defaultOverlap.set(r.key, {
+      kind: cls.kind,
+      reason: cls.reason,
+      others: others.map((o) => o.decl.label || o.decl.id).join("、"),
+    });
   }
   const roleHtml = (r) => {
     const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
@@ -765,7 +772,7 @@ function renderPinRoles(roles, fam) {
     const unbound = pinUnbound.has(r.key);
     const defOnBoard = !!idx[r.decl.default];
     const famInfo = fam.get(r.key);
-    const typeClash = typeClashByPin.get(r.key);
+    const overlap = defaultOverlap.get(r.key);
     let status;
     if (bound) {
       status = `<span style="color:${st[0]}">已绑 ${esc(bound)}</span>` +
@@ -777,11 +784,16 @@ function renderPinRoles(roles, fam) {
         ' <button class="pin-role-restore">清除红显</button>';
     } else if (!defOnBoard) {
       status = `<span style="color:var(--warn)">默认板外（排针未引出）——仍可绑到板内空闲脚</span>`;
-    } else if (typeClash) {
-      status = `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 与 ${esc(typeClash)} 冲突（类型不同同脚）——未绑定时生成会资源冲突，建议改线</span>`;
+    } else if (overlap && overlap.kind === "conflict") {
+      status = `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 与 ${esc(overlap.others)} 冲突（同脚分属不同外设）——未绑定时生成会资源冲突，建议改线</span>`;
     } else if (Object.values(pinBindings).includes(r.decl.default)) {
       const by = Object.entries(pinBindings).find(([k, v]) => v === r.decl.default && k !== r.key);
-      status = `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 已被 ${esc((by && by[0]) || "其它角色")} 占用——未绑定时生成可能资源冲突，建议改线</span>`;
+      const byName = esc((by && by[0]) || "其它角色");
+      status = overlap && overlap.kind === "share"
+        ? `<span class="muted">默认 ${esc(r.decl.default)} 已被 ${byName} 占用（同一外设/总线，合法共享）</span>`
+        : `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 已被 ${byName} 占用——未绑定时生成可能资源冲突，建议改线</span>`;
+    } else if (overlap && overlap.kind === "share") {
+      status = `<span class="muted">默认 ${esc(r.decl.default)}（与 ${esc(overlap.others)} 共用同一外设/总线，合法共享）</span>`;
     } else {
       status = `<span class="muted">默认 ${esc(r.decl.default)}</span>`;
     }
@@ -880,11 +892,12 @@ $("btn-pin-auto").addEventListener("click", async () => {
       pinBindings[key] = pin;
     }
     renderPinCard();
-    // 结果说明条：已调整 + 保留共享
+    // 结果说明条：已调整 + 同脚标注（工单 pin-share-rule/01：kind 区分
+    // 合法共享 🔗 与物理冲突 ⚠——旧行为统一「合法共享，不拆」误导接线）
     const lines = [];
     for (const line of res.fixed || []) lines.push("✓ " + line);
     for (const s of res.shared || []) {
-      lines.push("🔗 " + s.pin + "：" + s.roles.join(" / ") + " —— " + s.reason);
+      lines.push((s.kind === "conflict" ? "⚠ " : "🔗 ") + s.pin + "：" + s.roles.join(" / ") + " —— " + s.reason);
     }
     if (!lines.length) lines.push("当前绑定无冲突，无需调整。");
     msg.textContent = lines.join("\n");
@@ -951,7 +964,15 @@ function showPinMenu(pinEl, pinName) {
       }).join("");
   }
   if (defaulters.length) {
-    rows += `<li class="muted">另有 ${defaulters.length} 个角色默认使用此脚（未绑定，按默认生成）：${defaulters.map((r) => esc(r.decl.label || r.decl.id)).join("、")}——同脚接线请自行确认。</li>`;
+    // 同脚分类（工单 pin-share-rule/01）：默认重叠的角色与已占用角色一起判定——
+    // 同一外设/总线 = 合法共享；分属不同外设 = 物理冲突，提示改线。
+    const cls = pinShareClass(
+      [...occupants, ...defaulters], pinName, pinBoard, (state && state.module_instances) || {}
+    );
+    const suffix = cls.kind === "conflict"
+      ? "——同脚分属不同外设（物理冲突），请改线"
+      : "——同用一外设/总线（合法共享）";
+    rows += `<li class="muted">另有 ${defaulters.length} 个角色默认使用此脚（未绑定，按默认生成）：${defaulters.map((r) => esc(r.decl.label || r.decl.id)).join("、")}${suffix}。</li>`;
   }
   rows += `<li class="muted" style="font-weight:600;border-top:1px dashed var(--border);margin-top: var(--space-1);padding-top:8px">绑定角色到此脚（点条目即绑定）：</li>`;
   rows += roles.filter((r) => pinListsType(pin, r.decl.type)).map((r) => {

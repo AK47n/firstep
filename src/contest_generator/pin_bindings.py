@@ -32,8 +32,10 @@ boards.pin_capability_instances 推导实例）。校验通过产出 ResolvedBin
 - 缺省 = 全默认：bindings 缺省或未覆盖的角色按声明默认值生成；必选角色允许
   缺省（走默认）。绑定值 == 默认值的条目保留在清单里（写侧按 no-op 跳过，
   逐字节契约不破）。
-- 重复绑定不拦（同引脚多角色共享合法，spec 已定）；板外脚（如 mspm0 的
-  PB4/PB5 不在排针）绑定 = 未知引脚 400。
+- 重复绑定不拦（同脚多角色不拒；是否合法由 `_shared_groups` 标注区分——
+  同 I2C 总线 / 同 UART 实例 / 同 syscfg 器件实例 = 合法共享 kind=share，
+  分属不同外设 = kind=conflict（物理不通，前端提示改线），工单 pin-share-rule/01）；
+  板外脚（如 mspm0 的 PB4/PB5 不在排针）绑定 = 未知引脚 400。
 - mspm0 槽位互斥：同一默认引脚且同一 syscfg 落点路径（母版 $assign 引脚值
   唯一为常态；STEP_MOTOR SLP2/DIR2 与 HUIDU R3/R4 默认重叠 PB6/PB7 属刻意
   重叠，路径不同不互斥）的两个角色绑到不同引脚 = 冲突 400——stm32 各角色
@@ -484,11 +486,11 @@ def _pwm_channel(role_id: str) -> str:
 @dataclass(frozen=True)
 class AutoAssignResult:
     """自动配置结果（工单 pin-auto-assign/01）：bindings 增量 + 调整说明 +
-    保留共享标注。"""
+    保留共享/冲突标注。"""
 
     bindings: dict[str, str]  # 增量：只含冲突角色新绑定（key → PIN）
     fixed: tuple[str, ...]  # 说明行："<role_key> → <PIN>（原 <old> 冲突，已自动移开）"
-    shared: tuple[dict[str, object], ...]  # 保留共享标注：{pin, roles, reason}
+    shared: tuple[dict[str, object], ...]  # 同脚多角色标注：{pin, roles, kind, reason}
 
 
 def auto_assign_bindings(
@@ -565,18 +567,42 @@ def auto_assign_bindings(
     )
 
 
+def _role_resource_keys(slug: str, decl: PinDeclaration, bound: BoardPin | None) -> set[str]:
+    """角色的「物理资源键」集（同脚多角色 合法共享/冲突 判据，工单
+    pin-share-rule/01——_shared_groups 与前端 pinShareClass 同口径）：
+
+    - uart_tx / uart_rx：绑定/默认引脚的能力实例（UART_1 / UART_3 …）——
+      同一串口外设的链路才能共用（zigbee 家族 / DIGIT+COORD+UWB 共 UART_1）；
+    - i2c_scl / i2c_sda：能力实例（I2C0 …；stm32 无实例 token = 空集）——
+      I2C 总线按多挂语义单独判（_shared_groups 首分支），不依赖本键；
+    - gpio_out / gpio_in：模块的 syscfg 实例集（INSTANCES_BY_SLUG）——
+      同一器件/总线（HUIDU 灰度 8 路 / LED_BEEP / DC_MOTOR …）才能共用；
+    - 其余（pwm / enc / adc / spi …）= 空集：同脚即物理冲突（两路输出/两
+      个通道不可并——共用会短路或混线，除非两角色描述同一信号）。
+    """
+    if bound is None:
+        return set()
+    if decl.type in ("uart_tx", "uart_rx", "i2c_scl", "i2c_sda"):
+        return set(pin_capability_instances(bound, decl.type))
+    if decl.type in ("gpio_out", "gpio_in"):
+        return set(INSTANCES_BY_SLUG.get(slug, ()))
+    return set()
+
+
 def _shared_groups(
     manifests: Sequence[ModuleManifest],
     platform: str,
     board: Board,
     bindings: Mapping[str, str],
 ) -> tuple[dict[str, object], ...]:
-    """保留的合法共享标注：同引脚多角色组（含绑定与默认脚）。
-
-    I2C 总线角色（i2c_scl / i2c_sda）标注协议允许同挂；其余 = 同引脚共享
-    （ADR 0010 允许，不拆）。仅对在板上存在的引脚标注。
+    """同脚多角色组的 共享/冲突 标注（工单 pin-share-rule/01）：按「物理资源
+    键」交集判定——同一 I2C 总线（HMC5883L / MPU6050 可同挂 SCL/SDA）、同一
+    UART 实例、同一 syscfg 器件实例 = 合法共享（kind=share）；其余同脚 =
+    分属不同外设（kind=conflict，物理不通，请改线）。只对在板上存在的引脚
+    标注。旧行为「任意同脚多角色都算合法共享」已废弃（电机 DIR 与按键、
+    DIP 拨码与灰度同脚等实际不可共用）。
     """
-    groups: dict[str, list[str]] = {}
+    groups: dict[str, list[tuple[str, str, PinDeclaration]]] = {}
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         if entry is None:
@@ -585,16 +611,38 @@ def _shared_groups(
             key = f"{manifest.slug}.{decl.id}"
             pin = bindings.get(key) or decl.default
             if pin:
-                groups.setdefault(pin, []).append(key)
+                groups.setdefault(pin, []).append((key, manifest.slug, decl))
     shared: list[dict[str, object]] = []
     for pin, roles in sorted(groups.items()):
         if len(roles) < 2 or board.pin_index.get(pin) is None:
             continue
-        is_i2c = any(".i2c_" in role for role in roles)
-        reason = (
-            "I2C 总线共享（MPU6050 / HMC5883L 等可同挂 SCL/SDA，协议允许）"
-            if is_i2c
-            else "同引脚共享（合法共享，不拆）"
+        bound = board.pin_index[pin]
+        types = {decl.type for _, _, decl in roles}
+        if types <= {"i2c_scl", "i2c_sda"}:
+            kind, reason = (
+                "share",
+                "I2C 总线共享（HMC5883L / MPU6050 等可同挂 SCL/SDA，协议允许）",
+            )
+        else:
+            keysets = [
+                _role_resource_keys(slug, decl, bound) for _, slug, decl in roles
+            ]
+            common = set.intersection(*keysets) if keysets else set()
+            if common and types & {"uart_tx", "uart_rx"}:
+                kind, reason = "share", "同一串口链路共享（共用同一 UART 实例）"
+            elif common:
+                kind, reason = "share", "共用同一器件/总线（同一实例，共享合法）"
+            else:
+                kind, reason = (
+                    "conflict",
+                    "同引脚但分属不同外设（物理不通）——请改线",
+                )
+        shared.append(
+            {
+                "pin": pin,
+                "roles": [key for key, _, _ in roles],
+                "kind": kind,
+                "reason": reason,
+            }
         )
-        shared.append({"pin": pin, "roles": roles, "reason": reason})
     return tuple(shared)
