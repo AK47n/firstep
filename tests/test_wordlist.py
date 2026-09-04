@@ -228,3 +228,26 @@ def test_default_wordlist_wireless_group_has_zigbee_lib():
     assert zigbee.lib_modules == ("zigbee_link",)
     assert zigbee.recommended is False
     assert sum(1 for s in wireless.solutions if s.recommended) <= 2
+
+
+def test_default_wordlist_sensor_group_has_ir_beam_lib():
+    """真词表回归（工单 ir-beam-module/02）：「感知传感器」组含红外对射方案且
+    挂库内 ir_beam（买件指引显示「库内已有」，ticket 02 钉防回退）。"""
+    from contest_generator.wordlist import DEFAULT_WORDLIST
+
+    sensor = next(
+        (g for g in DEFAULT_WORDLIST if g.category == "感知传感器"), None
+    )
+    assert sensor is not None, "默认词表应含「感知传感器」组"
+    ir = next(
+        (s for s in sensor.solutions if s.name == "红外对射传感器（遮挡检测）"),
+        None,
+    )
+    assert ir is not None, "感知传感器组应含红外对射（遮挡检测）方案"
+    assert ir.interface == "GPIO 数字量（三线制 VCC/GND/OUT）"
+    assert ir.price == "￥3-10/套"
+    assert "ir_beam" in ir.note
+    assert "IR_BEAM_BLOCKED_LEVEL" in ir.note  # 极性翻转提示
+    assert ir.suitable == "门洞/出入口遮挡检测、物体经过计数、防夹、载物在位"
+    assert ir.lib_modules == ("ir_beam",)
+    assert ir.recommended is False
