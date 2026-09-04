@@ -76,6 +76,14 @@
         "suitable": "撞墙检测/近距避障/边界判定"
       },
       {
+        "name": "红外对射传感器（遮挡检测）",
+        "interface": "GPIO 数字量（三线制 VCC/GND/OUT）",
+        "price": "￥3-10/套",
+        "note": "库内 ir_beam 已打通遮挡检测（ir_beam_read 返回 1=遮挡/0=无遮挡，双平台默认 PA8，无需再自写驱动）；对射式发射/接收两端对装、三线制只占 1 个 GPIO；遮挡=高电平（个别模块极性相反，改 IR_BEAM_BLOCKED_LEVEL 一处即可）；强光下接收易误判，室内用",
+        "suitable": "门洞/出入口遮挡检测、物体经过计数、防夹、载物在位",
+        "lib_modules": ["ir_beam"]
+      },
+      {
         "name": "磁力计指南针（QMC5883L）",
         "interface": "I2C（QMC/IST 系列同寄存器族）",
         "price": "￥5-15/个",
