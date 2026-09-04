@@ -939,7 +939,7 @@ function addModule(slug) {
 
 let expandBusy = false;   // 展开检查进行中（工单 ux-walkthrough-02/17：禁防连点）
 
-async function runExpand() {
+export async function runExpand() {
   if (expandBusy) return;   // 进行中禁防连点（工单 ux-walkthrough-02/17）
   $("expand-msg").textContent = "";
   if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
