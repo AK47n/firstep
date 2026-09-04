@@ -186,3 +186,18 @@ def test_real_zigbee_pair_passes_gate():
         for slug in ("config", "zigbee_uart", "zigbee_uart_key")
     ]
     _check_file_path_conflicts(manifests, PLATFORM_STM32)  # 不抛
+
+
+def test_exclusive_pair_conflict_maps_to_400():
+    """硬互斥对同选错误经 error_to_http 表 → 400 中文（与 /api/generate 同接缝）。"""
+    from contest_generator.errors import error_entry
+    from contest_generator.generator import ExclusivePairConflictError
+
+    err = ExclusivePairConflictError(
+        "模块 zigbee_uart 与 zigbee_link 互斥：同一路 ZIGBEE_UART 接收只能选"
+        "一个驱动（固定 ID 帧 vs 通用帧收发），请二选一。"
+    )
+    status, mapped = error_entry(err)
+    assert status == 400
+    assert "zigbee_uart" in mapped and "zigbee_link" in mapped
+    assert "二选一" in mapped

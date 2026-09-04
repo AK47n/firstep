@@ -146,13 +146,37 @@ def test_exclusive_groups_aggregate_on_the_real_library():
     """
     manifests = _real_manifests()
     groups = collect_exclusive_groups(manifests)
-    assert {g.id for g in groups} == {"gray-track", "attitude-hold"}
+    assert {g.id for g in groups} == {"gray-track", "attitude-hold", "zigbee-rx"}
     by_id = {g.id: g for g in groups}
     assert by_id["gray-track"].label == "8 路灰度传感器驱动"
     assert [m.slug for m in by_id["gray-track"].members] == ["huidu", "pid", "xunji"]
     assert by_id["attitude-hold"].label == "航向保持 / 姿态传感器"
     assert [m.slug for m in by_id["attitude-hold"].members] == ["imu_uart", "ml_mpu6050"]
-    # mspm0 侧两组完整；stm32 侧两组均单成员 → 剔除（无意义组不出现）
+    assert by_id["zigbee-rx"].label == "Zigbee 无线链路（接收侧）"
+    assert [m.slug for m in by_id["zigbee-rx"].members] == ["zigbee_link", "zigbee_uart"]
+    assert {
+        m.slug: m.role for m in by_id["zigbee-rx"].members
+    } == {
+        "zigbee_link": "任意字节帧收发（双机/双车无线数据通信）",
+        "zigbee_uart": "固定 DIP-4 ID 帧接收（身份识别/信标上报，与 zigbee_uart_key 配对）",
+    }
+    # mspm0 侧三组完整；stm32 侧 gray/attitude 两组单成员 → 剔除，zigbee-rx 保留
     msp_groups = collect_exclusive_groups(manifests, platform="mspm0")
-    assert {g.id for g in msp_groups} == {"gray-track", "attitude-hold"}
-    assert collect_exclusive_groups(manifests, platform="stm32") == []
+    assert {g.id for g in msp_groups} == {"gray-track", "attitude-hold", "zigbee-rx"}
+    assert [g.id for g in collect_exclusive_groups(manifests, platform="stm32")] == [
+        "zigbee-rx"
+    ]
+
+
+def test_hard_exclusive_pairs_are_covered_by_manifest_groups():
+    """生成侧硬互斥对（generator.HARD_EXCLUSIVE_PAIRS）必须是某 manifest 互斥
+    组的同组成员（双源防漂移：组加成员不自动进硬表 = 静默空洞，本测试拦截）。"""
+    from contest_generator.generator import HARD_EXCLUSIVE_PAIRS
+
+    manifests = _real_manifests()
+    groups = collect_exclusive_groups(manifests)
+    for left, right, _reason in HARD_EXCLUSIVE_PAIRS:
+        same_group = any(
+            {left, right} <= {m.slug for m in group.members} for group in groups
+        )
+        assert same_group, f"硬互斥对 {left}/{right} 未在任一 manifest 互斥组内"

@@ -34,6 +34,7 @@ from .flash import FlashError
 from .generation_output import BackupRestoreError, GenerationBusyError, GenerationConflictError
 from .generator import (
     DuplicateFilePathError,
+    ExclusivePairConflictError,
     ExtiLineConflictError,
     GeneratorError,
     PythonArtifactError,
@@ -223,6 +224,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             ManualReferenceError,  # 手动选参考资料不存在 / 重复（工单 01）
             GeneratorError,
             DuplicateFilePathError,  # 跨模块同名文件（生成侧查重兜底，工单 gen-file-collision-gate/01）
+            ExclusivePairConflictError,  # 硬互斥对同选（同一外设单消费者，工单 zigbee-link/02）
             PinBindingError,  # 引脚绑定载荷非法（工单 pin-board-config/02：键/角色/引脚/能力/槽位）
             SkeletonError,  # 骨架/自检冒烟（工单 route-orchestration-homing/01：main_mode 非法 / 冒烟守卫）
             TimerConflictError,  # 绑定 pwm TIM 实例撞骨架调度定时器（工单 pin-unlock-stm32/01）

@@ -4,6 +4,11 @@
   "dependencies": [
     "config"
   ],
+  "exclusive_group": {
+    "id": "zigbee-rx",
+    "label": "Zigbee 无线链路（接收侧）",
+    "role": "任意字节帧收发（双机/双车无线数据通信）"
+  },
   "platforms": {
     "stm32": {
       "files": [
