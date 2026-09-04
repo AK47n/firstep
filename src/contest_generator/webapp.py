@@ -249,6 +249,7 @@ from .selection import (
     resolve_selection,
     run_recommendation,
 )
+from .syscfg_instances import INSTANCES_BY_SLUG  # 同脚多角色 共享/冲突 判据（工单 pin-share-rule/01：前端 pinShareClass 的数据源）
 from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -1039,6 +1040,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "toolchains": {
                 PLATFORM_STM32: uv4 is not None,
                 PLATFORM_MSPM0: make is not None,
+            },
+            "module_instances": {
+                slug: list(instances)
+                for slug, instances in sorted(INSTANCES_BY_SLUG.items())
             },
             "llm": (
                 {"base_url": config.base_url, "model": config.model}
