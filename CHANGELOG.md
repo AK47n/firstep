@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=24dc011fa214ab7024024574259a1b12e1abbb3b -->
+<!-- changelog-auto: last-commit=b2a683981c1d2efac855381f688b42aa41834e90 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 23:15 现场修复批次：关标签改 Ctrl+Alt+W（Chrome 保留键收不到 Ctrl+W）/ 标签指针拖拽替代原生 DnD（沿 X 平移 + Esc 取消）/ 窗口化行高实测兜底 + 行号列横滚遮盖 + 当前行高亮去首竖线
 - 23:15 新建 VERSIONS.md：版本更新记录定稿文件与发版格式约定（工单 version-changelog/01）
 - 23:21 新增 VERSIONS.md 版本记录解析器 parse_versions/load_versions（工单 version-changelog/02）
+- 23:25 路由 /api/changelog 改读 VERSIONS.md 返回版本要点（工单 version-changelog/03）
 
 ## 2026-09-03
 - 13:00 feat：编译错误行内标记（行号色点 + 错误行底色/波浪线 + title 悬停 + 点击跳转）——fx 纯件 compileErrorLinesForFile（path 归一 \\→/、去 . 段、../ 后缀与 basename 兜底、同行消息合并、line 0 跳过）与 compileErrorPathNorm/Base（与生成页修复中心 fixKeyOf/fixKeyBasename 单源化）；ui 错误态 setCompileErrors/getCompileErrors 成对导出（ui 单向依赖：状态归 codeeditor，写方=code-compile，免 ui-cycle 环）；winRenderMarks 一次映射共用标记层与行号色点（评审整改：currentMarks 可选 errLines、越界钳制、split 移出循环）；MARK_PRIORITY 加 error:4（压过 current/hit/word/bracket）+ codeMarksHTML 可选 title（esc 后悬停）；gutter 色点点击复用 jumpToCompileError 兜底链（折叠箭头不拦截）；单测 5 组 + 全量 1224 pass + smoke-05 11/11（工单 code-editor-refine/05）
