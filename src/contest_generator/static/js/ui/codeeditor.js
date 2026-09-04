@@ -763,7 +763,10 @@ function paneBox() { return $("code-viewer"); }
 // （highlightCodeLines 跨行 token 在行界闭合/重开，行间独立），滚动只切片。
 const WIN_OVERSCAN = 20;
 let winCache = null;   // { hl: string[], gutter: string[], lineCount, probeText, probeCols }
-let winLineH = 20;     // 实测行高 px（随 --code-font-size/行高变化重测）
+let winLineH = 0;     // 实测行高 px（0 = 未测；首次 winBuild / codeWindowRefresh 实测——
+                       // 初值不能是 20：`if (!winLineH)` 守卫会跳过测量，136% 缩放下
+                       // 行高 20px vs 实际 28.29px → .code-edit 变矮、标记层
+                       // （overflow:hidden）底部被裁切——用户现场「文件尾几行括号无彩虹色」）
 let winLast = null;    // { start, end, lineCount }——窗口未变 → 零 DOM
 let winSize = null;    // { lineCount, lineH, cols, chW }——尺寸缓存（工单 09：行数/行高/
                        // 最长列数不变则不碰样式；列数增长按 ch 宽估算，零强制布局）
@@ -784,13 +787,22 @@ function winReadView() {
 
 function winLineHeight() {
   const box = paneBox();
-  const el = box && box.querySelector(".code-hl-line");
+  // 实测行高：优先行内元素；首次打开窗口化空壳时 .code-hl 还没有
+  // .code-hl-line 子行（renderPane 先建空壳、winBuild 随后才测量）——
+  // 改测空壳就存在的 .code-hl / .code-marks pre（与 .code-hl-line 同
+  // font-size/line-height 单源 --code-font-size，computed 同样解析出
+  // 真实行高，缩放 136% 时 = 13*1.36*1.6 ≈ 28.29px）。旧兜底读
+  // #code-viewer 自身 font-size（基础 UI 字号）→ 行高与代码层不符。
+  // 无代码层（未打开文件 / 空壳尚未建）→ 0（保持未测态，待 winBuild
+  // 实测——不为 0 会污染 `if (!winLineH)` 守卫）。
+  const el = box && (box.querySelector(".code-hl-line")
+    || box.querySelector(".code-hl")
+    || box.querySelector(".code-marks"));
   if (el) {
     const lh = parseFloat(getComputedStyle(el).lineHeight);
     if (lh > 0) return lh;
   }
-  const fs = parseFloat(getComputedStyle(box).fontSize) || 13;
-  return fs * 1.6;
+  return 0;
 }
 
 // winBuild(viewText, lang)：内容变化后重建逐行缓存（高亮数组 / gutter 数组 /
@@ -2777,76 +2789,116 @@ export function initCodeEditor() {
     closeTab(t.dataset.tabPath);
   });
 
-  // 拖拽排序（工单 code-editor-vscode-polish/03）：HTML5 DnD——dragstart 记
-  // 路径（dataTransfer 携带，跨标签实例），dragover 按命中 tab 中线计算插入
-  // 位（before/after 用 drop-before/drop-after 指示线），drop 调 moveTab 纯件
-  // 重排 + renderTabs（内容/脏点/活动态不动）；空白区拖放 = 追加末尾。
-  // 合成事件（CDP 冒烟）与真实拖拽同一路径；dragend 兜底清理标记。
+  // 拖拽排序（工单 code-editor-vscode-polish/03 改造）：指针拖拽替代 HTML5 DnD
+  // ——原生 DnD 的拖影跟随鼠标自由移动（X/Y 都跑，用户反馈「拖标签到处乱跑」）；
+  // 改为 mousedown 记录起点、mousemove 只沿 X 平移被拖标签（transform
+  // translateX，垂直锁定在标签条内——与 Chrome/VSCode 标签吸附同观感），
+  // 沿路按被拖标签当前中线计算插入位（沿用 drop-before/drop-after 指示线），
+  // mouseup 经 moveTab 纯件重排 + renderTabs；拖开不激活（抑制本次 click）。
   if (strip) {
-    let dragPath = "";
-    let dropTargetPath = "";
-    let dropPlace = "after";
-    let dropAtEnd = false;   // 拖到空白区（无命中 tab）= 追加末尾（与 dragover 命中逻辑分开，防「空路径 = 无操作」歧义）
+    const DRAG_THRESHOLD = 5;   // 位移超过阈值才进入拖拽（防与点击激活混淆）
+    let drag = null;            // {tab, path, startX, baseLeft, width, dx, on, targetPath, place}
+    let suppressClick = false;  // 拖拽结束抑制本次 click（不激活被拖标签）
     const clearDropMarks = () => {
       strip.querySelectorAll(".code-tab.drop-before, .code-tab.drop-after")
         .forEach((el) => el.classList.remove("drop-before", "drop-after"));
     };
     const endDrag = () => {
-      dragPath = "";
-      dropTargetPath = "";
-      dropAtEnd = false;
-      clearDropMarks();
-      strip.querySelectorAll(".code-tab.dragging")
-        .forEach((el) => el.classList.remove("dragging"));
+      if (!drag) return;
+      if (drag.on) {
+        drag.tab.style.transform = "";
+        drag.tab.classList.remove("dragging");
+        document.body.style.userSelect = "";
+        clearDropMarks();
+      }
+      drag = null;
     };
-    strip.addEventListener("dragstart", (e) => {
+    // 按被拖标签当前中心横坐标推算插入位：中线落在第 idx 个兄弟前 →
+    // 该兄弟 drop-before；越过全部兄弟（idx = others.length）→ 追加末尾
+    // （drop-after 指示线标在最后一个兄弟右缘；被拖者已居末则无需标记）。
+    const updateDropMark = (prev) => {
+      clearDropMarks();
+      const cx = prev.baseLeft + prev.width / 2 + prev.dx;
+      const others = [...strip.querySelectorAll(".code-tab")]
+        .filter((el) => el !== prev.tab);
+      let idx = 0;
+      for (const el of others) {
+        const r = el.getBoundingClientRect();
+        if (r.left + r.width / 2 < cx) idx++;
+      }
+      prev.targetPath = "";
+      prev.place = "before";
+      prev.atEnd = false;
+      if (idx < others.length) {
+        prev.targetPath = others[idx].dataset.tabPath;
+        prev.place = "before";
+        others[idx].classList.add("drop-before");
+      } else {
+        prev.atEnd = true;
+        const all = [...strip.querySelectorAll(".code-tab")];
+        if (all[all.length - 1] !== prev.tab && others.length) {
+          others[others.length - 1].classList.add("drop-after");
+        }
+      }
+    };
+    strip.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
       const tab = e.target.closest("[data-tab-path]");
       if (!tab) return;
       // 从关闭钮 / 磁盘徽章按下不启动拖动（评审整改 03：显式控件保持原语义）
       if (e.target.closest("[data-tab-close]") || e.target.closest("[data-tab-disk]")) return;
-      dragPath = tab.dataset.tabPath;
-      try {
-        e.dataTransfer.setData("text/plain", dragPath);
-        e.dataTransfer.effectAllowed = "move";
-      } catch (err) { /* 合成事件无 DataTransfer：容错 */ }
-      tab.classList.add("dragging");
+      const rect = tab.getBoundingClientRect();
+      drag = { tab, path: tab.dataset.tabPath, startX: e.clientX,
+        baseLeft: rect.left, width: rect.width, dx: 0, on: false,
+        targetPath: "", place: "before", atEnd: false };
     });
-    strip.addEventListener("dragover", (e) => {
-      if (!dragPath) return;
-      e.preventDefault();
-      try { e.dataTransfer.dropEffect = "move"; } catch (err) { /* 同上 */ }
-      clearDropMarks();
-      const target = e.target.closest("[data-tab-path]");
-      dropAtEnd = false;
-      if (!target) {
-        // 空白区：追加末尾（无插入位指示线）
-        dropTargetPath = "";
-        dropAtEnd = true;
-        return;
+    document.addEventListener("mousemove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.startX;
+      if (!drag.on) {
+        if (Math.abs(dx) < DRAG_THRESHOLD) return;
+        drag.on = true;
+        drag.tab.classList.add("dragging");
+        document.body.style.userSelect = "none";
       }
-      if (target.dataset.tabPath === dragPath) {
-        dropTargetPath = "";   // 拖回自身 = 无操作
-        return;
-      }
-      const rect = target.getBoundingClientRect();
-      const before = e.clientX < rect.left + rect.width / 2;
-      dropTargetPath = target.dataset.tabPath;
-      dropPlace = before ? "before" : "after";
-      target.classList.add(before ? "drop-before" : "drop-after");
+      drag.dx = dx;
+      drag.tab.style.transform = "translateX(" + dx + "px)";   // 只沿 X：垂直锁定
+      updateDropMark(drag);
     });
-    strip.addEventListener("drop", (e) => {
-      if (!dragPath) return;
-      e.preventDefault();
-      if (dropTargetPath && dropTargetPath !== dragPath) {
-        tabs = moveTab(tabs, dragPath, dropTargetPath, dropPlace);
+    document.addEventListener("mouseup", () => {
+      if (!drag) return;
+      const prev = drag;
+      const wasOn = prev.on;
+      endDrag();
+      if (!wasOn) return;   // 简单点击：交给既有 click 激活
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+      if (prev.targetPath && prev.targetPath !== prev.path) {
+        tabs = moveTab(tabs, prev.path, prev.targetPath, prev.place);
         renderTabs();
-      } else if (dropAtEnd && dropTargetPath !== dragPath) {
-        tabs = moveTab(tabs, dragPath, "", "after");
-        renderTabs();
+      } else if (prev.atEnd) {
+        // 追加末尾：被拖者已居末则恒等（不动）；否则重排到尾部
+        const all = [...strip.querySelectorAll(".code-tab")];
+        if (all[all.length - 1] !== prev.tab) {
+          tabs = moveTab(tabs, prev.path, "", "after");
+          renderTabs();
+        }
       }
+    });
+    // 捕获层拦截拖拽产生的 click（拖开 ≠ 切 tab，与既有「拖回自身=无操作」
+    // 语义一致；未拖拽的普通点击不受影响）
+    strip.addEventListener("click", (e) => {
+      if (suppressClick) {
+        suppressClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, { capture: true });
+    // Esc 取消拖拽（返回原位，不做重排）
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !drag) return;
       endDrag();
     });
-    strip.addEventListener("dragend", endDrag);
   }
 
   // Ctrl/Cmd+S：tab-code 活动时全局截获（与 Ctrl+F 同口径——焦点在树/侧栏
