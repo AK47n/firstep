@@ -112,6 +112,16 @@ test("codeEditorHTML：opts.taValue 覆盖 textarea 内容（窗口化：不内�
   assert.match(def, />line one\nline two\nline three<\/textarea>/);
 });
 
+test("codeEditorHTML：窗口化空壳仍输出 .code-hl / .code-marks 空 pre（行高测量链契约）", () => {
+  // ui/winLineHeight 在首次打开时（.code-hl-line 尚未渲染）从空壳 pre 实测
+  // computed line-height（与 .code-hl-line 同 --code-font-size 单源）；空壳
+  // 若省略这两个 pre，行高只能回退容器字号 → 136% 缩放下行高 20px vs 28.29px、
+  // .code-edit 变矮、标记层底部被裁切（用户现场：文件尾括号无彩虹标色）。
+  const html = codeEditorHTML("a\n", "c", { windowed: true });
+  assert.match(html, /<pre class="code-hl" aria-hidden="true"><\/pre>/);
+  assert.match(html, /<pre class="code-marks" aria-hidden="true"><\/pre>/);
+});
+
 test("caretLineOf：光标行号（1 基，含中英混排）", () => {
   const v = "ab\ncd中文\nef\n";
   assert.equal(caretLineOf(v, 0), 1);      // 首字符

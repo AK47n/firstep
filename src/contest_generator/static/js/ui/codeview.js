@@ -1083,11 +1083,14 @@ export function initCodeViewer() {
     e.preventDefault();
     focusFindPanel(replaceInput);
   });
-  // 快捷键补位（工单 code-editor-refine/02）：Ctrl+W 关标签 / Ctrl+B 侧栏开合。
-  // Ctrl+W 全局拦截（输入框聚焦也生效——否则浏览器按原生关页，数据丢失面更大；
-  // VSCode 同义）；脏标签由 closeTab 内 confirmModal 处理；模态开启（.ref-files-
-  // overlay）时不并发截获（防与确认弹窗冲突）。Ctrl+B 输入框聚焦不抢键（Tab
-  // 陷阱先例：焦点在查找/过滤框内不打断输入）。
+  // 快捷键补位（工单 code-editor-refine/02）：关闭标签 / Ctrl+B 侧栏开合。
+  // 关标签主键 = Ctrl+Alt+W：Ctrl+W 是 Chrome 浏览器级保留键——keydown 根本
+  // 不会投递给页面（实测：Chrome 直接关闭标签页，页面零机会 preventDefault），
+  // 应用侧无法拦截；Ctrl+Alt+W 实测 Chrome 正常投递且无浏览器动作，W 同义
+  // 「Close」。Ctrl+W 分支保留兜底（Firefox/Edge/嵌入环境能投递时同样关标签）。
+  // 脏标签由 closeTab 内 confirmModal 处理；模态开启（.ref-files-overlay）时
+  // 不并发截获（防与确认弹窗冲突）。Ctrl+B 输入框聚焦不抢键（Tab 陷阱先例：
+  // 焦点在查找/过滤框内不打断输入）。
   document.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();

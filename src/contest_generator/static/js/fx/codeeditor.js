@@ -128,7 +128,7 @@ export function codeTabStripHTML(tabs, activePath) {
     const active = path === activePath;
     const ro = t.readonly ? " ro" : "";
     return '<button type="button" class="code-tab' + (active ? " on" : "") + ro
-      + '" data-tab-path="' + esc(path) + '" role="tab" draggable="true"'
+      + '" data-tab-path="' + esc(path) + '" role="tab"'
       + ' aria-selected="' + (active ? "true" : "false") + '"'
       + ' title="' + esc(path) + (t.readonly ? "（只读：非 UTF-8，禁止保存）" : "") + '">'
       + '<span class="code-tab-badge">' + codeTabBadge(t.lang) + "</span>"

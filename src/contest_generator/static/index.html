@@ -1103,13 +1103,17 @@
   /* 设置页折叠总开关（工单 settings-infoarch/03）：页首工具栏两端对齐 */
   .settings-toolbar { display: flex; align-items: center; justify-content: space-between;
                       gap: 12px; margin-bottom: var(--space-4); }
-  /* 设置页 sticky 保存条（工单 ux-walkthrough-02/04）：任意滚动位置可见；
-     top 在吸顶栏 + AI 行动横幅之下，不遮挡内容 */
-  .settings-stickybar { position: sticky; top: calc(var(--header-h) + 8px); z-index: 60;
-                        display: flex; align-items: center; gap: 10px;
-                        background: var(--panel); border: 1px solid var(--border);
-                        border-radius: var(--radius-md); padding: 8px 12px; margin-bottom: var(--space-4);
-                        box-shadow: var(--shadow-card); }
+  /* 设置页悬浮保存按钮（原 sticky 全宽保存条——滚动时整条盖住下方表单，
+     用户反馈不美观、挡视野；改 fixed 右下角紧凑胶囊：不占文档流、只贴视口
+     右下角，任意滚动位置可见，不遮表单主体；「有未保存的修改」提示随胶囊
+     内联；与 #toast-root（右上）不冲突。类名沿用 settings-stickybar（JS 只
+     依赖内部 id，不随布局更名）。 */
+  .settings-stickybar { position: fixed; right: 20px; bottom: 20px; z-index: 60;
+    display: flex; align-items: center; gap: 8px; width: max-content;
+    max-width: calc(100vw - 40px);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-full); padding: 8px 12px;
+    box-shadow: var(--shadow-card); }
   /* 按钮内联图标（工单 ui-polish-9/04） */
   button .btn-ico { display: inline-block; width: 15px; height: 15px;
                     vertical-align: -2px; margin-right: 6px; }
@@ -1671,11 +1675,12 @@
     padding: 3px 6px; border-radius: var(--radius-xs); margin-left: 2px; }
   .code-tab-close:hover { background: var(--accent-dim); color: var(--accent); }
   .code-tab.ro .code-tab-name { text-decoration: line-through; opacity: .8; }
-  /* 拖拽排序（工单 code-editor-vscode-polish/03）：标签可拖（grab 光标）、
-     拖动中半透明、插入位 = 左侧/右侧 2px accent 竖线（VSCode 拖放指示线
-     观感；与当前行/树选中同族 accent 竖线视觉语言）。 */
-  .code-tab[draggable="true"] { cursor: grab; }
-  .code-tab.dragging { opacity: .55; }
+  /* 拖拽排序（工单 code-editor-vscode-polish/03 改造）：标签可拖（grab 光标）、
+     拖动中半透明 + z-index 置顶（transform 水平平移时盖过兄弟标签）、插入位 =
+     左侧 2px accent 竖线（VSCode 拖放指示线观感；与当前行/树选中同族 accent
+     竖线视觉语言；改为指针拖拽后不再用 [draggable] 属性选择器）。 */
+  .code-tab { cursor: grab; }
+  .code-tab.dragging { opacity: .55; z-index: 2; }
   .code-tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
   .code-tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
   /* 徽章间距统一（工单 code-editor-vscode-polish/03）：磁盘变更「!」与只读
@@ -1706,8 +1711,13 @@
   .code-view { flex: 1; overflow: auto; min-height: 0; display: flex;
     align-items: flex-start; background: var(--code-bg); position: relative;
     --code-font-size: calc(13px * var(--code-zoom, 1)); }
+  /* 行号列（横向滚动静止）：sticky left:0 吸附在视口左缘；opaque 代码底色 +
+     z-index:2（高于 .code-marks(0)/.code-ta(1)/.code-hl 静态流）——横滚时
+     代码/光标/标记层从行号列下方滑过，由行号列整体遮盖（用户现场：横滚后
+     代码左端叠到行首序号上，原文从「108」后直接露出——gutter 透明+无
+     z-index 时后绘制的代码层盖过行号）。 */
   .code-gutter { position: sticky; left: 0; flex: none; padding: 8px 0;
-    user-select: none; }
+    user-select: none; background: var(--code-bg); z-index: 2; }
   .code-gutter-line { display: block; font-family: var(--mono);
     font-size: var(--code-font-size); line-height: 1.6; padding: 0 12px;
     text-align: right; color: var(--muted); min-width: 3ch; box-sizing: border-box; }
@@ -1742,10 +1752,12 @@
   .code-pre-line { display: block; }
   .code-pre-line:empty { min-height: 1.6em; }
   .code-pre-line.flash { background: var(--accent-dim); }
-  /* 当前行（重设计）：整行淡 accent 底 + 左侧 2px accent 竖线（VSCode
-     active line 观感）；行号 accent 加粗（.code-gutter-line.active 同行）。 */
-  .code-pre-line.active { background: rgba(var(--accent-rgb), .07);
-    box-shadow: inset 2px 0 0 var(--accent); }
+  /* 当前行（重设计）：整行淡 accent 底（VSCode active line 观感）；行号
+     accent 加粗（.code-gutter-line.active 同行）。不画左侧 accent 竖线——
+     与 textarea 的光标（caret-color: var(--accent)，同为细 accent 竖线）
+     过于相像，用户反馈「高亮行首竖线像闪烁光标、视觉不舒服」（原为
+     box-shadow: inset 2px 0 0 var(--accent)，已移除）。 */
+  .code-pre-line.active { background: rgba(var(--accent-rgb), .07); }
   /* 空态（工单 code-editor-vscode-polish/02）：编辑器空态文本在滚动容器内
      居中——.code-view 是 flex 滚动容器，唯一子元素 margin:auto 双向居中；
      muted 小字 + 留白，观感贴近 VSCode 欢迎页（保持轻量，不引入图标）。 */
@@ -1775,8 +1787,7 @@
   .code-hl-line { display: block; }
   .code-hl-line:empty { min-height: 1.6em; }
   .code-hl-line.flash { background: var(--accent-dim); }
-  .code-hl-line.active { background: rgba(var(--accent-rgb), .07);
-    box-shadow: inset 2px 0 0 var(--accent); }
+  .code-hl-line.active { background: rgba(var(--accent-rgb), .07); }
   .code-ta { position: absolute; inset: 0; z-index: 1; display: block; width: 100%;
     height: 100%; padding: 8px 24px 8px 12px; border: 0; margin: 0; background: transparent;
     color: transparent; caret-color: var(--accent); font-family: var(--mono);

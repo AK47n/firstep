@@ -21,12 +21,15 @@ test("SHORTCUT_GROUPS：覆盖全部常用快捷键（关键条目）", () => {
   const all = SHORTCUT_GROUPS.flatMap((g) => g.items).flatMap((it) => it.keys).join("|");
   for (const k of ["Ctrl+S", "Ctrl+F", "Ctrl+H", "Esc", "Backspace",
     "Ctrl+Shift+[", "Ctrl+Shift+]", "Ctrl+滚轮", "Tab", "Enter", "Shift+Enter",
-    "Ctrl+W", "Ctrl+B"]) {
+    "Ctrl+Alt+W", "Ctrl+B"]) {
     assert.ok(all.includes(k), "缺少快捷键条目: " + k);
   }
   // 鼠标手势也在册
   assert.ok(all.includes("中键"));
   assert.ok(all.includes("拖拽"));
+  // 关标签主键必须是 Ctrl+Alt+W：Ctrl+W 是 Chrome 浏览器级保留键（keydown
+  // 不投递给页面，直接关标签页），页面无法拦截——帮助文档不得误导为 Ctrl+W。
+  assert.ok(!all.includes("Ctrl+W"), "不得再宣传 Ctrl+W（Chrome 保留键，页面收不到）");
 });
 
 test("shortcutHelpHTML：键帽/分组/标签渲染（替代键位各一帽 + 或分隔）", () => {
