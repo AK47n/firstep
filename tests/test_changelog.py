@@ -409,11 +409,22 @@ def test_load_versions_unreadable_path_returns_empty(tmp_path):
     assert load_versions(tmp_path) == []
 
 
-def test_load_versions_real_file_yields_no_ghost_from_example():
-    """真实 VERSIONS.md（本阶段只含格式示例注释，未发版）→ []。
+def test_load_versions_real_file_reflects_released_versions():
+    """真实 VERSIONS.md：已发布 v1.0.0（GitHub Release 2026-08-30 定稿）。
 
-    契约守卫：示例注释里的 `## v1.1.0` / `- 新增：…` 行不得击穿注释态
-    解析出幽灵版本。首个版本发布时此测试需随 VERSIONS.md 一起更新。
+    契约守卫：官方格式示例注释（`<!-- … -->` 内含 `## v` / `- ` 行）不得
+    击穿注释态解析出幽灵版本——真实块恰好 1 个、字段与首版定稿一致；
+    下个版本发布时更新此断言（追加而非替换）。
     """
     real = Path(__file__).resolve().parents[1] / "VERSIONS.md"
-    assert load_versions(real) == []
+    releases = load_versions(real)
+    assert len(releases) == 1, "VERSIONS.md 应恰有 1 个已发布版本（示例注释不算）"
+    first = releases[0]
+    assert first["version"] == "v1.0.0"
+    assert first["date"] == "2026-08-30"
+    assert first["summary"], "首版应有主题一句话"
+    assert first["items"], "首版应有要点条目"
+    assert all(
+        isinstance(i["kind"], str) and isinstance(i["text"], str) and i["text"]
+        for i in first["items"]
+    )
