@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=779f97a96d3162deeb05a9e9630bd4fb25029c60 -->
+<!-- changelog-auto: last-commit=05d04e16d4a76813e5a876061b872c4a2d8051e9 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 00:42 词表「无线通信模块」补 Zigbee 方案并挂库内 zigbee_link（工单 zigbee-link/03）
 - 00:55 多实例配置变体控件去掉残留 select 空壳（工单 key-multi-instance/06 回归）
 - 01:08 草稿恢复后重驱动 展开 + 板定义，刷新不再卡在引脚配置占位（工单 refresh-restore-downstream）
+- 01:27 同脚多角色 共享/冲突 判据收紧——只有同一外设/总线才算合理共用（工单 pin-share-rule/01）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
