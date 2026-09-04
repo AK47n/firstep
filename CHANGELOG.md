@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=770eeb1b02a34f2ec426e2e941c16c39caf4cb92 -->
+<!-- changelog-auto: last-commit=c31dc048a77584797b4391a772e87f1e8428e140 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 01:08 草稿恢复后重驱动 展开 + 板定义，刷新不再卡在引脚配置占位（工单 refresh-restore-downstream）
 - 01:27 同脚多角色 共享/冲突 判据收紧——只有同一外设/总线才算合理共用（工单 pin-share-rule/01）
 - 02:04 模块库新增红外对射传感器 ir_beam（双平台驱动 + 库级测试）（工单 ir-beam-module/01）
+- 02:14 词表「感知传感器」补红外对射方案并挂库内 ir_beam（工单 ir-beam-module/02）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
