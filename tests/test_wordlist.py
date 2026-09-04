@@ -1,7 +1,8 @@
 """硬件词表（wordlist.py）测试：solutions 解析（工单 buy-guide/01）。
 
 词表解析耦合到包内默认词表（DEFAULT_WORDLIST=load_wordlist() 模块级），
-这里全部用临时词表文件 + 显式路径，测试自足不依赖库内容。
+解析用例全部用临时词表文件 + 显式路径，测试自足不依赖库内容；末尾保留
+少量真实词表回归（test_default_wordlist_*）钉「库内已有」引用与方案形状。
 """
 
 from __future__ import annotations
@@ -202,3 +203,28 @@ def test_default_wordlist_lib_modules_references_exist():
     }
     assert referenced, "词表应有方案声明 lib_modules（本特性迁移后）"
     assert referenced <= slugs, f"词表引用了库中不存在的模块 slug：{referenced - slugs}"
+
+
+def test_default_wordlist_wireless_group_has_zigbee_lib():
+    """真词表回归（工单 zigbee-link/03）：「无线通信模块」组含 Zigbee 方案且
+    挂库内 zigbee_link（买件指引显示「库内已有」）；组内 recommended ≤2。"""
+    from contest_generator.wordlist import DEFAULT_WORDLIST
+
+    wireless = next(
+        (g for g in DEFAULT_WORDLIST if g.category == "无线通信模块"), None
+    )
+    assert wireless is not None, "默认词表应含「无线通信模块」组"
+    zigbee = next(
+        (s for s in wireless.solutions if s.name == "Zigbee 模块（DL-20 串口透传）"),
+        None,
+    )
+    assert zigbee is not None, "无线通信模块组应含 Zigbee（DL-20 串口透传）方案"
+    assert zigbee.interface == "UART 串口透传（115200 点对点）"
+    assert zigbee.price == "￥10-20/个"
+    assert "zigbee_link" in zigbee.note
+    assert "115200" in zigbee.note
+    assert "不要" not in zigbee.note  # note 应说明不需要，而非歧义措辞
+    assert zigbee.suitable == "双机/双车无线数据通信、遥控指令、遥测上报"
+    assert zigbee.lib_modules == ("zigbee_link",)
+    assert zigbee.recommended is False
+    assert sum(1 for s in wireless.solutions if s.recommended) <= 2
