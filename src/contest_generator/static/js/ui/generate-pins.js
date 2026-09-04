@@ -191,7 +191,7 @@ function instanceRow(slug, i, inst) {
     <div class="instance-row${picking ? " instance-picking" : ""}">
       <span class="muted" style="font-family:var(--mono)">#${i + 1}</span>
       <input type="text" data-field="name" data-slug="${esc(slug)}" data-index="${i}" value="${esc(inst.name)}" placeholder="显示名（自由中文）">
-      <select data-field="variant" data-slug="${esc(slug)}" data-index="${i}">${colors}</select>
+      ${colors}
       <span class="instance-pin">
         ${pinShow}
         <button data-pick="1" data-slug="${esc(slug)}" data-index="${i}">${picking ? "取消" : "选引脚"}</button>
