@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=930fcf64286b53b6916f1663ec06311f29b89cc2 -->
+<!-- changelog-auto: last-commit=bf793d0d14ffeef3e8daa780f782717667cc909a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-05
+- 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
