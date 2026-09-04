@@ -7185,28 +7185,34 @@ def test_pdf_trash_route_not_shadowed_by_file_route(client, context, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 更新记录（工单 changelog-tab/01）：GET /api/changelog 按天分组时间轴
+# 版本更新记录（工单 version-changelog/03）：GET /api/changelog → {releases}
 # ---------------------------------------------------------------------------
 
 
-def test_changelog_route_lists_daily_groups(client):
-    """更新记录：200 + [{date, items: [{time, text}]}]——repo 根 CHANGELOG.md 实况。"""
+def test_changelog_route_lists_releases(client):
+    """版本更新记录：200 + {releases: [{version, date, summary, items}]}——
+    repo 根 VERSIONS.md 实况（本阶段只含格式示例注释，未发版 → releases == []）。"""
     resp = client.get("/api/changelog")
     assert resp.status_code == 200
     data = resp.json()
-    assert data, "repo 根 CHANGELOG.md 应有初始内容"
-    assert all(
-        isinstance(group["date"], str)
-        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", group["date"])
-        and isinstance(group["items"], list)
-        and all(
-            isinstance(item["time"], str) and isinstance(item["text"], str)
-            for item in group["items"]
-        )
-        for group in data
-    )
-    # 08-12 条目应带 HH:MM 时间前缀（工单实施当日真实 commit 时间）
-    assert re.fullmatch(r"\d{1,2}:\d{2}", data[0]["items"][0]["time"])
+    assert "releases" in data   # 对象包裹：允许将来扩展新字段
+    for rel in data["releases"]:
+        assert isinstance(rel["version"], str) and rel["version"].startswith("v")
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", rel["date"])
+        assert isinstance(rel["summary"], str)
+        assert isinstance(rel["items"], list)
+        for item in rel["items"]:
+            assert isinstance(item["kind"], str) and isinstance(item["text"], str)
+    # 实况断言：未发版 = 空（首个版本发布时此断言随 VERSIONS.md 一起更新）
+    assert data["releases"] == [], "VERSIONS.md 实况应是空（格式示例注释被跳过）"
+
+
+def test_changelog_route_missing_versions_returns_empty(client, monkeypatch):
+    """VERSIONS.md 缺失（load_versions → []）→ {releases: []}，路由不抛。"""
+    monkeypatch.setattr("contest_generator.webapp.load_versions", lambda path: [])
+    resp = client.get("/api/changelog")
+    assert resp.status_code == 200
+    assert resp.json() == {"releases": []}
 
 
 # ---------------------------------------------------------------------------

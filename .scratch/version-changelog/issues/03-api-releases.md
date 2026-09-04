@@ -7,7 +7,16 @@ tests/test_webapp.py 的更新记录路由测试同步为新契约。
 
 **被谁阻塞：** 02（解析器就绪）。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**审查结论（code-review 双轴）与整改：**
+- 规格轴：测试未兑现「与 VERSIONS.md 实况」断言——已补 `data["releases"] == []`
+  显式断言（首次发布时随 VERSIONS.md 更新）；键断言放宽为 `"releases" in data`
+  （对象包裹允许将来扩展）；新增路由级缺失分支测试
+  （monkeypatch load_versions → `{"releases": []}`）。范围蔓延：无。
+- 标准轴：无明文违规；运行时循环内形状断言目前不可达（空态），保留为
+  首次发版后的守卫（docstring 已注明）；`/api/changelog` 命名是 spec 显式
+  决策（前端唯一调用方，破坏性变更可接受），不改名；仓库根推导不新增多处。
 
 - [ ] 路由返回 `{"releases": [...]}`，字段与 02 契约一致
 - [ ] VERSIONS.md 缺失 → `{"releases": []}`
