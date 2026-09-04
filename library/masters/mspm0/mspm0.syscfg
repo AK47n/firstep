@@ -9,7 +9,9 @@
  *   BIN2=PA7、编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20
  *   HUIDU：PA22-27/PB4/PB5（R3/R4 的 PB4/PB5 为 LaunchPad 遗留，地猛星未引出）
  *   KEY：PA2（板载 ROSC 偏置 100k 到地，按键与上拉共用此脚）
- *   LED_BEEP：PA15；IMU601：UART0 = PA28(TX)/PA31(RX)（板载 CH340E 占
+ *   LED_BEEP：PA15；IR_BEAM：PA8（红外对射 OUT，ir_beam 模块；与
+ *   DIGIT_UART 默认重叠，同选时经引脚绑定消解）；IMU601：UART0 =
+ *   PA28(TX)/PA31(RX)（板载 CH340E 占
  *   UART0 的 PA10/PA11，勿用）；DIGIT_UART：UART1 = PA8(TX)/PA9(RX)（K230 串口）
  *   OLED：I2C1 = PB3(SDA)/PB2(SCL)；I2C_0：I2C0 = PA0(SDA)/PA1(SCL)（MPU6050，
  *   复用板载 LED 脚——总线空闲高电平 LED 不亮，通信期间微闪；PA1 板载 4.7k 上拉，
@@ -52,6 +54,7 @@ const HUIDU   = GPIO.addInstance();
 const KEY     = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
+const IR_BEAM = GPIO.addInstance();
 const UART    = scripting.addModule("/ti/driverlib/UART", {}, false);
 const IMU601  = UART.addInstance();
 const I2C     = scripting.addModule("/ti/driverlib/I2C", {}, false);
@@ -169,6 +172,17 @@ KEY.associatedPins.create(1);
 KEY.associatedPins[0].$name       = "START";
 KEY.associatedPins[0].direction   = "INPUT";
 KEY.associatedPins[0].pin.$assign = "PA2";
+
+// 红外对射传感器输入（ir_beam 模块：实例名 IR_BEAM → IR_BEAM_PORT 宏；
+// 引脚名 OUT → IR_BEAM_OUT_PIN；默认 PA8——仅与 DIGIT_UART 默认重叠，
+// 同选时经引脚绑定消解；内部上拉 = 遮挡（开集输出截止）时由电阻钳到高，
+// 无遮挡 = 接收管导通拉低）
+IR_BEAM.$name = "IR_BEAM";
+IR_BEAM.associatedPins.create(1);
+IR_BEAM.associatedPins[0].$name            = "OUT";
+IR_BEAM.associatedPins[0].direction        = "INPUT";
+IR_BEAM.associatedPins[0].internalResistor = "PULL_UP";
+IR_BEAM.associatedPins[0].pin.$assign      = "PA8";
 
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";

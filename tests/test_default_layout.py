@@ -75,6 +75,9 @@ WHITELIST = {
     # servo 默认 PB6 与 pid.GRAY_D7 重叠（b1-adc-servo/02）：蓝药丸可 PWM 脚
     # 全被占用，无空闲可挪——实际接线经引脚绑定消解
     "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0"},
+    # ir_beam 默认 PA8 与 pid.GRAY_D5 重叠（ir-beam-module/01）：蓝药丸无空闲
+    # 通用 GPIO 可挪——门类/载物检测题目与巡线 PID 不同选，同选经引脚绑定消解
+    "PA8": {"pid.GRAY_D5", "ir_beam.IR_BEAM_OUT"},
 }
 
 

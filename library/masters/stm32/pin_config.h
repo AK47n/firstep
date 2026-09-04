@@ -113,6 +113,12 @@
 #define KEY_GPIO          GPIO_B
 #define KEY_PIN           Pin_3
 
+/* ---- 红外对射传感器（ir_beam 模块：三线制 VCC/GND/OUT，OUT 默认 PA8；
+ * 内部上拉输入，遮挡=高电平（同 21F 药位检测）；与 pid 灰度 GRAY_D5 默认
+ * 重叠 PA8——同选时经引脚绑定消解）---- */
+#define IR_BEAM_GPIO          GPIO_A
+#define IR_BEAM_PIN           Pin_8
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1

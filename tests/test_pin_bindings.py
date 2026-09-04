@@ -299,6 +299,8 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA25": 2,  # HUIDU L4 + ZIGBEE_UART RX
         "PA26": 2,
         "PA7": 2,  # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）
+        "PA8": 2,  # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚；K230 视觉与
+        # 遮挡检测同选时经引脚绑定消解）
         "UART2": 2,  # UWB_UART 与 DEBUG_UART 默认同外设（用户改绑消解）
     }
 

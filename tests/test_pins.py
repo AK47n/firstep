@@ -356,6 +356,7 @@ MSPM0_DEFAULT_MAP = {
     ("zigbee_uart_key", "ZIGBEE_UART_RX"): ("ZIGBEE_UART", "rxPin"),
     ("zigbee_link", "ZIGBEE_UART_TX"): ("ZIGBEE_UART", "txPin"),
     ("zigbee_link", "ZIGBEE_UART_RX"): ("ZIGBEE_UART", "rxPin"),
+    ("ir_beam", "IR_BEAM_OUT"): ("IR_BEAM", "OUT"),
     ("coord_detect", "COORD_DETECT_UART_TX"): ("DIGIT_UART", "txPin"),
     ("coord_detect", "COORD_DETECT_UART_RX"): ("DIGIT_UART", "rxPin"),
     ("led", "LED"): ("LED_BEEP", "LED"),
