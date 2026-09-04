@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
 from .budget import RELATED_CANDIDATES_LIMIT, SKELETON_RELATED_LIMIT
-from .changelog import load_changelog
+from .changelog import load_versions
 from .codeview import (
     apply_code_diff,
     code_raw_media_type,
@@ -4659,21 +4659,24 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
 
     # ------------------------------------------------------------------
-    # 更新记录（工单 changelog-tab/01）：CHANGELOG.md → 按天分组
-    # 文件由 post-commit 钩子调用 changelog.update_changelog() 自动补录
+    # 版本更新记录（工单 version-changelog/03）：VERSIONS.md → 定稿版本要点
+    # 自动草稿（CHANGELOG.md，post-commit 钩子补录）不进前台；发版时把草稿
+    # 归纳成用户要点写进 VERSIONS.md 顶部（格式契约见 changelog.py）
     # ------------------------------------------------------------------
 
     @app.get("/api/changelog")
     @_map_errors
-    def changelog() -> list[dict]:
-        """更新记录：仓库根 CHANGELOG.md → [{date, items}]（文件顺序）。
+    def changelog() -> dict:
+        """版本更新记录：仓库根 VERSIONS.md → {releases: [{version, date, summary, items}]}。
 
-        数据源是自动维护的 markdown（格式契约见 changelog.py：`## YYYY-MM-DD`
-        严格日期 + 组内 `- ` 条目；git log 自动补录见 update_changelog）。
-        纯展示数据：文件缺失 / 损坏 → []（前端显示「暂无更新记录」），不因
+        数据源是发版时定稿的 markdown（解析契约见 changelog.py::parse_versions：
+        `## vX.Y.Z (YYYY-MM-DD)` + 组内 `- 标签：文本`）。
+        纯展示数据：文件缺失 / 损坏 → {"releases": []}（前端显示空态），不因
         展示数据损坏阻塞工具——不走"大声失败"。
         """
-        return load_changelog(Path(__file__).resolve().parents[2] / "CHANGELOG.md")
+        return {
+            "releases": load_versions(Path(__file__).resolve().parents[2] / "VERSIONS.md")
+        }
 
     # ------------------------------------------------------------------
     # 赛题库（工单 01/05）：长 PDF 拆条 → 用户逐条校对 → 确认入库（事务）
