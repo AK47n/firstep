@@ -204,6 +204,44 @@ def test_zigbee_uart_key_mspm0_driver_shares_instance():
     assert "const ZIGBEE_UART" in prune_syscfg(_syscfg_text(), ["zigbee_uart_key"])
 
 
+def test_zigbee_link_mspm0_driver_shape_and_instance():
+    """zigbee_link mspm0：通用帧链路与 zigbee_uart 共享 ZIGBEE_UART/UART3
+    默认脚；API/全局量与 stm32 同形；定义 ZIGBEE_UART_INST_IRQHandler。"""
+    entry = _manifest("zigbee_link").platforms["mspm0"]
+    assert entry.files == ("code/zigbee_link_mspm0.c", "code/zigbee_link_mspm0.h")
+    for rel in entry.files:
+        assert (MODULES / "zigbee_link" / rel).is_file(), rel
+    assert {(p.id, p.type, p.default, p.required) for p in entry.pins} == {
+        ("ZIGBEE_UART_TX", "uart_tx", "PA26", True),
+        ("ZIGBEE_UART_RX", "uart_rx", "PA25", True),
+    }
+
+    mspm0_h = _read("zigbee_link", "code/zigbee_link_mspm0.h")
+    stm32_h = _read("zigbee_link", "code/zigbee_link.h")
+    for fn in (
+        "zigbee_link_init",
+        "zigbee_link_send",
+        "zigbee_link_recv",
+        "zigbee_link_available",
+    ):
+        assert fn in mspm0_h
+        assert fn in stm32_h
+    for name in ("g_zigbee_link_frame_count", "g_zigbee_link_byte_count"):
+        assert name in mspm0_h
+        assert name in stm32_h
+
+    c = _read("zigbee_link", "code/zigbee_link_mspm0.c")
+    assert "DL_UART_receiveData(ZIGBEE_UART_INST)" in c
+    assert "DL_UART_transmitDataBlocking(ZIGBEE_UART_INST" in c
+    assert "ZIGBEE_UART_INST_IRQHandler" in c
+
+    from contest_generator.syscfg_instances import INSTANCES_BY_SLUG
+    from contest_generator.syscfg_prune import prune_syscfg
+
+    assert "ZIGBEE_UART" in INSTANCES_BY_SLUG["zigbee_link"]
+    assert "const ZIGBEE_UART" in prune_syscfg(_syscfg_text(), ["zigbee_link"])
+
+
 def test_coord_detect_mspm0_pins_and_shared_uart1_note():
     """coord_detect mspm0 已有实现补声明：pins 与 DIGIT_UART 共享映射 + 头注释
     写明与 digit_uart 同选时由 main.c 单个 UART1 handler 聚合。"""
