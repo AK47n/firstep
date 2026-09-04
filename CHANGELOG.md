@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8d7ce117a3e291e79f0e2d8264ca635fe78569e0 -->
+<!-- changelog-auto: last-commit=7b041597194a09b24a1baf1add6c761b5461d950 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 00:29 通用 Zigbee 数据链路模块 zigbee_link（双平台驱动 + 库级测试）（工单 zigbee-link/01）
 - 00:38 zigbee_uart 与 zigbee_link 互斥组 + 生成硬互斥门禁（工单 zigbee-link/02）
 - 00:42 词表「无线通信模块」补 Zigbee 方案并挂库内 zigbee_link（工单 zigbee-link/03）
+- 00:55 多实例配置变体控件去掉残留 select 空壳（工单 key-multi-instance/06 回归）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
