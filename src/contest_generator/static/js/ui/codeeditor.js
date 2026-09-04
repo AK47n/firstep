@@ -563,15 +563,17 @@ function viewLineIndexOf(modelLine) {
   return idx < 0 ? 0 : idx + 1;
 }
 
-// refreshFoldView()：折叠态变更后重建视图模型并重渲染（保留光标：模型偏移
-// → 新视图偏移）；全部展开 → viewModel = null 回全量路径。
+// refreshFoldView()：折叠态变更后重建视图模型并重渲染（保留光标：视图偏移
+// → 模型偏移 → 新视图偏移；03/04：textarea 选区在窗口化后即窗口偏移，
+// taCaretViewPos 单源换算视图）；全部展开 → viewModel = null 回全量路径。
 function refreshFoldView() {
   const tab = getActiveTab();
   if (!tab) return;
   const box = paneBox();
   const oldTa = box && box.querySelector(".code-ta");
   const oldSegs = viewModel ? viewModel.segs : null;
-  const caretModel = oldTa ? (oldSegs ? codeFoldViewToModel(oldSegs, oldTa.selectionStart) : oldTa.selectionStart) : 0;
+  const oldViewCaret = oldTa ? taCaretViewPos() : 0;
+  const caretModel = oldSegs ? codeFoldViewToModel(oldSegs, oldViewCaret) : oldViewCaret;
   viewModel = (folds.length && foldedSet.size)
     ? codeFoldVisible(tab.content, folds, foldedSet)
     : null;
@@ -579,13 +581,9 @@ function refreshFoldView() {
   const ta = box && box.querySelector(".code-ta");
   if (ta && !ta.readOnly) {
     ta.focus();
-    if (!viewModel && taWinInfo) {
-      // 展开后回窗口化（02）：光标按模型偏移落位（taWindowApply 确保窗口含光标）
-      taWindowApply(caretModel);
-    } else {
-      const vo = viewModel ? codeFoldModelToView(viewModel.segs, caretModel) : caretModel;
-      ta.setSelectionRange(vo, vo);
-    }
+    const vo = viewModel ? codeFoldModelToView(viewModel.segs, caretModel) : caretModel;
+    if (taWinInfo) taWindowApply(vo);   // 04：折叠/非折叠窗口化统一按视图偏移重装
+    else ta.setSelectionRange(vo, vo);
   }
 }
 
@@ -1004,12 +1002,14 @@ function winWindow() {
     winCache.lineCount, WIN_OVERSCAN);
 }
 
-// ===== textarea 窗口化（工单 editor-textarea-viewport/02）=====
+// ===== textarea 窗口化（工单 editor-textarea-viewport/02 + 04 三层组合）=====
 // textarea 只装当前窗口 [start,end) 文本（01 纯件构建），盒高 = 视口高并
 // 贴内容坐标（top = start*行高；向下延伸覆盖全视口——textarea 必须盖满
 // 视口，否则点击/选区在 overscan 不覆盖区落空）。taWinInfo 记录当前窗口
-// 对象（窗口编辑回写/光标映射共用）。折叠态（viewModel 非空）保持
-// 「textarea = 视图文本全量」现状，本组函数一律早退（04 打通三层）。
+// 对象（窗口编辑回写/光标映射共用）。折叠态（viewModel 非空，04 打通三层）
+// 同样窗口化：winCache.lines = 视图行数组，窗口文本 = 视图切片（占位行按
+// 既有折叠渲染语义在窗口内呈现），absStart = 视图偏移——模型→视图→窗口
+// 三环映射链自然成立；本组函数不再对折叠态早退。
 
 // taCaretViewPos()：当前 textarea 选区 → 视图绝对偏移（窗口化 = 窗口起点 +
 // 窗口内偏移——windowPosToView 单源；折叠/全量 = 原偏移）。
@@ -1047,16 +1047,17 @@ function taFillWindow(wi, rel) {
   setActiveLine(caretLineFast(taCaretViewPos()));
 }
 
-// taWindowApply(caretModel, follow?)：把 textarea 重装为「含模型光标」的窗口
-// 文本——打开/输入回写/跳转/重载后调用。光标在窗口外 → 先滚动使其可见
-// （居中）再重算窗口（跳转语义：光标始终在窗口内，后续输入不落不可见处）。
-// follow=false（IME compositionend 场景）：不滚动回光标——组合期间用户可能
-// 已滚动，光标按窗口边缘钳制（视口不被强行拉回）。
-function taWindowApply(caretModel, follow = true) {
+// taWindowApply(caretView, follow?)：把 textarea 重装为「含光标」的窗口文本
+// ——打开/输入回写/跳转/重载后调用。**视图坐标**：非折叠 模型=视图；折叠态
+// （04 三层组合）调用方先 codeFoldModelToView 换算视图偏移。光标在窗口外 →
+// 先滚动使其可见（居中）再重算窗口（跳转语义：光标始终在窗口内，后续输入
+// 不落不可见处）。follow=false（IME compositionend 场景）：不滚动回光标——
+// 组合期间用户可能已滚动，光标按窗口边缘钳制（视口不被强行拉回）。
+function taWindowApply(caretView, follow = true) {
   const box = paneBox();
   const ta = box && box.querySelector(".code-ta");
-  if (!box || !ta || !winCache || viewModel) return;
-  const m = Math.max(0, caretModel == null ? 0 : caretModel | 0);
+  if (!box || !ta || !winCache) return;
+  const m = Math.max(0, caretView == null ? 0 : caretView | 0);
   let r = winLast || winWindow();
   let wi = windowTextBuild(winCache.lines, r.start, r.end, winCache.lineStarts);
   let rel = windowPosFromView(wi, m);
@@ -1077,15 +1078,27 @@ function taWindowApply(caretModel, follow = true) {
   taFillWindow(wi, rel);
 }
 
+// rebuildWindowKeepCaret()：映射失配/内容漂移兜底——以模型为准重建窗口文本，
+// 光标按旧选区（窗口→视图）落位，不静默错位（spec：宁可重装，不可错位）。
+// syncEditorAfterInput 三处兜底共用（02 非折叠两处 + 04 折叠窗口化一处）。
+function rebuildWindowKeepCaret() {
+  const ta = paneBox() && paneBox().querySelector(".code-ta");
+  const cur = windowPosToView(taWinInfo, ta ? ta.selectionStart : 0);
+  taWinInfo = null;
+  taWindowApply(cur);
+}
+
 // taWindowSync()：滚动/尺寸变化后的窗口同步——仅窗口行区间变化时重装文本
-// （滚动监听同步调用；同窗只更新 top/height 覆盖全视口，顶部 overscan 随滚动
-// 连续增减）；窗口变化时选区按旧窗口文档位置换算（滚出窗口 = 钳到窗口
-// 边缘——光标随视口走，输入永不静默落在不可见处）。IME 组合中不重装
-// （打断候选窗），由 taWinDirty 标记、compositionend 后补。
+// （同窗只更新 top/height 覆盖全视口，顶部 overscan 随滚动连续增减）；窗口
+// 变化时选区按旧窗口文档位置换算（滚出窗口 = 钳到窗口边缘——光标随视口走，
+// 输入永不静默落在不可见处）。折叠态（04 三层组合）：winCache.lines = 视图行
+// 数组，窗口文本 = 视图切片（占位行经既有折叠渲染语义在窗口内呈现），
+// absStart = 视图偏移——三环映射链 模型→视图→窗口 自然成立。IME 组合中不
+// 重装（打断候选窗），由 taWinDirty 标记、compositionend 后补。
 function taWindowSync() {
   const box = paneBox();
   const ta = box && box.querySelector(".code-ta");
-  if (!box || !ta || !winCache || viewModel) return;
+  if (!box || !ta || !winCache) return;
   const r = winLast || winWindow();
   const changed = !taWinInfo || taWinInfo.start !== r.start || taWinInfo.end !== r.end;
   if (changed && !composing && !taWinDirty) {
@@ -1123,16 +1136,26 @@ function taSetRange(viewStart, viewEnd) {
   ta.setSelectionRange(s, e);
 }
 
-// editSource()：程序化编辑（Tab/Enter/行操作/注释/括号）的数据源——窗口化态
-// = 模型全文 + 模型选区（textarea 只装窗口文本，纯件必须基于模型算，选区经
-// windowPosToView 单源换算）；折叠/全量态 = textarea 视图文本 + 视图选区
-// （既有语义不变）。返回 {text, selStart, selEnd}。
+// editSource()：程序化编辑（Tab/Enter/行操作/注释/括号）的数据源——
+// 非折叠窗口化态 = 模型全文 + 模型选区（textarea 只装窗口文本，纯件必须基于
+// 模型算，选区经 windowPosToView 单源换算）；折叠窗口化态（04 三层组合）=
+// **视图全文** + 视图选区（窗口→视图换算后超集——程序化编辑须保持 07 既有
+// 全视图语义：Alt+↑↓ 移动行/Ctrl+A 全选等不能把窗口边界当文档边界；ApplyEdit
+// 折叠分支经 codeFoldMapEdit 视图→模型回写）；折叠/全量非窗口态 = textarea 值
+// + 选区（既有语义）。返回 {text, selStart, selEnd}。
 function editSource() {
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   const tab = getActiveTab();
-  if (ta && taWinInfo && tab) {
+  if (ta && taWinInfo && tab && !viewModel) {
     return {
       text: tab.content,
+      selStart: windowPosToView(taWinInfo, ta.selectionStart),
+      selEnd: windowPosToView(taWinInfo, ta.selectionEnd),
+    };
+  }
+  if (ta && taWinInfo && tab && viewModel) {
+    return {
+      text: viewModel.text,
       selStart: windowPosToView(taWinInfo, ta.selectionStart),
       selEnd: windowPosToView(taWinInfo, ta.selectionEnd),
     };
@@ -1372,10 +1395,10 @@ function renderPane() {
       // 打开延迟大头之一；marksCache 由随后 winRenderMarks 正常构建）
       marks: [],
       windowed: true,
-      // 工单 editor-textarea-viewport/02：非折叠窗口化——textarea 不内嵌全文
-      // （6000 行 108KB 标记是打开渲染大头），由下方 taWindowApply 装窗口文本；
-      // 折叠态保持「textarea = 视图文本全量」现状（04 打通三层组合）。
-      taValue: viewModel ? undefined : "",
+      // 工单 editor-textarea-viewport/02 + 04：textarea 一律不内嵌全文/视图
+      // 全量（6000 行 108KB 标记是打开渲染大头），由下方 taWindowApply 装
+      // 窗口文本——折叠态（04 三层组合）装「视图切片」而非视图全量。
+      taValue: "",
     })
     + '<span class="code-window-probe" aria-hidden="true"></span>';
   winBuild(src, tab.lang);
@@ -2275,13 +2298,19 @@ function syncTail(caretModel, follow = true) {
   // editorWord/editorBracket/editorFind/错误 渲染一次即终——不再调用
   // renderEditorMarks 二次全量重画（其仅保留给查找输入/命中跳转等外部入口）。
   if (taWinInfo) {
-    // 窗口化（02）：窗口文本已随模型漂移——重装窗口 + 模型光标落位；
-    // IME 组合中不重装（打断候选窗），raw 值留窗、compositionend 后补。
+    // 窗口化（02；04 三层组合含折叠态）：窗口文本已随模型漂移——重装窗口 +
+    // 光标落位。caretModel（模型偏移）在折叠态换算为视图偏移再装窗
+    // （taWindowApply 契约 = 视图坐标，winCache.lines 即视图行）；IME 组合中
+    // 不重装（打断候选窗），raw 值留窗、compositionend 后补。
     if (composing) {
       taWinDirty = true;
       taWinInfo = { ...taWinInfo, text: ta.value };
     } else {
-      taWindowApply(caretModel == null ? 0 : caretModel, follow);
+      const caretM = caretModel == null ? 0 : caretModel;
+      const viewCaret = viewModel
+        ? codeFoldModelToView(viewModel.segs, caretM)
+        : caretM;
+      taWindowApply(viewCaret, follow);
     }
     setActiveLine(caretLineFast(taCaretViewPos()));
   } else {
@@ -2301,18 +2330,20 @@ function syncTail(caretModel, follow = true) {
 
 // applyEdit(text, start, end)：程序化编辑（Tab/Enter/行操作/注释/括号/AI 插入/
 // 查找替换共用）落库。统一「模型为唯一事实源」：
-//   - 窗口化（非折叠，02）：text/start/end = **模型**偏移——写模型 + 窗口重装 +
-//     模型级快照（03 全域化）；不再走 execCommand（原生撤销栈只认「textarea=
-//     全量文本」旧语义，视口化后窗口内/跨窗口必错乱——03 明确放弃）。
-//   - 折叠态（textarea = 视图全量，02 保持现状）与全量兜底：text/start/end =
-//     视图坐标——直赋值 + syncEditorAfterInput 折叠映射回写模型（既有语义
-//     不变）；快照模型级捕获于赋值前，sync 的变更入口统一入栈（不重复入栈）。
+//   - 非折叠窗口化（02/03）：text/start/end = **模型**偏移——写模型 + 窗口重装 +
+//     模型级快照；不再走 execCommand（原生撤销栈只认「textarea=全量文本」旧
+//     语义，视口化后窗口内/跨窗口必错乱——03 明确放弃）。
+//   - 折叠窗口化（04 三层组合）：text/start/end = **视图**坐标（editSource 折叠
+//     态返回视图全文 + 视图选区——保持 07 既有全视图语义：Alt+↑↓ 移动行/Ctrl+A
+//     全选等不能把窗口边界当文档边界）；codeFoldMapEdit 视图→模型回写（占位
+//     触碰展开/整块覆盖语义原样承接），syncTail 统一窗口/光标落位。
+//   - 全量兜底：直赋值 + syncEditorAfterInput。
 function applyEdit(text, start, end) {
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!ta) return;
-  if (taWinInfo) {
-    const tab = getActiveTab();
-    if (!tab || tab.readonly) return;
+  const tab = getActiveTab();
+  if (!tab || tab.readonly) return;
+  if (taWinInfo && !viewModel) {
     if (tab.content === text) {
       ta.focus();
       taSetRange(start, end);
@@ -2328,12 +2359,35 @@ function applyEdit(text, start, end) {
     scheduleCursorWork();
     return;
   }
+  if (viewModel) {
+    // 折叠（07 既有语义 + 04 窗口化）：视图全文编辑 → codeFoldMapEdit 写回模型
+    if (viewModel.text === text) {
+      ta.focus();
+      if (taWinInfo) taSetRange(start, end);   // start/end = 视图坐标
+      else ta.setSelectionRange(start, end);
+      return;
+    }
+    pushEditSnapshot();       // 03：模型级编辑前快照（程序化不进 input 事件）
+    const r = codeFoldMapEdit(tab.content, viewModel.segs, viewModel.text, text);
+    tab.content = r.model;
+    r.expand.forEach((i) => foldedSet.delete(i));
+    const oldFolds = folds;
+    folds = codeFoldRanges(tab.content, tab.lang);
+    foldedSet = codeFoldMerge(oldFolds, foldedSet, folds);
+    viewModel = (folds.length && foldedSet.size)
+      ? codeFoldVisible(tab.content, folds, foldedSet)
+      : null;
+    syncTail(r.caret);
+    scheduleCursorWork();
+    return;
+  }
   if (ta.value === text) {
     ta.setSelectionRange(start, end);
     return;
   }
-  // 折叠/全量兜底：直赋值（现状行为）+ 快照栈接管——编辑前模型状态经
-  // syncEditorAfterInput 的变更入口统一入栈（pendingSnapshot 携带，防双入）。
+  // 非折叠非窗口（兜底/兼容既有全量路径）：直赋值 + 快照栈接管——
+  // 编辑前模型状态经 syncEditorAfterInput 的变更入口统一入栈（pendingSnapshot
+  // 携带，防双入）。
   pendingSnapshot = captureModelSnapshot();
   ta.focus();
   ta.value = text;
@@ -2351,12 +2405,30 @@ function syncEditorAfterInput() {
   if (!tab) return;
   curEditSpan = null;    // 本次输入未定/结构变更时置 null（防 updateWordMarks 误用陈旧 span）
   if (viewModel) {
-    // 折叠态（工单 07）：视图文本编辑 → 偏移映射写回模型；触碰占位 → 展开
-    // + 重设视图文本与光标（模型偏移 → 新视图偏移）；折叠区随内容重算并
-    // 按签名保留既有折叠态（codeFoldMerge）。
-    const textChanged = viewModel.text !== ta.value;
+    // ===== 折叠态（工单 07 + 04 三层组合）=====
+    // 视图文本编辑 → 偏移映射写回模型；触碰占位 → 展开 + 重设视图文本与光标
+    // （模型偏移 → 新视图偏移）；折叠区随内容重算并按签名保留既有折叠态
+    // （codeFoldMerge）。
+    // 04：折叠态 textarea 已窗口化（装视图切片）——先经 01 窗口映射
+    // 窗口→视图（windowEditToView）→ 模型（windowEditToModel，segs 非空走
+    // codeFoldMapEdit 既有「触碰占位 → 展开/整块覆盖」语义）；无窗口兜底
+    // 走既有全量视图映射（历史路径，防御保留）。映射失败 → 以模型重建窗口。
+    const lineStarts = winCache ? winCache.lineStarts : null;
+    const newWin = String(ta.value == null ? "" : ta.value);
+    const v = taWinInfo
+      ? windowEditToView(editChangeSpan(taWinInfo.text, newWin), taWinInfo, lineStarts)
+      : null;
+    const r = taWinInfo
+      ? (v == null ? null
+        : windowEditToModel(tab.content, viewModel.segs, viewModel.text,
+            taWinInfo, lineStarts, newWin))
+      : codeFoldMapEdit(tab.content, viewModel.segs, viewModel.text, ta.value);
+    if (taWinInfo && (v == null || r == null)) {
+      rebuildWindowKeepCaret();   // 失配（窗口与行起点表不同步等）：以模型重建窗口
+      return;
+    }
+    const textChanged = taWinInfo ? taWinInfo.text !== newWin : viewModel.text !== ta.value;
     if (textChanged) pushTypingSnapshot();   // 03：真实变更 → 编辑前快照入栈（此时 tab.content 仍是旧模型）
-    const r = codeFoldMapEdit(tab.content, viewModel.segs, viewModel.text, ta.value);
     tab.content = r.model;
     r.expand.forEach((i) => foldedSet.delete(i));
     const oldFolds = folds;
@@ -2366,11 +2438,16 @@ function syncEditorAfterInput() {
       ? codeFoldVisible(tab.content, folds, foldedSet)
       : null;
     if (textChanged) {
+      // 窗口化（含折叠）：落位统一交 syncTail——组合守卫（composing 不重装、
+      // 防打断候选窗）+ 模型→视图换算单点（syncTail 内）都在那里；
+      // 此处只保留「无窗口」历史全量路径的直赋值兜底（04 后折叠必窗口化）。
       if (viewModel) {
-        ta.value = viewModel.text;
-        const vo = codeFoldModelToView(viewModel.segs, r.caret);
-        ta.setSelectionRange(vo, vo);
-      } else {
+        if (!taWinInfo) {
+          const vo = codeFoldModelToView(viewModel.segs, r.caret);
+          ta.value = viewModel.text;
+          ta.setSelectionRange(vo, vo);
+        }
+      } else if (!taWinInfo) {
         // 占位触碰后全部展开（评审整改 07c）：视图回全量文本、光标落插入点
         ta.value = tab.content;
         ta.setSelectionRange(r.caret, r.caret);
@@ -2378,7 +2455,10 @@ function syncEditorAfterInput() {
     } else {
       clearTypingSnapshot();   // 无真实变更：不产生撤销步，丢弃已捕获快照
     }
-    syncTail(null);
+    // 真实变更 → 光标取映射 caret；无变更（IME 取消等）→ 保持当前模型光标
+    // （codeFoldMapEdit 的 identical 分支 caret 恒 0，不能拿来重装——会把
+    // 光标拉回视图顶；04 评审整改）。
+    syncTail(textChanged ? r.caret : foldCaretModelPos(), false);
     return;
   }
   if (taWinInfo) {
@@ -2392,9 +2472,7 @@ function syncEditorAfterInput() {
       // 内容未变（IME compositionend 等）：先经 01 一致性校验——窗口文本与
       // 模型推导不符（外部漂移/罕见路径）→ 以模型重建，不静默错位。
       if (!windowTextMatchesModel(tab.content, viewModel, taWinInfo.start, taWinInfo.end, newWin)) {
-        const cur = windowPosToView(taWinInfo, ta.selectionStart);
-        taWinInfo = null;
-        taWindowApply(cur);
+        rebuildWindowKeepCaret();
         return;
       }
       // 仅重装/状态刷新，光标留在原选区；follow=false：组合期间用户可能已
@@ -2411,10 +2489,7 @@ function syncEditorAfterInput() {
       : windowEditToModel(tab.content, null, winCache ? winCache.text : tab.content,
           taWinInfo, lineStarts, newWin);
     if (v == null || r == null) {
-      // 失配（窗口与行起点表不同步等）：以模型重建窗口文本
-      const cur = windowPosToView(taWinInfo, ta.selectionStart);
-      taWinInfo = null;
-      taWindowApply(cur);
+      rebuildWindowKeepCaret();   // 失配（窗口与行起点表不同步等）：以模型重建窗口
       return;
     }
     pushTypingSnapshot();   // 03：真实变更 → 编辑前快照入栈（此时 tab.content 仍是旧模型）
@@ -2448,9 +2523,10 @@ function syncEditorAfterInput() {
 
 // ===== 查找替换（工单 code-editor-utilize/03 + code-page-vscode-overhaul/03）=====
 // rebaseModelContent(newContent, caret)：模型内容整体替换后的折叠重算 + 视图
-// 重建 + 光标落位——折叠态 textarea 须持视图文本，不能经 applyEdit 直写模型
-// （会把模型当视图喂 mapEdit → 占位误判整块替换丢内容）；caret = 模型偏移
-// （null → 文件尾，与既有「替换后光标置文件尾」语义一致）。
+// 重建 + 光标落位——折叠态不能经 applyEdit 直写模型（会把模型当视图喂
+// mapEdit → 占位误判整块替换丢内容），需要模型级重写（代码不变）；caret =
+// 模型偏移（null → 文件尾，与既有「替换后光标置文件尾」语义一致）。03/04：
+// 窗口化（含折叠三层组合）统一经 taWindowApply 按**视图坐标**重装窗口落位。
 function rebaseModelContent(newContent, caret) {
   const tab = getActiveTab();
   if (!tab) return;
@@ -2468,15 +2544,11 @@ function rebaseModelContent(newContent, caret) {
     ? tab.content.length
     : Math.max(0, Math.min(tab.content.length, caret));
   ta.focus();
-  if (!viewModel && taWinInfo) {
-    // 窗口化（02）：renderPane 后 textarea 已装新窗口文本，光标按模型落位
-    taWindowApply(caretM);
-  } else {
-    const vo = viewModel
-      ? codeFoldModelToView(viewModel.segs, caretM)
-      : caretM;
-    ta.setSelectionRange(vo, vo);
-  }
+  const vo = viewModel
+    ? codeFoldModelToView(viewModel.segs, caretM)
+    : caretM;
+  if (taWinInfo) taWindowApply(vo);   // 04：折叠/非折叠窗口化统一按视图偏移重装
+  else ta.setSelectionRange(vo, vo);
 }
 
 // insertIntoActiveFile(text)：把文本插入活动标签当前光标/选区（工单
@@ -2490,16 +2562,11 @@ export function insertIntoActiveFile(text) {
   if (!tab || tab.readonly) return false;
   const ta = paneBox() && paneBox().querySelector(".code-ta");
   if (!ta) return false;   // .md 预览态/未渲染：无可编辑缓冲——不做尾部追加假成功（评审整改）
-  let start;
-  let end;
-  if (viewModel) {
-    start = codeFoldViewToModel(viewModel.segs, ta.selectionStart);
-    end = codeFoldViewToModel(viewModel.segs, ta.selectionEnd);
-  } else if (taWinInfo) {
-    // 窗口化（02）：textarea 选区是窗口内偏移 → 模型偏移（windowPosToView 单源）
-    start = windowPosToView(taWinInfo, ta.selectionStart);
-    end = windowPosToView(taWinInfo, ta.selectionEnd);
-  } else { start = ta.selectionStart; end = ta.selectionEnd; }
+  // 选区 → 模型偏移单源换算：editorSelectionModel（窗口→视图→模型，折叠/
+  // 非折叠统一）；无选区（坍缩光标）→ foldCaretModelPos（同链取光标）。
+  const sel = editorSelectionModel();
+  const start = sel ? sel.start : foldCaretModelPos();
+  const end = sel ? sel.end : start;
   const r = insertAtPosition(tab.content, text, { start, end });
   if (viewModel) {
     pushEditSnapshot();   // 折叠态走 rebase 不经 input 事件——快照栈补撤销（03 全域化：与窗口化同一模型级快照）
@@ -2614,18 +2681,23 @@ export function initCodeEditor() {
     document.body.appendChild(d);
   });
   // 滚动窗口化（工单 08）：窗口内滚动零 DOM（winRender 同窗跳过），跨窗口
-  // 同步重建（本切片 02 未接 rAF 节流——04 工单「滚动同步」细化；视口尺寸
-  // 变化（布局/面板高度）经 ResizeObserver 重画。
-  // 工单 02：滚动后同步 textarea 窗口（行区间变化才重装文本；同窗只挪覆盖
-  // 高度——overscan 上缘随 scrollTop 连续变化，textarea 须盖满视口）。
+  // 同步重建；rAF 节流（工单 04）：一次 rAF 合并突发滚动事件（快速拖滚只
+  // 重装一次目标窗口，不逐帧重装）——「仅窗口行区间变化才重装文本」判定在
+  // taWindowSync 内（同窗零 DOM），节流只合并事件、不吞正确性。
+  // 视口尺寸变化（布局/面板高度）经 ResizeObserver 同步重画（不节流——尺寸
+  // 事件低频，且需要精确窗口）。
   const viewBox = paneBox();
   if (viewBox) {
-    viewBox.addEventListener("scroll", () => {
+    let scrollRaf = 0;
+    const scrollSync = () => {
+      scrollRaf = 0;
       winReadView();
-      // 工单 02：滚动即窗口切换（同步——窗口行区间变化才重装文本，winRender
-      // 同窗早退零 DOM；rAF 节流属 04 工单「滚动同步」细化，本切片先打通）。
       winRender();
       taWindowSync();
+    };
+    viewBox.addEventListener("scroll", () => {
+      if (scrollRaf) return;
+      scrollRaf = requestAnimationFrame(scrollSync);
     });
     if (typeof ResizeObserver === "function") {
       new ResizeObserver(() => { winReadView(); winRender(); taWindowSync(); }).observe(viewBox);
@@ -2801,11 +2873,16 @@ export function initCodeEditor() {
     // 组合输入保护：compositionend 后补一次同步（内容一次性落定）。
     // 03 撤销全域化：compositionstart 捕获「编辑前快照」——一次组合 = 一步
     // 撤销（组合中 beforeinput 不覆盖，输入中间态不单列入栈）。
-    box.addEventListener("compositionstart", () => {
+    // target 守卫与 beforeinput 同形（防其它元素组合事件误触发——评审整改）。
+    box.addEventListener("compositionstart", (e) => {
+      const ta = e.target;
+      if (!ta || !ta.classList || !ta.classList.contains("code-ta")) return;
       composing = true;
       pendingSnapshot = captureModelSnapshot();
     });
-    box.addEventListener("compositionend", () => {
+    box.addEventListener("compositionend", (e) => {
+      const ta = e.target;
+      if (!ta || !ta.classList || !ta.classList.contains("code-ta")) return;
       composing = false;
       syncEditorAfterInput();
     });
@@ -2884,6 +2961,8 @@ export function initCodeEditor() {
         // 行操作（工单 code-page-vscode-overhaul/01）：Ctrl+L 选整行
         e.preventDefault();
         const r = lineRangeOf(eb.text, eb.selStart, eb.selEnd);
+        // 折叠窗口化：r 是视图坐标 → taSetRange（视图→窗口换算）同样适用；
+        // 非折叠窗口化：r 是模型（=视图）坐标；全量：直接选区
         if (taWinInfo) taSetRange(r.start, r.end);
         else ta.setSelectionRange(r.start, r.end);
         setActiveLine(caretLineFast(taCaretViewPos()));
