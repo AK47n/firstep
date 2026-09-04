@@ -7191,7 +7191,7 @@ def test_pdf_trash_route_not_shadowed_by_file_route(client, context, tmp_path):
 
 def test_changelog_route_lists_releases(client):
     """版本更新记录：200 + {releases: [{version, date, summary, items}]}——
-    repo 根 VERSIONS.md 实况（本阶段只含格式示例注释，未发版 → releases == []）。"""
+    repo 根 VERSIONS.md 实况（已发布 v1.0.0，GitHub Release 2026-08-30）。"""
     resp = client.get("/api/changelog")
     assert resp.status_code == 200
     data = resp.json()
@@ -7203,8 +7203,11 @@ def test_changelog_route_lists_releases(client):
         assert isinstance(rel["items"], list)
         for item in rel["items"]:
             assert isinstance(item["kind"], str) and isinstance(item["text"], str)
-    # 实况断言：未发版 = 空（首个版本发布时此断言随 VERSIONS.md 一起更新）
-    assert data["releases"] == [], "VERSIONS.md 实况应是空（格式示例注释被跳过）"
+    # 实况断言：首个已发布版本 v1.0.0（下个版本发布时随 VERSIONS.md 更新）
+    assert data["releases"], "VERSIONS.md 应有已发布版本"
+    first = data["releases"][0]
+    assert first["version"] == "v1.0.0"
+    assert first["date"] == re.fullmatch(r"2026-08-30", first["date"]).group(0)
 
 
 def test_changelog_route_missing_versions_returns_empty(client, monkeypatch):
