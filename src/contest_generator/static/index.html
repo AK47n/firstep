@@ -1212,7 +1212,9 @@
                   padding: 6px 0; }
   .instance-row + .instance-row { border-top: 1px dashed var(--border); }
   .instance-row input[type=text] { width: auto; flex: 1 1 140px; padding: 5px 8px; }
-  .instance-row select { width: auto; padding: 5px 8px; }
+  /* 变体自由文本 + 建议（工单 key-multi-instance/06）：input[list] 组合框，
+     固定偏窄宽度、不与显示名抢弹性空间（原 select 壳已移除） */
+  .instance-row input[list] { flex: 0 1 150px; width: 150px; padding: 5px 8px; }
   .instance-row .instance-pin { display: inline-flex; gap: 4px; align-items: center; }
   .instance-row .instance-pin input[type=text] { width: 74px; flex: none; font-family: var(--mono); }
   .instance-actions { margin-top: var(--space-2); display: flex; gap: 10px; align-items: center; }
