@@ -1,4 +1,4 @@
-// ui/master.js — 母版页 + 更新记录 DOM 胶水（阶段 2 工单 04）
+// ui/master.js — 母版页 + 版本更新记录 DOM 胶水（阶段 2 工单 04；版本记录 工单 version-changelog/04）
 //
 // 母版 tab 全部胶水：扫描 / 整夹暂存 / 提炼进度面板实例（distPanel，共享
 // 工厂在 ui/progress.js）/ 报告渲染 / 报告确认入库 / 母版库表格与详情弹窗 /
@@ -658,26 +658,53 @@ export function renderNewPlatformOptions(platforms) {
 }
 
 // ---------------------------------------------------------------------------
-// 更新记录页（工单 changelog-tab/01）：按天分组时间轴，数据源 CHANGELOG.md（提交后自动补录）
+// 版本更新记录页（工单 version-changelog/04）：版本卡片折叠时间轴，
+// 数据源 VERSIONS.md（发版定稿的用户要点；自动草稿 CHANGELOG.md 不进前台）
 // ---------------------------------------------------------------------------
+const _RELEASE_KIND_CLASS = {
+  "新增": "tag-new", "改进": "tag-imp", "修复": "tag-fix",
+  "性能": "tag-perf", "其他": "tag-other",
+};
+
 export async function loadChangelog() {
   const box = $("changelog-list");
   try {
-    const groups = await apiGet("/api/changelog");
-    if (!groups.length) {
-      box.innerHTML = '<div class="empty-state"><div class="es-icon">📝</div><div class="es-title">暂无更新记录</div><div class="es-hint">每次提交代码后，这里会自动补录 CHANGELOG 条目。</div></div>';
+    const { releases = [] } = await apiGet("/api/changelog");
+    if (!releases.length) {
+      box.innerHTML = '<div class="empty-state"><div class="es-icon">📦</div>'
+        + '<div class="es-title">还没有正式版本</div>'
+        + '<div class="es-hint">每次发布新版本时，这里会归纳对用户重要的要点（新增 / 改进 / 修复）。</div></div>';
       return;
     }
-    box.innerHTML = groups.map((g) => `
-      <div style="margin-bottom: var(--space-4)">
-        <h3 style="color:var(--accent);margin:0 0 6px">${esc(g.date)}</h3>
-        <ul style="margin:0;padding-left:22px">
-          ${g.items.map((i) => `<li style="margin-bottom: var(--space-1)">${
-            i.time ? `<span class="slug" style="margin-right:8px">${esc(i.time)}</span>` : ""
-          }${esc(i.text)}</li>`).join("")}
-        </ul>
-      </div>`).join("");
+    box.innerHTML = releases.map((r, idx) => releaseCardHTML(r, idx === 0)).join("");
+    box.querySelectorAll(".release-head").forEach((b) =>
+      b.addEventListener("click", () => toggleReleaseCard(b)));
   } catch (e) {
     box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
   }
+}
+
+function releaseCardHTML(rel, open) {
+  const items = rel.items.map((i) => `<li><span class="rel-tag ${
+    _RELEASE_KIND_CLASS[i.kind] || "tag-other"}">${esc(i.kind)}</span><span>${
+    esc(i.text)}</span></li>`).join("");
+  return `<div class="release-card${open ? "" : " collapsed"}">
+    <button type="button" class="release-head" aria-expanded="${open ? "true" : "false"}">
+      <span class="release-ver">${esc(rel.version)}</span>
+      <span class="release-date">${esc(rel.date)}</span>
+      <span class="release-count">${rel.items.length} 条</span>
+      <span class="collapse-ico" aria-hidden="true">▾</span>
+    </button>
+    <div class="release-body">
+      ${rel.summary ? `<p class="release-summary">${esc(rel.summary)}</p>` : ""}
+      <ul class="release-items">${items}</ul>
+    </div>
+  </div>`;
+}
+
+function toggleReleaseCard(head) {
+  const card = head.closest(".release-card");
+  if (!card) return;
+  const collapsed = card.classList.toggle("collapsed");
+  head.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }

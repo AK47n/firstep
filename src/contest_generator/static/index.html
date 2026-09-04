@@ -67,6 +67,7 @@
     --accent-hi: #33dcff; --accent-lo: #00b8de;
     --on-accent-deep: #001018; --on-ok-deep: #04170c;
     --purple-grad: #8b5cf6;
+    --purple-dim: rgba(139, 92, 246, .12);  /* 紫色淡底（版本记录「性能」标签等，亮色同族换值） */
     --power: #f59e0b;
     --ok-glow: rgba(126, 231, 135, .25);
     --tok-com: #3fb950; --tok-str: #d29922; --tok-pre: #8b949e;
@@ -110,6 +111,7 @@
     --accent-hi: #33dcff; --accent-lo: #00b8de;   /* 渐变亮/暗端沿用（深底对比换 accent 主色） */
     --on-accent-deep: #001018; --on-ok-deep: #04170c;
     --purple-grad: #8250df;
+    --purple-dim: rgba(130, 80, 223, .12);  /* 亮色套：紫色淡底随 #8250df 换值 */
     --power: #d97706;
     --ok-glow: rgba(45, 164, 78, .18);
     --tok-com: #1a7f37; --tok-str: #9a6700; --tok-pre: #59636e;
@@ -1265,6 +1267,38 @@
                           filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), .3)); }
   .empty-state .es-title { font-size: 13px; font-weight: 600; color: var(--text); }
   .empty-state .es-hint { font-size: 12px; line-height: 1.8; max-width: 400px; }
+  /* 版本更新记录卡片（工单 version-changelog/04）：版本徽章 + 日期 + 主题 +
+     带语义标签的要点列表；默认只展开最新版，其余折叠（点击头部切换，折叠
+     指示线 = 面板高光 + 头部 hover 用 accent-dim，与设置页折叠同族） */
+  .release-card { margin-bottom: var(--space-3); border: 1px solid var(--border);
+                  border-radius: var(--radius-md); background: var(--panel-2);
+                  overflow: hidden; }
+  .release-head { display: flex; align-items: center; gap: 10px; width: 100%;
+                  padding: 10px 14px; border: 0; background: none; cursor: pointer;
+                  font: inherit; color: var(--text); text-align: left; }
+  .release-head:hover { background: var(--accent-dim); }
+  .release-ver { flex: none; font-family: var(--mono); font-weight: 600; font-size: 13px;
+                 color: var(--on-accent); background: var(--accent);
+                 border-radius: var(--radius-sm); padding: 2px 8px; }
+  .release-date { font-size: 12px; color: var(--muted); }
+  .release-count { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .release-card .collapse-ico { flex: none; font-size: 12px; color: var(--muted);
+                                transition: transform var(--dur-slow) var(--ease-ui); }
+  .release-card.collapsed .collapse-ico { transform: rotate(-90deg); }
+  .release-card.collapsed .release-body { display: none; }
+  .release-body { padding: 0 14px 12px; }
+  .release-summary { margin: 10px 0 0; font-size: 13px; line-height: 1.7; }
+  .release-items { margin: 8px 0 0; padding: 0; list-style: none; }
+  .release-items li { display: flex; gap: 8px; align-items: baseline;
+                      font-size: 13px; line-height: 1.8; }
+  .rel-tag { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px;
+             border-radius: var(--radius-xs); white-space: nowrap; }
+  .rel-tag.tag-new { color: var(--ok); background: var(--ok-dim); }
+  .rel-tag.tag-imp { color: var(--info); background: var(--info-dim); }
+  .rel-tag.tag-fix { color: var(--warn); background: var(--warn-dim); }
+  .rel-tag.tag-perf { color: var(--purple-grad); background: var(--purple-dim); }
+  .rel-tag.tag-other { color: var(--muted); background: transparent;
+                       border: 1px solid var(--border); }
   table td.empty-td { padding: 0; border-bottom: none; }
   /* 赛题库卡片网格（工单 ui-polish-9/02）：编号徽章 + 年份 chip + 题面预览 */
   .topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -2878,10 +2912,10 @@
       <button data-tab="reference" role="tab" aria-selected="false" aria-controls="tab-reference" tabindex="-1" title="套件例程 / 说明书等配套资料，生成时作学习素材；管理入口，做题用不到。">参考文件库</button>
       <button data-tab="pdf" role="tab" aria-selected="false" aria-controls="tab-pdf" tabindex="-1" title="素材根目录全部 PDF 的浏览与整理（含疑似重复清理）；管理入口，做题用不到。">PDF 资料库</button>
       <button data-tab="master" role="tab" aria-selected="false" aria-controls="tab-master" tabindex="-1" title="stm32 / mspm0 两平台基础工程浏览与体检；管理入口，做题用不到。">母版</button>
-      <button data-tab="changelog" role="tab" aria-selected="false" aria-controls="tab-changelog" tabindex="-1" title="本工具的更新日志（CHANGELOG）。">更新记录</button>
     </div>
     <div class="tab-group" role="tablist" aria-label="指南">
       <button data-tab="guide" role="tab" aria-selected="false" aria-controls="tab-guide" tabindex="0" title="面向第一次使用的完整教程：准备、做题主线、编译上板到交付收尾。">新手指引</button>
+      <button data-tab="changelog" role="tab" aria-selected="false" aria-controls="tab-changelog" tabindex="-1" title="按版本归纳的用户可见要点（新增 / 改进 / 修复），每次发版更新。">版本更新记录</button>
     </div>
   </nav>
   <button id="btn-theme" type="button" title="切换到亮色主题">🌙</button>
@@ -3963,10 +3997,10 @@
     </div>
   </section>
 
-  <!-- ============================ 更新记录页 ============================ -->
+  <!-- ============================ 版本更新记录页 ============================ -->
   <section id="tab-changelog" class="page">
     <div class="card">
-      <h2>更新记录 <span class="muted">（按天回看工具改进，数据源 CHANGELOG.md 由提交后自动补录）</span></h2>
+      <h2>版本更新记录 <span class="muted">（按版本归纳的用户可见要点：新增 / 改进 / 修复；每次发版时更新）</span></h2>
       <div id="changelog-list" style="margin-top: var(--space-2)"></div>
     </div>
   </section>

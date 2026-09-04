@@ -1,5 +1,6 @@
 // 顶部导航 tab 分组守卫（工单 tab-grouping/01/02；工单 beginner-guide/01 增「指南」组；
-// 工单 code-viewer/04 增「代码」组内按钮）：
+// 工单 code-viewer/04 增「代码」组内按钮；工单 version-changelog/04 更新记录挪入
+// 「指南」组并改名版本更新记录）：
 // 读 index.html 静态标记锁定——组容器（做题 / 资料管理 / 指南）各恰好一个、
 // 10 个 tab 键无多余/缺失、组归属与组内顺序精确、组容器不可点击且无旧组标签
 // （tab-group-label 随胶囊导航重构移除，防把分组拆掉或把标签升级成按钮）、
@@ -18,8 +19,8 @@ const html = readFileSync(
 // 分组定义（与 index.html 顶部导航的标记契约）：组内顺序 = 组内按钮出现顺序。
 const GROUPS = [
   { label: "做题", keys: ["generate", "topic", "code", "settings"] },
-  { label: "资料管理", keys: ["library", "reference", "pdf", "master", "changelog"] },
-  { label: "指南", keys: ["guide"] },
+  { label: "资料管理", keys: ["library", "reference", "pdf", "master"] },
+  { label: "指南", keys: ["guide", "changelog"] },
 ];
 const ALL_KEYS = GROUPS.flatMap((g) => g.keys);
 
@@ -83,7 +84,7 @@ test("10 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () =>
     "顶部导航应恰好 " + ALL_KEYS.length + " 个 tab 按钮（实际 " + total + "）");
 });
 
-test("组归属与组内顺序：做题 3 个、资料管理 5 个、指南 1 个，无串组", () => {
+test("组归属与组内顺序：做题 4 个、资料管理 4 个、指南 2 个，无串组", () => {
   for (const g of GROUPS) {
     const inner = groupInnerHTML(g.label);
     const keys = [...inner.matchAll(/data-tab="([^"]+)"/g)].map((m) => m[1]);
