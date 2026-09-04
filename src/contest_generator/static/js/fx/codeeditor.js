@@ -267,6 +267,20 @@ export function caretLineFromStarts(lineStarts, pos) {
   return lo;
 }
 
+// patchLineStarts(lineStarts, idx, delta)：行起点数组增量修补（fix——用户现场
+// 「第 2 行连打字符，首字符留第 2 行、后续字符落到第 3 行且顺序反转」的根因
+// 守卫）——非结构单行编辑（行数不变、变更段在 idx 行内）后，idx 行自身起点
+// 不变，其后所有行的绝对行起点整体平移 delta（新行长 - 旧行长）。返回新数组
+// （不改入参；delta 为 0 或 idx 越界 → 原样返回）。
+export function patchLineStarts(lineStarts, idx, delta) {
+  const ls = lineStarts || [];
+  const d = delta | 0;
+  if (!d || idx < 0 || idx >= ls.length) return ls;
+  const out = ls.slice();
+  for (let i = idx + 1; i < out.length; i++) out[i] += d;
+  return out;
+}
+
 // _lineStart(value, pos)：pos 所在行行首偏移（lastIndexOf("\n", pos-1)+1）。
 function _lineStart(value, pos) {
   return value.lastIndexOf("\n", pos - 1) + 1;
@@ -276,6 +290,12 @@ function _lineStart(value, pos) {
 // 替换选区为「\n + 起始行前导空白」（无选区 = 插入同一串）；单行与多行
 // 选区同语义（VSCode 行为：Enter 吃选区）。返回 {value, start, end}——
 // start/end = 新光标位（选区被折叠为空）。
+// 花括号展开（优化）：空选区且光标紧贴成对 `{}`（前一字符 `{`、当前字符
+// `}`）→ Enter 展开为
+//   {
+//       |          ← 中间行 = 原前导空白 + 4 空格（与 indentLines 同口径）
+//   }              ← 闭括号按原前导空白落下一行
+// 与 bracketOpen 自动闭合先例配套——直接输入，不再需要补 Tab/回车。
 export function indentOnEnter(value, selStart, selEnd) {
   const v = String(value == null ? "" : value);
   const start = Math.max(0, Math.min(v.length, selStart | 0));
@@ -284,6 +304,13 @@ export function indentOnEnter(value, selStart, selEnd) {
   const lineEnd = v.indexOf("\n", lineStart);
   const lineText = v.slice(lineStart, lineEnd === -1 ? v.length : lineEnd);
   const ws = /^[ \t]*/.exec(lineText)[0];
+  if (start === end && start > 0 && start < v.length
+    && v[start - 1] === "{" && v[start] === "}") {
+    const inner = ws + "    ";
+    const text = v.slice(0, start) + "\n" + inner + "\n" + ws + v.slice(end);
+    const pos = start + 1 + inner.length;
+    return { value: text, start: pos, end: pos };
+  }
   const insert = "\n" + ws;
   const text = v.slice(0, start) + insert + v.slice(end);
   const pos = start + insert.length;
@@ -378,6 +405,7 @@ if (typeof window !== "undefined") {
     caretColOf,
     caretLineFromStarts,
     buildLineStarts,
+    patchLineStarts,
     indentOnEnter,
     indentLines,
     replaceAllText,

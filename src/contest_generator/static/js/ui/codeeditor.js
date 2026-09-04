@@ -10,8 +10,8 @@
 // 本模块导出面联动（openEditorFile / getActiveTab / editJumpToLine /
 // setMdMode / onActiveTabChanged）。
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
-import { languageOf } from "/js/fx/highlight.js";
-import { codeGutterLineHTML, highlightCodeLines } from "/js/fx/codeview.js";
+import { languageOf, lineEndState, lineStatesOf, highlightLineHTML } from "/js/fx/highlight.js";
+import { codeGutterLineHTML } from "/js/fx/codeview.js";
 import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges, codeIndentGuideMarks } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用；07 缩进引导线）
 import {
   BRACKET_OPEN,
@@ -36,6 +36,7 @@ import {
   caretColOf,
   caretLineFromStarts,
   buildLineStarts,
+  patchLineStarts,
   indentOnEnter,
   indentLines,
   replaceAllText,
@@ -826,6 +827,7 @@ function winBuild(viewText, lang) {
     hl, gutter, lineCount: hl.length,
     lines,                    // 行数组（工单 code-editor-opt/02：窗口切片/标记窗口文本复用，免每次 split）
     lineStarts: buildLineStarts(lines),   // 行起点数组（caretLineFast 二分）
+    lineStates: lineStatesOf(lines, lang),  // 逐行起始跨行态（fix：块注释/跨行字符串承接行）
     lang,                     // 惰性高亮语言（工单 code-editor-opt/06）
     probeText, probeCols, probeIndex, text: viewText,
   };
@@ -835,16 +837,48 @@ function winBuild(viewText, lang) {
 
 // hlLineHtml(idx)：窗口行高亮（惰性——工单 code-editor-opt/06）——hl[idx] 为
 // null（未算过）时按 winCache.lines[idx] 单行现算并回填；命中缓存零成本。
+// 单行高亮带跨行态（lineStates[idx]——fix：多行 /* */ 注释 / 跨行字符串的
+// 承接行不再被当普通代码着色）。
 function hlLineHtml(idx) {
   let h = winCache.hl[idx];
   if (h == null) {
     const line = winCache.lines ? winCache.lines[idx] : "";
-    const parts = highlightCodeLines(line, winCache.lang || "text");
+    const st = winCache.lineStates ? winCache.lineStates[idx] : null;
     h = '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
-      + (parts[0] || "") + "</span>";
+      + highlightLineHTML(line, st, winCache.lang || "text") + "</span>";
     winCache.hl[idx] = h;
   }
   return h;
+}
+
+// lineStateEq(a, b)：跨行态浅比较（null 与 {…} 两种形态）。
+function lineStateEq(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+}
+
+// refreshLineStatesFrom(fromIdx)：编辑后重算 fromIdx 行**之后**各行的起始跨行
+// 态——fromIdx 行自身的起始态由前面行决定，不受本行编辑影响；其后每行起始态
+// = 上一行（新文本）的终止态。任一行的起始态变化 → 该行起所有惰性高亮缓存
+// 作废（hl 置 null，重渲染现算），防止沿用旧配色。
+function refreshLineStatesFrom(fromIdx) {
+  if (!winCache || !winCache.lineStates || !winCache.lines) return;
+  const n = winCache.lineCount;
+  if (fromIdx >= n) return;
+  const lang = winCache.lang;
+  let changed = -1;
+  for (let k = fromIdx; k < n - 1; k++) {
+    const next = lineEndState(winCache.lines[k], winCache.lineStates[k], lang);
+    const old = winCache.lineStates[k + 1];
+    winCache.lineStates[k + 1] = next;
+    if (changed < 0 && !lineStateEq(old, next)) changed = k + 1;
+  }
+  if (changed >= 0) {
+    for (let k = changed; k < n; k++) winCache.hl[k] = null;
+  }
 }
 
 // winPatchEdit(viewText, lang, span?)：逐行缓存增量修补（工单 11 性能整改——
@@ -867,9 +901,21 @@ function winPatchEdit(viewText, lang, span) {
       const nl = viewText.indexOf("\n", lineStart);
       const lineEnd = nl === -1 ? viewText.length : nl;
       const newLineText = viewText.slice(lineStart, lineEnd);
-      const parts = highlightCodeLines(newLineText, lang);
+      // 行起点表同步（fix）：非结构单行编辑改变行长度 → 变更行之后所有行的
+      // 绝对行起点整体平移 delta（行起点表必须与 lines 一致，否则下一次击键
+      // editSpan.line / 窗口映射会落到下一行——用户现场：第 2 行连打字符错行反转）
+      if (winCache.lines) {
+        const oldLineLen = winCache.lines[idx].length;
+        winCache.lines[idx] = newLineText;
+        winCache.lineStarts = patchLineStarts(winCache.lineStarts, idx,
+          newLineText.length - oldLineLen);
+        // 跨行态同步（fix）：编辑可改变行内 /* \*/ 结构 → 其后行起始态重算
+        refreshLineStatesFrom(idx);
+      }
+      // 变更行自身按（不变的）起始态重高亮——与整段渲染在行界闭合并重开等价
+      const st = winCache.lineStates ? winCache.lineStates[idx] : null;
       winCache.hl[idx] = '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
-        + (parts[0] || "") + "</span>";
+        + highlightLineHTML(newLineText, st, lang) + "</span>";
       let probeCols = winCache.probeCols;
       let probeText = winCache.probeText;
       let probeIndex = winCache.probeIndex;
@@ -891,7 +937,6 @@ function winPatchEdit(viewText, lang, span) {
         winCache.probeText = newLineText;
         winCache.probeIndex = idx;
       }
-      if (winCache.lines) winCache.lines[idx] = newLineText;
       winCache.text = viewText;
       winLast = null;
       return;
@@ -907,11 +952,23 @@ function winPatchEdit(viewText, lang, span) {
   const start = a;
   const end = n - b;   // [start, end) 变更行
   if (start < end) {
-    const parts = highlightCodeLines(newLines.slice(start, end).join("\n"), lang);
-    for (let i = 0; i < parts.length; i++) {
-      const idx = start + i;
-      winCache.hl[idx] = '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
-        + parts[i] + "</span>";
+    // 行数组先落位（跨行态重算与逐行高亮都以新文本为数据源）
+    if (winCache.lines) {
+      // 工单 code-editor-opt/02：行数组同步变更行（非结构编辑行数不变、行起点
+      // 数组零维护——窗口切片/标记窗口文本/caretLineFast 全部复用）
+      for (let i = start; i < end; i++) winCache.lines[i] = newLines[i];
+      // 行起点表同步（fix）：多行替换可能改变各变更行长度，其后所有行起点
+      // 绝对偏移随之漂移——行起点表必须与 lines 重建一致
+      winCache.lineStarts = buildLineStarts(winCache.lines);
+      // 跨行态同步（fix）：变更行可能改变注释/字符串结构 → 其后行起始态重算
+      // （start 行的起始态不变；起始态变化的行 hl 置 null 由 refresh 负责）
+      refreshLineStatesFrom(start);
+    }
+    // 逐行按（重算后的）起始态重高亮——与整段渲染在行界闭合并重开等价
+    for (let i = start; i < end; i++) {
+      const st = winCache.lineStates ? winCache.lineStates[i] : null;
+      winCache.hl[i] = '<span class="code-hl-line" data-code-line="' + (i + 1) + '">'
+        + highlightLineHTML(newLines[i], st, lang) + "</span>";
     }
     let probeCols = winCache.probeCols;
     let probeText = winCache.probeText;
@@ -932,11 +989,6 @@ function winPatchEdit(viewText, lang, span) {
     winCache.probeCols = probeCols;
     winCache.probeText = probeText;
     winCache.probeIndex = probeIndex;
-    if (winCache.lines) {
-      // 工单 code-editor-opt/02：行数组同步变更行（非结构编辑行数不变、行起点
-      // 数组零维护——窗口切片/标记窗口文本/caretLineFast 全部复用）
-      for (let i = start; i < end; i++) winCache.lines[i] = newLines[i];
-    }
   }
   winCache.text = viewText;
   winLast = null;   // 内容已变：强制窗口重画（winRender 同窗早退保护）

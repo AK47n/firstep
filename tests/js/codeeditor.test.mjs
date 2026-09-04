@@ -17,6 +17,7 @@ import {
   caretColOf,
   caretLineFromStarts,
   buildLineStarts,
+  patchLineStarts,
   indentOnEnter,
   indentLines,
   replaceAllText,
@@ -154,6 +155,39 @@ test("indentOnEnter：多行选区 = 替换为换行 + 起始行前导空白", (
   // 选区被换行替换，光标落新行
   assert.equal(r.value.slice(r.start, r.end), "");
   assert.equal(r.start, 6);
+});
+
+test("indentOnEnter：花括号对居中展开（`{}` 中间回车 → 缩进一格直接输入）", () => {
+  // 现场场景：`void f() {}` 光标在 `{` 与 `}` 中间 → 回车后
+  //   行 1: void f() {
+  //   行 2:     |（4 空格，直接输入）
+  //   行 3: }
+  const r = indentOnEnter("void f() {}", 10, 10);
+  assert.equal(r.value, "void f() {\n    \n}");
+  assert.equal(r.start, 15);
+  assert.equal(r.end, 15);
+  assert.equal(r.value.slice(r.start, r.start + 1), "\n");  // 光标在中间缩进行行尾
+});
+
+test("indentOnEnter：花括号展开保留原前导空白（闭括号与原行同级）", () => {
+  // 缩进行内：`    if (x) {}` → 中间行 = 原 4 空格 + 4 空格（8 格），
+  // 闭括号回落原 4 空格
+  const r = indentOnEnter("    if (x) {}", 12, 12);
+  assert.equal(r.value, "    if (x) {\n        \n    }");
+  assert.equal(r.start, 21);
+  assert.equal(r.end, 21);
+});
+
+test("indentOnEnter：非花括号对 / 有选区 / 非空选区不触发展开", () => {
+  // 圆括号对：走普通换行（既不展开也不缩进额外一级）
+  const r1 = indentOnEnter("f()", 2, 2);
+  assert.equal(r1.value, "f(\n)");
+  // 相同位置但有选区（选中 `}`）→ 普通换行替换选区语义
+  const r2 = indentOnEnter("{}", 1, 2);
+  assert.equal(r2.value, "{\n");
+  // 光标不在 `{}` 中间（前有空格）
+  const r3 = indentOnEnter("{ }", 2, 2);
+  assert.equal(r3.value, "{ \n}");
 });
 
 test("editorLineRange：委托 fx/code.js 单源——行选段 + 越界 null", () => {
@@ -350,4 +384,32 @@ test("caretLineFromStarts：随机文本全偏移与 caretLineOf 对拍一致", 
   for (let p = 0; p <= text.length; p++) {
     assert.equal(caretLineFromStarts(ls, p), caretLineOf(text, p), "pos=" + p);
   }
+});
+
+// ---- 行起点表增量修补（fix：第 2 行连打字符错行反转的根因守卫）----
+
+test("patchLineStarts：非结构单行编辑后与全量重建一致（回归）", () => {
+  // 现场场景：第 2 行为空行，连打 4 个字符——每次击键行 2 长度 +1，
+  // 其后所有行起点必须整体平移，否则下一次击键的 editSpan.line 错算到第 3 行
+  const lines = ["line1", "", "line3", "line4"];
+  let ls = buildLineStarts(lines);
+  lines[1] = "a";            // 第 2 行插入 'a'（delta +1）
+  ls = patchLineStarts(ls, 1, 1);
+  assert.deepEqual(ls, buildLineStarts(lines));   // 与全量重建一致
+  // 第 2 行行尾（pos = 7）在修补后的表上仍属第 2 行；陈旧表 [0,6,7,...] 会误判第 3 行
+  assert.equal(caretLineFromStarts(ls, 7), 2);
+  lines[1] = "ab";           // 再插 'b'（delta +1）
+  ls = patchLineStarts(ls, 1, 1);
+  assert.deepEqual(ls, buildLineStarts(lines));
+  assert.equal(caretLineFromStarts(ls, 8), 2);
+});
+
+test("patchLineStarts：边界（delta 0 / 越界 / 首行 / 不入参修改）", () => {
+  const ls = [0, 6, 12, 18];
+  assert.equal(patchLineStarts(ls, 1, 0), ls);        // delta 0 → 原引用
+  assert.equal(patchLineStarts(ls, -1, 1), ls);       // idx 越界 → 原引用
+  assert.equal(patchLineStarts(ls, 9, 1), ls);
+  assert.deepEqual(patchLineStarts(ls, 0, 2), [0, 8, 14, 20]);   // 首行 +2
+  assert.deepEqual(patchLineStarts(ls, 3, 3), [0, 6, 12, 18]);   // 末行自身不变
+  assert.deepEqual(ls, [0, 6, 12, 18]);               // 入参未被修改
 });

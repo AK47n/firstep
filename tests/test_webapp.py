@@ -7866,6 +7866,29 @@ def test_api_health_ok_without_config(tmp_path):
     assert resp.json()["ok"] is True
 
 
+def test_frontend_assets_force_revalidate(client):
+    """前端首页与全部 /js 模块必须禁用浏览器启发式缓存（首页 no-cache +
+    Clear-Site-Data；/js 模块 no-store——工单【桌面打开卡死需 F5】根因守卫）——
+    本地迭代频繁改代码，浏览器启发式新鲜度会让部分模块命中旧缓存、部分重新
+    拉取，形成新旧混装模块图：ESM 导入名不匹配 → 整图静默失败（平台卡空 /
+    页签无响应 / 无错误横幅，F5 全量协商后才恢复）。强制协商让模块图恒与磁盘
+    当前版本一致。"""
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert resp.headers.get("cache-control") == "no-cache"
+    assert resp.headers.get("clear-site-data") == '"cache"'
+    resp = client.get("/js/app.js")
+    assert resp.status_code == 200
+    assert resp.headers.get("cache-control") == "no-store"
+    resp = client.get("/js/fx/highlight.js")
+    assert resp.status_code == 200
+    assert resp.headers.get("cache-control") == "no-store"
+    # API 端点不受影响（不带强制协商头）
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    assert resp.headers.get("cache-control") is None
+
+
 # ---------------------------------------------------------------------------
 # 代码查看器（工单 code-viewer/01）：目录打开与文件读取端点
 # ---------------------------------------------------------------------------
