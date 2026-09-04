@@ -4,6 +4,11 @@
 措辞不可控），后改为自动：post-commit 钩子调用 update_changelog()，把上次
 已录入提交之后的新提交自动整理成条目追加进 CHANGELOG.md 并提交。
 
+CHANGELOG.md 是「自动草稿区」（开发视角、全量提交史）；用户前台展示的是
+「定稿区」VERSIONS.md——每个版本一条 `## vX.Y.Z (YYYY-MM-DD)` 区块，组内
+3~6 条用户视角要点（解析见 parse_versions / load_versions）。发版时把草稿
+归纳成要点写进 VERSIONS.md 顶部（详见仓库根 VERSIONS.md 说明段）。
+
 文件头部有一行机器标记（HTML 注释，渲染不可见）：
     <!-- changelog-auto: last-commit=<sha> -->
 记录上次已录入的提交 SHA。没有标记时按文件内最新日期时间回退。
@@ -39,6 +44,23 @@ _MARKER_RE = re.compile(r"^<!-- changelog-auto: last-commit=([0-9a-fA-F]+) -->$"
 _TYPE_PREFIX_RE = re.compile(r"^[a-z]+: ", re.ASCII)
 # 尾部 PR 引用（#93 等）
 _PR_REF_RE = re.compile(r"\s*\(#\d+\)$")
+# 版本头：`## vX.Y.Z (YYYY-MM-DD)`（ASCII 括号、日期补零；版本号严格
+# 主.次.补丁 三段，组 1 = 带 v 前缀的版本串，直接作展示徽章文本）
+_VERSION_HEADER_RE = re.compile(
+    r"^## (v[0-9]+\.[0-9]+\.[0-9]+) \(([0-9]{4}-[0-9]{2}-[0-9]{2})\)$"
+)
+# 任意二级标题：非版本的 `## ` 行是分区边界（重置当前块——残缺版本头不会把
+# 后续条目误挂到上一版本）
+_SECTION_RE = re.compile(r"^## ")
+# 版本条目：`- 标签：文本`（标签 ∈ 主题 / 新增 / 改进 / 修复 / 性能）
+_VERSION_ITEM_RE = re.compile(r"^- ([^：:]+)[：:]\s*(.*)$")
+_VERSION_SUMMARY = "主题"
+_VERSION_KINDS = ("新增", "改进", "修复", "性能")
+_VERSION_KIND_OTHER = "其他"  # 无标签 / 未知标签行的兜底标签（整行保留，不静默丢）
+# HTML 注释状态（VERSIONS.md 用 `<!-- … -->` 包格式示例——注释内的
+# `## vX.Y.Z` / `- ` 行不得误入解析结果）
+_COMMENT_START = "<!--"
+_COMMENT_END = "-->"
 # 自动补录跳过的提交前缀（工单管理 / 机器自提交噪声）
 _SKIP_PREFIXES = ("docs:", "chore:", "test:")
 # 写库 CRUD 机器提交固定模板（库管理动作不是工具改进，不进更新记录）
@@ -97,6 +119,84 @@ def load_changelog(path: Path) -> list[dict]:
         return []
     try:
         return parse_changelog(text)
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
+# 版本更新记录（定稿区 VERSIONS.md）：用户视角版本要点（工单 version-changelog/02）
+# ---------------------------------------------------------------------------
+
+
+def parse_versions(text: str) -> list[dict]:
+    """按格式契约解析 VERSIONS.md 文本 → [{version, date, summary, items}]。
+
+    `## vX.Y.Z (YYYY-MM-DD)`（ASCII 括号、严格补零日期、主.次.补丁三段）开
+    新版块；组内 `- 标签：文本`（标签 ∈ 新增/改进/修复/性能）进 items，
+    `- 主题：文本` 进 summary（不占条目）；无标签 / 未知标签的行 kind=「其他」
+    且整行文本保留（不静默丢内容）。`# ` 大标题 / HTML 注释（含多行注释内的
+    `## v` / `- ` 示例行）/ 说明段跳过；任何非版本的 `## ` 行是分区边界
+    （重置当前块——残缺版本头不会把后续条目误挂到上一版本）。
+    """
+    versions: list[dict] = []
+    current: dict | None = None
+    in_comment = False
+    for line in text.splitlines():
+        if in_comment:
+            if _COMMENT_END in line:
+                in_comment = False
+            continue
+        if _COMMENT_START in line:
+            # 整行 + 后续区间都是注释；`<!-- … -->` 同行闭合只跳本行
+            if _COMMENT_END not in line:
+                in_comment = True
+            continue
+        m = _VERSION_HEADER_RE.match(line)
+        if m:
+            current = {
+                "version": m.group(1),
+                "date": m.group(2),
+                "summary": "",
+                "items": [],
+            }
+            versions.append(current)
+            continue
+        if _SECTION_RE.match(line):
+            current = None
+            continue
+        if current is None or not line.startswith("- "):
+            continue
+        m = _VERSION_ITEM_RE.match(line)
+        if m:
+            label, rest = m.group(1).strip(), m.group(2).strip()
+            if label == _VERSION_SUMMARY:
+                current["summary"] = rest
+            elif label in _VERSION_KINDS:
+                current["items"].append({"kind": label, "text": rest})
+            else:
+                # 未知标签整行保留（kind=其他），防「更新：xxx」这类漏网被静默丢掉
+                current["items"].append(
+                    {"kind": _VERSION_KIND_OTHER, "text": line[2:].strip()}
+                )
+        else:
+            rest = line[2:].strip()
+            if rest:
+                current["items"].append({"kind": _VERSION_KIND_OTHER, "text": rest})
+    return versions
+
+
+def load_versions(path: Path) -> list[dict]:
+    """读取 VERSIONS.md → 解析结果；文件缺失 / 读取 / 解析异常 → []。
+
+    与 load_changelog 同风格：纯展示数据，损坏不阻塞工具（前端显示空态），
+    解析异常不抛，调用方无需兜底。
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    try:
+        return parse_versions(text)
     except Exception:
         return []
 

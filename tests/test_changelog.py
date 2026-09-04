@@ -21,7 +21,9 @@ from contest_generator.changelog import (
     _split_header,
     _upsert_marker,
     load_changelog,
+    load_versions,
     parse_changelog,
+    parse_versions,
     update_changelog,
 )
 
@@ -280,3 +282,138 @@ def test_update_changelog_no_display_commits_returns_false(tmp_path, monkeypatch
     )
     assert update_changelog(changelog, tmp_path) is False
     assert "last-commit" not in changelog.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# 版本更新记录（VERSIONS.md 定稿区，工单 version-changelog/02）：
+# parse_versions + load_versions——用户视角版本要点，纯展示数据不抛
+# ---------------------------------------------------------------------------
+
+
+def test_parse_versions_standard_blocks():
+    """标准格式：`## vX.Y.Z (YYYY-MM-DD)` 开组，主题归 summary，标签条目进 items。"""
+    text = (
+        "# 版本更新记录\n"
+        "\n"
+        "（说明段：面向用户的版本要点……）\n"
+        "\n"
+        "## v1.1.0 (2026-09-04)\n"
+        "- 主题：一个月打磨，从能生成工程到像 IDE 一样改\n"
+        "- 新增：代码栏——IDE 式编辑器（文件树 / 多标签保存）\n"
+        "- 改进：生成主流程自动编译 + AI 修复\n"
+        "- 修复：一批现场问题\n"
+        "\n"
+        "## v1.0.0 (2026-08-05)\n"
+        "- 新增：首个版本\n"
+    )
+    assert parse_versions(text) == [
+        {"version": "v1.1.0", "date": "2026-09-04",
+         "summary": "一个月打磨，从能生成工程到像 IDE 一样改",
+         "items": [
+             {"kind": "新增", "text": "代码栏——IDE 式编辑器（文件树 / 多标签保存）"},
+             {"kind": "改进", "text": "生成主流程自动编译 + AI 修复"},
+             {"kind": "修复", "text": "一批现场问题"},
+         ]},
+        {"version": "v1.0.0", "date": "2026-08-05",
+         "summary": "", "items": [{"kind": "新增", "text": "首个版本"}]},
+    ]
+
+
+def test_parse_versions_untagged_and_unknown_label_kept_whole():
+    """无标签 / 未知标签的行不静默丢失：kind=其他，文本整行保留。"""
+    text = (
+        "## v1.1.0 (2026-09-04)\n"
+        "- 无标签的一句话\n"
+        "- 更新：未知标签也保留原文\n"
+        "- 主题：  前后空白剥掉\n"
+        "- 新增：\n"
+    )
+    assert parse_versions(text) == [
+        {"version": "v1.1.0", "date": "2026-09-04", "summary": "前后空白剥掉",
+         "items": [
+             {"kind": "其他", "text": "无标签的一句话"},
+             {"kind": "其他", "text": "更新：未知标签也保留原文"},
+             {"kind": "新增", "text": ""},
+         ]},
+    ]
+
+
+def test_parse_versions_skips_header_comments_and_foreign_sections():
+    """大标题 / 多行 HTML 注释示例（内含 `## v` 与 `- ` 行）/ 非版本 `## `
+    小节与组外 `- ` 行都不产生版本（注释状态跨越行界）。"""
+    text = (
+        "# 版本更新记录\n"
+        "<!-- 格式示例（正式条目写在示例上方）：\n"
+        "## v1.1.0 (2026-09-04)\n"
+        "- 主题：一句话概括本期\n"
+        "- 新增：示例条目不得解析出版本\n"
+        "-->\n"
+        "- 组外游离条目（忽略）\n"
+        "## 格式约定（非版本小节）\n"
+        "- 仍忽略\n"
+        "## v1.1.0 (2026-09-04)\n"
+        "- 新增：正式条目\n"
+    )
+    assert parse_versions(text) == [
+        {"version": "v1.1.0", "date": "2026-09-04", "summary": "",
+         "items": [{"kind": "新增", "text": "正式条目"}]},
+    ]
+
+
+def test_parse_versions_inline_comment_skipped():
+    """同行闭合的 `<!-- … -->` 只跳过本行，不进入注释态。"""
+    text = (
+        "## v1.1.0 (2026-09-04)\n"
+        "<!-- 单行注释：- 新增：示例 -->\n"
+        "- 新增：正式条目\n"
+    )
+    assert parse_versions(text) == [
+        {"version": "v1.1.0", "date": "2026-09-04", "summary": "",
+         "items": [{"kind": "新增", "text": "正式条目"}]},
+    ]
+
+
+def test_parse_versions_strict_header():
+    """版本头必须严格 `## vX.Y.Z (YYYY-MM-DD)`：ASCII 括号、日期补零、
+    版本号主.次.补丁三段——任一残缺整块丢弃（不建组、其后条目不入任何组）。"""
+    text = (
+        "## v1.1.0 (2026-9-4)\n"
+        "- 日期未补零，整段丢弃\n"
+        "## v1.1 (2026-09-04)\n"
+        "- 少一段版本号，整段丢弃\n"
+        "## v1.1.0.1 (2026-09-04)\n"
+        "- 多一段版本号，整段丢弃\n"
+        "## v1.1.0（2026-09-04）\n"
+        "- 全角括号不接受\n"
+        "## v1.1.0 (2026-09-04)\n"
+        "- 正式条目\n"
+    )
+    assert parse_versions(text) == [
+        {"version": "v1.1.0", "date": "2026-09-04", "summary": "",
+         "items": [{"kind": "其他", "text": "正式条目"}]},
+    ]
+
+
+def test_parse_versions_garbage_returns_empty():
+    """乱文本（无版本头）→ []，不抛。"""
+    assert parse_versions("随便什么\n# 标题\n- 游离行\n") == []
+
+
+def test_load_versions_missing_file_returns_empty(tmp_path):
+    """VERSIONS.md 缺失 → []（纯展示数据，损坏不阻塞工具）。"""
+    assert load_versions(tmp_path / "nope" / "VERSIONS.md") == []
+
+
+def test_load_versions_unreadable_path_returns_empty(tmp_path):
+    """读取异常（路径是目录）→ []。"""
+    assert load_versions(tmp_path) == []
+
+
+def test_load_versions_real_file_yields_no_ghost_from_example():
+    """真实 VERSIONS.md（本阶段只含格式示例注释，未发版）→ []。
+
+    契约守卫：示例注释里的 `## v1.1.0` / `- 新增：…` 行不得击穿注释态
+    解析出幽灵版本。首个版本发布时此测试需随 VERSIONS.md 一起更新。
+    """
+    real = Path(__file__).resolve().parents[1] / "VERSIONS.md"
+    assert load_versions(real) == []
