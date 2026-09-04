@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=05d04e16d4a76813e5a876061b872c4a2d8051e9 -->
+<!-- changelog-auto: last-commit=770eeb1b02a34f2ec426e2e941c16c39caf4cb92 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 00:55 多实例配置变体控件去掉残留 select 空壳（工单 key-multi-instance/06 回归）
 - 01:08 草稿恢复后重驱动 展开 + 板定义，刷新不再卡在引脚配置占位（工单 refresh-restore-downstream）
 - 01:27 同脚多角色 共享/冲突 判据收紧——只有同一外设/总线才算合理共用（工单 pin-share-rule/01）
+- 02:04 模块库新增红外对射传感器 ir_beam（双平台驱动 + 库级测试）（工单 ir-beam-module/01）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
