@@ -234,6 +234,51 @@ export function lineStatesOf(lines, lang) {
   return out;
 }
 
+// stateEq(a, b)：跨行态浅比较（null 与 {…} 两种形态）——lineStatesRefresh
+// 早停判定；导出供单测复用同一判定（单源，防测试与实现判定漂移）。
+export function stateEq(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+}
+
+// lineStatesRefresh(lines, states, fromIdx, lang, changedEndIdx?)：编辑后**增量
+// 续算**逐行起始跨行态（工单 editor-line-state-opt/01）。约定：lines[fromIdx,
+// changedEndIdx) 行文本已按新内容落位（行数不变；changedEndIdx 缺省 = n，即
+// 保守到文末——正确但无早停），states 仍是编辑前的旧起始态（fromIdx 行自身的
+// 起始态由前面行决定，不受本行编辑影响；其后每行起始态 = 上一行新文本的终止态）。
+// 原地写 states[k+1]（k ≥ fromIdx），返回**首个起始态变化的行索引**
+// （0 基；-1 = 无变化）——调用方据此作废该行起的惰性高亮缓存。
+// 早停论据（归纳）：行 k+1 的起始态是「行 k 文本 + 行 k 起始态」的唯一函数；
+// 若某行新终止态与旧起始态相等，则该行起始态未变；**且 k+1 已越过变更区**
+// （k+1 ≥ changedEndIdx——其后各行文本又未变），故其后所有起始态必与旧值
+// 全等——继续扫描只会重复写相同值。变更区内部不得早停：区内行文本已变，
+// 即使某行起始态碰巧未变，其**终止态**也可能改变后续行（评审实测案例：
+// 多行替换 [2,4) 中第 3 行新开 `/*`，若在区内收敛会漏掉其后注释承接行）。
+// 常见输入（单行字符增删不碰注释/字符串跨行结构）changedEndIdx = fromIdx+1，
+// 第 1 行即收敛：成本 O(受影响跨行段行数) 而非 O(剩余行数)。fromIdx 越界 /
+// 空数组 → -1 不改动。
+export function lineStatesRefresh(lines, states, fromIdx, lang, changedEndIdx) {
+  const src = lines || [];
+  const st = states || [];
+  const n = src.length;
+  if (!n || fromIdx < 0 || fromIdx >= n) return -1;
+  const to = changedEndIdx == null
+    ? n
+    : Math.max(fromIdx + 1, Math.min(n, changedEndIdx | 0));
+  let changed = -1;
+  for (let k = fromIdx; k < n - 1; k++) {
+    const next = lineEndState(src[k], st[k], lang);
+    const old = st[k + 1];
+    st[k + 1] = next;
+    if (k + 1 >= to && stateEq(old, next)) break;   // 越区且收敛：其后全等
+    if (changed < 0 && !stateEq(old, next)) changed = k + 1;
+  }
+  return changed;
+}
+
 function _cLineHTML(line, st) {
   const src = String(line == null ? "" : line);
   const n = src.length;
@@ -306,6 +351,6 @@ function utf8Bytes(text) {
 if (typeof window !== "undefined") {
   Object.assign(window, {
     languageOf, highlightXml, highlightText, HIGHLIGHT_MAX_BYTES,
-    lineEndState, lineStatesOf, highlightLineHTML,
+    lineEndState, lineStatesOf, lineStatesRefresh, highlightLineHTML,
   });
 }

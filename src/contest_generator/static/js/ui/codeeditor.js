@@ -10,7 +10,7 @@
 // 本模块导出面联动（openEditorFile / getActiveTab / editJumpToLine /
 // setMdMode / onActiveTabChanged）。
 import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
-import { languageOf, lineEndState, lineStatesOf, highlightLineHTML } from "/js/fx/highlight.js";
+import { languageOf, lineStatesOf, lineStatesRefresh, highlightLineHTML } from "/js/fx/highlight.js";
 import { codeGutterLineHTML } from "/js/fx/codeview.js";
 import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges, codeIndentGuideMarks } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用；07 缩进引导线）
 import {
@@ -844,41 +844,24 @@ function hlLineHtml(idx) {
   if (h == null) {
     const line = winCache.lines ? winCache.lines[idx] : "";
     const st = winCache.lineStates ? winCache.lineStates[idx] : null;
-    h = '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
-      + highlightLineHTML(line, st, winCache.lang || "text") + "</span>";
+    h = wrapHl(idx, highlightLineHTML(line, st, winCache.lang || "text"));
     winCache.hl[idx] = h;
   }
   return h;
 }
 
-// lineStateEq(a, b)：跨行态浅比较（null 与 {…} 两种形态）。
-function lineStateEq(a, b) {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  const ka = Object.keys(a);
-  const kb = Object.keys(b);
-  return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+// invalidateHlFrom(fromIdx)：起始态变化的行起作废惰性高亮缓存（hl 置 null，
+// 下次渲染按新起始态现算）——lineStatesRefresh 返回首个变化行索引后由调用方
+// 执行；无变化（-1）时其后各行起始态全等，缓存继续有效零动作。
+function invalidateHlFrom(fromIdx) {
+  for (let k = fromIdx; k < winCache.lineCount; k++) winCache.hl[k] = null;
 }
 
-// refreshLineStatesFrom(fromIdx)：编辑后重算 fromIdx 行**之后**各行的起始跨行
-// 态——fromIdx 行自身的起始态由前面行决定，不受本行编辑影响；其后每行起始态
-// = 上一行（新文本）的终止态。任一行的起始态变化 → 该行起所有惰性高亮缓存
-// 作废（hl 置 null，重渲染现算），防止沿用旧配色。
-function refreshLineStatesFrom(fromIdx) {
-  if (!winCache || !winCache.lineStates || !winCache.lines) return;
-  const n = winCache.lineCount;
-  if (fromIdx >= n) return;
-  const lang = winCache.lang;
-  let changed = -1;
-  for (let k = fromIdx; k < n - 1; k++) {
-    const next = lineEndState(winCache.lines[k], winCache.lineStates[k], lang);
-    const old = winCache.lineStates[k + 1];
-    winCache.lineStates[k + 1] = next;
-    if (changed < 0 && !lineStateEq(old, next)) changed = k + 1;
-  }
-  if (changed >= 0) {
-    for (let k = changed; k < n; k++) winCache.hl[k] = null;
-  }
+// wrapHl(idx, html)：行高亮元素包装（行号数据属性与 .code-hl-line 类名单源）——
+// hlLineHtml / winPatchEdit 单行与多行分支三处共用，防包装形状漂移。
+function wrapHl(idx, html) {
+  return '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
+    + html + "</span>";
 }
 
 // winPatchEdit(viewText, lang, span?)：逐行缓存增量修补（工单 11 性能整改——
@@ -910,12 +893,15 @@ function winPatchEdit(viewText, lang, span) {
         winCache.lineStarts = patchLineStarts(winCache.lineStarts, idx,
           newLineText.length - oldLineLen);
         // 跨行态同步（fix）：编辑可改变行内 /* \*/ 结构 → 其后行起始态重算
-        refreshLineStatesFrom(idx);
+        // （早停：单行变更区 = [idx, idx+1)，结构未变时第 1 行即收敛，零全扫
+        // ——工单 editor-line-state-opt/01）
+        const changedFrom = lineStatesRefresh(
+          winCache.lines, winCache.lineStates, idx, lang, idx + 1);
+        if (changedFrom >= 0) invalidateHlFrom(changedFrom);
       }
       // 变更行自身按（不变的）起始态重高亮——与整段渲染在行界闭合并重开等价
       const st = winCache.lineStates ? winCache.lineStates[idx] : null;
-      winCache.hl[idx] = '<span class="code-hl-line" data-code-line="' + (idx + 1) + '">'
-        + highlightLineHTML(newLineText, st, lang) + "</span>";
+      winCache.hl[idx] = wrapHl(idx, highlightLineHTML(newLineText, st, lang));
       let probeCols = winCache.probeCols;
       let probeText = winCache.probeText;
       let probeIndex = winCache.probeIndex;
@@ -961,14 +947,18 @@ function winPatchEdit(viewText, lang, span) {
       // 绝对偏移随之漂移——行起点表必须与 lines 重建一致
       winCache.lineStarts = buildLineStarts(winCache.lines);
       // 跨行态同步（fix）：变更行可能改变注释/字符串结构 → 其后行起始态重算
-      // （start 行的起始态不变；起始态变化的行 hl 置 null 由 refresh 负责）
-      refreshLineStatesFrom(start);
+      // （start 行的起始态不变；起始态变化的行 hl 置 null 由返回索引驱动；
+      // 早停仅允许在越过变更区 [start, end) 后收敛——区内行文本已变，即使
+      // 某行起始态碰巧未变，其终止态仍可能影响后续行（评审实测案例）——
+      // 工单 editor-line-state-opt/01）
+      const changedFrom = lineStatesRefresh(
+        winCache.lines, winCache.lineStates, start, lang, end);
+      if (changedFrom >= 0) invalidateHlFrom(changedFrom);
     }
     // 逐行按（重算后的）起始态重高亮——与整段渲染在行界闭合并重开等价
     for (let i = start; i < end; i++) {
       const st = winCache.lineStates ? winCache.lineStates[i] : null;
-      winCache.hl[i] = '<span class="code-hl-line" data-code-line="' + (i + 1) + '">'
-        + highlightLineHTML(newLines[i], st, lang) + "</span>";
+      winCache.hl[i] = wrapHl(i, highlightLineHTML(newLines[i], st, lang));
     }
     let probeCols = winCache.probeCols;
     let probeText = winCache.probeText;

@@ -8,6 +8,8 @@ import {
   highlightText,
   highlightLineHTML,
   lineStatesOf,
+  lineStatesRefresh,
+  stateEq,
   HIGHLIGHT_MAX_BYTES,
 } from "../../src/contest_generator/static/js/fx/highlight.js";
 import { highlightCodeLines } from "../../src/contest_generator/static/js/fx/codeview.js";
@@ -139,4 +141,133 @@ test("lineStatesOf：逐行起始态（注释开合 / 字符串跨越 / plain �
   assert.deepEqual(states[3], { comment: false, quote: null });
   assert.deepEqual(states[4], { comment: false, quote: '"' });
   assert.deepEqual(lineStatesOf(["a", "b"], "plain"), [null, null]);
+});
+
+// ---- lineStatesRefresh：编辑后增量续算 + 状态收敛早停（工单 editor-line-state-opt/01）----
+
+test("lineStatesRefresh：真实路径（行已更新、起始态为旧值）与全量重算一致，返回首个变化行", () => {
+  // 每个用例：orig = 编辑前文本；apply 原地改行（模拟非结构/结构编辑后的行数组）；
+  // edit = 变更起始行索引；end = 变更区末行（排他，缺省 edit+1 = 单行）——
+  // 真实路径：states 仍是编辑前的旧起始态，lines[edit, end) 已是新文本。
+  const cases = [
+    // 常见输入：行内注释结构未变 → 单行变更区第 1 行即收敛（早停），返回 -1
+    {
+      lang: "c",
+      orig: ["int a;", "int b;", "/* 开", "中", "*/ int c;"],
+      edit: 1,
+      apply: (l) => { l[1] = "int bb;"; },
+    },
+    // 打开块注释：状态变化直到注释关闭行收敛
+    {
+      lang: "c",
+      orig: ["int a;", "int b;", "int c;", "/* 开", "*/ int d;", "int e;"],
+      edit: 1,
+      apply: (l) => { l[1] = "/* 开"; },
+    },
+    // 提前闭合注释：第 2 行补上闭注释 → 其后起始态在闭合行收敛
+    {
+      lang: "c",
+      orig: ["int a;", "/* 开", "中", "int d;", "int e;"],
+      edit: 2,
+      apply: (l) => { l[2] = "*/ int dd;"; },
+    },
+    // 跨行字符串开启（未闭合至文末：变化段 = 剩余行，早停不适用但结果仍全量一致）
+    {
+      lang: "c",
+      orig: ['char *s = "a', "b\";", "int x;", "int y;"],
+      edit: 0,
+      apply: (l) => { l[0] = 'char *s = "a'; },
+    },
+    // 行内注释打开（未闭合）：变化段延伸到下一行开注释处收敛
+    {
+      lang: "c",
+      orig: ["int a;", "int b;", 'char *s = "x', 'y";', "int z;"],
+      edit: 1,
+      apply: (l) => { l[1] = "int bb; /* 开"; },
+    },
+    // XML 注释提前闭合
+    {
+      lang: "xml",
+      orig: ["<r/>", "<!-- 开", "中", "<x/>"],
+      edit: 2,
+      apply: (l) => { l[2] = "中 -->"; },
+    },
+    // XML CDATA 开启后闭合（收敛于 ]]>
+    {
+      lang: "xml",
+      orig: ["<r/>", "<x/>", "]]>", "</r>"],
+      edit: 1,
+      apply: (l) => { l[1] = "<![CDATA["; },
+    },
+    // plain：恒 null
+    {
+      lang: "plain",
+      orig: ["a", "b", "c"],
+      edit: 0,
+      apply: (l) => { l[0] = "aa"; },
+    },
+    // 多行变更区（[2,4) 行文本都被替换）：区内起始态碰巧未变也不得早停——
+    // 第 4 行（索引 3）新开 /* 使其后承接行起始态变化（评审实测案例；旧契约
+    // 在区内收敛会漏算并在错误状态上续算 —— 用户故事 2 守护）
+    {
+      lang: "c",
+      orig: ["int a;", "int b;", "old3", "old4", "old5", "old6"],
+      edit: 2,
+      end: 4,
+      apply: (l) => { l[2] = "int bb;"; l[3] = "/* 开"; },
+    },
+    // 多行变更区内开合自平衡（第 4 行开注释并在本行闭合）：变化只发生在区内，
+    // 越过变更区状态回旧值 → 无变化行（-1），但区内行仍需逐个扫描
+    {
+      lang: "c",
+      orig: ["int a;", "int b;", "old3", "old4", "old5", "old6"],
+      edit: 2,
+      end: 4,
+      apply: (l) => { l[2] = "int bb;"; l[3] = "/* 开 */"; },
+    },
+  ];
+  for (const c of cases) {
+    const lang = c.lang || "c";
+    const orig = c.orig.slice();
+    const oldStates = lineStatesOf(orig, lang);
+    const lines = orig.slice();
+    c.apply(lines);
+    const states = oldStates.slice();          // 编辑前起始态
+    const ref = states;
+    const changed = lineStatesRefresh(lines, states, c.edit, lang, c.end == null ? c.edit + 1 : c.end);
+    assert.equal(states, ref, "必须原地写（不换引用）: " + JSON.stringify(c.orig));
+    const full = lineStatesOf(lines, lang);
+    assert.deepEqual(states, full,
+      "与全量重算不一致: " + JSON.stringify(c.orig) + " 编辑行=" + c.edit);
+    // 期望变化索引 = 首个（> edit）起始态与旧值不同的行；无变化 → -1
+    let expected = -1;
+    for (let i = c.edit + 1; i < lines.length; i++) {
+      if (!stateEq(full[i], oldStates[i])) { expected = i; break; }
+    }
+    assert.equal(changed, expected,
+      "变化索引不符: " + JSON.stringify(c.orig) + " 编辑行=" + c.edit);
+  }
+});
+
+test("lineStatesRefresh：边界（空数组 / fromIdx 越界 / 末行 / 幂等收敛）", () => {
+  const lines = ["a", "b", "c"];
+  const states = lineStatesOf(lines, "plain");
+  assert.equal(lineStatesRefresh([], [], 0, "c"), -1);
+  assert.equal(lineStatesRefresh(lines, states, -1, "plain"), -1);
+  assert.equal(lineStatesRefresh(lines, states, 3, "plain"), -1);
+  assert.equal(lineStatesRefresh(lines, states, 2, "plain"), -1);  // 末行：其后无行
+  assert.deepEqual(states, [null, null, null]);                    // 越界路径不改动
+  // 幂等：对已等于全量重算结果的 states 再刷（单行区）→ 第 1 行即收敛 → -1
+  const cLines = ["int a; /* 开", "中", "*/ int b;", "int c;"];
+  const cStates = lineStatesOf(cLines, "c");
+  assert.equal(lineStatesRefresh(cLines, cStates, 0, "c", 1), -1);
+  assert.deepEqual(cStates, lineStatesOf(cLines, "c"));
+  // changedEndIdx 越界钳制：> n 退化为到文末（正确但无早停）；< fromIdx+1 钳到单行区
+  const dStates = lineStatesOf(cLines, "c");
+  assert.equal(lineStatesRefresh(cLines, dStates, 0, "c", 999), -1);
+  const eLines = ["int a;", "int b;", "int c;"];
+  const eStates = lineStatesOf(eLines, "c");
+  eLines[1] = "/* 开";
+  assert.equal(lineStatesRefresh(eLines, eStates, 1, "c", 0), 2);  // 钳到 [1,2)
+  assert.deepEqual(eStates, lineStatesOf(eLines, "c"));
 });
