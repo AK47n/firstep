@@ -10,6 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { NAV_TAB_KEYS } from "./nav-tabs-shared.mjs";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
@@ -82,6 +83,10 @@ test("10 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () =>
   const total = countOccurrences(nav, "data-tab=");
   assert.equal(total, ALL_KEYS.length,
     "顶部导航应恰好 " + ALL_KEYS.length + " 个 tab 按钮（实际 " + total + "）");
+  // 单源锁（工单 version-changelog/05）：group 派生键清单与 nav-tabs-shared
+  // 成员校验清单必须一致——改导航结构不许只改一处
+  assert.deepEqual(ALL_KEYS, NAV_TAB_KEYS,
+    "nav-tabs-shared.mjs 的键清单应与分组结构定义一致（改导航需三处同步）");
 });
 
 test("组归属与组内顺序：做题 4 个、资料管理 4 个、指南 2 个，无串组", () => {
