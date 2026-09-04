@@ -6,6 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { NAV_TAB_KEYS } from "./nav-tabs-shared.mjs";
 import { GUIDE_CHAPTERS, guideBlocksOf } from "../../src/contest_generator/static/js/fx/guide.js";
 
 const html = readFileSync(
@@ -27,8 +28,6 @@ function swdPins(boardPath) {
   assert.ok(swd, "板卡定义应含「SWD 调试」条目：" + boardPath);
   return swd.occupies;
 }
-
-const NAV_TAB_KEYS = ["generate", "topic", "code", "settings", "library", "reference", "pdf", "master", "changelog", "guide"];
 
 function sectionByTitle(chapter, titlePrefix) {
   return chapter.sections.find((s) => s.title.indexOf(titlePrefix) === 0);

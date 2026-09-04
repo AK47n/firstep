@@ -8,7 +8,23 @@ VERSIONS.md 定稿）；tests/test_repo_language.py 扩展 VERSIONS.md 中文守
 
 **被谁阻塞：** 04（文案描述最终形态的栏目）。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**完成情况：**
+- [x] guide.js：资料管理组列表去掉「更新记录」，指南组介绍 + 一句话导语同步
+- [x] CONTEXT.md 补版本更新记录机制词条（草稿区 → 定稿区 + 前端 + 发布仪式）
+- [x] test_repo_language.py 增 VERSIONS.md 中文守门并全绿（含 helper 纯函数单测）
+- [x] 全量测试套件绿
+
+**审查结论（code-review 双轴）与整改：**
+- 标准轴：无硬违规。整改：nav 键三份拷贝 → 新建 nav-tabs-shared.mjs 单源
+  （guide.test / guide-refs 改 import；nav-tabs-guard 增加深浅一致性深比较锁）；
+  中文守门注释状态机从惰性 → 抽 _version_entry_lines 纯函数 + 单元测试
+  （多行注释区间 + 行内注释剥离两态真触发）；标签集口径统一（四处均列
+  新增/改进/修复/性能：guide.js / index.html title / h2 / VERSIONS.md / CONTEXT）。
+- 规格轴：主体达标；域名术语统一为「版本更新记录」；守门行内注释洞已修。
+- 此前被 04 评审指出的「无操作顺序重排」已随单源化消解（顺序含义只在
+  nav-tabs-shared 一处表达）。
 
 - [ ] guide.js：资料管理组列表去掉「更新记录」，指南组介绍 + 一句话导语同步
 - [ ] CONTEXT.md 补版本记录机制一行（或所在词条更新）

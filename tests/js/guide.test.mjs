@@ -7,6 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { NAV_TAB_KEYS } from "./nav-tabs-shared.mjs";
 import {
   GUIDE_TABS, GUIDE_CHAPTERS, guidePanelFor, guideTabNext,
   guideBlockHTML, guideChapterHTML, guideBlocksOf,
@@ -16,8 +17,6 @@ const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8",
 );
-
-const NAV_TAB_KEYS = ["generate", "topic", "code", "settings", "library", "reference", "pdf", "master", "changelog", "guide"];
 
 function countOccurrences(text, needle) {
   return text.split(needle).length - 1;
