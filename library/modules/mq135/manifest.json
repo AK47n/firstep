@@ -1,0 +1,28 @@
+{
+  "slug": "mq135",
+  "description": "MQ-135 空气质量传感器驱动（mspm0 纯驱动切片，ADR 0009）：ADC 模拟量独立通道读取（ADC12_0 MEM4，与 mq2 的 MEM0 薄封装不同——多路气体同选时物理通道独立、无共读冲突），mq135_init + mq135_read_percent 出 0-100% 浓度百分比（相对值非 ppm 精标）；适用于空气质量/有害气体检测（氨气/硫化物/苯系/烟雾）、气体浓度报警、通风联动、环境监测等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/mq135.c",
+        "code/mq135.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**独立 MEM 通道（ir_distance 先例）而非 mq2 的 MEM0 薄封装**：ADC12_0 sequence 开 MEM4（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20——地猛星板上 ADC0 剩余通道中与既有默认同选概率最低者：与 DC_MOTOR BB（编码器）/SYN6288 TX（语音报警）重叠）——多路气体同选时各器件物理通道独立、无共读冲突（mq2 薄封装共读 adc 模块 MEM0（默认 PA24），与 mq135 同选会撞同一物理通道——绑定槽位冲突检查强制同脚，mq2 与 mq135 同选 = PA24/PB20 两槽位，默认即不撞；与 mq5 同选 = PB20/PB24 两槽位，同样不撞）。页面原脚 PA27（A0_0）已归 ir_distance MEM3——复现手册接线需经引脚绑定换通道（绑 PA27 = 改写 adcPin6→adcPin0 + adcMem4chansel→CHAN_0）。读数经 adc 模块 API（dependencies=[\"adc\"]：adc_get(ADC_1, ADC_Channel_4)——busy 忙等单点实现在 adc 模块，mq2/ir_distance 同走属主；adc_get 通道守卫随本件扩展至 ADC_Channel_5）。换算 percent = value/4095×100（页面 Get_MQ135_Percentage_value 原式——**相对值非 ppm 精标**：MQ 系读数随加热/环境/老化漂移，真实 ppm 需标准气体标定；模块上电必须预热（几分钟级）否则输出不准；MQ-135 对氨气/氮氧化合物/醇类/芳族化合物/硫化物/烟雾灵敏）。页面 Get_Adc_MQ135_Value 30 次累加改 5 次快速平均（mq2/us016 快平均先例）。页面 ADC 中断（ADC12_0_INST_IRQHandler + gCheckADC 标志位）改依赖 adc 模块轮询（共享实例 IRQHandler 强符号唯一）。页面 Get_MQ135_DO_value/MQ_DO 宏（LM393 阈值比较数字量）未声明 DO 角色（mq2 同策略——阈值由模块可调电阻控制，需要时经引脚绑定 GPIO 输入自行读取）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--mq-135-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/mq-135-sensor.html；网盘资料 https://pan.baidu.com/s/1B8WhPIzTmWwQsFFVayRpAA?pwd=9966 提取码 9966；移植成功案例 https://pan.baidu.com/s/1iY6rFTg_xho5sr1L5D9vpg?pwd=quhb 提取码 quhb）。改造要点：去掉 main.c 演示与 printf；函数名规范化（mq135_init/read_percent，去 ADC_MQ135_Init/ADC_GET/Get_Adc_MQ135_Value/Get_MQ135_Percentage_value 命名）；ADC 中断改轮询；DO 宏未用不声明；SAMPLES 30→5 快平均；SYSCFG_DL_init 重复调用删除（模板 main 已调）。与库内同类分工：mq2（MEM0 薄封装，烟雾/可燃气体）与 mq5（MEM5 独立通道，液化气/天然气）同属 MQ 系模拟量相对值件、可多路同测；SGP30（软 I2C，TVOC/CO2e 数字量）与 AGS10（软 I2C，TVOC ppb）为免标定数字量件——MQ 系按相对值报警/联动、数字量件按 ppb 级读数，按需任选或组合（默认脚互不相撞）。\nwiki-modules-batch7/01 编译矩阵（2026-09-08）：单选生成 → SysConfig CLI（sequence endAdd=4 五通道合法）→ gmake 0 error、0 warning；未上板（ADC 换算/预热真机验证留后续）。",
+      "kit": "MQ-135 空气质量传感器模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V、150mA；AO 模拟量输出，DO 数字量阈值由模块可调电阻控制；对氨气/硫化物/苯系/烟雾灵敏，100-10000ppm 级检测）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/mq-135-sensor.html",
+      "pins": [
+        {
+          "id": "MQ135_AO_CH4",
+          "type": "adc",
+          "default": "PB20",
+          "required": true
+        }
+      ]
+    }
+  }
+}

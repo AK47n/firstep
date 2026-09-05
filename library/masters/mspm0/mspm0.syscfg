@@ -21,12 +21,15 @@
  *   LED2+15k 到地，PWM 输出时 LED 微亮，可忽略）
  *   JOYSTICK：SW = PA9（摇杆按键，上拉输入低有效；与 DIGIT_UART RX 默认
  *   重叠——手动摇杆与 K230 视觉同选概率最低，同选时经引脚绑定消解）；
- *   ADC12_0 四通道：MEM0 = PA24(A0_3) 归 adc 模块（us016/mq2 薄封装共读同槽），
+ *   ADC12_0 五通道：MEM0 = PA24(A0_3) 归 adc 模块（us016/mq2 薄封装共读同槽），
  *   MEM1 = PA26(A0_1) / MEM2 = PA25(A0_2) 归 joystick 摇杆 X/Y（与
  *   ZIGBEE_UART 默认重叠——手动摇杆与无线身份/信标同选概率最低，同选时
  *   经引脚绑定消解；多 MEM 必须 sequence 模式，2026-09-05 SysConfig CLI
  *   实证），MEM3 = PA27(A0_0) 归 ir_distance（与 HUIDU R2 重叠——红外
- *   测距与灰度巡线同选概率最低）
+ *   测距与灰度巡线同选概率最低），MEM4 = PB20(A0_6) 归 mq135（独立通道，
+ *   与 DC_MOTOR BB 编码器/SYN6288 TX 重叠——MQ 系与运动控制/语音常见同框
+ *   概率最低；多路气体同选时物理通道独立、无共读冲突——mq2 为 MEM0 薄封装
+ *   共读同槽，2026-09-08 实证 MEM4-7 通道/脚全合法）
  *   HC05：HC05_UART = UART2 共享（9600——HC05 出厂默认波特率，与 DEBUG+UWB
  *   同外设；默认 PA23/PA24 与 UWB 同脚——蓝牙与 UWB 链路互替、同选概率
  *   最低，同选时经引脚绑定换实例消解）；STATE = PA8 输入（连接状态，
@@ -424,6 +427,8 @@ SHT30.associatedPins[1].direction    = "OUTPUT";
 SHT30.associatedPins[1].initialValue = "CLEARED";
 SHT30.associatedPins[1].pin.$assign  = "PA31";
 
+
+
 // TTP224 4 路电容触摸按键（ttp224 模块：OUT1-4 输入 + 内部上拉——页面
 // 「上拉输入」；电平直读无去抖/无 GPIO 中断（GROUP1 仍被 motor 编码器独占，
 // 页面同为电平直读）。默认 OUT1=PA22 / OUT2=PA25 / OUT3=PA26 / OUT4=PA27——
@@ -804,14 +809,17 @@ I2C_0.peripheral.$assign        = "I2C0";
 I2C_0.peripheral.sdaPin.$assign = "PA0";
 I2C_0.peripheral.sclPin.$assign = "PA1";
 
-// adc 模块 + 摇杆 + 模拟量测距共享 ADC12_0（b1-adc-servo/01 +
-// wiki-modules-batch1/01 + wiki-modules-batch2/02/04：
+// adc 模块 + 摇杆 + 模拟量测距 + 气体传感共享 ADC12_0（b1-adc-servo/01 +
+// wiki-modules-batch1/01 + wiki-modules-batch2/02/04 +
+// wiki-modules-batch7/01：
 // MEM0=PA24/A0_3 归 adc（us016/mq2 薄封装共读同槽——wiki-modules-batch2/02
 // 与 batch6/03），MEM1=PA26/A0_1、
 // MEM2=PA25/A0_2 归 joystick X/Y，MEM3=PA27/A0_0 归 ir_distance 红外测距
-// （手册原脚）；轮询读取不配中断。多 MEM 必须 sequence 模式（startAdd..
-// endAdd = 启用 MEM 集合）——单发模式只启用 startAdd 槽位，adcPin1/2 由此
-// 不可用（原注释「槽位不存在」系误判，2026-09-05 SysConfig CLI 实证）
+// （手册原脚），MEM4=PB20/A0_6 归 mq135（独立通道——与 mq2 的 MEM0 薄封装
+// 不同：多路气体同选时各器件物理通道独立、无共读冲突；2026-09-08 SysConfig
+// CLI 实证 MEM4-7 通道/脚全合法）；轮询读取不配中断。多 MEM 必须 sequence 模式（startAdd..endAdd = 启用 MEM 集合）——
+// 单发模式只启用 startAdd 槽位，adcPin1/2 由此不可用（原注释「槽位不存在」
+// 系误判，2026-09-05 SysConfig CLI 实证）
 const ADC12   = scripting.addModule("/ti/driverlib/ADC12", {}, false);
 const ADC12_0 = ADC12.addInstance();
 ADC12_0.$name                      = "ADC12_0";
@@ -823,14 +831,16 @@ ADC12_0.adcMem0chansel             = "DL_ADC12_INPUT_CHAN_3";
 ADC12_0.adcMem1chansel             = "DL_ADC12_INPUT_CHAN_1";
 ADC12_0.adcMem2chansel             = "DL_ADC12_INPUT_CHAN_2";
 ADC12_0.adcMem3chansel             = "DL_ADC12_INPUT_CHAN_0";
+ADC12_0.adcMem4chansel             = "DL_ADC12_INPUT_CHAN_6";
 ADC12_0.samplingOperationMode      = "sequence";
 ADC12_0.startAdd                   = 0;
-ADC12_0.endAdd                     = 3;
+ADC12_0.endAdd                     = 4;
 ADC12_0.peripheral.$assign         = "ADC0";
 ADC12_0.peripheral.adcPin3.$assign = "PA24";
 ADC12_0.peripheral.adcPin1.$assign  = "PA26";
 ADC12_0.peripheral.adcPin2.$assign  = "PA25";
 ADC12_0.peripheral.adcPin0.$assign = "PA27";
+ADC12_0.peripheral.adcPin6.$assign = "PB20";
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
 Board.configureUnused = true;
 
