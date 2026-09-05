@@ -38,11 +38,12 @@
     "solutions": [
       {
         "name": "超声波测距（HC-SR04）",
-        "interface": "GPIO trigger/echo（定时输入捕获读回响）",
-        "price": "￥3-8/个",
-        "note": "测 2cm-4m；5V 供电，echo 回 5V 需分压或串电阻；探头发声有方向性",
+        "interface": "GPIO trigger/echo（CPU 忙等测宽，免定时器）",
+        "price": "￥5-15/个",
+        "note": "库内 sr04 已打通（mspm0：sr04_get_distance_cm 直接出厘米，5 次平均 + 超时防护，默认 PB24/PB8——同选时经引脚绑定消解）；忙等测宽不占 TIM 外设（地猛星 TIMG 全被占用）；5V 供电 echo 回 5V 需分压或串电阻；探头发声有方向性、死角 2cm",
         "suitable": "避障/定高/车位感知（>10cm 距离）",
-        "recommended": true
+        "recommended": true,
+        "lib_modules": ["sr04"]
       },
       {
         "name": "串口超声波（JSN-SR04T 等）",

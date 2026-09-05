@@ -1,0 +1,34 @@
+{
+  "slug": "sr04",
+  "description": "HC-SR04 超声波测距驱动（mspm0 纯驱动，ADR 0009）：TRIG 触发 + ECHO 脉宽 CPU 忙等计时（不占定时器外设），sr04_get_distance_cm 直接出厘米（5 次平均，30ms 超时防护）；适用于避障、定高、车位/液位感知、距离阈值触发等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/sr04.c",
+        "code/sr04.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 SR04（TRIG 输出宏 SR04_TRIG_PIN / ECHO 输入宏 SR04_ECHO_PIN，同组 SR04_PORT；TRIG idle 低按 HC-SR04 常态）。默认 TRIG=PB24 / ECHO=PB8——与 STEP_MOTOR RST2/DCY2 默认重叠（测距与步进同选概率最低），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。**无定时器依赖**：地猛星 SysConfig TIMER 实例仅暴露 TIMG0/6/7/8/12（已被 motor/pid/ntb_time/servo/step_motor 全占），本模块用 CPU 忙等计数测 ECHO 脉宽——`SR04_LOOP_US` 单源校准（默认 0.25us/迭代，32MHz 实测偏细或偏粗时改这一处；1cm = 58us，0.25us 分辨率足够）。计时与延时走 delay 模块；5 次测量平均 + 每次 100ms 间隔保留（立创原版算法）；任一次超时整次返回 0（防平均拉虚）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--sr04-ultrasonic-ranging-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sr04-ultrasonic-ranging-sensor.html；网盘完整工程 https://pan.baidu.com/s/1sSah9PvLBrmbA7So-6YcSw / https://pan.baidu.com/s/1Rx1U1v-diM_jTVJLSI3IiA?pwd=uqis）。改造要点：去掉 main.c 演示与 printf；函数名规范化（sr04_init/get_distance_cm，Open_Timer/Get_TIMER_Count/Close_Timer 内联收敛）；引脚宏参数化（SR04_PORT/SR04_TRIG_PIN/SR04_ECHO_PIN）；定时器中断测宽 → 忙等测宽（立创版占 TIMER 实例，地猛星无可分配 TIMG；忙等不占外设、无中断优先级风险）；原版 Get_TIMER_Count 内部 delay_ms(1) 移除（计时不掺延时）；ECHO 等待加 30ms/66ms 超时（原版死等，拆机无回波挂死）；distance 全局变量去除（返回值透出）。\nwiki-materials/06 编译矩阵（2026-09-05）：gmake 0 error、0 module warning（首版 TIMG4 定时器实例被 SysConfig 拒绝——TIMER 仅暴露 TIMG0/6/7/8/12，改 CPU 忙等测宽后通过）；未上板。",
+      "kit": "HC-SR04 超声波测距模块",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sr04-ultrasonic-ranging-sensor.html",
+      "pins": [
+        {
+          "id": "SR04_TRIG",
+          "type": "gpio_out",
+          "default": "PB24",
+          "required": true
+        },
+        {
+          "id": "SR04_ECHO",
+          "type": "gpio_in",
+          "default": "PB8",
+          "required": true
+        }
+      ]
+    }
+  }
+}

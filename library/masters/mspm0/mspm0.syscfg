@@ -55,6 +55,7 @@ const KEY     = GPIO.addInstance();
 const WS2812 = GPIO.addInstance();
 const HX711 = GPIO.addInstance();
 const AHT10 = GPIO.addInstance();
+const SR04 = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -100,6 +101,22 @@ MOTOR_PID.peripheral.$assign = "TIMG6";
 NTB.$name              = "NTB";
 NTB.profile            = "Basic_Periodic";
 NTB.peripheral.$assign = "TIMG7";
+
+// 超声波 TRIG/ECHO（sr04 模块：TRIG 输出触发 / ECHO 输入回波；测宽用
+// CPU 忙等计数，不占 TIMER 外设——地猛星 SysConfig TIMER 实例仅暴露
+// TIMG0/6/7/8/12（已被 motor/pid/ntb_time/servo/step_motor 全占，没有
+// 新定时器可加）。默认 TRIG=PB24（与 STEP_MOTOR RST2 重叠）、ECHO=PB8
+// （与 STEP_MOTOR DCY2 重叠）——测距与步进同选概率最低，同选时经引脚
+// 绑定消解）
+SR04.$name = "SR04";
+SR04.associatedPins.create(2);
+SR04.associatedPins[0].$name        = "TRIG";
+SR04.associatedPins[0].direction    = "OUTPUT";
+SR04.associatedPins[0].initialValue = "CLEARED";
+SR04.associatedPins[0].pin.$assign  = "PB24";
+SR04.associatedPins[1].$name        = "ECHO";
+SR04.associatedPins[1].direction    = "INPUT";
+SR04.associatedPins[1].pin.$assign  = "PB8";
 
 // 电机方向/使能 + 编码器中断（key 模块 GROUP1_IRQHandler 消费 IIDX）
 DC_MOTOR.$name = "DC_MOTOR";

@@ -310,6 +310,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PB6": 3,  # STEP_MOTOR SLP2 + HUIDU R3 + AHT10 SCL（aht10 默认脚；
         # 温湿度与步进/巡线同选概率最低故叠此脚，同选时经引脚绑定消解）
         "PB7": 3,  # STEP_MOTOR DIR2 + HUIDU R4 + AHT10 SDA（同上）
+        "PB8": 2,  # STEP_MOTOR DCY2 + SR04 ECHO（sr04 默认脚；测距与步进
+        # 同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "PB24": 2,  # STEP_MOTOR RST2 + SR04 TRIG（同上）
         "UART2": 2,  # UWB_UART 与 DEBUG_UART 默认同外设（用户改绑消解）
     }
 
