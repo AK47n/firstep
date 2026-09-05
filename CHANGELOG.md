@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=771ea0b846f8d14f4a92202135a05911cd9d15d4 -->
+<!-- changelog-auto: last-commit=df19d751a795fcaad7c260e801616dcd1c86fab2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -36,6 +36,7 @@
 - 16:20 素材批次全量重抓 70 篇（工单 wiki-md-repair/02）：新转换器产物 + 质量扫描 70/70 通过 + CONTEXT 更新
 - 16:20 补充已解决工单结论注记（wiki-materials/02、06）
 - 16:24 Markdown 手册图片服务后端（工单 wiki-md-repair/03）：资产端点 /api/materials-md-assets + 图片类型限制
+- 16:24 Markdown 预览图片显示（工单 wiki-md-repair/04）：mdAssetImageUrl 归一 + 预览 imageUrl 回调
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
