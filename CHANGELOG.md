@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=59a302a5d9f5d7842dcf777fa0a8a8b631b1bcb4 -->
+<!-- changelog-auto: last-commit=aaf34ce8263654095a0b69bc52648ae10b4cdf61 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -56,6 +56,7 @@
 - 19:15 pca9685 16 路舵机驱动模块（工单 wiki-modules-batch3/02）：立创 wiki 手册提炼，软 I2C 位操作（AHT10 先例）不占硬件外设/TIMER，角度映射与 servo 模块同口径互补
 - 19:15 ir_remote_tx 红外编码发射模块（工单 wiki-modules-batch3/03）：立创 wiki 手册提炼，38kHz NEC 载波 GPIO 忙等不占 TIMER，与 ir_remote 接收配对同口径，UART 指令形态归生成骨架
 - 19:28 wiki-modules-batch3 code-review 收尾修正（批次 1+2+3 全部 12 件）：ir_tx_burst 载波时长 13.16 倍放大修正（配对解码可通）、pca9685 prescale/角度映射整型截断改浮点 round、max7219 notes 宏名按编译矩阵实测更正；CONTEXT 平台行补录批次 3 三模块
+- 20:09 批次4/01：jq8900 语音播报模块入库（软 UART 单发 TX 新先例）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
