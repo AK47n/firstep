@@ -1,7 +1,7 @@
 """mq135 空气质量传感器模块：真实库 + 真实母版不变量与 mspm0 单选生成。
 
 与 ir_distance 同款结构测试：manifest 形状（仅 mspm0、依赖 adc、单角色
-MQ135_AO_CH4 = adc PB20——ADC12_0 sequence 五通道 MEM4 独立通道，与 mq2
+MQ135_AO_CH4 = adc PB20——ADC12_0 sequence 六通道 MEM4 独立通道，与 mq2
 的 MEM0 薄封装不同：多路气体同选时物理通道独立、无共读冲突）、mspm0 单选
 生成（syscfg 裁剪保留 ADC12_0、mq135 + 依赖 adc 模块文件落盘、main.c 调
 init/read_percent 过静态门禁）。百分比公式与「无 ADC 中断」源码守卫钉死

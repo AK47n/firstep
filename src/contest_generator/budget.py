@@ -109,7 +109,9 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # wiki-modules-batch5 增补 I2C 增强件 4 方案 + 存储/数据记录新分类后完整
 # wire 实测 4925，预算升 5200——全量送达 + 余量，2026-09-06；
 # wiki-modules-batch6 增补环境监测 4 方案后完整 wire 实测 5201，预算升
-# 5400——全量送达 + 余量，2026-09-07）+ 澄清历史
+# 5400——全量送达 + 余量，2026-09-07；
+# wiki-modules-batch7 增补气体/空气 4 方案后完整 wire 实测 5495，预算升
+# 5700——全量送达 + 余量，2026-09-08）+ 澄清历史
 # （CLARIFICATION_HISTORY_CAP=2500 字符 × 6 ≈ 15KB + 标注）+ 契约文本 ≈ 1KB
 # + 系统提示词 ≈ 3.3KB + JSON 壳 ≈ 0.1KB + 参考清单 / 全文段壳 ≈ 0.5KB ≈
 # 60.3KB → 全文预算 = 128KB − 10KB 目标余量 − 60.3KB − 全文段壳 / 截断标注
@@ -121,7 +123,10 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # 词表段变更配套（2026-09-06，wiki-modules-batch5）：词表完整 wire 实测 4925、
 # 预算 4700→5200 → 词表段全量 4925 比截断形态 4700 多 225B → 全文降 500B 回
 # 62500 保 2KB 边界余量（红证见 worst-case 结构测试实测）。
-REFERENCE_FULLTEXT_BYTES = 62500
+# 词表段变更配套（2026-09-08，wiki-modules-batch7）：词表完整 wire 实测 5495、
+# 预算 5400→5700 → 词表段全量 5495 比截断形态 5300 多 195B → 全文降 500B 回
+# 62000 保 2KB 边界余量（同 batch5 口径；红证见 worst-case 结构测试实测）。
+REFERENCE_FULLTEXT_BYTES = 62000
 
 # 相关候选清单段合计 wire 字节预算（工单 02 相关候选自动扩容）：recommend
 # 启 15 条相关候选后，清单段现实形态 ≈4.7KB（真实库简介 194-348 字/条，
