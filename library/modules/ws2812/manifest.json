@@ -1,0 +1,28 @@
+{
+  "slug": "ws2812",
+  "description": "WS2812 幻彩 RGB 灯带驱动（mspm0 纯驱动，ADR 0009）：单 GPIO 位操作时序下发 24bit 颜色，内置 8 灯颜色缓冲（ws2812_set_color/set_rgb 设色、ws2812_refresh 整体刷新），颜色值 0xRRGGBB 直接写码；适用于 RGB 幻彩指示、氛围灯效、状态光带等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/ws2812.c",
+        "code/ws2812.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 输出实例 WS2812（实例宏 WS2812_PORT / 引脚宏 WS2812_IN_PIN；默认 PA14——与 DCC_100_PWM2（step_motor 脉冲）默认重叠，同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用，新模块默认脚按同选概率最低者重叠分配，IR_BEAM/PA8 先例）。时序延时走 delay 模块（delay_us(1) + 0.25us 按 CPUCLK_FREQ/4MHz 精确换算）；依赖 delay。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/control--ws2812-color-rgb-led.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/control/ws2812-color-rgb-led.html；网盘完整工程 https://pan.baidu.com/s/1OkCpw8ooDyuw947V0b89Rw / https://pan.baidu.com/s/1NsfhskbwIaArsrKMfCYNgw?pwd=mw2n）。改造要点：去掉 main.c 演示与 printf；函数名规范化（ws2812_init/set_led_count/led_count/set_color/set_rgb/refresh）；引脚宏参数化（WS2812_PORT/WS2812_IN_PIN）；延时走 delay 模块；GRB 发送序保留立创原版换位逻辑。立创原版 @12MHz 调试，实测时序偏差可能需真机微调两处延时（编译级验证不含板级行为）。\nwiki-materials/03 编译矩阵（2026-09-05）：gmake 0 error、0 module warning；未上板。",
+      "kit": "WS2812 幻彩灯带",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/control/ws2812-color-rgb-led.html",
+      "pins": [
+        {
+          "id": "WS2812_IN",
+          "type": "gpio_out",
+          "default": "PA14",
+          "required": true
+        }
+      ]
+    }
+  }
+}

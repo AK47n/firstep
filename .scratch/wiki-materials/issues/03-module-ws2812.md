@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** claimed
+
+**结论：** 2026-09-05 完成待提交。gmake 0 error / 0 module warning（PASS）；结构测试两处对齐（判据④ 黑名单「锁存」入能力词白名单——硬件术语 not 题绑定；PA14 默认重叠入 test_pin_bindings 刻意重叠表）。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/control--ws2812-color-rgb-led.md` 的「代码块」章节抽 `bsp_ws2812.c/h` 全文（正文内嵌段落是行拆散版，不可用）→ 改写为模块规范：`code/ws2812.c` + `code/ws2812.h`，gpio 位操作时序（delay_us 走 delay 模块依赖），去掉 main.c 演示/printf，无状态机（ADR 0009）
 - [ ] 母版 `mspm0.syscfg` 加 GPIO 输出实例（命名 WS2812，1 associatedPin，地猛星排针空闲脚且不与现有默认布局重叠）；`syscfg_instances.py` INSTANCE_CONSUMERS 登记

@@ -301,6 +301,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA7": 2,  # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）
         "PA8": 2,  # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚；K230 视觉与
         # 遮挡检测同选时经引脚绑定消解）
+        "PA14": 2,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
+        # （ws2812 默认脚；地猛星排针 31 IO 全占，步进与灯带同选概率最低故
+        # 叠此脚，同选时经引脚绑定消解）
         "UART2": 2,  # UWB_UART 与 DEBUG_UART 默认同外设（用户改绑消解）
     }
 

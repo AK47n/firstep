@@ -84,6 +84,14 @@
         "lib_modules": ["ir_beam"]
       },
       {
+        "name": "WS2812 幻彩灯带",
+        "interface": "GPIO 单线位操作（800kHz 时序）",
+        "price": "￥5-20/米",
+        "note": "库内 ws2812 已打通（mspm0：ws2812_set_color/set_rgb/refresh，0xRRGGBB 直接写色，单 GPIO 默认 PA14）；灯带每颗 40mA 级功耗，长段需外部供电；数据手册时序 1.25us/位，本实现延时经 CPUCLK_FREQ 精确换算，实测异常时微调 ws2812.c 两处延时",
+        "suitable": "RGB 幻彩指示/氛围灯效/状态光带",
+        "lib_modules": ["ws2812"]
+      },
+      {
         "name": "磁力计指南针（QMC5883L）",
         "interface": "I2C（QMC/IST 系列同寄存器族）",
         "price": "￥5-15/个",
