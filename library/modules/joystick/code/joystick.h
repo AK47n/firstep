@@ -5,8 +5,9 @@
 
 /* 双轴摇杆按键驱动（mspm0 纯驱动，ADR 0009）：
  * - X/Y 两轴：ADC12_0 实例共享（b1-adc-servo/01 的 adc 模块同实例，sequence
- *   三通道模式）——JOYSTICK_X = MEM1（default PA26/A0_1）、JOYSTICK_Y = MEM2
- *   （default PA25/A0_2），轮询读取 + 4 次快速平均，12bit 原始值（0-4095），
+ *   四通道模式——MEM3 归 ir_distance，wiki-modules-batch2/04）：JOYSTICK_X =
+ *   MEM1（default PA26/A0_1）、JOYSTICK_Y = MEM2（default PA25/A0_2），
+ *   轮询读取 + 4 次快速平均，12bit 原始值（0-4095），
  *   percent 版按 4095 归一 0-100%；
  * - SW 按键：JOYSTICK_SW 上拉输入（default PA9），按下接地低电平。
  * 引脚/极性由母版 syscfg 与宏决定（JOYSTICK_PORT / JOYSTICK_SW_PIN /

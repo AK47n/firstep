@@ -2,8 +2,9 @@
 #include "ti_msp_dl_config.h"
 
 /* 双轴摇杆按键（mspm0 纯驱动）：X/Y 走 ADC12_0 MEM1/MEM2（与 adc 模块共享
- * 实例，sequence 三通道——单发模式只启用 startAdd 槽位，SysConfig CLI 实证），
- * SW 上拉输入低有效。轮询读取（照 adc 模块先例）；4 次快速平均降噪
+ * 实例，sequence 四通道——单发模式只启用 startAdd 槽位，SysConfig CLI
+ * 实证；MEM3 归 ir_distance，wiki-modules-batch2/04），SW 上拉输入低有效。
+ * 轮询读取（照 adc 模块先例）；4 次快速平均降噪
  * （立创原版 30 次 × delay_ms(5) 太慢，摇杆需实时，已按库规范改造）。 */
 
 #define JOYSTICK_ADC_MAX 4095      /* 12bit 满量程 */

@@ -516,11 +516,13 @@ I2C_0.peripheral.$assign        = "I2C0";
 I2C_0.peripheral.sdaPin.$assign = "PA0";
 I2C_0.peripheral.sclPin.$assign = "PA1";
 
-// adc 模块 + 摇杆共享 ADC12_0（b1-adc-servo/01 + wiki-modules-batch1/01：
-// MEM0=PA24/A0_3 归 adc，MEM1=PA26/A0_1、MEM2=PA25/A0_2 归 joystick X/Y；
-// 轮询读取不配中断。多 MEM 必须 sequence 模式（startAdd..endAdd = 启用
-// MEM 集合）——单发模式只启用 startAdd 槽位，adcPin1/2 由此不可用（原注释
-// 「槽位不存在」系误判，2026-09-05 SysConfig CLI 实证）
+// adc 模块 + 摇杆 + 模拟量测距共享 ADC12_0（b1-adc-servo/01 +
+// wiki-modules-batch1/01 + wiki-modules-batch2/02/04：
+// MEM0=PA24/A0_3 归 adc（us016 薄封装共读同槽），MEM1=PA26/A0_1、
+// MEM2=PA25/A0_2 归 joystick X/Y，MEM3=PA27/A0_0 归 ir_distance 红外测距
+// （手册原脚）；轮询读取不配中断。多 MEM 必须 sequence 模式（startAdd..
+// endAdd = 启用 MEM 集合）——单发模式只启用 startAdd 槽位，adcPin1/2 由此
+// 不可用（原注释「槽位不存在」系误判，2026-09-05 SysConfig CLI 实证）
 const ADC12   = scripting.addModule("/ti/driverlib/ADC12", {}, false);
 const ADC12_0 = ADC12.addInstance();
 ADC12_0.$name                      = "ADC12_0";
@@ -531,13 +533,15 @@ ADC12_0.powerDownMode              = "DL_ADC12_POWER_DOWN_MODE_MANUAL";
 ADC12_0.adcMem0chansel             = "DL_ADC12_INPUT_CHAN_3";
 ADC12_0.adcMem1chansel             = "DL_ADC12_INPUT_CHAN_1";
 ADC12_0.adcMem2chansel             = "DL_ADC12_INPUT_CHAN_2";
+ADC12_0.adcMem3chansel             = "DL_ADC12_INPUT_CHAN_0";
 ADC12_0.samplingOperationMode      = "sequence";
 ADC12_0.startAdd                   = 0;
-ADC12_0.endAdd                     = 2;
+ADC12_0.endAdd                     = 3;
 ADC12_0.peripheral.$assign         = "ADC0";
 ADC12_0.peripheral.adcPin3.$assign = "PA24";
 ADC12_0.peripheral.adcPin1.$assign  = "PA26";
 ADC12_0.peripheral.adcPin2.$assign  = "PA25";
+ADC12_0.peripheral.adcPin0.$assign = "PA27";
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
 Board.configureUnused = true;
 
