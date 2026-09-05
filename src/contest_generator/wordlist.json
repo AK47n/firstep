@@ -167,10 +167,11 @@
     "solutions": [
       {
         "name": "NRF24L01 2.4G 点对点",
-        "interface": "SPI（裸寄存器或参考库）",
+        "interface": "软 SPI（CLK/MOSI/MISO/CSN/CE/IRQ 六脚位操作）",
         "price": "￥10-20/对",
-        "note": "双向低功耗；信道/地址自配；短帧传输数据包",
+        "note": "双向低功耗；信道/地址自配；短帧传输数据包；库内 nrf24l01 已打通（mspm0：nrf24l01_init/set_channel/address/speed/power + tx_packet/rx_packet，默认 PA26/PA25/PA9/PA24/PA23/PA22——同选时经引脚绑定消解；接收为轮询，不占 TIMER/SPI 外设）",
         "suitable": "双车通信/遥控/无线触发（距离 20-50m）",
+        "lib_modules": ["nrf24l01"],
         "recommended": true
       },
       {
@@ -265,10 +266,11 @@
       },
       {
         "name": "NRF24L01 2.4G 遥控（含手柄/摇杆）",
-        "interface": "SPI（裸寄存器，需自写驱动）",
+        "interface": "软 SPI（裸寄存器，需自写驱动）",
         "price": "￥15-30/对",
-        "note": "双向通信、多信道可编组；SPI 驱动与配对逻辑要自写；CE/CSN 占 2-3 个 IO",
+        "note": "双向通信、多信道可编组；库内 nrf24l01 已打通（mspm0：六脚软 SPI 位操作 + tx/rx 收发；接收为轮询）；CE/CSN 占 2 个 IO，与其它无线链路（蓝牙/Zigbee/UWB）互替、同选时经引脚绑定消解",
         "suitable": "远距遥控（>8m）/双车协同/多车编组",
+        "lib_modules": ["nrf24l01"],
         "recommended": true
       },
       {
