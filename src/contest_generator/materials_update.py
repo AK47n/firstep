@@ -248,6 +248,11 @@ def check_for_materials_update(
             "del_count": del_count,
             "size_bytes": size_bytes,
             "parts": parts_out,
+            # 应用期重建新基线清单所需（工单 05；仅 apply 消费，前端忽略）：
+            # 线上全量文件集 + 本批次 removed + 卷名（zip_name 从线上清单 parts）
+            "files": [f for f in online_files.values()],
+            "removed": list(online_batch.get("removed") or []),
+            "zip_names": [str(p.get("zip_name") or "") for p in parts],
         })
 
     # 本地有、线上无的整批删除（旧批次被整体移除）

@@ -166,6 +166,44 @@ def test_apply_task_runs_and_downloads_all_parts(tmp_path: Path) -> None:
     assert marker.is_file()
 
 
+def test_apply_task_invokes_on_complete_after_all_parts(tmp_path: Path) -> None:
+    """全部卷就绪后调 on_complete（应用器挂钩）；挂钩抛错 = 失败态。"""
+    _, sha_a = _content_for("https://x/k230.zip")
+    batches = [
+        _batch("k230", "k230资料", [_part("https://x/k230.zip", 60, sha_a)]),
+    ]
+    applied: list[str] = []
+    task = ApplyTask(
+        task_dir=tmp_path / "updates",
+        batches=batches,
+        download=_fake_download(),
+        on_complete=lambda: applied.append("applied"),
+    )
+    task.run()
+    assert task.state == TaskState.DONE
+    assert applied == ["applied"]
+
+
+def test_apply_task_on_complete_failure_is_failed_state(tmp_path: Path) -> None:
+    _, sha_a = _content_for("https://x/k230.zip")
+    batches = [
+        _batch("k230", "k230资料", [_part("https://x/k230.zip", 60, sha_a)]),
+    ]
+
+    def boom() -> None:
+        raise RuntimeError("应用失败：磁盘写入错误")
+
+    task = ApplyTask(
+        task_dir=tmp_path / "updates",
+        batches=batches,
+        download=_fake_download(),
+        on_complete=boom,
+    )
+    task.run()
+    assert task.state == TaskState.FAILED
+    assert "应用失败" in (task.error or "")
+
+
 def test_apply_task_resume_skips_done_parts(tmp_path: Path) -> None:
     """卷 1 成功（标记已写），卷 2 失败后重试 → 只重下卷 2。"""
     _, sha_a = _content_for("https://x/k230.zip")
