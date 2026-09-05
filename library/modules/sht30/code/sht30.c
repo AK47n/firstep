@@ -69,7 +69,7 @@ static void sht30_iic_send_ack(uint8_t ack)
 {
     SHT30_SDA_OUT();
     SHT30_SCL(0);
-    SHT30_SDA(0);
+    SHT30_SDA(0); /* 页面原式：先置 0，再按 ack 重设（ack=0 时同值二次写） */
     delay_us(5);
     if (!ack) {
         SHT30_SDA(0);

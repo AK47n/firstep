@@ -40,21 +40,10 @@
                                    * 上电默认 85℃ 或不稳定值，本实现按手册等待，
                                    * 改动见 manifest notes） */
 
-/* 位槽总时长（纯函数）：读位槽 = 2+12+50 = 64us、写位槽 = 2+60（=60+2）= 62us，
- * 全落页面 60-70us 位槽区间。测试按此钉死时间轴（10us 级忙等裕量）。 */
-static inline uint16_t ds18b20_read_slot_us(void)
-{
-    return DS18B20_T_READ_START_US + DS18B20_T_READ_SAMPLE_US +
-           DS18B20_T_READ_HOLD_US;
-}
-
-static inline uint16_t ds18b20_write_slot_us(uint8_t bit)
-{
-    if (bit) {
-        return DS18B20_T_WRITE_START_US + DS18B20_T_WRITE_HIGH_US;
-    }
-    return DS18B20_T_WRITE_LOW_US + DS18B20_T_WRITE_END_US;
-}
+/* 位槽时间轴（页面原值；源码只引用常量，不散写字面量）：
+ * 读位槽 = 起始 2us + 采样点 12us + 尾部 50us = 64us；写位槽 = 2+60 / 60+2
+ * = 62us——全落页面 60-70us 位槽区间。测试侧按常量计算钉死该时间轴
+ * （test_module_ds18b20.py::test_ds18b20_bit_slot_timeline_guard）。 */
 
 /* ds18b20_init：复位总线并检测器件（页面 DS18B20_Init/Check 语义）。
  * 返回 0 = 检测到器件、1 = 无应答/释放超时（短路/未接/未上电）。 */
