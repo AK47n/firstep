@@ -15,6 +15,28 @@ export function mdFileUrl(relPath) {
   return "/api/materials-md/" + mdEncodedPath(relPath);
 }
 
+// mdAssetUrl(relPath)：素材库 Markdown 附属资源（手册图片等）URL（段编码）。
+export function mdAssetUrl(relPath) {
+  return "/api/materials-md-assets/" + mdEncodedPath(relPath);
+}
+
+// mdAssetImageUrl(mdRelPath, src)：预览图片 URL（fx/markdown.js imageUrl 回调）。
+// http(s) 外链透传；其余按标准 Markdown 语义「相对 .md 所在目录」归一到素材库
+// 相对路径 → 资产端点（wiki 手册约定：md 在批次根、图片在批次根 images/ 下，
+// 两义一致；子目录 md 按所在目录归一，引用与本文件同目录的图）。
+// 注意与 ui/codeeditor.js 的本地 mdImageUrl（/api/code/raw 预览图）同名异物——
+// 端点不同、签名不同（那边是 (src)），命名用 mdAssetImageUrl 区分。
+// ../ 越界 / 绝对路径 / 非 http 协议的引用面判定由 fx/markdown.js
+// isSafeImageSrc 先行拒绝——本回调只做归一，不复判。
+export function mdAssetImageUrl(mdRelPath, src) {
+  const s = String(src == null ? "" : src).trim().replace(/^(\.\/)+/, "");
+  if (!s) return "";
+  if (/^https?:/i.test(s)) return s;
+  const rel = String(mdRelPath || "");
+  const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+  return mdAssetUrl(dir ? dir + "/" + s : s);
+}
+
 // mdSubdir(relPath)：批次内子目录（rel 去掉批次段与文件名；空 = 批次根）
 export function mdSubdir(relPath) {
   const parts = String(relPath || "").split("/");
@@ -132,5 +154,5 @@ export function mdPreviewShellHTML(m) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { mdEncodedPath, mdSubdir, formatMtime, mdFilterEntries, mdSortEntries, mdStats, mdStatsText, mdChipRowHTML, mdRowHTML, mdPreviewShellHTML, mdFileUrl });
+  Object.assign(window, { mdEncodedPath, mdSubdir, formatMtime, mdFilterEntries, mdSortEntries, mdStats, mdStatsText, mdChipRowHTML, mdRowHTML, mdPreviewShellHTML, mdFileUrl, mdAssetUrl, mdAssetImageUrl });
 }
