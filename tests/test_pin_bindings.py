@@ -416,6 +416,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PB9": 3,   # DC_MOTOR AIN1 + MAX7219 DIN（max7219 默认脚；大数字显示/
         # 计分计时与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
         # + SGP30 SDA（sgp30 默认脚——同上，同选时经引脚绑定消解）
+        "PB18": 3,  # DC_MOTOR BIN1 + MAX7219 CS（同上）+ AGS10 SCL（ags10
+        # 默认脚——软 I2C 气体传感与双电机/大数字显示/步进/灯带/读卡门禁低频
+        # 同框、同选概率最低故叠此脚（避让原则同 SGP30），同选时经引脚绑定消解）
+        "PA14": 4,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
+        # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
+        # 概率最低故叠此脚，同选时经引脚绑定消解）+ AGS10 SDA（ags10 默认脚
+        # ——同上，同选时经引脚绑定消解）
     }
 
 
