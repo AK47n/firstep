@@ -120,6 +120,7 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ir_distance"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq2"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq135"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq5"]), "ADC12_0")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "ADC12_0")
 
 
