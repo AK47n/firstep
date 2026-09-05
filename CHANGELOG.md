@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=72c45fefa50d440316d7334098e97187ba57bfb6 -->
+<!-- changelog-auto: last-commit=a04275d532b11a839d6d84377ca4577350591ad1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -64,6 +64,7 @@
 - 20:29 批次4 复核自修：fingerprint 注释/notes 去掉猜测性 PID 表述 + 15 件 manifest 快照脚本入库
 - 20:37 批次4 code-review 修正：指纹返回约定统一/enroll 补 100ms 稳定拍/syscfg 注释去矛盾/rc522 时序注释诚实化/spec 勘误对齐实现
 - 21:25 批次5「I2C 增强件」四模块入库（工单 wiki-modules-batch5/01-04）：ads1115 四通道 16bit 外扩 ADC、tcs34725 颜色识别（RGB→HSL）、mlx90614 非接触红外测温（SMBus 0.02 系数）、at24c02 EEPROM（页写/随机读）——均软 I2C 位操作（AHT10 先例，不占硬件 I2C 外设/TIMER），默认脚按同选概率最低重叠且四件互不相撞，单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；词表感知传感器 +3 方案与存储/数据记录新分类，词表段预算校准（WORDLIST_PROMPT_BYTES 4700→5200、REFERENCE_FULLTEXT_BYTES 63000→62500）；CONTEXT 平台行补录
+- 21:25 批次5 收尾：19 件（batch1-5）code-review 全库一致性快检脚本（ADR0009/verified/wordlist 挂接/kit/source_url 逐件扫描）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
