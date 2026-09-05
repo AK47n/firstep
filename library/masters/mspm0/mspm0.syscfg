@@ -21,7 +21,7 @@
  *   LED2+15k 到地，PWM 输出时 LED 微亮，可忽略）
  *   JOYSTICK：SW = PA9（摇杆按键，上拉输入低有效；与 DIGIT_UART RX 默认
  *   重叠——手动摇杆与 K230 视觉同选概率最低，同选时经引脚绑定消解）；
- *   ADC12_0 四通道：MEM0 = PA24(A0_3) 归 adc 模块（us016 共读同槽），
+ *   ADC12_0 四通道：MEM0 = PA24(A0_3) 归 adc 模块（us016/mq2 薄封装共读同槽），
  *   MEM1 = PA26(A0_1) / MEM2 = PA25(A0_2) 归 joystick 摇杆 X/Y（与
  *   ZIGBEE_UART 默认重叠——手动摇杆与无线身份/信标同选概率最低，同选时
  *   经引脚绑定消解；多 MEM 必须 sequence 模式，2026-09-05 SysConfig CLI
@@ -779,7 +779,8 @@ I2C_0.peripheral.sclPin.$assign = "PA1";
 
 // adc 模块 + 摇杆 + 模拟量测距共享 ADC12_0（b1-adc-servo/01 +
 // wiki-modules-batch1/01 + wiki-modules-batch2/02/04：
-// MEM0=PA24/A0_3 归 adc（us016 薄封装共读同槽），MEM1=PA26/A0_1、
+// MEM0=PA24/A0_3 归 adc（us016/mq2 薄封装共读同槽——wiki-modules-batch2/02
+// 与 batch6/03），MEM1=PA26/A0_1、
 // MEM2=PA25/A0_2 归 joystick X/Y，MEM3=PA27/A0_0 归 ir_distance 红外测距
 // （手册原脚）；轮询读取不配中断。多 MEM 必须 sequence 模式（startAdd..
 // endAdd = 启用 MEM 集合）——单发模式只启用 startAdd 槽位，adcPin1/2 由此
