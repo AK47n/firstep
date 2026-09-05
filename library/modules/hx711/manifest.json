@@ -1,0 +1,34 @@
+{
+  "slug": "hx711",
+  "description": "HX711 称重传感器驱动（mspm0 纯驱动，ADR 0009）：24 位 ADC 串行读取（通道 A 增益 128），hx711_tare 去皮 + hx711_get_gram 直接出克数（HX711_GAP_VALUE 每克计数校准）；适用于电子称重、拉力/压力检测、重量阈值判断等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/hx711.c",
+        "code/hx711.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 HX711（SCK 输出宏 HX711_SCK_PIN / DT 输入宏 HX711_DT_PIN，DT 内部上拉——空闲高、数据就绪拉低，与 stm32 侧无对偶实现）。默认 SCK=PA28 / DT=PA31——与 IMU601 UART0 默认重叠（称重与姿态同为低概率同选组合），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例，按同选概率最低者重叠分配）。时序延时走 delay 模块（SCK 周期 ≥1us），DT 就绪阻塞轮询带 20ms 超时返回 0（防拆机死等）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--hx711-weighing-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/hx711-weighing-sensor.html；网盘完整工程 https://pan.baidu.com/s/1V2NdHCmvusPDhBp00VvIvQ / https://pan.baidu.com/s/1FKa-qbwxTmj9ShVEfhb-ow?pwd=z8lu）。改造要点：去掉 main.c 演示与 printf；函数名规范化（hx711_init/tare/read_raw/get_gram，Get_Maopi→tare）；引脚宏参数化（HX711_PORT/HX711_SCK_PIN/HX711_DT_PIN）；DT_OUT/DT_IN 方向切换宏去掉（DT 纯输入，HX711 芯片独立供电）；24 位补码转无符号偏移 `count ^ 0x800000` 保留；GapValue 校准参数保留为 HX711_GAP_VALUE（默认 207.00，实秤需校准）。\nwiki-materials/04 编译矩阵（2026-09-05）：gmake 0 error、0 module warning；未上板。",
+      "kit": "HX711 称重传感器（压阻式半桥 + 锑码）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/hx711-weighing-sensor.html",
+      "pins": [
+        {
+          "id": "HX711_SCK",
+          "type": "gpio_out",
+          "default": "PA28",
+          "required": true
+        },
+        {
+          "id": "HX711_DT",
+          "type": "gpio_in",
+          "default": "PA31",
+          "required": true
+        }
+      ]
+    }
+  }
+}

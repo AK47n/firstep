@@ -53,6 +53,7 @@ const DC_MOTOR = GPIO.addInstance();
 const HUIDU   = GPIO.addInstance();
 const KEY     = GPIO.addInstance();
 const WS2812 = GPIO.addInstance();
+const HX711 = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -195,6 +196,21 @@ WS2812.associatedPins[0].$name        = "IN";
 WS2812.associatedPins[0].direction    = "OUTPUT";
 WS2812.associatedPins[0].initialValue = "CLEARED";
 WS2812.associatedPins[0].pin.$assign  = "PA14";
+
+// HX711 称重（hx711 模块：SCK 输出 / DT 输入（片上拉，空闲高 = 未就绪，
+// 数据就绪拉低）。默认 SCK=PA28（与 IMU601 TX 重叠）、DT=PA31（与 IMU601
+// RX 重叠）——称重与串口陀螺仪同为「姿态/力」低频组合，同选概率最低；
+// 同选时经引脚绑定消解）
+HX711.$name = "HX711";
+HX711.associatedPins.create(2);
+HX711.associatedPins[0].$name        = "SCK";
+HX711.associatedPins[0].direction    = "OUTPUT";
+HX711.associatedPins[0].initialValue = "CLEARED";
+HX711.associatedPins[0].pin.$assign  = "PA28";
+HX711.associatedPins[1].$name        = "DT";
+HX711.associatedPins[1].direction    = "INPUT";
+HX711.associatedPins[1].internalResistor = "PULL_UP";
+HX711.associatedPins[1].pin.$assign  = "PA31";
 
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
