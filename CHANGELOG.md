@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=2748762eed7227b3fed2c1c3996caf2e41866c75 -->
+<!-- changelog-auto: last-commit=0fbe841da77771c4c10efcc3382ebb378950b2ad -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 00:16 批次7 收尾修正补丁：ags10 源码注释改用页面函数名简写（避免与「原语族静态化」守卫字面量 AGS10_IIC_ 相撞——守卫防页面残留命名，注释引述不可带前缀字面量）
 - 00:20 批次7 收尾：四张工单标记 resolved（结论含提交号/关键发现/code-review 修正指向）；spec 补 sgp30 失败码定稿（1/2/3=写命令地址/命令字节应答失败、4=读地址应答失败、5=CRC 校验失败）
 - 00:39 批次8/01 火焰传感器模块入库（mspm0）：ADC 模拟量独立 MEM6 通道（mq135/mq5 模式——与 mq2 的 MEM0 薄封装不同：与其它模拟量件同选时物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 7 通道（endAdd 5→6、adcMem6chansel=CHAN_7、adcPin7=PA22——地猛星板上剩余 ADC 通道中唯一无负载脚（PA14 板载 LED2+15k 会分流高阻光电二极管源，mq5 选脚判据先例）；与 HUIDU L1/DEBUG_UART RX/NRF24L01 IRQ/TTP224 OUT1 重叠——同选概率最低）；flame_init + flame_read_percent 出 0-100% 火焰强度（页面原式反向映射（1−value/4095）×100——红外光越强 ADC 值越小、百分比越高，30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM6（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明 700-1000nm 波段/反向映射/相对强度非绝对值；默认 PA22；词表感知传感器 +火焰传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；旧断言同步（endAdd 5→6：ir_distance/mq135/mq5/joystick）
+- 00:42 批次8/02 土壤湿度传感器模块入库（mspm0）：ADC 模拟量独立 MEM7 通道（**最后一个 MEM 槽位——槽位已满（8/8）**：后续 ADC 类件（photoresistance/rain/gp2y1014au/s12sd/ms1100）一律薄封装共读 MEM0 模式（mq2/us016 先例，notes 写明多器件共读限制）），母版 syscfg ADC12_0 sequence 加第 8 通道（endAdd 6→7、adcMem7chansel=CHAN_12、adcPin12=PA14——剩余通道仅 PA14（板载 LED2+15k 固定比率衰减：读数系统偏小、单调性保留，notes 写明限制）；与 DCC_100_PWM2/WS2812 IN/RC522 SCK/AGS10 SDA 重叠——同选概率最低）；soil_init + soil_read_percent 出 0-100% 土壤湿度（页面原式正向映射 value/4095×100——水分越足 ADC 值越大、百分比越高，区别于 flame 反向；30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM7（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；默认 PA14；词表感知传感器 +土壤湿度传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；旧断言全量同步（endAdd 6→7：flame/ir_distance/mq135/mq5/joystick）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
