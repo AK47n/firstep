@@ -16,6 +16,8 @@ set UPD_DIR=%USERPROFILE%\.contest_generator\updates
 if exist "%UPD_DIR%\updating.lock" goto :updating
 if exist "%UPD_DIR%\pending-update.json" goto :update_left
 
+goto :launcher_continue
+
 :updating
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "(New-Object -ComObject WScript.Shell).Popup('firstep 正在更新中，请稍候片刻再启动（更新完成后会自动打开浏览器）',0,'firstep 更新中',64)"
 exit /b 1
@@ -25,6 +27,7 @@ exit /b 1
 exit /b 1
 
 
+:launcher_continue
 rem ---------- 1. 定位 Python：.venv 优先，缺失回退系统 python ----------
 set PYEXE=python
 if exist ".venv\Scripts\python.exe" set PYEXE=.venv\Scripts\python.exe
