@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=23186df4b04c275640e3c9fc22197c8287659fc4 -->
+<!-- changelog-auto: last-commit=8895e8bdc0123e188884ca5196c33a0e0b2e1676 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -58,6 +58,7 @@
 - 19:28 wiki-modules-batch3 code-review 收尾修正（批次 1+2+3 全部 12 件）：ir_tx_burst 载波时长 13.16 倍放大修正（配对解码可通）、pca9685 prescale/角度映射整型截断改浮点 round、max7219 notes 宏名按编译矩阵实测更正；CONTEXT 平台行补录批次 3 三模块
 - 20:09 批次4/01：jq8900 语音播报模块入库（软 UART 单发 TX 新先例）
 - 20:12 批次4/02：syn6288 语音合成模块入库（软 UART 单发 TX）
+- 20:16 批次4/03：rc522 RFID IC 卡识别模块入库（软 SPI 5 脚）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
