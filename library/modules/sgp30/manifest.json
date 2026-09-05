@@ -1,0 +1,34 @@
+{
+  "slug": "sgp30",
+  "description": "SGP30 空气质量传感器驱动（mspm0 纯驱动切片，ADR 0009）：软 I2C 位操作读取（不占硬件 I2C 外设，2 GPIO + SDA 方向运行时切换），sgp30_init 发 0x2003 初始化空气特征基准 + sgp30_read 出 TVOC（ppb）与 CO2 当量（ppm），带 CRC8 校验（器件正确性修正——页面缺校验）；适用于空气质量检测（甲醛/TVOC）、CO2 浓度监测、通风联动、环境监测等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/sgp30.c",
+        "code/sgp30.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 SGP30（SCL 宏 SGP30_SCL_PORT/PIN/IOMUX、SDA 宏 SGP30_SDA_PORT/PIN/IOMUX——SCL/SDA 跨 GPIOA/GPIOB 两端口，生成器按引脚名分派各口宏（max7219 先例），SysConfig 命名 <实例>_<引脚名>_IOMUX；SCL/SDA 均 OUTPUT 初值 CLEARED）。软 I2C：SDA 方向运行时切换（SGP30_SDA_OUT/IN 宏，照 AHT10 先例；节点需板上/模块自带上拉）；位操作半周期 5us ≈ 100kHz 级（页面原值，SGP30 规格 ≤400kHz），延时走 delay 模块，不占 TIMER、不注册 GPIO 中断。**CRC8 器件正确性修正**（ir_remote 反码校验/和 nrf24l01 上游缺陷先例）：SGP30 数据手册要求 CRC8（多项式 0x31、初值 0xFF——同 SHT30/AGS10 系）——页面实现缺 CRC 校验且只读 5 字节（漏 TVOC CRC 字节、读回 `crc = crc` 即弃）→ 本实现读满 6 字节回包（CO2 高/低 + CRC + TVOC 高/低 + CRC）+ 两组 CRC8 校验（器件正确性修正，非页面语义变化；失败返回 5）。API = sgp30_init（0x2003 init_air_quality——页面 SGP30_Init 语义）+ sgp30_read(&tvoc_ppb, &co2_ppm)（0x2008 测量命令（写命令内嵌 delay_ms(100) 覆盖器件测量时长——页面原式）→ 读地址 0xB1 → 6 字节回包 → 两组 CRC8 校验 → CO2=高 16 位/TVOC=低 16 位（页面打包语义拆出参）；返回 0=成功、1/2/3=写命令地址/命令字节应答失败（页面原式不查应答，按 sht30 风格补）、4=读地址应答失败、5=CRC 校验失败）。上电需 15s 左右预热：预热期 CO2=400ppm、TVOC=0ppb 恒定，读到 TVOC≠0 且 CO2≠400 才算初始化完成（判定归生成骨架/调用方循环，页面注释原文；初始化后读数随环境波动属正常，可按需滤波）。默认 SCL=PA18 / SDA=PB9——与 DC_MOTOR AIN2/AIN1（双电机）、MAX7219 CLK/DIN（大数字显示）、RC522 RST（读卡门禁）重叠：气体传感与运动控制/读卡门禁不同框、同选概率最低（刻意不叠温湿度（AHT10 PB6/PB7、DHT11 PB7、DS18B20 PA7、SHT30 PA28/PA31）、光照（PA12/PA13）、OLED 显示（PB2/PB3）、语音（PB19/PB20）、按键（PA2、PA22-27）、报警（PA15）、无线（PA8/PA9/PA23/PA24）、批次 5 八脚——气体检测器标配温湿度+显示+蜂鸣/灯+键盘，同选概率最高故避开；车类/读卡/大数字显示与气体检测低频同框），同选时经引脚绑定消解；与同批默认（PB20/PB24/PB18/PA14）不撞。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--sgp30-gas-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sgp30-gas-sensor.html；网盘资料 https://pan.baidu.com/s/16ITjdV34J8K2Wu24sB_iPg 提取码 1vds；移植成功案例 https://pan.baidu.com/s/1-jzfg_zgpZXJdvWiPrkftQ?pwd=1x3e 提取码 1x3e）。改造要点：去掉 main.c 演示与 printf；函数名规范化（sgp30_init/read，去 SGP30_Init/SGP30_Read/SGP30_Write_cmd 命名）；IIC 原语静态化（sgp30_iic_start/stop/send_ack/wait_ack/send_byte/read_byte，同 SHT30）；页外演示的 `sgp30_dat` 打包 uint32_t 收敛为双出参（tvoc_ppb/co2_ppm）+ 状态码；SGP30_Write_cmd 的 delay_ms(100) 保留（测量时长；页面原值）；SGP30_Read 读 5 字节 + CRC 丢弃 → 修正为 6 字节 + 两组 CRC8 校验（器件正确性修正）。与库内同类分工（**温湿度/气体**）：mq2/mq135/mq5（ADC 模拟量 MQ 系——相对值非 ppm 精标、需预热标定）为模拟量气体件；AGS10（软 I2C，TVOC ppb 0-99999、预热 ≥120s、采样周期 ≥2s）为单 TVOC 数字量件；本件 = TVOC+CO2e 双向数字量（预热 ~15s、采样周期 ≥1s、规格 0-60000ppb/400-60000ppm）——多气体/空气质量监测按需任选或组合（默认脚互不相撞），与温湿度件（aht10/dht11/sht30）同为环境站常配（默认脚刻意错开）。\nwiki-modules-batch7/03 编译矩阵（2026-09-08）：单选生成 → SysConfig CLI → gmake 0 error、0 warning；未上板（软 I2C 时序/CRC 校验真机验证留后续）。",
+      "kit": "GY-SGP30 气体传感器模块（4Pin I2C，地址 0x58；3.3V 供电 40mA；TVOC 0-60000ppb、CO2e 400-60000ppm；用于甲醛/空气质量检测）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sgp30-gas-sensor.html",
+      "pins": [
+        {
+          "id": "SGP30_SCL",
+          "type": "gpio_out",
+          "default": "PA18",
+          "required": true
+        },
+        {
+          "id": "SGP30_SDA",
+          "type": "gpio_out",
+          "default": "PB9",
+          "required": true
+        }
+      ]
+    }
+  }
+}

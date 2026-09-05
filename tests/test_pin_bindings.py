@@ -409,6 +409,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # PA22 的 DEBUG_UART RX/HUIDU L1/NRF IRQ/TTP224 OUT1 与气体检测的
         # 巡线巡检车/无线气体站/触摸面板环境站更常同框——同选概率最低故叠此脚，
         # 多路气体同选时物理通道独立、无共读冲突，同选时经引脚绑定消解）
+        "PA18": 4,  # DC_MOTOR AIN2 + MAX7219 CLK（同上）+ RC522 RST（同上）
+        # + SGP30 SCL（sgp30 默认脚——软 I2C 气体传感与双电机/大数字显示/读卡
+        # 门禁不同框、同选概率最低故叠此脚（刻意不叠温湿度/光照/OLED/语音/
+        # 按键/报警/无线件——气体检测器标配环境站组合），同选时经引脚绑定消解）
+        "PB9": 3,   # DC_MOTOR AIN1 + MAX7219 DIN（max7219 默认脚；大数字显示/
+        # 计分计时与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
+        # + SGP30 SDA（sgp30 默认脚——同上，同选时经引脚绑定消解）
     }
 
 

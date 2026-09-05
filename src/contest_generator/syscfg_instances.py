@@ -43,6 +43,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "DHT11": ("dht11",),
     "DS18B20": ("ds18b20",),
     "SHT30": ("sht30",),
+    "SGP30": ("sgp30",),
     "TTP224": ("ttp224",),
     "BH1750": ("bh1750",),
     "SR04": ("sr04",),
@@ -68,7 +69,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "ZIGBEE_UART": ("zigbee_uart", "zigbee_uart_key", "zigbee_link"),
     "OLED": ("oled",),
     "I2C_0": ("ml_mpu6050",),
-    "ADC12_0": ("adc", "joystick", "us016", "ir_distance", "mq2"),
+    "ADC12_0": ("adc", "joystick", "us016", "ir_distance", "mq2", "mq135", "mq5"),
     "SERVO_PWM": ("servo",),
 }
 
