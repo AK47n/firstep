@@ -359,6 +359,17 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA16": 2,  # DC_MOTOR 编码器 AA + RC522 MOSI（rc522 默认脚——读卡与
         # 双电机同选概率最低故叠此脚，同选时经引脚绑定消解）
         "PA17": 2,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）
+        "PA28": 3,  # IMU601 TX + HX711 SCK（hx711 默认脚；称重与姿态同选
+        # 概率最低故叠此脚，同选时经引脚绑定消解）+ FINGERPRINT_UART TX
+        # （fingerprint 默认脚——身份与姿态同选概率最低故叠此脚，同选时经
+        # 引脚绑定换实例消解）
+        "PA31": 3,  # IMU601 RX + HX711 DT（同上）+ FINGERPRINT_UART RX（同上）
+        "PA12": 3,  # PWMAB ccp0Pin（motor 双路 PWM）+ BH1750 SCL（bh1750 默认
+        # 脚；光照度监测/台灯类与双电机驱动同选概率最低故叠此脚，同选时经
+        # 引脚绑定消解）+ FINGERPRINT TOUCH（fingerprint 默认脚——指纹与
+        # 双电机/光照同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "UART0": 2,  # IMU601 与 FINGERPRINT_UART 默认同外设（用户改绑消解，
+        # 批次 4 指纹独立实例——SysConfig 拒绝同外设多实例，单选裁剪后独占）
         "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
     }
 

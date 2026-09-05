@@ -56,8 +56,16 @@
   },
   {
     "category": "感知传感器",
-    "models": ["编码器", "MPU6050", "红外传感器", "超声波传感器", "磁力计", "DHT11", "BH1750", "US-016"],
+    "models": ["编码器", "MPU6050", "红外传感器", "超声波传感器", "磁力计", "DHT11", "BH1750", "US-016", "指纹模块"],
     "solutions": [
+      {
+        "name": "指纹识别模块（AS608）",
+        "interface": "串口（UART 帧协议，双向）+ 触摸检测 GPIO",
+        "price": "￥15-30/个",
+        "note": "库内 fingerprint 已打通（mspm0：fingerprint_init + check_device 口令验证 + get_image/img_to_buffer/reg_model/save_finger + search 返回指纹 ID（255=未找到）+ enroll 录入固定序列 + delete_all 删库——真实 UART 轮询接收（独立 FINGERPRINT_UART，默认 57600（页面注释；9600 出厂版改 targetBaudRate 一行）），默认 PA28/PA31/PA12——同选时经引脚绑定消解）；指库 300 枚（ID 0-299）；采集/比对流程控制归生成骨架（先触摸→采集→比对）；模块 8 脚（串口方式 USB 悬空），3.3V 供电勿超压",
+        "suitable": "指纹采集/身份验证/指纹门禁考勤",
+        "lib_modules": ["fingerprint"]
+      },
       {
         "name": "超声波测距（HC-SR04）",
         "interface": "GPIO trigger/echo（CPU 忙等测宽，免定时器）",
