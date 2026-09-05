@@ -402,6 +402,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 同选概率最低：与双电机编码器/语音报警不同框、同选概率最低故叠此脚，
         # 多路气体同选时物理通道独立、无共读冲突（mq2 为 MEM0 薄封装共读），
         # 同选时经引脚绑定消解）
+        "PB24": 5,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY（hc05 默认脚；
+        # AT 切换不常用，故叠此脚，同选时经引脚绑定消解）+ AT24C02 SCL
+        # （同上）+ ADC12_0 adcPin5（mq5 默认脚——MQ-5 独立 MEM5 通道 A0_5；
+        # 候选 PA14 板载 LED2+15k 负载不适合作 ADC 模拟输入（会被 15k 分流），
+        # PA22 的 DEBUG_UART RX/HUIDU L1/NRF IRQ/TTP224 OUT1 与气体检测的
+        # 巡线巡检车/无线气体站/触摸面板环境站更常同框——同选概率最低故叠此脚，
+        # 多路气体同选时物理通道独立、无共读冲突，同选时经引脚绑定消解）
     }
 
 

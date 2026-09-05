@@ -4,9 +4,9 @@
 三角色默认 = 母版 syscfg 由 test_pins.py / test_pin_bindings.py 守）、
 mspm0 单选生成（syscfg 裁剪保留 JOYSTICK + ADC12_0、模块文件落盘、
 main.c 调 init/读轴/读键过静态门禁）。摇杆 X/Y 与 adc 模块共享 ADC12_0
-实例（sequence 五通道——MEM1=PA26/A0_1、MEM2=PA25/A0_2；MEM3 归
-ir_distance，wiki-modules-batch2/04；MEM4=PB20/A0_6 归 mq135，
-wiki-modules-batch7/01），SW 独立 GPIO 输入（PA9）。
+实例（sequence 六通道——MEM1=PA26/A0_1、MEM2=PA25/A0_2；MEM3 归
+ir_distance，wiki-modules-batch2/04；MEM4=PB20/A0_6 归 mq135、MEM5=PB24/A0_5
+归 mq5，wiki-modules-batch7/01/02），SW 独立 GPIO 输入（PA9）。
 全程无 LLM、无服务。
 """
 
@@ -65,10 +65,10 @@ def test_joystick_manifest_shape_mspm0():
 
 
 def test_joystick_mspm0_syscfg_instances():
-    """mspm0 母版：JOYSTICK GPIO 实例（SW=PA9 上拉输入）+ ADC12_0 五通道
+    """mspm0 母版：JOYSTICK GPIO 实例（SW=PA9 上拉输入）+ ADC12_0 六通道
     sequence（adcPin1=PA26/A0_1、adcPin2=PA25/A0_2、adcPin3=PA24/A0_3、
     adcPin0=PA27/A0_0——MEM3 归 ir_distance，wiki-modules-batch2/04；
-    MEM4=PB20/A0_6 归 mq135，wiki-modules-batch7/01）。"""
+    MEM4=PB20/A0_6 归 mq135、MEM5=PB24/A0_5 归 mq5，wiki-modules-batch7）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const JOYSTICK = GPIO.addInstance();" in syscfg
     assert 'JOYSTICK.associatedPins[0].$name            = "SW";' in syscfg
