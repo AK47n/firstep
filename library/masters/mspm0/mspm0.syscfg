@@ -315,6 +315,81 @@ BH1750.associatedPins[1].direction    = "OUTPUT";
 BH1750.associatedPins[1].initialValue = "CLEARED";
 BH1750.associatedPins[1].pin.$assign  = "PA13";
 
+// ADS1115 四通道 16bit 外扩 ADC（ads1115 模块：软 I2C 位操作 2 脚 SCL/SDA——
+// 照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。
+// 默认 SCL=PA16 / SDA=PA17——与 DC_MOTOR 编码器 AA/AB、RC522 MOSI/MISO 重叠：
+// 外扩多通道 ADC 与双电机闭环车/读卡门禁同选概率最低（与库内 adc 板载 12bit
+// 单通道分工不同：adc = 板载 ADC12_0 MEM0（默认 PA24，us016 共读同槽），多路
+// 模拟量/分离供电用本件——两件同选互不冲突），同选时经引脚绑定消解；
+// 软 I2C 需板上/模块自带上拉）
+const ADS1115 = GPIO.addInstance();
+ADS1115.$name = "ADS1115";
+ADS1115.associatedPins.create(2);
+ADS1115.associatedPins[0].$name        = "SCL";
+ADS1115.associatedPins[0].direction    = "OUTPUT";
+ADS1115.associatedPins[0].initialValue = "CLEARED";
+ADS1115.associatedPins[0].pin.$assign  = "PA16";
+ADS1115.associatedPins[1].$name        = "SDA";
+ADS1115.associatedPins[1].direction    = "OUTPUT";
+ADS1115.associatedPins[1].initialValue = "CLEARED";
+ADS1115.associatedPins[1].pin.$assign  = "PA17";
+
+// TCS34725 颜色识别（tcs34725 模块：软 I2C 位操作 2 脚 SCL/SDA——照 AHT10 先例
+// 不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。默认
+// SCL=PA23 / SDA=PA24——与 HUIDU L2/L3、UWB/DEBUG/HC05 UART（PA23/PA24）、
+// NRF24L01 CSN/CE、ADC12_0 MEM0（adc+us016 共享槽）重叠：颜色识别与无线
+// 链路/巡线/板载 ADC 同选概率最低（颜色识别属视觉类，与 K230 视觉互替；
+// 刻意不叠 OLED PB2/PB3/MAX7219 显示件——显示颜色值是常见搭配），同选时
+// 经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+const TCS34725 = GPIO.addInstance();
+TCS34725.$name = "TCS34725";
+TCS34725.associatedPins.create(2);
+TCS34725.associatedPins[0].$name        = "SCL";
+TCS34725.associatedPins[0].direction    = "OUTPUT";
+TCS34725.associatedPins[0].initialValue = "CLEARED";
+TCS34725.associatedPins[0].pin.$assign  = "PA23";
+TCS34725.associatedPins[1].$name        = "SDA";
+TCS34725.associatedPins[1].direction    = "OUTPUT";
+TCS34725.associatedPins[1].initialValue = "CLEARED";
+TCS34725.associatedPins[1].pin.$assign  = "PA24";
+
+// MLX90614 非接触红外测温（mlx90614 模块：软 I2C/SMBus 兼容位操作 2 脚
+// SCL/SDA——照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、
+// 读 ACK = 输入）。默认 SCL=PA9 / SDA=PA8——与 DIGIT_UART RX/TX（K230 视觉）、
+// IR_BEAM OUT、HC05 STATE、JOYSTICK SW、NRF24L01 MISO 重叠：非接触测温与
+// 视觉（K230 互替类）/手动输入/蓝牙/2.4G 链路同选概率最低（刻意不叠
+// 温湿度/光照/显示——测温与传感站/显示为常见搭配），同选时经引脚绑定
+// 消解；软 I2C 需板上/模块自带上拉（SMBus 上拉 4.7k~10k，模块板自带））
+const MLX90614 = GPIO.addInstance();
+MLX90614.$name = "MLX90614";
+MLX90614.associatedPins.create(2);
+MLX90614.associatedPins[0].$name        = "SCL";
+MLX90614.associatedPins[0].direction    = "OUTPUT";
+MLX90614.associatedPins[0].initialValue = "CLEARED";
+MLX90614.associatedPins[0].pin.$assign  = "PA9";
+MLX90614.associatedPins[1].$name        = "SDA";
+MLX90614.associatedPins[1].direction    = "OUTPUT";
+MLX90614.associatedPins[1].initialValue = "CLEARED";
+MLX90614.associatedPins[1].pin.$assign  = "PA8";
+
+// AT24C02 EEPROM 存储（at24c02 模块：软 I2C 位操作 2 脚 SCL/SDA——照 AHT10
+// 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。
+// 默认 SCL=PB24 / SDA=PB8——与 STEP_MOTOR RST2/DCY2、SR04 TRIG/ECHO、
+// HC05 KEY 重叠：EEPROM 存储记录与步进/测距同选概率最低（记录类与运动类
+// 不同框；记录+传感站类同选时与同批 ads1115/tcs34725/mlx90614 默认不撞），
+// 同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+const AT24C02 = GPIO.addInstance();
+AT24C02.$name = "AT24C02";
+AT24C02.associatedPins.create(2);
+AT24C02.associatedPins[0].$name        = "SCL";
+AT24C02.associatedPins[0].direction    = "OUTPUT";
+AT24C02.associatedPins[0].initialValue = "CLEARED";
+AT24C02.associatedPins[0].pin.$assign  = "PB24";
+AT24C02.associatedPins[1].$name        = "SDA";
+AT24C02.associatedPins[1].direction    = "OUTPUT";
+AT24C02.associatedPins[1].initialValue = "CLEARED";
+AT24C02.associatedPins[1].pin.$assign  = "PB8";
+
 // 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
 // JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
 // DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。

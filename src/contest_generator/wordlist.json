@@ -56,7 +56,7 @@
   },
   {
     "category": "感知传感器",
-    "models": ["编码器", "MPU6050", "红外传感器", "超声波传感器", "磁力计", "DHT11", "BH1750", "US-016", "指纹模块"],
+    "models": ["编码器", "MPU6050", "红外传感器", "超声波传感器", "磁力计", "DHT11", "BH1750", "US-016", "MLX90614", "ADS1115", "TCS34725", "指纹模块"],
     "solutions": [
       {
         "name": "指纹识别模块（AS608）",
@@ -169,6 +169,30 @@
         "note": "库内 bh1750 已打通（mspm0：bh1750_init 上电 + start_measure 启动连续高分辨率 + read_lux 出 lx，默认 PA12/PA13——同选时经引脚绑定消解）；0-65535 lx、1 lx 分辨率、测量 ~120ms（调用方按 BH1750_MEASURE_DELAY_MS 等待）；模块板自带上拉；台灯调光/农业补光监测/环境光照采集",
         "suitable": "环境光照度采集/光照控制与显示/自动调光",
         "lib_modules": ["bh1750"]
+      },
+      {
+        "name": "ADS1115 四通道 ADC（I2C 外扩 16bit）",
+        "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设；4 路 16bit）",
+        "price": "￥5-15/个",
+        "note": "库内 ads1115 已打通（mspm0：ads1115_init + read(ch) 出 16bit 原始值 + read_voltage(ch) 出电压 + set_gain/set_data_rate/set_address，默认 PA16/PA17——同选时经引脚绑定消解）；MUX 任选 AIN0-3 单端（或差分）、PGA ±256mV~±6.144V 六档、8~860SPS；与板载 adc 分工：板载 adc 单通道（默认 PA24，us016 共享），多路模拟量/分离供电用本件；比较器/ALERT 未用；模块板自带上拉",
+        "suitable": "多路模拟量采集/称重与电压监测/多传感器分离供电",
+        "lib_modules": ["ads1115"]
+      },
+      {
+        "name": "TCS34725 颜色识别传感器（RGB）",
+        "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+        "price": "￥8-20/个",
+        "note": "库内 tcs34725 已打通（mspm0：tcs34725_init 判 ID（0x44/0x4D）+ read_rgb 出 RGBC 16bit（C/R/G/B）+ rgb_to_hsl 出 HSL + set_gain/set_integration_time（2.4ms-700ms/1X-60X），默认 PA23/PA24——同选时经引脚绑定消解）；红外阻挡滤光片（环境光直射干扰小）；识别前需避光/固定照度标定；颜色识别与 K230 视觉互替——按识别精度/并发需求选",
+        "suitable": "颜色识别/物料色块分拣/RGB 环境光检测/色温调节",
+        "lib_modules": ["tcs34725"]
+      },
+      {
+        "name": "MLX90614 非接触红外测温（GY-906）",
+        "interface": "I2C/SMBus（软 I2C 占 2 GPIO，不必硬件外设）",
+        "price": "￥15-35/个",
+        "note": "库内 mlx90614 已打通（mspm0：mlx90614_read_object_temp 出目标温度℃ + read_ambient_temp 出环境温度℃（RAW×0.02−273.15，0.01℃ 级，页面 0.02 系数），默认 PA9/PA8——同选时经引脚绑定消解）；测温分辨率 0.02K 级、±0.5℃ 典型误差；视场角/被测面距离影响读数（被测面罩住视野中心）；人脸测温需辐射率校准/环境温度补偿；与 MLX90640 阵列区分（本件单点）",
+        "suitable": "非接触体温/物温测量/恒温监测/热源定位",
+        "lib_modules": ["mlx90614"]
       },
       {
         "name": "磁力计指南针（QMC5883L）",
@@ -303,6 +327,20 @@
         "note": "库内 max7219 已打通（mspm0：max7219_init 按形态初始化 + write_digit 写 0-9/熄灭 + write_matrix 写 8×8 行字模，级联 1-4 片；默认 PB9/PA18/PB18，同选时绑脚消解）；同芯片双形态（BCD 数码管 / 行直通点阵），大数字比 OLED 醒目",
         "suitable": "计分/计时/大数字显示、状态数字牌、点阵文字与图形",
         "lib_modules": ["max7219"]
+      }
+    ]
+  },
+  {
+    "category": "存储/数据记录",
+    "models": ["EEPROM", "SD 卡", "AT24C02"],
+    "solutions": [
+      {
+        "name": "AT24C02 EEPROM（I2C 串行存储）",
+        "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+        "price": "￥1-3/个",
+        "note": "库内 at24c02 已打通（mspm0：at24c02_write_byte/read_byte + write_page（16 字节页写，跨页拒收防覆盖）+ read_block（连续读）+ wait_write_done（~5ms 写周期等待），默认 PB24/PB8——同选时经引脚绑定消解）；256 字节（2K 位）、一条总线可挂 8 枚（A0-A2 地址）；写 10 万次寿命（参数类可用、高频日志不推荐）；掉电保存参数/记录/配置用",
+        "suitable": "掉电参数保存/数据记录/赛题存储配置",
+        "lib_modules": ["at24c02"]
       }
     ]
   },

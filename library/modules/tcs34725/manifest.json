@@ -1,0 +1,34 @@
+{
+  "slug": "tcs34725",
+  "description": "TCS34725 颜色识别传感器驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作（不占硬件 I2C 外设），读 RGBC（红/绿/蓝/清光）16bit 原始值——tcs34725_init（ID 判定 0x44/0x4D + 积分时间 24ms + 增益 1X + 使能）、tcs34725_read_rgb 出 RGBC（STATUS AVALID 判定）、tcs34725_rgb_to_hsl 出 HSL（h[0,360]/s,l[0,100]）、set_integration_time/set_gain/enable/disable 配置服务；适用于颜色识别、物料色块分拣、RGB 环境光检测、智能家居色温调节等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/tcs34725.c",
+        "code/tcs34725.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 TCS34725（SCL 宏 TCS34725_SCL_PIN / SDA 宏 TCS34725_SDA_PIN / IOMUX 宏 TCS34725_SCL_IOMUX / TCS34725_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测确认）。软 I2C：SDA 方向运行时切换（TCS34725_SDA_OUT/IN 宏，不用硬件 I2C 外设；节点需板上/模块自带上拉）。默认 SCL=PA23 / SDA=PA24——与 HUIDU L2/L3、UWB/DEBUG/HC05 UART（PA23/PA24）、NRF24L01 CSN/CE、ADC12_0 MEM0（adc+us016 共享槽）默认重叠（颜色识别与无线链路/巡线/板载 ADC 同选概率最低——颜色识别属视觉类，与 K230 视觉互替；刻意不叠 OLED PB2/PB3/MAX7219 显示件——显示颜色值是常见搭配），同选时经引脚绑定消解。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--tcs34725-color-recognition-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/tcs34725-color-recognition-sensor.html；资料 https://pan.baidu.com/s/1z_5qOfe-YMbj0TYSbDD-sQ?pwd=6668 / 代码 https://pan.baidu.com/s/18yHqFFdQn88K1O_rAS4WtQ?pwd=iqac）。改造要点：去掉 main.c 演示与 printf；函数名规范化（TCS34725_Init→tcs34725_init（返回 1=检出 0=未检出）/TCS34725_GetRawData→tcs34725_read_rgb（STATUS AVALID 判定，出参）/TCS34725_GetChannelData→内部 get_channel_data/TCS34725_SetIntegrationTime/SetGain/Enable/Disable→tcs34725_set_integration_time/set_gain/enable/disable/TCS34725_Write/Read→tcs34725_write_reg/read_reg）；IIC 原语静态化（tcs34725_iic_start/stop/send_ack/wait_ack/send_byte/read_byte 照 aht10）；全局 COLOR_RGBC rgb / COLOR_HSL hsl 收敛为出参指针；**页面 `if(id==0x4D | id==0x44)` 按位或写法**（`==` 优先级高于 `|` 语义等价但易误导，页面演示即此——本实现改 `||`，notes 记录）；RGBtoHSL 页面原式保留（r/g/b 先按 Clear 通道标定 [0,100]，max3v/min3v 宏同页面——括号法无分支）；页面演示注记「读两次，实际测试时发现读到的颜色总是上一次的颜色」= 主循环未按 AVALID 判定，本实现 GetRawData 判定保留；页面 Enable 两段写（PON → PON|AEN）保留；地址 0x29 7 位 + COMMAND_BIT 0x80（自动递增）按页面原式；页面中断阈值寄存器族（AILT/AIHT/PERS/WTIME）未用（Enable 只 PON|AEN，无 AIEN），不实现。未上板（软 I2C 时序/积分时间真机验证留后续）。\nwiki-modules-batch5/02 编译矩阵（2026-09-06）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（warning 核查脚本串行复跑确认）。",
+      "kit": "TCS34725 颜色识别传感器 RGB 开发板（I2C 通信）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/tcs34725-color-recognition-sensor.html",
+      "pins": [
+        {
+          "id": "TCS34725_SCL",
+          "type": "gpio_out",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "TCS34725_SDA",
+          "type": "gpio_out",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    }
+  }
+}

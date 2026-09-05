@@ -1,0 +1,34 @@
+{
+  "slug": "mlx90614",
+  "description": "MLX90614 非接触红外测温传感器驱动（mspm0 纯驱动，ADR 0009）：软 I2C（SMBus 兼容）位操作（不占硬件 I2C 外设）——mlx90614_read_object_temp 读被测目标温度（寄存器 0x07，℃=RAW×0.02−273.15）、mlx90614_read_ambient_temp 读环境温度（寄存器 0x06）、mlx90614_init 占位（SMBus 无初始化序列）；适用于非接触体温/物温测量、恒温监测、红外测温门禁、热源定位等赛题功能（0.01℃ 级分辨率，页面 0.02 系数换算）。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/mlx90614.c",
+        "code/mlx90614.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 MLX90614（SCL 宏 MLX90614_SCL_PIN / SDA 宏 MLX90614_SDA_PIN / IOMUX 宏 MLX90614_SCL_IOMUX / MLX90614_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测确认）。软 I2C：SDA 方向运行时切换（MLX90614_SDA_OUT/IN 宏，不用硬件 I2C 外设；节点需板上/模块自带上拉——SMBus 上拉一般 4.7k~10k，模块板自带）。默认 SCL=PA9 / SDA=PA8——与 DIGIT_UART RX/TX（K230 视觉串口）、IR_BEAM OUT、HC05 STATE、JOYSTICK SW、NRF24L01 MISO 默认重叠（非接触测温与视觉（K230 互替类）/手动输入/蓝牙/2.4G 链路同选概率最低；刻意不叠温湿度/光照/显示——测温与传感站/显示为常见搭配），同选时经引脚绑定消解。**SMBus 时序差异与页面实现取证**：① 页面 `PEC_Calculation`（CRC-8，多项式 X8+X2+X1+1，数据手册 PEC 定义）整体注释未启用 → 本实现剔除、不含 PEC 校验通路（页面演示读即成功——接收端不校验 PEC 也可通；若需 PEC 校验通路另立，notes 记录）；② 命令字节 = bit7-5（RAM=000/EEPROM=001）+ bit4-0（地址低 5 位），页面 RegAddr 直传 0x06（Ta）/0x07（To）即此构造，无额外移位；③ 页面读时序无重试/延时（原 `delay_ms(1)` 注释掉，仅页面第一处演示版有 do 循环）——本实现按页面上料；④ 页面函数注释名「MLX90615_Read」系笔误（函数名与器件均为 MLX90614），按 MLX90614 命名；⑤ **页面失败语义修正**：页面失败 `return 0.0` 与合法 0.0℃ 混淆——本实现改出参 + 状态（0=成功 1=失败，出参不变），notes 记录。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--mlx90614-non-contact-temp-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/mlx90614-non-contact-temp-sensor.html；资料 https://pan.baidu.com/s/1AsEBvVCiNAvTKqTeGSA60w 提取码 g06n / 代码 https://pan.baidu.com/s/1QMKKUtHMzw7ExFmAesTWmA?pwd=ytqz）。改造要点：去掉 main.c 演示与 printf；函数名规范化（MLX90614_Read(SlaveAddr, RegAddr) → 内部 mlx90614_read_word + mlx90614_read_object_temp/read_ambient_temp 服务函数（RegAddr 0x07/0x06 按页面常量固化））；器件地址 0x5A（页面默认），8 位写/读 = (0x5A<<1)|0/1 = 0xB4/0xB5 保留页面原式；IIC 原语静态化（mlx90614_iic_start/stop/send_ack/wait_ack/send_byte/read_byte 照 aht10）；数据低 8 位在前（页面「低8位在前面，高8位在后」）；换算 ℃ = RAW×0.02−273.15（页面公式：0.02K/LSB，内部数据 0.01℃ 分辨率——页面演示用 0.02 系数，真机验证留后续）；温度寄存器 EEPROM 部分（0x00-0x05/0x0E/0x0F/0x19 可改写）不用（出厂校准，页面同）；PEC 不启用（见上）。未上板（软 I2C 时序/0.02 系数真机验证留后续）。\nwiki-modules-batch5/03 编译矩阵（2026-09-06）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（warning 核查脚本串行复跑确认）。",
+      "kit": "GY-906 MLX90614ESF BAA/BCC/DCI IR 红外测温传感器模块（I2C/SMBus）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/mlx90614-non-contact-temp-sensor.html",
+      "pins": [
+        {
+          "id": "MLX90614_SCL",
+          "type": "gpio_out",
+          "default": "PA9",
+          "required": true
+        },
+        {
+          "id": "MLX90614_SDA",
+          "type": "gpio_out",
+          "default": "PA8",
+          "required": true
+        }
+      ]
+    }
+  }
+}
