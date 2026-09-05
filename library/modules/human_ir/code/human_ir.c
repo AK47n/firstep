@@ -1,0 +1,28 @@
+#include "human_ir.h"
+#include "ti_msp_dl_config.h" /* HUMAN_IR_PORT / HUMAN_IR_OUT_PIN
+                                * （SysConfig 生成命名：<实例>_<引脚名>_PIN
+                                * + 单 <实例>_PORT 宏；单脚输入实例，
+                                * TTP224 先例） */
+
+/* HC-SR501 人体红外感应（mspm0 纯驱动）：三线制 VCC/GND/OUT——模块被感应
+ * 到人体时 OUT 输出高电平（模块介绍/规格「人进入其感应范围则输出高电平」；
+ * 页面函数注释「0=感应到人体红外」与介绍/规格矛盾——按 HC-SR501 器件标准
+ * 高=检测到修正，notes 记录）；极性单点反相宏 HUMAN_IR_TRIGGER_LEVEL
+ * （照 ttp224 TTP224_TOUCH_LEVEL 先例）。 */
+
+static uint8_t human_ir_raw_level(void)
+{
+    uint32_t bits = DL_GPIO_readPins(HUMAN_IR_PORT, HUMAN_IR_OUT_PIN);
+    return (bits & HUMAN_IR_OUT_PIN) ? 1 : 0;
+}
+
+void human_ir_init(void)
+{
+    /* GPIO 输入（内部上拉）由 SYSCFG_DL_init() 配置，无需运行时初始化 */
+}
+
+uint8_t human_ir_read(void)
+{
+    uint8_t level = human_ir_raw_level();
+    return (level == HUMAN_IR_TRIGGER_LEVEL) ? 1 : 0; /* 1=感应到人体 */
+}
