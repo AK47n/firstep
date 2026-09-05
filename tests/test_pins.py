@@ -399,6 +399,7 @@ MSPM0_DEFAULT_MAP = {
     ("at24c02", "AT24C02_SCL"): ("AT24C02", "SCL"),
     ("at24c02", "AT24C02_SDA"): ("AT24C02", "SDA"),
     ("dht11", "DHT11_DATA"): ("DHT11", "DATA"),
+    ("ds18b20", "DS18B20_DATA"): ("DS18B20", "DATA"),
     ("bh1750", "BH1750_SCL"): ("BH1750", "SCL"),
     ("bh1750", "BH1750_SDA"): ("BH1750", "SDA"),
     ("sr04", "SR04_TRIG"): ("SR04", "TRIG"),

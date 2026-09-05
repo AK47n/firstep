@@ -100,6 +100,8 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "FINGERPRINT")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["dht11"]), "DHT11")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "DHT11")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ds18b20"]), "DS18B20")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "DS18B20")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["bh1750"]), "BH1750")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "BH1750")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ads1115"]), "ADS1115")

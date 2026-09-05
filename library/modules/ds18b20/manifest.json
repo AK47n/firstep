@@ -1,0 +1,28 @@
+{
+  "slug": "ds18b20",
+  "description": "DS18B20 单总线温度传感器驱动（mspm0 纯驱动，ADR 0009）：1-Wire 单总线位时序读取（一根数据线双向，方向运行时切换，忙等不占 TIMER），ds18b20_init 器件检测 + ds18b20_read_temp 出摄氏温度（±0.5℃ 精度、12bit 默认分辨率 0.0625 系数、-55~+125℃ 量程、负温补码）；适用于高精度环境测温、恒温控制、温控报警、粮仓/冷链温度监测等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/ds18b20.c",
+        "code/ds18b20.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 DS18B20（DATA 宏 DS18B20_DATA_PIN / DS18B20_PORT / DS18B20_DATA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测；direction OUTPUT、initialValue SET = 空闲高）。1-Wire 单总线：数据线方向运行时切换（DS18B20_DATA_OUT/IN，照 DHT11_DATA 先例；模块板自带上拉），位时序 CPU 忙等 + delay 模块换算（复位低 750us/释放 15us/应答等待 200×1us/释放等待 240×1us；写位 1 = 低 2us+高 60us、写位 0 = 低 60us+高 2us；读位 = 低 2us+释放+输入 12us 采样+50us 尾部——位槽 62-64us 落页面 60-70us 区间；时间轴常量单源 ds18b20.h，源码不散写字面量），不占 TIMER（sr04 先例）。默认 DATA=PA7——与 DC_MOTOR BIN2（双电机）、SERVO_PWM ccp0（舵机）、RC522 CS（读卡）重叠：接触测温与运动控制/读卡不同框、同选概率最低（刻意不叠温湿度/光照/显示/语音件——测温+显示/语音/传感站为常见搭配，同 mlx90614 选型口诀；不叠 I2C_0 的 PA0/PA1——硬件 I2C 脚与 i2c_bus_share 测试互扰，批次 5 实测调整先例），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--ds18b20-temp-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ds18b20-temp-sensor.html；网盘资料 https://pan.baidu.com/s/1L83uG8So6k1NG_QznraoFQ；移植成功案例 https://pan.baidu.com/s/1mA9RH6Wz39P4949ny4i8qA?pwd=kuhp 提取码 kuhp）。改造要点：去掉 main.c 演示与 printf；函数名规范化（ds18b20_init/read_temp）；DS18B20_Check/Start/Write_Byte/Read_Byte/GetTemperture 归一（模块内静态）；页面头文件声明 DS18B20_Reset(void) 但 .c 无定义（上游缺陷）→ 剔除该声明；页面读温度只读 2 字节、未读第 9 字节 CRC → 按页面不加 CRC 校验；页面 GetTemperture 发 0x44 后未等待转换完成（首次读回上电默认 85℃ 或不稳定值）→ 本实现按数据手册等待 12bit 最大转换时间 750ms（DS18B20_CONVERT_MS）；负温补码 `(~temp)+1` × -0.0625 按页面原式。采样间隔建议 ≥1s（转换 750ms + 器件自发热）。\nwiki-modules-batch6/01 编译矩阵（2026-09-07）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（位时序真机验证留后续）。",
+      "kit": "DS18B20 测温模块（3Pin 单总线，模块板带 4.7k 上拉；-55~+125℃、±0.5℃ 精度、9-12bit 可编程分辨率默认 12bit）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ds18b20-temp-sensor.html",
+      "pins": [
+        {
+          "id": "DS18B20_DATA",
+          "type": "gpio_out",
+          "default": "PA7",
+          "required": true
+        }
+      ]
+    }
+  }
+}
