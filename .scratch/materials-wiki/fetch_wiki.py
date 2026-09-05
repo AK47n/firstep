@@ -28,7 +28,7 @@ from pathlib import Path
 # 允许本脚本直接运行时导入仓库域模块（sys.path[0] = 脚本目录，不含仓库根）
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from contest_generator.wiki_md import build_markdown, code_block_count, img_ext, parse_main  # noqa: E402
+from contest_generator.wiki_md import build_markdown, cat_label, code_block_count, img_ext, parse_main  # noqa: E402
 
 # Windows 控制台默认 GBK：打印中文/UTF-8 字符（如 URL 中的非 ASCII）会
 # UnicodeEncodeError 崩溃 —— 强制 UTF-8 输出（Py3.7+ 支持 reconfigure）
@@ -95,14 +95,16 @@ def parse_page(html: str, slug: str) -> dict:
     客户端懒加载图片（SSR HTML 中是 <!---->）抓不到，属已知局限。
     """
     title_m = re.search(r"<title>(.*?)</title>", html, flags=re.I | re.S)
-    title = title_m.group(1).strip() if title_m else ""
+    title_full = title_m.group(1).strip() if title_m else ""
 
     main_m = re.search(r"<main[^>]*>([\s\S]*?)</main>", html, flags=re.I)
     main_html = main_m.group(1) if main_m else html
 
-    md_body, img_urls = parse_main(main_html, slug)
+    md_body, img_urls, h1_title = parse_main(main_html, slug)
+    # 页面名 = h1（如「SHT30温湿度传感器」）；无 h1 → <title> 去「 | 立创…」后缀
+    page_name = h1_title or re.sub(r"\s*\|\s*立创开发板技术文档中心\s*$", "", title_full) or slug
     pan_links = extract_pan_links(main_html)
-    return {"title": title, "md_body": md_body, "img_urls": img_urls,
+    return {"title": page_name, "md_body": md_body, "img_urls": img_urls,
             "pan_links": pan_links}
 
 
@@ -179,7 +181,7 @@ def main() -> int:
         for m in manifest:
             by_cat.setdefault(m["cat"], []).append(m)
         for cat in sorted(by_cat):
-            index_lines.append(f"## {cat}")
+            index_lines.append(f"## {cat_label(cat)}")
             index_lines.append("")
             for m in sorted(by_cat[cat], key=lambda x: x["slug"]):
                 index_lines.append(

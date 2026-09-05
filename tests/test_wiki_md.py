@@ -9,7 +9,14 @@ from __future__ import annotations
 
 import re
 
-from contest_generator.wiki_md import build_markdown, code_block_count, img_ext, parse_main, shiki_lines
+from contest_generator.wiki_md import (
+    build_markdown,
+    cat_label,
+    code_block_count,
+    img_ext,
+    parse_main,
+    shiki_lines,
+)
 
 # —— shiki_lines：<pre><code> 内部原始 HTML → 逐行代码 ——
 
@@ -75,7 +82,7 @@ def _anchor(zws="\u200b"):
 
 def test_headings_strip_anchor_and_zero_width():
     html = _main(f'<h2 id="\u4e00\u3001\u6a21\u5757\u6765\u6e90">\u4e00\u3001\u6a21\u5757\u6765\u6e90\u200b {_anchor()}</h2>')
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert md == "## 一、模块来源"
 
 
@@ -85,7 +92,7 @@ def test_paragraph_inline_bold_code_link():
         '<p><strong><code>Yes to All</code></strong></p>'
         '<p><a href="https://pan.baidu.com/s/abc">https://pan.baidu.com/s/abc</a></p>'
     )
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert "**工作电压**：2.4-5.5V" in md
     assert "**`Yes to All`**" in md
     assert "[https://pan.baidu.com/s/abc](https://pan.baidu.com/s/abc)" in md
@@ -97,14 +104,14 @@ def test_ordered_lists_merge_with_start_numbers():
         '<ol start="6"><li>然后点击编译</li></ol>'
         '<ol start="7"><li>引脚就会默认分配</li></ol>'
     )
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     # 连续 ol（每 li 一个）合并为一块，编号取自 start
     assert "5. 点击保存\n6. 然后点击编译\n7. 引脚就会默认分配" in md
 
 
 def test_unordered_list():
     html = _main("<ul><li>甲</li><li>乙</li></ul>")
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert "- 甲\n- 乙" in md
 
 
@@ -115,7 +122,7 @@ def test_custom_block_becomes_quote():
         '<p>出现只要出现下面的框就一定要选择：<strong><code>Yes to All</code></strong></p>'
         "</div>"
     )
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert "> **WARNING**：出现只要出现下面的框就一定要选择：**`Yes to All`**" in md
 
 
@@ -129,7 +136,7 @@ def test_custom_block_body_not_leak_into_following_list():
         '<ol start="6"><li>然后点击编译（<strong>可能会报错，我们不用管！</strong>）</li></ol>'
         '<p>移植完成后修改相关代码。</p>'
     )
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert "> **WARNING**：出现只要出现下面的框就一定要选择" in md
     assert "6. 然后点击编译（**可能会报错，我们不用管！**）" in md
     assert "移植完成后修改相关代码。" in md
@@ -152,7 +159,7 @@ def test_line_number_wrapper_not_leak_into_prose():
         "</div></div>"
         '<p>在文件 bsp_sht30.h 中，编写如下代码。</p>'
     )
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert '```c\n#include "board.h"\n```' in md
     assert "在文件 bsp_sht30.h 中，编写如下代码。" in md
     # 泄漏检查：正文里不得出现行号序列
@@ -161,14 +168,14 @@ def test_line_number_wrapper_not_leak_into_prose():
 
 def test_inline_del_and_em():
     html = _main("<p><del>旧文本</del><em>新文本</em></p>")
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert "~~旧文本~~" in md
     assert "*新文本*" in md
 
 
 def test_paragraphs_separated_by_blank_line():
     html = _main("<p>第一段。</p><p>第二段。</p>")
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert "第一段。\n\n第二段。" in md
 
 
@@ -178,14 +185,14 @@ def test_images_dedup_numbered_with_ext():
         '<p><img src="/storage/images/zh-hans/dmx/module/0-96-color-screen/0-96-color-screen_20240626_171132.gif" alt=""></p>'
         '<p><img src="/storage/images/zh-hans/dmx/module/0-96-color-screen/0-96-color-screen_20240626_171132.gif" alt=""></p>'
     )
-    md, urls = parse_main(html, "demo")
+    md, urls, _ = parse_main(html, "demo")
     assert urls == ["https://wiki.lckfb.com/storage/images/zh-hans/dmx/module/0-96-color-screen/0-96-color-screen_20240626_171132.gif"]
     assert md.count("![img](images/demo/img1.gif)") == 2  # 去重后两处引用同一本地文件
 
 
 def test_drops_comments_and_h1():
     html = _main("<h1>SHT30温湿度传感器</h1><!----><p>正文</p>")
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert "SHT30温湿度传感器" not in md  # h1 抛弃（元数据里已有标题行）
     assert "正文" in md
 
@@ -198,18 +205,64 @@ def test_code_fence_with_lang():
         '<span class="line"><span style="--shiki-light:#000;">int main(void)</span></span>'
         "</code></pre></div>"
     )
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     assert '```c\n#include "board.h"\nint main(void)\n```' in md
 
 
 def test_escapes_markdown_specials_in_prose():
     html = _main("<p>说明：A*B 与 _x_ 与 [y] 与 `z`</p>")
-    md, _ = parse_main(html, "s")
+    md, _, _ = parse_main(html, "s")
     # * [ backtick 转义；词内 _ 不转义（CommonMark 词内下划线按字面，转义污染原文）
     assert "A\\*B 与 _x_ 与 \\[y] 与 \\`z\\`" in md
 
 
 # —— build_markdown：单篇组装 ——
+
+def test_h1_captured_as_page_title_clean_of_anchor():
+    html = _main(
+        '<h1>SHT30温湿度传感器</h1>'
+        '<p>正文</p>'
+    )
+    md, _, page_title = parse_main(html, "s")
+    assert page_title == "SHT30温湿度传感器"
+    assert "SHT30温湿度传感器" not in md  # h1 仍不进正文（H1 由 build_markdown 组装）
+
+
+def test_h1_strips_anchor_and_zero_width():
+    html = _main(
+        '<h1>SHT30温湿度传感器 <a class="header-anchor" href="#x" aria-label="Permalink to \u201cx\u201d">\u200b</a></h1><p>正文</p>'
+    )
+    md, _, page_title = parse_main(html, "s")
+    assert page_title == "SHT30温湿度传感器"
+
+
+def test_build_markdown_uses_chinese_title_and_category():
+    body = "## 一、模块来源\n\n正文"
+    md = build_markdown(
+        slug="sensor--demo",
+        cat="sensor",
+        url="https://wiki.lckfb.com/zh-hans/dmx/module/sensor/demo.html",
+        title="演示传感器",
+        md_body=body,
+        img_urls=[],
+        pan_links=[],
+    )
+    assert md.startswith("# 演示传感器\n")
+    assert "- 分类：传感器类" in md
+    assert "- 标题：演示传感器" in md
+
+
+def test_build_markdown_falls_back_to_slug_when_title_empty():
+    md = build_markdown("sensor--demo", "sensor", "https://x", "", "## 一、模块来源", [], [])
+    assert md.startswith("# sensor--demo\n")
+
+
+def test_cat_label_mapping():
+    assert cat_label("sensor") == "传感器类"
+    assert cat_label("screen") == "显示类"
+    assert cat_label("rf") == "无线通信类"
+    assert cat_label("control") == "控制类"
+    assert cat_label("未知") == "未知"  # 回退原码
 
 
 def test_build_markdown_assembles_doc():
@@ -218,15 +271,15 @@ def test_build_markdown_assembles_doc():
         slug="sensor--demo",
         cat="sensor",
         url="https://wiki.lckfb.com/zh-hans/dmx/module/sensor/demo.html",
-        title="Demo | 立创开发板技术文档中心",
+        title="Demo 模块",
         md_body=body,
         img_urls=["https://wiki.lckfb.com/x/a.gif"],
         pan_links=["https://pan.baidu.com/s/abc"],
     )
-    assert md.startswith("# sensor--demo\n")
-    assert "- 分类：sensor" in md
+    assert md.startswith("# Demo 模块\n")
+    assert "- 分类：传感器类" in md
     assert "- 来源：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/demo.html" in md
-    assert "- 标题：Demo | 立创开发板技术文档中心" in md
+    assert "- 标题：Demo 模块" in md
     assert "- 代码块：1 个 · 图片：1 张" in md
     assert "## 百度网盘下载" in md
     assert "- https://pan.baidu.com/s/abc" in md

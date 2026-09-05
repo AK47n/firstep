@@ -54,6 +54,11 @@ def scan_one(md: str) -> list[str]:
         bad.append(f"孤立 token 行（如 {tokens[0].strip()!r}）")
     if "## " not in md:
         bad.append("无 ## 章节标题")
+    h1 = re.search(r"^# (.+)$", md, re.M)
+    if h1 is None:
+        bad.append("无 # 首页标题")
+    elif not re.search(r"[\u4e00-\u9fff]", h1.group(1)):
+        bad.append(f"首页标题非中文（{h1.group(1)[:30]!r}），用户难懂")
     fences = md.count("```") // 2
     m = re.search(r"- 代码块：(\d+) 个", md)
     declared = int(m.group(1)) if m else -1
