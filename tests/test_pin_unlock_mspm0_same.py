@@ -39,7 +39,10 @@ MSPM0_MASTER_SYSCFG = (MSPM0_MASTER / MSPM0_SYSCFG_FILENAME).read_text(
 
 # mspm0 UART 换位（真机场景 ② 同款）：IMU601 UART0→UART1（PA8/PA9）、
 # DIGIT_UART UART1→UART0（PA28/PA31）、coord_detect 与 DIGIT_UART 共享实例
-# 一并成对换到 UART0——绑定×绑定，实例冲突门禁放行。
+# 一并成对换到 UART0——绑定×绑定，实例冲突门禁放行；fingerprint 与 IMU601
+# 同默认 PA28/PA31 槽位（批次 4 新增默认 UART0 模块），换位时按槽位共享规则
+# 一并绑到 UART1（PA8/PA9，与 IMU601 共享同一槽位——真实换位需同样显式
+# 安排，否则「同默认脚却绑到不同脚」的被解析器拦截）。
 UART_SWAP_BINDINGS = {
     "imu_uart.IMU601_TX": "PA8",
     "imu_uart.IMU601_RX": "PA9",
@@ -47,6 +50,8 @@ UART_SWAP_BINDINGS = {
     "digit_uart.DIGIT_UART_RX": "PA31",
     "coord_detect.COORD_DETECT_UART_TX": "PA28",
     "coord_detect.COORD_DETECT_UART_RX": "PA31",
+    "fingerprint.FINGERPRINT_TX": "PA8",
+    "fingerprint.FINGERPRINT_RX": "PA9",
 }
 
 
