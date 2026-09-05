@@ -43,6 +43,18 @@
  *   与 ZIGBEE_TX/joystick X/NRF24L01 CLK 重叠——红外与其它无线/手动输入
  *   互替、同选概率最低，同选时经引脚绑定消解；主循环轮询解码，不注册
  *   GPIO 中断，原因同 NRF24L01）
+ *   MAX7219：DIN=PB9/CLK=PA18/CS=PB18 输出（数码管/点阵显示，软 SPI 位
+ *   操作不占硬件 SPI——与 DC_MOTOR AIN1/AIN2/BIN1 重叠：大数字显示（计分/
+ *   计时/数据牌）与双电机小车同选概率最低，同选时经引脚绑定消解；PA18 兼
+ *   BSL 排针脚，作输出无碍）
+ *   PCA9685：SCL=PB6/SDA=PB7（16 路舵机驱动板，软 I2C 位操作不占硬件 I2C
+ *   外设，SDA 方向运行时切换——与 STEP_MOTOR SLP2/DIR2、HUIDU R3/R4、
+ *   AHT10/DHT11 温湿度重叠：多路舵机多自由度执行与温湿度采集/步进（互替）/
+ *   巡线车同选概率最低，同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+ *   IR_TX：OUT = PA0 输出（红外编码发射，38kHz 载波忙等不占 TIMER——与
+ *   I2C_0 SDA（ml_mpu6050 姿态）/板载 LED 重叠：红外发射链与姿态采集同选
+ *   概率最低，板载 LED 随载波闪烁可作发射指示；与 IR_REMOTE 默认 PA26 刻意
+ *   错开——发射/接收常配对，双选默认即不撞，同选时经引脚绑定消解）
  * 板上固定占用：CH340E PA10/PA11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、
  * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针，
  * 用户实物未在 2×20P 上找到 A19/A20）、NRST。2026-08-20 用户实物核验：芯片丝印
@@ -374,6 +386,60 @@ IR_REMOTE.associatedPins[0].$name            = "OUT";
 IR_REMOTE.associatedPins[0].direction        = "INPUT";
 IR_REMOTE.associatedPins[0].internalResistor = "PULL_UP";
 IR_REMOTE.associatedPins[0].pin.$assign      = "PA26";
+
+// MAX7219 数码管/点阵（max7219 模块：软 SPI 位操作 3 脚 DIN/CLK/CS，全强推挽
+// 输出；位操作不占硬件 SPI 外设；CS 初始高 = 片选空闲。默认 DIN=PB9（与
+// DC_MOTOR AIN1 重叠）/CLK=PA18（与 DC_MOTOR AIN2 重叠——PA18 兼 BSL 排针
+// 脚，作输出无碍）/CS=PB18（与 DC_MOTOR BIN1 重叠）——大数字显示（计分/
+// 计时/数据牌类固定装置）与双电机小车同选概率最低（小车状态显示惯走
+// OLED），同选时经引脚绑定消解）
+const MAX7219 = GPIO.addInstance();
+MAX7219.$name = "MAX7219";
+MAX7219.associatedPins.create(3);
+MAX7219.associatedPins[0].$name        = "DIN";
+MAX7219.associatedPins[0].direction    = "OUTPUT";
+MAX7219.associatedPins[0].initialValue = "CLEARED";
+MAX7219.associatedPins[0].pin.$assign  = "PB9";
+MAX7219.associatedPins[1].$name        = "CLK";
+MAX7219.associatedPins[1].direction    = "OUTPUT";
+MAX7219.associatedPins[1].initialValue = "CLEARED";
+MAX7219.associatedPins[1].pin.$assign  = "PA18";
+MAX7219.associatedPins[2].$name        = "CS";
+MAX7219.associatedPins[2].direction    = "OUTPUT";
+MAX7219.associatedPins[2].initialValue = "SET";
+MAX7219.associatedPins[2].pin.$assign  = "PB18";
+
+// PCA9685 16 路舵机驱动板（pca9685 模块：软 I2C 位操作 2 脚 SCL/SDA——照
+// AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。
+// 默认 SCL=PB6 / SDA=PB7——与 STEP_MOTOR SLP2/DIR2、HUIDU R3/R4、
+// AHT10 SCL/SDA（软 I2C 同型）、DHT11 DATA 重叠：16 路舵机多自由度执行与
+// 温湿度采集（环境站类）/步进电机（单轴执行，互替）/8 路灰度巡线（车类）
+// 同选概率最低，同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+const PCA9685 = GPIO.addInstance();
+PCA9685.$name = "PCA9685";
+PCA9685.associatedPins.create(2);
+PCA9685.associatedPins[0].$name        = "SCL";
+PCA9685.associatedPins[0].direction    = "OUTPUT";
+PCA9685.associatedPins[0].initialValue = "CLEARED";
+PCA9685.associatedPins[0].pin.$assign  = "PB6";
+PCA9685.associatedPins[1].$name        = "SDA";
+PCA9685.associatedPins[1].direction    = "OUTPUT";
+PCA9685.associatedPins[1].initialValue = "CLEARED";
+PCA9685.associatedPins[1].pin.$assign  = "PB7";
+
+// 红外编码发射（ir_remote_tx 模块：OUT 输出强推挽，38kHz NEC 载波位时序
+// CPU 忙等 + delay 模块换算，不占 TIMER（照 ir_remote/ws2812 先例）；初始
+// 低 = 载波空闲。默认 PA0——与 I2C_0 SDA（ml_mpu6050 姿态）/板载 LED 重叠
+// （红外发射链与姿态采集同选概率最低；板载 LED 随载波闪烁可作发射指示），
+// 且与 IR_REMOTE 默认 PA26 刻意错开（发射/接收本就常配对——双选默认即不撞，
+// 同选时经引脚绑定消解）
+const IR_TX = GPIO.addInstance();
+IR_TX.$name = "IR_TX";
+IR_TX.associatedPins.create(1);
+IR_TX.associatedPins[0].$name        = "OUT";
+IR_TX.associatedPins[0].direction    = "OUTPUT";
+IR_TX.associatedPins[0].initialValue = "CLEARED";
+IR_TX.associatedPins[0].pin.$assign  = "PA0";
 
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";

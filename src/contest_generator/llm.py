@@ -816,12 +816,12 @@ def _fit_segment_wire(
 # 硬件词表科普段 wire 字节预算（工单 buy-guide/01）：词表行含选购方案名后
 # 体积上升（方案名是 selected 判决依据——模型必须看到全部类别的方案名才能
 # 按题面选 selected，截掉尾部类别 = 该类别 selected 恒空、买件指引核心功能
-# 折损）。预算取「默认词表完整 wire（实测 3170）+ 膨胀余量」= 4200：默认
-# 词表全量送达（不截断）、未来加类/加方案留 ~1KB 余量，同时段级兜底防
-# 词表无界膨胀撑爆请求预算（budget.REFERENCE_FULLTEXT_BYTES 推导里的
-# 「词表」项按本预算计）。截断标注自身 wire 字节计入预算（fit 前预扣，
-# 对齐 fit_wire_budget 文档契约「标注非免费、进记账」）。
-WORDLIST_PROMPT_BYTES = 4200
+# 折损）。预算取「默认词表完整 wire（wiki-modules-batch3 后实测 4062）+ 膨胀
+# 余量」= 4600：默认词表全量送达（不截断）、未来加类/加方案留 ~500B 余量，
+# 同时段级兜底防词表无界膨胀撑爆请求预算（budget.REFERENCE_FULLTEXT_BYTES
+# 推导里的「词表」项按本预算计）。截断标注自身 wire 字节计入预算（fit 前
+# 预扣，对齐 fit_wire_budget 文档契约「标注非免费、进记账」）。
+WORDLIST_PROMPT_BYTES = 4600
 
 # 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
 # （后续类别仍由界面展示加载），与 content 截断契约（题面/参考）语义不同界，
