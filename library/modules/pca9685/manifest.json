@@ -1,0 +1,34 @@
+{
+  "slug": "pca9685",
+  "description": "PCA9685 16 路舵机/PWM 驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作 2 脚（SCL/SDA，不必占硬件 I2C 外设），芯片内部 25MHz 振荡器生成 16 路 12bit PWM（主控只写寄存器，不占 TIMER）——pca9685_init 设频率（默认 50Hz）+ 16 路归零、pca9685_set_pwm 写任意脉宽（ON=0/OFF=计数）、pca9685_set_angle 出舵机角度 0-180°（0.5-2.5ms 脉宽，与 servo 模块同一口径）、set_freq/set_address（A5..A0 → 0x40-0x7F 最多 62 板级联）；适用于多舵机机械臂/云台/六足机器人等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/pca9685.c",
+        "code/pca9685.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：PCA9685 GPIO 实例（2 关联脚 SCL/SDA，宏 PCA9685_PORT/PCA9685_SCL_PIN/PCA9685_SDA_PIN/PCA9685_SCL_IOMUX/PCA9685_SDA_IOMUX；SDA 方向运行时切换照 AHT10_SDA 先例）。默认 SCL=PB6/SDA=PB7——与 STEP_MOTOR SLP2/DIR2、HUIDU R3/R4、AHT10 SCL/SDA（软 I2C 同型）、DHT11 DATA 重叠：16 路舵机多自由度执行与温湿度采集（环境站类）/步进电机（单轴执行，互替）/8 路灰度巡线（车类）同选概率最低，同选时经引脚绑定消解。**不占硬件 I2C 外设**（软 I2C 位操作，AHT10 先例；需板上/模块自带上拉）；**不占 TIMER**（PWM 由芯片内部 25MHz 振荡器生成，主控只写寄存器——页面「不断发送信号占用单片机」即此义）；**与 servo 模块区分**：servo = TIMG8 硬件 PWM 单路（50Hz 周期由主控定时器生成，PA7；角度语义 0.5-2.5ms）、pca9685 = 16 路 I2C 寄存器扩展（全板同频率，芯片自己生成 PWM）——单舵机用 servo、多舵机/机械臂用 pca9685，二者 API 同口径（角度/脉宽）互补不重复；伺服电压 3.3-5V 与舵机供电分开（页面 16 路驱动板供电注意事项）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/control--16-ch-servo-drive-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/control/16-ch-servo-drive-module.html；资料 https://pan.baidu.com/s/1FjoAuJm387bxaZxS6g9HEg 提取码 8888 / 代码 https://pan.baidu.com/s/1q4a8EzJPYC2jh-v7TtG9-g?pwd=ojep）。改造要点：去掉 main.c 演示与 printf；函数名规范化（IIC_Start/Stop/Send_Ack/WaitAck/Send_Byte/Read_Byte/PCA9685_Write/Read/setPWM/setFreq/setAngle/PCA9685_Init → 模块内静态 pca9685_iic_* + pca9685_write_reg/read_reg 静态 + pca9685_init/set_pwm/set_angle/set_freq/set_address 服务函数）；**角度映射修正**：页面 setAngle `off = 158+angle*2.2` 与 Init `off = 145+angle*2.4` 两套不一致、且 Init 按 60Hz 演示而注释写 50Hz——统一为 0.5-2.5ms 线性映射（50Hz = 102.4-512 tick，与 servo 模块同口径），默认频率 PCA9685_DEFAULT_FREQ_HZ=50（页面演示 60Hz 是搬 Adafruit 例程遗留）；**地址**：页面写死 PCA_Addr 0x80（A0-A2 全 0），本实现按数据手册 A5..A0 六位通用（默认 0）、set_address 可切；**读寄存器**：页面 PCA9685_Read 发完寄存器地址后 stop+delay 再 restart 读，行为保留（pca9685_read_reg）；MODE1 恢复值 oldmode|0xA1（自动递增+ALLCALL）保持页面行为；页面 Excel FLOOR 注解剔除（公式即 prescale = round(25e6/4096/freq)-1）。未上板（软 I2C 时序/频率真机验证留后续）。\nwiki-modules-batch3/02 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning。",
+      "kit": "PCA9685 16 路 PWM 舵机驱动板（I2C 接口）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/control/16-ch-servo-drive-module.html",
+      "pins": [
+        {
+          "id": "PCA9685_SCL",
+          "type": "gpio_out",
+          "default": "PB6",
+          "required": true
+        },
+        {
+          "id": "PCA9685_SDA",
+          "type": "gpio_out",
+          "default": "PB7",
+          "required": true
+        }
+      ]
+    }
+  }
+}
