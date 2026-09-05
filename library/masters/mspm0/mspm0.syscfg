@@ -429,6 +429,28 @@ SHT30.associatedPins[1].direction    = "OUTPUT";
 SHT30.associatedPins[1].initialValue = "CLEARED";
 SHT30.associatedPins[1].pin.$assign  = "PA31";
 
+// SGP30 空气 TVOC/CO2e 气体传感（sgp30 模块：软 I2C 位操作 2 脚 SCL/SDA——
+// 照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK =
+// 输入）。默认 SCL=PA18 / SDA=PB9——与 DC_MOTOR AIN2/AIN1（双电机）、
+// MAX7219 CLK/DIN（大数字显示）、RC522 RST（读卡门禁）重叠：气体传感与
+// 运动控制/读卡门禁不同框、同选概率最低（刻意不叠温湿度（AHT10 PB6/PB7、
+// DHT11 PB7、DS18B20 PA7、SHT30 PA28/PA31）、光照（PA12/PA13）、OLED 显示
+// （PB2/PB3）、语音（PB19/PB20）、按键（PA2、PA22-27）、报警（PA15）、无线
+// （PA8/PA9/PA23/PA24）与批次 5 八脚——气体检测器标配温湿度+显示+蜂鸣/灯+
+// 键盘，同选概率最高故避开），同选时经引脚绑定消解；软 I2C 需板上/模块
+// 自带上拉）
+const SGP30 = GPIO.addInstance();
+SGP30.$name = "SGP30";
+SGP30.associatedPins.create(2);
+SGP30.associatedPins[0].$name        = "SCL";
+SGP30.associatedPins[0].direction    = "OUTPUT";
+SGP30.associatedPins[0].initialValue = "CLEARED";
+SGP30.associatedPins[0].pin.$assign  = "PA18";
+SGP30.associatedPins[1].$name        = "SDA";
+SGP30.associatedPins[1].direction    = "OUTPUT";
+SGP30.associatedPins[1].initialValue = "CLEARED";
+SGP30.associatedPins[1].pin.$assign  = "PB9";
+
 // TTP224 4 路电容触摸按键（ttp224 模块：OUT1-4 输入 + 内部上拉——页面
 // 「上拉输入」；电平直读无去抖/无 GPIO 中断（GROUP1 仍被 motor 编码器独占，
 // 页面同为电平直读）。默认 OUT1=PA22 / OUT2=PA25 / OUT3=PA26 / OUT4=PA27——

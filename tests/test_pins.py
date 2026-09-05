@@ -402,6 +402,8 @@ MSPM0_DEFAULT_MAP = {
     ("ds18b20", "DS18B20_DATA"): ("DS18B20", "DATA"),
     ("sht30", "SHT30_SCL"): ("SHT30", "SCL"),
     ("sht30", "SHT30_SDA"): ("SHT30", "SDA"),
+    ("sgp30", "SGP30_SCL"): ("SGP30", "SCL"),
+    ("sgp30", "SGP30_SDA"): ("SGP30", "SDA"),
     ("ttp224", "TTP224_OUT1"): ("TTP224", "OUT1"),
     ("ttp224", "TTP224_OUT2"): ("TTP224", "OUT2"),
     ("ttp224", "TTP224_OUT3"): ("TTP224", "OUT3"),
