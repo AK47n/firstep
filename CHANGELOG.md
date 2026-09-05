@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ae1b7966e21264416bd78b80fde46069b1f1546b -->
+<!-- changelog-auto: last-commit=59356e8c2ca8d13d933c37aa57ea55e8043ec7bb -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -54,6 +54,7 @@
 - 18:34 wiki-modules-batch2 code-review 收尾修正（批次 1+2 八件）
 - 19:15 max7219 数码管/点阵显示模块（工单 wiki-modules-batch3/01）：立创 wiki 手册提炼（8 位数码管 + 4合1 点阵两页合并为单模块双形态），仅 mspm0
 - 19:15 pca9685 16 路舵机驱动模块（工单 wiki-modules-batch3/02）：立创 wiki 手册提炼，软 I2C 位操作（AHT10 先例）不占硬件外设/TIMER，角度映射与 servo 模块同口径互补
+- 19:15 ir_remote_tx 红外编码发射模块（工单 wiki-modules-batch3/03）：立创 wiki 手册提炼，38kHz NEC 载波 GPIO 忙等不占 TIMER，与 ir_remote 接收配对同口径，UART 指令形态归生成骨架
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
