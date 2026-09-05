@@ -272,6 +272,11 @@ from .topic_library import (
     update_topic,
 )
 from .update import check_for_update
+from .materials_update import (
+    check_for_materials_update,
+    load_local_manifest,
+    materials_library_dir,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -1089,6 +1094,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         return {"app": "contest-generator", "version": __version__, "ok": True}
+
+    # 资料库检查更新（工单 materials-update/03）：本地基线 + 线上清单对比；
+    # 与软件检查更新平级（独立 tag `materials-vX.Y.Z`），不依赖 releases/latest
+    @app.get("/api/update/materials/check")
+    @_map_errors
+    def materials_update_check() -> dict:
+        return check_for_materials_update(
+            load_local_manifest(materials_library_dir())
+        )
 
     # 检查更新（工单 auto-update/03）：GitHub Releases API + 本地版本比对；
     # 网络不可达 / 无更新包资产 → 200 级 error/message 中文提示，不 500
