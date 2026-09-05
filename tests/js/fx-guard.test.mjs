@@ -246,6 +246,11 @@ const DOMAINS = {
   "update.js": {
     updateStateText: "fn", updateCheckCardHTML: "fn", updateStatusHTML: "fn",
   },
+  "materials-update.js": {
+    materialsCheckCardHTML: "fn", aggregateSelection: "fn",
+    materialsPickHTML: "fn", materialsPickFooterHTML: "fn",
+    materialsProgressHTML: "fn", materialsStateText: "fn",
+  },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
