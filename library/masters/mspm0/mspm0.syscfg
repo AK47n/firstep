@@ -298,6 +298,22 @@ DHT11.associatedPins[0].direction    = "OUTPUT";
 DHT11.associatedPins[0].initialValue = "SET";
 DHT11.associatedPins[0].pin.$assign  = "PB7";
 
+// DS18B20 单总线温度（ds18b20 模块：DATA 双向——输出起始/释放总线、输入采样
+// 应答与数据位，方向运行时切换（照 DHT11_DATA 先例）；位时序 CPU 忙等 +
+// delay 模块换算（复位 750us、位槽 62-64us），不占 TIMER；模块板自带上拉。
+// 默认 DATA=PA7——与 DC_MOTOR BIN2（双电机）、SERVO_PWM ccp0（舵机）、
+// RC522 CS（读卡门禁）重叠：接触测温与运动控制/读卡不同框、同选概率最低
+// （刻意不叠温湿度/光照/显示/语音件——测温+显示/语音/传感站为常见搭配，
+// 同 mlx90614 选型口诀；也不叠 I2C_0 的 PA0/PA1——硬件 I2C 脚与 i2c_bus_share
+// 测试互扰，批次 5 实测调整先例），同选时经引脚绑定消解）
+const DS18B20 = GPIO.addInstance();
+DS18B20.$name = "DS18B20";
+DS18B20.associatedPins.create(1);
+DS18B20.associatedPins[0].$name        = "DATA";
+DS18B20.associatedPins[0].direction    = "OUTPUT";
+DS18B20.associatedPins[0].initialValue = "SET";
+DS18B20.associatedPins[0].pin.$assign  = "PA7";
+
 // BH1750 光照度软 I2C（bh1750 模块：SCL 输出 / SDA 双向运行时切换；
 // 位操作不占硬件 I2C 外设，照 AHT10 先例。默认 SCL=PA12 / SDA=PA13——
 // 与 PWMAB C0/C1（motor 双路 PWM）重叠：光照度监测/台灯类与双电机驱动
