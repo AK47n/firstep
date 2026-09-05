@@ -299,7 +299,8 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA23": 5,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
         # （hc05 默认脚）+ NRF24L01 CE（nrf24l01 默认脚；蓝牙/2.4G 与 UWB/
         # DEBUG 链路互替，同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PA24": 5,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚）+
+        "PA24": 5,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
+        # us016 薄封装共享同槽——wiki-modules-batch2/02，无新 $assign 行）+
         # HC05_UART RX + NRF24L01 CSN（同上——HC05/NRF 与 UWB 无线链路互替）
         "PA25": 4,  # HUIDU L4 + ZIGBEE_UART RX + ADC12_0 adcPin2（joystick Y
         # 默认脚；摇杆与无线身份/信标同选概率最低故叠此脚，同选时经引脚绑定

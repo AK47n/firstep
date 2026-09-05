@@ -70,6 +70,14 @@
         "lib_modules": ["xunji", "pid"]
       },
       {
+        "name": "模拟量超声波测距（US-016）",
+        "interface": "模拟量输出（ADC 电压成正比）",
+        "price": "￥10-20/个",
+        "note": "库内 us016 已打通（mspm0：us016_read_distance_cm 出 cm，5 次快平均；与 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——同选时经引脚绑定消解）；量程 2cm-3m（Range 悬空/高 = 3m、接地 = 1m），输 0~Vcc 模拟电压线性对应距离；避障/定高比数字超声稳（无脉冲回声波形依赖），但需一个 ADC 通道",
+        "suitable": "避障/定高/车位感知（模拟量场景，ADC 空余时）",
+        "lib_modules": ["us016"]
+      },
+      {
         "name": "红外避障探头（GPIO）",
         "interface": "GPIO 数字量（带电位器调距）",
         "price": "￥2-6/个",

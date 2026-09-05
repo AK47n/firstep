@@ -1,0 +1,28 @@
+{
+  "slug": "us016",
+  "description": "US-016 模拟量超声波测距驱动（mspm0 纯驱动，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（薄封装，不新开 ADC 通道），us016_read_distance_cm 出距离（cm，3m/1m 双量程编译期宏），5 次快速平均；适用于非接触测距、避障、定高、车位感知等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/us016.c",
+        "code/us016.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "薄封装：无独立 syscfg 实例——依赖 adc 模块共享 ADC12_0 实例 MEM0 槽位（默认 PA24/A0_3，绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动；手册原脚 PA27/A0_0 经绑定即可复现——绑 PA27 时改写器按通道号换 adcPin3→adcPin0 + adcMem0chansel→CHAN_0）。轮询读取（adc_get 忙等）无 ADC 中断——共享 ADC12_0 实例，IRQHandler 强符号须唯一（joystick/adc 先例）。换算 L = (A×3072/4096)×(Vref/Vcc) mm（手册正文「3096」与代码「3072」不一，按代码 0.75 系数；US016_RANGE_1M=1 时 1m 量程 0.25 系数）；50 次 × delay_ms(10) 平均改 5 次快速平均（摇杆先例，实时性）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--us-016-ultrasonic-ranging-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/us-016-ultrasonic-ranging-sensor.html；网盘完整工程 https://pan.baidu.com/s/1se0PoPJNsy6H-OTE-_yN3Q?pwd=wavj；厂家资料 http://pan.baidu.com/s/1c08JuBQ）。改造要点：去掉 main.c 演示与 printf；函数名规范化（us016_init/read_distance_cm）；ADC 中断（IRQHandler + gCheckADC 标志位）改轮询（照库内 adc 模块 busy 等待先例）；Get_distance/Get_ADC_Value 合并（5 次快平均 + 出 cm）；量程宏 US016_RANGE_1M 保留手册 RANGE 语义。未上板（模拟量系数真机标定留后续）。\nwiki-modules-batch2/02 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 warning；未上板。",
+      "kit": "US-016 模拟量输出超声波测距模块（Range 悬空/高 = 3m 量程，低 = 1m）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/us-016-ultrasonic-ranging-sensor.html",
+      "pins": [
+        {
+          "id": "US016_OUT_CH0",
+          "type": "adc",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    }
+  }
+}

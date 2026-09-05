@@ -4,9 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始（与 01/03 独立）。
 
-**状态：** pending
+**状态：** resolved
 
-**结论：** 待完成。
+**结论：** 2026-09-05 完成。薄封装成立：依赖 adc 模块读 ADC12_0 MEM0（adc_get(ADC_1, ADC_Channel_0)），不新开通道；ADC 中断改轮询（共享实例 IRQHandler 强符号唯一性）；换算按代码 0.75 系数（US016_RANGE_1M=1 时 0.25），50 次 ×10ms 平均改 5 次快速平均；同步修正 adc_mspm0.h 陈旧注释（「MEM1 未绑引脚」→ 与 joystick X 共享）+ adc manifest notes（us016 共读 MEM0）。单选生成 → gmake 0 error / 0 warning（PASS）；未上板。
 
 - [ ] 通道决策（既定事实：ADC12_0 已是 sequence 三通道 endAdd=2，MEM0=adc/MEM1-2=joystick）：**优先薄封装**——依赖 adc 模块读 MEM0（adc_get(ADC_1, ADC_Channel_0)），不新开通道；若实现中发现薄封装不可行（冲突不可消解）→ 才走独立通道（sequence 加 MEM endAdd+1 + 同步 joystick 相关测试断言），本件预计不走
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--us-016-ultrasonic-ranging-sensor.md` 「代码块」章节抽完整 `bsp_US016.c/h` → 改造为 `code/us016.c` + `code/us016.h`：去 main/printf、函数名规范化（`us016_init/read_distance_cm`）、ADC 中断（IRQHandler + gCheckADC 标志位）改轮询（照 adc/joystick 先例——共享 ADC12_0 实例，多模块同选时 IRQHandler 强符号重复定义；`dependencies: ["adc"]`）
