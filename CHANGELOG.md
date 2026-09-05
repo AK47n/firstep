@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ffb9d22524a5da0363c3512b9e0be41571bc27c8 -->
+<!-- changelog-auto: last-commit=37970c64bd28603fe9dd1b0f9b21fe8f04989f2b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 10:42 启动器误弹「正在更新中」——检测标签块穿透主流程(工单 auto-update/06 回归)
 - 11:11 资料库增量打包核心（工单 materials-update/01）：扫描+diff+分卷+清单+CLI
 - 11:13 资料库增量打包脚本与发版流程（工单 materials-update/02）：pack-materials.ps1 + releasing.md 改写
+- 11:16 资料库检查更新端点（工单 materials-update/03）：本地基线+线上清单对比，四态中文降级
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
