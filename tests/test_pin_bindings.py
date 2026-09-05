@@ -296,8 +296,12 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA22": 2,
         "PA23": 3,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX
         "PA24": 3,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚）
-        "PA25": 2,  # HUIDU L4 + ZIGBEE_UART RX
-        "PA26": 2,
+        "PA25": 3,  # HUIDU L4 + ZIGBEE_UART RX + ADC12_0 adcPin2（joystick Y
+        # 默认脚；摇杆与无线身份/信标同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "PA26": 3,  # HUIDU R1 + ZIGBEE_UART TX + ADC12_0 adcPin1（joystick X
+        # 默认脚，同上）
+        "PA9": 2,   # DIGIT_UART RX + JOYSTICK SW（joystick 默认脚；手动摇杆与
+        # K230 视觉串口同选概率最低故叠此脚，同选时经引脚绑定消解）
         "PA7": 2,  # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）
         "PA8": 2,  # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚；K230 视觉与
         # 遮挡检测同选时经引脚绑定消解）

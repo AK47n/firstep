@@ -357,6 +357,7 @@ MSPM0_DEFAULT_MAP = {
     ("zigbee_link", "ZIGBEE_UART_TX"): ("ZIGBEE_UART", "txPin"),
     ("zigbee_link", "ZIGBEE_UART_RX"): ("ZIGBEE_UART", "rxPin"),
     ("ir_beam", "IR_BEAM_OUT"): ("IR_BEAM", "OUT"),
+    ("joystick", "JOYSTICK_SW"): ("JOYSTICK", "SW"),
     ("ws2812", "WS2812_IN"): ("WS2812", "IN"),
     ("hx711", "HX711_SCK"): ("HX711", "SCK"),
     ("hx711", "HX711_DT"): ("HX711", "DT"),

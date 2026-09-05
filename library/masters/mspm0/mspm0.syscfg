@@ -19,6 +19,12 @@
  *   STEP_MOTOR：RST2/SLP2/DIR2/DCY2 = PB24/PB6/PB7/PB8（全 GPIOB，
  *   STEP_MOTOR_PORT 整组 GPIOB）；DCC_100_PWM2：TIMG12 C0 = PA14（板上经
  *   LED2+15k 到地，PWM 输出时 LED 微亮，可忽略）
+ *   JOYSTICK：SW = PA9（摇杆按键，上拉输入低有效；与 DIGIT_UART RX 默认
+ *   重叠——手动摇杆与 K230 视觉同选概率最低，同选时经引脚绑定消解）；
+ *   ADC12_0 三通道：MEM0 = PA24(A0_3) 归 adc 模块，MEM1 = PA26(A0_1) /
+ *   MEM2 = PA25(A0_2) 归 joystick 摇杆 X/Y（与 ZIGBEE_UART 默认重叠——
+ *   手动摇杆与无线身份/信标同选概率最低，同选时经引脚绑定消解；多 MEM
+ *   必须 sequence 模式，2026-09-05 SysConfig CLI 实证）
  * 板上固定占用：CH340E PA10/PA11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、
  * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针，
  * 用户实物未在 2×20P 上找到 A19/A20）、NRST。2026-08-20 用户实物核验：芯片丝印
@@ -56,6 +62,7 @@ const WS2812 = GPIO.addInstance();
 const HX711 = GPIO.addInstance();
 const AHT10 = GPIO.addInstance();
 const SR04 = GPIO.addInstance();
+const JOYSTICK = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -244,6 +251,16 @@ AHT10.associatedPins[1].$name        = "SDA";
 AHT10.associatedPins[1].direction    = "OUTPUT";
 AHT10.associatedPins[1].initialValue = "CLEARED";
 AHT10.associatedPins[1].pin.$assign  = "PB7";
+// 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
+// JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
+// DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。
+// X/Y 两轴走 ADC12_0 MEM1/MEM2（见 ADC 段），SW 独立 GPIO）
+JOYSTICK.$name = "JOYSTICK";
+JOYSTICK.associatedPins.create(1);
+JOYSTICK.associatedPins[0].$name            = "SW";
+JOYSTICK.associatedPins[0].direction        = "INPUT";
+JOYSTICK.associatedPins[0].internalResistor = "PULL_UP";
+JOYSTICK.associatedPins[0].pin.$assign  = "PA9";
 
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
@@ -370,8 +387,11 @@ I2C_0.peripheral.$assign        = "I2C0";
 I2C_0.peripheral.sdaPin.$assign = "PA0";
 I2C_0.peripheral.sclPin.$assign = "PA1";
 
-// adc 模块：ADC12 单通道（b1-adc-servo/01；MEM0=PA24/A0_3，轮询读取，不配中断；
-// 第二通道的 adcPinN 槽位在 LQFP-64(PM) 设备数据不存在，双通道留后续）
+// adc 模块 + 摇杆共享 ADC12_0（b1-adc-servo/01 + wiki-modules-batch1/01：
+// MEM0=PA24/A0_3 归 adc，MEM1=PA26/A0_1、MEM2=PA25/A0_2 归 joystick X/Y；
+// 轮询读取不配中断。多 MEM 必须 sequence 模式（startAdd..endAdd = 启用
+// MEM 集合）——单发模式只启用 startAdd 槽位，adcPin1/2 由此不可用（原注释
+// 「槽位不存在」系误判，2026-09-05 SysConfig CLI 实证）
 const ADC12   = scripting.addModule("/ti/driverlib/ADC12", {}, false);
 const ADC12_0 = ADC12.addInstance();
 ADC12_0.$name                      = "ADC12_0";
@@ -380,8 +400,15 @@ ADC12_0.sampClkDiv                 = "DL_ADC12_CLOCK_DIVIDE_8";
 ADC12_0.sampleTime0                = "125 us";
 ADC12_0.powerDownMode              = "DL_ADC12_POWER_DOWN_MODE_MANUAL";
 ADC12_0.adcMem0chansel             = "DL_ADC12_INPUT_CHAN_3";
+ADC12_0.adcMem1chansel             = "DL_ADC12_INPUT_CHAN_1";
+ADC12_0.adcMem2chansel             = "DL_ADC12_INPUT_CHAN_2";
+ADC12_0.samplingOperationMode      = "sequence";
+ADC12_0.startAdd                   = 0;
+ADC12_0.endAdd                     = 2;
 ADC12_0.peripheral.$assign         = "ADC0";
 ADC12_0.peripheral.adcPin3.$assign = "PA24";
+ADC12_0.peripheral.adcPin1.$assign  = "PA26";
+ADC12_0.peripheral.adcPin2.$assign  = "PA25";
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
 Board.configureUnused = true;
 
