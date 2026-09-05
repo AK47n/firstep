@@ -521,6 +521,27 @@ HUMAN_IR.associatedPins[0].direction        = "INPUT";
 HUMAN_IR.associatedPins[0].internalResistor = "PULL_UP";
 HUMAN_IR.associatedPins[0].pin.$assign      = "PB8";
 
+// 微波多普勒雷达输入（microwave_radar 模块：OUT 输入 + 内部上拉——HB100
+// 模块检测到物体移动时 OUT 低电平（页面函数注释「1=未检测到 0=检测到」+
+// main 演示（OUT 输入为 0 判移动）同口径，页面自一致）；电平直读无去抖/无
+// GPIO 中断（GROUP1 仍被 motor 编码器独占，页面同为电平直读）；页面演示的
+// 开/关门时序逻辑归生成骨架（ADR 0009）。默认 PA31——2026-09-09 SysConfig
+// CLI 实证 PA0/PA1 不在 GPIO 输入实例 pin 选项内（"No option named PA0
+// defined"；GPIO 输出可配 PA0——ir_remote_tx 先例，输入不可）→ 改选
+// PA31：与 IMU601 RX（姿态）/HX711 DT（称重）/FINGERPRINT_UART RX（身份）/
+// SHT30 SDA（温湿度）重叠——微波雷达（自动门/车流/倒车）与姿态/称重/身份/
+// 温湿度采集不同框、同选概率最低（自动门/车流惯配电机/显示/蜂鸣/无线/超声/
+// 人体红外——刻意不叠：PWMAB/MAX7219/LED_BEEP/无线族/SR04 脚/human_ir PB8），
+// 同选时经引脚绑定消解；与同批 human_ir（PB8）刻意错开（人体红外+微波组合
+// 常同选，默认即不撞）
+const MICROWAVE = GPIO.addInstance();
+MICROWAVE.$name = "MICROWAVE";
+MICROWAVE.associatedPins.create(1);
+MICROWAVE.associatedPins[0].$name            = "OUT";
+MICROWAVE.associatedPins[0].direction        = "INPUT";
+MICROWAVE.associatedPins[0].internalResistor = "PULL_UP";
+MICROWAVE.associatedPins[0].pin.$assign      = "PA31";
+
 // 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
 // JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
 // DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。
