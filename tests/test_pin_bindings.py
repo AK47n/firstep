@@ -346,6 +346,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 消解；板载 LED 随 38kHz 载波闪烁可作发射指示）
         "PB19": 2,  # DC_MOTOR 编码器 BA + JQ8900 TX（jq8900 默认脚——语音
         # 播报与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "PB20": 2,  # DC_MOTOR 编码器 BB + SYN6288 TX（syn6288 默认脚——语音
+        # 合成与双电机小车同选概率最低故叠此脚，且与 jq8900 默认 PB19 刻意错开
+        # （语音两件常同选，默认即不撞），同选时经引脚绑定消解）
         "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
     }
 
