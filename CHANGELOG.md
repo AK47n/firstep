@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=786dc450b1b5d8b4d9a3451d0c208a081a12caf3 -->
+<!-- changelog-auto: last-commit=f8d8af5cd355c5c093724bd6a70ec760d04d2420 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 11:13 资料库增量打包脚本与发版流程（工单 materials-update/02）：pack-materials.ps1 + releasing.md 改写
 - 11:16 资料库检查更新端点（工单 materials-update/03）：本地基线+线上清单对比，四态中文降级
 - 11:21 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+- 11:24 资料库应用器（工单 materials-update/05）：安全解压+备份+删除+写基线，任务完成后自动应用
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
