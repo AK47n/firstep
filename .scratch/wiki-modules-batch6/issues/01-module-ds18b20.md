@@ -4,16 +4,18 @@
 
 **被谁阻塞：** 无——可立即开始（与 02/03/04 独立）。
 
-**状态：** claimed
+**状态：** resolved
+
+**结论：** 2026-09-07 完成并提交（28e3420b）。1-Wire 位时序（DQ 方向运行时切换，delay 模块忙等不占 TIMER，位槽 62-64us 落页面 60-70us；时间轴常量单源 ds18b20.h）；`ds18b20_init`（复位检测，0=检出 1=未检出）+ `ds18b20_read_temp`（℃；0.0625 系数 12bit、负温补码 `(~temp)+1`×-0.0625、0x44 后按数据手册等待 750ms 转换——页面未等待系上游缺陷已修正）；剔除页面 `DS18B20_Reset` 无定义声明；页面不读第 9 字节 CRC 按页保留；默认 DATA=PA7——与 DC_MOTOR BIN2/SERVO_PWM/RC522 CS 重叠（同选概率最低；刻意不叠温湿度/显示/语音件与 I2C_0 PA0/PA1——i2c_bus_share 测试互扰，批次 5 实测调整先例）；单选生成 → SysConfig CLI → gmake 0 error/0 warning（PASS，verified=true）；词表感知传感器 +DS18B20。未上板（位时序真机验证留后续）。
 
 **验收：**
 
-- [ ] 代码提炼：`code/ds18b20.c/h`（去 main/printf；函数名规范化 `ds18b20_init/read_temp`；DQ_OUT/IN/GET/SET 宏参数化 `<实例>_<引脚名>_PIN/_IOMUX`；页面 DS18B20_Check/Start/Write_Byte/Read_Byte/GetTemperture 归一；全局无状态 = 纯函数 + 出参；`DS18B20_Reset` 页面声明无定义 → 剔除并记 notes）
-- [ ] 时序：复位 750us+15us+200×1us/240×1us；写位 1 = 2+60us、写位 0 = 60+2us；读位 = 2us 拉低+释放+输入 12us 采样+50us 尾部——全部按页面原值，走 `delay` 模块（依赖声明）忙等，不占 TIMER；位槽总时长 62-64us 落页面 60-70us 区间；源码只引用头文件常量（12us/60us 时间轴守卫）
-- [ ] 母版 `mspm0.syscfg`：`DS18B20` GPIO 实例（DATA 输出，initialValue SET=空闲高，运行时 DQ_OUT/IN 切换——DHT11 先例）；默认 PA7（与 DC_MOTOR BIN2/SERVO_PWM/RC522 CS 重叠——接触测温与运动控制/读卡不同框同选概率最低；刻意不叠温湿度/显示/语音件与 I2C_0 的 PA0/PA1——i2c_bus_share 测试互扰批次 5 先例；不与批次 5/同批相撞），重叠对登记 test_pin_bindings 刻意表
-- [ ] `syscfg_instances.py` INSTANCE_CONSUMERS 登记 `"DS18B20": ("ds18b20",)`
-- [ ] `manifest.json`：dependencies ["delay"]；pins DATA = gpio_out PA1；notes 含手册路径+原页+网盘链接+改造要点+`DS18B20_Reset` 未定义缺陷+未读 CRC 记录+编译记录；verified=true
-- [ ] wordlist.json「感知传感器」类补录 DS18B20 方案（lib_modules 挂接）+ models 词条
-- [ ] 测试：test_pins MSPM0_DEFAULT_MAP 增 DS18B20_DATA；test_pin_bindings PA7 计数 3→4；test_syscfg_prune DS18B20 断言；新增 test_module_ds18b20.py（位槽时序常量守卫 12us/60us/750us + 0.0625 负温守卫 + 无 Reset 声明守卫）
-- [ ] 编译验证：run_ds18b20_matrix.py 单选生成 → SysConfig CLI → gmake 0 error / 0 warning；verified=true + notes 记录
-- [ ] 中文提交 + 工单 resolved + code-review
+- [x] 代码提炼：`code/ds18b20.c/h`（去 main/printf；函数名规范化 `ds18b20_init/read_temp`；DQ_OUT/IN/GET/SET 宏参数化 `<实例>_<引脚名>_PIN/_IOMUX`；页面 DS18B20_Check/Start/Write_Byte/Read_Byte/GetTemperture 归一；全局无状态 = 纯函数 + 出参；`DS18B20_Reset` 页面声明无定义 → 剔除并记 notes）
+- [x] 时序：复位 750us+15us+200×1us/240×1us；写位 1 = 2+60us、写位 0 = 60+2us；读位 = 2us 拉低+释放+输入 12us 采样+50us 尾部——全部按页面原值，走 `delay` 模块（依赖声明）忙等，不占 TIMER；位槽总时长 62-64us 落页面 60-70us 区间；源码只引用头文件常量（12us/60us 时间轴守卫）
+- [x] 母版 `mspm0.syscfg`：`DS18B20` GPIO 实例（DATA 输出，initialValue SET=空闲高，运行时 DQ_OUT/IN 切换——DHT11 先例）；默认 PA7（与 DC_MOTOR BIN2/SERVO_PWM/RC522 CS 重叠——接触测温与运动控制/读卡不同框同选概率最低；刻意不叠温湿度/显示/语音件与 I2C_0 的 PA0/PA1——i2c_bus_share 测试互扰批次 5 先例；不与批次 5/同批相撞），重叠对登记 test_pin_bindings 刻意表
+- [x] `syscfg_instances.py` INSTANCE_CONSUMERS 登记 `"DS18B20": ("ds18b20",)`
+- [x] `manifest.json`：dependencies ["delay"]；pins DATA = gpio_out PA7；notes 含手册路径+原页+网盘链接+改造要点+`DS18B20_Reset` 未定义缺陷+未读 CRC 记录+编译记录；verified=true
+- [x] wordlist.json「感知传感器」类补录 DS18B20 方案（lib_modules 挂接）+ models 词条
+- [x] 测试：test_pins MSPM0_DEFAULT_MAP 增 DS18B20_DATA；test_pin_bindings PA7 计数 3→4；test_syscfg_prune DS18B20 断言；新增 test_module_ds18b20.py（位槽时序常量守卫 12us/60us/750us + 0.0625 负温守卫 + 无 Reset 声明守卫）
+- [x] 编译验证：run_ds18b20_matrix.py 单选生成 → SysConfig CLI → gmake 0 error / 0 warning；verified=true + notes 记录
+- [x] 中文提交 + 工单 resolved + code-review

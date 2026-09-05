@@ -1,7 +1,7 @@
 """ds18b20 单总线温度模块：真实库 + 真实母版不变量与 mspm0 单选生成。
 
 与 dht11 / joystick 同款结构测试：manifest 形状（仅 mspm0、依赖 delay、
-单角色 DATA = gpio_out PA1——默认与母版 syscfg 一致性由 test_pins.py /
+单角色 DATA = gpio_out PA7——默认与母版 syscfg 一致性由 test_pins.py /
 test_pin_bindings.py 守）、mspm0 单选生成（syscfg 裁剪保留 DS18B20、模块
 文件落盘、main.c 调 init/read_temp 过静态门禁）。单总线位时序走 delay 模块
 （依赖声明），位槽时间轴（12us 采样点 / 60us 槽体 / 750us 复位）以源码常量
@@ -43,7 +43,7 @@ MAIN_C_MSPM0 = (
 
 
 def test_ds18b20_manifest_shape_mspm0():
-    """ds18b20：仅 mspm0 平台条目；依赖 delay；单角色 DATA = gpio_out PA1。"""
+    """ds18b20：仅 mspm0 平台条目；依赖 delay；单角色 DATA = gpio_out PA7。"""
     manifest = ModuleManifest.load(MODULES / "ds18b20")
     assert manifest.slug == "ds18b20"
     assert manifest.dependencies == ("delay",)
