@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=aefd24a22e85ff231e356417e694db7d54454055 -->
+<!-- changelog-auto: last-commit=8ceb9e3de5e21fe24eef03e15744349994d0671e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -34,6 +34,7 @@
 - 15:18 Markdown 资料前端 tab（工单 wiki-materials/02）：素材根 .md 浏览 + 页内渲染预览
 - 16:18 wiki 页面转换器域模块（工单 wiki-md-repair/01）：Shiki 逐行还原 + 原页顺序 Markdown，三页重抓验证
 - 16:20 素材批次全量重抓 70 篇（工单 wiki-md-repair/02）：新转换器产物 + 质量扫描 70/70 通过 + CONTEXT 更新
+- 16:20 补充已解决工单结论注记（wiki-materials/02、06）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
