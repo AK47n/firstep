@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
+
+**结论：** 2026-09-05 完成并提交（8781d8d5 前置提交）。**实现变更：定时器中断测宽 → CPU 忙等测宽**——首版加 TIMG4 定时器实例被 SysConfig 拒绝（地猛星 SysConfig TIMER 仅暴露 TIMG0/6/7/8/12，全被既有模块占用），改忙等后 gmake 0 error/0 warning（PASS）。PB24/PB8 默认重叠入 test_pin_bindings 刻意重叠表；全量 3315 通过。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--sr04-ultrasonic-ranging-sensor.md`「代码块」章节抽 `bsp_ultrasonic.c/h` 全文 → 模块规范改写（`code/sr04.c/h`；TRIG/ECHO 引脚宏参数化；定时器中断计数照 ntb_time `NTB_INST_IRQHandler` 先例；delay_us/delay_ms 走 delay 依赖；去掉 main.c 演示/printf；5 次测量均值等按手册算法保留为纯函数）
 - [ ] 母版 `mspm0.syscfg` 加：GPIO 输出实例（TRIG）+ GPIO 输入实例（ECHO）+ TIMER 实例（Basic_Periodic 1ms 中断，闲置 TIMGx——不占用 MOTOR_PID/NTB/SERVO_PWM 的 TIM 外设，计时基准 = 时钟 1MHz 换 1us 分辨率，按手册 800kHz 说明核对）；`syscfg_instances.py` 登记（TIMER 实例 → sr04 slug）
