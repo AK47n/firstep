@@ -122,13 +122,17 @@ export function mdChipRowHTML(options, selected) {
   ).join("");
 }
 
-// mdRowHTML(m, {preview})：行渲染（文件名 + 完整路径 tooltip、批次 chip、
+// mdRowHTML(m, {preview})：行渲染（标题 + 文件名小字 + 完整路径 tooltip、批次 chip、
 // 目录列、大小、修改时间、操作按钮）。preview = 是否渲染「预览」钮
 // （一律渲染——Markdown 全文由前端拉取页内渲染，无浏览器原生视图）。
+// 主行显示 title（服务端取首页标题；空回退文件名），文件名缩为第二行小字。
 export function mdRowHTML(m) {
   const subdir = mdSubdir(m.rel_path || "");
+  const title = (m.title && String(m.title).trim()) || m.name;
+  const fileLine = title !== m.name
+    ? `<div class="md-row-file">${esc(m.name)}</div>` : "";
   return `<tr>
-    <td class="desc-cell" title="${esc(m.rel_path)}"><a href="#" data-open-md="${esc(m.rel_path)}" title="${esc(m.rel_path)}">${esc(m.name)}</a>${m.size_bytes > 1024 * 1024 ? '<span class="badge pdf-broken">⚠ 超预览上限</span>' : ""}</td>
+    <td class="desc-cell" title="${esc(m.rel_path)}"><a href="#" data-open-md="${esc(m.rel_path)}" title="${esc(m.rel_path)}">${esc(title)}</a>${fileLine}${m.size_bytes > 1024 * 1024 ? '<span class="badge pdf-broken">⚠ 超预览上限</span>' : ""}</td>
     <td><span class="lib-chip">${esc(m.batch)}</span></td>
     <td class="muted" title="${esc(subdir || "批次根")}">${esc(subdir || "—")}</td>
     <td class="muted">${formatSize(m.size_bytes)}</td>

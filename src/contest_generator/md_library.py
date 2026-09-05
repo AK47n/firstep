@@ -20,6 +20,23 @@ from .reference_library import ReferenceError
 # 超限 = 拒绝预览（webapp 映射 400 中文），不静默截断。
 MD_FILE_MAX_BYTES = 1024 * 1024
 
+# 清单 title 提取的读取窗口（首页标题总是在文件开头；8KB 足够覆盖非标准样板）
+_TITLE_SCAN_BYTES = 8 * 1024
+
+
+def first_heading_title(data: bytes) -> str:
+    """从 md 字节流提取首页标题（首个 `^# ` 行，剥离锚点尾 #）。
+
+    标题规范 = 文档第一行 # 标题（wiki_md.build_markdown 产物）；非本批产物无
+    `# ` 行 → 返回空串（调用方回退文件名）。代码围栏内 #include 等行不误判：
+    `^# ` 要求井号后跟空格，`#include` 不匹配。
+    """
+    text = data.decode("utf-8", errors="replace")[:_TITLE_SCAN_BYTES]
+    for line in text.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip().rstrip("#").strip() or ""
+    return ""
+
 # 附属资源（手册图片等）单文件上限：16MB（彩屏 gif 1.6MB 级别；过大 = 拒绝 400）。
 MD_ASSET_MAX_BYTES = 16 * 1024 * 1024
 
@@ -67,8 +84,9 @@ def resolve_md_asset(root: Path, rel_path: str) -> Path:
 def list_markdowns(root: Path, name: str = "") -> list[dict]:
     """素材根下全量 Markdown 清单（递归，扩展名大小写不敏感）。
 
-    每条目 {rel_path, name, batch, size_bytes, mtime}：rel_path 为相对素材根的
-    POSIX 路径（服务端 :path 转换器直用，前端逐段编码）；mtime 为 UNIX epoch
+    每条目 {rel_path, name, title, batch, size_bytes, mtime}：rel_path 为相对素材根的
+    POSIX 路径（服务端 :path 转换器直用，前端逐段编码）；title = 首页标题（首个
+    `^# ` 行，first_heading_title；无 → 空串，前端回退 name）；mtime 为 UNIX epoch
     秒（前端格式化显示「修改时间」）；按 (batch, rel_path) 排序（批次分组内
     按路径排）。name 非空时子串过滤（大小写不敏感，命中 文件名 / 批次 /
     完整路径 任意一处）。素材根缺失 = 空清单（不炸——备份未落盘时前端照常
@@ -85,10 +103,15 @@ def list_markdowns(root: Path, name: str = "") -> list[dict]:
         if needle and needle not in rel.lower():
             continue
         st = path.stat()
+        # 标题只读文件头（全量清单轻量化的关键：多数文件 <300KB，但 75 篇全读
+        # 不如 75 × 8KB；标题必在文件头）
+        with path.open("rb") as fh:
+            head = fh.read(_TITLE_SCAN_BYTES)
         entries.append(
             {
                 "rel_path": rel,
                 "name": path.name,
+                "title": first_heading_title(head),
                 "batch": rel.split("/", 1)[0],
                 "size_bytes": st.st_size,
                 "mtime": int(st.st_mtime),

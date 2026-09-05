@@ -7132,6 +7132,9 @@ def test_materials_md_lists_all_sorted_with_batch_and_size(client, context, tmp_
     ]
     assert mds[1]["size_bytes"] == len("# mpu6050\n\n正文内容\n".encode("utf-8"))
     assert mds[1]["rel_path"].endswith("lckfb-地猛星移植手册/sensor--mpu6050-six-axis-sensor.md")
+    # 标题 = 首页 # 行（前端主行显示；列表轻量读文件头）
+    assert mds[1]["title"] == "mpu6050"
+    assert mds[2]["title"] == "索引"
 
 
 def test_materials_md_filters_by_name(client, context, tmp_path):
