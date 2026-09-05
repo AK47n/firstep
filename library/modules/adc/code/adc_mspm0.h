@@ -7,7 +7,8 @@
  * - stm32 侧 = 母版 ml_adc 同名 API（ADCx_enum / ADCINx_enum 定义在 ml_adc.h，
  *   通道枚举 = 硬件通道 PA0-PC5）；
  * - mspm0 侧 = 本头（枚举兼容形态：通道枚举值 = ADC12 MEM 索引，
- *   v1 支持 0/1 两路）。
+ *   v1 支持 0-3 四路——0 = 本模块默认脚（us016 共读）、1/2 = joystick 摇杆
+ *   共享通道、3 = ir_distance 通道）。
  * 引脚由生成器绑定（stm32 pin_config.h 宏 / mspm0 syscfg $assign），
  * 模块代码不吃引脚字面量。 */
 

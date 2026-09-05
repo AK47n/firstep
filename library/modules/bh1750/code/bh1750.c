@@ -69,11 +69,13 @@ static void bh1750_iic_stop(void)
     delay_us(2);
 }
 
-static void bh1750_iic_send_ack(uint8_t ack)
+/* ack 后置一位应答/非应答：is_nack = 0 应答（继续收下一字节）、1 = 非应答
+ * （最后一字节，通知从机停发） */
+static void bh1750_iic_send_ack(uint8_t is_nack)
 {
     BH1750_SDA_OUT();
     BH1750_SCL(0);
-    if (ack) {
+    if (is_nack) {
         BH1750_SDA(1);
     } else {
         BH1750_SDA(0);

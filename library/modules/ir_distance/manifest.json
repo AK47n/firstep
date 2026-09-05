@@ -1,7 +1,9 @@
 {
   "slug": "ir_distance",
-  "description": "GP2Y0A02YK0F 红外测距驱动（mspm0 纯驱动，ADR 0009）：模拟量输出 ADC 电压→距离换算（独立通道 ADC12_0 MEM3，默认 PA27/A0_0，与 adc/us016/joystick 共享同一 ADC 实例 sequence 四通道），ir_distance_read_distance_cm 出距离（cm，20-150cm 段，10 次平均）；适用于非接触测距、避障、近距开关量替代、落点检测等赛题功能。",
-  "dependencies": [],
+  "description": "GP2Y0A02YK0F 红外测距驱动（mspm0 纯驱动，ADR 0009）：模拟量输出 ADC 电压→距离换算，经 adc 模块 API 读独立通道 ADC12_0 MEM3（默认 PA27/A0_0，与 adc/us016/joystick 共享同一 ADC 实例 sequence 四通道），ir_distance_read_distance_cm 出距离（cm，20-150cm 段，10 次平均）；适用于非接触测距、避障、近距开关量替代、落点检测等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
   "platforms": {
     "mspm0": {
       "files": [
@@ -10,7 +12,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "通道策略：us016（wiki-modules-batch2/02）已按薄封装占用 ADC12_0 MEM0 槽位——同一槽位两个角色同选经绑定无法消解（绑定槽位冲突检查强制同脚）→ 本件走独立通道 MEM3：母版 syscfg ADC12_0 sequence 加第 4 通道（endAdd 2→3、adcMem3chansel=CHAN_0、adcPin0=PA27——手册原脚；SysConfig 多 MEM sequence 实证先例 2026-09-05；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动）。轮询读取无 ADC 中断（共享实例 IRQHandler 强符号须唯一，joystick 先例）。换算 V=raw/4095×3.3V（IR_DIST_VREF_V 宏）、Distance=60.374×V^(-1.16)（GP2Y0A02YK0F 官方公式，20-150cm 段；<15cm 电压跌落非线性区随手册注释）；10 次快速平均（手册 Get_Adc_Value(10) 原值）。默认 PA27 与 HUIDU R2 重叠（红外测距与 8 路灰度巡线同选概率最低），同选时经引脚绑定消解。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--Infrared-distance-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/Infrared-distance-sensor.html；网盘完整工程 https://pan.baidu.com/s/1M47qNl6mt6vmMwT214tvKg?pwd=emd3；厂家资料 https://pan.baidu.com/s/11dDQHyYJfi0nNyC28vkpoA 提取码 qvpm）。改造要点：去掉 main.c 演示与 printf；函数名规范化（ir_distance_init/read_distance_cm，去 IRdistance_/ADC_GET/Get_Adc_Value/Get_IRdistance_Distance 命名）；ADC 中断（IRQHandler + gCheckADC 标志位）改轮询（照 joystick 忙等 + 超时先例）；Get_Adc_Value(10) 保留 10 次平均；新增全 0 采样防护（防 pow(0,-1.16) 溢出，原版会输出 inf）；SYSCFG_DL_init 重复调用删除（模板 main 已调）。未上板（换算系数真机标定留后续）。\nwiki-modules-batch2/04 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验（sequence endAdd=3 四通道合法）→ gmake 0 error、0 warning；未上板。",
+      "notes": "通道策略：us016（wiki-modules-batch2/02）已按薄封装占用 ADC12_0 MEM0 槽位——同一槽位两个角色同选经绑定无法消解（绑定槽位冲突检查强制同脚）→ 本件走独立通道 MEM3：母版 syscfg ADC12_0 sequence 加第 4 通道（endAdd 2→3、adcMem3chansel=CHAN_0、adcPin0=PA27——手册原脚；SysConfig 多 MEM sequence 实证先例 2026-09-05；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动）。读数经 adc 模块 API（dependencies=[\"adc\"]：adc_get(ADC_1, ADC_Channel_3)——busy 忙等单点实现在 adc 模块，us016/ir_distance 均走属主，code-review 收尾消除同类轮询第三份拷贝）；无 ADC 中断（共享实例 IRQHandler 强符号须唯一，joystick 先例）。换算 V=raw/4095×3.3V（IR_DIST_VREF_V 宏）、Distance=60.374×V^(-1.16)（GP2Y0A02YK0F 官方公式，20-150cm 段；<15cm 电压跌落非线性区随手册注释）；10 次快速平均（手册 Get_Adc_Value(10) 原值）；全 0 采样返回 0.0f（防 pow(0,-1.16) 溢出，原版输出 inf）。默认 PA27 与 HUIDU R2 重叠（红外测距与 8 路灰度巡线同选概率最低），同选时经引脚绑定消解。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--Infrared-distance-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/Infrared-distance-sensor.html；网盘完整工程 https://pan.baidu.com/s/1M47qNl6mt6vmMwT214tvKg?pwd=emd3；厂家资料 https://pan.baidu.com/s/11dDQHyYJfi0nNyC28vkpoA 提取码 qvpm）。改造要点：去掉 main.c 演示与 printf；函数名规范化（ir_distance_init/read_distance_cm，去 IRdistance_/ADC_GET/Get_Adc_Value/Get_IRdistance_Distance 命名）；ADC 中断（IRQHandler + gCheckADC 标志位）改轮询（经 adc 模块忙等 API）；Get_Adc_Value(10) 保留 10 次平均；新增全 0 采样防护（防 pow(0,-1.16) 溢出，原版会输出 inf）；SYSCFG_DL_init 重复调用删除（模板 main 已调）。未上板（换算系数真机标定留后续）。\nwiki-modules-batch2/04 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验（sequence endAdd=3 四通道合法）→ gmake 0 error、0 warning；未上板。",
       "kit": "GP2Y0A02YK0F 红外测距传感器模块（20-150cm 模拟量输出）",
       "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/Infrared-distance-sensor.html",
       "pins": [

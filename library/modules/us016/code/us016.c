@@ -10,8 +10,7 @@
  *   符号须唯一，joystick/adc 先例）；
  * - 5 次快速平均（立创原版 50 次 × delay_ms(10) ≈ 500ms 太慢，摇杆先例）。 */
 
-#define US016_ADC_SAMPLES 5 /* 快速平均采样次数 */
-#define US016_RANGE_1M 0    /* 0=3m 量程（Range 悬空/高）1=1m 量程（Range 低） */
+#define US016_ADC_SAMPLES 5 /* 快速平均采样次数（量程宏 US016_RANGE_1M 在头文件） */
 
 void us016_init(void)
 {
@@ -32,5 +31,7 @@ float us016_read_distance_cm(void)
 #else
     mm = (float)(sum / US016_ADC_SAMPLES) * 0.75f; /* L = A×3072/4096 mm */
 #endif
+    /* Vref/Vcc 修正（US016_VREF_V / US016_VCC_V，默认 3.3/3.3 = 1） */
+    mm = mm * (US016_VREF_V / US016_VCC_V);
     return mm / 10.0f; /* mm → cm */
 }

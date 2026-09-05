@@ -104,7 +104,8 @@ uint8_t dht11_read(float *temperature_c, float *humidity_rh)
     DHT11_DATA_OUT();
     DHT11_DATA_SET(1);
 
-    /* 5. 校验和 = 湿整 + 湿小 + 温整 + 温小（末 8 位）与第 40-48 位比对 */
+    /* 5. 校验和 = 湿整 + 湿小 + 温整 + 温小（末 8 位）与 val 末 8 位
+     *（校验字节——最后接收的 8 位，val 位 0-7）比对 */
     verify_num = (uint8_t)(((val >> 32) & 0xFF) + ((val >> 24) & 0xFF) +
                            ((val >> 16) & 0xFF) + ((val >> 8) & 0xFF));
     if ((uint8_t)(val & 0xFF) != verify_num) {
@@ -129,14 +130,10 @@ uint8_t dht11_read(float *temperature_c, float *humidity_rh)
 
 float dht11_read_temperature(void)
 {
-    float t = 0.0f, h = 0.0f;
-    (void)dht11_read(&t, &h);
-    return t;
+    return s_temperature; /* 最近一次成功读数缓存（手册 Get_* 语义） */
 }
 
 float dht11_read_humidity(void)
 {
-    float t = 0.0f, h = 0.0f;
-    (void)dht11_read(&t, &h);
-    return h;
+    return s_humidity;
 }

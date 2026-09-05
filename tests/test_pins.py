@@ -492,10 +492,11 @@ PIN_LITERAL_PATTERNS = [
 def test_module_code_has_no_pin_literals():
     """验收 grep：注释剥离后模块 .c/.h 无引脚字面量（宏名如
     DC_MOTOR_AA_PORT / HUIDU_L1_PIN 整体豁免——GPIOA/GPIOB 组宏名是
-    syscfg 生成宏的一部分）。adc 模块与 us016 豁免 ADC_Channel_N 模式：
+    syscfg 生成宏的一部分）。adc/us016/ir_distance 豁免 ADC_Channel_N 模式：
     mspm0 侧枚举成员名复用 ml_adc 的 ADCINx_enum 形态是双平台 API 对偶契约
-    （b1-adc-servo/01，语义 = ADC12 MEM 索引而非引脚）；us016 薄封装经
-    adc 模块 API 读 MEM0，ADC_Channel_0 是 API 参数（wiki-modules-batch2/02）。"""
+    （b1-adc-servo/01，语义 = ADC12 MEM 索引而非引脚）；us016/ir_distance
+    薄封装经 adc 模块 API 读共享通道，ADC_Channel_N 是 API 参数
+    （wiki-modules-batch2/02/04）。"""
     hits: list[str] = []
     for path in sorted(LIBRARY_MODULES.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in (".c", ".h"):
@@ -505,7 +506,8 @@ def test_module_code_has_no_pin_literals():
         for pattern, label in PIN_LITERAL_PATTERNS:
             if (
                 pattern == r"\bADC_Channel_\d+\b"
-                and path.relative_to(LIBRARY_MODULES).parts[0] in ("adc", "us016")
+                and path.relative_to(LIBRARY_MODULES).parts[0]
+                in ("adc", "us016", "ir_distance")
             ):
                 continue  # API 对偶枚举（见 docstring）
             for m in re.finditer(pattern, stripped):

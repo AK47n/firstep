@@ -21,10 +21,12 @@
  *   LED2+15k 到地，PWM 输出时 LED 微亮，可忽略）
  *   JOYSTICK：SW = PA9（摇杆按键，上拉输入低有效；与 DIGIT_UART RX 默认
  *   重叠——手动摇杆与 K230 视觉同选概率最低，同选时经引脚绑定消解）；
- *   ADC12_0 三通道：MEM0 = PA24(A0_3) 归 adc 模块，MEM1 = PA26(A0_1) /
- *   MEM2 = PA25(A0_2) 归 joystick 摇杆 X/Y（与 ZIGBEE_UART 默认重叠——
- *   手动摇杆与无线身份/信标同选概率最低，同选时经引脚绑定消解；多 MEM
- *   必须 sequence 模式，2026-09-05 SysConfig CLI 实证）
+ *   ADC12_0 四通道：MEM0 = PA24(A0_3) 归 adc 模块（us016 共读同槽），
+ *   MEM1 = PA26(A0_1) / MEM2 = PA25(A0_2) 归 joystick 摇杆 X/Y（与
+ *   ZIGBEE_UART 默认重叠——手动摇杆与无线身份/信标同选概率最低，同选时
+ *   经引脚绑定消解；多 MEM 必须 sequence 模式，2026-09-05 SysConfig CLI
+ *   实证），MEM3 = PA27(A0_0) 归 ir_distance（与 HUIDU R2 重叠——红外
+ *   测距与灰度巡线同选概率最低）
  *   HC05：HC05_UART = UART2 共享（9600——HC05 出厂默认波特率，与 DEBUG+UWB
  *   同外设；默认 PA23/PA24 与 UWB 同脚——蓝牙与 UWB 链路互替、同选概率
  *   最低，同选时经引脚绑定换实例消解）；STATE = PA8 输入（连接状态，
