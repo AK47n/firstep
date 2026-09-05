@@ -1,0 +1,28 @@
+{
+  "slug": "ir_remote_tx",
+  "description": "红外编码发射驱动（mspm0 纯驱动，ADR 0009）：单 GPIO 直出 38kHz NEC 载波（半周期 13.2us 忙等翻转，delay_cycles 按 CPUCLK_FREQ 换算，不占 TIMER）——ir_tx_init 置空闲低、ir_tx_send(address, command) 发完整 NEC 帧（引导码 + 地址/反码/命令/反码 4 字节 + 结束位，字节内 MSB 先与批次 1 ir_remote 解码口径一致）、ir_tx_send_repeat 发重复码（长按节奏由调用方循环）；与 ir_remote 接收头配对即插即用；适用于双机红外遥控、模拟家电遥控器（NEC 98% 设备）、红外无线数据链发射端等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/ir_remote_tx.c",
+        "code/ir_remote_tx.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：IR_TX GPIO 实例（OUT 输出，宏 IR_TX_PORT/IR_TX_OUT_PIN；初始 CLEARED = 载波空闲低）。默认 TX=**PA0**——与 I2C_0 SDA（ml_mpu6050 姿态默认脚）/板载 LED 重叠：红外发射链与姿态采集同选概率最低（姿态题惯用上位机/OLED 呈现，几乎不再发红外），板载 LED 随 38kHz 载波闪烁可作发射指示；**与 ir_remote 接收默认 PA26 刻意错开**——发射/接收本就常配对（双机红外互控/模拟遥控器），双选默认即不撞、无需改绑；配对建议（remap）：发/收两脚绑相邻排针、共地、发射头 5V 供电（串 100-200Ω 限流电阻，距离不足加三极管/MOS 驱动——3.3V GPIO 直驱 ~8-16mA 输出力有限），同选时经引脚绑定消解。**不占 TIMER**（载波 CPU 忙等；地猛星 TIMER 已被全占，ir_remote/ws2812 先例）；**不注册 GPIO 中断**（GROUP1 只一路且被 motor 编码器独占）；单帧发射阻塞 ~65ms（38000Hz 位时序），调用方注意调度节拍。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/rf--Infrared-decoding-coding-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/rf/Infrared-decoding-coding-module.html；资料 https://pan.baidu.com/s/1idRcrVCxQ5zWLh59EFpi9g 提取码 n8ud / 成功案例 https://pan.baidu.com/s/1LTeMwPdeFN-Wf3_duocsOg?pwd=0z0p）。改造要点：页面是「MCU+发射头+接收头、**UART 指令**」模块形态——5 字节串口指令（帧头 device_addr 默认 A1 / 通用地址 F2 修改指令用 FA + 操作位 F1 发射/F2 改地址/F3 改波特率，成功回 F1/F2/F3）+ UART 中断接收解析——**UART 指令解析归生成骨架（ADR 0009）**：骨架 = 接库内 uart 模块（RX 中断 + 环形缓冲）收 5 字节 → 解析 → 调 ir_tx_send（F1）/忽略（F2/F3 是对模块实物的参数命令，本实现无对应硬件不实现），即还原页面「串口→红外发射」形态；本模块只出 NEC 发射原语（ir_tx_init/send/send_repeat）；去 main/printf、函数名规范化、38kHz 载波 = delay_cycles(CPUCLK_FREQ/76000)（页面完全未给载波生成代码——其模块内含 MCU 完成，本实现按 NEC 标准 38kHz 自写），位时序延时走 delay 模块；**字节位序**：与批次 1 ir_remote 解码一致 MSB 先（其 value[g]<<=1 口径——标准 NEC 为 LSB 先，控市售设备改 IR_TX_MSB_FIRST=0 重编译，notes 记录）。未上板（载波频率/收发配对真机验证留后续）。\nwiki-modules-batch3/03 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning。",
+      "kit": "红外发射头（38kHz NEC 发射管，串限流电阻）+ 红外接收头 VS1838B 配对",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/rf/Infrared-decoding-coding-module.html",
+      "pins": [
+        {
+          "id": "IR_TX_OUT",
+          "type": "gpio_out",
+          "default": "PA0",
+          "required": true
+        }
+      ]
+    }
+  }
+}
