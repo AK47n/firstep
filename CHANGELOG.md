@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ea90223ba9197774701dc42cd7bae33478dd0b25 -->
+<!-- changelog-auto: last-commit=777975a7572116998860edeeb96ea97bf9718efc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -32,6 +32,7 @@
 - 15:04 aht10 温湿度传感器模块（工单 wiki-materials/05）：从立创 wiki 手册提炼，仅 mspm0
 - 15:12 sr04 超声波模块（工单 wiki-materials/06）：从立创 wiki 手册提炼，仅 mspm0
 - 15:18 Markdown 资料前端 tab（工单 wiki-materials/02）：素材根 .md 浏览 + 页内渲染预览
+- 16:18 wiki 页面转换器域模块（工单 wiki-md-repair/01）：Shiki 逐行还原 + 原页顺序 Markdown，三页重抓验证
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
