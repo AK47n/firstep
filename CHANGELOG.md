@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=511020805fbbb302496b0ec9c667a48a84e55ada -->
+<!-- changelog-auto: last-commit=6fac27373510cb3c89273a2011a377bd6b667a12 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -60,6 +60,7 @@
 - 20:12 批次4/02：syn6288 语音合成模块入库（软 UART 单发 TX）
 - 20:16 批次4/03：rc522 RFID IC 卡识别模块入库（软 SPI 5 脚）
 - 20:20 批次4/04：fingerprint 指纹识别模块入库（真实 UART 轮询）
+- 20:27 批次4 收尾修正：词表预算校准 + CONTEXT 平台行补录 + swap 测试补 fingerprint
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
