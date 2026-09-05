@@ -292,7 +292,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         counts[value] = counts.get(value, 0) + 1
     assert {v: c for v, c in counts.items() if c != 1} == {
         "PB6": 3,
-        "PB7": 3,
+        "PB7": 4,  # AHT10 SDA（aht10 默认脚）+ STEP_MOTOR DIR2 + HUIDU R4
+        # + DHT11 DATA（dht11 默认脚；DHT11 与 AHT10 温湿度互替、同选概率最低，
+        # 温湿度与步进/巡线同选概率最低故叠此脚，同选时经引脚绑定消解）
         "PA22": 3,
         "PA23": 5,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
         # （hc05 默认脚）+ NRF24L01 CE（nrf24l01 默认脚；蓝牙/2.4G 与 UWB/
