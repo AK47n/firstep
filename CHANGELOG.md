@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c65d6e00af8bc6429dbbfac8a5e0fc4b1710f932 -->
+<!-- changelog-auto: last-commit=25f6d3041de0728ff656728a6982eb27c88c3c48 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -38,6 +38,7 @@
 - 16:24 Markdown 手册图片服务后端（工单 wiki-md-repair/03）：资产端点 /api/materials-md-assets + 图片类型限制
 - 16:24 Markdown 预览图片显示（工单 wiki-md-repair/04）：mdAssetImageUrl 归一 + 预览 imageUrl 回调
 - 16:33 手册标题与分类中文化（工单 wiki-md-repair/05）：h1 中文名 + 分类映射 + 重抓 70 篇
+- 16:33 Markdown 列表中文标题（工单 wiki-md-repair/06）：清单 title 字段 + 行渲染主行标题文件名小字
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
