@@ -29,7 +29,7 @@ static uint16_t _joystick_adc_read(DL_ADC12_MEM_IDX mem)
 
 void joystick_init(void)
 {
-    /* SysConfig 已配 ADC12_0（三通道 sequence）+ JOYSTICK（上拉输入），
+    /* SysConfig 已配 ADC12_0（四通道 sequence）+ JOYSTICK（上拉输入），
      * 由模板 SYSCFG_DL_init() 生效；此处仅确保转换使能。 */
     DL_ADC12_enableConversions(ADC12_0_INST);
 }

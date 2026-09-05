@@ -19,8 +19,9 @@ void adc_init(ADCx_enum adc, ADCINx_enum adc_channel)
 uint16_t adc_get(ADCx_enum adc, ADCINx_enum adc_channel)
 {
     (void)adc;
-    if (adc_channel > ADC_Channel_1) {
-        return 0; /* 本模块开放 MEM0/MEM1 两路（MEM2 归摇杆 Y） */
+    if (adc_channel > ADC_Channel_3) {
+        return 0; /* 本模块开放 MEM0-3：MEM0=本模块/us016、MEM1=摇杆 X、
+                   * MEM2=摇杆 Y、MEM3=ir_distance（共享实例同读） */
     }
     DL_ADC12_startConversion(ADC12_0_INST);
     /* SDK 2_10 的 getStatus 单参返回 STATUS 寄存器，busy 位 = ADC12_STATUS_BUSY_ACTIVE */

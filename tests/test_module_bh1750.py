@@ -23,6 +23,7 @@ from contest_generator.selection import resolve_selection  # noqa: E402
 
 MAIN_C_MSPM0 = (
     '#include "ti_msp_dl_config.h"\n'
+    '#include "delay.h"\n'
     '#include "bh1750.h"\n'
     "\n"
     "int main(void)\n"

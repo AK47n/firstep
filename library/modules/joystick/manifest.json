@@ -1,6 +1,6 @@
 {
   "slug": "joystick",
-  "description": "双轴摇杆按键驱动（mspm0 纯驱动，ADR 0009）：X/Y 双轴 ADC 采样（12bit 4 次平均，read_x/read_y 出原始值 0-4095，read_x_percent/read_y_percent 出 0-100%），SW 按键上拉低有效（read_sw 出 1=按下）；与 adc 模块共享 ADC12_0 实例（sequence 三通道）；适用于手动控制、模拟量遥控、云台方向等赛题功能。",
+  "description": "双轴摇杆按键驱动（mspm0 纯驱动，ADR 0009）：X/Y 双轴 ADC 采样（12bit 4 次平均，read_x/read_y 出原始值 0-4095，read_x_percent/read_y_percent 出 0-100%），SW 按键上拉低有效（read_sw 出 1=按下）；与 adc 模块共享 ADC12_0 实例（sequence 四通道，MEM3 归 ir_distance）；适用于手动控制、模拟量遥控、云台方向等赛题功能。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -10,7 +10,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "母版 syscfg：JOYSTICK GPIO 实例（SW 输入上拉，宏 JOYSTICK_PORT / JOYSTICK_SW_PIN——SysConfig 命名 <实例>_<引脚名>_PIN）默认 PA9——仅与 DIGIT_UART RX（K230 视觉串口）默认重叠，同选时经引脚绑定消解（手动摇杆与视觉识别同选概率最低）。X/Y 走 ADC12_0 MEM1/MEM2（宏 ADC12_0_ADCMEM_1/2 由 adcMem1/2chansel 生成；默认 PA26/A0_1、PA25/A0_2——与 ZIGBEE_UART 默认重叠，同选时经引脚绑定消解；与 adc 模块共享 ADC12_0 实例，同选时通道无冲突）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/control--two-axis-keystroke-rocker-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/control/two-axis-keystroke-rocker-module.html；网盘完整工程 https://pan.baidu.com/s/15xVEt4G8DBrRQpZpbXyfJw?pwd=8z0w）。改造要点：去掉 main.c 演示与 printf；函数名规范化（joystick_read_x/y 等）；页内 ADC 中断（IRQHandler + 标志位）改轮询（照库内 adc 模块 busy 等待先例）；采样平均 30 次 × delay_ms(5) 改 4 次快速平均（摇杆实时性）；ADC 单发模式只启用 startAdd 槽位导致多通道不可用——改 sequence 模式（startAdd=0/endAdd=2，SysConfig CLI 实证）；SW 引脚宏参数化（JOYSTICK_PORT/JOYSTICK_SW_PIN）+ 极性宏（JOYSTICK_SW_PRESSED_LEVEL=0）。\nwiki-modules-batch1/01 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验（sequence 三通道合法）→ gmake 0 error、0 warning；未上板。",
+      "notes": "母版 syscfg：JOYSTICK GPIO 实例（SW 输入上拉，宏 JOYSTICK_PORT / JOYSTICK_SW_PIN——SysConfig 命名 <实例>_<引脚名>_PIN）默认 PA9——仅与 DIGIT_UART RX（K230 视觉串口）默认重叠，同选时经引脚绑定消解（手动摇杆与视觉识别同选概率最低）。X/Y 走 ADC12_0 MEM1/MEM2（宏 ADC12_0_ADCMEM_1/2 由 adcMem1/2chansel 生成；默认 PA26/A0_1、PA25/A0_2——与 ZIGBEE_UART 默认重叠，同选时经引脚绑定消解；与 adc 模块共享 ADC12_0 实例，同选时通道无冲突）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/control--two-axis-keystroke-rocker-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/control/two-axis-keystroke-rocker-module.html；网盘完整工程 https://pan.baidu.com/s/15xVEt4G8DBrRQpZpbXyfJw?pwd=8z0w）。改造要点：去掉 main.c 演示与 printf；函数名规范化（joystick_read_x/y 等）；页内 ADC 中断（IRQHandler + 标志位）改轮询（照库内 adc 模块 busy 等待先例）；采样平均 30 次 × delay_ms(5) 改 4 次快速平均（摇杆实时性）；ADC 单发模式只启用 startAdd 槽位导致多通道不可用——改 sequence 模式（startAdd=0/endAdd=2，SysConfig CLI 实证；batch2/04 起 endAdd=3，MEM3 归 ir_distance 红外测距）；SW 引脚宏参数化（JOYSTICK_PORT/JOYSTICK_SW_PIN）+ 极性宏（JOYSTICK_SW_PRESSED_LEVEL=0）。\nwiki-modules-batch1/01 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验（sequence 三通道合法）→ gmake 0 error、0 warning；未上板。",
       "kit": "双轴按键摇杆模块（PS2 手柄摇杆电位器式）",
       "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/control/two-axis-keystroke-rocker-module.html",
       "pins": [

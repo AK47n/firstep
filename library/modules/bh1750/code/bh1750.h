@@ -5,7 +5,8 @@
 
 /* BH1750 光照度驱动（mspm0 纯驱动，ADR 0009）：
  * - 软 I2C 位操作读取（不占硬件 I2C 外设，SDA 方向运行时切换，照 aht10）；
- *   器件地址 0x46（ALT ADDRESS 脚接地；接电源 = 0xB8，改 BH1750_ADDR 一处）；
+ *   器件地址 0x46（ALT ADDRESS 脚接地；接电源 = 0xB8，改 BH1750_ADDR_WRITE
+ *   一处）；
  * - 一次测量：bh1750_init（Power On）→ bh1750_start_measure（0x10 连续
  *   高分辨率）→ 等 ≥BH1750_MEASURE_DELAY_MS → bh1750_read_lux；
  * - 光照度 = 高 8 位 << 8 | 低 8 位，除以 1.2 出 lx（0-65535 lx，1 lx 分辨率）。 */

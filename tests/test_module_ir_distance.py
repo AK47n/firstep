@@ -39,10 +39,11 @@ MAIN_C_MSPM0 = (
 
 
 def test_ir_distance_manifest_shape_mspm0():
-    """ir_distance：仅 mspm0 平台条目；无依赖；单角色 = adc PA27（MEM3 槽位）。"""
+    """ir_distance：仅 mspm0 平台条目；依赖 adc（经其 API 读 MEM3——数据所有权
+    归 adc 模块）；单角色 = adc PA27（MEM3 槽位）。"""
     manifest = ModuleManifest.load(MODULES / "ir_distance")
     assert manifest.slug == "ir_distance"
-    assert manifest.dependencies == ()
+    assert manifest.dependencies == ("adc",)
     assert set(manifest.platforms) == {"mspm0"}
 
     mspm0 = manifest.platforms["mspm0"]
@@ -73,9 +74,10 @@ def test_ir_distance_mspm0_master_syscfg_shared_facts():
 
 
 def test_ir_distance_mspm0_single_select_generation(tmp_path):
-    """ir_distance mspm0 单选生成：syscfg 保留 ADC12_0、模块文件落盘、静态
-    门禁过。"""
+    """ir_distance mspm0 单选生成：syscfg 保留 ADC12_0、ir_distance + 依赖 adc
+    模块文件落盘、静态门禁过。"""
     resolved = resolve_selection(MODULES, PLATFORM_MSPM0, ["ir_distance"])
+    assert {m.slug for m in resolved.manifests} == {"ir_distance", "adc"}
     out = tmp_path / "out"
     generate(
         platform=PLATFORM_MSPM0,
@@ -97,3 +99,5 @@ def test_ir_distance_mspm0_single_select_generation(tmp_path):
         assert f"const {drop}" not in syscfg
     assert (out / "modules/ir_distance/code/ir_distance.c").is_file()
     assert (out / "modules/ir_distance/code/ir_distance.h").is_file()
+    assert (out / "modules/adc/code/adc_mspm0.c").is_file()
+    assert (out / "modules/adc/code/adc_mspm0.h").is_file()

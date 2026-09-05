@@ -14,9 +14,10 @@
 void dht11_init(void);
 /* 一次完整测量：内部完成起始/响应/40bit 接收/校验/换算。
  * 出参 temperature_c（℃）/ humidity_rh（%RH）；返回 0=成功 1=失败
- * （校验和不符或应答超时——出参保持上次值不变）。 */
+ * （校验和不符或应答超时——出参保持原值不变）。 */
 uint8_t dht11_read(float *temperature_c, float *humidity_rh);
-float dht11_read_temperature(void); /* 便捷封装（失败返回上次值） */
-float dht11_read_humidity(void);    /* 便捷封装（失败返回上次值） */
+float dht11_read_temperature(void); /* 返回最近一次成功读数缓存（手册 Get_*
+                                     * 语义：不触发新测量；从未成功 = 0.0f） */
+float dht11_read_humidity(void);    /* 同上；失败/未读时缓存保持上次值 */
 
 #endif /* DHT11_H */
