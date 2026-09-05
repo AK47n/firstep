@@ -97,3 +97,14 @@ def test_pca9685_mspm0_single_select_generation(tmp_path):
     assert (out / "modules/pca9685/code/pca9685.h").is_file()
     assert (out / "modules/delay/code/delay.c").is_file()
     assert (out / "modules/delay/code/delay.h").is_file()
+
+
+def test_pca9685_prescale_round_guard():
+    """prescale 公式守卫（code-review 收尾修正）：round(25e6/4096/freq)-1 必须
+    浮点计算——整数先除会截断小数、+0.5f 失效，frac≥0.5 时差 1（60Hz 应 101
+    得 100）；默认 50Hz 巧合一致，此处以源码文本守卫钉死。"""
+    source = (MODULES / "pca9685" / "code" / "pca9685.c").read_text(
+        encoding="utf-8"
+    )
+    assert "- 1.0f + 0.5f" in source
+    assert "(PCA9685_RESOLUTION * (uint32_t)freq_hz)" not in source

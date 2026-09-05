@@ -215,9 +215,11 @@ void pca9685_set_freq(uint16_t freq_hz)
     s_freq_hz = freq_hz;
     /* prescale = round(25000000/(4096×freq)) - 1（页面正文「119.68→120」把
      * −1 提前进除数（(50+1)）系笔误；代码公式即此式——50Hz 下
-     * 25e6/204800−1 = 121.07 → 121，实际输出 50.02Hz，页面代码行为保持） */
-    prescale = (uint8_t)(PCA9685_CLK_HZ / (PCA9685_RESOLUTION * (uint32_t)freq_hz)
-                         - 1u + 0.5f);
+     * 25e6/204800−1 = 121.07 → 121，实际输出 50.02Hz，页面代码行为保持；
+     * 浮点计算保证 round（整数先除会截断 frac，±1 差频） */
+    prescale = (uint8_t)((float)PCA9685_CLK_HZ
+                         / ((float)PCA9685_RESOLUTION * (float)freq_hz)
+                         - 1.0f + 0.5f);
     /* 频率只能休眠时改：读回 MODE1（保护其它位）→ 置 SLEEP → 写 PRE_SCALE →
      * 写回旧值唤醒 → 等 5ms → 设自动递增/ALLCALL（页面 0xA1 行为保持） */
     oldmode = pca9685_read_reg(PCA9685_MODE1);
