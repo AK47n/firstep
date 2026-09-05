@@ -42,7 +42,7 @@
   - 三种模式：`-Diff`（给上一版清单或 GitHub 自动拉取 → diff → 批次 zip + 新版清单）、`-Init`（只生成当前快照清单，不打包）、`-Full`（无基线全量打批次分卷包）；单批次 zip 超 1.9 GB 自动拆 `part<N>`（GitHub 单资产 2 GB 上限留余量），每 part 独立 SHA256。
   - 清单 SHA256 计算与 diff 逻辑纯函数化，可单测；扫描时跳过 `.materials-manifest.json` 自身与备份/临时噪音。
 - **用户侧模块**（`src/contest_generator/` 下新模块，webapp 端点薄调，可注入 fetch / download 函数便于测试不碰网络）：
-  - `GET /api/update/materials/check`：读本地清单（缺失 = `baseline_missing` 降级提示）→ 拉线上最新清单 → 按批次 diff（本地批次版本 vs 线上版本）→ 200 级返回 `{current_version, latest_version, update_available, total_size_bytes, batches: [{slug, name, add_count, modify_count, del_count, size_bytes, parts: [{zip_url, size_bytes, sha256}]}], error, message}`；网络 / 解析失败一律 200 级 + 中文 message（沿 auto-update 契约风格）。
+  - `GET /api/update/materials/check`：读本地清单（缺失 = `baseline_missing` 降级提示）→ 拉线上最新清单 → 按批次 diff（本地批次版本 vs 线上版本）→ 200 级返回 `{current_version, latest_version, update_available, total_size_bytes, batches: [{slug, name, add_count, modify_count, del_count, size_bytes, parts: [{zip_url, size_bytes, sha256}]}], deleted_batches: [{slug, name, file_count}], error, message}`；`deleted_batches` = 本地有、线上无的整批删除（用户侧推导）；网络 / 解析失败一律 200 级 + 中文 message（沿 auto-update 契约风格）。
   - `POST /api/update/materials/apply`：校验所选批次 slug 集合（白名单 = check 返回的批次，防注入）→ 校验目标磁盘剩余空间 ≥ 下载总量 + 备份余量（不足 400 中文）→ 启动后台下载任务（线程）→ 返回 `started`。
   - `GET /api/update/materials/status`：后台任务内存态 + 落盘节流快照（`updates\materials-task.json`，每 ~2 s 持久化一次，重启可恢复）→ `{state: idle|downloading|applying|done|failed|partial, current_part_name, parts: [{name, downloaded_bytes, total_bytes, ok}], total_downloaded_bytes, total_bytes, speed_bps, error, message}`；`partial` = 只更新了部分批次（用户勾选子集时属正常终态）。
   - `POST /api/update/materials/cancel`：置取消标记，任务在分卷边界停止；已完成卷标记保留（断点续传）。
